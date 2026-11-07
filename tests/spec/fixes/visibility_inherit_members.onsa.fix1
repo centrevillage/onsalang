@@ -1,0 +1,71 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1", "§8.3"]
+// fixes = 1
+
+// A visibility word on a member that takes the visibility of its owner: a member of a `trait`,
+// of an `effect`, of a `handler` and of a handler written in place (W5-11 U5, spec §15.1, §8.3,
+// §18.1; S-491). The members of these are reached through the owner, so a word on one is a
+// repeat, E0020, and the candidate takes it out. The main position is the word, and the member
+// is read on from the word. The unit reports the first error, which is the word: the E0200 of
+// the declaration (this version does not support `trait`, `effect` and `handler`) is a later
+// stage and comes back when the word is gone. One error in each unit; a declaration has one
+// word, so the unit is the declaration.
+
+trait Plain {                                       //~ E0200
+  fn m(self) -> I32
+}
+
+trait PubMember {
+  fn m(self) -> I32                             //~ E0020 @3
+}
+
+trait PrivMember {
+  fn m(self) -> I32                            //~ E0020 @3
+}
+
+pub trait PubConst {
+  fn m(self) -> I32
+  const K: I32                                  //~ E0020 @3
+}
+
+trait WithDefault {
+  fn m(self) -> I32 { 0 }
+  fn n(self) -> I32 { 1 }                      //~ E0020 @3
+}
+
+effect Ask {                                        //~ E0200
+  fn ask() -> I32
+}
+
+effect PubOp {
+  fn op() -> I32                                //~ E0020 @3
+}
+
+blocking effect PrivOp {
+  fn op2() -> I32                              //~ E0020 @3
+}
+
+handler h_plain: Ask {                              //~ E0200
+  fn ask() -> I32 { 1 }
+}
+
+handler h_pub: Ask {
+  fn ask() -> I32 { 1 }                         //~ E0020 @3
+}
+
+handler h_priv: Ask {
+  fn ask() -> I32 { 2 }                        //~ E0020 @3
+}
+
+fn in_place() -> I32 {
+  handle { ask() } with Ask {
+    fn ask() -> I32 { 3 }                       //~ E0020 @5
+  }
+}
+
+fn in_place_priv() -> I32 {
+  handle { ask() } with Ask {
+    fn ask() -> I32 { 4 }                      //~ E0020 @5
+  }
+}

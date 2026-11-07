@@ -213,6 +213,10 @@ impl<'a> Dumper<'a> {
             ItemKind::Trait(t) => {
                 let _ = write!(self.out, "trait {}", t.name.name);
                 self.generics(&t.generics);
+                for (i, p) in t.supers.iter().enumerate() {
+                    self.out.push_str(if i == 0 { ": " } else { " + " });
+                    self.path(p);
+                }
                 for &i in &t.items {
                     self.nested(|d| d.item(i));
                 }

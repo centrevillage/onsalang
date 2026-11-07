@@ -765,6 +765,24 @@ pub static ROWS: &[Row] = &[
         detect: Detect::Read,
     },
     Row {
+        id: RowId::VisibilityContainer,
+        name: "visibility_container",
+        phase: Phase::Syntax,
+        code: Code::E0002,
+        message: "a block whose members have a visibility of their own takes no visibility",
+        rule: "write the visibility on each member: the members of an `impl` of a type and of an `extern` block have their own, and the block has none (§15.1, §14.1)",
+        detect: Detect::Read,
+    },
+    Row {
+        id: RowId::VisibilityInherited,
+        name: "visibility_inherited",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "this declaration has no visibility of its own; the word on it is redundant",
+        rule: "a visibility is written on the declarations that another module names; the `impl` of a trait and a `test` have none, and the members of a `trait`, an `effect` and a handler and the variants of an `enum` take their owner's (§15.1)",
+        detect: Detect::Read,
+    },
+    Row {
         id: RowId::ConstFn,
         name: "const_fn",
         phase: Phase::Syntax,
@@ -1153,4 +1171,5 @@ pub static READS: &[Matcher] = &[
     Matcher::many(decls::OLD_ATTRIBUTE_ROWS, old_attribute),
     Matcher::one(&[RowId::FieldPub], field_pub),
     Matcher::one(&[RowId::PrivUse], priv_use),
+    Matcher::many(decls::UNPLACED_WORD_ROWS, decls::unplaced_word),
 ];

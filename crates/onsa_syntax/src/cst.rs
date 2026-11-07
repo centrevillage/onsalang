@@ -106,13 +106,13 @@ pub enum NodeKind {
     Field,
     /// `= Expr`: the default of a field (§4.4), an item of its own
     FieldDefault,
-    /// `: Bound + Bound` at the head of a struct or an enum (§6.4)
+    /// `: Bound + Bound` at the head of a struct or an enum (§6.4), or of a trait (§6.3)
     Derives,
     /// `enum name GenericParams? Derives? VariantList`
     Enum,
     /// `{ Variant, ... }`
     VariantList,
-    /// `name VariantFields?`
+    /// `Vis? name VariantFields?` (the word is an error, §15.1)
     Variant,
     /// `( Type, ... )`
     VariantFields,
@@ -120,7 +120,7 @@ pub enum NodeKind {
     TypeAlias,
     /// `type name` (in `extern` or after `target`)
     OpaqueType,
-    /// `trait name GenericParams? ItemList`
+    /// `trait name GenericParams? Derives? ItemList`
     Trait,
     /// `impl GenericParams? Type (for Type)? ItemList`
     Impl,

@@ -197,6 +197,7 @@ impl<'a> Parser<'a> {
             reach: self.open.iter().map(|o| o.level + o.children).max().unwrap_or(0),
             place: None,
             declaration: None,
+            word: None,
         }
     }
 
@@ -208,8 +209,22 @@ impl<'a> Parser<'a> {
     /// reading goes on (the unit has the syntax error, so its body is not
     /// checked).
     pub(super) fn read_form(&mut self, at: usize, place: Option<Place>, declaration: Option<usize>) -> bool {
+        self.read_at(at, |c| (c.place, c.declaration) = (place, declaration))
+    }
+
+    /// The visibility word at token `word` in a place that takes none, on
+    /// what `on` says (§15.1, S-491): its row is reported, and the reading
+    /// goes on, as at [`Parser::read_form`].
+    pub(super) fn read_word(&mut self, word: usize, on: foreign::WordOn) {
+        if !self.read_at(word, |c| c.word = Some(on)) {
+            onsa_diag::internal::bug(Some(self.tokens[word].span), "a visibility word that no row reads");
+        }
+    }
+
+    /// [`Parser::read_form`] with what the parser knows set on the cursor by `set`.
+    fn read_at(&mut self, at: usize, set: impl FnOnce(&mut foreign::Cursor)) -> bool {
         let mut cursor = self.cursor(at, Want::Other);
-        (cursor.place, cursor.declaration) = (place, declaration);
+        set(&mut cursor);
         let found = foreign::at_read(&cursor);
         let any = !found.is_empty();
         for d in found {

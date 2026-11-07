@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+//
+// [[test.fix]]
+// at = "49:1"
+// code = "E0002"
+// candidate = 1
+// leaves = ["49:1 E0020"]
+
+// A visibility word on a block, together with a second error in the head (W5-11 U5, spec
+// §15.1, §18.1; S-491): the unit reports one error, the first in the order of the report, and
+// the order of the head decides which. The error of a run of modifiers (`pub rt impl`,
+// `rt pub impl`, `pub pub impl`, `pub rt test`: S-492, S-593) is one E0002 whose range is the
+// run, and its main position is the first word of the run, so it is the first error of the unit
+// and the word on the block comes after it. The candidate of the run is the right order (the
+// `rt` is not carried to the members, and a second `pub` is taken out): it leaves the word of
+// the block, which is E0002 for an `impl` (no candidate) and E0020 for a `test` (the candidate
+// takes it out). The unit had two errors, so the promise of §18.1 does not bind the candidate of
+// the run (S-384): whether a block keeps it is not pinned here (none is given now), and on the
+// `test` its `leaves` names the E0020 of the word. The declaration is read on in
+// all of these: the members are names of the module, and the callers get no report.
+// (The forms where the word is the first error: negative/visibility_container_neg.onsa.)
+
+struct P1 {
+  x: I32,
+}
+
+pub rt impl P1 {                                    //~ E0002 @1
+  fn a(self) -> I32 { self.x }
+}
+
+struct P2 {
+  x: I32,
+}
+
+rt pub impl P2 {                                    //~ E0002 @1
+  fn b(self) -> I32 { self.x }
+}
+
+struct P3 {
+  x: I32,
+}
+
+pub pub impl P3 {                                   //~ E0002 @1
+  fn c(self) -> I32 { self.x }
+}
+
+pub rt test "run" {                                 //~ E0002 @1
+  assert 1 == 1
+}
+
+fn call(p1: P1, p2: P2, p3: P3) -> I32 {
+  p1.a() + p2.b() + p3.c()
+}

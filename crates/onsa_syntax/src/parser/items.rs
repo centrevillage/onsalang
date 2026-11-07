@@ -258,14 +258,36 @@ impl<'a> Parser<'a> {
             return Err(e);
         }
         self.check_attrs(&attrs, place, Some(self.peek_index()));
-        // `priv use` is redundant (§15.1): a `use` is within its module.
-        if let Some(word) = vis
-            && t.kind == TokenKind::KwUse
-        {
-            self.read_form(word, None, None);
+        if let Some(word) = vis {
+            self.judge_word(word, t.kind, ctx);
         }
         parse(self, ctx)?;
         Ok(self.complete(m, NodeKind::Item))
+    }
+
+    /// The visibility word `word` of the head of the declaration of keyword
+    /// `keyword` in the list of `ctx` (§15.1, S-491): it is written on the
+    /// declarations that another module names. On a block whose members have
+    /// their own (an `extern` block, an `impl` of a type), on a declaration
+    /// with none of its own (a `test`, an `impl` of a trait) and on a member
+    /// that takes its owner's, the row is reported and the declaration is
+    /// read on; `priv use` is redundant (a `use` is within its module). The
+    /// members of an `impl` are the names stage's (`impl_member_pub`, S-904).
+    fn judge_word(&mut self, word: usize, keyword: TokenKind, ctx: ItemCtx) {
+        use foreign::WordOn::{Container, Inheriting};
+        match keyword {
+            TokenKind::KwUse => {
+                self.read_form(word, None, None);
+            }
+            // Of a type or of a trait: known after its `for` ([`Parser::parse_impl`]).
+            TokenKind::KwImpl => self.impl_word = Some(word),
+            TokenKind::KwExtern => self.read_word(word, Container),
+            TokenKind::KwTest => self.read_word(word, Inheriting),
+            _ if matches!(ctx, ItemCtx::Trait | ItemCtx::Effect | ItemCtx::Handler | ItemCtx::InlineHandler) => {
+                self.read_word(word, Inheriting)
+            }
+            _ => {}
+        }
     }
 
     /// E0002 for the declaration at `t` (of the kind the word `kind` after
@@ -417,8 +439,9 @@ impl<'a> Parser<'a> {
     }
 
     /// `: Trait + Trait` after the name and the type parameters of a struct
-    /// or an enum (§6.4, S-34): the traits derived from its structure. A
-    /// line break after a `+` goes on with the head (§2.5).
+    /// or an enum (§6.4, S-34): the traits derived from its structure; of a
+    /// trait (§6.3): its supertraits. A line break after a `+` goes on with
+    /// the head (§2.5).
     fn parse_derives_opt(&mut self) -> PResult<()> {
         if !self.at(TokenKind::Colon) {
             return Ok(());
@@ -457,6 +480,7 @@ impl<'a> Parser<'a> {
                 let docs = p.element_docs();
                 let v = p.start(NodeKind::Variant)?;
                 p.attach_docs(docs);
+                p.variant_word()?;
                 p.parse_name("variant name")?;
                 // S-412: the `(` of the fields of a variant follows the
                 // rule of the postfix `(` (a blank before it is E0020).
@@ -492,6 +516,20 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
+    /// A visibility word before the name of a variant (`pub A`): the variant
+    /// takes the visibility of its enum (§15.1, S-491), so the word is read
+    /// (the `Vis` node) and its row reported, and the name is read on. A
+    /// word before no name (`pub(crate) A`) is the general E0002 at the name.
+    fn variant_word(&mut self) -> PResult<()> {
+        if matches!(self.peek_kind(), TokenKind::KwPub | TokenKind::KwPriv)
+            && self.peek2().kind == TokenKind::Ident
+            && let VisRead::Word(word) = self.parse_vis("variant name")?
+        {
+            self.read_word(word, foreign::WordOn::Inheriting);
+        }
+        Ok(())
+    }
+
     /// `type Name = T` (alias) or `type Name` (opaque, in `extern` / `target`).
     pub(super) fn parse_type_item(&mut self, ctx: ItemCtx) -> PResult<()> {
         let m = self.start(NodeKind::TypeAlias)?;
@@ -520,12 +558,18 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::KwTrait)?;
         self.parse_name("trait name")?;
         self.parse_generics_opt()?;
+        // The supertraits (§6.3, R-373): read, and not lowered (a trait is E0200 in this version).
+        self.parse_derives_opt()?;
         self.parse_members(NodeKind::Trait)?;
         self.complete(m, NodeKind::Trait);
         Ok(())
     }
 
+    /// The `impl` of a type or of a trait; the visibility word of its head
+    /// (`impl_word`) is judged after its `for`, and not when the head fails
+    /// before it (S-491, [`Parser::judge_word`]).
     pub(super) fn parse_impl(&mut self, _: ItemCtx) -> PResult<()> {
+        let word = self.impl_word.take();
         let m = self.start(NodeKind::Impl)?;
         self.expect(TokenKind::KwImpl)?;
         self.parse_generics_opt()?;
@@ -539,7 +583,11 @@ impl<'a> Parser<'a> {
             return Err(self.unexpected("a type"));
         }
         let (first, _) = self.parse_type_with(ClockAfter::Read)?;
-        if self.eat(TokenKind::KwFor).is_some() {
+        let of_trait = self.eat(TokenKind::KwFor).is_some();
+        if let Some(word) = word {
+            self.read_word(word, if of_trait { foreign::WordOn::Inheriting } else { foreign::WordOn::Container });
+        }
+        if of_trait {
             if first.kind != NodeKind::PathType {
                 return Err(self.error(Code::E0002, first.span, "expected a trait name before `for`"));
             }

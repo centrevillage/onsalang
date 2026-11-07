@@ -238,6 +238,23 @@ pub struct Cursor<'a> {
     /// (`Parser::parse_heading`), its attributes, visibility and the forms
     /// it reads on after, and the rows read no head again.
     pub declaration: Option<usize>,
+    /// What the visibility word at `at` is on, when the parser asks about a
+    /// word in a place that takes none ([`at_read`], S-491): the parser
+    /// knows the declaration and its list there.
+    pub word: Option<WordOn>,
+}
+
+/// A place of a visibility word that takes none (§15.1, S-491), as the
+/// parser judged it (`Parser::judge_word`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WordOn {
+    /// A block whose members have their own visibility (an `impl` of a
+    /// type, an `extern` block).
+    Container,
+    /// A declaration with no visibility of its own (the `impl` of a trait,
+    /// a `test`) or one that takes its owner's (a member of a `trait`, an
+    /// `effect`, a handler; a variant).
+    Inheriting,
 }
 
 /// A postfix opener (`(`, `[`, or the mark `!` / `~` before a `(`) or a
@@ -522,6 +539,8 @@ pub enum RowId {
     FieldPub,
     ImplMemberPub,
     PrivUse,
+    VisibilityContainer,
+    VisibilityInherited,
     ConstFn,
     ExternFn,
     ExportC,

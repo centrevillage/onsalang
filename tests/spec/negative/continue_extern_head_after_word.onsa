@@ -24,7 +24,7 @@ extern "C" {
   type RawLinked
 }
 
-pub unsafe extern "C" {                             //~ E0002 @5
+pub unsafe extern "C" {                             //~ E0002 @1
   fn c_pub_unsafe(x: I32) -> I32
 }
 

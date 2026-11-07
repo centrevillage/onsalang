@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+// fixes = 1
+
+// A visibility word on a declaration that has no visibility of its own: the `impl` of a trait
+// and a `test` (W5-11 U5, spec §15.1, §18.1; S-491). A word on the implementation of a trait
+// or on a `test` is a repeat, E0020, and the candidate takes it out. An implementation of a
+// trait does not make a name that another module takes by its name, and `onsa test` runs a
+// `test` whatever its word is, so the word means nothing and the candidate that takes it out
+// (with the white space after it) changes nothing. The main position is the word, and the
+// declaration is read on from the word. The unit reports the first error, which is the word:
+// the E0200 of the implementation of a trait (this version does not support it) is a later
+// stage and comes back when the word is gone. One error in each unit.
+
+struct P {
+  x: I32,
+}
+
+trait Tr { fn a(self) -> I32 }                      //~ E0200
+
+pub impl Tr for P {                                 //~ E0020 @1
+  fn a(self) -> I32 { self.x }
+}
+
+priv impl Show for P {                              //~ E0020 @1
+  fn show(self) -> Str { "p" }
+}
+
+struct G[T] {
+  v: T,
+}
+
+pub impl[T] Show for G[T] {                         //~ E0020 @1
+  fn show(self) -> Str { "g" }
+}
+
+pub test "a" {                                      //~ E0020 @1
+  assert 1 == 1
+}
+
+priv test "b" {                                     //~ E0020 @1
+  assert 2 == 2
+}
+
+pub test "block" {                                  //~ E0020 @1
+  let x = 3
+  if x > 2 {
+    assert x == 3
+  }
+}
+
+// A test without a word is right.
+test "plain" {
+  assert 1 + 1 == 2
+}

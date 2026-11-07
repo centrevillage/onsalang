@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§6.3", "§18.2"]
+
+// The spaces of a head with supertraits (spec/tools.md §3.2, spec §6.3; R-373), as they are in
+// the head of a `struct` with a list (`struct P: Eq + Dup`): no space before the `:`, one after
+// it, and one on each side of the `+`. `onsa fmt` does not change this file; the loose
+// forms are in trait_super_spaces_loose.onsa.
+
+trait Tr1: Show {
+  fn m(self) -> I32
+}
+
+pub trait Tr2: Show + Dup {
+  fn m(self) -> I32
+}
+
+trait Tr3[T]: Show {
+  fn m(self) -> I32
+}
+
+trait Tr4: Dup {}

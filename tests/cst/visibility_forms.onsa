@@ -1,0 +1,116 @@
+// onsa.toml
+// [test]
+// mode = "none"
+// spec = ["§15.1", "§6.3", "§18.1"]
+
+// Visibility words in places that do not take them, and the supertraits of a trait (W5-11 U5,
+// §15.1, §6.3, §18.1, S-491, R-373): a word on a container (`impl`, `extern`), a word on a
+// declaration that inherits (the `impl` of a trait, `test`, the members of a `trait`, an
+// `effect` and a `handler`, the variants of an `enum`), the supertraits of a `trait` with the
+// spaces of any kind, and the list that is not read. Whatever the parser does with the word
+// and with what follows, the round trip of the CST gives the file back byte for byte (R-86).
+// An input of the CST round trip; fmt refuses it (syntax diagnostics), as it must.
+
+pub impl A1 {
+  fn a(self) -> I32 { 1 }
+}
+priv impl[T] A2[T] {
+  fn a(self) -> I32 { 1 }
+}
+pub /* c */ impl A3 {
+  fn a(self) -> I32 { 1 }
+}
+pub extern "C" lib "m" {
+  fn c_abs(x: I32) -> I32
+  pub type Raw
+}
+priv extern "C" {
+  fn c_neg(x: I32) -> I32
+}
+pub unsafe extern "C" lib "m" {
+  fn c_pos(x: I32) -> I32
+}
+pub @fp(relaxed) impl A4 {
+  fn a(self) -> I32 { 1 }
+}
+pub rt impl A5 {
+  fn a(self) -> I32 { 1 }
+}
+rt pub impl A6 {
+  fn a(self) -> I32 { 1 }
+}
+pub pub impl A7 {
+  fn a(self) -> I32 { 1 }
+}
+
+pub impl Tr for A1 {
+  fn a(self) -> I32 { 1 }
+}
+priv impl Show for A1 {
+  fn show(self) -> Str { "a" }
+}
+pub test "a" { assert true }
+priv test "b" {
+  assert true
+}
+pub rt test "c" { assert true }
+pub(crate) impl A8 {
+  fn a(self) -> I32 { 1 }
+}
+
+trait B1 {
+  pub fn m(self) -> I32
+  priv fn n(self) -> I32
+  pub const K: I32
+}
+effect B2 {
+  pub fn ask() -> I32
+}
+handler b3: B2 {
+  pub fn ask() -> I32 { 1 }
+  priv fn other() -> I32 { 2 }
+}
+fn b4() -> I32 {
+  handle { ask() } with B2 {
+    pub fn ask() -> I32 { 3 }
+  }
+}
+
+enum C1 { pub A, priv B(I32), C }
+enum C2 {
+  pub A,
+  priv B(I32),
+  C,
+}
+enum C3 { pub(crate) A, B }
+enum C4 { pub /* c */ A, B }
+
+trait D1: Show {
+  fn m(self) -> I32
+}
+pub trait D2: Show + Dup {
+  fn m(self) -> I32
+}
+trait D3[T]: Show {
+  fn m(self) -> I32
+}
+trait D4: Dup {}
+trait D5:Show {
+  fn m(self) -> I32
+}
+trait D6 :  Show+Dup {
+  fn m(self) -> I32
+}
+trait D7: {
+  fn m(self) -> I32
+}
+trait D8: + {
+  fn m(self) -> I32
+}
+trait D9:
+  Show {
+  fn m(self) -> I32
+}
+trait D10: /* a */ Show /* b */ + /* c */ Dup {
+  fn m(self) -> I32
+}

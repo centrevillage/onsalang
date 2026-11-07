@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+
+// The words of a visibility that W5-11 U5 does not change and that have a candidate (spec
+// §15.1, §18.1; S-491): the guard against a change that takes a repeat out of a place that
+// the rule of the candidate still covers. `pub(crate)` before an `impl` and before a `test` is
+// the form of Rust of the rows `pub_pkg` and `pub_crate` of spec/foreign-forms.toml (E0020; the
+// candidate takes the whole visibility out). The `pub` of a member of the `impl` of a type
+// that has no visibility word reaches no farther than the type, so it is a repeat. The `pub` of a
+// field and `priv use` are repeats as well (S-35, S-36). The main position is the word. One
+// error in each unit. (`fixes` is not written: the candidates are checked by the contract of
+// the runner, and the files of their texts are the business of the ticket that changes the
+// code.)
+
+struct P {
+  x: I32,
+}
+
+pub(crate) impl P {                                 //~ E0020 @1
+  fn a(self) -> I32 { self.x }
+}
+
+pub(crate) test "a" {                               //~ E0020 @1
+  assert 1 == 1
+}
+
+impl P {
+  pub fn c(self) -> I32 { self.x }                  //~ E0020 @3
+}
+
+pub struct F {
+  pub y: I32,                                       //~ E0020 @3
+}
+
+priv use std.math                                   //~ E0020 @1

@@ -1,0 +1,28 @@
+pub struct P {
+  x: I32,
+}
+
+pub impl P {                                        //~ E0002 @1
+  pub fn new() -> P { P { x: 1 } }
+  pub fn a(self) -> I32 { self.x }
+  fn c(self) -> I32 { self.x }
+  priv fn b(self) -> I32 { self.x }
+}
+
+pub extern "C" lib "m" {                            //~ E0002 @1
+  pub fn c_abs(x: I32) -> I32
+  fn c_mid(x: I32) -> I32
+  priv fn c_neg(x: I32) -> I32
+  priv type Raw
+  type Mid
+}
+
+pub struct Q {
+  x: I32,
+}
+
+priv impl Q {                                       //~ E0002 @1
+  pub fn new() -> Q { Q { x: 2 } }
+  fn d(self) -> I32 { self.x }
+  priv fn e(self) -> I32 { self.x }
+}

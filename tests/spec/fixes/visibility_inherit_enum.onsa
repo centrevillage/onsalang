@@ -1,0 +1,96 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§7", "§18.1"]
+// fixes = 1
+
+// A visibility word on a variant of an `enum` (W5-11 U5, spec §15.1, §18.1; S-491). The
+// content of an enum takes the visibility of the enum, so a word on a variant is a repeat,
+// E0020, and the candidate takes it out (the word used to be E0002 "expected variant name"). The
+// main position is the word, and the variants are read on from the word: the variant is a name
+// of the enum, so the places that use it (`E1.A`, the arms of a `match`) get no report, and a
+// real error of such a place is reported (the arms that do not cover a variant, E0501). One
+// error in each enum: a declaration has one word. The words that give no candidate (`pub(crate)`)
+// are in negative/visibility_kept_forms.onsa.
+
+enum E1 { pub A, B, C }                             //~ E0020 @11
+
+enum E2 { A, priv B(I32), C }                       //~ E0020 @14
+
+enum E3 {
+  A,
+  pub B(I32),                                       //~ E0020 @3
+  C,
+}
+
+enum E4 {
+  priv A,                                           //~ E0020 @3
+  B,
+}
+
+pub enum E5 {
+  pub A,                                            //~ E0020 @3
+  B(I32),
+}
+
+fn names(a: Bool) -> E1 {
+  if a { E1.A } else { E1.B }
+}
+
+fn arms_1(e: E1) -> I32 {
+  match e {
+    E1.A => 1,
+    E1.B => 2,
+    E1.C => 3,
+  }
+}
+
+fn arms_2(e: E2) -> I32 {
+  match e {
+    E2.A => 1,
+    E2.B(x) => x,
+    E2.C => 3,
+  }
+}
+
+fn arms_3(e: E3) -> I32 {
+  match e {
+    E3.A => 1,
+    E3.B(x) => x,
+    E3.C => 3,
+  }
+}
+
+fn arms_4(e: E4) -> I32 {
+  match e {
+    E4.A => 1,
+    E4.B => 2,
+  }
+}
+
+fn arms_5(e: E5) -> I32 {
+  match e {
+    E5.A => 1,
+    E5.B(x) => x,
+  }
+}
+
+fn missing_1(e: E1) -> I32 {
+  match e {                                         //~ E0501
+    E1.A => 1,
+    E1.B => 2,
+  }
+}
+
+fn missing_3(e: E3) -> I32 {
+  match e {                                         //~ E0501
+    E3.A => 1,
+    E3.C => 3,
+  }
+}
+
+fn missing_2(e: E2) -> I32 {
+  match e {                                         //~ E0501
+    E2.A => 1,
+    E2.B(x) => x,
+  }
+}

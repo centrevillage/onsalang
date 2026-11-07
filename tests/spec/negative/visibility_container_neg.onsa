@@ -1,0 +1,116 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§14.1", "§18.1"]
+// fixes = 0
+
+// A visibility word on a block whose members have a visibility of their own (W5-11 U5, spec
+// §15.1 "the `pub` and `priv` written on a container ... are E0002 without a candidate", §14.1,
+// §18.1; S-491): the `impl` of a type and an `extern` block. The visibility is written on
+// each member, so a word on the block would read as the default of its members and would
+// not be (a word taken out leaves the members with a visibility the writer did not mean, so
+// there is no candidate: the note says that the visibility is written on each member). The
+// main position is the word. The word is one error, and the declaration is read on from the
+// word: the `impl` has its members (the places that call them get no report), the `extern`
+// block has its functions and its types. The block is one unit, so the members are not
+// checked (an error in the body of a member or in its signature is not reported, as for an
+// `impl` whose head is wrong), and the E0200 of the `extern` block is not reported either (the
+// syntax stage is first). The words after the first one in the head (`pub unsafe extern`,
+// `pub @fp(relaxed) impl`, `pub extern "C" {`) come second in the unit: the word is the first
+// error. One error in each unit.
+
+struct P1 {
+  x: I32,
+}
+
+pub impl P1 {                                       //~ E0002 @1
+  fn a(self) -> I32 { self.x }
+}
+
+struct P2 {
+  x: I32,
+}
+
+priv impl P2 {                                      //~ E0002 @1
+  fn b(self) -> I32 { self.x }
+}
+
+struct G[T] {
+  v: T,
+}
+
+pub impl[T] G[T] {                                  //~ E0002 @1
+  fn get(self) -> I32 { 1 }
+}
+
+priv impl[T] G[T] {                                 //~ E0002 @1
+  fn put(self) -> I32 { 2 }
+}
+
+struct P3 {
+  x: I32,
+}
+
+pub impl P3 {                                       //~ E0002 @1
+  fn bad_body(self) -> I32 { zz }
+}
+
+struct P4 {
+  x: I32,
+}
+
+priv impl P4 {                                      //~ E0002 @1
+  fn bad_signature(self) -> Gone { self.x }
+  fn also_bad(self, y: AlsoGone) -> I32 { y }
+}
+
+struct P5 {
+  x: I32,
+}
+
+pub @fp(relaxed) impl P5 {                          //~ E0002 @1
+  fn d(self) -> I32 { self.x }
+}
+
+pub extern "C" lib "m" {                            //~ E0002 @1
+  fn c_abs(x: I32) -> I32
+  pub fn c_neg(x: I32) -> I32
+  type Raw1
+}
+
+priv extern "C" lib "m" {                           //~ E0002 @1
+  pub fn c_pow(x: I32, y: I32) -> I32
+  priv type Raw2
+}
+
+pub extern "C" {                                    //~ E0002 @1
+  fn c_floor(x: I32) -> I32
+  type Raw3
+}
+
+pub unsafe extern "C" {                             //~ E0002 @1
+  fn c_ceil(x: I32) -> I32
+}
+
+// The declarations are read on, so the members are names of the module. None of these lines is
+// reported.
+fn call_impls(p1: P1, p2: P2, g: G[I32], p5: P5) -> I32 {
+  p1.a() + p2.b() + g.get() + g.put() + p5.d()
+}
+
+fn call_externs() -> I32 {
+  c_abs(1) + c_neg(2) + c_pow(2, 3) + c_floor(4) + c_ceil(5)
+}
+
+fn takes_raw(a: Raw1, b: Raw3) -> I32 {
+  c_abs(1) + c_floor(2)
+}
+
+fn in_a_closure(p: P1, c: Bool) -> I32 {
+  let f = fn(q: P1) -> I32 { q.a() + c_abs(1) }
+  if c { f.(p) } else { c_neg(c_pow(2, 3)) }
+}
+
+// A real error of the module is still reported.
+fn own_error() -> I32 {
+  c_abs(1) + zz                                     //~ E0302
+}

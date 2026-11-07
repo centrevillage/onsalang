@@ -367,6 +367,22 @@ pub(super) fn priv_use(c: &Cursor) -> Option<Hit> {
     hit(c.span(c.at), vec![remove_word(c, c.at, "remove `priv`")])
 }
 
+pub(super) const UNPLACED_WORD_ROWS: &[RowId] = &[RowId::VisibilityContainer, RowId::VisibilityInherited];
+
+/// A visibility word at `c.at` in a place that takes none (§15.1, S-491),
+/// where the parser judged it (`c.word`): on a block whose members have
+/// their own, no candidate (taken out, it would leave the members with a
+/// visibility the writer did not mean); on a declaration with none of its
+/// own or one that takes its owner's, the word goes.
+pub(super) fn unplaced_word(c: &Cursor) -> Option<(RowId, Hit)> {
+    match c.word? {
+        WordOn::Container => found(RowId::VisibilityContainer, c.span(c.at), Vec::new()),
+        WordOn::Inheriting => {
+            found(RowId::VisibilityInherited, c.span(c.at), vec![remove_word(c, c.at, "remove the visibility")])
+        }
+    }
+}
+
 /// `const fn h` of Rust (§6.6, S-464): the parser fails at the keyword of
 /// the function after `const` (`Parser::keyword_before_keyword`); a function
 /// that a constant calls has no mark, and `const` goes.

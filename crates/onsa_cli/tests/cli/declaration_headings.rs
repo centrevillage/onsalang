@@ -178,7 +178,6 @@ fn a_head_of_an_extern_block_that_does_not_read_shows_the_form_of_the_head() {
         ("bare", "extern {\n  fn f() -> I32\n}\n", "extern"),
         ("word", "extern \"C\" lib fastconv {\n  fn f() -> I32\n}\n", "extern \"C\" lib fastconv"),
         ("extra", "extern \"C\" lib \"m\" \"x\" {\n  fn f() -> I32\n}\n", "extern \"C\" lib \"m\" \"x\""),
-        ("vis", "pub extern \"C\" {\n  fn f() -> I32\n}\n", "extern \"C\""),
     ];
     let d = Dir::bare("externhead");
     for (name, src, found) in forms {
@@ -187,6 +186,28 @@ fn a_head_of_an_extern_block_that_does_not_read_shows_the_form_of_the_head() {
         assert_eq!(count(&diag, "fixes"), 0, "{name}: no candidate: {diag}");
         let notes = rule_notes(&diag);
         assert!(notes.iter().any(|n| n.contains("`extern \"C\" lib \"…\" {`")), "{name}: the note: {notes:?}");
+    }
+}
+
+#[test]
+fn a_visibility_on_a_block_has_no_candidate_and_says_to_write_it_on_each_member() {
+    // §15.1, §14.1 (S-491): the word on an `impl` of a type or on an `extern` block is one E0002 at the word, with
+    // no candidate, and its note says that the visibility is written on each member. A head of an `extern` block
+    // that does not read after it (`pub extern "C" {`, `pub unsafe extern "C" {`) is not the error reported.
+    let forms = [
+        ("impl_pub", "struct P {\n  x: I32,\n}\n\npub impl P {\n  fn a(self) -> I32 { self.x }\n}\n", "pub"),
+        ("impl_priv", "struct G[T] {\n  v: T,\n}\n\npriv impl[T] G[T] {\n  fn g(self) -> I32 { 1 }\n}\n", "priv"),
+        ("extern_lib", "pub extern \"C\" lib \"m\" {\n  fn f() -> I32\n}\n", "pub"),
+        ("extern_head", "pub extern \"C\" {\n  fn f() -> I32\n}\n", "pub"),
+        ("extern_unsafe", "pub unsafe extern \"C\" {\n  fn f() -> I32\n}\n", "pub"),
+    ];
+    let d = Dir::bare("blockvis");
+    for (name, src, word) in forms {
+        let diag = one(&d, name, src, "E0002");
+        assert_eq!(found_of(&diag), word, "{name}: {diag}");
+        assert_eq!(count(&diag, "fixes"), 0, "{name}: no candidate: {diag}");
+        let notes = rule_notes(&diag);
+        assert!(notes.iter().any(|n| n.contains("on each member")), "{name}: the note: {notes:?}");
     }
 }
 

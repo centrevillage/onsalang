@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§2.5", "§18.1"]
+// fixes = 0
+
+// A list of supertraits that cannot be read (W5-11 U5, spec §6.3, §2.5; R-373): the list that
+// is empty (`trait Tr: {`), that has a `+` with no trait on one side, and the colon that ends the
+// line (a line break after `:` is the end of the line, as in the head `struct P:`, where the
+// check reports "expected a trait name, found newline"). Each is one E0002 on the line of the
+// head, and no E0200 (the declaration is not read). One error in each unit.
+
+trait Tr1: {                                        //~ E0002
+  fn m(self) -> I32
+}
+
+trait Tr2: + {                                      //~ E0002
+  fn m(self) -> I32
+}
+
+trait Tr3: Show + {                                 //~ E0002
+  fn m(self) -> I32
+}
+
+trait Tr4: + Show {                                 //~ E0002
+  fn m(self) -> I32
+}
+
+trait Tr5:                                          //~ E0002
+  Show {
+  fn m(self) -> I32
+}
+
+struct P:                                           //~ E0002
+  Eq {
+  x: I32
+}

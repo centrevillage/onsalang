@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§14.1", "§18.1"]
+// fixes = 0
+
+// The places where a visibility is written and is read as it was before W5-11 U5 (spec §15.1,
+// §14.1; S-491, S-904): the guard against a change that takes a word out of a place that has
+// the right to it. (1) The members of an `impl` of a type take their own words: `pub` on a
+// member of a `pub struct` and `priv` on one are right, and a use of the member from the same
+// package reads. (2) The head of a `trait`, an `effect` and a `handler` takes a visibility, and
+// the declaration is E0200 in this version (the word is written on a declaration that exists).
+// (3) The members of an `extern` block take their own visibility (§14.1: `pub fn`, `priv type`),
+// and the block is E0200 (the members are read, so the places that use them get no E0302; a
+// `priv type` is a name of the module, so the function that takes it is `priv` as well; a
+// plain `fn` would be E0303, §15.1).
+// (4) `pub(crate)` on a variant is the form of Rust that has no candidate (E0002). (5) The
+// member of an `impl` of a trait: the whole `impl` is E0200 in this version, and the word
+// on the member is not a second report (the row `impl_member_pub` is in the names stage, S-904).
+// One error in each unit.
+
+pub struct P {
+  x: I32,
+}
+
+impl P {
+  pub fn a(self) -> I32 { self.x }
+  priv fn b(self) -> I32 { self.x }
+  fn c(self) -> I32 { self.x }
+}
+
+fn uses_members(p: P) -> I32 {
+  p.a() + p.b() + p.c()
+}
+
+pub trait Tr { fn m(self) -> I32 }                  //~ E0200
+
+pub effect Ask { fn ask() -> I32 }                  //~ E0200
+
+pub handler h: Ask { fn ask() -> I32 { 1 } }        //~ E0200
+
+priv trait Hidden { fn m(self) -> I32 }             //~ E0200
+
+extern "C" lib "m" {                                //~ E0200
+  pub fn c_abs(x: I32) -> I32
+  priv type Raw
+  fn c_neg(x: I32) -> I32
+}
+
+priv fn uses_extern(r: Raw) -> I32 {
+  c_abs(1) + c_neg(2)
+}
+
+enum Crate { pub(crate) A, B }                      //~ E0002
+
+enum CrateRows {
+  pub(crate) A,                                     //~ E0002
+  B,
+}
+
+impl Show for P {                                   //~ E0200
+  pub fn show(self) -> Str { "p" }
+}

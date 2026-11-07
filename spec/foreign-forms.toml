@@ -8551,6 +8551,147 @@ pub fn f() -> F32 {
 # フィールドは `priv`（§4.4 の `pub struct Q { priv value: F32 }`）。`priv struct` では、どちらも同じに届くので付けない（§15.1、S-494、S-672）。
 # 主の位置は書かない（仕様が決めない）。要素が二つ以上か、要素が型として読めないか、要素が無いときは候補が無く、
 # `tuple_struct_many` の行（E0002）。
+
+[[form]]
+id = "visibility_container"
+kind = "foreign"
+origin = "Swift"
+stage = "syntax"
+code = "E0002"
+spec = ["15.1", "14.1", "18.1"]
+rule = "メンバが自分の可視性を持つ容れ物（固有の `impl`、extern のブロック）には可視性を書かない。可視性はメンバごとに書く"
+
+[[form.example]]
+source = '''
+struct P {
+  x: I32,
+}
+
+pub impl P {
+  fn a(self) -> I32 { self.x }
+}
+'''
+at = "5:1"
+
+[[form.example]]
+source = '''
+struct G[T] {
+  v: T,
+}
+
+priv impl[T] G[T] {
+  fn get(self) -> I32 { 1 }
+}
+'''
+at = "5:1"
+
+[[form.example]]
+source = '''
+pub extern "C" lib "m" {
+  fn c_abs(x: I32) -> I32
+  type Raw
+}
+'''
+at = "1:1"
+
+[[form]]
+id = "visibility_inherited"
+kind = "redundant"
+origin = "Rust と Java"
+stage = "syntax"
+code = "E0020"
+spec = ["15.1", "18.1"]
+rule = "可視性は他のモジュールから名前で参照する宣言にだけ書く。trait の実装と `test` は可視性を持たず、trait・effect・handler のメンバと列挙子は持ち主の可視性を継ぐ。語は冗長"
+
+[[form.example]]
+source = '''
+pub test "a" {
+  assert 1 == 1
+}
+'''
+at = "1:1"
+fixed = ['''
+test "a" {
+  assert 1 == 1
+}
+''']
+
+[[form.example]]
+source = '''
+struct P {
+  x: I32,
+}
+
+trait Tr {
+  fn a(self) -> I32
+}
+
+pub impl Tr for P {
+  fn a(self) -> I32 { self.x }
+}
+'''
+at = "9:1"
+fixed = ['''
+struct P {
+  x: I32,
+}
+
+trait Tr {
+  fn a(self) -> I32
+}
+
+impl Tr for P {
+  fn a(self) -> I32 { self.x }
+}
+''']
+
+[[form.example]]
+source = '''
+trait Tr {
+  pub fn m(self) -> I32
+}
+'''
+at = "2:3"
+fixed = ['''
+trait Tr {
+  fn m(self) -> I32
+}
+''']
+
+[[form.example]]
+source = '''
+fn f() -> I32 {
+  handle { ask() } with Ask {
+    pub fn ask() -> I32 { 3 }
+  }
+}
+
+effect Ask {
+  fn ask() -> I32
+}
+'''
+at = "3:5"
+fixed = ['''
+fn f() -> I32 {
+  handle { ask() } with Ask {
+    fn ask() -> I32 { 3 }
+  }
+}
+
+effect Ask {
+  fn ask() -> I32
+}
+''']
+
+[[form.example]]
+source = '''
+enum E { pub A, B }
+'''
+at = "1:10"
+fixed = ['''
+enum E { A, B }
+''']
+
 [[form]]
 id = "tuple_struct"
 kind = "foreign"

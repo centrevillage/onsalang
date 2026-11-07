@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// canonical = false
+// spec = ["§6.3", "§18.2"]
+
+// A head with supertraits with the spaces broken (spec/tools.md §3.2, spec §6.3; R-373): no
+// space after the `:`, a space before it, more than one around it, and no space or more than one
+// around the `+`. The language reads all of them, and `onsa fmt` writes the forms of
+// trait_super_spaces.onsa (what the head of a `struct` with a list gets). The file is not canonical
+// on purpose (`canonical = false`).
+
+trait Tr1:Show {
+  fn m(self) -> I32
+}
+
+trait Tr2 :  Show+Dup {
+  fn m(self) -> I32
+}
+
+pub trait Tr3[T]:Show   +   Dup{
+  fn m(self) -> I32
+}
+
+trait Tr4:Dup {}

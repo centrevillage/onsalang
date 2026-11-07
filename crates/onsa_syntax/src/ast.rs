@@ -572,6 +572,10 @@ pub struct Variant {
 pub struct TraitDecl {
     pub name: Ident,
     pub generics: Vec<GenericParam>,
+    /// The supertraits of its head (`trait Ord: PartialOrd + Eq`, §6.3): read so that
+    /// `diff --ast` and the check of `onsa fmt` compare them; nothing else reads them
+    /// in this version (a trait is E0200, R-373).
+    pub supers: Vec<Path>,
     /// `Fn` (with or without body) and `Const` items.
     pub items: Vec<ItemId>,
 }

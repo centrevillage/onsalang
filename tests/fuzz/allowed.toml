@@ -449,3 +449,17 @@ left = "empty brackets are not written here"
 input = "tests/fuzz/9bfbd754.onsa"
 reasons = ["S-384"]
 note = "an input with two errors: the space before `(`, and `let o ()` that has no `=` and empty brackets where a value goes"
+
+[[allowed]]
+class = "fix|E0002|write the visibility, then `…`, once each|E0002"
+left = "a block whose members have a visibility of their own takes no visibility"
+input = "tests/fuzz/a7b97bd4.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: the run `pub pub`, and a visibility on an `impl` block that the right order keeps (and the file ends before the `{`)"
+
+[[allowed]]
+class = "fix|E0002|write the head without `…`|E0020"
+left = "this declaration has no visibility of its own; the word on it is redundant"
+input = "tests/fuzz/f67ff637.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: an `rt` before `test`, and a visibility on a `test`; the candidate of the run leaves the word, whose own candidate takes it out"

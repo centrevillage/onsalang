@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§14.1", "§18.1"]
+// fixes = 0
+
+// The visibility of the members of a block that has a word (W5-11 U5, spec §15.1, §14.1, §18.1;
+// S-491). In shapes.onsa the `pub` and `priv` on an `impl` and on an `extern` block are E0002
+// without a candidate, and the declaration is read on from the word, with the members as they
+// were written: a member has the visibility of its own word whatever the word of the block is
+// (the word of the block is not the default of its members). So a member with no word is of the
+// package, `pub fn` is of the package and of the outside, and `priv fn` is E0303 here, in the
+// `impl` and in the `extern` block alike; `priv type Raw` is E0303 in a `use`, and the `type
+// Mid` with no word is taken. The names are not E0302 (the declaration is read on), and the
+// places that use them are read as usual. One error in each unit.
+
+use shapes.{P}
+use shapes.{Q}
+use shapes.{c_abs}
+use shapes.{c_mid}
+use shapes.{c_neg}                                  //~ E0303
+use shapes.{Raw}                                    //~ E0303
+use shapes.{Mid}
+
+fn calls_public() -> I32 {
+  let p = P.new()
+  p.a() + p.c()
+}
+
+fn calls_private() -> I32 {
+  let p = P.new()
+  p.b()                                             //~ E0303
+}
+
+fn calls_q() -> I32 {
+  let q = Q.new()
+  q.d()
+}
+
+fn calls_q_private() -> I32 {
+  let q = Q.new()
+  q.e()                                             //~ E0303
+}
+
+fn calls_extern() -> I32 {
+  c_abs(1) + c_mid(2)
+}
+
+fn takes_mid(m: Mid) -> I32 {
+  1
+}

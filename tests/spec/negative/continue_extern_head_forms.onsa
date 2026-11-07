@@ -23,7 +23,7 @@ extern "C++" {                                      //~ E0002 @1
   fn c_b(x: I32) -> I32
 }
 
-pub extern "C" {                                    //~ E0002 @5
+pub extern "C" {                                    //~ E0002 @1
   fn c_c(x: I32) -> I32
   type RawC
 }

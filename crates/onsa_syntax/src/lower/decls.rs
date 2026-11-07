@@ -354,8 +354,12 @@ impl<'a> Lower<'a> {
         let mut heading = true;
         let name = self.read_name(d)?;
         let generics = self.read_generics(d, &mut heading);
+        let supers = match self.read_derives(d, &mut heading) {
+            Derives::Listed(paths) => paths,
+            Derives::Unknown => Vec::new(),
+        };
         let items = self.read_members(d, &mut heading);
-        Some((ItemKind::Trait(TraitDecl { name, generics, items }), heading))
+        Some((ItemKind::Trait(TraitDecl { name, generics, supers, items }), heading))
     }
 
     fn read_impl(&mut self, d: NodeId) -> Option<(ItemKind, bool)> {
