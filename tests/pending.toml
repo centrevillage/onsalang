@@ -294,6 +294,12 @@ note = "rt の効果行の rt 効果でない効果。効果の操作は第 2 �
 
 [[pending]]
 kind = "diag-code"
+target = "E0423"
+reasons = ["S-290"]
+until = "W5-23"
+note = "具体化の数の上限（降下の段）"
+[[pending]]
+kind = "diag-code"
 target = "E1010"
 reasons = ["§20"]
 until = "PH2"
