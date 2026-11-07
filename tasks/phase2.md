@@ -84,3 +84,4 @@
   第 2 期に捕捉の形を増やすとき、経路の捕捉を許すかを決める（入力は `target/notes/89/s803/probe/g12_capture.onsa`）。
 - **`impl Tr for Ty` を開く述語（117 回目、2026-11-06、W5-06 U4）:** `names/collect.rs` の `opens_impl` は経路の最後の綴りが `Default` かを読み、`ImplDef.of` は `Bound::Default` に固定である（利用者の `m.Default` も std の `Default` と読む。第 1 期は利用者の trait の宣言が E0200 なので害が無い）。
   第 2 期に利用者の trait と他の標準 trait を開くときは、解決した実体から決める形にする。
+- **S-293 から（2026-11-07、121 回目）:** 結果が型と被演算子の同一性で決まる比較と自己代入（`x == x`、符号なしの `x >= 0`、`y = y`）を報告したくなったら、言語の誤りにせず `onsa audit` の項目にする案がある（判定は約 90〜130 行の見当。`decisions/S/S-293.draft.md`）。
