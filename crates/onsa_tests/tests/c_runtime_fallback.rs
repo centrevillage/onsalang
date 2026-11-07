@@ -83,7 +83,8 @@ fn program() -> (String, usize) {
 }
 
 #[test]
-fn the_portable_integer_checks_give_the_exact_results() {
+#[ignore = "heavy: the gate item `heavy` runs it"]
+fn heavy_the_portable_integer_checks_give_the_exact_results() {
     for cc in ["gcc-15", "clang"] {
         c::require(cc).unwrap_or_else(|e| panic!("{e}"));
     }

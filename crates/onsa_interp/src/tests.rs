@@ -481,7 +481,8 @@ fn stack_needed(run: &dyn Fn()) -> usize {
 /// it, from two depths and two nestings. The rule it holds: 128 calls under
 /// 256 levels of any kind use at most half of what the net leaves.
 #[test]
-fn measure_the_stack_of_calls_and_levels() {
+#[ignore = "heavy: the gate item `heavy` runs it"]
+fn heavy_measure_the_stack_of_calls_and_levels() {
     on_stack(|| {
         let budget = onsa_diag::stack::STACK_SIZE - crate::STACK_RESERVE;
         for level in LEVELS {

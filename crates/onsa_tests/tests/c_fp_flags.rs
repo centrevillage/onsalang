@@ -604,7 +604,8 @@ fn the_generated_c_starts_with_the_flags_it_needs() {
 // ---------------------------------------------------------------------------------------------
 
 #[test]
-fn the_vector_fixture_compiles_without_a_warning_at_every_level() {
+#[ignore = "heavy: the gate item `heavy` runs it"]
+fn heavy_the_vector_fixture_compiles_without_a_warning_at_every_level() {
     need(&[GCC, CLANG]);
     // The package of the test vectors holds every integer and float operation and every conversion:
     // the `narrow_from` range checks (R-145), the `match` of every `Option` (R-145), the helpers of the

@@ -151,7 +151,7 @@ fn internal(span: Span, msg: impl Into<String>) -> ! {
 /// that call. A tail call counts; reading a `const` is not a call, and its
 /// initializer is an evaluation of its own, from 0. The same in every build.
 ///
-/// The stack it needs (R-05: measured, `measure_the_stack_of_calls_and_levels`
+/// The stack it needs (R-05: measured, `heavy_measure_the_stack_of_calls_and_levels`
 /// in the unit tests prints it). The interpreter runs on a thread with
 /// [`onsa_diag::stack::STACK_SIZE`] (64 MiB) of stack, and the safety net keeps
 /// [`STACK_RESERVE`] (4 MiB) of it, so a call may use 60 MiB / 128 = 480 K
@@ -175,7 +175,7 @@ fn internal(span: Span, msg: impl Into<String>) -> ! {
 /// So 128 calls, each under 256 levels of the most expensive kind, use 31 MB
 /// in debug and 27 MB in release, less than half of the 60 MiB (the unit
 /// tests `the_limit_comes_before_the_net_under_256_levels` and
-/// `measure_the_stack_of_calls_and_levels`). Without the `opt-level` the debug
+/// `heavy_measure_the_stack_of_calls_and_levels`). Without the `opt-level` the debug
 /// build uses 4.2 K a call and up to 5.1 K a level, and the net would come
 /// first under about 96 levels. The guarantee in every environment (the
 /// evaluator keeps its own stack) is W9-03's.

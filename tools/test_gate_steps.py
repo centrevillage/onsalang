@@ -76,7 +76,7 @@ class RealSteps(unittest.TestCase):
             for p in s.narrows:
                 self.assertTrue((gate.TOOLS / Path(p).relative_to("tools")).is_file(), p)
         self.assertEqual({s.name: s.touches for s in steps if s.touches},
-                         {"heavy": ("crates/onsa_core/", "tests/heavy/"), "gate-selftest": ("tools/",)})
+                         {"heavy": ("crates/", "tests/heavy/"), "gate-selftest": ("tools/",)})
         # the self-test is not run by a diff of the table of the allowed names alone (X-1 U10)
         self.assertEqual({s.name: s.touches_except for s in steps if s.touches_except},
                          {"gate-selftest": ("tools/builtin_names.toml",)})  # fmt: skip
