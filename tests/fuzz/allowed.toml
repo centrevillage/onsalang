@@ -534,3 +534,17 @@ left = "this `…` is never closed"
 input = "tests/fuzz/d20bd0f4.onsa"
 reasons = ["S-384"]
 note = "an input with two errors: a line break in the parameters of a function type, and a `{` never closed"
+
+[[allowed]]
+class = "fix|E0020|write the assignment out|reading"
+left = "token # outside the edits: Ident `…` at #..# after, Comment at #..# expected"
+input = "tests/fuzz/dffd5993.onsa"
+reasons = ["R-392"]
+note = "`x/=//`: the candidate puts a `/` right before the `//`, which reads as `///`; low, an edge of the joining of tokens"
+
+[[allowed]]
+class = "fix|E0020|write it against its operand|E0020"
+left = "a callee that is no path of names is a function value; it is called with `…`"
+input = "tests/fuzz/f7c3b7b9.onsa"
+reasons = ["R-393"]
+note = "`^` at the end of a line before `x()`: the candidate makes `^x()`, an error at the same place; low, the writer still sees an error"
