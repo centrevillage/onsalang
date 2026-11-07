@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// fixes = 2
+// spec = ["§2.4", "§2.5", "§18.1"]
+
+// Two string literals side by side with no name between them are not a run of §2.4 (S-856): they are the
+// form of §2.5, E0002 with two candidates, the `,` after the first literal and the two literals merged into
+// one, whether they touch (`"a""b"`) or not (`"a" "b"`). The error is not the error of a run (no name and no
+// delimiter), so it has candidates, and a name between the literals makes a run, which has none (see
+// run_prefix_sequences.onsa). One error per declaration (P-01).
+
+fn first(a: Str, n: I32) -> U32 {
+  1
+}
+
+fn second(n: I32, a: Str) -> U32 {
+  1
+}
+
+pub fn touching_in_the_first_argument() -> U32 {
+  first("a""b", 1)                                      //~ E0002
+}
+
+pub fn touching_in_the_second_argument() -> U32 {
+  second(1, "a""b")                                     //~ E0002
+}
+
+pub fn touching_in_an_array() -> U32 {
+  let xs = ["a""b"]                                     //~ E0002
+  xs.len()
+}
+
+pub fn touching_in_an_array_after_an_element() -> U32 {
+  let xs = ["a", "b""c"]                                //~ E0002
+  xs.len()
+}
+
+pub fn touching_in_a_tuple() -> U32 {
+  let t = ("a""b", 1)                                   //~ E0002
+  1
+}
+
+pub fn separated_by_a_space() -> U32 {
+  first("a" "b", 1)                                     //~ E0002
+}
+
+pub fn separated_by_a_line_end() -> U32 {
+  let xs = ["a"
+    "b"]                                                //~ E0002
+  xs.len()
+}

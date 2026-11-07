@@ -1,0 +1,129 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§2.4", "§18.1"]
+
+// E0002 in the lexical stage for a run of names, literals and delimiters of other languages that follow one
+// another with no space between them and hold at least one delimiter (spec §2.4; S-856, S-458, S-468, S-858;
+// the row `string_delimiter` of spec/foreign-forms.toml). The run is one form: `r"""x"""` is one error that
+// starts at `r` (not a name and then a delimiter), `"""x"""u8` and `x#"a"#y` are one error with the name
+// after the delimiter, and `br#"x"#` starts at `br`. The main position is where the run starts (the marker
+// gives its column) and the range is the whole run (not written here: a marker holds the line and the column
+// of the main position only). The error has no candidate (fixes = 0). The opening delimiter is read as long
+// as it can be: a run of `$` and `@` followed by a `"` or by three or more `"` (`$$"x"`, `$"""x"""`,
+// `$$"""{{x}}"""`), a run of three or more `"` (`""""x""""`), and one or more `#` followed by a `"`
+// (`##"x"##`, `r#"x"#`). The content is not read: a bad escape, a hole that cannot be written or a hole never
+// closed in it is no E0001. A `$` that does not start a delimiter (`$x`, a `$` before a backtick) is E0001 as
+// before (S-468). One error per declaration (P-01).
+// The rest of the forms of this file are in run_delimiter_sequences_whole.onsa.
+
+// The right forms.
+pub fn fine() -> Str {
+  let a = "r#\"x\"#"
+  a
+}
+
+pub fn name_hash_quote() -> Str {
+  r#"x"#                                                //~ E0002 @3
+}
+
+pub fn name_two_hashes() -> Str {
+  r##"x"##                                              //~ E0002 @3
+}
+
+pub fn triple_quotes_name() -> Str {
+  """x"""u8                                             //~ E0002 @3
+}
+
+pub fn triple_quotes_suffix_with_an_underscore() -> Str {
+  """x"""_s                                             //~ E0002 @3
+}
+
+pub fn hash_quote_name() -> Str {
+  #"x"#y                                                //~ E0002 @3
+}
+
+pub fn dollar_quote_name() -> Str {
+  $"x"y                                                 //~ E0002 @3
+}
+
+pub fn backticks_name() -> Str {
+  `x`y                                                  //~ E0002 @3
+}
+
+pub fn literal_name_dollar_quote() -> Str {
+  "a"x$"b"                                              //~ E0002 @3
+}
+
+pub fn dollar_quote_name_literal() -> Str {
+  $"a"x"b"                                              //~ E0002 @3
+}
+
+pub fn delimiter_name_character() -> Str {
+  $"a"x'b'                                              //~ E0002 @3
+}
+
+pub fn long_run_with_a_delimiter() -> Str {
+  p"a"q#"b"#r'c's                                       //~ E0002 @3
+}
+
+pub fn dollar_triple_quotes() -> Str {
+  $"""x"""                                              //~ E0002 @3
+}
+
+pub fn dollar_at_quote() -> Str {
+  $@"x"                                                 //~ E0002 @3
+}
+
+pub fn at_dollar_quote() -> Str {
+  @$"x"                                                 //~ E0002 @3
+}
+
+pub fn two_ats_quote() -> Str {
+  @@"x"                                                 //~ E0002 @3
+}
+
+pub fn four_quotes() -> Str {
+  """"x""""                                             //~ E0002 @3
+}
+
+pub fn five_quotes() -> Str {
+  """""x"""""                                           //~ E0002 @3
+}
+
+pub fn two_hashes() -> Str {
+  ##"x"##                                               //~ E0002 @3
+}
+
+pub fn three_hashes() -> Str {
+  ###"x"###                                             //~ E0002 @3
+}
+
+pub fn hash_quote_with_a_quote_hash_inside() -> Str {
+  ##"a"#b"##                                            //~ E0002 @3
+}
+
+pub fn hole_never_closed_in_a_hash_quote() -> Str {
+  r#"{x"#                                               //~ E0002 @3
+}
+
+pub fn dollar_before_a_name() -> Str {
+  $x                                                    //~ E0001 @3
+}
+
+pub fn dollar_before_backticks() -> Str {
+  $`x`                                                  //~ E0001 @3
+}
+
+pub fn two_dollars_before_a_name() -> Str {
+  $$x                                                   //~ E0001 @3
+}
+
+pub fn dollar_and_a_space_before_a_quote() -> Str {
+  $ "x"                                                 //~ E0001 @3
+}
+
+pub fn dollar_in_the_middle_of_a_line() -> Str {
+  let s = $y                                            //~ E0001 @11
+  s
+}

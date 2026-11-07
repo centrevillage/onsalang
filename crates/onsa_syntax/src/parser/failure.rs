@@ -236,11 +236,11 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// The held errors of the content of each literal right against a name
-    /// that no `string_prefix` reported ([`foreign::held_errors`]), after the
-    /// whole file is read (S-400, [`crate::literal::Touch`]).
+    /// The held errors of the content of the literals of each run that no
+    /// row reported ([`foreign::held_errors`]), after the whole file is read
+    /// (S-400, [`crate::literal::Run`]).
     pub(super) fn release_held(&mut self) {
-        if self.literals.touches().is_empty() {
+        if self.literals.runs().is_empty() {
             return;
         }
         let held: Vec<Diagnostic> = foreign::held_errors(&self.literals, &self.prefixed).cloned().collect();

@@ -1,0 +1,104 @@
+// onsa.toml
+// [test]
+// fixes = 1
+// spec = ["§2.4", "§2.5", "§18.1"]
+
+// A literal that touches a keyword, `_`, `true`, `false` or a number in a place the grammar cannot read
+// them together is reported by the general rule, the missing `,` of §2.5 (spec §2.4; S-856, S-474): these
+// words are not names, so they make no run with the literal, and the error is E0002 with one candidate, the
+// `,` (not the error of a run, which has no candidate). `true"a"` is `true` and `"a"`. A space or a line end
+// between the two (`x "a"`) gives the same error and the same candidate (the marker gives the line only: the
+// spec does not say where in the line the main position is). (Two literals side by side have two candidates and are in
+// run_prefix_adjacent_literals.onsa; a run of names and literals has none and is in run_prefix_sequences.onsa.)
+// The candidate `,` makes no other error of the syntax stage. One error per declaration (P-01).
+
+fn three(a: Bool, b: Str, c: I32) -> U32 {
+  1
+}
+
+fn str_first(a: Str, b: Bool, c: I32) -> U32 {
+  1
+}
+
+fn num_first(a: I32, b: Str, c: I32) -> U32 {
+  1
+}
+
+fn str_then_num(a: Str, b: I32, c: I32) -> U32 {
+  1
+}
+
+fn name_first(a: I32, b: Str, c: I32) -> U32 {
+  1
+}
+
+// ---------------------------------------------------------------- the words that are no names
+
+pub fn true_then_a_literal() -> U32 {
+  three(true"a", 1)                                     //~ E0002
+}
+
+pub fn false_then_a_literal() -> U32 {
+  three(false"a", 1)                                    //~ E0002
+}
+
+pub fn a_literal_then_true() -> U32 {
+  str_first("a"true, 1)                                 //~ E0002
+}
+
+pub fn a_literal_then_false() -> U32 {
+  str_first("a"false, 1)                                //~ E0002
+}
+
+pub fn a_number_then_a_literal() -> U32 {
+  num_first(1"a", 2)                                    //~ E0002
+}
+
+pub fn a_literal_then_a_number() -> U32 {
+  str_then_num("a"1, 2)                                 //~ E0002
+}
+
+pub fn a_character_then_a_number() -> U32 {
+  let xs = ['a'1]                                       //~ E0002
+  1
+}
+
+pub fn a_hole_then_a_literal() -> U32 {
+  let xs = [_"a"]                                       //~ E0002
+  1
+}
+
+// ---------------------------------------------------------------- the same words in an array and a tuple
+
+pub fn true_then_a_literal_in_an_array() -> U32 {
+  let xs = [true"a"]                                    //~ E0002
+  1
+}
+
+pub fn a_number_then_a_literal_in_a_tuple() -> U32 {
+  let t = (1"a", 2)                                     //~ E0002
+  1
+}
+
+// ---------------------------------------------------------------- a name and a literal with a space or a line end
+
+pub fn name_space_literal() -> U32 {
+  name_first(1, x "a", 2)                               //~ E0002
+}
+
+pub fn literal_space_name() -> U32 {
+  let xs = ["a" x]                                      //~ E0002
+  1
+}
+
+pub fn name_line_end_literal() -> U32 {
+  let xs = [x
+    "a"]                                                //~ E0002
+  1
+}
+
+pub fn literal_line_end_name() -> U32 {
+  let xs = ["a"
+    x]                                                  //~ E0002
+  1
+}

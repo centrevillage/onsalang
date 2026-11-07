@@ -282,10 +282,10 @@ pub(crate) struct Parser<'a> {
     /// [`Parser::complete`] records them from the kinds of the nodes
     /// ([`End::of`]).
     ends: Vec<(usize, End)>,
-    /// The ranges of the literals right against a name whose form the row
-    /// `string_prefix` reported ([`foreign::Failure::prefixed`]), kept and
-    /// dropped with the diagnostics: the held errors of the others are
-    /// reported after the file is read ([`Parser::release_held`]).
+    /// The ranges of the runs whose form a row reported
+    /// ([`foreign::Failure::prefixed`]), kept and dropped with the
+    /// diagnostics: the held errors of the others are reported after the
+    /// file is read ([`Parser::release_held`]).
     prefixed: Vec<Span>,
     /// The state of a guard reading ([`reads_as_pattern`]); `None` in every
     /// other reading.

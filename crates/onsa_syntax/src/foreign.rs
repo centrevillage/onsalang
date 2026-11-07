@@ -335,9 +335,9 @@ pub struct Hit {
     /// kinds `Copy` and `Dup` a derive does not take, S-463), or on another
     /// reading of the form (the delay `x'` of FAUST, `faust::prime_note`).
     pub note: Option<&'static str>,
-    /// The range of a literal right against a name whose form this hit
-    /// reports, so that the lexer's errors held in it are not reported (the
-    /// row `string_prefix`, S-466; `Failure::prefixed`).
+    /// The range of the run whose form this hit reports, so that the lexer's
+    /// errors held in it are not reported (the rows `string_prefix` and
+    /// `string_delimiter`, S-466; `Failure::prefixed`).
     pub held: Option<Span>,
 }
 
@@ -637,9 +637,8 @@ fn diagnostic(text: &str, id: RowId, hit: Hit) -> Diagnostic {
 pub(crate) struct Failure {
     pub rows: Vec<Diagnostic>,
     pub general: Option<Vec<Fix>>,
-    /// The range of the literal right against a name whose form a row
-    /// reported ([`Hit::held`]: the row `string_prefix`): the parser keeps it
-    /// with its diagnostics, and its held errors are not reported
+    /// The range of the run whose form a row reported ([`Hit::held`]): the
+    /// parser keeps it with its diagnostics, and its held errors are not reported
     /// ([`spaces::held_errors`]).
     pub prefixed: Option<Span>,
     /// Where the form a row found ends on its line ([`Hit::resume`]).

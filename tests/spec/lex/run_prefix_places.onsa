@@ -1,0 +1,163 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§2.4", "§18.1"]
+
+// E0002 for a run of names and literals with no space between them (spec §2.4; S-856, S-473) in the places
+// where a literal stands: an argument, an element, a field, the value of an arm, a closure body, a block in a
+// block, an attribute, a return, a flow, a `par` body, a constant, a generic function, a method, and a hole of
+// an interpolation. The run is one form wherever it stands: the main position is where it starts (the marker
+// gives its column) and there is no candidate (no `,` is offered). A `"` in a hole of an interpolation ends
+// the string there (§2.4), so `"{f"x"}"` is the literal `"{f"`, the name `x` and the literal `"}"`: one run
+// that starts at the first `"`. One error per declaration (P-01).
+
+pub struct Label {
+  text: Str,
+}
+
+fn show(s: Str) -> U32 {
+  s.len()
+}
+
+fn pair(a: Str, b: Str) -> U32 {
+  1
+}
+
+// ---------------------------------------------------------------- the places of a literal
+
+pub fn in_an_argument() -> U32 {
+  show(x"a"y)                                           //~ E0002 @8
+}
+
+pub fn in_the_first_of_two_arguments() -> U32 {
+  pair(x"a"y, "b")                                      //~ E0002 @8
+}
+
+pub fn in_the_second_of_two_arguments() -> U32 {
+  pair("a", x"b"y)                                      //~ E0002 @13
+}
+
+pub fn in_an_array() -> U32 {
+  let xs = ["a", x"b"y]                                 //~ E0002 @18
+  xs.len()
+}
+
+pub fn in_a_tuple() -> U32 {
+  let t = (1, x"b"y)                                    //~ E0002 @15
+  1
+}
+
+pub fn in_a_field() -> Label {
+  Label { text: x"a"y }                                 //~ E0002 @17
+}
+
+pub fn in_an_arm(o: Option[I32]) -> U32 {
+  match o {
+    Some(_) => show(x"a"y),                             //~ E0002 @21
+    None => 0,
+  }
+}
+
+pub fn as_the_value_of_an_arm(o: Option[I32]) -> Str {
+  match o {
+    Some(_) => x"a"y,                                   //~ E0002 @16
+    None => "b",
+  }
+}
+
+pub fn in_a_closure_body() -> U32 {
+  let f = fn(y: I32) -> U32 { show(x"a"y) }             //~ E0002 @36
+  f.(1)
+}
+
+pub fn in_a_block_in_a_block() -> U32 {
+  let r: U32 = {
+    let s: U32 = {
+      show(x"a"y)                                       //~ E0002 @12
+    }
+    s
+  }
+  r
+}
+
+pub fn in_a_branch(c: Bool) -> Str {
+  if c { x"a"y } else { "b" }                           //~ E0002 @10
+}
+
+pub fn after_a_return() -> Str {
+  return x"a"y                                          //~ E0002 @10
+}
+
+pub fn as_a_receiver() -> U32 {
+  x"a"y.len()                                           //~ E0002 @3
+}
+
+pub fn in_a_generic_function[T](x: T) -> T {
+  let s = x"a"y                                         //~ E0002 @11
+  x
+}
+
+pub struct Gain {
+  g: F32,
+}
+
+impl Gain {
+  pub fn label(self) -> Str {
+    x"a"y                                               //~ E0002 @5
+  }
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  let s = x"a"y                                         //~ E0002 @11
+  x
+}
+
+pub flow in_a_par(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0..<2 {
+    let s = x"a"y                                       //~ E0002 @13
+    x
+  }
+}
+
+const IN_A_CONST: Str = x"a"y                           //~ E0002 @25
+
+// ---------------------------------------------------------------- an attribute
+
+@fp(x"a")                                               //~ E0002 @5
+pub fn in_an_attribute() -> U32 {
+  1
+}
+
+@derive(x"a")                                           //~ E0002 @9
+pub struct InADerive {
+  a: I32,
+}
+
+// ---------------------------------------------------------------- a hole of an interpolation
+
+pub fn quote_in_a_hole() -> Str {
+  "{f"x"}"                                              //~ E0002 @3
+}
+
+pub fn quote_in_a_hole_after_text() -> U32 {
+  show("a{"x"y}")                                       //~ E0002 @8
+}
+
+pub fn quote_in_a_hole_with_a_dollar() -> Str {
+  "{$"x"}"                                              //~ E0002 @3
+}
+
+pub fn quote_in_a_hole_with_a_hash() -> Str {
+  "{#"x"#}"                                             //~ E0002 @3
+}
+
+pub fn quote_in_a_hole_in_a_let() -> Str {
+  let s = "{"a"}"                                       //~ E0002 @11
+  s
+}
+
+// The right forms.
+pub fn fine(x: I32) -> U32 uses {Alloc} {
+  let a = "{x}"
+  show(a)
+}

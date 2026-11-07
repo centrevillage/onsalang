@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§2.4", "§18.1"]
+
+// E0002 in the lexical stage for a run that holds a delimiter of another language (spec §2.4; S-856, S-458,
+// S-468) in the places where a literal stands: an argument, an element, a field, the value of an arm, a
+// closure body, a block in a block, an attribute, a return, a flow, a `par` body, a constant, a generic
+// function and a method. The run is one form wherever it stands: `r"""x"""` starts at `r` and `$$"x"` at the
+// first `$`, the marker gives that column, and there is no candidate. One error per declaration (P-01).
+// The rest of the forms of this file are in run_delimiter_places_whole.onsa.
+
+pub struct Label {
+  text: Str,
+}
+
+fn show(s: Str) -> U32 {
+  s.len()
+}
+
+fn pair(a: Str, b: Str) -> U32 {
+  1
+}
+
+pub struct Gain {
+  g: F32,
+}
+
+// The right forms.
+pub fn fine(x: I32) -> U32 uses {Alloc} {
+  let a = "{x}"
+  show(a)
+}
+
+pub fn dollar_triple_quotes_in_a_field() -> Label {
+  Label { text: $"""x""" }                              //~ E0002 @17
+}
+
+pub fn dollar_triple_quotes_in_an_arm(o: Option[I32]) -> U32 {
+  match o {
+    Some(_) => show($"""x"""),                          //~ E0002 @21
+    None => 0,
+  }
+}
+
+pub flow four_quotes_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let s = """"x""""                                     //~ E0002 @11
+  x
+}
+
+pub flow two_hashes_in_a_par(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0..<2 {
+    let s = ##"x"##                                     //~ E0002 @13
+    x
+  }
+}
+
+pub fn triple_quotes_name_in_an_argument() -> U32 {
+  show("""x"""u8)                                       //~ E0002 @8
+}
+
+pub fn triple_quotes_name_after_a_return() -> Str {
+  return """x"""u8                                      //~ E0002 @10
+}

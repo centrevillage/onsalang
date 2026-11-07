@@ -527,3 +527,10 @@ left = "this `…` is never closed"
 input = "tests/fuzz/b8de771a.onsa"
 reasons = ["S-384"]
 note = "an input with two errors: `2{` in the brackets of a type with no `,`, and the `{` never closed; the `{` reads as an element after the `,`"
+
+[[allowed]]
+class = "fix|E0002|remove the line break|E0002"
+left = "this `…` is never closed"
+input = "tests/fuzz/d20bd0f4.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: a line break in the parameters of a function type, and a `{` never closed"

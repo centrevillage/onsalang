@@ -1,0 +1,3 @@
+pub fn i(f:fn(n
+[I])->I32) -> I3{ //
+pub

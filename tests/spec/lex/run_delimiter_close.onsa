@@ -1,0 +1,133 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§2.4", "§18.1"]
+
+// How a delimiter of another language ends (spec §2.4; S-856, S-858, S-467). A run of `"` ends at a run of
+// the same number of `"`; a delimiter with `#` ends at a `"` followed by the same number of `#`; a `$` or `@`
+// run before the `"` changes neither. A delimiter that is not ended on the line (a run of another length, a
+// `"` with too few `#`, no closing at all) is not closed: its token goes on to the end of the line, and
+// the range of the error is the opening delimiter only (not written here: a marker holds the line and the
+// column of the main position only). The part of the line after an opening delimiter that is not closed is
+// not read, so a `}` in it is no end of a block, and the `}` on the next line ends the function. The first
+// half of the file has a `}` inside the content of a closed delimiter, after a shorter run of `"` or `#`
+// that would end it if the run were not read whole: if it ended there the `}` would end the function
+// and the `}` on the next line would be one more error. Each declaration has one error and the `}` that
+// ends it is the one on its last line (P-01).
+// The rest of the forms of this file are in run_delimiter_close_whole.onsa.
+
+// The right forms.
+pub fn fine() -> Str {
+  let a = "}}"
+  a
+}
+
+pub fn four_quotes_with_three_inside() -> Str {
+  """"a"""b }""""                                       //~ E0002 @3
+}
+
+pub fn three_quotes_with_two_inside() -> Str {
+  """a""b }"""                                          //~ E0002 @3
+}
+
+pub fn three_quotes_with_one_inside() -> Str {
+  """a"b }"""                                           //~ E0002 @3
+}
+
+pub fn five_quotes_with_four_inside() -> Str {
+  """""a""""b }"""""                                    //~ E0002 @3
+}
+
+pub fn dollar_and_three_quotes_with_one_inside() -> Str {
+  $"""a"b }"""                                          //~ E0002 @3
+}
+
+pub fn dollar_and_a_quote_with_a_brace_inside() -> Str {
+  $"a }"                                                //~ E0002 @3
+}
+
+pub fn at_and_a_quote_with_a_brace_inside() -> Str {
+  @"a }"                                                //~ E0002 @3
+}
+
+pub fn two_hashes_with_one_inside() -> Str {
+  ##"a"#b }"##                                          //~ E0002 @3
+}
+
+pub fn three_hashes_with_two_inside() -> Str {
+  ###"a"##b }"###                                       //~ E0002 @3
+}
+
+pub fn name_and_two_hashes_with_one_inside() -> Str {
+  r##"a"#b }"##                                         //~ E0002 @3
+}
+
+pub fn one_hash_with_a_quote_inside() -> Str {
+  #"a"b }"#                                             //~ E0002 @3
+}
+
+pub fn four_quotes_closed_by_three() -> Str {
+  """"x""" }                                            //~ E0002 @3
+}
+
+pub fn three_quotes_closed_by_two() -> Str {
+  """x"" }                                              //~ E0002 @3
+}
+
+pub fn five_quotes_closed_by_four() -> Str {
+  """""x"""" }                                          //~ E0002 @3
+}
+
+pub fn two_hashes_closed_by_one() -> Str {
+  ##"x"# }                                              //~ E0002 @3
+}
+
+pub fn three_hashes_closed_by_two() -> Str {
+  ###"x"## }                                            //~ E0002 @3
+}
+
+pub fn name_and_two_hashes_closed_by_one() -> Str {
+  r##"x"# }                                             //~ E0002 @3
+}
+
+pub fn one_hash_with_no_quote_after() -> Str {
+  #"x# }                                                //~ E0002 @3
+}
+
+pub fn dollar_not_closed() -> Str {
+  $"x }                                                 //~ E0002 @3
+}
+
+pub fn at_not_closed() -> Str {
+  @"x }                                                 //~ E0002 @3
+}
+
+pub fn dollar_triple_quotes_not_closed() -> Str {
+  $"""x }                                               //~ E0002 @3
+}
+
+pub fn name_hash_not_closed() -> Str {
+  r#"x }                                                //~ E0002 @3
+}
+
+pub fn hash_not_closed() -> Str {
+  #"x }                                                 //~ E0002 @3
+}
+
+pub fn triple_quotes_over_lines() -> Str {
+  """x }                                                //~ E0002 @3
+  text
+  """
+}
+
+pub fn run_ends_in_a_delimiter_not_closed() -> Str {
+  "a"b$"c }                                             //~ E0002 @3
+}
+
+pub fn run_with_a_delimiter_ends_in_a_string_not_closed() -> Str {
+  $"a"b"c }                                             //~ E0002 @3
+}
+
+pub fn comment_in_the_rest_of_the_line() -> Str {
+  $"x // text }                                         //~ E0002 @3
+}

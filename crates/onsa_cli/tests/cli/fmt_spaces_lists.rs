@@ -140,6 +140,37 @@ fn a_binary_operator_has_one_space_on_each_side() {
     expect_fmt("binary", &exprs("a binary operator written without spaces", &table));
 }
 
+/// A literal against a keyword is read by the grammar, and `onsa fmt` puts the space (§2.4, S-469, S-474).
+#[test]
+fn a_literal_against_a_keyword_gets_its_space() {
+    let extern_head = |what, head| {
+        let tail = ["  fn c_sin(x: F64) -> F64", "}"];
+        let input: Vec<&str> = [head].into_iter().chain(tail).collect();
+        let expected: Vec<&str> = ["extern \"C\" lib \"m\" {"].into_iter().chain(tail).collect();
+        case(what, &input, &expected)
+    };
+    expect_fmt(
+        "keyword_literal",
+        &[
+            extern_head("extern and the abi", "extern\"C\" lib\"m\" {"),
+            extern_head("the abi and lib", "extern \"C\"lib \"m\" {"),
+            extern_head("every part", "extern\"C\"lib\"m\" {"),
+            extern_head("lib and the name", "extern \"C\" lib\"m\" {"),
+            body(
+                "return",
+                &["  if c {", "    return\"a\"", "  }", "  \"b\""],
+                &["  if c {", "    return \"a\"", "  }", "  \"b\""],
+            ),
+            body("if", &["  if\"a\" == s {", "    g()", "  }", "  1"], &["  if \"a\" == s {", "    g()", "  }", "  1"]),
+            body(
+                "a guard",
+                &["  match s {", "    \"a\"if g => 1,", "    _ => 2,", "  }"],
+                &["  match s {", "    \"a\" if g => 1,", "    _ => 2,", "  }"],
+            ),
+        ],
+    );
+}
+
 #[test]
 fn a_binary_operator_written_with_other_spaces_has_one_on_each_side() {
     let table = [

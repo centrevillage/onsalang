@@ -1,0 +1,52 @@
+// onsa.toml
+// [test]
+// canonical = false
+// spec = ["§2.4", "§2.5"]
+
+// What is no run of §2.4 and is read as written (S-856): a literal beside a punctuation or an operator
+// (`s=="a"`, `["a","b"]`, `f("a")`, `"a".len()`), a quote or a prefix-looking word inside a comment, a doc
+// comment or a string, and a quote inside a character literal (`'"'`). Only a name, a string or character
+// literal and a delimiter of another language that follow one another with no space between them make a run.
+// The file is not canonical on purpose (`canonical = false`): `onsa fmt` puts spaces round `==` and `&&`.
+
+fn show(s: Str) -> U32 {
+  s.len()
+}
+
+// x"a"y, r"""x""", $"a", f"{x}" and `x` in a comment are nothing.
+pub fn punctuation_beside_literals(s: Str, c: Char) -> Bool {
+  s=="a" && "a"==s && c=='b' && 'b'==c
+}
+
+pub fn literal_before_a_dot() -> U32 {
+  "a".len() + show("b")
+}
+
+pub fn literals_between_commas() -> U32 {
+  let xs = ["a","b"]
+  let _ = ("a",'b')
+  xs.len()
+}
+
+/// A doc comment with x"a"y and $"""x""" in it.
+pub fn delimiters_and_prefixes_in_strings() -> Str {
+  let a = "x\"a\"y"
+  let _ = "r#\"x\"#"
+  let _ = "$\"x\" `y` '''z'''"
+  let _ = "f\"{{x}}\" u8\"x\""
+  let _ = "\"\"\"x\"\"\""
+  a
+}
+
+pub fn quotes_in_characters(c: Char) -> Bool {
+  c=='"' || c=='\'' || c=='`' || c=='$' || c=='#'
+}
+
+pub fn quotes_in_a_string_with_names(s: Str) -> Bool {
+  s=="'" || s=="\"" || s=="a'b" || s=="x#y"
+}
+
+pub fn after_a_comment() -> U32 {
+  // x"a"y and $"b" and r"""c""" in a comment
+  show("z")
+}

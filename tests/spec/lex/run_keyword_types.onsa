@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§2.4", "§7", "§18.1"]
+
+// A literal that touches a keyword is read where the grammar reads it, and what follows is the diagnostic of
+// the stage after (spec §2.4; S-856, S-474): `if"a"` is `if "a"`, a condition of type `Str`, and the error
+// is the type error E0401 (a condition is `Bool`, §4.7), not an error of the syntax stage about the
+// literal. The same holds for `while"a"`, `else if"a"` and `assert"a"` (§7: `assert e` has an `e` of type
+// `Bool`, E0401). One error per declaration (P-01).
+
+pub fn if_condition() -> I32 {
+  if"a" { 1 } else { 2 }                                //~ E0401
+}
+
+pub fn else_if_condition(c: Bool) -> I32 {
+  if c { 1 } else if"a" { 2 } else { 3 }                //~ E0401
+}
+
+pub fn while_condition() {
+  while"a" {                                            //~ E0401
+  }
+}
+
+pub fn assert_condition() {
+  assert"a"                                             //~ E0401
+}
+
+pub fn assert_character() {
+  assert'a'                                             //~ E0401
+}
+
+// The right forms.
+pub fn fine(c: Bool) -> I32 {
+  if c { 1 } else { 2 }
+}

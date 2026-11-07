@@ -86,34 +86,29 @@ pub(super) fn space_before_open(c: &Cursor) -> Option<(RowId, Hit)> {
     found(row, c.span(c.at), fixes)
 }
 
-/// A string or character literal right against a name (`f"{x}"`, `r"\d"`,
-/// `b"x"`, `u8"x"`, `b'x'`) or a name right against a literal (`"x"_s`): the
-/// prefixes and suffixes of other languages (§2.4, S-400), as the lexer found
-/// them ([`crate::literal::Touch`]), where the parser fails at the literal
-/// or at the name, before it or after it. E0002 with the note and no
-/// candidate; found before the missing `,` of a list (S-387), so no `,` goes
-/// between them. The literal is not read (S-406): one that does not close
-/// or holds an error is the form too, whose range the lexer gave (the name
-/// to the closing quote, or to the opening one when the line has none). The
-/// lexer's errors in it are held: [`held_errors`] reports those of the forms
-/// this row did not report.
+/// A run with no delimiter of other languages in it: the string and
+/// character literals right against a name (`f"{x}"`, `r"\d"`, `b"x"`,
+/// `u8"x"`, `b'x'`, `"x"_s`, `x"a"y`, `"a"b"c"`), the prefixes and suffixes of
+/// other languages (§2.4, S-400, S-856), as the lexer found them
+/// ([`crate::literal::Run`]), where the parser fails at any part of it. E0002
+/// with the note and no candidate; found before the missing `,` of a list
+/// (S-387), so no `,` goes between them. The literals are not read (S-406):
+/// one that does not close or holds an error is the form too. The lexer's
+/// errors in them are held: [`held_errors`] reports those of the forms no
+/// row reported.
 pub(super) fn string_prefix(c: &Cursor) -> Option<Hit> {
-    if !matches!(c.kind(c.at), TokenKind::Str | TokenKind::Char | TokenKind::Ident) {
-        return None;
-    }
-    let range = c.literals.touch(c.span(c.at))?.range;
+    let range = c.literals.touch(c.span(c.at)).filter(|r| !r.delimiter)?.range;
     // A `'` after the name may be the delay of FAUST, `x'` (its note).
     Some(Hit::new(range, Vec::new()).holding(range).with_note(super::faust::prime_note(c.text, range)))
 }
 
-/// The lexer's errors held in the literals right against a name
-/// ([`crate::literal::Touch::held`]) whose form the row `string_prefix` did
-/// not report, `reported` being the ranges of those it did
+/// The lexer's errors held in the runs ([`crate::literal::Run::held`]) whose
+/// form no row reported, `reported` being the ranges of those it did
 /// ([`super::Failure::prefixed`]): the literal was read as one (`extern "C"
 /// lib"m\q"` by the grammar of the heading), and its errors are its own.
 pub(crate) fn held_errors<'l>(literals: &'l Literals, reported: &[Span]) -> impl Iterator<Item = &'l Diagnostic> {
     let reported: std::collections::HashSet<&Span> = reported.iter().collect();
-    literals.touches().iter().filter(move |t| !reported.contains(&t.range)).flat_map(|t| &t.held)
+    literals.runs().iter().filter(move |r| !reported.contains(&r.range)).flat_map(|r| &r.held)
 }
 
 /// A space before or after a member `.` inside a line (`p . x`, `f .(x)`,

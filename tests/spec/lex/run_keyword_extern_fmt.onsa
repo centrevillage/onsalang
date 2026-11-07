@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// canonical = false
+// spec = ["§2.4", "§14.1", "§18.2"]
+
+// The heads of `extern` that touch their literals (S-469, S-474; spec §2.4): `extern"C" lib"m" {`, `extern
+// "C"lib "m" {`, `extern"C"lib"m" {` and `extern "C" lib"m" {`. The head reads them (the keyword and `lib`
+// are not names, so the literal makes no run with them), and `onsa fmt` puts the spaces of the form of
+// §14.1, `extern "C" lib "m" {`. The file is not canonical on purpose (`canonical = false`); that the
+// result is the form of §14.1 is in the CLI tests. It is read by the syntax stage only (`mode = "parse"`),
+// which is what fmt reads: the block is E0200 for `onsa check` (the cases are in run_keyword_extern.onsa).
+
+extern"C" lib"m" {
+  fn f_a(x: F64) -> F64
+}
+
+extern "C"lib "m" {
+  fn f_b(x: F64) -> F64
+  type HandleB
+}
+
+extern"C"lib"m" {
+  fn f_c(x: F64) -> F64
+}
+
+extern "C" lib"m" {
+  fn f_d(x: F64) -> F64
+  rt fn f_e(x: F64) -> F64
+}
+
+extern "C" lib "m" {
+  fn f_f(x: F64) -> F64
+}

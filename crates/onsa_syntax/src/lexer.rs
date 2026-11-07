@@ -12,7 +12,7 @@ use onsa_diag::{Code, Diagnostic, FileId, Span, Stage};
 
 pub use crate::chars::{BLANKS, is_blank};
 use crate::chars::{is_ident_continue, is_ident_start, line_break};
-use crate::literal::{ForeignNumber, ForeignString, Form, Found, Hole, HoleError, Invalid, Kind, Literals, Touch};
+use crate::literal::{ForeignNumber, Form, Found, Hole, HoleError, Invalid, Kind, Literals, Run};
 use crate::token::{Token, TokenKind};
 
 /// Result of lexing one file.
@@ -37,6 +37,7 @@ pub fn lex(file: FileId, text: &str) -> Lexed {
         content: Vec::new(),
     };
     lx.run();
+    lx.runs();
     let mut out = lx.out;
     out.literals = Literals::new(lx.found, &out.diagnostics);
     out
@@ -83,9 +84,9 @@ pub(crate) fn indent(text: &str, offset: u32) -> &str {
 /// The first token of the line of the token `i` of `tokens` (those of a
 /// file, all kinds): lexing anew from its start reads the tokens of the file
 /// from there on as they are (`a_line_lexed_anew_reads_its_tokens`). The
-/// lexer looks back at the token right before only (a tuple index after a
-/// `.`, a `#` after a `#`, a name right before a literal), and a line break
-/// is none of them; a token over lines goes back to the line it starts on.
+/// lexer looks back at what is right before only (a tuple index after a
+/// `.`, a `#`, `$` or `@` after one of its run), and a line break is none of
+/// them; a token over lines goes back to the line it starts on.
 pub(crate) fn line_of(tokens: &[Token], i: usize) -> usize {
     let mut k = i.min(tokens.len());
     while k > 0 && tokens[k - 1].kind != TokenKind::Newline {
@@ -110,9 +111,9 @@ struct Lexer<'a> {
     bytes: &'a [u8],
     pos: usize,
     out: Lexed,
-    /// The holes of the string literals that a `}` closes, the numbers and
-    /// the strings written as in other languages and the literals right
-    /// against a name ([`Literals`]).
+    /// The holes of the string literals that a `}` closes, the numbers
+    /// written as in other languages, the runs and what does not close on
+    /// its line ([`Literals`]).
     found: Found,
     /// The errors of the content of the string or character literal being
     /// read, until it is read whole ([`Lexer::literal`]).
@@ -172,8 +173,8 @@ impl<'a> Lexer<'a> {
                 self.push(TokenKind::Newline, start);
                 continue;
             }
-            if matches!(b, b'"' | b'\'' | b'`' | b'$' | b'@' | b'#' | b'r')
-                && !self.after_hash(start)
+            if matches!(b, b'"' | b'\'' | b'`' | b'$' | b'@' | b'#')
+                && !self.after_unopened(start)
                 && let Some((open, close)) = foreign_open(&self.text[start..])
             {
                 self.foreign_string(start, open, close);
@@ -199,13 +200,63 @@ impl<'a> Lexer<'a> {
         self.push(TokenKind::Eof, end);
     }
 
-    /// Whether a `#` at `start` follows a `#` token right before it: the run
-    /// of `#` from that one opened no delimiter ([`foreign_open`]), so the
-    /// rest of the run, before the same character, opens none either. Each
-    /// `#` of a run counting it again would be quadratic in its length.
-    fn after_hash(&self, start: usize) -> bool {
-        self.bytes[start] == b'#'
-            && self.out.tokens.last().is_some_and(|t| t.kind == TokenKind::Hash && t.span.end as usize == start)
+    /// The runs of the file (§2.4, S-856): the names, the string and
+    /// character literals and the strings written with a delimiter of other
+    /// languages that follow one another with no token between them, read
+    /// from the tokens once. A run is one form, and the parser's failure at
+    /// any part of it finds it ([`Literals::touch`]). One literal alone is
+    /// none, nor are literals with no name and no delimiter (`"a""b"`, §2.5),
+    /// and a word of the grammar ends a run. What does not close goes to the
+    /// end of its line, so it ends the run too. The errors of the content of
+    /// the literals are the run's, held; those of the other literals go to
+    /// the diagnostics, in the order of the file.
+    // SPEC-GAP(S-937): a run with a name or a delimiter holds the literals
+    // side by side in it (`x"a""b"`, `"a"$"b"`).
+    fn runs(&mut self) {
+        let in_run = |t: &Token| {
+            use TokenKind::*;
+            matches!(t.kind, Ident | Str | Char | ForeignStr)
+        };
+        let mut runs: Vec<Run> = Vec::new();
+        for part in self.out.tokens.chunk_by(|a, b| in_run(a) && in_run(b) && a.span.end == b.span.start) {
+            let delimiter = part.iter().any(|t| t.kind == TokenKind::ForeignStr);
+            let name = part.len() > 1 && part.iter().any(|t| t.kind == TokenKind::Ident);
+            if !(delimiter || name) {
+                continue;
+            }
+            let (start, last) = (part[0].span.start, part[part.len() - 1].span);
+            let open = self.found.unclosed.binary_search_by_key(&last.start, |s| s.start);
+            let end = open.map_or(last.end, |i| self.found.unclosed[i].end);
+            let at = |end| Span::new(self.file, start, end);
+            runs.push(Run { span: at(last.end), range: at(end), delimiter, held: Vec::new() });
+        }
+        let contents = std::mem::take(&mut self.found.contents);
+        let read = !contents.is_empty();
+        for (literal, errors) in contents {
+            let i = runs.partition_point(|r| r.span.end <= literal.start);
+            match runs.get_mut(i).filter(|r| r.span.start <= literal.start) {
+                Some(run) => run.held.extend(errors),
+                None => self.out.diagnostics.extend(errors),
+            }
+        }
+        if read {
+            self.out.diagnostics.sort_by_key(|d| d.span.start);
+        }
+        self.found.runs = runs;
+    }
+
+    /// Whether a `#`, `$` or `@` at `start` follows one of its run that
+    /// opened no delimiter ([`foreign_open`], which reads the whole run): the
+    /// rest of the run, before the same character, opens none either. Each of
+    /// a run counting it again would be quadratic in its length. A token ends
+    /// with a `$` or `@` only where they opened nothing; a `#` also closes a
+    /// delimiter, so the token before has to be a `#` of its own.
+    fn after_unopened(&self, start: usize) -> bool {
+        match self.bytes[start] {
+            b'#' => self.out.tokens.last().is_some_and(|t| t.kind == TokenKind::Hash && t.span.end as usize == start),
+            b'$' | b'@' => start > 0 && matches!(self.bytes[start - 1], b'$' | b'@'),
+            _ => false,
+        }
     }
 
     /// Whether the character at the position starts no token (§2.3, §2.5):
@@ -216,7 +267,7 @@ impl<'a> Lexer<'a> {
         match self.peek() {
             None | Some(b' ' | b'\t') => false,
             _ if self.line_break().is_some() => false,
-            Some(b'$') => foreign_open(&self.text[self.pos..]).is_none(),
+            Some(b'$') => self.after_unopened(self.pos) || foreign_open(&self.text[self.pos..]).is_none(),
             Some(b'\\') => true,
             Some(b) => !b.is_ascii_graphic(),
         }
@@ -332,7 +383,9 @@ impl<'a> Lexer<'a> {
                 break;
             }
         }
-        let kind = word_kind(&self.text[start..self.pos]);
+        let word = &self.text[start..self.pos];
+        let kind =
+            if word == "_" { TokenKind::Underscore } else { TokenKind::keyword(word).unwrap_or(TokenKind::Ident) };
         self.push(kind, start);
     }
 
@@ -388,50 +441,17 @@ impl<'a> Lexer<'a> {
 
     /// A string or character literal (§2.4), read by `lex` ([`Lexer::string`],
     /// [`Lexer::char_lit`]), which says whether it closes on its line. The
-    /// errors of its content wait until it is read whole: one right against
-    /// a name before it (`f"…"`, `b'x'`) or after it (`"…"_s`) is a form of
-    /// other languages whose content is not read (S-400, S-406), and they
-    /// are held in its [`Touch`]; else they are reported. A character written
-    /// nowhere is reported as it is in either (§2.5, S-454).
+    /// errors of its content wait for the runs: the content of a literal in a
+    /// run is not read (§2.4, S-400, S-406). A character written nowhere is
+    /// reported as it is in either (§2.5, S-454).
     fn literal(&mut self, start: usize, lex: fn(&mut Self, usize) -> bool) {
-        let closed = lex(self, start);
-        let literal = self.span(start);
-        let at = |from: u32, to: u32| Span::new(self.file, from, to);
-        let n = self.out.tokens.len();
-        let before = n.checked_sub(2).map(|i| self.out.tokens[i]);
-        let touch = match before {
-            Some(t) if t.kind == TokenKind::Ident && t.span.end == literal.start => {
-                // Not closed: the name to the opening quote.
-                let end = if closed { literal.end } else { literal.start + 1 };
-                Some((t.span, at(t.span.start, end)))
-            }
-            // A hole that a `"` cuts closes the literal there, so `"{"a"}"` is
-            // `"{"` against the name `a` (`string_prefix`), not a literal in a
-            // hole (§2.4, S-465: the form of S-400, whose content is not read).
-            _ if closed => self.name_after().map(|name| (name, at(literal.start, name.end))),
-            _ => None,
-        };
-        if !closed {
-            self.found.unclosed.push(literal);
+        if !lex(self, start) {
+            self.found.unclosed.push(Span::new(self.file, start as u32, start as u32 + 1));
         }
-        let content = std::mem::take(&mut self.content);
-        match touch {
-            Some((name, range)) => self.found.touches.push(Touch { literal, name, range, held: content }),
-            None => self.out.diagnostics.extend(content),
+        if !self.content.is_empty() {
+            let literal = self.span(start);
+            self.found.contents.push((literal, std::mem::take(&mut self.content)));
         }
-    }
-
-    /// The name right after the position, as the lexer will read it: a
-    /// delimiter of other languages is read before a word (`r#"…"#`,
-    /// [`Lexer::run`]), and [`word_kind`] tells a name from a keyword or `_`.
-    fn name_after(&self) -> Option<Span> {
-        let rest = &self.bytes[self.pos..];
-        if !rest.first().is_some_and(|&b| is_ident_start(b)) || foreign_open(&self.text[self.pos..]).is_some() {
-            return None;
-        }
-        let n = rest.iter().take_while(|&&b| is_ident_continue(b)).count();
-        (word_kind(&self.text[self.pos..self.pos + n]) == TokenKind::Ident)
-            .then(|| Span::new(self.file, self.pos as u32, (self.pos + n) as u32))
     }
 
     /// An E0001 of the content of the literal being read ([`Lexer::literal`]).
@@ -443,26 +463,25 @@ impl<'a> Lexer<'a> {
     /// S-455), at its opening delimiter of `open` bytes ([`foreign_open`]):
     /// one token `ForeignStr` to the first closing delimiter `close` on the
     /// line, or to the end of the line. The content is not read, but for a
-    /// character written nowhere (§2.5, S-454). The range of the form is the
-    /// token, or the opening delimiter when the line has no closing one; the
-    /// row `string_delimiter` reports it ([`Literals::foreign_string`]).
+    /// character written nowhere (§2.5, S-454).
     fn foreign_string(&mut self, start: usize, open: usize, close: Close) {
         self.pos = start + open;
         let closed = loop {
             if self.at_line_end() {
                 break false;
             }
-            if let Some(n) = close.at(&self.text[self.pos..]) {
-                self.pos += n;
+            let (n, closes) = close.at(&self.bytes[self.pos..]);
+            self.pos += n;
+            if closes {
                 break true;
             }
-            if !self.unwritable_run() {
+            if n == 0 && !self.unwritable_run() {
                 self.bump_char();
             }
         };
-        let token = self.span(start);
-        let range = if closed { token } else { Span::new(self.file, start as u32, (start + open) as u32) };
-        self.found.strings.push(ForeignString { token, range });
+        if !closed {
+            self.found.unclosed.push(Span::new(self.file, start as u32, (start + open) as u32));
+        }
         self.push(TokenKind::ForeignStr, start);
     }
 
@@ -714,57 +733,63 @@ impl<'a> Lexer<'a> {
     }
 }
 
-/// The token of the word `word` (a run of the characters of a name): `_`,
-/// a keyword or a name. The one test, for the words the lexer reads and the
-/// name it looks for after a literal ([`Lexer::name_after`]).
-fn word_kind(word: &str) -> TokenKind {
-    if word == "_" { TokenKind::Underscore } else { TokenKind::keyword(word).unwrap_or(TokenKind::Ident) }
-}
-
 /// The closing delimiter of a string of other languages ([`foreign_open`]):
-/// its quotes and the number of `#` after them.
+/// `count` of its character `mark`, then `hashes` of `#`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Close {
-    quotes: &'static str,
+    mark: u8,
+    count: usize,
     hashes: usize,
 }
 
 impl Close {
-    /// The length of the closing delimiter at the start of `rest`, if it is there.
-    fn at(self, rest: &str) -> Option<usize> {
-        let after = rest.strip_prefix(self.quotes)?;
-        let n = after.bytes().take(self.hashes).take_while(|&b| b == b'#').count();
-        (n == self.hashes).then_some(self.quotes.len() + n)
+    /// What `rest` starts with: the bytes to go over, and whether they are
+    /// the closing delimiter. The `#` of a closing delimiter are counted up
+    /// to `hashes`, so that a delimiter may open right after it (`#"a"##"b"#`).
+    // SPEC-GAP(S-941): a run of `mark` of another length is no closing
+    // delimiter, and is gone over whole.
+    fn at(self, rest: &[u8]) -> (usize, bool) {
+        if self.hashes > 0 {
+            if rest.first() != Some(&self.mark) {
+                return (0, false);
+            }
+            let n = rest[1..].iter().take(self.hashes).take_while(|&&b| b == b'#').count();
+            return if n == self.hashes { (1 + n, true) } else { (0, false) };
+        }
+        let n = rest.iter().take_while(|&&b| b == self.mark).count();
+        (n, n == self.count)
     }
 }
 
 /// The opening delimiter of a string of other languages at the start of
-/// `rest` (§2.4, S-406, S-455): its length and the closing delimiter. They
-/// are `$"`, `@"`, `$@"`, `@$"` (C#), `#"`, `r#"` with one `#` or more
-/// (Swift, Rust; `rest` starts a token, so the `r` is a name of its own),
-/// `"""`, `'''` and `` ` ``. Neither is a token of Onsa: `"""` would be two
-/// strings side by side, `'''` an empty character, and `$`, `` ` `` no
-/// character of a token.
+/// `rest`, read as long as it goes (§2.4, S-406, S-455, S-856): its length
+/// and the closing delimiter. They are a run of `$` and `@` before a `"` or
+/// before three or more `"`, three or more `"`, one or more `#` before a `"`,
+/// `'''` and `` ` ``. Neither is a token of Onsa: `"""` would be two strings
+/// side by side, `'''` an empty character, and `$`, `` ` `` no character of a
+/// token. A name right before one is a token of its own, and the two are a
+/// run ([`Lexer::runs`]). Two `"` after a `$` are a delimiter and its close.
 fn foreign_open(rest: &str) -> Option<(usize, Close)> {
-    // SPEC-GAP(S-458): a name right before a delimiter is a name of its own
-    // (`r"""x"""`, `` f`x` ``, `br#"x"#`: the row `string_delimiter` at the
-    // delimiter, no `string_prefix`), and `$"""x"""` opens with `$"`.
-    const QUOTED: [(&str, &str); 7] = [
-        ("\"\"\"", "\"\"\""),
-        ("'''", "'''"),
-        ("`", "`"),
-        ("$@\"", "\""),
-        ("@$\"", "\""),
-        ("$\"", "\""),
-        ("@\"", "\""),
-    ];
-    if let Some((open, close)) = QUOTED.iter().find(|(open, _)| rest.starts_with(open)) {
-        return Some((open.len(), Close { quotes: close, hashes: 0 }));
-    }
     let b = rest.as_bytes();
-    let r = usize::from(b.first() == Some(&b'r'));
-    let hashes = b[r..].iter().take_while(|&&c| c == b'#').count();
-    (hashes > 0 && b.get(r + hashes) == Some(&b'"')).then_some((r + hashes + 1, Close { quotes: "\"", hashes }))
+    let marks = b.iter().take_while(|&&c| matches!(c, b'$' | b'@')).count();
+    let quotes = b[marks..].iter().take_while(|&&c| c == b'"').count();
+    let close = |mark, count, hashes| Close { mark, count, hashes };
+    if quotes >= 3 {
+        return Some((marks + quotes, close(b'"', quotes, 0)));
+    }
+    if marks > 0 {
+        return (quotes > 0).then_some((marks + 1, close(b'"', 1, 0)));
+    }
+    // SPEC-GAP(S-942): a `'''` right after a name opens a delimiter too, so
+    // `x'''` is a run with a delimiter and no delay of FAUST.
+    if rest.starts_with("'''") {
+        return Some((3, close(b'\'', 3, 0)));
+    }
+    if rest.starts_with('`') {
+        return Some((1, close(b'`', 1, 0)));
+    }
+    let hashes = b.iter().take_while(|&&c| c == b'#').count();
+    (hashes > 0 && b.get(hashes) == Some(&b'"')).then_some((hashes + 1, close(b'"', 1, hashes)))
 }
 
 #[cfg(test)]
@@ -1019,8 +1044,7 @@ mod tests {
             "@\"C:\\p\"",
             "$@\"x\"",
             "@$\"x\"",
-            "r#\"a\\q\"#",
-            "r##\"a\"#b\"##",
+            "##\"a\"#b\"##",
             "#\"x\"#",
             "##\"x\"##",
             "\"\"\"a\"b\"\"\"",
@@ -1031,7 +1055,7 @@ mod tests {
             assert_eq!(texts(src), vec![(ForeignStr, src), (Eof, "")], "{src}");
             assert!(errors(src).is_empty(), "{src}");
         }
-        assert_eq!(texts("r#\"a\"#b\"#")[..2], [(ForeignStr, "r#\"a\"#"), (Ident, "b")]);
+        assert_eq!(texts("r#\"a\"#b\"#")[..3], [(Ident, "r"), (ForeignStr, "#\"a\"#"), (Ident, "b")]);
         // No closing delimiter on the line: the token goes to its end.
         let line: Vec<TokenKind> = texts("$\"ab \\q\nx").into_iter().map(|t| t.0).collect();
         assert_eq!(line, vec![ForeignStr, Newline, Ident, Eof]);
@@ -1048,10 +1072,112 @@ mod tests {
         // A run of `#` that opens no delimiter is a `#` each; a delimiter
         // after a closing one opens (`"#` then `#"`).
         assert_eq!(kinds("### x").0, vec![Hash, Hash, Hash, Ident, Eof]);
-        assert_eq!(kinds("r#\"a\"##\"b\"#").0, vec![ForeignStr, ForeignStr, Eof]);
-        // A delimiter after a literal is no name against it (`r` of `r#"…"#`).
-        let l = lex(FileId(0), "\"a\"r#\"b\"#");
-        assert!(l.literals.touches().is_empty(), "{:?}", l.literals.touches());
+        assert_eq!(kinds("#\"a\"##\"b\"#").0, vec![ForeignStr, ForeignStr, Eof]);
+    }
+
+    /// The text of the opening delimiter at the start of `src`, when it is one.
+    fn opening(src: &str) -> Option<&str> {
+        foreign_open(src).map(|(n, _)| &src[..n])
+    }
+
+    #[test]
+    fn an_opening_delimiter_is_read_as_long_as_it_goes() {
+        // S-856, S-468, S-858.
+        for (src, open) in [
+            ("$$\"x\"", "$$\""),
+            ("$@$\"x\"", "$@$\""),
+            ("$\"\"\"x\"\"\"", "$\"\"\""),
+            ("$$\"\"\"\"x\"\"\"\"", "$$\"\"\"\""),
+            ("\"\"\"\"x\"\"\"\"", "\"\"\"\""),
+            ("###\"x\"###", "###\""),
+            // Two `"` after a `$` are a delimiter and its close.
+            ("$\"\"", "$\""),
+        ] {
+            assert_eq!(opening(src), Some(open), "{src}");
+        }
+        // No delimiter.
+        for src in ["\"\"", "\"a\"", "$", "$$x", "$`x`", "@x", "#x", "r#\"x\"#", "r\"\"\""] {
+            assert_eq!(opening(src), None, "{src}");
+        }
+        assert_eq!(texts("$\"\"x")[..2], [(ForeignStr, "$\"\""), (Ident, "x")]);
+    }
+
+    #[test]
+    fn a_closing_delimiter_has_the_number_of_the_opening_one() {
+        // The same number of `"`; a longer run does not close (S-858, S-941).
+        assert_eq!(texts("\"\"\"x\"\"\"\" y")[..1], [(ForeignStr, "\"\"\"x\"\"\"\" y")]);
+        assert_eq!(texts("\"\"\"x\"\" y")[..1], [(ForeignStr, "\"\"\"x\"\" y")]);
+        assert_eq!(texts("\"\"\"\"x\"\"\"\" y")[..2], [(ForeignStr, "\"\"\"\"x\"\"\"\""), (Whitespace, " ")]);
+        assert_eq!(texts("$\"a\"\"b\" y")[..2], [(ForeignStr, "$\"a\"\"b\""), (Whitespace, " ")]);
+        // The `#` are counted up to the number (`#"a"##"b"#` above).
+        assert_eq!(texts("##\"a\"#b\"## y")[..2], [(ForeignStr, "##\"a\"#b\"##"), (Whitespace, " ")]);
+        assert_eq!(texts("##\"a\"# y")[..1], [(ForeignStr, "##\"a\"# y")]);
+    }
+
+    #[test]
+    fn a_long_run_of_the_characters_of_a_delimiter_is_read_once() {
+        // The opening is read once per run ([`Lexer::after_unopened`]), and a
+        // run of the mark inside once: these end at once.
+        let n = 200_000;
+        assert_eq!(kinds(&format!("{}x", "$".repeat(n))).0, vec![Error, Ident, Eof]);
+        assert_eq!(kinds(&format!("{}x", "$@".repeat(n))).0.len(), 2 * n + 2);
+        assert_eq!(kinds(&format!("{}x", "#".repeat(n))).0.len(), n + 2);
+        assert_eq!(kinds(&format!("\"\"\"{}", "\"\"\"\"x".repeat(n))).0, vec![ForeignStr, Eof]);
+    }
+
+    /// The text of the range of each run of `src`, and whether it has a delimiter.
+    fn runs(src: &str) -> Vec<(&str, bool)> {
+        let l = lex(FileId(0), src);
+        l.literals.runs().iter().map(|r| (&src[r.range.start as usize..r.range.end as usize], r.delimiter)).collect()
+    }
+
+    #[test]
+    fn a_run_is_the_names_and_the_literals_with_no_token_between() {
+        for (src, want) in [
+            ("x\"a\"y", vec![("x\"a\"y", false)]),
+            ("\"a\"b\"c\"", vec![("\"a\"b\"c\"", false)]),
+            ("x'a'y", vec![("x'a'y", false)]),
+            ("r\"\"\"x\"\"\"", vec![("r\"\"\"x\"\"\"", true)]),
+            ("r#\"x\"#y", vec![("r#\"x\"#y", true)]),
+            ("\"a\"r#\"b\"#", vec![("\"a\"r#\"b\"#", true)]),
+            // One delimiter alone is a run; a name or a literal alone is none.
+            ("$\"x\"", vec![("$\"x\"", true)]),
+            ("x \"a\" 'b'", vec![]),
+            // Literals side by side are one with a name or a delimiter
+            // (S-937), and §2.5 with neither.
+            ("\"a\"\"b\"", vec![]),
+            ("x\"a\"\"b\"", vec![("x\"a\"\"b\"", false)]),
+            ("\"a\"$\"b\"", vec![("\"a\"$\"b\"", true)]),
+            // A blank, a comment, a keyword, `_`, a number end it.
+            ("x\"a\" \"b\"y", vec![("x\"a\"", false), ("\"b\"y", false)]),
+            ("x/*c*/\"a\"", vec![]),
+            ("if\"a\"", vec![]),
+            ("_\"a\"", vec![]),
+            ("true\"a\"", vec![]),
+            ("x\"a\"if\"b\"y", vec![("x\"a\"", false), ("\"b\"y", false)]),
+            ("1\"a\"2", vec![]),
+            // What does not close: to its opening delimiter.
+            ("x\"abc", vec![("x\"", false)]),
+            ("\"a\"b'c", vec![("\"a\"b'", false)]),
+            ("\"a\"b$\"c", vec![("\"a\"b$\"", true)]),
+            ("x\"\"\"\"a\"\"\"", vec![("x\"\"\"\"", true)]),
+            // A `'''` after a name opens (S-942).
+            ("x'''", vec![("x'''", true)]),
+        ] {
+            assert_eq!(runs(src), want, "{src}");
+        }
+    }
+
+    #[test]
+    fn the_errors_of_the_content_of_a_run_are_held() {
+        let src = "\"\\q\" x\"\\q\"\"\\p\" \"\\q\" \u{e9} '\\q'y";
+        let l = lex(FileId(0), src);
+        let at: Vec<u32> = l.diagnostics.iter().map(|d| d.span.start).collect();
+        assert_eq!(at, vec![1, 16, 20], "in the order of the file");
+        let held: Vec<u32> = l.literals.runs().iter().flat_map(|r| &r.held).map(|d| d.span.start).collect();
+        assert_eq!(held, vec![7, 11, 24]);
+        // A character written nowhere is not held (S-454).
+        assert_eq!(errors("x\"\u{2028}\""), vec![(Code::E0001, "\u{2028}")]);
     }
 
     #[test]

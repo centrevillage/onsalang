@@ -1,0 +1,185 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§2.4", "§18.1"]
+
+// E0002 for a run of names, string literals and character literals that follow one another with no space
+// between them and hold no delimiter of another language (spec §2.4; S-856, S-473, S-458; the row
+// `string_prefix` of spec/foreign-forms.toml). The run is one form: `x"a"y` is one error, not two (a name
+// before the literal and a name after it), `"a"b"c"` is one error, and `lib"m"x` is one error that starts at
+// `lib`. The main position is where the run starts (the marker gives its column); the range is the whole
+// run, or up to the opening delimiter of the last literal when that literal is not closed on the line (the
+// range is not written here: a marker holds the line and the column of the main position only). The error
+// has no candidate (fixes = 0): no `,` is offered between the parts of a run. The content of the literals in
+// the run is not read: a bad escape, a hole that cannot be written, a character literal of two characters
+// or a hole never closed in it is no E0001, and the error is this E0002. A character that cannot be written
+// anywhere (§2.5) is its own E0001 and is first in the text only when it stands before the run.
+// A space ends a run (`x"a" "b"`: the run is `x"a"`). One error per declaration (P-01).
+
+fn show(s: Str) -> U32 {
+  s.len()
+}
+
+fn two(a: Str, n: I32) -> I32 {
+  n
+}
+
+// ---------------------------------------------------------------- the shapes of a run
+
+pub fn name_literal_name() -> Str {
+  x"a"y                                                 //~ E0002 @3
+}
+
+pub fn literal_name_literal() -> Str {
+  "a"b"c"                                               //~ E0002 @3
+}
+
+pub fn lib_literal_name() -> Str {
+  lib"m"x                                               //~ E0002 @3
+}
+
+pub fn name_literal() -> Str {
+  f"a"                                                  //~ E0002 @3
+}
+
+pub fn literal_name() -> Str {
+  "x"_s                                                 //~ E0002 @3
+}
+
+pub fn name_character_name() -> Str {
+  x'a'y                                                 //~ E0002 @3
+}
+
+pub fn name_character() -> Char {
+  b'a'                                                  //~ E0002 @3
+}
+
+pub fn literal_name_character() -> Str {
+  "a"x'b'                                               //~ E0002 @3
+}
+
+pub fn character_name_literal() -> Str {
+  'a'x"b"                                               //~ E0002 @3
+}
+
+pub fn long_run() -> Str {
+  p"a"q'b'r"c"s                                         //~ E0002 @3
+}
+
+pub fn names_with_digits() -> Str {
+  u8"a"x1                                               //~ E0002 @3
+}
+
+pub fn run_after_a_let() -> Str {
+  let s = x"a"y                                         //~ E0002 @11
+  s
+}
+
+pub fn run_before_an_operator() -> Str {
+  let s = x"a"y + "b"                                   //~ E0002 @11
+  s
+}
+
+pub fn run_before_a_dot() -> U32 {
+  x"a"y.len()                                           //~ E0002 @3
+}
+
+pub fn run_in_the_middle_of_a_line() -> U32 {
+  let n = 1 + show(x"a"y) + 2                           //~ E0002 @20
+  n
+}
+
+// ---------------------------------------------------------------- a space ends the run
+
+pub fn space_after_the_run() -> I32 {
+  two(x"a"y "b", 1)                                     //~ E0002 @7
+}
+
+pub fn space_before_the_run() -> I32 {
+  two("b", x"a"y)                                       //~ E0002 @12
+}
+
+pub fn line_end_after_the_run() -> U32 {
+  let xs = [x"a"                                        //~ E0002 @13
+    y]
+  1
+}
+
+// ---------------------------------------------------------------- the run ends in a literal that is not closed
+
+pub fn string_not_closed_after_a_name() -> Str {
+  x"abc                                                 //~ E0002 @3
+}
+
+pub fn string_not_closed_after_a_run() -> Str {
+  "a"x"abc                                              //~ E0002 @3
+}
+
+pub fn string_not_closed_after_an_escaped_quote() -> Str {
+  x"a\"                                                 //~ E0002 @3
+}
+
+pub fn hole_not_closed_after_a_name() -> Str {
+  f"{x                                                  //~ E0002 @3
+}
+
+pub fn closing_brace_in_the_rest_of_the_line() -> Str {
+  x"abc }                                               //~ E0002 @3
+}
+
+// ---------------------------------------------------------------- the content is not read
+
+pub fn bad_escape_between_names() -> Str {
+  x"\q"y                                                //~ E0002 @3
+}
+
+pub fn bad_escape_before_a_name() -> Str {
+  "\q"y                                                 //~ E0002 @3
+}
+
+pub fn bad_unicode_escape_in_a_run() -> Str {
+  u8"\u{110000}"x                                       //~ E0002 @3
+}
+
+pub fn call_in_a_hole_in_a_run() -> Str {
+  x"{f(a)}"y                                            //~ E0002 @3
+}
+
+pub fn reserved_word_in_a_hole_in_a_run() -> Str {
+  x"{clock}"y                                           //~ E0002 @3
+}
+
+pub fn spaces_in_a_hole_in_a_run() -> Str {
+  "{ a }"x                                              //~ E0002 @3
+}
+
+pub fn hole_never_closed_in_a_run() -> Str {
+  x"{"y                                                 //~ E0002 @3
+}
+
+pub fn two_characters_in_a_run() -> Char {
+  x'ab'y                                                //~ E0002 @3
+}
+
+pub fn two_bad_literals_in_a_run() -> Str {
+  "\q"x"{f(a)}"                                         //~ E0002 @3
+}
+
+pub fn character_that_cannot_be_written_in_a_run() -> Str {
+  x"a b"y                                               //~ E0002 @3
+}
+
+// The character that cannot be written stands before the run: it is the first error in the text.
+
+pub fn character_that_cannot_be_written_before_a_run() -> Str {
+  let a = " "                                           //~ E0001
+  x"a"y
+}
+
+// ---------------------------------------------------------------- the right forms
+
+pub fn fine(c: Char) -> U32 {
+  let a = "x"
+  let _ = 'y'
+  show(a) + show("z")
+}

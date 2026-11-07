@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§2.4", "§14.1", "§18.1"]
+
+// A literal that touches a keyword is read where the grammar reads it (spec §2.4; S-856, S-469, S-474): the
+// keyword, `_`, `true`, `false` and a number are not names, so they make no run with the literal, and `onsa
+// fmt` puts the space (tests/spec/lex/run_keyword_extern_fmt.onsa). `lib` is not a keyword but a word of the
+// head of `extern` (§2.2), and the head reads `lib"m"` and `"C"lib` (S-400, S-469): `extern"C" lib"m" {`,
+// `extern "C"lib "m" {`, `extern"C"lib"m" {` and `extern "C" lib"m" {` are heads, and the block is E0200 as
+// `extern "C" lib "m" {` is (§14.1, §18.1: the block is not in this version). A run that the head cannot
+// read is the error of the run (S-473): the run `lib"m"x` starts at `lib`, the run `"m"x` at `"m"`, and
+// `r"C"` and `$"m"` start at their first character; the head is read on and there is one error in each block
+// (P-01). The range of the error is not written here: a marker holds the line and the column of the main
+// position only.
+// The rest of the forms of this file are in run_keyword_extern.onsa.
+
+extern "C" lib"m"x {                                    //~ E0002 @12
+  fn k_f(x: F64) -> F64
+}
+
+extern "C"lib"m"x {                                     //~ E0002 @8
+  fn k_h(x: F64) -> F64
+}

@@ -2,9 +2,9 @@
 //! and of the escapes ([`escape`]), which the lexer calls; their values (one
 //! function each, for the parser's checks, the types stage and the
 //! lowering); and the facts the lexer found in them ([`Literals`]: the holes
-//! of the strings, its errors in them, the numbers and the strings written as
-//! in other languages, the literals right against a name), which the parser
-//! and the table of the forms of other languages read alike (D-15).
+//! of the strings, its errors in them, the numbers written as in other
+//! languages, the runs of names and literals), which the parser and the
+//! table of the forms of other languages read alike (D-15).
 
 use onsa_diag::{Diagnostic, Span};
 use serde::{Deserialize, Serialize};
@@ -30,23 +30,26 @@ pub(crate) struct Hole {
     pub(crate) reserved_head: Option<Span>,
 }
 
-/// A string or character literal right against a name, the prefixes and
-/// suffixes of other languages (`f"{x}"`, `b'x'`, `"x"_s`; §2.4, S-400), as
-/// the lexer found it: the row `string_prefix` reports it where the parser
-/// fails at the literal or the name, whatever the literal holds.
+/// Names, string and character literals and strings with a delimiter of
+/// other languages with no space between them (`f"{x}"`, `"x"_s`, `x"a"y`,
+/// `r"""x"""`; §2.4, S-400, S-856), as the lexer found them
+/// ([`crate::lexer`]'s `runs`): one form, which the rows `string_prefix` and
+/// `string_delimiter` report where the parser fails at any part of it,
+/// whatever its literals hold.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Touch {
-    /// The literal (a token `Str` or `Char`).
-    pub(crate) literal: Span,
-    /// The name right before the literal or right after it.
-    pub(crate) name: Span,
-    /// The range of the form: the name and the literal, or the name to the
-    /// opening quote when the literal does not close on its line.
+pub(crate) struct Run {
+    /// Its tokens, from the first to the last.
+    pub(crate) span: Span,
+    /// The range of the form: `span`, or to the opening delimiter of the
+    /// last part when that does not close on its line. It starts where the
+    /// form's main position is.
     pub(crate) range: Span,
-    /// The lexer's errors of the content of the literal (§2.4), held back:
+    /// Whether a part is a string with a delimiter of other languages.
+    pub(crate) delimiter: bool,
+    /// The lexer's errors of the content of its literals (§2.4), held back:
     /// the form's E0002 is the error, and they are reported only where no
-    /// `string_prefix` is (`extern "C" lib"m"` reads the literal). A
-    /// character written nowhere is not held (§2.5, S-454).
+    /// row is (`extern "C" lib"m"` reads the literal). A character written
+    /// nowhere is not held (§2.5, S-454).
     pub(crate) held: Vec<Diagnostic>,
 }
 
@@ -61,30 +64,18 @@ pub(crate) struct ForeignNumber {
     pub(crate) number: Number,
 }
 
-/// A string written with a delimiter of other languages (a token
-/// `ForeignStr`, S-406), as the lexer read it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct ForeignString {
-    /// The token.
-    pub(crate) token: Span,
-    /// The range of its form: the token, or its opening delimiter when the
-    /// line has no closing one.
-    pub(crate) range: Span,
-}
-
 /// The facts of the literals that the lexer read, each in the order of the
 /// file: the holes of the strings (also of a form an interpolation may not
 /// have, `{a + 1}`), the spans of the lexer's errors (the held ones too), the
-/// numbers and the strings written as in other languages ([`ForeignNumber`],
-/// [`ForeignString`]), the literals right against a name ([`Touch`]) and the
-/// string and character literals that do not close on their line.
+/// numbers written as in other languages ([`ForeignNumber`]), the runs of
+/// names and literals ([`Run`]) and the opening delimiters of the literals
+/// and the strings of other languages that do not close on their line.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Literals {
     holes: Vec<Hole>,
     errors: Vec<Span>,
     numbers: Vec<ForeignNumber>,
-    strings: Vec<ForeignString>,
-    touches: Vec<Touch>,
+    runs: Vec<Run>,
     unclosed: Vec<Span>,
 }
 
@@ -94,9 +85,11 @@ pub(crate) struct Literals {
 pub(crate) struct Found {
     pub(crate) holes: Vec<Hole>,
     pub(crate) numbers: Vec<ForeignNumber>,
-    pub(crate) strings: Vec<ForeignString>,
-    pub(crate) touches: Vec<Touch>,
+    pub(crate) runs: Vec<Run>,
     pub(crate) unclosed: Vec<Span>,
+    /// The errors of the content of each literal that has some, until the
+    /// runs are known (`Lexer::runs`).
+    pub(crate) contents: Vec<(Span, Vec<Diagnostic>)>,
 }
 
 /// A fact of [`Literals`] at a place of the file, by which its list is
@@ -123,16 +116,9 @@ impl Placed for ForeignNumber {
     }
 }
 
-impl Placed for ForeignString {
+impl Placed for Run {
     fn span(&self) -> Span {
-        self.token
-    }
-}
-
-/// A touch is ordered by its literal.
-impl Placed for Touch {
-    fn span(&self) -> Span {
-        self.literal
+        self.span
     }
 }
 
@@ -140,43 +126,30 @@ impl Literals {
     /// The facts of what the lexer found `found` and of its diagnostics
     /// `diagnostics`.
     pub(crate) fn new(found: Found, diagnostics: &[Diagnostic]) -> Literals {
-        let Found { holes, numbers, strings, touches, unclosed } = found;
-        let held = touches.iter().flat_map(|t| &t.held);
+        let Found { holes, numbers, runs, unclosed, .. } = found;
+        let held = runs.iter().flat_map(|r| &r.held);
         let mut errors: Vec<Span> = diagnostics.iter().chain(held).map(|d| d.span).collect();
         errors.sort_by_key(|s| s.start);
-        Literals { holes, errors, numbers, strings, touches, unclosed }
+        Literals { holes, errors, numbers, runs, unclosed }
     }
 
     /// The facts of the literals between `from` and `to`, for a run of tokens
     /// read on its own (`parser::reads_as_expr`): its holes and the errors of
     /// the lexer in it, so that a literal reads there as it does in the file.
     pub(crate) fn within(&self, from: u32, to: u32) -> Literals {
-        // A touch is in when its whole form is.
-        let touches = inside_where(&self.touches, from, to, |t| t.range.start >= from && t.range.end <= to);
         Literals {
             holes: inside(&self.holes, from, to),
             errors: inside(&self.errors, from, to),
             numbers: inside(&self.numbers, from, to),
-            strings: inside(&self.strings, from, to),
-            touches,
+            runs: inside(&self.runs, from, to),
             unclosed: inside(&self.unclosed, from, to),
         }
     }
 
-    /// The range of the form of the string written with a delimiter of
-    /// other languages at `span` (a token `ForeignStr`), found by a binary
-    /// search.
-    pub(crate) fn foreign_string(&self, span: Span) -> Option<Span> {
-        at(&self.strings, span).map(|s| s.range)
-    }
-
-    /// The literal right against a name of which the token at `span` is the
-    /// literal or the name (before it or after it), found by a binary search.
-    /// A name between two literals (`"a"x"b"`) is of the first.
-    pub(crate) fn touch(&self, span: Span) -> Option<&Touch> {
-        let i = self.touches.partition_point(|t| t.literal.start < span.start);
-        let mut near = i.checked_sub(1).into_iter().chain([i]).filter_map(|k| self.touches.get(k));
-        near.find(|t| t.literal == span || t.name == span)
+    /// The run that holds the token at `span`, found by a binary search.
+    pub(crate) fn touch(&self, span: Span) -> Option<&Run> {
+        let i = self.runs.partition_point(|r| r.span.end <= span.start);
+        self.runs.get(i).filter(|r| r.span.start <= span.start)
     }
 
     /// Whether the string or character literal at `span` closes on its line.
@@ -184,9 +157,9 @@ impl Literals {
         self.unclosed.binary_search_by_key(&span.start, |s| s.start).is_err()
     }
 
-    /// Every literal right against a name, in the order of the file.
-    pub(crate) fn touches(&self) -> &[Touch] {
-        &self.touches
+    /// Every run, in the order of the file.
+    pub(crate) fn runs(&self) -> &[Run] {
+        &self.runs
     }
 
     /// The number written as in other languages at `span` (a token
@@ -226,15 +199,9 @@ impl Literals {
 /// The facts of `items` (ordered by their start) that lie between `from`
 /// and `to`, found by a binary search.
 fn inside<T: Placed + Clone>(items: &[T], from: u32, to: u32) -> Vec<T> {
-    inside_where(items, from, to, |x| x.span().end <= to)
-}
-
-/// The facts of `items` (ordered by their start) that start between `from`
-/// and `to` and that `keep` takes, found by a binary search.
-fn inside_where<T: Placed + Clone>(items: &[T], from: u32, to: u32, keep: impl Fn(&T) -> bool) -> Vec<T> {
     let first = items.partition_point(|x| x.span().start < from);
     let last = items.partition_point(|x| x.span().start <= to);
-    items[first..last].iter().filter(|x| keep(x)).cloned().collect()
+    items[first..last].iter().filter(|x| x.span().end <= to).cloned().collect()
 }
 
 /// The fact of `items` (ordered by their start) at `span`, found by a binary search.

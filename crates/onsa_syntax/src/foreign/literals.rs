@@ -162,19 +162,11 @@ pub(super) fn called_number(c: &Cursor) -> Option<usize> {
     (c.want == Want::Expr && c.kind(paren) == TokenKind::LParen && c.gap(paren) == Gap::None).then_some(paren)
 }
 
-/// A string written with a delimiter of other languages (the token
-/// `ForeignStr`, §2.4, S-406): E0002 with the note and no candidate, which
-/// would have to guess a plain, an interpolated or a raw string. The range is
-/// the lexer's ([`crate::literal::Literals::foreign_string`]). The place
-/// does not matter: the form is the lexer's.
+/// A run with a delimiter of other languages in it (§2.4, S-406, S-856), at
+/// any of its parts: E0002 with the note and no candidate, which would have
+/// to guess a plain, an interpolated or a raw string. The place does not
+/// matter: the form is the lexer's ([`crate::literal::Run`]).
 pub(super) fn string_delimiter(c: &Cursor) -> Option<Hit> {
-    if c.kind(c.at) != TokenKind::ForeignStr {
-        return None;
-    }
-    let span = c.span(c.at);
-    let range = c
-        .literals
-        .foreign_string(span)
-        .unwrap_or_else(|| onsa_diag::internal::bug(Some(span), "a `ForeignStr` the lexer did not read"));
-    hit(range, Vec::new())
+    let range = c.literals.touch(c.span(c.at)).filter(|r| r.delimiter)?.range;
+    Some(Hit::new(range, Vec::new()).holding(range))
 }

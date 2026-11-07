@@ -1,0 +1,168 @@
+run_delimiter_close.onsa	26	3	18	""""a"""b }""""
+run_delimiter_close.onsa	30	3	15	"""a""b }"""
+run_delimiter_close.onsa	34	3	14	"""a"b }"""
+run_delimiter_close.onsa	38	3	21	"""""a""""b }"""""
+run_delimiter_close.onsa	42	3	15	$"""a"b }"""
+run_delimiter_close.onsa	46	3	9	$"a }"
+run_delimiter_close.onsa	50	3	9	@"a }"
+run_delimiter_close.onsa	54	3	15	##"a"#b }"##
+run_delimiter_close.onsa	58	3	18	###"a"##b }"###
+run_delimiter_close.onsa	62	3	16	r##"a"#b }"##
+run_delimiter_close.onsa	66	3	12	#"a"b }"#
+run_delimiter_close.onsa	70	3	7	""""
+run_delimiter_close.onsa	74	3	6	"""
+run_delimiter_close.onsa	78	3	8	"""""
+run_delimiter_close.onsa	82	3	6	##"
+run_delimiter_close.onsa	86	3	7	###"
+run_delimiter_close.onsa	90	3	7	r##"
+run_delimiter_close.onsa	94	3	5	#"
+run_delimiter_close.onsa	98	3	5	$"
+run_delimiter_close.onsa	102	3	5	@"
+run_delimiter_close.onsa	106	3	7	$"""
+run_delimiter_close.onsa	110	3	6	r#"
+run_delimiter_close.onsa	114	3	5	#"
+run_delimiter_close.onsa	118	3	6	"""
+run_delimiter_close.onsa	124	3	9	"a"b$"
+run_delimiter_close.onsa	128	3	9	$"a"b"
+run_delimiter_close.onsa	132	3	5	$"
+run_delimiter_close_whole.onsa	26	3	16	x"""a"b }"""y
+run_delimiter_close_whole.onsa	30	3	17	$$"""a""b }"""
+run_delimiter_close_whole.onsa	34	3	18	br##"a"#b }"##y
+run_delimiter_close_whole.onsa	38	3	8	x""""
+run_delimiter_close_whole.onsa	42	3	6	$$"
+run_delimiter_close_whole.onsa	46	3	7	x"""
+run_delimiter_close_whole.onsa	50	3	13	r"""a"""b"
+run_delimiter_places.onsa	36	17	25	$"""x"""
+run_delimiter_places.onsa	41	21	29	$"""x"""
+run_delimiter_places.onsa	47	11	20	""""x""""
+run_delimiter_places.onsa	53	13	20	##"x"##
+run_delimiter_places.onsa	59	8	17	"""x"""u8
+run_delimiter_places.onsa	63	10	19	"""x"""u8
+run_delimiter_places_whole.onsa	36	8	16	r"""x"""
+run_delimiter_places_whole.onsa	40	8	16	r"""x"""
+run_delimiter_places_whole.onsa	44	13	21	r"""x"""
+run_delimiter_places_whole.onsa	48	18	25	br#"x"#
+run_delimiter_places_whole.onsa	53	15	23	r"""x"""
+run_delimiter_places_whole.onsa	58	17	25	r"""x"""
+run_delimiter_places_whole.onsa	63	21	29	r"""x"""
+run_delimiter_places_whole.onsa	70	16	24	r"""x"""
+run_delimiter_places_whole.onsa	76	36	44	r"""x"""
+run_delimiter_places_whole.onsa	83	12	20	r"""x"""
+run_delimiter_places_whole.onsa	91	10	18	r"""x"""
+run_delimiter_places_whole.onsa	95	10	18	r"""x"""
+run_delimiter_places_whole.onsa	99	3	11	r"""x"""
+run_delimiter_places_whole.onsa	103	11	19	r"""x"""
+run_delimiter_places_whole.onsa	109	5	13	r"""x"""
+run_delimiter_places_whole.onsa	114	11	19	r"""x"""
+run_delimiter_places_whole.onsa	120	13	21	r"""x"""
+run_delimiter_places_whole.onsa	125	25	33	r"""x"""
+run_delimiter_places_whole.onsa	128	8	13	$$"x"
+run_delimiter_places_whole.onsa	132	18	31	$$"""{{x}}"""
+run_delimiter_places_whole.onsa	137	36	45	""""x""""
+run_delimiter_places_whole.onsa	142	18	25	x#"b"#y
+run_delimiter_places_whole.onsa	146	5	13	r"""x"""
+run_delimiter_places_whole.onsa	151	9	14	$$"x"
+run_delimiter_sequences.onsa	27	3	9	r#"x"#
+run_delimiter_sequences.onsa	31	3	11	r##"x"##
+run_delimiter_sequences.onsa	35	3	12	"""x"""u8
+run_delimiter_sequences.onsa	39	3	12	"""x"""_s
+run_delimiter_sequences.onsa	43	3	9	#"x"#y
+run_delimiter_sequences.onsa	47	3	8	$"x"y
+run_delimiter_sequences.onsa	51	3	7	`x`y
+run_delimiter_sequences.onsa	55	3	11	"a"x$"b"
+run_delimiter_sequences.onsa	59	3	11	$"a"x"b"
+run_delimiter_sequences.onsa	63	3	11	$"a"x'b'
+run_delimiter_sequences.onsa	67	3	18	p"a"q#"b"#r'c's
+run_delimiter_sequences.onsa	71	3	11	$"""x"""
+run_delimiter_sequences.onsa	75	3	8	$@"x"
+run_delimiter_sequences.onsa	79	3	8	@$"x"
+run_delimiter_sequences.onsa	83	3	8	@@"x"
+run_delimiter_sequences.onsa	87	3	12	""""x""""
+run_delimiter_sequences.onsa	91	3	14	"""""x"""""
+run_delimiter_sequences.onsa	95	3	10	##"x"##
+run_delimiter_sequences.onsa	99	3	12	###"x"###
+run_delimiter_sequences.onsa	103	3	13	##"a"#b"##
+run_delimiter_sequences.onsa	107	3	10	r#"{x"#
+run_delimiter_sequences_whole.onsa	27	3	11	r"""x"""
+run_delimiter_sequences_whole.onsa	31	3	11	f"""x"""
+run_delimiter_sequences_whole.onsa	35	3	11	b"""x"""
+run_delimiter_sequences_whole.onsa	39	3	10	br#"x"#
+run_delimiter_sequences_whole.onsa	43	3	7	f`x`
+run_delimiter_sequences_whole.onsa	47	3	8	x$"a"
+run_delimiter_sequences_whole.onsa	51	3	10	x#"a"#y
+run_delimiter_sequences_whole.onsa	55	3	12	x"""a"""y
+run_delimiter_sequences_whole.onsa	59	3	8	x`a`y
+run_delimiter_sequences_whole.onsa	63	3	19	r"""a"""x"""b"""
+run_delimiter_sequences_whole.onsa	67	3	8	$$"x"
+run_delimiter_sequences_whole.onsa	71	3	16	$$"""{{x}}"""
+run_delimiter_sequences_whole.onsa	75	3	9	$$$"x"
+run_delimiter_sequences_whole.onsa	79	3	9	$@$"x"
+run_delimiter_sequences_whole.onsa	83	3	17	$$"a{{x}}b{y}"
+run_delimiter_sequences_whole.onsa	87	3	21	r"""\q {f(x)} {"""
+run_delimiter_sequences_whole.onsa	91	3	13	x$"{1+2}"y
+run_delimiter_sequences_whole.onsa	95	3	17	$$"\u{110000}"
+run_delimiter_sequences_whole.onsa	99	3	13	r"""a b"""
+run_keyword_extern.onsa	38	16	20	"m"x
+run_keyword_extern.onsa	42	8	12	r"C"
+run_keyword_extern.onsa	46	16	20	$"m"
+run_keyword_extern.onsa	50	8	12	"C"x
+run_keyword_extern_whole.onsa	18	12	19	lib"m"x
+run_keyword_extern_whole.onsa	22	8	18	"C"lib"m"x
+run_prefix_places.onsa	29	8	13	x"a"y
+run_prefix_places.onsa	33	8	13	x"a"y
+run_prefix_places.onsa	37	13	18	x"b"y
+run_prefix_places.onsa	41	18	23	x"b"y
+run_prefix_places.onsa	46	15	20	x"b"y
+run_prefix_places.onsa	51	17	22	x"a"y
+run_prefix_places.onsa	56	21	26	x"a"y
+run_prefix_places.onsa	63	16	21	x"a"y
+run_prefix_places.onsa	69	36	41	x"a"y
+run_prefix_places.onsa	76	12	17	x"a"y
+run_prefix_places.onsa	84	10	15	x"a"y
+run_prefix_places.onsa	88	10	15	x"a"y
+run_prefix_places.onsa	92	3	8	x"a"y
+run_prefix_places.onsa	96	11	16	x"a"y
+run_prefix_places.onsa	106	5	10	x"a"y
+run_prefix_places.onsa	111	11	16	x"a"y
+run_prefix_places.onsa	117	13	18	x"a"y
+run_prefix_places.onsa	122	25	30	x"a"y
+run_prefix_places.onsa	126	5	9	x"a"
+run_prefix_places.onsa	131	9	13	x"a"
+run_prefix_places.onsa	139	3	11	"{f"x"}"
+run_prefix_places.onsa	143	8	17	"a{"x"y}"
+run_prefix_places.onsa	147	3	11	"{$"x"}"
+run_prefix_places.onsa	151	3	12	"{#"x"#}"
+run_prefix_places.onsa	155	11	18	"{"a"}"
+run_prefix_sequences.onsa	30	3	8	x"a"y
+run_prefix_sequences.onsa	34	3	10	"a"b"c"
+run_prefix_sequences.onsa	38	3	10	lib"m"x
+run_prefix_sequences.onsa	42	3	7	f"a"
+run_prefix_sequences.onsa	46	3	8	"x"_s
+run_prefix_sequences.onsa	50	3	8	x'a'y
+run_prefix_sequences.onsa	54	3	7	b'a'
+run_prefix_sequences.onsa	58	3	10	"a"x'b'
+run_prefix_sequences.onsa	62	3	10	'a'x"b"
+run_prefix_sequences.onsa	66	3	16	p"a"q'b'r"c"s
+run_prefix_sequences.onsa	70	3	10	u8"a"x1
+run_prefix_sequences.onsa	74	11	16	x"a"y
+run_prefix_sequences.onsa	79	11	16	x"a"y
+run_prefix_sequences.onsa	84	3	8	x"a"y
+run_prefix_sequences.onsa	88	20	25	x"a"y
+run_prefix_sequences.onsa	95	7	12	x"a"y
+run_prefix_sequences.onsa	99	12	17	x"a"y
+run_prefix_sequences.onsa	103	13	17	x"a"
+run_prefix_sequences.onsa	111	3	5	x"
+run_prefix_sequences.onsa	115	3	8	"a"x"
+run_prefix_sequences.onsa	119	3	5	x"
+run_prefix_sequences.onsa	123	3	5	f"
+run_prefix_sequences.onsa	127	3	5	x"
+run_prefix_sequences.onsa	133	3	9	x"\q"y
+run_prefix_sequences.onsa	137	3	8	"\q"y
+run_prefix_sequences.onsa	141	3	18	u8"\u{110000}"x
+run_prefix_sequences.onsa	145	3	13	x"{f(a)}"y
+run_prefix_sequences.onsa	149	3	14	x"{clock}"y
+run_prefix_sequences.onsa	153	3	11	"{ a }"x
+run_prefix_sequences.onsa	157	3	8	x"{"y
+run_prefix_sequences.onsa	161	3	9	x'ab'y
+run_prefix_sequences.onsa	165	3	16	"\q"x"{f(a)}"
+run_prefix_sequences.onsa	169	3	10	x"a b"y
