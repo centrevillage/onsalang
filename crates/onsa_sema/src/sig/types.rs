@@ -6,7 +6,6 @@ use super::*;
 use crate::ResolveError;
 use crate::names::PathEnd;
 use crate::resolve::NameKind;
-use crate::ty::{TYPE_DEPTH_LIMIT, TYPE_SIZE_LIMIT};
 
 impl<'p> Sema<'p> {
     // ------------------------------------------------------------ types
@@ -27,11 +26,7 @@ impl<'p> Sema<'p> {
         if types.has_error(ty) {
             return self.a.types.error();
         }
-        let msg = if types.depth(ty) > TYPE_DEPTH_LIMIT {
-            format!("the type is deeper than {TYPE_DEPTH_LIMIT} levels (§4.4)")
-        } else {
-            format!("the type is larger than {TYPE_SIZE_LIMIT} names and forms (§4.4)")
-        };
+        let msg = types.measure_of(ty).limit_message();
         let def = self.a.def(cx.def);
         let span = if matches!(def.kind, DefKind::Alias(_)) { def.name_span } else { cx.ast.ty(t).span };
         let rule = "name an inner part of the type with a `struct`: a declared type counts as one name, and an \

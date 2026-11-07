@@ -1,0 +1,35 @@
+// onsa.toml
+// [package]
+// name = "instance_grow_same_and_wrap"
+// edition = "2026"
+//
+// [export]
+// prefix = "igs_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+// fixes = 0
+
+// S-290 (W5-23 U2): a call that keeps the type argument and a call that wraps it, on one line. The
+// call that keeps it makes no new instantiation, so there is one instantiation at each depth and the
+// limit of §4.4 (depth 256) is the first limit past, whichever of the two is lowered first. There
+// is one report for the line.
+
+@export
+pub fn root() -> U32 {
+  g(1, 3)
+}
+
+fn g[T](x: T, n: U32) -> U32 {
+  if n == 0 {
+    return 0
+  }
+  g(Some(x), n - 1) + g(x, n - 1)  //~ E0422
+}

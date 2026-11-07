@@ -1,0 +1,6 @@
+pub fn grow[T](x: T, n: U32) -> U32 {
+  if n == 0 {
+    return 0
+  }
+  grow(Some(x), n - 1)  //~ E0422
+}

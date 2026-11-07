@@ -1,0 +1,53 @@
+// onsa.toml
+// [package]
+// name = "instance_stop_e0200_before"
+// edition = "2026"
+//
+// [export]
+// prefix = "ise1_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+// fixes = 0
+
+// S-290 (W5-23 U2), §18.1: the lowering has a diagnostic E0200 (`?` in an anonymous function that `array.from_fn` expands in
+// place; the lowering does not support it, `onsa check` has no diagnostic) in `q_option`, which is above the growth. Past the limit
+// the lowering stops and reports the limit only: the E0200 is not reported (§18.1: "具体化の上限を超えたら、そこで降下を止め、その
+// 一つだけを報告する"), so there is E0422 only, and no mark of E0200.
+
+use std.array
+
+fn half(n: U32) -> Option[U32] {
+  if n < 100 {
+    Some(n / 2)
+  } else {
+    None
+  }
+}
+
+pub fn q_option() -> Option[U32] {
+  let _: [Option[U32]; 3] = array.from_fn(fn(i: U32) -> Option[U32] {
+    let h = half(i + 99)?
+    Some(h)
+  })
+  Some(7)
+}
+
+fn g[T](x: T, n: U32) -> U32 {
+  if n == 0 {
+    return 0
+  }
+  g(Some(x), n - 1)  //~ E0422
+}
+
+@export
+pub fn root() -> U32 {
+  g(1, 3)
+}

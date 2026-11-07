@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+// fixes = 0
+
+// S-290 (W5-23 U2): the growth is in a function of another module of the package: the position is the
+// call in `lib.onsa` (the mark is read in the file of a module of the package), and the call of
+// `grow` in `main.onsa` has no diagnostic.
+
+use lib.{grow}
+
+@export
+pub fn root() -> U32 {
+  grow(1, 3)
+}

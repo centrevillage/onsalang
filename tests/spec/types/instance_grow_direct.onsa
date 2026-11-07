@@ -1,0 +1,39 @@
+// onsa.toml
+// [package]
+// name = "instance_grow_direct"
+// edition = "2026"
+//
+// [export]
+// prefix = "igd_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+// fixes = 0
+
+// S-290 (W5-23 U2): a generic function that calls itself with a type argument that wraps its own
+// type parameter makes a type that is one level deeper at every call, so the instantiation does not
+// end. The type that the instantiation makes has the limit of §4.4 (depth 256), so it is E0422 at
+// the call that makes the first type past the limit (§4.4: "総称の具体化の型は具体化を作った呼び出し"),
+// and not at the declaration. `onsa check` has no diagnostic: the instantiation is made by the
+// lowering (§4.5), so the build of the target reports it. `Some(x)` and the call are on the same
+// line, so that the position is the line whichever of the two is the first past the limit.
+// One error is in this file and one is reported (§18.1: the lowering stops at the limit).
+
+@export
+pub fn root() -> U32 {
+  g(1, 3)
+}
+
+fn g[T](x: T, n: U32) -> U32 {
+  if n == 0 {
+    return 0
+  }
+  g(Some(x), n - 1)  //~ E0422
+}

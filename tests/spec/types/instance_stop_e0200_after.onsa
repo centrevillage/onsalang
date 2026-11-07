@@ -1,0 +1,51 @@
+// onsa.toml
+// [package]
+// name = "instance_stop_e0200_after"
+// edition = "2026"
+//
+// [export]
+// prefix = "ise2_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+// fixes = 0
+
+// S-290 (W5-23 U2), §18.1: the same as `instance_stop_e0200_before.onsa` with the function of the E0200 below the growth: the
+// report is the limit only whichever of the two the lowering finds first.
+
+fn g[T](x: T, n: U32) -> U32 {
+  if n == 0 {
+    return 0
+  }
+  g(Some(x), n - 1)  //~ E0422
+}
+
+@export
+pub fn root() -> U32 {
+  g(1, 3)
+}
+
+use std.array
+
+fn half(n: U32) -> Option[U32] {
+  if n < 100 {
+    Some(n / 2)
+  } else {
+    None
+  }
+}
+
+pub fn q_option() -> Option[U32] {
+  let _: [Option[U32]; 3] = array.from_fn(fn(i: U32) -> Option[U32] {
+    let h = half(i + 99)?
+    Some(h)
+  })
+  Some(7)
+}

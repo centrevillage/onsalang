@@ -1,0 +1,39 @@
+// onsa.toml
+// [package]
+// name = "instance_grow_private_root"
+// edition = "2026"
+//
+// [export]
+// prefix = "igp_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+// fixes = 0
+
+// S-290 (W5-23 U2): the roots of the instantiation are all the items of the package that are not
+// generic (§4.5: "根は命令と `--filter` によらずパッケージの全て"), so a private function that nothing
+// calls is a root too, and the growth that it starts is E0422 as the one that an exported function
+// starts. The call of `g` in `unused` is a root; the recursive call in `g` is the position.
+
+fn g[T](x: T, n: U32) -> U32 {
+  if n == 0 {
+    return 0
+  }
+  g(Some(x), n - 1)  //~ E0422
+}
+
+fn unused() -> U32 {
+  g(1, 3)
+}
+
+@export
+pub fn anchor() -> U32 {
+  1
+}

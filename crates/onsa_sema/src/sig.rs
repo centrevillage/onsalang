@@ -310,7 +310,8 @@ impl<'p> Sema<'p> {
                     cx.reach = Some(vis);
                     let ty = self.lower_type(&cx, f.ty);
                     let default = f.default.filter(|_| read).map(|d| self.field_default(&cx, f, d, (ty, vis)));
-                    fields.push(FieldDef { name: f.name.name.clone(), ty, vis, span: f.span, default });
+                    let ty_span = cx.ast.ty(f.ty).span;
+                    fields.push(FieldDef { name: f.name.name.clone(), ty, vis, span: f.span, ty_span, default });
                 }
                 let fields = Fields::Named(fields);
                 if let DefKind::Struct(sd) = &mut self.a.defs[id.0 as usize].kind {
@@ -330,6 +331,7 @@ impl<'p> Sema<'p> {
                     .map(|v| VariantDef {
                         name: v.name.name.clone(),
                         fields: v.fields.iter().map(|&t| self.lower_type(&cx, t)).collect(),
+                        field_spans: v.fields.iter().map(|&t| cx.ast.ty(t).span).collect(),
                         span: v.span,
                     })
                     .collect();

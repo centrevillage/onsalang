@@ -1,0 +1,91 @@
+// onsa.toml
+// [package]
+// name = "instance_type_fork_size"
+// edition = "2026"
+//
+// [export]
+// prefix = "itf_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+// fixes = 0
+
+// S-290 (W5-23 U2): a chain of 11 structs with two fields each, `G(k)[T] { x: G(k-1)[(T, T)],
+// y: G(k-1)[(T, U8)] }`, used as `G11[F32]` (sizes by §4.4: the name `F32` is 1, a tuple of two is
+// `1 + 2s`, a declared struct with an argument is `2 + s`). Along the fields `x` the argument of
+// `G(11-j)` has the size `2^(j+1) - 1` (`G11` has 1, `G1` has 2047), so `G0[(T, T)]` for the `T` of
+// `G1` is `2 + (1 + 2 * 2047) = 4097`: the only type past the limit 4096, made in the field `x` of
+// `G1`, which is the position. Every other type is within the limit (the fields `y` add 1 per
+// step) and the number of instantiations is `2^11 - 1` for the structs, far under 65536, so the
+// limit is E0422 whatever the order is. The same chain with 10 structs is in
+// `instance_type_fork_fine.onsa`.
+
+pub struct G0[T] {
+  v: T,
+}
+
+pub struct G1[T] {
+  x: G0[(T, T)],  //~ E0422
+  y: G0[(T, U8)],
+}
+
+pub struct G2[T] {
+  x: G1[(T, T)],
+  y: G1[(T, U8)],
+}
+
+pub struct G3[T] {
+  x: G2[(T, T)],
+  y: G2[(T, U8)],
+}
+
+pub struct G4[T] {
+  x: G3[(T, T)],
+  y: G3[(T, U8)],
+}
+
+pub struct G5[T] {
+  x: G4[(T, T)],
+  y: G4[(T, U8)],
+}
+
+pub struct G6[T] {
+  x: G5[(T, T)],
+  y: G5[(T, U8)],
+}
+
+pub struct G7[T] {
+  x: G6[(T, T)],
+  y: G6[(T, U8)],
+}
+
+pub struct G8[T] {
+  x: G7[(T, T)],
+  y: G7[(T, U8)],
+}
+
+pub struct G9[T] {
+  x: G8[(T, T)],
+  y: G8[(T, U8)],
+}
+
+pub struct G10[T] {
+  x: G9[(T, T)],
+  y: G9[(T, U8)],
+}
+
+pub struct G11[T] {
+  x: G10[(T, T)],
+  y: G10[(T, U8)],
+}
+
+pub fn f(g: G11[F32]) -> U32 {
+  0
+}

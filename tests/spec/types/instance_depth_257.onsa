@@ -1,0 +1,1059 @@
+// onsa.toml
+// [package]
+// name = "instance_depth_257"
+// edition = "2026"
+//
+// [export]
+// prefix = "id2_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+// fixes = 0
+
+// S-290 (W5-23 U2), §4.4: one past the limit of `instance_depth_256_fine.onsa`. `T(k)` has depth `k -
+// 1`, so `T(257)` has depth 256 = 256, and `Some(x)` in `f257` has the type `Option[T(257)]` of depth
+// 257: E0422 at the line of the wrap and the call of `f258`, which are on one line.
+
+fn f1[T](x: T) -> U32 {
+  f2(Some(x))
+}
+
+fn f2[T](x: T) -> U32 {
+  f3(Some(x))
+}
+
+fn f3[T](x: T) -> U32 {
+  f4(Some(x))
+}
+
+fn f4[T](x: T) -> U32 {
+  f5(Some(x))
+}
+
+fn f5[T](x: T) -> U32 {
+  f6(Some(x))
+}
+
+fn f6[T](x: T) -> U32 {
+  f7(Some(x))
+}
+
+fn f7[T](x: T) -> U32 {
+  f8(Some(x))
+}
+
+fn f8[T](x: T) -> U32 {
+  f9(Some(x))
+}
+
+fn f9[T](x: T) -> U32 {
+  f10(Some(x))
+}
+
+fn f10[T](x: T) -> U32 {
+  f11(Some(x))
+}
+
+fn f11[T](x: T) -> U32 {
+  f12(Some(x))
+}
+
+fn f12[T](x: T) -> U32 {
+  f13(Some(x))
+}
+
+fn f13[T](x: T) -> U32 {
+  f14(Some(x))
+}
+
+fn f14[T](x: T) -> U32 {
+  f15(Some(x))
+}
+
+fn f15[T](x: T) -> U32 {
+  f16(Some(x))
+}
+
+fn f16[T](x: T) -> U32 {
+  f17(Some(x))
+}
+
+fn f17[T](x: T) -> U32 {
+  f18(Some(x))
+}
+
+fn f18[T](x: T) -> U32 {
+  f19(Some(x))
+}
+
+fn f19[T](x: T) -> U32 {
+  f20(Some(x))
+}
+
+fn f20[T](x: T) -> U32 {
+  f21(Some(x))
+}
+
+fn f21[T](x: T) -> U32 {
+  f22(Some(x))
+}
+
+fn f22[T](x: T) -> U32 {
+  f23(Some(x))
+}
+
+fn f23[T](x: T) -> U32 {
+  f24(Some(x))
+}
+
+fn f24[T](x: T) -> U32 {
+  f25(Some(x))
+}
+
+fn f25[T](x: T) -> U32 {
+  f26(Some(x))
+}
+
+fn f26[T](x: T) -> U32 {
+  f27(Some(x))
+}
+
+fn f27[T](x: T) -> U32 {
+  f28(Some(x))
+}
+
+fn f28[T](x: T) -> U32 {
+  f29(Some(x))
+}
+
+fn f29[T](x: T) -> U32 {
+  f30(Some(x))
+}
+
+fn f30[T](x: T) -> U32 {
+  f31(Some(x))
+}
+
+fn f31[T](x: T) -> U32 {
+  f32(Some(x))
+}
+
+fn f32[T](x: T) -> U32 {
+  f33(Some(x))
+}
+
+fn f33[T](x: T) -> U32 {
+  f34(Some(x))
+}
+
+fn f34[T](x: T) -> U32 {
+  f35(Some(x))
+}
+
+fn f35[T](x: T) -> U32 {
+  f36(Some(x))
+}
+
+fn f36[T](x: T) -> U32 {
+  f37(Some(x))
+}
+
+fn f37[T](x: T) -> U32 {
+  f38(Some(x))
+}
+
+fn f38[T](x: T) -> U32 {
+  f39(Some(x))
+}
+
+fn f39[T](x: T) -> U32 {
+  f40(Some(x))
+}
+
+fn f40[T](x: T) -> U32 {
+  f41(Some(x))
+}
+
+fn f41[T](x: T) -> U32 {
+  f42(Some(x))
+}
+
+fn f42[T](x: T) -> U32 {
+  f43(Some(x))
+}
+
+fn f43[T](x: T) -> U32 {
+  f44(Some(x))
+}
+
+fn f44[T](x: T) -> U32 {
+  f45(Some(x))
+}
+
+fn f45[T](x: T) -> U32 {
+  f46(Some(x))
+}
+
+fn f46[T](x: T) -> U32 {
+  f47(Some(x))
+}
+
+fn f47[T](x: T) -> U32 {
+  f48(Some(x))
+}
+
+fn f48[T](x: T) -> U32 {
+  f49(Some(x))
+}
+
+fn f49[T](x: T) -> U32 {
+  f50(Some(x))
+}
+
+fn f50[T](x: T) -> U32 {
+  f51(Some(x))
+}
+
+fn f51[T](x: T) -> U32 {
+  f52(Some(x))
+}
+
+fn f52[T](x: T) -> U32 {
+  f53(Some(x))
+}
+
+fn f53[T](x: T) -> U32 {
+  f54(Some(x))
+}
+
+fn f54[T](x: T) -> U32 {
+  f55(Some(x))
+}
+
+fn f55[T](x: T) -> U32 {
+  f56(Some(x))
+}
+
+fn f56[T](x: T) -> U32 {
+  f57(Some(x))
+}
+
+fn f57[T](x: T) -> U32 {
+  f58(Some(x))
+}
+
+fn f58[T](x: T) -> U32 {
+  f59(Some(x))
+}
+
+fn f59[T](x: T) -> U32 {
+  f60(Some(x))
+}
+
+fn f60[T](x: T) -> U32 {
+  f61(Some(x))
+}
+
+fn f61[T](x: T) -> U32 {
+  f62(Some(x))
+}
+
+fn f62[T](x: T) -> U32 {
+  f63(Some(x))
+}
+
+fn f63[T](x: T) -> U32 {
+  f64(Some(x))
+}
+
+fn f64[T](x: T) -> U32 {
+  f65(Some(x))
+}
+
+fn f65[T](x: T) -> U32 {
+  f66(Some(x))
+}
+
+fn f66[T](x: T) -> U32 {
+  f67(Some(x))
+}
+
+fn f67[T](x: T) -> U32 {
+  f68(Some(x))
+}
+
+fn f68[T](x: T) -> U32 {
+  f69(Some(x))
+}
+
+fn f69[T](x: T) -> U32 {
+  f70(Some(x))
+}
+
+fn f70[T](x: T) -> U32 {
+  f71(Some(x))
+}
+
+fn f71[T](x: T) -> U32 {
+  f72(Some(x))
+}
+
+fn f72[T](x: T) -> U32 {
+  f73(Some(x))
+}
+
+fn f73[T](x: T) -> U32 {
+  f74(Some(x))
+}
+
+fn f74[T](x: T) -> U32 {
+  f75(Some(x))
+}
+
+fn f75[T](x: T) -> U32 {
+  f76(Some(x))
+}
+
+fn f76[T](x: T) -> U32 {
+  f77(Some(x))
+}
+
+fn f77[T](x: T) -> U32 {
+  f78(Some(x))
+}
+
+fn f78[T](x: T) -> U32 {
+  f79(Some(x))
+}
+
+fn f79[T](x: T) -> U32 {
+  f80(Some(x))
+}
+
+fn f80[T](x: T) -> U32 {
+  f81(Some(x))
+}
+
+fn f81[T](x: T) -> U32 {
+  f82(Some(x))
+}
+
+fn f82[T](x: T) -> U32 {
+  f83(Some(x))
+}
+
+fn f83[T](x: T) -> U32 {
+  f84(Some(x))
+}
+
+fn f84[T](x: T) -> U32 {
+  f85(Some(x))
+}
+
+fn f85[T](x: T) -> U32 {
+  f86(Some(x))
+}
+
+fn f86[T](x: T) -> U32 {
+  f87(Some(x))
+}
+
+fn f87[T](x: T) -> U32 {
+  f88(Some(x))
+}
+
+fn f88[T](x: T) -> U32 {
+  f89(Some(x))
+}
+
+fn f89[T](x: T) -> U32 {
+  f90(Some(x))
+}
+
+fn f90[T](x: T) -> U32 {
+  f91(Some(x))
+}
+
+fn f91[T](x: T) -> U32 {
+  f92(Some(x))
+}
+
+fn f92[T](x: T) -> U32 {
+  f93(Some(x))
+}
+
+fn f93[T](x: T) -> U32 {
+  f94(Some(x))
+}
+
+fn f94[T](x: T) -> U32 {
+  f95(Some(x))
+}
+
+fn f95[T](x: T) -> U32 {
+  f96(Some(x))
+}
+
+fn f96[T](x: T) -> U32 {
+  f97(Some(x))
+}
+
+fn f97[T](x: T) -> U32 {
+  f98(Some(x))
+}
+
+fn f98[T](x: T) -> U32 {
+  f99(Some(x))
+}
+
+fn f99[T](x: T) -> U32 {
+  f100(Some(x))
+}
+
+fn f100[T](x: T) -> U32 {
+  f101(Some(x))
+}
+
+fn f101[T](x: T) -> U32 {
+  f102(Some(x))
+}
+
+fn f102[T](x: T) -> U32 {
+  f103(Some(x))
+}
+
+fn f103[T](x: T) -> U32 {
+  f104(Some(x))
+}
+
+fn f104[T](x: T) -> U32 {
+  f105(Some(x))
+}
+
+fn f105[T](x: T) -> U32 {
+  f106(Some(x))
+}
+
+fn f106[T](x: T) -> U32 {
+  f107(Some(x))
+}
+
+fn f107[T](x: T) -> U32 {
+  f108(Some(x))
+}
+
+fn f108[T](x: T) -> U32 {
+  f109(Some(x))
+}
+
+fn f109[T](x: T) -> U32 {
+  f110(Some(x))
+}
+
+fn f110[T](x: T) -> U32 {
+  f111(Some(x))
+}
+
+fn f111[T](x: T) -> U32 {
+  f112(Some(x))
+}
+
+fn f112[T](x: T) -> U32 {
+  f113(Some(x))
+}
+
+fn f113[T](x: T) -> U32 {
+  f114(Some(x))
+}
+
+fn f114[T](x: T) -> U32 {
+  f115(Some(x))
+}
+
+fn f115[T](x: T) -> U32 {
+  f116(Some(x))
+}
+
+fn f116[T](x: T) -> U32 {
+  f117(Some(x))
+}
+
+fn f117[T](x: T) -> U32 {
+  f118(Some(x))
+}
+
+fn f118[T](x: T) -> U32 {
+  f119(Some(x))
+}
+
+fn f119[T](x: T) -> U32 {
+  f120(Some(x))
+}
+
+fn f120[T](x: T) -> U32 {
+  f121(Some(x))
+}
+
+fn f121[T](x: T) -> U32 {
+  f122(Some(x))
+}
+
+fn f122[T](x: T) -> U32 {
+  f123(Some(x))
+}
+
+fn f123[T](x: T) -> U32 {
+  f124(Some(x))
+}
+
+fn f124[T](x: T) -> U32 {
+  f125(Some(x))
+}
+
+fn f125[T](x: T) -> U32 {
+  f126(Some(x))
+}
+
+fn f126[T](x: T) -> U32 {
+  f127(Some(x))
+}
+
+fn f127[T](x: T) -> U32 {
+  f128(Some(x))
+}
+
+fn f128[T](x: T) -> U32 {
+  f129(Some(x))
+}
+
+fn f129[T](x: T) -> U32 {
+  f130(Some(x))
+}
+
+fn f130[T](x: T) -> U32 {
+  f131(Some(x))
+}
+
+fn f131[T](x: T) -> U32 {
+  f132(Some(x))
+}
+
+fn f132[T](x: T) -> U32 {
+  f133(Some(x))
+}
+
+fn f133[T](x: T) -> U32 {
+  f134(Some(x))
+}
+
+fn f134[T](x: T) -> U32 {
+  f135(Some(x))
+}
+
+fn f135[T](x: T) -> U32 {
+  f136(Some(x))
+}
+
+fn f136[T](x: T) -> U32 {
+  f137(Some(x))
+}
+
+fn f137[T](x: T) -> U32 {
+  f138(Some(x))
+}
+
+fn f138[T](x: T) -> U32 {
+  f139(Some(x))
+}
+
+fn f139[T](x: T) -> U32 {
+  f140(Some(x))
+}
+
+fn f140[T](x: T) -> U32 {
+  f141(Some(x))
+}
+
+fn f141[T](x: T) -> U32 {
+  f142(Some(x))
+}
+
+fn f142[T](x: T) -> U32 {
+  f143(Some(x))
+}
+
+fn f143[T](x: T) -> U32 {
+  f144(Some(x))
+}
+
+fn f144[T](x: T) -> U32 {
+  f145(Some(x))
+}
+
+fn f145[T](x: T) -> U32 {
+  f146(Some(x))
+}
+
+fn f146[T](x: T) -> U32 {
+  f147(Some(x))
+}
+
+fn f147[T](x: T) -> U32 {
+  f148(Some(x))
+}
+
+fn f148[T](x: T) -> U32 {
+  f149(Some(x))
+}
+
+fn f149[T](x: T) -> U32 {
+  f150(Some(x))
+}
+
+fn f150[T](x: T) -> U32 {
+  f151(Some(x))
+}
+
+fn f151[T](x: T) -> U32 {
+  f152(Some(x))
+}
+
+fn f152[T](x: T) -> U32 {
+  f153(Some(x))
+}
+
+fn f153[T](x: T) -> U32 {
+  f154(Some(x))
+}
+
+fn f154[T](x: T) -> U32 {
+  f155(Some(x))
+}
+
+fn f155[T](x: T) -> U32 {
+  f156(Some(x))
+}
+
+fn f156[T](x: T) -> U32 {
+  f157(Some(x))
+}
+
+fn f157[T](x: T) -> U32 {
+  f158(Some(x))
+}
+
+fn f158[T](x: T) -> U32 {
+  f159(Some(x))
+}
+
+fn f159[T](x: T) -> U32 {
+  f160(Some(x))
+}
+
+fn f160[T](x: T) -> U32 {
+  f161(Some(x))
+}
+
+fn f161[T](x: T) -> U32 {
+  f162(Some(x))
+}
+
+fn f162[T](x: T) -> U32 {
+  f163(Some(x))
+}
+
+fn f163[T](x: T) -> U32 {
+  f164(Some(x))
+}
+
+fn f164[T](x: T) -> U32 {
+  f165(Some(x))
+}
+
+fn f165[T](x: T) -> U32 {
+  f166(Some(x))
+}
+
+fn f166[T](x: T) -> U32 {
+  f167(Some(x))
+}
+
+fn f167[T](x: T) -> U32 {
+  f168(Some(x))
+}
+
+fn f168[T](x: T) -> U32 {
+  f169(Some(x))
+}
+
+fn f169[T](x: T) -> U32 {
+  f170(Some(x))
+}
+
+fn f170[T](x: T) -> U32 {
+  f171(Some(x))
+}
+
+fn f171[T](x: T) -> U32 {
+  f172(Some(x))
+}
+
+fn f172[T](x: T) -> U32 {
+  f173(Some(x))
+}
+
+fn f173[T](x: T) -> U32 {
+  f174(Some(x))
+}
+
+fn f174[T](x: T) -> U32 {
+  f175(Some(x))
+}
+
+fn f175[T](x: T) -> U32 {
+  f176(Some(x))
+}
+
+fn f176[T](x: T) -> U32 {
+  f177(Some(x))
+}
+
+fn f177[T](x: T) -> U32 {
+  f178(Some(x))
+}
+
+fn f178[T](x: T) -> U32 {
+  f179(Some(x))
+}
+
+fn f179[T](x: T) -> U32 {
+  f180(Some(x))
+}
+
+fn f180[T](x: T) -> U32 {
+  f181(Some(x))
+}
+
+fn f181[T](x: T) -> U32 {
+  f182(Some(x))
+}
+
+fn f182[T](x: T) -> U32 {
+  f183(Some(x))
+}
+
+fn f183[T](x: T) -> U32 {
+  f184(Some(x))
+}
+
+fn f184[T](x: T) -> U32 {
+  f185(Some(x))
+}
+
+fn f185[T](x: T) -> U32 {
+  f186(Some(x))
+}
+
+fn f186[T](x: T) -> U32 {
+  f187(Some(x))
+}
+
+fn f187[T](x: T) -> U32 {
+  f188(Some(x))
+}
+
+fn f188[T](x: T) -> U32 {
+  f189(Some(x))
+}
+
+fn f189[T](x: T) -> U32 {
+  f190(Some(x))
+}
+
+fn f190[T](x: T) -> U32 {
+  f191(Some(x))
+}
+
+fn f191[T](x: T) -> U32 {
+  f192(Some(x))
+}
+
+fn f192[T](x: T) -> U32 {
+  f193(Some(x))
+}
+
+fn f193[T](x: T) -> U32 {
+  f194(Some(x))
+}
+
+fn f194[T](x: T) -> U32 {
+  f195(Some(x))
+}
+
+fn f195[T](x: T) -> U32 {
+  f196(Some(x))
+}
+
+fn f196[T](x: T) -> U32 {
+  f197(Some(x))
+}
+
+fn f197[T](x: T) -> U32 {
+  f198(Some(x))
+}
+
+fn f198[T](x: T) -> U32 {
+  f199(Some(x))
+}
+
+fn f199[T](x: T) -> U32 {
+  f200(Some(x))
+}
+
+fn f200[T](x: T) -> U32 {
+  f201(Some(x))
+}
+
+fn f201[T](x: T) -> U32 {
+  f202(Some(x))
+}
+
+fn f202[T](x: T) -> U32 {
+  f203(Some(x))
+}
+
+fn f203[T](x: T) -> U32 {
+  f204(Some(x))
+}
+
+fn f204[T](x: T) -> U32 {
+  f205(Some(x))
+}
+
+fn f205[T](x: T) -> U32 {
+  f206(Some(x))
+}
+
+fn f206[T](x: T) -> U32 {
+  f207(Some(x))
+}
+
+fn f207[T](x: T) -> U32 {
+  f208(Some(x))
+}
+
+fn f208[T](x: T) -> U32 {
+  f209(Some(x))
+}
+
+fn f209[T](x: T) -> U32 {
+  f210(Some(x))
+}
+
+fn f210[T](x: T) -> U32 {
+  f211(Some(x))
+}
+
+fn f211[T](x: T) -> U32 {
+  f212(Some(x))
+}
+
+fn f212[T](x: T) -> U32 {
+  f213(Some(x))
+}
+
+fn f213[T](x: T) -> U32 {
+  f214(Some(x))
+}
+
+fn f214[T](x: T) -> U32 {
+  f215(Some(x))
+}
+
+fn f215[T](x: T) -> U32 {
+  f216(Some(x))
+}
+
+fn f216[T](x: T) -> U32 {
+  f217(Some(x))
+}
+
+fn f217[T](x: T) -> U32 {
+  f218(Some(x))
+}
+
+fn f218[T](x: T) -> U32 {
+  f219(Some(x))
+}
+
+fn f219[T](x: T) -> U32 {
+  f220(Some(x))
+}
+
+fn f220[T](x: T) -> U32 {
+  f221(Some(x))
+}
+
+fn f221[T](x: T) -> U32 {
+  f222(Some(x))
+}
+
+fn f222[T](x: T) -> U32 {
+  f223(Some(x))
+}
+
+fn f223[T](x: T) -> U32 {
+  f224(Some(x))
+}
+
+fn f224[T](x: T) -> U32 {
+  f225(Some(x))
+}
+
+fn f225[T](x: T) -> U32 {
+  f226(Some(x))
+}
+
+fn f226[T](x: T) -> U32 {
+  f227(Some(x))
+}
+
+fn f227[T](x: T) -> U32 {
+  f228(Some(x))
+}
+
+fn f228[T](x: T) -> U32 {
+  f229(Some(x))
+}
+
+fn f229[T](x: T) -> U32 {
+  f230(Some(x))
+}
+
+fn f230[T](x: T) -> U32 {
+  f231(Some(x))
+}
+
+fn f231[T](x: T) -> U32 {
+  f232(Some(x))
+}
+
+fn f232[T](x: T) -> U32 {
+  f233(Some(x))
+}
+
+fn f233[T](x: T) -> U32 {
+  f234(Some(x))
+}
+
+fn f234[T](x: T) -> U32 {
+  f235(Some(x))
+}
+
+fn f235[T](x: T) -> U32 {
+  f236(Some(x))
+}
+
+fn f236[T](x: T) -> U32 {
+  f237(Some(x))
+}
+
+fn f237[T](x: T) -> U32 {
+  f238(Some(x))
+}
+
+fn f238[T](x: T) -> U32 {
+  f239(Some(x))
+}
+
+fn f239[T](x: T) -> U32 {
+  f240(Some(x))
+}
+
+fn f240[T](x: T) -> U32 {
+  f241(Some(x))
+}
+
+fn f241[T](x: T) -> U32 {
+  f242(Some(x))
+}
+
+fn f242[T](x: T) -> U32 {
+  f243(Some(x))
+}
+
+fn f243[T](x: T) -> U32 {
+  f244(Some(x))
+}
+
+fn f244[T](x: T) -> U32 {
+  f245(Some(x))
+}
+
+fn f245[T](x: T) -> U32 {
+  f246(Some(x))
+}
+
+fn f246[T](x: T) -> U32 {
+  f247(Some(x))
+}
+
+fn f247[T](x: T) -> U32 {
+  f248(Some(x))
+}
+
+fn f248[T](x: T) -> U32 {
+  f249(Some(x))
+}
+
+fn f249[T](x: T) -> U32 {
+  f250(Some(x))
+}
+
+fn f250[T](x: T) -> U32 {
+  f251(Some(x))
+}
+
+fn f251[T](x: T) -> U32 {
+  f252(Some(x))
+}
+
+fn f252[T](x: T) -> U32 {
+  f253(Some(x))
+}
+
+fn f253[T](x: T) -> U32 {
+  f254(Some(x))
+}
+
+fn f254[T](x: T) -> U32 {
+  f255(Some(x))
+}
+
+fn f255[T](x: T) -> U32 {
+  f256(Some(x))
+}
+
+fn f256[T](x: T) -> U32 {
+  f257(Some(x))
+}
+
+fn f257[T](x: T) -> U32 {
+  f258(Some(x))  //~ E0422
+}
+
+fn f258[T](x: T) -> U32 {
+  0
+}
+
+@export
+pub fn root() -> U32 {
+  f1(1)
+}

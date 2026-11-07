@@ -204,7 +204,7 @@ fn build_stages(loaded: &Loaded, analyzed: &Analyzed, resolved: &ResolvedTarget)
 
     // Lower and emit.
     // `bulk_threshold` is not a key of §15.3: `memory.bulk` replaces it (W9-06).
-    let lower_opts = LowerOptions { bulk_threshold: None, ptr_size: settings.platform.ptr_size };
+    let lower_opts = LowerOptions { ptr_size: settings.platform.ptr_size, ..Default::default() };
     let module = crate::lower_core_with(analyzed, &lower_opts).map_err(diagnostics)?;
     // The exports are the entries of the build (spec §15.2, S-242): the
     // evaluation of the `const`s and the C unit start from them.

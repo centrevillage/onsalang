@@ -1,0 +1,88 @@
+// onsa.toml
+// [package]
+// name = "instance_size_4097_tuple"
+// edition = "2026"
+//
+// [export]
+// prefix = "is4_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+// fixes = 0
+
+// S-290 (W5-23 U2), §4.4: the size of the types that the instantiation makes, counted by the rule of
+// §4.4. A is `(T, T, T)` = `1 + 3s`, B is `(T, T)` = `1 + 2s`, C is `W[T]` = `2 + s` (`W` is a
+// declared struct with an argument), D is `[T; 4]` = `2 + s` (the array shape, the element and one
+// const argument). The type argument of `s1` is `I32` (1) and each function wraps `x` once for the
+// next one: s1:A=4, s2:A=13, s3:B=27, s4:B=55, s5:B=111, s6:D=113, s7:A=340, s8:B=681, s9:A=2044,
+// s10:C=2046, s11:C=2048, s12:B=4097. So the type of the argument that the last call makes is 4097,
+// one past the limit 4096: E0422 at that line. The sizes along the chain are all within the limit
+// before the last step.
+
+pub struct W[T] {
+  v: T,
+}
+
+fn s1[T: Copy](x: T) -> U32 {
+  s2((x, x, x))
+}
+
+fn s2[T: Copy](x: T) -> U32 {
+  s3((x, x, x))
+}
+
+fn s3[T: Copy](x: T) -> U32 {
+  s4((x, x))
+}
+
+fn s4[T: Copy](x: T) -> U32 {
+  s5((x, x))
+}
+
+fn s5[T: Copy](x: T) -> U32 {
+  s6((x, x))
+}
+
+fn s6[T: Copy](x: T) -> U32 {
+  s7([x; 4])
+}
+
+fn s7[T: Copy](x: T) -> U32 {
+  s8((x, x, x))
+}
+
+fn s8[T: Copy](x: T) -> U32 {
+  s9((x, x))
+}
+
+fn s9[T: Copy](x: T) -> U32 {
+  s10((x, x, x))
+}
+
+fn s10[T: Copy](x: T) -> U32 {
+  s11(W { v: x })
+}
+
+fn s11[T: Copy](x: T) -> U32 {
+  s12(W { v: x })
+}
+
+fn s12[T: Copy](x: T) -> U32 {
+  s13((x, x))  //~ E0422
+}
+
+fn s13[T: Copy](x: T) -> U32 {
+  0
+}
+
+@export
+pub fn root() -> U32 {
+  s1(1)
+}

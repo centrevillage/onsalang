@@ -1,0 +1,40 @@
+// onsa.toml
+// [package]
+// name = "instance_grow_method"
+// edition = "2026"
+//
+// [export]
+// prefix = "igt_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+// fixes = 0
+
+// S-290 (W5-23 U2): the growth is in a method of a generic type: `m` makes a value of `S[Option[T]]`
+// and calls `m` on it, so the method is instantiated for a type one level deeper at every call. The
+// struct literal and the method call are on one line.
+
+pub struct S[T] {
+  v: T,
+}
+
+impl[T] S[T] {
+  fn m(self, n: U32) -> U32 {
+    if n == 0 {
+      return 0
+    }
+    S { v: Some(self.v) }.m(n - 1)  //~ E0422
+  }
+}
+
+@export
+pub fn root() -> U32 {
+  S { v: 1 }.m(3)
+}

@@ -204,6 +204,8 @@ pub struct FieldDef {
     /// struct's (§15.1, S-35).
     pub vis: Vis,
     pub span: Span,
+    /// The type written: where an instance over the limits is (§4.4).
+    pub ty_span: Span,
     /// The constant of its default (§4.4): a def no path finds, whose owner
     /// is the struct.
     pub default: Option<DefId>,
@@ -264,6 +266,8 @@ impl FlowTy {
 pub struct VariantDef {
     pub name: String,
     pub fields: Vec<TyId>,
+    /// The types written, one for each of `fields`, as [`FieldDef::ty_span`].
+    pub field_spans: Vec<Span>,
     pub span: Span,
 }
 

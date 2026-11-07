@@ -25,7 +25,10 @@ use std::thread::{Builder, JoinHandle, Scope, ScopedJoinHandle};
 /// is bounded too: a type the check makes is at most 256 levels deep and
 /// 4096 names and forms large (§4.4, S-264, E0422; `onsa_sema::ty`), however
 /// a chain of aliases (`type A2 = (A1, A1)`) expands (the written types and
-/// the aliases; the types a body infers are W5-08's). The walks through the
+/// the aliases; the types a body infers are W5-16's), and lowering holds the
+/// types of the instances to the same limits (`onsa_core::lower::limits`,
+/// S-290), though not the length of a chain of instances, which only the
+/// number of them bounds. The walks through the
 /// declarations a type holds stop at a stack of their own, with an internal
 /// error (`onsa_sema::walk`). Measured on
 /// aarch64-apple-darwin in a debug build (2026-11-05, W5-19, the stack

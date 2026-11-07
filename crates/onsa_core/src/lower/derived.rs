@@ -34,13 +34,13 @@ fn default_value(lw: &mut Lowerer, ty: &Ty, span: Span) -> R<Expr> {
         return value;
     }
     let (member, args) = lw.member_of(ty, DerivedFn::Default.name(), span)?;
-    Ok(Expr::new(ty.clone(), span, ExprKind::Call { fn_: lw.fn_id(member, args), args: Vec::new() }))
+    Ok(Expr::new(ty.clone(), span, ExprKind::Call { fn_: lw.fn_id(member, args, span)?, args: Vec::new() }))
 }
 
 /// The read of the default `d` of a field of the type `ty` of a struct at
 /// `args` (§4.4): the constant of the instance, burnt in once (S-918).
 fn declared_default(lw: &mut Lowerer, d: DefId, ty: Ty, args: &[GenericArg], span: Span) -> R<Expr> {
-    Ok(Expr::new(ty, span, ExprKind::Const(lw.const_id(d, args.to_vec())?)))
+    Ok(Expr::new(ty, span, ExprKind::Const(lw.const_id(d, args.to_vec(), span)?)))
 }
 
 /// The value of the field `name`, of the type `ty`, of the struct `id` that a

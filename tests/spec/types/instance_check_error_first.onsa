@@ -1,0 +1,37 @@
+// onsa.toml
+// [package]
+// name = "instance_check_error_first"
+// edition = "2026"
+//
+// [export]
+// prefix = "ice_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+
+// S-290 (W5-23 U2), §18.1: the lowering and the build have a diagnostic only for a unit that passes
+// the check, so a file that has a type error (E0401 in `bad`) and a growth that only the lowering
+// finds has the E0401 only; the growth is not reported, and not marked.
+
+fn bad() -> U32 {
+  true  //~ E0401
+}
+
+fn g[T](x: T, n: U32) -> U32 {
+  if n == 0 {
+    return 0
+  }
+  g(Some(x), n - 1)
+}
+
+@export
+pub fn root() -> U32 {
+  g(1, 3)
+}

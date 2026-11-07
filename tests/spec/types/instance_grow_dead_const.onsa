@@ -1,0 +1,35 @@
+// onsa.toml
+// [package]
+// name = "instance_grow_dead_const"
+// edition = "2026"
+//
+// [export]
+// prefix = "igdc_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1", "§7"]
+// fixes = 0
+
+// S-290 (W5-23 U2), §7: the same as `instance_grow_dead_false.onsa` with a `const` as the condition
+// (§4.5: "枝の条件の値は見ない"; the value of a constant is not read either, §7).
+
+const DEBUG: Bool = false
+
+fn g[T](x: T, n: U32) -> U32 {
+  if DEBUG {
+    return g(Some(x), n)  //~ E0422
+  }
+  n
+}
+
+@export
+pub fn root() -> U32 {
+  g(1, 3)
+}

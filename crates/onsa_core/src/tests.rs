@@ -828,3 +828,120 @@ fn a_panic_holds_its_origin() {
         ]
     );
 }
+
+// ---------------------------------------------------------------- limits
+
+/// Lowering `src` with the limit of the instances at `limit`, on a stack of
+/// the command's size: a growing call goes 256 levels (S-290).
+fn lower_at(src: &str, limit: u32) -> (SourceMap, Result<Module, crate::LowerFailure>) {
+    let src = src.to_string();
+    onsa_diag::stack::run(move || {
+        let (sources, pkg) = package(&src);
+        let a = onsa_sema::analyze(&pkg);
+        assert!(a.diagnostics.is_empty(), "check diagnostics:\n{}", onsa_diag::to_text(&sources, &a.diagnostics));
+        let opts = crate::LowerOptions { instance_limit: limit, ..Default::default() };
+        let lowered = crate::lower_with(&pkg, &a, &opts);
+        (sources, lowered)
+    })
+}
+
+/// The one diagnostic of a limit: anything else is a failure of the test.
+fn the_one_limit(src: &str, limit: u32) -> onsa_diag::Diagnostic {
+    match lower_at(src, limit) {
+        (_, Err(crate::LowerFailure::Diagnostics(d))) if d.len() == 1 => d.into_iter().next().unwrap(),
+        (s, Err(f)) => panic!("not one diagnostic:\n{}", failure_text(&s, &f)),
+        (_, Ok(_)) => panic!("expected a limit:\n{src}"),
+    }
+}
+
+/// The instances of `src`: the least limit it lowers at, one below it being E0423.
+fn instances_of(src: &str) -> u32 {
+    let n = (1..200).find(|&n| lower_at(src, n).1.is_ok()).expect("lowers at some limit");
+    assert_eq!(the_one_limit(src, n - 1).code, onsa_diag::Code::E0423, "{src}");
+    n
+}
+
+fn text_at(src: &str, span: onsa_diag::Span) -> &str {
+    &src[span.start as usize..span.end as usize]
+}
+
+const ID: &str = "fn id[T](x: T) -> T {\n  x\n}\npub fn go() -> I32 {\n  id(1)\n}\n";
+
+#[test]
+fn the_instances_are_the_pairs_of_item_and_arguments() {
+    assert_eq!(instances_of(ID), 2, "`go` and `id[I32]`");
+    for (more, what, added) in [
+        ("pub fn two() -> F32 {\n  id(1.0)\n}\n", "a new argument: the function and `id[F32]`", 2),
+        ("pub fn again() -> I32 {\n  id(2)\n}\n", "the same arguments: the function only", 1),
+        ("pub struct P[T] {\n  x: T,\n}\npub fn p(a: P[I32]) -> I32 {\n  a.x\n}\n", "a struct", 2),
+        ("pub enum E[T] {\n  A(T),\n  B,\n}\npub fn e(a: E[I32]) -> I32 {\n  1\n}\n", "an enum", 2),
+        ("test \"t\" {\n  assert(1 == 1)\n}\n", "a test", 1),
+        ("pub struct S {\n  v: I32,\n}\nimpl S {\n  const K: I32 = 1\n}\n", "the constant of an `impl`", 1),
+        ("pub struct D {\n  v: I32 = 1,\n}\n", "a default", 1),
+    ] {
+        assert_eq!(instances_of(&format!("{ID}{more}")), 2 + added, "{what}");
+    }
+}
+
+#[test]
+fn what_is_generated_and_a_constant_of_a_module_are_not_counted() {
+    let eq = "pub fn eq(a: (I32, I32), b: (I32, I32)) -> Bool {\n  a == b\n}\n";
+    let flow = "pub flow one(x: F32 at sample) -> F32 at sample {\n  x\n}\n";
+    let derived =
+        "pub struct D: Default {\n  v: I32,\n}\npub fn d(a: D) -> I32 {\n  1\n}\npub fn m() -> D {\n  D.default()\n}\n";
+    for (more, what, added) in [
+        ("const K: I32 = 1\n", "a constant of a module", 0),
+        (eq, "the function, not its `__eq`", 1),
+        (flow, "the four structs of a flow, not its functions", 4),
+        // `I32.default` is a function `std` writes by hand, which the derive calls.
+        (derived, "`D`, `d`, `m` and `I32.default`, not the `default` of the derive", 4),
+    ] {
+        assert_eq!(instances_of(&format!("{ID}{more}")), 2 + added, "{what}");
+    }
+}
+
+/// §18.1: the limit is the one diagnostic, whatever lowering found before it.
+#[test]
+fn e0423_is_alone_and_names_the_item_with_the_most_instances() {
+    let many = format!("{ID}pub fn f() -> F32 {{\n  id(1.0)\n}}\npub fn b() -> Bool {{\n  id(true)\n}}\n");
+    let d = the_one_limit(&many, 5);
+    assert_eq!(d.code, onsa_diag::Code::E0423);
+    assert!(d.message.contains("more than 5 instances"), "{}", d.message);
+    assert!(d.notes.iter().any(|n| n.message.contains(".id` has the most instances: 2")), "{:?}", d.notes);
+    let unsupported = "pub fn s(f: fn(I32) -> I32) -> I32 {\n  f.(1)\n}\n";
+    assert_eq!(the_one_limit(&format!("{unsupported}{ID}"), 1).code, onsa_diag::Code::E0423);
+}
+
+const GROW: &str = "fn g[T](x: T, n: U32) -> U32 {\n  if n == 0 {\n    return 0\n  }\n  g(Some(x), n - 1)\n}\n";
+
+#[test]
+fn e0422_of_an_instance_is_short_and_shows_at_most_three_places_of_the_path() {
+    let root = "pub fn go() -> U32 {\n  g(1, 3)\n}\n";
+    let d = the_one_limit(&format!("{GROW}{root}"), u32::MAX);
+    assert_eq!(d.code, onsa_diag::Code::E0422);
+    assert_eq!(d.message, "the type is deeper than 256 levels (§4.4)");
+    assert_eq!(d.notes.iter().filter(|n| n.span.is_some()).count(), 1, "the root's: the call that recurs is the place");
+    let hops: String = (0..6)
+        .map(|k| format!("fn a{k}[T](x: T, n: U32) -> U32 {{\n  a{}(Some(x), n - 1)\n}}\n", (k + 1) % 6))
+        .collect();
+    let d = the_one_limit(&format!("{hops}pub fn go() -> U32 {{\n  a0(1, 3)\n}}\n"), u32::MAX);
+    assert_eq!(d.notes.iter().filter(|n| n.span.is_some()).count(), 3, "{:?}", d.notes);
+}
+
+#[test]
+fn over_the_limits_in_a_declaration_is_at_the_type_of_the_innermost_field() {
+    let use_it = "pub fn u(r: R[I32]) -> U32 {\n  0\n}\n";
+    for (decl, at) in [
+        ("pub struct R[T] {\n  t: T,\n  a: fn(R[(T, T)]) -> I32,\n}\n", "fn(R[(T, T)]) -> I32"),
+        ("pub enum R[T] {\n  A(I32, fn(R[(T, T)]) -> I32),\n  B(T),\n}\n", "fn(R[(T, T)]) -> I32"),
+        (
+            "pub struct R[T] {\n  v: V[T],\n}\npub struct V[T] {\n  w: fn(R[(T, T)]) -> I32,\n}\n",
+            "fn(R[(T, T)]) -> I32",
+        ),
+    ] {
+        let src = format!("{decl}{use_it}");
+        let d = the_one_limit(&src, u32::MAX);
+        assert_eq!(d.code, onsa_diag::Code::E0422, "{decl}");
+        assert_eq!(text_at(&src, d.span), at, "{decl}");
+    }
+}

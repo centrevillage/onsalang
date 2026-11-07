@@ -206,7 +206,7 @@ fn lower_target_value(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, t: Target, ty:
         },
         Target::Const { def, of, inst } => {
             let (def, gargs) = lw.instance_target(def, of, inst, cx, span)?;
-            ExprKind::Const(lw.const_id(def, gargs)?)
+            ExprKind::Const(lw.const_id(def, gargs, span)?)
         }
         Target::Variant { index, .. } => {
             let Ty::Enum(id) = &ty else { return Err(unsupported(span, Feature::VariantCtorValues, &[])) };

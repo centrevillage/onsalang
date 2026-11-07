@@ -172,7 +172,7 @@ fn pat_test(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr) -> R<Opti
 fn const_test(lw: &mut Lowerer, cx: &mut FnCx, target: Target, place: &Expr, span: Span) -> R<Expr> {
     let Target::Const { def, of, inst } = target else { return Err(internal(span, "pattern of no constant")) };
     let (def, gargs) = lw.instance_target(def, of, inst, cx, span)?;
-    let rhs = Expr::new(place.ty.clone(), span, ExprKind::Const(lw.const_id(def, gargs)?));
+    let rhs = Expr::new(place.ty.clone(), span, ExprKind::Const(lw.const_id(def, gargs, span)?));
     Ok(Expr::new(Ty::Bool, span, ExprKind::Cmp { op: CmpOp::Eq, lhs: Box::new(place.clone()), rhs: Box::new(rhs) }))
 }
 

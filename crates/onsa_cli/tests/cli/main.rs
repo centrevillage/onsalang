@@ -41,6 +41,7 @@ mod gap_forms;
 mod generated_order;
 mod heading_names;
 mod heading_reach_grid;
+mod instance_limits;
 mod interface_const_floats;
 mod interface_fn_return;
 mod interface_generic_kinds;

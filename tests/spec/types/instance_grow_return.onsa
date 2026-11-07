@@ -1,0 +1,42 @@
+// onsa.toml
+// [package]
+// name = "instance_grow_return"
+// edition = "2026"
+//
+// [export]
+// prefix = "igr_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+// fixes = 0
+
+// S-290 (W5-23 U2): the type grows through the return type of a generic function: `wrap(x)` has the
+// type `S[T]` (a declared struct with an argument is `2 + the size of the argument` and one level
+// of depth), and the call of `g` with it makes `g` for `S[T]`.
+
+pub struct S[T] {
+  v: T,
+}
+
+fn wrap[T](x: T) -> S[T] {
+  S { v: x }
+}
+
+fn g[T](x: T, n: U32) -> U32 {
+  if n == 0 {
+    return 0
+  }
+  g(wrap(x), n - 1)  //~ E0422
+}
+
+@export
+pub fn root() -> U32 {
+  g(1, 3)
+}

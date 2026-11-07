@@ -1,0 +1,47 @@
+// onsa.toml
+// [package]
+// name = "instance_grow_bound"
+// edition = "2026"
+//
+// [export]
+// prefix = "igbo_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+// fixes = 0
+
+// S-290 (W5-23 U2): the growth goes through a bound: the `default` of `W[T]` makes a `W[W[T]]` by
+// the generic function `mk` (the call of `mk` is the member `T.default()` of the bound `Default`, so
+// it is known only when the type is known), and `mk` calls the `default` of that type, which makes a
+// `W[W[..]]` again. The type that is first past the limit is written in the annotation of the `let`,
+// which is on the same line as the call of `mk`: that line is the position. `onsa check` has no
+// diagnostic. (The cycle is an `rt` cycle too (§10 rule 5, E0903 in the lowering) and the report is
+// the limit only, §18.1.)
+
+pub struct W[T] {
+  x: T,
+}
+
+impl[T: Default] Default for W[T] {
+  rt fn default() -> W[T] {
+    let _: W[W[T]] = mk()  //~ E0422
+    W { x: T.default() }
+  }
+}
+
+rt fn mk[T: Default]() -> T {
+  T.default()
+}
+
+@export
+pub fn root() -> U32 {
+  let _: W[I32] = mk()
+  1
+}

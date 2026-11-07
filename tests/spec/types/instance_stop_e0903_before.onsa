@@ -1,0 +1,49 @@
+// onsa.toml
+// [package]
+// name = "instance_stop_e0903_before"
+// edition = "2026"
+//
+// [export]
+// prefix = "ise3_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+// fixes = 0
+
+// S-290 (W5-23 U2), §18.1: the lowering has an `rt` cycle through a bound (E0903, S-911: `Q1.default` calls `mk`, which calls
+// `T.default()` of `Q1`; `onsa check` has no diagnostic) above the growth. The limit stops the lowering before the cycles are
+// reported, so there is E0422 only.
+
+pub struct Q1 {
+  n: I32,
+}
+
+impl Default for Q1 {
+  rt fn default() -> Q1 {
+    let q: Q1 = mk()
+    q
+  }
+}
+
+rt fn mk[T: Default]() -> T {
+  T.default()
+}
+
+fn g[T](x: T, n: U32) -> U32 {
+  if n == 0 {
+    return 0
+  }
+  g(Some(x), n - 1)  //~ E0422
+}
+
+@export
+pub fn root() -> U32 {
+  g(1, 3)
+}

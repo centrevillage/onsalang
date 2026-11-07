@@ -1,0 +1,39 @@
+// onsa.toml
+// [package]
+// name = "instance_field_fn"
+// edition = "2026"
+//
+// [export]
+// prefix = "iff_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+// fixes = 0
+
+// S-290 (W5-23 U2): the growth is in a type, not in a function: the field `a` of `R[T]` has a function
+// type that takes `R[(T, T)]`, so `R[I32]` needs `R[(I32, I32)]` and so on, each with a tuple one
+// level deeper. A function type is a level of the depth and the field is not a value of the
+// type itself (no E0311). The type `R[X]` that the lowering makes past the limit is made in the type
+// of the field: the position is the field (§4.4: "型の宣言の中で超えたら、そのフィールドの型"), each
+// field on its own line. `onsa check` has no diagnostic (`R[(T, T)]` is a small type).
+
+pub struct R[T] {
+  t: T,
+  a: fn(R[(T, T)]) -> I32,  //~ E0422
+}
+
+pub fn f(x: R[I32]) -> U32 {
+  0
+}
+
+@export
+pub fn anchor() -> U32 {
+  1
+}

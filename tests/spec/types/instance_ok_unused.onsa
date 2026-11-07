@@ -1,0 +1,48 @@
+// onsa.toml
+// [package]
+// name = "instance_ok_unused"
+// edition = "2026"
+//
+// [export]
+// prefix = "iou_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+
+// S-290 (W5-23 U2): a generic item that nothing instantiates makes no type, whatever it would do: the
+// function `g` that wraps its own type (it is exported and not called), the pair `a` and `b`, and the
+// generic struct `R` whose field holds a function of `R[(T, T)]` (no use names `R` with an argument).
+// The roots are the items that are not generic, and none of them reaches these. No diagnostic, and the
+// build of the target passes.
+
+pub fn g[T](x: T, n: U32) -> U32 {
+  if n == 0 {
+    return 0
+  }
+  g(Some(x), n - 1)
+}
+
+fn a[T](x: T, n: U32) -> U32 {
+  b(Some(x), n)
+}
+
+fn b[T](x: T, n: U32) -> U32 {
+  a(x, n)
+}
+
+pub struct R[T] {
+  t: T,
+  a: fn(R[(T, T)]) -> I32,
+}
+
+@export
+pub fn root() -> U32 {
+  1
+}

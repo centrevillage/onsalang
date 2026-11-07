@@ -113,7 +113,7 @@ pub(super) fn lower_call(
             }
             let params = sig_params(lw, cx, f, &gargs, span)?;
             let cargs = lower_args(lw, cx, args, &params)?;
-            let fid = lw.fn_id(def, gargs);
+            let fid = lw.fn_id(def, gargs, span)?;
             Ok(Expr::new(ty, span, ExprKind::Call { fn_: fid, args: cargs }))
         }
         Target::Method { def, of, inst } => {
@@ -139,7 +139,7 @@ pub(super) fn lower_call(
             let params = sig_params(lw, cx, f, &gargs, span)?;
             let mut cargs = vec![Arg { mode: self_mode, expr: recv }];
             cargs.extend(lower_args(lw, cx, args, &params)?);
-            let fid = lw.fn_id(def, gargs);
+            let fid = lw.fn_id(def, gargs, span)?;
             Ok(Expr::new(ty, span, ExprKind::Call { fn_: fid, args: cargs }))
         }
         Target::BuiltinMethod { name, .. } => lower_builtin_method(lw, cx, e, callee, &name),
@@ -281,7 +281,7 @@ fn lower_from_fn(lw: &mut Lowerer, cx: &mut FnCx, args: &[ast::Arg], ty: Ty, spa
             // A `target` declaration has no body to call (`F32.round_from`).
             let kind = match lw.a.prims.get(&def).copied() {
                 Some(row) => ExprKind::Prim { prim: row_prim(lw, def, row, &gargs, span)?.0, args },
-                None => ExprKind::Call { fn_: lw.fn_id(def, gargs), args },
+                None => ExprKind::Call { fn_: lw.fn_id(def, gargs, span)?, args },
             };
             Expr::new(elem.clone(), span, kind)
         }

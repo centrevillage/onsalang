@@ -338,12 +338,12 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     let base = lw.qual_name(flow);
     let ctl = push_fn(lw, format!("{base}.ctl"), true, span);
     let tick = push_fn(lw, format!("{base}.tick"), true, span);
-    let init = lw.fn_id(need("init")?, Vec::new());
-    let reset = lw.fn_id(need("reset")?, Vec::new());
-    let process = lw.fn_id(need("process")?, Vec::new());
-    let process_inplace = member(&fd, "process_inplace").map(|d| lw.fn_id(d, Vec::new()));
-    let render = lw.fn_id(need("render")?, Vec::new());
-    let params_default = member(&fd, "params_default").map(|d| lw.fn_id(d, Vec::new()));
+    let init = lw.fn_id(need("init")?, Vec::new(), span)?;
+    let reset = lw.fn_id(need("reset")?, Vec::new(), span)?;
+    let process = lw.fn_id(need("process")?, Vec::new(), span)?;
+    let process_inplace = member(&fd, "process_inplace").map(|d| lw.fn_id(d, Vec::new(), span)).transpose()?;
+    let render = lw.fn_id(need("render")?, Vec::new(), span)?;
+    let params_default = member(&fd, "params_default").map(|d| lw.fn_id(d, Vec::new(), span)).transpose()?;
     let fns = FlowFns {
         flow,
         state: state_ty,

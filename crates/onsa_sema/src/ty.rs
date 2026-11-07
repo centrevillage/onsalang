@@ -257,6 +257,47 @@ impl Ty {
 pub const TYPE_DEPTH_LIMIT: u32 = 256;
 pub const TYPE_SIZE_LIMIT: u32 = 4096;
 
+/// The depth and the size of a type (§4.4), each held at its limit + 1: a
+/// form (a type with arguments, a tuple, an array, a function type) is a level
+/// and one, a name and a const argument (a length) one each; `()` is a form
+/// with no parts. The one way of adding them: the check over its interned
+/// types, lowering over the types of the instances (`onsa_core`, S-290).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Measure {
+    pub depth: u16,
+    pub size: u32,
+}
+
+impl Measure {
+    /// A name or a const argument, and a declared type with no arguments.
+    pub const LEAF: Measure = Measure { depth: 0, size: 1 };
+
+    /// A form that counts `own`, before its parts are added.
+    pub const fn form(own: u32) -> Measure {
+        Measure { depth: 1, size: own }
+    }
+
+    /// This form with the part `p` added.
+    pub fn with(self, p: Measure) -> Measure {
+        let depth = self.depth.max(p.depth + 1).min(TYPE_DEPTH_LIMIT as u16 + 1);
+        Measure { depth, size: self.size.saturating_add(p.size).min(TYPE_SIZE_LIMIT + 1) }
+    }
+
+    /// Whether it is deeper or larger than the limits (§4.4, E0422).
+    pub fn over_limit(self) -> bool {
+        u32::from(self.depth) > TYPE_DEPTH_LIMIT || self.size > TYPE_SIZE_LIMIT
+    }
+
+    /// The message of an E0422.
+    pub fn limit_message(self) -> String {
+        if u32::from(self.depth) > TYPE_DEPTH_LIMIT {
+            format!("the type is deeper than {TYPE_DEPTH_LIMIT} levels (§4.4)")
+        } else {
+            format!("the type is larger than {TYPE_SIZE_LIMIT} names and forms (§4.4)")
+        }
+    }
+}
+
 /// The arguments a type is read under (R-30): `Param(i)` stands for
 /// `args[i]`, read under `outer`. The walks behind `&Analysis` (kinds,
 /// layouts, the drops of `rt`) read a field of a generic type under the
@@ -274,10 +315,10 @@ pub struct Env<'e> {
 pub struct Types {
     tys: Vec<Ty>,
     map: HashMap<Ty, TyId>,
-    /// The depth and the size (§4.4) of each type, from its parts once when
-    /// it is interned, each held at its limit + 1: so a shared type is
-    /// judged without being expanded. And whether it is open ([`Types::open`]).
-    measures: Vec<(u16, u32, bool)>,
+    /// The measure (§4.4) of each type, from its parts once when it is
+    /// interned: so a shared type is judged without being expanded. And
+    /// whether it is open ([`Types::open`]).
+    measures: Vec<(Measure, bool)>,
 }
 
 impl Types {
@@ -292,47 +333,49 @@ impl Types {
         id
     }
 
-    /// The depth and the size of `ty` (§4.4): a form (a type with
-    /// arguments, a tuple, an array, a function type) is a level and one, a
-    /// name and a const argument (a length) one each; `()` is a form with no
-    /// parts. A declared type is a leaf.
-    fn measure(&self, ty: &Ty) -> (u16, u32, bool) {
+    /// The measure of `ty` from those of its parts. A declared type with no
+    /// arguments is a leaf.
+    fn measure(&self, ty: &Ty) -> (Measure, bool) {
         let (own, parts, open): (u32, Vec<TyId>, bool) = match ty {
             Ty::Unit => (1, Vec::new(), false),
             Ty::Tuple(ts) => (1, ts.clone(), false),
             Ty::Array(t, len) => (2, vec![*t], !matches!(len, Len::Const(_))),
             Ty::Named(_, ts) | Ty::Builtin(_, ts) if !ts.is_empty() => (2, ts.clone(), false),
             Ty::Fn(f) => (1, f.params.iter().map(|&(_, t)| t).chain([f.ret]).collect(), false),
-            Ty::Param(_) | Ty::Var(_) => return (0, 1, true),
-            _ => return (0, 1, false),
+            Ty::Param(_) | Ty::Var(_) => return (Measure::LEAF, true),
+            _ => return (Measure::LEAF, false),
         };
-        let (depth, size, open) = parts.iter().fold((0, own, open), |(d, s, o), p| {
-            let (pd, ps, po) = self.measures[p.0 as usize];
-            (d.max(pd), s.saturating_add(ps), o || po)
-        });
-        ((depth + 1).min(TYPE_DEPTH_LIMIT as u16 + 1), size.min(TYPE_SIZE_LIMIT + 1), open)
+        parts.iter().fold((Measure::form(own), open), |(m, o), p| {
+            let (pm, po) = self.measures[p.0 as usize];
+            (m.with(pm), o || po)
+        })
     }
 
     /// Whether a type parameter or an inference variable, of a type or of a
     /// length, is in `id`: what a type that is not open holds is the same
     /// wherever it is read (`walk::Known`).
     pub fn open(&self, id: TyId) -> bool {
-        self.measures[id.0 as usize].2
+        self.measures[id.0 as usize].1
+    }
+
+    /// The measure of `id` (§4.4).
+    pub fn measure_of(&self, id: TyId) -> Measure {
+        self.measures[id.0 as usize].0
     }
 
     /// The depth of `id` (§4.4), at most [`TYPE_DEPTH_LIMIT`] + 1.
     pub fn depth(&self, id: TyId) -> u32 {
-        u32::from(self.measures[id.0 as usize].0)
+        u32::from(self.measure_of(id).depth)
     }
 
     /// The size of `id` (§4.4), at most [`TYPE_SIZE_LIMIT`] + 1.
     pub fn size(&self, id: TyId) -> u32 {
-        self.measures[id.0 as usize].1
+        self.measure_of(id).size
     }
 
     /// Whether `id` is deeper or larger than the limits (§4.4, E0422).
     pub fn over_limit(&self, id: TyId) -> bool {
-        self.depth(id) > TYPE_DEPTH_LIMIT || self.size(id) > TYPE_SIZE_LIMIT
+        self.measure_of(id).over_limit()
     }
 
     /// Whether the error type is in `id`. Each type is visited once.

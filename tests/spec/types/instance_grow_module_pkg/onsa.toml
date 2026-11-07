@@ -1,0 +1,13 @@
+[package]
+name = "instance_grow_module_pkg"
+edition = "2026"
+
+[export]
+prefix = "igmo_"
+
+[targets.host]
+kind = "source"
+lang = "c"
+platform = "host"
+panic = "trap"
+provides = []

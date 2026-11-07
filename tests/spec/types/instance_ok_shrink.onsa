@@ -1,0 +1,66 @@
+// onsa.toml
+// [package]
+// name = "instance_ok_shrink"
+// edition = "2026"
+//
+// [export]
+// prefix = "ish_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+// mode = "test"
+
+// S-290 (W5-23 U2): a call whose type argument is smaller than the caller's does not grow (`g` takes
+// `Option[T]` and passes the content to `h`), and the instantiation through a bound that goes to the
+// inner type ends: `W[T]`'s `default` calls `T.default()` (the type inside), so `mk` for `W[W[I32]]`
+// reaches `W[I32]` and `I32`. No diagnostic; the tests run.
+
+fn g[T](x: Option[T], n: U32) -> U32 {
+  if n == 0 {
+    return 0
+  }
+  match x {
+    Some(y) => h(y),
+    None => 0,
+  }
+}
+
+fn h[T](y: T) -> U32 {
+  0
+}
+
+pub struct W[T] {
+  x: T,
+}
+
+impl[T: Default] Default for W[T] {
+  rt fn default() -> W[T] {
+    W { x: T.default() }
+  }
+}
+
+rt fn mk[T: Default]() -> T {
+  T.default()
+}
+
+@export
+pub fn root() -> U32 {
+  g(Some(1), 3)
+}
+
+test "a smaller type argument" {
+  assert g(Some(1), 3) == 0
+  assert g(Some(Some(true)), 3) == 0
+}
+
+test "through a bound to the inner type" {
+  let z: W[W[I32]] = mk()
+  assert z.x.x == 0
+}

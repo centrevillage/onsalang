@@ -1,0 +1,85 @@
+// onsa.toml
+// [package]
+// name = "instance_type_fork_fine"
+// edition = "2026"
+//
+// [export]
+// prefix = "itff_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+
+// S-290 (W5-23 U2): the chain of `instance_type_fork_size.onsa` with 10 structs, used as `G10[F32]`:
+// the largest type is `G0[(T, T)]` for the `T` of `G1` of size 1023, `2 + (1 + 2 * 1023) = 2049`,
+// within the limit 4096; the structs are `2^10 - 1` instantiations. No diagnostic, and the build of
+// the target passes.
+
+pub struct G0[T] {
+  v: T,
+}
+
+pub struct G1[T] {
+  x: G0[(T, T)],
+  y: G0[(T, U8)],
+}
+
+pub struct G2[T] {
+  x: G1[(T, T)],
+  y: G1[(T, U8)],
+}
+
+pub struct G3[T] {
+  x: G2[(T, T)],
+  y: G2[(T, U8)],
+}
+
+pub struct G4[T] {
+  x: G3[(T, T)],
+  y: G3[(T, U8)],
+}
+
+pub struct G5[T] {
+  x: G4[(T, T)],
+  y: G4[(T, U8)],
+}
+
+pub struct G6[T] {
+  x: G5[(T, T)],
+  y: G5[(T, U8)],
+}
+
+pub struct G7[T] {
+  x: G6[(T, T)],
+  y: G6[(T, U8)],
+}
+
+pub struct G8[T] {
+  x: G7[(T, T)],
+  y: G7[(T, U8)],
+}
+
+pub struct G9[T] {
+  x: G8[(T, T)],
+  y: G8[(T, U8)],
+}
+
+pub struct G10[T] {
+  x: G9[(T, T)],
+  y: G9[(T, U8)],
+}
+
+pub fn f(g: G10[F32]) -> U32 {
+  0
+}
+
+@export
+pub fn anchor() -> U32 {
+  1
+}

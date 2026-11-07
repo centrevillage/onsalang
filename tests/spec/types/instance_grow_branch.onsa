@@ -1,0 +1,36 @@
+// onsa.toml
+// [package]
+// name = "instance_grow_branch"
+// edition = "2026"
+//
+// [export]
+// prefix = "igb_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+// fixes = 0
+
+// S-290 (W5-23 U2): the growth is in the block of an `else`, after a call that does
+// not grow: the type argument of the first call is the same (`g(x, ..)`, one instantiation) and the
+// second one wraps. The position is the line of the call that wraps.
+
+@export
+pub fn root() -> U32 {
+  g(1, 3)
+}
+
+fn g[T](x: T, n: U32) -> U32 {
+  if n == 0 {
+    0
+  } else {
+    let a = g(x, n - 1)
+    a + g(Some(x), n - 1)  //~ E0422
+  }
+}

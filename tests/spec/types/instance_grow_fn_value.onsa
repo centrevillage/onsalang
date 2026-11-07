@@ -1,0 +1,35 @@
+// onsa.toml
+// [package]
+// name = "instance_grow_fn_value"
+// edition = "2026"
+//
+// [export]
+// prefix = "igf_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+// fixes = 0
+
+// S-290 (W5-23 U2): the growth is only in the type of a function value: the parameter `f` has the
+// type `fn(T) -> U32` and the argument is a function that takes `Option[T]`, so the type argument is
+// one level deeper and no value of the type `T` itself is passed. The function type is a level
+// of the depth too (§4.4), so it is E0422 at the call.
+
+fn g[T](f: fn(T) -> U32, n: U32) -> U32 {
+  if n == 0 {
+    return 0
+  }
+  g(fn(o: Option[T]) -> U32 { 0 }, n - 1)  //~ E0422
+}
+
+@export
+pub fn root() -> U32 {
+  g(fn(y: I32) -> U32 { 0 }, 3)
+}

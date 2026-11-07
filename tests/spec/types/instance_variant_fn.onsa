@@ -1,0 +1,35 @@
+// onsa.toml
+// [package]
+// name = "instance_variant_fn"
+// edition = "2026"
+//
+// [export]
+// prefix = "ivf_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+// fixes = 0
+
+// S-290 (W5-23 U2): the same as `instance_field_fn.onsa` in the content of a variant of an enum:
+// the position is the line of the variant that holds the function type.
+
+pub enum R[T] {
+  N,
+  C(T, fn(R[(T, T)]) -> I32),  //~ E0422
+}
+
+pub fn f(x: R[I32]) -> U32 {
+  0
+}
+
+@export
+pub fn anchor() -> U32 {
+  1
+}
