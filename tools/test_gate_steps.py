@@ -47,7 +47,7 @@ class RealSteps(unittest.TestCase):
         self.assertTrue(by_name["ignores"].stage_args and not by_name["ignores"].pendable)
         self.assertFalse(by_name["fmt-props"].pendable)
         # `--quick` leaves out the fuzzing, the self-test, the C and the fmt properties (2026-10-08)
-        slow = ["save-base", "fuzz", "fuzz-deep", "fix-loop", "gate-selftest"] + self.c_items() + ["vectors-c", "fmt-props", "fmt-cst"]
+        slow = ["save-base", "heavy", "fuzz", "fuzz-deep", "fix-loop", "gate-selftest"] + self.c_items() + ["vectors-c", "fmt-props", "fmt-cst"]
         self.assertEqual([s.name for s in gate_steps.STEPS if s.slow], slow)
         # the deep fuzzing runs only at a stage end (W3-03)
         self.assertEqual([s.name for s in gate_steps.STEPS if s.stage_end_only], ["fuzz-deep"])
@@ -75,7 +75,8 @@ class RealSteps(unittest.TestCase):
         for s in steps:
             for p in s.narrows:
                 self.assertTrue((gate.TOOLS / Path(p).relative_to("tools")).is_file(), p)
-        self.assertEqual({s.name: s.touches for s in steps if s.touches}, {"gate-selftest": ("tools/",)})
+        self.assertEqual({s.name: s.touches for s in steps if s.touches},
+                         {"heavy": ("crates/onsa_core/", "tests/heavy/"), "gate-selftest": ("tools/",)})
         # the self-test is not run by a diff of the table of the allowed names alone (X-1 U10)
         self.assertEqual({s.name: s.touches_except for s in steps if s.touches_except},
                          {"gate-selftest": ("tools/builtin_names.toml",)})  # fmt: skip
@@ -89,7 +90,7 @@ class RealSteps(unittest.TestCase):
         self.assertTrue(due.stage_args and not due.pendable and not due.slow)
         sweep = [s.name for s in steps if gate._in_form(s, gate.Form(sweep=(0, 2)), None)]
         self.assertEqual(sweep[0], "save-base")
-        self.assertEqual(sorted(sweep), sorted(["save-base", "gate-selftest", "fuzz", "fmt-props", "fmt-cst"]
+        self.assertEqual(sorted(sweep), sorted(["save-base", "heavy", "gate-selftest", "fuzz", "fmt-props", "fmt-cst"]
                                                + gate_steps.static_names()))  # fmt: skip
         for form in (gate.Form(), gate.Form(works=("W3-07",)), gate.Form(stage_end="W3"), gate.Form(quick=True)):
             self.assertEqual([s.name for s in steps if not gate._in_form(s, form, None)], ["save-base"])

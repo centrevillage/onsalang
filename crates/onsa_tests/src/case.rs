@@ -10,6 +10,9 @@ use crate::fragment::{self, TestSettings};
 /// The directory scanned, relative to the repository root.
 pub const TESTS: &str = "tests";
 
+/// The cases too slow to run every time (X-24): [`collect_heavy`], not [`collect`].
+pub const HEAVY: &str = "tests/heavy";
+
 /// Directories under `tests/` that hold no cases, with the reason. Every other
 /// directory is scanned, so a new one is never skipped silently.
 pub const EXCLUDED: &[(&str, &str)] = &[
@@ -23,6 +26,11 @@ pub const EXCLUDED: &[(&str, &str)] = &[
         "inputs the fuzzing of `check` and `fmt` saved (Q-06, W1-04): mutated sources that crashed the compiler \
          or broke a fix candidate, replayed by `tools/fuzz.py` (the gate item `fuzz`) and walked by the fix \
          loop (the gate item `fix-loop`, `onsa_tests::fix_loop`; [`onsa_files`]), not cases",
+    ),
+    (
+        HEAVY,
+        "cases too slow for every run (X-24): each reader of the cases would pay for them, so the ignored test \
+         `heavy_cases` of `tests/cases.rs` runs them, for the gate item `heavy`",
     ),
 ];
 
@@ -71,13 +79,28 @@ pub fn target_names(loaded: &Loaded) -> Vec<String> {
 /// Every case under `root/tests`, sorted by path, and the directories that
 /// cannot be read. `tests/` itself is never a package, even with an `onsa.toml`.
 pub fn collect(root: &Path) -> (Vec<Case>, Vec<String>) {
+    let top = root.join(TESTS);
+    let (cases, mut errors) = scan(root, &top);
+    if top.join("onsa.toml").exists() {
+        errors
+            .push(format!("{TESTS}/onsa.toml: the root of the cases is not a package; move it into a case directory"));
+    }
+    (cases, errors)
+}
+
+/// Every case under `root/tests/heavy`, as [`collect`].
+pub fn collect_heavy(root: &Path) -> (Vec<Case>, Vec<String>) {
+    scan(root, &root.join(HEAVY))
+}
+
+/// The cases under `top`, sorted by path: [`EXCLUDED`] holds none, but when it is `top` itself.
+fn scan(root: &Path, top: &Path) -> (Vec<Case>, Vec<String>) {
     let mut out = Vec::new();
     let mut errors = Vec::new();
-    let top = root.join(TESTS);
-    let mut stack = vec![top.clone()];
+    let mut stack = vec![top.to_path_buf()];
     while let Some(d) = stack.pop() {
         let rel = rel_path(root, &d);
-        if EXCLUDED.iter().any(|(x, _)| *x == rel) {
+        if d != top && EXCLUDED.iter().any(|(x, _)| *x == rel) {
             continue;
         }
         if d != top && d.join("onsa.toml").exists() {
@@ -105,10 +128,6 @@ pub fn collect(root: &Path) -> (Vec<Case>, Vec<String>) {
                 out.push(read_file(root, &p));
             }
         }
-    }
-    if top.join("onsa.toml").exists() {
-        errors
-            .push(format!("{TESTS}/onsa.toml: the root of the cases is not a package; move it into a case directory"));
     }
     out.sort_by(|a, b| a.path.cmp(&b.path));
     (out, errors)

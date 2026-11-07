@@ -64,6 +64,7 @@
 | `pipeline/` | export とターゲットを持ち、ビルドの全体を通す事例 |
 | `golden/` | 写し（`core`・`interface`・`c`・`graph`）。事例が宣言しない写しは失敗 |
 | `vectors/` | テストベクトルの表（形式は [`vectors/FORMAT.md`](vectors/FORMAT.md)） |
+| `heavy/` | 1 件で時間のかかる事例。既定の走査から外し、gate の項目 `heavy` だけが回す（X-24）。印は `diag-negatives` が走らせずに数える |
 | `fuzz/` | ファズが保存した入力（事例ではない。`tools/fuzz.py` と `fix-loop` が読む） |
 | `review-phase1/` | レビューの再現の入力（事例ではない。[`review-phase1/README.md`](review-phase1/README.md)） |
 | `pending.toml` | 実装待ちの一覧（形はファイルの頭のコメント） |

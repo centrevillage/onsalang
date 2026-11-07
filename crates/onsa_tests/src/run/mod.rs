@@ -64,7 +64,7 @@ mod test_blocks;
 #[cfg(test)]
 mod tests;
 
-pub use all::{run_all, run_all_with, run_each, runs_json};
+pub use all::{run_all, run_all_with, run_each, run_heavy, runs_json};
 use build::{BuildCtx, build_target, conformance_scope, disk_files, host_not_run, manifest_of_target, run_hosts};
 use markers::{canonical, compare, manifest_stage, negative_rules, parser_markers};
 pub use report::{CaseReport, Report, reconcile};

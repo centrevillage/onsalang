@@ -126,6 +126,12 @@ class DiagNegatives(TempRepo):
         counts = diag_codes.count_negatives(runs, entries)
         self.assertEqual(counts, {"E0809": 2, "E0302": 2, "E0401": 1})
 
+
+    def test_the_slow_cases_count_unrun(self):
+        """X-24: the marks of tests/heavy count with no run, for the gate item `heavy` compares them."""
+        self.repo.write("tests/heavy/a.onsa", "x  //~ E0001\ny  //~ E0002\n")
+        self.repo.write("tests/heavy/deep/b.onsa", "z  //~ E0001\n// no mark\n")
+        self.assertEqual(diag_codes.heavy_negatives(self.repo.root), {"E0001": 2, "E0002": 1})
     def test_check(self):
         registry = {"E0001", "E0002", "E0003"}
         counts = {"E0001": 3, "E0002": 2, "E0003": 0}

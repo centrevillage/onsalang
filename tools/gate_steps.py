@@ -106,6 +106,9 @@ STEPS = [
     Step("clippy", ("cargo", "clippy", "--workspace", "--all-targets", "--", "-D", "warnings")),
     # Every test binary runs, the ones after a failing one too (X9-70).
     Step("test", ("cargo", "test", "--workspace", "--no-fail-fast")),
+    # X-24: the cases too slow for every run. The work checks and the sweeps run them when what they try changed.
+    Step("heavy", ("cargo", "test", "-p", "onsa_tests", "--test", "cases", "--", "--ignored", "--exact", "heavy_cases"),
+         slow=True, touches=("crates/onsa_core/", "tests/heavy/"), sweep=True),
     # The compiler does not fail inside on mutated inputs (Q-06, W1-04).
     Step("fuzz", (*PY, str(TOOLS / "fuzz.py")), slow=True, narrows=FUZZ_TOOLS),
     # The mutants that nest thousands deep (S-183, W3-14), with the replay: heavy on the machine

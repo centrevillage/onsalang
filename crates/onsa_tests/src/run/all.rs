@@ -23,6 +23,17 @@ pub fn run_all(root: &Path) -> Report {
     run_all_with(root, Update::from_env())
 }
 
+/// Every case of `tests/heavy` (X-24), as [`run_all`] runs a case. None may be
+/// pending: a slow case that fails has nothing to wait for in the list, which
+/// the other runs read.
+pub fn run_heavy(root: &Path) -> Report {
+    let (cases, scan_errors) = case::collect_heavy(root);
+    let runs = run_each(root, &cases, |_| Update::Off, HostSteps::Run);
+    let mut report = reconcile(runs, &Pending::default());
+    report.failures.extend(scan_errors);
+    report
+}
+
 /// [`run_all`], rewriting as `update` says (the cases listed as a whole never).
 pub fn run_all_with(root: &Path, update: Update) -> Report {
     let (cases, scan_errors) = case::collect(root);

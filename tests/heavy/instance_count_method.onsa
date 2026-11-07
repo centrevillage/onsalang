@@ -1,0 +1,52 @@
+// onsa.toml
+// [package]
+// name = "instance_count_method"
+// edition = "2026"
+//
+// [export]
+// prefix = "icm_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+// fixes = 0
+
+// S-290 (W5-23 U2), §4.5: the methods are counted. `m` of `P` makes a `P` with the nine fields rotated and one with the first two
+// swapped and calls `m` on each: 9! = 362880 instantiations of `P` and of `m`, from one line.
+//
+// Why nine type parameters: the types do not grow (the depth and the size stay small, so there is no E0422), and the number of
+// instantiations is the number of orders of the nine different types that the two calls (a rotation and a swap of the first
+// two, which generate all the permutations) reach: 9! = 362880 > 65536. All of them are made on one line, so the position is
+// that line whichever order the lowering takes. A chain of `f(k)` that call `f(k-1)` twice with different types would be
+// the same count, but each function is on its own line (a declaration cannot share a line, E0002) and the line that makes the
+// 65537th instantiation depends on the order, which §4.5 does not fix.
+
+pub struct P[A, B, C, D, E, F, G, H, I] {
+  a: A, b: B, c: C, d: D, e: E, f: F, g: G, h: H, i: I,
+}
+
+impl[A, B, C, D, E, F, G, H, I] P[A, B, C, D, E, F, G, H, I] {
+  fn m(self) -> U32 {
+    P { a: self.b, b: self.c, c: self.d, d: self.e, e: self.f, f: self.g, g: self.h, h: self.i, i: self.a }.m() + P { a: self.b, b: self.a, c: self.c, d: self.d, e: self.e, f: self.f, g: self.g, h: self.h, i: self.i }.m()  //~ E0423
+  }
+}
+
+@export
+pub fn root() -> U32 {
+  let a: I8 = 0
+  let b: I16 = 0
+  let c: I32 = 0
+  let d: I64 = 0
+  let e: U8 = 0
+  let f: U16 = 0
+  let g: U64 = 0
+  let h: Bool = true
+  let i: F32 = 0.0
+  P { a: a, b: b, c: c, d: d, e: e, f: f, g: g, h: h, i: i }.m()
+}

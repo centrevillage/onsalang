@@ -34,6 +34,7 @@ import spec_blocks
 
 ROOT = Path(__file__).resolve().parent.parent
 PENDING = Path("tests") / "pending.toml"
+HEAVY = "tests/heavy"  # the cases too slow for every run (X-24), `onsa_tests::case::HEAVY`
 # The saved fuzz inputs (tools/fuzz.py, W1-04); `onsa_tests::case::EXCLUDED` keeps them out of the cases.
 FUZZ_DIR = Path("tests") / "fuzz"
 # `onsa_cases` (`crates/onsa_tests/src/bin/onsa_cases.rs`): its cargo arguments, its build, and the command that runs

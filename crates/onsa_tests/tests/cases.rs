@@ -13,3 +13,14 @@ fn cases() {
     assert!(!report.cases.is_empty(), "no case under {}", root.join("tests").display());
     assert!(!report.failed(), "{}", report.failures_text());
 }
+
+/// The cases too slow to run every time (X-24): the gate item `heavy`.
+#[test]
+#[ignore = "heavy: the gate item `heavy` runs it"]
+fn heavy_cases() {
+    let root = onsa_tests::case::repo_root();
+    let report = onsa_tests::run::run_heavy(&root);
+    eprintln!("{}", report.summary());
+    assert!(!report.cases.is_empty(), "no case under {}", root.join(onsa_tests::case::HEAVY).display());
+    assert!(!report.failed(), "{}", report.failures_text());
+}

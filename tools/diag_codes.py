@@ -12,7 +12,8 @@ The table of the codes (`tasks/diag-codes.md`) is read in `repo.py`: the retired
 codes of the second phase (the rows of its table marked "第 2 期").
 
 A negative example is a marker (`//~` in a source, `#~` in a manifest) that a
-run compared and a diagnostic matched. Not counted: the markers of a case with `mode = "none"`, of a case
+run compared and a diagnostic matched, or a `//~` of a case of `tests/heavy`: those are too slow for
+this check (X-24) and are counted unrun, for the gate item `heavy` compares them. Not counted: the markers of a case with `mode = "none"`, of a case
 listed as a whole in tests/pending.toml (`test-case` "<path>"), and of the
 directories the scan excludes (the runner never reports them). A case listed
 by test (`<path>::<name>`) still compares its markers, so they count. A
@@ -42,6 +43,7 @@ ROOT = repo.ROOT
 
 # Negative examples each code needs (rules/process.md 8.3 2, Q-13). The one place of the number.
 NEGATIVE_MIN = 3
+HEAVY_MARK = re.compile(r"//~ (E\d{4})")
 
 CODE = repo.CODE
 # "E0410〜E0416" names the codes in between without writing them: the check
@@ -93,6 +95,12 @@ def count_negatives(runs, entries):
             if m["matched"]:
                 seen.add((case["path"], m["file"], m["line"], m["code"]))
     return Counter(code for _, _, _, code in seen)
+
+
+def heavy_negatives(root):
+    """{code: the `//~` marks of the cases of `repo.HEAVY`}, which the gate item `heavy` compares (X-24)."""
+    texts = (p.read_text(encoding="utf-8") for p in sorted((Path(root) / repo.HEAVY).rglob("*.onsa")))
+    return Counter(code for text in texts for code in HEAVY_MARK.findall(text))
 
 
 def check_negatives(counts, registry, entries, phase2):
@@ -151,7 +159,7 @@ def main(argv=None, root=ROOT, cmd=repo.CASES_CMD):
                 raise CheckError("\n".join(load_errors))
             runs = repo.cases_json(root, cmd, "--run", str(root))
             problems = [f"cannot scan the cases: {e}" for e in runs["errors"]]
-            counts = count_negatives(runs, entries)
+            counts = count_negatives(runs, entries) + heavy_negatives(root)
             problems += check_negatives(counts, registry, entries, phase2)
             short = sorted(c for c in registry if counts.get(c, 0) < NEGATIVE_MIN)
             summary = (

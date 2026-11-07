@@ -79,9 +79,10 @@ def cases(root) -> list:
 
 
 def core_cases(root) -> list:
-    """The inputs `core` lowers, relative to `root`: the cases of `diags` (tests/fuzz is not among them) but REVIEW,
+    """The inputs `core` lowers, relative to `root`: the cases of `diags` (tests/fuzz is not among them) but REVIEW
+    and the slow cases of `repo.HEAVY`,
     then the files of examples, a package's ones as its directory. Whether an input lowers is its exit code."""
-    tests = [rel for rel, _ in fuzz.seeds(root) if not rel.startswith(f"{REVIEW}/")]
+    tests = [rel for rel, _ in fuzz.seeds(root) if not rel.startswith((f"{REVIEW}/", f"{repo.HEAVY}/"))]
     examples = [p.relative_to(root).as_posix() for p in sorted((Path(root) / "examples").rglob("*.onsa"))]
     return packaged(root, tests + examples)
 
@@ -268,7 +269,7 @@ class Build(NamedTuple):
 def c_builds(root, tmp) -> list:
     """[Build] of every target of the inputs of `core_cases` in a copy of the HEAD of `root` below `tmp`."""
     tree, packages = Path(tmp) / "head", Path(tmp) / "packages"
-    paths = ["tests", f":!{REVIEW}", f":!{fuzz.FUZZ_DIR}", "examples"]
+    paths = ["tests", f":!{REVIEW}", f":!{repo.HEAVY}", f":!{fuzz.FUZZ_DIR}", "examples"]
     git = subprocess.run(["git", "-C", str(root), "archive", "HEAD", "--", *paths], capture_output=True)
     if git.returncode:
         raise OSError(f"git archive HEAD in {root}: {git.stderr.decode('utf-8', 'replace').strip()}")

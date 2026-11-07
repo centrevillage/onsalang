@@ -1,0 +1,120 @@
+// onsa.toml
+// [package]
+// name = "instance_count_types"
+// edition = "2026"
+//
+// [export]
+// prefix = "ict_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+// fixes = 0
+
+// S-290 (§4.5: "パッケージの具体化の数は 65536 までで、超えると E0423 である"; "数えるのは関数、テスト、struct と enum"): a fork
+// of the declarations makes 2^(k+1) instances of `G_k` and more of `Option`, with no type over the limits of §4.4 (17 levels deep,
+// each small). The line of the E0423 is where the count ran out, which a version may move (§4.5): the mark pins this version.
+
+pub struct G0[T] {
+  v: T,
+}
+
+pub struct G1[T] {
+  x: G0[Option[T]],
+  y: G0[(T, U8)],
+}
+
+pub struct G2[T] {
+  x: G1[Option[T]],
+  y: G1[(T, U8)],
+}
+
+pub struct G3[T] {
+  x: G2[Option[T]],
+  y: G2[(T, U8)],
+}
+
+pub struct G4[T] {
+  x: G3[Option[T]],
+  y: G3[(T, U8)],
+}
+
+pub struct G5[T] {
+  x: G4[Option[T]],
+  y: G4[(T, U8)],  //~ E0423
+}
+
+pub struct G6[T] {
+  x: G5[Option[T]],
+  y: G5[(T, U8)],
+}
+
+pub struct G7[T] {
+  x: G6[Option[T]],
+  y: G6[(T, U8)],
+}
+
+pub struct G8[T] {
+  x: G7[Option[T]],
+  y: G7[(T, U8)],
+}
+
+pub struct G9[T] {
+  x: G8[Option[T]],
+  y: G8[(T, U8)],
+}
+
+pub struct G10[T] {
+  x: G9[Option[T]],
+  y: G9[(T, U8)],
+}
+
+pub struct G11[T] {
+  x: G10[Option[T]],
+  y: G10[(T, U8)],
+}
+
+pub struct G12[T] {
+  x: G11[Option[T]],
+  y: G11[(T, U8)],
+}
+
+pub struct G13[T] {
+  x: G12[Option[T]],
+  y: G12[(T, U8)],
+}
+
+pub struct G14[T] {
+  x: G13[Option[T]],
+  y: G13[(T, U8)],
+}
+
+pub struct G15[T] {
+  x: G14[Option[T]],
+  y: G14[(T, U8)],
+}
+
+pub struct G16[T] {
+  x: G15[Option[T]],
+  y: G15[(T, U8)],
+}
+
+pub struct G17[T] {
+  x: G16[Option[T]],
+  y: G16[(T, U8)],
+}
+
+pub fn use_g(g: G17[F32]) -> U32 {
+  0
+}
+
+@export
+pub fn anchor() -> U32 {
+  1
+}

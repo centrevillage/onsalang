@@ -189,8 +189,9 @@ class Compare(unittest.TestCase):
                                                   "fmt: no case ran to exit 0 in both binaries"]))
 
     def test_core(self):
-        # The cases of `diags` but tests/review-phase1, then examples (std is not taken); the exit code tells.
-        for rel in ("tests/review-phase1/r.onsa", "tests/spec/s.onsa", "std/s.onsa", "examples/e/m.onsa",
+        # The cases of `diags` but tests/review-phase1 and tests/heavy, then examples (std is not taken); the exit
+        # code tells.
+        for rel in ("tests/review-phase1/r.onsa", "tests/heavy/h.onsa", "tests/spec/s.onsa", "std/s.onsa", "examples/e/m.onsa",
                     "examples/e/onsa.toml", "examples/f.onsa"):  # fmt: skip
             (self.root / rel).parent.mkdir(parents=True, exist_ok=True)
             (self.root / rel).write_text("")
