@@ -208,6 +208,19 @@ fn every_unit_of_the_repository_reads_alone_in_the_context_of_its_list() {
     assert!(problems.is_empty(), "{problems:#?}");
 }
 
+/// A candidate that leaves an error at its diagnostic's place or before it,
+/// in a unit with no other, is dropped; one after it is taken for another
+/// error of the unit, past which the parser did not read, and one with a
+/// candidate of its own for one the next candidate mends (§18.1).
+#[test]
+fn a_candidate_is_dropped_for_the_error_it_leaves_at_its_place_only() {
+    let body = |line: &str| format!("fn f(a: F32, s: U32) -> F32 {{\n  {line}\n}}\n");
+    let left = |line: &str| crate::parse(FileId(0), &body(line)).candidate_reads.left;
+    assert_eq!(left("let x = a\n  /// d\n  + a\n  x"), 1, "the doc comment is stranded");
+    assert_eq!(left("let v = [0.1 0.2 0.3]"), 0, "the second gap is after the first");
+    assert_eq!(left("match s {\n    0 => a\n    | 1 => a,\n    _ => a,\n  }"), 0, "an E0020 at the place");
+}
+
 /// Another error of the unit, which the candidate brings to light, does not
 /// drop it: the candidate with the parentheses is kept when it leaves no
 /// more than the candidate alone did, less the E0013 it takes away.

@@ -1,0 +1,79 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+// fixes = 0
+
+// A float literal that starts with the point (`.5`) is an E0020 whose candidate adds the `0` before the point (§2.4).
+// Right after a keyword (no space), that `0` joins the keyword: `assert0.0` is a name, not the keyword and a float
+// (R-228). A candidate does not change the reading of the characters outside its edit (§18.1: "the lexical reading of
+// the characters outside the range of an edit does not change"), and the edit cannot be made here without that, so
+// the form has no candidate. A form of the syntax stage that has no candidate is a general syntax error, E0002
+// (§18.1), and the lexical stage is a part of the syntax stage, so the marker is E0002, not E0020. The keywords are the
+// ones that stand before an expression: `assert`, `if`, `return`, `while`, `match`. The main position of each error
+// is on the line of the keyword. One error in each function (P-01). The forms where the point does not follow a
+// keyword (`let x = .5`) keep their candidate: fix_keeps_point_and_tilde.onsa. The same form in an anonymous
+// function, a nested `match`, a `test` body, a method and a flow body is in the second half.
+
+pub fn assert_point(c: Bool) -> Bool {
+  assert.0 true                                     //~ E0002
+  c
+}
+
+pub fn if_point(c: Bool) -> I32 {
+  let r = if.01 c { 1 } else { 2 }                  //~ E0002
+  r
+}
+
+pub fn return_point() -> F32 {
+  return.5                                          //~ E0002
+}
+
+pub fn while_point(c: Bool) -> I32 {
+  while.5 c {                                       //~ E0002
+  }
+  0
+}
+
+pub fn match_point(n: I32) -> I32 {
+  match.5 n {                                       //~ E0002
+    _ => 1,
+  }
+}
+
+// ---- other contexts
+
+pub fn in_an_anonymous_function() -> F32 {
+  let k = fn(y: F32) -> F32 {
+    return.5                                        //~ E0002
+  }
+  k.(1.0)
+}
+
+pub fn in_a_nested_match(n: I32, m: I32) -> I32 {
+  match n {
+    0 => match m {
+      1 => 2,
+      _ => if.01 true { 1 } else { 2 },             //~ E0002
+    },
+    _ => 3,
+  }
+}
+
+test "a point after assert" {
+  assert.0 true                                     //~ E0002
+}
+
+pub struct Gain {
+  k: F32,
+}
+
+impl Gain {
+  pub fn pick(self, c: Bool) -> I32 {
+    if.01 c { 1 } else { 2 }                        //~ E0002
+  }
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  let y = if.01 true { x } else { 0.0 }             //~ E0002
+  y
+}

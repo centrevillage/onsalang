@@ -1,0 +1,131 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§2.4", "§2.5", "§18.1"]
+// fixes = 1
+
+// The candidates that stay when the forms that leave an error are dropped (fix_stays_attribute_operator.onsa,
+// fix_stays_doc_comment.onsa, fix_join_trailing_dot.onsa): the check is that the candidate leaves nothing, not that
+// there is a symbol at the head of a line. Each form has one candidate and nothing is left after it (§18.1).
+// - A binary operator at the head of a line after a line that is an expression (a `let`, a call, a constant) moves to the
+//   end of the line before (§2.5). A `//` line between them stays where it is: it is not a `///` that would attach to
+//   nothing (R-380), and it does not change the reading of the characters outside the edit.
+// - The `=` of the default of a field moves to the end of the field's line in the same way.
+// - A `.` at the end of a line moves to the head of the next line when that line starts with a plain decimal integer
+//   (a tuple index), a name or a `(` (§2.5; the integers that are written in another form are in
+//   fix_join_trailing_dot.onsa).
+// The main position is the symbol, and the marker is on its line. One error in each item (P-01). The same form in an
+// anonymous function, a nested `match`, a `test` body, a method and a flow body is in the second half.
+
+pub struct Field {
+  x: U32
+  // a plain comment between the name and the default
+  = 1,                                              //~ E0020
+}
+
+pub fn let_plus() -> U32 {
+  let a = 1
+  // a plain comment between the operands
+  + 2                                               //~ E0020
+  a
+}
+
+pub const LIMIT: U32 = 1
+// a plain comment between the operands
++ 2                                                 //~ E0020
+
+pub fn add(a: U32, b: U32) -> U32 {
+  a + b
+}
+
+pub fn call() -> U32 {
+  add(1
+  // a plain comment between the operands
+  + 2, 3)                                           //~ E0020
+}
+
+pub fn let_equal() -> U32 {
+  let a: U32
+  // a plain comment between the type and the value
+  = 1                                               //~ E0020
+  a
+}
+
+pub fn after_an_expression(a: I32) -> I32 {
+  let r = a
+  / 2                                               //~ E0020
+  r
+}
+
+pub fn tuple_index(t: (I32, I32)) -> I32 {
+  t.                                                //~ E0020
+  1
+}
+
+pub fn tuple_index_zero(t: (I32, I32)) -> I32 {
+  t.                                                //~ E0020
+  0
+}
+
+pub fn field_name(p: Pair) -> I32 {
+  p.                                                //~ E0020
+  a
+}
+
+pub struct Pair {
+  a: I32,
+  b: I32,
+}
+
+// ---- other contexts
+
+pub fn in_an_anonymous_function(n: U32) -> U32 {
+  let k = fn(y: U32) -> U32 {
+    let a = y
+    // a plain comment between the operands
+    + 2                                             //~ E0020
+    a
+  }
+  k.(n)
+}
+
+pub fn in_a_nested_match(n: U32, m: U32) -> U32 {
+  match n {
+    0 => match m {
+      1 => {
+        let a = m
+        // a plain comment between the operands
+        + 2                                         //~ E0020
+        a
+      },
+      _ => 0,
+    },
+    _ => 9,
+  }
+}
+
+test "a plain comment between the operands" {
+  let a = 1
+  // a plain comment between the operands
+  + 2                                               //~ E0020
+  assert a == 3
+}
+
+pub struct Gain {
+  k: U32,
+}
+
+impl Gain {
+  pub fn plus(self) -> U32 {
+    let a = self.k
+    // a plain comment between the operands
+    + 2                                             //~ E0020
+    a
+  }
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  let y = x
+  // a plain comment between the operands
+  * 2.0                                             //~ E0020
+  y
+}

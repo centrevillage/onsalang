@@ -1,0 +1,103 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+
+// A float literal in a pattern is E0020 and the candidate puts the pattern in a guard: the literal is replaced by a new
+// binding and the comparison `v == 0.5` is joined to the guard the arm already has with `&&` (§7, R-235). The
+// comparison is written right after the `if` of that guard, and when the guard starts with a token that has no
+// space after the `if` (`if(c)`, `if!c`, `if-g`, `if[c][0]`, `if'c'`), the text written there would join the `if`
+// into a name (`ifv`). A candidate does not change the reading of the characters outside its edit (§18.1), so the
+// comparison is written with a space after the `if`: the candidate stays, and is the only one. A guard that is
+// not a Bool (`if'c'` is a `Char`) leaves an error of the types stage after the candidate, which a candidate may
+// leave (§18.1). The main position is the float literal, and the marker is on its line. One error in each function
+// (P-01). The same form in an anonymous function, a nested `match`, a `test` body, a method and a flow body is in
+// the second half. The result of each candidate has no error of the syntax stage (the contract of §18.1), which the
+// runner checks; the file holds many units, so there is no `clean` entry.
+
+pub fn paren(x: F32, c: Bool) -> I32 {
+  match x {
+    v if v == 0.5 && (c) => 1,                                 //~ E0020
+    _ => 2,
+  }
+}
+
+pub fn not(x: F32, c: Bool) -> I32 {
+  match x {
+    v if v == 0.5 && !c => 1,                                  //~ E0020
+    _ => 2,
+  }
+}
+
+pub fn minus(x: F32, g: I32) -> I32 {
+  match x {
+    v if v == 0.5 && -g == 0 => 1,                             //~ E0020
+    _ => 2,
+  }
+}
+
+pub fn index(x: F32, c: [Bool; 1]) -> I32 {
+  match x {
+    v if v == 0.5 && [c][0] => 1,                              //~ E0020
+    _ => 2,
+  }
+}
+
+pub fn character(x: F32) -> I32 {
+  match x {
+    v if v == 0.5 && 'c' => 1,                                 //~ E0020
+    _ => 2,
+  }
+}
+
+// ---- other contexts
+
+pub fn in_an_anonymous_function(c: Bool) -> I32 {
+  let k = fn(x: F32) -> I32 {
+    match x {
+      v if v == 1.5 && (c) => 1,                               //~ E0020
+      _ => 2,
+    }
+  }
+  k.(1.0)
+}
+
+pub fn in_a_nested_match(n: I32, x: F32, c: Bool) -> I32 {
+  match n {
+    0 => match x {
+      v if v == 2.5 && !c => 1,                                //~ E0020
+      _ => 2,
+    },
+    _ => 3,
+  }
+}
+
+test "a float pattern with a guard that starts at the keyword" {
+  let c = true
+  let r = match 0.25 {
+    v if v == 0.25 && (c) => 1,                                //~ E0020
+    _ => 2,
+  }
+  assert r == 1
+}
+
+pub struct Gain {
+  k: F32,
+}
+
+impl Gain {
+  pub fn pick(self, c: [Bool; 1]) -> I32 {
+    match self.k {
+      v if v == 0.75 && [c][0] => 1,                           //~ E0020
+      _ => 2,
+    }
+  }
+}
+
+pub flow in_a_flow(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let y = match x {
+    v if v == 0.5 && !c => 1.0,                                //~ E0020
+    _ => 0.0,
+  }
+  y
+}

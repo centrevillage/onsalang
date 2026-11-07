@@ -1,0 +1,75 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§18.1"]
+// fixes = 0
+
+// A prefix `~` is E0020 and the candidate writes `!` in its place, because the bits are negated with the prefix `!`
+// (§2.6, the row `faust_bit_not`). When the token right after the `~` is `=` or `==`, the `!` joins it: `!=` is the
+// one token of the comparison, and `!==` is `!=` and `=` (R-235, R-333). A candidate does not change the reading of the
+// characters outside its edit (§18.1), so the form has no candidate, and a form of the syntax stage that has no
+// candidate is a general syntax error, E0002 (§18.1). The main position is the `~`, so the marker is on its line. The
+// binary `a ~= b` (the `~=` of Lua) is not this form: it is the mark of a flow call in a binary position
+// (spec/foreign-forms.toml, `faust_feedback`). A `~` before something that does not join keeps its candidate
+// (fix_keeps_point_and_tilde.onsa). One error in each function (P-01). The same form in an anonymous function, a
+// nested `match`, a `test` body, a method and a flow body is in the second half.
+
+pub fn in_parentheses(a: U32) -> Bool {
+  (~= 1)                                            //~ E0002
+}
+
+pub fn after_a_binding(a: U32) -> U32 {
+  let b = ~= a                                      //~ E0002
+  b
+}
+
+pub fn double_equal(a: U32) -> U32 {
+  let b = ~== a                                     //~ E0002
+  b
+}
+
+pub fn double_equal_in_parentheses(a: U32) -> Bool {
+  (~== 1)                                           //~ E0002
+}
+
+test "tilde and equal on the next line" {
+  ~=                                                //~ E0002
+}
+
+// ---- other contexts
+
+pub fn in_an_anonymous_function(a: U32) -> U32 {
+  let k = fn(y: U32) -> U32 {
+    ~= y                                            //~ E0002
+  }
+  k.(a)
+}
+
+pub fn in_a_nested_match(n: U32, m: U32) -> U32 {
+  match n {
+    0 => match m {
+      1 => 2,
+      _ => ~= m,                                    //~ E0002
+    },
+    _ => 3,
+  }
+}
+
+test "tilde and double equal in a test" {
+  let a = 1
+  let b = ~== a                                     //~ E0002
+}
+
+pub struct Gain {
+  k: U32,
+}
+
+impl Gain {
+  pub fn flip(self) -> U32 {
+    ~= self.k                                       //~ E0002
+  }
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  let n = ~= 1                                      //~ E0002
+  x
+}

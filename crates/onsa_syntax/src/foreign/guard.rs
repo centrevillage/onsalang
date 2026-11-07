@@ -823,10 +823,12 @@ impl Arm {
                     let g_last = c.sig_before(self.arrow).ok_or(Why::GuardEnd)?;
                     let g = operand(&(g_first..=g_last).map(|i| c.kind(i)).collect::<Vec<_>>());
                     let cond = if BinOp::And.bare(Side::Left, top) { cond } else { format!("({cond})") };
+                    // A guard against its `if` (`if(c)`) stays apart from the word (§18.1, R-235).
+                    let lead = if c.gap_after(t) == Gap::None { " " } else { "" };
                     if BinOp::And.bare(Side::Left, g) && !self.wrap_guard {
-                        edits.push(Edit::insert(c.file, c.span(g_first).start, format!("{cond} && ")));
+                        edits.push(Edit::insert(c.file, c.span(g_first).start, format!("{lead}{cond} && ")));
                     } else {
-                        edits.push(Edit::insert(c.file, c.span(g_first).start, format!("{cond} && (")));
+                        edits.push(Edit::insert(c.file, c.span(g_first).start, format!("{lead}{cond} && (")));
                         edits.push(Edit::insert(c.file, c.span(g_last).end, ")"));
                     }
                 }

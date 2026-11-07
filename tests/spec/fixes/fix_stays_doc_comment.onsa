@@ -1,0 +1,110 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§2.5", "§18.1"]
+// fixes = 0
+
+// E0020 for a symbol at the head of a line (`=` of the default of a field, a binary operator) after a line that
+// is not finished, with a `///` line between them (§2.5: the lines of comments are skipped when the lines are
+// joined). The candidate moves the symbol to the end of the line before, and then the `///` line stands inside the
+// declaration or the expression, before the value: a `///` with no declaration to attach to is an E0004 (§2.1).
+// A candidate does not leave an error of its own stage or an earlier one (§18.1), so there is no candidate, and
+// a form of the syntax stage that has no candidate is a general syntax error, E0002 (§18.1). The main position is
+// the symbol, and the marker is on its line. With a `//` line between them the candidate is made
+// (fix_keeps_leading_symbol.onsa). One error in each item (P-01). The same form in an anonymous function, a nested
+// `match`, a `test` body, a method and a flow body is in the second half.
+
+pub struct Field {
+  x: U32
+  /// a doc comment between the name and the default
+  = 1,                                              //~ E0002
+}
+
+pub fn let_plus() -> U32 {
+  let a = 1
+  /// a doc comment between the operands
+  + 2                                               //~ E0002
+  a
+}
+
+pub const LIMIT: U32 = 1
+/// a doc comment between the operands
++ 2                                                 //~ E0002
+
+pub fn add(a: U32, b: U32) -> U32 {
+  a + b
+}
+
+pub fn call() -> U32 {
+  add(1
+  /// a doc comment between the operands
+  + 2, 3)                                           //~ E0002
+}
+
+pub fn let_equal() -> U32 {
+  let a: U32
+  /// a doc comment between the type and the value
+  = 1                                               //~ E0002
+  a
+}
+
+pub fn two_doc_lines() -> U32 {
+  let a = 1
+  /// the first line
+  /// the second line
+  * 2                                               //~ E0002
+  a
+}
+
+// ---- other contexts
+
+pub fn in_an_anonymous_function(n: U32) -> U32 {
+  let k = fn(y: U32) -> U32 {
+    let a = y
+    /// a doc comment between the operands
+    + 2                                             //~ E0002
+    a
+  }
+  k.(n)
+}
+
+pub fn in_a_nested_match(n: U32, m: U32) -> U32 {
+  match n {
+    0 => match m {
+      1 => {
+        let a = m
+        /// a doc comment between the operands
+        + 2                                         //~ E0002
+        a
+      },
+      _ => 0,
+    },
+    _ => 9,
+  }
+}
+
+test "a doc comment between the operands" {
+  let a = 1
+  /// a doc comment between the operands
+  + 2                                               //~ E0002
+  assert a == 3
+}
+
+pub struct Gain {
+  k: U32,
+}
+
+impl Gain {
+  pub fn plus(self) -> U32 {
+    let a = self.k
+    /// a doc comment between the operands
+    + 2                                             //~ E0002
+    a
+  }
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  let y = x
+  /// a doc comment between the operands
+  * 2.0                                             //~ E0002
+  y
+}

@@ -1,0 +1,109 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§7", "§18.1"]
+// fixes = 1
+
+// E0002 for two string literals side by side in the value of an arm (`1 => "a" "{x}",`). Two adjacent string
+// literals have two candidates in a list: the `,` and the two literals made one (§2.5). In the list of the arms the `,`
+// after the first literal makes the second one the head of the next arm, a pattern; the `,` stays a candidate only
+// when the arm that starts there reads (a `=>` comes before the next `,` or `}` that is not in brackets, as for the
+// other tokens of an arm value, fix_stays_arm_value.onsa). Here a `,` or a `}` comes first, and a string with an
+// interpolation (`"{x}"`) is no pattern (§7) either, so a candidate that writes the `,` leaves an error of its own
+// stage (R-217). A candidate does not (§18.1), so the `,` is not offered and the only candidate is the two
+// literals made one (`"a{x}"`, `"ab"`): one candidate, in the arm value like in a list. The main position is the
+// second literal, and the marker is on its line. A function that holds the interpolation has the effect `Alloc`
+// (§12), so the result of the candidate has no error. One error in each function (P-01). The form where the `,` reads
+// as an arm (`1 => "a" "b" => 2`) keeps both candidates: fix_keeps_arm_comma_strings.onsa. The same form in an
+// anonymous function, a nested `match`, a `test` body, a method and a flow body is in the second half.
+
+pub fn interpolation(x: U32) -> Str uses {Alloc} {
+  match x {
+    1 => "a{x}" ,                                 //~ E0002
+    _ => "b",
+  }
+}
+
+pub fn on_one_line(x: U32) -> Str uses {Alloc} {
+  match x { 1 => "a{x}" , _ => "b" }              //~ E0002
+}
+
+pub fn plain(x: U32) -> Str {
+  match x {
+    1 => "ab" ,                                   //~ E0002
+    _ => "c",
+  }
+}
+
+pub fn last_arm(x: U32) -> Str {
+  match x {
+    1 => "a",
+    _ => "bc"                                     //~ E0002
+  }
+}
+
+pub fn last_arm_with_interpolation(x: U32) -> Str uses {Alloc} {
+  match x {
+    1 => "a",
+    _ => "b{x}"                                   //~ E0002
+  }
+}
+
+pub fn on_the_next_line(x: U32) -> Str {
+  match x {
+    1 => "ab"
+      ,                                          //~ E0002
+    _ => "c",
+  }
+}
+
+// ---- other contexts
+
+pub fn in_an_anonymous_function(x: U32) -> Str uses {Alloc} {
+  let k = fn(y: U32) -> Str uses {Alloc} {
+    match y {
+      1 => "a{y}" ,                               //~ E0002
+      _ => "b",
+    }
+  }
+  k.(x)
+}
+
+pub fn in_a_nested_match(n: U32, x: U32) -> Str uses {Alloc} {
+  match n {
+    0 => match x {
+      1 => "a{x}" ,                               //~ E0002
+      _ => "b",
+    },
+    _ => "c",
+  }
+}
+
+test "two strings in the value of an arm" {
+  let x = 1
+  let r = match x {
+    1 => "ab" ,                                   //~ E0002
+    _ => "c",
+  }
+  assert r == "ab"
+}
+
+pub struct Gain {
+  k: U32,
+}
+
+impl Gain {
+  pub fn label(self) -> Str uses {Alloc} {
+    match self.k {
+      1 => "a{self.k}" ,                          //~ E0002
+      _ => "b",
+    }
+  }
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  let n = match 1 {
+    1 => "ab" ,                                   //~ E0002
+    _ => "c",
+  }
+  x
+}

@@ -1,0 +1,97 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§7", "§18.1"]
+// fixes = 1
+
+// E0002 when the value of an arm is followed by the pattern of the next arm without a `,` (`0 => 1 2 => 3,`). The
+// token after the value starts a pattern and a `=>` follows it before the next `,` or `}` that is not in brackets, so
+// the `,` makes a readable arm: the candidate is kept, and it is the only one (§2.5: the join of the value and the
+// next token into a call is not made). Nothing is left in the unit after it. This is the form that must not lose its
+// candidate when the forms that leave an error are dropped (fix_stays_arm_value.onsa, R-296): the check is that the
+// token after the `,` is read as the pattern of an arm, not that it is some token. The main position is the token
+// that cannot go on the value, and the marker is on its line. One error in each function (P-01). The same form in an
+// anonymous function, a nested `match`, a `test` body, a method and a flow body is in the second half.
+
+pub fn integer(s: U32) -> U32 {
+  match s {
+    0 => 1, 2 => 3,                                  //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn binding(s: U32) -> U32 {
+  match s {
+    0 => 1, n => n,                                  //~ E0002
+  }
+}
+
+pub fn string(s: Str) -> U32 {
+  match s {
+    "a" => 1, "b" => 2,                              //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn variant(o: Option[U32]) -> U32 {
+  match o {
+    Some(v) => v, None => 0,                         //~ E0002
+  }
+}
+
+pub fn last_arm_of_a_list(s: U32) -> U32 {
+  match s {
+    0 => 1,
+    1 => 0, _ => 2                                   //~ E0002
+  }
+}
+
+// ---- other contexts
+
+pub fn in_an_anonymous_function(s: U32) -> U32 {
+  let k = fn(y: U32) -> U32 {
+    match y {
+      0 => 1, 2 => 3,                                //~ E0002
+      _ => 0,
+    }
+  }
+  k.(s)
+}
+
+pub fn in_a_nested_match(n: U32, s: U32) -> U32 {
+  match n {
+    0 => match s {
+      0 => 1, 2 => 3,                                //~ E0002
+      _ => 0,
+    },
+    _ => 9,
+  }
+}
+
+test "a missing comma between two arms" {
+  let r = match 2 {
+    0 => 1, 2 => 3,                                  //~ E0002
+    _ => 0,
+  }
+  assert r == 3
+}
+
+pub struct Gain {
+  k: U32,
+}
+
+impl Gain {
+  pub fn pick(self) -> U32 {
+    match self.k {
+      0 => 1, 2 => 3,                                //~ E0002
+      _ => 0,
+    }
+  }
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  let y = match 1 {
+    0 => 1.0, 1 => 2.0,                              //~ E0002
+    _ => 0.0,
+  }
+  x * y
+}

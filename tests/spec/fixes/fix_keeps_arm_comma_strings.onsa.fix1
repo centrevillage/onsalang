@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§7", "§18.1"]
+// fixes = 1
+
+// E0002 for two string literals side by side in the value of an arm when the second one is the pattern of the next arm
+// (`"x" => "a" "b" => "c",`). The two candidates of two adjacent string literals are the `,` and the two literals
+// made one (§2.5), and a candidate does not leave an error of its own stage or an earlier one (§18.1). Here the `,`
+// makes a readable arm (the second literal, a plain string, is a pattern, and a `=>` follows it before the next
+// `,`), so it is kept. The two literals made one are the value of the arm and the `=>` after them has no arm
+// to start (`"x" => "ab" => "c"`), so that candidate leaves an error and is not offered: one candidate, the
+// `,`. The form where the `,` leaves an error and the merge is the one that reads has the merge only
+// (fix_stays_arm_strings.onsa, R-217). The main position is the second literal. One error in each function (P-01).
+
+pub fn plain(s: Str) -> Str {
+  match s {
+    "x" => "a", "b" => "c",                          //~ E0002
+    _ => "d",
+  }
+}
+
+pub fn next_line(s: Str) -> Str {
+  match s {
+    "x" => "a",
+      "b" => "c",                                   //~ E0002
+    _ => "d",
+  }
+}
+
+pub fn in_a_nested_match(n: U32, s: Str) -> Str {
+  match n {
+    0 => match s {
+      "x" => "a", "b" => "c",                        //~ E0002
+      _ => "d",
+    },
+    _ => "e",
+  }
+}

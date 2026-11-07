@@ -1,0 +1,94 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.5", "§18.1"]
+// fixes = 0
+
+// E0020 for a line that starts with a binary operator after a line that cannot go on (§2.5): an attribute does not end
+// the item, so the line after it goes on with the attribute (§2.5: "an attribute does not end an item"), and the
+// candidate that moves the operator to the end of the line before makes `@fp(relaxed) /`, an attribute and an
+// operator, which reads as an E0002 ("expected a declaration, found `/`"). The operator needs an expression on its
+// left, and a line of attributes (or a heading) has none. A candidate does not leave an error of its own stage or
+// an earlier one (§18.1), so there is no candidate, and a form of the syntax stage that has no candidate is a
+// general syntax error, E0002 (§18.1). The main position is the operator, and the marker is on its line. An
+// operator at the head of a line after a line that is an expression keeps its candidate
+// (fix_keeps_leading_symbol.onsa). One error in each item (P-01).
+
+@fp(relaxed)
+/(1)                                                //~ E0002
+pub fn paren_after_the_operator(x: F32) -> F32 {
+  x
+}
+
+@fp(relaxed)
+/ scale(1.0)                                        //~ E0002
+pub fn call_after_the_operator(x: F32) -> F32 {
+  x
+}
+
+@fp(relaxed)
+* 2.0                                               //~ E0002
+pub fn times(x: F32) -> F32 {
+  x
+}
+
+@fp(relaxed)
+&& true                                             //~ E0002
+pub fn and(x: F32) -> F32 {
+  x
+}
+
+@fp(relaxed)
+== 1                                                //~ E0002
+pub fn equal(x: F32) -> F32 {
+  x
+}
+
+@fp(relaxed)
+% 2                                                 //~ E0002
+pub fn remainder(x: F32) -> F32 {
+  x
+}
+
+@fp(relaxed)
+// a comment between the attribute and the operator
+/(1)                                                //~ E0002
+pub fn comment_between(x: F32) -> F32 {
+  x
+}
+
+@repr(c)
+/ 2                                                 //~ E0002
+pub struct Frame {
+  a: I32,
+}
+
+@repr(c)
+@fp(relaxed)
+/ 2                                                 //~ E0002
+pub fn two_attributes(x: F32) -> F32 {
+  x
+}
+
+// ---- other contexts
+
+pub struct Gain {
+  k: F32,
+}
+
+impl Gain {
+  @fp(relaxed)
+  /(1)                                              //~ E0002
+  pub fn apply(self, x: F32) -> F32 {
+    x
+  }
+}
+
+@fp(relaxed)
+/(1)                                                //~ E0002
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub fn scale(x: F32) -> F32 {
+  x
+}

@@ -1,0 +1,106 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§7", "§18.1"]
+// fixes = 0
+
+// E0002 when the value of an arm of a `match` is followed by a token that cannot go on the value (`_ => s 0.0`): the
+// elements of the list of the arms are separated by `,` (§2.5), and the reading as a missing `,` is the only
+// candidate there is (the join of two names or a name and a literal into a call is not made, §2.5: "the range of
+// the arguments differs between languages"). The `,` is written only when what follows it reads as the next arm:
+// right after the `,` the token starts a pattern, and a `=>` comes before the next `,` or `}` that is not in brackets
+// (§2.5 reads the arms the same way, for a `(` or a `[` at the head of a line). Here the next token is a float
+// literal (a float is no pattern, §7), a name, a string or an integer, and the `}` or the next arm's `,` comes
+// before any `=>`, so the arm that the `,` would start is an error of the same stage (E0002, "expected `=>`", or the
+// float literal in a pattern). A candidate does not leave an error of its own stage or an earlier one (§18.1), so
+// there is no candidate and the error stays one E0002 (R-296). The main position is the token that cannot go on
+// the value, and the marker is on its line. The forms where the `,` makes a readable arm keep it
+// (fix_keeps_arm_comma.onsa). One error in each function (P-01). The same form in an anonymous function, a nested
+// `match`, a `test` body, a method and a flow body is in the second half.
+
+pub fn float_literal(s: F32) -> F32 {
+  match s {
+    _ => s 0.0                                      //~ E0002
+  }
+}
+
+pub fn name(s: F32, t: F32) -> F32 {
+  match s {
+    _ => s t                                        //~ E0002
+  }
+}
+
+pub fn string(s: Str) -> Str {
+  match s {
+    _ => s "x"                                      //~ E0002
+  }
+}
+
+pub fn integer(s: U32) -> U32 {
+  match s {
+    _ => s 1                                        //~ E0002
+  }
+}
+
+pub fn not_the_last_arm(s: U32) -> U32 {
+  match s {
+    1 => s 0.5,                                     //~ E0002
+    _ => s,
+  }
+}
+
+pub fn after_a_call(s: F32) -> F32 {
+  match s {
+    _ => abs(s) 0.0                                 //~ E0002
+  }
+}
+
+pub fn abs(x: F32) -> F32 {
+  x
+}
+
+// ---- other contexts
+
+pub fn in_an_anonymous_function(s: F32) -> F32 {
+  let k = fn(y: F32) -> F32 {
+    match y {
+      _ => y 0.0                                    //~ E0002
+    }
+  }
+  k.(s)
+}
+
+pub fn in_a_nested_match(n: U32, s: F32) -> F32 {
+  match n {
+    0 => match s {
+      _ => s 0.0                                    //~ E0002
+    },
+    _ => s,
+  }
+}
+
+test "a float after the value of an arm" {
+  let s = 1.0
+  let r = match s {
+    _ => s 0.0                                      //~ E0002
+  }
+  assert r == s
+}
+
+pub struct Gain {
+  k: F32,
+}
+
+impl Gain {
+  pub fn pick(self, s: F32) -> F32 {
+    match s {
+      _ => self.k 0.0                               //~ E0002
+    }
+  }
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  let y = match x {
+    _ => x 0.0                                      //~ E0002
+  }
+  y
+}

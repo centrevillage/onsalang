@@ -995,20 +995,6 @@ note = "fix-same-place: fix|E0020|write the attribute with `…`|E0005。閉じ�
 # --- W4-04 U5 の gate のファズが見つけた修正候補の型（事例を足してコーパスが変わった。e741747 でも出る）
 
 [[pending]]
-kind = "fuzz-input"
-target = "tests/fuzz/7e25b3d2.onsa"
-reasons = ["R-296", "S-236"]
-until = "W5-11"
-note = "fix-same-place: fix|E0002|write the `…` between the elements|E0002。match の腕の値の後の演算子の無い式（_ => s 0.0）に `,` を挿す候補を出し、当てると 0.0 が次の腕のパターンの E0002 になる"
-
-[[pending]]
-kind = "fuzz-input"
-target = "tests/fuzz/6c441628.onsa"
-reasons = ["R-297", "S-236"]
-until = "W5-11"
-note = "fix-same-place: fix|E0020|move it to the end of the line before|E0002。属性の行の次の行の頭の二項演算子を前の行の末尾へ移す候補で、前の行が属性と演算子になり E0002 が残る（2575c47 の網羅の検査）"
-
-[[pending]]
 kind = "spec-example"
 target = "§16.1 d350081e: use std.audio.device"
 reasons = ["S-112", "S-570", "S-609", "S-625"]
@@ -1170,13 +1156,6 @@ target = "tests/spec/negative/binding_static_affine_type_plain.onsa"
 reasons = ["R-87", "S-82"]
 until = "W6-03"
 note = "所有の集成体の破棄の E0601 を束縛の行に出す（今は関数名の行。`binding_static_interp.onsa` と同じ理由、W4-16 U2/t）"
-
-[[pending]]
-kind = "fuzz-input"
-target = "tests/fuzz/938b63f9.onsa"
-reasons = ["R-333", "S-302"]
-until = "W5-11"
-note = "fix-same-place: fix|E0020|write `…`|reading と fix|E0020|write `…`|E0002。式の始まりの ~= の ~ を ! にする候補で、!= が一語に読まれて編集の外の = の読みが変わり、同じ位置に E0002 が残る（3434a10 の後の親の fuzz）"
 
 [[pending]]
 kind = "test-case"

@@ -1,0 +1,97 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§2.6", "§18.1"]
+// fixes = 1
+
+// The candidates that stay when the forms that join the next token are dropped (fix_join_keyword_point.onsa,
+// fix_join_prefix_tilde.onsa): the check is that the text the candidate writes does not join the token next to it, not
+// that the form has a neighbour.
+// - A float literal that starts with the point (`.5`) gets the `0` before the point (§2.4). After a token that is
+//   not a name or a keyword (`=`, `(`, `,`, `+`, `[`), the `0` makes the literal `0.5` and joins nothing.
+// - A prefix `~` is written `!` (§2.6, the row `faust_bit_not`). When the token after the `~` is a name, a `(` or a
+//   literal, the `!` joins nothing.
+// The main position is the `.` of the literal or the `~`, and the marker is on its line. One error in each function
+// (P-01). The same form in an anonymous function, a nested `match`, a `test` body, a method and a flow body is in the
+// second half. A `~` that does not touch the next token (`~ x`) has no case: §2.6 does not say whether it is this form.
+
+pub fn after_a_binding() -> F32 {
+  let x = .5                                        //~ E0020
+  x
+}
+
+pub fn in_a_call(a: F32) -> F32 {
+  scale(.5)                                         //~ E0020
+}
+
+pub fn scale(x: F32) -> F32 {
+  x
+}
+
+pub fn after_an_operator(a: F32) -> F32 {
+  a + .5                                            //~ E0020
+}
+
+pub fn in_an_array() -> [F32; 2] {
+  [.5, 1.0]                                         //~ E0020
+}
+
+pub fn tilde_before_a_name(m: U32) -> U32 {
+  let n = ~m                                        //~ E0020
+  n
+}
+
+pub fn tilde_before_a_parenthesis(m: U32) -> U32 {
+  let n = ~(m)                                      //~ E0020
+  n
+}
+
+pub fn tilde_after_an_operator(m: U32) -> U32 {
+  m & ~(m + 1)                                      //~ E0020
+}
+
+pub fn tilde_before_a_literal() -> U32 {
+  let n = ~1                                        //~ E0020
+  n
+}
+
+// ---- other contexts
+
+pub fn in_an_anonymous_function(a: F32) -> F32 {
+  let k = fn(y: F32) -> F32 {
+    y + .5                                          //~ E0020
+  }
+  k.(a)
+}
+
+pub fn in_a_nested_match(n: U32, m: U32) -> U32 {
+  match n {
+    0 => match m {
+      1 => ~m,                                      //~ E0020
+      _ => 0,
+    },
+    _ => 9,
+  }
+}
+
+test "a float that starts with the point" {
+  let x = .25                                       //~ E0020
+  assert x == 0.25
+}
+
+pub struct Gain {
+  k: F32,
+}
+
+impl Gain {
+  pub fn plus(self) -> F32 {
+    self.k + .5                                     //~ E0020
+  }
+
+  pub fn flip(self, m: U32) -> U32 {
+    ~m                                              //~ E0020
+  }
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  x * .5                                            //~ E0020
+}

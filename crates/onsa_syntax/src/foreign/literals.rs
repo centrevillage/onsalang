@@ -36,24 +36,12 @@ pub(super) fn foreign_literal(c: &Cursor) -> Option<(RowId, Hit)> {
         Foreign::TrailingDot => (RowId::FloatTrailingDot, &["add the `0` after the point"]),
         Foreign::DotExponent => (RowId::FloatDotExponent, &["add the `0` after the point"]),
     };
-    // A spelling that joins the token after it (`1u8.5` would be the float
-    // `1.5`, `1u8.)` would be `1.)`) is no candidate, S-302: the lexer reads
-    // the text after it ([`crate::edits::joining`]). `0u32..n`, `1u8.abs()`
-    // and `1i32.(x)` read the same (S-350). A token after a gap is joined to
-    // nothing, and the line is not lexed for it.
-    let touching = c.gap_after(c.at) == Gap::None;
-    let joins =
-        |fix: &Fix| touching && crate::edits::joining(c.file, c.text, c.all, fix.edits()).iter().any(|j| j.after);
     // A number called (`017(2)`) is a callee too, the row
     // `callee_expression` at the same failure ([`called_number`]): the
     // number's row comes first (S-281) and its candidate leaves the callee's
     // E0020, a second error (S-457).
-    let fixes = spellings(text, &n, form)
-        .into_iter()
-        .zip(titles)
-        .map(|(s, title)| Fix::replace(*title, span, s))
-        .filter(|fix| !joins(fix))
-        .collect();
+    let fixes =
+        spellings(text, &n, form).into_iter().zip(titles).map(|(s, title)| Fix::replace(*title, span, s)).collect();
     Some((row, Hit::new(span, fixes).misplaced_if(!matches!(c.want, Want::Expr | Want::Pattern))))
 }
 

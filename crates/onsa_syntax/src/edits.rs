@@ -79,35 +79,37 @@ pub(crate) fn insert_apart(file: FileId, offset: u32, s: &str, marks: &mut Inser
     Edit::insert(file, offset, s)
 }
 
-/// The candidate `fix` with each edit that takes text out and joins the
-/// tokens round it ([`joining`]) replaced with a blank (`impl[]S` is
-/// `impl S`, not `implS`; `Some()if` is `Some if`; `0 /& //` is `0 / //`,
-/// not the doc comment `///`), and each insertion of [`insert_apart`]
-/// (`marks`) with a blank on the side where it joins: the reading outside the
-/// edits stays (§18.1). `tokens` are those of the file `text`. The one place
-/// of it, for every candidate of the syntax stage that a check reports
-/// (`crate::operands::complete`); `joining` reads the candidate once.
-pub(crate) fn apart(file: FileId, text: &str, tokens: &[Token], fix: Fix, marks: &Insertions) -> Fix {
-    let taken = |e: &Edit| e.replace.is_empty() && !e.span.is_empty() && e.span.file == file;
-    let asked = |e: &Edit| {
-        let (l, r) = around(tokens, e);
-        (taken(e) && (l.is_some() || r.is_some())) || (e.span.file == file && marks.holds(e))
-    };
-    if !fix.edits().iter().any(asked) {
-        return fix;
-    }
+/// The candidate `fix` kept to its promise on the reading outside the edits
+/// (§18.1), for every candidate of the syntax stage that a check reports
+/// (`crate::operands::complete`). `joining` reads the candidate once; for
+/// an edit that joins the tokens round it (`tokens` are those of the file
+/// `text`):
+///
+/// - One that takes text out becomes a blank (`impl[]S` is `impl S`, not
+///   `implS`; `Some()if` is `Some if`; `0 /& //` is `0 / //`, not the doc
+///   comment `///`).
+/// - An insertion of [`insert_apart`] (`marks`) takes a blank on the side
+///   where it joins.
+/// - Any other edit has no such way: no candidate (`None`). `assert.0` would
+///   read as `assert0.0`, `(~= 1)` as `(!= 1)` (R-228, R-235, R-333).
+///
+/// The one place of it.
+pub(crate) fn apart(file: FileId, text: &str, tokens: &[Token], fix: Fix, marks: &Insertions) -> Option<Fix> {
     let joins = joining(file, text, tokens, fix.edits());
-    let edits = (fix.edits().iter().zip(joins))
-        .map(|(e, j)| match () {
-            _ if taken(e) && j.any() => Edit::replace(e.span, " "),
-            _ if e.span.file == file && marks.holds(e) && j.any() => {
-                let (before, after) = (if j.before { " " } else { "" }, if j.after { " " } else { "" });
-                Edit::insert(file, e.span.start, format!("{before}{}{after}", e.replace))
-            }
-            _ => e.clone(),
-        })
-        .collect();
-    Fix::new(fix.title(), edits)
+    if !joins.iter().any(|j| j.any()) {
+        return Some(fix);
+    }
+    let apart_edit = |(e, j): (&Edit, Joins)| match () {
+        _ if !j.any() => Some(e.clone()),
+        _ if e.replace.is_empty() => Some(Edit::replace(e.span, " ")),
+        _ if marks.holds(e) => {
+            let (before, after) = (if j.before { " " } else { "" }, if j.after { " " } else { "" });
+            Some(Edit::insert(file, e.span.start, format!("{before}{}{after}", e.replace)))
+        }
+        _ => None,
+    };
+    let edits = fix.edits().iter().zip(joins).map(apart_edit).collect::<Option<Vec<Edit>>>()?;
+    Some(Fix::new(fix.title(), edits))
 }
 
 /// Which of the tokens right at an edit a candidate joins to the text round
@@ -142,9 +144,8 @@ fn around(tokens: &[Token], e: &Edit) -> (Option<Token>, Option<Token>) {
 /// all kinds are `all`), whether the token of code that ends where it starts
 /// and the one that starts where it ends ([`around`]) are no longer read as
 /// they were, alone and of their kind, after all the edits: whether they
-/// join. The one judgment of whether two tokens join (D-15), for the
-/// candidates that take text out ([`apart`], the blanks round a member `.`)
-/// and that write a word ([`insert_apart`]).
+/// join. The one judgment of whether two tokens join (D-15), for every
+/// candidate reported ([`apart`]) and the blanks round a member `.`.
 ///
 /// The lexer itself reads the text after the edits, in its own context (a
 /// tuple index after a `.` too): from the first token of the line of an edit

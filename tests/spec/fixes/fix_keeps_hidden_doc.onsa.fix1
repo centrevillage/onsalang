@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "21:17"
+// code = "E0020"
+// candidate = 1
+// leaves = ["20:3 E0004"]
+
+// The doc comment after the attribute is an error of the unit that the check
+// does not report before `&self`. It is before the edit, so the candidate stays.
+pub struct Frame {
+  a: I32,
+}
+
+impl Frame {
+  @fp(relaxed)
+  /// Doc.
+  pub fn scaled(self, k: F32) -> F32 { //~ E0020
+    k * 2.0
+  }
+}

@@ -12,7 +12,8 @@
 //! is dropped when it nests over the limit ([`nesting::nests_too_deep`]) or
 //! leaves more than the candidate alone did, less the E0013 of those
 //! expressions (§18.1: a candidate that cannot keep the promise is not made;
-//! another error of the unit stays as it was).
+//! another error of the unit stays as it was). The same reading judges every
+//! candidate, whatever makes it, on the error it leaves ([`leaves`]).
 //!
 //! [`crate::read`] completes no candidate, so the reading goes one level
 //! deep; each reading is of the units a candidate touches, and one
@@ -20,13 +21,14 @@
 //! times the candidates of a diagnostic ([`CandidateReads`]).
 
 use std::collections::BTreeMap;
+use std::ops::Range;
 
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 
 use crate::cst::Cst;
 use crate::groups;
 use crate::nesting;
-use crate::units::Units;
+use crate::units::{Units, Within};
 
 /// What the completion read again in a file: the text of the units (bytes,
 /// one count per reading), the text lexed in the file to judge whether two
@@ -34,21 +36,24 @@ use crate::units::Units;
 /// and for the candidates reported, [`crate::edits::apart`]), the
 /// candidates dropped (a
 /// completed one that left more diagnostics of the syntax stage than the
-/// candidate alone did, less the E0013 it takes away) and those kept as they
-/// are without a reading (no run of the units of one list,
-/// [`Units::reading`]). The tests see them.
+/// candidate alone did, less the E0013 it takes away), those dropped for an
+/// error they leave ([`Failed`]), and those kept as they are without a
+/// reading (no run of the units of one list, [`Units::reading`]). The tests
+/// see them.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct CandidateReads {
     pub bytes: usize,
     pub lexed: usize,
     pub dropped: usize,
+    pub left: usize,
     pub unread: usize,
 }
 
 /// The candidates of the diagnostics of the syntax stage that a check
 /// reports among `diagnostics` (of the file `text` whose CST and units are
 /// those), with the parentheses they need and apart from the tokens around
-/// what they take out ([`crate::edits::apart`]). E0013's own candidate is
+/// what they take out, or dropped when they join them
+/// ([`crate::edits::apart`]). E0013's own candidate is
 /// those parentheses. A diagnostic left without a candidate takes the code
 /// of [`Code::without_fixes`]; E0002 orders before the other codes at its
 /// place, so it stays the one reported.
@@ -61,6 +66,7 @@ pub(crate) fn complete(
 ) -> CandidateReads {
     let reported: Vec<bool> =
         units.choose(&diagnostics.iter().collect::<Vec<_>>()).into_iter().map(|(_, c)| c).collect();
+    let failed = Failed::of(units, diagnostics);
     let mut reads = CandidateReads::default();
     for (d, _) in diagnostics.iter_mut().zip(reported).filter(|(_, r)| *r) {
         if d.stage != Stage::Syntax || d.fixes.is_empty() {
@@ -68,11 +74,11 @@ pub(crate) fn complete(
         }
         let file = d.span.file;
         let fixes: Vec<Fix> = (std::mem::take(&mut d.fixes).into_iter())
-            .map(|f| crate::edits::apart(file, text, cst.tokens(), f, apart))
+            .filter_map(|f| crate::edits::apart(file, text, cst.tokens(), f, apart))
             .collect();
         d.fixes = match d.code {
             Code::E0013 => fixes,
-            _ => fixes.into_iter().filter_map(|f| completed(text, units, f, &mut reads)).collect(),
+            _ => fixes.into_iter().filter_map(|f| completed(text, units, &failed, d.span, f, &mut reads)).collect(),
         };
         if d.fixes.is_empty() {
             d.code = d.code.without_fixes(d.stage);
@@ -81,10 +87,64 @@ pub(crate) fn complete(
     reads
 }
 
-/// `fix` with the parentheses it needs, `None` when it leaves more with them
-/// than [`keeps`] allows. A candidate whose edits touch no run of the units
-/// of one list ([`Units::reading`]) is kept as it is.
-fn completed(text: &str, units: &Units, fix: Fix, reads: &mut CandidateReads) -> Option<Fix> {
+/// The starts of the units of the diagnostics of the syntax stage of a file,
+/// one for each diagnostic, in order.
+struct Failed(Vec<u32>);
+
+impl Failed {
+    fn of(units: &Units, diagnostics: &[Diagnostic]) -> Failed {
+        let syntax = diagnostics.iter().filter(|d| d.stage == Stage::Syntax);
+        let mut starts: Vec<u32> = syntax.filter_map(|d| units.of(d.span)).map(|u| units.list[u].span.start).collect();
+        starts.sort_unstable();
+        Failed(starts)
+    }
+
+    /// Whether the units of `within` hold one diagnostic of the syntax stage.
+    fn one_in(&self, within: &Within) -> bool {
+        let (a, b) = (within.span.start, within.span.end);
+        self.0.partition_point(|&s| s <= b) - self.0.partition_point(|&s| s < a) == 1
+    }
+}
+
+/// Whether `read`, of a text of `len` bytes, only wants the item that
+/// follows it: no item, and no error but a doc comment that documents nothing
+/// or a declaration wanted at the end. A unit of no item (a comment, an
+/// attribute) is read without the item after it in the file, so that is what
+/// the reading says, not what a check says (S-247, S-432).
+fn wants_the_next_item(read: &crate::Read, len: usize) -> bool {
+    let at_the_end = |d: &Diagnostic| d.span.is_empty() && d.span.start as usize == len;
+    let syntax = || read.diagnostics.iter().filter(|d| d.stage == Stage::Syntax);
+    read.ast.items.is_empty() && syntax().all(|d| d.code == Code::E0004 || at_the_end(d))
+}
+
+/// Whether `read` holds an error that the candidate leaves (§18.1): a
+/// diagnostic of the syntax stage that starts in `place`, from the first edit
+/// of the candidate, or the diagnostic if that is before it, to the end of the
+/// diagnostic's place. The reading goes forward, so one before the edit was
+/// there before it, an error the check did not report (a `{` never closed, a
+/// doc comment after an attribute). One from the end on cannot be told from
+/// another error of the unit, past which the parser did not read (`with h()else`):
+/// the number of errors of a unit is not known. One with a candidate of its own
+/// is mended by the next one (`e0002_arm_comma_before_leading`), but for an
+/// E0004: its candidate gives up the doc comment the candidate stranded (R-380).
+fn leaves(read: &crate::Read, place: Range<u32>) -> bool {
+    let mended = |d: &Diagnostic| !d.fixes.is_empty() && d.code != Code::E0004;
+    read.diagnostics.iter().any(|d| d.stage == Stage::Syntax && !mended(d) && place.contains(&d.span.start))
+}
+
+/// `fix`, a candidate of the diagnostic at `span`, with the parentheses it
+/// needs; `None` when it leaves more with them than [`keeps`] allows, or
+/// when the diagnostic is the one of its units and it leaves an error
+/// ([`leaves`]). A candidate whose edits touch no run of the units of one
+/// list ([`Units::reading`]) is kept as it is.
+fn completed(
+    text: &str,
+    units: &Units,
+    failed: &Failed,
+    span: Span,
+    fix: Fix,
+    reads: &mut CandidateReads,
+) -> Option<Fix> {
     let spans: Vec<Span> = fix.edits().iter().map(|e| e.span).collect();
     let Some(within) = units.reading(&spans) else {
         reads.unread += 1;
@@ -92,24 +152,38 @@ fn completed(text: &str, units: &Units, fix: Fix, reads: &mut CandidateReads) ->
     };
     let (file, own) = (within.span.file, within.of(text));
     let local: Vec<Edit> = fix.edits().iter().map(|e| within.local(e)).collect();
-    let Ok((after, regions)) = applied(own, &local) else { return Some(fix) };
+    // The place of the diagnostic: a character at least (§18.1's near "same
+    // place", `fix_contract::same_place`).
+    let last = span.end.saturating_sub(within.span.start);
+    let start = span.start.saturating_sub(within.span.start);
+    let reach = u32::from(span.is_empty());
+    let place = |regions: &[(u32, u32)], end: u32| regions.first().map_or(start, |r| r.0.min(start))..end + reach;
+    let Ok(Applied { text: after, regions, end }) = applied(own, &local, last) else { return Some(fix) };
     reads.bytes += after.len();
     let alone = crate::read(file, &after, within.ctx);
+    let judge = within.span.start <= span.start && failed.one_in(&within) && !wants_the_next_item(&alone, after.len());
     let touched = touched_operands(&alone, &regions);
     if touched.is_empty() {
-        return Some(fix);
+        let left = judge && leaves(&alone, place(&regions, end));
+        reads.left += usize::from(left);
+        return (!left).then_some(fix);
     }
     let operands: Vec<Span> = touched.iter().flat_map(|(_, o)| o.iter().copied()).collect();
     let local = composed(local, &regions, groups::parenthesizing(&operands).collect());
     let edits: Vec<Edit> = local.iter().map(|e| within.global(e)).collect();
     let deep = nesting::nests_too_deep(text, within, within.span, &edits, operands.len() as u32);
-    let Some((again, regions)) = applied(own, &local).ok().filter(|_| !deep) else {
+    let Some(Applied { text: again, regions, end }) = applied(own, &local, last).ok().filter(|_| !deep) else {
         reads.dropped += 1;
         return None;
     };
     reads.bytes += again.len();
-    if !keeps(&alone, touched.len(), &crate::read(file, &again, within.ctx), &regions) {
+    let with = crate::read(file, &again, within.ctx);
+    if !keeps(&alone, touched.len(), &with, &regions) {
         reads.dropped += 1;
+        return None;
+    }
+    if judge && leaves(&with, place(&regions, end)) {
+        reads.left += 1;
         return None;
     }
     Some(Fix::new(fix.title(), edits))
@@ -149,22 +223,36 @@ fn keeps(alone: &crate::Read, touched: usize, with: &crate::Read, regions: &[(u3
     })
 }
 
-/// `text` with `edits` (sorted, apart), and the range each replacement
-/// takes in the new text.
-fn applied(text: &str, edits: &[Edit]) -> Result<(String, Vec<(u32, u32)>), String> {
+/// A text with the edits of a candidate ([`applied`]).
+struct Applied {
+    text: String,
+    /// The range each replacement takes in `text`.
+    regions: Vec<(u32, u32)>,
+    /// Where the offset `last` of the text before goes: the end of the
+    /// replacement of an edit that holds it.
+    end: u32,
+}
+
+/// `text` with `edits` (sorted, apart).
+fn applied(text: &str, edits: &[Edit], last: u32) -> Result<Applied, String> {
     let mut edits: Vec<&Edit> = edits.iter().collect();
     onsa_diag::sort_edits(&mut edits);
     let after = onsa_diag::apply_text(text, &edits)?;
     let mut delta: i64 = 0;
+    let mut moved = None;
     let regions = edits
         .iter()
         .map(|e| {
             let a = (e.span.start as i64 + delta) as u32;
+            let b = a + e.replace.len() as u32;
+            if moved.is_none() && last < e.span.end {
+                moved = Some(if e.span.start < last { b } else { (last as i64 + delta) as u32 });
+            }
             delta += e.replace.len() as i64 - e.span.len() as i64;
-            (a, a + e.replace.len() as u32)
+            (a, b)
         })
         .collect();
-    Ok((after, regions))
+    Ok(Applied { text: after, regions, end: moved.unwrap_or((last as i64 + delta) as u32) })
 }
 
 /// The edits `local` (sorted; `regions` the ranges of their replacements in

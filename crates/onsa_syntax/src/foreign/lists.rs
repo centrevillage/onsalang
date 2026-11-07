@@ -36,9 +36,9 @@ pub(super) fn join_fix(c: &Cursor) -> Option<Fix> {
 ///   the next arm (S-386): the `,`, which takes a `+` out (S-405); a `- 1`
 ///   has none, as its blank is an error of its own; nothing else;
 /// - the `,` when the token starts an element (S-384, S-387), whatever is
-///   between the elements;
+///   between the elements; in the arms only when a `=>` follows (R-217);
 /// - two string literals next to each other (S-388): the one literal they
-///   make, after the `,`;
+///   make, after the `,`; in the arms only when no `=>` follows;
 /// - else an opener after a line break (S-89, S-373), or after a blank when
 ///   the token before is no path of names (S-399): the gap taken out when
 ///   that reads, after the `,` when the opener starts an element.
@@ -119,10 +119,11 @@ fn sign_comma(a: &After) -> Option<Fix> {
 /// Whether a `,` goes before the token (S-384, S-387): it starts an
 /// element of the list, and is not `fn name`, which no expression is;
 /// in a list of types, a `[` holds a `;` (S-419); not in the repetition
-/// of an array; in the arms, not before an opener after a gap when no `=>`
-/// follows (the gap taken out is then the one candidate, when it reads,
-/// §2.5: `0 => t.0 (x), _ => 1` has none); not after the rest of a struct
-/// pattern or literal, which is last (§7, §4.4).
+/// of an array; in the arms, only when a `=>` follows, so that what comes
+/// after the `,` can read as an arm (R-217, R-296: `_ => s t` has none; an
+/// opener after a gap then has the gap taken out as its one candidate, when
+/// it reads, §2.5: `0 => t.0 (x), _ => 1` has none); not after the rest of a
+/// struct pattern or literal, which is last (§7, §4.4).
 fn comma_goes(a: &After) -> bool {
     let c = a.c;
     let declaration = declares_a_function(a.kind, c.kind(c.sig_after(c.at)));
@@ -130,8 +131,7 @@ fn comma_goes(a: &After) -> bool {
     let array =
         (a.kind != TokenKind::LBracket || !types || bracket_contents(c.tokens, c.at).is_some_and(|(_, _, semi)| semi))
             && !(a.list == Some(NodeKind::ArrayExpr) && array_repeats(c));
-    let gap = c.detached.is_some_and(|d| d.at == c.at);
-    let comma = !(a.arms && gap && !arm_ahead(c.tokens, c.at));
+    let comma = !a.arms || arm_ahead(c.tokens, c.at);
     let after_rest = c.closed.iter().any(|n| n.0.is_field_rest());
     a.list.is_some_and(|l| starts_element(l, a.kind)) && !declaration && array && comma && !after_rest
 }
@@ -149,9 +149,16 @@ pub(super) fn struct_lit_base(c: &Cursor) -> Option<super::Hit> {
     (c.kind(c.at) == TokenKind::DotDot && field.is_some()).then(|| super::Hit::new(c.span(c.at), Vec::new()))
 }
 
-/// Two string literals next to each other in a list (S-388).
+/// Whether the token is in the arms and a `=>` follows it: the next arm
+/// starts there, and the two sides stay apart.
+fn next_arm(a: &After) -> bool {
+    a.arms && arm_ahead(a.c.tokens, a.c.at)
+}
+
+/// Two string literals next to each other in a list (S-388); in the arms,
+/// none that a `=>` follows.
 fn two_strings(a: &After) -> bool {
-    a.kind == TokenKind::Str && a.c.kind(a.prev) == TokenKind::Str && a.list.is_some()
+    a.kind == TokenKind::Str && a.c.kind(a.prev) == TokenKind::Str && a.list.is_some() && !next_arm(a)
 }
 
 fn one_string(a: &After) -> Option<Fix> {
@@ -161,7 +168,7 @@ fn one_string(a: &After) -> Option<Fix> {
 /// An opener after a gap that reads joined (S-89, S-373, S-399); in the
 /// arms, none that a `=>` follows.
 fn rejoins(a: &After) -> bool {
-    a.joins && !(a.arms && arm_ahead(a.c.tokens, a.c.at))
+    a.joins && !next_arm(a)
 }
 
 fn joined(a: &After) -> Option<Fix> {

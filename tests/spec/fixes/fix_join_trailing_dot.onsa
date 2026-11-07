@@ -1,0 +1,81 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§2.5", "§18.1"]
+// fixes = 0
+
+// A `.` at the end of a line is E0020 and the candidate moves it to the head of the next line, when the next token is
+// a name, a tuple index or a `(` (§2.5, the row `newline_after_dot`). When the next token is a number written in a
+// form that is not a plain decimal tuple index (`0x1`, `0b1`, a float `1.5`, a float with an exponent `1e3`), the
+// `.` at its head joins it and the reading of the number changes: `0x1` is the tuple index `0` and the name `x1`,
+// and `1.5` is no longer a float (R-235). A candidate does not change the reading of the characters outside its
+// edit (§18.1), so the form has no candidate, and the form of the syntax stage that has no candidate is a general
+// syntax error, E0002 (§18.1). The marker is on the line of the `.`. (§2.5 says the same of the next token that is
+// neither a name, an integer nor a `(`: "no candidate and E0002".) The forms whose next line starts with a plain
+// decimal integer keep their candidate (fix_keeps_leading_symbol.onsa). One error in each function (P-01). The same
+// form in an anonymous function, a nested `match`, a `test` body, a method and a flow body is in the second half.
+
+pub fn hex(t: (I32, I32)) -> I32 {
+  t.                                                //~ E0002
+  0x1
+}
+
+pub fn binary(t: (I32, I32)) -> I32 {
+  t.                                                //~ E0002
+  0b1
+}
+
+pub fn float(t: (I32, I32)) -> I32 {
+  t.                                                //~ E0002
+  1.5
+}
+
+pub fn float_with_exponent(t: (I32, I32)) -> I32 {
+  t.                                                //~ E0002
+  1e3
+}
+
+// ---- other contexts
+
+pub fn in_an_anonymous_function(t: (I32, I32)) -> I32 {
+  let k = fn(u: (I32, I32)) -> I32 {
+    u.                                              //~ E0002
+    0x1
+  }
+  k.(t)
+}
+
+pub fn in_a_nested_match(n: I32, t: (I32, I32)) -> I32 {
+  match n {
+    0 => match n {
+      1 => 2,
+      _ => t.                                       //~ E0002
+        0b1,
+    },
+    _ => 3,
+  }
+}
+
+test "a dot before a hexadecimal number" {
+  let t = (1, 2)
+  let v = t.                                        //~ E0002
+    0x1
+  assert v == 2
+}
+
+pub struct Pair {
+  t: (I32, I32),
+}
+
+impl Pair {
+  pub fn pick(self) -> I32 {
+    self.t.                                         //~ E0002
+    1.5
+  }
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  let t = (x, x)
+  let y = t.                                        //~ E0002
+    1e3
+  y
+}
