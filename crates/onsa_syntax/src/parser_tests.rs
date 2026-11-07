@@ -524,9 +524,11 @@ fn an_unclosed_brace_ends_at_an_item_keyword_indented_as_its_line() {
     let note = p.diagnostics[0].notes.iter().find(|n| n.span.is_some()).unwrap();
     assert_eq!(note.message, "it is in the body of `f`");
     assert!(dump(&p.ast).contains("(fn g()"));
-    // A line indented deeper than the `{` is not a place to end it.
+    // A line indented deeper than the `{` is not a place to end it, and the
+    // `{` is reported at the end of the file all the same (S-943, R-371).
     let p = parse("fn f() -> I32 {\n  1 +\n    fn g() {}\n");
-    assert!(p.diagnostics.iter().all(|d| d.message != "this `{` is never closed"));
+    assert_eq!(p.diagnostics.last().unwrap().message, "this `{` is never closed");
+    assert_eq!(p.diagnostics.last().unwrap().span.start, 14);
     // In an `impl`, by the member.
     let src = "impl P {\n  fn a(self) {\n    1\n\n  fn b(self) {}\n}\nfn c() {}\n";
     let p = parse(src);
@@ -590,9 +592,38 @@ fn an_unclosed_brace_at_the_end_of_the_file() {
     let p = parse(src);
     assert_eq!(codes_of(&p), [Code::E0002]);
     assert_eq!(p.diagnostics[0].span.start, 14);
-    // Another error stopped it earlier: the open `{` follow from it, no diagnostic.
+    // Another error stopped it earlier: the `{` is reported too (R-371).
     let p = parse("fn f() -> I32 {\n  let = 1\n");
-    assert_eq!(p.diagnostics.iter().map(|d| d.message.as_str()).collect::<Vec<_>>(), ["expected a pattern, found `=`"]);
+    let messages = p.diagnostics.iter().map(|d| d.message.as_str()).collect::<Vec<_>>();
+    assert_eq!(messages, ["expected a pattern, found `=`", "this `{` is never closed"]);
+    // Not an E0006 unit (§2.5), nor one with a literal or a `/*` that does not close (S-859).
+    for src in ["fn f() {\n  let s = \"x }\n", "fn f() {\n  let s = $\"x }\n", "fn f() {\n  /* x }\n"] {
+        assert!(parse(src).diagnostics.iter().all(|d| d.message != "this `{` is never closed"), "{src}");
+    }
+    // By its place: the literal is in a member, and the `impl` around does not report.
+    let p = parse("impl S {\n  fn a() { \"x }\n  fn b() { }\n");
+    assert!(p.diagnostics.iter().all(|d| d.message != "this `{` is never closed"), "{:?}", p.diagnostics);
+}
+
+#[test]
+fn the_other_brackets_never_closed_are_notes_in_order_after_the_declaration() {
+    // S-943: the innermost has the E0002, the others have notes, of the
+    // member's unit and of the list around it.
+    let src = "impl S {\n  fn a(self) -> I32 {\n    if c {\n      1\n";
+    let p = parse(src);
+    assert_eq!(codes_of(&p), [Code::E0002]);
+    let at = |s: &str| src.find(s).unwrap() as u32 + s.len() as u32 - 1;
+    assert_eq!(p.diagnostics[0].span.start, at("if c {"));
+    let notes: Vec<(&str, u32)> =
+        p.diagnostics[0].notes.iter().filter_map(|n| n.span.map(|s| (n.message.as_str(), s.start))).collect();
+    assert_eq!(
+        notes,
+        [
+            ("it is in the body of `a`", src.find("a(self)").unwrap() as u32),
+            ("this `{` is never closed either", at("impl S {")),
+            ("this `{` is never closed either", at("I32 {")),
+        ]
+    );
 }
 
 #[test]

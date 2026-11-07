@@ -1,0 +1,4 @@
+fn i(c:l)-> U3{
+[if c { } else
+ if l { }, 4]B2//3
+}

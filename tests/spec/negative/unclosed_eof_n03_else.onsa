@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// The `{` of an `else` never closed, in a `fn` never closed (N3).
+// The unit is the last one of the file, so it ends at the end of the file. A bracket that is not closed is reported whatever
+// stopped the reading: the E0002 points at the innermost bracket that is not closed (§18.1, S-943, R-371). The same file
+// with an item after the unit is unclosed_next_n03_else.onsa, and the report is on the same line.
+
+fn a(c: Bool) -> I32 {
+  if c {
+    1
+  } else {                                      //~ E0002 @10
+    2

@@ -1,0 +1,8 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.4"]
+// fixes = 0
+
+// L14: a `/*` that is not closed reads to the end of the file (§2.4), so it takes the `}` and the items after it: the E0002 is the comment, and no bracket is reported (§18.1, S-859).
+
+fn f() -> I32 { 1 /* }                          //~ E0002 @19

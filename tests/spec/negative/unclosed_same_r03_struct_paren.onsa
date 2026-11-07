@@ -1,0 +1,11 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// `struct S( {`: the `(` is where the reading stops and where the bracket is never closed. The report is the same with an item after
+// the unit or without (R3).
+
+struct S( {                                     //~ E0002 @9
+  a: I32
+}

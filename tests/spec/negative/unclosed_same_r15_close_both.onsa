@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// The `}` that closes the `{` of the closure also closes the call, so no bracket is left open, and the E0002 is the `}` that the reading
+// does not expect (R15). The report is the same with an item after the unit or without.
+
+fn f() -> I32 {
+  g(fn() -> I32 {
+    1
+  }
+}                                               //~ E0002 @1

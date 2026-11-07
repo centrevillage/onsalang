@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// T6: the line of the `{` is indented by a tab, the item line by 8 spaces (deeper).
+// The indentation is compared by the number of characters before the first token, and a tab is one character (§18.1), so the item
+// line is deeper than the line of the `{` and does not end the member. The `{` of the member is closed by the `}` below, so the
+// `impl` is what is never closed (E0002 on its `{`), and the `fn` in the body of `a` is the other E0002 of the file.
+
+pub struct S { v: I32 }
+impl S {                                        //~ E0002 @8
+	fn a(self) -> I32 {
+		self.v
+        fn b(self) -> I32 { 2 }                 //~ E0002
+}
+fn u() -> I32 { 3 }

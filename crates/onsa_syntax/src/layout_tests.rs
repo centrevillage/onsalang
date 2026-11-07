@@ -448,11 +448,13 @@ fn a_line_that_ends_where_it_cannot_has_an_empty_range() {
 #[test]
 fn a_clock_written_after_a_type_is_apart_from_the_name_after_it() {
     // R-205 (tests/fuzz/f60b27e5.onsa): ` at a` before `e` is not ` at ae`.
-    let src = "flow m(x:(((F at a)))e";
+    // The `(` of the inputs is closed: the E0002 of an unclosed one would be the
+    // error of the unit, and the candidates of another are not completed.
+    let src = "flow m(x:(((F at a)))e)";
     let p = parse(src);
     let d = p.diagnostics.iter().find(|d| d.code == Code::E0020).unwrap_or_else(|| panic!("{:?}", p.diagnostics));
     let fixed = onsa_diag::apply_text(src, &d.fixes[0].edits().iter().collect::<Vec<_>>()).unwrap();
-    assert_eq!(fixed, "flow m(x:(((F))) at a e");
+    assert_eq!(fixed, "flow m(x:(((F))) at a e)");
 }
 
 #[test]

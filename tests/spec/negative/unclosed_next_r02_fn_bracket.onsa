@@ -1,0 +1,14 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// `fn f[ {`: the reading stops at the `{` of the type parameters (R2).
+// The unit ends at the item that follows it, on a line with the same or a shallower indentation. A bracket that is not closed
+// is reported whatever stopped the reading: the E0002 points at the innermost bracket that is not closed (§18.1, S-943,
+// R-371). The same file without the item after the unit is unclosed_eof_r02_fn_bracket.onsa, and the report is on the same line.
+
+fn f[ {                                         //~ E0002 @5
+  1
+}
+fn z() -> I32 { 1 }

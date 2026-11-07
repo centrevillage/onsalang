@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// The `{` of an arm of a `match` never closed, in the `{` of the `match` and the `fn` (N4).
+// The unit ends at the item that follows it, on a line with the same or a shallower indentation. A bracket that is not closed
+// is reported whatever stopped the reading: the E0002 points at the innermost bracket that is not closed (§18.1, S-943,
+// R-371). The same file without the item after the unit is unclosed_eof_n04_match_arm.onsa, and the report is on the same line.
+
+fn a(c: Bool) -> I32 {
+  match c {
+    true => 1,
+    false => {                                  //~ E0002 @14
+      2
+fn b() -> I32 { 2 }

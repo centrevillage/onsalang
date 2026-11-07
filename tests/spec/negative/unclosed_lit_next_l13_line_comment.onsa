@@ -1,0 +1,9 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.4"]
+// fixes = 0
+
+// L13: a `}` in a `//` comment is not a bracket: the `{` is never closed, and it is the only error (the comment is not a literal that is not closed).
+
+fn f() -> I32 { 1 // }                          //~ E0002 @15
+fn z() -> I32 { 1 }

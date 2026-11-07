@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// T2: the line of the `{` is indented by 8 spaces, the item line by a tab.
+// The indentation is compared by the number of characters before the first token, and a tab is one character (§18.1), so the item
+// line is not deeper than the line of the `{`: it ends the member, and `b` is declared (no E0413 for `s.b()`).
+
+pub struct S { v: I32 }
+impl S {
+        fn a(self) -> I32 {                     //~ E0002
+                self.v
+	fn b(self) -> I32 { 2 }
+}
+fn u(s: S) -> I32 { s.b() }

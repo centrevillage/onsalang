@@ -372,6 +372,9 @@ impl<'a> Lexer<'a> {
                 self.bump_char();
             }
         }
+        if depth > 0 {
+            self.found.unclosed.push(Span::new(self.file, start as u32, start as u32 + 2));
+        }
         self.push(TokenKind::BlockComment, start);
     }
 

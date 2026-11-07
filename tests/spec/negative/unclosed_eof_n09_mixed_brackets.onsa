@@ -1,0 +1,12 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// `{`, `[` and `(` never closed: the `(` is the innermost (N9).
+// The unit is the last one of the file, so it ends at the end of the file. A bracket that is not closed is reported whatever
+// stopped the reading: the E0002 points at the innermost bracket that is not closed (§18.1, S-943, R-371). The same file
+// with an item after the unit is unclosed_next_n09_mixed_brackets.onsa, and the report is on the same line.
+
+fn a() -> I32 {
+  let v = [1, g(2,                              //~ E0002 @16

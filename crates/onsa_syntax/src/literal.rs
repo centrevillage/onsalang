@@ -68,8 +68,9 @@ pub(crate) struct ForeignNumber {
 /// file: the holes of the strings (also of a form an interpolation may not
 /// have, `{a + 1}`), the spans of the lexer's errors (the held ones too), the
 /// numbers written as in other languages ([`ForeignNumber`]), the runs of
-/// names and literals ([`Run`]) and the opening delimiters of the literals
-/// and the strings of other languages that do not close on their line.
+/// names and literals ([`Run`]), and the opening delimiters of the literals
+/// and the strings of other languages that do not close on their line and
+/// of the `/*` that never closes.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Literals {
     holes: Vec<Hole>,
@@ -155,6 +156,20 @@ impl Literals {
     /// Whether the string or character literal at `span` closes on its line.
     pub(crate) fn closed(&self, span: Span) -> bool {
         self.unclosed.binary_search_by_key(&span.start, |s| s.start).is_err()
+    }
+
+    /// Whether a literal, a string of other languages or a `/*` that does
+    /// not close opens from `from` on and before `to`: a closing bracket may
+    /// be inside it (§18.1, S-859). A binary search.
+    pub(crate) fn unclosed_in(&self, from: u32, to: u32) -> bool {
+        let i = self.unclosed.partition_point(|s| s.start < from);
+        self.unclosed.get(i).is_some_and(|s| s.start < to)
+    }
+
+    /// Whether the lexer has an error from `from` on and before `to`.
+    pub(crate) fn errors_in(&self, from: u32, to: u32) -> bool {
+        let i = self.errors.partition_point(|s| s.start < from);
+        self.errors.get(i).is_some_and(|s| s.start < to)
     }
 
     /// Every run, in the order of the file.

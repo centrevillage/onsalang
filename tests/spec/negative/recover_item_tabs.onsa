@@ -2,9 +2,8 @@
 // [test]
 // spec = ["§18.1", "§2.5"]
 
-// The indentation of a line is the tabs and spaces before its first token, and a file that uses
-// tabs only compares the lines by their number of tabs (§2.5 does not say how a tab is counted
-// against spaces, so a line of tabs is never compared with a line of spaces here). A `{` that is
+// The indentation of a line is the blanks before its first token, a tab counting as one (§18.1),
+// and a file that uses tabs only compares the lines by their number of tabs. A `{` that is
 // never closed ends at the next start of an item on a line with the same or a shallower
 // indentation than the line of the `{` (§18.1). One error in each unit.
 

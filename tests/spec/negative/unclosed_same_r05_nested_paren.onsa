@@ -1,0 +1,10 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// `fn f(a: [I32; ( {`: three brackets never closed; the innermost one that is not closed by a `}` is the `(` before the `{` (R5).
+
+fn f(a: [I32; ( {                               //~ E0002 @15
+  1
+}

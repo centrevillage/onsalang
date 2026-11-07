@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// Two members of one `impl` each have a `{` never closed. The units are separate, so both are reported (N10).
+
+struct S { v: I32 }
+impl S {
+  fn a(self) -> I32 {                           //~ E0002 @21
+    self.v
+  fn b(self) -> I32 {                           //~ E0002 @21
+    2
+  fn c(self) -> I32 { 3 }
+}
+fn d() -> I32 { 3 }

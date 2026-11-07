@@ -17,20 +17,6 @@
 #   note     a short note
 
 [[allowed]]
-class = "fix|E0002|write the `…` between the elements|E0020"
-left = "a `…` goes between the alternatives of a pattern, not before the first"
-input = "tests/fuzz/0562ac9f.onsa"
-reasons = ["S-386", "S-383"]
-note = "an arm without its `,` before a line that starts with `|`: the `,`, then the `|` before the first alternative (S-383), two steps as S-386 decided"
-
-[[allowed]]
-class = "fix|E0020|write one `…`|E0020"
-left = "a `…` goes between the alternatives of a pattern, not before the first"
-input = "tests/fuzz/1cf48968.onsa"
-reasons = ["S-389", "S-383"]
-note = "a `||` where a pattern starts: one `|`, then the `|` before the first alternative (S-383), two steps as S-389 decided"
-
-[[allowed]]
 class = "fix|E0003|move `…` to the end of the line before|E0002"
 left = "expected effect name, found `…`"
 input = "tests/fuzz/3516409a.onsa"
@@ -43,41 +29,6 @@ left = "this `…` is never closed"
 input = "tests/fuzz/8fc9fb69.onsa"
 reasons = ["S-384", "S-413"]
 note = "an input with two errors: the `{` of an effect row on the next line in brackets, and the body's `{` never closed at the end of the file"
-
-[[allowed]]
-class = "fix|E0020|write one `…`|E0020"
-left = "a line does not start with an operator that goes on with the line before"
-input = "tests/fuzz/33e26e15.onsa"
-reasons = ["S-389", "S-380"]
-note = "a `||` at the head of a line in a pattern: one `|`, then the `|` at the head of the line (S-380), two steps as S-389 decided"
-
-[[allowed]]
-class = "fix|E0003|move `…` to the end of the line before|E0002"
-left = "expected newline or `…`, found identifier"
-input = "tests/fuzz/d877b39a.onsa"
-reasons = ["S-384", "S-216"]
-note = "an input with two errors: an `else` on the line after its `}`, and two expressions on one line in its block"
-
-[[allowed]]
-class = "fix|E0003|move `…` to the end of the line before|E0002"
-left = "expected field name, found integer literal"
-input = "tests/fuzz/7e0c855f.onsa"
-reasons = ["S-413"]
-note = "a `{` after a constant's name on the next line in brackets (`two(N` and `{ 1 })`): the E0003 first, and what is left of the literal is reported by the next check, as S-413 decided"
-
-[[allowed]]
-class = "fix|E0020|take the `…` out|E0020"
-left = "ranges cannot be patterns; compare in a guard"
-input = "tests/fuzz/9ab30c13.onsa"
-reasons = ["S-281", "S-405"]
-note = "one failure read as two forms (R-206): a prefix `+` that starts a range pattern (`(+1..)`); the `+` is reported first (S-281), and the range pattern is left for the next check, at the same place"
-
-[[allowed]]
-class = "fix|E0003|move `…` to the end of the line before|E0001"
-left = "`…` (U+#) cannot be written outside comments and strings: a name is written with"
-input = "tests/fuzz/d035fd58.onsa"
-reasons = ["S-384", "S-236", "R-219", "R-226"]
-note = "an input with two errors: an `else`, an `if` or a `{` on the next line, and a character that cannot be written outside comments right after it, which the input has before the candidate (`（` here; the other inputs of the class are regression inputs)"
 
 [[allowed]]
 class = "fix|E0003|move `…` to the end of the line before|E0002"
@@ -94,53 +45,11 @@ reasons = ["S-384"]
 note = "an input with two errors: the `{` of a struct on the next line, and a `(` right after it where a field starts (`{(`), which the input has before the candidate"
 
 [[allowed]]
-class = "fix|E0003|move `…` to the end of the line before|E0002"
-left = "expected an expression, found `…`"
-input = "tests/fuzz/322185fb.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: an `else` on the next line, and a `]` where the condition of its `if` starts, which the input has before the candidate"
-
-[[allowed]]
 class = "fix|E0003|move `…` to the end of the line before|E0408"
 left = "integer literal is larger than any integer type holds"
 input = "tests/fuzz/4db3be15.onsa"
 reasons = ["S-384"]
 note = "an input with two errors: the `{` of a struct literal on the next line, and an integer literal in it larger than any integer type, which the input has before the candidate"
-
-[[allowed]]
-class = "fix|E0020|remove the `…`|E0002"
-left = "expected an expression, found newline"
-input = "tests/fuzz/654dcd9a.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: a `~` on the `if` after `else`, and that `if` without its condition and body (the `{` is never written), which the input has before the candidate"
-
-[[allowed]]
-class = "fix|E0020|write the number in decimal|E0020"
-left = "ranges cannot be patterns; compare in a guard"
-input = "tests/fuzz/c37aeca4.onsa"
-reasons = ["S-281", "S-236"]
-note = "one failure read as two forms (R-206): an octal number (`0o17`) that starts a range pattern; the shorter form from the same start is reported (S-281), and the range pattern is left for the next check, at the same place (the `leaves` of tests/spec/fixes/e0020_overlap_numeric_forms_range_pattern.onsa)"
-
-[[allowed]]
-class = "fix|E0020|read it as decimal|E0020"
-left = "ranges cannot be patterns; compare in a guard"
-input = "tests/fuzz/76db4720.onsa"
-reasons = ["S-281", "S-236"]
-note = "one failure read as two forms (R-206): a decimal integer with a leading zero (`017`) that starts a range pattern; the shorter form from the same start is reported (S-281), and the range pattern is left for the next check, at the same place (the `leaves` of tests/spec/fixes/e0020_overlap_numeric_forms_range_pattern.onsa)"
-
-[[allowed]]
-class = "fix|E0020|add the `…` before the point|E0020"
-left = "ranges cannot be patterns; compare in a guard"
-input = "tests/fuzz/e8180a1e.onsa"
-reasons = ["S-281", "S-236"]
-note = "one failure read as two forms (R-206): a float with a leading point (`.5`) that starts a range pattern; the shorter form from the same start is reported (S-281), and the range pattern is left for the next check, at the same place (the `leaves` of tests/spec/fixes/e0020_overlap_numeric_forms_range_pattern.onsa)"
-
-[[allowed]]
-class = "fix|E0020|remove the type suffix|E0020"
-left = "ranges cannot be patterns; compare in a guard"
-input = "tests/fuzz/fd9ec569.onsa"
-reasons = ["S-281", "S-236"]
-note = "one failure read as two forms (R-206): a number with a type suffix (`1f32`) that starts a range pattern; the shorter form from the same start is reported (S-281), and the range pattern is left for the next check, at the same place (the `leaves` of tests/spec/fixes/e0020_overlap_numeric_forms_range_pattern.onsa)"
 
 [[allowed]]
 class = "fix|E0002|make the two literals one|E0001"
@@ -157,13 +66,6 @@ reasons = ["S-124"]
 note = "an input with two errors: a binary operator at the start of a line, and no operand after it before the `}`"
 
 [[allowed]]
-class = "fix|E0003|move `…` to the end of the line before|E0002"
-left = "expected `…`, found integer literal"
-input = "tests/fuzz/1f7993d8.onsa"
-reasons = ["S-384", "S-413"]
-note = "an input with two errors: the `{` of a struct pattern on the next line, and a number after the pattern where the arm's `=>` goes"
-
-[[allowed]]
 class = "fix|E0012|parenthesize the inner operator|E0020"
 left = "a prefix symbol is written on the line of its operand"
 input = "tests/fuzz/2695c80d.onsa"
@@ -171,46 +73,11 @@ reasons = ["S-236", "R-221"]
 note = "the line break between the inner `-` and its operand (a comment ends the line) was in the input, hidden behind the E0012 (one error a unit); the candidate is right (low harm)"
 
 [[allowed]]
-class = "fix|E0003|move `…` to the end of the line before|E0001"
-left = "U+# cannot be written outside comments and strings: a name is written with the A"
-input = "tests/fuzz/1559d8c8.onsa"
-reasons = ["S-236", "R-219"]
-note = "the U+0091 (a control character, shown by its number) against the `if` was in the input, hidden behind the E0003 (one error a unit); the candidate is right (low harm, the form of 44fc0733)"
-
-[[allowed]]
-class = "fix|E0020|move it to the end of the line before|E0002"
-left = "expected a type, found `…`"
-input = "tests/fuzz/c2f67890.onsa"
-reasons = ["R-227"]
-note = "an input with two errors: a `->` at the head of a line, and no type after it (`-> ;`), which the input has before the candidate"
-
-[[allowed]]
-class = "fix|E0020|remove the space|E0002"
-left = "empty brackets are not written here"
-input = "tests/fuzz/524c665a.onsa"
-reasons = ["R-231"]
-note = "an input with two errors: a blank and empty brackets after it (`let o ()`); the candidate of the blank, reported first, leaves the E0002 of the brackets"
-
-[[allowed]]
 class = "fix|E0004|move it before the attributes|E0001"
 left = "U+# (a control character) cannot be written, also in a comment or a string (§#.#"
 input = "tests/fuzz/c6671c23.onsa"
 reasons = ["R-232"]
 note = "an input with two errors: a doc comment after an attribute that holds a NUL; the candidate moves the doc comment, and the E0001 of the NUL with it"
-
-[[allowed]]
-class = "fix|E0020|write `…` before the name|E0002"
-left = "expected a type, found float literal"
-input = "tests/fuzz/b4850c81.onsa"
-reasons = ["R-234"]
-note = "an input with three errors: `&mut` before a parameter type, a float where the type goes, and no `)`; the candidate writes `inout` before the name and leaves the E0002 of the float"
-
-[[allowed]]
-class = "fix|E0020|write the assignment out|E0002"
-left = "expected an expression, found `…`"
-input = "tests/fuzz/1eb16a95.onsa"
-reasons = ["R-236"]
-note = "an input with three errors: a compound assignment, no operand after its `^`, and no `}`; the candidate writes the assignment out and the missing operand shows in its parentheses"
 
 [[allowed]]
 class = "fix|E0811|add `…`|E0811"
@@ -255,32 +122,11 @@ reasons = ["S-384"]
 note = "an input with two errors: `else` on the next line, and a blank before a `(` on that line, which shows once `else` moves up; the brackets are never closed at the end of the file"
 
 [[allowed]]
-class = "fix|E0002|remove the empty brackets|E0002"
-left = "expected `…`, found newline"
-input = "tests/fuzz/232d7e85.onsa"
-reasons = ["S-384"]
-note = "an input cut short: `let c()` with no `=`, and the `{` of the test never closed; once the brackets go, the missing `=` is the next error"
-
-[[allowed]]
 class = "fix|E0004|move it before the attributes|E0001"
 left = "U+# (a bidirectional control) cannot be written, also in a comment or a string ("
 input = "tests/fuzz/edef5780.onsa"
 reasons = ["S-384"]
 note = "an input with two errors: a doc comment after an attribute, and a bidirectional control (U+202E) in that comment, which the input has before the candidate and the candidate moves with the comment"
-
-[[allowed]]
-class = "fix|E0020|remove the `…`|E0002"
-left = "expected `…` or `…`, found `…`"
-input = "tests/fuzz/cc29ca46.onsa"
-reasons = ["S-384"]
-note = "an input cut short with two errors: a `;` between the arguments of an attribute, and a `}` where the `)` closes them, which the input has before the candidate"
-
-[[allowed]]
-class = "fix|E0020|remove the space|E0002"
-left = "expected module path, found `…`"
-input = "tests/fuzz/332a8990.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: a blank after the `.` of a `use` path, and a `(` where the next name of the path goes"
 
 [[allowed]]
 class = "fix|E0302|add `…`|E0200"
@@ -297,32 +143,11 @@ reasons = ["S-236", "S-710"]
 note = "an input with two errors of the names stage at one place: a flow written as the type of an input (`a: Sig[2]`, the candidate `Sig.State`) and the missing clock of that input, which S-710 put in the names stage, so the E0810 comes next"
 
 [[allowed]]
-class = "fix|E0020|write it against its operand|E0002"
-left = "a callee that is no path of names is a function value; it is called with `…`"
-input = "tests/fuzz/2988ecc4.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: a prefix `^` at the end of a line before its operand, and the `(` of the call and the body's `{` never closed at the end of the file (closed, the candidate joins the operand and the loop is clean)"
-
-[[allowed]]
 class = "fix|E0308|call `…` on the first argument|E0302"
 left = "cannot find `…`"
 input = "tests/fuzz/a589aa43.onsa"
 reasons = ["S-103"]
 note = "an input with two errors of the names stage in one unit: the method `len` called through its type, and the argument `s` that is not found, hidden by the one error of a unit. The E0308 is not the only error of its stage, so the promise of the candidates (§18.1: only when the diagnostic is the only error of its stage and before in the units it touches) does not hold, and the candidate `s.len()` leaves the E0302 of `s`"
-
-[[allowed]]
-class = "fix|E0002|write the `…` between the elements|E0002"
-left = "a callee that is no path of names is a function value; it is called with `…`"
-input = "tests/fuzz/0ea80e63.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: two elements of a parenthesized list without the `,` (`()2`), and the literal `2` called as `2(`, which the `,` leaves as the call of a value"
-
-[[allowed]]
-class = "fix|E0020|write `…`|E0020"
-left = "a member `…` is written without spaces around it"
-input = "tests/fuzz/ce515053.onsa"
-reasons = ["R-306"]
-note = "a `::` with a blank after it (`e:: F`): the candidate writes `.` and leaves the E0020 of the blank around the member at the same place, whose candidate removes the blank (two steps, as R-231 and R-244)"
 
 [[allowed]]
 class = "fix|E0020|write the rate as the clock `…`|E0302"
@@ -337,13 +162,6 @@ left = "a rate is no type; it is written as the clock after the type"
 input = "tests/fuzz/a927e108.onsa"
 reasons = ["S-384"]
 note = "an input with two errors: a rate written as a type (`g: Ctl[[Sig[F32]; 2]]`) and another rate written as a type (`Sig[F32]`) inside it, which the input has before the candidate; the candidate writes the clock of the outer one and leaves the E0020 of the inner one at the same place"
-
-[[allowed]]
-class = "fix|E0020|move it to the end of the line before|E0020"
-left = "a prefix operator is written right before its operand"
-input = "tests/fuzz/03db5ce3.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: a line that starts with `=`, and a blank between the prefix `!` after it and its operand, which the input has before the candidate; moved, the `=` leaves the `!` at the head of the line at the same place, whose candidate removes the blank (two steps)"
 
 [[allowed]]
 class = "fix|E0020|remove the space|E0002"
@@ -365,20 +183,6 @@ left = "expected `…` or `…`, found `…`"
 input = "tests/fuzz/7434abe6.onsa"
 reasons = ["S-384"]
 note = "an input with two errors in one unit: a blank between a name and its `~` (E0020) and a `(` and a `{` never closed; the E0020 hides the second, and the candidate that takes the blank out leaves it (the fuzz of X-20/U1 at 0ad8c01, also before it)"
-
-[[allowed]]
-class = "fix|E0003|move `…` to the end of the line before|E0002"
-left = "expected `…` or `…`, found identifier"
-input = "tests/fuzz/4d70eed7.onsa"
-reasons = ["R-356"]
-note = "an input with two errors: a `{` on the next line and a missing `,` in the struct literal (`2 u`); the candidate of the `{`, reported first, leaves the E0002 of the missing `,` (W5-01 U2's cases moved the mutants)"
-
-[[allowed]]
-class = "fix|E0003|move `…` to the end of the line before|E0002"
-left = "expected newline or `…`, found integer literal"
-input = "tests/fuzz/1e227865.onsa"
-reasons = ["R-356"]
-note = "an input with two errors: an `else` on the next line and two expressions on one line in the block (`2 6`); the candidate of the `else`, reported first, leaves the E0002 of the second error (W5-01 U2's cases moved the mutants)"
 
 [[allowed]]
 class = "fix|E0020|move it to the end of the line before|E0408"
@@ -416,33 +220,11 @@ reasons = ["S-384"]
 note = "途中の文の `F64.round_from(1)` は誤りが二つある入力（捨てる値と、`as` で書ける組の変換の関連関数）。候補の約束は誤りが一つの単位に当たる（§18.1）"
 
 [[allowed]]
-class = "fix|E0020|read it as octal|E0020"
-left = "ranges cannot be patterns; compare in a guard"
-input = "tests/fuzz/55f40d7e.onsa"
-reasons = ["S-281", "S-236"]
-note = "`read it as decimal` の許可（`76db4720`）と同じ入力の形の、二番目の候補。範囲の誤りが別にある入力"
-
-
-[[allowed]]
 class = "fix|E0411|remove `…`|E0418"
 left = "the type of this statement is `…`, not `…`; a statement gives no value (§#.#)"
 input = "tests/fuzz/88496320.onsa"
 reasons = ["S-384"]
 note = "`x as T` の誤りの文に、捨てる値の誤りが残る。誤りが二つある入力"
-
-[[allowed]]
-class = "fix|E0020|join it to the line before|E0001"
-left = "number prefix without digits"
-input = "tests/fuzz/d58c5045.onsa"
-reasons = ["S-384"]
-note = "`- b  0x` は誤りが二つある入力（行頭の `- b` と、数字の無い `0x`）。つなぐ候補が `0x` ごと前の行へ移すので、残る誤りの位置が変わる。候補の約束は誤りが一つの単位に当たる（§18.1）"
-
-[[allowed]]
-class = "fix|E0002|write the `…` between the elements|E0020"
-left = "a prefix operator is written right before its operand"
-input = "tests/fuzz/32e948d8.onsa"
-reasons = ["S-384"]
-note = "切れた入力の `(ab, n - 1` は誤りが二つある入力（`,` の無い二つの要素と閉じていない括弧の中の `- 1`）。`,` を当てると `- 1` が前置の演算子の形として残る。候補の約束は誤りが一つの単位に当たる（§18.1）"
 
 [[allowed]]
 class = "fix|E0020|write it against its operand|E0002"
@@ -487,20 +269,6 @@ reasons = ["S-384"]
 note = "途中の文の `-x`（`T: AnyNum`）は誤りが二つある入力（捨てない値と、`Neg` の無い否定）。候補で否定が通ると、隠れていた E0418 が見える。候補の約束は誤りが一つの単位に当たる（§18.1）"
 
 [[allowed]]
-class = "fix|E0002|remove the line break|E0002"
-left = "expected `…` or `…`, found identifier"
-input = "tests/fuzz/6ae4b399.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: a line break before the `[I]` in the payload of a variant, and an `e` after the `]`, which the input has before the candidate"
-
-[[allowed]]
-class = "fix|E0020|join it to the line before|E0002"
-left = "a `…` that opens a list is written right after the token before it"
-input = "tests/fuzz/a187ec10.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: a `^` at the head of a line, and a `(` apart from the name before it on that line, which the input has before the candidate"
-
-[[allowed]]
 class = "fix|E0411|call `…`|E0418"
 left = "the type of this statement is `…`, not `…`; a statement gives no value (§#.#)"
 input = "tests/fuzz/087eb621.onsa"
@@ -529,22 +297,141 @@ reasons = ["S-384"]
 note = "an input with two errors: a line break in the parameters of a function type, and a `{` never closed"
 
 [[allowed]]
+class = "fix|E0002|write the `…` between the elements|E0020"
+left = "a callee that is no path of names is a function value; it is called with `…`"
+input = "tests/fuzz/0ea80e63.onsa"
+reasons = ["S-384"]
+note = "two errors: the elements without a `,` and the brackets never closed; the `,`, then what stays"
+
+[[allowed]]
+class = "fix|E0020|move it to the end of the line before|E0002"
+left = "expected a declaration, found `…`"
+input = "tests/fuzz/6c441628.onsa"
+reasons = ["S-384"]
+note = "two errors: the operator at the head of a line after an attribute and a `(` never closed"
+
+[[allowed]]
+class = "fix|E0020|join it to the line before|E0002"
+left = "expected newline after the declaration, found `…`"
+input = "tests/fuzz/9e4a532d.onsa"
+reasons = ["S-384"]
+note = "two errors: the `-` at the head of a line and a `{` never closed"
+
+[[allowed]]
+class = "fix|E0020|join it to the line before|E0002"
+left = "this `…` is never closed"
+input = "tests/fuzz/a187ec10.onsa"
+reasons = ["S-384"]
+note = "two errors: the `^` at the head of a line and a `(` never closed, which the check reports next"
+
+[[allowed]]
+class = "fix|E0020|join it to the line before|E0002"
+left = "the `…` of a flow call is written right after the name"
+input = "tests/fuzz/d6acd0a4.onsa"
+reasons = ["S-384"]
+note = "two errors: the `-` at the head of a line and a `(` never closed after a `~`"
+
+[[allowed]]
+class = "fix|E0020|remove the type suffix|E0020"
+left = "ranges cannot be patterns; compare in a guard"
+input = "tests/fuzz/03792f38.onsa"
+reasons = ["S-281", "S-236"]
+note = "one failure read as two forms (R-206): a number with a type suffix (`1f32`) that starts a range pattern; the shorter form from the same start is reported (S-281), and the range pattern is left for the next check, at the same place (the `leaves` of tests/spec/fixes/e0020_overlap_numeric_forms_range_pattern.onsa)"
+
+[[allowed]]
+class = "fix|E0002|write the `…` between the elements|E0020"
+left = "a `…` goes between the alternatives of a pattern, not before the first"
+input = "tests/fuzz/05af451b.onsa"
+reasons = ["S-386", "S-383"]
+note = "an arm without its `,` before a line that starts with `|`: the `,`, then the `|` before the first alternative (S-383), two steps as S-386 decided"
+
+[[allowed]]
+class = "fix|E0020|read it as decimal|E0020"
+left = "ranges cannot be patterns; compare in a guard"
+input = "tests/fuzz/10938aa7.onsa"
+reasons = ["S-281", "S-236"]
+note = "one failure read as two forms (R-206): a decimal integer with a leading zero (`017`) that starts a range pattern; the shorter form from the same start is reported (S-281), and the range pattern is left for the next check, at the same place (the `leaves` of tests/spec/fixes/e0020_overlap_numeric_forms_range_pattern.onsa)"
+
+[[allowed]]
+class = "fix|E0003|move `…` to the end of the line before|E0002"
+left = "expected newline or `…`, found identifier"
+input = "tests/fuzz/3aaaec1e.onsa"
+reasons = ["S-384", "S-216"]
+note = "an input with two errors: an `else` on the line after its `}`, and two expressions on one line in its block"
+
+[[allowed]]
+class = "fix|E0020|write one `…`|E0020"
+left = "a `…` goes between the alternatives of a pattern, not before the first"
+input = "tests/fuzz/3d32fa9b.onsa"
+reasons = ["S-389", "S-383"]
+note = "a `||` where a pattern starts: one `|`, then the `|` before the first alternative (S-383), two steps as S-389 decided"
+
+[[allowed]]
+class = "fix|E0020|take the `…` out|E0020"
+left = "ranges cannot be patterns; compare in a guard"
+input = "tests/fuzz/53410584.onsa"
+reasons = ["S-281", "S-405"]
+note = "one failure read as two forms (R-206): a prefix `+` that starts a range pattern (`(+1..)`); the `+` is reported first (S-281), and the range pattern is left for the next check, at the same place"
+
+[[allowed]]
+class = "fix|E0020|add the `…` before the point|E0020"
+left = "ranges cannot be patterns; compare in a guard"
+input = "tests/fuzz/56eeec5e.onsa"
+reasons = ["S-281", "S-236"]
+note = "one failure read as two forms (R-206): a float with a leading point (`.5`) that starts a range pattern; the shorter form from the same start is reported (S-281), and the range pattern is left for the next check, at the same place (the `leaves` of tests/spec/fixes/e0020_overlap_numeric_forms_range_pattern.onsa)"
+
+[[allowed]]
 class = "fix|E0020|write the assignment out|reading"
 left = "token # outside the edits: Ident `…` at #..# after, Comment at #..# expected"
-input = "tests/fuzz/dffd5993.onsa"
+input = "tests/fuzz/6cc24ed3.onsa"
 reasons = ["R-392"]
 note = "`x/=//`: the candidate puts a `/` right before the `//`, which reads as `///`; low, an edge of the joining of tokens"
 
 [[allowed]]
-class = "fix|E0020|write it against its operand|E0020"
-left = "a callee that is no path of names is a function value; it is called with `…`"
-input = "tests/fuzz/f7c3b7b9.onsa"
-reasons = ["R-393"]
-note = "`^` at the end of a line before `x()`: the candidate makes `^x()`, an error at the same place; low, the writer still sees an error"
+class = "fix|E0003|move `…` to the end of the line before|E0001"
+left = "`…` (U+#) cannot be written outside comments and strings: a name is written with"
+input = "tests/fuzz/c47fe1f3.onsa"
+reasons = ["S-384", "S-236", "R-219", "R-226"]
+note = "an input with two errors: an `else`, an `if` or a `{` on the next line, and a character that cannot be written outside comments right after it, which the input has before the candidate (`（` here; the other inputs of the class are regression inputs)"
 
 [[allowed]]
-class = "fix|E0020|move it to the end of the line before|E0020"
-left = "a float literal needs digits on both sides of the point"
-input = "tests/fuzz/2a9aeb10.onsa"
+class = "fix|E0003|move `…` to the end of the line before|E0002"
+left = "expected an expression, found `…`"
+input = "tests/fuzz/c94ecb45.onsa"
 reasons = ["S-384"]
-note = "an input with two errors: a `*` at the head of a line, and `2.` with no digits after the point"
+note = "an input with two errors: an `else` on the next line, and a `]` where the condition of its `if` starts, which the input has before the candidate"
+
+[[allowed]]
+class = "fix|E0020|write the number in decimal|E0020"
+left = "ranges cannot be patterns; compare in a guard"
+input = "tests/fuzz/d66681d5.onsa"
+reasons = ["S-281", "S-236"]
+note = "one failure read as two forms (R-206): an octal number (`0o17`) that starts a range pattern; the shorter form from the same start is reported (S-281), and the range pattern is left for the next check, at the same place (the `leaves` of tests/spec/fixes/e0020_overlap_numeric_forms_range_pattern.onsa)"
+
+[[allowed]]
+class = "fix|E0020|write it against its operand|E0020"
+left = "a callee that is no path of names is a function value; it is called with `…`"
+input = "tests/fuzz/2988ecc4.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: a prefix `^` at the end of a line before its operand, and the `(` of the call and the body's `{` never closed"
+
+[[allowed]]
+class = "fix|E0020|write one `…`|E0020"
+left = "a line does not start with an operator that goes on with the line before"
+input = "tests/fuzz/2a4dda0a.onsa"
+reasons = ["S-389", "S-380"]
+note = "a `||` at the head of a line in a pattern: one `|`, then the `|` at the head of the line (S-380), two steps as S-389 decided"
+
+[[allowed]]
+class = "fix|E0003|move `…` to the end of the line before|E0002"
+left = "expected field name, found integer literal"
+input = "tests/fuzz/32e8524b.onsa"
+reasons = ["S-413"]
+note = "a `{` after a constant's name on the next line in brackets (`two(N` and `{ 1 })`): the E0003 first, and what is left of the literal is reported by the next check, as S-413 decided"
+
+[[allowed]]
+class = "fix|E0020|read it as octal|E0020"
+left = "ranges cannot be patterns; compare in a guard"
+input = "tests/fuzz/4c857f74.onsa"
+reasons = ["S-281", "S-236"]
+note = "`read it as decimal` の許可（`76db4720`）と同じ入力の形の、二番目の候補。範囲の誤りが別にある入力"

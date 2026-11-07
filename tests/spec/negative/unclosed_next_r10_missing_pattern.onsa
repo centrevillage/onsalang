@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// `let = 1` stops the reading in the body, and the `{` is never closed (R10).
+// The unit ends at the item that follows it, on a line with the same or a shallower indentation. A bracket that is not closed
+// is reported whatever stopped the reading: the E0002 points at the innermost bracket that is not closed (§18.1, S-943,
+// R-371). The same file without the item after the unit is unclosed_eof_r10_missing_pattern.onsa, and the report is on the same line.
+
+fn f() -> I32 {                                 //~ E0002 @15
+  let = 1
+fn z() -> I32 { 1 }

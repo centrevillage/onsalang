@@ -1,0 +1,14 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// `0o17` is a form of another language (E0020 with a candidate) in a unit whose `{` is never closed: the report of the unit is the
+// `{` (R12), and the candidate is for the next run, so there is none.
+// The unit is the last one of the file, so it ends at the end of the file. A bracket that is not closed is reported whatever
+// stopped the reading: the E0002 points at the innermost bracket that is not closed (§18.1, S-943, R-371). The same file
+// with an item after the unit is unclosed_next_r12_other_language_form.onsa, and the report is on the same line.
+
+fn f() -> I32 {                                 //~ E0002 @15
+  let n: I32 = 0o17
+  n

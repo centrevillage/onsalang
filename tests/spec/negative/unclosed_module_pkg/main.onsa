@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1"]
+// fixes = 0
+
+// A module whose last unit has two `{` never closed (kp.onsa): the E0002 is in the module, at the innermost `{`, and the names of the
+// module are still known to this file (no E0302 for `g` and `h`), because the signature of `g` is kept (§18.1, S-943). The module
+// is read to the end of its file, so the unit ends there.
+use kp.{g, h}
+
+pub fn user() -> I32 {
+  g(true) + h()
+}

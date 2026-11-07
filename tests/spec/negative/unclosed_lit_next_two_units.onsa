@@ -1,0 +1,12 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.4"]
+// fixes = 0
+
+// Units are counted one by one: the unit with a string that is not closed reports the literal, and the unit after it, whose `{` is never closed, reports its bracket.
+
+fn a() -> Str {
+  let s = "x }                                  //~ E0001
+fn b() -> I32 {                                 //~ E0002 @15
+  1
+fn c() -> I32 { 2 }

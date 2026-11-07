@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// An `if` in a member, the member and the `impl`, all three never closed: the `if` (N7).
+// The unit is the last one of the file, so it ends at the end of the file. A bracket that is not closed is reported whatever
+// stopped the reading: the E0002 points at the innermost bracket that is not closed (§18.1, S-943, R-371). The same file
+// with an item after the unit is unclosed_next_n07_member_if_impl.onsa, and the report is on the same line.
+
+struct S { v: I32 }
+impl S {
+  fn a(self, c: Bool) -> I32 {
+    if c {                                      //~ E0002 @10
+      1

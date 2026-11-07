@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// In an `impl`, the member `fn f[ {` has a `[` never closed. The member that follows, or none, does not change the report (R14).
+// The unit is the last one of the file, so it ends at the end of the file. A bracket that is not closed is reported whatever
+// stopped the reading: the E0002 points at the innermost bracket that is not closed (§18.1, S-943, R-371). The same file
+// with an item after the unit is unclosed_next_r14_member_bracket.onsa, and the report is on the same line.
+
+struct S { a: I32 }
+
+impl S {
+  fn f[ {                                       //~ E0002 @7
+    1
+  }
+}

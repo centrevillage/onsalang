@@ -134,8 +134,8 @@ fn semicolons() {
     e0020("struct P { x: I32; y: I32 }\n", "struct P { x: I32, y: I32 }\n");
     e0020("struct P {\n  x: I32;\n}\n", "struct P {\n  x: I32\n}\n");
     e0020(&body("  g(a; b)"), &body("  g(a, b)"));
-    // No element before it: the general E0002.
-    assert_eq!(codes("pub fn t(;\n"), [Code::E0002]);
+    // No element before it: the general E0002, and the `(` is not closed (R-371).
+    assert_eq!(codes("pub fn t(;\n"), [Code::E0002, Code::E0002]);
     assert_eq!(codes(&body("  g(a, ; b)")), [Code::E0002]);
     // Not the end of a statement: the general E0002.
     assert_eq!(codes(&body("  let x = ;")), [Code::E0002]);

@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// The `{` of a `par~` never closed, in a flow whose `{` is never closed.
+// The unit is the last one of the file, so it ends at the end of the file. A bracket that is not closed is reported whatever
+// stopped the reading: the E0002 points at the innermost bracket that is not closed (§18.1, S-943, R-371). The same file
+// with an item after the unit is unclosed_next_n12_par_in_flow.onsa, and the report is on the same line.
+
+pub flow unison(f0: F32 at block) -> F32 at sample {
+  let saws = par~ i in 0 ..< 4 {                //~ E0002 @32
+    saw~(f0)

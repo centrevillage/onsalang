@@ -1,0 +1,11 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.4"]
+// fixes = 0
+
+// L10: a character literal that is not closed.
+// A literal that is not closed reads to the end of the line (§2.4), so a closing bracket on that line may be inside it: the unit is not counted for
+// brackets, and the E0002 for a bracket never closed is not given (§18.1, S-859). The report is the literal.
+
+fn a() -> Char {
+  let c = 'x }                                  //~ E0001

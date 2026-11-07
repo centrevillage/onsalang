@@ -1,0 +1,12 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.4"]
+// fixes = 0
+
+// A syntax error before the literal that is not closed: the first error of the unit is reported (the order of §18.1), and it is that one.
+// A literal that is not closed reads to the end of the line (§2.4), so a closing bracket on that line may be inside it: the unit is not counted for
+// brackets, and the E0002 for a bracket never closed is not given (§18.1, S-859). The report is the literal.
+
+fn f() -> I32 {
+  let = 1                                       //~ E0002
+  let s = "x }

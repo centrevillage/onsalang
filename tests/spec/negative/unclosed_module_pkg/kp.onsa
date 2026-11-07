@@ -1,0 +1,5 @@
+pub fn h() -> I32 { 2 }
+
+pub fn g(c: Bool) -> I32 {
+  if c {                                          //~ E0002 @8
+    1

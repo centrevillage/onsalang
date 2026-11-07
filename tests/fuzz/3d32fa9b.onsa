@@ -1,0 +1,1 @@
+fn a(x:U)->U{match x{||0}}

@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// `impl S[ {`: the `[` is never closed; the `pub` after it is a symptom (R1).
+// The unit ends at the item that follows it, on a line with the same or a shallower indentation. A bracket that is not closed
+// is reported whatever stopped the reading: the E0002 points at the innermost bracket that is not closed (§18.1, S-943,
+// R-371). The same file without the item after the unit is unclosed_eof_r01_impl_bracket.onsa, and the report is on the same line.
+
+struct S { a: I32 }
+
+impl S[ {                                       //~ E0002 @7
+  pub fn f(self) -> I32 { self.a }
+}
+fn z() -> I32 { 1 }

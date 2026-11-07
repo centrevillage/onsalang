@@ -1,0 +1,10 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// `impl S( {`: as unclosed_same_r03_struct_paren.onsa, for an `impl` (R4).
+
+impl S( {                                       //~ E0002 @7
+  pub fn f(self) -> I32 { 1 }
+}

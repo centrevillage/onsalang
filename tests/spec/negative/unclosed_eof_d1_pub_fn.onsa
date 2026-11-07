@@ -1,0 +1,14 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.5"]
+// fixes = 0
+
+// A line with `pub fn` in the body of a `{` that is never closed, indented deeper than the line of the `{`. A deeper item word does
+// not end the unit (§18.1), so the `{` is what is reported, with the item after it or without (D1).
+// The unit is the last one of the file, so it ends at the end of the file. A bracket that is not closed is reported whatever
+// stopped the reading: the E0002 points at the innermost bracket that is not closed (§18.1, S-943, R-371). The same file
+// with an item after the unit is unclosed_next_d1_pub_fn.onsa, and the report is on the same line.
+
+fn a() -> I32 {                                 //~ E0002 @15
+  1
+    pub fn b() -> I32 { 2 }

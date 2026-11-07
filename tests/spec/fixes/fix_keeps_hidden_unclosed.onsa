@@ -1,17 +1,11 @@
 // onsa.toml
 // [test]
 // spec = ["§2.4", "§18.1"]
-// fixes = 1
-//
-// [[test.fix]]
-// at = "16:16"
-// code = "E0020"
-// candidate = 1
-// leaves = ["15:19 E0002"]
+// fixes = 0
 
-// The `{` of the last item is never closed, an error the check does not
-// report before the number. The error is before the edit of the candidate,
-// which did not make it, so the candidate stays (§18.1: two errors).
-pub fn f() -> I32 {
-  let n: I32 = 0o17 //~ E0020
+// The `{` of the last item is never closed. The error at the number stopped
+// the reading, but the `{` is reported all the same (§18.1, R-371), and it
+// is the error of the unit: the candidate of the number is not offered.
+pub fn f() -> I32 { //~ E0002
+  let n: I32 = 0o17
   n

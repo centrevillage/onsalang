@@ -1,0 +1,3 @@
+fn e(c:l)->I{a=if c { }
+else 音 //~
+}

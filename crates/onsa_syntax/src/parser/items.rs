@@ -811,7 +811,7 @@ impl<'a> Parser<'a> {
                     return Err(ParseError);
                 }
                 let start = p.peek().span.start;
-                let depth = p.open.len();
+                let (depth, reported) = (p.open.len(), p.diagnostics.len());
                 let item = p.start_item(doc);
                 let around = p.unit_brackets;
                 if ctx != ItemCtx::InlineHandler {
@@ -829,6 +829,7 @@ impl<'a> Parser<'a> {
                     p.close_open(depth + 1);
                     p.skip_unit(start, base, true, false);
                     p.close_open(depth);
+                    p.failed_unit_reported(start, reported);
                     continue;
                 }
                 match p.peek_kind() {
