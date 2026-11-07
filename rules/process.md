@@ -40,7 +40,7 @@
 ### 8.3 完了の定義（Q-13）
 
 1. 対応する仕様の節を挙げる（テストの断片の `[test] spec`、Q-05）。
-2. 正例と否定例がある。否定例は、診断コードごとに 3 件以上（実際に走って照らしたマーカの数。gate の `diag-negatives` が数え、届かないコードは実装待ちの一覧の `diag-code` に置く。K-13）。
+2. 正例と否定例がある。否定例は、診断コードごとに 3 件以上（実際に走って照らしたマーカの数。gate の `diag-negatives` が数え、`tests/heavy/` の印は走らせずに数える（照らすのは gate の `heavy`）。届かないコードは実装待ちの一覧の `diag-code` に置く。K-13）。
 3. 仕様から書いた期待値付きのテスト（Q-01）が通る。
 4. 関係する組み合わせ（入れ子、分岐、`par`、クロージャ、総称、モジュール）のテストがある。
 5. 算術・変換の意味に触れたら、テストベクトル（D-16）を作り直し、差分を報告する（承認は親）。
@@ -126,7 +126,7 @@
   - 親は、`work.py take` の `work check:` の行に従う（三つの答えと意味は `work.py patch --help`）。親がコードを直したときは、主のツリーで作業の検査を回す。
     写した後に登録（文書の表、`tests/pending.toml`、`tools/builtin_names.toml`）を変えたら `--only static` を回し、`tests/pending.toml` を dev の版から作り直したときは `cargo test -p onsa_tests` も回す。文書だけの決定のコミットは `--quick` で確かめる。
   - 網羅の検査: 親が `work.py commit` でコードか事例を変えるコミットをすると、網羅の検査と基のバイナリの保存が裏で起きる（`tools/after_commit.py`）。
-    網羅の検査の重い項目（fuzz と fmt の性質）の結果を変えないコミットでは `work.py commit --no-sweep` を指定し、網羅の検査を外す（例: `cargo test` のテストのコードだけ、`tests/` の README や `tests/pending.toml` の注記だけを変える）。基のバイナリは、コードを変えたコミットなら道具が残す。迷うときは外さない。
+    網羅の検査の重い項目（fuzz、fmt の性質、`heavy`）の結果を変えないコミットでは `work.py commit --no-sweep` を指定し、網羅の検査を外す（例: `cargo test` のテストのコードだけ（`heavy_` のテストを除く）、`tests/` の README や `tests/pending.toml` の注記だけを変える）。基のバイナリは、コードを変えたコミットなら道具が残す。迷うときは外さない。
     親は区切りで、gate の要約と `work.py take` の `auto sweep:` の行を見る。FAILED なら、行が指す出力を読み、`rules/leader.md` 4.5 の形で仕分ける。
     gate の要約の `fuzz new:` の行に並ぶ入力（作業ツリーから写したものを含む）は、`fuzz.py sort` で仕分ける（`rules/leader.md` 4.5）。
     全体を自分で回す前と、続けて大きく変えるときは止める（止め方と起こし方は `tools/after_commit.py --help`）。

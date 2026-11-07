@@ -9,6 +9,7 @@
 5.2 テストの ignore の付け外しと理由の改めは `tools/ignores.py`（`list`・`passing`・`remove`・`set`）で、実装待ちの一覧の項目の付け外しは `tools/pending.py` の `list`・`remove`・`add` で行い、使い捨ての置換を書かない。
   通るようになった ignore は `ignores.py passing -p <crate> --reason <理由>` で探す。
   ignore の理由は、そのテストを通すことになる作業の ID で始める（`W3-11 U3c: …`）。gate の `ignores` が、済んだ作業か表に無い ID の ignore を落とす。
+  重いテスト（`tests/README.md` の `heavy/` の行）の理由は `heavy: …` で始める。
 
 5.3 文書（`rules/`、`spec/`、`design/`、ID のファイル、README）を編集するとき（i、docs）:
   - 先に、編集と別のコマンドで `python3 tools/docs.py swaps` を回し、vim のスワップファイルが無いことを確かめる（利用者が vim で開いて回答を書いていることがある）。
