@@ -3,7 +3,7 @@
 - `Ty` はインターン（`TyId(u32)`）: `Int`・`Float`・`Bool`・`Char`・`Unit`・`Array(TyId, Len)`・`Tuple`・`Named(DefId, Vec<TyId>)`・`Builtin(BuiltinTy, Vec<TyId>)`（`Str`・`Bytes`・`Array`・`Map`・`Set`・`Buf`・`Span`・`Ptr`）・`Fn(FnTy)`・`Param`・`ConstVal`・`Var`（推論中）・`Error`。
   intern は深さと大きさと「open か」を一度だけ計算して持つ（上限は `TYPE_DEPTH_LIMIT` 256・`TYPE_SIZE_LIMIT` 4096、§4.4、S-264）。型引数の代入は `Types::subst` の一つ（R-30）。
   クロックは型ではなく、flow の計画（§3.5）の属性である（S-102 で `Rate(Rate, TyId)` を取り除いた）。
-- 種（`Kind::{Copy, Shared, Affine}`）・配置・`rt` の破棄は、`walk.rs` の宣言を辿る一つの歩きが読み、宣言と閉じた引数の組ごとに一度だけ答える（`Known`、R-30）。
+- 種（`Kind::{Copy, Shared, Affine}`）と `rt` の破棄の要否は、`summary.rs` が宣言ごとの要約（`Facts { kind, drops, held }`）から答える（S-782）。配置は `walk.rs` の宣言を辿る歩きが読み、宣言と閉じた引数の組ごとに一度だけ答える（`Known`、R-30）。歩数の上限は配置の歩きだけに残る（S-939）。
 - 大きさと配置は、Core の降下の後のターゲットの pass が計算して Module に記録する（レビュー R-80、D-03 の追記）。`onsa interface`、`SIZE`、`_Static_assert`、プローブ、ホットリロードは記録を読む。sema は大きさを計算しない。
   W9-04 までは、`onsa interface` が型の宣言の大きさと配置を sema の `layout.rs`（`layout_of_def`）から、enum の tag の型を `layout::tag_kind` から読む（`sema` の `layout.rs` を消すのは W9-04）。
 - 推論の状態は `Infer`（`infer.rs`。変数は束縛か、整数・浮動小数のリテラルの制約を持つ未束縛）。文の順に進め、型が決まってから確かめる検査は `Deferred`（`deferred.rs`）に並べて、文ごと（`check_deferred_now`）と本体の終わり（`check_deferred_end`。整数リテラルを `I32` にした後、S-22、仕様 §4.7）に確かめる（未解決の浮動小数リテラルは E0405）。
@@ -26,7 +26,8 @@
 - 効果と `rt` の判定（レビュー R-83、S-77、D-15）: 型付けと modes（経路を見た破棄の点、R-32）の後に、「使用の記録」を作る段を一つ置く。記録は本体（関数、無名関数、`test`、定数の初期化式）ごとに、使う効果とその位置と理由（呼び出し、関数値の呼び出し、効果の操作、補間などの暗黙の確保、破棄）と、呼ぶ関数（`rt` かどうか）を持つ。
   E0601、E0901、E0903、第 2 期の E0642 などは、この記録を読む判定にする（E0902、E0904、E0905、E0610 は署名だけで決まる）。効果の判定は全ての関数で同じで、`rt` は効果行の制限と呼び出しの規則を足すだけにする。無名関数の使用は外の関数に数えず、期待する関数型の効果行と照合する（§8.1、R-27）。
   `test` の本体と定数の初期化式は `Alloc` を与えられる（D-08、§6.6）。報告は 1 つの本体につき最初の 1 件（`rt.rs::body_rules`、`effects.rs::first_use`）で、単位の中の選び方は driver の `reduce::per_unit`（S-59、S-64）。
-  E0903 の辺は `rt_checked` な関数の呼び出しだけで、辺が欠ける関数を通る閉路は報告しない（`unread.rs` の `rt_unread`・`rt_held`）。具体化で決まる循環（`T.default()`、derive が作る関数を経る形）は `rt.rs` に見えないので、`onsa_core` の `rt_cycles.rs` が降下の後の `Call` の辺で調べる（S-911）。E0601 の形は S-77。今は `rt.rs` と `effects.rs` が別々に使用を集める（使用の記録の段は W6-03）。
+  E0903 の辺は `rt_checked` な関数の呼び出しだけで、辺が欠ける関数を通る閉路は報告しない（`unread.rs` の `rt_unread`・`rt_held`）。
+  具体化で決まる循環（`T.default()`、derive が作る関数を経る形）は `rt.rs` に見えないので、`onsa_core` の `rt_cycles.rs` が降下の後の `Call` の辺で調べる（S-911）。E0601 の形は S-77。今は `rt.rs` と `effects.rs` が別々に使用を集める（使用の記録の段は W6-03）。
   効果行は「効果の宣言の ID の集合 + 効果行の変数」で表し（S-74 で名前を解決するため）、`Alloc` は lang item の一つにする。
 - lang item の表（2026-10-06、点検 C-84）: コンパイラが std の項目について知るのは、この表（std の経路 → 役割）だけで、他の文書はここを指す。std は役割の印で見分ける（R-88）。
   - 演算子の脱糖: 演算子 trait（§3.2、§6.3 の表）
