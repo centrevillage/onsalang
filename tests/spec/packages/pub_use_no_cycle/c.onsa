@@ -1,4 +1,4 @@
-pub use d.{k}                                       //~ E0200 @1
+pub use d.k                                       //~ E0200 @1
 
 pub fn j() -> I32 {
   1

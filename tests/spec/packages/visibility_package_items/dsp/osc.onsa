@@ -1,5 +1,5 @@
 // A module below another one is another module: it takes what the package shows, from the parent and from util.
-use dsp.{parent_item}
+use dsp.parent_item
 use util.{double, Pair, Mode}
 
 fn osc_step(x: I32) -> I32 {

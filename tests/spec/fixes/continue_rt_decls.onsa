@@ -13,7 +13,7 @@
 // has a syntax error, so its body is not checked. One error in each unit.
 // (`rt priv pub`, which has no candidate, is in negative/continue_rt_no_candidate.onsa.)
 
-rt use std.math.{sqrt}                              //~ E0002 @1
+rt use std.math.sqrt                              //~ E0002 @1
 
 rt struct Pt {                                      //~ E0002 @1
   x: I32,

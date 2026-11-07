@@ -10,7 +10,7 @@
 // into `+0.0`. The sums of the delayed values are worked out by hand from the input `[1.0, 2.0, 3.0, 4.0]` (`prev~(x)` is
 // 0.0 at the first sample, then the input one sample back).
 
-use std.math.{sum}
+use std.math.sum
 
 pub flow weighted(x: F32 at sample) -> F32 at sample {
   let ks = par~ i in 0 ..< 4 {

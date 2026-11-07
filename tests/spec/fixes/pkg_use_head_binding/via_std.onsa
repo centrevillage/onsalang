@@ -1,6 +1,6 @@
 use std.math
 
-use math.{sin}                                      //~ E0302
+use math.sin                                      //~ E0302
 
 pub fn run_math() -> I32 {
   1

@@ -11,7 +11,7 @@
 // is read as an error type and has no diagnostic. The type is declared in `util.onsa`, and the `impl` of it there is
 // right. When the second period opens `pub use` (§19.1), the type is a name of the module that is not declared there,
 // and the `impl` through it is E0307 as in packages/orphan_other_module. One error per unit (P-01).
-use reexp.{Point}
+use reexp.Point
 
 impl Point {
   pub fn twice(self) -> F32 { self.x * 2.0 }

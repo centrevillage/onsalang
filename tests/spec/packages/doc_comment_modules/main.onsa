@@ -12,7 +12,7 @@
 //! Documentation of the module `main`.
 
 use util.{twice, Pair}
-use late.{first}
+use late.first
 
 /// Documents `run`.
 pub fn run(p: Pair) -> I32 {

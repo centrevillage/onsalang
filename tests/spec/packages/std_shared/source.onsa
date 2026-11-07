@@ -1,4 +1,4 @@
-use std.math.{max}
+use std.math.max
 
 pub fn pick(x: I32) -> Option[I32] {
   if max(x, 0) > 0 {

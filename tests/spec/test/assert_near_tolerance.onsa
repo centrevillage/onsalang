@@ -9,7 +9,7 @@
 // The other tolerances that fail are in assert_near.onsa. `TESTFAIL` marks
 // the tests that are expected to fail.
 
-use std.dsp.test.{assert_near}
+use std.dsp.test.assert_near
 
 fn inf() -> F64 {
   F64.INFINITY

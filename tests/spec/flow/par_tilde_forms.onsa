@@ -11,7 +11,7 @@
 // in par_tilde_closed_range.onsa, the nesting in par_tilde_nested.onsa and the body without state in
 // par_tilde_stateless.onsa. The old spelling without the `~` is E0811 (negative/e0811_par_*).
 
-use std.math.{floor}
+use std.math.floor
 
 const N: U32 = 4
 

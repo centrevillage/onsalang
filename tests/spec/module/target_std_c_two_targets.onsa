@@ -23,7 +23,7 @@
 // [test]
 // spec = ["§15.2", "§15.3", "§11.8"]
 
-use std.dsp.test.{assert_near}
+use std.dsp.test.assert_near
 
 // W5-02 U3a/t, S-69 (2)(3), R-79: the E0200 of a `std` function that the C backend does not provide is judged for
 // each target of the manifest, and both targets here are built by the C backend, so the same use is reported once

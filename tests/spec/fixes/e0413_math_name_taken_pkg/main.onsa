@@ -9,7 +9,7 @@
 // `via_module.onsa` the module `abs.onsa` is imported (`use abs`), which binds the name `abs` as well. So no
 // candidate is offered (`fixes = 0`). One error per function (P-01).
 
-use util.{abs}
+use util.abs
 
 pub fn magnitude(x: F32) -> F32 {
   x.abs()                                           //~ E0413

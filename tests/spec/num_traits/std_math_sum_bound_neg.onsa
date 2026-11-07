@@ -8,7 +8,7 @@
 // these bounds is not known to have a `ZERO` or an addition), so each call is E0416. The calls from bounds that do imply
 // `AnyNum` are in std_math_sum_generic.onsa. One error per function (P-01).
 
-use std.math.{sum}
+use std.math.sum
 
 pub fn only_copy[T: Copy](a: T, b: T) -> T {
   sum([a, b]) //~ E0416

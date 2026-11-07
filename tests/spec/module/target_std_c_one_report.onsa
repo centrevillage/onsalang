@@ -16,7 +16,7 @@
 // [test]
 // spec = ["§15.2", "§18.1", "§11.8"]
 
-use std.dsp.test.{assert_near}
+use std.dsp.test.assert_near
 
 // W5-02 U3a/t, S-69 (2)(3), R-79: one use that several entries reach, or that several instantiations of a generic
 // function reach, is one report (§18.1: "一つの使用が複数の入口（テスト）や総称の関数の複数の具体化から届いても、

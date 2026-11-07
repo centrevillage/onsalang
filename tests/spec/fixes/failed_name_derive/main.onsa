@@ -5,7 +5,7 @@
 
 // A failed name in a derive list makes the list not known (S-460); the bodies are checked.
 // After the candidate, `util` is a module: the E0416 of the list is of a def the failed name held back.
-use fx.{util}                                       //~ E0302
+use fx.util                                       //~ E0302
 
 pub struct S: util {
   a: I32,

@@ -9,7 +9,7 @@
 // later; and the vdelay formula multiplies both neighbours, so an infinite neighbour with the
 // weight 0 gives NaN. (A NaN *d* is 1; that test is in vdelay_edges.onsa.)
 
-use std.math.{is_nan}
+use std.math.is_nan
 
 pub flow vd(x: F32 at sample, d: F32 at block) -> F32 at sample {
   vdelay~(x, d, 4)

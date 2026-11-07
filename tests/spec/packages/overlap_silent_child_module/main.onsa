@@ -9,10 +9,10 @@
 // `Bool`). In `a` itself the name `b` is the item (the space of the body has no clash), so
 // `b()` in `inside` is the `I32` of the item and `Bool` is E0401.
 use a
-use a.{b}
-use a.b.{c}
-use p.{q}
-use p.q.{s}
+use a.b
+use a.b.c
+use p.q
+use p.q.s
 
 pub fn item_by_the_list() -> I32 {
   let _: Bool = b()

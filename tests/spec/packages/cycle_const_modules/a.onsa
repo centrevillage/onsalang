@@ -7,7 +7,7 @@
 // (spec §18.1: "モジュールをまたぐ宣言（型と定数）の循環は、必ず `use` の循環の中にあるので E0310 だけを
 // 報告する"). The E0310 is at the first `use` of the cycle (the other `use` is a note), and the
 // constants `A` and `B` have no diagnostic of their own.
-use b.{B}                        //~ E0310
+use b.B                        //~ E0310
 
 pub const A: U32 = B + 1
 

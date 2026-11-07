@@ -1,4 +1,4 @@
-use fx.{util}                                       //~ E0302
+use fx.util                                       //~ E0302
 
 pub type A = fn() -> I32 uses {util}
 

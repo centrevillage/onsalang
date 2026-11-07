@@ -6,7 +6,7 @@
 // `std.math.abs` on a signed integer is `-a` with the same panic: it panics for
 // the minimum value, whose negation does not fit (spec §3.4).
 
-use std.math.{abs}
+use std.math.abs
 
 test "abs of ordinary signed integers" {
   let a: I64 = -5

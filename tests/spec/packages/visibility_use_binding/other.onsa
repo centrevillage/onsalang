@@ -1,6 +1,6 @@
 use main
-use main.{k}
-use util.{triple}
+use main.k
+use util.triple
 
 fn through_the_item() -> I32 {
   k(1) + main.k(2) + triple(3)

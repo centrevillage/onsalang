@@ -8,7 +8,7 @@
 // or any trait below it. The type of an empty array comes from an annotation, `let e: [F32; 0] = []`. The bits of the float
 // zero are looked at: the empty sum is `+0.0`, never `-0.0`.
 
-use std.math.{sum}
+use std.math.sum
 
 fn total[T: AnyNum, const N: U32](xs: [T; N]) -> T {
   sum(xs)

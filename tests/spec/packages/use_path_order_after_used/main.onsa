@@ -7,7 +7,7 @@
 // the `use`. This waits for that rule (S-462, W4-03 U3b); the same two lines without the call are in
 // `use_path_order_after`.
 use kp.inner
-use main.inner.{g}                                  //~ E0302
+use main.inner.g                                  //~ E0302
 
 pub fn k() -> I32 {
   g()

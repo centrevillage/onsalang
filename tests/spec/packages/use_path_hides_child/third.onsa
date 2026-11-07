@@ -1,4 +1,4 @@
-use main.{inner}
+use main.inner
 
 pub fn n() -> I32 {
   inner.h()

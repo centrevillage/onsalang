@@ -8,8 +8,8 @@
 // that `use a.b.{...}` means. Both are read and checked, and neither hides the other: the error
 // inside each file is reported, and `one`, which only `a.b.onsa` has, is not found in the module
 // `a.b` that `use` reaches (E0302). The names of the failed `use` are not used.
-use a.b.{two}
-use a.b.{one}                                       //~ E0302
+use a.b.two
+use a.b.one                                       //~ E0302
 
 pub fn x() -> I32 {
   two()

@@ -1,4 +1,4 @@
-use a.{f}
+use a.f
 
 pub fn tick() -> I32 {
   f()

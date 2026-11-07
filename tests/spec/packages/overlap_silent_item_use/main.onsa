@@ -6,7 +6,7 @@
 // the body of the item is checked (the `true` in `quad` is E0401: the item is a unit of its own), and
 // the name is drawn from neither: the uses are `Bool` for what `util` returns (`I32`) and for what the
 // item returns, and none is reported.
-use util.{quad}                                     //~ E0304
+use util.quad                                     //~ E0304
 
 pub fn quad() -> I32 {
   true                                              //~ E0401
@@ -16,7 +16,7 @@ pub fn sixth() -> F32 {
   6.0
 }
 
-use util.{sixth}                                    //~ E0304
+use util.sixth                                    //~ E0304
 
 pub fn uses_quad() -> I32 {
   let _: Bool = quad()

@@ -359,7 +359,8 @@ impl<'a> Printer<'a> {
         let (mut breaks, mut blanks) = (0, 0);
         for (i, tok) in self.cst.tokens()[from..t.index()].iter().enumerate() {
             let c = TokenIdx((from + i) as u32);
-            if tok.kind == TokenKind::Newline {
+            // A line break that goes with a token a rewrite drops (§3.4) is none.
+            if tok.kind == TokenKind::Newline && self.plan.kept(c) {
                 breaks += 1;
                 gap.breaks = true;
                 continue;

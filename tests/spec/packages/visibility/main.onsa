@@ -9,16 +9,16 @@
 // W4-03; `pub(pkg)` is not a visibility (E0020), and util.onsa has the item that it was used for with no
 // visibility word (`SHARED`, which another module of the package takes). The re-export `pub use` is E0200 in
 // this version (S-596), so the visibility of a name that it takes is not asked here.
-use util.{in_package}
-use util.{hidden} //~ E0303
-use util.{SECRET} //~ E0303
-use util.{Inner}  //~ E0303
-use util.{Mode}   //~ E0303
-use util.{Sample} //~ E0303
-use util.{Point}
-use util.{SHARED}
-use util.{missing} //~ E0302
-pub use util.{shown}                                //~ E0200 @1
+use util.in_package
+use util.hidden //~ E0303
+use util.SECRET //~ E0303
+use util.Inner  //~ E0303
+use util.Mode   //~ E0303
+use util.Sample //~ E0303
+use util.Point
+use util.SHARED
+use util.missing //~ E0302
+pub use util.shown                                //~ E0200 @1
 pub use util.{shown, in_package}                    //~ E0200 @1
 
 pub fn run() -> I32 { shown() + in_package() }

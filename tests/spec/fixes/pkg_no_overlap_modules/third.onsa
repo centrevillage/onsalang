@@ -1,4 +1,4 @@
-use util.{_gain}
+use util._gain
 
 pub fn twice() -> F32 {
   _gain() * 2.0

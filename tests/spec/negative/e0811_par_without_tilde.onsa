@@ -19,7 +19,7 @@
 // fixes/e0811_par_*, the nested forms in e0811_par_nested.onsa, the same spelling outside a flow (E0821)
 // in e0821_par_plain_outside_flow.onsa.
 
-use std.math.{floor}
+use std.math.floor
 
 const N: U32 = 4
 

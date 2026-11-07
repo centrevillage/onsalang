@@ -9,9 +9,9 @@
 // has is fine, as is the operator `%`. `is_infinite` is not in std either (S-98 (5): only `is_nan` and
 // `is_finite`).
 
-use std.math.{fmod}                                 //~ E0302
-use std.math.{is_infinite}                          //~ E0302
-use std.math.{floor}
+use std.math.fmod                                 //~ E0302
+use std.math.is_infinite                          //~ E0302
+use std.math.floor
 
 pub fn fine(x: F32, y: F32) -> F32 {
   floor(x) + (x % y)

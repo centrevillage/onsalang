@@ -16,7 +16,7 @@
 // [test]
 // spec = ["§15.2", "§11.5", "§11.8"]
 
-use std.dsp.test.{assert_near}
+use std.dsp.test.assert_near
 
 // W5-02 U3a/t, S-69 (2)(3), R-79: the build reaches a `std` function that the C backend does not provide through an
 // exported flow, and through a flow whose instance it makes (§15.2: "届くとは、入口から、… インスタンスを作る flow …

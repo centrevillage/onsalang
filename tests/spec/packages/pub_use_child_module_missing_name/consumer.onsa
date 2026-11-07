@@ -1,4 +1,4 @@
-use main.{inner}
+use main.inner
 
 pub fn the_child_module_has_no_g() -> I32 {
   inner.g()                                         //~ E0302

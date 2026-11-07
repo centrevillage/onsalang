@@ -11,8 +11,8 @@
 // `use std.math.{max}` to `third.onsa` and `util.onsa` is not edited. One `use` is added to a module at most.
 // One error per function (P-01).
 
-use std.math.{abs}
-use util.{twice}
+use std.math.abs
+use util.twice
 
 pub fn magnitude(x: F32) -> F32 {
   abs(x)                                           //~ E0413

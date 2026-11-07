@@ -6,7 +6,7 @@
 // `review-phase1/types/useorder2.onsa`): the result is the same, E0302 at `use math.{sin}`.
 
 use std.math
-use math.{sin}                                      //~ E0302
+use math.sin                                      //~ E0302
 
 pub rt fn f(x: F32) -> F32 {
   math.sqrt(x)

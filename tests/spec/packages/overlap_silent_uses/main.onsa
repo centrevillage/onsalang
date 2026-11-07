@@ -6,10 +6,10 @@
 // modules), and neither is drawn where the name is used. `double` is `I32` in `util` and `F32` in
 // `other`, so a use that went to either would be E0401 for one of `I32`, `F32`; none is reported.
 // `math.sqrt` and `math.nosuch` are paths from the name `math` of `use std.math` and `use kp.math`.
-use util.{double}
-use other.{double}                                  //~ E0304
-use util.{triple}
-use util.{triple}                                   //~ E0304
+use util.double
+use other.double                                  //~ E0304
+use util.triple
+use util.triple                                   //~ E0304
 use std.math
 use kp.math                                         //~ E0304
 

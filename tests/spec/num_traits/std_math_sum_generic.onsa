@@ -12,7 +12,7 @@
 // the module (`math.sum`) is in std_math_sum_path.onsa.
 
 use std.array
-use std.math.{sum}
+use std.math.sum
 
 fn total_any[T: AnyNum, const N: U32](xs: [T; N]) -> T {
   sum(xs)

@@ -10,7 +10,7 @@
 // overlap_local_stops_unit.onsa has the plain `let` forms; this file has the other forms of binding, in
 // the places that nest (a loop, a branch, a closure, a generic function, a method, a `test`). The
 // E0304 is in W4-04 U7a (tests/pending.toml).
-use std.math.{sin}
+use std.math.sin
 use std.math
 
 pub fn gain(x: F32) -> F32 {

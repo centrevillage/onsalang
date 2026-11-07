@@ -1,4 +1,4 @@
-use p3.{f3}
+use p3.f3
 
 pub fn prev() -> I32 { //~ E0304
   1

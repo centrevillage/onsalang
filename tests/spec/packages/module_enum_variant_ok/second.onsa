@@ -1,4 +1,4 @@
-use kp.inner.{Mode}
+use kp.inner.Mode
 
 test "a variant through the type taken by name" {
   let m = Mode.B(3)

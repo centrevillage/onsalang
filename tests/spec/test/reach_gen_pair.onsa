@@ -9,7 +9,7 @@
 // (§15.2: "使った位置で"): the `pair` and the two generators it takes are three uses at three columns of one line.
 // The tests do not run, so the `assert false` is never reached.
 
-use std.test.{Gen}
+use std.test.Gen
 use std.test.gen
 
 fn pairs() -> Gen[(U32, F32)] {

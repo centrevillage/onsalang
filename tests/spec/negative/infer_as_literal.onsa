@@ -12,7 +12,7 @@
 // type of the literal first, or using the literal where the expected type decides it, is fine.
 // One error per function (P-01).
 
-use std.math.{abs}
+use std.math.abs
 
 pub fn the_form_of_the_review() -> F32 {
   var acc = 0.0

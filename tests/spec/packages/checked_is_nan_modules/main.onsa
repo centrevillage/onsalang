@@ -8,7 +8,7 @@
 // (spec §15.1: a `use` binds the name in its module alone). Worked out by hand: -7 % 4 = -3 and its negation
 // is 3; 300 << 8 = 76800, which leaves 76800 - 65536 = 11264 in a U16; the amount 16 is the width of a U16.
 
-use std.math.{is_nan}
+use std.math.is_nan
 use util.{generic_usable, rem_neg, shifted, usable}
 
 fn val[T](o: Option[T], d: T) -> T {

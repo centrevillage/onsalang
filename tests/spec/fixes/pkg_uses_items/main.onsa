@@ -12,15 +12,15 @@
 // so the default of §18.1 checks that the units that the candidate touches have no error of the
 // stage, and that the units that had none have no error at all after it.
 
-use util.{BadFn}
-use util.{Bad_Pt}
-use util.{Bad_Shape}
-use util.{max_voices}
-use util.{Bad_Alias}
-use util.{ok_name}
-use util.{Wave}
-use util.{Cfg}
-use dsp.synth.{BadFlow}
+use util.BadFn
+use util.Bad_Pt
+use util.Bad_Shape
+use util.max_voices
+use util.Bad_Alias
+use util.ok_name
+use util.Wave
+use util.Cfg
+use dsp.synth.BadFlow
 use dsp.synth.BadFlow.{State, Params}
 
 pub fn call(x: I32) -> I32 {

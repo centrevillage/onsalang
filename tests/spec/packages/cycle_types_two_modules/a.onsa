@@ -7,7 +7,7 @@
 // (§15.1), so it lies in a cycle of `use`: the report is the E0310 of the modules only, and there is no
 // E0311 (§18.1: "モジュールをまたぐ宣言（型と定数）の循環は、必ず `use` の循環の中にあるので E0310
 // だけを報告する"). The E0310 is at the first `use` of the cycle in the order of the diagnostics.
-use b.{B}                        //~ E0310
+use b.B                        //~ E0310
 
 pub struct A {
   b: B,

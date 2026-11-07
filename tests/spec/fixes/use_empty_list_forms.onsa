@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+// fixes = 1
+
+// S-515 (U6 of W5-11): the forms of an empty `use` list, each the one E0002 of its unit (the syntax stage, §15.1):
+// a path that ends at a package (`use std.{}`), spaces in the braces, and a comment after the closing brace (a
+// comment outside the list does not stop the candidate; the candidate ends at the `}`). Each has the one
+// candidate that takes out the whole `use` (`fixes = 1`: the `.fix1` has the first candidate of every diagnostic
+// applied together, tests/README.md). The list with a line break in the braces is
+// not here: the marker of the case is a comment, and a comment inside the braces would leave no candidate, so
+// its line cannot carry the marker (it is in the report of the case, not in a file). The units around them are
+// read as before: the names the other `use`s bring in are used, and each empty list is the only error of its
+// unit. The `clean` check is in use_empty_list_clean.onsa.
+
+use std.array
+use std.{}                                          //~ E0002
+use std.array.{ }                                   //~ E0002
+use std.io.{} // a comment after the brace          //~ E0002
+use std.math.{sqrt}
+
+pub fn root(x: F32) -> F32 {
+  sqrt(x)
+}
+
+pub fn filled() -> [I32; 2] {
+  array.from_fn(fn(i: U32) -> I32 { 1 })
+}

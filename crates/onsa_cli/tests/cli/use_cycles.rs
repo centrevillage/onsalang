@@ -665,13 +665,12 @@ fn the_own_package_name_before_a_name_that_is_nothing_has_no_candidate() {
     assert!(fixes_of(&diagnostics(&doc)[0]).is_empty(), "{doc}");
 }
 
-/// §15.1, §18.1: a list with no name after the own package name (`use fx.{}`, on two lines, with a comment
-/// in it, after a module) has no candidate, and the check ends with its E0302, not an internal error.
-/// (Its E0002 is S-515, W5-11. A `pub use` of the empty list is not here: the `pub use` is an E0200 at
-/// `pub` and its path is not resolved further, S-596, and after S-515 the empty list is a syntax error that
-/// comes first.)
+/// §15.1, §18.1, S-515: a list with no name after the own package name (`use fx.{}`, on two lines, with a
+/// comment in it, after a module) is the E0002 of the syntax stage, which comes before the E0302 of the own
+/// package name, and the check ends with it, not an internal error. Its candidate takes out the whole `use`;
+/// with a comment in the list there is none.
 #[test]
-fn an_empty_list_after_the_own_package_name_has_no_candidate() {
+fn an_empty_list_after_the_own_package_name_is_the_e0002_of_the_syntax_stage() {
     let cases = [
         ("one_line", "main.onsa", "use fx.{}\n"),
         ("lines", "main.onsa", "use fx.{\n}\n"),
@@ -684,8 +683,9 @@ fn an_empty_list_after_the_own_package_name_has_no_candidate() {
         let d = fx(&format!("own_empty_{tag}"), &files);
         let (out, doc) = check_json(d.root(), &["."]);
         assert_eq!(out.code, 1, "{tag}: {}{}", out.stdout, out.stderr);
-        assert_eq!(codes(&doc), set(&["E0302"]), "{tag}: {doc}");
-        assert!(diagnostics(&doc).iter().all(|e| fixes_of(e).is_empty()), "{tag}: {doc}");
+        assert_eq!(codes(&doc), set(&["E0002"]), "{tag}: {doc}");
+        let want = if tag == "comment" { 0 } else { 1 };
+        assert!(diagnostics(&doc).iter().all(|e| fixes_of(e).len() == want), "{tag}: {doc}");
     }
 }
 

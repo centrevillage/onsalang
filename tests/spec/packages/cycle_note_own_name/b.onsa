@@ -8,7 +8,7 @@
 // given. The note says so: it shows the form that was left out and the module of the cycle (checked in
 // crates/onsa_cli/tests/cli/use_cycles.rs). The failed `use` makes no dependency (S-678), so there is no
 // E0310 as it is written.
-use fx.a.{f}                                        //~ E0302
+use fx.a.f                                        //~ E0302
 
 pub fn g() -> I32 {
   2

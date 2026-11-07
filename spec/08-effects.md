@@ -85,7 +85,7 @@ let r = handle { load(Path.new("x.txt")) } with memory_fs
 ### 8.4 `Alloc` の handler と、持ち出しの禁止
 
 ```onsa
-use std.mem.{arena}
+use std.mem.arena
 
 const N: U32 = 1024
 

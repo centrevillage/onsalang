@@ -2,8 +2,8 @@
 // flow, the namespace and every item of it are E0303 in another module. The error of a unit is the only
 // one of the unit (§18.1), so each form is a unit of its own. What the failed `use` would have taken is silent.
 use synth
-use synth.{hidden_voice}                            //~ E0303
-use synth.hidden_voice.{State}                      //~ E0303
+use synth.hidden_voice                            //~ E0303
+use synth.hidden_voice.State                      //~ E0303
 use synth.hidden_voice.{Params, reset}              //~ E0303
 
 fn silent_names(move s: State) -> State {

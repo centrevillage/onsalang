@@ -202,18 +202,26 @@ impl<'a> Parser<'a> {
     }
 
     /// The E0002 of the empty brackets from token `open` to token `close`
-    /// (§2.5, S-513): the candidate takes them out, and with a comment
-    /// between them there is none, the note giving the rule.
+    /// (§2.5, S-513): the candidate takes them out ([`Parser::report_empty`]).
     pub(super) fn empty_brackets(&mut self, open: usize, close: usize) -> ParseError {
+        let what = ("empty brackets are not written here", EMPTY_BRACKETS_RULE, "remove the empty brackets");
+        self.report_empty((open, close), open, what);
+        ParseError
+    }
+
+    /// The E0002 of an empty list, the tokens `open` and `close` (S-513,
+    /// S-515), with `what`, its message, its note giving the rule and the
+    /// title of its candidate, which takes out the tokens from `from` to
+    /// `close`; with a comment between the brackets there is none.
+    pub(super) fn report_empty(&mut self, (open, close): (usize, usize), from: usize, what: (&str, &str, &str)) {
         let span = Span::new(self.file, self.tokens[open].span.start, self.tokens[close].span.end);
-        let mut d = Diagnostic::new(Stage::Syntax, Code::E0002, span, "empty brackets are not written here")
+        let mut d = Diagnostic::new(Stage::Syntax, Code::E0002, span, what.0)
             .with_found(self.src(span).to_string())
-            .with_rule(EMPTY_BRACKETS_RULE);
+            .with_rule(what.1);
         if !(open + 1..close).any(|k| self.tokens[k].kind.is_comment()) {
-            d = d.with_fix(Fix::delete("remove the empty brackets", span));
+            d = d.with_fix(Fix::delete(what.2, Span { start: self.tokens[from].span.start, ..span }));
         }
         self.report(d);
-        ParseError
     }
 
     /// The closing bracket `close` of a list of `list` after its elements:

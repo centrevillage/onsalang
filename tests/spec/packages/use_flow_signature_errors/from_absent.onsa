@@ -1,1 +1,1 @@
-use dsp.absent.one.{process_inplace}                 //~ E0302
+use dsp.absent.one.process_inplace                 //~ E0302

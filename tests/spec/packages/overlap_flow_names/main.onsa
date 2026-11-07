@@ -35,7 +35,7 @@ pub flow wide(x: F32 at sample) -> F32 at sample {
   x
 }
 
-use util.{wide} //~ E0304
+use util.wide //~ E0304
 
 pub flow fine(x: F32 at sample) -> F32 at sample {
   x

@@ -3,7 +3,7 @@
 // spec = ["§11.5"]
 // golden = ["core"]
 
-use std.math.{sum}
+use std.math.sum
 
 const UNISON: U32 = 4
 
@@ -19,7 +19,7 @@ pub rt fn spread(i: U32, n: U32) -> F32 {
   F32.round_from(i) / F32.round_from(n - 1) - 0.5
 }
 
-use std.math.{floor}
+use std.math.floor
 
 /// 素朴なのこぎり波（§17.4 と同じ）
 pub flow saw(f0: F32 at block) -> F32 at sample {

@@ -4,4 +4,4 @@ pub fn process_inplace() -> I32 {
   1
 }
 
-use dsp.synth.one.{process_inplace}                 //~ E0304
+use dsp.synth.one.process_inplace                 //~ E0304

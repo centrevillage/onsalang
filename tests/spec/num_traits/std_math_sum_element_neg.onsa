@@ -7,7 +7,7 @@
 // E0416: `Bool`, `Char`, `Str`, a struct, a tuple, an `Option`, the unit and an array. The note that names the number
 // traits is not asked here. One error per function (P-01).
 
-use std.math.{sum}
+use std.math.sum
 
 pub struct Pair {
   a: F32,

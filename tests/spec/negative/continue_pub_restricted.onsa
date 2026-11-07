@@ -47,7 +47,7 @@ pub(super) flow lp(x: F32 at sample) -> F32 at sample {   //~ E0002
   x
 }
 
-pub(super) use std.math.{sqrt}                      //~ E0002
+pub(super) use std.math.sqrt                      //~ E0002
 
 impl Wide {
   pub(super) fn get(self) -> I32 {                  //~ E0002

@@ -13,7 +13,7 @@
 // has no marker: its generator is not an E0200. No test runs.
 
 use util.{reached_digit, plain_len}
-use consts.{LIMIT}
+use consts.LIMIT
 
 test "a function of another module" {
   assert reached_digit(2) == 2

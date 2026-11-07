@@ -29,7 +29,7 @@ rt extern "C" lib "m" {
 rt flow lp(x: F32 at sample) -> F32 at sample { x }
 rt test "t" { assert true }
 rt const A8: I32 = 1
-rt use std.math.{sqrt}
+rt use std.math.sqrt
 rt trait A9 { fn m(self) -> I32 }
 rt handler ha: Ef { fn op() -> I32 { 1 } }
 rt effect Ef { fn op() -> I32 }

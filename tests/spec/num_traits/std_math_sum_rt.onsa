@@ -8,7 +8,7 @@
 // or with a parameter of the `rt` function, and from an `rt` function that is called by another `rt` function and by a
 // function that is not `rt`. The sum of the array is the same in all of them, the negative zero and the empty sum included.
 
-use std.math.{sum}
+use std.math.sum
 
 rt fn rt_total_f32(xs: [F32; 4]) -> F32 {
   sum(xs)

@@ -9,9 +9,9 @@
 // not `util`, `use util.sub` takes `sub` and not `util`. A path that starts from a name that the
 // module did not take is E0302, whatever the other `use` lines take. The functions that start from
 // the taken names carry no mark and give nothing.
-use std.math.{sqrt}
+use std.math.sqrt
 use std.dsp
-use util.{double}
+use util.double
 use util.sub
 
 pub fn from_a_taken_item(x: F32) -> F32 {

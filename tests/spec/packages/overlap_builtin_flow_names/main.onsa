@@ -8,8 +8,8 @@
 // `use` lines: a module taken whole (`use dsp.delay`, the module `dsp/delay.onsa`) and a child module
 // taken by a list (`use dsp.{vdelay}`, `use dsp.{sample_tick}`). The items are in `items.onsa`.
 use dsp.delay //~ E0304
-use dsp.{vdelay} //~ E0304
-use dsp.{sample_tick} //~ E0304
+use dsp.vdelay //~ E0304
+use dsp.sample_tick //~ E0304
 
 pub fn fine() -> I32 {
   1

@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+// fixes = 1
+
+// S-515 (U6 of W5-11): the empty list is an error of the syntax stage, so it comes before the errors that a `use`
+// would have in the name stage (§18.1: the stages run in order, and a unit with an error in a stage is not checked
+// in the later ones). `pub use` is the E0200 of the name stage when the list has names (re-exports, §15.1), and
+// `use nope.{}` is the E0302 of a path that names no module; with an empty list each is the E0002 of the list
+// and nothing else, because the one error of the unit is the first stage's. Each has the candidate that takes
+// out the whole `use`, from the visibility to the `}`. `pub use` with a name keeps its E0200 beside them.
+// The unit `after` below is a function that no `use` here touches.
+
+                                 //~ E0002
+                                         //~ E0002
+pub use std.math.{sqrt}                             //~ E0200
+
+pub fn after(x: I32) -> I32 {
+  x + 1
+}

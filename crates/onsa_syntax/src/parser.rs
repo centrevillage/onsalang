@@ -293,9 +293,11 @@ pub(crate) struct Parser<'a> {
     /// The state of a guard reading ([`reads_as_pattern`]); `None` in every
     /// other reading.
     guard: Option<guard_reading::GuardReading>,
-    /// The visibility word of the head of the `impl` being read, which it
-    /// judges when it knows whether it is of a trait (S-491, `Parser::parse_impl`).
-    impl_word: Option<usize>,
+    /// The visibility word of the head of the `impl` or the `use` being read:
+    /// an `impl` judges it when it knows whether it is of a trait (S-491,
+    /// `Parser::parse_impl`), and the candidate of an empty `use` list starts
+    /// at it (S-515, `Parser::parse_use`).
+    head_word: Option<usize>,
 }
 
 /// What a trial reading restores ([`Parser::snapshot`]).
@@ -359,7 +361,7 @@ impl<'a> Parser<'a> {
             ends: Vec::new(),
             prefixed: Vec::new(),
             guard: None,
-            impl_word: None,
+            head_word: None,
         }
     }
 }

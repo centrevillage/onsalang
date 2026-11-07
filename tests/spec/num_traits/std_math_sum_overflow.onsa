@@ -8,7 +8,7 @@
 // signed and the unsigned widths, directly and through a generic function. A sum whose last step lands on the edge of the
 // range does not panic.
 
-use std.math.{sum}
+use std.math.sum
 
 fn total[T: AnyNum, const N: U32](xs: [T; N]) -> T {
   sum(xs)

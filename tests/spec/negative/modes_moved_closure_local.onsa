@@ -9,7 +9,7 @@
 // the closure is not a captured value (an Affine value of the outside cannot be captured, E0712 in
 // negative/closure_capture_inout_affine.onsa). The error is at the second use. One error per function (P-01).
 
-use std.array.{from_fn}
+use std.array.from_fn
 
 pub fn take(move b: Buf[F32]) -> I32 uses {Alloc} {
   0

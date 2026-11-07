@@ -5,7 +5,7 @@
 
 // A failed name in the effect row of the function type of an alias is silent; the alias is the type of a
 // field, so the users of the struct are of defs the failed name held back.
-use fx.{util}                                       //~ E0302
+use fx.util                                       //~ E0302
 
 pub type A = fn() -> I32 uses {util}
 

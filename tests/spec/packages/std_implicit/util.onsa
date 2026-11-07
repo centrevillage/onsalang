@@ -1,4 +1,4 @@
-use std.math.{max}
+use std.math.max
 
 pub fn larger(a: I32, b: I32) -> I32 {
   max(a, b)

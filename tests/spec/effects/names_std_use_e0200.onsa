@@ -7,11 +7,11 @@
 // place a row is written. The `use` itself passes, and a row is read by the unit that writes it, so each
 // unit has one diagnostic. A row of several names has one (the first, by position), as every unit has.
 
-use std.fs.{Fs}
+use std.fs.Fs
 use std.io.{Stdout, Stdin}
-use std.time.{Clock}
-use std.random.{Random}
-use std.log.{Log}
+use std.time.Clock
+use std.random.Random
+use std.log.Log
 
 pub fn with_fs() uses {Fs} {}   //~ E0200 @24
 

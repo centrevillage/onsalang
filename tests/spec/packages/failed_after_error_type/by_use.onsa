@@ -1,5 +1,5 @@
 // `Gone` is the name of a `use` that failed; `A` is an alias of it and `B` of `A`.
-use std.math.{Gone}                                 //~ E0302
+use std.math.Gone                                 //~ E0302
 
 pub type A = Gone
 

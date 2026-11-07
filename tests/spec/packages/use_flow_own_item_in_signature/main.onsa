@@ -10,7 +10,7 @@
 // the output; `in_block.onsa`: the type of a block input; `via_alias.onsa`: the type through a type alias, whose
 // error is the one of the alias). `process_inplace` itself written in those places is a function in the place
 // of a type, in `use_flow_own_item_signature_kind`.
-use main.f.{process_inplace}
+use main.f.process_inplace
 pub flow f(x: Nope at sample) -> F32 at sample {  //~ E0302
   1.0
 }

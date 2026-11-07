@@ -1,4 +1,4 @@
-use dsp.struct_in.bad.{process_inplace}
+use dsp.struct_in.bad.process_inplace
 
 pub fn f_struct_in() -> I32 {
   1

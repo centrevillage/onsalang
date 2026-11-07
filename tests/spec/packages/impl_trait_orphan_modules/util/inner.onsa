@@ -1,4 +1,4 @@
-use util.{Point}
+use util.Point
 
 pub struct Leaf {
   n: I32,

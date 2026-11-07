@@ -8,7 +8,7 @@
 // used). So the heading has no error of the names stage, and "誤りが無ければ形の E0200" (§18.1): the `impl` is the E0200 of the form, in the unit of its
 // own, and the E0302 of the `use` that failed is the only report of the name. The failed name is the trait (`Gone`, from a `use` of a module that is not
 // found), the target, and a bound of the `impl`. One error per unit (P-01).
-use std.nope.{Gone}                                 //~ E0302
+use std.nope.Gone                                 //~ E0302
 
 pub struct P {
   x: F32,

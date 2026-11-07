@@ -10,7 +10,7 @@
 // `target/` is not written in this case (the repository ignores it); the Rust test
 // `dot_names_the_target_of_the_root_and_other_files_are_not_gathered` covers it.
 
-use sub.tests.n.{nf}
+use sub.tests.n.nf
 
 pub fn mf() -> I32 {
   nf() + 1

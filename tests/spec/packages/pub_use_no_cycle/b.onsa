@@ -1,4 +1,4 @@
-pub use a.{f}                                       //~ E0200 @1
+pub use a.f                                       //~ E0200 @1
 
 pub fn g() -> I32 {
   1

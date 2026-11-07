@@ -1,0 +1,78 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// canonical = false
+// spec = ["§15.1", "§18.2"]
+
+// The lists of one bare name written loosely (S-598, spec/tools.md §3.3): a `,` after the name, a space on one
+// side or both of the braces, spaces in the braces of a path that ends at a package, and the block form without
+// the `,` after the name. The language reads all of them; `onsa fmt` writes `use a.b` for each, whatever the
+// spaces and the `,` were, and writes it again as it is (idempotent). The file is not canonical on purpose
+// (`canonical = false`); it changes today too (the spaces and the `,`), so the case passes before the rewrite of
+// the list is done, and use_one_name_rewrite.onsa is the one that needs it. The tests read the names in a
+// function, a branch, a closure, a generic function and a `par~` of a flow, the same as the path without the
+// list does (§15.1). The values are worked out by hand from the spec text.
+
+use std.array
+use std.{ math }
+use std.math.{pow,}
+use std.math.{ abs }
+use std.math.{ sqrt}
+use std.math.{max }
+use std.math.{
+  min
+}
+
+pub fn cube(x: F32) -> F32 {
+  pow(x, 3.0)
+}
+
+pub fn magnitude(x: F32) -> F32 {
+  abs(x)
+}
+
+pub fn bigger(a: I32, b: I32) -> I32 {
+  max(a, b)
+}
+
+pub fn through_the_package(a: I32, b: I32) -> I32 {
+  math.min(a, b)
+}
+
+pub fn in_a_branch(c: Bool, x: F32) -> F32 {
+  if c { sqrt(x) } else { abs(x) }
+}
+
+pub fn in_a_closure() -> [F32; 3] {
+  array.from_fn(fn(i: U32) -> F32 { sqrt(F32.round_from(i * i)) })
+}
+
+pub fn in_a_generic_function[T: AnyNum](a: T, b: T) -> T {
+  min(a, b)
+}
+
+pub flow in_a_par(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 1 ..< 3 {
+    abs(x) * F32.round_from(i)
+  }
+}
+
+test "the names a loose list of one name brings in are the names of the path without the list" {
+  assert cube(2.0) == 8.0
+  assert magnitude(-3.0) == 3.0
+  assert bigger(3, 7) == 7
+  assert through_the_package(3, 7) == 3
+}
+
+test "a branch, a closure and a generic function use them the same way" {
+  assert in_a_branch(true, 9.0) == 3.0
+  assert in_a_branch(false, -9.0) == 9.0
+  let a = in_a_closure()
+  assert a[0] == 0.0
+  assert a[1] == 1.0
+  assert a[2] == 2.0
+  assert in_a_generic_function(5, 2) == 2
+  let lo: F32 = 1.5
+  let hi: F32 = 2.5
+  assert in_a_generic_function(lo, hi) == lo
+}

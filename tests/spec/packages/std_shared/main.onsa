@@ -9,11 +9,11 @@
 // it, and `main` joins them. Every module of the package uses `std.math` too, so std is reached
 // by the root module, by two siblings and by a module in a directory (a diamond: each of them
 // reaches std, and `main` reaches all of them). Every test passes.
-use source.{pick}
-use sink.{or_zero}
-use shapes.{Pair}
-use eq.{same}
-use deep.inner.{twice_clamped}
+use source.pick
+use sink.or_zero
+use shapes.Pair
+use eq.same
+use deep.inner.twice_clamped
 
 test "an Option made in one module is taken by another" {
   assert or_zero(pick(3)) == 3

@@ -4,7 +4,7 @@
 
 // W5-22 U4/b, S-697 (spec §15.1): a `priv` field with a default is filled in another module, also when its struct has a diagnostic of the syntax stage
 // elsewhere in its unit and was read whole (the `pub` of the other module's field): no E0303 here.
-use shapes.{Held}
+use shapes.Held
 
 pub fn made() -> Held {
   Held { x: 1, ... }

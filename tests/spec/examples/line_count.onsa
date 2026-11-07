@@ -4,7 +4,7 @@
 // spec = ["§17.2"]
 
 use std.fs.{Fs, Path, IoError}
-use std.text.{count_lines}
+use std.text.count_lines
 
 pub enum ConfigError: PartialEq + Eq + Show {
   Io(IoError),

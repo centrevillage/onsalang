@@ -10,7 +10,7 @@ pub fn second() -> I32 {
 }
 
 /// A stray comment before a use.                                  //~ E0004
-use util.{twice}
+use util.twice
 
 pub fn third() -> I32 {
   twice(3)

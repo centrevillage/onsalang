@@ -1,4 +1,4 @@
-use b.{j}
+use b.j
 
 pub fn x() -> I32 {
   j()

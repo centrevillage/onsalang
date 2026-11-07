@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+
+// A list of `,` alone has no name either, but it is not the empty list of S-515: a `,` stands where a name is
+// expected, so it is the ordinary E0002 of an element that is not a name (§15.1: the list is one or more names
+// separated by `,`, and each element is a name). The empty list `{}` (use_empty_list_forms.onsa) is a
+// different diagnostic with a candidate; these are the same error as before, and the file passes with the
+// binary of today and with the one that reads the empty list. The units after them are read.
+
+use std.array
+
+use std.math.{,}                                    //~ E0002
+use std.time.{ , }                                  //~ E0002
+use std.io.{,,}                                     //~ E0002
+
+pub fn filled() -> [I32; 2] {
+  array.from_fn(fn(i: U32) -> I32 { 1 })
+}

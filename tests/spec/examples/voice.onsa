@@ -50,7 +50,7 @@ test "resonator decays" {
 }
 
 // §17.3 と同じモジュール（resonator を参照する）
-use std.math.{floor}
+use std.math.floor
 
 /// 素朴なのこぎり波（エイリアシングあり。例示用）
 pub flow saw(f0: F32 at block) -> F32 at sample {
@@ -102,7 +102,7 @@ pub flow echo(
 }
 
 use std.array
-use std.math.{exp2}
+use std.math.exp2
 
 const MAX_VOICES: U32 = 8
 

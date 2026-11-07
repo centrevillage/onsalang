@@ -17,7 +17,7 @@
 // of this version does not read yet.
 
 use std.test.gen
-use std.dsp.test.{impulse}
+use std.dsp.test.impulse
 
 // Called from the body of `tone`, at the clock `block`.
 fn scale(g: F32) -> F32 {

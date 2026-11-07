@@ -18,11 +18,11 @@
 //    unit is not checked after it (S-719): the `let z: Bool = 2` that follows it has no E0401.
 // The declarations are E0200 in `util.onsa`. One error per unit (§18.1), so each form is in its own
 // unit (a `use` is a unit of its own).
-use util.g.{x}                                      //~ E0308
+use util.g.x                                      //~ E0308
 use util.g.x                                        //~ E0308
-use util.K.{x}                                      //~ E0308
-use util.Tr.{m}                                     //~ E0308
-use util.hh.{y}                                     //~ E0308
+use util.K.x                                      //~ E0308
+use util.Tr.m                                     //~ E0308
+use util.hh.y                                     //~ E0308
 use util
 use util.{g, K, Tr, hh, Ef, Pt}
 

@@ -8,8 +8,8 @@
 // module `d.e` that has a file, in a directory `d/` that has no file of its own). The diagnostic is
 // on the item. A directory that holds no `.onsa` file is not a module (`p/empty/` and the item
 // `empty` of `p.onsa`), so it clashes with nothing.
-use p.{pp}
-use d.e.{ee}
+use p.pp
+use d.e.ee
 
 pub fn k() -> I32 {
   pp() + ee()

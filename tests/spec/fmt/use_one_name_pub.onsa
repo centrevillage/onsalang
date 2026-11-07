@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// canonical = false
+// spec = ["§15.1", "§18.2"]
+
+// `pub use` with a list of one name (S-598, spec/tools.md §3.1, §3.3): `pub use` is the E0200 of the name stage
+// (re-exports are not in this version, §15.1), and `onsa fmt` stops for the errors of the syntax stage only
+// (§3.1), so it writes the file and the list of one name goes: `pub use a.b`. The rewrite does not change the
+// verdict of any stage (§3.3), so the E0200 stays where it is. A case with a marker is not asked about `onsa fmt`,
+// so the file is read by the syntax stage only (`mode = "parse"`), which is what `onsa fmt` reads, and the E0200 of
+// each `pub use` is not marked here. A `pub use` with two names stays as it is. The file is not canonical on
+// purpose (`canonical = false`: it fails while the command leaves it as it is), and the rewrite is idempotent.
+
+pub use std.math.{sqrt}
+pub use std.{math}
+pub use std.math.{max, min}
+
+pub fn root(x: F32) -> F32 {
+  sqrt(x)
+}

@@ -7,7 +7,7 @@
 // not in its type) and an `Option`. An array of a fixed length whose elements are not numbers is E0416
 // (std_math_sum_element_neg.onsa). One error per function (P-01).
 
-use std.math.{sum}
+use std.math.sum
 
 pub fn of_number(x: F32) -> F32 {
   sum(x) //~ E0401

@@ -868,8 +868,9 @@ def brace_lists(code):
 
 def break_places(text):
     """[(key, place, line break, blank line, comment, line)]: the gap before
-    each code token of `text` but the `,` and the `return` (the tokens fmt
-    drops or moves, §3.2, §3.3: their gaps join the gap after them), keyed by
+    each code token of `text` but the `,`, the `return` and the braces of a
+    `use` list of one name (`use_list_braces`) (the tokens fmt drops or
+    moves, §3.2, §3.3: their gaps join the gap after them), keyed by
     the token (a number as `#`, its spelling may change). The place is one of
     KEPT_PLACES, `removable` or None (fmt may add or remove a line break there):
 
@@ -887,7 +888,8 @@ def break_places(text):
         continue   a continuation (§2.5): after a symbol of `continuing()`,
                    before `.` and `uses`;
         removable  any other gap inside an element: fmt removes the line
-                   break (S-497, S-505)."""
+                   break (S-497, S-505); and the gap after a `{` that fmt
+                   drops (§3.4: the line break goes with it)."""
     code, places = gap_places(text)
     return [("#" if NUMBER.fullmatch(code[j].text) else code[j].text, *rest) for j, *rest in places]
 
@@ -910,12 +912,14 @@ def gap_places(text):
             gaps.append((nl > 0, blank, comment))
             line_of.append(line)
             nl, run, blank, comment = 0, 0, False, False
-    ends, lists = attribute_ends(code), brace_lists(code)
+    ends, lists, dropped = attribute_ends(code), brace_lists(code), use_list_braces(code, gaps)
     out, stack, merged, a = [], [], None, None
     for j, t in enumerate(code):
         g = gaps[j]
         merged = g if merged is None else (merged[0] or g[0], merged[1] or g[1], merged[2] or g[2])
         comma = a is not None and any(code[k].text == "," for k in range(a + 1, j))
+        if j in dropped:
+            continue
         if t.text in (",", "return"):
             pass
         else:
@@ -924,6 +928,8 @@ def gap_places(text):
                 block = top is not None and code[top].text == "{" and not lists.get(top, False)
                 if t.text in CLOSERS:
                     place = None
+                elif j - 1 in dropped and code[j - 1].text == "{":
+                    place = "removable"
                 elif a == top:
                     place = None if block else "open"
                 elif a in ends:
@@ -949,6 +955,27 @@ def gap_places(text):
     return code, out
 
 
+def use_list_braces(code, gaps):
+    """The indices of the `{` and the `}` that fmt drops from a `use` list of
+    one bare name (`spec/tools.md` §3.3, S-598: `use a.{b}`, `use a.{b,}` is
+    `use a.b`): after `use` and a path, a name that is no keyword, and no
+    comment from the `{` to the `}` (§3.4: a comment keeps the list)."""
+    out = set()
+    for j, t in enumerate(code[:-2]):
+        if t.text != "{" or j < 3 or code[j - 1].text != ".":
+            continue
+        k = j - 2  # back over the path: a name before each `.`, `use` before its first name
+        while k >= 2 and code[k - 1].text == ".":
+            k -= 2
+        if k < 1 or code[k - 1].text != "use" or not IDENT.fullmatch(code[k].text):
+            continue
+        name, close = code[j + 1].text, j + 2 + (code[j + 2].text == ",")
+        bare = IDENT.fullmatch(name) is not None and name not in keywords()
+        if bare and close < len(code) and code[close].text == "}" and not any(gaps[i][2] for i in range(j + 1, close + 1)):
+            out.update((j, close))
+    return out
+
+
 def break_problems(before, after):
     """The places where `after` (fmt of `before`) does not keep the line
     breaks of the writer (`spec/tools.md` §3.2): a line break at a place
@@ -967,7 +994,7 @@ def break_problems(before, after):
         blocks = [(0, 0, len(want))]
     else:
         # A rewrite that `break_places` does not leave out: the gaps round it are not judged, so say so.
-        problems.append(sequence_problem("token (but `,` and `return`)", *keys))
+        problems.append(sequence_problem("token (but `,`, `return` and the braces of a `use` list of one name)", *keys))
         blocks = difflib.SequenceMatcher(None, *keys, autojunk=False).get_matching_blocks()
     for i, j, size in blocks:
         for k in range(1 if i or j else 0, size):

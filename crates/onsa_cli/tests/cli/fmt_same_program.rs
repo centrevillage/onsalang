@@ -652,7 +652,7 @@ fn c_module_generic_and_return() -> Case {
             "}",
         ],
         &[
-            "use std.math.{sqrt}",
+            "use std.math.sqrt",
             "",
             "pub fn hyp(a: F32, b: F32) -> F32 {",
             "  sqrt(a * a + b * b)",

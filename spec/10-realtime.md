@@ -1,7 +1,7 @@
 ## 10. リアルタイム（`rt`）
 
 ```onsa
-use std.math.{abs}
+use std.math.abs
 
 pub rt fn soft_clip(x: F32) -> F32 {
   x / (1.0 + abs(x))

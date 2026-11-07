@@ -1,5 +1,5 @@
-use deep.{check_level}
-use std.dsp.test.{assert_near}
+use deep.check_level
+use std.dsp.test.assert_near
 
 pub fn measure(x: F64) -> F64 {
   check_level(x)

@@ -1,6 +1,6 @@
 //! DSP helpers (spec §11.7, S-10).
 
-use math.{pow}
+use math.pow
 
 /// Decibels to linear amplitude: 10^(db / 20).
 pub rt fn db_to_amp(db: F32) -> F32 {

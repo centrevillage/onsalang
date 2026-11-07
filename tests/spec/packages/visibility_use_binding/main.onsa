@@ -9,7 +9,7 @@
 // `third.onsa` in a `use` of `main` (the names of a failed `use` are silent, S-462). `main.k` is an item of
 // `main`, so it is found. A path through `main` to the name (`main.double(1)`) is the case
 // `visibility_use_binding_path`, which waits for W4-04 (R-254).
-use util.{double}
+use util.double
 
 fn in_main() -> I32 {
   double(1)

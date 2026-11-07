@@ -1,5 +1,5 @@
 use main
-use main.{BadFlow}
+use main.BadFlow
 use main.BadFlow.{State, Params}
 
 pub fn state_taken(s: State) -> U32 {

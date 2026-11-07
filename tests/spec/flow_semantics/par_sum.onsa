@@ -10,7 +10,7 @@
 //
 // `sum` of the replicas is `std.math.sum` (§13.4).
 
-use std.math.{sum}
+use std.math.sum
 
 // Three replicas, each with its own delay: (1 + 2 + 3) * x[n-1].
 pub flow three_delays(x: F32 at sample) -> F32 at sample {

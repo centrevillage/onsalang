@@ -10,7 +10,7 @@
 // `dsp/osc.onsa`). No diagnostic, and every test passes.
 use util.{double, double_rt, LIMIT, Pair, Mode, Count, gain, exported}
 use util.gain.{State, Params}
-use dsp.{parent_item}
+use dsp.parent_item
 use dsp.osc.{osc_step, osc_mode, osc_pair}
 
 fn count_of(n: U32) -> Count {

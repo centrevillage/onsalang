@@ -9,8 +9,8 @@
 // `main.inner` is the child module (`main/inner.onsa`), and `main.k` an item. No diagnostic. Every
 // test passes; the tests tell which module each name is.
 use kp.inner
-use kp.leaf.{l}
-use main.inner.{h}
+use kp.leaf.l
+use main.inner.h
 
 pub fn k() -> I32 {
   1

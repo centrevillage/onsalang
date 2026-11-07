@@ -1,4 +1,4 @@
-use first.{Pair}
+use first.Pair
 use second.{Stereo, Wide}
 
 // The outputs are a struct named through an alias in the heading (the body writes the struct itself), and a

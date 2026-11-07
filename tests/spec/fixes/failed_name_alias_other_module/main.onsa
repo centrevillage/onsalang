@@ -5,7 +5,7 @@
 
 // The alias with a failed name in the effect row of its function type is in `other`: the user `m` in this
 // module is of a def the failed name held back.
-use other.{h}
+use other.h
 
 pub fn p() -> I32 {
   1

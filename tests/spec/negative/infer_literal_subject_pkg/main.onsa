@@ -7,7 +7,7 @@
 // the call is the calling function's, wherever the callee is declared, so the rule is that of a literal in
 // the same module (infer_pkg/main.onsa has the same for E0406 and E0420). One error per function (P-01).
 
-use lib.{id}
+use lib.id
 
 pub fn call_on_a_result_of_another_module(x: I32) -> I32 {
   let z = id(17)

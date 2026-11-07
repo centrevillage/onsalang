@@ -7,7 +7,7 @@
 // and there is no cycle in any of the three pairs. The item of each `q` with the name is E0304 in its own
 // module too (§15.1), which is the second mark of each pair. (The function `panic` is in
 // `clash_edge_prelude_panic`.)
-use q1.{Option}                                     //~ E0304
+use q1.Option                                     //~ E0304
 
 pub fn f1() -> I32 {
   1

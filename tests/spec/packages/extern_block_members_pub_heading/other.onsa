@@ -1,4 +1,4 @@
-use main.{Handle}
+use main.Handle
 
 pub fn pub_head(h: Handle) -> I32 {                 //~ E0303
   4

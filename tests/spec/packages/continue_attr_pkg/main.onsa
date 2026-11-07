@@ -14,8 +14,8 @@
 // not there.
 
 use util.{kept_pub, kept_none_rt, kept_pub_rt, KeptPubStruct, kept_none_foreign}
-use util.{kept_priv}                                //~ E0303
-use util.{KeptPrivStruct}                           //~ E0303
+use util.kept_priv                                //~ E0303
+use util.KeptPrivStruct                           //~ E0303
 
 fn reads(s: KeptPubStruct) -> F32 {
   kept_pub(1.0) + kept_none_rt(2.0) + kept_pub_rt(3.0) + kept_none_foreign(4.0) + s.x

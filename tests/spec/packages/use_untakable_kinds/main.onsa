@@ -9,9 +9,9 @@
 // says why and how to write them: through the type, `use shapes.{Shape}` and `Shape.Circle`). The names are
 // failed names, so where they are used nothing more is reported. The type itself is taken as always.
 use shapes.{Shape, Point}
-use shapes.Shape.{Circle}                           //~ E0302
-use shapes.Point.{new}                              //~ E0302
-use shapes.Point.{ORIGIN}                           //~ E0302
+use shapes.Shape.Circle                           //~ E0302
+use shapes.Point.new                              //~ E0302
+use shapes.Point.ORIGIN                           //~ E0302
 
 pub fn the_failed_names_are_silent() -> Point {
   let c = Circle(1.0)

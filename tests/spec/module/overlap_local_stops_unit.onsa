@@ -5,7 +5,7 @@
 // S-681: a local with the name of a binding that is visible (a name taken by a `use`, a module, an item) is
 // E0304 on the local (§5.1), and the unit stops there (§18.1: the first error of a unit), so what comes after
 // it in the same unit is not reported: the `Bool` of each `y` would be E0401. The E0304 is in W4-04.
-use std.math.{sin}
+use std.math.sin
 use std.math
 
 pub fn double(x: F32) -> F32 {

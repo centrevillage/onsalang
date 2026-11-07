@@ -9,7 +9,7 @@
 
 use std.math
 
-use std.math.{sin}                                      //~ E0302
+use std.math.sin                                      //~ E0302
 
 pub fn root(x: F32) -> F32 {
   math.sqrt(x)

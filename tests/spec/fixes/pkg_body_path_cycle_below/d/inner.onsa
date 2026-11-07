@@ -1,4 +1,4 @@
-use c.{f}
+use c.f
 
 pub fn leaf() -> I32 {
   f()

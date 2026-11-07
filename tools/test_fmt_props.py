@@ -574,8 +574,23 @@ class FmtProps(TempRepo):
             (body("two(a", "    , b)"), body("two(a,", "    b)"), []),
             (body("two(a // c", "    , b)"), body("two(a, // c", "    b)"), []),
             ("fn f() -> I32 {\n  return 1\n}\n", "fn f() -> I32 {\n  1\n}\n", []),
+            ("use a.{b}\npub use a.b.{\n  c,\n}\nuse use.{d}\n", "use a.b\npub use a.b.c\nuse use.d\n", []),
+            # A comment in the list keeps it (§3.4); a name that is a keyword is no bare name.
+            ("use a.{\n  b, // c\n}\n", "use a.{\n  b, // c\n}\n", []),
+            ("use a.{b, // c\n}\n", "use a.b // c\n", ["token (but `,`, `return` and the braces of a `use` list "
+                                                      "of one name) #3: '{' became 'b'"]),
+            ("use a.{test}\n", "use a.test\n", ["token (but `,`, `return` and the braces of a `use` list of one "
+                                                "name) #3: '{' became 'test'"]),
+            # The line break after the dropped `}` ends the item and stays; the one after the dropped `{` goes.
+            ("use a.{b}\nfn f() {}\n", "use a.b fn f() {}\n",
+             ["line 2, before `fn` (line): the line break of the writer is gone"]),
+            ("use a.{\n  b\n}\nfn f() {}\n", "use a.b fn f() {}\n",
+             ["line 4, before `fn` (line): the line break of the writer is gone"]),
+            ("use a.{\n  b\n}\nfn f() {}\n", "use a.b\nfn f() {}\n", []),
+            ("use a.{b}\n", "use a.\n  b\n", ["line 1, before `b` (removable): the line break inside an element stays"]),
             # Another token changed: said, and the gaps round it are not judged.
-            (body("g(x", "    as F64)"), body("g(y", "    as F64)"), ["token (but `,` and `return`) #7: 'x' became 'y'"]),
+            (body("g(x", "    as F64)"), body("g(y", "    as F64)"), ["token (but `,`, `return` and the braces of a "
+                                                                      "`use` list of one name) #7: 'x' became 'y'"]),
         ):
             with self.subTest(before=before, after=after):
                 self.assertEqual(fmt_props.break_problems(before, after), want)

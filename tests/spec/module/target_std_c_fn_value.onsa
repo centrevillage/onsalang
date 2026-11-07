@@ -16,7 +16,7 @@
 // [test]
 // spec = ["§15.2", "§6.1", "§11.8"]
 
-use std.dsp.test.{assert_near}
+use std.dsp.test.assert_near
 
 // W5-02 U3a/t, S-69 (2)(3), R-79: the build reaches a `std` function that the C backend does not provide through a
 // function that an exported item uses as a value (§15.2: "届くとは、入口から、… 値として使う関数 … を静的にたどれる

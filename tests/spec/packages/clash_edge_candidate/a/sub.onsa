@@ -1,4 +1,4 @@
-use b.{g}                                           //~ E0304
+use b.g                                           //~ E0304
 
 pub fn g() -> I32 {
   2

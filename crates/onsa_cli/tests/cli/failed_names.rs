@@ -915,7 +915,6 @@ fn an_empty_list_takes_no_name_and_silences_nothing() {
 /// §15.1, S-515: the empty list is an E0002 of the `use`. The candidate takes the whole `use` off (§15.1),
 /// and after it only the E0302 is left. With a comment inside there is no candidate.
 #[test]
-#[ignore = "W5-11: the empty list of a use is not an E0002 yet (S-515)"]
 fn an_empty_list_is_an_e0002_whose_candidate_takes_the_use_off() {
     let main = format!("use util.{{}}\n{}", user("double", "double(1)"));
     let d = with_main("empty_list", &main);

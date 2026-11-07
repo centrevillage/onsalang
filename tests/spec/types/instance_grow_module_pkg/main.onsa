@@ -7,7 +7,7 @@
 // call in `lib.onsa` (the mark is read in the file of a module of the package), and the call of
 // `grow` in `main.onsa` has no diagnostic.
 
-use lib.{grow}
+use lib.grow
 
 @export
 pub fn root() -> U32 {

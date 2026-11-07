@@ -3,7 +3,7 @@
 // mode = "none"
 // spec = ["§8.4"]
 
-use std.mem.{arena}
+use std.mem.arena
 
 const N: U32 = 1024
 

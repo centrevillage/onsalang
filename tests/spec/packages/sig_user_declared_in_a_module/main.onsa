@@ -8,7 +8,7 @@
 // module that does not take it (other.onsa), `Sig` is the name that does not resolve, so it is the rate written
 // as a type and it is E0020 (name stage, §11.3), and not the E0302 of an unknown name (§18.1).
 use util
-use util.{Sig}
+use util.Sig
 use other
 
 pub fn taken_by_a_use(x: Sig[F32]) -> F32 {

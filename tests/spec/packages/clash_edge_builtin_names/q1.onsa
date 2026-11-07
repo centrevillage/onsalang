@@ -1,4 +1,4 @@
-use p1.{f1}
+use p1.f1
 
 pub enum Option { //~ E0304
   Nothing,

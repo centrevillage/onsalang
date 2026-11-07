@@ -9,7 +9,7 @@
 // file. The items are in `fns.onsa` and `flows.onsa`. The other names of the prelude are in
 // `overlap_prelude_names`.
 use panic //~ E0304
-use kp.{panic} //~ E0304
+use kp.panic //~ E0304
 
 pub fn fine() -> I32 {
   1

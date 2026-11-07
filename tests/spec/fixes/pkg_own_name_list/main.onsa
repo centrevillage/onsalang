@@ -9,7 +9,7 @@
 // `use fx.one` (in whole.onsa) takes the package name off. Each file has one such `use`, and the
 // candidate is the only one.
 
-use fx.{util}                                       //~ E0302
+use fx.util                                       //~ E0302
 
 pub fn run() -> I32 {
   1

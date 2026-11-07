@@ -15,6 +15,6 @@
 // has no error (§15.3 `edition` row, §18.1; S-597). The column of the main position is the name
 // `package` in the heading (the spec fixes the line only).
 
-use util.{g}
+use util.g
 
 pub fn f() -> I32 { g() }

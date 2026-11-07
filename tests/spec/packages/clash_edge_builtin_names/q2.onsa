@@ -1,4 +1,4 @@
-use p2.{f2}
+use p2.f2
 
 pub struct F32 { //~ E0304
   v: I32,

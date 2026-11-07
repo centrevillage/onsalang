@@ -278,9 +278,10 @@ impl<'a> Parser<'a> {
         match keyword {
             TokenKind::KwUse => {
                 self.read_form(word, None, None);
+                self.head_word = Some(word);
             }
             // Of a type or of a trait: known after its `for` ([`Parser::parse_impl`]).
-            TokenKind::KwImpl => self.impl_word = Some(word),
+            TokenKind::KwImpl => self.head_word = Some(word),
             TokenKind::KwExtern => self.read_word(word, Container),
             TokenKind::KwTest => self.read_word(word, Inheriting),
             _ if matches!(ctx, ItemCtx::Trait | ItemCtx::Effect | ItemCtx::Handler | ItemCtx::InlineHandler) => {
@@ -566,10 +567,10 @@ impl<'a> Parser<'a> {
     }
 
     /// The `impl` of a type or of a trait; the visibility word of its head
-    /// (`impl_word`) is judged after its `for`, and not when the head fails
+    /// (`head_word`) is judged after its `for`, and not when the head fails
     /// before it (S-491, [`Parser::judge_word`]).
     pub(super) fn parse_impl(&mut self, _: ItemCtx) -> PResult<()> {
-        let word = self.impl_word.take();
+        let word = self.head_word.take();
         let m = self.start(NodeKind::Impl)?;
         self.expect(TokenKind::KwImpl)?;
         self.parse_generics_opt()?;
@@ -639,12 +640,15 @@ impl<'a> Parser<'a> {
     }
 
     pub(super) fn parse_use(&mut self, _: ItemCtx) -> PResult<()> {
+        let word = self.head_word.take();
         let m = self.start(NodeKind::Use)?;
+        let start = word.unwrap_or(self.peek_index());
         self.expect(TokenKind::KwUse)?;
         let tree = self.start(NodeKind::UseTree)?;
-        // The head of the path of a `use` reads a keyword as a name, as
-        // after a `.` (S-20, S-37, S-371: `use test.{Gen}` in std).
-        // SPEC-GAP(S-443): a reserved word there too (`use clock.{x}`).
+        // The head of the path of a `use` reads a keyword and a reserved word
+        // as a module name, as after a `.` (S-20, S-37, S-371, S-443:
+        // `use test.{Gen}` in std, `use clock.{x}`); the name it takes is
+        // read as a declaration's ([`Parser::check_taken`], S-594).
         let mut path = vec![self.parse_name_after_dot("module path")?];
         let mut listed = false;
         loop {
@@ -655,6 +659,13 @@ impl<'a> Parser<'a> {
                 break;
             }
             if self.at(TokenKind::LBrace) {
+                // An empty list is read whole after its E0002: the `use` takes no name (S-515, R-180).
+                // The candidate takes out the whole `use` from `start` (its visibility word or
+                // `use`), as the braces alone would make another program.
+                if let Some(close) = crate::scan::empty_brackets(&self.tokens, self.peek_index()) {
+                    let what = ("a `use` list with no name", EMPTY_USE_LIST_RULE, "remove the `use`");
+                    self.report_empty((self.peek_index(), close), start, what);
+                }
                 let n = self.start(NodeKind::UseNames)?;
                 self.bump();
                 self.with_nl(false, |p| {
@@ -931,3 +942,4 @@ pub(super) enum VisRead {
 
 /// The note of a visibility of another language (§15.1).
 const VISIBILITY_RULE: &str = "the visibility is `pub` (out of the package), no word (within the package) or `priv` (within the module); there is no other form (§15.1)";
+const EMPTY_USE_LIST_RULE: &str = "a `use` list is one or more names; a `use` that brings in nothing is not written, and without its braces it would be another `use`, which brings in the module (`use std.math` brings in `math`, §15.1)";

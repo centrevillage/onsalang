@@ -1,4 +1,4 @@
-use fx.a.{f}                                        //~ E0302
+use fx.a.f                                        //~ E0302
 
 pub fn g() -> I32 {
   2

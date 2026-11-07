@@ -17,7 +17,7 @@
 // So the smallest delay is 1 sample (d = 1.0 is prev~), d is clamped to [1, MAX], and the values
 // before the start are init. The expected sequences below follow from that formula by hand.
 
-use std.dsp.test.{impulse}
+use std.dsp.test.impulse
 
 pub flow vd(x: F32 at sample, d: F32 at block) -> F32 at sample {
   vdelay~(x, d, 4)

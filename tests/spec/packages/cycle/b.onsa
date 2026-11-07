@@ -1,3 +1,3 @@
-use a.{f}
+use a.f
 
 pub fn g() -> I32 { f() }

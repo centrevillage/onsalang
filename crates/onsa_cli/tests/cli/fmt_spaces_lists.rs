@@ -581,7 +581,11 @@ fn an_effect_row_and_a_use_list_get_no_space_inside_the_braces() {
         case("a use list", &["use a.{ x, y }"], &["use a.{x, y}"]),
         case("a use list, without spaces", &["use a.{x,y}"], &["use a.{x, y}"]),
         case("a use list, more spaces", &["use a.b.{   x ,   y   }"], &["use a.b.{x, y}"]),
-        case("a use list of one name", &["use std.math.{ sqrt }"], &["use std.math.{sqrt}"]),
+        case(
+            "a use list of one name, written without the list (S-598)",
+            &["use std.math.{ sqrt }"],
+            &["use std.math.sqrt"],
+        ),
         case("a use list with a tab", &["use a.{\tx,\ty\t}"], &["use a.{x, y}"]),
     ];
     expect_fmt("effect_use_braces", &cases);
@@ -1450,7 +1454,7 @@ fn the_forms_of_a_use_list_are_kept() {
             &["use a.{", "  x,", "  y}"],
             &["use a.{", "  x,", "  y,", "}"],
         ),
-        case("a block form of one name", &["use a.{", "  x", "}"], &["use a.{", "  x,", "}"]),
+        case("a block form of one name, written without the list (S-598)", &["use a.{", "  x", "}"], &["use a.x"]),
         case(
             "a block form, not indented",
             &["use std.math.{", "sqrt,", "      sum,", "}"],

@@ -9,7 +9,7 @@
 //! Module documentation, at the start of the file.
 
 // A stray doc comment before a `use`.              //~ E0004
-use std.math.{sqrt}
+use std.math.sqrt
 
 /// This one is attached to `root`.
 pub fn root(x: F32) -> F32 {

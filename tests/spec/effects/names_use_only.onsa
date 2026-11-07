@@ -6,11 +6,11 @@
 // modules of the table of §8.2 (`std.fs`, `std.io`, `std.time`, `std.random`, `std.log`) hold the
 // effects, and a module is taken as a whole too.
 
-use std.fs.{Fs}
+use std.fs.Fs
 use std.io.{Stdout, Stdin}
-use std.time.{Clock}
-use std.random.{Random}
-use std.log.{Log}
+use std.time.Clock
+use std.random.Random
+use std.log.Log
 use std.fs
 use std.io
 use std.time

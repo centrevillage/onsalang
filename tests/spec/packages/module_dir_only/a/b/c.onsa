@@ -1,4 +1,4 @@
-use a.b.d.{h}
+use a.b.d.h
 
 pub fn f() -> I32 {
   h() - 1

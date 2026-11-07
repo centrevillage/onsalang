@@ -1,5 +1,5 @@
-use a.{in_package_parent}
-use a.{from_parent}                                 //~ E0303
+use a.in_package_parent
+use a.from_parent                                 //~ E0303
 
 priv fn from_child() -> I32 {
   3

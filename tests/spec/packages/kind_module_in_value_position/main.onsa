@@ -14,7 +14,7 @@
 // error per unit (§18.1), so each form is in its own unit; the places (a branch, a closure, a
 // match arm, a `test`, a `const`) give the same code.
 use util
-use util.{Q}
+use util.Q
 use inner
 use std.math
 

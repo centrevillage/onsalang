@@ -12,9 +12,9 @@
 // parameter of a failed type, the head of a path of a failed type (`Gone.make(…)`), a failed function (`helper(…)`)
 // and a field of a parameter of a failed type.
 
-use std.math.{Gone}                                 //~ E0302
-use std.math.{Missing}                              //~ E0302
-use std.math.{helper}                               //~ E0302
+use std.math.Gone                                 //~ E0302
+use std.math.Missing                              //~ E0302
+use std.math.helper                               //~ E0302
 
 pub struct Holder {
   m: Gone,

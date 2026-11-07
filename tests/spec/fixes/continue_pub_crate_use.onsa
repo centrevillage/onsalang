@@ -10,9 +10,9 @@
 // not cut), so a real error of the module, an E0302 for a name that no `use` brings in, is still
 // reported where it is.
 
-pub(crate) use std.math.{sqrt}                      //~ E0020
+pub(crate) use std.math.sqrt                      //~ E0020
 
-pub (pkg) use std.math.{floor}                      //~ E0020
+pub (pkg) use std.math.floor                      //~ E0020
 
 priv use std.math                                   //~ E0020
 

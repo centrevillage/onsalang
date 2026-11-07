@@ -13,13 +13,13 @@
 // Mid` with no word is taken. The names are not E0302 (the declaration is read on), and the
 // places that use them are read as usual. One error in each unit.
 
-use shapes.{P}
-use shapes.{Q}
-use shapes.{c_abs}
-use shapes.{c_mid}
-use shapes.{c_neg}                                  //~ E0303
-use shapes.{Raw}                                    //~ E0303
-use shapes.{Mid}
+use shapes.P
+use shapes.Q
+use shapes.c_abs
+use shapes.c_mid
+use shapes.c_neg                                  //~ E0303
+use shapes.Raw                                    //~ E0303
+use shapes.Mid
 
 fn calls_public() -> I32 {
   let p = P.new()

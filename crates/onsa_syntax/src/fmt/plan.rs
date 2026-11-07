@@ -63,8 +63,11 @@ impl Plan {
         plan.numbers(cst, src);
         for &n in nodes {
             let forms = shape::forms(cst, n);
+            // A list whose brackets a rewrite drops has no form to write (S-598).
             for &(pair, form) in &forms {
-                plan.list(cst, n, pair, form);
+                if plan.kept(pair.0) {
+                    plan.list(cst, n, pair, form);
+                }
             }
             plan.attributes(cst, n, forms.first().map(|&(_, form)| form));
             plan.forms.extend(forms.into_iter().map(|((open, _), form)| (open, form)));

@@ -8,7 +8,7 @@
 // not an error of their own. Each local is a real binding: the `Bool` annotation in each unit is E0401
 // (the local `x` is an `I32`), which says that the name reads the local and is not silenced like a
 // name of a failed `use`. The only E0304 would be against a real binding (overlap_local_failed_use_real.onsa).
-use std.nothing.{x}                                 //~ E0302
+use std.nothing.x                                 //~ E0302
 use std.nothing.{y, z}                              //~ E0302
 
 pub fn let_with_the_name() -> I32 {

@@ -8,7 +8,7 @@
 // built-in flow), and the `use` that takes it is E0304 here: a declaration with an error in it is
 // still read as a name (§18.1), so the `use` finds the item and binds it, and the binding is the
 // error. No candidate.
-use util.{prev} //~ E0304
+use util.prev //~ E0304
 
 pub fn fine() -> I32 {
   1

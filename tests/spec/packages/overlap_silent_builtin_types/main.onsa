@@ -22,7 +22,7 @@ pub fn typed_literal() -> I32 {
   0
 }
 
-use util.{Bool}                                     //~ E0304
+use util.Bool                                     //~ E0304
 
 pub fn takes_bool(b: Bool) -> Bool {
   b

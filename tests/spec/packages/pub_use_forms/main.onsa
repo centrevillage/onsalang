@@ -9,11 +9,11 @@
 // its definition, `use util.inner.{g}`). The names it takes are failed names (§18.1): nothing is reported
 // where they are used, in this module and in `consumer.onsa`, and they are no binding that another name of
 // the same spelling can clash with.
-pub use util.{shown}                                //~ E0200 @1
+pub use util.shown                                //~ E0200 @1
 pub use util.other                                  //~ E0200 @1
 pub use util.{third, fourth}                        //~ E0200 @1
 pub use util.inner                                  //~ E0200 @1
-pub use std.math.{sqrt}                             //~ E0200 @1
+pub use std.math.sqrt                             //~ E0200 @1
 pub use std.math                                    //~ E0200 @1
 
 pub fn failed_item_names_are_silent() -> I32 {

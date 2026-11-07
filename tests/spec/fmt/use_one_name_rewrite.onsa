@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// canonical = false
+// spec = ["§15.1", "§18.2"]
+
+// A `use` list of one bare name (S-598, spec/tools.md §3.3): `onsa fmt` writes the form without the list, `use a.b`
+// for `use a.{b}`, and the two forms bring in the same binding (§15.1). The file is written in the canonical form
+// of today in every other way, so the list of one name is the only thing `onsa fmt` has to change, and the case
+// needs the rewrite to pass (`canonical = false`: it fails while the command leaves the file as it is). The
+// lists: on one line, a path that ends at a package (`use std.{math}` is `use std.math`), and the block form of
+// today (a line break after `{`, the name, a `,`, the `}` on a line of its own). The comment over a `use` is outside
+// the list and stays where it is written; the one at the end of the line of a `}` belongs to the `}`, the last code
+// of its line, and keeps that list (§3.4), so its line is unchanged. The spaces, the `,` after the name and the
+// form without a `,` are in use_one_name_loose.onsa. The tests read the names as before. The lists of two names or more and the lists with a comment inside are in use_one_name_kept.onsa. The
+// values are worked out by hand from the spec text.
+
+use std.array
+use std.{math}
+use std.math.{sqrt}
+use std.math.{
+  floor,
+}
+// A comment over a `use` stays over it.
+use std.math.{ceil}
+use std.math.{min} // and one after it
+
+pub fn root(x: F32) -> F32 {
+  sqrt(x)
+}
+
+pub fn down_and_up(x: F32) -> [F32; 2] {
+  [floor(x), ceil(x)]
+}
+
+pub fn smaller(a: I32, b: I32) -> I32 {
+  min(a, b)
+}
+
+pub fn through_the_package(a: I32, b: I32) -> I32 {
+  math.max(a, b)
+}
+
+pub fn in_a_closure() -> [F32; 3] {
+  array.from_fn(fn(i: U32) -> F32 { sqrt(F32.round_from(i * i)) })
+}
+
+test "the names a list of one name brings in are the names of the path without the list" {
+  assert root(16.0) == 4.0
+  let ends = down_and_up(2.5)
+  assert ends[0] == 2.0
+  assert ends[1] == 3.0
+  assert smaller(3, 7) == 3
+  assert through_the_package(3, 7) == 7
+  let a = in_a_closure()
+  assert a[0] == 0.0
+  assert a[1] == 1.0
+  assert a[2] == 2.0
+}

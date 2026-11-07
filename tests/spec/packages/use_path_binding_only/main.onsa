@@ -8,7 +8,7 @@
 // module `inner` or `leaf`; `main.k` is its own item. Neither a name taken nor a module taken is a
 // definition of `main`. The names of the failed `use` are not used.
 use kp.inner
-use kp.leaf.{l}
+use kp.leaf.l
 
 pub fn k() -> I32 {
   1

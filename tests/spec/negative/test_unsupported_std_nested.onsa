@@ -10,7 +10,7 @@
 // handle (here, each call of a generator), not at the test that reaches it.
 // The test that only passes still does not run.
 
-use std.test.{Gen}
+use std.test.Gen
 use std.test.gen
 
 fn unit_range() -> Gen[F32] {

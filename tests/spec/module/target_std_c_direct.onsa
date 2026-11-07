@@ -16,7 +16,7 @@
 // [test]
 // spec = ["§15.2", "§11.8", "§18.1"]
 
-use std.dsp.test.{assert_near}
+use std.dsp.test.assert_near
 use std.test.gen
 
 // W5-02 U3a/t, S-69 (2)(3), R-79: a `std` function that the C backend does not provide (§15.2: "全ての変換先が与え

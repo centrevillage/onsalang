@@ -16,7 +16,7 @@
 // [test]
 // spec = ["§15.2", "§11.8", "§6.1"]
 
-use std.dsp.test.{assert_near}
+use std.dsp.test.assert_near
 use std.array
 
 // W5-02 U3a/t, S-69 (2)(3), R-79: the build reaches a `std` function that the C backend does not provide through

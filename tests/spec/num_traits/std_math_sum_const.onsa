@@ -9,7 +9,7 @@
 // from `xs[0]`, the negative zero kept, and `ZERO` for an empty array. An overflow in the initializer is E0419
 // (std_math_sum_const_neg.onsa).
 
-use std.math.{sum}
+use std.math.sum
 
 const WEIGHTS: [F32; 4] = [0.5, 0.25, 0.125, 0.125]
 const TOTAL: F32 = sum(WEIGHTS)

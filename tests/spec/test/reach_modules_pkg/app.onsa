@@ -3,7 +3,7 @@
 // mode = "test"
 // spec = ["§15.2", "§15.1", "§18.2", "§11.8"]
 
-use util.{digit}
+use util.digit
 
 // W5-02 U3a/t, S-69 (2)(3), R-79: `onsa test` reaches a `std` function that the interpreter does not provide through the
 // modules of the package (§15.1: a `use` is a dependency; §15.2: "届くとは、入口から、呼ぶ関数、…を静的にたどれる

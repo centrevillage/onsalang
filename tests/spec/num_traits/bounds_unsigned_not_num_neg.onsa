@@ -8,7 +8,7 @@
 // of a type parameter whose bound is `Unsigned`. `Int` and `AnyNum` do not imply `Num` either (an integer can be unsigned),
 // so a parameter with only those is no `Num`. One error per item (P-01).
 
-use std.math.{abs}
+use std.math.abs
 
 fn want_num[T: Num](x: T) -> T {
   x

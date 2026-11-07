@@ -11,5 +11,5 @@
 // modules of this package: `later_absent.onsa`, `has_then_absent.onsa`, `absent_then_has.onsa`,
 // `absent_twice.onsa`. The E0304 is a diagnostic of the names stage, so the `use` that has it has no E0302 of
 // the types stage (a unit with an error of an earlier stage is not checked by the later one, §18.1).
-use dsp.synth.one.{process_inplace}                 //~ E0302
-use dsp.other.{process_inplace}                     //~ E0304
+use dsp.synth.one.process_inplace                 //~ E0302
+use dsp.other.process_inplace                     //~ E0304

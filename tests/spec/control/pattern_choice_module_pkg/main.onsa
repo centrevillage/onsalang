@@ -6,7 +6,7 @@
 // of another module, imported by name and written with the module's name (§15.1), is fine.
 
 use kinds
-use kinds.{Kind}
+use kinds.Kind
 
 pub fn imported_by_name(k: Kind) -> U32 {
   match k {

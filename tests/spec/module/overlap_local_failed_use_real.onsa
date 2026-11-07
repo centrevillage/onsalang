@@ -7,9 +7,9 @@
 // std.nothing.{gain}` fails before the item `gain`. A local or an argument with the name is E0304
 // against the real binding (the `use` of `sin`, the item `gain`), and the other diagnostic of the file
 // is the E0302 of the failed `use` alone. The E0304 is in W4-04 U7a (tests/pending.toml).
-use std.math.{sin}
-use std.nothing.{sin}                               //~ E0302
-use std.nothing.{gain}                              //~ E0302
+use std.math.sin
+use std.nothing.sin                               //~ E0302
+use std.nothing.gain                              //~ E0302
 
 pub fn gain(x: F32) -> F32 {
   x * 0.5

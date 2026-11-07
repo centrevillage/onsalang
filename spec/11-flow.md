@@ -194,7 +194,7 @@ flow 本体の中での呼び出しは、呼び出す相手によって意味が
 値の世界で N 個の値を作る `[e; N]` / `array.from_fn` に対応する、flow の世界の構築子である。コンパイラは複製を状態の配列 `[sub.State; N]` とループに落とす（コードは N 倍にならず、複製方向にベクトル化できる）。複製ごとに違う遅延線の長さが要るときは `vdelay` に上限を与えるか、`let` を並べて書く。
 
 ```onsa
-use std.math.{sum}
+use std.math.sum
 
 const UNISON: U32 = 4
 
@@ -304,7 +304,7 @@ fn voice.Event.<入力の名前>(pos: U32, v: T) -> voice.Event   // イベン�
 ### 11.7 パラメータのメタデータ `@param`
 
 ```onsa
-use std.dsp.{db_to_amp}
+use std.dsp.db_to_amp
 
 pub flow gain(
   x: F32 at sample,

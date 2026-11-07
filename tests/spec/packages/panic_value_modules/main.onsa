@@ -8,7 +8,7 @@
 // path of the module. The same in `util.onsa`. There is no candidate (`fixes = 0`). One error per
 // function (P-01).
 use util
-use util.{apply}
+use util.apply
 
 pub fn passed_to_an_imported_function() -> I32 {
   apply(panic, 1)                                   //~ E0308

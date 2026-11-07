@@ -2,7 +2,7 @@
 // [test]
 // spec = ["§11.7"]
 
-use std.dsp.{db_to_amp}
+use std.dsp.db_to_amp
 
 pub flow gain(
   x: F32 at sample,

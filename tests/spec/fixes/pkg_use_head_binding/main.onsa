@@ -11,7 +11,7 @@
 
 use util.counter
 
-use counter.{next}                                  //~ E0302
+use counter.next                                  //~ E0302
 
 pub fn run() -> I32 {
   1

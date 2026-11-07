@@ -2,7 +2,7 @@
 // [test]
 // spec = ["§15.2", "§11.8"]
 
-use std.dsp.test.{assert_near}
+use std.dsp.test.assert_near
 use std.test.gen
 
 // W5-02 U3a/t, S-69 (2)(3), R-79: `onsa check` does not depend on the target, so it does not report the E0200 of a

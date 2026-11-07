@@ -6,7 +6,7 @@
 // bindings too, so a name that is visible (a name taken by a `use`, a module taken by a `use`, an item
 // of the module, a value of the prelude) cannot be the name of one: E0304, on the argument. The unit
 // stops there (§18.1); each unit is otherwise correct. The E0304 is in W4-04 U7a (tests/pending.toml).
-use std.math.{sin}
+use std.math.sin
 use std.math
 
 pub fn gain(x: F32) -> F32 {

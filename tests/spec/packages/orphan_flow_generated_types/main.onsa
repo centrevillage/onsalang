@@ -10,7 +10,7 @@
 // Each `impl` is one unit with one E0307. The places that use the members have no diagnostic (§18.1). One error per
 // unit (P-01).
 use synth
-use synth.{voice}
+use synth.voice
 
 impl voice.State {                                  //~ E0307
   pub fn other_helper(self) -> U32 {

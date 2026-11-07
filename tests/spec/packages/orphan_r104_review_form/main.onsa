@@ -10,7 +10,7 @@
 // (S-59, §18.1) that does not make a diagnostic in `run` and `run2`: `p.twice()`, `F32.HALF`, `F32.make()` and
 // `x.double()` have none (the members are names after the name of the type, §6.2, §18.1; today `x.double()` is E0413).
 // One error per unit (P-01).
-use util.{Point}
+use util.Point
 
 impl Point {                                        //~ E0307
   pub fn twice(self) -> F32 { self.x * 2.0 }

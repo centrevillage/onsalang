@@ -12,8 +12,8 @@
 // of the wrong type.
 
 use util.{PubRt, PUB_RT, PubRtMode, PubRtAlias}
-use util.{PrivRt}                                   //~ E0303
-use util.{PRIV_RT}                                  //~ E0303
+use util.PrivRt                                   //~ E0303
+use util.PRIV_RT                                  //~ E0303
 
 fn uses_pub(a: PubRtAlias) -> I32 {
   let p = PubRt { x: PUB_RT }

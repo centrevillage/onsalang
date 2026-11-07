@@ -8,7 +8,7 @@
 // the package name off. The candidate of one `use` is applied alone, and the other `use` stays as it is.
 // Taking both off gives the cycle (E0310), which crates/onsa_cli/tests/cli/use_cycles.rs checks.
 
-use fx.b.{g}                                        //~ E0302
+use fx.b.g                                        //~ E0302
 
 pub fn f() -> I32 {
   1

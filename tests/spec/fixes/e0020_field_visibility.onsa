@@ -31,7 +31,7 @@ struct NoVisibilityPubField {
 
 priv use std.math                                   //~ E0020
 
-priv use std.math.{sqrt}                         //~ E0020
+priv use std.math.sqrt                         //~ E0020
 
 // The fields that are right: the struct's own visibility, and `priv` in a struct of any visibility.
 pub struct Ring {
@@ -44,6 +44,6 @@ struct Inner {
   priv b: I32,
 }
 
-pub use std.dsp.{db_to_amp}                         //~ E0200 @1
+pub use std.dsp.db_to_amp                         //~ E0200 @1
 
-use std.math.{sin}
+use std.math.sin

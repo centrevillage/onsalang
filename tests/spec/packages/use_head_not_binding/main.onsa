@@ -8,7 +8,7 @@
 // (`math`) and an item of this module (`local`). None of them is a module at the root of the package
 // or a dependency. The names of the failed `use` are not used below, so no other diagnostic is
 // expected (the candidates are not checked here).
-use util.{double}
+use util.double
 use util.counter
 use std.math
 
@@ -16,7 +16,7 @@ fn local() -> I32 {
   1
 }
 
-use double.{x}           //~ E0302
-use counter.{next}       //~ E0302
-use math.{sin}           //~ E0302
-use local.{x}            //~ E0302
+use double.x           //~ E0302
+use counter.next       //~ E0302
+use math.sin           //~ E0302
+use local.x            //~ E0302

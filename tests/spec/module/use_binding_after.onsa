@@ -7,7 +7,7 @@
 // `use std.math` that makes the binding `math` is before it or after it (`use_binding_before.onsa`).
 // The name `sin` is not used.
 
-use math.{sin}                                      //~ E0302
+use math.sin                                      //~ E0302
 use std.math
 
 pub rt fn f(x: F32) -> F32 {

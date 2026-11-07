@@ -9,9 +9,9 @@
 // type), the same as `reset` (a function of every namespace) in the same place. `nosuch`, a name of a plain
 // failed `use`, is silent in all of them: it is the control of the failed name. The same places with the
 // `use` marks only are in `use_flow_absent_in_type_positions`.
-use dsp.synth.one.{process_inplace}                 //~ E0302
-use dsp.synth.one.{reset}
-use dsp.synth.{nosuch}                              //~ E0302
+use dsp.synth.one.process_inplace                 //~ E0302
+use dsp.synth.one.reset
+use dsp.synth.nosuch                              //~ E0302
 
 pub fn in_a_signature(x: process_inplace) -> I32 {  //~ E0308
   1

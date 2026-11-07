@@ -8,7 +8,7 @@
 // sample output of `gain` are of one type. No diagnostic. (The shape of the arguments of `init` and `render`,
 // which depends on the inputs of the flow, is R-264; they are taken here and not called. `Rendered` is in
 // `use_flow_rendered`.)
-use dsp.synth.{gain}
+use dsp.synth.gain
 use dsp.synth.gain.{State, Params, init, reset, process, process_inplace, render}
 
 pub fn restart(inout s: State) {

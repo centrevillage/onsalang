@@ -1,4 +1,4 @@
-use kp.inner.{Mode}
+use kp.inner.Mode
 
 pub fn a_unit_variant() -> Mode {
   Mode.Z                                            //~ E0302

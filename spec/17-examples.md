@@ -26,7 +26,7 @@ test "gcd" {
 
 ```onsa
 use std.fs.{Fs, Path, IoError}
-use std.text.{count_lines}
+use std.text.count_lines
 
 pub enum ConfigError: PartialEq + Eq + Show {
   Io(IoError),
@@ -91,7 +91,7 @@ test "resonator decays" {
 
 ```onsa
 // §17.3 と同じモジュール（resonator を参照する）
-use std.math.{floor}
+use std.math.floor
 
 /// 素朴なのこぎり波（エイリアシングあり。例示用）
 pub flow saw(f0: F32 at block) -> F32 at sample {
@@ -206,7 +206,7 @@ FAUST ではボイスの割り当てを言語の外（アーキテクチャフ�
 
 ```onsa
 use std.array
-use std.math.{exp2}
+use std.math.exp2
 
 const MAX_VOICES: U32 = 8
 

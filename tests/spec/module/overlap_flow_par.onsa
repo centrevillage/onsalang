@@ -8,7 +8,7 @@
 // the prelude) cannot be its name: E0304, on the index. The unit stops there (§18.1). The overlaps with
 // the inputs and the `let`s of the flow already hold (overlap_flow_par_locals_ok.onsa). The E0304 is in
 // W4-04 U7a (tests/pending.toml).
-use std.math.{sin}
+use std.math.sin
 use std.math
 
 pub fn gain(x: F32) -> F32 {

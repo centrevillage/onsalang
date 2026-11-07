@@ -14,7 +14,7 @@
 // Beside them, the same file has uses that no test reaches (unmarked): the
 // interpreter does not report them (reach_unreached.onsa).
 
-use std.test.{Gen}
+use std.test.Gen
 use std.test.gen
 use std.array
 

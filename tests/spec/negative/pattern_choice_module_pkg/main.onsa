@@ -9,7 +9,7 @@
 // are checked as well (§18.1: units are independent). Every name bound is read.
 
 use kinds
-use kinds.{Kind}
+use kinds.Kind
 
 pub fn imported_by_name(k: Kind) -> U32 {
   match k {

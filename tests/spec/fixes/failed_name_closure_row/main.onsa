@@ -6,7 +6,7 @@
 // A failed name in the effect row of a closure is silent, and the body goes on (S-691 (1)).
 // After the candidate, `util` is a module: the E0200 of the row is of a def the failed name
 // held back, also in `h`, which had no diagnostic.
-use fx.{util}                                       //~ E0302
+use fx.util                                       //~ E0302
 
 pub fn f() -> I32 {
   let g = fn(x: I32) -> I32 uses {util} { x }

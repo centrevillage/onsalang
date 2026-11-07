@@ -1,4 +1,4 @@
-use b.{g}
+use b.g
 
 pub fn f() -> I32 {
   1

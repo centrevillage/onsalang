@@ -7,7 +7,7 @@
 // bound is `Num + Int` (the signed integers only), through the `Num` of the bound. The value is that of `abs` on the type
 // itself, the least value panics (§3.4).
 
-use std.math.{abs}
+use std.math.abs
 
 fn abs_of_signed[T: Num + Int](x: T) -> T {
   abs(x)

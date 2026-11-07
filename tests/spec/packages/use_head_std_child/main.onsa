@@ -9,7 +9,7 @@
 // at the root and the dependencies, never among the names of the module. The root has only the
 // directory `kp/`, which holds the module. Every test passes.
 use kp.std
-use std.math.{abs}
+use std.math.abs
 
 test "the binding std is the module of the package" {
   assert std.marker() == 9

@@ -6,8 +6,10 @@
 // The three forms of a `use` list (spec/tools.md §3.2, W3-11 unit U2): on one line, in the block form
 // (a line break right after `{`, one name a line, a `,` after every name, `}` on a line of its own) and as a
 // continuation (the first name after `{`, the others under it, no `,` after the last). There is no space
-// inside the braces of a `use` list in any of the three. A list of one name has the three forms too. The
-// file is read by the syntax stage only (`mode = "parse"`).
+// inside the braces of a `use` list in any of the three. A list of one name is not a list for `onsa fmt`: it
+// writes `use a.b` for `use a.{b}` (spec §15.1, spec/tools.md §3.3; use_one_name_*.onsa), so the three forms
+// here have two names or more, and a path without a list is as it is. The file is read by the syntax stage
+// only (`mode = "parse"`).
 
 use std.math.{sqrt, sum}
 use std.array.{
@@ -18,8 +20,10 @@ use std.string.{concat,
                 join}
 use shapes.{
   Point,
+  Circle,
 }
-use std.test.{check}
+use std.test.check
+use shapes.Square
 use std.io.{
   Stdout,
   Stdin,

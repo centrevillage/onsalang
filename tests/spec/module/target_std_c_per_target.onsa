@@ -17,7 +17,7 @@
 // mode = "test"
 // spec = ["§15.2", "§11.8", "§18.2"]
 
-use std.dsp.test.{assert_near}
+use std.dsp.test.assert_near
 
 // W5-02 U3a/t, S-69 (2)(3), R-79: whether a `std` function is provided is decided for each target (§15.2: "全ての変換先
 // が与えるのを原則とする。この版で与えない変換先があれば、…"). `assert_near` is provided by the interpreter (§11.8: it

@@ -5,7 +5,7 @@
 
 // Golden source: instantiations of generic items (`clamp` is the §4.5
 // example; `types/generics.onsa` alone has no instances).
-use std.math.{sum}
+use std.math.sum
 
 pub fn clamp[T: PartialOrd](x: T, lo: T, hi: T) -> T {
   if x < lo { lo } else if x > hi { hi } else { x }

@@ -54,7 +54,7 @@ impl Target {
 }
 
 impl Target {
-  use std.math.{sqrt}                               //~ E0002
+  use std.math.sqrt                               //~ E0002
 
   pub fn after_use(self) -> F32 {
     self.x

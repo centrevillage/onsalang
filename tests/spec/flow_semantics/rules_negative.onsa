@@ -9,7 +9,7 @@
 // its marker is on the declaration of the flow, as the report is one per collection of flows, §18.1,
 // S-742; more of the E0817 is in instance_cycle_groups.onsa, instance_cycle_forms.onsa).
 
-use std.math.{sum}
+use std.math.sum
 
 pub flow acc(x: F32 at sample) -> F32 at sample {
   let y = x + prev~(^y)

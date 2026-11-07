@@ -6,7 +6,7 @@
 // A failed name in the effect row of the function type of an alias is silent. The alias is expanded where
 // it is written, so `h` and its caller `m` write its type; after the candidate, what they report is of
 // defs the failed name held back.
-use fx.{util}                                       //~ E0302
+use fx.util                                       //~ E0302
 
 pub type A = fn() -> I32 uses {util}
 

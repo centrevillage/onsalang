@@ -1,4 +1,4 @@
-use util.{version}
+use util.version
 
 // An exported function that only calls a pure one has an empty row, which every target provides.
 @export

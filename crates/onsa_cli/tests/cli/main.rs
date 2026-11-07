@@ -82,6 +82,7 @@ mod types_holding_themselves;
 mod use_clash_edges;
 mod use_cycles;
 mod use_generated_items;
+mod use_list_forms;
 mod use_list_words;
 mod use_model;
 mod use_name_rules;

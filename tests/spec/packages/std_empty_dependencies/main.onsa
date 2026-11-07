@@ -5,7 +5,7 @@
 
 // A `[dependencies]` table with no entry is the same as no table: `std` is
 // still a dependency (§15.3). Every test passes.
-use std.math.{floor}
+use std.math.floor
 
 test "std is used when the dependencies table is empty" {
   let x: F32 = 2.5

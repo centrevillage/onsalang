@@ -1,4 +1,4 @@
-use first.{Pair}
+use first.Pair
 
 pub type Stereo = Pair
 

@@ -8,11 +8,11 @@
 // candidate is not safe (§18.1: a candidate that cannot be made safe is not given). The note of
 // §15.1 about the head is for the same reason.
 
-use util.{double}
+use util.double
 
 fn local() -> I32 {
   1
 }
 
-use double.{x}                                      //~ E0302
-use local.{y}                                       //~ E0302
+use double.x                                      //~ E0302
+use local.y                                       //~ E0302

@@ -7,7 +7,7 @@
 // same two lines without the call are in `use_binding_before.onsa`.
 
 use std.math
-use math.{sin}                                      //~ E0302
+use math.sin                                      //~ E0302
 
 pub rt fn f(x: F32) -> F32 {
   sin(x)

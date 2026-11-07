@@ -8,7 +8,7 @@
 // (a `for` variable and a `let` after the loop, a block's `let` and a `let` after the block, a closure's
 // argument and a `let` after the closure), the same argument names in different functions, methods and
 // flows, and names that are not of the body (a field name, a type parameter of another case).
-use std.math.{sin}
+use std.math.sin
 
 pub fn gain(x: F32) -> F32 {
   x * 0.5

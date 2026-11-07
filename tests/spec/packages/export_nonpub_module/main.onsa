@@ -7,6 +7,6 @@
 // the file of the module that has the declaration (`util.onsa`), at its name, with the candidate that writes
 // the `pub`. A declaration with no visibility word is visible in the package (§15.1), so `main` can use it
 // and the use is not an error: the error is the export's, not the use's.
-use util.{hidden}
+use util.hidden
 
 pub fn call() -> U32 { hidden() }

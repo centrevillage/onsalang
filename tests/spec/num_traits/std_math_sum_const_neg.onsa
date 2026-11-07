@@ -7,7 +7,7 @@
 // compile-time evaluation, and the initializer is E0419. A sum whose steps all fit is not (std_math_sum_const.onsa).
 // One error per `const` (P-01).
 
-use std.math.{sum}
+use std.math.sum
 
 const SIGNED_HIGH: [I8; 2] = [100, 100]
 const SIGNED_LOW: [I8; 2] = [-100, -100]

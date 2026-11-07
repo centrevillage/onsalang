@@ -153,7 +153,7 @@
 // the F64 are read by the half that holds the sign (the whole is above the largest literal that the steps can hold). The
 // reset target runs the steps that do not panic. The values in the F32 steps are the ones of std_math_sum_order.onsa.
 
-use std.math.{sum}
+use std.math.sum
 
 const NEGATIVE_ZEROS: [F32; 2] = [-0.0, -0.0]
 const NEGATIVE_ZEROS_SUM: F32 = sum(NEGATIVE_ZEROS)

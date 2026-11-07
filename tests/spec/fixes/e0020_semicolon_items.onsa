@@ -11,9 +11,9 @@ const LIMIT: I32 = 4;                               //~ E0020
 
 const OTHER: I32 = 5;                               //~ E0020
 
-use std.math.{sqrt};                                //~ E0020
+use std.math.sqrt;                                //~ E0020
 
-use std.math.{abs};                                 //~ E0020
+use std.math.abs;                                 //~ E0020
 
 pub struct Pair {
   a: I32,

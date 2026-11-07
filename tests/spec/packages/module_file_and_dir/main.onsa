@@ -7,9 +7,9 @@
 // `a.onsa` is the module `a`, and `a/b.onsa` is `a.b`, the child module `b` of `a`. The path of the
 // child is written from the root (`use a.b.{g}`) or through the parent (`use a.{b}`). Every test
 // passes.
-use a.{f}
-use a.b.{g}
-use a.{b}
+use a.f
+use a.b.g
+use a.b
 
 test "the module and the items of the module" {
   assert f() == 1

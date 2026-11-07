@@ -7,7 +7,7 @@
 // (`smoothed_sum.render`) and the items of that namespace (`Params`) are taken in with `use`.
 
 use dsp.synth.{smoothed_sum, limited, quantized, doubled}
-use dsp.synth.limited.{Params}
+use dsp.synth.limited.Params
 
 test "a flow from another module with instances from a third" {
   // acc: 1 2 3 4.  avg of that: 0.5, 1.5, 2.5, 3.5.

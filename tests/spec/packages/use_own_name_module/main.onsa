@@ -8,8 +8,8 @@
 // names the module, so it is not E0302 (§15.1: "if there is a module at the root of the same name, the
 // name points to it", S-663). The package name is not a dependency name, so the module is not E0304.
 // Every test passes.
-use fx.{g}
-use fx.inner.{h}
+use fx.g
+use fx.inner.h
 use fx
 
 test "an item of the module with the name of the package" {

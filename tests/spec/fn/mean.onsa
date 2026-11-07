@@ -3,7 +3,7 @@
 // mode = "test"
 // spec = ["§6.1", "§13.4"]
 
-use std.math.{sum}
+use std.math.sum
 
 pub fn mean[const N: U32](xs: [F64; N]) -> Option[F64] {
   if xs.len() == 0 {

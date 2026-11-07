@@ -8,9 +8,9 @@
 // `use util.{std}` makes does not hide the dependency `std` for `use std.math.{abs}`, and the items
 // `util` and `dsp` of this module do not hide the root modules `util` and `dsp` (the two names are in
 // different spaces, so they do not clash either). Every test passes.
-use util.{std}
-use std.math.{abs}
-use dsp.synth.{gain}
+use util.std
+use std.math.abs
+use dsp.synth.gain
 
 fn dsp() -> I32 {
   1

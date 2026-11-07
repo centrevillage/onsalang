@@ -9,9 +9,9 @@
 // failed `use`, is silent in the places of a type and of a length: it is the control of the failed name.
 // (The code of `process_inplace` written in the place of a type is in `use_flow_absent_type_position_kinds`; the
 // code of a function name in the place of an array length is not fixed by the spec.)
-use dsp.synth.one.{process_inplace}                 //~ E0302
-use dsp.synth.one.{reset}
-use dsp.synth.{nosuch}                              //~ E0302
+use dsp.synth.one.process_inplace                 //~ E0302
+use dsp.synth.one.reset
+use dsp.synth.nosuch                              //~ E0302
 
 pub fn in_a_signature_control(x: nosuch) -> I32 {
   1

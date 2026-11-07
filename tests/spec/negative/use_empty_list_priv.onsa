@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+//
+// [[test.fix]]
+// at = "24:1"
+// code = "E0020"
+// candidate = 1
+// leaves = ["24:14 E0002"]
+
+// S-515 (U6 of W5-11): `priv use std.math.{}` has two errors of the syntax stage, `priv` (E0020, a `use` is
+// within its module already) and the empty list (E0002), and the unit reports the first of them by the order of
+// the diagnostics (the start position, §18.1): the `priv` at the head. The empty list is not lost: it is the
+// error the candidate of the E0020 leaves, so the check after the candidate reports it (`leaves`, at the
+// `{`, which is the main position of the empty list; the `priv ` before it is out, so the column is 14).
+// There is no `fixes` here: the count of candidates is not the point of the case.
+
+use std.array
+
+pub fn filled() -> [I32; 2] {
+  array.from_fn(fn(i: U32) -> I32 { 1 })
+}
+
+priv use std.math.{}                                //~ E0020

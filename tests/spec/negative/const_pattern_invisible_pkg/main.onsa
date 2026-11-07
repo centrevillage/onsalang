@@ -8,7 +8,7 @@
 // constants of the same module are no error. One error per function (P-01).
 use lib
 use lib.{Box2, SHOWN}
-use lib.{HIDDEN}                                    //~ E0303
+use lib.HIDDEN                                    //~ E0303
 
 pub fn qualified_hidden(n: I32) -> I32 {
   match n {

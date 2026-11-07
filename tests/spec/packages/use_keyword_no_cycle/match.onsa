@@ -1,4 +1,4 @@
-use a.{f}
+use a.f
 
 pub fn x() -> I32 {
   f()

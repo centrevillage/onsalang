@@ -14,8 +14,8 @@
 use std.array
 use std.math.{max, min}
 
-use std.math.{sin}
-use std.dsp.{db_to_amp}
+use std.math.sin
+use std.dsp.db_to_amp
 pub struct Alpha { x: I32 }
 pub struct Beta { y: I32 }
 

@@ -1,5 +1,5 @@
 use shapes.inner
-use shapes.inner.{Child}
+use shapes.inner.Child
 
 pub struct Parent {
   n: I32,

@@ -9,7 +9,7 @@
 // `use` has it), with a note on the item. The `use` has an error of the names stage, so the types stage does
 // not report it again as E0302 (§18.1). The order of the item and the `use` is the other way in
 // `item_first.onsa`. The item is a function that no code calls.
-use dsp.synth.one.{process_inplace}                 //~ E0304
+use dsp.synth.one.process_inplace                 //~ E0304
 
 pub fn process_inplace() -> I32 {
   1

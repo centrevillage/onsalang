@@ -1,4 +1,4 @@
-use a.{A}
+use a.A
 
 pub struct B {
   a: A,

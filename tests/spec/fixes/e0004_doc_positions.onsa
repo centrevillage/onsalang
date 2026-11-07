@@ -31,7 +31,7 @@ test "documented test" {
 }
 
 /// Before a use.                                        //~ E0004
-use std.math.{sqrt}
+use std.math.sqrt
 
 // ---- before a statement
 

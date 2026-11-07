@@ -10,10 +10,10 @@
 // `[dependencies]` table, and modules at the root and in a directory take the
 // names of std with `use`. Every test passes.
 use std.math.{sqrt, max}
-use std.dsp.{db_to_amp}
-use std.dsp.test.{assert_near}
-use dsp.filter.{root_of}
-use util.{larger}
+use std.dsp.db_to_amp
+use std.dsp.test.assert_near
+use dsp.filter.root_of
+use util.larger
 
 pub fn root(x: F32) -> F32 {
   sqrt(x)

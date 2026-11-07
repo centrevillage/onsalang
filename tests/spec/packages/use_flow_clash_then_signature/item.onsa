@@ -1,4 +1,4 @@
-use dsp.synth.gain.{process_inplace}                              //~ E0304
+use dsp.synth.gain.process_inplace                              //~ E0304
 
 pub fn process_inplace() -> I32 {
   1

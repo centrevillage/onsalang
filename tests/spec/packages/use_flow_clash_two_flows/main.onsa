@@ -8,6 +8,6 @@
 // the namespace of two flows (`gain`, `gain2`) and one takes a function of a module; in `main.onsa` the
 // function comes last, in `middle.onsa` between the two flows, in `first.onsa` first. The note of each E0304
 // is not fixed by the spec.
-use dsp.synth.gain.{process_inplace}
-use dsp.synth.gain2.{process_inplace}                              //~ E0304
-use dsp.other.{process_inplace}                                    //~ E0304
+use dsp.synth.gain.process_inplace
+use dsp.synth.gain2.process_inplace                              //~ E0304
+use dsp.other.process_inplace                                    //~ E0304

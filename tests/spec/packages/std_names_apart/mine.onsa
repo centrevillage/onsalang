@@ -1,6 +1,6 @@
-use math.{sqrt}
-use dsp.{db_to_amp}
-use dsp.test.{marker}
+use math.sqrt
+use dsp.db_to_amp
+use dsp.test.marker
 
 pub fn own_sqrt(x: F32) -> F32 {
   sqrt(x)

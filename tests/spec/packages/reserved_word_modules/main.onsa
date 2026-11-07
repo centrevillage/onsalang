@@ -12,14 +12,14 @@
 // expression, an element of the list of a `use`) is E0200 at the word.
 
 use kp
-use kp.clock.{tick}
-use kp.when.{after}
-use kp.ser.{order}
-use kp.reset_if.{latch}
-use clock.{beat}
-use when.{late}
-use ser.{rank}
-use reset_if.{gate}
+use kp.clock.tick
+use kp.when.after
+use kp.ser.order
+use kp.reset_if.latch
+use clock.beat
+use when.late
+use ser.rank
+use reset_if.gate
 
 pub fn through_the_path() -> U32 {
   kp.clock.tick() + kp.clock.TICKS + kp.when.after() + kp.ser.order() + kp.reset_if.latch()

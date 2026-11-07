@@ -1,4 +1,4 @@
-use std.math.{abs}
+use std.math.abs
 
 pub fn h() -> I32 {
   3

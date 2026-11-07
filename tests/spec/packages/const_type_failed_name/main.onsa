@@ -13,10 +13,10 @@
 // name (an error type: no judgement, §18.1), and a name that the bad `use` could not have lost. The only other
 // diagnostics are the E0302 of the `use` lines. The same without a failed name is in negative/const_type_shared.onsa
 // and negative/const_type_affine_position.onsa.
-use util.{REAL}
-use util.{KK}                                       //~ E0302
-use util.{gone}                                     //~ E0302
-use util.{LostType}                                 //~ E0302
+use util.REAL
+use util.KK                                       //~ E0302
+use util.gone                                     //~ E0302
+use util.LostType                                 //~ E0302
 
 pub struct Pt {
   x: U32,

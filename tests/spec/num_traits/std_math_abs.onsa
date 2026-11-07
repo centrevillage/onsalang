@@ -8,7 +8,7 @@
 // directly and through a generic function whose bound is `Num` (which has `Neg`) or `Float`. This is what a program does today and
 // keeps; the unsigned integers, which `Num` does not take, are in bounds_unsigned_not_num_neg.onsa.
 
-use std.math.{abs}
+use std.math.abs
 
 fn abs_of[T: Num](x: T) -> T {
   abs(x)

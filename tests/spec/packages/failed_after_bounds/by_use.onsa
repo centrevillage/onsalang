@@ -1,5 +1,5 @@
 // `Gone` is the name of a `use` that failed: as a bound it is a bound that is not known.
-use std.math.{Gone}                                 //~ E0302
+use std.math.Gone                                 //~ E0302
 
 // The operators and the methods that need a bound of `T` have no diagnostic.
 pub fn cmp[T: Gone](x: T) -> Bool {

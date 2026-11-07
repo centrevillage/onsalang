@@ -582,7 +582,8 @@ list_test!(variant_pattern_continuation, K_VARIANT_PATTERN, CONT);
 
 // ---- a list of one element, and a grouping ------------------------------------------------------------
 
-/// A list of one element of each of the seven kinds (and the type arguments of an expression).
+/// A list of one element of each of the seven kinds (and the type arguments of an expression) but the
+/// `use` list, whose one bare name `onsa fmt` writes without the list (S-598, `use_list_forms.rs`).
 fn single_kinds() -> Vec<Kind> {
     vec![
         Kind {
@@ -614,16 +615,6 @@ fn single_kinds() -> Vec<Kind> {
             close: "}",
             post: " {",
             tail: &["  1", "}"],
-        },
-        Kind {
-            name: "a use list",
-            head: &[],
-            pre: "use std.math.{",
-            pad: false,
-            elems: &["sin"],
-            close: "}",
-            post: "",
-            tail: &[],
         },
         Kind {
             name: "the type arguments of a type",

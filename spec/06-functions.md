@@ -3,7 +3,7 @@
 ### 6.1 関数
 
 ```onsa
-use std.math.{sum}
+use std.math.sum
 
 pub fn mean[const N: U32](xs: [F64; N]) -> Option[F64] {
   if xs.len() == 0 {
@@ -68,7 +68,7 @@ fn demo(x: F32) -> F32 {
 ### 6.2 メソッド
 
 ```onsa
-use std.math.{sqrt}
+use std.math.sqrt
 
 impl Point {
   pub fn new(x: F32, y: F32) -> Point { Point { x: x, y: y } } // 関連関数: Point.new(...)

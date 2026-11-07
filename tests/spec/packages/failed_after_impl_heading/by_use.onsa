@@ -1,6 +1,6 @@
 // `Gone` is the name of a `use` that failed. It is the type of an `impl`: the type of `self` is an
 // error type, and the members are checked.
-use std.math.{Gone}                                 //~ E0302
+use std.math.Gone                                 //~ E0302
 
 pub struct S[T] {
   a: T,

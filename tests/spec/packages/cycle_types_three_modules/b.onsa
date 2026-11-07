@@ -1,4 +1,4 @@
-use c.{C}
+use c.C
 
 pub enum B {
   Has(C),

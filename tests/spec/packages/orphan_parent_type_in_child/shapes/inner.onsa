@@ -1,4 +1,4 @@
-use shapes.{Parent}
+use shapes.Parent
 
 pub struct Child {
   n: I32,

@@ -8,10 +8,10 @@
 // `use` passes through them. The modules inside the directories take each other by the paths from the
 // root as well (`a.b.c` takes `a.b.d`, which takes `a.e`), not by a path from their own directory.
 // Every test passes.
-use a.b.c.{f}
+use a.b.c.f
 use a.b.c
-use a.b.d.{h}
-use a.e.{j}
+use a.b.d.h
+use a.e.j
 
 test "a module two directories down" {
   assert f() == 5

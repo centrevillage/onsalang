@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.1", "§18.2", "§3.4"]
+
+// The `use` forms that `onsa fmt` leaves alone when it writes the list of one name without the list (S-598,
+// spec/tools.md §3.3, §3.4). A list of one name with a comment inside stays a list: the comment is on the line of
+// the name, on a line over it, on a line under it, or after the `{` (a comment keeps its line, and the list
+// is the form that has a place for it). A comment at the end of the line of the `}` keeps the list too: the `}` is the
+// last code of its line, which the comment belongs to (§3.4). A list of two names or more stays as it is, on one line
+// and in the block form, and a path without a list is the form the others are written as. The `use`s all bring in a different name,
+// and the tests read each of them (the same binding whichever way it is written, §15.1). The file is canonical, so
+// `onsa fmt` leaves it unchanged. It passes with the command of today and must go on passing after the rewrite;
+// use_one_name_rewrite.onsa and use_one_name_loose.onsa are the lists that are written without the braces.
+// The values are worked out by hand from the spec text.
+
+use std.math.{sqrt // the comment is on the line of the name
+}
+use std.math.{
+  // the comment is over the name
+  floor,
+}
+use std.math.{
+  ceil,
+  // the comment is under the name
+}
+use std.math.{abs
+  // the comment is under the name, which has no `,` after it
+}
+use std.math.{max, min}
+use std.math.{
+  pow,
+  exp,
+}
+use std.math.log
+use std.math.{trunc} // the comment is after the `}`
+
+pub fn root(x: F32) -> F32 {
+  sqrt(x)
+}
+
+pub fn down_and_up(x: F32) -> [F32; 2] {
+  [floor(x), ceil(x)]
+}
+
+pub fn magnitude(x: F32) -> F32 {
+  abs(x)
+}
+
+pub fn bounds(a: I32, b: I32) -> [I32; 2] {
+  [min(a, b), max(a, b)]
+}
+
+pub fn power_and_exp(x: F32) -> F32 {
+  pow(x, 2.0) + exp(0.0) + log(1.0)
+}
+
+pub fn whole(x: F32) -> F32 {
+  trunc(x)
+}
+
+test "a name is the same name whichever way its use is written" {
+  assert root(16.0) == 4.0
+  let ends = down_and_up(2.5)
+  assert ends[0] == 2.0
+  assert ends[1] == 3.0
+  assert magnitude(-3.0) == 3.0
+  let b = bounds(7, 3)
+  assert b[0] == 3
+  assert b[1] == 7
+  // 2.0 * 2.0 + 1.0 + 0.0.
+  assert power_and_exp(2.0) == 5.0
+  assert whole(2.5) == 2.0
+}

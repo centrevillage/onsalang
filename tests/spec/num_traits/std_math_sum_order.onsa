@@ -10,7 +10,7 @@
 // (1.0e17 is one of them). For the integers the order shows only in a step that does not fit the type: `I8` 100 + 100 panics
 // in the first step although the whole sum, 100, fits.
 
-use std.math.{sum}
+use std.math.sum
 
 test "F32: a large value that cancels first leaves the small one" {
   let a: [F32; 3] = [100000000.0, -100000000.0, 1.0]

@@ -1,1 +1,1 @@
-use a.pan.{process_inplace} //~ E0302
+use a.pan.process_inplace //~ E0302

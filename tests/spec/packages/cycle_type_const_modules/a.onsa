@@ -8,6 +8,6 @@
 // またぐ宣言の循環（型と定数）は E0310 だけ"; §18.1). The E0310 is at the first `use` of the cycle.
 // (The constant `K` of `b` is the error value, and its initializer `3` has no diagnostic of its own,
 // as in types/cycle_type_const_later.onsa.)
-use b.{K}                        //~ E0310
+use b.K                        //~ E0310
 
 pub type A = [F32; K]

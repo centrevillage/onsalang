@@ -9,7 +9,7 @@
 // `if` and of a `while`, the argument of a generic function of `std.math`, and a closure. The guard of a `match` arm is in tp_positions_match_guard.onsa. The same body runs at several types. Every value is worked out by hand.
 
 use std.array
-use std.math.{max}
+use std.math.max
 
 pub struct Acc[T: Int] {
   total: T,

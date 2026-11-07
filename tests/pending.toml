@@ -989,7 +989,7 @@ note = "クロージャと .( の呼び出しが E0200。W3-05 の値の規則�
 
 [[pending]]
 kind = "spec-example"
-target = "§16.1 d350081e: use std.audio.device"
+target = "§16.1 f815e141: use std.audio.device"
 reasons = ["S-112", "S-570", "S-609", "S-625"]
 until = "W7-03"
 note = "52 回目の S-112 の改め（init の入力の無い flow は Config と cfg を持たない）。仕様の例は voice.Config {} などを外した。58 回目の S-609 で、関数の項目の move on_audio・move on_control を外した。61 回目の S-625 で、voice.params_default() を Params のリテラルに書き直した（Onsa の生成する API から外した）。写しは今の実装に合わせて残し、生成する API の Onsa の側（W7-03）で写しを直して外す"
@@ -1010,19 +1010,12 @@ note = "52 回目の S-112 の改め（init の入力の無い flow は Config �
 
 [[pending]]
 kind = "spec-example"
-target = "§17.6 e7b876ad: use std.array"
+target = "§17.6 9d3a61e2: use std.array"
 reasons = ["S-112", "S-570", "S-625"]
 until = "W7-03"
 note = "52 回目の S-112 の改め（init の入力の無い flow は Config と cfg を持たない）。仕様の例は voice.Config {} などを外した。61 回目の S-625 で、voice.params_default() を Params のリテラルに書き直した（Onsa の生成する API から外した）。写しは今の実装に合わせて残し、生成する API の Onsa の側（W7-03）で写しを直して外す"
 
 # --- W4-03 U2a/t: 木と収集と use の規則（tests/spec/packages/use_*、module_*、tests/spec/module/use_binding_*。2026-10-24）。
-[[pending]]
-kind = "test-case"
-target = "tests/spec/packages/failed_use_empty_list"
-reasons = ["S-515"]
-until = "W5-11"
-note = "空の並び use util.{} の E0002（S-515）が出ない。何も取り込まず何も黙らせない部分は failed_names.rs の an_empty_list_takes_no_name_and_silences_nothing（U3b1）で通る"
-
 # --- W4-03 U3b2: 名前の段の E0200 と生成項目の事例のうち、後の単位・作業の機能で通るもの（2026-10-25）。
 [[pending]]
 kind = "test-case"

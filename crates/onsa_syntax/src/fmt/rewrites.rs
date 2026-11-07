@@ -9,8 +9,9 @@
 //! ([`normalize`]). `crate::fmt::format` chooses once on its input for both
 //! ([`Choices`]); `verify`, `diff --ast` and the output read again choose on
 //! their own trees. The AST side does not decide again, it rewrites the AST
-//! nodes made from the chosen CST nodes (`Parsed::map`), and a chosen node
-//! whose AST is not of the form the CST side saw is an internal error.
+//! nodes made from the chosen CST nodes (`Parsed::map`) or every node of the
+//! form, and a chosen node whose AST is not of the form the CST side saw is
+//! an internal error.
 //!
 //! Here is the `return e` in the tail position (§6.1), whose places
 //! `fmt/tail.rs` decides; a `return` without a value stays (S-547). The
@@ -19,12 +20,14 @@
 //! c`), so no comment is ever in its range (S-536 (1)). The redundant
 //! parentheses (W3-12 U2) come in the same form and go last (their AST side
 //! copies the node inside, which the others must have rewritten before).
+//! The braces of a `use` list of one bare name go with its `,` (§15.1,
+//! S-598: `use a.{b}` is `use a.b`), unless a comment is in the list (§3.4).
 
 use std::collections::{HashMap, HashSet};
 
 use super::tail;
 use crate::Parsed;
-use crate::ast::{Ast, ExprKind, StmtKind};
+use crate::ast::{Ast, ExprKind, ItemKind, StmtKind};
 use crate::cst::{Cst, Elem, NodeId, NodeKind, TokenIdx};
 use crate::token::TokenKind;
 
@@ -32,15 +35,22 @@ use crate::token::TokenKind;
 struct Rewrite {
     /// The kinds of the nodes it chooses (an AST side is given no other).
     kinds: &'static [NodeKind],
-    /// The code tokens it drops from the node (it is called on every node of
-    /// the tree): the node it drops tokens from is a node it rewrites.
+    /// The code tokens it drops from the node, and the line breaks that go
+    /// with them (§3.4; it is called on every node of the tree): the node it
+    /// drops tokens from is a node it rewrites.
     cst: fn(&Cst, NodeId, &mut Vec<TokenIdx>),
-    /// The same rewrite on the AST, of the nodes the CST side chose.
+    /// The same rewrite on the AST: of the nodes the CST side chose, or of
+    /// every node of its form, the ones a comment keeps included (the
+    /// comparison takes the rewritten form either way, §3.4), the chosen ones
+    /// among them.
     ast: fn(&mut Ast, &Parsed, &[NodeId]),
 }
 
 /// The closed list of §3.3, in the order they are chosen and done.
-const REWRITES: &[Rewrite] = &[Rewrite { kinds: &[NodeKind::ReturnStmt], cst: tail_return, ast: tail_return_ast }];
+const REWRITES: &[Rewrite] = &[
+    Rewrite { kinds: &[NodeKind::ReturnStmt], cst: tail_return, ast: tail_return_ast },
+    Rewrite { kinds: &[NodeKind::UseNames], cst: use_names, ast: use_names_ast },
+];
 
 /// The choice of every rewrite of a tree ([`choose`]), made once by
 /// `crate::fmt::format` for the plan and for the comparison of its input.
@@ -162,6 +172,58 @@ fn tail_return_ast(ast: &mut Ast, parsed: &Parsed, chosen: &[NodeId]) {
         }
         block.stmts.pop();
         block.tail = Some(value);
+    }
+}
+
+/// The `{`, the `,` and the `}` of a `use` list of one bare name (§15.1,
+/// S-598) with no comment in their range (§3.4: from the `{` to the `}`, and
+/// at the end of the line of the `}`, whose last code it is: `use a.{b} //
+/// c` stays), and the line breaks between them, which go with them:
+/// `use a.{` `b,` `}` is `use a.b`.
+fn use_names(cst: &Cst, n: NodeId, out: &mut Vec<TokenIdx>) {
+    if cst.kind(n) != NodeKind::UseNames {
+        return;
+    }
+    let all = cst.tokens();
+    let code: Vec<TokenIdx> = cst.child_tokens(n).filter(|&t| !all[t.index()].kind.is_trivia()).collect();
+    let kinds: Vec<TokenKind> = code.iter().map(|&t| all[t.index()].kind).collect();
+    use TokenKind::{Comma, Ident, LBrace, RBrace};
+    if !matches!(kinds.as_slice(), [LBrace, Ident, RBrace] | [LBrace, Ident, Comma, RBrace]) {
+        return;
+    }
+    let (open, close) = (code[0].index(), code[code.len() - 1].index());
+    let after = all[close + 1..].iter().find(|t| t.kind != TokenKind::Whitespace);
+    if !all[open..close].iter().chain(after).any(|t| t.kind.is_comment()) {
+        let breaks = (open..close).filter(|&i| all[i].kind == TokenKind::Newline).map(|i| TokenIdx(i as u32));
+        out.extend(code.into_iter().filter(|&t| all[t.index()].kind != Ident).chain(breaks));
+    }
+}
+
+/// [`use_names`] on the AST: every `use` of a list of one name takes the
+/// name as the last of its path, with no list, the lists a comment keeps
+/// included (§3.4); the chosen lists must be such ones.
+fn use_names_ast(ast: &mut Ast, parsed: &Parsed, chosen: &[NodeId]) {
+    let bug = |n: NodeId| -> ! {
+        onsa_diag::internal::bug(Some(parsed.cst.span(n)), "fmt's rewrite of a `use` list of one name: no such `use`")
+    };
+    let item = |n: NodeId| parsed.cst.ancestors(n).find(|&a| parsed.cst.kind(a) == NodeKind::Item);
+    let wanted: HashSet<NodeId> = chosen.iter().filter_map(|&n| item(n)).collect();
+    let item_of = index_of(&parsed.map.items, &wanted);
+    for &n in chosen {
+        let Some(&i) = item(n).and_then(|it| item_of.get(&it)) else { bug(n) };
+        let ItemKind::Use(u) = &ast.items[i].kind else { bug(n) };
+        let Some([_]) = u.names.as_deref() else { bug(n) };
+    }
+    // Every list of one name, the ones a comment keeps too: with or without
+    // the rewrite, the comparison takes the rewritten form (§3.4, §3.5).
+    for item in &mut ast.items {
+        if let ItemKind::Use(u) = &mut item.kind
+            && let Some([name]) = u.names.as_deref()
+        {
+            let name = name.clone();
+            u.names = None;
+            u.path.segments.push(name);
+        }
     }
 }
 

@@ -1,5 +1,5 @@
 use second.{Stereo, Wide}
-use third.{Pair}
+use third.Pair
 
 // The outputs are a struct named through an alias in the heading (the body writes the struct itself), and a
 // struct with an array of a constant length (the constant is in the second module).

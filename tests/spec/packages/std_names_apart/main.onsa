@@ -8,9 +8,9 @@
 // and `std.dsp.test` that this package also takes with `use std...`. The own modules are plain
 // modules of the package, and std is the same std for them (a root module named `math` is not
 // `std`, §15.1). Every test passes.
-use std.math.{sqrt}
-use std.dsp.{db_to_amp}
-use std.dsp.test.{assert_near}
+use std.math.sqrt
+use std.dsp.db_to_amp
+use std.dsp.test.assert_near
 use mine.{own_sqrt, own_gain, own_marker}
 
 test "std.math is std and math is the module of the package" {

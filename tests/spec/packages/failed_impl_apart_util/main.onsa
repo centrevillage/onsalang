@@ -8,7 +8,7 @@
 // name after its name that is not there, the field that is not there and the bound it does not satisfy are reported.
 // Each form is a function of its own with the one error (P-01). (The uses of the types of `util` that are silent
 // are in `failed_impl_modules`.)
-use util.{S}
+use util.S
 
 struct R {
   b: I32,

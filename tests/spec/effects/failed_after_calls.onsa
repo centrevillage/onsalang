@@ -7,7 +7,7 @@
 // effects that were read: an `Alloc` that was read in the row of a function is an `Alloc` of its callers.
 // (The functions that have an E0601 are written on one line, so that the mark does not depend on whether the
 // diagnostic is at the heading or at the use, `tests/spec/fixes/e0601_alloc_row.onsa`.)
-use std.math.{Gone}                                 //~ E0302
+use std.math.Gone                                 //~ E0302
 
 pub fn f() -> I32 uses {Alloc, Gone} {
   1

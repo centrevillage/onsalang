@@ -14,7 +14,7 @@
 // (the `Float` constants of §6.3) through two functions, so that no test
 // depends on how a division by zero in a test body is folded.
 
-use std.dsp.test.{assert_near}
+use std.dsp.test.assert_near
 
 fn inf() -> F64 {
   F64.INFINITY

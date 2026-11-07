@@ -7,7 +7,7 @@
 // captures `k`), and an imported generic function is called with two types. Only the names stage and
 // the types stage are checked here (function values and closures are not lowered in this version).
 use util.{double, pick, apply}
-use util.counter.{next}
+use util.counter.next
 
 pub fn through_a_value() -> I32 {
   apply(double, 3)

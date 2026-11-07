@@ -10,7 +10,7 @@
 // method `x.double()`, the constant `F32.HALF` and the function `F32.make()` of the builtin type, and the method
 // `p.twice()` of the type of `util`. The E0307s are in `a.onsa`; this module has none. One error per unit (P-01).
 use a
-use util.{Point}
+use util.Point
 
 pub fn the_method_of_a_builtin_type(x: F32) -> F32 {
   x.double()

@@ -10,9 +10,9 @@
 // child module. A taken generic function is called with two types. Every test passes.
 use util
 use util.{double, pick}
-use util.counter.{next}
-use dsp.synth.{gain}
-use std.math.{abs}
+use util.counter.next
+use dsp.synth.gain
+use std.math.abs
 
 test "the root module and its items" {
   assert double(4) == 8

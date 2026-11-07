@@ -6,7 +6,7 @@
 // was before it moved to `std.math`, is E0302 (§15.1: "名前が見つからなければ E0302"). The use of the name in the body is
 // not asked for here: the program calls nothing by it.
 
-use std.dsp.{sum} //~ E0302
+use std.dsp.sum //~ E0302
 
 pub fn nothing() -> F32 {
   1.0

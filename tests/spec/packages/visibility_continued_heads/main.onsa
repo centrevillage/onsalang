@@ -10,10 +10,10 @@
 // without a mistake, is the control.
 use util.{kept_pub_attribute, kept_pub_word, kept_pub_const, kept_pub_twice}
 use util.{package_crate, package_priv_pub, plain_pub, plain}
-use util.{kept_priv_attribute}                      //~ E0303
-use util.{kept_priv_word}                           //~ E0303
-use util.{kept_priv_twice}                          //~ E0303
-use util.{plain_priv}                               //~ E0303
+use util.kept_priv_attribute                      //~ E0303
+use util.kept_priv_word                           //~ E0303
+use util.kept_priv_twice                          //~ E0303
+use util.plain_priv                               //~ E0303
 
 fn recorded_pub() -> I32 {
   kept_pub_attribute() + kept_pub_word() + kept_pub_const() + kept_pub_twice()

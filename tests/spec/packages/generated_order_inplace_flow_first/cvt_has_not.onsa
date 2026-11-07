@@ -1,1 +1,1 @@
-use a.cvt.{process_inplace} //~ E0302
+use a.cvt.process_inplace //~ E0302

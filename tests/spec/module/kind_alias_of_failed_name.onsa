@@ -14,7 +14,7 @@
 // goes on, so the E0401 is reported there. The cycle of aliases is in kind_alias_cycle.onsa (the code
 // of the cycle waits for W4-05). One error per unit (§18.1) for the real errors, so each form is in
 // its own unit.
-use std.math.{Gone}                                 //~ E0302
+use std.math.Gone                                 //~ E0302
 
 type A = Gone
 

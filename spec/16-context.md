@@ -11,7 +11,7 @@ Onsa は **スレッドを作らない**。プログラムが走る文脈（オ�
 
 ```onsa
 use std.audio.device
-use std.sync.{Swap}
+use std.sync.Swap
 
 pub fn main() -> Result[(), device.Error] {
   let st     = voice.init(48000.0)

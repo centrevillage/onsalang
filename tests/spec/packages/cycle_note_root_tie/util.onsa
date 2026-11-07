@@ -8,7 +8,7 @@
 // close a cycle (this module takes an item of `dsp/util.onsa`). The reading of the own name (`g()`) is not
 // taken then: there is no candidate, and the note shows `use util` and the module of the cycle
 // (crates/onsa_cli/tests/cli/use_cycles.rs).
-use dsp.util.{f}
+use dsp.util.f
 
 pub fn g() -> I32 {
   f()

@@ -9,7 +9,7 @@
 // not found in `kp/inner.onsa`. A name that is not found is E0302, in the name stage (a module that
 // exists and has no such name is E0302, not a type error, R-254).
 use kp.inner
-use kp.leaf.{l}
+use kp.leaf.l
 
 pub fn k() -> I32 {
   1

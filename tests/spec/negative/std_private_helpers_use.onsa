@@ -11,10 +11,10 @@
 // module itself is fine. The method that the helpers serve is called as a method.
 
 use std.core.num
-use std.core.num.{add_parts}                        //~ E0303
-use std.core.num.{sub_parts}                        //~ E0303
-use std.core.num.{div_parts}                        //~ E0303
-use std.core.num.{some_if}                          //~ E0303
+use std.core.num.add_parts                        //~ E0303
+use std.core.num.sub_parts                        //~ E0303
+use std.core.num.div_parts                        //~ E0303
+use std.core.num.some_if                          //~ E0303
 
 pub fn fine(a: I32, b: I32) -> Option[I32] {
   a.checked_add(b)

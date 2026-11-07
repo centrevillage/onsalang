@@ -11,7 +11,7 @@
 // sample input; `in_output.onsa`: the type of the output; `in_block.onsa`: the type of a block input;
 // `via_alias.onsa`: the type through a type alias, whose error is the one of the alias). The same
 // places with a type name that is not there are in `use_flow_own_item_in_signature`.
-use main.f.{process_inplace}
+use main.f.process_inplace
 pub flow f(x: process_inplace at sample) -> F32 at sample {  //~ E0308
   1.0
 }

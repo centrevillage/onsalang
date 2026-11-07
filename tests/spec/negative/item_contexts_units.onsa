@@ -31,7 +31,7 @@ impl Target {
     self.x
   }
 
-  use std.math.{sqrt}                               //~ E0002
+  use std.math.sqrt                               //~ E0002
 
   test "a test in an impl" {                        //~ E0002
     assert true

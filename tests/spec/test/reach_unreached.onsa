@@ -14,7 +14,7 @@
 // tests run and pass: no E0200. `onsa check` does not report it either (it does not
 // depend on the target). The reached counterpart is reach_calls.onsa and reach_const.onsa.
 
-use std.test.{Gen}
+use std.test.Gen
 use std.test.gen
 
 // A function that nothing calls.

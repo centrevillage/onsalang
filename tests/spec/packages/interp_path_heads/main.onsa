@@ -15,7 +15,7 @@
 use cfg
 use cfg.{N, ORIGIN, PAIR}
 use kp.inner
-use kp.inner.{Q}
+use kp.inner.Q
 use kp.deep
 
 pub fn a_module_taken() -> Str uses {Alloc} {

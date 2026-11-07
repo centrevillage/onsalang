@@ -11,11 +11,11 @@
 // What does not clash: a grandchild (`p/r/q.onsa` is `p.r.q`, a child of `p.r`, and the item `q` of
 // `p.onsa` is an item of `p`), and a child of another module (`u/t.onsa` is `u.t`, and the item `t` of
 // `s.onsa` is an item of `s`).
-use a.{c}
-use h.{n}
-use s.{t}
-use p.r.q.{w}
-use u.t.{y}
+use a.c
+use h.n
+use s.t
+use p.r.q.w
+use u.t.y
 
 pub fn k() -> I32 {
   c() + n() + t() + w() + y()

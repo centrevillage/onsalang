@@ -1,4 +1,4 @@
-use c.{j}
+use c.j
 
 pub fn k() -> I32 {
   j()

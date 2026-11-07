@@ -8,15 +8,15 @@
 // The `use` is the one that gets the diagnostic here, since it is the later declaration in every
 // case. The name is drawn from none of the bindings (S-675), so `double` and `triple` below are
 // called without a diagnostic of their own.
-use util.{double}
-use util.{triple}
+use util.double
+use util.triple
 use std.math
-use util.{double} //~ E0304
-use other.{triple} //~ E0304
+use util.double //~ E0304
+use other.triple //~ E0304
 use kp.math //~ E0304
 
 pub fn quad() -> I32 {
   double(2) + triple(1)
 }
 
-use util.{quad} //~ E0304
+use util.quad //~ E0304
