@@ -46,14 +46,20 @@ pub(super) fn foreign_literal(c: &Cursor) -> Option<(RowId, Hit)> {
 }
 
 /// A tuple index with a leading `0` (`t.01`, `t.00`; §2.4, S-508), where the
-/// parser failed at it ([`Want::TupleIndex`]): the one candidate takes the
-/// leading `0`s out (no language reads a tuple index as octal).
+/// parser failed at it ([`Want::TupleIndex`]), with [`unpadded_index`].
 pub(super) fn tuple_index_zero(c: &Cursor) -> Option<Hit> {
     if c.want != Want::TupleIndex {
         return None;
     }
-    let digits = crate::literal::tuple_index_unpadded(c.src(c.at))?;
-    hit(c.span(c.at), vec![Fix::replace("remove the leading zero", c.span(c.at), digits)])
+    hit(c.span(c.at), vec![unpadded_index(c.span(c.at), c.src(c.at))?])
+}
+
+/// The one candidate of the tuple index `digits` at `span` with a leading
+/// `0`, of an expression or a hole (R-290): it takes the leading `0`s out (no
+/// language reads a tuple index as octal).
+pub(crate) fn unpadded_index(span: Span, digits: &str) -> Option<Fix> {
+    let unpadded = crate::literal::tuple_index_unpadded(digits)?;
+    Some(Fix::replace("remove the leading zero", span, unpadded))
 }
 
 /// The parts of the number written as in other languages at token `i` (a

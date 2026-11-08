@@ -516,7 +516,8 @@ impl<'a> Dumper<'a> {
                 }
                 StrSeg::Interp(p) => {
                     self.out.push('{');
-                    self.path(p);
+                    let names: Vec<&str> = p.segments.iter().map(|(s, _)| s.name.as_str()).collect();
+                    self.out.push_str(&names.join("."));
                     self.out.push('}');
                 }
             }

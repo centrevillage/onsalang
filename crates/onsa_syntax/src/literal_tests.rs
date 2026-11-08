@@ -357,8 +357,18 @@ fn a_negative_pattern_names_the_form_of_its_number() {
 
 #[test]
 fn a_tuple_index_of_a_hole_follows_the_rules_of_one_of_an_expression() {
-    // §2.4, S-508: decimal digits, no leading `0` but `0`, in `U32`.
-    let read = |s: &str| crate::literal::hole_tuple_index(s);
-    assert_eq!((read("0"), read("1"), read("10"), read("4294967295")), (Some(0), Some(1), Some(10), Some(u32::MAX)));
-    assert_eq!((read("01"), read("00"), read("4294967296"), read("x"), read("1a")), (None, None, None, None, None));
+    // §2.4, S-508, R-290: no leading `0` but `0`, in `U32`; a too large one first.
+    use crate::literal::{BadIndex::*, tuple_index};
+    assert_eq!([tuple_index("0"), tuple_index("1"), tuple_index("4294967295")], [Ok(0), Ok(1), Ok(u32::MAX)]);
+    assert_eq!(
+        [tuple_index("01"), tuple_index("00"), tuple_index("4294967296")],
+        [Err(Padded), Err(Padded), Err(TooLarge)]
+    );
+    assert_eq!(tuple_index("04294967296"), Err(TooLarge));
+    // The lexer reads them in a hole: a name path with each index, a path
+    // still with an index of no index.
+    let path = |s: &str| crate::literal::hole_path(s).map(|p| p.into_iter().map(|(_, i)| i).collect::<Vec<_>>());
+    assert_eq!(path("t.0.x.1"), Ok(vec![None, Some(Ok(0)), None, Some(Ok(1))]));
+    assert_eq!(path("t.01.99999999999"), Ok(vec![None, Some(Err(Padded)), Some(Err(TooLarge))]));
+    assert_eq!(path("t.01 + 1"), Err(crate::literal::HoleError::NotAPath));
 }

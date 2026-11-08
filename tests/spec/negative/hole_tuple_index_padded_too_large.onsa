@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§2.4", "§18.1"]
+
+// A tuple index with a leading `0` and one too large for `U32` in the holes of one literal (spec §2.4, §18.1; R-290):
+// the candidate of the leading `0` would leave the E0408 of the other in the literal, which it replaces whole, so
+// there is none, and the form found in the syntax stage with no candidate is the general E0002 (§18.1). The error is
+// at the first index of the literal; when that is the one too large, it is its E0408 (no candidate either).
+
+pub fn in_one_hole(t: (I32, (I32, I32))) -> Str uses {Alloc} {
+  "{t.01.4294967296}"                                //~ E0002 @7
+}
+
+pub fn in_two_holes(t: (I32, I32)) -> Str uses {Alloc} {
+  "{t.01} {t.4294967296}"                            //~ E0002 @7
+}
+
+pub fn the_large_one_first(t: (I32, I32)) -> Str uses {Alloc} {
+  "{t.4294967296.01}"                                //~ E0408 @7
+}

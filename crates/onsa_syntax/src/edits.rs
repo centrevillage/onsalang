@@ -4,7 +4,7 @@
 //! ([`apart`]), and whether such an edit joins two tokens ([`joining`]): the
 //! one place of each.
 
-use onsa_diag::{Edit, FileId, Fix, Span};
+use onsa_diag::{Diagnostic, Edit, FileId, Fix, Span};
 
 use crate::token::{Token, TokenKind};
 
@@ -239,4 +239,28 @@ thread_local! {
 /// those of the candidates reported alike.
 pub(crate) fn lexed() -> usize {
     LEXED.get()
+}
+
+/// The candidates of the error `d` in the string literal at `lit` of the
+/// file `text`: an edit inside the literal, which is one token, becomes the
+/// replacement of the literal with the edits inside it (§18.1). The one
+/// place for the lexer's errors of a hole (R-290) and the names stage's.
+pub fn in_literal(mut d: Diagnostic, lit: Span, text: &str) -> Diagnostic {
+    let inside = |e: &Edit| e.span.file == lit.file && lit.start < e.span.start && e.span.end < lit.end;
+    for fix in &mut d.fixes {
+        let (inner, mut edits): (Vec<Edit>, Vec<Edit>) = fix.edits().iter().cloned().partition(inside);
+        if inner.is_empty() {
+            continue;
+        }
+        let (mut out, mut pos) = (String::new(), lit.start as usize);
+        for e in &inner {
+            out.push_str(&text[pos..e.span.start as usize]);
+            out.push_str(&e.replace);
+            pos = e.span.end as usize;
+        }
+        out.push_str(&text[pos..lit.end as usize]);
+        edits.push(Edit::replace(lit, out));
+        *fix = Fix::new(fix.title(), edits);
+    }
+    d
 }

@@ -10,6 +10,9 @@
 // not part of this rule: a `'` after `)` or after a space starts a character literal that is not closed, which is E0001 of
 // the literal (§2.4). The cases write `'` at the end of a line or before a closing `'` of the same line, and never before
 // the `}` of the unit on the same line (what an unclosed literal takes of the end of its line is not decided, S-467).
+// Three `'` after a name are not this form: `'''` opens a string with a delimiter of other languages wherever it
+// stands (S-942), so `x'''` is the name and the delimiter, the `string_delimiter` E0002 of §2.4 over `x'''`, with no
+// note of FAUST (`three_in_a_row`).
 // The marker is the line only. One error in each declaration unit.
 
 pub flow plain(x: F32 at sample) -> F32 at sample {
@@ -67,6 +70,7 @@ pub flow two_in_a_row(x: F32 at sample) -> F32 at sample {
   a
 }
 
+// `x'''` is the name and the delimiter `'''` (S-942), not a delay: the line's E0002 is the `string_delimiter` one.
 pub flow three_in_a_row(x: F32 at sample) -> F32 at sample {
   let a = x'''                                      //~ E0002
   a

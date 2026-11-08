@@ -1,0 +1,91 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§2.4", "§18.1"]
+
+// E0002 for a run that holds a delimiter of another language and literals side by side (spec §2.4, S-937, S-941; the
+// row `string_delimiter` of spec/foreign-forms.toml). The run is one form as a whole: `"a"$"b"` is one error that starts
+// at the first `"`, not the literal `"a"` and then the delimiter `$"b"`, and the main position is where the run starts
+// (the marker gives its column; the range is the whole run, which a marker does not hold). The same for a delimiter
+// that is followed by a literal (`"a"$"b""c"`: `$"b"` is closed by its second `"`, and `"c"` is the next part of the
+// run), for two delimiters side by side (`$"a"$"b"`) and for a name in the run (`x"a"$"b"`). A stretch of literals with
+// no name and no delimiter in it is the form of §2.5 (lex/run_prefix_adjacent_literals.onsa). No candidate
+// (fixes = 0). One error per declaration (P-01).
+// The runs that hold a name and no delimiter are in negative/lex_run_adjacent_literals_names.onsa.
+
+// The right forms.
+pub fn fine() -> Str {
+  let a = "$"
+  a
+}
+
+pub fn literal_dollar_literal() -> Str {
+  "a"$"b"                                            //~ E0002 @3
+}
+
+pub fn name_literal_dollar_literal() -> Str {
+  x"a"$"b"                                           //~ E0002 @3
+}
+
+pub fn two_literals_dollar_literal() -> Str {
+  "a""b"$"c"                                         //~ E0002 @3
+}
+
+pub fn literal_dollar_two_literals() -> Str {
+  "a"$"b""c"                                         //~ E0002 @3
+}
+
+pub fn two_dollar_delimiters() -> Str {
+  $"a"$"b"                                           //~ E0002 @3
+}
+
+pub fn literal_at_literal() -> Str {
+  "a"@"b"                                            //~ E0002 @3
+}
+
+pub fn literal_backtick() -> Str {
+  "a"`b`                                             //~ E0002 @3
+}
+
+pub fn literal_two_dollars() -> Str {
+  "a"$$"b"                                           //~ E0002 @3
+}
+
+pub fn literal_name_hash_delimiter() -> Str {
+  "a"r#"b"#                                          //~ E0002 @3
+}
+
+pub fn literal_hash_delimiter() -> Str {
+  "a"#"b"#                                           //~ E0002 @3
+}
+
+pub fn literal_triple_quotes() -> Str {
+  "a""""b"""                                         //~ E0002 @3
+}
+
+pub fn literal_triple_single_quotes() -> Str {
+  "a"'''b'''                                         //~ E0002 @3
+}
+
+pub fn name_literal_dollar_literal_name() -> Str {
+  x"a"$"b"y                                          //~ E0002 @3
+}
+
+pub fn dollar_literal_literal() -> Str {
+  $"a""b"                                            //~ E0002 @3
+}
+
+pub fn in_a_let() -> Str {
+  let s = "a"$"b"                                    //~ E0002 @11
+  s
+}
+
+pub fn before_an_operator() -> Str {
+  let s = "a"$"b" + "q"                              //~ E0002 @11
+  s
+}
+
+pub fn after_an_operator() -> Str {
+  let s = "q" + "a"$"b"                              //~ E0002 @17
+  s
+}

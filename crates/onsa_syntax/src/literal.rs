@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use std::ops::Range;
 
-use crate::ast::{Ident, Path, StrLit, StrSeg};
+use crate::ast::{HolePath, Ident, StrLit, StrSeg};
 use crate::token::TokenKind;
 
 /// A hole of a string literal (`{x}`, from the `{` to after the `}`), as
@@ -23,8 +23,9 @@ pub(crate) struct Hole {
     pub(crate) span: Span,
     /// The spans of the segments of its name path (the head, then each name
     /// or tuple index after a `.`), or `None` when it holds no name path
-    /// (the lexer's E0001).
-    pub(crate) path: Option<Vec<Span>>,
+    /// (the lexer's E0001), or a tuple index of no index (its E0020, E0408);
+    /// with each the tuple index it is ([`tuple_index`]), or `None` for a name.
+    pub(crate) path: Option<Vec<(Span, Option<u32>)>>,
     /// The head of its path when it is a reserved word, whose unsupported
     /// feature the lexer reported there (§2.2, S-371).
     pub(crate) reserved_head: Option<Span>,
@@ -762,13 +763,24 @@ pub(crate) fn tuple_index_unpadded(text: &str) -> Option<&str> {
     Some(if digits.is_empty() { &text[text.len() - 1..] } else { digits })
 }
 
-/// The tuple index a name of the path of a hole is (`0` of `{t.0}`, §2.4),
-/// by the rules of a tuple index of an expression: `None` when it is no
-/// decimal digits, or starts with `0` and is not `0` (S-508), or does not
-/// fit `U32`.
-pub fn hole_tuple_index(name: &str) -> Option<u32> {
-    let digits = name.bytes().all(|b| b.is_ascii_digit()) && tuple_index_unpadded(name).is_none();
-    digits.then(|| tuple_index_value(name)).flatten()
+/// The message of the E0408 of a tuple index ([`BadIndex::TooLarge`]).
+pub(crate) const TOO_LARGE: &str = "tuple index is too large";
+
+/// Why the digits after a `.` are no tuple index ([`tuple_index`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BadIndex {
+    /// It does not fit `U32` (E0408).
+    TooLarge,
+    /// It starts with `0` and is not `0` (E0020, S-508).
+    Padded,
+}
+
+/// The value of the tuple index `digits` after a `.` (§2.4), by the one rule
+/// of an expression's (`t.0`) and a hole's (`{t.0}`, R-290): a too large one
+/// is that before it is a padded one.
+pub(crate) fn tuple_index(digits: &str) -> Result<u32, BadIndex> {
+    let value = tuple_index_value(digits).ok_or(BadIndex::TooLarge)?;
+    if tuple_index_unpadded(digits).is_some() { Err(BadIndex::Padded) } else { Ok(value) }
 }
 
 /// The character of a char literal (`'a'`, `'\n'`).
@@ -801,9 +813,11 @@ pub(crate) fn str_lit(text: &str, span: Span, holes: &[Hole]) -> StrLit {
                 segments.push(StrSeg::Text(std::mem::take(&mut buf)));
             }
             if let Some(path) = &h.path {
-                let name = |s: &Span| Ident { name: text[s.start as usize..s.end as usize].to_string(), span: *s };
-                let pspan = Span::new(span.file, path[0].start, path[path.len() - 1].end);
-                segments.push(StrSeg::Interp(Path { segments: path.iter().map(name).collect(), span: pspan }));
+                let name = |&(s, i): &(Span, _)| {
+                    (Ident { name: text[s.start as usize..s.end as usize].to_string(), span: s }, i)
+                };
+                let pspan = Span::new(span.file, path[0].0.start, path[path.len() - 1].0.end);
+                segments.push(StrSeg::Interp(HolePath { segments: path.iter().map(name).collect(), span: pspan }));
             }
             pathless_hole |= h.path.is_none();
             i = h.span.end as usize;
@@ -866,12 +880,14 @@ pub(crate) fn escape(after: &str) -> (Option<char>, usize) {
 }
 
 /// The name path a hole holds (§2.4, S-90), `content` being the text
-/// between its `{` and `}`: the byte ranges in `content` of its segments, or
-/// what keeps it from being one. The head is a name, `self` or `Self` (or a
-/// reserved word, whose E0200 is the lexer's); after each `.` a name, a
-/// keyword (S-357) or the digits of a tuple index. Nothing else: no blank,
-/// no call, no literal, no operator, no format (`{x:.2}`).
-pub(crate) fn hole_path(content: &str) -> Result<Vec<Range<usize>>, HoleError> {
+/// between its `{` and `}`: the byte ranges in `content` of its segments
+/// with the tuple index of each that is one, or what keeps it from being one.
+/// The head is a name, `self` or `Self` (or a reserved word, whose E0200 is
+/// the lexer's); after each `.` a name, a keyword (S-357) or the digits of a
+/// tuple index. Nothing else: no blank, no call, no literal, no operator, no
+/// format (`{x:.2}`). Digits that are no tuple index by the rule of an
+/// expression's are a path's still: the lexer reports them (R-290).
+pub(crate) fn hole_path(content: &str) -> Result<Vec<Segment>, HoleError> {
     // S-440: a blank, a keyword at the head but `self` / `Self` (`{true}`, `{fn}`) and `_` make no name path.
     if content.contains(':') {
         return Err(HoleError::Format);
@@ -885,22 +901,27 @@ pub(crate) fn hole_path(content: &str) -> Result<Vec<Range<usize>>, HoleError> {
         let name = b.first().is_some_and(|&x| x.is_ascii_alphabetic() || x == b'_')
             && b.iter().all(|&x| x.is_ascii_alphanumeric() || x == b'_')
             && seg != "_";
+        let digits = k > 0 && !b.is_empty() && b.iter().all(u8::is_ascii_digit);
         let ok = if k == 0 {
             name && TokenKind::keyword(seg)
                 .is_none_or(|kw| matches!(kw, TokenKind::KwSelf | TokenKind::KwSelfType) || kw.reserved().is_some())
         } else {
-            name || (!b.is_empty() && b.iter().all(u8::is_ascii_digit))
+            name || digits
         };
         if !ok {
             return Err(HoleError::NotAPath);
         }
-        out.push(range);
+        out.push((range, digits.then(|| tuple_index(seg))));
     }
     Ok(out)
 }
 
-/// Why a hole holds no name path ([`hole_path`]), for the note of its E0001.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// A segment of the path of a hole ([`hole_path`]): its range in the
+/// content, and the tuple index it is (`None` for a name).
+pub(crate) type Segment = (Range<usize>, Option<Result<u32, BadIndex>>);
+
+/// Why a hole holds no name path ([`hole_path`]), for its diagnostic.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum HoleError {
     /// A format (`{x:.2}`): there is none.
     Format,

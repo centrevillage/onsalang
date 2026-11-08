@@ -302,14 +302,13 @@ impl<'a> Parser<'a> {
                             return Err(self.unexpected("a field name or tuple index after `.`"));
                         }
                         TokenKind::Int => {
-                            if crate::literal::tuple_index_value(self.token_text(n)).is_some()
-                                && crate::literal::tuple_index_unpadded(self.token_text(n)).is_some()
-                            {
+                            let index = crate::literal::tuple_index(self.token_text(n));
+                            if index == Err(crate::literal::BadIndex::Padded) {
                                 return Err(self.fail(Want::TupleIndex, "a tuple index without a leading `0`"));
                             }
                             self.bump();
-                            if crate::literal::tuple_index_value(self.token_text(n)).is_none() {
-                                return Err(self.error(Code::E0408, n.span, "tuple index is too large"));
+                            if index.is_err() {
+                                return Err(self.error(Code::E0408, n.span, crate::literal::TOO_LARGE));
                             }
                             expr = self.complete(m, NodeKind::TupleIndexExpr);
                             chain = None;
@@ -652,9 +651,9 @@ impl<'a> Parser<'a> {
     fn interpolation_levels(&mut self, t: Token) -> PResult<()> {
         let level = self.level();
         let mut height = 0;
-        let paths: Vec<Vec<Span>> = self.literals.holes_in(t.span).iter().filter_map(|h| h.path.clone()).collect();
+        let paths: Vec<Vec<_>> = self.literals.holes_in(t.span).iter().filter_map(|h| h.path.clone()).collect();
         for path in paths {
-            for (i, name) in path.iter().enumerate().skip(1) {
+            for (i, (name, _)) in path.iter().enumerate().skip(1) {
                 let dot = Span::new(self.file, name.start - 1, name.start);
                 self.limit(level + Self::height(NodeKind::FieldExpr, i as u32 - 1), dot, NodeKind::FieldExpr)?;
             }

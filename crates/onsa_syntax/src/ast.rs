@@ -260,7 +260,16 @@ pub enum StrSeg {
     /// Literal text with escapes resolved.
     Text(String),
     /// `{name.field}`
-    Interp(Path),
+    Interp(HolePath),
+}
+
+/// The path of a hole (`{t.0}`, §2.4): its names, each with the tuple index
+/// it is (`0`), as the lexer read it by the rule of an expression's (R-290),
+/// or `None` for a name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HolePath {
+    pub segments: Vec<(Ident, Option<u32>)>,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

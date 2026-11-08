@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§2.4", "§18.1"]
+
+// What the pass reads today and the decision keeps, for a delimiter with `#` whose content holds a run longer than the
+// closing (spec §2.4, S-941, S-858). The closing of a delimiter with `#` is a `"` and the same number of `#` as the
+// opening: in `##"a"### }"##` the `"###` is not the closing and the `"##` after the `}` is, so the `}` is content, and
+// the function ends at the `}` of its last line. When the line ends after the run (`##"x"###`), the token stops at the
+// line end and the `}` on the next line ends the function. The range of the error is not held by a marker (the line and
+// the column of the main position are). Each declaration has one error (P-01). No candidate (fixes = 0).
+// The closings that are longer than the opening and leave the delimiter not closed, where the output changes, are in
+// negative/lex_delimiter_long_close_hashes.onsa.
+
+// The right forms.
+pub fn fine() -> Str {
+  let a = "}}"
+  a
+}
+
+pub fn two_hashes_with_three_inside() -> Str {
+  ##"a"### }"##                                      //~ E0002 @3
+}
+
+pub fn two_hashes_with_four_inside() -> Str {
+  ##"a"#### }"##                                     //~ E0002 @3
+}
+
+pub fn one_hash_with_two_inside() -> Str {
+  #"a"## }"#                                         //~ E0002 @3
+}
+
+pub fn three_hashes_with_four_inside() -> Str {
+  ###"a"#### }"###                                   //~ E0002 @3
+}
+
+pub fn name_and_two_hashes_with_three_inside() -> Str {
+  r##"a"### }"##                                     //~ E0002 @3
+}
+
+pub fn two_hashes_with_three_inside_and_a_brace_before() -> Str {
+  ##"a"### { }"##                                    //~ E0002 @3
+}
+
+pub fn two_hashes_closed_by_three_at_the_end_of_the_line() -> Str {
+  ##"x"###                                           //~ E0002 @3
+}
+
+pub fn one_hash_closed_by_two_at_the_end_of_the_line() -> Str {
+  #"x"##                                             //~ E0002 @3
+}

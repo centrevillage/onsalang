@@ -73,28 +73,27 @@ impl<'a> Checker<'a> {
     /// is `path`: the value its records end at (the namespaces they pass
     /// read as an expression's, [`Self::namespaces`]), then its fields and tuple
     /// elements. A hole with no record has a name held as an error.
-    pub(super) fn check_hole(&mut self, e: ExprId, k: u32, path: &Path) -> R<TyId> {
+    pub(super) fn check_hole(&mut self, e: ExprId, k: u32, hole: &onsa_syntax::ast::HolePath) -> R<TyId> {
         let records = self.names.interp.get(&(e, k)).cloned().unwrap_or_default();
         let Some((at, last)) = records.last().cloned() else { return Err(self.held_stop()) };
-        let segs = &path.segments;
-        self.namespaces(records.iter().map(|(i, r)| (e, r.clone(), segs[*i as usize].clone())).collect())?;
-        let name = &segs[at as usize];
-        let span = Span::new(name.span.file, segs[0].span.start, name.span.end);
+        let segs = &hole.segments;
+        self.namespaces(records.iter().map(|(i, r)| (e, r.clone(), segs[*i as usize].0.clone())).collect())?;
+        let name = &segs[at as usize].0;
+        let span = Span::new(name.span.file, segs[0].0.span.start, name.span.end);
         let mut t = self.value_of_record(last, e, name, span, None)?;
         // The targets of a hole are kept by the hole (the literal is no name).
         if let Some(target) = self.info.targets.remove(&e) {
             self.info.hole_targets.insert((e, k), target);
         }
-        for seg in &segs[at as usize + 1..] {
+        for (seg, index) in &segs[at as usize + 1..] {
             let base = self.known_shape(t, seg.span, "value")?;
-            // A tuple element that is no tuple index of an expression
-            // (`{t.01}`) is a field, which the tuple has not (E0413).
-            t = match onsa_syntax::hole_tuple_index(&seg.name) {
+            // The lexer read the tuple indexes (R-290).
+            t = match *index {
                 Some(index) => self.tuple_element(base, index, seg.span)?,
                 None => self.field_type(base, seg)?,
             };
         }
-        self.defer(path.span, t, DeferredKind::Require { bound: Bound::Show, what: Required::HoleValue });
+        self.defer(hole.span, t, DeferredKind::Require { bound: Bound::Show, what: Required::HoleValue });
         Ok(t)
     }
 

@@ -1,0 +1,128 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§2.4", "§18.1"]
+
+// How a delimiter of another language ends when the run that follows the content has another length than its opening
+// (spec §2.4, S-941, S-858, S-467). A delimiter is closed only by a run of the same number as its opening (a run of `"`
+// for a run of `"`; a `"` and the same number of `#` for a delimiter with `#`). A run of another length is no closing,
+// whether it is shorter (`""""x"""`) or longer (`"""x""""`, `'''x''''`), and the delimiter is then not closed: its token
+// goes on to the end of the line, nothing after the opening is read, and the range of the error is the opening delimiter
+// only (a marker holds the line and the column of the main position, not the range). A longer run inside a delimiter
+// that is closed later is content. The `"` before a closing of the right length is content (`#"a""#` is closed by its
+// second `"`), and a delimiter with one character in front of the `"` (`$"a""b"`) is one token like the others. This
+// file holds what the pass reads today and the decision keeps: the closings of a delimiter with `#` that are longer than
+// the opening are in negative/lex_delimiter_long_close_hashes.onsa and negative/lex_delimiter_long_close_kept.onsa.
+// The first half has a `}` after the opening, on the line: if the delimiter is closed, the `}` is content, and if it
+// is not, the `}` is not read, and the `}` on the next line ends the function. Each declaration has one error and the
+// `}` that ends it is the one on its last line (P-01). No candidate (fixes = 0).
+
+// The right forms.
+pub fn fine() -> Str {
+  let a = "}}"
+  a
+}
+
+pub fn three_quotes_with_four_inside() -> Str {
+  """a"""" }"""                                      //~ E0002 @3
+}
+
+pub fn three_quotes_with_five_inside() -> Str {
+  """a""""" }"""                                     //~ E0002 @3
+}
+
+pub fn four_quotes_with_five_inside() -> Str {
+  """"a""""" }""""                                   //~ E0002 @3
+}
+
+pub fn single_quotes_with_four_inside() -> Str {
+  '''a'''' }'''                                      //~ E0002 @3
+}
+
+pub fn dollar_triple_quotes_with_four_inside() -> Str {
+  $"""a"""" }"""                                     //~ E0002 @3
+}
+
+pub fn three_quotes_closed_by_four() -> Str {
+  """x"""" }                                         //~ E0002 @3
+}
+
+pub fn three_quotes_closed_by_five() -> Str {
+  """x""""" }                                        //~ E0002 @3
+}
+
+pub fn four_quotes_closed_by_five() -> Str {
+  """"x""""" }                                       //~ E0002 @3
+}
+
+pub fn single_quotes_closed_by_four() -> Str {
+  '''x'''' }                                         //~ E0002 @3
+}
+
+pub fn single_quotes_closed_by_five() -> Str {
+  '''x''''' }                                        //~ E0002 @3
+}
+
+pub fn dollar_triple_quotes_closed_by_four() -> Str {
+  $"""x"""" }                                        //~ E0002 @3
+}
+
+pub fn name_and_three_quotes_closed_by_four() -> Str {
+  r"""x"""" }                                        //~ E0002 @3
+}
+
+pub fn four_quotes_closed_by_three() -> Str {
+  """"x""" }                                         //~ E0002 @3
+}
+
+pub fn three_quotes_closed_by_two() -> Str {
+  """x"" }                                           //~ E0002 @3
+}
+
+pub fn two_hashes_closed_by_one() -> Str {
+  ##"x"# }                                           //~ E0002 @3
+}
+
+pub fn three_hashes_closed_by_two() -> Str {
+  ###"x"## }                                         //~ E0002 @3
+}
+
+pub fn dollar_quote_then_a_quote() -> Str {
+  $"a""b"                                            //~ E0002 @3
+}
+
+pub fn dollar_quote_then_two_quotes() -> Str {
+  $"a"""b"                                           //~ E0002 @3
+}
+
+pub fn at_quote_then_a_quote() -> Str {
+  @"a""b"                                            //~ E0002 @3
+}
+
+pub fn dollar_at_quote_then_a_quote() -> Str {
+  $@"a""b"                                           //~ E0002 @3
+}
+
+pub fn hash_quote_with_a_quote_inside() -> Str {
+  #"a""#                                             //~ E0002 @3
+}
+
+pub fn hash_quote_with_two_quotes_inside() -> Str {
+  #"a"""#                                            //~ E0002 @3
+}
+
+pub fn two_hashes_with_a_quote_inside() -> Str {
+  ##"a""##                                           //~ E0002 @3
+}
+
+pub fn name_hash_quote_with_a_quote_inside() -> Str {
+  r#"a""#                                            //~ E0002 @3
+}
+
+pub fn two_hash_delimiters_side_by_side() -> Str {
+  #"a"##"b"#                                         //~ E0002 @3
+}
+
+pub fn hash_delimiter_and_a_literal() -> Str {
+  #"a"#"b"                                           //~ E0002 @3
+}

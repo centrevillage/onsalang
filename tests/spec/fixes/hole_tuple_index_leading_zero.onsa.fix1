@@ -1,0 +1,144 @@
+// onsa.toml
+// [test]
+// fixes = 1
+// spec = ["§2.4", "§18.1"]
+
+// E0020 for a tuple index in a hole of an interpolation that starts with `0` and is not `0` itself (spec §2.4, R-290,
+// S-508): `"{t.01}"`, `"{t.00}"`, `"{t.007}"`. A hole is resolved by the rules of an expression, so the index is read
+// in decimal digits and `0` is the one index that starts with `0` and stays, as in the expression `t.01`
+// (fixes/tuple_index_leading_zero.onsa). The one candidate takes the leading `0`s off (`{t.1}`, `{t.0}`, `{t.7}`),
+// and the main position is where the index starts, as in the expression (the column the marker gives). The error is in
+// the syntax stage wherever the hole stands, before the types are looked at, so the indexes that do not fit the tuple
+// are not reported, and the type of the tuple does not matter (a generic one too). One error per function (P-01); the
+// rest of the function is not checked.
+// The index too large for `U32` is in negative/hole_tuple_index_too_large.onsa; a file whose whole text is checked
+// after the candidate is applied is fixes/hole_tuple_index_leading_zero_clean.onsa.
+
+pub struct Wrap {
+  pair: (I32, I32),
+}
+
+type Eleven = (I32, I32, I32, I32, I32, I32, I32, I32, I32, I32, I32)
+
+fn show(s: Str) -> U32 {
+  s.len()
+}
+
+impl Wrap {
+  pub fn show_pair(self) -> Str uses {Alloc} {
+    "{self.pair.0}"
+  }
+}
+
+// An index of `0` and an index with no leading `0` are not errors, and an error in one function does not touch them.
+pub fn fine(t: (I32, I32)) -> Str uses {Alloc} {
+  "{t.0} {t.1}"
+}
+
+pub fn on_the_tail(t: (I32, I32)) -> Str uses {Alloc} {
+  "{t.1}"                                           //~ E0020 @7
+}
+
+pub fn two_zeros(t: (I32, I32)) -> Str uses {Alloc} {
+  "{t.0}"                                           //~ E0020 @7
+}
+
+pub fn three_zeros(t: (I32, I32)) -> Str uses {Alloc} {
+  "{t.0}"                                          //~ E0020 @7
+}
+
+pub fn zero_then_digits(t: Eleven) -> Str uses {Alloc} {
+  "{t.10}"                                          //~ E0020 @7
+}
+
+pub fn two_zeros_then_a_digit(t: Eleven) -> Str uses {Alloc} {
+  "{t.7}"                                          //~ E0020 @7
+}
+
+pub fn text_around_the_hole(t: (I32, I32)) -> Str uses {Alloc} {
+  "a {t.1} b"                                       //~ E0020 @9
+}
+
+pub fn a_good_hole_first(t: (I32, I32)) -> Str uses {Alloc} {
+  "{t.0} {t.1}"                                     //~ E0020 @13
+}
+
+pub fn a_good_hole_after(t: (I32, I32)) -> Str uses {Alloc} {
+  "{t.1} {t.0}"                                     //~ E0020 @7
+}
+
+pub fn a_hole_after_a_name(n: U32, t: (I32, I32)) -> Str uses {Alloc} {
+  "{n} {t.1}"                                       //~ E0020 @11
+}
+
+pub fn nested_outer(t: (I32, (I32, I32))) -> Str uses {Alloc} {
+  "{t.1.1}"                                         //~ E0020 @7
+}
+
+pub fn nested_inner(t: ((I32, I32), I32)) -> Str uses {Alloc} {
+  "{t.0.1}"                                         //~ E0020 @9
+}
+
+pub fn through_a_field(w: Wrap) -> Str uses {Alloc} {
+  "{w.pair.1}"                                      //~ E0020 @12
+}
+
+impl Wrap {
+  pub fn through_self(self) -> Str uses {Alloc} {
+    "{self.pair.1}"                                 //~ E0020 @17
+  }
+}
+
+pub fn in_a_let(t: (I32, I32)) -> Str uses {Alloc} {
+  let a = "{t.1}"                                   //~ E0020 @15
+  a
+}
+
+pub fn in_an_argument(t: (I32, I32)) -> U32 uses {Alloc} {
+  show("{t.1}")                                     //~ E0020 @12
+}
+
+pub fn in_the_second_argument(t: (I32, I32)) -> U32 uses {Alloc} {
+  pair2(1, "{t.1}")                                 //~ E0020 @16
+}
+
+pub fn in_a_branch(c: Bool, t: (I32, I32)) -> Str uses {Alloc} {
+  if c {
+    "{t.1}"                                         //~ E0020 @9
+  } else {
+    "x"
+  }
+}
+
+pub fn in_an_else_branch(c: Bool, t: (I32, I32)) -> Str uses {Alloc} {
+  if c {
+    "x"
+  } else {
+    "{t.1}"                                         //~ E0020 @9
+  }
+}
+
+pub fn in_an_arm(n: U32, t: (I32, I32)) -> Str uses {Alloc} {
+  match n {
+    0 => "{t.1}",                                   //~ E0020 @14
+    _ => "x",
+  }
+}
+
+pub fn in_a_generic_function[T](t: (T, I32)) -> Str uses {Alloc} {
+  "{t.1}"                                           //~ E0020 @7
+}
+
+pub fn in_a_block_in_a_block(t: (I32, I32)) -> Str uses {Alloc} {
+  let r: Str = {
+    let s: Str = {
+      "{t.1}"                                       //~ E0020 @11
+    }
+    s
+  }
+  r
+}
+
+fn pair2(a: I32, b: Str) -> U32 {
+  1
+}

@@ -8,8 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use onsa_diag::Span;
 use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::internal::bug;
-use onsa_syntax::ast::{Ast, ExprId, ExprKind, PatId, PatKind, Path, StmtKind};
-use onsa_syntax::hole_tuple_index;
+use onsa_syntax::ast::{Ast, ExprId, ExprKind, HolePath, PatId, PatKind, StmtKind};
 use serde::{Deserialize, Serialize};
 
 use crate::binding::{Head, HeadRow};
@@ -110,10 +109,10 @@ pub(super) fn pattern_places(ast: &Ast, info: &BodyInfo, p: PatId, proj: &mut Ve
 /// The place a hole of a string literal names (§2.4, S-803): of its last
 /// record a local, then the names after it, a tuple element by the types
 /// stage's one test (`check_hole`); `None` of any other hole.
-pub(super) fn hole_place(names: &BodyNames, e: ExprId, k: u32, path: &Path) -> Option<Place> {
+pub(super) fn hole_place(names: &BodyNames, e: ExprId, k: u32, hole: &HolePath) -> Option<Place> {
     let (at, PathRes::Local(b)) = names.interp.get(&(e, k))?.last()? else { return None };
-    let proj = (path.segments[*at as usize + 1..].iter())
-        .map(|s| hole_tuple_index(&s.name).map_or_else(|| Proj::Field(s.name.clone()), Proj::Elem))
+    let proj = (hole.segments[*at as usize + 1..].iter())
+        .map(|(s, index)| index.map_or_else(|| Proj::Field(s.name.clone()), Proj::Elem))
         .collect();
     Some(Place { root: LocalId(b.0), proj })
 }

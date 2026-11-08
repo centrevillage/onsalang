@@ -8,11 +8,11 @@
 //! bytes only, and goes over any other character whole ([`Lexer::bump_char`]),
 //! so that every span lies on character boundaries.
 
-use onsa_diag::{Code, Diagnostic, FileId, Span, Stage};
+use onsa_diag::{Code, Diagnostic, FileId, Fix, Span, Stage};
 
 pub use crate::chars::{BLANKS, is_blank};
 use crate::chars::{is_ident_continue, is_ident_start, line_break};
-use crate::literal::{ForeignNumber, Form, Found, Hole, HoleError, Invalid, Kind, Literals, Run};
+use crate::literal::{BadIndex, ForeignNumber, Form, Found, Hole, HoleError, Invalid, Kind, Literals, Run};
 use crate::token::{Token, TokenKind};
 
 /// Result of lexing one file.
@@ -35,6 +35,7 @@ pub fn lex(file: FileId, text: &str) -> Lexed {
         out: Lexed::default(),
         found: Found::default(),
         content: Vec::new(),
+        bad_indexes: Vec::new(),
     };
     lx.run();
     lx.runs();
@@ -118,6 +119,8 @@ struct Lexer<'a> {
     /// The errors of the content of the string or character literal being
     /// read, until it is read whole ([`Lexer::literal`]).
     content: Vec<Diagnostic>,
+    /// The tuple indexes of no index in the holes of the literal being read ([`Lexer::index_error`]).
+    bad_indexes: Vec<(Span, BadIndex)>,
 }
 
 impl<'a> Lexer<'a> {
@@ -206,12 +209,12 @@ impl<'a> Lexer<'a> {
     /// from the tokens once. A run is one form, and the parser's failure at
     /// any part of it finds it ([`Literals::touch`]). One literal alone is
     /// none, nor are literals with no name and no delimiter (`"a""b"`, §2.5),
-    /// and a word of the grammar ends a run. What does not close goes to the
-    /// end of its line, so it ends the run too. The errors of the content of
-    /// the literals are the run's, held; those of the other literals go to
-    /// the diagnostics, in the order of the file.
-    // SPEC-GAP(S-937): a run with a name or a delimiter holds the literals
-    // side by side in it (`x"a""b"`, `"a"$"b"`).
+    /// and a word of the grammar ends a run. A run with a name or a delimiter
+    /// holds the literals side by side in it whole (`x"a""b"`, `"a"$"b"`,
+    /// S-937). What does not close goes to the end of its line, so it ends
+    /// the run too. The errors of the content of the literals are the run's,
+    /// held; those of the other literals go to the diagnostics, in the order
+    /// of the file.
     fn runs(&mut self) {
         let in_run = |t: &Token| {
             use TokenKind::*;
@@ -451,6 +454,9 @@ impl<'a> Lexer<'a> {
         if !lex(self, start) {
             self.found.unclosed.push(Span::new(self.file, start as u32, start as u32 + 1));
         }
+        if let Some(d) = self.index_error(self.span(start)) {
+            self.content.push(d);
+        }
         if !self.content.is_empty() {
             let literal = self.span(start);
             self.found.contents.push((literal, std::mem::take(&mut self.content)));
@@ -533,8 +539,10 @@ impl<'a> Lexer<'a> {
     /// A hole `{…}` of a string literal (§2.4, S-90), at its `{`: what it
     /// holds goes to its `}`, the closing `"` or the end of the line. It
     /// holds a name path ([`crate::literal::hole_path`]); anything else is
-    /// E0001, and a reserved word at its head is E0200 (§2.2, S-371). The
-    /// lexer reads it once ([`Hole`]); the names stage resolves it (W4-04).
+    /// E0001, a tuple index of no index is the E0020 or E0408 of one of an
+    /// expression (R-290), and a reserved word at its head is E0200 (§2.2,
+    /// S-371). The lexer reads it once ([`Hole`]); the names stage resolves
+    /// it (W4-04).
     fn hole(&mut self) {
         let open = self.pos;
         self.pos += 1;
@@ -556,8 +564,14 @@ impl<'a> Lexer<'a> {
         let span = self.span(open);
         let at =
             |r: std::ops::Range<usize>| Span::new(self.file, (open + 1 + r.start) as u32, (open + 1 + r.end) as u32);
-        let path = match crate::literal::hole_path(content) {
-            Ok(ranges) => Some(ranges.into_iter().map(at).collect::<Vec<_>>()),
+        let path: Option<Vec<_>> = match crate::literal::hole_path(content) {
+            // The tuple indexes of no index are the literal's ([`Lexer::index_error`]).
+            Ok(segments) if segments.iter().any(|(_, i)| matches!(i, Some(Err(_)))) => {
+                let bad = segments.into_iter().filter_map(|(r, i)| Some((at(r), i?.err()?)));
+                self.bad_indexes.extend(bad);
+                None
+            }
+            Ok(segments) => Some(segments.into_iter().map(|(r, i)| (at(r), i.and_then(Result::ok))).collect()),
             Err(why) => {
                 // A character written nowhere has its own E0001 already.
                 if !unwritable {
@@ -584,13 +598,42 @@ impl<'a> Lexer<'a> {
         };
         // SPEC-GAP(S-449): a reserved word at the head of a hole of another
         // form is not reported; the form's E0001 is.
-        let head = path.as_ref().map(|p| p[0]);
+        let head = path.as_ref().map(|p| p[0].0);
         let word = |s: Span| &self.text[s.start as usize..s.end as usize];
         let reserved = head.and_then(|h| TokenKind::keyword(word(h)).and_then(TokenKind::reserved));
         if let (Some(head), Some(feature)) = (head, reserved) {
             self.content.push(feature.diagnostic(Stage::Syntax, head, &[]));
         }
         self.found.holes.push(Hole { span, path, reserved_head: reserved.and(head) });
+    }
+
+    /// The error of the digits after a `.` in the holes of the literal at
+    /// `literal` that are no tuple index (§2.4, S-508, R-290), one for the
+    /// literal, at the first: the expression's E0408 or E0020. The one
+    /// candidate of the E0020 takes the leading `0`s off all of them, made
+    /// once as one replacement of the literal (§18.1); with an index too
+    /// large too there is none, and the form is an E0002 (§18.1).
+    fn index_error(&mut self, literal: Span) -> Option<Diagnostic> {
+        let bad = std::mem::take(&mut self.bad_indexes);
+        let &(span, why) = bad.first()?;
+        let digits = |s: Span| &self.text[s.start as usize..s.end as usize];
+        if why == BadIndex::TooLarge {
+            return Some(
+                Diagnostic::new(Stage::Syntax, Code::E0408, span, crate::literal::TOO_LARGE).with_found(digits(span)),
+            );
+        }
+        let unpadded = |&(s, why): &(Span, BadIndex)| {
+            (why == BadIndex::Padded).then(|| crate::foreign::unpadded_index(s, digits(s)))?
+        };
+        let fixes: Option<Vec<Fix>> = bad.iter().map(unpadded).collect();
+        let fix = fixes.map(|f| Fix::new(f[0].title(), f.iter().flat_map(|x| x.edits().iter().cloned()).collect()));
+        let d = crate::foreign::report(
+            crate::foreign::RowId::TupleIndexLeadingZero,
+            self.text,
+            span,
+            fix.into_iter().collect(),
+        );
+        Some(crate::edits::in_literal(d, literal, self.text))
     }
 
     /// A character literal (§2.4): to its closing `'`, on its line. Whether
@@ -747,17 +790,18 @@ struct Close {
 
 impl Close {
     /// What `rest` starts with: the bytes to go over, and whether they are
-    /// the closing delimiter. The `#` of a closing delimiter are counted up
-    /// to `hashes`, so that a delimiter may open right after it (`#"a"##"b"#`).
-    // SPEC-GAP(S-941): a run of `mark` of another length is no closing
-    // delimiter, and is gone over whole.
+    /// the closing delimiter. Only a run of the number of the opening one
+    /// closes (S-941): `count` of `mark`, or a `"` then `hashes` of `#`, the
+    /// whole run of `#` counted (`##"x"###` and `#"a"##"b"#` do not close
+    /// there). A run of another length is gone over whole; the `"` before a
+    /// `"` of the closing one are content (`#"a""#`).
     fn at(self, rest: &[u8]) -> (usize, bool) {
         if self.hashes > 0 {
             if rest.first() != Some(&self.mark) {
                 return (0, false);
             }
-            let n = rest[1..].iter().take(self.hashes).take_while(|&&b| b == b'#').count();
-            return if n == self.hashes { (1 + n, true) } else { (0, false) };
+            let n = rest[1..].iter().take_while(|&&b| b == b'#').count();
+            return (1 + n, n == self.hashes);
         }
         let n = rest.iter().take_while(|&&b| b == self.mark).count();
         (n, n == self.count)
@@ -783,8 +827,8 @@ fn foreign_open(rest: &str) -> Option<(usize, Close)> {
     if marks > 0 {
         return (quotes > 0).then_some((marks + 1, close(b'"', 1, 0)));
     }
-    // SPEC-GAP(S-942): a `'''` right after a name opens a delimiter too, so
-    // `x'''` is a run with a delimiter and no delay of FAUST.
+    // A `'''` right after a name opens a delimiter too, so `x'''` is a run
+    // with a delimiter and no delay of FAUST (S-942).
     if rest.starts_with("'''") {
         return Some((3, close(b'\'', 3, 0)));
     }
@@ -1072,10 +1116,10 @@ mod tests {
         // A name before a delimiter is a name, and the delimiter opens (S-458).
         let both = kinds("br#\"x\"# f`x` r\"\"\"x\"\"\"").0;
         assert_eq!(both, vec![Ident, ForeignStr, Ident, ForeignStr, Ident, ForeignStr, Eof]);
-        // A run of `#` that opens no delimiter is a `#` each; a delimiter
-        // after a closing one opens (`"#` then `#"`).
+        // A run of `#` that opens no delimiter is a `#` each; a longer run
+        // of `#` after a `"` closes nothing (S-941), so `"##"` is content.
         assert_eq!(kinds("### x").0, vec![Hash, Hash, Hash, Ident, Eof]);
-        assert_eq!(kinds("#\"a\"##\"b\"#").0, vec![ForeignStr, ForeignStr, Eof]);
+        assert_eq!(texts("#\"a\"##\"b\"# y")[..2], [(ForeignStr, "#\"a\"##\"b\"#"), (Whitespace, " ")]);
     }
 
     /// The text of the opening delimiter at the start of `src`, when it is one.
@@ -1112,9 +1156,12 @@ mod tests {
         assert_eq!(texts("\"\"\"x\"\" y")[..1], [(ForeignStr, "\"\"\"x\"\" y")]);
         assert_eq!(texts("\"\"\"\"x\"\"\"\" y")[..2], [(ForeignStr, "\"\"\"\"x\"\"\"\""), (Whitespace, " ")]);
         assert_eq!(texts("$\"a\"\"b\" y")[..2], [(ForeignStr, "$\"a\"\"b\""), (Whitespace, " ")]);
-        // The `#` are counted up to the number (`#"a"##"b"#` above).
+        // The whole run of `#` is counted: a shorter or a longer one does
+        // not close (S-941), and a `"` before the closing one is content.
         assert_eq!(texts("##\"a\"#b\"## y")[..2], [(ForeignStr, "##\"a\"#b\"##"), (Whitespace, " ")]);
         assert_eq!(texts("##\"a\"# y")[..1], [(ForeignStr, "##\"a\"# y")]);
+        assert_eq!(texts("##\"x\"### y")[..1], [(ForeignStr, "##\"x\"### y")]);
+        assert_eq!(texts("#\"a\"\"# y")[..2], [(ForeignStr, "#\"a\"\"#"), (Whitespace, " ")]);
     }
 
     #[test]
@@ -1248,13 +1295,26 @@ mod tests {
         // A reserved word at the head is E0200 at the word (S-371); after a `.` it is a name.
         assert_eq!(errors("\"a{clock}b\""), vec![(Code::E0200, "clock")]);
         assert!(errors("\"{s.clock}\"").is_empty());
+        // A tuple index of no index is the expression's E0020 or E0408
+        // (R-290), whose candidate replaces the literal (§18.1).
+        assert_eq!(errors("\"{t.0} {t.01}\""), vec![(Code::E0020, "01")]);
+        assert_eq!(errors("\"{t.99999999999}\""), vec![(Code::E0408, "99999999999")]);
+        let fix = &lex(FileId(0), "\"a{t.00}\"").diagnostics[0].fixes[0];
+        assert_eq!(fix.edits()[0].replace, "\"a{t.0}\"");
+        // One error for the literal, whose one candidate takes all the `0`s off,
+        // written once: the text of the candidates is as long as the literal.
+        let src = format!("\"{}\"", "{t.01}".repeat(2000));
+        let d = lex(FileId(0), &src).diagnostics;
+        let text: usize = d.iter().flat_map(|d| &d.fixes).flat_map(|f| f.edits()).map(|e| e.replace.len()).sum();
+        assert_eq!((d.len(), text), (1, src.len() - 2000));
+        assert_eq!(errors("\"{t.01} {t.4294967296}\""), vec![(Code::E0002, "01")]);
         // The lexer keeps the path of each hole.
         let l = lex(FileId(0), "\"a{t.0}b{x}\"");
         let paths: Vec<Vec<&str>> = l
             .literals
             .holes()
             .iter()
-            .map(|h| h.path.iter().flatten().map(|s| &"\"a{t.0}b{x}\""[s.start as usize..s.end as usize]).collect())
+            .map(|h| h.path.iter().flatten().map(|s| &"\"a{t.0}b{x}\""[s.0.start as usize..s.0.end as usize]).collect())
             .collect();
         assert_eq!(paths, vec![vec!["t", "0"], vec!["x"]]);
     }

@@ -1,0 +1,105 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§2.4", "§18.1"]
+
+// E0408 for a tuple index in a hole of an interpolation that does not fit `U32` (spec §2.4, R-290): `"{t.99999999999}"`,
+// `"{t.4294967296}"`. A hole is resolved by the rules of an expression, and an index that cannot hold a value is E0408
+// in the syntax stage (§18.1), as `t.99999999999` is. The main position is where the index starts, as in the expression
+// (the column the marker gives). No candidate (fixes = 0). One error per function (P-01); the rest of the function is
+// not checked, so the tuple that has no such field is not reported.
+// The leading `0` is in fixes/hole_tuple_index_leading_zero.onsa.
+
+pub struct Wrap {
+  pair: (I32, I32),
+}
+
+fn show(s: Str) -> U32 {
+  s.len()
+}
+
+impl Wrap {
+  pub fn show_pair(self) -> Str uses {Alloc} {
+    "{self.pair.0}"
+  }
+}
+
+// The largest index that fits `U32` is a value (it has no element of that number in the tuple, which is the types
+// stage and not this file), and an index of `0` and an index with no leading `0` are not errors.
+pub fn fine(t: (I32, I32)) -> Str uses {Alloc} {
+  "{t.0} {t.1}"
+}
+
+pub fn eleven_digits(t: (I32, I32)) -> Str uses {Alloc} {
+  "{t.99999999999}"                                  //~ E0408 @7
+}
+
+pub fn just_over_u32(t: (I32, I32)) -> Str uses {Alloc} {
+  "{t.4294967296}"                                   //~ E0408 @7
+}
+
+pub fn ten_nines(t: (I32, I32)) -> Str uses {Alloc} {
+  "{t.9999999999}"                                   //~ E0408 @7
+}
+
+pub fn over_u64(t: (I32, I32)) -> Str uses {Alloc} {
+  "{t.18446744073709551616}"                         //~ E0408 @7
+}
+
+pub fn thirty_digits(t: (I32, I32)) -> Str uses {Alloc} {
+  "{t.123456789012345678901234567890}"               //~ E0408 @7
+}
+
+pub fn text_around_the_hole(t: (I32, I32)) -> Str uses {Alloc} {
+  "a {t.99999999999} b"                              //~ E0408 @9
+}
+
+pub fn a_good_hole_first(t: (I32, I32)) -> Str uses {Alloc} {
+  "{t.0} {t.99999999999}"                            //~ E0408 @13
+}
+
+pub fn nested_outer(t: (I32, (I32, I32))) -> Str uses {Alloc} {
+  "{t.99999999999.1}"                                //~ E0408 @7
+}
+
+pub fn nested_inner(t: ((I32, I32), I32)) -> Str uses {Alloc} {
+  "{t.0.99999999999}"                                //~ E0408 @9
+}
+
+pub fn through_a_field(w: Wrap) -> Str uses {Alloc} {
+  "{w.pair.99999999999}"                             //~ E0408 @12
+}
+
+pub fn in_a_let(t: (I32, I32)) -> Str uses {Alloc} {
+  let a = "{t.99999999999}"                          //~ E0408 @15
+  a
+}
+
+pub fn in_an_argument(t: (I32, I32)) -> U32 uses {Alloc} {
+  show("{t.99999999999}")                            //~ E0408 @12
+}
+
+pub fn in_a_branch(c: Bool, t: (I32, I32)) -> Str uses {Alloc} {
+  if c {
+    "{t.99999999999}"                                //~ E0408 @9
+  } else {
+    "x"
+  }
+}
+
+pub fn in_an_arm(n: U32, t: (I32, I32)) -> Str uses {Alloc} {
+  match n {
+    0 => "{t.99999999999}",                          //~ E0408 @14
+    _ => "x",
+  }
+}
+
+pub fn in_a_generic_function[T](t: (T, T)) -> Str uses {Alloc} {
+  "{t.99999999999}"                                  //~ E0408 @7
+}
+
+impl Wrap {
+  pub fn through_self(self) -> Str uses {Alloc} {
+    "{self.pair.99999999999}"                        //~ E0408 @17
+  }
+}

@@ -1,0 +1,95 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§2.4", "§18.1"]
+
+// E0002 for a name that touches `'''` (spec §2.4, S-942, S-856, S-466; the row `string_delimiter` of
+// spec/foreign-forms.toml, and no row for FAUST). The opening of a delimiter is read as long as it can be, so `'''` is
+// the opening of a delimiter of another language after a name as it is after a space: `x'''` is the name `x` and the
+// delimiter `'''`, one run of §2.4 that holds a delimiter, with no note about the delay of FAUST, and the main position
+// is where the run starts, at the `x`. A delimiter that is not closed on the line takes the rest of the line. What tells
+// it from `x'` followed by `''` is the closing: `x'''a }'''` is closed by the `'''` after the `}`, so the `}` is content
+// and the function ends at the `}` of its last line; if `'''` were read as `x'` and `''`, the `}` would end the function
+// and the line after it would be one more error. The delay of one sample and two samples (`x'`, `x''`) stay the
+// string_prefix form (tests/spec/negative/syntax_string_prefix_faust.onsa). The marker gives the column of the main
+// position (the range is not held by a marker). No candidate (fixes = 0). One error per declaration (P-01).
+
+fn show(s: Str) -> U32 {
+  s.len()
+}
+
+// The right forms.
+pub fn fine() -> Str {
+  let a = "'''"
+  a
+}
+
+pub fn name_and_an_open_delimiter() -> Str {
+  x'''                                               //~ E0002 @3
+}
+
+pub fn longer_name_and_an_open_delimiter() -> Str {
+  gain'''                                            //~ E0002 @3
+}
+
+pub fn open_delimiter_in_a_let() -> Str {
+  let a = x'''                                       //~ E0002 @11
+  a
+}
+
+pub fn open_delimiter_takes_the_rest_of_the_line() -> Str {
+  let a = x''' + y'''                                //~ E0002 @11
+  a
+}
+
+pub fn open_delimiter_in_an_argument() -> U32 {
+  show(x''')                                         //~ E0002 @8
+}
+
+pub fn open_delimiter_over_lines() -> Str {
+  x'''                                               //~ E0002 @3
+  text
+  '''
+}
+
+pub fn closed_delimiter() -> Str {
+  x'''a'''                                           //~ E0002 @3
+}
+
+pub fn closed_delimiter_with_a_brace_inside() -> Str {
+  x'''a }'''                                         //~ E0002 @3
+}
+
+pub fn closed_delimiter_with_two_quotes_inside() -> Str {
+  x'''a''b }'''                                      //~ E0002 @3
+}
+
+pub fn closed_delimiter_with_one_quote_inside() -> Str {
+  x'''a'b }'''                                       //~ E0002 @3
+}
+
+pub fn closed_delimiter_then_a_name() -> Str {
+  x'''a'''y                                          //~ E0002 @3
+}
+
+pub fn closed_delimiter_then_a_literal() -> Str {
+  x'''a'''"b"                                        //~ E0002 @3
+}
+
+pub fn closed_delimiter_after_a_literal() -> Str {
+  "b"x'''a'''                                        //~ E0002 @3
+}
+
+pub fn closed_delimiter_after_an_operator() -> Str {
+  let y = 1 + x'''a'''                               //~ E0002 @15
+}
+
+pub fn one_prime_stays_the_prefix_form() -> Str {
+  let a = x'                                         //~ E0002 @11
+  a
+}
+
+pub fn two_primes_stay_the_prefix_form() -> Str {
+  let a = x''                                        //~ E0002 @11
+  a
+}

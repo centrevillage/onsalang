@@ -1,0 +1,193 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§2.4", "§18.1"]
+
+// E0002 for a run of literals side by side with a name or a delimiter of another language in it (spec §2.4, S-937),
+// in the places where a literal stands: an argument, an element, a field, the value of an arm, a closure body, a block
+// in a block, a branch, a return, a flow, a `par` body, a constant, a generic function and a method. The run is one
+// form wherever it stands: `x"a""b"` starts at the `x` and `"a"$"b"` at the first `"`, and the marker gives that
+// column. No candidate (fixes = 0). One error per declaration (P-01).
+
+pub struct Label {
+  text: Str,
+}
+
+fn show(s: Str) -> U32 {
+  s.len()
+}
+
+fn pair(a: Str, b: Str) -> U32 {
+  1
+}
+
+// The right forms.
+pub fn fine() -> U32 {
+  show("a")
+}
+
+pub fn name_in_an_argument() -> U32 {
+  show(x"a""b")                                      //~ E0002 @8
+}
+
+pub fn delimiter_in_an_argument() -> U32 {
+  show("a"$"b")                                      //~ E0002 @8
+}
+
+pub fn name_in_the_second_argument() -> U32 {
+  pair("p", x"a""b")                                 //~ E0002 @13
+}
+
+pub fn delimiter_in_the_second_argument() -> U32 {
+  pair("p", "a"$"b")                                 //~ E0002 @13
+}
+
+pub fn name_in_the_first_argument() -> U32 {
+  pair(x"a""b", "p")                                 //~ E0002 @8
+}
+
+pub fn name_in_an_array() -> U32 {
+  let xs = ["p", x"a""b"]                            //~ E0002 @18
+  xs.len()
+}
+
+pub fn delimiter_in_an_array() -> U32 {
+  let xs = ["p", "a"$"b"]                            //~ E0002 @18
+  xs.len()
+}
+
+pub fn name_in_a_tuple() -> U32 {
+  let t = (1, x"a""b")                               //~ E0002 @15
+  1
+}
+
+pub fn delimiter_in_a_tuple() -> U32 {
+  let t = (1, "a"$"b")                               //~ E0002 @15
+  1
+}
+
+pub fn name_in_a_field() -> Label {
+  Label { text: x"a""b" }                            //~ E0002 @17
+}
+
+pub fn delimiter_in_a_field() -> Label {
+  Label { text: "a"$"b" }                            //~ E0002 @17
+}
+
+pub fn name_in_an_arm(o: Option[I32]) -> U32 {
+  match o {
+    Some(_) => show(x"a""b"),                        //~ E0002 @21
+    None => 0,
+  }
+}
+
+pub fn delimiter_in_an_arm(o: Option[I32]) -> U32 {
+  match o {
+    Some(_) => show("a"$"b"),                        //~ E0002 @21
+    None => 0,
+  }
+}
+
+pub fn name_in_a_closure_body() -> U32 {
+  let f = fn(y: I32) -> U32 { show(x"a""b") }        //~ E0002 @36
+  f.(1)
+}
+
+pub fn delimiter_in_a_closure_body() -> U32 {
+  let f = fn(y: I32) -> U32 { show("a"$"b") }        //~ E0002 @36
+  f.(1)
+}
+
+pub fn name_in_a_block_in_a_block() -> U32 {
+  let r: U32 = {
+    let s: U32 = {
+      show(x"a""b")                                  //~ E0002 @12
+    }
+    s
+  }
+  r
+}
+
+pub fn delimiter_in_a_block_in_a_block() -> U32 {
+  let r: U32 = {
+    let s: U32 = {
+      show("a"$"b")                                  //~ E0002 @12
+    }
+    s
+  }
+  r
+}
+
+pub fn name_in_a_branch(c: Bool) -> U32 {
+  if c {
+    show(x"a""b")                                    //~ E0002 @10
+  } else {
+    0
+  }
+}
+
+pub fn delimiter_in_an_else_branch(c: Bool) -> U32 {
+  if c {
+    0
+  } else {
+    show("a"$"b")                                    //~ E0002 @10
+  }
+}
+
+pub fn name_after_a_return() -> Str {
+  return x"a""b"                                     //~ E0002 @10
+}
+
+pub fn delimiter_after_a_return() -> Str {
+  return "a"$"b"                                     //~ E0002 @10
+}
+
+pub fn name_in_a_generic_function[T](x: T) -> T {
+  let s = x"a""b"                                    //~ E0002 @11
+  x
+}
+
+pub fn delimiter_in_a_generic_function[T](x: T) -> T {
+  let s = "a"$"b"                                    //~ E0002 @11
+  x
+}
+
+pub flow name_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let s = x"a""b"                                    //~ E0002 @11
+  x
+}
+
+pub flow delimiter_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let s = "a"$"b"                                    //~ E0002 @11
+  x
+}
+
+pub flow name_in_a_par_body(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0..<2 {
+    let s = x"a""b"                                  //~ E0002 @13
+    x
+  }
+}
+
+pub flow delimiter_in_a_par_body(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0..<2 {
+    let s = "a"$"b"                                  //~ E0002 @13
+    x
+  }
+}
+
+const NAME_IN_A_CONST: Str = x"a""b"                 //~ E0002 @30
+
+const DELIMITER_IN_A_CONST: Str = "a"$"b"            //~ E0002 @35
+
+impl Label {
+  pub fn name_in_a_method(self) -> Str {
+    x"a""b"                                          //~ E0002 @5
+  }
+}
+
+impl Label {
+  pub fn delimiter_in_a_method(self) -> Str {
+    "a"$"b"                                          //~ E0002 @5
+  }
+}

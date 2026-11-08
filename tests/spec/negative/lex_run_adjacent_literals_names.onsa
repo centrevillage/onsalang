@@ -1,0 +1,85 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§2.4", "§18.1"]
+
+// E0002 for a run of names and literals with no space between them that holds literals side by side (spec §2.4,
+// S-937). A run that holds a name is one form as a whole, with the literals that touch each other in it (`x"a""b"`,
+// `"a"x"b""c"`, `"a""b"c`), and the main position is where the whole run starts. Only a stretch of literals with no name
+// and no delimiter of another language in it (`"a""b"`) is the form of §2.5, which has the two candidates of that form
+// (lex/run_prefix_adjacent_literals.onsa). The column tells the reading: if the run were split where two literals
+// touch (`"a""b"c` as `"a"` and `"b"c`), the error would stand at the second literal. The error has no candidate
+// (fixes = 0). The marker gives the column of the main position (the range is the whole run, which a marker does not
+// hold). One error per declaration (P-01).
+// The runs that hold a delimiter of another language are in negative/lex_run_adjacent_literals_delimiter.onsa, and the
+// places are in negative/lex_run_adjacent_literals_places.onsa.
+
+// The right forms.
+pub fn fine() -> Str {
+  let a = "a"
+  a
+}
+
+pub fn name_then_two_literals() -> Str {
+  x"a""b"                                            //~ E0002 @3
+}
+
+pub fn name_then_three_literals() -> Str {
+  x"a""b""c"                                         //~ E0002 @3
+}
+
+pub fn name_then_two_literals_then_name() -> Str {
+  x"a""b"y                                           //~ E0002 @3
+}
+
+pub fn literal_name_literal_literal() -> Str {
+  "a"x"b""c"                                         //~ E0002 @3
+}
+
+pub fn two_literals_then_a_name() -> Str {
+  "a""b"c                                            //~ E0002 @3
+}
+
+pub fn three_literals_then_a_name() -> Str {
+  "a""b""c"d                                         //~ E0002 @3
+}
+
+pub fn literal_name_two_literals_name() -> Str {
+  "a"x"b""c"y                                        //~ E0002 @3
+}
+
+pub fn two_names_between_literals() -> Str {
+  x"a"y"b""c"z                                       //~ E0002 @3
+}
+
+pub fn name_then_a_string_and_a_character() -> Str {
+  x"a"'b'                                            //~ E0002 @3
+}
+
+pub fn name_then_two_characters() -> Str {
+  x'a''b'                                            //~ E0002 @3
+}
+
+pub fn two_literals_then_a_name_and_a_literal() -> Str {
+  "a""b"x"c"                                         //~ E0002 @3
+}
+
+pub fn in_a_let() -> Str {
+  let s = x"a""b"                                    //~ E0002 @11
+  s
+}
+
+pub fn in_a_sum() -> Str {
+  let s = "p" + x"a""b"                              //~ E0002 @17
+  s
+}
+
+pub fn before_an_operator() -> Str {
+  let s = x"a""b" + "q"                              //~ E0002 @11
+  s
+}
+
+pub fn two_runs_on_the_line() -> Str {
+  let s = x"a""b" + y"c""d"                          //~ E0002 @11
+  s
+}

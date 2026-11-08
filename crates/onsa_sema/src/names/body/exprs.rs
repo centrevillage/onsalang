@@ -4,7 +4,7 @@
 
 use onsa_diag::hash::HashMap;
 use onsa_diag::unsupported::Feature;
-use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
+use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast::{
     Ast, Block, Clock, ExprId, ExprKind, Ident, Lit, MatchArm, Param, ParamName, PatId, PatKind, StmtId, StmtKind,
     StrLit, StrSeg, TypeId, TypeKind,
@@ -175,10 +175,11 @@ impl Walker<'_> {
     fn interp(&mut self, e: ExprId, s: &StrLit) -> W {
         for (k, seg) in (0..).zip(&s.segments) {
             if let StrSeg::Interp(p) = seg {
-                let (records, fail) = self.resolve(&p.segments.iter().collect::<Vec<_>>(), &[], Place::Value);
+                let (records, fail) =
+                    self.resolve(&p.segments.iter().map(|s| &s.0).collect::<Vec<_>>(), &[], Place::Value);
                 match fail {
                     Some(Fail::Report(d)) => {
-                        let d = self.in_literal(d, self.ast.expr(e).span);
+                        let d = onsa_syntax::in_literal(d, self.ast.expr(e).span, self.text);
                         return Err(self.fail(Fail::Report(d)));
                     }
                     Some(f) => return Err(self.fail(f)),
@@ -188,29 +189,6 @@ impl Walker<'_> {
             }
         }
         Ok(())
-    }
-
-    /// The candidates of the error `d` of a hole of the string literal at
-    /// `lit`: an edit inside the literal, which is one token, becomes the
-    /// replacement of the literal with the edits inside it (§18.1).
-    fn in_literal(&self, mut d: Diagnostic, lit: Span) -> Diagnostic {
-        let inside = |e: &Edit| e.span.file == lit.file && lit.start < e.span.start && e.span.end < lit.end;
-        for fix in &mut d.fixes {
-            let (inner, mut edits): (Vec<Edit>, Vec<Edit>) = fix.edits().iter().cloned().partition(inside);
-            if inner.is_empty() {
-                continue;
-            }
-            let (mut text, mut pos) = (String::new(), lit.start as usize);
-            for e in &inner {
-                text.push_str(&self.text[pos..e.span.start as usize]);
-                text.push_str(&e.replace);
-                pos = e.span.end as usize;
-            }
-            text.push_str(&self.text[pos..lit.end as usize]);
-            edits.push(Edit::replace(lit, text));
-            *fix = Fix::new(fix.title(), edits);
-        }
-        d
     }
 
     fn block(&mut self, b: &Block) -> W {

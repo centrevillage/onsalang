@@ -716,7 +716,7 @@ pub(crate) fn file_names(all: &[Token], text: &str, literals: &crate::literal::L
     #[cfg(test)]
     NAMED.set(NAMED.get() + all.len());
     let idents = all.iter().filter(|t| t.kind == TokenKind::Ident).map(|t| t.span);
-    let in_holes = literals.holes().iter().flat_map(|h| h.path.iter().flatten().copied());
+    let in_holes = literals.holes().iter().flat_map(|h| h.path.iter().flatten().map(|s| s.0));
     idents.chain(in_holes).map(|s| text[s.start as usize..s.end as usize].into()).collect()
 }
 

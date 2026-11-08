@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+//
+// [[test.fix]]
+// at = "16:7"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// The candidate of `{t.01}` in a hole of an interpolation leaves nothing behind (spec §2.4, §18.1; R-290, S-508): it
+// takes the leading `0` off the index, `{t.1}`, and the check reads the file without a report (`clean` is about the
+// whole file, so this file has this one error). The main position is where the index starts.
+
+pub fn on_the_tail(t: (I32, I32)) -> Str uses {Alloc} {
+  "{t.01}"                                           //~ E0020 @7
+}

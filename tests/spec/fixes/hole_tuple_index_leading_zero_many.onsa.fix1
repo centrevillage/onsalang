@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// fixes = 1
+// spec = ["§2.4", "§18.1"]
+
+// Tuple indexes with a leading `0` twice or more in the holes of one literal (spec §2.4, §18.1; R-290, S-508): the
+// literal is one token, so its one candidate replaces it whole and takes the leading `0`s off every index of its
+// holes at once (`"{t.01.007} {t.0}"` becomes `"{t.1.7} {t.0}"`), and nothing of the same stage is left in the
+// literal. The error is reported once for the literal, at its first index (one error per function, P-01).
+// With an index too large in the same literal there is no candidate: negative/hole_tuple_index_padded_too_large.onsa.
+
+pub fn two_in_one_hole(t: (I32, (I32, I32, I32))) -> Str uses {Alloc} {
+  "{t.1.2}"                                        //~ E0020 @7
+}
+
+pub fn two_in_one_hole_and_a_good_one(t: (I32, (I32, I32, I32, I32, I32, I32, I32, I32))) -> Str uses {Alloc} {
+  "{t.1.7} {t.0}"                                 //~ E0020 @7
+}
+
+pub fn one_in_each_of_two_holes(t: (I32, I32, I32)) -> Str uses {Alloc} {
+  "{t.1} {t.2}"                                    //~ E0020 @7
+}
+
+pub fn after_a_good_hole(t: (I32, I32, I32)) -> Str uses {Alloc} {
+  "{t.0} {t.1} {t.2}"                             //~ E0020 @13
+}

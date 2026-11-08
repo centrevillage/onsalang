@@ -105,6 +105,7 @@ mod flow;
 mod spaces;
 
 pub(crate) use flow::clocks;
+pub(crate) use literals::unpadded_index;
 pub(crate) use spaces::held_errors;
 
 /// The kind constraint `Copy` (§4.6): written in bounds, never derived.
