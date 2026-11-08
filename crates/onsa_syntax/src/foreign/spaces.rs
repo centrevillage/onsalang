@@ -213,7 +213,7 @@ pub(super) fn asymmetric_binary_space(c: &Cursor) -> Option<Hit> {
     if !matches!(c.kind(c.at), TokenKind::Minus | TokenKind::Caret | TokenKind::Plus) {
         return None;
     }
-    if c.want == Want::Separator(NodeKind::MatchArms) && crate::scan::arm_ahead(c.tokens, c.at) {
+    if c.want == Want::Separator(NodeKind::MatchArms) && crate::scan::arm_ahead(c.tokens, c.brackets(), c.at) {
         return None;
     }
     if c.gap(c.at) != Gap::Space

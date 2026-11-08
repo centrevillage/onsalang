@@ -99,8 +99,15 @@ impl<'a> Parser<'a> {
         let t = self.peek();
         // A range (`1..<3`, `..=5`, `lo..<n + 1`; spec §7): no pattern. The
         // table of the forms reads it from its first token (the guard form).
-        let rest =
-            self.tokens[self.pos..].iter().map(|t| t.kind).filter(|k| !k.is_trivia() || *k == TokenKind::Newline);
+        // Only its range symbol is read here, but by a guard reading: none is
+        // after an opener no closer closes, so the scan stops there once the
+        // file has an error, which makes the table of the brackets (R-410).
+        let failed = self.guard.is_none() && !self.diagnostics.is_empty();
+        let end = failed.then(|| crate::scan::Brackets::of(&self.brackets, &self.tokens).scan_end(self.pos));
+        let rest = self.tokens[self.pos..end.unwrap_or(self.tokens.len())]
+            .iter()
+            .map(|t| t.kind)
+            .filter(|k| !k.is_trivia() || *k == TokenKind::Newline);
         if let (end, Some(sym)) = pattern_alternative(rest) {
             if self.guard.is_some() {
                 return self.guard_range(sym, end);

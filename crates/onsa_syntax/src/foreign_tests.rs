@@ -1118,3 +1118,59 @@ fn the_candidates_of_the_types_stage_read_the_units_of_their_arms() {
     assert!(0 < read && read <= AT_MOST * src.len(), "read {read} bytes of a file of {}", src.len());
     assert!(0 < named && named <= tokens, "went through {named} tokens for the names of a file of {tokens}");
 }
+
+/// The bytes the parsers read, the tokens the scans went through and the
+/// tables made for `n` copies of `form` (`{i}` the copy's number), with the
+/// diagnostics.
+fn read_for(form: &str, n: usize) -> (usize, usize, usize, usize) {
+    let src: String = (0..n).map(|i| form.replace("{i}", &i.to_string())).collect();
+    let (read, walked, made) = (crate::parser::PARSED.get(), crate::scan::WALKED.get(), crate::scan::MADE.get());
+    let p = parse(&src);
+    let read = crate::parser::PARSED.get() - read;
+    (read, crate::scan::WALKED.get() - walked, crate::scan::MADE.get() - made, p.diagnostics.len())
+}
+
+/// A pattern of an arm (also after a `|` before it), a `let` or a `for` that leaves a bracket open fails
+/// in each function of a file, and the guard forms' reading of each reads
+/// its tokens up to that bracket (R-410): what the parsers read and the
+/// scans go through grows as the file, not as its square.
+#[test]
+fn the_patterns_that_leave_a_bracket_open_read_on_to_it() {
+    let forms = [
+        "fn f{i}() -> I32 {\n  match x {\n    A(1, [2 => 3,\n",
+        "fn f{i}() -> I32 {\n  match x {\n    n @ [1, 2 => xs[0],\n",
+        "fn f{i}() -> I32 {\n  match x {\n    A(1.5 [2 => 3,\n",
+        "fn f{i}() -> I32 {\n  match x {\n    1..<f(2 => 3,\n",
+        "fn f{i}() -> I32 {\n  match x {\n    n @ A(1.5, (2 => 3,\n",
+        "fn f{i}() -> I32 {\n  match x {\n    A(1.5, (2 => 3,\n",
+        "fn f{i}() -> I32 {\n  match x {\n    A(g[1, [2 => 3,\n",
+        "fn f{i}() -> I32 {\n  match x {\n    | A(1, [2 => 3,\n",
+        "fn f{i}() -> I32 {\n  match x {\n    A => 1\n    B(1, [2 => 3,\n",
+        "fn f{i}() -> I32 {\n  match x {\n    A if c => 1\n    -(-1 => 3,\n",
+        "fn f{i}() -> I32 {\n  match x {\n    A => 1\n    | B(1, [2 => 3,\n",
+        "fn f{i}() -> I32 {\n  let A(1, [2 = 3\n",
+        "fn f{i}() -> I32 {\n  for A(1, [2 in xs {\n",
+    ];
+    for form in forms {
+        let (read, walked, made, diagnostics) = read_for(form, 100);
+        let (read2, walked2, made2, diagnostics2) = read_for(form, 200);
+        assert!(diagnostics >= 100 && diagnostics2 >= 2 * diagnostics - 1, "{form:?}: {diagnostics}, {diagnostics2}");
+        // One table for the file, and one for each reading of a unit a
+        // candidate makes again (the `|` taken out).
+        assert!(made >= 1 && made <= diagnostics + 1 && made2 <= 2 * made, "{form:?}: {made}, {made2} tables");
+        assert!(read2 <= 2 * read + read / 10, "{form:?}: read {read} bytes for 100 and {read2} for 200");
+        assert!(
+            walked2 <= 2 * walked + walked / 10,
+            "{form:?}: went through {walked} tokens for 100 and {walked2} for 200"
+        );
+    }
+}
+
+/// A file of patterns with no failure makes no table of the brackets, and
+/// its scans are those of before (R-410: the table is made at a failure).
+#[test]
+fn the_patterns_of_a_file_without_failures_make_no_table() {
+    let form = "fn f{i}(x: I32, p: (I32, I32)) -> I32 {\n  let (a, b) = p\n  for k in 0..<x {\n  }\n  match x {\n    1 | 2 => a,\n    _ => b,\n  }\n}\n";
+    let (_, _, made, diagnostics) = read_for(form, 50);
+    assert_eq!((made, diagnostics), (0, 0));
+}

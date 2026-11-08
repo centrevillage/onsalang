@@ -142,7 +142,7 @@ pub(super) fn leading(c: &Cursor) -> Option<(usize, usize)> {
         return None;
     }
     let (s, prev) = c.head_symbol_after_operand()?;
-    let arm = c.want == Want::Separator(NodeKind::MatchArms) && arm_ahead(c.tokens, s);
+    let arm = c.want == Want::Separator(NodeKind::MatchArms) && arm_ahead(c.tokens, c.brackets(), s);
     let touching = c.gap_after(s) == Gap::None && !crate::starts::starts_operand(c.kind(s + 1));
     if c.want == Want::Pattern || arm || touching {
         return None;
@@ -210,7 +210,10 @@ pub(super) fn leading_vert(c: &Cursor) -> Option<Hit> {
     }
     let next = c.sig_after(c.at);
     let starts = c.kind(next) == TokenKind::Pipe || crate::starts::starts_element(NodeKind::TuplePat, c.kind(next));
-    let kinds = c.tokens[next..].iter().map(|t| t.kind).filter(|k| !k.is_trivia());
+    // To an opener no closer closes: no operator after it is at the depth
+    // of the pattern (R-410, [`crate::scan::Brackets::scan_end`]).
+    let end = c.brackets().scan_end(next);
+    let kinds = c.tokens[next..end].iter().map(|t| t.kind).filter(|k| !k.is_trivia());
     let (n, _) = crate::scan::pattern_alternative(kinds.clone());
     let mut depth = 0u32;
     let operator = kinds.take(n).enumerate().any(|(k, kind)| {

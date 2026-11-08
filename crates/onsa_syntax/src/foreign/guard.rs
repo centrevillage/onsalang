@@ -546,11 +546,17 @@ fn form_at(c: &Cursor) -> Option<(Form, usize, usize)> {
     let start = if c.kind(c.at) == TokenKind::At { c.sig_before(c.at)? } else { c.at };
     // The tokens of one alternative from `start`, and of the right of each
     // `@` it ends at ([`crate::scan::pattern_alternative`]): the reading
-    // reads one alternative, no further.
+    // reads one alternative, no further. One that reaches an opener no
+    // closer closes runs on to the last token of the file inside it
+    // ([`crate::scan::Brackets::scan_end`], R-410): the reading of its
+    // tokens to that opener fails where that of all of them fails, and reads
+    // the same tree where that reads one, the node a range swallows to the
+    // end then ending at the opener. That node is given its last token.
+    let end = c.brackets().scan_end(start);
     let mut toks: Vec<usize> = Vec::new();
     let mut from = start;
     loop {
-        let rest = (from..c.tokens.len()).filter(|&i| !c.kind(i).is_trivia() || c.kind(i) == TokenKind::Newline);
+        let rest = (from..end).filter(|&i| !c.kind(i).is_trivia() || c.kind(i) == TokenKind::Newline);
         let (n, _) = crate::scan::pattern_alternative(rest.clone().map(|i| c.kind(i)));
         let code: Vec<usize> = rest.filter(|&i| !c.kind(i).is_trivia()).take(n + 1).collect();
         toks.extend(&code[..n.min(code.len())]);
@@ -566,7 +572,12 @@ fn form_at(c: &Cursor) -> Option<(Form, usize, usize)> {
     let mut found = Vec::new();
     forms(&p, &mut found);
     let &(form, a, b) = found.first()?;
-    (t.toks[a] == c.at).then(|| (form, t.toks[a], t.toks[b]))
+    let last = if t.toks[b] == end - 1 {
+        (0..c.tokens.len()).rev().find(|&i| !c.kind(i).is_trivia() && c.kind(i) != TokenKind::Eof)?
+    } else {
+        t.toks[b]
+    };
+    (t.toks[a] == c.at).then_some((form, t.toks[a], last))
 }
 
 /// The rows [`guard_pattern`] names ([`super::Matcher::many`]).
@@ -750,10 +761,20 @@ impl Arm {
     /// does not read, whether a block comment is among the pattern's tokens.
     fn read_tokens(c: &Cursor, arm_start: u32, skip_blocks: bool) -> Result<Arm, bool> {
         let first = c.index_at(arm_start);
+        // An opener no closer closes: the arm reaches no `=>` at its depth
+        // from there, and the reading ends where it would at the end of the
+        // file ([`crate::scan::Brackets::scan_end`], R-410; at the `Eof`, as
+        // there).
+        let end = c.brackets().scan_end(first);
         let mut depth = 0i32;
         let mut toks = Vec::new();
         let mut i = first;
         let (if_tok, arrow) = loop {
+            #[cfg(test)]
+            crate::scan::WALKED.set(crate::scan::WALKED.get() + 1);
+            if i + 1 == end {
+                return Err(false);
+            }
             match c.kind(i) {
                 TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace => depth += 1,
                 TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace => depth -= 1,
@@ -761,6 +782,9 @@ impl Arm {
                     // Its `=>` is outside the brackets of the guard (`if { c } =>`).
                     let mut j = i + 1;
                     while depth > 0 || c.kind(j) != TokenKind::FatArrow {
+                        if j + 1 == end {
+                            return Err(false);
+                        }
                         match c.kind(j) {
                             TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace => depth += 1,
                             TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace if depth > 0 => depth -= 1,

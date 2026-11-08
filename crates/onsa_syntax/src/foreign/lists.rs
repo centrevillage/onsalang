@@ -106,7 +106,9 @@ const CASES: [Case; 4] = [
 
 /// A `-`, `|` or `+` that starts the next arm of a `match` (S-386).
 fn arm_sign(a: &After) -> bool {
-    a.arms && matches!(a.kind, TokenKind::Minus | TokenKind::Pipe | TokenKind::Plus) && arm_ahead(a.c.tokens, a.c.at)
+    a.arms
+        && matches!(a.kind, TokenKind::Minus | TokenKind::Pipe | TokenKind::Plus)
+        && arm_ahead(a.c.tokens, a.c.brackets(), a.c.at)
 }
 
 /// The `,` before the sign; none before a `-` with a blank after it,
@@ -131,7 +133,7 @@ fn comma_goes(a: &After) -> bool {
     let array =
         (a.kind != TokenKind::LBracket || !types || c.brackets().contents(c.at).is_some_and(|(_, _, semi)| semi))
             && !(a.list == Some(NodeKind::ArrayExpr) && array_repeats(c));
-    let comma = !a.arms || arm_ahead(c.tokens, c.at);
+    let comma = !a.arms || arm_ahead(c.tokens, c.brackets(), c.at);
     let after_rest = c.closed.iter().any(|n| n.0.is_field_rest());
     a.list.is_some_and(|l| starts_element(l, a.kind)) && !declaration && array && comma && !after_rest
 }
@@ -152,7 +154,7 @@ pub(super) fn struct_lit_base(c: &Cursor) -> Option<super::Hit> {
 /// Whether the token is in the arms and a `=>` follows it: the next arm
 /// starts there, and the two sides stay apart.
 fn next_arm(a: &After) -> bool {
-    a.arms && arm_ahead(a.c.tokens, a.c.at)
+    a.arms && arm_ahead(a.c.tokens, a.c.brackets(), a.c.at)
 }
 
 /// Two string literals next to each other in a list (S-388); in the arms,

@@ -15,6 +15,9 @@ pub(crate) struct Brackets {
     contents: Vec<Option<(usize, bool, bool)>>,
     /// [`Brackets::closing`], by the position of the opener.
     closing: Vec<Option<usize>>,
+    /// The openers no closer closes, whatever the kinds, in order: those
+    /// left open at the end of the file ([`Brackets::scan_end`]).
+    unclosed: Vec<usize>,
 }
 
 impl Brackets {
@@ -29,7 +32,8 @@ impl Brackets {
     pub(crate) fn new(tokens: &[Token]) -> Brackets {
         #[cfg(test)]
         MADE.set(MADE.get() + 1);
-        let mut b = Brackets { contents: vec![None; tokens.len()], closing: vec![None; tokens.len()] };
+        let mut b =
+            Brackets { contents: vec![None; tokens.len()], closing: vec![None; tokens.len()], unclosed: Vec::new() };
         let (mut any, mut kinds) = (Vec::<(usize, bool, bool)>::new(), Vec::new());
         for (i, t) in tokens.iter().enumerate() {
             #[cfg(test)]
@@ -58,7 +62,18 @@ impl Brackets {
                 _ => {}
             }
         }
+        b.unclosed = any.into_iter().map(|(o, ..)| o).collect();
         b
+    }
+
+    /// Where a scan by the depth from `from` ends (R-410): after the first
+    /// opener from there that no closer closes, whatever the kinds (every
+    /// token after it is inside it, so the scan reaches its depth again
+    /// nowhere after it), else at the end of the file. The one judgment of
+    /// where such a scan may stop, for the parser and the table.
+    pub(crate) fn scan_end(&self, from: usize) -> usize {
+        let k = self.unclosed.partition_point(|&o| o < from);
+        self.unclosed.get(k).map_or(self.closing.len(), |o| o + 1)
     }
 
     /// The `]` that closes the `[` at `open`, the brackets in it closing one
@@ -84,8 +99,10 @@ impl Brackets {
 thread_local! {
     /// The tables [`Brackets::new`] made on this thread.
     pub(crate) static MADE: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
-    /// The tokens the tables and [`closing_on_line`] went through on this
-    /// thread: the tests see that the failures of a file do not each scan it.
+    /// The tokens the tables, [`closing_on_line`] and the scans of the
+    /// patterns ([`pattern_alternative`], [`arm_ahead`], the guard forms' reading of an arm)
+    /// went through on this thread: the tests see that the failures of a
+    /// file do not each scan it.
     pub(crate) static WALKED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
@@ -187,10 +204,13 @@ fn closer(kind: TokenKind) -> Option<TokenKind> {
 /// `i` comes before the next `,` or `}` there (S-386, S-419). The scan of the
 /// tokens, which reads no element on (S-384): a symbol at the head of the
 /// line that starts it is no binary operator of the arm before, and the
-/// line break before an opener there is no gap inside a postfix.
-pub(crate) fn arm_ahead(tokens: &[Token], i: usize) -> bool {
+/// line break before an opener there is no gap inside a postfix. It stops
+/// where the table says no `=>` comes at that depth ([`Brackets::scan_end`]).
+pub(crate) fn arm_ahead(tokens: &[Token], brackets: &Brackets, i: usize) -> bool {
     let mut depth = 0u32;
-    for t in &tokens[i..] {
+    for t in &tokens[i..brackets.scan_end(i)] {
+        #[cfg(test)]
+        WALKED.set(WALKED.get() + 1);
         match t.kind {
             TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace => depth += 1,
             TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace if depth == 0 => return false,
@@ -221,6 +241,8 @@ pub(crate) fn pattern_alternative(kinds: impl Iterator<Item = TokenKind>) -> (us
     let mut n = 0;
     let mut last = Eof;
     for k in kinds {
+        #[cfg(test)]
+        WALKED.set(WALKED.get() + 1);
         match k {
             Newline if n == 0 || depth > 0 || last.binop().is_some() => continue,
             Eof | Newline => break,
