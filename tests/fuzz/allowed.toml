@@ -484,3 +484,10 @@ left = "expected a declaration, found identifier"
 input = "tests/fuzz/5710808f.onsa"
 reasons = ["S-384"]
 note = "an input with two errors: the `{` of an extern block on the line after its heading, and a `D` that is no declaration among its members, which the input has before the candidate"
+
+[[allowed]]
+class = "fix|E0020|remove the `…`|E0002"
+left = "expected a type, found `…`"
+input = "tests/fuzz/64ec82d1.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: a `&` before the type of an `impl` (the default borrow), and a `|` after it that is no type, which the input has before the candidate"

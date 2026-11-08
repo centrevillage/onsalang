@@ -54,6 +54,9 @@ pub enum NameKind {
     /// the `?` that lifts it.
     Escape,
     Effect,
+    /// An effect row variable (§8.1), which §15.1 counts among the names that
+    /// are no namespace.
+    EffectVar,
     Handler,
     /// A const parameter, a value and a constant (§15.1) that a pattern does
     /// not take (§7, S-185).
@@ -108,12 +111,12 @@ impl NameKind {
 
     /// The kind of a parameter of a heading (§15.1): a type parameter is a
     /// type, a const parameter a value and a constant, an effect-row
-    /// variable an effect.
+    /// variable neither a value nor a namespace.
     pub fn of_generic(kind: &crate::def::GenericKind) -> NameKind {
         match kind {
             crate::def::GenericKind::Type { .. } => NameKind::Type,
             crate::def::GenericKind::Const(_) => NameKind::ConstParam,
-            crate::def::GenericKind::Effect => NameKind::Effect,
+            crate::def::GenericKind::Effect => NameKind::EffectVar,
         }
     }
 
@@ -153,6 +156,7 @@ impl NameKind {
             NameKind::KindConstraint => "a kind constraint",
             NameKind::Escape => "the implicit requirement of a type parameter",
             NameKind::Effect => "an effect",
+            NameKind::EffectVar => "an effect row variable",
             NameKind::Handler => "a handler",
             NameKind::ConstParam => "a const parameter",
             NameKind::Local => "a local",

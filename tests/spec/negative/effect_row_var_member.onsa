@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§8.1"]
+// fixes = 0
+
+// W5-11 U10f, R-406 (spec §15.1): an effect row variable is a name that is no namespace (§15.1 counts
+// it among the names that are neither a namespace nor a value), so a dot after it is the E0308 of a
+// name of another kind (§15.1: a dot written after a name that is no namespace), not the E0302 of a
+// name that is not found. It is the same in a body, a result type, a bound and an effect row. One error
+// in each unit (P-01); the last function is the right form. The variable alone at the place of a value
+// or of a callee is no value (§15.1, R-411): the E0308 of a name of another kind.
+pub fn in_a_body[e](f: fn(F32) -> F32 uses {e}, x: F32) -> F32 uses {e} {
+  e.x                                               //~ E0308
+}
+pub fn in_a_result_type[e](f: fn(F32) -> F32 uses {e}, x: F32) -> e.K uses {e} { //~ E0308
+  x
+}
+pub fn in_a_bound[e, U: e.x](f: fn(U) -> U uses {e}, x: U) -> U uses {e} { //~ E0308
+  x
+}
+pub fn in_an_effect_row[e](f: fn(F32) -> F32 uses {e}, x: F32) -> F32 uses {e.x} { //~ E0308
+  x
+}
+pub fn as_a_value[e](f: fn(F32) -> F32 uses {e}, x: F32) -> F32 uses {e} {
+  let a = e                                         //~ E0308
+  x
+}
+pub fn as_a_callee[e](f: fn(F32) -> F32 uses {e}, x: F32) -> F32 uses {e} {
+  e(x)                                              //~ E0308
+}
+pub fn right[e](f: fn(F32) -> F32 uses {e}, x: F32) -> F32 uses {e} {
+  f.(x)
+}

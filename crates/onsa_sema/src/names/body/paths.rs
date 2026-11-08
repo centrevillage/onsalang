@@ -110,6 +110,9 @@ impl<'a> Walker<'a> {
             Some(r) => return (vec![r], None),
             None => {}
         }
+        if let Some(f) = self.effect_var(segs, Some(place)) {
+            return (Vec::new(), Some(f));
+        }
         let a = self.a;
         if let Some(b) = self.flow_name(&head.name) {
             return self.flow_builtin(b, segs, place);
@@ -369,6 +372,19 @@ impl<'a> Walker<'a> {
         }
     }
 
+    /// The E0308 of the effect row variable of the heading at the head of
+    /// `segs`, a name that is neither a namespace nor a value (§15.1, §8.1):
+    /// of a `.` after it, as in a heading (R-406), and of it alone at `place`
+    /// (R-411); none for another path, and where `place` reads no value.
+    fn effect_var(&self, segs: &[&Ident], place: Option<Place>) -> Option<Fail> {
+        let g = self.generics.iter().find(|g| g.name == segs[0].name && matches!(g.kind, GenericKind::Effect))?;
+        let kind = NameKind::of_generic(&g.kind);
+        match segs {
+            [head, next, ..] => Some(Fail::Report(crate::sig::member_error(head, next, kind).into_diagnostic())),
+            _ => self.kind_fail(kind, segs, place?),
+        }
+    }
+
     /// The chain of names `e` ends (`a.b.c` is `Field(Field(Path(a), b), c)`),
     /// from its head, with the node of each; none when its head is no name
     /// (`f().x`).
@@ -416,6 +432,9 @@ impl<'a> Walker<'a> {
             // A type parameter is a type, and no struct (`T { x: 1 }`).
             let no_struct = || Fail::Report(crate::body::not_a_struct(head.name.clone(), head.span));
             return Err(self.want(kind, &segs, want).unwrap_or_else(no_struct));
+        }
+        if let Some(f) = self.effect_var(&segs, None) {
+            return Err(f);
         }
         let (first, typed) = a.typed_path(self.m, path, self.self_ty).map_err(error)?;
         let at = typed.reached.len() + 1;

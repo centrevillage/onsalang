@@ -297,14 +297,15 @@ fn heading_name(
 /// (§15.1, R-370, R-404): the kind of the member the bounds of
 /// a type parameter give (an E0308 where the place takes another kind), the
 /// E0302 of one they do not give, held (`Failed`, no diagnostic) when they
-/// are unknown (§18.1); after a const parameter, a value, the E0308 of a
-/// name with no members. None when `p` starts at no such parameter.
+/// are unknown (§18.1); after a const parameter, a value, and an effect row
+/// variable (R-406), the E0308 of a name with no members. None when `p`
+/// starts at no such parameter.
 pub(super) fn param_member(a: &Analysis, generics: &[GenericDef], p: &Path) -> Option<Member> {
     let [head, name, rest @ ..] = &p.segments[..] else { return None };
-    let g = generics.iter().find(|g| g.name == head.name && !matches!(g.kind, GenericKind::Effect))?;
+    let g = generics.iter().find(|g| g.name == head.name)?;
     a.note_use(g.span, head.span);
     let GenericKind::Type { bounds, unknown, .. } = &g.kind else {
-        return Some(Err(member_error(head, name, NameKind::ConstParam)));
+        return Some(Err(member_error(head, name, NameKind::of_generic(&g.kind))));
     };
     // S-953 (§18.1): a member a known bound gives is held too when another
     // bound is unknown (`T: Float + Gone`, `T: Float + ?Dup` of `T.PI`).
@@ -323,8 +324,8 @@ type Member = Result<NameKind, crate::ResolveError>;
 
 /// The error of `next` after `head` of the kind `kind`, a value (a local,
 /// a const parameter) or another name with no members (§15.1, S-729,
-/// S-741): E0308, in a heading and in a type.
-pub(super) fn member_error(head: &Ident, next: &Ident, kind: NameKind) -> crate::ResolveError {
+/// S-741): E0308, in a heading, in a type and after a parameter in a body.
+pub(crate) fn member_error(head: &Ident, next: &Ident, kind: NameKind) -> crate::ResolveError {
     crate::ResolveError::NotANamespace { name: head.name.clone(), span: next.span, kind: Some(kind) }
 }
 
@@ -348,6 +349,6 @@ fn param_kind(g: &GenericParam) -> NameKind {
     match g {
         GenericParam::Type { .. } => NameKind::Type,
         GenericParam::Const { .. } => NameKind::ConstParam,
-        GenericParam::Effect { .. } => NameKind::Effect,
+        GenericParam::Effect { .. } => NameKind::EffectVar,
     }
 }

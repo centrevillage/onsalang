@@ -1,12 +1,13 @@
-//! A name after a type parameter or a const parameter and a `.` in a heading and a type (spec §15.1, §5.1,
-//! §18.1; R-370, R-404; W5-11 U10a/i, U10e/i).
+//! A name after a type parameter, a const parameter or an effect row variable and a `.` in a heading, a type
+//! and a body (spec §15.1, §5.1, §8.1, §18.1; R-370, R-404, R-406; W5-11 U10a/i, U10e/i, U10f/i).
 //!
 //! What is checked: a member that the bounds of the type parameter do not give is the name not found, in
 //! the message and at the place, in the three places that are no body (a type `-> T.K`, a bound `U: T.x`,
 //! an effect row `uses {T.e}`) and in the type of a local of a body, as it is in a body (`T.f()`). The type
 //! parameter itself is found, so no message says it is not. A member the bounds give is the E0308 of its kind
 //! at the place, as `F32.PI` is; after a const parameter, a value, the `.` is the E0308 of a name with no
-//! members, as after a local (`x.K`). After a parameter whose bounds are unknown (a contradiction, a bound not
+//! members, as after a local (`x.K`); so is it after an effect row variable, a name that is no namespace, in
+//! each place and in a body (`e.x`, `let y: e.K`, `e.K { a: 1 }`). After a parameter whose bounds are unknown (a contradiction, a bound not
 //! found) the `.` gets no diagnostic, and the error of the bound is the one of the unit. A parameter is seen in
 //! the whole heading (§5.1): in a bound before it, in its own bound and in the type of a const parameter.
 //! The text of a message is not promised by the spec (§18.1): this holds the one of the implementation.
@@ -68,6 +69,17 @@ const KINDS: [(&str, u64, &str, u64); 12] = [
     ),
 ];
 
+/// An item of `main.onsa` with a `.` after its effect row variable `e`, and the line in it (from 1) and the
+/// column (from 1) of the name after the `.`, where its one diagnostic is.
+const EFFECT_VARS: [(&str, u64, u64); 6] = [
+    ("fn a[e](f: fn(F32) -> F32 uses {e}, x: F32) -> e.K uses {e} {\n  x\n}\n", 1, 50),
+    ("fn b[e, U: e.x](f: fn(U) -> U uses {e}, x: U) -> U uses {e} {\n  x\n}\n", 1, 14),
+    ("fn c[e](f: fn(F32) -> F32 uses {e}, x: F32) -> F32 uses {e.x} {\n  x\n}\n", 1, 60),
+    ("fn d[e](f: fn(F32) -> F32 uses {e}, x: F32) -> F32 uses {e} {\n  e.x\n}\n", 2, 5),
+    ("fn g[e](f: fn(F32) -> F32 uses {e}, x: F32) -> F32 uses {e} {\n  let y: e.K = x\n  y\n}\n", 2, 12),
+    ("fn h[e](f: fn(F32) -> F32 uses {e}, x: F32) -> F32 uses {e} {\n  let q = e.K { a: 1 }\n  x\n}\n", 2, 13),
+];
+
 /// The diagnostics of the package of the one file `main.onsa` holding the items `items`, against the line, the
 /// message (with its code) and the column of each.
 fn expect(items: &[(&str, u64, String, u64)]) {
@@ -96,6 +108,35 @@ fn a_member_the_bounds_do_not_give_is_the_name_not_found() {
 fn a_member_the_bounds_give_and_a_const_parameter_are_of_another_kind_and_unknown_bounds_hold_the_name() {
     let items: Vec<_> = KINDS.iter().map(|&(src, line, message, col)| (src, line, message.to_string(), col)).collect();
     expect(&items);
+}
+
+#[test]
+fn an_effect_row_variable_has_no_members_in_each_place_and_is_no_value_in_a_body() {
+    let message = "E0308 `e` is an effect row variable, which has no members (§15.1)";
+    let items = EFFECT_VARS.iter().map(|&(src, line, col)| (src, line, message.to_string(), col));
+    // The variable alone at the place of a value and of a callee (R-411).
+    let alone = [
+        ("fn i[e](f: fn(F32) -> F32 uses {e}, x: F32) -> F32 uses {e} {\n  let v = e\n  x\n}\n", "value", 11),
+        ("fn j[e](f: fn(F32) -> F32 uses {e}, x: F32) -> F32 uses {e} {\n  e(x)\n}\n", "function", 3),
+    ];
+    let alone = alone
+        .map(|(src, want, col)| (src, 2, format!("E0308 `e` is an effect row variable, not a {want} (§15.1)"), col));
+    expect(&items.chain(alone).collect::<Vec<_>>());
+}
+
+/// The head of a `.` after an effect row variable is a use of it, in a heading and in a body: the E0320 of its
+/// name renames it there too (§2.3).
+#[test]
+fn the_rename_of_an_effect_row_variable_reaches_its_name_before_a_dot() {
+    let mut texts = Texts::new();
+    let text = "pub fn n1[_e, U: _e.x](f: fn(U) -> U uses {_e}, x: U) -> _e.K uses {_e.y} {\n  _e.z\n}\n";
+    texts.insert("main.onsa".to_string(), text.to_string());
+    let checked = check_input(&input_of("demo", &texts));
+    let renames: Vec<_> = checked.of_code("E0320").iter().flat_map(|d| &d.fixes).cloned().collect();
+    assert_eq!(renames.len(), 1, "one rename:\n{}", checked.stderr);
+    apply_fix_texts(&mut texts, &renames[0]);
+    let want = "pub fn n1[e, U: e.x](f: fn(U) -> U uses {e}, x: U) -> e.K uses {e.y} {\n  e.z\n}\n";
+    assert_eq!(texts["main.onsa"], want);
 }
 
 /// The head of a `.` after a const parameter is a use of it: the E0320 of its name renames it there too (§2.3).
