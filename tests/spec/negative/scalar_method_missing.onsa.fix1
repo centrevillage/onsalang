@@ -16,7 +16,7 @@
 // the bound of its declaration (`trunc_from[S: Float]`, `narrow_from[S: Int]`, E0416 at the call, §4.5) when the pair
 // is not one that `as` writes (the pairs that `as` writes are E0413 with a candidate, in fixes/).
 
-use std.math.{sin}
+use std.math.sin
 pub fn int_to_bits(n: I32) -> U32 {
   n.to_bits()                                       //~ E0413
 }

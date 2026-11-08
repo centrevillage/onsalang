@@ -9,7 +9,7 @@
 // in the case.
 
 use std.math
-use std.math.{floor}
+use std.math.floor
 
 pub fn round_down(x: F32) -> F32 {
   floor(x)                                         //~ E0413

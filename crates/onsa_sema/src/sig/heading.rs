@@ -22,7 +22,7 @@ impl<'p> Sema<'p> {
                     // an E0308 (S-713 (c)).
                     for b in bounds {
                         let n = b.path.segments.last().unwrap();
-                        match heading_name(self.a, cx.m, &b.path, (&listed, &cx.locals), cx.self_ty) {
+                        match heading_name(self.a, cx.m, &b.path, (&listed, &out, &cx.locals), cx.self_ty) {
                             Ok((_, Some(Entity::Builtin(Builtin::Kind(Bound::Dup))))) if b.relaxed => {
                                 list.push((Bound::Dup, true, n.span));
                             }
@@ -102,7 +102,7 @@ impl<'p> Sema<'p> {
     /// name held (§18.1).
     pub(super) fn lower_trait(&mut self, cx: &Cx<'p>, p: &Path) -> Option<Entity> {
         let listed = listed(&[], &cx.generics);
-        match heading_name(self.a, cx.m, p, (&listed, &cx.locals), None) {
+        match heading_name(self.a, cx.m, p, (&listed, &cx.generics, &cx.locals), None) {
             Ok((NameKind::Trait, e)) => return e,
             Ok((kind, _)) => self.report(cx.def, kind_error(p, kind, "a trait", p.span)),
             Err(e) if self.a.unread_path(cx.def, cx.m, p, &e) => {}
@@ -194,7 +194,7 @@ pub(crate) fn read_effects(
             set.vars.push(i as u32);
             continue;
         }
-        match heading_name(a, from, p, (&listed, locals), self_ty) {
+        match heading_name(a, from, p, (&listed, generics, locals), self_ty) {
             Ok((_, Some(Entity::Def(d)))) if Some(d) == a.alloc => set.alloc = true,
             Ok((_, Some(Entity::Def(d))))
                 if matches!(a.def(d).kind, DefKind::Effect { .. }) && a.modules.is_std(from) =>
@@ -232,16 +232,17 @@ pub(crate) fn read_effects(
 
 /// The kind of what the path `p` of a bound or an effect row names (§15.1),
 /// and what it names but a parameter of the heading of `listed` (the names a
-/// heading binds that are no item of a module, with their kinds, and the
-/// values `locals` the place sees, [`Cx::locals`]) and an
-/// associated name of a builtin type: through `Self` (`self_ty`) and the
-/// aliases ([`Analysis::path_end`]). A parameter of a list has no members
-/// (the E0302 of its head), a local neither (its E0308).
+/// heading binds that are no item of a module, with their kinds, the
+/// parameters `generics` lowered so far, and the values `locals` the place
+/// sees, [`Cx::locals`]) and an associated name of a builtin type: through
+/// `Self` (`self_ty`) and the aliases ([`Analysis::path_end`]). A parameter
+/// of a list has no members (the E0302 of the member, [`missing_member`], or
+/// of its head), a local neither (its E0308).
 fn heading_name(
     a: &Analysis,
     from: ModId,
     p: &Path,
-    (listed, locals): (&[(&str, NameKind)], &HashSet<String>),
+    (listed, generics, locals): (&[(&str, NameKind)], &[GenericDef], &HashSet<String>),
     self_ty: Option<TyId>,
 ) -> Result<(NameKind, Option<Entity>), crate::ResolveError> {
     let head = &p.segments[0];
@@ -250,7 +251,8 @@ fn heading_name(
         return match &p.segments[1..] {
             [] => Ok((kind, None)),
             [next, ..] if kind == NameKind::Local => Err(local_member(head, next)),
-            _ => Err(crate::ResolveError::NotFound { name: head.name.clone(), span: head.span }),
+            _ => Err(missing_member(a, generics, p)
+                .unwrap_or_else(|| crate::ResolveError::NotFound { name: head.name.clone(), span: head.span })),
         };
     }
     let end = a.path_end(from, p, self_ty)?;
@@ -259,6 +261,20 @@ fn heading_name(
         crate::names::PathEnd::Builtin { .. } => None,
     };
     Ok((end.kind(a, p.span), entity))
+}
+
+/// The E0302 of the member after the type parameter of `generics` at the
+/// head of `p` that its bounds do not give (§15.1, R-370), as in a body:
+/// none when `p` starts at no such parameter or its bounds are unknown
+/// (§18.1) or give the member.
+pub(super) fn missing_member(a: &Analysis, generics: &[GenericDef], p: &Path) -> Option<crate::ResolveError> {
+    let [head, name, ..] = &p.segments[..] else { return None };
+    let g = generics.iter().find(|g| g.name == head.name)?;
+    let GenericKind::Type { bounds, unknown: false, .. } = &g.kind else { return None };
+    crate::traits::member(a, bounds, &name.name).is_none().then(|| {
+        a.note_use(g.span, head.span);
+        crate::ResolveError::NotFound { name: name.name.clone(), span: name.span }
+    })
 }
 
 /// The error of `next` after the local `head` (§15.1, S-729, S-741): a

@@ -9,5 +9,5 @@
 // diagnostic of the stage of the E0302 in the touched units (§18.1). The text after the candidate is
 // the copy `.fix1`.
 
-use std.fs.{Fs}
+use std.fs.Fs
 pub fn read_it() uses {Fs} {}   //~ E0302

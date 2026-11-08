@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§3.1"]
+// canonical = false
+
+// (S-271, S-331.) In the list of arguments of a call, `a < b, c > (d)` and `a<b, c> (d)` are two arguments,
+// the comparisons `a < b` and `c > (d)`: only a `>` that a `(` follows with no blank is read as the end of
+// type arguments of other languages (§4.5), and there the `>` is followed by a blank. Both pass (`onsa fmt`
+// writes the second spaced as the first, so the file is not in the canonical form). The forms
+// with no blank, which are E0020, are in `tests/spec/fixes/e0020_type_args_angle_in_args.onsa`.
+
+pub fn g2(x: Bool, y: Bool) -> Bool {
+  x
+}
+
+pub fn t3(a: I32, b: I32, c: I32, d: I32) -> Bool {
+  g2(a < b, c > (d))
+}
+
+pub fn t4(a: I32, b: I32, c: I32, d: I32) -> Bool {
+  g2(a<b, c> (d))
+}

@@ -9,7 +9,7 @@
 // unit, as the `use` is the candidate of the error that is reported. After the candidate the unit reports
 // the narrow name, with no candidate, and the loop stops there.
 
-use std.fs.{Fs}
+use std.fs.Fs
 struct Hid {
   a: I32,
 }

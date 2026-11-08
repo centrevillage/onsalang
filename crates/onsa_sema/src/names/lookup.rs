@@ -173,9 +173,10 @@ impl Modules {
                 matches!(super::clash::unbindable(&head.name), Some(super::clash::Unbindable::FlowBuiltin)).then(|| {
                     let item = segs.get(1).map_or("f", |s| s.name.as_str());
                     format!(
-                        "`{0}` is a builtin name of a flow, which a `use` does not bind: take what is used from it \
-                         (`use {0}.{{{item}}}`)",
-                        head.name
+                        "`{}` is a builtin name of a flow, which a `use` does not bind: take what is used from it \
+                         (`use {}`)",
+                        head.name,
+                        super::use_form(&[&head.name], Some(&[item]))
                     )
                 })
             }
@@ -277,7 +278,7 @@ impl Modules {
         {
             return None;
         }
-        let added = format!("{}.{{{name}}}", self.abs_path(from, def.module).join("."));
+        let added = super::use_form(&self.abs_path(from, def.module), Some(&[name]));
         let edit = self.use_edit(from, &added)?;
         Some((added, edit))
     }

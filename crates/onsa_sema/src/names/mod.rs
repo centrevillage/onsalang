@@ -43,6 +43,18 @@ pub(crate) fn is_self_type(name: &str) -> bool {
     name == "Self"
 }
 
+/// The text after `use` of a `use` of `path` taking `names` (none: the path
+/// alone), in the form fmt writes (§15.1, S-598): a list of one name is the
+/// last element of the path, `a.b` for `a.{b}`.
+pub(crate) fn use_form<S: AsRef<str>>(path: &[S], names: Option<&[&str]>) -> String {
+    let list = match names {
+        Some([one]) => Some(one.to_string()),
+        Some(list) => Some(format!("{{{}}}", list.join(", "))),
+        None => None,
+    };
+    path.iter().map(|s| s.as_ref()).chain(list.as_deref()).collect::<Vec<_>>().join(".")
+}
+
 /// The names stage, in its order: the tree, the prelude, the items (those
 /// of `std.core` then in the prelude, S-659) and their clashes, each `use` and the clashes of their names, the cycles of
 /// their dependencies, then the `use` whose head is no head (their

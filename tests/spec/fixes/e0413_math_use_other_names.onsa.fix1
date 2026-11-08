@@ -8,7 +8,7 @@
 // std.math.{cos}`). The names that were imported stay. One error in the case; the function at the end is fine.
 
 use std.math.{sin, sqrt}
-use std.math.{cos}
+use std.math.cos
 
 pub fn cosine(x: F32) -> F32 {
   cos(x)                                           //~ E0413

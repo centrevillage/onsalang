@@ -4,7 +4,7 @@
 // fixes = 0
 
 // E0413 of a function of `std.math` when the name is a binding of the module (§3.4, §5.1, §18.1, S-98). The module
-// has no `use`, so the candidate would add `use std.math.{<name>}`, and a `use` binds the name in the whole
+// has no `use`, so the candidate would add `use std.math.<name>`, and a `use` binds the name in the whole
 // module: a local binding of the same name anywhere in the module, in the function of the call or in another one,
 // would be E0304 (§5.1: no shadowing; a `let`, a parameter, a binding of a `match` arm, a parameter of a closure,
 // the binding of a `for`). A function form that does not add the `use` is E0302. So no candidate is offered

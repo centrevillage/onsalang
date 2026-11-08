@@ -281,11 +281,9 @@ impl<'p> Sema<'p> {
                 }
                 ([], Some(_)) => return (None, None),
                 (rest, names) => {
-                    let mut form: Vec<&str> = rest.iter().map(|s| s.name.as_str()).collect();
+                    let path: Vec<&str> = rest.iter().map(|s| s.name.as_str()).collect();
                     let list = names.as_ref().map(|l| l.iter().map(|n| n.name.as_str()).collect::<Vec<_>>());
-                    let list = list.map(|l| format!("{{{}}}", l.join(", ")));
-                    form.extend(list.as_deref());
-                    vec![(form.join("."), self.use_reads(m, rest, names.as_deref()))]
+                    vec![(super::use_form(&path, list.as_deref()), self.use_reads(m, rest, names.as_deref()))]
                 }
             };
             if written.iter().any(|(_, r)| *r == Err(None)) {

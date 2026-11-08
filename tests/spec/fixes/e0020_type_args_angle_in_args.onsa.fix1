@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 1
+
+// (S-271, S-331.) The type arguments of other languages between angle brackets in front of a call are
+// E0020 inside the list of arguments of another call too (§4.5): `g(pair<U8, F32>(1, 2.0))` and
+// `g2(a<b, c>(d))`. Each list has a `,`, so it cannot be a chain of comparisons (§18.1), and each has one
+// candidate, the Onsa form `::[…]`. The spaced forms that are two arguments, comparisons, are in
+// `tests/spec/ops/compare_args_not_type_args.onsa`.
+
+pub fn pair[A, B](a: A, b: B) -> A {
+  a
+}
+
+pub fn g(x: U8) -> U8 {
+  x
+}
+
+pub fn g2(x: Bool, y: Bool) -> Bool {
+  x
+}
+
+pub fn t1() -> U8 {
+  g(pair::[U8, F32](1, 2.0))                          //~ E0020
+}
+
+pub fn t2(a: I32, b: I32, c: I32, d: I32) -> Bool {
+  g2(a::[b, c](d))                                    //~ E0020
+}

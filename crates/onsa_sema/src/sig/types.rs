@@ -100,6 +100,10 @@ impl<'p> Sema<'p> {
                         return self.a.types.intern(Ty::Param(i as u32));
                     }
                 }
+                if let Some(e) = missing_member(self.a, &cx.generics, path) {
+                    self.report(cx.def, e.into_diagnostic());
+                    return self.a.types.error();
+                }
                 // Through `Self` and the aliases (`Self.N`, `Al.N`, §2.2, §4.4).
                 let entity = match self.a.path_end(cx.m, path, cx.self_ty) {
                     Ok(PathEnd::Entity(e)) => e,

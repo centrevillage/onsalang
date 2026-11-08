@@ -78,6 +78,7 @@ mod test_identity;
 mod test_json_document;
 mod test_reach;
 mod type_args_syntax;
+mod type_param_members;
 mod types_holding_themselves;
 mod use_clash_edges;
 mod use_cycles;

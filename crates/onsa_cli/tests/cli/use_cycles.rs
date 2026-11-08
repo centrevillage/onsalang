@@ -950,7 +950,7 @@ fn a_use_head_candidate_left_out_for_a_cycle_has_a_note_with_the_form() {
     assert_eq!(span_of(&e["span"]).file, "b.onsa", "{doc}");
     assert!(fixes_of(e).is_empty(), "the form would close a cycle: {e}");
     let text = note_text(e);
-    assert!(text.contains("use a.{f}"), "the note shows the form that was left out: {text:?} in {e}");
+    assert!(text.contains("use a.f"), "the note shows the form that was left out: {text:?} in {e}");
 
     let d = fx(
         "note_head_control",
@@ -1125,7 +1125,7 @@ fn the_head_candidate_of_a_use_inside_a_cycle_that_is_there_already_is_left_out(
         of_code(&doc, "E0302").into_iter().filter(|e| span_of(&e["span"]).file == "a.onsa").collect();
     assert_eq!(found.len(), 1, "{doc}");
     assert!(fixes_of(found[0]).is_empty(), "{}", found[0]);
-    assert!(note_text(found[0]).contains("use c.{h}"), "the form that was left out: {}", found[0]);
+    assert!(note_text(found[0]).contains("use c.h"), "the form that was left out: {}", found[0]);
 }
 
 /// The two modules of S-687: `util.onsa` takes `f` of `dsp/util.onsa` when `takes_dsp_util` (an edge from `util`

@@ -163,13 +163,11 @@ impl<'p> Sema<'p> {
     fn collect_use(&mut self, m: ModId, item: &Item, id: ItemId, u: &UseDecl) {
         if item.vis == Vis::Pub {
             let at = item.vis_span.unwrap_or(item.span);
-            let mut form: Vec<&str> = u.path.segments.iter().map(|s| s.name.as_str()).collect();
-            let list = u.names.as_ref().map(|l| l.iter().map(|n| n.name.as_str()).collect::<Vec<_>>().join(", "));
-            let list = list.map(|l| format!("{{{l}}}"));
-            form.extend(list.as_deref());
+            let path: Vec<&str> = u.path.segments.iter().map(|s| s.name.as_str()).collect();
+            let list = u.names.as_ref().map(|l| l.iter().map(|n| n.name.as_str()).collect::<Vec<_>>());
             let rule = format!(
                 "a module that uses the names takes them from the module that defines them (`use {}`)",
-                form.join(".")
+                super::use_form(&path, list.as_deref())
             );
             self.report_mod(Feature::Reexports.diagnostic(Stage::Names, at, &[]).with_rule(rule));
             self.fail_taken(m, u, item.vis);

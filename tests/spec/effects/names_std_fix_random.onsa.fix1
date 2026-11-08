@@ -6,7 +6,7 @@
 // The same for the effect of another module (`Random` of `std.random`, S-659 (B)), in an anonymous
 // function: one candidate, the `use` of the name at the top of the module.
 
-use std.random.{Random}
+use std.random.Random
 pub fn closure() -> U32 {
   let g = fn(x: U32) -> U32 uses {Random} { x }   //~ E0302
   1
