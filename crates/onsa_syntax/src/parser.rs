@@ -283,6 +283,9 @@ pub(crate) struct Parser<'a> {
     /// ([`foreign::Cursor::apart`]); those of a trial reading undone stay,
     /// and mark no edit that a candidate reported makes otherwise.
     apart: std::cell::RefCell<crate::edits::Insertions>,
+    /// Where the brackets of `tokens` close, made at the first that wants
+    /// it ([`foreign::Cursor::brackets`]).
+    brackets: std::cell::OnceCell<crate::scan::Brackets>,
     /// The levels of each top-level item that parsed.
     levels: Vec<u32>,
     /// The height of each item node closed ([`ParseOutput::items`]).
@@ -383,6 +386,7 @@ impl<'a> Parser<'a> {
             literals,
             names: std::cell::OnceCell::new(),
             apart: Default::default(),
+            brackets: std::cell::OnceCell::new(),
             levels: Vec::new(),
             items: Vec::new(),
             trials: 0,

@@ -6,26 +6,87 @@
 
 use crate::token::{Token, TokenKind};
 
-/// The `]` that closes the `[` at `open`, and whether a `,` and a `;` are
-/// directly in it.
-pub(crate) fn bracket_contents(tokens: &[Token], open: usize) -> Option<(usize, bool, bool)> {
-    let (mut depth, mut comma, mut semi) = (0u32, false, false);
-    for (i, t) in tokens.iter().enumerate().skip(open) {
-        match t.kind {
-            TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace => depth += 1,
-            TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace => {
-                depth = depth.checked_sub(1)?;
-                if depth == 0 {
-                    return (t.kind == TokenKind::RBracket).then_some((i, comma, semi));
-                }
-            }
-            TokenKind::Comma if depth == 1 => comma = true,
-            TokenKind::Semi if depth == 1 => semi = true,
-            TokenKind::Eof => return None,
-            _ => {}
-        }
+/// Where each bracket of a run of tokens closes, read once for the run
+/// (R-401, R-403): what a scan from an opener to its closer would say, for
+/// every opener, so that the failures of a file do not each scan on to its
+/// end. Made at the first that wants it ([`Brackets::of`]).
+pub(crate) struct Brackets {
+    /// [`Brackets::contents`], by the position of the opener.
+    contents: Vec<Option<(usize, bool, bool)>>,
+    /// [`Brackets::closing`], by the position of the opener.
+    closing: Vec<Option<usize>>,
+}
+
+impl Brackets {
+    /// The table of `tokens` in `cell`, made at the first that wants it.
+    pub(crate) fn of<'a>(cell: &'a std::cell::OnceCell<Brackets>, tokens: &[Token]) -> &'a Brackets {
+        cell.get_or_init(|| Brackets::new(tokens))
     }
-    None
+
+    /// One pass: a stack of the openers of any kind gives the contents, and
+    /// one paired by kind ([`pair`]) the closing; a closer that closes
+    /// another than the innermost there closes none of those open.
+    pub(crate) fn new(tokens: &[Token]) -> Brackets {
+        #[cfg(test)]
+        MADE.set(MADE.get() + 1);
+        let mut b = Brackets { contents: vec![None; tokens.len()], closing: vec![None; tokens.len()] };
+        let (mut any, mut kinds) = (Vec::<(usize, bool, bool)>::new(), Vec::new());
+        for (i, t) in tokens.iter().enumerate() {
+            #[cfg(test)]
+            WALKED.set(WALKED.get() + 1);
+            match t.kind {
+                TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace => {
+                    any.push((i, false, false));
+                    kinds.push(i);
+                }
+                TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace => {
+                    if let Some((o, comma, semi)) = any.pop() {
+                        b.contents[o] = (t.kind == TokenKind::RBracket).then_some((i, comma, semi));
+                    }
+                    let innermost = kinds.last().copied();
+                    match pair(&mut kinds, tokens, i, 0) {
+                        Some(o) if Some(o) == innermost => b.closing[o] = Some(i),
+                        _ => kinds.clear(),
+                    }
+                }
+                TokenKind::Comma | TokenKind::Semi => {
+                    if let Some(top) = any.last_mut() {
+                        *(if t.kind == TokenKind::Comma { &mut top.1 } else { &mut top.2 }) = true;
+                    }
+                }
+                TokenKind::Eof => break,
+                _ => {}
+            }
+        }
+        b
+    }
+
+    /// The `]` that closes the `[` at `open`, the brackets in it closing one
+    /// another whatever their kinds, and whether a `,` and a `;` are directly
+    /// in it. None when another closer closes it, at the end of the file, and
+    /// at any token that opens nothing.
+    pub(crate) fn contents(&self, open: usize) -> Option<(usize, bool, bool)> {
+        self.contents.get(open).copied().flatten()
+    }
+
+    /// The bracket that closes the one at `open`: the closer of its kind, the
+    /// brackets in it paired by kind too (§2.5). None when `open` is no
+    /// opening bracket, when a closer of another kind comes first
+    /// (`pub(crate]` closes nothing), and at the end of the file. The one
+    /// reading of where a bracket closes by kind, for the parser and the table
+    /// of the forms of other languages ([`closing_on_line`] on a line).
+    pub(crate) fn closing(&self, open: usize) -> Option<usize> {
+        self.closing.get(open).copied().flatten()
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// The tables [`Brackets::new`] made on this thread.
+    pub(crate) static MADE: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// The tokens the tables and [`closing_on_line`] went through on this
+    /// thread: the tests see that the failures of a file do not each scan it.
+    pub(crate) static WALKED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// The bracket that closes the `(`, `[` or `{` at `open` when nothing but
@@ -46,26 +107,21 @@ pub(crate) fn empty_brackets(tokens: &[Token], open: usize) -> Option<usize> {
         .filter(|&k| tokens[k].kind == close)
 }
 
-/// The bracket that closes the one at `open`: the closer of its kind, the
-/// brackets in it paired by kind too (§2.5). None when `open` is no opening
-/// bracket, when a closer of another kind comes first (`pub(crate]` closes
-/// nothing), and at the end of the file. The one scan of where a bracket
-/// closes, for the parser and the table of the forms of other languages.
-pub(crate) fn closing(tokens: &[Token], open: usize) -> Option<usize> {
-    scan_closing(tokens, open, false)
-}
-
-/// [`closing`] on the line of `open` (the code tokens, in which a line break
+/// [`Brackets::closing`] on the line of `open` (the code tokens, in which a line break
 /// is a token in brackets too; none when a line break comes first): a form
 /// of one line (§18.1, S-435).
 pub(crate) fn closing_on_line(tokens: &[Token], open: usize) -> Option<usize> {
     scan_closing(tokens, open, true)
 }
 
+/// The scan from `open` to its closer (on its line when `on_line`): the
+/// reading [`Brackets::closing`] makes for every opener at once.
 fn scan_closing(tokens: &[Token], open: usize, on_line: bool) -> Option<usize> {
     closer(tokens.get(open)?.kind)?;
     let mut brackets = Vec::new();
     for (i, t) in tokens.iter().enumerate().skip(open) {
+        #[cfg(test)]
+        WALKED.set(WALKED.get() + 1);
         let innermost = brackets.last().copied();
         let closed = pair(&mut brackets, tokens, i, 0);
         match t.kind {
@@ -86,11 +142,15 @@ fn scan_closing(tokens: &[Token], open: usize, on_line: bool) -> Option<usize> {
 /// brackets opened inside it and left open (`f(a }` closes the `{` and the
 /// `(`). The opener a closer closed; none for one that matches none (it
 /// closes nothing) and for any other token. The one judgment of which
-/// bracket a closer closes, for the parser and [`closing`].
+/// bracket a closer closes, for the parser and [`Brackets::closing`].
 pub(crate) fn pair(open: &mut Vec<usize>, tokens: &[Token], i: usize, base: usize) -> Option<usize> {
     let kind = tokens[i].kind;
     if closer(kind).is_some() {
         open.push(i);
+        return None;
+    }
+    // A token that closes nothing, without looking at those open (R-403).
+    if !matches!(kind, TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace) {
         return None;
     }
     let from = base.min(open.len());

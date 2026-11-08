@@ -2,6 +2,7 @@
 //! `if` and its branches, and the reading of a range end ([`reads_as_expr`]).
 
 use super::*;
+use crate::foreign::type_list_ahead;
 
 /// The rule of a `^` with no name right after it (§2.6, S-358).
 const CARET_RULE: &str = "a prefix `^` is the mark of a name, written right before the name of a `let` of the flow (`prev~(^y)`), and no operator; the binary `^` is the exclusive or (§2.6)";
@@ -328,7 +329,7 @@ impl<'a> Parser<'a> {
                 // In a type (a const argument, an array's length) no `::[` is
                 // written, so a `[…]` with `,` is read as an index (R-196).
                 TokenKind::Lt | TokenKind::LBracket
-                    if foreign::type_list_ahead(&self.tokens, &self.lines, self.peek_index(), expr.kind)
+                    if type_list_ahead(&self.tokens, &self.lines, &self.brackets, self.peek_index(), expr.kind)
                         && (self.peek_kind() == TokenKind::Lt || (!self.in_type() && self.type_list_next())) =>
                 {
                     return Err(self.fail(Want::Other, "an operator or the end of the expression"));

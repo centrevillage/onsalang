@@ -579,7 +579,7 @@ impl<'a> Parser<'a> {
         // list `touches` did not read.
         let at = self.peek_index();
         if self.detached.is_some_and(|d| d.at == at)
-            && crate::scan::bracket_contents(&self.tokens, at).is_some_and(|(_, _, semi)| !semi)
+            && crate::scan::Brackets::of(&self.brackets, &self.tokens).contents(at).is_some_and(|(_, _, semi)| !semi)
         {
             return Err(self.unexpected("a type"));
         }

@@ -312,17 +312,10 @@ impl Applied {
 /// texts and where the places of the original texts went.
 pub fn apply_mapped<'a>(sources: &SourceMap, edits: impl IntoIterator<Item = &'a Edit>) -> Result<Applied, String> {
     let edits: Vec<&Edit> = edits.into_iter().collect();
-    let mut by_file: BTreeMap<FileId, Vec<usize>> = BTreeMap::new();
-    for (i, e) in edits.iter().enumerate() {
-        if sources.get(e.span.file).is_none() {
-            return Err(format!("an edit in an unknown file: {:?}", e.span));
-        }
-        by_file.entry(e.span.file).or_default().push(i);
-    }
     let mut out = Applied { ranges: edits.iter().map(|e| e.span).collect(), ..Applied::default() };
-    for (file, idx) in by_file {
+    for (file, idx) in by_file(sources, &edits)? {
         let mine: Vec<&Edit> = idx.iter().map(|&i| edits[i]).collect();
-        let (text, ranges) = apply_text_mapped(sources.file(file).text(), &mine)?;
+        let (text, ranges) = apply_text_mapped(sources.file(file).text(), &mine, None)?;
         let mut moves = Vec::with_capacity(idx.len());
         for (k, &i) in idx.iter().enumerate() {
             out.ranges[i] = Span::new(file, ranges[k].0, ranges[k].1);
@@ -335,14 +328,33 @@ pub fn apply_mapped<'a>(sources: &SourceMap, edits: impl IntoIterator<Item = &'a
     Ok(out)
 }
 
+/// The indexes of `edits` by their files; an edit in a file not of `sources`
+/// is an error.
+fn by_file(sources: &SourceMap, edits: &[&Edit]) -> Result<BTreeMap<FileId, Vec<usize>>, String> {
+    let mut by_file: BTreeMap<FileId, Vec<usize>> = BTreeMap::new();
+    for (i, e) in edits.iter().enumerate() {
+        if sources.get(e.span.file).is_none() {
+            return Err(format!("an edit in an unknown file: {:?}", e.span));
+        }
+        by_file.entry(e.span.file).or_default().push(i);
+    }
+    Ok(by_file)
+}
+
 /// Apply edits of one file to its `text` at once (the rule of [`apply`]).
 pub fn apply_text(text: &str, edits: &[&Edit]) -> Result<String, String> {
-    apply_text_mapped(text, edits).map(|(t, _)| t)
+    apply_text_mapped(text, edits, None).map(|(t, _)| t)
 }
 
 /// [`apply_text`], with the range each replacement takes in the new text (in
-/// the order of `edits`).
-fn apply_text_mapped(text: &str, edits: &[&Edit]) -> Result<(String, Vec<(u32, u32)>), String> {
+/// the order of `edits`): of the part of `text` in `window` (all of it when
+/// none), which holds the edits.
+fn apply_text_mapped(
+    text: &str,
+    edits: &[&Edit],
+    window: Option<std::ops::Range<usize>>,
+) -> Result<(String, Vec<(u32, u32)>), String> {
+    let window = window.unwrap_or(0..text.len());
     let mut order: Vec<usize> = (0..edits.len()).collect();
     order.sort_by_key(|&i| {
         let s = edits[i].span;
@@ -351,9 +363,9 @@ fn apply_text_mapped(text: &str, edits: &[&Edit]) -> Result<(String, Vec<(u32, u
     if let Some((a, b)) = overlap(edits) {
         return Err(format!("edits overlap: {:?} and {:?}", edits[a].span, edits[b].span));
     }
-    let mut out = String::with_capacity(text.len());
+    let mut out = String::with_capacity(window.len());
     let mut ranges = vec![(0, 0); edits.len()];
-    let mut pos = 0;
+    let mut pos = window.start;
     // Front to back: the text before each edit, then its replacement.
     for i in order {
         let e = edits[i];
@@ -367,8 +379,33 @@ fn apply_text_mapped(text: &str, edits: &[&Edit]) -> Result<(String, Vec<(u32, u
         ranges[i] = (start, out.len() as u32);
         pos = t;
     }
-    out.push_str(&text[pos..]);
+    out.push_str(&text[pos..window.end]);
     Ok((out, ranges))
+}
+
+/// Whether `edits` change the files of `sources`, applied as [`apply`] does
+/// (its errors) to the part of each file from its first edit to the end of
+/// its last: the candidates of a file cost their edits, not the file each
+/// (R-398).
+fn changes(sources: &SourceMap, edits: &[Edit]) -> Result<bool, String> {
+    let edits: Vec<&Edit> = edits.iter().collect();
+    let mut changed = false;
+    for (file, idx) in by_file(sources, &edits)? {
+        let mine: Vec<&Edit> = idx.iter().map(|&i| edits[i]).collect();
+        let text = sources.file(file).text();
+        let from = mine.iter().map(|e| e.span.start as usize).min().unwrap_or(0);
+        let to = mine.iter().map(|e| e.span.end as usize).max().unwrap_or(0);
+        #[cfg(test)]
+        WINDOWS.set(WINDOWS.get() + to.saturating_sub(from));
+        changed |= apply_text_mapped(text, &mine, Some(from..to))?.0 != text[from..to];
+    }
+    Ok(changed)
+}
+
+#[cfg(test)]
+thread_local! {
+    /// The bytes of the parts [`changes`] applied edits to on this thread.
+    static WINDOWS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// The rules every diagnostic follows, as messages (empty when it follows
@@ -416,13 +453,10 @@ pub fn contract(d: &Diagnostic, sources: &SourceMap, is_boundary: &dyn Fn(FileId
                 }
             }
         }
-        match apply(sources, f.edits()) {
+        match changes(sources, f.edits()) {
             Err(e) => out.push(format!("{code}: `{title}` cannot be applied: {e}")),
-            Ok(texts) => {
-                if texts.iter().all(|(file, t)| sources.file(*file).text() == t) {
-                    out.push(format!("{code}: `{title}` does not change the source"));
-                }
-            }
+            Ok(false) => out.push(format!("{code}: `{title}` does not change the source")),
+            Ok(true) => {}
         }
     }
     out
@@ -838,6 +872,54 @@ mod tests {
         let f = FileId(0);
         let fix = Fix::new("t", vec![Edit::insert(f, 5, "]"), Edit::replace(Span::new(f, 1, 2), "[")]);
         assert_eq!(fix.edits()[0].span.start, 1);
+    }
+
+    /// The contract applies each candidate to the part of its file its edits
+    /// span (R-398): over a file of many candidates, the bytes applied to are
+    /// the sum of the candidates' ranges, not the file's length times their
+    /// number; and a candidate that cannot be applied says what [`apply`] says.
+    #[test]
+    fn contract_applies_a_candidate_to_the_range_of_its_edits() {
+        let n = 2000;
+        let text: String = (0..n).map(|i| format!("let a{i:04} = {i}\n")).collect();
+        let mut sources = SourceMap::default();
+        let f = sources.add("a.onsa", &text);
+        let g = sources.add("b.onsa", "let x = 1\n");
+        let any = |_: FileId, _: u32| true;
+        let (before, mut spans) = (WINDOWS.get(), 0);
+        for (k, (at, _)) in text.match_indices("let a").enumerate() {
+            let name = Span::new(f, at as u32 + 4, at as u32 + 9);
+            // Every other candidate edits the two ends of its line.
+            let fix = if k % 2 == 0 {
+                Fix::replace("rename", name, "b")
+            } else {
+                let end = at as u32 + text[at..].find('\n').unwrap() as u32;
+                Fix::new("t", vec![Edit::replace(name, "b"), Edit::insert(f, end, " // x")])
+            };
+            spans += fix.edits().iter().map(|e| e.span.end).max().unwrap() - name.start;
+            let d = Diagnostic::new(Stage::Syntax, Code::E0002, name, "m").with_fix(fix);
+            assert!(contract(&d, &sources, &any).is_empty(), "{:?}", contract(&d, &sources, &any));
+        }
+        let windows = WINDOWS.get() - before;
+        assert_eq!(windows, spans as usize, "the windows of {n} candidates of a file of {} bytes", text.len());
+        let bad = [
+            vec![Edit::replace(Span::new(g, 0, 3), "var"), Edit::replace(Span::new(FileId(9), 0, 1), "y")],
+            vec![
+                Edit::replace(Span::new(g, 0, 3), "a"),
+                Edit::replace(Span::new(f, 0, 3), "b"),
+                Edit::replace(Span::new(f, 2, 5), "c"),
+            ],
+            vec![Edit::replace(Span::new(f, 4, 6), "a"), Edit::replace(Span::new(g, 8, 40), "b")],
+            vec![Edit::replace(Span::new(g, 4, 5), "x"), Edit::replace(Span::new(g, 0, 3), "let")],
+        ];
+        for edits in bad {
+            let message = match apply(&sources, &edits) {
+                Err(e) => format!("E0002: `t` cannot be applied: {e}"),
+                Ok(_) => "E0002: `t` does not change the source".to_string(),
+            };
+            let d = Diagnostic::new(Stage::Syntax, Code::E0002, Span::new(g, 0, 3), "m").with_fix(Fix::new("t", edits));
+            assert!(contract(&d, &sources, &any).contains(&message), "{message}: {:?}", contract(&d, &sources, &any));
+        }
     }
 
     #[test]

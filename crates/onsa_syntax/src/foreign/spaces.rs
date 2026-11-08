@@ -66,7 +66,7 @@ pub(super) fn space_before_open(c: &Cursor) -> Option<(RowId, Hit)> {
             }
             Gap::Newline => {}
         }
-    } else if d.joins(c.tokens) {
+    } else if d.joins(c) {
         fixes.extend(super::lists::join_fix(c));
     }
     if row == RowId::SpaceBeforeBracket

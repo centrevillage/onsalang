@@ -214,6 +214,7 @@ impl<'a> Parser<'a> {
             literals: &self.literals,
             names: &self.names,
             apart: &self.apart,
+            brackets: &self.brackets,
             at,
             open: self
                 .open

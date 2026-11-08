@@ -260,7 +260,13 @@ fn angle_tokens(tokens: &[Token], open: usize) -> Option<(usize, Vec<(usize, &'s
 /// parser asks it before it reads `<` as a comparison or `[` as an index, and
 /// reads a `[` on as a list of type arguments to be sure; the table builds
 /// the diagnostic where the parser then fails ([`type_args_call`]).
-pub(crate) fn type_list_ahead(tokens: &[Token], lines: &crate::layout::Lines, i: usize, callee: NodeKind) -> bool {
+pub(crate) fn type_list_ahead(
+    tokens: &[Token],
+    lines: &crate::layout::Lines,
+    brackets: &std::cell::OnceCell<crate::scan::Brackets>,
+    i: usize,
+    callee: NodeKind,
+) -> bool {
     let link = Link::of(callee);
     let name = link.names_a_path();
     if !(name || link.is_value()) || lines.before(i) != Gap::None {
@@ -268,7 +274,7 @@ pub(crate) fn type_list_ahead(tokens: &[Token], lines: &crate::layout::Lines, i:
     }
     let close = match tokens[i].kind {
         TokenKind::Lt => angle_tokens(tokens, i).map(|(close, _)| close),
-        TokenKind::LBracket => bracket_with_comma(tokens, i),
+        TokenKind::LBracket => bracket_with_comma(crate::scan::Brackets::of(brackets, tokens), i),
         _ => None,
     };
     let Some(close) = close else { return false };
@@ -278,8 +284,8 @@ pub(crate) fn type_list_ahead(tokens: &[Token], lines: &crate::layout::Lines, i:
 }
 
 /// The `]` that closes the `[` at `open` when a `,` is directly in it.
-fn bracket_with_comma(tokens: &[Token], open: usize) -> Option<usize> {
-    crate::scan::bracket_contents(tokens, open).filter(|b| b.1).map(|b| b.0)
+fn bracket_with_comma(brackets: &crate::scan::Brackets, open: usize) -> Option<usize> {
+    brackets.contents(open).filter(|b| b.1).map(|b| b.0)
 }
 
 /// The rows [`type_args_call`] names ([`super::Matcher::many`]).
@@ -304,14 +310,14 @@ pub(super) fn type_args_call(c: &Cursor) -> Option<(RowId, Hit)> {
     let callee = closed_expr(c)?;
     let (row, open) = match c.kind(c.at) {
         TokenKind::ColonColon if c.kind(c.at + 1) == TokenKind::Lt => (RowId::TypeArgsTurbofish, c.at + 1),
-        TokenKind::Lt | TokenKind::LBracket if type_list_ahead(c.tokens, c.lines, c.at, callee.0) => {
+        TokenKind::Lt | TokenKind::LBracket if type_list_ahead(c.tokens, c.lines, c.brackets, c.at, callee.0) => {
             let row = if c.kind(c.at) == TokenKind::Lt { RowId::TypeArgsAngle } else { RowId::TypeArgsSquareComma };
             (row, c.at)
         }
         _ => return None,
     };
     let (close, edits) = if row == RowId::TypeArgsSquareComma {
-        let close = bracket_with_comma(c.tokens, open)?;
+        let close = bracket_with_comma(c.brackets(), open)?;
         (close, vec![Edit::insert(c.file, c.span(open).start, "::")])
     } else {
         let first = if row == RowId::TypeArgsAngle { "::[" } else { "[" };

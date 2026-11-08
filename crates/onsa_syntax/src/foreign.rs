@@ -214,6 +214,8 @@ pub struct Cursor<'a> {
     /// The insertions the rows make apart from the tokens round them
     /// ([`crate::edits::insert_apart`]), for the candidates a check reports.
     pub(crate) apart: &'a std::cell::RefCell<crate::edits::Insertions>,
+    /// Where the brackets of `tokens` close, once made ([`Cursor::brackets`]).
+    pub(crate) brackets: &'a std::cell::OnceCell<crate::scan::Brackets>,
     /// The token the parser failed at (an index of `tokens`).
     pub at: usize,
     /// The open nodes, outermost first, and where each starts.
@@ -289,12 +291,12 @@ impl Detached {
     /// of names; a `[` whose list closes, is not empty and holds no `;` (an
     /// array, `[T; N]`), and, after an expression, holds no `,` either
     /// (`xs[0, 1]` is no index).
-    pub(crate) fn joins(self, tokens: &[Token]) -> bool {
-        match tokens[self.at].kind {
+    pub(crate) fn joins(self, c: &Cursor) -> bool {
+        match c.tokens[self.at].kind {
             TokenKind::LParen | TokenKind::Bang | TokenKind::Tilde => self.by_name,
             TokenKind::LBracket => {
-                let Some((_, comma, semi)) = crate::scan::bracket_contents(tokens, self.at) else { return false };
-                crate::scan::empty_brackets(tokens, self.at).is_none() && !semi && !(self.expr && comma)
+                let Some((_, comma, semi)) = c.brackets().contents(self.at) else { return false };
+                crate::scan::empty_brackets(c.tokens, self.at).is_none() && !semi && !(self.expr && comma)
             }
             _ => false,
         }
@@ -870,6 +872,12 @@ impl Cursor<'_> {
         self.open.len().checked_sub(n + 1).map(|k| self.open[k])
     }
 
+    /// Where the brackets of the file close ([`crate::scan::Brackets`]),
+    /// made at the first that wants it.
+    pub(crate) fn brackets(&self) -> &crate::scan::Brackets {
+        crate::scan::Brackets::of(self.brackets, self.tokens)
+    }
+
     /// The index in `tokens` of the token that starts at `offset` (or the next one).
     pub(crate) fn index_at(&self, offset: u32) -> usize {
         self.tokens.partition_point(|t| t.span.start < offset)
@@ -1009,9 +1017,9 @@ fn ends_statement(c: &Cursor, i: usize) -> bool {
 }
 
 /// The bracket that closes the one at `open` (`(`, `[` or `{`; none at any
-/// other token, [`crate::scan::closing`]).
+/// other token, [`crate::scan::Brackets::closing`]).
 pub(crate) fn closing(c: &Cursor, open: usize) -> Option<usize> {
-    crate::scan::closing(c.tokens, open)
+    c.brackets().closing(open)
 }
 
 /// The expression that ended right before the failure: the outermost

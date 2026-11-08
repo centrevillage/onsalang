@@ -459,15 +459,15 @@ fn a_bracket_closed_by_another_kind_does_not_close() {
     let src = "@fp(relaxed, 1 +] fn h() -> I32 { 1 }\n";
     assert!(parse(src).ast.root.is_empty(), "{src}: read on");
     let tokens = crate::layout::code_tokens(&crate::lex(FileId(0), "(a] b").tokens).0;
-    assert_eq!(crate::scan::closing(&tokens, 0), None);
+    assert_eq!(crate::scan::Brackets::new(&tokens).closing(0), None);
     // At a token that opens nothing, none (no overflow, no failure).
-    assert_eq!(crate::scan::closing(&tokens, 1), None);
-    assert_eq!(crate::scan::closing(&tokens, 2), None);
+    assert_eq!(crate::scan::Brackets::new(&tokens).closing(1), None);
+    assert_eq!(crate::scan::Brackets::new(&tokens).closing(2), None);
 }
 
 /// Which bracket a closer closes (`crate::scan::pair`): the innermost one of
 /// its kind above the base, with the ones opened inside it; with none of its
-/// kind, nothing. [`crate::scan::closing`] reads it strictly: a closer of
+/// kind, nothing. [`crate::scan::Brackets::closing`] reads it strictly: a closer of
 /// another kind first closes nothing.
 #[test]
 fn a_closer_closes_the_innermost_bracket_of_its_kind() {
@@ -485,10 +485,10 @@ fn a_closer_closes_the_innermost_bracket_of_its_kind() {
     assert_eq!(crate::scan::pair(&mut open, &tokens, at(RBrace), 1), None);
     assert_eq!(open, [at(LBrace), at(LParen)]);
     let tokens = crate::layout::code_tokens(&crate::lex(FileId(0), "( [ { ] ) ( [ ] )").tokens).0;
-    assert_eq!(crate::scan::closing(&tokens, 0), None);
+    assert_eq!(crate::scan::Brackets::new(&tokens).closing(0), None);
     let second = tokens.iter().rposition(|t| t.kind == LParen).unwrap();
     let last = tokens.iter().rposition(|t| t.kind == RParen).unwrap();
-    assert_eq!(crate::scan::closing(&tokens, second), Some(last));
+    assert_eq!(crate::scan::Brackets::new(&tokens).closing(second), Some(last));
 }
 
 /// The traits a head has end with its list (§6.4): a line break after a

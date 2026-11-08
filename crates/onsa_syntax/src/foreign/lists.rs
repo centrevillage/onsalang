@@ -8,7 +8,7 @@ use onsa_diag::{Edit, Fix, Span};
 
 use super::{Cursor, Want};
 use crate::cst::NodeKind;
-use crate::scan::{arm_ahead, bracket_contents};
+use crate::scan::arm_ahead;
 use crate::starts::{declares_a_function, starts_element};
 use crate::token::TokenKind;
 
@@ -58,7 +58,7 @@ pub(super) fn list_fixes(c: &Cursor, list: Option<NodeKind>) -> Vec<Fix> {
         prev,
         kind: c.kind(c.at),
         arms: list == Some(NodeKind::MatchArms),
-        joins: c.detached.is_some_and(|d| d.at == c.at && d.joins(c.tokens)),
+        joins: c.detached.is_some_and(|d| d.at == c.at && d.joins(c)),
     };
     let mut fixes = Vec::new();
     for case in CASES {
@@ -129,7 +129,7 @@ fn comma_goes(a: &After) -> bool {
     let declaration = declares_a_function(a.kind, c.kind(c.sig_after(c.at)));
     let types = matches!(a.list, Some(NodeKind::VariantFields | NodeKind::TupleType | NodeKind::FnTypeParams));
     let array =
-        (a.kind != TokenKind::LBracket || !types || bracket_contents(c.tokens, c.at).is_some_and(|(_, _, semi)| semi))
+        (a.kind != TokenKind::LBracket || !types || c.brackets().contents(c.at).is_some_and(|(_, _, semi)| semi))
             && !(a.list == Some(NodeKind::ArrayExpr) && array_repeats(c));
     let comma = !a.arms || arm_ahead(c.tokens, c.at);
     let after_rest = c.closed.iter().any(|n| n.0.is_field_rest());
@@ -224,5 +224,5 @@ pub(super) fn expression_list(c: &Cursor) -> bool {
 /// at its depth): its brackets close, and a `;` is in them.
 fn array_repeats(c: &Cursor) -> bool {
     let Some(&(_, start)) = c.open.iter().rev().find(|o| o.0 == NodeKind::ArrayExpr) else { return false };
-    bracket_contents(c.tokens, c.index_at(start)).is_some_and(|(_, _, semi)| semi)
+    c.brackets().contents(c.index_at(start)).is_some_and(|(_, _, semi)| semi)
 }
