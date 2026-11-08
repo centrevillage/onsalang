@@ -46,7 +46,7 @@ mod types;
 mod wellformed;
 
 use flow_sig::FlowHeading;
-use heading::{heading_locals, kind_error, local_member, missing_member};
+use heading::{heading_locals, kind_error, member_error, param_member};
 
 pub(crate) use decls::{Decls, item_kind};
 pub(crate) use derives::kind_constraint;

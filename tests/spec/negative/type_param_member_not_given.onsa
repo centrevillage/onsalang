@@ -1,0 +1,127 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§4.5", "§6.3", "§18.1"]
+// fixes = 0
+
+// W5-11 U10e (R-404 (3); the E0302 itself is R-370, done by U10a): a name after a type parameter and a `.`
+// that the bounds of the type parameter do not give is a name that is not found (spec §15.1: "名前が見つか
+// らなければ E0302"; §6.3: the members of a bound are its trait's). The type parameter itself is found (it
+// is visible in the whole heading and the body, §5.1). The place of the error is the name that is not found,
+// and it is the same in every place that is no body: a result type, a type argument, a bound, an effect row,
+// a field, a function type, a local's annotation, and a name after a name that was not found (`T.K.L`).
+// The names given by a bound are in negative/type_param_member_kind_in_*.onsa, which are E0308.
+// One error per unit (P-01), so each form is in its own unit; the right forms are the last units.
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+pub struct Pair[A, B] {
+  a: A,
+  b: B,
+}
+
+pub fn result_type[T](x: T) -> T.K {   //~ E0302
+  x
+}
+
+pub fn result_type_of_a_bound_that_gives_other_names[T: Float](x: T) -> T.NOPE {   //~ E0302
+  x
+}
+
+pub fn result_type_after_a_name[T](x: T) -> T.K.L {   //~ E0302
+  x
+}
+
+pub fn argument_type[T](x: T.K) -> U32 {   //~ E0302
+  1
+}
+
+pub fn type_argument[T](x: T) -> Wrap[T.K] {   //~ E0302
+  x
+}
+
+pub fn second_type_argument[T](x: T) -> Pair[T, T.K] {   //~ E0302
+  x
+}
+
+pub fn type_argument_of_a_name_with_arguments[T](x: T) -> T.K[F32] {   //~ E0302
+  x
+}
+
+pub fn bound_of_another_parameter[T, U: T.x](x: U) -> U {   //~ E0302
+  x
+}
+
+pub fn bound_that_is_not_given[T: Float, U: T.NOPE](x: U) -> U {   //~ E0302
+  x
+}
+
+pub fn effect_row[T](x: T) -> U32 uses {T.e} {   //~ E0302
+  1
+}
+
+pub fn effect_row_of_a_bound_that_gives_other_names[T: Float](x: T) -> U32 uses {T.NOPE} {   //~ E0302
+  1
+}
+
+pub fn function_type_argument[T](f: fn(T.K) -> U32) -> U32 {   //~ E0302
+  1
+}
+
+pub fn function_type_result[T](f: fn(U32) -> T.K) -> U32 {   //~ E0302
+  1
+}
+
+pub fn array_element_type[T](xs: [T.K; 4]) -> U32 {   //~ E0302
+  1
+}
+
+pub fn tuple_element_type[T](x: T) -> (T, T.K) {   //~ E0302
+  (x, x)
+}
+
+pub fn local_annotation[T](x: T) -> U32 {
+  let y: T.K = x   //~ E0302
+  1
+}
+
+pub fn local_annotation_in_a_branch[T](x: T, c: Bool) -> U32 {
+  if c {
+    let y: T.K = x   //~ E0302
+    1
+  } else {
+    2
+  }
+}
+
+pub fn closure_parameter_annotation[T](x: T) -> U32 {
+  let f = fn(y: T.K) -> U32 { 1 }   //~ E0302
+  1
+}
+
+pub fn closure_result_annotation[T](x: T) -> U32 {
+  let f = fn(y: U32) -> T.K { x }   //~ E0302
+  1
+}
+
+pub struct FieldType[T] {
+  a: T.K,   //~ E0302
+}
+
+pub enum VariantType[T] {
+  One(T.K),   //~ E0302
+  Nothing,
+}
+
+pub fn bound_that_is_given_is_a_body_value[T: Float](x: T) -> T {
+  T.PI
+}
+
+pub fn right_bound_of_another_parameter[T: Float, U: Show](x: T, y: U) -> T {
+  x
+}
+
+pub fn right_wrap_of_the_parameter[T](x: T) -> Wrap[T] {
+  Wrap { v: x }
+}

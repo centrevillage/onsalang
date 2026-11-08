@@ -1,0 +1,202 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§4.5", "§6.3", "§6.6", "§18.1"]
+// fixes = 0
+
+// W5-11 U10e (R-404, the part of a member that the bounds give): a name after a type parameter and a `.`
+// that the bounds of the type parameter give (`T: Float` gives the constants `PI`, `ONE`, `MAX`, ..., `ZERO`
+// and the associated function `round_from`; `T: Int` gives `BITS`, `MIN`, `MAX`; `T: Default` gives the
+// associated function `default`; §6.3, §6.6) is a name that is found, so it is not E0302. It is a constant or
+// a function where a type, a trait or a kind constraint, or an effect is wanted, so it is E0308 "位置によらず"
+// (§15.1: "名前は見つかったが、その位置に要る種類...でなければ、位置によらず E0308"; "定数を型引数の位置に
+// 書く" and "効果行に効果でない名前を書く" and "境界に trait でも種の制約でもない名前を書く" are E0308 too).
+// The places are the ones of F32.PI (`-> F32.PI` is E0308 today, negative/scalar_assoc_const_param_errors.onsa
+// keeps the neighbours): a result type, an argument type, a type argument, a bound (also of a parameter
+// before it), an effect row, the type of a const parameter, a field, a variant, the heading of an `impl`, a
+// function type, a tuple and an array element, a local's annotation, and the parameter and the result of an
+// anonymous function.
+// The names that the bounds do not give are in negative/type_param_member_not_given.onsa (E0302). One error per
+// unit (P-01), so each form is in its own unit; the right forms are the last units.
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+pub struct Pair[A, B] {
+  a: A,
+  b: B,
+}
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub fn constant_as_a_result_type[T: Float](x: T) -> T.PI {   //~ E0308
+  x
+}
+
+pub fn constant_one_as_a_result_type[T: Float](x: T) -> T.ONE {   //~ E0308
+  x
+}
+
+pub fn zero_of_a_number_as_a_result_type[T: AnyNum](x: T) -> T.ZERO {   //~ E0308
+  x
+}
+
+pub fn bits_of_an_integer_as_a_result_type[T: Int](x: T) -> T.BITS {   //~ E0308
+  x
+}
+
+pub fn constant_of_a_bound_that_implies_it[T: Float + Show](x: T) -> T.MAX {   //~ E0308
+  x
+}
+
+pub fn constant_as_an_argument_type[T: Float](x: T.PI) -> U32 {   //~ E0308
+  1
+}
+
+pub fn constant_as_a_type_argument[T: Float](x: T) -> Wrap[T.PI] {   //~ E0308
+  x
+}
+
+pub fn constant_as_the_second_type_argument[T: Float](x: T) -> Pair[T, T.EPSILON] {   //~ E0308
+  x
+}
+
+pub fn constant_as_the_type_argument_of_a_ring[T: Float](x: T) -> Ring[T.PI, 4] {   //~ E0308
+  x
+}
+
+pub fn constant_in_a_function_type[T: Float](f: fn(T.PI) -> U32) -> U32 {   //~ E0308
+  1
+}
+
+pub fn constant_as_a_function_type_result[T: Float](f: fn(U32) -> T.PI) -> U32 {   //~ E0308
+  1
+}
+
+pub fn constant_as_an_array_element_type[T: Float](xs: [T.PI; 4]) -> U32 {   //~ E0308
+  1
+}
+
+pub fn constant_in_a_tuple[T: Float](x: T) -> (T, T.PI) {   //~ E0308
+  (x, x)
+}
+
+pub fn constant_as_a_bound[T: Float, U: T.PI](x: U) -> U {   //~ E0308
+  x
+}
+
+pub fn constant_as_a_bound_before_its_parameter[U: T.PI, T: Float](x: U) -> U {   //~ E0308
+  x
+}
+
+pub fn constant_as_the_second_bound[T: Float, U: Show + T.PI](x: U) -> U {   //~ E0308
+  x
+}
+
+pub fn constant_as_an_effect[T: Float](x: T) -> U32 uses {T.PI} {   //~ E0308
+  1
+}
+
+pub fn constant_as_the_second_effect[T: Float](x: T) -> U32 uses {Alloc, T.PI} {   //~ E0308
+  1
+}
+
+pub fn constant_as_a_local_annotation[T: Float](x: T) -> U32 {
+  let y: T.PI = x   //~ E0308
+  1
+}
+
+pub fn constant_as_a_local_annotation_in_a_branch[T: Float](x: T, c: Bool) -> U32 {
+  if c {
+    let y: T.PI = x   //~ E0308
+    1
+  } else {
+    2
+  }
+}
+
+pub fn constant_as_a_closure_parameter[T: Float](x: T) -> U32 {
+  let f = fn(y: T.PI) -> U32 { 1 }   //~ E0308
+  1
+}
+
+pub fn constant_as_a_closure_result[T: Float](x: T) -> U32 {
+  let f = fn(y: U32) -> T.PI { x }   //~ E0308
+  1
+}
+
+pub struct ConstantAsAFieldType[T: Float] {
+  a: T.PI,   //~ E0308
+}
+
+pub enum ConstantAsAVariantType[T: Float] {
+  One(T.PI),   //~ E0308
+  Nothing,
+}
+
+pub fn function_as_a_result_type[T: Default](x: T) -> T.default {   //~ E0308
+  x
+}
+
+pub fn function_of_float_as_a_result_type[T: Float](x: T) -> T.round_from {   //~ E0308
+  x
+}
+
+pub fn function_of_int_as_an_argument_type[T: Int](x: T.narrow_from) -> U32 {   //~ E0308
+  1
+}
+
+pub fn function_as_a_type_argument[T: Default](x: T) -> Wrap[T.default] {   //~ E0308
+  x
+}
+
+pub fn function_as_a_bound[T: Default, U: T.default](x: U) -> U {   //~ E0308
+  x
+}
+
+pub fn function_as_an_effect[T: Default](x: T) -> U32 uses {T.default} {   //~ E0308
+  1
+}
+
+pub fn function_as_a_local_annotation[T: Default](x: T) -> U32 {
+  let y: T.default = x   //~ E0308
+  1
+}
+
+pub fn constant_as_the_type_of_a_const_parameter[T: Float, const N: T.PI](x: T) -> T {   //~ E0308
+  x
+}
+
+pub fn constant_as_the_type_of_a_const_parameter_before_it[const N: T.PI, T: Float](x: T) -> T {   //~ E0308
+  x
+}
+
+pub struct ConstantAsABoundBeforeItsParameter[U: T.PI, T: Float] {   //~ E0308
+  u: U,
+}
+
+pub struct ConstantAsTheTypeOfAConstParameter[T: Float, const N: T.PI] {   //~ E0308
+  t: T,
+}
+
+impl[T: Float, U: T.PI] Wrap[U] {   //~ E0308
+  pub fn nothing(self) -> U32 {
+    1
+  }
+}
+
+pub fn the_members_are_values_in_a_body[T: Float](x: T) -> T {
+  let p: T = T.PI
+  x * p
+}
+
+pub fn the_function_is_called_in_a_body[T: Default](x: T) -> T {
+  T.default()
+}
+
+pub fn the_type_is_the_parameter[T: Float](x: T) -> Wrap[T] {
+  Wrap { v: x }
+}

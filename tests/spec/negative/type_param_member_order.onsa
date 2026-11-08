@@ -1,0 +1,83 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§4.5", "§5.1", "§6.3", "§18.1"]
+// fixes = 0
+
+// W5-11 U10e (R-404 (2)): the type parameters of a list are visible in the whole heading of the item and in its
+// body whatever the order they are written in (§5.1: "項目の型パラメータ・const パラメータ・効果行変数...は、
+// その項目の中（見出しの全体と本体...）で見える束縛"), so a name after a type parameter and a `.` is looked up in
+// the bounds of that parameter in the bound of a parameter before it (`U: T.x, T: Show`), in the bound of the
+// parameter itself (`T: T.x`), in the type of a const parameter (`const N: T.K`) and in a const parameter
+// before it. The bounds `Show` and none give no `x`, `zzz` or `K` (§6.3: `Show` has the method `show`), so the
+// name is not found: E0302 (§15.1: "名前が見つからなければ E0302"). The names that the bounds give are in
+// negative/type_param_member_kind_in_type.onsa (E0308). One error per unit (P-01), so each form is in its own
+// unit; the right forms are the last units.
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+pub fn bound_of_a_parameter_before_it[U: T.x, T: Show](x: U) -> U {   //~ E0302
+  x
+}
+
+pub fn bound_of_a_parameter_after_it[T: Show, U: T.x](x: U) -> U {   //~ E0302
+  x
+}
+
+pub fn bound_of_the_parameter_itself[T: T.x](x: T) -> T {   //~ E0302
+  x
+}
+
+pub fn bound_of_the_parameter_itself_after_a_trait[T: Show + T.x](x: T) -> T {   //~ E0302
+  x
+}
+
+pub fn type_of_a_const_parameter_after_it[T, const N: T.K](x: T) -> T {   //~ E0302
+  x
+}
+
+pub fn type_of_a_const_parameter_before_it[const N: T.K, T](x: T) -> T {   //~ E0302
+  x
+}
+
+pub fn type_of_a_const_parameter_of_a_bound_that_does_not_give_it[T: Show, const N: T.K](x: T) -> T {   //~ E0302
+  x
+}
+
+pub struct BoundOfAParameterBeforeIt[U: T.zzz, T: Show] {   //~ E0302
+  u: U,
+}
+
+pub struct BoundOfTheParameterItself[T: T.zzz] {   //~ E0302
+  t: T,
+}
+
+pub enum BoundOfAParameterBeforeItInAnEnum[U: T.zzz, T: Show] {   //~ E0302
+  One(U),
+  Nothing,
+}
+
+pub struct TypeOfAConstParameter[T, const N: T.K] {   //~ E0302
+  t: T,
+}
+
+impl[U: T.x, T: Show] Wrap[U] {   //~ E0302
+  pub fn nothing(self) -> U32 {
+    1
+  }
+}
+
+impl[T: Show, U: T.x] Wrap[U] {   //~ E0302
+  pub fn nothing_else(self) -> U32 {
+    1
+  }
+}
+
+pub fn the_parameter_before_is_used_as_a_type[U: Show, T: Show](x: U, y: T) -> U {
+  x
+}
+
+pub fn the_parameter_after_is_used_as_a_type[T, U](x: T, y: U) -> T {
+  x
+}

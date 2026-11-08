@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§4.5", "§18.1"]
+// fixes = 0
+
+// W5-11 U10e (R-404 (1); S-747 A5): a type parameter whose list of bounds contradicts itself (`T: Copy + ?Dup`)
+// is read as an unknown bound where it is used (§4.5: "矛盾のある並びと、`?` を `Dup`・`Escape` 以外に付けた並
+// びの型パラメータを使う側には、暗黙の `Dup` を含めてその境界による診断を出さない"; §18.1). Whether a name after
+// `T.` is given by the bounds is such a judgment (the bounds that are unknown may give it), so `T.K` gets no
+// diagnostic, and the one error of the unit is the E0416 of the list. Today the `T.K` is the E0302 "cannot find
+// `T`" and it hides the E0416 (the names stage is before the types stage, §18.1). The mark is on the line of the
+// bound, and a diagnostic of the `T.K` on that line or on another would be an extra one.
+// The `T.K` is written in a result type, an argument type, a type argument, a bound, an effect row, a field and
+// the annotation of a local. A name not found in the bounds (`T: Gone`) is in
+// negative/type_param_member_gone_bound.onsa, and a parameter whose bounds are sound is in
+// negative/type_param_member_not_given.onsa. One error per unit (P-01), so each form is in its own unit; the
+// right forms are the last units.
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+pub fn contradiction_then_result_type[T: Copy + ?Dup](   //~ E0416
+  x: T,
+) -> T.K {
+  x
+}
+
+pub fn contradiction_then_argument_type[T: Copy + ?Dup](   //~ E0416
+  x: T.K,
+) -> U32 {
+  1
+}
+
+pub fn contradiction_then_type_argument[T: Copy + ?Dup](   //~ E0416
+  x: T,
+) -> Wrap[T.K] {
+  x
+}
+
+pub fn contradiction_then_bound[T: Copy + ?Dup, U: T.x](   //~ E0416
+  x: U,
+) -> U {
+  x
+}
+
+pub fn bound_before_contradiction[U: T.x, T: Copy + ?Dup](   //~ E0416
+  x: U,
+) -> U {
+  x
+}
+
+pub fn contradiction_then_effect_row[T: Copy + ?Dup](   //~ E0416
+  x: T,
+) -> U32 uses {T.e} {
+  1
+}
+
+pub fn contradiction_then_local_annotation[T: Copy + ?Dup](x: T) -> U32 {   //~ E0416
+  let y: T.K = x
+  1
+}
+
+pub fn contradiction_of_a_number_then_result_type[T: Num + ?Dup](   //~ E0416
+  x: T,
+) -> T.K {
+  x
+}
+
+pub struct ContradictionThenField[T: Copy + ?Dup] {   //~ E0416
+  a: T.K,
+}
+
+pub fn sound_bounds_with_no_member[T: Copy](x: T) -> Wrap[T] {
+  Wrap { v: x }
+}

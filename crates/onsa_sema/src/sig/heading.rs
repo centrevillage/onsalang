@@ -10,18 +10,26 @@ impl<'p> Sema<'p> {
         let mut out = cx.generics.clone();
         // The names of the list, each seen in every bound of it.
         let listed = listed(gs, &cx.generics);
+        // A bound after a parameter's `.` (`U: T.x`, `T: T.x`, always an
+        // error) is read once the whole list it sees (§5.1) is lowered.
+        let mut after = Vec::new();
         for g in gs {
             let def = match g {
                 GenericParam::Type { name, bounds } => {
                     // The bounds read, each with its `?` and its name (S-747).
                     let mut list = Vec::new();
-                    let mut unknown = false;
+                    let (mut unknown, mut late) = (false, false);
                     // The path of a bound is resolved as any other (§15.1,
                     // R-278): a trait of the prelude, or a kind constraint; a
                     // user trait is an E0200 (S-719), a name of another kind
                     // an E0308 (S-713 (c)).
                     for b in bounds {
                         let n = b.path.segments.last().unwrap();
+                        if b.path.segments.len() > 1 && listed.iter().any(|l| l.0 == b.path.segments[0].name) {
+                            after.push((out.len(), b));
+                            late = true;
+                            continue;
+                        }
                         match heading_name(self.a, cx.m, &b.path, (&listed, &out, &cx.locals), cx.self_ty) {
                             Ok((_, Some(Entity::Builtin(Builtin::Kind(Bound::Dup))))) if b.relaxed => {
                                 list.push((Bound::Dup, true, n.span));
@@ -49,21 +57,14 @@ impl<'p> Sema<'p> {
                             // A bound with an error of its name is a part of the
                             // declaration not read (§18.1): unknown to its users, its
                             // implicit `Dup` too (S-768 (1)).
-                            Ok((kind, _)) => {
-                                let d = kind_error(&b.path, kind, "a trait or a kind constraint", b.path.span);
-                                self.report(cx.def, d);
-                                unknown = true;
-                            }
-                            // An unknown bound (§18.1, S-689).
-                            Err(e) if self.a.unread_path(cx.def, cx.m, &b.path, &e) => unknown = true,
-                            Err(e) => {
-                                self.report(cx.def, e.into_diagnostic());
+                            r => {
+                                self.bound_error(cx, &b.path, r, "a trait or a kind constraint");
                                 unknown = true;
                             }
                         }
                     }
                     // A list with a contradiction is unknown to its users (S-747).
-                    unknown |= self.bound_list(cx, bounds, &list, unknown);
+                    unknown |= self.bound_list(cx, bounds, &list, unknown || late);
                     // `Dup` and `Escape` written are the implicit requirements
                     // (S-751), which every parameter has but with its `?`.
                     let bs = list.iter().filter(|b| !b.1 && b.0 != Bound::Escape).map(|b| b.0).collect();
@@ -76,25 +77,50 @@ impl<'p> Sema<'p> {
                     };
                     GenericDef { name: name.name.clone(), span: name.span, kind }
                 }
-                GenericParam::Const { name, ty } => {
-                    let t = self.lower_type(cx, *ty);
-                    if !matches!(self.a.types.get(t), Ty::Int(IntKind::U32) | Ty::Error) {
-                        self.report(
-                            cx.def,
-                            Feature::ConstGenericKinds
-                                .diagnostic(Stage::Names, cx.ast.ty(*ty).span, &[])
-                                .with_fix(Fix::replace("write `U32`", cx.ast.ty(*ty).span, "U32")),
-                        );
-                    }
-                    GenericDef { name: name.name.clone(), span: name.span, kind: GenericKind::Const(t) }
-                }
+                // Its type, which sees the whole list too, is lowered below.
+                GenericParam::Const { name, .. } => GenericDef {
+                    name: name.name.clone(),
+                    span: name.span,
+                    kind: GenericKind::Const(self.a.types.error()),
+                },
                 GenericParam::Effect { name } => {
                     GenericDef { name: name.name.clone(), span: name.span, kind: GenericKind::Effect }
                 }
             };
             out.push(def);
         }
+        // Read by the bounds known before them: an unknown one holds them.
+        for &(_, b) in &after {
+            let r = heading_name(self.a, cx.m, &b.path, (&listed, &out, &cx.locals), cx.self_ty);
+            self.bound_error(cx, &b.path, r, "a trait or a kind constraint");
+        }
+        for (i, _) in after {
+            if let GenericKind::Type { unknown, .. } = &mut out[i].kind {
+                *unknown = true;
+            }
+        }
+        let whole = Cx { generics: out.clone(), locals: cx.locals.clone(), ..*cx };
+        for (i, g) in gs.iter().enumerate() {
+            let GenericParam::Const { ty, .. } = g else { continue };
+            let (t, span) = (self.lower_type(&whole, *ty), cx.ast.ty(*ty).span);
+            if !matches!(self.a.types.get(t), Ty::Int(IntKind::U32) | Ty::Error) {
+                let d = Feature::ConstGenericKinds.diagnostic(Stage::Names, span, &[]);
+                self.report(cx.def, d.with_fix(Fix::replace("write `U32`", span, "U32")));
+            }
+            out[cx.generics.len() + i].kind = GenericKind::Const(t);
+        }
         out
+    }
+
+    /// The error of the path `p` of a bound (`want`, "a trait"), which names
+    /// a name of the kind `r` (an E0308) or none; of a name held, none (§18.1,
+    /// S-689).
+    fn bound_error(&mut self, cx: &Cx<'p>, p: &Path, r: Named, want: &'static str) {
+        match r {
+            Ok((kind, _)) => self.report(cx.def, kind_error(p, kind, want, p.span)),
+            Err(e) if self.a.unread_path(cx.def, cx.m, p, &e) => {}
+            Err(e) => self.report(cx.def, e.into_diagnostic()),
+        }
     }
 
     /// The trait the path `p` of an `impl p for Ty` names (§6.3, S-895), read
@@ -103,12 +129,12 @@ impl<'p> Sema<'p> {
     pub(super) fn lower_trait(&mut self, cx: &Cx<'p>, p: &Path) -> Option<Entity> {
         let listed = listed(&[], &cx.generics);
         match heading_name(self.a, cx.m, p, (&listed, &cx.generics, &cx.locals), None) {
-            Ok((NameKind::Trait, e)) => return e,
-            Ok((kind, _)) => self.report(cx.def, kind_error(p, kind, "a trait", p.span)),
-            Err(e) if self.a.unread_path(cx.def, cx.m, p, &e) => {}
-            Err(e) => self.report(cx.def, e.into_diagnostic()),
+            Ok((NameKind::Trait, e)) => e,
+            r => {
+                self.bound_error(cx, p, r, "a trait");
+                None
+            }
         }
-        None
     }
 
     /// The effects of a row of a signature or a function type
@@ -230,29 +256,33 @@ pub(crate) fn read_effects(
     (set, errors)
 }
 
+/// What [`heading_name`] reads of a path.
+type Named = Result<(NameKind, Option<Entity>), crate::ResolveError>;
+
 /// The kind of what the path `p` of a bound or an effect row names (§15.1),
 /// and what it names but a parameter of the heading of `listed` (the names a
 /// heading binds that are no item of a module, with their kinds, the
 /// parameters `generics` lowered so far, and the values `locals` the place
 /// sees, [`Cx::locals`]) and an associated name of a builtin type: through
-/// `Self` (`self_ty`) and the aliases ([`Analysis::path_end`]). A parameter
-/// of a list has no members (the E0302 of the member, [`missing_member`], or
-/// of its head), a local neither (its E0308).
+/// `Self` (`self_ty`) and the aliases ([`Analysis::path_end`]). After a
+/// parameter of a list is what [`param_member`] reads (of its head not found
+/// when it is not lowered yet); a local has no members (its E0308).
 fn heading_name(
     a: &Analysis,
     from: ModId,
     p: &Path,
     (listed, generics, locals): (&[(&str, NameKind)], &[GenericDef], &HashSet<String>),
     self_ty: Option<TyId>,
-) -> Result<(NameKind, Option<Entity>), crate::ResolveError> {
+) -> Named {
     let head = &p.segments[0];
     let local = locals.contains(&head.name).then_some(NameKind::Local);
     if let Some(kind) = local.or_else(|| listed.iter().find(|(n, _)| *n == head.name).map(|&(_, k)| k)) {
         return match &p.segments[1..] {
             [] => Ok((kind, None)),
-            [next, ..] if kind == NameKind::Local => Err(local_member(head, next)),
-            _ => Err(missing_member(a, generics, p)
-                .unwrap_or_else(|| crate::ResolveError::NotFound { name: head.name.clone(), span: head.span })),
+            [next, ..] if kind == NameKind::Local => Err(member_error(head, next, NameKind::Local)),
+            _ => param_member(a, generics, p)
+                .unwrap_or_else(|| Err(crate::ResolveError::NotFound { name: head.name.clone(), span: head.span }))
+                .map(|kind| (kind, None)),
         };
     }
     let end = a.path_end(from, p, self_ty)?;
@@ -263,24 +293,39 @@ fn heading_name(
     Ok((end.kind(a, p.span), entity))
 }
 
-/// The E0302 of the member after the type parameter of `generics` at the
-/// head of `p` that its bounds do not give (§15.1, R-370), as in a body:
-/// none when `p` starts at no such parameter or its bounds are unknown
-/// (§18.1) or give the member.
-pub(super) fn missing_member(a: &Analysis, generics: &[GenericDef], p: &Path) -> Option<crate::ResolveError> {
-    let [head, name, ..] = &p.segments[..] else { return None };
-    let g = generics.iter().find(|g| g.name == head.name)?;
-    let GenericKind::Type { bounds, unknown: false, .. } = &g.kind else { return None };
-    crate::traits::member(a, bounds, &name.name).is_none().then(|| {
-        a.note_use(g.span, head.span);
-        crate::ResolveError::NotFound { name: name.name.clone(), span: name.span }
-    })
+/// What the path `p` names after the parameter of `generics` at its head
+/// (§15.1, R-370, R-404): the kind of the member the bounds of
+/// a type parameter give (an E0308 where the place takes another kind), the
+/// E0302 of one they do not give, held (`Failed`, no diagnostic) when they
+/// are unknown (§18.1); after a const parameter, a value, the E0308 of a
+/// name with no members. None when `p` starts at no such parameter.
+pub(super) fn param_member(a: &Analysis, generics: &[GenericDef], p: &Path) -> Option<Member> {
+    let [head, name, rest @ ..] = &p.segments[..] else { return None };
+    let g = generics.iter().find(|g| g.name == head.name && !matches!(g.kind, GenericKind::Effect))?;
+    a.note_use(g.span, head.span);
+    let GenericKind::Type { bounds, unknown, .. } = &g.kind else {
+        return Some(Err(member_error(head, name, NameKind::ConstParam)));
+    };
+    // S-953 (§18.1): a member a known bound gives is held too when another
+    // bound is unknown (`T: Float + Gone`, `T: Float + ?Dup` of `T.PI`).
+    if *unknown {
+        return Some(Err(crate::ResolveError::Failed));
+    }
+    let Some(member) = crate::traits::member(a, bounds, &name.name) else {
+        return Some(Err(crate::ResolveError::NotFound { name: name.name.clone(), span: name.span }));
+    };
+    let kind = NameKind::of_named(Entity::Member(member), &a.defs, name.span);
+    Some(rest.first().map_or(Ok(kind), |next| Err(member_error(name, next, kind))))
 }
 
-/// The error of `next` after the local `head` (§15.1, S-729, S-741): a
-/// value, which has no members (E0308), in a heading and in a type.
-pub(super) fn local_member(head: &Ident, next: &Ident) -> crate::ResolveError {
-    crate::ResolveError::NotANamespace { name: head.name.clone(), span: next.span, kind: Some(NameKind::Local) }
+/// What [`param_member`] reads of a path.
+type Member = Result<NameKind, crate::ResolveError>;
+
+/// The error of `next` after `head` of the kind `kind`, a value (a local,
+/// a const parameter) or another name with no members (§15.1, S-729,
+/// S-741): E0308, in a heading and in a type.
+pub(super) fn member_error(head: &Ident, next: &Ident, kind: NameKind) -> crate::ResolveError {
+    crate::ResolveError::NotANamespace { name: head.name.clone(), span: next.span, kind: Some(kind) }
 }
 
 /// E0308 for the path `p` at `span`, of the kind `kind`, where `want` is

@@ -1,0 +1,75 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§4.5", "§6.6", "§18.1"]
+// fixes = 0
+
+// W5-11 U10e (R-404 (1); the forms are right before U10e too): the name after `T.` in the body of a function
+// whose type parameter has a list of bounds that is read as an unknown bound (a list that contradicts itself,
+// `T: Copy + ?Dup`, §4.5; a name that is not found, `T: Gone`, §18.1) is not judged by the bounds: the bounds
+// that are unknown may give it. The value `T.K` and the call `T.f(x)` get no
+// diagnostic, and the one error of the unit is the error of the bounds (the E0416 of the list, the E0302 of the
+// name `Gone`). The annotation of a local, `let y: T.K`, is a name of a type: it is read as the ones of a heading
+// (the contradiction is in negative/type_param_member_unknown_bound.onsa, `Gone` here). The same names in a heading are in negative/type_param_member_unknown_bound.onsa and
+// negative/type_param_member_gone_bound.onsa. A parameter whose bounds are sound gives the E0302 for a name
+// that they do not give, in a body too (`T.f()`, W5-04 U2) and in the places that are no body
+// (negative/type_param_member_not_given.onsa).
+// One error per unit (P-01), so each form is in its own unit; the right forms are the last units.
+
+pub fn contradiction_then_value[T: Copy + ?Dup](x: T) -> U32 {   //~ E0416
+  let z = T.K
+  1
+}
+
+pub fn contradiction_then_call[T: Copy + ?Dup](x: T) -> U32 {   //~ E0416
+  T.f(x)
+}
+
+pub fn contradiction_of_a_number_then_value[T: Num + ?Dup](x: T) -> U32 {   //~ E0416
+  let z = T.K
+  1
+}
+
+pub fn contradiction_then_value_in_a_branch[T: Copy + ?Dup](x: T, c: Bool) -> U32 {   //~ E0416
+  if c {
+    let z = T.K
+    1
+  } else {
+    2
+  }
+}
+
+pub fn name_not_found_then_value[T: Gone](x: T) -> U32 {   //~ E0302
+  let z = T.K
+  1
+}
+
+pub fn name_not_found_then_call[T: Gone](x: T) -> U32 {   //~ E0302
+  T.f(x)
+}
+
+pub fn name_not_found_then_local_annotation[T: Gone](x: T) -> U32 {   //~ E0302
+  let y: T.K = x
+  1
+}
+
+pub fn name_not_found_beside_a_trait_then_value[T: Show + Gone](x: T) -> U32 {   //~ E0302
+  let z = T.K
+  1
+}
+
+pub fn name_not_found_then_value_in_a_branch[T: Gone](x: T, c: Bool) -> U32 {   //~ E0302
+  if c {
+    let z = T.K
+    1
+  } else {
+    2
+  }
+}
+
+pub fn the_member_of_sound_bounds[T: Float](x: T) -> T {
+  T.PI
+}
+
+pub fn the_function_of_sound_bounds[T: Default](x: T) -> T {
+  T.default()
+}

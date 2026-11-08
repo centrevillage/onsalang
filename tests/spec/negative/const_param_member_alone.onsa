@@ -1,0 +1,83 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§4.5", "§18.1"]
+// fixes = 0
+
+// W5-11 U10e (R-404; these forms are E0308 and E0413 before U10e too): a const parameter is a value and a
+// constant (§15.1: "const パラメータは値であり定数"). Written alone where a type, a trait, a kind constraint
+// or an effect is wanted it is E0308 as a local is ("値... を型の位置に書く"; "効果行に効果でない名前を書く";
+// "境界に trait でも種の制約でもない名前を書く"). In a body it is the
+// value of the type that its declaration gives, so a name after it is the field or the method of that value
+// (§15.1: "値の後の `.` はそのフィールドとメソッドで、型の段が読む"), and a `U32` has no field `x`: E0413,
+// as `F32.PI.x` is (negative/scalar_assoc_const_after_names.onsa). The forms of a `.` after the const
+// parameter in a type, a bound and an effect row are in negative/const_param_member_in_type.onsa.
+// One error per unit (P-01), so each form is in its own unit; the right forms are the last units.
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+pub struct Cells[const N: U32] {
+  data: [F32; N],
+}
+
+pub fn alone_as_a_result_type[const N: U32](x: F32) -> N {   //~ E0308
+  x
+}
+
+pub fn alone_as_an_argument_type[const N: U32](x: N) -> U32 {   //~ E0308
+  1
+}
+
+pub fn alone_as_a_type_argument[const N: U32](x: F32) -> Wrap[N] {   //~ E0308
+  x
+}
+
+pub fn alone_as_a_bound[const N: U32, U: N](x: U) -> U {   //~ E0308
+  x
+}
+
+pub fn alone_as_an_effect[const N: U32](x: F32) -> F32 uses {N} {   //~ E0308
+  x
+}
+
+pub fn alone_as_a_local_annotation[const N: U32](x: F32) -> U32 {
+  let y: N = x   //~ E0308
+  1
+}
+
+pub fn field_in_a_body[const N: U32](x: F32) -> F32 {
+  N.x   //~ E0413
+}
+
+pub fn associated_constant_name_in_a_body[const N: U32](x: F32) -> U32 {
+  N.BITS   //~ E0413
+}
+
+pub fn field_after_the_value_in_a_branch[const N: U32](x: F32, c: Bool) -> F32 {
+  if c {
+    N.x   //~ E0413
+  } else {
+    x
+  }
+}
+
+pub fn field_in_an_argument_of_a_call[const N: U32](x: F32) -> U32 {
+  id(N.x)   //~ E0413
+}
+
+pub fn id(x: U32) -> U32 {
+  x
+}
+
+pub fn the_value_in_a_body[const N: U32](x: F32) -> U32 {
+  N + 1
+}
+
+pub fn the_value_as_a_length[const N: U32](xs: [F32; N]) -> U32 {
+  N
+}
+
+pub fn the_value_as_a_const_argument[const N: U32](c: Cells[N]) -> U32 {
+  N
+}

@@ -1,0 +1,71 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§4.5", "§18.1"]
+// fixes = 0
+
+// W5-11 U10e (R-404 (1); the forms are right before U10e too): a type parameter whose list of bounds has a
+// name that is not found (`T: Gone`) is not judged by its bounds where it is used (§18.1: "境界の並びに見つ
+// からない名前のある型パラメータ（`struct M[T: Gone]`）も、使う側では暗黙の `Dup` を含めて要求を判定しない").
+// Whether a name after `T.` is given by the bounds is such a judgment, so `T.K` gets no diagnostic, and the one
+// error of the unit is the E0302 of the name `Gone`. The mark is on the line of the bound, and a diagnostic
+// of the `T.K` on that line or on another would be an extra one. The `T.K` is written in the places of a result
+// type, an argument type, a type argument, a bound, an effect row, a field and the annotation of a local.
+// The list with a contradiction is in negative/type_param_member_unknown_bound.onsa. One error per unit (P-01),
+// so each form is in its own unit; the right forms are the last units.
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+pub fn name_not_found_then_result_type[T: Gone](   //~ E0302
+  x: T,
+) -> T.K {
+  x
+}
+
+pub fn name_not_found_then_argument_type[T: Gone](   //~ E0302
+  x: T.K,
+) -> U32 {
+  1
+}
+
+pub fn name_not_found_then_type_argument[T: Gone](   //~ E0302
+  x: T,
+) -> Wrap[T.K] {
+  x
+}
+
+pub fn name_not_found_then_bound[T: Gone, U: T.x](   //~ E0302
+  x: U,
+) -> U {
+  x
+}
+
+pub fn name_not_found_then_effect_row[T: Gone](   //~ E0302
+  x: T,
+) -> U32 uses {T.e} {
+  1
+}
+
+pub fn name_not_found_then_local_annotation[T: Gone](x: T) -> U32 {   //~ E0302
+  let y: T.K = x
+  1
+}
+
+pub fn name_not_found_beside_a_trait_then_result_type[T: Show + Gone](   //~ E0302
+  x: T,
+) -> T.K {
+  x
+}
+
+pub struct NameNotFoundThenField[T: Gone] {   //~ E0302
+  a: T.K,
+}
+
+pub fn sound_bounds_with_no_member[T: Copy](x: T) -> Wrap[T] {
+  Wrap { v: x }
+}
+
+pub fn another_parameter_with_sound_bounds[T: Gone, U: Show](x: T, y: U) -> U {   //~ E0302
+  y
+}

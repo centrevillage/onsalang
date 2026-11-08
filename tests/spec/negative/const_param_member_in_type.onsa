@@ -1,0 +1,155 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§4.5", "§18.1"]
+// fixes = 0
+
+// W5-11 U10e (R-404): a name after a const parameter and a `.` where a type, a trait, a kind constraint or an
+// effect is wanted. A const parameter is a value and a constant (§15.1: "型パラメータと `Self` は型、const
+// パラメータは値であり定数"), so the head of the path is found and is no namespace, and it is E0308 as the
+// head of `x.K` for a local `x` is ("値... を型の位置に書く"; "名前空間でない名前の後に `.` を書く"; "効果行に
+// 効果でない名前を書く"; "境界に trait でも種の制約でもない名前を書く"). The name after the `.` is not looked
+// up (a local `x.K` is E0308 whatever follows), so it is E0308 for a name that does not matter (`K`, `x`) and
+// for a name that the type of the parameter has (`MAX`, `BITS` of `U32`). The places are the ones of the
+// type parameters (negative/type_param_member_kind_in_type.onsa): a result type, an argument type, a type
+// argument, a bound (also of a parameter before it), an effect row, a field, the heading of an `impl`, a
+// function type, a tuple and an array element, a local's annotation, an anonymous function, and the type of
+// another const parameter.
+// A const parameter alone in a type position is E0308 today (`-> N`, "is a const parameter, not a type"); it
+// is kept in negative/const_param_member_alone.onsa with the forms of a body.
+// One error per unit (P-01), so each form is in its own unit; the right forms are the last units.
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub fn name_as_a_result_type[const N: U32](x: F32) -> N.K {   //~ E0308
+  x
+}
+
+pub fn name_that_the_type_has_as_a_result_type[const N: U32](x: F32) -> N.MAX {   //~ E0308
+  x
+}
+
+pub fn bits_as_a_result_type[const N: U32](x: F32) -> N.BITS {   //~ E0308
+  x
+}
+
+pub fn name_as_an_argument_type[const N: U32](x: N.K) -> U32 {   //~ E0308
+  1
+}
+
+pub fn name_as_a_type_argument[const N: U32](x: F32) -> Wrap[N.K] {   //~ E0308
+  x
+}
+
+pub fn name_as_a_type_argument_of_a_ring[const N: U32](x: F32) -> Ring[N.K, 4] {   //~ E0308
+  x
+}
+
+pub fn name_in_a_function_type[const N: U32](f: fn(N.K) -> U32) -> U32 {   //~ E0308
+  1
+}
+
+pub fn name_as_a_function_type_result[const N: U32](f: fn(U32) -> N.K) -> U32 {   //~ E0308
+  1
+}
+
+pub fn name_as_an_array_element_type[const N: U32](xs: [N.K; 4]) -> U32 {   //~ E0308
+  1
+}
+
+pub fn name_in_a_tuple[const N: U32](x: F32) -> (F32, N.K) {   //~ E0308
+  (x, x)
+}
+
+pub fn name_as_a_bound[const N: U32, U: N.x](x: U) -> U {   //~ E0308
+  x
+}
+
+pub fn name_as_a_bound_of_a_parameter_before_it[U: N.x, const N: U32](x: U) -> U {   //~ E0308
+  x
+}
+
+pub fn name_as_the_second_bound[const N: U32, U: Show + N.x](x: U) -> U {   //~ E0308
+  x
+}
+
+pub fn name_as_an_effect[const N: U32](x: F32) -> F32 uses {N.x} {   //~ E0308
+  x
+}
+
+pub fn name_as_the_second_effect[const N: U32](x: F32) -> F32 uses {Alloc, N.x} {   //~ E0308
+  x
+}
+
+pub fn name_as_the_type_of_a_const_parameter[const N: U32, const M: N.K](x: F32) -> F32 {   //~ E0308
+  x
+}
+
+pub fn name_as_a_local_annotation[const N: U32](x: F32) -> U32 {
+  let y: N.K = x   //~ E0308
+  1
+}
+
+pub fn name_as_a_local_annotation_in_a_branch[const N: U32](x: F32, c: Bool) -> U32 {
+  if c {
+    let y: N.K = x   //~ E0308
+    1
+  } else {
+    2
+  }
+}
+
+pub fn name_as_a_closure_parameter[const N: U32](x: F32) -> U32 {
+  let f = fn(y: N.K) -> U32 { 1 }   //~ E0308
+  1
+}
+
+pub fn name_as_a_closure_result[const N: U32](x: F32) -> U32 {
+  let f = fn(y: U32) -> N.K { x }   //~ E0308
+  1
+}
+
+pub struct NameAsAFieldType[const N: U32] {
+  a: N.K,   //~ E0308
+}
+
+pub enum NameAsAVariantType[const N: U32] {
+  One(N.K),   //~ E0308
+  Nothing,
+}
+
+pub struct NameAsABound[const N: U32, U: N.x] {   //~ E0308
+  u: U,
+}
+
+pub struct NameAsABoundBeforeItsParameter[U: N.x, const N: U32] {   //~ E0308
+  u: U,
+}
+
+pub struct NameAsTheTypeOfAConstParameter[const N: U32, const M: N.K] {   //~ E0308
+  a: F32,
+}
+
+impl[const N: U32, U: N.x] Wrap[U] {   //~ E0308
+  pub fn nothing(self) -> U32 {
+    1
+  }
+}
+
+pub fn the_const_parameter_is_a_length[const N: U32](xs: [F32; N]) -> U32 {
+  N
+}
+
+pub fn the_const_parameter_is_a_const_argument[const N: U32](x: F32) -> Ring[F32, N] {
+  Ring { data: [x; N], head: 0 }
+}
+
+pub fn the_type_is_the_parameter[T](x: T) -> Wrap[T] {
+  Wrap { v: x }
+}

@@ -100,9 +100,14 @@ impl<'p> Sema<'p> {
                         return self.a.types.intern(Ty::Param(i as u32));
                     }
                 }
-                if let Some(e) = missing_member(self.a, &cx.generics, path) {
-                    self.report(cx.def, e.into_diagnostic());
-                    return self.a.types.error();
+                match param_member(self.a, &cx.generics, path) {
+                    Some(Ok(kind)) => return self.not_a_type(cx, None, kind, te.span, path),
+                    Some(Err(e)) if self.a.unread_path(cx.def, cx.m, path, &e) => return self.a.types.error(),
+                    Some(Err(e)) => {
+                        self.report(cx.def, e.into_diagnostic());
+                        return self.a.types.error();
+                    }
+                    None => {}
                 }
                 // Through `Self` and the aliases (`Self.N`, `Al.N`, §2.2, §4.4).
                 let entity = match self.a.path_end(cx.m, path, cx.self_ty) {
@@ -298,7 +303,7 @@ impl<'p> Sema<'p> {
         let Some(next) = rest.first() else {
             return Some(self.not_a_type(cx, None, NameKind::Local, span, path));
         };
-        self.report(cx.def, local_member(head, next).into_diagnostic());
+        self.report(cx.def, member_error(head, next, NameKind::Local).into_diagnostic());
         Some(self.a.types.error())
     }
 
