@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§10", "§18.1"]
+
+// S-776 (W4-06), the contrast of unit_stage_rt_cycle_{sig,type,modes}.onsa: the same three cycles
+// with the failed unit fixed. Now every unit is checked for rt and the cycle is an E0903 (§10
+// rule 5: "it is reported after that unit is fixed").
+//
+// S-778: one E0903 for each cycle, on the first call in the body of its first declaration to a
+// function of the cycle (as E0310 is on a `use`, §18.1), the same place as `ping` in
+// negative/rt.onsa.
+
+// The failed unit of unit_stage_rt_cycle_sig.onsa, fixed (c has the parameter type I32).
+pub rt fn d(n: I32) -> I32 {
+  if n == 0 { 0 } else { c(n - 1, 0) }   //~ E0903
+}
+
+pub rt fn c(n: I32, q: I32) -> I32 {
+  if n == 0 { q } else { d(n - 1) }
+}
+
+// The failed unit of unit_stage_rt_cycle_type.onsa, fixed (c2 has no type error).
+pub rt fn d2(n: I32) -> I32 {
+  if n == 0 { 0 } else { c2(n - 1) }     //~ E0903
+}
+
+pub rt fn c2(n: I32) -> I32 {
+  if n == 0 { 0 } else { d2(n - 1) }
+}
+
+// The failed unit of unit_stage_rt_cycle_modes.onsa, fixed (c3 moves its argument once).
+pub rt fn d3(n: I32, move q: Buf[F32]) -> I32 {
+  c3(n - 1, move q)                      //~ E0903
+}
+
+pub rt fn c3(n: I32, move q: Buf[F32]) -> I32 {
+  d3(n - 1, move q)
+}
