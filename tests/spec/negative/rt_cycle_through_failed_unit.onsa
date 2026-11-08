@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§10", "§18.1"]
+
+// S-779: a unit with an error of the rt and effects stage itself (E0901, E0902) is not in a
+// cycle either, as a unit with an error of a stage before (S-776): `d` <-> `c` has no E0903
+// until the E0901 of `c` is fixed, and `g` <-> `h` none until the E0902 of `g` is. The clean
+// cycle `e` <-> `f` has its one E0903 on the call of `e` (S-778).
+
+pub fn slow(x: I32) -> I32 {
+  x
+}
+
+pub rt fn d(n: I32) -> I32 {
+  c(n - 1)
+}
+
+pub rt fn c(n: I32) -> I32 {
+  let a = slow(n)                       //~ E0901
+  d(a)
+}
+
+pub rt fn e(n: I32) -> I32 {
+  f(n - 1)                              //~ E0903
+}
+
+pub rt fn f(n: I32) -> I32 {
+  e(n - 1)
+}
+
+pub rt fn g(n: I32) -> I32 uses {Alloc} {   //~ E0902
+  h(n - 1)
+}
+
+pub rt fn h(n: I32) -> I32 {
+  g(n - 1)
+}
