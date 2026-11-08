@@ -67,6 +67,7 @@ impl<'a> Parser<'a> {
             #[cfg(test)]
             height: self.height,
             items: self.items,
+            apart: self.apart.into_inner(),
         }
     }
 
@@ -171,11 +172,31 @@ impl<'a> Parser<'a> {
         } else if self.tokens[i].kind != TokenKind::Eof {
             // It is reported where the unit stops (`fn f(` before the next
             // `fn`), so that it is of the unit (`crate::units`): at the end of
-            // the unit, as an empty span (§18.1, S-276).
+            // the unit, as an empty span (§18.1, S-276): the general E0002,
+            // though the token that starts the next unit is a reserved word
+            // (R-400, S-952). Failed at that token or after comments only, it
+            // is what the unit wants after its last token. E0006 stays.
             let end = Span::new(self.file, self.last_end, self.last_end);
+            let general = self.diagnostics[first_at_stop..].iter().any(|d| d.code != Code::E0006);
+            let last = (first..i).rev().find(|&k| !self.tokens[k].kind.is_trivia());
+            let failed = self.wanted.take().filter(|w| {
+                let at = self.tokens[w.0].span.start;
+                w.0 >= i
+                    && self.tokens[i..w.0].iter().all(|t| t.kind.is_trivia())
+                    && self.diagnostics[first_at_stop..].iter().any(|d| d.span.start == at)
+            });
+            if let (Some(last), Some((_, expected)), true) = (last, failed, general) {
+                let at_stop = self.diagnostics.split_off(first_at_stop);
+                self.diagnostics.extend(at_stop.into_iter().filter(|d| d.code == Code::E0006));
+                let message = format!("expected {expected} after {}", self.tokens[last].kind.describe());
+                self.report(Diagnostic::new(Stage::Syntax, Code::E0002, end, message));
+            }
             for d in &mut self.diagnostics[first_at_stop..] {
                 d.span = end;
                 d.found = None;
+                if d.code != Code::E0006 {
+                    d.code = Code::E0002;
+                }
             }
         }
         let first = (from..i).find(|&k| !self.tokens[k].kind.is_trivia());
@@ -359,7 +380,7 @@ impl<'a> Parser<'a> {
         }
         for &o in others {
             let t = self.tokens[o];
-            d = d.with_note(t.span, format!("this `{}` is never closed either", self.token_text(t)));
+            d = d.with_note(t.span, format!("this `{}` is open here too", self.token_text(t)));
         }
         self.report(d);
     }

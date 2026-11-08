@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§18.1"]
+// fixes = 1
+
+// W5-11 U10b, S-736 (spec §2.3, §18.1): the candidate of an E0320 writes the name in the form of its
+// kind (§2.3), and when the written name ends with `_`, the name of the candidate keeps one `_` at the end
+// (`Gain_` is `gain_`, `_v_` is `v_`, `a__b_` is `a_b_`). The spec does not promise the text of the
+// candidate (S-736), so the `.fix1` keeps the behavior of this version. The candidate changes the
+// declaration and every use of the name (§2.3, §18.1). The name without the `_` that is a name already is in
+// e0320_trailing_underscore_free.onsa, and the name with it that is a name already in
+// e0320_trailing_underscore_taken.onsa.
+// One error in each declaration unit (P-01).
+pub fn gain_() -> I32 { //~ E0320
+  1
+}
+pub fn calls_gain() -> I32 {
+  gain_()
+}
+pub struct Point_ { //~ E0320
+  x: I32,
+}
+pub fn read_point(p: Point_) -> I32 {
+  p.x
+}
+const MAX_: I32 = 4 //~ E0320
+pub fn twice_max() -> I32 {
+  MAX_ * 2
+}
+pub fn foo_bar_() -> I32 { //~ E0320
+  5
+}
+pub fn a_b_() -> I32 { //~ E0320
+  6
+}
+pub fn pick(o: Option[I32]) -> I32 {
+  match o {
+    Some(v_) => v_, //~ E0320
+    None => 0,
+  }
+}

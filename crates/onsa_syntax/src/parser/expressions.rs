@@ -562,7 +562,7 @@ impl<'a> Parser<'a> {
             // or in a list of members: the error is at the `fn`, so that the
             // recovery may start the next unit there (an unclosed `{`, §18.1).
             TokenKind::KwFn if declares_a_function(t.kind, self.peek2().kind) => {
-                return Err(self.unexpected("an expression (a function is declared at the top level)"));
+                return Err(self.unexpected_fn("an expression"));
             }
             TokenKind::KwFn => {
                 let m = self.start(NodeKind::ClosureExpr)?;

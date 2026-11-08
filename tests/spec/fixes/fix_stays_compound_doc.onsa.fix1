@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§5.1", "§18.1"]
+// fixes = 1
+
+// E0020 for a compound assignment `/=` right against a line comment: the candidate writes the operation out after the
+// `=` and ends with the `/`. Written right against the `//`, that `/` would join the comment into a doc comment `///`
+// and change the reading of the text outside the edits (§18.1, §2.1), so the candidate keeps a blank between them
+// (`x = x / // half`). A candidate can be made, so the form is E0020 with it (§18.1; W5-11 U10b, R-392). One error in
+// each function (P-01).
+
+pub fn against_a_comment() -> U32 {
+  var x = 8
+  x = x / // half                                       //~ E0020
+    2
+  x
+}
+
+pub fn in_a_closure() -> U32 {
+  var y = 0
+  let f = fn() -> U32 {
+    var x = 8
+    x = x / // half                                     //~ E0020
+      2
+    x
+  }
+  y = f.()
+  y
+}

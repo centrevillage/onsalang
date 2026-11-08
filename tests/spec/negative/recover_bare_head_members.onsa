@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1"]
+// fixes = 0
+
+// W5-11 U10b, R-399 (spec §18.1): among the members of an `impl` too, a line of a visibility alone is
+// a run of its own that ends at the next item start, so two such lines are two units and both errors are
+// reported. The member after them is read: its use has no E0413.
+pub struct P { v: I32 }
+impl P {
+  pub                                               //~ E0002 @6
+  pub                                               //~ E0002 @6
+  fn m(self) -> I32 { self.v }
+}
+fn c(p: P) -> I32 { p.m() }

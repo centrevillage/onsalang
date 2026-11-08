@@ -9,7 +9,7 @@
 //! block-like operands of the expressions its edits share text with
 //! ([`groups::block_like_operands`], the judgment of E0013) are
 //! parenthesized in it. The candidate so completed is read once more, and it
-//! is dropped when it nests over the limit ([`nesting::nests_too_deep`]) or
+//! is dropped when a reading nests over the limit ([`nesting::over_limit`]) or
 //! leaves more than the candidate alone did, less the E0013 of those
 //! expressions (§18.1: a candidate that cannot keep the promise is not made;
 //! another error of the unit stays as it was). The same reading judges every
@@ -23,7 +23,7 @@
 use std::collections::BTreeMap;
 use std::ops::Range;
 
-use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
+use onsa_diag::{Code, Diagnostic, Edit, Fix, Note, Span, Stage};
 
 use crate::cst::Cst;
 use crate::groups;
@@ -47,6 +47,10 @@ pub struct CandidateReads {
     pub dropped: usize,
     pub left: usize,
     pub unread: usize,
+    /// Of `dropped`, those that nest over the limit (§2.5), and the rule
+    /// note of the last of them.
+    pub deep: usize,
+    pub deep_rule: &'static str,
 }
 
 /// The candidates of the diagnostics of the syntax stage that a check
@@ -76,12 +80,16 @@ pub(crate) fn complete(
         let fixes: Vec<Fix> = (std::mem::take(&mut d.fixes).into_iter())
             .filter_map(|f| crate::edits::apart(file, text, cst.tokens(), f, apart))
             .collect();
+        let deep = reads.deep;
         d.fixes = match d.code {
             Code::E0013 => fixes,
             _ => fixes.into_iter().filter_map(|f| completed(text, units, &failed, d.span, f, &mut reads)).collect(),
         };
         if d.fixes.is_empty() {
             d.code = d.code.without_fixes(d.stage);
+            if reads.deep > deep {
+                d.notes.push(Note::rule(reads.deep_rule));
+            }
         }
     }
     reads
@@ -169,6 +177,9 @@ fn completed(
     reads.bytes += after.len();
     let alone = crate::read(file, &after, within.ctx);
     let judge = within.span.start <= span.start && failed.one_in(&within) && !wants_the_next_item(&alone, after.len());
+    if deep(&alone, reads, nesting::WRITTEN_TOO_DEEP) {
+        return None;
+    }
     let touched = touched_operands(&alone, &regions);
     if touched.is_empty() {
         let left = judge && leaves(&alone, place(&regions, end));
@@ -178,13 +189,15 @@ fn completed(
     let operands: Vec<Span> = touched.iter().flat_map(|(_, o)| o.iter().copied()).collect();
     let local = composed(local, &regions, groups::parenthesizing(&operands).collect());
     let edits: Vec<Edit> = local.iter().map(|e| within.global(e)).collect();
-    let deep = nesting::nests_too_deep(text, within, within.span, &edits, operands.len() as u32);
-    let Some(Applied { text: again, regions, end }) = applied(own, &local, last).ok().filter(|_| !deep) else {
+    let Ok(Applied { text: again, regions, end }) = applied(own, &local, last) else {
         reads.dropped += 1;
         return None;
     };
     reads.bytes += again.len();
     let with = crate::read(file, &again, within.ctx);
+    if deep(&with, reads, nesting::TOO_DEEP_RULE) {
+        return None;
+    }
     if !keeps(&alone, touched.len(), &with, &regions) {
         reads.dropped += 1;
         return None;
@@ -194,6 +207,21 @@ fn completed(
         return None;
     }
     Some(Fix::new(fix.title(), edits))
+}
+
+/// Whether `read`, of the units a candidate touches with it, goes over the
+/// nesting limit (§2.5; §18.1: then no candidate), counted in `reads`. The
+/// units are read whole, also where the parser did not read them before (a
+/// guard after the failure, R-397), so their height does not bound it.
+/// `rule` says why, for the note.
+fn deep(read: &crate::Read, reads: &mut CandidateReads, rule: &'static str) -> bool {
+    let over = nesting::over_limit(&read.diagnostics, 0..u32::MAX);
+    reads.dropped += usize::from(over);
+    reads.deep += usize::from(over);
+    if over {
+        reads.deep_rule = rule;
+    }
+    over
 }
 
 /// The expressions of `read` with block-like operands that share text with

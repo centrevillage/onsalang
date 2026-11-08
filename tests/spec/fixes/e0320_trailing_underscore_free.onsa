@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§5.1", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "17:8"
+// code = "E0320"
+// candidate = 1
+// clean = true
+
+// W5-11 U10b, S-736, S-652 (spec §2.3, §18.1): the candidate of the E0320 of `Level_` keeps the `_` at the
+// end (`level_`, S-736). The module has `level` already, which is no overlap with `level_`, so the candidate
+// is given, and after it the file has no error.
+pub fn level() -> I32 {
+  2
+}
+pub fn Level_() -> I32 { //~ E0320
+  3
+}
+pub fn calls_level() -> I32 {
+  Level_() + level()
+}

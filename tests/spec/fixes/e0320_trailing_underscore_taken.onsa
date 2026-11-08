@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§5.1", "§18.1"]
+// fixes = 0
+
+// W5-11 U10b, S-736, S-652 (spec §2.3, §18.1): the candidate of the E0320 of `Gain_` would be `gain_`,
+// the name in the form with the `_` at the end kept (S-736). That is a name of the module already, so a
+// declaration with it would be E0304 (§5.1) and the candidate would leave an error in the unit it touches:
+// no candidate is given (§18.1, S-652). The error is the same E0320 at the name. The written `fixes = 0`
+// checks that no diagnostic of the file has a candidate.
+pub fn gain_() -> I32 {
+  2
+}
+pub fn Gain_() -> I32 { //~ E0320
+  1
+}
+pub fn calls() -> I32 {
+  Gain_() + gain_()
+}

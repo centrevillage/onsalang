@@ -97,8 +97,10 @@ pub(super) fn compound_assignment(c: &Cursor) -> Option<(RowId, Hit)> {
     // A line break or a comment between the `=` and the right side stays
     // (S-251, R-210): the left side and the operator go in after the `=`
     // (`x = x + // c`). Blanks alone are replaced (`x +=1` is `x = x + 1`).
+    // Apart from a comment right after the `=` (`x = x / // c`, R-392).
     let between = if rhs_first > c.at + 1 {
-        Edit::insert(c.file, c.span(c.at).end, format!("{head}{}", if parens { " (" } else { "" }))
+        let s = format!("{head}{}", if parens { " (" } else { "" });
+        crate::edits::insert_apart(c.file, c.span(c.at).end, &s, &mut c.apart.borrow_mut())
     } else {
         let blanks = c.file_span(c.span(c.at).end, c.span(rhs_first).start);
         Edit::replace(blanks, format!("{head}{}", if parens { " (" } else { " " }))

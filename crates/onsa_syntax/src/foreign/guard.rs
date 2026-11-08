@@ -628,9 +628,6 @@ pub(super) fn guard_pattern(c: &Cursor) -> Option<(RowId, Hit)> {
     }
 }
 
-/// Why [`constants_in_guard`] makes no candidate at the limit of §2.5.
-const TOO_DEEP: &str = "no candidate: the guard form would nest over the limit (§2.5); simplify the arm";
-
 /// The names of `p` that start at `constants` (sorted) made holes of the
 /// constant they name; how many.
 fn mark(c: &Cursor, toks: &[usize], p: &mut Pat, constants: &[u32]) -> usize {
@@ -680,13 +677,8 @@ pub fn constants_in_guard(
     let (fix, window) = made?;
     // The parentheses of a block-like guard after the `&&` (§3.1), as for
     // the candidates of the syntax stage: the unit has no error of that
-    // stage, so the completion drops one only over the limit.
-    let fix = crate::operands::completed_later(text, units, window, fix).ok_or(Some(TOO_DEEP))?;
-    // Each level it adds is of a token it writes (an operator of the guard
-    // too, §2.5): a byte at least.
-    let written = fix.edits().iter().map(|e| e.replace.len() as u32).sum();
-    let limit = crate::nesting::Limit { text, units };
-    if limit.exceeded(window, fix.edits(), written) { Err(Some(TOO_DEEP)) } else { Ok(fix) }
+    // stage, so the completion drops one only over the limit (§2.5).
+    crate::operands::completed_later(text, units, window, fix).ok_or(Some(crate::nesting::WRITTEN_TOO_DEEP))
 }
 
 /// The `n`-th name (from 1) the guard-form candidates may bind: `v`, `v2`,

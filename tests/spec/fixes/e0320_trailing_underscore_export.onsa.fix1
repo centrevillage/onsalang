@@ -1,0 +1,12 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§14.2", "§18.1"]
+// fixes = 1
+
+// W5-11 U10b, S-736, S-653 (spec §2.3, §14.2): the name of an `@export` function cannot end with `_`
+// (§14.2), so the candidate of the E0320 of `Mix_` writes the name in its form without the `_` at the end
+// (`mix`), not with it as for other names (S-736). One error in the declaration unit (P-01).
+@export
+pub fn mix() -> I32 { //~ E0320
+  1
+}

@@ -128,10 +128,11 @@ impl Joins {
     }
 }
 
-/// The tokens of code (no blank, line break or line comment) of `tokens`
-/// that end where `e` starts and that start where it ends.
+/// The tokens of `tokens` but blanks and line breaks that end where `e`
+/// starts and that start where it ends: a comment too, whose kind an edit
+/// may change (`/` before `//` is `///`, R-392).
 fn around(tokens: &[Token], e: &Edit) -> (Option<Token>, Option<Token>) {
-    let code = |t: &&Token| !t.kind.is_trivia() && t.kind != TokenKind::Eof;
+    let code = |t: &&Token| !matches!(t.kind, TokenKind::Whitespace | TokenKind::Newline | TokenKind::Eof);
     let l = tokens.get(tokens.partition_point(|t| t.span.end < e.span.start));
     let r = tokens.get(tokens.partition_point(|t| t.span.start < e.span.end));
     (

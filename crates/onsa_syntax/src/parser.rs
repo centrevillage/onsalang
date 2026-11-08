@@ -105,6 +105,9 @@ pub(crate) struct ParseOutput {
     /// that a candidate stays in the nesting limit reads again only a unit
     /// near it (`nesting::nests_too_deep`).
     pub items: Vec<(u32, u32)>,
+    /// The insertions of the rows apart from the tokens round them
+    /// ([`crate::edits::apart`]).
+    pub apart: crate::edits::Insertions,
 }
 
 /// Marker for "a diagnostic was reported; abandon this item".
@@ -255,6 +258,9 @@ pub(crate) struct Parser<'a> {
     /// The token where the recovery reported an unclosed bracket: the units
     /// around that end there too and do not report it again.
     reported_stop: Option<usize>,
+    /// The token of the last failure ([`Parser::fail_at`]) and what was
+    /// wanted there: the error of a unit that ends at it ([`Parser::skip_unit`]).
+    wanted: Option<(usize, String)>,
     events: Vec<Event>,
     /// The open nodes, innermost last.
     open: Vec<Open>,
@@ -273,6 +279,10 @@ pub(crate) struct Parser<'a> {
     /// The names of the file that the guard candidates take no new name
     /// from, made at the first that wants them ([`foreign::Cursor::names`]).
     names: std::cell::OnceCell<foreign::guard::Names>,
+    /// The insertions of the rows apart from the tokens round them
+    /// ([`foreign::Cursor::apart`]); those of a trial reading undone stay,
+    /// and mark no edit that a candidate reported makes otherwise.
+    apart: std::cell::RefCell<crate::edits::Insertions>,
     /// The levels of each top-level item that parsed.
     levels: Vec<u32>,
     /// The height of each item node closed ([`ParseOutput::items`]).
@@ -363,6 +373,7 @@ impl<'a> Parser<'a> {
             attribute_lines: std::cell::Cell::new((0, 0)),
             unit_brackets: 0,
             reported_stop: None,
+            wanted: None,
             events: Vec::new(),
             open: Vec::new(),
             closed: Vec::new(),
@@ -371,6 +382,7 @@ impl<'a> Parser<'a> {
             diagnostics,
             literals,
             names: std::cell::OnceCell::new(),
+            apart: Default::default(),
             levels: Vec::new(),
             items: Vec::new(),
             trials: 0,

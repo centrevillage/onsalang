@@ -100,7 +100,7 @@ impl<'a> Parser<'a> {
                 if self.tokens[f].kind == TokenKind::KwFn
                     && declares_a_function(TokenKind::KwFn, self.tokens[self.skip_trivia(f + 1)].kind)
                 {
-                    return Err(self.unexpected("a type (a function is declared at the top level)"));
+                    return Err(self.unexpected_fn("a type"));
                 }
                 let m = self.start(NodeKind::FnType)?;
                 self.eat(TokenKind::KwRt);

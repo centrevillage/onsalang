@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1"]
+// fixes = 0
+
+// W5-11 U10b, R-399 (spec §18.1): a run of tokens of no item ends at the next item start, and a
+// visibility (`pub`, `priv`) is an item start, as a token that starts a heading. A line of a visibility
+// alone, with no declaration after it on the line, is an error of its own run, so the next such line
+// starts a new unit and every one of them is reported at once (the errors of all the units, §18.1).
+// The tokens of no item on the line after one (`) )`) are in its run, up to the next item start, so the
+// `) )` adds no report of its own. The declarations after the lines are read: their uses have no E0302.
+pub                                                 //~ E0002 @4
+pub                                                 //~ E0002 @4
+fn b() -> I32 { 2 }
+pub                                                 //~ E0002 @4
+pub                                                 //~ E0002 @4
+pub                                                 //~ E0002 @4
+fn c() -> I32 { b() }
+priv                                                //~ E0002 @5
+pub                                                 //~ E0002 @4
+fn d() -> I32 { c() }
+pub                                                 //~ E0002 @4
+) )
+pub                                                 //~ E0002 @4
+fn e() -> I32 { d() }

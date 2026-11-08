@@ -24,6 +24,21 @@ impl<'a> Parser<'a> {
         self.fail(Want::Other, expected)
     }
 
+    /// [`Parser::unexpected`] at a `fn` that declares a function, where
+    /// `expected` goes: the message says where a function is declared, and
+    /// what the unit wanted there, if it ends at that `fn`, is `expected`
+    /// alone ([`Parser::skip_unit`], R-400).
+    pub(super) fn unexpected_fn(&mut self, expected: &str) -> ParseError {
+        let at = self.peek_index();
+        self.unexpected(&format!("{expected} (a function is declared at the top level)"));
+        if let Some((k, wanted)) = &mut self.wanted
+            && *k == at
+        {
+            *wanted = expected.to_string();
+        }
+        ParseError
+    }
+
     /// The one entry of the failures of the parser at the next token, where
     /// it wanted `want` (`expected`, for the message). The table of the forms
     /// of other languages says first whether the token starts such a form
@@ -67,6 +82,7 @@ impl<'a> Parser<'a> {
         }
         let at = self.peek_index();
         let t = self.tokens[at];
+        self.wanted = Some((at, expected.to_string()));
         // The number of a literal written as in other languages (`1u8`,
         // `0o17`, `017`) is checked as any integer literal (E0408): two
         // errors of one token, of which the driver reports one.
@@ -197,6 +213,7 @@ impl<'a> Parser<'a> {
             lines: &self.lines,
             literals: &self.literals,
             names: &self.names,
+            apart: &self.apart,
             at,
             open: self
                 .open

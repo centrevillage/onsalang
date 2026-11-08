@@ -1,17 +1,17 @@
 // onsa.toml
 // [test]
 // spec = ["§2.1", "§5.1", "§18.1"]
-// fixes = 0
+// fixes = 1
 
 // E0020 for a compound assignment `/=` right against a line comment: the candidate writes the operation out after the
-// `=` and ends with the `/`, which joins the comment after it into a doc comment `///`, so the reading of the comment
-// changes and an E0004 stands where the comment was (§18.1, §2.1). A candidate does not do that, so there is no
-// candidate, and a form of the syntax stage that has no candidate is a general syntax error, E0002 (§18.1). With a
-// blank before the comment the candidate is made (`x = x / // half`). One error in each function (P-01).
+// `=` and ends with the `/`. Written right against the `//`, that `/` would join the comment into a doc comment `///`
+// and change the reading of the text outside the edits (§18.1, §2.1), so the candidate keeps a blank between them
+// (`x = x / // half`). A candidate can be made, so the form is E0020 with it (§18.1; W5-11 U10b, R-392). One error in
+// each function (P-01).
 
 pub fn against_a_comment() -> U32 {
   var x = 8
-  x /=// half                                       //~ E0002
+  x /=// half                                       //~ E0020
     2
   x
 }
@@ -20,7 +20,7 @@ pub fn in_a_closure() -> U32 {
   var y = 0
   let f = fn() -> U32 {
     var x = 8
-    x /=// half                                     //~ E0002
+    x /=// half                                     //~ E0020
       2
     x
   }

@@ -140,6 +140,33 @@ fn a_unit_near_the_limit_is_read_alone_and_its_candidate_dropped() {
     assert!(0 < limit && limit < size + 8, "read {limit} bytes, the deep unit is {size}");
 }
 
+#[test]
+fn a_candidate_over_the_limit_after_the_failure_is_dropped_with_the_note() {
+    // R-397: the candidate writes a comparison into a guard 254 groups deep,
+    // which the parser did not read (it failed at the range before it), so
+    // the height of the unit does not show it near the limit. Read whole with
+    // the candidate, the unit goes over it: no candidate, the E0002 of the
+    // form, and the note that says so; the candidate writes no parentheses
+    // (§2.5, §18.1).
+    let guard = format!("{}b{}", "(".repeat(254), ")".repeat(254));
+    let src = format!(
+        "pub fn f(x: I32, b: Bool) -> I32 {{\n  match x {{\n    1..<3 if {guard} => 1,\n    _ => 0,\n  }}\n}}\n"
+    );
+    let (found, reads) = onsa_diag::stack::run(move || {
+        let p = crate::parse(FileId(0), &src);
+        let found: Vec<(Code, usize, Vec<String>)> = p
+            .diagnostics
+            .iter()
+            .map(|d| (d.code, d.fixes.len(), d.notes.iter().map(|n| n.message.clone()).collect()))
+            .collect();
+        (found, p.candidate_reads)
+    });
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!((found[0].0, found[0].1), (Code::E0002, 0));
+    assert_eq!(found[0].2.last().map(String::as_str), Some(crate::nesting::WRITTEN_TOO_DEEP));
+    assert_eq!((reads.dropped, reads.deep), (1, 1));
+}
+
 /// A function whose body is 256 levels deep, the limit (§2.5: its block,
 /// 253 groups, the binary operator and the blocks of its operands), with an
 /// E0013 at the bottom: its parentheses would add a level.
@@ -158,8 +185,9 @@ fn no_candidate_of_a_file_of_the_repository_is_dropped() {
         for (name, text) in &files {
             let r = crate::parse(FileId(0), text).candidate_reads;
             read += r.bytes;
-            if r.dropped > 0 || r.unread > 0 {
-                dropped.push(format!("{name}: {} dropped, {} kept without a reading", r.dropped, r.unread));
+            // One over the limit is dropped as promised (§2.5, R-397).
+            if r.dropped > r.deep || r.unread > 0 {
+                dropped.push(format!("{name}: {} dropped, {} kept without a reading", r.dropped - r.deep, r.unread));
             }
         }
         (read, dropped)

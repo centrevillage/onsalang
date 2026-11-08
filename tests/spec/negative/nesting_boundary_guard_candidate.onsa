@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§7", "§18.1"]
+// fixes = 0
+
+// W5-11 U10b, R-397 (spec §2.5, §18.1): the candidate of a range pattern writes a comparison into the
+// guard (`compare in a guard`), which nests the guard deeper (§2.5 counts the levels of a chain of binary
+// operators too). This guard already nests near the limit of 256 levels, so the candidate would leave an
+// E0006 in the unit it touches: no candidate is made (§18.1), and a form of the syntax stage that has no
+// candidate is E0002 (§18.1). The guard and the rest of the file are within the limit.
+pub fn f(x: I32, b: Bool) -> I32 {
+  match x {
+    1..<3 if ((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((b)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))) => 1,  //~ E0002 @5
+    _ => 0,
+  }
+}

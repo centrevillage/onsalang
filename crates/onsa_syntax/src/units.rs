@@ -349,6 +349,17 @@ impl Builder<'_> {
                             self.field_defaults(decl, u);
                         }
                     }
+                    // A visibility, an attribute (`@`, `#[`) or a doc comment
+                    // starts an item (§18.1): a run of tokens of no item from
+                    // there is a unit of its own, which the tokens after it
+                    // join (R-399). A `#` alone does not.
+                    None if matches!(self.cst.children(n).first(), Some(&Elem::Node(c))
+                        if matches!(self.cst.kind(c), NodeKind::Vis | NodeKind::Docs)
+                            || self.cst.kind(c) == NodeKind::Attr
+                                && ["@", "#["].iter().any(|s| self.text[self.cst.span(c).start as usize..].starts_with(s))) =>
+                    {
+                        last = Some((self.push(self.cst.span(n), None, parent), true));
+                    }
                     None => self.stray(self.cst.span(n), parent, &mut last),
                 },
                 Elem::Node(n) => {

@@ -769,10 +769,44 @@ fn the_other_brackets_never_closed_are_notes_in_order_after_the_declaration() {
         notes,
         [
             ("it is in the body of `a`", src.find("a(self)").unwrap() as u32),
-            ("this `{` is never closed either", at("impl S {")),
-            ("this `{` is never closed either", at("I32 {")),
+            ("this `{` is open here too", at("impl S {")),
+            ("this `{` is open here too", at("I32 {")),
         ]
     );
+}
+
+#[test]
+fn the_note_on_an_outer_bracket_says_it_is_open_where_the_unit_stops() {
+    // R-395: the `{` of the `impl` is closed later, by the last `}`; where the
+    // member stops, it is open, and the note says no more than that.
+    let src = "impl P {\n  fn a(self) -> I32 {\n    self.v\n\n  fn b(self) -> I32 { 2 }\n}\n";
+    let p = parse(src);
+    assert_eq!(codes_of(&p), [Code::E0002]);
+    let notes: Vec<&str> = p.diagnostics[0].notes.iter().map(|n| n.message.as_str()).collect();
+    assert_eq!(notes[notes.len() - 1], "this `{` is open here too");
+}
+
+#[test]
+fn an_error_found_at_the_next_item_says_what_its_unit_wants_after_its_last_token() {
+    // R-400 (§18.1, S-276): the error is of the unit that stops, at its end;
+    // the forms the next item starts are of the next unit (the attribute of
+    // other languages is reported once, at itself).
+    let cases = [
+        ("const K: I32 = 1 +\nfn z() -> I32 { 1 }\n", "expected an expression after `+`", 1),
+        ("type Op =\nfn z() -> I32 { 1 }\n", "expected a type after `=`", 1),
+        ("pub type Op =\n  #[x]\n  fn(I32) -> I32\n", "expected a type after `=`", 3),
+        // A reserved word found there too (S-952): its unit has its own E0002.
+        ("const K: I32 = 1 +\nstatic fn z() -> I32 { 1 }\n", "expected an expression after `+`", 2),
+        // Failed after the doc comment where the unit stops, the same.
+        ("const K: I32 = 1 +\n/// d\nstatic fn z() -> I32 { 1 }\n", "expected an expression after `+`", 2),
+    ];
+    for (src, message, count) in cases {
+        let p = parse(src);
+        let end = src.find('\n').unwrap() as u32;
+        let first = &p.diagnostics[0];
+        assert!(first.message.starts_with(message) && first.span.start == end, "{src:?}: {:?}", p.diagnostics);
+        assert_eq!(p.diagnostics.len(), count, "{src:?}: {:?}", p.diagnostics);
+    }
 }
 
 #[test]

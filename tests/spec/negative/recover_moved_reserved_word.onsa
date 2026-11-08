@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§18.1"]
+// fixes = 0
+
+// W5-11 U10b, S-952 (spec §18.1, §2.2): an error that the reading of a cut declaration finds at the start
+// of the next item goes to the end of its unit, and it is the general E0002 of the cut unit even when the
+// token found is a reserved word (`static`): the reserved word is read in the next unit as §2.2 says, where
+// `static` before a heading is the E0002 of the words before a heading, and the reading goes on (the
+// functions are declared, so `calls` has no E0302). Comment and doc comment lines between the cut line and
+// the next item do not change it. One error in each unit (P-01).
+const K: I32 = 1 +                                  //~ E0002 @19
+static fn z() -> I32 { 1 }                          //~ E0002 @1
+const L: I32 = 2 +                                  //~ E0002 @19
+// a comment
+static fn w() -> I32 { 2 }                          //~ E0002 @1
+const M: I32 = 3 +                                  //~ E0002 @19
+/// the doc of `v`
+static fn v() -> I32 { 3 }                          //~ E0002 @1
+type T =                                            //~ E0002 @9
+/// the doc of `u`
+static fn u() -> I32 { 4 }                          //~ E0002 @1
+fn calls() -> I32 {
+  z() + w() + v() + u()
+}

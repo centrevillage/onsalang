@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "18:4"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// W5-11 U10b, R-392 (spec §18.1): the candidate of a compound assignment writes the left side and the
+// operator after the `=` (`x = x / …`), and a comment between the `=` and the right side stays. Written
+// right before the `//`, the `/` of the operator would turn the comment into the doc comment `///`, which
+// changes the reading of the text outside the edits; a candidate keeps that reading, so it keeps the
+// operator apart from the comment. A candidate can be made, so the form is E0020 with it (§18.1), and the
+// file has no error after it. The text of the candidate is not fixed here.
+pub fn f(inout x: I32) {
+  x= x / // the step                                    //~ E0020 @4
+    2
+}

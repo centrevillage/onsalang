@@ -101,12 +101,14 @@ impl Shape {
 
     /// The candidate of the E0320 of `name` (§2.3, §18.1): the name by the
     /// rule, with a `_` at its end when that is a reserved word (`match_`,
-    /// S-243), and whether it took that `_`. None when it is not of the shape
-    /// (`_0` gives no identifier, S-651) or is the name itself (R-260, R-262).
-    fn candidate(self, name: &str) -> Option<(String, bool)> {
+    /// S-243), and whether it took that `_`; with `tail`, one `_` at its end
+    /// also when `name` ends with one (`Gain_` is `gain_`, S-736). None when
+    /// it is not of the shape (`_0` gives no identifier, S-651) or is the
+    /// name itself (R-260, R-262).
+    fn candidate(self, name: &str, tail: bool) -> Option<(String, bool)> {
         let mut to = self.convert(name);
         let reserved = crate::token::TokenKind::keyword(&to).is_some();
-        if reserved {
+        if reserved || (tail && name.ends_with('_') && !to.ends_with('_')) {
             to.push('_');
         }
         (self.matches(&to) && to != name).then_some((to, reserved))
@@ -226,8 +228,10 @@ pub(crate) fn check(ast: &Ast, diagnostics: &mut Vec<Diagnostic>) {
         )
         .with_found(ident.name.clone());
         // S-82 (W4-04): the candidate also renames every use in the package.
-        match shape.candidate(&ident.name) {
-            Some((_, true)) if exported.contains(&ident.span) => {
+        // The name of an item with `@export` takes no `_` at its end (S-653).
+        let export = exported.contains(&ident.span);
+        match shape.candidate(&ident.name, !export) {
+            Some((_, true)) if export => {
                 d = d.with_rule(
                     "the name by the rule is a reserved word, and the name of an item with `@export` does not end \
                      with `_` (§14.2): rename by hand",
@@ -520,7 +524,7 @@ mod tests {
         ];
         for shape in [Shape::Snake, Shape::UpperCamel, Shape::UpperSnake] {
             for name in samples {
-                let Some((to, _)) = shape.candidate(name) else {
+                let Some((to, _)) = shape.candidate(name, true) else {
                     let none = ["_0", "_1", "__", "_"].contains(&name) || shape.matches(name);
                     assert!(none, "{} `{name}` has no candidate", shape.describe());
                     continue;
@@ -530,9 +534,9 @@ mod tests {
             }
         }
         // S-149: `__` takes the name by the rule.
-        assert_eq!(Shape::Snake.candidate("a__b"), Some(("a_b".into(), false)));
-        assert_eq!(Shape::UpperSnake.candidate("A__B"), Some(("A_B".into(), false)));
-        assert_eq!(Shape::Snake.candidate("g__"), Some(("g".into(), false)));
+        assert_eq!(Shape::Snake.candidate("a__b", true), Some(("a_b".into(), false)));
+        assert_eq!(Shape::UpperSnake.candidate("A__B", true), Some(("A_B".into(), false)));
+        assert_eq!(Shape::Snake.candidate("g__", true), Some(("g_".into(), false)));
         let src = "struct _0 {}\nenum C { _0 }\nconst _1: I32 = 1\n";
         assert!(e0320s(src).iter().all(|(_, c, _)| c.is_empty()), "{:?}", e0320s(src));
     }
@@ -559,7 +563,7 @@ mod tests {
         let src = "pub fn Match() {}\nfn Clock() {}\nfn When() {}\nstruct S { Ser: I32 }\nconst true_: I32 = 1\n";
         let parsed = crate::parse(onsa_diag::FileId(0), src);
         let fixes: Vec<_> = parsed.diagnostics.iter().map(|d| d.fixes[0].edits()[0].replace.clone()).collect();
-        assert_eq!(fixes, vec!["match_", "clock_", "when_", "ser_", "TRUE"]);
+        assert_eq!(fixes, vec!["match_", "clock_", "when_", "ser_", "TRUE_"]);
     }
 
     /// R-347 (§2.3, §14.2, §18.1): the name of an item with `@export` does

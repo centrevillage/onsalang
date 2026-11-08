@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1"]
+// fixes = 0
+
+// W5-11 U10b, R-399 (spec §18.1): an attribute starts an item when it starts with `@` or with the `#[` of
+// another language; a `#` that no `[` follows is no item start, so the line of it is in the run of tokens
+// of no item before it, which a line of `pub` alone starts, and that run is one unit with one error. The
+// declaration after it is read: its use has no E0302.
+pub                                                 //~ E0002 @4
+#
+fn ok() -> I32 { 1 }
+fn calls() -> I32 {
+  ok()
+}

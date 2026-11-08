@@ -32,6 +32,11 @@ pub(crate) fn too_deep(limit: Limit, span: Span, fixes: &[Fix], more: u32) -> bo
 pub(crate) const TOO_DEEP_RULE: &str =
     "bind a part of it with `let`: parenthesizing it nests deeper than the limit (§2.5)";
 
+/// Why a candidate that adds no level of its own is not made (§2.5, §18.1):
+/// the unit with it goes over the limit (R-397).
+pub(crate) const WRITTEN_TOO_DEEP: &str =
+    "no candidate: with it written out, the unit nests deeper than the limit (§2.5)";
+
 /// What the check that a candidate stays in the nesting limit reads (§2.5):
 /// the file and its units.
 #[derive(Clone, Copy)]
@@ -57,9 +62,9 @@ impl Limit<'_> {
 /// over the nesting limit (§2.5; §18.1: no such candidate is made). The
 /// parser counts it, on that text with the candidate, when its height (a
 /// level it reaches at least) and `added` are over the limit: only a unit
-/// near the limit is read again, and only that unit. The one judgment of
-/// it, for the candidates of the syntax stage and the parentheses they take
-/// (`crate::operands`).
+/// near the limit is read again, and only that unit: for the candidates of
+/// the forms the parser read (the completion reads its units whole,
+/// `crate::operands`).
 pub(crate) fn nests_too_deep(text: &str, within: Within, span: Span, edits: &[Edit], added: u32) -> bool {
     if within.height + added <= crate::parser::NESTING_LIMIT {
         return false;
@@ -74,7 +79,14 @@ pub(crate) fn nests_too_deep(text: &str, within: Within, span: Span, edits: &[Ed
     let (start, end) = (span.start - within.span.start, span.end - within.span.start + longer);
     let file = span.file;
     let out = crate::parser::Parser::new(file, &after, crate::lex(file, &after)).parse_units(within.ctx);
-    out.diagnostics.iter().any(|d| d.code == Code::E0006 && start <= d.span.start && d.span.start < end)
+    over_limit(&out.diagnostics, start..end)
+}
+
+/// Whether the `diagnostics` of a reading with a candidate hold an E0006
+/// that starts in `range`: the one test of whether it goes over the limit,
+/// for [`nests_too_deep`] and the readings of `crate::operands`.
+pub(crate) fn over_limit(diagnostics: &[Diagnostic], range: std::ops::Range<u32>) -> bool {
+    diagnostics.iter().any(|d| d.code == Code::E0006 && range.contains(&d.span.start))
 }
 
 thread_local! {

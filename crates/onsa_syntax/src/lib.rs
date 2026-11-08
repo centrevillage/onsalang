@@ -235,7 +235,7 @@ pub(crate) fn read(file: FileId, text: &str, ctx: parser::ItemCtx) -> Read {
     // may not hold there until the recovery by statement (S-59) lowers
     // the statements before the error (accepted, 2026-10-08).
     groups::check(&ast, &|e| map.expr_kind(&cst, e), limit, &mut diagnostics);
-    let mut apart = edits::Insertions::default();
+    let mut apart = out.apart;
     foreign::clocks(&cst, limit, &mut diagnostics, &mut apart);
     Read { ast, cst, map, diagnostics, levels: out.levels, units, apart, literals: out.literals }
 }
