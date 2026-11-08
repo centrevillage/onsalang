@@ -17,6 +17,13 @@
 #   note     a short note
 
 [[allowed]]
+class = "fix|E0003|move `…` to the end of the line before|E0001"
+left = "U+# cannot be written outside comments and strings: a name is written with the A"
+input = "tests/fuzz/2dfdbff8.onsa"
+reasons = ["S-384", "S-236"]
+note = "an input with two errors: a `{` on the next line, and a bidirectional control (U+2066) that cannot be written outside comments right after its `}`, which the input has before the candidate (the class of c47fe1f3 with a control character, whose message has no quoted character)"
+
+[[allowed]]
 class = "fix|E0003|move `…` to the end of the line before|E0002"
 left = "expected effect name, found `…`"
 input = "tests/fuzz/3516409a.onsa"
