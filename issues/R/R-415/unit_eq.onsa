@@ -1,0 +1,5 @@
+fn g() {}
+test "t" {
+  let u = g()
+  assert u == g()
+}
