@@ -561,3 +561,10 @@ left = "expected a declaration, found `…`"
 input = "tests/fuzz/070c3cec.onsa"
 reasons = ["S-384", "S-236"]
 note = "an input with two errors: a `;` that ends nothing at the top of the file, and a `}` that closes nothing after it, which the input has before the candidate"
+
+[[allowed]]
+class = "fix|E0020|remove the space|E0020"
+left = "a callee that is no path of names is a function value; it is called with `…`"
+input = "tests/fuzz/096d98d5.onsa"
+reasons = ["S-384", "S-236"]
+note = "an input with two errors: a space after the `^` of a feedback name (`^ a`), and a call of it with `(` (`^a(`, a callee that is no path of names), which the input has before the candidate"
