@@ -57,7 +57,10 @@ impl<'a> Parser<'a> {
             let title = format!("move `{word}` to the end of the line before");
             let fix = crate::edits::move_up(self.file, self.text, &self.all, &title, self.last_end, t, " ");
             let message = message(&word);
-            let d = Diagnostic::new(Stage::Syntax, Code::E0003, t.span, message).with_found(word).with_fix(fix);
+            // No candidate (a literal that does not close, `move_up`): the E0002 of the form.
+            let code = if fix.is_some() { Code::E0003 } else { Code::E0003.without_fixes(Stage::Syntax) };
+            let mut d = Diagnostic::new(Stage::Syntax, code, t.span, message).with_found(word);
+            d.fixes.extend(fix);
             self.report(d);
             self.with_nl(true, |p| p.skip_newlines());
         }
@@ -111,12 +114,15 @@ impl<'a> Parser<'a> {
     fn parse_stmt(&mut self) -> PResult<Completed> {
         // The attributes before a statement (§6.5, §12.4: `@mem(bulk) let`):
         // an `@` with a name after it (a blank or a line break between them
-        // is the table's E0020, S-489, S-957). A line break may come before the
+        // is the table's E0020, S-489, S-957; a block comment is its own E0020
+        // first, S-960, as in `Parser::parse_attr`). A line break may come before the
         // statement, as before a declaration (fmt puts them on its line). Only
         // a `let` takes one (`@mem`); before any other statement, the table's
         // E0005, and the statement is read on.
         let i = self.peek_index();
-        if self.tokens[i].kind == TokenKind::At && self.tokens[self.next_code(i)].kind == TokenKind::Ident {
+        if self.tokens[i].kind == TokenKind::At
+            && matches!(self.tokens[self.next_code(i)].kind, TokenKind::Ident | TokenKind::BlockComment)
+        {
             let attrs = self.parse_attrs(false)?;
             self.skip_newlines();
             if self.at(TokenKind::KwLet) {

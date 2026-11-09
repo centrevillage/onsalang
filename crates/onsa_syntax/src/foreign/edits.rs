@@ -63,10 +63,15 @@ pub(super) fn move_token_down_as(c: &Cursor, title: &str, i: usize, symbol: &str
     if next == i || c.kind(next) == TokenKind::Eof {
         return None;
     }
-    let removed = alone_on_its_line(c, i).unwrap_or_else(|| {
+    Some(Fix::new(title, vec![Edit::delete(taken_down(c, i)), Edit::insert(c.file, c.span(next).start, symbol)]))
+}
+
+/// What [`move_token_down`] takes out of the line of the symbol `i` (and the
+/// `--` of an increment written out on the line after it, S-429).
+pub(super) fn taken_down(c: &Cursor, i: usize) -> Span {
+    alone_on_its_line(c, i).unwrap_or_else(|| {
         let k = c.full[i] as usize;
         let start = k.checked_sub(1).map(|p| c.all[p]).filter(|t| t.kind == TokenKind::Whitespace);
         Span::new(c.file, start.map_or(c.span(i).start, |t| t.span.start), c.span(i).end)
-    });
-    Some(Fix::new(title, vec![Edit::delete(removed), Edit::insert(c.file, c.span(next).start, symbol)]))
+    })
 }

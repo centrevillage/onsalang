@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§15.1", "§18.1"]
+// fixes = 0
+
+// S-963 (W5-11 U10i3, §2.5 "the `::` of a path", §18.1): a `::` at the end of a line that follows no name of a path is not the
+// E0020 of a path whose `.` moves to the next line. After the name of a declaration, a keyword, `pub`, a field and a
+// parameter, the `::` touching the next name (`fn t::wo`) and with a space (`fn t:: wo`) have no candidate: written as `.`,
+// the `::` leaves the error of its place (§18.1). The line break after it is the same: the `.` moved to the head of the
+// next line is that error too, so there is no candidate and the code is E0002 (the main position is the `::`). The marker
+// is on the line of the `::`. One error per declaration unit (P-01).
+
+pub fn t::   //~ E0002
+wo(a: I32) -> I32 {
+  a
+}
+
+pub fn after_let(m: I32) -> I32 {
+  let::   //~ E0002
+  r
+  m
+}
+
+pub fn after_if(m: I32) -> I32 {
+  if::   //~ E0002
+  m
+}
+
+pub fn after_return(m: I32) -> I32 {
+  return::   //~ E0002
+  m
+}
+
+pub ::   //~ E0002
+fn after_pub(a: I32) -> I32 {
+  a
+}
+
+pub struct S {
+  a::   //~ E0002
+  b: I32,
+}
+
+pub fn a_parameter(a::   //~ E0002
+  b: I32) -> I32 {
+  a
+}

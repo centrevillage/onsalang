@@ -57,7 +57,7 @@ pub(super) fn space_before_open(c: &Cursor) -> Option<(RowId, Hit)> {
         }
         let paren = c.tokens.iter().enumerate().skip(c.at + 1).find(|(_, t)| !t.kind.is_trivia()).map(|(k, _)| k)?;
         let after =
-            crate::edits::move_up(c.file, c.text, c.all, "remove the space", c.span(c.at).end, c.tokens[paren], "");
+            crate::edits::move_up(c.file, c.text, c.all, "remove the space", c.span(c.at).end, c.tokens[paren], "")?;
         match c.gap(c.at) {
             Gap::None => fixes.push(after),
             Gap::Space => {
@@ -194,7 +194,7 @@ pub(super) fn space_after_prefix(c: &Cursor) -> Option<(RowId, Hit)> {
         && let Some((s, prev)) = c.head_symbol_after_operand().filter(|&(s, _)| s == c.at)
     {
         let title = "join it to the line before";
-        fixes.push(crate::edits::move_up(c.file, c.text, c.all, title, c.span(prev).end, c.tokens[s], " "));
+        fixes.extend(crate::edits::move_up(c.file, c.text, c.all, title, c.span(prev).end, c.tokens[s], " "));
         if kind == TokenKind::Minus {
             row = RowId::LeadingMinus;
         }
@@ -221,18 +221,18 @@ pub(super) fn space_after_mark(c: &Cursor) -> Option<(RowId, Hit)> {
     found(row, c.span(c.at), vec![Fix::new(title, mark_edits(c)?)])
 }
 
-/// The token after the mark at `c.at` when a blank on its line or a line
+/// The token after the mark at `i` when a blank on its line or a line
 /// break (a line comment before it) is between them; none when they touch,
 /// or with a block comment between (its own row, §2.5).
-pub(super) fn partner(c: &Cursor) -> Option<usize> {
-    let n = c.sig_after(c.at);
-    let between = (c.at + 1..n).all(|i| c.kind(i) == TokenKind::Newline || c.kind(i).is_line_comment());
-    (c.gap_after(c.at).is_some() && between).then_some(n)
+pub(super) fn partner(c: &Cursor, i: usize) -> Option<usize> {
+    let n = c.sig_after(i);
+    let between = (i + 1..n).all(|i| c.kind(i) == TokenKind::Newline || c.kind(i).is_line_comment());
+    (c.gap_after(i).is_some() && between).then_some(n)
 }
 
 /// The name after the mark at `c.at`, [`partner`].
 pub(super) fn marked_name(c: &Cursor) -> Option<usize> {
-    partner(c).filter(|&n| c.kind(n) == TokenKind::Ident)
+    partner(c, c.at).filter(|&n| c.kind(n) == TokenKind::Ident)
 }
 
 /// The edits that write the mark at `c.at` against its name ([`marked_name`]):

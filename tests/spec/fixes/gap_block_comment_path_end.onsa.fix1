@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§2.5", "§15.1", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "24:10"
+// code = "E0020"
+// candidate = 1
+// leaves = ["25:8 E0020"]
+//
+// [[test.fix]]
+// at = "27:21"
+// code = "E0020"
+// candidate = 1
+// leaves = ["28:19 E0020"]
+
+// S-960 and S-963 (W5-11 U10i3, §2.5, §2.1, §18.1): a block comment right after the `::` of a path at the end of a line
+// (`use std::/**/` and `math` on the next line) is the E0020 of the block comment first, and the line of the declaration
+// goes on after the `::` as it does without the comment: the name on the next line is of the same unit, so it has no error
+// of its own ("expected a declaration"). The one candidate is the one of §2.1; the `::` is left, and is the E0020 of the
+// path in the next round (`leaves`, in the layout of that candidate). The marker is on the line of the comment.
+
+//
+use std::   //~ E0020
+math
+
+//
+const K: F32 = F32::   //~ E0020
+PI
+
+pub fn f() -> F32 {
+  K
+}

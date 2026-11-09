@@ -563,8 +563,8 @@ fn keywords_and_marks() {
     e0020(&body("  let n = ~m"), &body("  let n = !m"));
     // Before another prefix operator, the operand in parentheses (no stack, §3.1).
     e0020(&body("  let n = ~-m"), &body("  let n = !(-m)"));
-    e0020(&body("  let n = ~!m.f(1)"), &body("  let n = !(!m.f(1))"));
-    // After one, or before `~` or `--`: no candidate.
+    // After one, or before `~`, `--` or `!` (S-962): no candidate.
+    assert_eq!(codes(&body("  let n = ~!m.f(1)")), [Code::E0002]);
     assert_eq!(codes(&body("  let n = -~m")), [Code::E0002]);
     assert_eq!(codes(&body("  let n = ~~m")), [Code::E0002]);
     // A flow is not a member: the general E0002.

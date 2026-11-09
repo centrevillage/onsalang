@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§4.5", "§18.1"]
+// fixes = 1
+
+// S-327 (W5-11 U10i/t, §2.5, §4.5, the row `type_position_path` of spec/foreign-forms.toml): the `::` of a type argument in a type
+// position with a space on the same line after it (`Buf:: [F32]`, two spaces, a tab) is the E0020 of the mark that a
+// type does not have, and the one candidate takes the `::` and the space out (`Buf[F32]`), as the `Buf::[F32]` that touches does
+// (e0020_type_args_type_position.onsa). S-327 says that the same is the E0020 for a line break after the `::`
+// (gap_type_args_type_position.onsa); this file is the form that the pinned binary reports before S-327 and pins that it stays.
+// The main position is the `::`. One error per declaration unit (P-01).
+
+pub fn a_space(b: Buf[F32]) -> U32 {   //~ E0020
+  b.len()
+}
+
+pub fn two_spaces(b: Buf[F32]) -> U32 {   //~ E0020
+  b.len()
+}
+
+pub fn a_tab(b: Buf[F32]) -> U32 {   //~ E0020
+  b.len()
+}
+
+pub fn in_a_result() -> Buf[F32] {   //~ E0020
+  Buf.zeroed(4)
+}

@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6", "§3.1", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "18:11"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// S-958 (W5-11 U10i/t, §2.5, §2.6, §3.1, §18.1): the one candidate of a prefix `~` with a space before an operand that begins
+// with a `-` (`~ -m`) writes the `!` with the operand in parentheses (`!(-m)`), and nothing is left behind (`clean`,
+// S-253): not an E0012 of two prefix operators in a row (§3.1). The main position is the `~`. A file with one unit, so that
+// `clean` looks at the whole file.
+
+pub fn f(m: I32) -> I32 {
+  let n = ~ -m   //~ E0020
+  n
+}

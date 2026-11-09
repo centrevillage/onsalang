@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.1", "§18.1"]
+// fixes = 1
+
+// S-349 (W5-11 U10i/t, §2.5, §3.1, the row `binary_minus_prefix_minus` of spec/foreign-forms.toml): a binary `-` and a
+// prefix `-` written together as `--` between two operands, with a space on the same line before it, after it or on both
+// sides (`a-- b`, `a -- b`, a tab), is the E0020 of S-320, as `a--b` and `a --b` are (gap_minus_minus_touching.onsa). The
+// one candidate writes the two minus signs apart (`a - -b`) and takes the spaces round them out, so that it leaves no
+// error. Inside the brackets of a list the candidate is the same one and the `,` of the missing element is not offered
+// (`[a -- b]`, `two(a-- b, 1)`): a `--` is not a sign that can start an element. The main position is the `--`. One error per
+// declaration unit (P-01). An operand on the next line is not this rule: gap_minus_minus_stays.onsa.
+
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn a_space_after(a: I32, b: I32) -> I32 {
+  a-- b   //~ E0020
+}
+
+pub fn a_space_on_both_sides(a: I32, b: I32) -> I32 {
+  a -- b   //~ E0020
+}
+
+pub fn a_tab(a: I32, b: I32) -> I32 {
+  a --	b   //~ E0020
+}
+
+pub fn two_spaces(a: I32, b: I32) -> I32 {
+  a  --  b   //~ E0020
+}
+
+pub fn in_a_let(a: I32, b: I32) -> I32 {
+  let c = a -- b   //~ E0020
+  c
+}
+
+pub fn in_a_list(a: I32, b: I32) -> [I32; 1] {
+  [a -- b]   //~ E0020
+}
+
+pub fn in_a_list_of_two(a: I32, b: I32) -> [I32; 2] {
+  [a -- b, 1]   //~ E0020
+}
+
+pub fn in_a_call(a: I32) -> I32 {
+  two(a-- 1, 1)   //~ E0020
+}
+
+pub fn a_literal_after(a: I32) -> I32 {
+  a -- 1   //~ E0020
+}

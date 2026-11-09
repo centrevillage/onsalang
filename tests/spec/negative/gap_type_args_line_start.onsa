@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§4.5", "§18.1"]
+// fixes = 0
+
+// S-327 (W5-11 U10i/t, §2.5, §4.5): the `::` that begins a line does not follow the name before it, and it is not the
+// rule of the `::` at the end of a line (gap_type_args_newline.onsa): a `::` at the start of a line is the E0002 of §2.5, "the
+// only token that continues the line before is the `.`", inside the brackets as well. There is no candidate (no `fixes`,
+// `fixes = 0` says so): the line break before it is not the rule of the symbol and its partner. The marker is on the
+// line of the `::`.
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn a_statement_start() -> U8 {
+  let a =
+    id
+    ::[U8](250)   //~ E0002
+  a
+}
+
+pub fn in_a_call(a: I32) -> I32 {
+  two(id
+    ::[I32](a), 1)   //~ E0002
+}
+
+pub fn in_an_array() -> [U8; 2] {
+  [id
+    ::[U8](1), 2]   //~ E0002
+}
+
+pub fn after_a_comment_line() -> U8 {
+  id
+    // c
+    ::[U8](250)   //~ E0002
+}

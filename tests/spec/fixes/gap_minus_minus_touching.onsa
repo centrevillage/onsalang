@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.1", "§18.1"]
+// fixes = 1
+
+// S-349 (W5-11 U10i/t, §2.5, §3.1, the row `binary_minus_prefix_minus` of spec/foreign-forms.toml): the `--` that has a space on
+// the same line before it only, or none (`a --b`, `a--b`), is the E0020 of S-320 with the candidate that writes the
+// two minus signs apart (`a - -b`), and in a list the one candidate is the same (no `,`). These are the forms that
+// the pinned binary reports before S-349, so this file passes without the work of S-349 and pins that they stay:
+// the forms with a space after the `--` are in gap_minus_minus_space.onsa. The main position is the `--`. One error per
+// declaration unit (P-01).
+
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn no_space(a: I32, b: I32) -> I32 {
+  a--b   //~ E0020
+}
+
+pub fn a_space_before(a: I32, b: I32) -> I32 {
+  a --b   //~ E0020
+}
+
+pub fn a_tab_before(a: I32, b: I32) -> I32 {
+  a	--b   //~ E0020
+}
+
+pub fn in_a_list(a: I32, b: I32) -> [I32; 1] {
+  [a --b]   //~ E0020
+}
+
+pub fn in_a_call(a: I32, b: I32) -> I32 {
+  two(a --b, 1)   //~ E0020
+}
+
+pub fn a_call_as_the_operand(a: I32) -> I32 {
+  two(a, 1) --a   //~ E0020
+}

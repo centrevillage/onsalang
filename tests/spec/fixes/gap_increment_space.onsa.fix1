@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§5.1", "§18.1"]
+// fixes = 1
+
+// S-429 (W5-11 U10i/t, §2.5, §5.1, the row `increment` of spec/foreign-forms.toml): a decrement or an increment of C with a
+// space on the same line between the operand and the `--` or the `++` (`x --`, `x ++`, with a tab, with two spaces, with a
+// line comment after it, before a `}`) is the E0020 of the row `increment`, as `x--` is, and the one candidate writes the
+// assignment out (`x = x - 1`, `x = x + 1`). A statement in a block, an `if` branch, a loop body, a closure and a method,
+// an operand that is a field, and an assignment on the next line (`x --` and then `y = 0`: the candidate does not touch the
+// next line). The main position is the `--` or the `++`, the first token of the form after the operand, the same as `x--`
+// (e0020_increment.onsa). One error per declaration unit (P-01). The forms that are not a statement stay the E0002 they
+// are: gap_increment_stays.onsa.
+
+pub struct S {
+  n: I32,
+}
+
+pub fn a_decrement(inout x: I32) {
+  x = x - 1   //~ E0020
+}
+
+pub fn an_increment(inout x: I32) {
+  x = x + 1   //~ E0020
+}
+
+pub fn with_two_spaces(inout x: I32) {
+  x = x - 1   //~ E0020
+}
+
+pub fn with_a_tab(inout x: I32) {
+  x = x - 1   //~ E0020
+}
+
+pub fn with_a_line_comment(inout x: I32) {
+  x = x - 1 // down   //~ E0020
+}
+
+pub fn before_a_brace(inout x: I32, a: I32) {
+  if a > 0 { x = x - 1 }   //~ E0020
+}
+
+pub fn then_an_assignment(inout x: I32, inout y: I32) {
+  x = x - 1   //~ E0020
+  y = 0
+}
+
+pub fn in_a_loop(inout x: I32) {
+  while x > 0 {
+    x = x - 1   //~ E0020
+  }
+}
+
+pub fn a_field(inout s: S) {
+  s.n = s.n - 1   //~ E0020
+}
+
+pub fn in_a_closure(inout x: I32) {
+  let f = fn() { x = x + 1 }   //~ E0020
+  f.()
+}
+
+impl S {
+  pub fn tick(inout self) {
+    self.n = self.n + 1   //~ E0020
+  }
+}

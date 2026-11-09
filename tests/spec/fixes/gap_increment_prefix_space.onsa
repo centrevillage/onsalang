@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§5.1", "§18.1"]
+// fixes = 1
+
+// S-429 (W5-11 U10i/t, §2.5, §5.1, the row `increment` of spec/foreign-forms.toml): the decrement and the increment in front
+// of the operand with a space on the same line (`-- x`, `++ x`, with a tab, with a field as the operand, before a `}`) are
+// the E0020 of the row `increment`, as the `--x` that touches is, and the one candidate writes the assignment out
+// (`x = x - 1`, `x = x + 1`). These are the E0020 with the candidate that the pinned binary reports before S-429, so
+// this file passes without the work of S-429 and pins that it stays: the forms of the work are in gap_increment_space.onsa and
+// gap_increment_newline.onsa. The main position is the `--` or the `++`. One error per declaration unit (P-01).
+
+pub struct S {
+  n: I32,
+}
+
+pub fn a_prefix_decrement(inout x: I32) {
+  -- x   //~ E0020
+}
+
+pub fn a_prefix_increment(inout x: I32) {
+  ++ x   //~ E0020
+}
+
+pub fn a_prefix_tab(inout x: I32) {
+  --	x   //~ E0020
+}
+
+pub fn a_prefix_field(inout s: S) {
+  -- s.n   //~ E0020
+}
+
+pub fn before_a_brace(inout x: I32, a: I32) {
+  if a > 0 { -- x }   //~ E0020
+}

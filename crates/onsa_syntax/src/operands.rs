@@ -142,9 +142,13 @@ fn wants_the_next_item(read: &crate::Read, len: usize) -> bool {
 /// the number of errors of a unit is not known. One with a candidate of its own
 /// is mended by the next one (`e0002_arm_comma_before_leading`), but for an
 /// E0004: its candidate gives up the doc comment the candidate stranded (R-380).
-fn leaves(read: &crate::Read, place: Range<u32>) -> bool {
+/// One that starts in what the candidate writes (in a replacement of
+/// `regions`) is the candidate's too, where it is (the `.` of `fn t::` moved
+/// to the next line, S-963); not one right after what it takes out.
+fn leaves(read: &crate::Read, place: Range<u32>, regions: &[(u32, u32)]) -> bool {
     let mended = |d: &Diagnostic| !d.fixes.is_empty() && d.code != Code::E0004;
-    read.diagnostics.iter().any(|d| d.stage == Stage::Syntax && !mended(d) && place.contains(&d.span.start))
+    let at = |s: u32| place.contains(&s) || regions.iter().any(|&(a, b)| (a..b).contains(&s));
+    read.diagnostics.iter().any(|d| d.stage == Stage::Syntax && !mended(d) && at(d.span.start))
 }
 
 /// `fix`, a candidate of the diagnostic at `span`, with the parentheses it
@@ -182,7 +186,7 @@ fn completed(
     }
     let touched = touched_operands(&alone, &regions);
     if touched.is_empty() {
-        let left = judge && leaves(&alone, place(&regions, end));
+        let left = judge && leaves(&alone, place(&regions, end), &regions);
         reads.left += usize::from(left);
         return (!left).then_some(fix);
     }
@@ -202,7 +206,7 @@ fn completed(
         reads.dropped += 1;
         return None;
     }
-    if judge && leaves(&with, place(&regions, end)) {
+    if judge && leaves(&with, place(&regions, end), &regions) {
         reads.left += 1;
         return None;
     }

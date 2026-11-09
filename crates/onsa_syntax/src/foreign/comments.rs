@@ -64,6 +64,42 @@ fn documents(c: &Cursor) -> bool {
     }
 }
 
+/// The block comment in the gap after the symbol the parser failed at,
+/// which is written against its partner after it (§2.5, S-960): the first
+/// token after the symbol, past line breaks and line comments. Its own
+/// diagnostic is reported first, and alone ([`super::at_failure`]). The
+/// symbol is a prefix `-`, `!`, `^`, `+`, `~` or `--` / `++`, the mark `~` or
+/// `!` of a call, a member `.`, a `::` of a path ([`super::paths::path_head`])
+/// and the `--` of `a--b` before its operand on its line. Not after a postfix
+/// `--`, a binary `+`, `~` or `!`, or an `@` (`Parser::parse_stmt` reads one).
+pub(super) fn in_gap(c: &Cursor) -> Option<usize> {
+    use crate::starts::starts_operand;
+    use TokenKind::*;
+    let i = (c.at + 1..c.tokens.len()).find(|&i| c.kind(i) != Newline && !c.kind(i).is_line_comment())?;
+    let operand = || c.want == Want::Expr;
+    let by_name = || closed_expr(c).is_some_and(|n| crate::callee::Link::of(n.0).names_a_path());
+    let mark = || c.kind(c.sig_after(c.at)) == LParen && by_name();
+    let fits = match c.kind(c.at) {
+        Minus => matches!(c.want, Want::Prefix | Want::Pattern),
+        Caret | PlusPlus => operand(),
+        Plus => super::lines::prefix_plus_at(c),
+        Tilde => super::faust::prefix_tilde(c) || mark(),
+        Bang => c.want == Want::Prefix || mark(),
+        Dot => c.want == Want::Postfix,
+        ColonColon => super::paths::path_head(c),
+        MinusMinus => {
+            let next = c.sig_after(i);
+            // The `--` of `a--b` after a closed expression, as `assign::binary_minus_minus` reads it.
+            operand()
+                || (closed_expr(c).is_some()
+                    && c.tokens[c.at..next].iter().all(|t| t.kind != Newline)
+                    && starts_operand(c.kind(next)))
+        }
+        _ => false,
+    };
+    (fits && c.kind(i) == BlockComment).then_some(i)
+}
+
 /// The rows [`block_comment`] names ([`super::Matcher::many`]).
 pub(super) const BLOCK_COMMENT_ROWS: &[RowId] = &[
     RowId::BlockComment,
@@ -90,8 +126,7 @@ pub(super) const BLOCK_COMMENT_ROWS: &[RowId] = &[
 /// another are E0002.
 pub(super) fn block_comment(c: &Cursor) -> Option<(RowId, Hit)> {
     if c.kind(c.at) != TokenKind::BlockComment {
-        let at = super::faust::comment_after_tilde(c)?;
-        return block_comment(&Cursor { at, open: c.open.clone(), ..*c });
+        return None;
     }
     let span = c.span(c.at);
     let text = c.src(c.at);

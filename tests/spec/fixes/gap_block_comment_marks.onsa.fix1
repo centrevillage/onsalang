@@ -1,0 +1,95 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§2.5", "§4.5", "§6.1", "§6.5", "§11.2", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "65:29"
+// code = "E0020"
+// candidate = 1
+// leaves = ["66:27 E0020"]
+//
+// [[test.fix]]
+// at = "70:6"
+// code = "E0020"
+// candidate = 1
+// leaves = ["71:4 E0020"]
+//
+// [[test.fix]]
+// at = "74:8"
+// code = "E0020"
+// candidate = 1
+// leaves = ["75:5 E0020"]
+//
+// [[test.fix]]
+// at = "78:15"
+// code = "E0020"
+// candidate = 1
+// leaves = ["79:13 E0020"]
+//
+// [[test.fix]]
+// at = "83:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["84:3 E0020"]
+//
+// [[test.fix]]
+// at = "88:6"
+// code = "E0020"
+// candidate = 1
+// leaves = ["89:3 E0020"]
+
+// S-960 (W5-11 U10i/t, §2.1, §2.5, §4.5, §6.1, §6.5, §11.2, §18.1): a block comment between a mark or a symbol that is written without a
+// space and its partner is the E0020 of the block comment (§2.1) first, before the error of the space between them and before the error of
+// the form: the `^` of a return reference and its name (`^ /* c */ y`), the member `.` and the field (`s. /* c */ f`), the `::` of the type
+// arguments and the `[` (`id:: /* c */ [I32](1)`), the `~` of a flow call and the `(` (`lp~ /* c */ (x)`), the `@` of an attribute at the
+// start of a statement and its name (`@ /* c */ mem(bulk) let`; before S-960 an E0002 "expected an expression"), and the decrement of C and
+// its operand (`-- /* c */ x`). The one candidate is the one of §2.1, so the space that was there stays and is the E0020 of the mark in the
+// next round (`leaves`, in the layout of that candidate: the comment inside a line becomes one space and the words go on a line above, so
+// the mark of the unit is on the next line). The main position is the start of the block comment, so the marker is on its line. One error
+// per declaration unit (P-01). The `--` of an expression (`a --/* c */b`) is in gap_block_comment_minus_minus.onsa.
+
+pub struct S {
+  f: I32,
+}
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow a5_caret(x: F32 at sample) -> F32 at sample {
+  // c
+  let y = x + 0.5 * prev~(^ y)   //~ E0020
+  y
+}
+
+pub fn a8_dot(s: S) -> I32 {
+  // c
+  s. f   //~ E0020
+}
+
+pub fn a9_type_args() -> I32 {
+  // c
+  id:: [I32](1)   //~ E0020
+}
+
+pub flow a10_flow_call(x: F32 at sample) -> F32 at sample {
+  // c
+  let y = lp~ (x)   //~ E0020
+  y
+}
+
+pub flow a11_attr_statement(x: F32 at sample) -> F32 at sample {
+  // c
+  @ mem(bulk) let d = delay~(x, 4800)   //~ E0020
+  d
+}
+
+pub fn a14_decrement(inout x: I32) {
+  // c
+  -- x   //~ E0020
+}

@@ -1,0 +1,102 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§2.5", "§4.5", "§6.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "67:12"
+// code = "E0020"
+// candidate = 1
+// leaves = ["68:11 E0020"]
+//
+// [[test.fix]]
+// at = "71:22"
+// code = "E0020"
+// candidate = 1
+// leaves = ["72:20 E0020"]
+//
+// [[test.fix]]
+// at = "75:3"
+// code = "E0020"
+// candidate = 1
+// leaves = ["76:1 E0020"]
+//
+// [[test.fix]]
+// at = "81:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["82:5 E0020"]
+//
+// [[test.fix]]
+// at = "85:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["86:6 E0020"]
+//
+// [[test.fix]]
+// at = "89:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["90:6 E0020"]
+//
+// [[test.fix]]
+// at = "93:13"
+// code = "E0020"
+// candidate = 1
+// leaves = ["94:14 E0020"]
+
+// S-960 (W5-11 U10i/t, §2.1, §2.5, §4.5, §6.5, §18.1): the places of a block comment next to a mark or a symbol that already report the
+// E0020 of the block comment first, before the error of the space or the missing space: the `?` of a bound and its name (`T: ? /* c */ Dup`),
+// the `@` of an attribute at the head of an item and its name, a postfix `?` and the space before it (`o /* c */ ?`), a call or an index with
+// the comment where the `(` or the `[` stands (`g/* c */(x)`, `xs/* c */[0]`), the `-` that touches the comment (`-/* c */x`) and the `if~`
+// (`if/* c */~ c`). S-960 states the rule for all of them and this file pins that they stay. The one candidate is the one of §2.1, so the
+// one space that it puts in the place of the comment, or the space that was there, is the E0020 of the mark in the next round (`leaves`, in
+// the layout of that candidate: the comment inside a line becomes one space and the words go on a line above, so the mark of the unit is on
+// the next line). The main position is the start of the block comment. One error per declaration unit (P-01). This file passes without the
+// work of S-960.
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub fn a2_minus_touching(x: I32) -> I32 {
+  // c
+  let n = - x   //~ E0020
+  n
+}
+
+// c
+pub fn b1_bound[T: ? Dup](x: T) -> U32 {   //~ E0020
+  0
+}
+
+// c
+@ fp(relaxed)   //~ E0020
+pub flow b2_attr(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub fn b3_question(o: Option[I32]) -> Option[I32] {
+  // c
+  o ?   //~ E0020
+}
+
+pub fn b4_call_touching(x: I32) -> I32 {
+  // c
+  id (x)   //~ E0020
+}
+
+pub fn b5_index_touching(xs: [I32; 2]) -> I32 {
+  // c
+  xs [0]   //~ E0020
+}
+
+pub flow b6_if_tilde(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  // c
+  let y = if ~ c { lp~(x) } else { x }   //~ E0020
+  y
+}

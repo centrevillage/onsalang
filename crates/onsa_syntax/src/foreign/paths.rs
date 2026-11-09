@@ -4,6 +4,7 @@
 //! does not go (§4.5, S-239, S-250, S-256).
 
 use super::calls::value_call;
+use super::spaces::partner;
 use super::*;
 use crate::callee::Link;
 
@@ -45,26 +46,19 @@ pub(super) fn is_segment(kind: TokenKind) -> bool {
 /// a::{b}`): one path is one form, and the candidate writes every `::` of it
 /// as `.` (S-248). The path goes on across a `::[…]` of type arguments
 /// (`m::Buf::[F32]::zeroed`, S-239), whose `::` is no separator; it ends at a
-/// `::<` (`Buf::<F32>::zeroed` is two forms, S-326).
+/// `::<` (`Buf::<F32>::zeroed` is two forms, S-326), its gaps too ([`dot_for`]).
 pub(super) fn path_separator(c: &Cursor) -> Option<Hit> {
-    // A clock is one name (§11.3, S-359): a path after `at` is E0002, which
-    // `.` for `::` does not fix.
-    if c.kind(c.at) != TokenKind::ColonColon || c.closed.first().is_some_and(|n| n.0 == NodeKind::Clock) {
+    if !path_head(c) {
         return None;
     }
     let in_use = c.open.iter().chain(c.closed).any(|o| o.0 == NodeKind::Use);
     let follows = |i: usize| {
-        let n = c.kind(i + 1);
-        is_segment(n) || (in_use && n == TokenKind::LBrace)
+        let n = if c.gap_after(i) == Gap::None { i + 1 } else { partner(c, i)? };
+        (is_segment(c.kind(n)) || (in_use && c.kind(n) == TokenKind::LBrace)).then_some(n)
     };
-    let before = c.before(c.at)?;
-    let after_list = c.kind(before) == TokenKind::RBracket && c.closed.iter().any(|o| o.0 == NodeKind::TypeArgsExpr);
-    if !(is_segment(c.kind(before)) || c.kind(before) == TokenKind::KwSelfType || after_list) || !follows(c.at) {
-        return None;
-    }
     // The path: names separated with `.` or `::`, on and after the failure.
     let mut seps = vec![c.at];
-    let mut i = c.at + 1;
+    let mut i = follows(c.at)?;
     loop {
         if is_type_args_mark(c, i + 1) {
             match closing(c, i + 2) {
@@ -74,18 +68,45 @@ pub(super) fn path_separator(c: &Cursor) -> Option<Hit> {
         }
         match c.kind(i + 1) {
             TokenKind::Dot if is_segment(c.kind(i + 2)) => i += 2,
-            TokenKind::ColonColon if follows(i + 1) => {
+            TokenKind::ColonColon if follows(i + 1).is_some() => {
                 seps.push(i + 1);
-                i += 2;
+                i = follows(i + 1)?;
             }
             _ => break,
         }
     }
-    let edits = seps.iter().map(|&s| Edit::replace(c.span(s), ".")).collect();
+    let edits = seps.iter().map(|&s| dot_for(c, s)).collect::<Option<Vec<_>>>()?.concat();
     let title = if seps.len() > 1 { "write each `::` as `.`" } else { "write `.`" };
     // The range of the form (S-316): from its first `::` to its last.
     let last = *seps.last().unwrap_or(&c.at);
     hit(c.file_span(c.span(c.at).start, c.span(last).end), vec![Fix::new(title, edits)])
+}
+
+/// Whether the `::` at the cursor goes on a path ([`path_separator`], and
+/// `::[`): after a name ([`path_colons`]) or the `]` of type arguments, but
+/// in a clock, one name (§11.3, S-359: E0002, which `.` does not fix).
+pub(super) fn path_head(c: &Cursor) -> bool {
+    let after_list =
+        c.kind(c.at.saturating_sub(1)) == TokenKind::RBracket && c.closed.iter().any(|o| o.0 == NodeKind::TypeArgsExpr);
+    (path_colons(c.tokens, c.at) || (c.kind(c.at) == TokenKind::ColonColon && after_list))
+        && !c.closed.first().is_some_and(|n| n.0 == NodeKind::Clock)
+}
+
+/// Whether the token `i` is a `::` right after a name or `Self` (S-248).
+pub(crate) fn path_colons(tokens: &[Token], i: usize) -> bool {
+    let before = |b: usize| is_segment(tokens[b].kind) || tokens[b].kind == TokenKind::KwSelfType;
+    tokens[i].kind == TokenKind::ColonColon && i.checked_sub(1).is_some_and(before)
+}
+
+/// The edits that write the `::` at `s` of a path as `.` (S-963): the blanks
+/// on its line go with it, and after a line break the `.` goes to the head of
+/// the next line ([`move_token_down_as`]).
+fn dot_for(c: &Cursor, s: usize) -> Option<Vec<Edit>> {
+    if c.gap_after(s) == Gap::Newline {
+        return Some(super::edits::move_token_down_as(c, "", s, ".")?.edits().to_vec());
+    }
+    let start = c.space_before(s).map_or(c.span(s).start, |b| b.start);
+    Some(vec![Edit::replace(c.file_span(start, c.space_after(s).map_or(c.span(s).end, |b| b.end)), ".")])
 }
 
 /// The mark `::[` of type arguments in an expression at token `i`.
@@ -374,38 +395,49 @@ pub(super) fn type_args_call(c: &Cursor) -> Option<(RowId, Hit)> {
 /// blank around it). A list that is empty or that something no type is
 /// followed by follows (`Buf::[F32].Inner`) has none (the general E0002).
 pub(super) fn type_position_path(c: &Cursor) -> Option<Hit> {
-    if c.kind(c.at) != TokenKind::ColonColon || c.kind(c.at + 1) != TokenKind::LBracket {
+    let open = type_args_bracket(c)?;
+    if !c.closed.iter().any(|n| n.0 == NodeKind::PathType) {
         return None;
     }
-    if !c.closed.iter().any(|n| n.0 == NodeKind::PathType) || c.gap_after(c.at) == Gap::Newline {
-        return None;
-    }
-    let close = closing(c, c.at + 1)?;
-    if close == c.at + 2 || !follows_type(c.kind(close + 1)) {
+    let close = closing(c, open)?;
+    if close == open + 1 || !follows_type(c.kind(close + 1)) {
         return None;
     }
     let name = c.before(c.at)?;
-    let gap = c.file_span(c.span(name).end, c.span(c.at + 1).start);
-    hit(c.span(c.at), vec![Fix::delete("remove the `::`", gap)])
+    hit(c.span(c.at), vec![Fix::new("remove the `::`", bracket_up(c, c.span(name).end, open)?)])
 }
 
 /// A space on either side of the `::` of `name::[…]` in an expression
-/// (`id ::[U8]`, `id:: [U8]`, §2.5, §4.5): the candidate removes it.
+/// (`id ::[U8]`, `id:: [U8]`, §2.5, §4.5) and a line break after it
+/// (S-327): the candidate removes them ([`bracket_up`]).
 pub(super) fn space_in_type_args_mark(c: &Cursor) -> Option<Hit> {
-    if c.kind(c.at) != TokenKind::ColonColon || c.kind(c.at + 1) != TokenKind::LBracket {
+    let open = type_args_bracket(c)?;
+    if c.gap(c.at) == Gap::Newline || !closed_expr(c).is_some_and(|n| Link::of(n.0).names_a_path()) {
         return None;
     }
-    if !closed_expr(c).is_some_and(|n| Link::of(n.0).names_a_path()) {
-        return None;
+    let mut edits: Vec<Edit> = c.space_before(c.at).into_iter().map(Edit::delete).collect();
+    edits.extend(bracket_up(c, c.span(c.at).end, open)?);
+    (!edits.is_empty()).then(|| Hit::new(c.span(c.at), vec![Fix::new("remove the space", edits)]))
+}
+
+/// The `[` after the `::` at the cursor, touching it or after a gap with no
+/// block comment in it ([`partner`]).
+fn type_args_bracket(c: &Cursor) -> Option<usize> {
+    let open = if c.gap_after(c.at) == Gap::None { c.at + 1 } else { partner(c, c.at)? };
+    (c.kind(c.at) == TokenKind::ColonColon && c.kind(open) == TokenKind::LBracket).then_some(open)
+}
+
+/// The edits that take out what is between `end` (of the `::` at the cursor or
+/// of the name before it) and the `[` at `open`: after a line break (S-327),
+/// the line of the `[` goes up as a mark's `(` does ([`crate::edits::move_up`]).
+fn bracket_up(c: &Cursor, end: u32, open: usize) -> Option<Vec<Edit>> {
+    let (colons, gap) = (c.span(c.at).end, c.file_span(end, c.span(open).start));
+    if c.gap_after(c.at) != Gap::Newline {
+        return Some((!gap.is_empty()).then(|| Edit::delete(gap)).into_iter().collect());
     }
-    let (before, after) = (c.gap(c.at), c.gap_after(c.at));
-    if before == Gap::Newline || after == Gap::Newline {
-        return None;
+    let mut edits = crate::edits::move_up(c.file, c.text, c.all, "", colons, c.tokens[open], "")?.edits().to_vec();
+    if end < colons {
+        edits.push(Edit::delete(c.file_span(end, colons)));
     }
-    let edits: Vec<Edit> =
-        [c.space_before(c.at), c.space_after(c.at)].into_iter().flatten().map(Edit::delete).collect();
-    if edits.is_empty() {
-        return None;
-    }
-    hit(c.span(c.at), vec![Fix::new("remove the space", edits)])
+    Some(edits)
 }

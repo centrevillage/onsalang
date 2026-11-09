@@ -1,0 +1,78 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§4.5", "§18.1"]
+// fixes = 1
+
+// S-327 (W5-11 U10i/t, §2.5, §4.5): a line break between the `::` of the type arguments of an expression and its `[`
+// (`id::` and then `[U8](250)` on the next line) is the E0020 of the mark, the same as the space (`id:: [U8]`, S-239) and
+// the line break after the other marks (`T: ?` and then `Dup`, S-957). The one candidate takes the line break out
+// (`id::[U8](250)`), and when a line comment lies between (the marker of the line is one), it moves the `[` and what
+// follows it on that line above the comment (`id::[U8](250) // c`); the comment lines and the blank lines between are kept. A space before the `::` as
+// well (`id ::` and then `[U8]`) is one form, whose one candidate takes both out. The same inside the brackets of a call,
+// an array, a method call, a closure, a flow, and with a comment line or a blank line between. The marker is on the line
+// of the `::`, the mark the candidate keeps (the position of the space form). The candidate leaves no error of the
+// syntax stage; the E0200 of the instantiation (this version) is of a later stage and is not what the candidate
+// is about. One error per declaration unit (P-01). The `::` that begins a line is not this rule:
+// tests/spec/negative/gap_type_args_line_start.onsa.
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub struct V {
+  n: I32,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+}
+
+pub fn a_line_break() -> U8 {
+  id::[U8](250)   //~ E0020
+}
+
+pub fn a_blank_line() -> U8 {
+  id::[U8](250)   //~ E0020
+
+}
+
+pub fn a_comment_line() -> U8 {
+  id::[U8](250)   //~ E0020
+    // c
+}
+
+pub fn a_space_before() -> U8 {
+  id::[U8](250)   //~ E0020
+}
+
+pub fn in_a_call(a: I32) -> I32 {
+  two(id::[I32](a), 1)   //~ E0020
+}
+
+pub fn in_a_call_with_a_space_before(a: I32) -> I32 {
+  two(id::[I32](a), 1)   //~ E0020
+}
+
+pub fn in_an_array() -> [U8; 2] {
+  [id::[U8](1), 2]   //~ E0020
+}
+
+pub fn in_a_method_call(v: V) -> I32 {
+  v.conv::[I32](1)   //~ E0020
+}
+
+pub fn in_a_closure() -> U8 {
+  let f = fn(x: U8) -> U8 { id::[U8](x) }   //~ E0020
+  f.(1)
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  let y = id::[F32](x)   //~ E0020
+  y
+}

@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§5.1", "§18.1"]
+// fixes = 1
+
+// S-429 (W5-11 U10i/t, §2.5, §5.1, the row `increment` of spec/foreign-forms.toml): a `--` or a `++` at the end of a line with
+// its operand on the next line (`--` and then `x`, with a comment line or a blank line between, and a field as the operand)
+// is the E0020 of the row `increment`, as the `--x` that touches is, and the one candidate writes the assignment out
+// (`x = x - 1`, `x = x + 1`). The line break after the symbol is the same kind of gap as the space after it
+// (gap_increment_prefix_space.onsa). The main position is the `--` or the `++`, the first token of the form, so the marker
+// is on its line, the line before the operand. One error per declaration unit (P-01). The `--` that begins a line and
+// has no operand after it is not a form of this row: gap_increment_stays.onsa.
+
+pub struct S {
+  n: I32,
+}
+
+pub fn the_operand_on_the_next_line(inout x: I32) {
+  --   //~ E0020
+    x
+}
+
+pub fn an_increment_and_the_next_line(inout x: I32) {
+  ++   //~ E0020
+    x
+}
+
+pub fn a_comment_line_between(inout x: I32) {
+  --   //~ E0020
+    // down
+    x
+}
+
+pub fn a_blank_line_between(inout x: I32) {
+  --   //~ E0020
+
+    x
+}
+
+pub fn the_field_on_the_next_line(inout s: S) {
+  ++   //~ E0020
+    s.n
+}

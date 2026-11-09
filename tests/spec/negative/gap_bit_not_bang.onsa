@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§18.1"]
+// fixes = 0
+
+// S-962 (W5-11 U10i/t, §2.6, §18.1): a prefix `~` that touches an operand that begins with a `!` (`~!x`, `~!(x)`, `~!f(x)`) has
+// no candidate and is the E0002 of §18.1, the same as `~~x`. In C the `!` of `~!x` is the logical not, so the candidate
+// `!(!x)` would be `x` and the writer's meaning is not one (S-962); the candidate that the pinned binary gives is gone.
+// The `~-x` next to it keeps its candidate `!(-x)` (gap_bit_not_touching_minus.onsa). The spaced forms are in
+// gap_bit_not_bang_space.onsa. The marker is on the line of the `~`; no candidate (`fixes = 0`).
+
+pub fn id(m: I32) -> I32 {
+  m
+}
+
+pub fn touching(m: I32) -> I32 {
+  let n = ~!m   //~ E0002
+  n
+}
+
+pub fn touching_a_group(m: I32) -> I32 {
+  let n = ~!(m)   //~ E0002
+  n
+}
+
+pub fn touching_a_call(m: I32) -> I32 {
+  let n = ~!id(m)   //~ E0002
+  n
+}
+
+pub fn touching_in_an_argument(m: I32) -> I32 {
+  id(~!m)   //~ E0002
+}

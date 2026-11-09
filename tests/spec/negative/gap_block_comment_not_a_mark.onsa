@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§2.5", "§2.6", "§18.1"]
+// fixes = 0
+
+// S-960 (W5-11 U10i3, §2.5 the last paragraph of "the marks and the prefix symbols", §2.1): the block comment is reported
+// first only in a place where a symbol is written against its partner. A `!` that is no prefix and no mark of a call, an
+// `@` in an expression, a `.` where an expression starts, a binary `~` and a `::` at the head of a line (§2.5: it does not
+// go on the line before) are in no such place: the error is the E0002 of the symbol (the column on the marker), not the
+// block comment after it. One error per declaration unit (P-01).
+
+pub fn a_bang(a: I32, b: I32) -> I32 {
+  let r = a ! /* c */ b   //~ E0002 @13
+  r
+}
+
+pub fn an_at(a: I32) -> I32 {
+  let r = @ /* c */ a   //~ E0002 @11
+  r
+}
+
+pub fn a_dot(a: I32) -> I32 {
+  let r = . /* c */ a   //~ E0002 @11
+  r
+}
+
+pub fn a_binary_tilde(a: I32, b: I32) -> I32 {
+  let r = a ~ /* c */ b   //~ E0002 @13
+  r
+}
+
+pub fn colons_at_the_head() -> F32 {
+  let r = F32
+    :: /* c */ PI   //~ E0002 @5
+  r
+}

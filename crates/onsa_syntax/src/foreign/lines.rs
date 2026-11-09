@@ -102,7 +102,7 @@ pub(super) fn leading_symbol(c: &Cursor) -> Option<(RowId, Hit)> {
         Gap::Newline if sign => return None,
         Gap::Space if sign => {
             let title = "join it to the line before";
-            vec![move_up(c.file, c.text, c.all, title, c.span(prev).end, c.tokens[s], " ")]
+            move_up(c.file, c.text, c.all, title, c.span(prev).end, c.tokens[s], " ").into_iter().collect()
         }
         gap => moved_to_the_line_before(c, s, prev, gap),
     };
@@ -259,7 +259,7 @@ pub(super) fn pattern_double_vert(c: &Cursor) -> Option<Hit> {
 /// costs its candidates at every such line (W3-06's long inputs). In a
 /// pattern only before an integer.
 pub(super) fn prefix_plus(c: &Cursor) -> Option<Hit> {
-    if c.kind(c.at) != TokenKind::Plus || !matches!(c.want, Want::Expr | Want::Pattern) || leading(c).is_some() {
+    if !prefix_plus_at(c) {
         return None;
     }
     let next = c.sig_after(c.at);
@@ -275,7 +275,7 @@ pub(super) fn prefix_plus(c: &Cursor) -> Option<Hit> {
     let title = "take the `+` out";
     let fix = match c.gap_after(c.at) {
         Gap::Newline => {
-            let up = move_up(c.file, c.text, c.all, title, s.end, c.tokens[next], "");
+            let up = move_up(c.file, c.text, c.all, title, s.end, c.tokens[next], "")?;
             let mut edits = vec![Edit::delete(s)];
             edits.extend(up.edits().iter().cloned());
             Fix::new(title, edits)
@@ -283,4 +283,10 @@ pub(super) fn prefix_plus(c: &Cursor) -> Option<Hit> {
         _ => Fix::delete(title, Span::new(c.file, s.start, c.space_after(c.at).map_or(s.end, |w| w.end))),
     };
     hit(s, vec![fix])
+}
+
+/// Whether the cursor is at a prefix `+` ([`prefix_plus`]): where an operand
+/// or a pattern starts, and no binary one at the head of a line ([`leading`]).
+pub(super) fn prefix_plus_at(c: &Cursor) -> bool {
+    c.kind(c.at) == TokenKind::Plus && matches!(c.want, Want::Expr | Want::Pattern) && leading(c).is_none()
 }

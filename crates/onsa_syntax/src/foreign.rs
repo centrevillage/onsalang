@@ -693,6 +693,11 @@ pub(crate) struct Failure {
 /// E0002 is reported too when no row recognises the failure, or when a form
 /// is where nothing of its kind goes ([`Hit::misplaced`]).
 pub(crate) fn at_failure(c: &Cursor) -> Failure {
+    if let Some(at) = comments::in_gap(c) {
+        let c = &Cursor { at, open: c.open.clone(), ..*c };
+        let rows = comments::block_comment(c).map(|(row, hit)| diagnostic(c.text, row, hit)).into_iter().collect();
+        return Failure { rows, general: None, prefixed: None, resume: None };
+    }
     let mut rows = Vec::new();
     let mut misplaced = false;
     let mut prefixed = None;
@@ -1063,7 +1068,7 @@ pub use guard::guard_name;
 use guard::guard_pattern;
 
 pub use paths::TYPE_NAMES;
-pub(crate) use paths::{type_list_ahead, type_name};
+pub(crate) use paths::{path_colons, type_list_ahead, type_name};
 pub use rows::{MATCHERS, READS, ROWS, WAITING};
 // The helpers that the rows of `guard` and `flow` share with a family.
 use assign::operand;

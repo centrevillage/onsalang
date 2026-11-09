@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§2.5", "§18.1"]
+// fixes = 0
+
+// S-960 and S-961 (W5-11 U10i, §2.5): a block comment after a `--` that is not the `--` of `a--b` after a closed expression
+// (in a type, a parameter, a `use` and a pattern) is not at a position written without blanks, so the first error of the
+// unit is the E0002 of the `--` at its place, as with no comment, and the block comment is not reported first. The
+// `--` of an expression (`a -- /* c */ b`) is the case `gap_block_comment_minus_minus.onsa`. One error per declaration
+// unit (P-01).
+
+use std -- /* c */ math   //~ E0002 @9
+
+pub fn in_a_parameter(a: I32 -- /* c */ b: I32) -> I32 {   //~ E0002 @30
+  a
+}
+
+pub fn in_a_type(a: I32) -> I32 {
+  let r: I32 -- /* c */ x = a   //~ E0002 @14
+  r
+}
+
+pub fn in_a_pattern(a: I32) -> I32 {
+  match a {
+    1 -- /* c */ b => 1,   //~ E0002 @7
+    _ => 2,
+  }
+}

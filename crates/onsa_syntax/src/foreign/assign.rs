@@ -123,7 +123,8 @@ pub(super) fn binary_minus_prefix_minus(c: &Cursor) -> Option<Hit> {
     }
     let span = c.span(c.at);
     let text = if c.gap(c.at) == Gap::None { " - -" } else { "- -" };
-    hit(span, vec![Fix::replace("write the two `-` apart", span, text)])
+    let gap = c.file_span(span.start, c.span(c.at + 1).start);
+    hit(span, vec![Fix::replace("write the two `-` apart", gap, text)])
 }
 
 fn binary_minus_minus(c: &Cursor) -> bool {
@@ -132,11 +133,10 @@ fn binary_minus_minus(c: &Cursor) -> bool {
     }
     // A `--` is not the last token (an `Eof` follows it).
     let next = c.kind(c.at + 1);
-    // SPEC-GAP(S-349): a blank before the `--` (`a --b`) is the form too.
     c.before(c.at).is_some()
         && !c.at_line_head(c.at)
         && closed_expr(c).is_some()
-        && c.gap_after(c.at) == Gap::None
+        && c.gap_after(c.at) != Gap::Newline
         && !matches!(next, TokenKind::Minus | TokenKind::Bang)
         && crate::starts::starts_operand(next)
 }
@@ -159,18 +159,17 @@ pub(super) fn increment(c: &Cursor) -> Option<(RowId, Hit)> {
     let none = || found(RowId::IncrementUnfixable, span, Vec::new());
     // `++x` as a statement: nothing of it was read yet.
     if c.want == Want::Expr && c.top() == Some(NodeKind::Block) {
-        let first = c.at + 1;
-        let Some(last) = statement_end(c, first) else { return none() };
+        let nl = c.gap_after(c.at) == Gap::Newline;
+        let first = if nl { super::spaces::partner(c, c.at) } else { Some(c.at + 1) };
+        let Some((first, last)) = first.and_then(|f| Some((f, statement_end(c, f)?))) else { return none() };
         if !is_place(c, first, last) || !ends_statement(c, last) {
             return none();
         }
         let place = &c.text[c.span(first).start as usize..c.span(last).end as usize];
+        let gone = if nl { super::edits::taken_down(c, c.at) } else { c.file_span(span.start, c.span(first).start) };
         let fix = Fix::new(
             "write the assignment out",
-            vec![
-                Edit::delete(c.file_span(span.start, c.span(first).start)),
-                Edit::insert(c.file, c.span(last).end, format!(" = {place} {op} 1")),
-            ],
+            vec![Edit::delete(gone), Edit::insert(c.file, c.span(last).end, format!(" = {place} {op} 1"))],
         );
         return found(RowId::Increment, span, vec![fix]);
     }
@@ -181,12 +180,13 @@ pub(super) fn increment(c: &Cursor) -> Option<(RowId, Hit)> {
         && ends_statement(c, c.at)
     {
         let first = c.index_at(*start);
-        if is_place(c, first, c.at - 1) && c.gap(c.at) == Gap::None {
+        if is_place(c, first, c.at - 1) && c.gap(c.at) != Gap::Newline {
+            let gone = c.file_span(c.span(c.at - 1).end, span.end);
             let place = &c.text[c.span(first).start as usize..c.span(c.at - 1).end as usize];
             return found(
                 RowId::Increment,
                 span,
-                vec![Fix::replace("write the assignment out", span, format!(" = {place} {op} 1"))],
+                vec![Fix::replace("write the assignment out", gone, format!(" = {place} {op} 1"))],
             );
         }
     }

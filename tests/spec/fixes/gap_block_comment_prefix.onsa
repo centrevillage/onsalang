@@ -1,0 +1,107 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§2.5", "§2.6", "§3.1", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "67:13"
+// code = "E0020"
+// candidate = 1
+// leaves = ["68:11 E0020"]
+//
+// [[test.fix]]
+// at = "73:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["72:11 E0020"]
+//
+// [[test.fix]]
+// at = "78:13"
+// code = "E0020"
+// candidate = 1
+// leaves = ["79:11 E0020"]
+//
+// [[test.fix]]
+// at = "84:13"
+// code = "E0020"
+// candidate = 1
+// leaves = ["85:11 E0020"]
+//
+// [[test.fix]]
+// at = "89:13"
+// code = "E0020"
+// candidate = 1
+// leaves = ["90:11 E0020"]
+//
+// [[test.fix]]
+// at = "94:12"
+// code = "E0020"
+// candidate = 1
+// leaves = ["95:11 E0020"]
+//
+// [[test.fix]]
+// at = "99:13"
+// code = "E0020"
+// candidate = 1
+// leaves = ["100:11 E0020"]
+//
+// [[test.fix]]
+// at = "105:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["104:11 E0020"]
+
+// S-960 (W5-11 U10i/t, §2.1, §2.5, §2.6, §3.1, §18.1): a block comment between a prefix sign (`-`, `!`, `~`, `+`) and its operand is the
+// E0020 of the block comment (§2.1) first, before the E0020 of the space or the line break between the sign and the operand and before
+// the error of the form itself (the `~` of the foreign form, the `+` that Onsa does not have). The comment is on the line of the sign
+// (`- /* c */ x`, `!`, `~`, `+`), touches it (`~/* c */m`), is at the end of its line with the operand on the next line (`- /* c */` and
+// then `x`), or begins the next line (`-` and then `/* c */ x`, `+` and then `/* c */ x`). Before S-960 the sign was reported (an E0002
+// on the same line, the `!` candidate of the `~`, the E0020 of the `-` at the end of its line, the candidate of the `+` that took it out
+// and left the comment). The one candidate is the one of §2.1 (a line comment keeps the words; the tokens and the line breaks stay), so
+// the space or the line break that was there stays and is the E0020 of the sign in the next round (`leaves`, in the layout of that
+// candidate: a comment at the end of its line or at the start of its line is written in place, one inside a line becomes one space and the
+// words go on a line above, so the sign of such a unit is on the next line). The main position is the start of the block comment, so the
+// marker is on its line. One error per declaration unit (P-01).
+
+pub fn a1_minus_both(x: I32) -> I32 {
+  let n = - /* c */ x   //~ E0020
+  n
+}
+
+pub fn a3_minus_newline(x: I32) -> I32 {
+  let n = -
+    /* c */ x   //~ E0020
+  n
+}
+
+pub fn a3b_minus_newline_comment_first(x: I32) -> I32 {
+  let n = - /* c */   //~ E0020
+    x
+  n
+}
+
+pub fn a4_bang(b: Bool) -> Bool {
+  let n = ! /* c */ b   //~ E0020
+  n
+}
+
+pub fn a6_tilde(m: U32) -> U32 {
+  let n = ~ /* c */ m   //~ E0020
+  n
+}
+
+pub fn a7_tilde_touching(m: U32) -> U32 {
+  let n = ~/* c */m   //~ E0020
+  n
+}
+
+pub fn a12_plus(x: I32) -> I32 {
+  let n = + /* c */ x   //~ E0020
+  n
+}
+
+pub fn a13_plus_newline(x: I32) -> I32 {
+  let n = +
+    /* c */ x   //~ E0020
+  n
+}

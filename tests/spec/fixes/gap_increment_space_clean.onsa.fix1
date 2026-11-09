@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§5.1", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "17:5"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// S-429 (W5-11 U10i/t, §2.5, §5.1, the row `increment` of spec/foreign-forms.toml): the one candidate of a decrement with a space
+// before the `--` (`x --`) writes the assignment out (`x = x - 1`), and nothing is left behind (`clean`, S-253). The main
+// position is the `--`. A file with one unit, so that `clean` looks at the whole file.
+
+pub fn f(inout x: I32) {
+  x = x - 1   //~ E0020
+}

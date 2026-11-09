@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§15.1", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "20:8"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// S-963 (W5-11 U10i/t, §2.5, §15.1, the row `path_separator` of spec/foreign-forms.toml): the one candidate of a `use` whose `::`
+// has a space after it (`use std:: {math}`) writes `use std.{math}`, the `::` as a `.` and the space out in the same edit
+// (the pinned binary reports an E0002 here and has no candidate), and nothing is left behind (`clean`, S-253). The main
+// position is the `::`. The file has one candidate, so that `clean` looks at the whole file. The use of `math` in `f` is the
+// E0302 of the name stage before the candidate: the reading stops at the `::`, before the name it imports, so the name is
+// not one read of a `use` with an error of the syntax stage (§18.1, the parent's reading; a touching `use std::math` is the
+// same). It is gone after the candidate.
+
+use std.{math}   //~ E0020
+
+pub fn f() -> F32 {
+  math.sqrt(2.0)   //~ E0302
+}

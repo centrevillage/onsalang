@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.1", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "18:5"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// S-349 (W5-11 U10i/t, §2.5, §3.1, the row `binary_minus_prefix_minus` of spec/foreign-forms.toml): the one candidate of a `--` with
+// a space on both sides (`a -- b`) writes the two minus signs apart and takes the spaces round them out (`a - -b`), and
+// nothing is left behind (`clean`, S-253). The main position is the `--`. A file with one unit, so that `clean` looks at
+// the whole file.
+
+pub fn f(a: I32, b: I32) -> I32 {
+  a -- b   //~ E0020
+}

@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§15.1", "§18.1"]
+// fixes = 0
+
+// S-963 (W5-11 U10i/t, §2.5, §15.1): the `::` of a path that begins a line is the E0002 of §2.5 ("the only token that
+// continues the line before is the `.`"), inside the brackets as well, and the decision of S-963 leaves it so: no
+// candidate (`fixes = 0`). The marker is on the line of the `::`.
+
+pub fn two(a: F32, b: F32) -> F32 {
+  a + b
+}
+
+pub fn a_statement() -> F32 {
+  let a = F32
+    ::PI   //~ E0002
+  a
+}
+
+pub fn in_a_call() -> F32 {
+  two(F32
+    ::PI, 1.0)   //~ E0002
+}
+
+pub fn after_a_comment_line() -> F32 {
+  let a = F32
+    // pi
+    ::PI   //~ E0002
+  a
+}
+
+pub fn in_a_pattern(x: I32) -> I32 {
+  match x {
+    I32
+      ::MAX => 1,   //~ E0002
+    _ => 0,
+  }
+}

@@ -14,15 +14,25 @@ use crate::token::{Token, TokenKind};
 /// `sep`. Comments between and after it are kept and keep their order: the code of
 /// `next`'s line (up to a comment or the end of the line) moves to `end`,
 /// before the comment of that line, and the line of `next` is removed when
-/// nothing else is left on it (W3-02/b 4).
-pub(crate) fn move_up(file: FileId, text: &str, all: &[Token], title: &str, end: u32, next: Token, sep: &str) -> Fix {
+/// nothing else is left on it (W3-02/b 4). None when that code holds a
+/// literal that does not close on its line: moved before the comment, it
+/// would take the comment in (`f:: //` and `[2])"` on the next line).
+pub(crate) fn move_up(
+    file: FileId,
+    text: &str,
+    all: &[Token],
+    title: &str,
+    end: u32,
+    next: Token,
+    sep: &str,
+) -> Option<Fix> {
     let at = all.partition_point(|t| t.span.start < next.span.start);
     let comment = |t: &Token| t.kind.is_line_comment();
     let between = all[..at].iter().rev().take_while(|t| t.span.start >= end);
     let rest = &all[at..];
     let after = rest.iter().take_while(|t| !matches!(t.kind, TokenKind::Newline | TokenKind::Eof));
     if !between.clone().any(comment) && !after.clone().any(comment) {
-        return Fix::replace(title, Span::new(file, end, next.span.start), sep);
+        return Some(Fix::replace(title, Span::new(file, end, next.span.start), sep));
     }
     // The code of `next`'s line: up to a comment, a newline or the end.
     let code_len = rest
@@ -32,6 +42,9 @@ pub(crate) fn move_up(file: FileId, text: &str, all: &[Token], title: &str, end:
     let code_end =
         rest[..code_len].iter().rev().find(|t| t.kind != TokenKind::Whitespace).map_or(next.span.end, |t| t.span.end);
     let moved = &text[next.span.start as usize..code_end as usize];
+    if crate::lex(file, moved).literals.unclosed_in(0, moved.len() as u32) {
+        return None;
+    }
     let after = rest[code_len..].first().copied();
     let removed = match after.map(|t| t.kind) {
         // Nothing else on the line: remove the line, its indentation and its newline.
@@ -45,7 +58,7 @@ pub(crate) fn move_up(file: FileId, text: &str, all: &[Token], title: &str, end:
         // A comment stays on the line, after the indentation.
         Some(_) => Span::new(file, next.span.start, after.map_or(code_end, |t| t.span.start)),
     };
-    Fix::new(title, vec![Edit::insert(file, end, format!("{sep}{moved}")), Edit::delete(removed)])
+    Some(Fix::new(title, vec![Edit::insert(file, end, format!("{sep}{moved}")), Edit::delete(removed)]))
 }
 
 /// The candidate that takes out the blanks `blanks` on the line of a postfix

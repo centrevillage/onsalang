@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6", "§3.1", "§18.1"]
+// fixes = 0
+
+// S-958 (W5-11 U10i/t, §2.5, §2.6, §3.1, §18.1): the forms of a prefix `~` next to another prefix sign that have no
+// candidate and are the E0002 of §18.1 (a form of a language that has no candidate), the same as the `~~m` that touches:
+// a `~` before a `~` (`~ ~m`), a `!` before a spaced `~` (`!~ m`), a `-` before a `~` (`- ~m`), and the `~` before a `-`
+// that has a space of its own after it (`~ - x`: the space after the `-` is another error that the candidate of
+// the `~` does not take out, so the `~` has none). It is not the E0012
+// of §3.1: the `~` is not an operator of Onsa. Whether the E0002 has a note is not this file's. The marker is on the
+// line of the first token of the form; no candidate (`fixes = 0`).
+
+pub fn a_tilde_and_a_tilde(m: I32) -> I32 {
+  let n = ~ ~m   //~ E0002
+  n
+}
+
+pub fn a_tilde_and_a_tilde_touching(m: I32) -> I32 {
+  let n = ~~m   //~ E0002
+  n
+}
+
+pub fn a_tilde_after_a_bang(m: I32) -> I32 {
+  let n = !~ m   //~ E0002
+  n
+}
+
+pub fn a_tilde_after_a_minus(m: I32) -> I32 {
+  let n = - ~m   //~ E0002
+  n
+}
+
+pub fn a_minus_with_a_space(m: I32) -> I32 {
+  let n = ~ - m   //~ E0002
+  n
+}

@@ -31,11 +31,32 @@ reasons = ["S-384", "S-236"]
 note = "an input with two errors: a block called with `(` (`if c { … }(`), and a tuple index with a leading 0 in a hole (`\"{t.01}\"`), which the input has before the candidate; the hole is a lexical error since W5-11 U10d1 (R-290), so the candidate of the call leaves it at its place"
 
 [[allowed]]
-class = "fix|E0020|write `…`|E0020"
-left = "a member `…` is written without spaces around it"
-input = "tests/fuzz/94679d99.onsa"
-reasons = ["S-384", "S-963"]
-note = "an input with two errors: the path separator `::` of Rust (`d:: F`) and a blank after it, which the input has before the candidate; the candidate of `::` writes `.` and leaves the blank, which is then the E0020 of a spaced member `.` at its place. Whether the candidate of such a form takes the blank out too is S-963 (under the family rule S-961 of the blanks round the symbols of 2.5); the class is from before W5-11 U10d2 (f5fb3bc shows it)"
+class = "fix|E0020|join it to the line before|E0002"
+left = "expected trait bound, found `…`"
+input = "tests/fuzz/3ffdcc07.onsa"
+reasons = ["S-384"]
+note = "an input with two errors from before W5-11 U10i1 (c7314da shows it): the `?` of a bound with no name before a line break (`impl[T:?`) and a `^` at the head of the next line, which the input has before the candidate; the candidate joins the `^` to the line before, which leaves the bound without a name"
+
+[[allowed]]
+class = "fix|E0020|write a line comment|E0020"
+left = "a postfix `…` is written right after its operand"
+input = "tests/fuzz/57c5f2a4.onsa"
+reasons = ["S-384", "S-960"]
+note = "an input with two errors from before W5-11 U10i (c7314da shows it): a block comment before a postfix `?` and a blank before the comment (`o /**/?`); the block comment comes first (S-960), and its candidate keeps the line break of the line comment, which is then the E0020 of the `?` at its place, the second of the two errors"
+
+[[allowed]]
+class = "fix|E0020|remove the `…`|E0002"
+left = "this `…` is never closed"
+input = "tests/fuzz/e5458b4b.onsa"
+reasons = ["S-384"]
+note = "an input with two errors: the `::` of a type position with a line comment and a line break after it (`f:://` and `[2],U))->U{` on the next line, S-963 of W5-11 U10i1) and a `{` that never closes, which the input has before the candidate; the candidate brings the next line up before the comment, and the E0002 of the open `{` moves with it"
+
+[[allowed]]
+class = "fix|E0020|move it to the end of the line before|E0002"
+left = "`…` is no part of the head of a declaration"
+input = "tests/fuzz/0a1bda47.onsa"
+reasons = ["S-384"]
+note = "an input with two errors from before W5-11 U10i (c7314da shows it): a word before `const` (`t const K:I=1`) and a `|` at the head of the next line (`|t type`), which the input has before the candidate; the candidate moves the `|` to the end of the line before, and the word `t` of the next line is then no part of the head"
 
 [[allowed]]
 class = "fix|E0003|move `…` to the end of the line before|E0002"

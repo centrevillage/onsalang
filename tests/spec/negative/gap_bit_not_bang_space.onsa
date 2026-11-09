@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§18.1"]
+// fixes = 0
+
+// S-962 (W5-11 U10i/t, §2.6, §18.1): a prefix `~` with a space (`~ !x`, a tab) or a line break (`~` and then `!x`, with a comment
+// line between) before an operand that begins with a `!` has no candidate and is the E0002 of §18.1, the same as the
+// touching `~!x` (gap_bit_not_bang.onsa) and `~~x`. These are the forms that the pinned binary reports the same
+// before S-962, so this file passes without the work and pins that they stay. The marker is on the line of the `~`; no
+// candidate (`fixes = 0`).
+
+pub fn id(m: I32) -> I32 {
+  m
+}
+
+pub fn a_space(m: I32) -> I32 {
+  let n = ~ !m   //~ E0002
+  n
+}
+
+pub fn a_tab(m: I32) -> I32 {
+  let n = ~	!m   //~ E0002
+  n
+}
+
+pub fn a_line_break(m: I32) -> I32 {
+  let n = ~   //~ E0002
+    !m
+  n
+}
+
+pub fn a_comment_line_between(m: I32) -> I32 {
+  let n = ~   //~ E0002
+    // the operand
+    !m
+  n
+}

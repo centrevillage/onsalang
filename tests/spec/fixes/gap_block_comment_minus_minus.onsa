@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§2.5", "§3.1", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "19:7"
+// code = "E0020"
+// candidate = 1
+// leaves = ["20:5 E0020"]
+
+// S-960 (W5-11 U10i/t, §2.1, §2.5, §3.1, §18.1): a block comment next to the `--` of a binary `-` and a prefix `-` written together
+// (`a --/* c */b`) is the E0020 of the block comment (§2.1) first; the E0002 of the increment that the `--` was before S-960 is gone. The one
+// candidate is the one of §2.1, and the space that it leaves after the `--` (`a -- b`) is the E0020 of S-320 in the next round, with the one
+// candidate `a - -b` (S-349: a space after the `--` is that error, not the increment's E0002; it is the work of U10i1, which this file
+// needs). The main position is the start of the block comment. A file with one unit, so that the candidate is the one of the comment.
+
+pub fn a15_minus_minus(a: I32, b: I32) -> I32 {
+  a --/* c */b   //~ E0020
+}

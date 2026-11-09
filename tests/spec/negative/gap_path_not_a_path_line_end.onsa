@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§15.1", "§18.1"]
+// fixes = 0
+
+// S-963 (W5-11 U10i3, §2.5, §18.1): the line of a declaration goes on after a `::` at its end only when the declaration
+// stopped at the `::` of a path (`use std::` and `math` on the next line are one unit). When it stopped before, at a token
+// that is no part of a path (`1 2 F32::`, `use a b c::`), or at a `::` after no name (`1 ::`), the unit ends with its line,
+// and the next line is a unit of its own: its error is reported too (E0002 "expected a declaration"). The markers are on
+// the lines of the errors.
+
+const A: I32 = 1 2 F32::   //~ E0002
+x y z   //~ E0002
+
+use a b c::   //~ E0002
+x y z   //~ E0002
+
+const C: I32 = 1 ::   //~ E0002
+x   //~ E0002
+
+pub fn f() -> I32 {
+  A + C
+}

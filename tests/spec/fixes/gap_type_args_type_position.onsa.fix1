@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§4.5", "§18.1"]
+// fixes = 1
+
+// S-327 (W5-11 U10i/t, §2.5, §4.5, the row `type_position_path` of spec/foreign-forms.toml): the `::` of a type argument in
+// a type position is the E0020 of the mark that a type does not have (`Buf::[F32]` is `Buf[F32]`). With a line break
+// between the `::` and the `[` (`Buf::` and then `[F32]`) it is the same E0020 as with the space after it (`Buf:: [F32]`,
+// which is the same E0020 today: gap_type_args_type_space.onsa), and the one candidate takes the `::` and the line
+// break out (`Buf[F32]`). The places a type stands: a parameter, a result, a field, an annotation, an argument of another
+// type, a tuple, and the header of an `impl`. The marker is on the line of the `::`, the token the form is reported
+// at. One error per declaration unit (P-01).
+
+pub struct Wrapper[T] {
+  value: T,
+}
+
+pub struct Holder {
+  data: Buf[F32],   //~ E0020
+}
+
+pub fn as_a_parameter(b: Buf[F32]) -> U32 {   //~ E0020
+  b.len()
+}
+
+pub fn as_a_result() -> Buf[F32] {   //~ E0020
+  Buf.zeroed(4)
+}
+
+pub fn as_an_annotation() -> U32 {
+  let b: Buf[F32] = Buf.zeroed(4)   //~ E0020
+  b.len()
+}
+
+pub fn as_an_argument_of_a_type(o: Option[Buf[F32]]) -> U32 {   //~ E0020
+  1
+}
+
+pub fn in_a_tuple(t: (Buf[F32], U8)) -> U8 {   //~ E0020
+  t.1
+}
+
+impl[T] Wrapper[T] {   //~ E0020
+  pub fn get(self) -> T {
+    self.value
+  }
+}

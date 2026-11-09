@@ -357,6 +357,53 @@ pub fn f(s: Stage) -> I32 {
 }
 ''']
 
+[[form.example]]
+source = '''
+use std:: {math}
+
+pub fn f() -> F32 {
+  math.sqrt(2.0)
+}
+'''
+at = "1:8"
+fixed = ['''
+use std.{math}
+
+pub fn f() -> F32 {
+  math.sqrt(2.0)
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> F32 {
+  F32::
+    PI
+}
+'''
+at = "2:6"
+fixed = ['''
+pub fn f() -> F32 {
+  F32
+    .PI
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f() -> F32 {
+  F32:: // c
+    PI
+}
+'''
+at = "2:6"
+fixed = ['''
+pub fn f() -> F32 {
+  F32 // c
+    .PI
+}
+''']
+
 [[form]]
 id = "angle_brackets"
 kind = "foreign"
@@ -1279,8 +1326,9 @@ pub fn f(inout xs: [(I32, I32); 4], i: U32) {
 '''
 at = "2:11"
 
-# 増減。空白を空けない `++x` `--x` `x++` `x--` を拾う（空白を空けた `- - x` は前置演算子の重ねで
-# E0012、§3.1）。文の位置で左辺が名前かフィールドの経路のとき、候補は `x = x + 1` / `x = x - 1`。
+# 増減。`++x` `--x` `x++` `x--` を拾う（被演算子との間の同じ行の空白と、前置の `--` の後の改行も同じ形、
+# S-429。空白を空けた `- - x` は前置演算子の重ねで E0012、§3.1）。文の位置で左辺が名前かフィールドの経路の
+# とき、候補は `x = x + 1` / `x = x - 1`。
 [[form]]
 id = "increment"
 kind = "foreign"
@@ -1433,6 +1481,48 @@ pub fn f(inout t: ((I32, I32), I32)) {
 }
 ''']
 
+[[form.example]]
+source = '''
+pub fn f(inout x: I32) {
+  x --
+}
+'''
+at = "2:5"
+fixed = ['''
+pub fn f(inout x: I32) {
+  x = x - 1
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(inout x: I32) {
+  --
+  x
+}
+'''
+at = "2:3"
+fixed = ['''
+pub fn f(inout x: I32) {
+  x = x - 1
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(inout x: I32) {
+  -- // c
+  x
+}
+'''
+at = "2:3"
+fixed = ['''
+pub fn f(inout x: I32) {
+ // c
+  x = x - 1
+}
+''']
+
 # 式の位置（値の意味が言語で分かれる）、添字などの左辺、左辺が名前でない形（`---x` は字句が `--` と
 # `-x` で、S-297）は候補を作らない。
 [[form]]
@@ -1496,9 +1586,36 @@ pub fn f(inout t: (I32, I32)) -> I32 {
 '''
 at = "2:14"
 
-# 二項の `-` の直後に、空白を空けずに前置の `-` を書いた形（`a--b`、`5--3`、S-320）。字句は `--` を一つの
-# トークンにする（上の `increment` の行）ので、被演算子の直後に `--` が来て、その直後に被演算子が
-# 続く形をここで拾う。C は `a-- b` と読んで誤り、Rust は `a - (-b)` と読む。言語の間で読みが割れるので、
+[[form.example]]
+source = '''
+pub fn f(inout x: I32) -> I32 {
+  let y = x --
+  y
+}
+'''
+at = "2:13"
+
+[[form.example]]
+source = '''
+pub fn f(a: I32, b: I32) -> I32 {
+  let c = a --
+  b
+}
+'''
+at = "2:13"
+
+[[form.example]]
+source = '''
+pub fn f(a: I32, b: I32) -> I32 {
+  let c = a -- // c
+  b
+}
+'''
+at = "2:13"
+
+# 二項の `-` の直後に、空白を空けずに前置の `-` を書いた形（`a--b`、`5--3`、S-320。`--` の前後の同じ行の
+# 空白も同じ、S-349）。字句は `--` を一つのトークンにする（上の `increment` の行）ので、被演算子の直後に
+# `--` が来て、その直後に被演算子が続く形をここで拾う。C は `a-- b` と読んで誤り、Rust は `a - (-b)` と読む。言語の間で読みが割れるので、
 # 一つに決めずに誤りにする。候補は両方の読みと同じ `a - -b`（`a+-b` のように `-` 以外の二項演算子の
 # 直後の前置の `-` は、字句が二つのトークンに分けるので誤りではない）。
 [[form]]
@@ -1573,6 +1690,40 @@ at = "2:10"
 fixed = ['''
 pub fn f(a: I32, b: I32) -> I32 {
   (a + 1) - -b
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(a: I32, b: I32) -> I32 {
+  a -- b
+}
+'''
+at = "2:5"
+fixed = ['''
+pub fn f(a: I32, b: I32) -> I32 {
+  a - -b
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn f(a: I32, b: I32) -> I32 {
+  two(a-- b, 1)
+}
+'''
+at = "6:8"
+fixed = ['''
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn f(a: I32, b: I32) -> I32 {
+  two(a - -b, 1)
 }
 ''']
 
@@ -7522,8 +7673,50 @@ pub fn f() -> Option[I32] {
 }
 ''']
 
+[[form.example]]
+source = '''
+pub fn f(b: Buf:: [F32]) -> U32 {
+  b.len()
+}
+'''
+at = "1:16"
+fixed = ['''
+pub fn f(b: Buf[F32]) -> U32 {
+  b.len()
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(b: Buf::
+  [F32]) -> U32 {
+  b.len()
+}
+'''
+at = "1:16"
+fixed = ['''
+pub fn f(b: Buf[F32]) -> U32 {
+  b.len()
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(b: Buf:: // c
+  [F32]) -> U32 {
+  b.len()
+}
+'''
+at = "1:16"
+fixed = ['''
+pub fn f(b: Buf[F32]) -> U32 { // c
+  b.len()
+}
+''']
+
 # 式の中の型引数の印 `::[` の中の空白（名前と `::` の間、`::` と `[` の間、§2.5、§4.5、S-239）。候補は空白を除く。
-# 改行は別の形（行頭の `::` は E0002、`::` の後の改行は S-327）。並びと `!` の間の空白は `space_before_bang` の行。
+# `::` と `[` の間の改行も同じ形で、候補は改行を除く（行コメントがあれば `[` からをコメントの前へ上げる、S-327）。
+# 行頭の `::` は E0002（§2.5）。並びと `!` の間の空白は `space_before_bang` の行。
 [[form]]
 id = "space_in_type_args_mark"
 kind = "foreign"
@@ -7602,6 +7795,50 @@ impl V {
 
 pub fn f(v: V) -> I32 {
   v.conv::[I32](1)
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn f() -> U8 {
+  id::
+    [U8](250)
+}
+'''
+at = "6:5"
+fixed = ['''
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn f() -> U8 {
+  id::[U8](250)
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn f() -> U8 {
+  id:: // c
+    [U8](250)
+}
+'''
+at = "6:5"
+fixed = ['''
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn f() -> U8 {
+  id::[U8](250) // c
 }
 ''']
 
@@ -7907,6 +8144,23 @@ fixed = ['''
 pub fn f(m: U32) -> U32 {
   let n =
     !m
+  n
+}
+''']
+
+# 被演算子が前置の `-` で始まる形は、間の空白があっても内側を括弧で囲む `!(-x)` で、空白も除く（S-958）。
+# 被演算子が `!` で始まる形（`~!x`、`~ !x`）は候補を作らず、`~~x` と同じ §18.1 の E0002（S-962）。
+[[form.example]]
+source = '''
+pub fn f(m: I32) -> I32 {
+  let n = ~ -m
+  n
+}
+'''
+at = "2:11"
+fixed = ['''
+pub fn f(m: I32) -> I32 {
+  let n = !(-m)
   n
 }
 ''']

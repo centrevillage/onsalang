@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§15.1", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "18:6"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// S-963 (W5-11 U10i/t, §2.5, §15.1, the row `path_separator` of spec/foreign-forms.toml): the one candidate of a path with a space
+// after its `::` (`F32:: PI`) writes the `::` as a `.` and takes the space out in the same edit, so that nothing is left behind
+// (`clean`, S-253: the unit has no error after the one edit; the candidate of the pinned binary left a space after the
+// `.`, an error of the next round). The main position is the `::`. A file with one unit, so that `clean` looks at the whole file.
+
+pub fn f() -> F32 {
+  F32.PI   //~ E0020
+}

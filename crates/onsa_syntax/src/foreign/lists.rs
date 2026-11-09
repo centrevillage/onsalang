@@ -24,7 +24,7 @@ pub(super) fn join_fix(c: &Cursor) -> Option<Fix> {
     }
     let prev = c.sig_before(c.at)?;
     let title = if c.at_line_head(c.at) { "remove the line break" } else { "remove the space" };
-    Some(crate::edits::move_up(c.file, c.text, c.all, title, c.span(prev).end, c.tokens[c.at], ""))
+    crate::edits::move_up(c.file, c.text, c.all, title, c.span(prev).end, c.tokens[c.at], "")
 }
 
 /// The candidates of the general E0002 at the token after an element of a

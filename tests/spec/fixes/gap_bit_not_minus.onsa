@@ -1,0 +1,80 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6", "§3.1", "§18.1"]
+// fixes = 1
+
+// S-958 (W5-11 U10i/t, §2.5, §2.6, §3.1, the row `faust_bit_not` of spec/foreign-forms.toml): a prefix `~` with a space on the
+// same line (`~ -x`, two spaces, a tab) or a line break (`~` and then `-x`, with a line comment after the `~`, a comment
+// line or a blank line between) before an operand that begins with a prefix `-` is the E0020 of the bit negation, as the
+// `~-x` that touches is, and the one candidate writes the `!` with the operand in parentheses (`!(-x)`), the line break
+// moved to the operand's line (the `!` stands where the `-` stood). It is not the E0012 of two prefix operators in a row
+// (§3.1): the `~` is not an operator of Onsa. The operand is a name, a group, a literal, a call and a field. The main
+// position is the `~`, the token that the candidate replaces, so the marker is on its line. One error per declaration unit
+// (P-01). The forms of the spaced `~` with an operand that is not a `-` are in bit_not_space_forms.onsa and
+// bit_not_newline_forms.onsa; the forms that keep the E0002 are in gap_bit_not_stays.onsa.
+
+pub fn id(m: I32) -> I32 {
+  m
+}
+
+pub struct Gain {
+  k: I32,
+}
+
+pub fn a_space(m: I32) -> I32 {
+  let n = ~ -m   //~ E0020
+  n
+}
+
+pub fn two_spaces(m: I32) -> I32 {
+  let n = ~  -m   //~ E0020
+  n
+}
+
+pub fn a_tab(m: I32) -> I32 {
+  let n = ~	-m   //~ E0020
+  n
+}
+
+pub fn a_group_operand(m: I32) -> I32 {
+  let n = ~ -(m + 1)   //~ E0020
+  n
+}
+
+pub fn a_literal_operand() -> I32 {
+  let n = ~ -1   //~ E0020
+  n
+}
+
+pub fn a_field_operand(g: Gain) -> I32 {
+  let n = ~ -g.k   //~ E0020
+  n
+}
+
+pub fn in_an_argument(m: I32) -> I32 {
+  id(~ -m)   //~ E0020
+}
+
+pub fn the_operand_of_an_operator(m: I32) -> I32 {
+  m & ~ -m   //~ E0020
+}
+
+pub fn a_line_break(m: I32) -> I32 {
+  let n = ~   //~ E0020
+    -m
+  n
+}
+
+pub fn a_comment_line_between(m: I32) -> I32 {
+  let n = ~   //~ E0020
+    // the operand
+    -m
+  n
+}
+
+pub fn a_blank_line_between(m: I32) -> I32 {
+  let n = ~   //~ E0020
+
+    -m
+  n
+}

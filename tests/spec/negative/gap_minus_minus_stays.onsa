@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.1", "§18.1"]
+// fixes = 0
+
+// S-349 (W5-11 U10i/t, §2.5, §3.1): the forms of a `--` that the decision of S-349 leaves the E0002 of the increment, with no
+// candidate (`fixes = 0`): a `--` at the end of a line after an operand is a postfix decrement, not a binary operator, so
+// the line ends there and the operand on the next line is not joined to it (`let c = a --` and then `b`, with a comment
+// line or a blank line between, inside the brackets of a call), and `a -- -b`, where the `--` is followed by a second
+// sign. The marker is on the line of the `--`.
+
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn the_operand_on_the_next_line(a: I32, b: I32) -> I32 {
+  let c = a --   //~ E0002
+    b
+  c
+}
+
+pub fn a_comment_line_between(a: I32, b: I32) -> I32 {
+  let c = a --   //~ E0002
+    // minus
+    b
+  c
+}
+
+pub fn a_blank_line_between(a: I32, b: I32) -> I32 {
+  let c = a --   //~ E0002
+
+    b
+  c
+}
+
+pub fn in_a_call(a: I32, b: I32) -> I32 {
+  two(a --   //~ E0002
+    b, 1)
+}
+
+pub fn a_second_sign(a: I32, b: I32) -> I32 {
+  a -- -b   //~ E0002
+}
+
+pub fn a_second_sign_in_a_call(a: I32, b: I32) -> I32 {
+  two(a -- -b, 1)   //~ E0002
+}

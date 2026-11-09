@@ -93,7 +93,10 @@ impl<'a> Parser<'a> {
     ///
     /// With `line`, the unit is a finished item and the tokens after it on
     /// its line (S-274): the skip also ends at the end of that line, outside
-    /// the brackets it opens, the line going on as §2.5 reads (S-950).
+    /// the brackets it opens, the line going on as §2.5 reads (S-950) and
+    /// after a `::` of a path at its end, when the unit failed at a path's `::`
+    /// ([`crate::foreign::path_colons`]), with the name after it (S-963: `use std::`
+    /// and `math` on the next line, as `use std.` and `math`).
     pub(super) fn skip_unit(&mut self, unit_start: u32, base: usize, member: bool, line: bool) {
         let mut braces = self.braces.clone();
         // Where in `braces` the lowest bracket that may stay open is, kept
@@ -126,11 +129,13 @@ impl<'a> Parser<'a> {
         // The last attribute that closes on its line: a line that ends with
         // it goes on (§2.5).
         let mut attribute = None;
+        let (mut last, path) = (None, crate::foreign::path_colons(&self.tokens, from));
         loop {
             let t = self.tokens[i];
             let line_ends = t.kind == TokenKind::Newline
                 && braces.len() <= base
                 && !self.lines.goes_on(i)
+                && !(path && last.is_some_and(|l| crate::foreign::path_colons(&self.tokens, l)))
                 && !attribute.is_some_and(|e: usize| self.tokens[e + 1..i].iter().all(|c| c.kind.is_comment()));
             if t.kind == TokenKind::Eof || (line && line_ends) {
                 break;
@@ -138,6 +143,7 @@ impl<'a> Parser<'a> {
             if line && matches!(t.kind, TokenKind::At | TokenKind::Hash) {
                 attribute = self.attribute_end(i);
             }
+            last = Some(i).filter(|_| !t.kind.is_trivia() && !t.kind.is_comment()).or(last);
             if self.unit_ends_at(i, unit_start, base, &braces, stays_open.is_some()) {
                 break;
             }

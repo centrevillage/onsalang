@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§15.1", "§18.1"]
+// fixes = 1
+
+// S-963 (W5-11 U10i/t, §2.5, §15.1, the row `path_separator` of spec/foreign-forms.toml): the `::` of a path that has a
+// space on the same line before it or after it (`F32:: PI`, `F32 :: PI`, `F32 ::PI`, a tab) is the E0020 of the row
+// `path_separator` and not a second error about the space: the one candidate writes every `::` of the path as a `.` and
+// takes the spaces round it out in the same edit, so that the candidate leaves no error (one round). The path of two `::`
+// (`std:: math:: sqrt(2.0)`) is one error with one candidate. The same in a `use` (`use std:: {math}`), a call, a pattern, a
+// closure and a flow. The main position is the first `::` of the path, as in the row. One error per declaration unit (P-01).
+// The forms that the E0020 of the space does not need the row for are in e0020_type_args_path.onsa.
+
+use std.{math}   //~ E0020
+
+use std.fmt   //~ E0020
+
+pub fn two(a: F32, b: F32) -> F32 {
+  a + b
+}
+
+pub fn a_space_after() -> F32 {
+  F32.PI   //~ E0020
+}
+
+pub fn a_space_before() -> F32 {
+  F32.PI   //~ E0020
+}
+
+pub fn a_space_on_both_sides() -> F32 {
+  F32.PI   //~ E0020
+}
+
+pub fn two_spaces() -> F32 {
+  F32.PI   //~ E0020
+}
+
+pub fn a_tab() -> F32 {
+  F32.PI   //~ E0020
+}
+
+pub fn a_path_of_two() -> F32 {
+  std.math.sqrt(2.0)   //~ E0020
+}
+
+pub fn in_a_call() -> F32 {
+  two(F32.PI, 1.0)   //~ E0020
+}
+
+pub fn in_a_method_call(x: F32) -> F32 {
+  x.max(F32.PI)   //~ E0020
+}
+
+pub fn in_a_pattern(x: I32) -> I32 {
+  match x {
+    I32.MAX => 1,   //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn in_a_closure() -> F32 {
+  let f = fn(x: F32) -> F32 { x + F32.PI }   //~ E0020
+  f.(1.0)
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  let y = x + F32.PI   //~ E0020
+  y
+}
+
+pub flow in_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<2 {
+    x + F32.PI   //~ E0020
+  }
+  ys[0]
+}
