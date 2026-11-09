@@ -1,0 +1,240 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1", "§11.4", "§11.5"]
+
+// W5-16 U1a/t: a name that is not a value (a type, an alias, an enum, a builtin type, a trait, a constraint of a kind,
+// an effect, a flow) written in a constant expression is E0308, wherever the constant expression is written (§4.5:
+// "値でない名前（型、モジュール、flow、trait、効果など）は E0308"; §15.1: the name is found, so it is not the E0302 of
+// a name that is not found). The three places of the code are the heading of an item (the type of a parameter, a
+// result, a flow input), the repeat `[x; N]` and the annotation of a body, and the places of a flow body (the length
+// of `delay~` and `vdelay~`, the ends of a `par~`, the repeat). The same name has the same code in all of them.
+// The cells that the older cases have are not repeated: types/kind_array_lengths.onsa (a type, an alias, a trait,
+// an effect, a flow, a builtin type in the heading and in the repeat of a function), flow/kind_const_places.onsa (a type
+// in the places of a flow body) and packages/kind_signature_places_modules (a module). The modules in the body
+// and in a flow are in packages/length_names_module_places.
+// One error per unit (§18.1), so each form is in its own unit.
+
+pub struct P {
+  x: I32,
+}
+
+pub enum E {
+  A,
+  B(I32),
+}
+
+type Al = P
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+// ---- The repeat and the annotation of the body of a function ----
+
+pub fn builtin_type_in_a_repeat() -> F32 {
+  let a = [0.0; I32]                                //~ E0308
+  a[0]
+}
+
+pub fn enum_in_a_repeat() -> F32 {
+  let a = [0.0; E]                                  //~ E0308
+  a[0]
+}
+
+pub fn prelude_type_in_a_repeat() -> F32 {
+  let a = [0.0; Option]                             //~ E0308
+  a[0]
+}
+
+pub fn kind_constraint_in_a_repeat() -> F32 {
+  let a = [0.0; Copy]                               //~ E0308
+  a[0]
+}
+
+pub fn flow_in_an_annotation() -> F32 {
+  let _: [F32; lp] = [0.0; 4]                       //~ E0308
+  1.0
+}
+
+pub fn trait_in_an_annotation() -> F32 {
+  let _: [F32; Show] = [0.0; 4]                     //~ E0308
+  1.0
+}
+
+pub fn builtin_type_in_an_annotation() -> F32 {
+  let _: [F32; I32] = [0.0; 4]                      //~ E0308
+  1.0
+}
+
+// ---- The heading of a flow ----
+
+pub flow type_in_a_flow_input(a: [F32; P] at sample) -> F32 at sample {   //~ E0308
+  0.0
+}
+
+pub flow flow_in_a_flow_input(a: [F32; lp] at sample) -> F32 at sample {   //~ E0308
+  0.0
+}
+
+pub flow trait_in_a_flow_input(a: [F32; Show] at sample) -> F32 at sample {   //~ E0308
+  0.0
+}
+
+pub flow builtin_type_in_a_flow_input(a: [F32; I32] at sample) -> F32 at sample {   //~ E0308
+  0.0
+}
+
+pub flow alias_in_a_flow_result(x: F32 at sample) -> [F32; Al] at sample {   //~ E0308
+  [x; 4]
+}
+
+pub flow flow_in_a_flow_result(x: F32 at sample) -> [F32; lp] at sample {   //~ E0308
+  [x; 4]
+}
+
+// ---- The repeat of the body of a flow ----
+
+pub flow flow_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
+  let a = [x; lp]                                   //~ E0308
+  a[0]
+}
+
+pub flow builtin_type_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
+  let a = [x; I32]                                  //~ E0308
+  a[0]
+}
+
+pub flow alias_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
+  let a = [x; Al]                                   //~ E0308
+  a[0]
+}
+
+// ---- The length of a delay line ----
+
+pub flow trait_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, Show)                                   //~ E0308
+}
+
+pub flow flow_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, lp)                                     //~ E0308
+}
+
+pub flow builtin_type_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, I32)                                    //~ E0308
+}
+
+pub flow alias_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, Al)                                     //~ E0308
+}
+
+pub flow enum_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, E)                                      //~ E0308
+}
+
+pub flow kind_constraint_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, Copy)                                   //~ E0308
+}
+
+pub flow effect_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, Alloc)                                  //~ E0308
+}
+
+pub flow prelude_type_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, Option)                                 //~ E0308
+}
+
+pub flow type_in_a_delay_with_an_initial_value(x: F32 at sample) -> F32 at sample {
+  delay~(x, P, 0.5)                                 //~ E0308
+}
+
+pub flow type_in_a_delay_bound_to_a_let(x: F32 at sample) -> F32 at sample {
+  let d = delay~(x, P)                              //~ E0308
+  x + d
+}
+
+pub flow flow_in_a_delay_inside_par(x: F32 at sample) -> F32 at sample {
+  let ds = par~ i in 0..<2 {
+    delay~(x * F32.round_from(i), lp)               //~ E0308
+  }
+  ds[0] + ds[1]
+}
+
+pub flow trait_in_a_delay_inside_if_tilde(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c {
+    delay~(x, Show)                                 //~ E0308
+  } else {
+    x
+  }
+}
+
+// ---- The maximum of a variable delay line ----
+
+pub flow type_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, P)                                  //~ E0308
+}
+
+pub flow flow_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, lp)                                 //~ E0308
+}
+
+pub flow trait_in_a_vdelay_with_an_initial_value(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, Show, 0.5)                          //~ E0308
+}
+
+// ---- The ends of a `par~` ----
+
+pub flow trait_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<Show { x * F32.round_from(i) }     //~ E0308
+  ys[0]
+}
+
+pub flow flow_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<lp { x * F32.round_from(i) }       //~ E0308
+  ys[0]
+}
+
+pub flow builtin_type_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<I32 { x * F32.round_from(i) }      //~ E0308
+  ys[0]
+}
+
+pub flow alias_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<Al { x * F32.round_from(i) }       //~ E0308
+  ys[0]
+}
+
+pub flow enum_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<E { x * F32.round_from(i) }        //~ E0308
+  ys[0]
+}
+
+pub flow type_as_the_end_of_an_inclusive_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..=P { x * F32.round_from(i) }        //~ E0308
+  ys[0]
+}
+
+pub flow flow_as_the_start_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in lp..<4 { x * F32.round_from(i) }       //~ E0308
+  ys[0]
+}
+
+pub flow trait_as_the_start_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in Show..<4 { x * F32.round_from(i) }     //~ E0308
+  ys[0]
+}
+
+// ---- Fine: a name of a value that is a constant, in the same places ----
+
+const K: U32 = 4
+
+pub fn constant_in_a_body_repeat_and_annotation() -> F32 {
+  let a: [F32; K] = [0.0; K]
+  a[0]
+}
+
+pub flow constant_in_the_places_of_a_flow(a: [F32; K] at sample, x: F32 at sample) -> [F32; K] at sample {
+  let d = delay~(x, K)
+  let e = vdelay~(x, d, K)
+  let ys = par~ i in 0..<K { x * F32.round_from(i) }
+  [d, e, ys[0], ys[1]]
+}

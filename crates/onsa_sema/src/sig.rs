@@ -106,15 +106,11 @@ impl Cx<'_> {
         self.generics.iter().position(|g| g.name == name)
     }
 
-    /// What a constant expression reads with ([`crate::constarg::expr`]).
-    fn scope(&self) -> (&[GenericDef], Option<TyId>, bool) {
-        (&self.generics, self.self_ty, self.flow)
-    }
-
-    /// Whether a constant expression starts at one of [`Self::locals`]: a
-    /// value, no constant (E0417, §4.5).
-    fn local(&self) -> impl Fn(onsa_syntax::ast::ExprId) -> bool + '_ {
-        |e| crate::constarg::path_of(self.ast, e).is_some_and(|p| self.is_local(&p.segments[0].name))
+    /// What the names of a constant expression are read in
+    /// ([`crate::names::body::const_names`]).
+    fn consts(&self) -> crate::names::body::ConstScope<'_> {
+        let (generics, self_ty, flow, locals) = (&self.generics[..], self.self_ty, self.flow, &self.locals);
+        crate::names::body::ConstScope { generics, self_ty, flow, locals }
     }
 }
 

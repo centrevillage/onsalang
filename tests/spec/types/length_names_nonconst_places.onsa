@@ -1,0 +1,257 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1", "§11.4", "§11.5", "§5.1"]
+
+// W5-16 U1a/t: a name that is a value and is not a constant (a function, a variant of an enum, a function named through
+// its type, a local binding, a parameter, an input of a flow, the index of a `par~`) written in a constant
+// expression is E0417, and a method named through its type is no value, E0308 (§4.5: "定数式でないもの（関数の呼び出し、
+// ローカル変数など）を書くと、位置によらず … E0417。値だが定数でない名前（関数、列挙子）もローカル変数と同じく E0417";
+// §15.1; S-205). The places are the heading of an item, the repeat `[x; N]` and the annotation of a body, and the places of a
+// flow body (the length of `delay~` and `vdelay~`, the ends of a `par~`, the repeat); the same name has the same code
+// in all of them. The cells that the older cases have are not repeated: types/kind_array_lengths.onsa (a function, a
+// variant, a parameter and a local in the heading and the repeat of a function), types/kind_body_local_lengths.onsa
+// (the locals in an annotation), type_names/kind_signature_locals.onsa (the parameters in a heading), flow/kind_const_places.onsa
+// (a function and a variant in a flow) and negative/flow_delay_const.onsa (an input of a flow in `delay~`).
+// One error per unit (§18.1), so each form is in its own unit.
+
+pub struct P {
+  x: U32,
+}
+
+impl P {
+  pub fn mk() -> U32 {
+    1
+  }
+
+  pub fn get(self) -> U32 {
+    self.x
+  }
+}
+
+pub enum E {
+  A,
+  B(I32),
+}
+
+fn g() -> U32 {
+  1
+}
+
+// ---- A function and a variant: the heading of a flow and the places of its body ----
+
+pub flow function_in_a_flow_input(a: [F32; g] at sample) -> F32 at sample {   //~ E0417
+  0.0
+}
+
+pub flow function_in_a_flow_result(x: F32 at sample) -> [F32; g] at sample {   //~ E0417
+  [x; 4]
+}
+
+pub flow variant_in_a_flow_input(a: [F32; E.A] at sample) -> F32 at sample {   //~ E0417
+  0.0
+}
+
+pub flow function_in_a_delay_with_an_initial_value(x: F32 at sample) -> F32 at sample {
+  delay~(x, g, 0.5)                                 //~ E0417
+}
+
+pub flow function_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, g)                                  //~ E0417
+}
+
+pub flow variant_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, E.A)                                    //~ E0417
+}
+
+pub flow tuple_variant_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, E.B)                                    //~ E0417
+}
+
+pub flow prelude_variant_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, None)                                   //~ E0417
+}
+
+pub flow prelude_variant_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
+  let a = [x; Some]                                 //~ E0417
+  a[0]
+}
+
+pub flow variant_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
+  let a = [x; E.A]                                  //~ E0417
+  a[0]
+}
+
+pub flow function_as_the_start_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in g..<4 { x * F32.round_from(i) }        //~ E0417
+  ys[0]
+}
+
+pub flow variant_as_the_end_of_an_inclusive_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..=E.A { x * F32.round_from(i) }      //~ E0417
+  ys[0]
+}
+
+// ---- The prelude variants in the body of a function ----
+
+pub fn prelude_variant_in_a_repeat() -> F32 {
+  let a = [0.0; None]                               //~ E0417
+  a[0]
+}
+
+pub fn prelude_variant_in_an_annotation() -> F32 {
+  let _: [F32; Some] = [0.0; 4]                     //~ E0417
+  1.0
+}
+
+// ---- An associated function and a method named through their type ----
+
+pub fn associated_function_in_a_parameter(x: [F32; P.mk]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn associated_function_in_a_result() -> [F32; P.mk] {   //~ E0417
+  [0.0; 4]
+}
+
+pub fn associated_function_in_a_repeat() -> F32 {
+  let a = [0.0; P.mk]                               //~ E0417
+  a[0]
+}
+
+pub fn associated_function_in_an_annotation() -> F32 {
+  let _: [F32; P.mk] = [0.0; 4]                     //~ E0417
+  1.0
+}
+
+pub flow associated_function_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, P.mk)                                   //~ E0417
+}
+
+pub flow associated_function_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
+  let a = [x; P.mk]                                 //~ E0417
+  a[0]
+}
+
+pub flow associated_function_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<P.mk { x * F32.round_from(i) }     //~ E0417
+  ys[0]
+}
+
+pub fn method_in_a_repeat() -> F32 {
+  let a = [0.0; P.get]                              //~ E0308
+  a[0]
+}
+
+pub flow method_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, P.get)                                  //~ E0308
+}
+
+pub flow method_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<P.get { x * F32.round_from(i) }    //~ E0308
+  ys[0]
+}
+
+// ---- A local binding and an input in the body of a flow ----
+
+pub flow local_in_a_delay(x: F32 at sample) -> F32 at sample {
+  let n: U32 = 4
+  delay~(x, n)                                      //~ E0417
+}
+
+pub flow local_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  let n: U32 = 4
+  vdelay~(x, d, n)                                  //~ E0417
+}
+
+pub flow local_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let n: U32 = 4
+  let ys = par~ i in 0..<n { x * F32.round_from(i) }        //~ E0417
+  ys[0]
+}
+
+pub flow local_as_the_start_of_a_par(x: F32 at sample) -> F32 at sample {
+  let n: U32 = 1
+  let ys = par~ i in n..<4 { x * F32.round_from(i) }        //~ E0417
+  ys[0]
+}
+
+pub flow local_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
+  let n: U32 = 4
+  let a = [x; n]                                    //~ E0417
+  a[0]
+}
+
+pub flow local_in_an_operation_in_a_delay(x: F32 at sample) -> F32 at sample {
+  let n: U32 = 4
+  delay~(x, n + 1)                                  //~ E0417
+}
+
+pub flow input_in_a_vdelay(x: F32 at sample, d: F32 at sample, n: U32 at init) -> F32 at sample {
+  vdelay~(x, d, n)                                  //~ E0417
+}
+
+pub flow input_as_the_end_of_a_par(x: F32 at sample, n: U32 at init) -> F32 at sample {
+  let ys = par~ i in 0..<n { x * F32.round_from(i) }        //~ E0417
+  ys[0]
+}
+
+pub flow input_in_a_flow_repeat(x: F32 at sample, n: U32 at init) -> F32 at sample {
+  let a = [x; n]                                    //~ E0417
+  a[0]
+}
+
+pub flow input_in_a_flow_annotation(x: F32 at sample, n: U32 at init) -> F32 at sample {
+  let a: [F32; n] = [x; 4]                          //~ E0417
+  a[0]
+}
+
+pub flow index_of_a_par_in_a_delay(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 1..<3 { delay~(x, i) }         //~ E0417
+  ys[0]
+}
+
+// ---- A binding of the body of a function: a repeat ----
+
+pub fn binding_of_a_for_in_a_repeat() -> F32 {
+  var s = 0.0
+  for i in 0..<3 {
+    let a = [0.0; i]                                //~ E0417
+    s = s + a[0]
+  }
+  s
+}
+
+pub fn parameter_of_a_closure_in_a_repeat() -> F32 {
+  let f = fn(n: U32) -> F32 {
+    let a = [0.0; n]                                //~ E0417
+    a[0]
+  }
+  f.(2)
+}
+
+pub fn binding_of_a_match_arm_in_a_repeat(o: Option[U32]) -> F32 {
+  match o {
+    Some(n) => {
+      let a = [0.0; n]                              //~ E0417
+      a[0]
+    },
+    None => 0.0,
+  }
+}
+
+// ---- Fine: a constant in the same places ----
+
+const K: U32 = 4
+
+pub fn constant_in_a_repeat_in_a_closure() -> F32 {
+  let f = fn(x: F32) -> F32 {
+    let a = [x; K]
+    a[0]
+  }
+  f.(1.0)
+}
+
+pub flow constant_in_a_flow_annotation(x: F32 at sample) -> F32 at sample {
+  let a: [F32; K] = [x; K]
+  a[0]
+}

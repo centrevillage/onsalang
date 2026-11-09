@@ -1,0 +1,3 @@
+[package]
+name = "length_names_errored_module_path"
+edition = "2026"

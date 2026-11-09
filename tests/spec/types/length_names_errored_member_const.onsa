@@ -1,0 +1,135 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1", "§4.5", "§2.4"]
+
+// W5-16 U1a/t (R-321): two `impl S` blocks declare `const N`, so the name `S.N` is E0304 and the later declaration carries the
+// only diagnostic (§15.1: "項目どうしはソースの順で後の宣言に付け"; the members of a type are the names after the name of the
+// type, §6.2). A use of a name that is E0304 is read as an error and gets no diagnostic of its own (§18.1: "E0304・E0305
+// になった名前も、その空間（型の名前の後の `.` の空間、§6.2）では、使う所 … はどちらの宣言も引かず、その名前を誤りとして扱う";
+// a type place reads the length as an error type, and the types that hold it give no diagnostic to their users). The uses are
+// the length of an array in every place a constant expression is written: the heading of an item, the field of a struct, an
+// alias, the type of a `const`, a const argument, the annotation and the repeat `[0.0; S.N]` of a body (whose float literal
+// must not get the E0405 of "the type cannot be determined"), the places of a flow body, and an operation on the name in a
+// flow. The same with two `const N` of a module is in length_names_errored_module_const.onsa.
+// The operations in a heading and in the repeat of a body are in length_names_errored_member_const_sum.onsa (this version
+// does not evaluate them, E0200). One error in the file, E0304, and no other (the reading of §18.1).
+
+pub struct Ring[T, const M: U32] {
+  data: [T; M],
+  head: U32,
+}
+
+pub struct S {
+  x: I32,
+}
+
+impl S {
+  pub const N: U32 = 1
+}
+
+impl S {
+  pub const N: U32 = 2                              //~ E0304
+}
+
+pub const IN_A_CONST_TYPE: [F32; S.N] = [0.0; S.N]
+
+type InAnAlias = [F32; S.N]
+
+pub struct InAField {
+  data: [F32; S.N],
+  more: Ring[F32, S.N],
+}
+
+pub fn in_a_parameter(a: [F32; S.N]) -> F32 {
+  a[0]
+}
+
+pub fn in_a_result() -> [F32; S.N] {
+  [0.0; S.N]
+}
+
+pub fn in_a_const_argument(r: Ring[F32, S.N]) -> U32 {
+  r.head
+}
+
+pub fn in_a_tuple(t: (U32, [F32; S.N])) -> U32 {
+  t.0
+}
+
+pub fn in_a_repeat() -> [F32; 2] {
+  let b = [0.0; S.N]
+  b
+}
+
+pub fn in_a_repeat_of_floats_only() -> F32 {
+  let b = [0.0; S.N]
+  1.0
+}
+
+pub fn in_an_annotation() -> F32 {
+  let a: [F32; S.N] = [0.0; S.N]
+  a[0]
+}
+
+pub fn in_a_closure() -> F32 {
+  let f = fn(x: F32) -> [F32; S.N] { [x; S.N] }
+  1.0
+}
+
+pub fn as_a_value() -> U32 {
+  S.N
+}
+
+pub fn as_a_value_in_a_repeat() -> F32 {
+  let n = S.N
+  let a = [0.0; 4]
+  a[0]
+}
+
+pub flow in_a_flow_input(a: [F32; S.N] at sample) -> F32 at sample {
+  0.0
+}
+
+pub flow in_a_flow_result(x: F32 at sample) -> [F32; S.N] at sample {
+  [x; S.N]
+}
+
+pub flow in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, S.N)
+}
+
+pub flow in_a_delay_with_an_initial_value(x: F32 at sample) -> F32 at sample {
+  delay~(x, S.N, 0.5)
+}
+
+pub flow in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, S.N)
+}
+
+pub flow as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<S.N { x * F32.round_from(i) }
+  ys[0]
+}
+
+pub flow as_the_start_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in S.N..<8 { x * F32.round_from(i) }
+  ys[0]
+}
+
+pub flow in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
+  let a = [x; S.N]
+  a[0]
+}
+
+pub flow in_an_operation_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, S.N + 1)
+}
+
+pub flow in_an_operation_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, 2 * S.N)
+}
+
+pub flow in_an_operation_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<S.N + 1 { x * F32.round_from(i) }
+  ys[0]
+}

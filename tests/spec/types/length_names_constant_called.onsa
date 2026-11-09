@@ -1,0 +1,153 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.1", "§15.1", "§18.1", "§11.4"]
+
+// W5-16 U1a/t: a constant called with `(` in a constant expression (`T.BITS()` for `T: Int`, `I32.BITS()`, `P.N()`, `K()`)
+// is E0020, wherever the constant expression is written: a value is called as `f.(x)` whatever its type, and
+// `f(x)` calls an item declared with `fn`, so a constant is read without `(…)` (§6.1, §15.1: "値を `x(...)` の形で呼ぶと、
+// 型によらず E0020"; §15.1: the rule of the position that fixes the code goes first, and the names of the call are
+// read before the E0417 of a call in a length, §4.5: "関数の呼び出しは書けない"). This file holds the forms that this
+// version already reports with E0020: the repeat of a body for the associated constant of a type parameter (the name
+// comes from the bounds, `BITS` from `Int`, so it is found and it is the form that is wrong), and the constants of the
+// concrete types and of the module in every place, a flow body included. The type parameter in a heading and in an
+// annotation is in length_names_type_param_constant_called.onsa (it is E0302 in this version). A flow has no type
+// parameter (§11.6), so the places of a flow body hold the constants of concrete types only.
+// The same names without the call are E0417 for a type parameter (num_traits/tp_const_expression_e0417.onsa) and fine for a
+// concrete type (types/scalar_bits_array_lengths.onsa). The form in a value position is in num_traits/tp_const_called_e0020.onsa.
+// One error per unit (§18.1), so each form is in its own unit.
+
+pub struct P {
+  x: I32,
+}
+
+impl P {
+  pub const N: U32 = 3
+}
+
+pub struct G[const N: U32] {
+  a: [F32; N],
+}
+
+const K: U32 = 4
+
+// ---- A type parameter: the body ----
+
+pub fn bits_called_in_a_repeat[T: Int]() -> F32 {
+  let a = [0.0; T.BITS()]                           //~ E0020
+  a[0]
+}
+
+pub fn bits_called_in_a_repeat_sum[T: Int]() -> F32 {
+  let a = [0.0; 1 + T.BITS()]                       //~ E0020
+  a[0]
+}
+
+pub fn bits_called_in_a_closure[T: Int]() -> F32 {
+  let f = fn(x: F32) -> F32 {
+    let a = [x; T.BITS()]                           //~ E0020
+    a[0]
+  }
+  f.(1.0)
+}
+
+// ---- A concrete type and a constant of the module ----
+
+pub fn scalar_bits_called_in_a_parameter(a: [F32; I32.BITS()]) -> F32 {   //~ E0020
+  0.0
+}
+
+pub fn scalar_bits_called_in_a_repeat() -> F32 {
+  let a = [0.0; I32.BITS()]                         //~ E0020
+  a[0]
+}
+
+pub flow scalar_bits_called_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, I32.BITS())                             //~ E0020
+}
+
+pub flow scalar_bits_called_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, U16.BITS())                         //~ E0020
+}
+
+pub flow scalar_bits_called_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<I32.BITS() { x * F32.round_from(i) }   //~ E0020
+  ys[0]
+}
+
+pub flow scalar_bits_called_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
+  let a = [x; I32.BITS()]                           //~ E0020
+  a[0]
+}
+
+pub flow scalar_bits_called_in_a_flow_input(a: [F32; I32.BITS()] at sample) -> F32 at sample {   //~ E0020
+  0.0
+}
+
+pub fn associated_constant_called_in_a_parameter(a: [F32; P.N()]) -> F32 {   //~ E0020
+  0.0
+}
+
+pub fn associated_constant_called_in_a_repeat() -> F32 {
+  let a = [0.0; P.N()]                              //~ E0020
+  a[0]
+}
+
+pub flow associated_constant_called_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, P.N())                                  //~ E0020
+}
+
+pub flow associated_constant_called_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<P.N() { x * F32.round_from(i) }        //~ E0020
+  ys[0]
+}
+
+pub flow constant_called_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, K())                                    //~ E0020
+}
+
+pub flow constant_called_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, K())                                //~ E0020
+}
+
+pub flow constant_called_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<K() { x * F32.round_from(i) }          //~ E0020
+  ys[0]
+}
+
+pub flow constant_called_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
+  let a = [x; K()]                                  //~ E0020
+  a[0]
+}
+
+pub flow constant_called_in_a_flow_input(a: [F32; K()] at sample) -> F32 at sample {   //~ E0020
+  0.0
+}
+
+pub fn constant_called_in_an_annotation() -> F32 {
+  let _: [F32; K()] = [0.0; 4]                      //~ E0020
+  1.0
+}
+
+pub fn constant_called_in_a_field_type() -> F32 {
+  let _: G[K()] = G { a: [0.0; 4] }                 //~ E0020
+  1.0
+}
+
+// ---- Fine: the constants without the call, in the same places ----
+
+pub fn scalar_bits_in_a_parameter_and_a_repeat(a: [F32; I32.BITS]) -> F32 {
+  let b = [0.0; I32.BITS]
+  a[0] + b[0]
+}
+
+pub fn associated_constant_in_a_parameter_and_a_repeat(a: [F32; P.N]) -> F32 {
+  let b = [0.0; P.N]
+  a[0] + b[0]
+}
+
+pub flow constants_in_the_places_of_a_flow(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, I32.BITS)
+  let b = vdelay~(x, a, P.N)
+  let ys = par~ i in 0..<U8.BITS { x * F32.round_from(i) }
+  a + b + ys[0]
+}

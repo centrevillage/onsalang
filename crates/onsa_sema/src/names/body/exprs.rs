@@ -98,17 +98,20 @@ impl Walker<'_> {
                 self.struct_lit(e, path, rest.is_some())?;
                 self.exprs(ast.sub_exprs(e))
             }
+            // A block with statements in a flow body is the flow stage's
+            // E0806 (`Self::stmt`); in a constant expression, no constant.
+            ExprKind::Block(b) if self.flow && !b.stmts.is_empty() => self.later(),
             ExprKind::Block(b) => self.block(b),
             ExprKind::Match { scrutinee, arms, .. } => self.match_arms(*scrutinee, arms),
             // What a flow body cannot contain (§11.2) and the flow stage
             // reports as its E0806 until W7-04 reports it here (S-267).
-            ExprKind::Closure { .. } | ExprKind::Try(_) | ExprKind::Move(_) if self.flow => Err(self.fail(Fail::Later)),
+            ExprKind::Closure { .. } | ExprKind::Try(_) | ExprKind::Move(_) if self.flow => self.later(),
             ExprKind::Closure { params, ret, ret_clock, body, effects } => {
                 self.closure(e, params, (*ret, ret_clock.as_ref()), effects.is_some(), *body)
             }
             // Forms this version does not have (E0200 of the types stage),
             // whose names it does not read.
-            ExprKind::Handle { .. } | ExprKind::Unsafe(_) => Err(self.fail(Fail::Later)),
+            ExprKind::Handle { .. } | ExprKind::Unsafe(_) => self.later(),
             ExprKind::Par { var, range, body, .. } => {
                 let declare = |w: &mut Self| w.declare(var, BindingKind::ParVar, Origin::Par(e), None).map(drop);
                 self.ahead(declare)?;
@@ -124,6 +127,17 @@ impl Walker<'_> {
         }
     }
 
+    /// A form whose error is of a later stage, whose names the walk does not
+    /// read: it stops the walk, but in a constant expression, where it is no
+    /// constant (the E0417 or E0200 of the reader, `crate::constarg`) and the
+    /// names after it are read.
+    pub(super) fn later(&mut self) -> W {
+        match self.in_const {
+            true => Ok(()),
+            false => Err(self.fail(Fail::Later)),
+        }
+    }
+
     pub(super) fn exprs(&mut self, es: impl IntoIterator<Item = ExprId>) -> W {
         es.into_iter().try_for_each(|e| self.expr(e))
     }
@@ -131,11 +145,19 @@ impl Walker<'_> {
     /// A constant expression (§4.5: the length of `[x; n]`, a bound of
     /// `par`, the constant of a delay), walked as any expression; a name in
     /// it has no candidate that would leave it no constant (§18.1, S-236).
+    /// A name held as an error in it stops the walk after it (§18.1, S-692),
+    /// and the names after that name in it are read: the reader of the types
+    /// stage tells an error of them from a use of the held one
+    /// ([`super::BodyNames::held`]).
     pub(super) fn const_expr(&mut self, e: ExprId) -> W {
         let outer = std::mem::replace(&mut self.in_const, true);
         let r = self.expr(e);
         self.in_const = outer;
-        r
+        r?;
+        match !outer && std::mem::take(&mut self.const_held) {
+            true => Err(self.fail(Fail::Held)),
+            false => Ok(()),
+        }
     }
 
     /// Keep the types `ts` written here at the place `pos` for `lower_types`
@@ -444,7 +466,7 @@ fn row_heads<'a>(row: &'a onsa_syntax::ast::EffectRow, out: &mut Vec<&'a Ident>)
     out.extend(row.effects.iter().filter_map(|p| p.segments.first()));
 }
 
-fn expr_heads<'a>(ast: &'a Ast, e: ExprId, out: &mut Vec<&'a Ident>) {
+pub(super) fn expr_heads<'a>(ast: &'a Ast, e: ExprId, out: &mut Vec<&'a Ident>) {
     match &ast.expr(e).kind {
         ExprKind::Path(p) => out.extend(p.segments.first()),
         _ => ast.sub_exprs(e).into_iter().for_each(|x| expr_heads(ast, x, out)),

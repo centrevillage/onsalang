@@ -246,7 +246,7 @@ impl<'p> Sema<'p> {
                 local.unwrap_or_else(|| self.wrong_kind_arg(cx, te.span, "a constant expression", "a type"))
             }
             (TypeKind::ConstArg(e), Some(true)) => {
-                match crate::constarg::expr(self.a, cx.m, cx.ast, cx.text, cx.scope(), *e, &cx.local()) {
+                match self.read_const(cx, *e) {
                     Ok((crate::constarg::ConstU32::Value(v), _)) => self.a.types.intern(Ty::ConstVal(v)),
                     Ok((crate::constarg::ConstU32::Param(i), _)) => self.a.types.intern(Ty::Param(i)),
                     Err(crate::constarg::ConstErr::Unknown) => self.a.types.error(),
@@ -262,18 +262,17 @@ impl<'p> Sema<'p> {
             (TypeKind::Path { path, args }, Some(true)) => {
                 // `N` of the enclosing item, or a constant; a name of another
                 // kind is E0417 or E0308 (§4.5, S-713 (a)), with type
-                // arguments or not (`Wrap[F32]`, S-732).
-                let local = || crate::constarg::value_not_constant(src(cx, path.span), "a local", path.span);
-                let named = match crate::constarg::generic(self.a, &cx.generics, path) {
-                    _ if cx.is_local(&path.segments[0].name) => Err(local().into()),
-                    Some((i, NameKind::ConstParam)) => Ok(Ty::Param(i)),
-                    Some((_, kind)) => Err(crate::constarg::not_constant(kind, src(cx, path.span), path.span)),
-                    None => match crate::constarg::member_of_param(self.a, &cx.generics, cx.text, path, path.span) {
-                        Some(err) => Err(err),
-                        None => crate::constarg::named(self.a, cx.m, (cx.ast, cx.text), path, cx.self_ty, path.span)
-                            .map(Ty::ConstVal),
-                    },
+                // arguments or not (`Wrap[F32]`, S-732). The names are the
+                // names stage's (§15.1).
+                let names = crate::names::body::const_path_names(self.a, cx.m, (cx.ast, cx.text), cx.consts(), path);
+                let named = match names {
+                    Ok(records) => crate::constarg::path(self.a, (cx.m, cx.ast, cx.text), records.as_deref(), path),
+                    Err(d) => Err(crate::constarg::ConstErr::Report(d)),
                 };
+                let named = named.map(|(v, _)| match v {
+                    crate::constarg::ConstU32::Value(v) => Ty::ConstVal(v),
+                    crate::constarg::ConstU32::Param(i) => Ty::Param(i),
+                });
                 match named {
                     // A constant with type arguments (`K[F32]`).
                     Ok(_) | Err(crate::constarg::ConstErr::Uncomputed(_)) if !args.is_empty() => {
@@ -484,10 +483,30 @@ impl<'p> Sema<'p> {
         self.report(cx.def, d);
     }
 
+    /// The constant expression `e` of a type (§4.5): its names, walked by the
+    /// names stage ([`crate::names::body::const_names`]), then its value. The
+    /// error of the names stage is reported as the walk has it.
+    fn read_const(
+        &mut self,
+        cx: &Cx<'p>,
+        e: onsa_syntax::ast::ExprId,
+    ) -> Result<(crate::constarg::ConstU32, Option<DefId>), crate::constarg::ConstErr> {
+        let names = match crate::names::body::const_names(self.a, cx.m, (cx.ast, cx.text), cx.consts(), e) {
+            Ok(names) => names,
+            Err(d) => {
+                self.report(cx.def, d);
+                return Err(crate::constarg::ConstErr::Unknown);
+            }
+        };
+        let (names, held) = (&names.0, &names.1);
+        let rcx = crate::constarg::ConstCx { m: cx.m, ast: cx.ast, text: cx.text, names, held };
+        crate::constarg::expr(self.a, &rcx, e)
+    }
+
     /// Array length (§4.1): an integer literal, a `const` with a literal
     /// initializer, or a const generic parameter.
     fn lower_len(&mut self, cx: &Cx<'p>, e: onsa_syntax::ast::ExprId) -> Option<Len> {
-        match crate::constarg::expr(self.a, cx.m, cx.ast, cx.text, cx.scope(), e, &cx.local()) {
+        match self.read_const(cx, e) {
             Ok((crate::constarg::ConstU32::Value(v), _)) => Some(Len::Const(v)),
             Ok((crate::constarg::ConstU32::Param(i), _)) => Some(Len::Param(i)),
             Err(crate::constarg::ConstErr::Unknown) => None,

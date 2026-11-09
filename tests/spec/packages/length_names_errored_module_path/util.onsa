@@ -1,0 +1,14 @@
+pub const N: U32 = 1
+pub const N: U32 = 2                                //~ E0304
+
+pub struct S {
+  x: I32,
+}
+
+impl S {
+  pub const M: U32 = 1
+}
+
+impl S {
+  pub const M: U32 = 2                              //~ E0304
+}

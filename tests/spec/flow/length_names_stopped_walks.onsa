@@ -1,0 +1,101 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1", "§11.2", "§11.4", "§11.5"]
+
+// W5-16 U1a/b F1: a constant expression of a flow body (the length of `delay~`, the maximum of `vdelay~`, an end of a
+// `par~`, the length of `[x; n]`) whose part is a form the names stage of a flow body does not read (an argument with
+// `move` or `inout`, a block with a statement: E0806 of §11.2 outside a constant expression) or a field of what is no
+// name (`cfg().size`, `(K).x`) is no constant: E0417 (§4.5: "定数式でないもの（関数の呼び出し、ローカル変数など）を書くと、
+// 位置によらず … E0417"), and a name after that part that is not found is E0302 (§15.1), first (§18.1: the names stage
+// goes first). Neither passes with no diagnostic: only a name of E0304 or E0305 is used with none (§18.1).
+// One error per unit (§18.1), so each form is in its own unit.
+
+pub struct Cfg {
+  size: U32,
+}
+
+const K: U32 = 4
+
+fn cfg() -> Cfg {
+  Cfg { size: 4 }
+}
+
+fn g(a: U32) -> U32 {
+  a
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+// ---- An argument with `move` or `inout` before the rest ----
+
+pub flow move_then_constant(x: F32 at sample) -> F32 at sample {
+  delay~(x, lp~(move x) + K)   //~ E0417
+}
+
+pub flow move_then_not_found(x: F32 at sample) -> F32 at sample {
+  delay~(x, lp~(move x) + zz)   //~ E0302
+}
+
+pub flow delay_move_then_not_found(x: F32 at sample) -> F32 at sample {
+  delay~(x, delay~(move x, 2) + zz)   //~ E0302
+}
+
+pub flow inout_in_par_end(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<(lp~(inout x) + K) { x }   //~ E0417
+  ys[0]
+}
+
+pub flow move_in_vdelay_maximum(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, delay~(move x, 2) + K)   //~ E0417
+}
+
+// ---- A block with a statement before the rest ----
+
+pub flow block_then_constant(x: F32 at sample) -> F32 at sample {
+  delay~(x, ({ let q = 1   //~ E0417
+    q }) + K)
+}
+
+pub flow if_block_then_constant(x: F32 at sample) -> F32 at sample {
+  delay~(x, (if true { let q = 1   //~ E0417
+    q } else { 2 }) + K)
+}
+
+pub flow block_then_not_found(x: F32 at sample) -> F32 at sample {
+  delay~(x, ({ let q = 1
+    q }) + zz)   //~ E0302
+}
+
+pub flow block_in_repeat_then_not_found(x: F32 at sample) -> F32 at sample {
+  let ys = [x; ({ let q = 1
+    q }) + zz]   //~ E0302
+  ys[0]
+}
+
+pub flow block_then_error_after(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, ({ let q = 1
+    q }) + K)
+  let b = zz   //~ E0302
+  a
+}
+
+// ---- A field of what is no name ----
+
+pub flow field_of_call(x: F32 at sample) -> F32 at sample {
+  delay~(x, cfg().size)   //~ E0417
+}
+
+pub flow field_of_parenthesized(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, (K).x)   //~ E0417
+}
+
+pub flow field_of_parenthesized_in_par_end(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<(K).x { x }   //~ E0417
+  ys[0]
+}
+
+pub flow field_of_parenthesized_call(x: F32 at sample) -> F32 at sample {
+  delay~(x, (g(3)).x)   //~ E0417
+}

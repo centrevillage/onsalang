@@ -190,13 +190,6 @@ impl Walker<'_> {
     }
 }
 
-/// E0020 for the value at `span` of `text` called as `x(...)` (a constant,
-/// §15.1, the row `value_call`); the candidate calls it with `.(` (§6.1).
-/// The one form of a body and a constant expression.
-pub(crate) fn value_called(text: &str, span: Span) -> Diagnostic {
-    foreign::report(RowId::ValueCall, text, span, vec![value_call_fix(span)])
-}
-
 /// The candidate of the E0020 of a value at `span` called as `x(...)`: `.(`.
 pub(super) fn value_call_fix(span: Span) -> Fix {
     Fix::new(foreign::CALL_WITH_DOT, vec![Edit::replace(Span { start: span.end, ..span }, ".")])

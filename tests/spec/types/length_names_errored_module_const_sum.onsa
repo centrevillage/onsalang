@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1", "§4.5"]
+
+// W5-16 U1a/t (R-321): `const N` is declared twice in the module (E0304), and an operation on the name `N + 1` in the length of an array
+// in a heading or in the repeat of a body gives no diagnostic of its own: the name is read as an error, so the operation is
+// an error operand, and the use gets no diagnostic (§18.1: "E0304・E0305 になった名前も … 使う所は … その名前を誤りとして扱い、
+// 診断を出さない"). The same operation in the places of a flow body is in length_names_errored_module_const.onsa and has no
+// diagnostic there.
+// This version reports the E0200 of "expressions as array lengths" (computed lengths are not evaluated, W9-03) for the
+// operation in a heading and in a body without reading the name in it. Whether the unsupported-expression E0200 of this
+// version is a diagnostic "of a use" that §18.1 silences when the operand is an error is a reading of the rule that the
+// ticket of this unit takes (E0304 only); the forms are pending until the reader of the names of W5-16 U1a makes it so, or
+// until the evaluation of W9-03 replaces the E0200. One error in the file, E0304, and no other.
+
+const N: U32 = 1
+const N: U32 = 2                                    //~ E0304
+
+pub fn in_a_parameter(a: [F32; N + 1]) -> F32 {
+  a[0]
+}
+
+pub fn in_a_product_in_a_parameter(a: [F32; 2 * N]) -> F32 {
+  a[0]
+}
+
+pub fn in_a_result() -> [F32; N + 1] {
+  [0.0; 2]
+}
+
+pub fn in_a_repeat() -> [F32; 2] {
+  let b = [0.0; N + 1]
+  b
+}
+
+pub fn in_a_repeat_returned() -> [F32; 2] {
+  [0.0; N + 1]
+}
+
+pub fn in_an_annotation() -> F32 {
+  let a: [F32; N + 1] = [0.0; 2]
+  a[0]
+}
+
+type InAnAlias = [F32; N + 1]
+
+pub struct InAField {
+  data: [F32; N + 1],
+}
+
+pub const IN_A_CONST_TYPE: [F32; N + 1] = [0.0; N + 1]

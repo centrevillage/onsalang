@@ -2,19 +2,20 @@
 //! lengths (`[F32; N]`, `[e; N]`). Spec §4.5: a constant expression of type
 //! `U32`, checked like an ordinary expression with the expected type `U32`;
 //! `U32` has no prefix `-` (`-1`, `-0`, E0401, S-228) and a constant of another
-//! type is E0401 (R-154). One place for the signature lowering (`sig.rs`) and
-//! the bodies (`body.rs`); W5-08 replaces the inside with the typing of the
-//! whole constant-expression grammar.
+//! type is E0401 (R-154). One place for the signature lowering (`sig.rs`),
+//! the bodies (`body.rs`) and the flows, which reads the records of the names
+//! the names stage made once (`names::body`, D-15); W5-16 U1b replaces the
+//! inside with the typing of the whole constant-expression grammar.
 
+use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{Ast, CallKind, ExprId, ExprKind, ItemKind, Lit, Path};
 
-use crate::def::{DefKind, GenericDef, GenericKind};
-use crate::names::body::{Outside, instance_form, method_named, outside_flow, value_called};
-use crate::names::{BuiltinMember, PathEnd};
+use crate::def::DefKind;
+use crate::names::body::PathRes;
 use crate::resolve::{Callee, Entity, NameKind, ResolveError};
-use crate::ty::{IntKind, Ty, TyId};
-use crate::{Analysis, ModId};
+use crate::ty::{IntKind, Ty};
+use crate::{Analysis, DefId, ModId};
 
 /// The value of a constant expression in a type position.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -44,215 +45,158 @@ impl From<Diagnostic> for ConstErr {
     }
 }
 
+/// What a constant expression is read with: the module `m` of `ast`, and the
+/// records of the names of the expression, which the names stage made once
+/// (a body's, or [`crate::names::body::const_names`]'; §15.1, D-15), with
+/// its chains held as an error.
+pub(crate) struct ConstCx<'r> {
+    pub m: ModId,
+    pub ast: &'r Ast,
+    pub text: &'r str,
+    pub names: &'r HashMap<ExprId, PathRes>,
+    pub held: &'r HashSet<ExprId>,
+}
+
 /// An array length or a const argument written as an expression (`4`, `-1`, `N`,
 /// `SIZE`, `cfg.N`, `I32.BITS`, `Self.N`): the one reader of the forms, for the
-/// signatures and the bodies, with the type and const parameters in scope and the
-/// type `Self` names (§2.2), and whether it is in a flow body (`flow`, §11.1);
-/// `local` tells a chain of a body that starts at a local. `Ok((value,
-/// constant))`: `constant` is the `const` item a name denotes.
-/// Of an operation (E0200 until W9-03), a call, a local or a name of no constant
-/// in it is the error first (§4.5, §18.1, S-713 (a)); of a call (E0417), the
-/// error of the names stage of its callee and its arguments, as a body has it.
-pub(crate) fn expr(
-    a: &mut Analysis,
-    m: ModId,
-    ast: &Ast,
-    text: &str,
-    (generics, self_ty, flow): (&[GenericDef], Option<TyId>, bool),
-    e: ExprId,
-    local: &dyn Fn(ExprId) -> bool,
-) -> Result<(ConstU32, Option<crate::DefId>), ConstErr> {
-    Reader { m, ast, text, generics, self_ty, flow, local }.expr(a, e)
-}
-
-/// What [`expr`] reads with: the module `m` of `ast`, the parameters in
-/// scope, the type `Self` names, whether in a flow body and the locals.
-struct Reader<'r> {
-    m: ModId,
-    ast: &'r Ast,
-    text: &'r str,
-    generics: &'r [GenericDef],
-    self_ty: Option<TyId>,
-    flow: bool,
-    local: &'r dyn Fn(ExprId) -> bool,
-}
-
-impl Reader<'_> {
-    fn expr(&self, a: &mut Analysis, e: ExprId) -> Result<(ConstU32, Option<crate::DefId>), ConstErr> {
-        let ast = self.ast;
-        if let Some(r) = literal(ast, self.text, e) {
-            return r.map(|v| (ConstU32::Value(v), None)).map_err(ConstErr::Report);
-        }
-        let span = ast.expr(e).span;
-        let found = self.text[span.start as usize..span.end as usize].to_string();
-        if (self.local)(e) {
-            return Err(value_not_constant(found, "a local", span).into());
-        }
-        if let Some(path) = path_of(ast, e) {
-            return self.name(a, &path, span);
-        }
-        if let ExprKind::Call { callee, kind, args } = &ast.expr(e).kind {
-            let callee = match kind {
-                // Before the names of its callee (§11.1, S-815).
-                CallKind::Flow if !self.flow => {
-                    return Err(outside_flow(instance_form(ast, *callee), span, self.text).into());
-                }
-                CallKind::Plain | CallKind::Bang => self.callee(a, *callee, (span, *kind == CallKind::Bang)),
-                CallKind::Value { .. } => self.before(a, *callee, false),
-                CallKind::Flow => None,
-            };
-            // The names stage's errors first, of the callee, then of the
-            // arguments (§18.1).
-            let (names, later) = match callee {
-                Some(ConstErr::Report(d)) if d.stage != Stage::Names => (None, Some(ConstErr::Report(d))),
-                c => (c, None),
-            };
-            let mut args = args.iter().map(|x| x.expr);
-            return Err(names
-                .or_else(|| args.find_map(|x| self.before(a, x, false)))
-                .or(later)
-                .unwrap_or_else(|| value_not_constant(found, "a call", span).into()));
-        }
-        let mut leaves = Vec::new();
-        operands(ast, e, &mut leaves);
-        let wrong = leaves.into_iter().filter(|&l| l != e).filter_map(|l| match self.before(a, l, true) {
-            Some(ConstErr::Report(d)) => Some(d),
-            _ => None,
-        });
-        if let Some(d) = wrong.min_by(|x, y| x.unit_order().cmp(&y.unit_order())) {
-            return Err(d.into());
-        }
-        let unsupported = onsa_diag::unsupported::Feature::ArrayLengthExprs.diagnostic(Stage::Types, span, &[]);
-        Err(unsupported.with_found(found).into())
+/// signatures, the bodies and the flows, from the records of its names.
+/// `Ok((value, constant))`: `constant` is the `const` item a name denotes.
+/// Of an operation (E0200 until W9-03), a call, a local or a name of no
+/// constant in it is the error first (§4.5, S-713 (a)); a name held as an
+/// error in it leaves its value unknown, with no diagnostic (§18.1).
+pub(crate) fn expr(a: &mut Analysis, cx: &ConstCx, e: ExprId) -> Result<(ConstU32, Option<DefId>), ConstErr> {
+    let ast = cx.ast;
+    if let Some(r) = literal(ast, cx.text, e) {
+        return r.map(|v| (ConstU32::Value(v), None)).map_err(ConstErr::Report);
     }
-
-    /// The error of the part `l` that comes before the error of what holds
-    /// it: one of the names stage (§18.1), or an E0417 when `e0417`.
-    fn before(&self, a: &mut Analysis, l: ExprId, e0417: bool) -> Option<ConstErr> {
-        match self.expr(a, l) {
-            Err(ConstErr::Report(d)) if d.stage == Stage::Names || (e0417 && d.code == Code::E0417) => Some(d.into()),
-            _ => None,
-        }
-    }
-
-    /// The error of the callee `c` of the call `c(...)` at `call` (`c!(...)`
-    /// when `bang`), as a body has it (§15.1, §6.1, §11.1): what is not
-    /// found, a method named through its type, a value called (E0020, with
-    /// `!` E0401), a flow outside a flow body (E0821) and what is no value;
-    /// a local and the members of a value (`K.x()`) are the types stage's.
-    fn callee(&self, a: &mut Analysis, c: ExprId, (call, bang): (Span, bool)) -> Option<ConstErr> {
-        let Some(path) = path_of(self.ast, c).filter(|_| !(self.local)(c)) else { return self.before(a, c, false) };
-        let span = self.ast.expr(c).span;
-        let shown = self.text[span.start as usize..span.end as usize].to_string();
-        let kind = match generic(a, self.generics, &path) {
-            Some((_, kind)) => kind,
-            None => match path_end(a, self.m, &path, self.self_ty) {
-                Ok(end) if end.method(a).is_some() => {
-                    return Some(method_named(shown, &path.segments[path.segments.len() - 1].name, span).into());
-                }
-                Ok(end) => end.kind(a, span),
-                Err(ResolveError::Failed) => return Some(ConstErr::Unknown),
-                // A member of a value (`K.x()`) is the types stage's; a method
-                // named through its type is no value whatever follows it.
-                Err(ResolveError::NotANamespace { kind: Some(k), span: at, .. }) if k.is_value() => {
-                    return self.method_before(a, &path, at);
-                }
-                Err(err) => return Some(err.into_diagnostic().into()),
-            },
+    let span = ast.expr(e).span;
+    if path_of(ast, e).is_some() {
+        let head = chain_head(ast, e);
+        let ExprKind::Path(first) = &ast.expr(head).kind else {
+            onsa_diag::internal::bug(Some(span), "a chain of names starts at a name")
         };
-        let want = "a function";
-        match kind.at_callee(bang) {
-            Callee::Called => None,
-            Callee::Flow if self.flow => None,
-            Callee::Flow => Some(outside_flow(Outside::Flow, call, self.text).into()),
-            Callee::Value => Some(value_called(self.text, span).into()),
-            Callee::NoFunction => {
-                let msg = format!("`{shown}` is not a function");
-                Some(Diagnostic::new(Stage::Types, Code::E0401, span, msg).with_found(shown).into())
+        let records = (cx.names.get(&e), cx.names.get(&head));
+        let held = cx.held.contains(&e);
+        return read_chain(a, (cx.m, ast, cx.text), (records, held), (&first.segments[0].name, span));
+    }
+    let found = cx.text[span.start as usize..span.end as usize].to_string();
+    if let ExprKind::Call { callee, kind, .. } = &ast.expr(e).kind {
+        // A callee held as an error (§18.1).
+        if cx.held.contains(callee) && matches!(kind, CallKind::Plain | CallKind::Bang) {
+            return Err(ConstErr::Unknown);
+        }
+        // A constant called with `!` (`K!()`, §5.2), as a body has it.
+        let kind_of = |r: &PathRes| match r {
+            PathRes::Item { entity, .. } => NameKind::of(*entity, &a.defs),
+            PathRes::BoundMember { member, .. } => NameKind::of(Entity::Member(*member), &a.defs),
+            PathRes::ConstParam(_) => Some(NameKind::ConstParam),
+            _ => None,
+        };
+        let callee_kind = cx.names.get(callee).and_then(kind_of);
+        if callee_kind.is_some_and(|k| k.at_callee(*kind == CallKind::Bang) == Callee::NoFunction) {
+            let cspan = ast.expr(*callee).span;
+            let shown = cx.text[cspan.start as usize..cspan.end as usize].to_string();
+            let msg = format!("`{shown}` is not a function");
+            return Err(Diagnostic::new(Stage::Types, Code::E0401, cspan, msg).with_found(shown).into());
+        }
+        return Err(value_not_constant(found, "a call", span).into());
+    }
+    let mut leaves = Vec::new();
+    operands(ast, e, &mut leaves);
+    let (mut wrong, mut held): (Option<Diagnostic>, bool) = (None, false);
+    for l in leaves.into_iter().filter(|&l| l != e) {
+        match expr(a, cx, l) {
+            Err(ConstErr::Report(d)) if d.stage == Stage::Names || d.code == Code::E0417 => {
+                if wrong.as_ref().is_none_or(|w| d.unit_order() < w.unit_order()) {
+                    wrong = Some(d);
+                }
             }
-            Callee::NoValue => Some(ResolveError::Kind { shown, span, kind, want }.into_diagnostic().into()),
+            Err(ConstErr::Unknown) => held = true,
+            _ => {}
         }
     }
-
-    /// E0308 for the method named through its type (`P.get` of
-    /// `P.get.zz()`) before the name at `at` of `path`, as a body has it
-    /// (§15.1, S-205); none for another name.
-    fn method_before(&self, a: &Analysis, path: &Path, at: Span) -> Option<ConstErr> {
-        let i = path.segments.iter().position(|s| s.span == at)?;
-        let last = &path.segments[i.checked_sub(1)?];
-        let span = Span::new(path.span.file, path.span.start, last.span.end);
-        let before = Path { segments: path.segments[..i].to_vec(), span };
-        // `before` resolved on the way to `at`.
-        let Ok(end) = path_end(a, self.m, &before, self.self_ty) else { return None };
-        end.method(a)?;
-        let shown = self.text[span.start as usize..span.end as usize].to_string();
-        Some(method_named(shown, &last.name, span).into())
-    }
-
-    /// The name `path` at `span`: a const parameter, or a constant
-    /// ([`named_def`]); a parameter of another kind is an error
-    /// ([`not_constant`]).
-    fn name(&self, a: &mut Analysis, path: &Path, span: Span) -> Result<(ConstU32, Option<crate::DefId>), ConstErr> {
-        if let Some(err) = member_of_param(a, self.generics, self.text, path, span) {
-            return Err(err);
-        }
-        match generic(a, self.generics, path) {
-            Some((i, NameKind::ConstParam)) => Ok((ConstU32::Param(i), None)),
-            Some((_, kind)) => Err(not_constant(kind, path.segments[0].name.clone(), span)),
-            None => {
-                let (v, constant) = named_def(a, self.m, (self.ast, self.text), path, self.self_ty, span)?;
-                Ok((ConstU32::Value(v), constant))
-            }
+    match (wrong, held) {
+        (Some(d), _) => Err(d.into()),
+        (None, true) => Err(ConstErr::Unknown),
+        (None, false) => {
+            let unsupported = onsa_diag::unsupported::Feature::ArrayLengthExprs.diagnostic(Stage::Types, span, &[]);
+            Err(unsupported.with_found(found).into())
         }
     }
 }
 
-/// The error of a member after a type parameter in `path` at `span`
-/// (`T.BITS`): a constant has its value at the instantiation, as a const
-/// parameter's in an expression (E0417, §4.5, S-898). A member of another
-/// kind is the error of the member of a type ([`named_def`]), and what the
-/// bounds do not give is not found, as in a body (§15.1).
-pub(crate) fn member_of_param(
-    a: &Analysis,
-    generics: &[GenericDef],
-    text: &str,
+/// The node of the first name of the chain of names `e` (`a` of `a.b.c`).
+fn chain_head(ast: &Ast, e: ExprId) -> ExprId {
+    match &ast.expr(e).kind {
+        ExprKind::Field { base, .. } => chain_head(ast, *base),
+        _ => e,
+    }
+}
+
+/// A const argument written as a path (`Ring[F32, N]`, `G[T.BITS]`), from
+/// the records of its names ([`crate::names::body::const_path_names`]), as
+/// [`expr`] reads a chain of names; `None` when it is held as an error.
+pub(crate) fn path(
+    a: &mut Analysis,
+    (m, ast, text): (ModId, &Ast, &str),
+    records: Option<&[PathRes]>,
     path: &Path,
-    span: Span,
-) -> Option<ConstErr> {
-    let [head, name, rest @ ..] = &path.segments[..] else { return None };
-    let g = generics.iter().find(|g| g.name == head.name)?;
-    let GenericKind::Type { bounds, unknown, .. } = &g.kind else { return None };
-    a.note_use(g.span, head.span);
-    let Some(member) = crate::traits::member(a, bounds, &name.name) else {
-        let err = ResolveError::NotFound { name: name.name.clone(), span: name.span };
-        return Some(if *unknown { ConstErr::Unknown } else { err.into_diagnostic().into() });
-    };
+) -> Result<(ConstU32, Option<DefId>), ConstErr> {
+    let Some(records) = records else { return Err(ConstErr::Unknown) };
+    let leaf = records.get(path.segments.len() - 1);
+    read_chain(a, (m, ast, text), ((leaf, records.first()), false), (&path.segments[0].name, path.span))
+}
+
+/// The chain of names at `span` from the name `first`, by the records at its
+/// last name (`leaf`) and at its first (`head`): a const parameter, or a constant
+/// ([`of_entity`]); a local, a member of a type parameter and a name of
+/// another kind are errors. A chain `held` as an error has no value and no
+/// diagnostic (§18.1); one with no record otherwise is one whose names the
+/// walk did not read, no constant. The names stage reported a name after a
+/// value that is no local.
+fn read_chain(
+    a: &mut Analysis,
+    (m, ast, text): (ModId, &Ast, &str),
+    ((leaf, head), held): ((Option<&PathRes>, Option<&PathRes>), bool),
+    (first, span): (&str, Span),
+) -> Result<(ConstU32, Option<DefId>), ConstErr> {
     let shown = text[span.start as usize..span.end as usize].to_string();
-    let kind = NameKind::of_named(Entity::Member(member), &a.defs, span);
-    if matches!(&a.def(member).kind, DefKind::Fn(f) if f.self_mode.is_some()) {
-        return Some(method_named(shown, &name.name, span).into());
+    match (leaf, head) {
+        (_, Some(PathRes::Local(_))) => Err(value_not_constant(shown, "a local", span).into()),
+        (Some(&PathRes::ConstParam(i)), _) => Ok((ConstU32::Param(i), None)),
+        (Some(&PathRes::BoundMember { member, .. }), _) => Err(bound_member(a, member, (first, shown), span)),
+        (Some(&PathRes::Item { entity, .. }), _) => {
+            let constant = match entity {
+                Entity::Def(d) | Entity::Member(d) => Some(d),
+                _ => None,
+            };
+            match of_entity(a, m, ast, text, entity, span)? {
+                Some(v) => Ok((ConstU32::Value(v), constant)),
+                None => Err(not_constant(NameKind::of_named(entity, &a.defs, span), shown, span)),
+            }
+        }
+        (None, None) if held => Err(ConstErr::Unknown),
+        (None, None) => {
+            let msg = format!("`{shown}` is not a constant: a constant expression names constants (§4.5)");
+            Err(Diagnostic::new(Stage::Types, Code::E0417, span, msg).with_found(shown).into())
+        }
+        (leaf, _) => onsa_diag::internal::bug(Some(span), format!("a constant expression's name read as {leaf:?}")),
     }
-    if let Some(next) = rest.first() {
-        let err = ResolveError::NotANamespace { name: name.name.clone(), span: next.span, kind: Some(kind) };
-        return Some(err.into_diagnostic().into());
-    }
+}
+
+/// The error of the member `member` of the type parameter `param` (`T.BITS`, whose
+/// bounds give it, `names/body/paths.rs`) in a constant expression: a
+/// constant has its value at the instantiation, as a const parameter's in
+/// an expression (E0417, §4.5, S-898), and is not read here; a function is
+/// no constant ([`not_constant`]).
+fn bound_member(a: &Analysis, member: DefId, (param, shown): (&str, String), span: Span) -> ConstErr {
     if !matches!(a.def(member).kind, DefKind::Const(_)) {
-        return Some(not_constant(kind, shown, span));
+        return not_constant(NameKind::of_named(Entity::Member(member), &a.defs, span), shown, span);
     }
     let msg = format!(
-        "`{shown}` has no value before `{}` is instantiated: a constant expression names constants (§4.5)",
-        head.name
+        "`{shown}` has no value before `{param}` is instantiated: a constant expression names constants (§4.5)"
     );
-    Some(Diagnostic::new(Stage::Types, Code::E0417, span, msg).with_found(shown).into())
-}
-
-/// The parameter of `generics` a path of one name names, with its kind
-/// (§15.1): the one question of the constants of a body and a signature.
-pub(crate) fn generic(a: &Analysis, generics: &[GenericDef], path: &Path) -> Option<(u32, NameKind)> {
-    let [seg] = &path.segments[..] else { return None };
-    let i = generics.iter().position(|g| g.name == seg.name)?;
-    a.note_use(generics[i].span, seg.span);
-    Some((i as u32, NameKind::of_generic(&generics[i].kind)))
+    Diagnostic::new(Stage::Types, Code::E0417, span, msg).with_found(shown).into()
 }
 
 /// The operands of the arithmetic of `e`, under parentheses, prefix `-` and
@@ -327,70 +271,8 @@ pub(crate) fn literal(ast: &Ast, text: &str, e: ExprId) -> Option<Result<u32, Di
     }
 }
 
-/// A name of a constant (`SIZE`, `cfg.N`, `I32.BITS`, `Self.N`, `Al.N` of an
-/// alias, §4.4) at `span`: its value, when its type is `U32`; a name of
-/// another kind is an error ([`not_constant`]). `ast` is the module `m` the
-/// name is written in, and `self_ty` the type `Self` names. A body reads the
-/// entity its record has ([`of_entity`]).
-pub(crate) fn named(
-    a: &mut Analysis,
-    m: ModId,
-    (ast, text): (&Ast, &str),
-    path: &Path,
-    self_ty: Option<TyId>,
-    span: Span,
-) -> Result<u32, ConstErr> {
-    Ok(named_def(a, m, (ast, text), path, self_ty, span)?.0)
-}
-
-/// [`named`], with the `const` item the name denotes.
-fn named_def(
-    a: &mut Analysis,
-    m: ModId,
-    (ast, text): (&Ast, &str),
-    path: &Path,
-    self_ty: Option<TyId>,
-    span: Span,
-) -> Result<(u32, Option<crate::DefId>), ConstErr> {
-    let shown = text[span.start as usize..span.end as usize].to_string();
-    match path_end(a, m, path, self_ty) {
-        // A method named through its type, no value (§15.1, S-205).
-        Ok(end) if end.method(a).is_some() => {
-            Err(method_named(path.dotted(), &path.segments[path.segments.len() - 1].name, span).into())
-        }
-        Ok(PathEnd::Entity(entity)) => {
-            let constant = match entity {
-                Entity::Def(d) | Entity::Member(d) => Some(d),
-                _ => None,
-            };
-            match of_entity(a, m, ast, text, entity, span)? {
-                Some(v) => Ok((v, constant)),
-                None => Err(not_constant(NameKind::of_named(entity, &a.defs, span), shown, span)),
-            }
-        }
-        // A name of the spec this version has not (R-294).
-        Ok(PathEnd::Builtin { member: BuiltinMember::Missing { feature }, .. }) => {
-            let shown = path.dotted();
-            Err(feature.diagnostic(Stage::Names, span, &[&shown]).with_found(shown).into())
-        }
-        Ok(PathEnd::Builtin { .. }) => Err(not_constant(NameKind::Function, shown, span)),
-        // A name held as an error (§18.1, S-462, S-675): no diagnostic, and
-        // the check goes on (S-689).
-        Err(ResolveError::Failed) => Err(ConstErr::Unknown),
-        Err(err) => Err(err.into_diagnostic().into()),
-    }
-}
-
-/// What `path` names ([`Analysis::path_end`]); an alias of the error type
-/// stands for a failed name, as at the head of a value path (§18.1, S-728).
-fn path_end(a: &Analysis, m: ModId, path: &Path, self_ty: Option<TyId>) -> Result<PathEnd, ResolveError> {
-    match a.path_end(m, path, self_ty)? {
-        PathEnd::Entity(e) if a.alias_type(e).is_err() => Err(ResolveError::Failed),
-        end => Ok(end),
-    }
-}
-
-/// The value of the constant `entity` a name at `span` names (as [`named`]).
+/// The value of the constant `entity` a name at `span` names, of the
+/// module `m` of `ast` (`None` when it is no constant).
 pub(crate) fn of_entity(
     a: &mut Analysis,
     m: ModId,

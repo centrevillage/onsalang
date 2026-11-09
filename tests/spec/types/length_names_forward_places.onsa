@@ -1,0 +1,137 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1", "§11.4", "§11.5"]
+
+// W5-16 U1a/t: the names of a constant expression are looked up whatever the order of the source (§15.1: "項目と `impl` の
+// メンバの名前は、書いた順によらずに引く。署名と型（定数式、§4.5 を含む）からも、ソースで後ろに書いた項目とメンバを引け
+// （`fn f(a: [F32; P.N])` の後ろの `impl P { pub const N: U32 = 2 }`）"): a constant, an associated constant, a function, a
+// type and a flow that are written after the place where they are used are found, and have the code of their kind, in
+// every place a constant expression is written: the heading of an item, the repeat and the annotation of a body, and
+// the places of a flow body. One error per unit (§18.1), so each form is in its own unit.
+
+// ---- Fine: the declaration comes after the use ----
+
+pub fn later_constant_in_a_parameter(a: [F32; LATER]) -> F32 {
+  a[0]
+}
+
+pub fn later_associated_constant_in_a_parameter(a: [F32; Late.N]) -> F32 {
+  a[0]
+}
+
+pub fn later_alias_constant_in_a_result() -> [F32; Al.N] {
+  [0.0; Al.N]
+}
+
+pub fn later_constants_in_a_body() -> F32 {
+  let a: [F32; LATER] = [0.0; LATER]
+  let b = [0.0; Late.N]
+  a[0] + b[0]
+}
+
+pub struct LaterInAField {
+  data: [F32; LATER],
+  more: [F32; Late.N],
+}
+
+pub flow later_constants_in_the_places_of_a_flow(a: [F32; LATER] at sample, x: F32 at sample) -> F32 at sample {
+  let p = delay~(x, LATER)
+  let q = vdelay~(x, p, Late.N)
+  let ys = par~ i in 0..<LATER { x * F32.round_from(i) }
+  let zs = [x; Al.N]
+  p + q + ys[0] + zs[0]
+}
+
+// ---- The declaration comes after the use, and the kind is wrong ----
+
+pub fn later_function_in_a_parameter(a: [F32; later_fn]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn later_type_in_a_parameter(a: [F32; LaterType]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn later_flow_in_a_parameter(a: [F32; later_flow]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn later_function_in_a_repeat() -> F32 {
+  let a = [0.0; later_fn]                           //~ E0417
+  a[0]
+}
+
+pub fn later_type_in_a_repeat() -> F32 {
+  let a = [0.0; LaterType]                          //~ E0308
+  a[0]
+}
+
+pub fn later_associated_function_in_a_repeat() -> F32 {
+  let a = [0.0; Late.mk]                            //~ E0417
+  a[0]
+}
+
+pub fn later_method_in_an_annotation() -> F32 {
+  let _: [F32; Late.get] = [0.0; 4]                 //~ E0308
+  1.0
+}
+
+pub flow later_function_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, later_fn)                               //~ E0417
+}
+
+pub flow later_type_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, LaterType)                              //~ E0308
+}
+
+pub flow later_flow_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, later_flow)                         //~ E0308
+}
+
+pub flow later_function_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<later_fn { x * F32.round_from(i) }     //~ E0417
+  ys[0]
+}
+
+pub flow later_associated_function_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
+  let a = [x; Late.mk]                              //~ E0417
+  a[0]
+}
+
+pub flow later_type_in_a_flow_input(a: [F32; LaterType] at sample) -> F32 at sample {   //~ E0308
+  0.0
+}
+
+// ---- The declarations ----
+
+const LATER: U32 = 4
+
+pub struct Late {
+  x: U32,
+}
+
+impl Late {
+  pub const N: U32 = 3
+
+  pub fn mk() -> U32 {
+    1
+  }
+
+  pub fn get(self) -> U32 {
+    self.x
+  }
+}
+
+type Al = Late
+
+pub struct LaterType {
+  x: U32,
+}
+
+fn later_fn() -> U32 {
+  1
+}
+
+pub flow later_flow(x: F32 at sample) -> F32 at sample {
+  x
+}

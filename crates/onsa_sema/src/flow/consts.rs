@@ -16,7 +16,7 @@ impl<'a> Checker<'a> {
         self.const_shape(e, &mut shape);
         // Each leaf: its name as the record has it, read as the constants
         // of type positions are (`constarg::of_entity`: `N`, `cfg.N`,
-        // `I32.BITS`).
+        // `I32.BITS`); a name after a value is the names stage's E0308.
         let mut leaves = Vec::new();
         for &l in &shape.leaves {
             let leaf = match &self.expr(l).kind {
@@ -86,16 +86,13 @@ impl<'a> Checker<'a> {
                 crate::constarg::of_entity(self.a, self.m, self.ast, self.text, entity, lspan)
                     .map(|v| v.map(|v| (v, d)))
             }
-            // A field after a value (`K.n`), which has no record: the error
-            // of its path, as a type position has it (W5-08 types the whole
-            // grammar).
-            _ => match crate::constarg::path_of(self.ast, l) {
-                Some(p) => {
-                    let named = crate::constarg::named(self.a, self.m, (self.ast, self.text), &p, None, lspan);
-                    named.map(|v| Some((v, None)))
-                }
-                None => return Ok(Leaf::Other),
-            },
+            // A name held as an error (§18.1): no diagnostic.
+            None if self.names.held.contains(&l) => {
+                self.failed = true;
+                return Err(crate::body::Stop);
+            }
+            // A field of what is no name (`cfg().size`), ...
+            _ => return Ok(Leaf::Other),
         };
         Ok(match value {
             Ok(Some((v, d))) => Leaf::Value(v, d),

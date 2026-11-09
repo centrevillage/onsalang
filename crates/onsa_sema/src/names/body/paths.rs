@@ -89,6 +89,15 @@ impl<'a> Walker<'a> {
         for (&(e, _), r) in chain.iter().zip(records) {
             self.out.paths.insert(e, r);
         }
+        if matches!(fail, Some(Fail::Held)) {
+            self.out.held.insert(e);
+            // In a constant expression, the names after it are read
+            // (`Self::const_expr`).
+            if self.in_const {
+                self.const_held = true;
+                return Ok(());
+            }
+        }
         fail.map_or(Ok(()), |f| Err(self.fail(f)))
     }
 
@@ -98,7 +107,7 @@ impl<'a> Walker<'a> {
     /// of a string (where a candidate writes no other form).
     pub(super) fn resolve(&mut self, segs: &[&Ident], nodes: &[ExprId], place: Place) -> (Vec<PathRes>, Option<Fail>) {
         let head = segs[0];
-        if let Some(b) = self.lookup(head) {
+        if let Some(b) = self.lookup(head).or_else(|| self.outer.get(&head.name).copied()) {
             return (vec![PathRes::Local(b)], None);
         }
         if head.name == crate::names::SELF_VALUE {
@@ -107,7 +116,7 @@ impl<'a> Walker<'a> {
         }
         match self.heading(head) {
             Some(PathRes::TypeParam(i)) => return self.type_param(i, segs, nodes, place),
-            Some(r) => return (vec![r], None),
+            Some(r) => return (vec![r], self.after_value(segs, 0, NameKind::ConstParam, place)),
             None => {}
         }
         if let Some(f) = self.effect_var(segs, Some(place)) {
@@ -169,7 +178,8 @@ impl<'a> Walker<'a> {
                 if method.is_none() {
                     out.push(PathRes::Item { entity: cur, owner });
                 }
-                method
+                let kind = NameKind::of(cur, &a.defs);
+                method.or_else(|| kind.and_then(|k| self.after_value(segs, at - 1, k, place)))
             }
             Some(ResolveError::NotANamespace { kind: Some(k), .. }) if !k.is_namespace() => {
                 Some(Fail::Report(self.no_namespace(&segs[..=at], k)))
@@ -227,11 +237,24 @@ impl<'a> Walker<'a> {
             return (head, Some(Fail::Report(d)));
         };
         // Up to the member, a value, whose fields and methods may follow.
-        let (at, place) = if segs.len() == 2 { (segs, place) } else { (&segs[..2], Place::Value) };
+        let (at, place_at) = if segs.len() == 2 { (segs, place) } else { (&segs[..2], Place::Value) };
         let entity = Entity::Member(member);
-        let kind = NameKind::of(entity, &self.a.defs).and_then(|k| self.kind_fail(k, at, place));
+        let kind = NameKind::of(entity, &self.a.defs);
+        let fail =
+            kind.and_then(|k| self.kind_fail(k, at, place_at)).or_else(|| self.method_form(entity, at, place_at));
         let records = vec![head[0].clone(), PathRes::BoundMember { param, member }];
-        (records, kind.or_else(|| self.method_form(entity, at, place)))
+        (records, fail.or_else(|| kind.and_then(|k| self.after_value(segs, 1, k, place))))
+    }
+
+    /// E0308 for a name after `segs[at]`, a value of the kind `kind` that is
+    /// no local (a constant, a function, a variant, a const parameter, a
+    /// member of a type parameter), in a constant expression at the place of
+    /// a value (§4.5, §15.1): it names no constant through its fields and
+    /// methods. The callee of a call is the call's E0417 (of the types stage).
+    fn after_value(&self, segs: &[&Ident], at: usize, kind: NameKind, place: Place) -> Option<Fail> {
+        let next = segs.get(at + 1).filter(|_| self.in_const && matches!(place, Place::Value | Place::DotCallee))?;
+        let err = ResolveError::NotANamespace { name: segs[at].name.clone(), span: next.span, kind: Some(kind) };
+        Some(Fail::Report(err.into_diagnostic()))
     }
 
     /// The error `err` of `segs[at]`, no member of `of` as written (`owner`):

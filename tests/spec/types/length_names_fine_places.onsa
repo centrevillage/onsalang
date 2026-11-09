@@ -1,0 +1,93 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§15.1", "§11.4", "§11.5"]
+
+// W5-16 U1a/t: the names that a constant expression takes (§4.5: a constant of the module, an associated constant of a user
+// type and of a type with its arguments fixed including an alias, a constant of a builtin type such as `I32.BITS`) are fine
+// in every place a constant expression is written, and the length is the value of the constant (§4.5: "型は評価した値で
+// 比べる"): the heading of an item (a parameter, a result, a field), the annotation and the repeat `[x; N]` of a body, and
+// the places of a flow body (the length of `delay~` and `vdelay~`, the ends of a `par~`, the repeat). A name resolved once
+// for every place must give the same constant in all of them, so the tests read the length back (`len()`) where it is
+// written in a heading, and the flow is only checked. The computed lengths (`K * 2`) are in array_length_operations_fine.onsa
+// (pending: computed lengths are not evaluated until W9-03). The names that are errors in the same places are in
+// length_names_nonvalue_places.onsa, length_names_nonconst_places.onsa and length_names_after_constant_places.onsa.
+
+pub struct P {
+  x: I32,
+}
+
+impl P {
+  pub const N: U32 = 3
+}
+
+type Al = P
+
+const K: U32 = 4
+
+pub struct Holder {
+  data: [F32; K],
+  more: [F32; P.N],
+  bits: [F32; U8.BITS],
+}
+
+fn first(a: [F32; K]) -> U32 {
+  a.len()
+}
+
+fn made() -> [F32; Al.N] {
+  [1.0; Al.N]
+}
+
+fn bits_of(a: [F32; I16.BITS]) -> U32 {
+  a.len()
+}
+
+pub flow in_the_places_of_a_flow(x: F32 at sample) -> F32 at sample {
+  let a  = delay~(x, K)
+  let b  = delay~(x, P.N, 0.5)
+  let c  = vdelay~(x, a, Al.N)
+  let d  = vdelay~(x, a, I32.BITS, 0.25)
+  let ys = par~ i in 0 ..< K { x * F32.round_from(i) }
+  let zs = par~ i in 1 ..< P.N { x * F32.round_from(i) }
+  let ws = [x; Al.N]
+  a + b + c + d + ys[0] + zs[0] + ws[0]
+}
+
+pub flow in_the_heading_of_a_flow(a: [F32; K] at sample, x: F32 at sample) -> [F32; P.N] at sample {
+  [x, a[0], a[1]]
+}
+
+test "a constant of the module as a length" {
+  let a: [F32; K] = [0.0; K]
+  assert a.len() == 4
+  assert first(a) == 4
+}
+
+test "an associated constant of a user type and of its alias as a length" {
+  let a: [F32; P.N] = [0.0; P.N]
+  assert a.len() == 3
+  assert made().len() == 3
+  let h = Holder { data: [0.0; 4], more: [0.0; 3], bits: [0.0; 8] }
+  assert h.more.len() == 3
+}
+
+test "a constant of a builtin type as a length" {
+  let a: [F32; I32.BITS] = [0.0; I32.BITS]
+  assert a.len() == 32
+  let b: [F32; I16.BITS] = [0.0; 16]
+  assert bits_of(b) == 16
+  let h = Holder { data: [0.0; 4], more: [0.0; 3], bits: [0.0; 8] }
+  assert h.bits.len() == 8
+}
+
+test "a constant in a branch" {
+  let flag = true
+  let n = if flag {
+    let a: [F32; P.N] = [0.0; P.N]
+    a.len()
+  } else {
+    0
+  }
+  assert n == 3
+}

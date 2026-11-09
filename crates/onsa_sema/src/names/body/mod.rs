@@ -18,14 +18,16 @@
 //! of the record.
 
 mod calls;
+mod consts;
 mod cycles;
 mod exprs;
 mod flow;
 mod kinds;
 mod paths;
+pub(crate) use consts::{ConstScope, const_names, const_path_names};
 pub(crate) use exprs::heads;
-pub(crate) use flow::{Outside, clock_after, instance_form, outside_flow};
-pub(crate) use kinds::{METHOD_IS_CALLED, method_named, value_called};
+pub(crate) use flow::clock_after;
+pub(crate) use kinds::METHOD_IS_CALLED;
 pub(crate) use paths::is_value;
 mod scope;
 #[cfg(test)]
@@ -132,6 +134,11 @@ pub(crate) struct BodyNames {
     /// A type of the body reads what the check does not read (a name held as
     /// an error, S-690): [`crate::body::BodyInfo::read_unread`].
     pub read_unread: bool,
+    /// The chains held as an error (§18.1, S-692), at the node the walk
+    /// read them at: the uses of a name of E0304 or E0305, which get no
+    /// diagnostic. Every other node with no record is a form whose names the
+    /// walk does not read (a field of what is no name, `f().x`).
+    pub held: HashSet<ExprId>,
 }
 
 impl BodyNames {
@@ -474,12 +481,18 @@ struct Walker<'a> {
     flow_types: VecDeque<(StmtId, Site)>,
     /// In a constant expression of §4.5 (`Walker::const_expr`).
     in_const: bool,
+    /// A name of the constant expression walked is held as an error: the
+    /// walk stops after the expression (`Walker::const_expr`).
+    const_held: bool,
     /// The expression of the body, under which a candidate finds the place
     /// of an expression (`crate::body::slot`).
     root: ExprId,
     /// The parameters of the anonymous function whose heading is walked,
     /// which the whole heading sees (§5.1, S-739).
     heading: HashMap<String, onsa_diag::Span>,
+    /// The locals a type sees, of the walk of a constant expression of it
+    /// (`consts.rs`), by name: found after the bindings of the walk.
+    outer: HashMap<String, BindingId>,
 }
 
 impl<'a> Walker<'a> {
@@ -507,8 +520,10 @@ impl<'a> Walker<'a> {
             flow_stop: None,
             flow_types: VecDeque::new(),
             in_const: false,
+            const_held: false,
             root,
             heading: HashMap::default(),
+            outer: HashMap::default(),
         }
     }
 

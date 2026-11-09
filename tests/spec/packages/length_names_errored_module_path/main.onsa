@@ -1,0 +1,69 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1", "§4.5", "§2.4", "§11.4", "§11.5"]
+
+// W5-16 U1a/t (R-321): `util.N` and `util.S.M` name a constant that the module `util` declares twice (E0304 in `util.onsa`), so
+// the other module's path that names it is read as an error and gets no diagnostic (§18.1: "E0304・E0305 になった名前も、その
+// 空間（本体、モジュールの名前空間、… 型の名前の後の `.` の空間）では、使う所と他のモジュールの経路はどちらも引かず、その名前を
+// 誤りとして扱う"), in every place a constant expression is written: the heading of an item, the annotation and the repeat of
+// a body (whose float literal must not get the E0405 of "the type cannot be determined"), the places of a flow body.
+// The only diagnostics are the two E0304 of `util.onsa`.
+use util
+
+pub fn path_in_a_parameter(a: [F32; util.N]) -> F32 {
+  a[0]
+}
+
+pub fn path_in_a_result() -> [F32; util.N] {
+  [0.0; util.N]
+}
+
+pub fn path_in_a_repeat() -> [F32; 2] {
+  let b = [0.0; util.N]
+  b
+}
+
+pub fn path_in_an_annotation() -> F32 {
+  let a: [F32; util.N] = [0.0; util.N]
+  a[0]
+}
+
+pub fn member_path_in_a_parameter(a: [F32; util.S.M]) -> F32 {
+  a[0]
+}
+
+pub fn member_path_in_a_repeat() -> [F32; 2] {
+  let b = [0.0; util.S.M]
+  b
+}
+
+pub flow path_in_a_flow_input(a: [F32; util.N] at sample) -> F32 at sample {
+  0.0
+}
+
+pub flow path_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, util.N)
+}
+
+pub flow path_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, util.N)
+}
+
+pub flow path_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< util.N { x * F32.round_from(i) }
+  ys[0]
+}
+
+pub flow member_path_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, util.S.M)
+}
+
+pub flow member_path_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< util.S.M { x * F32.round_from(i) }
+  ys[0]
+}
+
+pub flow member_path_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
+  let a = [x; util.S.M]
+  a[0]
+}

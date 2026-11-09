@@ -309,16 +309,13 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// `[e; N]` / array length in an expression (§4.5; the forms are read in `constarg.rs`).
-    /// `None`: a length the check does not read (§18.1, S-690).
+    /// `[e; N]` / array length in an expression (§4.5; the forms are read in
+    /// `constarg.rs`, from the records of the names of the body). `None`: a
+    /// length the check does not read (§18.1, S-690).
     pub(crate) fn const_len(&mut self, len: ExprId) -> R<Option<Len>> {
-        let generics = self.generics.clone();
-        // A local or a parameter, by the record (§4.5: E0417, as a value that
-        // is no constant).
-        let (ast, names) = (self.ast, &self.names);
-        let local = |e| crate::body::starts_at_local(ast, names, e);
-        let scope = (&generics[..], self.self_ty, self.flow.is_some());
-        match crate::constarg::expr(self.a, self.m, self.ast, self.text, scope, len, &local) {
+        let (names, held) = (&self.names.paths, &self.names.held);
+        let cx = crate::constarg::ConstCx { m: self.m, ast: self.ast, text: self.text, names, held };
+        match crate::constarg::expr(self.a, &cx, len) {
             Ok((value, constant)) => {
                 let u32 = self.u32();
                 self.record(len, u32);

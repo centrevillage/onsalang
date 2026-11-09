@@ -1,0 +1,17 @@
+pub struct Q {
+  x: I32,
+}
+
+pub struct Cfg {
+  x: I32,
+}
+
+impl Cfg {
+  pub const SIZE: U32 = 5
+}
+
+pub const K: U32 = 3
+
+pub fn g() -> U32 {
+  1
+}

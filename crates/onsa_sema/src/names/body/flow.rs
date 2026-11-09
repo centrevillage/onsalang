@@ -191,10 +191,10 @@ impl Walker<'_> {
 
     /// An `inout` or `move` argument of an instance or a delay is the flow
     /// stage's E0806 (`plain_args`, §11.2) until W7-04 reports it here
-    /// (S-267): the walk stops at the call.
+    /// (S-267): the walk stops at the call ([`Self::later`]).
     fn plain_args(&mut self, args: &[Arg]) -> W {
         match args.iter().any(|a| a.mode != Mode::Borrow) {
-            true => Err(self.fail(Fail::Later)),
+            true => self.later(),
             false => Ok(()),
         }
     }
