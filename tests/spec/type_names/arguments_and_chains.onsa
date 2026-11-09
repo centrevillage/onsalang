@@ -123,8 +123,8 @@ fn an_alias_of_an_alias_pattern(p: B) -> F32 {
 
 fn the_names_of_the_chain_are_one_type(p: P, a: A, b: B) -> F32 {
   let q: Point = p
-  let r: B     = a
-  let s: A     = b
+  let r: B = a
+  let s: A = b
   q.x + r.x + s.x
 }
 

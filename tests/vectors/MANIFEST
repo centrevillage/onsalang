@@ -17,7 +17,7 @@ file conv-u8.tsv sha256=31026a5c5e8f40f283b877809bcd9770e98d1d278c4bd5098739f05b
 file expr-f32.tsv sha256=f4b472c77e9df4eab876d9efd330651ba60b9eaf8306d1baea80f7280a670f41 rows=1481 edge=1353 rand=128
 file expr-f64.tsv sha256=e11a2b295f3511ac8ca8d9b41884ee06a9441fe771e4968d1e8ea3e6afe49e0a rows=1489 edge=1361 rand=128
 file fixture/scalar/onsa.toml sha256=146f4631f9b6ee803fba1a7e1f69fdc636cab3a4c72a805da6174b0b318feb77 rows=0
-file fixture/scalar/ops.onsa sha256=e76317d6710d4096b2e516a5d6e188e903079b215de32567f9ae5ac3665a2f8b rows=0
+file fixture/scalar/ops.onsa sha256=7fba0ca778e400222373519610a1f762a733a6ac3a66e37ed6ca53f03e246638 rows=0
 file float-f32.tsv sha256=7ea10493d5e2d7d3a118dab8ba29b1f6f1b5112dda7693062203fd124477078d rows=17133 edge=14599 rand=2534
 file float-f64.tsv sha256=005badcc7700a4e5c2bb8db4cc1a69c137c7425921599ed5f673b648dace5aea rows=17151 edge=14635 rand=2516
 file int-i16.tsv sha256=2baa3fc78f875be8a723c0a2f24a084835ecf076f18050b23ab1afb79dac5a00 rows=25840 edge=22844 rand=2996

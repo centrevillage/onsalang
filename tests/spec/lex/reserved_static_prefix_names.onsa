@@ -28,8 +28,8 @@ pub fn static_rate(x: I32) -> I32 {
 
 pub fn statics_of(is_static: I32, statics: I32) -> I32 {
   let my_static_x = statics
-  let staticx     = is_static
-  let _           = (my_static_x, staticx)
+  let staticx = is_static
+  let _ = (my_static_x, staticx)
   static_rate(is_static)
 }
 

@@ -48,7 +48,7 @@ fn var_decided_by_the_tail[T: Float](x: T) -> T {
 }
 
 fn accumulated[T: Float](x: T) -> T {
-  var a      = 0.0
+  var a = 0.0
   var i: U32 = 0
   while i < 3 {
     a = a + x * 0.5

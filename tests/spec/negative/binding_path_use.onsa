@@ -434,7 +434,7 @@ pub fn derived_whole(inout w: Wrap) -> U32 {
 pub fn derived_twice_with_the_field_changed(inout w: Wrap) -> U32 {
   match w {
     Wrap { h: hh, k: _ } => {
-      let g  = hh
+      let g = hh
       let g2 = g
       w.h.buf.fill!(0.0)
       len_of(g2.buf) //~ E0704

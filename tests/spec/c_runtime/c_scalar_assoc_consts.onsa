@@ -230,7 +230,7 @@ pub fn widths_in_consts(sel: U32) -> U32 {
 @export
 pub fn lanes(x: F32) -> F32 {
   let a: [F32; U8.BITS] = [x; U8.BITS]
-  var s: F32            = 0.0
+  var s: F32 = 0.0
   for i in 0 ..< U8.BITS {
     s = s + a[i]
   }
@@ -239,7 +239,7 @@ pub fn lanes(x: F32) -> F32 {
 
 @export
 pub fn top_bit(sel: U32) -> U64 {
-  let a: U8  = 1
+  let a: U8 = 1
   let b: U16 = 1
   let c: U32 = 1
   let d: U64 = 1
@@ -258,7 +258,7 @@ pub fn top_bit(sel: U32) -> U64 {
 
 @export
 pub fn shift_by_the_width(sel: U32) -> U32 {
-  let a: U8  = 1
+  let a: U8 = 1
   let b: I16 = 1
   let c: U32 = 1
   let d: U64 = 1

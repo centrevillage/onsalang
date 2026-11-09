@@ -87,17 +87,17 @@ test "T.narrow_from of the same type is Some of the value" {
 }
 
 test "T.narrow_from takes the type of the target from the expected type" {
-  let n: I32         = 300
-  let a: Option[U8]  = narrow(n)
+  let n: I32 = 300
+  let a: Option[U8] = narrow(n)
   let b: Option[U16] = narrow(n)
-  let c: Option[I8]  = narrow(n)
+  let c: Option[I8] = narrow(n)
   assert a == None
   assert b == Some(300)
   assert c == None
 }
 
 test "T.narrow_from takes the type of the target from another argument" {
-  let t: U8  = 0
+  let t: U8 = 0
   let u: I16 = 0
   assert narrow_like(t, 255) == Some(255)
   assert narrow_like(t, 256) == None

@@ -96,7 +96,7 @@ test "both in one function" {
   let s = Slot.Some(1)
   let o = Some(2)
   assert slot_value(s) + option_value(o) == 3
-  let t              = Slot.None
+  let t = Slot.None
   let n: Option[U32] = None
   assert slot_value(t) + option_value(n) == 0
 }

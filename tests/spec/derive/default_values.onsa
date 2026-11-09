@@ -247,8 +247,8 @@ test "T.default() of a tuple" {
   assert t.1 == false
   assert t.2.to_bits() == 0
   let n: ((U8, Bool), (I8, F64)) = zero_of()
-  let first                      = n.0
-  let second                     = n.1
+  let first = n.0
+  let second = n.1
   assert first.0 == 0
   assert first.1 == false
   assert second.0 == 0

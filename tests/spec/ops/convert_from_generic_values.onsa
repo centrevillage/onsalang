@@ -97,13 +97,13 @@ test "trunc_from of a type parameter cuts toward zero" {
 
 test "trunc_from of a type parameter panics out of the range" {
   let a: F64 = -1.0
-  let n      = to_u32(a) //~ PANIC "trunc_from of a type parameter panics out of the range"
+  let n = to_u32(a) //~ PANIC "trunc_from of a type parameter panics out of the range"
   assert n == 0
 }
 
 test "trunc_from of a type parameter panics for a NaN" {
   let a: F32 = F32.NAN
-  let n      = to_u32(a) //~ PANIC "trunc_from of a type parameter panics for a NaN"
+  let n = to_u32(a) //~ PANIC "trunc_from of a type parameter panics for a NaN"
   assert n == 0
 }
 
@@ -125,7 +125,7 @@ test "the generic conversions sit in a nested call, a branch and a closure" {
   assert capped(b, 5) == 5
   assert capped(b, 9) == 7
   let xs: [F64; 3] = [0.5, 1.5, 2.5]
-  let ys           = steps_of(xs)
+  let ys = steps_of(xs)
   assert ys[0] == 0
   assert ys[1] == 1
   assert ys[2] == 2

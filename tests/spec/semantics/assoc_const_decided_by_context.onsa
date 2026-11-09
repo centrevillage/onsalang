@@ -46,7 +46,7 @@ test "the annotation of the let" {
 }
 
 test "a later statement" {
-  let z              = Rg.Z
+  let z = Rg.Z
   let w: Option[F32] = z
   assert w == None
 }
@@ -57,16 +57,16 @@ test "an argument position" {
 
 test "the second branch of an if takes the type of the first" {
   let yes = 1 < 2
-  let no  = 2 < 1
-  let a   = if yes { Some(2) } else { Rg.Z }
-  let b   = if no { Some(2) } else { Rg.Z }
+  let no = 2 < 1
+  let a = if yes { Some(2) } else { Rg.Z }
+  let b = if no { Some(2) } else { Rg.Z }
   assert a == Some(2)
   assert b == None
 }
 
 test "the first branch of an if takes the annotation" {
-  let yes            = 1 < 2
-  let no             = 2 < 1
+  let yes = 1 < 2
+  let no = 2 < 1
   let a: Option[F32] = if yes { Rg.Z } else { Some(1.5) }
   let b: Option[F32] = if no { Rg.Z } else { Some(1.5) }
   assert a == None
@@ -81,7 +81,7 @@ test "the field of a struct literal" {
 test "the return type of a generic function" {
   let a: Option[F32] = through_the_return_type()
   let b: Option[I32] = through_the_return_type()
-  let c: Option[U8]  = through_the_return_type_beside_a_parameter(5)
+  let c: Option[U8] = through_the_return_type_beside_a_parameter(5)
   assert a == None
   assert b == None
   assert c == None

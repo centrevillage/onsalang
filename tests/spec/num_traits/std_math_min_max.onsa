@@ -11,8 +11,8 @@
 use std.math.{max, min}
 
 test "min and max of the unsigned integers" {
-  let a: U8  = 200
-  let b: U8  = 17
+  let a: U8 = 200
+  let b: U8 = 17
   let c: U16 = 0
   let d: U16 = 65535
   let e: U32 = 4294967295
@@ -30,8 +30,8 @@ test "min and max of the unsigned integers" {
 }
 
 test "min and max of the signed integers" {
-  let a: I8  = -128
-  let b: I8  = 127
+  let a: I8 = -128
+  let b: I8 = 127
   let c: I16 = -5
   let d: I16 = -6
   let e: I32 = 0
@@ -68,7 +68,7 @@ test "min and max of equal values are that value" {
 }
 
 test "min and max with a NaN are a NaN" {
-  let n: F64   = F64.NAN
+  let n: F64 = F64.NAN
   let one: F64 = 1.0
   assert !(min(n, one) == min(n, one))
   assert !(max(one, n) == max(one, n))

@@ -109,7 +109,7 @@ test "the value of Some and of Ok is the content, for a number" {
   assert Some(7).unwrap() == 7
   let n: Result[U32, U32] = Ok(9)
   assert n.unwrap() == 9
-  let o: Option[U32]      = Some(3)
+  let o: Option[U32] = Some(3)
   let r: Result[U32, U32] = Ok(4)
   assert o.unwrap() == 3
   assert r.unwrap() == 4
@@ -126,11 +126,11 @@ test "the content may be a float, a bool and a character" {
 
 test "the content may be a tuple" {
   let o: Option[(U32, F32)] = Some((2, 0.5))
-  let t                     = o.unwrap()
+  let t = o.unwrap()
   assert t.0 == 2
   assert t.1 == 0.5
   let r: Result[(U32, U32), U32] = Ok((5, 6))
-  let (a, b)                     = r.unwrap()
+  let (a, b) = r.unwrap()
   assert a + b == 11
 }
 
@@ -144,7 +144,7 @@ test "the content may be a struct" {
 
 test "the content may be an array" {
   let o: Option[[U32; 3]] = Some([1, 2, 3])
-  let xs                  = o.unwrap()
+  let xs = o.unwrap()
   assert xs[0] == 1
   assert xs[2] == 3
   let r: Result[[F32; 2], U32] = Ok([0.5, 1.5])
@@ -231,10 +231,10 @@ test "a generic body unwraps a content that is a type parameter" {
 test "a generic body with the bound ?Dup takes an owned content" {
   assert first_owned(Some(7)) == 7
   let o: Option[Buf[F32]] = Some(Buf.zeroed(4))
-  let b                   = first_owned(move o)
+  let b = first_owned(move o)
   assert b.len() == 4
   let r: Result[Buf[F32], U32] = Ok(Buf.zeroed(2))
-  let c                        = first_ok_owned(move r)
+  let c = first_ok_owned(move r)
   assert c.len() == 2
   let e: Result[U32, Buf[F32]] = Ok(8)
   assert first_ok_owned(move e) == 8
@@ -259,7 +259,7 @@ test "unwrap in an anonymous function" {
 }
 
 test "unwrap as an operand of an operator and in a condition" {
-  let o: Option[U32]      = Some(3)
+  let o: Option[U32] = Some(3)
   let r: Result[U32, U32] = Ok(4)
   assert o.unwrap() < r.unwrap()
   if o.unwrap() == 3 {

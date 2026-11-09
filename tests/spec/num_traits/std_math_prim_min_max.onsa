@@ -112,8 +112,8 @@ test "min and max of the zeros through a Float function, F64" {
 }
 
 test "a NaN passes through a clamp made of min and max" {
-  let lo: F32    = -1.0
-  let hi: F32    = 1.0
+  let lo: F32 = -1.0
+  let hi: F32 = 1.0
   let above: F32 = 2.5
   let below: F32 = -2.5
   assert is_nan(clamp_any(F32.NAN, lo, hi))

@@ -35,7 +35,7 @@ pub flow given_to_an_instance(
   x: F32 at sample,
 ) -> F32 at sample {
   let someLevel = x * 0.5 //~ E0320
-  let y         = smoothing~(someLevel)
+  let y = smoothing~(someLevel)
   y + someLevel
 }
 

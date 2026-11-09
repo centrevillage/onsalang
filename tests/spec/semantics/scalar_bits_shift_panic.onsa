@@ -13,28 +13,28 @@
 
 test "a shift left of a U8 by U8.BITS panics" {
   let one: U8 = 1
-  let n: U32  = U8.BITS
-  let y       = one << n //~ PANIC "a shift left of a U8 by U8.BITS panics"
+  let n: U32 = U8.BITS
+  let y = one << n //~ PANIC "a shift left of a U8 by U8.BITS panics"
   assert y == 0
 }
 
 test "a shift right of an I8 by I8.BITS panics" {
-  let x: I8  = -1
+  let x: I8 = -1
   let n: U32 = I8.BITS
-  let y      = x >> n //~ PANIC "a shift right of an I8 by I8.BITS panics"
+  let y = x >> n //~ PANIC "a shift right of an I8 by I8.BITS panics"
   assert y == -1
 }
 
 test "a shift left of a U16 by U16.BITS panics" {
   let one: U16 = 1
-  let n: U32   = U16.BITS
-  let y        = one << n //~ PANIC "a shift left of a U16 by U16.BITS panics"
+  let n: U32 = U16.BITS
+  let y = one << n //~ PANIC "a shift left of a U16 by U16.BITS panics"
   assert y == 0
 }
 
 test "a shift right of an I16 by I16.BITS panics" {
   let x: I16 = 1
   let n: U32 = I16.BITS
-  let y      = x >> n //~ PANIC "a shift right of an I16 by I16.BITS panics"
+  let y = x >> n //~ PANIC "a shift right of an I16 by I16.BITS panics"
   assert y == 0
 }

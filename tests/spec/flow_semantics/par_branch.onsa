@@ -24,7 +24,7 @@ test "if~ inside a par runs every replica's instance" {
   // x = 0.5 1.5 2.5.  Replica 0 chooses when x > 0: T T T.  Replica 1 when x > 1: F T T.
   // Each counter runs every sample: 1 2 3.  Chosen: replica 0: 1 2 3.  replica 1: 0 2 3.
   let xs: [F32; 3] = [0.5, 1.5, 2.5]
-  let o            = counted_above.render(counted_above.Config {}, counted_above.Params {}, xs, 8.0)
+  let o = counted_above.render(counted_above.Config {}, counted_above.Params {}, xs, 8.0)
   assert o.out[0][0] == 1.0
   assert o.out[0][1] == 2.0
   assert o.out[0][2] == 3.0

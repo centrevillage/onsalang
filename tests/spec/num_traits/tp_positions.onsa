@@ -81,7 +81,7 @@ fn zeros_of[T: AnyNum](x: T) -> [T; 3] {
 }
 
 fn count_down[T: Int](from: T) -> U32 {
-  var v      = from
+  var v = from
   var n: U32 = 0
   while v > T.ZERO {
     v = v - T.ONE
@@ -153,14 +153,14 @@ test "T.ZERO as the argument of a generic function of std.math" {
 test "T.ZERO in a closure" {
   let a: F32 = 1.5
   let b: U16 = 7
-  let za     = zeros_of(a)
-  let zb     = zeros_of(b)
+  let za = zeros_of(a)
+  let zb = zeros_of(b)
   assert za[2].to_bits() == 0
   assert zb[1] == 0
 }
 
 test "T.ZERO and T.ONE in the condition of a while" {
-  let a: I8  = 100
+  let a: I8 = 100
   let b: U64 = 0
   assert count_down(a) == 100
   assert count_down(b) == 0

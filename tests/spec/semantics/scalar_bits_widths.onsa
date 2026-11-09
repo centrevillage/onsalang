@@ -50,7 +50,7 @@ test "BITS adds and compares as a U32" {
 // ---------------------------------------------------------------- a shift by BITS
 
 test "a shift by BITS - 1 of 1 is the top bit of the unsigned types" {
-  let a: U8  = 1
+  let a: U8 = 1
   let b: U16 = 1
   let c: U32 = 1
   let d: U64 = 1
@@ -61,7 +61,7 @@ test "a shift by BITS - 1 of 1 is the top bit of the unsigned types" {
 }
 
 test "a shift by BITS - 1 of 1 is the minimum of the signed types" {
-  let a: I8  = 1
+  let a: I8 = 1
   let b: I16 = 1
   let c: I32 = 1
   let d: I64 = 1
@@ -80,10 +80,10 @@ test "a mask of the low bits is one shifted up by BITS, minus one" {
 }
 
 test "the top bit and everything below it make the maximum of the unsigned types" {
-  let a: U8   = 1
-  let b: U16  = 1
-  let c: U64  = 1
-  let ta: U8  = a << (U8.BITS - 1)
+  let a: U8 = 1
+  let b: U16 = 1
+  let c: U64 = 1
+  let ta: U8 = a << (U8.BITS - 1)
   let tb: U16 = b << (U16.BITS - 1)
   let tc: U64 = c << (U64.BITS - 1)
   assert ta + (ta - 1) == U8.MAX

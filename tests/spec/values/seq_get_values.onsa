@@ -97,7 +97,7 @@ test "get of an array is Some in the range and None at len and beyond" {
 }
 
 test "get of an array of length 1 and of an empty array" {
-  let one: [F32; 1]  = [1.5]
+  let one: [F32; 1] = [1.5]
   let none: [F32; 0] = []
   assert one.get(0) == Some(1.5)
   assert one.get(1) == None

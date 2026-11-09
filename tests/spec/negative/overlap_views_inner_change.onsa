@@ -152,6 +152,6 @@ pub fn a_change_of_another_variable_is_no_overlap() {
 
 pub fn a_change_before_the_call_is_no_overlap() {
   var a: [F32; 8] = [0.0; 8]
-  let v           = change_all(inout a)
+  let v = change_all(inout a)
   use_n(a.slice(0, 4), v)
 }

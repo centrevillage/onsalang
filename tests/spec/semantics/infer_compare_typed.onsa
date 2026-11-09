@@ -38,15 +38,15 @@ test "an annotated local and a literal on the left" {
 
 test "the result of the comparison is kept in a binding" {
   let v: [I32; 2] = [1, 2]
-  let r           = v == [1, 2]
-  let n           = v == [1, 3]
+  let r = v == [1, 2]
+  let n = v == [1, 3]
   assert r
   assert !n
 }
 
 test "the other composites with an annotated local" {
-  let o: Option[U8]       = Some(3)
-  let t: (I32, F32)       = (1, 2.5)
+  let o: Option[U8] = Some(3)
+  let t: (I32, F32) = (1, 2.5)
   let n: [Option[I32]; 2] = [Some(1), None]
   assert o == Some(3)
   assert Some(3) == o
@@ -140,7 +140,7 @@ test "branches and a loop" {
 }
 
 test "a closure that captures the typed local" {
-  let v: [I32; 2]           = [1, 2]
+  let v: [I32; 2] = [1, 2]
   let is_one_two: [Bool; 2] = array.from_fn(fn(i) { v == [1, 2] })
   let one_two_is: [Bool; 2] = array.from_fn(fn(i) { [1, 2] == v })
   assert is_one_two[0] && is_one_two[1]

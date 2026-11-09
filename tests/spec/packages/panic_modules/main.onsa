@@ -67,7 +67,7 @@ test "a search loop of a module" {
 
 test "a search loop of a module that gives up by a panic" {
   let xs: [U32; 3] = [4, 5, 6]
-  let r            = find(xs, 9) //~ PANIC "a search loop of a module that gives up by a panic"
+  let r = find(xs, 9) //~ PANIC "a search loop of a module that gives up by a panic"
   assert r == 0
 }
 

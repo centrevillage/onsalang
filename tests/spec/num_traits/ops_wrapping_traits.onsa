@@ -20,10 +20,10 @@ fn wmul[T: WrappingMul](a: T, b: T) -> T {
 }
 
 test "WrappingAdd wraps at the top of the range" {
-  let a: U8  = 250
-  let b: U8  = 10
-  let c: I8  = 127
-  let d: I8  = 1
+  let a: U8 = 250
+  let b: U8 = 10
+  let c: I8 = 127
+  let d: I8 = 1
   let e: U64 = 18446744073709551615
   assert wadd(a, b) == 4
   assert wadd(c, d) == -128
@@ -37,10 +37,10 @@ test "WrappingAdd inside the range is the sum" {
 }
 
 test "WrappingSub wraps at the bottom of the range" {
-  let a: U8  = 0
-  let b: U8  = 1
-  let c: I8  = -128
-  let d: I8  = 1
+  let a: U8 = 0
+  let b: U8 = 1
+  let c: I8 = -128
+  let d: I8 = 1
   let e: U16 = 5
   let f: U16 = 7
   assert wsub(a, b) == 255
@@ -49,10 +49,10 @@ test "WrappingSub wraps at the bottom of the range" {
 }
 
 test "WrappingMul wraps the product" {
-  let a: U8  = 200
-  let b: U8  = 2
-  let c: I8  = 64
-  let d: I8  = 2
+  let a: U8 = 200
+  let b: U8 = 2
+  let c: I8 = 64
+  let d: I8 = 2
   let e: U64 = 4294967296
   assert wmul(a, b) == 144
   assert wmul(c, d) == -128

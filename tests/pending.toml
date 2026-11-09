@@ -989,21 +989,21 @@ note = "クロージャと .( の呼び出しが E0200。W3-05 の値の規則�
 
 [[pending]]
 kind = "spec-example"
-target = "§16.1 f815e141: use std.audio.device"
+target = "§16.1 6f7b22db: use std.audio.device"
 reasons = ["S-112", "S-570", "S-609", "S-625"]
 until = "W7-03"
 note = "52 回目の S-112 の改め（init の入力の無い flow は Config と cfg を持たない）。仕様の例は voice.Config {} などを外した。58 回目の S-609 で、関数の項目の move on_audio・move on_control を外した。61 回目の S-625 で、voice.params_default() を Params のリテラルに書き直した（Onsa の生成する API から外した）。写しは今の実装に合わせて残し、生成する API の Onsa の側（W7-03）で写しを直して外す"
 
 [[pending]]
 kind = "spec-example"
-target = "§17.3 c0649aa1: use std.math.{exp, cos}"
+target = "§17.3 4902dd54: use std.math.{exp, cos}"
 reasons = ["S-112", "S-570"]
 until = "W7-03"
 note = "52 回目の S-112 の改め（init の入力の無い flow は Config と cfg を持たない）。仕様の例は voice.Config {} などを外した。写しは今の実装に合わせて残し、生成する API の Onsa の側（W7-03）で写しを直して外す"
 
 [[pending]]
 kind = "spec-example"
-target = "§17.4 ff1dd5a3: use std.fs.{Fs, Path, IoError}"
+target = "§17.4 a4e5bc9e: use std.fs.{Fs, Path, IoError}"
 reasons = ["S-112", "S-570", "S-625"]
 until = "W7-03"
 note = "52 回目の S-112 の改め（init の入力の無い flow は Config と cfg を持たない）。仕様の例は voice.Config {} などを外した。61 回目の S-625 で、voice.params_default() を Params のリテラルに書き直した（Onsa の生成する API から外した）。写しは今の実装に合わせて残し、生成する API の Onsa の側（W7-03）で写しを直して外す"

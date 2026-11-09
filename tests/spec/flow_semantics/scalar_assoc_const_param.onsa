@@ -36,21 +36,21 @@ pub flow wide_range(
 
 test "a flow with an @param whose values are associated constants runs with the value it is given" {
   let xs: [F32; 2] = [2.0, 3.0]
-  let o            = gain.render(gain.Config {}, gain.Params { level: 0.5 }, xs, 8.0)
+  let o = gain.render(gain.Config {}, gain.Params { level: 0.5 }, xs, 8.0)
   assert o.out[0] == 1.0
   assert o.out[1] == 1.5
 }
 
 test "a flow with an @param of an integer whose bounds are associated constants runs" {
   let xs: [F32; 2] = [2.0, 1.0]
-  let o            = count.render(count.Config {}, count.Params { steps: 4 }, xs, 8.0)
+  let o = count.render(count.Config {}, count.Params { steps: 4 }, xs, 8.0)
   assert o.out[0] == 8.0
   assert o.out[1] == 4.0
 }
 
 test "a flow with an @param whose log range starts at EPSILON runs" {
   let xs: [F64; 2] = [2.0, 3.0]
-  let o            = wide_range.render(wide_range.Config {}, wide_range.Params { level: 2.0 }, xs, 8.0)
+  let o = wide_range.render(wide_range.Config {}, wide_range.Params { level: 2.0 }, xs, 8.0)
   assert o.out[0] == 4.0
   assert o.out[1] == 6.0
 }

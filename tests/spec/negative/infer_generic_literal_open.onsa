@@ -94,7 +94,7 @@ pub fn nothing_decided_by_an_argument() -> F32 {
 }
 
 pub fn float_decided_by_an_annotation() -> Bool {
-  let a      = id(1.5)
+  let a = id(1.5)
   let b: F32 = a
   b == 1.5
 }

@@ -188,7 +188,7 @@ test "the elements of a tuple are the hand-written defaults" {
   assert t.1.steps == 8
   assert t.2 == 0
   let n: ((Level, Seven), Hundred) = zero_of()
-  let first                        = n.0
+  let first = n.0
   assert first.0 == Level.Mid
   assert first.1.n == 7
   assert n.1.n == 100

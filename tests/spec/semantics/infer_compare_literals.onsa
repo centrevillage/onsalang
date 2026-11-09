@@ -110,15 +110,15 @@ test "the comparison in a closure" {
 // ------------------------------------------------- a later statement decides the literals
 
 test "the literals are decided by a later annotation" {
-  let a          = [1, 2]
-  let e          = a == [1, 2]
+  let a = [1, 2]
+  let e = a == [1, 2]
   let b: [U8; 2] = a
   assert e
   assert b == [1, 2]
 }
 
 test "the literals of an assigned variable are decided by a later assignment" {
-  var o      = Some(1)
+  var o = Some(1)
   let before = o == Some(1)
   o = Some(2)
   let after = o == Some(1)
@@ -127,8 +127,8 @@ test "the literals of an assigned variable are decided by a later assignment" {
 }
 
 test "a tuple whose literals are decided by a later annotation" {
-  let t            = (1, 200)
-  let e            = t == (1, 200)
+  let t = (1, 200)
+  let e = t == (1, 200)
   let u: (I32, U8) = t
   assert e
   assert u.1 == 200

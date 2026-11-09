@@ -15,7 +15,7 @@ fn float_same[T: Float](x: T) -> T {
 }
 
 test "Num takes the signed integers" {
-  let a: I8  = -8
+  let a: I8 = -8
   let b: I16 = -16
   let c: I32 = -32
   let d: I64 = -64

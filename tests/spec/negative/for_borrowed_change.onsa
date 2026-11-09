@@ -41,7 +41,7 @@ pub fn set_whole(inout w: W) {
 
 pub fn assign_to_an_element() -> U32 {
   var xs: [U32; 3] = [1, 2, 3]
-  var s: U32       = 0
+  var s: U32 = 0
   for x in xs {
     xs[2] = 100 //~ E0715
     s = s + x
@@ -121,7 +121,7 @@ pub fn change_in_an_arm(c: Bool) {
 
 pub fn change_in_a_block_value() -> U32 {
   var xs: [U32; 3] = [1, 2, 3]
-  var s: U32       = 0
+  var s: U32 = 0
   for _ in xs {
     s = s + ({
       xs[0] = 5 //~ E0715
@@ -133,7 +133,7 @@ pub fn change_in_a_block_value() -> U32 {
 
 pub fn change_after_a_read() -> U32 {
   var xs: [U32; 3] = [1, 2, 3]
-  var s: U32       = 0
+  var s: U32 = 0
   for x in xs {
     s = s + x + xs[0]
     xs[1] = s //~ E0715

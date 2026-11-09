@@ -102,7 +102,7 @@ test "nested loops over inout [a, b] write each channel up to its own length" {
 }
 
 test "a part of a buffer is one channel of inout [a, b]" {
-  var a: [F32; 3]    = [0.0; 3]
+  var a: [F32; 3] = [0.0; 3]
   var long: [F32; 6] = [0.0; 6]
   fill_channel(inout [a, long.slice(2, 4)], 1, 4.0)
   assert long[1] == 0.0

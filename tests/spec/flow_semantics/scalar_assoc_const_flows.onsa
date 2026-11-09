@@ -39,7 +39,7 @@ pub flow lowest_input(x: F32 at sample) -> F32 at sample {
 
 test "a flow body multiplies by an associated constant" {
   let xs: [F32; 3] = [1.0, 2.0, 0.0]
-  let o            = times_pi.render(times_pi.Config {}, times_pi.Params {}, xs, 8.0)
+  let o = times_pi.render(times_pi.Config {}, times_pi.Params {}, xs, 8.0)
   assert o.out[0] == F32.PI
   assert o.out[1] == F32.PI * 2.0
   assert o.out[2] == 0.0
@@ -47,35 +47,35 @@ test "a flow body multiplies by an associated constant" {
 
 test "a flow reads a const that reads an associated constant" {
   let xs: [F32; 2] = [2.0, 4.0]
-  let o            = by_const.render(by_const.Config {}, by_const.Params {}, xs, 8.0)
+  let o = by_const.render(by_const.Config {}, by_const.Params {}, xs, 8.0)
   assert o.out[0] == F32.PI / 2.0
   assert o.out[1] == F32.PI
 }
 
 test "a flow adds the largest finite value twice and overflows to infinity" {
   let xs: [F32; 2] = [0.0, 1.0]
-  let o            = overflow.render(overflow.Config {}, overflow.Params {}, xs, 8.0)
+  let o = overflow.render(overflow.Config {}, overflow.Params {}, xs, 8.0)
   assert o.out[0] == F32.INFINITY
   assert o.out[1] == F32.INFINITY
 }
 
 test "a flow adds EPSILON to a zero it makes" {
   let xs: [F32; 2] = [5.0, -3.5]
-  let o            = floor_at_epsilon.render(floor_at_epsilon.Config {}, floor_at_epsilon.Params {}, xs, 8.0)
+  let o = floor_at_epsilon.render(floor_at_epsilon.Config {}, floor_at_epsilon.Params {}, xs, 8.0)
   assert o.out[0] == F32.EPSILON
   assert o.out[1] == F32.EPSILON
 }
 
 test "a flow of F64 adds the EPSILON of F64" {
   let xs: [F64; 2] = [1.0, 0.0]
-  let o            = wide.render(wide.Config {}, wide.Params {}, xs, 8.0)
+  let o = wide.render(wide.Config {}, wide.Params {}, xs, 8.0)
   assert o.out[0] == 1.0 + F64.EPSILON
   assert o.out[1] == F64.EPSILON
 }
 
 test "a delayed sample plus the negative largest value" {
   let xs: [F32; 3] = [1.0, 2.0, 3.0]
-  let o            = lowest_input.render(lowest_input.Config {}, lowest_input.Params {}, xs, 8.0)
+  let o = lowest_input.render(lowest_input.Config {}, lowest_input.Params {}, xs, 8.0)
   assert o.out[0] == -F32.MAX
   assert o.out[1] == 1.0 - F32.MAX
   assert o.out[2] == 2.0 - F32.MAX

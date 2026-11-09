@@ -13,9 +13,9 @@ pub fn arguments_with_the_names(prev: F32, delay: F32, vdelay: F32, sample_rate:
 }
 
 pub fn lets_with_the_names(x: F32) -> F32 {
-  let prev        = x
-  let delay       = prev + 1.0
-  let vdelay      = delay + 1.0
+  let prev = x
+  let delay = prev + 1.0
+  let vdelay = delay + 1.0
   let sample_rate = vdelay + 1.0
   let sample_tick = sample_rate + 1.0
   sample_tick

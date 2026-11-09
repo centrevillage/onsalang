@@ -39,36 +39,36 @@ test "slice of a Buf and of a Span inside the range" {
 
 test "slice of an array past the end panics" {
   let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
-  let n            = view_len(xs.slice(2, 5)) //~ PANIC "slice of an array past the end panics"
+  let n = view_len(xs.slice(2, 5)) //~ PANIC "slice of an array past the end panics"
   assert n == 3
 }
 
 test "slice of an array with both ends past the end panics" {
   let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
-  let n            = view_len(xs.slice(5, 6)) //~ PANIC "slice of an array with both ends past the end panics"
+  let n = view_len(xs.slice(5, 6)) //~ PANIC "slice of an array with both ends past the end panics"
   assert n == 1
 }
 
 test "slice of an array that starts past the end and is empty panics" {
   let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
-  let n            = view_len(xs.slice(5, 5)) //~ PANIC "slice of an array that starts past the end and is empty panics"
+  let n = view_len(xs.slice(5, 5)) //~ PANIC "slice of an array that starts past the end and is empty panics"
   assert n == 0
 }
 
 test "slice of a Buf past the end panics" {
   let b: Buf[F32] = Buf.zeroed(3)
-  let n           = view_len(b.slice(0, 4)) //~ PANIC "slice of a Buf past the end panics"
+  let n = view_len(b.slice(0, 4)) //~ PANIC "slice of a Buf past the end panics"
   assert n == 4
 }
 
 test "slice of a Span past the end panics" {
   let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
-  let n            = view_of(xs, 0, 5) //~ PANIC "slice of a Span past the end panics"
+  let n = view_of(xs, 0, 5) //~ PANIC "slice of a Span past the end panics"
   assert n == 5
 }
 
 test "slice of a view is checked against the view and not the array" {
   let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
-  let n            = view_of(xs.slice(0, 2), 1, 3) //~ PANIC "slice of a view is checked against the view and not the array"
+  let n = view_of(xs.slice(0, 2), 1, 3) //~ PANIC "slice of a view is checked against the view and not the array"
   assert n == 2
 }

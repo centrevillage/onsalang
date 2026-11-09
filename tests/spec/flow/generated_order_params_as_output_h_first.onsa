@@ -20,13 +20,13 @@ pub flow g(x: F32 at sample, k: F32 at block) -> F32 at sample {
 
 test "the generated Params of another flow is the output type" {
   let xs: [F32; 3] = [1.0, 2.0, 3.0]
-  let o            = h.render(h.Config { c: 1.0 }, h.Params { m: 2.0 }, xs, 8.0)
+  let o = h.render(h.Config { c: 1.0 }, h.Params { m: 2.0 }, xs, 8.0)
   assert o.k[0] == 3.0
   assert o.k[2] == 7.0
 }
 
 test "the flow whose Params it is works as before" {
-  var st           = g.init(g.Config {}, 8.0)
+  var st = g.init(g.Config {}, 8.0)
   let xs: [F32; 2] = [1.0, 2.0]
   var ys: [F32; 2] = [0.0; 2]
   g.process(inout st, g.Params { k: 3.0 }, xs, inout ys)

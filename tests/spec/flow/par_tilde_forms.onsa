@@ -66,7 +66,7 @@ pub flow with_one_replica(f0: F32 at block) -> [F32; 1] at sample {
 }
 
 pub flow with_two_in_one_flow(f0: F32 at block) -> F32 at sample {
-  let lows  = par~ i in 0 ..< 4 { saw~(f0 * (1.0 + F32.round_from(i))) }
+  let lows = par~ i in 0 ..< 4 { saw~(f0 * (1.0 + F32.round_from(i))) }
   let highs = par~ i in 0 ..< 4 { saw~(f0 * (5.0 + F32.round_from(i))) }
   total(lows) + total(highs)
 }

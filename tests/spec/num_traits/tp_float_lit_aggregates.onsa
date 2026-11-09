@@ -101,8 +101,8 @@ test "a float literal in an operand inside Some" {
 test "a float literal as the element of an array repeated" {
   let a: F32 = 0.0
   let b: F64 = 0.0
-  let ra     = repeated(a)
-  let rb     = repeated(b)
+  let ra = repeated(a)
+  let rb = repeated(b)
   assert ra[0] == 0.5
   assert ra[1] == 0.5
   assert rb[0] == 0.5
@@ -112,8 +112,8 @@ test "a float literal as the element of an array repeated" {
 test "float literals in an array literal with a variable of the type T" {
   let a: F32 = 0.5
   let b: F64 = 0.5
-  let la     = listed_with_a_variable(a)
-  let lb     = listed_with_a_variable(b)
+  let la = listed_with_a_variable(a)
+  let lb = listed_with_a_variable(b)
   assert la[0] == 0.25
   assert la[1] == 0.5
   assert la[2] == 0.75
@@ -125,8 +125,8 @@ test "float literals in an array literal with a variable of the type T" {
 test "an array literal of float literals only takes its type from the return type" {
   let a: F32 = 0.0
   let b: F64 = 0.0
-  let la     = listed_literals(a)
-  let lb     = listed_literals(b)
+  let la = listed_literals(a)
+  let lb = listed_literals(b)
   assert la[0] == 0.25
   assert la[2] == 0.75
   assert lb[1] == 0.5
@@ -136,8 +136,8 @@ test "an array literal of float literals only takes its type from the return typ
 test "a float literal as the field of a struct" {
   let a: F32 = 2.0
   let b: F64 = 3.0
-  let pa     = in_a_struct(a)
-  let pb     = in_a_struct(b)
+  let pa = in_a_struct(a)
+  let pb = in_a_struct(b)
   assert pa.a == 0.5
   assert pa.b == 2.0
   assert pb.a == 0.5
@@ -153,8 +153,8 @@ test "a float literal as the field of a struct" {
 test "a float literal in a tuple" {
   let a: F32 = 2.0
   let b: F64 = 3.0
-  let ta     = in_a_tuple(a)
-  let tb     = in_a_tuple(b)
+  let ta = in_a_tuple(a)
+  let tb = in_a_tuple(b)
   assert ta.0 == 0.5
   assert ta.1 == 2.0
   assert tb.0 == 0.5
@@ -177,8 +177,8 @@ test "float literals bound by a tuple pattern" {
 test "a float literal in a nested shape" {
   let a: F32 = 1.5
   let b: F64 = 2.5
-  let na     = nested_shape(a)
-  let nb     = nested_shape(b)
+  let na = nested_shape(a)
+  let nb = nested_shape(b)
   let ca = match na {
     Some(t) => t.0 + t.1[0] + t.1[1],
     None => 0.0,

@@ -27,6 +27,6 @@ test "neg of a signed value" {
 
 test "neg of an unsigned value" {
   let u: U32 = 5
-  let v      = neg(u) //~ E0416
+  let v = neg(u) //~ E0416
   assert v == 0
 }

@@ -176,7 +176,7 @@ pub flow quantize(x: F32 at sample) -> F32 at sample {
 
 test "the body of a flow calls the methods in a chain" {
   let xs: [F32; 4] = [1.7, -2.5, 3.0e10, F32.NAN]
-  let o            = quantize.render(quantize.Config {}, quantize.Params {}, xs, 8.0)
+  let o = quantize.render(quantize.Config {}, quantize.Params {}, xs, 8.0)
   assert o.out[0] == 1.0
   assert o.out[1] == -2.0
   assert o.out[2] == 2147483648.0
@@ -194,31 +194,31 @@ test "MIN rem_euclid -1 is 0 and the other edges keep their value" {
 
 test "a trunc of a NaN panics" {
   let nan = F32.NAN
-  let n = I32.trunc_from(nan)                       //~ PANIC "a trunc of a NaN panics"
+  let n = I32.trunc_from(nan) //~ PANIC "a trunc of a NaN panics"
   assert n == 0
 }
 
 test "a trunc out of the range panics" {
   let big: F64 = 2147483648.0
-  let n = I32.trunc_from(big)                       //~ PANIC "a trunc out of the range panics"
+  let n = I32.trunc_from(big) //~ PANIC "a trunc out of the range panics"
   assert n == 0
 }
 
 test "div_euclid of MIN by -1 panics" {
   let m = I32.MIN
-  let q = m.div_euclid(-1)                          //~ PANIC "div_euclid of MIN by -1 panics"
+  let q = m.div_euclid(-1) //~ PANIC "div_euclid of MIN by -1 panics"
   assert q == 0
 }
 
 test "rem_euclid by 0 panics" {
   let a: I32 = 5
   let zero: I32 = 0
-  let r = a.rem_euclid(zero)                        //~ PANIC "rem_euclid by 0 panics"
+  let r = a.rem_euclid(zero) //~ PANIC "rem_euclid by 0 panics"
   assert r == 0
 }
 
 test "an unwrap of a narrow that does not fit panics" {
   let n: I32 = 256
-  let v = U8.narrow_from(n).unwrap()                //~ PANIC "an unwrap of a narrow that does not fit panics"
+  let v = U8.narrow_from(n).unwrap() //~ PANIC "an unwrap of a narrow that does not fit panics"
   assert v == 0
 }

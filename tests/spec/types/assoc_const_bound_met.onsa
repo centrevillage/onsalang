@@ -40,7 +40,7 @@ test "a Show bound" {
 }
 
 test "a Show bound and the option of the argument" {
-  let i: Option[I32]  = ShI.Z
+  let i: Option[I32] = ShI.Z
   let b: Option[Bool] = ShB.Z
   assert i == None
   assert b == None

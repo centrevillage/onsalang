@@ -103,8 +103,8 @@ pub fn array_decided_later() -> [Plain; 2] {
 }
 
 pub fn tuple_decided_later() -> I32 {
-  let t               = (make(), 1)
-  let e               = t == t //~ E0401
+  let t = (make(), 1)
+  let e = t == t //~ E0401
   let p: (Plain, I32) = t
   p.1
 }

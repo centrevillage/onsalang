@@ -16,7 +16,7 @@ fn twice[T: AnyNum](x: T) -> (T, T) {
 }
 
 test "AnyNum takes the signed integers" {
-  let a: I8  = -128
+  let a: I8 = -128
   let b: I16 = -32768
   let c: I32 = -2147483648
   let d: I64 = I64.MIN
@@ -27,7 +27,7 @@ test "AnyNum takes the signed integers" {
 }
 
 test "AnyNum takes the unsigned integers" {
-  let a: U8  = 255
+  let a: U8 = 255
   let b: U16 = 65535
   let c: U32 = 4294967295
   let d: U64 = 18446744073709551615
@@ -45,9 +45,9 @@ test "AnyNum takes the floats" {
 }
 
 test "AnyNum reads a value twice for every family" {
-  let a: U8    = 9
-  let b: I64   = -9
-  let c: F32   = 0.5
+  let a: U8 = 9
+  let b: I64 = -9
+  let c: F32 = 0.5
   let (a1, a2) = twice(a)
   let (b1, b2) = twice(b)
   let (c1, c2) = twice(c)

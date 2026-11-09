@@ -50,10 +50,10 @@ test "F32.from_bits reads a subnormal pattern, which stays subnormal in arithmet
 }
 
 test "F32.from_bits reads every pattern of a NaN as a NaN, and to_bits gives back the quiet NaN" {
-  let quiet: F32     = F32.from_bits(0x7FC00000)
+  let quiet: F32 = F32.from_bits(0x7FC00000)
   let signaling: F32 = F32.from_bits(0x7F800001)
-  let negative: F32  = F32.from_bits(0xFFC00001)
-  let ones: F32      = F32.from_bits(0xFFFFFFFF)
+  let negative: F32 = F32.from_bits(0xFFC00001)
+  let ones: F32 = F32.from_bits(0xFFFFFFFF)
   assert quiet != quiet
   assert signaling != signaling
   assert negative != negative
@@ -123,9 +123,9 @@ test "F64.from_bits reads a subnormal pattern, which stays subnormal in arithmet
 }
 
 test "F64.from_bits reads every pattern of a NaN as a NaN, and to_bits gives back the quiet NaN" {
-  let quiet: F64     = F64.from_bits(0x7FF8000000000000)
+  let quiet: F64 = F64.from_bits(0x7FF8000000000000)
   let signaling: F64 = F64.from_bits(0x7FF0000000000001)
-  let ones: F64      = F64.from_bits(0xFFFFFFFFFFFFFFFF)
+  let ones: F64 = F64.from_bits(0xFFFFFFFFFFFFFFFF)
   assert quiet != quiet
   assert signaling != signaling
   assert ones != ones
@@ -149,7 +149,7 @@ test "to_bits then F64.from_bits then to_bits keeps the bits of every pattern th
 
 test "the same value in the two widths: widening F32 gives the F64 of the wider fields" {
   let narrow: F32 = F32.from_bits(0x3FC00000)
-  let wide: F64   = F64.from_bits(0x3FF8000000000000)
+  let wide: F64 = F64.from_bits(0x3FF8000000000000)
   assert (narrow as F64) == wide
   assert F32.round_from(wide) == narrow
 }

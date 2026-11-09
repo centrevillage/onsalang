@@ -33,8 +33,8 @@ fn rem2[T: Rem](a: T, b: T) -> T {
 test "Add adds integers and floats" {
   let a: I32 = 7
   let b: I32 = 5
-  let c: U8  = 200
-  let d: U8  = 55
+  let c: U8 = 200
+  let d: U8 = 55
   let e: F64 = 0.5
   let f: F64 = 0.25
   assert add2(a, b) == 12
@@ -44,8 +44,8 @@ test "Add adds integers and floats" {
 }
 
 test "Sub subtracts integers and floats" {
-  let a: I8  = -100
-  let b: I8  = 28
+  let a: I8 = -100
+  let b: I8 = 28
   let c: U16 = 10
   let d: U16 = 3
   let e: F32 = 1.5
@@ -58,8 +58,8 @@ test "Sub subtracts integers and floats" {
 test "Mul multiplies integers and floats" {
   let a: I16 = -300
   let b: I16 = 100
-  let c: U8  = 15
-  let d: U8  = 17
+  let c: U8 = 15
+  let d: U8 = 17
   let e: F32 = 1.5
   let f: F32 = 4.0
   assert mul2(a, b) == -30000
@@ -106,41 +106,41 @@ test "Rem of the least signed integer by -1 is 0" {
 test "Add panics where the integer overflows" {
   let a: U8 = 255
   let b: U8 = 1
-  let r     = add2(a, b) //~ PANIC "Add panics where the integer overflows"
+  let r = add2(a, b) //~ PANIC "Add panics where the integer overflows"
   assert r == 0
 }
 
 test "Sub panics where an unsigned integer falls below 0" {
   let a: U32 = 0
   let b: U32 = 1
-  let r      = sub2(a, b) //~ PANIC "Sub panics where an unsigned integer falls below 0"
+  let r = sub2(a, b) //~ PANIC "Sub panics where an unsigned integer falls below 0"
   assert r == 0
 }
 
 test "Mul panics where the integer overflows" {
   let a: I16 = 256
   let b: I16 = 128
-  let r      = mul2(a, b) //~ PANIC "Mul panics where the integer overflows"
+  let r = mul2(a, b) //~ PANIC "Mul panics where the integer overflows"
   assert r == 0
 }
 
 test "Div panics where the divisor is 0" {
   let a: U8 = 5
   let z: U8 = 0
-  let r     = div2(a, z) //~ PANIC "Div panics where the divisor is 0"
+  let r = div2(a, z) //~ PANIC "Div panics where the divisor is 0"
   assert r == 0
 }
 
 test "Div panics where the least signed integer is divided by -1" {
   let a: I32 = I32.MIN
   let b: I32 = -1
-  let r      = div2(a, b) //~ PANIC "Div panics where the least signed integer is divided by -1"
+  let r = div2(a, b) //~ PANIC "Div panics where the least signed integer is divided by -1"
   assert r == 0
 }
 
 test "Rem panics where the divisor is 0" {
   let a: I64 = 5
   let z: I64 = 0
-  let r      = rem2(a, z) //~ PANIC "Rem panics where the divisor is 0"
+  let r = rem2(a, z) //~ PANIC "Rem panics where the divisor is 0"
   assert r == 0
 }

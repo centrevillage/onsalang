@@ -146,27 +146,27 @@ test "reaching the panic branch of a unit fails the test" {
 
 test "the arm that is taken runs its side effect and the panic arm does not" {
   var n: U32 = 0
-  let r      = bump_in_the_arm_that_is_taken(inout n, true)
+  let r = bump_in_the_arm_that_is_taken(inout n, true)
   assert r == 1
   assert n == 1
 }
 
 test "a side effect before a branch happens once, and the panic branch that is not taken does not run" {
   var n: U32 = 4
-  let r      = bump_before_a_branch(inout n, true)
+  let r = bump_before_a_branch(inout n, true)
   assert r == 15 + 5
   assert n == 5
 }
 
 test "the parts are evaluated from the left, and the panic arm that is not taken is not evaluated" {
   var n: U32 = 0
-  let r      = bump_in_both_places(inout n, Some(1))
+  let r = bump_in_both_places(inout n, Some(1))
   assert r == 1 + 2
   assert n == 2
 }
 
 test "a panic arm that is taken in a function with an inout parameter fails the test" {
   var n: U32 = 0
-  let r      = bump_in_both_places(inout n, None) //~ PANIC "a panic arm that is taken in a function with an inout parameter fails the test"
+  let r = bump_in_both_places(inout n, None) //~ PANIC "a panic arm that is taken in a function with an inout parameter fails the test"
   assert r == 0
 }

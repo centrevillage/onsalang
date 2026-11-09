@@ -45,8 +45,8 @@ test "a generic function that compares a composite of its parameter" {
 }
 
 test "the type parameter is decided by a later statement" {
-  let a          = [1, 2]
-  let r          = same(a, [1, 2])
+  let a = [1, 2]
+  let r = same(a, [1, 2])
   let b: [U8; 2] = a
   assert r
   assert same(b, [1, 2])

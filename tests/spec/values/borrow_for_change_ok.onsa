@@ -58,7 +58,7 @@ fn change_the_other_field_of_an_arm_binding() -> U32 uses {Alloc} {
 
 fn change_the_subject_of_a_copy_binding() -> U32 {
   var o: Option[[U32; 3]] = Some([1, 2, 3])
-  var t: U32              = 0
+  var t: U32 = 0
   match o {
     Some(arr) => {
       for x in arr {
@@ -75,7 +75,7 @@ fn change_the_subject_of_a_copy_binding() -> U32 {
 
 fn change_the_array_of_an_owned_iteration_of_a_dup_value() -> U32 {
   var xs: [U32; 3] = [1, 2, 3]
-  var t: U32       = 0
+  var t: U32 = 0
   for x in move xs {
     xs[0] = 100
     t = t + x
@@ -85,7 +85,7 @@ fn change_the_array_of_an_owned_iteration_of_a_dup_value() -> U32 {
 
 fn change_the_subject_of_an_owned_iteration_of_a_binding() -> U32 {
   var o: Option[[U32; 3]] = Some([1, 2, 3])
-  var t: U32              = 0
+  var t: U32 = 0
   match o {
     Some(bs) => {
       for x in move bs {
@@ -99,7 +99,7 @@ fn change_the_subject_of_an_owned_iteration_of_a_binding() -> U32 {
 }
 
 fn assign_to_the_moved_array_of_an_affine_iteration() -> U32 uses {Alloc} {
-  var xs     = [mk(), mk()]
+  var xs = [mk(), mk()]
   var n: U32 = 0
   for z in move xs {
     take(move z)
@@ -155,7 +155,7 @@ fn iterate_a_literal_and_change_the_name_in_it() -> U32 {
 
 fn change_after_the_loop() -> U32 {
   var xs: [U32; 3] = [1, 2, 3]
-  var s: U32       = 0
+  var s: U32 = 0
   for x in xs {
     s = s + x
   }
@@ -165,8 +165,8 @@ fn change_after_the_loop() -> U32 {
 
 fn change_in_the_next_pass_of_an_outer_loop() -> U32 {
   var xs: [U32; 3] = [1, 2, 3]
-  var s: U32       = 0
-  var i: U32       = 0
+  var s: U32 = 0
+  var i: U32 = 0
   while i < 2 {
     for x in xs {
       s = s + x
@@ -188,7 +188,7 @@ fn change_another_array() -> U32 {
 
 fn read_the_place_in_the_body() -> U32 {
   var xs: [U32; 3] = [1, 2, 3]
-  var s: U32       = 0
+  var s: U32 = 0
   for x in xs {
     s = s + x + xs[2]
   }

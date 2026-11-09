@@ -425,8 +425,8 @@ test "trunc at the largest and smallest F64 that fit a 64-bit integer" {
 
 test "trunc_sat clamps to the integer range and maps NaN to 0" {
   let zero: F64 = 0.0
-  let nan  = zero / zero
-  let inf  = 1.0 / zero
+  let nan = zero / zero
+  let inf = 1.0 / zero
   let ninf = -1.0 / zero
   assert I64.trunc_sat_from(nan) == 0
   assert U64.trunc_sat_from(nan) == 0
@@ -525,43 +525,43 @@ test "a NaN reads back as the canonical quiet NaN" {
 //
 // Each test below reaches exactly one operation that §3.4 / §3.3 say panics.
 
-test "I64.MAX + 1 panics" {   //~ TESTFAIL "I64.MAX + 1 panics"
+test "I64.MAX + 1 panics" { //~ TESTFAIL "I64.MAX + 1 panics"
   let a: I64 = I64.MAX
   let _ = a + 1
 }
 
-test "I64.MIN - 1 panics" {   //~ TESTFAIL "I64.MIN - 1 panics"
+test "I64.MIN - 1 panics" { //~ TESTFAIL "I64.MIN - 1 panics"
   let a: I64 = I64.MIN
   let _ = a - 1
 }
 
-test "U64.MAX + 1 panics" {   //~ TESTFAIL "U64.MAX + 1 panics"
+test "U64.MAX + 1 panics" { //~ TESTFAIL "U64.MAX + 1 panics"
   let a: U64 = U64.MAX
   let _ = a + 1
 }
 
-test "0 - 1 on U64 panics" {   //~ TESTFAIL "0 - 1 on U64 panics"
+test "0 - 1 on U64 panics" { //~ TESTFAIL "0 - 1 on U64 panics"
   let a: U64 = 0
   let _ = a - 1
 }
 
-test "I64.MAX * 2 panics" {   //~ TESTFAIL "I64.MAX * 2 panics"
+test "I64.MAX * 2 panics" { //~ TESTFAIL "I64.MAX * 2 panics"
   let a: I64 = I64.MAX
   let _ = a * 2
 }
 
-test "I64.MIN * -1 panics" {   //~ TESTFAIL "I64.MIN * -1 panics"
+test "I64.MIN * -1 panics" { //~ TESTFAIL "I64.MIN * -1 panics"
   let a: I64 = I64.MIN
   let m: I64 = -1
   let _ = a * m
 }
 
-test "U64.MAX * 2 panics" {   //~ TESTFAIL "U64.MAX * 2 panics"
+test "U64.MAX * 2 panics" { //~ TESTFAIL "U64.MAX * 2 panics"
   let a: U64 = U64.MAX
   let _ = a * 2
 }
 
-test "3037000500 squared overflows I64" {   //~ TESTFAIL "3037000500 squared overflows I64"
+test "3037000500 squared overflows I64" { //~ TESTFAIL "3037000500 squared overflows I64"
   let a: I64 = 3037000500
   let _ = a * a
 }
@@ -572,7 +572,7 @@ test "3037000499 squared fits in I64" {
   assert b == 9223372030926249001
 }
 
-test "negating I64.MIN panics" {   //~ TESTFAIL "negating I64.MIN panics"
+test "negating I64.MIN panics" { //~ TESTFAIL "negating I64.MIN panics"
   let a: I64 = I64.MIN
   let _ = -a
 }
@@ -583,61 +583,61 @@ test "negating I64.MAX does not panic" {
   assert b == -9223372036854775807
 }
 
-test "I64.MIN / -1 panics" {   //~ TESTFAIL "I64.MIN / -1 panics"
+test "I64.MIN / -1 panics" { //~ TESTFAIL "I64.MIN / -1 panics"
   let a: I64 = I64.MIN
   let m: I64 = -1
   let _ = a / m
 }
 
-test "division by zero panics on U64" {   //~ TESTFAIL "division by zero panics on U64"
+test "division by zero panics on U64" { //~ TESTFAIL "division by zero panics on U64"
   let a: U64 = 1
   let z: U64 = 0
   let _ = a / z
 }
 
-test "remainder by zero panics on I64" {   //~ TESTFAIL "remainder by zero panics on I64"
+test "remainder by zero panics on I64" { //~ TESTFAIL "remainder by zero panics on I64"
   let a: I64 = 1
   let z: I64 = 0
   let _ = a % z
 }
 
-test "div_euclid of I64.MIN by -1 panics" {   //~ TESTFAIL "div_euclid of I64.MIN by -1 panics"
+test "div_euclid of I64.MIN by -1 panics" { //~ TESTFAIL "div_euclid of I64.MIN by -1 panics"
   let a: I64 = I64.MIN
   let m: I64 = -1
   let _ = a.div_euclid(m)
 }
 
-test "div_euclid by zero panics" {   //~ TESTFAIL "div_euclid by zero panics"
+test "div_euclid by zero panics" { //~ TESTFAIL "div_euclid by zero panics"
   let a: I64 = 5
   let z: I64 = 0
   let _ = a.div_euclid(z)
 }
 
-test "rem_euclid by zero panics" {   //~ TESTFAIL "rem_euclid by zero panics"
+test "rem_euclid by zero panics" { //~ TESTFAIL "rem_euclid by zero panics"
   let a: U64 = 5
   let z: U64 = 0
   let _ = a.rem_euclid(z)
 }
 
-test "shifting a U64 left by 64 panics" {   //~ TESTFAIL "shifting a U64 left by 64 panics"
+test "shifting a U64 left by 64 panics" { //~ TESTFAIL "shifting a U64 left by 64 panics"
   let a: U64 = 1
   let n: U32 = 64
   let _ = a << n
 }
 
-test "shifting an I64 right by 64 panics" {   //~ TESTFAIL "shifting an I64 right by 64 panics"
+test "shifting an I64 right by 64 panics" { //~ TESTFAIL "shifting an I64 right by 64 panics"
   let a: I64 = 1
   let n: U32 = 64
   let _ = a >> n
 }
 
-test "shifting an I32 left by 32 panics" {   //~ TESTFAIL "shifting an I32 left by 32 panics"
+test "shifting an I32 left by 32 panics" { //~ TESTFAIL "shifting an I32 left by 32 panics"
   let a: I32 = 1
   let n: U32 = 32
   let _ = a << n
 }
 
-test "shifting a U8 left by 8 panics" {   //~ TESTFAIL "shifting a U8 left by 8 panics"
+test "shifting a U8 left by 8 panics" { //~ TESTFAIL "shifting a U8 left by 8 panics"
   let a: U8 = 1
   let n: U32 = 8
   let _ = a << n
@@ -650,34 +650,34 @@ test "shifting a U8 left by 7 does not panic" {
   assert b == 128
 }
 
-test "I64.trunc_from just below -2^63 panics" {   //~ TESTFAIL "I64.trunc_from just below -2^63 panics"
+test "I64.trunc_from just below -2^63 panics" { //~ TESTFAIL "I64.trunc_from just below -2^63 panics"
   let a: F64 = -9223372036854777856.0
   let _ = I64.trunc_from(a)
 }
 
-test "I32.trunc_from of 2^31 panics" {   //~ TESTFAIL "I32.trunc_from of 2^31 panics"
+test "I32.trunc_from of 2^31 panics" { //~ TESTFAIL "I32.trunc_from of 2^31 panics"
   let a: F32 = 2147483648.0
   let _ = I32.trunc_from(a)
 }
 
-test "I32.trunc_from just below -2^31 panics" {   //~ TESTFAIL "I32.trunc_from just below -2^31 panics"
+test "I32.trunc_from just below -2^31 panics" { //~ TESTFAIL "I32.trunc_from just below -2^31 panics"
   let a: F32 = -2147483904.0
   let _ = I32.trunc_from(a)
 }
 
-test "I64.trunc_from of NaN panics" {   //~ TESTFAIL "I64.trunc_from of NaN panics"
+test "I64.trunc_from of NaN panics" { //~ TESTFAIL "I64.trunc_from of NaN panics"
   let z: F64 = 0.0
   let nan = z / z
-  let _   = I64.trunc_from(nan)
+  let _ = I64.trunc_from(nan)
 }
 
-test "I64.trunc_from of infinity panics" {   //~ TESTFAIL "I64.trunc_from of infinity panics"
+test "I64.trunc_from of infinity panics" { //~ TESTFAIL "I64.trunc_from of infinity panics"
   let z: F64 = 0.0
   let inf = 1.0 / z
-  let _   = I64.trunc_from(inf)
+  let _ = I64.trunc_from(inf)
 }
 
-test "U64.trunc_from of a value of at least 1 below zero panics" {   //~ TESTFAIL "U64.trunc_from of a value of at least 1 below zero panics"
+test "U64.trunc_from of a value of at least 1 below zero panics" { //~ TESTFAIL "U64.trunc_from of a value of at least 1 below zero panics"
   let a: F64 = -1.0
   let _ = U64.trunc_from(a)
 }

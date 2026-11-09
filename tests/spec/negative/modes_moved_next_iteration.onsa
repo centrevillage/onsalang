@@ -24,8 +24,8 @@ pub fn read(b: Buf[F32]) -> U32 {
 }
 
 pub fn move_on_the_continue_path(n: U32) -> U32 uses {Alloc} {
-  var b          = mk()
-  var i: U32     = 0
+  var b = mk()
+  var i: U32 = 0
   var total: U32 = 0
   while i < n {
     i = i + 1
@@ -40,7 +40,7 @@ pub fn move_on_the_continue_path(n: U32) -> U32 uses {Alloc} {
 }
 
 pub fn read_in_the_condition(n: U32) uses {Alloc} {
-  var b      = mk()
+  var b = mk()
   var i: U32 = 0
   while i < n + read(b) { //~ E0704
     b = mk()
@@ -50,7 +50,7 @@ pub fn read_in_the_condition(n: U32) uses {Alloc} {
 }
 
 pub fn move_on_the_continue_path_of_a_for(n: U32) -> U32 uses {Alloc} {
-  var b          = mk()
+  var b = mk()
   var total: U32 = 0
   for i in 0 ..< n {
     if i == 2 {

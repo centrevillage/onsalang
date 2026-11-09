@@ -33,11 +33,11 @@ fn twice_zero[T: AnyNum](x: T) -> T {
 }
 
 test "T.ZERO of every integer type is 0" {
-  let a: I8  = 5
+  let a: I8 = 5
   let b: I16 = 5
   let c: I32 = 5
   let d: I64 = 5
-  let e: U8  = 5
+  let e: U8 = 5
   let f: U16 = 5
   let g: U32 = 5
   let h: U64 = 5
@@ -71,7 +71,7 @@ test "x + T.ZERO is x for the other values" {
   let b: F64 = 1.0e300
   let c: I64 = I64.MAX
   let d: U64 = U64.MAX
-  let e: I8  = -128
+  let e: I8 = -128
   assert plus_zero(a) == -2.5
   assert plus_zero(b) == 1.0e300
   assert plus_zero(c) == I64.MAX
@@ -88,7 +88,7 @@ test "a sum that starts at T.ZERO of two -0.0 is +0.0" {
 
 test "a sum that starts at T.ZERO adds the elements" {
   let a: [I16; 3] = [100, -30, 7]
-  let b: [U8; 3]  = [100, 100, 55]
+  let b: [U8; 3] = [100, 100, 55]
   let c: [F64; 3] = [0.5, 0.25, 0.125]
   assert sum3(a) == 77
   assert sum3(b) == 255

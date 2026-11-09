@@ -47,7 +47,7 @@ test "sum in an rt function with a named type" {
 }
 
 test "sum in a generic rt function" {
-  let a: [U8; 3]  = [10, 20, 30]
+  let a: [U8; 3] = [10, 20, 30]
   let b: [F64; 2] = [0.25, 0.5]
   let c: [I64; 0] = []
   assert rt_total(a) == 60

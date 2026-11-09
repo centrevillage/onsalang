@@ -13,20 +13,20 @@ use std.array
 
 test "a shift left of a U64 by U64.BITS panics" {
   let one: U64 = 1
-  let n: U32   = U64.BITS
-  let y        = one << n //~ PANIC "a shift left of a U64 by U64.BITS panics"
+  let n: U32 = U64.BITS
+  let y = one << n //~ PANIC "a shift left of a U64 by U64.BITS panics"
   assert y == 0
 }
 
 test "a shift right of an I64 by I64.BITS panics" {
   let x: I64 = 1
   let n: U32 = I64.BITS
-  let y      = x >> n //~ PANIC "a shift right of an I64 by I64.BITS panics"
+  let y = x >> n //~ PANIC "a shift right of an I64 by I64.BITS panics"
   assert y == 0
 }
 
 test "a shift by BITS of a wide type in a closure that array.from_fn runs panics" {
-  let one: U64     = 1
+  let one: U64 = 1
   let ys: [U64; 2] = array.from_fn(fn(i) { one << U64.BITS }) //~ PANIC "a shift by BITS of a wide type in a closure that array.from_fn runs panics"
   assert ys[0] == 0
 }

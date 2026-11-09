@@ -28,13 +28,13 @@ pub fn borrowed_inout(inout xs: [Buf[F32]; 2]) {
 
 pub fn local_var() uses {Alloc} {
   var xs: [Buf[F32]; 2] = [Buf.zeroed(1), Buf.zeroed(2)]
-  let _                 = xs.get(0) //~ E0416
+  let _ = xs.get(0) //~ E0416
   xs[0][0] = 1.0
 }
 
 pub fn local_let() uses {Alloc} {
   let xs: [Buf[F32]; 2] = [Buf.zeroed(1), Buf.zeroed(2)]
-  let _                 = xs.get(0) //~ E0416
+  let _ = xs.get(0) //~ E0416
 }
 
 pub fn field_of_a_struct(r: Rack) {

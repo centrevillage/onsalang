@@ -56,7 +56,7 @@ pub flow detuned_pair(f0: F32 at block, detune: F32 at block) -> [F32; 2] at sam
 test "each replica has its own instance" {
   // replica 0: 1 2 3.  replica 1: x + 1 = 2 2 2 summed: 2 4 6.
   let xs: [F32; 3] = [1.0, 1.0, 1.0]
-  let o            = two_accs.render(two_accs.Config {}, two_accs.Params {}, xs, 8.0)
+  let o = two_accs.render(two_accs.Config {}, two_accs.Params {}, xs, 8.0)
   assert o.out[0][0] == 1.0
   assert o.out[0][1] == 2.0
   assert o.out[0][2] == 3.0
@@ -68,7 +68,7 @@ test "each replica has its own instance" {
 test "the index of a par starts at its lower bound" {
   // i = 2 3 4.
   let xs: [F32; 2] = [1.0, 2.0]
-  let o            = scaled_by_index.render(scaled_by_index.Config {}, scaled_by_index.Params {}, xs, 8.0)
+  let o = scaled_by_index.render(scaled_by_index.Config {}, scaled_by_index.Params {}, xs, 8.0)
   assert o.out[0][0] == 2.0
   assert o.out[0][1] == 4.0
   assert o.out[1][0] == 3.0
@@ -80,7 +80,7 @@ test "the index of a par starts at its lower bound" {
 test "a par of one replica has one element" {
   // prev~(x) + 5: 5, 6, 7.
   let xs: [F32; 3] = [1.0, 2.0, 3.0]
-  let o            = one_replica.render(one_replica.Config {}, one_replica.Params {}, xs, 8.0)
+  let o = one_replica.render(one_replica.Config {}, one_replica.Params {}, xs, 8.0)
   assert o.out[0][0] == 5.0
   assert o.out[0][1] == 6.0
   assert o.out[0][2] == 7.0
@@ -89,7 +89,7 @@ test "a par of one replica has one element" {
 test "a delay length computed from the index" {
   // replica 0: d = 2.0.  replica 1: d = 4.0.
   let xs: [F32; 8] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
-  let o            = own_delay_each.render(own_delay_each.Config {}, own_delay_each.Params {}, xs, 8.0)
+  let o = own_delay_each.render(own_delay_each.Config {}, own_delay_each.Params {}, xs, 8.0)
   assert o.out[0][0] == 0.0
   assert o.out[0][1] == 0.0
   assert o.out[0][2] == 1.0

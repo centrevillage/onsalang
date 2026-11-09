@@ -46,8 +46,8 @@ type FlD = Fl[F64]
 type NmI = Nm[I32]
 
 test "the option of the argument of the alias" {
-  let f: Option[F32]  = WF.Z
-  let i: Option[I32]  = WI.Z
+  let f: Option[F32] = WF.Z
+  let i: Option[I32] = WI.Z
   let b: Option[Bool] = WB.Z
   assert f == None
   assert i == None
@@ -74,7 +74,7 @@ test "a tuple that holds the option" {
 }
 
 test "an empty array of the parameter" {
-  let e: [F32; 0]  = WF.EMPTY
+  let e: [F32; 0] = WF.EMPTY
   let g: [Bool; 0] = WB.EMPTY
   assert e.len() == 0
   assert g.len() == 0

@@ -145,14 +145,14 @@ test "in the default of another field, in one level and in two" {
 
 test "in the let of a flow body" {
   let xs: [F32; 2] = [1.0, 2.0]
-  let o            = mix_let.render(mix_let.Config {}, mix_let.Params {}, xs, 8.0)
+  let o = mix_let.render(mix_let.Config {}, mix_let.Params {}, xs, 8.0)
   assert o.out[0] == 3.0
   assert o.out[1] == 6.0
 }
 
 test "as the last expression of a flow body" {
   let a: [F32; 2] = [1.0, 2.0]
-  let o           = pan_tail.render(pan_tail.Config {}, pan_tail.Params {}, a, 8.0)
+  let o = pan_tail.render(pan_tail.Config {}, pan_tail.Params {}, a, 8.0)
   assert o.l[0] == 2.0
   assert o.l[1] == 4.0
   assert o.r[0] == 0.25
@@ -162,7 +162,7 @@ test "as the last expression of a flow body" {
 test "as the argument of an instance" {
   // held~: the first sample is the init value 3.0 (the default of k), then the input one sample late.
   let xs: [F32; 3] = [1.0, 2.0, 3.0]
-  let o            = wired.render(wired.Config {}, wired.Params {}, xs, 8.0)
+  let o = wired.render(wired.Config {}, wired.Params {}, xs, 8.0)
   assert o.out[0] == 3.0
   assert o.out[1] == 1.0
   assert o.out[2] == 2.0

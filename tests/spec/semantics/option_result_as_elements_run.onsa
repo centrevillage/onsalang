@@ -93,7 +93,7 @@ test "an Option and a Result as the payload of an enum" {
 }
 
 test "an Option as an element of a tuple" {
-  let t              = (Some(5), None)
+  let t = (Some(5), None)
   let a: Option[U32] = t.0
   let b: Option[U32] = t.1
   assert value_or(a, 0) == 5
@@ -121,7 +121,7 @@ test "a Twin of Options and a type parameter made an Option" {
   assert value_or(t.a, 0) == 6
   assert value_or(t.b, 7) == 7
   assert first_of(t) == Some(6)
-  let u                    = same_type_twice(Some(2), None)
+  let u = same_type_twice(Some(2), None)
   let v: Twin[Option[U32]] = u
   assert value_or(v.a, 0) == 2
   assert first_of(v) == Some(2)

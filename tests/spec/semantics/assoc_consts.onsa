@@ -49,7 +49,7 @@ test "MIN and MAX of every integer type" {
   assert I16.MAX == 32767
   assert I32.MAX == 2147483647
   assert I64.MAX == 9223372036854775807
-  let i8_min  = -I8.MAX - 1
+  let i8_min = -I8.MAX - 1
   let i16_min = -I16.MAX - 1
   let i32_min = -I32.MAX - 1
   let i64_min = -I64.MAX - 1

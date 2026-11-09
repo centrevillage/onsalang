@@ -24,7 +24,7 @@ pub flow lp(x: F32 at sample) -> F32 at sample {
 
 pub fn clock_names_as_variables(x: F32) -> F32 {
   let sample = x
-  let block  = sample + 1.0
+  let block = sample + 1.0
   block
 }
 
@@ -66,10 +66,10 @@ pub fn branches_without_a_tilde(c: Bool, x: F32) -> F32 {
 pub const SCALED: F32 = 0.5 * 2.0
 
 pub flow right_forms(x: F32 at sample, p: F32 at block) -> F32 at sample {
-  let a  = lp~(x)
-  let q  = p at sample
-  let d  = scale(a) + q * prev~(^b)
-  let b  = a + d
+  let a = lp~(x)
+  let q = p at sample
+  let d = scale(a) + q * prev~(^b)
+  let b = a + d
   let ps = par~ i in 0 ..< 2 { x }
   b + ps[0] + ps[1]
 }

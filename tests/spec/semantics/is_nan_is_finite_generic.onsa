@@ -29,12 +29,12 @@ fn product_is_finite[T: Float](a: T, b: T) -> Bool {
 }
 
 test "the classes of F32 and F64 values through one generic function" {
-  let f_nan: F32  = F32.NAN
-  let f_inf: F32  = F32.INFINITY
-  let f_big: F32  = F32.MAX
-  let d_nan: F64  = F64.NAN
+  let f_nan: F32 = F32.NAN
+  let f_inf: F32 = F32.INFINITY
+  let f_big: F32 = F32.MAX
+  let d_nan: F64 = F64.NAN
   let d_ninf: F64 = -F64.INFINITY
-  let d_big: F64  = F64.MAX
+  let d_big: F64 = F64.MAX
   assert classify(f_nan) == 0
   assert classify(f_inf) == 2
   assert classify(f_big) == 1
@@ -61,11 +61,11 @@ test "NaN from an operation in a generic body" {
 }
 
 test "overflow in a generic body is an infinity" {
-  let f_big: F32  = F32.MAX
-  let f_one: F32  = 1.0
-  let f_two: F32  = 2.0
+  let f_big: F32 = F32.MAX
+  let f_one: F32 = 1.0
+  let f_two: F32 = 2.0
   let f_zero: F32 = 0.0
-  let f_inf: F32  = F32.INFINITY
+  let f_inf: F32 = F32.INFINITY
   // MAX * 2 overflows binary32; MAX * 1 does not; inf * 0 is NaN, which is not finite either.
   assert !product_is_finite(f_big, f_two)
   assert product_is_finite(f_big, f_one)

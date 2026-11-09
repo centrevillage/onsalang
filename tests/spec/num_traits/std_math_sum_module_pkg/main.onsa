@@ -19,7 +19,7 @@ fn local_total(xs: [F32; 3]) -> F32 {
 
 test "a generic function of another module that calls sum" {
   let a: [F32; 3] = [0.5, 0.25, 0.125]
-  let b: [I8; 2]  = [-5, 3]
+  let b: [I8; 2] = [-5, 3]
   let c: [U16; 2] = [60000, 5535]
   assert total(a) == 0.875
   assert lib.total(b) == -2
@@ -28,14 +28,14 @@ test "a generic function of another module that calls sum" {
 
 test "a Num function and a type of another module" {
   let a: [F64; 2] = [1.5, 2.5]
-  let x: F64      = 1.5
-  let y: F64      = 2.0
-  let z: F64      = 0.5
-  let m: I32      = 7
-  let n: I32      = 8
-  let p: I32      = 9
-  let g           = make_bag(x, y, z)
-  let h           = make_bag(m, n, p)
+  let x: F64 = 1.5
+  let y: F64 = 2.0
+  let z: F64 = 0.5
+  let m: I32 = 7
+  let n: I32 = 8
+  let p: I32 = 9
+  let g = make_bag(x, y, z)
+  let h = make_bag(m, n, p)
   assert lib.total_rt(a) == 4.0
   assert bag_total(g) == 4.0
   assert bag_total(h) == 24

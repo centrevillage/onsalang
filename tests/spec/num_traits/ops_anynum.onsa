@@ -101,7 +101,7 @@ test "AnyNum computes with the floats" {
 
 test "AnyNum compares every family" {
   let a: I32 = -1
-  let b: U8  = 200
+  let b: U8 = 200
   let c: F64 = 0.5
   assert larger(a, 3) == 3
   assert larger(b, 7) == 200
@@ -119,7 +119,7 @@ test "AnyNum in a nested call and a method" {
   assert three_sum(a, b, c) == 60
   let x: F32 = 3.0
   let y: F32 = 9.5
-  let p      = Pair { a: x, b: y }
+  let p = Pair { a: x, b: y }
   assert p.gap() == 6.5
   let q = Pair { a: a, b: 4 }
   assert q.gap() == 6
@@ -128,27 +128,27 @@ test "AnyNum in a nested call and a method" {
 test "AnyNum subtraction of unsigned below 0 panics" {
   let a: U32 = 3
   let b: U32 = 5
-  let r      = sub_any(a, b) //~ PANIC "AnyNum subtraction of unsigned below 0 panics"
+  let r = sub_any(a, b) //~ PANIC "AnyNum subtraction of unsigned below 0 panics"
   assert r == 0
 }
 
 test "AnyNum addition of U8 over the range panics" {
   let a: U8 = 200
   let b: U8 = 100
-  let r     = add_any(a, b) //~ PANIC "AnyNum addition of U8 over the range panics"
+  let r = add_any(a, b) //~ PANIC "AnyNum addition of U8 over the range panics"
   assert r == 0
 }
 
 test "AnyNum division of an integer by 0 panics" {
   let a: I16 = 9
   let z: I16 = 0
-  let r      = div_any(a, z) //~ PANIC "AnyNum division of an integer by 0 panics"
+  let r = div_any(a, z) //~ PANIC "AnyNum division of an integer by 0 panics"
   assert r == 0
 }
 
 test "AnyNum remainder of an integer by 0 panics" {
   let a: U64 = 9
   let z: U64 = 0
-  let r      = rem_any(a, z) //~ PANIC "AnyNum remainder of an integer by 0 panics"
+  let r = rem_any(a, z) //~ PANIC "AnyNum remainder of an integer by 0 panics"
   assert r == 0
 }

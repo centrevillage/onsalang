@@ -65,13 +65,13 @@ use std.dsp.test.{impulse, energy}
 /// 二極レゾネータ。極は r·e^{±jw} にあり、bw > 0 なら |r| < 1 で安定。
 /// 入力に (1 - r) を掛けて、ピークのゲインをおおよそ正規化する。
 pub flow resonator(x: F32 at sample, fc: F32 at block, bw: F32 at block) -> F32 at sample {
-  let r  = exp(-(F32.PI * bw) / sample_rate()) // block
-  let w  = (2.0 * F32.PI * fc) / sample_rate() // block
-  let b1 = 2.0 * r * cos(w)                    // block
-  let b2 = r * r                               // block
-  let y1 = prev~(^y)                           // sample: ^y は下で定義される y（帰還）
-  let y2 = prev~(y1)                           // sample
-  let y  = (1.0 - r) * x + b1 * y1 - b2 * y2   // sample: y[n] = g·x + b1·y[n-1] − r²·y[n-2]
+  let r = exp(-(F32.PI * bw) / sample_rate()) // block
+  let w = (2.0 * F32.PI * fc) / sample_rate() // block
+  let b1 = 2.0 * r * cos(w)                   // block
+  let b2 = r * r                              // block
+  let y1 = prev~(^y)                          // sample: ^y は下で定義される y（帰還）
+  let y2 = prev~(y1)                          // sample
+  let y = (1.0 - r) * x + b1 * y1 - b2 * y2   // sample: y[n] = g·x + b1·y[n-1] − r²·y[n-2]
   y
 }
 
@@ -122,8 +122,8 @@ pub flow voice(
   gain: F32 at block,
 ) -> F32 at sample {
   let src = saw~(f0)
-  let f1  = resonator~(src, vowel_f1, 80.0) // 80.0: 定数から block へ昇格
-  let f2  = resonator~(src, vowel_f2, 120.0)
+  let f1 = resonator~(src, vowel_f1, 80.0) // 80.0: 定数から block へ昇格
+  let f2 = resonator~(src, vowel_f2, 120.0)
   (f1 + f2) * smooth~(gain, 0.01)
 }
 ```
@@ -159,10 +159,10 @@ use std.fs.{Fs, Path, IoError}
 use std.audio.wav
 
 pub fn render_vowel(path: Path) -> Result[(), IoError] uses {Fs, Alloc} {
-  let sr: F32       = 48000.0
-  var st            = voice.init(sr)
+  let sr: F32 = 48000.0
+  var st = voice.init(sr)
   var out: Buf[F32] = Buf.zeroed(48000)
-  let p             = voice.Params { f0: 110.0, vowel_f1: 700.0, vowel_f2: 1220.0, gain: 0.5 }
+  let p = voice.Params { f0: 110.0, vowel_f1: 700.0, vowel_f2: 1220.0, gain: 0.5 }
   voice.process(inout st, p, inout out)
   wav.write(path, out, sr)
 }

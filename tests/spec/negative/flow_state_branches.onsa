@@ -23,45 +23,45 @@ pub rt fn wrap(x: F32) -> F32 {
 // ---- E0811: a branch of a plain `if` ----
 
 pub flow else_branch_with_state(x: F32 at sample) -> F32 at sample {
-  if x > 0.0 { 1.0 } else { acc~(x) }                             //~ E0811
+  if x > 0.0 { 1.0 } else { acc~(x) } //~ E0811
 }
 
 pub flow else_if_branch_with_state(x: F32 at sample) -> F32 at sample {
-  if x > 1.0 { 1.0 } else if x > 0.0 { acc~(x) } else { 0.0 }    //~ E0811
+  if x > 1.0 { 1.0 } else if x > 0.0 { acc~(x) } else { 0.0 } //~ E0811
 }
 
 pub flow constant_condition_with_state(x: F32 at sample) -> F32 at sample {
-  if true { acc~(x) } else { 0.0 }                                //~ E0811
+  if true { acc~(x) } else { 0.0 } //~ E0811
 }
 
 pub flow delay_in_a_branch(x: F32 at sample) -> F32 at sample {
-  if x > 0.0 { delay~(x, 2) } else { 0.0 }                        //~ E0811
+  if x > 0.0 { delay~(x, 2) } else { 0.0 } //~ E0811
 }
 
 pub flow vdelay_in_a_branch(x: F32 at sample) -> F32 at sample {
-  if x > 0.0 { vdelay~(x, 2.0, 4) } else { 0.0 }                  //~ E0811
+  if x > 0.0 { vdelay~(x, 2.0, 4) } else { 0.0 } //~ E0811
 }
 
 pub flow state_inside_a_call_in_a_branch(x: F32 at sample) -> F32 at sample {
-  if x > 0.0 { wrap(prev~(x)) } else { 0.0 }                      //~ E0811
+  if x > 0.0 { wrap(prev~(x)) } else { 0.0 } //~ E0811
 }
 
 pub flow state_inside_an_array_in_a_branch(x: F32 at sample) -> F32 at sample {
-  if x > 0.0 { [prev~(x), x][0] } else { 0.0 }                    //~ E0811
+  if x > 0.0 { [prev~(x), x][0] } else { 0.0 } //~ E0811
 }
 
 // ---- E0811: nested branches ----
 
 pub flow nested_if_with_state(x: F32 at sample) -> F32 at sample {
-  if x > 0.0 { if x > 1.0 { acc~(x) } else { 0.0 } } else { 0.0 }   //~ E0811
+  if x > 0.0 { if x > 1.0 { acc~(x) } else { 0.0 } } else { 0.0 } //~ E0811
 }
 
 pub flow plain_if_with_state_inside_an_if_tilde(x: F32 at sample) -> F32 at sample {
-  if~ x > 0.0 { if x > 1.0 { acc~(x) } else { 0.0 } } else { acc~(x) }   //~ E0811
+  if~ x > 0.0 { if x > 1.0 { acc~(x) } else { 0.0 } } else { acc~(x) } //~ E0811
 }
 
 pub flow if_inside_a_match_arm(k: U32 at sample, x: F32 at sample) -> F32 at sample {
-  match k { 0 => if x > 0.0 { acc~(x) } else { 0.0 }, _ => 0.0 }  //~ E0811
+  match k { 0 => if x > 0.0 { acc~(x) } else { 0.0 }, _ => 0.0 } //~ E0811
 }
 
 pub flow match_inside_an_if_branch(k: U32 at sample, x: F32 at sample) -> F32 at sample {
@@ -71,19 +71,19 @@ pub flow match_inside_an_if_branch(k: U32 at sample, x: F32 at sample) -> F32 at
 // ---- E0811: an arm and a guard of a plain `match` ----
 
 pub flow arm_with_a_delay(k: U32 at sample, x: F32 at sample) -> F32 at sample {
-  match k { 0 => 1.0, _ => prev~(x) }                             //~ E0811
+  match k { 0 => 1.0, _ => prev~(x) } //~ E0811
 }
 
 pub flow guard_with_an_instance(k: U32 at sample, x: F32 at sample) -> F32 at sample {
   match k {
-    0 if acc~(x) > 1.0 => 1.0,                                    //~ E0811
+    0 if acc~(x) > 1.0 => 1.0, //~ E0811
     _ => 0.0,
   }
 }
 
 pub flow guard_with_a_delay(k: U32 at sample, x: F32 at sample) -> F32 at sample {
   match k {
-    _ if prev~(x) > 0.0 => 1.0,                                   //~ E0811
+    _ if prev~(x) > 0.0 => 1.0, //~ E0811
     _ => 0.0,
   }
 }
@@ -91,7 +91,7 @@ pub flow guard_with_a_delay(k: U32 at sample, x: F32 at sample) -> F32 at sample
 pub flow guard_with_state_after_a_plain_arm(k: U32 at sample, x: F32 at sample) -> F32 at sample {
   match k {
     0 => 2.0,
-    1 if delay~(x, 2) > 0.5 => 1.0,                               //~ E0811
+    1 if delay~(x, 2) > 0.5 => 1.0, //~ E0811
     _ => 0.0,
   }
 }
@@ -99,15 +99,15 @@ pub flow guard_with_state_after_a_plain_arm(k: U32 at sample, x: F32 at sample) 
 // ---- E0811: inside a `par` body ----
 
 pub flow if_in_a_par_body(x: F32 at sample) -> F32 at sample {
-  let xs = par~ i in 0..<2 {
-    if x > 0.0 { acc~(x) * F32.round_from(i) } else { 0.0 }       //~ E0811
+  let xs = par~ i in 0 ..< 2 {
+    if x > 0.0 { acc~(x) * F32.round_from(i) } else { 0.0 } //~ E0811
   }
   xs[0]
 }
 
 pub flow match_in_a_par_body(k: U32 at sample, x: F32 at sample) -> F32 at sample {
-  let xs = par~ i in 0..<2 {
-    match k { 0 => prev~(x) * F32.round_from(i), _ => 0.0 }       //~ E0811
+  let xs = par~ i in 0 ..< 2 {
+    match k { 0 => prev~(x) * F32.round_from(i), _ => 0.0 } //~ E0811
   }
   xs[1]
 }
@@ -115,32 +115,32 @@ pub flow match_in_a_par_body(k: U32 at sample, x: F32 at sample) -> F32 at sampl
 // ---- E0806: the right side of && and || ----
 
 pub flow nested_or_with_state(x: F32 at sample) -> F32 at sample {
-  let hit = x > 0.0 && (x > 1.0 || acc~(x) > 1.0)                 //~ E0806
+  let hit = x > 0.0 && (x > 1.0 || acc~(x) > 1.0) //~ E0806
   if hit { 1.0 } else { 0.0 }
 }
 
 pub flow chained_and_with_state(x: F32 at sample) -> F32 at sample {
-  let hit = x > 0.0 && x < 1.0 && prev~(x) > 0.0                  //~ E0806
+  let hit = x > 0.0 && x < 1.0 && prev~(x) > 0.0 //~ E0806
   if hit { 1.0 } else { 0.0 }
 }
 
 pub flow or_with_a_delay(x: F32 at sample) -> F32 at sample {
-  let hit = x > 0.0 || delay~(x, 2) > 1.0                         //~ E0806
+  let hit = x > 0.0 || delay~(x, 2) > 1.0 //~ E0806
   if hit { 1.0 } else { 0.0 }
 }
 
 pub flow right_side_state_inside_a_call(x: F32 at sample) -> F32 at sample {
-  let hit = x > 0.0 || wrap(acc~(x)) > 1.0                        //~ E0806
+  let hit = x > 0.0 || wrap(acc~(x)) > 1.0 //~ E0806
   if hit { 1.0 } else { 0.0 }
 }
 
 pub flow right_side_state_in_an_if_tilde_condition(x: F32 at sample) -> F32 at sample {
-  if~ x > 0.0 && acc~(x) > 1.0 { 1.0 } else { acc~(x) }           //~ E0806
+  if~ x > 0.0 && acc~(x) > 1.0 { 1.0 } else { acc~(x) } //~ E0806
 }
 
 pub flow right_side_state_in_a_par_body(x: F32 at sample) -> F32 at sample {
-  let flags = par~ i in 0..<2 {
-    x > 0.0 && acc~(x) > F32.round_from(i)                        //~ E0806
+  let flags = par~ i in 0 ..< 2 {
+    x > 0.0 && acc~(x) > F32.round_from(i) //~ E0806
   }
   if flags[0] { 1.0 } else { 0.0 }
 }
@@ -157,6 +157,6 @@ pub flow if_tilde_with_a_plain_if(c: Bool at sample, d: I32 at sample, x: F32 at
 // The condition, the scrutinee and the left operand are always evaluated and may hold state.
 pub flow state_where_it_is_always_evaluated(x: F32 at sample, k: U32 at sample) -> F32 at sample {
   let hit = acc~(x) > 1.0 && x > 0.0
-  let m   = match prev~(k) { 0 => 1.0, _ => 2.0 }
+  let m = match prev~(k) { 0 => 1.0, _ => 2.0 }
   if prev~(x) > 0.0 && hit { m } else { 0.0 }
 }

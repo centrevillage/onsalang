@@ -33,7 +33,7 @@ fn ge2[T: PartialOrd](a: T, b: T) -> Bool {
 }
 
 test "PartialEq compares integers, Bool and Char" {
-  let a: I8  = -3
+  let a: I8 = -3
   let b: U64 = 5
   assert eq2(a, a)
   assert !eq2(b, 6)
@@ -44,8 +44,8 @@ test "PartialEq compares integers, Bool and Char" {
 }
 
 test "PartialOrd orders integers and Char" {
-  let a: I8  = -3
-  let b: I8  = 4
+  let a: I8 = -3
+  let b: I8 = 4
   let c: U32 = 9
   assert lt2(a, b)
   assert !lt2(b, a)
@@ -68,7 +68,7 @@ test "PartialEq and PartialOrd compare floats as IEEE does" {
 }
 
 test "a NaN is equal to nothing and has no order" {
-  let n: F64   = F64.NAN
+  let n: F64 = F64.NAN
   let one: F64 = 1.0
   assert !eq2(n, n)
   assert ne2(n, n)

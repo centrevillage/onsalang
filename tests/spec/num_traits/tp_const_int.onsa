@@ -45,7 +45,7 @@ fn signed_minus_one[T: Num + Int](x: T) -> T {
 }
 
 fn highest_bit[T: Unsigned](x: T) -> U32 {
-  var v      = x
+  var v = x
   var n: U32 = 0
   while v != T.ZERO {
     v = v >> 1
@@ -55,11 +55,11 @@ fn highest_bit[T: Unsigned](x: T) -> U32 {
 }
 
 test "T.ONE of every integer type is 1" {
-  let a: I8  = 0
+  let a: I8 = 0
   let b: I16 = 0
   let c: I32 = 0
   let d: I64 = 0
-  let e: U8  = 0
+  let e: U8 = 0
   let f: U16 = 0
   let g: U32 = 0
   let h: U64 = 0
@@ -75,11 +75,11 @@ test "T.ONE of every integer type is 1" {
 }
 
 test "T.MAX of every integer type" {
-  let a: I8  = 0
+  let a: I8 = 0
   let b: I16 = 0
   let c: I32 = 0
   let d: I64 = 0
-  let e: U8  = 0
+  let e: U8 = 0
   let f: U16 = 0
   let g: U32 = 0
   let h: U64 = 0
@@ -94,7 +94,7 @@ test "T.MAX of every integer type" {
 }
 
 test "T.MIN of the signed integer types is the least value, of the unsigned 0" {
-  let a: I8  = 0
+  let a: I8 = 0
   let b: I16 = 0
   let c: I32 = 0
   let d: I64 = 0
@@ -103,7 +103,7 @@ test "T.MIN of the signed integer types is the least value, of the unsigned 0" {
   assert min_of(c) == -2147483648
   assert min_of(d) == I64.MIN
   assert min_of(d) + I64.MAX == -1
-  let e: U8  = 7
+  let e: U8 = 7
   let f: U16 = 7
   let g: U32 = 7
   let h: U64 = 7
@@ -114,14 +114,14 @@ test "T.MIN of the signed integer types is the least value, of the unsigned 0" {
 }
 
 test "T.BITS is the width, and it is a U32 whatever T is" {
-  let a: I8   = 0
-  let b: I16  = 0
-  let c: I32  = 0
-  let d: I64  = 0
-  let e: U8   = 0
-  let f: U16  = 0
-  let g: U32  = 0
-  let h: U64  = 0
+  let a: I8 = 0
+  let b: I16 = 0
+  let c: I32 = 0
+  let d: I64 = 0
+  let e: U8 = 0
+  let f: U16 = 0
+  let g: U32 = 0
+  let h: U64 = 0
   let ba: U32 = bits_of(a)
   let bb: U32 = bits_of(b)
   let bc: U32 = bits_of(c)
@@ -141,7 +141,7 @@ test "T.BITS is the width, and it is a U32 whatever T is" {
 }
 
 test "the constants of T: Unsigned" {
-  let a: U8  = 0
+  let a: U8 = 0
   let b: U64 = 0
   assert unsigned_top(a) == 254
   assert unsigned_top(b) == 18446744073709551614
@@ -150,7 +150,7 @@ test "the constants of T: Unsigned" {
 }
 
 test "the constants of T: Num + Int, the signed integers" {
-  let a: I8  = 0
+  let a: I8 = 0
   let b: I32 = 0
   let c: I64 = 0
   assert signed_min_plus_max(a) == -1

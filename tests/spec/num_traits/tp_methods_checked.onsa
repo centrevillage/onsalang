@@ -65,7 +65,7 @@ test "checked_add and checked_sub of an unsigned type, 0 - 1 is None" {
   assert c_add(z, a) == Some(255)
   assert c_sub(z, b) == None
   assert c_sub(a, a) == Some(0)
-  let m: U64   = U64.MAX
+  let m: U64 = U64.MAX
   let one: U64 = 1
   assert c_add(m, one) == None
   assert c_sub(m, one) == Some(18446744073709551614)
@@ -101,8 +101,8 @@ test "checked_mul" {
 
 test "checked_div: a division by 0 and MIN / -1 are None, the quotient is cut toward zero" {
   let min: I8 = -128
-  let m1: I8  = -1
-  let z: I8   = 0
+  let m1: I8 = -1
+  let z: I8 = 0
   let one: I8 = 1
   assert c_div(min, m1) == None
   assert c_div(min, one) == Some(-128)
@@ -119,8 +119,8 @@ test "checked_div: a division by 0 and MIN / -1 are None, the quotient is cut to
 
 test "checked_rem: the sign of the dividend, MIN % -1 is Some(0), a division by 0 is None" {
   let min: I8 = -128
-  let m1: I8  = -1
-  let z: I8   = 0
+  let m1: I8 = -1
+  let z: I8 = 0
   assert c_rem(min, m1) == Some(0)
   assert c_rem(m1, z) == None
   let a: I32 = -7
@@ -133,8 +133,8 @@ test "checked_rem: the sign of the dividend, MIN % -1 is Some(0), a division by 
 
 test "checked_div_euclid and checked_rem_euclid" {
   let min: I16 = -32768
-  let m1: I16  = -1
-  let z: I16   = 0
+  let m1: I16 = -1
+  let z: I16 = 0
   assert c_div_euclid(min, m1) == None
   assert c_rem_euclid(min, m1) == Some(0)
   assert c_div_euclid(m1, z) == None
@@ -183,7 +183,7 @@ test "checked_shr: arithmetic for a signed type, logical for an unsigned type, t
 
 test "the shift by 0 is the value" {
   let a: I16 = -300
-  let b: U8  = 9
+  let b: U8 = 9
   assert c_shl(a, 0) == Some(-300)
   assert c_shr(a, 0) == Some(-300)
   assert c_shl(b, 0) == Some(9)

@@ -47,7 +47,7 @@ test "I32: exact divisions, zero and small dividends" {
 }
 
 test "I32: checked_rem has the sign of the dividend" {
-  let a: I32  = 7
+  let a: I32 = 7
   let na: I32 = -7
   assert val(a.checked_rem(2), 99) == 1
   assert val(na.checked_rem(2), 99) == -1
@@ -83,7 +83,7 @@ test "I8: the minimum with other divisors, and the maximum with the minimum" {
 }
 
 test "unsigned: the same methods, None for a zero divisor" {
-  let a: U8  = 200
+  let a: U8 = 200
   let m: U32 = U32.MAX
   assert val(a.checked_div_euclid(7), 99) == 28
   assert val(a.checked_rem_euclid(7), 99) == 4

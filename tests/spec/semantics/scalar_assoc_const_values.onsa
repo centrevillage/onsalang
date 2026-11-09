@@ -62,13 +62,13 @@ test "EPSILON of F32 is 2^-23" {
 }
 
 test "adding a half of EPSILON of F32 to 1.0 is a tie that rounds to the even 1.0" {
-  let one: F32  = 1.0
+  let one: F32 = 1.0
   let half: F32 = F32.EPSILON / 2.0
   assert one + half == one
 }
 
 test "adding three quarters of EPSILON of F32 to 1.0 rounds to the next value" {
-  let one: F32  = 1.0
+  let one: F32 = 1.0
   let part: F32 = F32.EPSILON * 0.75
   assert one + part == one + F32.EPSILON
 }
@@ -83,7 +83,7 @@ test "EPSILON of F64 is 2^-52" {
 }
 
 test "adding a half of EPSILON of F64 to 1.0 is a tie that rounds to the even 1.0" {
-  let one: F64  = 1.0
+  let one: F64 = 1.0
   let half: F64 = F64.EPSILON / 2.0
   assert one + half == one
 }
@@ -193,7 +193,7 @@ test "NAN spreads through the operations, and to_bits reads it as the positive q
 // ---------------------------------------------------------------- MIN and MAX of the integers
 
 test "the constants of the signed types are the values of the type" {
-  let a: I8  = I8.MAX
+  let a: I8 = I8.MAX
   let b: I16 = I16.MAX
   let c: I32 = I32.MAX
   let d: I64 = I64.MAX
@@ -201,7 +201,7 @@ test "the constants of the signed types are the values of the type" {
   assert (b as I32) == 32767
   assert c == 2147483647
   assert d == 9223372036854775807
-  let e: I8  = I8.MIN
+  let e: I8 = I8.MIN
   let f: I16 = I16.MIN
   let g: I32 = I32.MIN
   let h: I64 = I64.MIN
@@ -212,7 +212,7 @@ test "the constants of the signed types are the values of the type" {
 }
 
 test "the constants of the unsigned types are the values of the type" {
-  let a: U8  = U8.MAX
+  let a: U8 = U8.MAX
   let b: U16 = U16.MAX
   let c: U32 = U32.MAX
   let d: U64 = U64.MAX

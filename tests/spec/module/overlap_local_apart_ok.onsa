@@ -111,9 +111,9 @@ impl Pt {
 
 // The locals `x` and `norm` are not the fields `x` and `norm` (a field is not a binding of the body).
 pub fn locals_with_the_field_names(p: Pt) -> F32 {
-  let x    = p.x
+  let x = p.x
   let norm = p.norm
-  let q    = Pt { x: x, norm: norm }
+  let q = Pt { x: x, norm: norm }
   q.norm_of(x)
 }
 

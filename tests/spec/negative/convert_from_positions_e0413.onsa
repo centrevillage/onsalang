@@ -72,6 +72,6 @@ pub fn in_arm(o: Option[I32]) -> Option[I64] {
 
 test "a test body" {
   let y: F32 = 1.5
-  let w      = F64.round_from(y) //~ E0413
+  let w = F64.round_from(y) //~ E0413
   assert w == 1.5
 }

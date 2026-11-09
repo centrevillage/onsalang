@@ -104,7 +104,7 @@ test "the element of a Buf is a Num or a Float" {
 }
 
 test "x repeated in an array is a Num or a Float" {
-  let a: I8  = 3
+  let a: I8 = 3
   let b: F32 = 0.25
   assert filled_num(a)[2] == 3
   assert filled_float(b)[1] == 0.25
@@ -112,7 +112,7 @@ test "x repeated in an array is a Num or a Float" {
 
 test "a method of a type with a Float parameter reads its field twice" {
   let h: F32 = 2.0
-  let w      = W { a: h }
+  let w = W { a: h }
   let (x, y) = w.twice()
   assert x == 2.0
   assert y == 2.0

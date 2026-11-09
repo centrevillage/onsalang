@@ -38,7 +38,7 @@ test "a const parameter has the value of the instance" {
 }
 
 test "a type parameter has the value of the instance" {
-  let a: Width[U8]  = Width.default()
+  let a: Width[U8] = Width.default()
   let b: Width[I32] = Width.default()
   assert a.bits == 8
   assert b.bits == 32

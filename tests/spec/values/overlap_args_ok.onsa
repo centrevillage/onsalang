@@ -103,7 +103,7 @@ pub fn receiver_and_a_sibling_field() {
 }
 
 pub fn receiver_and_another_variable() {
-  var p      = P { x: 1, y: 2 }
+  var p = P { x: 1, y: 2 }
   let k: U32 = 3
   p.scale!(k)
 }

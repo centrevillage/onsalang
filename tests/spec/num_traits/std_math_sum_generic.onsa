@@ -69,7 +69,7 @@ fn nested_total[T: AnyNum](a: [T; 2], b: [T; 2]) -> T {
 test "sum from an AnyNum function, for every family" {
   let a: [F32; 3] = [0.5, 0.25, 0.125]
   let b: [I16; 3] = [-3, 10, -4]
-  let c: [U8; 3]  = [250, 3, 2]
+  let c: [U8; 3] = [250, 3, 2]
   assert total_any(a) == 0.875
   assert total_any(b) == 3
   assert total_any(c) == 255
@@ -87,7 +87,7 @@ test "sum from a Num and a Float function" {
 
 test "sum from an Int, an Unsigned and a Num with Int function" {
   let a: [U64; 3] = [18446744073709551610, 3, 2]
-  let b: [I8; 3]  = [-100, 50, -28]
+  let b: [I8; 3] = [-100, 50, -28]
   let c: [U16; 2] = [40000, 25535]
   assert total_int(a) == 18446744073709551615
   assert total_int(b) == -78
@@ -98,12 +98,12 @@ test "sum from an Int, an Unsigned and a Num with Int function" {
 
 test "sum from a function with a fixed length and from arrays built of the values" {
   let a: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
-  let x: F32      = 1.5
-  let y: F32      = 2.5
-  let m: I64      = 7
-  let n: I64      = 8
-  let z: F64      = -1.5
-  let w: F64      = 0.5
+  let x: F32 = 1.5
+  let y: F32 = 2.5
+  let m: I64 = 7
+  let n: I64 = 8
+  let z: F64 = -1.5
+  let w: F64 = 0.5
   assert total_four(a) == 10.0
   assert pair_sum(x, y) == 4.0
   assert pair_sum(m, n) == 15
@@ -129,7 +129,7 @@ test "the zero signs and the empty sum through a generic function" {
   let a: [F32; 2] = [-0.0, -0.0]
   let b: [F64; 1] = [-0.0]
   let c: [F32; 0] = []
-  let z: F32      = -0.0
+  let z: F32 = -0.0
   assert total_any(a).to_bits() == 2147483648
   assert (total_float(b).to_bits() >> 32) == 2147483648
   assert total_num(c).to_bits() == 0
@@ -137,10 +137,10 @@ test "the zero signs and the empty sum through a generic function" {
 }
 
 test "sum from a closure that captures a value" {
-  let k: F32      = 2.0
+  let k: F32 = 2.0
   let xs: [I8; 3] = [1, 2, 3]
   let a: [F32; 3] = array.from_fn(fn(i) { sum([F32.round_from(i), k]) })
-  let b: [I8; 2]  = array.from_fn(fn(_) { sum(xs) })
+  let b: [I8; 2] = array.from_fn(fn(_) { sum(xs) })
   assert a[0] == 2.0
   assert a[1] == 3.0
   assert a[2] == 4.0

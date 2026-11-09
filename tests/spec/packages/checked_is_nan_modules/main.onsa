@@ -27,8 +27,8 @@ test "the checked methods in another module" {
 }
 
 test "is_nan and is_finite in another module" {
-  let nan: F32    = F32.NAN
-  let inf: F64    = F64.INFINITY
+  let nan: F32 = F32.NAN
+  let inf: F64 = F64.INFINITY
   let finite: F64 = 2.5
   assert usable(2.5)
   assert !usable(nan)

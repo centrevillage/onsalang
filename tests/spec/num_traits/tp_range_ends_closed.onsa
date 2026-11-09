@@ -79,7 +79,7 @@ test "a closed range that is empty runs the body 0 times" {
 }
 
 test "the closed range that starts at T.ONE" {
-  let a: U8  = 5
+  let a: U8 = 5
   let b: I32 = 11
   assert sum_from_one_closed(a) == 15
   assert sum_from_one_closed(b) == 66
@@ -93,7 +93,7 @@ test "the closed range with the same end runs once" {
 }
 
 test "the closed range from T.ZERO sums to the triangle number" {
-  let a: U8  = 10
+  let a: U8 = 10
   let b: I64 = 100
   let c: I16 = 0
   assert sum_closed(a) == 55

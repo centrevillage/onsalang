@@ -25,7 +25,7 @@ fn neg_signed_int[T: Num + Int](x: T) -> T {
 }
 
 test "Neg negates the signed integers" {
-  let a: I8  = 5
+  let a: I8 = 5
   let b: I16 = -7
   let c: I32 = 0
   let d: I64 = 9
@@ -62,12 +62,12 @@ test "Num and Int negate the signed integers" {
 
 test "Neg panics for the least signed integer" {
   let a: I8 = -128
-  let r     = neg_trait(a) //~ PANIC "Neg panics for the least signed integer"
+  let r = neg_trait(a) //~ PANIC "Neg panics for the least signed integer"
   assert r == 0
 }
 
 test "Num negation panics for the least signed integer" {
   let a: I64 = I64.MIN
-  let r      = neg_num(a) //~ PANIC "Num negation panics for the least signed integer"
+  let r = neg_num(a) //~ PANIC "Num negation panics for the least signed integer"
   assert r == 0
 }

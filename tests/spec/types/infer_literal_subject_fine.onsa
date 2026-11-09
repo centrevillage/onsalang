@@ -75,7 +75,7 @@ pub fn literal_decided_by_an_argument(x: U8) -> U8 {
 
 pub fn annotated_integer_with_a_method() -> I32 {
   let n: I32 = 17
-  let c      = n.checked_add(1)
+  let c = n.checked_add(1)
   match c {
     Some(v) => v,
     None => 0,

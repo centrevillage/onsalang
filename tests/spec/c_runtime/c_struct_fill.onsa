@@ -74,7 +74,7 @@ pub fn plain(x: U32) -> U32 {
 @export
 pub fn generic() -> U32 {
   let s: Sized[U8] = Sized { v: 1, ... }
-  let r: Ring[5]   = Ring { tail: 0, ... }
+  let r: Ring[5] = Ring { tail: 0, ... }
   s.bits + r.head
 }
 

@@ -3,7 +3,7 @@
 // spec = ["§2.6", "§11.5", "§18.1"]
 //
 // [[test.fix]]
-// at = "91:15"
+// at = "91:14"
 // code = "E0811"
 // candidate = 1
 // leaves = ["92:15 E0811"]
@@ -37,58 +37,58 @@ pub rt fn total(xs: [F32; 4]) -> F32 {
 }
 
 pub flow in_a_let(f0: F32 at block) -> [F32; 4] at sample {
-  let saws = par i in 0 ..< 4 { saw~(f0) }          //~ E0811
+  let saws = par i in 0 ..< 4 { saw~(f0) } //~ E0811
   saws
 }
 
 pub flow as_the_tail(f0: F32 at block) -> [F32; 4] at sample {
-  par i in 0 ..< 4 { saw~(f0) }                     //~ E0811
+  par i in 0 ..< 4 { saw~(f0) } //~ E0811
 }
 
 pub flow as_an_argument(f0: F32 at block) -> F32 at sample {
-  total(par i in 0 ..< 4 { saw~(f0) })              //~ E0811
+  total(par i in 0 ..< 4 { saw~(f0) }) //~ E0811
 }
 
 pub flow without_state_in_a_let(x: F32 at sample) -> [F32; 4] at sample {
-  let ys = par i in 0 ..< 4 { x * F32.round_from(i) }   //~ E0811
+  let ys = par i in 0 ..< 4 { x * F32.round_from(i) } //~ E0811
   ys
 }
 
 pub flow without_state_as_the_tail(x: F32 at sample) -> [F32; 4] at sample {
-  par i in 0 ..< 4 { x * F32.round_from(i) }        //~ E0811
+  par i in 0 ..< 4 { x * F32.round_from(i) } //~ E0811
 }
 
 pub flow without_state_as_an_argument(x: F32 at sample) -> F32 at sample {
-  total(par i in 0 ..< 4 { x * F32.round_from(i) })     //~ E0811
+  total(par i in 0 ..< 4 { x * F32.round_from(i) }) //~ E0811
 }
 
 pub flow with_a_delay_in_the_body(x: F32 at sample) -> [F32; 4] at sample {
-  par i in 0 ..< 4 { prev~(x * F32.round_from(i)) }     //~ E0811
+  par i in 0 ..< 4 { prev~(x * F32.round_from(i)) } //~ E0811
 }
 
 pub flow with_a_constant_count(f0: F32 at block) -> [F32; N] at sample {
-  par i in 0 ..< N { saw~(f0 * (1.0 + F32.round_from(i))) }  //~ E0811
+  par i in 0 ..< N { saw~(f0 * (1.0 + F32.round_from(i))) } //~ E0811
 }
 
 pub flow with_a_lower_bound(f0: F32 at block) -> [F32; 3] at sample {
-  par i in 2 ..< 5 { saw~(f0 * F32.round_from(i)) }     //~ E0811
+  par i in 2 ..< 5 { saw~(f0 * F32.round_from(i)) } //~ E0811
 }
 
 pub flow with_a_block_body(f0: F32 at block, detune: F32 at block) -> [F32; 4] at sample {
-  let saws = par i in 0 ..< 4 {                     //~ E0811
+  let saws = par i in 0 ..< 4 { //~ E0811
     saw~(f0 * (1.0 + detune * F32.round_from(i)))
   }
   saws
 }
 
 pub flow after_a_par_with_the_tilde(f0: F32 at block) -> F32 at sample {
-  let lows  = par~ i in 0 ..< 4 { saw~(f0 * (1.0 + F32.round_from(i))) }
-  let highs = par i in 0 ..< 4 { saw~(f0 * (5.0 + F32.round_from(i))) }  //~ E0811
+  let lows = par~ i in 0 ..< 4 { saw~(f0 * (1.0 + F32.round_from(i))) }
+  let highs = par i in 0 ..< 4 { saw~(f0 * (5.0 + F32.round_from(i))) } //~ E0811
   total(lows) + total(highs)
 }
 
 pub flow two_without_the_tilde_in_one_flow(f0: F32 at block) -> F32 at sample {
-  let lows  = par i in 0 ..< 4 { saw~(f0 * (1.0 + F32.round_from(i))) }  //~ E0811
+  let lows = par i in 0 ..< 4 { saw~(f0 * (1.0 + F32.round_from(i))) } //~ E0811
   let highs = par i in 0 ..< 4 { saw~(f0 * (5.0 + F32.round_from(i))) }
   total(lows) + total(highs)
 }
@@ -96,7 +96,7 @@ pub flow two_without_the_tilde_in_one_flow(f0: F32 at block) -> F32 at sample {
 // ---- Not errors ----
 
 pub flow fine(f0: F32 at block, x: F32 at sample) -> F32 at sample {
-  let lows  = par~ i in 0 ..< 4 { saw~(f0 * (1.0 + F32.round_from(i))) }
+  let lows = par~ i in 0 ..< 4 { saw~(f0 * (1.0 + F32.round_from(i))) }
   let highs = par~ i in 0 ..< 4 { x * F32.round_from(i) }
   total(lows) + total(highs)
 }

@@ -60,13 +60,13 @@ pub fn view_with_run_time_bounds(xs: Span[F32], a: U32, b: U32) -> U32 {
 }
 
 pub fn view_of_a_binding_of_the_argument(xs: Span[F32]) -> U32 {
-  let s    = xs
+  let s = xs
   let part = s.slice(0, 1)
   part.len()
 }
 
 pub fn view_of_a_planar_binding(input: [Span[F32]; 2]) -> U32 {
-  let ch   = input[0]
+  let ch = input[0]
   let part = ch.slice(0, 2)
   part.len()
 }
@@ -80,7 +80,7 @@ pub fn view_of_a_view(xs: Span[F32]) -> U32 {
 // ---------------------------------------------------------------------------- derived
 
 pub fn derived(xs: Span[F32], n: U32) -> F32 {
-  let half  = xs.slice(0, n)
+  let half = xs.slice(0, n)
   let again = half
   again[0]
 }
@@ -154,7 +154,7 @@ pub fn for_over_the_view_of_a_buffer(b: Buf[F32]) -> F32 {
 }
 
 pub fn for_over_the_view_of_a_binding(xs: Span[F32]) -> F32 {
-  let half       = xs.slice(0, 3)
+  let half = xs.slice(0, 3)
   var total: F32 = 0.0
   for v in half.slice(1, 3) {
     total = total + v

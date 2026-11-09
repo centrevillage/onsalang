@@ -280,7 +280,7 @@ pub fn derived_before_the_change(inout w: Wrap) -> U32 {
 pub fn derived_twice_before_the_change(inout w: Wrap) -> U32 {
   match w {
     Wrap { h: hh, k: _ } => {
-      let g  = hh
+      let g = hh
       let g2 = g
       io_n(inout w.h.n)
       len_of(g2.buf) + g2.m

@@ -26,7 +26,7 @@ test "the instance comes from the written field" {
 }
 
 test "the instance comes from the expected type" {
-  let a: Width[U8]  = Width { v: 0, ... }
+  let a: Width[U8] = Width { v: 0, ... }
   let b: Width[I32] = Width { v: 0, ... }
   assert a.bits == 8
   assert b.bits == 32

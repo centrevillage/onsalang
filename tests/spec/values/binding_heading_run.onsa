@@ -43,7 +43,7 @@ fn match_if_that_leaves(c: Bool, x: Option[Buf[F32]]) -> F32 {
 
 fn first_of_a_local(n: U32) -> U32 uses {Alloc} {
   var bufs: [Buf[F32]; 2] = [Buf.zeroed(n), Buf.zeroed(n + 1)]
-  var total: U32          = 0
+  var total: U32 = 0
   for b in bufs {
     total = total + b.len()
   }

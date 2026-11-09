@@ -15,7 +15,7 @@ pub struct Voice {
 
 pub fn fn_binds_builtin_names(v: Voice) -> F32 {
   let sample_rate = v.prev + v.delay
-  let prev        = sample_rate * 2.0
+  let prev = sample_rate * 2.0
   prev
 }
 
@@ -47,8 +47,8 @@ pub flow call_forms_behind_a_caret(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow similar_names(x: F32 at sample) -> F32 at sample {
-  let previous     = prev~(x)
-  let delay_time   = 2.0
+  let previous = prev~(x)
+  let delay_time = 2.0
   let sample_rates = sample_rate()
   previous * delay_time + sample_rates
 }

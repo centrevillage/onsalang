@@ -82,10 +82,10 @@ pub enum CountsThatMatchInAVariant {
 }
 
 pub fn counts_that_match_in_an_annotation() -> I32 {
-  let _: Pair[I32]         = Pair { a: 1, b: 2 }
-  let _: Ring[F32, 2]      = Ring { data: [0.0; 2], head: 0 }
+  let _: Pair[I32] = Pair { a: 1, b: 2 }
+  let _: Ring[F32, 2] = Ring { data: [0.0; 2], head: 0 }
   let _: Option[Pair[I32]] = None
-  let _: B                 = P { x: 1 }
+  let _: B = P { x: 1 }
   1
 }
 

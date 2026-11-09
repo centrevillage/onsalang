@@ -27,15 +27,15 @@ pub fn annotated_local(flag: Bool) -> Bool {
 }
 
 pub fn decided_by_a_later_annotation() -> Bool {
-  let a          = [1, 300] //~ E0408
-  let e          = a == a
+  let a = [1, 300] //~ E0408
+  let e = a == a
   let b: [U8; 2] = a
   e
 }
 
 pub fn tuple_decided_by_a_later_annotation() -> Bool {
-  let t            = (1, 256) //~ E0408
-  let e            = t == t
+  let t = (1, 256) //~ E0408
+  let e = t == t
   let u: (I32, U8) = t
   e
 }
@@ -50,8 +50,8 @@ pub fn negative_literal_for_an_annotated_local() -> Bool {
 }
 
 pub fn negative_literal_decided_later() -> Bool {
-  let a          = [-1, 2] //~ E0401
-  let e          = a == a
+  let a = [-1, 2] //~ E0401
+  let e = a == a
   let b: [U8; 2] = a
   e
 }

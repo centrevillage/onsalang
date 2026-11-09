@@ -20,7 +20,7 @@ fn signed_same[T: Num + Int](x: T) -> T {
 }
 
 test "Int takes the signed integers" {
-  let a: I8  = 127
+  let a: I8 = 127
   let b: I16 = -32768
   let c: I32 = 2147483647
   let d: I64 = I64.MIN
@@ -31,7 +31,7 @@ test "Int takes the signed integers" {
 }
 
 test "Int takes the unsigned integers" {
-  let a: U8  = 255
+  let a: U8 = 255
   let b: U16 = 65535
   let c: U32 = 4294967295
   let d: U64 = 18446744073709551615
@@ -42,7 +42,7 @@ test "Int takes the unsigned integers" {
 }
 
 test "Unsigned takes the unsigned integers" {
-  let a: U8  = 255
+  let a: U8 = 255
   let b: U16 = 65535
   let c: U32 = 4294967295
   let d: U64 = 18446744073709551615
@@ -53,7 +53,7 @@ test "Unsigned takes the unsigned integers" {
 }
 
 test "Num and Int together take the signed integers" {
-  let a: I8  = -128
+  let a: I8 = -128
   let b: I16 = 32767
   let c: I32 = -2147483648
   let d: I64 = 9223372036854775807

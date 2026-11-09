@@ -17,25 +17,25 @@ pub fn apply(f: fn(U32) -> U32) -> U32 {
 
 pub fn captured_view(xs: Span[F32], n: U32) -> U32 {
   let half = xs.slice(0, n)
-  apply(fn(k) { half.len() + k })   //~ E0710
+  apply(fn(k) { half.len() + k }) //~ E0710
 }
 
 pub fn captured_derived(xs: Span[F32], n: U32) -> U32 {
-  let half  = xs.slice(0, n)
+  let half = xs.slice(0, n)
   let again = half
-  apply(fn(k) { again.len() + k })  //~ E0710
+  apply(fn(k) { again.len() + k }) //~ E0710
 }
 
 pub fn captured_view_of_a_planar_element(input: [Span[F32]; 2]) -> U32 {
   let part = input[0].slice(0, 1)
-  apply(fn(k) { part.len() + k })   //~ E0710
+  apply(fn(k) { part.len() + k }) //~ E0710
 }
 
 pub fn captured_in_a_loop(xs: Span[F32], n: U32) -> U32 {
   var total: U32 = 0
   for i in 0 ..< n {
     let part = xs.slice(0, i)
-    total = total + apply(fn(k) { part.len() + k })   //~ E0710
+    total = total + apply(fn(k) { part.len() + k }) //~ E0710
   }
   total
 }

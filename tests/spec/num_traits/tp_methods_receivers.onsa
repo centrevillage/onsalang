@@ -120,8 +120,8 @@ test "T.ZERO.checked_sub(x) is the checked negation of a signed type" {
 }
 
 test "T.ZERO.checked_sub(x) of an unsigned type is Some only for 0" {
-  let a: U8  = 0
-  let b: U8  = 1
+  let a: U8 = 0
+  let b: U8 = 1
   let c: U64 = U64.MAX
   assert on_zero(a) == Some(0)
   assert on_zero(b) == None

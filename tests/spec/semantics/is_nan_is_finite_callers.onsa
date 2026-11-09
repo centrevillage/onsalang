@@ -62,10 +62,10 @@ test "an rt fn calls is_nan and is_finite" {
 }
 
 test "the body of a flow calls is_nan" {
-  let nan: F32     = F32.NAN
-  let inf: F32     = F32.INFINITY
+  let nan: F32 = F32.NAN
+  let inf: F32 = F32.INFINITY
   let xs: [F32; 4] = [nan, 2.0, inf, -1.0]
-  let o            = guard.render(guard.Config {}, guard.Params {}, xs, 8.0)
+  let o = guard.render(guard.Config {}, guard.Params {}, xs, 8.0)
   assert o.out[0] == 0.0
   assert o.out[1] == 2.0
   assert o.out[2] == inf
@@ -73,10 +73,10 @@ test "the body of a flow calls is_nan" {
 }
 
 test "the body of a flow calls is_finite" {
-  let nan: F32     = F32.NAN
-  let inf: F32     = F32.INFINITY
+  let nan: F32 = F32.NAN
+  let inf: F32 = F32.INFINITY
   let xs: [F32; 4] = [nan, 2.0, -inf, -1.0]
-  let o            = finite_only.render(finite_only.Config {}, finite_only.Params {}, xs, 8.0)
+  let o = finite_only.render(finite_only.Config {}, finite_only.Params {}, xs, 8.0)
   assert o.out[0] == 0.0
   assert o.out[1] == 2.0
   assert o.out[2] == 0.0
@@ -84,9 +84,9 @@ test "the body of a flow calls is_finite" {
 }
 
 test "a flow calls an rt fn that calls is_nan" {
-  let nan: F32     = F32.NAN
+  let nan: F32 = F32.NAN
   let xs: [F32; 3] = [nan, 3.0, 4.0]
-  let o            = guarded_gain.render(guarded_gain.Config {}, guarded_gain.Params {}, xs, 8.0)
+  let o = guarded_gain.render(guarded_gain.Config {}, guarded_gain.Params {}, xs, 8.0)
   assert o.out[0] == 0.0
   assert o.out[1] == 1.5
   assert o.out[2] == 2.0

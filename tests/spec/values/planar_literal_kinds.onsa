@@ -116,7 +116,7 @@ pub fn inout_three_elements(m: U32) -> F32 uses {Alloc} {
 
 pub fn inout_parts_of_one_variable_and_another(n: U32) -> F32 {
   var long: [F32; 8] = [0.0; 8]
-  var a: [F32; 3]    = [0.0; 3]
+  var a: [F32; 3] = [0.0; 3]
   fill_all(inout [a, long.slice(2, 4)], 1.0)
   fill_all(inout [long.slice(0, n), a], 2.0)
   long[0] + a[0]

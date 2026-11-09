@@ -34,12 +34,12 @@ test "a scalar and a var are captured by copy" {
 }
 
 test "a Copy struct, a tuple and an array" {
-  let g                   = Gain { a: 2, b: 5 }
-  let t: (U32, U32)       = (7, 8)
-  let xs: [U32; 3]        = [10, 20, 30]
+  let g = Gain { a: 2, b: 5 }
+  let t: (U32, U32) = (7, 8)
+  let xs: [U32; 3] = [10, 20, 30]
   let by_struct: [U32; 2] = array.from_fn(fn(i) { i + g.a + g.b })
-  let by_tuple: [U32; 2]  = array.from_fn(fn(i) { i + t.0 + t.1 })
-  let by_array: [U32; 2]  = array.from_fn(fn(i) { xs[i] + xs[2] })
+  let by_tuple: [U32; 2] = array.from_fn(fn(i) { i + t.0 + t.1 })
+  let by_array: [U32; 2] = array.from_fn(fn(i) { xs[i] + xs[2] })
   assert by_struct[1] == 8
   assert by_tuple[0] == 15
   assert by_array[1] == 50

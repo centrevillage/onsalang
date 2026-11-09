@@ -34,7 +34,7 @@ fn assign_after_the_move() -> U32 uses {Alloc} {
 }
 
 fn assign_at_the_end_of_the_body(n: U32) -> U32 uses {Alloc} {
-  var b      = mk(1)
+  var b = mk(1)
   var i: U32 = 0
   while i < n {
     take(move b)
@@ -54,7 +54,7 @@ fn assign_in_a_for(n: U32) -> U32 uses {Alloc} {
 }
 
 fn assign_before_the_continue(n: U32) -> U32 uses {Alloc} {
-  var b      = mk(1)
+  var b = mk(1)
   var i: U32 = 0
   while i < n {
     i = i + 1
@@ -93,7 +93,7 @@ fn assign_in_every_arm(c: Bool) -> U32 uses {Alloc} {
 }
 
 fn condition_reads_what_the_body_assigned() -> U32 uses {Alloc} {
-  var b      = mk(1)
+  var b = mk(1)
   var i: U32 = 0
   while i < read(b) {
     take(move b)
@@ -104,7 +104,7 @@ fn condition_reads_what_the_body_assigned() -> U32 uses {Alloc} {
 }
 
 fn moved_before_the_break() -> U32 uses {Alloc} {
-  let b      = mk(1)
+  let b = mk(1)
   var n: U32 = 0
   while cond() {
     take(move b)

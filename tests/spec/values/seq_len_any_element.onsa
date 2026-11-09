@@ -39,7 +39,7 @@ fn len_of_a_maybe_affine_parameter[T: ?Dup, const N: U32](xs: [T; N]) -> U32 {
 }
 
 test "len of an array of Copy and nested elements" {
-  let a: [F32; 4]      = [0.0; 4]
+  let a: [F32; 4] = [0.0; 4]
   let n: [[F32; 3]; 2] = [[0.0; 3]; 2]
   assert len_copy(a) == 4
   assert len_nested(n) == 23
@@ -61,7 +61,7 @@ test "len of a planar array is the number of channels" {
 }
 
 test "len of a type parameter array, with and without ?Dup" {
-  let a: [F32; 4]         = [0.0; 4]
+  let a: [F32; 4] = [0.0; 4]
   let bufs: [Buf[F32]; 2] = [Buf.zeroed(2), Buf.zeroed(5)]
   assert len_of_a_parameter(a) == 4
   assert len_of_a_maybe_affine_parameter(a) == 4

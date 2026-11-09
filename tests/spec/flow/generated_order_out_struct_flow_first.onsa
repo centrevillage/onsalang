@@ -43,7 +43,7 @@ test "the fields of a struct output without a sample input" {
 
 test "the fields of a struct output, one of them an array of channels" {
   let xs: [F32; 3] = [1.0, 2.0, 3.0]
-  let o            = spread.render(spread.Config {}, spread.Params { k: 2.0 }, xs, 8.0)
+  let o = spread.render(spread.Config {}, spread.Params { k: 2.0 }, xs, 8.0)
   assert o.v[0][2] == 6.0
   assert o.v[1][2] == 5.0
   assert o.g[0] == 2.0

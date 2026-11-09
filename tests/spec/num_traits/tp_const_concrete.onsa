@@ -15,11 +15,11 @@ type Offset = I8
 type Lane = Index
 
 test "ZERO of the eight integer types" {
-  let a: I8  = I8.ZERO
+  let a: I8 = I8.ZERO
   let b: I16 = I16.ZERO
   let c: I32 = I32.ZERO
   let d: I64 = I64.ZERO
-  let e: U8  = U8.ZERO
+  let e: U8 = U8.ZERO
   let f: U16 = U16.ZERO
   let g: U32 = U32.ZERO
   let h: U64 = U64.ZERO
@@ -34,11 +34,11 @@ test "ZERO of the eight integer types" {
 }
 
 test "ONE of the eight integer types" {
-  let a: I8  = I8.ONE
+  let a: I8 = I8.ONE
   let b: I16 = I16.ONE
   let c: I32 = I32.ONE
   let d: I64 = I64.ONE
-  let e: U8  = U8.ONE
+  let e: U8 = U8.ONE
   let f: U16 = U16.ONE
   let g: U32 = U32.ONE
   let h: U64 = U64.ONE
@@ -82,8 +82,8 @@ test "ZERO and ONE through a type alias" {
   assert Wide.ONE.to_bits() == 0x3FF0000000000000
   let a: U16 = Index.ZERO
   let b: U16 = Index.ONE
-  let c: I8  = Offset.ZERO
-  let d: I8  = Offset.ONE
+  let c: I8 = Offset.ZERO
+  let d: I8 = Offset.ONE
   assert a == 0
   assert b == 1
   assert c == 0

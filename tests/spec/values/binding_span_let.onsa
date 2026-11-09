@@ -51,14 +51,14 @@ pub fn two_channels(input: [Span[F32]; 2]) -> F32 {
 // ---------------------------------------------------------------------------- derived
 
 pub fn derived(input: [Span[F32]; 2]) -> F32 {
-  let ch    = input[0]
+  let ch = input[0]
   let again = ch
   again[0]
 }
 
 pub fn derived_from_the_whole(input: [Span[F32]; 2]) -> F32 {
   let all = input
-  let ch  = all[1]
+  let ch = all[1]
   ch[0]
 }
 

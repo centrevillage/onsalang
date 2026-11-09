@@ -43,8 +43,8 @@ test "a function of the other module that calls another function of it" {
 test "a method of a type of the other module" {
   let a: F32 = 4.0
   let b: F64 = 4.0
-  let ma     = make_mix(a)
-  let mb     = make_mix(b)
+  let ma = make_mix(a)
+  let mb = make_mix(b)
   assert ma.wet() == 0.5
   assert mb.wet() == 0.5
 }

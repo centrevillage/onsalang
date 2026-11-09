@@ -2898,16 +2898,16 @@ pub fn f32_expr_interp(a: F32, b: F32, c: F32) -> F32 { (1.0 - c) * a + c * b }
 
 @export
 pub fn f32_vdelay_k(d: F32, top: U32) -> U32 {
-  let m  = F32.round_from(top)
+  let m = F32.round_from(top)
   let dc = if d >= 1.0 { if d <= m { d } else { m } } else { 1.0 }
   U32.trunc_from(dc)
 }
 
 @export
 pub fn f32_vdelay_f(d: F32, top: U32) -> F32 {
-  let m  = F32.round_from(top)
+  let m = F32.round_from(top)
   let dc = if d >= 1.0 { if d <= m { d } else { m } } else { 1.0 }
-  let k  = U32.trunc_from(dc)
+  let k = U32.trunc_from(dc)
   dc - F32.round_from(k)
 }
 
@@ -2928,16 +2928,16 @@ pub fn f64_expr_interp(a: F64, b: F64, c: F64) -> F64 { (1.0 - c) * a + c * b }
 
 @export
 pub fn f64_vdelay_k(d: F64, top: U32) -> U32 {
-  let m  = top as F64
+  let m = top as F64
   let dc = if d >= 1.0 { if d <= m { d } else { m } } else { 1.0 }
   U32.trunc_from(dc)
 }
 
 @export
 pub fn f64_vdelay_f(d: F64, top: U32) -> F64 {
-  let m  = top as F64
+  let m = top as F64
   let dc = if d >= 1.0 { if d <= m { d } else { m } } else { 1.0 }
-  let k  = U32.trunc_from(dc)
+  let k = U32.trunc_from(dc)
   dc - (k as F64)
 }
 

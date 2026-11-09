@@ -34,13 +34,13 @@ pub rt fn use_p(p: Param) -> U32 {
 
 pub rt fn a_static_name_in_a_struct(v: F32) -> U32 {
   let nm = "gain"
-  let p  = Param { name: nm, value: v }
+  let p = Param { name: nm, value: v }
   use_p(p)
 }
 
 pub rt fn a_static_name_in_a_tuple() -> U32 {
   let nm = "gain"
-  let t  = (nm, 1)
+  let t = (nm, 1)
   t.0.len() + t.1
 }
 
@@ -71,7 +71,7 @@ pub rt fn a_path_of_a_tuple_binding(v: F32) -> U32 {
 
 pub rt fn an_index_path(i: U32) -> U32 {
   let names = ["a", "bc"]
-  let t     = (names[i], 1)
+  let t = (names[i], 1)
   t.0.len() + t.1
 }
 
@@ -95,7 +95,7 @@ pub rt fn a_match_arm_binding_in_a_tuple(v: F32) -> U32 {
 
 pub rt fn a_destructured_binding_in_a_tuple(v: F32) -> U32 {
   let (nm, x) = ("gain", v)
-  let t       = (nm, x)
+  let t = (nm, x)
   t.0.len()
 }
 
@@ -108,7 +108,7 @@ pub rt fn an_if_of_two_literal_bindings(c: Bool, v: F32, w: F32) -> U32 {
 }
 
 pub rt fn the_name_in_a_heading(v: F32) -> U32 {
-  let nm     = "gain"
+  let nm = "gain"
   var n: U32 = 0
   for x in [(nm, v), ("b", v)] {
     n = n + x.0.len()
@@ -124,7 +124,7 @@ pub rt fn the_name_in_a_match(v: F32) -> U32 {
 }
 
 pub rt fn in_a_branch_and_a_loop(c: Bool, n: U32, v: F32) -> U32 {
-  let nm         = "gain"
+  let nm = "gain"
   var total: U32 = 0
   for i in 0 ..< n {
     if c {
@@ -143,7 +143,7 @@ pub fn use_p_plain(p: Param) -> U32 {
 
 pub fn plain_a_static_name_in_a_struct(v: F32) -> U32 {
   let nm = "gain"
-  let p  = Param { name: nm, value: v }
+  let p = Param { name: nm, value: v }
   use_p_plain(p)
 }
 

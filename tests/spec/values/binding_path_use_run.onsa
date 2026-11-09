@@ -107,7 +107,7 @@ fn path_of_a_chain(inout w: Wrap) -> U32 {
   var r: U32 = 0
   match w {
     Wrap { h: hh, k: _ } => {
-      let g  = hh
+      let g = hh
       let g2 = g
       w.h.n = 5
       r = len_of(g2.buf) + g2.m

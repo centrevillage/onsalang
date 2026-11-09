@@ -101,8 +101,8 @@ impl[T: AnyNum] AnyBox[T] {
 }
 
 test "an AnyNum value is read twice" {
-  let a: U8    = 200
-  let b: F64   = 0.5
+  let a: U8 = 200
+  let b: F64 = 0.5
   let (a1, a2) = twice_any(a)
   let (b1, b2) = twice_any(b)
   assert a1 == 200
@@ -127,7 +127,7 @@ test "an Unsigned value is read twice" {
 
 test "AnyNum, Int and Unsigned go where Copy is asked" {
   let a: U16 = 9
-  let b: I8  = -9
+  let b: I8 = -9
   let c: F32 = 1.5
   assert via_any(a) == 9
   assert via_any(c) == 1.5
@@ -148,7 +148,7 @@ test "the element of a Buf is an AnyNum, an Int or an Unsigned" {
 }
 
 test "x repeated in an array is an AnyNum, an Int or an Unsigned" {
-  let a: U8  = 3
+  let a: U8 = 3
   let b: I64 = -3
   let c: U32 = 4
   assert filled_any(a)[2] == 3
@@ -157,8 +157,8 @@ test "x repeated in an array is an AnyNum, an Int or an Unsigned" {
 }
 
 test "a struct that holds an AnyNum is Copy" {
-  let h      = Holder { a: 7 }
-  let g      = holder_for_copy(h)
+  let h = Holder { a: 7 }
+  let g = holder_for_copy(h)
   let (p, q) = holder_read_twice(h)
   assert g.a == 7
   assert p.a == 7
@@ -167,7 +167,7 @@ test "a struct that holds an AnyNum is Copy" {
 }
 
 test "a method of a type with an Int parameter reads its field twice" {
-  let r      = Rack { a: 12 }
+  let r = Rack { a: 12 }
   let (x, y) = r.twice()
   assert x == 12
   assert y == 12

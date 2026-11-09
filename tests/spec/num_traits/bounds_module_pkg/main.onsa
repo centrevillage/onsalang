@@ -24,7 +24,7 @@ fn flip_gain[T: Num](g: Gain[T]) -> T {
 }
 
 test "a function of the other module takes an unsigned, a signed and a float instance" {
-  let a: U8  = 100
+  let a: U8 = 100
   let b: I16 = -30
   let c: F32 = 0.25
   assert lib.double(a) == 200
@@ -43,14 +43,14 @@ test "a bound Unsigned, Num and Int of the other module" {
 
 test "a type with a bound of the other module" {
   let f: F32 = 0.5
-  let g      = make_gain(f)
+  let g = make_gain(f)
   assert gain_of(g) == 0.5
   let h: I32 = 7
   assert flip_gain(make_gain(h)) == -7
 }
 
 test "a function of this module passes its parameter on" {
-  let a: U8  = 20
+  let a: U8 = 20
   let b: I64 = -5
   assert quad(a) == 80
   assert quad(b) == -20

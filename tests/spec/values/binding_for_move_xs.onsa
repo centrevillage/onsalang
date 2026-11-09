@@ -30,7 +30,7 @@ fn sum_of_a_parameter(move xs: [Buf[F32]; 2]) -> F32 uses {Alloc} {
 }
 
 fn sum_of_a_local(a: F32, b: F32) -> F32 uses {Alloc} {
-  let xs         = [make(a), make(b)]
+  let xs = [make(a), make(b)]
   var total: F32 = 0.0
   for z in move xs {
     total = total + value_of(move z)
@@ -93,7 +93,7 @@ fn nested_in_a_loop(a: F32) -> F32 uses {Alloc} {
 
 fn copy_array_stays_usable() -> U32 {
   let xs: [U32; 3] = [1, 2, 3]
-  var n: U32       = 0
+  var n: U32 = 0
   for x in move xs {
     n = n + x
   }

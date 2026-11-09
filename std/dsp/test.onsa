@@ -15,8 +15,8 @@ pub fn impulse(n: U32) -> Buf[F32] uses {Alloc} {
 /// Magnitude of the DFT of `xs` at `freq` (|X(f)|, unnormalized), computed
 /// with the Goertzel algorithm in F64 and rounded to F32.
 pub fn magnitude_at(xs: Span[F32], freq: F32, sample_rate: F32) -> F32 {
-  let w       = (2.0 * F64.PI * (freq as F64)) / (sample_rate as F64)
-  let c       = 2.0 * cos(w)
+  let w = (2.0 * F64.PI * (freq as F64)) / (sample_rate as F64)
+  let c = 2.0 * cos(w)
   var s1: F64 = 0.0
   var s2: F64 = 0.0
   for x in xs {

@@ -32,7 +32,7 @@ test "match~ with a last _ in its arms" {
   // open = T F T.  The counter of the first arm adds a = 1, 0 (the arm is not chosen), 3: 1 1 4.
   // out = the counter, 0, the counter = 1 0 4.
   let xs: [F32; 3] = [1.0, 2.0, 3.0]
-  let o            = gated.render(gated.Config {}, gated.Params {}, xs, 8.0)
+  let o = gated.render(gated.Config {}, gated.Params {}, xs, 8.0)
   assert o.out[0] == 1.0
   assert o.out[1] == 0.0
   assert o.out[2] == 4.0

@@ -54,7 +54,7 @@ pub type Level = F32
 pub type Count = I32
 
 test "a struct as the type of a block input" {
-  var st           = scaled.init(scaled.Config {}, 8.0)
+  var st = scaled.init(scaled.Config {}, 8.0)
   let xs: [F32; 2] = [1.0, 2.0]
   var ys: [F32; 2] = [0.0; 2]
   scaled.process(inout st, scaled.Params { gain: Gain { v: 2.0 } }, xs, inout ys)
@@ -63,7 +63,7 @@ test "a struct as the type of a block input" {
 }
 
 test "a struct as the type of an init input" {
-  var st           = offset.init(offset.Config { seed: Seed { v: 1.0 } }, 8.0)
+  var st = offset.init(offset.Config { seed: Seed { v: 1.0 } }, 8.0)
   let xs: [F32; 2] = [1.0, 2.0]
   var ys: [F32; 2] = [0.0; 2]
   offset.process(inout st, offset.Params {}, xs, inout ys)
@@ -72,8 +72,8 @@ test "a struct as the type of an init input" {
 }
 
 test "an alias of an array with a declared length as the output" {
-  var st                = widen.init(widen.Config {}, 8.0)
-  let xs: [F32; 3]      = [1.0, 2.0, 3.0]
+  var st = widen.init(widen.Config {}, 8.0)
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
   var ys: [[F32; 3]; 2] = [[0.0; 3]; 2]
   widen.process(inout st, widen.Params {}, xs, inout ys)
   assert ys[0][2] == 3.0
@@ -81,16 +81,16 @@ test "an alias of an array with a declared length as the output" {
 }
 
 test "an alias of an array with a declared length as the input" {
-  var st                = narrow.init(narrow.Config {}, 8.0)
+  var st = narrow.init(narrow.Config {}, 8.0)
   let xs: [[F32; 2]; 2] = [[1.0, 2.0], [10.0, 20.0]]
-  var ys: [F32; 2]      = [0.0; 2]
+  var ys: [F32; 2] = [0.0; 2]
   narrow.process(inout st, narrow.Params {}, xs, inout ys)
   assert ys[0] == 11.0
   assert ys[1] == 22.0
 }
 
 test "aliases of one type give process_inplace" {
-  var st           = halve.init(halve.Config {}, 8.0)
+  var st = halve.init(halve.Config {}, 8.0)
   var xs: [F32; 2] = [1.0, 2.0]
   halve.process_inplace(inout st, halve.Params {}, inout xs)
   assert xs[0] == 0.5

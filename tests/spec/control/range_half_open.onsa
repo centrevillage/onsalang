@@ -438,14 +438,14 @@ fn next(inout k: U32) -> U32 {
 
 test "an end changed by the body does not change the number of iterations" {
   var hi: U32 = 3
-  var n: U32  = 0
+  var n: U32 = 0
   for _ in 0 ..< hi {
     hi = hi + 1
     n = n + 1
   }
   assert n == 3
   assert hi == 6
-  var lo: U32  = 0
+  var lo: U32 = 0
   var sum: U32 = 0
   for i in lo ..< 3 {
     lo = 2
@@ -468,7 +468,7 @@ test "an end that is a sum is evaluated once" {
 
 test "the operands of the ends run in the order of the expression: the start, then the end left to right" {
   var log: U32 = 0
-  var n: U32   = 0
+  var n: U32 = 0
   // start 1; end 2 + 3 = 5; the range is 1..<5.
   for _ in tick(inout log, 1) ..< tick(inout log, 2) + tick(inout log, 3) {
     n = n + 1
@@ -490,7 +490,7 @@ test "the start is read before the end changes what it reads" {
 
 test "each execution of an inner header evaluates its own ends once" {
   var log: U32 = 0
-  var n: U32   = 0
+  var n: U32 = 0
   for _ in 0 ..< 2 {
     // 1..<2 + 1 is 1..<3: two iterations; the header runs once for each outer iteration.
     for _ in tick(inout log, 1) ..< tick(inout log, 2) + 1 {
@@ -503,7 +503,7 @@ test "each execution of an inner header evaluates its own ends once" {
 
 test "the ends of a loop in a branch that is not taken are not evaluated" {
   var log: U32 = 0
-  let go       = false
+  let go = false
   if go {
     for _ in tick(inout log, 1) ..< tick(inout log, 2) {
       log = log + 100

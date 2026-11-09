@@ -216,7 +216,7 @@ pub flow fixed_gain(x: F32 at sample) -> F32 at sample {
 
 test "the call in a flow" {
   let xs: [F32; 2] = [2.0, 4.0]
-  let o            = fixed_gain.render(fixed_gain.Config {}, fixed_gain.Params {}, xs, 8.0)
+  let o = fixed_gain.render(fixed_gain.Config {}, fixed_gain.Params {}, xs, 8.0)
   assert o.out[0] == 1.0
   assert o.out[1] == 2.0
 }

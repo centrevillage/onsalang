@@ -13,8 +13,8 @@
 use std.math.{is_finite, is_nan}
 
 test "F64: the special values" {
-  let nan: F64  = F64.NAN
-  let inf: F64  = F64.INFINITY
+  let nan: F64 = F64.NAN
+  let inf: F64 = F64.INFINITY
   let ninf: F64 = -F64.INFINITY
   assert is_nan(nan)
   assert !is_finite(nan)
@@ -25,12 +25,12 @@ test "F64: the special values" {
 }
 
 test "F64: the numbers, including the zeros and the ends of the range" {
-  let zero: F64  = 0.0
+  let zero: F64 = 0.0
   let nzero: F64 = -0.0
-  let one: F64   = 1.0
-  let big: F64   = F64.MAX
-  let nbig: F64  = -F64.MAX
-  let eps: F64   = F64.EPSILON
+  let one: F64 = 1.0
+  let big: F64 = F64.MAX
+  let nbig: F64 = -F64.MAX
+  let eps: F64 = F64.EPSILON
   assert !is_nan(zero)
   assert is_finite(zero)
   assert !is_nan(nzero)
@@ -45,7 +45,7 @@ test "F64: the numbers, including the zeros and the ends of the range" {
 
 test "F64: a subnormal number is a number" {
   let smallest: F64 = F64.from_bits(1)
-  let biggest: F64  = F64.from_bits(0x000F_FFFF_FFFF_FFFF)
+  let biggest: F64 = F64.from_bits(0x000F_FFFF_FFFF_FFFF)
   assert !is_nan(smallest)
   assert is_finite(smallest)
   assert !is_nan(biggest)
@@ -54,9 +54,9 @@ test "F64: a subnormal number is a number" {
 
 test "F64: the results of operations" {
   let zero: F64 = 0.0
-  let inf: F64  = F64.INFINITY
-  let big: F64  = F64.MAX
-  let two: F64  = 2.0
+  let inf: F64 = F64.INFINITY
+  let big: F64 = F64.MAX
+  let two: F64 = 2.0
   // 0.0 / 0.0 and inf - inf are NaN (§3.4).
   assert is_nan(zero / zero)
   assert is_nan(inf - inf)
@@ -73,11 +73,11 @@ test "F64: the results of operations" {
 }
 
 test "F64: NaN from bits, with any sign and payload" {
-  let quiet: F64    = F64.from_bits(0x7FF8_0000_0000_0000)
+  let quiet: F64 = F64.from_bits(0x7FF8_0000_0000_0000)
   let negative: F64 = F64.from_bits(0xFFF8_0000_0000_0000)
-  let payload: F64  = F64.from_bits(0x7FF8_0000_0000_0001)
-  let inf: F64      = F64.from_bits(0x7FF0_0000_0000_0000)
-  let ninf: F64     = F64.from_bits(0xFFF0_0000_0000_0000)
+  let payload: F64 = F64.from_bits(0x7FF8_0000_0000_0001)
+  let inf: F64 = F64.from_bits(0x7FF0_0000_0000_0000)
+  let ninf: F64 = F64.from_bits(0xFFF0_0000_0000_0000)
   assert is_nan(quiet)
   assert is_nan(negative)
   assert is_nan(payload)

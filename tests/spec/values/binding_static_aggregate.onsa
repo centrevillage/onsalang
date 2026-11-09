@@ -141,7 +141,7 @@ pub rt fn for_over_a_repeated_array() -> U32 {
 }
 
 pub rt fn for_over_a_let_of_a_literal() -> U32 {
-  let t      = ["a", "bc"]
+  let t = ["a", "bc"]
   var n: U32 = 0
   for s in t {
     n = n + name_len(s)

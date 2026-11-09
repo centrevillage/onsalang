@@ -100,7 +100,7 @@ fn plain_struct_with_an_argument(v: F32) -> F32 {
 
 rt fn names_in_a_tuple(v: F32) -> F32 {
   let nm: U32 = 3
-  let t       = (nm, v)
+  let t = (nm, v)
   t.1 + F32.round_from(t.0)
 }
 

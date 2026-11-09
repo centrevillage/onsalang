@@ -70,7 +70,7 @@ fn nested(o: core.Option[core.Option[U32]]) -> U32 {
 
 test "a value of Option[U32] is accepted where core.Option[U32] is written, and the other way" {
   let a: core.Option[U32] = Some(3)
-  let b: Option[U32]      = a
+  let b: Option[U32] = a
   let c: core.Option[U32] = b
   assert plain_name(a) == Some(3)
   assert through_module(b) == Some(3)
@@ -79,13 +79,13 @@ test "a value of Option[U32] is accepted where core.Option[U32] is written, and 
 
 test "a Result written through the module is the Result of the prelude" {
   let a: core.Result[U32, Bool] = Ok(4)
-  let b: Result[U32, Bool]      = a
+  let b: Result[U32, Bool] = a
   assert result_through_module(b) == Ok(4)
   assert result_through_package(a) == Ok(4)
 }
 
 test "an alias of a path type is the same type" {
-  let m: MaybeCount  = Some(8)
+  let m: MaybeCount = Some(8)
   let o: Option[U32] = m
   assert count_of(o) == 8
   assert count_of(None) == 0

@@ -56,7 +56,7 @@ test "the impl member of another module that calls a method" {
 
 test "the flow of another module that calls methods in a chain" {
   let xs: [F32; 3] = [1.5, -40000.7, 40000.7]
-  let o            = level_of.render(level_of.Config {}, level_of.Params {}, xs, 8.0)
+  let o = level_of.render(level_of.Config {}, level_of.Params {}, xs, 8.0)
   assert o.out[0] == 1.0
   assert o.out[1] == -32768.0
   assert o.out[2] == 32767.0

@@ -28,7 +28,7 @@ test "map_err on an Err changes the error, and the Err stays an Err" {
 }
 
 test "map_err with a constructor, then unwrap" {
-  let r: Result[U32, U32]     = Ok(2)
+  let r: Result[U32, U32] = Ok(2)
   let w: Result[U32, Wrapped] = r.map_err(Wrapped.In)
   assert w.unwrap() == 2
 }

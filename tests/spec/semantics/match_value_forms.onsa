@@ -119,7 +119,7 @@ test "a guard on a wildcard arm that comes first" {
 
 test "the scrutinee is evaluated once when two guards fail" {
   var log: U32 = 0
-  let a        = classify_once(inout log, 5)
+  let a = classify_once(inout log, 5)
   assert a == 1
   assert log == 1
   let b = classify_once(inout log, 2)

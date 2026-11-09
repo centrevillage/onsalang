@@ -60,7 +60,7 @@ test "abs of a NaN and an infinity through a Float function" {
 }
 
 test "abs of the value next to the least signed integer does not panic" {
-  let a: I8  = -127
+  let a: I8 = -127
   let b: I16 = -32767
   let c: I32 = -2147483647
   let d: I64 = -9223372036854775807
@@ -73,36 +73,36 @@ test "abs of the value next to the least signed integer does not panic" {
 
 test "abs of the least I16 panics" {
   let a: I16 = -32768
-  let r      = abs(a) //~ PANIC "abs of the least I16 panics"
+  let r = abs(a) //~ PANIC "abs of the least I16 panics"
   assert r == 0
 }
 
 test "abs of the least I32 panics" {
   let a: I32 = I32.MIN
-  let r      = abs(a) //~ PANIC "abs of the least I32 panics"
+  let r = abs(a) //~ PANIC "abs of the least I32 panics"
   assert r == 0
 }
 
 test "abs of the least I64 panics" {
   let a: I64 = I64.MIN
-  let r      = abs(a) //~ PANIC "abs of the least I64 panics"
+  let r = abs(a) //~ PANIC "abs of the least I64 panics"
   assert r == 0
 }
 
 test "abs of the least I8 through a Num and Int function panics" {
   let a: I8 = I8.MIN
-  let r     = abs_signed(a) //~ PANIC "abs of the least I8 through a Num and Int function panics"
+  let r = abs_signed(a) //~ PANIC "abs of the least I8 through a Num and Int function panics"
   assert r == 0
 }
 
 test "abs of the least I16 through a Num function panics" {
   let a: I16 = I16.MIN
-  let r      = abs_num(a) //~ PANIC "abs of the least I16 through a Num function panics"
+  let r = abs_num(a) //~ PANIC "abs of the least I16 through a Num function panics"
   assert r == 0
 }
 
 test "abs of the least I64 through a Num and Int function panics" {
   let a: I64 = I64.MIN
-  let r      = abs_signed(a) //~ PANIC "abs of the least I64 through a Num and Int function panics"
+  let r = abs_signed(a) //~ PANIC "abs of the least I64 through a Num and Int function panics"
   assert r == 0
 }

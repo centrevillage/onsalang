@@ -16,9 +16,9 @@ fn shr2[T: Shr](x: T, n: U32) -> T {
 }
 
 test "Shl shifts to the left and drops the bits that leave" {
-  let a: U8  = 1
-  let b: U8  = 3
-  let c: I8  = 1
+  let a: U8 = 1
+  let b: U8 = 3
+  let c: I8 = 1
   let d: U64 = 1
   assert shl2(a, 7) == 128
   assert shl2(b, 7) == 128
@@ -28,7 +28,7 @@ test "Shl shifts to the left and drops the bits that leave" {
 
 test "Shr is arithmetic for a signed integer" {
   let a: I32 = -8
-  let b: I8  = -128
+  let b: I8 = -128
   let c: I64 = -1
   assert shr2(a, 1) == -4
   assert shr2(b, 7) == -1
@@ -37,7 +37,7 @@ test "Shr is arithmetic for a signed integer" {
 
 test "Shr is logical for an unsigned integer" {
   let a: U32 = 2147483648
-  let b: U8  = 128
+  let b: U8 = 128
   let c: U16 = 65535
   assert shr2(a, 1) == 1073741824
   assert shr2(b, 7) == 1
@@ -53,12 +53,12 @@ test "a shift by 0 keeps the value" {
 
 test "Shl panics where the count is the bit width" {
   let a: U8 = 1
-  let r     = shl2(a, 8) //~ PANIC "Shl panics where the count is the bit width"
+  let r = shl2(a, 8) //~ PANIC "Shl panics where the count is the bit width"
   assert r == 0
 }
 
 test "Shr panics where the count is over the bit width" {
   let a: I32 = -1
-  let r      = shr2(a, 33) //~ PANIC "Shr panics where the count is over the bit width"
+  let r = shr2(a, 33) //~ PANIC "Shr panics where the count is over the bit width"
   assert r == 0
 }

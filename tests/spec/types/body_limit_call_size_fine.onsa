@@ -11,17 +11,17 @@ fn pair[T: Copy](x: T) -> (T, T) {
 
 pub fn chain() -> U32 {
   let t0: I32 = 0
-  let t1      = pair(t0)
-  let t2      = pair(t1)
-  let t3      = pair(t2)
-  let t4      = pair(t3)
-  let t5      = pair(t4)
-  let t6      = pair(t5)
-  let t7      = pair(t6)
-  let t8      = pair(t7)
-  let t9      = pair(t8)
-  let t10     = pair(t9)
-  let t11     = pair(t10)
-  let _       = t11
+  let t1 = pair(t0)
+  let t2 = pair(t1)
+  let t3 = pair(t2)
+  let t4 = pair(t3)
+  let t5 = pair(t4)
+  let t6 = pair(t5)
+  let t7 = pair(t6)
+  let t8 = pair(t7)
+  let t9 = pair(t8)
+  let t10 = pair(t9)
+  let t11 = pair(t10)
+  let _ = t11
   0
 }

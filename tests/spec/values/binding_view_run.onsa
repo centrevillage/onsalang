@@ -42,13 +42,13 @@ fn view_of_a_view(xs: Span[F32]) -> F32 {
 }
 
 fn view_of_a_binding(xs: Span[F32]) -> F32 {
-  let s    = xs
+  let s = xs
   let part = s.slice(2, 4)
   part[0]
 }
 
 fn derived(xs: Span[F32]) -> F32 {
-  let half  = xs.slice(0, 2)
+  let half = xs.slice(0, 2)
   let again = half
   again[1]
 }
@@ -92,7 +92,7 @@ fn for_count(xs: Span[F32], a: U32, b: U32) -> U32 {
 
 fn for_weighted(xs: Span[F32]) -> F32 {
   var total: F32 = 0.0
-  var w: F32     = 1.0
+  var w: F32 = 1.0
   for v in xs.slice(1, 4) {
     total = total + v * w
     w = w * 10.0
@@ -109,7 +109,7 @@ fn for_over_the_view_of_a_planar_element(input: [Span[F32]; 2]) -> F32 {
 }
 
 fn for_over_the_view_of_a_binding(xs: Span[F32]) -> F32 {
-  let half       = xs.slice(0, 4)
+  let half = xs.slice(0, 4)
   var total: F32 = 0.0
   for v in half.slice(2, 4) {
     total = total + v

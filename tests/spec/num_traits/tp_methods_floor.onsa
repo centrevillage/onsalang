@@ -81,7 +81,7 @@ test "div_euclid and rem_euclid of an unsigned T: Int" {
 }
 
 test "MIN.rem_euclid(-1) is 0 for every signed width" {
-  let m1: I8  = -1
+  let m1: I8 = -1
   let m2: I16 = -1
   let m3: I32 = -1
   let m4: I64 = -1
@@ -103,38 +103,38 @@ test "MIN.div_euclid by 1 and MAX.div_euclid by -1 fit the type" {
 
 test "I8.MIN.div_euclid(-1) panics" {
   let m: I8 = -1
-  let q     = floor_div(I8.MIN, m) //~ PANIC "I8.MIN.div_euclid(-1) panics"
+  let q = floor_div(I8.MIN, m) //~ PANIC "I8.MIN.div_euclid(-1) panics"
   assert q == 0
 }
 
 test "I16.MIN.div_euclid(-1) panics" {
   let m: I16 = -1
-  let q      = floor_div(I16.MIN, m) //~ PANIC "I16.MIN.div_euclid(-1) panics"
+  let q = floor_div(I16.MIN, m) //~ PANIC "I16.MIN.div_euclid(-1) panics"
   assert q == 0
 }
 
 test "I32.MIN.div_euclid(-1) panics" {
   let m: I32 = -1
-  let q      = floor_div(I32.MIN, m) //~ PANIC "I32.MIN.div_euclid(-1) panics"
+  let q = floor_div(I32.MIN, m) //~ PANIC "I32.MIN.div_euclid(-1) panics"
   assert q == 0
 }
 
 test "I64.MIN.div_euclid(-1) panics" {
   let m: I64 = -1
-  let q      = floor_div(I64.MIN, m) //~ PANIC "I64.MIN.div_euclid(-1) panics"
+  let q = floor_div(I64.MIN, m) //~ PANIC "I64.MIN.div_euclid(-1) panics"
   assert q == 0
 }
 
 test "div_euclid by 0 panics" {
   let z: U32 = 0
   let a: U32 = 5
-  let q      = floor_div(a, z) //~ PANIC "div_euclid by 0 panics"
+  let q = floor_div(a, z) //~ PANIC "div_euclid by 0 panics"
   assert q == 0
 }
 
 test "rem_euclid by 0 panics" {
   let z: I16 = 0
   let a: I16 = 5
-  let r      = floor_rem(a, z) //~ PANIC "rem_euclid by 0 panics"
+  let r = floor_rem(a, z) //~ PANIC "rem_euclid by 0 panics"
   assert r == 0
 }

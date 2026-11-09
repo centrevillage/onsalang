@@ -26,7 +26,7 @@ pub fn assign_to_a_borrowed_argument(xs: [U32; 2]) {
 
 pub fn closure_in_the_body_writes_the_source() -> U32 {
   var xs: [U32; 2] = [1, 2]
-  var t: U32       = 0
+  var t: U32 = 0
   for _ in xs {
     t = ap(fn() {
       xs[0] = 1 //~ E0701

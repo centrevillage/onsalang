@@ -10,8 +10,8 @@
 // makes a pair that `as` writes are in negative/convert_from_literal_pairs.onsa.
 
 pub fn decided_to_i64_later() -> F64 {
-  let k      = 1
-  let a      = F64.round_from(k)
+  let k = 1
+  let a = F64.round_from(k)
   let b: I64 = k
   a + F64.round_from(b)
 }

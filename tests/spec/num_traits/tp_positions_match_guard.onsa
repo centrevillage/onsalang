@@ -15,8 +15,8 @@ fn classify[T: AnyNum](x: T) -> U32 {
 }
 
 test "the guard of a match arm" {
-  let a: I8  = 0
-  let b: I8  = -3
+  let a: I8 = 0
+  let b: I8 = -3
   let c: U32 = 9
   let d: F32 = -0.0
   let e: F64 = F64.NAN

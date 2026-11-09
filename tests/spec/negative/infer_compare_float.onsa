@@ -67,8 +67,8 @@ pub fn in_a_closure() -> Bool {
 // ---------------------------------------------------------------- fine: the type of the float is decided
 
 pub fn decided_by_a_later_annotation() -> Bool {
-  let a           = [1.0, 2.0]
-  let e           = a == a
+  let a = [1.0, 2.0]
+  let e = a == a
   let _: [F32; 2] = a
   e
 }

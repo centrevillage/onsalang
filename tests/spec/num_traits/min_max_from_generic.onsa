@@ -43,8 +43,8 @@ fn lower_signed[T: Num + Int](x: T, y: T) -> T {
 }
 
 test "min and max from an AnyNum function, for every family" {
-  let a: U8  = 250
-  let b: U8  = 5
+  let a: U8 = 250
+  let b: U8 = 5
   let c: I32 = -4
   let d: I32 = 3
   let e: F32 = 0.5
@@ -61,8 +61,8 @@ test "min and max from an Int and an Unsigned function" {
   let a: U64 = 18446744073709551615
   let b: U64 = 2
   let c: U16 = 40000
-  let d: I8  = -128
-  let e: I8  = 127
+  let d: I8 = -128
+  let e: I8 = 127
   assert lower_int(a, b) == 2
   assert upper_unsigned(a, b) == 18446744073709551615
   assert lower_unsigned(c, 7) == 7
@@ -79,11 +79,11 @@ test "min from a Float function and from a Num with Int function" {
 }
 
 test "min and max nested in one AnyNum function" {
-  let lo: U32     = 10
-  let hi: U32     = 20
-  let below: U32  = 3
+  let lo: U32 = 10
+  let hi: U32 = 20
+  let below: U32 = 3
   let inside: U32 = 15
-  let above: U32  = 99
+  let above: U32 = 99
   assert clamp_any(below, lo, hi) == 10
   assert clamp_any(inside, lo, hi) == 15
   assert clamp_any(above, lo, hi) == 20

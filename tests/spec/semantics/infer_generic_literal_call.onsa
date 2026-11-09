@@ -75,19 +75,19 @@ test "a generic call with integer literals only is I32 at the end of the functio
 }
 
 test "the result of a generic call with literals is decided by a later annotation" {
-  let m     = max(200, 100)
+  let m = max(200, 100)
   let n: U8 = m
   assert n == 200
-  let a      = id(7)
+  let a = id(7)
   let b: I64 = a
   assert b == 7
 }
 
 test "the result of a generic call with float literals is decided by a later annotation" {
-  let m      = max(1.0, 2.5)
+  let m = max(1.0, 2.5)
   let f: F32 = m
   assert f == 2.5
-  let a      = abs(-1.5)
+  let a = abs(-1.5)
   let g: F64 = a
   assert g == 1.5
 }

@@ -61,7 +61,7 @@ pub fn passed_on(inp: pair.In) -> F32 {
 }
 
 pub fn derived(inp: pair.In) -> F32 {
-  let l     = inp.l
+  let l = inp.l
   let again = l
   again[0]
 }

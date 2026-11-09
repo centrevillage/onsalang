@@ -227,7 +227,7 @@ test "a closure body, a nested branch and a generic function" {
 test "the end of a flow" {
   // x = 1, -2, 3: the end is max(x, 0).
   let xs: [F32; 3] = [1.0, -2.0, 3.0]
-  let t            = tail_if_in_a_flow.render(tail_if_in_a_flow.Config {}, tail_if_in_a_flow.Params {}, xs, 8.0)
+  let t = tail_if_in_a_flow.render(tail_if_in_a_flow.Config {}, tail_if_in_a_flow.Params {}, xs, 8.0)
   assert t.out[0] == 1.0
   assert t.out[1] == 0.0
   assert t.out[2] == 3.0
@@ -235,7 +235,7 @@ test "the end of a flow" {
 test "a par as a let value" {
   // x * 1 + x * 2 = 3 x.
   let xs: [F32; 2] = [1.0, 2.0]
-  let p            = let_par.render(let_par.Config {}, let_par.Params {}, xs, 8.0)
+  let p = let_par.render(let_par.Config {}, let_par.Params {}, xs, 8.0)
   assert p.out[0] == 3.0
   assert p.out[1] == 6.0
 }

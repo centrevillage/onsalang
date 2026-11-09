@@ -13,8 +13,8 @@
 // (`fmod` is not in std, see negative/std_math_fmod_removed.onsa).
 
 test "F64: the sign of the remainder is the sign of a" {
-  let a: F64  = 5.5
-  let b: F64  = 2.0
+  let a: F64 = 5.5
+  let b: F64 = 2.0
   let na: F64 = -5.5
   let nb: F64 = -2.0
   assert a % b == 1.5
@@ -30,23 +30,23 @@ test "F64: the remainder is exact, with no rounding in a - b * trunc(a / b)" {
   let c: F64 = 1.0e10
   let d: F64 = 0.3
   assert c % d == 0.10000037007434154
-  let big: F64    = 1.0e300
+  let big: F64 = 1.0e300
   let eleven: F64 = 11.0
   assert big % eleven == 7.0
   let thousand: F64 = 1000.0
   assert big % thousand == 160.0
-  let huge: F64         = 1.0e308
+  let huge: F64 = 1.0e308
   let seven_tenths: F64 = 0.7
   assert huge % seven_tenths == 0.049661879885306126
 }
 
 test "F64: a zero b and an infinite a give NaN" {
-  let one: F64   = 1.0
-  let zero: F64  = 0.0
+  let one: F64 = 1.0
+  let zero: F64 = 0.0
   let nzero: F64 = -0.0
-  let inf: F64   = F64.INFINITY
-  let ninf: F64  = -F64.INFINITY
-  let r1         = one % zero
+  let inf: F64 = F64.INFINITY
+  let ninf: F64 = -F64.INFINITY
+  let r1 = one % zero
   assert r1 != r1
   let r2 = zero % zero
   assert r2 != r2
@@ -61,11 +61,11 @@ test "F64: a zero b and an infinite a give NaN" {
 }
 
 test "F64: a finite a with an infinite b is a, and -0.0 is kept" {
-  let three: F64  = 3.0
+  let three: F64 = 3.0
   let nthree: F64 = -3.0
-  let nzero: F64  = -0.0
-  let inf: F64    = F64.INFINITY
-  let ninf: F64   = -F64.INFINITY
+  let nzero: F64 = -0.0
+  let inf: F64 = F64.INFINITY
+  let ninf: F64 = -F64.INFINITY
   assert three % inf == 3.0
   assert nthree % inf == -3.0
   assert three % ninf == 3.0
@@ -74,19 +74,19 @@ test "F64: a finite a with an infinite b is a, and -0.0 is kept" {
 }
 
 test "F64: a zero remainder has the sign of a" {
-  let four: F64  = 4.0
+  let four: F64 = 4.0
   let nfour: F64 = -4.0
-  let two: F64   = 2.0
+  let two: F64 = 2.0
   assert (four % two).to_bits() == 0
   assert (nfour % two).to_bits() == 0x8000_0000_0000_0000
 }
 
 test "F32: the sign, the zero b and the infinities" {
-  let a: F32    = 5.5
-  let na: F32   = -5.5
-  let b: F32    = 2.0
+  let a: F32 = 5.5
+  let na: F32 = -5.5
+  let b: F32 = 2.0
   let zero: F32 = 0.0
-  let inf: F32  = F32.INFINITY
+  let inf: F32 = F32.INFINITY
   assert a % b == 1.5
   assert na % b == -1.5
   assert a % -b == 1.5
@@ -102,27 +102,27 @@ test "F32: the remainder is exact, not a - b * trunc(a / b) rounded in binary32"
   // 1.0e10 is 2^10 * 9765625 and fits the 24 bits of a binary32 exactly. 10000000000 = 7 * 1428571428 + 4.
   // The quotient 1428571428.57... is not a binary32, so a formula that rounds the quotient is off by a lot.
   let ten_billion: F32 = 1.0e10
-  let seven: F32       = 7.0
+  let seven: F32 = 7.0
   assert ten_billion % seven == 4.0
   let three: F32 = 3.0
   assert ten_billion % three == 1.0
   // 1.0e30 as a binary32 is the integer 1000000015047466219876688855040; its remainder by 11 is 4.
-  let huge: F32   = 1.0e30
+  let huge: F32 = 1.0e30
   let eleven: F32 = 11.0
   assert huge % eleven == 4.0
   // 0.3 and 0.1 as binary32: 0.300000011920929 = 3 * 0.100000001490116 + 2^-27.
-  let a: F32    = 0.3
-  let b: F32    = 0.1
+  let a: F32 = 0.3
+  let b: F32 = 0.1
   let tiny: F32 = 1.0 / 134217728.0
   assert a % b == tiny
 }
 
 test "F32: -0.0 and a zero remainder keep the sign of a" {
   let nzero: F32 = -0.0
-  let inf: F32   = F32.INFINITY
-  let four: F32  = 4.0
+  let inf: F32 = F32.INFINITY
+  let four: F32 = 4.0
   let nfour: F32 = -4.0
-  let two: F32   = 2.0
+  let two: F32 = 2.0
   assert (nzero % inf).to_bits() == 0x8000_0000
   assert (four % two).to_bits() == 0
   assert (nfour % two).to_bits() == 0x8000_0000

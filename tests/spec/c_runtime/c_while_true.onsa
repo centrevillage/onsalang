@@ -69,7 +69,7 @@
 
 @export
 pub fn steps_to_zero(n: U32) -> U32 {
-  var k: U32     = n
+  var k: U32 = n
   var steps: U32 = 0
   while true {
     if k == 0 {

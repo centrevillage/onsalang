@@ -129,7 +129,7 @@ pub fn the_second_call_of_one_expression() -> U32 {
 }
 
 pub fn a_value_read_in_an_argument_then_a_receiver_overlap() -> U32 {
-  var p      = P { x: 1, y: 2 }
+  var p = P { x: 1, y: 2 }
   var x: U32 = 3
   two(inout x, if x > 2 { 1 } else { 2 })
   p.scale!(p.x) //~ E0702

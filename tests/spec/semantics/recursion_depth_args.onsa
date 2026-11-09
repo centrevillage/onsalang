@@ -107,8 +107,8 @@ test "a call as a receiver and a call as a method argument, all the 129th call, 
 fn down_literal(n: U32) -> U32 {
   if n == 0 {
     let xs: [U32; 2] = [id(1), id(2)]
-    let p            = Pair { a: id(3), b: id(4) }
-    let t            = (id(5), id(6))
+    let p = Pair { a: id(3), b: id(4) }
+    let t = (id(5), id(6))
     xs[0] + xs[1] + p.a + p.b + t.0 + t.1
   } else {
     down_literal(n - 1)

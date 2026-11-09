@@ -3,7 +3,7 @@
 ### 5.1 束縛
 
 ```onsa
-let x: I32   = 1   // 不変
+let x: I32 = 1     // 不変
 var acc: F64 = 0.0 // 可変（ローカルのみ）
 acc = acc + (x as F64)
 ```

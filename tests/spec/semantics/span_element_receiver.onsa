@@ -203,7 +203,7 @@ test "a generic get on an element returns the first one" {
 
 test "the receiver in both branches of an if" {
   let ins: [[F32; 2]; 2] = [[1.0, 2.0], [3.0, 4.0]]
-  let k: U32             = 1
+  let k: U32 = 1
   let n = if k == 0 {
     lens(ins)
   } else {

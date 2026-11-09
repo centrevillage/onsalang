@@ -12,7 +12,7 @@ pub struct P {
 
 pub fn annotation(a: I32) -> I32 {
   let b: I32 = a
-  let p: P   = P { x: b }
+  let p: P = P { x: b }
   p.x
 }
 
@@ -83,13 +83,13 @@ pub fn closure_in_a_closure(a: I32) -> I32 {
 impl P {
   pub fn all_three_in_a_method(self) -> I64 {
     let b: I32 = self.x
-    let f      = fn(y: I32) -> I32 { y }
+    let f = fn(y: I32) -> I32 { y }
     f.(b) as I64
   }
 }
 
 test "the three places with found types" {
   let b: I32 = 1
-  let f      = fn(y: I32) -> I32 { y }
+  let f = fn(y: I32) -> I32 { y }
   assert (f.(b) as I64) == 1
 }

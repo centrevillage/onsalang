@@ -10,8 +10,8 @@
 use std.math.{is_finite, is_nan}
 
 test "F32: the special values" {
-  let nan: F32  = F32.NAN
-  let inf: F32  = F32.INFINITY
+  let nan: F32 = F32.NAN
+  let inf: F32 = F32.INFINITY
   let ninf: F32 = -F32.INFINITY
   assert is_nan(nan)
   assert !is_finite(nan)
@@ -23,8 +23,8 @@ test "F32: the special values" {
 
 test "F32: -0.0 and the ends of the range are numbers" {
   let nzero: F32 = -0.0
-  let big: F32   = F32.MAX
-  let nbig: F32  = -F32.MAX
+  let big: F32 = F32.MAX
+  let nbig: F32 = -F32.MAX
   assert !is_nan(nzero)
   assert is_finite(nzero)
   assert !is_nan(big)
@@ -35,7 +35,7 @@ test "F32: -0.0 and the ends of the range are numbers" {
 test "F32: a number that overflows binary32 is an infinity, not NaN" {
   let big: F32 = F32.MAX
   let two: F32 = 2.0
-  let doubled  = big * two
+  let doubled = big * two
   assert !is_nan(doubled)
   assert !is_finite(doubled)
   let wide: F64 = F32.MAX as F64
@@ -44,7 +44,7 @@ test "F32: a number that overflows binary32 is an infinity, not NaN" {
 
 test "F32: a subnormal number is a number" {
   let smallest: F32 = F32.from_bits(1)
-  let biggest: F32  = F32.from_bits(0x007F_FFFF)
+  let biggest: F32 = F32.from_bits(0x007F_FFFF)
   assert !is_nan(smallest)
   assert is_finite(smallest)
   assert !is_nan(biggest)
@@ -52,11 +52,11 @@ test "F32: a subnormal number is a number" {
 }
 
 test "F32: NaN from bits, with any sign and payload" {
-  let quiet: F32    = F32.from_bits(0x7FC0_0000)
+  let quiet: F32 = F32.from_bits(0x7FC0_0000)
   let negative: F32 = F32.from_bits(0xFFC0_0000)
-  let payload: F32  = F32.from_bits(0x7FC0_0001)
-  let inf: F32      = F32.from_bits(0x7F80_0000)
-  let ninf: F32     = F32.from_bits(0xFF80_0000)
+  let payload: F32 = F32.from_bits(0x7FC0_0001)
+  let inf: F32 = F32.from_bits(0x7F80_0000)
+  let ninf: F32 = F32.from_bits(0xFF80_0000)
   assert is_nan(quiet)
   assert is_nan(negative)
   assert is_nan(payload)
@@ -69,8 +69,8 @@ test "F32: NaN from bits, with any sign and payload" {
 
 test "F32: the results of operations" {
   let zero: F32 = 0.0
-  let inf: F32  = F32.INFINITY
-  let one: F32  = 1.0
+  let inf: F32 = F32.INFINITY
+  let one: F32 = 1.0
   assert is_nan(zero / zero)
   assert is_nan(inf - inf)
   assert !is_nan(one / zero)

@@ -140,7 +140,7 @@ test "an alias reads the associated function and the constants" {
 }
 
 test "an alias writes a struct literal and a pattern" {
-  let q                = B { x: 5.0, y: 6.0 }
+  let q = B { x: 5.0, y: 6.0 }
   let B { x: a, y: b } = q
   assert a == 5.0
   assert b == 6.0
@@ -173,7 +173,7 @@ test "an alias that fixes the arguments fixes them" {
   assert b[2] == 0.0
   let g = GI.wrap(1)
   assert g.v == 1
-  let l           = GI { v: 7 }
+  let l = GI { v: 7 }
   let GI { v: w } = l
   assert w == 7
 }

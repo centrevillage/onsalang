@@ -21,7 +21,7 @@ test "Not negates a Bool" {
 }
 
 test "Not inverts the bits of an unsigned integer" {
-  let a: U8  = 0
+  let a: U8 = 0
   let b: U16 = 255
   let c: U32 = 4294967295
   let d: U64 = 0
@@ -32,7 +32,7 @@ test "Not inverts the bits of an unsigned integer" {
 }
 
 test "Not inverts the bits of a signed integer" {
-  let a: I8  = 5
+  let a: I8 = 5
   let b: I32 = -1
   let c: I64 = 0
   assert not1(a) == -6
@@ -41,7 +41,7 @@ test "Not inverts the bits of a signed integer" {
 }
 
 test "Int has Not" {
-  let a: U8  = 15
+  let a: U8 = 15
   let b: I16 = 0
   assert not_int(a) == 240
   assert not_int(b) == -1

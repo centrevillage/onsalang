@@ -41,7 +41,7 @@ pub fn borrow_and_inout_of_the_iterated_place() {
 
 pub fn borrow_and_a_block_that_writes_the_iterated_place() -> U32 {
   var xs: [U32; 2] = [1, 2]
-  var t: U32       = 0
+  var t: U32 = 0
   for _ in xs {
     t = g(xs, {
       xs[0] = 5 //~ E0702

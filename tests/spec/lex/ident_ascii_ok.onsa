@@ -24,15 +24,15 @@ pub struct Names {
 }
 
 pub fn names_with_a_reserved_prefix(clock_rate: F32, clocks: I32, serial: I32) -> F32 {
-  let when_done  = clocks
-  let whenever   = serial
+  let when_done = clocks
+  let whenever = serial
   let reset_if_x = 1
-  let reset_ifx  = 2
-  let reset      = 3
-  let ser1       = 4
-  let my_clock   = 5
-  let user       = 6
-  let conserve   = 7
+  let reset_ifx = 2
+  let reset = 3
+  let ser1 = 4
+  let my_clock = 5
+  let user = 6
+  let conserve = 7
 
   let _ = (when_done, whenever, reset_if_x, reset_ifx, reset, ser1, my_clock, user, conserve)
   clock_rate

@@ -35,7 +35,7 @@ test "the empty sum of the floats is +0.0" {
 }
 
 test "the empty sum of the signed integers is 0" {
-  let a: [I8; 0]  = []
+  let a: [I8; 0] = []
   let b: [I16; 0] = []
   let c: [I32; 0] = []
   let d: [I64; 0] = []
@@ -46,7 +46,7 @@ test "the empty sum of the signed integers is 0" {
 }
 
 test "the empty sum of the unsigned integers is 0" {
-  let a: [U8; 0]  = []
+  let a: [U8; 0] = []
   let b: [U16; 0] = []
   let c: [U32; 0] = []
   let d: [U64; 0] = []
@@ -58,7 +58,7 @@ test "the empty sum of the unsigned integers is 0" {
 
 test "the empty sum through an AnyNum function" {
   let a: [F32; 0] = []
-  let b: [U8; 0]  = []
+  let b: [U8; 0] = []
   let c: [I64; 0] = []
   assert total(a).to_bits() == 0
   assert total(b) == 0
@@ -76,7 +76,7 @@ test "the empty sum through a Float and an Int function" {
 
 test "the empty sum with an element type given by a parameter" {
   let a: F32 = -0.0
-  let b: I8  = -5
+  let b: I8 = -5
   let c: U16 = 9
   assert empty_of(a).to_bits() == 0
   assert empty_of(b) == 0

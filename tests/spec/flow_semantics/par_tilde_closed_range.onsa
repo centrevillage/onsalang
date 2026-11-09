@@ -55,7 +55,7 @@ pub flow nested(x: F32 at sample) -> F32 at sample {
 test "the index of a closed range goes to its upper bound" {
   // x * 1, x * 2, x * 3 with x = 1.0, 2.0.
   let xs: [F32; 2] = [1.0, 2.0]
-  let o            = scaled_by_index.render(scaled_by_index.Config {}, scaled_by_index.Params {}, xs, 8.0)
+  let o = scaled_by_index.render(scaled_by_index.Config {}, scaled_by_index.Params {}, xs, 8.0)
   assert o.out[0][0] == 1.0
   assert o.out[0][1] == 2.0
   assert o.out[1][0] == 2.0
@@ -67,7 +67,7 @@ test "the index of a closed range goes to its upper bound" {
 test "the last value of the index is the upper bound" {
   // 0 + 1 + 2 + 3 = 6, whatever x is.
   let xs: [F32; 2] = [1.0, 2.0]
-  let o            = the_index_itself.render(the_index_itself.Config {}, the_index_itself.Params {}, xs, 8.0)
+  let o = the_index_itself.render(the_index_itself.Config {}, the_index_itself.Params {}, xs, 8.0)
   assert o.out[0] == 6.0
   assert o.out[1] == 6.0
 }
@@ -75,7 +75,7 @@ test "the last value of the index is the upper bound" {
 test "a ..= a is one replica" {
   // x + 4 with x = 1.0, 2.0.
   let xs: [F32; 2] = [1.0, 2.0]
-  let o            = one_replica.render(one_replica.Config {}, one_replica.Params {}, xs, 8.0)
+  let o = one_replica.render(one_replica.Config {}, one_replica.Params {}, xs, 8.0)
   assert o.out[0][0] == 5.0
   assert o.out[0][1] == 6.0
 }
@@ -83,7 +83,7 @@ test "a ..= a is one replica" {
 test "each replica of a closed range has its own instance" {
   // x = 1.0 each sample. Replica i: the running sum of 1 + i: 1 2 3, 2 4 6 and 3 6 9.
   let xs: [F32; 3] = [1.0, 1.0, 1.0]
-  let o            = own_instances.render(own_instances.Config {}, own_instances.Params {}, xs, 8.0)
+  let o = own_instances.render(own_instances.Config {}, own_instances.Params {}, xs, 8.0)
   assert o.out[0][0] == 1.0
   assert o.out[0][1] == 2.0
   assert o.out[0][2] == 3.0
@@ -98,7 +98,7 @@ test "each replica of a closed range has its own instance" {
 test "a closed range inside a closed range" {
   // i = 0: 1 + 2 = 3 times x; i = 1: 2 + 4 = 6 times x; 9 * x.
   let xs: [F32; 2] = [1.0, 2.0]
-  let o            = nested.render(nested.Config {}, nested.Params {}, xs, 8.0)
+  let o = nested.render(nested.Config {}, nested.Params {}, xs, 8.0)
   assert o.out[0] == 9.0
   assert o.out[1] == 18.0
 }

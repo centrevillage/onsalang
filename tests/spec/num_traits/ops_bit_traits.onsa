@@ -20,10 +20,10 @@ fn xor2[T: BitXor](a: T, b: T) -> T {
 }
 
 test "BitAnd on unsigned and signed integers" {
-  let a: U8  = 240
-  let b: U8  = 60
-  let c: I8  = -1
-  let d: I8  = 15
+  let a: U8 = 240
+  let b: U8 = 60
+  let c: I8 = -1
+  let d: I8 = 15
   let e: U64 = 18446744073709551615
   let f: U64 = 4294967296
   assert and2(a, b) == 48
@@ -32,10 +32,10 @@ test "BitAnd on unsigned and signed integers" {
 }
 
 test "BitOr on unsigned and signed integers" {
-  let a: U8  = 240
-  let b: U8  = 60
-  let c: I8  = -128
-  let d: I8  = 1
+  let a: U8 = 240
+  let b: U8 = 60
+  let c: I8 = -128
+  let d: I8 = 1
   let e: U16 = 256
   let f: U16 = 1
   assert or2(a, b) == 252
@@ -44,10 +44,10 @@ test "BitOr on unsigned and signed integers" {
 }
 
 test "BitXor on unsigned and signed integers" {
-  let a: U8  = 240
-  let b: U8  = 60
-  let c: I8  = -1
-  let d: I8  = 85
+  let a: U8 = 240
+  let b: U8 = 60
+  let c: I8 = -1
+  let d: I8 = 85
   let e: I32 = 5
   assert xor2(a, b) == 204
   assert xor2(c, d) == -86

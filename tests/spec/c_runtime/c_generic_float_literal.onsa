@@ -216,7 +216,7 @@ fn bucket[T: Float](x: T) -> U32 {
 }
 
 fn accumulated[T: Float](x: T) -> T {
-  var a      = 0.0
+  var a = 0.0
   var i: U32 = 0
   while i < 3 {
     a = a + x * 0.5

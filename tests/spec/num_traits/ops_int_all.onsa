@@ -162,26 +162,26 @@ test "Num and Int negate a signed instance" {
 test "Int addition of an unsigned instance over the range panics" {
   let a: U8 = 250
   let b: U8 = 10
-  let r     = i_add(a, b) //~ PANIC "Int addition of an unsigned instance over the range panics"
+  let r = i_add(a, b) //~ PANIC "Int addition of an unsigned instance over the range panics"
   assert r == 0
 }
 
 test "Int subtraction of an unsigned instance below 0 panics" {
   let a: U16 = 1
   let b: U16 = 2
-  let r      = i_sub(a, b) //~ PANIC "Int subtraction of an unsigned instance below 0 panics"
+  let r = i_sub(a, b) //~ PANIC "Int subtraction of an unsigned instance below 0 panics"
   assert r == 0
 }
 
 test "Int shift by the bit width panics" {
   let a: I8 = 1
-  let r     = i_shl(a, 8) //~ PANIC "Int shift by the bit width panics"
+  let r = i_shl(a, 8) //~ PANIC "Int shift by the bit width panics"
   assert r == 0
 }
 
 test "Int division of the least signed value by -1 panics" {
   let a: I8 = -128
   let b: I8 = -1
-  let r     = i_div(a, b) //~ PANIC "Int division of the least signed value by -1 panics"
+  let r = i_div(a, b) //~ PANIC "Int division of the least signed value by -1 panics"
   assert r == 0
 }

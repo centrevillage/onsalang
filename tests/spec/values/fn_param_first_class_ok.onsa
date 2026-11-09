@@ -153,9 +153,9 @@ fn item_in_the_tail_of_an_if(c: Bool) -> Op {
 }
 
 fn function_value_variable_stored(f: Unary) -> I32 {
-  let g  = inc
-  let o  = Op { f: g }
-  let h  = id(g)
+  let g = inc
+  let o = Op { f: g }
+  let h = id(g)
   let fs = [g, h]
   o.f.(1) + fs[0].(1) + call(g, 1) + keep(g).f.(1) + f.(1)
 }

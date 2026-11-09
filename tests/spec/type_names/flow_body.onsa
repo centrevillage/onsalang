@@ -54,7 +54,7 @@ pub flow with_the_largest(x: Sample at sample) -> Sample at sample {
 }
 
 pub flow struct_literal_and_pattern(x: Sample at sample) -> Sample at sample {
-  let p                = P { x: x, y: Sample.PI }
+  let p = P { x: x, y: Sample.PI }
   let P { x: a, y: b } = p
   a * b
 }

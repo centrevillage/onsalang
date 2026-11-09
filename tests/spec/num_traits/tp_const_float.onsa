@@ -120,8 +120,8 @@ test "T.INFINITY is the positive infinity" {
 test "T.NAN is a NaN, and its bits read as the positive quiet NaN" {
   let a: F32 = 0.0
   let b: F64 = 0.0
-  let na     = nan_of(a)
-  let nb     = nan_of(b)
+  let na = nan_of(a)
+  let nb = nan_of(b)
   assert na != na
   assert nb != nb
   assert na.to_bits() == 0x7FC00000

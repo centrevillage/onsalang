@@ -29,11 +29,11 @@ pub flow scalar_methods(
   gain: F32 at block,
 ) -> F32 at sample {
   let scaled = x * gain
-  let q      = I32.trunc_sat_from(scaled)
-  let r      = F32.round_from(q.rem_euclid(7))
-  let s      = F32.round_from(q.div_euclid(7))
-  let wide   = scaled as F64
-  let back   = F32.round_from(wide * 1.0000001)
-  let kept   = F32.from_bits(back.to_bits())
+  let q = I32.trunc_sat_from(scaled)
+  let r = F32.round_from(q.rem_euclid(7))
+  let s = F32.round_from(q.div_euclid(7))
+  let wide = scaled as F64
+  let back = F32.round_from(wide * 1.0000001)
+  let kept = F32.from_bits(back.to_bits())
   (r + (s * 0.5)) + kept
 }

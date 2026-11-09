@@ -18,7 +18,7 @@ fn abs_then_negate[T: Num + Int](x: T) -> T {
 }
 
 test "abs of Num and Int instances" {
-  let a: I8  = -100
+  let a: I8 = -100
   let b: I16 = 300
   let c: I64 = -9
   assert abs_of_signed(a) == 100
@@ -35,6 +35,6 @@ test "abs then negate is never positive" {
 
 test "abs of the least value of a Num and Int instance panics" {
   let a: I16 = -32768
-  let r      = abs_of_signed(a) //~ PANIC "abs of the least value of a Num and Int instance panics"
+  let r = abs_of_signed(a) //~ PANIC "abs of the least value of a Num and Int instance panics"
   assert r == 0
 }

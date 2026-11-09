@@ -36,10 +36,10 @@ pub flow index_at_sample(x: F32 at sample, s: [F32; 2] at block) -> F32 at sampl
 // A name, a literal and a constant are promoted, and an `at` of the clock of the value changes
 // nothing.
 pub flow fine(x: F32 at sample, g: F32 at block) -> F32 at sample {
-  let gs  = g at sample
+  let gs = g at sample
   let one = 1.0 at block
   let six = (2.0 * 3.0) at init
   let neg = -1.0 at sample
-  let y   = (x * g) at sample
+  let y = (x * g) at sample
   prev~(g at sample) + gs * one * six * neg + y
 }

@@ -19,7 +19,7 @@ fn abs_of_float[T: Float](x: T) -> T {
 }
 
 test "abs of the signed integers" {
-  let a: I8  = -127
+  let a: I8 = -127
   let b: I16 = 300
   let c: I32 = -1
   let d: I64 = 0
@@ -48,12 +48,12 @@ test "abs through the bounds Num and Float" {
 
 test "abs of the least signed integer panics" {
   let a: I8 = -128
-  let r     = abs(a) //~ PANIC "abs of the least signed integer panics"
+  let r = abs(a) //~ PANIC "abs of the least signed integer panics"
   assert r == 0
 }
 
 test "abs of the least signed integer through Num panics" {
   let a: I32 = I32.MIN
-  let r      = abs_of(a) //~ PANIC "abs of the least signed integer through Num panics"
+  let r = abs_of(a) //~ PANIC "abs of the least signed integer through Num panics"
   assert r == 0
 }

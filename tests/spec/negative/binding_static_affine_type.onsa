@@ -25,7 +25,7 @@ pub fn take_e(move e: E) -> U32 uses {Alloc} {
 
 pub fn a_none_moved_twice() -> U32 uses {Alloc} {
   let o: Option[Buf[F32]] = None
-  let a                   = take_o(move o)
+  let a = take_o(move o)
   a + take_o(move o) //~ E0704
 }
 
@@ -37,7 +37,7 @@ pub fn a_unit_variant_moved_twice() -> U32 uses {Alloc} {
 
 pub fn a_none_read_after_the_move() -> U32 uses {Alloc} {
   let o: Option[Buf[F32]] = None
-  let a                   = take_o(move o)
+  let a = take_o(move o)
   let n = match o { //~ E0704
     Some(b) => b.len(),
     None => 0,
@@ -53,7 +53,7 @@ pub fn a_unit_variant_moved_in_a_branch(c: Bool) -> U32 uses {Alloc} {
 
 pub fn a_none_moved_in_a_loop(n: U32) -> U32 uses {Alloc} {
   let o: Option[Buf[F32]] = None
-  var total: U32          = 0
+  var total: U32 = 0
   for i in 0 ..< n {
     total = total + take_o(move o) + i //~ E0704
   }

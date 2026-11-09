@@ -57,7 +57,7 @@ test "a range that is empty runs the body 0 times" {
 }
 
 test "the range that starts at T.ONE" {
-  let a: U8  = 5
+  let a: U8 = 5
   let b: I32 = 11
   let c: U16 = 1
   // 1 + 2 + 3 + 4 and 1 + ... + 10.
@@ -67,7 +67,7 @@ test "the range that starts at T.ONE" {
 }
 
 test "the range that starts at T.MIN" {
-  let a: I8  = 0
+  let a: I8 = 0
   let b: I32 = 0
   let c: U64 = 0
   assert count_from_min(a) == 1

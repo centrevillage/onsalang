@@ -126,7 +126,7 @@ pub rt fn for_over_an_array_of_structs(v: F32) -> U32 {
 }
 
 pub rt fn for_over_a_let_of_a_literal(v: F32, w: F32) -> U32 {
-  let t      = [("a", v), ("b", w)]
+  let t = [("a", v), ("b", w)]
   var n: U32 = 0
   for x in t {
     n = n + x.0.len()

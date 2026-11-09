@@ -20,10 +20,10 @@ fn smul[T: SaturatingMul](a: T, b: T) -> T {
 }
 
 test "SaturatingAdd stops at the greatest value" {
-  let a: U8  = 250
-  let b: U8  = 10
-  let c: I8  = 127
-  let d: I8  = 1
+  let a: U8 = 250
+  let b: U8 = 10
+  let c: I8 = 127
+  let d: I8 = 1
   let e: I16 = -32768
   let f: I16 = -1
   assert sadd(a, b) == 255
@@ -32,10 +32,10 @@ test "SaturatingAdd stops at the greatest value" {
 }
 
 test "SaturatingSub stops at the least value" {
-  let a: U8  = 5
-  let b: U8  = 10
-  let c: I8  = -128
-  let d: I8  = 1
+  let a: U8 = 5
+  let b: U8 = 10
+  let c: I8 = -128
+  let d: I8 = 1
   let e: U64 = 0
   assert ssub(a, b) == 0
   assert ssub(c, d) == -128

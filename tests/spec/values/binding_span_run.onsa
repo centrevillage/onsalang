@@ -36,7 +36,7 @@ fn two_channels(input: [Span[F32]; 2]) -> F32 {
 }
 
 fn derived(input: [Span[F32]; 2]) -> F32 {
-  let ch    = input[1]
+  let ch = input[1]
   let again = ch
   again[2]
 }

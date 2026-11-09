@@ -84,7 +84,7 @@ pub fn read_as_a_receiver(xs: [I32; 3]) -> U32 {
 }
 
 pub fn read_in_the_range_of_a_for(n: U32) -> U32 {
-  let m     = n + 1
+  let m = n + 1
   var total = 0
   for i in 0 ..< m {
     total = total + i
@@ -94,7 +94,7 @@ pub fn read_in_the_range_of_a_for(n: U32) -> U32 {
 
 pub fn read_in_a_while(n: U32) -> U32 {
   let limit = n
-  var i     = 0
+  var i = 0
   while i < limit {
     i = i + 1
   }
@@ -139,7 +139,7 @@ pub fn read_in_every_branch_of_a_choice(o: Option[I32], p: Option[I32]) -> I32 {
 }
 
 pub fn read_in_a_destructuring(pair: (I32, I32), p: Point) -> I32 {
-  let (a, b)                 = pair
+  let (a, b) = pair
   let Point { x: px, y: py } = p
   a + b + px + py
 }
@@ -176,9 +176,9 @@ pub fn unused_closure_parameter() -> I32 {
 }
 
 pub fn underscore_everywhere(o: Option[I32], pair: (I32, I32), n: U32) -> I32 {
-  let _      = 1
+  let _ = 1
   let (_, b) = pair
-  var count  = 0
+  var count = 0
   for _ in 0 ..< n {
     count = count + 1
   }

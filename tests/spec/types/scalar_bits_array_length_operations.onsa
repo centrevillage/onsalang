@@ -47,7 +47,7 @@ test "the value of the operation decides the type" {
   let b: [F32; 8] = [4.0; LANES]
   assert lanes(b) == 4.0
   let c: [F32; U8.BITS + U16.BITS] = summed()
-  let d: [F32; 24]                 = c
+  let d: [F32; 24] = c
   assert d[23] == 1.0
 }
 

@@ -52,7 +52,7 @@ test "an array whose length is BITS has the length that BITS has" {
 
 test "the value of BITS decides the type: an array of BITS is an array of that many" {
   let a: [F32; U8.BITS] = [0.5; U8.BITS]
-  let b: [F32; 8]       = a
+  let b: [F32; 8] = a
   assert take_eight(a) == 0.5
   assert first_and_last(b) == 1.0
 }
@@ -72,16 +72,16 @@ test "a struct field and a repeat count name a length by BITS" {
 }
 
 test "a const argument names BITS and has the value of BITS" {
-  let a: [F32; U8.BITS]     = [0.5; U8.BITS]
+  let a: [F32; U8.BITS] = [0.5; U8.BITS]
   let r: Ring[F32, U8.BITS] = Ring { data: a, head: 0 }
-  let same: Ring[F32, 8]    = r
+  let same: Ring[F32, 8] = r
   assert same.data[7] == 0.5
   assert same.head == 0
 }
 
 test "a loop counts to BITS and indexes an array of that length" {
   let a: [F32; U8.BITS] = array.from_fn(fn(i) { F32.round_from(i) })
-  var sum: F32          = 0.0
+  var sum: F32 = 0.0
   for i in 0 ..< U8.BITS {
     sum = sum + a[i]
   }

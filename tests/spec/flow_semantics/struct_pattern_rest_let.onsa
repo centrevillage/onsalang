@@ -28,7 +28,7 @@ pub flow two_fields(x: F32 at sample) -> F32 at sample {
 test "a destructuring let with a last _ in a flow" {
   // prev~ gives l = 0 1 2 at the samples of 1 2 3: out = 1 2 3.
   let xs: [F32; 3] = [1.0, 2.0, 3.0]
-  let o            = left_of_the_last.render(left_of_the_last.Config {}, left_of_the_last.Params {}, xs, 8.0)
+  let o = left_of_the_last.render(left_of_the_last.Config {}, left_of_the_last.Params {}, xs, 8.0)
   assert o.out[0] == 1.0
   assert o.out[1] == 2.0
   assert o.out[2] == 3.0
@@ -36,7 +36,7 @@ test "a destructuring let with a last _ in a flow" {
 
 test "the fields of a struct made in the body, in another order" {
   let xs: [F32; 2] = [1.0, 2.0]
-  let o            = two_fields.render(two_fields.Config {}, two_fields.Params {}, xs, 8.0)
+  let o = two_fields.render(two_fields.Config {}, two_fields.Params {}, xs, 8.0)
   assert o.out[0] == 3.0
   assert o.out[1] == 6.0
 }

@@ -38,10 +38,10 @@ test "U8: None from the amount 8, bits that leave are dropped" {
 }
 
 test "I8: None from the amount 8, shl reaches the sign bit, shr copies it" {
-  let one: I8        = 1
+  let one: I8 = 1
   let sixty_four: I8 = 64
-  let minus_one: I8  = -1
-  let min: I8        = I8.MIN
+  let minus_one: I8 = -1
+  let min: I8 = I8.MIN
   assert val(one.checked_shl(7), 9) == -128
   assert is_none(one.checked_shl(8))
   assert val(sixty_four.checked_shl(1), 9) == -128
@@ -54,8 +54,8 @@ test "I8: None from the amount 8, shl reaches the sign bit, shr copies it" {
 }
 
 test "U16 and I16: None from the amount 16" {
-  let one: U16  = 1
-  let top: U16  = 32768
+  let one: U16 = 1
+  let top: U16 = 32768
   let sone: I16 = 1
   let smin: I16 = I16.MIN
   assert val(one.checked_shl(15), 9) == 32768
@@ -69,8 +69,8 @@ test "U16 and I16: None from the amount 16" {
 }
 
 test "U32 and I32: None from the amount 32, and for the largest amount" {
-  let one: U32  = 1
-  let top: U32  = 2147483648
+  let one: U32 = 1
+  let top: U32 = 2147483648
   let sone: I32 = 1
   let smin: I32 = I32.MIN
   assert val(one.checked_shl(31), 9) == 2147483648
@@ -86,7 +86,7 @@ test "U32 and I32: None from the amount 32, and for the largest amount" {
 }
 
 test "the amount 0 returns the value itself, also for a value of 0" {
-  let a: U8  = 200
+  let a: U8 = 200
   let b: I16 = -300
   let z: U32 = 0
   assert val(a.checked_shl(0), 9) == 200

@@ -69,7 +69,7 @@ pub fn derived_field(h: Holder) -> U32 {
 }
 
 pub fn derived_destructure(p: (Buf[F32], U32)) -> U32 {
-  let q      = p
+  let q = p
   let (a, n) = q
   a.len() + n
 }
@@ -105,7 +105,7 @@ pub fn for_element_derived(xs: [Holder; 2]) -> U32 {
 // The origin of a borrowing `for` may be any place (§5.4), a local included.
 pub fn for_over_a_local() -> U32 uses {Alloc} {
   let hs: [Holder; 2] = [Holder { buf: Buf.zeroed(2), gain: 1.0 }, Holder { buf: Buf.zeroed(3), gain: 2.0 }]
-  var n: U32          = 0
+  var n: U32 = 0
   for h in hs {
     let b = h.buf
     n = n + b.len()

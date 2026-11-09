@@ -69,7 +69,7 @@ pub fn move_the_subject() uses {Alloc} {
 
 pub fn change_the_subject_and_read_the_element() -> U32 uses {Alloc} {
   var o: Option[[Buf[F32]; 2]] = None
-  var n: U32                   = 0
+  var n: U32 = 0
   match o {
     Some(bs) => {
       for x in bs {

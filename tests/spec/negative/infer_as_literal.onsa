@@ -16,7 +16,7 @@ use std.math.abs
 
 pub fn the_form_of_the_review() -> F32 {
   var acc = 0.0
-  let y   = abs(acc)
+  let y = abs(acc)
   y + (1.0 as F32) //~ E0420
 }
 
@@ -57,7 +57,7 @@ pub fn variable_of_a_literal() -> F64 {
 pub fn the_literal_is_annotated() -> F32 {
   let one: F32 = 1.0
   var acc: F32 = 0.0
-  let y        = abs(acc)
+  let y = abs(acc)
   y + one
 }
 

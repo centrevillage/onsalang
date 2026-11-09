@@ -31,7 +31,7 @@ test "sum by the path of the module keeps a negative zero and the empty sum" {
 }
 
 test "sum by the path of the module from a generic function" {
-  let a: [U8; 3]  = [1, 2, 3]
+  let a: [U8; 3] = [1, 2, 3]
   let b: [F32; 2] = [1.5, 2.0]
   assert total_by_path(a) == 6
   assert total_by_path(b) == 3.5
