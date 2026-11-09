@@ -533,3 +533,31 @@ left = "expected a type, found `…`"
 input = "tests/fuzz/64ec82d1.onsa"
 reasons = ["S-384"]
 note = "an input with two errors: a `&` before the type of an `impl` (the default borrow), and a `|` after it that is no type, which the input has before the candidate"
+
+[[allowed]]
+class = "fix|E0020|move it to the end of the line before|E0020"
+left = "a float literal needs digits on both sides of the point"
+input = "tests/fuzz/8e6b0f65.onsa"
+reasons = ["S-384", "S-236"]
+note = "an input with two errors: a line that starts with `*` after a line it goes on with, and a float literal `2.` with no digit after its point, which the input has before the candidate (the candidate that moves the `*` leaves the `2.` at the head of the line)"
+
+[[allowed]]
+class = "fix|E0003|move `…` to the end of the line before|E0002"
+left = "expected `…`, found identifier"
+input = "tests/fuzz/d083d9c7.onsa"
+reasons = ["S-384", "S-236"]
+note = "an input with two errors: a `{` of a struct literal on the next line, and a field with no `:` in it (`{e y)`), which the input has before the candidate"
+
+[[allowed]]
+class = "fix|E0020|write `…`|E0002"
+left = "expected a declaration, found `…`"
+input = "tests/fuzz/784aa3c5.onsa"
+reasons = ["R-419"]
+note = "the `::` after the keyword `pub` and a line break (`pub::` and `fn` on the next line) gets the candidate of a path's `::`, which moves the `.` to the head of the next line and leaves an E0002 there; no target language writes `pub::`"
+
+[[allowed]]
+class = "fix|E0020|remove the `…`|E0002"
+left = "expected a declaration, found `…`"
+input = "tests/fuzz/070c3cec.onsa"
+reasons = ["S-384", "S-236"]
+note = "an input with two errors: a `;` that ends nothing at the top of the file, and a `}` that closes nothing after it, which the input has before the candidate"
