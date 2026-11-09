@@ -149,7 +149,14 @@ class PendingList(TempRepo):
                 errors = self.errors_of(entry("gate", item), pendable=gate_steps.pendable())
                 self.assertEqual(len(errors), 1, errors)
                 self.assertIn("may be listed only by case", errors[0])
-        self.assertEqual(gate_steps.by_case_only(), ["vectors-interp", "keywords", "vectors-c"])
+        self.assertEqual(gate_steps.by_case_only(), ["fix-loop", "vectors-interp", "keywords", "vectors-c"])
+
+    def test_the_fix_loop_is_listed_by_case_only(self):
+        # S-475: a known cycle or limit of one input, `fix-loop/<file from the root>`; never the whole item
+        self.assertEqual(self.errors_of(entry("gate", "fix-loop/tests/fuzz/x.onsa"), pendable=gate_steps.pendable()), [])
+        errors = self.errors_of(entry("gate", "fix-loop"), pendable=gate_steps.pendable())
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn("may be listed only by case", errors[0])
 
     def test_rows_of_the_vectors(self):
         # W2-02/b: a case entry of an item that counts rows says how many (`rows`) and which (`digest`);

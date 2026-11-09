@@ -34,8 +34,9 @@ class RealSteps(unittest.TestCase):
         # every test binary runs, the ones after a failing one too (X9-70)
         self.assertEqual(by_name["test"].argv, ("cargo", "test", "--workspace", "--no-fail-fast"))
         self.assertTrue(by_name["spec-coverage"].info)
-        # the convergence of the fix candidates shows its cycles and divergences, never listed (W3-22)
-        self.assertTrue(by_name["fix-loop"].info and not by_name["fix-loop"].pendable)
+        # the convergence of the fix candidates fails on a cycle or the limit, a known one listed by case (S-475)
+        fix_loop = by_name["fix-loop"]
+        self.assertTrue(not fix_loop.info and fix_loop.pendable and fix_loop.by_case_only and fix_loop.slow)
         self.assertFalse(by_name["spec-sections"].info)
         # the documents (X-2 DT-5): the checks fail the gate; the lines `fmt` would break are only shown (DT-4, DF-8)
         self.assertTrue(by_name["docs"].static and not by_name["docs"].info)
@@ -51,9 +52,11 @@ class RealSteps(unittest.TestCase):
         self.assertEqual([s.name for s in gate_steps.STEPS if s.slow], slow)
         # the deep fuzzing runs only at a stage end (W3-03)
         self.assertEqual([s.name for s in gate_steps.STEPS if s.stage_end_only], ["fuzz-deep"])
-        # the only items that may be listed: the test vectors against the interpreter and the C
-        # (W2-02, by case only), the keywords (W3-02, by case only) and the C checks (W1-06)
-        self.assertEqual(gate_steps.pendable(), ["vectors-interp", "keywords"] + self.c_items() + ["vectors-c"])
+        # the only items that may be listed: the fix loop (S-475, by case only), the test vectors against the
+        # interpreter and the C (W2-02, by case only), the keywords (W3-02, by case only) and the C checks (W1-06)
+        self.assertEqual(gate_steps.pendable(),
+                         ["fix-loop", "vectors-interp", "keywords"] + self.c_items() + ["vectors-c"])
+        self.assertEqual(gate_steps.by_case_only(), ["fix-loop", "vectors-interp", "keywords", "vectors-c"])
         vectors = [s for s in gate_steps.STEPS if s.argv[: len(gate_steps.VECTORS)] == gate_steps.VECTORS]
         self.assertEqual([(s.name, s.argv[len(gate_steps.VECTORS) :]) for s in vectors],
                          [("vectors-interp", ("interp",)), ("vectors-c", ("c",))])  # fmt: skip

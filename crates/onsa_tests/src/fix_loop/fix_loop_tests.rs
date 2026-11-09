@@ -4,8 +4,10 @@ use std::time::{Duration, Instant};
 
 use onsa_diag::{Code, Diagnostic, Edit, FileId, Fix, SourceMap, Span, Stage};
 
+use super::gate::{Inputs, options, verdict};
 use super::walk::{Mark, undoes};
 use super::*;
+use crate::pending::Pending;
 
 /// A made-up language for the walk, one character a token: `a` deletes
 /// itself; `n` has no candidate; `p` and `q` turn into each other; `u`
@@ -372,6 +374,7 @@ fn the_gate_walks_the_cases_and_the_saved_inputs() {
             ("tests/spec/fixes/a.onsa", LET_MUT),
             ("tests/spec/fixes/pkg/onsa.toml", b"[package]\nname = \"pkg\"\nedition = \"2026\"\n"),
             ("tests/fuzz/b.onsa", CLEAN),
+            ("tests/pending.toml", b""),
         ],
     );
     let g = root.gate(GATE_BUDGET);
@@ -379,7 +382,8 @@ fn the_gate_walks_the_cases_and_the_saved_inputs() {
     assert_eq!(
         g.text,
         "fix-loop: 2 files (1 packages not walked), walked with --branches in both orders: cycles (state) 0, \
-         cycles (undo) 0, divergences 0, limits 0, truncated 0 (walks of a file and an order; report only, W3-22)"
+         cycles (undo) 0, limits 0, truncated 0 (walks of a file and an order); breaches (cycles and limits) 0, held \
+         by tests/pending.toml 0"
     );
     let g = root.gate(Duration::ZERO);
     assert!(g.failed && g.text.contains("FAIL the time budget (0 s) ran out"), "{}", g.text);
@@ -398,4 +402,65 @@ fn the_gate_fails_when_it_walks_less_than_it_says() {
     fails("unreadable", unreadable, "FAIL tests/fuzz/b.onsa: cannot read it: not UTF-8");
     let clean: &[(&str, &[u8])] = &[("tests/spec/fixes/a.onsa", CLEAN), ("tests/fuzz/b.onsa", CLEAN)];
     fails("clean", clean, "FAIL no walk took a step");
+    let no_list: &[(&str, &[u8])] = &[("tests/spec/fixes/a.onsa", LET_MUT), ("tests/fuzz/b.onsa", CLEAN)];
+    fails("no-list", no_list, "tests/pending.toml: ");
+}
+
+/// The walks of the gate over the made-up language, one per `(name, text)`.
+fn gate_walks(inputs: &[(&str, &str)]) -> (Inputs, Vec<Report>) {
+    let options = options(Pick::First, Instant::now() + GATE_BUDGET);
+    let reports = inputs.iter().map(|(name, text)| walk(name, text, &options, &made_up)).collect();
+    let texts = inputs.iter().map(|(n, t)| (n.to_string(), t.to_string())).collect();
+    (Inputs { texts, packages: 0, problems: Vec::new() }, reports)
+}
+
+/// A list holding the cycles and the limits of `files`.
+fn listed(files: &[&str]) -> Pending {
+    let entry = |f: &&str| {
+        format!(
+            "[[pending]]\nkind = \"gate\"\ntarget = \"fix-loop/{f}\"\nreasons = [\"R-1\"]\nuntil = \"W5-24\"\nnote = \"n\"\n"
+        )
+    };
+    Pending::parse(&files.iter().map(entry).collect::<String>()).unwrap()
+}
+
+#[test]
+fn the_gate_fails_on_a_cycle_and_the_limit_but_not_on_a_divergence() {
+    // `p` and `uw` cycle (of state, of undo); `g` grows: its walk in the gate does not stop on
+    // the divergence, and stops at the limit, twice its token and 8 (S-475).
+    let (inputs, reports) = gate_walks(&[("p.onsa", "p"), ("uw.onsa", "uw"), ("g.onsa", "g"), ("a.onsa", "xax")]);
+    assert_eq!((reports[2].walks[0].stop, reports[2].longest, reports[2].count(Stop::Diverge)), (Stop::Limit, 10, 0));
+    let g = verdict(inputs, &reports, &Pending::default(), GATE_BUDGET);
+    assert!(g.failed, "{}", g.text);
+    for f in ["p.onsa", "uw.onsa", "g.onsa"] {
+        assert!(g.text.contains(&format!("FAIL {f} (--pick first): a cycle or the limit of the steps")), "{}", g.text);
+    }
+    assert!(!g.text.contains("FAIL a.onsa") && g.text.contains("cycles (state) 1, cycles (undo) 1, limits 1"));
+    assert!(g.text.ends_with("breaches (cycles and limits) 3, held by tests/pending.toml 0"), "{}", g.text);
+    // A walk that stops on a divergence (as the CLI's walks do, `--diverge`) fails nothing.
+    let diverging = walk("g.onsa", "g", &Options::default(), &made_up);
+    assert_eq!(diverging.count(Stop::Diverge), 1);
+    let inputs = Inputs { texts: vec![("g.onsa".into(), "g".into())], packages: 0, problems: Vec::new() };
+    let g = verdict(inputs, &[diverging], &Pending::default(), GATE_BUDGET);
+    assert!(!g.failed, "{}", g.text);
+}
+
+#[test]
+fn the_list_holds_the_cycles_and_the_limits_of_its_inputs_only() {
+    let walks = || gate_walks(&[("p.onsa", "p"), ("g.onsa", "g"), ("a.onsa", "xax"), ("i.onsa", "i")]);
+    let (inputs, reports) = walks();
+    let g = verdict(inputs, &reports[..3], &listed(&["p.onsa", "g.onsa"]), GATE_BUDGET);
+    assert!(!g.failed, "{}", g.text);
+    assert!(g.text.ends_with("breaches (cycles and limits) 2, held by tests/pending.toml 2"), "{}", g.text);
+    // An entry of an input without a cycle or a limit, or of no input, fails; so does an internal
+    // error of a listed input, which the list never holds.
+    let (inputs, reports) = walks();
+    let g = verdict(inputs, &reports, &listed(&["p.onsa", "g.onsa", "a.onsa", "b.onsa", "i.onsa"]), GATE_BUDGET);
+    for why in [
+        "FAIL fix-loop/a.onsa: no cycle and no limit, but listed in tests/pending.toml (until W5-24); remove the entry",
+        "FAIL tests/pending.toml: `fix-loop/b.onsa` names no input of the item (until W5-24)",
+        "FAIL i.onsa (--pick first): an internal error or a candidate that does not apply",
+    ] {
+        assert!(g.failed && g.text.contains(why), "{why}\n{}", g.text);
+    }
 }

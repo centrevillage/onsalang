@@ -114,7 +114,8 @@
 //!
 //! `--fix-loop-gate` is the gate item `fix-loop` over ROOT (default: the
 //! repository; `onsa_tests::fix_loop::gate`). Exits 1 when it fails to walk
-//! what it says, never on what the walks find.
+//! what it says, or a walk ends in a cycle or at the limit (S-475) on an
+//! input `tests/pending.toml` does not hold.
 //!
 //! `--phases` checks each PATH (a `.onsa` file or a package, as `onsa check`
 //! reads it) N times (default 3) and prints a line per path, the least

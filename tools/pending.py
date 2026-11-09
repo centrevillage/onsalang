@@ -20,7 +20,9 @@ the form of `target`:
                   checks `<path>[<target>]/<compiler>`  (onsa_tests::ccheck, W1-06).
                   The test vectors name a case `<operation>` (`vectors-interp/u64.mul`)
                   and `<operation>[<toolchain>]` (`vectors-c/u32.mul[c-gcc]`), and
-                  are listed only by case (`by_case_only`; onsa_tests::vectors, W2-02)
+                  are listed only by case (`by_case_only`; onsa_tests::vectors, W2-02).
+                  The fix loop names a case `<file from the root>`, by case only
+                  (`fix-loop/tests/fuzz/x.onsa`; onsa_tests::fix_loop::gate, S-475)
     test-case     a test case: a path from the repository root (a file or a
                   package directory), optionally "<path>::<test name>"   (W1-03)
     fuzz-input    a saved fuzz input: a path from the repository root  (W1-04)

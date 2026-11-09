@@ -10,7 +10,7 @@ pending.
 
 A pendable item may also apply the list case by case: the entries
 `<item>/<case>` are the item's own to apply (the C checks, `onsa_tests::ccheck`;
-the test vectors, `onsa_tests::vectors`); the gate applies only the entry of
+the test vectors, `onsa_tests::vectors`; the fix loop, `onsa_tests::fix_loop::gate`); the gate applies only the entry of
 the whole item. An item with `by_case_only=True` may be listed only by case
 (`tools/pending.py` refuses its whole entry: it would hide every new failure).
 An item with `expect_internal=True` may hold an internal error of the compiler
@@ -116,10 +116,10 @@ STEPS = [
     # (1 to 2.5 minutes on 10 cores), so only at a stage end (W3-03, 2026-10-08).
     Step("fuzz-deep", (*PY, str(TOOLS / "fuzz.py"), "--deep"), slow=True, stage_end_only=True),
     # The fix candidates applied again and again until the loop stops (S-236, rules/criteria.md 7.27,
-    # W3-22): the cases of tests/spec/fixes and the saved inputs of the fuzzing. It shows the cycles and the
-    # divergences (report only, until the known ones are sorted out) and fails when it walks nothing, runs
-    # out of its time, or a walk ends in an internal error.
-    Step("fix-loop", (*repo.CASES_CMD, "--fix-loop-gate"), info=True, slow=True),
+    # W3-22): the cases of tests/spec/fixes and the saved inputs of the fuzzing. It fails on a cycle or the
+    # limit of the steps (S-475; a known one is a case entry `fix-loop/<file>`, onsa_tests::fix_loop::gate),
+    # when it walks nothing, runs out of its time, or a walk ends in an internal error.
+    Step("fix-loop", (*repo.CASES_CMD, "--fix-loop-gate"), pendable=True, by_case_only=True, slow=True),
     Step("spec-examples", (*PY, str(TOOLS / "check_spec_examples.py")), static=True),
     Step("spec-sections", (*PY, str(TOOLS / "spec_sections.py"), "--check"), static=True),
     # The documents write the `init` of a delay in the omitted form (S-539 (c3a)): the ```onsa blocks of the spec

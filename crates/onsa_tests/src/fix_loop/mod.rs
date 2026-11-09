@@ -39,7 +39,7 @@
 //!   reason (`tests/spec/fixes/e0320_rename.onsa` rises in two for a known
 //!   defect, R-87 (5), until W4-04); 4 leaves room for candidates that let
 //!   the check reach errors of other units, and a growth that goes on stops
-//!   in 4 steps;
+//!   in 4 steps (the gate does not stop on it: [`gate`]);
 //! - `internal`: the check after a step ends in an internal error (with the
 //!   position of the panic);
 //! - `cannot-apply`: a candidate does not apply ([`crate::fix_contract::Unapplied`]).
@@ -64,9 +64,11 @@
 //!
 //! The gate item `fix-loop` ([`gate`]) walks the single-file cases of
 //! `tests/spec/fixes` and the saved inputs of the fuzzing `tests/fuzz` with
-//! branches, in both orders, within [`GATE_BUDGET`] = 300 s, and reports the
-//! cycles, the divergences and the limits without failing on them (until
-//! the known ones are sorted out).
+//! branches, in both orders, within [`GATE_BUDGET`] = 300 s, and fails on a
+//! cycle and on the limit (S-475), but of an input listed in
+//! `tests/pending.toml` as `fix-loop/<file from the root>`. A divergence is
+//! no failure (a sound walk can show errors that were hidden): its walks do
+//! not stop on one, and a growth that goes on stops at the limit.
 
 mod gate;
 mod text;
