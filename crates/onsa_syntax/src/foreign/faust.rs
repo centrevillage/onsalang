@@ -11,6 +11,8 @@
 //! the gate or needs a fix is removed with its cases, not fixed. The prefix
 //! `~` of C ([`bit_not`]) stays in support.
 
+use super::edits::move_token_down_as;
+use super::spaces::partner;
 use super::*;
 use crate::literal::int_value;
 use crate::naming::reads_constant;
@@ -223,14 +225,42 @@ pub(super) fn prime_note(text: &str, range: Span) -> Option<&'static str> {
 /// The row reads a prefix `~` that touches its operand and follows no name
 /// (S-123) and is not the `~` of an `if` / `match` with a blank before it
 /// (S-354, S-355: [`Cursor::branch`]; the `if` of a guard is none).
+/// One with a blank on its line before its operand (`~ a`, S-938) is the
+/// same: the `~` and the blank become `!` at once; one with a line break
+/// (`~` and `m` on the next line, S-957), the `~` moves to its operand's line
+/// as `!`. Such a `~` of no single `!` (a stack, `~ _`, `~ (… _ …)`; S-958,
+/// S-486) is the general E0002.
 pub(super) fn faust_bit_not(c: &Cursor) -> Option<Hit> {
-    if c.kind(c.at) != TokenKind::Tilde
-        || c.want != Want::Expr
-        || c.sig_before(c.at).is_some_and(|p| c.branch(p).is_some())
-    {
+    if !prefix_tilde(c) {
         return None;
     }
-    hit(c.span(c.at), bit_not(c)?)
+    if c.gap_after(c.at) == Gap::None {
+        return hit(c.span(c.at), bit_not(c)?);
+    }
+    let next = partner(c)?;
+    let plain = bit_not_of(c, next).filter(|f| f.len() == 1 && f[0].edits().len() == 1);
+    if !starts_operand(c.kind(next)) || plain.is_none() {
+        return None;
+    }
+    let fix = match c.gap_after(c.at) {
+        Gap::Space => Fix::replace("write `!`", c.file_span(c.span(c.at).start, c.span(next).start), "!"),
+        _ => move_token_down_as(c, "write `!`", c.at, "!")?,
+    };
+    hit(c.span(c.at), vec![fix])
+}
+
+/// The cursor is at a prefix `~` that the row [`faust_bit_not`] reads.
+fn prefix_tilde(c: &Cursor) -> bool {
+    c.kind(c.at) == TokenKind::Tilde && c.want == Want::Expr && c.sig_before(c.at).is_none_or(|p| c.branch(p).is_none())
+}
+
+/// The block comment that starts what follows the line break after a prefix
+/// `~` (a line comment before the break too, S-957): its own E0020 is first
+/// (`comments::block_comment`), as after a `?` and an `@`. Something between
+/// them is a line break (a line comment ends its line).
+pub(super) fn comment_after_tilde(c: &Cursor) -> Option<usize> {
+    let i = (c.at + 1..c.tokens.len()).find(|&i| c.kind(i) != TokenKind::Newline && !c.kind(i).is_line_comment())?;
+    (prefix_tilde(c) && i > c.at + 1 && c.kind(i) == TokenKind::BlockComment).then_some(i)
 }
 
 /// The prefix `~` at the cursor read as the bitwise negation of C: its
@@ -239,24 +269,32 @@ pub(super) fn faust_bit_not(c: &Cursor) -> Option<Hit> {
 /// same reading as their second candidate (S-354).
 pub(super) fn bit_not(c: &Cursor) -> Option<Vec<Fix>> {
     // It touches its operand only on its line with no blank (S-385).
-    if c.kind(c.at) != TokenKind::Tilde || c.gap_after(c.at).is_some() || c.kind(c.at + 1) == TokenKind::Underscore {
+    if c.gap_after(c.at).is_some() {
+        return None;
+    }
+    bit_not_of(c, c.at + 1)
+}
+
+/// [`bit_not`], of the operand that starts at token `next`.
+fn bit_not_of(c: &Cursor, next: usize) -> Option<Vec<Fix>> {
+    if c.kind(c.at) != TokenKind::Tilde || c.kind(next) == TokenKind::Underscore {
         return None;
     }
     // Out of support (S-486, FAUST): a `_` in the parentheses of `~(…)` (out of nested
     // brackets) is the feedback of FAUST (`x + ~(_ * 0.5)`), which `!` would
     // leave a typed hole: no reading of the row (the general E0002).
-    if c.kind(c.at + 1) == TokenKind::LParen && holds_wild(c, c.at + 1) {
+    if c.kind(next) == TokenKind::LParen && holds_wild(c, next) {
         return None;
     }
     // `!` beside another prefix operator would be a stack of them (E0012):
     // no candidate then.
     let prefix =
         |k: TokenKind| matches!(k, TokenKind::Minus | TokenKind::Bang | TokenKind::Tilde | TokenKind::MinusMinus);
-    if c.top() == Some(NodeKind::PrefixExpr) || matches!(c.kind(c.at + 1), TokenKind::Tilde | TokenKind::MinusMinus) {
+    if c.top() == Some(NodeKind::PrefixExpr) || matches!(c.kind(next), TokenKind::Tilde | TokenKind::MinusMinus) {
         return Some(Vec::new());
     }
     // The operand of `!` is no `move x` or `inout x` (§5.2): no candidate.
-    if matches!(c.kind(c.at + 1), TokenKind::KwMove | TokenKind::KwInout) {
+    if matches!(c.kind(next), TokenKind::KwMove | TokenKind::KwInout) {
         return Some(Vec::new());
     }
     // The operand of `move` and `inout` is a postfix expression (§5.2, R-42):
@@ -264,10 +302,10 @@ pub(super) fn bit_not(c: &Cursor) -> Option<Vec<Fix>> {
     if c.sig_before(c.at).is_some_and(|p| matches!(c.kind(p), TokenKind::KwMove | TokenKind::KwInout)) {
         return Some(Vec::new());
     }
-    if prefix(c.kind(c.at + 1)) {
+    if prefix(c.kind(next)) {
         // `~-x`: `!(-x)`, the operand in parentheses (no stack of prefix
         // operators, §3.1); only when the operand is plain.
-        let Some(end) = operand_end(c, c.at + 2) else { return Some(Vec::new()) };
+        let Some(end) = operand_end(c, next + 1) else { return Some(Vec::new()) };
         let fix =
             Fix::new("write `!`", vec![Edit::replace(c.span(c.at), "!("), Edit::insert(c.file, c.span(end).end, ")")]);
         return Some(vec![fix]);

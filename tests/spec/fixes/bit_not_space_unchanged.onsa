@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6", "§18.1"]
+// fixes = 1
+
+// S-938 (W5-11 U10d2, §2.6): the forms next to `~ a` that the decision leaves as they are, so that allowing a space after
+// a prefix `~` does not change them. A `~` that touches its operand (`~m`, `~(m)`) is the E0020 of the bit negation with
+// the candidate `!`. The FAUST feedback `x + ~ _` (S-486) is the E0020 with the candidate `prev~(^y)`, whose `~` is
+// followed by a `_`, which is not an operand. A `~` after `if` / `match` is the E0020 of §2.6 whose candidate takes
+// the space out (`if~ c`), and a `!` form is not set beside it because the `~` does not touch its operand. The main position
+// is the `~` of each form. One error per declaration unit (P-01).
+
+pub fn touching_a_name(m: U32) -> U32 {
+  let n = ~m   //~ E0020 @11
+  n
+}
+
+pub fn touching_a_group(m: U32) -> U32 {
+  let n = ~(m)   //~ E0020 @11
+  n
+}
+
+pub fn touching_a_literal() -> U32 {
+  let n = ~1   //~ E0020 @11
+  n
+}
+
+pub flow feedback(x: F32 at sample) -> F32 at sample {
+  let y = x + ~ _   //~ E0020 @15
+  y
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow after_if(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = if ~ c { lp~(x) } else { x }   //~ E0020 @14
+  a
+}
+
+pub fn after_match(c: Bool) -> U32 {
+  let a = match ~ c { true => 1, false => 2 }   //~ E0020 @17
+  a
+}
+
+pub fn fine(m: U32) -> U32 {
+  !m
+}

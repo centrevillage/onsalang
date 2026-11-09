@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§4.5", "§15.1", "§18.1"]
+// fixes = 1
+
+// S-957 (W5-11 U10d2/t2, §2.5, §4.5): a line break after the `?` of a bound is E0020 in each module of a package, and the
+// candidates are applied in each file. This module declares a function and a struct with the form and uses what util.onsa
+// declares (the right form), and util.onsa has the form in an `impl` and a function. One error per declaration unit
+// (P-01).
+
+use util.{Rack, keep}
+
+pub fn a_function_of_this_module[T:   //~ E0020 @37
+  ?Dup](x: T) -> U32 {
+  0
+}
+
+pub struct Local[T:   //~ E0020 @21
+  ?Escape] {
+  n: U32,
+}
+
+pub fn uses_the_imported_ones(r: Rack[U32]) -> U32 {
+  keep(r.n)
+}

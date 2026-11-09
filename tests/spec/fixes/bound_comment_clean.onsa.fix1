@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "18:3"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// R-384 (W5-11 U10d2, §4.5, §18.1): the candidate of `T: Dup` whose `:` is followed by a comment and a line break takes the
+// element out with the `:`, and nothing is left behind (`clean`, S-253): the unit reads `pub fn f[T](x: T)` after it,
+// with or without the comment (§18.1: a comment between the tokens removed may go with them). The main position is the
+// start of the element. A file with one unit, so that `clean` looks at the whole file.
+
+pub fn f[T](x: T) -> U32 {   //~ E0020
+  0
+}

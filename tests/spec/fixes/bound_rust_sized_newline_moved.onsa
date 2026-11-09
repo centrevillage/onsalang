@@ -1,0 +1,78 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 1
+
+// S-746 and S-957 (W5-11 U10d2/t2, §4.5, §18.1; the second round of the form H1 of bound_rust_sized_newline_forms.onsa): the
+// forms that the candidate of S-957 leaves, the `?` on the line of `Sized` (`T:` and `?Sized](x: T)` on the next line, or after a
+// comment line). They are the E0020 of the types stage of S-746 (every type has a size, so `?Sized` and `Sized` mean
+// nothing in a bound), as bound_rust_sized_forms.onsa does for the forms on one line; the one candidate takes the element
+// out, with the `+` next to it or with the `:` when no element is left, across the line break. The main position is the
+// start of the element, the `?` of `?Sized`. The forms are tried in the places a list can stand: a function, a struct, an
+// enum, the `[ ]` of an `impl` and the method of its own, alone, last, first and in the middle, with a comment on the line of
+// the `:` or of the `+`. One error per declaration unit (P-01). The candidate leaves a unit without an error, so a candidate
+// applied again after the round of S-957 ends (bound_rust_sized_newline_clean.onsa is the property).
+
+pub struct Held[T] {
+  n: U32,
+}
+
+pub fn maybe_alone[T:
+  ?Sized](x: T) -> U32 {   //~ E0020 @3
+  0
+}
+
+pub fn maybe_last[T: Show +
+  ?Sized](x: T) -> U32 {   //~ E0020 @3
+  0
+}
+
+pub fn maybe_first[T:
+  ?Sized + Show](x: T) -> U32 {   //~ E0020 @3
+  0
+}
+
+pub fn maybe_middle[T: Show +
+  ?Sized + PartialEq](x: T) -> U32 {   //~ E0020 @3
+  0
+}
+
+pub fn beside_a_right_maybe[T: ?Dup +
+  ?Sized](x: T) -> U32 {   //~ E0020 @3
+  0
+}
+
+pub fn a_comment_after_the_colon[T: // c
+  ?Sized](x: T) -> U32 {   //~ E0020 @3
+  0
+}
+
+pub fn a_comment_after_the_plus[T: Show + // c
+  ?Sized](x: T) -> U32 {   //~ E0020 @3
+  0
+}
+
+pub struct RackMaybe[T:
+  ?Sized] {   //~ E0020 @3
+  n: U32,
+}
+
+pub enum ShelfMaybe[T:
+  ?Sized] {   //~ E0020 @3
+  One(U32),
+  Nothing,
+}
+
+impl[T:
+  ?Sized] Held[T] {   //~ E0020 @3
+  pub fn tag() -> U32 {
+    7
+  }
+}
+
+impl[T] Held[T] {
+  pub fn own[U:
+    ?Sized](self, y: U) -> U32 {   //~ E0020 @5
+    self.n
+  }
+}

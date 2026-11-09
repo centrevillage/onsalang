@@ -1,0 +1,83 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 1
+
+// S-746 (W5-11 U10d2, §4.5, §18.1, the row of the Rust form next to `implicit_bound` of spec/foreign-forms.toml): the
+// Rust bounds `?Sized` and `Sized` are E0020 of the types stage when the name `Sized` is not found, and not the E0302 "cannot
+// find `Sized`" they were: every type of Onsa has a size, so the element means nothing here, and the one candidate takes it
+// out (the `+` next to it, or the `:` when no element is left). The main position is the start of the element, the `?` of
+// `?Sized`, as `implicit_bound` has it. The forms are tried in the places a list can stand: a function, a struct, an enum, the
+// `[ ]` of an `impl` and the method of its own, in the first, the middle and the last place of a list, and beside the `?Dup`
+// that is a right element. One error per declaration unit (P-01). The types stage runs only when the file has no syntax
+// error, so no form of the syntax stage is in this file (the `? Sized` with a space, which is S-511's, is in
+// space_after_bound_question_names.onsa).
+
+pub struct Held[T] {
+  n: U32,
+}
+
+pub fn maybe_alone[T: ?Sized](x: T) -> U32 {   //~ E0020 @23
+  0
+}
+
+pub fn maybe_last[T: Show + ?Sized](x: T) -> U32 {   //~ E0020 @29
+  0
+}
+
+pub fn maybe_first[T: ?Sized + Show](x: T) -> U32 {   //~ E0020 @23
+  0
+}
+
+pub fn maybe_middle[T: Show + ?Sized + PartialEq](x: T) -> U32 {   //~ E0020 @31
+  0
+}
+
+pub fn plain_alone[T: Sized](x: T) -> U32 {   //~ E0020 @23
+  0
+}
+
+pub fn plain_first[T: Sized + Show](x: T) -> U32 {   //~ E0020 @23
+  0
+}
+
+pub fn plain_last[T: Show + Sized](x: T) -> U32 {   //~ E0020 @29
+  0
+}
+
+pub fn beside_a_right_maybe[T: ?Dup + ?Sized](x: T) -> U32 {   //~ E0020 @39
+  0
+}
+
+pub fn in_the_second_parameter[T, U: ?Sized](x: T, y: U) -> U32 {   //~ E0020 @38
+  0
+}
+
+pub struct RackMaybe[T: ?Sized] {   //~ E0020 @25
+  n: U32,
+}
+
+pub struct RackPlain[T: Show + Sized] {   //~ E0020 @32
+  n: U32,
+}
+
+pub enum ShelfMaybe[T: ?Sized] {   //~ E0020 @24
+  One(U32),
+  Nothing,
+}
+
+impl[T: ?Sized] Held[T] {   //~ E0020 @9
+  pub fn tag() -> U32 {
+    7
+  }
+}
+
+impl[T] Held[T] {
+  pub fn own[U: Sized](self, y: U) -> U32 {   //~ E0020 @17
+    self.n
+  }
+}
+
+pub fn fine[T: Show + ?Dup](x: T) -> U32 {
+  0
+}

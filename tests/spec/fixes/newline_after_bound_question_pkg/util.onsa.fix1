@@ -1,0 +1,20 @@
+pub struct Rack[T: ?Dup] {
+  n: U32,
+}
+
+impl[T:   //~ E0020 @9
+  ?Dup] Rack[T] {
+  pub fn tag() -> U32 {
+    7
+  }
+}
+
+pub fn keep[T:   //~ E0020 @16
+  ?Dup](x: T) -> U32 {
+  0
+}
+
+pub fn fine[T:
+  ?Dup](x: T) -> U32 {
+  0
+}

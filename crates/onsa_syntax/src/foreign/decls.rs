@@ -3,6 +3,7 @@
 
 use std::collections::HashSet;
 
+use super::spaces::{marked_name, with_mark};
 use super::*;
 
 /// `let mut x` of Rust: `var x` (§5.1).
@@ -258,21 +259,23 @@ pub(super) const OLD_ATTRIBUTE_ROWS: &[RowId] = &[
 /// or an enum is the head of the declaration ([`derive`]), `@relaxed` on a fn
 /// or a flow is `@fp(relaxed)`, `@bulk` on a `let` is `@mem(bulk)`, and
 /// `@mem(fast)` on a `let` goes (redundant). In a place that does not take
-/// the Onsa form, the row with no candidate.
+/// the Onsa form, the row with no candidate. A blank or a line break after
+/// the `@` goes in the candidates too (§6.5, S-959, [`with_mark`]).
 pub(super) fn old_attribute(c: &Cursor) -> Option<(RowId, Hit)> {
     use crate::attrs::{FAST, FP, MEM, Place, RELAXED};
-    if c.kind(c.at) != TokenKind::At || c.kind(c.at + 1) != TokenKind::Ident {
+    let n = if c.gap_after(c.at).is_some() { marked_name(c)? } else { c.at + 1 };
+    if c.kind(c.at) != TokenKind::At || c.kind(n) != TokenKind::Ident {
         return None;
     }
     let place = c.place?;
-    let name = c.src(c.at + 1);
-    let args = c.kind(c.at + 2) == TokenKind::LParen && c.gap(c.at + 2) == Gap::None;
-    let last = if args { closing(c, c.at + 2)? } else { c.at + 1 };
+    let name = c.src(n);
+    let args = c.kind(n + 1) == TokenKind::LParen && c.gap(n + 1) == Gap::None;
+    let last = if args { closing(c, n + 1)? } else { n };
     let span = c.file_span(c.span(c.at).start, c.span(last).end);
     let no_candidate = || found(RowId::OldAttributeNoCandidate, span, Vec::new());
-    match name {
+    let mut out = match name {
         DERIVE if args => {
-            match c.declaration.filter(|&d| derives(c, d)).and_then(|d| derive(c, d, c.at + 2, last, last)) {
+            match c.declaration.filter(|&d| derives(c, d)).and_then(|d| derive(c, d, n + 1, last, last)) {
                 Some((fix, note)) => Some((RowId::DeriveAttribute, Hit::new(span, vec![fix]).with_note(note))),
                 None => no_candidate(),
             }
@@ -285,16 +288,18 @@ pub(super) fn old_attribute(c: &Cursor) -> Option<(RowId, Hit)> {
                 return no_candidate();
             }
             // The name stays; the attribute is written around it (S-251).
-            let s = c.span(c.at + 1);
+            let s = c.span(n);
             let edits = vec![Edit::insert(s.file, s.start, format!("{outer}(")), Edit::insert(s.file, s.end, ")")];
             let fix = Fix::new(format!("write `@{outer}({name})`"), edits);
             found(row, span, vec![fix])
         }
-        _ if name == MEM && place == Place::Let && last == c.at + 4 && c.is_ident(c.at + 3, FAST) => {
+        _ if name == MEM && place == Place::Let && last == n + 3 && c.is_ident(n + 2, FAST) => {
             found(RowId::MemFast, span, vec![Fix::new("remove `@mem(fast)`", vec![remove_attribute(c, c.at, last)])])
         }
         _ => None,
-    }
+    }?;
+    out.1.fixes = out.1.fixes.into_iter().map(|f| with_mark(c, f)).collect();
+    Some(out)
 }
 
 /// The rows [`visibility_form`] names ([`super::Matcher::many`]).

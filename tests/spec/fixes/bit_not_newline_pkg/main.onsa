@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6", "§15.1", "§18.1"]
+// fixes = 1
+
+// S-957 (W5-11 U10d2/t2, §2.5, §2.6): a line break after a prefix `~` is E0020 in each module of a package, and the candidates
+// are applied in each file. This module has the form in a function and in a method, and calls what util.onsa declares
+// (which has the form in a function). One error per declaration unit (P-01).
+
+use util.flip
+
+pub struct Gain {
+  k: U32,
+}
+
+pub fn a_function_of_this_module(m: U32) -> U32 {
+  let n = ~   //~ E0020 @11
+    m
+  flip(n)
+}
+
+impl Gain {
+  pub fn invert(self) -> U32 {
+    ~   //~ E0020 @5
+    self.k
+  }
+}

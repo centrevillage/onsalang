@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 1
+
+// R-384 (W5-11 U10d2, §4.5, §18.1): a comment between the `:` of a bound list and its only element does not change what the
+// candidate of the E0020 of `T: Dup` or `T: Escape` is. The candidate takes the element out with the `:` (`T`), so the
+// comment goes with the tokens it lies between (§18.1: a comment that lies between the tokens removed may go with them),
+// and the unit has no error of its stage after it (§18.1: the promise of a candidate). It must not take the element only
+// and leave `[T: // c` and `]`, which does not read (the candidate of the pinned binary does). The main position is the
+// start of the element, on the line after the `:`. The same form is tried in the list of a struct, an enum, the `[ ]` of
+// an `impl` and the method of its own, and with two comment lines. One error per declaration unit (P-01).
+
+pub fn dup_after_a_comment[T](x: T) -> U32 {   //~ E0020
+  0
+}
+
+pub fn escape_after_a_comment[T](x: T) -> U32 {   //~ E0020
+  0
+}
+
+pub fn dup_after_two_comment_lines[T](x: T) -> U32 {   //~ E0020
+  0
+}
+
+pub struct Rack[T] {   //~ E0020
+  n: U32,
+}
+
+pub enum Shelf[T] {   //~ E0020
+  One(U32),
+  Nothing,
+}
+
+pub struct Held[T] {
+  n: U32,
+}
+
+impl[T] Held[T] {   //~ E0020
+  pub fn tag() -> U32 {
+    7
+  }
+}
+
+impl[T] Held[T] {
+  pub fn own[U](self, y: U) -> U32 {   //~ E0020
+    self.n
+  }
+}

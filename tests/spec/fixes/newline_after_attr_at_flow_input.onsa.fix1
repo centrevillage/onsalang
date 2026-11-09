@@ -1,0 +1,79 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.5", "§11.7", "§18.1"]
+// fixes = 1
+
+// S-957 (W5-11 U10d2/t2, §2.5, §6.5, §11.7): a line break between the `@` of the attribute of a flow input and its name is
+// the E0020 of the prefix symbols too, in the `( )` of the inputs, where a line break is a space, and the candidate moves
+// the `@` to the line of its name (`@param(min: 20.0, …)`, the form of examples/voice_host/dsp.onsa). This form was
+// accepted before S-957. The inputs are tried in the places they stand: the first, a later one after a right one, the last
+// one, one with a comment line between, and one with a blank line between. The main position is the `@`. One error per
+// declaration unit (P-01). The right forms are at the end of the file.
+
+pub flow first_input(
+  x: F32 at sample,
+   //~ E0020 @3
+  @param(min: 20.0, max: 2000.0, default: 110.0, unit: "Hz", scale: "log")
+  f0: F32 at block,
+) -> F32 at sample {
+  x * f0
+}
+
+pub flow later_input(
+  x: F32 at sample,
+  @param(min: 20.0, max: 2000.0, default: 110.0)
+  f0: F32 at block,
+   //~ E0020 @3
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  g: F32 at block,
+) -> F32 at sample {
+  x * f0 * g
+}
+
+pub flow last_input(
+  @param(min: 20.0, max: 2000.0, default: 110.0)
+  f0: F32 at block,
+   //~ E0020 @3
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  g: F32 at block,
+) -> F32 at sample {
+  f0 * g
+}
+
+pub flow a_comment_line_between(
+  x: F32 at sample,
+   //~ E0020 @3
+  // the name of the attribute
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  g: F32 at block,
+) -> F32 at sample {
+  x * g
+}
+
+pub flow a_blank_line_between(
+  x: F32 at sample,
+   //~ E0020 @3
+
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  g: F32 at block,
+) -> F32 at sample {
+  x * g
+}
+
+pub flow on_the_line_of_the_input(
+  x: F32 at sample,
+   //~ E0020 @3
+  @param(min: 0.0, max: 1.0, default: 0.5) g: F32 at block,
+) -> F32 at sample {
+  x * g
+}
+
+pub flow fine(
+  x: F32 at sample,
+  @param(min: 20.0, max: 2000.0, default: 110.0, unit: "Hz", scale: "log")
+  f0: F32 at block,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  g: F32 at block,
+) -> F32 at sample {
+  x * f0 * g
+}

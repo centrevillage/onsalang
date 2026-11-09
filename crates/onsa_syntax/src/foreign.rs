@@ -106,7 +106,7 @@ mod spaces;
 
 pub(crate) use flow::clocks;
 pub(crate) use literals::unpadded_index;
-pub(crate) use spaces::held_errors;
+pub(crate) use spaces::{held_errors, with_mark};
 
 /// The kind constraint `Copy` (§4.6): written in bounds, never derived.
 pub const COPY: &str = "Copy";
@@ -115,6 +115,8 @@ pub const DUP: &str = "Dup";
 /// The implicit requirement `Escape` of a type parameter (§4.5): a name of
 /// the prelude (§15.1), no kind constraint.
 pub const ESCAPE: &str = "Escape";
+/// The Rust `Sized` of a bound (§4.5, `sized_bound`): no name of Onsa.
+pub const SIZED: &str = "Sized";
 /// The kind constraints (§4.6): the names a bound takes that are no trait, so
 /// that the head of a declaration does not take them (`copy_bound`) and the
 /// candidate of a derive leaves them out (S-463). The one list.
@@ -555,6 +557,7 @@ pub enum RowId {
     CopyBound,
     CopyImpl,
     ImplicitBound,
+    SizedBound,
     TypeArgsTurbofish,
     TypeArgsAngle,
     TypeArgsSquareComma,
@@ -578,6 +581,8 @@ pub enum RowId {
     SpaceBeforeQuestion,
     SpaceAfterPrefix,
     SpaceAfterCaret,
+    SpaceAfterBoundQuestion,
+    SpaceAfterAttributeAt,
     AsymmetricBinarySpace,
     NewlineAfterDot,
     NewlineAfterPrefix,

@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.5", "§11.7", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "19:3"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// S-957 (W5-11 U10d2/t2, §2.5, §6.5, §11.7): the candidate of a line break after the `@` of the attribute of a flow input
+// moves the `@` to the line of its name, and nothing is left behind (`clean`, S-253): `@param(…)` before an input is a right
+// declaration. A comment line between stays where it is. The main position is the `@`. A file with one unit, so that
+// `clean` looks at the whole file.
+
+pub flow f(
+  x: F32 at sample,
+   //~ E0020 @3
+  // the name of the attribute
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  g: F32 at block,
+) -> F32 at sample {
+  x * g
+}

@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "22:6"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// S-957 (W5-11 U10d2/t2, §2.5, §2.6, §18.1): the candidate of a prefix `~` with a comment line between it and its operand
+// puts the `!` on the line of the operand and leaves the comment line where it is, and nothing is left behind (`clean`,
+// S-253). Inside a bracket, in an argument. The main position is the `~`. A file with one unit, so that `clean` looks at the
+// whole file.
+
+pub fn id(m: U32) -> U32 {
+  m
+}
+
+pub fn f(m: U32) -> U32 {
+  id(~   //~ E0020 @6
+    // the operand
+    m)
+}

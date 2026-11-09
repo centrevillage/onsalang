@@ -89,6 +89,24 @@ pub static ROWS: &[Row] = &[
         detect: Detect::Syntax,
     },
     Row {
+        id: RowId::SpaceAfterBoundQuestion,
+        name: "space_after_bound_question",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "the `?` of a bound is written right before the name",
+        rule: "the `?` that lifts an implicit requirement is written right before its name, `T: ?Dup` (§2.5, §4.5)",
+        detect: Detect::Read,
+    },
+    Row {
+        id: RowId::SpaceAfterAttributeAt,
+        name: "space_after_attribute_at",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "the `@` of an attribute is written right before the name",
+        rule: "the `@` of an attribute is written right before its name, `@fp(relaxed)` (§2.5, §6.5)",
+        detect: Detect::Read,
+    },
+    Row {
         id: RowId::AsymmetricBinarySpace,
         name: "asymmetric_binary_space",
         phase: Phase::Syntax,
@@ -837,6 +855,15 @@ pub static ROWS: &[Row] = &[
         detect: Detect::Reported,
     },
     Row {
+        id: RowId::SizedBound,
+        name: "sized_bound",
+        phase: Phase::Types,
+        code: Code::E0020,
+        message: "every type has a size: `Sized` and `?Sized` mean nothing in a bound",
+        rule: "every type of Onsa has a size known at compile time, so a bound neither requires nor lifts one: `T: ?Sized` is `T` (§4.5)",
+        detect: Detect::Reported,
+    },
+    Row {
         id: RowId::TypeArgsTurbofish,
         name: "type_args_turbofish",
         phase: Phase::Syntax,
@@ -1168,6 +1195,7 @@ pub static MATCHERS: &[Matcher] = &[
 /// The matchers of the forms the parser reads whole ([`Detect::Read`]): the
 /// parser asks them where it read the form ([`super::at_read`]).
 pub static READS: &[Matcher] = &[
+    Matcher::many(spaces::SPACE_AFTER_MARK_ROWS, spaces::space_after_mark),
     Matcher::many(decls::OLD_ATTRIBUTE_ROWS, old_attribute),
     Matcher::one(&[RowId::FieldPub], field_pub),
     Matcher::one(&[RowId::PrivUse], priv_use),

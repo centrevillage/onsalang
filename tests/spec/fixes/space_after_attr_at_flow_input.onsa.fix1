@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.5", "§11.7", "§18.1"]
+// fixes = 1
+
+// S-489 (W5-11 U10d2, §2.5, §6.5): a space after the `@` of the attribute of a flow input is E0020, and the candidate
+// removes the space (`@param(min: 20.0, …)`, the form of examples/voice_host/dsp.onsa). The inputs are tried in the
+// places they stand: the first, a later one after a right one, the last one, and a flow with all of its inputs given
+// an attribute, with the options `unit` and `scale`. One error per declaration unit (P-01). The right forms are at the
+// end of the file.
+
+pub flow first_input(
+  x: F32 at sample,
+  @param(min: 20.0, max: 2000.0, default: 110.0, unit: "Hz", scale: "log")   //~ E0020
+  f0: F32 at block,
+) -> F32 at sample {
+  x * f0
+}
+
+pub flow later_input(
+  x: F32 at sample,
+  @param(min: 20.0, max: 2000.0, default: 110.0)
+  f0: F32 at block,
+  @param(min: 0.0, max: 1.0, default: 0.5)   //~ E0020
+  g: F32 at block,
+) -> F32 at sample {
+  x * f0 * g
+}
+
+pub flow last_input(
+  @param(min: 20.0, max: 2000.0, default: 110.0)
+  f0: F32 at block,
+  @param(min: 0.0, max: 1.0, default: 0.5)   //~ E0020
+  g: F32 at block,
+) -> F32 at sample {
+  f0 * g
+}
+
+pub flow two_spaces(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)   //~ E0020
+  g: F32 at block,
+) -> F32 at sample {
+  x * g
+}
+
+pub flow fine(
+  x: F32 at sample,
+  @param(min: 20.0, max: 2000.0, default: 110.0, unit: "Hz", scale: "log")
+  f0: F32 at block,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  g: F32 at block,
+) -> F32 at sample {
+  x * f0 * g
+}

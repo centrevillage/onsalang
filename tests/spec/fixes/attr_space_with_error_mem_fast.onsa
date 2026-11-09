@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.5", "§12.4", "§18.1"]
+// fixes = 1
+
+// S-959 (W5-11 U10d2, §2.5, §6.5, §12.4, §18.1): `@mem(fast)` is written with no mark (§12.4: E0020, the candidate takes it
+// out), an error of the attribute at the syntax stage, so with a space or a line break after its `@` the E0020 reported is
+// the one of `@mem(fast)`, and its candidate takes the attribute out with the blank; the E0020 of the blank is not reported
+// (S-959: the attribute has an error of its own). The main position is the attribute, from the `@` (§18.1). One error per
+// declaration unit (P-01).
+
+pub fn a_space(x: U32) -> U32 {
+  @ mem(fast) let y = x  //~ E0020 @3
+  y
+}
+
+pub fn a_line_break(x: U32) -> U32 {
+  @  //~ E0020 @3
+    mem(fast) let y = x
+  y
+}

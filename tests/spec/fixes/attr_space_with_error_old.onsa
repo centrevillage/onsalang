@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.4", "§6.5", "§12.4", "§18.1"]
+// fixes = 1
+
+// S-959 (W5-11 U10d2/t2, §2.5, §6.4, §6.5, §18.1): an attribute with a space after the `@` (S-489) that is also a form of the old
+// version with a fixed replacement (`@relaxed` is `@fp(relaxed)`, `@bulk` is `@mem(bulk)`, `@derive(…)` is written at the
+// head of the declaration, S-57, S-34) reports the E0020 of the old form, and not the one of the space: the two are
+// of one stage and the same place, and the form of the attribute is first. The candidate is the one of the old form, with
+// the space gone (`@fp(relaxed)`, `@mem(bulk)`, `: PartialEq` at the head), so one candidate directs the attribute to a right
+// form. The forms are tried on a function and a flow, on the line of the heading, with two spaces, on a struct and an enum
+// (`@derive`), and on the `let` of a statement (`@bulk`). The main position is the attribute, from the `@`. One error per
+// declaration unit (P-01). The old forms that go in no place are in attr_space_with_error_no_candidate.onsa.
+
+@ relaxed   //~ E0020
+pub fn a_function(x: F32) -> F32 {
+  x
+}
+
+@ relaxed   //~ E0020
+pub flow a_flow(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+@ relaxed pub fn on_the_line_of_the_heading(x: F32) -> F32 {   //~ E0020
+  x
+}
+
+@  relaxed   //~ E0020
+pub fn two_spaces(x: F32) -> F32 {
+  x
+}
+
+@ derive(PartialEq, Eq) pub struct Plain {   //~ E0020
+  id: U32,
+}
+
+@ derive(PartialEq)   //~ E0020
+pub enum Mode {
+  Off,
+  On,
+}
+
+pub flow a_bulk_delay(x: F32 at sample) -> F32 at sample {
+  @ bulk let y = delay~(x, 4)   //~ E0020
+  y
+}
+
+pub flow a_later_statement(x: F32 at sample) -> F32 at sample {
+  let a = x * 0.5
+  @  bulk let y = delay~(a, 4)   //~ E0020
+  y
+}

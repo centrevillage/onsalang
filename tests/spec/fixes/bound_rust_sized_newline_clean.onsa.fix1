@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "19:3"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// S-746 and S-957 (W5-11 U10d2/t2, §4.5, §18.1; the second round of the form H1): the candidate of the `?Sized` that stands on
+// the line after the `:` (what the candidate of S-957 leaves of `T: ?` and `Sized`) takes `: ?Sized` out across the line break,
+// and nothing is left behind (`clean`, S-253): the unit reads `pub fn f[T](x: T)` after it. So the two rounds, the
+// candidate of the line break and then this one, end in a unit without an error. The main position is the `?`. A file with one
+// unit, so that `clean` looks at the whole file.
+
+pub fn f[T](x: T) -> U32 {   //~ E0020 @3
+  0
+}

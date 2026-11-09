@@ -90,7 +90,8 @@ pub(super) const BLOCK_COMMENT_ROWS: &[RowId] = &[
 /// another are E0002.
 pub(super) fn block_comment(c: &Cursor) -> Option<(RowId, Hit)> {
     if c.kind(c.at) != TokenKind::BlockComment {
-        return None;
+        let at = super::faust::comment_after_tilde(c)?;
+        return block_comment(&Cursor { at, open: c.open.clone(), ..*c });
     }
     let span = c.span(c.at);
     let text = c.src(c.at);

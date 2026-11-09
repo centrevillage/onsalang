@@ -1166,6 +1166,24 @@ fn the_patterns_that_leave_a_bracket_open_read_on_to_it() {
     }
 }
 
+/// The range of a form that holds an opener no closer closes ends at that
+/// opener (S-955, R-412): it holds no item after it, so the range of the
+/// first of two functions is the same as that of the second.
+#[test]
+fn the_range_of_a_form_with_an_open_bracket_ends_at_it() {
+    let arm = |pat: &str| format!("fn f() -> I32 {{\n  match x {{\n    {pat}(2 => 3,\n");
+    for (pat, want) in [("1..<f", "1..<f("), ("n @ 1..<f", "@ 1..<f(")] {
+        let one = arm(pat);
+        for src in [one.clone(), one.repeat(2)] {
+            let p = parse(&src);
+            // The form's diagnostics (the unit's end at the `Eof` has none found).
+            let found: Vec<_> = p.diagnostics.iter().filter_map(|d| Some((d.code, d.found.as_deref()?))).collect();
+            assert_eq!(found, vec![(Code::E0002, want); src.matches("fn f").count()], "{src}");
+            assert_eq!(p.diagnostics[0].span.end as usize, one.find(want).unwrap() + want.len(), "{src}");
+        }
+    }
+}
+
 /// A file of patterns with no failure makes no table of the brackets, and
 /// its scans are those of before (R-410: the table is made at a failure).
 #[test]

@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§4.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "16:20"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// S-511 (W5-11 U10d2, §2.5): the candidate of a space after the `?` of a bound in the list of a struct removes the
+// space, and nothing is left behind (`clean`, S-253): `pub struct Rack[T: ?Escape]` is a right declaration. The main
+// position is the `?`. A file with one unit, so that `clean` looks at the whole file.
+
+pub struct Rack[T: ? Escape] {   //~ E0020
+  n: U32,
+}

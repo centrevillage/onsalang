@@ -1,0 +1,52 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§4.5"]
+// canonical = false
+
+// S-957 (W5-11 U10d2/t2, §2.5, §4.5): the right forms next to the E0020 of a line break after the `?` of a bound
+// (newline_after_bound_question_forms.onsa): a line break before the `?` is a space inside the `[ ]` (only the one
+// after it is the error), so `T:` and `?Dup` on the next line, a comment after the `:`, and a `?` that starts the
+// line of a list are right. A line break next to the name of a bound without a `?` is right too. No diagnostic.
+
+pub fn the_mark_on_the_next_line[T:
+  ?Dup](x: T) -> U32 {
+  0
+}
+
+pub fn a_comment_after_the_colon[T: // the bound
+  ?Escape](x: T) -> U32 {
+  0
+}
+
+pub fn a_mark_after_a_plus[T: Show +
+  ?Dup](x: T) -> U32 {
+  0
+}
+
+pub fn a_mark_that_starts_a_line[T: Show,
+  U: ?Dup](x: T, y: U) -> U32 {
+  0
+}
+
+pub struct Bag[T:
+  ?Dup] {
+  n: U32,
+}
+
+pub enum Shelf[T: // the bound
+  ?Escape] {
+  One(U32),
+  Nothing,
+}
+
+impl[T:
+  ?Dup] Bag[T] {
+  pub fn tag() -> U32 {
+    7
+  }
+}
+
+pub fn a_name_after_a_break[T:
+  Show](x: T) -> U32 {
+  0
+}

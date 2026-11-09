@@ -1,0 +1,13 @@
+pub struct Frame {
+  x: I32,
+}
+
+@fp(relaxed)   //~ E0020
+pub fn scale(x: F32) -> F32 {
+  x * 2.0
+}
+
+@ foo   //~ E0005
+pub fn an_unknown_name(x: F32) -> F32 {
+  x
+}

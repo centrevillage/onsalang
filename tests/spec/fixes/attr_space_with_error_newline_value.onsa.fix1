@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.5", "§18.1"]
+// fixes = 1
+
+// S-959 and S-957 (W5-11 U10d2, §2.5, §6.5, §18.1): a line break after the `@` of an attribute (S-957) whose value is not one
+// of the list of §6.5 reports the E0005 of the value, and its candidate takes the line break out too: the `@` goes to the
+// line of the name, and the value is replaced, so that no error is left after the one candidate. The line break is not
+// reported (S-959: the attribute has an error of its own). The main position is the attribute, from the `@`, as for the
+// space on one line (attr_space_with_error_value.onsa); the text does not say more of the line, and this is the reading of
+// the parent. The comment of the mark stays on the line of the `@`. One error per declaration unit (P-01).
+
+   //~ E0005 @1
+  @fp(relaxed)
+pub fn fp_with_a_value_not_in_the_list(x: F32) -> F32 {
+  x
+}
+
+   //~ E0005 @1
+  @repr(c)
+pub struct ReprWithAValueNotInTheList {
+  a: U32,
+}
+
+   //~ E0005 @1
+  @export
+pub fn export_with_arguments(x: F32) -> F32 {
+  x
+}

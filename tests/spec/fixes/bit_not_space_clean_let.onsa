@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "17:11"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// S-938 (W5-11 U10d2, §2.6): the candidate of a prefix `~` with a space before its operand replaces the `~` and the space by
+// `!` (`!m`), and nothing is left behind (`clean`, S-253: the unit has no error after the one edit). The main position is
+// the `~`. A file with one unit, so that `clean` looks at the whole file.
+
+pub fn f(m: U32) -> U32 {
+  let n = ~ m   //~ E0020 @11
+  n
+}

@@ -1,0 +1,82 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§4.5", "§18.1"]
+// fixes = 1
+
+// S-957 and S-746 (W5-11 U10d2/t2, §2.5, §4.5, §18.1; the form H1 of the break side of W5-11 U10d2): the `?` of the Rust bound
+// `?Sized` with a line break before its name is the E0020 of the line break (S-957) first, with the candidate that moves
+// the `?` to the line of `Sized`; the `?Sized` of S-746 (the E0020 of the types stage that takes the element out) is the
+// error of the next round, after the candidate is applied, because the stages run in order and the types stage does not run on
+// a file with an error of the syntax stage (bound_rust_sized_newline_moved.onsa is that round). The input of these forms
+// was an internal error of the compiler (exit code 101, "a diagnostic breaks the rules of diagnostics": the title of the
+// types stage's candidate held the line break), so none of them may end in one, and every candidate applied again ends
+// in a form without an error (the two rounds: this file and the other). The forms are tried in the places a list can
+// stand: a function, a struct, an enum, the `[ ]` of an `impl` and the method of its own, in the first, the middle and the
+// last place of a list, beside a right `?Dup`, with a comment line between. The main position is the `?`. One error per
+// declaration unit (P-01), and every unit is of the syntax stage. The marker is a line comment and ends the line of the `?`,
+// so a comment always follows the `?` here (a `?` at the very end of its line cannot carry a marker).
+
+pub struct Held[T] {
+  n: U32,
+}
+
+pub fn maybe_alone[T: ?   //~ E0020 @23
+  Sized](x: T) -> U32 {
+  0
+}
+
+pub fn maybe_last[T: Show + ?   //~ E0020 @29
+  Sized](x: T) -> U32 {
+  0
+}
+
+pub fn maybe_first[T: ?   //~ E0020 @23
+  Sized + Show](x: T) -> U32 {
+  0
+}
+
+pub fn maybe_middle[T: Show + ?   //~ E0020 @31
+  Sized + PartialEq](x: T) -> U32 {
+  0
+}
+
+pub fn beside_a_right_maybe[T: ?Dup + ?   //~ E0020 @39
+  Sized](x: T) -> U32 {
+  0
+}
+
+pub fn in_the_second_parameter[T, U: ?   //~ E0020 @38
+  Sized](x: T, y: U) -> U32 {
+  0
+}
+
+pub fn a_comment_line_between[T: ?   //~ E0020 @34
+  // the name
+  Sized](x: T) -> U32 {
+  0
+}
+
+pub struct RackMaybe[T: ?   //~ E0020 @25
+  Sized] {
+  n: U32,
+}
+
+pub enum ShelfMaybe[T: ?   //~ E0020 @24
+  Sized] {
+  One(U32),
+  Nothing,
+}
+
+impl[T: ?   //~ E0020 @9
+  Sized] Held[T] {
+  pub fn tag() -> U32 {
+    7
+  }
+}
+
+impl[T] Held[T] {
+  pub fn own[U: ?   //~ E0020 @17
+    Sized](self, y: U) -> U32 {
+    self.n
+  }
+}

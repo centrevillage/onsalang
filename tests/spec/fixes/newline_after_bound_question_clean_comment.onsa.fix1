@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§4.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "17:20"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// S-957 (W5-11 U10d2/t2, §2.5, §4.5, §18.1): the `?` of a bound and its name with a comment line and a blank line between:
+// the candidate moves the `?` to the line of the name, and the comment lines stay where they are (the `?` stands after
+// them), so the unit reads `T: Show +` and `?Escape](x: T)` after it and has no error (`clean`, S-253). The main
+// position is the `?`. A file with one unit, so that `clean` looks at the whole file.
+
+pub fn f[T: Show +   //~ E0020 @20
+  // the name of the bound
+
+  ?Escape](x: T) -> U32 {
+  0
+}

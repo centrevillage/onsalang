@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§4.5", "§18.1"]
+// fixes = 1
+
+// S-511 (W5-11 U10d2, §2.5, §18.1): a space between the `?` of a bound and its name is the E0020 of the syntax
+// stage whatever the name is, because the stages run in order (§18.1) and one unit reports one error. The name
+// is not looked at before the candidate is applied: `? Copy` (the E0416 of §4.5, a `?` on a bound that is not
+// implicit), `? Show`, `? Gone` (a name that is not found, the E0302 of the names stage) and `? Sized` (the
+// Rust form of S-746, the E0020 of the types stage) are all this E0020 first, with the one candidate that
+// removes the space. The candidate leaves the error of the later stage (§18.1: a diagnostic of a later stage may
+// appear, it was hidden), which is not checked here. One error per declaration unit (P-01). The forms with
+// `Dup` and `Escape` are in space_after_bound_question_forms.onsa.
+
+pub fn a_question_before_copy[T: ?Copy](x: T) -> U32 {   //~ E0020
+  0
+}
+
+pub fn a_question_before_show[T: ?Show](x: T) -> U32 {   //~ E0020
+  0
+}
+
+pub fn a_question_before_an_unknown_name[T: ?Gone](x: T) -> U32 {   //~ E0020
+  0
+}
+
+pub fn a_question_before_sized[T: ?Sized](x: T) -> U32 {   //~ E0020
+  0
+}
+
+pub fn a_question_before_sized_in_a_list[T: Show + ?Sized](x: T) -> U32 {   //~ E0020
+  0
+}
+
+pub struct Rack[T: ?Num] {   //~ E0020
+  n: U32,
+}

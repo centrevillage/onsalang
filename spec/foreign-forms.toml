@@ -3031,6 +3031,109 @@ pub fn f(a: U32, b: U32) -> U32 {
 ''',
 ]
 
+# 境界の `?` と名前の間の同じ行の空白（S-511、§2.5）。候補は空白を除く形。
+# 間の改行（間の行コメントの後の改行を含む）も同じ行で、候補は `?` を名前の行へ移す形（S-957）。
+[[form]]
+id = "space_after_bound_question"
+kind = "foreign"
+origin = "Rust（`?` の後の空白）"
+stage = "syntax"
+code = "E0020"
+spec = ["2.5", "4.5", "18.1"]
+rule = "境界の `?` は名前と空白も改行も空けずに書く（`T: ?Dup`）"
+
+[[form.example]]
+source = '''
+pub fn f[T: ? Dup](x: T) -> U32 {
+  0
+}
+'''
+at = "1:13"
+fixed = ['''
+pub fn f[T: ?Dup](x: T) -> U32 {
+  0
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f[T: ?
+  Dup](x: T) -> U32 {
+  0
+}
+'''
+at = "1:13"
+fixed = ['''
+pub fn f[T:
+  ?Dup](x: T) -> U32 {
+  0
+}
+''']
+
+# 属性の `@` と名前の間の同じ行の空白（S-489、§2.5、§6.5）。見出し、flow の入力、文の頭のどの位置でも同じ。
+# 間の改行（間の行コメントの後の改行を含む）も同じ行で、候補は `@` を名前の行へ移す形（S-957）。
+# 属性に構文の段の誤り（E0005、旧版の書き方の E0020）も重なるときは、その誤りが出る（S-959）。
+[[form]]
+id = "space_after_attribute_at"
+kind = "foreign"
+origin = "Python（`@` の後の空白）"
+stage = "syntax"
+code = "E0020"
+spec = ["2.5", "6.5", "18.1"]
+rule = "属性の `@` は名前と空白も改行も空けずに書く（`@fp(relaxed)`）"
+
+[[form.example]]
+source = '''
+@ fp(relaxed)
+pub fn f(x: F32) -> F32 {
+  x
+}
+'''
+at = "1:1"
+fixed = ['''
+@fp(relaxed)
+pub fn f(x: F32) -> F32 {
+  x
+}
+''']
+
+[[form.example]]
+source = '''
+pub flow g(
+  x: F32 at sample,
+  @ param(min: 0.0, max: 1.0, default: 0.5)
+  k: F32 at block,
+) -> F32 at sample {
+  x * k
+}
+'''
+at = "3:3"
+fixed = ['''
+pub flow g(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  k: F32 at block,
+) -> F32 at sample {
+  x * k
+}
+''']
+
+[[form.example]]
+source = '''
+@
+fp(relaxed)
+pub fn f(x: F32) -> F32 {
+  x
+}
+'''
+at = "1:1"
+fixed = ['''
+@fp(relaxed)
+pub fn f(x: F32) -> F32 {
+  x
+}
+''']
+
 # ---- 空白を空けない位置の改行と、非対称な空白、他の言語の文字列の接頭辞（W3-06、第 15〜20 組）----------
 # 空白と改行の誤りの主の位置は W3-06 で決めるので、`at` を省く。
 
@@ -7776,6 +7879,40 @@ pub fn f(m: U32) -> U32 {
 }
 ''']
 
+# 前置の `~` と被演算子の間の同じ行の空白も同じ行で、候補は `~` と空白を `!` に置き換える一つ（S-938）。
+[[form.example]]
+source = '''
+pub fn f(m: U32) -> U32 {
+  let n = ~ m
+  n
+}
+'''
+at = "2:11"
+fixed = ['''
+pub fn f(m: U32) -> U32 {
+  let n = !m
+  n
+}
+''']
+
+# 間の改行（間の行コメントの後の改行を含む）も同じ行で、候補は `~` を `!` にして被演算子の行へ移す形（S-957）。
+[[form.example]]
+source = '''
+pub fn f(m: U32) -> U32 {
+  let n = ~
+    m
+  n
+}
+'''
+at = "2:11"
+fixed = ['''
+pub fn f(m: U32) -> U32 {
+  let n =
+    !m
+  n
+}
+''']
+
 # `x@N`。`N` が 1 なら `prev~(x)`、2 以上の定数なら `delay~(x, N)`。名前の定数（`UPPER_SNAKE`）は構文の
 # 段では値が分からないので `delay~(x, N)` を候補にし、値が 1 なら後の検査の E0807 に任せる。
 [[form]]
@@ -8894,6 +9031,37 @@ candidates = 1
 [[form.example]]
 source = '''
 pub fn f[T: Show + Escape](x: T) -> U32 {
+  0
+}
+'''
+at = "1:20"
+property = ["clean"]
+candidates = 1
+
+# Rust の `?Sized` と `Sized`（S-746、§4.5）。名前 `Sized` が見つからないとき。Onsa の型は全て大きさが決まるので、
+# 候補は要素を外す一つ（`implicit_bound` と同じ外し方）。`Sized` を宣言していれば当たらない。
+[[form]]
+id = "sized_bound"
+kind = "redundant"
+origin = "Rust"
+stage = "types"
+code = "E0020"
+spec = ["4.5", "18.1"]
+rule = "Onsa の型は全て大きさが決まるので、境界の `Sized` と `?Sized` は何も要求せず何も外さない。要素を外す"
+
+[[form.example]]
+source = '''
+pub fn f[T: ?Sized](x: T) -> U32 {
+  0
+}
+'''
+at = "1:13"
+property = ["clean"]
+candidates = 1
+
+[[form.example]]
+source = '''
+pub fn f[T: Show + Sized](x: T) -> U32 {
   0
 }
 '''

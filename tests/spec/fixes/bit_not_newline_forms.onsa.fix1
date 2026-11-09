@@ -1,0 +1,121 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6", "§18.1"]
+// fixes = 1
+
+// S-957 (W5-11 U10d2/t2, §2.5, §2.6, the row `faust_bit_not` of spec/foreign-forms.toml): a line break between a prefix `~` and its
+// operand (the comment lines between included) is the same E0020 as the `~m` that touches (S-123) and the `~ m` with a space
+// (S-938), and the one candidate replaces the `~` by `!` and moves it to the line of the operand (`!m`), as the candidate of a
+// `-` or `!` at the end of a line moves it (S-369). A prefix at the end of a line is not a continuation, outside the brackets
+// and inside them alike. The main position is the `~`, the token that the candidate moves, so the marker is on its line. The
+// forms are tried in the places an operand can stand after a symbol that lets the line go on (`=`, `(`, `[`, `&`, `=>`, `{`) and
+// at the start of a line: a `let`, an argument, the operand of a binary operator, an element, an arm, a closure body, a
+// method, a flow and the branch of an `if~`, with a parenthesized, a literal and a path operand, and with a comment line
+// and a blank line between. One error per declaration unit (P-01). The `~` after `if` / `match` (S-385, §2.6) is not this
+// rule: tests/spec/fixes/e0020_newline_if_tilde.onsa. The right forms are in bit_not_newline_fine.onsa.
+
+pub fn id(m: U32) -> U32 {
+  m
+}
+
+pub fn a_let(m: U32) -> U32 {
+  let n =   //~ E0020 @11
+    !m
+  n
+}
+
+pub fn an_argument(m: U32) -> U32 {
+  id(   //~ E0020 @6
+    !m)
+}
+
+pub fn an_operand(m: U32) -> U32 {
+  m &   //~ E0020 @7
+    !m
+}
+
+pub fn an_element(m: U32) -> [U32; 2] {
+  [   //~ E0020 @4
+    !m, m]
+}
+
+pub fn a_parenthesized_operand(m: U32) -> U32 {
+  let n =   //~ E0020 @11
+    !(m)
+  n
+}
+
+pub fn a_literal_operand() -> U32 {
+  let n =   //~ E0020 @11
+    !1
+  n
+}
+
+pub fn the_last_expression(m: U32) -> U32 {
+   //~ E0020 @3
+  !m
+}
+
+pub fn an_arm(k: U32, m: U32) -> U32 {
+  match k {
+    0 =>   //~ E0020 @10
+      !m,
+    _ => m,
+  }
+}
+
+pub fn a_closure_body(m: U32) -> U32 {
+  let f = fn(x: U32) -> U32 {   //~ E0020 @31
+    !x }
+  f.(m)
+}
+
+pub struct Gain {
+  k: U32,
+}
+
+impl Gain {
+  pub fn flip(self) -> U32 {
+   //~ E0020 @5
+    !self.k
+  }
+}
+
+pub fn a_comment_line_between(m: U32) -> U32 {
+  let n =   //~ E0020 @11
+    // the operand
+    !m
+  n
+}
+
+pub fn a_blank_line_between(m: U32) -> U32 {
+  let n =   //~ E0020 @11
+
+    !m
+  n
+}
+
+pub fn in_an_argument_after_a_right_one(m: U32) -> U32 {
+  id(!m) + id(   //~ E0020 @15
+    !m)
+}
+
+pub flow in_a_flow(m: U32 at sample) -> U32 at sample {
+  let n =   //~ E0020 @11
+    !m
+  n
+}
+
+pub flow in_a_branch(m: U32 at sample, c: Bool at sample) -> U32 at sample {
+  let n = if~ c {   //~ E0020 @19
+    !m } else { m }
+  n
+}
+
+pub flow in_a_par(m: U32 at sample) -> U32 at sample {
+  let ns = par~ i in 0..<2 {
+   //~ E0020 @5
+    !m
+  }
+  ns[0]
+}

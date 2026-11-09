@@ -4,6 +4,7 @@
 
 use onsa_diag::{Diagnostic, Edit, Fix, Span};
 
+use super::edits::move_token_down;
 use super::{Cursor, Hit, RowId, Want, closed_expr, closing, found, hit};
 use crate::cst::NodeKind;
 use crate::literal::Literals;
@@ -199,6 +200,70 @@ pub(super) fn space_after_prefix(c: &Cursor) -> Option<(RowId, Hit)> {
         }
     }
     found(row, c.span(c.at), fixes)
+}
+
+/// The rows [`space_after_mark`] names ([`super::Matcher::many`]).
+pub(super) const SPACE_AFTER_MARK_ROWS: &[RowId] = &[RowId::SpaceAfterBoundQuestion, RowId::SpaceAfterAttributeAt];
+
+/// A blank or a line break after a mark of the name after it that the
+/// parser read (§2.5): the `?` of a bound (`T: ? Dup`, S-511) and the `@` of
+/// an attribute (`@ fp(relaxed)`, S-489), the line break with a line comment
+/// before it too (S-957). The candidate writes the mark against the name
+/// ([`mark_edits`]). An attribute is asked with no place, after its own rows
+/// and its E0005 found none (§6.5, S-959: `Parser::check_attrs`).
+pub(super) fn space_after_mark(c: &Cursor) -> Option<(RowId, Hit)> {
+    let row = match c.kind(c.at) {
+        TokenKind::Question => RowId::SpaceAfterBoundQuestion,
+        TokenKind::At if c.place.is_none() => RowId::SpaceAfterAttributeAt,
+        _ => return None,
+    };
+    let title = if c.gap_after(c.at) == Gap::Space { "remove the space" } else { "write it against its name" };
+    found(row, c.span(c.at), vec![Fix::new(title, mark_edits(c)?)])
+}
+
+/// The token after the mark at `c.at` when a blank on its line or a line
+/// break (a line comment before it) is between them; none when they touch,
+/// or with a block comment between (its own row, §2.5).
+pub(super) fn partner(c: &Cursor) -> Option<usize> {
+    let n = c.sig_after(c.at);
+    let between = (c.at + 1..n).all(|i| c.kind(i) == TokenKind::Newline || c.kind(i).is_line_comment());
+    (c.gap_after(c.at).is_some() && between).then_some(n)
+}
+
+/// The name after the mark at `c.at`, [`partner`].
+pub(super) fn marked_name(c: &Cursor) -> Option<usize> {
+    partner(c).filter(|&n| c.kind(n) == TokenKind::Ident)
+}
+
+/// The edits that write the mark at `c.at` against its name ([`marked_name`]):
+/// the blank goes, or the mark moves to the line of the name, the comments
+/// between staying ([`move_token_down`], as a prefix `-`, S-957).
+fn mark_edits(c: &Cursor) -> Option<Vec<Edit>> {
+    marked_name(c)?;
+    match c.gap_after(c.at) {
+        Gap::Space => Some(vec![Edit::delete(c.space_after(c.at)?)]),
+        _ => Some(move_token_down(c, "", c.at)?.edits().to_vec()),
+    }
+}
+
+/// `fix`, a candidate of the error of its own of the attribute whose `@` is
+/// at `c.at`, writing the `@` against its name too (§6.5, S-959,
+/// [`mark_edits`]): the `@` moved goes before what `fix` inserts there. A
+/// `fix` that takes the `@` out already is as it is.
+pub(crate) fn with_mark(c: &Cursor, fix: Fix) -> Fix {
+    let Some(marks) = mark_edits(c) else { return fix };
+    let mut edits = fix.edits().to_vec();
+    let meet = |a: Span, b: Span| a.start < b.end && b.start < a.end;
+    if marks.iter().any(|m| edits.iter().any(|e| meet(m.span, e.span))) {
+        return fix;
+    }
+    for m in marks {
+        match edits.iter_mut().find(|e| e.span.is_empty() && m.span.is_empty() && e.span.start == m.span.start) {
+            Some(e) => e.replace.insert_str(0, &m.replace),
+            None => edits.push(m),
+        }
+    }
+    Fix::new(fix.title(), edits)
 }
 
 /// A binary `-` / `^` / `+` with a blank before it and its operand touching

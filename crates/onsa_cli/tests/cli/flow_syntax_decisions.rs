@@ -9,7 +9,7 @@
 //! `fixes/e0020_else_if_tilde_chain.onsa`, `fixes/e0020_clock_in_types.onsa`,
 //! `fixes/e0020_clock_in_types_multi.onsa`, `fixes/e0020_prefix_tilde_contrast.onsa`,
 //! `fixes/e0003_if_tilde_else_line.onsa`, `negative/syntax_if_tilde_no_else.onsa`,
-//! `negative/syntax_caret_not_a_name.onsa`, `negative/syntax_tilde_no_candidate.onsa`,
+//! `negative/syntax_caret_not_a_name.onsa`, `fixes/bit_not_space_forms.onsa`,
 //! `negative/syntax_clock_in_types_values.onsa`, `negative/member_keyword_names.onsa`,
 //! `negative/names_clock_in_fn_head.onsa`, and `flow_syntax/tilde_clock_boundaries.onsa` for the right
 //! forms next to them). These tests say what those cannot: that the number of candidates is what the
@@ -302,24 +302,29 @@ fn if_with_the_tilde_glued_to_the_condition_is_read_and_fmt_spaces_it() {
 fn while_with_a_prefix_tilde_stays_the_bit_negation_with_one_candidate() {
     // S-354 limits the rule to `if` and `match`: `while ~c` is the prefix `~` of S-123 (the candidate is the `!`,
     // §2.6), and there is no second reading, so the candidate is the only one. With a space (`while ~ c`) it is the
-    // general error of S-363.
-    let cases = vec![case(
-        "while, the tilde touches the operand",
-        in_a_fn("  while ~c {\n    break\n  }\n  1"),
-        &[in_a_fn("  while !c {\n    break\n  }\n  1")],
-    )];
+    // same E0020, whose candidate replaces the `~` and the space by `!` at once (S-938, which changed S-363).
+    let cases = vec![
+        case(
+            "while, the tilde touches the operand",
+            in_a_fn("  while ~c {\n    break\n  }\n  1"),
+            &[in_a_fn("  while !c {\n    break\n  }\n  1")],
+        ),
+        case(
+            "while, a space after the tilde",
+            in_a_fn("  while ~ c {\n    break\n  }\n  1"),
+            &[in_a_fn("  while !c {\n    break\n  }\n  1")],
+        ),
+    ];
     check_cases("while_tilde", "E0020", &cases);
-    let d = Dir::bare("while_tilde_spaced");
-    let diag = only_diagnostic(&d, "while ~ c", &in_a_fn("  while ~ c {\n    break\n  }\n  1"), "E0002");
-    assert!(array_of(&diag, "fixes").is_empty(), "`while ~ c` has no candidate: {diag}");
 }
 
-// ---- S-363: the prefix `~` with and without a space ----------------------------------------------
+// ---- S-363, S-938: the prefix `~` with and without a space ----------------------------------------------
 
 #[test]
-fn a_prefix_tilde_with_a_space_is_e0002_and_without_a_space_e0020_with_the_bang() {
-    // §2.6 and S-363: `~m` (touching the operand) is the C-family bit negation, E0020 with the candidate `!m`; `~ m`
-    // (a space) is E0002 with no candidate, because removing the space would write `~m`, which is an error itself.
+fn a_prefix_tilde_with_or_without_a_space_is_e0020_with_the_bang() {
+    // §2.6: `~m` (touching the operand) is the C-family bit negation, E0020 with the candidate `!m`; `~ m` (a space on
+    // the line) is the same E0020, whose candidate replaces the `~` and the space by `!` at once (S-938; S-363 had it
+    // E0002, as removing the space alone would write `~m`, an error itself, which this candidate does not).
     // The scope is a `~` after neither a name nor `if` / `match`.
     let d = Dir::bare("prefix_tilde");
     let touching = [
@@ -336,16 +341,17 @@ fn a_prefix_tilde_with_a_space_is_e0002_and_without_a_space_e0020_with_the_bang(
         assert_eq!(squeeze(&after[0]), squeeze(&format!("{head}{}", in_a_fn(fixed))), "{what}");
     }
     let spaced = [
-        ("let", "  let n = ~ m\n  n"),
-        ("an argument", "  id(~ m)"),
-        ("an operand", "  m + ~ m"),
-        ("a tuple element", "  let t = (m, ~ m)\n  t.0"),
-        ("return", "  return ~ m"),
+        ("let, spaced", "  let n = ~ m\n  n", "  let n = !m\n  n"),
+        ("an argument, spaced", "  id(~ m)", "  id(!m)"),
+        ("an operand, spaced", "  m + ~ m", "  m + !m"),
+        ("a tuple element, spaced", "  let t = (m, ~ m)\n  t.0", "  let t = (m, !m)\n  t.0"),
+        ("return, spaced", "  return ~ m", "  return !m"),
     ];
-    for (what, body) in spaced {
+    for (what, body, fixed) in spaced {
         let text = format!("{head}{}", in_a_fn(body));
-        let diag = only_diagnostic(&d, what, &text, "E0002");
-        assert!(array_of(&diag, "fixes").is_empty(), "{what}: a space after the prefix `~` has no candidate: {diag}");
+        let after = candidates_applied(&d, what, &text, "E0020");
+        assert_eq!(after.len(), 1, "{what}: one candidate");
+        assert_eq!(squeeze(&after[0]), squeeze(&format!("{head}{}", in_a_fn(fixed))), "{what}");
     }
 }
 

@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// S-746 (W5-11 U10d2, §4.5, §18.1): the row of the Rust `?Sized` and `Sized` is for the name `Sized` and no other (the list
+// of the forms of §18.1 is closed: "一覧に無い形は E0020 にせず、その形を拒む一般の規則のコードで報告する"). A name that is
+// not found in a bound is the E0302 of the names stage, with a `?` and without it: `?Unsized`, `Size`, `Sizedd`, `?Gone`. The
+// order of S-711 holds: the name is looked up before the `?` is judged. One error per declaration unit (P-01).
+
+pub fn maybe_unsized[T: ?Unsized](x: T) -> U32 {   //~ E0302
+  0
+}
+
+pub fn size[T: Size](x: T) -> U32 {   //~ E0302
+  0
+}
+
+pub fn sizedd[T: Show + Sizedd](x: T) -> U32 {   //~ E0302
+  0
+}
+
+pub fn maybe_gone[T: ?Gone](x: T) -> U32 {   //~ E0302
+  0
+}
+
+pub struct Rack[T: ?Unsized] {   //~ E0302
+  n: U32,
+}

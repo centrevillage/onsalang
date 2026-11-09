@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§2.5", "§4.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "21:3"
+// code = "E0020"
+// candidate = 1
+// leaves = ["20:13 E0020"]
+
+// S-957 (W5-11 U10d2/t2, §2.1, §2.5, §4.5): a block comment between the `?` of a bound and its name, on the line of the name,
+// is the E0020 of the block comment (§2.1) first (S-957: "the block comment's own E0020 is first"), and the line break
+// after the `?` is not reported with it: one unit reports one error (P-01). Its one candidate writes a line comment
+// (`// c`) and keeps the tokens and the line breaks, so the break after the `?` is still there after it and is the
+// error of the next round (`leaves`: the E0020 of the `?`, at the place it stood). The main position is the start of the
+// block comment. This file passes without S-957 as far as the first error goes: the comment was the first error before it
+// too, and it must stay so after it. A file with one unit, so that the candidate is the one of the comment.
+
+pub fn f[T: ?
+  /* c */ Dup](x: T) -> U32 {   //~ E0020 @3
+  0
+}

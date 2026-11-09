@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§4.5", "§18.1"]
+// fixes = 1
+
+// S-957 (W5-11 U10d2/t2, §2.5, §18.1): a line break between the `?` of a bound and its name is the E0020 of the syntax stage
+// whatever the name is, because the stages run in order (§18.1) and one unit reports one error: the name is not looked
+// at before the candidate is applied. `?` and `Copy` (the E0416 of §4.5, a `?` on a bound that is not implicit), `Show`,
+// `Gone` (a name that is not found, the E0302 of the names stage) and `Num` are all this E0020 first, with
+// the one candidate that moves the `?` to the line of the name. The candidate leaves the error of the later stage
+// (§18.1: a diagnostic of a later stage may appear, it was hidden), which is not checked here. The main position is the
+// `?`. One error per declaration unit (P-01). The forms of `Sized` are in bound_rust_sized_newline_forms.onsa.
+
+pub fn a_question_before_copy[T: ?   //~ E0020 @34
+  Copy](x: T) -> U32 {
+  0
+}
+
+pub fn a_question_before_show[T: ?   //~ E0020 @34
+  Show](x: T) -> U32 {
+  0
+}
+
+pub fn a_question_before_an_unknown_name[T: ?   //~ E0020 @45
+  Gone](x: T) -> U32 {
+  0
+}
+
+pub fn a_question_in_a_list[T: Show + ?   //~ E0020 @39
+  Gone + PartialEq](x: T) -> U32 {
+  0
+}
+
+pub struct Rack[T: ?   //~ E0020 @20
+  Num] {
+  n: U32,
+}

@@ -1,0 +1,3 @@
+[package]
+name = "attrspace"
+edition = "2026"

@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "21:13"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// S-957 (W5-11 U10d2/t2, §4.5, §18.1; the first form of R-384): the form that the candidate of
+// newline_after_bound_question_implicit.onsa leaves, the `?` on the line of its name (`T: Dup +` and `?Escape]` on the next
+// line). It is the E0020 of the types stage on the `Dup`, and its candidate takes out the `Dup` with the `+` next to it,
+// the two tokens it removes, so that the unit reads `T:` and `?Escape](x: T)` after it, without an error (`clean`,
+// S-253). The comment stands after the `+` and before the `?Escape` that stays, not between the tokens removed, so
+// the candidate leaves it where it is (§18.1: only a comment between the tokens it removes may go with them); the
+// text that remains is in the `.fix1` of the implementation. The main position is the start of the element. A file with
+// one unit, so that `clean` looks at the whole file.
+
+pub fn f[T: //~ E0020 @13
+  ?Escape](x: T) -> U32 {
+  0
+}

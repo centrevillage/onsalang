@@ -707,3 +707,27 @@ fn several_block_comments_on_one_line_are_fixed_one_at_a_time_and_keep_their_wor
     let (a, b) = (text.find("first"), text.find("second"));
     assert!(a.is_some() && b.is_some() && a < b, "the words stay, `first` before `second`:\n{text}");
 }
+
+// ---- S-957: a line break after the `?` of a bound, before `Sized` (W5-11 U10d2) ------------------------
+
+#[test]
+fn a_line_break_after_the_question_mark_of_sized_is_the_e0020_of_the_question_mark_and_no_internal_error() {
+    // A case file cannot hold these: its markers are comments at the ends of lines, and a comment
+    // between the `?` and `Sized` is another form. The title of the candidate that takes `?Sized` out
+    // once held the line break of the range and ended in an internal error (W5-11 U10d2/b, H1).
+    // The `?` and the line break are the E0020 of §2.5 (S-957), at the `?`.
+    use crate::test_support::sweep::{check_file, ended_well};
+    let cases = [
+        ("fn", "pub fn f[T: ?\n  Sized](x: T) -> U32 { 0 }\n", 13),
+        ("struct", "pub struct S[T: Show + ?\n  Sized] { a: T }\n", 24),
+    ];
+    for (name, src, col) in cases {
+        let c = check_file(&format!("{name}.onsa"), src);
+        assert!(ended_well(&c), "{name}: exit code {} ({})", c.code, c.stderr);
+        assert!(
+            c.diags.iter().any(|d| d.code == "E0020" && (d.line, d.col) == (1, col)),
+            "{name}: no E0020 at the `?` (1:{col}): {:?}",
+            c.diags.iter().map(|d| (&d.code, d.line, d.col, &d.message)).collect::<Vec<_>>()
+        );
+    }
+}

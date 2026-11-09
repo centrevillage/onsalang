@@ -134,6 +134,11 @@ impl<'a> Parser<'a> {
         let at = self.peek_index();
         let m = self.start(NodeKind::Attr)?;
         self.expect(TokenKind::At)?;
+        // A line break before the name is read, the table's E0020 (S-957),
+        // and before a block comment, whose own E0020 is first.
+        if matches!(self.tokens[self.next_code(at)].kind, TokenKind::Ident | TokenKind::BlockComment) {
+            self.skip_newlines();
+        }
         let name = self.peek();
         let args = self.parse_attr_body()?;
         let done = self.complete(m, NodeKind::Attr);
@@ -189,10 +194,12 @@ impl<'a> Parser<'a> {
     /// `@bulk`, `@mem(fast)`, [`foreign::at_read`]) or the table of the
     /// attributes refuses ([`crate::attrs::check`], E0005) is reported, and
     /// its node turns incomplete: it is no attribute of the thing (§18.1),
-    /// and the unit goes on (its syntax error keeps its body unchecked).
+    /// and the unit goes on (its syntax error keeps its body unchecked). A
+    /// blank or a line break after the `@` is in the candidates of these, and
+    /// its own E0020 only with none of them (§6.5, S-959).
     pub(super) fn check_attrs(&mut self, seen: &[SeenAttr], place: Place, declaration: Option<usize>) {
         for a in seen {
-            let refused = self.read_form(a.at, Some(place), declaration) || {
+            let own = self.read_form(a.at, Some(place), declaration) || {
                 let w = crate::attrs::Written {
                     span: a.span,
                     name: self.token_text(a.name),
@@ -201,14 +208,16 @@ impl<'a> Parser<'a> {
                     arguments: a.arguments.iter().map(|t| (t.span, self.token_text(*t))).collect(),
                 };
                 match crate::attrs::check(self.file, self.text, &w, place) {
-                    Some(d) => {
+                    Some(mut d) => {
+                        let c = self.cursor(a.at, Want::Other);
+                        d.fixes = std::mem::take(&mut d.fixes).into_iter().map(|f| foreign::with_mark(&c, f)).collect();
                         self.report(d);
                         true
                     }
                     None => false,
                 }
             };
-            if refused {
+            if own || self.read_form(a.at, None, None) {
                 self.events[a.finish] = Event::Finish { complete: false };
             }
         }

@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.5", "§11.7"]
+
+// S-957 (W5-11 U10d2/t2, §2.5, §6.5): the right forms next to the E0020 of a line break after the `@` of an attribute
+// (newline_after_attr_at_item.onsa): the `@` and its name on one line, an attribute at the end of a line (it does not
+// end the item, §2.5) with a comment line after it, several attributes on their own lines, a comment
+// after an attribute, and the attributes of the inputs of a flow, each on its own line. The line break before the
+// `@` is not a line break after it. No diagnostic.
+
+@fp(relaxed) // the profile
+pub fn a_comment_after_the_attribute(x: F32) -> F32 {
+  x
+}
+
+@fp(relaxed)
+// the item
+pub fn a_comment_line_after_the_attribute(x: F32) -> F32 {
+  x
+}
+
+@fp(relaxed)
+@export
+pub fn two_attributes(x: F32) -> F32 {
+  x
+}
+
+// the attribute of the next item
+@repr(c)
+pub struct Frame {
+  x: I32,
+}
+
+pub flow with_inputs(
+  x: F32 at sample,
+  @param(min: 20.0, max: 2000.0, default: 110.0)
+  f0: F32 at block,
+  // the second input
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  g: F32 at block,
+) -> F32 at sample {
+  x * f0 * g
+}
+
+pub fn an_at_at_the_end_of_a_comment() -> I32 {
+  // the attribute is @
+  1
+}

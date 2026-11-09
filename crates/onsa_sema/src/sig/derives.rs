@@ -155,7 +155,12 @@ impl<'p> Sema<'p> {
                 }
                 (None, Some(dup)) => {
                     let spans: Vec<Span> = paths.iter().map(|p| p.span).collect();
-                    let d = foreign::report(RowId::CopyBound, cx.text, p.span, vec![drop_element(cx, &spans, k)]);
+                    let d = foreign::report(
+                        RowId::CopyBound,
+                        cx.text,
+                        p.span,
+                        vec![drop_element(cx, &spans, k, &n.name, None)],
+                    );
                     if let Some(at) = self.keep(cx.def, d) {
                         self.kind_heads.push((at, cx.def, dup));
                     }
@@ -275,21 +280,35 @@ fn unfit(b: Bound, variants: Option<&[Variant]>) -> Option<(&'static str, &'stat
 
 /// The candidate that takes the element `k` of a `+` list of the spans
 /// `list` out (a trait of a head, §4.6, `copy_bound`; a bound of a type
-/// parameter, §4.5, `implicit_bound`): with the `+` before it, or after it
-/// when it is the first, or with the `:` when it is the only one.
-pub(super) fn drop_element(cx: &Cx<'_>, list: &[Span], k: usize) -> Fix {
+/// parameter, §4.5, `implicit_bound`), titled by its name `shown`: with the
+/// `+` before it, or after it when it is the first, or with the `:` when it
+/// is the only one, found after `head`, the end of the name before the `:`,
+/// when known. A comment between the element and the symbol goes; one on
+/// the other side of the symbol stays (§18.1, R-384).
+pub(super) fn drop_element(cx: &Cx<'_>, list: &[Span], k: usize, shown: &str, head: Option<u32>) -> Fix {
     let p = list[k];
+    let (text, file) = (cx.text, p.file);
+    // The symbol `kind` in the text from `from` to `to` (blanks, comments and
+    // it): from the blanks before it on its line to the blanks after it there.
+    let symbol = |from: u32, to: u32, kind: onsa_syntax::TokenKind| {
+        let t = *onsa_syntax::lex(file, &text[from as usize..to as usize]).tokens.iter().find(|t| t.kind == kind)?;
+        let (s, e) = ((from + t.span.start) as usize, (from + t.span.end) as usize);
+        let after = text.len() - text[e..].trim_start_matches([' ', '\t']).len();
+        Some((text[..s].trim_end_matches([' ', '\t']).len() as u32, after as u32))
+    };
+    use onsa_syntax::TokenKind::{Colon, Plus};
     let span = if k > 0 {
-        Span::new(p.file, list[k - 1].end, p.end)
+        let start = symbol(list[k - 1].end, p.start, Plus).map_or(list[k - 1].end, |s| s.0);
+        Span::new(file, start, p.end)
     } else if list.len() > 1 {
-        Span::new(p.file, p.start, list[1].start)
+        Span::new(file, p.start, symbol(p.end, list[1].start, Plus).map_or(list[1].start, |s| s.1))
     } else {
         // The `:` before the only trait (blanks may be between them).
-        let before = cx.text[..p.start as usize].trim_end();
-        let colon = before.strip_suffix(':').map_or(p.start, |b| b.len() as u32);
-        Span::new(p.file, colon, p.end)
+        let before = || text[..p.start as usize].trim_end().strip_suffix(':').map_or(p.start, |b| b.len() as u32);
+        let colon = head.map_or_else(before, |h| symbol(h, p.start, Colon).map_or(h, |s| s.0));
+        Span::new(file, colon, p.end)
     };
-    Fix::delete(format!("remove `{}`", &cx.text[p.start as usize..p.end as usize]), span)
+    Fix::delete(format!("remove `{shown}`"), span)
 }
 
 /// The kind constraint `p` names (§4.6), by its spelling: whether it is

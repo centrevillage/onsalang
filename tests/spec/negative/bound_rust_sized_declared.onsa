@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// S-746 (W5-11 U10d2, §4.5, §18.1): the row of the Rust `?Sized` and `Sized` is for the case where the name `Sized` is not
+// found. A file that declares a `trait Sized` finds it, so the row does not apply and the two forms are what they were.
+// The declaration is the E0200 of this version (a trait is not defined yet, §18.1). The `?Sized` of that name is the E0416
+// of §4.5 ("only `Dup` and `Escape` are implicit"; the `?Copy` and `?Show` of S-711 are the same), and the plain `Sized`
+// is an ordinary bound of a trait that is declared, the E0200 of "a bound of a user-defined trait" (§18.1: `T: Tr` is E0200).
+// Neither is the E0020 that takes the element out. One error per declaration unit (P-01).
+
+pub trait Sized {   //~ E0200
+}
+
+pub fn maybe_a_declared_trait[T: ?Sized](x: T) -> U32 {   //~ E0416
+  0
+}
+
+pub fn a_declared_trait[T: Sized](x: T) -> U32 {   //~ E0200
+  0
+}
+
+pub fn a_declared_trait_beside_another[T: Show + Sized](x: T) -> U32 {   //~ E0200
+  0
+}
+
+pub struct Rack[T: ?Sized] {   //~ E0416
+  n: U32,
+}

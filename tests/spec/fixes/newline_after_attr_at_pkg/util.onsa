@@ -1,0 +1,11 @@
+@   //~ E0020 @1
+  fp(relaxed)
+pub fn scale(x: F32) -> F32 {
+  x * 2.0
+}
+
+@   //~ E0020 @1
+  repr(c)
+pub struct Frame {
+  x: I32,
+}

@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "17:1"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// S-489 (W5-11 U10d2, §2.5, §6.5): the candidate of a space after the `@` of the attribute of an item removes the
+// space, and nothing is left behind (`clean`, S-253): `@fp(relaxed)` before a function is a right declaration. The
+// main position is the `@`, the first token of the form (§18.1). A file with one unit, so that `clean` looks at the
+// whole file.
+
+@fp(relaxed)   //~ E0020
+pub fn f(x: F32) -> F32 {
+  x
+}

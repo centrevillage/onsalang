@@ -54,6 +54,13 @@ impl<'p> Sema<'p> {
                                 },
                                 _ => self.unsupported(cx.def, n.span, Feature::TraitBounds, &[]),
                             },
+                            // The Rust `Sized` and `?Sized`, no `Sized` found (S-746).
+                            Err(crate::ResolveError::NotFound { .. })
+                                if b.path.segments.len() == 1 && n.name == foreign::SIZED =>
+                            {
+                                self.sized_bound(cx, name.span.end, bounds, b);
+                                unknown = true;
+                            }
                             // A bound with an error of its name is a part of the
                             // declaration not read (§18.1): unknown to its users, its
                             // implicit `Dup` too (S-768 (1)).
@@ -64,7 +71,7 @@ impl<'p> Sema<'p> {
                         }
                     }
                     // A list with a contradiction is unknown to its users (S-747).
-                    unknown |= self.bound_list(cx, bounds, &list, unknown || late);
+                    unknown |= self.bound_list(cx, (name.span.end, bounds), &list, unknown || late);
                     // `Dup` and `Escape` written are the implicit requirements
                     // (S-751), which every parameter has but with its `?`.
                     let bs = list.iter().filter(|b| !b.1 && b.0 != Bound::Escape).map(|b| b.0).collect();

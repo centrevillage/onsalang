@@ -12,7 +12,8 @@
 //   literal, the `!` joins nothing.
 // The main position is the `.` of the literal or the `~`, and the marker is on its line. One error in each function
 // (P-01). The same form in an anonymous function, a nested `match`, a `test` body, a method and a flow body is in the
-// second half. A `~` that does not touch the next token (`~ x`) has no case: §2.6 does not say whether it is this form.
+// second half. A `~` with a blank before the next token on the line (`~ x`) is the same form (S-938), in the cases
+// tests/spec/fixes/bit_not_space_*.onsa.
 
 pub fn after_a_binding() -> F32 {
   let x = .5                                        //~ E0020

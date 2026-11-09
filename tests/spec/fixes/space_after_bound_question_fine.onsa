@@ -1,0 +1,54 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§4.5"]
+
+// S-511 (W5-11 U10d2, §2.5): the right forms of the `?` of a bound, written with no space between it and its name, stay
+// right when a space after the `?` becomes an error: after `:` and after `+`, before `+`, with `Dup` and `Escape`, in
+// the list of a function, a struct, an enum, the `[ ]` of an `impl` and the method of its own. The postfix `?` of an
+// expression (§9.1) is another symbol that takes no space before it, and it is right too. No diagnostic.
+
+pub struct Held[T: ?Escape] {
+  n: U32,
+}
+
+pub struct Bag[T: ?Dup] {
+  n: U32,
+}
+
+pub enum Shelf[T: ?Dup + ?Escape] {
+  One(U32),
+  Nothing,
+}
+
+impl[T: ?Escape] Held[T] {
+  pub fn tag() -> U32 {
+    7
+  }
+}
+
+impl[T: ?Dup] Bag[T] {
+  pub fn own[U: ?Dup](self, y: U) -> U32 {
+    self.n
+  }
+}
+
+pub fn after_the_colon[T: ?Dup](x: T) -> U32 {
+  0
+}
+
+pub fn after_a_plus[T: Show + ?Dup](x: T) -> U32 {
+  0
+}
+
+pub fn before_a_plus[T: ?Dup + Show](x: T) -> U32 {
+  0
+}
+
+pub fn both_marks[T: ?Dup + ?Escape](x: T) -> U32 {
+  0
+}
+
+pub fn a_postfix_question_next_to_a_bound[T: ?Dup](o: Option[U32], x: T) -> Option[U32] {
+  let v = o?
+  Some(v)
+}

@@ -47,11 +47,12 @@ impl<'p> Sema<'p> {
     /// the list has a contradiction, reported or after the one reported (A5):
     /// then the users of the parameter read its bounds as unknown (§18.1).
     /// A list with none of these has the E0020 of [`Self::implicit_bound`],
-    /// but one with an error of its own (`unknown`).
+    /// but one with an error of its own (`unknown`). `head` is the end of
+    /// the parameter's name.
     pub(super) fn bound_list(
         &mut self,
         cx: &Cx<'p>,
-        bounds: &[Written],
+        (head, bounds): (u32, &[Written]),
         list: &[(Bound, bool, Span)],
         unknown: bool,
     ) -> bool {
@@ -87,7 +88,7 @@ impl<'p> Sema<'p> {
             return any;
         }
         if !unknown {
-            self.implicit_bound(cx, bounds, list);
+            self.implicit_bound(cx, head, bounds, list);
         }
         false
     }
@@ -95,13 +96,25 @@ impl<'p> Sema<'p> {
     /// The E0020 of the first `Dup` or `Escape` with no `?` of the list
     /// `list` read of `bounds` (§4.5, S-751): the requirement every type
     /// parameter has, written. The candidate takes the element out.
-    fn implicit_bound(&mut self, cx: &Cx<'p>, bounds: &[Written], list: &[(Bound, bool, Span)]) {
+    fn implicit_bound(&mut self, cx: &Cx<'p>, head: u32, bounds: &[Written], list: &[(Bound, bool, Span)]) {
         let Some(&(_, _, at)) = list.iter().find(|x| !x.1 && matches!(x.0, Bound::Dup | Bound::Escape)) else { return };
         let Some(k) = bounds.iter().position(|b| b.path.segments.last().unwrap().span == at) else { return };
+        self.drop_bound(cx, RowId::ImplicitBound, head, bounds, k);
+    }
+
+    /// The E0020 of the Rust `Sized` or `?Sized`, the bound `b` of `bounds`
+    /// (§4.5, S-746): every type has a size. The candidate takes it out.
+    pub(super) fn sized_bound(&mut self, cx: &Cx<'p>, head: u32, bounds: &[Written], b: &Written) {
+        let k = bounds.iter().position(|x| std::ptr::eq(x, b)).unwrap();
+        self.drop_bound(cx, RowId::SizedBound, head, bounds, k);
+    }
+
+    /// The diagnostic of `row` at the element `k` of `bounds`, the list of
+    /// the parameter whose name ends at `head`, which the candidate takes out.
+    fn drop_bound(&mut self, cx: &Cx<'p>, row: RowId, head: u32, bounds: &[Written], k: usize) {
         let spans: Vec<Span> = bounds.iter().map(|b| element_span(cx, b)).collect();
-        self.report(
-            cx.def,
-            foreign::report(RowId::ImplicitBound, cx.text, spans[k], vec![drop_element(cx, &spans, k)]),
-        );
+        let shown = format!("{}{}", if bounds[k].relaxed { "?" } else { "" }, bounds[k].path.dotted());
+        let fix = drop_element(cx, &spans, k, &shown, Some(head));
+        self.report(cx.def, foreign::report(row, cx.text, spans[k], vec![fix]));
     }
 }

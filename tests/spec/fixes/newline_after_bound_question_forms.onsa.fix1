@@ -1,0 +1,112 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§4.5", "§18.1"]
+// fixes = 1
+
+// S-957 (W5-11 U10d2/t2, §2.5, §4.5): a line break between the `?` of a bound and its name is the E0020 of the prefix
+// symbols (S-369: `-` / `!` / `^` and their operand, `two(-` and `a, 1)`), and the candidate moves the `?` to the line of
+// its name (`T:` and `?Dup]` on the next line); a comment between stays where it is. The `?` of a bound stands in the `[ ]` of
+// the type parameters, where a line break is a space, so it is the rule of the symbols that makes the break an error.
+// The main position is the `?`, the token that the candidate moves (S-369), and the marker of a line comment ends
+// that line, so every form here has a comment after the `?` (the marker itself, or the comment line that is also
+// between). The forms are tried in the places a list of bounds can stand: a function, a struct, an enum, the `[ ]` of an
+// `impl` and the method of its own, after `:` and after `+`, before `+`, in the second parameter, as the second mark
+// of one list, with comment lines and a blank line between, for `?Dup` and `?Escape`. One error per declaration unit
+// (P-01), and every unit here is of the syntax stage, so the checks of the later stages do not run on this file. The
+// right forms (the `?` on the line of its name) are in newline_after_bound_question_fine.onsa, the names that are
+// not `Dup` or `Escape` in newline_after_bound_question_names.onsa, and `Sized` in bound_rust_sized_newline_forms.onsa.
+
+pub struct Held[T: ?Escape] {
+  n: U32,
+}
+
+pub fn after_the_colon[T:   //~ E0020 @27
+  ?Dup](x: T) -> U32 {
+  0
+}
+
+pub fn the_escape_mark[T:   //~ E0020 @27
+  ?Escape](x: T) -> U32 {
+  0
+}
+
+pub fn after_a_plus[T: Show +   //~ E0020 @31
+  ?Dup](x: T) -> U32 {
+  0
+}
+
+pub fn before_a_plus[T:   //~ E0020 @25
+  ?Dup + Show](x: T) -> U32 {
+  0
+}
+
+pub fn a_wide_list[T: Show + PartialEq +   //~ E0020 @42
+  ?Dup](x: T) -> U32 {
+  0
+}
+
+pub fn in_the_second_parameter[T, U:   //~ E0020 @38
+  ?Dup](x: T, y: U) -> U32 {
+  0
+}
+
+pub fn the_second_mark_of_a_list[T: ?Dup +   //~ E0020 @44
+  ?Escape](x: T) -> U32 {
+  0
+}
+
+pub struct Bag[T:   //~ E0020 @19
+  ?Dup] {
+  n: U32,
+}
+
+pub enum Shelf[T:   //~ E0020 @19
+  ?Escape] {
+  One(U32),
+  Nothing,
+}
+
+impl[T:   //~ E0020 @9
+  ?Dup] Held[T] {
+  pub fn tag() -> U32 {
+    7
+  }
+}
+
+impl[T: ?Dup] Bag[T] {
+  pub fn own[U:   //~ E0020 @17
+    ?Dup](self, y: U) -> U32 {
+    self.n
+  }
+}
+
+pub fn a_comment_line_between[T:   //~ E0020 @34
+  // the name
+  ?Dup](x: T) -> U32 {
+  0
+}
+
+pub fn two_comment_lines_between[T: Show +   //~ E0020 @44
+  // the name,
+  // on its own line
+  ?Dup](x: T) -> U32 {
+  0
+}
+
+pub fn a_blank_line_between[T:   //~ E0020 @32
+
+  ?Dup](x: T) -> U32 {
+  0
+}
+
+pub fn a_comment_and_a_blank_line[T:   //~ E0020 @38
+  // the name
+
+  ?Escape](x: T) -> U32 {
+  0
+}
+
+pub fn a_list_after_a_right_one[T: ?Dup, U: Show +   //~ E0020 @52
+  ?Escape](x: T, y: U) -> U32 {
+  0
+}

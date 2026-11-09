@@ -1,0 +1,86 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§4.5", "§18.1"]
+// fixes = 1
+
+// S-511 (W5-11 U10d2, §2.5): the `?` of a bound and its name take no space (`T: ?Dup`), as a mark that belongs to a
+// name and a prefix symbol do (`-x`, `!done`, `^y`). A space after it is E0020, and the candidate removes the
+// space (`?Dup`). The forms are tried in the places a list of bounds can stand: a function, a struct, an enum, the
+// `[ ]` of an `impl` and the method of its own, after `:` and after `+`, before `+`, with two spaces and with a tab,
+// in the second parameter and as the second mark of one list. One error per declaration unit (P-01), and every
+// unit here is of the syntax stage, so the checks of the later stages do not run on this file. The forms whose
+// name is not `Dup` or `Escape` are in space_after_bound_question_names.onsa. The right forms are at the end of the
+// file. The line break and the comment after the `?` are not decided by the text of §2.5 and have no case here.
+
+pub struct Held[T: ?Escape] {
+  n: U32,
+}
+
+pub struct Bag[T: ?Dup] {
+  n: U32,
+}
+
+pub struct Spaced[T: ? Dup] {   //~ E0020
+  n: U32,
+}
+
+pub enum Shelf[T: ?  Escape] {   //~ E0020
+  One(U32),
+  Nothing,
+}
+
+impl[T: ? Escape] Held[T] {   //~ E0020
+  pub fn tag() -> U32 {
+    7
+  }
+}
+
+impl[T: ?Dup] Bag[T] {
+  pub fn own[U: ? Dup](self, y: U) -> U32 {   //~ E0020
+    self.n
+  }
+}
+
+pub fn after_the_colon[T: ? Dup](x: T) -> U32 {   //~ E0020
+  0
+}
+
+pub fn after_a_plus[T: Show + ? Dup](x: T) -> U32 {   //~ E0020
+  0
+}
+
+pub fn before_a_plus[T: ? Dup + Show](x: T) -> U32 {   //~ E0020
+  0
+}
+
+pub fn with_a_tab[T: ?	Dup](x: T) -> U32 {   //~ E0020
+  0
+}
+
+pub fn the_escape_mark[T: ? Escape](x: T) -> U32 {   //~ E0020
+  0
+}
+
+pub fn in_the_second_parameter[T, U: ? Dup](x: T, y: U) -> U32 {   //~ E0020
+  0
+}
+
+pub fn the_second_mark_of_a_list[T: ?Dup + ? Escape](x: T) -> U32 {   //~ E0020
+  0
+}
+
+pub fn a_spaced_mark_on_a_wide_list[T: Show + PartialEq + ? Dup](x: T) -> U32 {   //~ E0020
+  0
+}
+
+pub fn fine_after_the_colon[T: ?Dup](x: T) -> U32 {
+  0
+}
+
+pub fn fine_after_a_plus[T: Show + ?Dup](x: T) -> U32 {
+  0
+}
+
+pub fn fine_both_marks[T: ?Dup + ?Escape](x: T) -> U32 {
+  0
+}

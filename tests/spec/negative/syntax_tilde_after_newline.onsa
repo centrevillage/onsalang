@@ -2,8 +2,8 @@
 // [test]
 // spec = ["§2.5", "§2.6", "§18.1"]
 
-// E0002 for a `~` after a line break that follows `if` / `match` (§2.6, S-354; moved from
-// syntax_tilde_no_candidate.onsa, the expectations unchanged).
+// E0002 for a `~` after a line break that follows `if` / `match` (§2.6, S-354; moved from a case of
+// the spaced prefix `~`, which S-938 made the E0020 of fixes/bit_not_space_forms.onsa).
 // - A line break between `if` / `match` and `~` is not the space of S-354, which is "right after the
 //   keyword, on the same line": an `if` ends its line (§2.5: a line goes on after a binary operator,
 //   a range mark, `=`, `->`, an attribute, a leading `.` or `uses`), so the `if` has no condition and

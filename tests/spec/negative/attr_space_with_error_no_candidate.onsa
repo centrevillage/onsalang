@@ -1,0 +1,79 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.5", "§18.1"]
+// fixes = 0
+
+// S-959 (W5-11 U10d2/t2, §2.5, §6.5, §18.1): an attribute with a space after the `@` (S-489) and an error of its own of the
+// syntax stage whose own error has no candidate reports that error and no candidate: E0005 for a name that is not in the
+// list (`@ foo`) and for an attribute in a place it cannot stand (`@ repr(c)` on a function). The candidate that only took
+// the space out would leave the E0005, which the promise of §18.1 does not allow, so the space is not reported with a
+// candidate; it is not reported at all, as the attribute has an error of its own (S-959). The places are the three of
+// §6.5: the heading of an item, an input of a flow and a statement. One error per declaration unit (P-01). The old
+// forms whose replacement goes in no place (E0002) are in attr_space_with_error_no_candidate_old.onsa.
+
+@ foo   //~ E0005
+pub fn an_unknown_name(x: F32) -> F32 {
+  x
+}
+
+@ inline   //~ E0005
+pub fn a_name_of_rust(x: F32) -> F32 {
+  x
+}
+
+@ repr(c)   //~ E0005
+pub fn repr_on_a_function(x: F32) -> F32 {
+  x
+}
+
+@ fp(relaxed)   //~ E0005
+pub struct FpOnAStruct {
+  x: I32,
+}
+
+@ mem(bulk)   //~ E0005
+pub fn mem_on_a_function(x: F32) -> F32 {
+  x
+}
+
+@ repr(c)   //~ E0005
+pub flow repr_on_a_flow(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub struct Holder {
+  x: I32,
+}
+
+impl Holder {
+  @ export   //~ E0005
+  pub fn export_on_a_method(self) -> I32 {
+    self.x
+  }
+}
+
+pub flow unknown_name_on_an_input(
+  x: F32 at sample,
+  @ foo   //~ E0005
+  g: F32 at block,
+) -> F32 at sample {
+  x * g
+}
+
+pub flow fp_on_an_input(
+  x: F32 at sample,
+  @ fp(relaxed)   //~ E0005
+  g: F32 at block,
+) -> F32 at sample {
+  x * g
+}
+
+pub fn unknown_name_on_a_statement(x: F32) -> F32 {
+  @ foo let y = x   //~ E0005
+  y
+}
+
+pub fn repr_on_a_statement(x: F32) -> F32 {
+  @ repr(c) let y = x   //~ E0005
+  y
+}

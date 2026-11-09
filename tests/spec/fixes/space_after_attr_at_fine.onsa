@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.5", "§11.7"]
+
+// S-489 (W5-11 U10d2, §2.5, §6.5): the right forms of the `@` of an attribute, written with no space between it and the
+// name, stay right when a space after the `@` becomes an error in every place: the heading of an item, the input of a
+// flow (`onsa fmt` puts an attribute on its own line). An `@` with spaces in a comment (// @ fp(relaxed)) and in a
+// string ("a @ b") is not an attribute and has no rule. No diagnostic.
+
+@fp(relaxed)
+pub fn a_function(x: F32) -> F32 {
+  x
+}
+
+@repr(c)
+pub struct Frame {
+  x: I32,
+}
+
+pub flow with_inputs(
+  x: F32 at sample,
+  @param(min: 20.0, max: 2000.0, default: 110.0, unit: "Hz", scale: "log")
+  f0: F32 at block,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  g: F32 at block,
+) -> F32 at sample {
+  x * f0 * g
+}
+
+pub fn an_at_in_a_string() -> Str {
+  "a @ b"
+}

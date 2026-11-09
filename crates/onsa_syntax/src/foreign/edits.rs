@@ -52,6 +52,13 @@ pub(super) fn move_token_up_as(c: &Cursor, title: &str, i: usize, symbol: &str) 
 /// against it (S-353, S-369). The comments and blank lines between stay; the
 /// blanks before the symbol go with it, and a line left empty goes.
 pub(super) fn move_token_down(c: &Cursor, title: &str, i: usize) -> Option<Fix> {
+    let s = c.span(i);
+    move_token_down_as(c, title, i, &c.text[s.start as usize..s.end as usize])
+}
+
+/// [`move_token_down`], the symbol written as `symbol` where it goes (the
+/// `~` of C as `!`, S-957).
+pub(super) fn move_token_down_as(c: &Cursor, title: &str, i: usize, symbol: &str) -> Option<Fix> {
     let next = c.sig_after(i);
     if next == i || c.kind(next) == TokenKind::Eof {
         return None;
@@ -61,7 +68,5 @@ pub(super) fn move_token_down(c: &Cursor, title: &str, i: usize) -> Option<Fix> 
         let start = k.checked_sub(1).map(|p| c.all[p]).filter(|t| t.kind == TokenKind::Whitespace);
         Span::new(c.file, start.map_or(c.span(i).start, |t| t.span.start), c.span(i).end)
     });
-    let s = c.span(i);
-    let symbol = &c.text[s.start as usize..s.end as usize];
     Some(Fix::new(title, vec![Edit::delete(removed), Edit::insert(c.file, c.span(next).start, symbol)]))
 }

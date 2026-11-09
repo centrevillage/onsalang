@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.5", "§11.7", "§14.2", "§18.1"]
+// fixes = 1
+
+// S-959 (W5-11 U10d2/t2, §2.5, §6.5, §11.7, §14.2, §18.1): the other half of the rule: an attribute with a space after the
+// `@` whose own error is of a later stage than the syntax one (the E0809 of a condition of the meaning of `@param`, the
+// E0303 of an `@export` on a function that is not `pub`) reports the E0020 of the space, with the candidate that removes it:
+// the error of the later stage is hidden while an error of the syntax stage stands, as the stages run in order (§18.1,
+// as the `? Gone` of S-511 is), and it comes back after the candidate is applied, which the promise of §18.1 allows (a
+// diagnostic of a later stage may appear, it was hidden). So the space is first only when the attribute has no error of the
+// syntax stage. The forms are a `@param` on an input that is not a `block` input (a `sample` input), a `@param` with `min`
+// over `max`, and an `@export` on a function that is not `pub`. The later stages do not run on a file with an error of the
+// syntax stage, so the errors of the later stage are not in this file. One error per declaration unit (P-01).
+
+pub flow param_on_a_sample_input(
+  @param(min: 0.0, max: 1.0, default: 0.5)   //~ E0020
+  x: F32 at sample,
+) -> F32 at sample {
+  x
+}
+
+pub flow param_with_min_over_max(
+  x: F32 at sample,
+  @param(min: 1.0, max: 0.0, default: 0.5)   //~ E0020
+  g: F32 at block,
+) -> F32 at sample {
+  x * g
+}
+
+@export   //~ E0020
+fn export_on_a_function_without_pub(x: F32) -> F32 {
+  x
+}
+
+@export   //~ E0020
+priv fn export_on_a_priv_function(x: F32) -> F32 {
+  x
+}

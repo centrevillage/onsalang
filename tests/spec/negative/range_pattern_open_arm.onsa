@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 0
+
+// S-955 (W5-11 U10d2, §18.1, §7; R-412): the range of a form of another language that has an opening parenthesis no closing
+// one closes ends at that parenthesis (`1..<f(2 => 3,` followed by nothing that closes it is the form `1..<f(`, as an
+// unclosed literal of §2.4 ends at the delimiter that opens it), and not at the end of the file, where it took in every
+// item that follows. The case cannot hold the end of the range (a marker has a line and a column), so it holds what the
+// change must keep: the code E0002 of the range that is not a pattern (the guard that copies the end cannot copy an end that
+// does not read, so there is no candidate, `fixes = 0`), and the main position, the start of the range, in each function
+// of three that follow one another with the arm that never closes. The error of every function is reported, the first
+// one's range not taking in the next ones. One error per declaration unit (P-01). The end of the range is held by a Rust
+// test of the implementation.
+
+pub fn first(x: I32) -> I32 {
+  match x {
+    1..<f(2 => 3,   //~ E0002 @5
+pub fn second(x: I32) -> I32 {
+  match x {
+    1..<f(2 => 3,   //~ E0002 @5
+pub fn third(x: I32) -> I32 {
+  match x {
+    1..<f(2 => 3,   //~ E0002 @5

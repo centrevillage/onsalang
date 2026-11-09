@@ -1,0 +1,77 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.5", "§15.5", "§18.1"]
+// fixes = 1
+
+// S-959 (W5-11 U10d2/t2, §2.5, §6.5): an attribute with a space after the `@` (S-489) and an error of its own of the syntax
+// stage reports its own error, the E0005 of a value that is not in the closed list (`@ fp(fast)`, `@ repr(rust)`) or of
+// arguments that the attribute does not take (`@ export(x)`), and not the E0020 of the space (§6.5, as the spaced stack of
+// prefix symbols `- - x` of §3.1 and the `~ a` of §2.6 report the error of the form first). The candidate is the one of
+// the E0005 (the value of the list, `@fp(relaxed)`; `@export`), and it removes the space too, so one candidate directs the
+// attribute to a right form and no error of the syntax stage is left (the promise of §18.1 that a candidate leaves no
+// error of its stage). The E0020 of the space alone (an attribute with no error of its own) is in
+// tests/spec/fixes/space_after_attr_at_item.onsa. The forms are tried on the items that take an attribute: a function, a flow, a struct, a method, a top-level function with `@export`,
+// on its own line and on the line of the heading, after another attribute, with two spaces and with a tab. One error per
+// declaration unit (P-01). The E0005 without a candidate is in attr_space_with_error_no_candidate.onsa.
+
+@fp(relaxed)   //~ E0005
+pub fn a_fp_value(x: F32) -> F32 {
+  x
+}
+
+@fp(relaxed)   //~ E0005
+pub flow a_fp_value_on_a_flow(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+@repr(c)   //~ E0005
+pub struct Rust {
+  x: I32,
+}
+
+@repr(c)   //~ E0005
+pub struct UpperC {
+  x: I32,
+}
+
+@repr(c)   //~ E0005
+priv struct HiddenPacked {
+  x: I32,
+}
+
+pub struct Holder {
+  x: I32,
+}
+
+impl Holder {
+  @fp(relaxed)   //~ E0005
+  pub fn a_method(self) -> I32 {
+    self.x
+  }
+}
+
+@export   //~ E0005
+pub fn an_export_with_an_argument(x: F32) -> F32 {
+  x
+}
+
+@fp(relaxed)
+@export   //~ E0005
+pub fn after_another_attribute(x: F32) -> F32 {
+  x
+}
+
+@fp(relaxed) pub fn on_the_line_of_the_heading(x: F32) -> F32 {   //~ E0005
+  x
+}
+
+@fp(relaxed)   //~ E0005
+pub fn two_spaces(x: F32) -> F32 {
+  x
+}
+
+@fp(relaxed)   //~ E0005
+pub fn a_tab(x: F32) -> F32 {
+  x
+}
+

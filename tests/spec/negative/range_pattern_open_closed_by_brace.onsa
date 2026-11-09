@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 0
+
+// S-955 (W5-11 U10d2, §18.1, §7; R-412): an opening parenthesis that a closer of another kind closes is not the case of
+// the decision: the `(` of `1..<f(2 => 3,` followed by `_ => 0,` and the `}` of the `match` stays the range up to that
+// closer, as it was. The case holds the code E0002, the main position (the start of the range) and that each of the
+// functions that follow is checked and reported. The end of the range is held by a Rust test of the implementation. One
+// error per declaration unit (P-01).
+
+pub fn first(x: I32) -> I32 {
+  match x {
+    1..<f(2 => 3,   //~ E0002 @5
+    _ => 0,
+  }
+}
+
+pub fn second(x: I32) -> I32 {
+  match x {
+    n @ 1..<f(2 => 3,   //~ E0002 @7
+    _ => 0,
+  }
+}
+
+pub fn third(x: I32) -> I32 {
+  match x {
+    1..<f(2 => 3,   //~ E0002 @5
+    _ => 0,
+  }
+}

@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// S-746 (W5-11 U10d2, §4.5, §15.1): the row of the Rust `?Sized` and `Sized` is for the case where the name `Sized` is not
+// found. A file that declares a type with that name finds it, so the row does not apply, and a type written as a bound
+// is the E0308 of its kind (§15.1: "境界に trait でも種の制約でもない名前を書く" is E0308), `T: ?Sized` and `T: Sized`
+// alike. It is not the E0020 that takes the element out. One error per declaration unit (P-01).
+
+pub struct Sized {
+  n: U32,
+}
+
+pub fn a_type_as_a_bound[T: Sized](x: T) -> U32 {   //~ E0308
+  0
+}
+
+pub fn maybe_a_type_as_a_bound[T: ?Sized](x: T) -> U32 {   //~ E0308
+  0
+}
+
+pub fn a_type_beside_another_bound[T: Show + Sized](x: T) -> U32 {   //~ E0308
+  0
+}

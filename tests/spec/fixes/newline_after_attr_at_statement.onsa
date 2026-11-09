@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.5", "§12.4", "§18.1"]
+// fixes = 1
+
+// S-957 (W5-11 U10d2/t2, §2.5, §6.5, §12.4): a line break between the `@` of the attribute of a statement and its name is
+// the E0020 of the prefix symbols too, and the candidate moves the `@` to the line of its name (`@mem(bulk) let y = …`). Before
+// S-957 this position was E0002 ("expected an expression, found `@`"). The forms are tried in the places a `let` can stand:
+// the first statement of a flow, a later one, in the branch of an `if~`, in a nested block, in the body of a `par~`, in a
+// function, and with a comment line between. The main position is the `@`. One error per declaration unit (P-01). The
+// candidate leaves what this version says of `@mem` (E0200, a later stage than the syntax one, §18.1), which is not checked
+// here.
+
+pub flow first_statement(x: F32 at sample) -> F32 at sample {
+  @   //~ E0020 @3
+  mem(bulk) let y = delay~(x, 4)
+  y
+}
+
+pub flow later_statement(x: F32 at sample) -> F32 at sample {
+  let a = x * 0.5
+  @   //~ E0020 @3
+  mem(bulk) let y = delay~(a, 4)
+  y
+}
+
+pub flow in_a_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = if~ c {
+    @   //~ E0020 @5
+    mem(bulk) let y = delay~(x, 4)
+    y
+  } else {
+    x
+  }
+  a
+}
+
+pub flow in_a_nested_block(x: F32 at sample) -> F32 at sample {
+  let a = {
+    @   //~ E0020 @5
+    mem(bulk) let y = delay~(x, 4)
+    y
+  }
+  a
+}
+
+pub flow in_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<2 {
+    @   //~ E0020 @5
+    mem(bulk) let y = delay~(x, 4)
+    y
+  }
+  ys[0]
+}
+
+pub fn in_a_function(x: F32) -> F32 {
+  @   //~ E0020 @3
+  mem(bulk) let y = x
+  y
+}
+
+pub flow a_comment_line_between(x: F32 at sample) -> F32 at sample {
+  @   //~ E0020 @3
+  // the name of the attribute
+  mem(bulk) let y = delay~(x, 4)
+  y
+}

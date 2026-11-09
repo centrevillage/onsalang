@@ -551,7 +551,7 @@ fn form_at(c: &Cursor) -> Option<(Form, usize, usize)> {
     // ([`crate::scan::Brackets::scan_end`], R-410): the reading of its
     // tokens to that opener fails where that of all of them fails, and reads
     // the same tree where that reads one, the node a range swallows to the
-    // end then ending at the opener. That node is given its last token.
+    // end then ending at the opener, the end of its form (S-955).
     let end = c.brackets().scan_end(start);
     let mut toks: Vec<usize> = Vec::new();
     let mut from = start;
@@ -572,12 +572,7 @@ fn form_at(c: &Cursor) -> Option<(Form, usize, usize)> {
     let mut found = Vec::new();
     forms(&p, &mut found);
     let &(form, a, b) = found.first()?;
-    let last = if t.toks[b] == end - 1 {
-        (0..c.tokens.len()).rev().find(|&i| !c.kind(i).is_trivia() && c.kind(i) != TokenKind::Eof)?
-    } else {
-        t.toks[b]
-    };
-    (t.toks[a] == c.at).then_some((form, t.toks[a], last))
+    (t.toks[a] == c.at).then_some((form, t.toks[a], t.toks[b]))
 }
 
 /// The rows [`guard_pattern`] names ([`super::Matcher::many`]).

@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "18:1"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// S-959 (W5-11 U10d2/t2, §2.5, §6.5, §18.1): the candidate of the E0020 of the old form `@ relaxed` (with a space after the
+// `@`) is the new form without the space, `@fp(relaxed)`, in one edit, and nothing is left behind (`clean`, S-253). Before
+// S-959 this form was the E0002 of the space, with no candidate. The main position is the attribute, from the `@` (§18.1: the
+// range of a form that is not in the language starts at its first token). A file with one unit, so that `clean` looks at
+// the whole file.
+
+@ relaxed   //~ E0020
+pub fn f(x: F32) -> F32 {
+  x
+}

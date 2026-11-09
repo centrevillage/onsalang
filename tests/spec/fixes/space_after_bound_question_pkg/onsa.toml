@@ -1,0 +1,3 @@
+[package]
+name = "boundq"
+edition = "2026"

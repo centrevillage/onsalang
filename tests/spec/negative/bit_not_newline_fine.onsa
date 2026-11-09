@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§2.6"]
+
+// S-957 (W5-11 U10d2/t2, §2.5, §2.6): the right forms next to the E0020 of a line break after a prefix `~`
+// (bit_not_newline_forms.onsa): the bit negation written with `!` on the line of its operand, after a symbol that lets the
+// line go on (`=`, `&`), and a comment at the end of the line before it. No diagnostic.
+
+pub fn id(m: U32) -> U32 {
+  m
+}
+
+pub fn the_operand_on_the_next_line(m: U32) -> U32 {
+  let n =
+    !m
+  n
+}
+
+pub fn a_comment_after_the_equals(m: U32) -> U32 {
+  let n = // the operand
+    !m
+  n
+}
+
+pub fn after_an_operator(m: U32) -> U32 {
+  m &
+    !m
+}

@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§4.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "16:13"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// S-957 (W5-11 U10d2/t2, §2.5, §4.5): the candidate of a line break after the `?` of a bound moves the `?` to the line of
+// its name, and nothing is left behind (`clean`, S-253): `T:` and `?Dup](x: T)` on the next line is a right declaration.
+// The main position is the `?`. A file with one unit, so that `clean` looks at the whole file.
+
+pub fn f[T:   //~ E0020 @13
+  ?Dup](x: T) -> U32 {
+  0
+}

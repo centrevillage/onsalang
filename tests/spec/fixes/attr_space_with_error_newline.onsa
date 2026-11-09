@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.4", "§6.5", "§12.4", "§18.1"]
+// fixes = 1
+
+// S-959 and S-957 (W5-11 U10d2/t2, §2.5, §6.5, §18.1): a line break after the `@` of an attribute (S-957) takes the place of
+// the space of S-959: when the attribute is also a form of the old version with a fixed replacement (`@` and `relaxed` on
+// the next line), the E0020 reported is the one of the old form, and its candidate takes the line break out with the form
+// (`@fp(relaxed)`), so that the attribute is right after the one candidate. The line break alone is the E0020 of the prefix
+// symbols (newline_after_attr_at_item.onsa). The main position is the attribute, from the `@` (§18.1: the range of a form
+// that is not in the language starts at its first token), the line the `@` stands on. The forms are tried on a function and
+// a flow, with a comment line between, with the name on the line of the heading, on a struct (`@derive`) and on the `let` of
+// a statement (`@bulk`). One error per declaration unit (P-01). The value errors (E0005) with a line break are not here: the
+// text of §6.5 does not say on which of the two lines the E0005 of such an attribute stands.
+
+@   //~ E0020 @1
+  relaxed
+pub fn a_function(x: F32) -> F32 {
+  x
+}
+
+@   //~ E0020 @1
+  relaxed
+pub flow a_flow(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+@   //~ E0020 @1
+// the name of the attribute
+  relaxed
+pub fn a_comment_line_between(x: F32) -> F32 {
+  x
+}
+
+@   //~ E0020 @1
+  relaxed pub fn on_the_line_of_the_heading(x: F32) -> F32 {
+  x
+}
+
+@   //~ E0020 @1
+  derive(PartialEq, Eq)
+pub struct Plain {
+  id: U32,
+}
+
+pub flow a_bulk_delay(x: F32 at sample) -> F32 at sample {
+  @   //~ E0020 @3
+  bulk let y = delay~(x, 4)
+  y
+}

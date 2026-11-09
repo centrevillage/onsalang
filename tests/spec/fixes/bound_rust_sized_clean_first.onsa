@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "16:13"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// S-746 (W5-11 U10d2, §4.5): the candidate of `T: Sized + Show`, the plain Rust element in the first place, takes the element
+// and the `+` after it out (`T: Show`), and nothing is left behind (`clean`, S-253). The main position is the start of the
+// element. A file with one unit, so that `clean` looks at the whole file.
+
+pub fn f[T: Sized + Show](x: T) -> U32 {   //~ E0020 @13
+  0
+}

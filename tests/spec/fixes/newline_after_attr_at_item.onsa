@@ -1,0 +1,86 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.5", "§18.1"]
+// fixes = 1
+
+// S-957 (W5-11 U10d2/t2, §2.5, §6.5): a line break between the `@` of an attribute and its name is the E0020 of the prefix
+// symbols (S-369, as `-` and its operand), and the candidate moves the `@` to the line of its name (`@fp(relaxed)` on
+// that line); a comment line between stays where it is. An attribute at the end of a line does not end the item (§2.5), so
+// the name on the next line is the continuation that the rule reads. The main position is the `@`, the token that the
+// candidate moves (S-369). The forms are tried on the items that take an attribute: a function and a flow (`@fp`), a struct
+// (`@repr`), a method of an `impl`, a top-level function with `@export`, after another attribute, with the name on the
+// line of the heading, with a comment line and a blank line between, and with the name at the start of its line. One
+// error per declaration unit (P-01). The attributes of the inputs of a flow are in
+// newline_after_attr_at_flow_input.onsa, and the ones of a statement in newline_after_attr_at_statement.onsa. The
+// right forms are in newline_after_attr_at_fine.onsa.
+
+@   //~ E0020 @1
+  fp(relaxed)
+pub fn a_function(x: F32) -> F32 {
+  x
+}
+
+@   //~ E0020 @1
+  fp(relaxed)
+pub flow a_flow(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+@   //~ E0020 @1
+  repr(c)
+pub struct Frame {
+  x: I32,
+}
+
+pub struct Holder {
+  x: I32,
+}
+
+impl Holder {
+  @   //~ E0020 @3
+  fp(relaxed)
+  pub fn a_method(self) -> I32 {
+    self.x
+  }
+}
+
+@   //~ E0020 @1
+  export
+pub fn an_export(x: F32) -> F32 {
+  x
+}
+
+@fp(relaxed)
+@   //~ E0020 @1
+  export
+pub fn after_another_attribute(x: F32) -> F32 {
+  x
+}
+
+@   //~ E0020 @1
+  fp(relaxed) pub fn on_the_line_of_the_heading(x: F32) -> F32 {
+  x
+}
+
+@   //~ E0020 @1
+// the name of the attribute
+  fp(relaxed)
+pub fn a_comment_line_between(x: F32) -> F32 {
+  x
+}
+
+@   //~ E0020 @1
+
+  fp(relaxed)
+pub fn a_blank_line_between(x: F32) -> F32 {
+  x
+}
+
+@   //~ E0020 @1
+// the name of the attribute
+
+// at the start of its line
+fp(relaxed)
+pub fn a_name_at_the_start_of_its_line(x: F32) -> F32 {
+  x
+}

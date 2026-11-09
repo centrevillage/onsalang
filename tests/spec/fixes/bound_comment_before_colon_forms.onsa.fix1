@@ -1,0 +1,81 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 1
+
+// R-384 and the form L1 (W5-11 U10d2/t2, §4.5, §18.1): a comment between a type parameter and its `:` is not between the tokens that
+// the candidate of the implicit element takes out (`:` and `Dup`, or the `+` and the element next to it), so the candidate
+// leaves it where it is (§18.1: the edit replaces the tokens it changes only, and only a comment between the tokens it
+// removes may go with them). `pub fn f[T // c` and `: Dup](x: T)` on the next line read `pub fn f[T // c` and `](x: T)`
+// after the candidate. The text that remains is the `.fix1`; this file says the number of candidates (one), the
+// place (the start of the element) and that the unit has no error after it (bound_comment_before_colon_clean.onsa). A comment
+// that is between the removed tokens (after the `:`, before the element) may go (the forms are in bound_comment_*.onsa).
+// The forms are tried in the places a list can stand: a function, a struct, an enum, the `[ ]` of an `impl` and the method of
+// its own, alone, first and last of a list, with two comment lines, with a comment after the `:` too, in the second parameter,
+// and for the `?Sized` of S-746 (the other types-stage E0020 of a bound). The main position is the start of the element. One
+// error per declaration unit (P-01).
+
+pub struct Held[T] {
+  n: U32,
+}
+
+pub fn alone[T // c
+](x: T) -> U32 {   //~ E0020 @5
+  0
+}
+
+pub fn first_of_two[T // c
+  : Show](x: T) -> U32 {   //~ E0020 @5
+  0
+}
+
+pub fn last_of_two[T // c
+  : Show](x: T) -> U32 {   //~ E0020 @12
+  0
+}
+
+pub fn two_comment_lines[T // a
+  // b
+](x: T) -> U32 {   //~ E0020 @5
+  0
+}
+
+pub fn a_comment_after_the_colon_too[T // a
+](x: T) -> U32 {   //~ E0020 @3
+  0
+}
+
+pub fn in_the_second_parameter[T, U // c
+](x: T, y: U) -> U32 {   //~ E0020 @5
+  0
+}
+
+pub fn the_rust_form[T // c
+](x: T) -> U32 {   //~ E0020 @5
+  0
+}
+
+pub struct Bag[T // c
+] {   //~ E0020 @5
+  n: U32,
+}
+
+pub enum Shelf[T // c
+] {   //~ E0020 @5
+  One(U32),
+  Nothing,
+}
+
+impl[T // c
+] Held[T] {   //~ E0020 @5
+  pub fn tag() -> U32 {
+    7
+  }
+}
+
+impl[T] Held[T] {
+  pub fn own[U // c
+](self, y: U) -> U32 {   //~ E0020 @7
+    self.n
+  }
+}

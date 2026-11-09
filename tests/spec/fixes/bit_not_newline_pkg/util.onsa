@@ -1,0 +1,8 @@
+pub fn flip(m: U32) -> U32 {
+  id(~   //~ E0020 @6
+    m)
+}
+
+pub fn id(m: U32) -> U32 {
+  m
+}

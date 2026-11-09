@@ -110,15 +110,13 @@ impl<'a> Parser<'a> {
 
     fn parse_stmt(&mut self) -> PResult<Completed> {
         // The attributes before a statement (§6.5, §12.4: `@mem(bulk) let`):
-        // an `@` with a name right after it. A line break may come before the
+        // an `@` with a name after it (a blank or a line break between them
+        // is the table's E0020, S-489, S-957). A line break may come before the
         // statement, as before a declaration (fmt puts them on its line). Only
         // a `let` takes one (`@mem`); before any other statement, the table's
         // E0005, and the statement is read on.
         let i = self.peek_index();
-        if self.tokens[i].kind == TokenKind::At
-            && self.tokens[i + 1].kind == TokenKind::Ident
-            && self.gap(i + 1) == Gap::None
-        {
+        if self.tokens[i].kind == TokenKind::At && self.tokens[self.next_code(i)].kind == TokenKind::Ident {
             let attrs = self.parse_attrs(false)?;
             self.skip_newlines();
             if self.at(TokenKind::KwLet) {

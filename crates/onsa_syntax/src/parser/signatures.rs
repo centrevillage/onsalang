@@ -109,7 +109,11 @@ impl<'a> Parser<'a> {
                     if self.eat(TokenKind::Colon).is_some() {
                         loop {
                             let b = self.start(NodeKind::Bound)?;
-                            self.eat(TokenKind::Question);
+                            let q = self.peek_index();
+                            // A blank after the `?` is the table's (§2.5, S-511).
+                            if self.eat(TokenKind::Question).is_some() {
+                                self.read_form(q, None, None);
+                            }
                             self.parse_path("trait bound")?;
                             self.complete(b, NodeKind::Bound);
                             if self.eat(TokenKind::Plus).is_none() {
