@@ -25,7 +25,7 @@ pub fn load(path: Path) -> Result[Str, IoError] uses {Fs} {
 - `blocking` はブロックしうる効果の印である（§8.2）。
 - 効果の操作には `rt` を付けられる（`effect Log { rt fn info(msg: Str) }`）。`rt` の操作の handler は `rt` でなければならない（E0613）。`blocking` の効果の操作に `rt` は付けられない（E0614）。全ての操作が `rt` である効果を **rt 効果** と呼ぶ（§10）。
 - `load` は受け取った `Str` をそのまま返すので、破棄が起きず、`Alloc` を要しない。
-- 効果行は集合で、書く順序は意味を持たない（`uses {A, B}` と `uses {B, A}` は同じ）。
+- 効果行は集合で、書く順序は意味を持たない（`uses {A, B}` と `uses {B, A}` は同じ）。同じ効果を二度書く形（`uses {Alloc, Alloc}`。効果行変数も同じ）は E0602 で、境界の重なりと同じ形で報告する（§4.5）。
 - 関数型どうしの互換: 関数 F を、関数型 G を期待する位置（引数、注釈付きの `let`、返り値、struct のフィールド）で使えるのは、次の全てを満たすときである。制約の強い（できることが少ない）関数は、制約の弱い位置で使える。
   1. 引数と返り値の型が等しい（引数の型の中の関数型も完全に一致する）。
   2. F の効果行が G の効果行に含まれる（純粋な関数は `uses {Alloc}` の位置で使える。逆は E0401）。
@@ -81,6 +81,7 @@ let r = handle { load(Path.new("x.txt")) } with memory_fs
 - handler 自身が使う効果は、`handle` 式の効果行に加わる。
 - handler は引数を取れる。引数は第二級（§5.3）で、`handle` 式の間だけ有効: `handler arena(inout mem: Span[U8]): Alloc { ... }`、`handle { ... } with arena(inout scratch)`。引数の無い handler は、宣言でも `with` でも括弧を書かない（`handler h(): Ask` と `with h()` は E0002、§2.5）。
 - インライン形式 `handle { ... } with Fs { fn read(...) ... }` も同じ意味。`with` の後の経路の最後の名前が `UpperCamel`（効果、§2.3）ならインライン形式で、本体 `{ … }` が同じ行に続く（本体が無ければ E0002 で、名前の付いた handler は `snake_case` であることを note で示す）。`snake_case` の名前は名前の付いた handler で、引数は `(…)` で続ける。
+  名前の付いた handler は本体を持たず、その後ろの `{` は `handle` 式の一部でない（見出しの深さ 0 では本体の始まり、§4.4）。それ以外の位置では、同じ行でも括弧の中の次の行でも、式の後ろの余分なトークンの E0002 で（`with quiet { … }`）、インライン形式の本体は効果の名前に続くことを note で示す。
 
 ### 8.4 `Alloc` の handler と、持ち出しの禁止
 
