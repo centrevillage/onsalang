@@ -348,6 +348,8 @@ codes! {
         "unreachable statement after a diverging one, or `match` arm the arms before it cover";
     E0601 = 601, Effects, [Effects], Optional, Optional,
         "effect used but not in the function's effect row";
+    E0602 = 602, Effects, [Names], Optional, Optional,
+        "the same effect twice in an effect row";
     E0610 = 610, Effects, [Effects, Build], Optional, Optional,
         "effect is not provided by the target";
     E0612 = 612, Effects, [Effects], Optional, Optional,
