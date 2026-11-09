@@ -93,14 +93,20 @@ pub(crate) fn insert_apart(file: FileId, offset: u32, s: &str, marks: &mut Inser
 /// - Any other edit has no such way: no candidate (`None`). `assert.0` would
 ///   read as `assert0.0`, `(~= 1)` as `(!= 1)` (R-228, R-235, R-333).
 ///
+/// When two or more edits join, each of them in turn, the others as they
+/// stand, is read again as it was: one whose tokens join only through
+/// another edit stays as it was (`@ export()pub`: the removal of the
+/// arguments joins `export` and `pub`, not the removal of the blank after
+/// `@`, R-413). The cost is the edits that join times their lines.
+///
 /// The one place of it.
 pub(crate) fn apart(file: FileId, text: &str, tokens: &[Token], fix: Fix, marks: &Insertions) -> Option<Fix> {
     let joins = joining(file, text, tokens, fix.edits());
-    if !joins.iter().any(|j| j.any()) {
+    let joined: Vec<usize> = (0..joins.len()).filter(|&k| joins[k].any()).collect();
+    if joined.is_empty() {
         return Some(fix);
     }
-    let apart_edit = |(e, j): (&Edit, Joins)| match () {
-        _ if !j.any() => Some(e.clone()),
+    let apart_edit = |e: &Edit, j: Joins| match () {
         _ if e.replace.is_empty() => Some(Edit::replace(e.span, " ")),
         _ if marks.holds(e) => {
             let (before, after) = (if j.before { " " } else { "" }, if j.after { " " } else { "" });
@@ -108,7 +114,24 @@ pub(crate) fn apart(file: FileId, text: &str, tokens: &[Token], fix: Fix, marks:
         }
         _ => None,
     };
-    let edits = fix.edits().iter().zip(joins).map(apart_edit).collect::<Option<Vec<Edit>>>()?;
+    let (original, mut edits) = (fix.edits(), fix.edits().to_vec());
+    // Each edit that joins apart, one with no such way as it is until read again.
+    for &k in &joined {
+        edits[k] = apart_edit(&original[k], joins[k]).unwrap_or_else(|| edits[k].clone());
+    }
+    for &k in &joined {
+        // With one edit that joins, the others stand as they were: it joins.
+        let j = match joined.len() {
+            1 => joins[k],
+            _ => {
+                edits[k] = original[k].clone();
+                joining(file, text, tokens, &edits)[k]
+            }
+        };
+        if j.any() {
+            edits[k] = apart_edit(&original[k], j)?;
+        }
+    }
     Some(Fix::new(fix.title(), edits))
 }
 

@@ -14,6 +14,8 @@ pub mod diff;
 mod docs;
 pub mod dump;
 mod edits;
+#[cfg(test)]
+mod edits_tests;
 pub mod fmt;
 pub mod foreign;
 #[cfg(test)]

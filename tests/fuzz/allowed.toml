@@ -31,6 +31,13 @@ reasons = ["S-384", "S-236"]
 note = "an input with two errors: a block called with `(` (`if c { … }(`), and a tuple index with a leading 0 in a hole (`\"{t.01}\"`), which the input has before the candidate; the hole is a lexical error since W5-11 U10d1 (R-290), so the candidate of the call leaves it at its place"
 
 [[allowed]]
+class = "fix|E0020|write `…`|E0020"
+left = "a member `…` is written without spaces around it"
+input = "tests/fuzz/94679d99.onsa"
+reasons = ["S-384", "S-963"]
+note = "an input with two errors: the path separator `::` of Rust (`d:: F`) and a blank after it, which the input has before the candidate; the candidate of `::` writes `.` and leaves the blank, which is then the E0020 of a spaced member `.` at its place. Whether the candidate of such a form takes the blank out too is S-963 (under the family rule S-961 of the blanks round the symbols of 2.5); the class is from before W5-11 U10d2 (f5fb3bc shows it)"
+
+[[allowed]]
 class = "fix|E0003|move `…` to the end of the line before|E0002"
 left = "expected effect name, found `…`"
 input = "tests/fuzz/3516409a.onsa"

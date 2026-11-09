@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.5", "§18.1"]
+// fixes = 1
+
+// R-413 (W5-11 U10h, §6.5, §18.1): the candidate of the E0005 of an attribute that takes no arguments, with a blank after
+// its `@` (S-959) and its `)` right against the next word (`)pub`), takes the blank out and the arguments, and puts one
+// blank where the arguments were, so that the attribute and the word do not join (`@export pub`): no error is left after
+// the one candidate (§18.1). The blank after the `@` is not put back because the removal of the arguments joins the words
+// after it. With a line break after the `@` (S-957), the `@` goes to the line of the name the same way. The main position
+// is the attribute, from the `@`. One error per declaration unit (P-01).
+
+@ export(name: "f")pub fn with_an_argument(m: U32) -> U32 {   //~ E0005 @1
+  m
+}
+
+@ export()pub fn with_no_argument(m: U32) -> U32 {   //~ E0005 @1
+  m
+}
+
+@   //~ E0005 @1
+  export(name: "f")pub fn with_a_line_break(m: U32) -> U32 {
+  m
+}

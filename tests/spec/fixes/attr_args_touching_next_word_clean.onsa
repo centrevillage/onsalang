@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "17:1"
+// code = "E0005"
+// candidate = 1
+// clean = true
+
+// R-413 (W5-11 U10h, §6.5, §18.1): the candidate of the E0005 of `@ export(name: "f")pub`, the arguments right against the
+// next word, leaves no error in the file after the one candidate (`clean`, S-253): the blank after the `@` goes out, and
+// one blank stands where the arguments were (`@export pub fn`). A file with one unit, so that `clean` looks at the whole
+// file.
+
+@ export(name: "f")pub fn exported(m: U32) -> U32 {   //~ E0005
+  m
+}
