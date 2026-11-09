@@ -1,0 +1,52 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1", "§4.5"]
+
+// W5-16 U1b2/i (S-967, S-968): `const D` is declared twice in the module, so the name `D` is E0304 and the later declaration carries its
+// diagnostic (§15.1). A name after it (`D.x`) is a chain of names whose head is held as an error: the chain is one leaf, read as an error, with no
+// diagnostic of its own, as `D` alone is (length_names_errored_module_const.onsa; §18.1: "E0304・E0305 になった名前も…その名前を誤りとして扱う"),
+// and an operation on it reports nothing either. The field of a constant that is no error (`U.x`) is the E0417 of S-967 (§4.5), so the units
+// are checked.
+
+pub struct Ring[T, const M: U32] {
+  data: [T; M],
+  head: U32,
+}
+
+const D: U32 = 1
+const D: U32 = 2                                    //~ E0304
+const U: U32 = 4
+
+pub struct InAField {
+  data: [F32; D.x],
+}
+
+pub fn in_a_parameter(a: [F32; D.x]) -> F32 {
+  a[0]
+}
+
+pub fn in_a_result() -> [F32; D.x.y] {
+  [0.0; 4]
+}
+
+pub fn in_a_const_argument(r: Ring[F32, D.x]) -> U32 {
+  r.head
+}
+
+pub fn in_a_repeat() -> F32 {
+  let a = [0.0; D.x]
+  a[0]
+}
+
+pub fn in_an_annotation() -> F32 {
+  let a: [F32; D.x + 1] = [0.0; 4]
+  a[0]
+}
+
+pub flow in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, D.x)
+}
+
+pub fn of_a_constant(a: [F32; U.x]) -> F32 {   //~ E0417
+  a[0]
+}

@@ -2,15 +2,12 @@
 // [test]
 // spec = ["§4.5", "§15.1", "§18.1", "§6.1", "§11.4", "§11.5"]
 
-// W5-16 U1a/t: a name after a constant in a constant expression (`U.x`, `P.N.x`, `F32.PI.x`, `T.BITS.x`) is E0308, the same
-// in every place where a constant expression is written: a constant is no namespace, so the name after it is not a member
-// (§15.1: "名前空間でない名前の後に `.` を書く" is E0308, as kind_length_names_after_members.onsa has it for the heading
-// and one place of a body). A call whose argument or callee has such a name is read by the names stage first, so the
-// E0308 of the name goes before the E0417 of the call (§18.1: the stages go first; §4.5: "関数の呼び出しは書けない";
-// types/kind_length_calls_and_methods.onsa has the same order for a type at an argument). The places are the heading
-// of an item, the repeat and the annotation of a body, and the places of a flow body (the length of `delay~` and `vdelay~`,
-// the ends of a `par~`, the repeat, the input of a flow); the same form has the same code in all of them.
-// The constant of a struct type (`K.x` with `const K: S = S { x: 3 }`) is in length_names_after_struct_constant_places.onsa.
+// W5-16 U1a/t, S-967 (W5-16 U1b2): a name after a value item in a constant expression (`U.x`, `P.N.x`, `F32.PI.x`, `T.BITS.x`) is the field of
+// a value, outside the grammar of a constant expression, and is E0417, the same in every place where a constant expression is written
+// (§4.5: "値のフィールド（`K.x`、`P.N.x`、`(K).x`。値の後の `.` は型の段が読む、§15.1）… E0417"). A call whose argument or callee has such a name
+// (`g(U.x)`, `U.x.()`) is E0417 as the call is (§4.5: "関数の呼び出しは書けない"). The places are the heading of an item, the repeat and the
+// annotation of a body, and the places of a flow body (the length of `delay~` and `vdelay~`, the ends of a `par~`, the repeat, the input of a
+// flow). The constant of a struct type (`K.x` with `const K: S = S { x: 3 }`) is in const_after_value_names.onsa.
 // One error per unit (§18.1), so each form is in its own unit.
 
 pub struct P {
@@ -29,183 +26,183 @@ fn g(a: U32) -> U32 {
 
 // ---- A constant of the module: the heading ----
 
-pub fn member_in_a_result() -> [F32; U.x] {          //~ E0308
+pub fn member_in_a_result() -> [F32; U.x] {          //~ E0417
   [0.0; 4]
 }
 
-pub fn member_in_a_tuple(t: (U32, [F32; U.x])) -> F32 {   //~ E0308
+pub fn member_in_a_tuple(t: (U32, [F32; U.x])) -> F32 {   //~ E0417
   1.0
 }
 
-pub fn member_in_a_function_type(f: fn([F32; U.x]) -> F32) -> F32 {   //~ E0308
+pub fn member_in_a_function_type(f: fn([F32; U.x]) -> F32) -> F32 {   //~ E0417
   1.0
 }
 
 pub struct MemberInAField {
-  a: [F32; U.x],                                    //~ E0308
+  a: [F32; U.x],                                    //~ E0417
 }
 
-type MemberInAnAlias = [F32; U.x]                   //~ E0308
+type MemberInAnAlias = [F32; U.x]                   //~ E0417
 
-const MEMBER_IN_A_CONST_TYPE: [F32; U.x] = [0.0; 4]   //~ E0308
+const MEMBER_IN_A_CONST_TYPE: [F32; U.x] = [0.0; 4]   //~ E0417
 
-pub fn call_of_a_member_in_a_parameter(a: [F32; U.x.()]) -> F32 {   //~ E0308
+pub fn call_of_a_member_in_a_parameter(a: [F32; U.x.()]) -> F32 {   //~ E0417
   1.0
 }
 
-pub fn member_as_an_argument_in_a_parameter(a: [F32; g(U.x)]) -> F32 {   //~ E0308
+pub fn member_as_an_argument_in_a_parameter(a: [F32; g(U.x)]) -> F32 {   //~ E0417
   1.0
 }
 
-pub fn member_as_an_argument_in_a_result() -> [F32; g(U.x)] {   //~ E0308
+pub fn member_as_an_argument_in_a_result() -> [F32; g(U.x)] {   //~ E0417
   [0.0; 4]
 }
 
-pub fn member_in_a_sum_in_a_parameter(a: [F32; U + U.x]) -> F32 {   //~ E0308
+pub fn member_in_a_sum_in_a_parameter(a: [F32; U + U.x]) -> F32 {   //~ E0417
   1.0
 }
 
 // ---- A constant of the module: the body of a function ----
 
 pub fn member_in_a_repeat() -> F32 {
-  let a = [0.0; U.x]                                //~ E0308
+  let a = [0.0; U.x]                                //~ E0417
   a[0]
 }
 
 pub fn member_in_an_annotation() -> F32 {
-  let _: [F32; U.x] = [0.0; 4]                      //~ E0308
+  let _: [F32; U.x] = [0.0; 4]                      //~ E0417
   1.0
 }
 
 pub fn call_of_a_member_in_a_repeat() -> F32 {
-  let a = [0.0; U.x.()]                             //~ E0308
+  let a = [0.0; U.x.()]                             //~ E0417
   a[0]
 }
 
 pub fn member_as_an_argument_in_a_repeat() -> F32 {
-  let a = [0.0; g(U.x)]                             //~ E0308
+  let a = [0.0; g(U.x)]                             //~ E0417
   a[0]
 }
 
 pub fn member_in_a_sum_in_a_repeat() -> F32 {
-  let a = [0.0; 1 + U.x]                            //~ E0308
+  let a = [0.0; 1 + U.x]                            //~ E0417
   a[0]
 }
 
 // ---- A constant of the module: the places of a flow ----
 
-pub flow member_in_a_flow_input(a: [F32; U.x] at sample) -> F32 at sample {   //~ E0308
+pub flow member_in_a_flow_input(a: [F32; U.x] at sample) -> F32 at sample {   //~ E0417
   0.0
 }
 
 pub flow member_in_a_delay(x: F32 at sample) -> F32 at sample {
-  delay~(x, U.x)                                    //~ E0308
+  delay~(x, U.x)                                    //~ E0417
 }
 
 pub flow member_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
-  vdelay~(x, d, U.x)                                //~ E0308
+  vdelay~(x, d, U.x)                                //~ E0417
 }
 
 pub flow member_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0..<U.x { x * F32.round_from(i) }      //~ E0308
+  let ys = par~ i in 0..<U.x { x * F32.round_from(i) }      //~ E0417
   ys[0]
 }
 
 pub flow member_as_the_start_of_a_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in U.x..<8 { x * F32.round_from(i) }      //~ E0308
+  let ys = par~ i in U.x..<8 { x * F32.round_from(i) }      //~ E0417
   ys[0]
 }
 
 pub flow member_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
-  let a = [x; U.x]                                  //~ E0308
+  let a = [x; U.x]                                  //~ E0417
   a[0]
 }
 
 pub flow member_as_an_argument_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
-  let a = [x; g(U.x)]                               //~ E0308
+  let a = [x; g(U.x)]                               //~ E0417
   a[0]
 }
 
 // ---- An associated constant of a user type and of a builtin type, in the places of a flow ----
 
-pub flow associated_member_in_a_flow_input(a: [F32; P.N.x] at sample) -> F32 at sample {   //~ E0308
+pub flow associated_member_in_a_flow_input(a: [F32; P.N.x] at sample) -> F32 at sample {   //~ E0417
   0.0
 }
 
 pub flow associated_member_in_a_delay(x: F32 at sample) -> F32 at sample {
-  delay~(x, P.N.x)                                  //~ E0308
+  delay~(x, P.N.x)                                  //~ E0417
 }
 
 pub flow associated_member_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
-  vdelay~(x, d, P.N.x)                              //~ E0308
+  vdelay~(x, d, P.N.x)                              //~ E0417
 }
 
 pub flow associated_member_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0..<P.N.x { x * F32.round_from(i) }    //~ E0308
+  let ys = par~ i in 0..<P.N.x { x * F32.round_from(i) }    //~ E0417
   ys[0]
 }
 
 pub flow associated_member_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
-  let a = [x; P.N.x]                                //~ E0308
+  let a = [x; P.N.x]                                //~ E0417
   a[0]
 }
 
-pub flow builtin_member_in_a_flow_input(a: [F32; F32.PI.x] at sample) -> F32 at sample {   //~ E0308
+pub flow builtin_member_in_a_flow_input(a: [F32; F32.PI.x] at sample) -> F32 at sample {   //~ E0417
   0.0
 }
 
 pub flow builtin_member_in_a_delay(x: F32 at sample) -> F32 at sample {
-  delay~(x, F32.PI.x)                               //~ E0308
+  delay~(x, F32.PI.x)                               //~ E0417
 }
 
 pub flow builtin_member_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
-  vdelay~(x, d, I32.BITS.x)                         //~ E0308
+  vdelay~(x, d, I32.BITS.x)                         //~ E0417
 }
 
 pub flow builtin_member_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0..<I32.BITS.x { x * F32.round_from(i) }   //~ E0308
+  let ys = par~ i in 0..<I32.BITS.x { x * F32.round_from(i) }   //~ E0417
   ys[0]
 }
 
 pub flow builtin_member_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
-  let a = [x; I32.MAX.x]                            //~ E0308
+  let a = [x; I32.MAX.x]                            //~ E0417
   a[0]
 }
 
-pub fn associated_member_in_a_result() -> [F32; P.N.x] {   //~ E0308
+pub fn associated_member_in_a_result() -> [F32; P.N.x] {   //~ E0417
   [0.0; 4]
 }
 
 pub fn associated_member_in_a_repeat() -> F32 {
-  let a = [0.0; P.N.x]                              //~ E0308
+  let a = [0.0; P.N.x]                              //~ E0417
   a[0]
 }
 
-pub fn builtin_member_in_a_result() -> [F32; F32.PI.x] {   //~ E0308
+pub fn builtin_member_in_a_result() -> [F32; F32.PI.x] {   //~ E0417
   [0.0; 4]
 }
 
 pub fn builtin_member_in_a_repeat() -> F32 {
-  let a = [0.0; I32.BITS.x]                         //~ E0308
+  let a = [0.0; I32.BITS.x]                         //~ E0417
   a[0]
 }
 
 // ---- The associated constant of a type parameter ----
 
-pub fn type_parameter_member_in_a_parameter[T: Int](a: [F32; T.BITS.x]) -> F32 {   //~ E0308
+pub fn type_parameter_member_in_a_parameter[T: Int](a: [F32; T.BITS.x]) -> F32 {   //~ E0417
   1.0
 }
 
-pub fn type_parameter_member_in_a_result[T: Int]() -> [F32; T.BITS.x] {   //~ E0308
+pub fn type_parameter_member_in_a_result[T: Int]() -> [F32; T.BITS.x] {   //~ E0417
   [0.0; 4]
 }
 
 pub fn type_parameter_member_in_a_repeat[T: Int]() -> F32 {
-  let a = [0.0; T.BITS.x]                           //~ E0308
+  let a = [0.0; T.BITS.x]                           //~ E0417
   a[0]
 }
 
 pub fn type_parameter_member_in_an_annotation[T: Int]() -> F32 {
-  let _: [F32; T.BITS.x] = [0.0; 4]                 //~ E0308
+  let _: [F32; T.BITS.x] = [0.0; 4]                 //~ E0417
   1.0
 }

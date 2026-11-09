@@ -1,0 +1,68 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 0
+
+// W5-16 U1b2/i, S-50: an operation on a const parameter (`N * 2`, `N + 1`) is not written in a constant expression (§4.5: "const の型パラメータを
+// 含む式（`[F32; N * 2]`、`N` は const の型パラメータ）は書けない（E0417。定数式の規則の違反と同じコード）"), in the heading of an item, in a body
+// and in a const argument, with the parameter on either side, in parentheses and inside a larger operation. A flow has no type parameters
+// (§4.4), so no const parameter is seen in a flow. The parameter alone, in parentheses too, is a constant expression. One error per unit (§18.1).
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub struct InAField[const N: U32] {
+  data: [F32; N + 1],   //~ E0417
+}
+
+pub fn in_a_parameter[const N: U32](a: [F32; N * 2]) -> F32 {   //~ E0417
+  a[0]
+}
+
+pub fn in_a_result[const N: U32]() -> [F32; N + 1] {   //~ E0417
+  [0.0; 4]
+}
+
+pub fn on_the_right[const N: U32](a: [F32; 2 * N]) -> F32 {   //~ E0417
+  a[0]
+}
+
+pub fn in_parentheses[const N: U32](a: [F32; (N) % 2]) -> F32 {   //~ E0417
+  a[0]
+}
+
+pub fn inside_an_operation[const N: U32](a: [F32; 1 + (N - 1)]) -> F32 {   //~ E0417
+  a[0]
+}
+
+pub fn in_a_const_argument[const N: U32](r: Ring[F32, N + 1]) -> U32 {   //~ E0417
+  r.head
+}
+
+pub fn in_a_repeat[const N: U32]() -> F32 {
+  let a = [0.0; N + 1]   //~ E0417
+  a[0]
+}
+
+pub fn in_an_annotation[const N: U32]() -> F32 {
+  let a: [F32; N / 2] = [0.0; 4]   //~ E0417
+  a[0]
+}
+
+pub fn in_a_const_argument_of_a_body[const N: U32](r: Ring[F32, N]) -> U32 {
+  let s: Ring[F32, N - 1] = r   //~ E0417
+  s.head
+}
+
+impl[T, const N: U32] Ring[T, N] {
+  pub fn in_a_member(self) -> [F32; N + 1] {   //~ E0417
+    [0.0; 4]
+  }
+}
+
+pub fn alone[const N: U32](a: [F32; N], r: Ring[F32, (N)]) -> F32 {
+  let b: [F32; (N)] = a
+  b[0]
+}

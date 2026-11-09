@@ -7,7 +7,8 @@
 // in the repeat of a function (types/kind_length_calls_and_methods.onsa): a callee or an argument that is not found is
 // E0302, one that is no value is E0308, a constant called as `K()` is the E0020 of a value called with `(` (§15.1: "値を
 // `x(...)` の形で呼ぶと、型によらず E0020"), and a call of a function is the E0417 of §4.5 ("関数の呼び出しは書けない";
-// §18.1: the stages go first). The same names with a name after a constant are in length_names_after_constant_flow_calls.onsa.
+// §18.1: the stages go first). A name after a value (`U.x.()`, `g(U.x)`) is no error of the names stage, so the call is the
+// E0417 (S-967). The same names with a name after a constant are in length_names_after_constant_flow_calls.onsa.
 // One error per unit (§18.1), so each form is in its own unit.
 
 pub struct P {
@@ -79,11 +80,11 @@ pub flow function_called_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow call_of_a_member_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
-  let a = [x; U.x.()]                               //~ E0308
+  let a = [x; U.x.()]                               //~ E0417
   a[0]
 }
 
-pub flow member_as_an_argument_in_a_flow_input(a: [F32; g(U.x)] at sample) -> F32 at sample {   //~ E0308
+pub flow member_as_an_argument_in_a_flow_input(a: [F32; g(U.x)] at sample) -> F32 at sample {   //~ E0417
   0.0
 }
 

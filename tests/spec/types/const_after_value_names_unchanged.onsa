@@ -1,0 +1,94 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1", "§11.4", "§11.5"]
+
+// A name after a value item (a constant, a function, a variant, an associated constant of a user type or of a builtin type) in a constant
+// expression is the field of a value: it is outside the grammar of a constant expression and is E0417 wherever the expression is written
+// (§4.5: "値のフィールド（`K.x`、`P.N.x`、`(K).x`。値の後の `.` は型の段が読む、§15.1）… E0417"; S-967), with a parenthesis (`(K).x`) and a call
+// (`K.x()`, `K.x.()`) alike, and whether the field exists (`K.zz`). A method named through its type is no value, so a name after it and the method
+// itself are E0308 as before (§15.1; S-205).
+// The places are the heading of an item (a parameter, a result, a field, an alias, the type of a `const`, a const argument) and
+// the repeat and the annotation of a body.
+// These are the units of const_after_value_names.onsa whose result the reader of W5-16 U1b2 does not change (they pass before it): they are in
+// its own file so that a regression of them is not silenced with the units that change.
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub struct S {
+  x: U32,
+}
+
+pub struct P {
+  x: I32,
+}
+
+impl P {
+  pub const N: U32 = 3
+
+  pub fn get(self) -> I32 {
+    self.x
+  }
+}
+
+pub enum E {
+  A,
+  B(I32),
+}
+
+const K: S = S { x: 3 }
+const U: U32 = 4
+
+fn g(a: U32) -> U32 {
+  a
+}
+
+pub fn field_of_a_constant_called_in_a_parameter(x: [F32; K.x()]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn field_of_a_constant_called_in_a_repeat() -> F32 {
+  let a = [0.0; K.x()]   //~ E0417
+  a[0]
+}
+
+pub fn field_of_a_constant_called_in_a_const_argument(r: Ring[F32, K.x()]) -> U32 {   //~ E0417
+  r.head
+}
+
+pub fn method_through_its_type_in_a_parameter(x: [F32; P.get]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn method_through_its_type_in_a_repeat() -> F32 {
+  let a = [0.0; P.get]   //~ E0308
+  a[0]
+}
+
+pub fn method_through_its_type_in_a_const_argument(r: Ring[F32, P.get]) -> U32 {   //~ E0308
+  r.head
+}
+
+pub fn member_of_a_method_through_its_type_called_in_a_parameter(x: [F32; P.get.zz()]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn member_of_a_method_through_its_type_called_in_a_repeat() -> F32 {
+  let a = [0.0; P.get.zz()]   //~ E0308
+  a[0]
+}
+
+pub fn member_of_a_builtin_method_called_in_a_parameter(x: [F32; Str.len.zz()]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn member_of_a_builtin_method_called_in_a_repeat() -> F32 {
+  let a = [0.0; Str.len.zz()]   //~ E0308
+  a[0]
+}
+
+pub struct MemberOfABuiltinMethodCalledInAField {
+  a: [F32; Str.len.zz()],   //~ E0308
+}

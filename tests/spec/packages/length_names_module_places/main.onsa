@@ -90,7 +90,7 @@ pub flow constant_called_in_a_delay(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow member_of_a_constant_in_a_delay(x: F32 at sample) -> F32 at sample {
-  delay~(x, util.K.x)                               //~ E0308
+  delay~(x, util.K.x)                               //~ E0417
 }
 
 // ---- Fine: the constants of the module in every place ----

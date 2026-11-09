@@ -1,0 +1,88 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// W5-16 U1b2/t, S-967: a name after a value item in a constant expression is the field of a value, outside the grammar of a constant
+// expression, and is E0417 (§4.5: "値のフィールド（`K.x`、`P.N.x`、`(K).x`。値の後の `.` は型の段が読む、§15.1）… E0417") when the value item is a const
+// parameter (`M.x`), the associated constant of a type parameter (`T.BITS.x`) or the constant of the type of an `impl` (`Self.N.x`): the same
+// code as for a constant (const_after_value_names.onsa). A method named through a type parameter is no value, so it is E0308 (§15.1; S-205). One
+// error per unit (§18.1).
+// The units whose result W5-16 U1b2 does not change are in const_after_value_generic_unchanged.onsa.
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub struct P {
+  x: I32,
+}
+
+impl P {
+  pub const N: U32 = 3
+
+  pub fn field_of_the_constant_of_self_in_a_parameter(self, a: [F32; Self.N.x]) -> F32 {   //~ E0417
+    1.0
+  }
+
+  pub fn field_of_the_constant_of_self_in_a_result(self) -> [F32; Self.N.x] {   //~ E0417
+    [0.0; 3]
+  }
+
+  pub fn field_of_the_constant_of_self_in_a_repeat(self) -> F32 {
+    let a = [0.0; Self.N.x]   //~ E0417
+    a[0]
+  }
+}
+
+pub fn field_of_a_const_parameter_in_a_parameter[const M: U32](x: [F32; M.x]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn field_of_a_const_parameter_in_a_result[const M: U32]() -> [F32; M.x] {   //~ E0417
+  [0.0; 4]
+}
+
+pub fn field_of_a_const_parameter_in_a_const_argument[const M: U32](r: Ring[F32, M.x]) -> U32 {   //~ E0417
+  r.head
+}
+
+pub fn field_of_a_const_parameter_in_a_repeat[const M: U32]() -> F32 {
+  let a = [0.0; M.x]   //~ E0417
+  a[0]
+}
+
+pub fn field_of_a_const_parameter_in_an_annotation[const M: U32]() -> F32 {
+  let a: [F32; M.x] = [0.0; 4]   //~ E0417
+  a[0]
+}
+
+pub fn field_of_a_parenthesised_const_parameter[const M: U32](x: [F32; (M).x]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn field_of_a_const_parameter_called_as_a_value[const M: U32](x: [F32; M.x.()]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn field_of_a_type_parameter_constant_in_a_parameter[T: Int](x: [F32; T.BITS.x]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn field_of_a_type_parameter_constant_in_a_result[T: Int]() -> [F32; T.BITS.x] {   //~ E0417
+  [0.0; 4]
+}
+
+pub fn field_of_a_type_parameter_constant_in_a_repeat[T: Int]() -> F32 {
+  let a = [0.0; T.BITS.x]   //~ E0417
+  a[0]
+}
+
+pub fn field_of_a_type_parameter_constant_in_an_annotation[T: Int]() -> F32 {
+  let a: [F32; T.BITS.x] = [0.0; 4]   //~ E0417
+  a[0]
+}
+
+pub fn field_of_a_parenthesised_type_parameter_constant[T: Int](x: [F32; (T.BITS).x]) -> F32 {   //~ E0417
+  1.0
+}

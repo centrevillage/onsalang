@@ -1,0 +1,211 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1", "§11.4", "§11.5"]
+
+// A name after a value item (a constant, a function, a variant, an associated constant of a user type or of a builtin type) in a constant
+// expression is the field of a value: it is outside the grammar of a constant expression and is E0417 wherever the expression is written
+// (§4.5: "値のフィールド（`K.x`、`P.N.x`、`(K).x`。値の後の `.` は型の段が読む、§15.1）… E0417"; S-967), with a parenthesis (`(K).x`) and a call
+// (`K.x()`, `K.x.()`) alike, and whether the field exists (`K.zz`). A method named through its type is no value, so a name after it and the method
+// itself are E0308 as before (§15.1; S-205).
+// The places are the heading of an item (a parameter, a result, a field, an alias, the type of a `const`, a const argument) and
+// the repeat and the annotation of a body.
+// The units whose result does not change are in const_after_value_names_unchanged.onsa. One error per unit (§18.1).
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub struct S {
+  x: U32,
+}
+
+pub struct P {
+  x: I32,
+}
+
+impl P {
+  pub const N: U32 = 3
+
+  pub fn get(self) -> I32 {
+    self.x
+  }
+}
+
+pub enum E {
+  A,
+  B(I32),
+}
+
+const K: S = S { x: 3 }
+const U: U32 = 4
+
+fn g(a: U32) -> U32 {
+  a
+}
+
+pub fn field_of_a_constant_in_a_parameter(x: [F32; K.x]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn field_of_a_constant_in_a_repeat() -> F32 {
+  let a = [0.0; K.x]   //~ E0417
+  a[0]
+}
+
+pub fn field_of_a_constant_in_a_result() -> [F32; K.x] {   //~ E0417
+  [0.0; 4]
+}
+
+pub fn field_of_a_constant_in_an_annotation() -> F32 {
+  let _: [F32; K.x] = [0.0; 4]   //~ E0417
+  1.0
+}
+
+pub fn field_of_a_parenthesised_constant_in_a_parameter(x: [F32; (K).x]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn field_of_a_parenthesised_constant_in_a_repeat() -> F32 {
+  let a = [0.0; (K).x]   //~ E0417
+  a[0]
+}
+
+type FieldOfAParenthesisedConstantInAnAlias = [F32; (K).x]   //~ E0417
+
+pub fn field_of_a_constant_called_as_a_value_in_a_parameter(x: [F32; K.x.()]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn field_of_a_constant_called_as_a_value_in_a_repeat() -> F32 {
+  let a = [0.0; K.x.()]   //~ E0417
+  a[0]
+}
+
+pub fn unknown_field_of_a_constant_in_a_parameter(x: [F32; K.zz]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn unknown_field_of_a_constant_in_a_repeat() -> F32 {
+  let a = [0.0; K.zz]   //~ E0417
+  a[0]
+}
+
+pub struct UnknownFieldOfAConstantInAField {
+  a: [F32; K.zz],   //~ E0417
+}
+
+pub fn field_of_a_chain_in_a_parameter(x: [F32; K.x.y]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn field_of_a_chain_in_a_repeat() -> F32 {
+  let a = [0.0; K.x.y]   //~ E0417
+  a[0]
+}
+
+const FIELD_OF_A_CHAIN_IN_A_CONST_TYPE: [F32; K.x.y] = [0.0; 4]   //~ E0417
+
+pub fn member_of_an_integer_constant_in_a_parameter(x: [F32; U.x]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn member_of_an_integer_constant_in_a_repeat() -> F32 {
+  let a = [0.0; U.x]   //~ E0417
+  a[0]
+}
+
+pub fn member_of_an_integer_constant_in_a_result() -> [F32; U.x] {   //~ E0417
+  [0.0; 4]
+}
+
+pub fn member_of_an_integer_constant_in_an_annotation() -> F32 {
+  let _: [F32; U.x] = [0.0; 4]   //~ E0417
+  1.0
+}
+
+pub fn member_of_an_integer_constant_in_a_sum_in_a_parameter(x: [F32; U + U.x]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn member_of_an_integer_constant_in_a_sum_in_a_repeat() -> F32 {
+  let a = [0.0; U + U.x]   //~ E0417
+  a[0]
+}
+
+type MemberOfAnIntegerConstantInASumInAnAlias = [F32; U + U.x]   //~ E0417
+
+pub fn member_of_an_associated_constant_in_a_parameter(x: [F32; P.N.x]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn member_of_an_associated_constant_in_a_repeat() -> F32 {
+  let a = [0.0; P.N.x]   //~ E0417
+  a[0]
+}
+
+pub fn member_of_an_associated_constant_in_a_const_argument(r: Ring[F32, P.N.x]) -> U32 {   //~ E0417
+  r.head
+}
+
+pub fn member_of_a_builtin_constant_in_a_parameter(x: [F32; F32.PI.x]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn member_of_a_builtin_constant_in_a_repeat() -> F32 {
+  let a = [0.0; F32.PI.x]   //~ E0417
+  a[0]
+}
+
+pub fn member_of_a_builtin_integer_constant_in_a_parameter(x: [F32; I32.BITS.x]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn member_of_a_builtin_integer_constant_in_a_repeat() -> F32 {
+  let a = [0.0; I32.BITS.x]   //~ E0417
+  a[0]
+}
+
+pub struct MemberOfABuiltinIntegerConstantInAField {
+  a: [F32; I32.BITS.x],   //~ E0417
+}
+
+pub fn member_of_a_function_in_a_parameter(x: [F32; g.y]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn member_of_a_function_in_a_repeat() -> F32 {
+  let a = [0.0; g.y]   //~ E0417
+  a[0]
+}
+
+const MEMBER_OF_A_FUNCTION_IN_A_CONST_TYPE: [F32; g.y] = [0.0; 4]   //~ E0417
+
+pub fn member_of_a_variant_in_a_parameter(x: [F32; E.A.x]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn member_of_a_variant_in_a_repeat() -> F32 {
+  let a = [0.0; E.A.x]   //~ E0417
+  a[0]
+}
+
+pub fn member_of_a_variant_in_a_result() -> [F32; E.A.x] {   //~ E0417
+  [0.0; 4]
+}
+
+pub fn member_of_a_variant_in_an_annotation() -> F32 {
+  let _: [F32; E.A.x] = [0.0; 4]   //~ E0417
+  1.0
+}
+
+pub fn member_of_a_constant_as_an_argument_in_a_parameter(x: [F32; g(U.x)]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn member_of_a_constant_as_an_argument_in_a_repeat() -> F32 {
+  let a = [0.0; g(U.x)]   //~ E0417
+  a[0]
+}
+
+type MemberOfAConstantAsAnArgumentInAnAlias = [F32; g(U.x)]   //~ E0417

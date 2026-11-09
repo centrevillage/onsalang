@@ -2,17 +2,13 @@
 // [test]
 // spec = ["§4.5", "§15.1", "§18.1", "§11.4", "§11.5"]
 
-// W5-16 U1a/t: a call in the length of `delay~` or `vdelay~` and in the ends of a `par~` whose callee or argument has a name
-// after a constant (`g(U.x)`, `U.x.()`, `g(P.N.x)`, `F32.PI.x.()`) is E0308, as the same form in the repeat of a flow, in the
-// repeat of a function and in the heading of an item is (types/length_names_after_constant_places.onsa). The names of the
-// call are read by the names stage before the E0417 of a call in a length (§4.5: "関数の呼び出しは書けない"; §18.1: the
-// stages go first), and a constant is no namespace, so the name after it is E0308 (§15.1: "名前空間でない名前の後に `.` を
-// 書く"). The code does not depend on the place (§4.5: "位置によらず").
-// This version reports the E0417 of the flow ("must be a constant expression") for these forms, with the names in the
-// call not read; the names of a constant expression are read once by the names stage for every place in the unit of
-// W5-16 U1a, so these forms are pending until then. The calls whose names are not found, are no values or are called
-// with the wrong form (E0302, E0308, E0020), and the call that is the E0417 itself, already have the same code in a
-// flow body (length_names_calls_in_flow_places.onsa).
+// W5-16 U1a/t, S-967 (W5-16 U1b2): a call in the length of `delay~` or `vdelay~` and in the ends of a `par~` whose callee or argument has a
+// name after a constant (`g(U.x)`, `U.x.()`, `g(P.N.x)`, `F32.PI.x.()`) is E0417, as the same form in the repeat of a flow, in the repeat of a
+// function and in the heading of an item is (types/length_names_after_constant_places.onsa): the name after a value is the field of a value, outside
+// the grammar of a constant expression, and the call is outside it too (§4.5: "関数の呼び出しは書けない"; "値のフィールド（`K.x`、…）… E0417").
+// The code does not depend on the place (§4.5: "位置によらず"). The calls whose names are not found, are no values or are called with the
+// wrong form (E0302, E0308, E0020), and the call that is the E0417 itself, have the same code in a flow body
+// (length_names_calls_in_flow_places.onsa).
 // One error per unit (§18.1), so each form is in its own unit.
 
 pub struct P {
@@ -30,40 +26,40 @@ fn g(a: U32) -> U32 {
 }
 
 pub flow call_of_a_member_in_a_delay(x: F32 at sample) -> F32 at sample {
-  delay~(x, U.x.())                                 //~ E0308
+  delay~(x, U.x.())                                 //~ E0417
 }
 
 pub flow member_as_an_argument_in_a_delay(x: F32 at sample) -> F32 at sample {
-  delay~(x, g(U.x))                                 //~ E0308
+  delay~(x, g(U.x))                                 //~ E0417
 }
 
 pub flow member_as_an_argument_in_a_delay_with_an_initial_value(x: F32 at sample) -> F32 at sample {
-  delay~(x, g(P.N.x), 0.5)                          //~ E0308
+  delay~(x, g(P.N.x), 0.5)                          //~ E0417
 }
 
 pub flow member_of_a_builtin_constant_called_in_a_delay(x: F32 at sample) -> F32 at sample {
-  delay~(x, F32.PI.x.())                            //~ E0308
+  delay~(x, F32.PI.x.())                            //~ E0417
 }
 
 pub flow member_as_an_argument_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
-  vdelay~(x, d, g(U.x))                             //~ E0308
+  vdelay~(x, d, g(U.x))                             //~ E0417
 }
 
 pub flow call_of_a_member_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
-  vdelay~(x, d, U.x.())                             //~ E0308
+  vdelay~(x, d, U.x.())                             //~ E0417
 }
 
 pub flow call_of_a_member_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0..<U.x.() { x * F32.round_from(i) }   //~ E0308
+  let ys = par~ i in 0..<U.x.() { x * F32.round_from(i) }   //~ E0417
   ys[0]
 }
 
 pub flow member_as_an_argument_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0..<g(U.x) { x * F32.round_from(i) }   //~ E0308
+  let ys = par~ i in 0..<g(U.x) { x * F32.round_from(i) }   //~ E0417
   ys[0]
 }
 
 pub flow member_as_an_argument_as_the_start_of_a_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in g(U.x)..<8 { x * F32.round_from(i) }   //~ E0308
+  let ys = par~ i in g(U.x)..<8 { x * F32.round_from(i) }   //~ E0417
   ys[0]
 }

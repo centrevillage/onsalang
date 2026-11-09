@@ -124,12 +124,12 @@ fn settle(r: Result<Got, ConstErr>) -> Result<Got, Diagnostic> {
 /// read by their type, and the nodes by the grammar (S-966): a node outside
 /// it is E0417 whatever is in it, whose names the names stage read (S-968).
 fn node(a: &mut Analysis, cx: &ConstCx, e: ExprId) -> Result<Got, Diagnostic> {
-    // An integer literal, and a prefix `-` before a literal (S-228).
-    if let Some(v) = literal(cx.ast, cx.text, e) {
-        return v.map(|v| Got::Val(ConstU32::Value(v), None));
-    }
     let expr = cx.ast.expr(e);
     let shown = || cx.text[expr.span.start as usize..expr.span.end as usize].to_string();
+    // A prefix `-` before a numeric literal, whatever its value (S-228).
+    if cx.ast.negated_literal(e).is_some() {
+        return Err(no_negative(shown(), expr.span));
+    }
     if let Some((nodes, head)) = chain_nodes(cx.ast, e) {
         if cx.held.contains(&e) {
             return Ok(Got::Unknown);
@@ -147,16 +147,21 @@ fn node(a: &mut Analysis, cx: &ConstCx, e: ExprId) -> Result<Got, Diagnostic> {
         ExprKind::Binary { op: BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem, lhs, rhs, .. } => {
             match (node(a, cx, *lhs)?, node(a, cx, *rhs)?) {
                 (Got::Unknown, _) | (_, Got::Unknown) => Ok(Got::Unknown),
+                // A const parameter has no value to compute with (§4.5, S-50).
+                (Got::Val(ConstU32::Param(_), _), _) | (_, Got::Val(ConstU32::Param(_), _)) => {
+                    Err(value_not_constant(shown(), "an operation on a const parameter", expr.span))
+                }
                 _ => Ok(Got::Op),
             }
         }
-        // A literal of another type (§4.5, S-966).
+        // An integer literal, and a literal of another type (§4.5, S-966).
         ExprKind::Lit(lit) => {
             let form = match lit {
+                Lit::Int { value, .. } => return int_literal(*value, shown(), expr.span),
                 Lit::Float { .. } => "a float literal",
                 Lit::Bool(_) => "a `Bool` literal",
                 Lit::Str(_) => "a string literal",
-                _ => "a character literal",
+                Lit::Char(_) => "a character literal",
             };
             let msg = format!("a constant expression has the type `U32`; found {form} (§4.5)");
             Err(Diagnostic::new(Stage::Types, Code::E0401, expr.span, msg).with_found(shown()))
@@ -204,7 +209,9 @@ fn chain_nodes(ast: &Ast, e: ExprId) -> Option<(Vec<ExprId>, &Ident)> {
 /// error: a const parameter, or a constant ([`of_entity`]); what is no
 /// constant is E0417 when it is a value (§4.5, S-713 (a)), else E0308. A
 /// chain whose records end before its last name ends at a value whose field
-/// follows (S-967), or is one whose names the walk did not read.
+/// follows (S-967), or is one whose names the walk did not read. A type
+/// parameter, a namespace and a builtin name of a flow end no chain the
+/// names stage passes (its E0308).
 fn chain(
     a: &mut Analysis,
     (m, ast, text): (ModId, &Ast, &str),
@@ -244,9 +251,9 @@ fn chain(
                 None => Err(not_constant(NameKind::of_named(entity, &a.defs, span), shown, span)),
             }
         }
-        PathRes::TypeParam(_) => Err(not_constant(NameKind::Type, shown, span)),
-        PathRes::Namespace(entity) => Err(not_constant(NameKind::of_named(entity, &a.defs, span), shown, span)),
-        PathRes::FlowBuiltin(_) => Err(value_not_constant(shown, "a builtin name of a flow", span).into()),
+        PathRes::TypeParam(_) | PathRes::Namespace(_) | PathRes::FlowBuiltin(_) => {
+            Err(value_not_constant(shown, "a name of another kind", span).into())
+        }
     }
 }
 
@@ -301,24 +308,15 @@ pub(crate) fn path_of(ast: &Ast, e: ExprId) -> Option<Path> {
     }
 }
 
-/// A literal or a negative literal written as the constant (`4`, `-1`, `-(1)`);
-/// `None` for any other expression.
-pub(crate) fn literal(ast: &Ast, text: &str, e: ExprId) -> Option<Result<u32, Diagnostic>> {
-    let expr = ast.expr(e);
-    let found = |span: Span| text[span.start as usize..span.end as usize].to_string();
-    match &expr.kind {
-        ExprKind::Lit(Lit::Int { value, .. }) => Some(match u32::try_from(*value) {
-            Ok(v) => Ok(v),
-            Err(_) => Err(Diagnostic::new(
-                Stage::Types,
-                Code::E0408,
-                expr.span,
-                format!("`{value}` does not fit in `U32`, the type of a constant expression (§4.5)"),
-            )
-            .with_found(found(expr.span))),
-        }),
-        _ if ast.negated_literal(e).is_some() => Some(Err(no_negative(found(expr.span), expr.span))),
-        _ => None,
+/// The integer literal `shown` at `span` of the value `value`: E0408 when
+/// it does not fit in `U32`.
+fn int_literal(value: u64, shown: String, span: Span) -> Result<Got, Diagnostic> {
+    match u32::try_from(value) {
+        Ok(v) => Ok(Got::Val(ConstU32::Value(v), None)),
+        Err(_) => {
+            let msg = format!("`{value}` does not fit in `U32`, the type of a constant expression (§4.5)");
+            Err(Diagnostic::new(Stage::Types, Code::E0408, span, msg).with_found(shown))
+        }
     }
 }
 

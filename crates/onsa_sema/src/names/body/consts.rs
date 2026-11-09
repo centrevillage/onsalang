@@ -55,7 +55,8 @@ pub(crate) fn const_names(
 
 /// A const argument written as a path (`Ring[F32, N]`, `G[T.BITS]`): the
 /// records of its names from its head, one for each name up to the last the
-/// names stage resolves ([`Walker::resolve`]), as of [`const_names`];
+/// names stage resolves ([`Walker::resolve`]: up to a value, whose field
+/// after it is the reader's E0417, `P.N.x`, S-967), as of [`const_names`];
 /// `None` when it is held as an error.
 pub(crate) fn const_path_names(
     a: &Analysis,

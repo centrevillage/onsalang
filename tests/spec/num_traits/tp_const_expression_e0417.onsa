@@ -5,7 +5,7 @@
 // W5-05 U3 (spec §4.5: 定数式でないものは "位置によらず (配列の長さ、const 引数、遅延線の長さ、`par~` の回数) E0417"; "型パラメータの関連定数 (`[F32; T.BITS]`、`T: Int`) も同じで、値が具体化まで決まらないので E0417"):
 // the associated constant of a type parameter in a constant expression, at each place a type or a body writes one: the length of an array type,
 // a const argument, and the length of an array value. A member of another kind has the error of the member of a type (§15.1): a function is a
-// value that is no constant (E0417), a method and a member of a constant are E0308. One error in each function (P-01).
+// value that is no constant (E0417), a method is E0308 (a method named through its type is no value), and a name after a constant is the field of a value, E0417 (S-967). One error in each function (P-01).
 
 pub struct G[const N: U32] {
   a: [F32; N],
@@ -53,7 +53,7 @@ pub fn a_method[T: Int](a: [F32; T.checked_add]) -> F32 { //~ E0308
   0.0
 }
 
-pub fn a_member_of_a_constant[T: Int](a: [F32; T.BITS.foo]) -> F32 { //~ E0308
+pub fn a_member_of_a_constant[T: Int](a: [F32; T.BITS.foo]) -> F32 { //~ E0417
   0.0
 }
 
