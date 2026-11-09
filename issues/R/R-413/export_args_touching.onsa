@@ -1,0 +1,3 @@
+@ export(name: "f")pub fn f(m: U32) -> U32 {
+  m
+}
