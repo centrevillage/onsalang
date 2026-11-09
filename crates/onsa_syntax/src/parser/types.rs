@@ -191,8 +191,8 @@ impl<'a> Parser<'a> {
         let s = self.snapshot();
         let as_type = self.parse_type();
         // A type followed by `::` keeps its reading: `Option::[I32]` in a
-        // list is the mark in a type position (E0020), and a constant
-        // expression with `::[…]` waits for S-329.
+        // list is the mark in a type position (E0020), and a const
+        // argument with `::[…]` waits for W5-24 (S-329).
         let next = self.peek_index();
         let ends = self.tokens[next].kind == TokenKind::ColonColon
             || !continues_an_expression(self.tokens[next].kind, self.gap(next));

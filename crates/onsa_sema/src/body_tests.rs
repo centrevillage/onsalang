@@ -1123,3 +1123,22 @@ fn a_type_over_the_limit_later_notes_where_it_was_decided() {
     assert_eq!(at, [(decided, decided + 1, "a part of the type was decided here as the annotation of `d`")]);
     assert!(d.fixes.is_empty());
 }
+
+/// S-264, S-849 (§4.4): a type that waits on an open variable is measured
+/// again only when a variable it reaches is bound, so that `n` such types
+/// among `n` unrelated bindings are measured again about `n` times, not
+/// `n * n` (the break side's F2 of W5-16 U2: `check` was quadratic).
+#[test]
+fn types_waiting_on_a_variable_are_measured_again_linearly() {
+    let n = 1000;
+    let mut src = String::from("pub fn f() -> U32 {\n  let a = None\n");
+    for i in 0..n {
+        src += &format!("  let y{i} = (a, 1)\n  let q{i}: Option[I32] = None\n  let _ = q{i}\n  let _ = y{i}\n");
+    }
+    src += "  let z: Option[I32] = a\n  let _ = z\n  0\n}\n";
+    crate::limits::MEASURED.with(|c| c.set(0));
+    let a = check(&src);
+    assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
+    let measured = crate::limits::MEASURED.with(|c| c.get());
+    assert!((n..=2 * n).contains(&measured), "measured again {measured} times for {n} types");
+}

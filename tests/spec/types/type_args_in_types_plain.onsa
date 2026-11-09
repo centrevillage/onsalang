@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§2.5"]
+
+// The lists of a type's arguments in a type position are read as types and constant expressions
+// (§4.5), and a `,` in them is no error: only a `[…]` with a `,` after a name in a constant
+// expression (an array length that is not in the arguments of a type; the others wait for W5-24)
+// that is not a list of a type's arguments is the E0020 of the other languages
+// (tests/spec/fixes/e0020_type_args_square_array_length.onsa). The forms here stay accepted. A
+// list of types is not a `::` form either:
+// tests/spec/fixes/e0002_type_args_unclosed_in_type.onsa.
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub struct Pair[A, B] {
+  a: A,
+  b: B,
+}
+
+pub const TABLE: U32 = 8
+
+pub fn a_literal(r: Ring[F32, 4]) -> U32 {
+  1
+}
+
+pub fn a_name(r: Ring[F32, TABLE]) -> U32 {
+  1
+}
+
+pub fn a_list_of_types(p: Pair[Option[U8], Ring[F32, 4]]) -> U32 {
+  1
+}
+
+pub fn a_nested_list(o: Option[Pair[Ring[F32, 4], Option[Ring[U8, TABLE]]]]) -> U32 {
+  1
+}
+
+pub fn in_an_array(a: [Ring[F32, 4]; 2]) -> U32 {
+  1
+}
+
+pub fn in_a_tuple(t: (U8, Pair[U8, F32])) -> U8 {
+  t.0
+}
+
+pub fn in_a_function_type(f: fn(Ring[F32, 4]) -> Pair[U8, F32]) -> U8 {
+  1
+}
+
+pub fn array_with_a_name(a: [F32; TABLE]) -> U32 {
+  1
+}
+
+pub fn array_of_arrays(a: [[F32; 2]; TABLE]) -> U32 {
+  1
+}
+
+pub struct InAField {
+  r: Ring[F32, 4],
+  p: Pair[Ring[F32, TABLE], Pair[U8, U8]],
+}
+
+type AnAlias = Pair[Ring[F32, 4], U8]
+
+pub fn in_an_annotation() -> U8 {
+  let p: Pair[U8, F32] = Pair { a: 1, b: 2.0 }
+  p.a
+}

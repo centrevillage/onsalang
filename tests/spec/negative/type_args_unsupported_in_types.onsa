@@ -1,0 +1,140 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+
+// E0200 for type arguments written in a constant expression of a type (`Rg::[F32, 4].CAP`, §4.5),
+// from W3-19 (the syntax) to W5-10 (the name and type stages): the same E0200 as for the same form
+// in an expression (type_args_unsupported.onsa). The syntax stage reads the list into the tree, in
+// every place where a type's constant expression is read; the stage that meets a name with a list
+// says E0200 once for the unit (§18.1), and the compiler neither drops the list nor accepts the
+// program as if it were not there (R-81). The same forms in a const argument
+// wait for W5-24 (S-329), whose unit U6 brings their case back.
+//
+// W5-10 removes this file: after it the same programs check, and their errors are in the cases of
+// W5-10.
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = 4
+}
+
+pub fn as_a_parameter(a: [F32; Rg::[F32, 4].CAP]) -> U32 { //~ E0200
+  1
+}
+
+pub fn as_a_result() -> [F32; Rg::[F32, 4].CAP] {   //~ E0200
+  [0.0; 4]
+}
+
+pub struct AsAField {
+  a: [F32; Rg::[F32, 4].CAP],                       //~ E0200
+}
+
+pub enum AsAPayload {
+  A([F32; Rg::[F32, 4].CAP]),                       //~ E0200
+  B,
+}
+
+type AsAnAlias = [F32; Rg::[F32, 4].CAP]            //~ E0200
+
+pub const AS_A_CONST_TYPE: [F32; Rg::[F32, 4].CAP] = [0.0; 4] //~ E0200
+
+pub fn as_an_annotation() -> U32 {
+  let a: [F32; Rg::[F32, 4].CAP] = [0.0; 4]         //~ E0200
+  1
+}
+
+pub fn in_a_branch(c: Bool) -> U32 {
+  if c {
+    let a: [F32; Rg::[F32, 4].CAP] = [0.0; 4]       //~ E0200
+    1
+  } else {
+    2
+  }
+}
+
+pub fn in_a_closure() -> U32 {
+  let f = fn(a: [F32; Rg::[F32, 4].CAP]) -> U32 { 1 } //~ E0200
+  1
+}
+
+pub fn in_a_generic_function[T](a: [T; Rg::[F32, 4].CAP]) -> U32 { //~ E0200
+  1
+}
+
+pub struct Holder {
+  n: U32,
+}
+
+impl Holder {
+  pub fn in_a_method(self, a: [F32; Rg::[F32, 4].CAP]) -> U32 { //~ E0200
+    1
+  }
+}
+
+pub flow in_a_flow(x: [F32; Rg::[F32, 4].CAP] at sample) -> F32 at sample { //~ E0200
+  0.0
+}
+
+pub fn in_a_type_argument(o: Option[[F32; Rg::[F32, 4].CAP]]) -> U32 { //~ E0200
+  1
+}
+
+pub fn in_a_tuple(t: (U8, [F32; Rg::[F32, 4].CAP])) -> U8 { //~ E0200
+  t.0
+}
+
+pub fn in_a_function_type(f: fn([F32; Rg::[F32, 4].CAP]) -> U8) -> U8 { //~ E0200
+  1
+}
+
+pub fn in_an_outer_array(a: [[F32; Rg::[F32, 4].CAP]; 2]) -> U32 { //~ E0200
+  1
+}
+
+pub fn with_an_array_in_the_list(a: [F32; Rg::[[F32; 2], 4].CAP]) -> U32 { //~ E0200
+  1
+}
+
+pub fn with_a_type_in_the_list(a: [F32; Rg::[Option[F32], 4].CAP]) -> U32 { //~ E0200
+  1
+}
+
+pub fn with_three_elements(a: [F32; Rg::[F32, 4, 2].CAP]) -> U32 { //~ E0200
+  1
+}
+
+pub fn after_an_arithmetic_operator(a: [F32; 2 + Rg::[F32, 4].CAP]) -> U32 { //~ E0200
+  1
+}
+
+pub fn before_an_arithmetic_operator(a: [F32; Rg::[F32, 4].CAP * 2]) -> U32 { //~ E0200
+  1
+}
+
+pub fn in_parentheses(a: [F32; (Rg::[F32, 4].CAP)]) -> U32 { //~ E0200
+  1
+}
+
+pub fn of_a_qualified_name(a: [F32; m.Rg::[F32, 4].CAP]) -> U32 { //~ E0200
+  1
+}
+
+pub fn fine(a: [F32; 4]) -> U32 {
+  1
+}
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub fn after_an_operator(r: Ring[F32, 2 + Rg::[F32, 4].CAP]) -> U32 { //~ E0200
+  1
+}
+
+pub fn in_parentheses_after_a_comma(r: Ring[F32, (Rg::[F32, 4].CAP)]) -> U32 { //~ E0200
+  1
+}

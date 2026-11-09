@@ -122,13 +122,15 @@ impl<'a> Parser<'a> {
         self.enter(kind, start, 0)
     }
 
-    /// Whether the parser reads inside a type (a const argument or the
-    /// length of an array type): an expression there has no `::[…]` (R-196).
-    pub(super) fn in_type(&self) -> bool {
-        self.open.iter().any(|o| {
-            matches!(self.events[o.event as usize], Event::Start { kind: Some(k), .. }
-                if k.class() == Class::Type)
-        })
+    /// Whether the parser reads a const argument of a type, the innermost
+    /// type around it: its `X[…]` with `,` is read as an index (R-196), as
+    /// the type argument's reading keeps `X::[…]` a type (S-329, W5-24).
+    /// The length of an array type is not: its `::[…]` is read (S-329).
+    pub(super) fn in_const_arg(&self) -> bool {
+        self.open.iter().rev().find_map(|o| match self.events[o.event as usize] {
+            Event::Start { kind: Some(k), .. } if k.class() == Class::Type => Some(k == NodeKind::ConstArg),
+            _ => None,
+        }) == Some(true)
     }
 
     /// The level of the innermost open node (0 outside every node).

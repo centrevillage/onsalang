@@ -27,6 +27,14 @@ pub(crate) struct Limits {
     waiting: HashMap<u32, Vec<usize>>,
     /// The bindings looked at ([`crate::infer::Infer::generation`]).
     seen: u32,
+    /// The items measured again so far, which stays linear in the body (a test counts them).
+    pub(crate) measured: u32,
+}
+
+#[cfg(test)]
+thread_local! {
+    /// The items measured again by the bodies checked on this thread ([`Limits::measured`]).
+    pub(crate) static MEASURED: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
 }
 
 impl<'a> Checker<'a> {
@@ -109,6 +117,7 @@ impl<'a> Checker<'a> {
         let mut walk = Walk::default();
         for i in woken {
             let Some(item) = self.limits.items[i].take() else { continue };
+            self.limits.measured = self.limits.measured.saturating_add(1);
             let m = self.infer.measure(&self.a.types, item.ty, &mut walk);
             if m.measure.over_limit() && !m.error {
                 return Some((item.seq, self.limit_fail(&item, m)));

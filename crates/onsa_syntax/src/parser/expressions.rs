@@ -325,11 +325,12 @@ impl<'a> Parser<'a> {
                 // whether the brackets are such a list ([`foreign::type_list_ahead`]);
                 // the parser fails at them, so `<` is not read as a comparison
                 // nor `[A, B]` as an index.
-                // In a type (a const argument, an array's length) no `::[` is
-                // written, so a `[…]` with `,` is read as an index (R-196).
+                // So in the length of an array type too (`[F32; xs[1, 2]]`),
+                // where `name::[…]` is read as well (S-329); in a const
+                // argument a `[…]` with `,` is read as an index (R-196).
                 TokenKind::Lt | TokenKind::LBracket
                     if type_list_ahead(&self.tokens, &self.lines, &self.brackets, self.peek_index(), expr.kind)
-                        && (self.peek_kind() == TokenKind::Lt || (!self.in_type() && self.type_list_next())) =>
+                        && (self.peek_kind() == TokenKind::Lt || (!self.in_const_arg() && self.type_list_next())) =>
                 {
                     return Err(self.fail(Want::Other, "an operator or the end of the expression"));
                 }

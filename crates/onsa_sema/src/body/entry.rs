@@ -236,6 +236,8 @@ impl<'a> Checker<'a> {
     /// The end of the body and the resolution of the tables.
     pub(super) fn finish(mut self) -> BodyInfo {
         self.end_checks();
+        #[cfg(test)]
+        crate::limits::MEASURED.with(|c| c.set(c.get() + self.limits.measured));
         // Resolve the tables.
         let keys: Vec<ExprId> = self.info.expr_types.keys().copied().collect();
         for e in keys {

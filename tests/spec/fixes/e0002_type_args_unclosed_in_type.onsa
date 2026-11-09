@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 0
+
+// A list of a type's arguments that holds a `,` and is never closed, in a type position (§4.5,
+// §18.1): the list is a type's arguments, so the `,` is no mark of another language, and the error
+// is the E0002 of the `[` that is never closed, with no candidate. The `::` form of E0020 is for
+// the `[…]` with a `,` after a name in an expression (tests/spec/fixes/e0020_type_args_square.onsa)
+// and in a constant expression of a type (e0020_type_args_square_array_length.onsa): a type's own
+// list is not that form, and `::` cannot be written in it. `fixes = 0` says no diagnostic of the
+// file has a candidate.
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+type R = e[t[[], l]                                 //~ E0002

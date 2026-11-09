@@ -1,0 +1,128 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+
+// E0020 for a `[…]` with a `,` after a name in the length of an array type (§4.5, §18.1). The length
+// is a constant expression, and it is read like an expression: `Rg::[F32, 4].CAP` is the form of
+// §4.5 (the associated constant of a type with its arguments), so the `[` of `Rg[F32, 4].CAP` is the
+// form of another language, with the same error as in an expression (tests/spec/fixes/
+// e0020_type_args_square.onsa): the syntax cannot read it as an index (it holds a `,`), so the
+// stage is the syntax stage, and every place where an array type is read gives it, outside a list
+// of type arguments (inside one, `Option[[F32; Rg[F32, 4].CAP]]`, the reading waits for W5-24,
+// S-329). The candidates are applied by the runner (§18.1), and each leaves only an error of a
+// later stage. The counts of the candidates and the const arguments of a type wait for W5-24
+// (S-333, S-329), whose unit U6 brings their cases back.
+//
+// The index forms
+// (`TABLE[1, 2]`) are in e0020_index_square_comma_array_length.onsa. What is not an error is in
+// tests/spec/types/type_args_syntax_in_types.onsa.
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = 4
+}
+
+pub fn as_a_parameter(a: [F32; Rg[F32, 4].CAP]) -> U32 { //~ E0020
+  1
+}
+
+pub fn as_a_result() -> [F32; Rg[F32, 4].CAP] {     //~ E0020
+  [0.0; 4]
+}
+
+pub struct AsAField {
+  a: [F32; Rg[F32, 4].CAP],                         //~ E0020
+}
+
+pub enum AsAPayload {
+  A([F32; Rg[F32, 4].CAP]),                         //~ E0020
+  B,
+}
+
+type AsAnAlias = [F32; Rg[F32, 4].CAP]              //~ E0020
+
+pub const AS_A_CONST_TYPE: [F32; Rg[F32, 4].CAP] = [0.0; 4] //~ E0020
+
+pub fn as_an_annotation() -> U32 {
+  let a: [F32; Rg[F32, 4].CAP] = [0.0; 4]           //~ E0020
+  1
+}
+
+pub fn in_a_branch(c: Bool) -> U32 {
+  if c {
+    let a: [F32; Rg[F32, 4].CAP] = [0.0; 4]         //~ E0020
+    1
+  } else {
+    2
+  }
+}
+
+pub fn in_a_closure() -> U32 {
+  let f = fn(a: [F32; Rg[F32, 4].CAP]) -> U32 { 1 } //~ E0020
+  1
+}
+
+pub fn in_a_generic_function[T](a: [T; Rg[F32, 4].CAP]) -> U32 { //~ E0020
+  1
+}
+
+pub struct Holder {
+  n: U32,
+}
+
+impl Holder {
+  pub fn in_a_method(self, a: [F32; Rg[F32, 4].CAP]) -> U32 { //~ E0020
+    1
+  }
+}
+
+pub flow in_a_flow(x: [F32; Rg[F32, 4].CAP] at sample) -> F32 at sample { //~ E0020
+  0.0
+}
+
+pub fn in_a_tuple(t: (U8, [F32; Rg[F32, 4].CAP])) -> U8 { //~ E0020
+  t.0
+}
+
+pub fn in_a_function_type(f: fn([F32; Rg[F32, 4].CAP]) -> U8) -> U8 { //~ E0020
+  1
+}
+
+pub fn in_an_outer_array(a: [[F32; Rg[F32, 4].CAP]; 2]) -> U32 { //~ E0020
+  1
+}
+
+pub fn with_an_array_in_the_list(a: [F32; Rg[[F32; 2], 4].CAP]) -> U32 { //~ E0020
+  1
+}
+
+pub fn with_a_type_in_the_list(a: [F32; Rg[Option[F32], 4].CAP]) -> U32 { //~ E0020
+  1
+}
+
+pub fn with_three_elements(a: [F32; Rg[F32, 4, 2].CAP]) -> U32 { //~ E0020
+  1
+}
+
+pub fn after_an_arithmetic_operator(a: [F32; 2 + Rg[F32, 4].CAP]) -> U32 { //~ E0020
+  1
+}
+
+pub fn before_an_arithmetic_operator(a: [F32; Rg[F32, 4].CAP * 2]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_parentheses(a: [F32; (Rg[F32, 4].CAP)]) -> U32 { //~ E0020
+  1
+}
+
+pub fn of_a_qualified_name(a: [F32; m.Rg[F32, 4].CAP]) -> U32 { //~ E0020
+  1
+}
+
+pub fn fine(a: [F32; 4]) -> U32 {
+  1
+}
