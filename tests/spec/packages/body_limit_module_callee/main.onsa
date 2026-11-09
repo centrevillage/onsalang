@@ -1,0 +1,14 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.7", "§18.1", "§15.1"]
+// fixes = 0
+
+// S-264 (W5-16 U2), §4.4, §18.1: the body of `lib.big` makes a type over the limit (E0422 in `lib.onsa`, at the
+// tuple), and the signature of `lib.big` is `U32`, so the call in this module has no diagnostic. The diagnostic is of
+// the unit that made the type.
+
+use lib
+
+pub fn caller() -> U32 {
+  lib.big()
+}

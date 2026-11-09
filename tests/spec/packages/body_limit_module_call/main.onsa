@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.7", "§18.1", "§15.1", "§4.5"]
+// fixes = 0
+
+// S-264 (W5-16 U2), §4.4: the generic function of another module (`lib.pair`) makes the type of the body of this
+// module, so the position is the call in this module: `t12 = lib.pair(t11)` is 8191. The signature of `lib.pair` is
+// in the limit and has no diagnostic in `lib.onsa`.
+
+use lib
+
+pub fn chain() -> U32 {
+  let t0: I32 = 0
+  let t1 = lib.pair(t0)
+  let t2 = lib.pair(t1)
+  let t3 = lib.pair(t2)
+  let t4 = lib.pair(t3)
+  let t5 = lib.pair(t4)
+  let t6 = lib.pair(t5)
+  let t7 = lib.pair(t6)
+  let t8 = lib.pair(t7)
+  let t9 = lib.pair(t8)
+  let t10 = lib.pair(t9)
+  let t11 = lib.pair(t10)
+  let t12 = lib.pair(t11)  //~ E0422
+  let t13 = lib.pair(t12)
+  let _ = t13
+  0
+}

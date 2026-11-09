@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.7", "§18.1", "§11.2", "§11.5"]
+// fixes = 0
+
+// S-264 (W5-16 U2), §4.4: the type of a flow body (the let statements of the flow, and the body of `par~`) has the
+// same limit. `x` is `F32` (1), so `t11` is 4095 and right, `(t11, t11)` of the `let` of `over_let` is 8191 and
+// E0422, and the body of `par~` of `over_par` (an expression) makes `(t11, t11)`, E0422 at that expression. One error
+// in a flow.
+
+pub flow over_let(x: F32 at sample) -> F32 at sample {
+  let t0 = x
+  let t1 = (t0, t0)
+  let t2 = (t1, t1)
+  let t3 = (t2, t2)
+  let t4 = (t3, t3)
+  let t5 = (t4, t4)
+  let t6 = (t5, t5)
+  let t7 = (t6, t6)
+  let t8 = (t7, t7)
+  let t9 = (t8, t8)
+  let t10 = (t9, t9)
+  let t11 = (t10, t10)
+  let e = (t11, t11)  //~ E0422
+  let _ = e
+  x
+}
+
+pub flow over_par(x: F32 at sample) -> F32 at sample {
+  let t0 = x
+  let t1 = (t0, t0)
+  let t2 = (t1, t1)
+  let t3 = (t2, t2)
+  let t4 = (t3, t3)
+  let t5 = (t4, t4)
+  let t6 = (t5, t5)
+  let t7 = (t6, t6)
+  let t8 = (t7, t7)
+  let t9 = (t8, t8)
+  let t10 = (t9, t9)
+  let t11 = (t10, t10)
+  let _ = par~ i in 0 ..< 2 {
+    (t11, t11)  //~ E0422
+  }
+  x
+}

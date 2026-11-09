@@ -34,6 +34,7 @@ pub mod lang;
 pub mod layout;
 #[cfg(test)]
 mod layout_tests;
+mod limits;
 mod modes;
 mod names;
 #[cfg(test)]

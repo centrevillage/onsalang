@@ -10,8 +10,10 @@ use crate::ir::{FloatKind, IntKind, Module, Ty, TypeDefKind, TypeId};
 /// [`flow_layout_for`] (T4-5).
 pub const PTR_SIZE: u32 = 8;
 
+// The sizes saturate at `u32::MAX`: a type larger than `U32` holds is E0409
+// (§4.1), which the layout pass reports (W9-04); until then no sum overflows.
 fn round_up(x: u32, align: u32) -> u32 {
-    if align == 0 { x } else { x.div_ceil(align) * align }
+    if align == 0 { x } else { x.div_ceil(align).saturating_mul(align) }
 }
 
 /// `(size, align)` of a type on the reference host (8-byte pointers).
@@ -38,7 +40,7 @@ pub fn size_align_for(m: &Module, ty: &Ty, ptr: u32) -> (u32, u32) {
         Ty::Unit => (0, 1),
         Ty::Array(e, n) => {
             let (s, a) = size_align_for(m, e, ptr);
-            (s * n, a)
+            (s.saturating_mul(*n), a)
         }
         Ty::Tuple(ts) => {
             let r = record_for(m, ts.iter().map(|t| ("".to_string(), t.clone())).collect::<Vec<_>>().as_slice(), ptr);
@@ -70,7 +72,7 @@ pub fn size_align_for(m: &Module, ty: &Ty, ptr: u32) -> (u32, u32) {
                     payload_align = payload_align.max(r.align);
                 }
                 let align = tag.max(payload_align);
-                (round_up(round_up(tag, payload_align) + payload_size, align), align)
+                (round_up(round_up(tag, payload_align).saturating_add(payload_size), align), align)
             }
             _ => (0, 1),
         },
@@ -108,7 +110,7 @@ pub fn record_for(m: &Module, fields: &[(String, Ty)], ptr: u32) -> RecordLayout
         let (s, a) = size_align_for(m, ty, ptr);
         size = round_up(size, a);
         out.push(FieldLayout { name: name.clone(), offset: size, size: s, align: a });
-        size += s;
+        size = size.saturating_add(s);
         align = align.max(a);
     }
     RecordLayout { fields: out, size: round_up(size, align), align }
@@ -134,7 +136,7 @@ pub struct FlowLayout {
 impl FlowLayout {
     /// End of the last fast field before the trailing padding.
     pub fn fast_end(&self) -> u32 {
-        self.fast_fields.iter().map(|f| f.offset + f.size).max().unwrap_or(0)
+        self.fast_fields.iter().map(|f| f.offset.saturating_add(f.size)).max().unwrap_or(0)
     }
 }
 

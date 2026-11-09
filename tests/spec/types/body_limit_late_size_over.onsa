@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.7", "§18.1"]
+// fixes = 0
+
+// S-849, S-264 (W5-16 U2), §4.4, §4.7: the type of a statement is made when a type variable is not yet decided, and a
+// later statement decides it and makes the type pass the limit. `a = None` is `Option[?T]` (the name, the shape and
+// the variable, 3), so while `?T` is open `b(k)` is `4 * 2^k - 1`: `b10` is 4095, within the limit, and nothing is
+// reported yet. The annotation of `d` decides `?T` as `(I32, I32)` (3), so `a` is 5 and `b(k)` is `6 * 2^k - 1`: `b9`
+// is 3071 (within the limit) and `b10` is 6143, the first to pass it. E0422 is at the expression that made the type,
+// `(b9, b9)` of `b10`, not at the annotation that decided the variable (§4.7: the note shows the expression that
+// decided it; its position is not marked here, a case marker marks a diagnostic only).
+
+pub fn late() -> U32 {
+  let a = None
+  let b1 = (a, a)
+  let b2 = (b1, b1)
+  let b3 = (b2, b2)
+  let b4 = (b3, b3)
+  let b5 = (b4, b4)
+  let b6 = (b5, b5)
+  let b7 = (b6, b6)
+  let b8 = (b7, b7)
+  let b9 = (b8, b8)
+  let b10 = (b9, b9)  //~ E0422
+  let d: Option[(I32, I32)] = a
+  let _ = d
+  let _ = b10
+  0
+}

@@ -6,6 +6,7 @@ use super::*;
 use crate::ResolveError;
 use crate::names::PathEnd;
 use crate::resolve::NameKind;
+use crate::ty::LIMIT_RULE;
 
 impl<'p> Sema<'p> {
     // ------------------------------------------------------------ types
@@ -29,9 +30,7 @@ impl<'p> Sema<'p> {
         let msg = types.measure_of(ty).limit_message();
         let def = self.a.def(cx.def);
         let span = if matches!(def.kind, DefKind::Alias(_)) { def.name_span } else { cx.ast.ty(t).span };
-        let rule = "name an inner part of the type with a `struct`: a declared type counts as one name, and an \
-                    alias stands for the whole type it names";
-        let d = Diagnostic::new(Stage::Names, Code::E0422, span, msg).with_found(src(cx, span)).with_rule(rule);
+        let d = Diagnostic::new(Stage::Names, Code::E0422, span, msg).with_found(src(cx, span)).with_rule(LIMIT_RULE);
         self.report(cx.def, d);
         self.a.types.error()
     }

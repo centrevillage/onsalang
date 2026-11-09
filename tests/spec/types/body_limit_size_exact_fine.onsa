@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.7", "§18.1"]
+
+// S-264 (W5-16 U2), §4.4: the boundary of the size, exactly 4096. `t10` is 2047, so `(t10, t10, k)` is one tuple
+// shape, two copies of 2047 and `k` (`I32`, 1): 1 + 2047 + 2047 + 1 = 4096, which is within the limit ("4096 までである").
+// No diagnostic.
+
+pub fn chain() -> U32 {
+  let k: I32  = 1
+  let t0: I32 = 0
+  let t1      = (t0, t0)
+  let t2      = (t1, t1)
+  let t3      = (t2, t2)
+  let t4      = (t3, t3)
+  let t5      = (t4, t4)
+  let t6      = (t5, t5)
+  let t7      = (t6, t6)
+  let t8      = (t7, t7)
+  let t9      = (t8, t8)
+  let t10     = (t9, t9)
+  let e       = (t10, t10, k)
+  let _       = e
+  0
+}

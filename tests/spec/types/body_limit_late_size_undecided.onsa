@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.7", "§18.1"]
+// fixes = 0
+
+// S-849 (W5-16 U2), §4.7 ("変数が残っていても超えていれば報告する"): the variable is never decided, and the type passes the limit with
+// the variable open: `b10` is 4095 and `b11` is 8191 (`?T` counts one). E0422 at the tuple of `b11`. The variable
+// that is left at the end of the function would be E0406 at `None` (§4.7), but the type stage of a unit stops at its
+// first error (§18.1), so the file has the one E0422.
+
+pub fn late() -> U32 {
+  let a = None
+  let b1 = (a, a)
+  let b2 = (b1, b1)
+  let b3 = (b2, b2)
+  let b4 = (b3, b3)
+  let b5 = (b4, b4)
+  let b6 = (b5, b5)
+  let b7 = (b6, b6)
+  let b8 = (b7, b7)
+  let b9 = (b8, b8)
+  let b10 = (b9, b9)
+  let b11 = (b10, b10)  //~ E0422
+  let b12 = (b11, b11)
+  let _ = b12
+  0
+}

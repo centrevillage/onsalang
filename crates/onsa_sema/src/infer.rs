@@ -4,8 +4,9 @@
 //! `Ty::ConstVal(n)`.
 
 use onsa_diag::Span;
+use onsa_diag::hash::{HashMap, HashSet};
 
-use crate::ty::{Len, Ty, TyId, Types};
+use crate::ty::{Len, Measure, TYPE_DEPTH_LIMIT, Ty, TyId, Types};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LitKind {
@@ -55,8 +56,32 @@ pub struct Infer {
     /// For each bound variable, the order of the binding and its cause.
     causes: Vec<Option<(u32, Cause)>>,
     seq: u32,
+    /// The variables in the order they were bound ([`Infer::bound_since`]).
+    bound: Vec<u32>,
     /// The type parameters of the body whose bounds hold `Float`.
     float_params: Vec<u32>,
+}
+
+/// One or more walks of [`Infer::measure`] with the same bindings: the parts
+/// measured whole, and the open variables met that are not a literal's.
+#[derive(Debug, Default)]
+pub struct Walk {
+    memo: HashMap<TyId, Measured>,
+    pub vars: Vec<u32>,
+    /// The last walk stopped below the depth limit.
+    cut: bool,
+}
+
+/// What [`Infer::measure`] finds of a type.
+#[derive(Debug, Clone, Copy)]
+pub struct Measured {
+    pub measure: Measure,
+    /// An unbound variable that is not a literal's is in it: a later
+    /// statement may make it larger (a literal's is decided to a name). Not
+    /// known of a type over the limits (the walk stops).
+    pub waits: bool,
+    /// The error type is in it: it is not judged (§18.1).
+    pub error: bool,
 }
 
 /// Why two types did not unify (for messages).
@@ -158,6 +183,9 @@ impl Infer {
     }
 
     fn occurs(&self, types: &Types, var: u32, ty: TyId) -> bool {
+        if !types.holds_infer_var(ty) {
+            return false;
+        }
         let ty = self.shallow(types, ty);
         match types.get(ty) {
             Ty::Var(i) => *i == var,
@@ -171,6 +199,7 @@ impl Infer {
     fn set_bound(&mut self, var: u32, ty: TyId, cause: &Cause) {
         self.vars[var as usize] = VarState::Bound(ty);
         self.seq += 1;
+        self.bound.push(var);
         self.causes[var as usize] = Some((self.seq, cause.clone()));
     }
 
@@ -320,6 +349,9 @@ impl Infer {
 
     /// Substitute every bound variable, interning the result.
     pub fn resolve(&self, types: &mut Types, ty: TyId) -> TyId {
+        if !types.holds_infer_var(ty) {
+            return ty;
+        }
         let ty = self.shallow(types, ty);
         match types.get(ty).clone() {
             Ty::Array(e, l) => {
@@ -372,6 +404,9 @@ impl Infer {
     /// Whether the type contains a variable (or an open length) whose literal
     /// kind `counts`.
     fn holds_var(&self, types: &Types, ty: TyId, counts: fn(Option<LitKind>) -> bool) -> bool {
+        if !types.holds_infer_var(ty) {
+            return false;
+        }
         let ty = self.shallow(types, ty);
         match types.get(ty) {
             Ty::Var(i) => matches!(self.vars[*i as usize], VarState::Unbound(lit) if counts(lit)),
@@ -384,6 +419,80 @@ impl Infer {
             }
             _ => false,
         }
+    }
+
+    /// The measure of `ty` with the bound variables followed (§4.4, S-264):
+    /// a part with no variable is read from the interner, a bound variable is
+    /// its type, an unbound one a name. Each part with a variable is measured
+    /// once in `walk`, and no deeper than the limit: a part found below it
+    /// makes the whole deeper than the limit, and the walk stops there.
+    pub fn measure(&self, types: &Types, ty: TyId, walk: &mut Walk) -> Measured {
+        walk.cut = false;
+        let mut m = self.measure_in(types, ty, 0, walk);
+        if walk.cut {
+            m.measure.depth = TYPE_DEPTH_LIMIT as u16 + 1;
+            m.error = self.reaches_error(types, ty);
+        }
+        m
+    }
+
+    fn measure_in(&self, types: &Types, ty: TyId, level: u32, walk: &mut Walk) -> Measured {
+        let ty = self.shallow(types, ty);
+        if let Some(&m) = walk.memo.get(&ty) {
+            return m;
+        }
+        let mut m = Measured { measure: types.measure_of(ty), waits: false, error: types.has_error(ty) };
+        if !types.holds_infer_var(ty) {
+            return m;
+        }
+        if level > TYPE_DEPTH_LIMIT {
+            walk.cut = true;
+            return m;
+        }
+        if let Ty::Var(i) = types.get(ty) {
+            m.waits = self.var_lit(*i).is_none();
+            if m.waits {
+                walk.vars.push(*i);
+            }
+        } else if let Some((own, parts)) = crate::ty::form_of(types.get(ty)) {
+            m.measure = Measure::form(own);
+            for p in parts {
+                let pm = self.measure_in(types, p, level + 1, walk);
+                if walk.cut {
+                    return m;
+                }
+                m = Measured {
+                    measure: m.measure.with(pm.measure),
+                    waits: m.waits || pm.waits,
+                    error: m.error || pm.error,
+                };
+            }
+        }
+        // Only a part measured whole is kept: a cut walk returns before.
+        walk.memo.insert(ty, m);
+        m
+    }
+
+    /// Whether the error type is in `ty` with the bound variables followed:
+    /// for a measure cut at the limit. Each part is visited once.
+    fn reaches_error(&self, types: &Types, ty: TyId) -> bool {
+        let (mut seen, mut todo) = (HashSet::default(), vec![ty]);
+        while let Some(t) = todo.pop() {
+            let t = self.shallow(types, t);
+            if !types.holds_infer_var(t) || !seen.insert(t) {
+                if types.has_error(t) {
+                    return true;
+                }
+                continue;
+            }
+            todo.extend(crate::ty::form_of(types.get(t)).map(|(_, parts)| parts).unwrap_or_default());
+        }
+        false
+    }
+
+    /// The variables bound after the first `from` bindings ([`Infer::generation`]).
+    pub fn bound_since(&self, from: u32) -> &[u32] {
+        &self.bound[from as usize..]
     }
 
     /// The default of the integer literals (spec §2.4, §4.7): every integer literal
@@ -416,6 +525,9 @@ impl Infer {
     }
 
     fn last_binding(&self, types: &Types, ty: TyId, best: &mut Option<(u32, Cause)>) {
+        if !types.holds_infer_var(ty) {
+            return;
+        }
         match types.get(ty) {
             Ty::Var(i) => self.note_var(types, *i, best),
             Ty::Array(e, l) => {

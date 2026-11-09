@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5"]
+// fixes = 0
+
+// R-280 (W5-16 U2/t): the element of a `Buf` must be `Copy` (§4.4: "`Buf[T]` と `Span[T]` の要素型は `T: Copy` に限る",
+// E0416), also in the field of a struct and the member of an enum. `Str` is not Copy. The forms of
+// `wellformed_element_copy.onsa` (a field `Buf[Str]`, `Buf[Buf[F32]]` in a variant) are not written again: here the
+// `Buf` is below another type in the field (`Option[Buf[Str]]`, a tuple), the member of an enum is a variant with a
+// field, and the element is a tuple or a generic type with `Str`. One error in a declaration (P-01). The field
+// `Buf[F32]` (Copy) is right.
+
+pub struct InOption {
+  b: Option[Buf[Str]],  //~ E0416
+}
+
+pub struct InTuple {
+  b: (F32, Buf[Str]),  //~ E0416
+}
+
+pub struct ElementTuple {
+  b: Buf[(F32, Str)],  //~ E0416
+}
+
+pub struct ElementOption {
+  b: Buf[Option[Str]],  //~ E0416
+}
+
+pub enum Variants {
+  Plain,
+  Wrap(Buf[Str]),  //~ E0416
+}
+
+pub struct Right {
+  b: Buf[F32],
+  c: Option[Buf[F32]],
+}

@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.7", "§18.1", "§4.5"]
+
+// S-264 (W5-16 U2), §4.4: the boundary of `body_limit_call_size_over.onsa`: the chain of `pair` stops at `t11`
+// (4095). No diagnostic.
+
+fn pair[T: Copy](x: T) -> (T, T) {
+  (x, x)
+}
+
+pub fn chain() -> U32 {
+  let t0: I32 = 0
+  let t1      = pair(t0)
+  let t2      = pair(t1)
+  let t3      = pair(t2)
+  let t4      = pair(t3)
+  let t5      = pair(t4)
+  let t6      = pair(t5)
+  let t7      = pair(t6)
+  let t8      = pair(t7)
+  let t9      = pair(t8)
+  let t10     = pair(t9)
+  let t11     = pair(t10)
+  let _       = t11
+  0
+}

@@ -308,6 +308,8 @@ pub(crate) struct Checker<'a> {
     /// number of items made so far (their order across both lists).
     pub(crate) deferred_end: Vec<Deferred>,
     pub(crate) deferred_count: u32,
+    /// The items of the limits of §4.4 (`limits.rs`).
+    pub(crate) limits: crate::limits::Limits,
     /// Where an expected type comes from (`an argument of `f``), for the note of
     /// E0416 (§4.5): it names a binding only when that very expected type is the
     /// one unified (an argument, an annotation, the result, a field); every other
@@ -410,6 +412,7 @@ fn read_body<'c>(
         deferred_generation: 0,
         deferred_end: Vec::new(),
         deferred_count: 0,
+        limits: Default::default(),
         why: None,
         arg_closure: None,
         flow: None,

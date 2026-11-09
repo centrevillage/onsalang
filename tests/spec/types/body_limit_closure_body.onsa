@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.7", "§18.1", "§6.1"]
+// fixes = 0
+
+// S-264 (W5-16 U2), §4.4: the body of an anonymous function that captures (a second-class value, passed to an
+// argument only, §5.3) is a body of the check: the type that passes the limit inside it is E0422 at the expression
+// that made it. The captured `t11` is outside (4095, right).
+
+fn apply(f: fn() -> U32) -> U32 {
+  f.()
+}
+
+pub fn outer() -> U32 {
+  let t0: I32 = 0
+  let t1 = (t0, t0)
+  let t2 = (t1, t1)
+  let t3 = (t2, t2)
+  let t4 = (t3, t3)
+  let t5 = (t4, t4)
+  let t6 = (t5, t5)
+  let t7 = (t6, t6)
+  let t8 = (t7, t7)
+  let t9 = (t8, t8)
+  let t10 = (t9, t9)
+  let t11 = (t10, t10)
+  apply(fn() -> U32 {
+    let _ = (t11, t11)  //~ E0422
+    0
+  })
+}

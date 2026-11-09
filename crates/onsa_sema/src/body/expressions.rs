@@ -18,7 +18,7 @@ impl<'a> Checker<'a> {
         if let Some(exp) = expected {
             self.unify_at(span, t, exp)?;
         }
-        Ok(self.record(e, t))
+        self.record_within(e, t)
     }
 
     /// The type of `e`, the `?` on `inner` (§9.1), with the constructors it

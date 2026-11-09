@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.7", "§18.1"]
+// fixes = 0
+
+// S-264 (W5-16 U2), §4.4, §18.1: the type that is over the limit is an error type for the lines that use it: its use
+// as a tuple (`u`), as an argument of a generic function (`id`), as a different type (`let m: Bool = w`), by a field
+// (`w.0`) and by the return of the function have no diagnostic of their own. The one error is the E0422 at the tuple
+// of `w`.
+
+fn id[T](x: T) -> T {
+  x
+}
+
+pub fn after() -> Bool {
+  let t0: I32 = 0
+  let t1 = (t0, t0)
+  let t2 = (t1, t1)
+  let t3 = (t2, t2)
+  let t4 = (t3, t3)
+  let t5 = (t4, t4)
+  let t6 = (t5, t5)
+  let t7 = (t6, t6)
+  let t8 = (t7, t7)
+  let t9 = (t8, t8)
+  let t10 = (t9, t9)
+  let t11 = (t10, t10)
+  let w = (t11, t11)  //~ E0422
+  let u = (w, w)
+  let v = id(w)
+  let x = w.0
+  let m: Bool = w
+  let _ = (u, v, x)
+  m
+}

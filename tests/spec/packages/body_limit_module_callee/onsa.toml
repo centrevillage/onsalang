@@ -1,0 +1,3 @@
+[package]
+name = "body_limit_module_callee"
+edition = "2026"

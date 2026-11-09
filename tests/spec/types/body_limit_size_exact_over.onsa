@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.7", "§18.1"]
+// fixes = 0
+
+// S-264 (W5-16 U2), §4.4: one past `body_limit_size_exact_fine.onsa`. `(t10, t10, k, k)` is 1 + 2047 + 2047 + 1 + 1 =
+// 4097. E0422 at that tuple.
+
+pub fn chain() -> U32 {
+  let k: I32 = 1
+  let t0: I32 = 0
+  let t1 = (t0, t0)
+  let t2 = (t1, t1)
+  let t3 = (t2, t2)
+  let t4 = (t3, t3)
+  let t5 = (t4, t4)
+  let t6 = (t5, t5)
+  let t7 = (t6, t6)
+  let t8 = (t7, t7)
+  let t9 = (t8, t8)
+  let t10 = (t9, t9)
+  let e = (t10, t10, k, k)  //~ E0422
+  let _ = e
+  0
+}

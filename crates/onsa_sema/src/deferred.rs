@@ -64,6 +64,10 @@ pub(crate) enum DeferredKind {
     Require { bound: Bound, what: Required },
     /// A typed hole (E0421), reported at the end with the decided type.
     Hole { visible: Vec<LocalId> },
+    /// The type an expression made, within the limits of §4.4 then, with a
+    /// variable that is not a literal's: E0422 at the expression when a later
+    /// binding makes it deeper or larger than the limits (S-849).
+    Limit,
 }
 
 /// The operator an [`DeferredKind::Operator`] item checks (§3.2): a binary one, or a
@@ -199,7 +203,7 @@ pub(crate) struct Deferred {
 }
 
 /// The outcome of looking at one item.
-enum Look {
+pub(crate) enum Look {
     /// Not decided yet: keep it.
     Wait,
     /// Decided and met (or nothing to check any more): drop it.
@@ -209,15 +213,19 @@ enum Look {
 
 impl<'a> Checker<'a> {
     pub(crate) fn defer(&mut self, span: Span, ty: TyId, kind: DeferredKind) {
-        let seq = self.deferred_count;
-        self.deferred_count += 1;
-        let item = Deferred { seq, span, ty, kind };
+        let item = self.deferred_item(span, ty, kind);
         // The items only the end decides (E0406, E0421) wait in their own list, so
         // that the statements do not walk them.
         match item.kind {
             DeferredKind::Origin { .. } | DeferredKind::Hole { .. } => self.deferred_end.push(item),
             _ => self.deferred.push(item),
         }
+    }
+
+    /// An item, numbered in the order the items are made.
+    pub(crate) fn deferred_item(&mut self, span: Span, ty: TyId, kind: DeferredKind) -> Deferred {
+        self.deferred_count += 1;
+        Deferred { seq: self.deferred_count - 1, span, ty, kind }
     }
 
     /// After a statement: check the items whose type has no variable left.
@@ -230,6 +238,7 @@ impl<'a> Checker<'a> {
         // Only a binding decides a waiting item: when no variable was bound since the last
         // look, the items seen then still wait and only the new ones are looked at (a body
         // of many open literals stays linear, W2-06/b).
+        let limit = self.wake_limits();
         let generation = self.infer.generation();
         let start =
             if generation == self.deferred_generation { self.deferred_seen.min(self.deferred.len()) } else { 0 };
@@ -244,14 +253,14 @@ impl<'a> Checker<'a> {
             match self.look(&item, false) {
                 Look::Wait => keep.push(item),
                 Look::Done => {}
-                Look::Fail(d) => fail = Some(d),
+                Look::Fail(d) => fail = Some((item.seq, d)),
             }
         }
         self.deferred = keep;
         self.deferred_seen = self.deferred.len();
         self.deferred_generation = self.infer.generation();
-        match fail {
-            Some(d) => Err(self.diag(d)),
+        match fail.into_iter().chain(limit).min_by_key(|f| f.0) {
+            Some((_, d)) => Err(self.diag(d)),
             None => Ok(()),
         }
     }
@@ -262,6 +271,7 @@ impl<'a> Checker<'a> {
         self.infer.default_int_literals(i32_);
         let mut items = std::mem::take(&mut self.deferred);
         items.append(&mut self.deferred_end);
+        items.extend(self.limits.items.drain(..).flatten());
         items.sort_by_key(|d| d.seq);
         // A requirement whose type is still open is not checked; the open variable
         // is reported (E0406 / E0405). When nothing reports it, the requirement is
@@ -322,6 +332,9 @@ impl<'a> Checker<'a> {
 
     /// One item. `end`: the body is finished (the open items fail or are dropped).
     fn look(&mut self, item: &Deferred, end: bool) -> Look {
+        if let DeferredKind::Limit = item.kind {
+            return self.look_limit(item);
+        }
         // Still waiting: answered without building the resolved type.
         let waits = match item.kind {
             DeferredKind::IntLit { .. } | DeferredKind::FloatLit { .. } => {
@@ -449,6 +462,7 @@ impl<'a> Checker<'a> {
                 }
                 Look::Fail(d)
             }
+            DeferredKind::Limit => Look::Done,
             DeferredKind::Hole { visible } => {
                 if !end {
                     return Look::Wait;
@@ -538,15 +552,22 @@ impl<'a> Checker<'a> {
     /// The note of E0416: the expression whose check decided the type (§4.5),
     /// or, for the integer default when `default`, a note without a position.
     fn decided_note(&mut self, d: Diagnostic, ty: TyId, shown: &str, default: bool) -> Diagnostic {
-        match self.infer.decided_by(&self.a.types, ty) {
-            Some(Cause::At { span, why }) => {
-                let why = why.map(|w| format!(" as {w}")).unwrap_or_default();
-                d.with_note(span, format!("the type became `{shown}` here{why}"))
-            }
+        let cause = self.infer.decided_by(&self.a.types, ty);
+        if let Some((span, why)) = decided_at(&cause) {
+            return d.with_note(span, format!("the type became `{shown}` here{why}"));
+        }
+        match cause {
             Some(Cause::Default) if default => d.with_rule(format!(
                 "the type became `{shown}` by the default of an integer literal (§4.7); a bound does not change the default: write a float literal such as `3.0` or annotate the type"
             )),
             _ => d,
         }
     }
+}
+
+/// The expression whose check made the binding `cause` (§4.5, S-235), and the
+/// ` as …` of where its expected type came from.
+pub(crate) fn decided_at(cause: &Option<Cause>) -> Option<(Span, String)> {
+    let Some(Cause::At { span, why }) = cause else { return None };
+    Some((*span, why.as_ref().map(|w| format!(" as {w}")).unwrap_or_default()))
 }

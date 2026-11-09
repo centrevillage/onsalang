@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.7", "§18.1"]
+
+// S-849 (W5-16 U2), §4.4, §4.7: the boundary of `body_limit_late_size_over.onsa`. The chain ends at `b9`, which is
+// 3071 when the annotation decides `?T` as `(I32, I32)` (the open variable made it 2047), so no diagnostic.
+
+pub fn late() -> U32 {
+  let a                     = None
+  let b1                    = (a, a)
+  let b2                    = (b1, b1)
+  let b3                    = (b2, b2)
+  let b4                    = (b3, b3)
+  let b5                    = (b4, b4)
+  let b6                    = (b5, b5)
+  let b7                    = (b6, b6)
+  let b8                    = (b7, b7)
+  let b9                    = (b8, b8)
+  let d: Option[(I32, I32)] = a
+  let _                     = d
+  let _                     = b9
+  0
+}

@@ -1,0 +1,61 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.7", "§18.1"]
+// fixes = 0
+
+// S-264 (W5-16 U2), §4.4, §18.1: the unit is the declaration, so each function with a type over the limit has its own
+// E0422 (`first` and `second`), and a function that is within the limit (`fine`) has none. The functions do not
+// report each other.
+
+pub fn first() -> U32 {
+  let t0: I32 = 0
+  let t1 = (t0, t0)
+  let t2 = (t1, t1)
+  let t3 = (t2, t2)
+  let t4 = (t3, t3)
+  let t5 = (t4, t4)
+  let t6 = (t5, t5)
+  let t7 = (t6, t6)
+  let t8 = (t7, t7)
+  let t9 = (t8, t8)
+  let t10 = (t9, t9)
+  let t11 = (t10, t10)
+  let w = (t11, t11)  //~ E0422
+  let _ = w
+  0
+}
+
+pub fn fine() -> U32 {
+  let t0: I32 = 0
+  let t1 = (t0, t0)
+  let t2 = (t1, t1)
+  let t3 = (t2, t2)
+  let t4 = (t3, t3)
+  let t5 = (t4, t4)
+  let t6 = (t5, t5)
+  let t7 = (t6, t6)
+  let t8 = (t7, t7)
+  let t9 = (t8, t8)
+  let t10 = (t9, t9)
+  let t11 = (t10, t10)
+  let _ = t11
+  0
+}
+
+pub fn second() -> U32 {
+  let t0: I32 = 0
+  let t1 = (t0, t0)
+  let t2 = (t1, t1)
+  let t3 = (t2, t2)
+  let t4 = (t3, t3)
+  let t5 = (t4, t4)
+  let t6 = (t5, t5)
+  let t7 = (t6, t6)
+  let t8 = (t7, t7)
+  let t9 = (t8, t8)
+  let t10 = (t9, t9)
+  let t11 = (t10, t10)
+  let w = Some(t11)  //~ E0422
+  let _ = w
+  0
+}

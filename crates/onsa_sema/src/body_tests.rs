@@ -1102,3 +1102,24 @@ fn a_method_of_a_number_trait_the_bounds_do_not_give() {
         assert!(d.notes.iter().any(|n| n.message.contains(text)), "{src}: {:?}", d.notes);
     }
 }
+
+/// S-849 (§4.4, §4.7): a type a later statement makes larger than the limit
+/// is E0422 at the expression that made it, with a note at the expression
+/// that decided the variable. The cases mark the diagnostic, not the note.
+#[test]
+fn a_type_over_the_limit_later_notes_where_it_was_decided() {
+    let mut src = String::from("pub fn late() -> U32 {\n  let a = None\n  let b1 = (a, a)\n");
+    for k in 2..=10 {
+        src += &format!("  let b{k} = (b{p}, b{p})\n", p = k - 1);
+    }
+    src += "  let d: Option[(I32, I32)] = a\n  let _ = d\n  let _ = b10\n  0\n}\n";
+    let a = check(&src);
+    assert_eq!(a.diagnostics.len(), 1, "{:?}", a.diagnostics);
+    let d = &a.diagnostics[0];
+    let made = src.find("(b9, b9)").unwrap() as u32;
+    assert_eq!((d.code, d.span.start, d.span.end), (Code::E0422, made, made + 8));
+    let decided = src.find("= a\n").unwrap() as u32 + 2;
+    let at: Vec<_> = d.notes.iter().filter_map(|n| n.span.map(|s| (s.start, s.end, n.message.as_str()))).collect();
+    assert_eq!(at, [(decided, decided + 1, "a part of the type was decided here as the annotation of `d`")]);
+    assert!(d.fixes.is_empty());
+}

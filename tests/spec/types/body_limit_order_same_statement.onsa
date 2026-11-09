@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.7", "§18.1"]
+// fixes = 0
+
+// S-264 (W5-16 U2), §4.7 (the order of the checks that are put off): the check of the limit is put off to after the
+// statement, so another type error in the same statement is reported first, and the unit gives the one error. The
+// tuple of `w` is 1 + 4095 + 1 = 4097 (over the limit) and `takes(3)` has the integer literal for a `Bool` (E0401,
+// found in the statement). The E0401 is on its own line, and there is no E0422 on the line of the tuple.
+
+fn takes(b: Bool) -> U32 {
+  1
+}
+
+pub fn order() -> U32 {
+  let t0: I32 = 0
+  let t1 = (t0, t0)
+  let t2 = (t1, t1)
+  let t3 = (t2, t2)
+  let t4 = (t3, t3)
+  let t5 = (t4, t4)
+  let t6 = (t5, t5)
+  let t7 = (t6, t6)
+  let t8 = (t7, t7)
+  let t9 = (t8, t8)
+  let t10 = (t9, t9)
+  let t11 = (t10, t10)
+  let w = (
+    t11,
+    takes(3),  //~ E0401
+  )
+  let _ = w
+  0
+}

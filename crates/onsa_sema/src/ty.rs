@@ -257,6 +257,11 @@ impl Ty {
 pub const TYPE_DEPTH_LIMIT: u32 = 256;
 pub const TYPE_SIZE_LIMIT: u32 = 4096;
 
+/// The rule of an E0422 of a type the check makes (§4.4): written, or of a
+/// body (the lowering has its own, of the instances).
+pub const LIMIT_RULE: &str = "name an inner part of the type with a `struct`: a declared type counts as one name, \
+                              and an alias stands for the whole type it names";
+
 /// The depth and the size of a type (§4.4), each held at its limit + 1: a
 /// form (a type with arguments, a tuple, an array, a function type) is a level
 /// and one, a name and a const argument (a length) one each; `()` is a form
@@ -315,10 +320,34 @@ pub struct Env<'e> {
 pub struct Types {
     tys: Vec<Ty>,
     map: HashMap<Ty, TyId>,
-    /// The measure (§4.4) of each type, from its parts once when it is
-    /// interned: so a shared type is judged without being expanded. And
-    /// whether it is open ([`Types::open`]).
-    measures: Vec<(Measure, bool)>,
+    /// What is known of each type from its parts once when it is interned:
+    /// so a shared type is judged without being expanded.
+    facts: Vec<Facts>,
+}
+
+/// What [`Types`] keeps of a type: its measure (§4.4), and whether it holds
+/// a type parameter or an inference variable ([`Types::open`]), an inference
+/// variable ([`Types::holds_infer_var`]), the error type ([`Types::has_error`]).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+struct Facts {
+    measure: Measure,
+    open: bool,
+    var: bool,
+    error: bool,
+}
+
+/// The form of `ty` for its measure (§4.4): what it counts of its own and
+/// its parts; `None` for a leaf (a declared type with no arguments is one).
+/// The one table of the forms, for the interner and [`crate::infer::Infer::measure`].
+pub(crate) fn form_of(ty: &Ty) -> Option<(u32, Vec<TyId>)> {
+    Some(match ty {
+        Ty::Unit => (1, Vec::new()),
+        Ty::Tuple(ts) => (1, ts.clone()),
+        Ty::Array(t, _) => (2, vec![*t]),
+        Ty::Named(_, ts) | Ty::Builtin(_, ts) if !ts.is_empty() => (2, ts.clone()),
+        Ty::Fn(f) => (1, f.params.iter().map(|&(_, t)| t).chain([f.ret]).collect()),
+        _ => return None,
+    })
 }
 
 impl Types {
@@ -327,27 +356,26 @@ impl Types {
             return id;
         }
         let id = TyId(self.tys.len() as u32);
-        self.measures.push(self.measure(&ty));
+        self.facts.push(self.facts_of(&ty));
         self.tys.push(ty.clone());
         self.map.insert(ty, id);
         id
     }
 
-    /// The measure of `ty` from those of its parts. A declared type with no
-    /// arguments is a leaf.
-    fn measure(&self, ty: &Ty) -> (Measure, bool) {
-        let (own, parts, open): (u32, Vec<TyId>, bool) = match ty {
-            Ty::Unit => (1, Vec::new(), false),
-            Ty::Tuple(ts) => (1, ts.clone(), false),
-            Ty::Array(t, len) => (2, vec![*t], !matches!(len, Len::Const(_))),
-            Ty::Named(_, ts) | Ty::Builtin(_, ts) if !ts.is_empty() => (2, ts.clone(), false),
-            Ty::Fn(f) => (1, f.params.iter().map(|&(_, t)| t).chain([f.ret]).collect(), false),
-            Ty::Param(_) | Ty::Var(_) => return (Measure::LEAF, true),
-            _ => return (Measure::LEAF, false),
-        };
-        parts.iter().fold((Measure::form(own), open), |(m, o), p| {
-            let (pm, po) = self.measures[p.0 as usize];
-            (m.with(pm), o || po)
+    /// What is known of `ty`, from what is known of its parts.
+    fn facts_of(&self, ty: &Ty) -> Facts {
+        let var = matches!(ty, Ty::Var(_) | Ty::Array(_, Len::Var(_)));
+        let open = var || matches!(ty, Ty::Param(_) | Ty::Array(_, Len::Param(_)));
+        let leaf = Facts { measure: Measure::LEAF, open, var, error: matches!(ty, Ty::Error) };
+        let Some((own, parts)) = form_of(ty) else { return leaf };
+        parts.iter().fold(Facts { measure: Measure::form(own), ..leaf }, |f, p| {
+            let pf = self.facts[p.0 as usize];
+            Facts {
+                measure: f.measure.with(pf.measure),
+                open: f.open || pf.open,
+                var: f.var || pf.var,
+                error: f.error || pf.error,
+            }
         })
     }
 
@@ -355,12 +383,18 @@ impl Types {
     /// length, is in `id`: what a type that is not open holds is the same
     /// wherever it is read (`walk::Known`).
     pub fn open(&self, id: TyId) -> bool {
-        self.measures[id.0 as usize].1
+        self.facts[id.0 as usize].open
+    }
+
+    /// Whether an inference variable, of a type or of a length, is in `id`:
+    /// the walks of `crate::infer` return at once from a type with none.
+    pub fn holds_infer_var(&self, id: TyId) -> bool {
+        self.facts[id.0 as usize].var
     }
 
     /// The measure of `id` (§4.4).
     pub fn measure_of(&self, id: TyId) -> Measure {
-        self.measures[id.0 as usize].0
+        self.facts[id.0 as usize].measure
     }
 
     /// The depth of `id` (§4.4), at most [`TYPE_DEPTH_LIMIT`] + 1.
@@ -378,22 +412,9 @@ impl Types {
         self.measure_of(id).over_limit()
     }
 
-    /// Whether the error type is in `id`. Each type is visited once.
+    /// Whether the error type is in `id`.
     pub fn has_error(&self, id: TyId) -> bool {
-        let (mut seen, mut todo) = (HashSet::default(), vec![id]);
-        while let Some(t) = todo.pop() {
-            if !seen.insert(t) {
-                continue;
-            }
-            match self.get(t) {
-                Ty::Error => return true,
-                Ty::Array(e, _) => todo.push(*e),
-                Ty::Tuple(ts) | Ty::Named(_, ts) | Ty::Builtin(_, ts) => todo.extend(ts),
-                Ty::Fn(f) => todo.extend(f.params.iter().map(|&(_, p)| p).chain([f.ret])),
-                _ => {}
-            }
-        }
-        false
+        self.facts[id.0 as usize].error
     }
 
     /// `ty` read under `env`: a parameter is followed to its argument, read
