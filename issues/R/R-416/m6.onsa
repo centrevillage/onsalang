@@ -1,0 +1,9 @@
+use kp.{g h}
+
+pub fn t() -> I32 {
+  h()
+}
+
+pub fn u() -> I32 {
+  zzz()
+}
