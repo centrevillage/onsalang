@@ -4,16 +4,16 @@
 //! `U32` has no prefix `-` (`-1`, `-0`, E0401, S-228) and a constant of another
 //! type is E0401 (R-154). One place for the signature lowering (`sig.rs`),
 //! the bodies (`body.rs`) and the flows, which reads the records of the names
-//! the names stage made once (`names::body`, D-15); W5-16 U1b replaces the
-//! inside with the typing of the whole constant-expression grammar.
+//! the names stage made once (`names::body`, D-15): the leaves by their type,
+//! the nodes by the grammar (S-966).
 
 use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
-use onsa_syntax::ast::{Ast, CallKind, ExprId, ExprKind, ItemKind, Lit, Path};
+use onsa_syntax::ast::{Ast, BinOp, ExprId, ExprKind, Ident, ItemKind, Lit, Path, UnOp};
 
 use crate::def::DefKind;
 use crate::names::body::PathRes;
-use crate::resolve::{Callee, Entity, NameKind, ResolveError};
+use crate::resolve::{Entity, NameKind, ResolveError};
 use crate::ty::{IntKind, Ty};
 use crate::{Analysis, DefId, ModId};
 
@@ -57,146 +57,203 @@ pub(crate) struct ConstCx<'r> {
     pub held: &'r HashSet<ExprId>,
 }
 
-/// An array length or a const argument written as an expression (`4`, `-1`, `N`,
-/// `SIZE`, `cfg.N`, `I32.BITS`, `Self.N`): the one reader of the forms, for the
-/// signatures, the bodies and the flows, from the records of its names.
-/// `Ok((value, constant))`: `constant` is the `const` item a name denotes.
-/// Of an operation (E0200 until W9-03), a call, a local or a name of no
-/// constant in it is the error first (§4.5, S-713 (a)); a name held as an
-/// error in it leaves its value unknown, with no diagnostic (§18.1).
+/// An array length or a const argument written as an expression (`4`, `-1`,
+/// `N + 1`, `cfg.N`, `(N)`): the one reader of the constant expressions, for
+/// the signatures, the bodies and the flows, from the records of their names
+/// (§4.5). `Ok((value, constant))`: `constant` is the `const` item that a
+/// constant expression of one name (in parentheses too) denotes.
 pub(crate) fn expr(a: &mut Analysis, cx: &ConstCx, e: ExprId) -> Result<(ConstU32, Option<DefId>), ConstErr> {
-    let ast = cx.ast;
-    if let Some(r) = literal(ast, cx.text, e) {
-        return r.map(|v| (ConstU32::Value(v), None)).map_err(ConstErr::Report);
-    }
-    let span = ast.expr(e).span;
-    if path_of(ast, e).is_some() {
-        let head = chain_head(ast, e);
-        let ExprKind::Path(first) = &ast.expr(head).kind else {
-            onsa_diag::internal::bug(Some(span), "a chain of names starts at a name")
-        };
-        let records = (cx.names.get(&e), cx.names.get(&head));
-        let held = cx.held.contains(&e);
-        return read_chain(a, (cx.m, ast, cx.text), (records, held), (&first.segments[0].name, span));
-    }
-    let found = cx.text[span.start as usize..span.end as usize].to_string();
-    if let ExprKind::Call { callee, kind, .. } = &ast.expr(e).kind {
-        // A callee held as an error (§18.1).
-        if cx.held.contains(callee) && matches!(kind, CallKind::Plain | CallKind::Bang) {
-            return Err(ConstErr::Unknown);
-        }
-        // A constant called with `!` (`K!()`, §5.2), as a body has it.
-        let kind_of = |r: &PathRes| match r {
-            PathRes::Item { entity, .. } => NameKind::of(*entity, &a.defs),
-            PathRes::BoundMember { member, .. } => NameKind::of(Entity::Member(*member), &a.defs),
-            PathRes::ConstParam(_) => Some(NameKind::ConstParam),
-            _ => None,
-        };
-        let callee_kind = cx.names.get(callee).and_then(kind_of);
-        if callee_kind.is_some_and(|k| k.at_callee(*kind == CallKind::Bang) == Callee::NoFunction) {
-            let cspan = ast.expr(*callee).span;
-            let shown = cx.text[cspan.start as usize..cspan.end as usize].to_string();
-            let msg = format!("`{shown}` is not a function");
-            return Err(Diagnostic::new(Stage::Types, Code::E0401, cspan, msg).with_found(shown).into());
-        }
-        return Err(value_not_constant(found, "a call", span).into());
-    }
-    let mut leaves = Vec::new();
-    operands(ast, e, &mut leaves);
-    let (mut wrong, mut held): (Option<Diagnostic>, bool) = (None, false);
-    for l in leaves.into_iter().filter(|&l| l != e) {
-        match expr(a, cx, l) {
-            Err(ConstErr::Report(d)) if d.stage == Stage::Names || d.code == Code::E0417 => {
-                if wrong.as_ref().is_none_or(|w| d.unit_order() < w.unit_order()) {
-                    wrong = Some(d);
-                }
-            }
-            Err(ConstErr::Unknown) => held = true,
-            _ => {}
-        }
-    }
-    match (wrong, held) {
-        (Some(d), _) => Err(d.into()),
-        (None, true) => Err(ConstErr::Unknown),
-        (None, false) => {
-            let unsupported = onsa_diag::unsupported::Feature::ArrayLengthExprs.diagnostic(Stage::Types, span, &[]);
-            Err(unsupported.with_found(found).into())
-        }
-    }
-}
-
-/// The node of the first name of the chain of names `e` (`a` of `a.b.c`).
-fn chain_head(ast: &Ast, e: ExprId) -> ExprId {
-    match &ast.expr(e).kind {
-        ExprKind::Field { base, .. } => chain_head(ast, *base),
-        _ => e,
-    }
+    let got = node(a, cx, e)?;
+    finish(got, cx.ast.expr(e).span)
 }
 
 /// A const argument written as a path (`Ring[F32, N]`, `G[T.BITS]`), from
-/// the records of its names ([`crate::names::body::const_path_names`]), as
-/// [`expr`] reads a chain of names; `None` when it is held as an error.
+/// the records of its names ([`crate::names::body::const_path_names`]; `None`
+/// when it is held as an error), as [`expr`] reads a chain of names.
 pub(crate) fn path(
     a: &mut Analysis,
-    (m, ast, text): (ModId, &Ast, &str),
+    at: (ModId, &Ast, &str),
     records: Option<&[PathRes]>,
     path: &Path,
 ) -> Result<(ConstU32, Option<DefId>), ConstErr> {
     let Some(records) = records else { return Err(ConstErr::Unknown) };
-    let leaf = records.get(path.segments.len() - 1);
-    read_chain(a, (m, ast, text), ((leaf, records.first()), false), (&path.segments[0].name, path.span))
+    let shown = at.2[path.span.start as usize..path.span.end as usize].to_string();
+    let got = settle(chain(a, at, records, path.segments.len(), (&path.segments[0].name, shown, path.span)))?;
+    finish(got, path.span)
 }
 
-/// The chain of names at `span` from the name `first`, by the records at its
-/// last name (`leaf`) and at its first (`head`): a const parameter, or a constant
-/// ([`of_entity`]); a local, a member of a type parameter and a name of
-/// another kind are errors. A chain `held` as an error has no value and no
-/// diagnostic (§18.1); one with no record otherwise is one whose names the
-/// walk did not read, no constant. The names stage reported a name after a
-/// value that is no local.
-fn read_chain(
+/// What a node of a constant expression reads as, when it is no error.
+enum Got {
+    /// A literal or a constant (in parentheses too), or a const parameter.
+    Val(ConstU32, Option<DefId>),
+    /// An operation, whose value this version does not compute (K-05).
+    Op,
+    /// The error type: a name held as an error, a constant of a failed unit
+    /// in it (§18.1). The nodes above it report nothing.
+    Unknown,
+    /// A constant whose value this version does not compute.
+    Uncomputed(Diagnostic),
+}
+
+/// The value of a whole constant expression at `span`, of what it reads as.
+fn finish(got: Got, span: Span) -> Result<(ConstU32, Option<DefId>), ConstErr> {
+    match got {
+        Got::Val(v, d) => Ok((v, d)),
+        Got::Op => Err(ConstErr::Uncomputed(onsa_diag::unsupported::Feature::ArrayLengthExprs.diagnostic(
+            Stage::Types,
+            span,
+            &[],
+        ))),
+        Got::Unknown => Err(ConstErr::Unknown),
+        Got::Uncomputed(d) => Err(ConstErr::Uncomputed(d)),
+    }
+}
+
+/// [`Got`] of what a leaf reads as (an error to report is `Err`).
+fn settle(r: Result<Got, ConstErr>) -> Result<Got, Diagnostic> {
+    match r {
+        Ok(got) => Ok(got),
+        Err(ConstErr::Report(d)) => Err(d),
+        Err(ConstErr::Uncomputed(d)) => Ok(Got::Uncomputed(d)),
+        Err(ConstErr::Unknown) => Ok(Got::Unknown),
+    }
+}
+
+/// The node `e`, its operands first (§4.5, §4.7: as an ordinary expression
+/// of the expected type `U32`), stopping at the first error. The leaves are
+/// read by their type, and the nodes by the grammar (S-966): a node outside
+/// it is E0417 whatever is in it, whose names the names stage read (S-968).
+fn node(a: &mut Analysis, cx: &ConstCx, e: ExprId) -> Result<Got, Diagnostic> {
+    // An integer literal, and a prefix `-` before a literal (S-228).
+    if let Some(v) = literal(cx.ast, cx.text, e) {
+        return v.map(|v| Got::Val(ConstU32::Value(v), None));
+    }
+    let expr = cx.ast.expr(e);
+    let shown = || cx.text[expr.span.start as usize..expr.span.end as usize].to_string();
+    if let Some((nodes, head)) = chain_nodes(cx.ast, e) {
+        if cx.held.contains(&e) {
+            return Ok(Got::Unknown);
+        }
+        let records: Vec<PathRes> = nodes.iter().map_while(|n| cx.names.get(n).cloned()).collect();
+        return settle(chain(a, (cx.m, cx.ast, cx.text), &records, nodes.len(), (&head.name, shown(), expr.span)));
+    }
+    match &expr.kind {
+        ExprKind::Paren(x) => node(a, cx, *x),
+        // `U32` has no prefix `-` (§3.4, S-228), but of the error type.
+        ExprKind::Unary { op: UnOp::Neg, expr: x } => match node(a, cx, *x)? {
+            Got::Unknown => Ok(Got::Unknown),
+            _ => Err(no_negative(shown(), expr.span)),
+        },
+        ExprKind::Binary { op: BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem, lhs, rhs, .. } => {
+            match (node(a, cx, *lhs)?, node(a, cx, *rhs)?) {
+                (Got::Unknown, _) | (_, Got::Unknown) => Ok(Got::Unknown),
+                _ => Ok(Got::Op),
+            }
+        }
+        // A literal of another type (§4.5, S-966).
+        ExprKind::Lit(lit) => {
+            let form = match lit {
+                Lit::Float { .. } => "a float literal",
+                Lit::Bool(_) => "a `Bool` literal",
+                Lit::Str(_) => "a string literal",
+                _ => "a character literal",
+            };
+            let msg = format!("a constant expression has the type `U32`; found {form} (§4.5)");
+            Err(Diagnostic::new(Stage::Types, Code::E0401, expr.span, msg).with_found(shown()))
+        }
+        ExprKind::Error => Ok(Got::Unknown),
+        kind => {
+            let noun = match kind {
+                ExprKind::Call { .. } => "a call",
+                ExprKind::Field { .. } | ExprKind::TupleIndex { .. } => "a field of a value",
+                ExprKind::Index { .. } => "an element of a value",
+                ExprKind::Tuple(_) => "a tuple",
+                ExprKind::Array(_) | ExprKind::Repeat { .. } => "an array",
+                ExprKind::Struct { .. } => "a struct literal",
+                ExprKind::Binary { .. } | ExprKind::Unary { .. } | ExprKind::Cast { .. } => {
+                    "an operation other than `+ - * / %` and prefix `-`"
+                }
+                // SPEC-GAP(S-971): a hole `_` (§18.1, E0421 at an expression) is E0417 here.
+                _ => "an expression of another form",
+            };
+            Err(value_not_constant(shown(), noun, expr.span))
+        }
+    }
+}
+
+/// The nodes of the chain of names `e` (`a.b.c`, from its head `a`) and its
+/// first name; none when `e` is no chain (`f().x`, `(K).x`, a literal).
+fn chain_nodes(ast: &Ast, e: ExprId) -> Option<(Vec<ExprId>, &Ident)> {
+    let mut out = vec![e];
+    let mut cur = e;
+    loop {
+        match &ast.expr(cur).kind {
+            ExprKind::Field { base, .. } => cur = *base,
+            ExprKind::Path(p) if p.segments.len() == 1 => {
+                out.reverse();
+                return Some((out, &p.segments[0]));
+            }
+            _ => return None,
+        }
+        out.push(cur);
+    }
+}
+
+/// The chain of `len` names whose records from its head are `records`
+/// (`head` its first name, `shown` at `span` the whole), not held as an
+/// error: a const parameter, or a constant ([`of_entity`]); what is no
+/// constant is E0417 when it is a value (§4.5, S-713 (a)), else E0308. A
+/// chain whose records end before its last name ends at a value whose field
+/// follows (S-967), or is one whose names the walk did not read.
+fn chain(
     a: &mut Analysis,
     (m, ast, text): (ModId, &Ast, &str),
-    ((leaf, head), held): ((Option<&PathRes>, Option<&PathRes>), bool),
-    (first, span): (&str, Span),
-) -> Result<(ConstU32, Option<DefId>), ConstErr> {
-    let shown = text[span.start as usize..span.end as usize].to_string();
-    match (leaf, head) {
-        (_, Some(PathRes::Local(_))) => Err(value_not_constant(shown, "a local", span).into()),
-        (Some(&PathRes::ConstParam(i)), _) => Ok((ConstU32::Param(i), None)),
-        (Some(&PathRes::BoundMember { member, .. }), _) => Err(bound_member(a, member, (first, shown), span)),
-        (Some(&PathRes::Item { entity, .. }), _) => {
-            let constant = match entity {
+    records: &[PathRes],
+    len: usize,
+    (head, shown, span): (&str, String, Span),
+) -> Result<Got, ConstErr> {
+    if records.len() < len {
+        let noun = match records.last() {
+            Some(PathRes::Local(_)) => "a local",
+            Some(_) => "a field of a value",
+            None => "a value",
+        };
+        return Err(value_not_constant(shown, noun, span).into());
+    }
+    match records[len - 1] {
+        PathRes::Local(_) => Err(value_not_constant(shown, "a local", span).into()),
+        PathRes::ConstParam(i) => Ok(Got::Val(ConstU32::Param(i), None)),
+        // Its value is the instantiation's (S-898); `const_values` is not
+        // read, as of the representative type of its row.
+        PathRes::BoundMember { member, .. } => match NameKind::of_named(Entity::Member(member), &a.defs, span) {
+            NameKind::Constant => {
+                let msg = format!(
+                    "`{shown}` has no value before `{head}` is instantiated: a constant expression names constants (§4.5)"
+                );
+                Err(Diagnostic::new(Stage::Types, Code::E0417, span, msg).with_found(shown).into())
+            }
+            kind => Err(not_constant(kind, shown, span)),
+        },
+        PathRes::Item { entity, .. } => {
+            let d = match entity {
                 Entity::Def(d) | Entity::Member(d) => Some(d),
                 _ => None,
             };
             match of_entity(a, m, ast, text, entity, span)? {
-                Some(v) => Ok((ConstU32::Value(v), constant)),
+                Some(v) => Ok(Got::Val(ConstU32::Value(v), d)),
                 None => Err(not_constant(NameKind::of_named(entity, &a.defs, span), shown, span)),
             }
         }
-        (None, None) if held => Err(ConstErr::Unknown),
-        (None, None) => {
-            let msg = format!("`{shown}` is not a constant: a constant expression names constants (§4.5)");
-            Err(Diagnostic::new(Stage::Types, Code::E0417, span, msg).with_found(shown).into())
-        }
-        (leaf, _) => onsa_diag::internal::bug(Some(span), format!("a constant expression's name read as {leaf:?}")),
+        PathRes::TypeParam(_) => Err(not_constant(NameKind::Type, shown, span)),
+        PathRes::Namespace(entity) => Err(not_constant(NameKind::of_named(entity, &a.defs, span), shown, span)),
+        PathRes::FlowBuiltin(_) => Err(value_not_constant(shown, "a builtin name of a flow", span).into()),
     }
 }
 
-/// The error of the member `member` of the type parameter `param` (`T.BITS`, whose
-/// bounds give it, `names/body/paths.rs`) in a constant expression: a
-/// constant has its value at the instantiation, as a const parameter's in
-/// an expression (E0417, §4.5, S-898), and is not read here; a function is
-/// no constant ([`not_constant`]).
-fn bound_member(a: &Analysis, member: DefId, (param, shown): (&str, String), span: Span) -> ConstErr {
-    if !matches!(a.def(member).kind, DefKind::Const(_)) {
-        return not_constant(NameKind::of_named(Entity::Member(member), &a.defs, span), shown, span);
-    }
-    let msg = format!(
-        "`{shown}` has no value before `{param}` is instantiated: a constant expression names constants (§4.5)"
-    );
-    Diagnostic::new(Stage::Types, Code::E0417, span, msg).with_found(shown).into()
+/// E0401 for a prefix `-` at `span`: `U32` has none (§3.4, §4.5, S-228).
+fn no_negative(shown: String, span: Span) -> Diagnostic {
+    let msg = "a constant expression has the type `U32`, which has no prefix `-` (also not `-0`) (§3.4, §4.5)";
+    Diagnostic::new(Stage::Types, Code::E0401, span, msg).with_found(shown)
 }
 
 /// The operands of the arithmetic of `e`, under parentheses, prefix `-` and
@@ -260,13 +317,7 @@ pub(crate) fn literal(ast: &Ast, text: &str, e: ExprId) -> Option<Result<u32, Di
             )
             .with_found(found(expr.span))),
         }),
-        _ if ast.negated_literal(e).is_some() => Some(Err(Diagnostic::new(
-            Stage::Types,
-            Code::E0401,
-            expr.span,
-            "a constant expression has the type `U32`, which has no prefix `-` (also not `-0`) (§3.4, §4.5)",
-        )
-        .with_found(found(expr.span)))),
+        _ if ast.negated_literal(e).is_some() => Some(Err(no_negative(found(expr.span), expr.span))),
         _ => None,
     }
 }

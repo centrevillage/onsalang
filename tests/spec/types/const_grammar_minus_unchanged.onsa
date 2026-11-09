@@ -1,0 +1,87 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§3.4", "§11.4", "§11.5"]
+
+// `U32` has no prefix `-`, so `-1`, `-0`, `-(1)`, `-K` and a prefix `-` in an operation or before a sum are E0401 wherever a constant
+// expression is written (§4.5, §3.4; S-228), never E0408 or E0808. negative/const_expr_neg.onsa and negative/flow_const_neg.onsa have some
+// of the places; this file has the others, and the flow places that are fine before W5-16 U1b1 are in the _unchanged file.
+// The places are the heading of an item (a parameter, a result, a field, an alias, the type of a `const`, a const argument) and
+// the repeat and the annotation of a body.
+// These are the units of const_grammar_minus.onsa whose result the reader of W5-16 U1b1 does not change (they pass before it): they are in
+// their own file so that a regression of them is not silenced with the units that change.
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub struct P {
+  x: U32,
+}
+
+const K: U32 = 4
+const XS: [U32; 2] = [1, 2]
+
+fn g(a: U32) -> U32 {
+  a
+}
+
+pub fn one_in_a_parameter(x: [F32; -1]) -> F32 {   //~ E0401
+  1.0
+}
+
+pub fn one_in_a_repeat() -> F32 {
+  let a = [0.0; -1]   //~ E0401
+  a[0]
+}
+
+pub fn one_in_a_result() -> [F32; -1] {   //~ E0401
+  [0.0; 4]
+}
+
+pub fn one_in_an_annotation() -> F32 {
+  let _: [F32; -1] = [0.0; 4]   //~ E0401
+  1.0
+}
+
+pub fn zero_in_a_parameter(x: [F32; -0]) -> F32 {   //~ E0401
+  1.0
+}
+
+pub fn zero_in_a_repeat() -> F32 {
+  let a = [0.0; -0]   //~ E0401
+  a[0]
+}
+
+type ZeroInAnAlias = [F32; -0]   //~ E0401
+
+pub fn parenthesised_in_a_parameter(x: [F32; -(1)]) -> F32 {   //~ E0401
+  1.0
+}
+
+pub fn parenthesised_in_a_repeat() -> F32 {
+  let a = [0.0; -(1)]   //~ E0401
+  a[0]
+}
+
+pub fn parenthesised_in_a_const_argument(r: Ring[F32, -(1)]) -> U32 {   //~ E0401
+  r.head
+}
+
+pub fn float_in_a_parameter(x: [F32; -1.5]) -> F32 {   //~ E0401
+  1.0
+}
+
+pub fn float_in_a_repeat() -> F32 {
+  let a = [0.0; -1.5]   //~ E0401
+  a[0]
+}
+
+pub fn float_in_a_result() -> [F32; -1.5] {   //~ E0401
+  [0.0; 4]
+}
+
+pub fn float_in_an_annotation() -> F32 {
+  let _: [F32; -1.5] = [0.0; 4]   //~ E0401
+  1.0
+}

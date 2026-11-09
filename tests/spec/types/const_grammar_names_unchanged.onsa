@@ -1,0 +1,268 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1", "§11.4", "§11.5"]
+
+// The names in a constant expression are read by the names stage first, as the names of an ordinary expression are (§4.5: "中の名前は
+// 普通の式と同じく名前の段が先に読む"; §18.1; S-968). In a form outside the grammar, a name that is not found is E0302 and a name that is no value
+// is E0308, not the E0417 of the form. A name that the names stage has rejected for E0304 (`D`, defined twice) is used with no diagnostic where
+// it is the whole expression (§18.1) and the form around it is E0417 (S-968). The forms that the walk of a flow body does not read into
+// (a block with a statement, a function value) are only in the heading and the body of a function.
+// The places are the heading of an item (a parameter, a result, a field, an alias, the type of a `const`, a const argument) and
+// the repeat and the annotation of a body.
+// These are the units of const_grammar_names.onsa whose result the reader of W5-16 U1b1 does not change (they pass before it): they are in
+// their own file so that a regression of them is not silenced with the units that change.
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub struct P {
+  x: U32,
+}
+
+const K: U32 = 4
+const XS: [U32; 2] = [1, 2]
+
+fn g(a: U32) -> U32 {
+  a
+}
+
+const D: U32 = 1
+const D: U32 = 2   //~ E0304
+
+pub fn unknown_in_a_tuple_in_a_parameter(x: [F32; (zz, 1)]) -> F32 {   //~ E0302
+  1.0
+}
+
+pub fn unknown_in_a_tuple_in_a_repeat() -> F32 {
+  let a = [0.0; (zz, 1)]   //~ E0302
+  a[0]
+}
+
+pub fn unknown_in_a_tuple_in_a_result() -> [F32; (zz, 1)] {   //~ E0302
+  [0.0; 4]
+}
+
+pub fn unknown_in_a_tuple_in_an_annotation() -> F32 {
+  let _: [F32; (zz, 1)] = [0.0; 4]   //~ E0302
+  1.0
+}
+
+pub fn unknown_in_an_if_in_a_parameter(x: [F32; if true { zz } else { 2 }]) -> F32 {   //~ E0302
+  1.0
+}
+
+pub fn unknown_in_an_if_in_a_repeat() -> F32 {
+  let a = [0.0; if true { zz } else { 2 }]   //~ E0302
+  a[0]
+}
+
+type UnknownInAnIfInAnAlias = [F32; if true { zz } else { 2 }]   //~ E0302
+
+pub fn unknown_in_a_block_in_a_parameter(x: [F32; { zz }]) -> F32 {   //~ E0302
+  1.0
+}
+
+pub fn unknown_in_a_block_in_a_repeat() -> F32 {
+  let a = [0.0; { zz }]   //~ E0302
+  a[0]
+}
+
+pub fn unknown_in_a_block_in_a_const_argument(r: Ring[F32, { zz }]) -> U32 {   //~ E0302
+  r.head
+}
+
+pub fn unknown_in_a_match_in_a_parameter(x: [F32; match zz { _ => 1 }]) -> F32 {   //~ E0302
+  1.0
+}
+
+pub fn unknown_in_a_match_in_a_repeat() -> F32 {
+  let a = [0.0; match zz { _ => 1 }]   //~ E0302
+  a[0]
+}
+
+pub fn unknown_in_a_comparison_in_a_parameter(x: [F32; zz < 2]) -> F32 {   //~ E0302
+  1.0
+}
+
+pub fn unknown_in_a_comparison_in_a_repeat() -> F32 {
+  let a = [0.0; zz < 2]   //~ E0302
+  a[0]
+}
+
+pub struct UnknownInAComparisonInAField {
+  a: [F32; zz < 2],   //~ E0302
+}
+
+pub fn unknown_in_an_array_repeat_in_a_parameter(x: [F32; [zz; 2]]) -> F32 {   //~ E0302
+  1.0
+}
+
+pub fn unknown_in_an_array_repeat_in_a_repeat() -> F32 {
+  let a = [0.0; [zz; 2]]   //~ E0302
+  a[0]
+}
+
+const UNKNOWN_IN_AN_ARRAY_REPEAT_IN_A_CONST_TYPE: [F32; [zz; 2]] = [0.0; 4]   //~ E0302
+
+pub fn unknown_in_a_call_in_a_parameter(x: [F32; g(zz)]) -> F32 {   //~ E0302
+  1.0
+}
+
+pub fn unknown_in_a_call_in_a_repeat() -> F32 {
+  let a = [0.0; g(zz)]   //~ E0302
+  a[0]
+}
+
+pub fn unknown_in_a_call_in_a_result() -> [F32; g(zz)] {   //~ E0302
+  [0.0; 4]
+}
+
+pub fn unknown_in_a_call_in_an_annotation() -> F32 {
+  let _: [F32; g(zz)] = [0.0; 4]   //~ E0302
+  1.0
+}
+
+pub fn unknown_in_a_closure_in_a_parameter(x: [F32; fn(x: U32) -> U32 { zz }]) -> F32 {   //~ E0302
+  1.0
+}
+
+pub fn unknown_in_a_closure_in_a_repeat() -> F32 {
+  let a = [0.0; fn(x: U32) -> U32 { zz }]   //~ E0302
+  a[0]
+}
+
+type UnknownInAClosureInAnAlias = [F32; fn(x: U32) -> U32 { zz }]   //~ E0302
+
+pub struct UnknownInAClosureInAField {
+  a: [F32; fn(x: U32) -> U32 { zz }],   //~ E0302
+}
+
+pub fn unknown_in_a_cast_in_a_parameter(x: [F32; zz as U32]) -> F32 {   //~ E0302
+  1.0
+}
+
+pub fn unknown_in_a_cast_in_a_repeat() -> F32 {
+  let a = [0.0; zz as U32]   //~ E0302
+  a[0]
+}
+
+pub struct UnknownInACastInAField {
+  a: [F32; zz as U32],   //~ E0302
+}
+
+pub fn unknown_in_an_index_in_a_parameter(x: [F32; XS[zz]]) -> F32 {   //~ E0302
+  1.0
+}
+
+pub fn unknown_in_an_index_in_a_repeat() -> F32 {
+  let a = [0.0; XS[zz]]   //~ E0302
+  a[0]
+}
+
+pub struct UnknownInAnIndexInAField {
+  a: [F32; XS[zz]],   //~ E0302
+}
+
+pub fn unknown_in_a_not_in_a_parameter(x: [F32; !zz]) -> F32 {   //~ E0302
+  1.0
+}
+
+pub fn unknown_in_a_not_in_a_repeat() -> F32 {
+  let a = [0.0; !zz]   //~ E0302
+  a[0]
+}
+
+pub struct UnknownInANotInAField {
+  a: [F32; !zz],   //~ E0302
+}
+
+pub fn type_in_a_tuple_in_a_parameter(x: [F32; (P, 1)]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn type_in_a_tuple_in_a_repeat() -> F32 {
+  let a = [0.0; (P, 1)]   //~ E0308
+  a[0]
+}
+
+pub fn type_in_a_tuple_in_a_result() -> [F32; (P, 1)] {   //~ E0308
+  [0.0; 4]
+}
+
+pub fn type_in_a_comparison_in_a_parameter(x: [F32; P < 2]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn type_in_a_comparison_in_a_repeat() -> F32 {
+  let a = [0.0; P < 2]   //~ E0308
+  a[0]
+}
+
+type TypeInAComparisonInAnAlias = [F32; P < 2]   //~ E0308
+
+pub fn type_as_the_condition_of_an_if_in_a_parameter(x: [F32; if P { 1 } else { 2 }]) -> F32 {   //~ E0308
+  1.0
+}
+
+pub fn type_as_the_condition_of_an_if_in_a_repeat() -> F32 {
+  let a = [0.0; if P { 1 } else { 2 }]   //~ E0308
+  a[0]
+}
+
+type TypeAsTheConditionOfAnIfInAnAlias = [F32; if P { 1 } else { 2 }]   //~ E0308
+
+pub fn duplicate_in_a_call_in_a_parameter(x: [F32; g(D)]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn duplicate_in_a_call_in_a_repeat() -> F32 {
+  let a = [0.0; g(D)]   //~ E0417
+  a[0]
+}
+
+pub fn duplicate_in_a_call_in_a_result() -> [F32; g(D)] {   //~ E0417
+  [0.0; 4]
+}
+
+pub fn duplicate_in_a_call_in_an_annotation() -> F32 {
+  let _: [F32; g(D)] = [0.0; 4]   //~ E0417
+  1.0
+}
+
+pub fn duplicate_alone_in_a_parameter(x: [F32; D]) -> F32 {
+  1.0
+}
+
+pub fn duplicate_alone_in_a_repeat() -> F32 {
+  let a = [0.0; D]
+  a[0]
+}
+
+pub fn duplicate_alone_in_a_const_argument(r: Ring[F32, D]) -> U32 {
+  r.head
+}
+
+pub fn unknown_name_after_a_statement_block(x: [F32; ({
+  let q = 1
+  q
+}) + zz]) -> F32 {   //~ E0302
+  1.0
+}
+
+pub fn unknown_name_in_a_statement_block() -> F32 {
+  let a = [0.0; {
+    let q = 1
+    q + zz   //~ E0302
+  }]
+  a[0]
+}
+
+pub fn unknown_name_in_a_closure_with_a_statement() -> F32 {
+  let a = [0.0; fn() -> U32 {
+    let q = 1
+    q + zz   //~ E0302
+  }]
+  a[0]
+}

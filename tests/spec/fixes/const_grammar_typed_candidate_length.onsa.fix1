@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "18:35"
+// code = "E0401"
+// candidate = 1
+// clean = true
+
+// W5-16 U1b/t, R-61, S-50: a constant that is not of the type `U32` (the length of an array in the heading of a function) is E0401, and the candidate is to make the type of the constant
+// `U32` (§4.5: "期待型でない定数は E0401 で、修正候補は定数の型を `U32` にすること"). The candidate leaves no error in the file (`clean`). A file with one
+// unit, so that `clean` looks at the whole file. The leaf is judged by its type, wherever the constant is written (const_grammar_typed.onsa).
+
+const WIDTH: U32 = 4
+
+pub fn width_as_a_length(x: [F32; WIDTH]) -> F32 {   //~ E0401
+  1.0
+}

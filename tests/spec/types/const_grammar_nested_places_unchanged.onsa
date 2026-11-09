@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7", "§18.1"]
+
+// W5-16 U1b/t, S-966, S-968, S-228: the code of a constant expression does not depend on where the length is written inside a function: the
+// repeat and the annotation inside a branch (`if`, `match`), a loop, a function value, a block, and in the type of a parameter of a function
+// value are E0417 for a form outside the grammar, E0401 for a float and a prefix `-`, and E0302 for a name that is not found (§4.5, §18.1).
+// A constant in the same places is fine. One error per unit (§18.1).
+// These are the units of const_grammar_nested_places.onsa whose result W5-16 U1b1 does not change (they pass before it): they are in their own file
+// so that a regression of them is not silenced with the units that change.
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+const K: U32 = 4
+
+pub fn unknown_in_a_nested_block() -> F32 {
+  let b = {
+    let a = [0.0; (zz, 1)]   //~ E0302
+    a[0]
+  }
+  b
+}
+
+pub fn prefix_minus_in_a_const_argument_in_a_tuple(r: (Ring[F32, -1], U32)) -> F32 {   //~ E0401
+  1.0
+}
+
+pub fn unknown_in_a_const_argument_in_a_function_type(f: fn(Ring[F32, (zz, 1)]) -> F32) -> F32 {   //~ E0302
+  1.0
+}
+
+pub fn constant_in_a_branch(c: Bool) -> F32 {
+  if c {
+    let a = [0.0; K]
+    a[0]
+  } else {
+    0.0
+  }
+}
+
+pub fn constant_in_a_closure() -> F32 {
+  let f = fn(a: [F32; K]) -> F32 {
+    a[0]
+  }
+  f.([0.0; 4])
+}
+
+pub fn constant_in_a_nested_type(a: Option[[F32; K]], r: (Ring[F32, K], U32)) -> F32 {
+  1.0
+}

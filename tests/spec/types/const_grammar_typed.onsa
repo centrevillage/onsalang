@@ -1,0 +1,54 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.1", "§11.4", "§11.5"]
+
+// A constant whose type is not `U32` is E0401 wherever it is written as a length or a const argument, unqualified or through a type
+// (`Dev.WIDE`): the leaf is judged by its type (§4.5: "期待型でない定数は E0401"; R-61: `[F32; N]` and `Ring[F32, N]` are the same). The constants
+// of the type `U32` (`K`, `Dev.CAP`, `I32.BITS`) are fine in the same places. The qualified name of a constant of a module is in
+// packages/const_grammar_qualified_names.
+// The places are the heading of an item (a parameter, a result, a field, an alias, the type of a `const`, a const argument) and
+// the repeat and the annotation of a body.
+// The units whose result does not change are in const_grammar_typed_unchanged.onsa. One error per unit (§18.1).
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub struct P {
+  x: U32,
+}
+
+const K: U32 = 4
+const XS: [U32; 2] = [1, 2]
+
+fn g(a: U32) -> U32 {
+  a
+}
+
+const B: I64 = 4
+const B8: U8 = 4
+const H: F32 = 1.5
+const FLAG: Bool = true
+
+pub struct Dev {
+  x: I32,
+}
+
+impl Dev {
+  pub const CAP: U32 = 3
+  pub const WIDE: I64 = 3
+}
+
+pub fn i64_in_parentheses_in_a_parameter(x: [F32; (B)]) -> F32 {   //~ E0401
+  1.0
+}
+
+pub fn i64_in_parentheses_in_a_repeat() -> F32 {
+  let a = [0.0; (B)]   //~ E0401
+  a[0]
+}
+
+pub struct I64InParenthesesInAField {
+  a: [F32; (B)],   //~ E0401
+}

@@ -1,0 +1,216 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§3.1", "§11.4", "§11.5"]
+
+// A comparison, a logical or a bit operator, `as`, a prefix `!` and `?` are outside the grammar of a constant expression (§4.5:
+// "比較・論理・ビットの演算子と `as`・`!`・`?`") and are E0417 wherever a constant expression is written, whatever the types of the operands are
+// (S-966: a node outside the grammar is judged by its form, so `true && false` and `1 < 2`, which have the type `Bool`, are not E0401).
+// The places are the heading of an item (a parameter, a result, a field, an alias, the type of a `const`, a const argument) and
+// the repeat and the annotation of a body.
+// One error per unit (§18.1).
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub struct P {
+  x: U32,
+}
+
+const K: U32 = 4
+const XS: [U32; 2] = [1, 2]
+
+fn g(a: U32) -> U32 {
+  a
+}
+
+pub fn less_in_a_parameter(x: [F32; K < 2]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn less_in_a_repeat() -> F32 {
+  let a = [0.0; K < 2]   //~ E0417
+  a[0]
+}
+
+pub fn less_in_a_result() -> [F32; K < 2] {   //~ E0417
+  [0.0; 4]
+}
+
+pub fn less_in_an_annotation() -> F32 {
+  let _: [F32; K < 2] = [0.0; 4]   //~ E0417
+  1.0
+}
+
+pub fn equal_in_a_parameter(x: [F32; K == K]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn equal_in_a_repeat() -> F32 {
+  let a = [0.0; K == K]   //~ E0417
+  a[0]
+}
+
+type EqualInAnAlias = [F32; K == K]   //~ E0417
+
+pub fn not_equal_in_a_parameter(x: [F32; K != 2]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn not_equal_in_a_repeat() -> F32 {
+  let a = [0.0; K != 2]   //~ E0417
+  a[0]
+}
+
+pub fn not_equal_in_a_const_argument(r: Ring[F32, K != 2]) -> U32 {   //~ E0417
+  r.head
+}
+
+pub fn literals_compared_in_a_parameter(x: [F32; 1 < 2]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn literals_compared_in_a_repeat() -> F32 {
+  let a = [0.0; 1 < 2]   //~ E0417
+  a[0]
+}
+
+pub fn and_in_a_parameter(x: [F32; true && false]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn and_in_a_repeat() -> F32 {
+  let a = [0.0; true && false]   //~ E0417
+  a[0]
+}
+
+pub struct AndInAField {
+  a: [F32; true && false],   //~ E0417
+}
+
+pub fn or_of_comparisons_in_a_parameter(x: [F32; (K < 2) || (K > 1)]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn or_of_comparisons_in_a_repeat() -> F32 {
+  let a = [0.0; (K < 2) || (K > 1)]   //~ E0417
+  a[0]
+}
+
+const OR_OF_COMPARISONS_IN_A_CONST_TYPE: [F32; (K < 2) || (K > 1)] = [0.0; 4]   //~ E0417
+
+pub fn bit_and_in_a_parameter(x: [F32; K & 1]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn bit_and_in_a_repeat() -> F32 {
+  let a = [0.0; K & 1]   //~ E0417
+  a[0]
+}
+
+pub fn bit_and_in_a_result() -> [F32; K & 1] {   //~ E0417
+  [0.0; 4]
+}
+
+pub fn bit_and_in_an_annotation() -> F32 {
+  let _: [F32; K & 1] = [0.0; 4]   //~ E0417
+  1.0
+}
+
+pub fn bit_or_in_a_parameter(x: [F32; K | 1]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn bit_or_in_a_repeat() -> F32 {
+  let a = [0.0; K | 1]   //~ E0417
+  a[0]
+}
+
+type BitOrInAnAlias = [F32; K | 1]   //~ E0417
+
+pub fn bit_xor_in_a_parameter(x: [F32; K ^ 1]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn bit_xor_in_a_repeat() -> F32 {
+  let a = [0.0; K ^ 1]   //~ E0417
+  a[0]
+}
+
+pub fn bit_xor_in_a_const_argument(r: Ring[F32, K ^ 1]) -> U32 {   //~ E0417
+  r.head
+}
+
+pub fn shift_left_in_a_parameter(x: [F32; K << 1]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn shift_left_in_a_repeat() -> F32 {
+  let a = [0.0; K << 1]   //~ E0417
+  a[0]
+}
+
+pub fn shift_right_in_a_parameter(x: [F32; K >> 1]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn shift_right_in_a_repeat() -> F32 {
+  let a = [0.0; K >> 1]   //~ E0417
+  a[0]
+}
+
+pub struct ShiftRightInAField {
+  a: [F32; K >> 1],   //~ E0417
+}
+
+pub fn cast_in_a_parameter(x: [F32; K as U32]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn cast_in_a_repeat() -> F32 {
+  let a = [0.0; K as U32]   //~ E0417
+  a[0]
+}
+
+type CastInAnAlias = [F32; K as U32]   //~ E0417
+
+pub fn not_in_a_parameter(x: [F32; !K]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn not_in_a_repeat() -> F32 {
+  let a = [0.0; !K]   //~ E0417
+  a[0]
+}
+
+pub fn not_in_a_result() -> [F32; !K] {   //~ E0417
+  [0.0; 4]
+}
+
+pub fn not_in_an_annotation() -> F32 {
+  let _: [F32; !K] = [0.0; 4]   //~ E0417
+  1.0
+}
+
+pub fn try_in_a_parameter(x: [F32; K?]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn try_in_a_repeat() -> F32 {
+  let a = [0.0; K?]   //~ E0417
+  a[0]
+}
+
+type TryInAnAlias = [F32; K?]   //~ E0417
+
+pub fn cast_of_literal_in_a_parameter(x: [F32; 1 as U32]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn cast_of_literal_in_a_repeat() -> F32 {
+  let a = [0.0; 1 as U32]   //~ E0417
+  a[0]
+}
+
+const CAST_OF_LITERAL_IN_A_CONST_TYPE: [F32; 1 as U32] = [0.0; 4]   //~ E0417

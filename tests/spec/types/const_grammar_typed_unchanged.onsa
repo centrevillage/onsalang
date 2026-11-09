@@ -1,0 +1,148 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.1", "§11.4", "§11.5"]
+
+// A constant whose type is not `U32` is E0401 wherever it is written as a length or a const argument, unqualified or through a type
+// (`Dev.WIDE`): the leaf is judged by its type (§4.5: "期待型でない定数は E0401"; R-61: `[F32; N]` and `Ring[F32, N]` are the same). The constants
+// of the type `U32` (`K`, `Dev.CAP`, `I32.BITS`) are fine in the same places. The qualified name of a constant of a module is in
+// packages/const_grammar_qualified_names.
+// The places are the heading of an item (a parameter, a result, a field, an alias, the type of a `const`, a const argument) and
+// the repeat and the annotation of a body.
+// These are the units of const_grammar_typed.onsa whose result the reader of W5-16 U1b1 does not change (they pass before it): they are in
+// their own file so that a regression of them is not silenced with the units that change.
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub struct P {
+  x: U32,
+}
+
+const K: U32 = 4
+const XS: [U32; 2] = [1, 2]
+
+fn g(a: U32) -> U32 {
+  a
+}
+
+const B: I64 = 4
+const B8: U8 = 4
+const H: F32 = 1.5
+const FLAG: Bool = true
+
+pub struct Dev {
+  x: I32,
+}
+
+impl Dev {
+  pub const CAP: U32 = 3
+  pub const WIDE: I64 = 3
+}
+
+pub fn i64_constant_in_a_parameter(x: [F32; B]) -> F32 {   //~ E0401
+  1.0
+}
+
+pub fn i64_constant_in_a_repeat() -> F32 {
+  let a = [0.0; B]   //~ E0401
+  a[0]
+}
+
+pub fn i64_constant_in_a_result() -> [F32; B] {   //~ E0401
+  [0.0; 4]
+}
+
+pub fn i64_constant_in_an_annotation() -> F32 {
+  let _: [F32; B] = [0.0; 4]   //~ E0401
+  1.0
+}
+
+pub fn u8_constant_in_a_parameter(x: [F32; B8]) -> F32 {   //~ E0401
+  1.0
+}
+
+pub fn u8_constant_in_a_repeat() -> F32 {
+  let a = [0.0; B8]   //~ E0401
+  a[0]
+}
+
+type U8ConstantInAnAlias = [F32; B8]   //~ E0401
+
+pub fn f32_constant_in_a_parameter(x: [F32; H]) -> F32 {   //~ E0401
+  1.0
+}
+
+pub fn f32_constant_in_a_repeat() -> F32 {
+  let a = [0.0; H]   //~ E0401
+  a[0]
+}
+
+pub fn f32_constant_in_a_const_argument(r: Ring[F32, H]) -> U32 {   //~ E0401
+  r.head
+}
+
+pub fn bool_constant_in_a_parameter(x: [F32; FLAG]) -> F32 {   //~ E0401
+  1.0
+}
+
+pub fn bool_constant_in_a_repeat() -> F32 {
+  let a = [0.0; FLAG]   //~ E0401
+  a[0]
+}
+
+pub fn i64_associated_constant_in_a_parameter(x: [F32; Dev.WIDE]) -> F32 {   //~ E0401
+  1.0
+}
+
+pub fn i64_associated_constant_in_a_repeat() -> F32 {
+  let a = [0.0; Dev.WIDE]   //~ E0401
+  a[0]
+}
+
+const I64_ASSOCIATED_CONSTANT_IN_A_CONST_TYPE: [F32; Dev.WIDE] = [0.0; 4]   //~ E0401
+
+pub fn u32_constant_in_a_parameter(x: [F32; K]) -> F32 {
+  1.0
+}
+
+pub fn u32_constant_in_a_repeat() -> F32 {
+  let a = [0.0; K]
+  a[0]
+}
+
+pub fn u32_constant_in_a_result() -> [F32; K] {
+  [0.0; 4]
+}
+
+pub fn u32_constant_in_an_annotation() -> F32 {
+  let _: [F32; K] = [0.0; 4]
+  1.0
+}
+
+pub fn u32_associated_constant_in_a_parameter(x: [F32; Dev.CAP]) -> F32 {
+  1.0
+}
+
+pub fn u32_associated_constant_in_a_repeat() -> F32 {
+  let a = [0.0; Dev.CAP]
+  a[0]
+}
+
+pub fn u32_builtin_constant_in_a_parameter(x: [F32; I32.BITS]) -> F32 {
+  1.0
+}
+
+pub fn u32_builtin_constant_in_a_repeat() -> F32 {
+  let a = [0.0; I32.BITS]
+  a[0]
+}
+
+pub fn u32_builtin_constant_in_a_const_argument(r: Ring[F32, I32.BITS]) -> U32 {
+  r.head
+}
+
+pub struct U32BuiltinConstantInAField {
+  a: [F32; I32.BITS],
+}

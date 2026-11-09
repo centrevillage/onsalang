@@ -1,0 +1,96 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7", "§11.4", "§11.5"]
+
+// A call (`g(1)`, `K.min(2)`) is outside the grammar of a constant expression (§4.5: "関数の呼び出しは書けない") and is E0417 wherever a constant
+// expression is written. A part outside the grammar inside an operation is the error of the operation: `K + (1, 2)` and `(K < 2) + 1` are
+// E0417 (the operand is read first, and the operation over it adds no error, §18.1), `-g(1)` is E0417 and not the E0401 of the prefix `-`.
+// The places are the heading of an item (a parameter, a result, a field, an alias, the type of a `const`, a const argument) and
+// the repeat and the annotation of a body.
+// These are the units of const_grammar_calls.onsa whose result the reader of W5-16 U1b1 does not change (they pass before it): they are in
+// their own file so that a regression of them is not silenced with the units that change.
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub struct P {
+  x: U32,
+}
+
+const K: U32 = 4
+const XS: [U32; 2] = [1, 2]
+
+fn g(a: U32) -> U32 {
+  a
+}
+
+pub fn call_in_a_parameter(x: [F32; g(1)]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn call_in_a_repeat() -> F32 {
+  let a = [0.0; g(1)]   //~ E0417
+  a[0]
+}
+
+pub fn call_in_a_result() -> [F32; g(1)] {   //~ E0417
+  [0.0; 4]
+}
+
+pub fn call_in_an_annotation() -> F32 {
+  let _: [F32; g(1)] = [0.0; 4]   //~ E0417
+  1.0
+}
+
+pub fn call_of_constant_in_a_parameter(x: [F32; g(K)]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn call_of_constant_in_a_repeat() -> F32 {
+  let a = [0.0; g(K)]   //~ E0417
+  a[0]
+}
+
+type CallOfConstantInAnAlias = [F32; g(K)]   //~ E0417
+
+pub fn call_in_a_sum_in_a_parameter(x: [F32; K + g(1)]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn call_in_a_sum_in_a_repeat() -> F32 {
+  let a = [0.0; K + g(1)]   //~ E0417
+  a[0]
+}
+
+pub fn call_in_a_sum_in_a_const_argument(r: Ring[F32, K + g(1)]) -> U32 {   //~ E0417
+  r.head
+}
+
+pub fn method_in_a_parameter(x: [F32; K.min(2)]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn method_in_a_repeat() -> F32 {
+  let a = [0.0; K.min(2)]   //~ E0417
+  a[0]
+}
+
+pub fn call_negated_in_a_parameter(x: [F32; -g(1)]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn call_negated_in_a_repeat() -> F32 {
+  let a = [0.0; -g(1)]   //~ E0417
+  a[0]
+}
+
+pub fn call_negated_in_a_result() -> [F32; -g(1)] {   //~ E0417
+  [0.0; 4]
+}
+
+pub fn call_negated_in_an_annotation() -> F32 {
+  let _: [F32; -g(1)] = [0.0; 4]   //~ E0417
+  1.0
+}

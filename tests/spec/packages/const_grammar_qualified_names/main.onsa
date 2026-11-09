@@ -1,0 +1,163 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.1", "§15.1", "§11.4", "§11.5"]
+
+// W5-16 U1b/t, R-61, S-50: a constant of a module (`cfg.N`) or of a type of a module (`cfg.Dev.CAP`) is read as a constant expression in
+// every place where one is written, and the same in a length and in a const argument: `[F32; cfg.N]` and `Ring[F32, cfg.N]` are fine,
+// and a constant whose type is not `U32` (`cfg.M: I64`, `cfg.Dev.WIDE: I64`) is E0401 in both (§4.5: "期待型でない定数は E0401"). The places
+// are the heading of an item, the repeat and the annotation of a body, and the places of a flow body. A name of the module that it does not
+// have, inside a form outside the grammar, is E0302 (§15.1; §18.1: the names stage goes first), and the form itself is E0417 as it is for an
+// unqualified name (const_grammar_qualified_forms has the forms that change with W5-16 U1b1). One error per unit (§18.1).
+use cfg
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+// ---- Fine: a constant of type `U32` ----
+
+pub fn module_constant_in_a_parameter(x: [F32; cfg.N]) -> F32 {
+  x[0]
+}
+
+pub fn module_constant_in_a_const_argument(r: Ring[F32, cfg.N]) -> U32 {
+  r.head
+}
+
+pub fn module_constant_in_a_result() -> [F32; cfg.N] {
+  [0.0; 4]
+}
+
+pub fn module_constant_in_a_repeat() -> F32 {
+  let a = [0.0; cfg.N]
+  a[0]
+}
+
+pub fn module_constant_in_an_annotation() -> F32 {
+  let a: [F32; cfg.N] = [0.0; 4]
+  a[0]
+}
+
+pub fn type_constant_in_a_parameter(x: [F32; cfg.Dev.CAP]) -> F32 {
+  x[0]
+}
+
+pub fn type_constant_in_a_const_argument(r: Ring[F32, cfg.Dev.CAP]) -> U32 {
+  r.head
+}
+
+pub flow module_constant_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, cfg.N)
+}
+
+pub flow module_constant_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, cfg.N)
+}
+
+pub flow module_constant_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<cfg.N { x * F32.round_from(i) }
+  ys[0]
+}
+
+pub flow module_constant_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
+  let a = [x; cfg.N]
+  a[0]
+}
+
+pub flow type_constant_in_a_flow_input(a: [F32; cfg.Dev.CAP] at sample) -> F32 at sample {
+  a[0]
+}
+
+// ---- E0401: a constant of another type ----
+
+pub fn module_i64_in_a_parameter(x: [F32; cfg.M]) -> F32 {   //~ E0401
+  1.0
+}
+
+pub fn module_i64_in_a_const_argument(r: Ring[F32, cfg.M]) -> U32 {   //~ E0401
+  r.head
+}
+
+pub fn module_i64_in_a_result() -> [F32; cfg.M] {   //~ E0401
+  [0.0; 4]
+}
+
+pub fn module_i64_in_a_repeat() -> F32 {
+  let a = [0.0; cfg.M]   //~ E0401
+  a[0]
+}
+
+pub fn module_i64_in_an_annotation() -> F32 {
+  let a: [F32; cfg.M] = [0.0; 4]   //~ E0401
+  a[0]
+}
+
+pub fn type_i64_in_a_parameter(x: [F32; cfg.Dev.WIDE]) -> F32 {   //~ E0401
+  1.0
+}
+
+pub fn type_i64_in_a_const_argument(r: Ring[F32, cfg.Dev.WIDE]) -> U32 {   //~ E0401
+  r.head
+}
+
+pub flow module_i64_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, cfg.M)   //~ E0401
+}
+
+pub flow module_i64_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, cfg.M)   //~ E0401
+}
+
+pub flow module_i64_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<cfg.M { x * F32.round_from(i) }   //~ E0401
+  ys[0]
+}
+
+pub flow module_i64_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
+  let a = [x; cfg.M]   //~ E0401
+  a[0]
+}
+
+pub flow type_i64_in_a_flow_input(a: [F32; cfg.Dev.WIDE] at sample) -> F32 at sample {   //~ E0401
+  0.0
+}
+
+// ---- E0417: a form outside the grammar around a qualified name ----
+
+pub flow comparison_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, cfg.Dev.CAP == 3)   //~ E0417
+}
+
+pub flow block_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<({ cfg.N }) { x * F32.round_from(i) }   //~ E0417
+  ys[0]
+}
+
+// ---- E0302: a name of the module that it does not have, inside the form ----
+
+pub fn missing_in_a_tuple_in_a_parameter(x: [F32; (cfg.Nope, 1)]) -> F32 {   //~ E0302
+  1.0
+}
+
+pub fn missing_in_a_comparison_in_a_repeat() -> F32 {
+  let a = [0.0; cfg.Nope < 2]   //~ E0302
+  a[0]
+}
+
+pub fn missing_in_an_if_in_a_const_argument(r: Ring[F32, if true { cfg.Nope } else { 2 }]) -> U32 {   //~ E0302
+  r.head
+}
+
+pub flow missing_in_a_tuple_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, (cfg.Nope, 1))   //~ E0302
+}
+
+pub flow missing_in_a_comparison_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
+  let a = [x; cfg.Nope == 2]   //~ E0302
+  a[0]
+}
+
+pub flow missing_in_a_cast_in_a_flow_input(a: [F32; cfg.Nope as U32] at sample) -> F32 at sample {   //~ E0302
+  0.0
+}

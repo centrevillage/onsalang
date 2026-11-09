@@ -305,9 +305,9 @@ impl<'a> Checker<'a> {
         expected: Option<TyId>,
     ) -> R<TyId> {
         let span = self.expr(e).span;
-        self.range_end_forms(range)?;
-        let lo = self.flow_const_u32(range.lo, "a `par~` bound")?;
-        let hi = self.flow_const_u32(range.hi, "a `par~` bound")?;
+        // The ends are constant expressions (§4.5, S-966), read by their form there.
+        let lo = self.flow_const_u32(range.lo)?;
+        let hi = self.flow_const_u32(range.hi)?;
         let end = range.end;
         let (empty, count) = match end {
             RangeEnd::Excluded => (hi <= lo, "`b - a`"),
@@ -518,7 +518,7 @@ impl<'a> Checker<'a> {
             Delay::Prev => 0,
             Delay::Fixed => {
                 let n_expr = constant.expect("the length of `delay~`");
-                let n = self.flow_const_u32(n_expr, "the length of `delay~`")?;
+                let n = self.flow_const_u32(n_expr)?;
                 if n == 1 {
                     // The name and the length change, the rest of the call stays (S-251):
                     // the length goes with the `,` before it.
@@ -550,7 +550,7 @@ impl<'a> Checker<'a> {
             Delay::Variable => {
                 self.check_expr(args[1].expr, Some(t))?;
                 let max_expr = constant.expect("the maximum of `vdelay~`");
-                let max = self.flow_const_u32(max_expr, "the maximum of `vdelay~`")?;
+                let max = self.flow_const_u32(max_expr)?;
                 if max < 1 {
                     return Err(self.flow_err(
                         Code::E0808,

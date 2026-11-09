@@ -1,0 +1,174 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1", "§11.4", "§11.5"]
+
+// The names in a constant expression are read by the names stage first, as the names of an ordinary expression are (§4.5: "中の名前は
+// 普通の式と同じく名前の段が先に読む"; §18.1; S-968). In a form outside the grammar, a name that is not found is E0302 and a name that is no value
+// is E0308, not the E0417 of the form. A name that the names stage has rejected for E0304 (`D`, defined twice) is used with no diagnostic where
+// it is the whole expression (§18.1) and the form around it is E0417 (S-968). The forms that the walk of a flow body does not read into
+// (a block with a statement, a function value) are only in the heading and the body of a function.
+// The places are those of a flow: the length of `delay~`, the maximum of `vdelay~`, the ends of a `par~`, the repeat and the annotation of
+// a flow body, and the type of an input.
+// These are the units of const_grammar_names.onsa whose result the reader of W5-16 U1b1 does not change (they pass before it): they are in
+// their own file so that a regression of them is not silenced with the units that change.
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub struct P {
+  x: U32,
+}
+
+const K: U32 = 4
+const XS: [U32; 2] = [1, 2]
+
+fn g(a: U32) -> U32 {
+  a
+}
+
+const D: U32 = 1
+const D: U32 = 2   //~ E0304
+
+pub flow unknown_in_a_tuple_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, (zz, 1))   //~ E0302
+}
+
+pub flow unknown_in_an_if_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, if true { zz } else { 2 })   //~ E0302
+}
+
+pub flow unknown_in_an_if_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<(if true { zz } else { 2 }) { x * F32.round_from(i) }   //~ E0302
+  ys[0]
+}
+
+pub flow unknown_in_a_block_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, { zz })   //~ E0302
+}
+
+pub flow unknown_in_a_block_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
+  let a = [x; { zz }]   //~ E0302
+  a[0]
+}
+
+pub flow unknown_in_a_match_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, match zz { _ => 1 })   //~ E0302
+}
+
+pub flow unknown_in_a_match_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, match zz { _ => 1 })   //~ E0302
+}
+
+pub flow unknown_in_a_match_in_a_flow_annotation(x: F32 at sample) -> F32 at sample {
+  let a: [F32; match zz { _ => 1 }] = [x; 4]   //~ E0302
+  a[0]
+}
+
+pub flow unknown_in_a_comparison_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, zz < 2)   //~ E0302
+}
+
+pub flow unknown_in_a_comparison_as_the_start_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in (zz < 2)..<8 { x * F32.round_from(i) }   //~ E0302
+  ys[0]
+}
+
+pub flow unknown_in_an_array_repeat_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, [zz; 2])   //~ E0302
+}
+
+pub flow unknown_in_an_array_repeat_in_a_flow_input(a: [F32; [zz; 2]] at sample) -> F32 at sample {   //~ E0302
+  0.0
+}
+
+pub flow unknown_in_a_call_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, g(zz))   //~ E0302
+}
+
+pub flow unknown_in_a_cast_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, zz as U32)   //~ E0302
+}
+
+pub flow unknown_in_a_cast_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, zz as U32)   //~ E0302
+}
+
+pub flow unknown_in_an_index_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, XS[zz])   //~ E0302
+}
+
+pub flow unknown_in_an_index_as_the_start_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in XS[zz]..<8 { x * F32.round_from(i) }   //~ E0302
+  ys[0]
+}
+
+pub flow unknown_in_a_not_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, !zz)   //~ E0302
+}
+
+pub flow unknown_in_a_not_as_the_start_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in !zz..<8 { x * F32.round_from(i) }   //~ E0302
+  ys[0]
+}
+
+pub flow type_in_a_tuple_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, (P, 1))   //~ E0308
+}
+
+pub flow type_in_a_tuple_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, (P, 1))   //~ E0308
+}
+
+pub flow type_in_a_comparison_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, P < 2)   //~ E0308
+}
+
+pub flow type_in_a_comparison_as_the_start_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in (P < 2)..<8 { x * F32.round_from(i) }   //~ E0308
+  ys[0]
+}
+
+pub flow type_as_the_condition_of_an_if_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, if P { 1 } else { 2 })   //~ E0308
+}
+
+pub flow type_as_the_condition_of_an_if_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<(if P { 1 } else { 2 }) { x * F32.round_from(i) }   //~ E0308
+  ys[0]
+}
+
+pub flow duplicate_in_an_if_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, if true { D } else { 2 })   //~ E0417
+}
+
+pub flow duplicate_in_an_if_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, if true { D } else { 2 })   //~ E0417
+}
+
+pub flow duplicate_in_a_block_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, { D })   //~ E0417
+}
+
+pub flow duplicate_in_a_call_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, g(D))   //~ E0417
+}
+
+pub flow duplicate_in_a_match_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, match D { _ => 1 })   //~ E0417
+}
+
+pub flow duplicate_in_a_match_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<(match D { _ => 1 }) { x * F32.round_from(i) }   //~ E0417
+  ys[0]
+}
+
+pub flow duplicate_alone_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, D)
+}
+
+pub flow duplicate_alone_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
+  let a = [x; D]
+  a[0]
+}

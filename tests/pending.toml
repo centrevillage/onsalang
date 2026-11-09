@@ -806,13 +806,6 @@ note = "main.onsa の値の match（リテラルのパターン、列挙子の�
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/negative/const_expr_neg.onsa"
-reasons = ["S-228"]
-until = "W5-16"
-note = "配列の長さ・const 引数の前置の - は E0401（-(1)、-ONE、-(N + 1)、[0.0; -1]）。U32 でない定数 I32 は E0401。定数式の文法は W5-08（今は E0002 / E0200）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/negative/const_expr_eval.onsa"
 reasons = ["S-228"]
 until = "W9-03"

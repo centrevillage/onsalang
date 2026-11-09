@@ -1,0 +1,101 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7", "§11.4", "§11.5"]
+
+// A literal that is not an integer (`1.5`, `true`, `"s"`, `'c'`) is a leaf of a constant expression and does not have the type `U32`:
+// E0401 wherever a constant expression is written (§4.5: "整数でないリテラル（`1.5`、`true`、`"s"`）も E0401"; S-966), as a constant of
+// another type is (const_grammar_typed.onsa). The operand of an operation of the grammar (`K + 1.5`) is read first, so the leaf is the error.
+// The places are the heading of an item (a parameter, a result, a field, an alias, the type of a `const`, a const argument) and
+// the repeat and the annotation of a body.
+// One error per unit (§18.1).
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub struct P {
+  x: U32,
+}
+
+const K: U32 = 4
+const XS: [U32; 2] = [1, 2]
+
+fn g(a: U32) -> U32 {
+  a
+}
+
+pub fn float_in_a_parameter(x: [F32; 1.5]) -> F32 {   //~ E0401
+  1.0
+}
+
+pub fn float_in_a_repeat() -> F32 {
+  let a = [0.0; 1.5]   //~ E0401
+  a[0]
+}
+
+pub fn float_in_a_result() -> [F32; 1.5] {   //~ E0401
+  [0.0; 4]
+}
+
+pub fn float_in_an_annotation() -> F32 {
+  let _: [F32; 1.5] = [0.0; 4]   //~ E0401
+  1.0
+}
+
+pub fn bool_in_a_parameter(x: [F32; true]) -> F32 {   //~ E0401
+  1.0
+}
+
+pub fn bool_in_a_repeat() -> F32 {
+  let a = [0.0; true]   //~ E0401
+  a[0]
+}
+
+type BoolInAnAlias = [F32; true]   //~ E0401
+
+pub fn str_in_a_parameter(x: [F32; "s"]) -> F32 {   //~ E0401
+  1.0
+}
+
+pub fn str_in_a_repeat() -> F32 {
+  let a = [0.0; "s"]   //~ E0401
+  a[0]
+}
+
+pub fn str_in_a_const_argument(r: Ring[F32, "s"]) -> U32 {   //~ E0401
+  r.head
+}
+
+pub fn char_in_a_parameter(x: [F32; 'c']) -> F32 {   //~ E0401
+  1.0
+}
+
+pub fn char_in_a_repeat() -> F32 {
+  let a = [0.0; 'c']   //~ E0401
+  a[0]
+}
+
+pub fn float_in_parens_in_a_parameter(x: [F32; (1.5)]) -> F32 {   //~ E0401
+  1.0
+}
+
+pub fn float_in_parens_in_a_repeat() -> F32 {
+  let a = [0.0; (1.5)]   //~ E0401
+  a[0]
+}
+
+pub struct FloatInParensInAField {
+  a: [F32; (1.5)],   //~ E0401
+}
+
+pub fn float_after_constant_in_a_parameter(x: [F32; K + 1.5]) -> F32 {   //~ E0401
+  1.0
+}
+
+pub fn float_after_constant_in_a_repeat() -> F32 {
+  let a = [0.0; K + 1.5]   //~ E0401
+  a[0]
+}
+
+const FLOAT_AFTER_CONSTANT_IN_A_CONST_TYPE: [F32; K + 1.5] = [0.0; 4]   //~ E0401

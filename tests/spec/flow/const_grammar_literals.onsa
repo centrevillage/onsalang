@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7", "§11.4", "§11.5"]
+
+// A literal that is not an integer (`1.5`, `true`, `"s"`, `'c'`) is a leaf of a constant expression and does not have the type `U32`:
+// E0401 wherever a constant expression is written (§4.5: "整数でないリテラル（`1.5`、`true`、`"s"`）も E0401"; S-966), as a constant of
+// another type is (const_grammar_typed.onsa). The operand of an operation of the grammar (`K + 1.5`) is read first, so the leaf is the error.
+// The places are those of a flow: the length of `delay~`, the maximum of `vdelay~`, the ends of a `par~`, the repeat and the annotation of
+// a flow body, and the type of an input.
+// The units whose result does not change are in const_grammar_literals_unchanged.onsa. One error per unit (§18.1).
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub struct P {
+  x: U32,
+}
+
+const K: U32 = 4
+const XS: [U32; 2] = [1, 2]
+
+fn g(a: U32) -> U32 {
+  a
+}
+
+pub flow str_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
+  let a = [x; "s"]   //~ E0401
+  a[0]
+}
+
+pub flow char_in_a_flow_annotation(x: F32 at sample) -> F32 at sample {
+  let a: [F32; 'c'] = [x; 4]   //~ E0401
+  a[0]
+}
+
+pub flow float_after_constant_in_a_flow_input(a: [F32; K + 1.5] at sample) -> F32 at sample {   //~ E0401
+  0.0
+}

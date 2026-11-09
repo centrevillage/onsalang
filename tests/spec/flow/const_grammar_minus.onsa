@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§3.4", "§11.4", "§11.5"]
+
+// `U32` has no prefix `-`, so `-1`, `-0`, `-(1)`, `-K` and a prefix `-` in an operation or before a sum are E0401 wherever a constant
+// expression is written (§4.5, §3.4; S-228), never E0408 or E0808. negative/const_expr_neg.onsa and negative/flow_const_neg.onsa have some
+// of the places; this file has the others, and the flow places that are fine before W5-16 U1b1 are in the _unchanged file.
+// The places are those of a flow: the length of `delay~`, the maximum of `vdelay~`, the ends of a `par~`, the repeat and the annotation of
+// a flow body, and the type of an input.
+// The units whose result does not change are in const_grammar_minus_unchanged.onsa. One error per unit (§18.1).
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub struct P {
+  x: U32,
+}
+
+const K: U32 = 4
+const XS: [U32; 2] = [1, 2]
+
+fn g(a: U32) -> U32 {
+  a
+}
+
+pub flow constant_in_a_flow_annotation(x: F32 at sample) -> F32 at sample {
+  let a: [F32; -K] = [x; 4]   //~ E0401
+  a[0]
+}
+
+pub flow after_operator_in_a_flow_input(a: [F32; 2 * -K] at sample) -> F32 at sample {   //~ E0401
+  0.0
+}

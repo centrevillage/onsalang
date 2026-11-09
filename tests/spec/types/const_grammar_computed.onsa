@@ -1,0 +1,90 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§11.4", "§11.5"]
+
+// A value that is computed from constants (`K + 1`, `K * 2`) is a constant expression of the grammar (§4.5), but this version does not
+// evaluate it (S-50, K-05): E0200 wherever it is written, and the reader of the grammar passes the form on to it, with no other code. W9-03
+// evaluates it, and then this file is replaced by the cases of the values (self/const_exprs_arith.onsa and negative/const_expr_eval.onsa).
+// The places are the heading of an item (a parameter, a result, a field, an alias, the type of a `const`, a const argument) and
+// the repeat and the annotation of a body.
+// One error per unit (§18.1).
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub struct P {
+  x: U32,
+}
+
+const K: U32 = 4
+const XS: [U32; 2] = [1, 2]
+
+fn g(a: U32) -> U32 {
+  a
+}
+
+pub fn sum_in_a_parameter(x: [F32; K + 1]) -> F32 {   //~ E0200
+  1.0
+}
+
+pub fn sum_in_a_repeat() -> F32 {
+  let a = [0.0; K + 1]   //~ E0200
+  a[0]
+}
+
+pub fn sum_in_a_result() -> [F32; K + 1] {   //~ E0200
+  [0.0; 4]
+}
+
+pub fn sum_in_an_annotation() -> F32 {
+  let _: [F32; K + 1] = [0.0; 4]   //~ E0200
+  1.0
+}
+
+pub fn product_in_a_parameter(x: [F32; K * 2]) -> F32 {   //~ E0200
+  1.0
+}
+
+pub fn product_in_a_repeat() -> F32 {
+  let a = [0.0; K * 2]   //~ E0200
+  a[0]
+}
+
+type ProductInAnAlias = [F32; K * 2]   //~ E0200
+
+pub fn quotient_in_a_parameter(x: [F32; K / 2]) -> F32 {   //~ E0200
+  1.0
+}
+
+pub fn quotient_in_a_repeat() -> F32 {
+  let a = [0.0; K / 2]   //~ E0200
+  a[0]
+}
+
+pub fn quotient_in_a_const_argument(r: Ring[F32, K / 2]) -> U32 {   //~ E0200
+  r.head
+}
+
+pub fn remainder_in_a_parameter(x: [F32; K % 3]) -> F32 {   //~ E0200
+  1.0
+}
+
+pub fn remainder_in_a_repeat() -> F32 {
+  let a = [0.0; K % 3]   //~ E0200
+  a[0]
+}
+
+pub fn nested_in_a_parameter(x: [F32; (K + 1) * 2]) -> F32 {   //~ E0200
+  1.0
+}
+
+pub fn nested_in_a_repeat() -> F32 {
+  let a = [0.0; (K + 1) * 2]   //~ E0200
+  a[0]
+}
+
+pub struct NestedInAField {
+  a: [F32; (K + 1) * 2],   //~ E0200
+}

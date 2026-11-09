@@ -56,15 +56,13 @@ use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 use onsa_syntax::ast::{
-    Arg, BinOp, CallKind, ExprId, ExprKind, Ident, Lit, Mode, PatId, PatKind, RangeEnd, RangeHead, StmtId, StmtKind,
-    UnOp,
+    Arg, CallKind, ExprId, ExprKind, Ident, Mode, PatId, PatKind, RangeEnd, RangeHead, StmtId, StmtKind,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::body::{BodyInfo, Checker, Frame, LocalId, R, Target};
 use crate::consteval::{self, ConstValue};
 use crate::def::FlowInput;
-use crate::resolve::Entity;
 use crate::ty::{FloatKind, Len, Rate, Ty, TyId};
 use crate::{Analysis, DefId, Kind, Module};
 

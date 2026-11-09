@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7", "§11.4", "§11.5"]
+
+// A literal that is not an integer (`1.5`, `true`, `"s"`, `'c'`) is a leaf of a constant expression and does not have the type `U32`:
+// E0401 wherever a constant expression is written (§4.5: "整数でないリテラル（`1.5`、`true`、`"s"`）も E0401"; S-966), as a constant of
+// another type is (const_grammar_typed.onsa). The operand of an operation of the grammar (`K + 1.5`) is read first, so the leaf is the error.
+// The places are those of a flow: the length of `delay~`, the maximum of `vdelay~`, the ends of a `par~`, the repeat and the annotation of
+// a flow body, and the type of an input.
+// These are the units of const_grammar_literals.onsa whose result the reader of W5-16 U1b1 does not change (they pass before it): they are in
+// their own file so that a regression of them is not silenced with the units that change.
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub struct P {
+  x: U32,
+}
+
+const K: U32 = 4
+const XS: [U32; 2] = [1, 2]
+
+fn g(a: U32) -> U32 {
+  a
+}
+
+pub flow float_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, 1.5)   //~ E0401
+}
+
+pub flow bool_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, true)   //~ E0401
+}
+
+pub flow bool_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<true { x * F32.round_from(i) }   //~ E0401
+  ys[0]
+}
+
+pub flow str_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, "s")   //~ E0401
+}
+
+pub flow char_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, 'c')   //~ E0401
+}
+
+pub flow char_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, 'c')   //~ E0401
+}
+
+pub flow float_in_parens_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, (1.5))   //~ E0401
+}
+
+pub flow float_in_parens_as_the_start_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in (1.5)..<8 { x * F32.round_from(i) }   //~ E0401
+  ys[0]
+}
+
+pub flow float_after_constant_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, K + 1.5)   //~ E0401
+}

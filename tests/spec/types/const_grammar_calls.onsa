@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7", "§11.4", "§11.5"]
+
+// A call (`g(1)`, `K.min(2)`) is outside the grammar of a constant expression (§4.5: "関数の呼び出しは書けない") and is E0417 wherever a constant
+// expression is written. A part outside the grammar inside an operation is the error of the operation: `K + (1, 2)` and `(K < 2) + 1` are
+// E0417 (the operand is read first, and the operation over it adds no error, §18.1), `-g(1)` is E0417 and not the E0401 of the prefix `-`.
+// The places are the heading of an item (a parameter, a result, a field, an alias, the type of a `const`, a const argument) and
+// the repeat and the annotation of a body.
+// The units whose result does not change are in const_grammar_calls_unchanged.onsa. One error per unit (§18.1).
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub struct P {
+  x: U32,
+}
+
+const K: U32 = 4
+const XS: [U32; 2] = [1, 2]
+
+fn g(a: U32) -> U32 {
+  a
+}
+
+pub fn tuple_in_a_sum_in_a_parameter(x: [F32; K + (1, 2)]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn tuple_in_a_sum_in_a_repeat() -> F32 {
+  let a = [0.0; K + (1, 2)]   //~ E0417
+  a[0]
+}
+
+pub struct TupleInASumInAField {
+  a: [F32; K + (1, 2)],   //~ E0417
+}
+
+pub fn comparison_in_a_sum_in_a_parameter(x: [F32; (K < 2) + 1]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn comparison_in_a_sum_in_a_repeat() -> F32 {
+  let a = [0.0; (K < 2) + 1]   //~ E0417
+  a[0]
+}
+
+const COMPARISON_IN_A_SUM_IN_A_CONST_TYPE: [F32; (K < 2) + 1] = [0.0; 4]   //~ E0417

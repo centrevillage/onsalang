@@ -5,8 +5,10 @@
 // W4-04 U8b/i3, S-728 (1): a type alias whose type is the error type (`type B = zz`, with `zz` not found) has
 // its error where it is declared, and stands for a failed name (§18.1: "誤りのある宣言も、名前まで読めれば
 // 名前解決に見せる。... それを使う側には診断を出さない"). So in a constant expression, a length of a
-// signature, of a body, of an annotation and of a flow, and a const argument, `B` and `B()` are no error of
-// their units, as `let _ = B()` of a body is not (no E0308 "`B` is a type").
+// signature, of a body, of an annotation and of a flow, and a const argument, `B` is no error of its unit,
+// as `let _ = B()` of a body is not (no E0308 "`B` is a type"). A length and a const argument are type
+// positions, where a failed name does not stop its unit (§18.1: "同じ単位の検査を続ける"), so a call `B()`
+// there is the E0417 of a call in a constant expression, whatever is called (§4.5, S-966, S-968).
 
 type B = zz   //~ E0302
 
@@ -19,12 +21,12 @@ pub fn called_in_a_body() -> I32 {
   1
 }
 
-pub fn called_in_a_length(x: [F32; B()]) -> F32 {
+pub fn called_in_a_length(x: [F32; B()]) -> F32 { //~ E0417
   1.0
 }
 
 pub fn called_in_a_body_length(x: F32) -> F32 {
-  let a = [x; B()]
+  let a = [x; B()] //~ E0417
   a[0]
 }
 
@@ -46,7 +48,7 @@ pub fn named_in_a_const_argument(x: W[B]) -> I32 {
   1
 }
 
-pub fn called_in_a_const_argument(x: W[B()]) -> I32 {
+pub fn called_in_a_const_argument(x: W[B()]) -> I32 { //~ E0417
   1
 }
 

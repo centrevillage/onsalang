@@ -1,0 +1,130 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§11.4", "§11.5"]
+
+// A block (with a value or with a statement), an `if`, a `match`, a function value and `unsafe` are outside the grammar of a constant
+// expression (§4.5) and are E0417 wherever a constant expression is written, whatever is in them (S-966). Where the form would take the
+// braces of the `par~` for its own, it is in parentheses, which do not change the code (§2.4).
+// The places are the heading of an item (a parameter, a result, a field, an alias, the type of a `const`, a const argument) and
+// the repeat and the annotation of a body.
+// One error per unit (§18.1).
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub struct P {
+  x: U32,
+}
+
+const K: U32 = 4
+const XS: [U32; 2] = [1, 2]
+
+fn g(a: U32) -> U32 {
+  a
+}
+
+pub fn block_in_a_parameter(x: [F32; { 1 }]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn block_in_a_repeat() -> F32 {
+  let a = [0.0; { 1 }]   //~ E0417
+  a[0]
+}
+
+pub fn block_in_a_result() -> [F32; { 1 }] {   //~ E0417
+  [0.0; 4]
+}
+
+pub fn block_in_an_annotation() -> F32 {
+  let _: [F32; { 1 }] = [0.0; 4]   //~ E0417
+  1.0
+}
+
+pub fn block_of_float_in_a_parameter(x: [F32; { 1.5 }]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn block_of_float_in_a_repeat() -> F32 {
+  let a = [0.0; { 1.5 }]   //~ E0417
+  a[0]
+}
+
+type BlockOfFloatInAnAlias = [F32; { 1.5 }]   //~ E0417
+
+pub fn if_in_a_parameter(x: [F32; if true { 1 } else { 2 }]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn if_in_a_repeat() -> F32 {
+  let a = [0.0; if true { 1 } else { 2 }]   //~ E0417
+  a[0]
+}
+
+pub fn if_in_a_const_argument(r: Ring[F32, if true { 1 } else { 2 }]) -> U32 {   //~ E0417
+  r.head
+}
+
+pub fn if_of_constants_in_a_parameter(x: [F32; if K > 1 { K } else { 2 }]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn if_of_constants_in_a_repeat() -> F32 {
+  let a = [0.0; if K > 1 { K } else { 2 }]   //~ E0417
+  a[0]
+}
+
+pub fn match_in_a_parameter(x: [F32; match 1 { _ => 1 }]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn match_in_a_repeat() -> F32 {
+  let a = [0.0; match 1 { _ => 1 }]   //~ E0417
+  a[0]
+}
+
+pub struct MatchInAField {
+  a: [F32; match 1 { _ => 1 }],   //~ E0417
+}
+
+pub fn closure_in_a_parameter(x: [F32; fn(x: U32) -> U32 { x }]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn closure_in_a_repeat() -> F32 {
+  let a = [0.0; fn(x: U32) -> U32 { x }]   //~ E0417
+  a[0]
+}
+
+const CLOSURE_IN_A_CONST_TYPE: [F32; fn(x: U32) -> U32 { x }] = [0.0; 4]   //~ E0417
+
+pub fn unsafe_in_a_parameter(x: [F32; unsafe { 1 }]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn unsafe_in_a_repeat() -> F32 {
+  let a = [0.0; unsafe { 1 }]   //~ E0417
+  a[0]
+}
+
+pub fn unsafe_in_a_result() -> [F32; unsafe { 1 }] {   //~ E0417
+  [0.0; 4]
+}
+
+pub fn unsafe_in_an_annotation() -> F32 {
+  let _: [F32; unsafe { 1 }] = [0.0; 4]   //~ E0417
+  1.0
+}
+
+pub fn block_in_a_sum_in_a_parameter(x: [F32; K + (if true { 1 } else { 2 })]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn block_in_a_sum_in_a_repeat() -> F32 {
+  let a = [0.0; K + (if true { 1 } else { 2 })]   //~ E0417
+  a[0]
+}
+
+type BlockInASumInAnAlias = [F32; K + (if true { 1 } else { 2 })]   //~ E0417

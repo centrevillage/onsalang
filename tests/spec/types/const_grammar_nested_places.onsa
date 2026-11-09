@@ -1,0 +1,124 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7", "§18.1"]
+
+// W5-16 U1b/t, S-966, S-968, S-228: the code of a constant expression does not depend on where the length is written inside a function: the
+// repeat and the annotation inside a branch (`if`, `match`), a loop, a function value, a block, and in the type of a parameter of a function
+// value are E0417 for a form outside the grammar, E0401 for a float and a prefix `-`, and E0302 for a name that is not found (§4.5, §18.1).
+// A constant in the same places is fine. One error per unit (§18.1).
+// The units whose result W5-16 U1b1 does not change are in const_grammar_nested_places_unchanged.onsa.
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+const K: U32 = 4
+
+pub fn comparison_in_a_branch(c: Bool) -> F32 {
+  if c {
+    let a = [0.0; K < 2]   //~ E0417
+    a[0]
+  } else {
+    0.0
+  }
+}
+
+pub fn tuple_in_an_else(c: Bool) -> F32 {
+  if c {
+    0.0
+  } else {
+    let a = [0.0; (1, 2)]   //~ E0417
+    a[0]
+  }
+}
+
+pub fn array_in_a_match_arm(o: Option[U32]) -> F32 {
+  match o {
+    Some(_) => {
+      let a = [0.0; [1]]   //~ E0417
+      a[0]
+    },
+    None => 0.0,
+  }
+}
+
+pub fn float_in_a_match_arm(o: Option[U32]) -> F32 {
+  match o {
+    Some(_) => 0.0,
+    None => {
+      let a = [0.0; 1.5]   //~ E0401
+      a[0]
+    },
+  }
+}
+
+pub fn cast_in_a_for() -> F32 {
+  var s = 0.0
+  for i in 0..<3 {
+    let a: [F32; K as U32] = [0.0; 4]   //~ E0417
+    s = s + a[0] + F32.round_from(i)
+  }
+  s
+}
+
+pub fn prefix_minus_in_a_while() -> F32 {
+  var s = 0.0
+  var n = 0
+  while n < 3 {
+    let a = [0.0; -K]   //~ E0401
+    s = s + a[0]
+    n = n + 1
+  }
+  s
+}
+
+pub fn comparison_in_a_closure() -> F32 {
+  let f = fn(x: F32) -> F32 {
+    let a = [x; K == 4]   //~ E0417
+    a[0]
+  }
+  f.(1.0)
+}
+
+pub fn index_in_a_parameter_of_a_closure() -> F32 {
+  let f = fn(a: [F32; [1][0]]) -> F32 {   //~ E0417
+    a[0]
+  }
+  f.([0.0; 1])
+}
+
+pub fn float_in_a_result_of_a_closure() -> F32 {
+  let f = fn() -> [F32; 2.5] {   //~ E0401
+    [0.0; 2]
+  }
+  f.()[0]
+}
+
+pub fn comparison_in_a_nested_block() -> F32 {
+  let b = {
+    let a = [0.0; K > 1]   //~ E0417
+    a[0]
+  }
+  b
+}
+
+pub fn comparison_in_a_function_type(f: fn([F32; K < 2]) -> F32) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn tuple_in_a_tuple_type(t: (U32, [F32; (1, 2)])) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn float_in_an_option(o: Option[[F32; 1.5]]) -> F32 {   //~ E0401
+  1.0
+}
+
+pub fn comparison_in_an_array_of_arrays(a: [[F32; K & 1]; 2]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn comparison_in_a_const_argument_in_a_type(r: Option[Ring[F32, K < 2]]) -> F32 {   //~ E0417
+  1.0
+}

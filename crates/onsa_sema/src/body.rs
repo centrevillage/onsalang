@@ -607,7 +607,8 @@ impl<'a> Checker<'a> {
 
     /// E0401 for an end of a range whose form is no integer, whatever its
     /// type is inferred to be (§7, S-257; [`Checker::non_integer_form`]).
-    /// The `for` and the `par` heads both check it first.
+    /// The `for` head checks it first; the ends of a `par` are constant
+    /// expressions (§4.5, `crate::constarg`).
     pub(crate) fn range_end_forms(&mut self, r: &RangeHead) -> R<()> {
         for e in [r.lo, r.hi] {
             if let Some(form) = self.non_integer_form(e) {
@@ -623,8 +624,8 @@ impl<'a> Checker<'a> {
     /// (through parentheses, prefix and binary operators; a cast makes an
     /// integer): a float, string, character or `Bool` literal, a tuple, an
     /// array. The one check of the integer positions that are read before
-    /// their type is inferred (the ends of a range, the constants of a
-    /// flow), so that a message names the form, not a type variable (`?0`).
+    /// their type is inferred (the ends of the range of a `for`), so that a
+    /// message names the form, not a type variable (`?0`).
     pub(crate) fn non_integer_form(&self, e: ExprId) -> Option<&'static str> {
         match &self.expr(e).kind {
             ExprKind::Paren(x) | ExprKind::Unary { expr: x, .. } => self.non_integer_form(*x),
@@ -830,12 +831,6 @@ impl<'a> Checker<'a> {
         Ok(())
     }
 
-    /// Whether the chain of names `e` ends at (`a.b.c`) starts at a local, by
-    /// the record of its head.
-    pub(crate) fn of_a_local(&self, e: ExprId) -> bool {
-        starts_at_local(self.ast, &self.names, e)
-    }
-
     pub(crate) fn local_ty(&self, id: LocalId) -> TyId {
         self.info.locals[id.0 as usize].ty
     }
@@ -849,16 +844,6 @@ impl<'a> Checker<'a> {
     pub(crate) fn target_of(&self, e: ExprId) -> Option<Target> {
         self.info.targets.get(&e).cloned()
     }
-}
-
-/// Whether the chain of names `e` ends at (`a.b.c`) of the body of `ast`
-/// starts at a local, by the record of its head in `names`.
-pub(crate) fn starts_at_local(ast: &Ast, names: &crate::names::body::BodyNames, e: ExprId) -> bool {
-    let mut cur = e;
-    while let ExprKind::Field { base, .. } = &ast.expr(cur).kind {
-        cur = *base;
-    }
-    matches!(names.paths.get(&cur), Some(PathRes::Local(_)))
 }
 
 /// The E0714 of `!` on a call of no `inout self` method (§5.2), wherever it

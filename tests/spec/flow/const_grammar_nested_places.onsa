@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§11.4", "§11.5", "§18.1"]
+
+// W5-16 U1b/t, S-966, S-968, S-228: the code of a constant expression of a flow does not depend on where it is written inside the flow: the
+// length of a delay line and the ends of a `par~` inside the body of a `par~`, inside a nested `par~`, in a branch of `if~`
+// are E0417 for a form outside the grammar, E0401 for a float and a prefix `-`, E0302 for a name that is not found (§4.5, §18.1). A constant in the same places
+// is fine. One error per unit (§18.1).
+// The units whose result W5-16 U1b1 does not change are in const_grammar_nested_places_unchanged.onsa.
+
+const K: U32 = 4
+
+pub flow tuple_in_the_body_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<2 {
+    delay~(x, (1, 2))   //~ E0417
+  }
+  ys[0] + ys[1]
+}
+
+pub flow tuple_in_an_else_of_an_if(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c {
+    x
+  } else {
+    delay~(x, (K, K))   //~ E0417
+  }
+}
+
+pub flow comparison_in_the_repeat_in_a_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if~ c {
+    [x; K & 1][0]   //~ E0417
+  } else {
+    x
+  }
+}

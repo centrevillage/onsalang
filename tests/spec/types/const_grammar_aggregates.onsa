@@ -1,0 +1,170 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§11.4", "§11.5"]
+
+// An index, a tuple, an array, a repeat `[e; n]`, a struct literal and the field `.0` of a tuple are outside the grammar of a constant
+// expression (§4.5) and are E0417 whatever is in them (S-966): the same form has the same code with a float (`(1.5, 2)`) or a call
+// (`(g(1), 2)`) inside, because the judgement does not look at the children of such a node. The index is not written as a const argument
+// (`Ring[F32, XS[0]]` can be read as a type, so a place that reads it is not fixed here).
+// The places are the heading of an item (a parameter, a result, a field, an alias, the type of a `const`, a const argument) and
+// the repeat and the annotation of a body.
+// One error per unit (§18.1).
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub struct P {
+  x: U32,
+}
+
+const K: U32 = 4
+const XS: [U32; 2] = [1, 2]
+
+fn g(a: U32) -> U32 {
+  a
+}
+
+pub fn index_of_constant_in_a_parameter(x: [F32; XS[0]]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn index_of_constant_in_a_repeat() -> F32 {
+  let a = [0.0; XS[0]]   //~ E0417
+  a[0]
+}
+
+pub fn index_of_constant_in_a_result() -> [F32; XS[0]] {   //~ E0417
+  [0.0; 4]
+}
+
+pub fn index_of_array_in_a_parameter(x: [F32; [1][0]]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn index_of_array_in_a_repeat() -> F32 {
+  let a = [0.0; [1][0]]   //~ E0417
+  a[0]
+}
+
+type IndexOfArrayInAnAlias = [F32; [1][0]]   //~ E0417
+
+pub fn tuple_of_literals_in_a_parameter(x: [F32; (1, 2)]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn tuple_of_literals_in_a_repeat() -> F32 {
+  let a = [0.0; (1, 2)]   //~ E0417
+  a[0]
+}
+
+pub fn tuple_of_literals_in_a_const_argument(r: Ring[F32, (1, 2)]) -> U32 {   //~ E0417
+  r.head
+}
+
+pub fn tuple_of_constants_in_a_parameter(x: [F32; (K, K)]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn tuple_of_constants_in_a_repeat() -> F32 {
+  let a = [0.0; (K, K)]   //~ E0417
+  a[0]
+}
+
+pub fn tuple_of_constants_in_a_result() -> [F32; (K, K)] {   //~ E0417
+  [0.0; 4]
+}
+
+pub fn tuple_index_in_a_parameter(x: [F32; (K, 1).0]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn tuple_index_in_a_repeat() -> F32 {
+  let a = [0.0; (K, 1).0]   //~ E0417
+  a[0]
+}
+
+type TupleIndexInAnAlias = [F32; (K, 1).0]   //~ E0417
+
+pub fn array_of_one_in_a_parameter(x: [F32; [1]]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn array_of_one_in_a_repeat() -> F32 {
+  let a = [0.0; [1]]   //~ E0417
+  a[0]
+}
+
+const ARRAY_OF_ONE_IN_A_CONST_TYPE: [F32; [1]] = [0.0; 4]   //~ E0417
+
+pub fn array_repeat_in_a_parameter(x: [F32; [1; 2]]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn array_repeat_in_a_repeat() -> F32 {
+  let a = [0.0; [1; 2]]   //~ E0417
+  a[0]
+}
+
+pub fn array_repeat_in_a_result() -> [F32; [1; 2]] {   //~ E0417
+  [0.0; 4]
+}
+
+pub fn array_repeat_in_an_annotation() -> F32 {
+  let _: [F32; [1; 2]] = [0.0; 4]   //~ E0417
+  1.0
+}
+
+pub fn array_repeat_of_constant_in_a_parameter(x: [F32; [K; 2]]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn array_repeat_of_constant_in_a_repeat() -> F32 {
+  let a = [0.0; [K; 2]]   //~ E0417
+  a[0]
+}
+
+const ARRAY_REPEAT_OF_CONSTANT_IN_A_CONST_TYPE: [F32; [K; 2]] = [0.0; 4]   //~ E0417
+
+pub fn struct_literal_in_a_parameter(x: [F32; P { x: 1 }]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn struct_literal_in_a_repeat() -> F32 {
+  let a = [0.0; P { x: 1 }]   //~ E0417
+  a[0]
+}
+
+pub fn tuple_with_a_float_in_a_parameter(x: [F32; (1.5, 2)]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn tuple_with_a_float_in_a_repeat() -> F32 {
+  let a = [0.0; (1.5, 2)]   //~ E0417
+  a[0]
+}
+
+pub fn array_with_a_float_in_a_parameter(x: [F32; [1.5]]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn array_with_a_float_in_a_repeat() -> F32 {
+  let a = [0.0; [1.5]]   //~ E0417
+  a[0]
+}
+
+pub struct ArrayWithAFloatInAField {
+  a: [F32; [1.5]],   //~ E0417
+}
+
+pub fn tuple_with_a_call_in_a_parameter(x: [F32; (g(1), 2)]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn tuple_with_a_call_in_a_repeat() -> F32 {
+  let a = [0.0; (g(1), 2)]   //~ E0417
+  a[0]
+}
+
+const TUPLE_WITH_A_CALL_IN_A_CONST_TYPE: [F32; (g(1), 2)] = [0.0; 4]   //~ E0417

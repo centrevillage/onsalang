@@ -1,0 +1,9 @@
+pub const N: U32 = 4
+
+pub struct Dev {
+  x: I32,
+}
+
+impl Dev {
+  pub const CAP: U32 = 3
+}

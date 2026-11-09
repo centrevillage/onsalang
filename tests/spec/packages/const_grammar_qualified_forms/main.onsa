@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1", "§11.4", "§11.5"]
+
+// W5-16 U1b/t, S-966: a qualified name of a constant (`cfg.N`, `cfg.Dev.CAP`) in a form outside the grammar of a constant expression is
+// judged as an unqualified one is (const_grammar_operators.onsa, const_grammar_aggregates.onsa, const_grammar_blocks.onsa): the form is
+// E0417 whatever the names in it are (§4.5). The qualified constants that are fine, and the units whose result W5-16 U1b1 does not change,
+// are in const_grammar_qualified_names. One error per unit (§18.1).
+use cfg
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+// ---- E0417: the form ----
+
+pub fn comparison_in_a_parameter(x: [F32; cfg.N < 2]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn comparison_in_a_const_argument(r: Ring[F32, cfg.N < 2]) -> U32 {   //~ E0417
+  r.head
+}
+
+pub fn tuple_in_a_result() -> [F32; (cfg.N, cfg.Dev.CAP)] {   //~ E0417
+  [0.0; 4]
+}
+
+pub fn cast_in_a_repeat() -> F32 {
+  let a = [0.0; cfg.N as U32]   //~ E0417
+  a[0]
+}
+
+pub fn if_in_an_annotation() -> F32 {
+  let a: [F32; if true { cfg.N } else { 2 }] = [0.0; 4]   //~ E0417
+  a[0]
+}
+
+pub flow tuple_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, (cfg.N, 1))   //~ E0417
+}
+
+pub flow array_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
+  let a = [x; [cfg.N]]   //~ E0417
+  a[0]
+}
+
+pub flow cast_in_a_flow_input(a: [F32; cfg.N as U32] at sample) -> F32 at sample {   //~ E0417
+  0.0
+}

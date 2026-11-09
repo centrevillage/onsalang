@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§11.4", "§11.5"]
+
+// An index, a tuple, an array, a repeat `[e; n]`, a struct literal and the field `.0` of a tuple are outside the grammar of a constant
+// expression (§4.5) and are E0417 whatever is in them (S-966): the same form has the same code with a float (`(1.5, 2)`) or a call
+// (`(g(1), 2)`) inside, because the judgement does not look at the children of such a node. The index is not written as a const argument
+// (`Ring[F32, XS[0]]` can be read as a type, so a place that reads it is not fixed here).
+// The places are those of a flow: the length of `delay~`, the maximum of `vdelay~`, the ends of a `par~`, the repeat and the annotation of
+// a flow body, and the type of an input.
+// These are the units of const_grammar_aggregates.onsa whose result the reader of W5-16 U1b1 does not change (they pass before it): they are in
+// their own file so that a regression of them is not silenced with the units that change.
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub struct P {
+  x: U32,
+}
+
+const K: U32 = 4
+const XS: [U32; 2] = [1, 2]
+
+fn g(a: U32) -> U32 {
+  a
+}
+
+pub flow index_of_constant_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, XS[0])   //~ E0417
+}
+
+pub flow index_of_constant_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, XS[0])   //~ E0417
+}
+
+pub flow index_of_array_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, [1][0])   //~ E0417
+}
+
+pub flow index_of_array_as_the_start_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in [1][0]..<8 { x * F32.round_from(i) }   //~ E0417
+  ys[0]
+}
+
+pub flow tuple_index_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, (K, 1).0)   //~ E0417
+}
+
+pub flow struct_literal_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, P { x: 1 })   //~ E0417
+}
+
+pub flow struct_literal_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, P { x: 1 })   //~ E0417
+}

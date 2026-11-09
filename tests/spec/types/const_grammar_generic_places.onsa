@@ -1,0 +1,61 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.1", "§4.7", "§18.1"]
+
+// W5-16 U1b/t, S-966, S-968, S-228: the grammar of a constant expression is the same inside a generic function, where a name can be a
+// const parameter (`M`) or an associated constant of a type parameter (`T.BITS`): a form outside the grammar is E0417 whatever the names in it
+// are (§4.5), a float and a prefix `-` are E0401, and a name that is not found is E0302 first (§18.1). A const parameter and the constant of a
+// type parameter alone are the cases of types/const_type_param.onsa and num_traits/tp_const_expression_e0417.onsa. One error per unit (§18.1).
+// The units whose result W5-16 U1b1 does not change are in const_grammar_generic_places_unchanged.onsa.
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub fn comparison_of_a_const_parameter[const M: U32](x: [F32; M < 2]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn cast_of_a_const_parameter[const M: U32](x: [F32; M as U32]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn tuple_of_a_const_parameter[const M: U32]() -> [F32; (M, 1)] {   //~ E0417
+  [0.0; 4]
+}
+
+pub fn array_of_a_const_parameter[const M: U32](r: Ring[F32, [M]]) -> U32 {   //~ E0417
+  r.head
+}
+
+pub fn if_of_a_const_parameter[const M: U32](r: Ring[F32, if true { M } else { 2 }]) -> U32 {   //~ E0417
+  r.head
+}
+
+pub fn comparison_of_a_const_parameter_in_a_repeat[const M: U32]() -> F32 {
+  let a = [0.0; M == 4]   //~ E0417
+  a[0]
+}
+
+pub fn block_of_a_const_parameter_in_an_annotation[const M: U32]() -> F32 {
+  let a: [F32; { M }] = [0.0; 4]   //~ E0417
+  a[0]
+}
+
+pub fn tuple_of_a_type_parameter_constant[T: Int]() -> [F32; (T.BITS, 1)] {   //~ E0417
+  [0.0; 4]
+}
+
+pub fn cast_of_a_type_parameter_constant_in_a_repeat[T: Int]() -> F32 {
+  let a = [0.0; T.BITS as U32]   //~ E0417
+  a[0]
+}
+
+pub fn float_beside_a_const_parameter[const M: U32](x: [F32; M + 1.5]) -> F32 {   //~ E0401
+  1.0
+}
+
+pub fn prefix_minus_of_a_const_parameter[const M: U32](x: [F32; -M]) -> F32 {   //~ E0401
+  1.0
+}

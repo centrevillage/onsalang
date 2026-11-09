@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§11.4", "§11.5"]
+
+// A value that is computed from constants (`K + 1`, `K * 2`) is a constant expression of the grammar (§4.5), but this version does not
+// evaluate it (S-50, K-05): E0200 wherever it is written, and the reader of the grammar passes the form on to it, with no other code. W9-03
+// evaluates it, and then this file is replaced by the cases of the values (self/const_exprs_arith.onsa and negative/const_expr_eval.onsa).
+// The places are those of a flow: the length of `delay~`, the maximum of `vdelay~`, the ends of a `par~`, the repeat and the annotation of
+// a flow body, and the type of an input.
+// One error per unit (§18.1).
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub struct P {
+  x: U32,
+}
+
+const K: U32 = 4
+const XS: [U32; 2] = [1, 2]
+
+fn g(a: U32) -> U32 {
+  a
+}
+
+pub flow sum_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, K + 1)   //~ E0200
+}
+
+pub flow product_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, K * 2)   //~ E0200
+}
+
+pub flow product_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<(K * 2) { x * F32.round_from(i) }   //~ E0200
+  ys[0]
+}
+
+pub flow quotient_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, K / 2)   //~ E0200
+}
+
+pub flow quotient_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
+  let a = [x; K / 2]   //~ E0200
+  a[0]
+}
+
+pub flow remainder_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, K % 3)   //~ E0200
+}
+
+pub flow remainder_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, K % 3)   //~ E0200
+}
+
+pub flow remainder_in_a_flow_annotation(x: F32 at sample) -> F32 at sample {
+  let a: [F32; K % 3] = [x; 4]   //~ E0200
+  a[0]
+}
+
+pub flow nested_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, (K + 1) * 2)   //~ E0200
+}
+
+pub flow nested_as_the_start_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in ((K + 1) * 2)..<8 { x * F32.round_from(i) }   //~ E0200
+  ys[0]
+}

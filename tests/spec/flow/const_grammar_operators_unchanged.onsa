@@ -1,0 +1,111 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§3.1", "§11.4", "§11.5"]
+
+// A comparison, a logical or a bit operator, `as`, a prefix `!` and `?` are outside the grammar of a constant expression (§4.5:
+// "比較・論理・ビットの演算子と `as`・`!`・`?`") and are E0417 wherever a constant expression is written, whatever the types of the operands are
+// (S-966: a node outside the grammar is judged by its form, so `true && false` and `1 < 2`, which have the type `Bool`, are not E0401).
+// The places are those of a flow: the length of `delay~`, the maximum of `vdelay~`, the ends of a `par~`, the repeat and the annotation of
+// a flow body, and the type of an input.
+// These are the units of const_grammar_operators.onsa whose result the reader of W5-16 U1b1 does not change (they pass before it): they are in
+// their own file so that a regression of them is not silenced with the units that change.
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub struct P {
+  x: U32,
+}
+
+const K: U32 = 4
+const XS: [U32; 2] = [1, 2]
+
+fn g(a: U32) -> U32 {
+  a
+}
+
+pub flow less_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, K < 2)   //~ E0417
+}
+
+pub flow equal_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, K == K)   //~ E0417
+}
+
+pub flow equal_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<(K == K) { x * F32.round_from(i) }   //~ E0417
+  ys[0]
+}
+
+pub flow not_equal_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, K != 2)   //~ E0417
+}
+
+pub flow literals_compared_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, 1 < 2)   //~ E0417
+}
+
+pub flow literals_compared_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, 1 < 2)   //~ E0417
+}
+
+pub flow or_of_comparisons_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, (K < 2) || (K > 1))   //~ E0417
+}
+
+pub flow bit_and_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, K & 1)   //~ E0417
+}
+
+pub flow bit_or_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, K | 1)   //~ E0417
+}
+
+pub flow bit_or_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<(K | 1) { x * F32.round_from(i) }   //~ E0417
+  ys[0]
+}
+
+pub flow bit_xor_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, K ^ 1)   //~ E0417
+}
+
+pub flow shift_left_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, K << 1)   //~ E0417
+}
+
+pub flow shift_left_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, K << 1)   //~ E0417
+}
+
+pub flow shift_right_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, K >> 1)   //~ E0417
+}
+
+pub flow shift_right_as_the_start_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in (K >> 1)..<8 { x * F32.round_from(i) }   //~ E0417
+  ys[0]
+}
+
+pub flow cast_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, K as U32)   //~ E0417
+}
+
+pub flow not_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, !K)   //~ E0417
+}
+
+pub flow try_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, K?)   //~ E0417
+}
+
+pub flow try_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<K? { x * F32.round_from(i) }   //~ E0417
+  ys[0]
+}
+
+pub flow cast_of_literal_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, 1 as U32)   //~ E0417
+}
