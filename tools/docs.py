@@ -1006,7 +1006,8 @@ def undirected(tree):
 def check_relations(tree):
     """(c) The relations the fields keep (the keys are named here, DT-1): each ID field has a direction
     in RESTS_ON, a decision OPEN when every work of `tasks` is DONE, an issue OPEN when every work of
-    `fix` is DONE, `doing` on a work that is not DOING. A missing ID is (b)'s."""
+    `fix` is DONE, an ID OPEN when its deadline `before` is DONE (`_past`), `doing` on a work that is not
+    DOING. A missing ID is (b)'s."""
     for readme, line, key in undirected(tree):
         yield Finding(readme, line, f"the ID field `{key}` has no direction in `docs.RESTS_ON` (`graph` needs it)")
     idx = tree.index
@@ -1021,8 +1022,21 @@ def check_relations(tree):
                 if all(idx.work_done().get(w) is True for w in works):
                     done = ", ".join(map(str, works))
                     yield Finding(rel, line("status", 1), f"OPEN, but every work of `{key}` is DONE ({done})")
+        due = _listed(v.get("before"))
+        if v.get("status") == "OPEN" and due and all(_past(idx, d) for d in due):
+            yield Finding(rel, line("before", 1), f"OPEN, but its deadline `before` is DONE ({', '.join(due)})")
         if "doing" in v and v.get("status") != "DOING":
             yield Finding(rel, line("doing", 1), f"`doing` on a work that is {v.get('status')}, not DOING")
+
+
+def _past(idx, due):
+    """A deadline of `before` is DONE: a work that is DONE, or a stage that has works and all of them DONE
+    (a stage with no work yet, as M5, and PH2 are not)."""
+    done = idx.work_done()
+    if repo.split_work(due):
+        return done.get(due) is True
+    works = [w for w in done if repo.split_work(w)[0] == due]
+    return bool(works) and all(done[w] for w in works)
 
 
 def check_links(tree):

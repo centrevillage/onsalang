@@ -838,6 +838,21 @@ class DocsLayout(DocsTree):
         self.assertOne(s2, '["W1-02", "PH2"]', '["W1-01"]', f"{s2}:2: OPEN, but every work of `tasks` is DONE (W1-01)")
         self.assertOne(r1, 'fix = ["W1-02"]', 'fix = ["W1-01"]', f"{r1}:2: OPEN, but every work of `fix` is DONE (W1-01)")
         self.assertOne(w1, 'commit = "abc"', 'doing = ["U1/i"]', f"{w1}:3: `doing` on a work that is DONE, not DOING")
+        # `before`: a work that is DONE, or a stage whose works are all DONE; not a stage with no work (W2, M5) or PH2
+        at, due = 'found_by = "W1-01/t"', 'found_by = "W1-01/t"\nbefore = "{}"'
+        self.assertOne(s2, at, due.format("W1-01"), f"{s2}:5: OPEN, but its deadline `before` is DONE (W1-01)")
+        for d in ("W1", "W1-02"):  # W1-02 is DOING
+            self.edit(s2, at, due.format(d))
+            self.assertEqual(self.check(), (0, []), d)
+            self.edit(s2, due.format(d), at)
+        self.edit(r1, 'status = "OPEN"', 'status = "DONE"')
+        self.edit("tasks/W/W1-02.md", 'status = "DOING"', 'status = "DONE"')
+        self.edit("tasks/W/W1-02.md", 'doing = ["U2/i"]\n', "")
+        self.assertOne(s2, at, due.format("W1"), f"{s2}:5: OPEN, but its deadline `before` is DONE (W1)")
+        for d in ("W2", "M5", "PH2"):
+            self.edit(s2, at, due.format(d))
+            self.assertEqual(self.check(), (0, []), d)
+            self.edit(s2, due.format(d), at)
         # X-2 U7b: an ID field the README adds needs its direction in RESTS_ON (`graph`)
         row = "| `found_by` | 文字列 | — | いいえ | 見つけた票 |\n"
         self.assertOne("decisions/README.md", row, row + "| `see` | ID の並び（S） | — | いいえ | 見る |\n",
