@@ -4,8 +4,8 @@
 //! multi-line blocks, the form of each list, line breaks in chains, blank
 //! lines up to one); the plan (`fmt/plan.rs`) drops, adds and respells the
 //! tokens of §3.2 and §3.3 and adds and removes the line breaks of §3.2;
-//! everything else (spacing, indentation, alignment of `=` in `let` runs and
-//! of trailing comments) is normalized.
+//! everything else (spacing, indentation, alignment of trailing comments) is
+//! normalized.
 
 mod align;
 mod plan;
@@ -240,30 +240,21 @@ mod tests {
     }
 
     #[test]
-    fn let_runs_are_always_aligned() {
+    fn the_equals_of_a_let_has_one_space_and_no_column() {
+        // One space on each side of the `=` of consecutive `let` and `var` lines, whatever the
+        // author wrote: no column (S-970).
+        let one = "fn f(t: (I32, I32)) {\n  let r = 1\n  let x: I32 = 2\n  // c\n  var y1 = 3\n  let (a, b) = t\n}\n";
+        assert_eq!(fmt(one), one);
         assert_eq!(
-            fmt("fn f() {\n  let r  = 1\n  let y1 = 2\n  let y = 3\n}"),
-            "fn f() {\n  let r  = 1\n  let y1 = 2\n  let y  = 3\n}\n"
+            fmt(
+                "fn f(t: (I32, I32)) {\n  let r      = 1\n  let x: I32 = 2\n  // c\n  var y1\t = 3\n  let (a, b) = t\n}"
+            ),
+            one
         );
-        // Canonical regardless of the author's spacing (S-07).
-        assert_eq!(fmt("fn f() {\n  let st = 1\n  let t = 2\n}"), "fn f() {\n  let st = 1\n  let t  = 2\n}\n");
-        // Annotated bindings, patterns and `var` are in the run (S-89); a line of comments
-        // does not cut it (S-122).
         assert_eq!(
-            fmt("fn f(t: (I32, I32)) {\n  let r  = 1\n  let x: I32 = 2\n  // c\n  var y1 = 3\n  let (a, b) = t\n}"),
-            "fn f(t: (I32, I32)) {\n  let r      = 1\n  let x: I32 = 2\n  // c\n  var y1     = 3\n  let (a, b) = t\n}\n"
+            fmt("fn f() {\n  @mem(bulk) let a   = 1\n  let bb  = 2\n}"),
+            "fn f() {\n  @mem(bulk) let a = 1\n  let bb = 2\n}\n"
         );
-        // A blank line, another statement, a multi-line statement and a `let` with an
-        // attribute cut it (S-122).
-        let cut = "fn f() {\n  let a = 1\n\n  let bb = 2\n  g()\n  let ccc = 3\n  let d = h(1,\n            2)\n  let eeee = 4\n  @mem(bulk) let ff = 5\n  let g = 6\n}\n";
-        assert_eq!(fmt(cut), cut);
-        // The statements of other blocks are in no run with these.
-        let blocks = "fn f(c: Bool) {\n  let a = 1\n  if c { let bbb = 2 }\n  let cc = {\n    let dddd = 3\n    dddd\n  }\n}\nfn g() { let eeeee = 4 }\nfn h() { let f = 5 }\n";
-        assert_eq!(fmt(blocks), blocks);
-        // A run aligns again to the same text (idempotence).
-        let once = fmt("fn f() {\n  let a: I32 = 1\n  // c\n  let bb = 2\n}");
-        assert_eq!(once, "fn f() {\n  let a: I32 = 1\n  // c\n  let bb     = 2\n}\n");
-        assert_eq!(fmt(&once), once);
     }
 
     #[test]
@@ -293,7 +284,7 @@ mod tests {
     #[test]
     fn comments_are_preserved_and_aligned() {
         let src = "// head\n/// doc\nfn f() {\n  // inside\n  let a = 1 // one\n  let bb = 2    // two\n\n  // before tail\n  a\n}\n";
-        let want = "// head\n/// doc\nfn f() {\n  // inside\n  let a  = 1 // one\n  let bb = 2 // two\n\n  // before tail\n  a\n}\n";
+        let want = "// head\n/// doc\nfn f() {\n  // inside\n  let a = 1  // one\n  let bb = 2 // two\n\n  // before tail\n  a\n}\n";
         assert_eq!(fmt(src), want);
         // Exactly one space after the longest code of the run, whatever the author wrote.
         assert_eq!(fmt("fn f() {\n  let a = 1        // c\n}\n"), "fn f() {\n  let a = 1 // c\n}\n");

@@ -108,16 +108,16 @@ pub flow gain(@param(min: 0.0, max: 1.0)
   level
 }
 
-// A struct pattern in the block form between lines of one `let`: the `=` of the lines around it are in
-// columns of their own, because a statement of more than one line cuts the column.
+// A struct pattern in the block form between lines of one `let`: the lines around it keep one space
+// around their `=` (no `=` is in a column, S-970).
 pub fn wrap_pattern(w: Wrap, x: I32) -> I32 {
-  let a   = x + 1
+  let a = x + 1
   let bcd = a + 2
   let Wrap {
     inner: q,
     tag: t,
   } = w
-  let e    = q + t
+  let e = q + t
   let ffff = e + bcd
   ffff
 }

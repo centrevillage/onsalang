@@ -4,11 +4,12 @@
 // canonical = false
 // spec = ["§5.1", "§18.2"]
 
-// The lines of let_columns.onsa with the `=` of every line at a place of its own: after one space, or after
-// three more than the line needs, by turns. The language reads them (the spaces before `=` carry no meaning,
-// §2.5), and `onsa fmt` puts the `=` of the consecutive one-line `let` and `var` lines in one column
-// (spec/tools.md §3.2, S-07, S-89, S-122), cut where let_columns.onsa shows. The file is not canonical
-// on purpose (`canonical = false`). The values are those of let_columns.onsa.
+// The lines of let_equals.onsa with the `=` of the `let` and `var` lines at a place of their own: after
+// one space, or after three more than the line needs, by turns, and the comments at the ends of the lines out
+// of their column. The language reads them (the spaces before `=` carry no meaning, §2.5), and `onsa fmt`
+// puts one space on each side of each `=` and the comments of consecutive lines in one column (spec/tools.md
+// §3.2, S-970), as let_equals.onsa shows. The file is not canonical on purpose (`canonical = false`). The
+// values are those of let_equals.onsa.
 
 use std.array
 
@@ -35,15 +36,15 @@ fn mixed(p: (U32, U32)) -> U32 {
 
 fn across_a_comment(a: U32) -> U32 {
   let first = a + 1
-  // A line of a comment does not cut the column.
+  // A line of a comment.
   let b    = first * 2
   // Two lines
-  // of comments do not either.
+  // of comments.
   let third_long_name = b + 1
   third_long_name
 }
 
-fn cut_by_a_blank_line(a: U32) -> U32 {
+fn after_a_blank_line(a: U32) -> U32 {
   let first    = a + 1
   let second = first + 1
 
@@ -52,65 +53,75 @@ fn cut_by_a_blank_line(a: U32) -> U32 {
   dd
 }
 
-fn cut_by_a_multi_line_statement(a: U32) -> U32 {
+fn around_a_multi_line_statement(a: U32) -> U32 {
   let first    = a + 1
   let second_long = first + 1
-  let picked = if a > 0 {
+  let picked    = if a > 0 {
     first
   } else {
     second_long
   }
-  let n    = picked + 1
-  let nn_long = n + 1
+  let n = picked + 1
+  let nn_long    = n + 1
   nn_long
 }
 
-fn cut_by_another_statement(a: U32) -> U32 {
-  var t: U32    = a
-  let big_name = 2
+fn around_another_statement(a: U32) -> U32 {
+  var t: U32 = a
+  let big_name    = 2
   t = t + big_name
-  let u    = t
-  let uu = u + 1
+  let u = t
+  let uu    = u + 1
   uu
 }
 
 fn nested(c: Bool, a: U32) -> U32 {
-  let outer    = a
-  let o = a + 1
-  var t: U32    = 0
+  let outer = a
+  let o    = a + 1
+  var t: U32 = 0
   if c {
-    let inner_long_name = o
-    let i    = inner_long_name + 1
+    let inner_long_name    = o
+    let i = inner_long_name + 1
     t = i
   }
-  let after = t + outer
-  let a2    = after + 1
+  let after    = t + outer
+  let a2 = after + 1
   a2
 }
 
 fn in_an_anonymous_function() -> [U32; 3] {
   array.from_fn(fn(i: U32) -> U32 {
-    let twice = i * 2
-    let plus_one    = twice + 1
+    let twice    = i * 2
+    let plus_one = twice + 1
     plus_one
   })
 }
 
-test "the lines of a column mean what they say" {
+fn with_comments(a: U32) -> U32 {
+  let x    = a + 1  // one
+  let width = x * 2   // two
+  var y: U32    = 0 // three
+  y = width - 1
+  y
+}
+
+test "the lines mean what they say" {
   assert plain_group(1) == 3
   // gain 3 + bias 1 + lo 2 + hi 5.
   assert mixed((2, 5)) == 11
   assert mixed((4, 4)) == 0
   // first = 2, b = 4, third_long_name = 5.
   assert across_a_comment(1) == 5
-  assert cut_by_a_blank_line(1) == 5
+  assert after_a_blank_line(1) == 5
   // first = 2, second_long = 3, picked = first = 2, n = 3, nn_long = 4.
-  assert cut_by_a_multi_line_statement(1) == 4
+  assert around_a_multi_line_statement(1) == 4
   // t = 1, big_name = 2, t = 3, u = 3, uu = 4.
-  assert cut_by_another_statement(1) == 4
+  assert around_another_statement(1) == 4
+  // x = 2, width = 4, y = 3.
+  assert with_comments(1) == 3
 }
 
-test "the column of a nested block is its own" {
+test "the lines of a nested block" {
   // outer = 1, o = 2, inner_long_name = 2, i = 3, t = 3, after = 4, a2 = 5.
   assert nested(true, 1) == 5
   // t stays 0: after = 1, a2 = 2.
@@ -121,7 +132,7 @@ test "the column of a nested block is its own" {
   assert a[2] == 5
 }
 
-test "a column in a test block" {
+test "lines in a test block" {
   let x    = nested(true, 1)
   let y_long = nested(false, 1)
   assert x == 5

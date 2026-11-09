@@ -1,54 +1,17 @@
-//! The alignment of `onsa fmt` (`spec/tools.md` §3.2, S-07, S-89,
-//! S-122): after the lines are printed, the `=` of the runs of single-line
-//! `let` and `var` statements and the trailing comments of consecutive
-//! lines are put in one column each. Only the columns of single-line
-//! statements move, so that the columns the printer set in multi-line ones
-//! (their continuation lines) stay and a second pass changes nothing.
+//! The alignment of `onsa fmt` (`spec/tools.md` §3.2, S-07): after the
+//! lines are printed, the trailing comments of consecutive lines are put in
+//! one column. The `=` of `let` and `var` is in no column: it has one space
+//! on each side, as the printer writes it (S-970).
 
 use crate::lexer::BLANKS;
 
-/// The ` = ` of a single-line `let` or `var` statement of a multi-line block
-/// (one alone on its line): its output line and the column before the ` = `.
-pub(super) struct LetMark {
-    pub(super) line: usize,
-    pub(super) col: usize,
-}
-
 /// The printed text `out` with its alignment done, ending in one line break
 /// (or empty). `comment_marks` are `(line, comment text)`.
-pub(super) fn finish(mut out: String, mut let_marks: Vec<LetMark>, mut comment_marks: Vec<(usize, String)>) -> String {
+pub(super) fn finish(mut out: String, mut comment_marks: Vec<(usize, String)>) -> String {
     while out.ends_with(' ') || out.ends_with('\n') {
         out.pop();
     }
     let mut lines: Vec<String> = out.split('\n').map(|l| l.trim_end_matches(BLANKS).to_string()).collect();
-
-    // Align ` = ` in each run of single-line `let` / `var` statements (S-07, S-89).
-    // Every run is aligned (gofmt style): the canonical form does not depend on what the
-    // author wrote. Two marks are in one run when only lines of comments are between them: a
-    // blank line, a statement of another kind, a multi-line statement, a `let` with an
-    // attribute (none has a mark) and the line of a `{` or `}` of another block cut it (S-122).
-    let_marks.sort_by_key(|m| m.line);
-    let only_comments =
-        |lines: &[String], a: usize, b: usize| lines[a + 1..b].iter().all(|l| l.trim_start().starts_with("//"));
-    let mut i = 0;
-    while i < let_marks.len() {
-        let mut j = i;
-        while j + 1 < let_marks.len() && only_comments(&lines, let_marks[j].line, let_marks[j + 1].line) {
-            j += 1;
-        }
-        let max = let_marks[i..=j].iter().map(|m| m.col).max().unwrap_or(0);
-        for m in &let_marks[i..=j] {
-            if m.col < max {
-                let l = &lines[m.line];
-                let byte = l.char_indices().nth(m.col).map(|(b, _)| b).unwrap_or(l.len());
-                let mut s = l[..byte].to_string();
-                s.extend(std::iter::repeat_n(' ', max - m.col));
-                s.push_str(&l[byte..]);
-                lines[m.line] = s;
-            }
-        }
-        i = j + 1;
-    }
 
     // Align trailing comments in runs of consecutive lines: exactly one space after the
     // longest code of the run (gofmt style, S-07).

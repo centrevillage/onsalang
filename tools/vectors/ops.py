@@ -264,9 +264,8 @@ def _vdelay_body(t, name):
     lets = [("m", mx), ("dc", "if d >= 1.0 { if d <= m { d } else { m } } else { 1.0 }")]
     if name == "vdelay_f":
         lets.append(("k", "U32.trunc_from(dc)"))
-    width = max(len(n) for n, _ in lets)  # `onsa fmt` aligns the `=` of consecutive lets
     head = f"pub fn {t}_{name}(d: {T}, top: U32) -> {'U32' if name == 'vdelay_k' else T} {{\n"
-    body = "".join(f"  let {n.ljust(width)} = {v}\n" for n, v in lets)
+    body = "".join(f"  let {n} = {v}\n" for n, v in lets)  # one space on each side of `=` (S-970)
     return head + body + ("  U32.trunc_from(dc)\n}" if name == "vdelay_k" else f"  dc - {ki}\n}}")
 
 

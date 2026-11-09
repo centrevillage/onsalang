@@ -26,7 +26,7 @@
 //! continuation, the blank lines inside a list (S-497 to S-499, S-502), the spaces the list of §3.2 does
 //! not name (S-496), the `..` of a struct pattern (S-500), an attribute of a flow input in a list of one
 //! line (S-501), the form of a list of type arguments over several lines (S-328), and the ranges, the
-//! spelling of the numbers and the column of `=` (unit U1).
+//! spelling of the numbers and the one space around the `=` of a `let` (S-970).
 //!
 //! The texts of `fmt` are made by the function `onsa fmt` calls (`test_support::fmt`, no file written), the
 //! refused files by the binary. Expected texts are written from the spec; none is taken from the output of
@@ -223,7 +223,7 @@ fn a_chain_of_operators_has_a_space_round_each() {
 #[test]
 fn the_equals_has_one_space_on_each_side() {
     // `let`, `var`, an assignment, `const`, `type`. Each statement is alone in its function or separated by
-    // a blank line, so that the column of `=` (unit U1) does not move them.
+    // a blank line (no `=` is put in a column since S-970).
     let cases = vec![
         body("let", &["  let x=1", "  x"], &["  let x = 1", "  x"]),
         body("let, more spaces", &["  let x  =  1", "  x"], &["  let x = 1", "  x"]),

@@ -36,10 +36,10 @@
 //!   closing bracket), and the line break after a comment is always kept.
 //!
 //! The indentation of a line is read from the stack; the output is not read
-//! back. The `=` of the runs of `let` and the comments at the ends of lines
-//! are aligned after the walk (`fmt/align.rs`).
+//! back. The comments at the ends of lines are aligned after the walk
+//! (`fmt/align.rs`).
 
-use super::align::{self, LetMark};
+use super::align;
 use super::plan::Plan;
 use super::rewrites::Choices;
 use super::shape::{self, Form, Shape};
@@ -66,13 +66,11 @@ pub(super) fn print(cst: &Cst, src: &str, choices: &Choices) -> String {
         col: 0,
         indent: 0,
         line_head: None,
-        let_marks: Vec::new(),
         comment_marks: Vec::new(),
-        pending_let: None,
         attribute: None,
     };
     p.walk();
-    align::finish(p.out, p.let_marks, p.comment_marks)
+    align::finish(p.out, p.comment_marks)
 }
 
 /// A node the walk is in.
@@ -87,10 +85,6 @@ struct Frame {
     /// A statement or an item: a child of the file or of a container (`shape::holds_statements`).
     statement: bool,
     brackets: Option<Brackets>,
-    /// A `let` or `var` without attributes, whose ` = ` goes in a column (S-122).
-    aligns: bool,
-    /// The ` = ` it wrote, on its first line.
-    let_mark: Option<LetMark>,
 }
 
 /// The brackets of a node in the table of `fmt/shape.rs`.
@@ -170,10 +164,7 @@ struct Printer<'a> {
     indent: usize,
     /// The first code token of the output line.
     line_head: Option<TokenIdx>,
-    let_marks: Vec<LetMark>,
     comment_marks: Vec<(usize, String)>,
-    /// The mark of a single-line `let` that ended the line, if the next gap breaks it.
-    pending_let: Option<LetMark>,
     /// The attributes on a line that one starts: their last token, the line and its indentation.
     attribute: Option<(TokenIdx, usize, usize)>,
 }
@@ -219,20 +210,12 @@ impl<'a> Printer<'a> {
             };
             Brackets { pairs, what }
         });
-        let aligns = matches!(kind, NodeKind::LetStmt | NodeKind::VarStmt)
-            && !cst.child_nodes(n).any(|c| cst.kind(c) == NodeKind::Attr);
         let statement = cst.parent(n).is_some_and(|p| shape::holds_statements(cst.kind(p)));
-        let (start, heads_line, let_mark) = (None, false, None);
-        self.frames.push(Frame { node: n, next: 0, start, heads_line, statement, brackets, aligns, let_mark });
+        self.frames.push(Frame { node: n, next: 0, start: None, heads_line: false, statement, brackets });
     }
 
     /// Leave the frame `f`; `last` is the last code token written.
     fn leave(&mut self, f: Frame, last: Option<TokenIdx>) {
-        if let Some(m) = f.let_mark
-            && m.line == self.line
-        {
-            self.pending_let = Some(m);
-        }
         if self.cst.kind(f.node) == NodeKind::Attr
             && let (Some(last), Some(indent)) = (last, f.start)
         {
@@ -250,26 +233,16 @@ impl<'a> Printer<'a> {
         // The deepest node that holds both tokens; the nodes above it start at `t`.
         let deepest = self.begun.max(1) - 1;
         let mut gap = self.gap(prev, t);
-        // The line breaks of the plan, before the mark of a `let` reads them.
+        // The line breaks of the plan.
         if self.plan.joins(t) && gap.trailing.is_none() && gap.lines.is_empty() {
             (gap.breaks, gap.blanks) = (false, 0);
         } else if self.plan.breaks_before(t) {
             gap.breaks = true;
         }
-        if let Some(m) = self.pending_let.take()
-            && gap.breaks
-        {
-            self.let_marks.push(m);
-        }
         let eof = cst.token(t).kind == TokenKind::Eof;
         if let (Some(prev), false) = (prev, gap.breaks) {
             if eof {
                 return;
-            }
-            let top = self.frames.last_mut().expect("a frame");
-            let on_first_line = cst.significant_tokens(top.node).map(|(first, _)| first) == self.line_head;
-            if cst.token(t).kind == TokenKind::Eq && top.aligns && top.heads_line && on_first_line {
-                top.let_mark = Some(LetMark { line: self.line, col: self.col });
             }
             if space::space(cst, prev, t) == Space::One {
                 self.write(" ");

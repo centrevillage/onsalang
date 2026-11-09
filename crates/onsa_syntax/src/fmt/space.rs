@@ -4,8 +4,7 @@
 //! [`space`] says whether two code tokens that the printer puts on one line
 //! touch or have one space between them. It reads the two tokens and the
 //! nodes that hold them, nothing else: the line breaks, the indentation and
-//! the columns of the alignment (the `=` of a run of `let`, `fmt/align.rs`)
-//! are decided elsewhere.
+//! the column of the trailing comments (`fmt/align.rs`) are decided elsewhere.
 //!
 //! The decision is the closed table [`ROWS`]. A row names the token on the
 //! left, the token on the right (either may be any token) and the space

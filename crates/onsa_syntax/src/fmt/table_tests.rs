@@ -7,10 +7,8 @@
 //! when the printer reads the tables.
 //!
 //! - The spaces: on every line, the text between two code tokens is the
-//!   space of the table. One rule of the canonical form puts more there and
-//!   is left out: the column of the `=` of a run of `let` and `var`
-//!   (`fmt/align.rs`), so the gap before such an `=` may be one space or more.
-//!   The indentation and the comments at the end of the lines are not
+//!   space of the table, the `=` of a `let` and a `var` too (no column,
+//!   S-970). The indentation and the comments at the end of the lines are not
 //!   between two code tokens.
 //! - The lists: in every list, the form agrees with the invariants of §3.2
 //!   (block: a `,` after every element and the closing bracket on a line of
@@ -98,7 +96,6 @@ struct Tally {
     read: usize,
     lines: usize,
     pairs: usize,
-    aligned: usize,
     lists: [usize; 3],
     space_rows: Vec<bool>,
     shape_rows: Vec<bool>,
@@ -189,13 +186,8 @@ fn check_spaces(name: &str, text: &str, cst: &Cst, tally: &mut Tally) {
                 Space::None => "",
                 Space::One => " ",
             };
-            let aligned = tok.kind == TokenKind::Eq
-                && matches!(cst.kind(cst.token_parent(t)), NodeKind::LetStmt | NodeKind::VarStmt)
-                && !actual.is_empty()
-                && actual.bytes().all(|b| b == b' ');
-            tally.aligned += usize::from(aligned && actual != " ");
             let (line, col) = line_col(text, tok.span.start);
-            if actual != expected && !aligned {
+            if actual != expected {
                 tally.errors.push(format!(
                     "{name}:{line}:{col}: {:?} between {} and {}, the table says {expected:?}",
                     actual,
@@ -362,9 +354,9 @@ fn the_tables_of_the_spaces_and_of_the_lists_agree_with_every_canonical_file() {
     });
     let elapsed = started.elapsed();
     eprintln!(
-        "{} canonical files of {} read, {} lines, {} pairs ({} aligned `=`), lists one line / block / continuation: \
+        "{} canonical files of {} read, {} lines, {} pairs, lists one line / block / continuation: \
          {:?}, {elapsed:?}",
-        tally.files, tally.read, tally.lines, tally.pairs, tally.aligned, tally.lists
+        tally.files, tally.read, tally.lines, tally.pairs, tally.lists
     );
     assert!(tally.files > 250, "only {} canonical files", tally.files);
     assert!(tally.read > 800, "only {} files read", tally.read);

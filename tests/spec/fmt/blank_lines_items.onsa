@@ -7,8 +7,8 @@
 // lines become one; that is in the tests of the command). The blank lines at the start and at the end of
 // a block are the ones before its first content and after its last content, where a line of a comment is
 // content: so a blank line under a comment at the start of a block stays, and a blank line over a comment
-// at the end of a block stays. A blank line cuts the column of the `=` of consecutive `let` lines
-// (let_columns.onsa), and a line of a comment does not. The file is canonical, so `onsa fmt` leaves it
+// at the end of a block stays. The `=` of consecutive `let` lines are in no column (S-970,
+// let_equals.onsa). The file is canonical, so `onsa fmt` leaves it
 // unchanged. The blank lines inside the lists are in blank_lines_lists.onsa.
 
 use std.array
@@ -101,13 +101,13 @@ pub fn nested(a: I32, c: Bool) -> I32 {
   t
 }
 
-// A blank line cuts the column of the `=`; a line of a comment does not.
+// A blank line and a line of a comment between `let` lines stay; no `=` is in a column (S-970).
 pub fn columns(a: I32) -> I32 {
-  let first  = a + 1
+  let first = a + 1
   let second = first + 1
 
-  let c   = second + 1
-  let dd  = c + 1
+  let c = second + 1
+  let dd = c + 1
   // A comment does not cut.
   let eee = dd + 1
   eee

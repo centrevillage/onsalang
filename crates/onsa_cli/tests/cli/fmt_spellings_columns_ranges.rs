@@ -1,6 +1,6 @@
-//! What `onsa fmt` writes for the spelling of a number, the column of `=` and the spaces round a range
-//! symbol, and how `onsa diff --ast` compares the numbers (W3-11/t, unit U1; `spec/tools.md`
-//! §3.2, §3.5, spec §2.4, §18.2; plan S-334, S-62, S-126, S-07, S-89, S-122).
+//! What `onsa fmt` writes for the spelling of a number, the `=` of `let` and `var` and the spaces round a
+//! range symbol, and how `onsa diff --ast` compares the numbers (W3-11/t, unit U1; `spec/tools.md`
+//! §3.2, §3.5, spec §2.4, §18.2; plan S-334, S-62, S-126, S-07, S-970).
 //!
 //! The case files in `tests/spec/fmt/` pin that the canonical files are a fixed point of `fmt` and
 //! that the programs mean what they say. These tests pin what `fmt` writes: which spelling, which
@@ -14,9 +14,8 @@
 //!   exponent, the digits of a hexadecimal in capitals, a `_` between two digits and one at a time, no
 //!   extra zeros in front of the integer part of a float; nothing else changes (the zeros in front of
 //!   an exponent, at the end of a fraction and in front of a hexadecimal stay);
-//! - the column: the `=` of consecutive one-line `let` and `var` lines (a `let` with a type and a `let`
-//!   that takes a tuple apart too) are in one column; a blank line, a statement of more than one
-//!   line, a `let` with an attribute and any other statement cut it, a line with only a comment does not.
+//! - the `=` of `let` and `var`: one space on each side and no column, whatever the left sides next to
+//!   it (S-970); the comments at the ends of consecutive lines stay in one column.
 //!
 //! §3.5: `onsa diff --ast` compares the numbers by value, not by spelling.
 //!
@@ -25,7 +24,7 @@
 //! digits, and a `_` stays only between two digits that stay) are pinned too.
 //!
 //! What is not here: the places of the comments, the line breaks of the writer and the indentation
-//! (U3, U4), and the alignment of the comments at the end of a line.
+//! (U3, U4).
 //!
 //! The texts of `fmt` are made by the function `onsa fmt` calls (`test_support::fmt`, no file written), the
 //! rest by the binary (`onsa fmt`, `onsa diff --ast`). Expected texts are written from the spec; none is
@@ -481,385 +480,128 @@ fn a_range_in_a_nested_block_gets_the_spaces_too() {
     expect_fmt("nested", &[("two loops in a branch", input, expected)]);
 }
 
-// ---- the column of `=` ----------------------------------------------------------------------------
-
-/// The lines `indent` + the left side padded to the longest + ` = ` + the right side: the column of
-/// `=` of spec/tools.md §3.2 (one space after the longest left side).
-fn col(indent: &str, rows: &[(&str, &str)]) -> Vec<String> {
-    let w = rows.iter().map(|(l, _)| l.len()).max().unwrap();
-    rows.iter().map(|(l, r)| format!("{indent}{l:<w$} = {r}")).collect()
-}
+// ---- the `=` of `let` and `var`: one space, no column ------------------------------------------
 
 /// A function `fn f() {` whose body is `lines`.
-fn in_fn(lines: &[String]) -> String {
-    let mut all = vec!["fn f() {".to_string()];
-    all.extend(lines.iter().cloned());
-    all.push("}".to_string());
-    all.join("\n") + "\n"
-}
-
-fn s(x: &str) -> String {
-    x.to_string()
+fn in_fn(lines: &[&str]) -> String {
+    let mut all = vec!["fn f() {"];
+    all.extend(lines);
+    all.push("}");
+    src(&all)
 }
 
 #[test]
-fn consecutive_lets_are_put_in_one_column() {
-    // The text of the expected output, written out once so that the rule can be read in it.
-    let literal = src(&["fn f() {", "  let a   = 1", "  let bcd = 2", "  let ef  = 3", "}"]);
-    assert_eq!(in_fn(&col("  ", &[("let a", "1"), ("let bcd", "2"), ("let ef", "3")])), literal);
-    let input = src(&["fn f() {", "  let a = 1", "  let bcd = 2", "  let ef = 3", "}"]);
-    // The longest left side is in the middle, at the start and at the end.
-    let middle = in_fn(&col("  ", &[("let ab", "1"), ("let abcdef", "2"), ("let abc", "3")]));
-    let first = in_fn(&col("  ", &[("let abcdef", "1"), ("let ab", "2"), ("let abc", "3")]));
-    let last = in_fn(&col("  ", &[("let ab", "1"), ("let abc", "2"), ("let abcdef", "3")]));
+fn the_equals_of_consecutive_lets_and_vars_has_one_space_and_no_column() {
+    // spec/tools.md §3.2 (S-970): one space on each side of the `=` of a `let` and a `var`, whatever
+    // the lengths of the left sides next to it and whatever the author wrote before it.
+    let three = in_fn(&["  let a = 1", "  let bcd = 2", "  let ef = 3"]);
+    let typed = in_fn(&["  let a: F32 = 1.0", "  let bcd = 2.0", "  var e: U8 = 3", "  let (x, y) = p"]);
+    let between = in_fn(&["  let a = 1", "  // note", "  let bcd = 2", "", "  let ef = 3", "  g(a)", "  var hij = 4"]);
     expect_fmt(
-        "column",
+        "equals",
         &[
-            ("three lets", input, literal),
+            ("three lets", three.clone(), three.clone()),
+            ("a column written by the author", in_fn(&["  let a   = 1", "  let bcd = 2", "  let ef  = 3"]), three),
             (
-                "the longest in the middle",
-                src(&["fn f() {", "  let ab = 1", "  let abcdef = 2", "  let abc = 3", "}"]),
-                middle,
-            ),
-            ("the longest first", src(&["fn f() {", "  let abcdef = 1", "  let ab = 2", "  let abc = 3", "}"]), first),
-            ("the longest last", src(&["fn f() {", "  let ab = 1", "  let abc = 2", "  let abcdef = 3", "}"]), last),
-        ],
-    );
-}
-
-#[test]
-fn vars_are_in_the_column_and_the_extra_spaces_go() {
-    let aligned = in_fn(&col("  ", &[("var a", "1"), ("var bcd", "2")]));
-    let mixed = in_fn(&col("  ", &[("var a", "1"), ("let bcd", "2"), ("var ef", "3")]));
-    let tabs = in_fn(&col("  ", &[("let a", "1"), ("let bcd", "2")]));
-    expect_fmt(
-        "vars",
-        &[
-            ("two vars", src(&["fn f() {", "  var a = 1", "  var bcd = 2", "}"]), aligned.clone()),
-            ("a var between lets", src(&["fn f() {", "  var a = 1", "  let bcd = 2", "  var ef = 3", "}"]), mixed),
-            (
-                "extra spaces in front of the =",
-                src(&["fn f() {", "  var a        = 1", "  var bcd      = 2", "}"]),
-                aligned,
-            ),
-            ("a tab in front of the =", src(&["fn f() {", "  let a\t= 1", "  let bcd\t\t= 2", "}"]), tabs),
-        ],
-    );
-}
-
-#[test]
-fn a_let_with_a_type_and_a_let_that_takes_a_tuple_apart_are_in_the_column() {
-    let typed =
-        in_fn(&col("  ", &[("let a: F32", "1.0"), ("let bcd", "2.0"), ("var e: U8", "3"), ("let (x, y)", "p")]));
-    // The width is that of the text fmt writes (`let (x, y)`), not of the text that was written.
-    let tuple = in_fn(&col("  ", &[("let (x, y)", "p"), ("let cc", "q")]));
-    let types_only = in_fn(&col("  ", &[("let a: F32", "1.0"), ("let b: U8", "2")]));
-    let nested_tuple = in_fn(&col("  ", &[("let ((a, b), c)", "p"), ("let d", "q")]));
-    expect_fmt(
-        "typed",
-        &[
-            (
-                "typed, var, tuple",
-                src(&["fn f() {", "  let a: F32 = 1.0", "  let bcd = 2.0", "  var e: U8 = 3", "  let (x, y) = p", "}"]),
+                "typed, var, tuple, with extra spaces and tabs",
+                in_fn(&["  let a: F32    = 1.0", "  let bcd\t= 2.0", "  var e: U8      = 3", "  let (x,y)  = p"]),
                 typed,
             ),
-            ("a tuple written close", src(&["fn f() {", "  let (x,y) = p", "  let cc = q", "}"]), tuple),
-            ("only lets with a type", src(&["fn f() {", "  let a: F32 = 1.0", "  let b: U8 = 2", "}"]), types_only),
-            ("a tuple in a tuple", src(&["fn f() {", "  let ((a, b), c) = p", "  let d = q", "}"]), nested_tuple),
-        ],
-    );
-}
-
-#[test]
-fn a_line_with_only_a_comment_does_not_cut_the_column() {
-    let one = {
-        let c = col("  ", &[("let a", "1"), ("let bcd", "2"), ("let ef", "3")]);
-        in_fn(&[c[0].clone(), s("  // note"), c[1].clone(), s("  // two"), s("  // lines"), c[2].clone()])
-    };
-    expect_fmt(
-        "comment",
-        &[(
-            "comment lines between lets",
-            src(&[
-                "fn f() {",
-                "  let a = 1",
-                "  // note",
-                "  let bcd = 2",
-                "  // two",
-                "  // lines",
-                "  let ef = 3",
-                "}",
-            ]),
-            one,
-        )],
-    );
-}
-
-#[test]
-fn a_blank_line_cuts_the_column() {
-    let g1 = col("  ", &[("let a", "1"), ("let bcd", "2")]);
-    let g2 = col("  ", &[("let ef", "3"), ("let g", "4")]);
-    let expected = in_fn(&[g1[0].clone(), g1[1].clone(), s(""), g2[0].clone(), g2[1].clone()]);
-    expect_fmt(
-        "blank",
-        &[(
-            "two groups",
-            src(&["fn f() {", "  let a = 1", "  let bcd = 2", "", "  let ef = 3", "  let g = 4", "}"]),
-            expected,
-        )],
-    );
-}
-
-#[test]
-fn a_statement_of_more_than_one_line_cuts_the_column() {
-    let g1 = col("  ", &[("let a", "1"), ("let bcd", "2")]);
-    let g2 = col("  ", &[("let ef", "3"), ("let g", "4")]);
-    let expected = in_fn(&[
-        g1[0].clone(),
-        g1[1].clone(),
-        s("  let c = if flag {"),
-        s("    1"),
-        s("  } else {"),
-        s("    2"),
-        s("  }"),
-        g2[0].clone(),
-        g2[1].clone(),
-    ]);
-    let input = src(&[
-        "fn f() {",
-        "  let a = 1",
-        "  let bcd = 2",
-        "  let c = if flag {",
-        "    1",
-        "  } else {",
-        "    2",
-        "  }",
-        "  let ef = 3",
-        "  let g = 4",
-        "}",
-    ]);
-    expect_fmt("multiline", &[("a let with a block between the groups", input, expected)]);
-}
-
-#[test]
-fn any_other_statement_cuts_the_column() {
-    let g1 = col("  ", &[("var t", "0"), ("let bcd", "2")]);
-    let g2 = col("  ", &[("let e", "3"), ("let fgh", "4")]);
-    let assigned = in_fn(&[g1[0].clone(), g1[1].clone(), s("  t = t + bcd"), g2[0].clone(), g2[1].clone()]);
-    let called = in_fn(&[g1[0].clone(), g1[1].clone(), s("  g(t)"), g2[0].clone(), g2[1].clone()]);
-    expect_fmt(
-        "other",
-        &[
             (
-                "an assignment",
-                src(&[
-                    "fn f() {",
-                    "  var t = 0",
-                    "  let bcd = 2",
-                    "  t = t + bcd",
-                    "  let e = 3",
-                    "  let fgh = 4",
-                    "}",
+                "a comment line, a blank line and another statement",
+                in_fn(&[
+                    "  let a      = 1",
+                    "  // note",
+                    "  let bcd    = 2",
+                    "",
+                    "  let ef  = 3",
+                    "  g(a)",
+                    "  var hij  = 4",
                 ]),
-                assigned,
+                between,
             ),
             (
-                "a call",
-                src(&["fn f() {", "  var t = 0", "  let bcd = 2", "  g(t)", "  let e = 3", "  let fgh = 4", "}"]),
-                called,
+                "comparisons on the right",
+                in_fn(&["  let same        = a == b", "  let longer_name = a >= b", "  let c = a <= b"]),
+                in_fn(&["  let same = a == b", "  let longer_name = a >= b", "  let c = a <= b"]),
             ),
         ],
     );
 }
 
 #[test]
-fn a_let_with_an_attribute_cuts_the_column_and_is_not_in_it() {
-    let g1 = col("  ", &[("let g", "x * 0.5"), ("let gain_total", "g")]);
-    let g2 = col("  ", &[("let h", "d"), ("let hh_long", "h")]);
-    let expected = src(&[
-        "pub flow f(x: F32 at sample) -> F32 at sample {",
-        &g1[0],
-        &g1[1],
-        "  @mem(bulk) let d = delay~(g, 4800)",
-        &g2[0],
-        &g2[1],
-        "  h",
-        "}",
-    ]);
-    let input = src(&[
+fn the_equals_has_one_space_next_to_an_attribute_and_in_every_block() {
+    let attribute = src(&[
         "pub flow f(x: F32 at sample) -> F32 at sample {",
         "  let g = x * 0.5",
-        "  let gain_total = g",
         "  @mem(bulk) let d = delay~(g, 4800)",
-        "  let h = d",
-        "  let hh_long = h",
-        "  h",
+        "  let hh_long = d",
+        "  hh_long",
         "}",
     ]);
-    // A long name after the attribute and a plain let in front of it do not share a column.
-    let a = src(&[
+    let attribute_in = src(&[
         "pub flow f(x: F32 at sample) -> F32 at sample {",
-        "  @mem(bulk) let line_long_name = delay~(x, 4800)",
-        "  let a   = line_long_name",
-        "  let abc = a + x",
-        "  abc",
+        "  let g         = x * 0.5",
+        "  @mem(bulk) let d  = delay~(g, 4800)",
+        "  let hh_long   = d",
+        "  hh_long",
         "}",
     ]);
-    let a_in = src(&[
-        "pub flow f(x: F32 at sample) -> F32 at sample {",
-        "  @mem(bulk) let line_long_name = delay~(x, 4800)",
-        "  let a = line_long_name",
-        "  let abc = a + x",
-        "  abc",
-        "}",
-    ]);
-    let b = src(&[
-        "pub flow f(x: F32 at sample) -> F32 at sample {",
-        "  let p  = x",
-        "  let pq = p",
-        "  @mem(bulk) let tail = delay~(pq, 64)",
-        "  tail",
-        "}",
-    ]);
-    let b_in = src(&[
-        "pub flow f(x: F32 at sample) -> F32 at sample {",
-        "  let p = x",
-        "  let pq = p",
-        "  @mem(bulk) let tail = delay~(pq, 64)",
-        "  tail",
-        "}",
-    ]);
-    expect_fmt(
-        "attribute",
-        &[
-            ("plain lets on both sides", input, expected),
-            ("the attributed let first", a_in, a),
-            ("the attributed let last", b_in, b),
-        ],
-    );
-}
-
-#[test]
-fn a_let_in_a_one_line_block_is_in_no_column() {
-    // Plan S-509: the column of `=` is of the one-line `let` and `var` lines that hold the statement
-    // alone; a `let` in a one-line block is on the line of its head, so it is in no column, even on
-    // consecutive lines.
-    let expected = src(&[
+    let blocks = src(&[
         "fn g() { let a = 1 }",
-        "fn h() { let bbbb = 2 }",
-        "",
-        "fn f(x: I32) {",
-        "  match x {",
-        "    0 => { let a = 1 },",
-        "    _ => { let bbbb = 2 },",
-        "  }",
-        "}",
-        "",
-        "fn k(c: Bool) {",
+        "fn h(c: Bool) {",
         "  let a = 1",
         "  if c { let bbbbbb = 2 }",
-        "  let cc = 3",
-        "}",
-    ]);
-    let input = src(&[
-        "fn g() {  let a=1 }",
-        "fn h() { let bbbb =  2 }",
-        "",
-        "fn f(x: I32) {",
-        "  match x {",
-        "    0 => { let a  = 1 },",
-        "    _ => { let bbbb = 2 },",
-        "  }",
-        "}",
-        "",
-        "fn k(c: Bool) {",
-        "  let a = 1",
-        "  if c { let bbbbbb    = 2 }",
-        "  let cc = 3",
-        "}",
-    ]);
-    expect_fmt(
-        "oneline",
-        &[("lets in one-line blocks", input, expected.clone()), ("the canonical form", expected.clone(), expected)],
-    );
-}
-
-#[test]
-fn a_nested_block_has_a_column_of_its_own() {
-    let outer = col("  ", &[("let a", "1"), ("let bcd", "2")]);
-    let inner = col("    ", &[("let inner_long", "3"), ("let i", "4")]);
-    let after = col("  ", &[("let ef", "5"), ("let g", "6")]);
-    let expected = src(&[
-        "fn f(c: Bool) {",
-        &outer[0],
-        &outer[1],
-        "  if c {",
-        &inner[0],
-        &inner[1],
-        "  }",
-        &after[0],
-        &after[1],
-        "}",
-    ]);
-    let input = src(&[
-        "fn f(c: Bool) {",
-        "  let a = 1",
-        "  let bcd = 2",
         "  if c {",
         "    let inner_long = 3",
         "    let i = 4",
         "  }",
-        "  let ef = 5",
-        "  let g = 6",
+        "}",
+        "test \"t\" {",
+        "  let x = 1",
+        "  let long_n = 2",
+        "  assert x < long_n",
         "}",
     ]);
-    // A column in the body of a test block and of an anonymous function.
-    let in_test = src(&["test \"t\" {", "  let x      = 1", "  let long_n = 2", "  assert x < long_n", "}"]);
-    let in_test_in = src(&["test \"t\" {", "  let x = 1", "  let long_n = 2", "  assert x < long_n", "}"]);
-    let closure = src(&[
-        "fn f() -> [U32; 3] {",
-        "  array.from_fn(fn(i: U32) -> U32 {",
-        "    let twice    = i * 2",
-        "    let plus_one = twice + 1",
-        "    plus_one",
-        "  })",
+    let blocks_in = src(&[
+        "fn g() {  let a=1 }",
+        "fn h(c: Bool) {",
+        "  let a = 1",
+        "  if c { let bbbbbb    = 2 }",
+        "  if c {",
+        "    let inner_long = 3",
+        "    let i          = 4",
+        "  }",
+        "}",
+        "test \"t\" {",
+        "  let x      = 1",
+        "  let long_n = 2",
+        "  assert x < long_n",
         "}",
     ]);
-    let closure_in = src(&[
-        "fn f() -> [U32; 3] {",
-        "  array.from_fn(fn(i: U32) -> U32 {",
-        "    let twice = i * 2",
-        "    let plus_one = twice + 1",
-        "    plus_one",
-        "  })",
-        "}",
-    ]);
-    expect_fmt(
-        "nested",
-        &[
-            ("a branch", input, expected),
-            ("a test block", in_test_in, in_test),
-            ("an anonymous function", closure_in, closure),
-        ],
-    );
+    expect_fmt("blocks", &[("next to an attribute", attribute_in, attribute), ("blocks", blocks_in, blocks)]);
 }
 
 #[test]
-fn a_let_alone_has_one_space_and_so_does_a_column_that_is_already_right() {
-    let alone = in_fn(&[s("  let only_one = 1"), s("  g(only_one)"), s("  let a = 2"), s("  g(a)")]);
-    let alone_in = in_fn(&[s("  let only_one    = 1"), s("  g(only_one)"), s("  let a     = 2"), s("  g(a)")]);
-    let right = in_fn(&col("  ", &[("let a", "1"), ("let bcd", "2")]));
+fn the_comments_at_the_ends_of_the_lines_stay_in_one_column_after_the_equals() {
+    // spec/tools.md §3.2: the comments of consecutive lines are in one column, one space after the
+    // longest code; the `=` is not in a column, so the column is read from the lines with one space.
+    let expected = in_fn(&[
+        "  let a = 1       // one",
+        "  let bcdefg = 2  // two",
+        "  var h: U8 = 3   // three",
+        "  g(a, bcdefg, h) // four",
+    ]);
+    let input = in_fn(&[
+        "  let a      = 1 // one",
+        "  let bcdefg = 2      // two",
+        "  var h: U8  = 3 // three",
+        "  g(a, bcdefg, h) // four",
+    ]);
     expect_fmt(
-        "alone",
-        &[("lets with a statement between", alone_in, alone), ("a column that is right", right.clone(), right)],
+        "comments",
+        &[("lets with comments", input, expected.clone()), ("the canonical form", expected.clone(), expected)],
     );
-}
-
-#[test]
-fn the_equals_of_the_let_is_the_one_in_the_column_and_not_one_in_the_right_side() {
-    let expected = in_fn(&col("  ", &[("let same", "a == b"), ("let longer_name", "a >= b"), ("let c", "a <= b")]));
-    let input = src(&["fn f() {", "  let same = a == b", "  let longer_name = a >= b", "  let c = a <= b", "}"]);
-    expect_fmt("compare", &[("comparisons on the right", input, expected)]);
 }
 
 #[test]
@@ -884,18 +626,16 @@ fn the_three_rules_work_together_and_a_second_fmt_changes_nothing() {
         "  total",
         "}",
     ]);
-    let a = col("  ", &[("let lo", "0x10"), ("let hi: U32", "1e3"), ("var total", "0")]);
-    let b = col("  ", &[("let mask", "0xDEAD_BEEF"), ("let m", "1_0")]);
     let expected = src(&[
         "fn f(n: U32) -> U32 {",
-        &a[0],
-        &a[1],
-        &a[2],
+        "  let lo = 0x10",
+        "  let hi: U32 = 1e3",
+        "  var total = 0",
         "  for i in lo + 1 ..< hi - 1 {",
         "    total = total + i",
         "  }",
-        &b[0],
-        &b[1],
+        "  let mask = 0xDEAD_BEEF",
+        "  let m = 1_0",
         "  total",
         "}",
     ]);

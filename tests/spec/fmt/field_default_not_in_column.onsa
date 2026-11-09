@@ -3,9 +3,9 @@
 // mode = "parse"
 // spec = ["§4.4", "§18.2"]
 
-// The `=` of the defaults of consecutive fields is not put in a column (spec/tools.md §3.2: only the `=`
-// of consecutive `let` and `var` lines are in a column; the closed list has no field). Fields with names
-// of different lengths keep one space before the `=`, and the `:` is not in a column either. The file is
+// The `=` of the defaults of consecutive fields is not put in a column (spec/tools.md §3.2: one space on
+// each side of `=`; no `=` is in a column, S-970). Fields with names of different lengths keep one space
+// before the `=`, and the `:` is not in a column either. The file is
 // canonical, so `onsa fmt` leaves it unchanged. The file is read by the syntax stage only
 // (`mode = "parse"`).
 

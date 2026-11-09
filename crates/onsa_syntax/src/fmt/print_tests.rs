@@ -324,8 +324,8 @@ fn blank_lines_separate_parts_and_comments_stay_on_their_lines() {
 
 /// The base line of an effect row on a continued head is the line of its `uses` (S-518); the line
 /// after a line that starts with an attribute has its indentation, also in the continuation form and
-/// after an attribute over more than one line (S-519); a `let` whose `=` is not on its first line has
-/// no column of `=`.
+/// after an attribute over more than one line (S-519); a `let` whose `=` is not on its first line keeps
+/// one space on each side of it, as every `let` (S-970).
 #[test]
 fn effect_rows_attributes_and_lets_take_the_lines_where_they_start() {
     let rows: &[(&str, &str)] = &[
@@ -385,17 +385,21 @@ fn closures_use_lists_and_enclosures_take_their_base_lines() {
     }
 }
 
-/// The `=` of a `let` is in a column only when the `let` starts its line and the line ends after it
-/// (S-122). The line breaks the plan adds after the `{` and before the `}` of a block over more than
-/// one line (§3.2) put the `let` there alone on its line; a `let` in a block on one line is in no column.
+/// The `=` of a `let` has one space on each side and is in no column (S-970): on lines of their own,
+/// after the line breaks the plan adds after the `{` and before the `}` of a block over more than one
+/// line (§3.2), and in a block on one line. The comments at the ends of consecutive lines stay in one
+/// column, now one space after the longest code with its `=` closed up (§3.2).
 #[test]
-fn the_column_of_the_equals_holds_only_the_lets_alone_on_their_lines() {
-    let aligned = "fn f() {\n  let a   = 1\n  let bbb = 2\n}\n";
-    for src in ["fn f() { let a = 1\n  let bbb = 2\n}\n", "fn f() {\n  let a = 1\n  let bbb = 2 }\n", aligned] {
-        assert_eq!(printed(src), aligned, "{src:?}");
+fn the_equals_of_a_let_is_in_no_column_and_the_comments_are() {
+    let lines = "fn f() {\n  let a = 1\n  let bbb = 2\n}\n";
+    for src in ["fn f() { let a = 1\n  let bbb = 2\n}\n", "fn f() {\n  let a = 1\n  let bbb = 2 }\n", lines] {
+        assert_eq!(printed(src), lines, "{src:?}");
     }
+    assert_eq!(printed("fn f() {\n  let a   = 1\n  let bbb = 2\n}\n"), lines);
     let one_line = "fn f(c: Bool) {\n  let a = 1\n  if c { let bbb = 2 }\n}\n";
     assert_eq!(printed(one_line), one_line);
+    let comments = "fn f() {\n  let a   = 1 // a\n  let bbb = 2 // b\n  var cc  = 3 // c\n}\n";
+    assert_eq!(printed(comments), "fn f() {\n  let a = 1   // a\n  let bbb = 2 // b\n  var cc = 3  // c\n}\n");
 }
 
 /// A `,` on a line of its own moves to the element before it (§3.2), and the line breaks before and
