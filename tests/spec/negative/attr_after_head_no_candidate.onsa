@@ -3,25 +3,19 @@
 // spec = ["§6.5", "§18.1"]
 // fixes = 0
 
-// W5-24 U3a/t, S-600 (spec §18.1: "中身が読めなければ候補を作らない" and "他言語の属性は、移しても属性の行の誤りが残るので、その行の診断だけを出し、移す候補を作らない"):
-// an attribute after `pub` or `rt` whose arguments cannot be read (`pub @fp(relaxed, 1 +) fn h`) and an attribute of another language after `rt`
-// (`rt #[inline] fn h`) are one E0002 for their place, and there is no candidate (the contents of the attribute are not read, so no
-// other error about them is reported). One error in each declaration unit (P-01).
+// W5-24 U3a/t and U3b, S-600, S-990 (spec §18.1: "中身が読めなければ候補を作らない" and "他言語の属性は、移しても属性の行の誤りが残るので、その行の診断だけを出し、移す候補を作らない"):
+// an attribute after `pub` or `rt` whose contents would not read as an attribute at the head of the declaration either (a parenthesis
+// not closed on its line, `pub @fp(relaxed fn h`; an error of the lexical stage in them, `pub @fp(0x) fn h`; arguments that do not read
+// of an attribute that takes no value, `pub @nope(1 +) fn h`) and an attribute of another language after `rt` (`rt #[inline] fn h`)
+// are one E0002 for their place, and there is no candidate (the contents of the attribute are not read, so no other error about them
+// is reported). One error in each declaration unit (P-01).
 
-pub @fp(relaxed, 1 +) fn unreadable_fn(x: F32) -> F32 {   //~ E0002
+pub @fp(0x) fn lexical_error(x: F32) -> F32 {   //~ E0002
   x
 }
 
-pub rt @fp(relaxed, 1 +) fn unreadable_rt(x: F32) -> F32 {   //~ E0002
+pub @nope(1 +) fn no_value_unreadable(x: F32) -> F32 {   //~ E0002
   x
-}
-
-pub @fp(relaxed, 1 +) flow unreadable_flow(x: F32 at sample) -> F32 at sample {   //~ E0002
-  x
-}
-
-pub @repr(c, 1 +) struct UnreadableStruct {   //~ E0002
-  x: I32,
 }
 
 rt #[inline] fn foreign_rt(x: I32) -> I32 {         //~ E0002
@@ -29,5 +23,9 @@ rt #[inline] fn foreign_rt(x: I32) -> I32 {         //~ E0002
 }
 
 pub rt #[inline] fn foreign_pub_rt(x: I32) -> I32 { //~ E0002
+  x
+}
+
+pub @fp(relaxed fn not_closed(x: F32) -> F32 {   //~ E0002
   x
 }

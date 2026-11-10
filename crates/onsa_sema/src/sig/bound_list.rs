@@ -62,12 +62,19 @@ impl<'p> Sema<'p> {
             _ => false,
         };
         let any = list.iter().any(|x| list.iter().any(|y| clash((x.0, x.1), (y.0, y.1))));
-        for (k, &(b, r, at)) in list.iter().enumerate() {
-            let before = list[..k].iter().find(|x| (x.0, x.1) == (b, r) || clash((x.0, x.1), (b, r)));
-            let Some(&(pb, pr, pat)) = before else { continue };
+        let repeat = onsa_diag::first_repeat(list.iter().map(|x| (x.0, x.1)));
+        // A contradiction after the first repeat is not the first of the two: it is not looked for.
+        let upto = repeat.map_or(list.len(), |(_, k)| k + 1);
+        let contradiction = list[..upto]
+            .iter()
+            .enumerate()
+            .find_map(|(k, x)| Some((list[..k].iter().position(|y| clash((y.0, y.1), (x.0, x.1)))?, k)));
+        // The first element of either, with the first one before it.
+        let first = repeat.into_iter().chain(contradiction).min_by_key(|&(before, k)| (k, before));
+        if let Some((before, k)) = first {
+            let ((b, r, at), (pb, pr, pat)) = (list[k], list[before]);
             let (this, prev) = (shown((b, r)), shown((pb, pr)));
-            let contradiction = (pb, pr) != (b, r);
-            let d = if contradiction {
+            let d = if (pb, pr) != (b, r) {
                 let lifted = if r { b } else { pb }.name();
                 let msg = format!(
                     "`{this}` and `{prev}` contradict: `?{lifted}` lifts the implicit `{lifted}`, and the other requires it (§4.5)"
@@ -81,8 +88,7 @@ impl<'p> Sema<'p> {
                          take out `?Dup`"
                     })
             } else {
-                Diagnostic::new(Stage::Types, Code::E0416, at, format!("the bound `{this}` is written twice (§4.5)"))
-                    .with_note(pat, format!("`{prev}` is first written here"))
+                onsa_diag::repeated(Stage::Types, Code::E0416, at, pat, &format!("the bound `{this}`"))
             };
             self.report(cx.def, d.with_found(b.name()));
             return any;

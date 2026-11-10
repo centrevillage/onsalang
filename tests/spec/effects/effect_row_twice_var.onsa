@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§4.5", "§18.1"]
+// fixes = 0
+
+// W5-24 U3b/t, S-750 (spec §8.1: "同じ効果を二度書く形(`uses {Alloc, Alloc}`。効果行変数も同じ)は E0602 で、境界の重なりと同じ形で報告する(§4.5)"; the names that are not capitalized in the
+// `[ ]` are effect row variables, §8.1): an effect row variable written twice in the row is the same E0602 as an effect, on the second one, with no candidate. The variable is
+// declared in the `[ ]` and is the row of a parameter of a function type, as in the `map` of §8.1. The row may have `Alloc` too, in either place, and two variables that
+// are different are not a copy of each other (`{d, e, e}` and `{d, e, d}` are, by the copy). One error in each unit (P-01).
+
+pub fn only_the_variable[e](f: fn() -> U32 uses {e}) -> U32 uses {e, e} { //~ E0602
+  f.()
+}
+
+pub fn variable_after_alloc[e](f: fn() -> U32 uses {e}) -> U32 uses {Alloc, e, e} { //~ E0602
+  f.()
+}
+
+pub fn variable_before_alloc[e](f: fn() -> U32 uses {e}) -> U32 uses {e, e, Alloc} { //~ E0602
+  f.()
+}
+
+pub fn two_variables[d, e](f: fn() -> U32 uses {d}, g: fn() -> U32 uses {e}) -> U32 uses {d, e, e} { //~ E0602
+  f.() + g.()
+}
+
+pub fn the_first_of_two_variables[d, e](f: fn() -> U32 uses {d}, g: fn() -> U32 uses {e}) -> U32 uses {d, e, d} { //~ E0602
+  f.() + g.()
+}
+
+pub fn the_row_of_the_parameter[e](f: fn() -> U32 uses {e, e}) -> U32 uses {e} { //~ E0602
+  f.()
+}
+
+pub fn variable_with_types[T, U, e](x: T, f: fn(T) -> U uses {e}) -> U uses {e, e} { //~ E0602
+  f.(x)
+}
+
+pub fn spread[e](f: fn() -> U32 uses {e}) -> U32
+  uses {e,
+    e} {                                            //~ E0602
+  f.()
+}

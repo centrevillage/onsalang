@@ -371,10 +371,10 @@ impl<'a> Parser<'a> {
     /// The candidate of the attribute from `at` to `last` after the
     /// visibility and `rt` right before it: it goes before them, after the
     /// attributes there (§18.1, S-600). None when what is in it does not
-    /// read as the arguments of an attribute (`pub @fp(relaxed, 1 +) fn h`),
-    /// tried at the cursor and undone; when the check of the head would take
-    /// it out (`@fp(strict)`, [`crate::attrs::unset`]); or when no modifier is
-    /// right before it.
+    /// read as an attribute at the head would (`pub @fp(0x) fn h`), tried at
+    /// the cursor and undone; when the check of the head would take it out
+    /// (`@fp(strict)`, [`crate::attrs::unset`]); or when no modifier is right
+    /// before it.
     fn moved_attribute(&mut self, at: usize, last: usize) -> Option<Fix> {
         let modifier = |k: usize| {
             let b = self.tokens[..k].iter().rposition(|t| !t.kind.is_comment())?;
@@ -382,9 +382,9 @@ impl<'a> Parser<'a> {
         };
         let first = std::iter::successors(modifier(at), |&k| modifier(k)).last()?;
         let trial = self.snapshot();
-        // SPEC-GAP(S-990): what is in it "reads" when the general reading of the arguments of an
-        // attribute reads it (not the value of S-834): `pub @fp(1) fn h` has no candidate.
-        let read = self.parse_attr(false).ok().filter(|_| self.diagnostics.len() == trial.diagnostics);
+        // What is in it is read as at the head (S-990, S-834): `pub @fp(1) fn h` has the candidate,
+        // and the value's E0005 is left at the attribute moved.
+        let read = self.parse_attr().ok().filter(|_| self.diagnostics.len() == trial.diagnostics);
         let reads = read.is_some_and(|a| crate::attrs::unset(self.text, &self.written(&a)).is_none());
         self.restore(trial);
         let span = Span::new(self.file, self.tokens[at].span.start, self.tokens[last].span.end);

@@ -1,0 +1,106 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§6.4", "§4.5"]
+
+// W5-24 U3b/t, S-750 (spec §6.4: "上位の trait も並べてよい(境界の含意で重なる形と同じ、§4.5)"; §4.5: "含意で重なる形(`Float + Num`)は誤りでない"): what is not the same trait
+// twice is fine, and no diagnostic is expected. A trait and the trait above it (`Ord + PartialEq`, where `Ord` brings `PartialEq` as one above it), the four of
+// the chain in either order, the same two traits in the other order (`Eq + PartialEq`), and the same trait once in each of two types. (The same trait twice in a
+// list: derive_twice_*.onsa.) Each type is used, with the operator that its list gives.
+
+pub struct SuperAfter: Ord + PartialEq {
+  n: U32,
+}
+
+pub struct SuperBefore: PartialEq + Ord {
+  n: U32,
+}
+
+pub struct WholeChain: PartialEq + Eq + PartialOrd + Ord {
+  n: U32,
+}
+
+pub struct WholeChainReversed: Ord + PartialOrd + Eq + PartialEq {
+  n: U32,
+}
+
+pub struct Swapped: Eq + PartialEq {
+  n: U32,
+}
+
+pub struct OrdAndEq: Ord + Eq {
+  n: U32,
+}
+
+pub struct HashAndEq: Hash + Eq {
+  n: U32,
+}
+
+pub struct OneEachFirst: Eq {
+  n: U32,
+}
+
+pub struct OneEachSecond: Eq {
+  n: U32,
+}
+
+pub struct GenericChain[T]: PartialEq + Eq {
+  a: T,
+}
+
+pub enum EnumUpper: Ord + PartialEq {
+  Off,
+  On,
+}
+
+pub enum EnumOrdinalAndEq: Ordinal + PartialEq + Eq {
+  Off,
+  On,
+}
+
+pub fn super_after(a: SuperAfter, b: SuperAfter) -> Bool {
+  a == b
+}
+
+pub fn super_after_order(a: SuperAfter, b: SuperAfter) -> Bool {
+  a < b
+}
+
+pub fn super_before(a: SuperBefore, b: SuperBefore) -> Bool {
+  a == b
+}
+
+pub fn whole_chain(a: WholeChain, b: WholeChain) -> Bool {
+  a <= b
+}
+
+pub fn whole_chain_reversed(a: WholeChainReversed, b: WholeChainReversed) -> Bool {
+  a >= b
+}
+
+pub fn swapped(a: Swapped, b: Swapped) -> Bool {
+  a == b
+}
+
+pub fn ord_and_eq(a: OrdAndEq, b: OrdAndEq) -> Bool {
+  a != b
+}
+
+pub fn first_of_two(a: OneEachFirst, b: OneEachFirst) -> Bool {
+  a == b
+}
+
+pub fn second_of_two(a: OneEachSecond, b: OneEachSecond) -> Bool {
+  a == b
+}
+
+pub fn generic_chain(a: GenericChain[U32], b: GenericChain[U32]) -> Bool {
+  a == b
+}
+
+pub fn enum_upper(a: EnumUpper, b: EnumUpper) -> Bool {
+  a < b
+}
+
+pub fn enum_number(m: EnumOrdinalAndEq) -> U32 {
+  m.ordinal()
+}

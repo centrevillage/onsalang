@@ -1,0 +1,100 @@
+// onsa.toml
+// [test]
+// spec = ["§6.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "66:5"
+// code = "E0002"
+// candidate = 1
+// leaves = ["66:1 E0005"]
+//
+// [[test.fix]]
+// at = "70:8"
+// code = "E0002"
+// candidate = 1
+// leaves = ["70:1 E0005"]
+//
+// [[test.fix]]
+// at = "74:5"
+// code = "E0002"
+// candidate = 1
+// leaves = ["74:1 E0005"]
+//
+// [[test.fix]]
+// at = "78:5"
+// code = "E0002"
+// candidate = 1
+// leaves = ["78:1 E0005"]
+//
+// [[test.fix]]
+// at = "82:5"
+// code = "E0002"
+// candidate = 1
+// leaves = ["82:1 E0005"]
+//
+// [[test.fix]]
+// at = "86:5"
+// code = "E0002"
+// candidate = 1
+// leaves = ["86:1 E0005"]
+//
+// [[test.fix]]
+// at = "90:5"
+// code = "E0002"
+// candidate = 1
+// leaves = ["90:1 E0005"]
+//
+// [[test.fix]]
+// at = "94:5"
+// code = "E0002"
+// candidate = 1
+// leaves = ["94:1 E0005"]
+//
+// [[test.fix]]
+// at = "98:5"
+// code = "E0002"
+// candidate = 1
+// leaves = ["98:1 E0005"]
+
+// W5-24 U3b, S-990, S-834 (spec §18.1, §6.5): an attribute after `pub` or `rt` whose contents read as they would at the head of the
+// declaration, but whose value is out of the list of the attribute (`@fp(1)`, `@fp(f(1))`, `@fp(relaxed, 1 +)`, `@fp(relaxed strict)`,
+// `@export(1)`, `@repr(1)`, `@repr(c, 1 +)`), is the E0002 of its place with the one candidate that moves it before the visibility and
+// `rt`; the E0005 of the value is left after the move, at the attribute moved (`leaves`: the first column of the line). One error in
+// each declaration unit (P-01).
+
+@fp(relaxed, 1 +) pub fn list_and_more_fn(x: F32) -> F32 {   //~ E0002
+  x
+}
+
+@fp(relaxed, 1 +) pub rt fn list_and_more_rt(x: F32) -> F32 {   //~ E0002
+  x
+}
+
+@fp(relaxed, 1 +) pub flow list_and_more_flow(x: F32 at sample) -> F32 at sample {   //~ E0002
+  x
+}
+
+@repr(c, 1 +) pub struct ListAndMoreStruct {   //~ E0002
+  x: I32,
+}
+
+@fp(1) pub fn number(x: F32) -> F32 {   //~ E0002
+  x
+}
+
+@fp(f(1)) pub fn call(x: F32) -> F32 {   //~ E0002
+  x
+}
+
+@fp(relaxed strict) pub fn two_values(x: F32) -> F32 {   //~ E0002
+  x
+}
+
+@export(1) pub fn exported(x: F32) -> F32 {   //~ E0002
+  x
+}
+
+@repr(1) pub struct NumberRepr {   //~ E0002
+  x: I32,
+}

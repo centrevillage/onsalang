@@ -151,7 +151,7 @@ impl<'p> Sema<'p> {
                         let d = Diagnostic::new(Stage::Types, Code::E0416, n.span, msg);
                         self.report(cx.def, d.with_found(n.name.clone()).with_rule(rule));
                     }
-                    written.push(b);
+                    written.push((b, n.span));
                 }
                 (None, Some(dup)) => {
                     let spans: Vec<Span> = paths.iter().map(|p| p.span).collect();
@@ -181,6 +181,14 @@ impl<'p> Sema<'p> {
                     .with_rule(format!("the traits a type derives are {}", list.join(", "))),
             );
         }
+        // The same trait twice (§6.4, S-750): a trait read, with the other
+        // E0416 of the types stage; a name not read is not compared.
+        if let Some((before, k)) = onsa_diag::first_repeat(written.iter().map(|w| w.0)) {
+            let what = format!("the trait `{}`", written[k].0.name());
+            let d = onsa_diag::repeated(Stage::Types, Code::E0416, written[k].1, written[before].1, &what);
+            self.report(cx.def, d.with_found(written[k].0.name()));
+        }
+        let written: Vec<Bound> = written.into_iter().map(|w| w.0).collect();
         list_known(paths).then(|| derived(&written))
     }
 

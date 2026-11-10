@@ -4,33 +4,40 @@
 // fixes = 1
 //
 // [[test.fix]]
-// at = "37:5"
+// at = "40:5"
 // code = "E0002"
 // candidate = 1
-// leaves = ["37:1 E0005"]
+// leaves = ["40:1 E0005"]
 //
 // [[test.fix]]
-// at = "41:5"
+// at = "44:5"
 // code = "E0002"
 // candidate = 1
-// leaves = ["41:18 E0002"]
+// leaves = ["44:1 E0005"]
 //
 // [[test.fix]]
-// at = "45:18"
+// at = "48:5"
 // code = "E0002"
 // candidate = 1
-// leaves = ["45:14 E0005"]
+// leaves = ["48:18 E0002"]
+//
+// [[test.fix]]
+// at = "52:18"
+// code = "E0002"
+// candidate = 1
+// leaves = ["52:14 E0005"]
 
 // An attribute after a visibility (W5-11 U4) is one E0002 for its place, whatever it holds: the
-// contents of the attribute are not read (§18.1, S-593), so an attribute that is unknown
-// (`@nope`), one whose arguments are not well formed (`@fp(relaxed, 1 +)`), and two in a row are
-// each one E0002, at the first `@`, and no E0005 or other error about the contents is reported.
+// contents of the attribute are not reported there (§18.1, S-593), so an attribute that is unknown
+// (`@nope`), one whose value is out of its list (`@fp(relaxed, 1 +)`, which moves with its
+// candidate and leaves the E0005 of the value, S-990), and two in a row are each one E0002, at
+// the first `@`, and no E0005 or other error about the contents is reported in this file.
 // A good attribute before the visibility stays where it is: `@fp(relaxed) pub @mem(bulk) fn`
 // is one E0002 at the second `@`. The head is read on from the end of the last attribute that
 // is on the line, so each function is a name of the module and its users are checked against the
 // head. The unit has a syntax error, so its body is not checked. One error in each unit.
 
-pub @fp(relaxed, 1 +) fn bad_arguments(x: F32) -> F32 {   //~ E0002 @5
+@fp(relaxed, 1 +) pub fn bad_arguments(x: F32) -> F32 {   //~ E0002 @5
   x
 }
 

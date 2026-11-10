@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§10", "§4.5", "§18.1"]
+// fixes = 0
+
+// W5-24 U3b/t, S-750 (spec §8.1: "同じ効果を二度書く形(`uses {Alloc, Alloc}`)は E0602"; §10: "効果行に `Alloc` を含まない(E0902)"; §18.1: a stage that found an error in a unit stops the stages after it, and the
+// order of the stages is syntax, names, types, flow, modes and moves, `rt` and effects, unused bindings; the registry puts E0602 in the names stage, tasks/diag-codes.md): an effect
+// written twice in the row of an `rt fn`. An `rt` function cannot have `Alloc` in its row at all (E0902, the stage of `rt`), but the overlap is found in the names stage, which is before it, so the
+// unit has the one E0602 and not the E0902. A method with `rt` is the same. One error in each unit (P-01). (An `rt fn` with `uses {Alloc}` once is the E0902 of rt/ and
+// is not here.)
+
+pub rt fn function() -> U32 uses {Alloc, Alloc} {   //~ E0602
+  1
+}
+
+rt fn private_function(x: U32) -> U32 uses {Alloc, Alloc} { //~ E0602
+  x
+}
+
+pub struct Holder {
+  id: U32,
+}
+
+impl Holder {
+  pub rt fn read(self) -> U32 uses {Alloc, Alloc} { //~ E0602
+    self.id
+  }
+}

@@ -1,0 +1,73 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§6.2", "§4.5", "§18.1"]
+// fixes = 0
+
+// W5-24 U3b/t, S-750 (spec §8.1: "同じ効果を二度書く形は E0602"; §18.1: "`impl` / `trait` / `effect` / `handler` / `extern` の各メンバ(メソッド、関連定数)がそれぞれ一つの単位"): an effect written twice in the
+// row of a method of an `impl` is E0602 on the second one, with no candidate, in the unit of the method. A method of a struct, of an enum and of a generic type, a method with
+// `self` and one without, a method that is public and one that is not, and an effect row variable. The methods that are right in the same `impl` are not touched, and the
+// `impl` is not a unit with an error of its own. One error in each unit (P-01). (The method of a `trait` is the E0200 of the whole declaration in this version, §18.1, and the
+// row is not read.)
+
+pub struct Holder {
+  id: U32,
+}
+
+impl Holder {
+  pub fn with_self(self) -> U32 uses {Alloc, Alloc} { //~ E0602
+    self.id
+  }
+
+  pub fn without_self() -> U32 uses {Alloc, Alloc} { //~ E0602
+    1
+  }
+
+  fn private_method(self) -> U32 uses {Alloc, Alloc} { //~ E0602
+    self.id
+  }
+
+  pub fn right(self) -> U32 uses {Alloc} {
+    self.id
+  }
+
+  pub fn with_a_variable[e](self, f: fn() -> U32 uses {e}) -> U32 uses {e, e} { //~ E0602
+    f.()
+  }
+
+  pub fn after_a_right_one(self) -> U32 uses {Alloc} {
+    self.id
+  }
+}
+
+pub enum Mode {
+  Off,
+  On,
+}
+
+impl Mode {
+  pub fn level(self) -> U32 uses {Alloc, Alloc} {   //~ E0602
+    1
+  }
+}
+
+pub struct Wrapper[T] {
+  a: T,
+}
+
+impl[T] Wrapper[T] {
+  pub fn get(self) -> T uses {Alloc, Alloc} {       //~ E0602
+    self.a
+  }
+}
+
+pub struct Spread {
+  id: U32,
+}
+
+impl Spread {
+  pub fn on_lines(self) -> U32
+    uses {Alloc,
+      Alloc} {                                      //~ E0602
+    self.id
+  }
+}

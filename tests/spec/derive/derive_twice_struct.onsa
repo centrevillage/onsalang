@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§4.5", "§18.1"]
+// fixes = 0
+
+// W5-24 U3b/t, S-750 (spec §6.4: "同じ trait を二度並べる形(`struct P: PartialEq + PartialEq`)は E0416 で、境界の重なりと同じ形で報告する(§4.5)"; §4.5: the
+// first element of the list that overlaps one before it gets the error, and "修正候補は無い"): a trait that is listed twice in the heading of a struct is
+// the E0416 of the heading, on the line of the second one, with no candidate (`fixes = 0`: which of the two to drop is the writer's). It is the same for each trait
+// of the closed list that a struct can list (`PartialEq` `Eq` `PartialOrd` `Ord` `Hash` `Default`; `Show` is the E0200 of this version, `Ordinal` is for an enum
+// without payloads and is in derive_twice_enum.onsa). The fields meet every trait, so the list is the only error of the unit. A struct with no field is the same.
+// One error in each unit (P-01).
+
+pub struct PartialEqTwice: PartialEq + PartialEq {  //~ E0416
+  n: U32,
+}
+
+pub struct EqTwice: Eq + Eq {                       //~ E0416
+  n: U32,
+}
+
+pub struct PartialOrdTwice: PartialOrd + PartialOrd { //~ E0416
+  n: U32,
+}
+
+pub struct OrdTwice: Ord + Ord {                    //~ E0416
+  n: U32,
+}
+
+pub struct HashTwice: Hash + Hash {                 //~ E0416
+  n: U32,
+}
+
+pub struct DefaultTwice: Default + Default {        //~ E0416
+  n: U32,
+}
+
+pub struct NoFields: PartialEq + PartialEq {}       //~ E0416
+
+pub struct SeveralFields: Eq + Eq {                 //~ E0416
+  a: U32,
+  b: Bool,
+  c: Char,
+}
+
+pub struct WithDefaults: Default + Default {        //~ E0416
+  gain: F32 = 1.0,
+  n: U32,
+}

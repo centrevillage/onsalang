@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§8.2", "§15.1", "§4.5", "§18.1"]
+// fixes = 0
+
+// W5-24 U3b/t, S-750 (spec §8.1: "同じ効果を二度書く形は E0602"; "効果行の名前は、他の名前と同じく解決する(§15.1)"; §8.2: `Alloc` is std's effect in `std.core` and is in the prelude): the
+// overlap is of the effect and not of the spelling. `Alloc`, `core.Alloc` (after `use std.core`) and `std.core.Alloc` (after `use std`) name the same effect, so a row with two of
+// them has the effect twice: E0602 on the second one, with no candidate. The names resolve before the overlap is looked for, so a row of two names that are the same effect is
+// the error of the overlap and not of the names. One error in each unit (P-01).
+
+use std
+use std.core
+
+pub fn plain_then_module() uses {Alloc, core.Alloc} {} //~ E0602
+
+pub fn module_then_plain() uses {core.Alloc, Alloc} {} //~ E0602
+
+pub fn plain_then_package() uses {Alloc, std.core.Alloc} {} //~ E0602
+
+pub fn module_then_package() uses {core.Alloc, std.core.Alloc} {} //~ E0602
+
+pub fn module_twice() uses {core.Alloc, core.Alloc} {} //~ E0602
+
+pub fn in_a_function_type(f: fn() -> U32 uses {Alloc, core.Alloc}) -> U32 { //~ E0602
+  1
+}
+
+pub fn fine_with_one_spelling() uses {core.Alloc} {}
+
+pub fn fine_with_the_package() uses {std.core.Alloc} {}

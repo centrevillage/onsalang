@@ -163,13 +163,6 @@ note = "型の大きさと状態の領域が U32 を超える（ターゲット�
 
 [[pending]]
 kind = "diag-code"
-target = "E0602"
-reasons = ["S-750", "S-965"]
-until = "W5-24"
-note = "効果行の同じ効果の重なり（R9）"
-
-[[pending]]
-kind = "diag-code"
 target = "E0808"
 reasons = ["S-88", "R-100", "S-151", "S-132"]
 until = "W7-04"

@@ -18,6 +18,7 @@ mod declaration_headings;
 mod declaration_order;
 mod deep_recursion;
 mod diagnostics_json;
+mod diff_ast_sets;
 mod doc_comment_targets;
 mod effect_names;
 mod empty_brackets;

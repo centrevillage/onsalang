@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§4.5", "§18.1"]
+// fixes = 0
+
+// W5-24 U3b (the parent), S-750 (spec §6.4: "同じ trait を二度並べる形は E0416"; §4.5: a list of bounds is read as a set; §18.1: each unit is checked on its own):
+// a type whose list has the same trait twice still has the traits it lists, so a unit that uses one of them has no error of its own. The E0416 of the overlap, on the
+// unit of the type, is the only error of the file. One error in each unit (P-01).
+
+pub struct P: PartialEq + PartialEq { //~ E0416
+  a: I32,
+}
+
+pub fn same(a: P, b: P) -> Bool {
+  a == b
+}

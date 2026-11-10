@@ -1,0 +1,54 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§4.5", "§18.1"]
+// fixes = 0
+
+// W5-24 U3b/t, S-750 (spec §6.4: "同じ trait を二度並べる形は E0416 で、境界の重なりと同じ形で報告する(§4.5)"): the same as derive_twice_struct.onsa for an
+// enum: a trait listed twice is the E0416 of the heading, on the line of the second one, with no candidate. The traits of an enum are `PartialEq` `Eq`
+// `PartialOrd` `Ord` `Hash` and `Ordinal` (an enum cannot list `Default`, which is another E0416 and is in heading_neg.onsa). An enum with a payload and one with
+// none are both written. One error in each unit (P-01).
+
+pub enum PartialEqTwice: PartialEq + PartialEq {    //~ E0416
+  Off,
+  On,
+}
+
+pub enum EqTwice: Eq + Eq {                         //~ E0416
+  Off,
+  On,
+}
+
+pub enum PartialOrdTwice: PartialOrd + PartialOrd { //~ E0416
+  Off,
+  On,
+}
+
+pub enum OrdTwice: Ord + Ord {                      //~ E0416
+  Off,
+  On,
+}
+
+pub enum HashTwice: Hash + Hash {                   //~ E0416
+  Off,
+  On,
+}
+
+pub enum OrdinalTwice: Ordinal + Ordinal {          //~ E0416
+  Off,
+  On,
+}
+
+pub enum WithPayload: Eq + Eq {                     //~ E0416
+  Off,
+  Level(U32),
+}
+
+pub enum WithTwoPayloads: Hash + Hash {             //~ E0416
+  Pair(U8, Bool),
+  Single(U32),
+  Off,
+}
+
+pub enum OneVariant: Ordinal + Ordinal {            //~ E0416
+  Only,
+}

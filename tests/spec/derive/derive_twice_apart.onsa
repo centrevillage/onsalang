@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§4.5", "§18.1"]
+// fixes = 0
+
+// W5-24 U3b/t, S-750 (spec §6.4: "同じ trait を二度並べる形は E0416 で、境界の重なりと同じ形で報告する(§4.5)"; §4.5: "並びを前から読んで前の要素と重なる…最初の要素に付け"):
+// the list is read from the front and the error is on the first element that overlaps one before it, so on the later one of two and, when a list has a
+// trait three times, on the second copy and not on the third. The marker is on the line of that element in the cases that put the elements on several lines.
+// The two copies need not be next to each other, and another trait between them (`PartialEq + Eq + PartialEq`) is not a way out. A list with two
+// traits that each overlap is the one error of the heading, on the first of the later copies. There is no candidate. (`Show` between the copies is a
+// matter of the stage of the error and is not here.) One error in each unit (P-01).
+
+pub struct Spread: PartialEq +
+  PartialEq {                                       //~ E0416
+  n: U32,
+}
+
+pub struct ThreeCopies: PartialEq + PartialEq +     //~ E0416
+  PartialEq {
+  n: U32,
+}
+
+pub struct ThreeCopiesOnThreeLines: Hash +
+  Hash +                                            //~ E0416
+  Hash {
+  n: U32,
+}
+
+pub struct OneBetween: PartialEq + Eq + PartialEq { //~ E0416
+  n: U32,
+}
+
+pub struct TwoBetween: Eq + Hash + Default + Eq {   //~ E0416
+  n: U32,
+}
+
+pub struct FirstThatOverlaps: Eq + Hash + Hash +    //~ E0416
+  Eq {
+  n: U32,
+}
+
+pub struct TwoPairs: PartialEq + Eq +
+  PartialEq +                                       //~ E0416
+  Eq {
+  n: U32,
+}
+
+pub struct OnLaterLine: PartialEq + Eq + Hash +
+  Default + Hash {                                  //~ E0416
+  n: U32,
+}
+
+pub struct TheWholeChain: PartialEq + Eq + PartialOrd + Ord +
+  Ord {                                             //~ E0416
+  n: U32,
+}
+
+pub enum EnumBetween: Eq + Ordinal + Eq {           //~ E0416
+  Off,
+  On,
+}
+
+pub enum EnumSpread: Ordinal +
+  Ordinal {                                         //~ E0416
+  Off,
+  On,
+}
+
+pub enum EnumThree: Hash + Hash + Hash {            //~ E0416
+  Off,
+  On,
+}
+
+pub struct GenericBetween[T]: PartialEq + Eq + PartialEq { //~ E0416
+  a: T,
+}

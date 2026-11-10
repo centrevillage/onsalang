@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§4.5", "§18.1"]
+// fixes = 0
+
+// W5-24 U3b/t, S-750 (spec §8.1: "効果行は集合で、…同じ効果を二度書く形(`uses {Alloc, Alloc}`。効果行変数も同じ)は E0602"; §8.1: the row is also in "関数型", `fn(T) -> U uses {e}`): the row
+// of a function type is a row like that of a function, and an effect written twice in it is E0602 on the second one, with no candidate, wherever the type is written: a
+// parameter, the result, a function type in a function type, the alias of a type, the field of a struct, the annotation of a `let` and the row of an anonymous function.
+// The unit is the declaration that has the type, and the unit of an anonymous function is the function that has it. Two rows in one unit that are both wrong are one error,
+// on the first of them. The bodies are right, so the row is the only error of each unit. One error in each unit (P-01).
+
+pub fn call(f: fn(U32) -> U32 uses {Alloc}) -> U32 uses {Alloc} {
+  f.(1)
+}
+
+pub fn parameter(f: fn(U32) -> U32 uses {Alloc, Alloc}) -> U32 { //~ E0602
+  1
+}
+
+pub fn result() -> fn(U32) -> U32 uses {Alloc, Alloc} { //~ E0602
+  fn(x: U32) -> U32 { x }
+}
+
+pub fn nested(f: fn(fn() -> U32 uses {Alloc, Alloc}) -> U32) -> U32 { //~ E0602
+  1
+}
+
+pub fn in_a_variable_row[e](f: fn(U32) -> U32 uses {e, e}) -> U32 { //~ E0602
+  1
+}
+
+pub fn parameter_and_result(f: fn(U32) -> U32 uses {Alloc, Alloc}, //~ E0602
+  g: U32) -> fn(U32) -> U32 uses {Alloc, Alloc} {
+  fn(x: U32) -> U32 { x }
+}
+
+pub type Maker = fn(U32) -> U32 uses {Alloc, Alloc} //~ E0602
+
+pub struct Holder {
+  f: fn(U32) -> U32 uses {Alloc, Alloc},            //~ E0602
+}
+
+pub fn annotation() -> U32 uses {Alloc} {
+  let f: fn(U32) -> U32 uses {Alloc, Alloc} = fn(x: U32) -> U32 { x } //~ E0602
+  f.(1)
+}
+
+pub fn closure() -> U32 {
+  let _ = fn(x: U32) -> U32 uses {Alloc, Alloc} { x } //~ E0602
+  1
+}
+
+pub fn closure_with_a_variable[e](f: fn() -> U32 uses {e}) -> U32 uses {e} {
+  let _ = fn(x: U32) -> U32 uses {e, e} { x }       //~ E0602
+  f.()
+}
+
+pub fn closure_that_captures(k: U32) -> U32 uses {Alloc} {
+  call(fn(i: U32) -> U32 uses {Alloc, Alloc} { i + k }) //~ E0602
+}
+
+pub fn a_wrong_row_in_the_parameter_and_in_the_signature(f: fn() -> U32 uses {Alloc, Alloc}, //~ E0602
+  x: U32) -> U32 uses {Alloc, Alloc} {
+  x
+}

@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§4.5", "§18.1"]
+// fixes = 0
+
+// W5-24 U3b/t, S-750 (spec §8.1: "同じ効果を二度書く形は E0602 で、境界の重なりと同じ形で報告する(§4.5)"; §4.5: "並びを前から読んで前の要素と重なる…最初の要素に付け"): the row is
+// read from the front and the error is on the first element that overlaps one before it. The two copies need not be next to each other (`{Alloc, e, Alloc}`),
+// a row with three copies of an element has it on the second copy, and a row with two elements that each overlap has it on the first of the later copies. The marker
+// is on the line of that element in the rows that are written on several lines. There is no candidate. One error in each unit (P-01).
+
+pub fn alloc_variable_alloc[e](f: fn() -> U32 uses {e}) -> U32 uses {Alloc, e, Alloc} { //~ E0602
+  f.()
+}
+
+pub fn variable_alloc_variable[e](f: fn() -> U32 uses {e}) -> U32 uses {e, Alloc, e} { //~ E0602
+  f.()
+}
+
+pub fn two_variables_apart[d, e](f: fn() -> U32 uses {d}, g: fn() -> U32 uses {e}) -> U32 uses {d, Alloc, e, d} { //~ E0602
+  f.() + g.()
+}
+
+pub fn three_alloc_on_three_lines(x: U32) -> U32
+  uses {Alloc,
+    Alloc,                                          //~ E0602
+    Alloc} {
+  x
+}
+
+pub fn three_variables_on_one_line[e](f: fn() -> U32 uses {e}) -> U32 uses {e, e, e} { //~ E0602
+  f.()
+}
+
+pub fn two_pairs[e](f: fn() -> U32 uses {e}) -> U32
+  uses {Alloc, e,
+    Alloc,                                          //~ E0602
+    e} {
+  f.()
+}
+
+pub fn the_overlap_on_a_later_line[e](f: fn() -> U32 uses {e}) -> U32
+  uses {Alloc,
+    e, Alloc} {                                     //~ E0602
+  f.()
+}
+
+pub fn two_pairs_on_one_line[e](f: fn() -> U32 uses {e}) -> U32 uses {e, Alloc, Alloc, e} { //~ E0602
+  f.()
+}

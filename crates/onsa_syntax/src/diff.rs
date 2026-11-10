@@ -14,7 +14,7 @@ use std::fmt;
 use onsa_diag::Span;
 
 use crate::Parsed;
-use crate::ast::{Ast, Block, ExprKind, ImplDecl, ItemId, ItemKind};
+use crate::ast::{Ast, Block, Derives, EffectRow, ExprKind, GenericParam, ImplDecl, ItemId, ItemKind, TypeKind};
 use crate::dump::{dump_item, dump_stmt, dump_type, dump_type_args};
 use crate::fmt::rewrites::Choices;
 use crate::lexer::comment_text;
@@ -183,9 +183,13 @@ struct Side<'a> {
 
 impl<'a> Side<'a> {
     /// `parsed` has no diagnostic of the syntax stage (`normalize`, which
-    /// chooses the rewrites unless `choices` has them).
-    fn new(parsed: &'a Parsed, choices: Option<&Choices>) -> Side<'a> {
-        let ast = crate::fmt::rewrites::normalize(parsed, choices);
+    /// chooses the rewrites unless `choices` has them). With `sets`, the
+    /// lists read as sets are in one order ([`in_one_order`]).
+    fn new(parsed: &'a Parsed, choices: Option<&Choices>, sets: bool) -> Side<'a> {
+        let mut ast = crate::fmt::rewrites::normalize(parsed, choices);
+        if sets {
+            in_one_order(&mut ast);
+        }
         let items = keyed(&ast);
         Side { ast, parsed, items }
     }
@@ -203,12 +207,59 @@ impl<'a> Side<'a> {
     }
 }
 
+/// The lists of `ast` read as sets (`spec/tools.md` §3.5, S-750), the bounds
+/// of a type parameter, a derive list and an effect row, each sorted by the
+/// names of its elements: their order is no difference to `diff --ast`. An
+/// element written twice stays twice. The check of `onsa fmt` does not sort
+/// them: fmt keeps the order written.
+fn in_one_order(ast: &mut Ast) {
+    fn row(e: &mut Option<EffectRow>) {
+        if let Some(e) = e {
+            e.effects.sort_by_cached_key(|p| p.dotted());
+        }
+    }
+    fn item(kind: &mut ItemKind) {
+        let (generics, derives) = match kind {
+            ItemKind::Fn(f) => {
+                row(&mut f.effects);
+                (&mut f.generics, None)
+            }
+            ItemKind::Struct(s) => (&mut s.generics, Some(&mut s.derives)),
+            ItemKind::Enum(e) => (&mut e.generics, Some(&mut e.derives)),
+            ItemKind::Trait(t) => (&mut t.generics, None),
+            ItemKind::Impl(i) => (&mut i.generics, None),
+            ItemKind::Target(inner) => return item(inner),
+            _ => return,
+        };
+        if let Some(Derives::Listed(paths)) = derives {
+            paths.sort_by_cached_key(|p| p.dotted());
+        }
+        for g in generics {
+            if let GenericParam::Type { bounds, .. } = g {
+                bounds.sort_by_cached_key(|b| (b.path.dotted(), b.relaxed));
+            }
+        }
+    }
+    ast.items.iter_mut().for_each(|i| item(&mut i.kind));
+    for t in &mut ast.types {
+        if let TypeKind::Fn { effects, .. } = &mut t.kind {
+            row(effects);
+        }
+    }
+    for e in &mut ast.exprs {
+        if let ExprKind::Closure { effects, .. } = &mut e.kind {
+            row(effects);
+        }
+    }
+}
+
 /// Compare two parsed files without a diagnostic of the syntax stage (one is
 /// an internal error, [`crate::fmt::rewrites::normalize`]): their structure
-/// alone, not their comments (S-534). Items keep the new file's order;
-/// removed items come last.
+/// alone, not their comments (S-534) nor the order of a list read as a set
+/// ([`in_one_order`]). Items keep the new file's order; removed items come
+/// last.
 pub fn diff(old: &Parsed, new: &Parsed) -> Vec<ItemDiff> {
-    let (old, new) = (Side::new(old, None), Side::new(new, None));
+    let (old, new) = (Side::new(old, None, true), Side::new(new, None, true));
     let (old_items, new_items) = (&old.items, &new.items);
     let old_map: HashMap<&str, ItemId> = old_items.iter().map(|(k, id)| (k.as_str(), *id)).collect();
     let new_map: HashMap<&str, ItemId> = new_items.iter().map(|(k, id)| (k.as_str(), *id)).collect();
@@ -317,7 +368,7 @@ pub(crate) fn same_program_chosen(
     new_text: &str,
 ) -> Option<Difference> {
     let eof = old.cst.tokens().last().expect("a file ends with its Eof token").span;
-    let (o, n) = (Side::new(old, old_choices), Side::new(new, None));
+    let (o, n) = (Side::new(old, old_choices, false), Side::new(new, None, false));
     for i in 0..o.items.len().max(n.items.len()) {
         let (place, at) = match (o.items.get(i), n.items.get(i)) {
             (Some((ok, oid)), Some((nk, nid)))

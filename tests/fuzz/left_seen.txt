@@ -3,6 +3,7 @@
 fix|E0002|write the attribute before the visibility and `…`|E0002	`…` cannot be written here: attributes come first in a head
 fix|E0002|write the attribute before the visibility and `…`|E0002	expected a declaration, found `…`
 fix|E0002|write the attribute before the visibility and `…`|E0005	`…` cannot be attached to a function of the top level; it goes on a `…`
+fix|E0002|write the attribute before the visibility and `…`|E0005	`…` takes no arguments
 fix|E0002|write the attribute before the visibility and `…`|E0005	the attribute `…` is written twice (§#.#)
 fix|E0002|write the attribute before the visibility and `…`|E0005	the value of `…` is one of `…`
 fix|E0002|write the attribute before the visibility and `…`|E0005	there is no attribute `…`

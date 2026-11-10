@@ -1,0 +1,72 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§4.5"]
+
+// W5-24 U3b/t, S-750 (spec §8.1: "効果行は集合で、書く順序は意味を持たない(`uses {A, B}` と `uses {B, A}` は同じ)"): what is not the same effect twice is fine, and no diagnostic is
+// expected. An effect and an effect row variable in either order, two variables in either order, the same effect once in each of two functions, in a function and in a
+// function type, in a method and in an anonymous function, and an empty row. (The same effect twice in a row: effect_row_twice_*.onsa.) The functions that have a row are used,
+// with the row that their body needs.
+
+pub fn alloc_then_variable[e](f: fn() -> U32 uses {e}) -> U32 uses {Alloc, e} {
+  f.()
+}
+
+pub fn variable_then_alloc[e](f: fn() -> U32 uses {e}) -> U32 uses {e, Alloc} {
+  f.()
+}
+
+pub fn two_variables[d, e](f: fn() -> U32 uses {d}, g: fn() -> U32 uses {e}) -> U32 uses {d, e} {
+  f.() + g.()
+}
+
+pub fn two_variables_swapped[d, e](f: fn() -> U32 uses {d}, g: fn() -> U32 uses {e}) -> U32 uses {e, d} {
+  f.() + g.()
+}
+
+pub fn two_variables_and_alloc[d, e](f: fn() -> U32 uses {d}, g: fn() -> U32 uses {e}) -> U32 uses {e, Alloc, d} {
+  f.() + g.()
+}
+
+pub fn alloc_once() uses {Alloc} {}
+
+pub fn alloc_once_again() uses {Alloc} {}
+
+pub fn no_row() {}
+
+pub fn row_in_the_parameter_and_in_the_signature(f: fn() -> U32 uses {Alloc}) -> U32 uses {Alloc} {
+  f.()
+}
+
+pub fn one_row_each_in_a_type(f: fn(fn() -> U32 uses {Alloc}) -> U32 uses {Alloc}) -> U32 {
+  1
+}
+
+pub type Maker = fn(U32) -> U32 uses {Alloc}
+
+pub struct Holder {
+  id: U32,
+  f: fn(U32) -> U32 uses {Alloc},
+}
+
+impl Holder {
+  pub fn read(self) -> U32 uses {Alloc} {
+    self.id
+  }
+
+  pub fn read_again(self) -> U32 uses {Alloc} {
+    self.id
+  }
+}
+
+pub fn call(f: fn(U32) -> U32 uses {Alloc}) -> U32 uses {Alloc} {
+  f.(1)
+}
+
+pub fn closure(k: U32) -> U32 uses {Alloc} {
+  call(fn(i: U32) -> U32 uses {Alloc} { i + k })
+}
+
+pub fn closure_with_a_variable[e](f: fn() -> U32 uses {e}) -> U32 uses {e} {
+  let _ = fn(x: U32) -> U32 uses {e} { x }
+  f.()
+}

@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§4.5", "§18.1"]
+// fixes = 0
+
+// W5-24 U3b/t, S-750 (spec §18.1: "一つの単位の中では、最初のエラーで検査を止める"; §8.1: an effect written twice in a row is E0602): a unit has one E0602 when it has several
+// rows that are wrong, and it is on the first of them by position (the signature before the body, a row before a row on a later line). The next unit is
+// checked on its own, so a unit that has a wrong row after a unit that has one has its own error. The rows that are right in the same unit are not touched. No candidate.
+
+pub fn two_wrong_rows_in_the_signature(f: fn() -> U32 uses {Alloc, Alloc}) -> U32 uses {Alloc, Alloc} { //~ E0602
+  1
+}
+
+pub fn signature_then_a_closure(x: U32) -> U32 uses {Alloc, Alloc} { //~ E0602
+  let _ = fn(y: U32) -> U32 uses {Alloc, Alloc} { y }
+  x
+}
+
+pub fn a_right_row_then_two_wrong_closures(x: U32) -> U32 uses {Alloc} {
+  let _ = fn(y: U32) -> U32 uses {Alloc, Alloc} { y } //~ E0602
+  let _ = fn(y: U32) -> U32 uses {Alloc, Alloc} { y }
+  x
+}
+
+pub fn a_row_of_a_type_then_a_closure(x: U32) -> U32 {
+  let _: fn(U32) -> U32 uses {Alloc, Alloc} = fn(y: U32) -> U32 { y } //~ E0602
+  let _ = fn(y: U32) -> U32 uses {Alloc, Alloc} { y }
+  x
+}
+
+pub fn first_unit() uses {Alloc, Alloc} {}          //~ E0602
+
+pub fn second_unit() uses {Alloc, Alloc} {}         //~ E0602
+
+pub fn third_unit_is_right() uses {Alloc} {}

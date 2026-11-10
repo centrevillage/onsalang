@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§18.1"]
+// fixes = 0
+
+// W5-24 U3b/t, S-750 (spec §6.4: "書けるのは `PartialEq Eq PartialOrd Ord Hash Show Default Ordinal` の閉じた一覧だけ(一覧に無い trait は E0416…)"; "同じ trait を二度並べる形は
+// E0416"; §18.1: one error in a unit): a name that is not in the closed list, listed twice. Both the name that is not in the list and the second copy are the E0416 of
+// the heading, so the unit has one E0416 whichever of the two the checker reports first, and the elements are on one line so that the marker does not depend on it.
+// A name that is not a trait at all (`Gone`), a trait of another language (`Clone`) and a trait of this language that a heading cannot list (`Num`, `Float`). There is
+// no candidate. One error in each unit (P-01).
+
+pub struct Unknown: Gone + Gone {                   //~ E0416
+  v: U32,
+}
+
+pub struct OtherLanguage: Clone + Clone {           //~ E0416
+  v: U32,
+}
+
+pub struct NumberTrait: Num + Num {                 //~ E0416
+  v: U32,
+}
+
+pub enum FloatTrait: Float + Float {                //~ E0416
+  A,
+  B,
+}
+
+pub struct WithAListedTrait: Eq + Gone + Gone {     //~ E0416
+  v: U32,
+}
+
+pub struct GenericUnknown[T]: Gone + Gone {         //~ E0416
+  a: T,
+}

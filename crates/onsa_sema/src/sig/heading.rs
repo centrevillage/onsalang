@@ -204,8 +204,10 @@ pub(super) fn heading_locals(
 /// (b)). A name not found is its E0302, with the `use` of the effect std
 /// declares of that name as the candidate (S-659 (3)); a name the check does
 /// not read is left out with no diagnostic (§18.1; read by `def`,
-/// [`Analysis::unread_path`]). The errors go back to the caller, which
-/// reports them.
+/// [`Analysis::unread_path`]). The same effect or effect row variable twice,
+/// as read (`Alloc` and `core.Alloc`), is the E0602 of the second (§8.1,
+/// S-750), among the others by its place. The errors go back to the caller,
+/// which reports them.
 // The effects read stay when a name held as an error is left out, as an
 // unknown effect of an open row, and the check goes on (§18.1, S-691).
 // A local it sees (`locals`, S-738) is a value, no effect.
@@ -218,6 +220,8 @@ pub(crate) fn read_effects(
 ) -> (EffectSet, Vec<Diagnostic>) {
     let mut set = EffectSet::default();
     let mut errors = Vec::new();
+    // What each element read names: an effect row variable or a definition.
+    let mut read: Vec<(Result<u32, DefId>, &Path)> = Vec::new();
     let listed = listed(&[], generics);
     for p in row.map_or(&[][..], |r| &r.effects[..]) {
         let n = p.segments.last().unwrap();
@@ -225,9 +229,14 @@ pub(crate) fn read_effects(
         if let (1, Some(i)) = (p.segments.len(), var) {
             a.note_use(generics[i].span, n.span);
             set.vars.push(i as u32);
+            read.push((Ok(i as u32), p));
             continue;
         }
-        match heading_name(a, from, p, (&listed, generics, locals), self_ty) {
+        let named = heading_name(a, from, p, (&listed, generics, locals), self_ty);
+        if let Ok((_, Some(Entity::Def(d)))) = named {
+            read.push((Err(d), p));
+        }
+        match named {
             Ok((_, Some(Entity::Def(d)))) if Some(d) == a.alloc => set.alloc = true,
             Ok((_, Some(Entity::Def(d))))
                 if matches!(a.def(d).kind, DefKind::Effect { .. }) && a.modules.is_std(from) =>
@@ -259,6 +268,17 @@ pub(crate) fn read_effects(
                 });
             }
         }
+    }
+    if let Some((before, k)) = onsa_diag::first_repeat(read.iter().map(|r| r.0)) {
+        let (key, p) = read[k];
+        // By its name, not as written: the two may be spelled apart (`Alloc`, `core.Alloc`).
+        let what = match key {
+            Ok(i) => format!("the effect row variable `{}`", generics[i as usize].name),
+            Err(d) => format!("the effect `{}`", a.def(d).name),
+        };
+        let d = onsa_diag::repeated(Stage::Names, Code::E0602, p.span, read[before].1.span, &what);
+        let place = errors.partition_point(|e| e.span.start <= p.span.start);
+        errors.insert(place, d.with_found(p.dotted()));
     }
     (set, errors)
 }

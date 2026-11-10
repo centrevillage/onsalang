@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§4.5", "§18.1"]
+// fixes = 0
+
+// W5-24 U3b/t, S-750 (spec §6.4: "同じ trait を二度並べる形は E0416"; "総称の型(`struct Pair[T]: PartialEq`)は、型引数が満たすときだけ満たす"): a trait listed twice
+// in the heading of a generic type is the E0416 of the heading, with no candidate. The type parameters, the bounds of the parameters and a const parameter do not
+// change that. A bound that is written twice in the `[ ]` of the same declaration is the error of the bounds (types/bounds_overlap.onsa) and is not here: a
+// declaration has one error (§18.1), so the bounds here are written once.
+
+pub struct One[T]: PartialEq + PartialEq {          //~ E0416
+  a: T,
+}
+
+pub struct Two[A, B]: Eq + Eq {                     //~ E0416
+  a: A,
+  b: B,
+}
+
+pub struct Bounded[T: Show]: Hash + Hash {          //~ E0416
+  a: T,
+}
+
+pub struct WithConst[T, const N: U32]: PartialEq + PartialEq { //~ E0416
+  d: [T; N],
+}
+
+pub struct OnlyConst[const N: U32]: Ord + Ord {     //~ E0416
+  d: [U32; N],
+}
+
+pub enum GenericEnum[T]: Eq + Eq {                  //~ E0416
+  Empty,
+  Full(T),
+}
+
+pub enum GenericEnumHash[T]: PartialEq + PartialEq { //~ E0416
+  Empty,
+  Full(T),
+}
+
+pub struct GenericDefault[T]: Default + Default {   //~ E0416
+  a: T,
+}

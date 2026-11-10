@@ -145,13 +145,14 @@ fn an_attribute_after_the_visibility_or_rt_says_where_attributes_go() {
     // §18.1 (S-593): the note shows that the attributes come before the visibility and `rt`, and the form is
     // the range, the attribute of Onsa from its `@` to its name or `)`, whatever is in it (S-949 for an old one).
     // The note of `pub #[inline] fn` is the row's, about the form of an attribute: not this one. The one
-    // candidate moves an attribute of Onsa that reads (S-600); none for one whose contents do not read, nor
-    // for one of other languages.
+    // candidate moves an attribute of Onsa that reads as at the head, its value out of the list too (S-600,
+    // S-990); none for one whose contents would not read at the head either, nor for one of other languages.
     let forms = [
         ("vis", "pub @fp(relaxed) fn f() -> I32 {\n  1\n}\n", "@fp(relaxed)", 1),
         ("rt", "rt @fp(relaxed) fn f() -> I32 {\n  1\n}\n", "@fp(relaxed)", 1),
         ("vis_rt", "pub rt @fp(relaxed) fn f() -> I32 {\n  1\n}\n", "@fp(relaxed)", 1),
-        ("contents", "pub @fp(relaxed, 1 +) fn f() -> I32 {\n  1\n}\n", "@fp(relaxed, 1 +)", 0),
+        ("contents", "pub @fp(relaxed, 1 +) fn f() -> I32 {\n  1\n}\n", "@fp(relaxed, 1 +)", 1),
+        ("lexical", "pub @fp(0x) fn f() -> I32 {\n  1\n}\n", "@fp(0x)", 0),
         ("name_only", "pub @nope fn f() -> I32 {\n  1\n}\n", "@nope", 1),
         ("old_derive", "pub @derive(Eq) struct P {\n  x: I32,\n}\n", "@derive(Eq)", 1),
         ("old_relaxed", "pub @relaxed fn f() -> I32 {\n  1\n}\n", "@relaxed", 1),

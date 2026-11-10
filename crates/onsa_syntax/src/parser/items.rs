@@ -111,7 +111,7 @@ impl<'a> Parser<'a> {
                 break;
             }
             let (at, depth, reported) = (self.peek_index(), self.open.len(), self.diagnostics.len());
-            match self.parse_attr(true) {
+            match self.parse_attr() {
                 Ok(a) => seen.push(a),
                 Err(_)
                     if read_on
@@ -130,8 +130,8 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// The attribute at the cursor; `values`: [`Parser::parse_attr_body`].
-    pub(super) fn parse_attr(&mut self, values: bool) -> PResult<SeenAttr> {
+    /// The attribute at the cursor ([`Parser::parse_attr_body`]).
+    pub(super) fn parse_attr(&mut self) -> PResult<SeenAttr> {
         let at = self.peek_index();
         let m = self.start(NodeKind::Attr)?;
         self.expect(TokenKind::At)?;
@@ -141,7 +141,7 @@ impl<'a> Parser<'a> {
             self.skip_newlines();
         }
         let name = self.peek();
-        let args = self.parse_attr_body(values)?;
+        let args = self.parse_attr_body()?;
         let done = self.complete(m, NodeKind::Attr);
         // The sole argument, when it is one name (`c`, `relaxed`, `bulk`).
         let value =
@@ -156,19 +156,19 @@ impl<'a> Parser<'a> {
     }
 
     /// The name and the arguments of an attribute; the indices of the `(`
-    /// and the `)` of its arguments, if any. With `values`, the parentheses
+    /// and the `)` of its arguments, if any. The parentheses
     /// of one that takes a value of its list or none (`@fp`, `@export`) are
     /// a value whatever is in them (§6.5, S-834): when they do not read as
     /// arguments and close ([`crate::scan::Brackets::closing`]), they are
     /// read to their `)`, a value the table refuses.
-    fn parse_attr_body(&mut self, values: bool) -> PResult<Option<(usize, usize)>> {
+    fn parse_attr_body(&mut self) -> PResult<Option<(usize, usize)>> {
         let name = self.peek();
         self.parse_ident("attribute name")?;
         if !self.touches(TokenKind::LParen, true, false) {
             return Ok(None);
         }
         let open = self.peek_index();
-        if !(values && crate::attrs::takes_value(self.token_text(name))) {
+        if !crate::attrs::takes_value(self.token_text(name)) {
             return self.parse_attr_args(None).map(|close| Some((open, close)));
         }
         let s = self.snapshot();
@@ -239,8 +239,8 @@ impl<'a> Parser<'a> {
     pub(super) fn check_attrs(&mut self, seen: &[SeenAttr], place: Place, declaration: Option<usize>) {
         let repeat = onsa_diag::first_repeat(seen.iter().map(|a| self.token_text(a.name)));
         for (k, a) in seen.iter().enumerate() {
-            // SPEC-GAP(S-988): a repeat whose value is wrong too (`@fp(relaxed) @fp(fast) fn h`) is
-            // the E0005 of the repeat, with no candidate: the names are compared before the table.
+            // A repeat whose value is wrong too (`@fp(relaxed) @fp(fast) fn h`) is the E0005 of the
+            // repeat, with no candidate (S-988): the names are compared before the table.
             if let Some((before, _)) = repeat.filter(|&(_, r)| r == k) {
                 let what = format!("the attribute `@{}`", self.token_text(a.name));
                 let d = onsa_diag::repeated(Stage::Syntax, Code::E0005, a.span, seen[before].span, &what);
