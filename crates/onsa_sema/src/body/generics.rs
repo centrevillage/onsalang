@@ -53,23 +53,6 @@ impl<'a> Checker<'a> {
         head_of(self.a, t).unwrap_or_else(|| self.display(t))
     }
 
-    /// The type argument `t` a use made at `span`, named `what`: its origin
-    /// (E0406 when still open at the end) and its implicit `Escape`, of the
-    /// rule `rule`, judged before the other requirements made after it (§4.5,
-    /// S-862). `way`: the note of the E0406; `lifted`: its parameter is
-    /// `?Escape`.
-    fn type_argument(
-        &mut self,
-        span: Span,
-        t: TyId,
-        what: ArgumentName,
-        way: Option<String>,
-        (rule, lifted): (&'static str, bool),
-    ) {
-        self.defer(span, t, DeferredKind::Origin { what: what.clone(), rule: way });
-        self.defer(span, t, DeferredKind::Escape { what, rule, lifted });
-    }
-
     /// How the parameters of the `impl` of the type `head` of the constant
     /// `def` are given (S-304, no candidate: which arguments is the writer's;
     /// `Self` where the body is of an `impl` of that type, the same definition
@@ -134,17 +117,20 @@ impl<'a> Checker<'a> {
                 _ => ArgumentName::Text(parameter(g, &owner)),
             };
             let of_seq = k < impl_count && matches!(element, Some(Required::SeqElement { .. }));
-            let Some((rule, lifted, wants)) = requirements(g, of_seq) else {
-                self.defer(span, arg, DeferredKind::Origin { what, rule: way.clone() });
-                continue;
-            };
-            self.type_argument(span, arg, what, way.clone(), (rule, lifted));
+            // Its origin (E0406 when still open at the end, `way` its note),
+            // then its requirements as items in their order.
+            self.defer(span, arg, DeferredKind::Origin { what: what.clone(), rule: way.clone() });
+            let Some(wants) = requirements(g, of_seq) else { continue };
             let required = || match (&element, k < impl_count) {
                 (Some(e), true) => e.clone(),
                 _ => Required::Param { param: g.name.clone(), owner: owner.clone(), std },
             };
-            for b in wants {
-                self.defer(span, arg, DeferredKind::Require { bound: b, what: required() });
+            for q in wants {
+                let kind = match q {
+                    Requirement::Escape { rule, lifted } => DeferredKind::Escape { what: what.clone(), rule, lifted },
+                    Requirement::Bound(bound) => DeferredKind::Require { bound, what: required() },
+                };
+                self.defer(span, arg, kind);
             }
         }
         let id = InstId(self.info.instances.len() as u32);
@@ -153,16 +139,25 @@ impl<'a> Checker<'a> {
     }
 }
 
+/// A requirement of a type parameter on its argument (§4.5), of [`requirements`].
+#[derive(Clone, Copy)]
+pub(crate) enum Requirement {
+    /// The implicit `Escape` (E0710 of the rule `rule`); `lifted`: the parameter is `?Escape`.
+    Escape { rule: &'static str, lifted: bool },
+    /// The implicit `Dup` or a bound (E0416).
+    Bound(Bound),
+}
+
 /// What the type parameter `g` requires of its argument, in the order it is
-/// judged (§4.5, S-862): its implicit `Escape` (the rule of its E0710, and
-/// whether `g` is `?Escape`), which a second-class argument fails before the
-/// others are judged, then the implicit `Dup` and its bounds. None of a const
-/// parameter, nor of one with an unknown bound, which requires nothing of
-/// its users (§18.1, S-768). `of_seq`: of the element of a method of an array.
-pub(crate) fn requirements(
-    g: &GenericDef,
-    of_seq: bool,
-) -> Option<(&'static str, bool, impl Iterator<Item = Bound> + '_)> {
+/// judged (§4.5, S-862): its implicit `Escape`, then the implicit `Dup` and
+/// its bounds. The first one an argument does not meet is its error, and the
+/// others are not judged (a second-class argument is E0710 alone): a use of a
+/// value makes them items in this order (the first one to fail is reported,
+/// [`Checker::check_deferred_now`]), a constant expression judges them at once
+/// ([`crate::constarg`]). None of a const parameter, nor of one with an
+/// unknown bound, which requires nothing of its users (§18.1, S-768).
+/// `of_seq`: of the element of a method of an array.
+pub(crate) fn requirements(g: &GenericDef, of_seq: bool) -> Option<impl Iterator<Item = Requirement> + '_> {
     let GenericKind::Type { bounds, dup, unknown: false, .. } = &g.kind else { return None };
     let lifted = g.lifts_escape();
     let rule = match (lifted, of_seq) {
@@ -170,7 +165,8 @@ pub(crate) fn requirements(
         (false, true) => VIEW_OF_ARRAY,
         (false, false) => GENERIC_VIEW,
     };
-    Some((rule, lifted, dup.then_some(Bound::Dup).into_iter().chain(bounds.iter().copied())))
+    let wants = dup.then_some(Bound::Dup).into_iter().chain(bounds.iter().copied());
+    Some(std::iter::once(Requirement::Escape { rule, lifted }).chain(wants.map(Requirement::Bound)))
 }
 
 /// The name of the type `t` with no type argument (`Rg` of `Rg[T, N]`,

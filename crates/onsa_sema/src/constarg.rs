@@ -45,16 +45,23 @@ pub(crate) enum ConstErr {
     OfOwner(Vec<DefId>, Box<ConstErr>),
 }
 
-/// The internal error of a held error after [`ConstErr::unheld`].
-pub(crate) const UNHELD: &str = "a constant expression's error held after it was unheld";
+/// A [`ConstErr`] with no `OfOwner`: the error itself, to a reader that
+/// knows the errors of the headings (a body, [`unread`]).
+#[derive(Debug)]
+pub(crate) enum Unheld {
+    Report(Diagnostic),
+    Uncomputed(Diagnostic),
+    Unknown,
+}
 
 impl ConstErr {
-    /// The error itself (no `OfOwner`), of a reader that knows the errors
-    /// of the headings.
-    pub(crate) fn unheld(self) -> ConstErr {
+    /// The error itself, of a reader that knows the errors of the headings.
+    pub(crate) fn unheld(self) -> Unheld {
         match self {
-            ConstErr::OfOwner(_, e) => *e,
-            e => e,
+            ConstErr::Report(d) => Unheld::Report(d),
+            ConstErr::Uncomputed(d) => Unheld::Uncomputed(d),
+            ConstErr::Unknown => Unheld::Unknown,
+            ConstErr::OfOwner(_, e) => e.unheld(),
         }
     }
 }
@@ -515,31 +522,40 @@ fn impl_args(
 
 /// The arguments `args` of the parameters of the generic `impl` of the
 /// constant `d` named at `span` (`found` as written), as a use of a value
-/// judges them (§4.5, S-304; [`crate::body::generics::requirements`]): the
-/// decided ones first, as of the statement that decides them, each E0710
-/// when it is second-class (its other requirements not judged), then E0416
-/// when it does not meet the bounds or the implicit `Dup` (an unknown bound
-/// is met, §18.1); then E0406 for the first one not decided, with no
+/// judges them (§4.5, S-304): the decided ones first, as of the statement
+/// that decides them, each by the first of its requirements it does not meet
+/// ([`crate::body::generics::requirements`]: E0710, or E0416; an unknown
+/// bound is met, §18.1); then E0406 for the first one not decided, with no
 /// candidate (which arguments is the writer's).
 fn judge_args(a: &Analysis, d: DefId, args: &[Option<TyId>], (found, span): (&str, Span)) -> Result<(), ConstErr> {
-    use crate::body::generics::{alias_way, head_of, parameter, requirements};
+    use crate::body::generics::{Requirement, alias_way, head_of, parameter, requirements};
     let Some(DefKind::Impl(i)) = a.def(d).owner.map(|o| &a.def(o).kind) else { return Ok(()) };
     let owner = format!("the `impl` of `{}`", head_of(a, i.self_ty).unwrap_or_default());
     let (under, std) = (crate::body::bounds::Bounds { a, generics: &[] }, a.modules.is_std(a.def(d).module));
     let show = |t: TyId| a.types.display(t, &|d| a.def(d).name.clone(), &|i| format!("<{i}>"));
     for (g, &arg) in i.generics.iter().zip(args) {
-        let (Some(arg), Some((rule, lifted, mut wants))) = (arg, requirements(g, false)) else { continue };
+        let (Some(arg), Some(mut wants)) = (arg, requirements(g, false)) else { continue };
+        let Some(q) = wants.find(|&q| match q {
+            Requirement::Escape { lifted, .. } => crate::sig::no_kind_argument(&under, arg, lifted),
+            Requirement::Bound(b) => !under.meets(arg, b),
+        }) else {
+            continue;
+        };
         let shown = show(arg);
-        if crate::sig::no_kind_argument(&under, arg, lifted) {
-            let msg = crate::deferred::second_class_argument(&shown, &parameter(g, &owner));
-            return Err(Diagnostic::new(Stage::Types, Code::E0710, span, msg).with_found(found).with_rule(rule).into());
-        }
-        let Some(b) = wants.find(|&b| !under.meets(arg, b)) else { continue };
-        let what = crate::deferred::Required::Param { param: g.name.clone(), owner: owner.clone(), std };
-        let mut e = Diagnostic::new(Stage::Types, Code::E0416, span, what.unmet(&shown, b, &mut |t| show(t)));
-        if let Some(note) = crate::traits::number_traits_note(a.types.get(arg), &shown, b) {
-            e = e.with_rule(note);
-        }
+        let e = match q {
+            Requirement::Escape { rule, .. } => {
+                let msg = crate::deferred::second_class_argument(&shown, &parameter(g, &owner));
+                Diagnostic::new(Stage::Types, Code::E0710, span, msg).with_rule(rule)
+            }
+            Requirement::Bound(b) => {
+                let what = crate::deferred::Required::Param { param: g.name.clone(), owner: owner.clone(), std };
+                let e = Diagnostic::new(Stage::Types, Code::E0416, span, what.unmet(&shown, b, &mut |t| show(t)));
+                match crate::traits::number_traits_note(a.types.get(arg), &shown, b) {
+                    Some(note) => e.with_rule(note),
+                    None => e,
+                }
+            }
+        };
         return Err(e.with_found(found).into());
     }
     let Some(k) = args.iter().position(Option::is_none) else { return Ok(()) };

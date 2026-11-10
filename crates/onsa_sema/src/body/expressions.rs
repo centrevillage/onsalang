@@ -3,6 +3,7 @@
 
 use super::arms::Arms;
 use super::*;
+use crate::constarg::Unheld;
 use crate::traits::{Class, op_bound};
 use onsa_diag::Edit;
 
@@ -313,9 +314,7 @@ impl<'a> Checker<'a> {
     /// `constarg.rs`, from the records of the names of the body). `None`: a
     /// length the check does not read (§18.1, S-690).
     pub(crate) fn const_len(&mut self, len: ExprId) -> R<Option<Len>> {
-        let (names, held) = (&self.names.paths, &self.names.held);
-        let cx = crate::constarg::ConstCx { m: self.m, ast: self.ast, text: self.text, names, held };
-        match crate::constarg::expr(self.a, &cx, len).map_err(crate::constarg::ConstErr::unheld) {
+        match self.const_expr(len) {
             Ok((value, constant)) => {
                 let u32 = self.u32();
                 self.record(len, u32);
@@ -329,19 +328,25 @@ impl<'a> Checker<'a> {
                     crate::constarg::ConstU32::Param(i) => Ok(Some(Len::Param(i))),
                 }
             }
-            Err(crate::constarg::ConstErr::Report(d) | crate::constarg::ConstErr::Uncomputed(d)) => Err(self.diag(d)),
-            Err(crate::constarg::ConstErr::OfOwner(..)) => {
-                onsa_diag::internal::bug(Some(self.expr(len).span), crate::constarg::UNHELD)
-            }
+            Err(Unheld::Report(d) | Unheld::Uncomputed(d)) => Err(self.diag(d)),
             // A constant whose value was not read (S-59) or a name held as an
             // error: no diagnostic, and the check goes on (§18.1, S-690).
-            Err(crate::constarg::ConstErr::Unknown) => {
+            Err(Unheld::Unknown) => {
                 let u32 = self.u32();
                 self.record(len, u32);
                 self.a.read_held.insert(self.def);
                 Ok(None)
             }
         }
+    }
+
+    /// The constant expression `e` of the body, read by the one reader
+    /// (`crate::constarg`) from the records of the names of the body, which
+    /// knows the errors of the headings ([`crate::constarg::ConstErr::unheld`]).
+    pub(crate) fn const_expr(&mut self, e: ExprId) -> Result<(crate::constarg::ConstU32, Option<DefId>), Unheld> {
+        let (names, held) = (&self.names.paths, &self.names.held);
+        let cx = crate::constarg::ConstCx { m: self.m, ast: self.ast, text: self.text, names, held };
+        crate::constarg::expr(self.a, &cx, e).map_err(crate::constarg::ConstErr::unheld)
     }
 
     /// The struct literal `e` (§4.4). An alias of the error type is no
