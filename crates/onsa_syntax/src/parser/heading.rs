@@ -33,7 +33,7 @@ pub(super) struct Heading {
 /// Why the head of a declaration did not read ([`Parser::read_heading`]):
 /// where it fails, an attribute of another language read on before it has
 /// no place the parser knows ([`foreign::at_heading_hash`]).
-enum Unread {
+pub(super) enum Unread {
     /// A form of the head failed (an attribute of Onsa, a visibility, a
     /// keyword before a keyword): a declaration was begun.
     Failed,
@@ -80,9 +80,13 @@ impl<'a> Parser<'a> {
             if !after_rt {
                 (cursor.place, cursor.declaration) = (place, keyword);
             }
-            let mut d = foreign::at_heading_hash(&cursor, failed).unwrap_or_else(|| {
+            let (row, mut d) = foreign::at_heading_hash(&cursor, failed).unwrap_or_else(|| {
                 onsa_diag::internal::bug(Some(self.tokens[at].span), "a `#[` read on that the table does not name")
             });
+            // The head of the `extern` block is of its form (S-601).
+            if row == foreign::RowId::LinkAttribute {
+                self.linked = keyword;
+            }
             if after_rt {
                 d.notes = vec![Note::rule(ATTRIBUTE_RULE)];
             }
@@ -136,6 +140,9 @@ impl<'a> Parser<'a> {
             // declaration after it): no declaration was begun.
             if self.foreign_attribute(hashes).map_err(|_| Unread::NoDeclaration)? || self.words_before_head() {
                 continue;
+            }
+            if let Some(unread) = self.static_head(ctx) {
+                return Err(unread);
             }
             self.unexpected("a declaration");
             return Err(Unread::NoDeclaration);
@@ -376,9 +383,11 @@ impl<'a> Parser<'a> {
     /// `extern` to before the `{` is one E0002 at the token the grammar fails
     /// at (a row of that token, a run of a literal, is the error instead), and
     /// `true`, the members being read on. The name of the library is the
-    /// writer's: no candidate.
+    /// writer's: no candidate. After `#[link(name = "m")]`, the attribute's
+    /// diagnostic is of the head too (S-601): the head has none of its own.
     pub(super) fn extern_head_read_on(&mut self) -> bool {
         let first = self.peek_index();
+        let linked = self.linked.take() == Some(first);
         let Some((head, brace)) = self.extern_head_on_line(first) else { return false };
         let string = |&t: &usize| self.tokens[t].kind == TokenKind::Str;
         let fits =
@@ -395,7 +404,9 @@ impl<'a> Parser<'a> {
             self.bump();
         }
         let own = Own { span, message, rule: EXTERN_RULE, fixes: Vec::new(), resume: brace };
-        self.fail_at(Want::Other, "a declaration", None, Some(own));
+        if !linked {
+            self.fail_at(Want::Other, "a declaration", None, Some(own));
+        }
         self.read_on(brace);
         true
     }

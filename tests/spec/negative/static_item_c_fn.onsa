@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§18.1", "§19.1"]
+// fixes = 0
+
+// E0002 without a candidate for the function of C, `static int f(void) {` (S-620, row `c_static_item`, the name that comes
+// last before the `(` is the name of the declaration; the note says to write a function with `fn`). The body is skipped up to
+// the `}` that matches the `{` and is not checked, so the C statements in it, a nested block and a body on one line raise
+// nothing, and the item that follows is read as usual. The item is a declaration whose type is not read, so a call of it
+// raises nothing. One error in each unit.
+
+static int add(int a, int b) {                      //~ E0002
+  return a + b;
+}
+
+static void tick(void) {                            //~ E0002
+  int i = 0;
+  while (i < 3) {
+    i = i + 1;
+  }
+}
+
+static int one(void) { return 1; }                  //~ E0002
+
+pub fn use_them() -> I32 {
+  add(1, 2) + one()
+}
+
+pub fn after_the_bodies(x: I32) -> I32 {
+  zz                                                //~ E0302
+}

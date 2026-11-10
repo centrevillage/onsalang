@@ -586,8 +586,12 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// E0415: `what` is no place (§5.1; a place that cannot change is the E0701 of the modes).
+    /// E0415: `what` is no place (§5.1; a place that cannot change is the E0701 of the modes),
+    /// but none of an item that was not read ([`Checker::unread_root`]).
     fn no_inout_place(&mut self, e: ExprId, what: &str, section: &str) -> Stop {
+        if self.unread_root(e) {
+            return self.held_stop();
+        }
         let msg = format!(
             "{what} must be a place (a `var`, an `inout` parameter, or a field / element of one), not a constant, a temporary or the result of a call ({section})"
         );

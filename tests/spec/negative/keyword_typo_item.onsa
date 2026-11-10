@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1"]
+// fixes = 0
+
+// A name where only a keyword can be written (S-602, §18.1): the head of an item and what follows a visibility. The word
+// (`fucn`, `strcut`, `cnst`, `enm`) is the E0002 of an item that cannot be read, and no candidate is made, even when only
+// one keyword is close in spelling (S-258: a name that is not found has no candidate by its spelling either). Each error
+// is followed by a function that is right, as the tokens that follow an error that stops the item are in its unit until the
+// next item starts. One error in each unit.
+
+fucn f() -> I32 {                                   //~ E0002
+  1
+}
+
+pub fn first() -> I32 {
+  2
+}
+
+pub strcut P {                                      //~ E0002
+  x: I32,
+}
+
+pub fn second() -> I32 {
+  3
+}
+
+cnst K: I32 = 1                                     //~ E0002
+
+pub fn third() -> I32 {
+  4
+}
+
+pub enm E {                                         //~ E0002
+  A,
+}
+
+pub fn fourth() -> I32 {
+  5
+}

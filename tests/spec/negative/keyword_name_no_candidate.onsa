@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§2.3", "§18.1"]
+// fixes = 0
+
+// E0002 without a candidate for a keyword written as a name in the places whose names do not have the form snake_case
+// (S-654, §2.3): the name of a type (a `struct`, an `enum`, an alias), a variant, a type parameter and a constant. The name
+// with a `_` at the end would not have the form of the place (E0320), so no candidate is made. The name of an item with
+// `@export` gets none either (a `_` cannot be written at the end of it, §2.3). One error in each unit.
+
+pub struct in {                                     //~ E0002
+  a: I32,
+}
+
+pub enum as {                                       //~ E0002
+  A,
+  B,
+}
+
+pub enum Letters {
+  A,
+  in,                                               //~ E0002
+}
+
+pub fn generic[type](x: I32) -> I32 {               //~ E0002
+  x
+}
+
+pub const uses: I32 = 1                             //~ E0002
+
+pub type at = I32                                   //~ E0002
+
+@export
+pub fn in(x: F32) -> F32 {                          //~ E0002
+  x
+}

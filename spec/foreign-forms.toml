@@ -10658,6 +10658,160 @@ pub fn f() -> I32 {
 '''
 at = "1:1"
 
+# ---- 項目の頭の `static`（§2.2、§18.1、S-620、B5） --------------------------------------
+
+# Rust の `static NAME: T = e`。候補は `static` を `const` にした形で、名前まで読み、型 `T` の定数として名前解決に見せる
+# （使う所に E0302 を出さない）。
+[[form]]
+id = "static_item"
+kind = "foreign"
+origin = "Rust"
+stage = "syntax"
+code = "E0020"
+spec = ["2.2", "18.1"]
+rule = "大域の定数は `const` と書く。この版では変更できる大域の値を宣言できず、変わる値は flow の状態か `inout` の引数で渡す"
+
+[[form.example]]
+source = '''
+static LIMIT: I32 = 4
+
+pub fn f() -> I32 {
+  LIMIT
+}
+'''
+at = "1:1"
+fixed = ['''
+const LIMIT: I32 = 4
+
+pub fn f() -> I32 {
+  LIMIT
+}
+''']
+
+[[form.example]]
+source = '''
+pub static LIMIT: I32 = 4
+'''
+at = "1:5"
+fixed = ['''
+pub const LIMIT: I32 = 4
+''']
+
+[[form.example]]
+source = '''
+pub struct P {
+  x: I32,
+}
+
+impl P {
+  static K: I32 = 1
+}
+
+pub fn f() -> I32 {
+  P.K
+}
+'''
+at = "6:3"
+fixed = ['''
+pub struct P {
+  x: I32,
+}
+
+impl P {
+  const K: I32 = 1
+}
+
+pub fn f() -> I32 {
+  P.K
+}
+''']
+
+# Rust の `static mut`。候補は無い（変更できる大域の値はこの版に無い）。名前まで読み、型の読めない宣言として名前解決に
+# 見せる（定数としては見せない。使う所の代入 `COUNT = COUNT + 1` にも診断を出さない）。
+[[form]]
+id = "static_mut_item"
+kind = "foreign"
+origin = "Rust"
+stage = "syntax"
+code = "E0002"
+spec = ["2.2", "18.1", "19.1"]
+rule = "この版では、変更できる大域の値を宣言できない。定数は `const`、変わる値は flow の状態か `inout` の引数で渡す"
+
+[[form.example]]
+source = '''
+static mut COUNT: I32 = 0
+
+pub fn f() -> I32 {
+  COUNT
+}
+'''
+at = "1:1"
+
+# C の `static` の宣言: `static` の後に名前が二つ以上並び、見出しを始めるトークンが続かない形（変数の `static int x = 4;`、
+# 関数の `static int f(void) {`）。名前の並びの最後が宣言の名前で、型の読めない宣言として名前解決に見せる（使う所に
+# 診断を出さない）。最後の名前の直後が `(` なら関数で、本体は対応する `}` まで読み飛ばし、note は「関数は `fn` で書く」。
+# `static const int x = 4;` は `const` が見出しを始めるので、この行に当たらない（§18.1 の見出しの前の修飾の語の E0002）。
+[[form]]
+id = "c_static_item"
+kind = "foreign"
+origin = "C 系"
+stage = "syntax"
+code = "E0002"
+spec = ["2.2", "18.1", "19.1"]
+rule = "この版では、変更できる大域の値を宣言できない。定数は `const NAME: T = e`、変わる値は flow の状態か `inout` の引数で渡す"
+
+[[form.example]]
+source = '''
+static int x = 4
+
+pub fn f() -> I32 {
+  x
+}
+'''
+at = "1:1"
+
+[[form.example]]
+source = '''
+static int f(void) {
+  return 1;
+}
+
+pub fn g() -> I32 {
+  f()
+}
+'''
+at = "1:1"
+
+# ---- Rust の `#[link(name = "…")]` と `extern "C" {`（§14.1、§18.1、S-601、R1） --------------
+
+# 属性の鍵が `name` だけで、直後の項目が `extern "C" {`（か `extern {`）のときだけ。名前が属性にあるので、§14.1 の
+# ライブラリの名前で意味が一つに決まる。範囲は属性から `{` の前まで（二つの形にまたがる一つの形）。候補は属性の行を
+# 除き `extern "C" lib "m" {` にする一つ（次の項目のトークンの並びを見るだけで、試しに読まない）。`kind` などの鍵が
+# あれば、この行に当たらず `hash_attribute_no_candidate` の E0002（`kind = "framework"` は `lib` でない）。
+# 当てた後の `extern` のブロックは、この版では後の段の E0200（構文の段より後）。
+[[form]]
+id = "link_attribute"
+kind = "foreign"
+origin = "Rust"
+stage = "syntax"
+code = "E0020"
+spec = ["14.1", "18.1"]
+rule = "外の C のライブラリは `extern \"C\" lib \"名前\" { … }` と書く"
+
+[[form.example]]
+source = '''
+#[link(name = "m")]
+extern "C" {
+  fn cos(x: F64) -> F64
+}
+'''
+at = "1:1"
+fixed = ['''
+extern "C" lib "m" {
+  fn cos(x: F64) -> F64
+}
+''']
+
 # クロックは束縛でなく値に付ける。
 [[form]]
 id = "clock_on_binding"

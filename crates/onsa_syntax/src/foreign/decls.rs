@@ -54,7 +54,7 @@ const DERIVE: &str = "derive";
 
 /// The rows [`hash_attribute`] names ([`super::Matcher::many`]).
 pub(super) const HASH_ATTRIBUTE_ROWS: &[RowId] =
-    &[RowId::HashAttribute, RowId::HashAttributeNoCandidate, RowId::HashAttributeUnfixable];
+    &[RowId::HashAttribute, RowId::HashAttributeNoCandidate, RowId::HashAttributeUnfixable, RowId::LinkAttribute];
 
 /// `#[name(...)]` of Rust: `@name(...)` (§6.5), when the attribute of Onsa
 /// that it spells goes in its place (the table of the attributes,
@@ -106,6 +106,9 @@ pub(super) fn hash_attribute_in(c: &Cursor, head_failed: bool) -> Option<(RowId,
         return no_form();
     }
     let name = c.src(c.at + 2);
+    if let Some(hit) = c.declaration.filter(|_| name == LINK).and_then(|decl| link(c, decl, e)) {
+        return Some((RowId::LinkAttribute, hit));
+    }
     if name == DERIVE {
         let Some(decl) = c.declaration.filter(|&d| derives(c, d)) else { return no_form() };
         return match derive(c, decl, c.at + 3, e - 1, e) {
@@ -140,6 +143,43 @@ pub(super) fn hash_attribute_in(c: &Cursor, head_failed: bool) -> Option<(RowId,
         }
     }
     found(RowId::HashAttribute, vec![Fix::new("write the attribute with `@`", edits)], None)
+}
+
+/// The name of the attribute of Rust that names the library of a block of
+/// C functions ([`link`]).
+const LINK: &str = "link";
+
+/// `#[link(name = "m")]` from `c.at` to its `]` at `e`, whose next code is
+/// the head `extern "C" {` or `extern {` on its line (the declaration of
+/// keyword token `decl`; §14.1, §18.1, S-601): the attribute names the
+/// library, so the two forms are one, from the `#` to before the `{`. The
+/// candidate takes the attribute out and writes `extern "C" lib "m" {`: the
+/// tokens of the head are looked at, and nothing is read on trial. `None`
+/// with another key, another ABI or another head (`pub extern "C" {`), and
+/// in a list of members, where a block is no member.
+fn link(c: &Cursor, decl: usize, e: usize) -> Option<Hit> {
+    use TokenKind::{Eq, KwExtern, LBrace, LParen, RParen, Str};
+    let at = c.at;
+    let lib = at + 6;
+    let keyed = c.kind(at + 3) == LParen
+        && c.is_ident(at + 4, "name")
+        && c.kind(at + 5) == Eq
+        && c.kind(lib) == Str
+        && c.kind(at + 7) == RParen
+        && at + 8 == e;
+    let member = c.open.iter().any(|o| o.0 == NodeKind::ItemList);
+    if !keyed || member || c.kind(decl) != KwExtern || c.sig_after(e) != decl {
+        return None;
+    }
+    let abi = Some(decl + 1).filter(|&s| c.kind(s) == Str && c.src(s) == "\"C\"");
+    let last = abi.unwrap_or(decl);
+    if c.kind(last + 1) != LBrace {
+        return None;
+    }
+    let head = if abi.is_some() { String::new() } else { " \"C\"".to_string() };
+    let insert = Edit::insert(c.file, c.span(last).end, format!("{head} lib {}", c.src(lib)));
+    let fix = Fix::new("name the library in the head of the block", vec![remove_attribute(c, at, e), insert]);
+    Some(Hit::new(c.file_span(c.span(at).start, c.span(last).end), vec![fix]))
 }
 
 /// Whether the declaration whose keyword is token `decl` derives traits at

@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§2.3", "§18.1"]
+// fixes = 0
+
+// The boundary of S-654 (§2.3, §18.1): a word that is reserved (`clock`, `when`, `ser`, `static`) written as the name of a
+// declaration is the E0200 of §2.2, and it gets no candidate. One error in each unit.
+
+pub fn let_clock() -> I32 {
+  let clock: I32 = 1                                //~ E0200
+  1
+}
+
+pub fn var_when() -> I32 {
+  var when: I32 = 1                                 //~ E0200
+  1
+}
+
+pub fn param_ser(ser: I32) -> I32 {                 //~ E0200
+  1
+}
+
+pub fn static() -> I32 {                            //~ E0200
+  1
+}

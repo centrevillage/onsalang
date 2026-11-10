@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§14.1"]
+// fixes = 1
+
+// E0020 for `#[link(name = "m")]` whose next tokens are `extern "C" {` (S-601, row `link_attribute`), where the head is on
+// the line of the attribute, or after blank lines and a comment: those are no tokens, so the attribute is right before the
+// head all the same. The candidate takes the attribute out and writes `extern "C" lib "…" {`, and the blocks are read on.
+// One error in each unit.
+
+extern "C" lib "m" {                    //~ E0020
+  fn one_line(x: I32) -> I32
+}
+
+                                 //~ E0020
+
+// The block of the library `z`.
+extern "C" lib "z" {
+  fn after_a_comment(x: I32) -> I32
+}
+
+fn calls() -> I32 {
+  one_line(1) + after_a_comment(2)
+}

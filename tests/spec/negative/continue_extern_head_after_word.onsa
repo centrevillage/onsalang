@@ -1,6 +1,7 @@
 // onsa.toml
 // [test]
 // spec = ["§18.1", "§14.1", "§15.1"]
+// fixes = 1
 
 // An `extern` head that cannot be read, after something else that is an error (W5-11 U4). The
 // unit reports the first error, and the head is read on past both, so the members are names of
@@ -8,17 +9,18 @@
 // - `unsafe extern "C" {` (Rust 2024): `unsafe` is a word that is no part of the head, one E0002;
 //   the `extern "C" {` that follows is the error of the next round (continue_extern_head_forms
 //   .onsa), so the unit has one.
-// - `#[link(name = "m")]` on a line of its own and then `extern "C" {`: the attribute of another
-//   language is one E0002, and the block that follows is read on, with its members.
-// No `fixes` is written: whether the attribute of `#[link(…)]` has a candidate (S-601, the
-// library `m` is known) is not decided here. One error in each unit.
+// - `#[link(name = "m")]` on a line of its own and then `extern "C" {`: the attribute of Rust and
+//   the head are one E0020 of the row `link_attribute` (S-601: the key is `name` only, so the
+//   library `m` is known), whose one candidate takes the attribute's line out and writes
+//   `extern "C" lib "m" {`; the block that follows is read on, with its members.
+// One error in each unit.
 
 unsafe extern "C" {                                 //~ E0002 @1
   fn c_unsafe(x: I32) -> I32
   type RawUnsafe
 }
 
-#[link(name = "m")]                                 //~ E0002 @1
+#[link(name = "m")]                                 //~ E0020 @1
 extern "C" {
   fn c_linked(x: I32) -> I32
   type RawLinked

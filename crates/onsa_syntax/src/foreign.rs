@@ -611,6 +611,10 @@ pub enum RowId {
     PowerOperator,
     AssertBang,
     AssertMessage,
+    StaticItem,
+    StaticMutItem,
+    CStaticItem,
+    LinkAttribute,
 }
 }
 
@@ -744,9 +748,9 @@ pub(crate) fn at_read(c: &Cursor) -> Vec<Diagnostic> {
 /// parser knows (§6.5), as the attributes of Onsa are checked there.
 /// `failed`: the head of a declaration began and failed, so the place is not
 /// known ([`decls::hash_attribute_in`]).
-pub(crate) fn at_heading_hash(c: &Cursor, failed: bool) -> Option<Diagnostic> {
+pub(crate) fn at_heading_hash(c: &Cursor, failed: bool) -> Option<(RowId, Diagnostic)> {
     let (row, hit) = decls::hash_attribute_in(c, failed)?;
-    Some(diagnostic(c.text, row, hit))
+    Some((row, diagnostic(c.text, row, hit)))
 }
 
 // ------------------------------------------------------------ the cursor

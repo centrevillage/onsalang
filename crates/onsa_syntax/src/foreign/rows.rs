@@ -28,6 +28,9 @@ const FLOAT_LITERAL_RULE: &str = "a float literal with a point has digits on bot
 
 const SPACE_BEFORE_OPEN_RULE: &str = "a postfix `(` or `[` that opens a list (the arguments of a call, an index, type arguments, the parameters of a declaration, a pattern, an attribute) is written right after the token before it, with no blank or line break between them (`f(x)`, `xs[0]`, §2.5)";
 
+/// The note of the `static` of other languages (§2.2, S-620).
+const STATIC_RULE: &str = "this version has no value of the module that changes: a constant is written `const NAME: T = e`, and a value that changes is the state of a `flow` or an `inout` argument (§2.2, §19.1)";
+
 /// The note of the C ABI written at the head of a function (S-464).
 const EXPORTED_RULE: &str = "a function that C calls has `@export` on its declaration (§14.2), and a function of C that Onsa calls is declared in `extern \"C\" lib \"…\" { … }` (§14.1); no word before `fn` says either";
 
@@ -863,6 +866,42 @@ pub static ROWS: &[Row] = &[
         code: Code::E0002,
         message: "a function is not declared `export`",
         rule: EXPORTED_RULE,
+        detect: Detect::Syntax,
+    },
+    Row {
+        id: RowId::StaticItem,
+        name: "static_item",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "a constant of the module is declared `const`, not `static`",
+        rule: STATIC_RULE,
+        detect: Detect::Reported,
+    },
+    Row {
+        id: RowId::StaticMutItem,
+        name: "static_mut_item",
+        phase: Phase::Syntax,
+        code: Code::E0002,
+        message: "there is no `static mut`: a value of the module that changes is not declared",
+        rule: STATIC_RULE,
+        detect: Detect::Reported,
+    },
+    Row {
+        id: RowId::CStaticItem,
+        name: "c_static_item",
+        phase: Phase::Syntax,
+        code: Code::E0002,
+        message: "a declaration of C is not written in Onsa",
+        rule: STATIC_RULE,
+        detect: Detect::Reported,
+    },
+    Row {
+        id: RowId::LinkAttribute,
+        name: "link_attribute",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "the library of an `extern` block is written in its head, `extern \"C\" lib \"…\" {`",
+        rule: "a library of C is named in the head of its block, `extern \"C\" lib \"name\" { … }`; there is no `#[link]` (§14.1)",
         detect: Detect::Syntax,
     },
     Row {

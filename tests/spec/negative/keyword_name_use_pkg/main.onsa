@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§2.3", "§15.1", "§18.1"]
+// fixes = 0
+
+// E0002 without a candidate for a keyword written as the name that a `use` takes in (S-654, §2.3, §15.1): the name of a
+// `use` is the name of an item of the other module, which the writer of this module cannot change, so the name with a `_`
+// at the end would be another module's item. Both forms, a name alone and the name in a list. One error in each unit.
+
+use util.type                                       //~ E0002
+
+use util.{ok, in}                                   //~ E0002
+
+pub fn here() -> I32 {
+  1
+}

@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§14.1"]
+// fixes = 1
+
+// E0020 for the `#[link(name = "m")]` of Rust followed by `extern "C" {` (S-601, row `link_attribute`, §18.1): the key of the
+// attribute is `name` only, so the name of the library is known and the two forms are one error. The main position is the
+// attribute and the candidate is the one that removes the line of the attribute and writes `extern "C" lib "m" {`. The members
+// are read on, so the places that use them raise nothing. One error.
+
+                                 //~ E0020
+extern "C" lib "m" {
+  fn c_abs(x: I32) -> I32
+  type Raw
+}
+
+fn calls() -> I32 {
+  c_abs(1)
+}
+
+fn takes(r: Raw) -> I32 {
+  c_abs(2)
+}
+
+fn in_a_closure(x: I32) -> I32 {
+  let f = fn(y: I32) -> I32 { c_abs(y) }
+  f.(x)
+}

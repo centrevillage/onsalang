@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§15.1", "§18.1"]
+// fixes = 1
+
+// `pub static NAME: T = e` in another module (S-620, §18.1): the module that has it reports E0020 (util.onsa) and the
+// constant is a name of the module with its type and its visibility as written, so `use util.LIMIT` in this module and
+// the use of it raise nothing. The candidate is applied in util.onsa. One error.
+
+use util.LIMIT
+use util.twice
+
+pub fn here(x: I32) -> I32 {
+  x + LIMIT + twice()
+}

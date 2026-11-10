@@ -1,0 +1,1 @@
+pub static mut COUNT: I32 = 0                       //~ E0002

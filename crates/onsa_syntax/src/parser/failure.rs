@@ -121,8 +121,8 @@ impl<'a> Parser<'a> {
         let noted = noted.or(value_bang.then_some((t, super::expressions::MARK_RULE)));
         // A reserved word, where nothing of this version takes it: its E0200
         // where it is read, instead of the general E0002 (§2.2, S-169, S-371).
-        // SPEC-GAP(S-620): `static NAME: T = e` of other languages is this
-        // E0200 at `static`, as §2.2 reads.
+        // `static` at the head of an item is read before (S-620,
+        // `Parser::static_head`): here it is out of that place.
         let shown = noted.map_or(t, |(found, _)| found);
         if let Some(feature) = shown.kind.reserved() {
             let word = self.token_text(shown);

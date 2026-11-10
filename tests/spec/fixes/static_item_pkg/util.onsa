@@ -1,0 +1,5 @@
+pub static LIMIT: I32 = 4                           //~ E0020
+
+pub fn twice() -> I32 {
+  LIMIT * 2
+}

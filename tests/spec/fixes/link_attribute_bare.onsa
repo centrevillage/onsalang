@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§14.1"]
+// fixes = 1
+
+// E0020 for `#[link(name = "m")]` followed by `extern {` with no ABI (S-601, row `link_attribute`): the same error and the
+// same candidate as for `extern "C" {`, `extern "C" lib "m" {`. The members are read on. One error.
+
+#[link(name = "m")]                                 //~ E0020
+extern {
+  fn c_abs(x: I32) -> I32
+  type Raw
+}
+
+fn calls() -> I32 {
+  c_abs(1)
+}
+
+fn takes(r: Raw) -> I32 {
+  c_abs(2)
+}
+
+fn in_a_closure(x: I32) -> I32 {
+  let f = fn(y: I32) -> I32 { c_abs(y) }
+  f.(x)
+}

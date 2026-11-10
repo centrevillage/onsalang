@@ -1,0 +1,63 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§5.1", "§18.1"]
+// fixes = 0
+
+// `static mut` and a variable of C are declarations whose type is not read (S-620, §18.1): the places that use them raise
+// nothing, and so does a place written with any path to them: an assignment that reads it, a member through its type
+// or `Self`, a field or an element of one, and an `inout` argument of one. Each use is in a function of its own, as the
+// check of a body ends at it with no diagnostic. A function that does not use them is checked as usual. One error in
+// each unit.
+
+static mut COUNT: I32 = 0                           //~ E0002
+
+static int total = 0;                               //~ E0002
+
+pub struct P {
+  x: I32,
+}
+
+impl P {
+  static mut K: I32 = 0                             //~ E0002
+
+  fn set(self) -> I32 {
+    Self.K = 1
+    self.x
+  }
+}
+
+fn bump(inout v: I32) {
+  v = v + 1
+}
+
+pub fn reads_and_assigns() {
+  COUNT = COUNT * 2
+}
+
+pub fn member() {
+  P.K = 1
+}
+
+pub fn member_field() {
+  P.K.x = 1
+}
+
+pub fn member_element() {
+  P.K[0] = 1
+}
+
+pub fn inout_top() {
+  bump(inout COUNT)
+}
+
+pub fn inout_member() {
+  bump(inout P.K)
+}
+
+pub fn c_variable() {
+  total = total + 1
+}
+
+pub fn others(x: I32) -> I32 {
+  zz                                                //~ E0302
+}

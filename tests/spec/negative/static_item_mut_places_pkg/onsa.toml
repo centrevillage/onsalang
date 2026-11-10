@@ -1,0 +1,3 @@
+[package]
+name = "staticmutpkg"
+edition = "2026"

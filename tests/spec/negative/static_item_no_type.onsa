@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§18.1"]
+// fixes = 0
+
+// The boundary of the Rust form of `static` (S-620, §2.2): `static X = 4` has no type, so it is not a form of the list of
+// other languages but an item that cannot be read, the E0002 of the general rule, without a candidate. The places that use
+// the name are not written, as the spec does not decide them. One error in each unit.
+
+static X = 4                                        //~ E0002
+
+pub fn separator() -> I32 {
+  1
+}
+
+pub static Y = 5                                    //~ E0002

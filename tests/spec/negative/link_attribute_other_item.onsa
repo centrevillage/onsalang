@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§14.1"]
+// fixes = 0
+
+// The boundary of the `#[link(name = "…")]` row (S-601, §18.1): the candidate is made only when the item after the attribute
+// is `extern "C" {` or `extern {`. In front of a `fn`, a `struct` or an `extern` whose head is written as it should be
+// (`extern "C" lib "m" {`) the attribute is the E0002 of an attribute that the version does not have, without a candidate.
+// One error in each unit.
+
+#[link(name = "m")]                                 //~ E0002
+pub fn plain() -> I32 {
+  1
+}
+
+#[link(name = "m")]                                 //~ E0002
+pub struct P {
+  x: I32,
+}
+
+#[link(name = "m")]                                 //~ E0002
+extern "C" lib "m" {
+  fn c_abs(x: I32) -> I32
+}
+
+pub fn calls() -> I32 {
+  c_abs(plain())
+}

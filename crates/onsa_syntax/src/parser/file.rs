@@ -92,12 +92,18 @@ impl<'a> Parser<'a> {
     /// none ([`Parser::uncounted`]).
     ///
     /// With `line`, the unit is a finished item and the tokens after it on
-    /// its line (S-274): the skip also ends at the end of that line, outside
+    /// its line (S-274), as it is once a `}` closes the brackets of the unit
+    /// (the body, §18.1, R-421) and after a form of `static` (S-620): the
+    /// skip also ends at the end of that line, outside
     /// the brackets it opens, the line going on as §2.5 reads (S-950) and
     /// after a `::` of a path at its end, when the unit failed at a path's `::`
     /// ([`crate::foreign::path_colons`]), with the name after it (S-963: `use std::`
     /// and `math` on the next line, as `use std.` and `math`).
     pub(super) fn skip_unit(&mut self, unit_start: u32, base: usize, member: bool, line: bool) {
+        let form = self.static_line.take();
+        let mut line = line || form.is_some();
+        // A function of C goes on to the body its next line opens (S-620).
+        let mut body = form == Some(true);
         let mut braces = self.braces.clone();
         // Where in `braces` the lowest bracket that may stay open is, kept
         // as they change: reading them at every item is quadratic.
@@ -137,9 +143,13 @@ impl<'a> Parser<'a> {
                 && !self.lines.goes_on(i)
                 && !(path && last.is_some_and(|l| crate::foreign::path_colons(&self.tokens, l)))
                 && !attribute.is_some_and(|e: usize| self.tokens[e + 1..i].iter().all(|c| c.kind.is_comment()));
-            if t.kind == TokenKind::Eof || (line && line_ends) {
+            let opens = || self.tokens[i..].iter().find(|c| !c.kind.is_comment() && !c.kind.is_trivia());
+            if line && line_ends && std::mem::take(&mut body) && opens().is_some_and(|c| c.kind == TokenKind::LBrace) {
+                line = false;
+            } else if t.kind == TokenKind::Eof || (line && line_ends) {
                 break;
             }
+            body &= t.kind != TokenKind::LBrace;
             if line && matches!(t.kind, TokenKind::At | TokenKind::Hash) {
                 attribute = self.attribute_end(i);
             }
@@ -155,6 +165,7 @@ impl<'a> Parser<'a> {
             if closed.is_none() && t.kind == TokenKind::RBrace && member {
                 break;
             }
+            line |= closed.is_some() && t.kind == TokenKind::RBrace && braces.len() <= base;
             i += 1;
         }
         // An error found at the token where the unit ends (the next item, the

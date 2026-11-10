@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§14.1"]
+// fixes = 0
+
+// The boundary of the `#[link(…)]` row (S-601, §18.1): an attribute that has a key other than `name` (`kind`, whatever the
+// value is and wherever the key stands) is not the row `link_attribute`. It is the E0002 of the attribute of another language
+// without a candidate, at the attribute, and nothing is written for the head that follows. A `#[link(…)]` with no `name` is
+// the same. The block is read on, so its members are names of the module. One error in each unit.
+
+#[link(name = "m", kind = "static")]                //~ E0002
+extern "C" {
+  fn s_abs(x: I32) -> I32
+}
+
+#[link(kind = "framework", name = "m")]             //~ E0002
+extern "C" {
+  fn f_abs(x: I32) -> I32
+}
+
+#[link(name = "m", kind = "dylib")]                 //~ E0002
+extern {
+  fn d_abs(x: I32) -> I32
+}
+
+#[link(kind = "static")]                            //~ E0002
+extern "C" {
+  fn n_abs(x: I32) -> I32
+}
+
+pub fn calls() -> I32 {
+  s_abs(1) + f_abs(2) + d_abs(3) + n_abs(4)
+}

@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§2.3"]
+
+// The boundary of S-654 (§2.3): the keywords that begin an expression or a statement (`match`, `fn`, `return`, `if`) and the
+// words that have a meaning in their place (`self`, `true`, `false`, `_`) are not touched by the error of a keyword in a
+// place of an expression. The file has no diagnostic.
+
+pub struct P {
+  x: I32,
+}
+
+impl P {
+  fn get(self) -> I32 {
+    self.x
+  }
+}
+
+pub fn id(a: I32) -> I32 {
+  a
+}
+
+pub fn valid(x: I32, c: Bool) -> I32 {
+  let m: I32 = match x {
+    0 => 1,
+    _ => 2,
+  }
+  let f = fn(y: I32) -> I32 { y }
+  let t: Bool = true
+  let n: Bool = false
+  if t && c && !n {
+    return id(m + f.(x))
+  }
+  m
+}

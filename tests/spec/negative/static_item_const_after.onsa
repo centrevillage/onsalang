@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§18.1"]
+// fixes = 0
+
+// The boundary of the C forms of `static` (S-620, §18.1): `static const int x = 4` has `const` after the `static`, a token that
+// starts a head, so it is not the row `c_static_item` but the error of a word in front of a head, one E0002 without a candidate.
+// One error in each unit.
+
+static const int x = 4                              //~ E0002
+
+pub fn separator() -> I32 {
+  1
+}
+
+static const unsigned limit = 5                     //~ E0002

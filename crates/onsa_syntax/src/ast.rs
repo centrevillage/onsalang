@@ -143,10 +143,18 @@ impl Ast {
     pub fn place_root_node(&self, e: ExprId) -> Option<ExprId> {
         match &self.expr(e).kind {
             ExprKind::Path(p) if p.segments.len() == 1 => Some(e),
+            _ => self.place_base(e).and_then(|b| self.place_root_node(b)),
+        }
+    }
+
+    /// The place that `e` is a part of (`a` of `a.f`, `a[i]`, `a.0`, `(a)`):
+    /// a step of [`Ast::place_root_node`].
+    pub fn place_base(&self, e: ExprId) -> Option<ExprId> {
+        match &self.expr(e).kind {
             ExprKind::Field { base, .. } | ExprKind::Index { base, .. } | ExprKind::TupleIndex { base, .. } => {
-                self.place_root_node(*base)
+                Some(*base)
             }
-            ExprKind::Paren(inner) => self.place_root_node(*inner),
+            ExprKind::Paren(inner) => Some(*inner),
             _ => None,
         }
     }

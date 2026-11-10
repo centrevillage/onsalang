@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "21:3"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// E0020 for `static NAME: T = e` as a member of an `impl` (S-620, row `static_item`, the members are item positions as
+// the top level is, §18.1): the candidate is `const NAME: T = e`, an associated constant, and the name is read as a constant
+// of the type `T`, so `P.K` in a method and in a function raises nothing. The other members are read on. After the
+// candidate is applied the file has no diagnostic. One error.
+
+pub struct P {
+  x: I32,
+}
+
+impl P {
+  static K: I32 = 1                                 //~ E0020
+
+  fn get(self) -> I32 {
+    self.x + P.K
+  }
+}
+
+pub fn read() -> I32 {
+  P.K
+}

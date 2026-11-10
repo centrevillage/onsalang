@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§18.1", "§19.1"]
+// fixes = 0
+
+// E0002 without a candidate for `static mut NAME: T = e` (S-620, row `static_mut_item`): the version has no global value that
+// is changed, so there is nothing to write instead (a `const`, a state of a `flow`, an `inout` argument; the note says so).
+// The item is read as far as its name and is a declaration whose type is not read, not a constant, so the places that use
+// it raise nothing, an assignment to it (`COUNT = COUNT + 1`) included, and so does `P.SEEN` of a member. The initializer
+// is not checked. The same at the top level (with and without `pub`) and as a member of an `impl`. One error in each unit.
+
+static mut COUNT: I32 = 0                           //~ E0002
+
+pub static mut LEVEL: U32 = 1                       //~ E0002
+
+pub struct P {
+  x: I32,
+}
+
+impl P {
+  static mut SEEN: I32 = 0                          //~ E0002
+
+  fn get(self) -> I32 {
+    self.x + P.SEEN
+  }
+}
+
+pub fn read() -> I32 {
+  COUNT
+}
+
+pub fn bump() -> I32 {
+  COUNT = COUNT + 1
+  COUNT
+}
+
+pub fn level() -> U32 {
+  LEVEL
+}
+
+pub fn in_a_closure(x: I32) -> I32 {
+  let f = fn(y: I32) -> I32 { y + COUNT }
+  f.(x)
+}

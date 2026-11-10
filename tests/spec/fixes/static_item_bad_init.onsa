@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "16:1"
+// code = "E0020"
+// candidate = 1
+// leaves = ["16:19 E0002"]
+
+// The initializer of `static NAME: T = e` is not checked (S-620, §18.1): `static N: I32 = 1 +` is E0020 of the row
+// `static_item` and no E0002 for the initializer, and the item is a constant of the type `I32` (the use raises nothing).
+// The candidate `const N: I32 = 1 +` has the error of a constant whose initializer is cut, that §18.1 puts at the end of
+// the unit (the next line is the start of the next item), so it is a diagnostic that is left (`leaves`).
+
+static N: I32 = 1 +                                 //~ E0020
+pub fn use_it() -> I32 {
+  N
+}

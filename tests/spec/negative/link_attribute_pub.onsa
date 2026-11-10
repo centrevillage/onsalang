@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§14.1", "§15.1"]
+// fixes = 0
+
+// The boundary of the `#[link(…)]` row (S-601, §18.1): the next token after the attribute is `pub`, not `extern`, so the
+// two forms are not the head `extern "C" {` that the row reads. The attribute is the E0002 of the attribute of another
+// language without a candidate (`pub extern` is an error of its own, the next round's), and the block is read on. One
+// error in each unit.
+
+#[link(name = "m")]                                 //~ E0002
+pub extern "C" {
+  fn c_abs(x: I32) -> I32
+}
+
+fn calls() -> I32 {
+  c_abs(1)
+}

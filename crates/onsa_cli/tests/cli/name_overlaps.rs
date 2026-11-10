@@ -474,7 +474,10 @@ fn a_body_path_whose_head_is_a_reserved_word_notes_the_use_that_reaches_it() {
         assert_eq!(out.code, 1, "{text}: {}{}", out.stdout, out.stderr);
         let doc: Value = serde_json::from_str(&out.stdout).expect("a document");
         let ds = diagnostics(&doc).to_vec();
-        assert!(ds.iter().any(|d| str_of(d, "code") == "E0200" && fixes_of(d) == 0), "{text}: {doc}");
+        // At the head of an item, `static` is read as a form of other languages, and one that is
+        // none is the general E0002 (§2.2, S-620).
+        let code = if text.starts_with("static.") { "E0002" } else { "E0200" };
+        assert!(ds.iter().any(|d| str_of(d, "code") == code && fixes_of(d) == 0), "{text}: {doc}");
         let notes = ds.iter().flat_map(|d| d["notes"].as_array().cloned().into_iter().flatten());
         notes
             .filter_map(|n| n["message"].as_str().map(str::to_string))

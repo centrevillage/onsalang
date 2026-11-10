@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1"]
+// fixes = 0
+
+// A name where only a keyword can be written, at the head of a member of an `impl` (S-602, §18.1): `fnc` is the E0002 of a
+// member that cannot be read, without a candidate, and the members around it are read as usual. One error in each unit.
+
+pub struct P {
+  x: I32,
+}
+
+impl P {
+  fn first(self) -> I32 {
+    self.x
+  }
+
+  fnc second(self) -> I32 {                         //~ E0002
+    self.x
+  }
+
+  fn third(self) -> I32 {
+    self.x
+  }
+
+  cnst K: I32 = 1                                   //~ E0002
+
+  fn fourth(self) -> I32 {
+    self.x
+  }
+}

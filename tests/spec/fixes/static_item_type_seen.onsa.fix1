@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§18.1"]
+// fixes = 1
+
+// A `static NAME: T = e` is read as a constant of the type `T` (S-620, §18.1: "型 `T` の定数として名前解決に見せる"), so a
+// use that does not fit `T` is the E0401 of any constant, in its own unit, and a use that fits raises nothing. The item has
+// E0020 and the candidate `const NAME: T = e`. One error in each unit.
+
+const LIMIT: I32 = 4                               //~ E0020
+
+pub fn wrong() -> F32 {
+  LIMIT                                             //~ E0401
+}
+
+pub fn right() -> I32 {
+  LIMIT
+}

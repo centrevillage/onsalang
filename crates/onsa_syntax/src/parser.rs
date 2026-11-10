@@ -69,6 +69,7 @@ mod nodes;
 mod patterns;
 mod signatures;
 mod statements;
+mod statics;
 mod types;
 
 pub(crate) use chain::ChainHeight;
@@ -325,6 +326,13 @@ pub(crate) struct Parser<'a> {
     /// `Parser::parse_impl`), and the candidate of an empty `use` list starts
     /// at it (S-515, `Parser::parse_use`).
     head_word: Option<usize>,
+    /// The keyword of the `extern` block after `#[link(name = "m")]`, whose
+    /// head the attribute's diagnostic covers (S-601).
+    linked: Option<usize>,
+    /// The unit that failed at a form of `static` ends at the end of its
+    /// line (S-620, [`Parser::skip_unit`]), or with `true` (a function of
+    /// C) at the end of the body that the next line opens.
+    static_line: Option<bool>,
 }
 
 /// What a trial reading restores ([`Parser::snapshot`]).
@@ -396,6 +404,8 @@ impl<'a> Parser<'a> {
             prefixed: Vec::new(),
             guard: None,
             head_word: None,
+            linked: None,
+            static_line: None,
         }
     }
 }

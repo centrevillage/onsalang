@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§18.1", "§19.1"]
+// fixes = 0
+
+// The C forms of `static` as members of an `impl` (S-620, row `c_static_item`, the members are item positions): a variable and
+// a function are each E0002 without a candidate, and the next members are read on as usual. A name of a member whose type is
+// not read raises nothing where it is used. One error in each unit.
+
+pub struct P {
+  x: I32,
+}
+
+impl P {
+  static int k = 1                                  //~ E0002
+
+  fn first(self) -> I32 {
+    self.x + P.k
+  }
+
+  static int get(void) {                            //~ E0002
+    return 1;
+  }
+
+  fn second(self) -> I32 {
+    self.x + P.get()
+  }
+
+  fn third(self) -> I32 {
+    zz                                              //~ E0302
+  }
+}

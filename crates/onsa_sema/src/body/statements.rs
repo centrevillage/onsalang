@@ -31,6 +31,9 @@ impl<'a> Checker<'a> {
                 Ok(())
             }
             StmtKind::Assign { target, value } => {
+                if self.unread_root(*target) {
+                    return Err(self.held_stop());
+                }
                 if !self.is_place(*target) {
                     let span = self.expr(*target).span;
                     let msg = "assignment needs a place: a `var`, or a field / element of one (§5.1)";
@@ -189,5 +192,18 @@ impl<'a> Checker<'a> {
     pub(super) fn is_place(&self, e: ExprId) -> bool {
         let root = self.ast.place_root_node(e);
         root.is_some_and(|r| matches!(self.names.paths.get(&r), Some(PathRes::Local(_))))
+    }
+
+    /// The place `e` or one it is a part of is an item whose heading a syntax
+    /// error cut, however its path is written (`COUNT`, `P.K`, `util.COUNT`
+    /// of a `static mut` of Rust, §18.1, S-620): what it is was not read, so
+    /// an assignment to it and an `inout` of it end the check of the body
+    /// with no diagnostic ([`Checker::held_stop`]), as its other uses get
+    /// none ([`crate::Analysis::heading_failed`]).
+    pub(super) fn unread_root(&self, e: ExprId) -> bool {
+        std::iter::successors(Some(e), |&p| self.ast.place_base(p)).any(|p| {
+            let item = self.names.paths.get(&p);
+            matches!(item, Some(&PathRes::Item { entity: Entity::Def(d) | Entity::Member(d), .. }) if self.a.heading_failed(d))
+        })
     }
 }

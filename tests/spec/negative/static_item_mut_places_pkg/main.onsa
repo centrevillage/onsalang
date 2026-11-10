@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§15.1", "§18.1"]
+// fixes = 0
+
+// `pub static mut COUNT` in another module (S-620, §18.1): a declaration whose type is not read, so a place written with
+// the path through its module raises nothing, as an assignment and as an `inout` argument. One error, in util.onsa.
+
+use util
+
+fn bump(inout v: I32) {
+  v = v + 1
+}
+
+pub fn assign() {
+  util.COUNT = 2
+}
+
+pub fn pass() {
+  bump(inout util.COUNT)
+}

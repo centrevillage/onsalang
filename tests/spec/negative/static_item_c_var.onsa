@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§18.1", "§19.1"]
+// fixes = 0
+
+// E0002 without a candidate for the variable of C, `static int x = 4` (S-620, row `c_static_item`: the names after `static`
+// are two or more and no token that starts a head follows them). The last name is the name of the declaration, and the item
+// is read as a declaration whose type is not read, so the places that use it raise nothing. The initializer is not checked.
+// (The `;` of C is another error of the same line; no case here writes it, one error in each unit.)
+
+static int x = 4                                    //~ E0002
+
+static unsigned long total = 0                      //~ E0002
+
+static float rate = 0.5                             //~ E0002
+
+pub fn first() -> I32 {
+  x + 1
+}
+
+pub fn second() -> U32 {
+  total
+}
+
+pub fn in_a_closure(y: I32) -> I32 {
+  let f = fn(z: I32) -> I32 { z + x }
+  f.(y)
+}
+
+pub fn third() -> F32 {
+  rate
+}

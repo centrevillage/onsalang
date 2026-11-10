@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§2.4"]
+
+// R-421 (§18.1): the syntax error of the function is an E0002 (a token after `x as F32` that cannot follow it) and not a
+// literal's, and the `0o19` after the function is still its own unit with its own E0001.
+
+pub fn g(x: I32) -> I32 {
+  x as F32 F32                                      //~ E0002
+}
+
+0o19                                                //~ E0001
+
+pub fn f() -> I32 {
+  1
+}

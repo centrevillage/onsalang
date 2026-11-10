@@ -1,0 +1,3 @@
+[package]
+name = "staticpkg"
+edition = "2026"
