@@ -1,7 +1,31 @@
 // onsa.toml
 // [test]
 // spec = ["§18.1", "§6.5", "§10", "§15.1"]
-// fixes = 0
+// fixes = 1
+//
+// [[test.fix]]
+// at = "45:5"
+// code = "E0002"
+// candidate = 1
+// leaves = ["45:14 E0002"]
+//
+// [[test.fix]]
+// at = "49:5"
+// code = "E0002"
+// candidate = 1
+// leaves = ["49:18 E0002"]
+//
+// [[test.fix]]
+// at = "53:5"
+// code = "E0002"
+// candidate = 1
+// leaves = ["53:18 E0002"]
+//
+// [[test.fix]]
+// at = "57:5"
+// code = "E0002"
+// candidate = 1
+// leaves = ["57:14 E0002"]
 
 // Two errors in the head of one item (W5-11 U4): the unit reports the first one, and the head is
 // read on past both, so the item is a name of the module and its users are checked against the

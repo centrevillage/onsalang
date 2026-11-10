@@ -144,11 +144,25 @@ fn wants_the_next_item(read: &crate::Read, len: usize) -> bool {
 /// E0004: its candidate gives up the doc comment the candidate stranded (R-380).
 /// One that starts in what the candidate writes (in a replacement of
 /// `regions`) is the candidate's too, where it is (the `.` of `fn t::` moved
-/// to the next line, S-963); not one right after what it takes out.
-fn leaves(read: &crate::Read, place: Range<u32>, regions: &[(u32, u32)]) -> bool {
+/// to the next line, S-963); not one right after what it takes out. One in
+/// what it moves (`moved`, [`moved`]) is the input's, left to the check
+/// after it (§18.1: the attribute moved, S-600).
+fn leaves(read: &crate::Read, place: Range<u32>, regions: &[(u32, u32)], moved: &[(u32, u32)]) -> bool {
     let mended = |d: &Diagnostic| !d.fixes.is_empty() && d.code != Code::E0004;
     let at = |s: u32| place.contains(&s) || regions.iter().any(|&(a, b)| (a..b).contains(&s));
-    read.diagnostics.iter().any(|d| d.stage == Stage::Syntax && !mended(d) && at(d.span.start))
+    let inside = |d: &Diagnostic| moved.iter().any(|&(a, b)| a <= d.span.start && d.span.end <= b);
+    read.diagnostics.iter().any(|d| d.stage == Stage::Syntax && !mended(d) && !inside(d) && at(d.span.start))
+}
+
+/// The replacements of `regions` in `after` that write an attribute that
+/// `edits` take out of `own` elsewhere: the attribute the candidate moves
+/// (§18.1). Another part moved (an operator to the line before) is the
+/// candidate's.
+fn moved(own: &str, edits: &[Edit], after: &str, regions: &[(u32, u32)]) -> Vec<(u32, u32)> {
+    let text = |e: &Edit| own[e.span.start as usize..e.span.end as usize].trim();
+    let out: Vec<&str> = edits.iter().filter(|e| e.replace.is_empty()).map(text).collect();
+    let written = |&(a, b): &(u32, u32)| after[a as usize..b as usize].trim();
+    regions.iter().copied().filter(|r| written(r).starts_with('@') && out.contains(&written(r))).collect()
 }
 
 /// `fix`, a candidate of the diagnostic at `span`, with the parentheses it
@@ -186,7 +200,7 @@ fn completed(
     }
     let touched = touched_operands(&alone, &regions);
     if touched.is_empty() {
-        let left = judge && leaves(&alone, place(&regions, end), &regions);
+        let left = judge && leaves(&alone, place(&regions, end), &regions, &moved(own, &local, &after, &regions));
         reads.left += usize::from(left);
         return (!left).then_some(fix);
     }
@@ -206,7 +220,7 @@ fn completed(
         reads.dropped += 1;
         return None;
     }
-    if judge && leaves(&with, place(&regions, end), &regions) {
+    if judge && leaves(&with, place(&regions, end), &regions, &moved(own, &local, &again, &regions)) {
         reads.left += 1;
         return None;
     }

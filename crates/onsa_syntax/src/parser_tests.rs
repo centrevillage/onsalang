@@ -625,7 +625,7 @@ fn an_item_after_a_cut_line_is_read_on_a_sample_of_contexts_and_heads() {
         "/// d\nfn z() {}",
         "@fp(relaxed)\nfn z() {}",
         "/// d\n@fp(relaxed)\nfn z() {}",
-        "@fp(relaxed)\n@fp(relaxed)\nfn z() {}",
+        "@export\n@fp(relaxed)\npub fn z() {}",
     ];
     let mut cases = 0;
     for (c, context) in contexts.iter().enumerate() {
@@ -688,14 +688,14 @@ fn an_item_after_the_attributes_of_a_member_ends_a_list_never_closed() {
 
 #[test]
 fn a_line_of_attributes_alone_is_measured_at_the_line_of_its_item() {
-    // §18.1, S-947 (947-2): the lines `@fp(relaxed)` and `#[inline]` start
-    // the item `canary` of the file, at the indentation of its `fn`: the
+    // §18.1, S-947 (947-2): the lines `@export` and `@fp(relaxed)` start
+    // the item `canary` of the file, at the indentation of its head: the
     // members' `{` and the `impl`'s end there, the innermost reported.
-    let src = "impl S {\n  fn a(self) -> I32 {\n    1\n  @fp(relaxed)\n  @fp(relaxed)\nfn canary() {}\n";
+    let src = "impl S {\n  fn a(self) -> I32 {\n    1\n  @export\n  @fp(relaxed)\npub fn canary() {}\n";
     let p = parse(src);
     assert_eq!(codes_of(&p), [Code::E0002], "{:?}", p.diagnostics);
     assert_eq!(p.diagnostics[0].span.start, src.find("{\n    1").unwrap() as u32);
-    assert!(dump(&p.ast).contains("\n(@fp(relaxed) @fp(relaxed) fn canary()"), "{}", dump(&p.ast));
+    assert!(dump(&p.ast).contains("\n(@export @fp(relaxed) pub fn canary()"), "{}", dump(&p.ast));
     // Measured at the line of `fn b`, as deep as the member: it is one.
     let src = "impl S {\n  fn a(self) -> I32 {\n    1\n@fp(relaxed)\n  fn b(self) {}\n}\n";
     let d = dump(&parse(src).ast);

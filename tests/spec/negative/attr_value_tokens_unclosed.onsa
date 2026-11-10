@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.5", "§18.1"]
+// fixes = 0
+
+// W5-24 U3a/t, S-834 (spec §6.5: "括弧が閉じていない形は構文の E0002 である"; §18.1: an unclosed bracket ends the unit at the next item that starts
+// a line, and the E0002 is on the innermost bracket that is open): the parenthesis of the attribute is not closed, whatever stands
+// in it, so the value is not looked at (no E0005) and there is no candidate. The item on the next line is a unit of its own. One
+// error in each declaration unit (P-01).
+
+@fp(relaxed                                         //~ E0002
+fn unclosed_fp(x: F32) -> F32 {
+  x * 2.0
+}
+
+@fp(true                                            //~ E0002
+pub fn unclosed_value(x: F32) -> F32 {
+  x * 3.0
+}
+
+@repr(c                                             //~ E0002
+pub struct UnclosedRepr {
+  x: I32,
+}
+
+@export(1                                           //~ E0002
+pub fn unclosed_export(x: F32) -> F32 {
+  x * 4.0
+}
+
+@fp(relaxed                                         //~ E0002
+pub flow unclosed_flow(x: F32 at sample) -> F32 at sample {
+  x * 5.0
+}
+
+fn calls() -> F32 {
+  zz                                                //~ E0302
+}

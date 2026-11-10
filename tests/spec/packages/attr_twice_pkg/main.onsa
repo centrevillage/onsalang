@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§6.5", "§15.1", "§18.1"]
+// fixes = 0
+
+// The names of util.onsa whose heads have the same attribute twice (W5-24 U3a/t, S-490, S-495; every one is one E0005 in
+// util.onsa, without a candidate). The head is read on, and the visibility that was written decides (§18.1): a `pub` name is
+// taken and used here without a diagnostic (a name of the module, so no E0302 either), and the `priv` one is E0303 in the
+// `use`. What was read is checked here: a call with too many arguments is a real error of this module.
+
+use util.{twice_pub, TwiceStruct, twice_flow}
+use util.twice_priv                                 //~ E0303
+
+fn reads(s: TwiceStruct) -> F32 {
+  twice_pub(1.0) + s.x
+}
+
+fn nested(c: Bool) -> F32 {
+  let f = fn(x: F32) -> F32 { twice_pub(x) }
+  if c { f.(1.0) } else { twice_pub(twice_pub(2.0)) }
+}
+
+pub flow chain(x: F32 at sample) -> F32 at sample {
+  twice_flow~(x)
+}
+
+fn silent_name() -> F32 {
+  twice_priv(1.0)
+}
+
+fn too_many_arguments() -> F32 {
+  twice_pub(1.0, 2.0)                               //~ E0412
+}
+
+fn own_error() -> F32 {
+  twice_pub(1.0) + zz                               //~ E0302
+}

@@ -111,7 +111,7 @@ impl<'a> Parser<'a> {
                 break;
             }
             let (at, depth, reported) = (self.peek_index(), self.open.len(), self.diagnostics.len());
-            match self.parse_attr() {
+            match self.parse_attr(true) {
                 Ok(a) => seen.push(a),
                 Err(_)
                     if read_on
@@ -130,7 +130,8 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub(super) fn parse_attr(&mut self) -> PResult<SeenAttr> {
+    /// The attribute at the cursor; `values`: [`Parser::parse_attr_body`].
+    pub(super) fn parse_attr(&mut self, values: bool) -> PResult<SeenAttr> {
         let at = self.peek_index();
         let m = self.start(NodeKind::Attr)?;
         self.expect(TokenKind::At)?;
@@ -140,7 +141,7 @@ impl<'a> Parser<'a> {
             self.skip_newlines();
         }
         let name = self.peek();
-        let args = self.parse_attr_body()?;
+        let args = self.parse_attr_body(values)?;
         let done = self.complete(m, NodeKind::Attr);
         // The sole argument, when it is one name (`c`, `relaxed`, `bulk`).
         let value =
@@ -155,17 +156,53 @@ impl<'a> Parser<'a> {
     }
 
     /// The name and the arguments of an attribute; the indices of the `(`
-    /// and the `)` of its arguments, if any.
-    fn parse_attr_body(&mut self) -> PResult<Option<(usize, usize)>> {
+    /// and the `)` of its arguments, if any. With `values`, the parentheses
+    /// of one that takes a value of its list or none (`@fp`, `@export`) are
+    /// a value whatever is in them (§6.5, S-834): when they do not read as
+    /// arguments and close ([`crate::scan::Brackets::closing`]), they are
+    /// read to their `)`, a value the table refuses.
+    fn parse_attr_body(&mut self, values: bool) -> PResult<Option<(usize, usize)>> {
+        let name = self.peek();
         self.parse_ident("attribute name")?;
         if !self.touches(TokenKind::LParen, true, false) {
             return Ok(None);
         }
-        let m = self.start(NodeKind::AttrArgs)?;
         let open = self.peek_index();
+        if !(values && crate::attrs::takes_value(self.token_text(name))) {
+            return self.parse_attr_args(None).map(|close| Some((open, close)));
+        }
+        let s = self.snapshot();
+        let read = self.parse_attr_args(None);
+        // Only the general E0002: a form of its own in them (a row, E0006) is their error, and so
+        // is one of the lexical stage there (E0001, and a block comment's E0020, a row found where
+        // the reading stops). An item at the head of a line in them is the next one (§18.1): the
+        // `(` is not closed.
+        let general = self.diagnostics[s.diagnostics..].iter().all(|d| d.code == Code::E0002 && d.notes.is_empty());
+        let close = crate::scan::Brackets::of(&self.brackets, &self.tokens).closing(open);
+        let value = |c: usize| {
+            !self.literals.errors_in(self.tokens[open].span.start, self.tokens[c].span.end)
+                && !self.tokens[open..c].iter().any(|t| t.kind == TokenKind::BlockComment)
+                && !(open + 1..c).any(|i| self.lines.at_line_head(i) && self.starts_an_item(i))
+        };
+        if let Some(c) = close.filter(|&c| read.is_err() && general && value(c)) {
+            self.restore(s);
+            return self.parse_attr_args(Some(c)).map(|c| Some((open, c)));
+        }
+        self.end_trial();
+        read.map(|close| Some((open, close)))
+    }
+
+    /// The parentheses of the arguments of an attribute at the cursor, read
+    /// as arguments, or to the `)` at `value` ([`Parser::parse_attr_body`]):
+    /// the index of the `)`.
+    fn parse_attr_args(&mut self, value: Option<usize>) -> PResult<usize> {
+        let m = self.start(NodeKind::AttrArgs)?;
         self.bump();
         let close = self.with_nl(false, |p| {
-            while !p.at(TokenKind::RParen) {
+            while value.is_some_and(|c| p.peek_index() < c) {
+                p.bump();
+            }
+            while value.is_none() && !p.at(TokenKind::RParen) {
                 if p.at(TokenKind::Ident) && p.peek2().kind == TokenKind::Colon {
                     let a = p.start(NodeKind::AttrNamedArg)?;
                     p.parse_ident("key")?;
@@ -186,7 +223,7 @@ impl<'a> Parser<'a> {
             Ok(close)
         })?;
         self.complete(m, NodeKind::AttrArgs);
-        Ok(Some((open, close)))
+        Ok(close)
     }
 
     /// The attributes `seen` of a thing at `place`: each the table of the
@@ -196,18 +233,23 @@ impl<'a> Parser<'a> {
     /// its node turns incomplete: it is no attribute of the thing (§18.1),
     /// and the unit goes on (its syntax error keeps its body unchecked). A
     /// blank or a line break after the `@` is in the candidates of these, and
-    /// its own E0020 only with none of them (§6.5, S-959).
+    /// its own E0020 only with none of them (§6.5, S-959). The first that
+    /// repeats the name of one before it is the E0005 of the repeat, whatever
+    /// the arguments (§6.5, §4.5, S-490).
     pub(super) fn check_attrs(&mut self, seen: &[SeenAttr], place: Place, declaration: Option<usize>) {
-        for a in seen {
+        let repeat = onsa_diag::first_repeat(seen.iter().map(|a| self.token_text(a.name)));
+        for (k, a) in seen.iter().enumerate() {
+            // SPEC-GAP(S-988): a repeat whose value is wrong too (`@fp(relaxed) @fp(fast) fn h`) is
+            // the E0005 of the repeat, with no candidate: the names are compared before the table.
+            if let Some((before, _)) = repeat.filter(|&(_, r)| r == k) {
+                let what = format!("the attribute `@{}`", self.token_text(a.name));
+                let d = onsa_diag::repeated(Stage::Syntax, Code::E0005, a.span, seen[before].span, &what);
+                self.report(d.with_found(self.src(a.span)));
+                self.events[a.finish] = Event::Finish { complete: false };
+                continue;
+            }
             let own = self.read_form(a.at, Some(place), declaration) || {
-                let w = crate::attrs::Written {
-                    span: a.span,
-                    name: self.token_text(a.name),
-                    args: a.args,
-                    value: a.value.map(|v| (v.span, self.token_text(v))),
-                    arguments: a.arguments.iter().map(|t| (t.span, self.token_text(*t))).collect(),
-                };
-                match crate::attrs::check(self.file, self.text, &w, place) {
+                match crate::attrs::check(self.file, self.text, &self.written(a), place) {
                     Some(mut d) => {
                         let c = self.cursor(a.at, Want::Other);
                         d.fixes = std::mem::take(&mut d.fixes).into_iter().map(|f| foreign::with_mark(&c, f)).collect();
@@ -220,6 +262,17 @@ impl<'a> Parser<'a> {
             if own || self.read_form(a.at, None, None) {
                 self.events[a.finish] = Event::Finish { complete: false };
             }
+        }
+    }
+
+    /// The attribute `a` as written, for the table ([`crate::attrs`]).
+    pub(super) fn written(&self, a: &SeenAttr) -> crate::attrs::Written<'a> {
+        crate::attrs::Written {
+            span: a.span,
+            name: self.token_text(a.name),
+            args: a.args,
+            value: a.value.map(|v| (v.span, self.token_text(v))),
+            arguments: a.arguments.iter().map(|t| (t.span, self.token_text(*t))).collect(),
         }
     }
 

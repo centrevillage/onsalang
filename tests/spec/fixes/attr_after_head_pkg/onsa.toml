@@ -1,0 +1,3 @@
+[package]
+name = "attr_after_head_pkg"
+edition = "2026"

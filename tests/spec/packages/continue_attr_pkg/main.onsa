@@ -1,7 +1,7 @@
 // onsa.toml
 // [test]
 // spec = ["§18.1", "§6.5", "§10", "§15.1"]
-// fixes = 0
+// fixes = 1
 
 // The names of util.onsa whose heads have an attribute after the visibility or after `rt` (W5-11
 // U4; every one is one error in util.onsa, without a candidate). The visibility that was

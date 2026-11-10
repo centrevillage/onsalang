@@ -1,0 +1,131 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.4", "§6.5", "§7"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "45:5"
+// code = "E0002"
+// candidate = 1
+// leaves = ["45:1 E0020"]
+//
+// [[test.fix]]
+// at = "50:5"
+// code = "E0002"
+// candidate = 1
+// leaves = ["50:1 E0020"]
+//
+// [[test.fix]]
+// at = "55:6"
+// code = "E0002"
+// candidate = 1
+// leaves = ["55:1 E0020"]
+//
+// [[test.fix]]
+// at = "61:5"
+// code = "E0002"
+// candidate = 1
+// leaves = ["61:1 E0020"]
+//
+// [[test.fix]]
+// at = "65:4"
+// code = "E0002"
+// candidate = 1
+// leaves = ["65:1 E0020"]
+
+// The old derive attribute after a visibility (W5-11 U4; `pub @derive(Eq) struct`). Before the
+// visibility, `@derive(Eq)` is an E0020 whose candidate writes the traits at the head of the
+// declaration (continue_derive_unknown.onsa). After a visibility the attribute is out of its
+// place, and that is the first error of the unit: one E0002 at the `@`, without a candidate
+// (§18.1, S-593, S-949; the contents are not read, so no E0020 is reported for them). The head is read
+// on, so the struct and the enum are names of the module with their fields and variants; the
+// derive list is a part that was not read, so nothing that depends on it is reported
+// (`==`, the bound `[T: Eq]`, the methods that a derive makes). One error in each unit.
+
+@derive(Eq) pub struct Pt {                         //~ E0002 @5
+  x: I32,
+  y: I32,
+}
+
+@derive(Eq) pub enum Mode {                         //~ E0002 @5
+  Off,
+  On(I32),
+}
+
+@derive(PartialEq) priv struct Key {                //~ E0002 @6
+  id: I32,
+}
+
+// The other old attributes read the same: the place is the first error, whatever the name
+// (S-949). The body is not checked.
+@relaxed pub fn old_relaxed(x: F32) -> F32 {        //~ E0002 @5
+  zz
+}
+
+@relaxed rt fn old_relaxed_rt(x: F32) -> F32 {      //~ E0002 @4
+  zz
+}
+
+fn calls_old(x: F32) -> F32 {
+  old_relaxed(x) + old_relaxed_rt(x)
+}
+
+fn equal(a: Pt, b: Pt) -> Bool {
+  a == b
+}
+
+fn modes(a: Mode, b: Mode) -> Bool {
+  a != b
+}
+
+fn bounded[T: Eq](a: T, b: T) -> Bool {
+  a == b
+}
+
+fn passes_the_bound(a: Pt, m: Mode) -> Bool {
+  bounded(a, a) && bounded(m, m)
+}
+
+fn keys() -> Bool {
+  let a = Key { id: 1 }
+  let b = Key { id: 2 }
+  a == b
+}
+
+fn zero() -> Pt {
+  Pt.default()
+}
+
+// What does not depend on the derive list is read, and a use of it is checked.
+fn matches_mode(m: Mode) -> I32 {
+  match m {
+    Mode.Off => 0,
+    Mode.On(n) => n,
+  }
+}
+
+fn reads(p: Pt) -> I32 {
+  p.x + p.y
+}
+
+fn no_such_field(p: Pt) -> I32 {
+  p.zz                                              //~ E0413
+}
+
+fn missing_field() -> Pt {
+  Pt { x: 1 }                                       //~ E0410
+}
+
+fn missing_variant(m: Mode) -> I32 {
+  match m {                                         //~ E0501
+    Mode.Off => 0,
+  }
+}
+
+fn wrong_argument_type() -> I32 {
+  reads(1)                                          //~ E0401
+}
+
+fn own_error(p: Pt) -> I32 {
+  reads(p) + zz                                     //~ E0302 @14
+}

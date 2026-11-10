@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.5", "§18.1"]
+// fixes = 0
+
+// W5-24 U3a/t, S-490, S-495 (spec §6.5: "一つの場所には、それぞれの属性を一度だけ付けられる"; the same attribute twice at one
+// place is E0005, "重なりは境界の重なりと同じ形で報告する" (§4.5): the error is on the first attribute that overlaps (the second
+// `@fp`), and there is no candidate). `@fp` is an attribute of a fn and of a flow. The two attributes are on the same line, or
+// on lines of their own; the error is on the line of the second one. One error in each declaration unit (P-01).
+
+@fp(relaxed) @fp(relaxed) fn same_line(x: F32) -> F32 {   //~ E0005
+  x * 2.0
+}
+
+@fp(relaxed) @fp(relaxed) pub fn same_line_pub(x: F32) -> F32 {   //~ E0005
+  x * 3.0
+}
+
+@fp(relaxed)
+@fp(relaxed)                                        //~ E0005
+pub fn two_lines(x: F32) -> F32 {
+  x * 4.0
+}
+
+@fp(relaxed) @fp(relaxed) pub flow flow_same_line(x: F32 at sample) -> F32 at sample {   //~ E0005
+  x * 5.0
+}
+
+@fp(relaxed)
+@fp(relaxed)                                        //~ E0005
+pub flow flow_two_lines(x: F32 at sample) -> F32 at sample {
+  x * 6.0
+}
+
+@fp(relaxed) @fp(relaxed) rt fn same_line_rt(x: F32) -> F32 {   //~ E0005
+  x * 7.0
+}
+
+// One of them is fine.
+@fp(relaxed)
+pub fn once(x: F32) -> F32 {
+  x * 8.0
+}

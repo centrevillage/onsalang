@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.5", "§11.7", "§18.1"]
+// fixes = 0
+
+// W5-24 U3a/t, S-490, S-495 (spec §6.5: "一つの入力の `@param(min: 0.0) @param(max: 1.0) x: F32 at block`" is E0005; the place
+// is the input, so an input of a flow is a place of its own: the same attribute on two inputs, one on each, is fine,
+// attr_twice_boundary.onsa). The error is on the second attribute, with no candidate; the two attributes may be on one line or
+// on lines of their own. One error in each declaration unit (P-01). (`@host` is attr_twice_host.onsa.)
+
+pub flow same_line(
+  x: F32 at sample,
+  @param(min: 0.0) @param(max: 1.0) level: F32 at block,   //~ E0005
+) -> F32 at sample {
+  x * level
+}
+
+pub flow two_lines(
+  x: F32 at sample,
+  @param(min: 0.0, default: 0.5)
+  @param(max: 1.0, default: 0.5)                        //~ E0005
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow the_second_input(
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  gain: F32 at block,
+  x: F32 at sample,
+  @param(min: 0.0, default: 0.5) @param(min: 0.0, default: 0.5) level: F32 at block,   //~ E0005
+) -> F32 at sample {
+  x * level * gain
+}

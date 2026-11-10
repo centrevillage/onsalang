@@ -1,0 +1,81 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.4", "§6.5", "§4.4", "§14.1"]
+// fixes = 1
+
+// An attribute after a visibility or after `rt` on a struct (W5-11 U4; `pub @repr(c) struct`,
+// `rt #[inline] struct`) is one E0002 without a candidate (§18.1, S-593), at the `@` or the `#[`.
+// The head is read on, so the struct is a name of the module, with its fields. The attribute
+// is the error, so what it would give is unknown: the derive list and the `@repr` value are
+// parts of the struct that were not read (§18.1), and nothing that depends on them is reported
+// (`==`, the methods that a derive makes, the layout for C). What does not depend on them is read
+// and checked: the fields and their types. The unit has a syntax error. One error in each unit.
+
+@repr(c) pub struct Frame {                         //~ E0002 @5
+  a: I32,
+  b: I32,
+}
+
+rt #[inline] struct Hot {                           //~ E0002 @4
+  a: I32,
+}
+
+@repr(c) priv struct Hidden {                       //~ E0002 @6
+  a: I32,
+}
+
+// Nothing that depends on the derive list or on `@repr` is reported.
+fn equal(f: Frame, g: Frame) -> Bool {
+  f == g
+}
+
+fn equal_hot(f: Hot, g: Hot) -> Bool {
+  f != g
+}
+
+fn zero() -> Frame {
+  Frame.default()
+}
+
+fn zero_hot() -> Hot {
+  Hot.default()
+}
+
+// What does not depend on them is read, and a use of it is checked.
+fn makes() -> Frame {
+  Frame { a: 1, b: 2 }
+}
+
+fn reads(f: Frame, h: Hot) -> I32 {
+  f.a + f.b + h.a
+}
+
+fn builds_hidden() -> I32 {
+  let h = Hidden { a: 1 }
+  h.a
+}
+
+fn nested(c: Bool, f: Frame) -> I32 {
+  let g = fn(p: Frame) -> I32 { p.a + p.b }
+  if c { g.(f) } else { reads(makes(), Hot { a: 3 }) }
+}
+
+fn no_such_field(f: Frame) -> I32 {
+  f.zz                                              //~ E0413
+}
+
+fn missing_field() -> Frame {
+  Frame { a: 1 }                                    //~ E0410
+}
+
+fn wrong_field_type() -> Hot {
+  Hot { a: true }                                   //~ E0401
+}
+
+fn too_many_arguments(f: Frame) -> Frame {
+  makes(f)                                          //~ E0412
+}
+
+fn own_error(f: Frame) -> I32 {
+  f.a + zz                                          //~ E0302 @9
+}

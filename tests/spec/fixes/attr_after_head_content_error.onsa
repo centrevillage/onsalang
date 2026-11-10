@@ -1,0 +1,61 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§6.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "43:5"
+// code = "E0002"
+// candidate = 1
+// leaves = ["43:1 E0005"]
+//
+// [[test.fix]]
+// at = "47:5"
+// code = "E0002"
+// candidate = 1
+// leaves = ["47:1 E0005"]
+//
+// [[test.fix]]
+// at = "51:5"
+// code = "E0002"
+// candidate = 1
+// leaves = ["51:1 E0005"]
+//
+// [[test.fix]]
+// at = "55:5"
+// code = "E0002"
+// candidate = 1
+// leaves = ["55:1 E0020"]
+//
+// [[test.fix]]
+// at = "59:5"
+// code = "E0002"
+// candidate = 1
+// leaves = ["59:1 E0020"]
+
+// W5-24 U3a/t, S-600, R3 (spec §18.1: "`@` の属性の修正候補は、その属性を可視性と `rt` の前（既にある属性の後ろ）へ移す形である（属性の中身の誤りは移した後の検査で報告し、中身が読めなければ候補を作らない）";
+// "候補が写すか動かす部分（移す属性）に同じ段の別の誤りがあっても、形そのものが読めれば候補を出し、残りの誤りは当てた後の検査で報告する"): an attribute after `pub` that is read as a form but has
+// an error of its own (an attribute that the table does not have, a value out of the list, a value of `@repr` out of the list, the
+// old `@derive(Eq)` and the old `@relaxed`) has the one candidate that moves it, and what is wrong inside it is reported after the
+// move (`leaves`: the position in the fixed text, the attribute at the first column; the E0005 of the unknown attribute and of the
+// value, the E0020 of the old forms). One error in each declaration unit (P-01).
+
+pub @nope fn bad_name(x: F32) -> F32 {              //~ E0002
+  x
+}
+
+pub @fp(fast) fn bad_value(x: F32) -> F32 {         //~ E0002
+  x
+}
+
+pub @repr(rust) struct BadRepr {                    //~ E0002
+  x: I32,
+}
+
+pub @derive(Eq) struct BadDerive {                  //~ E0002
+  x: I32,
+}
+
+pub @relaxed fn bad_old(x: F32) -> F32 {            //~ E0002
+  x
+}

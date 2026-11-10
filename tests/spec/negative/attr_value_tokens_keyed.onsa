@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§6.5", "§11.6", "§18.1"]
+// fixes = 0
+
+// W5-24 U3a/t, S-834 (spec §6.5: "鍵の付く属性の項として読めない引数（`@latency(1)`）は今のまま E0002"): an attribute whose arguments are terms with a key
+// (`@latency(samples: 64)`, §11.6) is not an attribute of the list of values, so an argument that is not a term (`@latency(1)`) is
+// not read as a value: the E0002 of the form, with no candidate. On the line of the flow, on a line of its own, and after another
+// attribute. One error in each declaration unit (P-01).
+
+@latency(1) pub flow on_the_line(x: F32 at sample) -> F32 at sample {   //~ E0002
+  x
+}
+
+@latency(1)                                         //~ E0002
+pub flow on_its_line(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+@export @latency(1) pub flow after_export(x: F32 at sample) -> F32 at sample {   //~ E0002
+  x
+}

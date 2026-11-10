@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§6.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "16:1"
+// code = "E0005"
+// candidate = 1
+// clean = true
+
+// W5-24 U3a/t, S-834 (spec §6.5: "一覧の値を取る属性と `@export` の括弧の中は、閉じた括弧の中のトークンによらず値として扱い、一覧の値でなければこの E0005 である"): `@fp(f(1))`: a call
+// has parentheses of its own, and all of them are the value; the candidate is `@fp(relaxed)`. The file has no error left after the
+// candidate (`clean`, S-253). The main position is the attribute. A file with one unit, so that `clean` looks at the whole file.
+
+@fp(f(1)) pub fn h(x: F32) -> F32 {                 //~ E0005
+  x * 2.0
+}

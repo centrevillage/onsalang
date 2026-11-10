@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§2.4", "§6.5", "§18.1"]
+// fixes = 1
+
+// W5-24 U3a/i2, S-834 (spec §6.5: the parentheses of an attribute that takes a value are a value whatever is in them; §18.1:
+// a unit reports its first error, and the lexical stage is before the syntax): an error of the lexical stage in the
+// parentheses (E0001 of a literal, the E0020 of a block comment) is reported as before, and they are not read as the value
+// (no E0005). With a block comment after a value that is no argument (`1 + /* c */ 2`), they are read as arguments, as
+// before, and the first error of the unit is where that reading stops (E0002, no candidate). One error reported in each
+// unit (P-01). The candidate is the one of the E0020 (the value is `relaxed`).
+
+@fp(0x) fn hex_empty() -> I32 { 1 }                 //~ E0001
+@fp('ab') fn char_ab() -> I32 { 1 }                 //~ E0001
+@fp('') fn char_empty() -> I32 { 1 }                //~ E0001
+@fp(0b2) fn bin_digit() -> I32 { 1 }                //~ E0001
+@fp(relaxed, 0x) fn listed_hex() -> I32 { 1 }       //~ E0001
+@repr('ab') struct ReprChar { x: I32 }              //~ E0001
+@export('ab') pub fn export_char() -> I32 { 1 }     //~ E0001
+@fp(relaxed /* c */) fn comment() -> I32 { 1 }      //~ E0020
+@fp(1 + /* c */ 2) fn comment_mid() -> I32 { 1 }    //~ E0002

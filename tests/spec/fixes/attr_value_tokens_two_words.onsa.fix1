@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.5", "§18.1"]
+// fixes = 1
+
+// W5-24 U3a/t, S-834 (spec §6.5: "一覧の値を取る属性（`@repr`・`@fp`・`@host`）と `@export` の括弧の中は、閉じた括弧の中のトークンによらず値として扱い、一覧の値でなければこの E0005
+// である"): two words without a `,` (`@fp(relaxed strict)`) are not one value of the list, so they are the E0005 whose one candidate
+// is the value of the list that is among them (`@fp(relaxed)`). The same for `@repr(c packed)`. A fn, a flow and a struct, on the
+// line of the item or on a line of its own, and on lines of the value. One error in each declaration unit (P-01).
+
+@fp(relaxed) pub fn u0(x: F32) -> F32 {      //~ E0005
+  x * 1.0
+}
+
+@fp(relaxed) pub flow f0(x: F32 at sample) -> F32 at sample {   //~ E0005
+  x * 1.0
+}
+
+@fp(relaxed)                                 //~ E0005
+pub fn u1(x: F32) -> F32 {
+  x * 2.0
+}
+
+@repr(c) pub struct S0 {                     //~ E0005
+  x: I32,
+}
+
+@fp(relaxed)
+pub fn u30(x: F32) -> F32 {
+  x * 3.0
+}

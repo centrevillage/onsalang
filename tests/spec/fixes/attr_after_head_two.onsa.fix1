@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§6.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "17:5"
+// code = "E0002"
+// candidate = 1
+// leaves = ["17:13 E0002"]
+
+// W5-24 U3a, S-600 (the parent wrote it; spec §18.1: "可視性か `rt` の後ろに書いた `@` の属性は、属性を一つの E0002 にし"、"`@` の属性の修正候補は、その属性を可視性と
+// `rt` の前（既にある属性の後ろ）へ移す形である"; a unit stops at its first error): two attributes after `pub` are the E0002 of the first one,
+// with the one candidate that moves that attribute, and the E0002 of the second one is what is left after the move
+// (`leaves`: the position in the fixed text). The input has two errors from the start; a second step moves the other one.
+
+@export pub @fp(relaxed) fn h(x: F32) -> F32 {        //~ E0002
+  x * 2.0
+}

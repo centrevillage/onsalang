@@ -1,0 +1,42 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.2", "§6.5", "§18.1"]
+// fixes = 0
+
+// W5-24 U3a/t, S-490, S-495 (spec §6.5, §6.2): the same attribute twice on a method of an `impl` is E0005 on the second one, with
+// no candidate. A method is a place of its own, so one `@fp(relaxed)` on each of two methods is fine. The unit of a member is the
+// member (§18.1), so one error in each member, and the other members are checked.
+
+pub struct Pt {
+  x: F32,
+}
+
+impl Pt {
+  @fp(relaxed) @fp(relaxed) fn same_line(self) -> F32 {   //~ E0005
+    self.x
+  }
+
+  @fp(relaxed)
+  @fp(relaxed)                                      //~ E0005
+  pub fn two_lines(self) -> F32 {
+    self.x
+  }
+
+  @fp(relaxed) @fp(relaxed) pub rt fn rt_member(self, k: F32) -> F32 {   //~ E0005
+    self.x * k
+  }
+
+  @fp(relaxed)
+  fn one_on_each(self) -> F32 {
+    self.x
+  }
+
+  @fp(relaxed)
+  fn and_the_other(self) -> F32 {
+    self.x
+  }
+
+  fn own_error(self) -> F32 {
+    self.x + zz                                     //~ E0302
+  }
+}

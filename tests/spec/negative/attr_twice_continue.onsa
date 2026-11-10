@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// spec = ["§6.5", "§18.1"]
+// fixes = 0
+
+// W5-24 U3a/t, S-490, S-495 (spec §18.1: an error of an attribute that stands before the name, "E0005 と引数の構文の誤り", is
+// reported as one error and the declaration is read on from it, as a head without the form: the name is a name of the module).
+// An item with the same attribute twice is a name of the module, so a user of it gets no E0302, the body of the unit with the
+// syntax error is not checked, and a real error of a use is reported against the head that was read. A fn, a flow and a struct,
+// used in the places a name can be used. One error in each declaration unit (P-01).
+
+@fp(relaxed) @fp(relaxed) pub fn twice_fn(x: F32) -> F32 {   //~ E0005
+  x * 2.0
+}
+
+@fp(relaxed)
+@fp(relaxed)                                        //~ E0005
+pub flow twice_flow(x: F32 at sample) -> F32 at sample {
+  zz
+}
+
+@repr(c) @repr(c) pub struct TwiceStruct {   //~ E0005
+  x: I32,
+  y: I32,
+}
+
+fn calls() -> F32 {
+  twice_fn(1.0) + twice_fn(twice_fn(2.0))
+}
+
+fn nested(c: Bool) -> F32 {
+  let f = fn(x: F32) -> F32 { twice_fn(x) }
+  if c { f.(1.0) } else { twice_fn(3.0) }
+}
+
+pub flow chain(x: F32 at sample) -> F32 at sample {
+  twice_flow~(twice_flow~(x))
+}
+
+fn makes() -> TwiceStruct {
+  TwiceStruct { x: 1, y: 2 }
+}
+
+fn reads(s: TwiceStruct) -> I32 {
+  s.x + s.y
+}
+
+// The head is the declaration that was read: a real error of a use is reported.
+fn too_many_arguments() -> F32 {
+  twice_fn(1.0, 2.0)                                //~ E0412
+}
+
+fn wrong_argument_type() -> F32 {
+  twice_fn(true)                                    //~ E0401
+}
+
+fn missing_field() -> TwiceStruct {
+  TwiceStruct { x: 1 }                              //~ E0410
+}
+
+// A real error of the module is still reported.
+fn own_error() -> F32 {
+  twice_fn(1.0) + zz                                //~ E0302
+}

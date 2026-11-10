@@ -1,0 +1,77 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.5", "§18.1", "§14.2"]
+// fixes = 1
+
+// W5-24 U3a/t, S-834 (spec §6.5: "一覧の値を取る属性（`@repr`・`@fp`・`@host`）と `@export` の括弧の中は、閉じた括弧の中のトークンによらず値として扱い、一覧の値でなければこの E0005
+// である"): `@export` takes no argument (§6.5), so whatever is in the parentheses is the E0005 whose one candidate is `@export`, with
+// the parentheses taken out. A fn and a flow, on the line of the item or on a line of its own, a value on lines of its own, and
+// the space after the `@`. One error in each declaration unit (P-01).
+
+@export pub fn u0(x: F32) -> F32 {               //~ E0005
+  x * 1.0
+}
+
+@export pub fn u1(x: F32) -> F32 {            //~ E0005
+  x * 2.0
+}
+
+@export pub fn u2(x: F32) -> F32 {             //~ E0005
+  x * 3.0
+}
+
+@export pub fn u3(x: F32) -> F32 {              //~ E0005
+  x * 4.0
+}
+
+@export pub fn u4(x: F32) -> F32 {             //~ E0005
+  x * 5.0
+}
+
+@export pub fn u5(x: F32) -> F32 {              //~ E0005
+  x * 6.0
+}
+
+@export pub fn u6(x: F32) -> F32 {           //~ E0005
+  x * 7.0
+}
+
+@export pub fn u7(x: F32) -> F32 {            //~ E0005
+  x * 8.0
+}
+
+@export pub fn u8(x: F32) -> F32 {               //~ E0005
+  x * 9.0
+}
+
+@export pub flow f0(x: F32 at sample) -> F32 at sample {   //~ E0005
+  x * 1.0
+}
+
+@export pub flow f1(x: F32 at sample) -> F32 at sample {   //~ E0005
+  x * 2.0
+}
+
+@export                                       //~ E0005
+pub fn u20(x: F32) -> F32 {
+  x * 21.0
+}
+
+@export                                       //~ E0005
+pub flow f2(x: F32 at sample) -> F32 at sample {
+  x * 3.0
+}
+
+@export
+pub fn u30(x: F32) -> F32 {
+  x * 3.0
+}
+
+@export pub fn u21(x: F32) -> F32 {             //~ E0005
+  x * 22.0
+}
+
+@export
+pub fn fine(x: F32) -> F32 {
+  x * 9.0
+}

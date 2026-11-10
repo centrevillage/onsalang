@@ -1,0 +1,20 @@
+// The declarations of this module have an attribute after the visibility or after `rt` (W5-24 U3a/t, S-600).
+// Each head is one E0002 with one candidate (§18.1), applied in this file. The visibility that was written is
+// recorded (and `rt` too), and the attribute is not, so the declaration is a name of the module with that
+// visibility for the module that brings it in with `use`.
+
+pub @fp(relaxed) fn kept_pub(x: F32) -> F32 {       //~ E0002
+  x * 2.0
+}
+
+priv @fp(relaxed) fn kept_priv(x: F32) -> F32 {     //~ E0002
+  x * 3.0
+}
+
+pub rt @fp(relaxed) fn kept_pub_rt(x: F32) -> F32 { //~ E0002
+  x * 4.0
+}
+
+pub @repr(c) struct KeptStruct {                    //~ E0002
+  x: F32,
+}

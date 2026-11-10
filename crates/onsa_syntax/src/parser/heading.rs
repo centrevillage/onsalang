@@ -339,8 +339,9 @@ impl<'a> Parser<'a> {
     /// An attribute at the cursor after a visibility or `rt`, where the head
     /// takes none (`pub @fp(relaxed) fn h`, S-593), when
     /// [`Parser::late_attribute_end`] finds its end: one E0002 for its place,
-    /// and the head is read on after it. Its node is incomplete, an attribute
-    /// that was not read (S-460): what is in it is not looked at.
+    /// whose candidate moves it ([`Parser::moved_attribute`], S-600), and the
+    /// head is read on after it. Its node is incomplete, an attribute that
+    /// was not read (S-460): what is in it is not looked at.
     // S-949: an old attribute here (`pub @derive(Eq) struct P`, `pub @relaxed
     // fn h`) is this E0002 too, whatever its name: its place is the first error.
     fn late_attribute(&mut self) -> PResult<bool> {
@@ -349,10 +350,11 @@ impl<'a> Parser<'a> {
             return Ok(false);
         }
         let Some(last) = self.late_attribute_end(at) else { return Ok(false) };
+        let fixes = self.moved_attribute(at, last).into_iter().collect();
         self.start(NodeKind::Attr)?;
         let span = Span::new(self.file, self.tokens[at].span.start, self.tokens[last].span.end);
         let message = format!("`{}` cannot be written here: attributes come first in a head", self.src(span));
-        let own = Own { span, message, rule: ATTRIBUTE_RULE, fixes: Vec::new(), resume: last + 1 };
+        let own = Own { span, message, rule: ATTRIBUTE_RULE, fixes, resume: last + 1 };
         self.fail_at(Want::Other, "a declaration", None, Some(own));
         self.read_on(last + 1);
         self.finish(None, false);
@@ -364,6 +366,31 @@ impl<'a> Parser<'a> {
     fn late_attribute_end(&self, at: usize) -> Option<usize> {
         let last = self.attribute_end(at)?;
         self.on_line_after(last).filter(|&n| self.head_goes_on(n)).map(|_| last)
+    }
+
+    /// The candidate of the attribute from `at` to `last` after the
+    /// visibility and `rt` right before it: it goes before them, after the
+    /// attributes there (§18.1, S-600). None when what is in it does not
+    /// read as the arguments of an attribute (`pub @fp(relaxed, 1 +) fn h`),
+    /// tried at the cursor and undone; when the check of the head would take
+    /// it out (`@fp(strict)`, [`crate::attrs::unset`]); or when no modifier is
+    /// right before it.
+    fn moved_attribute(&mut self, at: usize, last: usize) -> Option<Fix> {
+        let modifier = |k: usize| {
+            let b = self.tokens[..k].iter().rposition(|t| !t.kind.is_comment())?;
+            matches!(self.tokens[b].kind, TokenKind::KwPub | TokenKind::KwPriv | TokenKind::KwRt).then_some(b)
+        };
+        let first = std::iter::successors(modifier(at), |&k| modifier(k)).last()?;
+        let trial = self.snapshot();
+        // SPEC-GAP(S-990): what is in it "reads" when the general reading of the arguments of an
+        // attribute reads it (not the value of S-834): `pub @fp(1) fn h` has no candidate.
+        let read = self.parse_attr(false).ok().filter(|_| self.diagnostics.len() == trial.diagnostics);
+        let reads = read.is_some_and(|a| crate::attrs::unset(self.text, &self.written(&a)).is_none());
+        self.restore(trial);
+        let span = Span::new(self.file, self.tokens[at].span.start, self.tokens[last].span.end);
+        let gone = Edit::delete(Span::new(self.file, span.start, self.with_blank_after(last).end));
+        let put = Edit::insert(self.file, self.tokens[first].span.start, format!("{} ", self.src(span)));
+        reads.then(|| Fix::new("write the attribute before the visibility and `rt`", vec![gone, put]))
     }
 
     /// The last token of the attribute at `at` that closes on its line: of the

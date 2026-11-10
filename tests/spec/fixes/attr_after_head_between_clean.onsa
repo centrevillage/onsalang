@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§6.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "17:5"
+// code = "E0002"
+// candidate = 1
+// clean = true
+
+// W5-24 U3a/t, S-600 (spec §18.1: "`@` の属性の修正候補は、その属性を可視性と `rt` の前（既にある属性の後ろ）へ移す形である"): the E0002 of an attribute after `pub` and
+// before `rt` (`pub @fp(relaxed) rt fn h` is `@fp(relaxed) pub rt fn h`) has one candidate, which writes the attribute before the
+// visibility, and the file has no error left after it (`clean`, S-253). The main position is the attribute. A file with one unit,
+// so that `clean` looks at the whole file.
+
+pub @fp(relaxed) rt fn h(x: F32) -> F32 {           //~ E0002
+  x * 2.0
+}

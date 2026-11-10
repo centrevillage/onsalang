@@ -1,0 +1,3 @@
+[package]
+name = "attr_twice_pkg"
+edition = "2026"

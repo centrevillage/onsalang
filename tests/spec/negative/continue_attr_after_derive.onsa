@@ -1,7 +1,37 @@
 // onsa.toml
 // [test]
 // spec = ["§18.1", "§6.4", "§6.5", "§7"]
-// fixes = 0
+// fixes = 1
+//
+// [[test.fix]]
+// at = "45:5"
+// code = "E0002"
+// candidate = 1
+// leaves = ["45:1 E0020"]
+//
+// [[test.fix]]
+// at = "50:5"
+// code = "E0002"
+// candidate = 1
+// leaves = ["50:1 E0020"]
+//
+// [[test.fix]]
+// at = "55:6"
+// code = "E0002"
+// candidate = 1
+// leaves = ["55:1 E0020"]
+//
+// [[test.fix]]
+// at = "61:5"
+// code = "E0002"
+// candidate = 1
+// leaves = ["61:1 E0020"]
+//
+// [[test.fix]]
+// at = "65:4"
+// code = "E0002"
+// candidate = 1
+// leaves = ["65:1 E0020"]
 
 // The old derive attribute after a visibility (W5-11 U4; `pub @derive(Eq) struct`). Before the
 // visibility, `@derive(Eq)` is an E0020 whose candidate writes the traits at the head of the

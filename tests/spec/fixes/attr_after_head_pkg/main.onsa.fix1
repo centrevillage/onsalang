@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§6.5", "§15.1", "§18.1"]
+// fixes = 1
+
+// W5-24 U3a/t, S-600 (spec §18.1, §15.1): the names of util.onsa whose heads have an attribute after the visibility or after `rt`
+// (every one is one E0002 in util.onsa, with one candidate that is applied in that file). The visibility that was written decides: a `pub`
+// name is taken and used here without a diagnostic, and the `priv` one is E0303 in the `use`. The `rt` that was written is recorded: an
+// `rt` function of this module may call `kept_pub_rt`, and gets E0901 for `kept_pub`. This module has an error of the same kind of its
+// own, in a head of its own, and a real error of a use.
+
+use util.{kept_pub, kept_pub_rt, KeptStruct}
+use util.kept_priv                                  //~ E0303
+
+@fp(relaxed) pub fn local(x: F32) -> F32 {          //~ E0002
+  kept_pub(x)
+}
+
+fn reads(s: KeptStruct) -> F32 {
+  kept_pub(1.0) + kept_pub_rt(2.0) + local(3.0) + s.x
+}
+
+rt fn calls_rt_ones(x: F32) -> F32 {
+  kept_pub_rt(x)
+}
+
+rt fn calls_pub(x: F32) -> F32 {
+  kept_pub(x)                                       //~ E0901
+}
+
+fn too_many_arguments() -> F32 {
+  kept_pub(1.0, 2.0)                                //~ E0412
+}
+
+fn own_error() -> F32 {
+  kept_pub(1.0) + zz                                //~ E0302
+}

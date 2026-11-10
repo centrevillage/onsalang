@@ -337,7 +337,7 @@ impl<'a> Parser<'a> {
     /// S-593): what starts its head ([`starts_heading`]) but `fn(` and `rt
     /// fn(` (S-947), a doc comment, or the words before a head on the line,
     /// whatever else is read at the token.
-    fn starts_an_item(&self, i: usize) -> bool {
+    pub(super) fn starts_an_item(&self, i: usize) -> bool {
         let kind = self.tokens[i].kind;
         (starts_heading(kind) && !self.function_value_at(i)) || kind.is_doc() || self.words_before_head_at(i).is_some()
     }

@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.5", "§18.1"]
+// fixes = 0
+
+// W5-24 U3a/i2, S-834 (spec §6.5: "括弧が閉じていない形は構文の E0002 である"; §18.1: a unit whose bracket is not closed
+// ends at the next item that starts a line): the parentheses of an attribute that takes a value are read as the value only up
+// to their `)` with no item at the head of a line between; one there is the next item, so the `(` is not closed. That item is
+// a unit of its own and is checked (its E0302), and the `)` after it is a stray token of its own unit (E0002). The value is
+// not looked at (no E0005), and no candidate takes the item away. One error in each unit (P-01).
+
+@fp(1                                               //~ E0002
+fn swallowed_fp() -> I32 {
+  zz                                                //~ E0302
+}
+)                                                   //~ E0002
+fn after_fp() -> I32 { 1 }
+
+@export(                                            //~ E0002
+pub fn swallowed_export() -> I32 {
+  zz                                                //~ E0302
+}
+)                                                   //~ E0002
+pub fn after_export() -> I32 { 2 }
+
+@repr(c,                                            //~ E0002
+fn swallowed_repr() -> I32 {
+  zz                                                //~ E0302
+}
+)                                                   //~ E0002
+struct AfterRepr { x: I32 }
+
+@fp(relaxed,                                        //~ E0002
+/// A doc comment starts an item too.
+fn swallowed_doc() -> I32 {
+  zz                                                //~ E0302
+}
+) fn after_doc() -> I32 { 3 }                       //~ E0002

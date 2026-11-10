@@ -23,10 +23,10 @@ fn with_a_plain_comment_after(x: F32) -> F32 {
   x
 }
 
-@fp(relaxed)
+@export
 /** Between two attributes. */                     //~ E0020
 @fp(relaxed)
-fn between_two(x: F32) -> F32 {
+pub fn between_two(x: F32) -> F32 {
   x
 }
 

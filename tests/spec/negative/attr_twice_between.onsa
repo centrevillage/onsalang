@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.5", "§14.2", "§18.1"]
+// fixes = 0
+
+// W5-24 U3a/t, S-490, S-495 (spec §6.5, §4.5: "並びを前から読んで前の要素と重なる最初の要素に付け"): another attribute between the
+// two does not change what the same attribute is: the error is on the second `@fp(relaxed)` (the first attribute that overlaps
+// one before it); `@export` before it overlaps nothing. A different attribute on the other side of the pair does not either.
+// No candidate. One error in each declaration unit (P-01).
+
+@fp(relaxed) @export @fp(relaxed) pub fn between_same_line(x: F32) -> F32 {   //~ E0005
+  x * 2.0
+}
+
+@export
+@fp(relaxed)
+@export                                             //~ E0005
+pub fn between_lines(x: F32) -> F32 {
+  x * 3.0
+}
+
+@fp(relaxed)
+@export
+@fp(relaxed)                                        //~ E0005
+pub flow between_flow(x: F32 at sample) -> F32 at sample {
+  x * 4.0
+}
+
+@export @fp(relaxed) @fp(relaxed) pub flow before_the_pair(x: F32 at sample) -> F32 at sample {   //~ E0005
+  x * 5.0
+}
+
+@fp(relaxed) @fp(relaxed) @export pub flow after_the_pair(x: F32 at sample) -> F32 at sample {   //~ E0005
+  x * 6.0
+}

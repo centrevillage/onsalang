@@ -1,7 +1,7 @@
 // onsa.toml
 // [test]
 // spec = ["§18.1", "§6.5", "§10", "§15.1"]
-// fixes = 0
+// fixes = 1
 
 // An attribute of Onsa written after a visibility or after `rt` (W5-11 U4; the attributes come
 // first, `@fp(relaxed) pub rt fn h`, §6.5): the attribute is one E0002 without a candidate

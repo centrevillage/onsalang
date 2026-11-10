@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.5", "§15.5", "§18.1"]
+// fixes = 1
+
+// W5-24 U3a/t, S-484 (spec §6.5: "`@fp` に属性を付けないときと同じ意味を名指す値（`@fp(strict)`、§15.5
+// の既定）と、属性で選べない浮動小数のプロファイルの名前（`@fp(strict-ftz)`）は、同じ E0005 で、修正候補は属性を除くことである"): when the arguments hold the value of the list as
+// well (`@fp(relaxed, strict)`), the rule of the extra arguments goes first: the one candidate takes out the others and keeps
+// `relaxed` (`@fp(relaxed)`), not the attribute. A fn and a flow, the name of the default first or last, on one line and on lines
+// of their own. One error in each declaration unit (P-01).
+
+@fp(relaxed, strict) pub fn u0(x: F32) -> F32 {     //~ E0005
+  x * 1.0
+}
+
+@fp(strict, relaxed) pub fn u1(x: F32) -> F32 {     //~ E0005
+  x * 2.0
+}
+
+@fp(relaxed, strict) pub flow f0(x: F32 at sample) -> F32 at sample {   //~ E0005
+  x * 1.0
+}
+
+@fp(strict, relaxed)                                //~ E0005
+pub flow f1(x: F32 at sample) -> F32 at sample {
+  x * 2.0
+}
+
+@fp(strict, relaxed, x) pub fn u2(x: F32) -> F32 {  //~ E0005
+  x * 3.0
+}
+
+@fp(relaxed,                                        //~ E0005
+  strict
+)
+pub fn u30(x: F32) -> F32 {
+  x * 3.0
+}
+
+@fp(relaxed)
+pub fn fine(x: F32) -> F32 {
+  x * 9.0
+}

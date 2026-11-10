@@ -1,7 +1,7 @@
 // onsa.toml
 // [test]
 // spec = ["§18.1", "§6.4", "§6.5", "§4.4", "§14.1"]
-// fixes = 0
+// fixes = 1
 
 // An attribute after a visibility or after `rt` on a struct (W5-11 U4; `pub @repr(c) struct`,
 // `rt #[inline] struct`) is one E0002 without a candidate (§18.1, S-593), at the `@` or the `#[`.

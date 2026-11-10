@@ -1,7 +1,7 @@
 // onsa.toml
 // [test]
 // spec = ["§18.1", "§6.2", "§6.5", "§10", "§15.1"]
-// fixes = 0
+// fixes = 1
 
 // An attribute after a visibility or after `rt` on a member of an `impl` (W5-11 U4;
 // `pub @fp(relaxed) fn a(self)`, `rt @fp(relaxed) fn b(self)`): one E0002 at the `@`, without a

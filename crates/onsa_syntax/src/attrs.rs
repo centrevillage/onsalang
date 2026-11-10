@@ -70,6 +70,10 @@ pub struct Attribute {
     /// The places it may be attached to.
     pub places: &'static [Place],
     pub args: Args,
+    /// The values out of its list that name what no attribute means (the
+    /// default, a profile of the manifest), with their note: their E0005
+    /// takes the attribute out (§6.5, S-484).
+    pub unset: &'static [(&'static str, Option<&'static str>)],
 }
 
 /// What an attribute takes in its parentheses.
@@ -84,16 +88,30 @@ pub enum Args {
 
 /// The attributes (§6.5): no others.
 pub static ATTRIBUTES: &[Attribute] = &[
-    Attribute { name: REPR, places: &[Place::Struct], args: Args::OneOf(&[C]) },
-    Attribute { name: FP, places: &[Place::Fn, Place::MemberFn, Place::Flow], args: Args::OneOf(&[RELAXED]) },
-    Attribute { name: PARAM, places: &[Place::FlowInput], args: Args::Free },
-    Attribute { name: MEM, places: &[Place::Let], args: Args::Free },
-    Attribute { name: EXPORT, places: &[Place::Fn, Place::Flow], args: Args::None },
+    Attribute { name: REPR, places: &[Place::Struct], args: Args::OneOf(&[C]), unset: &[] },
+    Attribute {
+        name: FP,
+        places: &[Place::Fn, Place::MemberFn, Place::Flow],
+        args: Args::OneOf(&[RELAXED]),
+        unset: &[
+            ("strict", None),
+            ("strict-ftz", Some("the profile `strict-ftz` is chosen by `fp` in the manifest (§15.5)")),
+        ],
+    },
+    Attribute { name: PARAM, places: &[Place::FlowInput], args: Args::Free, unset: &[] },
+    Attribute { name: MEM, places: &[Place::Let], args: Args::Free, unset: &[] },
+    Attribute { name: EXPORT, places: &[Place::Fn, Place::Flow], args: Args::None, unset: &[] },
 ];
 
 /// The attribute of `name` in the table.
 pub fn attribute(name: &str) -> Option<&'static Attribute> {
     ATTRIBUTES.iter().find(|a| a.name == name)
+}
+
+/// Whether the parentheses of `@name` hold a value whatever is in them: one
+/// of its list or none (§6.5, S-834).
+pub fn takes_value(name: &str) -> bool {
+    attribute(name).is_some_and(|a| matches!(a.args, Args::OneOf(_) | Args::None))
 }
 
 /// Whether `@name(value)` (`value` the sole argument, a name; `None` for no
@@ -209,6 +227,14 @@ pub fn check(file: FileId, text: &str, w: &Written, place: Place) -> Option<Diag
     if w.value.is_some_and(|(_, v)| values.contains(&v)) {
         return None;
     }
+    if let Some(&(v, note)) = unset(text, w) {
+        let fix = Fix::delete(format!("take out `@{}({v})`", w.name), taken_out(text, w.span));
+        let d = error(format!("`@{}({v})` is what no `@{}` means; it is not written", w.name, w.name)).with_fix(fix);
+        return Some(match note {
+            Some(n) => d.with_rule(n),
+            None => d,
+        });
+    }
     let mut d = error(format!("the value of `@{}` is one of {}", w.name, quoted(values)));
     for v in values {
         let edits = match (w.value, w.args) {
@@ -228,6 +254,38 @@ pub fn check(file: FileId, text: &str, w: &Written, place: Place) -> Option<Diag
         d = d.with_fix(Fix::new(format!("write `@{}({v})`", w.name), edits));
     }
     Some(d)
+}
+
+/// The name of [`Attribute::unset`] that `w` has for its value, its list
+/// written nowhere in it: its E0005 takes it out ([`check`], S-484).
+pub fn unset(text: &str, w: &Written) -> Option<&'static (&'static str, Option<&'static str>)> {
+    let a = attribute(w.name)?;
+    let Args::OneOf(values) = a.args else { return None };
+    // The value as written: one name, or the tokens that touch (`strict-ftz`).
+    let written = w.value.map(|(_, v)| v).or_else(|| {
+        let (first, last) = (w.arguments.first()?.0, w.arguments.last()?.0);
+        Some(&text[first.start as usize..last.end as usize])
+    });
+    let listed = w.arguments.iter().any(|(_, t)| values.contains(t));
+    a.unset.iter().find(|(v, _)| Some(*v) == written).filter(|_| !listed)
+}
+
+/// The text an attribute at `span` that is taken out takes with it: the
+/// blanks after it, or before it at the end of its line; its lines when it
+/// stands alone on them.
+fn taken_out(text: &str, span: Span) -> Span {
+    let blank = |c: char| c == ' ' || c == '\t';
+    let (start, end) = (span.start as usize, span.end as usize);
+    let after = text.len() - text[end..].trim_start_matches(blank).len();
+    let eol =
+        ["\r\n", "\n", ""].into_iter().find(|e| text[after..].starts_with(e) && (!e.is_empty() || after == text.len()));
+    let line = text[..start].rfind('\n').map_or(0, |i| i + 1);
+    let to = |s: usize, e: usize| Span::new(span.file, s as u32, e as u32);
+    match eol {
+        Some(eol) if text[line..start].trim_matches(blank).is_empty() => to(line, after + eol.len()),
+        Some(_) => to(text[..start].trim_end_matches(blank).len(), after),
+        None => to(start, after),
+    }
 }
 
 /// The places of an attribute in words: "a function" for both kinds of

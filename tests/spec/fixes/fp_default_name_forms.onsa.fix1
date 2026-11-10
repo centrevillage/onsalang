@@ -1,0 +1,78 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.5", "§15.5", "§18.1"]
+// fixes = 1
+
+// W5-24 U3a/t, S-484 (spec §6.5: "`@fp` に属性を付けないときと同じ意味を名指す値（`@fp(strict)`、§15.5
+// の既定）と、属性で選べない浮動小数のプロファイルの名前（`@fp(strict-ftz)`）は、同じ E0005 で、修正候補は属性を除くことである"): the E0005 of the name of the default and the name
+// of a profile of the manifest has one candidate, which takes the attribute out (the space after the `@`, §2.5, and the line of an
+// attribute that stands alone go with it). The attribute is on a line of its own or on the line of the item, before the item or
+// after another attribute, on a fn, a flow and a method, and its value is on lines of its own. One error in each declaration unit
+// (P-01).
+
+//~ E0005
+pub fn u0(x: F32) -> F32 {
+  x * 1.0
+}
+
+pub fn u1(x: F32) -> F32 {              //~ E0005
+  x * 2.0
+}
+
+//~ E0005
+pub flow f0(x: F32 at sample) -> F32 at sample {
+  x * 1.0
+}
+
+pub flow f1(x: F32 at sample) -> F32 at sample {   //~ E0005
+  x * 2.0
+}
+
+//~ E0005
+pub fn u2(x: F32) -> F32 {
+  x * 3.0
+}
+
+pub fn u3(x: F32) -> F32 {          //~ E0005
+  x * 4.0
+}
+
+pub flow f2(x: F32 at sample) -> F32 at sample {   //~ E0005
+  x * 3.0
+}
+
+//~ E0005
+pub fn u4(x: F32) -> F32 {
+  x * 5.0
+}
+
+pub fn u5(x: F32) -> F32 {             //~ E0005
+  x * 6.0
+}
+
+@export pub fn u6(x: F32) -> F32 {      //~ E0005
+  x * 7.0
+}
+
+@export pub fn u7(x: F32) -> F32 {      //~ E0005
+  x * 8.0
+}
+
+pub fn u30(x: F32) -> F32 {
+  x * 3.0
+}
+
+pub struct Pt {
+  x: F32,
+}
+
+impl Pt {
+  pub fn m(self) -> F32 {               //~ E0005
+    self.x
+  }
+}
+
+@fp(relaxed)
+pub fn fine(x: F32) -> F32 {
+  x * 9.0
+}

@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.5", "§18.1"]
+// fixes = 0
+
+// W5-24 U3a/t, S-490, S-495 (spec §4.5: a set read as a list is read from the front, and the error is on the first element
+// that overlaps one before it, "前の要素を note で示し、修正候補は無い"; a unit reports one error, §18.1): the same attribute three
+// times is one E0005, on the second one, as it is for two. On one line, on lines of their own, and with another attribute
+// between them. One error in each declaration unit (P-01).
+
+@fp(relaxed) @fp(relaxed) @fp(relaxed) pub fn three_same_line(x: F32) -> F32 {   //~ E0005
+  x * 2.0
+}
+
+@fp(relaxed)
+@fp(relaxed)                                        //~ E0005
+@fp(relaxed)
+pub fn three_lines(x: F32) -> F32 {
+  x * 3.0
+}
+
+@fp(relaxed)
+@export
+@fp(relaxed)                                        //~ E0005
+@fp(relaxed)
+pub fn three_with_export(x: F32) -> F32 {
+  x * 4.0
+}
+
+@export @export @export pub flow three_exports(x: F32 at sample) -> F32 at sample {   //~ E0005
+  x * 5.0
+}
+
+@repr(c) @repr(c) @repr(c) pub struct ThreeRepr {   //~ E0005
+  x: I32,
+}

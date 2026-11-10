@@ -1,0 +1,79 @@
+// onsa.toml
+// [test]
+// spec = ["§6.5", "§10", "§18.1"]
+// fixes = 1
+
+// W5-24 U3a/t, S-600 (spec §18.1: an attribute written after a visibility or after `rt` is one E0002 "(属性は可視性と `rt` より前に書くと
+// note で示す)" and "読み続ける"; its candidate writes the attribute before the visibility and `rt`, after the attributes that are there
+// already). The forms are tried on the kinds of the items: `priv`, `pub rt`, an attribute between `pub` and `rt`, a flow, a struct, a
+// generic fn, and an item that has an attribute before the visibility. The head is read on, as a head without the attribute, so a user
+// of the item gets no E0302. One error in each declaration unit (P-01).
+
+priv @fp(relaxed) fn private_fn(x: F32) -> F32 {    //~ E0002
+  x * 2.0
+}
+
+pub rt @fp(relaxed) fn public_rt(x: F32) -> F32 {   //~ E0002
+  x * 3.0
+}
+
+pub @fp(relaxed) rt fn between(x: F32) -> F32 {     //~ E0002
+  x * 4.0
+}
+
+pub @fp(relaxed) flow gain(x: F32 at sample) -> F32 at sample {   //~ E0002
+  x * 5.0
+}
+
+pub @repr(c) struct Frame {                         //~ E0002
+  a: I32,
+  b: I32,
+}
+
+@export pub @fp(relaxed) fn exported(x: F32) -> F32 {   //~ E0002
+  x
+}
+
+pub @fp(relaxed) fn identity[T](x: T) -> T {        //~ E0002
+  x
+}
+
+fn calls() -> F32 {
+  private_fn(1.0) + public_rt(2.0) + between(3.0) + exported(4.0) + identity(5.0)
+}
+
+fn nested(c: Bool) -> F32 {
+  let f = fn(x: F32) -> F32 { private_fn(public_rt(x)) }
+  if c { f.(1.0) } else { between(identity(2.0)) }
+}
+
+pub flow chain(x: F32 at sample) -> F32 at sample {
+  gain~(gain~(x))
+}
+
+fn makes() -> Frame {
+  Frame { a: 1, b: 2 }
+}
+
+fn reads(f: Frame) -> I32 {
+  f.a + f.b
+}
+
+// What was written `rt` is `rt`: it may be called from an `rt` function.
+rt fn calls_from_rt(x: F32) -> F32 {
+  public_rt(between(x))
+}
+
+// The head is the declaration that was read: a real error of a use is reported.
+fn too_many_arguments() -> F32 {
+  private_fn(1.0, 2.0)                              //~ E0412
+}
+
+fn wrong_argument_type() -> F32 {
+  between(true)                                     //~ E0401
+}
+
+// A real error of the module is still reported.
+fn own_error() -> F32 {
+  private_fn(1.0) + zz                              //~ E0302
+}

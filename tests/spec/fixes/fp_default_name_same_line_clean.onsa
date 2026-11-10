@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§6.5", "§15.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "17:1"
+// code = "E0005"
+// candidate = 1
+// clean = true
+
+// W5-24 U3a/t, S-484 (spec §6.5: "`@fp` に属性を付けないときと同じ意味を名指す値（`@fp(strict)`、§15.5
+// の既定）と、属性で選べない浮動小数のプロファイルの名前（`@fp(strict-ftz)`）は、同じ E0005 で、修正候補は属性を除くことである"): `@fp(strict)` on the line of the item. The
+// candidate takes the attribute out, and the file has no error left after it (`clean`, S-253). The main position is the attribute.
+// A file with one unit, so that `clean` looks at the whole file.
+
+@fp(strict) pub fn h(x: F32) -> F32 {               //~ E0005
+  x * 2.0
+}

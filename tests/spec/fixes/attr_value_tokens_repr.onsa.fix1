@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.5", "§18.1"]
+// fixes = 1
+
+// W5-24 U3a/t, S-834 (spec §6.5: "一覧の値を取る属性（`@repr`・`@fp`・`@host`）と `@export` の括弧の中は、閉じた括弧の中のトークンによらず値として扱い、一覧の値でなければこの E0005
+// である"): the value of `@repr` is a word of the list (`c`, §6.5), and any other token or tokens in the parentheses are the E0005
+// whose one candidate is the value of the list, `@repr(c)`. On the line of the struct or on a line of its own, a value on lines of
+// its own, and the space after the `@`. One error in each declaration unit (P-01).
+
+@repr(c) pub struct S0 {                            //~ E0005
+  x: I32,
+}
+
+@repr(c) pub struct S1 {                         //~ E0005
+  x: I32,
+}
+
+@repr(c) pub struct S2 {                          //~ E0005
+  x: I32,
+}
+
+@repr(c) pub struct S3 {                           //~ E0005
+  x: I32,
+}
+
+@repr(c) pub struct S4 {                          //~ E0005
+  x: I32,
+}
+
+@repr(c) pub struct S5 {                           //~ E0005
+  x: I32,
+}
+
+@repr(c) pub struct S6 {                         //~ E0005
+  x: I32,
+}
+
+@repr(c) pub struct S7 {                     //~ E0005
+  x: I32,
+}
+
+@repr(c) pub struct S8 {                            //~ E0005
+  x: I32,
+}
+
+@repr(c)                                         //~ E0005
+pub struct S20 {
+  x: I32,
+}
+
+@repr(c)
+pub struct S30 {
+  x: I32,
+}
+
+@repr(c) pub struct S21 {                          //~ E0005
+  x: I32,
+}
+
+@repr(c)
+pub struct Fine {
+  x: I32,
+}

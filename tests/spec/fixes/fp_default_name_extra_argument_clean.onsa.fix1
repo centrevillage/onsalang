@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§6.5", "§15.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "18:1"
+// code = "E0005"
+// candidate = 1
+// clean = true
+
+// W5-24 U3a/t, S-484 (spec §6.5: "`@fp` に属性を付けないときと同じ意味を名指す値（`@fp(strict)`）は E0005 で、修正候補は属性を除くことである"; the rule of the extra
+// arguments, S-133, goes first): `@fp(relaxed, strict)` has a value of the list among its arguments, so the rule of the extra
+// arguments (the candidate takes out the others and keeps the value) goes first and the candidate is `@fp(relaxed)`, not the
+// attribute taken out. The file has no error left after the candidate (`clean`, S-253). The main position is the attribute. A file
+// with one unit, so that `clean` looks at the whole file.
+
+@fp(relaxed) pub fn h(x: F32) -> F32 {      //~ E0005
+  x * 2.0
+}

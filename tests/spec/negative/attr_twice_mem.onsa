@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.5", "§12.4", "§18.1"]
+// fixes = 0
+
+// W5-24 U3a/t, S-490, S-495 (spec §6.5: "`@mem` は `let`"; the same attribute twice at one place is E0005 on the second one,
+// with no candidate; "引数によらない"). The `let` is a statement of a flow, in the first place, in a later one, in a branch and
+// in a nested block (the place of the attribute is the `let`, not the flow). The meaning of `@mem` (E0200 for now, §12.4) is of a
+// later stage than the syntax one and is not looked at here. One error in each declaration unit (P-01).
+
+pub flow first_statement(x: F32 at sample) -> F32 at sample {
+  @mem(bulk) @mem(bulk) let y = delay~(x, 4)   //~ E0005
+  y
+}
+
+pub flow two_lines(x: F32 at sample) -> F32 at sample {
+  let a = x * 0.5
+  @mem(bulk)
+  @mem(bulk)                                        //~ E0005
+  let y = delay~(a, 4)
+  y
+}
+
+pub flow in_a_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = if~ c {
+    @mem(bulk) @mem(bulk) let y = delay~(x, 4)   //~ E0005
+    y
+  } else {
+    x
+  }
+  a
+}
+
+pub flow in_a_nested_block(x: F32 at sample) -> F32 at sample {
+  let a = {
+    @mem(bulk) @mem(bulk) let y = delay~(x, 4)   //~ E0005
+    y
+  }
+  a
+}

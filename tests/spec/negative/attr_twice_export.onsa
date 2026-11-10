@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.5", "§14.2", "§18.1"]
+// fixes = 0
+
+// W5-24 U3a/t, S-490, S-495 (spec §6.5: "`@export` はトップレベルの fn と flow"; the same attribute twice at one place is
+// E0005 on the second one, with no candidate; `@export` takes no argument, so the two are the same by their name alone). A fn
+// and a flow, on one line or on lines of their own. One error in each declaration unit (P-01).
+
+@export @export pub fn fn_same_line(x: F32) -> F32 {   //~ E0005
+  x * 2.0
+}
+
+@export
+@export                                             //~ E0005
+pub fn fn_two_lines(x: F32) -> F32 {
+  x * 3.0
+}
+
+@export @export pub flow flow_same_line(x: F32 at sample) -> F32 at sample {   //~ E0005
+  x * 4.0
+}
+
+@export
+@export                                             //~ E0005
+pub flow flow_two_lines(x: F32 at sample) -> F32 at sample {
+  x * 5.0
+}
+
+// One of them is fine.
+@export
+pub fn once(x: F32) -> F32 {
+  x * 6.0
+}

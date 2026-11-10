@@ -16,6 +16,7 @@ mod codes;
 pub mod hash;
 pub mod internal;
 mod quote;
+mod repeat;
 mod source;
 pub mod stack;
 pub mod timing;
@@ -24,6 +25,7 @@ pub mod unsupported;
 use std::collections::BTreeMap;
 
 pub use codes::{Category, Code, FixRule, NoteRule, Stage};
+pub use repeat::{first_repeat, repeated};
 pub use source::{FileId, LineCol, LineIndex, SHARED_BASE, SharedFiles, SourceFile, SourceMap};
 
 use serde::{Deserialize, Serialize};

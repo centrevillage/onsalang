@@ -1,0 +1,22 @@
+// The declarations of this module have the same attribute twice (W5-24 U3a, S-490, S-495).
+// Each head is one E0005 without a candidate (§6.5, §18.1). The visibility that was written is
+// recorded, and the declaration is a name of the module with it for the module that brings it
+// in with `use`.
+
+@fp(relaxed) @fp(relaxed) pub fn twice_pub(x: F32) -> F32 {   //~ E0005
+  x * 2.0
+}
+
+@fp(relaxed)
+@fp(relaxed)                                        //~ E0005
+priv fn twice_priv(x: F32) -> F32 {
+  x * 3.0
+}
+
+@repr(c) @repr(c) pub struct TwiceStruct {   //~ E0005
+  x: F32,
+}
+
+@export @export pub flow twice_flow(x: F32 at sample) -> F32 at sample {   //~ E0005
+  x
+}

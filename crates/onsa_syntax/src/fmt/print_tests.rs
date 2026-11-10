@@ -334,9 +334,9 @@ fn effect_rows_attributes_and_lets_take_the_lines_where_they_start() {
             "pub fn f(n: U32) -> U32\n  uses {\n    Alloc,\n  } {\n  n\n}\n",
         ),
         (
-            "pub flow f(x: F32 at sample,\n@param(min: 0.0) @param(max: 1.0)\nlevel: F32 at block) -> F32 at sample {\n  \
+            "pub flow f(x: F32 at sample,\n@param(min: 0.0, max: 1.0)\nlevel: F32 at block) -> F32 at sample {\n  \
              x * level\n}\n",
-            "pub flow f(x: F32 at sample,\n           @param(min: 0.0) @param(max: 1.0)\n           level: F32 at block) \
+            "pub flow f(x: F32 at sample,\n           @param(min: 0.0, max: 1.0)\n           level: F32 at block) \
              -> F32 at sample {\n  x * level\n}\n",
         ),
         (

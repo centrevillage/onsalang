@@ -1,0 +1,60 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.5", "§11.7", "§14.2"]
+
+// W5-24 U3a/t, S-490, S-495 (spec §6.5: "一つの場所には、それぞれの属性を一度だけ付けられる"): what is not the same attribute at one
+// place is fine, and no diagnostic is expected. Different attributes at one place (`@export` and `@fp(relaxed)`), the same attribute at two places (a `@fp(relaxed)` on each of two fns, on each of two methods, a
+// `@repr(c)` on each of two structs, a `@param` on each of two inputs of a flow). (The same attribute twice at one place:
+// attr_twice_*.onsa; `@latency` and `@host`: attr_twice_boundary_latency_host.onsa.)
+
+@fp(relaxed)
+pub fn first(x: F32) -> F32 {
+  x * 2.0
+}
+
+@fp(relaxed)
+pub fn second(x: F32) -> F32 {
+  x * 3.0
+}
+
+@export
+@fp(relaxed)
+pub fn export_and_fp(x: F32) -> F32 {
+  x * 4.0
+}
+
+@repr(c)
+pub struct FirstFrame {
+  x: I32,
+}
+
+@repr(c)
+pub struct SecondFrame {
+  x: I32,
+}
+
+pub struct Pt {
+  x: F32,
+}
+
+impl Pt {
+  @fp(relaxed)
+  pub fn first_method(self) -> F32 {
+    self.x
+  }
+
+  @fp(relaxed)
+  pub fn second_method(self) -> F32 {
+    self.x
+  }
+}
+
+pub flow two_inputs(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  gain: F32 at block,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  level: F32 at block,
+) -> F32 at sample {
+  x * gain * level
+}
