@@ -1,0 +1,60 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+
+// The strings and the characters that stand next to the forms the E0020 and E0001 cases of S-461 reject, and are
+// fine (spec §2.4; S-461, S-965 R1). `\0` is the escape of the NUL and the digits after it are plain characters
+// (`"\012"` is NUL, `1` and `2`; the spec says so), so it is not the octal escape of C and not the form `\x`. The
+// braced escape `\u{…}` is the one way to write a scalar value (1 to 6 digits), and a character after the
+// closing brace is a plain character. A backslash that is escaped (`\\`) makes the text after it plain text, so
+// the text of a form of another language is fine behind it. `onsa fmt` keeps the text of a string and of a
+// character literal (spec/tools.md §3.2). A comment holds the text of any form.
+
+pub fn nul_then_digits() -> Str {
+  "\012"
+}
+
+pub fn nul_then_a_zero() -> Str {
+  "\00"
+}
+
+pub fn nul_alone() -> Str {
+  "\0"
+}
+
+pub fn nul_then_x_and_digits() -> Str {
+  "\0x41"
+}
+
+pub fn nul_then_u_and_digits() -> Str {
+  "\0u0041"
+}
+
+pub fn braced_escapes() -> Str {
+  "\u{41}\u{0041}\u{8}\u{C}\u{B}\u{1F600}\u{10FFFF}"
+}
+
+pub fn braced_escape_then_digits() -> Str {
+  "\u{41}1\u{41}42\u{8}8"
+}
+
+pub fn text_of_a_form_behind_an_escaped_backslash() -> Str {
+  "\\x41 \\u0041 \\U0001F600 \\b \\f \\v \\a \\012 \\x414 \\uD800"
+}
+
+pub fn text_of_a_form_behind_three_backslashes() -> Str {
+  "\\\\x41"
+}
+
+pub fn text_that_looks_like_a_form() -> Str {
+  "x41 u0041 U0001F600 b f v a"
+}
+
+pub fn characters() -> (Char, Char, Char, Char, Char, Char) {
+  ('\0', '\u{41}', '\u{8}', '\u{C}', '\u{B}', '\\')
+}
+
+pub fn a_comment_keeps_the_text() -> I32 {
+  // "\x41" "\u0041" "\U0001F600" '\b' '\f' '\v' "\x414" "\a" "\uD800" and "a } b" are text in a comment
+  1
+}

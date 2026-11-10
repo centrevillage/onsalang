@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§15.1", "§18.1"]
+// fixes = 1
+
+// E0020 for the escapes of other languages and for a single `}` in a string, in the root file and in a module
+// of a package (spec §2.4, §18.1; S-461, S-439, S-965 R1: the reading of a literal does not depend on the
+// place, and a module is read like the root). The forms and the one candidate of each are those of
+// e0020_escape_u8.onsa, e0020_escape_x.onsa and e0020_lone_brace.onsa. One error per function (P-01), in each
+// file.
+
+use util.mark
+
+pub fn escape_in_the_root() -> Str {
+  "\x41"                                            //~ E0020
+}
+
+pub fn brace_in_the_root() -> Str {
+  "a } b"                                           //~ E0020
+}
+
+pub fn character_in_the_root() -> Char {
+  '\x41'                                            //~ E0020
+}
+
+// The right form, with a name of the module.
+pub fn fine() -> Str {
+  mark()
+}

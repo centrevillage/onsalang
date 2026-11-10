@@ -1,0 +1,58 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+// fixes = 0
+
+// E0001 with no candidate: a single `{` in a string (spec §2.4: "単独の `{` は補間の閉じ忘れと読みが割れるので
+// E0001 で、修正候補は無い"; S-439, S-965 R1). It is a hole that was never closed as well as a brace that
+// stands for itself, so no candidate is offered (the single `}` is the other case, E0020 with the candidate
+// `}}`, in fixes/e0020_lone_brace.onsa). `fixes = 0` says that no diagnostic has a candidate. One error per
+// function (P-01). The marker is the line only: the spec does not say where in the literal the span starts. The
+// forms of a hole that cannot be read are in lex_interp_holes.onsa.
+
+pub fn only_the_brace() -> Str {
+  "{"                                               //~ E0001
+}
+
+pub fn between_text() -> Str {
+  "a { b"                                           //~ E0001
+}
+
+pub fn at_the_end() -> Str {
+  "a {"                                             //~ E0001
+}
+
+pub fn at_the_start() -> Str {
+  "{ b"                                             //~ E0001
+}
+
+pub fn after_a_doubled_brace() -> Str {
+  "{{ {"                                            //~ E0001
+}
+
+pub fn after_a_closed_hole(x: U32) -> Str uses {Alloc} {
+  "{x} {"                                           //~ E0001
+}
+
+pub fn before_a_closed_hole(x: U32) -> Str uses {Alloc} {
+  "{ {x}"                                           //~ E0001
+}
+
+pub fn after_a_doubled_closing_brace() -> Str {
+  "}} {"                                            //~ E0001
+}
+
+pub fn after_an_escape() -> Str {
+  "\n{"                                             //~ E0001
+}
+
+pub fn in_a_nested_block(c: Bool) -> I32 {
+  if c {
+    if c {
+      let s = "a { b"                               //~ E0001
+    }
+  }
+  1
+}
+
+pub const OPEN: Str = "{"                           //~ E0001

@@ -1,0 +1,15 @@
+pub fn mark() -> Str {
+  "\u{41}"
+}
+
+pub fn escape_in_a_module() -> Str {
+  "\u{1F600}"                                      //~ E0020
+}
+
+pub fn brace_in_a_module() -> Str {
+  "}}"                                               //~ E0020
+}
+
+pub fn character_in_a_module() -> Char {
+  '\u{C}'                                              //~ E0020
+}

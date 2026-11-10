@@ -1,0 +1,71 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+
+// The strings and the characters with braces that stand next to the forms the E0020 and E0001 cases of S-439
+// reject, and are fine (spec §2.4; S-439, S-965 R1). `{{` and `}}` are the escapes of `{` and `}`; a hole
+// `{name}` ends at its own `}`; an escape `\u{…}` ends at its own `}`; the characters `'{'` and `'}'` are
+// characters. A string is read from the left, so `{{{a}}}` is `{{`, the hole `{a}` and `}}`. A single `}` and a
+// single `{` are in fixes/e0020_lone_brace.onsa and negative/lex_lone_open_brace.onsa. A comment holds any
+// braces.
+
+pub fn doubled_opening() -> Str {
+  "{{"
+}
+
+pub fn doubled_closing() -> Str {
+  "}}"
+}
+
+pub fn doubled_both() -> Str {
+  "{{}}"
+}
+
+pub fn doubled_twice() -> Str {
+  "{{{{ }}}}"
+}
+
+pub fn doubled_in_text() -> Str {
+  "set {{ a }} here"
+}
+
+pub fn braces_as_characters() -> (Char, Char) {
+  ('{', '}')
+}
+
+pub fn braces_as_escapes() -> Str {
+  "\u{7b}\u{7d}"
+}
+
+pub fn a_hole(a: U32) -> Str uses {Alloc} {
+  "{a}"
+}
+
+pub fn a_hole_between_doubled_braces(a: U32) -> Str uses {Alloc} {
+  "{{{a}}}"
+}
+
+pub fn a_hole_then_doubled_closing(a: U32) -> Str uses {Alloc} {
+  "{a}}}"
+}
+
+pub fn doubled_opening_then_a_hole(a: U32) -> Str uses {Alloc} {
+  "{{{a}"
+}
+
+pub fn a_hole_and_text_around(a: U32, b: U32) -> Str uses {Alloc} {
+  "x = {a}, y = {b} }}"
+}
+
+pub fn a_braced_escape_then_doubled_closing() -> Str {
+  "\u{41}}}"
+}
+
+pub fn a_braced_escape_between_doubled_braces() -> Str {
+  "{{\u{41}}}"
+}
+
+pub fn a_comment_keeps_the_braces() -> I32 {
+  // "}" and "a } b" and "{" are text in a comment }
+  1
+}

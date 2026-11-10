@@ -920,6 +920,39 @@ pub(crate) fn escape(after: &str) -> (Option<char>, usize) {
     (value, 2 + digits + usize::from(closed))
 }
 
+/// An escape of other languages whose value is the same in every language
+/// of the list that has it (§2.4, S-461, the row `escape_fixed_width`),
+/// `after` being the text after the `\` of an escape that [`escape`] does not
+/// know: how many bytes of `after` it takes, and the hexadecimal digits of
+/// the `\u{…}` of its value. It is `\u` and 4 hexadecimal digits and `\U`
+/// and 8, whose value is a scalar value (the digits after them are plain
+/// characters), `\x` and 2 whose value is `7F` or less with no hexadecimal
+/// digit after them (C reads on), and `\b`, `\f`, `\v`. The digits of `\u`
+/// and `\x` are kept as written; `\U` loses its leading zeros (`\U0001F600`
+/// is `\u{1F600}`). None for any other escape, an E0001 (`\x414`, `\xff`,
+/// `\a`, `\uD800`, `\U00110000`, `\x4`). The one test, for a string and a
+/// character literal alike (the lexer's).
+pub(crate) fn foreign_escape(after: &str) -> Option<(usize, &str)> {
+    let b = after.as_bytes();
+    let hex = |n: usize| after.get(1..1 + n).filter(|d| d.bytes().all(|x| x.is_ascii_hexdigit()));
+    let (len, digits) = match b.first()? {
+        b'b' => return Some((1, "8")),
+        b'f' => return Some((1, "C")),
+        b'v' => return Some((1, "B")),
+        b'u' => (5, hex(4)?),
+        b'U' => (9, hex(8)?),
+        b'x' if !b.get(3).is_some_and(u8::is_ascii_hexdigit) => (3, hex(2)?),
+        _ => return None,
+    };
+    let value = u32::from_str_radix(digits, 16).ok()?;
+    if char::from_u32(value).is_none() || (b[0] == b'x' && value > 0x7f) {
+        return None;
+    }
+    // 8 digits are more than `\u{…}` holds: the leading zeros go, one digit stays.
+    let zeros = (digits.len() - digits.trim_start_matches('0').len()).min(digits.len() - 1);
+    Some((len, if b[0] == b'U' { &digits[zeros..] } else { digits }))
+}
+
 /// The name path a hole holds (§2.4, S-90), `content` being the text
 /// between its `{` and `}`: the byte ranges in `content` of its segments
 /// with the tuple index of each that is one, or what keeps it from being one.
@@ -930,7 +963,9 @@ pub(crate) fn escape(after: &str) -> (Option<char>, usize) {
 /// expression's are a path's still: the lexer reports them (R-290).
 pub(crate) fn hole_path(content: &str) -> Result<Vec<Segment>, HoleError> {
     // S-440: a blank, a keyword at the head but `self` / `Self` (`{true}`, `{fn}`) and `_` make no name path.
-    if content.contains(':') {
+    // S-448: a format only where a `:` follows the path at its head (`{p.x:.2}`, not `{c ? 1 : 2}`).
+    let head = content.find(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, '_' | '.'))).unwrap_or(content.len());
+    if head > 0 && content[head..].starts_with(':') {
         return Err(HoleError::Format);
     }
     let mut out = Vec::new();
@@ -964,7 +999,7 @@ pub(crate) type Segment = (Range<usize>, Option<Result<u32, BadIndex>>);
 /// Why a hole holds no name path ([`hole_path`]), for its diagnostic.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum HoleError {
-    /// A format (`{x:.2}`): there is none.
+    /// A format (`{x:.2}`, a `:` right after the path at the head): there is none.
     Format,
     /// Anything else (an expression, a call, a literal, blanks).
     NotAPath,

@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "37:4"
+// code = "E0020"
+// candidate = 1
+// leaves = ["37:10 E0020"]
+//
+// [[test.fix]]
+// at = "41:4"
+// code = "E0020"
+// candidate = 1
+// leaves = ["41:11 E0020"]
+//
+// [[test.fix]]
+// at = "45:4"
+// code = "E0020"
+// candidate = 1
+// leaves = ["45:7 E0020"]
+//
+// [[test.fix]]
+// at = "49:4"
+// code = "E0020"
+// candidate = 1
+// leaves = ["49:7 E0020"]
+
+// Two forms of other languages in one string (spec §2.4, §18.1; S-461, S-439, S-965 R1). The unit of the
+// diagnostics is the declaration, and the lexical stage reports the first error of the unit (§18.1), so the
+// function reports the first form only, and its one candidate edits that form only. The form after it is
+// reported when the candidate has been applied (the input has two errors, outside the promise of §18.1). The
+// marker is the line only.
+
+pub fn two_escapes() -> Str {
+  "\u{41}\x42"                                        //~ E0020
+}
+
+pub fn an_escape_then_a_lone_brace() -> Str {
+  "\u{41} }"                                          //~ E0020
+}
+
+pub fn a_lone_brace_then_an_escape() -> Str {
+  "}} \x41"                                          //~ E0020
+}
+
+pub fn two_lone_braces() -> Str {
+  "}} }"                                             //~ E0020
+}

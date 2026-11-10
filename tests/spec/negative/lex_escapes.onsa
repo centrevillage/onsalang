@@ -7,7 +7,8 @@
 // U+10FFFF, a surrogate), has no digits or more than 6 (S-437, also when the value is in range), has a
 // character that is not a hexadecimal digit, or is never
 // closed, and a character literal that does not hold exactly one scalar value. One error per function
-// (P-01). The marker is the line only.
+// (P-01). The marker is the line only. The escapes of other languages of one value (`\x41`, `\U0001F600`)
+// are the E0020 of the row `escape_fixed_width` (S-461; more in fixes/e0020_escape_*.onsa).
 // The escapes that are fine are in lex/escapes_ok.onsa; the escapes followed by multi-byte
 // characters, which ended in an internal error (R-01), are in lex_utf8_escapes.onsa.
 
@@ -16,11 +17,11 @@ pub fn unknown_ascii() -> Str {
 }
 
 pub fn backslash_x() -> Str {
-  "\x41"                        //~ E0001
+  "\x41"                        //~ E0020
 }
 
 pub fn backslash_big_u() -> Str {
-  "\U0001F600"                  //~ E0001
+  "\U0001F600"                  //~ E0020
 }
 
 pub fn backslash_space() -> Str {

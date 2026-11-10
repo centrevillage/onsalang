@@ -1,0 +1,61 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+// fixes = 1
+
+// E0020 for the escapes of other languages in a character literal (spec §2.4: "文字リテラルも同じ", §18.1;
+// S-461, S-965 R1; the row `escape_fixed_width` of spec/foreign-forms.toml). The forms and the one candidate,
+// the escape `\u{…}` of the same value, are those of the string (e0020_escape_u4.onsa and the others of the
+// name). The character literal keeps the closed list of the escapes `\n \t \r \0 \\ \" \' \u{…}`, so the forms
+// of the other languages are E0020 here too and not the E0001 of a literal that does not hold one scalar value.
+// One error per function (P-01). The marker is the line only. The forms of a character that stay E0001
+// (`'\xff'`, `'\a'`, `'\uD800'`) are in negative/lex_escape_foreign_char.onsa.
+
+pub fn u_four_digits() -> Char {
+  '\u0041'                                          //~ E0020
+}
+
+pub fn u_four_digits_in_lower_case() -> Char {
+  '\u00e9'                                          //~ E0020
+}
+
+pub fn u_four_digits_of_a_kana() -> Char {
+  '\u3042'                                          //~ E0020
+}
+
+pub fn big_u_eight_digits() -> Char {
+  '\U0001F600'                                      //~ E0020
+}
+
+pub fn big_u_the_last_scalar_value() -> Char {
+  '\U0010FFFF'                                      //~ E0020
+}
+
+pub fn x_two_digits() -> Char {
+  '\x41'                                            //~ E0020
+}
+
+pub fn x_zero() -> Char {
+  '\x00'                                            //~ E0020
+}
+
+pub fn x_last_ascii() -> Char {
+  '\x7F'                                            //~ E0020
+}
+
+pub fn backspace() -> Char {
+  '\b'                                              //~ E0020
+}
+
+pub fn form_feed() -> Char {
+  '\f'                                              //~ E0020
+}
+
+pub fn vertical_tab() -> Char {
+  '\v'                                              //~ E0020
+}
+
+// The right forms.
+pub fn fine() -> (Char, Char, Char, Char) {
+  ('\u{41}', '\u{1F600}', '\u{8}', '\\')
+}

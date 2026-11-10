@@ -1,0 +1,90 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+// fixes = 1
+
+// E0020 for a single `}` in a string (spec §2.4: "単独の `}` は E0020 で、修正候補は `}}` である", §18.1; S-439,
+// S-965 R1; the row `lone_brace` of spec/foreign-forms.toml). In the ordinary strings of C, JavaScript and
+// Python a `}` is the one character, so the one candidate is the doubled brace `}}`, which does not change the
+// value. `{{` and `}}` are the escapes, a hole `{name}` ends at its own `}`, and an escape `\u{…}` ends at its
+// own `}`; a `}` that is none of these is a single one. The single `{` is not here (E0001, no candidate, in
+// negative/lex_lone_open_brace.onsa). One error per function (P-01), so one single `}` in a string. The marker is
+// the line only: the spec does not say where in the literal the span starts. The places are in
+// e0020_lone_brace_places.onsa.
+
+pub fn only_the_brace() -> Str {
+  "}}"                                               //~ E0020
+}
+
+pub fn between_text() -> Str {
+  "a }} b"                                           //~ E0020
+}
+
+pub fn at_the_start() -> Str {
+  "}}x"                                              //~ E0020
+}
+
+pub fn at_the_end() -> Str {
+  "x}}"                                              //~ E0020
+}
+
+pub fn after_a_hole(a: U32) -> Str uses {Alloc} {
+  "{a}}}"                                            //~ E0020
+}
+
+pub fn after_a_hole_and_a_space(a: U32) -> Str uses {Alloc} {
+  "{a} }} b"                                         //~ E0020
+}
+
+pub fn before_a_hole(a: U32) -> Str uses {Alloc} {
+  "}}{a}"                                            //~ E0020
+}
+
+pub fn between_two_holes(a: U32) -> Str uses {Alloc} {
+  "{a} }} {a}"                                       //~ E0020
+}
+
+pub fn after_a_doubled_opening_brace() -> Str {
+  "{{}}"                                             //~ E0020
+}
+
+pub fn after_a_doubled_opening_brace_and_text() -> Str {
+  "{{a}}"                                            //~ E0020
+}
+
+pub fn after_a_doubled_closing_brace() -> Str {
+  "{{a}}}}"                                          //~ E0020
+}
+
+pub fn three_closing_braces() -> Str {
+  "}}}}"                                             //~ E0020
+}
+
+pub fn five_closing_braces() -> Str {
+  "}}}}}}"                                           //~ E0020
+}
+
+pub fn after_a_braced_escape() -> Str {
+  "\u{41}}}"                                         //~ E0020
+}
+
+pub fn after_a_valid_escape() -> Str {
+  "\n}}"                                             //~ E0020
+}
+
+pub fn before_a_valid_escape() -> Str {
+  "}}\n"                                             //~ E0020
+}
+
+pub fn after_a_multi_byte_character() -> Str {
+  "日本}}"                                           //~ E0020
+}
+
+pub fn a_closing_brace_of_code_text() -> Str {
+  "return 1 }}"                                      //~ E0020
+}
+
+// The right forms: the doubled brace, the braces as characters, and the brace of a hole and of an escape.
+pub fn fine(a: U32) -> (Str, Char, Char) uses {Alloc} {
+  ("}} {{ {a} \u{41} {{{a}}}", '{', '}')
+}

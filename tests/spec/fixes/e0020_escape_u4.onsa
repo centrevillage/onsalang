@@ -1,0 +1,104 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+// fixes = 1
+
+// E0020 for the escape `\u` and four hexadecimal digits of C, Java, C#, JavaScript and Python (spec §2.4, §18.1;
+// S-461, S-965 R1; the row `escape_fixed_width` of spec/foreign-forms.toml). The value is the same in every
+// language that has the form, so the one candidate is the escape of the same value, `\u{…}`. The four digits are
+// all of the form: a character after them is a plain character, also a hexadecimal digit (`\u00411` is the
+// escape `\u0041` and the character `1`). The value may be any scalar value of four digits: the edges around the
+// surrogates (`\uD7FF` and `\uE000`) are fine. The digits may be in either case. One error per function (P-01),
+// so one form in a string. The marker is the line only: the spec does not say where in the literal the span
+// starts. The forms with eight digits, `\x`, `\b`, `\f` and `\v`, the character literal and the places are in
+// the other e0020_escape_*.onsa; the forms that are not E0020 (a surrogate, fewer digits) are in
+// negative/lex_escape_foreign_split.onsa.
+
+pub fn plain() -> Str {
+  "\u0041"                                         //~ E0020
+}
+
+pub fn lower_case_digits() -> Str {
+  "\u00e9"                                         //~ E0020
+}
+
+pub fn upper_case_digits() -> Str {
+  "\u00E9"                                         //~ E0020
+}
+
+pub fn mixed_case_digits() -> Str {
+  "\u00aB"                                         //~ E0020
+}
+
+pub fn kana() -> Str {
+  "\u3042"                                         //~ E0020
+}
+
+pub fn zero() -> Str {
+  "\u0000"                                         //~ E0020
+}
+
+pub fn last_below_the_surrogates() -> Str {
+  "\uD7FF"                                         //~ E0020
+}
+
+pub fn first_above_the_surrogates() -> Str {
+  "\uE000"                                         //~ E0020
+}
+
+pub fn last_of_the_plane() -> Str {
+  "\uFFFF"                                         //~ E0020
+}
+
+pub fn a_digit_after_the_four() -> Str {
+  "\u00411"                                        //~ E0020
+}
+
+pub fn a_hexadecimal_letter_after_the_four() -> Str {
+  "\u0041F"                                        //~ E0020
+}
+
+pub fn a_lower_case_letter_after_the_four() -> Str {
+  "\u0041a"                                        //~ E0020
+}
+
+pub fn a_non_hexadecimal_letter_after_the_four() -> Str {
+  "\u0041g"                                        //~ E0020
+}
+
+pub fn text_around() -> Str {
+  "before \u0041 after"                            //~ E0020
+}
+
+pub fn after_a_valid_escape() -> Str {
+  "\n\u0041"                                       //~ E0020
+}
+
+pub fn before_a_valid_escape() -> Str {
+  "\u0041\n"                                       //~ E0020
+}
+
+pub fn after_a_braced_escape() -> Str {
+  "\u{42}\u0041"                                  //~ E0020
+}
+
+pub fn after_an_escaped_backslash() -> Str {
+  "\\\u0041"                                       //~ E0020
+}
+
+pub fn before_a_hole(x: U32) -> Str uses {Alloc} {
+  "\u0041{x}"                                      //~ E0020
+}
+
+pub fn after_a_hole(x: U32) -> Str uses {Alloc} {
+  "{x}\u0041"                                      //~ E0020
+}
+
+pub fn between_two_holes(x: U32) -> Str uses {Alloc} {
+  "{x}\u0041{x}"                                   //~ E0020
+}
+
+// The right forms: the braced escape, and the text of a form behind an escaped backslash.
+pub fn fine(x: U32) -> Str uses {Alloc} {
+  "\u{0041}\u{41}\\u0041{x}"
+}

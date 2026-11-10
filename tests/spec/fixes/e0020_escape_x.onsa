@@ -1,0 +1,89 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+// fixes = 1
+
+// E0020 for the escape `\x` and two hexadecimal digits of C, C++, C#, Python, JavaScript and Rust (spec §2.4,
+// §18.1; S-461, S-965 R1; the row `escape_fixed_width` of spec/foreign-forms.toml). The value is the same in
+// every language when it is at most 7F and no hexadecimal digit follows the two digits (C reads every
+// hexadecimal digit that follows, so `\x414` is not `\x41` and `4` in C; C# reads one to four). The candidate
+// is the escape of the same value, `\u{…}`. A character after the two digits that is no hexadecimal digit is
+// plain text (`\x41g`). One error per function (P-01). The marker is the line only. The forms that are not
+// E0020 (`\x414`, `\xff`) are in negative/lex_escape_foreign_split.onsa.
+
+pub fn plain() -> Str {
+  "\x41"                                            //~ E0020
+}
+
+pub fn zero() -> Str {
+  "\x00"                                            //~ E0020
+}
+
+pub fn last_ascii() -> Str {
+  "\x7F"                                            //~ E0020
+}
+
+pub fn last_ascii_in_lower_case() -> Str {
+  "\x7f"                                            //~ E0020
+}
+
+pub fn line_feed() -> Str {
+  "\x0a"                                            //~ E0020
+}
+
+pub fn line_feed_in_upper_case() -> Str {
+  "\x0A"                                            //~ E0020
+}
+
+pub fn space() -> Str {
+  "\x20"                                            //~ E0020
+}
+
+pub fn a_letter_after_that_is_no_digit() -> Str {
+  "\x41g"                                           //~ E0020
+}
+
+pub fn a_space_after() -> Str {
+  "\x41 "                                           //~ E0020
+}
+
+pub fn a_brace_after() -> Str {
+  "\x41}}"                                          //~ E0020
+}
+
+pub fn a_valid_escape_after() -> Str {
+  "\x41\n"                                          //~ E0020
+}
+
+pub fn a_braced_escape_after() -> Str {
+  "\x41\u{42}"                                      //~ E0020
+}
+
+pub fn text_around() -> Str {
+  "before \x41 after"                               //~ E0020
+}
+
+pub fn a_digit_before() -> Str {
+  "1\x41"                                           //~ E0020
+}
+
+pub fn a_hexadecimal_letter_before() -> Str {
+  "f\x41"                                           //~ E0020
+}
+
+pub fn after_an_escaped_backslash() -> Str {
+  "\\\x41"                                          //~ E0020
+}
+
+pub fn before_a_hole(x: U32) -> Str uses {Alloc} {
+  "\x41{x}"                                         //~ E0020
+}
+
+pub fn after_a_hole(x: U32) -> Str uses {Alloc} {
+  "{x}\x41"                                         //~ E0020
+}
+
+// The right forms: the braced escape, and the text of a form behind an escaped backslash.
+pub fn fine(x: U32) -> Str uses {Alloc} {
+  "\u{41}\u{7F}\\x41{x}"
+}

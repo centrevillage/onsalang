@@ -1,0 +1,124 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+// fixes = 1
+
+// E0020 for a single `}` in a string in every place a string can stand (spec §2.4, §18.1; S-439, S-965 R1: the
+// reading of a literal does not depend on the place). The form and the one candidate, the doubled brace `}}`,
+// are those of e0020_lone_brace.onsa. The places: an argument, a return, an early return, a field, an element,
+// a tuple, a branch, a match arm, a closure body, a block in a block, a generic function, a loop body, a method,
+// a `const`, a `test`, a flow and the body of a `par~`. The functions that follow stand on their own: one error per function (P-01).
+
+pub struct Pair {
+  a: Str,
+  b: Str,
+}
+
+fn takes(s: Str, n: I32) -> I32 {
+  n
+}
+
+pub fn in_an_argument() -> I32 {
+  takes("a } b", 1)                                 //~ E0020
+}
+
+pub fn in_a_return() -> Str {
+  "}"                                               //~ E0020
+}
+
+pub fn in_an_early_return(flag: Bool) -> Str {
+  if flag {
+    return "a } b"                                  //~ E0020
+  }
+  "a"
+}
+
+pub fn in_a_field() -> Pair {
+  Pair { a: "a", b: "}" }                           //~ E0020
+}
+
+pub fn in_an_array() -> [Str; 2] {
+  ["a", "}"]                                        //~ E0020
+}
+
+pub fn in_a_tuple() -> (Str, I32) {
+  ("a } b", 2)                                      //~ E0020
+}
+
+pub fn in_a_branch(flag: Bool) -> Str {
+  if flag { "a" } else { "}" }                      //~ E0020
+}
+
+pub fn in_a_match_arm(n: I32) -> Str {
+  match n {
+    0 => "a } b",                                   //~ E0020
+    _ => "a",
+  }
+}
+
+pub fn in_a_closure_body() -> I32 {
+  let f = fn(n: I32) -> Str { "}" }                 //~ E0020
+  1
+}
+
+pub fn in_a_block_in_a_block() -> Str {
+  let r: Str = {
+    let s: Str = {
+      "a } b"                                       //~ E0020
+    }
+    s
+  }
+  r
+}
+
+pub fn in_a_generic_function[T](x: T) -> Str {
+  let s = "}"                                       //~ E0020
+  s
+}
+
+pub fn in_a_loop_body(n: I32) -> I32 {
+  var m: I32 = 0
+  for i in 0..<n {
+    let s = "a } b"                                 //~ E0020
+    m = m + i
+  }
+  m
+}
+
+pub struct Label {
+  text: Str,
+}
+
+impl Label {
+  pub fn closing(self) -> Str {
+    "}"                                             //~ E0020
+  }
+}
+
+pub const CLOSE: Str = "}"                          //~ E0020
+
+pub fn with_a_hole(x: U32) -> Str uses {Alloc} {
+  "x = {x} }"                                       //~ E0020
+}
+
+test "a single brace in a test body" {
+  let s = "a } b"                                   //~ E0020
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  let s = "a } b"                                   //~ E0020
+  x
+}
+
+pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<2 {
+    let s = "}"                                     //~ E0020
+    x
+  }
+  ys[0]
+}
+
+// The right forms.
+pub fn fine() -> Str {
+  "}}"
+}

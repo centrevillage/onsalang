@@ -1,0 +1,148 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+// fixes = 0
+
+// E0001 with no candidate: the escapes of other languages whose value is not the same in the languages that
+// have them, or is no scalar value (spec §2.4, §18.1; S-461, S-965 R1 and the decision of B8: the row
+// `escape_fixed_width` of spec/foreign-forms.toml does not take them, and the reading of each language is not
+// offered as a candidate). Where the languages split: `\x` and two digits followed by a hexadecimal digit (C reads
+// every digit that follows, Python and Rust read two), `\x` and a value above 7F (C makes one byte of it, the
+// others a character), `\a` (JavaScript reads it as `a`). No scalar value: a surrogate (`\uD800`), a value past
+// 10FFFF (`\U00110000`). Forms that are fewer than the digits they need (`\u004`, `\U0001F60`) and digits that
+// are no hexadecimal digits (`\u00G1`, `\xGG`) are no form of the row either: they are not on the closed list
+// of the escapes. `fixes = 0` says that no diagnostic has a candidate. One error per function (P-01). The marker
+// is the line only. The forms that are E0020 are in fixes/e0020_escape_*.onsa.
+
+pub fn x_digit_follows() -> Str {
+  "\x414"                                           //~ E0001
+}
+
+pub fn x_hexadecimal_letter_follows_in_upper_case() -> Str {
+  "\x41A"                                           //~ E0001
+}
+
+pub fn x_hexadecimal_letter_follows_in_lower_case() -> Str {
+  "\x41f"                                           //~ E0001
+}
+
+pub fn x_zero_then_a_digit() -> Str {
+  "\x004"                                           //~ E0001
+}
+
+pub fn x_first_above_ascii() -> Str {
+  "\x80"                                            //~ E0001
+}
+
+pub fn x_in_lower_case_above_ascii() -> Str {
+  "\xff"                                            //~ E0001
+}
+
+pub fn x_in_upper_case_above_ascii() -> Str {
+  "\xFF"                                            //~ E0001
+}
+
+pub fn x_without_digits() -> Str {
+  "\x"                                              //~ E0001
+}
+
+pub fn x_without_hexadecimal_digits() -> Str {
+  "\xGG"                                            //~ E0001
+}
+
+pub fn alert() -> Str {
+  "\a"                                              //~ E0001
+}
+
+pub fn alert_in_text() -> Str {
+  "x\ay"                                            //~ E0001
+}
+
+pub fn u_high_surrogate() -> Str {
+  "\uD800"                                          //~ E0001
+}
+
+pub fn u_last_high_surrogate() -> Str {
+  "\uDBFF"                                          //~ E0001
+}
+
+pub fn u_first_low_surrogate() -> Str {
+  "\uDC00"                                          //~ E0001
+}
+
+pub fn u_last_surrogate() -> Str {
+  "\uDFFF"                                          //~ E0001
+}
+
+pub fn u_surrogate_in_lower_case() -> Str {
+  "\ud800"                                          //~ E0001
+}
+
+pub fn u_high_surrogate_of_an_emoji() -> Str {
+  "\uD83D"                                          //~ E0001
+}
+
+pub fn u_low_surrogate_of_an_emoji() -> Str {
+  "\uDE00"                                          //~ E0001
+}
+
+pub fn u_surrogate_after_text() -> Str {
+  "text \uD800 text"                                //~ E0001
+}
+
+pub fn u_three_digits() -> Str {
+  "\u004"                                           //~ E0001
+}
+
+pub fn u_not_hexadecimal_digits() -> Str {
+  "\u00G1"                                          //~ E0001
+}
+
+pub fn u_with_a_space() -> Str {
+  "\u00 1"                                          //~ E0001
+}
+
+pub fn big_u_first_surrogate() -> Str {
+  "\U0000D800"                                      //~ E0001
+}
+
+pub fn big_u_last_surrogate() -> Str {
+  "\U0000DFFF"                                      //~ E0001
+}
+
+pub fn big_u_first_past_the_last_scalar() -> Str {
+  "\U00110000"                                      //~ E0001
+}
+
+pub fn big_u_all_digits_set() -> Str {
+  "\UFFFFFFFF"                                      //~ E0001
+}
+
+pub fn big_u_seven_digits() -> Str {
+  "\U0001F60"                                       //~ E0001
+}
+
+pub fn big_u_not_hexadecimal_digits() -> Str {
+  "\U0001F60G"                                      //~ E0001
+}
+
+pub fn big_u_four_digits() -> Str {
+  "\U0041"                                          //~ E0001
+}
+
+pub fn before_a_hole(x: U32) -> Str uses {Alloc} {
+  "\xff{x}"                                         //~ E0001
+}
+
+pub fn after_a_hole(x: U32) -> Str uses {Alloc} {
+  "{x}\x414"                                        //~ E0001
+}
+
+pub fn in_a_nested_block(c: Bool) -> I32 {
+  if c {
+    if c {
+      let s = "\uD800"                              //~ E0001
+    }
+  }
+  1
+}

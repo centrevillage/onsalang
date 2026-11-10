@@ -12,6 +12,7 @@ use onsa_diag::{Code, Diagnostic, FileId, Fix, Span, Stage};
 
 pub use crate::chars::{BLANKS, is_blank};
 use crate::chars::{is_ident_continue, is_ident_start, line_break};
+use crate::foreign::RowId;
 use crate::literal::{BadIndex, Base, ForeignNumber, Form, Found, Hole, HoleError, Invalid, Kind, Literals, Run};
 use crate::token::{Token, TokenKind};
 
@@ -454,18 +455,33 @@ impl<'a> Lexer<'a> {
         if !lex(self, start) {
             self.found.unclosed.push(Span::new(self.file, start as u32, start as u32 + 1));
         }
-        if let Some(d) = self.index_error(self.span(start)) {
+        if let Some(d) = self.index_error() {
             self.content.push(d);
         }
         if !self.content.is_empty() {
+            // A candidate replaces the literal, one token, whole (§18.1): only
+            // that of the first error, the one its unit may report, so that
+            // the candidates of a literal take a linear room in all.
             let literal = self.span(start);
-            self.found.contents.push((literal, std::mem::take(&mut self.content)));
+            let mut content = std::mem::take(&mut self.content);
+            let first = (0..content.len()).min_by(|&a, &b| content[a].order_in_file().cmp(&content[b].order_in_file()));
+            if let Some(i) = first {
+                content[i] = crate::edits::in_literal(content[i].clone(), literal, self.text);
+            }
+            self.found.contents.push((literal, content));
         }
     }
 
     /// An E0001 of the content of the literal being read ([`Lexer::literal`]).
     fn content_error(&mut self, span: Span, message: &str) {
         self.content.push(Diagnostic::new(Stage::Syntax, Code::E0001, span, message));
+    }
+
+    /// A form of other languages of the row `id` in the content of the
+    /// literal being read, at `span`, with its candidate `fix` (§2.4, S-461,
+    /// S-439).
+    fn row(&mut self, id: RowId, span: Span, fix: Fix) {
+        self.content.push(crate::foreign::report(id, self.text, span, vec![fix]));
     }
 
     /// A string written with a delimiter of other languages (§2.4, S-406,
@@ -513,10 +529,10 @@ impl<'a> Lexer<'a> {
                 Some(b'{') if self.peek_at(1) == Some(b'{') => self.pos += 2,
                 Some(b'}') if self.peek_at(1) == Some(b'}') => self.pos += 2,
                 Some(b'{') => self.hole(),
-                // SPEC-GAP(S-439): a `}` alone is E0001 (`}}` is the brace).
+                // A `}` alone is one in other languages (S-439): `}}` keeps its value.
                 Some(b'}') => {
                     let span = Span::new(self.file, self.pos as u32, self.pos as u32 + 1);
-                    self.content_error(span, "lone `}` in string; write `}}` for a literal brace");
+                    self.row(RowId::LoneBrace, span, Fix::replace("write the brace as `}}`", span, "}}"));
                     self.pos += 1;
                 }
                 _ => {
@@ -575,7 +591,7 @@ impl<'a> Lexer<'a> {
             Err(why) => {
                 // A character written nowhere has its own E0001 already.
                 if !unwritable {
-                    // SPEC-GAP(S-448): the note is chosen by a `:` in the hole.
+                    // Which note is not promised (§2.4, S-448): by a `:` after the path at the head.
                     let note = match why {
                         HoleError::Format => {
                             "there is no format in an interpolation; the value is shown as `Show` shows it"
@@ -607,13 +623,14 @@ impl<'a> Lexer<'a> {
         self.found.holes.push(Hole { span, path, reserved_head: reserved.and(head) });
     }
 
-    /// The error of the digits after a `.` in the holes of the literal at
-    /// `literal` that are no tuple index (§2.4, S-508, R-290), one for the
+    /// The error of the digits after a `.` in the holes of the literal
+    /// being read that are no tuple index (§2.4, S-508, R-290), one for the
     /// literal, at the first: the expression's E0408 or E0020. The one
     /// candidate of the E0020 takes the leading `0`s off all of them, made
-    /// once as one replacement of the literal (§18.1); with an index too
-    /// large too there is none, and the form is an E0002 (§18.1).
-    fn index_error(&mut self, literal: Span) -> Option<Diagnostic> {
+    /// once, which [`Lexer::literal`] makes one replacement of the literal
+    /// (§18.1); with an index too large too there is none, and the form is
+    /// an E0002 (§18.1).
+    fn index_error(&mut self) -> Option<Diagnostic> {
         let bad = std::mem::take(&mut self.bad_indexes);
         let &(span, why) = bad.first()?;
         let digits = |s: Span| &self.text[s.start as usize..s.end as usize];
@@ -627,13 +644,7 @@ impl<'a> Lexer<'a> {
         };
         let fixes: Option<Vec<Fix>> = bad.iter().map(unpadded).collect();
         let fix = fixes.map(|f| Fix::new(f[0].title(), f.iter().flat_map(|x| x.edits().iter().cloned()).collect()));
-        let d = crate::foreign::report(
-            crate::foreign::RowId::TupleIndexLeadingZero,
-            self.text,
-            span,
-            fix.into_iter().collect(),
-        );
-        Some(crate::edits::in_literal(d, literal, self.text))
+        Some(crate::foreign::report(RowId::TupleIndexLeadingZero, self.text, span, fix.into_iter().collect()))
     }
 
     /// A character literal (§2.4): to its closing `'`, on its line. Whether
@@ -693,10 +704,20 @@ impl<'a> Lexer<'a> {
 
     /// An escape (§2.4, S-19), at its `\`: the one grammar of the escapes
     /// ([`crate::literal::escape`]); one that is not of the closed list is
-    /// E0001.
+    /// E0001, but an escape of other languages of one value, the E0020 of
+    /// the row `escape_fixed_width` ([`crate::literal::foreign_escape`]).
     fn escape(&mut self) {
         let start = self.pos;
         let (value, len) = crate::literal::escape(&self.text[start + 1..]);
+        if value.is_none()
+            && let Some((len, digits)) = crate::literal::foreign_escape(&self.text[start + 1..])
+        {
+            self.pos += 1 + len;
+            let span = self.span(start);
+            let fix = Fix::replace("write the escape as `\\u{...}`", span, format!("\\u{{{digits}}}"));
+            self.row(RowId::EscapeFixedWidth, span, fix);
+            return;
+        }
         self.pos += 1 + len;
         if value.is_none() {
             let span = self.span(start);
@@ -951,10 +972,21 @@ mod tests {
         assert!(kinds(r#""plain" "a\nb\n" "({self.x}, {self.y})" "{{lit}}""#).1.is_empty());
         assert_eq!(kinds(r#""{1 + 2}""#).1, vec![Code::E0001]);
         assert_eq!(kinds(r#""{x""#).1, vec![Code::E0001]); // unterminated interpolation; the `"` then closes the string
-        assert_eq!(kinds(r#""a}b""#).1, vec![Code::E0001]);
+        assert_eq!(kinds(r#""a}b""#).1, vec![Code::E0020]); // S-439
         assert_eq!(kinds(r#""\q""#).1, vec![Code::E0001]);
         assert_eq!(kinds("\"abc").1, vec![Code::E0001]);
         assert!(kinds(r#""\u{1F600}""#).1.is_empty());
+    }
+
+    #[test]
+    fn the_candidates_of_the_errors_of_a_literal_take_a_linear_room() {
+        // One literal with many forms: one replacement of the literal, not one for each error.
+        let src = format!("\"{}{}\"", "\\x41".repeat(2000), " }".repeat(2000));
+        let l = lex(FileId(0), &src);
+        assert_eq!(l.diagnostics.len(), 4000);
+        let room: usize =
+            l.diagnostics.iter().flat_map(|d| &d.fixes).flat_map(|f| f.edits()).map(|e| e.replace.len()).sum();
+        assert!(room <= 4 * src.len(), "{room} bytes of candidates for {} of source", src.len());
     }
 
     #[test]
@@ -1273,6 +1305,15 @@ mod tests {
         assert_eq!(crate::literal::escape("u{0000041}"), (None, 10));
         assert_eq!(crate::literal::escape("音"), (None, 3));
         assert_eq!(crate::literal::escape("\nx"), (None, 0));
+        // The escapes of other languages of one value (S-461): what they take and the digits of `\u{…}`.
+        let foreign = crate::literal::foreign_escape;
+        assert_eq!(foreign("u00411"), Some((5, "0041")));
+        assert_eq!(foreign("U0001F600"), Some((9, "1F600")));
+        assert_eq!(foreign("U00000000"), Some((9, "0")));
+        assert_eq!((foreign("x41g"), foreign("x7f"), foreign("f")), (Some((3, "41")), Some((3, "7f")), Some((1, "C"))));
+        for split in ["x414", "x80", "x4", "x4G", "a", "uD800", "u004", "U00110000", "U0000DFFF", "u00é1"] {
+            assert_eq!(foreign(split), None, "{split}");
+        }
         assert_eq!(crate::literal::char_value("'\\u{0000041}'"), '\u{FFFD}');
     }
 

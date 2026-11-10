@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.4"]
+
+// The value of the escapes that the candidates of S-461 write (spec §2.4: "同じ値の `\u{…}`"; S-461, S-965 R1).
+// The candidate for `\x41` is `\u{41}`, for `\b`, `\f` and `\v` it is `\u{8}`, `\u{C}` and `\u{B}`, for
+// `\U0001F600` it is `\u{1F600}`. The escape `\u{…}` has the value of the scalar value it names, with 1 to 6
+// digits, in either case, and leading zeros do not change it. The `test` runs (`mode = "test"`): a `Char`
+// compares with a `Char` (there is no conversion to a number, E0411), so a value is compared with the
+// character written as itself, or with the same escape written with more digits.
+
+test "the braced escape of a character is the character it names" {
+  assert '\u{41}' == 'A'
+  assert '\u{0041}' == 'A'
+  assert '\u{000041}' == 'A'
+  assert '\u{61}' == 'a'
+  assert '\u{20}' == ' '
+  assert '\u{7B}' == '{'
+  assert '\u{7b}' == '{'
+  assert '\u{7D}' == '}'
+  assert '\u{1F600}' == '😀'
+  assert '\u{3042}' == 'あ'
+}
+
+test "the braced escape is the same value in either case and with leading zeros" {
+  assert '\u{8}' == '\u{0008}'
+  assert '\u{C}' == '\u{c}'
+  assert '\u{B}' == '\u{000B}'
+  assert '\u{7F}' == '\u{7f}'
+  assert '\u{10FFFF}' == '\u{10ffff}'
+  assert '\u{1F600}' == '\u{01F600}'
+}
+
+test "the controls are different characters" {
+  assert '\u{8}' != '\u{C}'
+  assert '\u{C}' != '\u{B}'
+  assert '\u{B}' != '\u{8}'
+  assert '\u{0}' != '\u{8}'
+}
+
+test "the escape of the NUL is the code point zero" {
+  assert '\0' == '\u{0}'
+  assert '\0' == '\u{000000}'
+  assert '\0' != '0'
+}
+
+test "the characters next to a brace are the braces" {
+  assert '{' == '\u{7B}'
+  assert '}' == '\u{7D}'
+}

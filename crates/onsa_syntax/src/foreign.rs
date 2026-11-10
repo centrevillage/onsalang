@@ -37,9 +37,10 @@
 //!   fails by itself).
 //! - A type name that the parser reads as a name (`i32`): [`type_name`], the
 //!   one entry where the parser does not fail, called where it reads a type.
-//! - The names, types and flow stages build their diagnostic with
-//!   [`report`]: they find the form and give the span and the candidates; the
-//!   code, the stage, the message and the note come from the row.
+//! - The lexer (in the content of a literal) and the names, types and flow
+//!   stages build their diagnostic with [`report`]: they find the form and
+//!   give the span and the candidates; the code, the stage, the message and
+//!   the note come from the row.
 //!
 //! The general E0002 of a failure that no row names is the parser's, but
 //! its candidates are this module's too ([`Failure`], `lists`): the missing
@@ -409,8 +410,9 @@ pub enum Detect {
     /// A form the parser reads whole, found on the tree after parsing (the
     /// clocks of S-356, [`clocks`]).
     Tree,
-    /// A form a later stage finds and reports with [`report`] (the rest `..`
-    /// of a struct pattern, `onsa_sema`).
+    /// A form the lexer or a later stage finds and reports with [`report`]
+    /// (an escape of other languages in a literal, the rest `..` of a struct
+    /// pattern in `onsa_sema`).
     Reported,
     /// A form the parser reads whole and asks about where it read it
     /// ([`at_read`]: an old attribute, a redundant visibility); a matcher of
@@ -511,6 +513,8 @@ pub enum RowId {
     LiteralSuffix,
     LiteralSuffixUnfixable,
     DigitSeparator,
+    EscapeFixedWidth,
+    LoneBrace,
     BlockComment,
     BlockCommentUnclosed,
     BlockCommentNested,

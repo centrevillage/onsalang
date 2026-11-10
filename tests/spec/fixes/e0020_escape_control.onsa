@@ -1,0 +1,68 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+// fixes = 1
+
+// E0020 for the escapes `\b`, `\f` and `\v` of C, C#, JavaScript and Python (spec §2.4, §18.1; S-461, S-965 R1;
+// the row `escape_fixed_width` of spec/foreign-forms.toml). Their values (8, 12 and 11) are the same in the
+// languages that have them (Java has no `\v`, so it does not count), so the candidate is the escape of the same
+// value: `\b` is `\u{8}`, `\f` is `\u{C}`, `\v` is `\u{B}`. One error per function (P-01). The marker is the
+// line only. `\a` is not one of them (its value is not the same in the languages that have it, JavaScript reads
+// it as `a`): E0001, in negative/lex_escape_foreign_split.onsa.
+
+pub fn backspace() -> Str {
+  "\b"                                              //~ E0020
+}
+
+pub fn form_feed() -> Str {
+  "\f"                                              //~ E0020
+}
+
+pub fn vertical_tab() -> Str {
+  "\v"                                              //~ E0020
+}
+
+pub fn backspace_in_text() -> Str {
+  "a\bc"                                            //~ E0020
+}
+
+pub fn form_feed_in_text() -> Str {
+  "a\fb"                                            //~ E0020
+}
+
+pub fn vertical_tab_in_text() -> Str {
+  "a\vb"                                            //~ E0020
+}
+
+pub fn backspace_before_a_digit() -> Str {
+  "\b1"                                             //~ E0020
+}
+
+pub fn form_feed_before_a_hexadecimal_digit() -> Str {
+  "\fA"                                             //~ E0020
+}
+
+pub fn after_a_valid_escape() -> Str {
+  "\n\f"                                            //~ E0020
+}
+
+pub fn before_a_valid_escape() -> Str {
+  "\v\n"                                            //~ E0020
+}
+
+pub fn after_an_escaped_backslash() -> Str {
+  "\\\b"                                            //~ E0020
+}
+
+pub fn before_a_hole(x: U32) -> Str uses {Alloc} {
+  "\b{x}"                                           //~ E0020
+}
+
+pub fn after_a_hole(x: U32) -> Str uses {Alloc} {
+  "{x}\f"                                           //~ E0020
+}
+
+// The right forms: the braced escapes, and the text of a form behind an escaped backslash.
+pub fn fine(x: U32) -> Str uses {Alloc} {
+  "\u{8}\u{C}\u{B}\\b\\f\\v{x}"
+}

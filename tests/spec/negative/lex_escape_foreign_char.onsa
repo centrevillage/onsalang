@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+// fixes = 0
+
+// E0001 with no candidate: the escapes of other languages whose value is not the same in the languages that
+// have them, or is no scalar value, in a character literal (spec §2.4: "文字リテラルも同じ", §18.1; S-461,
+// S-965 R1 and the decision of B8). The forms and the reason are those of negative/lex_escape_foreign_split.onsa;
+// `fixes = 0` says that no diagnostic has a candidate. One error per function (P-01). The marker is the line
+// only. The forms that are E0020 in a character are in fixes/e0020_escape_char.onsa.
+
+pub fn x_digit_follows() -> Char {
+  '\x414'                                           //~ E0001
+}
+
+pub fn x_above_ascii() -> Char {
+  '\xff'                                            //~ E0001
+}
+
+pub fn x_first_above_ascii() -> Char {
+  '\x80'                                            //~ E0001
+}
+
+pub fn alert() -> Char {
+  '\a'                                              //~ E0001
+}
+
+pub fn u_surrogate() -> Char {
+  '\uD800'                                          //~ E0001
+}
+
+pub fn u_last_surrogate() -> Char {
+  '\uDFFF'                                          //~ E0001
+}
+
+pub fn u_three_digits() -> Char {
+  '\u004'                                           //~ E0001
+}
+
+pub fn big_u_past_the_last_scalar() -> Char {
+  '\U00110000'                                      //~ E0001
+}
+
+pub fn big_u_surrogate() -> Char {
+  '\U0000D800'                                      //~ E0001
+}
+
+pub fn big_u_seven_digits() -> Char {
+  '\U0001F60'                                       //~ E0001
+}

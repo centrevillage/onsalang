@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+// fixes = 0
+
+// E0001 with no candidate for the forms near the row `escape_fixed_width` that the row does not take (spec §2.4,
+// §18.1; S-461, S-965 R1). `\x` and one hexadecimal digit is no `\xHH` of two digits, so it is not on the row
+// and not on the closed list of the escapes. A character literal holds one scalar value: in `'\u00411'` the
+// four digits of the escape end the escape and `1` is a plain character (the same reading as in a string), so the
+// literal holds two characters, which is the E0001 of the literal. One error per function. The marker is the
+// line only.
+
+pub fn x_one_digit_then_a_letter() -> Str {
+  "\x4G"                                            //~ E0001
+}
+
+pub fn x_one_digit_at_the_end() -> Str {
+  "a\x4"                                            //~ E0001
+}
+
+pub fn char_escape_then_a_digit() -> Char {
+  '\u00411'                                         //~ E0001
+}
+
+pub fn char_big_u_then_a_letter() -> Char {
+  '\U00000041A'                                     //~ E0001
+}
