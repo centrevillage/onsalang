@@ -91,9 +91,9 @@ def run(args):
 
 C = repo.Command  # (add_arguments, run, roles, purpose, when, example); the help is `help` (repo.parse_command)
 COMMANDS = {
-    "run": C(run_args, run, ("parent", "t", "i", "b"),
+    "run": C(run_args, run, tuple(repo.ROLES),
              "命令を、全てのプロセス（子と孫）の常駐メモリの合計と時間の上限の下で回し、超えたらグループごと SIGKILL で止める",
-             "大きさで増える入力（長い式、深い入れ子、多数の形）を onsa に渡すとき。`/usr/bin/time -l` で測るときは、その外側に置く",
+             "大きさで増える入力（長い式、深い入れ子、多数の形）を onsa や台本に渡すとき（`rules/common.md` 3.2、全ての役割）。`/usr/bin/time -l` で測るときは、その外側に置く",
              "guard.py run 2 120 -- /usr/bin/time -l target/debug/onsa check big.onsa"),
 }  # fmt: skip
 
