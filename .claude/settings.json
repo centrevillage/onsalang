@@ -20,6 +20,9 @@
       "Edit(/.claude/settings.local.json)",
       "Edit(/CLAUDE.md)"
     ],
+    "allow": [
+      "Bash(UPDATE_GOLDEN=1 cargo test -p onsa_tests --test cases)"
+    ],
     "deny": [
       "Read(.env)",
       "Read(.env.*)",
