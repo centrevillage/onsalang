@@ -1,0 +1,13 @@
+pub struct Cut[T: ] {
+  v: T,
+}
+
+pub fn lit() -> I32 {
+  let s = Cut::[3] { v: 1 }
+  1
+}
+
+pub fn chain() -> I32 {
+  let s = Cut::[3].x
+  1
+}
