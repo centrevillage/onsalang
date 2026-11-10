@@ -1,0 +1,58 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§6.6"]
+
+// S-239 (W5-10 U1a): the associated constant of a generic type with the type arguments written on the type
+// (§4.5: "型の関連関数と関連定数（`Rg::[F32, 4].CAP`）"). The const argument is a constant expression (§4.5: "const 引数は定数式"): a
+// literal, the name of a constant and parentheses (the arithmetic is in type_args_owner_const_arith.onsa). The value of `CAP` is
+// the const parameter `N` of the `impl`, so it is the value of the argument; `NEXT` reads `CAP` through `Self`; `TAG` is a literal that does not depend on the parameters,
+// and the type arguments are still needed to read it (§4.5: "値が型パラメータに依らなくても同じで、`Rg.CAP` は E0406"). The
+// values are worked out by hand.
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+  pub const NEXT: U32 = Self.CAP + 1
+  pub const TAG: U32 = 7
+}
+
+const K: U32 = 5
+
+test "the constant is the value of the const argument" {
+  assert Rg::[F32, 4].CAP == 4
+  assert Rg::[F32, 8].CAP == 8
+}
+
+test "the type argument that is not the const argument does not change it" {
+  assert Rg::[U8, 4].CAP == 4
+  assert Rg::[F32, 4].CAP == Rg::[U8, 4].CAP
+}
+
+test "a constant that reads another through Self follows the arguments" {
+  assert Rg::[F32, 4].NEXT == 5
+  assert Rg::[F32, 8].NEXT == 9
+}
+
+test "a constant that does not depend on the parameters" {
+  assert Rg::[F32, 4].TAG == 7
+  assert Rg::[U8, 1].TAG == 7
+}
+
+test "the const argument is the name of a constant" {
+  assert Rg::[F32, K].CAP == 5
+}
+
+test "the const argument is in parentheses" {
+  assert Rg::[F32, (K)].CAP == 5
+  assert Rg::[F32, (4)].CAP == 4
+}
+
+test "the value is a U32 in an expression" {
+  let n: U32 = Rg::[F32, 8].CAP * 2
+  assert n == 16
+  assert Rg::[F32, 4].CAP < Rg::[F32, 8].CAP
+}

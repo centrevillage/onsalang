@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// fixes = 1
+// spec = ["§2.6", "§4.5", "§18.1"]
+
+// S-239, S-811 (W5-10 U1a): the list is right (`Wrap::[F32]` names the type with its parameter) and the call has the `~` of a flow
+// after the name of an associated function, which is called with `(`: E0812 (§2.6: "flow でないものに `~` を付けると E0812"), with the
+// one candidate that removes the `~`, since the call after it has no error (§2.6: "呼び先が `f(x)` で呼ぶ項目（関数、関連関数、…）を指すときだけ
+// `~` を外す修正候補を示し"; S-811: "書いた印を呼び先の種類の印に置き換える一つの編集 … 当てた後に同じ段か前の段の誤りが残らないときだけ").
+// The arguments are constants, which a function that is not `rt` takes in a flow (§11.5). One error per item (P-01).
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+impl[T] Wrap[T] {
+  pub fn make(v: T) -> Wrap[T] {
+    Wrap { v: v }
+  }
+}
+
+pub flow in_a_let(x: F32 at sample) -> F32 at sample {
+  let w = Wrap::[F32].make~(1.5)                    //~ E0812
+  w.v
+}
+
+pub flow in_the_tail(x: F32 at sample) -> F32 at sample {
+  let w = Wrap::[F32].make~(2.5)                    //~ E0812
+  w.v + x
+}

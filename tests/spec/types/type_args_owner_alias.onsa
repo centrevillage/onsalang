@@ -1,0 +1,88 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§4.4"]
+
+// S-239 (W5-10 U1a): an alias in the list of type arguments is the type it names (§4.4: "別名は右辺に置き換える"), and a constant in
+// a const argument is read by its value (§4.5: "定数を指す名前"). An alias that already fixes the arguments of the type names the
+// type with its arguments, so the associated constant is read without `::[…]` (§4.5: "別名の `R.CAP`（`type R = Rg[F32]`）のように
+// 型の名前で型引数が決まるものは、型引数を要らない"); the same type written with `::[…]` has the same value. The values are worked
+// out by hand.
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+impl[T] Wrap[T] {
+  pub fn make(v: T) -> Wrap[T] {
+    Wrap { v: v }
+  }
+
+  pub fn get(self) -> T {
+    self.v
+  }
+}
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+type Sample = F32
+type Byte = U8
+type Opt = Option[U8]
+type Pt = (U8, U8)
+type R4 = Rg[F32, 4]
+const N4: U32 = 4
+const N6: U32 = 6
+
+test "an alias of a builtin type as the argument" {
+  let w = Wrap::[Byte].make(200)
+  let k = w.get()
+  assert k.checked_add(100) == None
+}
+
+test "the alias and the written type are the same type" {
+  let w = Wrap::[Sample].make(2.5)
+  let x: Wrap[F32] = w
+  assert x.get() == 2.5
+}
+
+test "an alias of a generic type as the argument" {
+  let w = Wrap::[Opt].make(Some(200))
+  let o = w.get()
+  let k = match o {
+    Some(x) => x,
+    None => 0,
+  }
+  assert k.checked_add(100) == None
+}
+
+test "an alias of a tuple as the argument" {
+  let w = Wrap::[Pt].make((200, 1))
+  let p = w.get()
+  assert p.0.checked_add(100) == None
+}
+
+test "an alias that fixes the arguments as the argument" {
+  let w = Wrap::[R4].make(Rg { d: [0.5; 4] })
+  let r = w.get()
+  assert r.d.len() == 4
+}
+
+test "the associated constant by an alias and by the written type is the same" {
+  assert R4.CAP == 4
+  assert Rg::[F32, 4].CAP == R4.CAP
+}
+
+test "the name of a constant in the const argument" {
+  assert Rg::[F32, N4].CAP == 4
+  assert Rg::[Sample, N6].CAP == 6
+}
+
+test "an alias in the type list of a type with a const argument" {
+  assert Rg::[Byte, N4].CAP == 4
+}

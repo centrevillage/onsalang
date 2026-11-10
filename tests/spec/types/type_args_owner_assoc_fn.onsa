@@ -1,0 +1,86 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§6.2"]
+
+// S-239 (W5-10 U1a): the type arguments of a generic type are written after the name of the type, not after the
+// associated function (§4.5: "型の関連関数と関連定数（`Buf::[F32].zeroed(4)`、`Rg::[F32, 4].CAP`）"; "型引数は、その型パラメータを
+// 宣言した項目の名前に付ける"). The type parameter of the call is decided by that statement: "型引数を書いた呼び出しの型パラメータは、
+// その文で決まる" (§4.5), so a method that needs the type (§4.7: "型の頭が決まっていなければ E0420") can be called on the result in
+// the next statement without an annotation: `checked_add(100)` of a `U8` that holds 200 is `None`, of an `I32` it is `Some(300)`. The
+// values are worked out by hand.
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+impl[T] Wrap[T] {
+  pub fn make(v: T) -> Wrap[T] {
+    Wrap { v: v }
+  }
+
+  pub fn get(self) -> T {
+    self.v
+  }
+
+  pub fn none() -> Option[T] {
+    None
+  }
+}
+
+pub fn take(w: Wrap[U8]) -> U8 {
+  w.get()
+}
+
+test "the type argument decides T before the next statement" {
+  let w = Wrap::[U8].make(200)
+  let k = w.get()
+  assert k.checked_add(100) == None
+  assert k.checked_add(50) == Some(250)
+}
+
+test "another type argument gives another type" {
+  let w = Wrap::[I32].make(200)
+  let k = w.get()
+  assert k.checked_add(100) == Some(300)
+}
+
+test "F32" {
+  let w = Wrap::[F32].make(1.5)
+  let f: F32 = w.get()
+  assert f == 1.5
+}
+
+test "the argument is a variable of the type" {
+  let x: U16 = 7
+  let w = Wrap::[U16].make(x)
+  let y: U16 = w.get()
+  assert y == 7
+}
+
+test "a call chained on the result" {
+  let a: U8 = Wrap::[U8].make(9).get()
+  assert a == 9
+}
+
+test "the result is taken by a parameter of the same type" {
+  assert take(Wrap::[U8].make(9)) == 9
+}
+
+test "T that the arguments do not decide is decided by the type argument" {
+  let n = Wrap::[U8].none()
+  let k = match n {
+    Some(x) => x,
+    None => 200,
+  }
+  assert k.checked_add(100) == None
+}
+
+test "two arguments in one test do not mix" {
+  let a = Wrap::[U8].make(1)
+  let b = Wrap::[F32].make(2.5)
+  let x: U8 = a.get()
+  let y: F32 = b.get()
+  assert x == 1
+  assert y == 2.5
+}

@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// S-239, S-306 (W5-10 U1a): a list written after the name of a local binding or an argument is E0308 (§4.5: "ローカルの束縛と引数
+// （関数値。一つの具体化を指し、型引数を取らない）に書くと E0308"; §15.1: the kind of the name is not the kind of the place, which
+// is an item that takes type arguments). The binding is a function value, a value that is not a function, a closure, a `var`, a name
+// of a pattern and the argument of a function type. The same list after the name of an item is not this error (E0412 for an item
+// without type parameters). One error per item (P-01).
+
+pub fn on_an_argument(g: fn(I32) -> I32) -> I32 {
+  let _ = g::[I32]                                  //~ E0308
+  1
+}
+
+pub fn on_a_value() -> I32 {
+  let n = 4
+  let _ = n::[I32]                                  //~ E0308
+  1
+}
+
+pub fn on_a_closure() -> I32 {
+  let c = fn(x: I32) -> I32 { x }
+  let _ = c::[I32]                                  //~ E0308
+  1
+}
+
+pub fn on_a_var() -> I32 {
+  var n: I32 = 4
+  n = n + 1
+  let _ = n::[I32]                                  //~ E0308
+  1
+}
+
+pub fn on_a_name_of_a_pattern(o: Option[I32]) -> I32 {
+  match o {
+    Some(v) => v::[I32],                            //~ E0308
+    None => 0,
+  }
+}
+
+pub fn on_an_argument_called(g: fn(I32) -> I32) -> I32 {
+  g::[I32].(1)                                      //~ E0308
+}

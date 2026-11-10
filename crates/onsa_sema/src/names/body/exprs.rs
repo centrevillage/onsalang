@@ -47,7 +47,7 @@ impl Walker<'_> {
         let ast = self.ast;
         match &ast.expr(e).kind {
             ExprKind::Lit(Lit::Str(s)) => self.interp(e, s),
-            ExprKind::Path(_) | ExprKind::Field { .. } => self.name_at(e, Place::Value),
+            ExprKind::Path(_) | ExprKind::Field { .. } | ExprKind::TypeArgs { .. } => self.name_at(e, Place::Value),
             ExprKind::Call { callee, kind, args } => self.call(e, *callee, *kind, args),
             ExprKind::Repeat { elem, len } => {
                 self.expr(*elem)?;
@@ -89,13 +89,8 @@ impl Walker<'_> {
                 self.out.holes.insert(e, visible);
                 Ok(())
             }
-            // A type argument in an expression: the names stage gives it to
-            // its item from W5-10; until then the body stops there (E0200
-            // `Feature::TypeArgsInExpressions`, neither dropped nor read, R-81).
-            ExprKind::TypeArgs { args, .. } => Err(self.type_args(args.span)),
-            ExprKind::Struct { type_args, .. } if !type_args.is_empty() => Err(self.type_args(type_args[0].1.span)),
-            ExprKind::Struct { path, rest, .. } => {
-                self.struct_lit(e, path, rest.is_some())?;
+            ExprKind::Struct { path, rest, type_args, .. } => {
+                self.struct_lit(e, path, type_args, rest.is_some())?;
                 self.exprs(ast.sub_exprs(e))
             }
             // A block with statements in a flow body is the flow stage's
@@ -181,14 +176,17 @@ impl Walker<'_> {
                     row_heads(row, &mut names);
                 }
             }
+            Typed::Args(ref at) => at.args.args.iter().for_each(|&x| heads(self.ast, x, &mut names)),
         }
         (t, names.into_iter().filter(|n| self.sees_local(n)).map(|n| n.name.clone()).collect())
     }
 
-    /// E0200 for the type arguments at `span` of an expression.
-    fn type_args(&mut self, span: onsa_diag::Span) -> super::Stop {
-        let d = Feature::TypeArgsInExpressions.diagnostic(Stage::Names, span, &[]).with_found(self.src(span));
-        self.fail(Fail::Report(d))
+    /// E0200 for the type arguments at `span` of an expression that this
+    /// version does not give to their item yet (W5-10 U1b, U2a, U2b, S-979):
+    /// of a function, of a method, of a variant of the prelude, of a constant
+    /// and in a constant expression; neither dropped nor read (R-81).
+    pub(super) fn type_args(&self, span: onsa_diag::Span) -> Fail {
+        Fail::Report(Feature::TypeArgsInExpressions.diagnostic(Stage::Names, span, &[]).with_found(self.src(span)))
     }
 
     /// The holes of a string literal (§2.4): the path of each is a chain of

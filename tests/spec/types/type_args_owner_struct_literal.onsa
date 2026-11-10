@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§4.4"]
+
+// S-239 (W5-10 U1a): the struct literal of a generic type with the type arguments written after the name of the type
+// (§4.5: "struct リテラル（`Pr::[U8] { a: 250 }`）"). The type parameters are decided by the literal itself, so the field is of the
+// written type: `checked_add(100)` of the field `200` of `Pr::[U8]` is `None` (§4.7: "型の頭が決まっていなければ E0420"), and
+// the length of the array field of `Rg::[F32, 4]` is the const argument. The values are worked out by hand.
+
+pub struct Pr[T] {
+  a: T,
+}
+
+pub struct Pair[A, B] {
+  a: A,
+  b: B,
+}
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+pub fn make_pr() -> Pr[U8] {
+  Pr::[U8] { a: 250 }
+}
+
+test "the field of the literal is of the written type" {
+  let p = Pr::[U8] { a: 200 }
+  let k = p.a
+  assert k.checked_add(100) == None
+  assert k.checked_add(55) == Some(255)
+}
+
+test "a literal of two type parameters" {
+  let p = Pair::[U8, F32] { a: 200, b: 1.5 }
+  let x = p.a
+  assert x.checked_add(100) == None
+  assert p.b == 1.5
+}
+
+test "the order of the arguments is the order of the parameters" {
+  let p = Pair::[F32, U8] { a: 1.5, b: 200 }
+  let y = p.b
+  assert y.checked_add(100) == None
+  assert p.a == 1.5
+}
+
+test "a literal with a const argument" {
+  let r = Rg::[F32, 4] { d: [0.5; 4] }
+  assert r.d.len() == 4
+  assert r.d[3] == 0.5
+}
+
+test "a literal in the tail of a function" {
+  let p = make_pr()
+  assert p.a == 250
+}
+
+test "a literal inside an argument" {
+  let q = Pair::[U8, Pr[U8]] { a: 1, b: Pr::[U8] { a: 2 } }
+  assert q.a == 1
+  assert q.b.a == 2
+}

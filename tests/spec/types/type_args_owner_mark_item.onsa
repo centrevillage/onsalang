@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§4.5", "§18.1"]
+
+// S-239, S-811 (W5-10 U1a): a list written after the name of an item that is called with `(` and has no type parameters,
+// with the `~` of a flow after it, is E0812 and not E0412 (S-811: "書いた印が呼び先に合わない規則（`~(` は E0812）" is before "印の無い `(` に
+// 呼び先の種類が求める規則（… E0412）"; §2.6: "flow でないものに `~` を付けると E0812"). The callee is a function, an associated function
+// of a type without parameters and an associated function of a generic type with the list on the function. The call is in a flow, so
+// E0821 (outside a flow) does not apply. One error per item (P-01). The number of the candidates is not written (see the report).
+
+pub fn plain(x: F32) -> F32 {
+  x
+}
+
+pub struct Pl {
+  k: F32,
+}
+
+impl Pl {
+  pub fn make(k: F32) -> Pl {
+    Pl { k: k }
+  }
+}
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+impl[T] Wrap[T] {
+  pub fn make(v: T) -> Wrap[T] {
+    Wrap { v: v }
+  }
+}
+
+pub flow on_a_function(x: F32 at sample) -> F32 at sample {
+  plain::[F32]~(1.0)                                //~ E0812
+}
+
+pub flow on_an_associated_function_of_a_plain_type(x: F32 at sample) -> F32 at sample {
+  let p = Pl.make::[F32]~(1.0)                      //~ E0812
+  p.k
+}
+
+pub flow on_an_associated_function_of_a_generic_type(x: F32 at sample) -> F32 at sample {
+  let w = Wrap.make::[F32]~(1.0)                    //~ E0812
+  w.v
+}

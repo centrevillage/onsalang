@@ -329,11 +329,32 @@ impl<'p> Sema<'p> {
         if here.is_none() && !self.holds(cx, ty, at) {
             return Ok(ty);
         }
+        let kids = self.kids(cx, here, self.a.types.get(ty));
+        self.parts(cx, (ty, at, span), (here.is_some(), kids), cyclic)
+    }
+
+    /// The type `ty` the type arguments `args` of an expression make with
+    /// the name before them (§4.5), judged as a type written at the place of
+    /// a part of a type, its parts the arguments ([`Self::judge`]).
+    pub(super) fn judge_args(&mut self, cx: &Cx<'p>, args: &[TypeId], ty: TyId, span: Span) -> Option<TyId> {
+        let kids = args.iter().map(|&t| self.written(cx, t)).collect();
+        let r = self.parts(cx, (ty, ARGUMENT, span), (true, kids), None);
+        r.map_err(|d| self.report(cx.def, d)).ok()
+    }
+
+    /// The part `ty` at `at` and `span` of [`Self::part`], with its parts as
+    /// written (`kids`), here (`here`) or not.
+    fn parts(
+        &mut self,
+        cx: &Cx<'p>,
+        (ty, at, span): (TyId, (Pos, u8), Span),
+        (here, kids): (bool, Vec<Written>),
+        cyclic: Option<TyId>,
+    ) -> Result<TyId, Diagnostic> {
         if second_class(&Bounds { a: self.a, generics: &cx.generics }, ty) && !fits(self.a, ty, at) {
             return Err(self.misplaced(cx, ty, at, span));
         }
         let shape = self.a.types.get(ty).clone();
-        let kids = self.kids(cx, here, &shape);
         let parts = places(self.a, &shape, at);
         // The parts are read first (each, so that none is judged as lowered),
         // the requirements judged of them; its own error comes first, then the
@@ -345,7 +366,7 @@ impl<'p> Sema<'p> {
             read.push(*r.as_ref().unwrap_or(&t));
             first = first.and(r.map(drop));
         }
-        if here.is_some() {
+        if here {
             self.required(cx, &shape, &read, &kids, span)?;
         }
         first?;

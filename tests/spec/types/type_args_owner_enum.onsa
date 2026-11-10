@@ -1,0 +1,90 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§4.1", "§7"]
+
+// S-239 (W5-10 U1a): the variant of a generic enum takes the type arguments on the enum (§4.5: "総称の enum の列挙子は型に付け
+// （`E::[I32].B`）"), not on the name of the variant. The type of the value is decided by that statement, so a variant without
+// payload (`E::[U8].B`) is a value of `E[U8]` that is taken apart in the next statement without an annotation, which `let b = E.B`
+// is not (§4.7: "`let o = None` の後に `match o { … }` は書ける" but the type parameter must be decided by the end of the function,
+// E0406). `checked_add(100)` of a `U8` that holds 200 is `None`. The values are worked out by hand.
+
+pub enum E[T] {
+  A(T),
+  B,
+}
+
+pub enum Two[A, B] {
+  First(A),
+  Second(B),
+}
+
+test "a variant without payload: the type is the written one" {
+  let e = E::[U8].B
+  let k = match e {
+    E.A(x) => x,
+    E.B => 200,
+  }
+  assert k.checked_add(100) == None
+}
+
+test "a variant with payload" {
+  let e = E::[U8].A(200)
+  let k = match e {
+    E.A(x) => x,
+    E.B => 0,
+  }
+  assert k.checked_add(100) == None
+  assert k.checked_add(55) == Some(255)
+}
+
+test "another type argument" {
+  let e = E::[I32].A(200)
+  let k = match e {
+    E.A(x) => x,
+    E.B => 0,
+  }
+  assert k.checked_add(100) == Some(300)
+}
+
+test "two type parameters, the variant of the first" {
+  let e = Two::[U8, F32].First(200)
+  let k = match e {
+    Two.First(x) => x,
+    Two.Second(_) => 0,
+  }
+  assert k.checked_add(100) == None
+}
+
+test "two type parameters, the variant of the second" {
+  let e = Two::[U8, F32].Second(1.5)
+  let f = match e {
+    Two.First(_) => 0.0,
+    Two.Second(y) => y,
+  }
+  assert f == 1.5
+}
+
+test "two type parameters in the other order" {
+  let e = Two::[F32, U8].Second(200)
+  let k = match e {
+    Two.First(_) => 0,
+    Two.Second(y) => y,
+  }
+  assert k.checked_add(100) == None
+}
+
+test "the variants are told apart" {
+  let a = E::[I32].A(3)
+  let b = E::[I32].B
+  let ka = match a {
+    E.A(x) => x,
+    E.B => -1,
+  }
+  let kb = match b {
+    E.A(x) => x,
+    E.B => -1,
+  }
+  assert ka == 3
+  assert kb == -1
+}

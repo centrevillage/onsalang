@@ -1,0 +1,95 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§4.4", "§6.2"]
+
+// S-239 (W5-10 U1a): inside an `impl`, the same type with other type arguments than its own is written with `::[…]` like
+// anywhere else (`Wrap::[U8]` in `impl[T] Wrap[T]`), a type parameter of the `impl` can be an argument (`Wrap::[T]`), and `Self`
+// is the target with the parameters of the `impl` (§4.4: "`impl` の本体の中の `Self` も、対象の型を右辺にした別名と同じである")
+// so it takes no list. A call to an associated function of the type needs the arguments of the type even if the function does not
+// use `T` (`Wrap::[F32].zero_u8()`), the same as outside. The values are worked out by hand.
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+impl[T] Wrap[T] {
+  pub fn make(v: T) -> Wrap[T] {
+    Wrap { v: v }
+  }
+
+  pub fn get(self) -> T {
+    self.v
+  }
+
+  pub fn zero_u8() -> Wrap[U8] {
+    Wrap::[U8].make(0)
+  }
+
+  pub fn as_u8(self) -> Wrap[U8] {
+    Wrap::[U8].make(200)
+  }
+
+  pub fn again(self) -> Wrap[T] {
+    Wrap::[T].make(self.v)
+  }
+
+  pub fn through_self(self) -> Wrap[T] {
+    Self.make(self.v)
+  }
+}
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+
+  pub fn cap_of_eight(self) -> U32 {
+    Rg::[F32, 8].CAP
+  }
+
+  pub fn other(self) -> Rg[U8, 2] {
+    Rg::[U8, 2] { d: [1, 200] }
+  }
+}
+
+test "the same type with another argument inside the impl" {
+  let w = Wrap::[F32].make(1.5)
+  let u = w.as_u8()
+  let k = u.get()
+  assert k.checked_add(100) == None
+}
+
+test "a function of the type that does not use T still needs the arguments of the type" {
+  let z = Wrap::[F32].zero_u8()
+  let k = z.get()
+  assert k.checked_add(255) == Some(255)
+  assert k.checked_sub(1) == None
+}
+
+test "a parameter of the impl as the argument" {
+  let w = Wrap::[F32].make(2.5)
+  let a = w.again()
+  assert a.get() == 2.5
+}
+
+test "Self takes no list and has the parameters of the impl" {
+  let w = Wrap::[F32].make(2.5)
+  let a = w.through_self()
+  assert a.get() == 2.5
+}
+
+test "a constant of the same type with other arguments inside the impl" {
+  let r = Rg::[F32, 4] { d: [0.0; 4] }
+  assert r.cap_of_eight() == 8
+  assert Rg::[F32, 4].CAP == 4
+}
+
+test "a literal of the same type with other arguments inside the impl" {
+  let r = Rg::[F32, 4] { d: [0.0; 4] }
+  let o = r.other()
+  assert o.d.len() == 2
+  assert o.d[1] == 200
+}

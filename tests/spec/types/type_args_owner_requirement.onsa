@@ -1,0 +1,75 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+
+// S-239 (W5-10 U1a): the requirements of the type parameter (a bound, and the implicit `Dup`) are checked for the type argument
+// written in an expression (§4.5: "型引数を書いた項目の型パラメータはその文で決まり、要求（境界と暗黙の `Dup`）もその文で検査する"; "型の位置
+// （… 式の型引数 `::[…]`）に書いた型引数は、その型の宣言の型パラメータの要求を満たさなければならず、満たさなければ E0416 である"). A bound
+// of the type that the argument does not meet, in an associated function, a struct literal, a variant and an associated constant, and the
+// `Dup` of a `Buf`. The requirement is the one of the declaration of the type, not of the `impl`. One error per item (P-01).
+
+pub struct Fl[T: Float] {
+  a: T,
+}
+
+impl[T: Float] Fl[T] {
+  pub fn make(a: T) -> Fl[T] {
+    Fl { a: a }
+  }
+
+  pub const TAG: U32 = 1
+}
+
+pub enum Ei[T: Int] {
+  A(T),
+  B,
+}
+
+pub struct N[T: Num] {
+  a: T,
+}
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+impl[T] Wrap[T] {
+  pub fn make(v: T) -> Wrap[T] {
+    Wrap { v: v }
+  }
+}
+
+pub fn a_literal_of_a_wrong_type() -> U8 {
+  let _ = Fl::[I32] { a: 1 }                        //~ E0416
+  1
+}
+
+pub fn a_literal_of_a_num_bound() -> U8 {
+  let _ = N::[Bool] { a: true }                     //~ E0416
+  1
+}
+
+pub fn an_associated_function() -> U8 {
+  let _ = Fl::[Bool].make(true)                     //~ E0416
+  1
+}
+
+pub fn an_associated_constant() -> U32 {
+  Fl::[Str].TAG                                     //~ E0416
+}
+
+pub fn a_variant() -> U8 {
+  let _ = Ei::[F32].B                               //~ E0416
+  1
+}
+
+pub fn the_dup_of_a_buf(b: Buf[F32]) -> U32 uses {Alloc} {
+  let _ = Wrap::[Buf[F32]].make(move b)             //~ E0416
+  1
+}
+
+pub fn fine() -> U32 {
+  let _ = Fl::[F32].make(1.0)
+  let _ = Ei::[U8].B
+  1
+}

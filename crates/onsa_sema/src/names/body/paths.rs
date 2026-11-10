@@ -15,10 +15,10 @@
 //! the names stage holds as an error stops it with no diagnostic (S-692).
 
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
-use onsa_syntax::ast::{ExprId, ExprKind, Ident, PatId, Path};
+use onsa_syntax::ast::{ExprId, ExprKind, Ident, PatId, Path, TypeArgList};
 
 use super::kinds::Want;
-use super::{Fail, PatRes, PathRes, StructRes, W, Walker};
+use super::{Fail, Listed, PatRes, PathRes, StructRes, Typed, W, Walker};
 use crate::Analysis;
 use crate::body::slot::{Form, slot_of};
 use crate::def::{Bound, GenericKind};
@@ -28,6 +28,10 @@ use crate::resolve::NameKind;
 use crate::resolve::{Builtin, Entity, ResolveError};
 use crate::traits::{MAX, MIN, implies, member_note};
 use crate::ty::{Ty, TyId};
+
+/// The names of a chain with their nodes, and its type arguments, each with
+/// the index of the name before it ([`Walker::chain`]).
+pub(super) type Chain<'a> = (Vec<(ExprId, &'a Ident)>, Vec<(usize, ExprId)>);
 
 /// What the types stage does with the end of a chain of names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,15 +81,29 @@ impl<'a> Walker<'a> {
     /// the nodes of the names it resolves; a node that is no chain walks its
     /// children.
     pub(super) fn name_at(&mut self, e: ExprId, place: Place) -> W {
-        let Some(chain) = self.chain(e) else {
+        let Some((chain, lists)) = self.chain(e) else {
             return match &self.ast.expr(e).kind {
                 // A field of a value that is no name (`f().x`).
                 ExprKind::Path(_) | ExprKind::Field { .. } => self.exprs(self.ast.sub_exprs(e)),
+                // After a method of such a value (U2b).
+                ExprKind::TypeArgs { args, .. } => Err(self.fail(self.type_args(args.span))),
                 _ => self.expr(e),
             };
         };
+        // In a constant expression, until U1b reads them there.
+        if let (true, Some(ExprKind::TypeArgs { args, .. })) =
+            (self.in_const, lists.first().map(|l| &self.ast.expr(l.1).kind))
+        {
+            return Err(self.fail(self.type_args(args.span)));
+        }
         let (nodes, names): (Vec<ExprId>, Vec<&Ident>) = chain.iter().copied().unzip();
+        self.listed = !lists.is_empty();
         let (records, fail) = self.resolve(&names, &nodes, place);
+        self.listed = false;
+        let fail = match lists.is_empty() {
+            true => fail,
+            false => self.lists((&nodes, &names), &lists, &records, fail),
+        };
         for (&(e, _), r) in chain.iter().zip(records) {
             self.out.paths.insert(e, r);
         }
@@ -162,6 +180,11 @@ impl<'a> Walker<'a> {
             }
             _ => (None, None),
         };
+        // The namespace a name is not found in has its record, before the
+        // type arguments after it (`Wrap::[Nope].nope2`, `type_args.rs`).
+        if let Some(ResolveError::NotFound { .. }) = err {
+            out.push(PathRes::Namespace(cur));
+        }
         let fail = match err {
             // An alias of the error type stands for a failed name (§18.1, S-728).
             None if a.alias_type(cur).is_err() => Some(Fail::Held),
@@ -328,7 +351,7 @@ impl<'a> Walker<'a> {
         let d = Diagnostic::new(Stage::Names, Code::E0302, name.span, msg)
             .with_found(name.name.clone())
             .with_rule(format!("a variant of the prelude is written by its name alone (`{}`, §4.1)", name.name));
-        if self.in_const {
+        if self.in_const || self.listed {
             return Some(d);
         }
         let names = (&a.prelude, &a.defs[..], &a.builtin_key);
@@ -397,11 +420,12 @@ impl<'a> Walker<'a> {
     }
 
     /// The chain of names `e` ends (`a.b.c` is `Field(Field(Path(a), b), c)`),
-    /// from its head, with the node of each; none when its head is no name
-    /// (`f().x`).
-    pub(super) fn chain(&self, e: ExprId) -> Option<Vec<(ExprId, &'a Ident)>> {
+    /// from its head, with the node of each, and its type arguments
+    /// (`Buf::[F32].zeroed`, §4.5), each with the index of the name before
+    /// it; none when its head is no name (`f().x`).
+    pub(super) fn chain(&self, e: ExprId) -> Option<Chain<'a>> {
         let ast = self.ast;
-        let mut out = Vec::new();
+        let (mut out, mut lists) = (Vec::new(), Vec::new());
         let mut cur = e;
         loop {
             match &ast.expr(cur).kind {
@@ -409,10 +433,15 @@ impl<'a> Walker<'a> {
                     out.push((cur, name));
                     cur = *base;
                 }
+                ExprKind::TypeArgs { base, .. } => {
+                    lists.push((out.len(), cur));
+                    cur = *base;
+                }
                 ExprKind::Path(p) if p.segments.len() == 1 => {
                     out.push((cur, &p.segments[0]));
                     out.reverse();
-                    return Some(out);
+                    let n = out.len();
+                    return Some((out, lists.into_iter().rev().map(|(after, x)| (n - after - 1, x)).collect()));
                 }
                 _ => return None,
             }
@@ -427,7 +456,7 @@ impl<'a> Walker<'a> {
     /// pattern name a type, a path with fields after it a variant, and one
     /// with nothing after it a variant or a constant (the form of each is the
     /// types stage's).
-    fn item(&self, path: &Path, want: Want) -> Result<(Entity, Option<TyId>), Fail> {
+    fn item(&self, path: &Path, want: Want) -> Result<(Entity, Option<TyId>, Entity), Fail> {
         let a = self.a;
         let segs: Vec<&Ident> = path.segments.iter().collect();
         let head = segs[0];
@@ -476,7 +505,7 @@ impl<'a> Walker<'a> {
                 };
                 match NameKind::of(entity, &a.defs).and_then(|k| self.want(k, &segs, want)) {
                     Some(f) => Err(f),
-                    None => Ok((entity, owner)),
+                    None => Ok((entity, owner, end)),
                 }
             }
         }
@@ -504,7 +533,7 @@ impl<'a> Walker<'a> {
         let segs: Vec<&Ident> = path.segments.iter().collect();
         let found = match self.bound_member(&segs, want) {
             Some(found) => found,
-            None => self.item(path, want).map(|(entity, owner)| PatRes::Ctor { entity, owner }),
+            None => self.item(path, want).map(|(entity, owner, _)| PatRes::Ctor { entity, owner }),
         };
         match found {
             Ok(r) => {
@@ -515,12 +544,26 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// The item the path of the struct literal `e` names.
-    pub(super) fn struct_lit(&mut self, e: ExprId, path: &Path, filled: bool) -> W {
-        let (entity, owner) = self.item(path, Want::Type).map_err(|f| self.fail(f))?;
+    /// The item the path of the struct literal `e` names, and its type
+    /// arguments `lists` (§4.5): of the struct, after its name
+    /// (`Pr::[U8] { a: 1 }`); after any other name (a module, `Self`), E0412.
+    pub(super) fn struct_lit(&mut self, e: ExprId, path: &Path, lists: &[(usize, TypeArgList)], filled: bool) -> W {
+        let (entity, owner, end) = self.item(path, Want::Type).map_err(|f| self.fail(f))?;
         self.out.structs.insert(e, StructRes { entity, owner });
         if let (true, Entity::Def(d) | Entity::Member(d)) = (filled, entity) {
             self.out.filled.insert(d);
+        }
+        let segs: Vec<&Ident> = path.segments.iter().collect();
+        for (k, args) in lists {
+            let key = (e, *k as u32);
+            if *k + 1 == segs.len() && !crate::names::is_self_type(&segs[*k].name) {
+                let (path, to) = (path.clone(), Some(e));
+                let site = self.site(Typed::Args(Box::new(Listed { key, entity: end, path, args: args.clone(), to })));
+                self.type_sites.push(site);
+            } else {
+                let d = self.no_params((&segs, *k), false, Span { start: segs[0].span.start, ..args.span });
+                self.out.type_args.insert(key, (None, Some(d)));
+            }
         }
         Ok(())
     }

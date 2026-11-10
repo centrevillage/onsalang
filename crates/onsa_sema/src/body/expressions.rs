@@ -158,15 +158,15 @@ impl<'a> Checker<'a> {
                 };
                 Ok(self.a.types.intern(Ty::Array(et, n)))
             }
-            // The names stage stops the body at a type argument (E0200 until W5-10).
-            ExprKind::Struct { type_args, .. } if !type_args.is_empty() => {
-                onsa_diag::internal::bug(Some(span), "a type argument the names stage did not stop at")
-            }
-            ExprKind::Struct { path, fields, rest, .. } => {
+            ExprKind::Struct { path, fields, rest, type_args } => {
+                self.reported_args(type_args.iter().map(|(k, _)| (e, *k as u32)))?;
                 self.check_struct_lit(e, path, fields, rest.as_ref(), expected, span)
             }
-            ExprKind::TypeArgs { .. } => {
-                onsa_diag::internal::bug(Some(span), "a type argument the names stage did not stop at")
+            // The type arguments after the names of a chain (§4.5), which
+            // the names stage gave to them.
+            ExprKind::TypeArgs { base, .. } => {
+                self.type_args_of(e)?;
+                self.check_expr(*base, expected)
             }
             ExprKind::Block(b) => self.check_block(e, self.block_of(e, b), expected),
             // What only a flow body holds is the names stage's E0821 outside

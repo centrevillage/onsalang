@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§15.1"]
+
+// S-239, S-979 (W5-10 U1a): a list written after a name that declares no type parameters and is no value of the place (a
+// local, an argument, a field) is E0412 (S-979 (2): a constant, an associated constant, a const parameter, `Self`, `panic`),
+// with no candidate (S-306). The one question is whether the name declares type parameters. One error per item (P-01).
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+pub struct Wr {
+  v: I32,
+}
+
+impl Wr {
+  pub fn mk(w: I32) -> Wr {
+    Wr { v: w }
+  }
+
+  pub fn again(w: I32) -> Wr {
+    Self::[I32].mk(w)                               //~ E0412
+  }
+}
+
+const K: I32 = 3
+
+pub fn after_a_constant() -> I32 {
+  K::[I32]                                          //~ E0412
+}
+
+pub fn after_a_const_parameter[const N: U32](a: [F32; N]) -> U32 {
+  let _ = a
+  N::[I32]                                          //~ E0412
+}
+
+pub fn after_an_associated_constant() -> U32 {
+  Rg.CAP::[F32, 4]                                  //~ E0412
+}
+
+pub fn after_panic() -> I32 {
+  panic::[I32]("x")                                 //~ E0412
+}
+
+pub fn right[const N: U32](a: [F32; N]) -> U32 {
+  let _ = a
+  let _ = K
+  N + Rg::[F32, 4].CAP
+}

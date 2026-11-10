@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§11.4", "§15.1"]
+
+// S-239, S-978 (W5-10 U1a): a list written after a builtin name of a flow body, before the `~` of the call, is E0412 (§4.5:
+// "型パラメータを持たない項目（…、組込みの flow の名前）に書いても E0412"), as after the name of a flow; the mark `~(` fits a delay,
+// so the list is what is wrong. There is no candidate (S-306). One error per item (P-01).
+
+pub flow one_element(x: F32 at sample) -> F32 at sample {
+  prev::[F32]~(x, 0.0)                              //~ E0412
+}
+
+pub flow in_a_let(x: F32 at sample) -> F32 at sample {
+  let y = prev::[F32, F32]~(x, 0.0)                 //~ E0412
+  y
+}
+
+pub flow right(x: F32 at sample) -> F32 at sample {
+  prev~(x, 0.0)
+}

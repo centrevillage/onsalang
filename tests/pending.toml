@@ -1515,3 +1515,25 @@ target = "tests/spec/fixes/e0020_digit_separator_const_arg.onsa"
 reasons = ["S-476", "S-471"]
 until = "W5-24"
 note = "定数の型引数 `S[1'0]` の桁の区切りは、型引数の位置の数の形（S-471）を入れる U6 で E0020 になる。今は E0002「expected a type」"
+
+# --- W5-10 U1a: 型に付く `::[…]` の事例のうち、後の作業を待つもの（2026-11-10）
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/type_args_owner_const_arith.onsa"
+reasons = ["S-713", "S-239"]
+until = "W9-03"
+note = "式の中の型引数の const 引数に演算のある定数式（`Rg::[F32, 2 + 2].CAP`）。演算を含む長さと const 引数は今 E0200（types/array_length_operations_fine.onsa と同じ待ち）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/type_args_owner_const_arith_neg.onsa"
+reasons = ["S-713", "S-239"]
+until = "W9-03"
+note = "式の中の型引数の const 引数の、溢れとゼロ除算の E0419。演算を含む定数式は今 E0200"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/type_args_owner_value_run.onsa"
+reasons = ["S-239", "R-08"]
+until = "W8-09"
+note = "型引数を書いた関連関数を値に置いて呼ぶ形を onsa test で走らせる。関数値の降下は今 E0200（check は types/type_args_owner_value.onsa が見る）"

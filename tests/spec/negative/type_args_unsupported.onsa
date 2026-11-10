@@ -8,7 +8,9 @@
 // compiler neither drops the list nor accepts the program as if it were not there (R-81).
 //
 // W5-10 removes this file: after it the same programs check, and their errors (E0412, E0308, E0406,
-// E0416) are in the cases of W5-10.
+// E0416) are in the cases of W5-10. W5-10 U1a gave the lists after a type to it (an associated
+// function, a struct literal: types/type_args_owner_*.onsa); those of a function, a method and a
+// variant of the prelude are E0200 until U2a and U2b.
 
 pub fn id[T](x: T) -> T {
   x
@@ -30,14 +32,6 @@ impl[T] Pr[T] {
 
 pub fn on_a_function() -> U8 {
   id::[U8](250)                                     //~ E0200
-}
-
-pub fn on_an_associated_function() -> Pr[U8] {
-  Pr::[U8].make(250)                                //~ E0200
-}
-
-pub fn on_a_struct_literal() -> Pr[U8] {
-  Pr::[U8] { a: 250 }                               //~ E0200
 }
 
 pub fn on_a_method(p: Pr[U8]) -> I32 {

@@ -470,6 +470,10 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
         let diverging = std::mem::take(&mut names.diverging);
         let job = Job { module, m, id, self_ty, body, ret, generics };
         let mut ck = read_body(a, &mut bound, &job, names, diverging, How::First);
+        // Type arguments the check passed with their diagnostic not reported.
+        if let (false, Some((_, Some(d)))) = (ck.failed, ck.names.type_args.values().find(|v| v.1.is_some())) {
+            onsa_diag::internal::bug(Some(d.span), "type arguments whose diagnostic the check did not report");
+        }
         let fcx = ck.flow.take();
         let mut names = std::mem::take(&mut ck.names);
         let tries = ck.tries.take();

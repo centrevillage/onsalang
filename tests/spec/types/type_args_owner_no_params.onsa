@@ -1,0 +1,89 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// S-239, S-306 (W5-10 U1a): a list written after the name of an item that has no type parameters is E0412, with no candidate
+// (§4.5: "型パラメータを持たない項目（総称でない関数、flow、型パラメータ、列挙子の名前）に書いても E0412"; "式の中の型引数の E0412 に修正候補は
+// 無く"; §15.1: "同じ種類の中の形の違い（… 総称でない型への型引数 …）は E0308 にしない（型引数の数は E0412）"). The type arguments
+// belong to the item that declares the type parameters (§4.5: "`Buf.zeroed::[F32](4)` は `zeroed` が型パラメータを持たないので E0412"): the name
+// of a function without parameters, a type without parameters (a function, a constant and a literal of it), the name of a variant
+// of a generic enum or of a plain enum, the associated function of a generic type, a type parameter and a builtin type. One error
+// per item (P-01).
+
+pub fn plain(x: I32) -> I32 {
+  x
+}
+
+pub struct Pl {
+  k: F32,
+}
+
+impl Pl {
+  pub const K: U32 = 4
+
+  pub fn make(k: F32) -> Pl {
+    Pl { k: k }
+  }
+}
+
+pub enum E[T] {
+  A(T),
+  B,
+}
+
+pub enum Plain {
+  A(I32),
+  B,
+}
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+impl[T] Wrap[T] {
+  pub fn make(v: T) -> Wrap[T] {
+    Wrap { v: v }
+  }
+}
+
+pub fn a_function_without_parameters() -> I32 {
+  plain::[I32](1)                                   //~ E0412
+}
+
+pub fn an_associated_function_of_a_type_without_parameters() -> Pl {
+  Pl::[F32].make(1.0)                               //~ E0412
+}
+
+pub fn an_associated_constant_of_a_type_without_parameters() -> U32 {
+  Pl::[F32].K                                       //~ E0412
+}
+
+pub fn a_literal_of_a_type_without_parameters() -> Pl {
+  Pl::[F32] { k: 1.0 }                              //~ E0412
+}
+
+pub fn the_name_of_a_variant_of_a_generic_enum() -> E[I32] {
+  E.A::[I32](1)                                     //~ E0412
+}
+
+pub fn the_name_of_a_unit_variant_of_a_generic_enum() -> E[I32] {
+  E.B::[I32]                                        //~ E0412
+}
+
+pub fn the_name_of_a_variant_of_a_plain_enum() -> Plain {
+  Plain.A::[I32](1)                                 //~ E0412
+}
+
+pub fn the_associated_function_of_a_generic_type() -> Wrap[U8] {
+  Wrap.make::[U8](1)                                //~ E0412
+}
+
+pub fn a_function_of_a_builtin_type() -> U32 uses {Alloc} {
+  let b = Buf.zeroed::[F32](4)                      //~ E0412
+  b.len()
+}
+
+pub fn a_type_parameter[T: AnyNum]() -> T {
+  T::[I32].ZERO                                     //~ E0412
+}

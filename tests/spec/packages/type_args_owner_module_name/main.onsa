@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§15.1"]
+
+// S-239, S-978 (W5-10 U1a): a list written after the name of a module, of the package or a child module, is E0412 (§4.5:
+// "型パラメータを持たない項目（…、モジュールの名前、組込みの flow の名前）に書いても E0412"), with no candidate (S-306). A module
+// named at the place of a value is the E0308 of the names stage before the list (S-978: "名前がその位置自体で誤りの形
+// （`let m = util::[I32]`）は今ある名前の段の診断（E0308）が先"). One error per item (P-01).
+use util
+
+pub fn after_a_module() -> I32 {
+  util::[I32].id(1)                                 //~ E0412
+}
+
+pub fn after_a_child_module() -> I32 {
+  util.inner::[I32].twice(1)                        //~ E0412
+}
+
+pub fn a_module_as_a_value() -> I32 {
+  let _ = util::[I32]                               //~ E0308
+  1
+}
+
+pub fn right() -> I32 {
+  util.id(1) + util.inner.twice(1)
+}

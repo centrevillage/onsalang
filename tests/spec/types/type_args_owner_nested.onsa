@@ -1,0 +1,87 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5"]
+
+// S-239 (W5-10 U1a): the elements of the list are read as the types of a type position (§4.5: "並びの要素は型の位置の並びと同じに
+// 読み"), so a type argument is itself a generic type, a tuple, an array, or a type with another list, and an argument of the call
+// can have a list of its own. The `[…]` of the inner types is the form of a type position, not `::[…]`. The values are worked out
+// by hand.
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+impl[T] Wrap[T] {
+  pub fn make(v: T) -> Wrap[T] {
+    Wrap { v: v }
+  }
+
+  pub fn get(self) -> T {
+    self.v
+  }
+}
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+test "a generic type of the prelude as the argument" {
+  let w = Wrap::[Option[U8]].make(Some(200))
+  let o = w.get()
+  let k = match o {
+    Some(x) => x,
+    None => 0,
+  }
+  assert k.checked_add(100) == None
+}
+
+test "a Wrap in a Wrap" {
+  let inner = Wrap::[U8].make(9)
+  let outer = Wrap::[Wrap[U8]].make(inner)
+  let back = outer.get()
+  let a = back.get()
+  assert a.checked_add(250) == None
+  assert a == 9
+}
+
+test "three levels" {
+  let w = Wrap::[Wrap[Option[U8]]].make(Wrap::[Option[U8]].make(None))
+  let o = w.get().get()
+  let k = match o {
+    Some(x) => x,
+    None => 200,
+  }
+  assert k.checked_add(100) == None
+}
+
+test "a tuple as the argument" {
+  let t = Wrap::[(U8, F32)].make((200, 2.5))
+  let p = t.get()
+  assert p.0.checked_add(100) == None
+  assert p.1 == 2.5
+}
+
+test "an array as the argument" {
+  let a = Wrap::[[U8; 3]].make([1, 2, 200])
+  let arr = a.get()
+  assert arr.len() == 3
+  assert arr[2].checked_add(100) == None
+}
+
+test "a type with a const argument as the argument" {
+  let r = Wrap::[Rg[F32, 2]].make(Rg { d: [0.5; 2] })
+  let g = r.get()
+  assert g.d.len() == 2
+}
+
+test "an argument of the call has a list of its own" {
+  let a = Wrap::[U8].make(Wrap::[U8].make(200).get())
+  let k = a.get()
+  assert k.checked_add(100) == None
+}
+
+test "a list in the type and a list in the argument" {
+  let w = Wrap::[Wrap[U8]].make(Wrap::[U8].make(1))
+  assert w.get().get() == 1
+}

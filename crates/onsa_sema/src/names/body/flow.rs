@@ -132,7 +132,11 @@ impl Walker<'_> {
         match (kind, resolved) {
             (CallKind::Flow, false) => Err(self.outside(instance_form(self.ast, callee), span)),
             (CallKind::Plain | CallKind::Bang, true)
-                if self.out.paths.get(&callee).is_some_and(|r| matches!(self.called(r), Called::Flow(_))) =>
+                if self
+                    .out
+                    .paths
+                    .get(&super::named(self.ast, callee))
+                    .is_some_and(|r| matches!(self.called(r), Called::Flow(_))) =>
             {
                 Err(self.outside(Outside::Flow, span))
             }
@@ -144,7 +148,7 @@ impl Walker<'_> {
     /// found: a flow called with `~` is an instance, recorded; a mark that
     /// does not fit the callee stops the walk (S-811).
     pub(super) fn flow_mark(&mut self, e: ExprId, callee: ExprId, kind: CallKind, args: &[Arg]) -> W {
-        let mark = match self.out.paths.get(&callee) {
+        let mark = match self.out.paths.get(&super::named(self.ast, callee)) {
             Some(&PathRes::FlowBuiltin(FlowBuiltin::Delay(d))) => Mark::Stateful(Stateful::Delay(d.name())),
             Some(PathRes::FlowBuiltin(_)) => Mark::Plain,
             Some(r) => match self.called(r) {

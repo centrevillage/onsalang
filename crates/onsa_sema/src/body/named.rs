@@ -21,6 +21,7 @@ impl<'a> Checker<'a> {
             let bt = self.field_base(e, *base)?;
             return self.field_type(bt, name);
         };
+        self.type_args_of(e)?;
         if matches!(r, PathRes::Item { .. }) {
             self.namespaces_before(e)?;
         }
@@ -97,12 +98,38 @@ impl<'a> Checker<'a> {
         Ok(t)
     }
 
+    /// The type arguments `::[…]` of the chain `e` ends, as the names stage
+    /// lowered them (§4.5): their first diagnostic from its head (E0412,
+    /// E0416, …). The one place the types stage reports them; the check of a
+    /// body that ends with one not reported is an internal error (`check_all`).
+    pub(super) fn type_args_of(&mut self, e: ExprId) -> R<()> {
+        let mut keys = Vec::new();
+        let mut cur = e;
+        while let ExprKind::Field { base, .. } | ExprKind::TypeArgs { base, .. } = &self.expr(cur).kind {
+            if matches!(self.expr(cur).kind, ExprKind::TypeArgs { .. }) {
+                keys.push((cur, 0));
+            }
+            cur = *base;
+        }
+        self.reported_args(keys.into_iter().rev())
+    }
+
+    /// The first diagnostic of the type arguments at `keys`, in order.
+    pub(super) fn reported_args(&mut self, keys: impl Iterator<Item = (ExprId, u32)>) -> R<()> {
+        for key in keys {
+            if let Some((_, Some(d))) = self.names.type_args.get(&key) {
+                return Err(self.diag(d.clone()));
+            }
+        }
+        Ok(())
+    }
+
     /// The namespaces a chain passes before `e`, from its head, by the
     /// records of the nodes before it.
     fn namespaces_before(&mut self, e: ExprId) -> R<()> {
         let mut records = Vec::new();
         let mut cur = e;
-        while let ExprKind::Field { base, .. } = &self.expr(cur).kind {
+        while let ExprKind::Field { base, .. } | ExprKind::TypeArgs { base, .. } = &self.expr(cur).kind {
             cur = *base;
             if let Some(r) = self.names.paths.get(&cur) {
                 records.push((cur, r.clone(), self.last_name(cur)));
@@ -139,7 +166,7 @@ impl<'a> Checker<'a> {
     /// Whether `e` is a chain of names (`a`, `a.b`), by its form.
     fn of_names(&self, e: ExprId) -> bool {
         match &self.expr(e).kind {
-            ExprKind::Field { base, .. } => self.of_names(*base),
+            ExprKind::Field { base, .. } | ExprKind::TypeArgs { base, .. } => self.of_names(*base),
             ExprKind::Path(p) => p.segments.len() == 1,
             _ => false,
         }

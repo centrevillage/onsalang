@@ -1,0 +1,94 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§18.1"]
+
+// S-239, S-306 (W5-10 U1a): the number of the elements of the list is not the number of the parameters of the type
+// (§4.5: "数が宣言と合わなければ E0412"). Too few, too many, the const argument missing or added, for an associated function, an
+// associated constant, a struct literal and a variant of a generic enum. There is no candidate in an expression (§4.5: "式の中の型引数の
+// E0412 に修正候補は無く"; `fixes = 0`). One error per item (P-01); the other items are fine.
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+impl[T] Wrap[T] {
+  pub fn make(v: T) -> Wrap[T] {
+    Wrap { v: v }
+  }
+
+  pub fn get(self) -> T {
+    self.v
+  }
+}
+
+pub struct Pair[A, B] {
+  a: A,
+  b: B,
+}
+
+impl[A, B] Pair[A, B] {
+  pub fn make(a: A, b: B) -> Pair[A, B] {
+    Pair { a: a, b: b }
+  }
+}
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+pub struct Pr[T] {
+  a: T,
+}
+
+pub enum E[T] {
+  A(T),
+  B,
+}
+
+pub fn too_many_for_a_function() -> U8 {
+  Wrap::[U8, F32].make(1).get()                     //~ E0412
+}
+
+pub fn too_few_for_a_function() -> U8 {
+  let p = Pair::[U8].make(1, 2.0)                   //~ E0412
+  p.a
+}
+
+pub fn the_const_argument_is_missing() -> U32 {
+  Rg::[F32].CAP                                     //~ E0412
+}
+
+pub fn a_const_argument_is_added() -> U32 {
+  Rg::[F32, 4, 4].CAP                               //~ E0412
+}
+
+pub fn too_many_for_a_literal() -> U8 {
+  let p = Pr::[U8, U8] { a: 1 }                     //~ E0412
+  p.a
+}
+
+pub fn too_few_for_a_literal() -> U8 {
+  let p = Pair::[U8] { a: 1, b: 2.0 }               //~ E0412
+  p.a
+}
+
+pub fn too_many_for_a_variant() -> E[I32] {
+  E::[I32, I32].B                                   //~ E0412
+}
+
+pub fn too_many_for_a_variant_with_payload() -> E[I32] {
+  E::[I32, I32].A(1)                                //~ E0412
+}
+
+pub fn right() -> U32 {
+  Rg::[F32, 4].CAP
+}
+
+pub fn right_too() -> U8 {
+  Wrap::[U8].make(1).get()
+}

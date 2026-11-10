@@ -1,0 +1,71 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.1"]
+
+// S-239 (W5-10 U1a): an associated function and the construction of an enum variant of a generic type, put as a value
+// with the type arguments written on the type (§6.1: "関連関数と関連定数は項目の関数と同じく値として使える"; "関連関数と列挙子の構築も
+// 同じである"; §4.5: "一つの値は一つの具体化を指す"). The type arguments are fixed by the statement that puts the value: the
+// `U8` of `Wrap::[U8].make` is the type of the argument of the later `f.(200)`, and `checked_add(100)` of the result needs the type
+// of the receiver (§4.7: "型の頭が決まっていなければ E0420"). No diagnostic. Only the check: the values run in
+// type_args_owner_value_run.onsa (`onsa test` stops at a function value with E0200 until R-295).
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+impl[T] Wrap[T] {
+  pub fn make(v: T) -> Wrap[T] {
+    Wrap { v: v }
+  }
+
+  pub fn get(self) -> T {
+    self.v
+  }
+}
+
+pub enum E[T] {
+  A(T),
+  B,
+}
+
+pub fn apply(f: fn(U8) -> Wrap[U8], x: U8) -> U8 {
+  f.(x).get()
+}
+
+pub fn put_then_called() -> Option[U8] {
+  let f = Wrap::[U8].make
+  let w = f.(200)
+  let k = w.get()
+  k.checked_add(100)
+}
+
+pub fn two_values() -> U8 {
+  let fu = Wrap::[U8].make
+  let ff = Wrap::[F32].make
+  let a: U8 = fu.(3).get()
+  let b: F32 = ff.(2.5).get()
+  if b == 2.5 { a } else { 0 }
+}
+
+pub fn given_to_a_parameter() -> U8 {
+  apply(Wrap::[U8].make, 5)
+}
+
+pub fn a_variant_with_payload() -> Option[U8] {
+  let mk = E::[U8].A
+  let e = mk.(200)
+  let k = match e {
+    E.A(x) => x,
+    E.B => 0,
+  }
+  k.checked_add(100)
+}
+
+pub fn a_variant_without_payload() -> Option[U8] {
+  let e = E::[U8].B
+  let k = match e {
+    E.A(x) => x,
+    E.B => 200,
+  }
+  k.checked_add(100)
+}

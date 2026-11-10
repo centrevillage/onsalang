@@ -51,7 +51,7 @@ use heading::{heading_locals, kind_error, param_member};
 pub(crate) use decls::{Decls, item_kind};
 pub(crate) use derives::kind_constraint;
 pub(crate) use heading::{member_error, read_effects};
-pub(crate) use types::lower_type_in_body;
+pub(crate) use types::{lower_args_in_body, lower_type_in_body};
 pub(crate) use wellformed::{Pos, no_kind_argument, second_class};
 
 pub(crate) struct Sema<'p> {

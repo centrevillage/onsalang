@@ -262,15 +262,19 @@ fn a_hole_of_a_string_is_resolved_and_reported_as_a_chain_of_an_expression() {
 
 #[test]
 fn a_type_argument_in_an_expression_stops_the_walk_of_its_body() {
-    let src = "pub struct Q[T] { v: T }\npub fn id(x: I32) -> I32 { x }\npub fn t() -> I32 {\n  let a = 1\n  let b = id::[I32](a)\n  let c = 2\n  c\n}\npub fn s() -> I32 {\n  let k = 1\n  let q = Q::[I32] { v: k }\n  0\n}\npub fn r() -> I32 {\n  let k = 1\n  let q = Q { v: k }\n  0\n}\nconst K: I32 = 1\ntest \"w\" {\n  let w = K\n  assert w == 1\n}\n";
+    // A function's own type arguments are E0200 until W5-10 U2a; those of a
+    // type go to it (U1a): the walk of `s` goes on, the type in the record.
+    let src = "pub struct Q[T] { v: T }\npub fn id[T](x: T) -> T { x }\npub fn t() -> I32 {\n  let a = 1\n  let b = id::[I32](a)\n  let c = 2\n  c\n}\npub fn s() -> I32 {\n  let k = 1\n  let q = Q::[I32] { v: k }\n  0\n}\npub fn r() -> I32 {\n  let k = 1\n  let q = Q { v: k }\n  0\n}\nconst K: I32 = 1\ntest \"w\" {\n  let w = K\n  assert w == 1\n}\n";
     let (a, _) = analysis(src);
     let t = names(&a, "t");
     assert!(!t.complete);
     assert_eq!(binding_names(t), ["a"]);
     assert_eq!(t.bindings[0].reads, 0);
     let s = names(&a, "s");
-    assert!(!s.complete);
-    assert_eq!(s.bindings[0].reads, 0);
+    assert!(s.complete);
+    assert_eq!(s.bindings[0].reads, 1);
+    let q = s.structs.values().next().and_then(|r| r.owner).map(|t| a.types.get(t).clone());
+    assert!(matches!(q, Some(crate::ty::Ty::Named(..))));
     let r = names(&a, "r");
     assert!(r.complete);
     assert_eq!(r.bindings[0].reads, 1);

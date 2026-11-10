@@ -1,0 +1,95 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§18.1"]
+
+// S-239 (W5-10 U1a): the elements of the list beyond the number of the parameters are not read (§4.5: "宣言の数を超えた要素は
+// 読まない（種類も名前も判定しない。`P[Nope]` と `Ring[F32, 4, K]` は E0412 だけ）"). The name that is not found (`Nope`, which is
+// E0302 in the list of the right count), the kind that is wrong (an integer for a type), and a type that would not meet a bound are not
+// reported: the item has the error of the count only. Also for a type without parameters, where every element is beyond. One error
+// per item (P-01).
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+impl[T] Wrap[T] {
+  pub fn make(v: T) -> Wrap[T] {
+    Wrap { v: v }
+  }
+
+  pub fn get(self) -> T {
+    self.v
+  }
+}
+
+pub struct Pair[A, B] {
+  a: A,
+  b: B,
+}
+
+impl[A, B] Pair[A, B] {
+  pub fn make(a: A, b: B) -> Pair[A, B] {
+    Pair { a: a, b: b }
+  }
+}
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+pub struct Fl[T: Float] {
+  a: T,
+}
+
+pub enum E[T] {
+  A(T),
+  B,
+}
+
+pub struct Plain {
+  k: F32,
+}
+
+impl Plain {
+  pub fn make() -> Plain {
+    Plain { k: 1.0 }
+  }
+}
+
+pub fn a_name_not_found_beyond() -> U8 {
+  Wrap::[U8, Nope].make(1).get()                    //~ E0412
+}
+
+pub fn a_name_not_found_beyond_the_const_argument() -> U32 {
+  Rg::[F32, 4, Nope].CAP                            //~ E0412
+}
+
+pub fn a_constant_beyond_the_types() -> U8 {
+  Pair::[U8, F32, 3].make(1, 2.0).a                 //~ E0412
+}
+
+pub fn a_type_beyond_the_const_argument() -> U32 {
+  Rg::[F32, 4, U8].CAP                              //~ E0412
+}
+
+pub fn a_type_that_would_fail_the_bound_beyond() -> F32 {
+  let p = Fl::[F32, Bool] { a: 1.0 }                //~ E0412
+  p.a
+}
+
+pub fn a_name_not_found_beyond_a_variant() -> E[I32] {
+  E::[I32, Nope].B                                  //~ E0412
+}
+
+pub fn every_element_is_beyond_a_type_without_parameters() -> Plain {
+  Plain::[Nope].make()                              //~ E0412
+}
+
+pub fn the_kind_of_the_one_beyond_a_type_without_parameters() -> Plain {
+  Plain::[3].make()                                 //~ E0412
+}

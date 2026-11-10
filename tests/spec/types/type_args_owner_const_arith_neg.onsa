@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.6", "§18.1"]
+
+// S-239, S-329 (W5-10 U1a): the value of a constant expression that is a const argument written after the name of a type in
+// an expression is worked out at compile time, and an overflow, an underflow and a division by zero are E0419 at the expression
+// (§4.5: "溢れとゼロ除算は、その式の位置で E0419（コンパイル時の評価の panic、§6.6）"). Kept apart from type_args_owner_const_arg.onsa:
+// this version stops every constant expression with an operator at E0200 ("expressions as array lengths", the same wait as
+// types/array_length_operations_fine.onsa). One error per item (P-01).
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+pub fn an_overflow() -> U32 {
+  Rg::[F32, 4294967295 + 1].CAP                     //~ E0419
+}
+
+pub fn a_division_by_zero() -> U32 {
+  Rg::[F32, 4 / 0].CAP                              //~ E0419
+}
+
+pub fn an_underflow() -> U32 {
+  Rg::[F32, 0 - 1].CAP                              //~ E0419
+}
+
+pub fn a_remainder_by_zero() -> U32 {
+  Rg::[F32, 4 % 0].CAP                              //~ E0419
+}
+
+pub fn a_product_that_overflows() -> U32 {
+  Rg::[F32, 65536 * 65536].CAP                      //~ E0419
+}
+
+pub fn fine() -> U32 {
+  Rg::[F32, 4294967295].CAP
+}

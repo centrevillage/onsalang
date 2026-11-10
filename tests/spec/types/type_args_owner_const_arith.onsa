@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§6.6"]
+
+// S-239 (W5-10 U1a): the const argument written after the name of a type in an expression is a constant expression with
+// arithmetic (§4.5: "算術の演算子（`+ - * / %`）と前置の `-`、括弧からなる"), and its value is the value of the associated constant.
+// Kept apart from type_args_owner_assoc_const.onsa: this version stops every constant expression with an operator in a length or
+// a const argument at E0200 ("expressions as array lengths", the same wait as types/array_length_operations_fine.onsa), so the
+// cases that only need the list of the type arguments pass without this one. The values are worked out by hand.
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+const K: U32 = 5
+
+test "addition" {
+  assert Rg::[F32, 2 + 3].CAP == 5
+}
+
+test "a constant in arithmetic" {
+  assert Rg::[F32, K * 2].CAP == 10
+  assert Rg::[F32, K + K].CAP == 10
+}
+
+test "several operators and the priority" {
+  assert Rg::[F32, 10 / 2 - 1].CAP == 4
+  assert Rg::[F32, 2 + 3 * 4].CAP == 14
+  assert Rg::[F32, (2 + 3) * 4].CAP == 20
+  assert Rg::[F32, 17 % 5].CAP == 2
+}
+
+test "the argument is an arithmetic expression of the other argument's constant" {
+  assert Rg::[U8, K - 1].CAP == 4
+}

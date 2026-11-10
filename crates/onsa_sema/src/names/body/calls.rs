@@ -79,7 +79,7 @@ impl Walker<'_> {
             false => self.call_outside(e, callee, kind, true)?,
         }
         // The constant of a delay (`delay~(x, N)`, §11.4).
-        let constant = match self.out.paths.get(&callee) {
+        let constant = match self.out.paths.get(&super::named(self.ast, callee)) {
             Some(PathRes::FlowBuiltin(FlowBuiltin::Delay(d))) => d.const_index(),
             _ => None,
         };
@@ -122,7 +122,7 @@ impl Walker<'_> {
     /// the row `item_dot_call` (a flow is no value there, E0308, S-816). A
     /// value called with `!(` is the types stage's (E0714, E0401, S-812).
     fn form(&mut self, callee: ExprId, kind: CallKind) -> W {
-        let Some(r) = self.out.paths.get(&callee) else { return Ok(()) };
+        let Some(r) = self.out.paths.get(&super::named(self.ast, callee)) else { return Ok(()) };
         let span = self.ast.expr(callee).span;
         let d = match (kind, self.called(r)) {
             (CallKind::Plain, Called::Value) => self.call_form(RowId::ValueCall, span, value_call_fix(span)),

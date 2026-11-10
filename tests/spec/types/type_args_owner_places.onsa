@@ -1,0 +1,116 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§11.2", "§7"]
+
+// S-239 (W5-10 U1a): the places where a type argument written on a type is read are the same as for any expression: the body of
+// a function, a method, a flow, a closure, the arms of an `if` and of a `match`, a loop, and a `const` initializer. The closure is
+// the argument of `array.from_fn`, the only place of an anonymous function in this version. The flow builds a struct literal,
+// since a function that is not `rt` takes no sample argument (§11.5). The values are worked out by hand.
+
+use std.array
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+impl[T] Wrap[T] {
+  pub fn make(v: T) -> Wrap[T] {
+    Wrap { v: v }
+  }
+
+  pub fn get(self) -> T {
+    self.v
+  }
+
+  pub const TAG: U32 = 3
+}
+
+pub struct Holder {
+  n: U8,
+}
+
+impl Holder {
+  pub fn in_a_method(self) -> U8 {
+    Wrap::[U8].make(self.n).get()
+  }
+}
+
+pub fn in_a_function(x: U8) -> U8 {
+  let w = Wrap::[U8].make(x)
+  w.get()
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  let w = Wrap::[F32] { v: x }
+  w.v * 2.0
+}
+
+pub fn in_a_closure() -> [U8; 3] {
+  array.from_fn(fn(_) { Wrap::[U8].make(7).get() })
+}
+
+pub fn in_an_if(c: Bool) -> U8 {
+  if c {
+    Wrap::[U8].make(1).get()
+  } else {
+    Wrap::[U8].make(2).get()
+  }
+}
+
+pub fn in_a_match(k: Option[I32]) -> F32 {
+  match k {
+    Some(_) => Wrap::[F32].make(0.5).get(),
+    None => Wrap::[F32].make(1.5).get(),
+  }
+}
+
+pub fn in_a_loop() -> U32 {
+  var s: U32 = 0
+  for _ in 0 ..< 3 {
+    s = s + Wrap::[U32].TAG
+  }
+  s
+}
+
+const TAG3: U32 = Wrap::[U8].TAG * 3
+
+test "a method" {
+  let h = Holder { n: 9 }
+  assert h.in_a_method() == 9
+}
+
+test "a function" {
+  assert in_a_function(5) == 5
+}
+
+test "a flow" {
+  let xs: [F32; 2] = [1.0, 2.5]
+  let o = in_a_flow.render(in_a_flow.Config {}, in_a_flow.Params {}, xs, 8.0)
+  assert o.out[0] == 2.0
+  assert o.out[1] == 5.0
+}
+
+test "a closure (an argument of array.from_fn)" {
+  let a = in_a_closure()
+  assert a.len() == 3
+  assert a[2] == 7
+}
+
+test "the arms of an if" {
+  assert in_an_if(true) == 1
+  assert in_an_if(false) == 2
+}
+
+test "the arms of a match" {
+  assert in_a_match(Some(0)) == 0.5
+  assert in_a_match(None) == 1.5
+}
+
+test "a loop" {
+  assert in_a_loop() == 9
+}
+
+test "a const initializer" {
+  assert TAG3 == 9
+}

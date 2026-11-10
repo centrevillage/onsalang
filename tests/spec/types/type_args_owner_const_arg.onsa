@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§3.4", "§6.6", "§18.1"]
+
+// S-239, S-329 (W5-10 U1a): a const argument written after the name of a type in an expression is a constant expression
+// (§4.5: "const 引数は定数式"). What is not one is E0417 whatever the position: a local variable, an argument of the function,
+// a call of a function, a comparison (§4.5: "定数式でない…（関数の呼び出し、ローカル変数など）を書くと、位置によらず E0417"). A
+// negative number and a literal that is not an integer are E0401 ("`U32` に前置の `-` は無い"; "整数でないリテラル（`1.5`、`true`、
+// `"s"`）も E0401"). A value that overflows is E0419 and is in type_args_owner_const_arith_neg.onsa. One error per item (P-01).
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+pub fn two() -> U32 {
+  2
+}
+
+pub fn a_local_variable() -> U32 {
+  let n: U32 = 4
+  Rg::[F32, n].CAP                                  //~ E0417
+}
+
+pub fn an_argument(n: U32) -> U32 {
+  Rg::[F32, n].CAP                                  //~ E0417
+}
+
+pub fn a_call() -> U32 {
+  Rg::[F32, two()].CAP                              //~ E0417
+}
+
+pub fn a_comparison() -> U32 {
+  Rg::[F32, 4 == 4].CAP                             //~ E0417
+}
+
+pub fn a_local_in_arithmetic() -> U32 {
+  let n: U32 = 4
+  Rg::[F32, n + 1].CAP                              //~ E0417
+}
+
+pub fn a_negative_number() -> U32 {
+  Rg::[F32, -1].CAP                                 //~ E0401
+}
+
+pub fn a_float_literal() -> U32 {
+  Rg::[F32, 1.5].CAP                                //~ E0401
+}
+
+pub fn a_bool_literal() -> U32 {
+  Rg::[F32, true].CAP                               //~ E0401
+}

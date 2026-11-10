@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// S-239 (W5-10 U1a): a name in the list that is not found is E0302 (§15.1: "名前が見つからなければ E0302"; §4.5: "数が宣言と合わなければ
+// E0412 で、宣言の数を超えた要素は読まない" so the name is read only inside the number of the parameters). A type, a name inside
+// another type argument, a constant of a const argument, and the name of the type itself. One error per item (P-01); the others are
+// fine.
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+impl[T] Wrap[T] {
+  pub fn make(v: T) -> Wrap[T] {
+    Wrap { v: v }
+  }
+}
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+pub struct Pr[T] {
+  a: T,
+}
+
+pub enum E[T] {
+  A(T),
+  B,
+}
+
+pub fn a_type_not_found() -> U8 {
+  let _ = Wrap::[Nope].make(1)                      //~ E0302
+  1
+}
+
+pub fn a_type_not_found_inside_another() -> U8 {
+  let _ = Wrap::[Option[Nope]].make(None)           //~ E0302
+  1
+}
+
+pub fn a_constant_not_found() -> U32 {
+  Rg::[F32, NOPE].CAP                               //~ E0302
+}
+
+pub fn a_constant_not_found_in_arithmetic() -> U32 {
+  Rg::[F32, 2 * NOPE].CAP                           //~ E0302
+}
+
+pub fn a_type_not_found_in_a_literal() -> U8 {
+  let _ = Pr::[Nope] { a: 1 }                       //~ E0302
+  1
+}
+
+pub fn a_type_not_found_in_a_variant() -> E[I32] {
+  E::[Nope].B                                       //~ E0302
+}
+
+pub fn the_type_itself_not_found() -> U8 {
+  let _ = Nope::[U8].make(1)                        //~ E0302
+  1
+}

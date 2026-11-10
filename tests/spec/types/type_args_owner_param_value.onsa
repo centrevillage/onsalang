@@ -1,0 +1,54 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§6.6"]
+
+// S-239 (W5-10 U1a): at the place of a value, the associated constant of a type whose type arguments hold a type parameter or a
+// const parameter of the item (`Rg::[T, 4].CAP`, `Rg::[F32, N].CAP`) is read as the item is instantiated (§4.5: the E0417 of
+// such arguments is of a constant expression, the length of an array and a const argument; at the place of a value it is a
+// value, as `Self.CAP` in a generic `impl` is). The values are worked out by hand.
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+pub fn of_a_type_parameter[T](x: T) -> U32 {
+  let _ = x
+  Rg::[T, 4].CAP
+}
+
+pub fn of_a_const_parameter[const N: U32](a: [F32; N]) -> U32 {
+  let _ = a
+  Rg::[F32, N].CAP
+}
+
+pub struct Holder[T] {
+  v: T,
+}
+
+impl[T] Holder[T] {
+  pub fn cap(self) -> U32 {
+    let _ = self
+    Rg::[T, 4].CAP + 1
+  }
+}
+
+test "a type parameter in the arguments of a function" {
+  let x: F32 = 1.5
+  assert of_a_type_parameter(x) == 4
+  assert of_a_type_parameter(true) == 4
+}
+
+test "a const parameter in the arguments of a function" {
+  assert of_a_const_parameter([0.0; 8]) == 8
+  assert of_a_const_parameter([1.0, 2.0]) == 2
+}
+
+test "a type parameter of the impl in the arguments of a method" {
+  let h = Holder { v: 2 }
+  assert h.cap() == 5
+}

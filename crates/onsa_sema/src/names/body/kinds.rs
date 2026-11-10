@@ -58,7 +58,7 @@ impl Walker<'_> {
             Place::Value | Place::DotCallee => "a value",
             Place::Callee(call) => match kind.at_callee(self.bang(call)) {
                 Callee::Called | Callee::Flow | Callee::NoFunction => return None,
-                Callee::Value => return self.value_called(segs),
+                Callee::Value => return self.value_called(segs, call),
                 Callee::NoValue => "a function",
             },
             Place::Instance(_) | Place::TypeOrValue => return None,
@@ -113,9 +113,14 @@ impl Walker<'_> {
 
     /// E0020 for the value `segs` called as `x(...)` ([`value_called`],
     /// [`Self::call_form`]).
-    pub(super) fn value_called(&self, segs: &[&Ident]) -> Option<Fail> {
+    pub(super) fn value_called(&self, segs: &[&Ident], call: ExprId) -> Option<Fail> {
         let span = span_of(segs);
-        self.call_form(RowId::ValueCall, span, value_call_fix(span)).map(Fail::Report)
+        // After the type arguments of the callee (`K::[I32].(1)`).
+        let at = match self.ast.expr(call).kind {
+            ExprKind::Call { callee, .. } => self.ast.expr(callee).span,
+            _ => span,
+        };
+        self.call_form(RowId::ValueCall, span, value_call_fix(at)).map(Fail::Report)
     }
 
     /// Whether the call `call` is `f!(x)`.
@@ -127,13 +132,13 @@ impl Walker<'_> {
     /// callee of `call` or as a value (none). The candidate calls it on the
     /// first argument (`p.get()`, `b.m!(x)` for an `inout self` method, with
     /// the `!` added or taken off as the receiver is declared); none with no
-    /// argument or no call.
+    /// argument, no call, or type arguments in the chain (`Pr::[U8].first`).
     fn method_call(&self, call: Option<ExprId>, segs: &[&Ident], bang: bool) -> Diagnostic {
         let span = span_of(segs);
         let name = &segs[segs.len() - 1].name;
         let d = method_named(path_of(segs).dotted(), name, span);
         let ast = self.ast;
-        let Some(call) = call else { return d };
+        let Some(call) = call.filter(|_| !self.listed) else { return d };
         let ExprKind::Call { args, kind, .. } = &ast.expr(call).kind else { return d };
         let Some((first, rest)) = args.split_first() else { return d };
         let recv = self.src(ast.expr(first.expr).span);

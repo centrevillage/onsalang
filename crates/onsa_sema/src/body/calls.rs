@@ -16,6 +16,8 @@ impl<'a> Checker<'a> {
         expected: Option<TyId>,
     ) -> R<TyId> {
         let span = self.expr(e).span;
+        // Before the call of a flow (§4.5, S-811: `lp::[F32]~(x)`).
+        self.type_args_of(callee)?;
         if self.flow.is_some()
             && let Some(t) = self.check_flow_call(e, callee, kind, args, expected)?
         {
@@ -31,9 +33,10 @@ impl<'a> Checker<'a> {
             // 1. A function (an associated one of a builtin type is std's,
             // `Buf.zeroed`) or a variant, as the names stage resolved the
             // callee.
-            let record = self.names.paths.get(&callee).cloned().map(|r| self.item_record(r));
+            let named = crate::names::body::named(self.ast, callee);
+            let record = self.names.paths.get(&named).cloned().map(|r| self.item_record(r));
             if let Some(PathRes::Item { entity, owner }) = record {
-                let name = self.last_name(callee);
+                let name = self.last_name(named);
                 return match entity {
                     Entity::Builtin(Builtin::Panic) => self.check_panic(e, &name, args, expected),
                     _ => self.check_fn_call(e, callee, (entity, owner), &name, args, expected, kind),

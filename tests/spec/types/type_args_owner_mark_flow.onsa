@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§6.1", "§15.1", "§18.1"]
+
+// S-239, S-306, S-811 (W5-10 U1a): a list written after the name of a flow, before the `~` of the call, is E0412 (§4.5: "型パラメータを
+// 持たない項目（総称でない関数、flow、…）に書いても E0412"). The mark `~(` is the right one for a flow, so the mark rules of the
+// call (E0812, E0821) are not met and the list is what is wrong (S-811: the rule that the kind of the callee asks of a `(` without
+// the mark is the last: "印の無い `(` に呼び先の種類が求める規則（E0020、E0811、E0713、E0308、E0412）"; here the mark is there and fits). There is no
+// candidate (S-306). One error per item (P-01).
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow one_element(x: F32 at sample) -> F32 at sample {
+  lp::[F32]~(x)                                     //~ E0412
+}
+
+pub flow two_elements(x: F32 at sample) -> F32 at sample {
+  lp::[F32, 4]~(x)                                  //~ E0412
+}
+
+pub flow in_a_let(x: F32 at sample) -> F32 at sample {
+  let y = lp::[F32]~(x)                             //~ E0412
+  y
+}
+
+pub flow right(x: F32 at sample) -> F32 at sample {
+  lp~(x)
+}

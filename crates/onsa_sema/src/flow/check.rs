@@ -362,7 +362,7 @@ impl<'a> Checker<'a> {
         // The builtin names (§2.2), as the names stage found them (one an
         // item or a `use` of the module takes is an E0304 there, held as an
         // error in the body, §18.1, S-675).
-        let builtin = match self.names.paths.get(&callee) {
+        let builtin = match self.names.paths.get(&crate::names::body::named(self.ast, callee)) {
             Some(&PathRes::FlowBuiltin(b)) => Some(b),
             _ => None,
         };
@@ -398,7 +398,7 @@ impl<'a> Checker<'a> {
     /// Whether the record of `callee` names a flow, by the table of the
     /// names stage ([`NameKind::at_callee`]).
     fn names_a_flow(&self, callee: ExprId) -> bool {
-        matches!(self.names.paths.get(&callee), Some(&PathRes::Item { entity, .. })
+        matches!(self.names.paths.get(&crate::names::body::named(self.ast, callee)), Some(&PathRes::Item { entity, .. })
             if NameKind::of(entity, &self.a.defs).is_some_and(|k| k.at_callee(false) == Callee::Flow))
     }
 

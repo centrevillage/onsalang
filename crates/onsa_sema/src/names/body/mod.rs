@@ -32,6 +32,7 @@ pub(crate) use paths::is_value;
 mod scope;
 #[cfg(test)]
 mod tests;
+mod type_args;
 
 use std::collections::{BTreeSet, VecDeque};
 
@@ -108,6 +109,13 @@ pub(crate) struct BodyNames {
     /// by the names stage: the type, and the diagnostic of the types stage at
     /// it (E0412, …), which the types stage reports when it reaches it.
     pub types: HashMap<TypeId, (TyId, Option<Diagnostic>)>,
+    /// The type arguments `::[…]` of the body (§4.5) that go to a name of
+    /// it, lowered once by the names stage: of a `TypeArgs` node (`0`) or of
+    /// the segment `k` of a struct literal. The type they make with a type
+    /// before them, which the record after them has as its `owner` (none for
+    /// a name that takes none), and the diagnostic of the types stage at them
+    /// (E0412, E0416, …), which it reports when it reaches them.
+    pub type_args: HashMap<(ExprId, u32), (Option<TyId>, Option<Diagnostic>)>,
     /// The effect row of an anonymous function, read once by the names stage
     /// as the row of a signature (§8.1, S-738).
     pub effects: HashMap<ExprId, crate::ty::EffectSet>,
@@ -294,11 +302,34 @@ pub(crate) struct ScopeInfo {
 /// with the visible locals it names ([`Walker::site`]).
 type Site = (Typed, HashSet<String>);
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 enum Typed {
     /// A type written at its place (`sig::wellformed`).
     Type(TypeId, Pos),
     Row(ExprId),
+    /// The type arguments after a type ([`BodyNames::type_args`]).
+    Args(Box<Listed>),
+}
+
+/// The type arguments `args` at `key` after the name `path` (the chain up
+/// to it), which names the type `entity`; the type they make goes to the
+/// `owner` of the record of `to`, the next name or the struct literal.
+#[derive(Debug, Clone)]
+struct Listed {
+    key: (ExprId, u32),
+    entity: Entity,
+    path: onsa_syntax::ast::Path,
+    args: onsa_syntax::ast::TypeArgList,
+    to: Option<ExprId>,
+}
+
+/// The node of the names of `e`: through the type arguments after them
+/// (`id::[U8]` of `id::[U8](250)`, §4.5), the node with their record.
+pub(crate) fn named(ast: &Ast, e: ExprId) -> ExprId {
+    match ast.expr(e).kind {
+        ExprKind::TypeArgs { base, .. } => base,
+        _ => e,
+    }
 }
 
 /// The walk of a body stopped: the record is partial
@@ -410,6 +441,22 @@ fn lower_types(
     for ((site, locals), late) in sites.into_iter().map(|t| (t, false)).chain(late) {
         let (t, pos) = match site {
             Typed::Type(t, pos) => (t, pos),
+            Typed::Args(at) => {
+                let site = (at.entity, &at.path, &at.args);
+                let (ty, diags) =
+                    crate::sig::lower_args_in_body(a, (m, ast, text), (generics, self_ty, def), site, locals);
+                let d = diags.into_iter().next();
+                if let Some(d) = d.as_ref().filter(|d| d.stage == onsa_diag::Stage::Names) {
+                    fail = Some(Fail::Report(d.clone()));
+                    break;
+                }
+                out.type_args.insert(at.key, (Some(ty), d));
+                match at.to.and_then(|x| out.paths.get_mut(&x)) {
+                    Some(PathRes::Item { owner, .. }) => *owner = Some(ty),
+                    _ => at.to.and_then(|x| out.structs.get_mut(&x)).into_iter().for_each(|s| s.owner = Some(ty)),
+                }
+                continue;
+            }
             Typed::Row(e) => {
                 let ExprKind::Closure { effects, .. } = &ast.expr(e).kind else { continue };
                 let (set, errors) = crate::sig::read_effects(a, def, m, (generics, self_ty, &locals), effects.as_ref());
@@ -493,6 +540,9 @@ struct Walker<'a> {
     /// The locals a type sees, of the walk of a constant expression of it
     /// (`consts.rs`), by name: found after the bindings of the walk.
     outer: HashMap<String, BindingId>,
+    /// The chain resolved has type arguments: a candidate that rewrites its
+    /// names is none (`kinds.rs`).
+    listed: bool,
 }
 
 impl<'a> Walker<'a> {
@@ -524,6 +574,7 @@ impl<'a> Walker<'a> {
             root,
             heading: HashMap::default(),
             outer: HashMap::default(),
+            listed: false,
         }
     }
 

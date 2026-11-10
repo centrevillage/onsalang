@@ -1,0 +1,63 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§6.1"]
+
+// S-239 (W5-10 U1a): the values of type_args_owner_value.onsa, run. `onsa test` stops at the lowering of a function value and of a call
+// through one with E0200 ("function values", R-295, the same wait as semantics/scalar_from_bits_value.onsa), so it is a case of its
+// own: the type check of the same forms is in type_args_owner_value.onsa. An associated function and the construction of a variant,
+// put as a value with the type arguments written on the type, are called and the results are the values worked out by hand.
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+impl[T] Wrap[T] {
+  pub fn make(v: T) -> Wrap[T] {
+    Wrap { v: v }
+  }
+
+  pub fn get(self) -> T {
+    self.v
+  }
+}
+
+pub enum E[T] {
+  A(T),
+  B,
+}
+
+pub fn apply(f: fn(U8) -> Wrap[U8], x: U8) -> U8 {
+  f.(x).get()
+}
+
+test "an associated function put as a value, then called" {
+  let f = Wrap::[U8].make
+  let w = f.(200)
+  let k = w.get()
+  assert k.checked_add(100) == None
+  assert k.checked_add(50) == Some(250)
+}
+
+test "two values of two type arguments" {
+  let fu = Wrap::[U8].make
+  let ff = Wrap::[F32].make
+  let a: U8 = fu.(3).get()
+  let b: F32 = ff.(2.5).get()
+  assert a == 3
+  assert b == 2.5
+}
+
+test "the value is given to a parameter of a function type" {
+  assert apply(Wrap::[U8].make, 5) == 5
+}
+
+test "the construction of an enum variant put as a value" {
+  let mk = E::[U8].A
+  let e = mk.(200)
+  let k = match e {
+    E.A(x) => x,
+    E.B => 0,
+  }
+  assert k.checked_add(100) == None
+}

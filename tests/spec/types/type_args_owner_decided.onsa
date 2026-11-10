@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7", "§18.1"]
+
+// S-239 (W5-10 U1a): the type parameters of the call are decided by the type arguments written on the type, in that statement
+// (§4.5: "型引数を書いた呼び出しの型パラメータは、その文で決まる"), so the next statement that needs another type is a type error
+// (E0401) and not an inference, and a literal is read as the written type (E0408 for a value that does not fit it, §2.4). The use
+// of the result as the other type, the annotation of the binding that disagrees, an argument of another type, the return type,
+// and a literal out of the range of the written type. One error per item (P-01).
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+impl[T] Wrap[T] {
+  pub fn make(v: T) -> Wrap[T] {
+    Wrap { v: v }
+  }
+
+  pub fn get(self) -> T {
+    self.v
+  }
+
+  pub fn none() -> Option[T] {
+    None
+  }
+}
+
+pub struct Pr[T] {
+  a: T,
+}
+
+pub fn the_result_used_as_another_type() -> I32 {
+  let w = Wrap::[U8].make(1)
+  let b: I32 = w.get()                              //~ E0401
+  b
+}
+
+pub fn the_annotation_disagrees() -> I32 {
+  let _: Wrap[I32] = Wrap::[U8].make(1)             //~ E0401
+  1
+}
+
+pub fn an_argument_of_another_type() -> U8 {
+  let x: I32 = 5
+  let _ = Wrap::[U8].make(x)                        //~ E0401
+  1
+}
+
+pub fn the_return_type_disagrees() -> Option[I32] {
+  Wrap::[U8].none()                                 //~ E0401
+}
+
+pub fn a_literal_out_of_the_range() -> U8 {
+  let _ = Wrap::[U8].make(300)                      //~ E0408
+  1
+}
+
+pub fn a_literal_of_a_struct_out_of_the_range() -> U8 {
+  let _ = Pr::[U8] { a: 300 }                       //~ E0408
+  1
+}

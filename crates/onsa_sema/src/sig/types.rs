@@ -128,37 +128,7 @@ impl<'p> Sema<'p> {
                         return self.a.types.error();
                     }
                 };
-                // Where an alias is written: its right side is judged at the alias
-                // (`Sema::wellformed`, S-757).
-                if let Entity::Def(d) = entity
-                    && matches!(self.a.def(d).kind, DefKind::Alias(_))
-                {
-                    self.alias_at.insert((cx.m, t), d);
-                }
-                // S-24: a const generic parameter takes an integer literal or a
-                // constant's name; which arguments are const depends on the entity.
-                // The declared parameters, when their count is known: an argument
-                // past them has no kind to judge and is not read, the E0412 of the
-                // count (`Ring[F32, 4, 5]`, `P[3]`, `P[Nope]`; §4.5, S-762 (1)).
-                let declared = self.declared_params(entity);
-                let lowered_args: Vec<TyId> = args_ast
-                    .iter()
-                    .enumerate()
-                    .map(|(i, &x)| match declared.as_ref().map(|p| p.get(i)) {
-                        Some(None) => self.a.types.error(),
-                        known => self.lower_type_arg(cx, x, known.flatten().copied().flatten()),
-                    })
-                    .collect();
-                // A type of a cycle with its count is the error type; its
-                // arguments are judged as written (R-327).
-                if let Entity::Def(d) = entity
-                    && self.a.decls.cyclic.contains(&d)
-                    && declared.as_ref().is_some_and(|p| !p.is_empty() && p.len() == lowered_args.len())
-                {
-                    let would_be = self.a.types.intern(Ty::Named(d, lowered_args.clone()));
-                    self.a.decls.cyclic_at.insert((cx.m, t), would_be);
-                }
-                self.type_of_entity(cx, entity, lowered_args, te.span, path)
+                self.type_with_args(cx, entity, &args_ast, (te.span, path), Some(t))
             }
             TypeKind::ConstArg(_) => {
                 self.report(
@@ -187,6 +157,49 @@ impl<'p> Sema<'p> {
             return None;
         }
         Some(b.misplaced(path.segments.iter().map(|s| s.span), cx.text))
+    }
+
+    /// The type the name `path` at `span`, found as `entity`, makes with the
+    /// arguments `args` written after it: in a type (`t`, the type written)
+    /// and in an expression (`Buf::[F32].zeroed(4)`, `Pr::[U8] { a: 1 }`,
+    /// §4.5), the one judgment of their kinds and count (D-15).
+    pub(super) fn type_with_args(
+        &mut self,
+        cx: &Cx<'p>,
+        entity: Entity,
+        args: &[TypeId],
+        (span, path): (Span, &Path),
+        t: Option<TypeId>,
+    ) -> TyId {
+        // Where an alias is written: its right side is judged at the alias
+        // (`Sema::wellformed`, S-757).
+        if let (Entity::Def(d), Some(t)) = (entity, t)
+            && matches!(self.a.def(d).kind, DefKind::Alias(_))
+        {
+            self.alias_at.insert((cx.m, t), d);
+        }
+        // S-24: a const generic parameter takes an integer literal or a
+        // constant's name; which arguments are const depends on the entity.
+        // The declared parameters, when their count is known: an argument
+        // past them has no kind to judge and is not read, the E0412 of the
+        // count (`Ring[F32, 4, 5]`, `P[3]`, `P[Nope]`; §4.5, S-762 (1)).
+        let declared = self.declared_params(entity);
+        let lowered_args: Vec<TyId> = (args.iter().enumerate())
+            .map(|(i, &x)| match declared.as_ref().map(|p| p.get(i)) {
+                Some(None) => self.a.types.error(),
+                known => self.lower_type_arg(cx, x, known.flatten().copied().flatten()),
+            })
+            .collect();
+        // A type of a cycle with its count is the error type; its
+        // arguments are judged as written (R-327).
+        if let (Entity::Def(d), Some(t)) = (entity, t)
+            && self.a.decls.cyclic.contains(&d)
+            && declared.as_ref().is_some_and(|p| !p.is_empty() && p.len() == lowered_args.len())
+        {
+            let would_be = self.a.types.intern(Ty::Named(d, lowered_args.clone()));
+            self.a.decls.cyclic_at.insert((cx.m, t), would_be);
+        }
+        self.type_of_entity(cx, entity, lowered_args, span, path)
     }
 
     /// E0020 for a rate written as a type `t` (`Sig[F32]`, the row
@@ -557,6 +570,30 @@ pub(crate) fn lower_type_in_body<'p>(
     // error of its lowering.
     if s.a.diagnostics.len() == before {
         s.judge(&cx, t, ty, pos);
+    }
+    let diags = s.a.diagnostics.drain(before..).collect();
+    (ty, diags)
+}
+
+/// The type the type arguments `args` of an expression make with the name
+/// `path` before them, found as `entity` (§4.5: `Buf::[F32]` of
+/// `Buf::[F32].zeroed(4)`): lowered and judged as a type of a body is
+/// ([`lower_type_in_body`]), at the place of a part of a type.
+pub(crate) fn lower_args_in_body<'p>(
+    a: &'p mut Analysis,
+    (m, ast, text): (ModId, &'p Ast, &'p str),
+    (generics, self_ty, def): (&[GenericDef], Option<TyId>, DefId),
+    (entity, path, args): (Entity, &Path, &onsa_syntax::ast::TypeArgList),
+    locals: HashSet<String>,
+) -> (TyId, Vec<Diagnostic>) {
+    let before = a.diagnostics.len();
+    let flow = matches!(a.def(def).kind, DefKind::Flow(_));
+    let mut s = Sema::new(a, Vec::new());
+    let cx = Cx { m, ast, text, generics: generics.to_vec(), self_ty, def, reach: None, locals, flow };
+    let span = Span { start: path.span.start, ..args.span };
+    let ty = s.type_with_args(&cx, entity, &args.args, (span, path), None);
+    if s.a.diagnostics.len() == before {
+        s.judge_args(&cx, &args.args, ty, span);
     }
     let diags = s.a.diagnostics.drain(before..).collect();
     (ty, diags)

@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§15.1"]
+
+// S-239 (W5-10 U1a): the generic types are declared in another module (`util.onsa`), and the type arguments are written after the
+// name of the type as it is written here: the name taken by a `use` (`Wrap::[U8]`) and the path through the module name
+// (`util.Wrap::[U8]`, §4.5: "名前の経路の直後"). The type parameters are decided by that statement in both. The associated
+// functions, the struct literal and the variants of another module are read by the same rules as the ones of this module.
+// The values are worked out by hand.
+use util
+use util.{E, Rg, Wrap}
+
+test "an associated function of a type taken by a use" {
+  let w = Wrap::[U8].make(200)
+  let k = w.get()
+  assert k.checked_add(100) == None
+}
+
+test "an associated function through the module name" {
+  let w = util.Wrap::[U8].make(200)
+  let k = w.get()
+  assert k.checked_add(100) == None
+}
+
+test "T that the arguments do not decide" {
+  let n = Wrap::[U8].none()
+  let k = match n {
+    Some(x) => x,
+    None => 200,
+  }
+  assert k.checked_add(100) == None
+}
+
+test "the struct literal of the other module" {
+  let w = util.Wrap::[U8] { v: 200 }
+  let k = w.v
+  assert k.checked_add(100) == None
+}
+
+test "the variants of the other module" {
+  let a = E::[U8].A(200)
+  let b = util.E::[U8].B
+  let ka = match a {
+    E.A(x) => x,
+    E.B => 0,
+  }
+  let kb = match b {
+    E.A(x) => x,
+    E.B => 200,
+  }
+  assert ka.checked_add(100) == None
+  assert kb.checked_add(100) == None
+}
+
+test "the constant of the other module" {
+  assert Rg::[F32, 4].CAP == 4
+  assert util.Rg::[F32, 8].CAP == 8
+}
