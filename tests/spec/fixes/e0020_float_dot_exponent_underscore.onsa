@@ -1,0 +1,142 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+// fixes = 1
+
+// E0020 for the point before an exponent whose digits are written with `_` (spec §2.4, §18.1; S-472, S-965
+// R4). `1e_3` is a float (a `_` stands anywhere among the digits of the exponent), so `1.e_3` is the float
+// `1.e3` with the same exponent: after the point, an `e` or `E` that is followed by a run of digits and `_`
+// with at least one digit in it (a sign may stand between) makes the exponent form, and the error is the one
+// of `1.e3` (E0020), with the one candidate that puts a `0` after the point (`1.0e_3`, the exponent as it
+// was). It is no member `.e_3` of an integer (E0413). The main position is the first digit of the number.
+// One error per declaration (P-01). The places: a let, an argument, a return, an operand, a comparison, a
+// field, an element, a tuple, a closure body, a flow, a `const` and an argument of `@param`. The form without
+// a digit in the run (`1.e_`) stays a member (negative/float_dot_exponent_member_e0413.onsa).
+
+pub struct Pair {
+  a: F32,
+  b: F32,
+}
+
+fn takes(x: F32) -> F32 {
+  x
+}
+
+pub fn underscore() -> F32 {
+  let a: F32 = 1.e_3                                //~ E0020
+  a
+}
+
+pub fn capital() -> F32 {
+  let a: F32 = 1.E_3                                //~ E0020
+  a
+}
+
+pub fn minus_and_underscore() -> F32 {
+  let a: F32 = 1.e-_3                               //~ E0020
+  a
+}
+
+pub fn plus_and_underscore() -> F32 {
+  let a: F32 = 1.e+_3                               //~ E0020
+  a
+}
+
+pub fn two_underscores() -> F32 {
+  let a: F32 = 1.e__3                               //~ E0020
+  a
+}
+
+pub fn underscore_after_the_digit() -> F32 {
+  let a: F32 = 1.e_3_                               //~ E0020
+  a
+}
+
+pub fn underscores_between_digits() -> F32 {
+  let a: F32 = 1.e_3_0                              //~ E0020
+  a
+}
+
+pub fn two_digits() -> F32 {
+  let a: F32 = 1.e_10                               //~ E0020
+  a
+}
+
+pub fn digits_before_the_point() -> F32 {
+  let a: F32 = 10.e_3                               //~ E0020
+  a
+}
+
+pub fn separator_before_the_point() -> F32 {
+  let a: F32 = 1_0.e_3                              //~ E0020
+  a
+}
+
+pub fn under_a_minus() -> F32 {
+  let a: F32 = -1.e_3                               //~ E0020
+  a
+}
+
+pub fn in_an_argument() -> F32 {
+  takes(1.e_3)                                      //~ E0020
+}
+
+pub fn in_a_return() -> F32 {
+  1.e_3                                             //~ E0020
+}
+
+pub fn as_an_operand(x: F32) -> F32 {
+  x * 1.e_3                                         //~ E0020
+}
+
+pub fn in_a_comparison(x: F32) -> Bool {
+  x < 1.e_3                                         //~ E0020
+}
+
+pub fn in_a_field() -> Pair {
+  Pair { a: 1.0, b: 1.e_3 }                         //~ E0020
+}
+
+pub fn in_an_array() -> [F32; 2] {
+  [1.0, 1.e_3]                                      //~ E0020
+}
+
+pub fn in_a_tuple() -> (F32, I32) {
+  (1.e_3, 2)                                        //~ E0020
+}
+
+pub fn in_a_branch(flag: Bool) -> F32 {
+  if flag { 1.0 } else { 1.e_3 }                    //~ E0020
+}
+
+pub fn in_a_closure_body() -> F32 {
+  let f = fn(y: I32) -> F32 { 1.e_3 }               //~ E0020
+  f.(1)
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  x * 1.e_3                                         //~ E0020
+}
+
+const IN_A_CONST: F32 = 1.e_3                       //~ E0020
+
+pub flow in_a_param(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.e_3, default: 0.5)        //~ E0020
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+// The right forms: the exponent with `_` and no point before it, the candidate's own form, and a number that
+// only looks like the exponent form.
+pub fn fine() -> F32 {
+  let a: F32 = 1e_3
+  let b: F32 = 1_e3
+  let c: F32 = 1e3_
+  let d: F32 = 1e_3_
+  let e: F32 = 1.0e_3
+  let f: F32 = 1.5e-_3
+  let g: F32 = 1.0e+_3
+  a + b + c + d + e + f + g
+}

@@ -12,7 +12,7 @@ use onsa_diag::{Code, Diagnostic, FileId, Fix, Span, Stage};
 
 pub use crate::chars::{BLANKS, is_blank};
 use crate::chars::{is_ident_continue, is_ident_start, line_break};
-use crate::literal::{BadIndex, ForeignNumber, Form, Found, Hole, HoleError, Invalid, Kind, Literals, Run};
+use crate::literal::{BadIndex, Base, ForeignNumber, Form, Found, Hole, HoleError, Invalid, Kind, Literals, Run};
 use crate::token::{Token, TokenKind};
 
 /// Result of lexing one file.
@@ -417,8 +417,8 @@ impl<'a> Lexer<'a> {
             Form::Invalid(why) => {
                 let message = match why {
                     Invalid::NoDigits => "number prefix without digits",
-                    // SPEC-GAP(S-451): a digit that is not octal after `0o` is E0001, no octal form.
-                    Invalid::OctalDigit => "a digit that is not octal after `0o`; Onsa has no octal numbers (§2.4)",
+                    Invalid::BaseDigit if n.base == Base::Bin => "a digit that is not binary after `0b` (§2.4)",
+                    Invalid::BaseDigit => "a digit that is not octal after `0o`; Onsa has no octal numbers (§2.4)",
                     Invalid::Suffix => "a number has no suffix",
                 };
                 let span = Span::new(self.file, (start + n.error.0) as u32, (start + n.error.1) as u32);

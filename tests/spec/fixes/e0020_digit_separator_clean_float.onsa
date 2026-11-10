@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "17:16"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// The candidate for the float `1'000.000'5` (the candidate is `1_000.000_5`) leaves nothing behind (spec §2.4, §18.1; S-476):
+// the check of the file after the candidate reports nothing (`clean`, S-253). A file with one unit, so that
+// `clean` looks at the whole file. The main position is the first digit of the number.
+
+pub fn f() -> F32 {
+  let n: F32 = 1'000.000'5                          //~ E0020
+  n
+}

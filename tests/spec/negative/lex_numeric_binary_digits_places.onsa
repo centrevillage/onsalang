@@ -1,0 +1,162 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1", "§7", "§4.5"]
+// fixes = 0
+
+// E0001 for a number with the prefix `0b` that holds a digit that is no binary digit, in every place a number
+// can be written (spec §2.4, §18.1; S-451, S-965 R4: the reading of a number token does not depend on the
+// place; S-471 for the constant type argument). The token and the error are those of
+// lex_numeric_binary_digits_e0001.onsa: E0001 on the line, one token, no candidate (`fixes = 0`: the report of
+// `S[0b12]` has no candidate that inserts a `,` between `0b1` and `2`). The places: an argument, a return, an
+// early return, a field, an element, a tuple, an operand, a comparison, a pattern, an arm, a branch, a closure
+// body, a block in a block, a generic function, the header of `for` and of `par~`, a flow, a `const`, the
+// count of a repeated element, the length of an array type, an argument of `@param`, and the constant
+// argument of a type (a parameter type, a field type, a type alias, a `let` annotation). One error per
+// declaration (P-01).
+
+pub struct Pair {
+  a: I32,
+  b: I32,
+}
+
+pub struct S[const N: U32] {
+  x: [I32; N],
+}
+
+fn takes(x: I32) -> I32 {
+  x
+}
+
+pub fn in_an_argument() -> I32 {
+  takes(0b12)                                       //~ E0001
+}
+
+pub fn in_a_return() -> I32 {
+  0b12                                              //~ E0001
+}
+
+pub fn in_an_early_return(flag: Bool) -> I32 {
+  if flag {
+    return 0b12                                     //~ E0001
+  }
+  0
+}
+
+pub fn in_a_field() -> Pair {
+  Pair { a: 1, b: 0b12 }                            //~ E0001
+}
+
+pub fn in_an_array() -> [I32; 2] {
+  [1, 0b12]                                         //~ E0001
+}
+
+pub fn in_a_tuple() -> (I32, I32) {
+  (0b12, 2)                                         //~ E0001
+}
+
+pub fn as_an_operand(x: I32) -> I32 {
+  x + 0b12                                          //~ E0001
+}
+
+pub fn in_a_comparison(x: I32) -> Bool {
+  x < 0b12                                          //~ E0001
+}
+
+pub fn in_a_pattern(x: I32) -> I32 {
+  match x {
+    0b12 => 1,                                      //~ E0001
+    _ => 0,
+  }
+}
+
+pub fn in_an_arm(x: I32) -> I32 {
+  match x {
+    0 => 0b12,                                      //~ E0001
+    _ => 0,
+  }
+}
+
+pub fn in_a_branch(flag: Bool) -> I32 {
+  if flag { 1 } else { 0b12 }                       //~ E0001
+}
+
+pub fn in_a_closure_body() -> I32 {
+  let f = fn(y: I32) -> I32 { 0b12 }                //~ E0001
+  f.(1)
+}
+
+pub fn in_a_block_in_a_block() -> I32 {
+  let r: I32 = {
+    let s: I32 = {
+      0b12                                          //~ E0001
+    }
+    s
+  }
+  r
+}
+
+pub fn in_a_generic_function[T](x: T) -> T {
+  let _: I32 = 0b12                                 //~ E0001
+  x
+}
+
+pub fn in_a_for_header() -> I32 {
+  var s: I32 = 0
+  for i in 0..<0b12 {                               //~ E0001
+    s = s + i
+  }
+  s
+}
+
+pub flow in_a_par_header(x: F32 at sample) -> [F32; 4] at sample {
+  par~ i in 0..<0b12 {                              //~ E0001
+    x * F32.round_from(i)
+  }
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  x * 0b12                                          //~ E0001
+}
+
+const IN_A_CONST: I32 = 0b12                        //~ E0001
+
+pub fn in_a_repeated_element() -> [I32; 3] {
+  let a: [I32; 3] = [0; 0b12]                       //~ E0001
+  a
+}
+
+pub fn in_an_array_length(a: [I32; 0b12]) -> I32 {  //~ E0001
+  1
+}
+
+pub flow in_a_param(
+  x: F32 at sample,
+  @param(min: 0b12, max: 2.0, default: 1.0)         //~ E0001
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub fn in_a_parameter_type(s: S[0b12]) -> I32 {     //~ E0001
+  1
+}
+
+pub fn in_a_separated_argument(s: S[0b1_2]) -> I32 { //~ E0001
+  1
+}
+
+pub struct InAField {
+  s: S[0b12],                                       //~ E0001
+}
+
+type InAnAlias = S[0b12]                            //~ E0001
+
+pub fn in_a_let_annotation(s: S[2]) -> I32 {
+  let _: S[0b12] = s                                //~ E0001
+  1
+}
+
+// The right forms.
+pub fn fine() -> I32 {
+  takes(0b10)
+}

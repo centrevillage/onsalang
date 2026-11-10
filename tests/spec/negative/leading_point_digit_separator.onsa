@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+// fixes = 0
+
+// A float with no digit before its point whose digits hold a `'` (`.5'5`), with more text after it on its
+// line (spec §2.4, §18.1). The input holds two forms of other languages: the leading point and the digit
+// separator of C++14. An input with two errors is outside the promise of the candidates (S-384): this is a check that it
+// ends in no internal error. After a `.` the lexer reads the digits alone, as for a tuple index, so the `'`
+// starts a character literal that never closes; a candidate that adds the `0` before the point would join
+// the number with that literal, so the leading point is the E0002 with no candidate (`fixes = 0`). A comment
+// after the form (the marker of this file) is in the literal too, so the forms at the end of a code line are
+// here as well (only where the line ends right after the digits does the literal end with the number). One
+// error per declaration (P-01).
+
+fn g(a: F32, b: F32) -> F32 {
+  a + b
+}
+
+pub fn in_an_argument() -> F32 {
+  g(.5'5, 1.0)                                      //~ E0002
+}
+
+pub fn before_an_operator(x: F32) -> F32 {
+  x * .000'001 + 1.0                                //~ E0002
+}
+
+pub fn at_the_end_of_the_code(x: F32) -> F32 {
+  x * .000'001                                      //~ E0002
+}
+
+pub fn half_at_the_end_of_the_code(x: F32) -> F32 {
+  x * .5'5                                          //~ E0002
+}
+
+pub fn before_as(x: I32) -> F32 {
+  .2'5 as F32                                       //~ E0002
+}
+
+pub fn before_a_trailing_operator() -> F32 {
+  let a = .7'83-                                    //~ E0002
+  a
+}
+
+pub flow in_a_param(
+  x: F32 at sample,
+  @param(min: 0.0, max: .4'6, default: 0.1)         //~ E0002
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}

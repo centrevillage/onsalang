@@ -1,0 +1,124 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1", "§7", "§4.5"]
+// fixes = 0
+
+// E0002 with no candidate for a float suffix on an integer with a prefix (spec §2.4, §18.1; S-456, S-965 R1 and
+// R4). The suffix of `1f32` is taken away by the candidate `1.0`, which adds the `.0` an integer form needs
+// to be a float. The integer `0b11` has no float form to add (`0b11.0` is no number), and taking away only the
+// suffix would turn a float into an integer, so there is no candidate: the error is the E0002 of the form
+// (`fixes = 0`), on the line. The prefix is `0b`, `0B` or `0o`; the suffix is a float suffix of the closed list
+// (`f32`, `f64`, `f`, `F`), with or without the `_` before it. The suffix of an integer type on the same forms
+// (`0b101u8`) has the candidate of fixes/e0020_numeric_suffixes.onsa and is not here. The same form in every
+// place a number can be written. One error per declaration (P-01).
+
+pub struct S[const N: U32] {
+  x: [I32; N],
+}
+
+fn takes(x: F32) -> F32 {
+  x
+}
+
+pub fn binary_f32() -> F32 {
+  let a: F32 = 0b11f32                              //~ E0002
+  a
+}
+
+pub fn binary_f32_after_a_separator() -> F32 {
+  let a: F32 = 0b101_f32                            //~ E0002
+  a
+}
+
+pub fn binary_f64() -> F64 {
+  let a: F64 = 0b11f64                              //~ E0002
+  a
+}
+
+pub fn binary_f() -> F32 {
+  let a: F32 = 0b11f                                //~ E0002
+  a
+}
+
+pub fn binary_capital_f() -> F32 {
+  let a: F32 = 0b11F                                //~ E0002
+  a
+}
+
+pub fn binary_capital_prefix() -> F32 {
+  let a: F32 = 0B11f32                              //~ E0002
+  a
+}
+
+pub fn binary_with_separators() -> F32 {
+  let a: F32 = 0b1_1_f32                            //~ E0002
+  a
+}
+
+pub fn octal_f32() -> F32 {
+  let a: F32 = 0o7f32                               //~ E0002
+  a
+}
+
+pub fn octal_f64_after_a_separator() -> F64 {
+  let a: F64 = 0o7_f64                              //~ E0002
+  a
+}
+
+pub fn under_a_minus() -> F32 {
+  let a: F32 = -0b11f32                             //~ E0002
+  a
+}
+
+pub fn in_an_argument() -> F32 {
+  takes(0b11f32)                                    //~ E0002
+}
+
+pub fn in_a_return() -> F32 {
+  0b11f32                                           //~ E0002
+}
+
+pub fn in_an_array() -> [F32; 2] {
+  [1.0, 0b11f32]                                    //~ E0002
+}
+
+pub fn in_a_tuple() -> (F32, I32) {
+  (0b11f32, 2)                                      //~ E0002
+}
+
+pub fn as_an_operand(x: F32) -> F32 {
+  x + 0b11f32                                       //~ E0002
+}
+
+pub fn in_a_closure_body() -> F32 {
+  let f = fn(y: I32) -> F32 { 0b11f32 }             //~ E0002
+  f.(1)
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  x * 0b11f32                                       //~ E0002
+}
+
+const IN_A_CONST: F32 = 0b11f32                     //~ E0002
+
+pub fn in_an_array_length(a: [I32; 0b11f32]) -> I32 { //~ E0002
+  1
+}
+
+pub flow in_a_param(
+  x: F32 at sample,
+  @param(min: 0.0, max: 0b11f32, default: 1.0)      //~ E0002
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub fn in_a_constant_type_argument(s: S[0b11f32]) -> I32 { //~ E0002
+  1
+}
+
+// The right forms: the decimal float, and the hexadecimal integers whose digits go on through `f32`, `f64` and
+// `F` (the `f`, `3`, `2`, `6` and `4` are hexadecimal digits, so there is no suffix).
+pub fn fine(x: F32) -> (F32, U32, U64, U32) {
+  (takes(3.0) + x, 0x1Ff32, 0xAB_f64, 0x1F)
+}

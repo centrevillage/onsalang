@@ -236,6 +236,18 @@ pub(crate) enum Base {
     Oct,
 }
 
+impl Base {
+    /// Whether `x` is a digit of the base: the one test (S-451).
+    fn digit(self, x: u8) -> bool {
+        match self {
+            Base::Dec => x.is_ascii_digit(),
+            Base::Hex => x.is_ascii_hexdigit(),
+            Base::Bin => matches!(x, b'0' | b'1'),
+            Base::Oct => matches!(x, b'0'..=b'7'),
+        }
+    }
+}
+
 /// What a number is written as (§2.4, §18.1): the one decision of its form,
 /// made by [`number`], in three layers: a number of Onsa, one written as in
 /// other languages (the token `ForeignLit`, a row of the table) or no number
@@ -274,6 +286,8 @@ pub(crate) enum Foreign {
     TrailingDot,
     /// No digit between the point and the exponent (`1.e3`): the row `float_dot_exponent`.
     DotExponent,
+    /// A `'` between digits, the separator of C++14 (`1'000`, S-476): the row `digit_separator`.
+    DigitSeparator,
 }
 
 /// Why a number is no number (the lexer's E0001, §18.1), at
@@ -282,8 +296,8 @@ pub(crate) enum Foreign {
 pub(crate) enum Invalid {
     /// No digit after the prefix (`0x_`, `0b`, `0o`; `_` is no digit).
     NoDigits,
-    /// A digit that is not octal after `0o` (`0o19`, S-451).
-    OctalDigit,
+    /// A digit outside the base after `0b` or `0o` (`0b12`, `0o19`, S-451).
+    BaseDigit,
     /// A suffix outside the closed list (`123abc`).
     Suffix,
 }
@@ -370,17 +384,11 @@ pub(crate) enum Point {
 /// candidate that puts an integer before such a `.` (S-302).
 pub(crate) fn point_after_int(rest: &str) -> Point {
     let b = rest.as_bytes();
-    let at = |i: usize| b.get(i).copied();
-    match at(1) {
+    match b.get(1).copied() {
         Some(d) if d.is_ascii_digit() => Point::Fraction,
         Some(b'.') => Point::Range,
-        // A sign between the `e` and the digits (`1.e-3`) is the exponent of S-62 too (S-452).
-        Some(b'e' | b'E')
-            if at(2).is_some_and(|d| d.is_ascii_digit())
-                || (matches!(at(2), Some(b'+' | b'-')) && at(3).is_some_and(|d| d.is_ascii_digit())) =>
-        {
-            Point::Exponent
-        }
+        // A sign (`1.e-3`, S-452) and `_` (`1.e_3`, S-472) are in the exponent of S-62 too.
+        Some(b'e' | b'E') if exponent_end(b, 1).is_some() => Point::Exponent,
         // SPEC-GAP(S-453): `1.f`, the float suffix of C after a point, is the member `.f`.
         Some(n) if crate::chars::is_ident_start(n) || n == b'(' => Point::Member,
         _ => Point::TrailingDot,
@@ -398,13 +406,27 @@ pub(crate) fn point_after_int(rest: &str) -> Point {
 /// exponent; the `.` after a hexadecimal or binary number is always a member
 /// `.` (`0x1F.abs()`): no float is written in those bases, so `0x1F.` has no
 /// spelling as a float to suggest. The letters, digits and `_` after the
-/// digits are a suffix.
+/// digits are a suffix. A `'` between digits ([`digits`]) makes the outer
+/// form: its candidate changes the `'` alone, and the other form of the
+/// number is found after it.
 pub(crate) fn number(rest: &str) -> Number {
+    let mut n = read(rest);
+    if !matches!(n.form, Form::Invalid(_)) && rest.as_bytes()[..n.len].contains(&b'\'') {
+        n.float = n.is_float();
+        n.form = Form::Foreign(Foreign::DigitSeparator);
+    }
+    n
+}
+
+/// [`number`] but the `'` between digits.
+fn read(rest: &str) -> Number {
     let b = rest.as_bytes();
     let at = |i: usize| b.get(i).copied();
     // The common number, digits alone (`42`, `0`): nothing else to read.
     let plain = run(b, 0, |x| x.is_ascii_digit());
-    if !at(plain).is_some_and(|x| x == b'.' || crate::chars::is_ident_continue(x)) && (plain == 1 || b[0] != b'0') {
+    if !at(plain).is_some_and(|x| matches!(x, b'.' | b'\'') || crate::chars::is_ident_continue(x))
+        && (plain == 1 || b[0] != b'0')
+    {
         return Number {
             len: plain,
             body: plain,
@@ -438,12 +460,12 @@ pub(crate) fn number(rest: &str) -> Number {
     let mut dot_exponent = false;
     match base {
         Base::Dec => {
-            i = run(b, 0, |x| x.is_ascii_digit() || x == b'_');
+            i = digits(b, 0, |x| x.is_ascii_digit());
             if at(i) == Some(b'.') {
                 match point_after_int(&rest[i..]) {
                     Point::Fraction => {
                         n.point = Some(i);
-                        i = run(b, i + 1, |x| x.is_ascii_digit() || x == b'_');
+                        i = digits(b, i + 1, |x| x.is_ascii_digit());
                         n.float = true;
                     }
                     Point::Exponent => {
@@ -460,29 +482,22 @@ pub(crate) fn number(rest: &str) -> Number {
                     }
                 }
             }
-            if matches!(at(i), Some(b'e' | b'E')) {
-                let sign = usize::from(matches!(at(i + 1), Some(b'+' | b'-')));
-                let end = run(b, i + 1 + sign, |x| x.is_ascii_digit() || x == b'_');
-                if b[i + 1 + sign..end].iter().any(u8::is_ascii_digit) {
-                    n.exponent = Some(i);
-                    i = end;
-                    n.float = true;
-                }
+            if matches!(at(i), Some(b'e' | b'E'))
+                && let Some(end) = exponent_end(b, i)
+            {
+                n.exponent = Some(i);
+                i = end;
+                n.float = true;
             }
         }
         _ => {
-            let digit: fn(u8) -> bool = match base {
-                Base::Hex => |x| x.is_ascii_hexdigit(),
-                Base::Bin => |x| matches!(x, b'0' | b'1'),
-                // Every decimal digit, so that one that is not octal is an
-                // error of the number (S-451), and not a number of its own.
-                _ => |x| x.is_ascii_digit(),
-            };
-            i = run(b, 2, |x| digit(x) || x == b'_');
+            // Every decimal digit, so that one outside the base is an error
+            // of the number (S-451), and not a number of its own.
+            i = digits(b, 2, |x| x.is_ascii_digit() || base.digit(x));
             if !b[2..i].iter().any(|&x| x != b'_') {
                 n.form = Form::Invalid(Invalid::NoDigits);
-            } else if base == Base::Oct && b[2..i].iter().any(|&x| matches!(x, b'8' | b'9')) {
-                n.form = Form::Invalid(Invalid::OctalDigit);
+            } else if b[2..i].iter().any(|&x| x.is_ascii_digit() && !base.digit(x)) {
+                n.form = Form::Invalid(Invalid::BaseDigit);
             }
         }
     }
@@ -493,6 +508,7 @@ pub(crate) fn number(rest: &str) -> Number {
         // The `_` before the suffix goes with it (`1_000_u8` is `1_000`).
         n.body = i - rest[..i].bytes().rev().take_while(|&x| x == b'_').count();
         match type_suffix(&rest[i..suffix]) {
+            // The E0001 of a digit outside the base is the error of `0b12f32` (S-973, S-281).
             _ if matches!(n.form, Form::Invalid(_)) => {}
             Some(float) => {
                 n.float_suffix = float;
@@ -515,7 +531,7 @@ pub(crate) fn number(rest: &str) -> Number {
     if n.form == Form::Foreign(Foreign::Suffix) {
         return n;
     }
-    let digits = || rest[..n.body].bytes().filter(|&x| x != b'_');
+    let body_digits = || rest[..n.body].bytes().filter(|&x| x != b'_');
     n.form = if base == Base::Oct {
         Form::Foreign(Foreign::Octal)
     } else if dot_exponent {
@@ -523,12 +539,37 @@ pub(crate) fn number(rest: &str) -> Number {
         Form::Foreign(Foreign::DotExponent)
     } else if n.float {
         Form::Onsa(Kind::Float)
-    } else if base == Base::Dec && rest.starts_with('0') && digits().count() > 1 {
+    } else if base == Base::Dec && rest.starts_with('0') && body_digits().count() > 1 {
         Form::Foreign(Foreign::LeadingZero)
     } else {
         Form::Onsa(Kind::Int)
     };
     n
+}
+
+/// The end of the digits of a number in `b` from `i` (§2.4): those `digit`
+/// takes, `_` anywhere, and a `'` between two of them (C++14, S-476). The
+/// lexer goes on only forward, and stops at a `'` with no digit on either
+/// side (a character literal: `1 '2'`).
+fn digits(b: &[u8], mut i: usize, digit: impl Fn(u8) -> bool) -> usize {
+    while let Some(&x) = b.get(i) {
+        let between = x == b'\'' && i > 0 && digit(b[i - 1]) && b.get(i + 1).is_some_and(|&y| digit(y));
+        if !(digit(x) || x == b'_' || between) {
+            break;
+        }
+        i += 1;
+    }
+    i
+}
+
+/// The end of the exponent whose `e` or `E` is at `i` in `b` (§2.4): a
+/// sign, then digits and `_` with one digit at least; `None` without one
+/// (`1.e_` reads as a member, S-472). The one test, of [`number`] and of
+/// [`point_after_int`].
+fn exponent_end(b: &[u8], i: usize) -> Option<usize> {
+    let from = i + 1 + usize::from(matches!(b.get(i + 1), Some(b'+' | b'-')));
+    let end = digits(b, from, |x| x.is_ascii_digit());
+    b[from..end].iter().any(u8::is_ascii_digit).then_some(end)
 }
 
 /// The end of the run of the bytes of `b` from `i` that `ok` takes.
@@ -543,7 +584,7 @@ fn run(b: &[u8], mut i: usize, ok: impl Fn(u8) -> bool) -> usize {
 /// decimal `017` of the candidates), or `None` when it is larger than
 /// `u64::MAX` (E0408) or no integer.
 pub(crate) fn int_value(text: &str) -> Option<u64> {
-    let digits: String = text.chars().filter(|&c| c != '_').collect();
+    let digits: String = text.chars().filter(|&c| c != '_' && c != '\'').collect();
     let radix = match digits.get(..2) {
         Some("0x" | "0X") => 16,
         Some("0b" | "0B") => 2,

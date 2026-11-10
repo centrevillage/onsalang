@@ -1,13 +1,20 @@
 //! The rows of the literals of other languages: the numbers (a suffix,
-//! `0o17`, `017`, `1.`, `1.e3`, `.5`) and the strings with a delimiter of
+//! `0o17`, `017`, `1.`, `1.e3`, `.5`, `1'000`) and the strings with a delimiter of
 //! other languages (`$"…"`, `"""…"""`; §2.4, §18.1).
 
 use super::*;
 use crate::literal::{Base, Foreign, Number, int_value};
 
 /// The rows [`foreign_literal`] names ([`super::Matcher::many`]).
-pub(super) const FOREIGN_LITERAL_ROWS: &[RowId] =
-    &[RowId::FloatTrailingDot, RowId::FloatDotExponent, RowId::OctalPrefix, RowId::LeadingZero, RowId::LiteralSuffix];
+pub(super) const FOREIGN_LITERAL_ROWS: &[RowId] = &[
+    RowId::FloatTrailingDot,
+    RowId::FloatDotExponent,
+    RowId::OctalPrefix,
+    RowId::LeadingZero,
+    RowId::LiteralSuffix,
+    RowId::LiteralSuffixUnfixable,
+    RowId::DigitSeparator,
+];
 
 /// A number written as in other languages (the token `ForeignLit`): the row
 /// of the form the lexer found ([`crate::literal::number`]), and its
@@ -30,11 +37,14 @@ pub(super) fn foreign_literal(c: &Cursor) -> Option<(RowId, Hit)> {
         return None;
     }
     let (row, titles): (RowId, &[&str]) = match form {
+        // A float suffix on a binary or octal integer: no `.0` makes it a float (S-456).
+        Foreign::Suffix if spellings(text, &n, form).is_empty() => (RowId::LiteralSuffixUnfixable, &[]),
         Foreign::Suffix => (RowId::LiteralSuffix, &["remove the type suffix"]),
         Foreign::Octal => (RowId::OctalPrefix, &["write the number in decimal"]),
         Foreign::LeadingZero => (RowId::LeadingZero, &["read it as decimal", "read it as octal"]),
         Foreign::TrailingDot => (RowId::FloatTrailingDot, &["add the `0` after the point"]),
         Foreign::DotExponent => (RowId::FloatDotExponent, &["add the `0` after the point"]),
+        Foreign::DigitSeparator => (RowId::DigitSeparator, &["write the separators as `_`"]),
     };
     // A number called (`017(2)`) is a callee too, the row
     // `callee_expression` at the same failure ([`called_number`]): the
@@ -78,12 +88,11 @@ fn number_at(c: &Cursor, i: usize) -> (Number, Foreign) {
 /// before it, and a float suffix on an integer adds `.0` (`1f32` is `1.0`;
 /// a hexadecimal or binary one has none, S-456);
 /// `0o17` is `15`; `017` is `17` and `15` (one when the readings agree or
-/// it is no octal number: `00` is `0`, `09` is `9`, S-63); `1.` is `1.0`
-/// and `1.e3` is `1.0e3`. `form` is the number's ([`number_at`]).
+/// it is no octal number: `00` is `0`, `09` is `9`, S-63); `1.` is `1.0`,
+/// `1.e3` is `1.0e3` and `1'000` is `1_000`. `form` is the number's ([`number_at`]).
 pub(super) fn spellings(text: &str, n: &Number, form: Foreign) -> Vec<String> {
     let body = &text[..n.body];
     match form {
-        // SPEC-GAP(S-456): a float suffix on a hexadecimal, binary or octal integer (`0b11f32`) has no candidate.
         // A float whose body is written as an integer.
         Foreign::Suffix if n.is_float() && !n.float => match n.base {
             Base::Dec => vec![format!("{body}.0")],
@@ -107,6 +116,7 @@ pub(super) fn spellings(text: &str, n: &Number, form: Foreign) -> Vec<String> {
             let (int, after) = text.split_once('.').unwrap_or((text, ""));
             vec![format!("{int}.0{after}")]
         }
+        Foreign::DigitSeparator => vec![text.replace('\'', "_")],
     }
 }
 
@@ -137,7 +147,11 @@ fn bounds_range(c: &Cursor, last: usize) -> bool {
 /// `.5`: `0.5` (§2.4). The form is what the number with its `0` reads
 /// ([`crate::literal::number`]): `.5E3` and `.2_5` are one number with the
 /// `0` (`0.5E3`, `0.2_5`), though the `E3` and `_5` after a `.` read as
-/// names, so the candidate takes them in (S-302).
+/// names, so the candidate takes them in (S-302). The span ends at a token
+/// boundary: at the last token of the line the number holds whole, with no
+/// gap before it. The number read from the text may hold more than the lexer
+/// read as tokens after a `.` (`.5'5` is `.5` and a character literal, as
+/// `t.1'0`), and the candidate is `0.5`, which the next one mends.
 pub(super) fn leading_point(c: &Cursor) -> Option<Hit> {
     if c.kind(c.at) != TokenKind::Dot
         || c.kind(c.at + 1) != TokenKind::Int
@@ -148,8 +162,12 @@ pub(super) fn leading_point(c: &Cursor) -> Option<Hit> {
     }
     let start = c.span(c.at).start as usize;
     let line = c.text[start..].lines().next().unwrap_or_default();
-    let number = crate::literal::number(&format!("0{line}"));
-    let span = c.file_span(start as u32, (start + number.len - 1) as u32);
+    let end = (start + crate::literal::number(&format!("0{line}")).len - 1) as u32;
+    let mut last = c.at + 1;
+    while last + 1 < c.tokens.len() && c.gap_after(last) == Gap::None && c.span(last + 1).end <= end {
+        last += 1;
+    }
+    let span = c.file_span(start as u32, c.span(last).end);
     let text = format!("0{}", &c.text[span.start as usize..span.end as usize]);
     hit(span, vec![Fix::replace("add the `0` before the point", span, text)])
 }

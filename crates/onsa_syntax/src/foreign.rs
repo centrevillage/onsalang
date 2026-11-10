@@ -509,6 +509,8 @@ pub enum RowId {
     OctalPrefix,
     LeadingZero,
     LiteralSuffix,
+    LiteralSuffixUnfixable,
+    DigitSeparator,
     BlockComment,
     BlockCommentUnclosed,
     BlockCommentNested,

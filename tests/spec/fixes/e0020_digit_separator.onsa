@@ -1,0 +1,136 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+// fixes = 1
+
+// E0020 for the digit separator of C++14 (spec §2.4, §18.1; S-476, S-965 R1 and R4). The number token holds
+// every `'` that stands between two digits of the number (the digits of the base: the hexadecimal digits
+// after `0x`, the binary digits after `0b`, the decimal digits of the integer part, the fraction and the
+// exponent), so `1'000'000` is one token and not the number `1` followed by a character literal that never
+// closes. The one error is E0020 on the line, with one candidate that replaces every `'` of the token with
+// `_` and changes nothing else: the value and the kind of the number (integer or float) stay. The text of the
+// candidate is the spec's (the writer's work, not copied here). One error per declaration (P-01). The places
+// of a number are in e0020_digit_separator_places.onsa, the position of a constant type argument in
+// e0020_digit_separator_const_arg.onsa. A `'` that stands between no two digits is not a separator (the
+// last function: a character literal of a digit, a string and a comment keep their `'`).
+
+pub fn thousands() -> I32 {
+  let n: I32 = 1'000                                //~ E0020
+  n
+}
+
+pub fn millions() -> I32 {
+  let n: I32 = 1'000'000                            //~ E0020
+  n
+}
+
+pub fn groups_of_two() -> I32 {
+  let n: I32 = 12'34'56                             //~ E0020
+  n
+}
+
+pub fn one_digit_groups() -> I32 {
+  let n: I32 = 1'2'3'4                              //~ E0020
+  n
+}
+
+pub fn under_a_minus() -> I32 {
+  let n: I32 = -1'000                               //~ E0020
+  n
+}
+
+pub fn next_to_an_underscore_separator() -> I32 {
+  let n: I32 = 1_000'000                            //~ E0020
+  n
+}
+
+pub fn before_an_underscore_separator() -> I32 {
+  let n: I32 = 1'000_000                            //~ E0020
+  n
+}
+
+pub fn hexadecimal() -> U32 {
+  let n: U32 = 0xFF'FF                              //~ E0020
+  n
+}
+
+pub fn hexadecimal_letters_on_both_sides() -> U32 {
+  let n: U32 = 0xAB'CD                              //~ E0020
+  n
+}
+
+pub fn hexadecimal_in_groups() -> U32 {
+  let n: U32 = 0xDEAD'BEEF                          //~ E0020
+  n
+}
+
+pub fn hexadecimal_capital_prefix() -> U32 {
+  let n: U32 = 0XFF'FF                              //~ E0020
+  n
+}
+
+pub fn hexadecimal_a_letter_and_a_digit() -> U32 {
+  let n: U32 = 0xF'1                                //~ E0020
+  n
+}
+
+pub fn binary() -> U32 {
+  let n: U32 = 0b1010'1010                          //~ E0020
+  n
+}
+
+pub fn binary_in_nibbles() -> U32 {
+  let n: U32 = 0b1111'0000'1111                     //~ E0020
+  n
+}
+
+pub fn float_integer_part() -> F32 {
+  let a: F32 = 1'000.5                              //~ E0020
+  a
+}
+
+pub fn float_fraction() -> F32 {
+  let a: F32 = 0.000'001                            //~ E0020
+  a
+}
+
+pub fn float_integer_part_and_fraction() -> F32 {
+  let a: F32 = 1'000.000'5                          //~ E0020
+  a
+}
+
+pub fn float_exponent() -> F32 {
+  let a: F32 = 1e1'0                                //~ E0020
+  a
+}
+
+pub fn float_integer_part_and_exponent() -> F32 {
+  let a: F32 = 1'0e3                                //~ E0020
+  a
+}
+
+pub fn float_signed_exponent() -> F32 {
+  let a: F32 = 2.5e-1'0                             //~ E0020
+  a
+}
+
+pub fn float_under_a_minus() -> F32 {
+  let a: F32 = -1'000.5                             //~ E0020
+  a
+}
+
+// The right forms: the separator is `_`, and a `'` that is no separator stays what it was.
+pub fn fine() -> (I32, U32, F32) {
+  let a: I32 = 1_000_000
+  let b: U32 = 0xFF_FF
+  let c: F32 = 1_000.5
+  (a, b, c)
+}
+
+pub fn quotes_that_are_no_separator() -> (Char, Char, Str) {
+  ('1', '7', "1'000")
+}
+
+pub fn a_comment_keeps_its_quote() -> I32 {
+  1 // 1'000
+}

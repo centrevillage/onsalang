@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1", "§4.5"]
+// fixes = 1
+
+// E0020 for the digit separator of C++14 in the position of a constant type argument (spec §2.4, §18.1, §4.5;
+// S-476, S-471, S-965 R4: the form and the code of a number token are the same in every place a number can be
+// written, the constant argument `S[…]` among them). The token and the candidate are those of
+// e0020_digit_separator.onsa; the code is E0020 and not the general E0002 ("expected a type") of the position.
+// The position has its own case (S-471) so that the places of the other case, which are not that position,
+// stay apart from it. One error per declaration (P-01). The places: a parameter type, a field type, a type
+// alias, a `let` annotation.
+
+pub struct S[const N: U32] {
+  x: [I32; N],
+}
+
+pub fn in_a_parameter_type(s: S[1'0]) -> I32 {      //~ E0020
+  1
+}
+
+pub fn in_a_hexadecimal_argument(s: S[0xF'F]) -> I32 { //~ E0020
+  1
+}
+
+pub struct InAField {
+  s: S[1'0],                                        //~ E0020
+}
+
+type InAnAlias = S[1'0]                             //~ E0020
+
+pub fn in_a_let_annotation(s: S[10]) -> I32 {
+  let _: S[1'0] = s                                 //~ E0020
+  1
+}
+
+// The right forms.
+pub fn fine(s: S[1_0]) -> I32 {
+  1
+}

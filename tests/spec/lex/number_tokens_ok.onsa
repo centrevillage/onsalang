@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// canonical = false
+// spec = ["§2.4"]
+
+// The number tokens that stand next to the forms the E0020, E0001 and E0002 cases reject, and are numbers
+// (spec §2.4; S-476, S-451, S-472, S-456, S-965 R4). A `_` stands anywhere among the digits of a number and
+// of an exponent and does not change the value: `1e_3` is the float `1e3`, and `1.0e_3` (the candidate of
+// `1.e_3`) is the same value. The digits after `0x` are hexadecimal digits, so `0x1Ff32` is the integer
+// 0x1FF32 and not a float with a suffix. The digits after `0b` are `0` and `1`. A `'` is part of a number
+// only between two digits; a character literal of a digit and a comment keep it. The `test` runs
+// (`mode = "test"`). `canonical = false`: `onsa fmt` rewrites some of the spellings (`0B11`, `0b_10`, `0x1Ff32`).
+
+pub fn integers() -> (I32, I32, I32, I32) {
+  (1_000_000, 0b1_0, 0B11, 0b_10)
+}
+
+pub fn hexadecimals() -> (U32, U32, U64) {
+  (0x1_F, 0x1Ff32, 0xAB_f64)
+}
+
+pub fn exponents() -> (F32, F32, F32, F32) {
+  (1e_3, 1_e3, 1e3_, 1.0e_3)
+}
+
+pub fn quotes() -> (Char, Char) {
+  ('1', '7')
+}
+
+pub fn a_comment_keeps_its_quote() -> I32 {
+  1 // 1'000
+}
+
+test "underscores do not change the value" {
+  assert integers() == (1000000, 2, 3, 2)
+  assert hexadecimals() == (31, 130866, 704356)
+}
+
+test "an exponent with an underscore is the exponent of its digits" {
+  let (a, b, c, d) = exponents()
+  assert a == 1000.0
+  assert b == 1000.0
+  assert c == 1000.0
+  assert d == 1000.0
+}
+
+test "quotes between no digits stay what they were" {
+  let (a, b) = quotes()
+  assert a == '1'
+  assert b == '7'
+  assert a_comment_keeps_its_quote() == 1
+}

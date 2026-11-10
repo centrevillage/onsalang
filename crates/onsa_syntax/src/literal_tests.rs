@@ -127,6 +127,15 @@ fn the_form_of_each_number() {
         ("1.E3", f(DotExponent), "1.E3"),
         ("1.e-3", f(DotExponent), "1.e-3"),
         ("1.e+3", f(DotExponent), "1.e+3"),
+        ("1.e_3", f(DotExponent), "1.e_3"),
+        // The `'` between digits (S-476) is the outer form.
+        ("1'000", f(DigitSeparator), "1'000"),
+        ("0xFF'FF", f(DigitSeparator), "0xFF'FF"),
+        ("0b1'0", f(DigitSeparator), "0b1'0"),
+        ("1'0.5e1'0", f(DigitSeparator), "1'0.5e1'0"),
+        ("01'7", f(DigitSeparator), "01'7"),
+        ("1'0u8", f(DigitSeparator), "1'0"),
+        ("1'0.", f(DigitSeparator), "1'0."),
     ];
     for &(text, form, body) in cases {
         let n = number(text);
@@ -137,7 +146,11 @@ fn the_form_of_each_number() {
     assert_eq!(number("0x1F").base, Base::Hex);
     // The number ends before a `.` that is no point (S-350), and a
     // hexadecimal or binary one before any `.`.
-    for (text, len) in [("1.abs()", 1), ("1.(x)", 1), ("1.f", 1), ("1..<4", 1), ("0x1F.5", 4), ("0b1.0", 3)] {
+    // A `'` with no digit on one side is no part of it (a character literal).
+    let quotes = [("1'a'", 1), ("1_'0", 2), ("1'_0", 1), ("0x'1", 2), ("1e'1", 2), ("1''0", 1)];
+    for (text, len) in
+        [("1.abs()", 1), ("1.(x)", 1), ("1.f", 1), ("1..<4", 1), ("0x1F.5", 4), ("0b1.0", 3)].into_iter().chain(quotes)
+    {
         assert_eq!(number(text).len, len, "{text}");
     }
 }
@@ -157,8 +170,13 @@ fn a_number_of_no_form_is_e0001_at_its_error() {
         ("0b", Invalid::NoDigits, (0, 2)),
         ("0o", Invalid::NoDigits, (0, 2)),
         ("0xG", Invalid::NoDigits, (0, 3)),
-        ("0o19", Invalid::OctalDigit, (0, 4)),
-        ("0o8u8", Invalid::OctalDigit, (0, 5)),
+        ("0o19", Invalid::BaseDigit, (0, 4)),
+        ("0o8u8", Invalid::BaseDigit, (0, 5)),
+        // Every decimal digit after `0b` (S-451), a float suffix after it too (S-973).
+        ("0b12", Invalid::BaseDigit, (0, 4)),
+        ("0b1_2", Invalid::BaseDigit, (0, 5)),
+        ("0b12f32", Invalid::BaseDigit, (0, 7)),
+        ("0b1'2", Invalid::BaseDigit, (0, 5)),
     ];
     for &(text, why, error) in cases {
         let n = number(text);
@@ -176,7 +194,10 @@ fn the_point_after_an_integer() {
         (".e-3", Exponent),
         (".e+3", Exponent),
         (".e", Member),
-        (".e_3", Member),
+        // `_` in the exponent (S-472), with one digit at least.
+        (".e_3", Exponent),
+        (".e-_3", Exponent),
+        (".e__", Member),
         (".abs()", Member),
         (".f", Member),
         (".(x)", Member),

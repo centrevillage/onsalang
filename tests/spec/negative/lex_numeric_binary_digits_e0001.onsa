@@ -1,0 +1,82 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1"]
+// fixes = 0
+
+// E0001 for a number with the prefix `0b` that holds a digit that is no binary digit (spec §2.4, §18.1; S-451,
+// S-965 R4). A number token is the longest run of letters, digits and `_` that starts with a digit, so
+// `0b12` is one token and not `0b1` followed by `2`: the error is the E0001 of the token, on the line, with no
+// candidate (`fixes = 0` says that no report of the file has one), and not the E0002 ("expected newline or
+// `}`") of two tokens next to each other. The digits are counted without the `_` and the prefix may be `0b` or
+// `0B`. The forms with no digit after the prefix and the digit `2` alone are in lex_numeric_e0001.onsa. The
+// same token in every place a number can be written is in lex_numeric_binary_digits_places.onsa. One error per
+// declaration (P-01).
+
+pub fn a_two() -> I32 {
+  let n: I32 = 0b12                                 //~ E0001
+  n
+}
+
+pub fn a_two_after_two_digits() -> I32 {
+  let n: I32 = 0b102                                //~ E0001
+  n
+}
+
+pub fn a_nine() -> I32 {
+  let n: I32 = 0b9                                  //~ E0001
+  n
+}
+
+pub fn a_two_after_a_separator() -> I32 {
+  let n: I32 = 0b1_2                                //~ E0001
+  n
+}
+
+pub fn a_two_after_the_prefix_and_a_separator() -> I32 {
+  let n: I32 = 0b_12                                //~ E0001
+  n
+}
+
+pub fn a_two_before_a_separator() -> I32 {
+  let n: I32 = 0b1_2_                               //~ E0001
+  n
+}
+
+pub fn a_two_at_the_end_of_many_digits() -> I32 {
+  let n: I32 = 0b1010_1012                          //~ E0001
+  n
+}
+
+pub fn a_two_at_the_start() -> I32 {
+  let n: I32 = 0b2101                               //~ E0001
+  n
+}
+
+pub fn capital_prefix() -> I32 {
+  let n: I32 = 0B12                                 //~ E0001
+  n
+}
+
+pub fn under_a_minus() -> I32 {
+  let n: I32 = -0b12                                //~ E0001
+  n
+}
+
+pub fn where_a_float_is_expected() -> F32 {
+  let a: F32 = 0b12                                 //~ E0001
+  a
+}
+
+pub fn in_the_middle_of_an_array() -> [I32; 3] {
+  [1, 0b12, 3]                                      //~ E0001
+}
+
+// The right forms.
+pub fn fine() -> I32 {
+  let a: I32 = 0b10
+  let b: I32 = 0b1_0
+  let c: I32 = 0B11
+  let d: I32 = 0b_10
+  let e: I32 = 0b1010_1010
+  a + b + c + d + e
+}

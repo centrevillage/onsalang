@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4"]
+
+// The `.` after an integer is a member when no digit follows the `e` (spec §2.4; S-472, S-965 R4). After the
+// digits of an integer, a `.` followed by a digit is a decimal point, and a `.` followed by `e` or `E` and a
+// run of digits and `_` that holds at least one digit (a sign may stand between) is the point of a float with
+// an exponent, the E0020 of fixes/e0020_float_dot_exponent_underscore.onsa. A run of `_` alone holds no digit,
+// so `e_` is a name and the `.` is the member access: the integer has no field `e_` (E0413, as for `1.f`).
+// One error per declaration (P-01).
+
+pub fn an_underscore() -> I32 {
+  1.e_                                              //~ E0413
+}
+
+pub fn two_underscores() -> I32 {
+  1.e__                                             //~ E0413
+}
+
+pub fn a_capital() -> I32 {
+  1.E_                                              //~ E0413
+}
+
+pub fn digits_before_the_point() -> I32 {
+  10.e_                                             //~ E0413
+}
+
+pub fn separator_before_the_point() -> I32 {
+  1_0.e_                                            //~ E0413
+}
+
+// The right form: the float with the exponent and no point.
+pub fn fine() -> F32 {
+  1e_3
+}
