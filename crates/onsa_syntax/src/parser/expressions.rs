@@ -615,7 +615,7 @@ impl<'a> Parser<'a> {
                 let m = self.start(NodeKind::ParExpr)?;
                 self.bump();
                 self.branch_tilde("the replication index")?;
-                self.parse_name("replication index")?;
+                self.parse_name(Declared::Variable, "replication index")?;
                 self.expect(TokenKind::KwIn)?;
                 let range = self.parse_head_expr(true)?;
                 // A range symbol at the head of the next line: the table names

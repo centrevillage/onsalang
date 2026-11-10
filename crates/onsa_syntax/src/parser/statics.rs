@@ -72,7 +72,7 @@ impl<'a> Parser<'a> {
         self.read_on(name);
         self.complete(m, NodeKind::Error);
         let node = if form == Static::Item { NodeKind::Const } else { NodeKind::Fn };
-        if self.start(node).is_ok() && self.parse_name("a name").is_ok() && form == Static::Item {
+        if self.start(node).is_ok() && self.parse_name(Declared::Constant, "a name").is_ok() && form == Static::Item {
             let _ = self.expect(TokenKind::Colon).and_then(|_| self.parse_type());
         }
         Some(super::heading::Unread::Failed)

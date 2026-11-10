@@ -282,7 +282,8 @@ impl<'a> Parser<'a> {
                 let bind = path.segments == 1 && crate::naming::reads_lowercase(self.token_text(path.first));
                 return Ok(self.complete(m, if bind { NodeKind::BindPat } else { NodeKind::PathPat }));
             }
-            _ => return Err(self.fail(Want::Pattern, "a pattern")),
+            // A keyword here is written as a binding (S-654).
+            _ => return Err(self.fail_name(Declared::Variable, Want::Pattern, "a pattern")),
         };
         let m = self.start(kind)?;
         self.bump();

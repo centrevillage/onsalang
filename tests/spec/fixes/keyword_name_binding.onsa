@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§2.3", "§18.1"]
+// fixes = 1
+
+// E0002 for keywords written as the names of bindings (S-654, §2.3, the places `let`, `var` and the patterns): `let in`,
+// `var type`, a name of a tuple pattern, a name of an arm of `match`, the variable of `for` and the parameter of a closure
+// (a closure has parameters as a function has). The one candidate adds a `_` at the end of the name (`in_`, `type_`, …).
+// One error in each unit.
+
+pub fn let_in() -> I32 {
+  let in: I32 = 1                                   //~ E0002
+  1
+}
+
+pub fn var_type() -> I32 {
+  var type: I32 = 1                                 //~ E0002
+  1
+}
+
+pub fn tuple_as() -> I32 {
+  let (as, b) = (1, 2)                              //~ E0002
+  b
+}
+
+pub fn match_in(x: I32) -> I32 {
+  match x {
+    0 => 1,
+    in => 2,                                        //~ E0002
+  }
+}
+
+pub fn for_uses() -> I32 {
+  var total: I32 = 0
+  for uses in 0..<3 {                               //~ E0002
+    total = total + 1
+  }
+  total
+}
+
+pub fn closure_in() -> I32 {
+  let f = fn(in: I32) -> I32 { 1 }                  //~ E0002
+  f.(1)
+}

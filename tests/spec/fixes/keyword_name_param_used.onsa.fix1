@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§2.3", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "16:13"
+// code = "E0002"
+// candidate = 1
+// leaves = ["17:3 E0002"]
+
+// E0002 for a keyword written as a parameter and used in the body, `fn pass(in: F32) -> F32 { in }` (S-654, §2.3). The unit
+// has one error, the parameter, and its candidate is `in_` there only. The `in` of the body is the error of the unit after
+// that (an expression, where a keyword that cannot start an expression gets the same candidate): the fix takes two steps,
+// and the diagnostic that is left after the first is the second step (`leaves`).
+
+pub fn pass(in_: F32) -> F32 {                       //~ E0002
+  in
+}

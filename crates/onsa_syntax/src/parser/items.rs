@@ -335,7 +335,7 @@ impl<'a> Parser<'a> {
     pub(super) fn parse_flow(&mut self, _: ItemCtx) -> PResult<()> {
         let m = self.start(NodeKind::Flow)?;
         self.bump();
-        self.parse_name("flow name")?;
+        self.parse_name(Declared::Flow, "flow name")?;
         self.parse_params(true, NodeKind::Flow)?;
         self.expect(TokenKind::Arrow)?;
         self.parse_type()?;
@@ -359,7 +359,7 @@ impl<'a> Parser<'a> {
         let m = self.start(NodeKind::Fn)?;
         self.eat(TokenKind::KwRt);
         self.expect(TokenKind::KwFn)?;
-        self.parse_name("function name")?;
+        self.parse_name(Declared::Function, "function name")?;
         self.parse_generics_opt()?;
         self.parse_params(true, NodeKind::Fn)?;
         if self.at_line_end(TokenKind::Arrow) {
@@ -402,7 +402,7 @@ impl<'a> Parser<'a> {
     pub(super) fn parse_struct(&mut self, _: ItemCtx) -> PResult<()> {
         let m = self.start(NodeKind::Struct)?;
         self.expect(TokenKind::KwStruct)?;
-        self.parse_name("struct name")?;
+        self.parse_name(Declared::Type, "struct name")?;
         self.parse_generics_opt()?;
         self.parse_derives_opt()?;
         // A tuple struct (`struct Hz(F32)`, S-39) is no struct of Onsa: the
@@ -425,7 +425,7 @@ impl<'a> Parser<'a> {
                 if let VisRead::Word(word) = p.parse_vis("a field name")? {
                     p.read_form(word, None, None);
                 }
-                p.parse_name("field name")?;
+                p.parse_name(Declared::Field, "field name")?;
                 p.expect(TokenKind::Colon)?;
                 p.parse_type()?;
                 // A `=` at the head of a line is the table's (§2.5).
@@ -473,7 +473,7 @@ impl<'a> Parser<'a> {
     pub(super) fn parse_enum(&mut self, _: ItemCtx) -> PResult<()> {
         let m = self.start(NodeKind::Enum)?;
         self.expect(TokenKind::KwEnum)?;
-        let name = self.parse_name("enum name")?;
+        let name = self.parse_name(Declared::Type, "enum name")?;
         self.parse_generics_opt()?;
         self.parse_derives_opt()?;
         let l = self.start(NodeKind::VariantList)?;
@@ -491,7 +491,7 @@ impl<'a> Parser<'a> {
                 let v = p.start(NodeKind::Variant)?;
                 p.attach_docs(docs);
                 p.variant_word()?;
-                p.parse_name("variant name")?;
+                p.parse_name(Declared::Variant, "variant name")?;
                 // S-412: the `(` of the fields of a variant follows the
                 // rule of the postfix `(` (a blank before it is E0020).
                 if p.touches_bare(TokenKind::LParen)? {
@@ -544,7 +544,7 @@ impl<'a> Parser<'a> {
     pub(super) fn parse_type_item(&mut self, ctx: ItemCtx) -> PResult<()> {
         let m = self.start(NodeKind::TypeAlias)?;
         self.expect(TokenKind::KwType)?;
-        let name = self.parse_name("type name")?;
+        let name = self.parse_name(Declared::Type, "type name")?;
         if self.eat(TokenKind::Eq).is_some() {
             if ctx == ItemCtx::Extern {
                 return Err(self.error(Code::E0002, name.span, "an opaque type in `extern` has no definition"));
@@ -566,7 +566,7 @@ impl<'a> Parser<'a> {
     pub(super) fn parse_trait(&mut self, _: ItemCtx) -> PResult<()> {
         let m = self.start(NodeKind::Trait)?;
         self.expect(TokenKind::KwTrait)?;
-        self.parse_name("trait name")?;
+        self.parse_name(Declared::Trait, "trait name")?;
         self.parse_generics_opt()?;
         // The supertraits (§6.3, R-373): read, and not lowered (a trait is E0200 in this version).
         self.parse_derives_opt()?;
@@ -612,7 +612,7 @@ impl<'a> Parser<'a> {
         let m = self.start(NodeKind::Effect)?;
         self.eat(TokenKind::KwBlocking);
         self.expect(TokenKind::KwEffect)?;
-        self.parse_name("effect name")?;
+        self.parse_name(Declared::Effect, "effect name")?;
         self.parse_members(NodeKind::Effect)?;
         self.complete(m, NodeKind::Effect);
         Ok(())
@@ -621,7 +621,7 @@ impl<'a> Parser<'a> {
     pub(super) fn parse_handler(&mut self, _: ItemCtx) -> PResult<()> {
         let m = self.start(NodeKind::Handler)?;
         self.expect(TokenKind::KwHandler)?;
-        self.parse_name("handler name")?;
+        self.parse_name(Declared::Handler, "handler name")?;
         if self.at(TokenKind::LParen) {
             self.refuse_empty(TokenKind::LParen)?;
             self.parse_params(true, NodeKind::Handler)?;
@@ -636,7 +636,7 @@ impl<'a> Parser<'a> {
     pub(super) fn parse_const(&mut self, ctx: ItemCtx) -> PResult<()> {
         let m = self.start(NodeKind::Const)?;
         self.expect(TokenKind::KwConst)?;
-        self.parse_name("constant name")?;
+        self.parse_name(Declared::Constant, "constant name")?;
         self.expect(TokenKind::Colon)?;
         self.parse_type()?;
         if self.eat(TokenKind::Eq).is_some() {
@@ -775,7 +775,7 @@ impl<'a> Parser<'a> {
             TokenKind::KwType => {
                 let o = self.start(NodeKind::OpaqueType)?;
                 self.bump();
-                self.parse_name("type name")?;
+                self.parse_name(Declared::Type, "type name")?;
                 self.complete(o, NodeKind::OpaqueType);
             }
             TokenKind::KwFn | TokenKind::KwRt => self.parse_fn_with(FnBody::Else)?,

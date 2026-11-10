@@ -52,6 +52,7 @@ use crate::cst::{Class, Event, NodeKind};
 use crate::foreign::{self, Detached, End, Want};
 use crate::layout::Lines;
 use crate::literal::Literals;
+use crate::naming::Declared;
 use crate::scan::pattern_alternative;
 use crate::starts::{declares_a_function, opens_a_function_value, starts_operand};
 use crate::token::{Gap, NotAName, Token, TokenKind};
@@ -305,6 +306,9 @@ pub(crate) struct Parser<'a> {
     /// (`inc(1)!(x)`): with no `,` of a list before it, the failure there
     /// notes the rule of the marks, as at a `~(` (R-339).
     value_bang: Option<usize>,
+    /// The token where a name of the kind was declared, at the failure there
+    /// ([`Parser::fail_name`]); [`Parser::fail_at`] takes it.
+    named: Option<(usize, Declared)>,
     /// The last tokens of the statements and declarations that end no operand
     /// (`for`, `while`, a declaration but `const` and `type`) or a bound value
     /// (`let`, `var`, an assignment), in order: a symbol at the head of the
@@ -400,6 +404,7 @@ impl<'a> Parser<'a> {
             trials: 0,
             detached: None,
             value_bang: None,
+            named: None,
             ends: Vec::new(),
             prefixed: Vec::new(),
             guard: None,

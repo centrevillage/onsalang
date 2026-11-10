@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§2.3", "§18.1"]
+// fixes = 1
+
+// E0002 for keywords written as the names of the fields of a `struct` (S-654, §2.3): the position has the form snake_case,
+// so the candidate is the name with a `_` at the end, wherever the field is in the list. One error in each unit.
+
+pub struct First {
+  in: F32,                                          //~ E0002
+  b: I32,
+}
+
+pub struct Later {
+  a: I32,
+  as: I32,                                          //~ E0002
+}
+
+pub struct Words {
+  uses: I32,                                        //~ E0002
+}

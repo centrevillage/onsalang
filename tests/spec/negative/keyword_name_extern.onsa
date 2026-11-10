@@ -1,0 +1,12 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§2.3", "§14.1", "§18.1"]
+// fixes = 0
+
+// E0002 without a candidate for a keyword written as the name of a function of an `extern` block (S-654, S-985): the name
+// is the symbol of C it binds, and the name with a `_` at the end would bind another one, so no candidate is made while
+// S-985 is open. One error.
+
+extern "C" lib "m" {
+  fn type(x: F64) -> F64                            //~ E0002
+}

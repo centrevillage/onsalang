@@ -21,6 +21,75 @@ enum Shape {
     UpperSnake,
 }
 
+/// The kinds of the names a declaration introduces (§2.3): the one table of
+/// their shapes and of the words that name them, which the E0320 of a
+/// declaration ([`check`]) and the candidate of a keyword written as one
+/// ([`keyword_candidate`], S-654) read. The parser says which it reads
+/// (`Parser::parse_name`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Declared {
+    Function,
+    Flow,
+    Field,
+    Parameter,
+    Variable,
+    Handler,
+    EffectVar,
+    Type,
+    Variant,
+    Trait,
+    Effect,
+    /// A name of `[…]`, whose kind its spelling decides after it is read.
+    TypeParam,
+    Constant,
+    ConstParam,
+}
+
+impl Declared {
+    fn shape(self) -> Shape {
+        use Declared::*;
+        match self {
+            Function | Flow | Field | Parameter | Variable | Handler | EffectVar => Shape::Snake,
+            Type | Variant | Trait | Effect | TypeParam => Shape::UpperCamel,
+            Constant | ConstParam => Shape::UpperSnake,
+        }
+    }
+
+    fn what(self) -> &'static str {
+        use Declared::*;
+        match self {
+            Function => "function",
+            Flow => "flow",
+            Field => "field",
+            Parameter => "parameter",
+            Variable => "variable",
+            Handler => "handler",
+            EffectVar => "effect-row variable",
+            Type => "type",
+            Variant => "variant",
+            Trait => "trait",
+            Effect => "effect",
+            TypeParam => "type parameter",
+            Constant => "constant",
+            ConstParam => "const parameter",
+        }
+    }
+}
+
+/// A word with a `_` at its end: the name that avoids a keyword (§2.3, S-243).
+fn tailed(word: &str) -> String {
+    format!("{word}_")
+}
+
+/// The candidate of the E0002 of the keyword `word` written as a name
+/// (§2.3, S-654): the word with a `_` at its end, where the name has the
+/// shape `snake_case`: a declared name of `kind` (not of an item with
+/// `@export`, `exported`, §14.2), or a name used in an expression (`None`).
+pub(crate) fn keyword_candidate(word: &str, kind: Option<Declared>, exported: bool) -> Option<String> {
+    let snake = kind.is_none_or(|k| matches!(k.shape(), Shape::Snake));
+    (snake && !exported).then(|| tailed(word))
+}
+
 /// The part of a name read where its spelling decides its kind (§2.3,
 /// S-648): what follows a leading `_`, so `_x` is read as `x` and the naming
 /// rule reports the `_` (E0320) as a name of the kind read. Only the kind
@@ -109,7 +178,7 @@ impl Shape {
         let mut to = self.convert(name);
         let reserved = crate::token::TokenKind::keyword(&to).is_some();
         if reserved || (tail && name.ends_with('_') && !to.ends_with('_')) {
-            to.push('_');
+            to = tailed(&to);
         }
         (self.matches(&to) && to != name).then_some((to, reserved))
     }
@@ -216,7 +285,8 @@ pub(crate) fn check(ast: &Ast, diagnostics: &mut Vec<Diagnostic>) {
     // `binding`: a name a pattern binds, whose leading `_` may mean a value
     // that is not used: that is `_` alone, the candidate of its E0309 after
     // this one (§2.3, §5.1, S-726).
-    let mut check = |ident: &Ident, shape: Shape, what: &str, binding: bool| {
+    let mut check = |ident: &Ident, kind: Declared, binding: bool| {
+        let (shape, what) = (kind.shape(), kind.what());
         if ident.name == "_" || shape.matches(&ident.name) {
             return;
         }
@@ -251,19 +321,19 @@ pub(crate) fn check(ast: &Ast, diagnostics: &mut Vec<Diagnostic>) {
         }
         out.push(d);
     };
-    let params = |params: &[Param], check: &mut dyn FnMut(&Ident, Shape, &str, bool)| {
+    let params = |params: &[Param], check: &mut dyn FnMut(&Ident, Declared, bool)| {
         for p in params {
             if let ParamName::Ident(id) = &p.name {
-                check(id, Shape::Snake, "parameter", false);
+                check(id, Declared::Parameter, false);
             }
         }
     };
-    let generics = |gs: &[GenericParam], check: &mut dyn FnMut(&Ident, Shape, &str, bool)| {
+    let generics = |gs: &[GenericParam], check: &mut dyn FnMut(&Ident, Declared, bool)| {
         for g in gs {
             match g {
-                GenericParam::Type { name, .. } => check(name, Shape::UpperCamel, "type parameter", false),
-                GenericParam::Const { name, .. } => check(name, Shape::UpperSnake, "const parameter", false),
-                GenericParam::Effect { name } => check(name, Shape::Snake, "effect-row variable", false),
+                GenericParam::Type { name, .. } => check(name, Declared::TypeParam, false),
+                GenericParam::Const { name, .. } => check(name, Declared::ConstParam, false),
+                GenericParam::Effect { name } => check(name, Declared::EffectVar, false),
             }
         }
     };
@@ -274,42 +344,40 @@ pub(crate) fn check(ast: &Ast, diagnostics: &mut Vec<Diagnostic>) {
         }
         match kind {
             ItemKind::Fn(f) => {
-                check(&f.name, Shape::Snake, "function", false);
+                check(&f.name, Declared::Function, false);
                 generics(&f.generics, &mut check);
                 params(&f.params, &mut check);
             }
             ItemKind::Flow(f) => {
-                check(&f.name, Shape::Snake, "flow", false);
+                check(&f.name, Declared::Flow, false);
                 params(&f.params, &mut check);
             }
             ItemKind::Struct(s) => {
-                check(&s.name, Shape::UpperCamel, "type", false);
+                check(&s.name, Declared::Type, false);
                 generics(&s.generics, &mut check);
                 for f in &s.fields {
-                    check(&f.name, Shape::Snake, "field", false);
+                    check(&f.name, Declared::Field, false);
                 }
             }
             ItemKind::Enum(e) => {
-                check(&e.name, Shape::UpperCamel, "type", false);
+                check(&e.name, Declared::Type, false);
                 generics(&e.generics, &mut check);
                 for v in &e.variants {
-                    check(&v.name, Shape::UpperCamel, "variant", false);
+                    check(&v.name, Declared::Variant, false);
                 }
             }
-            ItemKind::TypeAlias { name, .. } | ItemKind::OpaqueType { name } => {
-                check(name, Shape::UpperCamel, "type", false)
-            }
+            ItemKind::TypeAlias { name, .. } | ItemKind::OpaqueType { name } => check(name, Declared::Type, false),
             ItemKind::Trait(t) => {
-                check(&t.name, Shape::UpperCamel, "trait", false);
+                check(&t.name, Declared::Trait, false);
                 generics(&t.generics, &mut check);
             }
             ItemKind::Impl(i) => generics(&i.generics, &mut check),
-            ItemKind::Effect(e) => check(&e.name, Shape::UpperCamel, "effect", false),
+            ItemKind::Effect(e) => check(&e.name, Declared::Effect, false),
             ItemKind::Handler(h) => {
-                check(&h.name, Shape::Snake, "handler", false);
+                check(&h.name, Declared::Handler, false);
                 params(&h.params, &mut check);
             }
-            ItemKind::Const(c) => check(&c.name, Shape::UpperSnake, "constant", false),
+            ItemKind::Const(c) => check(&c.name, Declared::Constant, false),
             // A default has no name of its own.
             ItemKind::FieldDefault { .. }
             | ItemKind::Use(_)
@@ -320,19 +388,19 @@ pub(crate) fn check(ast: &Ast, diagnostics: &mut Vec<Diagnostic>) {
     }
     for stmt in &ast.stmts {
         if let StmtKind::Var { name, .. } = &stmt.kind {
-            check(name, Shape::Snake, "variable", false);
+            check(name, Declared::Variable, false);
         }
     }
     for expr in &ast.exprs {
         match &expr.kind {
             ExprKind::Closure { params: ps, .. } => params(ps, &mut check),
-            ExprKind::Par { var, .. } => check(var, Shape::Snake, "variable", false),
+            ExprKind::Par { var, .. } => check(var, Declared::Variable, false),
             _ => {}
         }
     }
     for pat in &ast.pats {
         if let PatKind::Bind(id) = &pat.kind {
-            check(id, Shape::Snake, "variable", true);
+            check(id, Declared::Variable, true);
         }
     }
     diagnostics.extend(out);

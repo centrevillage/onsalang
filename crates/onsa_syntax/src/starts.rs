@@ -64,6 +64,53 @@ pub(crate) fn ends_operand(kind: TokenKind) -> bool {
     )
 }
 
+/// Whether a keyword of `kind` starts a statement that is no expression
+/// (§6.1): what `Parser::parse_stmt` reads by its first token (an attribute
+/// `@` before a `let` too).
+pub(crate) fn starts_statement(kind: TokenKind) -> bool {
+    use TokenKind::*;
+    matches!(kind, KwLet | KwVar | KwFor | KwWhile | KwBreak | KwContinue | KwReturn | KwMove | KwAssert)
+}
+
+/// Whether a token of `kind` after an operand is a binary operator, `as` or
+/// `at` (§3.1, §3.3).
+pub(crate) fn operator_after(kind: TokenKind) -> bool {
+    kind.binop().is_some() || matches!(kind, TokenKind::KwAs | TokenKind::KwAt)
+}
+
+/// Whether the keyword `kind` that the parser failed at is written as a name
+/// (§2.3, S-654): a keyword that is no reserved word (its E0200, §2.2) and no
+/// word of a value (`self`, `Self`, `true`, `false`, which end an operand);
+/// where an operand is (`operand`), one that starts no expression and no
+/// statement either (`match`, `fn`, `return`). The one test, for the names
+/// and the operands the parser fails at (`Parser::fail_at`).
+pub(crate) fn keyword_as_name(kind: TokenKind, operand: bool) -> bool {
+    kind.is_keyword()
+        && kind.reserved().is_none()
+        && !ends_operand(kind)
+        && !(operand && (starts_operand(kind) || starts_statement(kind)))
+}
+
+/// Whether the token after a keyword written as a name, of `kind` (`None`:
+/// the end of the line), goes on after a name there (S-654, §18.1: else the
+/// candidate would leave an error of its stage): a binary operator, a `,`, a
+/// closing bracket, a postfix `.`, `[`, `(` or `?`, `=`, `=>` and a range
+/// symbol; after a declared name (`declared`) its `:` and the `in` of `for`
+/// and `par~`; after an operand `as`, `at` and in a header (`header`, S-338)
+/// the `{` of the body. A name, a literal or another word after it is a form
+/// of its own (`at sample`, `fn f(in x: I32)`, `let const x`), and the
+/// keyword before it is no name.
+pub(crate) fn follows_a_name(kind: Option<TokenKind>, declared: bool, header: bool) -> bool {
+    use TokenKind::*;
+    kind.is_none_or(|k| {
+        let any =
+            [Comma, RParen, RBracket, RBrace, Eof, Dot, LBracket, LParen, Question, Eq, FatArrow, DotDotLt, DotDotEq];
+        k.binop().is_some()
+            || any.contains(&k)
+            || if declared { matches!(k, Colon | KwIn) } else { operator_after(k) || (header && k == LBrace) }
+    })
+}
+
 /// Whether a token of `kind` after a member `.` is a member (§2.5): a name,
 /// a tuple index or the `(` of `.(`. The parser's postfix `.` reads it
 /// (`parser::expressions`, a keyword being a field name there), and so do the
@@ -179,5 +226,53 @@ mod tests {
         want.sort_unstable();
         assert_eq!(named, want);
         assert!(!super::names_a_member(TokenKind::Int) && super::starts_member(TokenKind::Int));
+    }
+
+    /// The parser reads a statement past its first token exactly when that
+    /// token starts an expression or a statement ([`super::starts_statement`],
+    /// the arms of `Parser::parse_stmt`): every other keyword is the failure
+    /// at it, where S-654 judges whether it is written as a name.
+    #[test]
+    fn the_keywords_that_start_a_statement_are_those_the_parser_reads() {
+        for k in KEYWORDS.iter().filter(|k| k.reserved.is_none()) {
+            let src = format!("fn f() {{\n  {}\n}}\n", k.text);
+            let parsed = crate::parse(onsa_diag::FileId(0), &src);
+            let at = src.find(&format!("  {}\n", k.text)).unwrap() as u32 + 2;
+            let fails_at = parsed.diagnostics.iter().any(|d| d.span.start == at);
+            let starts = super::starts_operand(k.kind) || super::starts_statement(k.kind);
+            assert_eq!(fails_at, !starts, "`{}`: {:?}", k.text, parsed.diagnostics);
+        }
+    }
+
+    /// S-654 (§2.3, §18.1): a keyword that starts no expression and no
+    /// statement, where an operand is, takes the candidate `in_` only when
+    /// the token after it surely goes on after a name; and a keyword where a
+    /// name is declared takes it where the name is `snake_case`, not on an
+    /// item with `@export`. The words of a value and `return` take none.
+    #[test]
+    fn a_keyword_written_as_a_name_takes_a_tail_where_it_would_be_a_name() {
+        let candidates = |body: &str| -> Vec<String> {
+            let parsed = crate::parse(onsa_diag::FileId(0), body);
+            let fixes = parsed.diagnostics.iter().flat_map(|d| d.fixes.iter());
+            fixes.map(|f| f.edits()[0].replace.clone()).collect()
+        };
+        let body = |e: &str| format!("fn f(x: I32) -> I32 {{\n  let y = {e}\n  y\n}}\n");
+        for (e, want) in [("in + 1", "in_"), ("(as)", "as_"), ("x * uses", "uses_"), ("in.x", "in_"), ("in(x)", "in_")]
+        {
+            assert_eq!(candidates(&body(e)), [want], "{e}");
+        }
+        // A type is no operand: `as` takes one after it.
+        for e in ["at sample", "in x", "in 1", "return", "self + 1", "true + 1", "match", "x as uses"] {
+            assert_eq!(candidates(&body(e)), Vec::<String>::new(), "{e}");
+        }
+        assert_eq!(candidates("fn type() {}\n"), ["type_"]);
+        assert_eq!(candidates("fn f() { for in in 0..<3 {} }\n"), ["in_"]);
+        // A name or a literal after a declared name: the `_` would leave an E0002.
+        for src in ["struct type {}\n", "@export\npub fn type() {}\n", "fn true() {}\n", "fn type f() {}\n"] {
+            assert_eq!(candidates(src), Vec::<String>::new(), "{src}");
+        }
+        for src in ["fn f(in x: I32) {}\n", "fn f() { for in xs {} }\n", "extern \"C\" lib \"m\" {\n  fn type()\n}\n"] {
+            assert_eq!(candidates(src), Vec::<String>::new(), "{src}");
+        }
     }
 }

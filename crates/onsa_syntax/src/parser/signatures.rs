@@ -14,12 +14,24 @@ pub(super) struct PathInfo {
 impl<'a> Parser<'a> {
     // ------------------------------------------------------------ signatures
 
-    /// The name a declaration introduces, in a `Name` node.
-    pub(super) fn parse_name(&mut self, what: &str) -> PResult<Token> {
+    /// The name of `kind` a declaration introduces, in a `Name` node.
+    pub(super) fn parse_name(&mut self, kind: Declared, what: &str) -> PResult<Token> {
         let m = self.start(NodeKind::Name)?;
-        let t = self.parse_ident(what)?;
+        let t = self.peek();
+        if t.kind != TokenKind::Ident {
+            return Err(self.fail_name(kind, Want::Other, what));
+        }
+        self.bump();
         self.complete(m, NodeKind::Name);
         Ok(t)
+    }
+
+    /// The failure where a name of `kind` is declared, wanting `want`
+    /// (`expected`): a keyword there may be written as the name (S-654,
+    /// [`Parser::fail_at`]).
+    pub(super) fn fail_name(&mut self, kind: Declared, want: Want, expected: &str) -> ParseError {
+        self.named = Some((self.peek_index(), kind));
+        self.fail(want, expected)
     }
 
     pub(super) fn parse_ident(&mut self, what: &str) -> PResult<Token> {
@@ -97,12 +109,12 @@ impl<'a> Parser<'a> {
         while !self.at(close) {
             let m = self.start(NodeKind::TypeParam)?;
             if self.eat(TokenKind::KwConst).is_some() {
-                self.parse_name("const parameter name")?;
+                self.parse_name(Declared::ConstParam, "const parameter name")?;
                 self.expect(TokenKind::Colon)?;
                 self.parse_type()?;
                 self.complete(m, NodeKind::ConstParam);
             } else {
-                let name = self.parse_name("type parameter")?;
+                let name = self.parse_name(Declared::TypeParam, "type parameter")?;
                 if crate::naming::reads_lowercase(self.token_text(name)) {
                     self.complete(m, NodeKind::EffectParam);
                 } else {
@@ -162,10 +174,10 @@ impl<'a> Parser<'a> {
                         t.kind == TokenKind::KwSelf
                     }
                     TokenKind::Ident => {
-                        p.parse_name("parameter name")?;
+                        p.parse_name(Declared::Parameter, "parameter name")?;
                         false
                     }
-                    _ => return Err(p.unexpected("a parameter name")),
+                    _ => return Err(p.fail_name(Declared::Parameter, Want::Other, "a parameter name")),
                 };
                 if p.eat(TokenKind::Colon).is_some() {
                     p.parse_type()?;

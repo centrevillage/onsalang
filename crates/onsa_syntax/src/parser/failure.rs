@@ -76,11 +76,13 @@ impl<'a> Parser<'a> {
         noted: Option<(Token, &str)>,
         own: Option<Own>,
     ) -> Option<usize> {
+        let named = self.named.take();
         // A guard reading only says whether the tokens read (no diagnostics).
         if self.guard.is_some() {
             return None;
         }
         let at = self.peek_index();
+        let named = named.filter(|&(k, _)| k == at).map(|(_, kind)| kind);
         let t = self.tokens[at];
         self.wanted = Some((at, expected.to_string()));
         // The number of a literal written as in other languages (`1u8`,
@@ -101,6 +103,7 @@ impl<'a> Parser<'a> {
         let cursor = self.cursor(at, want);
         let foreign::Failure { rows, general, prefixed, resume } = foreign::at_failure(&cursor);
         self.prefixed.extend(prefixed);
+        let read_by_a_row = !rows.is_empty();
         for d in rows {
             self.report(d);
         }
@@ -171,9 +174,61 @@ impl<'a> Parser<'a> {
             for f in fixes {
                 d = d.with_fix(f);
             }
+            // A keyword written as a name, of no form a row reads (S-654).
+            if d.fixes.is_empty()
+                && !read_by_a_row
+                && noted.is_none()
+                && let Some(to) = self.keyword_name(at, want, named)
+            {
+                d = d.with_fix(Fix::replace("write the name with a `_` at its end", t.span, to));
+            }
             self.report(d);
         }
         resume
+    }
+
+    /// The candidate of the keyword at token `at` written as a name (§2.3,
+    /// S-654): where a name of `named` is declared, or where an operand is
+    /// (`want`), when the token after it goes on after a name; the name of
+    /// an item with `@export` takes none (§14.2).
+    fn keyword_name(&self, at: usize, want: Want, named: Option<Declared>) -> Option<String> {
+        let t = self.tokens[at];
+        if named.is_none() && want != Want::Expr {
+            return None;
+        }
+        let next = self.on_line_after(at).map(|k| self.tokens[k].kind);
+        if !crate::starts::keyword_as_name(t.kind, named.is_none())
+            || !crate::starts::follows_a_name(next, named.is_some(), self.no_struct_lit)
+        {
+            return None;
+        }
+        let function = matches!(named, Some(Declared::Function | Declared::Flow));
+        // SPEC-GAP(S-985): the name of a member of an `extern` block is the
+        // symbol of C it binds, which a `_` at its end would change: none.
+        if function && self.innermost(NodeKind::Extern).is_some() {
+            return None;
+        }
+        let exported = function && self.exported_head(at);
+        crate::naming::keyword_candidate(self.token_text(t), named, exported)
+    }
+
+    /// Where the innermost open node of `kind` starts.
+    fn innermost(&self, kind: NodeKind) -> Option<u32> {
+        let open = self.open.iter().rev();
+        open.map(|o| (&self.events[o.event as usize], o.start))
+            .find(|(e, _)| matches!(e, Event::Start { kind: Some(k), .. } if *k == kind))
+            .map(|(_, start)| start)
+    }
+
+    /// Whether the head of the item being read, before token `at`, has the
+    /// attribute `@export` (§14.2).
+    fn exported_head(&self, at: usize) -> bool {
+        let Some(start) = self.innermost(NodeKind::Item) else { return false };
+        let first = self.tokens.partition_point(|t| t.span.start < start);
+        (first..at).any(|k| {
+            self.tokens[k].kind == TokenKind::At
+                && self.tokens.get(k + 1).is_some_and(|n| self.token_text(*n) == crate::attrs::EXPORT)
+        })
     }
 
     /// Read on to token `to` after a failure in the head of a declaration

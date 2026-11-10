@@ -211,6 +211,7 @@ impl<'a> Parser<'a> {
                 Ok(self.complete(m, NodeKind::AssertStmt))
             }
             _ => {
+                debug_assert!(!crate::starts::starts_statement(t.kind), "{:?} starts a statement", t.kind);
                 let expr = self.parse_expr()?;
                 if self.at(TokenKind::Eq) {
                     let m = self.precede(expr, NodeKind::AssignStmt)?;
@@ -225,7 +226,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_var_rest(&mut self, m: Marker) -> PResult<Completed> {
-        self.parse_name("variable name")?;
+        self.parse_name(Declared::Variable, "variable name")?;
         if self.eat(TokenKind::Colon).is_some() {
             self.parse_type()?;
         }
@@ -298,7 +299,7 @@ impl<'a> Parser<'a> {
 
     /// Whether `t` after an operand is a binary operator, `as` or `at`.
     fn operator_after(t: Token) -> bool {
-        t.kind.binop().is_some() || matches!(t.kind, TokenKind::KwAs | TokenKind::KwAt)
+        crate::starts::operator_after(t.kind)
     }
 
     /// The E0002 of a mark `move` or `inout` whose operand is not a postfix

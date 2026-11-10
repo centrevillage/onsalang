@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§2.3", "§18.1"]
+// fixes = 0
+
+// E0002 without a candidate for a keyword written where a name is declared and followed by a name or a literal, which
+// does not go on after a name (S-654, §2.3, §18.1): a word of other languages before the name (`in x`, `const x`,
+// `type x`, `type f`) or a name left out (`for in xs`, `par~ in 0..<2`). The name with a `_` at the end would leave an
+// error of the same stage, so no candidate is made. One error in each unit.
+
+pub fn param_word(in x: I32) -> I32 {               //~ E0002
+  x
+}
+
+pub fn let_const() -> I32 {
+  let const x = 1                                   //~ E0002
+  1
+}
+
+pub fn let_type() -> I32 {
+  let type x = 1                                    //~ E0002
+  1
+}
+
+pub fn type f() -> I32 {                            //~ E0002
+  1
+}
+
+pub fn for_without_a_name(xs: [I32; 2]) -> I32 {
+  for in xs {                                       //~ E0002
+  }
+  0
+}
+
+pub flow par_without_a_name(x: F32 at sample) -> F32 at sample {
+  par~ in 0..<2 {                                   //~ E0002
+    x
+  }
+  x
+}
+
+pub struct P {
+  const x: I32,                                     //~ E0002
+}

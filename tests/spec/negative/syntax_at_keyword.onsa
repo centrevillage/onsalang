@@ -1,12 +1,39 @@
 // onsa.toml
 // [test]
 // spec = ["§2.2", "§2.3", "§11.3", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "39:7"
+// code = "E0002"
+// candidate = 1
+// leaves = ["40:3 E0002"]
+//
+// [[test.fix]]
+// at = "44:7"
+// code = "E0002"
+// candidate = 1
+// leaves = ["45:3 E0002"]
+//
+// [[test.fix]]
+// at = "68:25"
+// code = "E0002"
+// candidate = 1
+// leaves = ["69:3 E0002"]
+//
+// [[test.fix]]
+// at = "81:14"
+// code = "E0002"
+// candidate = 1
+// leaves = ["81:33 E0002"]
 
 // E0002 for the keyword `at` used as a name (§2.2: `at` is in the list of all the keywords; a
 // keyword is not a name, and a token that cannot stand where a name is expected is an unexpected
 // token, §18.1). The same for every place a name is made: a binding, a pattern, a parameter, an
 // input of a flow, a field, a function, a flow. (`at` after a `.`, as the name of a field or a
 // method, is not fixed by the spec and is not here.) One error per declaration unit.
+// The units that use the name after it have a second error there, which the candidate `at_` of
+// the first leaves (`leaves`, S-654).
 
 pub fn at_as_a_binding() -> I32 {
   let at = 1   //~ E0002

@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§2.3", "§18.1"]
+// fixes = 1
+
+// E0002 for a keyword written where an expression is, followed by what goes on after an operand (S-654, §2.3): an index
+// `in[0]`, a field `in.x`, a method `in.abs()`, an assignment `in = 1`, a range `in ..< 3` and the guard of an arm
+// `0 if in => 1`. Each is the use left after the declaration was written `in_` (the first step of
+// `fn f(in: I32) { in[0] }`), and the candidate is the same `in_`, after which only the errors of the later stages may be
+// left. One error in each unit.
+
+pub struct P {
+  x: I32,
+}
+
+pub fn index(in_: [I32; 2]) -> I32 {
+  in_[0]                                             //~ E0002
+}
+
+pub fn field(in_: P) -> I32 {
+  in_.x                                              //~ E0002
+}
+
+pub fn method(in_: F32) -> F32 {
+  in_.abs()                                          //~ E0002
+}
+
+pub fn assign() -> I32 {
+  var in_: I32 = 0
+  in_ = 1                                            //~ E0002
+  in_
+}
+
+pub fn range(in_: I32) -> I32 {
+  var total: I32 = 0
+  for i in in_ ..< 3 {                               //~ E0002
+    total = total + i
+  }
+  total
+}
+
+pub fn guard(x: I32, in_: Bool) -> I32 {
+  match x {
+    0 if in_ => 1,                                   //~ E0002
+    _ => 2,
+  }
+}

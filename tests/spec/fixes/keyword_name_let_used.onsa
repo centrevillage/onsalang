@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§2.3", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "16:7"
+// code = "E0002"
+// candidate = 1
+// leaves = ["17:7 E0002"]
+
+// E0002 for a keyword written as a binding and used after it, `let type: I32 = 1` (S-654, §2.3): the candidate is `type_`
+// at the binding only, and the use is the error of the unit after that, with its own candidate `type_` (two steps; the
+// diagnostic that is left after the first is the second step, `leaves`).
+
+pub fn shadow() -> I32 {
+  let type: I32 = 1                                 //~ E0002
+  1 + type
+}
