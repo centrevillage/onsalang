@@ -15,6 +15,8 @@ says nothing of their results: the line of such a case says how many did not run
         (and its main tree, run from a work tree), neither in them nor holding them; any other is refused with
         exit 1, nothing removed
 The runner does not read tests/pending.toml, so a case listed there fails here as it fails without the list.
+It writes no copy either (the `.fixK` of a case): they are made by
+`UPDATE_GOLDEN=1 cargo test -p onsa_tests --test cases`, which runs every case (about 5 s).
 Exit 0 when every case passes, 1 otherwise (without the runner too: a line says which path is not there).
 """
 import argparse
