@@ -1,0 +1,87 @@
+// onsa.toml
+// [test]
+// spec = ["§6.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "55:5"
+// code = "E0002"
+// candidate = 1
+// leaves = ["55:1 E0005"]
+//
+// [[test.fix]]
+// at = "59:4"
+// code = "E0002"
+// candidate = 1
+// leaves = ["59:1 E0005"]
+//
+// [[test.fix]]
+// at = "63:8"
+// code = "E0002"
+// candidate = 1
+// leaves = ["63:1 E0005"]
+//
+// [[test.fix]]
+// at = "67:5"
+// code = "E0002"
+// candidate = 1
+// leaves = ["67:1 E0005"]
+//
+// [[test.fix]]
+// at = "71:5"
+// code = "E0002"
+// candidate = 1
+// leaves = ["71:1 E0005"]
+//
+// [[test.fix]]
+// at = "75:5"
+// code = "E0002"
+// candidate = 1
+// leaves = ["75:1 E0005"]
+//
+// [[test.fix]]
+// at = "84:7"
+// code = "E0002"
+// candidate = 1
+// leaves = ["84:3 E0005"]
+
+// W5-24 U3c, S-990, S-484 (spec §18.1: "属性の中身は頭に書いたときと同じに読み（§6.5）、中身の誤りは移した後の検査で報告する"; §6.5: "`@fp` に属性を付けないときと
+// 同じ意味を名指す値（`@fp(strict)`、§15.5 の既定）と、属性で選べない浮動小数のプロファイルの名前（`@fp(strict-ftz)`）は、同じ E0005 で、修正候補は属性を除くことである"):
+// `@fp(strict)` and `@fp(strict-ftz)` after `pub` or `rt` read as they would at the head of the declaration, so they are the E0002 of
+// their place with the one candidate that moves them before the visibility and `rt`, as every attribute that reads there is; the
+// E0005 of the value is left after the move, at the attribute moved (`leaves`), and its candidate takes the attribute out
+// (tests/spec/fixes/fp_default_name_forms.onsa). One error in each declaration unit (P-01).
+
+pub @fp(strict) fn default_name_fn(x: F32) -> F32 {   //~ E0002
+  x
+}
+
+rt @fp(strict) fn default_name_rt(x: F32) -> F32 {   //~ E0002
+  x
+}
+
+pub rt @fp(strict) fn default_name_pub_rt(x: F32) -> F32 {   //~ E0002
+  x
+}
+
+pub @fp(strict) flow default_name_flow(x: F32 at sample) -> F32 at sample {   //~ E0002
+  x
+}
+
+pub @fp(strict-ftz) fn profile_name_fn(x: F32) -> F32 {   //~ E0002
+  x
+}
+
+pub @fp(strict, relaxed) fn default_name_and_more(x: F32) -> F32 {   //~ E0002
+  x
+}
+
+struct P {
+  x: F32,
+}
+
+impl P {
+  pub @fp(strict) fn member(self) -> F32 {   //~ E0002
+    self.x
+  }
+}

@@ -54,14 +54,19 @@ impl Mark {
     }
 }
 
-/// The earlier step (an index of `marks`) whose edits `fix` undoes: each of
-/// its edits restores a mark of that step.
+/// The earlier step (an index of `marks`) that `fix` undoes: each of its
+/// edits restores a mark of that step, and every mark of the step is
+/// restored. A step that takes out what a move put, the text not back at
+/// its place, undoes no step (S-475, S-990: `pub @fp(strict) fn h`).
 pub(super) fn undoes(marks: &[Vec<Mark>], text: &str, fix: &Fix) -> Option<usize> {
     let edits = fix.edits();
     if edits.is_empty() {
         return None;
     }
-    marks.iter().position(|ms| edits.iter().all(|e| ms.iter().any(|m| m.undone_by(text, e))))
+    marks.iter().position(|ms| {
+        edits.iter().all(|e| ms.iter().any(|m| m.undone_by(text, e)))
+            && ms.iter().all(|m| edits.iter().any(|e| m.undone_by(text, e)))
+    })
 }
 
 /// The marks after `fix` (applied to `text`, its edits placed as `moved`):

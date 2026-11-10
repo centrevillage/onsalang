@@ -157,6 +157,27 @@ fn a_step_that_restores_an_earlier_one_is_a_cycle_of_undo() {
 }
 
 #[test]
+fn a_step_that_takes_out_what_a_move_put_undoes_no_step() {
+    // `ab@` to `@ab`: the `@` moved to the front, deleted at its place and inserted (two marks).
+    let mut sources = SourceMap::default();
+    let file = sources.add("m.onsa", "@ab");
+    let moved = vec![
+        Mark { start: 3, end: 3, old: "@".into(), new: String::new() },
+        Mark { start: 0, end: 1, old: String::new(), new: "@".into() },
+    ];
+    // The `@` at the front taken out: the insertion is restored and the deletion is not (the
+    // `@` is not back at its place), so the step is no undo (`pub @fp(strict) fn h`, S-990).
+    let out = Fix::replace("take out", Span::new(file, 0, 1), "");
+    assert_eq!(undoes(std::slice::from_ref(&moved), "@ab", &out), None);
+    // Taken out and written back at its place: both marks restored, an undo.
+    let back = Fix::new("back", vec![Edit::delete(Span::new(file, 0, 1)), Edit::insert(file, 3, "@")]);
+    assert_eq!(undoes(std::slice::from_ref(&moved), "@ab", &back), Some(0));
+    // One mark of a step with one mark restored is an undo, as before.
+    let put = vec![Mark { start: 0, end: 1, old: String::new(), new: "@".into() }];
+    assert_eq!(undoes(&[put], "@ab", &out), Some(0));
+}
+
+#[test]
 fn a_deleted_text_written_again_beside_an_insertion_at_its_place_is_an_undo() {
     // `a~b`: `~` deleted; `X` inserted where it was; `~` inserted before the `X` (or after it).
     static BEFORE: Table =
