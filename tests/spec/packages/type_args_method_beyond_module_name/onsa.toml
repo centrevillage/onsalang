@@ -1,0 +1,3 @@
+[package]
+name = "type_args_method_beyond_module_name"
+edition = "2026"

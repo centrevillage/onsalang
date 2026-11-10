@@ -33,7 +33,7 @@
 // candidate = 1
 // leaves = ["59:1 E0020"]
 
-// W5-24 U3a/t, S-600, R3 (spec §18.1: "`@` の属性の修正候補は、その属性を可視性と `rt` の前（既にある属性の後ろ）へ移す形である（属性の中身の誤りは移した後の検査で報告し、中身が読めなければ候補を作らない）";
+// W5-24 U3a/t, S-600, R3 (spec §18.1: "`@` の属性の修正候補は、その属性を可視性と `rt` の前（既にある属性の後ろ）へ移す形である（…属性の中身は頭に書いたときと同じに読み（§6.5）、中身の誤りは移した後の検査で報告する…）";
 // "候補が写すか動かす部分（移す属性）に同じ段の別の誤りがあっても、形そのものが読めれば候補を出し、残りの誤りは当てた後の検査で報告する"): an attribute after `pub` that is read as a form but has
 // an error of its own (an attribute that the table does not have, a value out of the list, a value of `@repr` out of the list, the
 // old `@derive(Eq)` and the old `@relaxed`) has the one candidate that moves it, and what is wrong inside it is reported after the

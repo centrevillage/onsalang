@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§18.1"]
+
+// S-994, S-981 (§4.5: "名前の段で分かるほかの誤りも同じで、宣言の数を超えた要素の中の、入れ子の並びの種類の誤り（…）とモジュールの名前（…）は、名前の段の E0308 が先である"): the
+// names stage reads every element of the list written after the name of a method before the number of its parameters is known, so an
+// error of the names stage in an element beyond that number comes before the E0412 of the number: the kind of an element of a list
+// nested in it (`Wrap[3]`, `Option[3]`, `Ring[4, F32]`: E0308), as the name not found does (E0302, type_args_method_unfound.onsa; the
+// name of a module written as a type is in packages/type_args_method_beyond_module_name). What only a later stage knows of an element beyond the number (the number of
+// a nested list, `Wrap[U8, U8]`; the kind of the element itself against the parameter, type_args_method_count_beyond.onsa) leaves the
+// E0412 alone. The same list after the name of a function is E0412 only, the names stage knowing its number (§4.5: "宣言の数を超えた
+// 要素は読まない"). There is no candidate (`fixes = 0`). One error per item (P-01).
+
+pub struct V {
+  n: U8,
+}
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+pub struct Ring[T, const N: U32] {
+  v: [T; N],
+}
+
+impl V {
+  pub fn plain(self, x: U8) -> U8 {
+    x
+  }
+
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+}
+
+pub fn idf[T](x: T) -> T {
+  x
+}
+
+pub fn a_nested_const_where_a_type_goes(v: V) -> U8 {
+  v.conv::[U8, Wrap[3]](1)                          //~ E0308
+}
+
+pub fn a_nested_const_in_a_type_of_the_prelude(v: V) -> U8 {
+  v.conv::[U8, Option[3]](1)                        //~ E0308
+}
+
+pub fn nested_kinds_the_other_way_round(v: V) -> U8 {
+  v.conv::[U8, Ring[4, F32]](1)                     //~ E0308
+}
+
+pub fn nested_in_a_tuple(v: V) -> U8 {
+  v.conv::[U8, (U8, Wrap[3])](1)                    //~ E0308
+}
+
+pub fn a_method_without_type_parameters(v: V) -> U8 {
+  v.plain::[Wrap[3]](1)                             //~ E0308
+}
+
+pub fn the_number_of_a_nested_list_is_of_a_later_stage(v: V) -> U8 {
+  v.conv::[U8, Wrap[U8, U8]](1)                     //~ E0412
+}
+
+pub fn the_same_list_after_a_function() -> U8 {
+  idf::[U8, Wrap[3]](1)                             //~ E0412
+}

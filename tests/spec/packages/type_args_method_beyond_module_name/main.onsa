@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// S-994, S-981 (§4.5: "宣言の数を超えた要素の中の、入れ子の並びの種類の誤り（…）とモジュールの名前（`v.m::[I32, util](x)`）は、名前の段の E0308 が先である"): the name of a module written as an element
+// of the list after the name of a method is the E0308 of the names stage (a name of the wrong kind where a type goes, §15.1), within
+// the number of the parameters of the method and beyond it: the names stage reads every element before the number is known. After
+// the name of a function, whose number the names stage knows, the element beyond it is not read and the report is the E0412 of the
+// number only. There is no candidate (`fixes = 0`). One error per function (P-01).
+use util
+use util.{V, idf}
+
+pub fn beyond_the_number(v: V) -> U8 {
+  v.conv::[U8, util](1)                             //~ E0308
+}
+
+pub fn of_a_method_without_type_parameters(v: V) -> U8 {
+  v.plain::[util](1)                                //~ E0308
+}
+
+pub fn within_the_number(v: V) -> U8 {
+  v.conv::[util](1)                                 //~ E0308
+}
+
+pub fn the_same_list_after_a_function() -> U8 {
+  idf::[U8, util](1)                                //~ E0412
+}

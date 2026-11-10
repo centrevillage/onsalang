@@ -1,0 +1,17 @@
+pub struct V {
+  n: U8,
+}
+
+impl V {
+  pub fn plain(self, x: U8) -> U8 {
+    x
+  }
+
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+}
+
+pub fn idf[T](x: T) -> T {
+  x
+}
