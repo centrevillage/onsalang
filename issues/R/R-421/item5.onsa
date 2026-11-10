@@ -1,0 +1,9 @@
+pub fn g(x: I32) -> I32 {
+  x as F32 F32
+}
+
+0o19
+
+pub fn f() -> I32 {
+  1
+}
