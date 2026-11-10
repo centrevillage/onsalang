@@ -14,7 +14,7 @@ impl<'a> Checker<'a> {
     pub(super) fn flow_const_u32(&mut self, e: ExprId) -> R<u32> {
         let (names, held) = (&self.names.paths, &self.names.held);
         let cx = crate::constarg::ConstCx { m: self.m, ast: self.ast, text: self.text, names, held };
-        match crate::constarg::expr(self.a, &cx, e) {
+        match crate::constarg::expr(self.a, &cx, e).map_err(ConstErr::unheld) {
             Ok((ConstU32::Value(v), constant)) => {
                 let u32 = self.u32();
                 let mut cur = e;
@@ -33,6 +33,7 @@ impl<'a> Checker<'a> {
                 Err(self.unsupported_in(Stage::Flow, self.expr(e).span, Feature::FlowConstExprs, &[]))
             }
             Err(ConstErr::Report(d)) => Err(self.diag(d)),
+            Err(ConstErr::OfOwner(..)) => onsa_diag::internal::bug(Some(self.expr(e).span), crate::constarg::UNHELD),
             // A name held as an error, a constant whose unit failed (§18.1).
             Err(ConstErr::Unknown) => {
                 self.failed = true;

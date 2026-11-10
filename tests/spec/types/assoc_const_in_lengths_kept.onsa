@@ -1,0 +1,149 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.4", "§4.5", "§6.2", "§6.6"]
+
+// S-304 (W5-16 U1c): the forms of an associated constant in a constant expression that pass today and must keep passing
+// when the constants of a generic `impl` are read in lengths: the value is a literal (`R4.LIT`), the alias meets the
+// bound of the `impl` (`SF.CAP`), the type is not generic (`Self.CAP` in `impl P`, `Point.N`). The values are worked
+// out by hand. The forms that change are in types/assoc_const_in_lengths_alias_values.onsa and
+// types/assoc_const_in_lengths_self_in_impl.onsa, each in its own file so that a regression of these is not silenced
+// with theirs.
+
+pub struct Rg[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const LIT: U32 = 4
+}
+
+pub struct Ring[T, const N: U32] {
+  a: [T; N],
+}
+
+type R4 = Rg[F32, 4]
+type R8 = Rg[F32, 8]
+
+// The alias fixes the arguments, the value is a literal that does not depend on them.
+pub fn literal_in_an_argument(a: [F32; R4.LIT]) -> F32 {
+  a[0] + a[3]
+}
+
+pub fn literal_in_a_return() -> [F32; R8.LIT] {
+  [1.5; R8.LIT]
+}
+
+pub fn literal_of_two_aliases_is_one_value(a: [F32; R8.LIT]) -> [F32; R4.LIT] {
+  a
+}
+
+pub fn literal_in_the_body() -> F32 {
+  let a: [F32; R4.LIT] = [2.0, 4.0, 6.0, 8.0]
+  let b = [1.0; R4.LIT]
+  a[1] + b[2]
+}
+
+pub fn literal_in_a_const_argument(r: Ring[F32, R4.LIT]) -> U32 {
+  r.a.len()
+}
+
+// The alias meets the bound of the `impl`.
+pub struct Sh[T] {
+  x: T,
+}
+
+impl[T: Float] Sh[T] {
+  pub const CAP: U32 = 4
+}
+
+type SF = Sh[F32]
+
+pub fn bound_met_in_an_argument(a: [F32; SF.CAP]) -> F32 {
+  a[3]
+}
+
+pub fn bound_met_in_the_body() -> F32 {
+  let a = [0.5; SF.CAP]
+  a[0]
+}
+
+// A type that is not generic: `Self.CAP` is the constant of the type itself.
+pub struct P {
+  x: F32,
+}
+
+impl P {
+  const CAP: U32 = 4
+  pub const WIDE: U32 = 8
+
+  pub fn in_an_argument(self, b: [F32; Self.CAP]) -> F32 {
+    b[3] + self.x
+  }
+
+  pub fn in_a_return(self) -> [F32; Self.WIDE] {
+    [self.x; Self.WIDE]
+  }
+
+  pub fn in_the_body(self) -> F32 {
+    let b = [self.x; Self.CAP]
+    b[1]
+  }
+}
+
+pub struct Point {
+  x: F32,
+}
+
+impl Point {
+  pub const N: U32 = 4
+}
+
+pub fn point_in_a_return() -> [F32; Point.N] {
+  [0.0; Point.N]
+}
+
+pub fn point_in_a_const_argument(r: Ring[F32, Point.N]) -> U32 {
+  r.a.len()
+}
+
+test "the literal is a length of 4 whatever the arguments of the alias are" {
+  let a: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  assert literal_in_an_argument(a) == 5.0
+  let r = literal_in_a_return()
+  let e: [F32; 4] = r
+  assert e.len() == 4
+  assert e[3] == 1.5
+  let same = literal_of_two_aliases_is_one_value(a)
+  assert same[2] == 3.0
+}
+
+test "the literal in the body and in a const argument" {
+  assert literal_in_the_body() == 5.0
+  let ring: Ring[F32, 4] = Ring { a: [0.0; 4] }
+  assert literal_in_a_const_argument(ring) == 4
+}
+
+test "an alias that meets the bound" {
+  let a: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  assert bound_met_in_an_argument(a) == 4.0
+  assert bound_met_in_the_body() == 0.5
+}
+
+test "Self.CAP of a type that is not generic" {
+  let p = P { x: 0.5 }
+  let b: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  assert p.in_an_argument(b) == 4.5
+  let r = p.in_a_return()
+  let e: [F32; 8] = r
+  assert e.len() == 8
+  assert p.in_the_body() == 0.5
+}
+
+test "the constant of a type that is not generic" {
+  let r = point_in_a_return()
+  let e: [F32; 4] = r
+  assert e.len() == 4
+  let ring: Ring[F32, 4] = Ring { a: [0.0; 4] }
+  assert point_in_a_const_argument(ring) == 4
+}

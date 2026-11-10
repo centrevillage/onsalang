@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// fixes = 1
+// spec = ["§4.5", "§6.2", "§18.1"]
+
+// S-304 (W5-16 U1c, §18.1): a constant of an `impl` whose heading is wrong by a redundant mark (E0020, whose candidate
+// removes it) read in a value has no diagnostic of its own: the one error is the heading's. The candidate makes the
+// `impl` well-formed, and the read then decides no parameter (E0406), which the read held back: the check of the body
+// did not read the constant (§18.1). Before this, the candidate was taken to leave that E0406 besides. One error per
+// item (P-01).
+
+pub struct Db[T] {
+  a: T,
+}
+
+impl[T] Db[T] {   //~ E0020
+  pub const R: U32 = 4
+}
+
+pub fn in_a_value() -> U32 {
+  let q: U32 = Db.R
+  q
+}

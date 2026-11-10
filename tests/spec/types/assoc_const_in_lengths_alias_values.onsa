@@ -1,0 +1,121 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.4", "§4.5", "§6.6"]
+
+// S-304 (W5-16 U1c): the constant of a generic `impl` read by an alias that fixes the arguments, when its value is the
+// const parameter alone (`CAP = N`), is a constant expression with the value of the argument: `R4.CAP` is 4 as a length
+// (§4.5: "`I32.BITS` のような型引数の決まった型（別名を含む）の関連定数"; §4.4: the alias decides the arguments). The
+// types `[F32; R4.CAP]` and `[F32; 4]` are the same type (§4.5: "型は評価した値で比べる"), which the functions below
+// show by their calls being accepted and their values. Today `R4.CAP` is E0200 (a computed constant). Every value is
+// worked out by hand from the arguments of the alias. The places are the signature (argument, return, field, alias,
+// type of a `const`), the body (annotation, repeat) and the const argument of a type; the length of a flow is in
+// flow/assoc_const_in_lengths_alias.onsa.
+
+pub struct Rg[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+pub struct Ring[T, const N: U32] {
+  a: [T; N],
+}
+
+const FIVE: U32 = 5
+
+type R4 = Rg[F32, 4]
+type R8 = Rg[F32, 8]
+type R5 = Rg[F32, FIVE]
+type Same4 = R4
+
+// The signature.
+pub fn first_and_last(a: [F32; R4.CAP]) -> F32 {
+  a[0] + a[3]
+}
+
+pub fn made() -> [F32; R4.CAP] {
+  [1.5; R4.CAP]
+}
+
+pub struct Holder {
+  a: [F32; R4.CAP],
+}
+
+type A4 = [F32; R4.CAP]
+
+pub const ZERO4: [F32; R4.CAP] = [0.0; 4]
+
+// The body.
+pub fn annotated() -> F32 {
+  let a: [F32; R4.CAP] = [2.0, 4.0, 6.0, 8.0]
+  a[1] + a[2]
+}
+
+pub fn repeated() -> [F32; 4] {
+  let a = [3.0; R4.CAP]
+  a
+}
+
+// The const argument of a type.
+pub fn ring_length(r: Ring[F32, R4.CAP]) -> U32 {
+  r.a.len()
+}
+
+pub fn made_ring() -> Ring[F32, R4.CAP] {
+  Ring { a: [0.0; 4] }
+}
+
+test "an argument of the length of R4.CAP is an array of 4" {
+  let a: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  assert first_and_last(a) == 5.0
+}
+
+test "the return of the length of R4.CAP is an array of 4" {
+  let m = made()
+  let same: [F32; 4] = m
+  assert same.len() == 4
+  assert same[0] == 1.5
+  assert same[3] == 1.5
+}
+
+test "a field, an alias and a constant of the length" {
+  let h = Holder { a: [0.25; 4] }
+  let b: A4 = h.a
+  let c: [F32; 4] = b
+  assert c.len() == 4
+  assert c[3] == 0.25
+  let z: [F32; 4] = ZERO4
+  assert z.len() == 4
+  assert z[0] == 0.0
+}
+
+test "the annotation and the repeat in the body" {
+  assert annotated() == 10.0
+  let r = repeated()
+  assert r.len() == 4
+  assert r[3] == 3.0
+}
+
+test "a const argument of R4.CAP is the type with 4" {
+  let r: Ring[F32, 4] = Ring { a: [1.0; 4] }
+  assert ring_length(r) == 4
+  let ring: Ring[F32, 4] = made_ring()
+  assert ring.a.len() == 4
+}
+
+test "the constant of an alias of an alias and of an alias written by a constant" {
+  let a: [F32; Same4.CAP] = [0.0; 4]
+  assert a.len() == 4
+  let b: [F32; R5.CAP] = [0.0; 5]
+  assert b.len() == 5
+  assert Same4.CAP == R4.CAP
+}
+
+test "two aliases have their own values" {
+  let a: [F32; R4.CAP] = [0.0; 4]
+  let b: [F32; R8.CAP] = [0.0; 8]
+  assert a.len() + b.len() == 12
+}

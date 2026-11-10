@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5"]
+
+// S-304 (W5-16 U1c): a constant that a type argument decides but whose initializer computes (`D = Self.CAP + 1`),
+// read by an alias in a constant expression, is E0200 (this version does not evaluate a constant computed by an
+// expression as a length, until W9-03), as it is today; the constant that is the const parameter alone (`CAP`) is
+// evaluated (types/assoc_const_in_lengths_alias_values.onsa). One error per unit (P-01); the places are the
+// signature, the body and the const argument of a type.
+
+pub struct Rg[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+  pub const D: U32 = Self.CAP + 1
+}
+
+pub struct Ring[T, const N: U32] {
+  a: [T; N],
+}
+
+type R4 = Rg[F32, 4]
+
+pub fn in_an_argument(a: [F32; R4.D]) -> F32 {   //~ E0200
+  0.0
+}
+
+pub fn in_a_return() -> [F32; R4.D] {   //~ E0200
+  [0.0; 5]
+}
+
+pub fn in_a_repeat() -> F32 {
+  let a = [0.0; R4.D]   //~ E0200
+  a[0]
+}
+
+pub fn in_a_let_annotation() -> F32 {
+  let a: [F32; R4.D] = [0.0; 5]   //~ E0200
+  a[0]
+}
+
+pub fn in_a_const_argument(r: Ring[F32, R4.D]) -> F32 {   //~ E0200
+  0.0
+}

@@ -248,12 +248,9 @@ impl<'p> Sema<'p> {
                 match self.read_const(cx, *e) {
                     Ok((crate::constarg::ConstU32::Value(v), _)) => self.a.types.intern(Ty::ConstVal(v)),
                     Ok((crate::constarg::ConstU32::Param(i), _)) => self.a.types.intern(Ty::Param(i)),
-                    Err(crate::constarg::ConstErr::Unknown) => self.a.types.error(),
-                    Err(crate::constarg::ConstErr::Report(mut d) | crate::constarg::ConstErr::Uncomputed(mut d)) => {
-                        // The whole argument (`-1`), as written in the type.
-                        d.span = te.span;
-                        d.found = Some(src(cx, te.span));
-                        self.report(cx.def, d);
+                    // At the reader's place (a leaf, a node), as in an array length.
+                    Err(e) => {
+                        self.const_error(cx.def, e);
                         self.a.types.error()
                     }
                 }
@@ -268,19 +265,23 @@ impl<'p> Sema<'p> {
                     Ok(records) => crate::constarg::path(self.a, (cx.m, cx.ast, cx.text), records.as_deref(), path),
                     Err(d) => Err(crate::constarg::ConstErr::Report(d)),
                 };
-                let named = named.map(|(v, _)| match v {
-                    crate::constarg::ConstU32::Value(v) => Ty::ConstVal(v),
-                    crate::constarg::ConstU32::Param(i) => Ty::Param(i),
-                });
-                match named {
-                    // A constant with type arguments (`K[F32]`).
-                    Ok(_) | Err(crate::constarg::ConstErr::Uncomputed(_)) if !args.is_empty() => {
-                        self.not_a_const_arg(cx, te.span)
+                // A constant with type arguments (`K[F32]`, `Rg.CAP[F32]`),
+                // whatever its value reads as, held as its error is.
+                let named = match named {
+                    _ if args.is_empty() => named,
+                    Ok(_) | Err(crate::constarg::ConstErr::Uncomputed(_)) => {
+                        Err(self.not_a_const_arg(cx, te.span).into())
                     }
-                    Ok(ty) => self.a.types.intern(ty),
-                    Err(crate::constarg::ConstErr::Unknown) => self.a.types.error(),
-                    Err(crate::constarg::ConstErr::Report(d) | crate::constarg::ConstErr::Uncomputed(d)) => {
-                        self.report(cx.def, d);
+                    Err(crate::constarg::ConstErr::OfOwner(o, _)) => {
+                        Err(crate::constarg::ConstErr::OfOwner(o, Box::new(self.not_a_const_arg(cx, te.span).into())))
+                    }
+                    named => named,
+                };
+                match named.map(|(v, _)| v) {
+                    Ok(crate::constarg::ConstU32::Value(v)) => self.a.types.intern(Ty::ConstVal(v)),
+                    Ok(crate::constarg::ConstU32::Param(i)) => self.a.types.intern(Ty::Param(i)),
+                    Err(e) => {
+                        self.const_error(cx.def, e);
                         self.a.types.error()
                     }
                 }
@@ -315,10 +316,9 @@ impl<'p> Sema<'p> {
 
     /// E0401 for the const argument at `span`, a constant with type
     /// arguments (`K[F32]`, a form of its kind, S-713 B4).
-    fn not_a_const_arg(&mut self, cx: &Cx<'p>, span: Span) -> TyId {
+    fn not_a_const_arg(&self, cx: &Cx<'p>, span: Span) -> Diagnostic {
         let msg = "a `const` parameter expects an integer literal or a constant, not a type";
-        self.report(cx.def, Diagnostic::new(Stage::Types, Code::E0401, span, msg).with_found(src(cx, span)));
-        self.a.types.error()
+        Diagnostic::new(Stage::Types, Code::E0401, span, msg).with_found(src(cx, span))
     }
 
     /// The kinds of the declared parameters of the type `entity` names, when
@@ -508,11 +508,25 @@ impl<'p> Sema<'p> {
         match self.read_const(cx, e) {
             Ok((crate::constarg::ConstU32::Value(v), _)) => Some(Len::Const(v)),
             Ok((crate::constarg::ConstU32::Param(i), _)) => Some(Len::Param(i)),
-            Err(crate::constarg::ConstErr::Unknown) => None,
-            Err(crate::constarg::ConstErr::Report(d) | crate::constarg::ConstErr::Uncomputed(d)) => {
-                self.report(cx.def, d);
+            Err(e) => {
+                self.const_error(cx.def, e);
                 None
             }
+        }
+    }
+
+    /// Report the error `e` of a constant expression of `def`. One of a
+    /// constant of an `impl` waits until the headings are judged, when the
+    /// signatures are lowered ([`Sema::held_consts`], S-304); a body knows them.
+    pub(super) fn const_error(&mut self, def: DefId, e: crate::constarg::ConstErr) {
+        use crate::constarg::ConstErr;
+        match e {
+            ConstErr::OfOwner(owner, e) if !self.flat.is_empty() => self.held_consts.push((def, owner, *e)),
+            ConstErr::OfOwner(_, e) => self.const_error(def, *e),
+            ConstErr::Report(d) | ConstErr::Uncomputed(d) => self.report(def, d),
+            // What a body reads and the check does not (§18.1, S-690), as `const_len`.
+            ConstErr::Unknown if self.flat.is_empty() => _ = self.a.read_held.insert(def),
+            ConstErr::Unknown => {}
         }
     }
 }

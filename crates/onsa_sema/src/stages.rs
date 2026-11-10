@@ -21,6 +21,9 @@ use crate::{Analysis, DefId, Package, binding, body, effects, flatten, modes, na
 /// with their stage, and dropped by the choice in a unit with another error
 /// (S-726).
 pub(crate) fn check_bodies(pkg: &Package, a: &mut Analysis) {
+    // The errors of the headings, which the types of the bodies the names
+    // stage lowers read (`constarg::unread`).
+    a.failures = Failures::of(pkg, a);
     timed(Phase::Names, || names::body::walk_bodies(pkg, a));
     a.failures = Failures::of(pkg, a);
     timed(Phase::Types, || body::check_all(pkg, a));

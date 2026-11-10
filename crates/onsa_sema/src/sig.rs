@@ -71,6 +71,10 @@ pub(crate) struct Sema<'p> {
     /// Whether a part of a type at its place holds a second-class type out
     /// of its place (E0710, [`Sema::wellformed`]).
     misfit: HashMap<(TyId, Pos, u8), bool>,
+    /// The errors of the constant expressions of a def that read a constant
+    /// of an `impl` (the def, the `impl`s): reported once the headings are
+    /// judged, unless the heading of one of them has an error (§18.1, S-304).
+    held_consts: Vec<(DefId, Vec<DefId>, crate::constarg::ConstErr)>,
 }
 
 /// Lowering context for one item.
@@ -135,6 +139,12 @@ pub(crate) fn collect_and_lower(pkg: &Package, mut a: Analysis) -> Result<Analys
     // after: what it read is of the fields before that (§18.1).
     s.a.known.summaries.get_mut().clear();
     s.check_trait_impls();
+    let failures = crate::stages::Failures::of(pkg, s.a);
+    for (def, owners, e) in std::mem::take(&mut s.held_consts) {
+        if !owners.iter().any(|&o| failures.failed(o)) {
+            s.const_error(def, e);
+        }
+    }
     s.check_generated(flows, pairs);
     s.fail_ungenerated();
     s.name_non_copy_fields();
@@ -151,6 +161,7 @@ impl<'p> Sema<'p> {
             kind_heads: Vec::new(),
             alias_at: HashMap::default(),
             misfit: HashMap::default(),
+            held_consts: Vec::new(),
         }
     }
 
@@ -365,7 +376,7 @@ impl<'p> Sema<'p> {
         let ItemKind::FieldDefault { value } = at.kind else {
             onsa_diag::internal::bug(Some(at.span), "a default that is no default item")
         };
-        let kind = DefKind::Const(ConstDef { ty, value: Some(value), int_value: None });
+        let kind = DefKind::Const(ConstDef { ty, value: Some(value), int_value: None, param: None });
         let (name, module, owner) = (f.name.name.clone(), cx.m, Some(cx.def));
         let span = at.span;
         self.add_def(Def { name, module, vis, span, name_span: span, kind, item: Some(item), owner, export: None })

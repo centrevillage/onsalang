@@ -44,7 +44,7 @@ mod const_patterns;
 mod conversions;
 mod entry;
 mod expressions;
-mod generics;
+pub(crate) mod generics;
 mod named;
 pub(crate) mod operator_fix;
 mod patterns;

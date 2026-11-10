@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§6.2"]
+
+// A const argument written as a constant with type arguments (`K[F32]`) is E0401 (S-713 B4: a `const` parameter expects
+// an integer literal or a constant, not a type), whatever the constant reads as: also a constant of a generic `impl`
+// whose parameters a read does not decide (`Rg.CAP`, else E0406) or whose alias does not meet a bound (`SI.CAP`, else
+// E0416). Before this, those two were E0406 and E0416. One error per item (P-01).
+
+pub struct Rg[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+pub struct Sh[T] {
+  a: T,
+}
+
+impl[T: Float] Sh[T] {
+  pub const CAP: U32 = 4
+}
+
+pub struct Ring[T, const N: U32] {
+  a: [T; N],
+}
+
+type SI = Sh[I32]
+
+pub fn not_decided(r: Ring[F32, Rg.CAP[F32]]) -> F32 {   //~ E0401
+  r.a[0]
+}
+
+pub fn unmet_bound(r: Ring[F32, SI.CAP[F32]]) -> F32 {   //~ E0401
+  r.a[0]
+}
+
+pub fn in_a_body(z: F32) -> F32 {
+  let r: Ring[F32, Rg.CAP[F32]] = Ring { a: [z; 4] }   //~ E0401
+  r.a[0]
+}

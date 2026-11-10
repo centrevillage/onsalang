@@ -580,8 +580,32 @@ impl<'p> Sema<'p> {
         let Some(cx) = cx else { return };
         let Some(ItemKind::Const(c)) = self.a.def(id).item.map(|i| item_kind(&cx.ast.item(i).kind)) else { return };
         let ty = self.lower_type(&cx, c.ty);
+        let param = c.value.and_then(|v| self.param_value(&cx, v));
         if let DefKind::Const(cd) = &mut self.a.defs[id.0 as usize].kind {
-            cd.ty = ty;
+            (cd.ty, cd.param) = (ty, param);
+        }
+        // The heading of its `impl`, which a constant expression may read
+        // before the `impl` is lowered (`constarg::impl_args`): as it lowers it.
+        let owner = self.a.def(id).owner.map(|o| &mut self.a.defs[o.0 as usize].kind);
+        if let (Some(DefKind::Impl(imp)), Some(self_ty)) = (owner, cx.self_ty) {
+            (imp.generics, imp.self_ty) = (cx.generics.clone(), self_ty);
+        }
+    }
+
+    /// The const parameter in scope whose name alone (in parentheses too)
+    /// the initializer `v` is, as the walk of the names reads it (D-15): a
+    /// constant expression reads its argument ([`ConstDef::param`]). An
+    /// error of the name is not reported here: the walk of the body does.
+    fn param_value(&self, cx: &Cx<'p>, v: ExprId) -> Option<u32> {
+        let v = cx.ast.without_parens(v);
+        let ExprKind::Path(p) = &cx.ast.expr(v).kind else { return None };
+        if p.segments.len() != 1 || !cx.generics.iter().any(|g| matches!(g.kind, GenericKind::Const(_))) {
+            return None;
+        }
+        let names = crate::names::body::const_names(self.a, cx.m, (cx.ast, cx.text), cx.consts(), v);
+        match names.map(|(records, _)| records.get(&v).cloned()) {
+            Ok(Some(crate::names::body::PathRes::ConstParam(i))) => Some(i),
+            _ => None,
         }
     }
 

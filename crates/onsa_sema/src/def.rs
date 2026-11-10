@@ -286,6 +286,10 @@ pub struct ConstDef {
     pub value: Option<ExprId>,
     /// The value when the initializer is an integer literal (array lengths, §4.1).
     pub int_value: Option<u64>,
+    /// The const parameter of its `impl` (its index) when the initializer is
+    /// its name alone, in parentheses too: a constant expression reads the
+    /// argument (`R.CAP` of `type R = Rg[F32, 4]`, §4.5, S-304).
+    pub param: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

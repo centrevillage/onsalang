@@ -1,0 +1,78 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§5.3", "§11.4"]
+
+// §4.5: "第二級の型…を、`?Escape` の無い型パラメータの型引数に書いた所は位置の E0710 だけで、その型引数の要求は判定しない".
+// A constant of a generic `impl` read by an alias that gives a second-class type (`Span[F32]`) to a type parameter of
+// the `impl` with no `?Escape` (the struct's has it) is E0710 at the constant expression, as in a value (`let q: U32 =
+// WS.CAP` is E0710 today), in every place: a signature, the annotation and the repeat of a body, a const argument, a
+// flow. With a bound on that parameter (`T: Float`, which `Span[F32]` does not meet), still E0710 only: the bound is not
+// judged. Before this, `WS.CAP` passed and `XS.CAP` was E0416. One error per item (P-01).
+
+pub struct W[T: ?Escape, const N: U32] {
+  f: fn(T) -> F32,
+}
+
+impl[T, const N: U32] W[T, N] {
+  pub const CAP: U32 = N
+}
+
+pub struct X[T: ?Escape + ?Dup, const N: U32] {
+  f: fn(T) -> F32,
+}
+
+impl[T: Float, const N: U32] X[T, N] {
+  pub const CAP: U32 = N
+}
+
+pub struct Ring[T, const N: U32] {
+  a: [T; N],
+}
+
+type WS = W[Span[F32], 4]
+type XS = X[Span[F32], 4]
+
+pub fn in_an_argument(a: [F32; WS.CAP]) -> U32 {   //~ E0710
+  a.len()
+}
+
+pub fn in_an_argument_bound(a: [F32; XS.CAP]) -> U32 {   //~ E0710
+  a.len()
+}
+
+pub fn in_an_annotation(z: F32) -> U32 {
+  let a: [F32; WS.CAP] = [z; 4]   //~ E0710
+  a.len()
+}
+
+pub fn in_an_annotation_bound(z: F32) -> U32 {
+  let a: [F32; XS.CAP] = [z; 4]   //~ E0710
+  a.len()
+}
+
+pub fn in_a_repeat(z: F32) -> U32 {
+  let a = [z; WS.CAP]   //~ E0710
+  a.len()
+}
+
+pub fn in_a_repeat_bound(z: F32) -> U32 {
+  let a = [z; XS.CAP]   //~ E0710
+  a.len()
+}
+
+pub fn in_a_const_argument(r: Ring[F32, WS.CAP]) -> F32 {   //~ E0710
+  r.a[0]
+}
+
+pub fn in_a_const_argument_bound(r: Ring[F32, XS.CAP]) -> F32 {   //~ E0710
+  r.a[0]
+}
+
+pub flow in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, WS.CAP)   //~ E0710
+}
+
+pub flow in_a_delay_bound(x: F32 at sample) -> F32 at sample {
+  delay~(x, XS.CAP)   //~ E0710
+}

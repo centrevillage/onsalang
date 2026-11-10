@@ -178,7 +178,7 @@ impl<'a> Checker<'a> {
         let Some(owner) = owner.filter(|_| self.param_of(owner).is_none()) else { return Ok(()) };
         let def = self.a.def(d);
         let ty = match (&def.kind, def.owner.map(|o| &self.a.def(o).kind)) {
-            (DefKind::Const(_), _) if self.const_unread(d) => return Ok(()),
+            (DefKind::Const(_), _) if crate::constarg::unread(self.a, d) => return Ok(()),
             (DefKind::Struct(_) | DefKind::Enum(_), _) => self.a.types.intern(Ty::Named(d, args.to_vec())),
             (DefKind::Fn(_) | DefKind::Const(_), Some(&DefKind::Impl(crate::def::ImplDef { self_ty, .. }))) => {
                 self.a.types.subst(self_ty, args)
@@ -291,6 +291,10 @@ impl<'a> Checker<'a> {
         let DefKind::Const(c) = self.a.def(d).kind.clone() else {
             onsa_diag::internal::bug(Some(span), "the value of a constant that is none");
         };
+        // What the body reads and the check does not (§18.1, S-690), as `const_len`.
+        if crate::constarg::unread(self.a, d) {
+            self.a.read_held.insert(self.def);
+        }
         let args = self.fresh_args(d);
         self.of_owner(d, &args, owner, span)?;
         let of = self.param_of(owner);

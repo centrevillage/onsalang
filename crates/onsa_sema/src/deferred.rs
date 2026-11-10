@@ -89,6 +89,12 @@ impl OpNeed {
     }
 }
 
+/// The message of the E0710 of the type argument `shown` of `what`, a
+/// second-class type (§4.5, §5.3).
+pub(crate) fn second_class_argument(shown: &str, what: &str) -> String {
+    format!("`{shown}` is second-class: {what} cannot take it (§4.5, §5.3)")
+}
+
 /// The rule of the E0710 of a type argument with no kind (§5.3, S-862).
 pub(crate) const GENERIC_VIEW: &str = "to take a view generically, declare the parameter `xs: Span[T]` or `xs: [Span[T]; N]` (§5.3), or give the type parameter `?Escape` (§4.5)";
 
@@ -439,7 +445,7 @@ impl<'a> Checker<'a> {
                     return Look::Done;
                 }
                 let (shown, what) = (self.display(r), what.text(|t| self.display(t)));
-                let msg = format!("`{shown}` is second-class: {what} cannot take it (§4.5, §5.3)");
+                let msg = second_class_argument(&shown, &what);
                 let d = Diagnostic::new(Stage::Types, Code::E0710, item.span, msg).with_found(self.src(item.span));
                 Look::Fail(self.decided_note(d, item.ty, &shown, false).with_rule(*rule))
             }

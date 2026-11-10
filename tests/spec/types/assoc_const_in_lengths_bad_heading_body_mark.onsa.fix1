@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// fixes = 1
+// spec = ["§4.5", "§6.2", "§11.4", "§18.1"]
+
+// S-304 (W5-16 U1c, §18.1): as types/assoc_const_in_lengths_bad_heading_body.onsa, with the heading wrong by a redundant
+// mark (E0020, whose candidate removes it): a constant of the `impl` read in the types written in a body (the annotation
+// of a `let`, as a length and as a const argument, and the annotation of a `let` of a flow) has no diagnostic of its
+// own. Before this, the annotations were E0406. One error per item (P-01).
+
+pub struct Ring[T, const N: U32] {
+  a: [T; N],
+}
+
+pub struct Db[T] {
+  a: T,
+}
+
+impl[T] Db[T] {   //~ E0020
+  pub const R: U32 = 4
+}
+
+pub fn in_an_annotation(z: F32) -> U32 {
+  let a: [F32; Db.R] = [z; 4]
+  a.len()
+}
+
+pub fn in_a_const_argument(z: F32) -> F32 {
+  let r: Ring[F32, Db.R] = Ring { a: [z; 4] }
+  r.a[0]
+}
+
+pub flow in_a_flow_annotation(x: F32 at sample) -> F32 at sample {
+  let a: [F32; Db.R] = [x; 4]
+  a[0]
+}

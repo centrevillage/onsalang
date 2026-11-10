@@ -1,0 +1,106 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§4.7", "§6.6", "§18.1"]
+
+// S-304 (W5-16 U1c): the constant whose value does not depend on a type parameter of the `impl` (`LIT = 4`) is read as the
+// one that does (types/assoc_const_in_lengths_unresolved_value.onsa): the type arguments of the `impl` are open whatever
+// the value is, so `Rg.LIT` in a constant expression is E0406 (§4.5: "型引数の決まらない総称の型の関連定数
+// （`[F32; Rg.CAP]`）は E0406 である"; S-304: "値が型パラメータに依らなくても同じで、今通る `Rg.CAP`（`const CAP: U32 = 4`）も
+// E0406 になる"). These forms pass the check today, and each is E0406 from this work. No candidate (`fixes = 0`).
+// The places are the signature, the body and the const argument of a type. One error per unit (P-01); the shape of the
+// `impl` differs from type to type.
+
+pub struct Rg[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const LIT: U32 = 4
+}
+
+pub struct Ring[T, const N: U32] {
+  a: [T; N],
+}
+
+pub fn in_an_argument(a: [F32; Rg.LIT]) -> F32 {   //~ E0406
+  0.0
+}
+
+pub fn in_a_return() -> [F32; Rg.LIT] {   //~ E0406
+  [0.0; 4]
+}
+
+pub struct InAField {
+  a: [F32; Rg.LIT],   //~ E0406
+}
+
+type InAnAlias = [F32; Rg.LIT]   //~ E0406
+
+pub const IN_A_CONST: [F32; Rg.LIT] = [0.0; 4]   //~ E0406
+
+pub fn in_a_let_annotation() -> F32 {
+  let a: [F32; Rg.LIT] = [0.0; 4]   //~ E0406
+  a[0]
+}
+
+pub fn in_a_repeat() -> F32 {
+  let a = [0.0; Rg.LIT]   //~ E0406
+  a[0]
+}
+
+pub fn in_a_const_argument(r: Ring[F32, Rg.LIT]) -> F32 {   //~ E0406
+  0.0
+}
+
+// A type parameter only, with a bound.
+pub struct Bounded[T] {
+  x: T,
+}
+
+impl[T: Copy] Bounded[T] {
+  pub const FOUR: U32 = 4
+}
+
+pub fn bounded_parameter(a: [F32; Bounded.FOUR]) -> F32 {   //~ E0406
+  0.0
+}
+
+// A type parameter only, with no bound.
+pub struct Plain[T] {
+  x: T,
+}
+
+impl[T] Plain[T] {
+  pub const FOUR: U32 = 4
+}
+
+pub fn plain_parameter() -> F32 {
+  let a = [0.0; Plain.FOUR]   //~ E0406
+  a[0]
+}
+
+// A const parameter only, which the value does not read.
+pub struct Cp[const N: U32] {
+  a: [F32; N],
+}
+
+impl[const N: U32] Cp[N] {
+  pub const FOUR: U32 = 4
+}
+
+pub fn const_parameter_only(a: [F32; Cp.FOUR]) -> F32 {   //~ E0406
+  0.0
+}
+
+// The type parameter of the function (`V`) is not a parameter of the `impl`.
+pub fn in_a_generic_function[V](v: V) -> [F32; Rg.LIT] {   //~ E0406
+  [0.0; 4]
+}
+
+// Inside an `impl` of the type, by the name of the type.
+impl[T, const N: U32] Ring[T, N] {
+  pub fn by_the_name(self, b: [F32; Rg.LIT]) -> F32 {   //~ E0406
+    0.0
+  }
+}

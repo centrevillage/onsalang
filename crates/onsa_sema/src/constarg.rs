@@ -11,10 +11,10 @@ use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{Ast, BinOp, ExprId, ExprKind, Ident, ItemKind, Lit, Path, UnOp};
 
-use crate::def::DefKind;
+use crate::def::{DefKind, GenericKind};
 use crate::names::body::PathRes;
 use crate::resolve::{Entity, NameKind, ResolveError};
-use crate::ty::{IntKind, Ty};
+use crate::ty::{IntKind, Ty, TyId};
 use crate::{Analysis, DefId, ModId};
 
 /// The value of a constant expression in a type position.
@@ -37,6 +37,26 @@ pub(crate) enum ConstErr {
     /// A constant whose unit failed in the syntax stage (S-59): its value was
     /// not read, and its users get no diagnostic for it (R-71).
     Unknown,
+    /// An error (`Report`, `Uncomputed`) of a constant of the items `owners`
+    /// (`impl`s), or of a node over such constants, which an error of one of
+    /// their headings holds back (§18.1, S-304): a signature reports it once
+    /// the headings are judged; a body knows them ([`unread`]), and reads the
+    /// error itself ([`ConstErr::unheld`]).
+    OfOwner(Vec<DefId>, Box<ConstErr>),
+}
+
+/// The internal error of a held error after [`ConstErr::unheld`].
+pub(crate) const UNHELD: &str = "a constant expression's error held after it was unheld";
+
+impl ConstErr {
+    /// The error itself (no `OfOwner`), of a reader that knows the errors
+    /// of the headings.
+    pub(crate) fn unheld(self) -> ConstErr {
+        match self {
+            ConstErr::OfOwner(_, e) => *e,
+            e => e,
+        }
+    }
 }
 
 impl From<Diagnostic> for ConstErr {
@@ -86,36 +106,56 @@ pub(crate) fn path(
 enum Got {
     /// A literal or a constant (in parentheses too), or a const parameter.
     Val(ConstU32, Option<DefId>),
-    /// An operation, whose value this version does not compute (K-05).
-    Op,
+    /// An operation, whose value this version does not compute (K-05), over
+    /// constants of the items `owners` ([`Got::owners`]).
+    Op(Vec<DefId>),
     /// The error type: a name held as an error, a constant of a failed unit
     /// in it (§18.1). The nodes above it report nothing.
     Unknown,
-    /// A constant whose value this version does not compute.
-    Uncomputed(Diagnostic),
+    /// A constant whose value this version does not compute (its error,
+    /// held as of its `impl` too).
+    Uncomputed(ConstErr),
+}
+
+impl Got {
+    /// The items of the constants it reads (`impl`s), whose headings hold
+    /// back an error of a node over it (S-304), as of the constants' own.
+    fn owners(&self, a: &Analysis) -> Vec<DefId> {
+        match self {
+            Got::Val(_, Some(d)) => a.def(*d).owner.into_iter().collect(),
+            Got::Op(os) | Got::Uncomputed(ConstErr::OfOwner(os, _)) => os.clone(),
+            _ => Vec::new(),
+        }
+    }
+}
+
+/// The error `e`, held as of the items `owners` (none: not held).
+fn held(owners: Vec<DefId>, e: ConstErr) -> ConstErr {
+    if owners.is_empty() { e } else { ConstErr::OfOwner(owners, Box::new(e)) }
 }
 
 /// The value of a whole constant expression at `span`, of what it reads as.
 fn finish(got: Got, span: Span) -> Result<(ConstU32, Option<DefId>), ConstErr> {
     match got {
         Got::Val(v, d) => Ok((v, d)),
-        Got::Op => Err(ConstErr::Uncomputed(onsa_diag::unsupported::Feature::ArrayLengthExprs.diagnostic(
-            Stage::Types,
-            span,
-            &[],
-        ))),
+        Got::Op(owners) => Err(held(
+            owners,
+            ConstErr::Uncomputed(onsa_diag::unsupported::Feature::ArrayLengthExprs.diagnostic(Stage::Types, span, &[])),
+        )),
         Got::Unknown => Err(ConstErr::Unknown),
-        Got::Uncomputed(d) => Err(ConstErr::Uncomputed(d)),
+        Got::Uncomputed(e) => Err(e),
     }
 }
 
 /// [`Got`] of what a leaf reads as (an error to report is `Err`).
-fn settle(r: Result<Got, ConstErr>) -> Result<Got, Diagnostic> {
+fn settle(r: Result<Got, ConstErr>) -> Result<Got, ConstErr> {
     match r {
-        Ok(got) => Ok(got),
-        Err(ConstErr::Report(d)) => Err(d),
-        Err(ConstErr::Uncomputed(d)) => Ok(Got::Uncomputed(d)),
+        Err(e @ ConstErr::Uncomputed(_)) => Ok(Got::Uncomputed(e)),
+        Err(ConstErr::OfOwner(o, e)) if matches!(*e, ConstErr::Uncomputed(_)) => {
+            Ok(Got::Uncomputed(ConstErr::OfOwner(o, e)))
+        }
         Err(ConstErr::Unknown) => Ok(Got::Unknown),
+        r => r,
     }
 }
 
@@ -123,12 +163,12 @@ fn settle(r: Result<Got, ConstErr>) -> Result<Got, Diagnostic> {
 /// of the expected type `U32`), stopping at the first error. The leaves are
 /// read by their type, and the nodes by the grammar (S-966): a node outside
 /// it is E0417 whatever is in it, whose names the names stage read (S-968).
-fn node(a: &mut Analysis, cx: &ConstCx, e: ExprId) -> Result<Got, Diagnostic> {
+fn node(a: &mut Analysis, cx: &ConstCx, e: ExprId) -> Result<Got, ConstErr> {
     let expr = cx.ast.expr(e);
     let shown = || cx.text[expr.span.start as usize..expr.span.end as usize].to_string();
     // A prefix `-` before a numeric literal, whatever its value (S-228).
     if cx.ast.negated_literal(e).is_some() {
-        return Err(no_negative(shown(), expr.span));
+        return Err(no_negative(shown(), expr.span).into());
     }
     if let Some((nodes, head)) = chain_nodes(cx.ast, e) {
         if cx.held.contains(&e) {
@@ -142,29 +182,32 @@ fn node(a: &mut Analysis, cx: &ConstCx, e: ExprId) -> Result<Got, Diagnostic> {
         // `U32` has no prefix `-` (§3.4, S-228), but of the error type.
         ExprKind::Unary { op: UnOp::Neg, expr: x } => match node(a, cx, *x)? {
             Got::Unknown => Ok(Got::Unknown),
-            _ => Err(no_negative(shown(), expr.span)),
+            x => Err(held(x.owners(a), no_negative(shown(), expr.span).into())),
         },
         ExprKind::Binary { op: BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem, lhs, rhs, .. } => {
-            match (node(a, cx, *lhs)?, node(a, cx, *rhs)?) {
+            let (l, r) = (node(a, cx, *lhs)?, node(a, cx, *rhs)?);
+            let owners = [l.owners(a), r.owners(a)].concat();
+            match (l, r) {
                 (Got::Unknown, _) | (_, Got::Unknown) => Ok(Got::Unknown),
                 // A const parameter has no value to compute with (§4.5, S-50).
-                (Got::Val(ConstU32::Param(_), _), _) | (_, Got::Val(ConstU32::Param(_), _)) => {
-                    Err(value_not_constant(shown(), "an operation on a const parameter", expr.span))
-                }
-                _ => Ok(Got::Op),
+                (Got::Val(ConstU32::Param(_), _), _) | (_, Got::Val(ConstU32::Param(_), _)) => Err(held(
+                    owners,
+                    value_not_constant(shown(), "an operation on a const parameter", expr.span).into(),
+                )),
+                _ => Ok(Got::Op(owners)),
             }
         }
         // An integer literal, and a literal of another type (§4.5, S-966).
         ExprKind::Lit(lit) => {
             let form = match lit {
-                Lit::Int { value, .. } => return int_literal(*value, shown(), expr.span),
+                Lit::Int { value, .. } => return Ok(int_literal(*value, shown(), expr.span)?),
                 Lit::Float { .. } => "a float literal",
                 Lit::Bool(_) => "a `Bool` literal",
                 Lit::Str(_) => "a string literal",
                 Lit::Char(_) => "a character literal",
             };
             let msg = format!("a constant expression has the type `U32`; found {form} (§4.5)");
-            Err(Diagnostic::new(Stage::Types, Code::E0401, expr.span, msg).with_found(shown()))
+            Err(Diagnostic::new(Stage::Types, Code::E0401, expr.span, msg).with_found(shown()).into())
         }
         ExprKind::Error => Ok(Got::Unknown),
         kind => {
@@ -181,7 +224,7 @@ fn node(a: &mut Analysis, cx: &ConstCx, e: ExprId) -> Result<Got, Diagnostic> {
                 // SPEC-GAP(S-971): a hole `_` (§18.1, E0421 at an expression) is E0417 here.
                 _ => "an expression of another form",
             };
-            Err(value_not_constant(shown(), noun, expr.span))
+            Err(value_not_constant(shown(), noun, expr.span).into())
         }
     }
 }
@@ -233,20 +276,15 @@ fn chain(
         // Its value is the instantiation's (S-898); `const_values` is not
         // read, as of the representative type of its row.
         PathRes::BoundMember { member, .. } => match NameKind::of_named(Entity::Member(member), &a.defs, span) {
-            NameKind::Constant => {
-                let msg = format!(
-                    "`{shown}` has no value before `{head}` is instantiated: a constant expression names constants (§4.5)"
-                );
-                Err(Diagnostic::new(Stage::Types, Code::E0417, span, msg).with_found(shown).into())
-            }
+            NameKind::Constant => Err(uninstantiated(shown, head, span).into()),
             kind => Err(not_constant(kind, shown, span)),
         },
-        PathRes::Item { entity, .. } => {
+        PathRes::Item { entity, owner } => {
             let d = match entity {
                 Entity::Def(d) | Entity::Member(d) => Some(d),
                 _ => None,
             };
-            match of_entity(a, m, ast, text, entity, span)? {
+            match of_entity(a, (m, ast, text), (entity, owner), (head, span))? {
                 Some(v) => Ok(Got::Val(ConstU32::Value(v), d)),
                 None => Err(not_constant(NameKind::of_named(entity, &a.defs, span), shown, span)),
             }
@@ -255,6 +293,15 @@ fn chain(
             Err(value_not_constant(shown, "a name of another kind", span).into())
         }
     }
+}
+
+/// E0417 for the constant `shown` at `span` of the type parameter or the
+/// generic `Self` `head` (`T.BITS`, S-898; `Self.CAP`, S-329): its value is
+/// the instantiation's (§4.5).
+fn uninstantiated(shown: String, head: &str, span: Span) -> Diagnostic {
+    let msg =
+        format!("`{shown}` has no value before `{head}` is instantiated: a constant expression names constants (§4.5)");
+    Diagnostic::new(Stage::Types, Code::E0417, span, msg).with_found(shown)
 }
 
 /// E0401 for a prefix `-` at `span`: `U32` has none (§3.4, §4.5, S-228).
@@ -320,27 +367,55 @@ fn int_literal(value: u64, shown: String, span: Span) -> Result<Got, Diagnostic>
     }
 }
 
-/// The value of the constant `entity` a name at `span` names, of the
-/// module `m` of `ast` (`None` when it is no constant).
+/// The value of the constant `entity` a name at `span` names (`None` when
+/// it is no constant), in the module `m` of `ast`: of a generic `impl`, at
+/// the arguments the type `owner` an alias or `Self` stands for gives
+/// ([`impl_args`]; `head` is the first name).
 pub(crate) fn of_entity(
     a: &mut Analysis,
-    m: ModId,
-    ast: &Ast,
-    text: &str,
-    entity: Entity,
-    span: Span,
+    (m, ast, text): (ModId, &Ast, &str),
+    (entity, owner): (Entity, Option<TyId>),
+    (head, span): (&str, Span),
 ) -> Result<Option<u32>, ConstErr> {
     let (Entity::Def(d) | Entity::Member(d)) = entity else { return Ok(None) };
     let found = text[span.start as usize..span.end as usize].to_string();
-    let u32_ = a.types.int(IntKind::U32);
     let def = a.def(d).clone();
     let DefKind::Const(c) = &def.kind else { return Ok(None) };
-    // A constant of a cycle (E0311, §18.1, S-734).
-    if c.int_value.is_none() && a.partly_read(d) || a.decls.cyclic.contains(&d) {
+    // A constant of a cycle (E0311, §18.1, S-734), and of an `impl` with an
+    // error of its heading.
+    if c.int_value.is_none() && a.partly_read(d) || a.decls.cyclic.contains(&d) || unread(a, d) {
         return Err(ConstErr::Unknown);
     }
-    if c.ty != u32_ && !matches!(a.types.get(c.ty), Ty::Error) {
-        let shown = a.types.display(c.ty, &|d| a.def(d).name.clone(), &|i| format!("<{i}>"));
+    value_of(a, (m, ast), (d, &def, c), owner, (head, found, span)).map_err(|e| match (e, def.owner) {
+        (e @ (ConstErr::Report(_) | ConstErr::Uncomputed(_)), Some(o)) => ConstErr::OfOwner(vec![o], Box::new(e)),
+        (e, _) => e,
+    })
+}
+
+/// `d` is a constant of an `impl` with an error of its heading (`impl[T]
+/// N[T]` for `N[T: Num]`), which is read as it is: a read of it decides
+/// nothing and reports nothing (§18.1, S-304). Of the record of the
+/// failures, which the bodies have from the signatures on (`stages`).
+pub(crate) fn unread(a: &Analysis, d: DefId) -> bool {
+    let def = a.def(d);
+    matches!(def.kind, DefKind::Const(_)) && def.owner.is_some_and(|o| a.failures.failed(o))
+}
+
+/// [`of_entity`] of the constant `d` (`def`, `c`), whose value is read.
+fn value_of(
+    a: &mut Analysis,
+    (m, ast): (ModId, &Ast),
+    (d, def, c): (DefId, &crate::def::Def, &crate::def::ConstDef),
+    owner: Option<TyId>,
+    (head, found, span): (&str, String, Span),
+) -> Result<Option<u32>, ConstErr> {
+    let u32_ = a.types.int(IntKind::U32);
+    let args = impl_args(a, d, c.ty, owner, (head, &found, span))?;
+    // An argument not decided stays its parameter, shown as `_`.
+    let given: Vec<TyId> = (0..).zip(&args).map(|(k, t)| t.unwrap_or_else(|| a.types.intern(Ty::Param(k)))).collect();
+    let ty = a.types.subst(c.ty, &given);
+    if ty != u32_ && !matches!(a.types.get(ty), Ty::Error) {
+        let shown = a.types.display(ty, &|d| a.def(d).name.clone(), &|_| "_".to_string());
         let mut d = Diagnostic::new(
             Stage::Types,
             Code::E0401,
@@ -362,7 +437,13 @@ pub(crate) fn of_entity(
         }
         return Err(d.into());
     }
-    match c.int_value {
+    judge_args(a, d, &args, (&found, span))?;
+    // A constant that is its const parameter reads the argument (S-304).
+    let of_param = c.param.and_then(|p| match given.get(p as usize).map(|&t| a.types.get(t)) {
+        Some(Ty::ConstVal(v)) => Some(u64::from(*v)),
+        _ => None,
+    });
+    match c.int_value.or(of_param) {
         Some(v) => match u32::try_from(v) {
             Ok(v) => Ok(Some(v)),
             Err(_) => Err(Diagnostic::new(
@@ -378,4 +459,94 @@ pub(crate) fn of_entity(
             onsa_diag::unsupported::Feature::ComputedArrayLengths.diagnostic(Stage::Types, span, &[]).with_found(found),
         )),
     }
+}
+
+/// The arguments of the parameters of the generic `impl` of the constant
+/// `d` of the type `ty` (none of another constant; `None`: not decided), of
+/// the type `owner` an alias or `Self` stands for (§4.4, S-595): its
+/// arguments at the places of the parameters in the type of the `impl`, each
+/// there once (§6.2). With no `owner`, a parameter that is the type of `d`
+/// is `U32`, the type of a constant expression (S-304). The type of a
+/// generic `Self` has none before it is instantiated (E0417, S-329); one
+/// with an error, and an `impl` whose type does not have its parameters so
+/// (its E0307), read as the error type (§18.1). `(head, found, span)`: the
+/// first name, and the whole as written.
+fn impl_args(
+    a: &mut Analysis,
+    d: DefId,
+    ty: TyId,
+    owner: Option<TyId>,
+    (head, found, span): (&str, &str, Span),
+) -> Result<Vec<Option<TyId>>, ConstErr> {
+    let Some(DefKind::Impl(i)) = a.def(d).owner.map(|o| &a.def(o).kind) else { return Ok(Vec::new()) };
+    let (generics, self_ty) = (i.generics.clone(), i.self_ty);
+    if generics.is_empty() {
+        return Ok(Vec::new());
+    }
+    let args_of = |t: &Ty| match t {
+        Ty::Named(_, args) | Ty::Builtin(_, args) => Some(args.clone()),
+        _ => None,
+    };
+    let Some(target) = args_of(a.types.get(self_ty)) else { return Err(ConstErr::Unknown) };
+    // The place of each parameter in the type of the `impl`.
+    let mut place = vec![None; generics.len()];
+    for (j, &t) in target.iter().enumerate() {
+        match a.types.get(t) {
+            &Ty::Param(k) if place.get(k as usize) == Some(&None) => place[k as usize] = Some(j),
+            _ => return Err(ConstErr::Unknown),
+        }
+    }
+    let Some(place) = place.into_iter().collect::<Option<Vec<usize>>>() else { return Err(ConstErr::Unknown) };
+    match owner {
+        Some(o) if a.types.open(o) => Err(uninstantiated(found.to_string(), head, span).into()),
+        Some(o) => match args_of(a.types.get(o)) {
+            Some(given) if given.len() == target.len() && !a.types.has_error(o) => {
+                Ok(place.iter().map(|&j| Some(given[j])).collect())
+            }
+            _ => Err(ConstErr::Unknown),
+        },
+        None => {
+            let (u32_, own) = (a.types.int(IntKind::U32), a.types.get(ty).clone());
+            let decided = |k: usize| own == Ty::Param(k as u32) && matches!(generics[k].kind, GenericKind::Type { .. });
+            Ok((0..generics.len()).map(|k| decided(k).then_some(u32_)).collect())
+        }
+    }
+}
+
+/// The arguments `args` of the parameters of the generic `impl` of the
+/// constant `d` named at `span` (`found` as written), as a use of a value
+/// judges them (§4.5, S-304; [`crate::body::generics::requirements`]): the
+/// decided ones first, as of the statement that decides them, each E0710
+/// when it is second-class (its other requirements not judged), then E0416
+/// when it does not meet the bounds or the implicit `Dup` (an unknown bound
+/// is met, §18.1); then E0406 for the first one not decided, with no
+/// candidate (which arguments is the writer's).
+fn judge_args(a: &Analysis, d: DefId, args: &[Option<TyId>], (found, span): (&str, Span)) -> Result<(), ConstErr> {
+    use crate::body::generics::{alias_way, head_of, parameter, requirements};
+    let Some(DefKind::Impl(i)) = a.def(d).owner.map(|o| &a.def(o).kind) else { return Ok(()) };
+    let owner = format!("the `impl` of `{}`", head_of(a, i.self_ty).unwrap_or_default());
+    let (under, std) = (crate::body::bounds::Bounds { a, generics: &[] }, a.modules.is_std(a.def(d).module));
+    let show = |t: TyId| a.types.display(t, &|d| a.def(d).name.clone(), &|i| format!("<{i}>"));
+    for (g, &arg) in i.generics.iter().zip(args) {
+        let (Some(arg), Some((rule, lifted, mut wants))) = (arg, requirements(g, false)) else { continue };
+        let shown = show(arg);
+        if crate::sig::no_kind_argument(&under, arg, lifted) {
+            let msg = crate::deferred::second_class_argument(&shown, &parameter(g, &owner));
+            return Err(Diagnostic::new(Stage::Types, Code::E0710, span, msg).with_found(found).with_rule(rule).into());
+        }
+        let Some(b) = wants.find(|&b| !under.meets(arg, b)) else { continue };
+        let what = crate::deferred::Required::Param { param: g.name.clone(), owner: owner.clone(), std };
+        let mut e = Diagnostic::new(Stage::Types, Code::E0416, span, what.unmet(&shown, b, &mut |t| show(t)));
+        if let Some(note) = crate::traits::number_traits_note(a.types.get(arg), &shown, b) {
+            e = e.with_rule(note);
+        }
+        return Err(e.with_found(found).into());
+    }
+    let Some(k) = args.iter().position(Option::is_none) else { return Ok(()) };
+    let what = parameter(&i.generics[k], &owner);
+    // No function decides it later, nor an annotation (§4.5).
+    let msg =
+        format!("{what} cannot be determined: a constant expression names a type with its arguments (§4.5, §4.7)");
+    let way = alias_way(&head_of(a, i.self_ty).unwrap_or_default(), &a.def(d).name);
+    Err(Diagnostic::new(Stage::Types, Code::E0406, span, msg).with_found(found).with_rule(way).into())
 }

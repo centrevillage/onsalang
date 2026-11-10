@@ -1,0 +1,13 @@
+pub struct Rg[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+pub struct Ring[T, const N: U32] {
+  a: [T; N],
+}
+
+pub type R8 = Rg[F32, 8]

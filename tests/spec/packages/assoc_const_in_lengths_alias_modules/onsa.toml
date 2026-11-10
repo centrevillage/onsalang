@@ -1,0 +1,3 @@
+[package]
+name = "assoc_const_in_lengths_alias_modules"
+edition = "2026"

@@ -58,7 +58,7 @@ impl<'p> Sema<'p> {
                     DefKind::Struct(StructDef { generics: Vec::new(), fields, derives, flow_ty: Some(t) })
                 }
                 Generated::Size | Generated::BulkSize => {
-                    DefKind::Const(ConstDef { ty: u32, value: None, int_value: None })
+                    DefKind::Const(ConstDef { ty: u32, value: None, int_value: None, param: None })
                 }
                 Generated::Fn(which) => DefKind::Fn(FnDef {
                     generics: Vec::new(),
@@ -409,8 +409,9 @@ impl<'p> Sema<'p> {
             self.fill_struct(flow, t, fs);
         }
         let u32 = self.a.types.int(IntKind::U32);
+        let size = ConstDef { ty: u32, value: None, int_value: None, param: None };
         for g in [Generated::Size, Generated::BulkSize] {
-            self.fill_generated(flow, g, DefKind::Const(ConstDef { ty: u32, value: None, int_value: None }));
+            self.fill_generated(flow, g, DefKind::Const(size.clone()));
         }
     }
 

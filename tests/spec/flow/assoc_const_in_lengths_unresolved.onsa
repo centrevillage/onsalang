@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§4.7", "§11.4", "§11.5", "§18.1"]
+
+// S-304 (W5-16 U1c): the constant of a generic `impl` read by the name of the type with no argument that decides the
+// parameters (`Rg.CAP`, `Rg.LIT`, `Rg.D`) is E0406 at the path in the constant expressions of a flow too (§4.5: "型引数の
+// 決まらない総称の型の関連定数（`[F32; Rg.CAP]`）は E0406 である"; the value of the constant does not matter, whether it
+// depends on a parameter (`CAP`, `D`) or not (`LIT`)). The places are those of a flow: the length of `delay~`, the maximum
+// of `vdelay~`, the ends of a `par~`, the repeat and the annotation of a flow body, and the type of an input. No
+// candidate (`fixes = 0`). Today the constants that depend on a parameter are E0200 and `LIT` passes. One error per
+// unit (P-01).
+
+pub struct Rg[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+  pub const LIT: U32 = 4
+  pub const D: U32 = Self.CAP + 1
+}
+
+pub flow in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, Rg.CAP)   //~ E0406
+}
+
+pub flow literal_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, Rg.LIT)   //~ E0406
+}
+
+pub flow derived_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, Rg.D)   //~ E0406
+}
+
+pub flow in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, Rg.CAP)   //~ E0406
+}
+
+pub flow literal_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, Rg.LIT)   //~ E0406
+}
+
+pub flow as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<Rg.CAP { x * F32.round_from(i) }   //~ E0406
+  ys[0]
+}
+
+pub flow as_the_start_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in Rg.LIT..<8 { x * F32.round_from(i) }   //~ E0406
+  ys[0]
+}
+
+pub flow in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
+  let a = [x; Rg.CAP]   //~ E0406
+  a[0]
+}
+
+pub flow in_a_flow_annotation(x: F32 at sample) -> F32 at sample {
+  let a: [F32; Rg.LIT] = [x; 4]   //~ E0406
+  a[0]
+}
+
+pub flow in_a_flow_input(a: [F32; Rg.CAP] at sample) -> F32 at sample {   //~ E0406
+  0.0
+}
+
+pub flow in_parentheses_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, (Rg.LIT))   //~ E0406
+}

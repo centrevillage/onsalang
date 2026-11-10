@@ -315,7 +315,7 @@ impl<'a> Checker<'a> {
     pub(crate) fn const_len(&mut self, len: ExprId) -> R<Option<Len>> {
         let (names, held) = (&self.names.paths, &self.names.held);
         let cx = crate::constarg::ConstCx { m: self.m, ast: self.ast, text: self.text, names, held };
-        match crate::constarg::expr(self.a, &cx, len) {
+        match crate::constarg::expr(self.a, &cx, len).map_err(crate::constarg::ConstErr::unheld) {
             Ok((value, constant)) => {
                 let u32 = self.u32();
                 self.record(len, u32);
@@ -330,6 +330,9 @@ impl<'a> Checker<'a> {
                 }
             }
             Err(crate::constarg::ConstErr::Report(d) | crate::constarg::ConstErr::Uncomputed(d)) => Err(self.diag(d)),
+            Err(crate::constarg::ConstErr::OfOwner(..)) => {
+                onsa_diag::internal::bug(Some(self.expr(len).span), crate::constarg::UNHELD)
+            }
             // A constant whose value was not read (S-59) or a name held as an
             // error: no diagnostic, and the check goes on (§18.1, S-690).
             Err(crate::constarg::ConstErr::Unknown) => {

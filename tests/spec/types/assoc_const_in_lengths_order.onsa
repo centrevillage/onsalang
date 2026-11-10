@@ -1,0 +1,80 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§4.7", "§6.2", "§6.3", "§18.1"]
+
+// S-304, S-329 (W5-16 U1c): the order of the errors of an associated constant of a generic `impl` in a constant
+// expression. In an operation the leaf goes first, its operands before the operator (§4.7; the reader reads in
+// post-order, U1b1): `Rg.CAP * 2` is the E0406 of `Rg.CAP`, `Self.CAP + 1` in a generic `impl` the E0417 of `Self.CAP`,
+// `SI.CAP * 2` the E0416 of `SI.CAP`. With a decided alias that meets the bounds, the operation is the E0200 of a
+// computed length (K-05). The bounds are judged before the value is read: `NgBool.CAP` (`CAP = N`) is E0416, as
+// `NgBool.CAP` in a value. In a generic `impl` of a trait (`impl[T: Default, const N: U32] Default for Ring[T, N]`),
+// `Self.CAP` is E0417 too, as `Self` holds its parameters. No candidate (`fixes = 0`). One error per unit (P-01).
+
+pub struct Rg[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+
+  pub fn in_an_operation(self, b: [F32; Self.CAP + 1]) -> F32 {   //~ E0417
+    0.0
+  }
+}
+
+pub struct Sh[T] {
+  x: T,
+}
+
+impl[T: Float] Sh[T] {
+  pub const CAP: U32 = 4
+}
+
+pub struct Ng[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T: Num, const N: U32] Ng[T, N] {
+  pub const CAP: U32 = N
+}
+
+type R4 = Rg[F32, 4]
+type SI = Sh[I32]
+type NgBool = Ng[Bool, 3]
+
+pub fn not_decided_in_an_operation(a: [F32; Rg.CAP * 2]) -> F32 {   //~ E0406
+  0.0
+}
+
+pub fn unmet_in_an_operation() -> F32 {
+  let a = [0.0; SI.CAP * 2]   //~ E0416
+  a[0]
+}
+
+pub fn decided_in_an_operation(a: [F32; R4.CAP * 2]) -> F32 {   //~ E0200
+  0.0
+}
+
+pub fn unmet_before_the_value(a: [F32; NgBool.CAP]) -> F32 {   //~ E0416
+  0.0
+}
+
+pub fn unmet_before_the_value_in_a_value() -> U32 {
+  NgBool.CAP   //~ E0416
+}
+
+pub struct Ring[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T, const N: U32] Ring[T, N] {
+  pub const CAP: U32 = N
+}
+
+impl[T: Default, const N: U32] Default for Ring[T, N] {
+  rt fn default() -> Self {
+    let b = [0.0; Self.CAP]   //~ E0417
+    Ring { a: [T.default(); N] }
+  }
+}

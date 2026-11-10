@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§15.1"]
+
+// R-277, S-304 (W5-16 U1c): the associated constant of a type of another module (taken by a `use`) that is not generic,
+// read in a constant expression, is a length: `[F32; Point.N]` (§4.5: "具体的な型の関連定数を定数式に含める"; §15.1:
+// the order of the declarations does not matter). `util.onsa` has a `pub` constant `N` of `Point`. The places are the
+// signature (an argument, a return, a field), the body (the annotation of a `let` and the repeat) and the const argument
+// of a type; an alias of the module that fixes the arguments of a generic type and a constant that is a literal are
+// the same. No diagnostic. This passes today. The values are worked out by hand.
+use util.{Point, Ring, Rg}
+
+type R4 = Rg[F32, 4]
+
+pub fn in_a_return() -> [F32; Point.N] {
+  [0.5; Point.N]
+}
+
+pub fn in_an_argument(a: [F32; Point.N]) -> F32 {
+  a[0] + a[3]
+}
+
+pub struct Holder {
+  a: [F32; Point.N],
+}
+
+pub fn in_the_body() -> F32 {
+  let a: [F32; Point.N] = [1.0, 2.0, 3.0, 4.0]
+  let b = [10.0; Point.N]
+  a[2] + b[0]
+}
+
+pub fn in_a_const_argument(r: Ring[F32, Point.N]) -> U32 {
+  r.a.len()
+}
+
+pub fn literal_of_an_alias_in_a_return() -> [F32; R4.LIT] {
+  [0.25; R4.LIT]
+}
+
+test "the length of Point.N is 4" {
+  let r = in_a_return()
+  let e: [F32; 4] = r
+  assert e.len() == 4
+  assert e[3] == 0.5
+}
+
+test "an argument, a field and the body" {
+  let a: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  assert in_an_argument(a) == 5.0
+  let h = Holder { a: a }
+  assert h.a.len() == 4
+  assert in_the_body() == 13.0
+}
+
+test "a const argument" {
+  let r: Ring[F32, 4] = Ring { a: [0.0; 4] }
+  assert in_a_const_argument(r) == 4
+}
+
+test "the literal constant read by an alias of another module's generic type" {
+  let r = literal_of_an_alias_in_a_return()
+  let e: [F32; 4] = r
+  assert e.len() == 4
+  assert e[0] == 0.25
+}

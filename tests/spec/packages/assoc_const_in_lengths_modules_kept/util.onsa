@@ -1,0 +1,19 @@
+pub struct Point {
+  x: F32,
+}
+
+impl Point {
+  pub const N: U32 = 4
+}
+
+pub struct Ring[T, const N: U32] {
+  a: [T; N],
+}
+
+pub struct Rg[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const LIT: U32 = 4
+}

@@ -12,9 +12,11 @@ impl<'a> Checker<'a> {
         let generics = self.all_generics(def);
         // The parameters of an `impl` whose target is the error type (a
         // heading with an error, §18.1) are not decided by a use: the error
-        // type (R-324), and those of a constant of [`Self::const_unread`].
+        // type (R-324), and those of a constant of [`crate::constarg::unread`].
         let unread = match self.a.def(def).owner.map(|o| &self.a.def(o).kind) {
-            Some(DefKind::Impl(i)) if matches!(self.ty(i.self_ty), Ty::Error) || self.const_unread(def) => {
+            Some(DefKind::Impl(i))
+                if matches!(self.ty(i.self_ty), Ty::Error) || crate::constarg::unread(self.a, def) =>
+            {
                 i.generics.len()
             }
             _ => 0,
@@ -34,14 +36,6 @@ impl<'a> Checker<'a> {
             .collect()
     }
 
-    /// `def` is a constant of an `impl` with an error of its heading
-    /// (`impl[T] N[T]` for `N[T: Num]`), which is read as it is: the read
-    /// decides nothing and reports nothing (§18.1, S-304).
-    pub(super) fn const_unread(&self, def: DefId) -> bool {
-        let d = self.a.def(def);
-        matches!(d.kind, DefKind::Const(_)) && d.owner.is_some_and(|o| self.a.failures.failed(o))
-    }
-
     /// The generic parameters a use of `def` decides: the ones of the `impl`
     /// first (a method's generics include them, sig.rs lowers them that way;
     /// an associated constant has only those).
@@ -56,11 +50,7 @@ impl<'a> Checker<'a> {
     /// of `Buf[T]`): what names its members (§6.2), and no variable of the
     /// inference in a message (§18.1, R-357).
     pub(super) fn type_head(&mut self, t: TyId) -> String {
-        match self.ty(t) {
-            Ty::Named(d, _) => self.a.def(d).name.clone(),
-            Ty::Builtin(b, _) => b.name().to_string(),
-            _ => self.display(t),
-        }
+        head_of(self.a, t).unwrap_or_else(|| self.display(t))
     }
 
     /// The type argument `t` a use made at `span`, named `what`: its origin
@@ -90,8 +80,7 @@ impl<'a> Checker<'a> {
             return None;
         }
         let name = d.name.clone();
-        // `{head}::[…].{name}` is E0200 until W5-10, and the note gives it then.
-        let alias = format!("give the type its arguments by an alias: `type R = {head}[…]`, then `R.{name}`");
+        let alias = alias_way(head, &name);
         let in_impl = self.self_ty.is_some_and(|s| match (self.ty(s), self.ty(of)) {
             (Ty::Named(a, _), Ty::Named(b, _)) => a == b,
             (Ty::Builtin(a, _), Ty::Builtin(b, _)) => a == b,
@@ -138,37 +127,23 @@ impl<'a> Checker<'a> {
         for (k, (g, &arg)) in generics.iter().zip(&args).enumerate() {
             let owner = if k < impl_count { impl_name.clone() } else { name.clone() };
             let what = match (&g.kind, &element) {
-                (GenericKind::Const(_), _) => {
-                    ArgumentName::Text(format!("the const parameter `{}` of {owner}", g.name))
-                }
+                (GenericKind::Const(_), _) => ArgumentName::Text(parameter(g, &owner)),
                 (_, Some(Required::SeqElement { recv, method })) if k < impl_count => {
                     ArgumentName::SeqElement { recv: *recv, method: method.clone() }
                 }
-                _ => ArgumentName::Text(format!("the type parameter `{}` of {owner}", g.name)),
-            };
-            // A parameter with an unknown bound requires nothing of its users (§18.1, S-768).
-            let GenericKind::Type { bounds, dup, unknown: false, .. } = &g.kind else {
-                self.defer(span, arg, DeferredKind::Origin { what, rule: way.clone() });
-                continue;
+                _ => ArgumentName::Text(parameter(g, &owner)),
             };
             let of_seq = k < impl_count && matches!(element, Some(Required::SeqElement { .. }));
-            let lifted = g.lifts_escape();
-            let rule = if lifted {
-                LIFTED_VIEW
-            } else if of_seq {
-                VIEW_OF_ARRAY
-            } else {
-                GENERIC_VIEW
+            let Some((rule, lifted, wants)) = requirements(g, of_seq) else {
+                self.defer(span, arg, DeferredKind::Origin { what, rule: way.clone() });
+                continue;
             };
             self.type_argument(span, arg, what, way.clone(), (rule, lifted));
             let required = || match (&element, k < impl_count) {
                 (Some(e), true) => e.clone(),
                 _ => Required::Param { param: g.name.clone(), owner: owner.clone(), std },
             };
-            if *dup {
-                self.defer(span, arg, DeferredKind::Require { bound: Bound::Dup, what: required() });
-            }
-            for &b in bounds {
+            for b in wants {
                 self.defer(span, arg, DeferredKind::Require { bound: b, what: required() });
             }
         }
@@ -176,4 +151,48 @@ impl<'a> Checker<'a> {
         self.info.instances.push(Instance { def, args, span });
         Ok(Some(id))
     }
+}
+
+/// What the type parameter `g` requires of its argument, in the order it is
+/// judged (§4.5, S-862): its implicit `Escape` (the rule of its E0710, and
+/// whether `g` is `?Escape`), which a second-class argument fails before the
+/// others are judged, then the implicit `Dup` and its bounds. None of a const
+/// parameter, nor of one with an unknown bound, which requires nothing of
+/// its users (§18.1, S-768). `of_seq`: of the element of a method of an array.
+pub(crate) fn requirements(
+    g: &GenericDef,
+    of_seq: bool,
+) -> Option<(&'static str, bool, impl Iterator<Item = Bound> + '_)> {
+    let GenericKind::Type { bounds, dup, unknown: false, .. } = &g.kind else { return None };
+    let lifted = g.lifts_escape();
+    let rule = match (lifted, of_seq) {
+        (true, _) => LIFTED_VIEW,
+        (false, true) => VIEW_OF_ARRAY,
+        (false, false) => GENERIC_VIEW,
+    };
+    Some((rule, lifted, dup.then_some(Bound::Dup).into_iter().chain(bounds.iter().copied())))
+}
+
+/// The name of the type `t` with no type argument (`Rg` of `Rg[T, N]`,
+/// `Buf` of `Buf[T]`); none of another form.
+pub(crate) fn head_of(a: &Analysis, t: TyId) -> Option<String> {
+    match a.types.get(t) {
+        Ty::Named(d, _) => Some(a.def(*d).name.clone()),
+        Ty::Builtin(b, _) => Some(b.name().to_string()),
+        _ => None,
+    }
+}
+
+/// The generic parameter `g` of `owner` (``the `impl` of `Rg` ``) as a
+/// message names it.
+pub(crate) fn parameter(g: &GenericDef, owner: &str) -> String {
+    let kind = if matches!(g.kind, GenericKind::Const(_)) { "const" } else { "type" };
+    format!("the {kind} parameter `{}` of {owner}", g.name)
+}
+
+/// The note of an E0406 of the constant `name` of the `impl` of the type
+/// `head` (S-304): how its arguments are given, by an alias.
+/// `{head}::[…].{name}` is E0200 until W5-10, and the note gives it then.
+pub(crate) fn alias_way(head: &str, name: &str) -> String {
+    format!("give the type its arguments by an alias: `type R = {head}[…]`, then `R.{name}`")
 }

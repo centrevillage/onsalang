@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§6.2", "§18.1"]
+
+// S-304 (W5-16 U1c, §18.1): a constant computed by an expression (`D = N + 1`, whose value this version does not
+// compute, E0200, K-05) of an `impl` whose heading is wrong (E0416) is read with no diagnostic of its own, as in a
+// repeat and a flow: the one error is the heading's, in every place of a constant expression (a signature, the
+// annotation of a `let`, a const argument, an alias, the type of a `const`, a field). Before this, those places were
+// E0200. One error per item (P-01).
+
+pub struct Nb[T: Num, const N: U32] {
+  a: [T; N],
+}
+
+impl[T, const N: U32] Nb[T, N] {   //~ E0416
+  pub const D: U32 = N + 1
+}
+
+pub struct Ring[T, const N: U32] {
+  a: [T; N],
+}
+
+type NF = Nb[F32, 4]
+
+pub fn in_an_argument(a: [F32; NF.D]) -> F32 {
+  a[0]
+}
+
+pub fn in_an_annotation(z: F32) -> F32 {
+  let a: [F32; NF.D] = [z; 5]
+  a[0]
+}
+
+pub fn in_a_const_argument(r: Ring[F32, NF.D]) -> F32 {
+  r.a[0]
+}
+
+type InAnAlias = [F32; NF.D]
+
+const IN_THE_TYPE: [F32; NF.D] = [1.0; 5]
+
+pub struct InAField {
+  a: [F32; NF.D],
+}

@@ -1,0 +1,71 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.4", "§4.5", "§6.6"]
+
+// S-304 (W5-16 U1c): a constant whose declared type does not meet the expected type of the place, read in a constant
+// expression, is E0401 as it is in an ordinary expression (`let x: U32 = O1.Z`): the alias decides the argument
+// (`Z8` is `Z1[U8]`, so `Z` is a `U8`) or the type is not an integer (`Option[T]`). These are E0401 today and stay
+// so; they have no candidate (`fixes = 0`): the initializer (`T.ZERO`, `None`) is not an integer of `U32` whatever the
+// declared type is, so changing the type to `U32` leaves an error (§4.5, S-236). One error per unit (P-01).
+
+pub struct Z1[T] {
+  a: T,
+}
+
+impl[T: Int + Copy] Z1[T] {
+  pub const Z: T = T.ZERO
+}
+
+type Z8 = Z1[U8]
+
+pub struct O1[T] {
+  a: T,
+}
+
+impl[T: Copy] O1[T] {
+  pub const Z: Option[T] = None
+}
+
+type OU = O1[U32]
+
+pub struct Ring[T, const N: U32] {
+  a: [T; N],
+}
+
+pub fn alias_of_another_integer_in_an_argument(a: [F32; Z8.Z]) -> F32 {   //~ E0401
+  0.0
+}
+
+pub fn alias_of_another_integer_in_a_repeat() -> F32 {
+  let a = [0.0; Z8.Z]   //~ E0401
+  a[0]
+}
+
+pub fn alias_of_another_integer_in_a_const_argument(r: Ring[F32, Z8.Z]) -> F32 {   //~ E0401
+  0.0
+}
+
+pub fn option_with_no_argument_in_an_argument(a: [F32; O1.Z]) -> F32 {   //~ E0401
+  0.0
+}
+
+pub fn option_with_no_argument_in_a_repeat() -> F32 {
+  let a = [0.0; O1.Z]   //~ E0401
+  a[0]
+}
+
+pub fn option_of_an_alias_in_an_argument(a: [F32; OU.Z]) -> F32 {   //~ E0401
+  0.0
+}
+
+pub fn option_of_an_alias_in_a_repeat() -> F32 {
+  let a = [0.0; OU.Z]   //~ E0401
+  a[0]
+}
+
+// The same constant in an ordinary expression.
+pub fn option_as_a_value() -> U32 {
+  let x: U32 = O1.Z   //~ E0401
+  x
+}

@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§4.7", "§6.6", "§15.1"]
+
+// S-304 (W5-16 U1c): the generic type of another module (taken by a `use`) read by its name in a constant expression,
+// without an alias or an argument that decides the parameters of the `impl` of the other module, is E0406 at the path
+// in this module (§4.5), whether the value depends on the parameter (`Rg.CAP`), does not (`Fixed.FOUR`), or is computed
+// from another constant (`Rg.D`). The other module has no diagnostic. The places are the signature, the body and the
+// const argument of a type. No candidate (`fixes = 0`). One error per unit (P-01).
+use shapes.{Fixed, Ring, Rg}
+
+pub fn dependent_in_an_argument(a: [F32; Rg.CAP]) -> F32 {   //~ E0406
+  0.0
+}
+
+pub fn dependent_in_a_return() -> [F32; Rg.CAP] {   //~ E0406
+  [0.0; 4]
+}
+
+pub fn independent_in_an_argument(a: [F32; Fixed.FOUR]) -> F32 {   //~ E0406
+  0.0
+}
+
+pub fn independent_in_a_repeat() -> F32 {
+  let a = [0.0; Fixed.FOUR]   //~ E0406
+  a[0]
+}
+
+pub fn derived_in_a_let_annotation() -> F32 {
+  let a: [F32; Rg.D] = [0.0; 4]   //~ E0406
+  a[0]
+}
+
+pub fn in_a_const_argument(r: Ring[F32, Rg.CAP]) -> F32 {   //~ E0406
+  0.0
+}
+
+pub fn in_a_generic_function[V](v: V) -> [F32; Rg.CAP] {   //~ E0406
+  [0.0; 4]
+}

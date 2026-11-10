@@ -1,0 +1,89 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§11.4", "§11.5"]
+
+// S-304 (W5-16 U1c): the forms of an associated constant in the places of a flow that pass today and must keep passing
+// when the constants of a generic `impl` are read in lengths: the value is a literal (`R4.LIT`), the alias meets the
+// bound of the `impl` (`SF.CAP`), the type is not generic (`Dev.CAP`). The constant that an alias decides but whose
+// initializer computes (`R4.D`) is E0200 as today (until W9-03). The forms that change are in
+// flow/assoc_const_in_lengths_unresolved.onsa and flow/assoc_const_in_lengths_alias.onsa, each in its own file so that a
+// regression of these is not silenced with theirs. One error per unit (P-01).
+
+pub struct Rg[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+  pub const LIT: U32 = 4
+  pub const D: U32 = Self.CAP + 1
+}
+
+type R4 = Rg[F32, 4]
+
+pub struct Sh[T] {
+  x: T,
+}
+
+impl[T: Float] Sh[T] {
+  pub const CAP: U32 = 4
+}
+
+type SF = Sh[F32]
+
+pub struct Dev {
+  x: I32,
+}
+
+impl Dev {
+  pub const CAP: U32 = 3
+}
+
+pub flow literal_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, R4.LIT)
+}
+
+pub flow literal_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, R4.LIT)
+}
+
+pub flow literal_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<R4.LIT { x * F32.round_from(i) }
+  ys[0] + ys[3]
+}
+
+pub flow literal_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
+  let a = [x; R4.LIT]
+  a[0] + a[3]
+}
+
+pub flow literal_in_a_flow_input(a: [F32; R4.LIT] at sample) -> F32 at sample {
+  a[0] + a[3]
+}
+
+pub flow bound_met_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, SF.CAP)
+}
+
+pub flow bound_met_in_a_flow_annotation(x: F32 at sample) -> F32 at sample {
+  let a: [F32; SF.CAP] = [x; 4]
+  a[0]
+}
+
+pub flow not_generic_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, Dev.CAP)
+}
+
+pub flow computed_in_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, R4.D)   //~ E0200
+}
+
+pub flow computed_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
+  let a = [x; R4.D]   //~ E0200
+  a[0]
+}
+
+pub flow computed_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<R4.D { x * F32.round_from(i) }   //~ E0200
+  ys[0]
+}

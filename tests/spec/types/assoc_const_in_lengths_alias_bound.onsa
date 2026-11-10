@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.4", "§4.5", "§6.2", "§6.3"]
+
+// S-304 (W5-16 U1c): once an alias decides the type arguments, the requirements of the `impl` (its bounds on the type
+// parameters, §6.2) are checked at the read of a constant in a constant expression too, and the argument that does not
+// meet one is E0416 (§4.5: "型引数が決まったら `impl` の境界を検査する（E0416）"), as for the same constant in a value
+// (types/assoc_const_bound_unmet.onsa: `let c: U32 = SI.CAP` is the same code). The value of each constant is a
+// literal, which passed today. No candidate (`fixes = 0`). One error per unit (P-01); a bound for each alias, and the
+// places are the signature, the body and the const argument of a type.
+
+pub struct Sh[T] {
+  x: T,
+}
+
+impl[T: Float] Sh[T] {
+  pub const CAP: U32 = 4
+}
+
+pub struct Nm[T] {
+  x: T,
+}
+
+impl[T: Num] Nm[T] {
+  pub const CAP: U32 = 4
+}
+
+pub struct Ring[T, const N: U32] {
+  a: [T; N],
+}
+
+type SI = Sh[I32]
+type NmStr = Nm[Str]
+type NmBool = Nm[Bool]
+
+pub fn in_an_argument(a: [F32; SI.CAP]) -> F32 {   //~ E0416
+  0.0
+}
+
+pub fn in_a_return() -> [F32; SI.CAP] {   //~ E0416
+  [0.0; 4]
+}
+
+pub fn in_a_let_annotation() -> F32 {
+  let a: [F32; SI.CAP] = [0.0; 4]   //~ E0416
+  a[0]
+}
+
+pub fn in_a_repeat() -> F32 {
+  let a = [0.0; SI.CAP]   //~ E0416
+  a[0]
+}
+
+pub fn in_a_const_argument(r: Ring[F32, SI.CAP]) -> F32 {   //~ E0416
+  0.0
+}
+
+pub fn a_string_is_no_number_in_an_argument(a: [F32; NmStr.CAP]) -> F32 {   //~ E0416
+  0.0
+}
+
+pub fn a_bool_is_no_number_in_a_repeat() -> F32 {
+  let a = [0.0; NmBool.CAP]   //~ E0416
+  a[0]
+}

@@ -1,0 +1,61 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.4", "§4.5", "§15.1"]
+
+// S-304 (W5-16 U1c): the constant of the generic type of another module (taken by a `use`), read by an alias that fixes
+// the arguments, whose value is the const parameter alone (`CAP = N`), is a constant expression with the value of the
+// argument (§4.5): `R4.CAP` of an alias of this module is 4, and an alias of the other module (`shapes.R8`, taken by
+// the `use`) is 8. The places are the signature, the body and the const argument of a type. The types `[F32; R4.CAP]`
+// and `[F32; 4]` are the same type. No diagnostic. Today these are E0200 (a computed constant). The values are
+// worked out by hand from the arguments of the aliases.
+use shapes.{R8, Ring, Rg}
+
+type R4 = Rg[F32, 4]
+
+pub fn in_an_argument(a: [F32; R4.CAP]) -> F32 {
+  a[0] + a[3]
+}
+
+pub fn in_a_return() -> [F32; R4.CAP] {
+  [0.5; R4.CAP]
+}
+
+pub fn in_the_body() -> F32 {
+  let a: [F32; R4.CAP] = [1.0, 2.0, 3.0, 4.0]
+  let b = [10.0; R4.CAP]
+  a[2] + b[3]
+}
+
+pub fn in_a_const_argument(r: Ring[F32, R4.CAP]) -> U32 {
+  r.a.len()
+}
+
+pub fn alias_of_the_other_module(a: [F32; R8.CAP]) -> U32 {
+  a.len()
+}
+
+test "the length of R4.CAP is 4" {
+  let r = in_a_return()
+  let e: [F32; 4] = r
+  assert e.len() == 4
+  assert e[3] == 0.5
+  assert R4.CAP == 4
+}
+
+test "an argument and the body" {
+  let a: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  assert in_an_argument(a) == 5.0
+  assert in_the_body() == 13.0
+}
+
+test "a const argument" {
+  let r: Ring[F32, 4] = Ring { a: [0.0; 4] }
+  assert in_a_const_argument(r) == 4
+}
+
+test "the alias of the other module has its own value" {
+  let a: [F32; 8] = [0.0; 8]
+  assert alias_of_the_other_module(a) == 8
+  assert R8.CAP == 8
+}

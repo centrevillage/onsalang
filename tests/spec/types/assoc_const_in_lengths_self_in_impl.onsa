@@ -1,0 +1,116 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§2.2", "§4.4", "§4.5", "§6.2", "§18.1"]
+
+// S-329 (W5-16 U1c): in a constant expression inside a generic `impl`, `Self.CAP` is E0417 (§4.5: "型引数に型パラメータか
+// const パラメータを含む形（`Rg::[T, 4].CAP`、総称の `impl` の中の `Self.CAP`）は、値が具体化まで決まらないので E0417
+// である"; `Self` is an alias of the target whose arguments are the parameters of the `impl`, §4.4, §2.2). The value does not
+// matter, whether it is the const parameter (`CAP = N`), a literal (`LIT = 4`) or reads another constant (`D`). It is
+// the same in every place: an argument, a return, the annotation of a `let`, the repeat of an array literal, the const
+// argument of a type. There is no candidate (`fixes = 0`). The same constant outside a generic `impl` is not an error
+// (types/assoc_const_in_lengths_kept.onsa). Today these are E0200 (a computed constant), and the independent value
+// passes. One error per unit (P-01).
+
+pub struct Ring[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T, const N: U32] Ring[T, N] {
+  const CAP: U32 = N
+  pub const LIT: U32 = 4
+  pub const D: U32 = Self.CAP + 1
+
+  pub fn in_an_argument(self, b: [F32; Self.CAP]) -> F32 {   //~ E0417
+    0.0
+  }
+
+  pub fn in_a_return(self) -> [F32; Self.CAP] {   //~ E0417
+    [0.0; 4]
+  }
+
+  pub fn in_a_let_annotation(self) -> F32 {
+    let b: [F32; Self.CAP] = [0.0; 4]   //~ E0417
+    b[0]
+  }
+
+  pub fn in_a_repeat(self) -> F32 {
+    let b = [0.0; Self.CAP]   //~ E0417
+    b[0]
+  }
+
+  pub fn in_a_const_argument(self, r: Ring[F32, Self.CAP]) -> F32 {   //~ E0417
+    0.0
+  }
+
+  pub fn in_a_function_without_self() -> [F32; Self.CAP] {   //~ E0417
+    [0.0; 4]
+  }
+
+  // The value is a literal: the form is the same.
+  pub fn independent_in_an_argument(self, b: [F32; Self.LIT]) -> F32 {   //~ E0417
+    0.0
+  }
+
+  pub fn independent_in_a_repeat(self) -> F32 {
+    let b = [0.0; Self.LIT]   //~ E0417
+    b[0]
+  }
+
+  // The value reads another constant through `Self`.
+  pub fn derived_in_an_argument(self, b: [F32; Self.D]) -> F32 {   //~ E0417
+    0.0
+  }
+
+  // The path in parentheses is the whole of the place.
+  pub fn in_parentheses(self, b: [F32; (Self.CAP)]) -> F32 {   //~ E0417
+    0.0
+  }
+
+  // The type parameter of the method is not a parameter of the `impl`: `Self` is still the target with its own.
+  pub fn in_a_generic_method[V](self, v: V, b: [F32; Self.CAP]) -> F32 {   //~ E0417
+    0.0
+  }
+}
+
+// A second `impl` block of the type, with a constant of the other.
+impl[T: Copy, const N: U32] Ring[T, N] {
+  pub fn in_another_impl(self, b: [F32; Self.CAP]) -> F32 {   //~ E0417
+    0.0
+  }
+}
+
+// A type with a type parameter only: `Self` is `Tp[T]`.
+pub struct Tp[T] {
+  x: T,
+}
+
+impl[T] Tp[T] {
+  pub const LIT: U32 = 4
+
+  pub fn in_an_argument(self, b: [F32; Self.LIT]) -> F32 {   //~ E0417
+    0.0
+  }
+
+  pub fn in_a_repeat(self) -> F32 {
+    let b = [0.0; Self.LIT]   //~ E0417
+    b[0]
+  }
+}
+
+// A type with a const parameter only: `Self` is `Cp[N]`.
+pub struct Cp[const N: U32] {
+  a: [F32; N],
+}
+
+impl[const N: U32] Cp[N] {
+  pub const LEN: U32 = N
+
+  pub fn in_an_argument(self, b: [F32; Self.LEN]) -> F32 {   //~ E0417
+    0.0
+  }
+
+  pub fn in_a_return(self) -> [F32; Self.LEN] {   //~ E0417
+    [0.0; 4]
+  }
+}

@@ -1,0 +1,63 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5"]
+
+// S-304 (W5-16 U1c): the length of a type is compared by its evaluated value (§4.5: "型は評価した値で比べる"), so the
+// constant of an alias that fixes the arguments is the value of its argument and a different value is a different type:
+// `[F32; R8.CAP]` (8) is not `[F32; R4.CAP]` (4) nor `[F32; 4]`, and it is E0401 (expected `...`, found `...`) at the
+// value that does not meet the type, as the mismatch of two literal lengths is. Today `R4.CAP` is E0200, so the
+// check stops before. One error per unit (P-01).
+
+pub struct Rg[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+pub struct Ring[T, const N: U32] {
+  a: [T; N],
+}
+
+type R4 = Rg[F32, 4]
+type R8 = Rg[F32, 8]
+
+pub fn takes_four(a: [F32; R4.CAP]) -> F32 {
+  a[0]
+}
+
+pub fn takes_eight(a: [F32; R8.CAP]) -> F32 {
+  a[0]
+}
+
+pub fn takes_a_ring_of_four(r: Ring[F32, R4.CAP]) -> U32 {
+  r.a.len()
+}
+
+pub fn eight_to_four(a: [F32; R8.CAP]) -> F32 {
+  takes_four(a)   //~ E0401
+}
+
+pub fn four_to_eight(a: [F32; R4.CAP]) -> F32 {
+  takes_eight(a)   //~ E0401
+}
+
+pub fn literal_eight_to_four(a: [F32; 8]) -> F32 {
+  takes_four(a)   //~ E0401
+}
+
+pub fn four_to_literal_eight(a: [F32; R4.CAP]) -> F32 {
+  let b: [F32; 8] = a   //~ E0401
+  b[0]
+}
+
+pub fn ring_of_eight_to_four(r: Ring[F32, R8.CAP]) -> U32 {
+  takes_a_ring_of_four(r)   //~ E0401
+}
+
+pub fn the_values_that_agree(a: [F32; 4], r: Ring[F32, 4]) -> F32 {
+  let b: [F32; R4.CAP] = a
+  let n = takes_a_ring_of_four(r)
+  takes_four(b) + takes_four(a) + F32.round_from(n)
+}

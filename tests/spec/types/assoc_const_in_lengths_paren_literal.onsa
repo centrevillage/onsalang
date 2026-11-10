@@ -1,0 +1,42 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// fixes = 0
+// spec = ["§3.1", "§4.5", "§11.4"]
+
+// A `const` whose initializer is an integer literal in parentheses (`(4)`, §3.1: a parenthesis only groups) has the
+// value of the literal as a constant expression (§4.5), as the length `[F32; (4)]` and a constant `(N)` of a const
+// parameter read: `[F32; K]` is `[F32; 4]`, in a signature, a repeat, an annotation and the length of `delay~`.
+// Before this, those were E0200 (a computed constant).
+
+const K: U32 = (4)
+const KK: U32 = ((3))
+
+pub fn first_and_last(a: [F32; K]) -> F32 {
+  a[0] + a[3]
+}
+
+pub fn made() -> [F32; K] {
+  [0.5; K]
+}
+
+pub fn three() -> U32 {
+  let a: [F32; KK] = [1.0; 3]
+  a.len()
+}
+
+pub flow late(x: F32 at sample) -> F32 at sample {
+  delay~(x, K)
+}
+
+test "a parameter of the length K is an array of 4" {
+  let a: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  assert first_and_last(a) == 5.0
+}
+
+test "the repeat of K and the annotation of KK" {
+  let m: [F32; 4] = made()
+  assert m.len() == 4
+  assert m[3] == 0.5
+  assert three() == 3
+}

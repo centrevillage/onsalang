@@ -1,0 +1,83 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§6.2", "§11.4", "§18.1"]
+
+// S-304 (W5-16 U1c, §18.1): a constant of an `impl` whose heading is wrong is read with no diagnostic of its own in the
+// types written in a body too (the annotation of a `let`, as a length and as a const argument, and the annotation of a
+// `let` of a flow), as in a signature and a repeat (types/assoc_const_in_lengths_bad_heading_kept.onsa): the one error
+// is the heading's. The headings are wrong in three ways here: a requirement of the type (E0416), a type of another
+// module (E0307), an unknown bound (E0302); a redundant mark (E0020, with a candidate) is in
+// types/assoc_const_in_lengths_bad_heading_body_mark.onsa. Before this, the annotations were E0406 (the parameters of
+// the `impl` not decided). One error per item (P-01).
+
+pub struct Ring[T, const N: U32] {
+  a: [T; N],
+}
+
+pub struct Nb[T: Num] {
+  a: T,
+}
+
+impl[T] Nb[T] {   //~ E0416
+  pub const R: U32 = 4
+}
+
+impl[T] Option[T] {   //~ E0307
+  pub const K: U32 = 4
+}
+
+pub struct Ub[T] {
+  a: T,
+}
+
+impl[T: Nope] Ub[T] {   //~ E0302
+  pub const R: U32 = 4
+}
+
+pub fn unmet_requirement_in_an_annotation(z: F32) -> U32 {
+  let a: [F32; Nb.R] = [z; 4]
+  a.len()
+}
+
+pub fn foreign_type_in_an_annotation(z: F32) -> U32 {
+  let a: [F32; Option.K] = [z; 4]
+  a.len()
+}
+
+pub fn unknown_bound_in_an_annotation(z: F32) -> U32 {
+  let a: [F32; Ub.R] = [z; 4]
+  a.len()
+}
+
+
+pub fn unmet_requirement_in_a_const_argument(z: F32) -> F32 {
+  let r: Ring[F32, Nb.R] = Ring { a: [z; 4] }
+  r.a[0]
+}
+
+pub fn foreign_type_in_a_const_argument(z: F32) -> F32 {
+  let r: Ring[F32, Option.K] = Ring { a: [z; 4] }
+  r.a[0]
+}
+
+pub fn unknown_bound_in_a_const_argument(z: F32) -> F32 {
+  let r: Ring[F32, Ub.R] = Ring { a: [z; 4] }
+  r.a[0]
+}
+
+
+pub flow unmet_requirement_in_a_flow_annotation(x: F32 at sample) -> F32 at sample {
+  let a: [F32; Nb.R] = [x; 4]
+  a[0]
+}
+
+pub flow foreign_type_in_a_flow_annotation(x: F32 at sample) -> F32 at sample {
+  let a: [F32; Option.K] = [x; 4]
+  a[0]
+}
+
+pub flow unknown_bound_in_a_flow_annotation(x: F32 at sample) -> F32 at sample {
+  let a: [F32; Ub.R] = [x; 4]
+  a[0]
+}

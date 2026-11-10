@@ -1,0 +1,20 @@
+pub struct Rg[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+  pub const D: U32 = Self.CAP + 1
+}
+
+pub struct Fixed[T] {
+  x: T,
+}
+
+impl[T] Fixed[T] {
+  pub const FOUR: U32 = 4
+}
+
+pub struct Ring[T, const N: U32] {
+  a: [T; N],
+}

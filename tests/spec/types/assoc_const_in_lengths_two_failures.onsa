@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§4.7", "§6.2"]
+
+// S-304 (decided as of the functions and the variants): a read of a constant whose type is the type parameter of its
+// `impl` (`Y: T`) decides that parameter from the expected type `U32` (§4.7), and leaves the const parameter `N` not
+// decided. A value judges the requirements of a decided parameter in its statement (§4.5, E0416: `U32` is no `Float`)
+// and reports a parameter not decided at the end of the function (E0406), so E0416 comes first (`let q: U32 = Z2.Y` is
+// E0416 today); a constant expression judges them in the same order: E0416, not the E0406 of `N`. Before this, the
+// constant expressions were E0406. One error per item (P-01).
+
+pub struct Z2[T: ?Dup, const N: U32] {
+  a: [T; N],
+}
+
+impl[T: Float, const N: U32] Z2[T, N] {
+  pub const Y: T = T.ZERO
+}
+
+pub struct Ring[T, const N: U32] {
+  a: [T; N],
+}
+
+pub fn in_an_argument(a: [F32; Z2.Y]) -> F32 {   //~ E0416
+  a[0]
+}
+
+pub fn in_a_repeat(z: F32) -> F32 {
+  let a = [z; Z2.Y]   //~ E0416
+  a[0]
+}
+
+pub fn in_a_const_argument(r: Ring[F32, Z2.Y]) -> F32 {   //~ E0416
+  r.a[0]
+}

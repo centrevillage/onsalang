@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§4.7", "§6.6", "§18.1"]
+
+// S-304 (W5-16 U1c): a constant whose declared type is the type parameter of the `impl` itself (`const Z: T = T.ZERO`),
+// read by the name of the type in a constant expression, has the type variable of `T` unified with the expected type of
+// the place (S-304: "宣言の型が型パラメータに依る定数は、列挙子と同じく型変数を立てて期待型と単一化する"), which is `U32`
+// there; the one parameter is decided by it. The value is computed (`T.ZERO`), which this version does not evaluate
+// as a length: E0200 (constants computed by expressions, until W9-03). Today these are E0401 (`Z` is `<0>`). No
+// candidate (`fixes = 0`). The type with another parameter that nothing decides is E0406
+// (types/assoc_const_in_lengths_unresolved_value.onsa), and the forms that the expected type does not meet are
+// E0401 (types/assoc_const_in_lengths_declared_type_kept.onsa). One error per unit (P-01).
+
+pub struct Z1[T] {
+  a: T,
+}
+
+impl[T: Int + Copy] Z1[T] {
+  pub const Z: T = T.ZERO
+}
+
+pub struct Ring[T, const N: U32] {
+  a: [T; N],
+}
+
+pub fn in_an_argument(a: [F32; Z1.Z]) -> F32 {   //~ E0200
+  0.0
+}
+
+pub fn in_a_return() -> [F32; Z1.Z] {   //~ E0200
+  [0.0; 4]
+}
+
+pub fn in_a_repeat() -> F32 {
+  let a = [0.0; Z1.Z]   //~ E0200
+  a[0]
+}
+
+pub fn in_a_let_annotation() -> F32 {
+  let a: [F32; Z1.Z] = [0.0; 4]   //~ E0200
+  a[0]
+}
+
+pub fn in_a_const_argument(r: Ring[F32, Z1.Z]) -> F32 {   //~ E0200
+  0.0
+}

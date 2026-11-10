@@ -1,0 +1,131 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§4.7", "§6.6", "§18.1"]
+
+// S-304 (W5-16 U1c): the associated constant of a generic `impl` read by the name of the type, with no argument and
+// no alias that decides the parameters of the `impl` (`Rg.CAP`), is E0406 at the path in a constant expression as it is
+// in a value (§4.5: "型引数の決まらない総称の型の関連定数（`[F32; Rg.CAP]`）は E0406 である"). The path is the whole
+// of the place, and there is no candidate (`fixes = 0`). Here the value of the constant depends on a parameter of the
+// `impl` (`N`) or reads one that does (`D`), which today is E0200 (a constant computed by an expression). The places are
+// the signature (an argument, a return, a field, the right side of an alias, the type of a `const`), the body (the
+// annotation of a `let` and the repeat of an array literal) and the const argument of a type (`Ring[F32, Rg.CAP]`);
+// the length of a flow is in flow/assoc_const_in_lengths_unresolved.onsa. A use of an alias whose right side has
+// the error has no diagnostic (§18.1: the error type). One error per unit (P-01).
+
+pub struct Rg[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+  pub const D: U32 = Self.CAP + 1
+}
+
+pub struct Ring[T, const N: U32] {
+  a: [T; N],
+}
+
+pub fn in_an_argument(a: [F32; Rg.CAP]) -> F32 {   //~ E0406
+  0.0
+}
+
+pub fn in_a_return() -> [F32; Rg.CAP] {   //~ E0406
+  [0.0; 4]
+}
+
+pub struct InAField {
+  a: [F32; Rg.CAP],   //~ E0406
+}
+
+type InAnAlias = [F32; Rg.CAP]   //~ E0406
+
+pub fn uses_the_alias(a: InAnAlias) -> F32 {
+  0.0
+}
+
+pub const IN_A_CONST: [F32; Rg.CAP] = [0.0; 4]   //~ E0406
+
+pub fn in_a_let_annotation() -> F32 {
+  let a: [F32; Rg.CAP] = [0.0; 4]   //~ E0406
+  a[0]
+}
+
+pub fn in_a_repeat() -> F32 {
+  let a = [0.0; Rg.CAP]   //~ E0406
+  a[0]
+}
+
+pub fn in_a_const_argument(r: Ring[F32, Rg.CAP]) -> F32 {   //~ E0406
+  0.0
+}
+
+pub fn in_a_const_argument_of_a_return() -> Ring[F32, Rg.CAP] {   //~ E0406
+  Ring { a: [0.0; 4] }
+}
+
+// The constant that reads another one of the `impl` through `Self` (inside the initializer `Self` is `Rg[T, N]`).
+pub fn derived_in_an_argument(a: [F32; Rg.D]) -> F32 {   //~ E0406
+  0.0
+}
+
+pub fn derived_in_a_repeat() -> F32 {
+  let a = [0.0; Rg.D]   //~ E0406
+  a[0]
+}
+
+// The path in parentheses is the whole of the place.
+pub fn in_parentheses(a: [F32; (Rg.CAP)]) -> F32 {   //~ E0406
+  0.0
+}
+
+// The type parameter of the function (`V`) is not a parameter of the `impl`.
+pub fn in_a_generic_function[V](v: V) -> [F32; Rg.CAP] {   //~ E0406
+  [0.0; 4]
+}
+
+// Inside an `impl` of the same type, the name of the type without `Self` is the same as outside: `Self` is what binds
+// the parameters (Self.CAP is E0417, types/assoc_const_in_lengths_self_in_impl.onsa).
+impl[T, const N: U32] Rg[T, N] {
+  pub fn by_the_name_in_an_argument(self, b: [F32; Rg.CAP]) -> F32 {   //~ E0406
+    0.0
+  }
+
+  pub fn by_the_name_in_a_repeat(self) -> F32 {
+    let b = [0.0; Rg.CAP]   //~ E0406
+    b[0]
+  }
+}
+
+// A constant whose declared type is the type parameter of the `impl` (`T`): the expected type `U32` of the length would
+// decide a `T` alone (types/assoc_const_in_lengths_declared_type.onsa), but `N` is also a parameter of the `impl` and
+// nothing decides it.
+pub struct Z2[T, const N: U32] {
+  a: [T; N],
+}
+
+impl[T: Int + Copy, const N: U32] Z2[T, N] {
+  pub const Z: T = T.ZERO
+}
+
+pub fn declared_as_the_parameter_and_the_other_parameter(a: [F32; Z2.Z]) -> F32 {   //~ E0406
+  0.0
+}
+
+pub fn declared_as_the_parameter_in_a_repeat() -> F32 {
+  let a = [0.0; Z2.Z]   //~ E0406
+  a[0]
+}
+
+// A type with a const parameter only.
+pub struct Cp[const N: U32] {
+  a: [F32; N],
+}
+
+impl[const N: U32] Cp[N] {
+  pub const LEN: U32 = N
+}
+
+pub fn const_parameter_only(a: [F32; Cp.LEN]) -> F32 {   //~ E0406
+  0.0
+}

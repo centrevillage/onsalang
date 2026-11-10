@@ -431,13 +431,14 @@ impl Place<'_> {
         gs.iter().map(one).collect()
     }
 
-    /// A `const` and its value when the initializer is an integer literal.
+    /// A `const` and its value when the initializer is an integer literal
+    /// (in parentheses too, as a constant expression reads it, §4.5).
     fn const_def(&self, value: Option<ExprId>) -> ConstDef {
-        let int_value = value.and_then(|v| match &self.ast.expr(v).kind {
+        let int_value = value.and_then(|v| match &self.ast.expr(self.ast.without_parens(v)).kind {
             ExprKind::Lit(Lit::Int { value, .. }) => Some(*value),
             _ => None,
         });
-        ConstDef { ty: self.error, value, int_value }
+        ConstDef { ty: self.error, value, int_value, param: None }
     }
 
     /// A function, with the mode of its `self` (a method, §6.2), known
