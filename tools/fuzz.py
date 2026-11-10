@@ -48,14 +48,30 @@ The gate item `fuzz` (this script without options) does three things:
    diagnostic of the original's stage or an earlier one whose start lies in
    the original's range or a replacement, moved to the text after it (an
    error the input held there before is not one, but one of the original's
-   code inside its range is: a part of the same form, S-248). Its
-   class is `fix|<code>|<title>|<code left>` (the quoted text of the title
-   `…`, the numbers `#`). A saved input listed in `tests/pending.toml` must
-   still crash or break the contract; one not listed must do neither; a
+   code inside its range is: a part of the same form, S-248), or a
+   candidate that does not apply (`cannot-apply`, `other-file`), changes the
+   reading outside its edits (`reading`, S-302), leads to an internal error
+   (`internal`) or is of a stage that cannot be checked (`unchecked-stage`).
+   Its class is `fix|<code>|<title>|<kind left>` (the quoted text of the
+   title `…`, the numbers `#`; the kind left is the code of the diagnostic
+   left, or one of those words). A saved input listed in `tests/pending.toml`
+   must still crash or break the contract; one not listed must do neither; a
    class a listed input shows is known, a new one is minimized and written
    as above. The units are not used: this is a net for new kinds of broken
    candidates, not the contract (the test runner checks the contract on the
    cases, `onsa_tests::fix_contract`).
+   **A class with an error left** (X-25, `left_behind`: the kind left is a
+   code) does not fail a mutant: the contract holds when the original is the
+   unit's only error, which the tool cannot tell, and a mutant most often
+   holds two. A new one (with its message left) is a line `NOTE`, counted
+   apart in the summary; its input, minimized, goes into `target/fuzz/left/`
+   with its class, message, detail and seed (one for each class and message,
+   never under `tests/`, `--save` too; the base is not asked), for the
+   parent to read at a break (`fuzz.py left`). One that
+   `tests/fuzz/left_seen.txt` lists (`class<TAB>left` a line, the classes
+   the parent has read; a line of another form fails) is known. The replay
+   of the saved inputs (1.) does not read that list: a regression input that
+   shows such a class fails as before.
 
 **The classes the spec puts outside the contract** (R-207): `tests/fuzz/allowed.toml`
 lists, as `[[allowed]]` entries, classes of the fix stage that the spec
@@ -63,8 +79,10 @@ decided are no broken candidate, or that an R records as a low harm left as
 it is (rules/leader.md 4.5), with an input that shows each: a fix that
 the spec makes in two steps (S-386: the `,`, then the `|` before the first
 alternative, S-383), and an input with two errors (S-384, S-413), which the
-mutants cut short at the end of a file often are. Every field is required:
-`class` (`fix|<code>|<title>|<code left>`; a crash or a signal is never
+mutants cut short at the end of a file often are. An entry of a class with
+an error left (3.) keeps its mutants out of the list to read; one of
+another kind keeps them from failing. Every field is required:
+`class` (`fix|<code>|<title>|<kind left>`; a crash or a signal is never
 listed), `input` (a saved input `tests/fuzz/<name>.onsa`, not listed in
 `tests/pending.toml`; one entry each), `left` (the message of the
 diagnostic left after the candidate, as the class writes the title: quoted
@@ -104,9 +122,10 @@ they are (a `\r` stays, invalid UTF-8 too).
                   [--deep] [--save] [--changed-since REV|auto] [--code-cap N]
                   [--sample F --salt ID] [--shard I/K] [--base auto|none|DIR]
     tools/fuzz.py sort [--go] [--jobs N] [--binary PATH] [--cases-binary PATH]
+    tools/fuzz.py left [--seen]
     tools/fuzz.py help [--role R] [COMMAND]
 
-The commands are `run` and `sort` (COMMANDS, rules/tools.md 9.1); `fuzz.py help`
+The commands are `run`, `sort` and `left` (COMMANDS, rules/tools.md 9.1); `fuzz.py help`
 shows their purposes, times, roles and examples (`--help` lists them). A call
 with no command (no argument, or a first argument `-…` but `-h` and `--help`:
 the gate's `fuzz` and `fuzz-deep`) is `run`, the gate item described above.
@@ -117,11 +136,21 @@ replay's known classes (`Replay.knows`, as the run does): an input `tests/fuzz/`
 has a file of the same name for, and one whose classes are all known, goes; one
 that shows nothing goes into `tests/fuzz/` as a regression input (not listed);
 one with an unknown crash, internal error or signal stays (it is fixed; never
-allowed, rules/leader.md 4.5), and one with unknown classes of the fix stage
-only stays, for the parent to decide. The entries to add go with what stays
+allowed, rules/leader.md 4.5); one whose unknown classes all have an error
+left goes into `target/fuzz/left/` (X-25, as the run would put it), and one
+with other unknown classes of the fix stage stays, for the parent to decide.
+The entries to add go with what stays
 (`entry_stub`, and `allowed_stub` for a class of the fix stage, as the run
 prints them). It prints the table and moves nothing unless `--go`; its last
 line counts each kind.
+
+**`left`** (X-25) lists the records of `target/fuzz/left/`: each class with
+its message left, detail, seed and input (on one line, cut short). With
+`--seen` it adds their classes to `tests/fuzz/left_seen.txt` (sorted) and
+removes the records; it changes nothing when a record or the list cannot be
+read. An input the parent takes for a real bug is copied into `tests/fuzz/`
+(with an R and an entry of `tests/pending.toml`) before `--seen`. The main
+tree's gate summary says how many classes are there (`fuzz left: …`).
 
 `--deep` adds mutants that nest brackets or blocks thousands deep: the
 nesting limit (spec §2.5, S-183, W3-14) must stop them with E0006 before
@@ -182,8 +211,9 @@ import spec_blocks  # noqa: E402
 
 ROOT = repo.ROOT
 FUZZ_DIR = repo.FUZZ_DIR
-# The work directory under cargo's target directory, and its directory of the inputs of the new classes.
-WORK, NEW = "fuzz", "new"
+# The work directory under cargo's target directory, its directory of the inputs of the new classes, and that of
+# the new classes with an error left at a candidate's place (X-25, `left_behind`).
+WORK, NEW, LEFT = "fuzz", "new", "left"
 # The commands of Q-06; `fmt --check` reads and does not write.
 ONSA_COMMANDS = (("check",), ("fmt", "--check"))
 TIMEOUT = 20  # seconds per run
@@ -201,6 +231,10 @@ NAME = "m.onsa"  # the name of an input's file, as the commands show it
 # The classes of the fix stage that the spec puts outside the contract, or that an R keeps (R-207).
 ALLOWED = FUZZ_DIR / "allowed.toml"
 ALLOWED_FIELDS = ("class", "left", "input", "reasons", "note")
+# The classes with an error left that the parent has read (X-25): `class<TAB>left` a line, sorted.
+SEEN = FUZZ_DIR / "left_seen.txt"
+SEEN_HEADER = ("# The classes of the fix stage with an error left at a candidate's place that the parent has read\n"
+               "# (X-25): `class<TAB>left` a line, sorted. tools/fuzz.py left --seen adds them.\n")
 TIME_BUDGET = 600  # seconds for the whole run
 # Nesting depths of the deep mutants (S-183): far above the nesting limit
 # (256, spec §2.5) and above what the stack of a command would hold without it.
@@ -330,6 +364,13 @@ def fix_signature(v):
     """The class of a violation of the near "same place" (S-236): the code,
     the title of the candidate (`normalized`) and the code left after it."""
     return f"fix|{v['code']}|{normalized(v['title'])}|{v['left']}"
+
+
+def left_behind(signature):
+    """Whether `signature` is a class of the fix stage whose kind left (`fix_signature`) is a diagnostic's code:
+    an error left at the candidate's place, which the run lists to read and does not fail on (X-25). Any other
+    kind (`reading`, `cannot-apply`, `internal`, …, or one not known) fails as before."""
+    return signature.startswith("fix|") and repo.CODE.fullmatch(signature.rsplit("|", 1)[-1]) is not None
 
 
 class FixRunner:
@@ -691,6 +732,27 @@ def load_allowed(root, listed):
     return out, errors
 
 
+def load_seen(root):
+    """The classes of `SEEN` ({(class, left)}) and the errors of its lines (X-25): a line is `#` and a note,
+    or a class with an error left (`left_behind`), a tab and the message left as the class writes it."""
+    try:
+        lines = (Path(root) / SEEN).read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return set(), []
+    except (OSError, UnicodeDecodeError) as e:
+        return set(), [f"{SEEN.as_posix()}: {e}"]
+    seen, errors = set(), []
+    for n, line in enumerate(lines, 1):
+        if line.startswith("#") or not line:
+            continue
+        parts = line.split("\t")
+        if len(parts) != 2 or not left_behind(parts[0]) or normalized(parts[1]) != parts[1]:
+            errors.append(f"{SEEN.as_posix()}:{n}: not `class<TAB>left` of a class with an error left (X-25)")
+        else:
+            seen.add(tuple(parts))
+    return seen, errors
+
+
 def entry_stub(target, crash):
     note = crash.signature.replace('"', "'")
     return (
@@ -731,11 +793,12 @@ class Replay:
     known: dict  # {class: a listed input that shows it}
     errors: list  # the lists cannot be read, or the fix stage cannot run: the classes known are not all
     failures: list  # a saved input disagrees with the lists
+    seen: set = frozenset()  # {(class, left)} of `SEEN` (X-25): known to the mutants, not to the saved inputs
 
     def knows(self, c):
-        """Whether the class of `c` is known: a listed input shows it, or the allowed list has it with its
-        message left (R-207)."""
-        return (c.signature, c.left) in self.allowed or c.signature in self.known
+        """Whether the class of `c` is known: a listed input shows it, or the allowed list (R-207) or the
+        list of the classes read (`SEEN`, X-25) has it with its message left."""
+        return (c.signature, c.left) in self.allowed or c.signature in self.known or (c.signature, c.left) in self.seen
 
 
 def examine(runner, fixer, texts, jobs, seconds):
@@ -754,7 +817,8 @@ def replay_saved(root, runner, fixer, jobs, deadline):
     entries, errors = pending.load(root / repo.PENDING)
     listed = {e.target for e in pending.of_kind(entries, "fuzz-input")}
     allowed, more = load_allowed(root, listed)
-    errors += more
+    seen, unread = load_seen(root)
+    errors += more + unread
     allowed_inputs = {inp: key for key, inp in allowed.items()}
     saved = sorted((root / FUZZ_DIR).glob("*.onsa")) if (root / FUZZ_DIR).is_dir() else []
     replayed, why = examine(runner, fixer, [read_input(p) for p in saved], jobs, max(1.0, deadline - time.monotonic()))
@@ -789,7 +853,52 @@ def replay_saved(root, runner, fixer, jobs, deadline):
                 what = "breaks the contract of a fix candidate" if unknown[0].command == FIX_COMMAND else "crashes"
                 failures.append(f"{rel}: {what} but is not listed in tests/pending.toml: {unknown[0].command}: "
                                 f"{unknown[0].signature}")
-    return Replay(saved, listed, allowed, known, errors, failures)
+    return Replay(saved, listed, allowed, known, errors, failures, seen)
+
+
+RECORD = ("class", "left", "detail", "seed")  # the fields of a record of `LEFT` (X-25)
+
+
+def write_left(left_dir, c, text, seed):
+    """Write the input `text` of the class with an error left of `c` into `left_dir`: `<name>.onsa`, and
+    `<name>.json` with the class, the message left, the detail and where it came from (`seed`)."""
+    name = short_name(f"{c.signature}\t{c.left}\n{text}")  # two classes of one input are two records
+    left_dir.mkdir(parents=True, exist_ok=True)
+    (left_dir / f"{name}.onsa").write_bytes(encode(text))
+    record = dict(zip(RECORD, (c.signature, c.left, c.detail, seed)))
+    (left_dir / f"{name}.json").write_text(json.dumps(record, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def left_records(left_dir):
+    """(the records of `left_dir` (`write_left`), each with its `name` and input `text`, sorted by class and
+    message left; the errors of those that cannot be read)."""
+    out, errors = [], []
+    for p in sorted(Path(left_dir).glob("*.json")):
+        try:
+            r = json.loads(p.read_text(encoding="utf-8"))
+            if not isinstance(r, dict) or not all(isinstance(r.get(k), str) for k in RECORD):
+                raise ValueError(f"not a record ({', '.join(RECORD)})")
+            out.append(dict(r, name=p.stem, text=read_input(p.with_suffix(".onsa"))))
+        except (OSError, ValueError) as e:
+            errors.append(f"{p}: {e}")
+    return sorted(out, key=lambda r: (r["class"], r["left"], r["name"])), errors
+
+
+def keep_left(lefts, fixer, left_dir, deadline):
+    """(a line `NOTE` for each new class with an error left, {(class, left): (seed, which, text, crash)};
+    the errors of the records of `left_dir`). Each class `left_dir` holds no record of yet is minimized and
+    written there (`write_left`); the base is not asked (X-25: no time spent on what does not fail)."""
+    records, errors = left_records(left_dir)
+    held = {(r["class"], r["left"]) for r in records}
+    notes = []
+    for (signature, left), (seed, which, text, c) in lefts.items():
+        notes.append(f"NOTE an error left at a candidate's place, to read at a break (tools/fuzz.py left): "
+                     f"{signature} with `{left}` (seed {seed}, {which})")
+        if (signature, left) not in held:
+            seconds = max(0.0, min(MINIMIZE_SECONDS, deadline - time.monotonic()))
+            small = minimize(fixer, text, signature, seconds=seconds, left=left) if seconds > 0 else text
+            write_left(left_dir, c, small, f"seed {seed}, {which}")
+    return notes, errors
 
 
 def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_dir=None, time_budget=TIME_BUDGET,
@@ -849,7 +958,7 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
             fixes = dict(zip(chosen, fixer.violations([inputs[i][2] for i in chosen], deadline - time.monotonic())))
         except RuntimeError as e:
             failures.append(f"the fix stage cannot run on the mutants: {e}")
-    new = {}
+    new, lefts = {}, {}  # the new classes, and those with an error left by (class, left) (X-25)
     crashing = 0
     breaking = 0
     cut_crashing = 0
@@ -863,8 +972,12 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
         if fixes.get(i):
             breaking += 1
         for c in crashes + fixes.get(i, []):
-            if not replay.knows(c) and c.signature not in new:
-                new[c.signature] = (seed, which, text, c)
+            if replay.knows(c):
+                continue
+            if left_behind(c.signature):
+                lefts.setdefault((c.signature, c.left), (seed, which, text, c))
+            else:
+                new.setdefault(c.signature, (seed, which, text, c))
     written = []
     before = []  # the lines of the classes the base shows too, in a narrowed run
     narrowed = bool(selection and selection.narrowed)
@@ -894,7 +1007,8 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
                 failures.append(f"{line} (pre-existing: the base {base.shown} shows it)")
             else:
                 failures.append(line + (f" (the base cannot tell: {why})" if why else ""))
-    failures += served.close()
+    notes, unread = keep_left(lefts, fixer, work / LEFT, deadline)
+    failures += unread + served.close()
     shutil.rmtree(served.work, ignore_errors=True)
 
     if isinstance(base, narrowing.Base):
@@ -908,14 +1022,14 @@ def run(root, argv, fix_argv, per_seed, version, jobs, save, out=print, target_d
         f"({truncated} each, {cut_crashing} crashing), "
         + (f"{len(swept_cuts)} cuts swept after `{RARE}` ({swept_crashing} crashing), " if swept else "")
         + f"{crashing} crashing in all, "
-        f"{len(new)} new classes; {len(chosen)} mutants through the fix stage ({fixer.unreadable} not UTF-8), "
+        f"{len(new)} new classes ({len(lefts)} more with an error left, to read at a break); {len(chosen)} mutants through the fix stage ({fixer.unreadable} not UTF-8), "
         f"{breaking} breaking a candidate's contract; {len(saved)} saved inputs replayed ({len(listed)} listed, {len(allowed)} allowed)"
         f"{base_part}; {time.time() - start:.1f} s"
     )
     for path, target, c, seed, which in written:
         shown = path.relative_to(root).as_posix() if root in path.parents else str(path)
         out(f"\n{shown}  ({c.command}; seed {seed}, {which})\n{c.detail}\n{stubs(target, c)}")
-    for line in before:
+    for line in before + notes:
         out(line)
     for f in failures:
         out(f"FAIL {f}")
@@ -961,15 +1075,25 @@ def unsorted_line(root):
     return f"fuzz new: {len(names)} not under {FUZZ_DIR}/ (sort them: tools/fuzz.py sort, rules/leader.md 4.5): " + ", ".join(names)
 
 
+def left_line(root):
+    """The line of the main tree's gate summary after `unsorted_line` (X-25): the classes with an error left
+    in `target/fuzz/left/`, for the parent to read at a break; None when there are none."""
+    records, errors = left_records(new_inputs(root).parent / LEFT)
+    classes = len({(r["class"], r["left"]) for r in records})
+    what = f"{classes} class(es) to read at a break" + (f", {len(errors)} record(s) unreadable" if errors else "")
+    return f"fuzz left: {what} (tools/fuzz.py left)" if classes or errors else None
+
+
 # The kinds of `sort` in the order of its table, and what it does with each (X9-23).
 SORTED = {
     "same name": "remove: tests/fuzz/ has a file of the same name",
     "fixed": "place in tests/fuzz/: a regression input (not listed)",
-    "known": "remove: a listed input or an allowed entry shows its classes",
+    "known": "remove: a listed input, an allowed entry or the classes read (X-25) show its classes",
     "crash": "keep: an internal error or a crash is fixed, never allowed (rules/leader.md 4.5)",
+    "left": "move to target/fuzz/left/: classes with an error left only, read at a break (X-25)",
     "new": "keep: a new class of the fix stage, for the parent to decide (rules/leader.md 4.5)",
 }
-GONE = ("same name", "fixed", "known")
+GONE = ("same name", "fixed", "known", "left")
 
 
 def sort_inputs(root, runner, fixer, jobs, new_dir, go, out=print):
@@ -990,7 +1114,8 @@ def sort_inputs(root, runner, fixer, jobs, new_dir, go, out=print):
         for n, classes in zip(rest, found):
             unknown = [c for c in classes if not replay.knows(c)]
             kind = ("fixed" if not classes else "known" if not unknown
-                    else "crash" if any(c.command != FIX_COMMAND for c in unknown) else "new")
+                    else "crash" if any(c.command != FIX_COMMAND for c in unknown)
+                    else "left" if all(left_behind(c.signature) for c in unknown) else "new")
             rows.append((n, kind, classes if kind == "known" else unknown))
     rows.sort(key=lambda r: (list(SORTED).index(r[1]), r[0]))
     for n, kind, classes in rows:
@@ -1004,18 +1129,64 @@ def sort_inputs(root, runner, fixer, jobs, new_dir, go, out=print):
         out(f"\n{n}  ({c.command})\n{c.detail}\n{stub}")
     for e in errors:
         out(f"FAIL {e}")
+    left_dir = new_dir.parent / LEFT
+    held, unread = left_records(left_dir)
+    errors += unread
+    held = {(r["class"], r["left"]) for r in held}
     moved = go and not errors
     if moved:
-        for n, kind, _ in rows:
+        for n, kind, classes in rows:
             if kind == "fixed":
                 (root / FUZZ_DIR).mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(new_dir / n, root / FUZZ_DIR / n)
+            for c in classes if kind == "left" else ():
+                if (c.signature, c.left) not in held:
+                    held.add((c.signature, c.left))
+                    write_left(left_dir, c, read_input(new_dir / n), f"sorted from {NEW}/{n}")
             if kind in GONE:
                 (new_dir / n).unlink()
     counts = collections.Counter(kind for _, kind, _ in rows)
     out(f"sort: {len(rows)} inputs in {new_dir}: " + ", ".join(f"{counts[k]} {k}" for k in SORTED) + "; "
         + ("placed and removed" if moved else "nothing moved" + ("" if errors else " (--go places and removes them)")))
     return 1 if errors else 0
+
+
+SHOWN = 160  # the characters of an input `left` shows on its line
+
+
+def read_left(root, left_dir, seen, out=print):
+    """`left` (X-25): the records of `left_dir` (`left_records`), a class with its message left, detail and
+    input on one line each; with `seen`, their classes added to `SEEN` (sorted, with `SEEN_HEADER`) and the
+    records removed. Changes nothing when a record or `SEEN` cannot be read (exit 1)."""
+    records, errors = left_records(left_dir)
+    for r in records:
+        text = json.dumps(r["text"], ensure_ascii=False)[1:-1]
+        out(f"{r['class']}\n  left: {r['left']}\n  {r['detail']}\n  input ({r['seed']}): "
+            + (text[:SHOWN] + "…" if len(text) > SHOWN else text))
+    classes = {(r["class"], r["left"]) for r in records}
+    known, unread = load_seen(root) if seen else (set(), [])
+    errors += unread
+    for e in errors:
+        out(f"FAIL {e}")
+    done = bool(seen and not errors and records)
+    if done:
+        lines = "".join(f"{c}\t{m}\n" for c, m in sorted(known | classes))
+        (Path(root) / SEEN).write_text(SEEN_HEADER + lines, encoding="utf-8")
+        for r in records:
+            for suffix in (".json", ".onsa"):
+                (Path(left_dir) / f"{r['name']}{suffix}").unlink(missing_ok=True)
+    out(f"left: {len(classes)} classes ({len(records)} inputs) in {left_dir}; "
+        + (f"added to {SEEN.as_posix()} and removed" if done else "nothing changed"
+           + ("" if seen or not records else f" (--seen adds them to {SEEN.as_posix()})")))
+    return 1 if errors else 0
+
+
+def left_args(p):
+    p.add_argument("--seen", action="store_true", help=f"add the classes listed to {SEEN} and remove their inputs")
+
+
+def left_command(args):
+    return read_left(args.root, new_inputs(args.root).parent / LEFT, args.seen)
 
 
 def run_args(p):
@@ -1108,6 +1279,10 @@ COMMANDS = {
               "target/fuzz/new/ の入力を今のバイナリで回し、同名・直った・既知・異常終了・新しい類に分ける（`--go` で置く・消す）",
               "区切りで、主のツリーの gate の要約の `fuzz new:` に入力が並んだとき。表を読んでから `--go`",
               "fuzz.py sort --go"),
+    "left": C(left_args, left_command, ("parent",),
+              "target/fuzz/left/ の残る誤りの類（候補の後に同じ場所に誤りが残る類）を、類・文面・detail・入力で並べる（`--seen` で既読の一覧に足して消す）",
+              "区切りで、主のツリーの gate の要約に `fuzz left:` が出たとき。読んで本物の不具合と見た入力を tests/fuzz/ へ写してから `--seen`",
+              "fuzz.py left --seen"),
 }  # fmt: skip
 
 

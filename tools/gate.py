@@ -412,7 +412,8 @@ examples:
 A worktree keeps its runs in its target/gate/history.jsonl: `tools/work.py patch` reads the last
 work check there and says whether the parent need run it again.
 In the main tree, the summary shows `fuzz new: …` (the inputs in target/fuzz/new/ that tests/fuzz/
-has no file of the same name for: not sorted yet), `sweep: …` (the shards) and `auto sweep: …` (the
+has no file of the same name for: not sorted yet), `fuzz left: …` (only when target/fuzz/left/ holds classes
+with an error left to read at a break, X-25), `sweep: …` (the shards) and `auto sweep: …` (the
 sweep a commit starts, tools/after_commit.py --help) after the golden line; only the warnings and the
 last line (the verdict) come after them. A whole run saves the base binaries of a clean HEAD."""
 
@@ -600,7 +601,7 @@ def _history(root, form, results, failed, tree=(None, False, None)):
     if gate_runs.whole_form(form.label()):
         gate_runs.save_base(root, gate_steps.BASES_KEPT, out=lambda line: notes.append(f"base: {line}"),
                             debug_limit=gate_steps.DEBUG_DIR_LIMIT)  # fmt: skip
-    notes.append(fuzz.unsorted_line(root))
+    notes += [line for line in (fuzz.unsorted_line(root), fuzz.left_line(root)) if line]
     try:
         rows, bad = gate_runs.read_history(root)
     except OSError as e:

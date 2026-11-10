@@ -56,7 +56,8 @@ sys.exit(1 if "e" in text else 0)
 
 
 # A stand-in for `onsa_cases --fix-same-place` (W3-17): an input with `BADCANDIDATE` breaks the
-# contract of a fix candidate; with `CRASH_FIX` in a path list's first input, the tool fails.
+# contract of a fix candidate (it changes the reading); one with `LEFTCANDIDATE` leaves an error at the
+# candidate's place (X-25); with `CRASH_FIX` in a path list's first input, the tool fails.
 FAKE_CASES = FAKE_SERVE + r"""
 import json, sys
 assert sys.argv[1] == "--fix-same-place"
@@ -68,10 +69,13 @@ for path in sys.argv[2:]:
         sys.exit(3)
     v = []
     if "BADCANDIDATE" in text:
-        v.append({"code": "E0010", "line": 1, "col": 1, "title": "parenthesize the `&&` of 12", "left": "E0010",
+        v.append({"code": "E0010", "line": 1, "col": 1, "title": "parenthesize the `&&` of 12", "left": "reading",
                   "left_line": 1, "left_col": 1, "message": "m"})
+    if "LEFTCANDIDATE" in text:
+        v.append({"code": "E0020", "line": 1, "col": 1, "title": "remove the `;`", "left": "E0002",
+                  "left_line": 1, "left_col": 2, "message": "expected `x`, found `y`"})
     if "SECONDCANDIDATE" in text:
-        v.append({"code": "E0010", "line": 1, "col": 1, "title": "take out the `&&`", "left": "E0010",
+        v.append({"code": "E0010", "line": 1, "col": 1, "title": "take out the `&&`", "left": "reading",
                   "left_line": 1, "left_col": 1, "message": "m"})
     out.append({"file": path, "candidates": len(v), "violations": v, "internal": None})
 print(json.dumps(out))
@@ -334,14 +338,14 @@ class Fuzz(TempRepo):
         self.assertEqual(len(fails), 2, text)
         self.assertIn("tests/fuzz/fixed.onsa: no longer crashes nor breaks the contract", fails[0])
         self.assertIn("tests/fuzz/unlisted.onsa: breaks the contract of a fix candidate but is not listed", fails[1])
-        self.assertIn("fix|E0010|parenthesize the `…` of #|E0010", fails[1])
+        self.assertIn("fix|E0010|parenthesize the `…` of #|reading", fails[1])
 
     def test_fix_stage_classes(self):
         # one mutant in FIX_EVERY goes through the fix stage; a new class is minimized and written
         self.repo.write("tests/spec/x.onsa", "BADCANDIDATE " * 10 + "\n")
         code, text = self.go(per_seed=fuzz.FIX_EVERY)
         self.assertEqual(code, 1, text)
-        self.assertIn("a new class of a broken fix candidate: fix-same-place: fix|E0010|parenthesize the `…` of #|E0010",
+        self.assertIn("a new class of a broken fix candidate: fix-same-place: fix|E0010|parenthesize the `…` of #|reading",
                       text)
         # 2 seeds of FIX_EVERY mutants: the first of each FIX_EVERY
         self.assertIn("2 mutants through the fix stage (0 not UTF-8)", text)
@@ -353,8 +357,8 @@ class Fuzz(TempRepo):
         code, text = self.go(per_seed=fuzz.FIX_EVERY)
         self.assertEqual(code, 0, text)
 
-    BAD = "fix|E0010|parenthesize the `…` of #|E0010"
-    SECOND = "fix|E0010|take out the `…`|E0010"
+    BAD = "fix|E0010|parenthesize the `…` of #|reading"
+    SECOND = "fix|E0010|take out the `…`|reading"
 
     def test_allowed_classes(self):
         # R-207: a class of the fix stage that the spec puts outside the contract is known through
@@ -542,7 +546,7 @@ class Fuzz(TempRepo):
         return narrowing.Base("abc1234", (), (sys.executable, "-B", str(self.repo.write("base_cases.py", script))))
 
     SAMPLED = narrowing.Selection(sample=1.0, salt="W9-99")
-    SIG = "fix|E0010|parenthesize the `…` of #|E0010"
+    SIG = "fix|E0010|parenthesize the `…` of #|reading"
 
     def test_a_class_the_base_shows_does_not_fail_a_narrowed_run(self):
         self.repo.write("tests/spec/x.onsa", "BADCANDIDATE " * 10 + "\n")
@@ -559,7 +563,7 @@ class Fuzz(TempRepo):
         self.repo.write("tests/spec/x.onsa", "BADCANDIDATE " * 10 + "\n")
         for name, script in (("no violation", FAKE_CASES.replace('"BADCANDIDATE" in text', "False")),
                              ("another message left", FAKE_CASES.replace('"message": "m"', '"message": "other"')),
-                             ("another code left", FAKE_CASES.replace('"left": "E0010"', '"left": "E0011"'))):
+                             ("another kind left", FAKE_CASES.replace('"left": "reading"', '"left": "cannot-apply"'))):
             with self.subTest(name):
                 code, text = self.go_narrowed(self.SAMPLED, self.base_of(script))
                 self.assertEqual(code, 1, text)
@@ -680,7 +684,7 @@ class Fuzz(TempRepo):
                                 ("known", "kx.onsa"), ("crash", "at.onsa"), ("crash", "mix.onsa"),
                                 ("crash", "z.onsa")], text)
         self.assertIn("sort: 7 inputs in", text)
-        self.assertIn(": 1 same name, 1 fixed, 2 known, 3 crash, 0 new; nothing moved (--go places and removes them)",
+        self.assertIn(": 1 same name, 1 fixed, 2 known, 3 crash, 0 left, 0 new; nothing moved (--go places and removes them)",
                       text)
         self.assertIn('target = "tests/fuzz/at.onsa"', text)
         self.assertIn('target = "tests/fuzz/mix.onsa"', text)  # the crash's entry, not the known class's
@@ -699,7 +703,7 @@ class Fuzz(TempRepo):
         # nothing to sort: no run of the compiler
         shutil.rmtree(self.new_dir)
         self.assertEqual(self.sort(), (0, f"sort: 0 inputs in {self.new_dir}: 0 same name, 0 fixed, 0 known, 0 crash, "
-                                          "0 new; nothing moved (--go places and removes them)"))
+                                          "0 left, 0 new; nothing moved (--go places and removes them)"))
 
     def test_sort_gives_the_allowed_entry_of_a_new_class(self):
         # X9-24: a new class of the fix stage stays with both entries; the allowed one, its reasons written,
@@ -707,7 +711,7 @@ class Fuzz(TempRepo):
         self.repo.write("target/fuzz/new/nf.onsa", "BADCANDIDATE")
         code, text = self.sort(go=True)
         self.assertEqual(code, 0, text)
-        self.assertIn(": 0 same name, 0 fixed, 0 known, 0 crash, 1 new; placed and removed", text)
+        self.assertIn(": 0 same name, 0 fixed, 0 known, 0 crash, 0 left, 1 new; placed and removed", text)
         self.assertIn('kind = "fuzz-input"', text)
         stub = text[text.index("[[allowed]]"):text.index("sort: ")]
         self.assertTrue(self.new_dir.joinpath("nf.onsa").exists())
@@ -755,6 +759,128 @@ class Fuzz(TempRepo):
         self.assertIn('kind = "fuzz-input"', text)
         self.assertNotIn("[[allowed]]", text)
 
+    # X-25: the classes with an error left at a candidate's place are listed to read, not failed on.
+    LEFT = "fix|E0020|remove the `…`|E0002"
+    LEFT_MSG = "expected `…`, found `…`"
+
+    @property
+    def left_dir(self):
+        return self.repo.root / "target" / "fuzz" / "left"
+
+    def read_left(self, seen=False):
+        lines = []
+        return fuzz.read_left(self.repo.root, self.left_dir, seen, out=lines.append), "\n".join(lines)
+
+    def test_a_class_with_an_error_left_is_listed_not_failed(self):
+        self.repo.write("tests/spec/x.onsa", "LEFTCANDIDATE " * 10 + "\n")
+        note = f"NOTE an error left at a candidate's place, to read at a break (tools/fuzz.py left): {self.LEFT} with `{self.LEFT_MSG}`"
+        for _ in range(2):  # a second run keeps one record of the class
+            code, text = self.go(per_seed=fuzz.FIX_EVERY, save=True)
+            self.assertEqual(code, 0, text)
+            self.assertIn("0 new classes (1 more with an error left, to read at a break);", text)
+            self.assertEqual([l for l in text.split("\n") if l.startswith(("NOTE", "FAIL"))][0][:len(note)], note)
+            self.assertNotIn("FAIL", text)
+            records, errors = fuzz.left_records(self.left_dir)
+            self.assertEqual(([(r["class"], r["left"], r["text"]) for r in records], errors),
+                             ([(self.LEFT, self.LEFT_MSG, "LEFTCANDIDATE")], []))  # minimized
+            self.assertTrue(records[0]["seed"].startswith("seed tests/spec/x.onsa, mutant "), records)
+            self.assertFalse((self.repo.root / "tests/fuzz").exists())  # never under tests/, --save too
+            self.assertFalse((self.repo.root / "target/fuzz/new").exists())
+        with mock.patch.object(fuzz, "target_directory", return_value=self.repo.root / "target"):
+            self.assertEqual(fuzz.left_line(self.repo.root),
+                             "fuzz left: 1 class(es) to read at a break (tools/fuzz.py left)")
+            code, text = self.read_left()
+            self.assertEqual(code, 0, text)
+            self.assertIn(f"{self.LEFT}\n  left: {self.LEFT_MSG}\n  E0020 at 1:1, candidate `remove the `;``, leaves "
+                          f"E0002 at 1:2: expected `x`, found `y`\n  input (seed tests/spec/x.onsa, mutant ", text)
+            self.assertTrue(text.endswith(f"in {self.left_dir}; nothing changed (--seen adds them to "
+                                          f"tests/fuzz/left_seen.txt)"), text)
+            self.repo.write("tests/fuzz/left_seen.txt", fuzz.SEEN_HEADER + "fix|E0020|z|E0002\tz\n")
+            code, text = self.read_left(seen=True)
+            self.assertEqual(code, 0, text)
+            self.assertIn("left: 1 classes (1 inputs) in ", text)
+            self.assertIn("; added to tests/fuzz/left_seen.txt and removed", text)
+            self.assertEqual((self.repo.root / "tests/fuzz/left_seen.txt").read_text(),
+                             fuzz.SEEN_HEADER + f"{self.LEFT}\t{self.LEFT_MSG}\nfix|E0020|z|E0002\tz\n")  # sorted
+            self.assertEqual(list(self.left_dir.iterdir()), [])
+            self.assertIsNone(fuzz.left_line(self.repo.root))
+        # a class read is known: no line, no record
+        code, text = self.go(per_seed=fuzz.FIX_EVERY)
+        self.assertEqual(code, 0, text)
+        self.assertIn("0 new classes (0 more with an error left", text)
+        self.assertNotIn("NOTE", text)
+        self.assertEqual(list(self.left_dir.iterdir()), [])
+        self.assertTrue(self.read_left(seen=True)[1].endswith("; nothing changed"))
+        # a narrowed run does not ask the base about it (its tool would fail)
+        (self.repo.root / "tests/fuzz/left_seen.txt").unlink()
+        code, text = self.go_narrowed(self.SAMPLED, self.base_of("import sys\nsys.exit(3)\n"))
+        self.assertEqual(code, 0, text)
+        self.assertIn("; base abc1234: 0 pre-existing;", text)
+
+    def test_the_other_classes_still_fail(self):
+        # a crash, an internal error and a class of the fix stage of another kind (`reading`) fail, beside one
+        # with an error left; so does a saved input not listed that shows one, the class read or not
+        self.repo.write("tests/spec/x.onsa", "XXXXXXXXXXXXXXXXXXXX\n")
+        self.repo.write("tests/spec/y.onsa", "BADCANDIDATE LEFTCANDIDATE " * 5 + "\n")
+        code, text = self.go(per_seed=fuzz.FIX_EVERY)
+        self.assertEqual(code, 1, text)
+        self.assertIn("2 new classes (1 more with an error left", text)
+        fails = [l for l in text.split("\n") if l.startswith("FAIL")]
+        self.assertEqual(len(fails), 2, text)
+        self.assertIn("a new crash class: check: internal|crates/onsa_sema/src/body.rs", fails[0])
+        self.assertIn(f"a new class of a broken fix candidate: fix-same-place: {self.BAD}", fails[1])
+        self.assertIn(f"\nNOTE an error left at a candidate's place, to read at a break (tools/fuzz.py left): {self.LEFT}",
+                      text)
+        self.assertEqual(len(list((self.repo.root / "target/fuzz/new").glob("*.onsa"))), 2)
+        (self.repo.root / "tests/spec/x.onsa").unlink()
+        (self.repo.root / "tests/spec/y.onsa").unlink()
+        self.repo.write("tests/fuzz/r.onsa", "LEFTCANDIDATE")
+        self.repo.write("tests/fuzz/left_seen.txt", f"{self.LEFT}\t{self.LEFT_MSG}\n")
+        code, text = self.go()
+        self.assertEqual(code, 1, text)
+        self.assertIn(f"FAIL tests/fuzz/r.onsa: breaks the contract of a fix candidate but is not listed in "
+                      f"tests/pending.toml: fix-same-place: {self.LEFT}", text)
+
+    def test_the_list_of_the_classes_read_is_checked(self):
+        self.repo.write("target/fuzz/left/a.json", "{}")  # a record that cannot be read: nothing changes
+        code, text = self.read_left(seen=True)
+        self.assertEqual(code, 1, text)
+        self.assertIn("a.json: not a record (class, left, detail, seed)", text)
+        self.assertTrue(text.endswith("; nothing changed"), text)
+        self.assertTrue((self.left_dir / "a.json").exists())
+        (self.left_dir / "a.json").unlink()
+        fuzz.write_left(self.left_dir, fuzz.Crash(self.LEFT, fuzz.FIX_COMMAND, "d", self.LEFT_MSG), "x", "s")
+        for line in (f"{self.LEFT}\t{self.LEFT_MSG}\tmore", self.LEFT, f"{self.BAD}\tm",
+                     "internal|crates/a.rs|boom\tm", f"{self.LEFT}\tline 3"):
+            with self.subTest(line=line):
+                self.repo.write("tests/fuzz/left_seen.txt", f"# a note\n\n{line}\n")
+                code, text = self.go()
+                self.assertEqual(code, 1, text)
+                self.assertIn("FAIL tests/fuzz/left_seen.txt:3: not `class<TAB>left` of a class with an error left",
+                              text)
+                code, text = self.read_left(seen=True)  # the list is not rewritten, the record stays
+                self.assertEqual(code, 1, text)
+                self.assertEqual(len(list(self.left_dir.glob("*.json"))), 1)
+                self.assertEqual((self.repo.root / "tests/fuzz/left_seen.txt").read_text(), f"# a note\n\n{line}\n")
+
+    def test_sort_moves_the_classes_with_an_error_left(self):
+        for name, text in (("l.onsa", "LEFTCANDIDATE"), ("ls.onsa", "LEFTCANDIDATE "), ("lb.onsa", "LEFTCANDIDATE BADCANDIDATE")):
+            self.repo.write(f"target/fuzz/new/{name}", text)
+        code, text = self.sort(go=True)
+        self.assertEqual(code, 0, text)
+        rows = re.findall(r"^(left|new) +(\S+)  (?:keep|move)", text, re.M)
+        self.assertEqual(rows, [("left", "l.onsa"), ("left", "ls.onsa"), ("new", "lb.onsa")], text)
+        self.assertIn(": 0 same name, 0 fixed, 0 known, 0 crash, 2 left, 1 new; placed and removed", text)
+        self.assertNotIn('target = "tests/fuzz/l.onsa"', text)  # no entry to add
+        self.assertEqual(sorted(p.name for p in self.new_dir.iterdir()), ["lb.onsa"])
+        records, _ = fuzz.left_records(self.left_dir)  # one of the class
+        self.assertEqual([(r["class"], r["text"], r["seed"]) for r in records], [(self.LEFT, "LEFTCANDIDATE", "sorted from new/l.onsa")])
+        # a class read is known
+        self.repo.write("tests/fuzz/left_seen.txt", f"{self.LEFT}\t{self.LEFT_MSG}\n")
+        self.repo.write("target/fuzz/new/l.onsa", "LEFTCANDIDATE")
+        code, text = self.sort()
+        self.assertTrue(text.startswith("known      l.onsa  remove: "), text)
+
     def test_commands(self):
         # X9-23, rules/tools.md 9.1: no command is `run` (the gate's call); `sort` finds the new inputs
         calls = []
@@ -801,7 +927,7 @@ class Fuzz(TempRepo):
                 self.assertEqual((code, [x.split()[0] for x in lines if not x.startswith(" ")]), (0, want or ["（役割"]))
         names = list(fuzz.COMMANDS)
         self.assertEqual([x.split()[0] for x in quiet_out(fuzz.main, ["help"])[1][: len(names)]], names)
-        self.assertEqual(names, ["run", "sort"])
+        self.assertEqual(names, ["run", "sort", "left"])
         sort_help = "\n".join(quiet_out(fuzz.main, ["help", "sort"])[1])
         for part in ("--save", "work.py patch", "もう一度回すとまた写る"):  # saving by hand (X9-23)
             self.assertIn(part, sort_help.replace("\n", ""))
@@ -810,7 +936,7 @@ class Fuzz(TempRepo):
             with self.subTest(flag=flag), mock.patch.object(sys, "stdout", buf), self.assertRaises(SystemExit) as e:
                 fuzz.main([flag])
             self.assertEqual(e.exception.code, 0)
-            self.assertIn("{run,sort,help}", buf.getvalue())
+            self.assertIn("{run,sort,left,help}", buf.getvalue())
             self.assertNotIn("--per-seed", buf.getvalue())
 
 

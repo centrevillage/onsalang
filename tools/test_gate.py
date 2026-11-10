@@ -647,7 +647,15 @@ class GateForms(GateRun):
             got = out.splitlines()
             at = got.index(want)
             self.assertTrue(got[at - 1].startswith("  golden: "), got)
-            self.assertTrue(got[at + 1].startswith("  sweep: next "), got)
+            self.assertTrue(got[at + 1].startswith("  sweep: next "), got)  # no `fuzz left:` with nothing to read
+            # X-25: the classes with an error left to read, after `fuzz new:`; the verdict stays
+            left = new.parent / fuzz.LEFT
+            fuzz.write_left(left, fuzz.Crash("fix|E0020|t|E0002", fuzz.FIX_COMMAND, "d", "m"), "x", "s")
+            code, out = lines()
+            got = out.splitlines()
+            self.assertEqual((code, got[got.index(want) + 1]),
+                             (0, "  fuzz left: 1 class(es) to read at a break (tools/fuzz.py left)"))
+            shutil.rmtree(left)
             self.assertIn(want, lines(["--only", "a"])[1].splitlines())  # as `sweep:`
             self.assertNotIn("fuzz new:", lines(["--quick"])[1])  # as `sweep:`
             for name in ("840a75a2.onsa", "7f730c9d.onsa"):
