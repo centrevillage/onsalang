@@ -1,0 +1,98 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§7"]
+// fixes = 0
+
+// E0320, with no candidate, for a name of a pattern that has no letter after its leading `_` (spec §7 "the name written in a pattern",
+// §2.3, S-656): `_0` and `__` are not capitalised, so they are bindings (the first letter is read after the leading `_`), and a
+// binding is a declared name, so the error is the E0320 of the name and not the E0302 of a name that is not found. The
+// candidate would be the name aligned to the rule, and that is not an identifier here (`0`, the empty name, `1x`), so there is none
+// (§2.3). `fixes = 0` checks that no candidate is offered. The places are the `let`, the arm, the parts of a pattern,
+// the `for`, a parameter and the parameter of a closure. One error per function (P-01); the names are not read, because the
+// error of the name is first (§18.1).
+
+pub struct Item {
+  x: I32,
+  y: I32,
+}
+
+pub fn let_zero() -> I32 {
+  let _0 = 1                                        //~ E0320
+  2
+}
+
+pub fn let_two_underscores() -> I32 {
+  let __ = 1                                        //~ E0320
+  2
+}
+
+pub fn let_digit_then_letter() -> I32 {
+  let _1x = 1                                       //~ E0320
+  2
+}
+
+pub fn let_many_digits() -> I32 {
+  let _007 = 1                                      //~ E0320
+  2
+}
+
+pub fn arm_two_underscores(n: I32) -> I32 {
+  match n {
+    __ => 1,                                        //~ E0320
+  }
+}
+
+pub fn arm_zero(n: I32) -> I32 {
+  match n {
+    _0 => 1,                                        //~ E0320
+  }
+}
+
+pub fn arm_zero_after_a_literal(n: I32) -> I32 {
+  match n {
+    0 => 1,
+    _0 => 2,                                        //~ E0320
+  }
+}
+
+pub fn in_a_tuple_pattern(t: (I32, I32)) -> I32 {
+  let (a, _0) = t                                   //~ E0320
+  a
+}
+
+pub fn in_the_payload_of_some(o: Option[I32]) -> I32 {
+  match o {
+    Some(_0) => 1,                                  //~ E0320
+    None => 0,
+  }
+}
+
+pub fn in_a_field_of_a_struct_pattern(v: Item) -> I32 {
+  let Item { x: _0, _ } = v                         //~ E0320
+  1
+}
+
+pub fn in_a_for(n: I32) -> I32 {
+  var r = 0
+  for _0 in 0 ..< n {                               //~ E0320
+    r = r + 1
+  }
+  r
+}
+
+pub fn as_a_parameter(_0: I32) -> I32 {             //~ E0320
+  1
+}
+
+pub fn as_a_parameter_of_a_closure(n: I32) -> I32 {
+  let f = fn(_0: I32) -> I32 { 1 }                  //~ E0320
+  f.(n)
+}
+
+// The right forms: a binding with a letter, and a wildcard.
+pub fn fine(n: I32) -> I32 {
+  match n {
+    0 => 1,
+    other => other,
+  }
+}

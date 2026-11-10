@@ -600,6 +600,8 @@ pub enum RowId {
     LeadingRange,
     LeadingVert,
     PatternDoubleVert,
+    ArmCommaPatterns,
+    PatternOrWord,
     PrefixPlus,
     TupleIndexLeadingZero,
     CalleeExpression,
@@ -1058,6 +1060,7 @@ fn closed_expr(c: &Cursor) -> Option<(NodeKind, u32)> {
 
 // ------------------------------------------------------------ the rows by their families
 
+mod arms;
 mod asserts;
 mod assign;
 mod calls;
@@ -1073,6 +1076,7 @@ mod modes;
 mod operators;
 mod paths;
 mod ranges;
+mod rests;
 mod rows;
 mod semicolons;
 

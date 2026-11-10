@@ -1,0 +1,73 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§3.1", "§18.1"]
+// fixes = 2
+// [[test.fix]]
+// at = "56:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["56:24 E0020"]
+//
+// [[test.fix]]
+// at = "56:5"
+// code = "E0020"
+// candidate = 2
+// leaves = ["56:25 E0020"]
+//
+// [[test.fix]]
+// at = "63:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["63:24 E0020"]
+//
+// [[test.fix]]
+// at = "63:5"
+// code = "E0020"
+// candidate = 2
+// leaves = ["63:25 E0020"]
+//
+// [[test.fix]]
+// at = "70:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["70:14 E0020"]
+//
+// [[test.fix]]
+// at = "70:5"
+// code = "E0020"
+// candidate = 2
+// leaves = ["70:15 E0020"]
+
+// (The two dots `..` and `...` have two readings, so two candidates: the end is not included, then included. §7.)
+// E0020 for a range as a pattern whose end is written in a form of another language (spec §7 "range patterns", §18.1, S-428). The end
+// is an expression of the guard form (§3.1), and if it reads as one, the error is the range's, E0020, and the candidate is the guard
+// that copies the end as it is (`1..<3u8` is `k if 1 <= k && k < 3u8`); the error of the end form is left for the check after the
+// candidate (a second step: the type suffix, the prefix `+`, the number with a leading 0, the `0o` octal), and it is the `leaves`
+// entry. The ends that do not read (`3abc`, an open `(`) are the E0002 of negative/range_pattern_foreign_end_unreadable.onsa. The forms at the
+// start of the range are in fixes/e0020_overlap_range_pattern.onsa and e0020_overlap_numeric_forms_range_pattern.onsa.
+//
+// NEW (S-253): the column of a `leaves` entry is the place of the end form in the text after the candidate, which depends on the
+// length of the name that the candidate introduces; the spec does not fix the name. The columns here are those of a name of one letter
+// (the `k` of the examples of §7, `k if 1 <= k && k < 3`). The files with these cases are to be adjusted if the name is longer.
+// One error per function (P-01).
+
+pub fn two_dots(x: U8) -> I32 {
+  match x {
+    v if 1 <= v && v < 3u8 => 1,                                    //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn three_dots(x: U8) -> I32 {
+  match x {
+    v if 1 <= v && v < 3u8 => 1,                                   //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn one_sided_two_dots(x: U8) -> I32 {
+  match x {
+    v if v < 3u8 => 1,                                     //~ E0020
+    _ => 0,
+  }
+}

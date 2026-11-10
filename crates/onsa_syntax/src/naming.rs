@@ -105,12 +105,12 @@ fn has_leading_underscore(name: &str) -> bool {
 }
 
 /// Whether a name read by its spelling is of a `snake_case` kind (§2.3): a
-/// binding in a pattern (§7), an effect-row variable in `[...]` (§8.1).
-// SPEC-GAP(S-656): a name with no letter after its leading `_` (`_0`, `__`)
-// has no case to read; it is read as a name whose first letter is not lowercase
-// (resolved in a pattern, a type parameter in `[...]`).
+/// binding in a pattern (§7), an effect-row variable in `[...]` (§8.1). It
+/// is a name that does not start with an uppercase letter, so one with no
+/// letter after its leading `_` (`_0`, `__`) is one too, and its naming
+/// rule reports it (E0320, S-656): the one test of both places.
 pub(crate) fn reads_lowercase(name: &str) -> bool {
-    spelled(name).starts_with(|c: char| c.is_ascii_lowercase())
+    !reads_uppercase(name)
 }
 
 /// Whether a name read by its spelling is of an `UpperCamel` kind (§2.3): a
@@ -472,7 +472,9 @@ mod tests {
         // E0320 is at the declaration).
         assert!(reads_constant("MAX__") && reads_constant("MAX_") && reads_constant("_A__B"));
         assert!(reads_lowercase("x__") && reads_uppercase("P__"));
-        assert!(!reads_lowercase("_0") && !reads_uppercase("_0"));
+        // S-656: a name with no letter after its `_` is not uppercase, so it is
+        // read as a binding and an effect-row variable.
+        assert!(reads_lowercase("_0") && reads_lowercase("__") && !reads_uppercase("_0"));
     }
 
     #[test]

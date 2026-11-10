@@ -5,9 +5,9 @@
 
 // S-903 (§7, §4.4): the `_` that ignores the rest of the fields is written only as the last element of the list of a struct
 // pattern, with nothing after it. The other places a `_` or a `..` could go are a pattern that cannot be read (E0002, with
-// no candidate: `fixes = 0` checks that none is offered): a `_` that is not last (`Item { _, x: a }`), two of them, a `,`
-// after the `_`, a `..` before or after it, and `_: a` as a field. The `..` that is not last or has a `,` after it is E0002
-// in the same way (the `..` that is last is E0020, fixes/e0020_patterns_rest*.onsa). The `_` is not the `...` of the struct
+// no candidate: `fixes = 0` checks that none is offered): a `_` with a `..` before or after it, and `_: a` as a field. The
+// `..` that is not last is E0002 in the same way (the `..` that is last is E0020, fixes/e0020_patterns_rest*.onsa). A `_`
+// that is not last and a `,` after the last `_` or `..` have a candidate (S-512, fixes/pattern_rest_comma_*.onsa). The `_` is not the `...` of the struct
 // literal (§4.4; filling with the defaults and ignoring are different meanings with different marks): `...` in a pattern is
 // E0002, and the `_` and the `..` in a struct literal are E0002 too. One error per function (P-01); the marker is on the
 // line of the pattern or the literal, and no column is written.
@@ -19,32 +19,6 @@ pub struct Item {
 }
 
 // ---- the `_` where it is not the last element
-
-pub fn the_rest_is_first(it: Item) -> I32 {
-  let Item { _, x: a } = it                         //~ E0002
-  a
-}
-
-pub fn the_rest_is_in_the_middle(it: Item) -> I32 {
-  match it {
-    Item { x: a, _, y: b } => a + b,                //~ E0002
-  }
-}
-
-pub fn two_rests(it: Item) -> I32 {
-  let Item { x: a, _, _ } = it                      //~ E0002
-  a
-}
-
-pub fn a_comma_after_the_rest(it: Item) -> I32 {
-  let Item { x: a, _, } = it                        //~ E0002
-  a
-}
-
-pub fn a_comma_after_the_rest_alone(it: Item) -> I32 {
-  let Item { _, } = it                              //~ E0002
-  1
-}
 
 pub fn the_rest_is_followed_by_dots(it: Item) -> I32 {
   let Item { x: a, _, .. } = it                     //~ E0002
@@ -66,19 +40,6 @@ pub fn the_rest_is_given_a_pattern_after_a_field(it: Item) -> I32 {
   a + b
 }
 
-pub fn the_rest_is_in_a_nested_pattern_not_last(o: Option[Item]) -> I32 {
-  var r = 0
-  match o {
-    Some(Item { _, x: a }) => {                     //~ E0002
-      r = a
-    },
-    None => {
-      r = 1
-    },
-  }
-  r
-}
-
 // ---- the dots in a pattern
 
 pub fn three_dots_in_a_pattern(it: Item) -> I32 {
@@ -94,11 +55,6 @@ pub fn three_dots_alone_in_a_pattern(it: Item) -> I32 {
 
 pub fn two_dots_that_are_not_last(it: Item) -> I32 {
   let Item { .., x: a } = it                        //~ E0002
-  a
-}
-
-pub fn two_dots_with_a_comma_after(it: Item) -> I32 {
-  let Item { x: a, .., } = it                       //~ E0002
   a
 }
 

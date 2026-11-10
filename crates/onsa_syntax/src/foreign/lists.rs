@@ -97,12 +97,22 @@ struct Case {
 
 /// The cases of [`list_fixes`], in the order of the decisions and of their
 /// candidates.
-const CASES: [Case; 4] = [
+const CASES: [Case; 5] = [
+    Case { holds: after_rest, makes: rest_fix, last: true },
     Case { holds: arm_sign, makes: sign_comma, last: true },
     Case { holds: comma_goes, makes: comma_fix, last: false },
     Case { holds: two_strings, makes: one_string, last: true },
     Case { holds: rejoins, makes: joined, last: true },
 ];
+
+/// A `,` after the rest of a struct pattern or literal (§7, §4.4, S-512).
+fn after_rest(a: &After) -> bool {
+    a.kind == TokenKind::Comma && a.c.closed.iter().any(|n| n.0.is_field_rest())
+}
+
+fn rest_fix(a: &After) -> Option<Fix> {
+    super::rests::rest_fix(a.c, a.prev)
+}
 
 /// A `-`, `|` or `+` that starts the next arm of a `match` (S-386).
 fn arm_sign(a: &After) -> bool {

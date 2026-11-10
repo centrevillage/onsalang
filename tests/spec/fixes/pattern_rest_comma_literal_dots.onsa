@@ -1,0 +1,68 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+// fixes = 1
+
+// E0002 for a `,` after the last `...` of a struct literal (spec §4.4, S-512): the `...` fills the fields that are not written
+// with the defaults of the declaration, it is the last in the list and nothing follows it (`Item { x: 1, ..., }`, in the block form too).
+// The candidate is the literal without the `,`, and nothing is left after it. The position of the E0002 is not in the spec: the
+// cases give the line only. One error per function (P-01). The right forms are at the end.
+
+pub struct Item {
+  x: I32,
+  y: I32 = 0,
+}
+
+pub struct Opts {
+  a: I32 = 1,
+  b: I32 = 2,
+}
+
+pub struct Wrap {
+  inner: Item,
+  tag: I32,
+}
+
+pub fn take(it: Item) -> I32 {
+  it.x
+}
+
+pub fn as_a_value() -> Item {
+  Item { x: 1, ..., }                               //~ E0002
+}
+
+pub fn only_the_dots() -> Opts {
+  Opts { ..., }                                     //~ E0002
+}
+
+pub fn as_an_argument() -> I32 {
+  take(Item { x: 1, ..., })                         //~ E0002
+}
+
+pub fn in_a_let() -> I32 {
+  let it = Item { x: 1, ..., }                      //~ E0002
+  it.x
+}
+
+pub fn in_the_block_form() -> Item {
+  Item {
+    x: 1,
+    ...,                                            //~ E0002
+  }
+}
+
+pub fn in_a_field() -> Wrap {
+  Wrap { inner: Item { x: 1, ..., }, tag: 2 }       //~ E0002
+}
+
+pub fn in_an_arm(n: I32) -> Item {
+  match n {
+    0 => Item { x: 1, ..., },                       //~ E0002
+    _ => Item { x: 2, ... },
+  }
+}
+
+// The right forms.
+pub fn fine() -> Item {
+  Item { x: 1, ... }
+}

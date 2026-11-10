@@ -1,0 +1,42 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§7"]
+// fixes = 1
+
+// E0320 for a name of a pattern that starts with `_` and has a letter after it (spec §2.3, §7, S-656; the reading did not change): `_x`
+// is a binding (its first letter, read after the `_`, is not a capital), the leading `_` is an error of the name, and the
+// candidate is the name without it (`x`), changed in the declaration and in the uses (§2.3). The names are used, so that the
+// E0309 of §5.1 does not come after the candidate. One error per function (P-01).
+
+pub struct Item {
+  x: I32,
+  y: I32,
+}
+
+pub fn in_a_let(n: I32) -> I32 {
+  let _x = n + 1                                    //~ E0320
+  _x * 2
+}
+
+pub fn in_an_arm(n: I32) -> I32 {
+  match n {
+    _x => _x + 1,                                   //~ E0320
+  }
+}
+
+pub fn in_a_tuple_pattern(t: (I32, I32)) -> I32 {
+  let (a, _b) = t                                   //~ E0320
+  a + _b
+}
+
+pub fn in_the_payload_of_some(o: Option[I32]) -> I32 {
+  match o {
+    Some(_v) => _v,                                 //~ E0320
+    None => 0,
+  }
+}
+
+pub fn in_a_field_of_a_struct_pattern(v: Item) -> I32 {
+  let Item { x: _a, _ } = v                         //~ E0320
+  _a
+}

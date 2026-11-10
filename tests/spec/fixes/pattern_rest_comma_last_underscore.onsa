@@ -1,0 +1,102 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+
+// E0002 for a `,` after the last `_` of a struct pattern (spec §7 "struct", S-512, S-903). The `_` that ignores the rest of
+// the fields is the last element and nothing follows it, not even a `,` (`Item { x: a, _, }`, in the block form too), and the
+// candidate is the one intent: the same pattern without the `,`. The pattern is a `let`, an arm, a part of
+// a larger pattern (a field, `Some`, a tuple), the arm of a closure or of a method. The position of the E0002 is not in
+// the spec, so the cases give the line only and have no `clean` entry. One error per function (P-01). The right forms are at the end.
+
+pub struct Item {
+  x: I32,
+  y: I32,
+  z: I32,
+}
+
+pub struct Wrap {
+  inner: Item,
+  tag: I32,
+}
+
+pub fn in_a_let(v: Item) -> I32 {
+  let Item { x: a, _, } = v                         //~ E0002
+  a
+}
+
+pub fn in_an_arm(v: Item) -> I32 {
+  match v {
+    Item { x: a, _, } => a,                         //~ E0002
+  }
+}
+
+pub fn two_fields_given(v: Item) -> I32 {
+  match v {
+    Item { x: a, y: b, _, } => a + b,               //~ E0002
+  }
+}
+
+pub fn the_rest_alone(v: Item) -> I32 {
+  match v {
+    Item { _, } => 1,                               //~ E0002
+  }
+}
+
+pub fn in_the_block_form_of_a_let(v: Item) -> I32 {
+  let Item {
+    x: a,
+    _,                                              //~ E0002
+  } = v
+  a
+}
+
+pub fn in_the_block_form_of_an_arm(v: Item) -> I32 {
+  match v {
+    Item {
+      x: a,
+      y: b,
+      _,                                            //~ E0002
+    } => a + b,
+  }
+}
+
+pub fn in_a_field(w: Wrap) -> I32 {
+  match w {
+    Wrap { inner: Item { x: a, _, }, tag: t } => a + t, //~ E0002
+  }
+}
+
+pub fn in_the_payload_of_some(o: Option[Item]) -> I32 {
+  match o {
+    Some(Item { x: a, _, }) => a,                   //~ E0002
+    None => 0,
+  }
+}
+
+pub fn in_a_tuple(p: (Item, I32)) -> I32 {
+  let (Item { x: a, _, }, n) = p                    //~ E0002
+  a + n
+}
+
+pub fn in_a_closure(v: Item) -> I32 {
+  let f = fn(k: Item) -> I32 {
+    match k {
+      Item { x: a, _, } => a,                       //~ E0002
+    }
+  }
+  f.(v)
+}
+
+impl Item {
+  pub fn first(self) -> I32 {
+    let Item { x: a, _, } = self                    //~ E0002
+    a
+  }
+}
+
+// The right forms.
+pub fn fine(v: Item) -> I32 {
+  let Item { x: a, _ } = v
+  a
+}

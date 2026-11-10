@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+
+// The `_` of a tuple pattern is one element, like any other: it is not the rest of the fields, so the rule of the last `_` of a struct
+// pattern (S-512: nothing follows it, not even a `,`) is not for it. The block form of a tuple puts a `,` after every element (the
+// last `_` too, spec/tools.md §3), and a struct pattern inside a tuple keeps its own last `_` with no `,`. The file is canonical.
+
+pub struct Item {
+  x: I32,
+  y: I32,
+}
+
+pub fn a_tuple_in_the_block_form(t: (I32, I32)) -> I32 {
+  let (
+    a,
+    _,
+  ) = t
+  a
+}
+
+pub fn a_struct_in_a_tuple(p: (Item, I32)) -> I32 {
+  let (Item { x: a, _ }, n) = p
+  a + n
+}
+
+pub fn a_tuple_in_a_struct(v: Item, t: (I32, I32)) -> I32 {
+  let Item { x: a, _ } = v
+  let (b, _) = t
+  a + b
+}

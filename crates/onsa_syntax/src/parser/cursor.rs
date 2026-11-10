@@ -234,6 +234,19 @@ impl<'a> Parser<'a> {
         Err(self.fail(Want::Separator(list), &format!("`,` or {}", close.describe())))
     }
 
+    /// The `}` of a struct pattern or literal of `list` after its elements,
+    /// the last of them its rest (`_`, `..`, `...`) when `rest`: a `,` after
+    /// the rest is the E0002 that says it is last, with `rule` as its note
+    /// (§7, §4.4, S-512).
+    pub(super) fn close_after_rest(&mut self, list: NodeKind, rest: Option<Token>, rule: &str) -> PResult<Token> {
+        if let Some(rest) = rest.filter(|_| self.at(TokenKind::Comma)) {
+            let expected = format!("`}}` after the rest `{}`, which is last", self.token_text(rest));
+            let comma = self.peek();
+            return Err(self.fail_noting(Want::Separator(list), &expected, comma, rule));
+        }
+        self.close_list(list, TokenKind::RBrace)
+    }
+
     pub(super) fn skip_newlines(&mut self) {
         while matches!(self.peek_kind(), TokenKind::Newline) {
             self.bump();

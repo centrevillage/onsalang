@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§7"]
+
+// A name that has a capital after its leading `_` (`_Foo`, `_MAX`) is not a binding but a name to resolve (spec §7: the names that start
+// with a capital are resolved; §2.3: the first letter is read after the `_`; S-656, the reading did not change). Nothing declares it
+// (a leading `_` cannot be declared, §2.3), so it is the E0302 of a name that is not found, and not the E0320 of a binding. One error per function (P-01).
+
+pub fn upper_camel(n: I32) -> I32 {
+  match n {
+    _Foo => 1,                                      //~ E0302
+    _ => 0,
+  }
+}
+
+pub fn upper_snake(n: I32) -> I32 {
+  match n {
+    _MAX => 1,                                      //~ E0302
+    _ => 0,
+  }
+}
+
+pub fn in_the_payload_of_some(o: Option[I32]) -> I32 {
+  match o {
+    Some(_Foo) => 1,                                //~ E0302
+    _ => 0,
+  }
+}

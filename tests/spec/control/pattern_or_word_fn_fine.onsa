@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§2.2"]
+
+// A function named `or` (§2.2: the word is no keyword) is called as any function, in an expression and in a guard, next to an arm
+// that is a plain choice. The word after an expression is not the choice of patterns (S-402), the call has a `(` right after the name.
+// The file is canonical.
+
+pub fn or(a: Bool, b: Bool) -> Bool {
+  a || b
+}
+
+pub fn calls_it(a: Bool, b: Bool) -> Bool {
+  or(a, b)
+}
+
+pub fn calls_it_in_a_guard(n: I32, a: Bool, b: Bool) -> I32 {
+  match n {
+    0 | 1 if or(a, b) => 1,
+    _ => 0,
+  }
+}

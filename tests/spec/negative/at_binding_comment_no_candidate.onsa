@@ -5,8 +5,8 @@
 // E0002, with no candidate, for an `@` binding that has a comment in what the guard form would copy (spec §7,
 // §18.1; S-251; the row `at_binding` of spec/foreign-forms.toml). The candidate writes the name on the left
 // and the comparison of the right side in a guard, so a comment in the right side (after the `@`, or between the
-// alternatives of its choice) would be lost; there is no candidate. The code is E0002 and the main message says
-// that this `@` binding is no comparison a guard can write; the note is to say that the comment is the reason (its
+// alternatives of its choice) would be lost; there is no candidate. The code is E0002, of the row `at_binding_complex`
+// when the arm has a choice and else of `at_binding` (S-845); the note is to say that the comment is the reason (its
 // text is the implementation's, and the runner of the cases does not compare it). The comment is the marker
 // itself. The main position is the `@`. One error in each declaration unit (P-01).
 

@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 0
+
+// E0002, with no candidate, where `or` is no choice of patterns (spec §7, §18.1, S-402). After a pattern, an `or` that no pattern follows
+// (before the `=>`, the `if`, another `or`) is the general E0002. The word `or` between two expressions (a `let`, a guard) is
+// no form of the list (the C# choice is a form of the patterns only), so it is the general E0002 of the syntax, and a
+// candidate (`||`) is not made. `fixes = 0` checks that no candidate is offered. One error per function (P-01).
+
+pub fn nothing_after_the_or(n: I32) -> I32 {
+  match n {
+    0 or => 1,                                      //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn a_guard_after_the_or(n: I32, c: Bool) -> I32 {
+  match n {
+    0 or if c => 1,                                 //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn nothing_after_the_second_or(n: I32) -> I32 {
+  match n {
+    0 or 1 or => 1,                                 //~ E0002
+    _ => 0,
+  }
+}
+
+pub fn or_between_two_names(a: Bool, b: Bool) -> Bool {
+  let c = a or b                                    //~ E0002
+  c
+}
+
+pub fn or_in_a_guard(n: I32, a: Bool, b: Bool) -> I32 {
+  match n {
+    0 if a or b => 1,                               //~ E0002
+    _ => 0,
+  }
+}
+
+// The right forms: a choice, and the operator of the guard.
+pub fn fine(n: I32, a: Bool, b: Bool) -> I32 {
+  match n {
+    0 | 1 if a || b => 1,
+    _ => 0,
+  }
+}

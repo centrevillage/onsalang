@@ -1,0 +1,79 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 2
+
+// E0020 for patterns with `,` between them (S-402), for the other kinds of pattern: the variants of an enum, constants (the names that
+// stand for a value, §7), the payload of `Some`, and tuple patterns. The two candidates are the choice (candidate 1) and
+// the tuple (candidate 2). The choice of the variants of the first function covers the enum, so the candidate leaves no
+// error of the earlier stages. One error per function (P-01).
+
+pub enum Color {
+  Red,
+  Green,
+  Blue,
+}
+
+const LOW: I32 = 1
+const HIGH: I32 = 9
+
+pub fn variants(c: Color) -> I32 {
+  match c {
+    Color.Red | Color.Green => 1,                    //~ E0020
+    Color.Blue => 2,
+  }
+}
+
+pub fn constants(n: I32) -> I32 {
+  match n {
+    LOW | HIGH => 1,                                 //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn a_constant_and_a_literal(n: I32) -> I32 {
+  match n {
+    LOW | 5 => 1,                                    //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn payloads(o: Option[I32]) -> I32 {
+  match o {
+    Some(0) | Some(1) => 1,                          //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn a_variant_and_none(o: Option[I32]) -> I32 {
+  match o {
+    Some(0) | None => 1,                             //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn tuples(t: (I32, I32)) -> I32 {
+  match t {
+    (0, 0) | (1, 1) => 1,                            //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn wildcard_after_a_literal(n: I32) -> I32 {
+  match n {
+    0 | _ => 1,                                      //~ E0020
+  }
+}
+
+// The right forms.
+pub fn fine(c: Color, o: Option[I32]) -> I32 {
+  let a = match c {
+    Color.Red | Color.Green => 1,
+    Color.Blue => 2,
+  }
+  let b = match o {
+    Some(0) | None => 1,
+    _ => 0,
+  }
+  a + b
+}

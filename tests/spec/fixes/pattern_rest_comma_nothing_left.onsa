@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+
+// E0002 for a `_` that is not the last element of a struct pattern that names every field (spec §7 "struct", S-512). The
+// candidate takes the `_` away and puts one at the end; the `_` then has no field left to ignore, which is the E0410 of the types
+// stage, whose candidate takes the `, _` out (§7). The two steps end with no error: the `_` put last is the writer's text that the
+// candidate moves, so the gate's walk of the candidates (`onsa_cases --fix-loop`) does not count the second step as undoing the
+// first (U3c's `Fix::moved`). One error per function (P-01).
+
+pub struct Item {
+  x: I32,
+  y: I32,
+}
+
+pub fn every_field_named(v: Item) -> I32 {
+  let Item { _, x: a, y: b } = v                    //~ E0002
+  a + b
+}
+
+// The right form.
+pub fn fine(v: Item) -> I32 {
+  let Item { x: a, y: b } = v
+  a + b
+}

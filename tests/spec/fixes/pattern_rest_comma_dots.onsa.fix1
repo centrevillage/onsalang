@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+
+// E0002 for a `,` after the `..` of a struct pattern (spec §7, S-512, S-500). The syntax does not take the `..` (the rest of the
+// fields is a `_`, and the `..` is the E0020 of the types stage, which needs the fields), so the `,` after it is the E0002 of the list,
+// and its candidate is the one intent: the pattern without the `,`. After it the `..` itself is left, as an error of the
+// types stage, which is a later stage than the E0002 (the contract of the candidates, §18.1). The position of the E0002 is not in the
+// spec: the cases give the line only. One error per function (P-01).
+
+pub struct Item {
+  x: I32,
+  y: I32,
+  z: I32,
+}
+
+pub fn in_a_let(v: Item) -> I32 {
+  let Item { x: a, .. } = v                        //~ E0002
+  a
+}
+
+pub fn in_an_arm(v: Item) -> I32 {
+  match v {
+    Item { x: a, .. } => a,                        //~ E0002
+  }
+}
+
+pub fn only_the_dots(v: Item) -> I32 {
+  match v {
+    Item { .. } => 1,                              //~ E0002
+  }
+}
+
+pub fn in_the_block_form(v: Item) -> I32 {
+  let Item {
+    x: a,
+    ..                                             //~ E0002
+  } = v
+  a
+}
+
+pub fn in_the_payload_of_some(o: Option[Item]) -> I32 {
+  match o {
+    Some(Item { x: a, .. }) => a,                  //~ E0002
+    None => 0,
+  }
+}
+
+pub fn in_a_closure(v: Item) -> I32 {
+  let f = fn(k: Item) -> I32 {
+    match k {
+      Item { x: a, .. } => a,                      //~ E0002
+    }
+  }
+  f.(v)
+}

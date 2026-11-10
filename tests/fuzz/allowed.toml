@@ -376,25 +376,11 @@ reasons = ["S-384"]
 note = "two errors: the `-` at the head of a line and a `(` never closed after a `~`"
 
 [[allowed]]
-class = "fix|E0020|remove the type suffix|E0020"
-left = "ranges cannot be patterns; compare in a guard"
-input = "tests/fuzz/03792f38.onsa"
-reasons = ["S-281", "S-236"]
-note = "one failure read as two forms (R-206): a number with a type suffix (`1f32`) that starts a range pattern; the shorter form from the same start is reported (S-281), and the range pattern is left for the next check, at the same place (the `leaves` of tests/spec/fixes/e0020_overlap_numeric_forms_range_pattern.onsa)"
-
-[[allowed]]
 class = "fix|E0002|write the `…` between the elements|E0020"
 left = "a `…` goes between the alternatives of a pattern, not before the first"
 input = "tests/fuzz/05af451b.onsa"
 reasons = ["S-386", "S-383"]
 note = "an arm without its `,` before a line that starts with `|`: the `,`, then the `|` before the first alternative (S-383), two steps as S-386 decided"
-
-[[allowed]]
-class = "fix|E0020|read it as decimal|E0020"
-left = "ranges cannot be patterns; compare in a guard"
-input = "tests/fuzz/10938aa7.onsa"
-reasons = ["S-281", "S-236"]
-note = "one failure read as two forms (R-206): a decimal integer with a leading zero (`017`) that starts a range pattern; the shorter form from the same start is reported (S-281), and the range pattern is left for the next check, at the same place (the `leaves` of tests/spec/fixes/e0020_overlap_numeric_forms_range_pattern.onsa)"
 
 [[allowed]]
 class = "fix|E0003|move `…` to the end of the line before|E0002"
@@ -411,20 +397,6 @@ reasons = ["S-389", "S-383"]
 note = "a `||` where a pattern starts: one `|`, then the `|` before the first alternative (S-383), two steps as S-389 decided"
 
 [[allowed]]
-class = "fix|E0020|take the `…` out|E0020"
-left = "ranges cannot be patterns; compare in a guard"
-input = "tests/fuzz/53410584.onsa"
-reasons = ["S-281", "S-405"]
-note = "one failure read as two forms (R-206): a prefix `+` that starts a range pattern (`(+1..)`); the `+` is reported first (S-281), and the range pattern is left for the next check, at the same place"
-
-[[allowed]]
-class = "fix|E0020|add the `…` before the point|E0020"
-left = "ranges cannot be patterns; compare in a guard"
-input = "tests/fuzz/56eeec5e.onsa"
-reasons = ["S-281", "S-236"]
-note = "one failure read as two forms (R-206): a float with a leading point (`.5`) that starts a range pattern; the shorter form from the same start is reported (S-281), and the range pattern is left for the next check, at the same place (the `leaves` of tests/spec/fixes/e0020_overlap_numeric_forms_range_pattern.onsa)"
-
-[[allowed]]
 class = "fix|E0003|move `…` to the end of the line before|E0001"
 left = "`…` (U+#) cannot be written outside comments and strings: a name is written with"
 input = "tests/fuzz/c47fe1f3.onsa"
@@ -437,13 +409,6 @@ left = "expected an expression, found `…`"
 input = "tests/fuzz/c94ecb45.onsa"
 reasons = ["S-384"]
 note = "an input with two errors: an `else` on the next line, and a `]` where the condition of its `if` starts, which the input has before the candidate"
-
-[[allowed]]
-class = "fix|E0020|write the number in decimal|E0020"
-left = "ranges cannot be patterns; compare in a guard"
-input = "tests/fuzz/d66681d5.onsa"
-reasons = ["S-281", "S-236"]
-note = "one failure read as two forms (R-206): an octal number (`0o17`) that starts a range pattern; the shorter form from the same start is reported (S-281), and the range pattern is left for the next check, at the same place (the `leaves` of tests/spec/fixes/e0020_overlap_numeric_forms_range_pattern.onsa)"
 
 [[allowed]]
 class = "fix|E0020|write it against its operand|E0020"
@@ -465,13 +430,6 @@ left = "expected field name, found integer literal"
 input = "tests/fuzz/32e8524b.onsa"
 reasons = ["S-413"]
 note = "a `{` after a constant's name on the next line in brackets (`two(N` and `{ 1 })`): the E0003 first, and what is left of the literal is reported by the next check, as S-413 decided"
-
-[[allowed]]
-class = "fix|E0020|read it as octal|E0020"
-left = "ranges cannot be patterns; compare in a guard"
-input = "tests/fuzz/4c857f74.onsa"
-reasons = ["S-281", "S-236"]
-note = "`read it as decimal` の許可（`76db4720`）と同じ入力の形の、二番目の候補。範囲の誤りが別にある入力"
 
 [[allowed]]
 class = "fix|E0003|move `…` to the end of the line before|E0002"

@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§4.4", "§18.1"]
+// fixes = 0
+
+// E0002, with no candidate, for a `,` after a `_`, a `..` or a `...` where the candidate "without the `,`" would still be an E0002 of the
+// syntax stage (spec §7, §4.4, S-512; §18.1: a candidate that leaves an error of its stage is not made). The `_` of a struct
+// literal and the `..` of a struct literal are no elements of it, the `...` of a struct pattern is none either, and a `..` before the last
+// `_` leaves the `..` that is not last. `fixes = 0` checks that no candidate is offered. One error per function (P-01).
+
+pub struct Item {
+  x: I32,
+  y: I32 = 0,
+}
+
+pub fn the_rest_of_a_pattern_in_a_literal(a: I32) -> Item {
+  Item { x: a, _, }                                 //~ E0002
+}
+
+pub fn the_dots_of_a_pattern_in_a_literal(a: I32) -> Item {
+  Item { x: a, .., }                                //~ E0002
+}
+
+pub fn the_dots_of_a_literal_in_a_pattern(v: Item) -> I32 {
+  let Item { x: a, ..., } = v                       //~ E0002
+  a
+}
+
+pub fn dots_before_the_last_rest(v: Item) -> I32 {
+  let Item { x: a, .., _, } = v                     //~ E0002
+  a
+}
+
+// The right forms.
+pub fn fine(v: Item) -> I32 {
+  let Item { x: a, _ } = v
+  a
+}

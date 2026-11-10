@@ -1,0 +1,52 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 0
+
+// E0002, with no candidate, for a `,` after which the line ends (spec §7, S-402): the form of `0, 1 =>` has the `,` and the next
+// pattern on one line, so `0,` before a newline is the missing `=>` of the general E0002 (the body of an arm that is
+// forgotten is not turned into a choice by a candidate). Every `,` of the arm counts: the second `,` of `0, 1,` before a newline
+// makes the arm this error too. The marker is on the line of the first `,`, where the `=>` was to be (the line of the pattern; the
+// column is not written). `fixes = 0` checks that no candidate is offered. One error per function (P-01).
+
+pub fn the_comma_ends_the_line(n: I32) -> I32 {
+  match n {
+    0,                                              //~ E0002
+    1 => 2,
+    _ => 0,
+  }
+}
+
+pub fn the_second_comma_ends_the_line(n: I32) -> I32 {
+  match n {
+    0, 1,                                           //~ E0002
+    2 => 3,
+    _ => 0,
+  }
+}
+
+pub fn three_lines(n: I32) -> I32 {
+  match n {
+    0,                                              //~ E0002
+    1,
+    2 => 3,
+    _ => 0,
+  }
+}
+
+pub fn the_comma_ends_the_line_before_a_guard(n: I32, c: Bool) -> I32 {
+  match n {
+    0,                                              //~ E0002
+    1 if c => 2,
+    _ => 0,
+  }
+}
+
+// The right form, a choice with its `|` at the end of the line (§2.5).
+pub fn fine(n: I32) -> I32 {
+  match n {
+    0 |
+    1 => 2,
+    _ => 0,
+  }
+}

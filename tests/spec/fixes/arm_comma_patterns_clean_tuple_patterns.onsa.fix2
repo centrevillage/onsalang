@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 2
+// [[test.fix]]
+// at = "16:5"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// S-402 (§7): the patterns of the arm are tuple patterns of a tuple subject. The choice `(0, 0) | (1, 1) =>` is the candidate that
+// leaves nothing (`clean`); the tuple of tuples (candidate 2) leaves an error of the types stage. This file has this one error.
+
+pub fn only_one_form(a: I32, b: I32) -> I32 {
+  match (a, b) {
+    ((0, 0), (1, 1)) => 1,                            //~ E0020
+    _ => 0,
+  }
+}

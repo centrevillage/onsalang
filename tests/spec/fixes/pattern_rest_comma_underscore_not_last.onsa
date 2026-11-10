@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+
+// E0002 for a `_` that is not the last element of a struct pattern (spec §7 "struct", S-512, S-903). The `_` means "the rest of the
+// fields are ignored", which is one meaning wherever it stands, so the intent is one and the candidate takes all the `_` away and puts
+// one at the end (`Item { _, x: a, _ }` is `Item { x: a, _ }`). A candidate that would leave an E0002 of the syntax stage is not made
+// (the forms with a `..` in negative/struct_rest_syntax.onsa). The position of the E0002 is not in the spec: the cases give the line
+// only. Each pattern leaves a field out so that the `_` after the candidate still has a field to ignore. One error per function (P-01).
+
+pub struct Item {
+  x: I32,
+  y: I32,
+  z: I32,
+}
+
+pub fn first(v: Item) -> I32 {
+  let Item { _, x: a } = v                          //~ E0002
+  a
+}
+
+pub fn in_the_middle(v: Item) -> I32 {
+  match v {
+    Item { x: a, _, y: b } => a + b,                //~ E0002
+  }
+}
+
+pub fn first_and_last(v: Item) -> I32 {
+  let Item { _, x: a, _ } = v                       //~ E0002
+  a
+}
+
+pub fn two_at_the_end(v: Item) -> I32 {
+  let Item { x: a, _, _ } = v                       //~ E0002
+  a
+}
+
+pub fn two_at_the_start(v: Item) -> I32 {
+  let Item { _, _, x: a } = v                       //~ E0002
+  a
+}
+
+pub fn three_of_them(v: Item) -> I32 {
+  let Item { _, x: a, _, _ } = v                    //~ E0002
+  a
+}
+
+pub fn in_the_payload_of_some(o: Option[Item]) -> I32 {
+  match o {
+    Some(Item { _, x: a }) => a,                    //~ E0002
+    None => 0,
+  }
+}
+
+pub fn in_a_tuple(p: (Item, I32)) -> I32 {
+  let (Item { _, x: a }, n) = p                     //~ E0002
+  a + n
+}
+
+pub fn in_a_closure(v: Item) -> I32 {
+  let f = fn(k: Item) -> I32 {
+    match k {
+      Item { _, x: a } => a,                        //~ E0002
+    }
+  }
+  f.(v)
+}
+
+// The right form.
+pub fn fine(v: Item) -> I32 {
+  let Item { x: a, _ } = v
+  a
+}

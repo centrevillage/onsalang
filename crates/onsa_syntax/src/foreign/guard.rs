@@ -235,11 +235,12 @@ impl<'c, 'a> Toks<'c, 'a> {
             && !matches!(c.kind(self.toks[a + 1]), TokenKind::Minus | TokenKind::Bang);
         let from = if minus { a + 1 } else { a };
         let (first, last) = (c.full[self.toks[from]] as usize, c.full[self.toks[b]] as usize);
-        if !crate::parser::reads_as_expr(c.file, c.text, c.all, c.literals, first, last) {
+        let read = as_operands(&c.all[first..=last]);
+        if !crate::parser::reads_as_expr(c.file, c.text, read.clone(), c.literals) {
             return None;
         }
         let text = if minus { format!("-{}", self.text(a + 1, b)) } else { self.text(a, b) };
-        let top = operand(&(self.toks[a]..=self.toks[b]).map(|i| c.kind(i)).collect::<Vec<_>>());
+        let top = operand(&read.iter().map(|t| t.kind).collect::<Vec<_>>());
         Some(if BinOp::Le.bare(side, top) { text } else { format!("({text})") })
     }
 
@@ -256,6 +257,26 @@ impl<'c, 'a> Toks<'c, 'a> {
             _ => PatKind::Bad(Form::Range),
         }
     }
+}
+
+/// The tokens `run` of an end of a range with the forms of other languages
+/// in it read as what they stand for (§7, §18.1, S-428): a number written
+/// as in other languages as a name, and a `+`, `++`, `--` or `.` where an
+/// operand starts (`+3`, `--3`, the point of `.5`) taken out. The guard copies the end
+/// as written, and the check after the candidate reports each form.
+fn as_operands(run: &[Token]) -> Vec<Token> {
+    let mut out: Vec<Token> = Vec::new();
+    for (k, t) in run.iter().enumerate() {
+        let starts = out.iter().rev().find(|t| !t.kind.is_trivia()).is_none_or(|p| !ends_operand(p.kind));
+        let point = run.get(k + 1).is_some_and(|n| n.kind == TokenKind::Int && n.span.start == t.span.end);
+        match t.kind {
+            TokenKind::ForeignLit => out.push(Token { kind: TokenKind::Ident, ..*t }),
+            TokenKind::Plus | TokenKind::PlusPlus | TokenKind::MinusMinus if starts => {}
+            TokenKind::Dot if starts && point => {}
+            _ => out.push(*t),
+        }
+    }
+    out
 }
 
 /// The text of the tokens `a..=b` of `toks`.
@@ -387,13 +408,15 @@ enum Why {
 }
 
 impl Why {
-    /// The row of a pattern with no candidate whose first form is `head`:
-    /// that of the alternatives but where a form makes none (S-48, S-317).
-    fn row(&self, head: Form) -> RowId {
+    /// The row of a pattern with no candidate whose first form is `head`,
+    /// whatever the reason (S-845): that of the alternatives when the arm
+    /// has a choice (`choice`, [`has_choice`]), else the form's; an `@`
+    /// whose right side is no comparison is always `at_binding_complex`.
+    fn row(&self, head: Form, choice: bool) -> RowId {
         match self {
             Why::Bad(Form::At) => Form::At.choice_row(),
-            Why::Bad(_) | Why::EndComment | Why::Unread => head.row(),
-            Why::Skeletons | Why::Comment | Why::NoForm | Why::GuardEnd => head.choice_row(),
+            _ if choice => head.choice_row(),
+            _ => head.row(),
         }
     }
 
@@ -539,6 +562,17 @@ fn forms(p: &Pat, out: &mut Vec<(Form, usize, usize)>) {
     }
 }
 
+/// Whether `p` has a choice (`p | q`, also on the right of an `@`), which
+/// gives a pattern with no candidate the row of the alternatives (S-845).
+fn has_choice(p: &Pat) -> bool {
+    match &p.kind {
+        PatKind::Or(_) => true,
+        PatKind::Hole(..) | PatKind::Bad(_) | PatKind::Leaf(_) => false,
+        PatKind::Paren(q) | PatKind::At { rhs: q, .. } => has_choice(q),
+        PatKind::Node(v) => v.iter().any(has_choice),
+    }
+}
+
 /// The form of a pattern that starts at the failing token, and its first
 /// and last token (indexes of `tokens`): read by the reader of the arms
 /// (one reading of the forms, D-15), from the name before an `@`.
@@ -615,6 +649,7 @@ pub(super) fn guard_pattern(c: &Cursor) -> Option<(RowId, Hit)> {
     if let Some((arm, _)) = &read {
         forms(&arm.pat, &mut in_arm);
     }
+    let choice = read.as_ref().is_some_and(|(arm, _)| has_choice(&arm.pat));
     let (head, span) = match (&read, in_arm.first(), in_arm.last()) {
         (Some((arm, _)), Some(&(head, a, _)), Some(&(_, _, b))) => {
             (head, c.file_span(c.span(arm.toks[a]).start, c.span(arm.toks[b]).end))
@@ -630,7 +665,7 @@ pub(super) fn guard_pattern(c: &Cursor) -> Option<(RowId, Hit)> {
     };
     match outcome {
         Ok(fixes) => found(head.row(), span, fixes),
-        Err(why) => Some((why.row(head), Hit::new(span, Vec::new()).with_note(why.note()))),
+        Err(why) => Some((why.row(head, choice), Hit::new(span, Vec::new()).with_note(why.note()))),
     }
 }
 

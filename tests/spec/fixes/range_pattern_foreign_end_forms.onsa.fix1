@@ -1,0 +1,184 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§3.1", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "91:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["91:24 E0020"]
+//
+// [[test.fix]]
+// at = "98:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["98:25 E0020"]
+//
+// [[test.fix]]
+// at = "105:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["105:24 E0020"]
+//
+// [[test.fix]]
+// at = "112:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["112:25 E0020"]
+//
+// [[test.fix]]
+// at = "119:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["119:24 E0020"]
+//
+// [[test.fix]]
+// at = "126:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["126:24 E0020"]
+//
+// [[test.fix]]
+// at = "133:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["133:14 E0020"]
+//
+// [[test.fix]]
+// at = "140:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["140:15 E0020"]
+//
+// [[test.fix]]
+// at = "147:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["147:26 E0020"]
+//
+// [[test.fix]]
+// at = "154:10"
+// code = "E0020"
+// candidate = 1
+// leaves = ["154:30 E0020"]
+//
+// [[test.fix]]
+// at = "161:9"
+// code = "E0020"
+// candidate = 1
+// leaves = ["161:29 E0020"]
+//
+// [[test.fix]]
+// at = "168:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["168:26 E0020"]
+
+// E0020 for a range as a pattern whose end is written in a form of another language (spec §7 "range patterns", §18.1, S-428). The end
+// is an expression of the guard form (§3.1), and if it reads as one, the error is the range's, E0020, and the candidate is the guard
+// that copies the end as it is (`1..<3u8` is `k if 1 <= k && k < 3u8`); the error of the end form is left for the check after the
+// candidate (a second step: the type suffix, the prefix `+`, the number with a leading 0, the `0o` octal), and it is the `leaves`
+// entry. The ends that do not read (`3abc`, an open `(`) are the E0002 of negative/range_pattern_foreign_end_unreadable.onsa. The forms at the
+// start of the range are in fixes/e0020_overlap_range_pattern.onsa and e0020_overlap_numeric_forms_range_pattern.onsa.
+//
+// NEW (S-253): the column of a `leaves` entry is the place of the end form in the text after the candidate, which depends on the
+// length of the name that the candidate introduces; the spec does not fix the name. The columns here are those of a name of one letter
+// (the `k` of the examples of §7, `k if 1 <= k && k < 3`). The files with these cases are to be adjusted if the name is longer.
+// One error per function (P-01).
+
+pub fn suffix_half_open(x: U8) -> I32 {
+  match x {
+    v if 1 <= v && v < 3u8 => 1,                                   //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn suffix_closed(x: U8) -> I32 {
+  match x {
+    v if 1 <= v && v <= 3u8 => 1,                                   //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn prefix_plus_half_open(x: I32) -> I32 {
+  match x {
+    v if 1 <= v && v < +3 => 1,                                    //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn prefix_plus_closed(x: I32) -> I32 {
+  match x {
+    v if 1 <= v && v <= +3 => 1,                                    //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn leading_zero(x: I32) -> I32 {
+  match x {
+    v if 1 <= v && v < 017 => 1,                                   //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn octal_prefix(x: I32) -> I32 {
+  match x {
+    v if 1 <= v && v < 0o17 => 1,                                  //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn one_sided_half_open(x: U8) -> I32 {
+  match x {
+    v if v < 3u8 => 1,                                    //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn one_sided_closed(x: U8) -> I32 {
+  match x {
+    v if v <= 3u8 => 1,                                    //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn float_suffix_of_c(x: F32) -> I32 {
+  match x {
+    v if 0.0 <= v && v < 1.5f => 1,                                //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn inside_some(o: Option[U8]) -> I32 {
+  match o {
+    Some(v) if 1 <= v && v < 3u8 => 1,                             //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn in_the_second_place_of_a_tuple(t: (I32, U8)) -> I32 {
+  match t {
+    (n, v) if 1 <= v && v < 3u8 => n,                              //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn leading_dot_float(x: F32) -> I32 {
+  match x {
+    v if 0.0 <= v && v < .5 => 1,                                  //~ E0020
+    _ => 0,
+  }
+}
+
+// The right forms: a guard, and the plain ends.
+pub fn fine(x: U8, y: I32) -> I32 {
+  let a = match x {
+    k if 1 <= k && k < 3 => 1,
+    _ => 0,
+  }
+  let b = match y {
+    k if 1 <= k && k < 17 => 1,
+    _ => 0,
+  }
+  a + b
+}

@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 2
+// [[test.fix]]
+// at = "17:5"
+// code = "E0020"
+// candidate = 2
+// clean = true
+
+// S-402 (§7): for a subject that is a tuple, `match (a, b) { 0, 1 => … }` has the tuple `(0, 1) =>` as the candidate that leaves
+// nothing (`clean`). The choice (candidate 1) leaves an error of the types stage (`0 | 1` is no pattern of a tuple), which the contract of the
+// candidates allows, so it has no entry. This file has this one error.
+
+pub fn only_one_form(a: I32, b: I32) -> I32 {
+  match (a, b) {
+    (0, 1) => 1,                                      //~ E0020
+    _ => 0,
+  }
+}

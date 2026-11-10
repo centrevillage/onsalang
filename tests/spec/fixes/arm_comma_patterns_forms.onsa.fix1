@@ -1,0 +1,146 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 2
+
+// E0020 for the patterns of one arm written with `,` between them (spec §7 "Choice", §18.1; S-402). Swift and Kotlin read
+// `0, 1 =>` as a choice, and Python 3.10 (`case 0, 1:`) as a sequence pattern, so the reading is not one and both are the
+// candidates: the choice `0 | 1 =>` (candidate 1, the order of the sentence of §7) and the tuple `(0, 1) =>` (candidate 2; it leaves
+// an error of the types stage when the subject is not a tuple, which the contract of the candidates allows). All the `,` of an arm
+// are one form (`0, 1, 2 =>`). The `,` and the next pattern are on one line; a `,` before a newline is the E0002 of
+// tests/spec/negative/arm_comma_patterns_newline.onsa. The main position is the first token of the form. One error per
+// function (P-01). The right forms are at the end of the file.
+
+pub fn two_literals(n: I32) -> I32 {
+  match n {
+    0 | 1 => 1,                                      //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn three_literals(n: I32) -> I32 {
+  match n {
+    0 | 1 | 2 => 1,                                   //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn five_literals(n: I32) -> I32 {
+  match n {
+    1 | 2 | 3 | 5 | 8 => 1,                             //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn a_negative_literal(n: I32) -> I32 {
+  match n {
+    -1 | 1 => 1,                                     //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn chars(c: Char) -> I32 {
+  match c {
+    'a' | 'b' => 1,                                  //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn strings(s: Str) -> I32 {
+  match s {
+    "a" | "b" => 1,                                  //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn not_the_first_arm(n: I32) -> I32 {
+  match n {
+    5 => 9,
+    7 => 8,
+    0 | 1 => 1,                                      //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn with_a_guard(n: I32, c: Bool) -> I32 {
+  match n {
+    0 | 1 if c => 1,                                 //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn with_a_block_body(n: I32) -> I32 {
+  match n {
+    0 | 1 => {                                       //~ E0020
+      2 + 3
+    },
+    _ => 0,
+  }
+}
+
+pub fn on_one_line(n: I32) -> I32 {
+  match n { 0 | 1 => 1, _ => 0 }                     //~ E0020
+}
+
+pub fn as_a_value(n: I32) -> I32 {
+  let r = match n {
+    0 | 1 => 1,                                      //~ E0020
+    _ => 0,
+  }
+  r + 1
+}
+
+pub fn as_a_statement(n: I32) -> I32 {
+  var r = 0
+  match n {
+    0 | 1 => { r = 1 },                              //~ E0020
+    _ => { r = 2 },
+  }
+  r
+}
+
+pub fn in_a_nested_match(a: I32, b: I32) -> I32 {
+  match a {
+    0 => match b {
+      1 | 2 => 5,                                    //~ E0020
+      _ => 6,
+    },
+    _ => 0,
+  }
+}
+
+pub fn in_a_closure(n: I32) -> I32 {
+  let f = fn(k: I32) -> I32 {
+    match k {
+      0 | 1 => 1,                                    //~ E0020
+      _ => 0,
+    }
+  }
+  f.(n)
+}
+
+pub struct Gate {
+  open: I32,
+}
+
+impl Gate {
+  pub fn opens_on(self, n: I32) -> I32 {
+    match n {
+      0 | 1 => self.open,                            //~ E0020
+      _ => 0,
+    }
+  }
+}
+
+// The right forms: a choice and a tuple pattern.
+pub fn fine(n: I32, t: (I32, I32)) -> I32 {
+  let a = match n {
+    0 | 1 => 1,
+    _ => 0,
+  }
+  let b = match t {
+    (0, 1) => 1,
+    _ => 0,
+  }
+  a + b
+}

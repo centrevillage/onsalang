@@ -365,6 +365,7 @@ impl<'a> Parser<'a> {
                     let l = self.start(NodeKind::StructLitFields)?;
                     self.bump();
                     self.with_nl(false, |p| {
+                        let mut rest = None;
                         while !p.at(TokenKind::RBrace) {
                             if p.unit_ends_unclosed() {
                                 return Err(ParseError);
@@ -373,7 +374,7 @@ impl<'a> Parser<'a> {
                             // E0002 of the list, as for a pattern's.
                             if p.at(TokenKind::DotDotDot) {
                                 let r = p.start(NodeKind::StructLitRest)?;
-                                p.bump();
+                                rest = Some(p.bump());
                                 p.complete(r, NodeKind::StructLitRest);
                                 break;
                             }
@@ -386,7 +387,7 @@ impl<'a> Parser<'a> {
                                 break;
                             }
                         }
-                        p.close_list(NodeKind::StructLitFields, TokenKind::RBrace)?;
+                        p.close_after_rest(NodeKind::StructLitFields, rest, LITERAL_REST_RULE)?;
                         Ok(())
                     })?;
                     self.complete(l, NodeKind::StructLitFields);
@@ -783,25 +784,22 @@ impl<'a> Parser<'a> {
     }
 }
 
-/// Whether the tokens `all[first..=last]` of a file are one expression,
+/// The rule of a `,` after the `...` of a struct literal (§4.4, S-512).
+const LITERAL_REST_RULE: &str = "the `...` that fills the fields not written with their defaults is the last element of a struct literal, with no `,` after it (§4.4)";
+
+/// Whether the tokens `tokens` (a run of those of a file, some of them read
+/// as other kinds) are one expression,
 /// read as an end of a range in a header (no struct literal and no block
 /// at its start, §4.4, S-338; newlines not significant): the ends of a
 /// range pattern (§7, S-341), read by the parser's own grammar (one
 /// reading). Its diagnostics are not kept.
-pub(crate) fn reads_as_expr(
-    file: FileId,
-    text: &str,
-    all: &[Token],
-    literals: &Literals,
-    first: usize,
-    last: usize,
-) -> bool {
-    let mut tokens = all[first..=last].to_vec();
-    let end = all[last].span.end;
+pub(crate) fn reads_as_expr(file: FileId, text: &str, mut tokens: Vec<Token>, literals: &Literals) -> bool {
+    let (Some(first), Some(last)) = (tokens.first().copied(), tokens.last().copied()) else { return false };
+    let end = last.span.end;
     tokens.push(Token { kind: TokenKind::Eof, span: Span::new(file, end, end) });
     // The holes and the lexer's errors of the literals in the run read as
     // they do in the file; its diagnostics are not this reading's.
-    let literals = literals.within(all[first].span.start, end);
+    let literals = literals.within(first.span.start, end);
     let mut p = Parser::new(file, text, crate::Lexed { tokens, diagnostics: Vec::new(), literals });
     p.nl = vec![false];
     p.no_struct_lit = true;

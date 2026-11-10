@@ -8,7 +8,7 @@
 // place of `..` with `_`, in the order of the declaration (not in the order the pattern was written in), so the text
 // of the candidate is fixed by the spec and `.fix1` holds it. The struct is declared in this file (before or after the function that
 // matches it); a struct of another module is in pkg_patterns_rest/. The `..` of a struct pattern is
-// found in the syntax stage (it stops `onsa fmt`, §18.2), and the shapes around the struct (`Some(..)`,
+// found in the types stage (it does not stop `onsa fmt`, §18.2), and the shapes around the struct (`Some(..)`,
 // a tuple, a field that is a struct, `let`, a method) are the same error. One error per function.
 
 pub struct P3 {

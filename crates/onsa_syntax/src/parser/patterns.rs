@@ -2,6 +2,10 @@
 
 use super::*;
 
+/// The rule of a `,` after the rest of a struct pattern (§7, S-512).
+const PATTERN_REST_RULE: &str =
+    "the rest of a struct pattern is one `_`, its last element, with no `,` after it: `Item { x: a, _ }` (§7)";
+
 impl<'a> Parser<'a> {
     // ------------------------------------------------------------ patterns
 
@@ -251,12 +255,13 @@ impl<'a> Parser<'a> {
                     self.reshape(NodeKind::StructPat)?;
                     self.bump();
                     self.with_nl(false, |p| {
+                        let mut rest = None;
                         while !p.at(TokenKind::RBrace) {
                             // The rest, last: `_` (§7, S-903), or `..` (the stage
                             // that counts the fields reports it, S-109, S-366).
                             if p.at(TokenKind::Underscore) || p.at(TokenKind::DotDot) {
                                 let r = p.start(NodeKind::StructPatRest)?;
-                                p.bump();
+                                rest = Some(p.bump());
                                 p.complete(r, NodeKind::StructPatRest);
                                 break;
                             }
@@ -269,7 +274,7 @@ impl<'a> Parser<'a> {
                                 break;
                             }
                         }
-                        p.close_list(NodeKind::StructPat, TokenKind::RBrace)?;
+                        p.close_after_rest(NodeKind::StructPat, rest, PATTERN_REST_RULE)?;
                         Ok(())
                     })?;
                     return Ok(self.complete(m, NodeKind::StructPat));

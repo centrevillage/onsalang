@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§8.1"]
+// fixes = 0
+
+// E0320, with no candidate, for a name of a `[…]` list that has no letter after its leading `_` (spec §8.1, §2.3, S-656): the names that do
+// not start with a capital are effect row variables, and `_0` and `__` are not capitalised, so they are read as effect row
+// variables, which are declared names, and a name aligned to the rule is no identifier (§2.3, no candidate). Whichever of the
+// two kinds is read, the code is the same: it is E0320 (the text of the note names the kind, and the cases do not compare it; the
+// rows are in the table of the ticket of the unit). The lists of a function, a method, a struct and an enum. `fixes = 0` checks that no
+// candidate is offered. One error per function or type (P-01).
+
+pub fn zero[_0](x: I32) -> I32 {                    //~ E0320
+  x
+}
+
+pub fn two_underscores[__](x: I32) -> I32 {         //~ E0320
+  x
+}
+
+pub fn zero_next_to_a_type[T, _0](x: T) -> T {      //~ E0320
+  x
+}
+
+pub fn zero_in_an_effect_row[_0](f: fn(I32) -> I32 uses {_0}, x: I32) -> I32 uses {_0} { //~ E0320
+  f.(x)
+}
+
+pub struct Holder {
+  v: I32,
+}
+
+impl Holder {
+  pub fn method_zero[_0](self, x: I32) -> I32 {     //~ E0320
+    x
+  }
+}
+
+pub struct Box[_0] {                                //~ E0320
+  v: I32,
+}
+
+pub enum Maybe[__] {                                //~ E0320
+  Nothing,
+  Something(I32),
+}
+
+// The right forms: a type parameter and an effect row variable with a letter.
+pub fn fine[T, e](f: fn(T) -> T uses {e}, x: T) -> T uses {e} {
+  f.(x)
+}

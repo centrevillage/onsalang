@@ -1,0 +1,106 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+
+// E0020 for the word `or` between the patterns of an arm (spec §7 "Choice", S-402): C# writes the choice of patterns `0 or 1 =>`, so
+// the reading is one, and the candidate is the only one: `0 | 1 =>`. All the `or` of an arm are one form (`0 or 1 or 2 =>`). The
+// word is a name, not a keyword (§2.2), and it is this form only where a pattern is followed by `or` and by what can start a pattern
+// (tests/spec/negative/pattern_or_word_no_candidate.onsa has the `or` that is not; pattern_or_word_binding_fine.onsa has the
+// name `or` as a binding). The main position is the first token of the form. One error per function (P-01). The right form is at the end.
+
+pub fn two_literals(n: I32) -> I32 {
+  match n {
+    0 or 1 => 1,                                    //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn three_literals(n: I32) -> I32 {
+  match n {
+    0 or 1 or 2 => 1,                               //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn chars(c: Char) -> I32 {
+  match c {
+    'a' or 'b' => 1,                                //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn strings(s: Str) -> I32 {
+  match s {
+    "a" or "b" => 1,                                //~ E0020
+    _ => 0,
+  }
+}
+
+pub enum Color {
+  Red,
+  Green,
+  Blue,
+}
+
+pub fn variants(c: Color) -> I32 {
+  match c {
+    Color.Red or Color.Green => 1,                  //~ E0020
+    Color.Blue => 2,
+  }
+}
+
+pub fn payloads(o: Option[I32]) -> I32 {
+  match o {
+    Some(0) or None => 1,                           //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn with_a_guard(n: I32, c: Bool) -> I32 {
+  match n {
+    0 or 1 if c => 1,                               //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn on_one_line(n: I32) -> I32 {
+  match n { 0 or 1 => 1, _ => 0 }                   //~ E0020
+}
+
+pub fn as_a_statement(n: I32) -> I32 {
+  var r = 0
+  match n {
+    0 or 1 => { r = 1 },                            //~ E0020
+    _ => { r = 2 },
+  }
+  r
+}
+
+pub fn in_a_nested_match(a: I32, b: I32) -> I32 {
+  match a {
+    0 => match b {
+      1 or 2 => 5,                                  //~ E0020
+      _ => 6,
+    },
+    _ => 0,
+  }
+}
+
+pub fn in_a_closure(n: I32) -> I32 {
+  let f = fn(k: I32) -> I32 {
+    match k {
+      0 or 1 => 1,                                  //~ E0020
+      _ => 0,
+    }
+  }
+  f.(n)
+}
+
+// The right form.
+pub fn fine(n: I32) -> I32 {
+  match n {
+    0 | 1 => 1,
+    _ => 0,
+  }
+}

@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 2
+// [[test.fix]]
+// at = "18:5"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// S-402 (§7): the choice `0 | 1 =>` of an arm written `0, 1 =>`, for a subject that is not a tuple, is the candidate that leaves
+// nothing: the check after it has no diagnostic (`clean`). The candidate 2 (the tuple) leaves an error of a later stage here, so it
+// has no entry. The main position is the first token of the form (the `0`). This file has this one error; the forms are in
+// arm_comma_patterns_forms.onsa.
+
+pub fn only_one_form(n: I32) -> I32 {
+  match n {
+    (0, 1) => 1,                                      //~ E0020
+    _ => 0,
+  }
+}

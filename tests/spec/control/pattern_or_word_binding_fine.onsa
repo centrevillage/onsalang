@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§2.2"]
+
+// The word `or` is a name and not a keyword (§2.2), so in a pattern it is a binding like any other name that does not
+// start with a capital (§7), where it is not after a pattern (S-402: the choice `0 or 1` is E0020, fixes/pattern_or_word_forms.onsa). It is
+// a binding at the head of an arm, in the payload of `Some`, and in a `let`. The file is canonical.
+
+pub fn at_the_head_of_an_arm(n: I32) -> I32 {
+  match n {
+    or => or + 1,
+  }
+}
+
+pub fn in_a_payload(o: Option[I32]) -> I32 {
+  match o {
+    Some(or) => or,
+    None => 0,
+  }
+}
+
+pub fn in_a_let(n: I32) -> I32 {
+  let or = n + 1
+  or * 2
+}

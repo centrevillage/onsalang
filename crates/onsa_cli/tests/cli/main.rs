@@ -69,6 +69,7 @@ mod package_naming;
 mod package_tests_dir;
 mod package_tree;
 mod pattern_guard_candidates;
+mod pattern_rows;
 mod prelude_names;
 mod range_syntax;
 mod std_privilege;
