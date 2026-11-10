@@ -1,0 +1,131 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§11.2", "§7"]
+
+// S-239 (W5-10 U2b): the places where the list of a method is read are the same as for any expression: the body of a function, of a method, of a
+// flow (a method that is `rt fn` with an empty effect row and no `!`, which §11.2 lists among the expressions of a flow), a closure, the arms of an `if`
+// and of a `match`, a loop, an argument and the argument of another call of the same method. The closure is the argument of `array.from_fn`, the
+// only place of an anonymous function in this version. The values are worked out by hand.
+
+use std.array
+
+pub struct V {
+  n: U8,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+
+  pub rt fn pass[T: Copy](self, x: T) -> T {
+    x
+  }
+
+  pub fn in_a_method(self) -> U8 {
+    self.conv::[U8](9)
+  }
+}
+
+pub fn mk() -> V {
+  V { n: 1 }
+}
+
+pub fn take(x: U8) -> U8 {
+  x
+}
+
+pub fn in_a_function(v: V) -> U8 {
+  v.conv::[U8](5)
+}
+
+// v.pass::[F32](x) is x, so the flow gives 2 * x.
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  let v = V { n: 1 }
+  v.pass::[F32](x) * 2.0
+}
+
+pub fn in_a_closure() -> [U8; 3] {
+  array.from_fn(fn(_) { mk().conv::[U8](7) })
+}
+
+pub fn in_an_if(c: Bool, v: V) -> U8 {
+  if c {
+    v.conv::[U8](1)
+  } else {
+    v.conv::[U8](2)
+  }
+}
+
+pub fn in_a_match(k: Option[I32], v: V) -> F32 {
+  match k {
+    Some(_) => v.conv::[F32](0.5),
+    None => v.conv::[F32](1.5),
+  }
+}
+
+pub fn in_a_loop(v: V) -> U32 {
+  var s: U32 = 0
+  for _ in 0 ..< 3 {
+    s = s + v.conv::[U32](2)
+  }
+  s
+}
+
+pub fn in_an_argument(v: V) -> U8 {
+  take(v.conv::[U8](9))
+}
+
+pub fn in_the_argument_of_the_same_method(v: V) -> U8 {
+  v.conv::[U8](v.conv::[U8](7))
+}
+
+test "a method" {
+  let v = V { n: 1 }
+  assert v.in_a_method() == 9
+}
+
+test "a function" {
+  assert in_a_function(V { n: 1 }) == 5
+}
+
+test "a flow" {
+  let xs: [F32; 2] = [1.0, 2.5]
+  let o = in_a_flow.render(in_a_flow.Config {}, in_a_flow.Params {}, xs, 8.0)
+  assert o.out[0] == 2.0
+  assert o.out[1] == 5.0
+}
+
+test "a closure (an argument of array.from_fn)" {
+  let a = in_a_closure()
+  assert a.len() == 3
+  assert a[2] == 7
+}
+
+test "the arms of an if" {
+  let v = V { n: 1 }
+  assert in_an_if(true, v) == 1
+  assert in_an_if(false, v) == 2
+}
+
+test "the arms of a match" {
+  let v = V { n: 1 }
+  assert in_a_match(Some(0), v) == 0.5
+  assert in_a_match(None, v) == 1.5
+}
+
+test "a loop" {
+  let v = V { n: 1 }
+  assert in_a_loop(v) == 6
+}
+
+test "an argument" {
+  let v = V { n: 1 }
+  assert in_an_argument(v) == 9
+}
+
+test "the argument of the same method" {
+  let v = V { n: 1 }
+  assert in_the_argument_of_the_same_method(v) == 7
+}

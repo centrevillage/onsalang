@@ -1355,137 +1355,11 @@ until = "W9-03"
 note = "フィールドの既定値の式の panic（桁あふれ、呼び出しの中の panic）が `const` と同じく E0419 にならない（§6.6）。今は onsa check で 0 件"
 
 [[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/call_forms_method_type_args.onsa:40:5 E0020 fix1"
-reasons = ["S-239", "S-256"]
-until = "W5-10"
-note = "v.m::[I32](x) の候補を当てた先は W5-10 まで E0200"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/call_forms_method_type_args.onsa:57:3 E0020 fix1"
-reasons = ["S-239", "S-256"]
-until = "W5-10"
-note = "v.m::[I32](x) の候補を当てた先は W5-10 まで E0200"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/call_forms_method_type_args.onsa:62:3 E0020 fix1"
-reasons = ["S-239", "S-256"]
-until = "W5-10"
-note = "v.m::[I32](x) の候補を当てた先は W5-10 まで E0200"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/call_forms_method_type_args.onsa:66:3 E0020 fix1"
-reasons = ["S-239", "S-256"]
-until = "W5-10"
-note = "v.m::[I32](x) の候補を当てた先は W5-10 まで E0200"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/call_forms_method_type_args.onsa:70:3 E0020 fix1"
-reasons = ["S-239", "S-256"]
-until = "W5-10"
-note = "v.m::[I32](x) の候補を当てた先は W5-10 まで E0200"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/call_forms_method_type_args.onsa:74:3 E0020 fix1"
-reasons = ["S-239", "S-256"]
-until = "W5-10"
-note = "v.m::[I32](x) の候補を当てた先は W5-10 まで E0200"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/call_forms_method_type_args.onsa:78:3 E0020 fix1"
-reasons = ["S-239", "S-256"]
-until = "W5-10"
-note = "v.m::[I32](x) の候補を当てた先は W5-10 まで E0200"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/call_forms_method_type_args.onsa:86:3 E0020 fix1"
-reasons = ["S-239", "S-256"]
-until = "W5-10"
-note = "v.m::[I32](x) の候補を当てた先は W5-10 まで E0200"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/call_forms_method_type_args.onsa:90:3 E0020 fix1"
-reasons = ["S-239", "S-256"]
-until = "W5-10"
-note = "v.m::[I32](x) の候補を当てた先は W5-10 まで E0200"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/call_forms_method_type_args.onsa:94:37 E0020 fix1"
-reasons = ["S-239", "S-256"]
-until = "W5-10"
-note = "v.m::[I32](x) の候補を当てた先は W5-10 まで E0200"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/call_forms_method_type_args.onsa:99:7 E0020 fix1"
-reasons = ["S-239", "S-256"]
-until = "W5-10"
-note = "v.m::[I32](x) の候補を当てた先は W5-10 まで E0200"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/call_forms_method_type_args.onsa:104:11 E0020 fix1"
-reasons = ["S-239", "S-256"]
-until = "W5-10"
-note = "v.m::[I32](x) の候補を当てた先は W5-10 まで E0200"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/packages/call_forms_method_type_args_modules/main.onsa:17:3 E0020 fix1"
-reasons = ["S-239", "S-256"]
-until = "W5-10"
-note = "v.m::[I32](x) の候補を当てた先は W5-10 まで E0200"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/packages/call_forms_method_type_args_modules/main.onsa:21:3 E0020 fix1"
-reasons = ["S-239", "S-256"]
-until = "W5-10"
-note = "v.m::[I32](x) の候補を当てた先は W5-10 まで E0200"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/packages/call_forms_method_type_args_modules/main.onsa:25:3 E0020 fix1"
-reasons = ["S-239", "S-256"]
-until = "W5-10"
-note = "v.m::[I32](x) の候補を当てた先は W5-10 まで E0200"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/packages/call_forms_method_type_args_modules/main.onsa:29:3 E0020 fix1"
-reasons = ["S-239", "S-256"]
-until = "W5-10"
-note = "v.m::[I32](x) の候補を当てた先は W5-10 まで E0200"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/packages/call_forms_method_type_args_modules/main.onsa:33:3 E0020 fix1"
-reasons = ["S-239", "S-256"]
-until = "W5-10"
-note = "v.m::[I32](x) の候補を当てた先は W5-10 まで E0200"
-
-[[pending]]
-kind = "foreign-form"
-target = "type_args_method_square"
-reasons = ["S-239", "S-256"]
-until = "W5-10"
-note = "メソッドに付けた [...] の型引数（型の段）。候補を当てた先の v.m::[I32](x) が W5-10 まで E0200"
-
-[[pending]]
 kind = "fuzz-input"
 target = "tests/fuzz/596f9321.onsa"
 reasons = ["S-239", "S-256"]
 until = "W5-10"
-note = "fix-same-place: fix|E0020|write the type arguments as `…`|E0200。`self.conv[I32](x)` の候補 `self.conv::[I32](x)` の先が W5-10 まで E0200"
+note = "fix-same-place: fix|E0020|write the type arguments as `…`|E0401。`self.conv[I32](x)`（`x: T`）の候補 `self.conv::[I32](x)` を当てると、同じ段の引数の型の E0401 が残る。メソッドの行の候補を出す条件（`fits_parameter`）は W5-10 U3 で見る"
 
 [[pending]]
 kind = "test-case"
@@ -1595,3 +1469,38 @@ target = "tests/spec/types/type_args_fn_effect_row_declared.onsa"
 reasons = ["R-27", "S-982", "S-991"]
 until = "W6-01"
 note = "引数の型に現れない効果行変数を持つ関数（`fn mid[A, e, B](a: A, b: B)`）の呼び出しは、型引数の有無によらず今 E0406（効果行変数が決まらない。決まらない効果行の扱いは S-991）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/type_args_method_const_arith.onsa"
+reasons = ["S-713", "S-239"]
+until = "W9-03"
+note = "メソッド自身の型引数の const 引数に演算のある定数式。演算を含む const 引数は今 E0200（types/type_args_fn_const_arith.onsa と同じ待ち）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/type_args_method_const_arith_neg.onsa"
+reasons = ["S-713", "S-239"]
+until = "W9-03"
+note = "メソッド自身の型引数の const 引数の演算の誤り（E0417、E0419）。演算を含む const 引数は今 E0200"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/type_args_method_effect_row.onsa"
+reasons = ["R-27", "S-982"]
+until = "W6-01"
+note = "効果行変数を持つメソッドに型引数を書く形（効果行変数は数に入れない）。純粋な関数を `fn(T) -> T uses {e}` の引数に渡す呼び出しは、型引数の有無によらず今 E0401（types/type_args_fn_effect_row.onsa と同じ待ち）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/type_args_method_effect_row_declared.onsa"
+reasons = ["R-27", "S-982", "S-991"]
+until = "W6-01"
+note = "引数の型に現れない効果行変数を持つメソッドの呼び出しは、型引数の有無によらず今 E0406（決まらない効果行の扱いは S-991）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/type_args_method_mark_bang_flow.onsa"
+reasons = ["S-811"]
+until = "W7-04"
+note = "flow の本体の `v.m::[F32]!(x)` は E0806（§11.2）。flow の本体の `!` はメソッドでは今は報告されない（W5-10 の単位の行）"

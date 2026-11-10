@@ -194,7 +194,9 @@ impl<'a> Checker<'a> {
         let (callee, &[Arg { mode: Mode::Borrow, expr: arg, .. }]) = (*callee, args.as_slice()) else {
             return Err(rule);
         };
-        let ExprKind::Field { base, .. } = self.expr(callee).kind else { return Err(rule) };
+        let Some(base) = crate::names::body::receiver(self.ast, callee) else {
+            return Err(rule);
+        };
         // The text around the argument, from the outside in. The argument
         // keeps parentheses in the place it comes to; out of `Some(…)`, also
         // where a header could end at it.

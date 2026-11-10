@@ -1,0 +1,52 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// S-239, S-306, S-977, S-981 (W5-10 U2b): the errors of the list after the name of a method are the same when the type comes from another module: the
+// number (E0412, with no candidate), the kind (E0308), a name that is not found (E0302), and a requirement that the type argument does not meet
+// (E0416). One error per function (P-01).
+use util
+use util.{V, W, mk}
+
+pub fn too_many(v: V) -> U8 {
+  v.conv::[U8, F32](1)                              //~ E0412
+}
+
+pub fn the_type_parameter_of_the_impl(w: W[F32]) -> F32 {
+  w.get::[F32]()                                    //~ E0412
+}
+
+pub fn a_constant_for_a_type_parameter(v: V) -> U8 {
+  v.conv::[4](1)                                    //~ E0308
+}
+
+pub fn a_type_for_a_const_parameter(v: V) -> U32 {
+  v.cn::[U8]()                                      //~ E0308
+}
+
+pub fn a_name_that_is_not_found(v: V) -> U8 {
+  v.conv::[Nope](1)                                 //~ E0302
+}
+
+pub fn beyond_the_number(v: V) -> U8 {
+  v.conv::[U8, Nope](1)                             //~ E0302
+}
+
+pub fn a_bound_that_is_not_met(v: V) -> Bool {
+  v.zero::[Bool]()                                  //~ E0416
+}
+
+pub fn the_result_of_a_function() -> U8 {
+  mk().conv::[U8, U8](1)                            //~ E0412
+}
+
+pub fn through_the_module_name() -> U8 {
+  util.mk().conv::[4](1)                            //~ E0308
+}
+
+pub fn right(v: V, w: W[F32]) -> U8 {
+  let a = v.conv::[U8](1)
+  let b = w.conv::[U8](2)
+  a + b
+}

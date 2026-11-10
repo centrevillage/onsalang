@@ -29,7 +29,7 @@ pub(crate) use exprs::heads;
 pub(crate) use flow::clock_after;
 pub(crate) use kinds::METHOD_IS_CALLED;
 pub(crate) use paths::is_value;
-pub(crate) use type_args::own_params;
+pub(crate) use type_args::{count_error, own_params};
 mod scope;
 #[cfg(test)]
 mod tests;
@@ -122,6 +122,13 @@ pub(crate) struct BodyNames {
     /// the tuple of them, in the order of [`own_params`]; the error type when
     /// they have an error.
     pub own: HashMap<ExprId, TyId>,
+    /// The type arguments after a member of a value (`v.m::[I32]`, §4.5,
+    /// S-977), whose method the types stage finds: at their node, whether
+    /// each is a constant expression by its form (S-981), the tuple of them
+    /// lowered so, and the diagnostic of the types stage in them, which the
+    /// check of the method reports after their kinds and count (none of a
+    /// method it does not know, §18.1: not in [`Self::all_reported`]).
+    pub members: HashMap<ExprId, (Vec<bool>, TyId, Option<Diagnostic>)>,
     /// The effect row of an anonymous function, read once by the names stage
     /// as the row of a signature (§8.1, S-738).
     pub effects: HashMap<ExprId, crate::ty::EffectSet>,
@@ -186,20 +193,23 @@ impl BodyNames {
 
     /// Keep the type arguments `at` as `lowered` (the type, and the
     /// diagnostics of `crate::sig`'s one lowering of them): the type in
-    /// [`Self::type_args`] and in the `owner` of the record after them, with
-    /// the first diagnostic; one of the names stage is `Err`, which stops the
-    /// walk there.
+    /// [`Self::type_args`] and in the `owner` of the record after them (in
+    /// [`Self::members`] after a member of a value), with the first
+    /// diagnostic; one of the names stage is `Err`, which stops the walk there.
     fn put_args(&mut self, at: Listed, (ty, diags): (TyId, Vec<Diagnostic>)) -> Result<(), Diagnostic> {
         let d = diags.into_iter().next();
         if let Some(d) = d.as_ref().filter(|d| d.stage == onsa_diag::Stage::Names) {
             return Err(d.clone());
         }
-        self.type_args.insert(at.key, (Some(ty), d));
-        match (at.to, at.to.and_then(|x| self.paths.get_mut(&x))) {
-            (Some(x), _) if at.own => _ = self.own.insert(x, ty),
-            (_, Some(PathRes::Item { owner, .. })) => *owner = Some(ty),
-            _ => at.to.and_then(|x| self.structs.get_mut(&x)).into_iter().for_each(|s| s.owner = Some(ty)),
+        let (key, to) = (at.key, at.to);
+        let x = to.filter(|_| matches!(at.of, ArgsOf::Own(_)));
+        match (at.of, x, to.and_then(|x| self.paths.get_mut(&x))) {
+            (ArgsOf::Member(kinds), ..) => return Ok(_ = self.members.insert(key.0, (kinds, ty, d))),
+            (_, Some(x), _) => _ = self.own.insert(x, ty),
+            (_, _, Some(PathRes::Item { owner, .. })) => *owner = Some(ty),
+            _ => to.and_then(|x| self.structs.get_mut(&x)).into_iter().for_each(|s| s.owner = Some(ty)),
         }
+        self.type_args.insert(key, (Some(ty), d));
         Ok(())
     }
 }
@@ -360,26 +370,50 @@ enum Typed {
 }
 
 /// The type arguments `args` at `key` after the name `path` (the chain up
-/// to it), which names the type `entity`; the type they make goes to the
-/// `owner` of the record of `to`, the next name, the struct literal or a
-/// variant of the prelude. Of the own parameters of the function `entity`
-/// (`own`), they go to [`BodyNames::own`] at `to`, its name.
+/// to it), of `of`; the type they make goes to the `owner` of the record of
+/// `to`, the next name, the struct literal or a variant of the prelude. Of
+/// the own parameters of a function, they go to [`BodyNames::own`] at `to`,
+/// its name; after a member of a value, to [`BodyNames::members`].
 #[derive(Debug, Clone)]
 struct Listed {
     key: (ExprId, u32),
-    entity: Entity,
+    of: ArgsOf,
     path: onsa_syntax::ast::Path,
     args: onsa_syntax::ast::TypeArgList,
     to: Option<ExprId>,
-    own: bool,
+}
+
+/// What type arguments of an expression are of (§4.5): the one decision of
+/// the names stage, which `crate::sig` lowers them by (D-15, R-426).
+#[derive(Debug, Clone)]
+pub(crate) enum ArgsOf {
+    /// The type `Entity` names, or the enum of a variant of the prelude.
+    Type(Entity),
+    /// The own parameters of the function.
+    Own(DefId),
+    /// A member of a value, a method or a field, which the types stage
+    /// finds: whether each is a constant expression by its form (S-981).
+    Member(Vec<bool>),
 }
 
 /// The node of the names of `e`: through the type arguments after them
-/// (`id::[U8]` of `id::[U8](250)`, §4.5), the node with their record.
-pub(crate) fn named(ast: &Ast, e: ExprId) -> ExprId {
+/// (`id::[U8]` of `id::[U8](250)`, §4.5), the node with their record; of
+/// a callee, the member whose base is the receiver (`v.m::[I32]`). The one
+/// reading of the callee through them for the later stages and Core.
+pub fn named(ast: &Ast, e: ExprId) -> ExprId {
     match ast.expr(e).kind {
         ExprKind::TypeArgs { base, .. } => base,
         _ => e,
+    }
+}
+
+/// The receiver of the method call whose callee is `callee` (`v` of
+/// `v.m(x)` and of `v.m::[I32](x)`), when the callee is a member of a
+/// value. The one reading of the receiver for the later stages and Core.
+pub fn receiver(ast: &Ast, callee: ExprId) -> Option<ExprId> {
+    match ast.expr(named(ast, callee)).kind {
+        ExprKind::Field { base, .. } => Some(base),
+        _ => None,
     }
 }
 
@@ -493,7 +527,7 @@ fn lower_types(
         let (t, pos) = match site {
             Typed::Type(t, pos) => (t, pos),
             Typed::Args(at) => {
-                let site = (at.entity, &at.path, &at.args);
+                let site = (&at.of, &at.path, &at.args);
                 let lowered = crate::sig::lower_args_in_body(a, (m, ast, text), (generics, self_ty, def), site, locals);
                 if let Err(d) = out.put_args(*at, lowered) {
                     fail = Some(Fail::Report(d));

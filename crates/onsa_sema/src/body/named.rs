@@ -215,11 +215,57 @@ impl<'a> Checker<'a> {
     /// them ([`BodyNames::own`]): the variables `args` of those parameters
     /// meet them at `span`, in the statement. Their error is reported before.
     pub(crate) fn own_args(&mut self, e: ExprId, d: DefId, args: &[TyId], span: Span) -> R<()> {
-        let Some(Ty::Tuple(written)) = self.names.own.get(&e).map(|&t| self.ty(t)) else { return Ok(()) };
+        let Some(&written) = self.names.own.get(&e) else { return Ok(()) };
+        self.meet_own(d, args, written, span)
+    }
+
+    /// The tuple `written` of the type arguments of the own parameters of
+    /// `d`, whose variables `args` meet them at `span`.
+    fn meet_own(&mut self, d: DefId, args: &[TyId], written: TyId, span: Span) -> R<()> {
+        let Ty::Tuple(written) = self.ty(written) else { return Ok(()) };
         for (k, t) in crate::names::body::own_params(self.a, d).into_iter().zip(written) {
             self.unify_at(span, args[k], t)?;
         }
         Ok(())
+    }
+
+    /// The type arguments written after the method `md` at `callee`
+    /// (`v.m::[I32](x)`, §4.5, S-977), as the names stage lowered them by
+    /// their forms ([`BodyNames::members`]): the kind of each within the
+    /// count of the own parameters of `md` (E0308), then their count (E0412
+    /// with no candidate, S-306, S-981), then their diagnostic; the variables
+    /// `args` of those parameters meet them at `span`.
+    pub(super) fn method_args(&mut self, callee: ExprId, md: DefId, args: &[TyId], span: Span) -> R<()> {
+        let ExprKind::TypeArgs { base, args: list } = &self.expr(callee).kind else { return Ok(()) };
+        let Some((kinds, written, d)) = self.names.members.get(&callee).cloned() else {
+            onsa_diag::internal::bug(Some(list.span), "type arguments of a method the names stage did not read")
+        };
+        let own = crate::names::body::own_params(self.a, md);
+        let params: Vec<GenericDef> = own.iter().map(|&k| self.a.def(md).generics()[k].clone()).collect();
+        for ((g, &constant), &x) in params.iter().zip(&kinds).zip(&list.args) {
+            if matches!(g.kind, GenericKind::Const(_)) != constant {
+                let at = self.ast.ty(x).span;
+                return Err(self.diag(crate::sig::arg_kind_error(Stage::Types, at, self.src(at), constant)));
+            }
+        }
+        if params.len() != kinds.len() {
+            let (name, at) = (self.last_name(*base).name, self.expr(callee).span);
+            let shown: Vec<String> = params.iter().map(|g| format!("`{}`", g.name)).collect();
+            let d = crate::names::body::count_error(&name, (&shown, kinds.len()), (at, self.src(at)), None);
+            return Err(self.diag(d));
+        }
+        if let Some(d) = d {
+            return Err(self.diag(d));
+        }
+        self.meet_own(md, args, written, span)
+    }
+
+    /// E0308 for the type arguments at `e` after a field (`h.f::[I32](1)`,
+    /// `v.a::[I32]`, §4.5, S-977): a field takes none, as a local.
+    pub(super) fn args_after_field(&mut self, e: ExprId) -> Stop {
+        let span = self.expr(e).span;
+        let msg = "a field takes no type arguments: they go after an item that declares type parameters (§4.5)";
+        self.diag(Diagnostic::new(Stage::Types, Code::E0308, span, msg).with_found(self.src(span)))
     }
 
     /// A type written in the body, as the names stage lowered it; its

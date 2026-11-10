@@ -1,0 +1,58 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§18.1"]
+
+// S-239, S-981 (W5-10 U2b): the kind and the bound of the elements of the list written after the name of a method beyond the number of the
+// parameters are not judged: the type stage judges the kind of the elements within the number (§4.5: "種類と数を型の段で判定する（… 数の内の要素の
+// 種類が先である）"), and what is beyond it only makes the number wrong. (The names beyond the number are read by the names stage and are E0302 first,
+// type_args_method_unfound.onsa; here every name is found.) A const argument beyond a type parameter, a type beyond a const parameter, a local value
+// beyond, a type that would not meet the bound, and the list of a method without type parameters, whose every element is beyond. The report is E0412
+// only, not E0308 or E0416 or E0417. There is no candidate (`fixes = 0`). One error per item (P-01).
+
+pub struct V {
+  n: U8,
+}
+
+impl V {
+  pub fn plain(self, x: U8) -> U8 {
+    x
+  }
+
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+
+  pub fn cn[const N: U32](self) -> U32 {
+    N
+  }
+
+  pub fn num[T: Float](self, x: T) -> T {
+    x
+  }
+}
+
+pub fn a_const_argument_beyond(v: V) -> U8 {
+  v.conv::[U8, 4](1)                                //~ E0412
+}
+
+pub fn a_type_beyond_the_const_argument(v: V) -> U32 {
+  v.cn::[4, I32]()                                  //~ E0412
+}
+
+pub fn a_local_beyond(v: V) -> U8 {
+  let k = 4
+  v.conv::[U8, k](1)                                //~ E0412
+}
+
+pub fn a_type_that_would_fail_the_bound_beyond(v: V) -> F32 {
+  v.num::[F32, Bool](1.0)                           //~ E0412
+}
+
+pub fn a_method_without_type_parameters(v: V) -> U8 {
+  v.plain::[3](1)                                   //~ E0412
+}
+
+pub fn a_method_without_type_parameters_and_a_type(v: V) -> U8 {
+  v.plain::[Bool, 3](1)                             //~ E0412
+}

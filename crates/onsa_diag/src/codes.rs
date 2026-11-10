@@ -286,7 +286,7 @@ codes! {
         "duplicate `test` name in this module";
     E0307 = 307, Names, [Names], Optional, Optional,
         "`impl` in a place, or for a target, the rules do not allow";
-    E0308 = 308, Names, [Names], Optional, Optional,
+    E0308 = 308, Names, [Names, Types], Optional, Optional,
         "the name is of a kind that does not fit this position";
     E0309 = 309, Names, [Unused], Optional, Optional,
         "unused binding";

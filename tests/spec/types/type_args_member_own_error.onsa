@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.1", "§18.1"]
+// fixes = 0
+
+// S-992 (W5-10 U2b, the parent): a list written after a member that is an error of its own
+// without the list is the error of the member, and the list is not judged (§4.5: "名前がその位置自体で誤りの形は、その名前の誤りが先である"; §6.1: "`p.norm` は
+// E0413（`norm` というフィールドが無い）", "メソッドと効果の操作は値にできない"). A method put in a binding, a method called with `.(`, and a name the type of the
+// receiver does not have are E0413 as they are without the list, with no candidate. One error per item (P-01).
+
+pub struct V {
+  n: U8,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+}
+
+pub fn method_as_a_value(v: V) -> U8 {
+  let g = v.conv::[U8] //~ E0413
+  1
+}
+
+pub fn method_called_as_a_value(v: V) -> U8 {
+  v.conv::[U8].(1) //~ E0413
+}
+
+pub fn no_such_member(v: V) -> U8 {
+  v.nope::[U8](1) //~ E0413
+}
+
+pub fn no_such_member_as_a_value(v: V) -> U8 {
+  v.nope::[U8] //~ E0413
+}

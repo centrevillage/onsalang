@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// S-981 (W5-10 U2b): when the kind of an element and the number of the list are both wrong, the kind of an element within the number (E0308) is
+// reported first, and the number (E0412) after it is fixed (§4.5: "メソッド自身の型引数 … 種類と数を型の段で判定する（コードは同じ E0308 と E0412 で、数の内の要素の
+// 種類が先である）"; S-981: "種類と数の両方が誤りのとき（`v.conv::[4, U8](1)`）は、数の内の要素の種類（E0308）が先で、次に数（E0412）"). The same result as
+// `id::[4, U8](1)` for a function. A constant for the type parameter with one element too many, a type for the const parameter with one
+// too many, a constant in the first place of a list that has too few, and a constant in the first place of three elements for two parameters. After
+// the kind is fixed the same lists are E0412 (the last four functions). One error per item (P-01). The number of the candidates is not written.
+
+pub struct V {
+  n: U8,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+
+  pub fn pair[A, B](self, a: A, b: B) -> A {
+    a
+  }
+
+  pub fn cn[const N: U32](self) -> U32 {
+    N
+  }
+
+  pub fn tag[T, const N: U32](self, x: T) -> (T, U32) {
+    (x, N)
+  }
+}
+
+pub fn a_constant_for_the_type_parameter_and_one_too_many(v: V) -> U8 {
+  v.conv::[4, U8](1)                                //~ E0308
+}
+
+pub fn a_type_for_the_const_parameter_and_one_too_many(v: V) -> U32 {
+  v.cn::[I32, 4]()                                  //~ E0308
+}
+
+pub fn a_constant_in_a_list_that_has_too_few(v: V) -> U8 {
+  v.pair::[4](1, 2.0)                               //~ E0308
+}
+
+pub fn a_constant_in_the_first_of_three(v: V) -> U32 {
+  let t = v.tag::[3, 4, 5](1)                       //~ E0308
+  t.1
+}
+
+pub fn the_number_after_the_kind_is_fixed(v: V) -> U8 {
+  v.conv::[U8, U8](1)                               //~ E0412
+}
+
+pub fn the_number_after_the_kind_is_fixed_for_the_const_parameter(v: V) -> U32 {
+  v.cn::[4, 4]()                                    //~ E0412
+}
+
+pub fn the_number_after_the_kind_is_fixed_too_few(v: V) -> U8 {
+  v.pair::[U8](1, 2.0)                              //~ E0412
+}
+
+pub fn the_number_after_the_kind_is_fixed_for_three(v: V) -> U32 {
+  let t = v.tag::[U8, 4, 5](1)                      //~ E0412
+  t.1
+}

@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§2.6", "§4.5", "§11.5", "§18.1"]
+
+// S-239, S-811 (W5-10 U2b): the `~` of a flow written after the list of a method, in the body of a flow where a `~` can be written, is E0812 (§2.6: "flow でない
+// ものに `~` を付けると E0812"; S-811: "書いた印が呼び先に合わない規則（`~(` は E0812）"). The callee is a method of a value, so there is no candidate (§2.6:
+// "受け手か呼び先が値（値のメソッド …）なら候補を出さず"; `fixes = 0`). The method is an `rt fn` with an empty effect row and the list is right, so
+// nothing else is wrong. A method with one parameter, with two, and in the argument of an operator. One error per item (P-01).
+
+pub struct V {
+  n: U8,
+}
+
+impl V {
+  pub rt fn pass[T: Copy](self, x: T) -> T {
+    x
+  }
+
+  pub rt fn second[T: Copy](self, a: T, b: T) -> T {
+    b
+  }
+}
+
+pub flow on_a_method(x: F32 at sample) -> F32 at sample {
+  let v = V { n: 1 }
+  v.pass::[F32]~(x)                                 //~ E0812
+}
+
+pub flow on_a_method_of_two(x: F32 at sample) -> F32 at sample {
+  let v = V { n: 1 }
+  v.second::[F32]~(x, 0.5)                          //~ E0812
+}
+
+pub flow in_an_operand(x: F32 at sample) -> F32 at sample {
+  let v = V { n: 1 }
+  x + v.pass::[F32]~(x)                             //~ E0812
+}

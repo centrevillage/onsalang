@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§4.5", "§11.1", "§18.1"]
+
+// S-239, S-811 (W5-10 U2b): the `~` of a flow written after the list of a method outside the body of a flow is E0821 (S-811: "その文脈で書けない印（flow の外の
+// E0821 …）" is before "書いた印が呼び先に合わない規則（`~(` は E0812）"; §11.1: the syntax only of a flow outside a flow). The list is right and the callee is found,
+// so nothing is before it. A method in a function, a method with two parameters, a method of a generic `impl`, and a method in a method. The number of the
+// candidates is not written. One error per item (P-01).
+
+pub struct V {
+  n: U8,
+}
+
+pub struct W[T] {
+  item: T,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+
+  pub fn pair[A, B](self, a: A, b: B) -> A {
+    a
+  }
+
+  pub fn lifted(self) -> F32 {
+    self.conv::[F32]~(1.0)                          //~ E0821
+  }
+}
+
+impl[T] W[T] {
+  pub fn conv[U](self, u: U) -> U {
+    u
+  }
+}
+
+pub fn in_a_function(v: V) -> F32 {
+  v.conv::[F32]~(1.0)                               //~ E0821
+}
+
+pub fn in_a_function_of_two(v: V) -> F32 {
+  v.pair::[F32, U8]~(1.0, 1)                        //~ E0821
+}
+
+pub fn of_a_generic_impl(w: W[U8]) -> F32 {
+  w.conv::[F32]~(1.0)                               //~ E0821
+}

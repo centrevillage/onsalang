@@ -12,10 +12,9 @@ use onsa_diag::hash::HashSet;
 use onsa_syntax::ast::{Ast, ExprId, Ident, Mode, Path, TypeArgList};
 
 use super::paths::Place;
-use super::{Binding, BindingId, BindingKind, BodyNames, Fail, Listed, Origin, PathRes, Typed, Walker};
+use super::{ArgsOf, Binding, BindingId, BindingKind, BodyNames, Fail, Listed, Origin, PathRes, Typed, Walker};
 use crate::Analysis;
 use crate::def::{GenericDef, ModId};
-use crate::resolve::Entity;
 use crate::ty::TyId;
 
 /// What the names of a constant expression of a type are read in: the type
@@ -46,10 +45,10 @@ impl ConstNames {
     /// it: the first in them, which comes before the walk's (§18.1).
     pub(crate) fn lower(
         &mut self,
-        mut lower: impl FnMut((Entity, &Path, &TypeArgList)) -> (TyId, Vec<Diagnostic>),
+        mut lower: impl FnMut((&ArgsOf, &Path, &TypeArgList)) -> (TyId, Vec<Diagnostic>),
     ) -> Option<Diagnostic> {
         for at in std::mem::take(&mut self.lists) {
-            let lowered = lower((at.entity, &at.path, &at.args));
+            let lowered = lower((&at.of, &at.path, &at.args));
             if let Err(d) = self.names.put_args(at, lowered) {
                 return Some(d);
             }

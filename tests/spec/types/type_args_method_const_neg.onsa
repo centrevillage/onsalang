@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// S-239 (W5-10 U2b): the const argument written after the name of a method is a constant expression (§4.5: "配列の長さと const 引数は定数式で書く"). What
+// is not one is E0417 (§4.5: "定数式でないもの（関数の呼び出し、ローカル変数など）を書くと、位置によらず E0417"; "比較・論理・ビットの演算子 … は中の型によらず E0417"):
+// a local variable, an argument, a call, a comparison, and a value that is not a constant (a function). What is not a number of the type of the parameter is
+// E0401: a negative number (`U32` has no prefix `-`, §3.4, so `-1` and `-0` are E0401 in every place), a float literal, a bool literal (§4.5:
+// "整数でないリテラル（`1.5`、`true`、`"s"`）も E0401"). The method is decided by the receiver's type, so the type stage reports them. The number of the
+// candidates is not written. One error per item (P-01).
+
+pub struct V {
+  n: U8,
+}
+
+impl V {
+  pub fn cn[const N: U32](self) -> U32 {
+    N
+  }
+}
+
+pub fn four() -> U32 {
+  4
+}
+
+pub fn a_local(v: V) -> U32 {
+  let n: U32 = 4
+  v.cn::[n]()                                       //~ E0417
+}
+
+pub fn an_argument(v: V, n: U32) -> U32 {
+  v.cn::[n]()                                       //~ E0417
+}
+
+pub fn a_call(v: V) -> U32 {
+  v.cn::[four()]()                                  //~ E0417
+}
+
+pub fn a_comparison(v: V) -> U32 {
+  v.cn::[1 < 2]()                                   //~ E0417
+}
+
+pub fn a_function(v: V) -> U32 {
+  v.cn::[four]()                                    //~ E0417
+}
+
+pub fn a_negative_number(v: V) -> U32 {
+  v.cn::[-1]()                                      //~ E0401
+}
+
+pub fn a_negative_zero(v: V) -> U32 {
+  v.cn::[-0]()                                      //~ E0401
+}
+
+pub fn a_float(v: V) -> U32 {
+  v.cn::[1.5]()                                     //~ E0401
+}
+
+pub fn a_bool(v: V) -> U32 {
+  v.cn::[true]()                                    //~ E0401
+}
+
+pub fn fine(v: V) -> U32 {
+  v.cn::[4]()
+}

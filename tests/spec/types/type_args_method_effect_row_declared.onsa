@@ -1,0 +1,58 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§8.1"]
+
+// S-982 (W5-10 U2b): the number of the type arguments of an expression does not count the effect row variable (§4.5: "式の中の型引数の数に、効果行変数
+// （§8.1）は数えない"), for a method as for a function. `fn mid[A, e, B]` has an effect row variable between two type parameters (a name that does
+// not start with a capital letter is an effect row variable, §8.1), so its list has two elements, in the order of `A` and `B` (the variable is skipped
+// wherever it is declared). The variable is declared and not used in a function type, so this case does not need the check of the effect rows of
+// function types (R-27, W6-01); type_args_method_effect_row.onsa has the method that takes a function with the row. The method of a generic `impl`
+// is the same. The errors of the number are in type_args_method_count.onsa. No diagnostic.
+
+pub struct V {
+  n: U8,
+}
+
+pub struct W[T] {
+  item: T,
+}
+
+impl V {
+  pub fn mid[A, e, B](self, a: A, b: B) -> A {
+    a
+  }
+
+  pub fn first_e[e, A](self, a: A) -> A {
+    a
+  }
+
+  pub fn last_e[A, e](self, a: A) -> A {
+    a
+  }
+}
+
+impl[T] W[T] {
+  pub fn mid_w[A, e, B](self, a: A, b: B) -> (T, A) {
+    (self.item, a)
+  }
+}
+
+pub fn the_variable_in_the_middle(v: V) -> U8 {
+  v.mid::[U8, F32](1, 2.5)
+}
+
+pub fn the_variable_first(v: V) -> U8 {
+  v.first_e::[U8](1)
+}
+
+pub fn the_variable_last(v: V) -> U8 {
+  v.last_e::[U8](1)
+}
+
+pub fn the_variable_in_a_generic_impl(w: W[F32]) -> (F32, U8) {
+  w.mid_w::[U8, F32](1, 2.5)
+}
+
+pub fn the_list_is_not_needed(v: V) -> U8 {
+  v.mid(1, true)
+}

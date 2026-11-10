@@ -1,0 +1,45 @@
+pub struct V {
+  n: U8,
+}
+
+pub struct W[T] {
+  item: T,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+
+  pub fn zero[T: AnyNum](self) -> T {
+    T.ZERO
+  }
+
+  pub fn cn[const N: U32](self) -> U32 {
+    N
+  }
+}
+
+impl[T] W[T] {
+  pub fn make(item: T) -> W[T] {
+    W { item: item }
+  }
+
+  pub fn conv[U](self, x: U) -> U {
+    x
+  }
+
+  pub fn both[U](self, u: U) -> (T, U) {
+    (self.item, u)
+  }
+
+  pub fn get(self) -> T {
+    self.item
+  }
+}
+
+pub fn mk() -> V {
+  V { n: 1 }
+}
+
+pub const KV: V = V { n: 2 }

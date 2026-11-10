@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§2.6", "§4.5", "§11.2", "§18.1"]
+
+// S-239, S-811 (W5-10 U2b): the `!` written after the list of a method in the body of a flow is E0806 (S-811: "その文脈で書けない印（… flow の本体の `!(` …
+// の E0806（§11.2））", before the rules of the mark with the callee; §11.2: "`!` の呼び出し … E0806"). The receiver is a value, so there is no candidate
+// (§11.2: "受け手か呼び先が値なら候補を出さない"; `fixes = 0`). The list is right. This case waits for W7-04 (the check of the body of a flow, the same wait as
+// type_args_fn_mark_bang_flow.onsa): this version does not report the `!` of a method in the body of a flow at all, with the list or without it. One
+// error per item (P-01).
+
+pub struct V {
+  n: U8,
+}
+
+impl V {
+  pub rt fn pass[T: Copy](self, x: T) -> T {
+    x
+  }
+}
+
+pub flow on_a_method(x: F32 at sample) -> F32 at sample {
+  let v = V { n: 1 }
+  v.pass::[F32]!(x)                                 //~ E0806
+}
+
+pub flow in_an_operand(x: F32 at sample) -> F32 at sample {
+  let v = V { n: 1 }
+  x + v.pass::[F32]!(x)                             //~ E0806
+}

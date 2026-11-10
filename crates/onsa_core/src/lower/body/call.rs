@@ -120,8 +120,10 @@ pub(super) fn lower_call(
             let (def, gargs) = lw.instance_target(def, of, inst, cx, span)?;
             let d = lw.a.def(def).clone();
             let DefKind::Fn(f) = &d.kind else { return Err(internal(span, "method target")) };
-            let AK::Field { base, .. } = &cx.expr(callee).kind else { return Err(internal(span, "method call shape")) };
-            let recv = lower_expr(lw, cx, *base)?;
+            let Some(base) = onsa_sema::receiver(cx.ast, callee) else {
+                return Err(internal(span, "method call shape"));
+            };
+            let recv = lower_expr(lw, cx, base)?;
             let self_mode = core_mode(f.self_mode.unwrap_or(ast::Mode::Borrow));
             if f.target {
                 return lower_target_call(lw, cx, e, (def, f), &gargs, Some((recv, self_mode)), args, ty);
@@ -299,8 +301,10 @@ fn lower_from_fn(lw: &mut Lowerer, cx: &mut FnCx, args: &[ast::Arg], ty: Ty, spa
 
 fn lower_builtin_method(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, callee: ExprId, name: &str) -> R<Expr> {
     let span = cx.expr(e).span;
-    let AK::Field { base, .. } = &cx.expr(callee).kind else { return Err(internal(span, "builtin method shape")) };
-    let recv = lower_expr(lw, cx, *base)?;
+    let Some(base) = onsa_sema::receiver(cx.ast, callee) else {
+        return Err(internal(span, "builtin method shape"));
+    };
+    let recv = lower_expr(lw, cx, base)?;
     match &recv.ty {
         // The one method of the table of an array, `len` (§5.3; the others
         // are std's): its length.

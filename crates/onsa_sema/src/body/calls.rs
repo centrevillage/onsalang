@@ -42,8 +42,9 @@ impl<'a> Checker<'a> {
                     _ => self.check_fn_call(e, callee, (entity, owner), &name, args, expected, kind),
                 };
             }
-            // 2. A method `recv.name(...)` of the value before it.
-            if let ExprKind::Field { base, name } = &self.expr(callee).kind {
+            // 2. A method `recv.name(...)` of the value before it, with type
+            // arguments of its own or not (`v.m::[I32](x)`, §4.5).
+            if let ExprKind::Field { base, name } = &self.expr(named).kind {
                 let (base, name) = (*base, name.clone());
                 let recv = self.check_expr(base, None)?;
                 let recv = self.known(recv, self.expr(base).span, "receiver")?;
@@ -245,6 +246,7 @@ impl<'a> Checker<'a> {
                     self.inout_receiver(callee)?;
                 }
                 let targs = self.fresh_args(md);
+                self.method_args(callee, md, &targs, span)?;
                 // The `Self` of a member of a type parameter is the receiver.
                 let of = matches!(self.ty(recv), Ty::Param(_)).then_some(recv);
                 // The impl's own generic arguments come from the receiver; of
@@ -288,6 +290,8 @@ impl<'a> Checker<'a> {
         if let Some(called) = self.field_called(e, callee, recv, name, args, expected, kind) {
             return called;
         }
+        // Type arguments after what is no member are not judged: the E0413
+        // is that of no type arguments (§4.5, S-992).
         Err(self.removed_method(e, recv, name, args, expected, kind))
     }
 
@@ -582,9 +586,9 @@ impl<'a> Checker<'a> {
     /// The receiver of an `inout self` method, written with `!` or not, is
     /// an `inout` argument (§5.2, S-178).
     fn inout_receiver(&mut self, callee: ExprId) -> R<()> {
-        match &self.expr(callee).kind {
-            ExprKind::Field { base, .. } if !self.inout_place(*base, false) => {
-                Err(self.no_inout_place(*base, "the receiver of an `inout self` method", "§5.2"))
+        match crate::names::body::receiver(self.ast, callee) {
+            Some(base) if !self.inout_place(base, false) => {
+                Err(self.no_inout_place(base, "the receiver of an `inout self` method", "§5.2"))
             }
             _ => Ok(()),
         }

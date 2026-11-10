@@ -1,0 +1,71 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§6.2"]
+
+// S-239 (W5-10 U2b): the list written after the name of a method gives the type parameters of the method itself, and the type parameters of
+// the `impl` are decided by the receiver (§4.5: "与えるのはメソッド自身の型パラメータで、`impl` の型パラメータはレシーバで決まる"). In
+// `impl[T] W[T]` the method `both[U]` has one parameter, so `w.both::[U8](200)` is the `U` of the method, and the `T` is the one of
+// the type of `w`. Two receivers of one method with different `T` and the same list, a list that names the same type as the `T` of the
+// receiver, and a const parameter of the method. The values are worked out by hand.
+
+pub struct W[T] {
+  item: T,
+}
+
+impl[T] W[T] {
+  pub fn conv[U](self, x: U) -> U {
+    x
+  }
+
+  pub fn both[U](self, u: U) -> (T, U) {
+    (self.item, u)
+  }
+
+  pub fn width[const N: U32](self) -> U32 {
+    N
+  }
+
+  pub fn get(self) -> T {
+    self.item
+  }
+}
+
+test "T is the one of the receiver and U is the one of the list" {
+  let w: W[F32] = W { item: 1.5 }
+  let r = w.both::[U8](200)
+  assert r.0 == 1.5
+  assert r.1.checked_add(100) == None
+}
+
+test "two receivers of one method with different T and the same list" {
+  let a: W[U8] = W { item: 200 }
+  let b: W[F32] = W { item: 0.5 }
+  let ra = a.both::[I32](200)
+  let rb = b.both::[I32](200)
+  assert ra.0.checked_add(100) == None
+  assert ra.1.checked_add(100) == Some(300)
+  assert rb.0 == 0.5
+  assert rb.1.checked_add(100) == Some(300)
+}
+
+test "the list names a type other than the T of the receiver" {
+  let w: W[F32] = W { item: 1.5 }
+  let k = w.conv::[U8](250)
+  assert k.checked_add(10) == None
+}
+
+test "the list names the same type as the T of the receiver" {
+  let w: W[U8] = W { item: 1 }
+  let k = w.conv::[U8](250)
+  assert k.checked_add(10) == None
+  let j = w.conv::[I32](250)
+  assert j.checked_add(10) == Some(260)
+}
+
+test "a const parameter of the method" {
+  let w: W[U8] = W { item: 1 }
+  assert w.width::[3]() == 3
+  assert w.width::[0]() == 0
+  assert w.get() == 1
+}

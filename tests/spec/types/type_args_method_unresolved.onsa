@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7"]
+
+// S-239 (W5-10 U2b): the pair of type_args_method_result_only_run.onsa. A type parameter that only the result of the method has, with no list, no
+// annotation and no later statement that decides it, is E0406 at the call (§4.5: "引数から決まらない型パラメータ（返り値だけに現れるものなど）は、型引数か、
+// 期待型の注釈か後の文で決める … 関数の終わりまでに決まらなければ、その呼び出しの位置に E0406"; §4.7). The bound does not decide it (§4.5: "決まらないまま関数が
+// 終われば、要求は検査せず、E0406 … だけを報告する"). A method of a type without parameters, a method that returns `Option[T]`, and a method of a generic
+// `impl`. The forms that decide it are fine: the list, the annotation of the binding, and a later statement that uses the value as a type
+// (the last three functions). One error per item (P-01). The number of the candidates is not written.
+
+pub struct V {
+  n: U8,
+}
+
+pub struct W[T] {
+  item: T,
+}
+
+impl V {
+  pub fn zero[T: AnyNum](self) -> T {
+    T.ZERO
+  }
+
+  pub fn none_of[T](self) -> Option[T] {
+    None
+  }
+}
+
+impl[T] W[T] {
+  pub fn zero_of[U: AnyNum](self) -> U {
+    U.ZERO
+  }
+}
+
+pub fn a_type_parameter_that_only_the_result_has(v: V) -> U32 {
+  let _ = v.zero()                                  //~ E0406
+  1
+}
+
+pub fn an_option_that_holds_no_value(v: V) -> U32 {
+  let _ = v.none_of()                               //~ E0406
+  1
+}
+
+pub fn a_method_of_a_generic_impl(w: W[F32]) -> U32 {
+  let _ = w.zero_of()                               //~ E0406
+  1
+}
+
+pub fn the_list_decides_it(v: V) -> U32 {
+  let _ = v.zero::[U8]()
+  1
+}
+
+pub fn the_annotation_decides_it(v: V) -> U8 {
+  let z: U8 = v.zero()
+  z
+}
+
+pub fn a_later_statement_decides_it(v: V) -> U8 {
+  let z = v.zero()
+  let w: U8 = z
+  w
+}

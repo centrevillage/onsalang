@@ -85,8 +85,15 @@ impl<'a> Walker<'a> {
             return match &self.ast.expr(e).kind {
                 // A field of a value that is no name (`f().x`).
                 ExprKind::Path(_) | ExprKind::Field { .. } => self.exprs(self.ast.sub_exprs(e)),
-                // After a method of such a value (U2b).
-                ExprKind::TypeArgs { args, .. } => Err(self.fail(self.type_args(args.span))),
+                // After a member of such a value (`f().m::[I32]`, S-977).
+                ExprKind::TypeArgs { base, args } => {
+                    self.name_at(*base, Place::Value)?;
+                    let ExprKind::Field { name, .. } = &self.ast.expr(*base).kind else {
+                        onsa_diag::internal::bug(Some(args.span), "type arguments after no name (E0002, §6.1)")
+                    };
+                    self.member_args(e, &[name], args);
+                    Ok(())
+                }
                 _ => self.expr(e),
             };
         };
@@ -420,7 +427,7 @@ impl<'a> Walker<'a> {
     }
 
     /// The type or const parameter `name` of the heading.
-    fn heading(&self, name: &Ident) -> Option<PathRes> {
+    pub(super) fn heading(&self, name: &Ident) -> Option<PathRes> {
         let (i, g) = (0..).zip(self.generics).find(|(_, g)| g.name == name.name)?;
         self.a.note_use(g.span, name.span);
         match g.kind {

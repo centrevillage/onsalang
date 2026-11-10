@@ -1,0 +1,87 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§4.7", "§6.2"]
+
+// S-239 (W5-10 U2b): the type arguments of a method are written after the name of the method (§4.5: "メソッド（`v.m::[I32](x)`。与えるのは
+// メソッド自身の型パラメータで、`impl` の型パラメータはレシーバで決まる）"). The type parameters of the call are decided by that statement (§4.5:
+// "型引数を書いた呼び出しの型パラメータは、その文で決まる"), so a method that needs the type of the receiver (§4.7: "型の頭が決まっていなければ E0420")
+// is called on the result in the next statement without an annotation: `checked_add(100)` of a `U8` that holds 200 is `None`, of an `I32`
+// it is `Some(300)`. A method of a struct without type parameters, one type parameter, and the list with a type that is not a name. The
+// values are worked out by hand.
+
+pub struct V {
+  n: U8,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+
+  pub fn take(self, x: U8) -> U8 {
+    x
+  }
+}
+
+test "the type argument decides T before the next statement" {
+  let v = V { n: 1 }
+  let k = v.conv::[U8](200)
+  assert k.checked_add(100) == None
+  assert k.checked_add(50) == Some(250)
+}
+
+test "another type argument gives another type" {
+  let v = V { n: 1 }
+  let k = v.conv::[I32](200)
+  assert k.checked_add(100) == Some(300)
+}
+
+test "two instantiations in one test do not mix" {
+  let v = V { n: 1 }
+  let a = v.conv::[U8](200)
+  let b = v.conv::[I32](200)
+  assert a.checked_add(100) == None
+  assert b.checked_add(100) == Some(300)
+}
+
+test "F32" {
+  let v = V { n: 1 }
+  let f = v.conv::[F32](1.5)
+  assert f == 1.5
+  assert f + 1.0 == 2.5
+}
+
+test "a type that is not a name" {
+  let v = V { n: 1 }
+  let o = v.conv::[Option[U8]](Some(200))
+  let k = match o {
+    Some(x) => x,
+    None => 0,
+  }
+  assert k.checked_add(100) == None
+  let t = v.conv::[(U8, F32)]((200, 2.5))
+  assert t.1 == 2.5
+  let a = v.conv::[[U8; 2]]([200, 1])
+  assert a[0].checked_add(100) == None
+}
+
+test "a call in an argument and a call of the call" {
+  let v = V { n: 1 }
+  assert v.take(v.conv::[U8](9)) == 9
+  assert v.conv::[U8](v.conv::[U8](7)) == 7
+}
+
+test "the list and the annotation together" {
+  let v = V { n: 1 }
+  let a: U8 = v.conv::[U8](250)
+  let b: Option[U8] = v.conv::[Option[U8]](None)
+  assert a.checked_add(10) == None
+  assert b == None
+}
+
+test "the result of the call is an operand" {
+  let v = V { n: 1 }
+  assert v.conv::[U8](100) + v.conv::[U8](100) == 200
+  assert v.conv::[F32](0.5) * 2.0 == 1.0
+}

@@ -161,9 +161,6 @@ features! {
     /// R-294: `{}`: a name the spec gives a builtin type (`Str.from_utf8`),
     /// of the table `MISSING` of `onsa_sema`'s `builtin.rs`.
     BuiltinName: Language, "the builtin name `{}`", None;
-    /// S-239: the syntax reads `name::[…]` (W3-19); the name and type stages
-    /// give the list to the item from W5-10.
-    TypeArgsInExpressions: Language, "instantiating an item with type arguments written in an expression (`name::[…]`)", None;
     /// S-224, S-257: the `for` loop over `a..=b` that ends when `b` is the
     /// type's maximum (W8-03); never lowered as `..<` (R-81).
     InclusiveRangeFor: Language, "a range with its end (`a..=b`) in a `for` head",

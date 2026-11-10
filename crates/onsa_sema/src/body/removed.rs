@@ -227,6 +227,8 @@ impl<'a> Checker<'a> {
     /// postfix form, written bare in every place (§3.1).
     fn call_edits(&self, e: ExprId, name: &Ident, args: &[Arg]) -> Option<Vec<Edit>> {
         let ExprKind::Call { callee, .. } = &self.expr(e).kind else { return None };
+        // The form with no type arguments after the name alone: the edits are of `.name(`, and a
+        // callee with them (`v.m::[I32](x)`) has no candidate.
         let ExprKind::Field { base, .. } = &self.expr(*callee).kind else { return None };
         let at = self.expr(*base).span;
         let (dot, open) = (name.span.start.checked_sub(1)?, name.span.end);

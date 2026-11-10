@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+
+// S-977 (W5-10 U2b): the E0308 of a list written after a field is an error of the type stage, so it is not reported while the same unit has an error of the
+// names stage (S-977: "同じ単位に名前の段の誤りがある間は出ない（§18.1 の段の順のまま）"; §18.1: "名前の誤りがある単位では型検査をしない"). The error of the names stage is
+// after the list in the source, so the report is not decided by the position: it is E0302 and the E0308 of the list is reported after the name is fixed.
+// A field of a function type called with `(`, a field of a function type called with `.(`, and a field that is not a function. The last function has the
+// error of the list alone, so it is reported. One error per item (P-01).
+
+pub struct H {
+  f: fn(I32) -> I32,
+  a: I32,
+}
+
+pub fn the_call_and_a_name_that_is_not_found(h: H) -> I32 {
+  let a = h.f::[I32](1)
+  let b = Nope                                      //~ E0302
+  a
+}
+
+pub fn the_call_with_the_mark_and_a_name_that_is_not_found(h: H) -> I32 {
+  let a = h.f::[I32].(1)
+  let b = Nope                                      //~ E0302
+  a
+}
+
+pub fn a_plain_field_and_a_name_that_is_not_found(h: H) -> I32 {
+  let a = h.a::[I32]
+  let b = Nope                                      //~ E0302
+  a
+}
+
+pub fn the_list_alone(h: H) -> I32 {
+  h.f::[I32](1)                                     //~ E0308
+}

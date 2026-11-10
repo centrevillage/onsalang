@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§9.1", "§5.2"]
+
+// S-239 (W5-10 U2b): a method of a type of the standard library that has a type parameter of its own takes the list after its name: `map_err` is declared
+// `pub fn map_err[F: ?Dup](move self, f: fn(move E) -> F) -> Result[T, F]` (§9.1), so `r.map_err::[U32](code)` gives `F = U32`, and the `T` and `E` of the
+// `impl` are the receiver's (§4.5: "与えるのはメソッド自身の型パラメータで、`impl` の型パラメータはレシーバで決まる"). Used alone, on a parameter, before `?`
+// (§9.1) and in a chain. Only the check: `f` is called in the body of `map_err`, and the lowering of a call through a function value is the work W8-09,
+// so the values are not run. The errors are in type_args_method_std.onsa. No diagnostic.
+
+pub enum Low {
+  Bad,
+  Worse(U32),
+}
+
+pub fn read_low() -> Result[U32, Low] {
+  Ok(1)
+}
+
+pub fn code(move e: Low) -> U32 {
+  match e {
+    Low.Bad => 0,
+    Low.Worse(n) => n,
+  }
+}
+
+pub fn alone() -> Result[U32, U32] {
+  read_low().map_err::[U32](code)
+}
+
+pub fn on_a_parameter(r: Result[U32, Low]) -> Result[U32, U32] {
+  r.map_err::[U32](code)
+}
+
+pub fn before_the_question_mark() -> Result[U32, U32] {
+  let n = read_low().map_err::[U32](code)?
+  Ok(n + 1)
+}
+
+pub fn in_a_chain() -> Result[U32, U32] {
+  read_low().map_err::[U32](code).map_err::[U32](wrap_back)
+}
+
+pub fn wrap_back(move e: U32) -> U32 {
+  e
+}
+
+pub fn without_the_list() -> Result[U32, U32] {
+  read_low().map_err(code)
+}

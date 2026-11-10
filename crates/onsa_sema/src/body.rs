@@ -862,10 +862,10 @@ pub(crate) fn view_base(
     ty: impl Fn(TyId) -> TyId,
 ) -> Option<ExprId> {
     let ExprKind::Call { callee, .. } = &ast.expr(e).kind else { return None };
-    let ExprKind::Field { base, .. } = &ast.expr(*callee).kind else { return None };
+    let base = crate::names::body::receiver(ast, *callee)?;
     let span = info.expr_types.get(&e).is_some_and(|&t| matches!(a.types.get(ty(t)), Ty::Builtin(BuiltinTy::Span, _)));
     let std = matches!(info.targets.get(&e), Some(Target::Method { def, .. }) if a.modules.is_std(a.def(*def).module));
-    (span && std).then_some(*base)
+    (span && std).then_some(base)
 }
 
 /// E0401 for the struct literal whose path `shown` at `span` names a type

@@ -34,6 +34,9 @@ impl<'a> Checker<'a> {
         let DefKind::Struct(s) = &def.kind else { return None };
         let Fields::Named(fields) = &s.fields else { return None };
         let field = fields.iter().find(|f| f.name == name.name).filter(|f| self.field_visible(d, f))?;
+        if let ExprKind::TypeArgs { .. } = self.expr(callee).kind {
+            return Some(Err(self.args_after_field(callee)));
+        }
         let t = self.a.types.subst(field.ty, &targs);
         let t = self.shallow(t);
         Some(match (self.ty(t), kind) {

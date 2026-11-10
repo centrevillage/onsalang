@@ -1,0 +1,73 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7", "§18.1"]
+
+// S-239 (W5-10 U2b): the type argument decides the type of the parameter of the call of a method, so an argument of another type and an expected type
+// of another type are E0401 (§4.5: "型引数を書いた呼び出しの型パラメータは、その文で決まる"; "期待型の注釈 … は束縛の型、後者は項目の具体化"; §4.7: the expected type is
+// checked against the type). A float literal and a bool literal for an integer, a variable of another type, the second argument of two, an annotation
+// of another type than the result, the result of a method without arguments, and a method of a generic `impl`. The number of the candidates is not
+// written (the spec does not promise a candidate for a mismatch of types in a call). One error per item (P-01). The literals out of the range are E0408
+// (type_args_method_literal_range.onsa).
+
+pub struct V {
+  n: U8,
+}
+
+pub struct W[T] {
+  item: T,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+
+  pub fn first[A, B](self, a: A, b: B) -> A {
+    a
+  }
+
+  pub fn zero[T: AnyNum](self) -> T {
+    T.ZERO
+  }
+}
+
+impl[T] W[T] {
+  pub fn conv[U](self, u: U) -> U {
+    u
+  }
+}
+
+pub fn a_float_for_an_integer(v: V) -> U8 {
+  v.conv::[U8](1.5)                                 //~ E0401
+}
+
+pub fn a_bool_for_an_integer(v: V) -> U8 {
+  v.conv::[U8](true)                                //~ E0401
+}
+
+pub fn a_variable_of_another_type(v: V, a: I32) -> U8 {
+  v.conv::[U8](a)                                   //~ E0401
+}
+
+pub fn the_second_argument(v: V) -> U8 {
+  v.first::[U8, F32](1, "s")                        //~ E0401
+}
+
+pub fn the_annotation_is_another_type(v: V) -> I32 {
+  let y: I32 = v.conv::[U8](250)                    //~ E0401
+  y
+}
+
+pub fn the_result_of_a_method_without_arguments(v: V) -> F32 {
+  let f: F32 = v.zero::[U8]()                       //~ E0401
+  f
+}
+
+pub fn a_method_of_a_generic_impl(w: W[F32]) -> U8 {
+  w.conv::[U8](2.5)                                 //~ E0401
+}
+
+pub fn right(v: V) -> U8 {
+  let y: U8 = v.conv::[U8](250)
+  y
+}

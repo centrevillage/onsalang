@@ -62,10 +62,10 @@ impl<'a> Rater<'a> {
                     self.sample_rate_at = Some(self.sample_rate_at.map_or(ctx, |r| r.max(ctx)));
                 } else {
                     self.non_rt_here(e, ctx);
-                    if let ExprKind::Field { base, .. } = &self.expr(*callee).kind
-                        && self.body.expr_types.contains_key(base)
+                    if let Some(base) = crate::names::body::receiver(self.ast, *callee)
+                        && self.body.expr_types.contains_key(&base)
                     {
-                        self.mark(*base, ctx);
+                        self.mark(base, ctx);
                     }
                     for a in args {
                         self.mark(a.expr, ctx);

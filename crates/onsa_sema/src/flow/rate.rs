@@ -359,11 +359,11 @@ impl<'a> Rater<'a> {
     fn rate_call(&mut self, e: ExprId, callee: ExprId, args: &[Arg], span: Span) -> RR<FlowRate> {
         let mut r = FlowRate::Const;
         // Receiver of a method call.
-        if let ExprKind::Field { base, .. } = &self.expr(callee).kind
-            && self.body.expr_types.contains_key(base)
+        if let Some(base) = crate::names::body::receiver(self.ast, callee)
+            && self.body.expr_types.contains_key(&base)
             && !matches!(self.body.targets.get(&e), Some(Target::Fn { .. }))
         {
-            r = r.max(self.rate(*base)?);
+            r = r.max(self.rate(base)?);
         }
         r = args.iter().try_fold(r, |r, a| Ok(r.max(self.rate(a.expr)?)))?;
         let target = self.body.targets.get(&e).cloned();

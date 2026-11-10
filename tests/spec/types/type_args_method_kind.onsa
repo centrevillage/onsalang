@@ -1,0 +1,92 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// S-239, S-977 (W5-10 U2b): the kind of an element of the list written after the name of a method (a type or a constant expression) is not the kind of
+// the parameter at that place. The method is decided by the type of the receiver, so the type stage knows the kind of the parameter and reports it
+// (S-977: "メソッド自身の型引数の種類の誤り（`v.conv::[4](1)`、`v.cn::[I32]()`）… は、どちらも型の段の E0308 である"), with the same code as a function
+// (§4.5: "名前でない型の形と定数式（`Ring[F32, (F32, F32)]`、`Wrap[3]`）も E0308 である"). A constant for a type parameter, a type for a const parameter,
+// in the first and the second place, a form that is not a name for a const parameter, a local value for a type parameter, and the same for a method
+// of a generic `impl`. The number of the candidates is not written. One error per item (P-01).
+
+pub struct V {
+  n: U8,
+}
+
+pub struct W[T] {
+  item: T,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+
+  pub fn cn[const N: U32](self) -> U32 {
+    N
+  }
+
+  pub fn tag[T, const N: U32](self, x: T) -> (T, U32) {
+    (x, N)
+  }
+}
+
+impl[T] W[T] {
+  pub fn conv[U](self, u: U) -> U {
+    u
+  }
+
+  pub fn cn[const N: U32](self) -> U32 {
+    N
+  }
+}
+
+pub fn a_constant_for_a_type_parameter(v: V) -> U8 {
+  v.conv::[4](1)                                    //~ E0308
+}
+
+pub fn a_type_for_a_const_parameter(v: V) -> U32 {
+  v.cn::[U8]()                                      //~ E0308
+}
+
+pub fn a_constant_for_the_first_of_two(v: V) -> U32 {
+  let t = v.tag::[3, 3](1)                          //~ E0308
+  t.1
+}
+
+pub fn a_type_for_the_const_of_two(v: V) -> U32 {
+  let t = v.tag::[U8, U8](1)                        //~ E0308
+  t.1
+}
+
+pub fn a_form_that_is_not_a_name_for_a_const_parameter(v: V) -> U32 {
+  let t = v.tag::[U8, (U8, U8)](1)                  //~ E0308
+  t.1
+}
+
+pub fn a_local_value_for_a_type_parameter(v: V) -> U8 {
+  let k = 4
+  v.conv::[k](1)                                    //~ E0308
+}
+
+pub fn a_constant_for_a_type_parameter_of_a_generic_impl(w: W[U8]) -> U8 {
+  w.conv::[4](1)                                    //~ E0308
+}
+
+pub fn a_type_for_a_const_parameter_of_a_generic_impl(w: W[U8]) -> U32 {
+  w.cn::[F32]()                                     //~ E0308
+}
+
+pub fn a_constant_for_a_type_parameter_of_the_result(v: V) -> U8 {
+  mk().conv::[4](1)                                 //~ E0308
+}
+
+pub fn mk() -> V {
+  V { n: 1 }
+}
+
+pub fn right(v: V, w: W[U8]) -> U32 {
+  let a = v.conv::[U8](1)
+  let t = v.tag::[U8, 3](a)
+  w.cn::[2]() + t.1
+}

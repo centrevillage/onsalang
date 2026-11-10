@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§9.1", "§18.1"]
+
+// S-239, S-306 (W5-10 U2b): the errors of the list after the name of a method of the standard library. `map_err[F]` has one type parameter, so a list
+// of two is E0412 (§4.5: "型引数と const 引数の数が宣言と合わなければ E0412"). `unwrap` has none: the `T` of `Option[T]` and of `Result[T, E]` is the one of the
+// `impl` and is decided by the receiver, so giving it in the list of the method is E0412 (§4.5: "型パラメータを宣言していない名前 … に書いても E0412";
+// S-306). The type argument decides the type that the conversion has to return, so a function that returns another type is E0401. There is no candidate
+// (`fixes = 0`). One error per item (P-01).
+
+pub enum Low {
+  Bad,
+  Worse(U32),
+}
+
+pub fn read_low() -> Result[U32, Low] {
+  Ok(1)
+}
+
+pub fn code(move e: Low) -> U32 {
+  match e {
+    Low.Bad => 0,
+    Low.Worse(n) => n,
+  }
+}
+
+pub fn too_many() -> Result[U32, U32] {
+  read_low().map_err::[U32, U32](code)              //~ E0412
+}
+
+pub fn the_type_parameter_of_a_result(r: Result[U32, Low]) -> U32 {
+  r.unwrap::[U32]()                                 //~ E0412
+}
+
+pub fn the_type_parameter_of_an_option(o: Option[U32]) -> U32 {
+  o.unwrap::[U32]()                                 //~ E0412
+}
+
+pub fn another_type_than_the_function_returns() -> Result[U32, Bool] {
+  read_low().map_err::[Bool](code)                  //~ E0401
+}
+
+pub fn right() -> Result[U32, U32] {
+  read_low().map_err::[U32](code)
+}

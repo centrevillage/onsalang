@@ -8,7 +8,7 @@ use std::mem::replace;
 
 use onsa_diag::internal::bug;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
-use onsa_syntax::ast::{Arg, CallKind, ExprId, ExprKind, Mode};
+use onsa_syntax::ast::{Arg, CallKind, ExprId, Mode};
 
 use super::check::Walker;
 use super::flow::Run;
@@ -48,9 +48,9 @@ impl Walker<'_> {
             bug(Some(self.ast.expr(e).span), "a call whose arguments are not those of its callee")
         }
         self.bang(e, callee, kind, recv);
-        let receiver = match (recv, &self.ast.expr(callee).kind) {
-            (Some(m), &ExprKind::Field { base, .. }) => Some((base, m)),
-            (Some(_), _) => bug(Some(self.ast.expr(callee).span), "a method call with no receiver"),
+        let receiver = match (recv, crate::names::body::receiver(self.ast, callee)) {
+            (Some(m), Some(base)) => Some((base, m)),
+            (Some(_), None) => bug(Some(self.ast.expr(callee).span), "a method call with no receiver"),
             (None, _) => None,
         };
         let (later, passed) = self.exclusive(receiver, args, &takes);

@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§4.7"]
+
+// S-239 (W5-10 U2b): a type parameter that only the result of the method has (`zero[T: AnyNum](self) -> T`) is decided by the list written
+// after the name of the method (§4.5: "引数から決まらない型パラメータ（返り値だけに現れるものなど）は、型引数か、期待型の注釈か後の文で決める"). Without the
+// list nothing decides it (type_args_method_unresolved.onsa). The result of `zero::[U8]()` is a `U8`, so `checked_sub(1)` of it is `None`, and
+// of an `I32` it is `Some(-1)`. An `Option[T]` that holds no value gets its `T` from the list. The values are worked out by hand.
+
+pub struct V {
+  n: U8,
+}
+
+impl V {
+  pub fn zero[T: AnyNum](self) -> T {
+    T.ZERO
+  }
+
+  pub fn none_of[T](self) -> Option[T] {
+    None
+  }
+}
+
+test "a type parameter that only the result has" {
+  let v = V { n: 1 }
+  let z = v.zero::[U8]()
+  assert z.checked_sub(1) == None
+  let i = v.zero::[I32]()
+  assert i.checked_sub(1) == Some(-1)
+  let f = v.zero::[F32]()
+  assert f == 0.0
+}
+
+test "an Option that holds no value gets its T from the list" {
+  let v = V { n: 1 }
+  let n = v.none_of::[U8]()
+  let k = match n {
+    Some(x) => x,
+    None => 200,
+  }
+  assert k.checked_add(100) == None
+}
+
+test "the list and the annotation together" {
+  let v = V { n: 1 }
+  let a: U8 = v.zero::[U8]()
+  let b: Option[U8] = v.none_of::[U8]()
+  let c: F32 = v.zero::[F32]()
+  assert a == 0
+  assert b == None
+  assert c == 0.0
+}
+
+test "the annotation alone also decides it" {
+  let v = V { n: 1 }
+  let a: U8 = v.zero()
+  assert a.checked_sub(1) == None
+}

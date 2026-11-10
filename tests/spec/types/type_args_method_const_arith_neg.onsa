@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.6", "§18.1"]
+
+// S-239 (W5-10 U2b): the value of a constant expression that is a const argument written after the name of a method is worked out at compile
+// time, and an overflow, an underflow and a division by zero are E0419 at the expression (§4.5: "溢れとゼロ除算は、その式の位置で E0419
+// （コンパイル時の評価の panic、§6.6）"). A const parameter of the method that calls in an expression with an operator (`M * 2`) is E0417 (§4.5:
+// "const の型パラメータを含む式（`[F32; N * 2]` …）は書けない（E0417 …）"). Kept apart from type_args_method_const_neg.onsa: this version stops every
+// constant expression with an operator at E0200 (the same wait as type_args_fn_const_arith_neg.onsa). One error per item (P-01).
+
+pub struct V {
+  n: U8,
+}
+
+impl V {
+  pub fn cn[const N: U32](self) -> U32 {
+    N
+  }
+
+  pub fn outer[const M: U32](self) -> U32 {
+    self.cn::[M * 2]()                              //~ E0417
+  }
+}
+
+pub fn an_overflow(v: V) -> U32 {
+  v.cn::[4294967295 + 1]()                          //~ E0419
+}
+
+pub fn a_division_by_zero(v: V) -> U32 {
+  v.cn::[4 / 0]()                                   //~ E0419
+}
+
+pub fn an_underflow(v: V) -> U32 {
+  v.cn::[0 - 1]()                                   //~ E0419
+}
+
+pub fn a_remainder_by_zero(v: V) -> U32 {
+  v.cn::[4 % 0]()                                   //~ E0419
+}
+
+pub fn fine(v: V) -> U32 {
+  v.cn::[4294967295]()
+}

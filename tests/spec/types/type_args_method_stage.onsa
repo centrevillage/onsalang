@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+
+// S-977 (W5-10 U2b): the kind and the number of the list written after the name of a method are judged by the type stage, so they are not reported while
+// the same unit has an error of the names stage (§18.1: "名前の誤りがある単位では型検査をしない"; S-977: "同じ単位に名前の段の誤りがある間は出ない"). The error of the
+// names stage is after the list in the source, so the report is not decided by the position: it is E0302 in all of them, and the E0308 and the E0412
+// of the list are reported after the name is fixed. A kind that is wrong (a type parameter and a const parameter), a number that is wrong, and a name
+// that is not found in the list itself (the names stage reads every name of the list, S-981). The last function has the kind error alone, so it
+// is reported. One error per item (P-01).
+
+pub struct V {
+  n: U8,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+
+  pub fn cn[const N: U32](self) -> U32 {
+    N
+  }
+}
+
+pub fn the_kind_is_wrong_and_a_name_is_not_found(v: V) -> U8 {
+  let a = v.conv::[4](1)
+  let b = Nope                                      //~ E0302
+  a
+}
+
+pub fn the_number_is_wrong_and_a_name_is_not_found(v: V) -> U8 {
+  let a = v.conv::[U8, U8](1)
+  let b = Nope                                      //~ E0302
+  a
+}
+
+pub fn the_const_kind_is_wrong_and_a_name_is_not_found(v: V) -> U32 {
+  let a = v.cn::[U8]()
+  let b = Nope                                      //~ E0302
+  a
+}
+
+pub fn the_kind_and_the_name_in_the_list(v: V) -> U8 {
+  v.conv::[4, Nope](1)                              //~ E0302
+}
+
+pub fn the_kind_is_wrong_alone(v: V) -> U8 {
+  v.conv::[4](1)                                    //~ E0308
+}

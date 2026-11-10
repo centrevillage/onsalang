@@ -1,0 +1,117 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§6.2", "§8.1", "§18.1"]
+
+// S-239, S-306, S-982 (W5-10 U2b): the number of the elements of the list written after the name of a method is not the number of the type and
+// const parameters of the method (§4.5: "型引数と const 引数の数が宣言と合わなければ E0412（関数の引数の数と同じコード）"; the method is decided by the type
+// of the receiver, so the type stage reports it, "種類と数を型の段で判定する"). Too many, too few, a method without type parameters, the type parameter
+// of the `impl` that the receiver decides (§4.5: "与えるのはメソッド自身の型パラメータで、`impl` の型パラメータはレシーバで決まる"; S-306: "型パラメータを
+// 持たないメソッドに書いた並び"), a const argument too many and missing, the effect row variable that is not counted (`fn mid[A, e, B]` has two type
+// parameters, so three elements are too many and one is too few, S-982), and a method of a generic `impl`. There is no candidate in an expression
+// (§4.5: "式の中の型引数の E0412 に修正候補は無く"; `fixes = 0`; S-306, the note is not promised). One error per item (P-01); the other items are fine.
+
+pub struct V {
+  n: U8,
+}
+
+pub struct W[T] {
+  item: T,
+}
+
+impl V {
+  pub fn plain(self, x: U8) -> U8 {
+    x
+  }
+
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+
+  pub fn pair[A, B](self, a: A, b: B) -> A {
+    a
+  }
+
+  pub fn cn[const N: U32](self) -> U32 {
+    N
+  }
+
+  pub fn tag[T, const N: U32](self, x: T) -> (T, U32) {
+    (x, N)
+  }
+
+  pub fn mid[A, e, B](self, a: A, b: B) -> A {
+    a
+  }
+}
+
+impl[T] W[T] {
+  pub fn get(self) -> T {
+    self.item
+  }
+
+  pub fn conv[U](self, u: U) -> U {
+    u
+  }
+
+  pub fn both[U](self, u: U) -> (T, U) {
+    (self.item, u)
+  }
+}
+
+pub fn too_many(v: V) -> U8 {
+  v.conv::[U8, F32](1)                              //~ E0412
+}
+
+pub fn too_few(v: V) -> U8 {
+  v.pair::[U8](1, 2.0)                              //~ E0412
+}
+
+pub fn a_method_without_type_parameters(v: V) -> U8 {
+  v.plain::[U8](1)                                  //~ E0412
+}
+
+pub fn the_type_parameter_of_the_impl(w: W[U8]) -> U8 {
+  w.get::[U8]()                                     //~ E0412
+}
+
+pub fn the_type_parameter_of_the_impl_and_the_own(w: W[U8]) -> (U8, U8) {
+  w.both::[U8, U8](1)                               //~ E0412
+}
+
+pub fn a_const_argument_too_many(v: V) -> U32 {
+  v.cn::[4, 4]()                                    //~ E0412
+}
+
+pub fn the_const_argument_is_missing(v: V) -> U32 {
+  let t = v.tag::[U8](1)                            //~ E0412
+  t.1
+}
+
+pub fn the_effect_row_variable_is_not_counted(v: V) -> U8 {
+  v.mid::[U8, F32, U8](1, 2.0)                      //~ E0412
+}
+
+pub fn the_effect_row_variable_is_not_counted_too_few(v: V) -> U8 {
+  v.mid::[U8](1, 2.0)                               //~ E0412
+}
+
+pub fn a_method_of_a_generic_impl_too_many(w: W[U8]) -> U8 {
+  w.conv::[U8, U8](1)                               //~ E0412
+}
+
+pub fn the_result_of_a_function() -> U8 {
+  mk().plain::[U8](1)                               //~ E0412
+}
+
+pub fn mk() -> V {
+  V { n: 1 }
+}
+
+pub fn right(v: V, w: W[F32]) -> U8 {
+  let a = v.conv::[U8](1)
+  let b = v.pair::[U8, F32](a, 2.0)
+  let t = v.tag::[U8, 4](b)
+  let c = w.conv::[U8](t.0)
+  v.plain(c)
+}

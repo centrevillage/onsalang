@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// fixes = 1
+// spec = ["§2.6", "§4.5", "§5.2", "§18.1"]
+
+// S-239, S-811 (W5-10 U2b): the `!` written after the list of a method that does not take `inout self` is E0714 (S-811: "書いた印が呼び先に合わない規則
+// （… `!(` は E0714）"; §5.2: "`inout self` のメソッドでない呼び出し … に付ければ E0714"). The list is right, so the one candidate removes the `!` (S-811: "書いた印を呼び先の種類の
+// 印に置き換える一つの編集（種類の印が無ければ消す）で、当てた後に同じ段か前の段の誤りが残らないときだけ示す") and the call after it has no error. A method with one
+// parameter, with two, and a method of a generic `impl`. One error per item (P-01).
+
+pub struct V {
+  n: U8,
+}
+
+pub struct W[T] {
+  item: T,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+
+  pub fn pair[A, B](self, a: A, b: B) -> A {
+    a
+  }
+}
+
+impl[T] W[T] {
+  pub fn conv[U](self, u: U) -> U {
+    u
+  }
+}
+
+pub fn on_a_method(v: V, x: F32) -> F32 {
+  v.conv::[F32]!(x)                                 //~ E0714
+}
+
+pub fn on_a_method_of_two(v: V, x: F32) -> F32 {
+  v.pair::[F32, U8]!(x, 1)                          //~ E0714
+}
+
+pub fn on_a_method_of_a_generic_impl(w: W[U8], x: F32) -> F32 {
+  w.conv::[F32]!(x)                                 //~ E0714
+}

@@ -1,0 +1,52 @@
+// onsa.toml
+// [test]
+// fixes = 1
+// spec = ["§2.6", "§4.5", "§5.2", "§18.1"]
+
+// S-239, S-811 (W5-10 U2b): a method that takes `inout self` is called with `!` (§5.2: "`inout self` のメソッドの呼び出しは、名前の直後に `!` を付ける"; the `!` is
+// after the list, §2.6: "型引数を書いたときはその並びの後"), and the call without it is E0713 (§5.2: "無ければ E0713 … 修正候補は一意"). The list is right, so the
+// one candidate puts the `!` after the list and the call after it has no error (S-811: "当てた後に同じ段か前の段の誤りが残らないときだけ示す"). A const
+// parameter, a type parameter, and the method of a generic `impl`. The receiver is a `var`. One error per item (P-01).
+
+pub struct Acc {
+  n: U32,
+}
+
+pub struct Hold[T] {
+  item: T,
+  count: U32,
+}
+
+impl Acc {
+  pub fn bump[const N: U32](inout self) {
+    self.n = self.n + N
+  }
+
+  pub fn store[T](inout self, x: T) -> T {
+    self.n = self.n + 1
+    x
+  }
+}
+
+impl[T] Hold[T] {
+  pub fn note[U](inout self, u: U) -> U {
+    self.count = self.count + 1
+    u
+  }
+}
+
+pub fn a_const_parameter() -> U32 {
+  var a = Acc { n: 0 }
+  a.bump::[3]()                                     //~ E0713
+  a.n
+}
+
+pub fn a_type_parameter() -> U8 {
+  var a = Acc { n: 0 }
+  a.store::[U8](200)                                //~ E0713
+}
+
+pub fn a_method_of_a_generic_impl() -> U8 {
+  var h: Hold[F32] = Hold { item: 1.5, count: 0 }
+  h.note::[U8](200)                                 //~ E0713
+}

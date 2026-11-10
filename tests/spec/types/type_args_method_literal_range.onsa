@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7", "§18.1"]
+
+// S-239 (W5-10 U2b): a literal that is an argument of a call of a method whose type argument is written has the type of the parameter from the start, so a
+// literal out of the range of that type is E0408 (§4.7: "型が決まった時点で範囲外のリテラル … は E0408"; "被演算子が、括弧を除くと整数リテラルそのものである前置の `-` は、
+// 値に含めて検査する（`I8` に `-128` は書け、`-129` は E0408）"). `v.conv::[U8](300)` is the same error as `let x: U8 = 300`, which the annotation without
+// the list gives (types.onsa). The first and the second argument, a signed type, a method of a generic `impl`, and the edge that is right. One error per item (P-01).
+
+pub struct V {
+  n: U8,
+}
+
+pub struct W[T] {
+  item: T,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+
+  pub fn first[A, B](self, a: A, b: B) -> A {
+    a
+  }
+}
+
+impl[T] W[T] {
+  pub fn conv[U](self, u: U) -> U {
+    u
+  }
+}
+
+pub fn too_big(v: V) -> U8 {
+  v.conv::[U8](300)                                 //~ E0408
+}
+
+pub fn just_over(v: V) -> U8 {
+  v.conv::[U8](256)                                 //~ E0408
+}
+
+pub fn too_small(v: V) -> I8 {
+  v.conv::[I8](-129)                                //~ E0408
+}
+
+pub fn the_second_argument(v: V) -> U8 {
+  v.first::[U8, U8](1, 256)                         //~ E0408
+}
+
+pub fn a_method_of_a_generic_impl(w: W[F32]) -> U8 {
+  w.conv::[U8](300)                                 //~ E0408
+}
+
+pub fn the_edges_are_right(v: V) -> I8 {
+  let b = v.conv::[I8](-128)
+  let c = v.conv::[I8](127)
+  b + c
+}
+
+pub fn the_unsigned_edge_is_right(v: V) -> U8 {
+  v.conv::[U8](255)
+}

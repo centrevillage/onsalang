@@ -1,0 +1,77 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// S-977 (W5-10 U2b): a list written after a field that is not a function and is not a method (`v.a::[I32]`) is E0308 (S-977: "メソッドでないメンバの後の並び
+// （`v.a::[I32]`）… 型の段の E0308"; §4.5: "その場の値（ローカルの束縛、引数、フィールド）に書くと E0308"). What the member is, is decided by the type of the receiver, so
+// the type stage reports it, as it does for a method (type_args_method_kind.onsa) and for a field of a function type (type_args_member_fn_field.onsa). A field
+// of a number, of a tuple, of an array, a field in an operation, in the middle of a chain, of a generic struct, of `self`, and of the result of a function. The
+// number of the candidates is not written. One error per item (P-01).
+
+pub struct V {
+  a: U8,
+  t: (U8, U8),
+  xs: [U8; 2],
+}
+
+pub struct Outer {
+  v: V,
+}
+
+pub struct W[T] {
+  item: T,
+}
+
+impl V {
+  pub fn through_self(self) -> U8 {
+    let _ = self.a::[U8]                            //~ E0308
+    1
+  }
+}
+
+pub fn mk() -> V {
+  V { a: 1, t: (1, 2), xs: [1, 2] }
+}
+
+pub fn a_number(v: V) -> U8 {
+  let _ = v.a::[I32]                                //~ E0308
+  1
+}
+
+pub fn a_number_in_an_operation(v: V) -> U8 {
+  v.a::[U8] + 1                                     //~ E0308
+}
+
+pub fn a_tuple(v: V) -> U8 {
+  let _ = v.t::[U8]                                 //~ E0308
+  1
+}
+
+pub fn an_array(v: V) -> U8 {
+  let _ = v.xs::[U8]                                //~ E0308
+  1
+}
+
+pub fn a_field_in_the_middle_of_a_chain(o: Outer) -> U8 {
+  let _ = o.v.a::[I32]                              //~ E0308
+  1
+}
+
+pub fn a_field_of_a_generic_struct(w: W[U8]) -> U8 {
+  let _ = w.item::[U8]                              //~ E0308
+  1
+}
+
+pub fn a_field_of_the_result_of_a_function() -> U8 {
+  let _ = mk().a::[I32]                             //~ E0308
+  1
+}
+
+pub fn a_const_argument(v: V) -> U8 {
+  let _ = v.a::[3]                                  //~ E0308
+  1
+}
+
+pub fn right(v: V, o: Outer, w: W[U8]) -> U8 {
+  v.a + o.v.a + w.item + v.t.0 + v.xs[1]
+}

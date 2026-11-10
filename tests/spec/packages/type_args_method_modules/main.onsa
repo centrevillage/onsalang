@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§6.2", "§15.1"]
+
+// S-239 (W5-10 U2b): the type stage knows the methods of a type of another module as it knows those of one in the same file, so the list after the
+// name of a method is read the same for an imported type, for the result of an imported function, for a constant of a module and for an imported
+// generic type (§4.5: "メソッド（`v.m::[I32](x)`。…）"). The type parameter that only the result has, a const parameter, and the `T` of the
+// imported `impl` that is the receiver's. The values are worked out by hand.
+use util
+use util.{V, W, mk}
+
+test "an imported type" {
+  let v = V { n: 1 }
+  let k = v.conv::[U8](200)
+  assert k.checked_add(100) == None
+}
+
+test "the result of an imported function" {
+  let k = mk().conv::[U8](200)
+  assert k.checked_add(100) == None
+}
+
+test "the result of a function of a module" {
+  let k = util.mk().conv::[I32](200)
+  assert k.checked_add(100) == Some(300)
+}
+
+test "a constant of a module" {
+  let k = util.KV.conv::[U8](200)
+  assert k.checked_add(100) == None
+}
+
+test "a type parameter that only the result has" {
+  let v = V { n: 1 }
+  let z = v.zero::[U8]()
+  assert z.checked_sub(1) == None
+}
+
+test "a const parameter" {
+  let v = V { n: 1 }
+  assert v.cn::[6]() == 6
+}
+
+test "an imported generic type" {
+  let w = W::[F32].make(0.5)
+  let r = w.both::[U8](200)
+  assert r.0 == 0.5
+  assert r.1.checked_add(100) == None
+  let k = w.conv::[U8](250)
+  assert k.checked_add(10) == None
+}
+
+test "a generic type through the module name" {
+  let w = util.W::[U8].make(200)
+  let r = w.both::[I32](300)
+  assert r.0.checked_add(100) == None
+  assert r.1.checked_add(1) == Some(301)
+}

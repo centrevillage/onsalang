@@ -3,7 +3,6 @@
 //! stage declares).
 
 use onsa_diag::hash::HashMap;
-use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast::{
     Ast, Block, Clock, ExprId, ExprKind, Ident, Lit, MatchArm, Param, ParamName, PatId, PatKind, StmtId, StmtKind,
@@ -179,13 +178,6 @@ impl Walker<'_> {
             Typed::Args(ref at) => at.args.args.iter().for_each(|&x| heads(self.ast, x, &mut names)),
         }
         (t, names.into_iter().filter(|n| self.sees_local(n)).map(|n| n.name.clone()).collect())
-    }
-
-    /// E0200 for the type arguments at `span` of an expression that this
-    /// version does not give to their item yet (W5-10 U2b, S-979): of a
-    /// method, or of a field of a value; neither dropped nor read (R-81).
-    pub(super) fn type_args(&self, span: onsa_diag::Span) -> Fail {
-        Fail::Report(Feature::TypeArgsInExpressions.diagnostic(Stage::Names, span, &[]).with_found(self.src(span)))
     }
 
     /// The holes of a string literal (§2.4): the path of each is a chain of

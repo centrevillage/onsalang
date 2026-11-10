@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.1", "§15.1", "§18.1"]
+
+// S-977 (W5-10 U2b): a list written after a field of a function type is E0308 (§4.5: "その場の値（ローカルの束縛、引数、フィールド。関数値は一つの具体化を指し、
+// 型引数を取らない）に書くと E0308 である（フィールドの `h.f::[I32](1)` は、何であるかが受け手の型で決まるので型の段）"; S-977: "関数型のフィールド … の後の並び
+// （`h.f::[I32](1)`、`v.a::[I32]`）は … 型の段の E0308"). The field is found by the type of the receiver, so the type stage reports it, whatever follows the list: a
+// call with `(`, a call with `.(`, nothing (the value is put in a binding). A field of a field, a field of the result of a function, a field of `self`, and
+// a field of a local. The number of the candidates is not written (the call with `(` is also the E0020 of §6.2, which is not reported before the list). One
+// error per item (P-01).
+
+pub struct H {
+  f: fn(I32) -> I32,
+}
+
+pub struct Outer {
+  h: H,
+}
+
+pub fn inc(x: I32) -> I32 {
+  x + 1
+}
+
+pub fn mk() -> H {
+  H { f: inc }
+}
+
+impl H {
+  pub fn through_self(self) -> I32 {
+    self.f::[I32](1)                                //~ E0308
+  }
+}
+
+pub fn called(h: H) -> I32 {
+  h.f::[I32](1)                                     //~ E0308
+}
+
+pub fn called_with_the_mark(h: H) -> I32 {
+  h.f::[I32].(1)                                    //~ E0308
+}
+
+pub fn not_called(h: H) -> I32 {
+  let _ = h.f::[I32]                                //~ E0308
+  1
+}
+
+pub fn a_field_of_a_field(o: Outer) -> I32 {
+  o.h.f::[I32](1)                                   //~ E0308
+}
+
+pub fn a_field_of_the_result_of_a_function() -> I32 {
+  mk().f::[I32](1)                                  //~ E0308
+}
+
+pub fn a_field_of_a_local() -> I32 {
+  let h = H { f: inc }
+  h.f::[I32](1)                                     //~ E0308
+}
+
+pub fn a_const_argument(h: H) -> I32 {
+  h.f::[3](1)                                       //~ E0308
+}
+
+pub fn right(h: H, o: Outer) -> I32 {
+  h.f.(1) + o.h.f.(2)
+}

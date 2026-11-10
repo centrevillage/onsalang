@@ -1,0 +1,58 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.6", "§4.5", "§5.2"]
+
+// S-239, S-811 (W5-10 U2b): the `!` of a method that takes `inout self` is written after the list of the method (§2.6: "`!` も名前（型引数を書いたときは
+// その並びの後、`buf.push::[F32]!(x)`、§4.5）の直後に空白を空けずに書き"). The list gives the type parameters and const parameters of the method, the
+// receiver is a `var`, and the call changes it. A const parameter, a type parameter, and the method of a generic `impl` whose `T` is the receiver's.
+// The values are worked out by hand.
+
+pub struct Acc {
+  n: U32,
+}
+
+pub struct Hold[T] {
+  item: T,
+  count: U32,
+}
+
+impl Acc {
+  pub fn bump[const N: U32](inout self) {
+    self.n = self.n + N
+  }
+
+  pub fn store[T](inout self, x: T) -> T {
+    self.n = self.n + 1
+    x
+  }
+}
+
+impl[T] Hold[T] {
+  pub fn note[U](inout self, u: U) -> U {
+    self.count = self.count + 1
+    u
+  }
+}
+
+test "a const parameter" {
+  var a = Acc { n: 0 }
+  a.bump::[3]!()
+  a.bump::[4]!()
+  assert a.n == 7
+}
+
+test "a type parameter" {
+  var a = Acc { n: 0 }
+  let k = a.store::[U8]!(200)
+  assert k.checked_add(100) == None
+  assert a.n == 1
+}
+
+test "the method of a generic impl" {
+  var h: Hold[F32] = Hold { item: 1.5, count: 0 }
+  let k = h.note::[U8]!(200)
+  assert k.checked_add(100) == None
+  assert h.count == 1
+  assert h.item == 1.5
+}

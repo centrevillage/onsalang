@@ -98,6 +98,7 @@ pub use def::{Def, DefId, DefKind, ModId};
 pub use flow::{FlowInfo, FlowLet, FlowRate, InitArg, Node};
 pub use kind::Kind;
 pub use layout::Layout;
+pub use names::body::{named, receiver};
 pub use names::rename::rename_fixes;
 pub use names::{cyclic, file_key};
 pub use resolve::{Builtin, Entity, ModInfo, Modules, ResolveError};

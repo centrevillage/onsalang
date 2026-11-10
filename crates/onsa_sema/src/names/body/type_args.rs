@@ -9,25 +9,27 @@
 //! `BodyNames::own`); after a variant of the prelude (`None::[I32]`, §4.1),
 //! they make the type of its enum, in the `owner` of its own record. In a
 //! constant expression alike (S-329: its reader reads the `owner`,
-//! `crate::constarg`). Those of a method are E0200 until the unit that reads
-//! them (W5-10 U2b), before the marks of the call (`flow.rs`).
+//! `crate::constarg`). After a member of a value (`v.m::[I32]`), they are of
+//! the method or the field the types stage finds (S-977): their names are
+//! read here, each lowered by its form ([`Walker::const_form`], S-981).
 
 use onsa_diag::{Code, Diagnostic, Span, Stage};
-use onsa_syntax::ast::{ExprId, ExprKind, Ident, Path, TypeArgList};
+use onsa_syntax::ast::{ExprId, ExprKind, Ident, Path, TypeArgList, TypeId, TypeKind};
 
-use super::paths::path_of;
-use super::{Fail, Listed, PathRes, Typed, Walker};
+use super::paths::{is_value, path_of};
+use super::{ArgsOf, Fail, Listed, PathRes, Typed, Walker};
 use crate::Analysis;
 use crate::def::{DefId, DefKind, GenericKind};
+use crate::names::PathEnd;
 use crate::resolve::{Builtin, Entity};
 
 /// What type arguments go to, by the record of the name before them.
 enum To {
     /// The type the next name is a member of.
     Type(Entity),
-    /// The name itself: the own parameters of a function (`true`), the type
-    /// of the enum of a variant of the prelude.
-    Name(Entity, bool),
+    /// The name itself: the own parameters of a function, the type of the
+    /// enum of a variant of the prelude.
+    Name(ArgsOf),
     /// A name that declares no type parameters: E0412.
     Nothing,
     /// A local: E0308.
@@ -51,10 +53,16 @@ impl<'a> Walker<'a> {
     ) -> Option<Fail> {
         for &(k, x) in lists {
             let ExprKind::TypeArgs { args, .. } = &self.ast.expr(x).kind else { continue };
-            // A field or a method of a value (U2b).
-            let Some(r) = records.get(k) else { return fail.or_else(|| Some(self.type_args(args.span))) };
+            // A field or a method of a value; none after an error of the chain.
+            let Some(r) = records.get(k) else {
+                if fail.is_some() {
+                    return fail;
+                }
+                self.member_args(x, &names[..=k], args);
+                continue;
+            };
             let stopped = fail.is_some() && records.len() == k + 1 && !matches!(r, PathRes::Namespace(_));
-            let (entity, to, own) = match self.goes_to(r, names[k]) {
+            let (of, to) = match self.goes_to(r, names[k]) {
                 To::Local => {
                     let span = self.ast.expr(x).span;
                     let msg = "a local takes no type arguments: a function value is one instance of a function (§4.5)";
@@ -63,8 +71,8 @@ impl<'a> Walker<'a> {
                     ));
                 }
                 _ if stopped => return fail,
-                To::Type(entity) => (entity, k + 1, false),
-                To::Name(entity, own) => (entity, k, own),
+                To::Type(entity) => (ArgsOf::Type(entity), k + 1),
+                To::Name(of) => (of, k),
                 To::Nothing => {
                     let after_type = k > 0 && matches!(self.goes_to(&records[k - 1], names[k - 1]), To::Type(_));
                     let d = self.no_params((names, k), after_type, self.ast.expr(x).span);
@@ -74,11 +82,45 @@ impl<'a> Walker<'a> {
                 To::Unknown => continue,
             };
             let (path, to) = (path_of(&names[..=k]), nodes.get(to).copied());
-            let site =
-                self.site(Typed::Args(Box::new(Listed { key: (x, 0), entity, path, args: args.clone(), to, own })));
+            let site = self.site(Typed::Args(Box::new(Listed { key: (x, 0), of, path, args: args.clone(), to })));
             self.type_sites.push(site);
         }
         fail
+    }
+
+    /// The type arguments `args` at `x` after the member of a value that
+    /// ends `names` (`v.m::[I32]`, `h.f::[I32]`, §4.5): of what the types
+    /// stage finds (S-977). Their names are read now, all of them (S-981).
+    pub(super) fn member_args(&mut self, x: ExprId, names: &[&Ident], args: &TypeArgList) {
+        let of = ArgsOf::Member(args.args.iter().map(|&t| self.const_form(t)).collect());
+        let at = Listed { key: (x, 0), of, path: path_of(names), args: args.clone(), to: None };
+        let site = self.site(Typed::Args(Box::new(at)));
+        self.type_sites.push(site);
+    }
+
+    /// Whether the element `t` of type arguments whose parameters are not
+    /// known (after a member of a value) is a constant expression by its
+    /// form, lowered as one: a form that is no type, or a name of a value (a
+    /// local, a const parameter, a constant, a function, a variant, a member
+    /// of a type parameter, `T.N`). The types stage judges its kind against
+    /// the parameter (E0308, S-977); a name not found is a type's E0302.
+    fn const_form(&self, t: TypeId) -> bool {
+        let TypeKind::Path { path, .. } = &self.ast.ty(t).kind else {
+            return matches!(self.ast.ty(t).kind, TypeKind::ConstArg(_));
+        };
+        let head = &path.segments[0];
+        if self.sees_local(head) || self.outer.contains_key(&head.name) {
+            return true;
+        }
+        match self.heading(head) {
+            Some(PathRes::ConstParam(_)) => true,
+            Some(_) => path.segments.len() > 1,
+            None => match self.a.path_end(self.m, path, self.self_ty) {
+                Ok(PathEnd::Entity(e)) => is_value(self.a, e),
+                Ok(PathEnd::Builtin { .. }) => true,
+                Err(_) => false,
+            },
+        }
     }
 
     /// The type arguments `lists` of the path of the struct literal `e`,
@@ -91,7 +133,8 @@ impl<'a> Walker<'a> {
             let key = (e, *k as u32);
             match (*k + 1 == segs.len()).then(|| self.goes_to(&last, segs[*k])) {
                 Some(To::Type(entity)) => {
-                    let at = Listed { key, entity, path: path.clone(), args: args.clone(), to: Some(e), own: false };
+                    let of = ArgsOf::Type(entity);
+                    let at = Listed { key, of, path: path.clone(), args: args.clone(), to: Some(e) };
                     let site = self.site(Typed::Args(Box::new(at)));
                     self.type_sites.push(site);
                 }
@@ -119,13 +162,13 @@ impl<'a> Walker<'a> {
         }
         match e {
             Entity::Builtin(Builtin::Scalar(_) | Builtin::Generic(_)) => To::Type(e),
-            Entity::Variant(d, _) if a.modules.lang.of(d).is_some() => To::Name(Entity::Def(d), false),
+            Entity::Variant(d, _) if a.modules.lang.of(d).is_some() => To::Name(ArgsOf::Type(Entity::Def(d))),
             Entity::Module(_) | Entity::Builtin(_) | Entity::Variant(..) => To::Nothing,
             Entity::Def(d) | Entity::Member(d) if a.heading_failed(d) => To::Unknown,
             Entity::Def(d) | Entity::Member(d) => match &a.def(d).kind {
                 DefKind::Struct(_) | DefKind::Enum(_) | DefKind::Alias(_) => To::Type(e),
                 DefKind::Flow(_) => To::Nothing,
-                DefKind::Fn(_) if !own_params(a, d).is_empty() => To::Name(e, true),
+                DefKind::Fn(_) if !own_params(a, d).is_empty() => To::Name(ArgsOf::Own(d)),
                 _ => To::Nothing,
             },
         }
@@ -136,16 +179,38 @@ impl<'a> Walker<'a> {
     /// note of the item that takes them, the type before it (`after_type`).
     pub(super) fn no_params(&self, (names, k): (&[&Ident], usize), after_type: bool, span: Span) -> Diagnostic {
         let name = &names[k].name;
-        let msg = format!("`{name}` declares no type parameters to take type arguments (§4.5)");
-        let rule = match after_type {
-            true => format!(
+        let rule = after_type.then(|| {
+            format!(
                 "the type arguments of `{0}` are written after it, `{0}::[…].{name}`",
                 path_of(&names[..k]).dotted()
-            ),
-            false => "type arguments are written after the item that declares the type parameters".to_string(),
-        };
-        Diagnostic::new(Stage::Types, Code::E0412, span, msg).with_found(self.src(span)).with_rule(rule)
+            )
+        });
+        count_error(name, (&[], 0), (span, self.src(span)), rule)
     }
+}
+
+/// The E0412 of the `n` type arguments at `span` (written `found`) after
+/// `name`, whose own parameters are `params` (§4.5, S-306): no candidate,
+/// and a note of the parameters, or of the item that takes them (`rule`).
+pub(crate) fn count_error(
+    name: &str,
+    (params, n): (&[String], usize),
+    (span, found): (Span, String),
+    rule: Option<String>,
+) -> Diagnostic {
+    let (msg, rule) = match params {
+        [] => (
+            format!("`{name}` declares no type parameters to take type arguments (§4.5)"),
+            rule.unwrap_or_else(|| {
+                "type arguments are written after the item that declares the type parameters".into()
+            }),
+        ),
+        _ => (
+            format!("`{name}` takes {} type argument(s), {n} given", params.len()),
+            format!("`{name}` declares the type parameters {} (§4.5)", params.join(", ")),
+        ),
+    };
+    Diagnostic::new(Stage::Types, Code::E0412, span, msg).with_found(found).with_rule(rule)
 }
 
 /// The own type and const parameters of the function `d` (§4.5), at their

@@ -1,0 +1,83 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// S-239, S-981 (W5-10 U2b): a name in the list written after the name of a method that is not found is E0302 of the names stage, whatever the
+// number of the parameters is (§4.5: "その並びの中の名前は、数が分かる前に名前の段が全て読む（宣言の数を超えた要素の見つからない名前 `v.m::[I32, Nope](x)` は、
+// 名前の段の E0302 が先である）"; S-981). The method is decided by the type of the receiver, so the names stage does not know the number: it reads every
+// name, and the number (E0412) is the next error, after the name is fixed. A name in the first place, a name beyond the number, the list of a method
+// without type parameters, a name in a list that has too few elements, a type inside a type, a name in a const place, the `T` of the `impl` (a name
+// that is not in scope in the code that calls), and a method of a generic `impl`. One error per item (P-01). The number of the candidates is not written.
+
+pub struct V {
+  n: U8,
+}
+
+pub struct W[T] {
+  item: T,
+}
+
+impl V {
+  pub fn plain(self, x: U8) -> U8 {
+    x
+  }
+
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+
+  pub fn pair[A, B](self, a: A, b: B) -> A {
+    a
+  }
+
+  pub fn cn[const N: U32](self) -> U32 {
+    N
+  }
+}
+
+impl[T] W[T] {
+  pub fn get(self) -> T {
+    self.item
+  }
+
+  pub fn conv[U](self, u: U) -> U {
+    u
+  }
+}
+
+pub fn a_name_in_the_first_place(v: V) -> U8 {
+  v.conv::[Nope](1)                                 //~ E0302
+}
+
+pub fn a_name_beyond_the_number(v: V) -> U8 {
+  v.conv::[I32, Nope](1)                            //~ E0302
+}
+
+pub fn a_method_without_type_parameters(v: V) -> U8 {
+  v.plain::[Nope](1)                                //~ E0302
+}
+
+pub fn too_few_and_not_found(v: V) -> U8 {
+  v.pair::[Nope](1, 2.0)                            //~ E0302
+}
+
+pub fn a_type_inside_a_type(v: V) -> U8 {
+  let _ = v.conv::[Option[Nope]](None)              //~ E0302
+  1
+}
+
+pub fn a_name_in_a_const_place(v: V) -> U32 {
+  v.cn::[K]()                                       //~ E0302
+}
+
+pub fn the_type_parameter_of_the_impl(w: W[U8]) -> U8 {
+  w.conv::[T](1)                                    //~ E0302
+}
+
+pub fn a_method_of_a_generic_impl_without_type_parameters(w: W[U8]) -> U8 {
+  w.get::[Nope]()                                   //~ E0302
+}
+
+pub fn a_name_beyond_the_number_of_a_const_parameter(v: V) -> U32 {
+  v.cn::[4, Nope]()                                 //~ E0302
+}

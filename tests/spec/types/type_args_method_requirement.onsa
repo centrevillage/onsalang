@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+
+// S-239 (W5-10 U2b): the requirements of the type parameter of a method (a bound, the implicit `Dup`) are checked for the type argument written after
+// the name of the method, in the statement (§4.5: "型引数を書いた呼び出しの型パラメータは、その文で決まる（下の要求の検査もその文で行う）"; "満たさなければ、
+// 要求を生んだ式（呼び出し、…）の位置に E0416"). A bound that the argument does not meet, the second parameter of two, a method of a generic `impl` whose own
+// parameter has a bound (the bound of the `impl`'s parameter is the receiver's business), and the `Dup` of a `Buf`. One error per item (P-01).
+
+pub struct V {
+  n: U8,
+}
+
+pub struct W[T] {
+  item: T,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+
+  pub fn zero[T: AnyNum](self) -> T {
+    T.ZERO
+  }
+
+  pub fn both[A: Num, B: Float](self, a: A, b: B) -> A {
+    a
+  }
+}
+
+impl[T] W[T] {
+  pub fn scaled[U: Float](self, u: U) -> U {
+    u
+  }
+}
+
+pub fn a_bound(v: V) -> Bool {
+  v.zero::[Bool]()                                  //~ E0416
+}
+
+pub fn a_bound_of_a_string(v: V) -> Str {
+  v.zero::[Str]()                                   //~ E0416
+}
+
+pub fn the_second_parameter(v: V) -> I32 {
+  v.both::[I32, I32](1, 2)                          //~ E0416
+}
+
+pub fn the_first_parameter(v: V) -> U8 {
+  v.both::[U8, F32](1, 2.0)                         //~ E0416
+}
+
+pub fn a_method_of_a_generic_impl(w: W[U8]) -> I32 {
+  w.scaled::[I32](1)                                //~ E0416
+}
+
+pub fn the_dup_of_a_buf(v: V) -> U32 uses {Alloc} {
+  let _ = v.conv::[Buf[F32]](Buf.zeroed(4))         //~ E0416
+  1
+}
+
+pub fn right(v: V, w: W[U8]) -> F32 {
+  let a = v.both::[I32, F32](1, 2.0)
+  let z = v.zero::[F32]()
+  w.scaled::[F32](z) + F32.round_from(a)
+}

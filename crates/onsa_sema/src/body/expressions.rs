@@ -166,7 +166,14 @@ impl<'a> Checker<'a> {
             // the names stage gave to them.
             ExprKind::TypeArgs { base, .. } => {
                 self.type_args_of(e)?;
-                self.check_expr(*base, expected)
+                // After a member of a value, not called: a field, or what is
+                // no field, as with no type arguments (E0413, S-992).
+                if !self.names.members.contains_key(&e) {
+                    return self.check_expr(*base, expected);
+                }
+                // The error of the member comes first (§4.5, S-992).
+                self.check_expr(*base, None)?;
+                Err(self.args_after_field(e))
             }
             ExprKind::Block(b) => self.check_block(e, self.block_of(e, b), expected),
             // What only a flow body holds is the names stage's E0821 outside

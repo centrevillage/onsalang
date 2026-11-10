@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// S-979 (4) (W5-10 U2b): a method written with the name of its type in the form of a function (`V.conv(v, 1)`) is E0308 of the names stage (§15.1: "メソッドを
+// 関数の形で呼ぶ" is a name of the wrong kind, E0308), whether a list follows the method or not. The name is an error at that place of its own, so the error of
+// the name is before the judgement of the list (S-979: "名前がその位置自体で誤りなら、今ある名前の段の診断が先である（`let m = util::[I32]`、`let p = prev::[F32]`）"):
+// a list that is right, a list of a wrong number and a list of the wrong kind are all E0308. A method with a type parameter, a method without, and a
+// method of a generic type. The number of the candidates is not written. One error per item (P-01).
+
+pub struct V {
+  n: U8,
+}
+
+pub struct W[T] {
+  item: T,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+
+  pub fn plain(self, x: U8) -> U8 {
+    x
+  }
+}
+
+impl[T] W[T] {
+  pub fn conv[U](self, u: U) -> U {
+    u
+  }
+}
+
+pub fn a_list_that_is_right(v: V) -> I32 {
+  V.conv::[I32](v, 1)                               //~ E0308
+}
+
+pub fn a_method_without_type_parameters(v: V) -> U8 {
+  V.plain::[I32](v, 1)                              //~ E0308
+}
+
+pub fn a_list_of_the_wrong_kind(v: V) -> I32 {
+  V.conv::[4](v, 1)                                 //~ E0308
+}
+
+pub fn a_method_of_a_generic_type(w: W[F32]) -> U8 {
+  W::[F32].conv::[U8](w, 1)                         //~ E0308
+}

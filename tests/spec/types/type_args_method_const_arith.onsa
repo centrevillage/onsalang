@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§6.6"]
+
+// S-239 (W5-10 U2b): the const argument written after the name of a method is a constant expression with arithmetic (§4.5: "算術の演算子
+// （`+ - * / %`）と前置の `-`、括弧からなる"). Kept apart from type_args_method_const_run.onsa: this version stops every constant expression with an
+// operator in a length or a const argument at E0200 ("expressions as array lengths", the same wait as types/array_length_operations_fine.onsa and
+// type_args_fn_const_arith.onsa), so the cases that need only the list pass without this one. The values are worked out by hand.
+
+pub const K: U32 = 8
+
+pub struct V {
+  n: U8,
+}
+
+impl V {
+  pub fn cn[const N: U32](self) -> U32 {
+    N
+  }
+
+  pub fn fill[const N: U32](self) -> [F32; N] {
+    [0.0; N]
+  }
+}
+
+test "addition" {
+  let v = V { n: 1 }
+  assert v.cn::[2 + 3]() == 5
+}
+
+test "a constant in arithmetic" {
+  let v = V { n: 1 }
+  assert v.cn::[K * 2]() == 16
+  assert v.cn::[K - 3]() == 5
+  assert v.cn::[K / 2]() == 4
+  assert v.cn::[K % 3]() == 2
+}
+
+test "parentheses" {
+  let v = V { n: 1 }
+  assert v.cn::[(1 + 2) * 3]() == 9
+}
+
+test "the array of a computed length equals the array of the value" {
+  let v = V { n: 1 }
+  let a: [F32; 8] = v.fill::[K]()
+  let b: [F32; 8] = v.fill::[4 + 4]()
+  assert a.len() == b.len()
+}

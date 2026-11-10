@@ -1,0 +1,68 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§4.6", "§5.3", "§18.1"]
+
+// S-239, R-336 (W5-10 U2b): a second-class type (`Span`) or a type that holds one, as the type argument of a type parameter of a method without
+// `?Escape`, is E0710 (§4.5: "第二級の型か、それを中に含む型を、`?Escape` の無い型パラメータの型引数に書いた所 … は位置の E0710 だけで、その型引数の要求は判定しない").
+// The type argument that is inferred is the same (§4.5: "推論で決まった型引数 … も同じで … 型引数を作った式（呼び出し、メソッドの呼び出し、…）の位置に E0710"), so
+// `v.conv::[Span[F32]](s)` and `v.conv(s)` are the same error at the same place of the line. A tuple and an array that hold a `Span`, and a bound that
+// the type argument does not meet, which is not judged (`Span` is not a `Num`, and the report is E0710 only). `fixes = 0`. One error per item (P-01).
+
+pub struct V {
+  n: U8,
+}
+
+pub struct W[T] {
+  item: T,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+
+  pub fn bounded[T: Num](self, x: T) -> U32 {
+    1
+  }
+}
+
+impl[T] W[T] {
+  pub fn pass[U](self, u: U) -> U {
+    u
+  }
+}
+
+pub fn written(v: V, s: Span[F32]) -> U32 {
+  let _ = v.conv::[Span[F32]](s)                    //~ E0710
+  1
+}
+
+pub fn inferred(v: V, s: Span[F32]) -> U32 {
+  let _ = v.conv(s)                                 //~ E0710
+  1
+}
+
+pub fn in_a_tuple(v: V, s: Span[F32]) -> U32 {
+  let _ = v.conv::[(Span[F32], F32)]((s, 1.0))      //~ E0710
+  1
+}
+
+pub fn in_an_array(v: V, s: Span[F32]) -> U32 {
+  let _ = v.conv::[[Span[F32]; 2]]([s, s])          //~ E0710
+  1
+}
+
+pub fn a_bound_is_not_judged(v: V, s: Span[F32]) -> U32 {
+  v.bounded::[Span[F32]](s)                         //~ E0710
+}
+
+pub fn a_method_of_a_generic_impl(w: W[U8], s: Span[F32]) -> U32 {
+  let _ = w.pass::[Span[F32]](s)                    //~ E0710
+  1
+}
+
+pub fn an_ordinary_array_is_fine(v: V, a: [F32; 2]) -> U32 {
+  let _ = v.conv::[[F32; 2]](a)
+  1
+}

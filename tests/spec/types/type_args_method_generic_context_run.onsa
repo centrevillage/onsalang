@@ -1,0 +1,71 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§6.2"]
+
+// S-239 (W5-10 U2b): the list of a method names the type parameters of the code that calls it: a generic function (`through[T]` calls
+// `w.conv::[T](t)`), a method of a generic `impl` that calls another method of its own type with the `T` of the `impl` (`self.conv::[T](…)`) or with its
+// own parameter (`twice[U]` calls `self.both::[U](u)`). The type parameter is the one of the caller in the list, and the receiver's `T` is the
+// `T` of the receiver's type. The values are worked out by hand.
+
+pub struct W[T] {
+  item: T,
+}
+
+impl[T] W[T] {
+  pub fn make(item: T) -> W[T] {
+    W { item: item }
+  }
+
+  pub fn conv[U](self, x: U) -> U {
+    x
+  }
+
+  pub fn both[U](self, u: U) -> (T, U) {
+    (self.item, u)
+  }
+
+  pub fn again(self) -> T {
+    self.conv::[T](self.item)
+  }
+
+  pub fn twice[U](self, u: U) -> (T, U) {
+    self.both::[U](u)
+  }
+}
+
+pub fn through[T](w: W[T], t: T) -> T {
+  w.conv::[T](t)
+}
+
+pub fn mixed[T, U](w: W[T], u: U) -> (T, U) {
+  w.both::[U](u)
+}
+
+test "a generic function names its own parameter in the list" {
+  let w = W::[U8].make(1)
+  let k = through(w, 250)
+  assert k.checked_add(10) == None
+  assert k.checked_add(5) == Some(255)
+}
+
+test "a generic function with two parameters" {
+  let w = W::[U8].make(200)
+  let r = mixed::[U8, F32](w, 3.5)
+  assert r.0.checked_add(100) == None
+  assert r.1 == 3.5
+}
+
+test "a method calls another with the T of the impl" {
+  let w = W::[U8].make(200)
+  assert w.again().checked_add(100) == None
+  let f = W::[F32].make(0.5)
+  assert f.again() == 0.5
+}
+
+test "a method calls another with its own parameter" {
+  let w = W::[F32].make(0.5)
+  let r = w.twice::[U8](200)
+  assert r.0 == 0.5
+  assert r.1.checked_add(100) == None
+}

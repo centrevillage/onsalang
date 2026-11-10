@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// S-977, S-981 (W5-10 U2b, the parent): the names stage does not know whether the member before a list is a method or a field (the type of the receiver
+// decides it), so it reads every name of a list written after a member of a value, as it does for a method (§4.5: "その並びの中の名前は、数が分かる前に名前の段が
+// 全て読む"; S-981: the names are looked up by the names stage only). A name that is not found in the list after a field is E0302 of the names stage, and the
+// E0308 of the list after a field (the type stage) is the next error, after the name is fixed (§18.1: the stages in order). One error per item (P-01). The
+// number of the candidates is not written.
+
+pub struct H {
+  f: fn(I32) -> I32,
+}
+
+pub struct V {
+  a: U8,
+}
+
+pub fn after_a_function_field(h: H) -> I32 {
+  h.f::[Nope](1) //~ E0302
+}
+
+pub fn after_a_plain_field(v: V) -> U8 {
+  v.a::[Nope] //~ E0302
+}

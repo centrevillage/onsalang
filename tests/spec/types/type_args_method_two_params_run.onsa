@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§6.2"]
+
+// S-239 (W5-10 U2b): a method with two type parameters takes a list of two, in the order of the declaration (§4.5: "型引数を書いた呼び出しの
+// 型パラメータは、その文で決まる"; the same order as the list of a function, type_args_fn_call_run.onsa). `first::[U8, F32]` gives `A = U8`
+// and `B = F32`; `first::[F32, U8]` the other way. A method of a type without parameters and one of a generic `impl`, where the two parameters
+// are those of the method and the `T` of the `impl` is the receiver's. The values are worked out by hand.
+
+pub struct V {
+  n: U8,
+}
+
+pub struct W[T] {
+  item: T,
+}
+
+impl V {
+  pub fn first[A, B](self, a: A, b: B) -> A {
+    a
+  }
+
+  pub fn second[A, B](self, a: A, b: B) -> B {
+    b
+  }
+
+  pub fn swap[A, B](self, a: A, b: B) -> (B, A) {
+    (b, a)
+  }
+}
+
+impl[T] W[T] {
+  pub fn mix[A, B](self, a: A, b: B) -> (T, A, B) {
+    (self.item, a, b)
+  }
+}
+
+test "two type parameters, in the order of the declaration" {
+  let v = V { n: 1 }
+  let a = v.first::[U8, F32](200, 2.5)
+  let b = v.second::[U8, F32](200, 2.5)
+  assert a.checked_add(100) == None
+  assert b == 2.5
+}
+
+test "the order of the list is the order of the parameters" {
+  let v = V { n: 1 }
+  let a = v.first::[F32, U8](2.5, 200)
+  let b = v.second::[F32, U8](2.5, 200)
+  assert a == 2.5
+  assert b.checked_add(100) == None
+}
+
+test "the same type twice" {
+  let v = V { n: 1 }
+  let a = v.first::[U8, U8](200, 3)
+  let b = v.second::[U8, I32](3, 200)
+  assert a.checked_add(100) == None
+  assert b.checked_add(100) == Some(300)
+}
+
+test "the result holds both" {
+  let v = V { n: 1 }
+  let r = v.swap::[U8, F32](200, 2.5)
+  assert r.0 == 2.5
+  assert r.1.checked_add(100) == None
+}
+
+test "a method of a generic impl, the T of the impl is the receiver's" {
+  let w: W[I32] = W { item: -1 }
+  let r = w.mix::[U8, F32](200, 2.5)
+  assert r.0 == -1
+  assert r.1.checked_add(100) == None
+  assert r.2 == 2.5
+}

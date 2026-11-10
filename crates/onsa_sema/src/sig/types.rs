@@ -5,6 +5,7 @@
 use super::*;
 use crate::ResolveError;
 use crate::names::PathEnd;
+use crate::names::body::ArgsOf;
 use crate::resolve::NameKind;
 use crate::ty::LIMIT_RULE;
 
@@ -205,27 +206,33 @@ impl<'p> Sema<'p> {
     /// The type arguments `args` written at `span` after the function `d`
     /// (`path`) for its own parameters (`id::[U8]`, §4.5,
     /// [`crate::names::body::own_params`]): the tuple of them, each lowered by
-    /// the kind of its parameter, as [`Self::type_with_args`] lowers those
-    /// of a type, and judged as a type of a body at a binding (a `Span`
-    /// stands there; what the parameter requires of it is the call's, §4.5).
-    /// Past their count none is read, the E0412 of the count with no
-    /// candidate and a note of the parameters (S-306); the error type.
+    /// the kind of its parameter ([`Self::args_of_kinds`]). Past their count
+    /// none is read, the E0412 of the count with no candidate and a note of
+    /// the parameters (S-306); the error type.
     fn own_args(&mut self, cx: &Cx<'p>, d: DefId, args: &[TypeId], (span, path): (Span, &Path)) -> TyId {
         let own = crate::names::body::own_params(self.a, d);
         let params: Vec<_> = own.iter().map(|&k| self.a.def(d).generics()[k].clone()).collect();
-        let before = self.a.diagnostics.len();
-        let read: Vec<TyId> = (args.iter().zip(&params))
-            .map(|(&x, g)| self.lower_type_arg(cx, x, Some(matches!(g.kind, GenericKind::Const(_)))))
-            .collect();
-        if args.len() != params.len() {
-            let name = &path.segments[path.segments.len() - 1].name;
-            let msg = format!("`{name}` takes {} type argument(s), {} given", params.len(), args.len());
-            let shown: Vec<String> = params.iter().map(|g| format!("`{}`", g.name)).collect();
-            let rule = format!("`{name}` declares the type parameters {} (§4.5)", shown.join(", "));
-            let d = Diagnostic::new(Stage::Types, Code::E0412, span, msg).with_found(src(cx, span)).with_rule(rule);
-            self.report(cx.def, d);
-            return self.a.types.error();
+        let kinds: Vec<bool> = params.iter().map(|g| matches!(g.kind, GenericKind::Const(_))).collect();
+        if args.len() == params.len() {
+            return self.args_of_kinds(cx, args, &kinds);
         }
+        args.iter().zip(&kinds).for_each(|(&x, &k)| _ = self.lower_type_arg(cx, x, Some(k)));
+        let name = &path.segments[path.segments.len() - 1].name;
+        let shown: Vec<String> = params.iter().map(|g| format!("`{}`", g.name)).collect();
+        let d = crate::names::body::count_error(name, (&shown, args.len()), (span, src(cx, span)), None);
+        self.report(cx.def, d);
+        self.a.types.error()
+    }
+
+    /// The type arguments `args`, each lowered as a constant expression or a
+    /// type by `kinds` (`true` a constant), as [`Self::type_with_args`]
+    /// lowers those of a type, and judged as a type of a body at a binding
+    /// (a `Span` stands there; what the parameter requires of it is the
+    /// call's, §4.5): the tuple of them. Of the own parameters of a
+    /// function, and after a member of a value by their forms (S-981).
+    fn args_of_kinds(&mut self, cx: &Cx<'p>, args: &[TypeId], kinds: &[bool]) -> TyId {
+        let before = self.a.diagnostics.len();
+        let read: Vec<TyId> = args.iter().zip(kinds).map(|(&x, &k)| self.lower_type_arg(cx, x, Some(k))).collect();
         for (&x, &t) in args.iter().zip(&read) {
             if self.a.diagnostics.len() > before || self.judge(cx, x, t, Pos::Bind).is_none() {
                 break;
@@ -287,7 +294,7 @@ impl<'p> Sema<'p> {
             (TypeKind::ConstArg(e), Some(false) | None) => {
                 // `Option[self]`: a local, as of a path (R-309).
                 let local = crate::constarg::path_of(cx.ast, *e).and_then(|p| self.local_as_type(cx, &p, te.span));
-                local.unwrap_or_else(|| self.wrong_kind_arg(cx, te.span, "a constant expression", "a type"))
+                local.unwrap_or_else(|| self.wrong_kind_arg(cx, te.span, true))
             }
             (TypeKind::ConstArg(e), Some(true)) => {
                 match self.read_const(cx, *e) {
@@ -331,7 +338,7 @@ impl<'p> Sema<'p> {
                     }
                 }
             }
-            (_, Some(true)) => self.wrong_kind_arg(cx, te.span, "a type", "a constant"),
+            (_, Some(true)) => self.wrong_kind_arg(cx, te.span, false),
             _ => self.lower_type(cx, t),
         }
     }
@@ -351,11 +358,11 @@ impl<'p> Sema<'p> {
         Some(self.a.types.error())
     }
 
-    /// E0308 for the type argument at `span`, which is `is` where the
-    /// parameter wants `want`.
-    fn wrong_kind_arg(&mut self, cx: &Cx<'p>, span: Span, is: &str, want: &str) -> TyId {
-        let msg = format!("`{}` is {is}, not {want} (§4.5)", src(cx, span));
-        self.report(cx.def, Diagnostic::new(Stage::Names, Code::E0308, span, msg).with_found(src(cx, span)));
+    /// E0308 for the type argument at `span`, a constant expression
+    /// (`constant`) where the parameter wants a type, or a type where it
+    /// wants a constant ([`arg_kind_error`]).
+    fn wrong_kind_arg(&mut self, cx: &Cx<'p>, span: Span, constant: bool) -> TyId {
+        self.report(cx.def, arg_kind_error(Stage::Names, span, src(cx, span), constant));
         self.a.types.error()
     }
 
@@ -556,16 +563,15 @@ impl<'p> Sema<'p> {
     fn listed(
         &mut self,
         cx: &Cx<'p>,
-        (entity, path, args): (Entity, &Path, &onsa_syntax::ast::TypeArgList),
+        (of, path, args): (&ArgsOf, &Path, &onsa_syntax::ast::TypeArgList),
     ) -> (TyId, Vec<Diagnostic>) {
         let before = self.a.diagnostics.len();
         let mut s = Sema::new(self.a, self.flat.clone());
         let span = Span { start: path.span.start, ..args.span };
-        let ty = match entity {
-            Entity::Def(d) | Entity::Member(d) if matches!(s.a.def(d).kind, DefKind::Fn(_)) => {
-                s.own_args(cx, d, &args.args, (span, path))
-            }
-            _ => {
+        let ty = match *of {
+            ArgsOf::Own(d) => s.own_args(cx, d, &args.args, (span, path)),
+            ArgsOf::Member(ref kinds) => s.args_of_kinds(cx, &args.args, kinds),
+            ArgsOf::Type(entity) => {
                 let ty = s.type_with_args(cx, entity, &args.args, (span, path), None);
                 if s.a.diagnostics.len() == before {
                     s.judge_args(cx, &args.args, ty, span);
@@ -607,6 +613,17 @@ impl<'p> Sema<'p> {
     }
 }
 
+/// The E0308 of the type argument at `span`, written `found`, of the stage
+/// `stage` (§4.5, §15.1): a constant expression (`constant`) where the
+/// parameter wants a type, or a type where it wants a constant. The names
+/// stage judges those of a name it knows the parameters of; the types stage,
+/// those of a method (S-977).
+pub(crate) fn arg_kind_error(stage: Stage, span: Span, found: String, constant: bool) -> Diagnostic {
+    let (is, want) = if constant { ("a constant expression", "a type") } else { ("a type", "a constant") };
+    let msg = format!("`{found}` is {is}, not {want} (§4.5)");
+    Diagnostic::new(stage, Code::E0308, span, msg).with_found(found)
+}
+
 /// Lower a type written inside a body (T2-5): same rules as signatures, with
 /// the item's generics and `Self` in scope, and the visible locals it names
 /// (`locals`, [`Cx::locals`]). Diagnostics are returned, not
@@ -646,7 +663,7 @@ pub(crate) fn lower_args_in_body<'p>(
     a: &'p mut Analysis,
     (m, ast, text): (ModId, &'p Ast, &'p str),
     (generics, self_ty, def): (&[GenericDef], Option<TyId>, DefId),
-    site: (Entity, &Path, &onsa_syntax::ast::TypeArgList),
+    site: (&ArgsOf, &Path, &onsa_syntax::ast::TypeArgList),
     locals: HashSet<String>,
 ) -> (TyId, Vec<Diagnostic>) {
     let flow = matches!(a.def(def).kind, DefKind::Flow(_));

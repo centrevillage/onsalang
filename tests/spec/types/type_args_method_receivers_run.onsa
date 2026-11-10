@@ -1,0 +1,134 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§6.2"]
+
+// S-239 (W5-10 U2b): the list is written after the name of the method whatever the receiver is (§4.5: "メソッド（`v.m::[I32](x)`。…）"; the receiver
+// is any value, §6.2). A local binding, an argument, `self`, a field, a field of a field, an element of an array, the result of a function, a
+// parenthesized expression, the result of a method that has a list of its own (two lists in a chain, `v.wrap::[U8](200).conv::[I32](300)`), the result
+// of an associated function after the list of a type (`Pack::[F32].make(1.5).conv::[U8](200)`), and the result of a method without a list. In
+// every one the type parameter of the call is decided by the list, so `checked_add(100)` of a `U8` that holds 200 is `None` (§4.7). The values are
+// worked out by hand.
+
+pub struct V {
+  n: U8,
+}
+
+pub struct Holder {
+  v: V,
+}
+
+pub struct Pack[T] {
+  item: T,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+
+  pub fn wrap[U](self, u: U) -> Pack[U] {
+    Pack { item: u }
+  }
+
+  pub fn through_self(self, x: U8) -> U8 {
+    self.conv::[U8](x)
+  }
+
+  pub fn me(self) -> V {
+    self
+  }
+}
+
+impl[T] Pack[T] {
+  pub fn make(item: T) -> Pack[T] {
+    Pack { item: item }
+  }
+
+  pub fn conv[U](self, u: U) -> (T, U) {
+    (self.item, u)
+  }
+
+  pub fn get(self) -> T {
+    self.item
+  }
+}
+
+pub fn mk() -> V {
+  V { n: 1 }
+}
+
+pub fn through_an_argument(v: V) -> U8 {
+  v.conv::[U8](200)
+}
+
+test "a local binding" {
+  let v = V { n: 1 }
+  let k = v.conv::[U8](200)
+  assert k.checked_add(100) == None
+}
+
+test "an argument" {
+  assert through_an_argument(V { n: 1 }).checked_add(100) == None
+}
+
+test "self" {
+  let v = V { n: 1 }
+  assert v.through_self(200).checked_add(100) == None
+}
+
+test "a field" {
+  let h = Holder { v: V { n: 1 } }
+  let k = h.v.conv::[U8](200)
+  assert k.checked_add(100) == None
+}
+
+test "an element of an array" {
+  let vs: [V; 2] = [V { n: 1 }, V { n: 2 }]
+  let k = vs[1].conv::[U8](200)
+  assert k.checked_add(100) == None
+}
+
+test "the result of a function" {
+  let k = mk().conv::[U8](200)
+  assert k.checked_add(100) == None
+}
+
+test "a parenthesized expression" {
+  let v = V { n: 1 }
+  let a = (v).conv::[U8](200)
+  let b = (mk()).conv::[U8](200)
+  assert a.checked_add(100) == None
+  assert b.checked_add(100) == None
+}
+
+test "the result of a method without a list" {
+  let v = V { n: 1 }
+  let k = v.me().conv::[U8](200)
+  assert k.checked_add(100) == None
+}
+
+test "two lists in a chain" {
+  let v = V { n: 1 }
+  let r = v.wrap::[U8](200).conv::[I32](300)
+  assert r.0.checked_add(100) == None
+  assert r.1.checked_add(1) == Some(301)
+}
+
+test "a list and then a method without a list" {
+  let v = V { n: 1 }
+  let k = v.wrap::[U8](200).get()
+  assert k.checked_add(100) == None
+}
+
+test "after the list of a type" {
+  let r = Pack::[F32].make(1.5).conv::[U8](200)
+  assert r.0 == 1.5
+  assert r.1.checked_add(100) == None
+}
+
+test "the list of a type and the list of a method, with other types" {
+  let r = Pack::[U8].make(200).conv::[I32](300)
+  assert r.0.checked_add(100) == None
+  assert r.1.checked_add(1) == Some(301)
+}
