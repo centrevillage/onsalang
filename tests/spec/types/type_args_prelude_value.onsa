@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§4.5", "§6.1"]
+
+// S-239 (W5-10 U2a): the construction of a variant of the prelude, put as a value with the list written after the name of the variant (§6.1: "関連関数と
+// 列挙子の構築も同じである"; §4.1: "列挙子の名前に付ける"). The value is one instantiation, so the type of the argument of `Some::[U8]` is `U8` and the
+// result is an `Option[U8]`. No diagnostic. Only the check: the calls through the values are not lowered yet (R-295, the same wait as
+// type_args_owner_value_run.onsa).
+
+pub fn apply(f: fn(move U8) -> Option[U8], x: U8) -> Option[U8] {
+  f.(x)
+}
+
+pub fn put_then_called() -> Option[U8] {
+  let mk = Some::[U8]
+  let o = mk.(200)
+  match o {
+    Some(v) => v.checked_add(100),
+    None => None,
+  }
+}
+
+pub fn ok_as_a_value() -> Result[U8, Str] {
+  let mk = Ok::[U8, Str]
+  mk.(1)
+}
+
+pub fn err_as_a_value() -> Result[U8, Str] {
+  let mk = Err::[U8, Str]
+  mk.("e")
+}
+
+pub fn given_to_a_parameter() -> Option[U8] {
+  apply(Some::[U8], 5)
+}
+
+pub fn two_values() -> Option[U8] {
+  let a = Some::[U8]
+  let b = Some::[F32]
+  let x: Option[F32] = b.(2.5)
+  match x {
+    Some(f) => if f == 2.5 { a.(1) } else { None },
+    None => None,
+  }
+}

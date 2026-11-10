@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7", "§18.1"]
+
+// S-303 (W5-10 U2a): the requirements of a type parameter of a generic function put as a value without the type arguments are checked in the
+// statement that decides the type, and the report is at the reference (§4.5: "満たさなければ、要求を生んだ式（呼び出し、…、値に置いた総称の関数）の位置に
+// E0416 で、型を決めた式を位置付きの note で示す"; the default of a literal does not change the bound, "`need_fl(3)` は `T` が `I32` に決まって E0416").
+// A second-class type that decides `T` is E0710 at the reference (§4.5: "推論で決まった型引数 … 値に置いた総称の関数の位置に E0710"). One error per
+// item (P-01).
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn zero[T: AnyNum]() -> T {
+  T.ZERO
+}
+
+pub fn need_fl[T: Float](x: T) -> T {
+  x
+}
+
+pub fn need_int[T: Int]() -> T {
+  T.ZERO
+}
+
+pub fn a_bound_that_the_annotation_does_not_meet() -> Bool {
+  let z = zero                                      //~ E0416
+  let b: Bool = z.()
+  b
+}
+
+pub fn a_bound_that_the_default_of_a_literal_does_not_meet() -> I32 {
+  let g = need_fl                                   //~ E0416
+  let a = g.(3)
+  a
+}
+
+pub fn a_bound_that_the_result_does_not_meet() -> F32 {
+  let g = need_int                                  //~ E0416
+  let a: F32 = g.()
+  a
+}
+
+pub fn a_second_class_type(s: Span[F32]) -> U32 {
+  let g = id                                        //~ E0710
+  let _ = g.(s)
+  1
+}

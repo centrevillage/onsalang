@@ -210,6 +210,18 @@ impl<'a> Checker<'a> {
         self.unify_at(span, ty, owner)
     }
 
+    /// The type arguments written after the function `d` named at `e` for
+    /// its own parameters (`id::[U8]`, §4.5), as the names stage lowered
+    /// them ([`BodyNames::own`]): the variables `args` of those parameters
+    /// meet them at `span`, in the statement. Their error is reported before.
+    pub(crate) fn own_args(&mut self, e: ExprId, d: DefId, args: &[TyId], span: Span) -> R<()> {
+        let Some(Ty::Tuple(written)) = self.names.own.get(&e).map(|&t| self.ty(t)) else { return Ok(()) };
+        for (k, t) in crate::names::body::own_params(self.a, d).into_iter().zip(written) {
+            self.unify_at(span, args[k], t)?;
+        }
+        Ok(())
+    }
+
     /// A type written in the body, as the names stage lowered it; its
     /// diagnostic of the types stage, if any, is reported here.
     pub(crate) fn lower_type_expr(&mut self, t: onsa_syntax::ast::TypeId) -> R<TyId> {
@@ -252,6 +264,7 @@ impl<'a> Checker<'a> {
                         }
                         let args = self.fresh_args(d);
                         self.of_owner(d, &args, owner, span)?;
+                        self.own_args(e, d, &args, span)?;
                         let of = self.param_of(owner);
                         let fty = self.fn_type(f, &args);
                         let fty = self.member_ty(d, fty, &[], of);
@@ -265,7 +278,12 @@ impl<'a> Checker<'a> {
                             let ret = self.member_ty(d, f.ret, &args, of);
                             self.conversion_use(name.span, args[0], to, ret, None)?;
                         }
-                        let inst = self.instance(d, args, span, self.buf_element(d))?;
+                        // Put with no type arguments, those of its own parameters
+                        // are written after its name (S-303: one its type does not
+                        // show is decided by no annotation).
+                        let own = (!self.names.own.contains_key(&e))
+                            .then(|| format!("write the type arguments after the name: `{}::[…]` (§4.5)", name.name));
+                        let inst = self.instance(d, args, span, (self.buf_element(d), own))?;
                         self.info.targets.insert(e, Target::Fn { def: d, of, inst });
                         Ok(Some(fty))
                     }

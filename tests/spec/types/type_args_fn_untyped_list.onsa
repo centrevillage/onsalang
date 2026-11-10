@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7", "§6.1"]
+
+// S-303 (W5-10 U2a): a type parameter that the type of the function does not have (`fn sz[T]() -> U32`, and a const parameter) is not decided by a call
+// or by the later statements, so the value put without the list is E0406 (type_args_fn_untyped_unresolved.onsa) and the way out is the list after the
+// name (S-303: "型に現れない型パラメータと const パラメータは注釈で直せない。`fn sz[T]() -> U32` の `let s = sz`"; §4.5: 引数から決まらない型パラメータは
+// 型引数か期待型の注釈か後の文で決める). With the list the value is one instantiation and it checks. No diagnostic. Only the check: the calls through the
+// values are not lowered yet (R-295).
+
+pub fn sz[T]() -> U32 {
+  1
+}
+
+pub fn width[const N: U32]() -> U32 {
+  N
+}
+
+pub fn a_parameter_that_the_type_has_not() -> U32 {
+  let s = sz::[F32]
+  s.()
+}
+
+pub fn a_const_parameter_that_the_type_has_not() -> U32 {
+  let w = width::[4]
+  w.()
+}
+
+pub fn two_values_of_two_instantiations() -> U32 {
+  let a = sz::[F32]
+  let b = sz::[U8]
+  a.() + b.()
+}

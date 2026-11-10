@@ -1,0 +1,95 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.1", "§4.5"]
+
+// S-239 (W5-10 U2a): the variants of `Option` and `Result` are names of the prelude, written without a qualifier (§4.1: "修飾なしで書く列挙子に式の中で
+// 型引数を書くときは、列挙子の名前に付ける（`None::[I32]`、`Some::[U8](250)`。他の総称の enum の列挙子は型に付ける、§4.5）"), so the list is after the name of the
+// variant: `None::[I32]`, `Some::[U8](250)`, `Ok::[U8, I32](1)`, `Err::[U8, I32](7)` (the parameters of `Result` in the order of the declaration, `T` and `E`).
+// (`Str` is not used: `onsa test` stops at the Shared types in this version.)
+// The list decides the types without an expected type, so a method that needs the type of the receiver is called in the next statement
+// (§4.7). The values are worked out by hand.
+
+pub fn take(o: Option[U8]) -> U8 {
+  match o {
+    Some(v) => v,
+    None => 0,
+  }
+}
+
+test "None gets its type from the list" {
+  let n = None::[U8]
+  let k = match n {
+    Some(v) => v,
+    None => 200,
+  }
+  assert k.checked_add(100) == None
+}
+
+test "Some gets its type from the list" {
+  let o = Some::[U8](200)
+  let k = match o {
+    Some(v) => v,
+    None => 0,
+  }
+  assert k.checked_add(100) == None
+  assert k.checked_add(50) == Some(250)
+}
+
+test "another type argument gives another type" {
+  let o = Some::[I32](200)
+  let k = match o {
+    Some(v) => v,
+    None => 0,
+  }
+  assert k.checked_add(100) == Some(300)
+}
+
+test "Ok gets both types from the list" {
+  let r = Ok::[U8, I32](200)
+  let k = match r {
+    Ok(v) => v,
+    Err(_) => 0,
+  }
+  assert k.checked_add(100) == None
+}
+
+test "Err gets both types from the list" {
+  let r = Err::[U8, I32](7)
+  let n = match r {
+    Ok(_) => 0,
+    Err(e) => e,
+  }
+  assert n == 7
+  assert n.checked_add(2147483647) == None
+}
+
+test "the list and the annotation together" {
+  let a: Option[U8] = None::[U8]
+  let b: Result[U8, I32] = Ok::[U8, I32](1)
+  assert a == None
+  assert b == Ok(1)
+}
+
+test "in an argument" {
+  assert take(Some::[U8](5)) == 5
+  assert take(None::[U8]) == 0
+}
+
+test "a comparison" {
+  assert Some::[U8](1) == Some(1)
+  assert None::[U8] == None
+}
+
+test "a list that holds a type that has a list" {
+  let o = Some::[Option[U8]](None::[U8])
+  let k = match o {
+    Some(i) => i,
+    None => Some(200),
+  }
+  let v = match k {
+    Some(x) => x,
+    None => 7,
+  }
+  assert v == 7
+}

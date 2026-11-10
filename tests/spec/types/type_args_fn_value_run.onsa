@@ -1,0 +1,86 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§6.1"]
+
+// S-239 (W5-10 U2a): the values of type_args_fn_value.onsa, run. `onsa test` stops at the lowering of a function value and of a call through one
+// with E0200 ("function values", R-295, the same wait as type_args_owner_value_run.onsa), so it is a case of its own: the type check of the same forms
+// is in type_args_fn_value.onsa. A generic function, put as a value with the type arguments written after its name, is called and the results are
+// the values worked out by hand: one value is one instantiation, so the type of the argument is the type of the list.
+
+pub struct W[T] {
+  v: T,
+}
+
+impl[T] W[T] {
+  pub fn mk2[U](v: T, u: U) -> (W[T], U) {
+    (W { v: v }, u)
+  }
+}
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn first[A, B](a: A, b: B) -> A {
+  a
+}
+
+pub fn zero[T: AnyNum]() -> T {
+  T.ZERO
+}
+
+pub fn apply(f: fn(U8) -> U8, x: U8) -> U8 {
+  f.(x)
+}
+
+test "put as a value, then called" {
+  let g = id::[U8]
+  let k = g.(200)
+  assert k.checked_add(100) == None
+  assert k.checked_add(50) == Some(250)
+}
+
+test "two values of two type arguments" {
+  let gu = id::[U8]
+  let gf = id::[F32]
+  let a: U8 = gu.(3)
+  let b: F32 = gf.(2.5)
+  assert a == 3
+  assert b == 2.5
+}
+
+test "two parameters" {
+  let f = first::[U8, F32]
+  let k = f.(200, 2.5)
+  assert k.checked_add(100) == None
+}
+
+test "a parameter that only the result has" {
+  let z = zero::[U8]
+  let k = z.()
+  assert k.checked_sub(1) == None
+}
+
+test "the value is given to a parameter of a function type" {
+  assert apply(id::[U8], 5) == 5
+}
+
+test "an associated function with the list of the type and the list of the function" {
+  let mk = W::[F32].mk2::[U8]
+  let r = mk.(1.5, 200)
+  let u = r.1
+  assert u.checked_add(100) == None
+}
+
+test "a value put without the list is decided by its use" {
+  let g = id
+  let k: U8 = g.(200)
+  assert k.checked_add(100) == None
+}
+
+test "a value put without the list gets I32 from the default of the literal" {
+  let g = id
+  let k = g.(200)
+  assert k == 200
+}

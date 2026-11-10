@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§4.5", "§15.1", "§18.1"]
+
+// S-239 (W5-10 U2a): a name in the list written after the name of a variant of the prelude that is not found is E0302 of the names stage (§18.1: the
+// names stage is before the types stage). In `None`, in `Some`, in the second place of `Ok`, and a type inside a type. One error per item (P-01).
+
+pub fn in_none() -> Option[I32] {
+  None::[Nope]                                      //~ E0302
+}
+
+pub fn in_some() -> Option[U8] {
+  Some::[Nope](1)                                   //~ E0302
+}
+
+pub fn in_the_second_of_ok() -> Result[U8, Str] {
+  Ok::[U8, Nope](1)                                 //~ E0302
+}
+
+pub fn inside_a_type() -> Option[U8] {
+  let _ = Some::[Option[Nope]](None)                //~ E0302
+  None
+}

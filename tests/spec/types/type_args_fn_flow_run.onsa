@@ -1,0 +1,60 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§11.5", "§10"]
+
+// S-239 (W5-10 U2a): the type arguments written after the name of a function in the body of a flow (§4.5: "式の中では、型引数を総称の項目の名前の
+// 後に `::[…]` で書く"). A function whose effect row is empty is called pointwise when it is `rt fn` (§11.5: "効果行が空の `rt fn` … 点ごとに適用する") and
+// at compile time when it is not `rt` and the arguments are constants; the list does not change that. The list decides the type of the literal
+// that the argument is (`0.5` is an `F32` because the list says `F32`). The call is inside each replica of a `par~`. Every value is worked
+// out by hand.
+
+rt fn second[T: Copy](a: T, b: T) -> T {
+  b
+}
+
+rt fn ident[T: Copy](x: T) -> T {
+  x
+}
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+// second::[F32](x, 0.5) is 0.5, so the flow gives x + 0.5.
+pub flow shifted(x: F32 at sample) -> F32 at sample {
+  x + second::[F32](x, 0.5)
+}
+
+// A function that is not `rt`, with a constant argument.
+pub flow offset(x: F32 at sample) -> F32 at sample {
+  let k = id::[F32](0.25)
+  x + k
+}
+
+// The call is inside each replica: 2 * (x + 0.25).
+pub flow replicated(x: F32 at sample) -> F32 at sample {
+  let rows = par~ i in 0 ..< 2 { x + ident::[F32](0.25) }
+  rows[0] + rows[1]
+}
+
+test "a pointwise call with the list" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = shifted.render(shifted.Config {}, shifted.Params {}, xs, 8.0)
+  assert o.out[0] == 1.5
+  assert o.out[1] == 2.5
+}
+
+test "a call with constant arguments with the list" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = offset.render(offset.Config {}, offset.Params {}, xs, 8.0)
+  assert o.out[0] == 1.25
+  assert o.out[1] == 2.25
+}
+
+test "the same inside par" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = replicated.render(replicated.Config {}, replicated.Params {}, xs, 8.0)
+  assert o.out[0] == 2.5
+  assert o.out[1] == 4.5
+}

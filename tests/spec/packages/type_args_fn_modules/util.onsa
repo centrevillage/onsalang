@@ -1,0 +1,25 @@
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn first[A, B](a: A, b: B) -> A {
+  a
+}
+
+pub fn zero[T: AnyNum]() -> T {
+  T.ZERO
+}
+
+pub fn count[const N: U32]() -> U32 {
+  N
+}
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+impl[T] Wrap[T] {
+  pub fn mk2[U](v: T, u: U) -> (Wrap[T], U) {
+    (Wrap { v: v }, u)
+  }
+}

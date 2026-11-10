@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.1"]
+
+// S-239 (W5-10 U2a): a generic function put as a value with the type arguments written after its name (§6.1: "総称の関数は、型引数を書いて取り出せる
+// （`let g = id::[U8]` の後に `g.(250)`。§4.5）"). The type arguments are fixed by the statement that puts the value: the `U8` of `id::[U8]` is the
+// type of the argument of the later `g.(200)`, and `checked_add(100)` of the result needs the type of the receiver (§4.7: "型の頭が決まって
+// いなければ E0420"). One value is one instantiation (§6.1), so the value of `id::[U8]` and the value of `id::[F32]` are two values. No
+// diagnostic. Only the check: the values run in no case until the function values are lowered (`onsa test` stops at them with E0200, R-295,
+// the same wait as type_args_owner_value_run.onsa).
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn first[A, B](a: A, b: B) -> A {
+  a
+}
+
+pub fn apply(f: fn(U8) -> U8, x: U8) -> U8 {
+  f.(x)
+}
+
+pub fn put_then_called() -> Option[U8] {
+  let g = id::[U8]
+  let k = g.(200)
+  k.checked_add(100)
+}
+
+pub fn two_values() -> U8 {
+  let gu = id::[U8]
+  let gf = id::[F32]
+  let a: U8 = gu.(3)
+  let b: F32 = gf.(2.5)
+  if b == 2.5 { a } else { 0 }
+}
+
+pub fn two_parameters() -> U8 {
+  let f = first::[U8, F32]
+  f.(1, 2.5)
+}
+
+pub fn given_to_a_parameter() -> U8 {
+  apply(id::[U8], 5)
+}
+
+pub fn with_the_annotation_of_the_same_type() -> U8 {
+  let g: fn(U8) -> U8 = id::[U8]
+  g.(1)
+}
+
+pub fn called_twice() -> U8 {
+  let g = id::[U8]
+  g.(g.(7))
+}
+
+pub fn in_a_closure() -> U8 {
+  let c = fn(x: U8) -> U8 { id::[U8](x) }
+  c.(3)
+}
+
+pub fn in_a_closure_with_two() -> U8 {
+  let c = fn(x: U8) -> U8 { first::[U8, F32](x, 2.5) }
+  c.(3)
+}

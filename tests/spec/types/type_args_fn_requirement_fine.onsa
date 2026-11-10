@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.3"]
+
+// S-239 (W5-10 U2a): the requirements of the type parameter (a bound, the implicit `Dup`, the implicit `Escape`) are checked for the type
+// argument written after the name of a function (§4.5: "型引数を書いた呼び出しの型パラメータは、その文で決まる（下の要求の検査もその文で行う）").
+// The type arguments here meet the requirements: a number for `AnyNum` (an unsigned integer is one, §6.3), a float for `Float`, an integer for `Int`; a second-class type
+// (`Span`) is a right type argument of a type parameter marked `?Escape` (§4.5: "`?Escape` の型パラメータの型引数には `Span` と平面の配列を書ける"),
+// and of no other. The negative forms are in type_args_fn_requirement.onsa and type_args_fn_second_class.onsa. No diagnostic.
+
+pub fn zero[T: AnyNum]() -> T {
+  T.ZERO
+}
+
+pub fn twice[T: Float](x: T) -> T {
+  x + x
+}
+
+pub fn odd[T: Int](x: T) -> Bool {
+  x % T.ONE == T.ONE
+}
+
+pub fn peek[T: ?Escape](x: T) -> U32 {
+  1
+}
+
+pub fn a_number() -> I32 {
+  zero::[I32]()
+}
+
+pub fn a_float() -> F32 {
+  twice::[F32](1.5)
+}
+
+pub fn an_integer() -> Bool {
+  odd::[U8](3)
+}
+
+pub fn a_span(s: Span[F32]) -> U32 {
+  peek::[Span[F32]](s)
+}
+
+pub fn a_flat_array_of_spans(a: [Span[F32]; 2]) -> U32 {
+  peek::[[Span[F32]; 2]](a)
+}
+
+pub fn an_ordinary_type_for_the_escape_parameter() -> U32 {
+  peek::[U8](1)
+}

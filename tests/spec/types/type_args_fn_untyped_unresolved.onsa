@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7", "§6.1", "§18.1"]
+
+// S-303 (W5-10 U2a): a type parameter of a generic function put as a value without the type arguments that nothing decides by the end of the function
+// is E0406 at the place of the reference (§4.7: "型引数を書かずに値に置いた総称の関数 `let g = id` の型パラメータが関数の終わりに残れば、その型変数を作った式
+// （… `id`）の位置に E0406"), and E0405 at the literal when the only thing that is left is the type of a float literal (§4.7: "浮動小数のリテラルなら
+// E0405"). A parameter that the type of the function does not have (`fn sz[T]() -> U32`) is never decided by a call, so it is E0406 and the way out is the list
+// (`sz::[F32]`, in type_args_fn_untyped_fine.onsa). The number of the candidates and the note on the list are not written. One error per
+// item (P-01).
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn zero[T: AnyNum]() -> T {
+  T.ZERO
+}
+
+pub fn sz[T]() -> U32 {
+  1
+}
+
+pub fn width[const N: U32]() -> U32 {
+  N
+}
+
+pub fn never_called() -> U32 {
+  let g = id                                        //~ E0406
+  1
+}
+
+pub fn a_parameter_that_the_type_has_not() -> U32 {
+  let s = sz                                        //~ E0406
+  s.()
+}
+
+pub fn a_const_parameter_that_the_type_has_not() -> U32 {
+  let w = width                                     //~ E0406
+  w.()
+}
+
+pub fn a_result_that_nothing_uses() -> U32 {
+  let z = zero                                      //~ E0406
+  let _ = z.()
+  1
+}
+
+pub fn only_a_float_literal() -> U32 {
+  let g = id
+  let _ = g.(1.5)                                   //~ E0405
+  1
+}

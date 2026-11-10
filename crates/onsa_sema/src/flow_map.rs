@@ -148,11 +148,12 @@ impl Rater<'_> {
 
     /// Whether `e at k` with a faster `k` is held by this representation
     /// whatever the clock of `e`: a name or a literal, in parentheses or not,
-    /// has its place, and nothing is computed at `k` (K-02). The E0813 note
-    /// suggests `prev~(e at sample)` on the same ground.
+    /// has its place (with type arguments after it too, `None::[F32]`), and
+    /// nothing is computed at `k` (K-02). The E0813 note suggests
+    /// `prev~(e at sample)` on the same ground.
     pub(super) fn promotes_as_written(&self, e: ExprId) -> bool {
         let mut x = e;
-        while let ExprKind::Paren(i) = &self.expr(x).kind {
+        while let ExprKind::Paren(i) | ExprKind::TypeArgs { base: i, .. } = &self.expr(x).kind {
             x = *i;
         }
         matches!(self.expr(x).kind, ExprKind::Path(_) | ExprKind::Lit(_))

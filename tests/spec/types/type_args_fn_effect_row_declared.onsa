@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§8.1"]
+
+// S-982 (W5-10 U2a): the number of the type arguments of an expression does not count the effect row variable (§4.5: "式の中の型引数の数に、効果行変数
+// （§8.1）は数えない"). `fn mid[A, e, B]` has an effect row variable between two type parameters (a name that does not start with a capital letter is
+// an effect row variable, §8.1), so its list has two elements, in the order of `A` and `B` (the variable is skipped wherever it is declared). The
+// variable is declared and not used in a function type, so this case does not need the check of the effect rows of function types (R-27, W6-01);
+// type_args_fn_effect_row.onsa has the function that takes a function with the row. The errors of the number are in type_args_fn_count.onsa.
+// No diagnostic.
+
+pub fn mid[A, e, B](a: A, b: B) -> A {
+  a
+}
+
+pub fn first_e[e, A](a: A) -> A {
+  a
+}
+
+pub fn last_e[A, e](a: A) -> A {
+  a
+}
+
+pub fn the_variable_in_the_middle() -> U8 {
+  mid::[U8, F32](1, 2.5)
+}
+
+pub fn the_variable_first() -> U8 {
+  first_e::[U8](1)
+}
+
+pub fn the_variable_last() -> U8 {
+  last_e::[U8](1)
+}
+
+pub fn the_list_is_not_needed() -> U8 {
+  mid(1, true)
+}

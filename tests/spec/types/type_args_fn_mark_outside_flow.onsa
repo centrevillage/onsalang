@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§4.5", "§11.1", "§18.1"]
+
+// S-239, S-811 (W5-10 U2a): the `~` of a flow written after the list of a function outside the body of a flow is E0821 (S-811: "その文脈で書けない印
+// （flow の外の E0821 …）" is before "書いた印が呼び先に合わない規則（`~(` は E0812）"; §11.1: the syntax only of a flow outside a flow). The list is right and
+// the callee is found, so nothing is before it. A function, a function with two type parameters, and in a method. The number of the candidates is not
+// written. One error per item (P-01).
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn first[A, B](a: A, b: B) -> A {
+  a
+}
+
+pub struct Pt {
+  x: F32,
+}
+
+impl Pt {
+  pub fn lifted(self) -> F32 {
+    id::[F32]~(self.x)                              //~ E0821
+  }
+}
+
+pub fn in_a_function() -> F32 {
+  id::[F32]~(1.0)                                   //~ E0821
+}
+
+pub fn in_a_function_of_two() -> F32 {
+  first::[F32, U8]~(1.0, 1)                         //~ E0821
+}

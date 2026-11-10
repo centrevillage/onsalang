@@ -137,6 +137,7 @@ impl<'a> Checker<'a> {
                 }
                 let targs = self.fresh_args(d);
                 self.of_owner(d, &targs, owner, span)?;
+                self.own_args(crate::names::body::named(self.ast, callee), d, &targs, span)?;
                 let of = self.param_of(owner);
                 let (params, ret) = self.member_sig(d, f, &targs, of);
                 // A conversion is judged by its source, which is not in its
@@ -154,7 +155,7 @@ impl<'a> Checker<'a> {
                         self.unify_at(span, ret, exp)?;
                     }
                 }
-                let inst = self.instance(d, targs, span, self.buf_element(d))?;
+                let inst = self.instance(d, targs, span, (self.buf_element(d), None))?;
                 self.info.targets.insert(e, Target::Fn { def: d, of, inst });
                 let fty = self.a.types.intern(Ty::Fn(FnTy { rt: f.rt, params, ret, effects: f.effects.clone() }));
                 self.record(callee, fty);
@@ -261,7 +262,7 @@ impl<'a> Checker<'a> {
                     self.unify_at(span, ret, exp)?;
                 }
                 self.check_args(args, &params, e)?;
-                let inst = self.instance(md, targs, span, element)?;
+                let inst = self.instance(md, targs, span, (element, None))?;
                 self.a.note_use(self.a.def(md).name_span, name.span);
                 self.info.targets.insert(e, Target::Method { def: md, of, inst });
                 return Ok(ret);

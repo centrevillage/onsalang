@@ -17,28 +17,28 @@ type R = Result[I32, Bool]
 type OO = O
 
 fn unit_variant() -> O {
-  None                                            //~ E0302
+  None::[I32]                                            //~ E0302
 }
 
 fn tuple_variant() -> O {
-  Some(1)                                         //~ E0302
+  Some::[I32](1)                                         //~ E0302
 }
 
 fn ok_variant() -> R {
-  Ok(1)                                           //~ E0302
+  Ok::[I32, Bool](1)                                           //~ E0302
 }
 
 fn err_variant() -> R {
-  Err(true)                                       //~ E0302
+  Err::[I32, Bool](true)                                       //~ E0302
 }
 
 fn through_two_names() -> OO {
-  None                                           //~ E0302
+  None::[I32]                                           //~ E0302
 }
 
 fn in_a_branch(c: Bool) -> O {
   if c {
-    Some(1)                                       //~ E0302
+    Some::[I32](1)                                       //~ E0302
   } else {
     None
   }
@@ -46,13 +46,13 @@ fn in_a_branch(c: Bool) -> O {
 
 fn in_an_arm(x: I32) -> O {
   match x {
-    0 => None,                                    //~ E0302
+    0 => None::[I32],                                    //~ E0302
     n => Some(n),
   }
 }
 
 fn in_a_closure() -> O {
-  let f = fn(x: I32) -> O { Some(x) }             //~ E0302
+  let f = fn(x: I32) -> O { Some::[I32](x) }             //~ E0302
   f.(3)
 }
 
@@ -62,7 +62,7 @@ fn in_a_generic_function[T](x: T) -> Option[T] {
 }
 
 fn as_an_argument() -> I32 {
-  or_zero(Some(2))                                //~ E0302
+  or_zero(Some::[I32](2))                                //~ E0302
 }
 
 fn or_zero(o: Option[I32]) -> I32 {
@@ -114,7 +114,7 @@ fn in_a_guarded_arm(o: O) -> I32 {
   }
 }
 
-const NOTHING: O = None                           //~ E0302
+const NOTHING: O = None::[I32]                           //~ E0302
 
 fn bare_names_are_fine(o: O, r: R) -> I32 {
   let a = match o {

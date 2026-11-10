@@ -4,29 +4,34 @@
 //! is a member of, lowered after the walk (`lower_types`) into its record's
 //! `owner`; after a local, they are the E0308 of the walk; after any other
 //! name that declares no type parameters (a constant, `Self`, a module,
-//! `panic`, …), the E0412 of the types stage. In a constant expression
-//! alike (S-329: its reader reads the `owner`, `crate::constarg`). Those of a
-//! function or a method and of a variant of the prelude are E0200 until the
-//! units that read them (W5-10 U2a, U2b), before the marks of the call
-//! (`flow.rs`).
+//! `panic`, …), the E0412 of the types stage. After a function with type
+//! parameters of its own (`id::[U8]`), they are its own ([`own_params`],
+//! `BodyNames::own`); after a variant of the prelude (`None::[I32]`, §4.1),
+//! they make the type of its enum, in the `owner` of its own record. In a
+//! constant expression alike (S-329: its reader reads the `owner`,
+//! `crate::constarg`). Those of a method are E0200 until the unit that reads
+//! them (W5-10 U2b), before the marks of the call (`flow.rs`).
 
 use onsa_diag::{Code, Diagnostic, Span, Stage};
-use onsa_syntax::ast::{ExprId, ExprKind, Ident};
+use onsa_syntax::ast::{ExprId, ExprKind, Ident, Path, TypeArgList};
 
 use super::paths::path_of;
 use super::{Fail, Listed, PathRes, Typed, Walker};
-use crate::def::DefKind;
+use crate::Analysis;
+use crate::def::{DefId, DefKind, GenericKind};
 use crate::resolve::{Builtin, Entity};
 
 /// What type arguments go to, by the record of the name before them.
 enum To {
+    /// The type the next name is a member of.
     Type(Entity),
+    /// The name itself: the own parameters of a function (`true`), the type
+    /// of the enum of a variant of the prelude.
+    Name(Entity, bool),
     /// A name that declares no type parameters: E0412.
     Nothing,
     /// A local: E0308.
     Local,
-    /// Not read yet: E0200.
-    Later,
     /// A def whose heading a syntax error cut (S-59): no diagnostic.
     Unknown,
 }
@@ -49,7 +54,7 @@ impl<'a> Walker<'a> {
             // A field or a method of a value (U2b).
             let Some(r) = records.get(k) else { return fail.or_else(|| Some(self.type_args(args.span))) };
             let stopped = fail.is_some() && records.len() == k + 1 && !matches!(r, PathRes::Namespace(_));
-            match self.goes_to(r, names[k]) {
+            let (entity, to, own) = match self.goes_to(r, names[k]) {
                 To::Local => {
                     let span = self.ast.expr(x).span;
                     let msg = "a local takes no type arguments: a function value is one instance of a function (§4.5)";
@@ -57,23 +62,46 @@ impl<'a> Walker<'a> {
                         Diagnostic::new(Stage::Names, Code::E0308, span, msg).with_found(self.src(span)),
                     ));
                 }
-                To::Later => return Some(self.type_args(args.span)),
                 _ if stopped => return fail,
-                To::Type(entity) => {
-                    let (path, to) = (path_of(&names[..=k]), nodes.get(k + 1).copied());
-                    let at = Listed { key: (x, 0), entity, path, args: args.clone(), to };
-                    let site = self.site(Typed::Args(Box::new(at)));
-                    self.type_sites.push(site);
-                }
+                To::Type(entity) => (entity, k + 1, false),
+                To::Name(entity, own) => (entity, k, own),
                 To::Nothing => {
                     let after_type = k > 0 && matches!(self.goes_to(&records[k - 1], names[k - 1]), To::Type(_));
                     let d = self.no_params((names, k), after_type, self.ast.expr(x).span);
                     self.out.type_args.insert((x, 0), (None, Some(d)));
+                    continue;
                 }
-                To::Unknown => {}
-            }
+                To::Unknown => continue,
+            };
+            let (path, to) = (path_of(&names[..=k]), nodes.get(to).copied());
+            let site =
+                self.site(Typed::Args(Box::new(Listed { key: (x, 0), entity, path, args: args.clone(), to, own })));
+            self.type_sites.push(site);
         }
         fail
+    }
+
+    /// The type arguments `lists` of the path of the struct literal `e`,
+    /// which names `end` (§4.5): after its last name, to the literal as those
+    /// of a chain go ([`Self::goes_to`], R-424); after another name, E0412.
+    pub(super) fn struct_args(&mut self, e: ExprId, path: &Path, lists: &[(usize, TypeArgList)], end: Entity) {
+        let segs: Vec<&Ident> = path.segments.iter().collect();
+        let last = PathRes::Item { entity: end, owner: None };
+        for (k, args) in lists {
+            let key = (e, *k as u32);
+            match (*k + 1 == segs.len()).then(|| self.goes_to(&last, segs[*k])) {
+                Some(To::Type(entity)) => {
+                    let at = Listed { key, entity, path: path.clone(), args: args.clone(), to: Some(e), own: false };
+                    let site = self.site(Typed::Args(Box::new(at)));
+                    self.type_sites.push(site);
+                }
+                Some(To::Unknown) => {}
+                _ => {
+                    let d = self.no_params((&segs, *k), false, Span { start: segs[0].span.start, ..args.span });
+                    self.out.type_args.insert(key, (None, Some(d)));
+                }
+            }
+        }
     }
 
     /// What the type arguments after the name `name`, whose record is `r`, go to.
@@ -91,20 +119,13 @@ impl<'a> Walker<'a> {
         }
         match e {
             Entity::Builtin(Builtin::Scalar(_) | Builtin::Generic(_)) => To::Type(e),
-            Entity::Variant(d, _) if a.modules.lang.of(d).is_some() => To::Later,
+            Entity::Variant(d, _) if a.modules.lang.of(d).is_some() => To::Name(Entity::Def(d), false),
             Entity::Module(_) | Entity::Builtin(_) | Entity::Variant(..) => To::Nothing,
             Entity::Def(d) | Entity::Member(d) if a.heading_failed(d) => To::Unknown,
             Entity::Def(d) | Entity::Member(d) => match &a.def(d).kind {
                 DefKind::Struct(_) | DefKind::Enum(_) | DefKind::Alias(_) => To::Type(e),
                 DefKind::Flow(_) => To::Nothing,
-                // Its own parameters, after those of its `impl`.
-                DefKind::Fn(f) => {
-                    let of_impl = a.def(d).owner.filter(|&o| matches!(a.def(o).kind, DefKind::Impl(_)));
-                    match f.generics.len() > of_impl.map_or(0, |o| a.def(o).generics().len()) {
-                        true => To::Later,
-                        false => To::Nothing,
-                    }
-                }
+                DefKind::Fn(_) if !own_params(a, d).is_empty() => To::Name(e, true),
                 _ => To::Nothing,
             },
         }
@@ -125,4 +146,14 @@ impl<'a> Walker<'a> {
         };
         Diagnostic::new(Stage::Types, Code::E0412, span, msg).with_found(self.src(span)).with_rule(rule)
     }
+}
+
+/// The own type and const parameters of the function `d` (§4.5), at their
+/// index in its generics: those after its `impl`'s, with no effect-row
+/// variable (S-982, `fn apply[T, e]` has one).
+pub(crate) fn own_params(a: &Analysis, d: DefId) -> Vec<usize> {
+    let def = a.def(d);
+    let of_impl = def.owner.filter(|&o| matches!(a.def(o).kind, DefKind::Impl(_)) && o != d);
+    let from = of_impl.map_or(0, |o| a.def(o).generics().len());
+    (from..def.generics().len()).filter(|&k| !matches!(def.generics()[k].kind, GenericKind::Effect)).collect()
 }

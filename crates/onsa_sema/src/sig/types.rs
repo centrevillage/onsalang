@@ -202,6 +202,38 @@ impl<'p> Sema<'p> {
         self.type_of_entity(cx, entity, lowered_args, span, path)
     }
 
+    /// The type arguments `args` written at `span` after the function `d`
+    /// (`path`) for its own parameters (`id::[U8]`, §4.5,
+    /// [`crate::names::body::own_params`]): the tuple of them, each lowered by
+    /// the kind of its parameter, as [`Self::type_with_args`] lowers those
+    /// of a type, and judged as a type of a body at a binding (a `Span`
+    /// stands there; what the parameter requires of it is the call's, §4.5).
+    /// Past their count none is read, the E0412 of the count with no
+    /// candidate and a note of the parameters (S-306); the error type.
+    fn own_args(&mut self, cx: &Cx<'p>, d: DefId, args: &[TypeId], (span, path): (Span, &Path)) -> TyId {
+        let own = crate::names::body::own_params(self.a, d);
+        let params: Vec<_> = own.iter().map(|&k| self.a.def(d).generics()[k].clone()).collect();
+        let before = self.a.diagnostics.len();
+        let read: Vec<TyId> = (args.iter().zip(&params))
+            .map(|(&x, g)| self.lower_type_arg(cx, x, Some(matches!(g.kind, GenericKind::Const(_)))))
+            .collect();
+        if args.len() != params.len() {
+            let name = &path.segments[path.segments.len() - 1].name;
+            let msg = format!("`{name}` takes {} type argument(s), {} given", params.len(), args.len());
+            let shown: Vec<String> = params.iter().map(|g| format!("`{}`", g.name)).collect();
+            let rule = format!("`{name}` declares the type parameters {} (§4.5)", shown.join(", "));
+            let d = Diagnostic::new(Stage::Types, Code::E0412, span, msg).with_found(src(cx, span)).with_rule(rule);
+            self.report(cx.def, d);
+            return self.a.types.error();
+        }
+        for (&x, &t) in args.iter().zip(&read) {
+            if self.a.diagnostics.len() > before || self.judge(cx, x, t, Pos::Bind).is_none() {
+                break;
+            }
+        }
+        self.a.types.intern(Ty::Tuple(read))
+    }
+
     /// E0020 for a rate written as a type `t` (`Sig[F32]`, the row
     /// `rate_as_type`, §11.3, S-120): a name of the list of
     /// [`foreign::RATE_TYPES`] with one type argument, not found (`err`;
@@ -513,12 +545,7 @@ impl<'p> Sema<'p> {
         }
         let rcx = crate::constarg::ConstCx { m: cx.m, ast: cx.ast, text: cx.text, names: &names.names };
         let r = crate::constarg::expr(self.a, &rcx, e);
-        // Type arguments whose diagnostic the reader did not give (`Checker::type_args_of`'s check).
-        if let (Ok(_) | Err(ConstErr::Unknown), Some((_, Some(d)))) =
-            (&r, names.names.type_args.values().find(|v| v.1.is_some()))
-        {
-            onsa_diag::internal::bug(Some(d.span), "type arguments whose diagnostic the reader did not give");
-        }
+        names.names.all_reported(matches!(r, Ok(_) | Err(ConstErr::Unknown)), "the reader");
         r
     }
 
@@ -534,10 +561,18 @@ impl<'p> Sema<'p> {
         let before = self.a.diagnostics.len();
         let mut s = Sema::new(self.a, self.flat.clone());
         let span = Span { start: path.span.start, ..args.span };
-        let ty = s.type_with_args(cx, entity, &args.args, (span, path), None);
-        if s.a.diagnostics.len() == before {
-            s.judge_args(cx, &args.args, ty, span);
-        }
+        let ty = match entity {
+            Entity::Def(d) | Entity::Member(d) if matches!(s.a.def(d).kind, DefKind::Fn(_)) => {
+                s.own_args(cx, d, &args.args, (span, path))
+            }
+            _ => {
+                let ty = s.type_with_args(cx, entity, &args.args, (span, path), None);
+                if s.a.diagnostics.len() == before {
+                    s.judge_args(cx, &args.args, ty, span);
+                }
+                ty
+            }
+        };
         let held = std::mem::take(&mut s.held_consts);
         self.held_consts.extend(held);
         (ty, self.a.diagnostics.drain(before..).collect())

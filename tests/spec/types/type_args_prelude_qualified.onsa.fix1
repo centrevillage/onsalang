@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// fixes = 1
+// spec = ["§4.1", "§4.4", "§4.5", "§15.1", "§18.1"]
+
+// S-607 (W5-10 U2a): a variant of the prelude written with the type as a qualifier, with the type arguments on the type (`Option::[I32].None`), or with an
+// alias that fixes them (`type O = Option[I32]`, then `O.None`), is E0302 of the names stage: the type namespaces of `Option` and `Result` give no variant,
+// since the variants are names of the prelude (§4.1: "型や別名で修飾した形（`Option.None`、`Option::[I32].None`、`type O = Option[I32]` の後の `O.None`）は名前の段の
+// E0302"). The one candidate takes the qualifier off and puts the type arguments that it had on the name (§4.1: "修正候補は修飾を除き、修飾が持っていた型引数を名前に
+// 付ける形（`None`、`None::[I32]`）"): `Option::[I32].None` is `None::[I32]`, `Option::[U8].Some(250)` is `Some::[U8](250)`, `Result::[I32, Str].Ok(1)` is
+// `Ok::[I32, Str](1)`, and `O.None` is `None::[I32]`, with the arguments of the alias. The text after the candidate is not written here (the case has
+// no `.fix1`: the implementation makes it). The qualifier without the list (`Option.None`) is in negative/prelude_variant_qualified_values.onsa. One error
+// per item (P-01).
+
+type O = Option[I32]
+
+type Res = Result[I32, Str]
+
+pub fn the_list_on_the_type_for_none() -> Option[I32] {
+  None::[I32]                                //~ E0302
+}
+
+pub fn the_list_on_the_type_for_some() -> Option[U8] {
+  Some::[U8](250)                            //~ E0302
+}
+
+pub fn the_list_on_the_type_for_ok() -> Result[I32, Str] {
+  Ok::[I32, Str](1)                          //~ E0302
+}
+
+pub fn the_list_on_the_type_for_err() -> Result[I32, Str] {
+  Err::[I32, Str]("e")                       //~ E0302
+}
+
+pub fn an_alias_for_none() -> Option[I32] {
+  None::[I32]                                            //~ E0302
+}
+
+pub fn an_alias_for_some() -> Option[I32] {
+  Some::[I32](1)                                         //~ E0302
+}
+
+pub fn an_alias_for_ok() -> Result[I32, Str] {
+  Ok::[I32, Str](1)                                         //~ E0302
+}
+
+pub fn the_list_on_the_type_as_a_value() -> Option[U8] {
+  let mk = Some::[U8]                        //~ E0302
+  mk.(1)
+}

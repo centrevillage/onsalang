@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.1", "§4.5", "§4.6", "§5.3", "§18.1"]
+
+// S-239 (W5-10 U2a): a second-class type (`Span`) written as the type argument of a variant of the prelude is E0710: `Option[T: ?Dup]` and
+// `Result[T: ?Dup, E: ?Dup]` have no `?Escape` (§4.1; §4.5: "第二級の型か、それを中に含む型を、`?Escape` の無い型パラメータの型引数に書いた所 … は位置の E0710
+// だけ"). `None`, `Some`, the first and the second parameter of `Result`. There is no candidate (§4.5: "修正候補は無く"; `fixes = 0`). One error per
+// item (P-01).
+
+pub fn in_none() -> U32 {
+  let _ = None::[Span[F32]]                         //~ E0710
+  1
+}
+
+pub fn in_some(s: Span[F32]) -> U32 {
+  let _ = Some::[Span[F32]](s)                      //~ E0710
+  1
+}
+
+pub fn in_the_first_of_ok(s: Span[F32]) -> U32 {
+  let _ = Ok::[Span[F32], Str](s)                   //~ E0710
+  1
+}
+
+pub fn in_the_second_of_err(s: Span[F32]) -> U32 {
+  let _ = Err::[Str, Span[F32]](s)                  //~ E0710
+  1
+}

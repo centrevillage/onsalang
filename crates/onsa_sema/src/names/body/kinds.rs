@@ -138,7 +138,7 @@ impl Walker<'_> {
         let name = &segs[segs.len() - 1].name;
         let d = method_named(path_of(segs).dotted(), name, span);
         let ast = self.ast;
-        let Some(call) = call.filter(|_| !self.listed) else { return d };
+        let Some(call) = call.filter(|_| self.listed.is_empty()) else { return d };
         let ExprKind::Call { args, kind, .. } = &ast.expr(call).kind else { return d };
         let Some((first, rest)) = args.split_first() else { return d };
         let recv = self.src(ast.expr(first.expr).span);

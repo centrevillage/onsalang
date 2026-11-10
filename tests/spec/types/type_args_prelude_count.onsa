@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.1", "§4.5", "§18.1"]
+
+// S-239, S-306 (W5-10 U2a): the number of the elements of the list written after the name of a variant of the prelude is not the number of the
+// parameters of the enum: `Option` has one (`T`), `Result` has two (`T` and `E`) (§4.5: "型引数と const 引数の数が宣言と合わなければ E0412"). Too many for
+// `None` and `Some`, too few for `Ok` and `Err`, and too many for `Ok`. There is no candidate in an expression (§4.5: "式の中の型引数の E0412 に修正候補は
+// 無く"; `fixes = 0`). One error per item (P-01); the other items are fine.
+
+pub fn none_too_many() -> Option[I32] {
+  None::[I32, I32]                                  //~ E0412
+}
+
+pub fn some_too_many() -> Option[U8] {
+  Some::[U8, U8](1)                                 //~ E0412
+}
+
+pub fn ok_too_few() -> Result[I32, Str] {
+  Ok::[I32](1)                                      //~ E0412
+}
+
+pub fn err_too_few() -> Result[I32, Str] {
+  Err::[Str]("e")                                   //~ E0412
+}
+
+pub fn ok_too_many() -> Result[I32, Str] {
+  Ok::[I32, Str, Str](1)                            //~ E0412
+}
+
+pub fn right() -> Result[I32, Str] {
+  let a = None::[I32]
+  match a {
+    Some(v) => Ok::[I32, Str](v),
+    None => Err::[I32, Str]("none"),
+  }
+}

@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+
+// R-424 (W5-10 U2a; the implementation wrote it): the type arguments of a struct literal go as those of a chain do
+// (`goes_to`), so after a type whose heading a syntax error cut (S-59), whose parameters are not known, they get
+// no diagnostic, whether they are a constant expression or a name that is not found: the same as the chain
+// `Cut::[3].x` and `Cut::[Nope].x` (§18.1, what the check does not read). The one error is the syntax error of
+// the heading.
+
+pub struct Cut[T: ] {                               //~ E0002
+  v: T,
+}
+
+pub fn a_literal_with_a_constant() -> I32 {
+  let _ = Cut::[3] { v: 1 }
+  1
+}
+
+pub fn a_literal_with_a_name_not_found() -> I32 {
+  let _ = Cut::[Nope] { v: 1 }
+  1
+}
+
+pub fn a_chain_with_a_constant() -> I32 {
+  let _ = Cut::[3].x
+  1
+}

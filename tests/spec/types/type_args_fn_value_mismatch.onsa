@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7", "§6.1", "§18.1"]
+
+// S-239 (W5-10 U2a): the value of a generic function put with the type arguments (`let g = id::[U8]`) is one instantiation (§6.1), so a call through
+// it that gives another type is a mismatch (§4.5: "値として取り出す `let g = id::[U8]` の後の `g.(250)`") and a literal out of the range of the type is
+// E0408 (§4.7). A float literal, an annotation of another type than the result, a variable of another type, the value given to a parameter of
+// another function type, and a literal out of the range. The number of the candidates is not written. One error per item (P-01).
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn apply_f(f: fn(F32) -> F32, x: F32) -> F32 {
+  f.(x)
+}
+
+pub fn a_float() -> U8 {
+  let g = id::[U8]
+  g.(1.5)                                           //~ E0401
+}
+
+pub fn the_annotation_is_another_type() -> I32 {
+  let g = id::[U8]
+  let r: I32 = g.(250)                              //~ E0401
+  r
+}
+
+pub fn a_variable_of_another_type(a: I32) -> U8 {
+  let g = id::[U8]
+  g.(a)                                             //~ E0401
+}
+
+pub fn given_to_a_parameter_of_another_type() -> F32 {
+  apply_f(id::[U8], 1.0)                            //~ E0401
+}
+
+pub fn out_of_the_range() -> U8 {
+  let g = id::[U8]
+  g.(300)                                           //~ E0408
+}
+
+pub fn right() -> U8 {
+  let g = id::[U8]
+  g.(255)
+}

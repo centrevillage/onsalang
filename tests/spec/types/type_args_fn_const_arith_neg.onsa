@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.6", "§18.1"]
+
+// S-239 (W5-10 U2a): the value of a constant expression that is a const argument written after the name of a function is worked out at
+// compile time, and an overflow, an underflow and a division by zero are E0419 at the expression (§4.5: "溢れとゼロ除算は、その式の位置で E0419
+// （コンパイル時の評価の panic、§6.6）"). Kept apart from type_args_fn_const_neg.onsa: this version stops every constant expression with an
+// operator at E0200 (the same wait as types/array_length_operations_fine.onsa). One error per item (P-01).
+
+pub fn count[const N: U32]() -> U32 {
+  N
+}
+
+pub fn an_overflow() -> U32 {
+  count::[4294967295 + 1]()                         //~ E0419
+}
+
+pub fn a_division_by_zero() -> U32 {
+  count::[4 / 0]()                                  //~ E0419
+}
+
+pub fn an_underflow() -> U32 {
+  count::[0 - 1]()                                  //~ E0419
+}
+
+pub fn a_remainder_by_zero() -> U32 {
+  count::[4 % 0]()                                  //~ E0419
+}
+
+pub fn fine() -> U32 {
+  count::[4294967295]()
+}

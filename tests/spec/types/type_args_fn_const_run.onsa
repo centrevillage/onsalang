@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§4.7"]
+
+// S-239 (W5-10 U2a): the const parameter of a function is given in the list as a constant expression (§4.5: "並びの要素は型の位置の並びと同じに
+// 読み、const 引数は定数式（下記）である"; the constant expression is an integer literal, a name of a constant, or a const parameter by itself).
+// A const parameter that only the result has (`fill`, `count`) is decided by the list, and a function with a type parameter and a const
+// parameter takes both in the order of the declaration. A const parameter of the function that calls, written by itself as the argument
+// (`count::[M]()`), is the same const parameter as the length `[F32; N]` is (§4.5: "const の型パラメータを含む式（`[F32; N * 2]` …）は書けない"
+// is about an expression with an operator). The expressions with an operator are in type_args_fn_const_arith.onsa. The values are
+// worked out by hand.
+
+pub const K: U32 = 8
+
+pub fn count[const N: U32]() -> U32 {
+  N
+}
+
+pub fn fill[const N: U32]() -> [F32; N] {
+  [0.0; N]
+}
+
+pub fn tag[T, const N: U32](x: T) -> (T, U32) {
+  (x, N)
+}
+
+pub fn outer[const M: U32]() -> U32 {
+  count::[M]()
+}
+
+test "an integer literal" {
+  assert count::[4]() == 4
+  assert count::[0]() == 0
+}
+
+test "the name of a constant" {
+  assert count::[K]() == 8
+}
+
+test "the array of the length" {
+  let a = fill::[4]()
+  assert a.len() == 4
+  assert a[3] == 0.0
+}
+
+test "the array of the length with the annotation of the same length" {
+  let a: [F32; 4] = fill::[4]()
+  assert a.len() == 4
+}
+
+test "a type parameter and a const parameter" {
+  let t = tag::[U8, 3](200)
+  assert t.1 == 3
+  let a = t.0
+  assert a.checked_add(100) == None
+}
+
+test "the const parameter of the function that calls" {
+  assert outer::[5]() == 5
+  assert outer::[K]() == 8
+}

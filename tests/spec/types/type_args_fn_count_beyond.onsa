@@ -1,0 +1,42 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§18.1"]
+
+// S-239 (W5-10 U2a): the elements of the list beyond the number of the parameters of the function are not read (§4.5: "宣言の数を超えた要素は読まない
+// （種類も名前も判定しない。`P[Nope]` と `Ring[F32, 4, K]` は E0412 だけ）"). A name that is not found, a const argument, a name of a constant that is
+// not found, all of them beyond the number, and the list of a function without type parameters, whose every element is beyond. The report is E0412 only,
+// not E0302 or E0308 or E0417. There is no candidate (`fixes = 0`). One error per item (P-01).
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn plain(x: U8) -> U8 {
+  x
+}
+
+pub fn count[const N: U32]() -> U32 {
+  N
+}
+
+pub fn a_name_that_is_not_found() -> U8 {
+  id::[U8, Nope](1)                                 //~ E0412
+}
+
+pub fn a_const_argument_beyond() -> U8 {
+  id::[U8, 4](1)                                    //~ E0412
+}
+
+pub fn a_constant_that_is_not_found() -> U32 {
+  count::[4, K]()                                   //~ E0412
+}
+
+pub fn a_function_without_type_parameters() -> U8 {
+  plain::[Nope](1)                                  //~ E0412
+}
+
+pub fn a_local_beyond() -> U8 {
+  let k = 4
+  id::[U8, k](1)                                    //~ E0412
+}

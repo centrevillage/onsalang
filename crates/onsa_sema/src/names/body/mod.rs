@@ -29,6 +29,7 @@ pub(crate) use exprs::heads;
 pub(crate) use flow::clock_after;
 pub(crate) use kinds::METHOD_IS_CALLED;
 pub(crate) use paths::is_value;
+pub(crate) use type_args::own_params;
 mod scope;
 #[cfg(test)]
 mod tests;
@@ -116,6 +117,11 @@ pub(crate) struct BodyNames {
     /// a name that takes none), and the diagnostic of the types stage at them
     /// (E0412, E0416, …), which it reports when it reaches them.
     pub type_args: HashMap<(ExprId, u32), (Option<TyId>, Option<Diagnostic>)>,
+    /// The node of a function with type arguments for its own parameters
+    /// (`id` of `id::[U8]`, §4.5) to them, as [`Self::type_args`] has them:
+    /// the tuple of them, in the order of [`own_params`]; the error type when
+    /// they have an error.
+    pub own: HashMap<ExprId, TyId>,
     /// The effect row of an anonymous function, read once by the names stage
     /// as the row of a signature (§8.1, S-738).
     pub effects: HashMap<ExprId, crate::ty::EffectSet>,
@@ -168,6 +174,16 @@ impl BodyNames {
         first
     }
 
+    /// The safety net of the readers of the type arguments (the check's
+    /// `Checker::type_args_of`, the reader of a constant expression of a
+    /// type, `reader`): one that read to its end (`done`) reported every
+    /// diagnostic of them, else an internal error at the one left (R-426).
+    pub(crate) fn all_reported(&self, done: bool, reader: &str) {
+        if let (true, Some((_, Some(d)))) = (done, self.type_args.values().find(|v| v.1.is_some())) {
+            onsa_diag::internal::bug(Some(d.span), format!("type arguments whose diagnostic {reader} did not report"));
+        }
+    }
+
     /// Keep the type arguments `at` as `lowered` (the type, and the
     /// diagnostics of `crate::sig`'s one lowering of them): the type in
     /// [`Self::type_args`] and in the `owner` of the record after them, with
@@ -179,8 +195,9 @@ impl BodyNames {
             return Err(d.clone());
         }
         self.type_args.insert(at.key, (Some(ty), d));
-        match at.to.and_then(|x| self.paths.get_mut(&x)) {
-            Some(PathRes::Item { owner, .. }) => *owner = Some(ty),
+        match (at.to, at.to.and_then(|x| self.paths.get_mut(&x))) {
+            (Some(x), _) if at.own => _ = self.own.insert(x, ty),
+            (_, Some(PathRes::Item { owner, .. })) => *owner = Some(ty),
             _ => at.to.and_then(|x| self.structs.get_mut(&x)).into_iter().for_each(|s| s.owner = Some(ty)),
         }
         Ok(())
@@ -344,7 +361,9 @@ enum Typed {
 
 /// The type arguments `args` at `key` after the name `path` (the chain up
 /// to it), which names the type `entity`; the type they make goes to the
-/// `owner` of the record of `to`, the next name or the struct literal.
+/// `owner` of the record of `to`, the next name, the struct literal or a
+/// variant of the prelude. Of the own parameters of the function `entity`
+/// (`own`), they go to [`BodyNames::own`] at `to`, its name.
 #[derive(Debug, Clone)]
 struct Listed {
     key: (ExprId, u32),
@@ -352,6 +371,7 @@ struct Listed {
     path: onsa_syntax::ast::Path,
     args: onsa_syntax::ast::TypeArgList,
     to: Option<ExprId>,
+    own: bool,
 }
 
 /// The node of the names of `e`: through the type arguments after them
@@ -564,9 +584,10 @@ struct Walker<'a> {
     /// The locals a type sees, of the walk of a constant expression of it
     /// (`consts.rs`), by name: found after the bindings of the walk.
     outer: HashMap<String, BindingId>,
-    /// The chain resolved has type arguments: a candidate that rewrites its
-    /// names is none (`kinds.rs`).
-    listed: bool,
+    /// The type arguments of the chain resolved, as [`Walker::chain`] has
+    /// them: a candidate that rewrites its names is none (`kinds.rs`), or
+    /// keeps them (`paths.rs::qualified_variant`).
+    listed: Vec<(usize, ExprId)>,
 }
 
 impl<'a> Walker<'a> {
@@ -598,7 +619,7 @@ impl<'a> Walker<'a> {
             root,
             heading: HashMap::default(),
             outer: HashMap::default(),
-            listed: false,
+            listed: Vec::new(),
         }
     }
 

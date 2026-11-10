@@ -182,9 +182,8 @@ impl Walker<'_> {
     }
 
     /// E0200 for the type arguments at `span` of an expression that this
-    /// version does not give to their item yet (W5-10 U2a, U2b, S-979): of a
-    /// function, of a method and of a variant of the prelude; neither dropped
-    /// nor read (R-81).
+    /// version does not give to their item yet (W5-10 U2b, S-979): of a
+    /// method, or of a field of a value; neither dropped nor read (R-81).
     pub(super) fn type_args(&self, span: onsa_diag::Span) -> Fail {
         Fail::Report(Feature::TypeArgsInExpressions.diagnostic(Stage::Names, span, &[]).with_found(self.src(span)))
     }

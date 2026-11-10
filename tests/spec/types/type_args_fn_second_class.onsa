@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§4.6", "§5.3", "§18.1"]
+
+// R-336, S-239 (W5-10 U2a): a second-class type (`Span`) or a type that holds one, as the type argument of a type parameter without `?Escape`, is
+// E0710 (§4.5: "第二級の型か、それを中に含む型を、`?Escape` の無い型パラメータの型引数に書いた所 … は位置の E0710 だけで、その型引数の要求は判定しない"). The type
+// argument that is inferred is the same (§4.5: "推論で決まった型引数 … も同じで … `fn id[T](x: T) -> T` の `id(s)`（`s: Span[F32]`）… は E0710 である。修正候補は
+// 無く"; R-336), so `id::[Span[F32]](s)` and `id(s)` are the same error at the same place of the line. A tuple and an array that hold a `Span`, and a
+// bound that the type argument does not meet, which is not judged (`Span` is not a `Num`, and the report is E0710 only). `fixes = 0`. One error
+// per item (P-01).
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn bounded[T: Num](x: T) -> U32 {
+  1
+}
+
+pub fn written(s: Span[F32]) -> U32 {
+  let _ = id::[Span[F32]](s)                        //~ E0710
+  1
+}
+
+pub fn inferred(s: Span[F32]) -> U32 {
+  let _ = id(s)                                     //~ E0710
+  1
+}
+
+pub fn in_a_tuple(s: Span[F32]) -> U32 {
+  let _ = id::[(Span[F32], F32)]((s, 1.0))          //~ E0710
+  1
+}
+
+pub fn in_an_array(s: Span[F32]) -> U32 {
+  let _ = id::[[Span[F32]; 2]]([s, s])              //~ E0710
+  1
+}
+
+pub fn a_bound_is_not_judged(s: Span[F32]) -> U32 {
+  bounded::[Span[F32]](s)                           //~ E0710
+}
+
+pub fn an_ordinary_array_is_fine(a: [F32; 2]) -> U32 {
+  let _ = id::[[F32; 2]](a)
+  1
+}

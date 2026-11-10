@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7", "§6.1"]
+
+// S-303 (W5-10 U2a): a generic function put as a value without the type arguments (`let g = id`) has its type parameters decided as a call
+// has: by the expected type and the later statements (§6.1: "型引数を書かずに値に置いたとき（`let g = id`）は、型パラメータは呼び出しと同じく期待型と後の
+// 文で決まり（§4.7）、一つの値は一つの具体化を指す"). A literal that is the argument takes the default of the literal at the end of the function
+// (`g.(250)` is an `I32`, §4.7), and a value is put twice for two instantiations (§6.1). No diagnostic, and the program checks today (S-303: "今の実装のとおりで、
+// 通るプログラムは変わらない"); this case guards that. The type parameter that the type of the function does not have is in type_args_fn_untyped_list.onsa.
+// Only the check: the calls through the values are not lowered yet (R-295).
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn zero[T: AnyNum]() -> T {
+  T.ZERO
+}
+
+pub fn apply(f: fn(U8) -> U8, x: U8) -> U8 {
+  f.(x)
+}
+
+pub fn decided_by_a_literal() -> I32 {
+  let g = id
+  g.(250)
+}
+
+pub fn decided_by_the_argument() -> U8 {
+  let g = id
+  let a: U8 = 250
+  g.(a)
+}
+
+pub fn decided_by_the_result() -> U8 {
+  let g = id
+  let a: U8 = g.(250)
+  a
+}
+
+pub fn decided_by_the_expected_type() -> U8 {
+  let g: fn(U8) -> U8 = id
+  g.(250)
+}
+
+pub fn decided_by_the_parameter_of_a_callee() -> U8 {
+  apply(id, 5)
+}
+
+pub fn a_parameter_that_only_the_result_has() -> U8 {
+  let z = zero
+  let a: U8 = z.()
+  a
+}
+
+pub fn two_instantiations_by_two_values() -> U8 {
+  let gu = id
+  let gf = id
+  let a: U8 = gu.(1)
+  let b: F32 = gf.(2.5)
+  if b == 2.5 { a } else { 0 }
+}

@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.1", "§4.5", "§6.1"]
+
+// S-239 (W5-10 U2a): the values of type_args_prelude_value.onsa, run. `onsa test` stops at the lowering of a function value and of a call through one
+// with E0200 ("function values", R-295, the same wait as type_args_owner_value_run.onsa), so it is a case of its own: the type check of the same forms
+// is in type_args_prelude_value.onsa. The construction of a variant of the prelude, put as a value with the list written after the name of the variant,
+// is called and the results are the values worked out by hand.
+
+pub fn apply(f: fn(move U8) -> Option[U8], x: U8) -> Option[U8] {
+  f.(x)
+}
+
+test "Some put as a value, then called" {
+  let mk = Some::[U8]
+  let o = mk.(200)
+  let k = match o {
+    Some(v) => v,
+    None => 0,
+  }
+  assert k.checked_add(100) == None
+}
+
+test "Ok put as a value" {
+  let mk = Ok::[U8, I32]
+  let r = mk.(200)
+  let k = match r {
+    Ok(v) => v,
+    Err(_) => 0,
+  }
+  assert k.checked_add(100) == None
+}
+
+test "Err put as a value" {
+  let mk = Err::[U8, I32]
+  let r = mk.(7)
+  let n = match r {
+    Ok(_) => 0,
+    Err(e) => e,
+  }
+  assert n == 7
+}
+
+test "the value is given to a parameter of a function type" {
+  assert apply(Some::[U8], 5) == Some(5)
+}
+
+test "two values of two type arguments" {
+  let a = Some::[U8]
+  let b = Some::[F32]
+  let x: Option[U8] = a.(1)
+  let y: Option[F32] = b.(2.5)
+  assert x == Some(1)
+  assert y == Some(2.5)
+}

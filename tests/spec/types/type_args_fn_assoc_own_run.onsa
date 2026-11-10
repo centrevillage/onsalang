@@ -1,0 +1,81 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§6.2"]
+
+// S-239 (W5-10 U2a): an associated function that has type parameters of its own takes two lists, the first on the type and the second on the
+// function (§4.5: "型引数は、その型パラメータを宣言した項目の名前に付ける"; "関連関数自身の型パラメータ"). `W::[F32].mk2::[U8](1.5, 200)`
+// is `W[F32]` and `U8`: the type parameter `T` of the `impl` is decided by the first list and the `U` of the function by the second. A type
+// without parameters takes only the list of the function (`Pl.pass::[U8](200)`), and a generic type takes only the list of the type when
+// the function has no parameters of its own (the cases of type_args_owner_assoc_fn.onsa). The values are worked out by hand.
+
+pub struct W[T] {
+  v: T,
+}
+
+impl[T] W[T] {
+  pub fn mk2[U](v: T, u: U) -> (W[T], U) {
+    (W { v: v }, u)
+  }
+
+  pub fn width[const N: U32](v: T) -> (W[T], U32) {
+    (W { v: v }, N)
+  }
+
+  pub fn make(v: T) -> W[T] {
+    W { v: v }
+  }
+}
+
+pub struct Pl {
+  k: U8,
+}
+
+impl Pl {
+  pub fn pass[U](u: U) -> U {
+    u
+  }
+
+  pub fn none_of[U]() -> Option[U] {
+    None
+  }
+}
+
+test "the list of the type and the list of the function" {
+  let r = W::[F32].mk2::[U8](1.5, 200)
+  let w = r.0
+  let u = r.1
+  assert w.v == 1.5
+  assert u.checked_add(100) == None
+}
+
+test "the two lists decide two types" {
+  let r = W::[U8].mk2::[I32](200, 200)
+  let w = r.0
+  let u = r.1
+  assert w.v.checked_add(100) == None
+  assert u.checked_add(100) == Some(300)
+}
+
+test "a const parameter of the function" {
+  let r = W::[U8].width::[3](200)
+  assert r.1 == 3
+  let w = r.0
+  assert w.v.checked_add(100) == None
+}
+
+test "a type without parameters takes the list of the function" {
+  let u = Pl.pass::[U8](200)
+  assert u.checked_add(100) == None
+  let n = Pl.none_of::[U8]()
+  let k = match n {
+    Some(x) => x,
+    None => 200,
+  }
+  assert k.checked_add(100) == None
+}
+
+test "the function that has no parameters of its own takes the list of the type only" {
+  let w = W::[U8].make(200)
+  assert w.v.checked_add(100) == None
+}

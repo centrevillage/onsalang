@@ -70,6 +70,8 @@ impl Settle<'_> {
                 }
                 _ => false,
             },
+            // As the name before them (`None::[Str]`, §4.5).
+            ExprKind::TypeArgs { base, .. } => self.leaf(*base),
             _ => false,
         }
     }

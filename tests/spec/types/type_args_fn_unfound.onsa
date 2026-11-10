@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// S-239 (W5-10 U2a): a name in the list written after the name of a function that is not found is E0302 of the names stage (§4.5: "並びの要素は型の
+// 位置の並びと同じに読み"; §18.1: the names stage is before the types stage). A type in the first and the second place, a type inside a type, a name
+// in a const place, and the name of the function itself. Within the number of the parameters (the elements beyond the number are not read,
+// type_args_fn_count_beyond.onsa). One error per item (P-01).
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn first[A, B](a: A, b: B) -> A {
+  a
+}
+
+pub fn count[const N: U32]() -> U32 {
+  N
+}
+
+pub fn a_type() -> U8 {
+  id::[Nope](1)                                     //~ E0302
+}
+
+pub fn the_second_element() -> U8 {
+  first::[U8, Nope](1, 2.0)                         //~ E0302
+}
+
+pub fn a_type_inside_a_type() -> U32 {
+  let _ = id::[Option[Nope]](None)                  //~ E0302
+  1
+}
+
+pub fn a_name_in_a_const_place() -> U32 {
+  count::[K]()                                      //~ E0302
+}
+
+pub fn the_function() -> U8 {
+  idd::[U8](1)                                      //~ E0302
+}
+
+// The parent added this one (W5-10 U2a): a name that is not found within the number of the parameters, in a list that has too few
+// elements, is the E0302 of the names stage too, before the E0412 of the count (the types stage); the type places do the same
+// (`Pr[Nope]` of `Pr[A, B]`).
+pub fn too_few_and_not_found() -> U8 {
+  first::[Nope](1, 2.0)                             //~ E0302
+}

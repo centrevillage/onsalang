@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7", "§18.1"]
+
+// S-239 (W5-10 U2a): the type argument decides the type of the parameter of the call, so an argument of another type and an expected type of
+// another type are E0401 (§4.5: "型引数を書いた呼び出しの型パラメータは、その文で決まる"; "期待型の注釈 … は束縛の型、後者は項目の具体化"; §4.7: the
+// expected type is checked against the type). A float literal and a bool literal for an integer, a variable of another type, the second
+// argument of two, an annotation of another type than the result, and the result of a function without arguments. The number of the candidates
+// is not written (the spec does not promise a candidate for a mismatch of types in a call). One error per item (P-01). The literals out of the
+// range are E0408 (type_args_fn_literal_range.onsa).
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn first[A, B](a: A, b: B) -> A {
+  a
+}
+
+pub fn zero[T: AnyNum]() -> T {
+  T.ZERO
+}
+
+pub fn a_float_for_an_integer() -> U8 {
+  id::[U8](1.5)                                     //~ E0401
+}
+
+pub fn a_bool_for_an_integer() -> U8 {
+  id::[U8](true)                                    //~ E0401
+}
+
+pub fn a_variable_of_another_type(a: I32) -> U8 {
+  id::[U8](a)                                       //~ E0401
+}
+
+pub fn the_second_argument() -> U8 {
+  first::[U8, F32](1, "s")                          //~ E0401
+}
+
+pub fn the_annotation_is_another_type() -> I32 {
+  let y: I32 = id::[U8](250)                        //~ E0401
+  y
+}
+
+pub fn the_result_of_a_function_without_arguments() -> F32 {
+  let f: F32 = zero::[U8]()                         //~ E0401
+  f
+}
+
+pub fn right() -> U8 {
+  let y: U8 = id::[U8](250)
+  y
+}

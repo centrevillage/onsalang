@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§4.5", "§15.1", "§18.1"]
+
+// S-239 (W5-10 U2a): the kind of an element of the list written after the name of a variant of the prelude (a type or a constant expression) is
+// not the kind of the parameter: the parameters of `Option` and `Result` are types (§4.5: "要素の種類（型か定数式か）が宣言の位置と合わなければ … E0308";
+// §15.1: a value is not a type). A constant for `None`, for `Some`, for the second of `Ok`, and a local value for `Err`. The number of the candidates
+// is not written. One error per item (P-01).
+
+pub fn a_constant_for_none() -> Option[I32] {
+  None::[4]                                         //~ E0308
+}
+
+pub fn a_constant_for_some() -> Option[U8] {
+  Some::[4](1)                                      //~ E0308
+}
+
+pub fn a_constant_for_the_second_of_ok() -> Result[U8, Str] {
+  Ok::[U8, 4](1)                                    //~ E0308
+}
+
+pub fn a_local_value_for_err() -> Result[U8, Str] {
+  let k = 4
+  Err::[k, Str]("e")                                //~ E0308
+}

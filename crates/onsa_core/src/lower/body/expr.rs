@@ -71,12 +71,12 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
         },
         AK::Path(_) => return Err(internal(span, "unresolved path")),
         AK::Hole => return Err(internal(span, "typed hole")),
-        // The names stage stops a `::[…]` with E0200 until W5-10.
-        AK::TypeArgs { .. } => return Err(internal(span, "type arguments in an expression")),
         // Lowering runs only on a package without diagnostics, and a failed
         // item has a syntax diagnostic (S-59).
         AK::Error => onsa_diag::internal::bug(Some(span), "lowering met a body a syntax error left unread"),
-        AK::Paren(inner) | AK::Move(inner) => return lower_expr(lw, cx, *inner),
+        // The type arguments after a name (`None::[I32]`, `id::[U8]`, §4.5):
+        // the types stage decided its type and its target, at the name.
+        AK::Paren(inner) | AK::Move(inner) | AK::TypeArgs { base: inner, .. } => return lower_expr(lw, cx, *inner),
         AK::Tuple(elems) => {
             if elems.is_empty() {
                 ExprKind::Lit(Lit::Unit)

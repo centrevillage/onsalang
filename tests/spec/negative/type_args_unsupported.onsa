@@ -9,8 +9,9 @@
 //
 // W5-10 removes this file: after it the same programs check, and their errors (E0412, E0308, E0406,
 // E0416) are in the cases of W5-10. W5-10 U1a gave the lists after a type to it (an associated
-// function, a struct literal: types/type_args_owner_*.onsa); those of a function, a method and a
-// variant of the prelude are E0200 until U2a and U2b.
+// function, a struct literal: types/type_args_owner_*.onsa), and U2a those of a function and of a
+// variant of the prelude (types/type_args_fn_*.onsa, types/type_args_prelude_*.onsa); those of a
+// method are E0200 until U2b.
 
 pub fn id[T](x: T) -> T {
   x
@@ -30,21 +31,8 @@ impl[T] Pr[T] {
   }
 }
 
-pub fn on_a_function() -> U8 {
-  id::[U8](250)                                     //~ E0200
-}
-
 pub fn on_a_method(p: Pr[U8]) -> I32 {
   p.first::[I32](1)                                 //~ E0200
-}
-
-pub fn on_a_prelude_variant() -> Option[I32] {
-  None::[I32]                                       //~ E0200
-}
-
-pub fn on_a_value() -> U8 {
-  let g = id::[U8]                                  //~ E0200
-  1
 }
 
 pub fn without_a_list(x: U8) -> U8 {

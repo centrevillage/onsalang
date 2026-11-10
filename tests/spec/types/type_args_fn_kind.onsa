@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// S-239 (W5-10 U2a): the kind of an element of the list (a type or a constant expression) is not the kind of the parameter at that place
+// (§4.5: "要素の種類（型か定数式か）が宣言の位置と合わなければ、名前でない型の形と定数式（`Ring[F32, (F32, F32)]`、`Wrap[3]`）も E0308 である"; §15.1: the name of a
+// type is not a constant, a value is not a type). A type for a const parameter, a constant for a type parameter, in the first and the second place,
+// a form that is not a name for a const parameter, and a local value for a type parameter. The number of the candidates is not written. One error
+// per item (P-01).
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn count[const N: U32]() -> U32 {
+  N
+}
+
+pub fn tag[T, const N: U32](x: T) -> (T, U32) {
+  (x, N)
+}
+
+pub fn a_type_for_a_const_parameter() -> U32 {
+  count::[U8]()                                     //~ E0308
+}
+
+pub fn a_constant_for_a_type_parameter() -> U8 {
+  id::[4](1)                                        //~ E0308
+}
+
+pub fn a_constant_for_the_first_of_two() -> U32 {
+  let t = tag::[3, 3](1)                            //~ E0308
+  t.1
+}
+
+pub fn a_type_for_the_const_of_two() -> U32 {
+  let t = tag::[U8, U8](1)                          //~ E0308
+  t.1
+}
+
+pub fn a_form_that_is_not_a_name_for_a_const_parameter() -> U32 {
+  let t = tag::[U8, (U8, U8)](1)                    //~ E0308
+  t.1
+}
+
+pub fn a_local_value_for_a_type_parameter() -> U8 {
+  let k = 4
+  id::[k](1)                                        //~ E0308
+}

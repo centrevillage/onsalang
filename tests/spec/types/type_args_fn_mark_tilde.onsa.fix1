@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// fixes = 1
+// spec = ["§2.6", "§4.5", "§11.5", "§18.1"]
+
+// S-239, S-811 (W5-10 U2a): the `~` of a flow written after the list of a function that is called with `(` is E0812, in the body of a flow where a
+// `~` can be written (§2.6: "flow でないものに `~` を付けると E0812"; S-811: "書いた印が呼び先に合わない規則（`~(` は E0812）"). The function is an `rt fn`
+// with an empty effect row, which is called pointwise without the mark (§11.5), so the one candidate removes the `~` and the call after it has no
+// error (S-811: "書いた印を呼び先の種類の印に置き換える一つの編集（種類の印が無ければ消す）で、当てた後に同じ段か前の段の誤りが残らないときだけ示す"). The list is
+// right. One parameter, two parameters, and in the argument of an operator. One error per item (P-01).
+
+rt fn ident[T: Copy](x: T) -> T {
+  x
+}
+
+rt fn second[T: Copy](a: T, b: T) -> T {
+  b
+}
+
+pub flow on_a_function(x: F32 at sample) -> F32 at sample {
+  ident::[F32](x)                                  //~ E0812
+}
+
+pub flow on_a_function_of_two(x: F32 at sample) -> F32 at sample {
+  second::[F32](x, 0.5)                            //~ E0812
+}
+
+pub flow in_an_operand(x: F32 at sample) -> F32 at sample {
+  x + ident::[F32](x)                              //~ E0812
+}

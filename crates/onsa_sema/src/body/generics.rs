@@ -77,18 +77,19 @@ impl<'a> Checker<'a> {
     /// origin (E0406 when still open at the end) and carries the requirements of
     /// its parameter (the bounds and the implicit `Dup`, E0416, S-235).
     pub(super) fn finish_instance(&mut self, def: DefId, args: Vec<TyId>, span: Span) -> R<Option<InstId>> {
-        self.instance(def, args, span, None)
+        self.instance(def, args, span, (None, None))
     }
 
     /// [`Self::finish_instance`]; the requirements of the parameters of an
     /// `impl` as `element` when it is given (the element of a sequence
-    /// receiver, S-853).
+    /// receiver, S-853), and `own`, the note of the E0406 of an own parameter
+    /// of the function (S-303).
     pub(super) fn instance(
         &mut self,
         def: DefId,
         args: Vec<TyId>,
         span: Span,
-        element: Option<Required>,
+        (element, own): (Option<Required>, Option<String>),
     ) -> R<Option<InstId>> {
         if args.is_empty() {
             return Ok(None);
@@ -119,7 +120,10 @@ impl<'a> Checker<'a> {
             let of_seq = k < impl_count && matches!(element, Some(Required::SeqElement { .. }));
             // Its origin (E0406 when still open at the end, `way` its note),
             // then its requirements as items in their order.
-            self.defer(span, arg, DeferredKind::Origin { what: what.clone(), rule: way.clone() });
+            // An effect row variable takes no type argument (S-982): no note of them.
+            let listed = !matches!(g.kind, GenericKind::Effect);
+            let rule = if k < impl_count { way.clone() } else { own.clone().filter(|_| listed) };
+            self.defer(span, arg, DeferredKind::Origin { what: what.clone(), rule });
             let Some(wants) = requirements(g, of_seq) else { continue };
             let required = || match (&element, k < impl_count) {
                 (Some(e), true) => e.clone(),

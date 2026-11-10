@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+
+// S-239 (W5-10 U2a): the requirements of the type parameter (a bound, the implicit `Dup`) are checked for the type argument written after the name
+// of a function, in the statement (§4.5: "型引数を書いた呼び出しの型パラメータは、その文で決まる（下の要求の検査もその文で行う）"; "満たさなければ、要求を生んだ式
+// （呼び出し、…）の位置に E0416"). A bound that the argument does not meet, the second parameter of two, a function of a module (`std.math.sqrt` asks for
+// `Float`), and the `Dup` of a `Buf`. One error per item (P-01); the other items are fine.
+use std.math
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn zero[T: AnyNum]() -> T {
+  T.ZERO
+}
+
+pub fn both[A: Num, B: Float](a: A, b: B) -> A {
+  a
+}
+
+pub fn a_bound() -> Bool {
+  zero::[Bool]()                                    //~ E0416
+}
+
+pub fn a_bound_of_a_string() -> Str {
+  zero::[Str]()                                     //~ E0416
+}
+
+pub fn the_second_parameter() -> I32 {
+  both::[I32, I32](1, 2)                            //~ E0416
+}
+
+pub fn a_function_of_a_module() -> I32 {
+  math.sqrt::[I32](4)                               //~ E0416
+}
+
+pub fn the_dup_of_a_buf() -> U32 uses {Alloc} {
+  let _ = id::[Buf[F32]](Buf.zeroed(4))             //~ E0416
+  1
+}
+
+pub fn right() -> F32 {
+  let a = both::[I32, F32](1, 2.0)
+  let z = zero::[F32]()
+  math.sqrt::[F32](z) + F32.round_from(a)
+}

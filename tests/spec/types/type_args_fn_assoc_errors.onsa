@@ -1,0 +1,79 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// S-239, S-306 (W5-10 U2a): the errors of the two lists of an associated function that has type parameters of its own (`W::[F32].mk2::[U8](…)`, the
+// first list on the type, the second on the function, §4.5: "型引数は、その型パラメータを宣言した項目の名前に付ける"). The number is wrong in the list of the function
+// or in the list of the type (E0412, no candidate in an expression: §4.5 "式の中の型引数の E0412 に修正候補は無く"; the number of the candidates is not
+// written for the other codes); the kind is wrong (E0308); a name is not found (E0302); a bound of the parameter of the function is not met (E0416);
+// a literal for the parameter of the function is out of the range (E0408); the list of the function on a type without parameters is too long (E0412).
+// One error per item (P-01); the other items are fine.
+
+pub struct W[T] {
+  v: T,
+}
+
+impl[T] W[T] {
+  pub fn mk2[U](v: T, u: U) -> (W[T], U) {
+    (W { v: v }, u)
+  }
+
+  pub fn width[const N: U32](v: T) -> (W[T], U32) {
+    (W { v: v }, N)
+  }
+
+  pub fn pick_num[U: Num](v: T, u: U) -> U {
+    u
+  }
+}
+
+pub struct Pl {
+  k: U8,
+}
+
+impl Pl {
+  pub fn pass[U](u: U) -> U {
+    u
+  }
+}
+
+pub fn the_list_of_the_function_too_long() -> U8 {
+  let r = W::[F32].mk2::[U8, U8](1.5, 200)          //~ E0412
+  r.1
+}
+
+pub fn the_list_of_the_type_too_long() -> U8 {
+  let r = W::[F32, F32].mk2::[U8](1.5, 200)         //~ E0412
+  r.1
+}
+
+pub fn a_type_for_the_const_parameter() -> U32 {
+  let r = W::[U8].width::[U8](200)                  //~ E0308
+  r.1
+}
+
+pub fn a_name_that_is_not_found() -> U8 {
+  let r = W::[F32].mk2::[Nope](1.5, 200)            //~ E0302
+  r.1
+}
+
+pub fn a_bound_of_the_function() -> Bool {
+  W::[F32].pick_num::[Bool](1.5, true)              //~ E0416
+}
+
+pub fn a_literal_out_of_the_range() -> U8 {
+  let r = W::[F32].mk2::[U8](1.5, 300)              //~ E0408
+  r.1
+}
+
+pub fn a_type_without_parameters() -> U8 {
+  Pl.pass::[U8, U8](1)                              //~ E0412
+}
+
+pub fn right() -> U8 {
+  let r = W::[F32].mk2::[U8](1.5, 200)
+  let n = W::[U8].pick_num::[I32](1, 2)
+  let p = Pl.pass::[U8](3)
+  let _ = n
+  r.1 + p
+}

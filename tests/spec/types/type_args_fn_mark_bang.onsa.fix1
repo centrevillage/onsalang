@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// fixes = 1
+// spec = ["§2.6", "§4.5", "§18.1"]
+
+// S-239, S-811 (W5-10 U2a): the `!` of a method that takes `inout self` written after the list of a function that is called with `(` is E0714 (S-811:
+// "書いた印が呼び先に合わない規則（… `!(` は E0714）"; §18.1: "構築子・関数・関数値の `!` も E0714"). The list is right, so the one candidate removes the `!`
+// (S-811: "書いた印を呼び先の種類の印に置き換える一つの編集（種類の印が無ければ消す）で、当てた後に同じ段か前の段の誤りが残らないときだけ示す"), and the call
+// after it has no error. A function with one parameter, with two, and an associated function with the list of the function after the list of the type.
+// One error per item (P-01).
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn first[A, B](a: A, b: B) -> A {
+  a
+}
+
+pub struct W[T] {
+  v: T,
+}
+
+impl[T] W[T] {
+  pub fn mk2[U](v: T, u: U) -> (W[T], U) {
+    (W { v: v }, u)
+  }
+}
+
+pub fn on_a_function(x: F32) -> F32 {
+  id::[F32](x)                                     //~ E0714
+}
+
+pub fn on_a_function_of_two(x: F32) -> F32 {
+  first::[F32, U8](x, 1)                           //~ E0714
+}
+
+pub fn on_an_associated_function(x: F32) -> F32 {
+  let r = W::[F32].mk2::[U8](x, 1)                 //~ E0714
+  r.0.v
+}

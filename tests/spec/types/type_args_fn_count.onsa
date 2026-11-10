@@ -1,0 +1,81 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§8.1", "§18.1"]
+
+// S-239, S-306, S-982 (W5-10 U2a): the number of the elements of the list written after the name of a function is not the number of the
+// parameters of the function (§4.5: "型引数と const 引数の数が宣言と合わなければ E0412（関数の引数の数と同じコード）"). Too many, too few, a function
+// without type parameters, a const argument too many and missing, the effect row variable that is not counted (`fn mid[A, e, B]` has two type
+// parameters, so three elements are too many and one is too few, S-982: "式の中の型引数の数に、効果行変数は数えない"), a function of a module, and a
+// function put as a value. There is no candidate in an expression (§4.5: "式の中の型引数の E0412 に修正候補は無く";
+// `fixes = 0`; S-306, the note is not promised). One error per item (P-01); the other items are fine.
+use std.math
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn first[A, B](a: A, b: B) -> A {
+  a
+}
+
+pub fn plain(x: U8) -> U8 {
+  x
+}
+
+pub fn count[const N: U32]() -> U32 {
+  N
+}
+
+pub fn tag[T, const N: U32](x: T) -> (T, U32) {
+  (x, N)
+}
+
+pub fn mid[A, e, B](a: A, b: B) -> A {
+  a
+}
+
+pub fn too_many() -> U8 {
+  id::[U8, F32](1)                                  //~ E0412
+}
+
+pub fn too_few() -> U8 {
+  first::[U8](1, 2.0)                               //~ E0412
+}
+
+pub fn a_function_without_type_parameters() -> U8 {
+  plain::[U8](1)                                    //~ E0412
+}
+
+pub fn a_const_argument_too_many() -> U32 {
+  count::[4, 4]()                                   //~ E0412
+}
+
+pub fn the_const_argument_is_missing() -> U32 {
+  let t = tag::[U8](1)                              //~ E0412
+  t.1
+}
+
+pub fn the_effect_row_variable_is_not_counted() -> U8 {
+  mid::[U8, F32, U8](1, 2.0)                        //~ E0412
+}
+
+pub fn the_effect_row_variable_is_not_counted_too_few() -> U8 {
+  mid::[U8](1, 2.0)                                 //~ E0412
+}
+
+pub fn a_function_of_a_module() -> F32 {
+  math.sqrt::[F32, F32](4.0)                        //~ E0412
+}
+
+pub fn put_as_a_value() -> U8 {
+  let _ = plain::[U8]                               //~ E0412
+  1
+}
+
+pub fn right() -> U8 {
+  let a = id::[U8](1)
+  let b = first::[U8, F32](a, 2.0)
+  let t = tag::[U8, 4](b)
+  plain(t.0)
+}

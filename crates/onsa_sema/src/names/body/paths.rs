@@ -18,7 +18,7 @@ use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 use onsa_syntax::ast::{ExprId, ExprKind, Ident, PatId, Path, TypeArgList};
 
 use super::kinds::Want;
-use super::{Fail, Listed, PatRes, PathRes, StructRes, Typed, W, Walker};
+use super::{Fail, PatRes, PathRes, StructRes, W, Walker};
 use crate::Analysis;
 use crate::body::slot::{Form, slot_of};
 use crate::def::{Bound, GenericKind};
@@ -91,9 +91,9 @@ impl<'a> Walker<'a> {
             };
         };
         let (nodes, names): (Vec<ExprId>, Vec<&Ident>) = chain.iter().copied().unzip();
-        self.listed = !lists.is_empty();
+        self.listed = lists.clone();
         let (records, fail) = self.resolve(&names, &nodes, place);
-        self.listed = false;
+        self.listed.clear();
         let fail = match lists.is_empty() {
             true => fail,
             false => self.lists((&nodes, &names), &lists, &records, fail),
@@ -170,7 +170,7 @@ impl<'a> Walker<'a> {
                 // either (`Str.len.zz`, as `P.get.zz`).
                 let place = if at + 1 == segs.len() { place } else { Place::Value };
                 let called = self.builtin_called(of, &segs[..=at], place);
-                (self.qualified_variant(&path_of(segs), at, of), called)
+                (self.qualified_variant(&path_of(segs), at, (of, owner)), called)
             }
             _ => (None, None),
         };
@@ -331,9 +331,10 @@ impl<'a> Walker<'a> {
     /// S-607): the variants are names of the prelude, not members of the
     /// type. The candidate takes off the qualifier, and then reads the name
     /// of the prelude (none when an item clashes with it, an E0304, and in a
-    /// constant expression, where a variant is no constant); the type
-    /// arguments of the qualifier go to the name from W5-10.
-    fn qualified_variant(&self, path: &Path, at: usize, of: Entity) -> Option<Diagnostic> {
+    /// constant expression, where a variant is no constant), with the type
+    /// arguments of the qualifier after it (`None::[I32]`): those written
+    /// after the type, or those of the type an alias stands for (`alias`).
+    fn qualified_variant(&self, path: &Path, at: usize, (of, alias): (Entity, Option<TyId>)) -> Option<Diagnostic> {
         let a = self.a;
         let name = &path.segments[at];
         let variant = a.prelude.get(&name.name).copied()?;
@@ -345,15 +346,44 @@ impl<'a> Walker<'a> {
         let d = Diagnostic::new(Stage::Names, Code::E0302, name.span, msg)
             .with_found(name.name.clone())
             .with_rule(format!("a variant of the prelude is written by its name alone (`{}`, §4.1)", name.name));
-        if self.in_const || self.listed {
-            return Some(d);
-        }
+        let args = match (&self.listed[..], alias) {
+            ([], None) => Some(String::new()),
+            ([], Some(t)) => self.shown_args(t),
+            (&[(k, x)], _) if k + 1 == at => match &self.ast.expr(x).kind {
+                ExprKind::TypeArgs { args, .. } => Some(self.src(args.span)),
+                _ => None,
+            },
+            _ => None,
+        };
+        let (Some(args), false) = (args, self.in_const) else { return Some(d) };
         let names = (&a.prelude, &a.defs[..], &a.builtin_key);
         Some(match a.modules.body_fix(self.m, path, at, Some(variant), names) {
-            Ok(fix) => d.with_fix(fix),
+            Ok(fix) if args.is_empty() => d.with_fix(fix),
+            Ok(fix) => {
+                let edits = [fix.edits(), &[Edit::insert(name.span.file, name.span.end, &args)]].concat();
+                d.with_fix(Fix::new(format!("write `{}{args}`", name.name), edits))
+            }
             // An item that clashes with the name of the prelude (E0304).
             Err(_) => d,
         })
+    }
+
+    /// The type arguments of the type `t` an alias stands for, as written
+    /// after a name (`::[I32]` of `Option[I32]`): none when one names a type
+    /// the module does not see by its name, or is a type with an error (it
+    /// has no text of a type: `type X = Option[Nope]`, `X.None`).
+    fn shown_args(&self, t: TyId) -> Option<String> {
+        let a = self.a;
+        let Ty::Named(_, args) = a.types.get(t) else { return Some(String::new()) };
+        let seen = |n: crate::DefId| a.modules.lookup(self.m, &a.def(n).name, &a.prelude) == Some(Entity::Def(n));
+        let shown = (args.iter())
+            .map(|&x| {
+                let written =
+                    a.types.named(x).into_iter().all(seen) && !a.types.mentions_param(x) && !a.types.has_error(x);
+                written.then(|| a.display_type(x))
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Some(if shown.is_empty() { String::new() } else { format!("::[{}]", shown.join(", ")) })
     }
 
     /// The builtin name of a flow `name` is, in a flow body, where no item
@@ -473,7 +503,8 @@ impl<'a> Walker<'a> {
         let (first, typed) = a.typed_path(self.m, path, self.self_ty).map_err(error)?;
         let at = typed.reached.len() + 1;
         match typed.err {
-            Some(err @ ResolveError::NotFound { .. }) => match self.qualified_variant(path, at, typed.at) {
+            // A pattern takes no type arguments (§4.5).
+            Some(err @ ResolveError::NotFound { .. }) => match self.qualified_variant(path, at, (typed.at, None)) {
                 Some(d) => Err(Fail::Report(d)),
                 // An associated name of a builtin type (`F32.PI { x: 1 }`, R-302).
                 None => {
@@ -547,18 +578,7 @@ impl<'a> Walker<'a> {
         if let (true, Entity::Def(d) | Entity::Member(d)) = (filled, entity) {
             self.out.filled.insert(d);
         }
-        let segs: Vec<&Ident> = path.segments.iter().collect();
-        for (k, args) in lists {
-            let key = (e, *k as u32);
-            if *k + 1 == segs.len() && !crate::names::is_self_type(&segs[*k].name) {
-                let (path, to) = (path.clone(), Some(e));
-                let site = self.site(Typed::Args(Box::new(Listed { key, entity: end, path, args: args.clone(), to })));
-                self.type_sites.push(site);
-            } else {
-                let d = self.no_params((&segs, *k), false, Span { start: segs[0].span.start, ..args.span });
-                self.out.type_args.insert(key, (None, Some(d)));
-            }
-        }
+        self.struct_args(e, path, lists, end);
         Ok(())
     }
 }

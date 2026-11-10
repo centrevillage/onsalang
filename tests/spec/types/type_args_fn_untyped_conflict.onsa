@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7", "§6.1", "§18.1"]
+
+// S-303 (W5-10 U2a): one value of a generic function put without the type arguments (`let g = id`) is one instantiation (§6.1: "一つの値は一つの具体化を
+// 指す（`g` を `U8` と `F32` の両方では呼べない）"), so the second use that needs another type is E0401, at the second use. The first use decided
+// `T`: by a literal, by an annotation, by a variable. The note that names the place that fixed the type is not promised (S-303: "二度目の使用の
+// E0401 に型の決まった位置の note を付けるかは、…この決定に含めない"). The number of the candidates is not written. One error per item (P-01).
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn an_integer_and_a_float_literal() -> I32 {
+  let g = id
+  let a = g.(250)
+  let b = g.(1.5)                                   //~ E0401
+  a
+}
+
+pub fn two_annotated_types() -> U8 {
+  let g = id
+  let a: U8 = g.(250)
+  let b: F32 = g.(2.5)                              //~ E0401
+  a
+}
+
+pub fn two_variables(x: U8, y: F32) -> U8 {
+  let g = id
+  let a = g.(x)
+  let b = g.(y)                                     //~ E0401
+  a
+}

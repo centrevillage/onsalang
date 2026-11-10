@@ -1324,7 +1324,7 @@ kind = "test-case"
 target = "tests/spec/num_traits/tp_conv_value_form.onsa"
 reasons = ["S-231", "S-239"]
 until = "W8-09"
-note = "関数値 `g.(k)` の降下が E0200（W8-09、具体的な型も同じ）。呼ぶ側の `via_binding::[F32](…)` も E0200（`name::[…]`、W5-10）"
+note = "関数値 `g.(k)` の降下が E0200（W8-09、具体的な型も同じ）。呼ぶ側の `via_binding::[F32](…)` は W5-10 U2a で通る"
 
 [[pending]]
 kind = "test-case"
@@ -1552,3 +1552,53 @@ target = "tests/spec/types/type_args_const_in_const_length.onsa"
 reasons = ["S-713", "S-329"]
 until = "W9-03"
 note = "初期化式に `Rg::[F32, 4].CAP` を書いた定数を長さに使う形。計算した定数の長さは今 E0200"
+
+# --- W5-10 U2a: 関数自身の `::[…]` の事例のうち、後の作業を待つもの（2026-11-10）
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/type_args_fn_const_arith.onsa"
+reasons = ["S-713", "S-239"]
+until = "W9-03"
+note = "関数自身の型引数の const 引数に演算のある定数式（`fill::[2 + 2]()`）。演算を含む const 引数は今 E0200（types/type_args_owner_const_arith.onsa と同じ待ち）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/type_args_fn_const_arith_neg.onsa"
+reasons = ["S-713", "S-239"]
+until = "W9-03"
+note = "関数自身の型引数の const 引数の、溢れとゼロ除算の E0419。演算を含む定数式は今 E0200"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/type_args_fn_value_run.onsa"
+reasons = ["S-239", "R-08"]
+until = "W8-09"
+note = "型引数を書いた関数を値に置いて呼ぶ形を onsa test で走らせる。関数値の降下は今 E0200（check は types/type_args_fn_value.onsa が見る）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/type_args_prelude_value_run.onsa"
+reasons = ["S-239", "R-08"]
+until = "W8-09"
+note = "型引数を書いた prelude の列挙子を値に置いて呼ぶ形を onsa test で走らせる。関数値の降下は今 E0200（check は types/type_args_prelude_value.onsa が見る）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/type_args_fn_effect_row.onsa"
+reasons = ["R-27", "S-982"]
+until = "W6-01"
+note = "効果行変数を持つ関数に型引数を書く形（`apply::[I32](inc, 1)`、効果行変数は数に入れない）。純粋な関数を `fn(T) -> T uses {e}` の引数に渡す呼び出しは、型引数の有無によらず今 E0401（効果の検査の作り直しを待つ）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/type_args_fn_mark_bang_flow.onsa"
+reasons = ["S-811"]
+until = "W7-04"
+note = "flow の本体の `id::[F32]!(x)` は E0806（§11.2）。今は `id!(x)` と同じ道で E0714（W5-10 の単位の行）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/type_args_fn_effect_row_declared.onsa"
+reasons = ["R-27", "S-982", "S-991"]
+until = "W6-01"
+note = "引数の型に現れない効果行変数を持つ関数（`fn mid[A, e, B](a: A, b: B)`）の呼び出しは、型引数の有無によらず今 E0406（効果行変数が決まらない。決まらない効果行の扱いは S-991）"

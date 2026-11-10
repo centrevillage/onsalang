@@ -1,0 +1,42 @@
+// onsa.toml
+// [test]
+// spec = ["§4.1", "§4.5", "§4.7", "§18.1"]
+
+// S-239 (W5-10 U2a): the list written after the name of a variant of the prelude decides the types of the payload, so an argument of another type and
+// an expected type of another type are E0401 (§4.5: "型引数を書いた呼び出しの型パラメータは、その文で決まる"), and a literal out of the range of the type is
+// E0408 (§4.7: "型が決まった時点で範囲外のリテラル … は E0408"). A float literal and a bool literal for the payload, the annotation of another type
+// than `None::[U8]`, and the literals out of the range in `Some`, in `Ok` and in `Err` (the second parameter of `Result`). The number of the
+// candidates is not written. One error per item (P-01).
+
+pub fn a_float_literal() -> Option[U8] {
+  Some::[U8](1.5)                                   //~ E0401
+}
+
+pub fn a_bool_literal() -> Result[U8, Str] {
+  Ok::[U8, Str](true)                               //~ E0401
+}
+
+pub fn the_annotation_is_another_type() -> Option[I32] {
+  let o: Option[I32] = None::[U8]                   //~ E0401
+  o
+}
+
+pub fn the_error_type() -> Result[U8, Str] {
+  Err::[U8, Str](1)                                 //~ E0401
+}
+
+pub fn a_literal_out_of_the_range_in_some() -> Option[U8] {
+  Some::[U8](300)                                   //~ E0408
+}
+
+pub fn a_literal_out_of_the_range_in_ok() -> Result[U8, Str] {
+  Ok::[U8, Str](256)                                //~ E0408
+}
+
+pub fn a_literal_out_of_the_range_in_err() -> Result[Str, U8] {
+  Err::[Str, U8](300)                               //~ E0408
+}
+
+pub fn right() -> Option[U8] {
+  Some::[U8](255)
+}

@@ -261,15 +261,17 @@ fn a_hole_of_a_string_is_resolved_and_reported_as_a_chain_of_an_expression() {
 }
 
 #[test]
-fn a_type_argument_in_an_expression_stops_the_walk_of_its_body() {
-    // A function's own type arguments are E0200 until W5-10 U2a; those of a
-    // type go to it (U1a): the walk of `s` goes on, the type in the record.
+fn a_type_argument_in_an_expression_goes_to_its_item() {
+    // A function's own type arguments go to it (W5-10 U2a), those of a type
+    // to the type (U1a): the walks go on, the types in the record.
     let src = "pub struct Q[T] { v: T }\npub fn id[T](x: T) -> T { x }\npub fn t() -> I32 {\n  let a = 1\n  let b = id::[I32](a)\n  let c = 2\n  c\n}\npub fn s() -> I32 {\n  let k = 1\n  let q = Q::[I32] { v: k }\n  0\n}\npub fn r() -> I32 {\n  let k = 1\n  let q = Q { v: k }\n  0\n}\nconst K: I32 = 1\ntest \"w\" {\n  let w = K\n  assert w == 1\n}\n";
     let (a, _) = analysis(src);
     let t = names(&a, "t");
-    assert!(!t.complete);
-    assert_eq!(binding_names(t), ["a"]);
-    assert_eq!(t.bindings[0].reads, 0);
+    assert!(t.complete);
+    assert_eq!(binding_names(t), ["a", "b", "c"]);
+    assert_eq!(t.bindings[0].reads, 1);
+    let own = t.own.values().next().map(|&t| a.types.get(t).clone());
+    assert!(matches!(own, Some(crate::ty::Ty::Tuple(v)) if v.len() == 1));
     let s = names(&a, "s");
     assert!(s.complete);
     assert_eq!(s.bindings[0].reads, 1);
