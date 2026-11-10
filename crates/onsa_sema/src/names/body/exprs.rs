@@ -48,6 +48,7 @@ impl Walker<'_> {
             ExprKind::Lit(Lit::Str(s)) => self.interp(e, s),
             ExprKind::Path(_) | ExprKind::Field { .. } | ExprKind::TypeArgs { .. } => self.name_at(e, Place::Value),
             ExprKind::Call { callee, kind, args } => self.call(e, *callee, *kind, args),
+            ExprKind::Index { .. } => self.index(e, super::calls::Square::Value),
             ExprKind::Repeat { elem, len } => {
                 self.expr(*elem)?;
                 self.const_expr(*len)

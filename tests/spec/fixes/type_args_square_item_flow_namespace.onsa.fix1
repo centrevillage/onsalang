@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.1", "§11.6", "§18.1"]
+// fixes = 1
+
+// W5-10 U3a (S-256, S-974): the function of the namespace of a flow (`lp.init`, §11.6) is called as `f(x)` (§6.1: "名前空間の関数 … は `f(x)` と書く"), so
+// the type argument written in square brackets after it (`lp.init[F32](sr)`) is the E0020 of the names stage, with the candidate that puts `::` before
+// the `[` (`lp.init::[F32](sr)`). It is the function of the namespace that takes the `[…]`, not the flow: the name of the flow with a `[…]` is the
+// E0308 of a flow in the place of a value (tests/spec/negative/type_args_square_flow_*.onsa). What is left after the candidate is the E0412 of a
+// function that has no type parameter (§4.5: "flow … に書いても E0412"), a later stage, which the candidate may leave (§18.1). One error per function (P-01).
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub fn after_the_function_of_a_flow(sr: F32) -> lp.State {
+  lp.init::[F32](sr)                                  //~ E0020
+}

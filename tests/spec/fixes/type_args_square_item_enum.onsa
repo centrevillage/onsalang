@@ -1,0 +1,69 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.1", "§18.1"]
+// fixes = 1
+
+// W5-10 U3a (S-256, S-607): the variant of a generic enum with the type argument written in square brackets after the name of the enum
+// (`E[I32].B`, `E[I32].A(1)`) is the E0020 of the names stage (§4.5: "他言語の形で書いた型引数 … は E0020"; "総称の enum の列挙子は型に付け
+// （`E::[I32].B`）"). The type argument belongs to the enum, so the one candidate puts `::` before the `[` and keeps the argument
+// (`E::[I32].B`). The variant has no payload (`B`), has one (`A(1)`), is the head of a `match`, is an argument and is in the body of a
+// method. One error per function (P-01).
+
+pub enum E[T] {
+  A(T),
+  B,
+}
+
+pub fn take(e: E[I32]) -> I32 {
+  match e {
+    E.A(x) => x,
+    E.B => 0,
+  }
+}
+
+impl[T] E[T] {
+  pub fn empty() -> E[I32] {
+    E[I32].B                                        //~ E0020
+  }
+}
+
+pub fn without_payload() -> E[I32] {
+  E[I32].B                                          //~ E0020
+}
+
+pub fn with_payload() -> E[I32] {
+  E[I32].A(1)                                       //~ E0020
+}
+
+pub fn as_a_binding() -> E[U8] {
+  let e = E[U8].A(200)                              //~ E0020
+  e
+}
+
+pub fn as_a_match_head() -> I32 {
+  match E[I32].A(3) {                               //~ E0020
+    E.A(x) => x,
+    E.B => 0,
+  }
+}
+
+pub fn as_an_argument() -> I32 {
+  take(E[I32].B)                                    //~ E0020
+}
+
+pub fn in_an_if_arm(c: Bool) -> E[I32] {
+  if c {
+    E[I32].B                                        //~ E0020
+  } else {
+    E::[I32].A(1)
+  }
+}
+
+test "the variant of a generic enum with the type argument in square brackets" {
+  let e = E[U8].B                                   //~ E0020
+  let k = match e {
+    E.A(x) => x,
+    E.B => 200,
+  }
+  assert k == 200
+}

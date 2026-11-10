@@ -1,0 +1,60 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1"]
+// fixes = 1
+
+// W5-10 U3a (S-256, R-179): the type argument in square brackets after a name of another module is the E0020 of the names stage, as after a
+// name of the file (§4.5): the names stage resolves the path, so it knows that `util.id` is a generic function, `util.W` a generic type and
+// `util.z` a function with a const parameter, and the candidate puts `::` before the `[` (`util.id::[I32](x)`; §4.5: "編集の形は呼び先の宣言によらない").
+// The name is written with the module (`util.id[I32](1)`, `util.W[U8].new(1)`, `util.z[4]()`, `util.E[I32].B`) and imported with a `use`
+// (`id[I32](2)`, `W[U8].new(3)`), and the function is taken as a value (`util.id[I32]`). The content is one name or one integer literal,
+// and the content of a name of a constant of the module is written as the name imported with a `use` (`K`). One error per function (P-01).
+
+use util
+use util.{E, K, W, id, z}
+
+pub fn a_function_of_a_module(x: I32) -> I32 {
+  util.id::[I32](x)                                   //~ E0020
+}
+
+pub fn an_imported_function(x: I32) -> I32 {
+  id::[I32](x)                                        //~ E0020
+}
+
+pub fn an_associated_function_of_a_type_of_a_module() -> U8 {
+  util.W::[U8].new(1).get()                           //~ E0020
+}
+
+pub fn an_associated_function_of_an_imported_type() -> U8 {
+  W::[U8].new(3).get()                                //~ E0020
+}
+
+pub fn a_variant_of_an_enum_of_a_module() -> util.E[I32] {
+  util.E::[I32].B                                     //~ E0020
+}
+
+pub fn a_variant_of_an_imported_enum() -> E[I32] {
+  E::[I32].A(1)                                       //~ E0020
+}
+
+pub fn a_const_parameter_with_a_literal() -> [U8; 4] {
+  util.z::[4]()                                       //~ E0020
+}
+
+pub fn a_const_parameter_with_an_imported_constant() -> [U8; 4] {
+  z::[K]()                                            //~ E0020
+}
+
+pub fn a_function_of_a_module_taken_as_a_value() -> I32 {
+  let f = util.id::[I32]                              //~ E0020
+  f.(1)
+}
+
+test "a function of a module with the type argument in square brackets" {
+  let y = util.id::[I32](5)                           //~ E0020
+  assert y == 5
+}
+
+pub fn fine(x: I32) -> I32 {
+  util.id::[I32](x) + id::[I32](x)
+}

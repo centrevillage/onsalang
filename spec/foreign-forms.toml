@@ -7728,7 +7728,7 @@ pub fn f(v: V) -> I32 {
 ''']
 
 # 名前の経路に付けた `[…]` のうち、添字として読めるもの（`,` を含まない）は名前の段。`,` を含むもの（`pair[U8, F32](1, 2.0)`）は
-# 構文の段の行 `type_args_square_comma`（上）。
+# 構文の段の行 `type_args_square_comma`（上）。flow の名前に付けた `[…]` はこの行でない（§15.1）。
 [[form]]
 id = "type_args_square"
 kind = "foreign"
@@ -7769,6 +7769,124 @@ fixed = ['''
 pub fn f() -> U32 {
   let b = Buf::[F32].zeroed(4)
   b.len()
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn parse[T](s: Str) -> Option[T] {
+  None
+}
+
+pub fn f() -> Option[I32] {
+  let n = parse[I32]("3")
+  n
+}
+'''
+fixed = ['''
+pub fn parse[T](s: Str) -> Option[T] {
+  None
+}
+
+pub fn f() -> Option[I32] {
+  let n = parse::[I32]("3")
+  n
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn ops[T](x: T) -> T {
+  x
+}
+
+pub fn g() -> I32 {
+  let f = ops[I32]
+  f.(1)
+}
+'''
+fixed = ['''
+pub fn ops[T](x: T) -> T {
+  x
+}
+
+pub fn g() -> I32 {
+  let f = ops::[I32]
+  f.(1)
+}
+''']
+
+[[form.example]]
+source = '''
+pub enum E[T] {
+  A(T),
+  B,
+}
+
+pub fn f() -> E[I32] {
+  E[I32].B
+}
+'''
+fixed = ['''
+pub enum E[T] {
+  A(T),
+  B,
+}
+
+pub fn f() -> E[I32] {
+  E::[I32].B
+}
+''']
+
+[[form.example]]
+source = '''
+pub struct Wrap[T] {
+  v: T,
+}
+
+impl[T] Wrap[T] {
+  pub fn new(v: T) -> Wrap[T] {
+    Wrap { v: v }
+  }
+}
+
+pub fn f() -> Wrap[U8] {
+  Wrap[U8].new(1)
+}
+'''
+fixed = ['''
+pub struct Wrap[T] {
+  v: T,
+}
+
+impl[T] Wrap[T] {
+  pub fn new(v: T) -> Wrap[T] {
+    Wrap { v: v }
+  }
+}
+
+pub fn f() -> Wrap[U8] {
+  Wrap::[U8].new(1)
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn z[const N: U32]() -> [U8; N] {
+  [0; N]
+}
+
+pub fn f() -> [U8; 4] {
+  z[4]()
+}
+'''
+fixed = ['''
+pub fn z[const N: U32]() -> [U8; N] {
+  [0; N]
+}
+
+pub fn f() -> [U8; 4] {
+  z::[4]()
 }
 ''']
 

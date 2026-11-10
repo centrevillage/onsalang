@@ -373,25 +373,9 @@ impl<'p> Sema<'p> {
         Diagnostic::new(Stage::Types, Code::E0401, span, msg).with_found(src(cx, span))
     }
 
-    /// The kinds of the declared parameters of the type `entity` names, when
-    /// their count is known (`Some(true)` a `const` one, `None` one of a
-    /// builtin, which takes a type).
+    /// [`declared_params`] of the type `entity` names.
     pub(super) fn declared_params(&self, entity: Entity) -> Option<Vec<Option<bool>>> {
-        match entity {
-            Entity::Def(d) | Entity::Member(d) if !self.a.heading_failed(d) => {
-                let def = &self.a.defs[d.0 as usize];
-                match &def.kind {
-                    DefKind::Struct(_) | DefKind::Enum(_) => {
-                        Some(def.generics().iter().map(|g| Some(matches!(g.kind, GenericKind::Const(_)))).collect())
-                    }
-                    DefKind::Alias(_) => Some(Vec::new()),
-                    _ => None,
-                }
-            }
-            Entity::Builtin(Builtin::Scalar(_)) => Some(Vec::new()),
-            Entity::Builtin(Builtin::Generic(b)) => Some(vec![None; b.arity()]),
-            _ => None,
-        }
+        declared_params(self.a, entity)
     }
 
     fn type_of_entity(
@@ -610,6 +594,27 @@ impl<'p> Sema<'p> {
             ConstErr::Unknown if self.flat.is_empty() => _ = self.a.read_held.insert(def),
             ConstErr::Unknown => {}
         }
+    }
+}
+
+/// The kinds of the declared parameters of the type `entity` names, when
+/// their count is known (`Some(true)` a `const` one, `None` one of a
+/// builtin, which takes a type).
+pub(crate) fn declared_params(a: &Analysis, entity: Entity) -> Option<Vec<Option<bool>>> {
+    match entity {
+        Entity::Def(d) | Entity::Member(d) if !a.heading_failed(d) => {
+            let def = &a.defs[d.0 as usize];
+            match &def.kind {
+                DefKind::Struct(_) | DefKind::Enum(_) => {
+                    Some(def.generics().iter().map(|g| Some(matches!(g.kind, GenericKind::Const(_)))).collect())
+                }
+                DefKind::Alias(_) => Some(Vec::new()),
+                _ => None,
+            }
+        }
+        Entity::Builtin(Builtin::Scalar(_)) => Some(Vec::new()),
+        Entity::Builtin(Builtin::Generic(b)) => Some(vec![None; b.arity()]),
+        _ => None,
     }
 }
 

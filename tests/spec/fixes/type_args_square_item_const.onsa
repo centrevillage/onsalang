@@ -1,0 +1,72 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.1", "§18.1"]
+// fixes = 1
+
+// W5-10 U3a (S-256, S-974): the const argument of a function written in square brackets, `z[4]()` and `z[K]()`, is the E0020 of the
+// names stage. The content is one integer literal or one name of a constant, which is what a const parameter takes (§4.5: "const 引数は定数式"),
+// so the kind agrees with the position and nothing of the names stage or before is left after the candidate (§4.5: "名前の段で見つける形の修正候補は、
+// 中身が一つの名前か整数のリテラルで、当てた後に名前の段までの誤りが残らないときだけ出す"). The one candidate puts `::` before the `[`
+// (`z::[4]()`). The place is a binding, an operand, an argument, a method call on the result, the body of a closure and of a `test`. One error per
+// function (P-01).
+
+pub const K: U32 = 4
+
+pub fn z[const N: U32]() -> [U8; N] {
+  [0; N]
+}
+
+pub fn count[const N: U32]() -> U32 {
+  N
+}
+
+pub fn take(n: U32) -> U32 {
+  n
+}
+
+pub fn with_a_literal() -> [U8; 4] {
+  z[4]()                                            //~ E0020
+}
+
+pub fn with_a_constant() -> [U8; 4] {
+  z[K]()                                            //~ E0020
+}
+
+pub fn count_with_a_literal() -> U32 {
+  count[8]()                                        //~ E0020
+}
+
+pub fn count_with_a_constant() -> U32 {
+  count[K]()                                        //~ E0020
+}
+
+pub fn in_a_binding() -> U32 {
+  let n = count[3]()                                //~ E0020
+  n
+}
+
+pub fn in_an_operand(x: U32) -> U32 {
+  x + count[K]()                                    //~ E0020
+}
+
+pub fn in_an_argument() -> U32 {
+  take(count[2]())                                  //~ E0020
+}
+
+pub fn on_the_result() -> U32 {
+  z[4]().len()                                      //~ E0020
+}
+
+pub fn in_a_closure() -> U32 {
+  let g = fn() -> U32 { count[5]() }                //~ E0020
+  g.()
+}
+
+test "the const argument of a function in square brackets" {
+  let n = count[6]()                                //~ E0020
+  assert n == 6
+}
+
+pub fn fine() -> U32 {
+  count::[4]() + count::[K]()
+}

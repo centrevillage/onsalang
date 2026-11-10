@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 1
+
+// W5-10 U3a (S-924, S-974): the candidate of the names stage is held back only by an error of the names stage or before it that the candidate
+// would leave (§4.5: "当てた後に名前の段までの誤りが残らないときだけ出す"; §18.1: "後の段の診断は出てよい"). A function with no type parameter
+// (`plainf[U8](1)`) and a function whose number of type parameters is not the number written (`two[U8](1, 2.0)`, `tagc[U8](1)`) leave after
+// `::` the E0412 of the number of the type arguments, which is an error of the type stage, a later stage, so the names stage keeps the
+// candidate (S-924: "名前の段の `plain[I32](1)` … は、後の段に誤りが残るだけなので候補を出す"). It is the contrary of the method (`v.plain[I32](x)`),
+// which the type stage finds and whose E0412 is of the same stage (tests/spec/negative/call_forms_s924_method_type_args_mismatch.onsa). The content
+// is one name that is a type, the kind of a type parameter. One error per function (P-01).
+
+pub fn plainf(x: U8) -> U8 {
+  x
+}
+
+pub fn two[A, B](a: A, b: B) -> A {
+  a
+}
+
+pub fn tagc[T, const N: U32](x: T) -> T {
+  x
+}
+
+pub fn no_type_parameter() -> U8 {
+  plainf::[U8](1)                                     //~ E0020
+}
+
+pub fn no_type_parameter_with_another_type() -> U8 {
+  plainf::[F32](1)                                    //~ E0020
+}
+
+pub fn two_parameters_one_argument() -> U8 {
+  two::[U8](1, 2.0)                                   //~ E0020
+}
+
+pub fn a_type_and_a_const_parameter_one_argument() -> U8 {
+  tagc::[U8](1)                                       //~ E0020
+}
+
+pub fn taken_as_a_value() -> fn(U8) -> U8 {
+  plainf::[U8]                                        //~ E0020
+}
+
+test "a function with no type parameter given a type argument in square brackets" {
+  let y = plainf::[U8](11)                            //~ E0020
+  assert y == 11
+}

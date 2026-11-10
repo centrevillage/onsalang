@@ -528,7 +528,8 @@ fn stages(a: &Analysis) -> Vec<(onsa_diag::Code, onsa_diag::Stage)> {
 }
 
 /// The table of the values of a call (`calls.rs::Called`): every row of a
-/// value is the E0020 of `ops[i](x)` at its head, an item is not (W5-10).
+/// value is the E0020 of `ops[i](x)` at its head, an item is not: it is the
+/// E0020 of `type_args_square`, whose candidate is `::` (§4.5, W5-10).
 #[test]
 fn the_values_of_a_call_are_one_table_for_the_head_of_an_index() {
     let pre = "pub const K: [I32; 2] = [1, 2]\npub enum E {\n  A,\n  B(I32),\n}\npub fn inc(x: I32) -> I32 {\n  x\n}\n";
@@ -539,7 +540,9 @@ fn the_values_of_a_call_are_one_table_for_the_head_of_an_index() {
         assert_eq!(stages(&a), [(E0020, Names)], "{head}");
     }
     let (a, _) = analysis(&format!("{pre}pub fn u() -> I32 {{\n  inc[0](1)\n}}\n"));
-    assert!(stages(&a).iter().all(|&(c, _)| c != E0020), "inc: {:?}", a.diagnostics);
+    let edits: Vec<&str> =
+        a.diagnostics.iter().flat_map(|d| &d.fixes).flat_map(|f| f.edits()).map(|e| e.replace.as_str()).collect();
+    assert_eq!((stages(&a), edits), (vec![(E0020, Names)], vec!["::"]), "inc: {:?}", a.diagnostics);
 }
 
 /// `!(` on a value is no E0020 of the names stage (S-812, R-341), and an

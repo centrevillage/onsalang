@@ -14,7 +14,7 @@
 //! read here, each lowered by its form ([`Walker::const_form`], S-981).
 
 use onsa_diag::{Code, Diagnostic, Span, Stage};
-use onsa_syntax::ast::{ExprId, ExprKind, Ident, Path, TypeArgList, TypeId, TypeKind};
+use onsa_syntax::ast::{ExprId, ExprKind, Ident, Lit, Path, TypeArgList, TypeId, TypeKind};
 
 use super::paths::{is_value, path_of};
 use super::{ArgsOf, Fail, Listed, PathRes, Typed, Walker};
@@ -22,6 +22,7 @@ use crate::Analysis;
 use crate::def::{DefId, DefKind, GenericKind};
 use crate::names::PathEnd;
 use crate::resolve::{Builtin, Entity};
+use crate::sig::declared_params;
 
 /// What type arguments go to, by the record of the name before them.
 enum To {
@@ -36,6 +37,15 @@ enum To {
     Local,
     /// A def whose heading a syntax error cut (S-59): no diagnostic.
     Unknown,
+}
+
+/// What a path is by its form ([`Walker::form_of`]).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Form {
+    Value,
+    /// A type, with what its path names (none of a type parameter).
+    Type(Option<Entity>),
+    Neither,
 }
 
 impl<'a> Walker<'a> {
@@ -100,26 +110,67 @@ impl<'a> Walker<'a> {
 
     /// Whether the element `t` of type arguments whose parameters are not
     /// known (after a member of a value) is a constant expression by its
-    /// form, lowered as one: a form that is no type, or a name of a value (a
-    /// local, a const parameter, a constant, a function, a variant, a member
-    /// of a type parameter, `T.N`). The types stage judges its kind against
-    /// the parameter (E0308, S-977); a name not found is a type's E0302.
+    /// form, lowered as one: a form that is no type, or a path of a value
+    /// ([`Self::form_of`]). The types stage judges its kind against the
+    /// parameter (E0308, S-977); a name not found is a type's E0302.
     fn const_form(&self, t: TypeId) -> bool {
-        let TypeKind::Path { path, .. } = &self.ast.ty(t).kind else {
-            return matches!(self.ast.ty(t).kind, TypeKind::ConstArg(_));
-        };
+        match &self.ast.ty(t).kind {
+            TypeKind::Path { path, .. } => self.form_of(path) == Form::Value,
+            kind => matches!(kind, TypeKind::ConstArg(_)),
+        }
+    }
+
+    /// What the path `path` is, read without walking it: a value (a local,
+    /// a const parameter, a constant, a function, a variant, a member of a
+    /// type parameter, `T.N`), a type whose parameters are known (a type
+    /// parameter, with no entity), or neither (not found, a module, a flow,
+    /// a trait, what the check does not read).
+    pub(super) fn form_of(&self, path: &Path) -> Form {
         let head = &path.segments[0];
         if self.sees_local(head) || self.outer.contains_key(&head.name) {
-            return true;
+            return Form::Value;
         }
         match self.heading(head) {
-            Some(PathRes::ConstParam(_)) => true,
-            Some(_) => path.segments.len() > 1,
+            Some(PathRes::ConstParam(_)) => Form::Value,
+            Some(_) if path.segments.len() > 1 => Form::Value,
+            Some(_) => Form::Type(None),
             None => match self.a.path_end(self.m, path, self.self_ty) {
-                Ok(PathEnd::Entity(e)) => is_value(self.a, e),
-                Ok(PathEnd::Builtin { .. }) => true,
-                Err(_) => false,
+                Ok(PathEnd::Entity(e)) if is_value(self.a, e) => Form::Value,
+                Ok(PathEnd::Entity(e)) if declared_params(self.a, e).is_some() => Form::Type(Some(e)),
+                Ok(PathEnd::Builtin { .. }) => Form::Value,
+                _ => Form::Neither,
             },
+        }
+    }
+
+    /// Whether `::` before the `[…]` written `x` after the name `name`,
+    /// whose record is `r`, leaves no error of the names stage or before
+    /// (§4.5, §18.1, S-974, S-980): `x` is one name or an integer literal, of
+    /// the kind of the first parameter the arguments go to (a local is a
+    /// value: for a const parameter, the E0417 of the types stage), or they
+    /// go to no parameter (the E0412 of the types stage, which reads none).
+    pub(super) fn fits_square(&self, r: &PathRes, name: &Ident, x: ExprId) -> bool {
+        let form = match &self.ast.expr(x).kind {
+            ExprKind::Lit(Lit::Int { .. }) => Form::Value,
+            ExprKind::Path(p) if p.segments.len() == 1 => self.form_of(p),
+            _ => return false,
+        };
+        let a = self.a;
+        let constant = match self.goes_to(r, name) {
+            To::Type(e) | To::Name(ArgsOf::Type(e)) => match declared_params(a, e) {
+                Some(kinds) => kinds.first().map(|k| *k == Some(true)),
+                None => return false,
+            },
+            To::Name(ArgsOf::Own(d)) => {
+                own_params(a, d).first().map(|&k| matches!(a.def(d).generics()[k].kind, GenericKind::Const(_)))
+            }
+            To::Nothing => None,
+            _ => return false,
+        };
+        match constant {
+            Some(true) => form == Form::Value,
+            Some(false) => matches!(form, Form::Type(_)),
+            None => true,
         }
     }
 
@@ -145,6 +196,12 @@ impl<'a> Walker<'a> {
                 }
             }
         }
+    }
+
+    /// Whether the name `name`, whose record is `r`, is a def whose heading
+    /// a syntax error cut ([`To::Unknown`]).
+    pub(super) fn cut(&self, r: &PathRes, name: &Ident) -> bool {
+        matches!(self.goes_to(r, name), To::Unknown)
     }
 
     /// What the type arguments after the name `name`, whose record is `r`, go to.

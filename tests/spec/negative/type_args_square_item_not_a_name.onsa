@@ -1,0 +1,84 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 0
+
+// W5-10 U3a (S-974, the addition of 2026-11-10): the candidate of the names stage is offered only when the content is one name or one integer
+// literal (§4.5: "名前の段で見つける形の修正候補は、中身が一つの名前か整数のリテラルで、…ときだけ出す"; "名前一つでない中身（`f[Option[I32]](x)`、
+// `f[[1; 4]](x)`）にも出さない"). The content that is a type with arguments (`Option[I32]`), a tuple (`(I32, F32)`), an array type
+// (`[F32; 4]`), an array (`[1; 4]`), `()` or an expression of constants (`K + 1`) is not one name, so the E0020 stays with no candidate,
+// after a function, after a type with an associated function, and when the function is taken as a value. The note shows how to write the
+// type arguments (`名前::[…]`), which the test does not compare. The one name and the integer literal have their candidate in
+// tests/spec/fixes/type_args_square_item_*.onsa. `fixes = 0` checks that no error of the file has a candidate. One error per function (P-01).
+
+pub const K: U32 = 4
+
+pub fn idf[T](x: T) -> T {
+  x
+}
+
+pub fn z[const N: U32]() -> [U8; N] {
+  [0; N]
+}
+
+pub fn parse[T](s: Str) -> Option[T] {
+  None
+}
+
+pub fn a_type_with_arguments(x: U8) -> U8 {
+  idf[Option[I32]](x)                               //~ E0020
+}
+
+pub fn a_tuple_type(x: U8) -> U8 {
+  idf[(I32, F32)](x)                                //~ E0020
+}
+
+pub fn an_array_type(x: U8) -> U8 {
+  idf[[F32; 4]](x)                                  //~ E0020
+}
+
+pub fn an_array_of_integers(x: U8) -> U8 {
+  idf[[1; 4]](x)                                    //~ E0020
+}
+
+pub fn the_unit(x: U8) -> U8 {
+  idf[()](x)                                        //~ E0020
+}
+
+pub fn an_expression_of_constants() -> [U8; 5] {
+  z[K + 1]()                                        //~ E0020
+}
+
+pub fn a_type_with_arguments_for_parse() -> Option[Option[I32]] {
+  parse[Option[I32]]("3")                           //~ E0020
+}
+
+pub fn a_type_with_arguments_after_a_type() -> U32 uses {Alloc} {
+  let b = Buf[Option[I32]].zeroed(4)                //~ E0020
+  b.len()
+}
+
+pub fn a_type_with_arguments_taken_as_a_value() -> fn(U8) -> U8 {
+  idf[Option[I32]]                                  //~ E0020
+}
+
+pub fn in_a_closure(x: U8) -> U8 {
+  let g = fn(y: U8) -> U8 { idf[(I32, F32)](y) }    //~ E0020
+  g.(x)
+}
+
+pub fn in_a_match_arm(c: Bool, x: U8) -> U8 {
+  match c {
+    true => idf[[F32; 4]](x),                       //~ E0020
+    false => x,
+  }
+}
+
+test "a content that is not one name" {
+  let y = idf[Option[I32]](3)                       //~ E0020
+  assert y == 3
+}
+
+pub fn fine(x: Option[I32]) -> Option[I32] {
+  idf::[Option[I32]](x)
+}

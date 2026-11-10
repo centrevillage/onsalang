@@ -4,15 +4,18 @@
 //! `inc.(1)`), (ii) a chain of names with `[…]` after it (`ops[i](x)`),
 //! (iii) anything else, whose form the syntax stage or the types stage
 //! decides. A wrong form is the E0020 of a row of `onsa_syntax::foreign`
-//! (`value_call`, `item_dot_call`, `indexed_value_call`), which stops the
-//! walk (§18.1).
+//! (`value_call`, `item_dot_call`, `indexed_value_call`, and
+//! `type_args_square` of a `[…]` after an item or a type, called or not),
+//! which stops the walk (§18.1).
 
+use onsa_diag::internal::bug;
 use onsa_diag::{Diagnostic, Fix, Span};
-use onsa_syntax::ast::{Arg, CallKind, ExprId, ExprKind};
-use onsa_syntax::foreign::{self, RowId};
+use onsa_syntax::ast::{Arg, CallKind, ExprId, ExprKind, Ident};
+use onsa_syntax::foreign::{self, CALL_WITH_DOT, RowId, TYPE_ARGS_WITH_COLONS};
 
 use super::kinds::value_call_fix;
-use super::paths::Place;
+use super::paths::{Place, path_of};
+use super::type_args::Form;
 use super::{Fail, PathRes, W, Walker};
 use crate::Analysis;
 use crate::DefId;
@@ -149,21 +152,27 @@ impl Walker<'_> {
         }
     }
 
-    /// The callee `ops[i]` whose head is `head`: a value there (the form
-    /// (ii), a chain of names) called as `f(x)` is the E0020 of the row
-    /// `indexed_value_call`, whose candidate calls it with `.(`; an item or
-    /// a type is as it was (its type arguments `inc::[I32](x)` from W5-10).
-    /// One `[…]` after a field (`p.m[I32](1)`) is the type arguments of a
-    /// method or an index, which the types stage tells apart (§4.5).
+    /// The callee `ops[i]` whose head is `head`: after an item or a type,
+    /// [`Self::square`]; a value there (the form (ii), a chain of names)
+    /// called as `f(x)` is the E0020 of the row `indexed_value_call`, whose
+    /// candidate calls it with `.(`, none when its indices, walked first,
+    /// have an error of the names stage that the candidate would leave
+    /// (`g[F32](x)`, §18.1, S-974). One `[…]` after a field (`p.m[I32](1)`)
+    /// is the type arguments of a method or an index, which the types stage
+    /// tells apart (§4.5).
     fn indexed_callee(&mut self, callee: ExprId, kind: CallKind, head: ExprId, indices: &[ExprId]) -> W {
-        self.name_at(head, Place::Value)?;
+        self.square(callee, (head, indices), Square::Called)?;
         let span = self.ast.expr(callee).span;
-        let fix = Fix::insert(foreign::CALL_WITH_DOT, span.file, span.end, ".");
-        if kind == CallKind::Plain
-            && self.out.paths.get(&head).is_some_and(|r| self.called(r).is_value())
-            && let Some(d) = self.call_form(RowId::IndexedValueCall, span, fix)
-        {
-            return Err(self.fail(Fail::Report(d)));
+        if kind == CallKind::Plain && self.out.paths.get(&head).is_some_and(|r| self.called(r).is_value()) {
+            let left = self.exprs(indices.iter().copied()).is_err() && matches!(self.failure, Some(Fail::Report(_)));
+            let fix = Fix::insert(CALL_WITH_DOT, span.file, span.end, ".");
+            let d = match left {
+                true => Some(foreign::report(RowId::IndexedValueCall, self.text, span, Vec::new())),
+                false => self.call_form(RowId::IndexedValueCall, span, fix),
+            };
+            if let Some(d) = d {
+                return Err(self.fail(Fail::Report(d)));
+            }
         }
         let typed = indices.len() == 1 && matches!(self.ast.expr(head).kind, ExprKind::Field { .. });
         indices.iter().try_for_each(|&i| match typed {
@@ -171,4 +180,56 @@ impl Walker<'_> {
             false => self.expr(i),
         })
     }
+
+    /// The `[…]` `e` that is no callee, at `at` ([`Self::square`]), then its indices.
+    pub(super) fn index(&mut self, e: ExprId, at: Square) -> W {
+        let (head, indices) = self.ast.indexed(e).unwrap_or_else(|| bug(Some(self.ast.expr(e).span), "no `[…]`"));
+        self.square(e, (head, &indices), at)?;
+        self.exprs(indices)
+    }
+
+    /// The `[…]` `x` after `head` at `at`, and the names of `head`: after a
+    /// chain of names that ends at an item called as `f(x)` or at a type,
+    /// the E0020 of the row `type_args_square` (§4.5, §6.1, S-256, R-179),
+    /// up to its last `]`. Its candidate puts `::` before its `[`, when there
+    /// is one `[…]` ([`Self::fits_square`]) and it makes no other error of
+    /// the names stage: a type only before a member (`Buf::[F32].zeroed(4)`,
+    /// not called or a value), an item not called with `.(` (S-974). A type
+    /// is read by its form, no value there (its E0308).
+    fn square(&mut self, x: ExprId, (head, indices): (ExprId, &[ExprId]), at: Square) -> W {
+        let names = self.chain(head).filter(|(_, lists)| lists.is_empty()).map(|(c, _)| c);
+        let names: Vec<&Ident> = names.iter().flatten().map(|&(_, n)| n).collect();
+        let Some(&last) = names.last() else { return self.name_at(head, Place::Value) };
+        let (r, takes) = match self.form_of(&path_of(&names)) {
+            Form::Type(Some(entity)) => (PathRes::Item { entity, owner: None }, at == Square::Member),
+            Form::Type(None) => (self.heading(last).unwrap_or_else(|| bug(None, "no parameter")), at == Square::Member),
+            _ => {
+                self.name_at(head, Place::Value)?;
+                match self.out.paths.get(&head) {
+                    // Not one whose heading a syntax error cut (S-59): no diagnostic.
+                    Some(r) if self.called(r) == Called::Item && !self.cut(r, last) => {
+                        (r.clone(), at != Square::DotCalled)
+                    }
+                    _ => return Ok(()),
+                }
+            }
+        };
+        let fits = takes && indices.len() == 1 && self.fits_square(&r, last, indices[0]);
+        let head = self.ast.expr(head).span;
+        let fixes = fits.then(|| Fix::insert(TYPE_ARGS_WITH_COLONS, head.file, head.end, "::")).into_iter().collect();
+        let span = Span { start: head.end, ..self.ast.expr(x).span };
+        Err(self.fail(Fail::Report(foreign::report(RowId::TypeArgsSquare, self.text, span, fixes))))
+    }
+}
+
+/// Where a `[…]` after a chain of names is ([`Walker::square`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Square {
+    /// The callee of `f(x)`, `f!(x)`, `f~(x)`.
+    Called,
+    /// The callee of `f.(x)`.
+    DotCalled,
+    /// Before a member (`Buf[F32].zeroed`).
+    Member,
+    Value,
 }

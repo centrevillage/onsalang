@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7", "§18.1"]
+//
+// [[test.fix]]
+// at = "21:16"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// W5-10 U3a (R-175): `parse[I32]("3")` with no annotation on the result is the E0020 of the names stage; the candidate decides `T` by the type argument (§4.5: "型引数を書いた呼び出しの型パラメータは、その文で決まる").
+// The one candidate puts `::` before the `[` and leaves nothing behind (`clean`, S-253): the check reads the file after the
+// edit without a report. The main position is the `[` of the form (§18.1: "E0020 の主の範囲は外来の形の範囲 … `<T>` は `<` から `>` まで").
+// A file with one error, so that `clean` looks at the whole file.
+
+pub fn parse[T](s: Str) -> Option[T] {
+  None
+}
+
+pub fn f() -> Option[I32] {
+  let n = parse[I32]("3")                           //~ E0020
+  n
+}

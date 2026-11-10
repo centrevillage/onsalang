@@ -1,0 +1,61 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.1", "§18.1"]
+// fixes = 1
+
+// W5-10 U3a (R-179, S-256): a generic function taken as a value, without being called, with the type argument in square brackets
+// (`let f = ops[I32]`) is the same E0020 as the call (§4.5: "呼ばずに値に置いた `let f = ops[I32]`" is a form of another language, and §4.5
+// names the call and the value in one sentence; the stage does not depend on the call). The name stage knows that `ops` is a function, so the
+// candidate puts `::` before the `[` (`ops::[I32]`, the form of §6.1: "総称の関数は、型引数を書いて取り出せる"). The value is a binding,
+// an argument, the result of a function, an element of an array and a field of a struct literal. One error per function (P-01).
+
+pub struct Holder {
+  f: fn(I32) -> I32,
+}
+
+pub fn ops[T](x: T) -> T {
+  x
+}
+
+pub fn apply(f: fn(I32) -> I32, x: I32) -> I32 {
+  f.(x)
+}
+
+pub fn as_a_binding() -> I32 {
+  let f = ops[I32]                                  //~ E0020
+  f.(1)
+}
+
+pub fn as_an_argument() -> I32 {
+  apply(ops[I32], 2)                                //~ E0020
+}
+
+pub fn as_the_result() -> fn(I32) -> I32 {
+  ops[I32]                                          //~ E0020
+}
+
+pub fn as_an_element() -> [fn(I32) -> I32; 2] {
+  [ops[I32], ops::[I32]]                            //~ E0020
+}
+
+pub fn as_a_field() -> Holder {
+  Holder { f: ops[I32] }                            //~ E0020
+}
+
+pub fn in_a_closure() -> I32 {
+  let g = fn(x: I32) -> I32 {
+    let f = ops[I32]                                //~ E0020
+    f.(x)
+  }
+  g.(3)
+}
+
+test "a generic function taken as a value with the type argument in square brackets" {
+  let f = ops[I32]                                  //~ E0020
+  assert f.(4) == 4
+}
+
+pub fn fine() -> I32 {
+  let f = ops::[I32]
+  f.(1)
+}

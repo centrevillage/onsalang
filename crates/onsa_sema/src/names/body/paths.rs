@@ -17,6 +17,7 @@
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 use onsa_syntax::ast::{ExprId, ExprKind, Ident, PatId, Path, TypeArgList};
 
+use super::calls::Square;
 use super::kinds::Want;
 use super::{Fail, PatRes, PathRes, StructRes, W, Walker};
 use crate::Analysis;
@@ -83,6 +84,11 @@ impl<'a> Walker<'a> {
     pub(super) fn name_at(&mut self, e: ExprId, place: Place) -> W {
         let Some((chain, lists)) = self.chain(e) else {
             return match &self.ast.expr(e).kind {
+                // A member after `[…]` (`Buf[F32].zeroed`, `ops[i].x`).
+                ExprKind::Field { base, .. } if matches!(self.ast.expr(*base).kind, ExprKind::Index { .. }) => {
+                    self.index(*base, Square::Member)
+                }
+                ExprKind::Index { .. } if place == Place::DotCallee => self.index(e, Square::DotCalled),
                 // A field of a value that is no name (`f().x`).
                 ExprKind::Path(_) | ExprKind::Field { .. } => self.exprs(self.ast.sub_exprs(e)),
                 // After a member of such a value (`f().m::[I32]`, S-977).

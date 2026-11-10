@@ -375,6 +375,27 @@ fn the_note_of_each_form_shows_the_mark() {
 }
 
 #[test]
+fn the_note_of_square_brackets_after_an_item_shows_the_mark() {
+    // §4.5 (S-256, S-974): `[…]` after the name of a generic function is the E0020 of the names stage,
+    // with the candidate `::` when its content is one name of the kind of the parameter (`U8`), and
+    // without one when it is a local value for a type parameter (`i`) or no one name (`Option[I32]`).
+    // Each shows in a note that a type argument in an expression is written `name::[…]` (§18.1).
+    let forms =
+        [("(i: U8)", "  idf[U8](250)", 1), ("(i: U8)", "  idf[i](1)", 0), ("(x: U8)", "  idf[Option[I32]](x)", 0)];
+    let d = Dir::bare("item_notes");
+    for (params, written, candidates) in forms {
+        let text = format!("pub fn idf[T](x: T) -> T {{\n  x\n}}\n\npub fn user{params} -> U8 {{\n{written}\n}}\n");
+        let diags = check(&d.file("a.onsa", &text));
+        assert_eq!(diags.len(), 1, "{written}: {diags:?}");
+        assert_eq!(code_of(&diags[0]), "E0020", "{written}: {diags:?}");
+        assert_eq!(fixes_of(&diags[0]).len(), candidates, "{written}: the candidates: {}", diags[0]);
+        let notes = diags[0]["notes"].as_array().unwrap_or_else(|| panic!("no notes in {}", diags[0]));
+        let shows = notes.iter().filter_map(|n| n["message"].as_str()).any(|m| m.contains("::["));
+        assert!(shows, "{written}: no note shows `::[`: {notes:?}");
+    }
+}
+
+#[test]
 fn the_edits_of_a_candidate_change_the_brackets_and_not_the_types() {
     // §18.1 (S-251): the edits replace the tokens that change and nothing between them, so the
     // type arguments are untouched. `<T>` becomes `::[T]`: the `<` and the `>` are replaced (an

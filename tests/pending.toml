@@ -907,13 +907,6 @@ note = "使用の位置の E0200 は出る。`Buf` の型の E0200 が位置 1:1
 
 [[pending]]
 kind = "foreign-form"
-target = "type_args_square"
-reasons = ["S-239", "S-256"]
-until = "W5-10"
-note = "名前の経路に付けた [...] の型引数（名前の段）"
-
-[[pending]]
-kind = "foreign-form"
 target = "caret_visible"
 reasons = ["S-116"]
 until = "W7-04"

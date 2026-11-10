@@ -1,0 +1,100 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.1", "§18.1"]
+// fixes = 1
+
+// W5-10 U3a (S-256, S-277, S-974): the type argument of a generic function written in square brackets, `idf[U8](250)`, is the
+// form of another language (Scala) and an E0020 of the names stage (§4.5: "名前の経路に付けた `[…]` は名前の段"; §6.1: "名前の経路に `[…]` を付けた
+// 呼び先（`ops[i](x)`）… `f(x)` で呼ぶ項目か型なら型引数の `ops::[…](x)`"). `idf` is a function of the file and `U8` is one name that is a type,
+// the kind of a type parameter, so the one candidate puts `::` before the `[` (`idf::[U8](250)`) and nothing of the names stage or before is left
+// after it (§4.5: "名前の段で見つける形の修正候補は、中身が一つの名前か整数のリテラルで、当てた後に名前の段までの誤りが残らないときだけ出す"). The
+// form is in the places where a call of a function is right: the body of a function, of a method, of a `test`, of a closure, of the arm of
+// an `if` and of a `match`, an argument, an operand, the body of a flow and of a `par~` (a call of an `rt` function, §11.5), and in a generic function with the
+// type parameter as the content.
+// Only the form of the call is written here; the forms that get no candidate are in tests/spec/negative/type_args_square_item_*.onsa.
+// One error per function (P-01).
+
+pub struct V {
+  n: U8,
+}
+
+pub fn idf[T](x: T) -> T {
+  x
+}
+
+pub rt fn idr[T](x: T) -> T {
+  x
+}
+
+pub fn take(x: U8) -> U8 {
+  x
+}
+
+impl V {
+  pub fn in_a_method(self) -> U8 {
+    idf::[U8](self.n)                                 //~ E0020
+  }
+}
+
+pub fn in_a_function() -> U8 {
+  idf::[U8](250)                                      //~ E0020
+}
+
+pub fn in_a_binding() -> U8 {
+  let y = idf::[U8](1)                                //~ E0020
+  y
+}
+
+pub fn in_an_argument() -> U8 {
+  take(idf::[U8](5))                                  //~ E0020
+}
+
+pub fn in_an_operand(x: U8) -> U8 {
+  x + idf::[U8](2)                                    //~ E0020
+}
+
+pub fn in_an_if_arm(c: Bool) -> U8 {
+  if c {
+    idf::[U8](1)                                      //~ E0020
+  } else {
+    2
+  }
+}
+
+pub fn in_a_match_arm(c: Bool) -> U8 {
+  match c {
+    true => idf::[U8](1),                             //~ E0020
+    false => 2,
+  }
+}
+
+pub fn in_a_closure() -> U8 {
+  let g = fn(x: U8) -> U8 { idf::[U8](x) }            //~ E0020
+  g.(3)
+}
+
+pub fn in_a_generic_function[T](x: T) -> T {
+  idf::[T](x)                                         //~ E0020
+}
+
+pub fn another_type(x: F32) -> F32 {
+  idf::[F32](x)                                       //~ E0020
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  let y = idr::[F32](x)                               //~ E0020
+  y
+}
+
+pub flow in_a_par(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 { idr::[F32](x) }                 //~ E0020
+}
+
+test "the type argument of a function in square brackets" {
+  let y = idf::[U8](250)                              //~ E0020
+  assert y == 250
+}
+
+pub fn fine(x: U8) -> U8 {
+  idf::[U8](x) + idf(x)
+}

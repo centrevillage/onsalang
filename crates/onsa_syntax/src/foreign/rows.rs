@@ -1215,6 +1215,17 @@ pub static ROWS: &[Row] = &[
         rule: "the value of a field of a function type is called with `.(` (`s.f.(x)`); `s.f(x)` is always the call of a method (§6.1, §6.2)",
         detect: Detect::Reported,
     },
+    // Found by the names stage at an item or a type with `[…]` after its
+    // path (§4.5, §6.1, W5-10).
+    Row {
+        id: RowId::TypeArgsSquare,
+        name: "type_args_square",
+        phase: Phase::Names,
+        code: Code::E0020,
+        message: "type arguments in an expression are written `name::[…]`; `[` alone is an index",
+        rule: TYPE_ARGS_RULE,
+        detect: Detect::Reported,
+    },
     // Found by the types stage at a method with `[…]` called (§4.5, W5-15).
     Row {
         id: RowId::TypeArgsMethodSquare,
@@ -1239,10 +1250,7 @@ pub static ROWS: &[Row] = &[
 
 /// The rows of the data file that no work has made yet (the later works
 /// of W3 to W7; [`Waiting`]).
-pub static WAITING: &[Waiting] = &[
-    Waiting { name: "type_args_square", phase: Phase::Names, code: Code::E0020 },
-    Waiting { name: "caret_visible", phase: Phase::Names, code: Code::E0020 },
-];
+pub static WAITING: &[Waiting] = &[Waiting { name: "caret_visible", phase: Phase::Names, code: Code::E0020 }];
 
 /// The matchers of the syntax stage and the rows each may name: every one
 /// runs at every failure of the parser ([`super::at_failure`]), in no order

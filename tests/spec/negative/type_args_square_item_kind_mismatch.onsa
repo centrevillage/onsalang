@@ -1,0 +1,85 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 0
+
+// W5-10 U3a (S-974): the content of a `[…]` after a function whose kind does not agree with the position gets the E0020 and no candidate
+// (§4.5: "型パラメータに書いたローカルの値の `f[i](x)` と整数の `f[4](x)` は種類が合わないので出さ[ない]"). `i` is a local value, `4` is an integer
+// and `K` is a constant, where `idf[T]` needs a type; `U8` is a type where `z[const N: U32]` needs a value. After `::` the names stage reads
+// the content again and finds the kind wrong (E0308, §15.1), an error of the stage of the original one, so the candidate is not offered
+// (§18.1: "当てた後に同じ段か前の段の誤りが残る候補は出さない"). The right content in the same place has its candidate in
+// tests/spec/fixes/type_args_square_item_fn_places.onsa and type_args_square_item_const.onsa. The content that is a local value for a const
+// parameter is another case, which keeps the candidate: tests/spec/fixes/type_args_square_item_const_local.onsa (S-980). `fixes = 0` checks
+// that no error of the file has a candidate. One error per function (P-01).
+
+pub const K: U32 = 4
+
+pub fn idf[T](x: T) -> T {
+  x
+}
+
+pub fn z[const N: U32]() -> [U8; N] {
+  [0; N]
+}
+
+pub fn local_value_for_a_type_parameter(i: U8) -> U8 {
+  idf[i](1)                                         //~ E0020
+}
+
+pub fn local_binding_for_a_type_parameter() -> U8 {
+  let i: U8 = 2
+  idf[i](i)                                         //~ E0020
+}
+
+pub fn integer_for_a_type_parameter() -> U8 {
+  idf[4](1)                                         //~ E0020
+}
+
+pub fn constant_for_a_type_parameter() -> U8 {
+  idf[K](1)                                         //~ E0020
+}
+
+pub fn integer_for_a_type_parameter_taken_as_a_value() -> fn(U8) -> U8 {
+  idf[4]                                            //~ E0020
+}
+
+pub fn type_for_a_const_parameter() -> [U8; 4] {
+  z[U8]()                                           //~ E0020
+}
+
+pub fn another_type_for_a_const_parameter() -> U32 {
+  z[F32]().len()                                    //~ E0020
+}
+
+pub fn in_a_closure(i: U8) -> U8 {
+  let g = fn(x: U8) -> U8 { idf[i](x) }             //~ E0020
+  g.(1)
+}
+
+pub fn in_an_if_arm(c: Bool, i: U8) -> U8 {
+  if c {
+    idf[i](1)                                       //~ E0020
+  } else {
+    2
+  }
+}
+
+pub rt fn idr[T](x: T) -> T {
+  x
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  let k: F32 = 1.0
+  let y = idr[k](x)                                 //~ E0020
+  y
+}
+
+test "a local value in the place of a type argument" {
+  let i: U8 = 3
+  let y = idf[i](i)                                 //~ E0020
+  assert y == 3
+}
+
+pub fn fine() -> U32 {
+  idf::[U32](1) + z::[K]().len()
+}

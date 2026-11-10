@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.7", "§18.1"]
+// fixes = 1
+
+// W5-10 U3a (R-175, S-256): `parse[I32]("3")` is the E0020 of the type argument written in square brackets whether or not the result has an
+// annotation. The type parameter `T` of `parse` is only in the result, so a call without type arguments is the E0406 of a type that is not
+// decided (§4.7), and the old reading answered that "annotate the result" even when the result had its annotation (R-175). The name stage
+// reads `parse[I32]` before any type is known and it is the form of another language (§4.5: "他言語の形で書いた型引数（`parse[I32]("3")`
+// …）は E0020"), so the code is E0020 for the unannotated binding, for the annotated one, for the result of the function and for a
+// match head, and never E0406. The one candidate puts `::` before the `[` and keeps the type argument (`parse::[I32]("3")`), which decides
+// `T` in the statement (§4.5: "型引数を書いた呼び出しの型パラメータは、その文で決まる"). One error per function (P-01).
+
+pub fn parse[T](s: Str) -> Option[T] {
+  None
+}
+
+pub fn without_an_annotation() -> Option[I32] {
+  let n = parse[I32]("3")                           //~ E0020
+  n
+}
+
+pub fn with_an_annotation() -> Option[I32] {
+  let n: Option[I32] = parse[I32]("3")              //~ E0020
+  n
+}
+
+pub fn as_the_result() -> Option[F32] {
+  parse[F32]("3.5")                                 //~ E0020
+}
+
+pub fn as_a_match_head() -> I32 {
+  match parse[I32]("3") {                           //~ E0020
+    Some(n) => n,
+    None => 0,
+  }
+}
+
+pub fn in_a_closure() -> Option[U8] {
+  let g = fn(s: Str) -> Option[U8] { parse[U8](s) }   //~ E0020
+  g.("1")
+}
+
+test "parse with the type argument in square brackets" {
+  let n = parse[I32]("3")                           //~ E0020
+  assert n == None
+}
+
+pub fn fine() -> Option[I32] {
+  parse::[I32]("3")
+}

@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 1
+
+// W5-10 U3a (S-974): the content that is the name of a generic type with no type arguments (`idf[Wrap](w)`) is one name that is a type, the kind
+// of a type parameter, so the names stage keeps the candidate `idf::[Wrap](w)`. What is left after it is the E0412 of the number of type
+// arguments of `Wrap` in a type position (§4.5: "数が宣言と合わなければ E0412"; §18.1 names the number of type arguments an error of the type
+// stage, a later stage than the names stage), which the candidate may leave (§18.1: "後の段の診断は出てよい"). The same content after a method
+// (the type stage) has no candidate: tests/spec/negative/type_args_square_method_count.onsa. One error per function (P-01).
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+pub fn idf[T](x: T) -> T {
+  x
+}
+
+pub fn bare_generic_type(w: Wrap[U8]) -> Wrap[U8] {
+  idf::[Wrap](w)                                      //~ E0020
+}

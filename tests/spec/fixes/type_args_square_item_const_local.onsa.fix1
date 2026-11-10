@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 1
+
+// W5-10 U3a (S-980): the local value written in square brackets after a function with a const parameter (`z[k]()`) is the E0020 of the names
+// stage with a candidate. The content is one name, and the names stage asks of it only the kind the position needs, a value for a const
+// parameter (a type parameter would need a type), so nothing of the names stage or before is left after the candidate `z::[k]()`. What is left is
+// the E0417 of the type stage (the local value is no constant, §4.5: "ローカル変数 … を書くと … E0417"), a later stage, which the candidate may leave
+// (§18.1: "後の段の診断は出てよい"; §4.5: "const パラメータに書いたローカルの値（`z[k]()`）は、当てた後に残るのが型の段の E0417 なので出す"). So the file asks for
+// a candidate and does not ask for `clean`. The local value is a binding, an argument, a loop variable and a binding of a closure.
+// The local value in the place of a type parameter (`idf[i](x)`) has no candidate (tests/spec/negative/type_args_square_item_kind_mismatch.onsa).
+// One error per function (P-01).
+
+pub fn z[const N: U32]() -> [U8; N] {
+  [0; N]
+}
+
+pub fn count[const N: U32]() -> U32 {
+  N
+}
+
+pub fn a_binding() -> U32 {
+  let k: U32 = 4
+  count::[k]()                                        //~ E0020
+}
+
+pub fn an_argument(k: U32) -> U32 {
+  count::[k]()                                        //~ E0020
+}
+
+pub fn a_loop_variable() -> U32 {
+  var s: U32 = 0
+  for k in 0 ..< 3 {
+    s = s + count::[k]()                              //~ E0020
+  }
+  s
+}
+
+pub fn a_function_with_an_array_result(k: U32) -> U32 {
+  z::[k]().len()                                      //~ E0020
+}
+
+pub fn a_closure_binding() -> U32 {
+  let g = fn(k: U32) -> U32 { count::[k]() }          //~ E0020
+  g.(2)
+}
+
+test "a local value in the place of a const argument" {
+  let k: U32 = 5
+  let n = count::[k]()                                //~ E0020
+  assert n == 5
+}

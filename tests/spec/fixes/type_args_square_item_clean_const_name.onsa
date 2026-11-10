@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+//
+// [[test.fix]]
+// at = "23:8"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// W5-10 U3a (S-256, S-974): A function with a const parameter, called with the name of a constant in square brackets, `count[K]()`, is the E0020 of the names stage; the content agrees with the kind of the position.
+// The one candidate puts `::` before the `[` and leaves nothing behind (`clean`, S-253): the check reads the file after the
+// edit without a report. The main position is the `[` of the form (§18.1: "E0020 の主の範囲は外来の形の範囲 … `<T>` は `<` から `>` まで").
+// A file with one error, so that `clean` looks at the whole file.
+
+pub const K: U32 = 4
+
+pub fn count[const N: U32]() -> U32 {
+  N
+}
+
+pub fn f() -> U32 {
+  count[K]()                                        //~ E0020
+}

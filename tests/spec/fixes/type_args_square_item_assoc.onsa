@@ -1,0 +1,93 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.2", "§18.1"]
+// fixes = 1
+
+// W5-10 U3a (R-179, S-256): the associated function and the associated constant of a generic type, written with the type argument in
+// square brackets after the name of the type (`Buf[F32].zeroed(4)`, `Wrap[U8].new(1)`, `Wrap[U8].TAG`) are the E0020 of the names stage
+// (§4.5: "他言語の形で書いた型引数（… `Buf[F32].zeroed(4)` …）は E0020"; the type argument belongs to the type: "型引数は、その型パラメータを
+// 宣言した項目の名前に付ける"). The type is the standard `Buf` and the types of the file, with a type parameter and with a const parameter whose
+// content is an integer literal or the name of a constant. The one candidate puts `::` before the `[` (`Buf::[F32].zeroed(4)`) and keeps
+// the type argument. The chain after the associated name does not change the reading (`.get()`). One error per function (P-01).
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+impl[T] Wrap[T] {
+  pub const TAG: U32 = 7
+
+  pub fn new(v: T) -> Wrap[T] {
+    Wrap { v: v }
+  }
+
+  pub fn get(self) -> T {
+    self.v
+  }
+
+  pub fn in_a_method(self) -> U8 {
+    Wrap[U8].new(1).get()                           //~ E0020
+  }
+}
+
+pub struct Slots[const N: U32] {
+  items: [U8; N],
+}
+
+impl[const N: U32] Slots[N] {
+  pub const CAP: U32 = N
+
+  pub fn make() -> Slots[N] {
+    Slots { items: [0; N] }
+  }
+}
+
+pub const K: U32 = 4
+
+pub fn of_the_standard_buffer() -> U32 uses {Alloc} {
+  let b = Buf[F32].zeroed(4)                        //~ E0020
+  b.len()
+}
+
+pub fn of_an_associated_function() -> U8 {
+  let w = Wrap[U8].new(1)                           //~ E0020
+  w.get()
+}
+
+pub fn of_an_associated_function_and_a_method() -> U8 {
+  Wrap[U8].new(2).get()                             //~ E0020
+}
+
+pub fn of_an_associated_constant() -> U32 {
+  Wrap[U8].TAG                                      //~ E0020
+}
+
+pub fn of_a_const_parameter_with_a_literal() -> U32 {
+  Slots[4].CAP                                      //~ E0020
+}
+
+pub fn of_a_const_parameter_with_a_constant() -> Slots[4] {
+  Slots[K].make()                                   //~ E0020
+}
+
+pub fn as_an_argument() -> U32 {
+  size(Wrap[F32].new(1.5))                          //~ E0020
+}
+
+pub fn size(w: Wrap[F32]) -> U32 {
+  Wrap::[F32].TAG
+}
+
+pub fn in_a_closure() -> U8 {
+  let g = fn(x: U8) -> U8 { Wrap[U8].new(x).get() }   //~ E0020
+  g.(3)
+}
+
+test "the associated function of a type with the type argument in square brackets" {
+  let w = Wrap[U8].new(5)                           //~ E0020
+  assert w.get() == 5
+}
+
+pub fn fine() -> U8 {
+  Wrap::[U8].new(1).get()
+}

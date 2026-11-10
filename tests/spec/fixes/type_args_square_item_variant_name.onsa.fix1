@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 1
+
+// W5-10 U3a (S-256, S-974): the type argument written in square brackets after the name of a variant (`E.A[I32](1)`) is the form of another language
+// after a path of names that ends with a variant, so the names stage finds it and the code is E0020 (§4.5: "名前の経路に付けた `[…]` は名前の段").
+// The content is one name that is a type, and the candidate is the edit that puts `::` before the `[` whatever the declaration is (§4.5: "編集の形は
+// 呼び先の宣言によらない"), `E.A::[I32](1)`. What is left after it is the E0412 of the type argument written after the name of a variant (§4.5: "列挙子の名前
+// … に書いても E0412"), an error of the type stage, a later stage, which the candidate may leave (§18.1). The type argument of a variant
+// belongs to the enum (`E[I32].A(1)`, tests/spec/fixes/type_args_square_item_enum.onsa). One error per function (P-01).
+
+pub enum E[T] {
+  A(T),
+  B,
+}
+
+pub fn after_the_name_of_a_variant() -> E[I32] {
+  E.A::[I32](1)                                       //~ E0020
+}

@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1"]
+// fixes = 1
+
+// W5-10 U3a (S-256, S-974): `Self` is a type in a body of an `impl` (§15.1: "名前空間は … 型（型パラメータと `Self` を含む）"), so a `[…]` after it
+// (`Self[U8].make()`) is the form of another language written after the name of a type, an E0020 of the names stage, with the candidate that puts
+// `::` before the `[` (`Self::[U8].make()`). What is left after it is the E0412 of the type argument written after `Self` (§4.5: "`Self` … に書いても
+// E0412"), a later stage, which the candidate may leave (§18.1). One error per function (P-01).
+
+pub struct V {
+  n: U8,
+}
+
+impl V {
+  pub fn make() -> V {
+    V { n: 1 }
+  }
+
+  pub fn again() -> V {
+    Self::[U8].make()                                 //~ E0020
+  }
+}

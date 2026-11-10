@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.1", "§18.1"]
+// fixes = 0
+
+// W5-10 U3a (S-974, S-256): a local function value or an array of them with a type in the brackets (`g[F32](x)`, `ops[F32](x)`) is the E0020 of
+// the names stage (§6.1: "名前の経路に `[…]` を付けた呼び先（`ops[i](x)`）… 値なら `ops[i].(x)`"), and its candidate `g[F32].(x)` is not
+// offered: after the edit the name `F32` is read as an index and is a type in the place of a value (E0308, §15.1), an error of the names stage that the
+// candidate would leave (S-974: "ローカルの関数値の `g[F32](x)` の候補 `g[F32].(x)` も、当てた後に名前の段の E0308 が残るなら出さない"; §18.1). The
+// local value is an argument, a binding and an element of an array; the element indexed by a value keeps its candidate (the `ops[i](x)` of
+// tests/spec/fixes/e0020_call_forms_names.onsa). `fixes = 0` checks that no error of the file has a candidate. One error per function (P-01).
+
+pub fn inc(x: F32) -> F32 {
+  x + 1.0
+}
+
+pub fn an_argument(g: fn(F32) -> F32, x: F32) -> F32 {
+  g[F32](x)                                         //~ E0020
+}
+
+pub fn a_binding(x: F32) -> F32 {
+  let g = inc
+  g[F32](x)                                         //~ E0020
+}
+
+pub fn an_array(ops: [fn(F32) -> F32; 2], x: F32) -> F32 {
+  ops[F32](x)                                       //~ E0020
+}
+
+pub fn a_type_with_arguments(g: fn(F32) -> F32, x: F32) -> F32 {
+  g[Option[F32]](x)                                 //~ E0020
+}
+
+pub fn an_integer_type(g: fn(U8) -> U8, x: U8) -> U8 {
+  g[U8](x)                                          //~ E0020
+}
+
+pub fn in_a_closure(g: fn(F32) -> F32, x: F32) -> F32 {
+  let h = fn(y: F32) -> F32 { g[F32](y) }           //~ E0020
+  h.(x)
+}
+
+pub fn in_a_branch(g: fn(F32) -> F32, c: Bool, x: F32) -> F32 {
+  if c {
+    g[F32](x)                                       //~ E0020
+  } else {
+    x
+  }
+}
+
+test "a local function value with a type in square brackets" {
+  let g = inc
+  let y = g[F32](1.0)                               //~ E0020
+  assert y == 2.0
+}
+
+pub fn fine(g: fn(F32) -> F32, ops: [fn(F32) -> F32; 2], i: U32, x: F32) -> F32 {
+  g.(x) + ops[i].(x)
+}

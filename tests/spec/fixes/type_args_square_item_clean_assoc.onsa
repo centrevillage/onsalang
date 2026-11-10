@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.2", "§18.1"]
+//
+// [[test.fix]]
+// at = "17:14"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// W5-10 U3a (R-179): The associated function of the standard `Buf` with the type argument in square brackets, `Buf[F32].zeroed(4)`, is the E0020 of the names stage (R-179).
+// The one candidate puts `::` before the `[` and leaves nothing behind (`clean`, S-253): the check reads the file after the
+// edit without a report. The main position is the `[` of the form (§18.1: "E0020 の主の範囲は外来の形の範囲 … `<T>` は `<` から `>` まで").
+// A file with one error, so that `clean` looks at the whole file.
+
+pub fn f() -> U32 uses {Alloc} {
+  let b = Buf[F32].zeroed(4)                        //~ E0020
+  b.len()
+}
