@@ -568,3 +568,10 @@ left = "a callee that is no path of names is a function value; it is called with
 input = "tests/fuzz/096d98d5.onsa"
 reasons = ["S-384", "S-236"]
 note = "an input with two errors: a space after the `^` of a feedback name (`^ a`), and a call of it with `(` (`^a(`, a callee that is no path of names), which the input has before the candidate"
+
+[[allowed]]
+class = "fix|E0004|move it before the attributes|E0004"
+left = "this doc comment documents no declaration; `…` goes right before an item, a memb"
+input = "tests/fuzz/2bbf2b4c.onsa"
+reasons = ["S-384", "S-236"]
+note = "an input with two errors: an `impl` with no type and an open `{` (`impl{`, E0002) before the attribute and the doc comment after it, so the doc comment moved before the attribute is still inside the broken `impl` and documents no declaration; from before (the base 222023b shows it), found after W5-24 U1a added cases"
