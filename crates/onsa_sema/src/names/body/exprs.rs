@@ -182,9 +182,9 @@ impl Walker<'_> {
     }
 
     /// E0200 for the type arguments at `span` of an expression that this
-    /// version does not give to their item yet (W5-10 U1b, U2a, U2b, S-979):
-    /// of a function, of a method, of a variant of the prelude, of a constant
-    /// and in a constant expression; neither dropped nor read (R-81).
+    /// version does not give to their item yet (W5-10 U2a, U2b, S-979): of a
+    /// function, of a method and of a variant of the prelude; neither dropped
+    /// nor read (R-81).
     pub(super) fn type_args(&self, span: onsa_diag::Span) -> Fail {
         Fail::Report(Feature::TypeArgsInExpressions.diagnostic(Stage::Names, span, &[]).with_found(self.src(span)))
     }
@@ -467,6 +467,11 @@ fn row_heads<'a>(row: &'a onsa_syntax::ast::EffectRow, out: &mut Vec<&'a Ident>)
 pub(super) fn expr_heads<'a>(ast: &'a Ast, e: ExprId, out: &mut Vec<&'a Ident>) {
     match &ast.expr(e).kind {
         ExprKind::Path(p) => out.extend(p.segments.first()),
+        // The types of the list after a name (`Rg::[F32, n].CAP`, §4.5).
+        ExprKind::TypeArgs { base, args } => {
+            expr_heads(ast, *base, out);
+            args.args.iter().for_each(|&x| heads(ast, x, out));
+        }
         _ => ast.sub_exprs(e).into_iter().for_each(|x| expr_heads(ast, x, out)),
     }
 }

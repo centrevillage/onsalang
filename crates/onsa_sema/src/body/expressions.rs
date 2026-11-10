@@ -344,8 +344,7 @@ impl<'a> Checker<'a> {
     /// (`crate::constarg`) from the records of the names of the body, which
     /// knows the errors of the headings ([`crate::constarg::ConstErr::unheld`]).
     pub(crate) fn const_expr(&mut self, e: ExprId) -> Result<(crate::constarg::ConstU32, Option<DefId>), Unheld> {
-        let (names, held) = (&self.names.paths, &self.names.held);
-        let cx = crate::constarg::ConstCx { m: self.m, ast: self.ast, text: self.text, names, held };
+        let cx = crate::constarg::ConstCx { m: self.m, ast: self.ast, text: self.text, names: &self.names };
         crate::constarg::expr(self.a, &cx, e).map_err(crate::constarg::ConstErr::unheld)
     }
 

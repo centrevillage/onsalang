@@ -496,23 +496,51 @@ impl<'p> Sema<'p> {
     }
 
     /// The constant expression `e` of a type (§4.5): its names, walked by the
-    /// names stage ([`crate::names::body::const_names`]), then its value. The
-    /// error of the names stage is reported as the walk has it.
+    /// names stage ([`crate::names::body::const_names`]) with its type
+    /// arguments lowered ([`Self::listed`], S-329), then its value. The error
+    /// of the names stage is reported as the walk has it; the diagnostic of
+    /// type arguments, by the reader where it reads them, as in a body.
     fn read_const(
         &mut self,
         cx: &Cx<'p>,
         e: onsa_syntax::ast::ExprId,
     ) -> Result<(crate::constarg::ConstU32, Option<DefId>), crate::constarg::ConstErr> {
-        let names = match crate::names::body::const_names(self.a, cx.m, (cx.ast, cx.text), cx.consts(), e) {
-            Ok(names) => names,
-            Err(d) => {
-                self.report(cx.def, d);
-                return Err(crate::constarg::ConstErr::Unknown);
-            }
-        };
-        let (names, held) = (&names.0, &names.1);
-        let rcx = crate::constarg::ConstCx { m: cx.m, ast: cx.ast, text: cx.text, names, held };
-        crate::constarg::expr(self.a, &rcx, e)
+        use crate::constarg::ConstErr;
+        let mut names = crate::names::body::const_names(self.a, cx.m, (cx.ast, cx.text), cx.consts(), e);
+        if let Some(d) = names.lower(|site| self.listed(cx, site)) {
+            self.report(cx.def, d);
+            return Err(ConstErr::Unknown);
+        }
+        let rcx = crate::constarg::ConstCx { m: cx.m, ast: cx.ast, text: cx.text, names: &names.names };
+        let r = crate::constarg::expr(self.a, &rcx, e);
+        // Type arguments whose diagnostic the reader did not give (`Checker::type_args_of`'s check).
+        if let (Ok(_) | Err(ConstErr::Unknown), Some((_, Some(d)))) =
+            (&r, names.names.type_args.values().find(|v| v.1.is_some()))
+        {
+            onsa_diag::internal::bug(Some(d.span), "type arguments whose diagnostic the reader did not give");
+        }
+        r
+    }
+
+    /// [`lower_args_in_body`] in `cx`, the one lowering of the type arguments
+    /// of an expression (D-15): of a body, and of a constant expression of a
+    /// type (S-329). Its diagnostics are returned; the errors it holds back
+    /// for the headings of `impl`s are this one's (S-304).
+    fn listed(
+        &mut self,
+        cx: &Cx<'p>,
+        (entity, path, args): (Entity, &Path, &onsa_syntax::ast::TypeArgList),
+    ) -> (TyId, Vec<Diagnostic>) {
+        let before = self.a.diagnostics.len();
+        let mut s = Sema::new(self.a, self.flat.clone());
+        let span = Span { start: path.span.start, ..args.span };
+        let ty = s.type_with_args(cx, entity, &args.args, (span, path), None);
+        if s.a.diagnostics.len() == before {
+            s.judge_args(cx, &args.args, ty, span);
+        }
+        let held = std::mem::take(&mut s.held_consts);
+        self.held_consts.extend(held);
+        (ty, self.a.diagnostics.drain(before..).collect())
     }
 
     /// Array length (§4.1): an integer literal, a `const` with a literal
@@ -583,18 +611,10 @@ pub(crate) fn lower_args_in_body<'p>(
     a: &'p mut Analysis,
     (m, ast, text): (ModId, &'p Ast, &'p str),
     (generics, self_ty, def): (&[GenericDef], Option<TyId>, DefId),
-    (entity, path, args): (Entity, &Path, &onsa_syntax::ast::TypeArgList),
+    site: (Entity, &Path, &onsa_syntax::ast::TypeArgList),
     locals: HashSet<String>,
 ) -> (TyId, Vec<Diagnostic>) {
-    let before = a.diagnostics.len();
     let flow = matches!(a.def(def).kind, DefKind::Flow(_));
-    let mut s = Sema::new(a, Vec::new());
     let cx = Cx { m, ast, text, generics: generics.to_vec(), self_ty, def, reach: None, locals, flow };
-    let span = Span { start: path.span.start, ..args.span };
-    let ty = s.type_with_args(&cx, entity, &args.args, (span, path), None);
-    if s.a.diagnostics.len() == before {
-        s.judge_args(&cx, &args.args, ty, span);
-    }
-    let diags = s.a.diagnostics.drain(before..).collect();
-    (ty, diags)
+    Sema::new(a, Vec::new()).listed(&cx, site)
 }

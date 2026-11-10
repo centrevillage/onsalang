@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// S-329 (W5-10 U1b): the list written on a type in a constant expression has a type parameter or a const parameter in it
+// (`Rg::[T, 4].CAP`, `Rg::[F32, N].CAP`), and the value is not known before the instantiation, so it is E0417 (§4.5: "型引数に型パラメータか
+// const パラメータを含む形（`Rg::[T, 4].CAP`、…）は、値が具体化まで決まらないので E0417 である"). In the places of a length and a const argument,
+// of a function, of a method and of the body; the parameter is in the type position or in the const position, alone or inside another
+// type. There is no candidate (`fixes = 0`). The parameter used by itself as a length is fine (`[F32; N]`). One error per item (P-01).
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub struct Holder[T] {
+  v: T,
+}
+
+pub fn with_a_type_parameter[T](a: [F32; Rg::[T, 4].CAP]) -> U32 { //~ E0417
+  1
+}
+
+pub fn with_a_const_parameter[const N: U32](a: [F32; Rg::[F32, N].CAP]) -> U32 { //~ E0417
+  1
+}
+
+pub fn with_a_type_parameter_inside_a_type[T](a: [F32; Rg::[Option[T], 4].CAP]) -> U32 { //~ E0417
+  1
+}
+
+pub fn in_a_result[T]() -> [F32; Rg::[T, 4].CAP] {  //~ E0417
+  [0.0; 4]
+}
+
+pub fn in_an_annotation[T](x: T) -> U32 {
+  let a: [F32; Rg::[T, 4].CAP] = [0.0; 4]           //~ E0417
+  a.len()
+}
+
+pub fn in_a_repeat[T](x: T) -> U32 {
+  let a = [0.0; Rg::[T, 4].CAP]                     //~ E0417
+  a.len()
+}
+
+pub fn in_a_const_argument[T](r: Ring[F32, (Rg::[T, 4].CAP)]) -> U32 { //~ E0417
+  1
+}
+
+impl[T] Holder[T] {
+  pub fn in_a_method(self, a: [F32; Rg::[T, 4].CAP]) -> U32 { //~ E0417
+    1
+  }
+}
+
+pub fn the_parameter_alone_is_fine[const N: U32](a: [F32; N]) -> U32 {
+  a.len()
+}

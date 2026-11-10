@@ -4,10 +4,11 @@
 //! is a member of, lowered after the walk (`lower_types`) into its record's
 //! `owner`; after a local, they are the E0308 of the walk; after any other
 //! name that declares no type parameters (a constant, `Self`, a module,
-//! `panic`, …), the E0412 of the types stage. Those of a function or a
-//! method, of a variant of the prelude and in a constant expression are
-//! E0200 until the units that read them (W5-10 U1b to U2b), before the marks
-//! of the call (`flow.rs`).
+//! `panic`, …), the E0412 of the types stage. In a constant expression
+//! alike (S-329: its reader reads the `owner`, `crate::constarg`). Those of a
+//! function or a method and of a variant of the prelude are E0200 until the
+//! units that read them (W5-10 U2a, U2b), before the marks of the call
+//! (`flow.rs`).
 
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast::{ExprId, ExprKind, Ident};

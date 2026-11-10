@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5"]
+
+// S-329 (W5-10 U1b; the parent wrote it): two places of the E0200 case that this unit removed
+// (negative/type_args_unsupported_in_types.onsa) and that type_args_const_places.onsa does not have: the type of a parameter
+// of a function without a name, and a length of an array in parentheses (§4.5: "配列の長さと const 引数は定数式で書く"; "括弧からなる").
+// The value of `CAP` is the const parameter `N`, so the lengths agree with the arrays (a function without a name is not
+// lowered in this version, so the case is checked and not run).
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+pub fn in_a_closure_parameter() -> U32 {
+  let f = fn(a: [F32; Rg::[F32, 4].CAP]) -> U32 { a.len() }
+  f.([0.5; 4])
+}
+
+pub fn in_parentheses(a: [F32; (Rg::[F32, 3].CAP)]) -> U32 {
+  a.len()
+}

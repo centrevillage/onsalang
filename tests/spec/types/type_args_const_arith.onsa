@@ -1,0 +1,82 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§15.1"]
+
+// S-329 (W5-10 U1b): the name of a constant with type arguments written on its type takes part in the arithmetic of a constant
+// expression (§4.5: "定数式は … 算術の演算子（`+ - * / %`）と前置の `-`、括弧からなる"), in the length of an array, in the repeat
+// of an array literal and in a const argument, and the type is compared by the value (§4.5: "`[F32; N * 2]` と `[F32; 8]` は同じ型").
+// These are the forms with an operator of negative/type_args_unsupported_in_types.onsa: before and after the operator, in
+// parentheses with an operator, and the name through a module (type_args_const_modules). Kept apart from
+// type_args_const_places.onsa: this version stops every constant expression with an operator at E0200 ("expressions as array
+// lengths", the same wait as types/array_length_operations_fine.onsa). The values are worked out by hand: `CAP` is the const
+// parameter `N`.
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+pub fn before_an_operator(a: [F32; Rg::[F32, 4].CAP * 2]) -> U32 {
+  a.len()
+}
+
+pub fn after_an_operator(a: [F32; 2 + Rg::[F32, 4].CAP]) -> U32 {
+  a.len()
+}
+
+pub fn between_two(a: [F32; Rg::[F32, 4].CAP + Rg::[F32, 2].CAP]) -> U32 {
+  a.len()
+}
+
+pub fn in_parentheses_with_an_operator(a: [F32; (Rg::[F32, 4].CAP + 1) * 2]) -> U32 {
+  a.len()
+}
+
+pub fn in_a_const_argument_after_an_operator(r: Ring[F32, 2 + Rg::[F32, 4].CAP]) -> U32 {
+  r.d.len()
+}
+
+pub fn in_a_result() -> [F32; Rg::[F32, 4].CAP - 1] {
+  [0.5; 3]
+}
+
+pub fn in_a_repeat() -> U32 {
+  let a = [0.5; Rg::[F32, 4].CAP * 2]
+  a.len()
+}
+
+test "an operator after and before the name" {
+  let a: [F32; 8] = [0.0; 8]
+  assert before_an_operator(a) == 8
+  let b: [F32; 6] = [0.0; 6]
+  assert after_an_operator(b) == 6
+}
+
+test "two names" {
+  let a: [F32; 6] = [0.0; 6]
+  assert between_two(a) == 6
+}
+
+test "parentheses" {
+  let a: [F32; 10] = [0.0; 10]
+  assert in_parentheses_with_an_operator(a) == 10
+}
+
+test "a const argument" {
+  let r: Ring[F32, 6] = Ring { d: [0.0; 6] }
+  assert in_a_const_argument_after_an_operator(r) == 6
+}
+
+test "a result and a repeat" {
+  let r: [F32; 3] = in_a_result()
+  assert r[2] == 0.5
+  assert in_a_repeat() == 8
+}

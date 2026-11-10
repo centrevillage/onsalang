@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§6.6"]
+
+// S-329 (W5-10 U1b): the initializer of a `const` is an ordinary expression that is worked out at compile time (§6.6), so the
+// name of an associated constant with the type arguments written on its type (`Rg::[F32, 4].CAP`) can be read in it, with a const
+// argument that is a literal or the name of another constant (§4.5: "`Rg::[F32, 4].CAP` のように式の型引数を書いた型の関連定数を含む").
+// The `const` is declared before and after the type, and reads a `const` that reads one (§4.5: "初期化式で計算した定数は名前で使える").
+// The length that such a `const` gives is in type_args_const_in_const_length.onsa. The values are worked out by hand: `CAP` is
+// the const parameter `N`, `NEXT` is `CAP + 1`.
+
+const FOUR: U32 = Rg::[F32, 4].CAP
+const BY_NAME: U32 = Rg::[U8, SIX].CAP
+const SIX: U32 = 6
+const SUM: U32 = Rg::[F32, 4].CAP + Rg::[F32, 2].NEXT
+const CHAIN: U32 = FOUR + 1
+const PAIR: (U32, U32) = (Rg::[F32, 1].CAP, Rg::[F32, 2].CAP)
+const IN_A_TABLE: [U32; 2] = [Rg::[F32, 3].CAP, Rg::[F32, 5].NEXT]
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+  pub const NEXT: U32 = Self.CAP + 1
+}
+
+test "a const that reads the associated constant" {
+  assert FOUR == 4
+}
+
+test "the const argument is the name of another const declared later" {
+  assert BY_NAME == 6
+}
+
+test "arithmetic of two" {
+  assert SUM == 7
+}
+
+test "a const that reads a const that reads one" {
+  assert CHAIN == 5
+}
+
+test "a tuple and an array of them" {
+  assert PAIR.0 == 1
+  assert PAIR.1 == 2
+  assert IN_A_TABLE[0] == 3
+  assert IN_A_TABLE[1] == 6
+}

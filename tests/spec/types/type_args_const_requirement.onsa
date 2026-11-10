@@ -1,0 +1,63 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+
+// S-329 (W5-10 U1b): the type argument of the list written on a type in a constant expression does not meet the requirement of
+// the type parameter (`Fl::[I32].CAP` with `T: Float`) and it is E0416 (§4.5: "型の位置（… 式の型引数 `::[…]`）に書いた型引数は、その型の宣言の
+// 型パラメータの要求を満たさなければならず、満たさなければ E0416 である"), also in a length and a const argument. A second-class type is
+// E0710 and the bound is not judged. One error per item (P-01).
+
+pub struct Fl[T: Float] {
+  a: T,
+}
+
+impl[T: Float] Fl[T] {
+  pub const CAP: U32 = 4
+}
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+impl[T] Wrap[T] {
+  pub const CAP: U32 = 4
+}
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub fn in_a_parameter(a: [F32; Fl::[I32].CAP]) -> U32 { //~ E0416
+  1
+}
+
+pub fn in_a_result() -> [F32; Fl::[Bool].CAP] {    //~ E0416
+  [0.0; 4]
+}
+
+pub fn in_an_annotation() -> U32 {
+  let a: [F32; Fl::[Str].CAP] = [0.0; 4]            //~ E0416
+  a.len()
+}
+
+pub fn in_a_repeat() -> U32 {
+  let a = [0.0; Fl::[U8].CAP]                       //~ E0416
+  a.len()
+}
+
+pub fn in_a_const_argument(r: Ring[F32, (Fl::[I32].CAP)]) -> U32 { //~ E0416
+  1
+}
+
+pub fn a_buf_is_not_dup() -> U32 {
+  let a = [0.0; Wrap::[Buf[F32]].CAP]               //~ E0416
+  a.len()
+}
+
+pub fn a_second_class_type(a: [F32; Wrap::[Span[F32]].CAP]) -> U32 { //~ E0710
+  1
+}
+
+pub fn right(a: [F32; Fl::[F32].CAP]) -> U32 {
+  a.len()
+}

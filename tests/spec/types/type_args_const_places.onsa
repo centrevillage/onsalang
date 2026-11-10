@@ -1,0 +1,175 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§4.4", "§15.1"]
+
+// S-329 (W5-10 U1b): the name of a constant with type arguments written on its type (`Rg::[F32, 4].CAP`) is a constant
+// expression, so it is the length of an array and the argument of a const parameter in every place where a type is written
+// (§4.5: "`Rg::[F32, 4].CAP` のように式の型引数を書いた型の関連定数を含む"; "配列の長さと const 引数は定数式で書く"; §15.1: "署名と型からも、
+// ソースで後ろに書いた項目とメンバを引け" so `Rg` is declared after the places). The places are the ones of the E0200 case that this
+// replaces (negative/type_args_unsupported_in_types.onsa): an argument, a result, a field, the payload of a variant, an alias, the type
+// of a `const`, an annotation, a branch, `array.from_fn` (whose length is the type of the result), a generic function, a method,
+// an input of a flow, the argument of another type, a tuple, a function type, an outer array, a list that has a type of its own,
+// and a const argument in parentheses (the one that starts with the name is in type_args_const_bare_arg.onsa, the
+// ones with an operator in type_args_const_arith.onsa).
+// The value of `CAP` is the const parameter `N`, so `Rg::[F32, 4].CAP` is 4 and the lengths are checked against the arrays of the tests.
+
+use std.array
+
+pub fn as_a_parameter(a: [F32; Rg::[F32, 4].CAP]) -> F32 {
+  a[3]
+}
+
+pub fn as_a_result() -> [F32; Rg::[F32, 4].CAP] {
+  [0.5; 4]
+}
+
+pub struct AsAField {
+  a: [F32; Rg::[F32, 4].CAP],
+}
+
+pub enum AsAPayload {
+  A([F32; Rg::[F32, 4].CAP]),
+  B,
+}
+
+type AsAnAlias = [F32; Rg::[F32, 4].CAP]
+
+pub const AS_A_CONST_TYPE: [F32; Rg::[F32, 4].CAP] = [0.25; 4]
+
+pub fn as_an_annotation() -> U32 {
+  let a: [F32; Rg::[F32, 4].CAP] = [0.0; 4]
+  a.len()
+}
+
+pub fn in_a_branch(c: Bool) -> U32 {
+  if c {
+    let a: [F32; Rg::[F32, 4].CAP] = [0.0; 4]
+    a.len()
+  } else {
+    0
+  }
+}
+
+pub fn in_a_from_fn() -> [F32; Rg::[F32, 4].CAP] {
+  array.from_fn(fn(_) { 0.5 })
+}
+
+pub fn in_a_generic_function[T](a: [T; Rg::[F32, 4].CAP]) -> U32 {
+  a.len()
+}
+
+pub struct Holder {
+  n: U32,
+}
+
+impl Holder {
+  pub fn in_a_method(self, a: [F32; Rg::[F32, 4].CAP]) -> U32 {
+    a.len() + self.n
+  }
+}
+
+pub flow in_a_flow(x: [F32; Rg::[F32, 4].CAP] at sample) -> F32 at sample {
+  x[0] + x[3]
+}
+
+pub fn in_a_type_argument(o: Option[[F32; Rg::[F32, 4].CAP]]) -> U32 {
+  match o {
+    Some(a) => a.len(),
+    None => 0,
+  }
+}
+
+pub fn in_a_tuple(t: (U8, [F32; Rg::[F32, 4].CAP])) -> U8 {
+  t.0
+}
+
+pub fn in_a_function_type(f: fn([F32; Rg::[F32, 4].CAP]) -> U8) -> U8 {
+  1
+}
+
+pub fn in_an_outer_array(a: [[F32; Rg::[F32, 4].CAP]; 2]) -> U32 {
+  a[1].len()
+}
+
+pub fn with_an_array_in_the_list(a: [F32; Rg::[[F32; 2], 4].CAP]) -> U32 {
+  a.len()
+}
+
+pub fn with_a_type_in_the_list(a: [F32; Rg::[Option[F32], 4].CAP]) -> U32 {
+  a.len()
+}
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub fn in_a_const_argument_in_parentheses(r: Ring[F32, (Rg::[F32, 4].CAP)]) -> U32 {
+  r.d.len()
+}
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+test "the argument, the result and the annotation have the length 4" {
+  let a: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  assert as_a_parameter(a) == 4.0
+  let r: [F32; 4] = as_a_result()
+  assert r.len() == 4
+  assert r[2] == 0.5
+  assert as_an_annotation() == 4
+}
+
+test "a field, a payload, an alias and the type of a const" {
+  let s = AsAField { a: [1.0, 2.0, 3.0, 4.0] }
+  assert s.a.len() == 4
+  let p = AsAPayload.A([0.0; 4])
+  let n = match p {
+    AsAPayload.A(a) => a.len(),
+    AsAPayload.B => 0,
+  }
+  assert n == 4
+  let x: AsAnAlias = [0.0; 4]
+  assert x.len() == 4
+  assert AS_A_CONST_TYPE[0] == 0.25
+}
+
+test "a branch and the length that decides array.from_fn" {
+  assert in_a_branch(true) == 4
+  assert in_a_branch(false) == 0
+  let a = in_a_from_fn()
+  assert a.len() == 4
+  assert a[3] == 0.5
+}
+
+test "a generic function and a method" {
+  let a: [U8; 4] = [1, 2, 3, 4]
+  assert in_a_generic_function(a) == 4
+  let h = Holder { n: 10 }
+  let b: [F32; 4] = [0.0; 4]
+  assert h.in_a_method(b) == 14
+}
+
+test "the argument of another type, a tuple and an outer array" {
+  let a: [F32; 4] = [0.0; 4]
+  assert in_a_type_argument(Some(a)) == 4
+  assert in_a_type_argument(None) == 0
+  assert in_a_tuple((7, a)) == 7
+  assert in_an_outer_array([a, a]) == 4
+}
+
+test "a list that has a type of its own is read the same" {
+  let a: [F32; 4] = [0.0; 4]
+  assert with_an_array_in_the_list(a) == 4
+  assert with_a_type_in_the_list(a) == 4
+}
+
+test "a const argument" {
+  let r: Ring[F32, 4] = Ring { d: [0.0; 4] }
+  assert in_a_const_argument_in_parentheses(r) == 4
+}

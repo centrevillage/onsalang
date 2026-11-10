@@ -168,8 +168,49 @@ impl Graph<'_> {
         }
         let mut leaves = Vec::new();
         crate::constarg::operands(w.ast, e, &mut leaves);
-        for p in leaves.into_iter().filter_map(|l| crate::constarg::path_of(w.ast, l)) {
-            self.read(w, &p, under);
+        for l in leaves {
+            if let Some(p) = self.chain(w, l, value, under) {
+                self.read(w, &p, under);
+            }
+        }
+    }
+
+    /// The path of the chain of names `e` without its type arguments
+    /// (`Rg.CAP` of `Rg::[F32, K].CAP`, S-329), after what they read.
+    fn chain(&mut self, w: &From, e: ExprId, value: bool, under: Under) -> Option<Path> {
+        match &w.ast.expr(e).kind {
+            ExprKind::Path(p) => Some(p.clone()),
+            ExprKind::Field { base, name } => {
+                let mut p = self.chain(w, *base, value, under)?;
+                p.segments.push(name.clone());
+                Some(p)
+            }
+            ExprKind::TypeArgs { base, args } => {
+                let p = self.chain(w, *base, value, under)?;
+                self.listed(w, &p, &args.args, value, under);
+                Some(p)
+            }
+            _ => None,
+        }
+    }
+
+    /// The type arguments `args` of the type `path` in a constant expression
+    /// (S-329): what its const arguments read, and anywhere what its types
+    /// name; the type they make holds none of them as a value.
+    fn listed(&mut self, w: &From, path: &Path, args: &[TypeId], value: bool, under: Under) {
+        let a = self.a;
+        let generics = match self.resolve(w, path) {
+            Some(Entity::Def(d) | Entity::Member(d)) => a.def(d).generics(),
+            _ => &[],
+        };
+        for (k, &x) in args.iter().enumerate() {
+            match (generics.get(k).map(|g| &g.kind), &w.ast.ty(x).kind) {
+                (Some(GenericKind::Const(_)), TypeKind::Path { path, args }) if args.is_empty() => {
+                    self.read(w, path, under)
+                }
+                (Some(GenericKind::Const(_)), _) => self.ty(w, x, value, under),
+                _ => self.ty(w, x, false, under),
+            }
         }
     }
 
@@ -603,8 +644,8 @@ impl<'p> Sema<'p> {
             return None;
         }
         let names = crate::names::body::const_names(self.a, cx.m, (cx.ast, cx.text), cx.consts(), v);
-        match names.map(|(records, _)| records.get(&v).cloned()) {
-            Ok(Some(crate::names::body::PathRes::ConstParam(i))) => Some(i),
+        match names.names.paths.get(&v) {
+            Some(&crate::names::body::PathRes::ConstParam(i)) if names.failure.is_none() => Some(i),
             _ => None,
         }
     }

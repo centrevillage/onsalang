@@ -90,12 +90,6 @@ impl<'a> Walker<'a> {
                 _ => self.expr(e),
             };
         };
-        // In a constant expression, until U1b reads them there.
-        if let (true, Some(ExprKind::TypeArgs { args, .. })) =
-            (self.in_const, lists.first().map(|l| &self.ast.expr(l.1).kind))
-        {
-            return Err(self.fail(self.type_args(args.span)));
-        }
         let (nodes, names): (Vec<ExprId>, Vec<&Ident>) = chain.iter().copied().unzip();
         self.listed = !lists.is_empty();
         let (records, fail) = self.resolve(&names, &nodes, place);

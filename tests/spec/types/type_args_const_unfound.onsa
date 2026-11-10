@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// S-329 (W5-10 U1b): a name in the list written on a type in a constant expression that is not found is E0302 (§15.1: "名前が
+// 見つからなければ E0302"), whether it is the type of the list, the constant of the const argument or the name of the type itself,
+// and the name stage reads them before the constant expression is judged (§18.1: "中の名前は普通の式と同じく名前の段が先に読む"). In
+// the places of a length and a const argument. One error per item (P-01).
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub fn a_type_not_found(a: [F32; Rg::[Nope, 4].CAP]) -> U32 { //~ E0302
+  1
+}
+
+pub fn a_constant_not_found() -> [F32; Rg::[F32, NOPE].CAP] { //~ E0302
+  [0.0; 4]
+}
+
+pub fn the_type_itself_not_found() -> U32 {
+  let a = [0.0; Nope::[F32, 4].CAP]                 //~ E0302
+  a.len()
+}
+
+pub fn a_type_not_found_inside_another(a: [F32; Rg::[Option[Nope], 4].CAP]) -> U32 { //~ E0302
+  1
+}
+
+pub fn a_constant_not_found_in_a_const_argument(r: Ring[F32, (Rg::[F32, NOPE].CAP)]) -> U32 { //~ E0302
+  1
+}
+
+pub fn right(a: [F32; Rg::[F32, 4].CAP]) -> U32 {
+  a.len()
+}

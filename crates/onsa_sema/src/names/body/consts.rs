@@ -8,13 +8,14 @@
 //! expression (§18.1); a name it holds as an error has no record.
 
 use onsa_diag::Diagnostic;
-use onsa_diag::hash::{HashMap, HashSet};
-use onsa_syntax::ast::{Ast, ExprId, Ident, Mode, Path};
+use onsa_diag::hash::HashSet;
+use onsa_syntax::ast::{Ast, ExprId, Ident, Mode, Path, TypeArgList};
 
 use super::paths::Place;
-use super::{Binding, BindingId, BindingKind, Fail, Origin, PathRes, Walker};
+use super::{Binding, BindingId, BindingKind, BodyNames, Fail, Listed, Origin, PathRes, Typed, Walker};
 use crate::Analysis;
 use crate::def::{GenericDef, ModId};
+use crate::resolve::Entity;
 use crate::ty::TyId;
 
 /// What the names of a constant expression of a type are read in: the type
@@ -29,28 +30,51 @@ pub(crate) struct ConstScope<'s> {
 }
 
 /// The names of a constant expression of a type, as a body has them: the
-/// records of its nodes ([`super::BodyNames::paths`]) and its chains held as
-/// an error ([`super::BodyNames::held`]).
-pub(crate) type ConstNames = (HashMap<ExprId, PathRes>, HashSet<ExprId>);
+/// records of its nodes ([`BodyNames::paths`]), its chains held as an error
+/// ([`BodyNames::held`]) and its type arguments ([`BodyNames::type_args`],
+/// once [`Self::lower`] lowered them); the error of the walk of the names.
+pub(crate) struct ConstNames {
+    pub names: BodyNames,
+    lists: Vec<Listed>,
+    pub failure: Option<Diagnostic>,
+}
 
-/// The names of the constant expression `e` of a type; the error of the
-/// names stage is `Err`.
+impl ConstNames {
+    /// Lower its type arguments after a type in order, each with `lower`
+    /// (the one lowering of `crate::sig`), into its records as a body has
+    /// them (`lower_types`, S-329); the error of the names stage that stops
+    /// it: the first in them, which comes before the walk's (§18.1).
+    pub(crate) fn lower(
+        &mut self,
+        mut lower: impl FnMut((Entity, &Path, &TypeArgList)) -> (TyId, Vec<Diagnostic>),
+    ) -> Option<Diagnostic> {
+        for at in std::mem::take(&mut self.lists) {
+            let lowered = lower((at.entity, &at.path, &at.args));
+            if let Err(d) = self.names.put_args(at, lowered) {
+                return Some(d);
+            }
+        }
+        self.failure.take()
+    }
+}
+
+/// The names of the constant expression `e` of a type.
 pub(crate) fn const_names(
     a: &Analysis,
     m: ModId,
     (ast, text): (&Ast, &str),
     scope: ConstScope,
     e: ExprId,
-) -> Result<ConstNames, Diagnostic> {
+) -> ConstNames {
     let mut w = Walker::new(a, m, ast, text, (scope.generics, scope.self_ty, e));
     let mut heads = Vec::new();
     super::exprs::expr_heads(ast, e, &mut heads);
     w.outer_locals(scope, heads, ast.expr(e).span);
     let _ = w.const_expr(e);
-    match w.failure {
-        Some(Fail::Report(d)) => Err(d),
-        _ => Ok((w.out.paths, w.out.held)),
-    }
+    // What else it types is no constant: the reader's E0417.
+    let lists = w.type_sites.into_iter().filter_map(|(t, _)| if let Typed::Args(at) = t { Some(*at) } else { None });
+    let failure = if let Some(Fail::Report(d)) = w.failure { Some(d) } else { None };
+    ConstNames { names: w.out, lists: lists.collect(), failure }
 }
 
 /// A const argument written as a path (`Ring[F32, N]`, `G[T.BITS]`): the

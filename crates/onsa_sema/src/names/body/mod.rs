@@ -154,6 +154,37 @@ impl BodyNames {
     pub(crate) fn instance(&self, e: ExprId) -> Option<DefId> {
         self.instance_of.get(&e).map(|&k| self.instances[k].1)
     }
+
+    /// The first diagnostic of the type arguments `::[…]` of the chain `e`
+    /// ends, from its head ([`Self::type_args`]): the one part the types
+    /// stage (`Checker::type_args_of`) and the reader of the constant
+    /// expressions (`crate::constarg`, S-329) report them by.
+    pub(crate) fn args_diag(&self, ast: &Ast, e: ExprId) -> Option<&Diagnostic> {
+        let (mut first, mut cur) = (None, e);
+        while let ExprKind::Field { base, .. } | ExprKind::TypeArgs { base, .. } = &ast.expr(cur).kind {
+            first = self.type_args.get(&(cur, 0)).and_then(|(_, d)| d.as_ref()).or(first);
+            cur = *base;
+        }
+        first
+    }
+
+    /// Keep the type arguments `at` as `lowered` (the type, and the
+    /// diagnostics of `crate::sig`'s one lowering of them): the type in
+    /// [`Self::type_args`] and in the `owner` of the record after them, with
+    /// the first diagnostic; one of the names stage is `Err`, which stops the
+    /// walk there.
+    fn put_args(&mut self, at: Listed, (ty, diags): (TyId, Vec<Diagnostic>)) -> Result<(), Diagnostic> {
+        let d = diags.into_iter().next();
+        if let Some(d) = d.as_ref().filter(|d| d.stage == onsa_diag::Stage::Names) {
+            return Err(d.clone());
+        }
+        self.type_args.insert(at.key, (Some(ty), d));
+        match at.to.and_then(|x| self.paths.get_mut(&x)) {
+            Some(PathRes::Item { owner, .. }) => *owner = Some(ty),
+            _ => at.to.and_then(|x| self.structs.get_mut(&x)).into_iter().for_each(|s| s.owner = Some(ty)),
+        }
+        Ok(())
+    }
 }
 
 /// One binding of a body (§5.1).
@@ -443,17 +474,10 @@ fn lower_types(
             Typed::Type(t, pos) => (t, pos),
             Typed::Args(at) => {
                 let site = (at.entity, &at.path, &at.args);
-                let (ty, diags) =
-                    crate::sig::lower_args_in_body(a, (m, ast, text), (generics, self_ty, def), site, locals);
-                let d = diags.into_iter().next();
-                if let Some(d) = d.as_ref().filter(|d| d.stage == onsa_diag::Stage::Names) {
-                    fail = Some(Fail::Report(d.clone()));
+                let lowered = crate::sig::lower_args_in_body(a, (m, ast, text), (generics, self_ty, def), site, locals);
+                if let Err(d) = out.put_args(*at, lowered) {
+                    fail = Some(Fail::Report(d));
                     break;
-                }
-                out.type_args.insert(at.key, (Some(ty), d));
-                match at.to.and_then(|x| out.paths.get_mut(&x)) {
-                    Some(PathRes::Item { owner, .. }) => *owner = Some(ty),
-                    _ => at.to.and_then(|x| out.structs.get_mut(&x)).into_iter().for_each(|s| s.owner = Some(ty)),
                 }
                 continue;
             }

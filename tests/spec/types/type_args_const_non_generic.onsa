@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// S-329, S-306 (W5-10 U1b): a list written on a type that is not generic, in a constant expression (`Pl::[F32].K`), is E0412 with no
+// candidate (S-329: "`Pl::[F32].K` は E0412"; §4.5: "型パラメータを持たない項目 … に書いても E0412"; §15.1: "総称でない型への型引数 … 型引数の
+// 数は E0412"). In the places of a length and a const argument: an argument, a result, a field, an annotation, a repeat and a const
+// argument. One error per item (P-01); the other items are fine.
+
+pub struct Pl {
+  k: F32,
+}
+
+impl Pl {
+  pub const K: U32 = 4
+}
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub fn in_a_parameter(a: [F32; Pl::[F32].K]) -> U32 { //~ E0412
+  1
+}
+
+pub fn in_a_result() -> [F32; Pl::[F32].K] {        //~ E0412
+  [0.0; 4]
+}
+
+pub struct AsAField {
+  a: [F32; Pl::[F32].K],                            //~ E0412
+}
+
+pub fn in_an_annotation() -> U32 {
+  let a: [F32; Pl::[F32].K] = [0.0; 4]              //~ E0412
+  a.len()
+}
+
+pub fn in_a_repeat() -> U32 {
+  let a = [0.0; Pl::[F32].K]                        //~ E0412
+  a.len()
+}
+
+pub fn in_a_const_argument(r: Ring[F32, (Pl::[F32].K)]) -> U32 { //~ E0412
+  r.d.len()
+}
+
+pub fn in_a_nested_length(a: [[F32; Pl::[F32].K]; 2]) -> U32 { //~ E0412
+  1
+}
+
+pub fn right(a: [F32; Pl.K]) -> U32 {
+  a.len()
+}

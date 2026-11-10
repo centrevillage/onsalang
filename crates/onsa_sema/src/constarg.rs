@@ -7,12 +7,11 @@
 //! the names stage made once (`names::body`, D-15): the leaves by their type,
 //! the nodes by the grammar (S-966).
 
-use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{Ast, BinOp, ExprId, ExprKind, Ident, ItemKind, Lit, Path, UnOp};
 
 use crate::def::{DefKind, GenericKind};
-use crate::names::body::PathRes;
+use crate::names::body::{BodyNames, PathRes};
 use crate::resolve::{Entity, NameKind, ResolveError};
 use crate::ty::{IntKind, Ty, TyId};
 use crate::{Analysis, DefId, ModId};
@@ -74,14 +73,13 @@ impl From<Diagnostic> for ConstErr {
 
 /// What a constant expression is read with: the module `m` of `ast`, and the
 /// records of the names of the expression, which the names stage made once
-/// (a body's, or [`crate::names::body::const_names`]'; §15.1, D-15), with
-/// its chains held as an error.
+/// (a body's, or [`crate::names::body::const_names`]'; §15.1, D-15): of its
+/// names, its chains held as an error and its type arguments.
 pub(crate) struct ConstCx<'r> {
     pub m: ModId,
     pub ast: &'r Ast,
     pub text: &'r str,
-    pub names: &'r HashMap<ExprId, PathRes>,
-    pub held: &'r HashSet<ExprId>,
+    pub names: &'r BodyNames,
 }
 
 /// An array length or a const argument written as an expression (`4`, `-1`,
@@ -178,10 +176,14 @@ fn node(a: &mut Analysis, cx: &ConstCx, e: ExprId) -> Result<Got, ConstErr> {
         return Err(no_negative(shown(), expr.span).into());
     }
     if let Some((nodes, head)) = chain_nodes(cx.ast, e) {
-        if cx.held.contains(&e) {
+        if cx.names.held.contains(&e) {
             return Ok(Got::Unknown);
         }
-        let records: Vec<PathRes> = nodes.iter().map_while(|n| cx.names.get(n).cloned()).collect();
+        // Its type arguments (`Pl::[F32].K`, E0412; S-329), before what it names.
+        if let Some(d) = cx.names.args_diag(cx.ast, e) {
+            return Err(d.clone().into());
+        }
+        let records: Vec<PathRes> = nodes.iter().map_while(|n| cx.names.paths.get(n).cloned()).collect();
         return settle(chain(a, (cx.m, cx.ast, cx.text), &records, nodes.len(), (&head.name, shown(), expr.span)));
     }
     match &expr.kind {
@@ -236,21 +238,26 @@ fn node(a: &mut Analysis, cx: &ConstCx, e: ExprId) -> Result<Got, ConstErr> {
     }
 }
 
-/// The nodes of the chain of names `e` (`a.b.c`, from its head `a`) and its
-/// first name; none when `e` is no chain (`f().x`, `(K).x`, a literal).
+/// The nodes of the names of the chain `e` (`a.b.c`, from its head `a`) and
+/// its first name; none when `e` is no chain (`f().x`, `(K).x`, a literal).
+/// Through its type arguments (`Rg::[F32, 4].CAP`, S-329), which the record
+/// after them has as its `owner`.
 fn chain_nodes(ast: &Ast, e: ExprId) -> Option<(Vec<ExprId>, &Ident)> {
-    let mut out = vec![e];
-    let mut cur = e;
+    let (mut out, mut cur) = (Vec::new(), e);
     loop {
         match &ast.expr(cur).kind {
-            ExprKind::Field { base, .. } => cur = *base,
+            ExprKind::Field { base, .. } => {
+                out.push(cur);
+                cur = *base;
+            }
+            ExprKind::TypeArgs { base, .. } => cur = *base,
             ExprKind::Path(p) if p.segments.len() == 1 => {
+                out.push(cur);
                 out.reverse();
                 return Some((out, &p.segments[0]));
             }
             _ => return None,
         }
-        out.push(cur);
     }
 }
 

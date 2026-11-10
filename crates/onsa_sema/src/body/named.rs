@@ -103,15 +103,10 @@ impl<'a> Checker<'a> {
     /// E0416, …). The one place the types stage reports them; the check of a
     /// body that ends with one not reported is an internal error (`check_all`).
     pub(super) fn type_args_of(&mut self, e: ExprId) -> R<()> {
-        let mut keys = Vec::new();
-        let mut cur = e;
-        while let ExprKind::Field { base, .. } | ExprKind::TypeArgs { base, .. } = &self.expr(cur).kind {
-            if matches!(self.expr(cur).kind, ExprKind::TypeArgs { .. }) {
-                keys.push((cur, 0));
-            }
-            cur = *base;
+        match self.names.args_diag(self.ast, e).cloned() {
+            Some(d) => Err(self.diag(d)),
+            None => Ok(()),
         }
-        self.reported_args(keys.into_iter().rev())
     }
 
     /// The first diagnostic of the type arguments at `keys`, in order.

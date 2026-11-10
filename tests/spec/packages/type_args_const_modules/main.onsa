@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§15.1"]
+
+// S-329 (W5-10 U1b): the name of a constant with type arguments written on its type is a length and a const argument also when
+// the type is of another module: through the name taken by a `use` (`Rg::[F32, 4].CAP`) and through the module name
+// (`util.Rg::[F32, 4].CAP`, the form `m.Rg::[F32, 4].CAP` of negative/type_args_unsupported_in_types.onsa, §4.5: "名前の
+// 経路の直後"). `util.onsa` has its own place that uses it in its own module (`in_the_other_module`), called from here. The
+// values are worked out by hand: `CAP` is the const parameter `N`.
+use util
+use util.{Ring, Rg}
+
+pub fn by_the_name_taken(a: [F32; Rg::[F32, 4].CAP]) -> U32 {
+  a.len()
+}
+
+pub fn by_the_module_name(a: [F32; util.Rg::[F32, 5].CAP]) -> U32 {
+  a.len()
+}
+
+pub fn in_a_result() -> [F32; util.Rg::[F32, 2].CAP] {
+  [0.5; 2]
+}
+
+pub fn in_a_repeat() -> U32 {
+  let a: [F32; 6] = [0.0; util.Rg::[F32, 6].CAP]
+  a.len()
+}
+
+pub fn in_a_const_argument(r: Ring[F32, (util.Rg::[F32, 7].CAP)]) -> U32 {
+  r.d.len()
+}
+
+test "the name taken by a use" {
+  let a: [F32; 4] = [0.0; 4]
+  assert by_the_name_taken(a) == 4
+}
+
+test "through the module name" {
+  let a: [F32; 5] = [0.0; 5]
+  assert by_the_module_name(a) == 5
+  let r: [F32; 2] = in_a_result()
+  assert r[1] == 0.5
+  assert in_a_repeat() == 6
+}
+
+test "a const argument through the module name" {
+  let r: Ring[F32, 7] = Ring { d: [0.0; 7] }
+  assert in_a_const_argument(r) == 7
+}
+
+test "the function of the other module" {
+  let a: [F32; 3] = [0.0; 3]
+  assert util.in_the_other_module(a) == 3
+}

@@ -1,0 +1,52 @@
+// onsa.toml
+// [test]
+// fixes = 0
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// S-329, S-239 (W5-10 U1b): the number of the elements of the list written on a type in a constant expression is not the number of
+// the parameters of the type (§4.5: "数が宣言と合わなければ E0412"; "宣言の数を超えた要素は読まない（種類も名前も判定しない）"): the const
+// argument missing, one added, and an added element that would be a name not found or a type (E0412 only). In the places of a length
+// and a const argument. No candidate in an expression (§4.5: "式の中の型引数の E0412 に修正候補は無く"; `fixes = 0`). One error per
+// item (P-01).
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub fn the_const_argument_is_missing(a: [F32; Rg::[F32].CAP]) -> U32 { //~ E0412
+  1
+}
+
+pub fn a_const_argument_is_added() -> [F32; Rg::[F32, 4, 4].CAP] { //~ E0412
+  [0.0; 4]
+}
+
+pub fn a_name_not_found_is_added() -> U32 {
+  let a: [F32; Rg::[F32, 4, Nope].CAP] = [0.0; 4]   //~ E0412
+  a.len()
+}
+
+pub fn a_type_is_added() -> U32 {
+  let a = [0.0; Rg::[F32, 4, F32].CAP]              //~ E0412
+  a.len()
+}
+
+pub fn the_const_argument_is_missing_in_a_const_argument(r: Ring[F32, (Rg::[F32].CAP)]) -> U32 { //~ E0412
+  r.d.len()
+}
+
+pub fn a_constant_not_found_is_added(a: [F32; Rg::[F32, 4, NOPE].CAP]) -> U32 { //~ E0412
+  1
+}
+
+pub fn right(a: [F32; Rg::[F32, 4].CAP]) -> U32 {
+  a.len()
+}

@@ -1537,3 +1537,18 @@ target = "tests/spec/types/type_args_owner_value_run.onsa"
 reasons = ["S-239", "R-08"]
 until = "W8-09"
 note = "型引数を書いた関連関数を値に置いて呼ぶ形を onsa test で走らせる。関数値の降下は今 E0200（check は types/type_args_owner_value.onsa が見る）"
+
+# --- W5-10 U1b: 定数式の `::[…]` の事例のうち、後の作業を待つもの（2026-11-10）
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/type_args_const_arith.onsa"
+reasons = ["S-713", "S-329"]
+until = "W9-03"
+note = "定数式の中の `Rg::[F32, 4].CAP` に演算が続く長さと const 引数。演算を含む長さと const 引数は今 E0200（types/array_length_operations_fine.onsa と同じ待ち）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/type_args_const_in_const_length.onsa"
+reasons = ["S-713", "S-329"]
+until = "W9-03"
+note = "初期化式に `Rg::[F32, 4].CAP` を書いた定数を長さに使う形。計算した定数の長さは今 E0200"

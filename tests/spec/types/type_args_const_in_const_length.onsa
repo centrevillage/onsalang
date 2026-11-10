@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§6.6"]
+
+// S-329 (W5-10 U1b): a `const` whose initializer reads an associated constant with the type arguments written on its type
+// (`Rg::[F32, 8].CAP`) is a name that a constant expression can use (§4.5: "初期化式で計算した定数（`const N2: U32 = N * 2`）は名前で
+// 使える"), so it is the length of an array and the argument of a const parameter. Kept apart from type_args_const_in_const.onsa:
+// this version stops a constant that is computed by an expression at E0200 when it is a length ("constants computed by
+// expressions as array lengths", the same wait as types/scalar_bits_array_length_operations.onsa). The values are worked out by
+// hand: `CAP` is the const parameter `N`.
+
+const LEN: U32 = Rg::[F32, 8].CAP
+const SHORT: U32 = Rg::[F32, 2].CAP
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub fn as_a_result() -> [F32; LEN] {
+  [0.5; LEN]
+}
+
+pub fn as_an_argument(a: [F32; SHORT]) -> U32 {
+  a.len()
+}
+
+pub fn as_a_const_argument(r: Ring[F32, LEN]) -> U32 {
+  r.d.len()
+}
+
+test "the length is the value of the const" {
+  let a: [F32; 8] = as_a_result()
+  assert a.len() == 8
+  assert a[7] == 0.5
+}
+
+test "an argument and a const argument" {
+  let b: [F32; 2] = [0.0; 2]
+  assert as_an_argument(b) == 2
+  let r: Ring[F32, 8] = Ring { d: [0.0; 8] }
+  assert as_a_const_argument(r) == 8
+}

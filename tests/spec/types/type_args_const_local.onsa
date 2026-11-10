@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// S-329 (W5-10 U1b): the list written on a type in a constant expression has a local variable, an argument or a call in it
+// (`Rg::[F32, n].CAP`), so it is not a constant expression and E0417 whatever the position (§4.5: "定数式でないもの（関数の呼び出し、
+// ローカル変数など）を書くと、位置によらず E0417"; §15.1: "ローカルの束縛を書いた配列の長さの E0417"). The local is in the const position
+// or inside the type; in the places of a length and a const argument of a signature, of the body annotation and of a repeat.
+// One error per item (P-01).
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub fn two() -> U32 {
+  2
+}
+
+pub fn an_argument_of_the_signature(n: U32, a: [F32; Rg::[F32, n].CAP]) -> U32 { //~ E0417
+  1
+}
+
+pub fn a_local_in_an_annotation() -> U32 {
+  let n: U32 = 4
+  let a: [F32; Rg::[F32, n].CAP] = [0.0; 4]         //~ E0417
+  a.len()
+}
+
+pub fn a_local_in_a_repeat() -> U32 {
+  let n: U32 = 4
+  let a = [0.0; Rg::[F32, n].CAP]                   //~ E0417
+  a.len()
+}
+
+pub fn a_local_in_a_const_argument(n: U32, r: Ring[F32, (Rg::[F32, n].CAP)]) -> U32 { //~ E0417
+  1
+}
+
+pub fn a_call_in_the_list(a: [F32; Rg::[F32, two()].CAP]) -> U32 { //~ E0417
+  1
+}
+
+pub fn a_local_in_the_list_of_an_outer_array(n: U32, a: [[F32; Rg::[F32, n].CAP]; 2]) -> U32 { //~ E0417
+  1
+}
+
+pub fn a_const_is_fine(a: [F32; Rg::[F32, 4].CAP]) -> U32 {
+  a.len()
+}
