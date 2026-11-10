@@ -21,6 +21,9 @@ pub(super) struct Mark {
     pub end: u32,
     pub old: String,
     pub new: String,
+    /// The text is the writer's, inserted by a candidate that moves it
+    /// (`Fix::moved`): taking it out restores nothing of the compiler's.
+    pub moved_in: bool,
 }
 
 impl Mark {
@@ -55,17 +58,18 @@ impl Mark {
 }
 
 /// The earlier step (an index of `marks`) that `fix` undoes: each of its
-/// edits restores a mark of that step, and every mark of the step is
-/// restored. A step that takes out what a move put, the text not back at
-/// its place, undoes no step (S-475, S-990: `pub @fp(strict) fn h`).
+/// edits restores a mark of that step. One shape is no undo: all that the
+/// edits restore is text the step moved in ([`Mark::moved_in`]), so the
+/// writer's text is taken out and is not back at its place (S-475, S-990:
+/// `pub @fp(strict) fn h`).
 pub(super) fn undoes(marks: &[Vec<Mark>], text: &str, fix: &Fix) -> Option<usize> {
     let edits = fix.edits();
     if edits.is_empty() {
         return None;
     }
     marks.iter().position(|ms| {
-        edits.iter().all(|e| ms.iter().any(|m| m.undone_by(text, e)))
-            && ms.iter().all(|m| edits.iter().any(|e| m.undone_by(text, e)))
+        let restores = |e: &Edit, moved_in: bool| ms.iter().any(|m| (moved_in || !m.moved_in) && m.undone_by(text, e));
+        edits.iter().all(|e| restores(e, true)) && edits.iter().any(|e| restores(e, false))
     })
 }
 
@@ -85,6 +89,7 @@ fn moved_marks(
         end: r.end,
         old: text.get(e.span.start as usize..e.span.end as usize).unwrap_or_default().to_string(),
         new: e.replace.clone(),
+        moved_in: fix.moves() && e.span.is_empty(),
     });
     out.push(own.collect());
     out

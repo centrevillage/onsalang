@@ -151,30 +151,64 @@ fn a_step_that_restores_an_earlier_one_is_a_cycle_of_undo() {
     assert_eq!((w.how, w.back_to), (Some(How::Undo), Some(2)));
     // A replacement elsewhere is no undo.
     let fix = made_up("v").unwrap().diagnostics.remove(0).fixes.remove(0);
-    let mark = Mark { start: 1, end: 2, old: "u".into(), new: "v".into() };
+    let mark = Mark { start: 1, end: 2, old: "u".into(), new: "v".into(), moved_in: false };
     assert_eq!(undoes(&[vec![mark.clone()]], "xv", &fix), None);
     assert_eq!(undoes(&[vec![mark]], "v", &fix), None, "the text there is not the mark's");
 }
 
 #[test]
-fn a_step_that_takes_out_what_a_move_put_undoes_no_step() {
-    // `ab@` to `@ab`: the `@` moved to the front, deleted at its place and inserted (two marks).
+fn a_step_that_only_takes_out_what_a_move_put_undoes_no_step() {
+    // `ab@` to `@ab`: the `@` moved to the front by a candidate of `Fix::moved`, deleted at its
+    // place and inserted (two marks, the insertion's `moved_in`).
     let mut sources = SourceMap::default();
     let file = sources.add("m.onsa", "@ab");
-    let moved = vec![
-        Mark { start: 3, end: 3, old: "@".into(), new: String::new() },
-        Mark { start: 0, end: 1, old: String::new(), new: "@".into() },
-    ];
-    // The `@` at the front taken out: the insertion is restored and the deletion is not (the
-    // `@` is not back at its place), so the step is no undo (`pub @fp(strict) fn h`, S-990).
+    let mark =
+        |start, end, old: &str, new: &str, moved_in| Mark { start, end, old: old.into(), new: new.into(), moved_in };
+    let moved = [vec![mark(3, 3, "@", "", false), mark(0, 1, "", "@", true)]];
+    // The `@` at the front taken out: the writer's text is gone, not back at its place
+    // (`pub @fp(strict) fn h`, S-990): no undo.
     let out = Fix::replace("take out", Span::new(file, 0, 1), "");
-    assert_eq!(undoes(std::slice::from_ref(&moved), "@ab", &out), None);
-    // Taken out and written back at its place: both marks restored, an undo.
+    assert_eq!(undoes(&moved, "@ab", &out), None);
+    // Written back at its place, the `@` at the front left or taken out too: an undo.
+    let again = Fix::replace("again", Span::new(file, 3, 3), "@");
+    assert_eq!(undoes(&moved, "@ab", &again), Some(0));
     let back = Fix::new("back", vec![Edit::delete(Span::new(file, 0, 1)), Edit::insert(file, 3, "@")]);
-    assert_eq!(undoes(std::slice::from_ref(&moved), "@ab", &back), Some(0));
-    // One mark of a step with one mark restored is an undo, as before.
-    let put = vec![Mark { start: 0, end: 1, old: String::new(), new: "@".into() }];
-    assert_eq!(undoes(&[put], "@ab", &out), Some(0));
+    assert_eq!(undoes(&moved, "@ab", &back), Some(0));
+    // The same edits of a candidate that is no move: the insertion taken out is an undo, as before.
+    let plain = [vec![mark(3, 3, "@", "", false), mark(0, 1, "", "@", false)]];
+    assert_eq!(undoes(&plain, "@ab", &out), Some(0));
+    // So is one of two replacements of a step put back: `ab` to `xy`, then the `x` back to `a`.
+    let two = [vec![mark(0, 1, "a", "x", false), mark(1, 2, "b", "y", false)]];
+    assert_eq!(undoes(&two, "xy", &Fix::replace("to a", Span::new(file, 0, 1), "a")), Some(0));
+}
+
+#[test]
+fn the_walk_reads_which_candidates_move_from_the_compiler() {
+    // `ab@`: the `@` goes to the front; `@ab`: the `@` is taken out. With a candidate of
+    // `Fix::moved` the walk ends clean; with the same edits of `Fix::new` the second step undoes
+    // the first.
+    fn check(text: &str, moves: bool) -> Result<Checked, String> {
+        let mut sources = SourceMap::default();
+        let file = sources.add("m.onsa", text);
+        let edits = |at: u32| vec![Edit::delete(Span::new(file, at, at + 1)), Edit::insert(file, 0, "@")];
+        let fix = match text {
+            "ab@" if moves => Some(Fix::moved("move", edits(2))),
+            "ab@" => Some(Fix::new("move", edits(2))),
+            "@ab" => Some(Fix::delete("take out", Span::new(file, 0, 1))),
+            _ => None,
+        };
+        let mut diagnostics = Vec::new();
+        if let Some(fix) = fix {
+            let mut d = Diagnostic::new(Stage::Syntax, Code::E0002, Span::new(file, 0, 0), "here");
+            d.fixes = vec![fix];
+            diagnostics.push(d);
+        }
+        Ok(Checked { sources, diagnostics })
+    }
+    let r = walk("m.onsa", "ab@", &Options::default(), &|t: &str| check(t, true));
+    assert_eq!((r.walks[0].stop, r.walks[0].steps.len()), (Stop::Clean, 2), "{r:?}");
+    let r = walk("m.onsa", "ab@", &Options::default(), &|t: &str| check(t, false));
+    assert_eq!((r.walks[0].how, r.walks[0].back_to), (Some(How::Undo), Some(1)), "{r:?}");
 }
 
 #[test]

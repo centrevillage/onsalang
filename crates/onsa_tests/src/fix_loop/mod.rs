@@ -19,10 +19,12 @@
 //!   a minimal edit, and blanks mean something in Onsa, `f (x)`), or every
 //!   edit of the step restores what an edit of one earlier step replaced
 //!   ([`How::Undo`]: a round trip across stages, as the `~` of S-435, where
-//!   the text is not the same). The step restores every edit of the earlier
-//!   step: one that restores some of them only is no undo (what a move put,
-//!   taken out again, is not back at its place: `pub @fp(strict) fn h`,
-//!   S-990). The places of the earlier edits are moved
+//!   the text is not the same). A step that restores some of the edits of an
+//!   earlier step is an undo too, but for one shape: all it restores is text
+//!   that a candidate of `Fix::moved` inserted, the writer's text moved, which
+//!   it takes out and does not put back at its place (`pub @fp(strict) fn h`,
+//!   S-990; the compiler says which candidates move, the walk compares no
+//!   text for it). The places of the earlier edits are moved
 //!   by the rule of the contract (`fix_contract::shift`: an insertion at an
 //!   end of a range is outside it); a deletion is a point that an insertion
 //!   at it does not move past, so the deleted text written again on either
