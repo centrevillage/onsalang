@@ -128,7 +128,7 @@
   - 網羅の検査: 親が `work.py commit` でコードか事例を変えるコミットをすると、網羅の検査と基のバイナリの保存が裏で起きる（`tools/after_commit.py`）。
     網羅の検査の重い項目（fuzz、fmt の性質、`heavy`）の結果を変えないコミットでは `work.py commit --no-sweep` を指定し、網羅の検査を外す（例: `cargo test` のテストのコードだけ（`heavy_` のテストを除く）、`tests/` の README や `tests/pending.toml` の注記だけを変える）。基のバイナリは、コードを変えたコミットなら道具が残す。迷うときは外さない。
     親は区切りで、gate の要約と `work.py take` の `auto sweep:` の行を見る。FAILED なら、行が指す出力を読み、`rules/leader.md` 4.5 の形で仕分ける。
-    gate の要約の `fuzz new:` の行に並ぶ入力（作業ツリーから写したものを含む）は、`fuzz.py sort` で仕分ける（`rules/leader.md` 4.5）。
+    gate の要約の `fuzz new:` の行に並ぶ入力（作業ツリーから写したものを含む）は、`fuzz.py sort` で仕分ける（`rules/leader.md` 4.5）。`fuzz left:` の行は、区切りに `fuzz.py left` で読む（`rules/leader.md` 4.5）。
     全体を自分で回す前と、続けて大きく変えるときは止める（止め方と起こし方は `tools/after_commit.py --help`）。
     段の終わりは `--stage-end` で全体を回す（8.6）。
   - `warning:` の行（時間の目安を超えた）は、続けて出たら、分割の数か抜き取りの割合（`tools/gate_steps.py`）を見直す。一度だけなら、他のビルドと重なっただけのことがある。
