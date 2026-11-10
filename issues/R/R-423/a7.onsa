@@ -1,0 +1,6 @@
+pub fn t() -> I32 {
+  1 +
+}
+stray1
+Ask pub
+pub fn z() -> I32 { 1 }
