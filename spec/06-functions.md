@@ -193,7 +193,7 @@ pub struct Key: PartialEq + Eq + Hash + Show {
 
 `@repr(c)`, `@fp(...)`（§15.5）、`@param(...)`（§11.7）、`@host(...)`（§11.7）、`@latency(...)`（§11.6）、`@mem(...)`（§12.4）、`@export`（§14.2）。これ以外の属性は無い（`@deprecated` は必要になったら定義する、§19.1）。
 属性を付けられる構文の場所は決まっている: `@repr` は struct、`@fp` は fn と flow、`@param` と `@host` は flow の入力、`@latency` は flow、`@mem` は `let`、`@export` はトップレベルの fn と flow。一つの場所には、それぞれの属性を一度だけ付けられる。
-一覧に無い属性と、その場所に付けられない属性と、一つの場所に同じ属性を二度付ける形（引数によらない。`@fp(relaxed) @fp(relaxed) fn f`、一つの入力の `@param(min: 0.0) @param(max: 1.0) x: F32 at block`）は E0005。重なりは境界の重なりと同じ形で報告する（§4.5）。重なりの判定は、置く位置を誤った属性（`@fp(relaxed) pub @fp(relaxed) fn h`、§18.1）も同じ場所の属性に数える。
+一覧に無い属性と、その場所に付けられない属性と、一つの場所に同じ属性を二度付ける形（引数によらない。`@fp(relaxed) @fp(relaxed) fn f`、一つの入力の `@param(min: 0.0) @param(max: 1.0) x: F32 at block`）は E0005。重なりは境界の重なりと同じ形で報告する（§4.5）。重なりの判定は、置く位置を誤った属性（`@fp(relaxed) pub @fp(relaxed) fn h`、§18.1）も同じ場所の属性に数える。重なった属性の引数は検査しない（`@fp(relaxed) @fp(fast) fn h` は重なりの E0005 で、値の誤りは報告しない）。
 付けられる場所の中での意味の条件と値の誤りは、各属性のコードで報告する（`@param`・`@host`・`@latency` は E0809。`sample` の入力の `@param` など。`@mem` は E0818。遅延でない `let` の `@mem` など）。`@repr` と `@fp` の値の誤り（`@repr(rust)`、`@fp(fast)`）と `@host` の種類の誤りは E0005 で、修正候補は一覧の値である。
 `@export` は引数を取らず、`@export(…)` は E0005 で、修正候補は `@export` である。
 一覧の値を取る属性（`@repr`・`@fp`・`@host`）と `@export` の括弧の中は、閉じた括弧の中のトークンによらず値として扱い、一覧の値でなければこの E0005 である（`@fp(1)`、`@fp(true)`、`@fp(f(x))`、`@export(1)` も同じ修正候補）。
