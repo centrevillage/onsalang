@@ -575,3 +575,24 @@ left = "this doc comment documents no declaration; `…` goes right before an it
 input = "tests/fuzz/2bbf2b4c.onsa"
 reasons = ["S-384", "S-236"]
 note = "an input with two errors: an `impl` with no type and an open `{` (`impl{`, E0002) before the attribute and the doc comment after it, so the doc comment moved before the attribute is still inside the broken `impl` and documents no declaration; from before (the base 222023b shows it), found after W5-24 U1a added cases"
+
+[[allowed]]
+class = "fix|E0020|drop the message: `…` takes none|E0002"
+left = "expected newline or `…`, found `…`"
+input = "tests/fuzz/2ce151e9.onsa"
+reasons = ["S-384", "S-236"]
+note = "an input with two errors: an `assert` with a comma and no message (`assert e,`, the row assert_message) and a stray `)` after it, which the input has before the candidate; found after W5-24 U2a added the row"
+
+[[allowed]]
+class = "fix|E0020|remove the space|E0002"
+left = "expected module path, found `…`"
+input = "tests/fuzz/1c541f69.onsa"
+reasons = ["S-384", "S-236"]
+note = "an input with two errors: a space after the `.` of a `use` path (`use p. `) and an unclosed `((` after it, which the input has before the candidate; from before (the base 81fefab shows it), found after W5-24 U1b and U2a added cases"
+
+[[allowed]]
+class = "fix|E0002|write the head without `…`|E0002"
+left = "a block whose members have a visibility of their own takes no visibility"
+input = "tests/fuzz/a2f2f543.onsa"
+reasons = ["S-384", "S-236"]
+note = "an input with two errors: `rt` and `pub` on the head of an `impl` (`rt pub impl P`), which the input has before the candidate; from before (the base 81fefab shows it), found after W5-24 U1b and U2a added cases"
