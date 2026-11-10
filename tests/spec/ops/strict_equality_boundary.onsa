@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§18.1"]
+
+// The comparisons that stay as they are (S-450): `==` and `!=` are the comparison, and `===`, `!==` inside a string, a
+// character or a comment are not tokens of the language (§2.1, §2.4), so they are no error. The tests check the
+// reading of each comparison by its operands.
+
+pub fn same(a: I32, b: I32) -> Bool {
+  a == b
+}
+
+pub fn differ(a: I32, b: I32) -> Bool {
+  a != b
+}
+
+pub fn in_a_chain(a: I32, b: I32, c: Bool) -> Bool {
+  a + 1 == b * 2 && c
+}
+
+// a === b and a !== b in a comment are text. The `a != b` after `a == b` also stays.
+pub fn is_equal_sign(c: Char) -> Bool {
+  c == '='
+}
+
+test "equal" {
+  assert same(1, 1)
+  assert !same(1, 2)
+}
+
+test "not equal" {
+  assert differ(1, 2)
+  assert !differ(2, 2)
+}
+
+test "the chain" {
+  assert in_a_chain(1, 1, true)
+  assert !in_a_chain(1, 2, true)
+  assert !in_a_chain(1, 1, false)
+}
+
+test "the text is a string" {
+  let s = "a === b and a !== b"
+  assert s == "a === b and a !== b"
+}

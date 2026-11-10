@@ -1,0 +1,11 @@
+pub fn positive(x: I32) {
+  assert(x > 0)   //~ E0020
+}
+
+pub fn small(x: I32) {
+  assert x < 10   //~ E0020
+}
+
+pub fn fine(x: I32) {
+  assert x != 0
+}

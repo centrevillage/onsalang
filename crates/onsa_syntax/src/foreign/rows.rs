@@ -2,6 +2,7 @@
 //! `spec/foreign-forms.toml`, the rows a later work makes (`WAITING`), and the
 //! rules (the notes) that several rows share.
 
+use super::asserts::{ASSERT_ROWS, assert_form};
 use super::assign::{binary_minus_prefix_minus, compound_assignment, increment};
 use super::calls::callee_expression;
 use super::comments::block_comment;
@@ -12,6 +13,7 @@ use super::decls::{
 use super::faust::{faust_bit_not, faust_compose, faust_delay, faust_feedback};
 use super::literals::{foreign_literal, leading_point, string_delimiter, tuple_index_zero};
 use super::modes::{mut_self, reference};
+use super::operators::{power_operator, strict_equality};
 use super::paths::{angle_brackets, path_separator, space_in_type_args_mark, type_args_call, type_position_path};
 use super::ranges::{range_dots, range_header_one_sided, range_outside_header};
 use super::semicolons::{semicolon, semicolon_in_list};
@@ -963,6 +965,42 @@ pub static ROWS: &[Row] = &[
         detect: Detect::Syntax,
     },
     Row {
+        id: RowId::StrictEquality,
+        name: "strict_equality",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "a comparison is written `==` or `!=`; there is no `===` or `!==`",
+        rule: "the comparisons are `==` and `!=`; a comparison converts no type, so there is no strict comparison `===` / `!==` (§3.1)",
+        detect: Detect::Syntax,
+    },
+    Row {
+        id: RowId::PowerOperator,
+        name: "power_operator",
+        phase: Phase::Syntax,
+        code: Code::E0002,
+        message: "there is no power operator `**`",
+        rule: "there is no power operator; a power of floats is `pow(x, y)` of `std.math` (§3.1)",
+        detect: Detect::Syntax,
+    },
+    Row {
+        id: RowId::AssertBang,
+        name: "assert_bang",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "`assert` is a statement, written `assert c`; `assert!(c)` reads as the negated condition `assert !(c)`",
+        rule: "`assert` is a statement whose condition is written without `!` (`assert x > 0`); `assert !(c)` asserts the negated condition (§7)",
+        detect: Detect::Syntax,
+    },
+    Row {
+        id: RowId::AssertMessage,
+        name: "assert_message",
+        phase: Phase::Syntax,
+        code: Code::E0020,
+        message: "`assert` takes no message; it is written `assert c`",
+        rule: "`assert` takes no message: the message of its failure is `assert <the source of the condition>` (§7, §18.1)",
+        detect: Detect::Syntax,
+    },
+    Row {
         id: RowId::StructPatternRest,
         name: "struct_pattern_rest",
         phase: Phase::Types,
@@ -1226,6 +1264,9 @@ pub static MATCHERS: &[Matcher] = &[
     Matcher::one(&[RowId::CalleeExpression], callee_expression),
     Matcher::one(&[RowId::SpaceAfterBranchKeyword], flow::space_after_branch_keyword),
     Matcher::one(&[RowId::ElseIfTilde], flow::else_if_tilde),
+    Matcher::one(&[RowId::StrictEquality], strict_equality),
+    Matcher::one(&[RowId::PowerOperator], power_operator),
+    Matcher::many(ASSERT_ROWS, assert_form),
 ];
 
 /// The matchers of the forms the parser reads whole ([`Detect::Read`]): the

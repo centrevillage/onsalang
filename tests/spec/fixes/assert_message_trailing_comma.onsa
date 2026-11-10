@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "15:3"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// E0020 for `assert!(c,)` (S-879, in the syntax stage): a `,` at depth 0 after the condition starts a message, here an
+// empty one, so it is the form with a message and its one candidate is `assert c`. The file has no diagnostic after it.
+
+pub fn positive(x: I32) {
+  assert!(x > 0,)                                   //~ E0020
+}

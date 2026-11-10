@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "17:3"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// E0020 for the `assert` of Python with a message, `assert e, "m"` (S-879, in the syntax stage). `assert` takes no message:
+// the message of a failure is `assert <the source of the expression>` (§18.1). The one candidate drops the message,
+// from the first `,` at depth 0 after the condition to the end of the form, so it leaves `assert e`; the file has no
+// diagnostic after it.
+
+pub fn positive(x: I32) {
+  assert x > 0, "positive"                          //~ E0020
+}

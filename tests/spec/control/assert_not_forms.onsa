@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// mode = "test"
+// canonical = false
+
+// The forms of `assert` that stay as they are (S-964, S-879): the row `assert_bang` is only `assert` followed by `!(` with no
+// space between, and a message is only a `,` at depth 0 after the condition. `assert !(c)` (a space), `assert!c` (no `(`) and
+// `if!c` are a prefix `!` on the condition, the negation, and so is the form of Python without a message
+// (`assert e`, `assert (e)`, `assert(e)`). The tests run them, so the reading is checked by the value too: each test passes
+// only if the condition is the negation of `c`, or the condition itself.
+
+test "assert with a space before the negated parenthesis" {
+  let c = false
+  assert !(c)
+}
+
+test "assert with a space and a comparison" {
+  let x = 0
+  assert !(x > 0)
+}
+
+test "assert and a negated name with no space" {
+  let c = false
+  assert!c
+}
+
+test "assert and a negated name with a space" {
+  let c = false
+  assert !c
+}
+
+test "if and a negated name with no space" {
+  let c = false
+  var r = 0
+  if!c {
+    r = 1
+  }
+  assert r == 1
+}
+
+test "if and a negated parenthesis with no space" {
+  let c = false
+  var r = 0
+  if!(c) {
+    r = 1
+  }
+  assert r == 1
+}
+
+test "assert of Python, with no message" {
+  let x = 1
+  assert x > 0
+  assert (x > 0)
+  assert(x > 0)
+}
+
+test "assert and a parenthesis that holds a comma inside a call" {
+  let x = 1
+  assert min2(x, 2) == 1
+  assert (min2(x, 2) == 1)
+}
+
+fn min2(a: I32, b: I32) -> I32 {
+  if a < b { a } else { b }
+}

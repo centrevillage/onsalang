@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 0
+
+// E0401 for `assert(e, m)` of Python (S-879): the `assert` of Python is a statement and `assert(e, m)` is the statement with a
+// tuple, a condition that is always true in Python. In Onsa `assert (e, m)` is `assert` with the condition `(e, m)`, a
+// tuple, and the condition must be `Bool` (§7), so it is a type error. It is not the form of a message (that one has no
+// `(` that holds the `,`), there is no candidate and the reading is the one that was before the row `assert_message`.
+
+pub fn tuple_of_a_condition_and_a_message(x: I32) {
+  assert(x > 0, "positive")                         //~ E0401
+}
+
+pub fn tuple_with_a_space(x: I32) {
+  assert (x > 0, "positive")                        //~ E0401
+}
+
+pub fn tuple_of_two_conditions(x: I32) {
+  assert(x > 0, x < 10)                             //~ E0401
+}
+
+pub fn tuple_of_a_condition_and_a_number(x: I32) {
+  assert(x > 0, 1)                                  //~ E0401
+}
+
+test "a tuple as the condition in a test" {
+  let x = 1
+  assert(x > 0, "positive")                         //~ E0401
+}

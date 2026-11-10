@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 2
+// [[test.fix]]
+// at = "21:3"
+// code = "E0020"
+// candidate = 1
+// clean = true
+// [[test.fix]]
+// at = "21:3"
+// code = "E0020"
+// candidate = 2
+// clean = true
+
+// E0020 for `assert!(a) && b` (S-964, in the syntax stage). The range of the form is `assert` to the `)` that closes `!(`, and
+// the tokens after it stay in both candidates: `assert(a) && b` and `assert !(a) && b`. The two candidates are still two (the
+// `&& b` does not add or remove one), and each leaves no diagnostic.
+
+pub fn both(a: Bool, b: Bool) {
+  assert!(a) && b                                   //~ E0020
+}

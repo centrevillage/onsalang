@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§15.1", "§18.1"]
+// fixes = 0
+
+// E0302 for `assert_eq!(a, b)` of Rust (S-879): it is not a form of the row `assert_message` (the name is not `assert`), so it
+// stays what it was: the name `assert_eq` is not defined (§15.1). There is no E0020 and no candidate. The same name rule
+// gives E0302 to the other macros of the same kind.
+
+pub fn equal(a: I32, b: I32) {
+  assert_eq!(a, b)                                  //~ E0302
+}
+
+pub fn not_equal(a: I32, b: I32) {
+  assert_ne!(a, b)                                  //~ E0302
+}
+
+pub fn equal_with_a_message(a: I32, b: I32) {
+  assert_eq!(a, b, "same")                          //~ E0302
+}
+
+test "assert_eq in a test" {
+  let x = 1
+  assert_eq!(x, 1)                                  //~ E0302
+}

@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§15.1", "§18.1"]
+// fixes = 2
+
+// S-964 and S-879 (§7, §18.1): the forms of `assert` of other languages are E0020 in each module of a package, and the
+// candidates are applied in each file. This module has `assert!(c)` (two candidates) and the form with a message (one),
+// and calls what util.onsa declares (which has both forms and a plain `assert`). One error per declaration unit.
+
+use util.positive
+use util.small
+use util.fine
+
+pub fn here(x: I32) {
+  assert!(x > 0)   //~ E0020
+  positive(x)
+  small(x)
+  fine(x)
+}
+
+pub fn here_with_a_message(x: I32) {
+  assert!(x < 10, "small")   //~ E0020
+}
+
+pub fn here_plain(x: I32) {
+  assert x > 0
+}

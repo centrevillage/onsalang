@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "16:5"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// E0020 for `a === b` (JavaScript, TypeScript, S-450): the one candidate is `a == b`, and the file has no
+// diagnostic after it. Onsa converts no type in a comparison, so `==` is the strict comparison of the other
+// languages and the value of the program does not change.
+
+pub fn same(a: I32, b: I32) -> Bool {
+  a == b                                           //~ E0020
+}

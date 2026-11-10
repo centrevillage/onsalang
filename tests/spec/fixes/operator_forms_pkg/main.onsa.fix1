@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§15.1", "§18.1"]
+// fixes = 1
+
+// S-450 (§3.1, §18.1): `===` and `!==` are E0020 with one candidate, and `**` is E0002 with none, in each module of a
+// package; the candidates are applied in each file. This module has the two forms and calls what util.onsa declares (which
+// has `!==` and `**` too). One error per declaration unit.
+
+use util.differ
+use util.fine
+use util.square
+
+pub fn here(a: I32, b: I32) -> Bool {
+  a == b   //~ E0020
+}
+
+pub fn here_power(a: I32) -> I32 {
+  a ** 3   //~ E0002
+}
+
+pub fn here_fine(a: I32, b: I32) -> Bool {
+  differ(a, b) && fine(a, b) && square(a) == a
+}

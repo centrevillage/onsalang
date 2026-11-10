@@ -276,6 +276,65 @@ pub fn f(p: P) -> I32 {
 }
 ''']
 
+# ---- 比較とべき乗（S-450、R1）。「文と項目の区切り」の節の後ろか、新しい節「演算子」に置く --------------------
+
+# JS と TS の厳密な比較。Onsa の `==` は型を変換しないので、`===` の読みは `==` と同じ（Swift の `===` は
+# クラスの参照の同一性で、Onsa に参照の値は無いので、その文脈は生じない）。
+[[form]]
+id = "strict_equality"
+kind = "foreign"
+origin = "JavaScript と TypeScript"
+stage = "syntax"
+code = "E0020"
+spec = ["3.1", "18.1"]
+rule = "比較は `==`・`!=` と書く。型を変換する比較は無いので、厳密な比較の `===`・`!==` も無い"
+
+[[form.example]]
+source = '''
+pub fn f(a: I32, b: I32) -> Bool {
+  a === b
+}
+'''
+at = "2:5"
+fixed = ['''
+pub fn f(a: I32, b: I32) -> Bool {
+  a == b
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(a: I32, b: I32) -> Bool {
+  a !== b
+}
+'''
+at = "2:5"
+fixed = ['''
+pub fn f(a: I32, b: I32) -> Bool {
+  a != b
+}
+''']
+
+# Python と JS のべき乗。C と Rust では `a ** b` が `a * (*b)` と読め、読みが割れる。Onsa の演算子で意味を
+# 一つに決める候補は無い（`pow` は浮動小数だけの関数で、意味の近似、rules/criteria.md 7.33）。一般の文面
+# 「expected newline or `}`, found `**`」は行の終わりを指して書き手を誤らせるので、E0002 の行にする。
+[[form]]
+id = "power_operator"
+kind = "foreign"
+origin = "Python と JavaScript"
+stage = "syntax"
+code = "E0002"
+spec = ["3.1", "18.1"]
+rule = "べき乗の演算子は無い。浮動小数のべき乗は `std.math` の `pow` で書く"
+
+[[form.example]]
+source = '''
+pub fn f(a: I32, b: I32) -> I32 {
+  a ** b
+}
+'''
+at = "2:5"
+
 # ---- 経路、型引数、参照、型の名前 ------------------------------------------------------------------
 
 [[form]]
@@ -7237,6 +7296,123 @@ pub fn f() -> I32 {
   g(0..<4)
 }
 '''
+
+# ---- `assert`（§7、S-964・S-879、R1）。新しい節 --------------------------------------------------------------
+
+# Rust の `assert!(c)`。`assert` の直後に空白なしで `!(` が続く形だけ。`assert !(c)`（否定した条件）とも読めるので、
+# 候補は `!` を除く形と、空白を置いた `assert !(c)` の二つ（§2.5 の `if ~c` の先例）。空白のある `assert !(c)`、
+# `assert!c`、`if!c` はこの行に当たらない（前置の `!`）。形の範囲は `assert` から `!(` に対応する `)` までで、後ろの
+# トークンは候補に残す（`assert!(a) && b` は `assert(a) && b` と `assert !(a) && b`）。
+[[form]]
+id = "assert_bang"
+kind = "foreign"
+origin = "Rust"
+stage = "syntax"
+code = "E0020"
+spec = ["7", "18.1"]
+rule = "`assert` は文で、条件を `!` を付けずに書く（`assert x > 0`）。`assert !(c)` は条件の否定である"
+
+[[form.example]]
+source = '''
+pub fn f(x: I32) {
+  assert!(x > 0)
+}
+'''
+at = "2:3"
+fixed = ['''
+pub fn f(x: I32) {
+  assert(x > 0)
+}
+''', '''
+pub fn f(x: I32) {
+  assert !(x > 0)
+}
+''']
+
+[[form.example]]
+source = '''
+test "t" {
+  assert!(1 < 2)
+}
+'''
+at = "2:3"
+fixed = ['''
+test "t" {
+  assert(1 < 2)
+}
+''', '''
+test "t" {
+  assert !(1 < 2)
+}
+''']
+
+# 文面を付けた `assert`（Python の `assert e, "m"` と Rust の `assert!(e, "m")`）。候補は文面を落とした
+# `assert e` の一つ（文面は失われるが、`1u8` を `1` にするのと同じく値と検査は変わらない）。Rust の形は
+# `assert_bang` より広い一つの形で、候補は一つ。文面は条件の後の最初の深さ 0 の `,` から形の終わりまでで、Rust の
+# 書式の引数（`"x = {}", x`）も含めて全て落とす。
+[[form]]
+id = "assert_message"
+kind = "foreign"
+origin = "Python と Rust"
+stage = "syntax"
+code = "E0020"
+spec = ["7", "18.1"]
+rule = "`assert` は文面を取らない。失敗の文面は `assert <式のソース>` である（§18.1）"
+
+[[form.example]]
+source = '''
+pub fn f(x: I32) {
+  assert x > 0, "positive"
+}
+'''
+at = "2:3"
+fixed = ['''
+pub fn f(x: I32) {
+  assert x > 0
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(x: I32) {
+  assert!(x > 0, "positive")
+}
+'''
+at = "2:3"
+fixed = ['''
+pub fn f(x: I32) {
+  assert x > 0
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(x: I32) {
+  assert!(x > 0, "x = {}", x)
+}
+'''
+at = "2:3"
+fixed = ['''
+pub fn f(x: I32) {
+  assert x > 0
+}
+''']
+
+[[form.example]]
+source = '''
+pub fn f(x: I32) {
+  assert!(
+    x > 0,
+    "positive",
+  )
+}
+'''
+at = "2:3"
+fixed = ['''
+pub fn f(x: I32) {
+  assert x > 0
+}
+''']
 
 # ---- 式の中の型引数（§4.5）。書き方は `名前::[…]`。他言語の形は `::[…]` への構文上の編集を候補にする ----
 #

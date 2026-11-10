@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§18.1"]
+// fixes = 0
+
+// `**` where no expression is (S-450): after a type, the row `power_operator` (an operator of an expression) is not the
+// form, and the failure is the general E0002 of the parser, as before the row. One error for each unit.
+
+pub fn parameter_type(x: I32 ** y) {}                //~ E0002
+
+pub fn let_type() {
+  let x: I32 ** = 1                                 //~ E0002
+}
+
+pub struct Field {
+  a: I32 **                                         //~ E0002
+}

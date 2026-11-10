@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 2
+// [[test.fix]]
+// at = "22:3"
+// code = "E0020"
+// candidate = 1
+// clean = true
+// [[test.fix]]
+// at = "22:3"
+// code = "E0020"
+// candidate = 2
+// clean = true
+
+// E0020 for the `assert!(c)` of Rust (S-964, in the syntax stage). `assert` followed by `!(` with no space is read as the
+// negated condition `assert !(c)`, which means the opposite of Rust, so it is an error, and there are two candidates because
+// the intent is not one: `assert(c)` (the `!` removed, the intent of Rust) and `assert !(c)` (a space, the negation as it was
+// read). Each of them leaves no diagnostic.
+
+pub fn positive(x: I32) {
+  assert(x > 0)                                    //~ E0020
+}

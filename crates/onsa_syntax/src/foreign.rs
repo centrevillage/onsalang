@@ -70,7 +70,8 @@
 //! `mut self`), `decls` (`let mut`, `loop`, `proc`, `#[…]`, `pub(crate)`),
 //! `literals` (the number literals, the string delimiters), `faust` (the
 //! forms of FAUST, the prefix `~` of C), `comments` (the block comments), `assign` (`+=`, `++`),
-//! `ranges` (the range symbols out of place), `guard` (the patterns written
+//! `ranges` (the range symbols out of place), `operators` (`===`, `**`),
+//! `asserts` (the `assert` of Rust and Python), `guard` (the patterns written
 //! as guards), `flow` (`if~`, the clocks) and `spaces` (the blanks inside a
 //! line, a literal against a name).
 //!
@@ -606,6 +607,10 @@ pub enum RowId {
     ClockOnBinding,
     ClockInType,
     RateAsType,
+    StrictEquality,
+    PowerOperator,
+    AssertBang,
+    AssertMessage,
 }
 }
 
@@ -1048,6 +1053,7 @@ fn closed_expr(c: &Cursor) -> Option<(NodeKind, u32)> {
 
 // ------------------------------------------------------------ the rows by their families
 
+mod asserts;
 mod assign;
 mod calls;
 mod comments;
@@ -1059,6 +1065,7 @@ mod lines;
 mod lists;
 mod literals;
 mod modes;
+mod operators;
 mod paths;
 mod ranges;
 mod rows;
@@ -1070,6 +1077,7 @@ pub const CALL_WITH_DOT: &str = "call the function value with `.(`";
 /// stage.
 pub const TYPE_ARGS_WITH_COLONS: &str = "write the type arguments as `::[…]`";
 
+pub(crate) use asserts::rust_assert;
 pub use guard::guard_name;
 use guard::guard_pattern;
 

@@ -1,0 +1,170 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+
+// E0020 for the `assert` with a message of Python and Rust (S-879, in the syntax stage). The message is everything from the
+// first `,` at depth 0 after the condition to the end of the form, and the one candidate drops it (`assert e`). A `,` that
+// is inside a bracket of any kind (`(`, `[`, `{`) or inside a string or a character is not at depth 0, so a condition with
+// commas in it keeps them. Each function holds one form (one error per unit).
+
+use std.array
+
+pub struct Pt {
+  x: I32,
+}
+
+pub fn both(a: I32, b: I32) -> Bool {
+  a == b
+}
+
+pub fn add(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+// ---------------------------------------------------------------- the condition holds a comma
+
+pub fn python_call_in_the_condition(a: I32, b: I32) {
+  assert both(a, b), "equal"                        //~ E0020
+}
+
+pub fn rust_call_in_the_condition(a: I32, b: I32) {
+  assert!(both(a, b), "equal")                      //~ E0020
+}
+
+pub fn python_tuple_in_the_condition(a: I32, b: I32) {
+  assert (a, b) == (1, 2), "pair"                   //~ E0020
+}
+
+pub fn rust_tuple_in_the_condition(a: I32, b: I32) {
+  assert!((a, b) == (1, 2), "pair")                 //~ E0020
+}
+
+pub fn python_array_in_the_condition(a: I32, b: I32) {
+  assert [a, b] == [1, 2], "array"                  //~ E0020
+}
+
+pub fn rust_array_in_the_condition(a: I32, b: I32) {
+  assert!([a, b] == [1, 2], "array")                //~ E0020
+}
+
+pub fn python_comma_in_a_string(s: Str) {
+  assert s == "a,b", "text"                         //~ E0020
+}
+
+pub fn rust_comma_in_a_string(s: Str) {
+  assert!(s == "a,b", "text")                       //~ E0020
+}
+
+pub fn python_comma_in_a_character(c: Char) {
+  assert c == ',', "comma"                          //~ E0020
+}
+
+pub fn rust_comma_in_a_character(c: Char) {
+  assert!(c == ',', "comma")                        //~ E0020
+}
+
+pub fn python_nested_calls(a: I32, b: I32) {
+  assert both(add(a, b), add(b, a)), "nested"     //~ E0020
+}
+
+// ---------------------------------------------------------------- the message
+
+pub fn python_message_is_a_name(x: I32, m: Str) {
+  assert x > 0, m                                   //~ E0020
+}
+
+pub fn rust_message_is_a_name(x: I32, m: Str) {
+  assert!(x > 0, m)                                 //~ E0020
+}
+
+pub fn python_message_with_a_comma(x: I32) {
+  assert x > 0, "a, b)"                             //~ E0020
+}
+
+pub fn rust_message_with_a_comma(x: I32) {
+  assert!(x > 0, "a, b)")                           //~ E0020
+}
+
+pub fn python_message_with_a_hole(x: I32) {
+  assert x > 0, "x = {x}"                           //~ E0020
+}
+
+pub fn rust_message_with_arguments(x: I32, y: I32) {
+  assert!(x > 0, "x = {x}, y = {y}", x, y)          //~ E0020
+}
+
+pub fn python_message_in_parentheses(x: I32) {
+  assert x > 0, ("positive")                        //~ E0020
+}
+
+pub fn python_message_over_lines(x: I32) {
+  assert x > 0, (                                   //~ E0020
+    "positive"
+  )
+}
+
+pub fn rust_over_lines(x: I32) {
+  assert!(                                          //~ E0020
+    x > 0,
+    "positive",
+  )
+}
+
+pub fn rust_condition_over_lines(a: I32, b: I32) {
+  assert!(a > 0 &&                                  //~ E0020
+    b > 0, "both")
+}
+
+// ---------------------------------------------------------------- the place of the statement
+
+pub fn in_a_branch(x: I32) {
+  if x > 0 {
+    assert x < 10, "small"                          //~ E0020
+  }
+}
+
+pub fn in_a_loop(n: U32) {
+  for i in 0 ..< n {
+    assert!(i < 100, "bound")                       //~ E0020
+  }
+}
+
+pub fn in_an_arm(o: Option[I32]) {
+  match o {
+    Some(x) => {
+      assert x > 0, "positive"                      //~ E0020
+    },
+    None => {},
+  }
+}
+
+pub fn in_a_closure() -> [Bool; 2] {
+  array.from_fn(fn(i) {
+    assert i < 2, "index"                           //~ E0020
+    true
+  })
+}
+
+pub fn generic[T: Eq](a: T, b: T) {
+  assert!(a == b, "same")                           //~ E0020
+}
+
+pub rt fn in_an_rt_function(x: I32) {
+  assert x > 0, "positive"                          //~ E0020
+}
+
+impl Pt {
+  pub fn check(self) {
+    assert self.x > 0, "positive"                   //~ E0020
+  }
+}
+
+test "a message in a test" {
+  let x = 1
+  assert x > 0, "positive"                          //~ E0020
+}
+
+test "a message of Rust in a test" {
+  let x = 1
+  assert!(x > 0, "positive")                        //~ E0020
+}

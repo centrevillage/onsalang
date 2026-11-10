@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 0
+
+// The `assert!(c, m)` of Rust (S-879) whose candidate `assert c` would leave an error of the syntax stage: a line break
+// in the condition that does not go on once the parentheses are gone (a `&&` at the head of the next line, here after
+// the comment of the marker), and an empty condition. No candidate keeps the contract of §18.1 there, so the row is the
+// E0002 with its note and `fixes = 0`. One form for each function (one error per unit).
+
+pub fn leading_operator(a: Bool, b: Bool) {
+  assert!(a                                         //~ E0002
+    && b, "both")
+}
+
+pub fn no_condition() {
+  assert!(, "nothing")                              //~ E0002
+}

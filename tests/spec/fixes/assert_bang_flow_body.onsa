@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§11.2", "§18.1"]
+
+// E0020 for `assert!(c)` in the body of a flow (S-964). `assert` is not allowed in a flow body (E0806, §7, §11.2), but E0806 is
+// a diagnostic of a later stage than the syntax (§18.1): a unit with an error of the syntax stage is not checked for the
+// names of its body, so the one error of the flow is the E0020 of the form, as it is in a `fn`. The candidates are the
+// same two; what is left after them is the E0806 of the later stage. The last flow has the space (`assert !(c)`), which is
+// not the form, so its error is the E0806 only.
+
+pub flow gate(x: F32 at sample) -> F32 at sample {
+  assert!(x > 0.0)                                  //~ E0020
+  x
+}
+
+pub flow gate_with_a_tail(x: F32 at sample) -> F32 at sample {
+  let y = x * 2.0
+  assert!(y > 0.0) && true                          //~ E0020
+  y
+}
+
+pub flow gate_negated(x: F32 at sample) -> F32 at sample {
+  assert !(x > 0.0)                                 //~ E0806
+  x
+}

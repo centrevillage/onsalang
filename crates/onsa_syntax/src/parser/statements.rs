@@ -199,7 +199,14 @@ impl<'a> Parser<'a> {
             }
             TokenKind::KwAssert => {
                 let m = self.start(NodeKind::AssertStmt)?;
+                let kw = self.peek_index();
                 self.bump();
+                // Rust's `assert!(` is no negated condition (§7, S-964): the
+                // table names the form at its `!`.
+                let brackets = crate::scan::Brackets::of(&self.brackets, &self.tokens);
+                if foreign::rust_assert(&self.tokens, &self.lines, brackets, kw).is_some() {
+                    return Err(self.fail(Want::Expr, "the condition of `assert`"));
+                }
                 self.parse_expr()?;
                 Ok(self.complete(m, NodeKind::AssertStmt))
             }

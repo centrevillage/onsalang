@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "18:3"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// E0020 for `assert!(x > 0, "x = {x}", x)` of Rust with the arguments of a format (S-879, in the syntax stage). The message is
+// everything from the first `,` at depth 0 after the condition to the end of the form, so the arguments of the format
+// (`"x = {x}", x`) go with the string and the one candidate is `assert x > 0`. The file has no diagnostic after it.
+// The hole is `{x}` (a name path, §2.4): the `{}` of Rust is an empty hole of the string, which the spec does not read as
+// part of this form (a gap, reported with the case).
+
+pub fn positive(x: I32) {
+  assert!(x > 0, "x = {x}", x)                      //~ E0020
+}

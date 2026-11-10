@@ -1,0 +1,84 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§18.1"]
+// fixes = 0
+
+// E0002 for `**` (Python, JavaScript, S-450): Onsa has no exponent operator, and no operator of Onsa has the meaning (`pow`
+// is a function of floats only, so it is an approximation of the meaning, and a form of a row has an E0020 candidate
+// only when the candidate means the same, §18.1). In C and Rust `a ** b` reads as `a * (*b)`, so the reading is not
+// one in every language either. The row `power_operator` is an E0002 with a note (the exponent of floats is `pow` of
+// `std.math`), and `fixes = 0` says there is no candidate. One `**` for each function (one error per unit); the file
+// puts the operator in the places an expression can be.
+
+pub fn tail(a: I32, b: I32) -> I32 {
+  a ** b                                            //~ E0002
+}
+
+pub fn let_rhs(a: I32, b: I32) -> I32 {
+  let r = a ** b                                    //~ E0002
+  r
+}
+
+pub fn literals() -> I32 {
+  2 ** 8                                            //~ E0002
+}
+
+pub fn floats(x: F32) -> F32 {
+  x ** 2.0                                          //~ E0002
+}
+
+pub fn if_condition(a: I32, b: I32) -> I32 {
+  if a ** b > 0 {                                   //~ E0002
+    1
+  } else {
+    0
+  }
+}
+
+pub fn argument(a: I32, b: I32) -> I32 {
+  max2(a ** b, 0)                                   //~ E0002
+}
+
+pub fn max2(a: I32, b: I32) -> I32 {
+  if a > b { a } else { b }
+}
+
+pub fn return_value(a: I32, b: I32) -> I32 {
+  return a ** b                                     //~ E0002
+}
+
+pub fn parenthesis(a: I32, b: I32) -> I32 {
+  (a ** b)                                          //~ E0002
+}
+
+pub fn in_a_sum(a: I32, b: I32, c: I32) -> I32 {
+  a + b ** c                                        //~ E0002
+}
+
+pub fn under_a_minus(a: I32, b: I32) -> I32 {
+  -a ** b                                           //~ E0002
+}
+
+pub fn no_spaces(a: I32, b: I32) -> I32 {
+  a**b                                              //~ E0002
+}
+
+pub fn assignment(a: I32) -> I32 {
+  var r = 1
+  r = a ** 2                                        //~ E0002
+  r
+}
+
+pub fn closure_body() -> I32 {
+  let f = fn(x: I32) -> I32 { x ** 2 }              //~ E0002
+  f.(3)
+}
+
+pub fn generic_operands[T: Num](a: T, b: T) -> T {
+  a ** b                                            //~ E0002
+}
+
+test "the power in a test" {
+  let a = 2
+  assert a ** 2 == 4                                //~ E0002
+}

@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "16:3"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// E0020 for `assert!(` over several lines (S-879, in the syntax stage). A form over several lines is one form: the lines of
+// the condition, the message and the trailing `,` are inside the `(` ... `)` of `!(`, so the error is one and the one
+// candidate drops the message and the lines of it. The file has no diagnostic after it.
+
+pub fn positive(x: I32) {
+  assert!(                                          //~ E0020
+    x > 0,
+    "positive",
+  )
+}

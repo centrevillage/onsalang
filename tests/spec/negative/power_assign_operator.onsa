@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§18.1"]
+// fixes = 0
+
+// E0002 for `**=` (Python, JavaScript, S-450): `**=` is the compound assignment of `**`, so it is the same row
+// `power_operator` as `**`: an E0002 with no candidate. One `**=` for each function (one error per unit).
+
+pub fn assign(a: I32) -> I32 {
+  var r = a
+  r **= 2                                           //~ E0002
+  r
+}
+
+pub fn assign_float(x: F32) -> F32 {
+  var r = x
+  r **= 2.0                                         //~ E0002
+  r
+}
+
+pub fn assign_to_a_field(p: (I32, I32)) -> I32 {
+  var q = p
+  q.0 **= 2                                         //~ E0002
+  q.0
+}
+
+pub fn in_a_loop(n: U32) -> I32 {
+  var r = 2
+  for _ in 0 ..< n {
+    r **= 2                                         //~ E0002
+  }
+  r
+}
+
+pub fn in_a_branch(a: I32, c: Bool) -> I32 {
+  var r = a
+  if c {
+    r **= 3                                         //~ E0002
+  }
+  r
+}
+
+test "the power assignment in a test" {
+  var r = 3
+  r **= 2                                           //~ E0002
+  assert r == 9
+}

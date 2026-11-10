@@ -1192,3 +1192,42 @@ fn the_patterns_of_a_file_without_failures_make_no_table() {
     let (_, _, made, diagnostics) = read_for(form, 50);
     assert_eq!((made, diagnostics), (0, 0));
 }
+
+/// The rows of `===` and `**` are in the place of a binary operator of an
+/// expression only (S-450): after a type, a pattern or the path of a `use`
+/// the failure is the general E0002 of the parser.
+#[test]
+fn the_operators_of_other_languages_are_rows_in_expressions_only() {
+    let message = |src: &str| parse(src).diagnostics.first().map(|d| d.message.clone()).unwrap_or_default();
+    for src in [
+        "fn g(x: I32 ** y) {}\n",
+        "fn f() {\n  let x: I32 ** = 1\n}\n",
+        "struct S {\n  a: I32 **\n}\n",
+        "fn f() -> I32 ** {\n  1\n}\n",
+        "use std.math **\n",
+        "fn f(x: I32) -> I32 {\n  match x {\n    1 ** 2 => 1,\n    _ => 0,\n  }\n}\n",
+        "fn g(x: I32 === y) {}\n",
+    ] {
+        assert!(message(src).starts_with("expected "), "{src}: {:?}", parse(src).diagnostics);
+    }
+    assert_eq!(message(&body("  a ** b")), "there is no power operator `**`");
+}
+
+/// The candidate `==` of `===` is made only where the operand after it ends
+/// at a token the table knows (S-450): a struct literal after it is not read.
+#[test]
+fn a_strict_equality_before_a_struct_literal_has_no_candidate() {
+    e0002(&body("  a === P { x: 1 }.x < c"));
+    e0020(&body("  a === b"), &body("  a == b"));
+    e0020("fn f() {\n  while a !== b {\n  }\n}\n", "fn f() {\n  while a != b {\n  }\n}\n");
+}
+
+/// A bracket of the message of `assert c, m` that does not close ends the
+/// form, with no candidate (§18.1): the statements after it stay out.
+#[test]
+fn an_unclosed_bracket_in_a_message_ends_the_form() {
+    let src = body("  assert c, g(1\n  assert c");
+    e0002(&src);
+    let d = &parse(&src).diagnostics[0];
+    assert_eq!(&src[d.span.start as usize..d.span.end as usize], "assert c, g(", "{d:?}");
+}

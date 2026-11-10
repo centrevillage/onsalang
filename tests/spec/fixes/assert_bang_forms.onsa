@@ -1,0 +1,144 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+
+// E0020 for the `assert!(c)` of Rust (S-964, in the syntax stage): `assert` followed by `!(` with no space. The range of the
+// form is `assert` to the `)` that closes `!(`, so the parentheses inside the condition (a call, a nested group) do not end
+// it early, and the tokens after it are not part of it. Each function holds one form (one error per unit); the file puts
+// the form in the places a statement can be, and in a condition that is long, nested or over several lines.
+
+use std.array
+
+pub struct Pt {
+  x: I32,
+}
+
+pub fn both(a: I32, b: I32) -> Bool {
+  a == b
+}
+
+// ---------------------------------------------------------------- the condition
+
+pub fn comparison(x: I32) {
+  assert!(x > 0)                                    //~ E0020
+}
+
+pub fn a_name(c: Bool) {
+  assert!(c)                                        //~ E0020
+}
+
+pub fn a_call(a: I32, b: I32) {
+  assert!(both(a, b))                               //~ E0020
+}
+
+pub fn nested_groups(a: Bool, b: Bool, c: Bool) {
+  assert!((a && b) || c)                            //~ E0020
+}
+
+pub fn nested_calls(a: I32, b: I32) {
+  assert!(both(a, b) && (a != 0))                   //~ E0020
+}
+
+pub fn negated_inside(c: Bool) {
+  assert!(!c)                                       //~ E0020
+}
+
+pub fn a_string_with_a_parenthesis(s: Str) {
+  assert!(s == ")")                                 //~ E0020
+}
+
+pub fn a_character_with_a_parenthesis(c: Char) {
+  assert!(c == ')')                                 //~ E0020
+}
+
+pub fn over_lines(a: Bool, b: Bool) {
+  assert!(a &&                                      //~ E0020
+    b)
+}
+
+// ---------------------------------------------------------------- the tokens after the form
+
+pub fn and_after(a: Bool, b: Bool) {
+  assert!(a) && b                                   //~ E0020
+}
+
+pub fn or_after(a: Bool, b: Bool) {
+  assert!(a) || b                                   //~ E0020
+}
+
+pub fn comparison_after(a: I32, b: I32) {
+  assert!(a > 0) == (b > 0)                         //~ E0020
+}
+
+pub fn a_comment_after(c: Bool) {
+  assert!(c) // the condition                       //~ E0020
+}
+
+// ---------------------------------------------------------------- the place of the statement
+
+pub fn in_a_branch(x: I32) {
+  if x > 0 {
+    assert!(x < 10)                                 //~ E0020
+  }
+}
+
+pub fn in_an_else_branch(x: I32) {
+  if x > 0 {
+    assert x < 10
+  } else {
+    assert!(x > -10)                                //~ E0020
+  }
+}
+
+pub fn in_a_loop(n: U32) {
+  for i in 0 ..< n {
+    assert!(i < 100)                                //~ E0020
+  }
+}
+
+pub fn in_a_while(n: U32) {
+  var i = 0
+  while i < n {
+    assert!(i < 100)                                //~ E0020
+    i = i + 1
+  }
+}
+
+pub fn in_an_arm(o: Option[I32]) {
+  match o {
+    Some(x) => {
+      assert!(x > 0)                                //~ E0020
+    },
+    None => {},
+  }
+}
+
+pub fn in_a_closure() -> [Bool; 2] {
+  array.from_fn(fn(i) {
+    assert!(i < 2)                                  //~ E0020
+    true
+  })
+}
+
+pub fn generic[T: Eq](a: T, b: T) {
+  assert!(a == b)                                   //~ E0020
+}
+
+pub rt fn in_an_rt_function(x: I32) {
+  assert!(x > 0)                                    //~ E0020
+}
+
+impl Pt {
+  pub fn check(self) {
+    assert!(self.x > 0)                             //~ E0020
+  }
+}
+
+test "assert! in a test" {
+  assert!(1 < 2)                                    //~ E0020
+}
+
+test "assert! in a test with a binding" {
+  let x = 1
+  assert!(x > 0)                                    //~ E0020
+}

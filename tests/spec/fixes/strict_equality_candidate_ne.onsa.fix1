@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "15:5"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// E0020 for `a !== b` (JavaScript, TypeScript, S-450): the one candidate is `a != b`, and the file has no
+// diagnostic after it.
+
+pub fn differ(a: I32, b: I32) -> Bool {
+  a != b                                           //~ E0020
+}

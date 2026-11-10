@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§18.1"]
+// fixes = 0
+
+// The edge of the row `power_operator` (S-450). Only the one token `**` (and `**=`) is the row. Two `*` that a space
+// divides are two tokens (§2.5), and Onsa has no prefix `*`, so `a * *b` is the general E0002 of an expression that does
+// not start: its reading does not change. A `**` inside a string, a character or a comment is text. The products that
+// stay valid are in the same file.
+
+pub fn product(a: I32, b: I32) -> I32 {
+  a * b
+}
+
+pub fn product_tight(a: I32, b: I32) -> I32 {
+  a*b
+}
+
+pub fn product_of_a_negative(a: I32, b: I32) -> I32 {
+  a * -b
+}
+
+pub fn wrapping_product(a: U8, b: U8) -> U8 {
+  a *% b
+}
+
+pub fn saturating_product(a: U8, b: U8) -> U8 {
+  a *| b
+}
+
+// a ** b in a comment is text.
+pub fn star(c: Char) -> Bool {
+  c == '*'
+}
+
+test "a power sign in a string" {
+  let s = "a ** b"
+  assert s == "a ** b"
+}
+
+pub fn two_stars_with_a_space(a: I32, b: I32) -> I32 {
+  a * *b                                            //~ E0002
+}
+
+pub fn two_stars_with_a_space_in_a_sum(a: I32, b: I32) -> I32 {
+  a + b * *a                                        //~ E0002
+}
+
+pub fn two_stars_as_an_argument(a: I32, b: I32) -> I32 {
+  product(a * *b, b)                                //~ E0002
+}

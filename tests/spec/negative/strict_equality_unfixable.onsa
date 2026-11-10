@@ -1,0 +1,42 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§18.1"]
+// fixes = 0
+
+// `===` and `!==` (S-450) where `==` / `!=` in their place would leave an error of the syntax stage in the chain around
+// them: another comparison (`==` cannot be chained, E0010), a bitwise operator (no strength against the comparisons,
+// E0010), an `as` (E0011), a block-like operand, or an operand after it whose end the reading of the tokens does not
+// know (a struct literal, after which the chain goes on). No candidate keeps the contract of §18.1 there, so the row is the
+// E0002 with its note and `fixes = 0`. One form for each function (one error per unit).
+
+pub struct P {
+  x: I32,
+}
+
+pub fn comparison_before(a: I32, b: I32, c: Bool) -> Bool {
+  a < b === c                                       //~ E0002
+}
+
+pub fn comparison_after(a: Bool, b: I32, c: I32) -> Bool {
+  a !== b < c                                       //~ E0002
+}
+
+pub fn bitwise_before(a: I32) -> Bool {
+  a & 1 === 0                                       //~ E0002
+}
+
+pub fn cast_after(a: I32, b: I16) -> Bool {
+  a === b as I32                                    //~ E0002
+}
+
+pub fn if_after(a: I32, c: Bool) -> Bool {
+  a === if c { 1 } else { 2 }                       //~ E0002
+}
+
+pub fn struct_literal_after(a: I32, c: I32) -> Bool {
+  a === P { x: 1 }.x < c                            //~ E0002
+}
+
+pub fn struct_literal_after_ne(a: I32, c: I32) -> Bool {
+  a !== P { x: 1 }.x as I32                         //~ E0002
+}

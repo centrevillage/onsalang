@@ -1,0 +1,147 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§18.1"]
+
+// E0020 for `===` and `!==` (JavaScript, TypeScript) in the syntax stage (§3.1, §18.1, S-450). A comparison is
+// written `==` and `!=`: Onsa converts no type, so there is no strict comparison, and the reading of `===` is the
+// one of `==`. The candidates are `==` and `!=` (one for each form). Each function holds one form (one error per
+// unit); the file puts the form in the places an expression can be: the right side of a `let`, the condition of
+// `if` and `while`, an argument, a `return`, a parenthesis, an operand of a chain of binary operators, the
+// element of a tuple, the guard of an arm, a closure, a flow body, a test, a generic function and a method.
+
+use std.array
+
+pub struct Pt {
+  x: I32,
+}
+
+pub fn not_it(b: Bool) -> Bool {
+  !b
+}
+
+// ---------------------------------------------------------------- the two spellings
+
+pub fn strict_eq(a: I32, b: I32) -> Bool {
+  a === b                                           //~ E0020
+}
+
+pub fn strict_ne(a: I32, b: I32) -> Bool {
+  a !== b                                           //~ E0020
+}
+
+// ---------------------------------------------------------------- the place of the form
+
+pub fn let_rhs(a: I32, b: I32) -> Bool {
+  let r = a === b                                   //~ E0020
+  r
+}
+
+pub fn let_rhs_ne(a: I32, b: I32) -> Bool {
+  let r = a !== b                                   //~ E0020
+  r
+}
+
+pub fn if_condition(a: I32, b: I32) -> I32 {
+  if a === b {                                      //~ E0020
+    1
+  } else {
+    0
+  }
+}
+
+pub fn if_condition_ne(a: I32, b: I32) -> I32 {
+  if a !== b {                                      //~ E0020
+    1
+  } else {
+    0
+  }
+}
+
+pub fn while_condition(n: I32) -> I32 {
+  var i = 0
+  while i !== n {                                   //~ E0020
+    i = i + 1
+  }
+  i
+}
+
+pub fn argument(a: I32, b: I32) -> Bool {
+  not_it(a === b)                                   //~ E0020
+}
+
+pub fn return_value(a: I32, b: I32) -> Bool {
+  return a === b                                    //~ E0020
+}
+
+pub fn parenthesis(a: I32, b: I32) -> Bool {
+  (a !== b)                                         //~ E0020
+}
+
+pub fn under_a_prefix(a: I32, b: I32) -> Bool {
+  !(a === b)                                        //~ E0020
+}
+
+pub fn tuple_element(a: I32, b: I32) -> (Bool, I32) {
+  (a === b, a)                                      //~ E0020
+}
+
+pub fn match_guard(n: I32, m: I32) -> I32 {
+  match n {
+    k if k === m => 1,                              //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn closure_body() -> [Bool; 4] {
+  array.from_fn(fn(i) { i === 2 })                  //~ E0020
+}
+
+pub fn generic_operands[T: Eq](a: T, b: T) -> Bool {
+  a === b                                           //~ E0020
+}
+
+pub fn fields(p: Pt, q: Pt) -> Bool {
+  p.x !== q.x                                       //~ E0020
+}
+
+impl Pt {
+  pub fn same(self, other: Pt) -> Bool {
+    self.x === other.x                              //~ E0020
+  }
+}
+
+pub flow gate(x: F32 at sample) -> F32 at sample {
+  let open = x !== 0.0                              //~ E0020
+  if open { x } else { 0.0 }
+}
+
+test "strict comparison in a test" {
+  let a = 1
+  assert a === 1                                    //~ E0020
+}
+
+// ---------------------------------------------------------------- inside a chain of binary operators
+
+pub fn left_of_and(a: I32, b: I32, c: Bool) -> Bool {
+  a === b && c                                      //~ E0020
+}
+
+pub fn right_of_or(a: I32, b: I32, c: Bool) -> Bool {
+  c || a !== b                                      //~ E0020
+}
+
+pub fn between_ands(a: I32, b: I32, p: Bool, q: Bool) -> Bool {
+  p && a === b && q                                 //~ E0020
+}
+
+pub fn arithmetic_operands(a: I32, b: I32) -> Bool {
+  a + 1 === b * 2                                   //~ E0020
+}
+
+pub fn arithmetic_operands_ne(a: I32, b: I32) -> Bool {
+  a - 1 !== b / 2                                   //~ E0020
+}
+
+pub fn call_operands(a: I32, b: I32) -> Bool {
+  not_it(a == b) === not_it(a == 0)                 //~ E0020
+}

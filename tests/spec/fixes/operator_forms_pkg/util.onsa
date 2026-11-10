@@ -1,0 +1,11 @@
+pub fn differ(a: I32, b: I32) -> Bool {
+  a !== b   //~ E0020
+}
+
+pub fn square(a: I32) -> I32 {
+  a ** 2   //~ E0002
+}
+
+pub fn fine(a: I32, b: I32) -> Bool {
+  a != b
+}

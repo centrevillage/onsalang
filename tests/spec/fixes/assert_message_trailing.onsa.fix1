@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "16:3"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// E0020 for `assert!(a, "m") && b` (S-879, in the syntax stage). The form of Rust ends at the `)` that closes `!(`, as in
+// `assert_bang`, and the tokens after it stay: the one candidate drops the message, the `!(` and the `)`, and the file has
+// no diagnostic after it.
+
+pub fn both(a: Bool, b: Bool) {
+  assert a && b                              //~ E0020
+}
