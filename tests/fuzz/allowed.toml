@@ -5,6 +5,8 @@
 # show them on every run, and nothing else: when it no longer does, the entry goes (the input stays as
 # a regression input). Only the classes of the fix stage (`fix|<code>|<title>|<code left>`) are listed;
 # a crash or a signal never is. The contract itself is checked on the cases (onsa_tests::fix_contract).
+# A class with an error left (its last part is a code) no longer fails the gate (X-25, rules/checks.md 4.4):
+# an entry of such a class only keeps its mutants out of the list `tools/fuzz.py left` prints.
 #
 # Every field is required:
 #   class    the class the fuzzing prints
