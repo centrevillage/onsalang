@@ -69,19 +69,20 @@ The gate item `fuzz` (this script without options) does three things:
    never under `tests/`, `--save` too; the base is not asked), for the
    parent to read at a break (`fuzz.py left`). One that
    `tests/fuzz/left_seen.txt` lists (`class<TAB>left` a line, the classes
-   the parent has read; a line of another form fails) is known. The replay
-   of the saved inputs (1.) does not read that list: a regression input that
-   shows such a class fails as before.
+   the parent has read; a line of another form fails) is known, to the
+   replay of the saved inputs (1.) too: a regression input may show such a
+   class, and no entry asks it to go on showing it.
 
 **The classes the spec puts outside the contract** (R-207): `tests/fuzz/allowed.toml`
 lists, as `[[allowed]]` entries, classes of the fix stage that the spec
 decided are no broken candidate, or that an R records as a low harm left as
 it is (rules/leader.md 4.5), with an input that shows each: a fix that
 the spec makes in two steps (S-386: the `,`, then the `|` before the first
-alternative, S-383), and an input with two errors (S-384, S-413), which the
-mutants cut short at the end of a file often are. An entry of a class with
-an error left (3.) keeps its mutants out of the list to read; one of
-another kind keeps them from failing. Every field is required:
+alternative, S-383). A class with an error left (3.) of an input with two
+errors (S-384, S-413), which the mutants most often are, goes to
+`tests/fuzz/left_seen.txt` instead, its input kept as a regression input. An
+entry of a class with an error left keeps its mutants out of the list to
+read; one of another kind keeps them from failing. Every field is required:
 `class` (`fix|<code>|<title>|<kind left>`; a crash or a signal is never
 listed), `input` (a saved input `tests/fuzz/<name>.onsa`, not listed in
 `tests/pending.toml`; one entry each), `left` (the message of the
@@ -90,10 +91,10 @@ text `…`, code points `U+#`, numbers `#`), `reasons` (S numbers of `decisions/
 `issues/R/` for a low harm recorded there) and `note`. A mutant is known
 when it shows the class with that message (the class alone is too coarse a
 net); the input must show them on every run (when it no longer does, the
-entry goes), and no class without an entry of its own (one diagnostic with
-two candidates shows two classes, so no input shows only the second).
-Another saved input that shows only listed classes is a regression input,
-with no entry. The net gets
+entry goes), and no class without an entry of its own or a line of
+`left_seen.txt` (one diagnostic with two candidates shows two classes, so
+no input shows only the second). Another saved input that shows only
+listed or read classes is a regression input, with no entry. The net gets
 coarser for such a class: the contract on the cases (`onsa_tests::fix_contract`)
 is what holds it.
 
@@ -270,7 +271,7 @@ class Crash:
     detail: str  # what the command printed, shortened
     # For a class of the fix stage, the message of the diagnostic left after
     # the candidate, as the title is in the class (`normalized`): what an entry
-    # of `tests/fuzz/allowed.toml` names besides the class (R-207).
+    # of `tests/fuzz/allowed.toml` (R-207) and a line of `tests/fuzz/left_seen.txt` (X-25) name besides the class.
     left: str = ""
 
 
@@ -793,7 +794,7 @@ class Replay:
     known: dict  # {class: a listed input that shows it}
     errors: list  # the lists cannot be read, or the fix stage cannot run: the classes known are not all
     failures: list  # a saved input disagrees with the lists
-    seen: set = frozenset()  # {(class, left)} of `SEEN` (X-25): known to the mutants, not to the saved inputs
+    seen: set = frozenset()  # {(class, left)} of `SEEN` (X-25): known to the mutants and the saved inputs
 
     def knows(self, c):
         """Whether the class of `c` is known: a listed input shows it, or the allowed list (R-207) or the
@@ -825,6 +826,7 @@ def replay_saved(root, runner, fixer, jobs, deadline):
     if why:
         errors.append(f"the fix stage cannot run on the saved inputs: {why}")
     known, failures = {}, []
+    read = allowed.keys() | seen  # the classes with their messages left a saved input may show
     for p, crashes in zip(saved, replayed):
         rel = p.relative_to(root).as_posix()
         if rel in listed:
@@ -838,17 +840,17 @@ def replay_saved(root, runner, fixer, jobs, deadline):
                 )
         elif rel in allowed_inputs:
             # A class the spec puts outside the contract (R-207): its input shows it with the
-            # message left, and no class that no entry allows.
+            # message left, and no class that no entry allows nor `SEEN` lists.
             key = allowed_inputs[rel]
             shown = {(c.signature, c.left) for c in crashes}
             if key not in shown:
                 failures.append(f"{rel}: the class `{key[0]}` with `{key[1]}` no longer shows; remove its entry "
                                 f"from {ALLOWED.as_posix()} (the file stays as a regression input)")
-            for other, left in sorted(shown - allowed.keys()):
+            for other, left in sorted(shown - read):
                 failures.append(f"{rel}: shows `{other}` with `{left}`, which is not the entry's in "
                                 f"{ALLOWED.as_posix()}")
         else:
-            unknown = [c for c in crashes if (c.signature, c.left) not in allowed]
+            unknown = [c for c in crashes if (c.signature, c.left) not in read]
             if unknown:
                 what = "breaks the contract of a fix candidate" if unknown[0].command == FIX_COMMAND else "crashes"
                 failures.append(f"{rel}: {what} but is not listed in tests/pending.toml: {unknown[0].command}: "

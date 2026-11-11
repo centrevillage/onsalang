@@ -819,7 +819,8 @@ class Fuzz(TempRepo):
 
     def test_the_other_classes_still_fail(self):
         # a crash, an internal error and a class of the fix stage of another kind (`reading`) fail, beside one
-        # with an error left; so does a saved input not listed that shows one, the class read or not
+        # with an error left; so does a saved input not listed that shows one not read (W5-13 U10: one that
+        # tests/fuzz/left_seen.txt lists with its message is known to the replay too)
         self.repo.write("tests/spec/x.onsa", "XXXXXXXXXXXXXXXXXXXX\n")
         self.repo.write("tests/spec/y.onsa", "BADCANDIDATE LEFTCANDIDATE " * 5 + "\n")
         code, text = self.go(per_seed=fuzz.FIX_EVERY)
@@ -835,11 +836,39 @@ class Fuzz(TempRepo):
         (self.repo.root / "tests/spec/x.onsa").unlink()
         (self.repo.root / "tests/spec/y.onsa").unlink()
         self.repo.write("tests/fuzz/r.onsa", "LEFTCANDIDATE")
-        self.repo.write("tests/fuzz/left_seen.txt", f"{self.LEFT}\t{self.LEFT_MSG}\n")
+        self.repo.write("tests/fuzz/left_seen.txt", f"{self.LEFT}\tanother\n")  # the class with another message
         code, text = self.go()
         self.assertEqual(code, 1, text)
         self.assertIn(f"FAIL tests/fuzz/r.onsa: breaks the contract of a fix candidate but is not listed in "
                       f"tests/pending.toml: fix-same-place: {self.LEFT}", text)
+        self.repo.write("tests/fuzz/left_seen.txt", f"{self.LEFT}\t{self.LEFT_MSG}\n")
+        code, text = self.go()
+        self.assertEqual(code, 0, text)
+        self.assertIn("1 saved inputs replayed (0 listed, 0 allowed)", text)
+        # the class read beside one not known still fails, the first one not known named
+        self.repo.write("tests/fuzz/r.onsa", "LEFTCANDIDATE BADCANDIDATE")
+        code, text = self.go()
+        self.assertEqual(code, 1, text)
+        self.assertIn(f"FAIL tests/fuzz/r.onsa: breaks the contract of a fix candidate but is not listed in "
+                      f"tests/pending.toml: fix-same-place: {self.BAD}", text)
+        # the input of an entry of tests/fuzz/allowed.toml may show a class read besides the entry's, not one
+        # neither lists
+        self.repo.write("tests/fuzz/allowed.toml", allowed(self.BAD, "tests/fuzz/r.onsa"))
+        code, text = self.go()
+        self.assertEqual(code, 0, text)
+        self.assertIn("1 saved inputs replayed (0 listed, 1 allowed)", text)
+        self.repo.write("tests/fuzz/left_seen.txt", f"{self.LEFT}\tanother\n")
+        code, text = self.go()
+        self.assertEqual(code, 1, text)
+        self.assertIn(f"FAIL tests/fuzz/r.onsa: shows `{self.LEFT}` with `{self.LEFT_MSG}`, which is not the "
+                      f"entry's in tests/fuzz/allowed.toml", text)
+        # a saved input that no longer shows a class read asks nothing (no entry names it): it stays as a
+        # regression input
+        (self.repo.root / "tests/fuzz/allowed.toml").unlink()
+        self.repo.write("tests/fuzz/left_seen.txt", f"{self.LEFT}\t{self.LEFT_MSG}\n")
+        self.repo.write("tests/fuzz/r.onsa", "ok")
+        code, text = self.go()
+        self.assertEqual(code, 0, text)
 
     def test_the_list_of_the_classes_read_is_checked(self):
         self.repo.write("target/fuzz/left/a.json", "{}")  # a record that cannot be read: nothing changes

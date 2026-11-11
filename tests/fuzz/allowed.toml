@@ -2,98 +2,26 @@
 # candidates (spec §18.1, S-236; R-207), or that an R records as a low harm left as it is (rules/leader.md
 # 4.5). The gate item `fuzz` (tools/fuzz.py) takes a mutant that shows
 # a class listed here with the message listed with it as known for good. The input of an entry must
-# show them on every run, and nothing else: when it no longer does, the entry goes (the input stays as
-# a regression input). Only the classes of the fix stage (`fix|<code>|<title>|<code left>`) are listed;
-# a crash or a signal never is. The contract itself is checked on the cases (onsa_tests::fix_contract).
+# show them on every run, and no class that is not listed here or in tests/fuzz/left_seen.txt: when it
+# no longer does, the entry goes (the input stays as a regression input). Only the classes of the fix
+# stage (`fix|<code>|<title>|<code left>`) are listed; a crash or a signal never is. The contract itself
+# is checked on the cases (onsa_tests::fix_contract).
 # A class with an error left (its last part is a code) no longer fails the gate (X-25, rules/checks.md 4.4):
-# an entry of such a class only keeps its mutants out of the list `tools/fuzz.py left` prints.
+# an entry of such a class only keeps its mutants out of the list `tools/fuzz.py left` prints. Such a
+# class of an input with two errors (S-384, S-413) is not listed here: it goes to tests/fuzz/left_seen.txt
+# (`tools/fuzz.py left --seen`), which the replay of the saved inputs reads too, and its input stays as a
+# regression input.
 #
 # Every field is required:
 #   class    the class the fuzzing prints
 #   left     the message of the diagnostic left after the candidate, written as the class writes the
 #            title (quoted text `…`, code points `U+#`, numbers `#`)
 #   input    the saved input that shows them, `tests/fuzz/<name>.onsa` (not listed in tests/pending.toml;
-#            one entry each; another saved input that shows only listed classes needs no entry)
+#            one entry each; another saved input that shows only classes listed here or in
+#            tests/fuzz/left_seen.txt needs no entry)
 #   reasons  the S numbers (`decisions/S/`) that put it outside the contract, or the R numbers (`issues/R/`)
 #            that record it as a low harm left as it is (one or more)
 #   note     a short note
-
-[[allowed]]
-class = "fix|E0003|move `…` to the end of the line before|E0001"
-left = "U+# cannot be written outside comments and strings: a name is written with the A"
-input = "tests/fuzz/2dfdbff8.onsa"
-reasons = ["S-384", "S-236"]
-note = "an input with two errors: a `{` on the next line, and a bidirectional control (U+2066) that cannot be written outside comments right after its `}`, which the input has before the candidate (the class of c47fe1f3 with a control character, whose message has no quoted character)"
-
-[[allowed]]
-class = "fix|E0020|call the function value with `…`|E0020"
-left = "a tuple index does not start with #"
-input = "tests/fuzz/4a4c185e.onsa"
-reasons = ["S-384", "S-236"]
-note = "an input with two errors: a block called with `(` (`if c { … }(`), and a tuple index with a leading 0 in a hole (`\"{t.01}\"`), which the input has before the candidate; the hole is a lexical error since W5-11 U10d1 (R-290), so the candidate of the call leaves it at its place"
-
-[[allowed]]
-class = "fix|E0020|join it to the line before|E0002"
-left = "expected trait bound, found `…`"
-input = "tests/fuzz/3ffdcc07.onsa"
-reasons = ["S-384"]
-note = "an input with two errors from before W5-11 U10i1 (c7314da shows it): the `?` of a bound with no name before a line break (`impl[T:?`) and a `^` at the head of the next line, which the input has before the candidate; the candidate joins the `^` to the line before, which leaves the bound without a name"
-
-[[allowed]]
-class = "fix|E0020|write a line comment|E0020"
-left = "a postfix `…` is written right after its operand"
-input = "tests/fuzz/57c5f2a4.onsa"
-reasons = ["S-384", "S-960"]
-note = "an input with two errors from before W5-11 U10i (c7314da shows it): a block comment before a postfix `?` and a blank before the comment (`o /**/?`); the block comment comes first (S-960), and its candidate keeps the line break of the line comment, which is then the E0020 of the `?` at its place, the second of the two errors"
-
-[[allowed]]
-class = "fix|E0020|remove the `…`|E0002"
-left = "this `…` is never closed"
-input = "tests/fuzz/e5458b4b.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: the `::` of a type position with a line comment and a line break after it (`f:://` and `[2],U))->U{` on the next line, S-963 of W5-11 U10i1) and a `{` that never closes, which the input has before the candidate; the candidate brings the next line up before the comment, and the E0002 of the open `{` moves with it"
-
-[[allowed]]
-class = "fix|E0020|move it to the end of the line before|E0002"
-left = "`…` is no part of the head of a declaration"
-input = "tests/fuzz/0a1bda47.onsa"
-reasons = ["S-384"]
-note = "an input with two errors from before W5-11 U10i (c7314da shows it): a word before `const` (`t const K:I=1`) and a `|` at the head of the next line (`|t type`), which the input has before the candidate; the candidate moves the `|` to the end of the line before, and the word `t` of the next line is then no part of the head"
-
-[[allowed]]
-class = "fix|E0003|move `…` to the end of the line before|E0002"
-left = "expected effect name, found `…`"
-input = "tests/fuzz/3516409a.onsa"
-reasons = ["S-384", "S-413"]
-note = "an input with two errors: the `{` of an effect row on the next line in brackets, and a second `{` where an effect name goes (the kind of `two(N` and `{ 1 })` of S-413)"
-
-[[allowed]]
-class = "fix|E0003|move `…` to the end of the line before|E0002"
-left = "this `…` is never closed"
-input = "tests/fuzz/8fc9fb69.onsa"
-reasons = ["S-384", "S-413"]
-note = "an input with two errors: the `{` of an effect row on the next line in brackets, and the body's `{` never closed at the end of the file"
-
-[[allowed]]
-class = "fix|E0003|move `…` to the end of the line before|E0002"
-left = "expected newline after the declaration, found `…`"
-input = "tests/fuzz/8e690826.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: the `{` of a `target fn`'s `else` body on the next line (S-864), and a `(` right after the body's `}` on that line, which the input has before the candidate"
-
-[[allowed]]
-class = "fix|E0003|move `…` to the end of the line before|E0002"
-left = "expected field name, found `…`"
-input = "tests/fuzz/9f255b7d.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: the `{` of a struct on the next line, and a `(` right after it where a field starts (`{(`), which the input has before the candidate"
-
-[[allowed]]
-class = "fix|E0003|move `…` to the end of the line before|E0408"
-left = "integer literal is larger than any integer type holds"
-input = "tests/fuzz/4db3be15.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: the `{` of a struct literal on the next line, and an integer literal in it larger than any integer type, which the input has before the candidate"
 
 [[allowed]]
 class = "fix|E0002|make the two literals one|E0001"
@@ -131,48 +59,6 @@ reasons = ["S-236", "S-267"]
 note = "an input with two errors: the nested old delays `prev(prev(), )`, outer and inner without their `~`; the candidate of the outer E0811 adds its `~` and the inner E0811 shows (tests/spec/negative/flow_old_delays.onsa, `leaves`)"
 
 [[allowed]]
-class = "fix|E0812|remove `…`|E0302"
-left = "cannot find `…`"
-input = "tests/fuzz/d5aac3cc.onsa"
-reasons = ["S-384", "S-811"]
-note = "an input with two errors: `~` on the function `g` and a name not found in its argument (`g~(nope)`); the E0812 of the callee comes first, its candidate removes the `~` and the E0302 of the argument shows"
-
-[[allowed]]
-class = "fix|E0811|add `…`|E0302"
-left = "cannot find `…`"
-input = "tests/fuzz/f9b658ee.onsa"
-reasons = ["S-384", "S-811"]
-note = "an input with two errors: the flow `lp` without its `~` and a name not found in its argument (`lp(e)`); the E0811 of the callee comes first, its candidate adds the `~` and the E0302 of the argument shows"
-
-[[allowed]]
-class = "fix|E0020|remove the `…`|E0002"
-left = "expected newline after the declaration, found `…`"
-input = "tests/fuzz/556aa7db.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: a `;` after the body of a declaration, and a `}` that closes nothing after it; the candidate removes the `;` and the E0002 of the `}` shows"
-
-[[allowed]]
-class = "fix|E0020|join it to the line before|E0001"
-left = "`…` (U+#) cannot be written outside comments and strings: a name is written with"
-input = "tests/fuzz/c570745f.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: a line that starts with `- `, and a `も` outside comments on it, which E0001 reports once the line is joined"
-
-[[allowed]]
-class = "fix|E0003|move `…` to the end of the line before|E0002"
-left = "a `…` that opens a list is written right after the token before it"
-input = "tests/fuzz/85e0f040.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: `else` on the next line, and a blank before a `(` on that line, which shows once `else` moves up; the brackets are never closed at the end of the file"
-
-[[allowed]]
-class = "fix|E0004|move it before the attributes|E0001"
-left = "U+# (a bidirectional control) cannot be written, also in a comment or a string ("
-input = "tests/fuzz/edef5780.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: a doc comment after an attribute, and a bidirectional control (U+202E) in that comment, which the input has before the candidate and the candidate moves with the comment"
-
-[[allowed]]
 class = "fix|E0302|add `…`|E0200"
 left = "this version does not support effects other than `…` (`…`)"
 input = "tests/fuzz/b28474c1.onsa"
@@ -194,20 +80,6 @@ reasons = ["S-103"]
 note = "an input with two errors of the names stage in one unit: the method `len` called through its type, and the argument `s` that is not found, hidden by the one error of a unit. The E0308 is not the only error of its stage, so the promise of the candidates (§18.1: only when the diagnostic is the only error of its stage and before in the units it touches) does not hold, and the candidate `s.len()` leaves the E0302 of `s`"
 
 [[allowed]]
-class = "fix|E0020|write the rate as the clock `…`|E0302"
-left = "cannot find `…`"
-input = "tests/fuzz/18026c0b.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: a rate written as a type (`g: Ctl[[S[2]; 2]]`) and an unknown type `S` inside it, which the input has before the candidate; the candidate writes the clock and leaves the E0302 of `S`"
-
-[[allowed]]
-class = "fix|E0020|write the rate as the clock `…`|E0020"
-left = "a rate is no type; it is written as the clock after the type"
-input = "tests/fuzz/a927e108.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: a rate written as a type (`g: Ctl[[Sig[F32]; 2]]`) and another rate written as a type (`Sig[F32]`) inside it, which the input has before the candidate; the candidate writes the clock of the outer one and leaves the E0020 of the inner one at the same place"
-
-[[allowed]]
 class = "fix|E0020|remove the space|E0002"
 left = "expected imported name, found `…`"
 input = "tests/fuzz/da925388.onsa"
@@ -222,158 +94,11 @@ reasons = ["R-344"]
 note = "an input with two errors: the parentheses after the unit variant `None`, and an `Option` in a body that returns `U32`; the candidate of the parentheses leaves the E0401 of the type, which the E0412 hid (the sweep at 195e052, shard 0/2)"
 
 [[allowed]]
-class = "fix|E0020|remove the spaces|E0002"
-left = "expected `…` or `…`, found `…`"
-input = "tests/fuzz/7434abe6.onsa"
-reasons = ["S-384"]
-note = "an input with two errors in one unit: a blank between a name and its `~` (E0020) and a `(` and a `{` never closed; the E0020 hides the second, and the candidate that takes the blank out leaves it (the fuzz of X-20/U1 at 0ad8c01, also before it)"
-
-[[allowed]]
-class = "fix|E0020|move it to the end of the line before|E0408"
-left = "integer literal is larger than any integer type holds"
-input = "tests/fuzz/70e79904.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: a binary operator `+` at the start of a line, and an integer literal larger than any integer type right after it, which the input has before the candidate"
-
-[[allowed]]
-class = "fix|E0003|move `…` to the end of the line before|E0001"
-left = "number prefix without digits"
-input = "tests/fuzz/698f6da0.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: the `{` of the `else` body of a `target fn` on the line after its heading, and a `0x` without digits after the closing `}`, which the input has before the candidate"
-
-[[allowed]]
 class = "fix|E0413|write `…`|E0401"
 left = "expected an integer, found `…`"
 input = "tests/fuzz/51f14f00.onsa"
 reasons = ["S-882"]
 note = "an input with two errors: `1 + F64.round_from(y)` with `y: F32`, an integer literal beside a `F64`, hidden behind the E0413; the candidate gives the operand the type the call had, and the error of the neighbouring operand is the second one (`tests/spec/fixes/e0413_as_other_error_left.onsa`)"
-
-[[allowed]]
-class = "fix|E0714|remove `…`|E0418"
-left = "the type of this statement is `…`, not `…`; a statement gives no value (§#.#)"
-input = "tests/fuzz/eb7dde4a.onsa"
-reasons = ["S-384"]
-note = "途中の文の `F32.from_bits!(0x30)` は誤りが二つある入力（`!` の印と、捨てる値）。候補の約束は誤りが一つの単位に当たる（§18.1）"
-
-[[allowed]]
-class = "fix|E0418|discard the value with `…`|E0413"
-left = "`…` converts `…` to `…`, so there is no conversion function for this pair (§#.#)"
-input = "tests/fuzz/73663482.onsa"
-reasons = ["S-384"]
-note = "途中の文の `F64.round_from(1)` は誤りが二つある入力（捨てる値と、`as` で書ける組の変換の関連関数）。候補の約束は誤りが一つの単位に当たる（§18.1）"
-
-[[allowed]]
-class = "fix|E0411|remove `…`|E0418"
-left = "the type of this statement is `…`, not `…`; a statement gives no value (§#.#)"
-input = "tests/fuzz/88496320.onsa"
-reasons = ["S-384"]
-note = "`x as T` の誤りの文に、捨てる値の誤りが残る。誤りが二つある入力"
-
-[[allowed]]
-class = "fix|E0020|write it against its operand|E0002"
-left = "expected a declaration, found identifier"
-input = "tests/fuzz/05b80269.onsa"
-reasons = ["S-384"]
-note = "行頭の `?D` は誤りが二つある入力（行頭の `?` と、宣言の位置の `D`）。`?` を前の行へ移すと `D` が残る"
-
-[[allowed]]
-class = "fix|E0302|add `…`|E0307"
-left = "neither `…` nor `…` is defined in this module"
-input = "tests/fuzz/2e1ff966.onsa"
-reasons = ["S-384", "S-895"]
-note = "an impl Tr for Ty with a path with no use and an orphan target: two errors from the start, the second one seen once the path resolves (S-895)"
-
-[[allowed]]
-class = "fix|E0601|add `…`|E0002"
-left = "expected `…` (a function body), found `…`"
-input = "tests/fuzz/09c63014.onsa"
-reasons = ["S-384"]
-note = "a cut `enum Alloc` that hides the effect in a `uses {Alloc}` already written: two errors from the start, and the row gets a second `uses`"
-
-[[allowed]]
-class = "fix|E0020|join it to the line before|E0001"
-left = "a number has no suffix"
-input = "tests/fuzz/43d12127.onsa"
-reasons = ["S-384"]
-note = "`- 1n` は誤りが二つある入力（行頭の `- ` と、接尾辞の付いた数 `1n`）。つなぐ候補が `1n` ごと前の行へ移すので、残る誤りの位置が変わる。候補の約束は誤りが一つの単位に当たる（§18.1）"
-
-[[allowed]]
-class = "fix|E0418|discard the value with `…`|E0405"
-left = "the type of this float literal cannot be determined; annotate it (§#.#)"
-input = "tests/fuzz/db0da067.onsa"
-reasons = ["S-384"]
-note = "途中の文の `T.round_from(0.5)` は誤りが二つある入力（捨てる値と、型の決まらない小数のリテラル）。具体的な型の `F32.round_from(0.5)` も同じ。候補の約束は誤りが一つの単位に当たる（§18.1）"
-
-[[allowed]]
-class = "fix|E0401|narrow the bound of `…` to `…`|E0418"
-left = "the type of this statement is `…`, not `…`; a statement gives no value (§#.#)"
-input = "tests/fuzz/c5a02c37.onsa"
-reasons = ["S-384"]
-note = "途中の文の `-x`（`T: AnyNum`）は誤りが二つある入力（捨てない値と、`Neg` の無い否定）。候補で否定が通ると、隠れていた E0418 が見える。候補の約束は誤りが一つの単位に当たる（§18.1）"
-
-[[allowed]]
-class = "fix|E0411|call `…`|E0418"
-left = "the type of this statement is `…`, not `…`; a statement gives no value (§#.#)"
-input = "tests/fuzz/087eb621.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: a statement that keeps its value, and an `as` from a type parameter, which the input has before the candidate"
-
-[[allowed]]
-class = "fix|E0020|write a doc comment `…`|E0004"
-left = "this doc comment documents no declaration; `…` goes right before an item, a memb"
-input = "tests/fuzz/76102d39.onsa"
-reasons = ["S-384"]
-note = "閉じない `{` と切れた項目の中の `/*!*///` は誤りが二つ以上ある入力（`///` の候補の後に、切れた `pub fn` の前の E0004 が残る）。候補の約束は誤りが一つの単位に当たる（§18.1）。前からの類で、事例を足して変異が変わって出た"
-
-[[allowed]]
-class = "fix|E0002|write the `…` between the elements|E0002"
-left = "this `…` is never closed"
-input = "tests/fuzz/b8de771a.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: `2{` in the brackets of a type with no `,`, and the `{` never closed; the `{` reads as an element after the `,`"
-
-[[allowed]]
-class = "fix|E0002|remove the line break|E0002"
-left = "this `…` is never closed"
-input = "tests/fuzz/d20bd0f4.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: a line break in the parameters of a function type, and a `{` never closed"
-
-[[allowed]]
-class = "fix|E0002|write the `…` between the elements|E0020"
-left = "a callee that is no path of names is a function value; it is called with `…`"
-input = "tests/fuzz/0ea80e63.onsa"
-reasons = ["S-384"]
-note = "two errors: the elements without a `,` and the brackets never closed; the `,`, then what stays"
-
-[[allowed]]
-class = "fix|E0020|move it to the end of the line before|E0002"
-left = "expected a declaration, found `…`"
-input = "tests/fuzz/6c441628.onsa"
-reasons = ["S-384"]
-note = "two errors: the operator at the head of a line after an attribute and a `(` never closed"
-
-[[allowed]]
-class = "fix|E0020|join it to the line before|E0002"
-left = "expected newline after the declaration, found `…`"
-input = "tests/fuzz/9e4a532d.onsa"
-reasons = ["S-384"]
-note = "two errors: the `-` at the head of a line and a `{` never closed"
-
-[[allowed]]
-class = "fix|E0020|join it to the line before|E0002"
-left = "this `…` is never closed"
-input = "tests/fuzz/a187ec10.onsa"
-reasons = ["S-384"]
-note = "two errors: the `^` at the head of a line and a `(` never closed, which the check reports next"
-
-[[allowed]]
-class = "fix|E0020|join it to the line before|E0002"
-left = "the `…` of a flow call is written right after the name"
-input = "tests/fuzz/d6acd0a4.onsa"
-reasons = ["S-384"]
-note = "two errors: the `-` at the head of a line and a `(` never closed after a `~`"
 
 [[allowed]]
 class = "fix|E0002|write the `…` between the elements|E0020"
@@ -383,39 +108,11 @@ reasons = ["S-386", "S-383"]
 note = "an arm without its `,` before a line that starts with `|`: the `,`, then the `|` before the first alternative (S-383), two steps as S-386 decided"
 
 [[allowed]]
-class = "fix|E0003|move `…` to the end of the line before|E0002"
-left = "expected newline or `…`, found identifier"
-input = "tests/fuzz/3aaaec1e.onsa"
-reasons = ["S-384", "S-216"]
-note = "an input with two errors: an `else` on the line after its `}`, and two expressions on one line in its block"
-
-[[allowed]]
 class = "fix|E0020|write one `…`|E0020"
 left = "a `…` goes between the alternatives of a pattern, not before the first"
 input = "tests/fuzz/3d32fa9b.onsa"
 reasons = ["S-389", "S-383"]
 note = "a `||` where a pattern starts: one `|`, then the `|` before the first alternative (S-383), two steps as S-389 decided"
-
-[[allowed]]
-class = "fix|E0003|move `…` to the end of the line before|E0001"
-left = "`…` (U+#) cannot be written outside comments and strings: a name is written with"
-input = "tests/fuzz/c47fe1f3.onsa"
-reasons = ["S-384", "S-236", "R-219", "R-226"]
-note = "an input with two errors: an `else`, an `if` or a `{` on the next line, and a character that cannot be written outside comments right after it, which the input has before the candidate (`（` here; the other inputs of the class are regression inputs)"
-
-[[allowed]]
-class = "fix|E0003|move `…` to the end of the line before|E0002"
-left = "expected an expression, found `…`"
-input = "tests/fuzz/c94ecb45.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: an `else` on the next line, and a `]` where the condition of its `if` starts, which the input has before the candidate"
-
-[[allowed]]
-class = "fix|E0020|write it against its operand|E0020"
-left = "a callee that is no path of names is a function value; it is called with `…`"
-input = "tests/fuzz/2988ecc4.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: a prefix `^` at the end of a line before its operand, and the `(` of the call and the body's `{` never closed"
 
 [[allowed]]
 class = "fix|E0020|write one `…`|E0020"
@@ -425,137 +122,11 @@ reasons = ["S-389", "S-380"]
 note = "a `||` at the head of a line in a pattern: one `|`, then the `|` at the head of the line (S-380), two steps as S-389 decided"
 
 [[allowed]]
-class = "fix|E0003|move `…` to the end of the line before|E0002"
-left = "expected field name, found integer literal"
-input = "tests/fuzz/32e8524b.onsa"
-reasons = ["S-413"]
-note = "a `{` after a constant's name on the next line in brackets (`two(N` and `{ 1 })`): the E0003 first, and what is left of the literal is reported by the next check, as S-413 decided"
-
-[[allowed]]
-class = "fix|E0003|move `…` to the end of the line before|E0002"
-left = "expected `…` or `…`, found identifier"
-input = "tests/fuzz/11bce631.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: the `if` after `else` on the next line, and a `(` never closed before them"
-
-[[allowed]]
-class = "fix|E0020|remove the space|E0002"
-left = "empty brackets are not written here"
-input = "tests/fuzz/9bfbd754.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: the space before `(`, and `let o ()` that has no `=` and empty brackets where a value goes"
-
-[[allowed]]
-class = "fix|E0002|write the visibility, then `…`, once each|E0002"
-left = "a block whose members have a visibility of their own takes no visibility"
-input = "tests/fuzz/a7b97bd4.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: the run `pub pub`, and a visibility on an `impl` block that the right order keeps (and the file ends before the `{`)"
-
-[[allowed]]
-class = "fix|E0002|write the head without `…`|E0020"
-left = "this declaration has no visibility of its own; the word on it is redundant"
-input = "tests/fuzz/f67ff637.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: an `rt` before `test`, and a visibility on a `test`; the candidate of the run leaves the word, whose own candidate takes it out"
-
-[[allowed]]
-class = "fix|E0020|write a line comment|E0002"
-left = "expected newline or `…`, found identifier"
-input = "tests/fuzz/3fbf4bd0.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: a block comment, and two names with no operator between them (`x y`) on its sides, which the input has before the candidate"
-
-[[allowed]]
-class = "fix|E0020|remove the `…`|E0002"
-left = "Onsa has no string of this delimiter"
-input = "tests/fuzz/60db9ab2.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: a `&` before a type (the default borrow), and a backquote right after it, a delimiter of a string that Onsa has not got, which the input has before the candidate"
-
-[[allowed]]
-class = "fix|E0002|remove the empty brackets|E0002"
-left = "expected `…`, found newline"
-input = "tests/fuzz/b4e6cb97.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: empty brackets after the name of a `let` (`let l()`), and no `=` and value after it, which the input has before the candidate"
-
-[[allowed]]
-class = "fix|E0003|move `…` to the end of the line before|E0002"
-left = "expected a declaration, found identifier"
-input = "tests/fuzz/5710808f.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: the `{` of an extern block on the line after its heading, and a `D` that is no declaration among its members, which the input has before the candidate"
-
-[[allowed]]
-class = "fix|E0020|remove the `…`|E0002"
-left = "expected a type, found `…`"
-input = "tests/fuzz/64ec82d1.onsa"
-reasons = ["S-384"]
-note = "an input with two errors: a `&` before the type of an `impl` (the default borrow), and a `|` after it that is no type, which the input has before the candidate"
-
-[[allowed]]
-class = "fix|E0020|move it to the end of the line before|E0020"
-left = "a float literal needs digits on both sides of the point"
-input = "tests/fuzz/8e6b0f65.onsa"
-reasons = ["S-384", "S-236"]
-note = "an input with two errors: a line that starts with `*` after a line it goes on with, and a float literal `2.` with no digit after its point, which the input has before the candidate (the candidate that moves the `*` leaves the `2.` at the head of the line)"
-
-[[allowed]]
-class = "fix|E0003|move `…` to the end of the line before|E0002"
-left = "expected `…`, found identifier"
-input = "tests/fuzz/d083d9c7.onsa"
-reasons = ["S-384", "S-236"]
-note = "an input with two errors: a `{` of a struct literal on the next line, and a field with no `:` in it (`{e y)`), which the input has before the candidate"
-
-[[allowed]]
 class = "fix|E0020|write `…`|E0002"
 left = "expected a declaration, found `…`"
 input = "tests/fuzz/784aa3c5.onsa"
 reasons = ["R-419"]
 note = "the `::` after the keyword `pub` and a line break (`pub::` and `fn` on the next line) gets the candidate of a path's `::`, which moves the `.` to the head of the next line and leaves an E0002 there; no target language writes `pub::`"
-
-[[allowed]]
-class = "fix|E0020|remove the `…`|E0002"
-left = "expected a declaration, found `…`"
-input = "tests/fuzz/070c3cec.onsa"
-reasons = ["S-384", "S-236"]
-note = "an input with two errors: a `;` that ends nothing at the top of the file, and a `}` that closes nothing after it, which the input has before the candidate"
-
-[[allowed]]
-class = "fix|E0020|remove the space|E0020"
-left = "a callee that is no path of names is a function value; it is called with `…`"
-input = "tests/fuzz/096d98d5.onsa"
-reasons = ["S-384", "S-236"]
-note = "an input with two errors: a space after the `^` of a feedback name (`^ a`), and a call of it with `(` (`^a(`, a callee that is no path of names), which the input has before the candidate"
-
-[[allowed]]
-class = "fix|E0004|move it before the attributes|E0004"
-left = "this doc comment documents no declaration; `…` goes right before an item, a memb"
-input = "tests/fuzz/2bbf2b4c.onsa"
-reasons = ["S-384", "S-236"]
-note = "an input with two errors: an `impl` with no type and an open `{` (`impl{`, E0002) before the attribute and the doc comment after it, so the doc comment moved before the attribute is still inside the broken `impl` and documents no declaration; from before (the base 222023b shows it), found after W5-24 U1a added cases"
-
-[[allowed]]
-class = "fix|E0020|drop the message: `…` takes none|E0002"
-left = "expected newline or `…`, found `…`"
-input = "tests/fuzz/2ce151e9.onsa"
-reasons = ["S-384", "S-236"]
-note = "an input with two errors: an `assert` with a comma and no message (`assert e,`, the row assert_message) and a stray `)` after it, which the input has before the candidate; found after W5-24 U2a added the row"
-
-[[allowed]]
-class = "fix|E0020|remove the space|E0002"
-left = "expected module path, found `…`"
-input = "tests/fuzz/1c541f69.onsa"
-reasons = ["S-384", "S-236"]
-note = "an input with two errors: a space after the `.` of a `use` path (`use p. `) and an unclosed `((` after it, which the input has before the candidate; from before (the base 81fefab shows it), found after W5-24 U1b and U2a added cases"
-
-[[allowed]]
-class = "fix|E0002|write the head without `…`|E0002"
-left = "a block whose members have a visibility of their own takes no visibility"
-input = "tests/fuzz/a2f2f543.onsa"
-reasons = ["S-384", "S-236"]
-note = "an input with two errors: `rt` and `pub` on the head of an `impl` (`rt pub impl P`), which the input has before the candidate; from before (the base 81fefab shows it), found after W5-24 U1b and U2a added cases"
 
 [[allowed]]
 class = "fix|E0020|write the type arguments as `…`|E0401"
