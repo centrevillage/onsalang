@@ -33,3 +33,4 @@ status = "OPEN"
 - 判断（2026-10-19、親）: X-6 の手順 1（44 回目）: (D) の `token_kinds!` は直さない（外部の crate を足さずに、列挙と `ALL` を一つの並びから出す保証を保つ書き方が無い）。
   R2 の `operand()` は X-6 に入れない（読めない入力では字句の読みが残り判断が一つにならず、出力が変わりうる）。`PatReader` を消す案（W3-15/b）は出力が変わりうる候補として残す。
   新しい候補: `lower.rs` の `failed_kind` と `item_kind` の二通りの読み、括弧の対の判断が 4 か所（`parser.rs`・`scan.rs`・`foreign/guard.rs`・`foreign/assign.rs`）。済んだ項目と X-6 で行う項目は `issues/X/X-6/step1/A.md`
+- 補い（2026-11-12、親）: W5-13 の前の洗い出しの Y8（140 回目、`target/notes/140/w513_survey/survey.md`）: 括弧の対を `scan::pair`（種類で対にする一つの判定）でなく深さだけで数える走査が、表の側に 13 か所ある（`foreign.rs`、`foreign/arms.rs`・`paths.rs`・`decls.rs` の 2 か所・`guard.rs` の 2 か所・`comments.rs` の 2 か所・`rests.rs`・`faust.rs` の 2 か所・`assign.rs`・`lines.rs`）。種類の合わない閉じのある入力でだけ読みが割れ、`Brackets::closing` に寄せると出力が変わるので事例が要る（W5-11 の設計メモの見積もり +60 −40）。R-409 の型の直しは W5-13 U7。
