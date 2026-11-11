@@ -241,7 +241,7 @@ pub(super) fn lower_block_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<
     }
 }
 
-fn push_expr_stmt(e: Expr, stmts: &mut Vec<Stmt>) {
+pub(crate) fn push_expr_stmt(e: Expr, stmts: &mut Vec<Stmt>) {
     match e.kind {
         ExprKind::Block(b) => {
             stmts.extend(b.stmts);

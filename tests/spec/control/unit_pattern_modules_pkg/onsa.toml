@@ -1,0 +1,3 @@
+[package]
+name = "unit_pattern_modules_pkg"
+edition = "2026"

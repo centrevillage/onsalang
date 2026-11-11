@@ -223,23 +223,14 @@ impl<'a> Checker<'a> {
             }
             PatKind::Tuple(elems) => {
                 let elems = elems.clone();
-                // A literal variable is no tuple (S-860).
-                let s = self.known_shape(ty, span, "matched value")?;
-                let Ty::Tuple(ts) = self.ty(s) else {
-                    let shown = self.described(ty);
-                    return Err(self.flow_err(
-                        Code::E0401,
-                        span,
-                        format!("expected a tuple pattern target, found {shown}"),
-                    ));
+                let Some(ts) = self.tuple_pattern(Stage::Flow, ty, span, elems.len())? else {
+                    // The error type: its elements are errors too (§18.1).
+                    let s = self.shallow(ty);
+                    for &el in &elems {
+                        self.flow_unify_pat(el, s)?;
+                    }
+                    return Ok(());
                 };
-                if ts.len() != elems.len() {
-                    return Err(self.flow_err(
-                        Code::E0401,
-                        span,
-                        format!("a tuple of {} element(s) cannot match this pattern of {}", ts.len(), elems.len()),
-                    ));
-                }
                 for (&el, &t) in elems.iter().zip(&ts) {
                     self.flow_unify_pat(el, t)?;
                 }

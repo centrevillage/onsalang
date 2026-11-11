@@ -4,7 +4,8 @@
 use onsa_diag::Span;
 use onsa_diag::unsupported::Feature;
 
-use super::{Lowerer, R, unsupported};
+use super::body::push_expr_stmt;
+use super::{Lowerer, R, internal, unsupported};
 use crate::ir::*;
 
 pub(crate) fn eq_fn(lw: &mut Lowerer, ty: &Ty, span: Span) -> R<FnId> {
@@ -42,10 +43,36 @@ pub(crate) fn eq_fn(lw: &mut Lowerer, ty: &Ty, span: Span) -> R<FnId> {
     Ok(id)
 }
 
+/// Whether [`compare`] takes values of `ty`: the scalars and `()`; an
+/// aggregate is compared by its eq fn.
+pub(crate) fn compared_directly(ty: &Ty) -> bool {
+    ty.is_scalar() || *ty == Ty::Unit
+}
+
+/// `l op r` of values that [`compared_directly`] takes. The one value of
+/// `()` equals itself: its operands are evaluated, the left one first, and
+/// the result is a constant, so the backends compare scalars only (§6.4,
+/// §3.5, R-415).
+pub(crate) fn compare(op: CmpOp, l: Expr, r: Expr, span: Span) -> R<Expr> {
+    if l.ty != Ty::Unit {
+        return Ok(Expr::new(Ty::Bool, span, ExprKind::Cmp { op, lhs: Box::new(l), rhs: Box::new(r) }));
+    }
+    let equal = match op {
+        CmpOp::Eq => true,
+        CmpOp::Ne => false,
+        _ => return Err(internal(span, "ordering on ()")),
+    };
+    let mut stmts = Vec::new();
+    push_expr_stmt(l, &mut stmts);
+    push_expr_stmt(r, &mut stmts);
+    let value = Expr::new(Ty::Bool, span, ExprKind::Lit(Lit::Bool(equal)));
+    Ok(Expr::new(Ty::Bool, span, ExprKind::Block(Block { stmts, value: Some(Box::new(value)) })))
+}
+
 /// `a == b` as an expression (scalars compare, aggregates call their eq fn).
 fn eq_expr(lw: &mut Lowerer, a: Expr, b: Expr, span: Span) -> R<Expr> {
-    if a.ty.is_scalar() || a.ty == Ty::Unit {
-        return Ok(Expr::new(Ty::Bool, span, ExprKind::Cmp { op: CmpOp::Eq, lhs: Box::new(a), rhs: Box::new(b) }));
+    if compared_directly(&a.ty) {
+        return compare(CmpOp::Eq, a, b, span);
     }
     let f = eq_fn(lw, &a.ty, span)?;
     Ok(Expr::new(

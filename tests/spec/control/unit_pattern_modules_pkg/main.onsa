@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§15.1"]
+
+// S-516 (U9 of W5-24): the pattern `()` on the values of another module (§7: "`()` 型の値に当たり、反駁不能"): the result of a function of the module, a variant and a
+// struct that the module declares (with the module's name, and by the name that a `use` takes), and an `Option[()]` that the module returns. Every `match` is a
+// statement that assigns a `var` in each arm. Every value is worked out by hand.
+use ev
+use ev.{Ev, Msg}
+
+fn let_from_a_module() -> I32 {
+  var n = 0
+  let () = ev.touch(inout n)
+  n
+}
+
+fn some_from_a_module(c: Bool) -> I32 {
+  var r = 0
+  match ev.probe(c) {
+    Some(()) => { r = 1 },
+    None => { r = 2 },
+  }
+  r
+}
+
+fn variant_with_the_module_name(e: ev.Ev) -> I32 {
+  var r = 0
+  match e {
+    ev.Ev.Tick(()) => { r = 10 },
+    ev.Ev.Note(n) => { r = n },
+  }
+  r
+}
+
+fn variant_by_a_use(e: Ev) -> I32 {
+  var r = 0
+  match e {
+    Ev.Tick(()) => { r = 20 },
+    Ev.Note(n) => { r = n + 1 },
+  }
+  r
+}
+
+fn struct_by_a_use(m: Msg) -> I32 {
+  let Msg { done: (), n: k } = m
+  k
+}
+
+test "a unit that a function of another module returns" {
+  assert let_from_a_module() == 1
+}
+
+test "Some of a unit from another module" {
+  assert some_from_a_module(true) == 1
+  assert some_from_a_module(false) == 2
+}
+
+test "a variant and a struct of another module" {
+  assert variant_with_the_module_name(Ev.Tick(())) == 10
+  assert variant_with_the_module_name(Ev.Note(3)) == 3
+  assert variant_by_a_use(Ev.Tick(())) == 20
+  assert variant_by_a_use(Ev.Note(3)) == 4
+  assert struct_by_a_use(Msg { done: (), n: 9 }) == 9
+}

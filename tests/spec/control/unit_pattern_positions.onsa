@@ -1,0 +1,96 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§2.5"]
+
+// S-516 (U9 of W5-24): the places where the pattern `()` is written and nothing is run (mode check, so that the forms are accepted by the check alone and need
+// no lowering): a closure that takes a `()` and an `Option[()]`, a method, a flow (a `let` that takes a `()` value apart, the target of a `match`, the element of
+// a tuple of a flow value; a call at the clock `sample` is of an `rt fn`, §11), a type parameter instantiated with `()`, and a `let ()` and a `match` in the body of a `for` and in the branches of an `if`.
+// §7: "反駁不能なパターン（タプル・構造体・unit の `()`）" and "`()` 型の値に当たり、反駁不能". No diagnostic.
+
+fn g() {}
+
+rt fn mark() {}
+
+pub struct Probe {
+  n: I32,
+}
+
+impl Probe {
+  pub fn quiet(self) {}
+
+  pub fn after_quiet(self) -> I32 {
+    let () = self.quiet()
+    self.n
+  }
+}
+
+fn id[T](x: T) -> T {
+  x
+}
+
+fn first[T](o: Option[T], d: T) -> T {
+  match o {
+    Some(v) => v,
+    None => d,
+  }
+}
+
+pub fn through_closures() -> I32 {
+  let f = fn(u: ()) -> I32 {
+    let () = u
+    7
+  }
+  let h = fn(o: Option[()]) -> I32 {
+    match o {
+      Some(()) => 1,
+      None => 0,
+    }
+  }
+  f.(()) + h.(Some(()))
+}
+
+pub fn through_a_method(p: Probe) -> I32 {
+  p.after_quiet()
+}
+
+pub fn generic_with_a_unit() -> I32 {
+  let () = id(g())
+  let () = first(Some(g()), g())
+  1
+}
+
+pub fn unit_in_a_loop_body(n: U32) -> I32 {
+  var s = 0
+  for _ in 0 ..< n {
+    let () = g()
+    s = s + 1
+  }
+  s
+}
+
+pub fn unit_in_an_if_branch(c: Bool) -> I32 {
+  if c {
+    let () = g()
+    1
+  } else {
+    match g() {
+      () => 2,
+    }
+  }
+}
+
+pub flow takes_apart(x: F32 at sample) -> F32 at sample {
+  let (a, ()) = (x, mark())
+  a
+}
+
+pub flow takes_a_unit(x: F32 at sample) -> F32 at sample {
+  let () = mark()
+  x
+}
+
+pub flow matches_a_unit(x: F32 at sample) -> F32 at sample {
+  match mark() {
+    () => x,
+  }
+}

@@ -1,0 +1,249 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§2.5"]
+
+// S-516 (U9 of W5-24): the pattern `()` (§7: "unit の `()`（`()` 型の値に当たり、反駁不能。`let () = g()`、`Some(())`）"; §2.5: "空の括弧が意味を持つ形 …
+// unit の型と値とパターン `()` は括弧を書く"). It takes the one value of `()` and binds nothing, so that the initializer of a `let` and the target of a `match`
+// are still evaluated, once. The places: a `let`, an arm of a `match`, the element of a tuple, `Some`, `Ok` and `Err`, the payload of a variant and the field
+// of a struct, the nested forms of these, a choice, a guard, and a generic function that works on a `()`. Every `match` is a statement that assigns a `var` in each arm
+// (the form that this version runs for every pattern). Every value is worked out by hand.
+
+fn g() {}
+
+fn touch(inout n: I32) {
+  n = n + 1
+}
+
+pub enum Ev {
+  Tick(()),
+  Note(I32),
+}
+
+pub struct Msg {
+  done: (),
+  n: I32,
+}
+
+fn id[T](x: T) -> T {
+  x
+}
+
+fn wrap[T](x: T) -> Option[T] {
+  Some(x)
+}
+
+fn let_unit() -> I32 {
+  let () = g()
+  1
+}
+
+fn match_unit() -> I32 {
+  var r = 0
+  match g() {
+    () => { r = 2 },
+  }
+  r
+}
+
+fn tuple_with_a_unit(k: I32) -> I32 {
+  let (a, ()) = (k, g())
+  a + 1
+}
+
+fn tuple_with_a_unit_first(k: I32) -> I32 {
+  let ((), b) = (g(), k)
+  b + 2
+}
+
+fn tuple_of_units() -> I32 {
+  let ((), ()) = (g(), g())
+  3
+}
+
+fn nested_tuple(k: I32) -> I32 {
+  let ((a, ()), b) = ((k, g()), 10)
+  a + b
+}
+
+fn some_unit(o: Option[()]) -> I32 {
+  var r = 0
+  match o {
+    Some(()) => { r = 1 },
+    None => { r = 2 },
+  }
+  r
+}
+
+fn none_first(o: Option[()]) -> I32 {
+  var r = 0
+  match o {
+    None => { r = 5 },
+    Some(()) => { r = 6 },
+  }
+  r
+}
+
+fn result_ok_unit(x: Result[(), Bool]) -> I32 {
+  var r = 0
+  match x {
+    Ok(()) => { r = 1 },
+    Err(true) => { r = 2 },
+    Err(false) => { r = 3 },
+  }
+  r
+}
+
+fn result_err_unit(x: Result[I32, ()]) -> I32 {
+  var r = 0
+  match x {
+    Ok(n) => { r = n },
+    Err(()) => { r = 0 - 1 },
+  }
+  r
+}
+
+fn variant_payload(e: Ev) -> I32 {
+  var r = 0
+  match e {
+    Ev.Tick(()) => { r = 100 },
+    Ev.Note(n) => { r = n },
+  }
+  r
+}
+
+fn struct_field(m: Msg) -> I32 {
+  let Msg { done: (), n: k } = m
+  k
+}
+
+fn struct_field_in_match(m: Msg) -> I32 {
+  var r = 0
+  match m {
+    Msg { done: (), n: 0 } => { r = 0 },
+    Msg { done: (), n: k } => { r = k + 1 },
+  }
+  r
+}
+
+fn unit_with_a_guard(c: Bool) -> I32 {
+  var r = 0
+  match g() {
+    () if c => { r = 1 },
+    () => { r = 2 },
+  }
+  r
+}
+
+fn unit_guard_then_wildcard(c: Bool) -> I32 {
+  var r = 0
+  match g() {
+    () if c => { r = 1 },
+    _ => { r = 2 },
+  }
+  r
+}
+
+fn choice_with_a_unit(o: Option[()]) -> I32 {
+  var r = 0
+  match o {
+    Some(()) | None => { r = 9 },
+  }
+  r
+}
+
+fn through_a_generic() -> I32 {
+  let () = id(g())
+  4
+}
+
+fn generic_wraps_a_unit(k: I32) -> I32 {
+  var r = 0
+  match wrap(g()) {
+    Some(()) => { r = k },
+    None => { r = 0 },
+  }
+  r
+}
+
+fn initializer_runs_once() -> I32 {
+  var n = 0
+  let () = touch(inout n)
+  n
+}
+
+fn target_runs_once() -> I32 {
+  var n = 0
+  var r = 0
+  match touch(inout n) {
+    () => { r = 10 },
+  }
+  r + n
+}
+
+fn target_runs_once_in_a_tuple() -> I32 {
+  var n = 0
+  let (a, ()) = (n + 5, touch(inout n))
+  a * 10 + n
+}
+
+test "let takes the unit" {
+  assert let_unit() == 1
+}
+
+test "match takes the unit" {
+  assert match_unit() == 2
+}
+
+test "a tuple with a unit, taken apart" {
+  assert tuple_with_a_unit(4) == 5
+  assert tuple_with_a_unit_first(4) == 6
+  assert tuple_of_units() == 3
+  assert nested_tuple(7) == 17
+}
+
+test "Some of a unit" {
+  assert some_unit(Some(())) == 1
+  assert some_unit(None) == 2
+  assert none_first(None) == 5
+  assert none_first(Some(())) == 6
+}
+
+test "Ok and Err around a unit" {
+  assert result_ok_unit(Ok(())) == 1
+  assert result_ok_unit(Err(true)) == 2
+  assert result_ok_unit(Err(false)) == 3
+  assert result_err_unit(Ok(8)) == 8
+  assert result_err_unit(Err(())) == 0 - 1
+}
+
+test "the payload of a variant and the field of a struct" {
+  assert variant_payload(Ev.Tick(())) == 100
+  assert variant_payload(Ev.Note(7)) == 7
+  assert struct_field(Msg { done: (), n: 6 }) == 6
+  assert struct_field_in_match(Msg { done: (), n: 0 }) == 0
+  assert struct_field_in_match(Msg { done: (), n: 4 }) == 5
+}
+
+test "a guard on the unit decides, and the unit arm after it is reached" {
+  assert unit_with_a_guard(true) == 1
+  assert unit_with_a_guard(false) == 2
+  assert unit_guard_then_wildcard(true) == 1
+  assert unit_guard_then_wildcard(false) == 2
+}
+
+test "a choice of Some of a unit and None" {
+  assert choice_with_a_unit(Some(())) == 9
+  assert choice_with_a_unit(None) == 9
+}
+
+test "a generic function that holds a unit" {
+  assert through_a_generic() == 4
+  assert generic_wraps_a_unit(3) == 3
+}
+
+test "the initializer and the target are evaluated once" {
+  assert initializer_runs_once() == 1
+  assert target_runs_once() == 11
+  assert target_runs_once_in_a_tuple() == 51
+}

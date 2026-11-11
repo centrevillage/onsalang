@@ -1,0 +1,99 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.4", "§3.5"]
+
+// R-415 (U9 of W5-24): the two sides of `==` and `!=` on `()` are still evaluated, left first, though the result does not depend on the values (§6.4: `()` has `PartialEq`;
+// §3.5: "二項演算子は左の被演算子から … 左から右に評価する"; "`&&` / `||` の右辺は、左辺で結果が決まらないときだけ評価する"). The order and the number of
+// the calls are seen in a `U32` log: `mark(inout log, d)` appends the decimal digit `d`, so that the log reads as the calls that ran. One call per side, in an `assert`, in a `let`,
+// in a condition, in the arguments of a call, and on the right of `&&` and `||` (evaluated only when the left does not decide). Every value is worked out by hand.
+
+fn mark(inout log: U32, d: U32) {
+  let shifted = log * 10
+  log = shifted + d
+}
+
+fn same_unit(a: (), b: ()) -> Bool {
+  a == b
+}
+
+fn probe(inout log: U32, d: U32, r: Bool) -> Bool {
+  let shifted = log * 10
+  log = shifted + d
+  r
+}
+
+test "== evaluates the left side and then the right side" {
+  var log: U32 = 0
+  let same = mark(inout log, 1) == mark(inout log, 2)
+  assert same
+  assert log == 12
+}
+
+test "!= evaluates the left side and then the right side" {
+  var log: U32 = 0
+  let differ = mark(inout log, 3) != mark(inout log, 4)
+  assert !differ
+  assert log == 34
+}
+
+test "assert evaluates both sides once" {
+  var log: U32 = 0
+  assert mark(inout log, 5) == mark(inout log, 6)
+  assert log == 56
+}
+
+test "a condition evaluates both sides once" {
+  var log: U32 = 0
+  var r = 0
+  if mark(inout log, 1) == mark(inout log, 2) {
+    r = 1
+  }
+  assert r == 1
+  assert log == 12
+}
+
+test "a call of a unit that stands on one side only" {
+  var log: U32 = 0
+  let u = ()
+  let same = u == mark(inout log, 7)
+  let same2 = mark(inout log, 8) == u
+  assert same
+  assert same2
+  assert log == 78
+}
+
+test "the arguments of a call are evaluated before the comparison in its body" {
+  var log: U32 = 0
+  let same = same_unit(mark(inout log, 1), mark(inout log, 2))
+  assert same
+  assert log == 12
+}
+
+test "the right side of && is evaluated only when the left side does not decide" {
+  var log: U32 = 0
+  let skipped = probe(inout log, 1, false) && (mark(inout log, 2) == mark(inout log, 3))
+  assert !skipped
+  assert log == 1
+  let taken = probe(inout log, 4, true) && (mark(inout log, 5) == mark(inout log, 6))
+  assert taken
+  assert log == 1456
+}
+
+test "the right side of || is evaluated only when the left side does not decide" {
+  var log: U32 = 0
+  let skipped = probe(inout log, 1, true) || (mark(inout log, 2) != mark(inout log, 3))
+  assert skipped
+  assert log == 1
+  let taken = probe(inout log, 4, false) || (mark(inout log, 5) == mark(inout log, 6))
+  assert taken
+  assert log == 1456
+}
+
+test "a comparison of a unit is a Bool that the other operators take" {
+  var log: U32 = 0
+  let a = mark(inout log, 1) == mark(inout log, 2)
+  let b = mark(inout log, 3) != mark(inout log, 4)
+  assert a && !b
+  assert log == 1234
+}

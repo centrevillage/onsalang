@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 2
+
+// S-516 (U9 of W5-24): the candidates of the E0503 of an arm with a `()` in it that a `_` before it covers are two, "腕を消す形と、覆っている腕が `_` か束縛だけのときは、それを最後へ移す形" (§7),
+// when the `_` moved to the end still covers something (fixes/match_unreachable_fix_delete_move.onsa has the others). Here the arm after the `_` has a `()` in it and does not cover all the values
+// of its type (`Some(())` leaves `None`, `None` leaves `Some(())`, `(true, ())` leaves `(false, ())`, `Ok(())` leaves `Err(_)`), so that the `_` at the end is reached. The first candidate
+// deletes the unreachable arm, the second moves the `_` to the end. The text after the candidates (`.fix1`, `.fix2`) is not written here; the contract of §18.1 checks that the unit is left
+// without a diagnostic of the stage of the E0503 or before it. One error per function (P-01).
+
+fn g() {}
+
+pub fn wildcard_then_some_unit(o: Option[()]) -> I32 {
+  match o {
+    
+    Some(()) => 1,
+    _ => 0, //~ E0503
+  }
+}
+
+pub fn wildcard_then_none(o: Option[()]) -> I32 {
+  match o {
+    
+    None => 1,
+    _ => 0, //~ E0503
+  }
+}
+
+pub fn wildcard_then_a_tuple_with_a_unit(b: Bool) -> I32 {
+  match (b, g()) {
+    
+    (true, ()) => 1,
+    _ => 0, //~ E0503
+  }
+}
+
+pub fn wildcard_then_ok_unit(x: Result[(), Bool]) -> I32 {
+  match x {
+    
+    Ok(()) => 1,
+    _ => 0, //~ E0503
+  }
+}

@@ -1,0 +1,98 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.4", "§3.2"]
+
+// R-415 (U9 of W5-24): `==` and `!=` on two `()` values (§6.4: "組込み型が実装する標準 trait … `()` | `PartialEq` `Eq` `Default`"; §3.2: `==` は `PartialEq` に脱糖する).
+// `()` has one value, so that `==` is always `true` and `!=` is always `false`. The values are bound to names, come out of calls, are a parameter and an argument,
+// stand in a condition, in an `assert` and in a generic function whose bound is `PartialEq` or `Eq` (a `()` satisfies both). Every value is worked out by hand.
+
+fn g() {}
+
+fn same_unit(a: (), b: ()) -> Bool {
+  a == b
+}
+
+fn different_unit(a: (), b: ()) -> Bool {
+  a != b
+}
+
+fn same_by_partial_eq[T: PartialEq](a: T, b: T) -> Bool {
+  a == b
+}
+
+fn same_by_eq[T: Eq](a: T, b: T) -> Bool {
+  a == b
+}
+
+fn different_by_partial_eq[T: PartialEq](a: T, b: T) -> Bool {
+  a != b
+}
+
+fn branch(u: (), v: ()) -> I32 {
+  var r = 0
+  if u == v {
+    r = 1
+  } else {
+    r = 2
+  }
+  r
+}
+
+fn branch_not_equal(u: (), v: ()) -> I32 {
+  var r = 0
+  if u != v {
+    r = 1
+  } else {
+    r = 2
+  }
+  r
+}
+
+test "two units are equal" {
+  let u = g()
+  let v = g()
+  assert u == v
+  assert v == u
+  assert u == u
+}
+
+test "two units are not different" {
+  let u = g()
+  let v = g()
+  assert !(u != v)
+  assert !(v != u)
+  assert !(u != u)
+}
+
+test "the result is a Bool value" {
+  let u = g()
+  let w = ()
+  let same = u == w
+  let differ = u != w
+  assert same
+  assert !differ
+  assert same != differ
+}
+
+test "calls that return a unit are compared" {
+  assert g() == g()
+  assert !(g() != g())
+}
+
+test "a unit as a parameter" {
+  assert same_unit(g(), g())
+  assert !different_unit(g(), g())
+  assert same_unit((), ())
+}
+
+test "a bound of PartialEq or Eq is satisfied by a unit" {
+  assert same_by_partial_eq(g(), g())
+  assert same_by_eq(g(), g())
+  assert !different_by_partial_eq(g(), g())
+}
+
+test "a condition takes the Bool of the comparison" {
+  assert branch(g(), g()) == 1
+  assert branch_not_equal(g(), g()) == 2
+}

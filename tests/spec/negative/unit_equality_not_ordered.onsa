@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§6.4", "§3.2", "§4.1"]
+
+// R-415 (U9 of W5-24): a `()` has `PartialEq`, `Eq` and `Default` and no more (§6.4: "`()` | `PartialEq` `Eq` `Default`", the table is the closed list), so that the
+// comparison of its values with `<` `<=` `>` `>=` is not an operation of the type ("演算子の被演算子の型がその演算子の trait を満たさないと E0401", §6.3). The `==` and `!=`
+// on the same values are fine (ops/unit_equality_run.onsa); the derive of an order in a type that holds a `()` is E0416 (derive/fields_partial_ord_neg.onsa). One error per function (P-01).
+
+fn g() {}
+
+pub fn less(a: (), b: ()) -> Bool {
+  a < b //~ E0401
+}
+
+pub fn less_or_equal(a: (), b: ()) -> Bool {
+  a <= b //~ E0401
+}
+
+pub fn greater(a: (), b: ()) -> Bool {
+  a > b //~ E0401
+}
+
+pub fn greater_or_equal(a: ()) -> Bool {
+  a >= g() //~ E0401
+}

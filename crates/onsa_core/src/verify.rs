@@ -329,11 +329,12 @@ impl<'a> V<'a> {
                 let lt = self.expr(lhs)?;
                 let rt = self.expr(rhs)?;
                 self.same(&lt, &rt, "comparison operands")?;
-                if !lt.is_scalar() && lt != Ty::Unit {
+                // `()` is compared by the lowering (`lower::eq::compare`).
+                if !lt.is_scalar() {
                     return Err(self.err("comparison of non-scalar values (use a generated eq function)"));
                 }
-                if matches!(lt, Ty::Bool | Ty::Unit) && !matches!(op, CmpOp::Eq | CmpOp::Ne) {
-                    return Err(self.err("ordering on Bool / ()"));
+                if lt == Ty::Bool && !matches!(op, CmpOp::Eq | CmpOp::Ne) {
+                    return Err(self.err("ordering on Bool"));
                 }
                 self.same(&ty, &Ty::Bool, "comparison result")?;
             }

@@ -1,0 +1,60 @@
+// onsa.toml
+// [test]
+// spec = ["§7"]
+
+// S-516 (U9 of W5-24): a `match` whose arms leave a value uncovered is E0501 also when a `()` is in it (§7: "網羅の判定に数えるのは、`Bool` の `true` と `false`、unit の `()`、enum の列挙子、
+// それらを要素に持つタプルと struct のパターンだけである"; "ガードの付いた腕は数えない"). The `()` is counted, so that `Some(())` alone leaves `None`, and `None` alone leaves `Some(())`; the
+// `()` that has a guard is not counted, so that it leaves the value of the unit. The marker is on the line of the `match`. One error per function (P-01). The exhaustive forms are in
+// control/unit_pattern_exhaustive.onsa.
+
+pub enum Ev {
+  Tick(()),
+  Note(Bool),
+}
+
+fn g() {}
+
+pub fn some_alone(o: Option[()]) -> I32 {
+  match o { //~ E0501
+    Some(()) => 1,
+  }
+}
+
+pub fn none_alone(o: Option[()]) -> I32 {
+  match o { //~ E0501
+    None => 1,
+  }
+}
+
+pub fn unit_with_a_guard_alone(c: Bool) -> I32 {
+  match g() { //~ E0501
+    () if c => 1,
+  }
+}
+
+pub fn tuple_with_one_bool_missing(b: Bool) -> I32 {
+  match (b, g()) { //~ E0501
+    (true, ()) => 1,
+  }
+}
+
+pub fn result_with_a_value_missing(x: Result[(), Bool]) -> I32 {
+  match x { //~ E0501
+    Ok(()) => 1,
+    Err(true) => 2,
+  }
+}
+
+pub fn variant_with_a_unit_missing_one(e: Ev) -> I32 {
+  match e { //~ E0501
+    Ev.Tick(()) => 1,
+    Ev.Note(true) => 2,
+  }
+}
+
+pub fn nested_option_missing_the_inner_none(o: Option[Option[()]]) -> I32 {
+  match o { //~ E0501
+    Some(Some(())) => 1,
+    None => 2,
+  }
+}

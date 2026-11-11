@@ -246,8 +246,8 @@ fn lower_binary(
                 ABinOp::Gt => CmpOp::Gt,
                 _ => CmpOp::Ge,
             };
-            if l.ty.is_scalar() {
-                Expr::new(Ty::Bool, sp, ExprKind::Cmp { op: cop, lhs: Box::new(l), rhs: Box::new(r) })
+            if super::eq::compared_directly(&l.ty) {
+                super::eq::compare(cop, l, r, sp)?
             } else if matches!(cop, CmpOp::Eq | CmpOp::Ne) {
                 let f = super::eq::eq_fn(lw, &l.ty, op_span)?;
                 let call = Expr::new(

@@ -1483,7 +1483,7 @@ reasons = ["S-811"]
 until = "W7-04"
 note = "flow の本体の `v.m::[F32]!(x)` は E0806（§11.2）。flow の本体の `!` はメソッドでは今は報告されない（W5-10 の単位の行）"
 
-# --- W5-24 U6a: const 引数と型の引数の中の `X::[…]`・`X[a, b]`、入れ子、他言語の数の形の事例と、W5-16 U1d の控えの事例（2026-11-11）。U6b の事例は U6b の前に写す
+# --- W5-24 U6a: const 引数と型の引数の中の `X::[…]`・`X[a, b]`、入れ子、他言語の数の形の事例と、W5-16 U1d の控えの事例（2026-11-11）
 [[pending]]
 kind = "test-case"
 target = "tests/spec/types/type_args_const_arg_operator_run.onsa"
@@ -1497,6 +1497,3 @@ target = "tests/spec/types/type_args_const_bare_arg_operator.onsa"
 reasons = ["S-329"]
 until = "W9-03"
 note = "W5-16 U1d から控えにしていた事例を W5-24 U6a で戻した（const 引数の `X::[…]`・`X[a, b]`、85 段の高さ）。演算を含む長さは W9-03 まで E0200。"
-
-# --- W5-24 U6b: `,` を含む `[…]` の候補（S-333・S-975・R-418）と空の型引数（S-548）の事例と、W5-16 U1d の控えの事例（2026-11-11）
-# W5-24 U6/t の実装待ちの項目（親が tests/pending.toml に足す）

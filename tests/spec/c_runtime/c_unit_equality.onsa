@@ -1,0 +1,173 @@
+// onsa.toml
+// [package]
+// name = "c_unit_equality"
+// edition = "2026"
+//
+// [export]
+// prefix = "cue_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§6.4", "§3.2", "§3.5"]
+//
+// [[test.host]]
+// name = "direct"
+// target = "host"
+// fn = "c_unit_equality.direct"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 11234 },
+// ]
+//
+// [[test.host]]
+// name = "logic_and"
+// target = "host"
+// fn = "c_unit_equality.logic_and"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 1 },
+// ]
+//
+// [[test.host]]
+// name = "logic_or"
+// target = "host"
+// fn = "c_unit_equality.logic_or"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 1123 },
+// ]
+//
+// [[test.host]]
+// name = "generic"
+// target = "host"
+// fn = "c_unit_equality.generic"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 3012 },
+// ]
+//
+// [[test.host]]
+// name = "aggregates"
+// target = "host"
+// fn = "c_unit_equality.aggregates"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 45 },
+// ]
+
+// R-415 (U9 of W5-24): `==` and `!=` on `()` in the C that the compiler writes. §6.4 gives `()` the traits
+// `PartialEq` and `Eq`; `()` has one value, so `==` is true and `!=` is false. The operands are evaluated,
+// the left one first (§3.5), and the right side of `&&` and `||` only when the left one does not decide.
+// `mark(inout log, d)` appends the digit `d` to `log`, so `log` shows which operands ran and in which order.
+// `direct`: `1 == 2` (true) then `3 != 4` (false): log 1234, 10000 for the true `==`, 20000 for a true `!=`;
+//   11234.
+// `logic_and`: `false && (2 == 3)` skips the right side: log 1, false; 1.
+// `logic_or`: `false || (2 == 3)` runs it: log 123, true; 1000 + 123.
+// `generic`: `eq_gen[T: Eq]` with `T = ()` on `1` and `2`: true, log 12; 1000 + 12, and 2000 for
+//   `eq_gen((), ())`; 3012.
+// `aggregates`: one bit for each comparison that is true: `Some(()) == Some(())` 1, `Some(()) == None` 2,
+//   `None == None` 4, two equal `Gate`s 8, `Gate`s that differ in `open` 16, `(1, ()) == (1, ())` 32,
+//   `(1, ()) == (2, ())` 64; 1 + 4 + 8 + 32 = 45.
+
+pub struct Gate: PartialEq + Eq {
+  open: Bool,
+  u: (),
+}
+
+fn mark(inout log: U32, d: U32) {
+  log = log * 10 + d
+}
+
+fn probe(inout log: U32, d: U32, r: Bool) -> Bool {
+  log = log * 10 + d
+  r
+}
+
+fn eq_gen[T: Eq](a: T, b: T) -> Bool {
+  a == b
+}
+
+@export
+pub fn direct() -> U32 {
+  var log: U32 = 0
+  let a = mark(inout log, 1) == mark(inout log, 2)
+  let b = mark(inout log, 3) != mark(inout log, 4)
+  var r = log
+  if a {
+    r = r + 10000
+  }
+  if b {
+    r = r + 20000
+  }
+  r
+}
+
+@export
+pub fn logic_and() -> U32 {
+  var log: U32 = 0
+  let r = probe(inout log, 1, false) && (mark(inout log, 2) == mark(inout log, 3))
+  if r { 1000 + log } else { log }
+}
+
+@export
+pub fn logic_or() -> U32 {
+  var log: U32 = 0
+  let r = probe(inout log, 1, false) || (mark(inout log, 2) == mark(inout log, 3))
+  if r { 1000 + log } else { log }
+}
+
+@export
+pub fn generic() -> U32 {
+  var log: U32 = 0
+  let a = eq_gen(mark(inout log, 1), mark(inout log, 2))
+  var r = log
+  if a {
+    r = r + 1000
+  }
+  if eq_gen((), ()) {
+    r = r + 2000
+  }
+  r
+}
+
+@export
+pub fn aggregates() -> U32 {
+  let s: Option[()] = Some(())
+  let n: Option[()] = None
+  let g = Gate { open: true, u: () }
+  let h = Gate { open: true, u: () }
+  let k = Gate { open: false, u: () }
+  var m: U32 = 0
+  if s == Some(()) {
+    m = m + 1
+  }
+  if s == n {
+    m = m + 2
+  }
+  if n == None {
+    m = m + 4
+  }
+  if g == h {
+    m = m + 8
+  }
+  if g == k {
+    m = m + 16
+  }
+  if (1, ()) == (1, ()) {
+    m = m + 32
+  }
+  if (1, ()) == (2, ()) {
+    m = m + 64
+  }
+  m
+}
+
+test "the values in the interpreter" {
+  assert direct() == 11234
+  assert logic_and() == 1
+  assert logic_or() == 1123
+  assert generic() == 3012
+  assert aggregates() == 45
+}

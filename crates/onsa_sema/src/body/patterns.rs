@@ -71,27 +71,15 @@ impl<'a> Checker<'a> {
             PatKind::Path(path) => self.bind_ctor_pat(pat, path, &[], ty, irrefutable, false),
             PatKind::TupleStruct { path, elems } => self.bind_ctor_pat(pat, path, elems, ty, irrefutable, true),
             PatKind::Tuple(elems) => {
-                // A literal variable is no tuple (S-860).
-                let s = self.known_shape(ty, span, "matched value")?;
-                let Ty::Tuple(ts) = self.ty(s) else {
-                    // A value of the error type: the elements are errors too,
-                    // and their names are bound (§18.1, R-271).
-                    if matches!(self.ty(s), Ty::Error) {
-                        for &el in elems {
-                            self.bind_pat(el, s, irrefutable)?;
-                        }
-                        return Ok(P::Wild);
+                let Some(ts) = self.tuple_pattern(Stage::Types, ty, span, elems.len())? else {
+                    // The names of the elements are bound (§18.1, R-271).
+                    let s = self.shallow(ty);
+                    for &el in elems {
+                        self.bind_pat(el, s, irrefutable)?;
                     }
-                    let shown = self.described(ty);
-                    return Err(self.err(Code::E0401, span, format!("expected a tuple pattern target, found {shown}")));
+                    return Ok(P::Wild);
                 };
-                if ts.len() != elems.len() {
-                    return Err(self.err(
-                        Code::E0401,
-                        span,
-                        format!("a tuple of {} element(s) cannot match this pattern of {}", ts.len(), elems.len()),
-                    ));
-                }
+                // The unit pattern `()` is the constructor of `()` (S-516).
                 let mut subs = Vec::new();
                 for (&el, &t) in elems.iter().zip(&ts) {
                     subs.push(self.bind_pat(el, t, irrefutable)?);
@@ -132,6 +120,24 @@ impl<'a> Checker<'a> {
                 Ok(P::Or(lowered))
             }
         }
+    }
+
+    /// The element types of a tuple pattern of `n` elements against `ty`, for
+    /// the bodies and the flows (`stage`, of the diagnostic): those of a tuple
+    /// of `n`, or none for the unit pattern `()` against `()` (§7, S-516). Any
+    /// other type is E0401. `None` is a value of the error type, whose
+    /// elements are errors too (§18.1, R-271).
+    pub(crate) fn tuple_pattern(&mut self, stage: Stage, ty: TyId, span: Span, n: usize) -> R<Option<Vec<TyId>>> {
+        // A literal variable is no tuple (S-860).
+        let s = self.known_shape(ty, span, "matched value")?;
+        let msg = match self.ty(s) {
+            Ty::Tuple(ts) if ts.len() == n => return Ok(Some(ts)),
+            Ty::Unit if n == 0 => return Ok(Some(Vec::new())),
+            Ty::Error => return Ok(None),
+            Ty::Tuple(ts) => format!("a tuple of {} element(s) cannot match this pattern of {n}", ts.len()),
+            _ => format!("expected a tuple pattern target, found {}", self.described(ty)),
+        };
+        Err(self.diag(Diagnostic::new(stage, Code::E0401, span, msg).with_found(self.src(span))))
     }
 
     fn bind_ctor_pat(

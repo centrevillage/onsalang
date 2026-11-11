@@ -1,0 +1,3 @@
+[package]
+name = "flow_failed_use_tuple_pattern_pkg"
+edition = "2026"

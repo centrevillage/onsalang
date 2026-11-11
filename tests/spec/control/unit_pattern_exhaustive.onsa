@@ -1,0 +1,177 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7"]
+
+// S-516 (U9 of W5-24): the exhaustive and the reachable `match` with a `()` in it (§7: "網羅の判定に数えるのは、`Bool` の `true` と `false`、unit の `()`、
+// enum の列挙子、それらを要素に持つタプルと struct のパターンだけである"). A `()` is one value, so that the arm `()` alone is exhaustive, `Some(())` and `None`
+// are exhaustive for an `Option[()]`, and a `_` after an arm that does not cover everything is still reached. No E0501 and no E0503 anywhere; the arms that do not
+// cover (E0501) and the arms that are covered (E0503) are in negative/unit_pattern_e0501_not_exhaustive.onsa and fixes/unit_pattern_e0503_covered.onsa. The
+// `match` is a statement that assigns a `var` in each arm (the form that this version runs for every pattern). Every value is worked out by hand.
+
+fn g() {}
+
+pub enum Ev {
+  Tick(()),
+  Note(Bool),
+}
+
+pub struct Gate {
+  open: Bool,
+  u: (),
+}
+
+fn one_unit_arm() -> I32 {
+  var r = 0
+  match g() {
+    () => { r = 1 },
+  }
+  r
+}
+
+fn a_binding_takes_the_unit() -> I32 {
+  var r = 0
+  match g() {
+    u => {
+      let () = u
+      r = 2
+    },
+  }
+  r
+}
+
+fn option_unit_both(o: Option[()]) -> I32 {
+  var r = 0
+  match o {
+    Some(()) => { r = 1 },
+    None => { r = 2 },
+  }
+  r
+}
+
+fn option_unit_then_wildcard(o: Option[()]) -> I32 {
+  var r = 0
+  match o {
+    Some(()) => { r = 1 },
+    _ => { r = 2 },
+  }
+  r
+}
+
+fn nested_option(o: Option[Option[()]]) -> I32 {
+  var r = 0
+  match o {
+    Some(Some(())) => { r = 1 },
+    Some(None) => { r = 2 },
+    None => { r = 3 },
+  }
+  r
+}
+
+fn tuple_bool_unit(b: Bool) -> I32 {
+  var r = 0
+  match (b, g()) {
+    (true, ()) => { r = 1 },
+    (false, ()) => { r = 2 },
+  }
+  r
+}
+
+fn tuple_bool_unit_wildcard(b: Bool) -> I32 {
+  var r = 0
+  match (b, g()) {
+    (true, ()) => { r = 1 },
+    _ => { r = 2 },
+  }
+  r
+}
+
+fn tuple_unit_binding(b: Bool) -> I32 {
+  var r = 0
+  match (g(), b) {
+    ((), true) => { r = 1 },
+    ((), false) => { r = 2 },
+  }
+  r
+}
+
+fn result_unit(x: Result[(), Bool]) -> I32 {
+  var r = 0
+  match x {
+    Ok(()) => { r = 1 },
+    Err(true) => { r = 2 },
+    Err(false) => { r = 3 },
+  }
+  r
+}
+
+fn variant_with_a_unit(e: Ev) -> I32 {
+  var r = 0
+  match e {
+    Ev.Tick(()) => { r = 1 },
+    Ev.Note(true) => { r = 2 },
+    Ev.Note(false) => { r = 3 },
+  }
+  r
+}
+
+fn struct_with_a_unit_field(gt: Gate) -> I32 {
+  var r = 0
+  match gt {
+    Gate { open: true, u: () } => { r = 1 },
+    Gate { open: false, u: () } => { r = 2 },
+  }
+  r
+}
+
+fn guard_does_not_count(c: Bool) -> I32 {
+  var r = 0
+  match g() {
+    () if c => { r = 1 },
+    _ => { r = 2 },
+  }
+  r
+}
+
+test "one arm is exhaustive for a unit" {
+  assert one_unit_arm() == 1
+  assert a_binding_takes_the_unit() == 2
+}
+
+test "Some of a unit and None are exhaustive, and the wildcard after Some of a unit is reached" {
+  assert option_unit_both(Some(())) == 1
+  assert option_unit_both(None) == 2
+  assert option_unit_then_wildcard(Some(())) == 1
+  assert option_unit_then_wildcard(None) == 2
+}
+
+test "a nested Option of a unit" {
+  assert nested_option(Some(Some(()))) == 1
+  assert nested_option(Some(None)) == 2
+  assert nested_option(None) == 3
+}
+
+test "tuples of a Bool and a unit" {
+  assert tuple_bool_unit(true) == 1
+  assert tuple_bool_unit(false) == 2
+  assert tuple_bool_unit_wildcard(true) == 1
+  assert tuple_bool_unit_wildcard(false) == 2
+  assert tuple_unit_binding(true) == 1
+  assert tuple_unit_binding(false) == 2
+}
+
+test "a Result, a variant and a struct that hold a unit" {
+  assert result_unit(Ok(())) == 1
+  assert result_unit(Err(true)) == 2
+  assert result_unit(Err(false)) == 3
+  assert variant_with_a_unit(Ev.Tick(())) == 1
+  assert variant_with_a_unit(Ev.Note(true)) == 2
+  assert variant_with_a_unit(Ev.Note(false)) == 3
+  assert struct_with_a_unit_field(Gate { open: true, u: () }) == 1
+  assert struct_with_a_unit_field(Gate { open: false, u: () }) == 2
+}
+
+test "a guard on the unit does not count, so the wildcard after it is reached" {
+  assert guard_does_not_count(true) == 1
+  assert guard_does_not_count(false) == 2
+}

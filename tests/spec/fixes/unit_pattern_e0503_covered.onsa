@@ -1,0 +1,91 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1"]
+// fixes = 1
+
+// S-516 (U9 of W5-24): an arm after the arms that cover everything, with a `()` among them, is E0503 (§7: "前の腕で覆われて、どの値でも選ばれない腕は E0503（… `true` と `false` の後の `_`、
+// `()` の後の `_`）"; "網羅の判定に数えるのは … unit の `()`"). `()` is the one value of its type, so the arm `()` covers a `_`, a second `()`, and `Some(_)` after `Some(())`. The candidate is only
+// the deletion of the arm when the arm that covers is not a `_` or a binding itself (S-934: "移す候補を出すのは、覆う腕のパターンが `_` か束縛そのものの形だけである"), and also when the
+// move of the covering `_` to the end would make it unreachable in its turn (`_` before `()`, where `()` alone is exhaustive; move_blocked in fixes/match_unreachable_fix_move_blocked.onsa
+// has the others). One candidate (the deletion), the text not written here (the contract of §18.1 checks it). One error per function (P-01).
+
+fn g() {}
+
+pub enum Ev {
+  Tick(()),
+  Note(I32),
+}
+
+pub struct Gate {
+  open: Bool,
+  u: (),
+}
+
+pub fn wildcard_after_unit() -> I32 {
+  match g() {
+    () => 1,
+    _ => 2, //~ E0503
+  }
+}
+
+pub fn unit_written_twice() -> I32 {
+  match g() {
+    () => 1,
+    () => 2, //~ E0503
+  }
+}
+
+pub fn wildcard_before_unit() -> I32 {
+  match g() {
+    _ => 1,
+    () => 2, //~ E0503
+  }
+}
+
+pub fn wildcard_after_some_and_none(o: Option[()]) -> I32 {
+  match o {
+    Some(()) => 1,
+    None => 2,
+    _ => 3, //~ E0503
+  }
+}
+
+pub fn some_wildcard_after_some_unit(o: Option[()]) -> I32 {
+  match o {
+    Some(()) => 1,
+    Some(_) => 2, //~ E0503
+    None => 3,
+  }
+}
+
+pub fn wildcard_after_a_tuple_with_a_unit(b: Bool) -> I32 {
+  match (b, g()) {
+    (true, ()) => 1,
+    (false, ()) => 2,
+    _ => 3, //~ E0503
+  }
+}
+
+pub fn wildcard_after_a_result_with_a_unit(x: Result[(), Bool]) -> I32 {
+  match x {
+    Ok(()) => 1,
+    Err(_) => 2,
+    _ => 3, //~ E0503
+  }
+}
+
+pub fn wildcard_after_every_variant(e: Ev) -> I32 {
+  match e {
+    Ev.Tick(()) => 1,
+    Ev.Note(_) => 2,
+    _ => 3, //~ E0503
+  }
+}
+
+pub fn wildcard_after_a_struct_with_a_unit_field(gt: Gate) -> I32 {
+  match gt {
+    Gate { open: true, u: () } => 1,
+    Gate { open: false, u: () } => 2,
+    _ => 3, //~ E0503
+  }
+}

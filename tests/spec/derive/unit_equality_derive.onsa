@@ -1,0 +1,110 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§6.4", "§4.1"]
+
+// R-415 (U9 of W5-24): the types that hold a `()` are compared when their parts are (§6.4: "`Option[T]`、`Result[T, E]` | 中身が全て実装するとき `PartialEq` `Eq` …";
+// "タプル、`[T; N]` | 要素が全て実装するとき `PartialEq` `Eq` …"; "生成する実装の意味: `PartialEq` / `Eq` は、全てのフィールド（enum は列挙子と中身）が等しいとき等しい"). A `()` has
+// `PartialEq` and `Eq` and no more (no `Hash`, `Show`, `PartialOrd`, which negative/unit_equality_not_ordered.onsa checks), so these are the types: an `Option[()]`,
+// a `Result` with a `()` on one side, a tuple, an array, a struct and an enum that derive `PartialEq + Eq` with a `()` in them. A `()` is always equal to a `()`, so that
+// the other parts decide. The two sides are evaluated even when the first parts differ. Every value is worked out by hand.
+
+fn g() {}
+
+fn mark(inout log: U32, d: U32) {
+  let shifted = log * 10
+  log = shifted + d
+}
+
+pub struct Gate: PartialEq + Eq {
+  open: Bool,
+  u: (),
+}
+
+pub enum Ev: PartialEq + Eq {
+  Tick(()),
+  Note(I32),
+}
+
+fn eq_by_bound[T: Eq](a: T, b: T) -> Bool {
+  a == b
+}
+
+test "Option of a unit" {
+  let a: Option[()] = Some(())
+  let b: Option[()] = Some(g())
+  let n: Option[()] = None
+  let m: Option[()] = None
+  assert a == b
+  assert !(a != b)
+  assert n == m
+  assert !(n != m)
+  assert a != n
+  assert n != a
+  assert !(a == n)
+}
+
+test "Result with a unit on one side" {
+  let ok: Result[(), I32] = Ok(())
+  let ok2: Result[(), I32] = Ok(g())
+  let e3: Result[(), I32] = Err(3)
+  let e4: Result[(), I32] = Err(4)
+  assert ok == ok2
+  assert ok != e3
+  assert e3 == e3
+  assert e3 != e4
+  assert !(e3 == e4)
+  let fine: Result[I32, ()] = Ok(1)
+  let bad: Result[I32, ()] = Err(())
+  assert fine != bad
+  assert bad == bad
+}
+
+test "a tuple with a unit" {
+  assert (1, g()) == (1, g())
+  assert (1, g()) != (2, g())
+  assert (g(), true) == (g(), true)
+  assert (g(), true) != (g(), false)
+}
+
+test "an array of units" {
+  let a: [(); 3] = [g(), g(), g()]
+  let b: [(); 3] = [(), (), ()]
+  assert a == b
+  assert !(a != b)
+}
+
+test "a struct that derives PartialEq with a unit field" {
+  let a = Gate { open: true, u: () }
+  let b = Gate { open: true, u: g() }
+  let c = Gate { open: false, u: () }
+  assert a == b
+  assert a != c
+  assert !(a == c)
+  assert !(a != b)
+}
+
+test "an enum that derives PartialEq with a unit payload" {
+  assert Ev.Tick(()) == Ev.Tick(g())
+  assert Ev.Tick(()) != Ev.Note(1)
+  assert Ev.Note(1) == Ev.Note(1)
+  assert Ev.Note(1) != Ev.Note(2)
+  assert !(Ev.Tick(()) != Ev.Tick(()))
+}
+
+test "a bound of Eq on the types that hold a unit" {
+  let a: Option[()] = Some(())
+  assert eq_by_bound(a, a)
+  assert eq_by_bound(Gate { open: true, u: () }, Gate { open: true, u: () })
+  assert eq_by_bound((1, g()), (1, g()))
+}
+
+test "both sides of a comparison of a type with a unit are evaluated" {
+  var log: U32 = 0
+  let same = (1, mark(inout log, 1)) == (2, mark(inout log, 2))
+  assert !same
+  assert log == 12
+  let same2 = (mark(inout log, 3), 7) == (mark(inout log, 4), 7)
+  assert same2
+  assert log == 1234
+}
