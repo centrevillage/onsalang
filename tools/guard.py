@@ -7,9 +7,11 @@ own, as tools/bg.py does) and every 0.05 s sums the resident memory of every pro
 pgid=,rss=`: the `ps` of macOS selects no group), so a command wrapped in another (`/usr/bin/time -l onsa …`,
 `sh -c …`) is measured whole, its children with it. Past max_gb or max_seconds it sends SIGKILL to the group
 (SIGKILL makes no crash report, rules/common.md 3.1); when the command ends, it kills what is left of the group.
-It prints the output of the command (the first 4000 characters of each stream), then a last line
+It prints the whole output of the command (a long one goes to a file with `> file`), then a last line
 `guard: exit <code> peak <MB> MB <seconds> s`, with `killed (memory)` or `killed (time)` when it stopped it
-(the code is then -9); its own exit is 0. A limit of the system (setrlimit) is not used: macOS does not hold
+(the code is then -9). Its own exit is the code of the command, or 128 + 9 when it stopped it (as a shell
+gives a command killed by SIGKILL), so `&&` and `$?` see the command. A limit of the system (setrlimit) is
+not used: macOS does not hold
 the resident memory to it, and an allocation that fails aborts with a crash report.
 """
 import os
@@ -25,7 +27,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import repo  # noqa: E402
 
 POLL = 0.05  # seconds between two looks at the group
-SHOWN = 4000  # characters of each stream printed
 
 
 def group_rss_kb(pgid):
@@ -69,7 +70,7 @@ def guard(command, max_gb, max_seconds, out=None, err=None):
         kill_group(p.pid)  # what the command left behind (a child sent to the background)
         for f, stream in ((o, out), (e, err)):
             f.seek(0)
-            stream.write(f.read().decode("utf-8", "replace")[:SHOWN])
+            stream.write(f.read().decode("utf-8", "replace"))
         print(f"guard: exit {p.returncode} peak {peak // 1024} MB {time.time() - start:.2f} s{why}", file=out)
         return p.returncode, peak, why.strip()
 
@@ -85,8 +86,14 @@ def run(args):
     if not command:
         print("guard: no command after `--`", file=sys.stderr)
         return 2
-    guard(command, args.max_gb, args.max_seconds)
-    return 0
+    code, _, _ = guard(command, args.max_gb, args.max_seconds)
+    return exit_code(code)
+
+
+def exit_code(code):
+    """The exit of `run` for the code `code` of the command: the code, or 128 + the signal that ended it
+    (-9, SIGKILL, is 137)."""
+    return code if code >= 0 else 128 - code
 
 
 C = repo.Command  # (add_arguments, run, roles, purpose, when, example); the help is `help` (repo.parse_command)

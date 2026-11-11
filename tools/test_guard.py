@@ -85,6 +85,30 @@ class Guard(unittest.TestCase):
         self.assertIn("there\n", out.getvalue())
         self.assertIn("guard: exit 0", out.getvalue())
 
+    def main_of(self, *argv):
+        out = io.StringIO()
+        real, sys.stdout = sys.stdout, out
+        try:
+            code = guard.main(["run", *argv])
+        finally:
+            sys.stdout = real
+        return code, out.getvalue()
+
+    def test_its_exit_is_the_exit_of_the_command(self):
+        code, out = self.main_of("1", "10", "--", "sh", "-c", "exit 3")
+        self.assertEqual(code, 3)
+        self.assertIn("guard: exit 3", out)
+
+    def test_its_exit_is_137_when_it_stops_the_command(self):
+        code, out = self.main_of("1", "0.4", "--", "sh", "-c", "sleep 30")
+        self.assertEqual(code, 137)
+        self.assertIn("killed (time)", out)
+
+    def test_a_long_output_is_printed_whole(self):
+        code, out = self.main_of("1", "10", "--", PY, "-c", "print('x' * 10000)")
+        self.assertEqual(code, 0)
+        self.assertIn("x" * 10000 + "\n", out)
+
 
 if __name__ == "__main__":
     unittest.main()
