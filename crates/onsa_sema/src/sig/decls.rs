@@ -561,6 +561,14 @@ impl<'p> Sema<'p> {
         e.variants.iter().map(|v| (v.name.name.clone(), v.name.span)).collect()
     }
 
+    /// The names of the fields of `d` when it is a struct, as written.
+    pub(crate) fn field_names(&self, d: DefId) -> Vec<String> {
+        let def = self.a.def(d);
+        let Some(ast) = self.module(def.module).map(|m| &m.parsed.ast) else { return Vec::new() };
+        let Some(ItemKind::Struct(s)) = def.item.map(|i| item_kind(&ast.item(i).kind)) else { return Vec::new() };
+        s.fields.iter().map(|f| f.name.name.clone()).collect()
+    }
+
     /// The table of the members of the inherent `impl` `id` (D-15): of the
     /// struct or enum it names, of the builtin type by its key. None for
     /// another type.

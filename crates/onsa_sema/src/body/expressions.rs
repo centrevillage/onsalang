@@ -295,7 +295,10 @@ impl<'a> Checker<'a> {
                         self.check_hole(e, k, path)?;
                     }
                 }
-                Ok(self.a.types.builtin(BuiltinTy::Str, vec![]))
+                match self.fixed_literal(self.expr(e).span, s, expected)? {
+                    Some(t) => Ok(t),
+                    None => Ok(self.a.types.builtin(BuiltinTy::Str, vec![])),
+                }
             }
         }
     }
@@ -692,33 +695,54 @@ impl<'a> Checker<'a> {
     /// One operator of a chain (the tree of §3.1): the left operand, the
     /// right one, then what the operator requires of them (S-255).
     fn check_binary(&mut self, op: BinOp, op_span: Span, lhs: ExprId, rhs: ExprId) -> R<TyId> {
-        let t = self.check_expr(lhs, None)?;
         Ok(match op.group() {
+            OpGroup::Comparison => return self.check_comparison(op, op_span, lhs, rhs),
             OpGroup::And | OpGroup::Or => {
+                let t = self.check_expr(lhs, None)?;
                 let bool_ = self.bool_();
                 self.unify_at(self.expr(lhs).span, t, bool_)?;
                 self.check_expr(rhs, Some(bool_))?;
                 bool_
             }
-            OpGroup::Comparison => {
-                let rt = self.check_expr(rhs, None)?;
-                self.unify_at(self.expr(rhs).span, rt, t)?;
-                self.require_op(OpNeed::Binary(op), t, op_span)?;
-                self.bool_()
-            }
             OpGroup::Bitwise if matches!(op, BinOp::Shl | BinOp::Shr) => {
+                let t = self.check_expr(lhs, None)?;
                 let u32 = self.u32();
                 self.check_expr(rhs, Some(u32))?;
                 self.require_op(OpNeed::Binary(op), t, op_span)?;
                 t
             }
             OpGroup::Bitwise | OpGroup::Additive | OpGroup::Multiplicative | OpGroup::Remainder => {
+                let t = self.check_expr(lhs, None)?;
                 let rt = self.check_expr(rhs, None)?;
                 self.unify_at(self.expr(rhs).span, rt, t)?;
                 self.require_op(OpNeed::Binary(op), t, op_span)?;
                 t
             }
         })
+    }
+
+    /// A comparison (§3.2): a string literal with no interpolation on one side,
+    /// through parentheses (S-1009), has the type of the other side as its
+    /// expected type (§4.7, S-614 C2), so the other side is checked first.
+    fn check_comparison(&mut self, op: BinOp, op_span: Span, lhs: ExprId, rhs: ExprId) -> R<TyId> {
+        let ast = self.ast;
+        let plain = |e: ExprId| {
+            let kind = &ast.expr(ast.without_parens(e)).kind;
+            matches!(kind, ExprKind::Lit(Lit::Str(s)) if onsa_syntax::test_name::value(s).is_some())
+        };
+        let (left, right) = (plain(lhs), plain(rhs));
+        let t = if left && !right {
+            let t = self.check_expr(rhs, None)?;
+            self.check_expr(lhs, Some(t))?;
+            t
+        } else {
+            let t = self.check_expr(lhs, None)?;
+            let rt = self.check_expr(rhs, right.then_some(t))?;
+            self.unify_at(self.expr(rhs).span, rt, t)?;
+            t
+        };
+        self.require_op(OpNeed::Binary(op), t, op_span)?;
+        Ok(self.bool_())
     }
 
     /// A prefix `-` or `!` (§3.2, §3.4).

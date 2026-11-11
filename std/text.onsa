@@ -1,0 +1,29 @@
+//! Text held as a value (spec §4.2, S-614).
+
+/// A string of ASCII characters (0x00 to 0x7F, NUL and the control
+/// characters among them) held as a value in a capacity of `N` bytes: Copy
+/// and with no heap, so that an `rt` function and a target with no heap
+/// build text with it (the line of a display, a log, the name of a state).
+/// Its length and its capacity are counted in bytes, the number of its
+/// characters.
+///
+/// A string literal with no interpolation is a value of it where the
+/// expected type is `FixedStr[N]` (§4.7): a literal longer than `N` or with
+/// a character out of ASCII is an E0408, and where `N` is not decided the
+/// length of the literal is `N`.
+///
+/// It holds the invariant `len <= N`, the bytes after `len` 0 and every
+/// byte ASCII: its fields are `priv`, so a value comes from a literal, from
+/// `default()` (empty) and from the appends alone. So the derived equality is
+/// that of the bytes used, and the derived order is the byte order of `Str`.
+pub struct FixedStr[const N: U32]: PartialEq + Eq + PartialOrd + Ord + Hash + Default {
+  priv bytes: [U8; N],
+  priv len: U32,
+}
+
+impl[const N: U32] FixedStr[N] {
+  /// The length used, in bytes.
+  pub rt fn len(self) -> U32 {
+    self.len
+  }
+}

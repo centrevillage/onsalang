@@ -1,0 +1,110 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.2", "§2.4", "§3.4"]
+
+// S-614 (W5-12 U2): the type `FixedStr[N]` of `std.text` (spec §4.2: "容量 `N` バイトの中に ASCII の文字列を値として持つ std の Copy の型").
+// Run in the interpreter: `len()` is the number of bytes of the used part (§4.2: "長さと容量はバイトで数え、文字の数と同じである"),
+// the equality is by the used length and the bytes (a NUL that is written is a byte that is used, so `"warm"` and `"warm\0"` differ),
+// the type is Copy (an array of it is made by `[e; N]`, which needs a Dup element, and a copy is apart from the source), and `Default` is
+// the empty string (§4.2: "等値・順序・`Hash`・`Default` は derive による"; the derive of a struct is the sum of its fields, so the empty string has the
+// length 0 and all bytes 0). The order `<` is run in fixed_str_decl_order.onsa (W8-10); the derive lists are checked in fixed_str_decl_derives.onsa.
+
+use std.text.FixedStr
+
+test "len is the number of the used bytes" {
+  let a: FixedStr[8] = "warm"
+  assert a.len() == 4
+  let b: FixedStr[8] = ""
+  assert b.len() == 0
+  let c: FixedStr[4] = "abcd"
+  assert c.len() == 4
+  let d: FixedStr[8] = "a\0b"
+  assert d.len() == 3
+  let e: FixedStr[8] = "{{}}"
+  assert e.len() == 2
+  let f: FixedStr[8] = "\u{7f}"
+  assert f.len() == 1
+  let g: FixedStr[8] = "\n\t\\"
+  assert g.len() == 3
+  let h: FixedStr[8] = "\0"
+  assert h.len() == 1
+}
+
+test "the equality is by the used length and the bytes" {
+  let a: FixedStr[8] = "warm"
+  let b: FixedStr[8] = "warm"
+  assert a == b
+  assert b == a
+  let c: FixedStr[8] = "warn"
+  assert a != c
+  let d: FixedStr[8] = "war"
+  assert a != d
+  assert d != a
+  let nul: FixedStr[8] = "warm\0"
+  assert a != nul
+  assert nul != a
+  assert nul.len() == 5
+  let empty: FixedStr[8] = ""
+  let zero: FixedStr[8] = "\0"
+  assert empty != zero
+  let same: FixedStr[8] = "a\0b"
+  let other: FixedStr[8] = "a\0c"
+  assert same == "a\0b"
+  assert same != other
+}
+
+test "the equality is the same for the capacity that is used up" {
+  let a: FixedStr[4] = "abcd"
+  let b: FixedStr[4] = "abcd"
+  let c: FixedStr[4] = "abc"
+  assert a == b
+  assert a != c
+}
+
+test "the value is copied" {
+  let a: FixedStr[8] = "one"
+  var b = a
+  b = "three"
+  assert a == "one"
+  assert a.len() == 3
+  assert b == "three"
+  assert b.len() == 5
+}
+
+fn changed_inside(t: FixedStr[8]) -> U32 {
+  var u = t
+  u = "xyz12"
+  u.len()
+}
+
+test "a copy that a function changes is apart from the source" {
+  let a: FixedStr[8] = "one"
+  assert changed_inside(a) == 5
+  assert a == "one"
+}
+
+test "an array of the value is made by [e; N]" {
+  let a: FixedStr[8] = "warm"
+  let xs = [a; 3]
+  assert xs[0] == "warm"
+  assert xs[2] == "warm"
+  assert xs[1].len() == 4
+}
+
+test "Default is the empty string" {
+  let d: FixedStr[8] = FixedStr.default()
+  assert d.len() == 0
+  assert d == ""
+  assert d != "a"
+}
+
+fn zero_of[T: Default]() -> T {
+  T.default()
+}
+
+test "Default through a bound" {
+  let d: FixedStr[16] = zero_of()
+  assert d.len() == 0
+  assert d == ""
+}

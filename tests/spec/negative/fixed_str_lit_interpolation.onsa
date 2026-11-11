@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§4.2", "§2.4", "§4.7"]
+
+// S-614 (W5-12 U2): a string literal with an interpolation makes a new `Str` (§2.4: "補間を含む文字列は新しい `Str` を作る"), so it is not a value of `FixedStr[N]`: where the expected
+// type is `FixedStr[N]` it is E0401 (§4.2: "補間を含むリテラルは E0401"), whatever the capacity is. The comparison with a literal that has an interpolation does not give the other side an
+// expected type (the rule of the comparison is for a literal "補間の無い"), so it is the `Str` against `FixedStr[8]`, also E0401. `{{` and `}}` are not an interpolation (a
+// literal with only those is a `FixedStr`, fixed_str_lit_expected.onsa). Every function has `uses {Alloc}` for the interpolation, so the only error is the type. Positions: an
+// annotation, an argument, a field, `return`, `Some(…)`, an array element and a comparison. One error in each function (P-01); the marker is on the line of the literal.
+
+use std.text.FixedStr
+
+pub struct Voice {
+  name: FixedStr[16],
+}
+
+fn takes(t: FixedStr[16]) -> U32 {
+  t.len()
+}
+
+pub fn in_a_let(x: U32) -> FixedStr[16] uses {Alloc} {
+  let t: FixedStr[16] = "gain={x}"                  //~ E0401
+  t
+}
+
+pub fn in_an_argument(x: U32) -> U32 uses {Alloc} {
+  takes("gain={x}")                                 //~ E0401
+}
+
+pub fn in_a_field(x: U32) -> Voice uses {Alloc} {
+  Voice { name: "v{x}" }                            //~ E0401
+}
+
+pub fn in_a_return(x: U32) -> FixedStr[16] uses {Alloc} {
+  return "{x}"                                      //~ E0401
+}
+
+pub fn in_some(x: U32) -> Option[FixedStr[16]] uses {Alloc} {
+  Some("a{x}")                                      //~ E0401
+}
+
+pub fn in_an_array(x: U32) -> [FixedStr[16]; 2] uses {Alloc} {
+  ["ok", "b{x}"]                                    //~ E0401
+}
+
+pub fn in_a_comparison(t: FixedStr[16], x: U32) -> Bool uses {Alloc} {
+  t == "gain={x}"                                   //~ E0401
+}
+
+pub fn in_a_comparison_on_the_left(t: FixedStr[16], x: U32) -> Bool uses {Alloc} {
+  "gain={x}" == t                                   //~ E0401
+}
+
+pub fn the_braces_that_are_escaped_are_fine() -> FixedStr[16] {
+  let t: FixedStr[16] = "{{x}}"
+  t
+}
+
+pub fn the_interpolation_in_a_str_is_fine(x: U32) -> Str uses {Alloc} {
+  let s: Str = "gain={x}"
+  s
+}

@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§4.2", "§15.1", "§7"]
+
+// S-614 (W5-12 U2): the fields of `FixedStr[N]` are `priv` (§4.2: `pub struct FixedStr[const N: U32] { priv bytes: [U8; N], priv len: U32 }`), so a module other than `std.text` cannot
+// touch them (§15.1: the current rule of visibility; the diagnostic is the E0303 of tests/spec/packages/visibility_fields/). Reading a field, writing it, naming it in a struct literal,
+// leaving it out of a literal (the struct is not made by a literal outside the module), and naming it in a pattern or leaving it out of a pattern (without the last `_`, §7)
+// are all E0303. The method `len()` is not the field `len` (the method is fine); a pattern with the last `_` and a literal-free way of making the value are fine
+// (fixed_str_decl_priv_rest_ok.onsa). One error in each function (P-01); the marker is on the line of the field or of the literal.
+
+use std.text.FixedStr
+
+pub fn reading_the_bytes(t: FixedStr[8]) -> U8 {
+  t.bytes[0]                                        //~ E0303
+}
+
+pub fn reading_the_used_length_field(t: FixedStr[8]) -> U32 {
+  let n = t.len                                     //~ E0303
+  n
+}
+
+pub fn writing_the_bytes(inout t: FixedStr[8]) {
+  t.bytes[0] = 65                                   //~ E0303
+}
+
+pub fn writing_the_used_length_field(inout t: FixedStr[8]) {
+  t.len = 3                                         //~ E0303
+}
+
+pub fn a_literal_that_names_the_fields() -> FixedStr[4] {
+  FixedStr { bytes: [0; 4], len: 0 }                //~ E0303
+}
+
+pub fn a_literal_that_leaves_the_fields_out() -> FixedStr[4] {
+  FixedStr { bytes: [0; 4] }                        //~ E0303
+}
+
+pub fn a_pattern_that_names_the_fields(t: FixedStr[8]) -> U32 {
+  match t {
+    FixedStr { bytes: _, len: n } => n,             //~ E0303
+  }
+}
+
+pub fn a_pattern_that_leaves_a_field_out(t: FixedStr[8]) -> U32 {
+  let FixedStr { len: n } = t                       //~ E0303
+  n
+}
+
+pub fn the_method_len_is_fine(t: FixedStr[8]) -> U32 {
+  t.len()
+}

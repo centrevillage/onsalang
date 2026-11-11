@@ -1,0 +1,3 @@
+[package]
+name = "fixed_str_decl_module"
+edition = "2026"

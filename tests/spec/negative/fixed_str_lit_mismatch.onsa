@@ -1,0 +1,82 @@
+// onsa.toml
+// [test]
+// spec = ["§4.2", "§4.7", "§3.3"]
+
+// S-614 (W5-12 U2): the type `FixedStr[N]` is a type of its own and the literal is a value of it only where the expected type is `FixedStr[N]` (§4.2). A value that is not a literal does
+// not change its type: a `Str` (a variable, a parameter, a field or a call, even one that was a literal when it was made) is not a `FixedStr[N]`, a `FixedStr[N]` is not a `Str`, and a
+// `FixedStr[8]` is not a `FixedStr[16]` (the capacity is a part of the type, §4.2: "容量 `N`"; no conversion is written in the spec, §3.3: "暗黙の変換は無い"). The mismatch is E0401 in the
+// annotation of a `let`, an argument, a return value, a field and a comparison; a `FixedStr[N]` is not a number either. One error in each function (P-01).
+
+use std.text.FixedStr
+
+pub struct Voice {
+  name: FixedStr[8],
+}
+
+fn takes_eight(t: FixedStr[8]) -> U32 {
+  t.len()
+}
+
+fn takes_str(s: Str) -> U32 {
+  s.len()
+}
+
+pub fn a_str_variable_to_a_let(s: Str) -> FixedStr[8] {
+  let t: FixedStr[8] = s                            //~ E0401
+  t
+}
+
+pub fn a_literal_that_became_a_variable_is_a_str() -> U32 {
+  let k = "warm"
+  takes_eight(k)                                    //~ E0401
+}
+
+pub fn a_str_to_a_return(s: Str) -> FixedStr[8] {
+  s                                                 //~ E0401
+}
+
+pub fn a_str_to_a_field(s: Str) -> Voice {
+  Voice { name: s }                                 //~ E0401
+}
+
+pub fn a_fixed_str_to_a_str_let(t: FixedStr[8]) -> Str {
+  let s: Str = t                                    //~ E0401
+  s
+}
+
+pub fn a_fixed_str_to_a_str_argument(t: FixedStr[8]) -> U32 {
+  takes_str(t)                                      //~ E0401
+}
+
+pub fn another_capacity_to_a_let(t: FixedStr[16]) -> FixedStr[8] {
+  let u: FixedStr[8] = t                            //~ E0401
+  u
+}
+
+pub fn another_capacity_to_an_argument(t: FixedStr[16]) -> U32 {
+  takes_eight(t)                                    //~ E0401
+}
+
+pub fn another_capacity_to_a_return(t: FixedStr[4]) -> FixedStr[8] {
+  t                                                 //~ E0401
+}
+
+pub fn compared_with_a_str(t: FixedStr[8], s: Str) -> Bool {
+  t == s                                            //~ E0401
+}
+
+pub fn compared_with_another_capacity(a: FixedStr[8], b: FixedStr[16]) -> Bool {
+  a == b                                            //~ E0401
+}
+
+pub fn a_fixed_str_is_not_a_number(t: FixedStr[8]) -> U32 {
+  t                                                 //~ E0401
+}
+
+pub fn a_number_is_not_a_fixed_str(n: U32) -> FixedStr[8] {
+  n                                                 //~ E0401
+}
+
+pub fn a_literal_to_a_str_stays_a_str_and_is_fine() -> U32 {
+  takes_str("abc")
+}

@@ -1497,3 +1497,11 @@ target = "tests/spec/types/type_args_const_bare_arg_operator.onsa"
 reasons = ["S-329"]
 until = "W9-03"
 note = "W5-16 U1d から控えにしていた事例を W5-24 U6a で戻した（const 引数の `X::[…]`・`X[a, b]`、85 段の高さ）。演算を含む長さは W9-03 まで E0200。"
+
+# --- W5-12 U2: FixedStr の型・リテラル・比較の事例のうち、この作業の後も落ちるもの（2026-11-11）
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/fixed_str_decl_order.onsa"
+reasons = ["S-614"]
+until = "W8-10"
+note = "derive した FixedStr の大小（`<` など）は、Core の比較が W8-10（R-119）まで E0200。"

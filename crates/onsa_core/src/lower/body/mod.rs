@@ -48,6 +48,9 @@ pub(crate) struct FnCx<'b> {
     /// Set while lowering a flow body (T3-5): overrides for state-resident
     /// locals and for the stateful node expressions.
     pub flow: Option<super::flow::FlowLowerCx<'b>>,
+    /// Lowering the initializer of a `const`, which has no local of its own
+    /// (`Feature::ConstBindings`).
+    pub constant: bool,
 }
 
 impl<'b> FnCx<'b> {
@@ -68,7 +71,8 @@ impl<'b> FnCx<'b> {
             let (ty, _) = placeholder_ty(lw, l.ty, &args, l.span)?;
             locals.push(Local { name: l.name.clone(), ty });
         }
-        Ok(FnCx { args, info, ast: &m.parsed.ast, text: &m.text, module, locals, ret, inline_depth: 0, flow: None })
+        let (ast, text) = (&m.parsed.ast, &m.text[..]);
+        Ok(FnCx { args, info, ast, text, module, locals, ret, inline_depth: 0, flow: None, constant: false })
     }
 
     pub(crate) fn temp(&mut self, name: &str, ty: Ty) -> LocalId {

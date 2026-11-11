@@ -121,11 +121,15 @@
 [allow."crates/onsa_sema/src/lang.rs"]
 "AnyOrdinal" = 1
 "Err" = 1
+"FixedStr" = 1
 "None" = 1
 "Ok" = 1
 "Option" = 1
 "Result" = 1
 "Some" = 1
+"bytes" = 1
+"len" = 1
+"text" = 1
 
 [allow."crates/onsa_sema/src/lib.rs"]
 "std" = 1
@@ -327,3 +331,6 @@
 "input" = { count = 3, note = "[[test.host]] の欄の名前（K-14、W1-11）と、place の中のキー（W2-08）" }
 "output" = { count = 3, note = "[[test.host]] の欄の名前（K-14、W1-11）と、place の中のキー（W2-08）と、出力を指すメッセージの語" }
 "params" = { count = 1, note = "[[test.host]] の欄の名前（K-14、W1-11）" }
+
+[same_spelling."crates/onsa_tests/src/run/all.rs"]
+"text" = { count = 1, note = "onsa_cases --json の問題の欄の鍵（文面）" }

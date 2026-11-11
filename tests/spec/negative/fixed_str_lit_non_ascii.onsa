@@ -1,0 +1,87 @@
+// onsa.toml
+// [test]
+// spec = ["§4.2", "§4.7", "§2.4"]
+
+// S-614 (W5-12 U2): a string literal whose expected type is `FixedStr[N]` and that has a letter outside ASCII is E0408 whatever the capacity is (§4.2: "文字は ASCII(0x00〜0x7F。NUL と
+// 制御文字を含む)に限る"; "容量を超えるか ASCII の外の文字を含むリテラルは E0408"). The letters: `é` written directly, an escape of the first scalar value outside ASCII (`\u{80}`), an
+// escape of a letter that has several bytes in UTF-8 (`\u{3042}`, `\u{1F600}`), and one such letter among ASCII ones. The capacity is wide enough in all of them, so that
+// it is the letter and not the length that is the error. Positions: an annotation, an argument, a field, `return`, `Some(…)`, an array and both sides of a comparison.
+// The same literal with no expected type is a `Str` and fine (fixed_str_lit_str_stays.onsa). One error in each function (P-01); the marker is on the line of the literal.
+
+use std.text.FixedStr
+
+pub struct Voice {
+  name: FixedStr[16],
+}
+
+fn takes(t: FixedStr[16]) -> U32 {
+  t.len()
+}
+
+pub fn a_letter_written_directly() -> FixedStr[16] {
+  let t: FixedStr[16] = "é"                         //~ E0408
+  t
+}
+
+pub fn the_first_value_outside_ascii() -> FixedStr[16] {
+  let t: FixedStr[16] = "\u{80}"                    //~ E0408
+  t
+}
+
+pub fn a_letter_of_three_bytes() -> FixedStr[16] {
+  let t: FixedStr[16] = "\u{3042}"                  //~ E0408
+  t
+}
+
+pub fn a_letter_of_four_bytes() -> FixedStr[16] {
+  let t: FixedStr[16] = "\u{1F600}"                 //~ E0408
+  t
+}
+
+pub fn among_ascii_letters() -> FixedStr[16] {
+  let t: FixedStr[16] = "caf\u{e9} au lait"          //~ E0408
+  t
+}
+
+pub fn the_last_letter_is_outside() -> FixedStr[16] {
+  let t: FixedStr[16] = "abc\u{ff}"                 //~ E0408
+  t
+}
+
+pub fn in_an_argument() -> U32 {
+  takes("na\u{ef}ve")                               //~ E0408
+}
+
+pub fn in_a_field() -> Voice {
+  Voice { name: "caf\u{e9}" }                       //~ E0408
+}
+
+pub fn in_a_return() -> FixedStr[16] {
+  return "\u{80}"                                   //~ E0408
+}
+
+pub fn in_some() -> Option[FixedStr[16]] {
+  Some("é")                                         //~ E0408
+}
+
+pub fn in_an_array() -> [FixedStr[16]; 2] {
+  ["ok", "\u{3042}"]                                //~ E0408
+}
+
+pub fn on_the_right_of_a_comparison(t: FixedStr[16]) -> Bool {
+  t == "é"                                          //~ E0408
+}
+
+pub fn on_the_left_of_a_comparison(t: FixedStr[16]) -> Bool {
+  "\u{80}" == t                                     //~ E0408
+}
+
+pub fn the_last_ascii_letter_is_fine() -> FixedStr[16] {
+  let t: FixedStr[16] = "\u{7f}"
+  t
+}
+
+pub fn the_same_letters_are_fine_as_a_str() -> Str {
+  let s = "café \u{3042}"
+  s
+}

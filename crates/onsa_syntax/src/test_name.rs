@@ -19,7 +19,9 @@ pub(crate) fn forbidden(c: char) -> bool {
 /// The value of the name written as `lit`: the text of the literal with its
 /// escapes read (`"\u{61}"` is `a`, S-244). `None` when the literal holds an
 /// interpolation: then it is no name (the parser's E0002). The one place a
-/// name's value is made (the parser's check, the names of `onsa_sema`).
+/// name's value is made (the parser's check, the names of `onsa_sema`), and
+/// so the value of any string literal with no interpolation (a `FixedStr`,
+/// S-614).
 pub fn value(lit: &crate::ast::StrLit) -> Option<String> {
     if lit.pathless_hole {
         return None;

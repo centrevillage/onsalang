@@ -1,0 +1,71 @@
+// onsa.toml
+// [test]
+// mode = "check"
+// spec = ["§4.2", "§2.4", "§4.7"]
+
+// S-614 (W5-12 U2): with no expected type of `FixedStr[N]` a string literal is a `Str` as before (§4.2: "期待の型が無ければ今までどおり `Str` である"; §2.4). The type
+// `FixedStr` is in scope (`use std.text.FixedStr`) and that changes nothing for a literal that is a `let` without an annotation, an argument whose parameter is a `Str`, a field
+// of type `Str`, a comparison with a `Str`, the argument of a generic function with an unbound type parameter, and a pattern of a `match` on a `Str`. A literal that stayed a `Str` is seen by
+// handing it to a parameter of type `Str` (`str_len`), which a `FixedStr` would not be accepted by (E0401, tests/spec/negative/fixed_str_lit_mismatch.onsa).
+
+use std.text.FixedStr
+
+pub struct Named {
+  label: Str,
+  short: FixedStr[4],
+}
+
+fn str_len(s: Str) -> U32 {
+  s.len()
+}
+
+fn id[T](x: T) -> T {
+  x
+}
+
+fn kind_of(s: Str) -> U32 {
+  var r: U32 = 0
+  match s {
+    "a" => {
+      r = 1
+    },
+    "bc" => {
+      r = 2
+    },
+    _ => {
+      r = 3
+    },
+  }
+  r
+}
+
+test "a literal without an expected type is a Str" {
+  let s = "warm"
+  assert str_len(s) == 4
+  let k: Str = "cold"
+  assert str_len(k) == 4
+  assert str_len("abc") == 3
+  assert str_len(id("hello")) == 5
+  assert "abc" == "abc"
+  assert "abc" != "abd"
+}
+
+test "a field of type Str next to a field of type FixedStr" {
+  let n = Named { label: "a longer label than eight", short: "ab" }
+  assert str_len(n.label) == 25
+  assert n.short.len() == 2
+  assert n.label != "x"
+}
+
+test "a Str is matched by a Str pattern" {
+  assert kind_of("a") == 1
+  assert kind_of("bc") == 2
+  assert kind_of("zz") == 3
+}
+
+test "letters that FixedStr does not hold stay in a Str" {
+  let s = "café"
+  assert str_len(s) == 5
+  let t: Str = "\u{3042}"
+  assert str_len(t) == 3
+}

@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.2", "§4.7"]
+
+// S-1009 (detail; the parent's temporary reading, W5-12 U2): a string literal that is put in parentheses is still the literal for the rule of the comparison
+// (S-614 C2: "比較の一方が補間の無い文字列リテラルなら他方の型が期待型になる"), so `("warm") == t` is read as `"warm" == t`; the spec has the parenthesis as a grouping
+// that is taken off before the literal is looked at, as the `-` of a negative number is (§4.7: "(`e`) は常にグループ化で、`onsa fmt` が冗長な括弧を外しても合否が変わらない").
+// The case is run in the interpreter with the parenthesis on either side and doubled. If the decision of S-1009 is that the parenthesis is not a literal, this file is changed
+// to the E0401 of the type `Str` against `FixedStr[8]`.
+
+use std.text.FixedStr
+
+fn parenthesized_left(t: FixedStr[8]) -> Bool {
+  ("warm") == t
+}
+
+fn parenthesized_right(t: FixedStr[8]) -> Bool {
+  t == ("warm")
+}
+
+fn doubled(t: FixedStr[8]) -> Bool {
+  t != (("warm"))
+}
+
+test "the parenthesis around the literal does not change the type" {
+  let t: FixedStr[8] = "warm"
+  assert parenthesized_left(t)
+  assert parenthesized_right(t)
+  assert !doubled(t)
+  let u: FixedStr[8] = "cold"
+  assert !parenthesized_left(u)
+  assert !parenthesized_right(u)
+  assert doubled(u)
+}

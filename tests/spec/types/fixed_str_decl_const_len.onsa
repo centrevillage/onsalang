@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.2", "§6.6"]
+
+// S-614 (W5-12 U2): `len()` of a `FixedStr` const is evaluated at compile time (§6.6: "初期化式から関数を呼べる"; §4.2: the method `len(self) -> U32`), so a `const`
+// can hold the length of another. This is the one case of the const that calls a method of the type, in a file of its own: the values of the consts of
+// fixed_str_decl_const.onsa do not depend on the evaluation of a call in a `const`.
+
+use std.text.FixedStr
+
+const NAME: FixedStr[8] = "gain"
+const NAME_LEN: U32 = NAME.len()
+const BLANK: FixedStr[8] = ""
+const BLANK_LEN: U32 = BLANK.len()
+
+test "the length of a const is a const" {
+  assert NAME_LEN == 4
+  assert BLANK_LEN == 0
+}

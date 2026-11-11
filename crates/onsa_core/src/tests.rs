@@ -945,3 +945,13 @@ fn over_the_limits_in_a_declaration_is_at_the_type_of_the_innermost_field() {
         assert_eq!(text_at(&src, d.span), at, "{decl}");
     }
 }
+
+/// A `FixedStr` literal in a body is of the size of its text, not of its
+/// capacity (§4.2, S-614): `[0; N]` with the bytes of the text written in it.
+#[test]
+fn a_fixed_str_literal_is_of_the_size_of_its_text() {
+    let src = "use std.text.FixedStr\npub fn f() -> U32 {\n  let a: FixedStr[1000000] = \"ab\"\n  a.len()\n}\n";
+    let t = text(src);
+    assert!(t.len() < 2000, "{t}");
+    assert!(t.contains("[0:U8; 1000000]") && t.contains("= 98:U8"), "{t}");
+}

@@ -1,0 +1,113 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.2", "§4.7"]
+
+// S-614 (W5-12 U2, C2): when one side of a comparison is a string literal without interpolation, the type of the other side is its expected type (§4.7: "比較(`==`・`<` など)の
+// 一方が補間の無い文字列リテラルなら、他方の型がその期待型になる(左右どちらに書いても同じ)"; §4.2: `t == "warm"`). So the literal is a `FixedStr[N]` on either side, and
+// the equality is by the used length and the bytes (a NUL that is written, or one byte less, is another value). The other side is a variable, a field, an element, the result of a call,
+// a constant, or a `match` scrutinee; the comparison is in a condition, in a `&&` and in an `assert`. A literal that is longer than the capacity is E0408
+// (tests/spec/negative/fixed_str_lit_too_long.onsa). The parenthesis around the literal is fixed_str_lit_paren.onsa (S-1009); the order is fixed_str_decl_order.onsa.
+
+use std.text.FixedStr
+
+pub struct Voice {
+  name: FixedStr[8],
+}
+
+const MODE: FixedStr[8] = "dry"
+
+fn current() -> FixedStr[8] {
+  "cur"
+}
+
+fn name_is_warm(t: FixedStr[8]) -> Bool {
+  t == "warm"
+}
+
+fn warm_is_name(t: FixedStr[8]) -> Bool {
+  "warm" == t
+}
+
+fn differs_from_warm(t: FixedStr[8]) -> Bool {
+  t != "warm"
+}
+
+fn warm_differs(t: FixedStr[8]) -> Bool {
+  "warm" != t
+}
+
+fn in_a_condition(t: FixedStr[8]) -> U32 {
+  if t == "warm" {
+    1
+  } else if "cold" == t {
+    2
+  } else {
+    3
+  }
+}
+
+test "the literal on the right and on the left" {
+  let t: FixedStr[8] = "warm"
+  assert t == "warm"
+  assert "warm" == t
+  assert t != "cold"
+  assert "cold" != t
+  assert t != "war"
+  assert "wa" != t
+  assert name_is_warm(t)
+  assert warm_is_name(t)
+  assert !differs_from_warm(t)
+  assert !warm_differs(t)
+  let u: FixedStr[8] = "cold"
+  assert !name_is_warm(u)
+  assert !warm_is_name(u)
+  assert differs_from_warm(u)
+  assert warm_differs(u)
+}
+
+test "a NUL that is written is a byte of the value" {
+  let t: FixedStr[8] = "warm"
+  assert t != "warm\0"
+  assert "warm\0" != t
+  let z: FixedStr[8] = "a\0b"
+  assert z == "a\0b"
+  assert z != "a"
+}
+
+test "the capacity that is used up, and the empty string" {
+  let t: FixedStr[4] = "abcd"
+  assert t == "abcd"
+  assert "abcd" == t
+  assert t != "abc"
+  let e: FixedStr[4] = ""
+  assert e == ""
+  assert "" == e
+  assert t != ""
+}
+
+test "the other side is a field, an element, a call or a constant" {
+  let v = Voice { name: "mix" }
+  assert v.name == "mix"
+  assert "mix" == v.name
+  let xs: [FixedStr[4]; 2] = ["a", "bc"]
+  assert xs[1] == "bc"
+  assert "a" == xs[0]
+  assert current() == "cur"
+  assert "cur" == current()
+  assert MODE == "dry"
+  assert "dry" == MODE
+  assert MODE != "wet"
+}
+
+test "a comparison in a condition and in an and" {
+  let t: FixedStr[8] = "cold"
+  assert in_a_condition(t) == 2
+  let w: FixedStr[8] = "warm"
+  assert in_a_condition(w) == 1
+  let x: FixedStr[8] = "other"
+  assert in_a_condition(x) == 3
+  assert t == "cold" && w == "warm"
+  assert t == "none" || w == "warm"
+  assert t.len() == 4 && "cold" == t
+}

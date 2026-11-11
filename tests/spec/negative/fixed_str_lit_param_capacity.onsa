@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// spec = ["§4.2", "§4.7"]
+
+// S-1005 (the parent's temporary treatment, W5-12 U2): a string literal whose expected type is `FixedStr[N]` with the capacity `N` that is a const parameter of the enclosing function
+// (`fn is_warm[const N: U32](t: FixedStr[N]) -> Bool { t == "warm" }`) cannot be checked against the capacity (§4.2 and §4.7 say E0408 for a literal that is longer than `N`; with a
+// parameter the capacity is not known at the check). The temporary treatment is E0401 in the stage of the types, the same as an array literal put where `[U8; N]` is expected (the
+// message is the type that is expected against the type that is found). If the decision of S-1005 goes another way this file is changed. The positions are the comparison on
+// either side, the annotation of a `let`, `return`, the last value and a field of a generic struct whose capacity is the parameter. The literal that is passed to such a function is
+// fine: its capacity is decided by the argument (tests/spec/types/fixed_str_lit_generic.onsa). One error in each function (P-01).
+
+use std.text.FixedStr
+
+pub struct Label[const N: U32] {
+  name: FixedStr[N],
+}
+
+pub fn is_warm[const N: U32](t: FixedStr[N]) -> Bool {
+  t == "warm"                                       //~ E0401
+}
+
+pub fn warm_is[const N: U32](t: FixedStr[N]) -> Bool {
+  "warm" == t                                       //~ E0401
+}
+
+pub fn in_a_let[const N: U32](t: FixedStr[N]) -> FixedStr[N] {
+  let u: FixedStr[N] = "warm"                       //~ E0401
+  u
+}
+
+pub fn in_a_return[const N: U32]() -> FixedStr[N] {
+  return "warm"                                     //~ E0401
+}
+
+pub fn in_the_last_value[const N: U32]() -> FixedStr[N] {
+  "warm"                                            //~ E0401
+}
+
+pub fn in_a_field_of_a_generic_struct[const N: U32]() -> Label[N] {
+  Label { name: "warm" }                            //~ E0401
+}
+
+pub fn a_value_of_the_parameter_is_fine[const N: U32](t: FixedStr[N], u: FixedStr[N]) -> Bool {
+  t == u
+}

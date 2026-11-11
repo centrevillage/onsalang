@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.2", "§4.7"]
+
+// S-614 (W5-12 U2, C1; a reading that is derived, not written in the spec): the field of a generic struct whose type is `FixedStr[N]` gives the literal the expected type
+// `FixedStr[N]` with the `N` of the struct. When the struct is annotated (`Label[8]`) the literal has the capacity 8. When it is not decided (`let m = Label { name: "warm" }`,
+// and an argument of a function whose parameter is `Label[N]`) the length of the literal is `N` (§4.2: "`N` が決まっていなければリテラルの長さを `N` にする"). The case is in a file
+// of its own because the spec says the rule for the type `FixedStr[N]` and not for a struct that holds one.
+
+use std.text.FixedStr
+
+pub struct Label[const N: U32] {
+  name: FixedStr[N],
+}
+
+fn cap_of_label[const N: U32](l: Label[N]) -> U32 {
+  N
+}
+
+test "the struct is annotated" {
+  let l: Label[8] = Label { name: "warm" }
+  assert l.name.len() == 4
+  assert l.name == "warm"
+  assert cap_of_label(l) == 8
+}
+
+test "the capacity of the struct is not decided" {
+  let m = Label { name: "warm" }
+  assert m.name.len() == 4
+  assert cap_of_label(m) == 4
+  assert cap_of_label(Label { name: "abcdef" }) == 6
+}

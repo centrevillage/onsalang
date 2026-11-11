@@ -1,0 +1,87 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.2", "§4.7", "§6.6"]
+
+// S-614 (W5-12 U2): a string literal in the initializer of a `const` whose type is `FixedStr[N]` is a static value of that type (§4.2: "リテラルは静的な値",
+// the decision A5; §4.7: the type of the `const` is the expected type of its initializer). The forms are the plain one, the one with the capacity used up, the
+// empty one, an array, a tuple and a struct that hold it, and an `Option`; a `const` is read, compared with a literal, copied into a `var` (the `const` is not
+// changed by the copy), and passed on. A `const` is not a pattern (that is E0020, tests/spec/fixes/fixed_str_match_const_guard.onsa), and a literal that is too
+// long or not ASCII is E0408 in the initializer too (tests/spec/negative/fixed_str_decl_const_neg.onsa).
+
+use std.text.FixedStr
+
+pub struct Preset {
+  name: FixedStr[8],
+  id: U32,
+}
+
+const NAME: FixedStr[8] = "gain"
+const FULL: FixedStr[4] = "abcd"
+const EMPTY: FixedStr[8] = ""
+const NAMES: [FixedStr[8]; 3] = ["a", "bc", "def"]
+const FIRST: Preset = Preset { name: "init", id: 0 }
+const PAIR: (FixedStr[4], U32) = ("k", 1)
+const MAYBE: Option[FixedStr[8]] = Some("opt")
+const NOTHING: Option[FixedStr[8]] = None
+
+fn length_of(t: FixedStr[8]) -> U32 {
+  t.len()
+}
+
+test "a const holds the literal" {
+  assert NAME == "gain"
+  assert "gain" == NAME
+  assert NAME.len() == 4
+  assert FULL == "abcd"
+  assert FULL.len() == 4
+  assert EMPTY.len() == 0
+  assert EMPTY == ""
+  assert NAME != "gai"
+}
+
+test "a const of an array, a struct and a tuple" {
+  assert NAMES[0] == "a"
+  assert NAMES[1].len() == 2
+  assert NAMES[2] == "def"
+  assert FIRST.name == "init"
+  assert FIRST.name.len() == 4
+  assert FIRST.id == 0
+  assert PAIR.0 == "k"
+  assert PAIR.1 == 1
+}
+
+test "a const of an Option" {
+  var seen: U32 = 0
+  match MAYBE {
+    Some(x) => {
+      assert x == "opt"
+      seen = x.len()
+    },
+    None => {
+      seen = 99
+    },
+  }
+  assert seen == 3
+  var other: U32 = 0
+  match NOTHING {
+    Some(_) => {
+      other = 99
+    },
+    None => {
+      other = 1
+    },
+  }
+  assert other == 1
+}
+
+test "a const is read as a value and copied" {
+  let t: FixedStr[8] = NAME
+  assert t == NAME
+  var u = NAME
+  u = "changed"
+  assert u == "changed"
+  assert NAME == "gain"
+  assert length_of(NAME) == 4
+  assert length_of(NAMES[2]) == 3
+}

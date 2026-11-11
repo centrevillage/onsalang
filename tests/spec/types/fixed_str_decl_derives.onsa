@@ -1,0 +1,82 @@
+// onsa.toml
+// [test]
+// spec = ["§4.2", "§6.3", "§6.4"]
+
+// S-614 (W5-12 U2): the traits that `FixedStr[N]` has (§4.2: "等値・順序・`Hash`・`Default` は derive による"; the decision lists `PartialEq`, `Eq`,
+// `PartialOrd`, `Ord`, `Hash` and `Default`). The check passes when a struct or an enum lists them over a field of this type (§6.4: "各フィールドの型が
+// 生成する trait を満たさなければ E0416"), when a type parameter with each bound is given the type, and when the operators `==`, `!=`, `<`, `<=`, `>` and `>=`
+// are written on two values of it (§6.3). Nothing runs here (the order is run in fixed_str_decl_order.onsa). The type is Copy, so it is a field of
+// a Copy struct and the element of an array.
+
+use std.text.FixedStr
+
+pub struct Entry: PartialEq + Eq + PartialOrd + Ord + Hash + Default {
+  name: FixedStr[8],
+  id: U32,
+}
+
+pub struct Wide[const N: U32]: PartialEq + Eq + PartialOrd + Ord + Hash + Default {
+  name: FixedStr[N],
+}
+
+pub struct Nested: Eq + Hash {
+  entry: Entry,
+  pair: (FixedStr[4], FixedStr[16]),
+  list: [FixedStr[4]; 2],
+  maybe: Option[FixedStr[8]],
+}
+
+pub enum Tag: PartialEq + Eq + Hash {
+  Plain,
+  Named(FixedStr[4]),
+  Both(FixedStr[4], U32),
+}
+
+pub enum Ranked: Ord {
+  Low(FixedStr[4]),
+  High(FixedStr[4]),
+}
+
+fn needs_eq[T: Eq](a: T, b: T) -> Bool {
+  a == b
+}
+
+fn needs_ord[T: Ord](a: T, b: T) -> Bool {
+  a < b
+}
+
+fn needs_partial_ord[T: PartialOrd](a: T, b: T) -> Bool {
+  a >= b
+}
+
+fn needs_hash[T: Hash](x: T) -> T {
+  x
+}
+
+fn needs_default[T: Default]() -> T {
+  T.default()
+}
+
+pub fn through_each_bound(a: FixedStr[8], b: FixedStr[8]) -> Bool {
+  let h = needs_hash(a)
+  let z: FixedStr[8] = needs_default()
+  needs_eq(a, b) && needs_ord(a, b) && needs_partial_ord(h, z)
+}
+
+pub fn all_the_operators(a: FixedStr[8], b: FixedStr[8]) -> Bool {
+  a == b || a != b || a < b || a <= b || a > b || a >= b
+}
+
+pub fn entries_compare(a: Entry, b: Entry) -> Bool {
+  a == b || a < b
+}
+
+pub fn wide_of_a_capacity(a: Wide[8], b: Wide[8]) -> Bool {
+  a <= b
+}
+
+pub fn copy_in_a_struct_that_is_read_twice(a: Entry) -> Bool {
+  let b = a
+  let c = a
+  b == c
+}

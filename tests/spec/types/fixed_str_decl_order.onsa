@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.2", "§6.3"]
+
+// S-614 (W5-12 U2), run in the interpreter after the comparison of the Core is lowered (W8-10; until = "W8-10"): the order of `FixedStr[N]` is the
+// lexicographic order of the bytes of the used part, the same as `Str` (§4.2: "順序は `Str` と同じバイトの辞書順"). A prefix is smaller than the longer
+// string, an upper-case letter is smaller than a lower-case one (the byte), and a NUL that is written is a used byte that makes the string longer. That
+// the operators are written and checked is in fixed_str_decl_derives.onsa, which runs nothing.
+
+use std.text.FixedStr
+
+test "a different byte decides" {
+  let a: FixedStr[8] = "warm"
+  let b: FixedStr[8] = "warn"
+  assert a < b
+  assert a <= b
+  assert b > a
+  assert b >= a
+  assert !(b < a)
+}
+
+test "a prefix is smaller" {
+  let short: FixedStr[8] = "war"
+  let long: FixedStr[8] = "warm"
+  assert short < long
+  assert long > short
+  let empty: FixedStr[8] = ""
+  assert empty < short
+  assert empty <= empty
+  assert empty >= empty
+}
+
+test "the bytes are compared as numbers" {
+  let upper: FixedStr[8] = "B"
+  let lower: FixedStr[8] = "a"
+  assert upper < lower
+  let digit: FixedStr[8] = "9"
+  assert digit < upper
+}
+
+test "a NUL that is written makes the string longer" {
+  let a: FixedStr[8] = "a"
+  let b: FixedStr[8] = "a\0"
+  assert a < b
+  assert b > a
+  assert a != b
+}
+
+test "equal strings are neither smaller nor larger" {
+  let a: FixedStr[8] = "warm"
+  let b: FixedStr[8] = "warm"
+  assert a <= b
+  assert a >= b
+  assert !(a < b)
+  assert !(a > b)
+}

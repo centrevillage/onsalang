@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.2", "§4.5", "§4.7"]
+
+// S-614 (W5-12 U2, C1): where the `N` of `FixedStr[N]` is not decided, the length of the literal is `N` (§4.2: "`N` が決まっていなければリテラルの長さを `N` にする";
+// the decision C1: `fn show[const N: U32](t: FixedStr[N])` with `show("warm")`, the same as `cap([1, 2, 3])` for an array). Where the `N` is decided by a type argument that is written
+// (`cap_of::[8]("warm")`) or by the type of another argument, the literal is a `FixedStr` of that capacity. Two parameters have two `N` that are decided one by one. The value of
+// `N` is read in the body, so the capacity is observed. A literal that does not fit the capacity that is written is E0408 (tests/spec/negative/fixed_str_lit_too_long.onsa).
+// The capacity that is a const parameter of the enclosing function is S-1005 (tests/spec/negative/fixed_str_lit_param_capacity.onsa). What the order of two arguments does to the
+// `N` that two parameters share is not written here (it is a gap, reported to the parent).
+
+use std.text.FixedStr
+
+fn cap_of[const N: U32](t: FixedStr[N]) -> U32 {
+  N
+}
+
+fn show[const N: U32](t: FixedStr[N]) -> U32 {
+  t.len()
+}
+
+fn two[const A: U32, const B: U32](a: FixedStr[A], b: FixedStr[B]) -> U32 {
+  A * 100 + B
+}
+
+fn cap_and_len[const N: U32](t: FixedStr[N]) -> U32 {
+  N * 100 + t.len()
+}
+
+test "N is the length of the literal" {
+  assert cap_of("warm") == 4
+  assert cap_of("abcdefgh") == 8
+  assert cap_of("a") == 1
+  assert show("warm") == 4
+  assert cap_and_len("warm") == 404
+}
+
+test "N is decided by a type argument or by the type of the argument" {
+  assert cap_of::[8]("warm") == 8
+  assert cap_of::[4]("warm") == 4
+  assert cap_and_len::[16]("warm") == 1604
+  let t: FixedStr[16] = "x"
+  assert cap_of(t) == 16
+  assert show(t) == 1
+}
+
+test "two parameters have their own N" {
+  assert two("ab", "cde") == 203
+  assert two("abcd", "z") == 401
+  let t: FixedStr[8] = "x"
+  assert two(t, "ab") == 802
+}

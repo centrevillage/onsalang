@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§4.2", "§6.3", "§6.4", "§2.4"]
+
+// S-614 (W5-12 U2): `FixedStr[N]` has no `Show` in the first version (§4.2: "最初の版に無いもの: … `Show` と同じ表記、補間で作ること"; the decision A4 and A9). The traits that a user
+// asks of the type are met only when it has them (§6.3, §6.4): the bound `T: Show` given the type is E0416, and an interpolation of a value of this type in a string is E0416 (§2.4: "補間される値は `Show` を実装していなければならない (E0416)").
+// The list `PartialEq` and the others that it has are in fixed_str_decl_derives.onsa. A derive of `Show` at the head of a type is E0200 in this version whatever the fields (S-13), so it is not here. One error in each declaration or function (P-01).
+
+use std.text.FixedStr
+
+fn needs_show[T: Show](x: T) -> Str uses {Alloc} {
+  "{x}"
+}
+
+pub fn a_bound_that_is_not_met(t: FixedStr[8]) -> Str uses {Alloc} {
+  needs_show(t)                                     //~ E0416
+}
+
+pub fn an_interpolation(t: FixedStr[8]) -> Str uses {Alloc} {
+  "name={t}"                                        //~ E0416
+}
+
+pub fn an_interpolation_of_a_field(t: (FixedStr[8], U32)) -> Str uses {Alloc} {
+  "name={t.0}"                                      //~ E0416
+}
+
+pub fn a_number_is_fine(n: U32) -> Str uses {Alloc} {
+  "n={n}"
+}

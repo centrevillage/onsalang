@@ -1,0 +1,255 @@
+// onsa.toml
+// [package]
+// name = "c_fixed_str_u2"
+// edition = "2026"
+//
+// [export]
+// prefix = "cfu2_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§4.2", "§2.4", "§4.7", "§13.4"]
+//
+// [[test.host]]
+// name = "case"
+// target = "host"
+// fn = "c_fixed_str_u2.case"
+// steps = [
+//   { call = "fn", args = { i = 0 }, status = 0, result = true },
+//   { call = "fn", args = { i = 1 }, status = 0, result = true },
+//   { call = "fn", args = { i = 2 }, status = 0, result = true },
+//   { call = "fn", args = { i = 3 }, status = 0, result = true },
+//   { call = "fn", args = { i = 4 }, status = 0, result = true },
+//   { call = "fn", args = { i = 5 }, status = 0, result = true },
+//   { call = "fn", args = { i = 6 }, status = 0, result = true },
+//   { call = "fn", args = { i = 7 }, status = 0, result = true },
+//   { call = "fn", args = { i = 8 }, status = 0, result = true },
+//   { call = "fn", args = { i = 9 }, status = 0, result = true },
+//   { call = "fn", args = { i = 10 }, status = 0, result = true },
+//   { call = "fn", args = { i = 11 }, status = 0, result = true },
+//   { call = "fn", args = { i = 12 }, status = 0, result = true },
+//   { call = "fn", args = { i = 13 }, status = 0, result = true },
+//   { call = "fn", args = { i = 14 }, status = 0, result = true },
+//   { call = "fn", args = { i = 15 }, status = 0, result = true },
+//   { call = "fn", args = { i = 16 }, status = 0, result = false },
+//   { call = "fn", args = { i = 4294967295 }, status = 0, result = false },
+// ]
+
+// S-614 (W5-12 U2, spec §4.2, §2.4, §4.7, §13.4): the values of `FixedStr[N]` in the C of the host, as the `test` blocks say them in the interpreter. The literal whose expected
+// type is `FixedStr[N]` is a value of that type, `len()` is the number of used bytes, the equality is by the used length and the bytes, a `const` holds a literal, `Option`,
+// a struct field, an array, a tuple and the `N` of a generic function that the literal decides are run. `case(i)` picks the i-th case by a `match` that is a statement and returns
+// whether the case holds (false for an `i` that is not a case); the sequence runs every `i`. A `mode = "test"` case runs the interpreter only, and the C is made from the `[[test.host]]` above.
+//   c0   len() of a literal              c1  == with the literal on the right      c2  == with the literal on the left
+//   c3   != by a byte and by a prefix    c4  a NUL that is written is a byte       c5  a const (also the capacity used up)
+//   c6   Option[FixedStr[8]]             c7  a struct field and its assignment     c8  the N that a literal decides
+//   c9   a copy is apart                 c10 Default                               c11 an array (also [e; N])
+//   c12  a tuple                         c13 the capacity used up                  c14 a NUL inside
+//   c15  the arms of an if and the return value
+
+use std.text.FixedStr
+
+pub struct Voice {
+  name: FixedStr[8],
+  gain: U32,
+}
+
+const NAME: FixedStr[8] = "gain"
+const FULL: FixedStr[4] = "abcd"
+
+fn cap_of[const N: U32](t: FixedStr[N]) -> U32 {
+  N
+}
+
+fn pick(flag: Bool) -> FixedStr[8] {
+  if flag {
+    "yes"
+  } else {
+    "no"
+  }
+}
+
+fn make_option(flag: Bool) -> Option[FixedStr[8]] {
+  if flag {
+    Some("ab")
+  } else {
+    None
+  }
+}
+
+fn c0() -> Bool {
+  let t: FixedStr[8] = "warm"
+  let e: FixedStr[8] = ""
+  t.len() == 4 && e.len() == 0
+}
+
+fn c1() -> Bool {
+  let t: FixedStr[8] = "warm"
+  t == "warm"
+}
+
+fn c2() -> Bool {
+  let t: FixedStr[8] = "warm"
+  "warm" == t
+}
+
+fn c3() -> Bool {
+  let t: FixedStr[8] = "warm"
+  t != "wam" && t != "warn" && "wa" != t && t != "warmer"
+}
+
+fn c4() -> Bool {
+  let t: FixedStr[8] = "warm"
+  let n: FixedStr[8] = "warm\0"
+  n.len() == 5 && n != t && t != n && t != "warm\0"
+}
+
+fn c5() -> Bool {
+  NAME == "gain" && NAME.len() == 4 && FULL.len() == 4 && FULL == "abcd" && "gain" == NAME
+}
+
+fn c6() -> Bool {
+  var r = false
+  match make_option(true) {
+    Some(x) => {
+      r = x == "ab" && x.len() == 2
+    },
+    None => {
+      r = false
+    },
+  }
+  var s = false
+  match make_option(false) {
+    Some(_) => {
+      s = false
+    },
+    None => {
+      s = true
+    },
+  }
+  r && s
+}
+
+fn c7() -> Bool {
+  var v = Voice { name: "mix", gain: 3 }
+  let before = v.name == "mix" && v.name.len() == 3
+  v.name = "lead"
+  before && v.name == "lead" && v.name.len() == 4 && v.gain == 3
+}
+
+fn c8() -> Bool {
+  cap_of("warm") == 4 && cap_of::[8]("warm") == 8 && cap_of("abcdefgh") == 8
+}
+
+fn c9() -> Bool {
+  let a: FixedStr[8] = "x"
+  var b = a
+  b = "yz"
+  a == "x" && a.len() == 1 && b == "yz" && b.len() == 2
+}
+
+fn c10() -> Bool {
+  let d: FixedStr[8] = FixedStr.default()
+  d.len() == 0 && d == "" && d != "a"
+}
+
+fn c11() -> Bool {
+  let xs: [FixedStr[4]; 2] = ["a", "bcd"]
+  let ys: [FixedStr[4]; 3] = ["ab"; 3]
+  xs[0] == "a" && xs[1].len() == 3 && ys[2] == "ab" && ys[0].len() == 2
+}
+
+fn c12() -> Bool {
+  let p: (FixedStr[8], U32) = ("k", 2)
+  p.0 == "k" && p.1 == 2 && p.0.len() == 1
+}
+
+fn c13() -> Bool {
+  let t: FixedStr[4] = "abcd"
+  t.len() == 4 && t == "abcd" && t != "abc"
+}
+
+fn c14() -> Bool {
+  let t: FixedStr[4] = "a\0b"
+  t.len() == 3 && t != "a" && t == "a\0b" && t != "a\0c"
+}
+
+fn c15() -> Bool {
+  pick(true) == "yes" && pick(false) == "no" && pick(true).len() == 3 && pick(false).len() == 2
+}
+
+@export
+pub fn case(i: U32) -> Bool {
+  var r = false
+  match i {
+    0 => {
+      r = c0()
+    },
+    1 => {
+      r = c1()
+    },
+    2 => {
+      r = c2()
+    },
+    3 => {
+      r = c3()
+    },
+    4 => {
+      r = c4()
+    },
+    5 => {
+      r = c5()
+    },
+    6 => {
+      r = c6()
+    },
+    7 => {
+      r = c7()
+    },
+    8 => {
+      r = c8()
+    },
+    9 => {
+      r = c9()
+    },
+    10 => {
+      r = c10()
+    },
+    11 => {
+      r = c11()
+    },
+    12 => {
+      r = c12()
+    },
+    13 => {
+      r = c13()
+    },
+    14 => {
+      r = c14()
+    },
+    15 => {
+      r = c15()
+    },
+    _ => {
+      r = false
+    },
+  }
+  r
+}
+
+test "every case holds in the interpreter" {
+  for i in 0 ..< 16 {
+    assert case(i)
+  }
+}
+
+test "a case that does not exist is false" {
+  assert !case(16)
+  assert !case(4294967295)
+}

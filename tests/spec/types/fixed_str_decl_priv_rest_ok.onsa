@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// spec = ["§4.2", "§15.1", "§7"]
+
+// S-614 (W5-12 U2): the fields of `FixedStr[N]` are `priv`, and a struct with fields that the module cannot see is taken apart by a pattern that ends with a `_` (§7, §15.1:
+// "見えないフィールドが残ってもよく、フィールドを一つも書かない `Item { _ }` も書ける", tests/spec/packages/visibility_field_rest_ok/). So `FixedStr { _ }` is fine in `let`, in an arm of a `match`,
+// inside `Some` and a tuple, and in a parameter of a generic function. It binds nothing, so it only says that the value is a `FixedStr`. The E0303 of the fields that are named or left out
+// is in tests/spec/negative/fixed_str_decl_priv_fields.onsa. A value is made outside `std.text` by a literal whose expected type is `FixedStr[N]` (§4.2), or by `Default`.
+
+use std.text.FixedStr
+
+pub fn a_let_takes_it_apart(t: FixedStr[8]) -> U32 {
+  let FixedStr { _ } = t
+  1
+}
+
+pub fn an_arm_takes_it_apart(t: FixedStr[8]) -> U32 {
+  var r: U32 = 0
+  match t {
+    FixedStr { _ } => {
+      r = 2
+    },
+  }
+  r
+}
+
+pub fn inside_some(o: Option[FixedStr[8]]) -> U32 {
+  var r: U32 = 0
+  match o {
+    Some(FixedStr { _ }) => {
+      r = 3
+    },
+    None => {
+      r = 0
+    },
+  }
+  r
+}
+
+pub fn inside_a_tuple(p: (FixedStr[4], U32)) -> U32 {
+  let (FixedStr { _ }, n) = p
+  n
+}
+
+pub fn generic_in_the_capacity[const N: U32](t: FixedStr[N]) -> U32 {
+  let FixedStr { _ } = t
+  N
+}
+
+pub fn made_by_a_literal() -> FixedStr[8] {
+  "warm"
+}
+
+pub fn made_by_default() -> FixedStr[8] {
+  FixedStr.default()
+}

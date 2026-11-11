@@ -1,0 +1,14 @@
+// onsa.toml
+// [test]
+// spec = ["§4.2", "§4.7"]
+
+// S-614 (W5-12 U2): the parameter of a closure is an expected type too (§4.7), so a string literal passed to a closure whose parameter is a `FixedStr[8]` is a value of that
+// type. This is in a `check` case: this version lowers a closure only as the argument of `array.from_fn` and does not call a function value (E0200), so the run is
+// in tests/spec/types/fixed_str_lit_expected.onsa without it.
+
+use std.text.FixedStr
+
+pub fn of_a_closure() -> U32 {
+  let f = fn(t: FixedStr[8]) -> U32 { t.len() }
+  f.("warm")
+}

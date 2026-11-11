@@ -23,7 +23,7 @@
 //! type parameters by their bounds ([`kind_in_body`]); a type with no kind
 //! (a second-class `Span`, a walk that keeps quiet, §18.1) is not Copy.
 
-use onsa_syntax::ast::{Ast, ExprId, ExprKind, Lit, Mode, StrSeg};
+use onsa_syntax::ast::{Ast, ExprId, ExprKind, Lit, Mode};
 
 use super::{Bind, LitClass, Settle};
 use crate::body::{BodyInfo, Target};
@@ -59,7 +59,7 @@ impl Settle<'_> {
     /// Whether `e` is a leaf static value (its own type aside).
     fn leaf(&self, e: ExprId) -> bool {
         match &self.ast.expr(e).kind {
-            ExprKind::Lit(Lit::Str(s)) => !s.pathless_hole && s.segments.iter().all(|x| matches!(x, StrSeg::Text(_))),
+            ExprKind::Lit(Lit::Str(s)) => onsa_syntax::test_name::value(s).is_some(),
             ExprKind::Lit(Lit::Int { .. } | Lit::Float { .. } | Lit::Bool(_) | Lit::Char(_)) => true,
             ExprKind::Path(_) | ExprKind::Field { .. } => match self.info.targets.get(&e) {
                 Some(Target::Const { .. } | Target::ConstParam(_)) => true,

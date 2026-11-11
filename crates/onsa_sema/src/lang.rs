@@ -1,7 +1,7 @@
-//! The lang items of std (S-71, R-79): the enums of `std.core` the compiler
-//! knows, its one table of them. Their variants are in the prelude by their
-//! names alone and not members of their types (§4.1, S-607), and `?` reads
-//! them (§9.1). The sema stages read [`LangItems`]; lowering and the backends
+//! The lang items of std (S-71, R-79): the enums of `std.core` and the struct
+//! of `std.text` the compiler knows, its one table of them. The variants of
+//! the enums are in the prelude by their names alone and not members of their
+//! types (§4.1, S-607), and `?` reads them (§9.1). The sema stages read [`LangItems`]; lowering and the backends
 //! read what the stages recorded.
 
 use serde::{Deserialize, Serialize};
@@ -22,6 +22,11 @@ pub(crate) const RESULT: usize = 1;
 /// of `std.core`, with no `pub`, so that no program names it.
 const ANY_ORDINAL: &str = "AnyOrdinal";
 
+/// Of `std`: the module and the struct of a string of a fixed capacity, a
+/// literal is a value of (§4.2, S-614), and its fields, the bytes and the
+/// length used.
+const FIXED_STR: (&str, &str, [&str; 2]) = ("text", "FixedStr", ["bytes", "len"]);
+
 /// A row of [`ENUMS`] in the analysis: the enum and the indices of its variants.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LangEnum {
@@ -30,12 +35,21 @@ pub struct LangEnum {
     pub exit: u32,
 }
 
-/// The rows of [`ENUMS`]: none with no `std.core` (unit tests of a package
-/// with no std). Of std alone, which [`crate::analyze_on`] does not read again.
+/// [`FIXED_STR`] in the analysis: the struct and the indices of its fields.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LangFixedStr {
+    pub def: DefId,
+    pub bytes: u32,
+    pub len: u32,
+}
+
+/// The rows of [`ENUMS`] and [`FIXED_STR`]: none with no `std.core` (unit
+/// tests of a package with no std). Of std alone, which [`crate::analyze_on`] does not read again.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct LangItems {
     enums: [Option<LangEnum>; ENUMS.len()],
     any_ordinal: Option<DefId>,
+    fixed_str: Option<LangFixedStr>,
 }
 
 impl LangItems {
@@ -57,6 +71,11 @@ impl LangItems {
     /// [`ANY_ORDINAL`].
     pub(crate) fn any_ordinal(&self) -> Option<DefId> {
         self.any_ordinal
+    }
+
+    /// [`FIXED_STR`], if `d` is it.
+    pub fn fixed_str(&self, d: DefId) -> Option<LangFixedStr> {
+        self.fixed_str.filter(|l| l.def == d)
     }
 }
 
@@ -80,10 +99,7 @@ pub(crate) fn declared(s: &mut Sema<'_>) {
             onsa_diag::internal::bug(None, format!("`std.core` declares no `{ty}`"))
         };
         let names: Vec<String> = s.variants(def).into_iter().map(|(name, _)| name).collect();
-        let index = |name: &str| match names.iter().position(|n| n == name) {
-            Some(i) => i as u32,
-            None => onsa_diag::internal::bug(None, format!("`{ty}` declares no `{name}`")),
-        };
+        let index = |name| position(&names, ty, name);
         s.a.modules.lang.enums[row] = Some(LangEnum { def, keep: index(keep), exit: index(exit) });
         for (i, name) in names.into_iter().enumerate() {
             s.a.prelude.insert(name, Entity::Variant(def, i as u32));
@@ -93,4 +109,21 @@ pub(crate) fn declared(s: &mut Sema<'_>) {
         onsa_diag::internal::bug(None, format!("`std.core` declares no `{ANY_ORDINAL}`"))
     };
     s.a.modules.lang.any_ordinal = Some(any);
+    let (module, ty, [bytes, len]) = FIXED_STR;
+    let std = s.a.modules.core.and_then(|m| s.a.modules.get(m).parent);
+    let text = std.and_then(|r| s.a.modules.get(r).children.get(module).copied());
+    let Some(&def) = text.and_then(|m| s.a.modules.get(m).items.get(ty)) else {
+        onsa_diag::internal::bug(None, format!("`std.{module}` declares no `{ty}`"))
+    };
+    let names = s.field_names(def);
+    let (bytes, len) = (position(&names, ty, bytes), position(&names, ty, len));
+    s.a.modules.lang.fixed_str = Some(LangFixedStr { def, bytes, len });
+}
+
+/// The index of `name` in `names`, the members std declares of `ty`.
+fn position(names: &[String], ty: &str, name: &str) -> u32 {
+    match names.iter().position(|n| n == name) {
+        Some(i) => i as u32,
+        None => onsa_diag::internal::bug(None, format!("`{ty}` declares no `{name}`")),
+    }
 }

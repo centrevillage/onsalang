@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.2", "§15.1", "§4.7"]
+
+// S-614 (W5-12 U2): a `FixedStr` crosses a module. `presets.onsa` has the type in a struct, in an array, in the payload of an enum, in a `pub const`, and as the type of a parameter and of a
+// return value, and `main.onsa` uses them. The type is not named in `main.onsa` (no `use std.text.FixedStr`), and the literal still has it where the other side or the parameter has it: the
+// expected type comes from the declaration of the other module (§4.7), so `p.name == "warm"`, `Event.Rename("lead")` and `named("mix", 3)` are values of `FixedStr[8]`. The `priv` field
+// `label` of the struct `Bank` is not visible here (§15.1), and a function of `presets` reads it. The values are run.
+
+use presets.{Event, DEFAULT_NAME, first, named, make_bank, label_len, label_is, renamed}
+
+test "the field and the constant of another module are compared with a literal" {
+  let p = first()
+  assert p.name == "warm"
+  assert "warm" == p.name
+  assert p.name.len() == 4
+  assert p.id == 1
+  assert DEFAULT_NAME == "init"
+  assert DEFAULT_NAME.len() == 4
+}
+
+test "a literal is an argument of a function of another module" {
+  let p = named("mix", 3)
+  assert p.name == "mix"
+  assert p.name.len() == 3
+  assert p.id == 3
+}
+
+test "a literal is the payload of an enum of another module" {
+  let p = first()
+  let q = renamed(p, Event.Rename("lead"))
+  assert q.name == "lead"
+  assert q.id == 1
+  let r = renamed(q, Event.Reset)
+  assert r.name == DEFAULT_NAME
+  assert p.name == "warm"
+}
+
+test "an array field is read and a priv field is read by the module" {
+  let b = make_bank()
+  assert b.slots[0] == "a"
+  assert b.slots[1].len() == 2
+  assert label_len(b) == 4
+  assert label_is(b, "bank")
+  assert !label_is(b, "banks")
+}

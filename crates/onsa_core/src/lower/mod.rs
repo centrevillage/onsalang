@@ -32,6 +32,7 @@ mod body;
 mod build;
 mod derived;
 mod eq;
+mod fixed_str;
 pub mod flow;
 pub mod fold;
 mod limits;
@@ -666,6 +667,7 @@ impl<'a> Lowerer<'a> {
                 };
                 let Some(v) = c.value else { return Err(internal(def.span, "const without initializer")) };
                 let mut cx = body::FnCx::new(self, d, gargs.clone(), body, ty.clone())?;
+                cx.constant = true;
                 let e = body::lower_expr(self, &mut cx, v)?;
                 // A placeholder is a local of its own (S-67): not one of the initializer.
                 if !cx.locals.is_empty() && self.hole_spans.is_empty() {

@@ -1,0 +1,192 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.2", "§2.4", "§4.7"]
+
+// S-614 (W5-12 U2, B3 (l1), C2): when the expected type is `FixedStr[N]` a string literal without interpolation is a value of that type (§4.2: "引数・フィールドの型、代入の左辺の型
+// (`p.name = "mix"`)、比較の他方の型も期待の型になる"; §4.7: the annotation of `let`, the type of the parameter of the callee, the type of the return value, the field of a struct, the
+// place at the left of an assignment, "`if` の後の枝と `match` の二つ目以降の腕には前の枝の型"). Each position is run in the interpreter, and the value is read back by `len()` and `==`.
+// The positions: the annotation of a `let` and a `var`, an assignment, an argument of a function, of a method, of a function value and of a constructor of an enum, a field (also of a
+// nested place), `return`, the last value of a body, the arms of an `if` and a `match`, `Some(…)`, an element of a tuple and of an array (also `[e; N]`). The capacity that is used up
+// and the letters at the edge of ASCII are included. The comparison is in fixed_str_lit_compare.onsa; a position with no expected type keeps `Str` (fixed_str_lit_str_stays.onsa).
+
+use std.text.FixedStr
+
+pub struct Voice {
+  name: FixedStr[8],
+  gain: U32,
+}
+
+pub struct Slot {
+  cur: Voice,
+  prev: FixedStr[8],
+}
+
+pub enum Msg {
+  Named(FixedStr[8]),
+  Plain,
+}
+
+impl Voice {
+  pub fn is_named(self, n: FixedStr[8]) -> Bool {
+    self.name == n
+  }
+}
+
+fn takes(t: FixedStr[8]) -> U32 {
+  t.len()
+}
+
+fn takes_two(a: FixedStr[8], b: FixedStr[4]) -> U32 {
+  a.len() * 10 + b.len()
+}
+
+fn from_return(early: Bool) -> FixedStr[8] {
+  if early {
+    return "ret"
+  }
+  "after"
+}
+
+fn from_tail() -> FixedStr[8] {
+  "tail"
+}
+
+fn from_if(flag: Bool) -> FixedStr[8] {
+  if flag {
+    "yes"
+  } else {
+    "no"
+  }
+}
+
+fn from_match(o: Option[U32]) -> FixedStr[8] {
+  match o {
+    Some(_) => "some",
+    None => "none",
+  }
+}
+
+fn from_let_with_if(flag: Bool) -> U32 {
+  let t: FixedStr[8] = if flag {
+    "long one"
+  } else {
+    "s"
+  }
+  t.len()
+}
+
+fn msg_len(m: Msg) -> U32 {
+  var n: U32 = 0
+  match m {
+    Msg.Named(t) => {
+      n = t.len()
+    },
+    Msg.Plain => {
+      n = 99
+    },
+  }
+  n
+}
+
+test "the annotation of let and var, and an assignment" {
+  let a: FixedStr[8] = "warm"
+  var b: FixedStr[16] = "gain="
+  assert a.len() == 4
+  assert b.len() == 5
+  b = "gain=5"
+  assert b.len() == 6
+  assert b == "gain=5"
+  let full: FixedStr[4] = "abcd"
+  assert full.len() == 4
+  let none: FixedStr[4] = ""
+  assert none.len() == 0
+}
+
+test "an argument of a function, a method, a function value and a constructor" {
+  assert takes("abcd") == 4
+  assert takes_two("ab", "cde") == 23
+  let v = Voice { name: "mix", gain: 1 }
+  assert v.is_named("mix")
+  assert !v.is_named("mi")
+  assert msg_len(Msg.Named("hello")) == 5
+  assert msg_len(Msg.Plain) == 99
+}
+
+test "a field and the left side of an assignment" {
+  var v = Voice { name: "mix", gain: 1 }
+  assert v.name.len() == 3
+  v.name = "lead"
+  assert v.name == "lead"
+  var s = Slot { cur: Voice { name: "a", gain: 2 }, prev: "p" }
+  assert s.cur.name.len() == 1
+  assert s.prev.len() == 1
+  s.cur.name = "init"
+  s.prev = "old"
+  assert s.cur.name == "init"
+  assert s.prev == "old"
+  assert s.cur.gain == 2
+}
+
+test "return, the last value, and the arms of an if and a match" {
+  assert from_return(true) == "ret"
+  assert from_return(true).len() == 3
+  assert from_return(false) == "after"
+  assert from_tail().len() == 4
+  assert from_if(true) == "yes"
+  assert from_if(false) == "no"
+  assert from_match(Some(1)) == "some"
+  assert from_match(None) == "none"
+  assert from_let_with_if(true) == 8
+  assert from_let_with_if(false) == 1
+}
+
+test "inside Some, a tuple and an array" {
+  let o: Option[FixedStr[8]] = Some("opt")
+  var got: U32 = 0
+  match o {
+    Some(x) => {
+      assert x == "opt"
+      got = x.len()
+    },
+    None => {
+      got = 99
+    },
+  }
+  assert got == 3
+  let p: (FixedStr[8], U32) = ("k", 2)
+  assert p.0 == "k"
+  assert p.1 == 2
+  let q: (Option[FixedStr[8]], U32) = (Some("x"), 0)
+  var qlen: U32 = 0
+  match q.0 {
+    Some(x) => {
+      qlen = x.len()
+    },
+    None => {
+      qlen = 99
+    },
+  }
+  assert qlen == 1
+  let xs: [FixedStr[4]; 2] = ["a", "bcd"]
+  assert xs[0] == "a"
+  assert xs[1].len() == 3
+  let ys: [FixedStr[4]; 3] = ["ab"; 3]
+  assert ys[2] == "ab"
+  assert ys[0].len() == 2
+}
+
+test "the letters at the edge of ASCII and the escapes" {
+  let nul: FixedStr[4] = "\0"
+  assert nul.len() == 1
+  let del: FixedStr[4] = "\u{7f}"
+  assert del.len() == 1
+  let braces: FixedStr[4] = "{{}}"
+  assert braces.len() == 2
+  let line: FixedStr[4] = "a\nb"
+  assert line.len() == 3
+  let quote: FixedStr[4] = "\"\\'"
+  assert quote.len() == 3
+  let tab: FixedStr[4] = "\t"
+  assert tab == "\t"
+}

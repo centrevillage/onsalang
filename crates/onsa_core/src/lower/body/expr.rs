@@ -67,7 +67,10 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
             }
             ALit::Char(c) => ExprKind::Lit(Lit::Char(*c)),
             ALit::Bool(b) => ExprKind::Lit(Lit::Bool(*b)),
-            ALit::Str(_) => return Err(unsupported(span, Feature::StrValues, &[])),
+            ALit::Str(s) => match &ty {
+                Ty::Struct(id) => crate::lower::fixed_str::value(lw, cx, s, *id, span)?,
+                _ => return Err(unsupported(span, Feature::StrValues, &[])),
+            },
         },
         AK::Path(_) => return Err(internal(span, "unresolved path")),
         AK::Hole => return Err(internal(span, "typed hole")),

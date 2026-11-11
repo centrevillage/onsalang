@@ -1,0 +1,51 @@
+use std.text.FixedStr
+
+pub struct Preset {
+  name: FixedStr[8],
+  id: U32,
+}
+
+pub struct Bank {
+  priv label: FixedStr[8],
+  slots: [FixedStr[4]; 2],
+}
+
+pub enum Event {
+  Rename(FixedStr[8]),
+  Reset,
+}
+
+pub const DEFAULT_NAME: FixedStr[8] = "init"
+
+pub fn first() -> Preset {
+  Preset { name: "warm", id: 1 }
+}
+
+pub fn named(n: FixedStr[8], id: U32) -> Preset {
+  Preset { name: n, id: id }
+}
+
+pub fn make_bank() -> Bank {
+  Bank { label: "bank", slots: ["a", "bc"] }
+}
+
+pub fn label_len(b: Bank) -> U32 {
+  b.label.len()
+}
+
+pub fn label_is(b: Bank, n: FixedStr[8]) -> Bool {
+  b.label == n
+}
+
+pub fn renamed(p: Preset, e: Event) -> Preset {
+  var out = p
+  match e {
+    Event.Rename(n) => {
+      out.name = n
+    },
+    Event.Reset => {
+      out.name = DEFAULT_NAME
+    },
+  }
+  out
+}

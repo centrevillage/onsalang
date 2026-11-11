@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§4.2", "§4.7", "§2.4"]
+
+// S-614 (W5-12 U2): the literal in the initializer of a `const` of the type `FixedStr[N]` is checked like the literal of an annotated `let` (§4.7: "型が決まった時点で範囲外の
+// リテラル（… 容量を超えるか ASCII の外の文字を含む `FixedStr` のリテラルも、§4.2）は E0408"). A literal that is longer than the capacity, one with a letter
+// outside ASCII (`é`, `\u{80}`), and one inside an array, a tuple and a struct that the `const` holds are E0408; a `const` of another type that is given to it
+// is E0401 (it is not a literal, so it has the type that it has: a `Str`). One error in each item (P-01).
+
+use std.text.FixedStr
+
+pub struct Preset {
+  name: FixedStr[4],
+}
+
+const TOO_LONG: FixedStr[4] = "abcde"                //~ E0408
+
+const ONE_OVER: FixedStr[8] = "abcdefghi"           //~ E0408
+
+const NOT_ASCII: FixedStr[8] = "caf\u{e9}"          //~ E0408
+
+const FIRST_NON_ASCII_BYTE: FixedStr[8] = "\u{80}"  //~ E0408
+
+const LETTER_OUTSIDE: FixedStr[8] = "é"             //~ E0408
+
+const IN_AN_ARRAY: [FixedStr[2]; 2] = ["ab", "abc"] //~ E0408
+
+const IN_A_TUPLE: (FixedStr[2], U32) = ("abc", 1)   //~ E0408
+
+const IN_A_STRUCT: Preset = Preset { name: "toolong" } //~ E0408
+
+const A_NUM: U32 = 3
+
+const FROM_A_NUM: FixedStr[8] = A_NUM               //~ E0401
+
+const OTHER_CAPACITY: FixedStr[16] = NAME_OF_EIGHT  //~ E0401
+
+const NAME_OF_EIGHT: FixedStr[8] = "ok"

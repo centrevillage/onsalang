@@ -1,0 +1,144 @@
+// onsa.toml
+// [test]
+// spec = ["§4.2", "§4.7", "§2.4"]
+
+// S-614 (W5-12 U2): a string literal whose expected type is `FixedStr[N]` and that is longer than `N` bytes is E0408 (§4.2: "容量を超えるか ASCII の外の文字を含むリテラルは E0408";
+// §4.7: "型が決まった時点で範囲外のリテラル(… 容量を超える … `FixedStr` のリテラルも、§4.2)は E0408"). The count is in bytes after the escapes are read (`\n` is one byte; `{{`
+// is one byte). The positions are those of fixed_str_lit_expected.onsa and fixed_str_lit_compare.onsa: the annotation of `let` and `var`, an assignment (also of a nested
+// place), an argument of a function, of a method and of a function value, a field, `return`, the last value, the arms of `if` and `match`, `Some(…)`, a tuple, an array,
+// both sides of a comparison, and a type argument that is written. One byte over the capacity is the edge. The file has no candidate to ask for (the spec names none).
+// One error in each function (P-01); the marker is on the line of the literal.
+
+use std.text.FixedStr
+
+pub struct Voice {
+  name: FixedStr[8],
+}
+
+pub struct Slot {
+  cur: Voice,
+}
+
+impl Voice {
+  pub fn is_named(self, n: FixedStr[4]) -> Bool {
+    n.len() <= self.name.len()
+  }
+}
+
+fn takes(t: FixedStr[4]) -> U32 {
+  t.len()
+}
+
+fn cap_of[const N: U32](t: FixedStr[N]) -> U32 {
+  N
+}
+
+pub fn in_a_let() -> FixedStr[4] {
+  let t: FixedStr[4] = "abcde"                      //~ E0408
+  t
+}
+
+pub fn in_a_var() -> FixedStr[8] {
+  var t: FixedStr[8] = "abcdefghi"                  //~ E0408
+  t
+}
+
+pub fn in_an_assignment(inout t: FixedStr[4]) {
+  t = "abcde"                                       //~ E0408
+}
+
+pub fn in_a_nested_place(inout s: Slot) {
+  s.cur.name = "abcdefghi"                          //~ E0408
+}
+
+pub fn in_an_argument() -> U32 {
+  takes("abcde")                                    //~ E0408
+}
+
+pub fn in_a_method_argument(v: Voice) -> Bool {
+  v.is_named("abcde")                               //~ E0408
+}
+
+pub fn in_a_function_value() -> U32 {
+  let f = fn(t: FixedStr[4]) -> U32 { t.len() }
+  f.("abcde")                                       //~ E0408
+}
+
+pub fn in_a_field() -> Voice {
+  Voice { name: "abcdefghi" }                       //~ E0408
+}
+
+pub fn in_a_return() -> FixedStr[4] {
+  return "abcde"                                    //~ E0408
+}
+
+pub fn in_the_last_value() -> FixedStr[4] {
+  "abcde"                                           //~ E0408
+}
+
+pub fn in_an_if_arm(flag: Bool) -> FixedStr[4] {
+  if flag {
+    "abc"
+  } else {
+    "abcde"                                         //~ E0408
+  }
+}
+
+pub fn in_a_match_arm(o: Option[U32]) -> FixedStr[4] {
+  match o {
+    Some(_) => "abcde",                             //~ E0408
+    None => "ab",
+  }
+}
+
+pub fn in_some() -> Option[FixedStr[4]] {
+  Some("abcde")                                     //~ E0408
+}
+
+pub fn in_a_tuple() -> (FixedStr[4], U32) {
+  ("abcde", 1)                                      //~ E0408
+}
+
+pub fn in_an_array() -> [FixedStr[4]; 2] {
+  ["ab", "abcde"]                                   //~ E0408
+}
+
+pub fn in_a_repeated_element() -> [FixedStr[4]; 2] {
+  ["abcde"; 2]                                      //~ E0408
+}
+
+pub fn on_the_right_of_a_comparison(t: FixedStr[4]) -> Bool {
+  t == "abcde"                                      //~ E0408
+}
+
+pub fn on_the_left_of_a_comparison(t: FixedStr[4]) -> Bool {
+  "abcde" == t                                      //~ E0408
+}
+
+pub fn in_a_not_equal(t: FixedStr[4]) -> Bool {
+  t != "abcde"                                      //~ E0408
+}
+
+pub fn a_type_argument_that_is_written() -> U32 {
+  cap_of::[3]("warm")                               //~ E0408
+}
+
+pub fn a_byte_per_escape_is_counted() -> FixedStr[3] {
+  let t: FixedStr[3] = "a\n\tb"                     //~ E0408
+  t
+}
+
+pub fn the_capacity_that_is_used_up_is_fine() -> FixedStr[4] {
+  let t: FixedStr[4] = "abcd"
+  t
+}
+
+pub fn the_escapes_that_fit_are_fine() -> FixedStr[3] {
+  let t: FixedStr[3] = "a\n\t"
+  t
+}
+
+pub fn the_braces_are_one_byte() -> FixedStr[2] {
+  let t: FixedStr[2] = "{{}}"
+  t
+}
