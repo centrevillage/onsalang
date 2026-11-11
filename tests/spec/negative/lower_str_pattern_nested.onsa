@@ -1,0 +1,70 @@
+// onsa.toml
+// [package]
+// name = "lower_str_pattern_nested"
+// edition = "2026"
+//
+// [targets.c]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§7", "§18.1", "§4.2"]
+
+// R-434 (W5-12 U3a), E0200 from lowering (S-225, S-67): a string literal pattern inside another pattern (`Some("a")`, `("a", 1)`) on a subject whose type holds a `Str` is
+// the same E0200 as one at the head (negative/lower_str_pattern.onsa): this version does not lower `Str` values or patterns to Core (§4.2), and the subject is E0200 too.
+// It used to be an internal error. The same patterns on a `FixedStr[N]` inside an `Option` and a tuple are lowered (the last function, with no error).
+
+use std.text.FixedStr
+
+pub fn in_some(o: Option[Str]) -> U32 {
+  var r: U32 = 0
+  match o {                     //~ E0200
+    Some("a") => {              //~ E0200
+      r = 1
+    },
+    _ => {},
+  }
+  r
+}
+
+pub fn in_a_tuple(p: (Str, U32)) -> U32 {
+  var r: U32 = 0
+  match p {                     //~ E0200
+    ("a", 1) => {               //~ E0200
+      r = 1
+    },
+    _ => {},
+  }
+  r
+}
+
+pub fn a_binding_in_some(o: Option[Str]) -> U32 {
+  var r: U32 = 0
+  match o {                     //~ E0200
+    Some(_) => {
+      r = 1
+    },
+    None => {},
+  }
+  r
+}
+
+pub fn fixed_str_is_lowered(o: Option[FixedStr[4]], p: (FixedStr[4], U32)) -> U32 {
+  var r: U32 = 0
+  match o {
+    Some("a") => {
+      r = 1
+    },
+    _ => {},
+  }
+  match p {
+    ("a", 1) => {
+      r = r + 1
+    },
+    _ => {},
+  }
+  r
+}

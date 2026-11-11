@@ -70,7 +70,7 @@ pub(crate) fn compare(op: CmpOp, l: Expr, r: Expr, span: Span) -> R<Expr> {
 }
 
 /// `a == b` as an expression (scalars compare, aggregates call their eq fn).
-fn eq_expr(lw: &mut Lowerer, a: Expr, b: Expr, span: Span) -> R<Expr> {
+pub(super) fn eq_expr(lw: &mut Lowerer, a: Expr, b: Expr, span: Span) -> R<Expr> {
     if compared_directly(&a.ty) {
         return compare(CmpOp::Eq, a, b, span);
     }

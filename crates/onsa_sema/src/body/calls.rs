@@ -490,7 +490,7 @@ impl<'a> Checker<'a> {
                     let aspan = self.expr(arg.expr).span;
                     let at = match (planar, &self.expr(self.ast.without_parens(arg.expr)).kind) {
                         (Some(_), ExprKind::Array(parts)) if !parts.is_empty() => {
-                            self.planar_literal(arg.expr, parts, elem)?
+                            self.planar_literal(arg.expr, parts, elem, mode)?
                         }
                         _ => self.check_expr(arg.expr, None)?,
                     };
@@ -500,11 +500,12 @@ impl<'a> Checker<'a> {
                         // A length unified, as of any array (a const parameter `N`).
                         (Some(n), Ty::Array(ch, m)) => {
                             let cause = self.cause(aspan, None);
-                            self.infer.unify_len(&mut self.a.types, n, m, &cause).is_ok() && self.views(ch, elem, aspan)
+                            self.infer.unify_len(&mut self.a.types, n, m, &cause).is_ok()
+                                && self.views(ch, elem, aspan, mode)?
                         }
                         (Some(_), Ty::Error) => true,
                         (Some(_), _) => false,
-                        (None, _) => self.views(at_s, elem, aspan),
+                        (None, _) => self.views(at_s, elem, aspan, mode)?,
                     };
                     if !ok {
                         return Err(self.not_a_view(aspan, pt, at));
@@ -519,17 +520,31 @@ impl<'a> Checker<'a> {
     }
 
     /// Whether a value of the type `t` is passed as a `Span[elem]` (§5.3):
-    /// an array, a `Buf` or a `Span` of the element (the error type too).
-    fn views(&mut self, t: TyId, elem: TyId, at: Span) -> bool {
+    /// an array, a `Buf` or a `Span` of the element (the error type too),
+    /// and a `FixedStr[N]` as a `Span[U8]` of its used part (§4.2), which
+    /// the parameter of the mode `mode` `inout` does not take (E0401: its
+    /// bytes change by the appends alone).
+    // SPEC-GAP(S-1008): the element of a planar argument and a generic
+    // `Span[T]` (`T = U8`) take a `FixedStr` too, as this one judgment.
+    fn views(&mut self, t: TyId, elem: TyId, at: Span, mode: Mode) -> R<bool> {
         let cause = self.cause(at, None);
-        match self.ty(self.shallow(t)) {
-            Ty::Array(el, _) => self.infer.unify(&mut self.a.types, el, elem, &cause).is_ok(),
-            Ty::Builtin(BuiltinTy::Span | BuiltinTy::Buf, a) => {
-                self.infer.unify(&mut self.a.types, a[0], elem, &cause).is_ok()
+        let el = match self.ty(self.shallow(t)) {
+            Ty::Array(el, _) => el,
+            Ty::Builtin(BuiltinTy::Span | BuiltinTy::Buf, a) => a[0],
+            Ty::Named(d, _) if self.a.modules.lang.fixed_str(d).is_some() => {
+                if mode == Mode::Inout {
+                    let msg = format!(
+                        "a `{}` is not passed as an `inout` `Span[U8]`: its bytes change by its appends alone (§4.2, §5.3)",
+                        self.display(t)
+                    );
+                    return Err(self.err(Code::E0401, at, msg));
+                }
+                self.a.types.int(IntKind::U8)
             }
-            Ty::Error => true,
-            _ => false,
-        }
+            Ty::Error => return Ok(true),
+            _ => return Ok(false),
+        };
+        Ok(self.infer.unify(&mut self.a.types, el, elem, &cause).is_ok())
     }
 
     /// The type of the planar literal `e` (`[a, b]` at `[Span[elem]; N]`,
@@ -537,11 +552,11 @@ impl<'a> Checker<'a> {
     /// kind and length, so `[Span[elem]; k]` (`k` checked against `N` by the
     /// caller), recorded through the parentheses. The lowering converts each
     /// element (`coerce`).
-    fn planar_literal(&mut self, e: ExprId, parts: &[ExprId], elem: TyId) -> R<TyId> {
+    fn planar_literal(&mut self, e: ExprId, parts: &[ExprId], elem: TyId, mode: Mode) -> R<TyId> {
         let view = self.a.types.intern(Ty::Builtin(BuiltinTy::Span, vec![elem]));
         for &x in parts {
             let (t, at) = (self.check_expr(x, None)?, self.expr(x).span);
-            if !self.views(t, elem, at) {
+            if !self.views(t, elem, at, mode)? {
                 return Err(self.not_a_view(at, view, t));
             }
         }

@@ -1,0 +1,149 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§3.5", "§5.3", "§7", "§4.2"]
+
+// R-433 (W5-12 U3a): a place whose index has a side effect is evaluated once where the lowering uses it more than once (§3.5: "添字 `xs[i]` は、`xs` の後に `i` を
+// 評価する", each expression once, from the left; "`match` は、取る腕だけを評価する"). The forms: a `FixedStr[N]` element passed to a `Span[U8]` (its bytes and its
+// length are of the same element), the subject of a `match` of integer and of `FixedStr` literal arms, an array of arrays passed to a planar argument `[Span[U8]; N]` (of
+// bytes and of `FixedStr`), an index of an index, a `for` over an element and a `let` of an element of tuples. `next` counts its calls: it is called once for each index
+// written. An index without an effect (`i + 1`, `min(j, 1)`) stays in the place, so an `inout` planar argument of one is accepted (the last test).
+
+use std.math.min
+use std.text.FixedStr
+
+fn next(inout n: U32) -> U32 {
+  n = n + 1
+  n - 1
+}
+
+fn size(s: Span[U8]) -> U32 {
+  s.len()
+}
+
+fn lens(xs: [Span[U8]; 2]) -> U32 {
+  xs[0].len() * 10 + xs[1].len()
+}
+
+fn zero(inout xs: [Span[U8]; 2]) {
+  xs[0].fill!(0)
+  xs[1].fill!(0)
+}
+
+pub struct W {
+  names: [[FixedStr[4]; 2]; 2],
+}
+
+test "a FixedStr element passed to a Span" {
+  let xs: [FixedStr[4]; 3] = ["a", "bb", "ccc"]
+  var n: U32 = 0
+  assert size(xs[next(inout n)]) == 1
+  assert n == 1
+  assert size(xs[next(inout n)]) == 2
+  assert n == 2
+}
+
+test "the subject of a match of integers" {
+  let xs: [U32; 3] = [1, 2, 3]
+  var n: U32 = 0
+  var r: U32 = 0
+  match xs[next(inout n)] {
+    2 => {
+      r = 20
+    },
+    3 => {
+      r = 30
+    },
+    1 => {
+      r = 10
+    },
+    _ => {
+      r = 99
+    },
+  }
+  assert r == 10
+  assert n == 1
+}
+
+test "the subject of a match of FixedStr literals" {
+  let xs: [FixedStr[4]; 3] = ["a", "bb", "ccc"]
+  var n: U32 = 0
+  var r: U32 = 0
+  match xs[next(inout n)] {
+    "bb" => {
+      r = 2
+    },
+    "ccc" => {
+      r = 3
+    },
+    "a" => {
+      r = 1
+    },
+    _ => {
+      r = 9
+    },
+  }
+  assert r == 1
+  assert n == 1
+}
+
+test "an array of arrays passed to a planar argument" {
+  let bs: [[[U8; 2]; 2]; 2] = [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
+  var n: U32 = 0
+  assert lens(bs[next(inout n)]) == 22
+  assert n == 1
+  let w = W { names: [["a", "bb"], ["ccc", "d"]] }
+  var k: U32 = 1
+  assert lens(w.names[next(inout k)]) == 31
+  assert k == 2
+}
+
+test "an index of an index" {
+  let xs: [[FixedStr[4]; 2]; 2] = [["a", "bb"], ["ccc", "dddd"]]
+  var n: U32 = 0
+  assert size(xs[next(inout n)][next(inout n)]) == 2
+  assert n == 2
+}
+
+test "a loop over an element and a let of an element of tuples" {
+  let xs: [[U8; 2]; 2] = [[1, 2], [3, 4]]
+  var n: U32 = 0
+  var s: U32 = 0
+  for x in xs[next(inout n)] {
+    s = s + (x as U32)
+  }
+  assert s == 3
+  assert n == 1
+  let ps: [(U32, U32); 2] = [(1, 2), (3, 4)]
+  var k: U32 = 1
+  let (a, b) = ps[next(inout k)]
+  assert a + b == 7
+  assert k == 2
+}
+
+test "an index without an effect" {
+  var ws: [[[U8; 2]; 2]; 2] = [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
+  let i: U32 = 0
+  zero(inout ws[i + 1])
+  assert ws[1][0][0] == 0 && ws[1][1][1] == 0 && ws[0][0][0] == 1
+  var vs: [[[[U8; 2]; 2]; 2]; 2] = [[[[1, 2], [3, 4]], [[5, 6], [7, 8]]], [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]]
+  let j: U32 = 3
+  zero(inout vs[i][min(j, 1)])
+  assert vs[0][1][0][0] == 0 && vs[0][1][1][1] == 0 && vs[0][0][0][0] == 1 && vs[1][1][0][0] == 5
+  assert lens(ws[i * 2]) == 22
+  let xs: [FixedStr[4]; 3] = ["a", "bb", "ccc"]
+  assert size(xs[i + 2]) == 3
+  var r: U32 = 0
+  match xs[j - 2] {
+    "a" => {
+      r = 1
+    },
+    "bb" => {
+      r = 2
+    },
+    _ => {
+      r = 9
+    },
+  }
+  assert r == 2
+}

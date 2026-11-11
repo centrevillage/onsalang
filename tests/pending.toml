@@ -505,36 +505,6 @@ reasons = ["S-110", "S-101", "S-116", "S-29", "S-44"]
 until = "W7-07"
 note = "状態を持つものの置き場所（E0811 / E0812 / E0806）、Default の無い遅延の値型（E0816）、^ の位置（E0801 / E0020）、遅延と par の範囲（E0808 / E0417 / E0416 / E0813）、自分自身のインスタンス（E0817）。最後に仕上がるのは E0816（W7-07）"
 
-# --- W1-06: 生成した C の検査（gate の C の項目）の実装待ち（2026-10-07）
-
-[[pending]]
-kind = "gate"
-target = "c-clang/tests/pipeline/span_const.onsa[host]"
-reasons = ["R-109", "S-94"]
-until = "W10-04"
-note = "借用の Span に const の配列を渡すと const が外れ、-Werror で落ちる"
-
-[[pending]]
-kind = "gate"
-target = "c-gcc/tests/pipeline/span_const.onsa[host]"
-reasons = ["R-109", "S-94"]
-until = "W10-04"
-note = "借用の Span に const の配列を渡すと const が外れ、-Werror で落ちる"
-
-[[pending]]
-kind = "gate"
-target = "c-sanitize/tests/pipeline/span_const.onsa[host]"
-reasons = ["R-109", "S-94"]
-until = "W10-04"
-note = "借用の Span に const の配列を渡すと const が外れ、-Werror で落ちる"
-
-[[pending]]
-kind = "gate"
-target = "c-x86/tests/pipeline/span_const.onsa[host]"
-reasons = ["R-109", "S-94"]
-until = "W10-04"
-note = "借用の Span に const の配列を渡すと const が外れ、-Werror で落ちる"
-
 [[pending]]
 kind = "test-case"
 target = "tests/spec/flow_semantics/enum_construct_match.onsa"
@@ -1505,3 +1475,11 @@ target = "tests/spec/types/fixed_str_decl_order.onsa"
 reasons = ["S-614"]
 until = "W8-10"
 note = "derive した FixedStr の大小（`<` など）は、Core の比較が W8-10（R-119）まで E0200。"
+
+# --- W5-12 U3a: FixedStr の Span[U8] の引数とパターンの事例のうち、この作業の後も落ちるもの（2026-11-11）
+[[pending]]
+kind = "test-case"
+target = "tests/spec/control/fixed_str_match_value.onsa"
+reasons = ["S-614"]
+until = "W8-06"
+note = "値の形の `match`（腕が値を返す）は、整数のリテラルと同じく Core で E0200（ValueMatch）。W8-06 で降ろす。"

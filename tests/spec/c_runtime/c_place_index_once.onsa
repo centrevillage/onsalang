@@ -1,0 +1,147 @@
+// onsa.toml
+// [package]
+// name = "c_place_index_once"
+// edition = "2026"
+//
+// [export]
+// prefix = "cpio_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§3.5", "§5.3", "§7", "§13.4"]
+//
+// [[test.host]]
+// name = "case"
+// target = "host"
+// fn = "c_place_index_once.case"
+// steps = [
+//   { call = "fn", args = { i = 0 }, status = 0, result = true },
+//   { call = "fn", args = { i = 1 }, status = 0, result = true },
+//   { call = "fn", args = { i = 2 }, status = 0, result = true },
+//   { call = "fn", args = { i = 3 }, status = 0, result = true },
+//   { call = "fn", args = { i = 4 }, status = 0, result = true },
+//   { call = "fn", args = { i = 5 }, status = 0, result = false },
+// ]
+
+// R-433 (W5-12 U3a): a place whose index has a side effect is evaluated once where the lowering uses it more than once (§3.5), in the C of the host as in the
+// interpreter (values/place_index_once.onsa has the same forms). `case(i)` picks the i-th case.
+//   c0  a FixedStr element passed to a Span     c1  the subject of a match of integers      c2  the subject of a match of FixedStr literals
+//   c3  an array of arrays of bytes, planar     c4  an array of FixedStr, planar
+
+use std.text.FixedStr
+
+fn next(inout n: U32) -> U32 {
+  n = n + 1
+  n - 1
+}
+
+rt fn size(s: Span[U8]) -> U32 {
+  s.len()
+}
+
+rt fn lens(xs: [Span[U8]; 2]) -> U32 {
+  xs[0].len() * 10 + xs[1].len()
+}
+
+fn c0() -> Bool {
+  let xs: [FixedStr[4]; 3] = ["a", "bb", "ccc"]
+  var n: U32 = 0
+  let r = size(xs[next(inout n)])
+  r == 1 && n == 1
+}
+
+fn c1() -> Bool {
+  let xs: [U32; 3] = [1, 2, 3]
+  var n: U32 = 0
+  var r: U32 = 0
+  match xs[next(inout n)] {
+    2 => {
+      r = 20
+    },
+    3 => {
+      r = 30
+    },
+    1 => {
+      r = 10
+    },
+    _ => {
+      r = 99
+    },
+  }
+  r == 10 && n == 1
+}
+
+fn c2() -> Bool {
+  let xs: [FixedStr[4]; 3] = ["a", "bb", "ccc"]
+  var n: U32 = 0
+  var r: U32 = 0
+  match xs[next(inout n)] {
+    "bb" => {
+      r = 2
+    },
+    "a" => {
+      r = 1
+    },
+    _ => {
+      r = 9
+    },
+  }
+  r == 1 && n == 1
+}
+
+fn c3() -> Bool {
+  let bs: [[[U8; 2]; 2]; 2] = [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
+  var n: U32 = 0
+  let r = lens(bs[next(inout n)])
+  r == 22 && n == 1
+}
+
+fn c4() -> Bool {
+  let names: [[FixedStr[4]; 2]; 2] = [["a", "bb"], ["ccc", "d"]]
+  var n: U32 = 1
+  let r = lens(names[next(inout n)])
+  r == 31 && n == 2
+}
+
+@export
+pub fn case(i: U32) -> Bool {
+  var r = false
+  match i {
+    0 => {
+      r = c0()
+    },
+    1 => {
+      r = c1()
+    },
+    2 => {
+      r = c2()
+    },
+    3 => {
+      r = c3()
+    },
+    4 => {
+      r = c4()
+    },
+    _ => {
+      r = false
+    },
+  }
+  r
+}
+
+test "every case holds in the interpreter" {
+  for i in 0 ..< 5 {
+    assert case(i)
+  }
+}
+
+test "a case that does not exist is false" {
+  assert !case(5)
+}

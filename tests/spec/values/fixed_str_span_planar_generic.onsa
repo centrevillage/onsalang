@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.3", "§4.2", "§4.5"]
+
+// S-1008 (detail; the parent's temporary treatment, W5-12 U3a): a `FixedStr[N]` is passed where the parameter is an element of a planar argument `[Span[U8]; N]` (a list `[a, b]` of values of
+// different capacities, §5.3: "要素の種類と長さは揃っていなくてよい"), and where the parameter is a generic `xs: Span[T]` (then `T` is `U8`, §5.3: "`Span` を総称で受けるのは `xs: Span[T]` の形"). The
+// spec says that a `FixedStr[N]` goes to a `Span[U8]` and does not say these two; the temporary treatment is that the check of "a value that goes to a `Span[U8]`" is one, so both are accepted
+// and the view is the used part. If the decision of S-1008 is that they are not accepted, this file is changed to the E0401 of the two forms.
+
+use std.text.FixedStr
+
+fn planar_sum(xs: [Span[U8]; 2]) -> U32 {
+  var acc: U32 = 0
+  for i in 0 ..< xs[0].len() {
+    acc = acc + (xs[0][i] as U32)
+  }
+  for i in 0 ..< xs[1].len() {
+    acc = acc + (xs[1][i] as U32)
+  }
+  acc
+}
+
+fn planar_lens(xs: [Span[U8]; 2]) -> U32 {
+  xs[0].len() * 10 + xs[1].len()
+}
+
+fn generic_len[T: Copy](xs: Span[T]) -> U32 {
+  xs.len()
+}
+
+test "a list of two FixedStr of different capacities is a planar argument" {
+  let a: FixedStr[8] = "ab"
+  let b: FixedStr[4] = "cde"
+  assert planar_lens([a, b]) == 23
+  assert planar_sum([a, b]) == 195 + 99 + 100 + 101
+}
+
+test "a FixedStr is passed with an array of bytes in a planar argument" {
+  let a: FixedStr[8] = "ab"
+  let bytes: [U8; 2] = [1, 2]
+  assert planar_lens([a, bytes]) == 22
+  assert planar_sum([bytes, a]) == 3 + 195
+}
+
+test "a FixedStr is passed to a generic Span" {
+  let a: FixedStr[8] = "abc"
+  assert generic_len(a) == 3
+  let e: FixedStr[8] = ""
+  assert generic_len(e) == 0
+}

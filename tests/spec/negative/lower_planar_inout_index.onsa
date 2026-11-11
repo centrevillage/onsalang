@@ -1,0 +1,50 @@
+// onsa.toml
+// [package]
+// name = "lower_planar_inout_index"
+// edition = "2026"
+//
+// [targets.c]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§3.5", "§5.3", "§18.1"]
+
+// R-433 (W5-12 U3a), E0200 from lowering: an array of arrays passed `inout` to a planar argument `[Span[U8]; N]` whose index has an effect (a call) is not supported in
+// this version. The index is evaluated once (§3.5), so it would be bound before the argument, and an `inout` argument is a place. An index without an effect (`i + 1`,
+// `min(j, 1)`) stays in the place and is accepted (the last function, with no error; values/place_index_once.onsa runs it).
+
+use std.math.min
+
+fn next(inout n: U32) -> U32 {
+  n = n + 1
+  n - 1
+}
+
+fn zero(inout xs: [Span[U8]; 2]) {
+  xs[0].fill!(0)
+  xs[1].fill!(0)
+}
+
+pub fn by_call(inout ws: [[[U8; 2]; 2]; 2]) {
+  var i: U32 = 0
+  zero(inout ws[next(inout i)]) //~ E0200
+}
+
+pub fn by_nested_call(inout vs: [[[[U8; 2]; 2]; 2]; 2]) {
+  var i: U32 = 0
+  zero(inout vs[0][next(inout i)]) //~ E0200
+}
+
+pub fn by_call_in_sum(inout ws: [[[U8; 2]; 2]; 2]) {
+  var i: U32 = 0
+  zero(inout ws[next(inout i) + 0]) //~ E0200
+}
+
+pub fn without_effect(inout ws: [[[U8; 2]; 2]; 2], inout vs: [[[[U8; 2]; 2]; 2]; 2], i: U32, j: U32) {
+  zero(inout ws[i + 1])
+  zero(inout vs[i][min(j, 1)])
+}

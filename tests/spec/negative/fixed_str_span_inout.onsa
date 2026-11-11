@@ -1,0 +1,52 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§4.2"]
+
+// S-614 (W5-12 U3a, the supplement of the check of the decision): a `FixedStr[N]` goes to a `Span[U8]` parameter that reads, and does not go to an `inout` one (§5.3: "`inout` の `Span[U8]` には渡せず
+// E0401"; §4.2: "中身は書き足しだけで変わり、不変条件を型の外から壊せない"). The value is a local `var`, an `inout` parameter, a field, a nested field and an element of an array; the argument is
+// written `inout x` as the parameter says (§5.2). The error is the type, so it is E0401 and not a mode mismatch. The same value goes to the `Span[U8]` that reads (fixed_str_span_pass.onsa).
+// One error in each function (P-01); the marker is on the line of the call.
+
+use std.text.FixedStr
+
+pub struct Voice {
+  name: FixedStr[8],
+}
+
+pub struct Slot {
+  cur: Voice,
+}
+
+fn clear(inout s: Span[U8]) {
+  s.fill!(0)
+}
+
+fn read(s: Span[U8]) -> U32 {
+  s.len()
+}
+
+pub fn a_local_var() -> U32 {
+  var t: FixedStr[8] = "abc"
+  clear(inout t)                                    //~ E0401
+  t.len()
+}
+
+pub fn an_inout_parameter(inout t: FixedStr[8]) {
+  clear(inout t)                                    //~ E0401
+}
+
+pub fn a_field(inout v: Voice) {
+  clear(inout v.name)                               //~ E0401
+}
+
+pub fn a_nested_field(inout s: Slot) {
+  clear(inout s.cur.name)                           //~ E0401
+}
+
+pub fn an_element(inout ts: [FixedStr[4]; 2]) {
+  clear(inout ts[0])                                //~ E0401
+}
+
+pub fn reading_is_fine(t: FixedStr[8]) -> U32 {
+  read(t)
+}

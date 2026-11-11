@@ -83,6 +83,19 @@ fn pat_binds(cx: &FnCx, pat: PatId) -> bool {
     }
 }
 
+/// The position of a string literal in the pattern `pat`, if it has one.
+fn str_lit(cx: &FnCx, pat: PatId) -> Option<Span> {
+    let p = cx.ast.pat(pat);
+    match &p.kind {
+        PatKind::Lit(ALit::Str(_)) => Some(p.span),
+        PatKind::Tuple(es) | PatKind::TupleStruct { elems: es, .. } | PatKind::Or(es) => {
+            es.iter().find_map(|&e| str_lit(cx, e))
+        }
+        PatKind::Struct { fields, .. } => fields.iter().find_map(|(_, p)| str_lit(cx, *p)),
+        _ => None,
+    }
+}
+
 /// Test of a refutable pattern against a place; `None` means "always matches".
 fn pat_test(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr) -> R<Option<Expr>> {
     let p = cx.ast.pat(pat);
@@ -101,6 +114,13 @@ fn pat_test(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr) -> R<Opti
                 (ALit::Int { value, .. }, Ty::Int(_)) => Lit::Int(if neg { -(*value as i128) } else { *value as i128 }),
                 (ALit::Char(c), Ty::Char) => Lit::Char(*c),
                 (ALit::Bool(b), Ty::Bool) => Lit::Bool(*b),
+                // Of a `FixedStr[N]`, `==` to the value of the literal (§7, §4.2).
+                (ALit::Str(text), Ty::Struct(id)) => {
+                    let id = *id;
+                    let rhs =
+                        Expr::new(place.ty.clone(), span, crate::lower::fixed_str::value(lw, cx, text, id, span)?);
+                    return crate::lower::eq::eq_expr(lw, place.clone(), rhs, span).map(Some);
+                }
                 (ALit::Str(_), _) => return Err(unsupported(span, Feature::StrPatterns, &[])),
                 _ => return Err(internal(span, "literal pattern type")),
             };
@@ -282,6 +302,10 @@ pub(super) fn lower_match(
         });
     }
     // General path: `if` chain with a `done` flag (guards may fall through).
+    // A subject that stands in for a type lowering does not support (`()`,
+    // S-67): no pattern is tested against it, and a string literal in one is
+    // the E0200 of one at the head (R-434).
+    let stand_in = place.ty == Ty::Unit && lw.stand_in_spans.contains(&place.span);
     let done = cx.temp("__done", Ty::Bool);
     stmts.push(stmt(span, StmtKind::Let(done, bool_lit(span, false))));
     let result = if want { Some(cx.temp("__result", ty.clone())) } else { None };
@@ -291,7 +315,10 @@ pub(super) fn lower_match(
         // matches and binds nothing, so lowering reaches its guard and body.
         let pat_hole = Hole::Pat(cx.module, arm.pat);
         let placeholder = lw.holes.contains(&pat_hole);
-        let test = if placeholder {
+        let test = if placeholder || stand_in {
+            if let (false, Some(at)) = (placeholder, str_lit(cx, arm.pat)) {
+                return Err(at_hole(unsupported(at, Feature::StrPatterns, &[]), pat_hole));
+            }
             let pat_span = cx.ast.pat(arm.pat).span;
             lw.hole_spans.push(pat_span);
             Some(bool_lit(pat_span, false))
@@ -307,7 +334,7 @@ pub(super) fn lower_match(
             ),
         };
         let mut inner = Vec::new();
-        if !placeholder {
+        if !placeholder && !stand_in {
             pat_bind(lw, cx, arm.pat, &place, &mut inner)?;
         }
         let mut body_stmts = vec![stmt(span, StmtKind::Assign(Place::Local(done), bool_lit(span, true)))];

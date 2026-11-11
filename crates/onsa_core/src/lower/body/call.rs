@@ -26,6 +26,8 @@ pub(crate) fn coerce(lw: &mut Lowerer, cx: &mut FnCx, e: Expr, want: &Ty, mode: 
     let span = e.span;
     match (want, &e.ty) {
         (Ty::Span(_), Ty::Array(..) | Ty::Buf(_)) => span_of(cx, e, mode),
+        // A `FixedStr[N]` at a `Span[U8]`: its used part (§4.2).
+        (Ty::Span(_), Ty::Struct(_)) => crate::lower::fixed_str::view(lw, cx, e),
         (Ty::Array(elem, n), Ty::Array(from, m)) if matches!(**elem, Ty::Span(_)) && n == m => {
             let n = *n;
             // Planar: `[a, b]` written in the argument, or an array of arrays / Bufs.
@@ -37,14 +39,22 @@ pub(crate) fn coerce(lw: &mut Lowerer, cx: &mut FnCx, e: Expr, want: &Ty, mode: 
                 return Ok(Expr::new(want.clone(), span, ExprKind::Array(out)));
             }
             let _ = from;
-            let base =
-                if e.as_place().is_some() { e } else { return Err(unsupported(span, Feature::PlanarTemporary, &[])) };
+            if e.as_place().is_none() {
+                return Err(unsupported(span, Feature::PlanarTemporary, &[]));
+            }
+            // Its indices evaluated once (R-433); an `inout` argument is a
+            // place, with no statements before it.
+            let mut stmts = Vec::new();
+            let base = materialize(cx, e, &mut stmts, "__planar");
+            if mode == Mode::Inout && !stmts.is_empty() {
+                return Err(unsupported(span, Feature::PlanarInoutIndex, &[]));
+            }
             let mut out = Vec::new();
             for i in 0..n {
                 let el = index(base.clone(), u32_lit(span, i))?;
                 out.push(coerce(lw, cx, el, elem, mode)?);
             }
-            Ok(Expr::new(want.clone(), span, ExprKind::Array(out)))
+            Ok(after(stmts, Expr::new(want.clone(), span, ExprKind::Array(out))))
         }
         // An `rt fn` value where a `fn` is wanted (§8.1): W8-09 lowers function values.
         (Ty::FnPtr(_), Ty::FnPtr(_)) => Err(unsupported(span, Feature::FnValues, &[])),

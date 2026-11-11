@@ -1,0 +1,134 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§4.2", "§18.1"]
+// fixes = 1
+
+// S-614 (W5-12 U3a), S-185 (§7: "書ける型は整数、`Char`、`Bool`、`Str` の具体的な型で(`FixedStr` の定数は struct の定数と同じく書けない)、それ以外の型の定数 … は E0020(修正候補はガードの形
+// `x if x == LIMIT`)"): the constant of the type `FixedStr[N]` is E0020 as a pattern, in the stage of the types because the type of the constant is needed. The candidate is the guard form, one for the
+// arm, with a binding that the spec does not name (S-253), so the text after it is not written here (the contract of §18.1 checks that nothing is left after it, and `FixedStr` has `PartialEq`, so the
+// guard is a comparison that is written). The constant is alone, in `Some`, in a tuple, the payload of an enum, next to a literal arm, and two in one arm (one error, one candidate). A literal
+// of the same type is a pattern (fixed_str_match_stmt.onsa). One error in each function (P-01); the marker is on the line of the constant.
+
+use std.text.FixedStr
+
+pub enum Msg {
+  Named(FixedStr[8]),
+  Plain,
+}
+
+const NAME: FixedStr[8] = "warm"
+const OTHER: FixedStr[8] = "cold"
+const SHORT: FixedStr[4] = "ab"
+
+pub fn alone(t: FixedStr[8]) -> U32 {
+  var r: U32 = 0
+  match t {
+    NAME => {                                       //~ E0020
+      r = 1
+    },
+    _ => {
+      r = 0
+    },
+  }
+  r
+}
+
+pub fn next_to_a_literal(t: FixedStr[8]) -> U32 {
+  var r: U32 = 0
+  match t {
+    "x" => {
+      r = 9
+    },
+    OTHER => {                                      //~ E0020
+      r = 2
+    },
+    _ => {
+      r = 0
+    },
+  }
+  r
+}
+
+pub fn a_constant_of_another_capacity(t: FixedStr[4]) -> U32 {
+  var r: U32 = 0
+  match t {
+    SHORT => {                                      //~ E0020
+      r = 1
+    },
+    _ => {
+      r = 0
+    },
+  }
+  r
+}
+
+pub fn inside_some(o: Option[FixedStr[8]]) -> U32 {
+  var r: U32 = 0
+  match o {
+    Some(NAME) => {                                 //~ E0020
+      r = 1
+    },
+    Some(_) => {
+      r = 2
+    },
+    None => {
+      r = 0
+    },
+  }
+  r
+}
+
+pub fn in_a_tuple(p: (FixedStr[8], U32)) -> U32 {
+  var r: U32 = 0
+  match p {
+    (NAME, n) => {                                  //~ E0020
+      r = n
+    },
+    _ => {
+      r = 0
+    },
+  }
+  r
+}
+
+pub fn in_the_payload_of_an_enum(m: Msg) -> U32 {
+  var r: U32 = 0
+  match m {
+    Msg.Named(NAME) => {                            //~ E0020
+      r = 1
+    },
+    Msg.Named(_) => {
+      r = 2
+    },
+    Msg.Plain => {
+      r = 0
+    },
+  }
+  r
+}
+
+pub fn two_constants_in_one_arm(p: (FixedStr[8], FixedStr[8])) -> U32 {
+  var r: U32 = 0
+  match p {
+    (NAME, OTHER) => {                              //~ E0020
+      r = 1
+    },
+    _ => {
+      r = 0
+    },
+  }
+  r
+}
+
+pub fn in_a_choice(t: FixedStr[8]) -> U32 {
+  var r: U32 = 0
+  match t {
+    NAME | OTHER => {                               //~ E0020
+      r = 1
+    },
+    _ => {
+      r = 0
+    },
+  }
+  r
+}

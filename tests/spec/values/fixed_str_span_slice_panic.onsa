@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.3", "§4.2"]
+
+// S-614 (W5-12 U3a): the view of a `FixedStr[N]` has the used length, not the capacity, so a `slice` that goes past the used length panics (§5.3: "半開区間 `[from, to)` の `Span`。範囲外は
+// panic"; §4.2: "使った長さの部分を見る"). The string "abc" has the capacity 8 and the view has the length 3: `slice(0, 3)` is the whole of it, `slice(0, 5)` is out of the view although it is inside the
+// capacity. The ends that are fine are run first, in the test that does not panic. One panic in each test.
+
+use std.text.FixedStr
+
+fn cut(s: Span[U8], to: U32) -> U32 {
+  s.slice(0, to).len()
+}
+
+fn cut_from(s: Span[U8], from: U32) -> U32 {
+  s.slice(from, s.len()).len()
+}
+
+test "a cut inside the used part is fine" {
+  let t: FixedStr[8] = "abc"
+  assert cut(t, 3) == 3
+  assert cut(t, 0) == 0
+  assert cut(t, 2) == 2
+  assert cut_from(t, 3) == 0
+  assert cut_from(t, 1) == 2
+}
+
+test "a cut past the used length panics" {
+  let t: FixedStr[8] = "abc"
+  let n = cut(t, 5) //~ PANIC "a cut past the used length panics"
+  assert n == 5
+}
+
+test "a cut of the empty string past zero panics" {
+  let e: FixedStr[8] = ""
+  let n = cut(e, 1) //~ PANIC "a cut of the empty string past zero panics"
+  assert n == 1
+}
+
+test "a cut that starts past the used length panics" {
+  let t: FixedStr[8] = "ab"
+  let n = cut_from(t, 3) //~ PANIC "a cut that starts past the used length panics"
+  assert n == 0
+}

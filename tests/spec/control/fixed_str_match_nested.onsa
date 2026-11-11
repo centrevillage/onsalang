@@ -1,0 +1,193 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§4.2"]
+
+// S-614 (W5-12 U3a, A8 (b)): a string literal in a pattern is read as a `FixedStr[N]` also where the pattern is not the whole pattern of the arm but a part of it whose value has that type: the
+// content of `Some`, an element of a tuple, the payload of a variant of an enum, a field of a struct (with the last `_` for the fields that are not written, §7), and the same inside another
+// pattern. The type of the part is what the subject says (§7: "`FixedStr[N]` の値に対する文字列リテラルは、その型の値として読み"). The literals do not count for the exhaustiveness, so each `match`
+// has the arm that is made of a pattern with no literal (`Some(_)`, `_`, a binding). The statement form is used (match_value.onsa has the form that gives a value, W8-06). The tests run.
+
+use std.text.FixedStr
+
+pub struct Voice {
+  name: FixedStr[8],
+  gain: U32,
+}
+
+pub enum Msg {
+  Named(FixedStr[8]),
+  Pair(FixedStr[4], U32),
+  Plain,
+}
+
+fn in_some(o: Option[FixedStr[8]]) -> U32 {
+  var r: U32 = 0
+  match o {
+    Some("warm") => {
+      r = 1
+    },
+    Some("") => {
+      r = 2
+    },
+    Some(_) => {
+      r = 3
+    },
+    None => {
+      r = 4
+    },
+  }
+  r
+}
+
+fn in_a_tuple(p: (FixedStr[8], U32)) -> U32 {
+  var r: U32 = 0
+  match p {
+    ("a", 1) => {
+      r = 1
+    },
+    ("a", _) => {
+      r = 2
+    },
+    (_, 1) => {
+      r = 3
+    },
+    _ => {
+      r = 4
+    },
+  }
+  r
+}
+
+fn in_two_strings(p: (FixedStr[4], FixedStr[8])) -> U32 {
+  var r: U32 = 0
+  match p {
+    ("a", "b") => {
+      r = 1
+    },
+    ("a", _) => {
+      r = 2
+    },
+    (_, "b") => {
+      r = 3
+    },
+    _ => {
+      r = 4
+    },
+  }
+  r
+}
+
+fn in_a_struct(v: Voice) -> U32 {
+  var r: U32 = 0
+  match v {
+    Voice { name: "mix", gain: 0 } => {
+      r = 1
+    },
+    Voice { name: "mix", _ } => {
+      r = 2
+    },
+    Voice { gain: 7, _ } => {
+      r = 3
+    },
+    _ => {
+      r = 4
+    },
+  }
+  r
+}
+
+fn in_an_enum(m: Msg) -> U32 {
+  var r: U32 = 0
+  match m {
+    Msg.Named("lead") => {
+      r = 1
+    },
+    Msg.Named(n) => {
+      r = n.len() + 10
+    },
+    Msg.Pair("k", 2) => {
+      r = 2
+    },
+    Msg.Pair(_, x) => {
+      r = x + 20
+    },
+    Msg.Plain => {
+      r = 3
+    },
+  }
+  r
+}
+
+fn in_an_option_of_a_tuple(o: Option[(FixedStr[4], U32)]) -> U32 {
+  var r: U32 = 0
+  match o {
+    Some(("a", n)) => {
+      r = n
+    },
+    Some((_, n)) => {
+      r = n + 100
+    },
+    None => {
+      r = 0
+    },
+  }
+  r
+}
+
+fn in_a_let_with_a_binding(p: (FixedStr[8], U32)) -> U32 {
+  let (s, n) = p
+  var r: U32 = n
+  match s {
+    "x" => {
+      r = r + 1
+    },
+    _ => {},
+  }
+  r
+}
+
+test "inside Some" {
+  assert in_some(Some("warm")) == 1
+  assert in_some(Some("")) == 2
+  assert in_some(Some("cold")) == 3
+  assert in_some(Some("warm\0")) == 3
+  assert in_some(None) == 4
+}
+
+test "inside a tuple" {
+  assert in_a_tuple(("a", 1)) == 1
+  assert in_a_tuple(("a", 5)) == 2
+  assert in_a_tuple(("b", 1)) == 3
+  assert in_a_tuple(("b", 5)) == 4
+  assert in_a_tuple(("a\0", 1)) == 3
+  assert in_two_strings(("a", "b")) == 1
+  assert in_two_strings(("a", "c")) == 2
+  assert in_two_strings(("z", "b")) == 3
+  assert in_two_strings(("z", "c")) == 4
+}
+
+test "a field of a struct, with the rest" {
+  assert in_a_struct(Voice { name: "mix", gain: 0 }) == 1
+  assert in_a_struct(Voice { name: "mix", gain: 5 }) == 2
+  assert in_a_struct(Voice { name: "lead", gain: 7 }) == 3
+  assert in_a_struct(Voice { name: "lead", gain: 8 }) == 4
+  assert in_a_struct(Voice { name: "mi", gain: 0 }) == 4
+}
+
+test "the payload of an enum" {
+  assert in_an_enum(Msg.Named("lead")) == 1
+  assert in_an_enum(Msg.Named("other")) == 15
+  assert in_an_enum(Msg.Pair("k", 2)) == 2
+  assert in_an_enum(Msg.Pair("k", 3)) == 23
+  assert in_an_enum(Msg.Pair("j", 2)) == 22
+  assert in_an_enum(Msg.Plain) == 3
+}
+
+test "deeper" {
+  assert in_an_option_of_a_tuple(Some(("a", 5))) == 5
+  assert in_an_option_of_a_tuple(Some(("b", 5))) == 105
+  assert in_an_option_of_a_tuple(None) == 0
+  assert in_a_let_with_a_binding(("x", 1)) == 2
+  assert in_a_let_with_a_binding(("y", 1)) == 1
+}

@@ -73,15 +73,90 @@ pub(super) fn index(base: Expr, idx: Expr) -> R<Expr> {
     Ok(Expr::new(ty, span, ExprKind::Index { base: Box::new(base), index: Box::new(idx) }))
 }
 
-/// Statements that evaluate `e` once into a temporary, unless it is a place.
+/// Statements that evaluate `e` once, for an expression used more than once
+/// (§3.5): a place stays one, not copied, with each of its indices that may
+/// have an effect ([`has_effect`]) bound to a temporary first (the base
+/// before its index, R-433); another expression is bound to a temporary.
 pub(super) fn materialize(cx: &mut FnCx, e: Expr, stmts: &mut Vec<Stmt>, name: &str) -> Expr {
     if e.as_place().is_some() {
-        return e;
+        let Expr { ty, span, kind } = e;
+        let kind = match kind {
+            ExprKind::Field { base, index } => {
+                ExprKind::Field { base: Box::new(materialize(cx, *base, stmts, name)), index }
+            }
+            ExprKind::Index { base, index } => {
+                let base = Box::new(materialize(cx, *base, stmts, name));
+                let index = match has_effect(&index) {
+                    false => index,
+                    true => Box::new(materialize(cx, *index, stmts, "__index")),
+                };
+                ExprKind::Index { base, index }
+            }
+            kind => kind,
+        };
+        return Expr::new(ty, span, kind);
     }
     let span = e.span;
     let t = cx.temp(name, e.ty.clone());
     stmts.push(stmt(span, StmtKind::Let(t, e)));
     local_expr(cx, t, span)
+}
+
+/// Whether evaluating `e` may have an effect: a call, an `inout` argument, a
+/// block. Of one without (`i + 1`, `ys[j] as U32`, `min(i, 1)`), a second
+/// evaluation gives the same value or the same panic, in the same order.
+fn has_effect(e: &Expr) -> bool {
+    use crate::prim::Prim as P;
+    match &e.kind {
+        ExprKind::Lit(_) | ExprKind::Local(_) | ExprKind::Const(_) | ExprKind::Zeroed => false,
+        ExprKind::Unary(_, x)
+        | ExprKind::Cast(x)
+        | ExprKind::Tag(x)
+        | ExprKind::Field { base: x, .. }
+        | ExprKind::Payload { base: x, .. } => has_effect(x),
+        ExprKind::Binary { lhs, rhs, .. }
+        | ExprKind::Cmp { lhs, rhs, .. }
+        | ExprKind::Logic { lhs, rhs, .. }
+        | ExprKind::Index { base: lhs, index: rhs } => has_effect(lhs) || has_effect(rhs),
+        // The primitives that only compute a value (a new one has an effect
+        // until it is added here).
+        ExprKind::Prim { prim, args } => {
+            let computes = matches!(
+                prim,
+                P::Math(..)
+                    | P::IntAbs(_)
+                    | P::IntMin(_)
+                    | P::IntMax(_)
+                    | P::NarrowParts { .. }
+                    | P::IntToFloat { .. }
+                    | P::FloatToFloat { .. }
+                    | P::TruncToInt { .. }
+                    | P::ToBits(_)
+                    | P::FromBits(_)
+                    | P::Parts(..)
+                    | P::DivEuclid(_)
+                    | P::RemEuclid(_)
+                    | P::IsNan(_)
+                    | P::IsFinite(_)
+                    | P::Len
+                    | P::Slice
+                    | P::StrLen
+            );
+            !computes || args.iter().any(|a| a.mode == Mode::Inout || has_effect(&a.expr))
+        }
+        _ => true,
+    }
+}
+
+/// `value` after the statements `stmts` (of [`materialize`]), a block when
+/// there are some.
+pub(super) fn after(stmts: Vec<Stmt>, value: Expr) -> Expr {
+    match stmts.is_empty() {
+        true => value,
+        false => {
+            Expr::new(value.ty.clone(), value.span, ExprKind::Block(Block { stmts, value: Some(Box::new(value)) }))
+        }
+    }
 }
 
 pub(super) fn float_lit(ty: &Ty, v: f64, span: Span) -> R<Expr> {

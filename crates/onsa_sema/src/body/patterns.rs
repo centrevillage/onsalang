@@ -53,18 +53,16 @@ impl<'a> Checker<'a> {
                         self.unify_at(span, t, ty)?;
                         Ok(P::Ctor(*b as u32, vec![]))
                     }
+                    // Of a `FixedStr[N]` subject, a value of it, compared as
+                    // `==` (§7, §4.2, S-614); else a `Str`.
                     Lit::Str(s) => {
-                        let t = self.a.types.builtin(BuiltinTy::Str, vec![]);
-                        self.unify_at(span, t, ty)?;
-                        let text: String = s
-                            .segments
-                            .iter()
-                            .map(|x| match x {
-                                StrSeg::Text(t) => t.clone(),
-                                _ => String::new(),
-                            })
-                            .collect();
-                        Ok(P::Str(text))
+                        if self.fixed_literal(span, s, Some(ty))?.is_none() {
+                            let t = self.a.types.builtin(BuiltinTy::Str, vec![]);
+                            self.unify_at(span, t, ty)?;
+                        }
+                        // Its value, as the lowering reads it; one with an
+                        // interpolation (E0020 of the syntax) covers none.
+                        Ok(onsa_syntax::test_name::value(s).map_or(P::Const, P::Str))
                     }
                 }
             }

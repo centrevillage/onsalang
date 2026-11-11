@@ -1,0 +1,212 @@
+// onsa.toml
+// [package]
+// name = "c_fixed_str_zero"
+// edition = "2026"
+//
+// [export]
+// prefix = "cfz_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§4.2", "§5.3", "§6.6", "§13.4"]
+//
+// [[test.host]]
+// name = "case"
+// target = "host"
+// fn = "c_fixed_str_zero.case"
+// steps = [
+//   { call = "fn", args = { i = 0 }, status = 0, result = true },
+//   { call = "fn", args = { i = 1 }, status = 0, result = true },
+//   { call = "fn", args = { i = 2 }, status = 0, result = true },
+//   { call = "fn", args = { i = 3 }, status = 0, result = true },
+//   { call = "fn", args = { i = 4 }, status = 0, result = true },
+//   { call = "fn", args = { i = 5 }, status = 0, result = true },
+//   { call = "fn", args = { i = 6 }, status = 0, result = true },
+//   { call = "fn", args = { i = 7 }, status = 0, result = true },
+//   { call = "fn", args = { i = 8 }, status = 0, result = false },
+// ]
+
+// R-432 (W5-12 U3a): an array of length 0 in a `const` and in a body, in the C of the host as in the interpreter. The C array of length 0 has one element, and its initializer
+// used to be empty (`{ {  } }`), a C23 extension that a C compiler with `-std=c11 -pedantic -Werror` refused. The forms: a struct with a field `[U8; 0]` in a `const` (by `[]` and
+// by `[0; 0]`), a `const` of `FixedStr[0]` and of an empty `FixedStr[4]` (§4.2), the same in a body, and a `match` on a `FixedStr[0]`. The arrays of none whose element is
+// an aggregate (a struct, a tuple, an `Option`, an array, a `FixedStr`) are braced to a scalar (gcc's `-Wmissing-braces`), and the element of `[f(); 0]` is evaluated once
+// and not left as an unused variable (`-Wunused-variable`), as the derived `default()` of a `FixedStr[0]` is. The element whose first scalar is deeper (a struct that opens
+// with an array of none or with `()`, a tuple that opens with `()`, a nested `Option` and a `Result`) is braced the same. `case(i)` picks the i-th case.
+//   c0  the const struct with `[U8; 0]`   c1  the const `FixedStr[0]` and `FixedStr[4]`   c2  the same in a body   c3  a match on a `FixedStr[0]`
+//   c4  arrays of none of aggregates      c5  `[next(inout n); 0]` evaluates `next` once   c6  `default()` of a `FixedStr[0]`
+//   c7  arrays of none whose element opens with an array of none, with `()`, or nests `Option` and `Result`
+
+use std.text.FixedStr
+
+pub struct Z {
+  a: [U8; 0],
+  n: U32,
+}
+
+const ZC: Z = Z { a: [], n: 3 }
+const ZR: Z = Z { a: [0; 0], n: 4 }
+const E: FixedStr[0] = ""
+const F: FixedStr[4] = ""
+
+pub struct P {
+  x: U8,
+  y: F32,
+}
+
+pub struct Many {
+  ps: [P; 0],
+  ts: [(U8, U8); 0],
+  os: [Option[U8]; 0],
+  rs: [[U8; 3]; 0],
+  fs: [FixedStr[4]; 0],
+  n: U32,
+}
+
+pub struct Hollow {
+  a: [U8; 0],
+}
+
+pub struct Inner {
+  h: Hollow,
+  n: U8,
+}
+
+pub struct Unit {
+  u: (),
+  n: U8,
+}
+
+pub struct Deep {
+  hs: [Hollow; 0],
+  is: [Inner; 0],
+  us: [Unit; 0],
+  ts: [((), U8); 0],
+  os: [Option[Option[(U8, F32)]]; 0],
+  rs: [Result[U8, (U8, F32)]; 0],
+  n: U32,
+}
+
+const D: Deep = Deep { hs: [], is: [], us: [], ts: [], os: [], rs: [], n: 8 }
+
+const M: Many = Many { ps: [], ts: [], os: [], rs: [], fs: [], n: 5 }
+const PS: [P; 0] = []
+
+rt fn size(s: Span[U8]) -> U32 {
+  s.len()
+}
+
+fn count[T: Copy](s: Span[T]) -> U32 {
+  s.len()
+}
+
+fn next(inout n: U32) -> U8 {
+  n = n + 1
+  7
+}
+
+fn mk[const N: U32]() -> FixedStr[N] {
+  FixedStr.default()
+}
+
+fn c0() -> Bool {
+  ZC.n == 3 && ZR.n == 4 && size(ZC.a) == 0 && size(ZR.a) == 0
+}
+
+fn c1() -> Bool {
+  size(E) == 0 && E.len() == 0 && size(F) == 0 && F.len() == 0
+}
+
+fn c2() -> Bool {
+  let z = Z { a: [7; 0], n: 1 }
+  let e: FixedStr[0] = ""
+  z.n == 1 && size(z.a) == 0 && size(e) == 0 && e == E
+}
+
+fn c3() -> Bool {
+  var r: U32 = 0
+  match E {
+    "" => {
+      r = 1
+    },
+    _ => {
+      r = 2
+    },
+  }
+  r == 1
+}
+
+fn c4() -> Bool {
+  let m = Many { ps: [], ts: [], os: [], rs: [], fs: [], n: 6 }
+  let fs: [FixedStr[4]; 0] = []
+  M.n == 5 && m.n == 6 && count(M.ps) == 0 && count(m.ts) == 0 && count(m.os) == 0 && count(m.rs) == 0 && count(fs) == 0 && count(PS) == 0
+}
+
+fn c5() -> Bool {
+  var n: U32 = 0
+  let z: [U8; 0] = [next(inout n); 0]
+  size(z) == 0 && n == 1
+}
+
+fn c6() -> Bool {
+  let t: FixedStr[0] = mk()
+  t.len() == 0 && t == E
+}
+
+fn c7() -> Bool {
+  let d = Deep { hs: [], is: [], us: [], ts: [], os: [], rs: [], n: 9 }
+  let us: [Unit; 0] = []
+  let rs: [Result[U8, (U8, F32)]; 0] = []
+  D.n == 8 && d.n == 9 && count(D.is) == 0 && count(d.hs) == 0 && count(d.ts) == 0 && count(d.os) == 0 && count(us) == 0 && count(rs) == 0
+}
+
+@export
+pub fn case(i: U32) -> Bool {
+  var r = false
+  match i {
+    0 => {
+      r = c0()
+    },
+    1 => {
+      r = c1()
+    },
+    2 => {
+      r = c2()
+    },
+    3 => {
+      r = c3()
+    },
+    4 => {
+      r = c4()
+    },
+    5 => {
+      r = c5()
+    },
+    6 => {
+      r = c6()
+    },
+    7 => {
+      r = c7()
+    },
+    _ => {
+      r = false
+    },
+  }
+  r
+}
+
+test "every case holds in the interpreter" {
+  for i in 0 ..< 8 {
+    assert case(i)
+  }
+}
+
+test "a case that does not exist is false" {
+  assert !case(8)
+}

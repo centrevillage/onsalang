@@ -1,0 +1,324 @@
+// onsa.toml
+// [package]
+// name = "c_fixed_str_u3a"
+// edition = "2026"
+//
+// [export]
+// prefix = "cfu3_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§5.3", "§4.2", "§7", "§13.4"]
+//
+// [[test.host]]
+// name = "case"
+// target = "host"
+// fn = "c_fixed_str_u3a.case"
+// steps = [
+//   { call = "fn", args = { i = 0 }, status = 0, result = true },
+//   { call = "fn", args = { i = 1 }, status = 0, result = true },
+//   { call = "fn", args = { i = 2 }, status = 0, result = true },
+//   { call = "fn", args = { i = 3 }, status = 0, result = true },
+//   { call = "fn", args = { i = 4 }, status = 0, result = true },
+//   { call = "fn", args = { i = 5 }, status = 0, result = true },
+//   { call = "fn", args = { i = 6 }, status = 0, result = true },
+//   { call = "fn", args = { i = 7 }, status = 0, result = true },
+//   { call = "fn", args = { i = 8 }, status = 0, result = true },
+//   { call = "fn", args = { i = 9 }, status = 0, result = true },
+//   { call = "fn", args = { i = 10 }, status = 0, result = true },
+//   { call = "fn", args = { i = 11 }, status = 0, result = true },
+//   { call = "fn", args = { i = 12 }, status = 0, result = true },
+//   { call = "fn", args = { i = 13 }, status = 0, result = true },
+//   { call = "fn", args = { i = 14 }, status = 0, result = true },
+//   { call = "fn", args = { i = 15 }, status = 0, result = true },
+//   { call = "fn", args = { i = 16 }, status = 0, result = true },
+//   { call = "fn", args = { i = 17 }, status = 0, result = false },
+//   { call = "fn", args = { i = 4294967295 }, status = 0, result = false },
+// ]
+
+// S-614 (W5-12 U3a, spec §5.3, §4.2, §7, §13.4; R-431): a `FixedStr[N]` passed to a `Span[U8]` parameter shows the used part, and a `match` on it compares the used length and the bytes,
+// in the C of the host as in the interpreter. `sum` adds the bytes and `size` is the length of the view. The `FixedStr` is passed as a place (a local, a field, an element of an array), as
+// a temporary (the value of a call), and as a borrowed parameter (a parameter and a field of a parameter that is a struct), and the part of the view is cut by `slice`. The two
+// functions on `Wave` are the shape of R-431: the array field of a struct that is a borrowed parameter is passed to a `Span[U8]` as it is and cut (the C used to drop the `const`
+// of the field, and a C compiler with `-Werror` refused it). `case(i)` picks the i-th case by a `match` that is a statement; the sequence runs every `i`.
+//   c0   a local (sum 294, size 3)       c1  a field of a local        c2  the value of a call            c3  a borrowed parameter
+//   c4   a field of a borrowed parameter c5  R-431: an array field of a borrowed struct, whole and cut
+//   c6   the empty string                c7  an element of an array    c8  a view cut by slice            c9  a var that was changed
+//   c10  the capacity used up            c11 match: a, ab              c12 match: a NUL that is written   c13 match: the other arms
+//   c14  match: a binding arm            c15 match: or, a guard        c16 match: inside Some
+
+use std.text.FixedStr
+
+pub struct Voice {
+  name: FixedStr[8],
+  gain: U32,
+}
+
+pub struct Wave {
+  a: [U8; 4],
+  n: U32,
+}
+
+rt fn sum(s: Span[U8]) -> U32 {
+  var acc: U32 = 0
+  for i in 0 ..< s.len() {
+    acc = acc + (s[i] as U32)
+  }
+  acc
+}
+
+rt fn size(s: Span[U8]) -> U32 {
+  s.len()
+}
+
+rt fn tail_sum(s: Span[U8]) -> U32 {
+  sum(s.slice(1, s.len()))
+}
+
+fn make() -> FixedStr[8] {
+  "ab"
+}
+
+fn borrowed(t: FixedStr[8]) -> U32 {
+  sum(t)
+}
+
+fn of_voice(v: Voice) -> U32 {
+  sum(v.name)
+}
+
+fn view_len(s: Span[U8]) -> U32 {
+  s.len()
+}
+
+fn of_param(w: Wave) -> U32 {
+  view_len(w.a)
+}
+
+fn of_param_cut(w: Wave) -> U32 {
+  sum(w.a.slice(0, w.n))
+}
+
+fn code(t: FixedStr[8]) -> U32 {
+  var r: U32 = 0
+  match t {
+    "a" => {
+      r = 1
+    },
+    "ab" => {
+      r = 2
+    },
+    "a\0" => {
+      r = 3
+    },
+    _ => {
+      r = 9
+    },
+  }
+  r
+}
+
+fn named(t: FixedStr[8]) -> U32 {
+  var r: U32 = 0
+  match t {
+    "x" => {
+      r = 1
+    },
+    other => {
+      r = other.len() + 10
+    },
+  }
+  r
+}
+
+fn choice(t: FixedStr[8]) -> U32 {
+  var r: U32 = 0
+  match t {
+    "a" | "b" => {
+      r = 1
+    },
+    v if v.len() > 3 => {
+      r = 2
+    },
+    _ => {
+      r = 3
+    },
+  }
+  r
+}
+
+fn nested(o: Option[FixedStr[8]]) -> U32 {
+  var r: U32 = 0
+  match o {
+    Some("x") => {
+      r = 1
+    },
+    Some(_) => {
+      r = 2
+    },
+    None => {
+      r = 3
+    },
+  }
+  r
+}
+
+fn c0() -> Bool {
+  let t: FixedStr[8] = "abc"
+  sum(t) == 294 && size(t) == 3
+}
+
+fn c1() -> Bool {
+  let v = Voice { name: "ab", gain: 1 }
+  sum(v.name) == 195 && size(v.name) == 2
+}
+
+fn c2() -> Bool {
+  sum(make()) == 195 && size(make()) == 2
+}
+
+fn c3() -> Bool {
+  let t: FixedStr[8] = "xyz"
+  borrowed(t) == 363
+}
+
+fn c4() -> Bool {
+  let v = Voice { name: "xyz", gain: 0 }
+  of_voice(v) == 363
+}
+
+fn c5() -> Bool {
+  let w = Wave { a: [1, 2, 3, 4], n: 3 }
+  of_param(w) == 4 && of_param_cut(w) == 6
+}
+
+fn c6() -> Bool {
+  let d: FixedStr[8] = FixedStr.default()
+  sum(d) == 0 && size(d) == 0
+}
+
+fn c7() -> Bool {
+  let ts: [FixedStr[4]; 2] = ["a", "bcd"]
+  sum(ts[1]) == 297 && size(ts[0]) == 1
+}
+
+fn c8() -> Bool {
+  let t: FixedStr[8] = "abc"
+  let one: FixedStr[8] = "a"
+  tail_sum(t) == 197 && tail_sum(one) == 0
+}
+
+fn c9() -> Bool {
+  var t: FixedStr[8] = "ab"
+  t = "abcd"
+  sum(t) == 394 && size(t) == 4
+}
+
+fn c10() -> Bool {
+  let t: FixedStr[4] = "wxyz"
+  size(t) == 4 && sum(t) == 482
+}
+
+fn c11() -> Bool {
+  code("a") == 1 && code("ab") == 2
+}
+
+fn c12() -> Bool {
+  code("a\0") == 3 && code("a") == 1
+}
+
+fn c13() -> Bool {
+  code("abc") == 9 && code("") == 9 && code("b") == 9
+}
+
+fn c14() -> Bool {
+  named("x") == 1 && named("hello") == 15 && named("") == 10
+}
+
+fn c15() -> Bool {
+  choice("a") == 1 && choice("b") == 1 && choice("abcd") == 2 && choice("zz") == 3
+}
+
+fn c16() -> Bool {
+  nested(Some("x")) == 1 && nested(Some("y")) == 2 && nested(None) == 3
+}
+
+@export
+pub fn case(i: U32) -> Bool {
+  var r = false
+  match i {
+    0 => {
+      r = c0()
+    },
+    1 => {
+      r = c1()
+    },
+    2 => {
+      r = c2()
+    },
+    3 => {
+      r = c3()
+    },
+    4 => {
+      r = c4()
+    },
+    5 => {
+      r = c5()
+    },
+    6 => {
+      r = c6()
+    },
+    7 => {
+      r = c7()
+    },
+    8 => {
+      r = c8()
+    },
+    9 => {
+      r = c9()
+    },
+    10 => {
+      r = c10()
+    },
+    11 => {
+      r = c11()
+    },
+    12 => {
+      r = c12()
+    },
+    13 => {
+      r = c13()
+    },
+    14 => {
+      r = c14()
+    },
+    15 => {
+      r = c15()
+    },
+    16 => {
+      r = c16()
+    },
+    _ => {
+      r = false
+    },
+  }
+  r
+}
+
+test "every case holds in the interpreter" {
+  for i in 0 ..< 17 {
+    assert case(i)
+  }
+}
+
+test "a case that does not exist is false" {
+  assert !case(17)
+  assert !case(4294967295)
+}

@@ -1,0 +1,147 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§4.2", "§4.7"]
+
+// S-614 (W5-12 U3a): a string literal in a pattern of a `match` on a `FixedStr[N]` is checked against the capacity and against ASCII (§7: "容量を超えるか ASCII の外の文字を含むリテラルは E0408"). A pattern
+// that is longer than the capacity can never be equal to a value, but it is still E0408 and not a silent never-chosen arm. The forms: one byte over the capacity, much longer, a letter outside ASCII
+// (`é`, `\u{80}`, `\u{3042}`), a long branch of a choice, and the literal inside `Some`, a tuple and a field of a struct. The capacity used up is fine. The marker is on the line of the pattern.
+// One error in each function (P-01). A `Str` subject keeps the literal that is longer and any letter (fixed_str_lit_str_stays.onsa).
+
+use std.text.FixedStr
+
+pub struct Voice {
+  name: FixedStr[4],
+}
+
+pub fn one_byte_over(t: FixedStr[4]) -> U32 {
+  var r: U32 = 0
+  match t {
+    "abcde" => {                                    //~ E0408
+      r = 1
+    },
+    _ => {
+      r = 2
+    },
+  }
+  r
+}
+
+pub fn much_longer(t: FixedStr[2]) -> U32 {
+  var r: U32 = 0
+  match t {
+    "a long literal" => {                           //~ E0408
+      r = 1
+    },
+    _ => {
+      r = 2
+    },
+  }
+  r
+}
+
+pub fn a_letter_written_directly(t: FixedStr[8]) -> U32 {
+  var r: U32 = 0
+  match t {
+    "é" => {                                        //~ E0408
+      r = 1
+    },
+    _ => {
+      r = 2
+    },
+  }
+  r
+}
+
+pub fn the_first_value_outside_ascii(t: FixedStr[8]) -> U32 {
+  var r: U32 = 0
+  match t {
+    "\u{80}" => {                                   //~ E0408
+      r = 1
+    },
+    _ => {
+      r = 2
+    },
+  }
+  r
+}
+
+pub fn a_letter_of_three_bytes(t: FixedStr[8]) -> U32 {
+  var r: U32 = 0
+  match t {
+    "a\u{3042}" => {                                //~ E0408
+      r = 1
+    },
+    _ => {
+      r = 2
+    },
+  }
+  r
+}
+
+pub fn a_long_branch_of_a_choice(t: FixedStr[4]) -> U32 {
+  var r: U32 = 0
+  match t {
+    "a" | "toolong" => {                            //~ E0408
+      r = 1
+    },
+    _ => {
+      r = 2
+    },
+  }
+  r
+}
+
+pub fn inside_some(o: Option[FixedStr[4]]) -> U32 {
+  var r: U32 = 0
+  match o {
+    Some("abcde") => {                              //~ E0408
+      r = 1
+    },
+    Some(_) => {
+      r = 2
+    },
+    None => {
+      r = 3
+    },
+  }
+  r
+}
+
+pub fn inside_a_tuple(p: (FixedStr[4], U32)) -> U32 {
+  var r: U32 = 0
+  match p {
+    ("abcde", 1) => {                               //~ E0408
+      r = 1
+    },
+    _ => {
+      r = 2
+    },
+  }
+  r
+}
+
+pub fn in_a_field(v: Voice) -> U32 {
+  var r: U32 = 0
+  match v {
+    Voice { name: "abcde" } => {                    //~ E0408
+      r = 1
+    },
+    _ => {
+      r = 2
+    },
+  }
+  r
+}
+
+pub fn the_capacity_used_up_is_fine(t: FixedStr[4]) -> U32 {
+  var r: U32 = 0
+  match t {
+    "abcd" => {
+      r = 1
+    },
+    _ => {
+      r = 2
+    },
+  }
+  r
+}

@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§4.2"]
+
+// S-614 (W5-12 U3a, A8 (b)): a `match` on a `FixedStr[8]` in the body of a closure reads its string literal patterns as values of that type, as in fixed_str_match_stmt.onsa.
+// This is in a `check` case: this version lowers a closure only as the argument of `array.from_fn` and does not call a function value (E0200), as in
+// tests/spec/types/fixed_str_lit_expected_closure.onsa.
+
+use std.text.FixedStr
+
+pub fn of_a_closure() -> U32 {
+  let f = fn(t: FixedStr[8]) -> U32 {
+    var r: U32 = 0
+    match t {
+      "k" => {
+        r = 7
+      },
+      _ => {
+        r = 8
+      },
+    }
+    r
+  }
+  f.("k") + f.("kk")
+}

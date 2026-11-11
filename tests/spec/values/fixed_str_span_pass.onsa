@@ -1,0 +1,144 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.3", "§4.2", "§4.7"]
+
+// S-614 (W5-12 U3a, A4): a `FixedStr[N]` that is passed to a `Span[U8]` parameter shows the used part (§5.3: "`Span[U8]` には `FixedStr[N]` も渡せ、使った長さの部分を見る"; §4.2: "出口: `Span[U8]` の
+// 引数に渡すと、使った長さの部分を見る"). The length of the view is the used length (not the capacity), the bytes after it are not seen, and a NUL that is written is a byte of the view. The
+// value is passed as a place (a local `let` and `var`, a borrowed parameter, a field, a nested field, an element of an array and of a tuple, a `const`), and as a temporary (the value of a
+// call, of a method and of an `if`). The callee uses the view with `len`, `get`, `slice` and indexing. A `[U8; N]` and a `Buf[U8]` still go to the same parameter (§5.3). The part is
+// read at the time of the call: a `var` that was assigned again shows the new part. An `inout` parameter is E0401 (tests/spec/negative/fixed_str_span_inout.onsa); the cut that is
+// out of the view panics (fixed_str_span_slice_panic.onsa); the planar argument and the generic `Span[T]` are fixed_str_span_planar_generic.onsa (S-1008).
+
+use std.text.FixedStr
+
+pub struct Voice {
+  name: FixedStr[8],
+  gain: U32,
+}
+
+pub struct Slot {
+  cur: Voice,
+}
+
+const NAME: FixedStr[8] = "gain"
+
+impl Voice {
+  pub fn label(self) -> FixedStr[8] {
+    self.name
+  }
+}
+
+fn sum(s: Span[U8]) -> U32 {
+  var acc: U32 = 0
+  for i in 0 ..< s.len() {
+    acc = acc + (s[i] as U32)
+  }
+  acc
+}
+
+fn size(s: Span[U8]) -> U32 {
+  s.len()
+}
+
+fn first_of(s: Span[U8]) -> Option[U8] {
+  s.get(0)
+}
+
+fn byte_at(s: Span[U8], i: U32) -> Option[U8] {
+  s.get(i)
+}
+
+fn tail_sum(s: Span[U8]) -> U32 {
+  sum(s.slice(1, s.len()))
+}
+
+fn through_a_parameter(t: FixedStr[8]) -> U32 {
+  sum(t)
+}
+
+fn make(flag: Bool) -> FixedStr[8] {
+  if flag {
+    "ab"
+  } else {
+    "wxyz"
+  }
+}
+
+test "a local is passed and the view is the used part" {
+  let t: FixedStr[8] = "abc"
+  assert size(t) == 3
+  assert sum(t) == 294
+  let e: FixedStr[8] = ""
+  assert size(e) == 0
+  assert sum(e) == 0
+  let full: FixedStr[4] = "wxyz"
+  assert size(full) == 4
+  assert sum(full) == 482
+}
+
+test "the bytes after the used part are not seen" {
+  var t: FixedStr[8] = "abcdef"
+  assert size(t) == 6
+  t = "ab"
+  assert size(t) == 2
+  assert sum(t) == 195
+  assert byte_at(t, 2) == None
+  assert byte_at(t, 7) == None
+  t = "xyz"
+  assert size(t) == 3
+}
+
+test "a NUL that is written is a byte of the view" {
+  let t: FixedStr[8] = "a\0b"
+  assert size(t) == 3
+  assert sum(t) == 195
+  assert byte_at(t, 1) == Some(0)
+  assert first_of(t) == Some(97)
+}
+
+test "get and slice of the view" {
+  let t: FixedStr[8] = "abc"
+  assert first_of(t) == Some(97)
+  assert byte_at(t, 2) == Some(99)
+  assert byte_at(t, 3) == None
+  let e: FixedStr[8] = ""
+  assert first_of(e) == None
+  assert tail_sum(t) == 197
+  let one: FixedStr[8] = "a"
+  assert tail_sum(one) == 0
+}
+
+test "a borrowed parameter, a field, a nested field, an element and a const" {
+  let t: FixedStr[8] = "xyz"
+  assert through_a_parameter(t) == 363
+  assert through_a_parameter("xyz") == 363
+  let v = Voice { name: "ab", gain: 1 }
+  assert sum(v.name) == 195
+  assert size(v.name) == 2
+  let s = Slot { cur: Voice { name: "abc", gain: 2 } }
+  assert sum(s.cur.name) == 294
+  let ts: [FixedStr[4]; 2] = ["a", "bcd"]
+  assert sum(ts[1]) == 297
+  assert size(ts[0]) == 1
+  let p: (FixedStr[4], U32) = ("ab", 7)
+  assert size(p.0) == 2
+  assert sum(NAME) == 103 + 97 + 105 + 110
+  assert size(NAME) == 4
+}
+
+test "a temporary is passed" {
+  assert size(make(true)) == 2
+  assert sum(make(true)) == 195
+  assert size(make(false)) == 4
+  assert sum(make(false)) == 482
+  let v = Voice { name: "ab", gain: 1 }
+  assert size(v.label()) == 2
+  assert sum(v.label()) == 195
+}
+
+test "an array of bytes still goes to the same parameter" {
+  let xs: [U8; 3] = [1, 2, 3]
+  assert size(xs) == 3
+  assert sum(xs) == 6
+}

@@ -1,0 +1,117 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§18.1", "§4.2"]
+
+// S-614 (W5-12 U3a), S-185 (§7: "整数・`Char`・`Str`・`FixedStr` のリテラル、定数のパターン、ガードの付いた腕は数えない(… `_` か束縛が要る)"): the string literals in the patterns of a `match` on a
+// `FixedStr[N]` do not count for the exhaustiveness, whatever the capacity is and however many values the literals name, so a `match` with only such arms is E0501. The forms: literals only, a literal and a
+// guarded binding (the guard is not counted either), the content of `Some` with a literal and `None`, a tuple with a literal in one place, a field of a struct, and the payload of an enum. A
+// `_` or a binding arm makes each of them exhaustive (fixed_str_match_stmt.onsa, fixed_str_match_nested.onsa). The marker is on the line of the `match`. One error in each function (P-01).
+
+use std.text.FixedStr
+
+pub struct Voice {
+  name: FixedStr[8],
+}
+
+pub enum Msg {
+  Named(FixedStr[8]),
+  Plain,
+}
+
+pub fn literals_only(t: FixedStr[8]) -> U32 {
+  var r: U32 = 0
+  match t {                                         //~ E0501
+    "a" => {
+      r = 1
+    },
+    "b" => {
+      r = 2
+    },
+  }
+  r
+}
+
+pub fn one_literal(t: FixedStr[2]) -> U32 {
+  var r: U32 = 0
+  match t {                                         //~ E0501
+    "ab" => {
+      r = 1
+    },
+  }
+  r
+}
+
+pub fn a_literal_and_a_guarded_binding(t: FixedStr[8]) -> U32 {
+  var r: U32 = 0
+  match t {                                         //~ E0501
+    "a" => {
+      r = 1
+    },
+    v if v.len() > 3 => {
+      r = 2
+    },
+  }
+  r
+}
+
+pub fn inside_some_without_the_rest(o: Option[FixedStr[8]]) -> U32 {
+  var r: U32 = 0
+  match o {                                         //~ E0501
+    Some("a") => {
+      r = 1
+    },
+    None => {
+      r = 0
+    },
+  }
+  r
+}
+
+pub fn in_a_tuple(p: (FixedStr[8], Bool)) -> U32 {
+  var r: U32 = 0
+  match p {                                         //~ E0501
+    ("a", true) => {
+      r = 1
+    },
+    (_, true) => {
+      r = 2
+    },
+  }
+  r
+}
+
+pub fn in_a_field(v: Voice) -> U32 {
+  var r: U32 = 0
+  match v {                                         //~ E0501
+    Voice { name: "mix" } => {
+      r = 1
+    },
+  }
+  r
+}
+
+pub fn in_the_payload_of_an_enum(m: Msg) -> U32 {
+  var r: U32 = 0
+  match m {                                         //~ E0501
+    Msg.Named("lead") => {
+      r = 1
+    },
+    Msg.Plain => {
+      r = 2
+    },
+  }
+  r
+}
+
+pub fn a_wildcard_makes_it_exhaustive(t: FixedStr[8]) -> U32 {
+  var r: U32 = 0
+  match t {
+    "a" => {
+      r = 1
+    },
+    _ => {
+      r = 2
+    },
+  }
+  r
+}

@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§4.2"]
+
+// S-614 (W5-12 U3a; until = "W8-06"): the `match` that gives a value, with the patterns that are string literals of a `FixedStr[N]` subject. It is the same meaning as the statement form
+// (fixed_str_match_stmt.onsa), but the Core of this version lowers only a `match` whose arms are a simple switch on the variants of an enum, so a `match` that gives a value on a
+// subject that is not an enum is E0200 here, and the case is run when the lowering of the value form comes (W8-06). The subject is a `FixedStr[N]` and the arms are `_`-ended: the literals
+// do not count for the exhaustiveness (§7). The form is the `let`, the last value of a function, an argument, and an operand.
+
+use std.text.FixedStr
+
+fn value_of(t: FixedStr[8]) -> U32 {
+  let r = match t {
+    "a" => 1,
+    "ab" => 2,
+    "a\0" => 3,
+    _ => 9,
+  }
+  r
+}
+
+fn as_the_last_value(t: FixedStr[8]) -> U32 {
+  match t {
+    "warm" => 1,
+    "" => 2,
+    other => other.len(),
+  }
+}
+
+fn as_an_operand(t: FixedStr[8]) -> U32 {
+  10 + (match t {
+    "x" => 1,
+    _ => 2,
+  })
+}
+
+fn in_some_as_a_value(o: Option[FixedStr[8]]) -> U32 {
+  match o {
+    Some("warm") => 1,
+    Some(_) => 2,
+    None => 3,
+  }
+}
+
+test "the value form on a FixedStr subject" {
+  assert value_of("a") == 1
+  assert value_of("ab") == 2
+  assert value_of("a\0") == 3
+  assert value_of("z") == 9
+  assert as_the_last_value("warm") == 1
+  assert as_the_last_value("") == 2
+  assert as_the_last_value("hello") == 5
+  assert as_an_operand("x") == 11
+  assert as_an_operand("y") == 12
+  assert in_some_as_a_value(Some("warm")) == 1
+  assert in_some_as_a_value(Some("cold")) == 2
+  assert in_some_as_a_value(None) == 3
+}

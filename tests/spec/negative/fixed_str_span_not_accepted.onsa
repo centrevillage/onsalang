@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§4.2", "§4.7"]
+
+// S-614 (W5-12 U3a): what goes to a `Span[T]` is listed (§5.3: "`[T; N]`、`Buf[T]`、`Span[T]` を渡せる(`Span[U8]` には `FixedStr[N]` も渡せ、使った長さの部分を見る)"), so a `FixedStr[N]` goes to a
+// `Span` of `U8` and to no other element type (the view is of bytes), and a `Str` does not go to a `Span[U8]` (it is not in the list; its bytes are `as_bytes()`, §4.2). A string literal
+// that is given to a `Span[U8]` parameter has the expected type `Span[U8]`, not `FixedStr[N]`, so it is a `Str` (§4.2: "期待の型が `FixedStr[N]` なら"), and the `Str` is E0401. The last form (the literal) is a reading from the list of
+// §5.3 as it is written (S-614 does not say it; it is reported). A `FixedStr[N]` also does not go to a `Buf[U8]` parameter or to `[U8; N]`.
+// One error in each function (P-01); the marker is on the line of the call.
+
+use std.text.FixedStr
+
+fn read_u8(s: Span[U8]) -> U32 {
+  s.len()
+}
+
+fn read_u16(s: Span[U16]) -> U32 {
+  s.len()
+}
+
+fn read_i8(s: Span[I8]) -> U32 {
+  s.len()
+}
+
+fn read_f32(s: Span[F32]) -> U32 {
+  s.len()
+}
+
+fn read_buf(b: Buf[U8]) -> U32 {
+  b.len()
+}
+
+fn read_array(a: [U8; 4]) -> U32 {
+  a.len()
+}
+
+pub fn to_a_span_of_u16(t: FixedStr[8]) -> U32 {
+  read_u16(t)                                       //~ E0401
+}
+
+pub fn to_a_span_of_i8(t: FixedStr[8]) -> U32 {
+  read_i8(t)                                        //~ E0401
+}
+
+pub fn to_a_span_of_f32(t: FixedStr[8]) -> U32 {
+  read_f32(t)                                       //~ E0401
+}
+
+pub fn to_a_buf(t: FixedStr[8]) -> U32 {
+  read_buf(t)                                       //~ E0401
+}
+
+pub fn to_an_array(t: FixedStr[4]) -> U32 {
+  read_array(t)                                     //~ E0401
+}
+
+pub fn a_str_variable_to_a_span_of_u8(s: Str) -> U32 {
+  read_u8(s)                                        //~ E0401
+}
+
+pub fn a_str_literal_to_a_span_of_u8() -> U32 {
+  read_u8("abc")                                    //~ E0401
+}
+
+pub fn to_a_span_of_u8_is_fine(t: FixedStr[8]) -> U32 {
+  read_u8(t)
+}

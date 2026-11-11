@@ -1,0 +1,242 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§7", "§4.2", "§2.4"]
+
+// S-614 (W5-12 U3a, A8 (b)): in a `match` whose subject is a `FixedStr[N]`, a string literal in a pattern is read as a value of that type, and it is compared with the subject by the used length
+// and the bytes (§7: "`FixedStr[N]` の値に対する文字列リテラルは、その型の値として読み、使った長さとバイトの等値で比べる"). So "a" and "a\0" are two different values, a prefix is another value, the empty
+// string is a pattern, and the capacity used up is a value. The literal does not count for the exhaustiveness (§7), so every `match` here has a `_` or a binding arm. The forms are the
+// statement form (the arms are blocks that assign a `var`, which the Core of this version lowers; the form that gives a value is match_value.onsa, W8-06), the binding arm, the choice `"a" | "b"`,
+// a guard, the subject as a parameter, a field, an element, the value of a call and a `const`, a `match` in a loop (in a closure: fixed_str_match_closure.onsa, a `check` case). The tests run in the interpreter.
+
+use std.text.FixedStr
+
+pub struct Voice {
+  name: FixedStr[8],
+}
+
+const NAME: FixedStr[8] = "warm"
+
+fn make() -> FixedStr[8] {
+  "ab"
+}
+
+fn code(t: FixedStr[8]) -> U32 {
+  var r: U32 = 0
+  match t {
+    "a" => {
+      r = 1
+    },
+    "ab" => {
+      r = 2
+    },
+    "a\0" => {
+      r = 3
+    },
+    "warm" => {
+      r = 4
+    },
+    "" => {
+      r = 5
+    },
+    _ => {
+      r = 9
+    },
+  }
+  r
+}
+
+fn full(t: FixedStr[4]) -> U32 {
+  var r: U32 = 0
+  match t {
+    "abcd" => {
+      r = 1
+    },
+    "abc" => {
+      r = 2
+    },
+    _ => {
+      r = 3
+    },
+  }
+  r
+}
+
+fn escapes(t: FixedStr[8]) -> U32 {
+  var r: U32 = 0
+  match t {
+    "\n" => {
+      r = 1
+    },
+    "{{}}" => {
+      r = 2
+    },
+    "\t\\" => {
+      r = 3
+    },
+    "\u{7f}" => {
+      r = 4
+    },
+    _ => {
+      r = 0
+    },
+  }
+  r
+}
+
+fn named(t: FixedStr[8]) -> U32 {
+  var r: U32 = 0
+  match t {
+    "x" => {
+      r = 1
+    },
+    other => {
+      r = other.len() + 10
+    },
+  }
+  r
+}
+
+fn choice(t: FixedStr[8]) -> U32 {
+  var r: U32 = 0
+  match t {
+    "a" | "b" => {
+      r = 1
+    },
+    "c" | "c" => {
+      r = 2
+    },
+    v if v.len() > 3 => {
+      r = 3
+    },
+    _ => {
+      r = 4
+    },
+  }
+  r
+}
+
+fn guarded_literal(t: FixedStr[8], flag: Bool) -> U32 {
+  var r: U32 = 0
+  match t {
+    "a" if flag => {
+      r = 1
+    },
+    "a" => {
+      r = 2
+    },
+    _ => {
+      r = 3
+    },
+  }
+  r
+}
+
+fn of_field(v: Voice) -> U32 {
+  var r: U32 = 0
+  match v.name {
+    "mix" => {
+      r = 1
+    },
+    _ => {
+      r = 2
+    },
+  }
+  r
+}
+
+fn of_call() -> U32 {
+  var r: U32 = 0
+  match make() {
+    "ab" => {
+      r = 1
+    },
+    _ => {
+      r = 2
+    },
+  }
+  r
+}
+
+fn of_const() -> U32 {
+  var r: U32 = 0
+  match NAME {
+    "warm" => {
+      r = 1
+    },
+    _ => {
+      r = 2
+    },
+  }
+  r
+}
+
+fn count_a(xs: [FixedStr[4]; 4]) -> U32 {
+  var n: U32 = 0
+  for i in 0 ..< 4 {
+    match xs[i] {
+      "a" => {
+        n = n + 1
+      },
+      _ => {},
+    }
+  }
+  n
+}
+
+test "the used length and the bytes decide" {
+  assert code("a") == 1
+  assert code("ab") == 2
+  assert code("a\0") == 3
+  assert code("warm") == 4
+  assert code("") == 5
+  assert code("wam") == 9
+  assert code("warm\0") == 9
+  assert code("b") == 9
+  assert code("warmer") == 9
+  let t: FixedStr[8] = "warm"
+  assert code(t) == 4
+}
+
+test "the capacity that is used up" {
+  assert full("abcd") == 1
+  assert full("abc") == 2
+  assert full("ab") == 3
+  assert full("") == 3
+}
+
+test "the escapes in a pattern" {
+  assert escapes("\n") == 1
+  assert escapes("{{}}") == 2
+  assert escapes("\t\\") == 3
+  assert escapes("\u{7f}") == 4
+  assert escapes("n") == 0
+  assert escapes("{{") == 0
+}
+
+test "a binding arm" {
+  assert named("x") == 1
+  assert named("hello") == 15
+  assert named("") == 10
+  assert named("xx") == 12
+}
+
+test "a choice and a guard" {
+  assert choice("a") == 1
+  assert choice("b") == 1
+  assert choice("c") == 2
+  assert choice("abcd") == 3
+  assert choice("zz") == 4
+  assert guarded_literal("a", true) == 1
+  assert guarded_literal("a", false) == 2
+  assert guarded_literal("b", true) == 3
+}
+
+test "the subject is a field, the value of a call, a const and an element" {
+  assert of_field(Voice { name: "mix" }) == 1
+  assert of_field(Voice { name: "mi" }) == 2
+  assert of_call() == 1
+  assert of_const() == 1
+  assert count_a(["a", "b", "a", "a"]) == 3
+  assert count_a(["", "ab", "b", "c"]) == 0
+}

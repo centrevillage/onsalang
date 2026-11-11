@@ -884,11 +884,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
             ExprKind::SpanOf(x) => {
                 let xs = self.place_like(x)?;
                 match &x.ty {
-                    Ty::Array(el, n) => {
-                        let tag = self.cx.names.tag(el);
-                        let _ = self.cx.names.name(&e.ty);
-                        Ok(format!("onsa_span_{tag}_of({xs}.a, UINT32_C({n}))"))
-                    }
+                    Ty::Array(el, n) => Ok(self.array_span(&xs, el, *n)),
                     Ty::Span(_) => Ok(xs),
                     Ty::Buf(_) => Err(unsupported(e.span, Feature::Buf, &[])),
                     _ => Err(internal("span of a non-sequence")),
@@ -918,18 +914,20 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
             }
             ExprKind::Array(xs) => {
                 let tn = self.cx.names.name(&e.ty);
-                if xs.is_empty() {
-                    return Ok(format!("(({tn}){{ {{ 0 }} }})"));
-                }
                 let refs: Vec<&Expr> = xs.iter().collect();
                 let vs = self.operands(&refs)?;
-                Ok(format!("(({tn}){{ {{ {} }} }})", vs.join(", ")))
+                Ok(format!("(({tn}){})", consts::array_init(self.cx, &e.ty, &vs)))
             }
             ExprKind::Repeat { elem, n } => {
                 let tn = self.cx.names.name(&e.ty);
                 let v = self.materialize(elem)?;
+                // The element of none is evaluated, as in the interpreter,
+                // and not read (no unused temporary, R-432).
+                if *n == 0 {
+                    self.line(&format!("(void){v};"));
+                }
                 if *n <= 8 {
-                    return Ok(format!("(({tn}){{ {{ {} }} }})", vec![v; *n as usize].join(", ")));
+                    return Ok(format!("(({tn}){})", consts::array_init(self.cx, &e.ty, &vec![v; *n as usize])));
                 }
                 let (t, _) = self.temp(&e.ty);
                 self.line(&format!("{tn} {t};"));
@@ -1145,12 +1143,20 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
             Ty::Span(_) => self.place_like(e),
             Ty::Array(el, n) => {
                 let p = self.place_like(e)?;
-                let tag = self.cx.names.tag(el);
-                let _ = self.cx.names.name(&Ty::Span(el.clone()));
-                Ok(format!("onsa_span_{tag}_of({p}.a, UINT32_C({n}))"))
+                Ok(self.array_span(&p, el, *n))
             }
             _ => Err(unsupported(e.span, Feature::Buf, &[])),
         }
+    }
+
+    /// The `Span` of the whole of the C array `arr` of `n` elements `el`.
+    /// The pointer is cast to the element's type: the array of a borrowed
+    /// parameter or of a `const` is `const`, and a `Span` the types stage
+    /// lets write is of none of them (R-431).
+    fn array_span(&mut self, arr: &str, el: &Ty, n: u32) -> String {
+        let (tag, et) = (self.cx.names.tag(el), self.cx.names.name(el));
+        let _ = self.cx.names.name(&Ty::Span(Box::new(el.clone())));
+        format!("onsa_span_{tag}_of(({et}*){arr}.a, UINT32_C({n}))")
     }
 
     fn span_tag(&mut self, ty: &Ty) -> R<String> {
