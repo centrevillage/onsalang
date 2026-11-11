@@ -1,0 +1,164 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+//
+// [[test.fix]]
+// at = "102:13"
+// code = "E0020"
+// candidate = 1
+// leaves = ["102:23 E0020"]
+//
+// [[test.fix]]
+// at = "107:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["107:15 E0020"]
+//
+// [[test.fix]]
+// at = "111:8"
+// code = "E0020"
+// candidate = 1
+// leaves = ["111:13 E0020"]
+//
+// [[test.fix]]
+// at = "114:38"
+// code = "E0020"
+// candidate = 1
+// leaves = ["114:48 E0020"]
+//
+// [[test.fix]]
+// at = "118:55"
+// code = "E0020"
+// candidate = 1
+// leaves = ["118:60 E0020"]
+//
+// [[test.fix]]
+// at = "122:43"
+// code = "E0020"
+// candidate = 1
+// leaves = ["122:53 E0020"]
+//
+// [[test.fix]]
+// at = "126:52"
+// code = "E0020"
+// candidate = 1
+// leaves = ["126:62 E0020"]
+//
+// [[test.fix]]
+// at = "132:7"
+// code = "E0020"
+// candidate = 1
+// leaves = ["132:17 E0020"]
+//
+// [[test.fix]]
+// at = "140:7"
+// code = "E0020"
+// candidate = 1
+// leaves = ["140:17 E0020"]
+//
+// [[test.fix]]
+// at = "145:30"
+// code = "E0020"
+// candidate = 1
+// leaves = ["145:40 E0020"]
+//
+// [[test.fix]]
+// at = "150:25"
+// code = "E0020"
+// candidate = 1
+// leaves = ["150:35 E0020"]
+
+// S-329 (W5-24 U6a): a name followed by a `[…]` with a `,` that holds another one (`Rg[F32, Rg[F32, 4].CAP].CAP`) is one
+// E0020 for the unit, at the outer `[` (§18.1: "最初のエラーで検査を止める", and of the errors left, the one that starts first). The
+// places are the ones where such a list can be written: a value, the length of an array type, a const argument of a type, and
+// the length of an array inside a list of type arguments. The inner list is the next error after the outer one is put right,
+// so the file marks one line per unit, and the entries of the candidates say that the inner list is left (`leaves`, the
+// position after the edit: the `::` of the candidate moves it two columns; the entries are turned on by U6a). The forms with a
+// `::` already on one of the two (`Rg::[F32, Rg[F32, 4].CAP].CAP`, `Rg[F32, Rg::[F32, 4].CAP].CAP`) are errors of the list that
+// has no `::`, and leave nothing. Only the code and the line are asked of the diagnostics, and the candidate `::` of the
+// entries (the candidates of the index form are the cases of S-333, type_args_square_candidates_*.onsa).
+
+use std.array
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = 4
+}
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub struct Mat[T, const R: U32, const C: U32] {
+  d: [T; R],
+}
+
+pub const TABLE: U32 = 8
+
+pub fn in_a_value() -> U32 {
+  let a = Rg[F32, Rg[F32, 4].CAP].CAP             //~ E0020
+  a
+}
+
+pub fn in_a_value_of_three_levels() -> U32 {
+  Rg[F32, Rg[F32, Rg[F32, 4].CAP].CAP].CAP        //~ E0020
+}
+
+pub fn in_a_value_of_a_constant() -> U32 {
+  TABLE[Rg[F32, 4].CAP, Rg[F32, 2].CAP]           //~ E0020
+}
+
+pub fn in_an_array_length(a: [F32; Rg[F32, Rg[F32, 4].CAP].CAP]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_an_array_length_of_a_constant(a: [F32; TABLE[Rg[F32, 4].CAP, 2]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_const_argument(r: Ring[F32, Rg[F32, Rg[F32, 4].CAP].CAP]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_type_argument_length(o: Option[[F32; Rg[F32, Rg[F32, 4].CAP].CAP]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_branch(c: Bool) -> U32 {
+  if c {
+    Rg[F32, Rg[F32, 4].CAP].CAP                   //~ E0020
+  } else {
+    2
+  }
+}
+
+pub fn in_a_closure() -> [U32; 2] {
+  array.from_fn(fn(_) {
+    Rg[F32, Rg[F32, 4].CAP].CAP                   //~ E0020
+  })
+}
+
+pub flow in_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< Rg[F32, Rg[F32, 4].CAP].CAP { x } //~ E0020
+  x
+}
+
+pub fn in_a_struct_literal() -> U32 {
+  let r = Ring::[F32, Rg[F32, Rg[F32, 4].CAP].CAP] { d: [0.0; 4] } //~ E0020
+  1
+}
+
+pub fn the_outer_has_the_colon() -> U32 {
+  Rg::[F32, Rg[F32, 4].CAP].CAP                     //~ E0020
+}
+
+pub fn the_inner_has_the_colon() -> U32 {
+  Rg[F32, Rg::[F32, 4].CAP].CAP                     //~ E0020
+}
+
+pub fn the_both_have_the_colon() -> U32 {
+  Rg::[F32, Rg::[F32, 4].CAP].CAP
+}

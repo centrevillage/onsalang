@@ -266,21 +266,7 @@ impl<'a> Parser<'a> {
                 TokenKind::ColonColon
                     if self.lines.type_args_mark(&self.tokens, self.peek_index()) && callee.last().names_a_path() =>
                 {
-                    // As a postfix, the list is one level over the receiver
-                    // and its types over that (§2.5, S-332): `x.f::[U8](y)`
-                    // is three levels.
-                    let m = self.precede(expr, NodeKind::TypeArgsExpr)?;
-                    let top = self.open.len() - 1;
-                    self.open[top].level += expr.height;
-                    self.bump();
-                    let a = self.start(NodeKind::TypeArgs)?;
-                    self.bump();
-                    self.in_brackets(|p| p.parse_type_args())?;
-                    let list = self.complete(a, NodeKind::TypeArgs);
-                    self.open[top].children = expr.height + list.height;
-                    // The name before the list stays the last name of a chain
-                    // (`Pr::[U8] { a: 1 }`).
-                    expr = self.complete(m, NodeKind::TypeArgsExpr);
+                    expr = self.parse_type_args_expr(expr)?;
                 }
                 // `::[` after what names no path (`(e)::[T](x)`, `t.0::[T](x)`,
                 // §4.5, S-606): the E0002 of its place.
@@ -332,19 +318,20 @@ impl<'a> Parser<'a> {
                         }
                     }
                 }
-                // Type arguments of other languages before a call, `f<T>(x)`
-                // and `f[A, B](x)` (§4.5): the table says from the tokens
-                // whether the brackets are such a list ([`foreign::type_list_ahead`]);
-                // the parser fails at them, so `<` is not read as a comparison
-                // nor `[A, B]` as an index.
-                // So in the length of an array type too (`[F32; xs[1, 2]]`),
-                // where `name::[…]` is read as well (S-329); in a const
-                // argument a `[…]` with `,` is read as an index (R-196).
+                // Type arguments of other languages, `f<T>(x)` and `f[A, B](x)`
+                // (§4.5): the table says from the tokens whether the brackets
+                // are such a list ([`foreign::type_list_ahead`]). After a path
+                // of names or a method, a `[…]` with `,` is read whole as the
+                // list of `::[…]` with no `::`, which the tree check reports
+                // (`foreign::square`, S-329); else the parser fails at them, so
+                // `<` is not read as a comparison nor `[A, B]` as an index.
                 TokenKind::Lt | TokenKind::LBracket
-                    if type_list_ahead(&self.tokens, &self.lines, &self.brackets, self.peek_index(), expr.kind)
-                        && (self.peek_kind() == TokenKind::Lt || (!self.in_const_arg() && self.type_list_next())) =>
+                    if type_list_ahead(&self.tokens, &self.lines, &self.brackets, self.peek_index(), expr.kind) =>
                 {
-                    return Err(self.fail(Want::Other, "an operator or the end of the expression"));
+                    if t.kind == TokenKind::Lt || !callee.last().names_a_path() {
+                        return Err(self.fail(Want::Other, "an operator or the end of the expression"));
+                    }
+                    expr = self.parse_type_args_expr(expr)?;
                 }
                 TokenKind::LBracket if self.touches(TokenKind::LBracket, callee.by_name(), true) => {
                     let m = self.precede(expr, NodeKind::IndexExpr)?;
@@ -419,6 +406,25 @@ impl<'a> Parser<'a> {
             self.detached = Some(Detached { at, by_name: false, expr: true, required: false });
         }
         Ok(expr)
+    }
+
+    /// The type arguments after `expr` (a path of names or a method), from
+    /// the `::` of `::[` or from a `[` with `,` (no `::`, an E0020 of the
+    /// tree): one reading of both. As a postfix, the list is one level over
+    /// the receiver and its types over that (§2.5, S-332): `x.f::[U8](y)` is
+    /// three levels. The name before the list stays the last name of a chain
+    /// (`Pr::[U8] { a: 1 }`).
+    fn parse_type_args_expr(&mut self, expr: Completed) -> PResult<Completed> {
+        let m = self.precede(expr, NodeKind::TypeArgsExpr)?;
+        let top = self.open.len() - 1;
+        self.open[top].level += expr.height;
+        self.eat(TokenKind::ColonColon);
+        let a = self.start(NodeKind::TypeArgs)?;
+        self.bump();
+        self.in_brackets(|p| p.parse_type_args())?;
+        let list = self.complete(a, NodeKind::TypeArgs);
+        self.open[top].children = expr.height + list.height;
+        Ok(self.complete(m, NodeKind::TypeArgsExpr))
     }
 
     /// `( args )`.

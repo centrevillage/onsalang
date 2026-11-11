@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1", "§4.5"]
+
+// S-471 (W5-24 U6a): the number forms of a type argument that read today: after an operator in a const argument and in the length of
+// an array type inside a list of type arguments (`2 + 017`, `Option[[F32; 017]]`). The error and its candidates are the ones
+// of an expression (§2.4: "数を書ける位置によらず同じ"): `017` is `17` or `15`. They are apart from
+// type_args_number_forms_const_arg.onsa, whose forms wait for U6a, so that a change of the unit does not hide them.
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub fn after_an_operator(r: Ring[F32, 2 + 017]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_length_in_a_type_argument(o: Option[[F32; 017]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_length_after_an_octal_prefix(o: Option[[F32; 0o17]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_length_after_a_suffix(o: Option[[F32; 1u32]]) -> U32 { //~ E0020
+  1
+}

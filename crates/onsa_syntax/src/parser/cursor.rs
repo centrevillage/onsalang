@@ -123,6 +123,8 @@ impl<'a> Parser<'a> {
     pub(super) fn bump(&mut self) -> Token {
         let i = self.peek_index();
         let t = self.tokens[i];
+        #[cfg(test)]
+        super::BUMPED.set(super::BUMPED.get() + 1);
         if t.kind != TokenKind::Eof {
             self.pos = i + 1;
             self.last_end = t.span.end;

@@ -1,0 +1,15 @@
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub fn in_the_other_module(r: Ring[F32, Rg::[F32, 3].CAP]) -> U32 {
+  r.d.len()
+}

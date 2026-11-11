@@ -1,0 +1,113 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§4.5", "§2.5"]
+
+// Type arguments written in a const argument of a type (§4.5): the elements of the list of a type's
+// arguments are types and constant expressions, and `Rg::[F32, 4].CAP` after the `,` of
+// `Ring[F32, …]` is the associated constant of a type with its arguments, a constant expression
+// that starts with a name, read like the same form in an array length (type_args_syntax_in_types.onsa)
+// and in an expression. Which type is generic and what the arguments are belong to the later stages
+// (W5-10), so no name here is looked up and the syntax stage reports nothing for any item. The file
+// is read by the parser only (mode = "parse"). A const argument that is the right side of an
+// operator (`Ring[F32, 2 + Rg::[F32, 4].CAP]`) is read already (type_args_syntax_in_types.onsa).
+//
+// The file is written the way `onsa fmt` writes it (spec/tools.md §3.2).
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = 4
+}
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub fn as_a_parameter(r: Ring[F32, Rg::[F32, 4].CAP]) -> U32 {
+  1
+}
+
+pub fn as_a_result() -> Ring[F32, Rg::[F32, 4].CAP] {
+  Ring { d: [0.0; 4] }
+}
+
+pub struct AsAField {
+  r: Ring[F32, Rg::[F32, 4].CAP],
+}
+
+pub enum AsAPayload {
+  A(Ring[F32, Rg::[F32, 4].CAP]),
+  B,
+}
+
+type AsAnAlias = Ring[F32, Rg::[F32, 4].CAP]
+
+pub fn as_an_annotation() -> U32 {
+  let r: Ring[F32, Rg::[F32, 4].CAP] = Ring { d: [0.0; 4] }
+  1
+}
+
+pub fn in_a_branch(c: Bool) -> U32 {
+  if c {
+    let r: Ring[F32, Rg::[F32, 4].CAP] = Ring { d: [0.0; 4] }
+    1
+  } else {
+    2
+  }
+}
+
+pub fn in_a_closure() -> U32 {
+  let f = fn(r: Ring[F32, Rg::[F32, 4].CAP]) -> U32 { 1 }
+  1
+}
+
+pub fn in_a_generic_function[T](r: Ring[T, Rg::[F32, 4].CAP]) -> U32 {
+  1
+}
+
+impl Ring[F32, Rg::[F32, 4].CAP] {}
+
+pub struct Holder {
+  n: U32,
+}
+
+impl Holder {
+  pub fn in_a_method(self, r: Ring[F32, Rg::[F32, 4].CAP]) -> U32 {
+    1
+  }
+}
+
+pub fn in_a_type_argument(o: Option[Ring[F32, Rg::[F32, 4].CAP]]) -> U32 {
+  1
+}
+
+pub fn in_a_tuple(t: (U8, Ring[F32, Rg::[F32, 4].CAP])) -> U8 {
+  t.0
+}
+
+pub fn in_an_array_of_rings(a: [Ring[F32, Rg::[F32, 4].CAP]; 2]) -> U32 {
+  1
+}
+
+pub fn in_a_function_type(f: fn(Ring[F32, Rg::[F32, 4].CAP]) -> U8) -> U8 {
+  1
+}
+
+pub fn with_an_array_in_the_list(r: Ring[F32, Rg::[[F32; 2], 4].CAP]) -> U32 {
+  1
+}
+
+pub fn before_an_operator(r: Ring[F32, Rg::[F32, 4].CAP * 2]) -> U32 {
+  1
+}
+
+pub fn of_a_qualified_name(r: Ring[F32, m.Rg::[F32, 4].CAP]) -> U32 {
+  1
+}
+
+pub fn fine(r: Ring[F32, 4]) -> U32 {
+  1
+}

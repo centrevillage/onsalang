@@ -58,16 +58,24 @@ impl<'a> Parser<'a> {
             if self.dot_apart() {
                 return Err(self.fail(Want::Postfix, "a member `.` without spaces around it"));
             }
-            if self.at(TokenKind::Dot) && crate::starts::names_a_member(self.peek2().kind) {
-                self.bump();
-            } else {
+            if self.path_goes_on(self.pos).is_none() {
                 break;
             }
+            self.bump();
             last = self.parse_name_after_dot(what)?;
             segments += 1;
         }
         self.complete(m, NodeKind::Path);
         Ok(PathInfo { segments, first, last })
+    }
+
+    /// The name of a `.name` that goes on a path, at the first code token
+    /// from `i`: the one test of [`Parser::parse_path`] and of the lookahead
+    /// of a type argument (`Parser::goes_on_as_expression`).
+    pub(super) fn path_goes_on(&self, i: usize) -> Option<usize> {
+        let dot = self.skip_trivia(i);
+        let name = (self.tokens[dot].kind == TokenKind::Dot).then(|| self.skip_trivia(dot + 1))?;
+        crate::starts::names_a_member(self.tokens[name].kind).then_some(name)
     }
 
     /// After `.` and at the head of the path of a `use`, a keyword is an

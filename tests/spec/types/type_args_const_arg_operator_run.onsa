@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§15.1"]
+
+// S-329 (W5-24 U6a): a const argument that starts with the name of a constant with type arguments and goes on with
+// arithmetic operators, and the operators around a nested one (§4.5: "算術の演算子（`+ - * / %`）と前置の `-`、括弧からなる").
+// The syntax is U6a; the value of an operator in a length or a const argument is an E0200 of a later stage (the same wait as
+// types/type_args_const_bare_arg_operator.onsa), so these are cases of their own. The values are worked out by hand
+// (`CAP` is the const parameter `N`): 2 + 3 = 5, (2 + 1) * 2 = 6, 9 - 4 = 5, 9 / 2 = 4, 9 % 4 = 1, (2 + 1) * 2 = 6,
+// 3 * 2 = 6, and 2 * 2 + 1 = 5.
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+pub fn sum(r: Ring[F32, Rg::[F32, 2].CAP + Rg::[F32, 3].CAP]) -> U32 {
+  r.d.len()
+}
+
+pub fn nested_with_operators(r: Ring[F32, Rg::[F32, Rg::[F32, 2].CAP + 1].CAP * 2]) -> U32 {
+  r.d.len()
+}
+
+pub fn difference(r: Ring[F32, Rg::[F32, 9].CAP - 4]) -> U32 {
+  r.d.len()
+}
+
+pub fn quotient(r: Ring[F32, Rg::[F32, 9].CAP / 2]) -> U32 {
+  r.d.len()
+}
+
+pub fn remainder(r: Ring[F32, Rg::[F32, 9].CAP % 4]) -> U32 {
+  r.d.len()
+}
+
+pub fn parenthesized(r: Ring[F32, (Rg::[F32, 2].CAP + 1) * 2]) -> U32 {
+  r.d.len()
+}
+
+pub fn in_a_length(a: [F32; Rg::[F32, 3].CAP * 2]) -> U32 {
+  a.len()
+}
+
+pub fn in_a_value() -> U32 {
+  Rg::[F32, Rg::[F32, 2].CAP * 2].CAP + 1
+}
+
+test "operators after a name with type arguments in a const argument" {
+  let a: Ring[F32, 5] = Ring { d: [0.0; 5] }
+  assert sum(a) == 5
+  assert difference(a) == 5
+  let b: Ring[F32, 6] = Ring { d: [0.0; 6] }
+  assert nested_with_operators(b) == 6
+  assert parenthesized(b) == 6
+  let c: Ring[F32, 4] = Ring { d: [0.0; 4] }
+  assert quotient(c) == 4
+  let d: Ring[F32, 1] = Ring { d: [0.0; 1] }
+  assert remainder(d) == 1
+}
+
+test "operators in a length and in a value" {
+  let a: [F32; 6] = [0.0; 6]
+  assert in_a_length(a) == 6
+  assert in_a_value() == 5
+}

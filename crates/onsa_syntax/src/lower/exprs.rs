@@ -301,12 +301,14 @@ impl<'a> Lower<'a> {
         (Path { segments, span: self.span(callee) }, lists)
     }
 
-    /// The list of a `::[…]` (a `TypeArgsExpr`): from its `::` to its `]`.
+    /// The list of a `::[…]` (a `TypeArgsExpr`): from its `::` to its `]`,
+    /// or from its `[` when it has no `::` (the E0020 of `foreign::square`).
     pub(super) fn type_arg_list(&mut self, n: NodeId) -> TypeArgList {
         let list = self.need(n, NodeKind::TypeArgs);
         let args = self.of_class(list, Class::Type).into_iter().map(|t| self.ty(t)).collect();
-        let colons = self.tok(n, TokenKind::ColonColon).unwrap_or_else(|| self.bug(n, "a `::`"));
-        TypeArgList { args, span: self.cst.token(colons).span.to(self.span(list)) }
+        let span =
+            self.tok(n, TokenKind::ColonColon).map_or(self.span(list), |c| self.cst.token(c).span.to(self.span(list)));
+        TypeArgList { args, span }
     }
 
     pub(super) fn args(&mut self, list: NodeId) -> Vec<Arg> {

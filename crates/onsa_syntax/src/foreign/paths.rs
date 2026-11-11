@@ -167,6 +167,7 @@ fn follows_type(kind: TokenKind) -> bool {
             | ModuleDoc
             | KwFor
             | KwUses
+            | KwAt
             | Ident
             | KwSelfType
     )
@@ -278,9 +279,10 @@ fn angle_tokens(tokens: &[Token], open: usize) -> Option<(usize, Vec<(usize, &'s
 /// expression of `callee`'s kind: it touches the callee, its list closes,
 /// and a `(` touches the list (for a `[` after a path, any token may follow:
 /// `Rg[F32, 4].CAP`); a `[` holds a `,` (an index holds one expression). The
-/// parser asks it before it reads `<` as a comparison or `[` as an index, and
-/// reads a `[` on as a list of type arguments to be sure; the table builds
-/// the diagnostic where the parser then fails ([`type_args_call`]).
+/// parser asks it before it reads `<` as a comparison or `[` as an index: it
+/// reads a `[` after a path as a list of type arguments (`super::square`
+/// reports it), and the table builds the diagnostic where it fails at the
+/// others ([`type_args_call`]).
 pub(crate) fn type_list_ahead(
     tokens: &[Token],
     lines: &crate::layout::Lines,
@@ -311,14 +313,15 @@ fn bracket_with_comma(brackets: &crate::scan::Brackets, open: usize) -> Option<u
 
 /// The rows [`type_args_call`] names ([`super::Matcher::many`]).
 pub(super) const TYPE_ARGS_CALL_ROWS: &[RowId] =
-    &[RowId::TypeArgsTurbofish, RowId::TypeArgsAngle, RowId::TypeArgsSquareComma, RowId::TypeArgsOnExpression];
+    &[RowId::TypeArgsTurbofish, RowId::TypeArgsAngle, RowId::TypeArgsOnExpression];
 
 /// Type arguments of another language before a call (§4.5, S-239, S-256,
 /// S-277): `f::<T>(x)` (Rust; the parser fails at the `::`), and `f<T>(x)`
-/// and `f[A, B](x)`, at which the parser fails when [`type_list_ahead`] says
-/// so. After a path of names or a method, the candidate is the Onsa form:
-/// `::<` keeps the `::` and writes `[ ]`, `<` becomes `::[`, `[` gets `::`
-/// before it (S-251; `>>` is `]]`, S-248); `f<T>(x)` with one name, literal
+/// and `(e)[A, B](x)`, at which the parser fails when [`type_list_ahead`] says
+/// so (after a path of names, `f[A, B]` is read whole: `super::square`).
+/// After a path of names or a method, the candidate is the Onsa form:
+/// `::<` keeps the `::` and writes `[ ]`, `<` becomes `::[` (S-251; `>>` is
+/// `]]`, S-248); `f<T>(x)` with one name, literal
 /// or path of names in the list has the reading of the languages that read
 /// it as comparisons too (`f < T && T > (x)`, §18.1). After a value
 /// (`g(x)`, `(e)`), no `::[` can be written: the one candidate drops the list
@@ -331,15 +334,16 @@ pub(super) fn type_args_call(c: &Cursor) -> Option<(RowId, Hit)> {
     let callee = closed_expr(c)?;
     let (row, open) = match c.kind(c.at) {
         TokenKind::ColonColon if c.kind(c.at + 1) == TokenKind::Lt => (RowId::TypeArgsTurbofish, c.at + 1),
-        TokenKind::Lt | TokenKind::LBracket if type_list_ahead(c.tokens, c.lines, c.brackets, c.at, callee.0) => {
-            let row = if c.kind(c.at) == TokenKind::Lt { RowId::TypeArgsAngle } else { RowId::TypeArgsSquareComma };
-            (row, c.at)
+        TokenKind::Lt if type_list_ahead(c.tokens, c.lines, c.brackets, c.at, callee.0) => (RowId::TypeArgsAngle, c.at),
+        TokenKind::LBracket
+            if Link::of(callee.0).is_value() && type_list_ahead(c.tokens, c.lines, c.brackets, c.at, callee.0) =>
+        {
+            (RowId::TypeArgsOnExpression, c.at)
         }
         _ => return None,
     };
-    let (close, edits) = if row == RowId::TypeArgsSquareComma {
-        let close = bracket_with_comma(c.brackets(), open)?;
-        (close, vec![Edit::insert(c.file, c.span(open).start, "::")])
+    let (close, edits) = if row == RowId::TypeArgsOnExpression {
+        (bracket_with_comma(c.brackets(), open)?, Vec::new())
     } else {
         let first = if row == RowId::TypeArgsAngle { "::[" } else { "[" };
         // A list that does not read as type arguments in `[ ]` (R-193): the general E0002.

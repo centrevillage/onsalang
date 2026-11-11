@@ -1,0 +1,86 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§15.1"]
+
+// S-329 (W5-10 U1b): the const argument of a type that is the name of a constant with type arguments, and nothing else
+// (`Ring[F32, Rg::[F32, 4].CAP]`), is a constant expression (§4.5: "`Rg::[F32, 4].CAP` のように式の型引数を書いた型の関連定数を含む"; "並びの
+// 要素は型の位置の並びと同じに読み、const 引数は定数式"). This form is a syntax error today ("expected `,` or `]`, found `::`":
+// the name is read as a type before the `::[` is seen), unlike the same constant with an operator or parentheses around it
+// (type_args_const_places.onsa), so it is a case of its own. Every place of a type where a const argument is written. The
+// values are worked out by hand: `CAP` is the const parameter `N`.
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+pub struct AsAField {
+  r: Ring[F32, Rg::[F32, 4].CAP],
+}
+
+type AsAnAlias = Ring[F32, Rg::[F32, 4].CAP]
+
+pub fn in_a_parameter(r: Ring[F32, Rg::[F32, 4].CAP]) -> U32 {
+  r.d.len()
+}
+
+pub fn in_a_result() -> Ring[F32, Rg::[F32, 4].CAP] {
+  Ring { d: [0.5; 4] }
+}
+
+pub fn in_an_annotation() -> U32 {
+  let r: Ring[F32, Rg::[F32, 4].CAP] = Ring { d: [0.5; 4] }
+  r.d.len()
+}
+
+pub fn after_a_type_argument(r: Ring[Option[F32], Rg::[F32, 4].CAP]) -> U32 {
+  r.d.len()
+}
+
+pub fn in_another_type(o: Option[Ring[F32, Rg::[F32, 4].CAP]]) -> U32 {
+  match o {
+    Some(r) => r.d.len(),
+    None => 0,
+  }
+}
+
+pub fn the_other_arguments_of_the_constant(r: Ring[F32, Rg::[U8, 8].CAP]) -> U32 {
+  r.d.len()
+}
+
+test "a parameter, a result and an annotation" {
+  let r: Ring[F32, 4] = Ring { d: [0.0; 4] }
+  assert in_a_parameter(r) == 4
+  let q: Ring[F32, 4] = in_a_result()
+  assert q.d[3] == 0.5
+  assert in_an_annotation() == 4
+}
+
+test "a field and an alias" {
+  let r: Ring[F32, 4] = Ring { d: [0.0; 4] }
+  let h = AsAField { r: r }
+  assert h.r.d.len() == 4
+  let x: AsAnAlias = r
+  assert x.d.len() == 4
+}
+
+test "inside another type argument" {
+  let r: Ring[Option[F32], 4] = Ring { d: [None; 4] }
+  assert after_a_type_argument(r) == 4
+  let q: Ring[F32, 4] = Ring { d: [0.0; 4] }
+  assert in_another_type(Some(q)) == 4
+  assert in_another_type(None) == 0
+}
+
+test "the length is the value of the constant, not the arguments" {
+  let r: Ring[F32, 8] = Ring { d: [0.0; 8] }
+  assert the_other_arguments_of_the_constant(r) == 8
+}

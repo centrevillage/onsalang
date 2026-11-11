@@ -1085,3 +1085,38 @@ fn the_guard_reading_stops_at_the_limit_of_nesting() {
         assert_eq!(guard_reading(&chain(300), false).map(count), Some((limit, 0)));
     });
 }
+
+/// R-417: an element of a list of type arguments that the tokens show to be
+/// an expression is not tried as a type, so a chain of `Rg::[F32, [F32;
+/// …].len]` is read once, as many tokens as it has (§2.5, under the limit):
+/// the tokens read for 60 levels are at most 3.5 times those for 20, in a
+/// type, a value and the length of an array, with `::[` and with `[`.
+#[test]
+fn the_type_arguments_of_a_chain_are_read_once() {
+    let head =
+        "pub struct Rg[T, const N: U32] { d: [T; N] }\nimpl[T, const N: U32] Rg[T, N] { pub const CAP: U32 = 4 }\n";
+    let chain =
+        |n: usize, colons: &str| (0..n).fold("I32".to_string(), |t, _| format!("Rg{colons}[F32, [F32; {t}].len]"));
+    let forms: [fn(&str) -> String; 3] = [
+        |t| format!("pub fn f(r: {t}) -> U32 {{ 0 }}\n"),
+        |t| format!("pub fn f() -> U32 {{\n  let a = {t}.CAP\n  0\n}}\n"),
+        |t| format!("pub fn f(r: [F32; {t}.CAP]) -> U32 {{ 0 }}\n"),
+    ];
+    onsa_diag::stack::run(|| {
+        for (k, form) in forms.iter().enumerate() {
+            for colons in ["::", ""] {
+                let bumped = |n: usize| {
+                    let before = crate::parser::BUMPED.get();
+                    parse(&format!("{head}{}", form(&chain(n, colons))));
+                    crate::parser::BUMPED.get() - before
+                };
+                let (few, many) = (bumped(20), bumped(60));
+                // Each level has 12 tokens: the chain is read to its end.
+                assert!(
+                    few > 20 * 12 && many * 2 <= few * 7,
+                    "form {k}, `{colons}`: {few} tokens for 20 levels, {many} for 60"
+                );
+            }
+        }
+    });
+}

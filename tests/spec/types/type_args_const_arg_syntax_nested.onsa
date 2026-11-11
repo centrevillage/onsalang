@@ -1,0 +1,102 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§4.5", "§2.5"]
+
+// S-329 (W5-24 U6a): the syntax of a const argument that is `Rg::[…].CAP` when the list of the `::[` holds another one, two
+// const arguments of a type (`Mat[F32, 2, Rg::[F32, 3].CAP]`, either or both), the elements of the list of the `::[` that are
+// a type of any shape (a generic type, a tuple, an array, a function type), and the places of a value and of a flow
+// (the ends of a `par~`). The file is read by the parser only (`mode = "parse"`): which type is generic and what the arguments
+// are belong to the later stages, so the syntax stage reports nothing. The single level is in
+// type_args_syntax_in_const_args.onsa. The file is written the way `onsa fmt` writes it (spec/tools.md §3.2).
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = 4
+}
+
+pub struct Mat[T, const R: U32, const C: U32] {
+  d: [T; R],
+}
+
+pub fn nested(r: Ring[F32, Rg::[F32, Rg::[F32, 4].CAP].CAP]) -> U32 {
+  1
+}
+
+pub fn three_levels(r: Ring[F32, Rg::[F32, Rg::[F32, Rg::[F32, 4].CAP].CAP].CAP]) -> U32 {
+  1
+}
+
+pub fn nested_with_an_operator(r: Ring[F32, Rg::[F32, Rg::[F32, 2].CAP + 1].CAP]) -> U32 {
+  1
+}
+
+pub fn two_const_arguments(m: Mat[F32, Rg::[F32, 2].CAP, Rg::[F32, 3].CAP]) -> U32 {
+  1
+}
+
+pub fn the_first_is_a_number(m: Mat[F32, 2, Rg::[F32, 3].CAP]) -> U32 {
+  1
+}
+
+pub fn the_second_is_a_number(m: Mat[F32, Rg::[F32, 2].CAP, 3]) -> U32 {
+  1
+}
+
+pub fn a_generic_type_in_the_list(r: Ring[F32, Rg::[Option[F32], 4].CAP]) -> U32 {
+  1
+}
+
+pub fn a_tuple_in_the_list(r: Ring[F32, Rg::[(F32, U8), 4].CAP]) -> U32 {
+  1
+}
+
+pub fn an_array_in_the_list(r: Ring[F32, Rg::[[F32; 2], 4].CAP]) -> U32 {
+  1
+}
+
+pub fn a_function_type_in_the_list(r: Ring[F32, Rg::[fn(F32) -> F32, 4].CAP]) -> U32 {
+  1
+}
+
+pub fn after_a_const_argument_list(o: Result[Ring[F32, Rg::[F32, 4].CAP], Ring[F32, Rg::[F32, 2].CAP]]) -> U32 {
+  1
+}
+
+pub fn in_an_array_of_rings(a: [Ring[F32, Rg::[F32, 4].CAP]; Rg::[F32, 2].CAP]) -> U32 {
+  1
+}
+
+pub fn in_a_bounded_generic[T: Num, const N: U32](r: Ring[T, Rg::[F32, 4].CAP]) -> U32 {
+  1
+}
+
+pub fn in_a_struct_literal() -> U32 {
+  let r = Ring::[F32, Rg::[F32, 4].CAP] { d: [0.0; 4] }
+  1
+}
+
+pub fn in_a_value() -> U32 {
+  let n = Rg::[F32, Rg::[F32, 4].CAP].CAP
+  n
+}
+
+pub fn in_a_branch(c: Bool) -> U32 {
+  if c {
+    Rg::[F32, Rg::[F32, 4].CAP].CAP
+  } else {
+    1
+  }
+}
+
+pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< Rg::[F32, Rg::[F32, 4].CAP].CAP { x }
+  x
+}

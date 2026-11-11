@@ -2155,6 +2155,21 @@ pub fn f() -> I32 {
 ''',
 ]
 
+# A constant type argument is a place a number can be written (S-471): the same row as in an expression.
+[[form.example]]
+source = '''
+pub struct Ring[T, const N: U32] { d: [T; N] }
+pub fn f(r: Ring[F32, 017]) -> U32 { 0 }
+'''
+at = "2:23"
+fixed = ['''
+pub struct Ring[T, const N: U32] { d: [T; N] }
+pub fn f(r: Ring[F32, 17]) -> U32 { 0 }
+''', '''
+pub struct Ring[T, const N: U32] { d: [T; N] }
+pub fn f(r: Ring[F32, 15]) -> U32 { 0 }
+''']
+
 [[form.example]]
 source = '''
 pub fn f() -> I32 {

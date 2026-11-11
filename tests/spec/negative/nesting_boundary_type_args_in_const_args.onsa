@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§2.5", "§4.5"]
+
+// Boundary of the nesting depth for `::[…]` in a const argument of a type (§2.5, §4.5): the same
+// count as in the length of an array type (tests/spec/negative/
+// nesting_boundary_type_args_in_types.onsa). A const argument is a constant expression, so
+// `Rg::[…].CAP` after the `,` of `Ring[F32, …]` is read like an expression: `.CAP` is one level,
+// the `::[` below it is one level, and the token that makes the level of `::[` is its `[`. The
+// case reads the syntax only (`mode = "parse"`), so it does not depend on how far the later stages
+// go.
+//
+// A parameter type is the first form of the declaration (the heading is not counted), so the first
+// form is level 1. Every repetition `Ring[F32, Rg::[… , 4].CAP]` is three levels: the type with
+// arguments, the `.CAP`, the `::[`. `has_256` is `Option[` and 85 repetitions: the `[` of the
+// innermost `::[` is level 1 + 3 * 85 = 256, so it is read. `has_257` is `Option[Option[` and 85
+// repetitions: the `[` of the innermost `::[` is level 2 + 3 * 85 = 257, the first token over the
+// limit in reading order, and one E0006 is on it (the unit is not read further, so no other error
+// is given).
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = 4
+}
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub fn has_256(a: Option[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[F32, 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP]]) -> I32 {
+  1
+}
+
+pub fn has_257(a: Option[Option[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[Ring[F32, Rg::[F32, 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP], 4].CAP]]]) -> I32 {   //~ E0006
+  1
+}
+
+pub fn after(a: [F32; 4]) -> I32 {
+  1
+}

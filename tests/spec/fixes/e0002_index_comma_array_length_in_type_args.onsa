@@ -1,21 +1,19 @@
 // onsa.toml
 // [test]
 // spec = ["§4.5", "§18.1"]
-// fixes = 0
 
-// E0002 at the `,` of a `[…]` after a name in the length of an array type inside a list of type
-// arguments (§4.5), when the `[…]` does not read as a list of type arguments either: the error has
-// no candidate. A candidate that wrote `::` there would leave an error in the same place (§18.1):
-// the `::` of `xs::[1, 2]` read as a type (E0020), the `as` that is chained (E0011), the `if` that
-// is an operand (E0013), the inner `x[a, b]` of the same form. Outside a list of type arguments the length
-// is read like an expression (tests/spec/fixes/e0020_type_args_square_array_length.onsa); inside
-// one the reading waits for W5-24 (S-329). `fixes = 0` says no diagnostic of the file has a
-// candidate.
+// E0020 at the `[` of a `[…]` with a `,` after a name in the length of an array type inside a list
+// of type arguments (§4.5, S-329): the length is read like an expression, as outside a list of type
+// arguments (tests/spec/fixes/e0020_type_args_square_array_length.onsa), also when the `[…]` does
+// not read as a list of type arguments either: the `::` of `xs::[1, 2]` read as a type (E0020), the
+// `as` that is chained (E0011), the `if` that is an operand (E0013), the inner `x[a, b]` of the same
+// form. A candidate that wrote `::` there would leave an error in the same place (§18.1): the
+// candidates of these lists are W5-24 U6b's (S-333, R-418).
 
-pub fn with_a_list_after_a_name(r: Q[[F32; Rg[F32, xs::[1, 2]].CAP]]) -> U32 { 0 } //~ E0002
+pub fn with_a_list_after_a_name(r: Q[[F32; Rg[F32, xs::[1, 2]].CAP]]) -> U32 { 0 } //~ E0020
 
-pub fn with_a_chained_as(r: Q[[F32; Rg[F32, 1 as U32 as U32].CAP]]) -> U32 { 0 } //~ E0002
+pub fn with_a_chained_as(r: Q[[F32; Rg[F32, 1 as U32 as U32].CAP]]) -> U32 { 0 } //~ E0020
 
-type WithTheSameFormInside = Q[[F32; e[[F32; x[a, b]], l]]] //~ E0002
+type WithTheSameFormInside = Q[[F32; e[[F32; x[a, b]], l]]] //~ E0020
 
-pub fn with_an_if(r: Q[[F32; Rg[F32, if c { 1 } else { 2 } as U32].CAP]]) -> U32 { 0 } //~ E0002
+pub fn with_an_if(r: Q[[F32; Rg[F32, if c { 1 } else { 2 } as U32].CAP]]) -> U32 { 0 } //~ E0020

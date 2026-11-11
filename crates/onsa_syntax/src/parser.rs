@@ -227,6 +227,9 @@ thread_local! {
     /// The bytes of the texts that the parsers of this thread read (from
     /// their first token to their last): the tests bound what is read again.
     pub(crate) static PARSED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// The tokens the parsers of this thread read ([`Parser::bump`]), read
+    /// again after a trial too: the tests bound the trials (R-417).
+    pub(crate) static BUMPED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 pub(crate) struct Parser<'a> {
@@ -297,10 +300,6 @@ pub(crate) struct Parser<'a> {
     items: Vec<(u32, u32)>,
     /// [`ParseOutput::item_starts`].
     item_starts: Vec<u32>,
-    /// How many trial readings ([`Parser::snapshot`]) are open: a reading
-    /// that is tried inside another one does not try the brackets of a
-    /// call's type arguments again, so trials nest at most once per level.
-    trials: u32,
     /// The line facts of `tokens` (§2.5): the gaps around each token and the
     /// line breaks that go on with their line ([`Lines`]).
     lines: Lines,
@@ -411,7 +410,6 @@ impl<'a> Parser<'a> {
             levels: Vec::new(),
             items: Vec::new(),
             item_starts: Vec::new(),
-            trials: 0,
             detached: None,
             value_bang: None,
             named_handler: None,

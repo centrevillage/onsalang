@@ -350,9 +350,7 @@ impl NodeKind {
     /// Whether a node of this kind is a part of a type as written: a type, or
     /// the type arguments (of a type, or of an expression, `f::[T]`) or the
     /// parameters of a function type. The node that holds a clock in a type
-    /// is the first above it that is none (S-356, `foreign::clocks`). The
-    /// parser's `in_const_arg` reads the types only, as an expression in the
-    /// type arguments of an expression is in no type.
+    /// is the first above it that is none (S-356, `foreign::clocks`).
     pub(crate) fn type_part(self) -> bool {
         self.class() == Class::Type || matches!(self, NodeKind::TypeArgs | NodeKind::FnTypeParams)
     }

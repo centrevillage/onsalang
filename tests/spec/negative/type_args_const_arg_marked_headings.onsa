@@ -1,0 +1,82 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+
+// S-329 (W5-24 U6a): the list of the `::[` written in the type position (§4.5: "型の位置に書いた `Buf::[F32]` は E0020") is the
+// same E0020 in every place of a heading, whether it stands alone or is an element of the list of another type, of a const
+// argument and of a length: a parameter, a result, a field, the payload of a variant, an alias, the heading of an `impl`, a
+// function type, a tuple, an array and the type arguments of the prelude. The unit that holds it is checked as any other
+// (no internal error, one E0020 for the unit), and the neighbours are read on their own. The candidate of each is the form without
+// the `::` and is asked of no case here.
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = 4
+}
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub struct Mat[T, const R: U32, const C: U32] {
+  d: [T; R],
+}
+
+pub const TABLE: U32 = 8
+
+pub fn as_a_parameter(a: Rg::[F32, 4]) -> U32 {     //~ E0020
+  1
+}
+
+pub fn as_a_result() -> Rg::[F32, 4] {              //~ E0020
+  Rg { d: [0.0; 4] }
+}
+
+pub struct AsAField {
+  a: Rg::[F32, 4],                                  //~ E0020
+}
+
+pub enum AsAPayload {
+  A(Rg::[F32, 4]),                                  //~ E0020
+  B,
+}
+
+type AsAnAlias = Rg::[F32, 4]                       //~ E0020
+
+impl Rg::[F32, 4] {                                 //~ E0020
+}
+
+pub fn in_a_function_type(f: fn(Rg::[F32, 4]) -> U8) -> U8 { //~ E0020
+  1
+}
+
+pub fn in_a_tuple(t: (U8, Rg::[F32, 4])) -> U8 {    //~ E0020
+  t.0
+}
+
+pub fn in_an_array(a: [Rg::[F32, 4]; 2]) -> U32 {   //~ E0020
+  1
+}
+
+pub fn in_a_type_argument(o: Option[Rg::[F32, 4]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_type_of_the_file(r: Ring[Rg::[F32, 4], 2]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_nested_type_argument(o: Option[Option[Rg::[F32, 4]]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_generic_function[T](a: Rg::[T, 4]) -> U32 { //~ E0020
+  1
+}
+
+pub fn the_neighbour_is_read(a: Rg[F32, 4]) -> U32 {
+  1
+}

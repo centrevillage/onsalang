@@ -191,7 +191,6 @@ impl<'a> Parser<'a> {
             self.restore(s);
             return self.parse_attr_args(Some(c)).map(|c| Some((open, c)));
         }
-        self.end_trial();
         read.map(|close| Some((open, close)))
     }
 

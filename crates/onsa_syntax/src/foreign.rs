@@ -30,11 +30,12 @@
 //!   and the head is read on after it (§18.1, S-435).
 //! - The type arguments of another language before a call, `f<T>(x)` and
 //!   `f[A, B](x)`, which the parser could read as a comparison or an index:
-//!   the parser asks [`type_list_ahead`] from the tokens (and reads a `[…]`
-//!   on as a list of type arguments to be sure) before it reads the `<` or
-//!   the `[`, and fails at it when the answer is yes; the row is then found
-//!   at that failure (`paths::type_args_call`, with `f::<T>(x)`, where the parser
-//!   fails by itself).
+//!   the parser asks [`type_list_ahead`] from the tokens before it reads the
+//!   `<` or the `[`. When the answer is yes, it fails at a `<` and at a `[`
+//!   after a value, and the row is found at that failure
+//!   (`paths::type_args_call`, with `f::<T>(x)`, where the parser fails by
+//!   itself); after a path of names it reads the `[…]` whole as the list of
+//!   `::[…]`, and the row is found on the tree ([`square_lists`], S-329).
 //! - A type name that the parser reads as a name (`i32`): [`type_name`], the
 //!   one entry where the parser does not fail, called where it reads a type.
 //! - The lexer (in the content of a literal) and the names, types and flow
@@ -105,10 +106,12 @@ use crate::token::{Gap, Token, TokenKind};
 
 mod flow;
 mod spaces;
+mod square;
 
 pub(crate) use flow::clocks;
 pub(crate) use literals::unpadded_index;
 pub(crate) use spaces::{held_errors, with_mark};
+pub(crate) use square::square_lists;
 
 /// The kind constraint `Copy` (§4.6): written in bounds, never derived.
 pub const COPY: &str = "Copy";

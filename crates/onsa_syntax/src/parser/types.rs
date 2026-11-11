@@ -186,26 +186,34 @@ impl<'a> Parser<'a> {
     /// list of type arguments the type opened (`Option[Option[I32 Bool]]`;
     /// the expression would read the brackets as an index and lose the list). A type that fails
     /// with a diagnostic of its own (a form of the table, E0020; E0006) keeps
-    /// it too.
+    /// it too. An element that the tokens show to be an expression
+    /// ([`Parser::goes_on_as_expression`]) is not tried as a type (R-417).
     fn parse_type_arg(&mut self) -> PResult<()> {
+        if !self.goes_on_as_expression(self.peek_index()) {
+            return self.try_type_arg();
+        }
+        let m = self.start(NodeKind::ConstArg)?;
+        self.parse_expr()?;
+        self.complete(m, NodeKind::ConstArg);
+        Ok(())
+    }
+
+    /// [`Parser::parse_type_arg`] of an element that may be a type: a trial
+    /// reading as a type, then as an expression.
+    fn try_type_arg(&mut self) -> PResult<()> {
         let s = self.snapshot();
         let as_type = self.parse_type();
         // A type followed by `::` keeps its reading: `Option::[I32]` in a
-        // list is the mark in a type position (E0020), and a const
-        // argument with `::[…]` waits for W5-24 (S-329).
+        // list is the mark in a type position (E0020).
         let next = self.peek_index();
-        let ends = self.tokens[next].kind == TokenKind::ColonColon
-            || !continues_an_expression(self.tokens[next].kind, self.gap(next));
+        let ends = !continues_an_expression(self.tokens[next].kind, self.gap(next));
         // A list of type arguments the type opened (`Option[…]`): an
         // expression reads its brackets as an index, so its error stays the
         // type's. Parentheses are not: `(1 + 2) * 3` is a constant.
         let opened_a_list =
             || self.events[s.events..].iter().any(|e| matches!(e, Event::Start { kind: Some(NodeKind::TypeArgs), .. }));
         match as_type {
-            Ok(_) if ends => {
-                self.end_trial();
-                return Ok(());
-            }
+            Ok(_) if ends => return Ok(()),
             // `_` is no type (§2.2) and no constant: `pair::[U8, _]` is E0002 (§4.5).
             Err(ParseError)
                 if self.diagnostics[s.diagnostics..].iter().any(|d| d.code != Code::E0002)
@@ -215,7 +223,6 @@ impl<'a> Parser<'a> {
                         .find(|t| !t.kind.is_trivia())
                         .is_some_and(|t| t.kind == TokenKind::Underscore) =>
             {
-                self.end_trial();
                 return Err(ParseError);
             }
             _ => self.restore(s),
@@ -226,18 +233,55 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    /// Whether the tokens from the `[` at `open` read as a list of type
-    /// arguments with two or more elements (a `[…]` that is no index, §4.5):
-    /// a trial reading, undone whatever its result. Not inside another trial.
-    pub(super) fn type_list_next(&mut self) -> bool {
-        if self.trials > 0 {
-            return false;
+    /// Whether the type argument at `at` is an expression by its tokens
+    /// alone (§4.5, R-417): a token that starts an expression and no type (a
+    /// number, `-`, a string, `if`), or a head (a path of names with the
+    /// `[…]` or `::[…]` after it, or a bracket) and its clock with an
+    /// operator or a postfix after them ([`continues_an_expression`]). A
+    /// bracket with nothing after it asks the same of the first element in
+    /// it (`(Rg[F32, 4].CAP)`). Else the element may be a type, and is tried.
+    /// The two spellings of a list read alike, so that no candidate turns
+    /// one reading into the other; each token is passed by one lookahead.
+    fn goes_on_as_expression(&self, mut at: usize) -> bool {
+        use TokenKind::*;
+        let brackets = crate::scan::Brackets::of(&self.brackets, &self.tokens);
+        loop {
+            let kind = self.tokens[at].kind;
+            if !crate::starts::starts_type(kind) {
+                return kind == ForeignLit || (starts_operand(kind) && kind != Underscore);
+            }
+            // The head ends at its last name, or at the bracket that closes
+            // the one it opens (a bracket that does not close: maybe a type).
+            let (mut last, mut open) = (at, matches!(kind, LParen | LBracket).then_some(at));
+            if matches!(kind, Ident | KwSelfType) {
+                while let Some(name) = self.path_goes_on(last + 1) {
+                    last = name;
+                }
+                let colons = self.skip_trivia(last + 1);
+                let o = if self.tokens[colons].kind == ColonColon { self.skip_trivia(colons + 1) } else { colons };
+                open = (self.tokens[o].kind == LBracket && (o != colons || self.gap(o) == Gap::None)).then_some(o);
+            } else if open.is_none() {
+                return false;
+            }
+            let end = match open {
+                Some(o) => match brackets.closing(o) {
+                    Some(close) => close,
+                    None => return false,
+                },
+                None => last,
+            };
+            let mut next = self.skip_trivia(end + 1);
+            if self.tokens[next].kind == KwAt && self.tokens[self.skip_trivia(next + 1)].kind == Ident {
+                next = self.skip_trivia(self.skip_trivia(next + 1) + 1);
+            }
+            if continues_an_expression(self.tokens[next].kind, self.gap(next)) {
+                return true;
+            }
+            if !matches!(kind, LParen | LBracket) {
+                return false;
+            }
+            at = self.skip_trivia(at + 1);
         }
-        let s = self.snapshot();
-        self.bump();
-        let n = self.with_nl(false, |p| p.parse_type_args());
-        self.restore(s);
-        matches!(n, Ok(n) if n >= 2)
     }
 }
 

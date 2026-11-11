@@ -1,0 +1,126 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+
+// S-329 (W5-24 U6a, the choice of 2026-11-10): E0020 for a `[…]` with a `,` after a name in the length of an array type that is
+// inside a list of type arguments (`Option[[F32; Rg[F32, 4].CAP]]`, `Option[[F32; TABLE[1, 2]]]`; §4.5, §18.1). The length
+// is a constant expression, so it is read as in an array length outside a list of type arguments (tests/spec/fixes/
+// e0020_type_args_square_array_length.onsa and e0020_index_square_comma_array_length.onsa): the same error in the syntax stage.
+// The places are those of a heading and of a body, the generic types of the prelude (`Option`, `Result`), a type of the
+// file (`Ring`), and a list that holds the array more than once. Only the code and the line are asked of the candidates.
+
+use std.array
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = 4
+}
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub struct Mat[T, const R: U32, const C: U32] {
+  d: [T; R],
+}
+
+pub const TABLE: U32 = 8
+
+pub fn as_a_parameter(o: Option[[F32; Rg[F32, 4].CAP]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn as_a_result() -> Option[[F32; Rg[F32, 4].CAP]] { //~ E0020
+  None
+}
+
+pub struct AsAField {
+  o: Option[[F32; Rg[F32, 4].CAP]],                 //~ E0020
+}
+
+pub enum AsAPayload {
+  A(Option[[F32; Rg[F32, 4].CAP]]),                 //~ E0020
+  B,
+}
+
+type AsAnAlias = Option[[F32; Rg[F32, 4].CAP]]      //~ E0020
+
+pub fn as_an_annotation() -> U32 {
+  let o: Option[[F32; Rg[F32, 4].CAP]] = None       //~ E0020
+  1
+}
+
+pub fn in_a_branch(c: Bool) -> U32 {
+  if c {
+    let o: Option[[F32; Rg[F32, 4].CAP]] = None     //~ E0020
+    1
+  } else {
+    2
+  }
+}
+
+pub fn in_a_closure() -> [U32; 2] {
+  array.from_fn(fn(_) {
+    let o: Option[[F32; Rg[F32, 4].CAP]] = None     //~ E0020
+    1
+  })
+}
+
+pub fn in_a_generic_function[T](o: Option[[T; Rg[F32, 4].CAP]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_result_type(r: Result[[F32; Rg[F32, 4].CAP], U8]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_the_second_argument(r: Result[U8, [F32; Rg[F32, 4].CAP]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_two_levels(o: Option[Option[[F32; Rg[F32, 4].CAP]]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_tuple(o: Option[(U8, [F32; Rg[F32, 4].CAP])]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_function_type(o: Option[fn([F32; Rg[F32, 4].CAP]) -> U8]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_type_of_the_file(r: Ring[[F32; Rg[F32, 4].CAP], 2]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_an_outer_array(o: Option[[[F32; Rg[F32, 4].CAP]; 2]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn with_an_operator(o: Option[[F32; Rg[F32, 4].CAP * 2]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn of_a_constant(o: Option[[F32; TABLE[1, 2]]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn of_a_constant_with_names(o: Option[[F32; TABLE[i, j]]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn of_a_constant_after_an_operator(o: Option[[F32; 2 + TABLE[1, 2]]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn of_a_qualified_constant(o: Option[[F32; cfg.TABLE[1, 2]]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn fine(o: Option[[F32; Rg::[F32, 4].CAP]]) -> U32 {
+  1
+}

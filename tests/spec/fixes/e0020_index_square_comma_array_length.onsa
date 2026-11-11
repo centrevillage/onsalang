@@ -6,8 +6,8 @@
 // form that another language reads as a multi-dimensional index (`xs[i, j]`). A constant expression
 // has no index, but the syntax stage does not read the meaning of a name: a `[…]` with a `,` after a
 // name is the same error everywhere an expression is read, in a value (tests/spec/fixes/
-// e0020_type_args_square.onsa) and in the length of an array type outside a list of type arguments
-// (inside one, `Option[[F32; TABLE[1, 2]]]`, the reading waits for W5-24, S-329). The candidates are
+// e0020_type_args_square.onsa) and in the length of an array type, in a list of type arguments too
+// (`Option[[F32; TABLE[1, 2]]]`, S-329, W5-24 U6a). The candidates are
 // applied by the runner (§18.1) and leave only errors of later stages.
 
 pub const TABLE: U32 = 8
@@ -70,6 +70,10 @@ pub fn before_an_arithmetic_operator(a: [F32; TABLE[1, 2] * 2]) -> U32 { //~ E00
 }
 
 pub fn in_parentheses(a: [F32; (TABLE[1, 2])]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_type_argument(o: Option[[F32; TABLE[1, 2]]]) -> U32 { //~ E0020
   1
 }
 

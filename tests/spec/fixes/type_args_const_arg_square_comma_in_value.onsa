@@ -1,0 +1,87 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+
+// S-329 (W5-24 U6a): E0020 for a `[…]` with a `,` after a name in a const argument written in an expression: in the list of
+// the `::[` of a struct literal, of a function, of a method and of an associated constant (§4.5: the elements of a list are
+// read as in the type position, and a const argument is a constant expression, so `Rg[F32, 4].CAP` is the form of another
+// language as in a heading). The syntax stage, one error per unit (§18.1). Only the code and the line are asked of the
+// candidates.
+
+use std.array
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = 4
+}
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub struct Mat[T, const R: U32, const C: U32] {
+  d: [T; R],
+}
+
+pub const TABLE: U32 = 8
+
+pub fn make[T, const N: U32]() -> U32 {
+  N
+}
+
+pub struct V {
+  n: I32,
+}
+
+impl V {
+  pub fn conv[T, const N: U32](self) -> U32 {
+    N
+  }
+}
+
+pub fn in_a_struct_literal() -> U32 {
+  let r = Ring::[F32, Rg[F32, 4].CAP] { d: [0.0; 4] } //~ E0020
+  1
+}
+
+pub fn in_a_function() -> U32 {
+  make::[F32, Rg[F32, 4].CAP]()                     //~ E0020
+}
+
+pub fn in_a_method(v: V) -> U32 {
+  v.conv::[F32, Rg[F32, 4].CAP]()                   //~ E0020
+}
+
+pub fn in_an_associated_constant() -> U32 {
+  Rg::[F32, Rg[F32, 4].CAP].CAP                     //~ E0020
+}
+
+pub fn with_an_operator() -> U32 {
+  make::[F32, Rg[F32, 4].CAP * 2]()                 //~ E0020
+}
+
+pub fn in_a_branch(c: Bool) -> U32 {
+  if c {
+    make::[F32, Rg[F32, 4].CAP]()                   //~ E0020
+  } else {
+    2
+  }
+}
+
+pub fn in_a_closure() -> [U32; 2] {
+  array.from_fn(fn(_) {
+    make::[F32, Rg[F32, 4].CAP]()                   //~ E0020
+  })
+}
+
+pub flow in_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { make::[F32, Rg[F32, 4].CAP]() } //~ E0020
+  x
+}
+
+pub fn fine() -> U32 {
+  make::[F32, Rg::[F32, 4].CAP]()
+}

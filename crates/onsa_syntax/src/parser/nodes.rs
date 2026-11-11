@@ -8,8 +8,7 @@ impl<'a> Parser<'a> {
     /// [`Parser::restore`] (its events and diagnostics are dropped). A trial
     /// opens and closes only nodes of its own (no `precede` of a node read
     /// before it).
-    pub(super) fn snapshot(&mut self) -> Snapshot {
-        self.trials += 1;
+    pub(super) fn snapshot(&self) -> Snapshot {
         Snapshot {
             pos: self.pos,
             last_end: self.last_end,
@@ -31,7 +30,6 @@ impl<'a> Parser<'a> {
 
     /// Undo the reading since `s`.
     pub(super) fn restore(&mut self, s: Snapshot) {
-        self.end_trial();
         self.pos = s.pos;
         self.last_end = s.last_end;
         self.events.truncate(s.events);
@@ -88,11 +86,6 @@ impl<'a> Parser<'a> {
         self.pos = h;
     }
 
-    /// Keep the reading since the snapshot.
-    pub(super) fn end_trial(&mut self) {
-        self.trials -= 1;
-    }
-
     // ------------------------------------------------------------ nodes
 
     /// The one place where nodes open (`start`, `precede`, the recovery,
@@ -122,17 +115,6 @@ impl<'a> Parser<'a> {
     pub(super) fn start(&mut self, kind: NodeKind) -> PResult<Marker> {
         let start = self.peek().span.start;
         self.enter(kind, start, 0)
-    }
-
-    /// Whether the parser reads a const argument of a type, the innermost
-    /// type around it: its `X[…]` with `,` is read as an index (R-196), as
-    /// the type argument's reading keeps `X::[…]` a type (S-329, W5-24).
-    /// The length of an array type is not: its `::[…]` is read (S-329).
-    pub(super) fn in_const_arg(&self) -> bool {
-        self.open.iter().rev().find_map(|o| match self.events[o.event as usize] {
-            Event::Start { kind: Some(k), .. } if k.class() == Class::Type => Some(k == NodeKind::ConstArg),
-            _ => None,
-        }) == Some(true)
     }
 
     /// The level of the innermost open node (0 outside every node).

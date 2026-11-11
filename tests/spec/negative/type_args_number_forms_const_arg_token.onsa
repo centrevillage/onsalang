@@ -1,0 +1,60 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§18.1", "§4.5"]
+
+// S-471 (W5-24 U6a): a number token with a digit that the base cannot read (`0b12`, `0o19`, `0b1_2`) is one token and an
+// E0001 of the lexical stage (§2.4: "接頭辞の後に基数で読めない数字のある形（`0o19`、`0b12`）も一つのトークンで、§18.1 の E0001"),
+// also in the position of a const argument: it is not split into `0b1` and `2`, so the position does not give its own E0002
+// "expected a type" first (§2.4: the form of the token is decided by the lexical stage whatever the position). The places are
+// the headings and the list of the `::[` of an expression. One error per unit; there is no candidate.
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = 4
+}
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub struct Mat[T, const R: U32, const C: U32] {
+  d: [T; R],
+}
+
+pub const TABLE: U32 = 8
+
+pub fn a_binary_digit(r: Ring[F32, 0b12]) -> U32 {  //~ E0001
+  1
+}
+
+pub fn an_octal_digit(r: Ring[F32, 0o19]) -> U32 {  //~ E0001
+  1
+}
+
+pub fn with_a_separator(r: Ring[F32, 0b1_2]) -> U32 { //~ E0001
+  1
+}
+
+pub fn after_an_operator(r: Ring[F32, 2 + 0b12]) -> U32 { //~ E0001
+  1
+}
+
+pub fn in_a_length_in_a_type_argument(o: Option[[F32; 0b12]]) -> U32 { //~ E0001
+  1
+}
+
+pub fn in_a_struct_literal() -> U32 {
+  let r = Ring::[F32, 0b12] { d: [0.0; 4] }         //~ E0001
+  1
+}
+
+pub fn in_a_value() -> U32 {
+  Rg::[F32, 0o19].CAP                               //~ E0001
+}
+
+pub fn fine(r: Ring[F32, 0b11]) -> U32 {
+  1
+}

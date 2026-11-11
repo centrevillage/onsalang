@@ -180,7 +180,7 @@ fn element_starts(list: NodeKind) -> Option<fn(TokenKind) -> bool> {
 }
 
 /// Whether a token of `kind` may start a type in a list.
-fn starts_type(kind: TokenKind) -> bool {
+pub(crate) fn starts_type(kind: TokenKind) -> bool {
     use TokenKind::*;
     matches!(kind, Ident | KwSelfType | LParen | LBracket | KwFn | KwRt)
 }

@@ -1361,14 +1361,6 @@ reasons = ["S-185"]
 until = "W8-06"
 note = "値の `match` が降下で E0200（W8-06）。定数のパターンの検査は W5-09 U1a で済み"
 
-# --- W5-24 U1a: 数のトークンの事例のうち、後の単位を待つもの（2026-11-10）
-[[pending]]
-kind = "test-case"
-target = "tests/spec/fixes/e0020_digit_separator_const_arg.onsa"
-reasons = ["S-476", "S-471"]
-until = "W5-24"
-note = "定数の型引数 `S[1'0]` の桁の区切りは、型引数の位置の数の形（S-471）を入れる U6 で E0020 になる。今は E0002「expected a type」"
-
 # --- W5-10 U1a: 型に付く `::[…]` の事例のうち、後の作業を待つもの（2026-11-10）
 [[pending]]
 kind = "test-case"
@@ -1490,3 +1482,46 @@ target = "tests/spec/types/type_args_method_mark_bang_flow.onsa"
 reasons = ["S-811"]
 until = "W7-04"
 note = "flow の本体の `v.m::[F32]!(x)` は E0806（§11.2）。flow の本体の `!` はメソッドでは今は報告されない（W5-10 の単位の行）"
+
+# --- W5-24 U6a: const 引数と型の引数の中の `X::[…]`・`X[a, b]`、入れ子、他言語の数の形の事例と、W5-16 U1d の控えの事例（2026-11-11）。U6b の事例は U6b の前に写す
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/type_args_const_arg_operator_run.onsa"
+reasons = ["S-329", "S-239"]
+until = "W9-03"
+note = "U6a の構文は W5-24。演算を含む長さと const 引数は今 E0200（types/type_args_const_bare_arg_operator.onsa と同じ待ち）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/type_args_const_bare_arg_operator.onsa"
+reasons = ["S-329"]
+until = "W9-03"
+note = "W5-16 U1d から控えにしていた事例を W5-24 U6a で戻した（const 引数の `X::[…]`・`X[a, b]`、85 段の高さ）。演算を含む長さは W9-03 まで E0200。"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0002_index_comma_array_length_in_type_args.onsa:13:46 E0020 fix1"
+reasons = ["S-333", "R-418"]
+until = "W5-24"
+note = "U6a で E0002 から E0020 になり、候補は今の `::` の一つ。当てると `xs::[1, 2]` の要素の `::` の E0020（型の位置）が残る。U6b の候補の作り分け（添字の形）で閉じる"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0002_index_comma_array_length_in_type_args.onsa:15:39 E0020 fix1"
+reasons = ["S-333", "R-418"]
+until = "W5-24"
+note = "U6a で E0002 から E0020 になり、候補は今の `::` の一つ。当てると `as` の連鎖の E0011 が残る。U6b の候補の作り分け（添字の形）で閉じる"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0002_index_comma_array_length_in_type_args.onsa:17:39 E0020 fix1"
+reasons = ["S-333", "R-418"]
+until = "W5-24"
+note = "U6a で E0002 から E0020 になり、候補は今の `::` の一つ。当てると入れ子の内の E0020 が残る。U6b の候補の作り分け（添字の形）で閉じる"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0002_index_comma_array_length_in_type_args.onsa:19:32 E0020 fix1"
+reasons = ["S-333", "R-418"]
+until = "W5-24"
+note = "U6a で E0002 から E0020 になり、候補は今の `::` の一つ。当てると `if` の E0013 が残る。U6b の候補の作り分け（添字の形）で閉じる"

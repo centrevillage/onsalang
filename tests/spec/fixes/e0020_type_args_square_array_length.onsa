@@ -7,9 +7,8 @@
 // §4.5 (the associated constant of a type with its arguments), so the `[` of `Rg[F32, 4].CAP` is the
 // form of another language, with the same error as in an expression (tests/spec/fixes/
 // e0020_type_args_square.onsa): the syntax cannot read it as an index (it holds a `,`), so the
-// stage is the syntax stage, and every place where an array type is read gives it, outside a list
-// of type arguments (inside one, `Option[[F32; Rg[F32, 4].CAP]]`, the reading waits for W5-24,
-// S-329). The candidates are applied by the runner (§18.1), and each leaves only an error of a
+// stage is the syntax stage, and every place where an array type is read gives it, in a list of
+// type arguments too (`Option[[F32; Rg[F32, 4].CAP]]`, S-329, W5-24 U6a). The candidates are applied by the runner (§18.1), and each leaves only an error of a
 // later stage. The counts of the candidates and the const arguments of a type wait for W5-24
 // (S-333, S-329), whose unit U6 brings their cases back.
 //
@@ -81,6 +80,10 @@ impl Holder {
 
 pub flow in_a_flow(x: [F32; Rg[F32, 4].CAP] at sample) -> F32 at sample { //~ E0020
   0.0
+}
+
+pub fn in_a_type_argument(o: Option[[F32; Rg[F32, 4].CAP]]) -> U32 { //~ E0020
+  1
 }
 
 pub fn in_a_tuple(t: (U8, [F32; Rg[F32, 4].CAP])) -> U8 { //~ E0020

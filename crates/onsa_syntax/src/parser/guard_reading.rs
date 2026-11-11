@@ -92,9 +92,8 @@ impl<'a> Parser<'a> {
         self.guard.iter_mut().for_each(|g| g.ats += 1);
         let read = self.parse_pattern_alt();
         self.guard.iter_mut().for_each(|g| g.ats -= 1);
-        match read {
-            Ok(_) => self.end_trial(),
-            Err(_) => self.restore(s),
+        if read.is_err() {
+            self.restore(s);
         }
         Ok(self.guarded(m, first, Guarded::At))
     }

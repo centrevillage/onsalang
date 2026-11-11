@@ -1,0 +1,108 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§15.1"]
+
+// S-329 (W5-24 U6a): a const argument that is `Rg::[F32, 4].CAP` itself holds another `Rg::[…].CAP` as its own const
+// argument (§4.5: "`Rg::[F32, 4].CAP` のように式の型引数を書いた型の関連定数を含む" constant expression; "並びの要素は型の位置の並びと
+// 同じに読み、const 引数は定数式"). The nesting is read the same in a type, in the length of an array type, in the list of a
+// struct literal and in a value, in a branch, in a closure and in a generic function. `CAP` is the const parameter `N`, so
+// the innermost number is the length: the values are worked out by hand. The form with one level is in
+// type_args_const_bare_arg.onsa; the operators are in type_args_const_arg_operator_run.onsa.
+
+use std.array
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+pub fn nested_parameter(r: Ring[F32, Rg::[F32, Rg::[F32, 4].CAP].CAP]) -> U32 {
+  r.d.len()
+}
+
+pub fn nested_result() -> Ring[F32, Rg::[F32, Rg::[F32, 3].CAP].CAP] {
+  Ring { d: [0.5; 3] }
+}
+
+pub fn three_levels(r: Ring[F32, Rg::[F32, Rg::[F32, Rg::[F32, 2].CAP].CAP].CAP]) -> U32 {
+  r.d.len()
+}
+
+pub fn in_an_array_length(a: [F32; Rg::[F32, Rg::[F32, 5].CAP].CAP]) -> U32 {
+  a.len()
+}
+
+pub fn in_a_type_argument(o: Option[Ring[F32, Rg::[F32, Rg::[F32, 1].CAP].CAP]]) -> U32 {
+  match o {
+    Some(r) => r.d.len(),
+    None => 0,
+  }
+}
+
+pub fn in_a_generic_function[T](r: Ring[T, Rg::[F32, Rg::[F32, 4].CAP].CAP]) -> U32 {
+  r.d.len()
+}
+
+pub fn in_a_struct_literal() -> U32 {
+  let r = Ring::[F32, Rg::[F32, Rg::[F32, 6].CAP].CAP] { d: [0.0; 6] }
+  r.d.len()
+}
+
+pub fn in_a_value() -> U32 {
+  Rg::[F32, Rg::[F32, 7].CAP].CAP
+}
+
+pub fn in_a_branch(c: Bool) -> U32 {
+  if c {
+    Rg::[F32, Rg::[F32, 2].CAP].CAP
+  } else {
+    let r: Ring[F32, Rg::[F32, Rg::[F32, 3].CAP].CAP] = Ring { d: [0.0; 3] }
+    r.d.len()
+  }
+}
+
+pub fn in_a_closure() -> [U32; 2] {
+  array.from_fn(fn(_) {
+    let r: Ring[F32, Rg::[F32, Rg::[F32, 4].CAP].CAP] = Ring { d: [0.0; 4] }
+    r.d.len()
+  })
+}
+
+test "nested const arguments in a type" {
+  let r: Ring[F32, 4] = Ring { d: [0.0; 4] }
+  assert nested_parameter(r) == 4
+  let q: Ring[F32, 3] = nested_result()
+  assert q.d[2] == 0.5
+  let s: Ring[F32, 2] = Ring { d: [0.0; 2] }
+  assert three_levels(s) == 2
+}
+
+test "nested const arguments in a length and in a type argument" {
+  let a: [F32; 5] = [0.0; 5]
+  assert in_an_array_length(a) == 5
+  let r: Ring[F32, 1] = Ring { d: [0.0; 1] }
+  assert in_a_type_argument(Some(r)) == 1
+  assert in_a_type_argument(None) == 0
+}
+
+test "nested const arguments in a generic function" {
+  let r: Ring[U8, 4] = Ring { d: [0; 4] }
+  assert in_a_generic_function(r) == 4
+}
+
+test "nested const arguments in a value" {
+  assert in_a_struct_literal() == 6
+  assert in_a_value() == 7
+  assert in_a_branch(true) == 2
+  assert in_a_branch(false) == 3
+  let c = in_a_closure()
+  assert c[1] == 4
+}

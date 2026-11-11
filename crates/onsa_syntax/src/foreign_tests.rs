@@ -262,7 +262,6 @@ fn type_args_before_a_call_whatever_follows() {
         "  1::<T>(x)",
         "  f::<>(x)",
         "  a[i][j, k]",
-        "  a[i, _]",
         "  pair::[U8, _](1, 2)",
         "  d<->>(x)",
         "  f<A,>(x)",
@@ -271,6 +270,10 @@ fn type_args_before_a_call_whatever_follows() {
         let p = parse(&body(src));
         assert!(p.diagnostics.iter().all(|d| d.fixes.is_empty()), "{src}: {:?}", p.diagnostics);
     }
+    // A list after a name that does not read whole is the E0020 of its `[`
+    // all the same, the first error of the unit (§18.1, S-329, W5-24 U6a).
+    let first = |src: &str| parse(&body(src)).diagnostics.iter().min_by_key(|d| d.span.start).map(|d| d.code);
+    assert_eq!(first("  a[i, _]"), Some(Code::E0020));
     for src in ["fn g(x: Buf::[]) { }\n", "fn g(x: Buf::[F32].Inner) { }\n"] {
         assert!(parse(src).diagnostics.iter().all(|d| d.fixes.is_empty()), "{src}");
     }

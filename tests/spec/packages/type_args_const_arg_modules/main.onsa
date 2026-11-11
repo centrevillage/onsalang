@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§15.1"]
+
+// S-329 (W5-24 U6a): a const argument that is the name of a constant with type arguments and nothing else
+// (`Ring[F32, Rg::[F32, 4].CAP]`, §4.5) when the type is of another module: through the name taken by a `use`, through the module
+// name (`util.Rg::[F32, 5].CAP`, §15.1), nested (the list of the `::[` holds a name through the module too) and in the
+// value of a struct literal. `util.onsa` has its own place that uses it in its own module, called from here. The values are
+// worked out by hand: `CAP` is the const parameter `N`.
+use util
+use util.{Ring, Rg}
+
+pub fn by_the_name_taken(r: Ring[F32, Rg::[F32, 4].CAP]) -> U32 {
+  r.d.len()
+}
+
+pub fn by_the_module_name(r: Ring[F32, util.Rg::[F32, 5].CAP]) -> U32 {
+  r.d.len()
+}
+
+pub fn nested_through_the_module(r: util.Ring[F32, util.Rg::[F32, util.Rg::[F32, 2].CAP].CAP]) -> U32 {
+  r.d.len()
+}
+
+pub fn in_a_struct_literal() -> U32 {
+  let r = util.Ring::[F32, util.Rg::[F32, 6].CAP] { d: [0.0; 6] }
+  r.d.len()
+}
+
+test "the name taken by a use" {
+  let r: Ring[F32, 4] = Ring { d: [0.0; 4] }
+  assert by_the_name_taken(r) == 4
+}
+
+test "through the module name" {
+  let r: Ring[F32, 5] = Ring { d: [0.0; 5] }
+  assert by_the_module_name(r) == 5
+  let q: Ring[F32, 2] = Ring { d: [0.0; 2] }
+  assert nested_through_the_module(q) == 2
+  assert in_a_struct_literal() == 6
+}
+
+test "the function of the other module" {
+  let r: Ring[F32, 3] = Ring { d: [0.0; 3] }
+  assert util.in_the_other_module(r) == 3
+}

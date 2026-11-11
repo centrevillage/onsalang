@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§15.1"]
+
+// S-329 (W5-10 U1b): the const argument of a type that starts with the name of a constant with type arguments and goes on with an
+// operator (`Ring[F32, Rg::[F32, 4].CAP * 2]`) is a constant expression (§4.5: "`Rg::[F32, 4].CAP` のように式の型引数を書いた型の関連定数を含む";
+// "算術の演算子（`+ - * / %`）と前置の `-`、括弧からなる"). It waits for two things, the syntax of a const argument that starts with the name
+// (type_args_const_bare_arg.onsa) and the operators of a constant expression (type_args_const_arith.onsa), so it is a case of
+// its own. The values are worked out by hand: `CAP` is the const parameter `N`.
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+pub fn times_two(r: Ring[F32, Rg::[F32, 4].CAP * 2]) -> U32 {
+  r.d.len()
+}
+
+pub fn plus_one(r: Ring[F32, Rg::[F32, 4].CAP + 1]) -> U32 {
+  r.d.len()
+}
+
+test "an operator after the name in a const argument" {
+  let r: Ring[F32, 8] = Ring { d: [0.0; 8] }
+  assert times_two(r) == 8
+  let q: Ring[F32, 5] = Ring { d: [0.0; 5] }
+  assert plus_one(q) == 5
+}

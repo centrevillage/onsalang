@@ -983,7 +983,7 @@ pub static ROWS: &[Row] = &[
         code: Code::E0020,
         message: "type arguments in an expression are written `name::[…]`; a `[…]` with `,` is no index",
         rule: TYPE_ARGS_RULE,
-        detect: Detect::Syntax,
+        detect: Detect::Tree,
     },
     Row {
         id: RowId::TypeArgsOnExpression,
