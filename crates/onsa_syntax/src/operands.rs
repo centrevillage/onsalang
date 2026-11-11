@@ -145,24 +145,14 @@ fn wants_the_next_item(read: &crate::Read, len: usize) -> bool {
 /// One that starts in what the candidate writes (in a replacement of
 /// `regions`) is the candidate's too, where it is (the `.` of `fn t::` moved
 /// to the next line, S-963); not one right after what it takes out. One in
-/// what it moves (`moved`, [`moved`]) is the input's, left to the check
-/// after it (§18.1: the attribute moved, S-600).
-fn leaves(read: &crate::Read, place: Range<u32>, regions: &[(u32, u32)], moved: &[(u32, u32)]) -> bool {
+/// the writer's text it copies or moves, unchecked there (`writers`,
+/// [`Edit::writers`]), is the input's, left to the check after it (§18.1:
+/// "候補が写すか動かす部分", S-475).
+fn leaves(read: &crate::Read, place: Range<u32>, regions: &[(u32, u32)], writers: &[(u32, u32)]) -> bool {
     let mended = |d: &Diagnostic| !d.fixes.is_empty() && d.code != Code::E0004;
     let at = |s: u32| place.contains(&s) || regions.iter().any(|&(a, b)| (a..b).contains(&s));
-    let inside = |d: &Diagnostic| moved.iter().any(|&(a, b)| a <= d.span.start && d.span.end <= b);
+    let inside = |d: &Diagnostic| writers.iter().any(|&(a, b)| a <= d.span.start && d.span.end <= b);
     read.diagnostics.iter().any(|d| d.stage == Stage::Syntax && !mended(d) && !inside(d) && at(d.span.start))
-}
-
-/// The replacements of `regions` in `after` that write an attribute that
-/// `edits` take out of `own` elsewhere: the attribute the candidate moves
-/// (§18.1). Another part moved (an operator to the line before) is the
-/// candidate's.
-fn moved(own: &str, edits: &[Edit], after: &str, regions: &[(u32, u32)]) -> Vec<(u32, u32)> {
-    let text = |e: &Edit| own[e.span.start as usize..e.span.end as usize].trim();
-    let out: Vec<&str> = edits.iter().filter(|e| e.replace.is_empty()).map(text).collect();
-    let written = |&(a, b): &(u32, u32)| after[a as usize..b as usize].trim();
-    regions.iter().copied().filter(|r| written(r).starts_with('@') && out.contains(&written(r))).collect()
 }
 
 /// `fix`, a candidate of the diagnostic at `span`, with the parentheses it
@@ -191,7 +181,7 @@ fn completed(
     let start = span.start.saturating_sub(within.span.start);
     let reach = u32::from(span.is_empty());
     let place = |regions: &[(u32, u32)], end: u32| regions.first().map_or(start, |r| r.0.min(start))..end + reach;
-    let Ok(Applied { text: after, regions, end }) = applied(own, &local, last) else { return Some(fix) };
+    let Ok(Applied { text: after, regions, writers, end }) = applied(own, &local, last) else { return Some(fix) };
     reads.bytes += after.len();
     let alone = crate::read(file, &after, within.ctx);
     let judge = within.span.start <= span.start && failed.one_in(&within) && !wants_the_next_item(&alone, after.len());
@@ -200,14 +190,14 @@ fn completed(
     }
     let touched = touched_operands(&alone, &regions);
     if touched.is_empty() {
-        let left = judge && leaves(&alone, place(&regions, end), &regions, &moved(own, &local, &after, &regions));
+        let left = judge && leaves(&alone, place(&regions, end), &regions, &writers);
         reads.left += usize::from(left);
         return (!left).then_some(fix);
     }
     let operands: Vec<Span> = touched.iter().flat_map(|(_, o)| o.iter().copied()).collect();
     let local = composed(local, &regions, groups::parenthesizing(&operands).collect());
     let edits: Vec<Edit> = local.iter().map(|e| within.global(e)).collect();
-    let Ok(Applied { text: again, regions, end }) = applied(own, &local, last) else {
+    let Ok(Applied { text: again, regions, writers, end }) = applied(own, &local, last) else {
         reads.dropped += 1;
         return None;
     };
@@ -220,7 +210,7 @@ fn completed(
         reads.dropped += 1;
         return None;
     }
-    if judge && leaves(&with, place(&regions, end), &regions, &moved(own, &local, &again, &regions)) {
+    if judge && leaves(&with, place(&regions, end), &regions, &writers) {
         reads.left += 1;
         return None;
     }
@@ -281,6 +271,8 @@ struct Applied {
     text: String,
     /// The range each replacement takes in `text`.
     regions: Vec<(u32, u32)>,
+    /// The ranges of the writer's text in them ([`Edit::writers`]).
+    writers: Vec<(u32, u32)>,
     /// Where the offset `last` of the text before goes: the end of the
     /// replacement of an edit that holds it.
     end: u32,
@@ -293,11 +285,13 @@ fn applied(text: &str, edits: &[Edit], last: u32) -> Result<Applied, String> {
     let after = onsa_diag::apply_text(text, &edits)?;
     let mut delta: i64 = 0;
     let mut moved = None;
+    let mut writers = Vec::new();
     let regions = edits
         .iter()
         .map(|e| {
             let a = (e.span.start as i64 + delta) as u32;
             let b = a + e.replace.len() as u32;
+            writers.extend(e.writers().iter().map(|&(x, y)| (a + x, a + y)));
             if moved.is_none() && last < e.span.end {
                 moved = Some(if e.span.start < last { b } else { (last as i64 + delta) as u32 });
             }
@@ -305,7 +299,7 @@ fn applied(text: &str, edits: &[Edit], last: u32) -> Result<Applied, String> {
             (a, b)
         })
         .collect();
-    Ok(Applied { text: after, regions, end: moved.unwrap_or((last as i64 + delta) as u32) })
+    Ok(Applied { text: after, regions, writers, end: moved.unwrap_or((last as i64 + delta) as u32) })
 }
 
 /// The edits `local` (sorted; `regions` the ranges of their replacements in
@@ -322,7 +316,7 @@ fn composed(mut local: Vec<Edit>, regions: &[(u32, u32)], mut parens: Vec<Edit>)
     for p in parens {
         let at = p.span.start;
         if let Some(i) = regions.iter().position(|&(a, b)| a <= at && at <= b) {
-            local[i].replace.insert_str((at - regions[i].0) as usize, &p.replace);
+            local[i].put((at - regions[i].0) as usize, &p.replace);
             continue;
         }
         // Before the edits that end before it, the text is as it was.

@@ -65,7 +65,7 @@ enum Test {
     /// `lo <= name && name < hi` (S-249, S-278): the ends as written, in
     /// parentheses when a comparison needs them (S-341); `end` is `None`
     /// for `..` and `...`, read both ways.
-    Range { lo: Option<String>, hi: Option<String>, end: Option<RangeEnd> },
+    Range { lo: Option<Copied>, hi: Option<Copied>, end: Option<RangeEnd> },
 }
 
 /// A pattern read from its tokens (`lo..=hi`, positions of the reader's
@@ -222,14 +222,17 @@ impl<'c, 'a> Toks<'c, 'a> {
 
     /// The end `a..=b` of a range (tokens of `toks`), as the guard writes it:
     /// in parentheses when it is no bare operand of a comparison (S-341).
-    /// `None` when it is not one expression, or holds a comment.
-    fn end_text(&self, a: usize, b: usize, side: Side) -> Option<String> {
+    /// `None` when it is not one expression, or holds a comment. What it
+    /// copies is the writer's text, read here only as an expression with the
+    /// forms of other languages taken out ([`as_operands`], S-475).
+    fn end_text(&self, a: usize, b: usize, side: Side) -> Option<Copied> {
         if self.comment_in(a, b) {
             return None;
         }
         let c = self.c;
         // A leading prefix `-` is written against its operand in the guard
-        // (§2.5, S-123): the blanks after it in the pattern do not go into it.
+        // (§2.5, S-123): the blanks after it in the pattern do not go into it,
+        // but before a `--` (`- --3` is not `---3`).
         let minus = a < b
             && c.kind(self.toks[a]) == TokenKind::Minus
             && !matches!(c.kind(self.toks[a + 1]), TokenKind::Minus | TokenKind::Bang);
@@ -239,9 +242,10 @@ impl<'c, 'a> Toks<'c, 'a> {
         if !crate::parser::reads_as_expr(c.file, c.text, read.clone(), c.literals) {
             return None;
         }
-        let text = if minus { format!("-{}", self.text(a + 1, b)) } else { self.text(a, b) };
+        let tight = minus && c.kind(self.toks[a + 1]) != TokenKind::MinusMinus;
+        let text = if tight { Copied::copy(self.text(from, b)).around("-", "") } else { Copied::copy(self.text(a, b)) };
         let top = operand(&read.iter().map(|t| t.kind).collect::<Vec<_>>());
-        Some(if BinOp::Le.bare(side, top) { text } else { format!("({text})") })
+        Some(if BinOp::Le.bare(side, top) { text } else { text.around("(", ")") })
     }
 
     /// A range from `lo`, with its symbol at `sym` and its end before `end`.
@@ -282,6 +286,46 @@ fn as_operands(run: &[Token]) -> Vec<Token> {
 /// The text of the tokens `a..=b` of `toks`.
 fn written(c: &Cursor, toks: &[usize], a: usize, b: usize) -> String {
     c.text[c.span(toks[a]).start as usize..c.span(toks[b]).end as usize].to_string()
+}
+
+/// A text a guard writes, and the ranges in it that copy the writer's text
+/// as it is (the ends of a range): the writer's text of the edit that
+/// inserts it ([`onsa_diag::Edit::writers`], S-475).
+#[derive(Clone, Default)]
+struct Copied {
+    text: String,
+    own: Vec<(u32, u32)>,
+}
+
+impl Copied {
+    fn written(text: String) -> Copied {
+        Copied { text, own: Vec::new() }
+    }
+
+    fn copy(text: String) -> Copied {
+        let own = vec![(0, text.len() as u32)];
+        Copied { text, own }
+    }
+
+    /// `before`, the text and `after`.
+    fn around(mut self, before: &str, after: &str) -> Copied {
+        let n = before.len() as u32;
+        self.own.iter_mut().for_each(|r| *r = (r.0 + n, r.1 + n));
+        self.text = format!("{before}{}{after}", self.text);
+        self
+    }
+
+    /// The texts `parts` with `sep` between them.
+    fn joined(parts: impl IntoIterator<Item = Copied>, sep: &str) -> Copied {
+        let mut out = Copied::default();
+        for (k, p) in parts.into_iter().enumerate() {
+            out.text.push_str(if k == 0 { "" } else { sep });
+            let at = out.text.len() as u32;
+            out.own.extend(p.own.iter().map(|&(a, b)| (a + at, b + at)));
+            out.text.push_str(&p.text);
+        }
+        out
+    }
 }
 
 /// What a condition compares: a new binding (a hole, by its index) or the
@@ -325,25 +369,23 @@ impl Cond {
     /// and `||` chains flat (S-339), a chain in the other one in
     /// parentheses (§3.1, [`BinOp::bare`]). `reading` is the end of the
     /// ranges written `..` and `...`.
-    fn render(&self, names: &[String], reading: RangeEnd) -> (String, Operand) {
+    fn render(&self, names: &[String], reading: RangeEnd) -> (Copied, Operand) {
         let subject = |s: &Subject| match s {
             Subject::Hole(i) => names[*i].clone(),
             Subject::Name(n) => n.clone(),
         };
         match self {
-            Cond::True => ("true".into(), Operand::Plain),
-            Cond::Test(s, Test::Equal(text)) => (format!("{} == {text}", subject(s)), Operand::Binary(BinOp::Eq)),
+            Cond::True => (Copied::written("true".into()), Operand::Plain),
+            Cond::Test(s, Test::Equal(text)) => {
+                (Copied::written(format!("{} == {text}", subject(s))), Operand::Binary(BinOp::Eq))
+            }
             Cond::Test(s, Test::Range { lo, hi, end }) => {
                 let s = subject(s);
-                let mut parts = Vec::new();
-                if let Some(lo) = lo {
-                    parts.push(format!("{lo} <= {s}"));
-                }
-                if let Some(hi) = hi {
-                    parts.push(format!("{s} {} {hi}", end.unwrap_or(reading).cmp()));
-                }
+                let lo = lo.clone().map(|lo| lo.around("", &format!(" <= {s}")));
+                let hi = hi.clone().map(|hi| hi.around(&format!("{s} {} ", end.unwrap_or(reading).cmp()), ""));
+                let parts: Vec<Copied> = lo.into_iter().chain(hi).collect();
                 let top = if parts.len() == 1 { BinOp::Le } else { BinOp::And };
-                (parts.join(" && "), Operand::Binary(top))
+                (Copied::joined(parts, " && "), Operand::Binary(top))
             }
             Cond::And(v) => chain(v, names, reading, BinOp::And),
             Cond::Or(v) => chain(v, names, reading, BinOp::Or),
@@ -353,18 +395,14 @@ impl Cond {
 
 /// The items of an `&&` or `||` chain, flat: `&&` and `||` are associative,
 /// so every item is read as the left operand of the next one.
-fn chain(items: &[Cond], names: &[String], reading: RangeEnd, op: BinOp) -> (String, Operand) {
-    let parts: Vec<(String, Operand)> =
+fn chain(items: &[Cond], names: &[String], reading: RangeEnd, op: BinOp) -> (Copied, Operand) {
+    let parts: Vec<(Copied, Operand)> =
         items.iter().filter(|c| !matches!(c, Cond::True)).map(|c| c.render(names, reading)).collect();
     if parts.len() == 1 {
-        return parts.into_iter().next().unwrap_or(("true".into(), Operand::Plain));
+        return parts.into_iter().next().unwrap_or((Copied::written("true".into()), Operand::Plain));
     }
-    let text = parts
-        .into_iter()
-        .map(|(t, top)| if op.bare(Side::Left, top) { t } else { format!("({t})") })
-        .collect::<Vec<_>>()
-        .join(if op == BinOp::And { " && " } else { " || " });
-    (text, Operand::Binary(op))
+    let parts = parts.into_iter().map(|(t, top)| if op.bare(Side::Left, top) { t } else { t.around("(", ")") });
+    (Copied::joined(parts, if op == BinOp::And { " && " } else { " || " }), Operand::Binary(op))
 }
 
 /// One token of a skeleton: a token, or a hole.
@@ -881,20 +919,22 @@ impl Arm {
         for &(reading, title) in readings {
             let (cond, top) = shape.cond.render(&names, reading);
             let mut edits = edits.clone();
+            // The ends copied are the writer's text (S-475).
+            let insert = |at: u32, text: Copied| Edit::insert(c.file, at, text.text).with_writers(&text.own);
             match self.if_tok {
-                None => edits.push(Edit::insert(c.file, c.span(self.last_pat).end, format!(" if {cond}"))),
+                None => edits.push(insert(c.span(self.last_pat).end, cond.around(" if ", ""))),
                 Some(t) => {
                     // The arm's own guard follows with `&&` (§7).
                     let g_first = c.sig_after(t);
                     let g_last = c.sig_before(self.arrow).ok_or(Why::GuardEnd)?;
                     let g = operand(&(g_first..=g_last).map(|i| c.kind(i)).collect::<Vec<_>>());
-                    let cond = if BinOp::And.bare(Side::Left, top) { cond } else { format!("({cond})") };
+                    let cond = if BinOp::And.bare(Side::Left, top) { cond } else { cond.around("(", ")") };
                     // A guard against its `if` (`if(c)`) stays apart from the word (§18.1, R-235).
                     let lead = if c.gap_after(t) == Gap::None { " " } else { "" };
                     if BinOp::And.bare(Side::Left, g) {
-                        edits.push(Edit::insert(c.file, c.span(g_first).start, format!("{lead}{cond} && ")));
+                        edits.push(insert(c.span(g_first).start, cond.around(lead, " && ")));
                     } else {
-                        edits.push(Edit::insert(c.file, c.span(g_first).start, format!("{lead}{cond} && (")));
+                        edits.push(insert(c.span(g_first).start, cond.around(lead, " && (")));
                         edits.push(Edit::insert(c.file, c.span(g_last).end, ")"));
                     }
                 }

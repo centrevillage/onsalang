@@ -22,7 +22,7 @@ pub(super) struct Mark {
     pub old: String,
     pub new: String,
     /// The text is the writer's, inserted by a candidate that moves it
-    /// (`Fix::moved`): taking it out restores nothing of the compiler's.
+    /// (`Fix::moves`): taking it out restores nothing of the compiler's.
     pub moved_in: bool,
 }
 

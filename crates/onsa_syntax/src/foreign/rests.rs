@@ -34,7 +34,7 @@ pub(super) fn rest_fix(c: &Cursor, rest: usize) -> Option<Fix> {
 /// after it goes). None when another element is no field whose pattern
 /// reads alone with no form of its own (`.., _`: an error of the stage
 /// would stay), or when what it takes out holds a comment. A `_` put last
-/// is moved ([`Fix::moved`]): the writer's text.
+/// is moved: the writer's text ([`Edit::writers`], S-475).
 fn underscore_last(c: &Cursor) -> Option<Fix> {
     let &(_, start) = c.open.iter().rev().find(|o| o.0 == NodeKind::StructPat)?;
     let open = (c.index_at(start)..c.at).find(|&i| c.kind(i) == TokenKind::LBrace)?;
@@ -77,19 +77,22 @@ fn underscore_last(c: &Cursor) -> Option<Fix> {
         }
         edits.push(Edit::delete(c.file_span(c.span(e.first).start, c.span(next).start)));
     }
-    let title = "put the one `_` last";
+    // The `_` put last, at the end of what is inserted.
+    let put = |at: u32, text: String| {
+        let n = text.len() as u32;
+        Edit::insert(c.file, at, text).with_writers(&[(n - 1, n)])
+    };
     match trailing {
         Some(comma) if last.rest => edits.push(Edit::delete(c.span(comma))),
         _ if last.rest => {}
         Some(comma) if c.at_line_head(close) => {
             let at = c.span(comma).end;
-            let line = format!("{}{}_", c.line_break(at), c.indent(c.span(last.first).start));
-            edits.push(Edit::insert(c.file, at, line));
+            edits.push(put(at, format!("{}{}_", c.line_break(at), c.indent(c.span(last.first).start))));
         }
-        Some(comma) => edits.push(Edit::insert(c.file, c.span(comma).end, " _")),
-        None => edits.push(Edit::insert(c.file, c.span(last.last).end, ", _")),
+        Some(comma) => edits.push(put(c.span(comma).end, " _".into())),
+        None => edits.push(put(c.span(last.last).end, ", _".into())),
     }
-    Some(if last.rest { Fix::new(title, edits) } else { Fix::moved(title, edits) })
+    Some(Fix::new("put the one `_` last", edits))
 }
 
 /// Whether the element `e` is a field `name: pattern` whose pattern reads

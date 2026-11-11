@@ -122,8 +122,10 @@ pub(crate) fn apart(file: FileId, text: &str, tokens: &[Token], fix: Fix, marks:
     let apart_edit = |e: &Edit, j: Joins| match () {
         _ if e.replace.is_empty() => Some(Edit::replace(e.span, " ")),
         _ if marks.holds(e) => {
-            let (before, after) = (if j.before { " " } else { "" }, if j.after { " " } else { "" });
-            Some(Edit::insert(file, e.span.start, format!("{before}{}{after}", e.replace)))
+            let mut e = e.clone();
+            e.put(e.replace.len(), if j.after { " " } else { "" });
+            e.put(0, if j.before { " " } else { "" });
+            Some(e)
         }
         _ => None,
     };
@@ -288,14 +290,16 @@ pub fn in_literal(mut d: Diagnostic, lit: Span, text: &str) -> Diagnostic {
         if inner.is_empty() {
             continue;
         }
-        let (mut out, mut pos) = (String::new(), lit.start as usize);
+        let (mut out, mut pos, mut writers) = (String::new(), lit.start as usize, Vec::new());
         for e in &inner {
             out.push_str(&text[pos..e.span.start as usize]);
+            let at = out.len() as u32;
+            writers.extend(e.writers().iter().map(|&(a, b)| (a + at, b + at)));
             out.push_str(&e.replace);
             pos = e.span.end as usize;
         }
         out.push_str(&text[pos..lit.end as usize]);
-        edits.push(Edit::replace(lit, out));
+        edits.push(Edit::replace(lit, out).with_writers(&writers));
         *fix = Fix::new(fix.title(), edits);
     }
     d

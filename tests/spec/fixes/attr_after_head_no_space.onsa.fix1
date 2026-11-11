@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// spec = ["§6.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "25:4"
+// code = "E0002"
+// candidate = 1
+// leaves = ["25:1 E0005"]
+//
+// [[test.fix]]
+// at = "29:4"
+// code = "E0002"
+// candidate = 1
+// leaves = ["29:1 E0005"]
+
+// W5-24 U4b (S-990, S-475): an attribute written right after the visibility with no space between (`pub@fp(strict) fn h`) gets the
+// same candidate as with a space (tests/spec/fixes/attr_after_head_default_name.onsa): the attribute moves to the head, and the
+// visibility keeps one space before the name (`@fp(strict) pub fn h`). What the candidate writes at the head is the writer's text,
+// not yet checked there (S-475, 137th supplement), so the E0005 of the value left at the attribute moved does not take the candidate
+// away, and the walk of the candidates ends clean in two steps (`@fp(strict)` is taken out next), with no undo. `@nope` is
+// the same move and leaves the E0005 of an unknown attribute. One error per function (P-01).
+
+@fp(strict) pub fn h() -> F32 {      //~ E0002
+  1.0
+}
+
+@nope pub fn g() -> I32 {            //~ E0002
+  1
+}

@@ -73,20 +73,62 @@ impl Span {
 pub struct Edit {
     pub span: Span,
     pub replace: String,
+    /// The ranges of `replace` (sorted, apart, not empty) that write the
+    /// writer's text as it is, where the check did not read it (S-475): an
+    /// attribute moved to the head, the `_` moved last, an end of a range
+    /// copied into a guard. The check after the candidate reports an error in
+    /// them, not the candidate (§18.1: "候補が写すか動かす部分"). No part of
+    /// the JSON (§18.1).
+    #[serde(skip)]
+    writers: Vec<(u32, u32)>,
 }
 
 impl Edit {
     pub fn replace(span: Span, text: impl Into<String>) -> Edit {
-        Edit { span, replace: text.into() }
+        Edit { span, replace: text.into(), writers: Vec::new() }
     }
 
     /// An insertion: the replacement of the empty range at `offset`.
     pub fn insert(file: FileId, offset: u32, text: impl Into<String>) -> Edit {
-        Edit { span: Span::empty(file, offset), replace: text.into() }
+        Edit::replace(Span::empty(file, offset), text)
     }
 
     pub fn delete(span: Span) -> Edit {
-        Edit { span, replace: String::new() }
+        Edit::replace(span, String::new())
+    }
+
+    /// The edit with `parts` of its replacement marked as the writer's text
+    /// ([`Edit::writers`]; [`contract`] checks them).
+    pub fn with_writers(mut self, parts: &[(u32, u32)]) -> Edit {
+        self.writers.extend_from_slice(parts);
+        self.writers.sort_unstable();
+        self
+    }
+
+    /// The ranges of the replacement that are the writer's text, unchecked there.
+    pub fn writers(&self) -> &[(u32, u32)] {
+        &self.writers
+    }
+
+    /// The same edit at `span`.
+    pub fn with_span(&self, span: Span) -> Edit {
+        Edit { span, ..self.clone() }
+    }
+
+    /// `text` put into the replacement at the byte `at`: the marks after it
+    /// move, and one it falls inside is two (the text put is not the writer's).
+    pub fn put(&mut self, at: usize, text: &str) {
+        self.replace.insert_str(at, text);
+        let (at, n) = (at as u32, text.len() as u32);
+        let mut out = Vec::with_capacity(self.writers.len() + 1);
+        for &(a, b) in &self.writers {
+            match () {
+                _ if b <= at => out.push((a, b)),
+                _ if at <= a => out.push((a + n, b + n)),
+                _ => out.extend([(a, at), (at + n, b + n)]),
+            }
+        }
+        self.writers = out;
     }
 }
 
@@ -96,10 +138,6 @@ impl Edit {
 pub struct Fix {
     title: String,
     edits: Vec<Edit>,
-    /// Whether the candidate moves text the writer wrote ([`Fix::moved`]).
-    /// No part of the JSON (§18.1): the walk of the candidates reads it.
-    #[serde(skip)]
-    moves: bool,
 }
 
 impl Fix {
@@ -108,22 +146,22 @@ impl Fix {
     /// reports them (in debug builds the driver stops on them, W3-02 D11).
     pub fn new(title: impl Into<String>, mut edits: Vec<Edit>) -> Fix {
         sort_edits(&mut edits);
-        Fix { title: title.into(), edits, moves: false }
+        Fix { title: title.into(), edits }
     }
 
-    /// A candidate that moves text the writer wrote: `edits` take it out
-    /// where it is and insert it where it goes, and replace nothing
-    /// ([`contract`] reports one that does not). What it inserts is the
-    /// writer's text, so a later candidate that takes that out undoes no step
-    /// of a walk of the candidates (`onsa_tests::fix_loop`, S-475); the check
-    /// of the promise of a candidate (§18.1) does not read it.
-    pub fn moved(title: impl Into<String>, edits: Vec<Edit>) -> Fix {
-        Fix { moves: true, ..Fix::new(title, edits) }
-    }
-
-    /// Whether the candidate is one of [`Fix::moved`].
+    /// Whether the candidate moves text the writer wrote: each edit takes
+    /// text out (leaving blanks at most) or inserts the writer's text
+    /// ([`Edit::writers`]) with nothing but blanks and `,` round it, and one
+    /// inserts. A later candidate that takes out what it inserted undoes no
+    /// step of a walk of the candidates (`onsa_tests::fix_loop`, S-475).
     pub fn moves(&self) -> bool {
-        self.moves
+        let takes = |e: &Edit| !e.span.is_empty() && e.replace.trim().is_empty();
+        let marked = |e: &Edit, i: usize| e.writers.iter().any(|&(a, b)| (a as usize..b as usize).contains(&i));
+        let moved_in = |e: &Edit| {
+            let rest = |(i, c): (usize, char)| c.is_whitespace() || c == ',' || marked(e, i);
+            e.span.is_empty() && !e.writers.is_empty() && e.replace.char_indices().all(rest)
+        };
+        self.edits.iter().any(moved_in) && self.edits.iter().all(|e| takes(e) || moved_in(e))
     }
 
     /// One edit that replaces `span` with `text`.
@@ -442,8 +480,8 @@ thread_local! {
 ///   outside the contract).
 /// - A candidate has edits; they do not overlap, lie in their file on token
 ///   boundaries (R-86), and change the source.
-/// - A candidate that moves ([`Fix::moved`]) takes text out and inserts text,
-///   and replaces none.
+/// - The writer's text of an edit ([`Edit::writers`]) is in its replacement,
+///   not empty, apart, and in the text the edits of its candidate take out.
 pub fn contract(d: &Diagnostic, sources: &SourceMap, is_boundary: &dyn Fn(FileId, u32) -> bool) -> Vec<String> {
     let mut out = Vec::new();
     let code = d.code.as_str();
@@ -464,15 +502,19 @@ pub fn contract(d: &Diagnostic, sources: &SourceMap, is_boundary: &dyn Fn(FileId
         if f.edits().is_empty() {
             out.push(format!("{code}: `{title}` has no edit"));
         }
-        let (takes, puts) = (|e: &Edit| e.replace.is_empty(), |e: &Edit| e.span.is_empty());
-        if f.moves()
-            && !(f.edits().iter().any(takes)
-                && f.edits().iter().any(puts)
-                && f.edits().iter().all(|e| takes(e) != puts(e)))
-        {
-            out.push(format!(
-                "{code}: `{title}` is said to move text, and does not take text out and insert text only"
-            ));
+        let taken =
+            |e: &Edit| sources.get(e.span.file).and_then(|f| f.text().get(e.span.start as usize..e.span.end as usize));
+        for e in f.edits() {
+            let mut end = 0;
+            for &(a, b) in e.writers() {
+                let part = e.replace.get(a as usize..b as usize).filter(|_| end <= a && a < b);
+                end = b;
+                if !part.is_some_and(|p| f.edits().iter().filter_map(taken).any(|t| t.contains(p))) {
+                    out.push(format!(
+                        "{code}: the writer's text {a}..{b} of an edit of `{title}` is not in it or not taken out"
+                    ));
+                }
+            }
         }
         for e in f.edits() {
             if sources.get(e.span.file).is_none_or(|f| e.span.end as usize > f.text().len()) {
@@ -974,16 +1016,35 @@ mod tests {
             "let",
         ));
         assert_eq!(contract(&same, &sources, &any).len(), 1, "a candidate that changes nothing");
-        // A candidate that moves takes text out and inserts text, and replaces none (S-475).
-        let moved = |edits| {
-            Diagnostic::new(Stage::Syntax, Code::E0002, Span::new(f, 0, 3), "m").with_fix(Fix::moved("t", edits))
+        // The writer's text of an edit is in its replacement, and in what the candidate takes out (S-475).
+        let marked = |edits: Vec<Edit>| {
+            let fix = Fix::new("t", edits);
+            (fix.moves(), Diagnostic::new(Stage::Syntax, Code::E0002, Span::new(f, 0, 3), "m").with_fix(fix))
         };
-        let (take, put) = (Edit::delete(Span::new(f, 0, 4)), Edit::insert(f, 8, "let "));
-        assert!(contract(&moved(vec![take.clone(), put.clone()]), &sources, &any).is_empty());
-        assert_eq!(contract(&moved(vec![put]), &sources, &any).len(), 1, "nothing taken out");
-        assert_eq!(contract(&moved(vec![take.clone()]), &sources, &any).len(), 1, "nothing inserted");
-        let replaces = vec![take, Edit::replace(Span::new(f, 8, 9), "let x")];
-        assert_eq!(contract(&moved(replaces), &sources, &any).len(), 1, "a replacement");
+        let take = Edit::delete(Span::new(f, 0, 4));
+        let put = |text: &str, parts: &[(u32, u32)]| Edit::insert(f, 8, text).with_writers(parts);
+        let (moves, d) = marked(vec![take.clone(), put("let ", &[(0, 3)])]);
+        assert!(moves && contract(&d, &sources, &any).is_empty(), "{:?}", contract(&d, &sources, &any));
+        for (edits, why) in [
+            (vec![put("let ", &[(0, 3)])], "nothing taken out"),
+            (vec![take.clone(), put("let ", &[(0, 5)])], "outside the replacement"),
+            (vec![take.clone(), put("let ", &[(1, 1)])], "empty"),
+            (vec![take.clone(), put("let ", &[(0, 2), (1, 3)])], "overlapping"),
+            (vec![take.clone(), put("lex ", &[(0, 3)])], "not the text taken out"),
+        ] {
+            assert_eq!(contract(&marked(edits).1, &sources, &any).len(), 1, "{why}");
+        }
+        // A move inserts nothing but the writer's text, blanks and `,`, and replaces nothing.
+        assert!(marked(vec![take.clone(), put(", let ", &[(2, 5)])]).0);
+        assert!(!marked(vec![take.clone(), put("if let", &[(3, 6)])]).0, "the compiler's text");
+        assert!(!marked(vec![take.clone(), Edit::insert(f, 8, "let ")]).0, "no writer's text");
+        assert!(!marked(vec![take, put("let ", &[(0, 3)]), Edit::replace(Span::new(f, 8, 9), "y")]).0);
+        // Text put into a writer's text splits it; at its ends, it is outside.
+        let mut e = put("abcd", &[(1, 3)]);
+        e.put(2, "()");
+        e.put(0, "<");
+        e.put(e.replace.len(), ">");
+        assert_eq!((e.replace.as_str(), e.writers()), ("<ab()cd>", &[(2, 3), (5, 6)][..]));
         let placed = Diagnostic::new(Stage::Syntax, Code::E0020, Span::new(f, 0, 7), "m")
             .with_fix(Fix::replace("write `var`", Span::new(f, 0, 7), "var"))
             .with_note(Span::new(f, 8, 9), "not a rule");

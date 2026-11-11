@@ -241,13 +241,11 @@ impl Within {
     /// The edit `e` of the file as one of its text (from its start), and
     /// back ([`Within::global`]).
     pub(crate) fn local(&self, e: &Edit) -> Edit {
-        let s = Span::new(e.span.file, e.span.start - self.span.start, e.span.end - self.span.start);
-        Edit::replace(s, e.replace.clone())
+        e.with_span(Span::new(e.span.file, e.span.start - self.span.start, e.span.end - self.span.start))
     }
 
     pub(crate) fn global(&self, e: &Edit) -> Edit {
-        let s = Span::new(e.span.file, e.span.start + self.span.start, e.span.end + self.span.start);
-        Edit::replace(s, e.replace.clone())
+        e.with_span(Span::new(e.span.file, e.span.start + self.span.start, e.span.end + self.span.start))
     }
 }
 

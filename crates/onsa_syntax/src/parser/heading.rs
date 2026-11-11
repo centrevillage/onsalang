@@ -386,8 +386,9 @@ impl<'a> Parser<'a> {
         self.restore(trial);
         let span = Span::new(self.file, self.tokens[at].span.start, self.tokens[last].span.end);
         let gone = Edit::delete(Span::new(self.file, span.start, self.with_blank_after(last).end));
-        let put = Edit::insert(self.file, self.tokens[first].span.start, format!("{} ", self.src(span)));
-        reads.then(|| Fix::moved("write the attribute before the visibility and `rt`", vec![gone, put]))
+        let put = Edit::insert(self.file, self.tokens[first].span.start, format!("{} ", self.src(span)))
+            .with_writers(&[(0, span.len())]);
+        reads.then(|| Fix::new("write the attribute before the visibility and `rt`", vec![gone, put]))
     }
 
     /// The last token of the attribute at `at` that closes on its line: of the

@@ -158,7 +158,7 @@ fn a_step_that_restores_an_earlier_one_is_a_cycle_of_undo() {
 
 #[test]
 fn a_step_that_only_takes_out_what_a_move_put_undoes_no_step() {
-    // `ab@` to `@ab`: the `@` moved to the front by a candidate of `Fix::moved`, deleted at its
+    // `ab@` to `@ab`: the `@` moved to the front by a candidate that moves (`Fix::moves`), deleted at its
     // place and inserted (two marks, the insertion's `moved_in`).
     let mut sources = SourceMap::default();
     let file = sources.add("m.onsa", "@ab");
@@ -184,16 +184,15 @@ fn a_step_that_only_takes_out_what_a_move_put_undoes_no_step() {
 
 #[test]
 fn the_walk_reads_which_candidates_move_from_the_compiler() {
-    // `ab@`: the `@` goes to the front; `@ab`: the `@` is taken out. With a candidate of
-    // `Fix::moved` the walk ends clean; with the same edits of `Fix::new` the second step undoes
-    // the first.
+    // `ab@`: the `@` goes to the front; `@ab`: the `@` is taken out. With the `@` inserted marked
+    // as the writer's text (`Edit::writers`) the walk ends clean; with the same edits unmarked
+    // the second step undoes the first.
     fn check(text: &str, moves: bool) -> Result<Checked, String> {
         let mut sources = SourceMap::default();
         let file = sources.add("m.onsa", text);
-        let edits = |at: u32| vec![Edit::delete(Span::new(file, at, at + 1)), Edit::insert(file, 0, "@")];
+        let put = Edit::insert(file, 0, "@").with_writers(if moves { &[(0, 1)] } else { &[] });
         let fix = match text {
-            "ab@" if moves => Some(Fix::moved("move", edits(2))),
-            "ab@" => Some(Fix::new("move", edits(2))),
+            "ab@" => Some(Fix::new("move", vec![Edit::delete(Span::new(file, 2, 3)), put])),
             "@ab" => Some(Fix::delete("take out", Span::new(file, 0, 1))),
             _ => None,
         };

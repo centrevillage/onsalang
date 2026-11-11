@@ -21,10 +21,10 @@
 //!   ([`How::Undo`]: a round trip across stages, as the `~` of S-435, where
 //!   the text is not the same). A step that restores some of the edits of an
 //!   earlier step is an undo too, but for one shape: all it restores is text
-//!   that a candidate of `Fix::moved` inserted, the writer's text moved, which
-//!   it takes out and does not put back at its place (`pub @fp(strict) fn h`,
-//!   S-990; the compiler says which candidates move, the walk compares no
-//!   text for it). The places of the earlier edits are moved
+//!   that a candidate that moves inserted (`Fix::moves`), the writer's text
+//!   moved, which it takes out and does not put back at its place
+//!   (`pub @fp(strict) fn h`, S-990; the compiler marks the writer's text,
+//!   `Edit::writers`, the walk compares no text for it). The places of the earlier edits are moved
 //!   by the rule of the contract (`fix_contract::shift`: an insertion at an
 //!   end of a range is outside it); a deletion is a point that an insertion
 //!   at it does not move past, so the deleted text written again on either
