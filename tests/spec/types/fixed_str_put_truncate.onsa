@@ -1,0 +1,226 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.2"]
+
+// S-614 (W5-12 U3b, spec §4.2): "書き足し（文字列、整数の 10 進、小数点以下の桁を決めた浮動小数）は、入る分だけ書き、容量を超えた分は黙って捨てる". The text that is written is the text of the full append cut at the capacity: the
+// first bytes that fit are written and the length stops at the capacity (so the cut is in the middle of a number, after the `-`, before or after the point, in `NaN` and `inf`, and the one byte `*` is not written
+// into a receiver that has no room). For each text, the receivers of the capacity 0 up to one over the length are run; the expected text is the prefix of the full text. A receiver that was not empty keeps its text
+// (the rest of the room is used). "収まるかは、書き手が書き足す前に長さを足して確かめる": the example at the end adds the length that the text will have and checks it against the capacity before the append, and
+// (whatever the answer) the append itself cuts. The full texts: -123 for `put_int`, `-123.46` for `put_float(-123.456, 2)`, `NaN`, `inf`, `-inf`, `*` for `put_float(1.0e300, 0)`, `0.05`.
+
+use std.text.FixedStr
+
+fn int_in[const N: U32](v: I32) -> FixedStr[N] {
+  var t: FixedStr[N] = FixedStr.default()
+  t.put_int!(v)
+  t
+}
+
+fn i64_in[const N: U32](v: I64) -> FixedStr[N] {
+  var t: FixedStr[N] = FixedStr.default()
+  t.put_int!(v)
+  t
+}
+
+fn float_in[const N: U32](v: F64, d: U32) -> FixedStr[N] {
+  var t: FixedStr[N] = FixedStr.default()
+  t.put_float!(v, d)
+  t
+}
+
+fn str_in[const N: U32, const M: U32](s: FixedStr[M]) -> FixedStr[N] {
+  var t: FixedStr[N] = FixedStr.default()
+  t.put_str!(s)
+  t
+}
+
+test "put_int: -123 cut at each capacity" {
+  assert int_in::[0](-123) == ""
+  assert int_in::[1](-123) == "-"
+  assert int_in::[2](-123) == "-1"
+  assert int_in::[3](-123) == "-12"
+  assert int_in::[4](-123) == "-123"
+  assert int_in::[5](-123) == "-123"
+}
+
+test "put_int: the 20 bytes of I64.MIN cut at each capacity" {
+  assert i64_in::[0](I64.MIN) == ""
+  assert i64_in::[1](I64.MIN) == "-"
+  assert i64_in::[2](I64.MIN) == "-9"
+  assert i64_in::[3](I64.MIN) == "-92"
+  assert i64_in::[4](I64.MIN) == "-922"
+  assert i64_in::[5](I64.MIN) == "-9223"
+  assert i64_in::[6](I64.MIN) == "-92233"
+  assert i64_in::[7](I64.MIN) == "-922337"
+  assert i64_in::[8](I64.MIN) == "-9223372"
+  assert i64_in::[9](I64.MIN) == "-92233720"
+  assert i64_in::[10](I64.MIN) == "-922337203"
+  assert i64_in::[11](I64.MIN) == "-9223372036"
+  assert i64_in::[12](I64.MIN) == "-92233720368"
+  assert i64_in::[13](I64.MIN) == "-922337203685"
+  assert i64_in::[14](I64.MIN) == "-9223372036854"
+  assert i64_in::[15](I64.MIN) == "-92233720368547"
+  assert i64_in::[16](I64.MIN) == "-922337203685477"
+  assert i64_in::[17](I64.MIN) == "-9223372036854775"
+  assert i64_in::[18](I64.MIN) == "-92233720368547758"
+  assert i64_in::[19](I64.MIN) == "-922337203685477580"
+  assert i64_in::[20](I64.MIN) == "-9223372036854775808"
+  assert i64_in::[21](I64.MIN) == "-9223372036854775808"
+}
+
+test "put_float: -123.456 with 2 digits cut at each capacity" {
+  assert float_in::[0](-123.456, 2) == ""
+  assert float_in::[1](-123.456, 2) == "-"
+  assert float_in::[2](-123.456, 2) == "-1"
+  assert float_in::[3](-123.456, 2) == "-12"
+  assert float_in::[4](-123.456, 2) == "-123"
+  assert float_in::[5](-123.456, 2) == "-123."
+  assert float_in::[6](-123.456, 2) == "-123.4"
+  assert float_in::[7](-123.456, 2) == "-123.46"
+  assert float_in::[8](-123.456, 2) == "-123.46"
+}
+
+test "put_float: 0.05 with 2 digits cut" {
+  assert float_in::[0](0.05, 2) == ""
+  assert float_in::[1](0.05, 2) == "0"
+  assert float_in::[2](0.05, 2) == "0."
+  assert float_in::[3](0.05, 2) == "0.0"
+  assert float_in::[4](0.05, 2) == "0.05"
+  assert float_in::[5](0.05, 2) == "0.05"
+}
+
+test "put_float: NaN cut" {
+  assert float_in::[0](F64.NAN, 2) == ""
+  assert float_in::[1](F64.NAN, 2) == "N"
+  assert float_in::[2](F64.NAN, 2) == "Na"
+  assert float_in::[3](F64.NAN, 2) == "NaN"
+  assert float_in::[4](F64.NAN, 2) == "NaN"
+}
+
+test "put_float: inf cut" {
+  assert float_in::[0](F64.INFINITY, 2) == ""
+  assert float_in::[1](F64.INFINITY, 2) == "i"
+  assert float_in::[2](F64.INFINITY, 2) == "in"
+  assert float_in::[3](F64.INFINITY, 2) == "inf"
+  assert float_in::[4](F64.INFINITY, 2) == "inf"
+}
+
+test "put_float: -inf cut" {
+  assert float_in::[0](-F64.INFINITY, 2) == ""
+  assert float_in::[1](-F64.INFINITY, 2) == "-"
+  assert float_in::[2](-F64.INFINITY, 2) == "-i"
+  assert float_in::[3](-F64.INFINITY, 2) == "-in"
+  assert float_in::[4](-F64.INFINITY, 2) == "-inf"
+  assert float_in::[5](-F64.INFINITY, 2) == "-inf"
+}
+
+test "put_float: the one byte * is written only where there is room" {
+  assert float_in::[0](1.0e300, 0) == ""
+  assert float_in::[1](1.0e300, 0) == "*"
+  assert float_in::[2](1.0e300, 0) == "*"
+}
+
+test "put_float: d = 0 has no point and is cut" {
+  assert float_in::[0](-12.5, 0) == ""
+  assert float_in::[1](-12.5, 0) == "-"
+  assert float_in::[2](-12.5, 0) == "-1"
+  assert float_in::[3](-12.5, 0) == "-12"
+  assert float_in::[4](-12.5, 0) == "-12"
+}
+
+test "put_float: 1.5 with 3 digits cut" {
+  assert float_in::[0](1.5, 3) == ""
+  assert float_in::[1](1.5, 3) == "1"
+  assert float_in::[2](1.5, 3) == "1."
+  assert float_in::[3](1.5, 3) == "1.5"
+  assert float_in::[4](1.5, 3) == "1.50"
+  assert float_in::[5](1.5, 3) == "1.500"
+  assert float_in::[6](1.5, 3) == "1.500"
+}
+
+test "put_str: a text cut at each capacity" {
+  assert str_in::[0, 5]("abcde") == ""
+  assert str_in::[1, 5]("abcde") == "a"
+  assert str_in::[2, 5]("abcde") == "ab"
+  assert str_in::[3, 5]("abcde") == "abc"
+  assert str_in::[4, 5]("abcde") == "abcd"
+  assert str_in::[5, 5]("abcde") == "abcde"
+  assert str_in::[6, 5]("abcde") == "abcde"
+}
+
+test "put_int cuts in the middle of the digits and keeps the text before" {
+  var t: FixedStr[6] = "ab"
+  t.put_int!(-12345)
+  assert t == "ab-123"
+  assert t.len() == 6
+  var u: FixedStr[4] = "ab"
+  u.put_int!(-12345)
+  assert u == "ab-1"
+  var v: FixedStr[3] = "ab"
+  v.put_int!(-5)
+  assert v == "ab-"
+  v.put_int!(7)
+  assert v == "ab-"
+  assert v.len() == 3
+}
+
+test "a receiver that is full takes no byte of a number, a point or a *" {
+  var t: FixedStr[3] = "abc"
+  t.put_int!(0)
+  t.put_float::[F64]!(1.5, 2)
+  t.put_float::[F64]!(1.0e300, 0)
+  t.put_float!(F64.NAN, 0)
+  assert t == "abc"
+  assert t.len() == 3
+}
+
+test "the cut is after the point or before it" {
+  var a: FixedStr[4] = ""
+  a.put_float::[F64]!(-123.456, 2)
+  assert a == "-123"
+  var b: FixedStr[5] = ""
+  b.put_float::[F64]!(-123.456, 2)
+  assert b == "-123."
+  var c: FixedStr[6] = ""
+  c.put_float::[F64]!(-123.456, 2)
+  assert c == "-123.4"
+  assert c.len() == 6
+}
+
+test "the text before is kept when a float is cut" {
+  var t: FixedStr[7] = "v="
+  t.put_float::[F64]!(3.14159, 4)
+  assert t == "v=3.141"
+  assert t.len() == 7
+  var u: FixedStr[4] = "v="
+  u.put_float!(F64.NAN, 4)
+  assert u == "v=Na"
+  var w: FixedStr[4] = "v="
+  w.put_float!(-F64.INFINITY, 4)
+  assert w == "v=-i"
+}
+
+// The writer checks the room before the append by adding the length that the text will have to the length used: the capacity is reached by the length alone in
+// both of a text that fits exactly and a text that was cut, which the length cannot tell (a receiver of 4 with "ab" and "cd" is full and is not cut; with "cde" it is full and cut).
+fn fits[const N: U32](t: FixedStr[N], add: U32) -> Bool {
+  t.len() + add <= N
+}
+
+test "the room is checked by adding the length before the append" {
+  var t: FixedStr[4] = "ab"
+  let a: FixedStr[4] = "cd"
+  let b: FixedStr[4] = "cde"
+  assert fits(t, a.len())
+  assert !fits(t, b.len())
+  var u = t
+  u.put_str!(a)
+  var v = t
+  v.put_str!(b)
+  assert u == "abcd"
+  assert v == "abcd"
+  assert u == v
+  assert u.len() == v.len()
+  assert fits(u, 0)
+  assert !fits(u, 1)
+}

@@ -1,0 +1,139 @@
+// onsa.toml
+// [test]
+// spec = ["§4.2", "§4.5", "§6.4"]
+
+// S-614 (W5-12 U3b, spec §4.2, §4.5, §6.4): the bounds of `put_int[T: Int](inout self, v: T)` and `put_float[T: Float](inout self, v: T, d: U32)` (decision of 2026-11-11). A type that does not satisfy the bound is
+// E0416 at the call (§4.5: "要求を生んだ式（呼び出し、…、メソッドの呼び出し、…）の位置に E0416"; §6.4: "数の trait の境界を満たさない型を渡した E0416"): `put_int` of a float, a `Bool`, a `Char`, an `Option`, a
+// struct; `put_float` of an integer (`I32`, `U8`), a `Bool`, and an integer literal (§4.5: `need_fl(3)` is E0416, `T` is `I32` by the default of the literal). The `d` of `put_float` is a `U32`, so a value of
+// another type is E0401. The number of the arguments is E0412 (§18.1: the number of the arguments). One error in each function (P-01); the marker is on the line of the call.
+
+use std.text.FixedStr
+
+pub struct Gain {
+  v: F32,
+}
+
+pub fn an_int_of_a_float(x: F64) -> FixedStr[24] {
+  var t: FixedStr[24] = ""
+  t.put_int!(x)                                       //~ E0416
+  t
+}
+
+pub fn an_int_of_a_f32(x: F32) -> FixedStr[24] {
+  var t: FixedStr[24] = ""
+  t.put_int!(x)                                       //~ E0416
+  t
+}
+
+pub fn an_int_of_a_bool(flag: Bool) -> FixedStr[24] {
+  var t: FixedStr[24] = ""
+  t.put_int!(flag)                                    //~ E0416
+  t
+}
+
+pub fn an_int_of_a_char(c: Char) -> FixedStr[24] {
+  var t: FixedStr[24] = ""
+  t.put_int!(c)                                       //~ E0416
+  t
+}
+
+pub fn an_int_of_an_option(o: Option[U32]) -> FixedStr[24] {
+  var t: FixedStr[24] = ""
+  t.put_int!(o)                                       //~ E0416
+  t
+}
+
+pub fn an_int_of_a_struct(g: Gain) -> FixedStr[24] {
+  var t: FixedStr[24] = ""
+  t.put_int!(g)                                       //~ E0416
+  t
+}
+
+pub fn a_float_of_an_i32(n: I32) -> FixedStr[24] {
+  var t: FixedStr[24] = ""
+  t.put_float!(n, 2)                                  //~ E0416
+  t
+}
+
+pub fn a_float_of_a_u8(n: U8) -> FixedStr[24] {
+  var t: FixedStr[24] = ""
+  t.put_float!(n, 2)                                  //~ E0416
+  t
+}
+
+pub fn a_float_of_a_u64(n: U64) -> FixedStr[24] {
+  var t: FixedStr[24] = ""
+  t.put_float!(n, 0)                                  //~ E0416
+  t
+}
+
+pub fn a_float_of_a_bool(flag: Bool) -> FixedStr[24] {
+  var t: FixedStr[24] = ""
+  t.put_float!(flag, 2)                               //~ E0416
+  t
+}
+
+pub fn a_float_of_an_integer_literal() -> FixedStr[24] {
+  var t: FixedStr[24] = ""
+  t.put_float!(3, 2)                                  //~ E0416
+  t
+}
+
+pub fn the_digits_as_an_i32(d: I32) -> FixedStr[24] {
+  var t: FixedStr[24] = ""
+  t.put_float::[F64]!(1.5, d)                                //~ E0401
+  t
+}
+
+pub fn the_digits_as_a_float() -> FixedStr[24] {
+  var t: FixedStr[24] = ""
+  t.put_float::[F64]!(1.5, 2.5)                              //~ E0401
+  t
+}
+
+pub fn the_digits_as_a_u64(d: U64) -> FixedStr[24] {
+  var t: FixedStr[24] = ""
+  t.put_float::[F64]!(1.5, d)                                //~ E0401
+  t
+}
+
+pub fn the_digits_missing() -> FixedStr[24] {
+  var t: FixedStr[24] = ""
+  t.put_float::[F64]!(1.5)                                   //~ E0412
+  t
+}
+
+pub fn the_value_missing() -> FixedStr[24] {
+  var t: FixedStr[24] = ""
+  t.put_int!()                                        //~ E0412
+  t
+}
+
+pub fn two_values_for_an_int() -> FixedStr[24] {
+  var t: FixedStr[24] = ""
+  t.put_int!(1, 2)                                    //~ E0412
+  t
+}
+
+pub fn the_text_missing() -> FixedStr[24] {
+  var t: FixedStr[24] = ""
+  t.put_str!()                                        //~ E0412
+  t
+}
+
+pub fn every_integer_type_and_both_floats_are_fine(a: I8, b: I16, c: I32, d: I64, e: U8, f: U16, g: U32, h: U64, x: F32, y: F64) -> FixedStr[24] {
+  var t: FixedStr[24] = ""
+  t.put_int!(a)
+  t.put_int!(b)
+  t.put_int!(c)
+  t.put_int!(d)
+  t.put_int!(e)
+  t.put_int!(f)
+  t.put_int!(g)
+  t.put_int!(h)
+  t.put_float!(x, 1)
+  t.put_float!(y, 1)
+  t.put_float::[F64]!(1.5, 2)
+  t.put_int!(7)
+  t
+}

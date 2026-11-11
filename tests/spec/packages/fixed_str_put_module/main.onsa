@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.2", "§15.1", "§2.6"]
+
+// S-614 (W5-12 U3b, spec §4.2, §15.1): the appends across a module. `labels.onsa` builds texts (`render`, `add_unit`, a struct whose `priv` field is a `FixedStr` that its method appends to) and `main.onsa`
+// appends to the values that it gets from there. The type is not named in `main.onsa` (no `use std.text.FixedStr`): the methods are found by the type of the value (`t.put_int!(…)` on a `FixedStr[24]`
+// that `render` returned) and a literal argument has the type that the parameter of the other module has (`add_unit(inout t, "Hz")`). A `priv` field is changed by the module's own method only (the field is
+// `priv`, §15.1). `write_to` is called in the other module and the bytes are read here.
+
+use labels.{Meter, new_meter, render, add_unit, dump}
+
+test "the text that another module built is appended to" {
+  var t = render(3, 0.5)
+  assert t == "3: 0.5"
+  t.put_str!(" ok")
+  assert t == "3: 0.5 ok"
+  t.put_int!(7)
+  assert t == "3: 0.5 ok7"
+  t.put_float::[F64]!(-1.25, 1)
+  assert t == "3: 0.5 ok7-1.2"
+}
+
+test "a literal is the argument of a function of another module that appends" {
+  var t = render(440, 2.0)
+  add_unit(inout t, "Hz")
+  assert t == "440: 2.0 Hz"
+  add_unit(inout t, "abcd")
+  assert t == "440: 2.0 Hz abcd"
+}
+
+test "a method of another module appends to a priv field" {
+  var m = new_meter()
+  m.push!(5)
+  m.push!(10)
+  m.push!(200)
+  assert m.text() == "m:5,10,200"
+  assert m.width() == 10
+  assert m.count == 3
+  m.push!(4000)
+  m.push!(50000)
+  assert m.text() == "m:5,10,200,4000,"
+  assert m.width() == 16
+}
+
+test "the value of the method is a copy that is appended to apart" {
+  var m = new_meter()
+  m.push!(1)
+  var line = m.text()
+  line.put_str!("!!")
+  assert line == "m:1!!"
+  assert m.text() == "m:1"
+}
+
+test "write_to through another module" {
+  let t = render(12, 3.0)
+  var out: [U8; 8] = [255; 8]
+  let n = dump(t, inout out)
+  assert n == 7
+  assert out[0] == 49
+  assert out[1] == 50
+  assert out[2] == 58
+  assert out[3] == 32
+  assert out[4] == 51
+  assert out[5] == 46
+  assert out[6] == 48
+}

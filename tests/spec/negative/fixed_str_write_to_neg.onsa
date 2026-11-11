@@ -1,0 +1,98 @@
+// onsa.toml
+// [test]
+// spec = ["§4.2", "§5.1", "§5.2", "§5.3"]
+
+// S-614 (W5-12 U3b, spec §4.2, §5.3): `write_to(self, inout out: Span[U8]) -> U32` writes into the `out` that it is given by `inout`. The call position needs the mark (`t.write_to(inout out)`; without
+// it E0703, §5.2: "呼び出し位置のモードの不一致"); `out` is a place that can be changed (a `let` array or a borrowed parameter is E0701; a value that is not a place, `[0; 4]`, is E0415, §5.1); the element
+// type is `U8` (an array of `U16` is E0401, §5.3: the argument of `Span[U8]`), and a `FixedStr` is not a `Span[U8]` that can be changed (§4.2: "`inout` の `Span[U8]` には渡せず E0401"). The mark `!` is for `inout self`
+// only, and `write_to` takes `self` (E0714 is in fixed_str_put_bang_neg.onsa). One error in each function (P-01); the marker is on the line of the call.
+
+use std.text.FixedStr
+
+pub fn without_the_inout_mark() -> U32 {
+  let t: FixedStr[8] = "ab"
+  var out: [U8; 4] = [0; 4]
+  t.write_to(out)                                     //~ E0703
+}
+
+pub fn without_the_inout_mark_on_a_part() -> U32 {
+  let t: FixedStr[8] = "ab"
+  var out: [U8; 4] = [0; 4]
+  t.write_to(out.slice(1, 3))                         //~ E0703
+}
+
+pub fn without_the_inout_mark_in_a_function(t: FixedStr[8], inout out: Span[U8]) -> U32 {
+  t.write_to(out)                                     //~ E0703
+}
+
+pub fn into_a_let_array() -> U32 {
+  let t: FixedStr[8] = "ab"
+  let out: [U8; 4] = [0; 4]
+  t.write_to(inout out)                               //~ E0701
+}
+
+pub fn into_a_borrowed_parameter(out: [U8; 4]) -> U32 {
+  let t: FixedStr[8] = "ab"
+  t.write_to(inout out)                               //~ E0701
+}
+
+pub fn into_a_borrowed_span(out: Span[U8]) -> U32 {
+  let t: FixedStr[8] = "ab"
+  t.write_to(inout out)                               //~ E0701
+}
+
+pub fn into_a_value_that_is_not_a_place() -> U32 {
+  let t: FixedStr[8] = "ab"
+  t.write_to(inout [0; 4])                            //~ E0415
+}
+
+pub fn into_an_array_of_u16() -> U32 {
+  let t: FixedStr[8] = "ab"
+  var out: [U16; 4] = [0; 4]
+  t.write_to(inout out)                               //~ E0401
+}
+
+pub fn into_an_array_of_i8() -> U32 {
+  let t: FixedStr[8] = "ab"
+  var out: [I8; 4] = [0; 4]
+  t.write_to(inout out)                               //~ E0401
+}
+
+pub fn into_a_fixed_str() -> U32 {
+  let t: FixedStr[8] = "ab"
+  var out: FixedStr[8] = ""
+  t.write_to(inout out)                               //~ E0401
+}
+
+pub fn into_a_number() -> U32 {
+  let t: FixedStr[8] = "ab"
+  var out: U32 = 0
+  t.write_to(inout out)                               //~ E0401
+}
+
+pub fn without_the_argument() -> U32 {
+  let t: FixedStr[8] = "ab"
+  t.write_to()                                        //~ E0412
+}
+
+pub fn with_two_arguments() -> U32 {
+  let t: FixedStr[8] = "ab"
+  var a: [U8; 4] = [0; 4]
+  var b: [U8; 4] = [0; 4]
+  t.write_to(inout a, inout b)                        //~ E0412
+}
+
+pub fn the_result_is_an_u32_not_an_i32() -> I32 {
+  let t: FixedStr[8] = "ab"
+  var out: [U8; 4] = [0; 4]
+  t.write_to(inout out)                               //~ E0401
+}
+
+pub fn into_an_array_a_part_and_a_span_is_fine(inout s: Span[U8]) -> U32 {
+  let t: FixedStr[8] = "ab"
+  var out: [U8; 4] = [0; 4]
+  let a = t.write_to(inout out)
+  let b = t.write_to(inout out.slice(1, 3))
+  let c = t.write_to(inout s)
+  a + b + c
+}

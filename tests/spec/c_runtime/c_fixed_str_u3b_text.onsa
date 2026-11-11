@@ -1,0 +1,312 @@
+// onsa.toml
+// [package]
+// name = "c_fixed_str_u3b_text"
+// edition = "2026"
+//
+// [export]
+// prefix = "cfu3bt_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§4.2", "§12.3", "§13.4"]
+//
+// [[test.host]]
+// name = "case"
+// target = "host"
+// fn = "c_fixed_str_u3b_text.case"
+// steps = [
+//   { call = "fn", args = { i = 0 }, status = 0, result = true },
+//   { call = "fn", args = { i = 1 }, status = 0, result = true },
+//   { call = "fn", args = { i = 2 }, status = 0, result = true },
+//   { call = "fn", args = { i = 3 }, status = 0, result = true },
+//   { call = "fn", args = { i = 4 }, status = 0, result = true },
+//   { call = "fn", args = { i = 5 }, status = 0, result = true },
+//   { call = "fn", args = { i = 6 }, status = 0, result = true },
+//   { call = "fn", args = { i = 7 }, status = 0, result = true },
+//   { call = "fn", args = { i = 8 }, status = 0, result = true },
+//   { call = "fn", args = { i = 9 }, status = 0, result = true },
+//   { call = "fn", args = { i = 10 }, status = 0, result = true },
+//   { call = "fn", args = { i = 11 }, status = 0, result = true },
+//   { call = "fn", args = { i = 12 }, status = 0, result = true },
+//   { call = "fn", args = { i = 13 }, status = 0, result = true },
+//   { call = "fn", args = { i = 14 }, status = 0, result = true },
+//   { call = "fn", args = { i = 15 }, status = 0, result = true },
+//   { call = "fn", args = { i = 16 }, status = 0, result = true },
+//   { call = "fn", args = { i = 17 }, status = 0, result = true },
+//   { call = "fn", args = { i = 18 }, status = 0, result = false },
+//   { call = "fn", args = { i = 4294967295 }, status = 0, result = false },
+// ]
+
+// S-614 (W5-12 U3b, spec §4.2, §12.3, §13.4): `put_str`, the cut at the capacity, a few cuts of `put_int` and `put_float`, an `rt` function that builds a line, and `write_to` in the C of the host, as the interpreter
+// files (fixed_str_put_str.onsa, fixed_str_put_truncate.onsa, fixed_str_write_to.onsa, fixed_str_put_rt.onsa) say them. The capacity 0 is in c_fixed_str_u3b_cap0.onsa (R-432 makes the C of `FixedStr[0]` not pass).
+// `case(i)` picks the i-th case by a `match` that is a statement and returns whether the case holds (false for an `i` that is not a case); the sequence of the `[[test.host]]` runs every `i`. A `mode = "test"`
+// case runs the interpreter only, and the C is made from the sequence above, so the interpreter and the C give the same bytes for every case here (the C rounds by `onsa_round_f64`).
+
+use std.text.FixedStr
+
+pub struct Voice {
+  name: FixedStr[8],
+  gain: U32,
+}
+
+fn int_in[const N: U32](v: I32) -> FixedStr[N] {
+  var t: FixedStr[N] = FixedStr.default()
+  t.put_int!(v)
+  t
+}
+
+fn float_in[const N: U32](v: F64, d: U32) -> FixedStr[N] {
+  var t: FixedStr[N] = FixedStr.default()
+  t.put_float!(v, d)
+  t
+}
+
+fn tag(inout t: FixedStr[8], n: U32) {
+  t.put_str!("#")
+  t.put_int!(n)
+}
+
+rt fn display_line(n: U32, level: F64) -> FixedStr[16] {
+  var t: FixedStr[16] = "ch"
+  t.put_int!(n)
+  t.put_str!(" ")
+  t.put_float!(level, 1)
+  t
+}
+
+fn bytes_are(out: [U8; 6], a: U8, b: U8, c: U8) -> Bool {
+  out[0] == a && out[1] == b && out[2] == c
+}
+
+// put_str: a literal, then a value of another capacity
+fn c0() -> Bool {
+  var t: FixedStr[8] = "a"
+  t.put_str!("b")
+  let big: FixedStr[16] = "xyz"
+  t.put_str!(big)
+  t == "abxyz" && t.len() == 5
+}
+
+// put_str: the used part of a value with a larger capacity, and the empty text
+fn c1() -> Bool {
+  var t: FixedStr[4] = "a"
+  let s: FixedStr[16] = "bc"
+  t.put_str!(s)
+  t.put_str!("")
+  t == "abc" && t.len() == 3
+}
+
+// put_str: the text that fits exactly and a full receiver
+fn c2() -> Bool {
+  var t: FixedStr[4] = "ab"
+  t.put_str!("cd")
+  let before = t
+  t.put_str!("e")
+  before == "abcd" && t == "abcd" && t.len() == 4
+}
+
+// put_str: the text cut at the capacity
+fn c3() -> Bool {
+  var t: FixedStr[8] = ""
+  t.put_str!("abcdefghi")
+  var u: FixedStr[4] = "ab"
+  u.put_str!("cdef")
+  t == "abcdefgh" && t.len() == 8 && u == "abcd" && u.len() == 4
+}
+
+// put_str: many appends, the cut stays after the cut
+fn c4() -> Bool {
+  var t: FixedStr[8] = ""
+  for _ in 0 ..< 3 {
+    t.put_str!("ab")
+  }
+  for _ in 0 ..< 4 {
+    t.put_str!("cd")
+  }
+  t == "abababcd" && t.len() == 8
+}
+
+// put_str: a NUL is a byte
+fn c5() -> Bool {
+  var t: FixedStr[8] = "a"
+  t.put_str!("\0")
+  t.put_str!("b")
+  t == "a\0b" && t.len() == 3 && t != "ab"
+}
+
+// a copy is apart from the receiver
+fn c6() -> Bool {
+  var t: FixedStr[8] = "ab"
+  let before = t
+  t.put_str!("cd")
+  var c = t
+  c.put_int!(7)
+  before == "ab" && t == "abcd" && c == "abcd7"
+}
+
+// a field and an inout parameter
+fn c7() -> Bool {
+  var v = Voice { name: "mix", gain: 3 }
+  v.name.put_int!(v.gain)
+  tag(inout v.name, 9)
+  v.name == "mix3#9" && v.gain == 3
+}
+
+// put_int cut at each capacity: -123
+fn c8() -> Bool {
+  int_in::[0](-123) == "" && int_in::[1](-123) == "-" && int_in::[2](-123) == "-1" && int_in::[3](-123) == "-12" && int_in::[4](-123) == "-123" && int_in::[5](-123) == "-123"
+}
+
+// put_float cut: -123.456 with 2 digits at the capacity 4, 5, 6 and 7
+fn c9() -> Bool {
+  float_in::[4](-123.456, 2) == "-123" && float_in::[5](-123.456, 2) == "-123." && float_in::[6](-123.456, 2) == "-123.4" && float_in::[7](-123.456, 2) == "-123.46"
+}
+
+// put_float cut: NaN, -inf and * at small capacities
+fn c10() -> Bool {
+  float_in::[1](F64.NAN, 2) == "N" && float_in::[2](F64.NAN, 2) == "Na" && float_in::[2](-F64.INFINITY, 2) == "-i" && float_in::[1](1.0e300, 0) == "*" && float_in::[3](1.0e300, 0) == "*"
+}
+
+// a receiver that is full takes no byte
+fn c11() -> Bool {
+  var t: FixedStr[3] = "abc"
+  t.put_int!(0)
+  t.put_float::[F64]!(1.5, 2)
+  t.put_float::[F64]!(1.0e300, 0)
+  t.put_float!(F64.NAN, 0)
+  t == "abc" && t.len() == 3
+}
+
+// the line of an rt function
+fn c12() -> Bool {
+  display_line(3, 0.75) == "ch3 0.8" && display_line(12, 100.0) == "ch12 100.0" && display_line(0, F64.NAN) == "ch0 NaN" && display_line(1, 1.0e300) == "ch1 *"
+}
+
+// write_to: out longer than the text
+fn c13() -> Bool {
+  let t: FixedStr[8] = "abc"
+  var out: [U8; 6] = [255; 6]
+  let n = t.write_to(inout out)
+  n == 3 && bytes_are(out, 97, 98, 99)
+}
+
+// write_to: out shorter than the text
+fn c14() -> Bool {
+  let t: FixedStr[8] = "abcd"
+  var out: [U8; 2] = [255; 2]
+  let n = t.write_to(inout out)
+  n == 2 && out[0] == 97 && out[1] == 98
+}
+
+// write_to: out empty and the text empty (no byte is written)
+fn c15() -> Bool {
+  let t: FixedStr[8] = "abcd"
+  var e: [U8; 0] = []
+  let u: FixedStr[8] = ""
+  var out: [U8; 2] = [255; 2]
+  t.write_to(inout e) == 0 && u.write_to(inout out) == 0
+}
+
+// write_to: a NUL of the text and the text that was built
+fn c16() -> Bool {
+  let t: FixedStr[8] = "a\0b"
+  var out: [U8; 6] = [255; 6]
+  let n = t.write_to(inout out)
+  var u: FixedStr[16] = "v="
+  u.put_int!(-12)
+  u.put_float::[F64]!(1.5, 1)
+  var o2: [U8; 8] = [255; 8]
+  let m = u.write_to(inout o2)
+  n == 3 && bytes_are(out, 97, 0, 98) && m == 8 && o2[0] == 118 && o2[1] == 61 && o2[2] == 45 && o2[3] == 49 && o2[4] == 50 && o2[5] == 49 && o2[6] == 46 && o2[7] == 53
+}
+
+// write_to: a part of an array and the bytes around it
+fn c17() -> Bool {
+  let t: FixedStr[8] = "abcd"
+  var out: [U8; 6] = [255; 6]
+  let n = t.write_to(inout out.slice(2, 5))
+  n == 3 && out[0] == 255 && out[1] == 255 && out[2] == 97 && out[3] == 98 && out[4] == 99 && out[5] == 255
+}
+
+@export
+pub fn case(i: U32) -> Bool {
+  var r = false
+  match i {
+    0 => {
+      r = c0()
+    },
+    1 => {
+      r = c1()
+    },
+    2 => {
+      r = c2()
+    },
+    3 => {
+      r = c3()
+    },
+    4 => {
+      r = c4()
+    },
+    5 => {
+      r = c5()
+    },
+    6 => {
+      r = c6()
+    },
+    7 => {
+      r = c7()
+    },
+    8 => {
+      r = c8()
+    },
+    9 => {
+      r = c9()
+    },
+    10 => {
+      r = c10()
+    },
+    11 => {
+      r = c11()
+    },
+    12 => {
+      r = c12()
+    },
+    13 => {
+      r = c13()
+    },
+    14 => {
+      r = c14()
+    },
+    15 => {
+      r = c15()
+    },
+    16 => {
+      r = c16()
+    },
+    17 => {
+      r = c17()
+    },
+    _ => {
+      r = false
+    },
+  }
+  r
+}
+
+test "every case holds in the interpreter" {
+  for i in 0 ..< 18 {
+    assert case(i)
+  }
+}
+
+test "a case that does not exist is false" {
+  assert !case(18)
+  assert !case(4294967295)
+}

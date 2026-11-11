@@ -1,0 +1,85 @@
+// onsa.toml
+// [test]
+// spec = ["§4.2", "§0.3"]
+
+// S-614 (W5-12 U3b, spec §4.2): "最初の版に無いもの: `Str` との変換、`Show` と同じ表記、補間で作ること、`Char` を一字足すこと。書き足しは総称の三つのメソッド `put_str`・`put_int[T: Int]`・`put_float[T: Float](v, d)` で、
+// ほかに `len()` と `write_to` を持つ". So `FixedStr` has the five methods and no other (the closed world: what the spec does not have is not accepted, E0413 for an unknown member): not a `Char` one by one
+// (`put_char`), not the names of other languages (`push_str`, `push`, `append`, `add_from`), not a clear or a conversion to `Str` (`clear`, `as_str`, `to_str`), and not a typed variant of the integer
+// (`put_u32`, `put_i64`), which the generic `put_int[T: Int]` replaces. One error in each function (P-01); the marker is on the line of the call. This file has no method that is new to the first version, so it
+// passes before the appends are made: it keeps the names closed after.
+
+use std.text.FixedStr
+
+pub fn put_char(c: Char) -> FixedStr[8] {
+  var t: FixedStr[8] = ""
+  t.put_char!(c)                                      //~ E0413
+  t
+}
+
+pub fn push_str() -> FixedStr[8] {
+  var t: FixedStr[8] = ""
+  t.push_str!("ab")                                   //~ E0413
+  t
+}
+
+pub fn push() -> FixedStr[8] {
+  var t: FixedStr[8] = ""
+  t.push!(97)                                         //~ E0413
+  t
+}
+
+pub fn append() -> FixedStr[8] {
+  var t: FixedStr[8] = ""
+  t.append!("ab")                                     //~ E0413
+  t
+}
+
+pub fn add_from(s: FixedStr[8]) -> FixedStr[8] {
+  var t: FixedStr[8] = ""
+  t.add_from!(s)                                      //~ E0413
+  t
+}
+
+pub fn clear() -> FixedStr[8] {
+  var t: FixedStr[8] = "ab"
+  t.clear!()                                          //~ E0413
+  t
+}
+
+pub fn as_str() -> Str {
+  let t: FixedStr[8] = "ab"
+  t.as_str()                                          //~ E0413
+}
+
+pub fn to_str() -> Str {
+  let t: FixedStr[8] = "ab"
+  t.to_str()                                          //~ E0413
+}
+
+pub fn put_u32(n: U32) -> FixedStr[8] {
+  var t: FixedStr[8] = ""
+  t.put_u32!(n)                                       //~ E0413
+  t
+}
+
+pub fn put_i64(n: I64) -> FixedStr[8] {
+  var t: FixedStr[8] = ""
+  t.put_i64!(n)                                       //~ E0413
+  t
+}
+
+pub fn put_f64(x: F64) -> FixedStr[8] {
+  var t: FixedStr[8] = ""
+  t.put_f64!(x, 2)                                    //~ E0413
+  t
+}
+
+pub fn is_empty() -> Bool {
+  let t: FixedStr[8] = "ab"
+  t.is_empty()                                        //~ E0413
+}
+
+pub fn capacity() -> U32 {
+  let t: FixedStr[8] = "ab"
+  t.capacity()                                        //~ E0413
+}

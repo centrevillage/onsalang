@@ -1,0 +1,563 @@
+// onsa.toml
+// [package]
+// name = "c_fixed_str_u3b_float_f32"
+// edition = "2026"
+//
+// [export]
+// prefix = "cfu3bg_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§4.2", "§13.4"]
+//
+// [[test.host]]
+// name = "case"
+// target = "host"
+// fn = "c_fixed_str_u3b_float_f32.case"
+// steps = [
+//   { call = "fn", args = { i = 0 }, status = 0, result = true },
+//   { call = "fn", args = { i = 1 }, status = 0, result = true },
+//   { call = "fn", args = { i = 2 }, status = 0, result = true },
+//   { call = "fn", args = { i = 3 }, status = 0, result = true },
+//   { call = "fn", args = { i = 4 }, status = 0, result = true },
+//   { call = "fn", args = { i = 5 }, status = 0, result = true },
+//   { call = "fn", args = { i = 6 }, status = 0, result = true },
+//   { call = "fn", args = { i = 7 }, status = 0, result = true },
+//   { call = "fn", args = { i = 8 }, status = 0, result = true },
+//   { call = "fn", args = { i = 9 }, status = 0, result = true },
+//   { call = "fn", args = { i = 10 }, status = 0, result = true },
+//   { call = "fn", args = { i = 11 }, status = 0, result = true },
+//   { call = "fn", args = { i = 12 }, status = 0, result = true },
+//   { call = "fn", args = { i = 13 }, status = 0, result = true },
+//   { call = "fn", args = { i = 14 }, status = 0, result = true },
+//   { call = "fn", args = { i = 15 }, status = 0, result = true },
+//   { call = "fn", args = { i = 16 }, status = 0, result = true },
+//   { call = "fn", args = { i = 17 }, status = 0, result = true },
+//   { call = "fn", args = { i = 18 }, status = 0, result = true },
+//   { call = "fn", args = { i = 19 }, status = 0, result = true },
+//   { call = "fn", args = { i = 20 }, status = 0, result = true },
+//   { call = "fn", args = { i = 21 }, status = 0, result = true },
+//   { call = "fn", args = { i = 22 }, status = 0, result = true },
+//   { call = "fn", args = { i = 23 }, status = 0, result = true },
+//   { call = "fn", args = { i = 24 }, status = 0, result = true },
+//   { call = "fn", args = { i = 25 }, status = 0, result = true },
+//   { call = "fn", args = { i = 26 }, status = 0, result = true },
+//   { call = "fn", args = { i = 27 }, status = 0, result = true },
+//   { call = "fn", args = { i = 28 }, status = 0, result = true },
+//   { call = "fn", args = { i = 29 }, status = 0, result = true },
+//   { call = "fn", args = { i = 30 }, status = 0, result = true },
+//   { call = "fn", args = { i = 31 }, status = 0, result = true },
+//   { call = "fn", args = { i = 32 }, status = 0, result = true },
+//   { call = "fn", args = { i = 33 }, status = 0, result = true },
+//   { call = "fn", args = { i = 34 }, status = 0, result = true },
+//   { call = "fn", args = { i = 35 }, status = 0, result = true },
+//   { call = "fn", args = { i = 36 }, status = 0, result = true },
+//   { call = "fn", args = { i = 37 }, status = 0, result = true },
+//   { call = "fn", args = { i = 38 }, status = 0, result = true },
+//   { call = "fn", args = { i = 39 }, status = 0, result = true },
+//   { call = "fn", args = { i = 40 }, status = 0, result = true },
+//   { call = "fn", args = { i = 41 }, status = 0, result = true },
+//   { call = "fn", args = { i = 42 }, status = 0, result = true },
+//   { call = "fn", args = { i = 43 }, status = 0, result = true },
+//   { call = "fn", args = { i = 44 }, status = 0, result = true },
+//   { call = "fn", args = { i = 45 }, status = 0, result = true },
+//   { call = "fn", args = { i = 46 }, status = 0, result = true },
+//   { call = "fn", args = { i = 47 }, status = 0, result = true },
+//   { call = "fn", args = { i = 48 }, status = 0, result = true },
+//   { call = "fn", args = { i = 49 }, status = 0, result = true },
+//   { call = "fn", args = { i = 50 }, status = 0, result = true },
+//   { call = "fn", args = { i = 51 }, status = 0, result = true },
+//   { call = "fn", args = { i = 52 }, status = 0, result = true },
+//   { call = "fn", args = { i = 53 }, status = 0, result = true },
+//   { call = "fn", args = { i = 54 }, status = 0, result = true },
+//   { call = "fn", args = { i = 55 }, status = 0, result = false },
+//   { call = "fn", args = { i = 4294967295 }, status = 0, result = false },
+// ]
+
+// S-614 (W5-12 U3b, spec §4.2, S-1007, §13.4): `put_float` of `F32` in the C of the host: the value is widened to `double` first (`0.1f` is `0.1000000015` with 10 digits), the ties, the neighbours of 2^64 in `float`,
+// `F32.MAX`, the smallest denormal, NaN and the infinities (fixed_str_put_float_f32.onsa).
+// `case(i)` picks the i-th case by a `match` that is a statement and returns whether the case holds (false for an `i` that is not a case); the sequence of the `[[test.host]]` runs every `i`. A `mode = "test"`
+// case runs the interpreter only, and the C is made from the sequence above, so the interpreter and the C give the same bytes for every case here (the C rounds by `onsa_round_f64`).
+
+use std.text.FixedStr
+
+fn f64s(v: F64, d: U32) -> FixedStr[32] {
+  var t: FixedStr[32] = ""
+  t.put_float!(v, d)
+  t
+}
+
+fn f32s(v: F32, d: U32) -> FixedStr[32] {
+  var t: FixedStr[32] = ""
+  t.put_float!(v, d)
+  t
+}
+
+// F32 0.1, d = 10: 1000000014.9011612 -> 1000000015
+fn c0() -> Bool {
+  f32s(0.1, 10) == "0.1000000015"
+}
+
+// F32 0.1, d = 7: 1000000.0149011612 -> 1000000
+fn c1() -> Bool {
+  f32s(0.1, 7) == "0.1000000"
+}
+
+// F32 0.1, d = 1: 1.0000000149011612 -> 1
+fn c2() -> Bool {
+  f32s(0.1, 1) == "0.1"
+}
+
+// F32 0.15, d = 1: 1.5000000596046448 -> 2
+fn c3() -> Bool {
+  f32s(0.15, 1) == "0.2"
+}
+
+// F32 0.15, d = 2: 15.000000596046448 -> 15
+fn c4() -> Bool {
+  f32s(0.15, 2) == "0.15"
+}
+
+// F32 1.5, d = 0: 1.5 -> 2
+fn c5() -> Bool {
+  f32s(1.5, 0) == "2"
+}
+
+// F32 2.5, d = 0: 2.5 -> 2
+fn c6() -> Bool {
+  f32s(2.5, 0) == "2"
+}
+
+// F32 0.5, d = 0: 0.5 -> 0
+fn c7() -> Bool {
+  f32s(0.5, 0) == "0"
+}
+
+// F32 -0.5, d = 0: 0.5 -> 0
+fn c8() -> Bool {
+  f32s(-0.5, 0) == "0"
+}
+
+// F32 -1.5, d = 0: 1.5 -> 2
+fn c9() -> Bool {
+  f32s(-1.5, 0) == "-2"
+}
+
+// F32 16777216.0, d = 0: 16777216.0 -> 16777216
+fn c10() -> Bool {
+  f32s(16777216.0, 0) == "16777216"
+}
+
+// F32 16777217.0, d = 0: 16777216.0 -> 16777216
+fn c11() -> Bool {
+  f32s(16777217.0, 0) == "16777216"
+}
+
+// F32 1.0e10, d = 0: 10000000000.0 -> 10000000000
+fn c12() -> Bool {
+  f32s(1.0e10, 0) == "10000000000"
+}
+
+// F32 12.345, d = 2: 1234.5000267028809 -> 1235
+fn c13() -> Bool {
+  f32s(12.345, 2) == "12.35"
+}
+
+// F32 12.345, d = 3: 12345.000267028809 -> 12345
+fn c14() -> Bool {
+  f32s(12.345, 3) == "12.345"
+}
+
+// F32 3.14159, d = 4: 31415.90118408203 -> 31416
+fn c15() -> Bool {
+  f32s(3.14159, 4) == "3.1416"
+}
+
+// F32 0.3, d = 1: 3.0000001192092896 -> 3
+fn c16() -> Bool {
+  f32s(0.3, 1) == "0.3"
+}
+
+// F32 0.3, d = 8: 30000001.192092896 -> 30000001
+fn c17() -> Bool {
+  f32s(0.3, 8) == "0.30000001"
+}
+
+// F32 1.0e-45, d = 22: 1.401298464324817e-23 -> 0
+fn c18() -> Bool {
+  f32s(1.0e-45, 22) == "0.0000000000000000000000"
+}
+
+// F32 1.17549435e-38, d = 22: 1.1754943508222875e-16 -> 0
+fn c19() -> Bool {
+  f32s(1.17549435e-38, 22) == "0.0000000000000000000000"
+}
+
+// F32 -0.0, d = 2: 0.0 -> 0
+fn c20() -> Bool {
+  f32s(-0.0, 2) == "0.00"
+}
+
+// F32 -0.0, d = 0: 0.0 -> 0
+fn c21() -> Bool {
+  f32s(-0.0, 0) == "0"
+}
+
+// F32 -0.004, d = 2: 0.4000000189989805 -> 0
+fn c22() -> Bool {
+  f32s(-0.004, 2) == "0.00"
+}
+
+// F32 0.05, d = 2: 5.000000074505806 -> 5
+fn c23() -> Bool {
+  f32s(0.05, 2) == "0.05"
+}
+
+// F32 0.125, d = 2: 12.5 -> 12
+fn c24() -> Bool {
+  f32s(0.125, 2) == "0.12"
+}
+
+// F32 -0.125, d = 2: 12.5 -> 12
+fn c25() -> Bool {
+  f32s(-0.125, 2) == "-0.12"
+}
+
+// F32 440.0, d = 2: 44000.0 -> 44000
+fn c26() -> Bool {
+  f32s(440.0, 2) == "440.00"
+}
+
+// F32 48000.0, d = 3: 48000000.0 -> 48000000
+fn c27() -> Bool {
+  f32s(48000.0, 3) == "48000.000"
+}
+
+// F32 1.0e-3, d = 22
+fn c28() -> Bool {
+  f32s(1.0e-3, 22) == "0.0010000000474974513152"
+}
+
+// F32 -1.0e-3, d = 22
+fn c29() -> Bool {
+  f32s(-1.0e-3, 22) == "-0.0010000000474974513152"
+}
+
+// F32 18446742974197923840.0, d = 0
+fn c30() -> Bool {
+  f32s(18446742974197923840.0, 0) == "18446742974197923840"
+}
+
+// F32 18446744073709551616.0, d = 0
+fn c31() -> Bool {
+  f32s(18446744073709551616.0, 0) == "*"
+}
+
+// F32 1.9e19, d = 0
+fn c32() -> Bool {
+  f32s(1.9e19, 0) == "*"
+}
+
+// F32 1.0e19, d = 0: 9.999999980506448e+18 -> 9999999980506447872
+fn c33() -> Bool {
+  f32s(1.0e19, 0) == "9999999980506447872"
+}
+
+// F32 1.8e19, d = 0
+fn c34() -> Bool {
+  f32s(1.8e19, 0) == "18000000404716257280"
+}
+
+// F32 -18446742974197923840.0, d = 0
+fn c35() -> Bool {
+  f32s(-18446742974197923840.0, 0) == "-18446742974197923840"
+}
+
+// F32 -18446744073709551616.0, d = 0
+fn c36() -> Bool {
+  f32s(-18446744073709551616.0, 0) == "*"
+}
+
+// F32 0.0, d = 22: 0.0 -> 0
+fn c37() -> Bool {
+  f32s(0.0, 22) == "0.0000000000000000000000"
+}
+
+// F32 0.0, d = 23
+fn c38() -> Bool {
+  f32s(0.0, 23) == "*"
+}
+
+// F32 1.0, d = 23
+fn c39() -> Bool {
+  f32s(1.0, 23) == "*"
+}
+
+// F32 1.0, d = 22: 1e+22 -> 10000000000000000000000
+fn c40() -> Bool {
+  f32s(1.0, 22) == "*"
+}
+
+// F32 1.0, d = 19: 1e+19 -> 10000000000000000000
+fn c41() -> Bool {
+  f32s(1.0, 19) == "1.0000000000000000000"
+}
+
+// F32 0.1, d = 19
+fn c42() -> Bool {
+  f32s(0.1, 19) == "0.1000000014901161216"
+}
+
+// F32 0.1, d = 20
+fn c43() -> Bool {
+  f32s(0.1, 20) == "0.10000000149011611648"
+}
+
+// F32 F32.MAX, d = 0
+fn c44() -> Bool {
+  f32s(F32.MAX, 0) == "*"
+}
+
+// F32 -F32.MAX, d = 0
+fn c45() -> Bool {
+  f32s(-F32.MAX, 0) == "*"
+}
+
+// F32 F32.MAX, d = 22
+fn c46() -> Bool {
+  f32s(F32.MAX, 22) == "*"
+}
+
+// F32 F32.NAN, d = 0
+fn c47() -> Bool {
+  f32s(F32.NAN, 0) == "NaN"
+}
+
+// F32 F32.NAN, d = 2
+fn c48() -> Bool {
+  f32s(F32.NAN, 2) == "NaN"
+}
+
+// F32 F32.NAN, d = 23
+fn c49() -> Bool {
+  f32s(F32.NAN, 23) == "NaN"
+}
+
+// F32 F32.INFINITY, d = 0
+fn c50() -> Bool {
+  f32s(F32.INFINITY, 0) == "inf"
+}
+
+// F32 F32.INFINITY, d = 23
+fn c51() -> Bool {
+  f32s(F32.INFINITY, 23) == "inf"
+}
+
+// F32 -F32.INFINITY, d = 0
+fn c52() -> Bool {
+  f32s(-F32.INFINITY, 0) == "-inf"
+}
+
+// F32 -F32.INFINITY, d = 23
+fn c53() -> Bool {
+  f32s(-F32.INFINITY, 23) == "-inf"
+}
+
+// F32 -F32.INFINITY, d = 2
+fn c54() -> Bool {
+  f32s(-F32.INFINITY, 2) == "-inf"
+}
+
+@export
+pub fn case(i: U32) -> Bool {
+  var r = false
+  match i {
+    0 => {
+      r = c0()
+    },
+    1 => {
+      r = c1()
+    },
+    2 => {
+      r = c2()
+    },
+    3 => {
+      r = c3()
+    },
+    4 => {
+      r = c4()
+    },
+    5 => {
+      r = c5()
+    },
+    6 => {
+      r = c6()
+    },
+    7 => {
+      r = c7()
+    },
+    8 => {
+      r = c8()
+    },
+    9 => {
+      r = c9()
+    },
+    10 => {
+      r = c10()
+    },
+    11 => {
+      r = c11()
+    },
+    12 => {
+      r = c12()
+    },
+    13 => {
+      r = c13()
+    },
+    14 => {
+      r = c14()
+    },
+    15 => {
+      r = c15()
+    },
+    16 => {
+      r = c16()
+    },
+    17 => {
+      r = c17()
+    },
+    18 => {
+      r = c18()
+    },
+    19 => {
+      r = c19()
+    },
+    20 => {
+      r = c20()
+    },
+    21 => {
+      r = c21()
+    },
+    22 => {
+      r = c22()
+    },
+    23 => {
+      r = c23()
+    },
+    24 => {
+      r = c24()
+    },
+    25 => {
+      r = c25()
+    },
+    26 => {
+      r = c26()
+    },
+    27 => {
+      r = c27()
+    },
+    28 => {
+      r = c28()
+    },
+    29 => {
+      r = c29()
+    },
+    30 => {
+      r = c30()
+    },
+    31 => {
+      r = c31()
+    },
+    32 => {
+      r = c32()
+    },
+    33 => {
+      r = c33()
+    },
+    34 => {
+      r = c34()
+    },
+    35 => {
+      r = c35()
+    },
+    36 => {
+      r = c36()
+    },
+    37 => {
+      r = c37()
+    },
+    38 => {
+      r = c38()
+    },
+    39 => {
+      r = c39()
+    },
+    40 => {
+      r = c40()
+    },
+    41 => {
+      r = c41()
+    },
+    42 => {
+      r = c42()
+    },
+    43 => {
+      r = c43()
+    },
+    44 => {
+      r = c44()
+    },
+    45 => {
+      r = c45()
+    },
+    46 => {
+      r = c46()
+    },
+    47 => {
+      r = c47()
+    },
+    48 => {
+      r = c48()
+    },
+    49 => {
+      r = c49()
+    },
+    50 => {
+      r = c50()
+    },
+    51 => {
+      r = c51()
+    },
+    52 => {
+      r = c52()
+    },
+    53 => {
+      r = c53()
+    },
+    54 => {
+      r = c54()
+    },
+    _ => {
+      r = false
+    },
+  }
+  r
+}
+
+test "every case holds in the interpreter" {
+  for i in 0 ..< 55 {
+    assert case(i)
+  }
+}
+
+test "a case that does not exist is false" {
+  assert !case(55)
+  assert !case(4294967295)
+}

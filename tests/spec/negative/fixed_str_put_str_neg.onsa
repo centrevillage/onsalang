@@ -1,0 +1,120 @@
+// onsa.toml
+// [test]
+// spec = ["§4.2", "§2.4", "§4.7"]
+
+// S-614 (W5-12 U3b, spec §4.2): the argument of `put_str[const M: U32](inout self, s: FixedStr[M])` (decision of 2026-11-11) is a `FixedStr[M]` and a literal gets that type by the expected type, so the
+// rules of the literal are those of §4.2 and §4.7: a literal with an interpolation is E0401 (§4.2: "補間を含むリテラルは E0401"; the interpolation makes a new `Str`, §2.4, and every function here has `uses {Alloc}`
+// for it), a literal with a character out of ASCII is E0408 (§4.2: "容量を超えるか ASCII の外の文字を含むリテラルは E0408"; the capacity of the argument is open, so the length of the literal is `M`, and only a
+// capacity that is written (`put_str::[2]`) can be too small), and a value that is not a `FixedStr` is a type error E0401: a `Str` value (the parent's reading of W5-12: `put_str` takes `FixedStr[M]` only, the
+// `Str` value is the second period), a number, a `Bool` and a `Char` (§4.2: "`Char` を一字足すこと" is not in the first version). The receiver is a `var`, so the only error of each function is the one marked.
+// One error in each function (P-01); the marker is on the line of the argument.
+
+use std.text.FixedStr
+
+pub fn interpolation_in_a_literal(x: U32) -> FixedStr[16] uses {Alloc} {
+  var t: FixedStr[16] = "n="
+  t.put_str!("v={x}")                                 //~ E0401
+  t
+}
+
+pub fn interpolation_with_a_path(p: (U32, U32)) -> FixedStr[16] uses {Alloc} {
+  var t: FixedStr[16] = ""
+  t.put_str!("{p.0}/{p.1}")                           //~ E0401
+  t
+}
+
+pub fn interpolation_after_a_text(x: U32) -> FixedStr[16] uses {Alloc} {
+  var t: FixedStr[16] = "a"
+  t.put_str!("b")
+  t.put_str!("c{x}")                                  //~ E0401
+  t
+}
+
+pub fn a_str_value(s: Str) -> FixedStr[16] {
+  var t: FixedStr[16] = ""
+  t.put_str!(s)                                       //~ E0401
+  t
+}
+
+pub fn a_str_binding() -> FixedStr[16] {
+  var t: FixedStr[16] = ""
+  let s: Str = "ab"
+  t.put_str!(s)                                       //~ E0401
+  t
+}
+
+pub fn a_number() -> FixedStr[16] {
+  var t: FixedStr[16] = ""
+  t.put_str!(5)                                       //~ E0401
+  t
+}
+
+pub fn a_bool(flag: Bool) -> FixedStr[16] {
+  var t: FixedStr[16] = ""
+  t.put_str!(flag)                                    //~ E0401
+  t
+}
+
+pub fn a_char(c: Char) -> FixedStr[16] {
+  var t: FixedStr[16] = ""
+  t.put_str!(c)                                       //~ E0401
+  t
+}
+
+pub fn a_character_out_of_ascii() -> FixedStr[16] {
+  var t: FixedStr[16] = ""
+  t.put_str!("é")                                     //~ E0408
+  t
+}
+
+pub fn a_text_out_of_ascii() -> FixedStr[16] {
+  var t: FixedStr[16] = "ab"
+  t.put_str!("日本")                                  //~ E0408
+  t
+}
+
+pub fn a_escape_out_of_ascii() -> FixedStr[16] {
+  var t: FixedStr[16] = ""
+  t.put_str!("a\u{80}")                               //~ E0408
+  t
+}
+
+pub fn a_scalar_value_over_the_bmp() -> FixedStr[16] {
+  var t: FixedStr[16] = ""
+  t.put_str!("\u{1F600}")                             //~ E0408
+  t
+}
+
+pub fn a_literal_longer_than_the_capacity_that_is_written() -> FixedStr[16] {
+  var t: FixedStr[16] = ""
+  t.put_str::[2]!("abc")                              //~ E0408
+  t
+}
+
+pub fn a_literal_longer_by_one_byte() -> FixedStr[16] {
+  var t: FixedStr[16] = ""
+  t.put_str::[4]!("abcde")                            //~ E0408
+  t
+}
+
+pub fn a_literal_in_a_function_with_the_capacity_that_is_written() -> FixedStr[16] {
+  var t: FixedStr[16] = ""
+  t.put_str::[3]!("a\n\tb")                           //~ E0408
+  t
+}
+
+pub fn the_literal_that_fits_is_fine() -> FixedStr[16] {
+  var t: FixedStr[16] = ""
+  t.put_str!("abcdefghijklmnopqrstuvwxyz")
+  t.put_str::[2]!("ab")
+  t.put_str!("{{}}")
+  t.put_str!("\u{7f}")
+  t
+}
+
+pub fn the_value_of_another_capacity_is_fine(s: FixedStr[4], u: FixedStr[40]) -> FixedStr[16] {
+  var t: FixedStr[16] = ""
+  t.put_str!(s)
+  t.put_str!(u)
+  t
+}

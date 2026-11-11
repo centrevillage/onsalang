@@ -1,0 +1,127 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.2"]
+
+// S-614 (W5-12 U3b, spec §4.2, S-1007): `put_float[T: Float](inout self, v: T, d: U32)` writes a float with `d` digits after the point. §4.2: "値を `F64` に広げて `F64` の乗算で `10^d` を掛け、最近接偶数で整数に丸め、
+// 10 進で書いて下から `d` 桁の前に小数点を入れた文字とする（`d` が 0 なら小数点を書かない。…）". The end of S-1007 (decision of 2026-11-11, the characters that std defines): NaN is `NaN`, the infinities are `inf` and `-inf`
+// (whatever `d` is); a finite value with `d` over 22, or whose rounded integer is 2^64 or over in the absolute value, is the one byte `*` (no sign); `d = 0` writes no point; `10^d` is multiplied as `F64`
+// (`1.075` with 2 digits is `1.08`). Read from the formula of the spec by the script (IEEE double, the product and the round half to even); the product and the integer are in the comment of the line when short.
+// Two readings that are one from the formula (the design memo 3.1): the rounded integer 0 has no sign (`-0.0` and `-0.004` with 2 digits are `0.00`), and a value under 1 is padded with 0 (`0.05`).
+
+// This file: the edges of S-1007. `d` over 22 and `d = 23` (`*` for a finite value, whatever it is; `d` is a `U32`, so the largest `U32` is a `d` too and the answer is at once); NaN and the infinities
+// (the characters do not depend on `d`, also over 22); the neighbours of 2^64 in the absolute value (`d = 0`: 18446744073709549568.0 is the largest double under 2^64 and is written in 20 digits, 18446744073709551616.0 and
+// the next double are `*`, and the same for the negative ones, which have no sign when `*`); 2^63 and its negative (written in full, `-9223372036854775808`); the values where the product is rounded again
+// (`1844674407370955264.0` with 1 digit: the product is 2^64 as a double, `*`; the neighbour under it is written as the digits of the product); the values that are too large (the product is over 2^64, or infinite),
+// and the smallest double (0 digits, `0`). The rounded integer decides, not the value (`1.9` with 19 digits is `*`, `1.8` with 19 digits is written).
+
+use std.text.FixedStr
+
+fn f64s(v: F64, d: U32) -> FixedStr[32] {
+  var t: FixedStr[32] = ""
+  t.put_float!(v, d)
+  t
+}
+
+fn f32s(v: F32, d: U32) -> FixedStr[32] {
+  var t: FixedStr[32] = ""
+  t.put_float!(v, d)
+  t
+}
+
+test "d over 22 is the one byte *, for a finite value of any size" {
+  assert f64s(0.0, 23) == "*"
+  assert f64s(1.0, 23) == "*"
+  assert f64s(-1.0, 23) == "*"
+  assert f64s(3.0e-25, 30) == "*"
+  assert f64s(0.5, 30) == "*"
+  assert f64s(-2.5, 100) == "*"
+  assert f64s(-0.0, 23) == "*"
+  assert f64s(1.0e-300, 23) == "*"
+}
+
+test "the largest U32 as d: the answer is at once" {
+  assert f64s(123.456, 4294967295) == "*"
+  assert f64s(0.0, 4294967295) == "*"
+  assert f64s(F64.NAN, 4294967295) == "NaN"
+  assert f64s(F64.INFINITY, 4294967295) == "inf"
+  assert f64s(-F64.INFINITY, 4294967295) == "-inf"
+}
+
+test "NaN and the infinities do not depend on d" {
+  assert f64s(F64.NAN, 0) == "NaN"
+  assert f64s(F64.NAN, 2) == "NaN"
+  assert f64s(F64.NAN, 22) == "NaN"
+  assert f64s(F64.NAN, 23) == "NaN"
+  assert f64s(F64.NAN, 100) == "NaN"
+  assert f64s(F64.INFINITY, 0) == "inf"
+  assert f64s(F64.INFINITY, 2) == "inf"
+  assert f64s(F64.INFINITY, 22) == "inf"
+  assert f64s(F64.INFINITY, 23) == "inf"
+  assert f64s(-F64.INFINITY, 0) == "-inf"
+  assert f64s(-F64.INFINITY, 2) == "-inf"
+  assert f64s(-F64.INFINITY, 22) == "-inf"
+  assert f64s(-F64.INFINITY, 23) == "-inf"
+}
+
+test "the neighbours of 2^64 and 2^63" {
+  assert f64s(18446744073709549568.0, 0) == "18446744073709549568"
+  assert f64s(18446744073709551616.0, 0) == "*"
+  assert f64s(18446744073709555712.0, 0) == "*"
+  assert f64s(-18446744073709549568.0, 0) == "-18446744073709549568"
+  assert f64s(-18446744073709551616.0, 0) == "*"
+  assert f64s(-18446744073709555712.0, 0) == "*"
+  assert f64s(9223372036854775808.0, 0) == "9223372036854775808"   // 9.223372036854776e+18 -> 9223372036854775808
+  assert f64s(-9223372036854775808.0, 0) == "-9223372036854775808" // 9.223372036854776e+18 -> 9223372036854775808
+  assert f64s(4294967296.0, 0) == "4294967296"                     // 4294967296.0 -> 4294967296
+  assert f64s(-4294967296.0, 0) == "-4294967296"                   // 4294967296.0 -> 4294967296
+  assert f64s(9007199254740992.0, 0) == "9007199254740992"         // 9007199254740992.0 -> 9007199254740992
+  assert f64s(9007199254740992.0, 1) == "9007199254740992.0"       // 9.007199254740992e+16 -> 90071992547409920
+  assert f64s(9007199254740994.0, 2) == "9007199254740994.56"      // 9.007199254740995e+17 -> 900719925474099456
+  assert f64s(9007199254740993.0, 0) == "9007199254740992"         // 9007199254740992.0 -> 9007199254740992
+  assert f64s(1844674407370955264.0, 1) == "*"
+  assert f64s(1844674407370955008.0, 1) == "1844674407370954956.8"
+  assert f64s(1844674407370954752.0, 1) == "1844674407370954752.0"
+  assert f64s(184467440737095488.0, 2) == "184467440737095495.68"
+  assert f64s(184467440737095552.0, 2) == "*"
+  assert f64s(-1844674407370955264.0, 1) == "*"
+  assert f64s(18446744073709549568.0, 1) == "*"
+  assert f64s(1.0e19, 0) == "10000000000000000000" // 1e+19 -> 10000000000000000000
+  assert f64s(1.8e19, 0) == "18000000000000000000" // 1.8e+19 -> 18000000000000000000
+  assert f64s(1.9e19, 0) == "*"                    // 1.9e+19 -> 19000000000000000000
+}
+
+test "the values that are too large or too small" {
+  assert f64s(1.0e300, 0) == "*"
+  assert f64s(1.0e300, 22) == "*" // product overflows
+  assert f64s(-1.0e300, 2) == "*"
+  assert f64s(F64.MAX, 0) == "*"
+  assert f64s(-F64.MAX, 2) == "*" // product overflows
+  assert f64s(F64.MAX, 22) == "*" // product overflows
+  assert f64s(1.0e25, 0) == "*"   // 1e+25 -> 10000000000000000905969664
+  assert f64s(-1.0e25, 2) == "*"
+  assert f64s(1.0e30, 3) == "*"
+  assert f64s(5.0e-324, 22) == "0.0000000000000000000000"                // 4.940656458412465e-302 -> 0
+  assert f64s(-5.0e-324, 0) == "0"                                       // 5e-324 -> 0
+  assert f64s(5.0e-324, 0) == "0"                                        // 5e-324 -> 0
+  assert f64s(2.2250738585072014e-308, 22) == "0.0000000000000000000000" // 2.2250738585072014e-286 -> 0
+  assert f64s(1.0e-300, 5) == "0.00000"                                  // 1e-295 -> 0
+}
+
+test "the length of the text" {
+  assert f64s(-0.001, 22).len() == 25
+  assert f64s(-1.8, 19).len() == 22
+  assert f64s(F64.NAN, 5).len() == 3
+  assert f64s(-F64.INFINITY, 5).len() == 4
+  assert f64s(1.0e300, 5).len() == 1
+  assert f64s(0.0, 22).len() == 24
+  assert f64s(-18446744073709549568.0, 0).len() == 21
+}
+
+test "the text of NaN, the infinities and * has no sign and no point" {
+  assert f64s(F64.NAN, 2) != "NaN.00"
+  assert f64s(F64.INFINITY, 2) != "inf.00"
+  assert f64s(1.0e300, 2) != "-*"
+  assert f64s(-1.0e300, 2) == "*"
+  assert f64s(-1.0e300, 2).len() == 1
+}

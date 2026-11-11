@@ -1,0 +1,194 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.2", "§5.3", "§14.2"]
+
+// S-614 (W5-12 U3b, spec §4.2): `t.write_to(inout out)` (`write_to(self, inout out: Span[U8]) -> U32`; §4.2: "`out` に入る分を書き、書いた数を返す（export の境界、§14.2）"). The number that is
+// written is `min(len, out.len())` and the bytes are the first bytes of the used part of the text (the bytes of the text, a NUL among them), in the order. `out` is a `Span[U8]` that
+// an array (also a part of it, `out.slice(from, to)`, §5.3) is passed to by `inout`. What the spec does not say is the bytes of `out` after the ones that are written (a NUL, 0 padding, or
+// untouched): nothing here reads them (the bytes of the `out` after the ones that are written are never asserted; the bytes outside a part `out.slice(from, to)` are not a part of the `out`). Covered: `out` longer than the text, of the same length, shorter, and empty; the empty text; the
+// text with a NUL; the text that was cut by the capacity; the text built by `put_int`, `put_float` and `put_str`; a part of an array; two calls; the return value as a `U32`; a forward through a function
+// that has a `Span[U8]`.
+
+use std.text.FixedStr
+
+test "out is longer than the text: the text is written and its length is returned" {
+  let t: FixedStr[8] = "abc"
+  var out: [U8; 6] = [255; 6]
+  let n = t.write_to(inout out)
+  assert n == 3
+  assert out[0] == 97
+  assert out[1] == 98
+  assert out[2] == 99
+}
+
+test "out has the same length as the text" {
+  let t: FixedStr[8] = "abcd"
+  var out: [U8; 4] = [255; 4]
+  let n = t.write_to(inout out)
+  assert n == 4
+  assert out[0] == 97
+  assert out[1] == 98
+  assert out[2] == 99
+  assert out[3] == 100
+}
+
+test "out is shorter than the text: the first bytes are written and the number is the length of out" {
+  let t: FixedStr[8] = "abcd"
+  var out: [U8; 2] = [255; 2]
+  let n = t.write_to(inout out)
+  assert n == 2
+  assert out[0] == 97
+  assert out[1] == 98
+  var one: [U8; 1] = [255; 1]
+  assert t.write_to(inout one) == 1
+  assert one[0] == 97
+}
+
+test "out is empty: nothing is written and the number is 0" {
+  let t: FixedStr[8] = "abcd"
+  var out: [U8; 0] = []
+  let n: U32 = t.write_to(inout out)
+  assert n == 0
+}
+
+test "the empty text writes no byte and the number is 0" {
+  let t: FixedStr[8] = ""
+  var out: [U8; 4] = [255; 4]
+  let n = t.write_to(inout out)
+  assert n == 0
+  let u: FixedStr[0] = ""
+  var e: [U8; 0] = []
+  assert u.write_to(inout e) == 0
+}
+
+test "a NUL of the text is a byte that is written" {
+  let t: FixedStr[8] = "a\0b"
+  var out: [U8; 5] = [255; 5]
+  let n = t.write_to(inout out)
+  assert n == 3
+  assert out[0] == 97
+  assert out[1] == 0
+  assert out[2] == 98
+  let u: FixedStr[4] = "\0\0"
+  var o2: [U8; 3] = [255; 3]
+  assert u.write_to(inout o2) == 2
+  assert o2[0] == 0
+  assert o2[1] == 0
+}
+
+test "the used part of the text is written, not the capacity" {
+  let t: FixedStr[16] = "xy"
+  var out: [U8; 16] = [255; 16]
+  let n = t.write_to(inout out)
+  assert n == 2
+  assert out[0] == 120
+  assert out[1] == 121
+  let full: FixedStr[3] = "pqr"
+  var o3: [U8; 3] = [255; 3]
+  assert full.write_to(inout o3) == 3
+  assert o3[2] == 114
+}
+
+test "a text that was cut by the capacity is written with the length it has" {
+  var t: FixedStr[4] = "ab"
+  t.put_str!("cdefgh")
+  var out: [U8; 10] = [255; 10]
+  let n = t.write_to(inout out)
+  assert n == 4
+  assert out[0] == 97
+  assert out[3] == 100
+}
+
+test "the text built by put_int, put_float and put_str" {
+  var t: FixedStr[16] = "v="
+  t.put_int!(-12)
+  t.put_str!(" ")
+  t.put_float::[F64]!(1.5, 2)
+  var out: [U8; 16] = [255; 16]
+  let n = t.write_to(inout out)
+  assert n == 10
+  assert out[0] == 118
+  assert out[1] == 61
+  assert out[2] == 45
+  assert out[3] == 49
+  assert out[4] == 50
+  assert out[5] == 32
+  assert out[6] == 49
+  assert out[7] == 46
+  assert out[8] == 53
+  assert out[9] == 48
+  var u: FixedStr[8] = ""
+  u.put_float!(F64.NAN, 1)
+  var o2: [U8; 4] = [255; 4]
+  assert u.write_to(inout o2) == 3
+  assert o2[0] == 78
+  assert o2[1] == 97
+  assert o2[2] == 78
+}
+
+test "a part of an array is the out, and the bytes around it are not touched" {
+  let t: FixedStr[8] = "abcd"
+  var out: [U8; 8] = [255; 8]
+  let n = t.write_to(inout out.slice(2, 5))
+  assert n == 3
+  assert out[0] == 255
+  assert out[1] == 255
+  assert out[2] == 97
+  assert out[3] == 98
+  assert out[4] == 99
+  assert out[5] == 255
+  assert out[6] == 255
+  assert out[7] == 255
+  let m = t.write_to(inout out.slice(6, 8))
+  assert m == 2
+  assert out[6] == 97
+  assert out[7] == 98
+  assert out[4] == 99
+}
+
+test "two calls write from the start of the out each time" {
+  let a: FixedStr[8] = "abcd"
+  let b: FixedStr[8] = "xy"
+  var out: [U8; 6] = [255; 6]
+  assert a.write_to(inout out) == 4
+  assert out[0] == 97
+  assert out[3] == 100
+  assert b.write_to(inout out) == 2
+  assert out[0] == 120
+  assert out[1] == 121
+}
+
+test "the text is not changed by write_to" {
+  let t: FixedStr[8] = "abcd"
+  var out: [U8; 8] = [0; 8]
+  let n = t.write_to(inout out)
+  assert n == t.len()
+  assert t == "abcd"
+}
+
+fn dump(t: FixedStr[8], inout out: Span[U8]) -> U32 {
+  t.write_to(inout out)
+}
+
+test "forwarded through a function that has a Span[U8]" {
+  let t: FixedStr[8] = "hi"
+  var out: [U8; 4] = [255; 4]
+  let n = dump(t, inout out)
+  assert n == 2
+  assert out[0] == 104
+  assert out[1] == 105
+  var s: [U8; 1] = [255; 1]
+  assert dump(t, inout s) == 1
+  assert s[0] == 104
+}
+
+test "the number returned is the length of the text when out is large enough" {
+  var t: FixedStr[8] = ""
+  var out: [U8; 8] = [255; 8]
+  for i in 0 ..< 9 {
+    assert t.write_to(inout out) == i
+    t.put_str!("z")
+  }
+  assert t.len() == 8
+}

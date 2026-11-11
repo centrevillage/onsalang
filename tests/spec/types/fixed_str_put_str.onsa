@@ -1,0 +1,214 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.2", "§2.6", "§4.7", "§5.2"]
+
+// S-614 (W5-12 U3b, spec §4.2, §2.6): `put_str` of `FixedStr[N]` (decision of 2026-11-11: `put_str[const M: U32](inout self, s: FixedStr[M])`; a literal is a `FixedStr[L]` by the expected type).
+// §4.2: "書き足し（文字列、…）は、入る分だけ書き、容量を超えた分は黙って捨てる". So the text of `s` (its used part, `len` bytes, not the capacity `M`) is put after the used part of the receiver, up to the capacity `N` of the
+// receiver; what does not fit is dropped and the length stops at `N`. The call is `t.put_str!(s)` (§2.6: a call that changes the receiver has the mark `!`). The expected values are the texts
+// written by hand, and the length is the number of used bytes. Covered: a literal, a value of another capacity (larger and smaller than the receiver, and larger than the receiver with a short
+// text), the empty text on either side, the capacity that fits exactly, a text cut in the middle, a receiver that is full, a receiver with the capacity 0, many appends, a NUL that is a byte, the copy that is
+// apart, the argument that is not changed, and the type argument that is written. The receivers are places of several kinds in fixed_str_put_combos.onsa.
+
+use std.text.FixedStr
+
+test "a literal is put after the text" {
+  var t: FixedStr[8] = "a"
+  t.put_str!("b")
+  assert t == "ab"
+  assert t.len() == 2
+  t.put_str!("cd")
+  assert t == "abcd"
+  assert t.len() == 4
+}
+
+test "put on an empty receiver" {
+  var t: FixedStr[8] = ""
+  t.put_str!("gain")
+  assert t == "gain"
+  assert t.len() == 4
+  let d: FixedStr[8] = FixedStr.default()
+  var u = d
+  u.put_str!("x")
+  assert u == "x"
+  assert d.len() == 0
+}
+
+test "a value of another capacity: the used part is put, not the capacity" {
+  var t: FixedStr[8] = "ab"
+  let big: FixedStr[16] = "xyz"
+  t.put_str!(big)
+  assert t == "abxyz"
+  assert t.len() == 5
+  let small: FixedStr[2] = "q"
+  t.put_str!(small)
+  assert t == "abxyzq"
+  assert t.len() == 6
+}
+
+test "a value with a larger capacity than the receiver and a short text" {
+  var t: FixedStr[4] = "a"
+  let s: FixedStr[16] = "bc"
+  t.put_str!(s)
+  assert t == "abc"
+  assert t.len() == 3
+}
+
+test "the empty text changes nothing" {
+  var t: FixedStr[8] = "ab"
+  t.put_str!("")
+  assert t == "ab"
+  assert t.len() == 2
+  let e: FixedStr[8] = ""
+  t.put_str!(e)
+  assert t == "ab"
+  var z: FixedStr[8] = ""
+  z.put_str!("")
+  assert z.len() == 0
+  assert z == ""
+}
+
+test "the text that fits exactly" {
+  var t: FixedStr[4] = "ab"
+  t.put_str!("cd")
+  assert t == "abcd"
+  assert t.len() == 4
+  var u: FixedStr[3] = ""
+  u.put_str!("xyz")
+  assert u == "xyz"
+  assert u.len() == 3
+}
+
+test "the text that does not fit is cut at the capacity" {
+  var t: FixedStr[4] = "ab"
+  t.put_str!("cdef")
+  assert t == "abcd"
+  assert t.len() == 4
+  var u: FixedStr[8] = ""
+  u.put_str!("abcdefghi")
+  assert u == "abcdefgh"
+  assert u.len() == 8
+  var v: FixedStr[2] = "a"
+  v.put_str!("bcdefghijklmnop")
+  assert v == "ab"
+  assert v.len() == 2
+}
+
+test "a receiver that is full takes nothing" {
+  var t: FixedStr[4] = "abcd"
+  t.put_str!("e")
+  assert t == "abcd"
+  assert t.len() == 4
+  t.put_str!("")
+  assert t == "abcd"
+  let s: FixedStr[8] = "zz"
+  t.put_str!(s)
+  assert t == "abcd"
+  assert t.len() == 4
+}
+
+test "a receiver with the capacity 0 stays empty" {
+  var t: FixedStr[0] = ""
+  t.put_str!("abc")
+  assert t.len() == 0
+  assert t == ""
+  t.put_str!("")
+  assert t.len() == 0
+}
+
+test "many appends and the cut stays after the cut" {
+  var t: FixedStr[8] = ""
+  for _ in 0 ..< 3 {
+    t.put_str!("ab")
+  }
+  assert t == "ababab"
+  assert t.len() == 6
+  for _ in 0 ..< 4 {
+    t.put_str!("cd")
+  }
+  assert t == "abababcd"
+  assert t.len() == 8
+  t.put_str!("z")
+  assert t == "abababcd"
+}
+
+test "a NUL that is put is a byte of the text" {
+  var t: FixedStr[8] = "a"
+  t.put_str!("\0")
+  assert t.len() == 2
+  assert t != "a"
+  assert t == "a\0"
+  t.put_str!("b")
+  assert t == "a\0b"
+  assert t.len() == 3
+  var u: FixedStr[2] = "a"
+  u.put_str!("\0\0")
+  assert u == "a\0"
+  assert u.len() == 2
+}
+
+test "the text put is equal to the text made by the literal" {
+  var t: FixedStr[8] = "ab"
+  t.put_str!("cd")
+  let u: FixedStr[8] = "abcd"
+  assert t == u
+  assert u == t
+  var v: FixedStr[8] = ""
+  v.put_str!("abcdefghijkl")
+  let w: FixedStr[8] = "abcdefgh"
+  assert v == w
+}
+
+test "a copy is apart from the receiver" {
+  var t: FixedStr[8] = "ab"
+  let before = t
+  t.put_str!("cd")
+  assert before == "ab"
+  assert before.len() == 2
+  assert t == "abcd"
+  var c = t
+  c.put_str!("ef")
+  assert t == "abcd"
+  assert c == "abcdef"
+}
+
+test "the argument is not changed and the text can be put twice" {
+  var t: FixedStr[16] = ""
+  let s: FixedStr[4] = "ab"
+  t.put_str!(s)
+  t.put_str!(s)
+  assert t == "abab"
+  assert s == "ab"
+  assert s.len() == 2
+  let c = t
+  t.put_str!(c)
+  assert t == "abababab"
+  assert t.len() == 8
+}
+
+test "the type argument that is written is the capacity of the argument" {
+  var t: FixedStr[8] = "a"
+  t.put_str::[3]!("bc")
+  assert t == "abc"
+  assert t.len() == 3
+  t.put_str::[2]!("de")
+  assert t == "abcde"
+}
+
+fn put_twice[const N: U32, const M: U32](inout t: FixedStr[N], s: FixedStr[M]) {
+  t.put_str!(s)
+  t.put_str!(s)
+}
+
+test "inside a generic function with both capacities" {
+  var t: FixedStr[8] = ""
+  put_twice(inout t, "abc")
+  assert t == "abcabc"
+  put_twice(inout t, "xyz")
+  assert t == "abcabcxy"
+  assert t.len() == 8
+  var u: FixedStr[3] = ""
+  let s: FixedStr[16] = "pq"
+  put_twice(inout u, s)
+  assert u == "pqp"
+}

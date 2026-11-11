@@ -1,0 +1,92 @@
+// onsa.toml
+// [test]
+// spec = ["§4.2", "§2.6", "§5.1", "§5.2"]
+
+// S-614 (W5-12 U3b, spec §4.2, §5.1, §5.2): the receiver of `put_str`, `put_int` and `put_float` (`inout self`) is a place that can be changed (the missing and the extra `!` are in
+// fixed_str_put_bang_neg.onsa, which has the candidates). A receiver that is a `let` or a borrowed parameter is E0701 (§5.2: "場所だが変更できないもの（`let` の束縛、借用の引数）は E0701"); a receiver that
+// is not a place (the result of a call, a constant) is E0415 (§5.2: "場所でないレシーバ（呼び出しの結果、定数）は E0415"); and the receiver together with an argument that is the same place (`t.put_str!(t)`: the
+// receiver is changed while it is borrowed as the argument) is E0702 (§5.1: `inout` and a borrow of the same variable in one call; the elements of one array overlap, and so do the field and the argument that
+// is the same field). One error in each function (P-01); the marker is on the line of the call.
+
+use std.text.FixedStr
+
+pub struct Voice {
+  name: FixedStr[8],
+}
+
+const NAME: FixedStr[8] = "gain"
+
+fn make() -> FixedStr[8] {
+  "ab"
+}
+
+pub fn put_str_on_a_let() -> FixedStr[8] {
+  let t: FixedStr[8] = ""
+  t.put_str!("b")                                     //~ E0701
+  t
+}
+
+pub fn put_int_on_a_let() -> FixedStr[8] {
+  let t: FixedStr[8] = ""
+  t.put_int!(5)                                       //~ E0701
+  t
+}
+
+pub fn put_float_on_a_let() -> FixedStr[8] {
+  let t: FixedStr[8] = ""
+  t.put_float::[F64]!(1.5, 2)                                //~ E0701
+  t
+}
+
+pub fn put_int_on_a_borrowed_parameter(t: FixedStr[8]) -> FixedStr[8] {
+  t.put_int!(5)                                       //~ E0701
+  t
+}
+
+pub fn put_str_on_a_field_of_a_borrowed_parameter(v: Voice) -> U32 {
+  v.name.put_str!("b")                                //~ E0701
+  v.name.len()
+}
+
+pub fn put_str_on_the_result_of_a_call() -> U32 {
+  make().put_str!("b")                                //~ E0415
+  1
+}
+
+pub fn put_int_on_a_constant() -> U32 {
+  NAME.put_int!(5)                                    //~ E0415
+  1
+}
+
+pub fn put_float_on_a_constant() -> U32 {
+  NAME.put_float::[F64]!(1.5, 1)                             //~ E0415
+  1
+}
+
+pub fn put_str_of_the_receiver_itself() -> FixedStr[8] {
+  var t: FixedStr[8] = "ab"
+  t.put_str!(t)                                       //~ E0702
+  t
+}
+
+pub fn put_str_of_the_same_field(inout v: Voice) {
+  v.name.put_str!(v.name)                             //~ E0702
+}
+
+pub fn put_str_of_another_element_of_the_array() -> FixedStr[8] {
+  var xs: [FixedStr[8]; 2] = ["a", "b"]
+  xs[0].put_str!(xs[1])                               //~ E0702
+  xs[0]
+}
+
+pub fn the_receiver_that_can_be_changed_is_fine(inout v: Voice, inout u: FixedStr[8]) -> FixedStr[8] {
+  var t: FixedStr[8] = "ab"
+  let c = t
+  t.put_str!(c)
+  v.name.put_str!("x")
+  u.put_int!(1)
+  var xs: [FixedStr[8]; 2] = ["a", "b"]
+  xs[1].put_str!("z")
+  t.put_str!(v.name)
+  t
+}

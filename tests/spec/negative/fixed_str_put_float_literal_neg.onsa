@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// spec = ["§4.2", "§4.7", "§4.5", "§2.4"]
+
+// S-614 (W5-12 U3b, spec §4.7, §4.5): the float literal as the value of `put_float[T: Float](inout self, v: T, d: U32)` (decision of 2026-11-11). Nothing but the literal decides `T`, and a float literal has no
+// default type (§4.7: "関数の終わりに … 浮動小数リテラルの型変数が残ればそのリテラルの位置に E0405"; §4.5: "決まらないまま関数が終われば、要求は検査せず、E0406（浮動小数のリテラルなら E0405）だけを報告する";
+// the integer literal of `put_int` is `I32` by the default, so `t.put_int!(5)` is fine). So `t.put_float!(1.5, 2)` is E0405 and the writer gives the literal its type: a binding with a type, the type
+// argument that is written (`put_float::[F64]!(1.5, 2)`), or a value of a type (`x * 2.0`). This follows from the spec (§2.4: a float literal has no default type, on purpose; the
+// std doc of `put_float` says so). One error in each function (P-01); the marker is on the line of the literal.
+
+use std.text.FixedStr
+
+pub fn a_literal_with_digits() -> FixedStr[24] {
+  var t: FixedStr[24] = ""
+  t.put_float!(1.5, 2)                                //~ E0405
+  t
+}
+
+pub fn a_negative_literal() -> FixedStr[24] {
+  var t: FixedStr[24] = ""
+  t.put_float!(-0.25, 1)                              //~ E0405
+  t
+}
+
+pub fn a_zero_literal() -> FixedStr[24] {
+  var t: FixedStr[24] = ""
+  t.put_float!(0.0, 0)                                //~ E0405
+  t
+}
+
+pub fn a_literal_with_an_exponent() -> FixedStr[24] {
+  var t: FixedStr[24] = ""
+  t.put_float!(1.0e10, 0)                             //~ E0405
+  t
+}
+
+pub fn the_literals_that_have_a_type_are_fine(x: F32) -> FixedStr[24] {
+  var t: FixedStr[24] = ""
+  let a: F64 = 1.5
+  let b: F32 = 2.5
+  t.put_float!(a, 2)
+  t.put_float!(b, 2)
+  t.put_float::[F64]!(1.5, 2)
+  t.put_float::[F32]!(-0.25, 1)
+  t.put_float!(x * 2.0, 1)
+  t.put_float!(F64.NAN, 1)
+  t.put_float!(F32.MAX, 0)
+  t.put_int!(5)
+  t
+}

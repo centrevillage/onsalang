@@ -1,0 +1,717 @@
+// onsa.toml
+// [package]
+// name = "c_fixed_str_u3b_float"
+// edition = "2026"
+//
+// [export]
+// prefix = "cfu3bf_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§4.2", "§13.4"]
+//
+// [[test.host]]
+// name = "case"
+// target = "host"
+// fn = "c_fixed_str_u3b_float.case"
+// steps = [
+//   { call = "fn", args = { i = 0 }, status = 0, result = true },
+//   { call = "fn", args = { i = 1 }, status = 0, result = true },
+//   { call = "fn", args = { i = 2 }, status = 0, result = true },
+//   { call = "fn", args = { i = 3 }, status = 0, result = true },
+//   { call = "fn", args = { i = 4 }, status = 0, result = true },
+//   { call = "fn", args = { i = 5 }, status = 0, result = true },
+//   { call = "fn", args = { i = 6 }, status = 0, result = true },
+//   { call = "fn", args = { i = 7 }, status = 0, result = true },
+//   { call = "fn", args = { i = 8 }, status = 0, result = true },
+//   { call = "fn", args = { i = 9 }, status = 0, result = true },
+//   { call = "fn", args = { i = 10 }, status = 0, result = true },
+//   { call = "fn", args = { i = 11 }, status = 0, result = true },
+//   { call = "fn", args = { i = 12 }, status = 0, result = true },
+//   { call = "fn", args = { i = 13 }, status = 0, result = true },
+//   { call = "fn", args = { i = 14 }, status = 0, result = true },
+//   { call = "fn", args = { i = 15 }, status = 0, result = true },
+//   { call = "fn", args = { i = 16 }, status = 0, result = true },
+//   { call = "fn", args = { i = 17 }, status = 0, result = true },
+//   { call = "fn", args = { i = 18 }, status = 0, result = true },
+//   { call = "fn", args = { i = 19 }, status = 0, result = true },
+//   { call = "fn", args = { i = 20 }, status = 0, result = true },
+//   { call = "fn", args = { i = 21 }, status = 0, result = true },
+//   { call = "fn", args = { i = 22 }, status = 0, result = true },
+//   { call = "fn", args = { i = 23 }, status = 0, result = true },
+//   { call = "fn", args = { i = 24 }, status = 0, result = true },
+//   { call = "fn", args = { i = 25 }, status = 0, result = true },
+//   { call = "fn", args = { i = 26 }, status = 0, result = true },
+//   { call = "fn", args = { i = 27 }, status = 0, result = true },
+//   { call = "fn", args = { i = 28 }, status = 0, result = true },
+//   { call = "fn", args = { i = 29 }, status = 0, result = true },
+//   { call = "fn", args = { i = 30 }, status = 0, result = true },
+//   { call = "fn", args = { i = 31 }, status = 0, result = true },
+//   { call = "fn", args = { i = 32 }, status = 0, result = true },
+//   { call = "fn", args = { i = 33 }, status = 0, result = true },
+//   { call = "fn", args = { i = 34 }, status = 0, result = true },
+//   { call = "fn", args = { i = 35 }, status = 0, result = true },
+//   { call = "fn", args = { i = 36 }, status = 0, result = true },
+//   { call = "fn", args = { i = 37 }, status = 0, result = true },
+//   { call = "fn", args = { i = 38 }, status = 0, result = true },
+//   { call = "fn", args = { i = 39 }, status = 0, result = true },
+//   { call = "fn", args = { i = 40 }, status = 0, result = true },
+//   { call = "fn", args = { i = 41 }, status = 0, result = true },
+//   { call = "fn", args = { i = 42 }, status = 0, result = true },
+//   { call = "fn", args = { i = 43 }, status = 0, result = true },
+//   { call = "fn", args = { i = 44 }, status = 0, result = true },
+//   { call = "fn", args = { i = 45 }, status = 0, result = true },
+//   { call = "fn", args = { i = 46 }, status = 0, result = true },
+//   { call = "fn", args = { i = 47 }, status = 0, result = true },
+//   { call = "fn", args = { i = 48 }, status = 0, result = true },
+//   { call = "fn", args = { i = 49 }, status = 0, result = true },
+//   { call = "fn", args = { i = 50 }, status = 0, result = true },
+//   { call = "fn", args = { i = 51 }, status = 0, result = true },
+//   { call = "fn", args = { i = 52 }, status = 0, result = true },
+//   { call = "fn", args = { i = 53 }, status = 0, result = true },
+//   { call = "fn", args = { i = 54 }, status = 0, result = true },
+//   { call = "fn", args = { i = 55 }, status = 0, result = true },
+//   { call = "fn", args = { i = 56 }, status = 0, result = true },
+//   { call = "fn", args = { i = 57 }, status = 0, result = true },
+//   { call = "fn", args = { i = 58 }, status = 0, result = true },
+//   { call = "fn", args = { i = 59 }, status = 0, result = true },
+//   { call = "fn", args = { i = 60 }, status = 0, result = true },
+//   { call = "fn", args = { i = 61 }, status = 0, result = true },
+//   { call = "fn", args = { i = 62 }, status = 0, result = true },
+//   { call = "fn", args = { i = 63 }, status = 0, result = true },
+//   { call = "fn", args = { i = 64 }, status = 0, result = true },
+//   { call = "fn", args = { i = 65 }, status = 0, result = true },
+//   { call = "fn", args = { i = 66 }, status = 0, result = true },
+//   { call = "fn", args = { i = 67 }, status = 0, result = true },
+//   { call = "fn", args = { i = 68 }, status = 0, result = true },
+//   { call = "fn", args = { i = 69 }, status = 0, result = true },
+//   { call = "fn", args = { i = 70 }, status = 0, result = true },
+//   { call = "fn", args = { i = 71 }, status = 0, result = true },
+//   { call = "fn", args = { i = 72 }, status = 0, result = false },
+//   { call = "fn", args = { i = 4294967295 }, status = 0, result = false },
+// ]
+
+// S-614 (W5-12 U3b, spec §4.2, S-1007, §13.4): `put_float` of `F64` in the C of the host, the rounding: the typical values, the midpoints (the tie goes to the even integer by `onsa_round_f64`), the values whose decimal is
+// not the double (`1.005` and `1.075`), the zero, the negative zero and the small values (no sign when the rounded integer is 0, `0.05` with the zeros padded). The expected texts are those of the interpreter file
+// fixed_str_put_float_round.onsa (the formula of §4.2 in the IEEE double, made by a script).
+// `case(i)` picks the i-th case by a `match` that is a statement and returns whether the case holds (false for an `i` that is not a case); the sequence of the `[[test.host]]` runs every `i`. A `mode = "test"`
+// case runs the interpreter only, and the C is made from the sequence above, so the interpreter and the C give the same bytes for every case here (the C rounds by `onsa_round_f64`).
+
+use std.text.FixedStr
+
+fn f64s(v: F64, d: U32) -> FixedStr[32] {
+  var t: FixedStr[32] = ""
+  t.put_float!(v, d)
+  t
+}
+
+fn f32s(v: F32, d: U32) -> FixedStr[32] {
+  var t: FixedStr[32] = ""
+  t.put_float!(v, d)
+  t
+}
+
+// F64 12.345, d = 2: 1234.5 -> 1234
+fn c0() -> Bool {
+  f64s(12.345, 2) == "12.34"
+}
+
+// F64 3.14159, d = 2: 314.159 -> 314
+fn c1() -> Bool {
+  f64s(3.14159, 2) == "3.14"
+}
+
+// F64 3.14159, d = 4: 31415.899999999998 -> 31416
+fn c2() -> Bool {
+  f64s(3.14159, 4) == "3.1416"
+}
+
+// F64 3.14159, d = 0: 3.14159 -> 3
+fn c3() -> Bool {
+  f64s(3.14159, 0) == "3"
+}
+
+// F64 440.0, d = 1: 4400.0 -> 4400
+fn c4() -> Bool {
+  f64s(440.0, 1) == "440.0"
+}
+
+// F64 440.0, d = 0: 440.0 -> 440
+fn c5() -> Bool {
+  f64s(440.0, 0) == "440"
+}
+
+// F64 1.0, d = 3: 1000.0 -> 1000
+fn c6() -> Bool {
+  f64s(1.0, 3) == "1.000"
+}
+
+// F64 123.456, d = 0: 123.456 -> 123
+fn c7() -> Bool {
+  f64s(123.456, 0) == "123"
+}
+
+// F64 0.1, d = 1: 1.0 -> 1
+fn c8() -> Bool {
+  f64s(0.1, 1) == "0.1"
+}
+
+// F64 0.1, d = 3: 100.0 -> 100
+fn c9() -> Bool {
+  f64s(0.1, 3) == "0.100"
+}
+
+// F64 99.995, d = 2: 9999.5 -> 10000
+fn c10() -> Bool {
+  f64s(99.995, 2) == "100.00"
+}
+
+// F64 0.999, d = 2: 99.9 -> 100
+fn c11() -> Bool {
+  f64s(0.999, 2) == "1.00"
+}
+
+// F64 0.9, d = 0: 0.9 -> 1
+fn c12() -> Bool {
+  f64s(0.9, 0) == "1"
+}
+
+// F64 100.0, d = 2: 10000.0 -> 10000
+fn c13() -> Bool {
+  f64s(100.0, 2) == "100.00"
+}
+
+// F64 7.0, d = 0: 7.0 -> 7
+fn c14() -> Bool {
+  f64s(7.0, 0) == "7"
+}
+
+// F64 1234567.891, d = 3: 1234567891.0 -> 1234567891
+fn c15() -> Bool {
+  f64s(1234567.891, 3) == "1234567.891"
+}
+
+// F64 -123.456, d = 2: 12345.6 -> 12346
+fn c16() -> Bool {
+  f64s(-123.456, 2) == "-123.46"
+}
+
+// F64 -3.14159, d = 1: 31.4159 -> 31
+fn c17() -> Bool {
+  f64s(-3.14159, 1) == "-3.1"
+}
+
+// F64 -7.0, d = 0: 7.0 -> 7
+fn c18() -> Bool {
+  f64s(-7.0, 0) == "-7"
+}
+
+// F64 -440.0, d = 2: 44000.0 -> 44000
+fn c19() -> Bool {
+  f64s(-440.0, 2) == "-440.00"
+}
+
+// F64 0.3, d = 1: 3.0 -> 3
+fn c20() -> Bool {
+  f64s(0.3, 1) == "0.3"
+}
+
+// F64 2.0, d = 10: 20000000000.0 -> 20000000000
+fn c21() -> Bool {
+  f64s(2.0, 10) == "2.0000000000"
+}
+
+// F64 0.125, d = 2: 12.5 -> 12
+fn c22() -> Bool {
+  f64s(0.125, 2) == "0.12"
+}
+
+// F64 0.375, d = 2: 37.5 -> 38
+fn c23() -> Bool {
+  f64s(0.375, 2) == "0.38"
+}
+
+// F64 0.625, d = 2: 62.5 -> 62
+fn c24() -> Bool {
+  f64s(0.625, 2) == "0.62"
+}
+
+// F64 0.25, d = 1: 2.5 -> 2
+fn c25() -> Bool {
+  f64s(0.25, 1) == "0.2"
+}
+
+// F64 0.75, d = 1: 7.5 -> 8
+fn c26() -> Bool {
+  f64s(0.75, 1) == "0.8"
+}
+
+// F64 0.5, d = 0: 0.5 -> 0
+fn c27() -> Bool {
+  f64s(0.5, 0) == "0"
+}
+
+// F64 1.5, d = 0: 1.5 -> 2
+fn c28() -> Bool {
+  f64s(1.5, 0) == "2"
+}
+
+// F64 2.5, d = 0: 2.5 -> 2
+fn c29() -> Bool {
+  f64s(2.5, 0) == "2"
+}
+
+// F64 3.5, d = 0: 3.5 -> 4
+fn c30() -> Bool {
+  f64s(3.5, 0) == "4"
+}
+
+// F64 -0.5, d = 0: 0.5 -> 0
+fn c31() -> Bool {
+  f64s(-0.5, 0) == "0"
+}
+
+// F64 -1.5, d = 0: 1.5 -> 2
+fn c32() -> Bool {
+  f64s(-1.5, 0) == "-2"
+}
+
+// F64 -2.5, d = 0: 2.5 -> 2
+fn c33() -> Bool {
+  f64s(-2.5, 0) == "-2"
+}
+
+// F64 -3.5, d = 0: 3.5 -> 4
+fn c34() -> Bool {
+  f64s(-3.5, 0) == "-4"
+}
+
+// F64 0.35, d = 1: 3.5 -> 4
+fn c35() -> Bool {
+  f64s(0.35, 1) == "0.4"
+}
+
+// F64 2.675, d = 2: 267.5 -> 268
+fn c36() -> Bool {
+  f64s(2.675, 2) == "2.68"
+}
+
+// F64 1.005, d = 2: 100.49999999999999 -> 100
+fn c37() -> Bool {
+  f64s(1.005, 2) == "1.00"
+}
+
+// F64 1.075, d = 2: 107.5 -> 108
+fn c38() -> Bool {
+  f64s(1.075, 2) == "1.08"
+}
+
+// F64 0.15, d = 1: 1.5 -> 2
+fn c39() -> Bool {
+  f64s(0.15, 1) == "0.2"
+}
+
+// F64 0.045, d = 2: 4.5 -> 4
+fn c40() -> Bool {
+  f64s(0.045, 2) == "0.04"
+}
+
+// F64 1.115, d = 2: 111.5 -> 112
+fn c41() -> Bool {
+  f64s(1.115, 2) == "1.12"
+}
+
+// F64 0.005, d = 2: 0.5 -> 0
+fn c42() -> Bool {
+  f64s(0.005, 2) == "0.00"
+}
+
+// F64 0.5, d = 1: 5.0 -> 5
+fn c43() -> Bool {
+  f64s(0.5, 1) == "0.5"
+}
+
+// F64 -0.125, d = 2: 12.5 -> 12
+fn c44() -> Bool {
+  f64s(-0.125, 2) == "-0.12"
+}
+
+// F64 -0.375, d = 2: 37.5 -> 38
+fn c45() -> Bool {
+  f64s(-0.375, 2) == "-0.38"
+}
+
+// F64 -1.075, d = 2: 107.5 -> 108
+fn c46() -> Bool {
+  f64s(-1.075, 2) == "-1.08"
+}
+
+// F64 0.05, d = 2: 5.0 -> 5
+fn c47() -> Bool {
+  f64s(0.05, 2) == "0.05"
+}
+
+// F64 0.05, d = 1: 0.5 -> 0
+fn c48() -> Bool {
+  f64s(0.05, 1) == "0.0"
+}
+
+// F64 0.007, d = 2: 0.7000000000000001 -> 1
+fn c49() -> Bool {
+  f64s(0.007, 2) == "0.01"
+}
+
+// F64 0.0005, d = 3: 0.5 -> 0
+fn c50() -> Bool {
+  f64s(0.0005, 3) == "0.000"
+}
+
+// F64 0.0005, d = 4: 5.0 -> 5
+fn c51() -> Bool {
+  f64s(0.0005, 4) == "0.0005"
+}
+
+// F64 0.0, d = 0: 0.0 -> 0
+fn c52() -> Bool {
+  f64s(0.0, 0) == "0"
+}
+
+// F64 0.0, d = 2: 0.0 -> 0
+fn c53() -> Bool {
+  f64s(0.0, 2) == "0.00"
+}
+
+// F64 -0.0, d = 2: 0.0 -> 0
+fn c54() -> Bool {
+  f64s(-0.0, 2) == "0.00"
+}
+
+// F64 -0.0, d = 0: 0.0 -> 0
+fn c55() -> Bool {
+  f64s(-0.0, 0) == "0"
+}
+
+// F64 -0.0, d = 5: 0.0 -> 0
+fn c56() -> Bool {
+  f64s(-0.0, 5) == "0.00000"
+}
+
+// F64 -0.004, d = 2: 0.4 -> 0
+fn c57() -> Bool {
+  f64s(-0.004, 2) == "0.00"
+}
+
+// F64 -0.005, d = 2: 0.5 -> 0
+fn c58() -> Bool {
+  f64s(-0.005, 2) == "0.00"
+}
+
+// F64 -0.0049999, d = 2: 0.49999 -> 0
+fn c59() -> Bool {
+  f64s(-0.0049999, 2) == "0.00"
+}
+
+// F64 -0.006, d = 2: 0.6 -> 1
+fn c60() -> Bool {
+  f64s(-0.006, 2) == "-0.01"
+}
+
+// F64 -0.4, d = 0: 0.4 -> 0
+fn c61() -> Bool {
+  f64s(-0.4, 0) == "0"
+}
+
+// F64 -0.6, d = 0: 0.6 -> 1
+fn c62() -> Bool {
+  f64s(-0.6, 0) == "-1"
+}
+
+// F64 -0.0001, d = 3: 0.1 -> 0
+fn c63() -> Bool {
+  f64s(-0.0001, 3) == "0.000"
+}
+
+// F64 -0.0001, d = 4: 1.0 -> 1
+fn c64() -> Bool {
+  f64s(-0.0001, 4) == "-0.0001"
+}
+
+// F64 1.0e-10, d = 2: 1e-08 -> 0
+fn c65() -> Bool {
+  f64s(1.0e-10, 2) == "0.00"
+}
+
+// F64 -1.0e-10, d = 5: 1e-05 -> 0
+fn c66() -> Bool {
+  f64s(-1.0e-10, 5) == "0.00000"
+}
+
+// F64 -1.0e-10, d = 10: 1.0 -> 1
+fn c67() -> Bool {
+  f64s(-1.0e-10, 10) == "-0.0000000001"
+}
+
+// F64 0.01, d = 2: 1.0 -> 1
+fn c68() -> Bool {
+  f64s(0.01, 2) == "0.01"
+}
+
+// F64 0.1, d = 2: 10.0 -> 10
+fn c69() -> Bool {
+  f64s(0.1, 2) == "0.10"
+}
+
+// F64 0.001, d = 3: 1.0 -> 1
+fn c70() -> Bool {
+  f64s(0.001, 3) == "0.001"
+}
+
+// F64 -0.05, d = 2: 5.0 -> 5
+fn c71() -> Bool {
+  f64s(-0.05, 2) == "-0.05"
+}
+
+@export
+pub fn case(i: U32) -> Bool {
+  var r = false
+  match i {
+    0 => {
+      r = c0()
+    },
+    1 => {
+      r = c1()
+    },
+    2 => {
+      r = c2()
+    },
+    3 => {
+      r = c3()
+    },
+    4 => {
+      r = c4()
+    },
+    5 => {
+      r = c5()
+    },
+    6 => {
+      r = c6()
+    },
+    7 => {
+      r = c7()
+    },
+    8 => {
+      r = c8()
+    },
+    9 => {
+      r = c9()
+    },
+    10 => {
+      r = c10()
+    },
+    11 => {
+      r = c11()
+    },
+    12 => {
+      r = c12()
+    },
+    13 => {
+      r = c13()
+    },
+    14 => {
+      r = c14()
+    },
+    15 => {
+      r = c15()
+    },
+    16 => {
+      r = c16()
+    },
+    17 => {
+      r = c17()
+    },
+    18 => {
+      r = c18()
+    },
+    19 => {
+      r = c19()
+    },
+    20 => {
+      r = c20()
+    },
+    21 => {
+      r = c21()
+    },
+    22 => {
+      r = c22()
+    },
+    23 => {
+      r = c23()
+    },
+    24 => {
+      r = c24()
+    },
+    25 => {
+      r = c25()
+    },
+    26 => {
+      r = c26()
+    },
+    27 => {
+      r = c27()
+    },
+    28 => {
+      r = c28()
+    },
+    29 => {
+      r = c29()
+    },
+    30 => {
+      r = c30()
+    },
+    31 => {
+      r = c31()
+    },
+    32 => {
+      r = c32()
+    },
+    33 => {
+      r = c33()
+    },
+    34 => {
+      r = c34()
+    },
+    35 => {
+      r = c35()
+    },
+    36 => {
+      r = c36()
+    },
+    37 => {
+      r = c37()
+    },
+    38 => {
+      r = c38()
+    },
+    39 => {
+      r = c39()
+    },
+    40 => {
+      r = c40()
+    },
+    41 => {
+      r = c41()
+    },
+    42 => {
+      r = c42()
+    },
+    43 => {
+      r = c43()
+    },
+    44 => {
+      r = c44()
+    },
+    45 => {
+      r = c45()
+    },
+    46 => {
+      r = c46()
+    },
+    47 => {
+      r = c47()
+    },
+    48 => {
+      r = c48()
+    },
+    49 => {
+      r = c49()
+    },
+    50 => {
+      r = c50()
+    },
+    51 => {
+      r = c51()
+    },
+    52 => {
+      r = c52()
+    },
+    53 => {
+      r = c53()
+    },
+    54 => {
+      r = c54()
+    },
+    55 => {
+      r = c55()
+    },
+    56 => {
+      r = c56()
+    },
+    57 => {
+      r = c57()
+    },
+    58 => {
+      r = c58()
+    },
+    59 => {
+      r = c59()
+    },
+    60 => {
+      r = c60()
+    },
+    61 => {
+      r = c61()
+    },
+    62 => {
+      r = c62()
+    },
+    63 => {
+      r = c63()
+    },
+    64 => {
+      r = c64()
+    },
+    65 => {
+      r = c65()
+    },
+    66 => {
+      r = c66()
+    },
+    67 => {
+      r = c67()
+    },
+    68 => {
+      r = c68()
+    },
+    69 => {
+      r = c69()
+    },
+    70 => {
+      r = c70()
+    },
+    71 => {
+      r = c71()
+    },
+    _ => {
+      r = false
+    },
+  }
+  r
+}
+
+test "every case holds in the interpreter" {
+  for i in 0 ..< 72 {
+    assert case(i)
+  }
+}
+
+test "a case that does not exist is false" {
+  assert !case(72)
+  assert !case(4294967295)
+}

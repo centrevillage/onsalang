@@ -1,5 +1,7 @@
 //! Text held as a value (spec §4.2, S-614).
 
+use math.{is_finite, is_nan, round}
+
 /// A string of ASCII characters (0x00 to 0x7F, NUL and the control
 /// characters among them) held as a value in a capacity of `N` bytes: Copy
 /// and with no heap, so that an `rt` function and a target with no heap
@@ -11,6 +13,11 @@
 /// expected type is `FixedStr[N]` (§4.7): a literal longer than `N` or with
 /// a character out of ASCII is an E0408, and where `N` is not decided the
 /// length of the literal is `N`.
+///
+/// The appends (`put_str`, `put_int`, `put_float`) write what fits and
+/// silently drop the rest past the capacity. To know that a text fits, add
+/// its length to `len()` before the append: a length that reached `N` does
+/// not tell a text that just fitted from one that was cut.
 ///
 /// It holds the invariant `len <= N`, the bytes after `len` 0 and every
 /// byte ASCII: its fields are `priv`, so a value comes from a literal, from
@@ -25,5 +32,126 @@ impl[const N: U32] FixedStr[N] {
   /// The length used, in bytes.
   pub rt fn len(self) -> U32 {
     self.len
+  }
+
+  /// Appends the bytes used of `s` (a literal is a `FixedStr` of its length).
+  /// What does not fit is dropped.
+  pub rt fn put_str[const M: U32](inout self, s: FixedStr[M]) {
+    for i in 0 ..< s.len {
+      self.put_byte!(s.bytes[i])
+    }
+  }
+
+  /// Appends `v` in decimal, with `-` before a negative value (`-12`, and
+  /// `-9223372036854775808` for `I64.MIN`). What does not fit is dropped.
+  pub rt fn put_int[T: Int](inout self, v: T) {
+    match U64.narrow_from(v) {
+      Some(n) => self.put_digits!(n, 0),
+      None => {
+        // Only a negative value is out of `U64`, and every one is an `I64`;
+        // `-(n + 1)` keeps `I64.MIN` in range.
+        let n = I64.narrow_from(v).unwrap()
+        self.put_byte!(45)
+        self.put_digits!(U64.narrow_from(-(n + 1)).unwrap() + 1, 0)
+      },
+    }
+  }
+
+  /// Appends `v` with `d` digits after the decimal point (§4.2). `v` is
+  /// widened to `F64` and multiplied by `10^d` with the `F64` multiplication,
+  /// rounded to an integer to the nearest, ties to even (`round`), and that
+  /// integer is written in decimal with a point before its last `d` digits,
+  /// padded with zeros (`0.05`). For `d` 0 no point is written (`12`). When
+  /// the rounded integer is 0 no sign is written (`-0.004` with 2 digits is
+  /// `0.00`). What does not fit in the capacity is dropped.
+  /// - NaN is `NaN`, and an infinity is `inf` or `-inf` (the spelling of
+  ///   `Show`), whatever `d` is.
+  /// - A finite value is written as the one character `*` when `d` is over 22
+  ///   (`10^22` is the largest power of ten exact in `F64`) or the rounded
+  ///   integer is `2^64` or more in magnitude. With `d` 9 or less, a value
+  ///   under `1.8e10` in magnitude is always written.
+  /// - The text is 25 bytes at most (22 bytes when `d` is 19 or less).
+  /// - The multiplication and the rounding are those of `F64`, so the digits
+  ///   may differ from rounding the decimal value (`1.075` with 2 digits is
+  ///   `1.08`), and when `|v| * 10^d` is over `2^53` the last digits do not
+  ///   follow the decimal expansion of `v`.
+  /// A float literal passed as `v` alone leaves `T` undecided (E0405, §4.7):
+  /// write `put_float::[F64]!(1.5, 2)` or pass a typed value.
+  pub rt fn put_float[T: Float](inout self, v: T, d: U32) {
+    let x = F64.round_from(v)
+    if is_nan(x) {
+      self.put_str!("NaN")
+      return
+    }
+    if !is_finite(x) {
+      if x < 0.0 {
+        self.put_byte!(45)
+      }
+      self.put_str!("inf")
+      return
+    }
+    // `d` is checked first, so that `10^d` is not built for a large `d`.
+    if d > 22 {
+      self.put_byte!(42)
+      return
+    }
+    var p: F64 = 1.0
+    for _ in 0 ..< d {
+      p = p * 10.0
+    }
+    let r = round((if x < 0.0 { -x } else { x }) * p)
+    if !(r < 18446744073709551616.0) {
+      self.put_byte!(42)
+      return
+    }
+    let n = U64.trunc_from(r)
+    if x < 0.0 && n != 0 {
+      self.put_byte!(45)
+    }
+    self.put_digits!(n, d)
+  }
+
+  /// Writes the bytes used into `out`, as many as fit, and returns their
+  /// number. This version leaves the bytes of `out` after that number as
+  /// they were (§4.2 does not fix them).
+  pub rt fn write_to(self, inout out: Span[U8]) -> U32 {
+    // SPEC-GAP(S-1012): §4.2 does not say what becomes of the bytes of `out` after the count; they are left as they were.
+    var k: U32 = 0
+    while k < self.len && k < out.len() {
+      out[k] = self.bytes[k]
+      k = k + 1
+    }
+    k
+  }
+
+  /// Appends one ASCII byte if it fits.
+  priv rt fn put_byte(inout self, c: U8) {
+    if self.len < N {
+      self.bytes[self.len] = c
+      self.len = self.len + 1
+    }
+  }
+
+  /// Appends `n` in decimal with a point before its last `d` digits, padded
+  /// with zeros to `d + 1` digits; no point for `d` 0. `d` is 22 at most.
+  priv rt fn put_digits(inout self, n: U64, d: U32) {
+    var digits: [U8; 23] = [48; 23]
+    var k: U32 = 0
+    var m = n
+    while m != 0 {
+      digits[k] = 48 + U8.narrow_from(m % 10).unwrap()
+      m = m / 10
+      k = k + 1
+    }
+    if k < d + 1 {
+      k = d + 1
+    }
+    while k > 0 {
+      if k == d {
+        self.put_byte!(46)
+      }
+      k = k - 1
+      self.put_byte!(digits[k])
+    }
   }
 }

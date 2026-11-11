@@ -1,0 +1,88 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.2", "§12.3", "§8.1"]
+
+// S-614 (W5-12 U3b, spec §4.2, §12.3): "ヒープを使わないので、rt の関数とヒープの無いターゲット（§12.3）で文字列を組み立てるのに使う". So `put_str`, `put_int`, `put_float` and `len` can be called in an `rt fn`
+// (an `rt fn` may not call a function that is not `rt`, and may not allocate), and the text is built there from the values and returned. The functions below are `rt fn`s that build a line of a display,
+// a name of a state, and a log line from a number and a float; the parameters of each have a `FixedStr` capacity as a type parameter in one of them. `write_to` is called in an `rt fn` too (the value of an
+// `inout` `Span[U8]` that an `rt fn` gets). The values are the texts of fixed_str_put_*.onsa.
+
+use std.text.FixedStr
+
+rt fn display_line(n: U32, level: F64) -> FixedStr[16] {
+  var t: FixedStr[16] = "ch"
+  t.put_int!(n)
+  t.put_str!(" ")
+  t.put_float!(level, 1)
+  t
+}
+
+rt fn state_name(tag: I32) -> FixedStr[12] {
+  var t: FixedStr[12] = "state"
+  if tag == 0 {
+    t.put_str!("_idle")
+  } else {
+    t.put_int!(tag)
+  }
+  t
+}
+
+rt fn log_line[const N: U32](inout t: FixedStr[N], code: U32, val: F32) {
+  t.put_str!("E")
+  t.put_int!(code)
+  t.put_str!(": ")
+  t.put_float!(val, 3)
+}
+
+rt fn copy_out(t: FixedStr[16], inout out: Span[U8]) -> U32 {
+  t.write_to(inout out)
+}
+
+rt fn count_digits(v: U64) -> U32 {
+  var t: FixedStr[24] = ""
+  t.put_int!(v)
+  t.len()
+}
+
+test "a line of a display is built in an rt function" {
+  assert display_line(3, 0.75) == "ch3 0.8"
+  assert display_line(12, 100.0) == "ch12 100.0"
+  assert display_line(0, F64.NAN) == "ch0 NaN"
+  assert display_line(1, 1.0e300) == "ch1 *"
+}
+
+test "the name of a state" {
+  assert state_name(5) == "state5"
+  assert state_name(0) == "state_idle"
+  let n = state_name(-12)
+  assert n.len() == 8
+  assert state_name(-12) == "state-12"
+  assert state_name(2147483647) == "state2147483"
+}
+
+test "a log line in an rt function with a capacity that is a parameter" {
+  var t: FixedStr[32] = ""
+  log_line(inout t, 17, 0.5)
+  assert t == "E17: 0.500"
+  var u: FixedStr[6] = ""
+  log_line(inout u, 17, 0.5)
+  assert u == "E17: 0"
+  assert u.len() == 6
+}
+
+test "write_to in an rt function" {
+  let t: FixedStr[16] = "hello"
+  var out: [U8; 8] = [255; 8]
+  let n = copy_out(t, inout out)
+  assert n == 5
+  assert out[0] == 104
+  assert out[4] == 111
+}
+
+test "the digits of the largest U64" {
+  assert count_digits(0) == 1
+  assert count_digits(9) == 1
+  assert count_digits(10) == 2
+  assert count_digits(U64.MAX) == 20
+}

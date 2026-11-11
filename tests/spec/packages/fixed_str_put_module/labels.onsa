@@ -1,0 +1,45 @@
+use std.text.FixedStr
+
+pub struct Meter {
+  priv line: FixedStr[16],
+  count: U32,
+}
+
+impl Meter {
+  pub fn push(inout self, n: U32) {
+    if self.count > 0 {
+      self.line.put_str!(",")
+    }
+    self.line.put_int!(n)
+    self.count = self.count + 1
+  }
+
+  pub fn text(self) -> FixedStr[16] {
+    self.line
+  }
+
+  pub fn width(self) -> U32 {
+    self.line.len()
+  }
+}
+
+pub fn new_meter() -> Meter {
+  Meter { line: "m:", count: 0 }
+}
+
+pub fn render(n: U32, level: F64) -> FixedStr[24] {
+  var t: FixedStr[24] = ""
+  t.put_int!(n)
+  t.put_str!(": ")
+  t.put_float!(level, 1)
+  t
+}
+
+pub fn add_unit(inout t: FixedStr[24], unit: FixedStr[4]) {
+  t.put_str!(" ")
+  t.put_str!(unit)
+}
+
+pub fn dump(t: FixedStr[24], inout out: Span[U8]) -> U32 {
+  t.write_to(inout out)
+}

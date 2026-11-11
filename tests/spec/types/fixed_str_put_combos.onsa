@@ -1,0 +1,205 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.2", "§2.6", "§5.2", "§7", "§4.5"]
+
+// S-614 (W5-12 U3b, spec §4.2, §2.6, §5.2): the appends in the places and the control flow that a program has. The receiver of `t.put_str!(…)`, `t.put_int!(…)` and `t.put_float!(…, d)` is a place that can
+// be changed (§5.2: a `var`, an `inout` parameter, the field of one, the element of one, an element of a tuple); the mark `!` is written after the name (§2.6). The value is a copy (the type is Copy), so the
+// appends of a copy do not change the original. Covered: a field, an element of an array, an element of a tuple, a field of an `inout` struct, an `inout` parameter, the branches of `if` and the arms of `match`,
+// `for` and `while`, a function with `[T: Int]` and `[T: Float]` that appends the value of the parameter, a function with a capacity that is a parameter, the value that a function returns, and an anonymous function
+// of `array.from_fn` that builds the text from a captured one (a captured value is read only, so the closure appends to a copy that it owns).
+
+use std.array
+use std.text.FixedStr
+
+pub struct Voice {
+  name: FixedStr[8],
+  gain: U32,
+}
+
+fn tag(inout t: FixedStr[8], n: U32) {
+  t.put_str!("#")
+  t.put_int!(n)
+}
+
+fn rename(inout v: Voice, n: U32) {
+  v.name.put_str!("v")
+  v.name.put_int!(n)
+}
+
+fn label(n: U32) -> FixedStr[16] {
+  var t: FixedStr[16] = "voice "
+  t.put_int!(n)
+  t
+}
+
+fn put_value[T: Int](inout t: FixedStr[24], v: T) {
+  t.put_int!(v)
+  t.put_str!(";")
+}
+
+fn put_level[T: Float](inout t: FixedStr[24], v: T, d: U32) {
+  t.put_float!(v, d)
+  t.put_str!(";")
+}
+
+fn append_both[const N: U32](inout t: FixedStr[N], n: U32, x: F64) {
+  t.put_int!(n)
+  t.put_str!("/")
+  t.put_float!(x, 1)
+}
+
+test "a field of a variable" {
+  var v = Voice { name: "ab", gain: 3 }
+  v.name.put_str!("cd")
+  v.name.put_int!(v.gain)
+  assert v.name == "abcd3"
+  assert v.gain == 3
+}
+
+test "a field of an inout parameter" {
+  var v = Voice { name: "", gain: 0 }
+  rename(inout v, 7)
+  assert v.name == "v7"
+  rename(inout v, 12)
+  assert v.name == "v7v12"
+}
+
+test "an element of an array and an element of a tuple" {
+  var xs: [FixedStr[8]; 3] = ["a", "b", "c"]
+  xs[1].put_int!(5)
+  xs[2].put_float::[F64]!(0.5, 1)
+  assert xs[0] == "a"
+  assert xs[1] == "b5"
+  assert xs[2] == "c0.5"
+  var p: (FixedStr[8], U32) = ("k", 2)
+  p.0.put_str!("=")
+  p.0.put_int!(p.1)
+  assert p.0 == "k=2"
+  assert p.1 == 2
+}
+
+test "an inout parameter" {
+  var t: FixedStr[8] = "n"
+  tag(inout t, 4)
+  assert t == "n#4"
+  tag(inout t, 56)
+  assert t == "n#4#56"
+  tag(inout t, 789)
+  assert t == "n#4#56#7"
+  assert t.len() == 8
+}
+
+test "the branches of if and the arms of match" {
+  var t: FixedStr[16] = ""
+  for i in 0 ..< 4 {
+    if i % 2 == 0 {
+      t.put_str!("e")
+    } else {
+      t.put_int!(i)
+    }
+  }
+  assert t == "e1e3"
+  var u: FixedStr[16] = ""
+  let o: Option[U32] = Some(42)
+  match o {
+    Some(n) => {
+      u.put_int!(n)
+    },
+    None => {
+      u.put_str!("-")
+    },
+  }
+  let none: Option[U32] = None
+  match none {
+    Some(n) => {
+      u.put_int!(n)
+    },
+    None => {
+      u.put_str!("-")
+    },
+  }
+  assert u == "42-"
+}
+
+test "a loop builds a list and the cut ends it" {
+  var t: FixedStr[12] = ""
+  for i in 0 ..< 6 {
+    if i > 0 {
+      t.put_str!(",")
+    }
+    t.put_int!(i * 5)
+  }
+  assert t == "0,5,10,15,20"
+  assert t.len() == 12
+  var w: FixedStr[8] = ""
+  while w.len() < 6 {
+    w.put_str!("ab")
+  }
+  assert w == "ababab"
+  var z: FixedStr[5] = ""
+  while z.len() < 5 {
+    z.put_str!("xyz")
+  }
+  assert z == "xyzxy"
+}
+
+test "a function with an integer type parameter and a float type parameter" {
+  var t: FixedStr[24] = ""
+  let a: U8 = 255
+  let b: I16 = -300
+  let c: I64 = I64.MIN
+  put_value(inout t, a)
+  put_value(inout t, b)
+  assert t == "255;-300;"
+  var u: FixedStr[24] = ""
+  put_value(inout u, c)
+  assert u == "-9223372036854775808;"
+  var v: FixedStr[24] = ""
+  let x: F32 = 0.5
+  let y: F64 = 2.25
+  put_level(inout v, x, 2)
+  put_level(inout v, y, 1)
+  assert v == "0.50;2.2;"
+}
+
+test "a function with a capacity that is a parameter" {
+  var t: FixedStr[8] = "a="
+  append_both(inout t, 3, 1.25)
+  assert t == "a=3/1.2"
+  var u: FixedStr[20] = "a="
+  append_both(inout u, 3, 1.25)
+  assert u == "a=3/1.2"
+  assert u.len() == 7
+}
+
+test "the value that a function returns" {
+  assert label(3) == "voice 3"
+  assert label(10).len() == 8
+  let a = label(1)
+  var b = label(2)
+  b.put_str!("!")
+  assert a == "voice 1"
+  assert b == "voice 2!"
+}
+
+test "an anonymous function builds the text from a captured one" {
+  let pre: FixedStr[8] = "v"
+  let xs: [FixedStr[8]; 3] = array.from_fn(fn(i) {
+    var t = pre
+    t.put_int!(i)
+    t
+  })
+  assert xs[0] == "v0"
+  assert xs[1] == "v1"
+  assert xs[2] == "v2"
+  assert pre == "v"
+}
+
+test "the copy of a struct is apart" {
+  var a = Voice { name: "x", gain: 1 }
+  let b = a
+  a.name.put_int!(9)
+  assert a.name == "x9"
+  assert b.name == "x"
+}

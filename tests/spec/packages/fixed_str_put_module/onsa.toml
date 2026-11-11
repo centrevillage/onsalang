@@ -1,0 +1,3 @@
+[package]
+name = "fixed_str_put_module"
+edition = "2026"

@@ -1,0 +1,122 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.2", "§6.4", "§3.3"]
+
+// S-614 (W5-12 U3b, spec §4.2, S-1007): `put_float[T: Float](inout self, v: T, d: U32)` writes a float with `d` digits after the point. §4.2: "値を `F64` に広げて `F64` の乗算で `10^d` を掛け、最近接偶数で整数に丸め、
+// 10 進で書いて下から `d` 桁の前に小数点を入れた文字とする（`d` が 0 なら小数点を書かない。…）". The end of S-1007 (decision of 2026-11-11, the characters that std defines): NaN is `NaN`, the infinities are `inf` and `-inf`
+// (whatever `d` is); a finite value with `d` over 22, or whose rounded integer is 2^64 or over in the absolute value, is the one byte `*` (no sign); `d = 0` writes no point; `10^d` is multiplied as `F64`
+// (`1.075` with 2 digits is `1.08`). Read from the formula of the spec by the script (IEEE double, the product and the round half to even); the product and the integer are in the comment of the line when short.
+// Two readings that are one from the formula (the design memo 3.1): the rounded integer 0 has no sign (`-0.0` and `-0.004` with 2 digits are `0.00`), and a value under 1 is padded with 0 (`0.05`).
+
+// This file: `F32`. The value is widened to `F64` first, then multiplied (decision: "中で 64 ビットの整数と `F64` に広げる"), so the product is the one of the double of the `F32` value (`0.1` as `F32` is
+// 0.100000001490116119384765625, which is `0.1000000015` with 10 digits, not `0.1000000000`; the `F32` `0.15` is over the tie, so `0.2` with 1 digit). A literal of `F32` is rounded once from the decimal
+// to `F32` (§2.4), and the script does that with exact fractions. The neighbours of 2^64 (the largest `F32` under 2^64 is 2^64 - 2^40), `F32.MAX` (`*`), the smallest denormal, NaN and the infinities. The generic
+// function is checked with `F32` and `F64`: the same value gives different texts when the value is not exact.
+
+use std.text.FixedStr
+
+fn f64s(v: F64, d: U32) -> FixedStr[32] {
+  var t: FixedStr[32] = ""
+  t.put_float!(v, d)
+  t
+}
+
+fn f32s(v: F32, d: U32) -> FixedStr[32] {
+  var t: FixedStr[32] = ""
+  t.put_float!(v, d)
+  t
+}
+
+fn gen_str[T: Float](v: T, d: U32) -> FixedStr[32] {
+  var t: FixedStr[32] = ""
+  t.put_float!(v, d)
+  t
+}
+
+test "F32: rounding and zeros" {
+  assert f32s(0.1, 10) == "0.1000000015"                        // 1000000014.9011612 -> 1000000015
+  assert f32s(0.1, 7) == "0.1000000"                            // 1000000.0149011612 -> 1000000
+  assert f32s(0.1, 1) == "0.1"                                  // 1.0000000149011612 -> 1
+  assert f32s(0.15, 1) == "0.2"                                 // 1.5000000596046448 -> 2
+  assert f32s(0.15, 2) == "0.15"                                // 15.000000596046448 -> 15
+  assert f32s(1.5, 0) == "2"                                    // 1.5 -> 2
+  assert f32s(2.5, 0) == "2"                                    // 2.5 -> 2
+  assert f32s(0.5, 0) == "0"                                    // 0.5 -> 0
+  assert f32s(-0.5, 0) == "0"                                   // 0.5 -> 0
+  assert f32s(-1.5, 0) == "-2"                                  // 1.5 -> 2
+  assert f32s(16777216.0, 0) == "16777216"                      // 16777216.0 -> 16777216
+  assert f32s(16777217.0, 0) == "16777216"                      // 16777216.0 -> 16777216
+  assert f32s(1.0e10, 0) == "10000000000"                       // 10000000000.0 -> 10000000000
+  assert f32s(12.345, 2) == "12.35"                             // 1234.5000267028809 -> 1235
+  assert f32s(12.345, 3) == "12.345"                            // 12345.000267028809 -> 12345
+  assert f32s(3.14159, 4) == "3.1416"                           // 31415.90118408203 -> 31416
+  assert f32s(0.3, 1) == "0.3"                                  // 3.0000001192092896 -> 3
+  assert f32s(0.3, 8) == "0.30000001"                           // 30000001.192092896 -> 30000001
+  assert f32s(1.0e-45, 22) == "0.0000000000000000000000"        // 1.401298464324817e-23 -> 0
+  assert f32s(1.17549435e-38, 22) == "0.0000000000000000000000" // 1.1754943508222875e-16 -> 0
+  assert f32s(-0.0, 2) == "0.00"                                // 0.0 -> 0
+  assert f32s(-0.0, 0) == "0"                                   // 0.0 -> 0
+  assert f32s(-0.004, 2) == "0.00"                              // 0.4000000189989805 -> 0
+  assert f32s(0.05, 2) == "0.05"                                // 5.000000074505806 -> 5
+  assert f32s(0.125, 2) == "0.12"                               // 12.5 -> 12
+  assert f32s(-0.125, 2) == "-0.12"                             // 12.5 -> 12
+  assert f32s(440.0, 2) == "440.00"                             // 44000.0 -> 44000
+  assert f32s(48000.0, 3) == "48000.000"                        // 48000000.0 -> 48000000
+  assert f32s(1.0e-3, 22) == "0.0010000000474974513152"
+  assert f32s(-1.0e-3, 22) == "-0.0010000000474974513152"
+}
+
+test "F32: the neighbours of 2^64 and the digits" {
+  assert f32s(18446742974197923840.0, 0) == "18446742974197923840"
+  assert f32s(18446744073709551616.0, 0) == "*"
+  assert f32s(1.9e19, 0) == "*"
+  assert f32s(1.0e19, 0) == "9999999980506447872" // 9.999999980506448e+18 -> 9999999980506447872
+  assert f32s(1.8e19, 0) == "18000000404716257280"
+  assert f32s(-18446742974197923840.0, 0) == "-18446742974197923840"
+  assert f32s(-18446744073709551616.0, 0) == "*"
+  assert f32s(0.0, 22) == "0.0000000000000000000000" // 0.0 -> 0
+  assert f32s(0.0, 23) == "*"
+  assert f32s(1.0, 23) == "*"
+  assert f32s(1.0, 22) == "*"                     // 1e+22 -> 10000000000000000000000
+  assert f32s(1.0, 19) == "1.0000000000000000000" // 1e+19 -> 10000000000000000000
+  assert f32s(0.1, 19) == "0.1000000014901161216"
+  assert f32s(0.1, 20) == "0.10000000149011611648"
+}
+
+test "F32: MAX, NaN and the infinities" {
+  assert f32s(F32.MAX, 0) == "*"
+  assert f32s(-F32.MAX, 0) == "*"
+  assert f32s(F32.MAX, 22) == "*"
+  assert f32s(F32.NAN, 0) == "NaN"
+  assert f32s(F32.NAN, 2) == "NaN"
+  assert f32s(F32.NAN, 23) == "NaN"
+  assert f32s(F32.INFINITY, 0) == "inf"
+  assert f32s(F32.INFINITY, 23) == "inf"
+  assert f32s(-F32.INFINITY, 0) == "-inf"
+  assert f32s(-F32.INFINITY, 23) == "-inf"
+  assert f32s(-F32.INFINITY, 2) == "-inf"
+}
+
+test "the generic function with F32 and with F64" {
+  let a: F32 = 0.1
+  let b: F64 = 0.1
+  assert gen_str(a, 10) == "0.1000000015"
+  assert gen_str(b, 10) == "0.1000000000"
+  assert gen_str(a, 1) == "0.1"
+  assert gen_str(b, 1) == "0.1"
+  let c: F32 = 0.5
+  let e: F64 = 0.5
+  assert gen_str(c, 3) == gen_str(e, 3)
+  assert gen_str(c, 3) == "0.500"
+  assert gen_str(F32.NAN, 3) == "NaN"
+  assert gen_str(F64.NAN, 3) == "NaN"
+  assert gen_str(-F32.INFINITY, 3) == "-inf"
+}
+
+test "F32 and F64 write the same text when the value is exact" {
+  assert f32s(0.375, 2) == f64s(0.375, 2)
+  assert f32s(-2.5, 0) == f64s(-2.5, 0)
+  assert f32s(1024.0, 3) == f64s(1024.0, 3)
+  assert f32s(0.1, 10) != f64s(0.1, 10)
+}

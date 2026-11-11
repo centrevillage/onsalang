@@ -1,0 +1,110 @@
+// onsa.toml
+// [package]
+// name = "c_fixed_str_u3b_cap0"
+// edition = "2026"
+//
+// [export]
+// prefix = "cfu3bz_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§4.2", "§13.4"]
+//
+// [[test.host]]
+// name = "case"
+// target = "host"
+// fn = "c_fixed_str_u3b_cap0.case"
+// steps = [
+//   { call = "fn", args = { i = 0 }, status = 0, result = true },
+//   { call = "fn", args = { i = 1 }, status = 0, result = true },
+//   { call = "fn", args = { i = 2 }, status = 0, result = true },
+//   { call = "fn", args = { i = 3 }, status = 0, result = true },
+//   { call = "fn", args = { i = 4 }, status = 0, result = false },
+//   { call = "fn", args = { i = 4294967295 }, status = 0, result = false },
+// ]
+
+// S-614 (W5-12 U3b, spec §4.2, §13.4): the receiver and the argument with the capacity 0 in the C of the host. A receiver with the capacity 0 takes no byte of `put_str`, `put_int` or `put_float` (the cut is at the capacity), `write_to` of it
+// writes nothing, and `put_str` of a value with the capacity 0 changes nothing. The C of `FixedStr[0]` has an array of length 0 and its initializer is empty, a C23 extension that `-pedantic -Werror` refuses (R-432, to be fixed in
+// W5-12 U3a), so this file is apart from the other C files of U3b (they pass without R-432).
+// `case(i)` picks the i-th case by a `match` that is a statement and returns whether the case holds (false for an `i` that is not a case); the sequence of the `[[test.host]]` runs every `i`. A `mode = "test"`
+// case runs the interpreter only, and the C is made from the sequence above, so the interpreter and the C give the same bytes for every case here (the C rounds by `onsa_round_f64`).
+
+use std.text.FixedStr
+
+fn empty_cap0() -> FixedStr[0] {
+  let t: FixedStr[0] = ""
+  t
+}
+
+// the empty text of the capacity 0
+fn c0() -> Bool {
+  let t: FixedStr[0] = ""
+  t.len() == 0 && t == ""
+}
+
+// put_str, put_int and put_float into the capacity 0 write nothing
+fn c1() -> Bool {
+  var t: FixedStr[0] = ""
+  t.put_str!("abc")
+  t.put_int!(-12)
+  t.put_float::[F64]!(1.5, 2)
+  t.put_float!(F64.NAN, 2)
+  t.put_float::[F64]!(1.0e300, 0)
+  t.len() == 0 && t == ""
+}
+
+// write_to from the capacity 0
+fn c2() -> Bool {
+  let t = empty_cap0()
+  var out: [U8; 2] = [255; 2]
+  t.write_to(inout out) == 0
+}
+
+// put_str of a value with the capacity 0 changes nothing
+fn c3() -> Bool {
+  var t: FixedStr[8] = "ab"
+  let e = empty_cap0()
+  t.put_str!(e)
+  t == "ab" && t.len() == 2
+}
+
+@export
+pub fn case(i: U32) -> Bool {
+  var r = false
+  match i {
+    0 => {
+      r = c0()
+    },
+    1 => {
+      r = c1()
+    },
+    2 => {
+      r = c2()
+    },
+    3 => {
+      r = c3()
+    },
+    _ => {
+      r = false
+    },
+  }
+  r
+}
+
+test "every case holds in the interpreter" {
+  for i in 0 ..< 4 {
+    assert case(i)
+  }
+}
+
+test "a case that does not exist is false" {
+  assert !case(4)
+  assert !case(4294967295)
+}

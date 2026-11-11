@@ -1,0 +1,61 @@
+// onsa.toml
+// [test]
+// spec = ["§4.2", "§2.6", "§5.2"]
+// fixes = 1
+
+// S-614 (W5-12 U3b, spec §4.2, §2.6, §5.2): `put_str`, `put_int` and `put_float` take `inout self`, so the call is `t.put_str!(…)` with the mark `!` right after the name (§2.6, §5.2: "`inout self` のメソッドの呼び出しは、
+// 名前の直後に `!` を付ける … 無ければ E0713"). Without it E0713; the mark on a method that is not `inout self` (`len`, `write_to`: both take `self`) is E0714. "どちらも修正候補は一意" (§5.2): the one candidate of E0713
+// inserts the `!`, and the one of E0714 removes it (the file after each candidate is made by the implementation, `.fix1`). One error in each function (P-01); the marker is on the line of the call.
+
+use std.text.FixedStr
+
+pub struct Voice {
+  name: FixedStr[8],
+}
+
+pub fn put_str_without_the_mark() -> FixedStr[8] {
+  var t: FixedStr[8] = ""
+  t.put_str("b")                                      //~ E0713
+  t
+}
+
+pub fn put_int_without_the_mark() -> FixedStr[8] {
+  var t: FixedStr[8] = ""
+  t.put_int(5)                                        //~ E0713
+  t
+}
+
+pub fn put_float_without_the_mark() -> FixedStr[8] {
+  var t: FixedStr[8] = ""
+  t.put_float::[F64](1.5, 2)                          //~ E0713
+  t
+}
+
+pub fn put_str_of_a_field_without_the_mark(inout v: Voice) {
+  v.name.put_str("b")                                 //~ E0713
+}
+
+pub fn the_mark_on_len() -> U32 {
+  let t: FixedStr[8] = "ab"
+  t.len!()                                            //~ E0714
+}
+
+pub fn the_mark_on_write_to() -> U32 {
+  let t: FixedStr[8] = "ab"
+  var out: [U8; 4] = [0; 4]
+  t.write_to!(inout out)                              //~ E0714
+}
+
+pub fn the_mark_on_len_of_a_field(v: Voice) -> U32 {
+  v.name.len!()                                       //~ E0714
+}
+
+pub fn the_calls_with_the_right_mark_are_fine(inout v: Voice) -> U32 {
+  var t: FixedStr[8] = ""
+  t.put_str!("b")
+  t.put_int!(5)
+  t.put_float::[F64]!(1.5, 2)
+  v.name.put_str!("b")
+  var out: [U8; 4] = [0; 4]
+  t.write_to(inout out) + v.name.len()
+}

@@ -1,0 +1,169 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.2"]
+
+// S-614 (W5-12 U3b, spec §4.2, S-1007): `put_float[T: Float](inout self, v: T, d: U32)` writes a float with `d` digits after the point. §4.2: "値を `F64` に広げて `F64` の乗算で `10^d` を掛け、最近接偶数で整数に丸め、
+// 10 進で書いて下から `d` 桁の前に小数点を入れた文字とする（`d` が 0 なら小数点を書かない。…）". The end of S-1007 (decision of 2026-11-11, the characters that std defines): NaN is `NaN`, the infinities are `inf` and `-inf`
+// (whatever `d` is); a finite value with `d` over 22, or whose rounded integer is 2^64 or over in the absolute value, is the one byte `*` (no sign); `d = 0` writes no point; `10^d` is multiplied as `F64`
+// (`1.075` with 2 digits is `1.08`). Read from the formula of the spec by the script (IEEE double, the product and the round half to even); the product and the integer are in the comment of the line when short.
+// Two readings that are one from the formula (the design memo 3.1): the rounded integer 0 has no sign (`-0.0` and `-0.004` with 2 digits are `0.00`), and a value under 1 is padded with 0 (`0.05`).
+
+// This file: the rounding. Typical values; the midpoints (a tie goes to the even integer: `0.125` with 2 digits is `0.12`, `0.375` is `0.38`, `0.5` is `0`, `1.5` is `2`, `2.5` is `2`); the values whose
+// decimal is not the double (`1.005` is under, `1.075` is over; the product is rounded, not the decimal); the zero and the small values (no sign for the rounded 0); the width of the digits from `d = 0`
+// to 22 (the longest text, 25 bytes). The edges (NaN, the infinities, `d` over 22, 2^64) are in fixed_str_put_float_edges.onsa, `F32` in fixed_str_put_float_f32.onsa.
+
+use std.text.FixedStr
+
+fn f64s(v: F64, d: U32) -> FixedStr[32] {
+  var t: FixedStr[32] = ""
+  t.put_float!(v, d)
+  t
+}
+
+fn f32s(v: F32, d: U32) -> FixedStr[32] {
+  var t: FixedStr[32] = ""
+  t.put_float!(v, d)
+  t
+}
+
+test "typical values" {
+  assert f64s(12.345, 2) == "12.34"            // 1234.5 -> 1234
+  assert f64s(3.14159, 2) == "3.14"            // 314.159 -> 314
+  assert f64s(3.14159, 4) == "3.1416"          // 31415.899999999998 -> 31416
+  assert f64s(3.14159, 0) == "3"               // 3.14159 -> 3
+  assert f64s(440.0, 1) == "440.0"             // 4400.0 -> 4400
+  assert f64s(440.0, 0) == "440"               // 440.0 -> 440
+  assert f64s(1.0, 3) == "1.000"               // 1000.0 -> 1000
+  assert f64s(123.456, 0) == "123"             // 123.456 -> 123
+  assert f64s(0.1, 1) == "0.1"                 // 1.0 -> 1
+  assert f64s(0.1, 3) == "0.100"               // 100.0 -> 100
+  assert f64s(99.995, 2) == "100.00"           // 9999.5 -> 10000
+  assert f64s(0.999, 2) == "1.00"              // 99.9 -> 100
+  assert f64s(0.9, 0) == "1"                   // 0.9 -> 1
+  assert f64s(100.0, 2) == "100.00"            // 10000.0 -> 10000
+  assert f64s(7.0, 0) == "7"                   // 7.0 -> 7
+  assert f64s(1234567.891, 3) == "1234567.891" // 1234567891.0 -> 1234567891
+  assert f64s(-123.456, 2) == "-123.46"        // 12345.6 -> 12346
+  assert f64s(-3.14159, 1) == "-3.1"           // 31.4159 -> 31
+  assert f64s(-7.0, 0) == "-7"                 // 7.0 -> 7
+  assert f64s(-440.0, 2) == "-440.00"          // 44000.0 -> 44000
+  assert f64s(0.3, 1) == "0.3"                 // 3.0 -> 3
+  assert f64s(2.0, 10) == "2.0000000000"       // 20000000000.0 -> 20000000000
+}
+
+test "the midpoints go to the even integer" {
+  assert f64s(0.125, 2) == "0.12"   // 12.5 -> 12
+  assert f64s(0.375, 2) == "0.38"   // 37.5 -> 38
+  assert f64s(0.625, 2) == "0.62"   // 62.5 -> 62
+  assert f64s(0.25, 1) == "0.2"     // 2.5 -> 2
+  assert f64s(0.75, 1) == "0.8"     // 7.5 -> 8
+  assert f64s(0.5, 0) == "0"        // 0.5 -> 0
+  assert f64s(1.5, 0) == "2"        // 1.5 -> 2
+  assert f64s(2.5, 0) == "2"        // 2.5 -> 2
+  assert f64s(3.5, 0) == "4"        // 3.5 -> 4
+  assert f64s(-0.5, 0) == "0"       // 0.5 -> 0
+  assert f64s(-1.5, 0) == "-2"      // 1.5 -> 2
+  assert f64s(-2.5, 0) == "-2"      // 2.5 -> 2
+  assert f64s(-3.5, 0) == "-4"      // 3.5 -> 4
+  assert f64s(0.35, 1) == "0.4"     // 3.5 -> 4
+  assert f64s(2.675, 2) == "2.68"   // 267.5 -> 268
+  assert f64s(1.005, 2) == "1.00"   // 100.49999999999999 -> 100
+  assert f64s(1.075, 2) == "1.08"   // 107.5 -> 108
+  assert f64s(0.15, 1) == "0.2"     // 1.5 -> 2
+  assert f64s(0.045, 2) == "0.04"   // 4.5 -> 4
+  assert f64s(1.115, 2) == "1.12"   // 111.5 -> 112
+  assert f64s(0.005, 2) == "0.00"   // 0.5 -> 0
+  assert f64s(0.5, 1) == "0.5"      // 5.0 -> 5
+  assert f64s(-0.125, 2) == "-0.12" // 12.5 -> 12
+  assert f64s(-0.375, 2) == "-0.38" // 37.5 -> 38
+  assert f64s(-1.075, 2) == "-1.08" // 107.5 -> 108
+}
+
+test "zero and the small values" {
+  assert f64s(0.05, 2) == "0.05"               // 5.0 -> 5
+  assert f64s(0.05, 1) == "0.0"                // 0.5 -> 0
+  assert f64s(0.007, 2) == "0.01"              // 0.7000000000000001 -> 1
+  assert f64s(0.0005, 3) == "0.000"            // 0.5 -> 0
+  assert f64s(0.0005, 4) == "0.0005"           // 5.0 -> 5
+  assert f64s(0.0, 0) == "0"                   // 0.0 -> 0
+  assert f64s(0.0, 2) == "0.00"                // 0.0 -> 0
+  assert f64s(-0.0, 2) == "0.00"               // 0.0 -> 0
+  assert f64s(-0.0, 0) == "0"                  // 0.0 -> 0
+  assert f64s(-0.0, 5) == "0.00000"            // 0.0 -> 0
+  assert f64s(-0.004, 2) == "0.00"             // 0.4 -> 0
+  assert f64s(-0.005, 2) == "0.00"             // 0.5 -> 0
+  assert f64s(-0.0049999, 2) == "0.00"         // 0.49999 -> 0
+  assert f64s(-0.006, 2) == "-0.01"            // 0.6 -> 1
+  assert f64s(-0.4, 0) == "0"                  // 0.4 -> 0
+  assert f64s(-0.6, 0) == "-1"                 // 0.6 -> 1
+  assert f64s(-0.0001, 3) == "0.000"           // 0.1 -> 0
+  assert f64s(-0.0001, 4) == "-0.0001"         // 1.0 -> 1
+  assert f64s(1.0e-10, 2) == "0.00"            // 1e-08 -> 0
+  assert f64s(-1.0e-10, 5) == "0.00000"        // 1e-05 -> 0
+  assert f64s(-1.0e-10, 10) == "-0.0000000001" // 1.0 -> 1
+  assert f64s(0.01, 2) == "0.01"               // 1.0 -> 1
+  assert f64s(0.1, 2) == "0.10"                // 10.0 -> 10
+  assert f64s(0.001, 3) == "0.001"             // 1.0 -> 1
+  assert f64s(-0.05, 2) == "-0.05"             // 5.0 -> 5
+}
+
+test "the width of the digits up to d = 22" {
+  assert f64s(5.0, 0) == "5"                               // 5.0 -> 5
+  assert f64s(5.0, 1) == "5.0"                             // 50.0 -> 50
+  assert f64s(5.0, 5) == "5.00000"                         // 500000.0 -> 500000
+  assert f64s(0.0, 19) == "0.0000000000000000000"          // 0.0 -> 0
+  assert f64s(0.0, 20) == "0.00000000000000000000"         // 0.0 -> 0
+  assert f64s(0.0, 22) == "0.0000000000000000000000"       // 0.0 -> 0
+  assert f64s(1.0e-5, 22) == "0.0000100000000000000016"    // 1.0000000000000002e+17 -> 100000000000000016
+  assert f64s(1.0, 19) == "1.0000000000000000000"          // 1e+19 -> 10000000000000000000
+  assert f64s(1.8, 19) == "1.8000000000000000000"          // 1.8e+19 -> 18000000000000000000
+  assert f64s(-1.8, 19) == "-1.8000000000000000000"        // 1.8e+19 -> 18000000000000000000
+  assert f64s(1.9, 19) == "*"                              // 1.9e+19 -> 19000000000000000000
+  assert f64s(0.1, 20) == "0.10000000000000000000"         // 1e+19 -> 10000000000000000000
+  assert f64s(0.2, 20) == "*"                              // 2e+19 -> 20000000000000000000
+  assert f64s(440.0, 16) == "440.0000000000000000"         // 4.4e+18 -> 4400000000000000000
+  assert f64s(440.0, 17) == "*"                            // 4.4e+19 -> 44000000000000000000
+  assert f64s(20000.0, 14) == "20000.00000000000000"       // 2e+18 -> 2000000000000000000
+  assert f64s(20000.0, 15) == "*"                          // 2e+19 -> 20000000000000000000
+  assert f64s(-0.001, 22) == "-0.0010000000000000000000"   // 1e+19 -> 10000000000000000000
+  assert f64s(0.001, 22) == "0.0010000000000000000000"     // 1e+19 -> 10000000000000000000
+  assert f64s(1.0, 22) == "*"                              // 1e+22 -> 10000000000000000000000
+  assert f64s(1.0e-3, 18) == "0.001000000000000000"        // 1000000000000000.0 -> 1000000000000000
+  assert f64s(12.5, 9) == "12.500000000"                   // 12500000000.0 -> 12500000000
+  assert f64s(18446744073.0, 9) == "18446744072.999999488" // 1.8446744073e+19 -> 18446744072999999488
+  assert f64s(18446744074.0, 9) == "*"                     // 1.8446744074e+19 -> 18446744073999998976
+  assert f64s(1.0, 21) == "*"                              // 1e+21 -> 1000000000000000000000
+  assert f64s(0.5, 22) == "*"                              // 5e+21 -> 5000000000000000000000
+  assert f64s(0.0000001, 22) == "0.0000001000000000000000" // 1000000000000000.0 -> 1000000000000000
+}
+
+test "the text after another text and one after another" {
+  var t: FixedStr[32] = "x="
+  t.put_float::[F64]!(1.5, 2)
+  assert t == "x=1.50"
+  t.put_str!(" y=")
+  t.put_float::[F64]!(-0.25, 1)
+  assert t == "x=1.50 y=-0.2"
+  t.put_float::[F64]!(2.5, 0)
+  assert t == "x=1.50 y=-0.22"
+}
+
+test "d = 0 has no point and d = 1 has one digit after it" {
+  assert f64s(12.0, 0) == "12"
+  assert f64s(12.0, 1) == "12.0"
+  assert f64s(-12.0, 0) == "-12"
+  assert f64s(0.0, 0) == "0"
+  assert f64s(0.0, 1) == "0.0"
+  assert f64s(12.0, 0).len() == 2
+  assert f64s(12.0, 1).len() == 4
+}
+
+test "the rounding is carried over to the digit before" {
+  assert f64s(9.99, 1) == "10.0"
+  assert f64s(9.99, 0) == "10"
+  assert f64s(0.999, 2) == "1.00"
+  assert f64s(-0.999, 0) == "-1"
+  assert f64s(99.95, 1) == "100.0" // 999.5 -> 1000
+  assert f64s(99.995, 2).len() == 6
+}

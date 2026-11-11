@@ -1,0 +1,344 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.2", "§6.4", "§3.3"]
+
+// S-614 (W5-12 U3b, spec §4.2, §6.4): `put_int[T: Int](inout self, v: T)` writes the decimal of `v` (decision of 2026-11-11: widened to a 64-bit integer inside). §4.2: "書き足し（… 整数の 10 進 …）は、入る分だけ
+// 書き". The decimal is the digits of the value without leading zeros (and `0` is one digit), with `-` first for a negative value. The types that satisfy `Int` (§6.4: `I8 I16 I32 I64 U8 U16 U32 U64`, §4.1)
+// are all run, each with 0, 1, -1 (for the signed ones), MIN, MAX, the value next to each of them, and the edges of the number of the digits (10^k - 1 and 10^k, and the negative ones). The text of an
+// integer is the same for all types, so the expected text is the decimal of the number (the lines of a type are in the order of the values). `I64.MIN` and `U64.MAX` are 20 bytes, the longest texts. The result
+// is read from a `FixedStr[24]` that holds the text. A narrow type is not read as another type (`U8.MAX` is `255`, not `-1`; `I8.MIN` is `-128`). The cuts at the capacity are in fixed_str_put_truncate.onsa.
+
+use std.text.FixedStr
+
+fn int_str[T: Int](v: T) -> FixedStr[24] {
+  var t: FixedStr[24] = ""
+  t.put_int!(v)
+  t
+}
+
+test "I8: 0, 1, the edges of the digits, MIN and MAX" {
+  assert int_str(I8.MIN) == "-128"
+  assert int_str::[I8](-127) == "-127"
+  assert int_str::[I8](-100) == "-100"
+  assert int_str::[I8](-99) == "-99"
+  assert int_str::[I8](-10) == "-10"
+  assert int_str::[I8](-9) == "-9"
+  assert int_str::[I8](-1) == "-1"
+  assert int_str::[I8](0) == "0"
+  assert int_str::[I8](1) == "1"
+  assert int_str::[I8](9) == "9"
+  assert int_str::[I8](10) == "10"
+  assert int_str::[I8](99) == "99"
+  assert int_str::[I8](100) == "100"
+  assert int_str::[I8](126) == "126"
+  assert int_str(I8.MAX) == "127"
+}
+
+test "I16: 0, 1, the edges of the digits, MIN and MAX" {
+  assert int_str(I16.MIN) == "-32768"
+  assert int_str::[I16](-32767) == "-32767"
+  assert int_str::[I16](-10000) == "-10000"
+  assert int_str::[I16](-9999) == "-9999"
+  assert int_str::[I16](-1000) == "-1000"
+  assert int_str::[I16](-999) == "-999"
+  assert int_str::[I16](-100) == "-100"
+  assert int_str::[I16](-99) == "-99"
+  assert int_str::[I16](-10) == "-10"
+  assert int_str::[I16](-9) == "-9"
+  assert int_str::[I16](-1) == "-1"
+  assert int_str::[I16](0) == "0"
+  assert int_str::[I16](1) == "1"
+  assert int_str::[I16](9) == "9"
+  assert int_str::[I16](10) == "10"
+  assert int_str::[I16](99) == "99"
+  assert int_str::[I16](100) == "100"
+  assert int_str::[I16](999) == "999"
+  assert int_str::[I16](1000) == "1000"
+  assert int_str::[I16](9999) == "9999"
+  assert int_str::[I16](10000) == "10000"
+  assert int_str::[I16](32766) == "32766"
+  assert int_str(I16.MAX) == "32767"
+}
+
+test "I32: 0, 1, the edges of the digits, MIN and MAX" {
+  assert int_str(I32.MIN) == "-2147483648"
+  assert int_str::[I32](-2147483647) == "-2147483647"
+  assert int_str::[I32](-1000000000) == "-1000000000"
+  assert int_str::[I32](-999999999) == "-999999999"
+  assert int_str::[I32](-100000000) == "-100000000"
+  assert int_str::[I32](-99999999) == "-99999999"
+  assert int_str::[I32](-10000000) == "-10000000"
+  assert int_str::[I32](-9999999) == "-9999999"
+  assert int_str::[I32](-1000000) == "-1000000"
+  assert int_str::[I32](-999999) == "-999999"
+  assert int_str::[I32](-100000) == "-100000"
+  assert int_str::[I32](-99999) == "-99999"
+  assert int_str::[I32](-10000) == "-10000"
+  assert int_str::[I32](-9999) == "-9999"
+  assert int_str::[I32](-1000) == "-1000"
+  assert int_str::[I32](-999) == "-999"
+  assert int_str::[I32](-100) == "-100"
+  assert int_str::[I32](-99) == "-99"
+  assert int_str::[I32](-10) == "-10"
+  assert int_str::[I32](-9) == "-9"
+  assert int_str::[I32](-1) == "-1"
+  assert int_str::[I32](0) == "0"
+  assert int_str::[I32](1) == "1"
+  assert int_str::[I32](9) == "9"
+  assert int_str::[I32](10) == "10"
+  assert int_str::[I32](99) == "99"
+  assert int_str::[I32](100) == "100"
+  assert int_str::[I32](999) == "999"
+  assert int_str::[I32](1000) == "1000"
+  assert int_str::[I32](9999) == "9999"
+  assert int_str::[I32](10000) == "10000"
+  assert int_str::[I32](99999) == "99999"
+  assert int_str::[I32](100000) == "100000"
+  assert int_str::[I32](999999) == "999999"
+  assert int_str::[I32](1000000) == "1000000"
+  assert int_str::[I32](9999999) == "9999999"
+  assert int_str::[I32](10000000) == "10000000"
+  assert int_str::[I32](99999999) == "99999999"
+  assert int_str::[I32](100000000) == "100000000"
+  assert int_str::[I32](999999999) == "999999999"
+  assert int_str::[I32](1000000000) == "1000000000"
+  assert int_str::[I32](2147483646) == "2147483646"
+  assert int_str(I32.MAX) == "2147483647"
+}
+
+test "I64: 0, 1, the edges of the digits, MIN and MAX" {
+  assert int_str(I64.MIN) == "-9223372036854775808"
+  assert int_str::[I64](-9223372036854775807) == "-9223372036854775807"
+  assert int_str::[I64](-1000000000000000000) == "-1000000000000000000"
+  assert int_str::[I64](-999999999999999999) == "-999999999999999999"
+  assert int_str::[I64](-100000000000000000) == "-100000000000000000"
+  assert int_str::[I64](-99999999999999999) == "-99999999999999999"
+  assert int_str::[I64](-10000000000000000) == "-10000000000000000"
+  assert int_str::[I64](-9999999999999999) == "-9999999999999999"
+  assert int_str::[I64](-1000000000000000) == "-1000000000000000"
+  assert int_str::[I64](-999999999999999) == "-999999999999999"
+  assert int_str::[I64](-100000000000000) == "-100000000000000"
+  assert int_str::[I64](-99999999999999) == "-99999999999999"
+  assert int_str::[I64](-10000000000000) == "-10000000000000"
+  assert int_str::[I64](-9999999999999) == "-9999999999999"
+  assert int_str::[I64](-1000000000000) == "-1000000000000"
+  assert int_str::[I64](-999999999999) == "-999999999999"
+  assert int_str::[I64](-100000000000) == "-100000000000"
+  assert int_str::[I64](-99999999999) == "-99999999999"
+  assert int_str::[I64](-10000000000) == "-10000000000"
+  assert int_str::[I64](-9999999999) == "-9999999999"
+  assert int_str::[I64](-1000000000) == "-1000000000"
+  assert int_str::[I64](-999999999) == "-999999999"
+  assert int_str::[I64](-100000000) == "-100000000"
+  assert int_str::[I64](-99999999) == "-99999999"
+  assert int_str::[I64](-10000000) == "-10000000"
+  assert int_str::[I64](-9999999) == "-9999999"
+  assert int_str::[I64](-1000000) == "-1000000"
+  assert int_str::[I64](-999999) == "-999999"
+  assert int_str::[I64](-100000) == "-100000"
+  assert int_str::[I64](-99999) == "-99999"
+  assert int_str::[I64](-10000) == "-10000"
+  assert int_str::[I64](-9999) == "-9999"
+  assert int_str::[I64](-1000) == "-1000"
+  assert int_str::[I64](-999) == "-999"
+  assert int_str::[I64](-100) == "-100"
+  assert int_str::[I64](-99) == "-99"
+  assert int_str::[I64](-10) == "-10"
+  assert int_str::[I64](-9) == "-9"
+  assert int_str::[I64](-1) == "-1"
+  assert int_str::[I64](0) == "0"
+  assert int_str::[I64](1) == "1"
+  assert int_str::[I64](9) == "9"
+  assert int_str::[I64](10) == "10"
+  assert int_str::[I64](99) == "99"
+  assert int_str::[I64](100) == "100"
+  assert int_str::[I64](999) == "999"
+  assert int_str::[I64](1000) == "1000"
+  assert int_str::[I64](9999) == "9999"
+  assert int_str::[I64](10000) == "10000"
+  assert int_str::[I64](99999) == "99999"
+  assert int_str::[I64](100000) == "100000"
+  assert int_str::[I64](999999) == "999999"
+  assert int_str::[I64](1000000) == "1000000"
+  assert int_str::[I64](9999999) == "9999999"
+  assert int_str::[I64](10000000) == "10000000"
+  assert int_str::[I64](99999999) == "99999999"
+  assert int_str::[I64](100000000) == "100000000"
+  assert int_str::[I64](999999999) == "999999999"
+  assert int_str::[I64](1000000000) == "1000000000"
+  assert int_str::[I64](9999999999) == "9999999999"
+  assert int_str::[I64](10000000000) == "10000000000"
+  assert int_str::[I64](99999999999) == "99999999999"
+  assert int_str::[I64](100000000000) == "100000000000"
+  assert int_str::[I64](999999999999) == "999999999999"
+  assert int_str::[I64](1000000000000) == "1000000000000"
+  assert int_str::[I64](9999999999999) == "9999999999999"
+  assert int_str::[I64](10000000000000) == "10000000000000"
+  assert int_str::[I64](99999999999999) == "99999999999999"
+  assert int_str::[I64](100000000000000) == "100000000000000"
+  assert int_str::[I64](999999999999999) == "999999999999999"
+  assert int_str::[I64](1000000000000000) == "1000000000000000"
+  assert int_str::[I64](9999999999999999) == "9999999999999999"
+  assert int_str::[I64](10000000000000000) == "10000000000000000"
+  assert int_str::[I64](99999999999999999) == "99999999999999999"
+  assert int_str::[I64](100000000000000000) == "100000000000000000"
+  assert int_str::[I64](999999999999999999) == "999999999999999999"
+  assert int_str::[I64](1000000000000000000) == "1000000000000000000"
+  assert int_str::[I64](9223372036854775806) == "9223372036854775806"
+  assert int_str(I64.MAX) == "9223372036854775807"
+}
+
+test "U8: 0, 1, the edges of the digits, MIN and MAX" {
+  assert int_str(U8.MIN) == "0"
+  assert int_str::[U8](1) == "1"
+  assert int_str::[U8](9) == "9"
+  assert int_str::[U8](10) == "10"
+  assert int_str::[U8](99) == "99"
+  assert int_str::[U8](100) == "100"
+  assert int_str::[U8](254) == "254"
+  assert int_str(U8.MAX) == "255"
+}
+
+test "U16: 0, 1, the edges of the digits, MIN and MAX" {
+  assert int_str(U16.MIN) == "0"
+  assert int_str::[U16](1) == "1"
+  assert int_str::[U16](9) == "9"
+  assert int_str::[U16](10) == "10"
+  assert int_str::[U16](99) == "99"
+  assert int_str::[U16](100) == "100"
+  assert int_str::[U16](999) == "999"
+  assert int_str::[U16](1000) == "1000"
+  assert int_str::[U16](9999) == "9999"
+  assert int_str::[U16](10000) == "10000"
+  assert int_str::[U16](65534) == "65534"
+  assert int_str(U16.MAX) == "65535"
+}
+
+test "U32: 0, 1, the edges of the digits, MIN and MAX" {
+  assert int_str(U32.MIN) == "0"
+  assert int_str::[U32](1) == "1"
+  assert int_str::[U32](9) == "9"
+  assert int_str::[U32](10) == "10"
+  assert int_str::[U32](99) == "99"
+  assert int_str::[U32](100) == "100"
+  assert int_str::[U32](999) == "999"
+  assert int_str::[U32](1000) == "1000"
+  assert int_str::[U32](9999) == "9999"
+  assert int_str::[U32](10000) == "10000"
+  assert int_str::[U32](99999) == "99999"
+  assert int_str::[U32](100000) == "100000"
+  assert int_str::[U32](999999) == "999999"
+  assert int_str::[U32](1000000) == "1000000"
+  assert int_str::[U32](9999999) == "9999999"
+  assert int_str::[U32](10000000) == "10000000"
+  assert int_str::[U32](99999999) == "99999999"
+  assert int_str::[U32](100000000) == "100000000"
+  assert int_str::[U32](999999999) == "999999999"
+  assert int_str::[U32](1000000000) == "1000000000"
+  assert int_str::[U32](4294967294) == "4294967294"
+  assert int_str(U32.MAX) == "4294967295"
+}
+
+test "U64: 0, 1, the edges of the digits, MIN and MAX" {
+  assert int_str(U64.MIN) == "0"
+  assert int_str::[U64](1) == "1"
+  assert int_str::[U64](9) == "9"
+  assert int_str::[U64](10) == "10"
+  assert int_str::[U64](99) == "99"
+  assert int_str::[U64](100) == "100"
+  assert int_str::[U64](999) == "999"
+  assert int_str::[U64](1000) == "1000"
+  assert int_str::[U64](9999) == "9999"
+  assert int_str::[U64](10000) == "10000"
+  assert int_str::[U64](99999) == "99999"
+  assert int_str::[U64](100000) == "100000"
+  assert int_str::[U64](999999) == "999999"
+  assert int_str::[U64](1000000) == "1000000"
+  assert int_str::[U64](9999999) == "9999999"
+  assert int_str::[U64](10000000) == "10000000"
+  assert int_str::[U64](99999999) == "99999999"
+  assert int_str::[U64](100000000) == "100000000"
+  assert int_str::[U64](999999999) == "999999999"
+  assert int_str::[U64](1000000000) == "1000000000"
+  assert int_str::[U64](9999999999) == "9999999999"
+  assert int_str::[U64](10000000000) == "10000000000"
+  assert int_str::[U64](99999999999) == "99999999999"
+  assert int_str::[U64](100000000000) == "100000000000"
+  assert int_str::[U64](999999999999) == "999999999999"
+  assert int_str::[U64](1000000000000) == "1000000000000"
+  assert int_str::[U64](9999999999999) == "9999999999999"
+  assert int_str::[U64](10000000000000) == "10000000000000"
+  assert int_str::[U64](99999999999999) == "99999999999999"
+  assert int_str::[U64](100000000000000) == "100000000000000"
+  assert int_str::[U64](999999999999999) == "999999999999999"
+  assert int_str::[U64](1000000000000000) == "1000000000000000"
+  assert int_str::[U64](9999999999999999) == "9999999999999999"
+  assert int_str::[U64](10000000000000000) == "10000000000000000"
+  assert int_str::[U64](99999999999999999) == "99999999999999999"
+  assert int_str::[U64](100000000000000000) == "100000000000000000"
+  assert int_str::[U64](999999999999999999) == "999999999999999999"
+  assert int_str::[U64](1000000000000000000) == "1000000000000000000"
+  assert int_str::[U64](9999999999999999999) == "9999999999999999999"
+  assert int_str::[U64](10000000000000000000) == "10000000000000000000"
+  assert int_str::[U64](18446744073709551614) == "18446744073709551614"
+  assert int_str(U64.MAX) == "18446744073709551615"
+}
+
+test "the length of the text is the number of the bytes" {
+  let a = int_str(I64.MIN)
+  assert a.len() == 20
+  let b = int_str(U64.MAX)
+  assert b.len() == 20
+  assert int_str::[I32](0).len() == 1
+  assert int_str::[I32](-1).len() == 2
+  assert int_str::[U8](255).len() == 3
+}
+
+test "the digits are put after the text and one after another" {
+  var t: FixedStr[24] = "n="
+  let s: U8 = 7
+  t.put_int!(-42)
+  assert t == "n=-42"
+  t.put_int!(s)
+  assert t == "n=-427"
+  t.put_int!(I8.MIN)
+  assert t == "n=-427-128"
+  assert t.len() == 10
+}
+
+test "the value is a number of any type, held by a binding" {
+  let a: U16 = 65535
+  let b: I16 = -32768
+  var t: FixedStr[16] = ""
+  t.put_int!(a)
+  t.put_str!(",")
+  t.put_int!(b)
+  assert t == "65535,-32768"
+  var u: FixedStr[16] = ""
+  let c: U32 = 300
+  let z: I8 = 0
+  u.put_int!(c)
+  u.put_int!(z)
+  assert u == "3000"
+}
+
+test "the text of an integer is the text of the same number of another type" {
+  assert int_str::[I8](99) == int_str::[U64](99)
+  assert int_str::[I64](-1) != int_str::[U64](1)
+  assert int_str(U32.MAX) == "4294967295"
+  assert int_str(I32.MAX) == "2147483647"
+  assert int_str(I32.MIN) == "-2147483648"
+}
+
+test "a value that is computed" {
+  var n: U32 = 1
+  var t: FixedStr[24] = ""
+  for _ in 0 ..< 5 {
+    t.put_int!(n)
+    t.put_str!(" ")
+    n = n * 10
+  }
+  assert t == "1 10 100 1000 10000 "
+  assert t.len() == 20
+}
