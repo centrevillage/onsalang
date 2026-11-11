@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.1", "§18.1"]
+// fixes = 1
+
+// E0020 for the clock after the index of a `par~` outside a flow too (spec §11.3, §18.1; S-378): the same code and the same
+// candidate (the clock is removed) as in a flow. The `par~` itself is E0821 of the names stage (§11.1), not reported
+// with the E0020.
+
+pub fn clock_of_a_par_index_in_a_fn(x: F32) -> F32 {
+  let saws = par~ i at sample in 0 ..< 2 {          //~ E0020
+    x
+  }
+  x
+}

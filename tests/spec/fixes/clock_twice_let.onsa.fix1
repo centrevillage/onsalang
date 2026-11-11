@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "26:14"
+// code = "E0020"
+// candidate = 1
+// leaves = ["26:14 E0020"]
+//
+// [[test.fix]]
+// at = "31:14"
+// code = "E0020"
+// candidate = 1
+// leaves = ["31:14 E0020"]
+
+// Two `at` after one type (spec §11.3, §18.1; S-382): the first is the form of E0020, so it is the one that is
+// reported, with its candidate, by the rule of §18.1 that of the remaining diagnostics the first by position is
+// reported (the second `at` is not E0002 hiding the first). Each unit has one error (P-01). The candidate takes the
+// first clock away, so the second is still there and is reported by the next check (`leaves`, at its place after
+// the first `at sample` is gone). The entries assume that the main position is the `at` token.
+// The `let` of a `fn` and of a flow.
+
+pub fn two_clocks_in_a_let(x: F32) -> F32 {
+  let y: F32 at block = x                 //~ E0020
+  y
+}
+
+pub flow two_clocks_in_a_flow_let(p: F32 at block) -> F32 at sample {
+  let y: F32 at block = p                 //~ E0020
+  y
+}

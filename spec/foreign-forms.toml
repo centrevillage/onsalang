@@ -11121,7 +11121,7 @@ origin = "旧版"
 stage = "syntax"
 code = "E0020"
 spec = ["11.3", "18.1"]
-rule = "クロックは値に付ける（`let y: F32 = x at sample`）。束縛の型には付けない"
+rule = "クロックは値に付ける（`let y = x at sample`）。束縛の側（名前とパターンの後ろ、型注釈の後ろ、`for`・`par~` の添字の後ろ）には付けない"
 
 [[form.example]]
 source = '''
@@ -11164,6 +11164,125 @@ pub fn f(x: [F32; 2]) -> [F32; 2] {
 fixed = ['''
 pub fn f(x: [F32; 2]) -> [F32; 2] {
   let y: [F32; 2] = x
+  y
+}
+''']
+
+# 型注釈の無い束縛。
+[[form.example]]
+source = '''
+pub flow g(x: F32 at block) -> F32 at sample {
+  let y at sample = x
+  y
+}
+'''
+at = "2:9"
+fixed = ['''
+pub flow g(x: F32 at block) -> F32 at sample {
+  let y = x at sample
+  y
+}
+''']
+
+# パターンの束縛。
+[[form.example]]
+source = '''
+pub flow g(p: (F32, F32) at block) -> F32 at sample {
+  let (a, b) at sample = p
+  a + b
+}
+'''
+at = "2:14"
+fixed = ['''
+pub flow g(p: (F32, F32) at block) -> F32 at sample {
+  let (a, b) = p at sample
+  a + b
+}
+''']
+
+# 値が `at` より弱い式は括弧で囲む。当てた後の `(x + x) at sample` は、この版では
+# 計算した式の昇格の E0200（後の段の診断で、約束の外）。
+[[form.example]]
+source = '''
+pub flow g(x: F32 at block) -> F32 at sample {
+  let y at sample = x + x
+  y
+}
+'''
+at = "2:9"
+fixed = ['''
+pub flow g(x: F32 at block) -> F32 at sample {
+  let y = (x + x) at sample
+  y
+}
+''']
+
+# 値が既に `at` の式なら、移すと `at` の連鎖の E0011 になるので、束縛の側のクロックを除く。
+[[form.example]]
+source = '''
+pub flow g(x: F32 at block) -> F32 at sample {
+  let y: F32 at sample = x at block
+  y
+}
+'''
+at = "2:14"
+fixed = ['''
+pub flow g(x: F32 at block) -> F32 at sample {
+  let y: F32 = x at block
+  y
+}
+''']
+
+# ブロックに似た式の値は括弧で囲む（裸で `at` の被演算子にすると E0013）。
+[[form.example]]
+source = '''
+pub flow g(x: F32 at block, c: Bool at block) -> F32 at sample {
+  let y: F32 at sample = if c { x } else { x }
+  y
+}
+'''
+at = "2:14"
+fixed = ['''
+pub flow g(x: F32 at block, c: Bool at block) -> F32 at sample {
+  let y: F32 = (if c { x } else { x }) at sample
+  y
+}
+''']
+
+# `for` と `par~` の添字の後ろの `at` は、移す先が無いのでクロックを除く。
+[[form.example]]
+source = '''
+pub fn f() -> I32 {
+  var s = 0
+  for i at sample in 0 ..< 2 {
+    s = s + i
+  }
+  s
+}
+'''
+at = "3:9"
+fixed = ['''
+pub fn f() -> I32 {
+  var s = 0
+  for i in 0 ..< 2 {
+    s = s + i
+  }
+  s
+}
+''']
+
+# flow の外の型注釈の無い束縛は、クロックを除く。
+[[form.example]]
+source = '''
+pub fn f(x: F32) -> F32 {
+  let y at sample = x
+  y
+}
+'''
+at = "2:9"
+fixed = ['''
+pub fn f(x: F32) -> F32 {
+  let y = x
   y
 }
 ''']

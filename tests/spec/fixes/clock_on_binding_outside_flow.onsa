@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§18.1"]
+// fixes = 1
+
+// E0020 for the clock written on the binding side of a `let` or `var` (spec §11.3, §18.1; S-378; the row
+// `clock_on_binding` of spec/foreign-forms.toml): after the name or the pattern, with or without a type
+// annotation, the code and the candidate are those of `let y: F32 at sample = x`.
+// Outside a flow there is no place for the clock (not even a value, §11.3), so the candidate removes it: a
+// `let` of a `fn`, a `var`, a pattern, the form with the annotation first, a `test`, a block inside a branch.
+// Each unit has its own error (P-01). The `at` of a binding of a `fn` is E0020 of the syntax stage, and the E0821
+// of the names stage is not reported.
+
+pub fn after_a_name(x: I32) -> I32 {
+  let y at sample = x                               //~ E0020
+  y
+}
+
+pub fn after_a_pattern(p: (I32, I32)) -> I32 {
+  let (a, b) at sample = p                          //~ E0020
+  a + b
+}
+
+pub fn before_the_type(x: I32) -> I32 {
+  let y at sample: I32 = x                          //~ E0020
+  y
+}
+
+pub fn in_a_var(x: I32) -> I32 {
+  var y at sample = x                               //~ E0020
+  y = y + 1
+  y
+}
+
+pub fn in_a_branch(c: Bool, x: I32) -> I32 {
+  if c {
+    let y at sample = x                             //~ E0020
+    y
+  } else {
+    0
+  }
+}
+
+test "in a test" {
+  let y at sample = 1                               //~ E0020
+  assert y == 1
+}

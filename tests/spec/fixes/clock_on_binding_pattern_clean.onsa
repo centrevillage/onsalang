@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "19:14"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// E0020 for the clock written on the binding side of a `let` or `var` (spec §11.3, §18.1; S-378; the row
+// `clock_on_binding` of spec/foreign-forms.toml): after the name or the pattern, with or without a type
+// annotation, the code and the candidate are those of `let y: F32 at sample = x`.
+// Here the clock stands after a pattern (`let (a, b) at sample = p` is `let (a, b) = p at sample`).
+// The candidate leaves nothing (`clean`). This file has this one error.
+
+pub flow clock_after_a_pattern(p: (F32, F32) at block) -> F32 at sample {
+  let (a, b) at sample = p                          //~ E0020
+  a + b
+}

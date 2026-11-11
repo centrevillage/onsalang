@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "20:9"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// E0020 for the clock written on the binding side of a `let` or `var` (spec §11.3, §18.1; S-378; the row
+// `clock_on_binding` of spec/foreign-forms.toml): after the name or the pattern, with or without a type
+// annotation, the code and the candidate are those of `let y: F32 at sample = x`.
+// Here the clock stands after the name, with no type annotation, and the candidate moves it after the
+// whole value (`let y = p at sample`). The candidate leaves nothing (`clean`). The entry assumes that the main
+// position is the `at` token, as the row does for the form with a type. This file has this one error.
+
+pub flow clock_after_the_name(p: F32 at block) -> F32 at sample {
+  let y = p at sample                               //~ E0020
+  y
+}

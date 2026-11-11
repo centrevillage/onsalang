@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§11.3", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "24:48"
+// code = "E0020"
+// candidate = 1
+// leaves = ["25:5 E0020"]
+//
+// [[test.fix]]
+// at = "30:21"
+// code = "E0020"
+// candidate = 1
+// leaves = ["31:5 E0020"]
+
+// Two `at` after one type with a line break between them in brackets (spec §2.5, §11.3, §18.1; S-382): in
+// brackets a line break before `at` is a blank, so the second `at` follows the first clock as on one line, and
+// the first clock is the E0020 that is reported, with its candidate, which takes it away; the second is still
+// there and is reported by the next check (`leaves`). A type argument of a parameter and of a `let`.
+// tests/spec/negative/clock_twice_next_line.onsa has the line break outside brackets, where it ends the line.
+
+pub fn two_clocks_in_a_parameter(x: Option[F32  //~ E0020
+    at block]) -> I32 {
+  1
+}
+
+pub fn two_clocks_in_a_let_type(x: Option[F32]) -> I32 {
+  let y: Option[F32                       //~ E0020
+    at block] = x
+  1
+}

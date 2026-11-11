@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§11.3", "§18.1"]
+// fixes = 0
+
+// A clock on the binding side of a `let` whose next line starts with `at` (spec §2.5, §11.3, §18.1; S-378,
+// S-382): outside brackets `at` has no rule of its own place, so the line break before it ends the line, and the
+// `let` stops unfinished at the line break, before its `=`. The `at` of the next line is no second clock of the
+// binding: the unit's error is the E0002 of the unfinished `let`, not the E0020 of its clock, whose candidate
+// would read a value that is not there. The same with a blank line, a line of a comment, or a doc comment
+// between, and with a type annotation. One error in each declaration unit (P-01).
+// tests/spec/fixes/clock_twice_next_line_in_brackets.onsa has the line break in brackets, where it is a blank.
+
+pub flow next_line(x: F32 at block) -> F32 at sample {
+  let y at sample                                   //~ E0002
+  at block = x
+  y
+}
+
+pub flow after_a_blank_line(x: F32 at block) -> F32 at sample {
+  let y at sample                                   //~ E0002
+
+  at block = x
+  y
+}
+
+pub flow after_a_line_of_a_comment(x: F32 at block) -> F32 at sample {
+  let y at sample                                   //~ E0002
+  // a comment
+  at block = x
+  y
+}
+
+pub flow after_a_doc_comment(x: F32 at block) -> F32 at sample {
+  let y at sample /// d                             //~ E0002
+  at block = x
+  y
+}
+
+pub flow after_a_type(x: F32 at block) -> F32 at sample {
+  let y: F32 at sample                              //~ E0002
+  at block = x
+  y
+}

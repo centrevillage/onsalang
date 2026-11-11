@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§5.2", "§18.1"]
+// fixes = 1
+
+// E0020 for the clock after the annotation of a binding whose value is a `move`, outside a flow (spec §11.3, §5.2, §18.1;
+// S-381): the candidate removes the clock (the form that is E0020 already). In a flow the same form is E0002 with no
+// candidate (negative/clock_on_binding_move_flow.onsa).
+
+pub fn move_with_a_type(x: I32) -> I32 {
+  let y: I32 = move x                     //~ E0020
+  y
+}

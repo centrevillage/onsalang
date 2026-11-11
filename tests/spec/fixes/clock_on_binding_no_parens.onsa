@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§5.2", "§18.1"]
+// fixes = 1
+
+// E0020 for the clock written on the binding side of a `let` or `var` (spec §11.3, §18.1; S-378; the row
+// `clock_on_binding` of spec/foreign-forms.toml): after the name or the pattern, with or without a type
+// annotation, the code and the candidate are those of `let y: F32 at sample = x`.
+// The values below need no parentheses before an `at` (a name, a prefix operator, a call, an index, a
+// value that is in parentheses already), so the candidate only moves the clock after the value. Each function has
+// its own error (P-01). The positions of the checks of the candidates are in the contract of §18.1.
+
+rt fn twice(x: F32) -> F32 {
+  x * 2.0
+}
+
+pub flow clock_of_a_name(p: F32 at block) -> F32 at sample {
+  let y at sample = p                               //~ E0020
+  y
+}
+
+pub flow clock_of_a_negation(p: F32 at sample) -> F32 at sample {
+  let y at sample = -p                              //~ E0020
+  y
+}
+
+pub flow clock_of_a_call(p: F32 at sample) -> F32 at sample {
+  let y at sample = twice(p)                        //~ E0020
+  y
+}
+
+pub flow clock_of_an_index(p: [F32; 2] at sample) -> F32 at sample {
+  let y at sample = p[0]                            //~ E0020
+  y
+}
+
+pub flow clock_of_a_value_in_parentheses(p: F32 at sample) -> F32 at sample {
+  let y at sample = (p + p)                         //~ E0020
+  y
+}

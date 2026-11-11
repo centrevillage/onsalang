@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "16:21"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// E0020 for the clock written after the index of a `par~` (spec §11.3, §11.5, §18.1; S-378): the index is a constant, so
+// the candidate removes the clock (`par~ i in 0 ..< 2`) and leaves nothing (`clean`). This file has this one error.
+
+pub flow clock_of_a_par_index(x: F32 at sample) -> [F32; 2] at sample {
+  let saws = par~ i at sample in 0 ..< 2 {          //~ E0020
+    x
+  }
+  saws
+}

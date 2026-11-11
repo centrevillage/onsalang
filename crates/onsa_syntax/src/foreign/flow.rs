@@ -2,7 +2,7 @@
 //! `par~` with a blank (S-354, S-745), the `~` on a later `if` of a chain (S-355), and the clocks
 //! written on a binding or in a type (S-102, S-356).
 
-use onsa_diag::{Diagnostic, Edit, Fix, Span};
+use onsa_diag::{Diagnostic, Edit, Fix, Span, Stage};
 
 use super::{Cursor, Hit, RowId, Want, bit_not, diagnostic, hit};
 use crate::cst::Class;
@@ -135,15 +135,20 @@ pub(super) fn else_if_tilde(c: &Cursor) -> Option<Hit> {
 
 // ------------------------------------------------------------ clocks
 
-/// The clocks the parser read where no clock goes (§11.3): on the type of a
-/// `let` or `var` (`clock_on_binding`), and in a type or after the type of
-/// a declaration that is no input or output (`clock_in_type`, S-356). Each
+/// The clocks the parser read where no clock goes (§11.3): on the binding
+/// side of a `let` or `var` and after the index of `for` and `par~`
+/// (`clock_on_binding`, S-378), and in a type or after the type of a
+/// declaration that is no input or output (`clock_in_type`, S-356). Each
 /// clock is an error of its own (one type may hold several). A clock whose
 /// node, or the node its candidate reads, a syntax error left unfinished is
-/// not reported: that error is the unit's. No candidate goes over the
+/// not reported: that error is the unit's, but for a second `at` right
+/// after the clock ([`second_clock`]). No candidate goes over the
 /// nesting limit (spec §2.5, `limit` the file and its units).
 pub(crate) fn clocks(cst: &Cst, limit: crate::nesting::Limit, out: &mut Vec<Diagnostic>, marks: &mut Insertions) {
     let text = limit.text;
+    // Where the parser failed: the starts of the syntax errors so far.
+    let mut failed: Vec<u32> = out.iter().filter(|d| d.stage == Stage::Syntax).map(|d| d.span.start).collect();
+    failed.sort_unstable();
     for (i, t) in cst.tokens().iter().enumerate() {
         if t.kind != TokenKind::KwAt {
             continue;
@@ -153,13 +158,20 @@ pub(crate) fn clocks(cst: &Cst, limit: crate::nesting::Limit, out: &mut Vec<Diag
             continue;
         }
         let Some(parent) = cst.parent(clock) else { continue };
-        let mut outside = false;
+        let mut side = Side::Flow;
+        let second = second_clock(cst, clock, &failed);
         let found = match cst.kind(parent) {
             NodeKind::AtExpr | NodeKind::Param | NodeKind::Fn | NodeKind::Flow | NodeKind::ClosureExpr => None,
-            NodeKind::LetStmt | NodeKind::VarStmt => {
-                to_value(cst, text, clock, parent, (marks, &mut outside)).map(|fixes| (RowId::ClockOnBinding, fixes))
+            NodeKind::LetStmt | NodeKind::VarStmt => to_value(cst, text, clock, parent, (marks, &mut side, second))
+                .map(|fixes| (RowId::ClockOnBinding, fixes)),
+            // The index of `for` and `par~` has no value to take the clock:
+            // the candidate takes it out, in a flow body or not (S-378).
+            NodeKind::ForStmt | NodeKind::ParExpr => {
+                side = Side::of(cst, parent);
+                let fixes = take_out(cst, clock).map(|out| vec![Fix::new("remove the clock", out.edits(""))]);
+                Some((RowId::ClockOnBinding, fixes.unwrap_or_default()))
             }
-            _ => in_type(cst, text, clock, (marks, &mut outside)).map(|fixes| (RowId::ClockInType, fixes)),
+            _ => in_type(cst, text, clock, (marks, &mut side, second)).map(|fixes| (RowId::ClockInType, fixes)),
         };
         let Some((id, fixes)) = found else { continue };
         // A candidate that would nest deeper than the limit is not made
@@ -170,8 +182,11 @@ pub(crate) fn clocks(cst: &Cst, limit: crate::nesting::Limit, out: &mut Vec<Diag
         // is an `at` node over it.
         let too_deep = crate::nesting::too_deep(limit, span, &fixes, 1);
         let fixes = if too_deep { Vec::new() } else { fixes };
-        let mut d = diagnostic(text, id, Hit::new(cst.span(clock), fixes));
-        if outside && let Some(rule) = d.notes.first_mut() {
+        let note = (side == Side::Move).then_some(MOVE_NOTE);
+        let mut d = diagnostic(text, id, Hit::new(cst.span(clock), fixes).with_note(note));
+        if side == Side::Outside
+            && let Some(rule) = d.notes.first_mut()
+        {
             d.message = OUTSIDE.0.into();
             *rule = onsa_diag::Note::rule(OUTSIDE.1);
         }
@@ -179,9 +194,50 @@ pub(crate) fn clocks(cst: &Cst, limit: crate::nesting::Limit, out: &mut Vec<Diag
     }
 }
 
-/// The insertions of the candidates, and whether the clock is on a binding
-/// outside a flow body, whose value takes no clock either ([`to_value`]).
-type Ins<'a> = (&'a mut Insertions, &'a mut bool);
+/// The insertions of the candidates, where the binding of the clock stands
+/// ([`to_value`]), and whether a second `at` follows it ([`second_clock`]).
+type Ins<'a> = (&'a mut Insertions, &'a mut Side, bool);
+
+/// Where the binding of a clock stands, for the message and the notes of
+/// its diagnostic.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Side {
+    /// In a flow body (or the clock is in a type that no binding has).
+    Flow,
+    /// Outside a flow body, where a value takes no clock either (§11.1,
+    /// S-820).
+    Outside,
+    /// In a flow body, on a binding whose value is `move a`, which no
+    /// parentheses may hold (§5.2): no place takes the clock (S-381).
+    Move,
+}
+
+impl Side {
+    /// Whether `node` is in a flow body (a function or a closure in it is
+    /// not).
+    fn of(cst: &Cst, node: NodeId) -> Side {
+        let body =
+            cst.ancestors(node).find(|&n| matches!(cst.kind(n), NodeKind::Flow | NodeKind::Fn | NodeKind::ClosureExpr));
+        if body.is_some_and(|n| cst.kind(n) == NodeKind::Flow) { Side::Flow } else { Side::Outside }
+    }
+}
+
+/// The note of a clock on a binding whose value is `move a` (S-381).
+const MOVE_NOTE: &str = "a clock is written after the whole value (`let y = x at sample`), and a `move` value has no \
+     place for one: the operand of `move` is a postfix expression, and `(move a)` cannot be written (§5.2, §11.3)";
+
+/// The code token after `clock` is a second `at` (`F32 at sample at block`,
+/// S-382) and the parser failed at it (`failed`, sorted): it left the binding
+/// or the type around the clock unfinished, but the first clock is still the
+/// form of its row, the first error by position (§18.1). Its candidate takes
+/// it out, as that of a clock after the type of a field: the value was not
+/// read. Whether the line break before an `at` is a blank (in brackets) or
+/// ends the statement (§2.5) is the parser's: it failed at the line break
+/// in the second case, so the `at` on the next line is not counted.
+fn second_clock(cst: &Cst, clock: NodeId, failed: &[u32]) -> bool {
+    let after = cst.tokens()[cst.token_range(clock).end..].iter().find(|t| !t.kind.is_trivia() && !t.kind.is_comment());
+    after.is_some_and(|t| t.kind == TokenKind::KwAt && failed.binary_search(&t.span.start).is_ok())
+}
 
 /// The message and the note of a clock on a binding outside a flow body, in
 /// place of its row's (§11.1, §11.3, S-820).
@@ -258,11 +314,13 @@ fn take_out(cst: &Cst, clock: NodeId) -> Option<Out> {
 /// takes parentheses ([`crate::ast::Operand::bare_before_as_at`], E0011).
 /// A value that has a clock already (in parentheses or not) is no place for
 /// another, nor is a value outside a flow body: the candidate takes the
-/// clock out (S-356, S-820). `None` when the
+/// clock out (S-356, S-820), and so does that of a clock before a second
+/// `at` ([`second_clock`]). `None` when the
 /// statement was not read whole; no candidate when the value is `move x`
 /// or the clock holds a comment.
-fn to_value(cst: &Cst, text: &str, clock: NodeId, stmt: NodeId, (marks, outside): Ins) -> Option<Vec<Fix>> {
-    if !cst.is_complete(stmt) {
+fn to_value(cst: &Cst, text: &str, clock: NodeId, stmt: NodeId, (marks, side, second): Ins) -> Option<Vec<Fix>> {
+    let twice = !cst.is_complete(stmt);
+    if twice && !second {
         return None;
     }
     // A value a syntax error cut on its line (`= 0..<3`: `0`, then `..<3`
@@ -273,21 +331,20 @@ fn to_value(cst: &Cst, text: &str, clock: NodeId, stmt: NodeId, (marks, outside)
         .position(|t| !t.kind.is_blank_or_plain_comment())
         .map(|k| cst.token_range(stmt).end + k);
     if let Some(k) = next
+        && !twice
         && cst.tokens()[k].kind != TokenKind::Newline
         && cst.kind(cst.token_parent(TokenIdx(k as u32))) == NodeKind::Error
     {
         return None;
     }
     let first_expr = |n: NodeId| cst.child_nodes(n).find(|&c| cst.kind(c).class() == Class::Expr);
-    let value = cst.child_nodes(stmt).filter(|&n| cst.kind(n).class() == Class::Expr).last()?;
     // Outside a flow body a value takes no clock either (§11.1, S-820).
-    let body =
-        cst.ancestors(stmt).find(|&n| matches!(cst.kind(n), NodeKind::Flow | NodeKind::Fn | NodeKind::ClosureExpr));
-    *outside = body.is_none_or(|n| cst.kind(n) != NodeKind::Flow);
+    *side = Side::of(cst, stmt);
     let Some(out) = take_out(cst, clock) else { return Some(Vec::new()) };
-    if *outside {
+    if twice || *side == Side::Outside {
         return Some(vec![Fix::new("remove the clock", out.edits(""))]);
     }
+    let value = cst.child_nodes(stmt).filter(|&n| cst.kind(n).class() == Class::Expr).last()?;
     let mut inner = value;
     while cst.kind(inner) == NodeKind::ParenExpr {
         inner = first_expr(inner)?;
@@ -300,9 +357,12 @@ fn to_value(cst: &Cst, text: &str, clock: NodeId, stmt: NodeId, (marks, outside)
     let kinds: Vec<TokenKind> = cst.token_range(value).map(|i| cst.tokens()[i].kind).collect();
     let mut edits = out.edits("");
     match cst.kind(value) {
-        // SPEC-GAP(S-381): the operand of `move` takes no clock (§5.2), and
-        // the spec gives no other place for it: no candidate.
-        NodeKind::MoveExpr => return Some(Vec::new()),
+        // The operand of `move` takes no clock and no parentheses hold
+        // `move a` (§5.2): no candidate, the E0002 with the note (§11.3, S-381).
+        NodeKind::MoveExpr => {
+            *side = Side::Move;
+            return Some(Vec::new());
+        }
         _ if !super::operand(&kinds).bare_before_as_at() => {
             edits.extend([Edit::insert(s.file, s.start, "("), insert_apart(s.file, s.end, &format!("){at}"), marks)]);
         }
@@ -314,17 +374,17 @@ fn to_value(cst: &Cst, text: &str, clock: NodeId, stmt: NodeId, (marks, outside)
 /// The candidate of a clock in a type (S-356): moved after the type of the
 /// input or output of a flow it is in, or to the value of the binding it is
 /// in, when that place has no clock; else taken out. `None` when a type
-/// around it was not read whole (`Option[F32 at sample at block]`: the
-/// second `at` is the E0002 of the unit, as at the type of an input); no
+/// around it was not read whole, but before a second `at`
+/// (`Option[F32 at sample at block]`, [`second_clock`]); no
 /// candidate when the clock holds a comment.
-fn in_type(cst: &Cst, text: &str, clock: NodeId, (marks, outside): Ins) -> Option<Vec<Fix>> {
+fn in_type(cst: &Cst, text: &str, clock: NodeId, (marks, side, second): Ins) -> Option<Vec<Fix>> {
     let mut place = clock;
     while let Some(p) = cst.parent(place) {
         place = p;
         if !cst.kind(p).type_part() {
             break;
         }
-        if !cst.is_complete(p) {
+        if !cst.is_complete(p) && !second {
             return None;
         }
     }
@@ -364,10 +424,14 @@ fn in_type(cst: &Cst, text: &str, clock: NodeId, (marks, outside): Ins) -> Optio
     }
     if matches!(cst.kind(place), NodeKind::LetStmt | NodeKind::VarStmt)
         && !has_clock(place)
-        && let Some(fixes) = to_value(cst, text, clock, place, (marks, outside))
+        && let Some(fixes) = to_value(cst, text, clock, place, (marks, side, second))
         && !fixes.is_empty()
     {
         return Some(fixes);
+    }
+    // A clock in the type of a binding of `move a` is taken out below.
+    if *side == Side::Move {
+        *side = Side::Flow;
     }
     // Taken out of the end of a function type that no `uses` closes, the
     // clock after the type would become its result's (S-367): the function

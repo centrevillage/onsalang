@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§3.1", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "21:9"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// E0020 for the clock written on the binding side of a `let` or `var` (spec §11.3, §18.1; S-378; the row
+// `clock_on_binding` of spec/foreign-forms.toml): after the name or the pattern, with or without a type
+// annotation, the code and the candidate are those of `let y: F32 at sample = x`.
+// The value is a binary operation, which does not take `at` as it stands (`p + p at sample` is E0011,
+// §3.1, §11.3), so the candidate writes it in parentheses: `let y = (p + p) at sample`. The check after the
+// candidate has no diagnostic (`clean`), so a candidate without the parentheses would fail. The clock of the
+// operands is `sample`, the clock of the binding, so the `at` promotes nothing. This file has this one error.
+
+pub flow clock_of_a_sum(p: F32 at sample) -> F32 at sample {
+  let y = (p + p) at sample                           //~ E0020
+  y
+}

@@ -1,0 +1,14 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.2", "§18.1"]
+// fixes = 1
+
+// E0020 for the clock written after the index of a `for`, in a flow too (spec §11.3, §18.1; S-378): the code and the
+// candidate (the clock is removed) are those of a `fn`, whether the `for` is in a flow or not. The `for` of a flow body is
+// E0806 of a later stage (§11.2), not reported here.
+
+pub flow clock_of_a_for_index_in_a_flow(x: F32 at sample) -> F32 at sample {
+  for i at sample in 0 ..< 2 {                      //~ E0020
+    x
+  }
+}

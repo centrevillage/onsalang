@@ -106,6 +106,7 @@ impl<'a> Parser<'a> {
     /// A `let` after its keyword (the node `m` is open): `pat[: T] = e`.
     fn parse_let_rest(&mut self, m: Marker) -> PResult<Completed> {
         self.parse_pattern()?;
+        self.parse_binding_clock()?;
         if self.eat(TokenKind::Colon).is_some() {
             self.parse_type()?;
         }
@@ -152,6 +153,7 @@ impl<'a> Parser<'a> {
                 let m = self.start(NodeKind::ForStmt)?;
                 self.bump();
                 self.parse_pattern()?;
+                self.parse_binding_clock()?;
                 self.expect(TokenKind::KwIn)?;
                 if self.at(TokenKind::KwMove) {
                     self.parse_move(MoveAs::Level, |p, mv| p.parse_moved_head(mv))?;
@@ -230,12 +232,24 @@ impl<'a> Parser<'a> {
 
     fn parse_var_rest(&mut self, m: Marker) -> PResult<Completed> {
         self.parse_name(Declared::Variable, "variable name")?;
+        self.parse_binding_clock()?;
         if self.eat(TokenKind::Colon).is_some() {
             self.parse_type()?;
         }
         self.expect(TokenKind::Eq)?;
         self.parse_consumed()?;
         Ok(self.complete(m, NodeKind::VarStmt))
+    }
+
+    /// A clock on the binding side (§11.3, S-378): after the name or the
+    /// pattern of a `let` or `var`, before its type annotation, and after the
+    /// index of `for` and `par~`. It is read as a clock, which is no place
+    /// for one: the table reports it on the tree (`clock_on_binding`).
+    pub(super) fn parse_binding_clock(&mut self) -> PResult<()> {
+        if self.at(TokenKind::KwAt) {
+            self.parse_clock()?;
+        }
+        Ok(())
     }
 
     /// An expression in a consuming position (§5.2, S-21) or where the

@@ -1180,7 +1180,7 @@ pub static ROWS: &[Row] = &[
         phase: Phase::Syntax,
         code: Code::E0020,
         message: "a clock is written on the value, not on the binding",
-        rule: "a clock is written on an expression (`let y: F32 = x at sample`) or after the type of an input or output of a flow, never on the type of a binding (§11.3)",
+        rule: "a clock is written on an expression (`let y = x at sample`) or after the type of an input or output of a flow, never on the binding side: after the name or the pattern of a `let` or `var`, after its type annotation, or after the index of `for` and `par~` (§11.3)",
         detect: Detect::Tree,
     },
     Row {

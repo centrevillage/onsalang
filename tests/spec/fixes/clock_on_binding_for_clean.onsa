@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "18:9"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// E0020 for the clock written after the index of a `for` (spec §11.3, §18.1; S-378): there is no place to move it to, and
+// the index is a constant, so the candidate removes it (`for i in 0 ..< 2`). The candidate leaves nothing (`clean`).
+// The entry assumes that the main position is the `at` token. This file has this one error.
+
+pub fn clock_of_a_for_index() -> I32 {
+  var s = 0
+  for i at sample in 0 ..< 2 {                      //~ E0020
+    s = s + i
+  }
+  s
+}

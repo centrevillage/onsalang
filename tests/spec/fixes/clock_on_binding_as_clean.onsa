@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§3.3", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "20:9"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// E0020 for the clock written on the binding side of a `let` or `var` (spec §11.3, §18.1; S-378; the row
+// `clock_on_binding` of spec/foreign-forms.toml): after the name or the pattern, with or without a type
+// annotation, the code and the candidate are those of `let y: F32 at sample = x`.
+// The value is an `as` (the strength of `at` is that of `as`, and the two do not chain: `n as I64 at
+// sample` is E0011), so the candidate writes it in parentheses: `let y = (n as I64) at sample` (`clean`). This file
+// has this one error.
+
+pub flow clock_of_a_cast(n: I32 at sample) -> I64 at sample {
+  let y at sample = n as I64                        //~ E0020
+  y
+}

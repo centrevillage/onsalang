@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§3.1", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "19:9"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// E0020 for the clock written on the binding side of a `let` or `var` (spec §11.3, §18.1; S-378; the row
+// `clock_on_binding` of spec/foreign-forms.toml): after the name or the pattern, with or without a type
+// annotation, the code and the candidate are those of `let y: F32 at sample = x`.
+// The value is a `match`, an expression that looks like a block, which takes parentheses before an `at`
+// (§11.3): `let y = (match k { 0 => p, _ => 0.0 }) at sample` (`clean`). This file has this one error.
+
+pub flow clock_of_a_match(k: U32 at sample, p: F32 at sample) -> F32 at sample {
+  let y at sample = match k { 0 => p, _ => 0.0 }    //~ E0020
+  y
+}

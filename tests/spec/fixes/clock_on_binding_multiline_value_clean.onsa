@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§2.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "23:9"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// E0020 for the clock written on the binding side of a `let` or `var` (spec §11.3, §18.1; S-378; the row
+// `clock_on_binding` of spec/foreign-forms.toml): after the name or the pattern, with or without a type
+// annotation, the code and the candidate are those of `let y: F32 at sample = x`.
+// The value is a call written on three lines: the clock goes after the whole value, after its closing
+// parenthesis (`)` at sample`). The candidate leaves nothing (`clean`). This file has this one error.
+
+rt fn twice(x: F32) -> F32 {
+  x * 2.0
+}
+
+pub flow clock_of_a_long_call(p: F32 at sample) -> F32 at sample {
+  let y at sample = twice(                          //~ E0020
+    p,
+  )
+  y
+}
