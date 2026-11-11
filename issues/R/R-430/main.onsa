@@ -1,0 +1,6 @@
+use util.{Point}
+
+pub fn f() -> F32 {
+  let b = [10.0; Point.N] at sample
+  b[0]
+}

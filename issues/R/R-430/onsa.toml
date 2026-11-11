@@ -1,0 +1,3 @@
+[package]
+name = "ice_min"
+edition = "2026"
