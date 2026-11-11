@@ -1,0 +1,9 @@
+// A nested list (`{x, y}`), in the middle: its `,` is at depth 1 and ends nothing.
+use kp.{g, {x, y}, h}                               //~ E0002
+
+pub fn silent() -> I32 {
+  let _: Bool = zzz()
+  let _: Bool = g()
+  let _: Bool = h()
+  0
+}

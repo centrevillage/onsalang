@@ -97,7 +97,7 @@ impl<'a> Parser<'a> {
             match next(last) {
                 Some(n) if ident(&n) => (before, last) = (last, n),
                 // The words before a head (`static int fn`) are read before.
-                Some(n) if starts_heading(self.tokens[n].kind) => return None,
+                Some(n) if self.heading_at(n) => return None,
                 n => {
                     let function = n.is_some_and(|n| self.tokens[n].kind == TokenKind::LParen);
                     return Some((Static::C { function }, before, last));

@@ -1,0 +1,9 @@
+// Two elements that are no names: one E0002 for the `use` (the first), and the list is not read to the end.
+use kp.{3, g, "s", h}                               //~ E0002
+
+pub fn silent() -> I32 {
+  let _: Bool = zzz()
+  let _: Bool = g()
+  let _: Bool = h()
+  0
+}

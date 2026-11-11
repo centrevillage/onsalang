@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1", "§2.5"]
+
+// The unit of a `use` whose list has an error and is closed by its `}` (spec §18.1: "項目と同じ行の後ろに置いた余分な
+// トークン…は、その項目の単位に入る", and "どの項目にも入らない余分なトークンは、ひと続きごとに一つの単位"): the
+// unit ends at the end of the line of the `}`, so the stray tokens on the next line (`hello`) are a unit of their own
+// with their E0002, and the function after them is a unit of its own with its own error. The forms of the list:
+// an element that is no name (`3` here; `"s"`, `a.b` and `g as h` in the other modules, S-696), a `,` missing between
+// two names (R-416), and a `;` between them (§2.5, S-248). The tokens of the stray line differ from module to module
+// (`hello`, `p`, `foo bar`, `3`), and a blank line before the stray line changes nothing.
+use kp.{g, 3}                                       //~ E0002
+hello                                               //~ E0002
+
+pub fn after() -> Bool {
+  1                                                 //~ E0401
+}

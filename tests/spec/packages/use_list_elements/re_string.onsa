@@ -1,0 +1,6 @@
+// A string in the list (spec §15.1; S-696): the element is the syntax error, `h2` after it is read.
+pub use kp.{g, "s", h2}                             //~ E0002
+
+pub fn silent() -> I32 {
+  zzz()
+}

@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1"]
+
+// A run of extra tokens is one unit with one E0002, whatever the number of its lines (spec §18.1; R-423: the run is
+// "to the start of the next item, on several lines too"). A word alone on a line (`Ask`) is no start of an item (no
+// heading follows it), and a `#` that is not the start of `#[` is no start either: they belong to the run of the
+// line before. The function after each run is read as a unit with no error.
+
+pub fn first() -> I32 { 1 }
+
+stray1                                              //~ E0002
+stray2
+stray3
+pub fn after_lines() -> I32 { 1 }
+
+stray4                                              //~ E0002
+Ask
+pub fn after_a_word() -> I32 { 1 }
+
+stray5                                              //~ E0002
+#
+pub fn after_a_hash() -> I32 { 1 }
+
+stray6                                              //~ E0002
+# pub
+pub fn after_a_hash_and_pub() -> I32 { 1 }

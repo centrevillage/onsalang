@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§11.1", "§4.5"]
+
+// R-430 (spec §18.1, §11.1, §4.5): a failed name of a `use` (`util` is no module, E0302 at the `use`) in the length
+// of a repeat array outside a flow, with `at` after the array. The names stage reads the operand of `at` before its
+// clock, and stops at the failed name with no diagnostic (§18.1: its uses are errors with no diagnostic), so the
+// `at` outside a flow (E0821, §11.1), which comes after it, is not reported; nothing else is. The same after a
+// statement whose length has the failed name, and for the other forms that only a flow body holds (`par`, `^`,
+// `if~`). The names of a list with an element that is no name are failed names too (S-696): cut.onsa.
+use util.{Point}                                    //~ E0302
+
+pub fn in_the_operand() -> F32 {
+  let b = [10.0; Point.N] at sample
+  b[0]
+}
+
+pub fn after_a_statement() -> F32 {
+  let a = [10.0; Point.N]
+  let b = 1.0 at sample
+  b
+}
+
+pub fn par_after() -> F32 {
+  let a = [10.0; Point.N]
+  par i in 0 ..< 2 {
+    a[i]
+  }
+  1.0
+}
+
+pub fn feedback_after() -> F32 {
+  let a = [10.0; Point.N]
+  ^a
+}
+
+pub fn branches_after(c: Bool) -> F32 {
+  let a = [10.0; Point.N]
+  if~ c { 1.0 } else { 2.0 }
+}

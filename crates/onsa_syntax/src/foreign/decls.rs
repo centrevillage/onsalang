@@ -492,7 +492,8 @@ pub(super) fn tuple_struct(c: &Cursor) -> Option<(RowId, Hit)> {
     {
         return None;
     }
-    let close = crate::scan::closing_on_line(c.tokens, c.at)?;
+    // Over lines too: a line break in brackets does not change the form (§2.5, R-414).
+    let close = c.brackets().closing(c.at)?;
     let (_, start) = c.open_at(1).filter(|o| o.0 == NodeKind::Struct)?;
     let span = c.file_span(c.span(c.at).start, c.span(close).end);
     let mut depth = 0u32;
@@ -505,7 +506,7 @@ pub(super) fn tuple_struct(c: &Cursor) -> Option<(RowId, Hit)> {
             _ => {}
         }
     }
-    let empty = (c.at + 1..close).all(|i| c.comment(i));
+    let empty = (c.at + 1..close).all(|i| c.comment(i) || c.kind(i) == TokenKind::Newline);
     let trailing = c.sig_before(close).is_some_and(|p| c.kind(p) == TokenKind::Comma);
     if empty || commas > usize::from(trailing) {
         return found(RowId::TupleStructMany, span, Vec::new());
@@ -521,13 +522,39 @@ pub(super) fn tuple_struct(c: &Cursor) -> Option<(RowId, Hit)> {
     // The `{` one blank after the head, the field on its own line; the
     // `,` after it once, whether the element has one or not (comments
     // after the element stay, the `)` alone is replaced).
-    let open = c.file_span(
-        c.space_before(c.at).map_or(c.span(c.at).start, |s| s.start),
-        c.space_after(c.at).map_or(c.span(c.at).end, |s| s.end),
-    );
+    // The line breaks before the element go too. Comments on lines before it
+    // stay before the field, a doc comment documenting it (R-414, S-433).
+    let first = c.sig_after(c.at);
+    let next = (c.at + 1..first).find(|&i| c.kind(i) != TokenKind::Newline);
+    let lines = (c.at + 1..first).any(|i| c.kind(i) == TokenKind::Newline);
+    let start = c.space_before(c.at).map_or(c.span(c.at).start, |s| s.start);
+    let mut edits = match (next, lines) {
+        (None, _) => {
+            vec![Edit::replace(c.file_span(start, c.span(first).start), format!(" {{{eol}{indent}  {field}: "))]
+        }
+        (Some(n), true) => vec![
+            Edit::replace(c.file_span(start, c.span(n).start), format!(" {{{eol}{indent}  ")),
+            Edit::insert(c.file, c.span(first).start, format!("{field}: ")),
+        ],
+        (Some(_), false) => {
+            let end = c.space_after(c.at).map_or(c.span(c.at).end, |s| s.end);
+            vec![Edit::replace(c.file_span(start, end), format!(" {{{eol}{indent}  {field}: "))]
+        }
+    };
+    // What documents nothing in the struct is a plain comment (§2.1, S-997).
+    for i in (c.at + 1..close).filter(|&i| c.kind(i) == TokenKind::ModuleDoc || c.kind(i).is_doc() && i > last) {
+        let text = &c.text[c.span(i).start as usize + 3..c.span(i).end as usize];
+        edits.push(Edit::replace(c.span(i), format!("//{text}")));
+    }
     let comments = (last + 1..close).any(|i| c.comment(i));
-    let mut edits = vec![Edit::replace(open, format!(" {{{eol}{indent}  {field}: "))];
     match (comments, trailing, c.sig_before(close)) {
+        // A `)` on a line of its own after the comments is the `}` (S-997).
+        (true, _, _) if c.at_line_head(close) => {
+            if !trailing {
+                edits.push(Edit::insert(c.file, c.span(last).end, ","));
+            }
+            edits.push(Edit::replace(c.span(close), "}"));
+        }
         (true, _, _) => {
             edits.push(Edit::replace(c.span(close), format!("{}{eol}{indent}}}", if trailing { "" } else { "," })))
         }

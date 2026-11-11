@@ -1,0 +1,3 @@
+// A keyword or a reserved word as an element (spec §15.1, §2.2, R-272), followed with no `,` by a number: the report
+// of the `use` is the error of the word, at the word (the first error of the unit), as in `use kp.{match, 3}`.
+use kp.{match 3}                                    //~ E0002 @9

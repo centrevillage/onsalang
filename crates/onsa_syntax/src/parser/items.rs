@@ -92,6 +92,9 @@ impl<'a> Parser<'a> {
     /// first child, `Docs`. The trivia before them belong to the enclosing list.
     pub(super) fn start_item(&mut self, docs: Option<(usize, usize)>) -> Marker {
         let start = self.peek().span.start;
+        if docs.is_some() || self.starts_an_item(self.peek_index()) {
+            self.item_starts.push(start);
+        }
         let m = self.enter_unit(NodeKind::Item, start);
         self.attach_docs(docs);
         m
@@ -705,6 +708,7 @@ impl<'a> Parser<'a> {
         let word = self.head_word.take();
         let m = self.start(NodeKind::Use)?;
         let start = word.unwrap_or(self.peek_index());
+        let unit_start = self.tokens[start].span.start;
         self.expect(TokenKind::KwUse)?;
         let tree = self.start(NodeKind::UseTree)?;
         // The head of the path of a `use` reads a keyword and a reserved word
@@ -730,6 +734,8 @@ impl<'a> Parser<'a> {
                 }
                 let n = self.start(NodeKind::UseNames)?;
                 self.bump();
+                // Whether an element was no name, and whether a `,` was missing.
+                let (mut cut, mut missing) = (false, false);
                 self.with_nl(false, |p| {
                     while !p.at(TokenKind::RBrace) {
                         // The `{` is never closed and an item starts the line:
@@ -738,18 +744,33 @@ impl<'a> Parser<'a> {
                         if p.unit_ends_unclosed() {
                             return Err(ParseError);
                         }
-                        // An element that is not a name (`3`, `g as h`, `_`) cuts the list here.
-                        // SPEC-GAP(S-696): whether the elements after it are read on.
-                        let t = p.parse_name_after_dot("imported name")?;
-                        p.check_taken(t, &path);
-                        if p.eat(TokenKind::Comma).is_none() {
+                        if p.use_element_named() {
+                            let t = p.bump();
+                            p.check_taken(t, &path);
+                        } else {
+                            p.skip_use_element(unit_start)?;
+                            cut = true;
+                        }
+                        if p.eat(TokenKind::Comma).is_some() {
+                            continue;
+                        }
+                        if !crate::starts::starts_element(NodeKind::UseNames, p.peek_kind()) {
                             break;
                         }
+                        // Two elements with no `,` (§2.5): the next is read (R-416).
+                        let _ = p.close_list(NodeKind::UseNames, TokenKind::RBrace);
+                        missing = true;
                     }
                     p.close_list(NodeKind::UseNames, TokenKind::RBrace)?;
-                    Ok(())
+                    // A list with an element that is no name is not read whole
+                    // (§15.1, §18.1, S-696): the list stays open.
+                    if cut { Err(ParseError) } else { Ok(()) }
                 })?;
                 self.complete(n, NodeKind::UseNames);
+                // Its names read whole, of a `use` that failed (R-416).
+                if missing {
+                    return Err(ParseError);
+                }
                 listed = true;
                 break;
             }
@@ -768,6 +789,56 @@ impl<'a> Parser<'a> {
         }
         self.complete(tree, NodeKind::UseTree);
         self.complete(m, NodeKind::Use);
+        Ok(())
+    }
+
+    /// Whether the element of a `use` list at the cursor is a name (§15.1):
+    /// a name or a keyword (whose error is [`Parser::check_taken`]) that no
+    /// token makes longer, a `.`, an `as`, or a `(` or `[` that goes with it
+    /// (a line break between parts them, §2.5). What follows it is read as
+    /// after a name: a `,`, the `}`, the next element with no `,` (§2.5, S-696).
+    fn use_element_named(&self) -> bool {
+        let next = self.peek2_index();
+        let kind = self.tokens[next].kind;
+        let goes_with = matches!(kind, TokenKind::LParen | TokenKind::LBracket) && self.gap(next) != Gap::Newline;
+        let longer = goes_with || matches!(kind, TokenKind::Dot | TokenKind::KwAs);
+        crate::starts::names_a_member(self.peek_kind()) && !longer
+    }
+
+    /// An element of a `use` list that is no name (`3`, `"s"`, `a.b`, `g as
+    /// h`, `{h}`, `_`): its E0002, and an `Error` node to the next `,` or `}`
+    /// of the list, read on from there (§15.1, S-696). One pass forward. The
+    /// `}` closes the list over a `(` or `[` open in the element, as brackets
+    /// pair ([`crate::scan::pair`]); the unit ends in it where its skip ends
+    /// it ([`Parser::unit_ends_here`], §18.1), from the `use` at `unit_start`.
+    fn skip_use_element(&mut self, unit_start: u32) -> PResult<()> {
+        if crate::starts::names_a_member(self.peek_kind()) {
+            // The name an element starts with (`g` of `g as h`) is taken by no `use`;
+            // the table reads the failure after it in the list.
+            let e = self.start(NodeKind::Error)?;
+            self.bump();
+            self.complete(e, NodeKind::Error);
+            let _ = self.close_list(NodeKind::UseNames, TokenKind::RBrace);
+        } else {
+            let _ = self.parse_name_after_dot("imported name");
+        }
+        if self.at(TokenKind::Comma) {
+            return Ok(());
+        }
+        let e = self.start(NodeKind::Error)?;
+        let base = self.braces.len();
+        let ends = |p: &Self| match p.peek_kind() {
+            TokenKind::Comma => p.braces.len() <= base,
+            TokenKind::RBrace => !p.braces.iter().skip(base).any(|&b| p.tokens[b].kind == TokenKind::LBrace),
+            _ => false,
+        };
+        while !ends(self) {
+            if self.at(TokenKind::Eof) || self.unit_ends_here(self.peek_index(), unit_start) {
+                return Err(ParseError);
+            }
+            self.bump();
+        }
+        self.complete(e, NodeKind::Error);
         Ok(())
     }
 

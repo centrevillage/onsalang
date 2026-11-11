@@ -1,0 +1,2 @@
+// A reserved word as an element, followed with no `,` by a number (spec §15.1, §2.2, R-272): its E0200.
+use kp.{static 3}                                   //~ E0200

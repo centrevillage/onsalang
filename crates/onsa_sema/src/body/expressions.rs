@@ -181,16 +181,16 @@ impl<'a> Checker<'a> {
             // `if` and `match`, and the flow checks read the `~`
             // (`crate::flow::map`); `at`, `^` and `par` are theirs.
             ExprKind::If { tilde: Some(_), .. } | ExprKind::Match { tilde: Some(_), .. } if self.flow.is_none() => {
-                onsa_diag::internal::bug(Some(span), "flow syntax the names stage did not stop at")
+                Err(self.flow_syntax(span))
             }
             ExprKind::Closure { ret_clock: Some(_), .. } | ExprKind::Feedback(_) | ExprKind::Par { .. } => {
-                onsa_diag::internal::bug(Some(span), "flow syntax the names stage did not stop at")
+                Err(self.flow_syntax(span))
             }
             // The names stage reads the operand of `at` before its clock
             // (§18.1), and may stop in it with no error (S-675).
             ExprKind::At { expr, .. } => {
                 self.check_expr(*expr, None)?;
-                onsa_diag::internal::bug(Some(span), "flow syntax the names stage did not stop at")
+                Err(self.flow_syntax(span))
             }
             ExprKind::If { cond, then, else_, .. } => {
                 let bool_ = self.bool_();
@@ -320,6 +320,17 @@ impl<'a> Checker<'a> {
     /// `[e; N]` / array length in an expression (§4.5; the forms are read in
     /// `constarg.rs`, from the records of the names of the body). `None`: a
     /// length the check does not read (§18.1, S-690).
+    /// The end of the check at what only a flow body holds, outside one:
+    /// the names stage stopped before it with no error (a name held as an
+    /// error in a constant expression, S-692, after which this check goes
+    /// on, S-690; R-430), else it would have reported its E0821 (§11.1).
+    fn flow_syntax(&mut self, span: Span) -> Stop {
+        if !self.names.complete {
+            return self.held_stop();
+        }
+        onsa_diag::internal::bug(Some(span), "flow syntax the names stage did not stop at")
+    }
+
     pub(crate) fn const_len(&mut self, len: ExprId) -> R<Option<Len>> {
         match self.const_expr(len) {
             Ok((value, constant)) => {

@@ -1,0 +1,15 @@
+pub struct Point {
+  x: F32,
+}
+
+impl Point {
+  pub const N: U32 = 2
+}
+
+pub struct Ring {
+  x: F32,
+}
+
+impl Ring {
+  pub const N: U32 = 3
+}

@@ -353,7 +353,8 @@ pub enum Failed {
     /// of an `impl`): its uses are checked against it. The body, the value,
     /// the fields, the variants or the members were cut; what was not read is
     /// [`ExprKind::Error`], and the fields and variants that were not read are
-    /// absent (their uses get no diagnostic, S-260).
+    /// absent (their uses get no diagnostic, S-260). A `use` whose names were
+    /// all read with an error between them (a missing `,`, R-416).
     Body,
     /// The heading was cut: only the name is known. A function or flow is
     /// an error to its users (a call of it is not checked against it); a

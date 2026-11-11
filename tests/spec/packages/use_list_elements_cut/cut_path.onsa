@@ -1,0 +1,9 @@
+// A path (`a.b`), in the middle.
+use kp.{g, a.b, h}                                  //~ E0002
+
+pub fn silent() -> I32 {
+  let _: Bool = zzz()
+  let _: Bool = g()
+  let _: Bool = h()
+  0
+}

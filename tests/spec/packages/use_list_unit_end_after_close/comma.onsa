@@ -1,0 +1,8 @@
+// A `,` missing between two names (R-416; spec §2.5): the list is read to the end, and the unit still ends at the end
+// of the line of its `}` (spec §18.1).
+use kp.{g h}                                        //~ E0002
+hello                                               //~ E0002
+
+pub fn after() -> Bool {
+  1                                                 //~ E0401
+}

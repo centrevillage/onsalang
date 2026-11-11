@@ -19,7 +19,7 @@
 //! - a run of tokens that belong to no item, up to the next item, over lines
 //!   (S-259).
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::ops::Range;
 
 use onsa_diag::{Diagnostic, Edit, FileId, Span, Stage};
@@ -250,17 +250,25 @@ impl Within {
 }
 
 /// The units of the file of `cst` (`text` is its source; `heights` the
-/// height of each item node by its start, `ParseOutput::items`). A run of
+/// height of each item node by its start, `ParseOutput::items`, and where the
+/// item nodes that start at the start of an item start, `ParseOutput::item_starts`). A run of
 /// tokens of no item takes the trivia with a diagnostic of the syntax stage
 /// in `diagnostics` (S-259): those of the lexer and of the doc comments,
 /// which are reported before the units are made; the later checks report
 /// on code.
-pub(crate) fn build(cst: &Cst, map: &AstMap, text: &str, heights: &[(u32, u32)], diagnostics: &[Diagnostic]) -> Units {
+pub(crate) fn build(
+    cst: &Cst,
+    map: &AstMap,
+    text: &str,
+    (heights, item_starts): (&[(u32, u32)], &[u32]),
+    diagnostics: &[Diagnostic],
+) -> Units {
     let item_of: HashMap<NodeId, ItemId> = map.items.iter().enumerate().map(|(i, &n)| (n, ItemId(i as u32))).collect();
     let mut starts: Vec<u32> = diagnostics.iter().filter(|d| d.stage == Stage::Syntax).map(|d| d.span.start).collect();
     starts.sort_unstable();
     let heights = heights.iter().copied().collect();
-    let mut b = Builder { cst, text, item_of, heights, starts, ctx: ItemCtx::Top, list: Vec::new() };
+    let item_starts = item_starts.iter().copied().collect();
+    let mut b = Builder { cst, text, item_of, heights, item_starts, starts, ctx: ItemCtx::Top, list: Vec::new() };
     b.list(cst.root(), None);
     let list = b.list;
     let top = (0..list.len()).filter(|&u| list[u].parent.is_none()).collect();
@@ -305,6 +313,8 @@ struct Builder<'a> {
     item_of: HashMap<NodeId, ItemId>,
     /// The height of each item node, by its start.
     heights: HashMap<u32, u32>,
+    /// Where the item nodes that start at the start of an item start.
+    item_starts: HashSet<u32>,
     /// Where the syntax diagnostics start, in order.
     starts: Vec<u32>,
     /// The list whose units are made ([`Unit::list`]).
@@ -347,15 +357,10 @@ impl Builder<'_> {
                             self.field_defaults(decl, u);
                         }
                     }
-                    // A visibility, an attribute (`@`, `#[`) or a doc comment
-                    // starts an item (§18.1): a run of tokens of no item from
-                    // there is a unit of its own, which the tokens after it
-                    // join (R-399). A `#` alone does not.
-                    None if matches!(self.cst.children(n).first(), Some(&Elem::Node(c))
-                        if matches!(self.cst.kind(c), NodeKind::Vis | NodeKind::Docs)
-                            || self.cst.kind(c) == NodeKind::Attr
-                                && ["@", "#["].iter().any(|s| self.text[self.cst.span(c).start as usize..].starts_with(s))) =>
-                    {
+                    // Tokens of no item from the start of an item (§18.1), as
+                    // the parser judged it, are a unit of their own, which the
+                    // tokens after it join (R-399, R-423).
+                    None if self.item_starts.contains(&self.cst.span(n).start) => {
                         last = Some((self.push(self.cst.span(n), None, parent), true));
                     }
                     None => self.stray(self.cst.span(n), parent, &mut last),

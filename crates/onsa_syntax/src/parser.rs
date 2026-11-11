@@ -107,6 +107,9 @@ pub(crate) struct ParseOutput {
     /// that a candidate stays in the nesting limit reads again only a unit
     /// near it (`nesting::nests_too_deep`).
     pub items: Vec<(u32, u32)>,
+    /// Where each item node that starts at the start of an item starts
+    /// ([`Parser::starts_an_item`], a doc comment): the units read it (R-423).
+    pub item_starts: Vec<u32>,
     /// The insertions of the rows apart from the tokens round them
     /// ([`crate::edits::apart`]).
     pub apart: crate::edits::Insertions,
@@ -292,6 +295,8 @@ pub(crate) struct Parser<'a> {
     levels: Vec<u32>,
     /// The height of each item node closed ([`ParseOutput::items`]).
     items: Vec<(u32, u32)>,
+    /// [`ParseOutput::item_starts`].
+    item_starts: Vec<u32>,
     /// How many trial readings ([`Parser::snapshot`]) are open: a reading
     /// that is tried inside another one does not try the brackets of a
     /// call's type arguments again, so trials nest at most once per level.
@@ -405,6 +410,7 @@ impl<'a> Parser<'a> {
             brackets: std::cell::OnceCell::new(),
             levels: Vec::new(),
             items: Vec::new(),
+            item_starts: Vec::new(),
             trials: 0,
             detached: None,
             value_bang: None,

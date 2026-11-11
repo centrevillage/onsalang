@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§15.1", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "re_number.onsa:2:16"
+// code = "E0002"
+// candidate = 1
+// leaves = ["re_number.onsa:2:17 E0002"]
+// [[test.fix]]
+// at = "re_string.onsa:2:16"
+// code = "E0002"
+// candidate = 1
+// leaves = ["re_string.onsa:2:17 E0002"]
+// [[test.fix]]
+// at = "re_underscore.onsa:2:16"
+// code = "E0002"
+// candidate = 1
+// leaves = ["re_underscore.onsa:2:17 E0002"]
+// [[test.fix]]
+// at = "re_braces.onsa:2:16"
+// code = "E0002"
+// candidate = 1
+// leaves = ["re_braces.onsa:2:17 E0002"]
+// [[test.fix]]
+// at = "re_line.onsa:4:3"
+// code = "E0002"
+// candidate = 1
+// leaves = ["re_line.onsa:4:3 E0002"]
+
+// A name of the list of a `use` followed, with no `,`, by an element that is no name (`3`, `"s"`, `_`, `{h}`; spec
+// §15.1, S-696) is read as a name: the element after it starts an element of the list (spec §2.5: "要素の後に `,` を
+// 置かずに、次のトークンがその並びの要素を始めるとき…`,` の無い二つの要素"), so it is two elements with no `,`, not
+// one element that is no name. Only a `.`, an `as`, or a `(` or `[` that goes with the name (on its line, §2.5) make
+// the name a part of a longer element. The name is read, as a name of a `use` with an error (spec §18.1), so the
+// modules re_*.onsa that re-export it give it to this module, which finds it (no E0302 for `g1`...); the list holds an
+// element that is no name, so it is one that was not read to the end, and the module that has it is silent for the
+// names it does not find (`zzz` there). A name that no list has is E0302 here as always. The E0002 of the `,` that
+// is missing has its candidate, the `,` (§2.5); the element after it stays an error (two errors, §2.5: "どの候補でも
+// 直らない形は、誤りが二つある入力として扱う"), which the `leaves` above say.
+use re_number.{g1}
+use re_string.{g2}
+use re_underscore.{g3}
+use re_braces.{g4}
+use re_line.{g5}
+use re_number.{zzz1}                                //~ E0302
+
+pub fn t() -> I32 {
+  g1() + g2() + g3() + g4() + g5()
+}

@@ -1,0 +1,10 @@
+// The module that takes the names of a `pub use` with the `,` missing (reexport.onsa): `g` and `h` are found (names of
+// an error, so nothing is reported for the call below), and `zzz`, which the list did not have, is E0302. (S-696 is
+// the same for a list with an element that is no name; here the list was read to the end.)
+use reexport.{g}
+use reexport.{h}
+use reexport.{zzz}                                  //~ E0302
+
+pub fn t() -> Bool {
+  h()
+}

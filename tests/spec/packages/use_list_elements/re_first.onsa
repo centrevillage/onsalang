@@ -1,0 +1,6 @@
+// The first element is no name (spec §15.1; S-696): the names after it are all read (`g`, `h7`).
+pub use kp.{3, g, h7}                               //~ E0002
+
+pub fn silent() -> I32 {
+  zzz()
+}

@@ -96,9 +96,9 @@ impl<'p> Sema<'p> {
                 let _scope = onsa_diag::internal::item_scope(item.span);
                 let mut at = Place { m, ast, id, item, error, unit, target: false };
                 match &item.kind {
-                    ItemKind::Use(u) if matches!(item.failed, Some(Failed::Body | Failed::Heading)) => {
-                        self.cut_use(m, u, item.vis)
-                    }
+                    // Its names read whole are failed (§18.1, R-416).
+                    ItemKind::Use(u) if item.failed == Some(Failed::Body) => self.fail_taken(m, u, item.vis),
+                    ItemKind::Use(u) if item.failed == Some(Failed::Heading) => self.cut_use(m, u, item.vis),
                     ItemKind::Use(u) => self.collect_use(m, item, id, u),
                     ItemKind::Impl(decl) => self.collect_impl(&at, decl),
                     ItemKind::Extern(e) => {

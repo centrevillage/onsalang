@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§18.1"]
+// fixes = 1
+
+// E0004 for a `///` before the type of the element of a variant (spec §2.1, §18.1; S-433): the type in the
+// parentheses of a variant is no place that a doc comment documents (the closed list of §2.1 has the variants, not
+// their elements), so the doc comment has nothing to attach to. The candidate is `//`. The forms: the doc comment
+// before the first element, before the second, and at the end after a `,` (which has no element after it). The
+// marker is on the line of the comment. One error in each declaration unit (P-01), so each variant is in an enum of
+// its own. A variant that has a doc comment before it is fine (lex/doc_comment_targets.onsa).
+
+pub enum BeforeTheFirst {
+  V(
+    /// the element                                //~ E0004
+    I32)
+}
+
+pub enum BeforeTheSecond {
+  W(I32,
+    /// the second element                         //~ E0004
+    I32)
+}
+
+pub enum AtTheEnd {
+  X(I32,
+    /// nothing follows                            //~ E0004
+  )
+}
+
+pub enum OnTheLineOfTheName {
+  Y(/// the element                                //~ E0004
+    I32)
+}
+
+pub enum Documented {
+  /// This variant has its doc comment.
+  Z(I32),
+}

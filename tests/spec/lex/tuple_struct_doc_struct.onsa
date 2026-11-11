@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§2.1", "§4.4", "§18.1"]
+
+// A `///` before the element of a tuple struct (spec §2.1, §4.4, §18.1; S-433, R-414): the element of a tuple struct
+// is no place that a doc comment documents (the closed list of §2.1), and the tuple struct is E0020 (§4.4), which
+// is earlier in the source than the doc comment, so E0020 is the error that is reported, and not the E0004 of the
+// doc comment. This is so for the forms with a line break inside the parentheses (R-414), which they must have to
+// hold a doc comment: the break after the `(`, the `///` on the line of the `(`, the break after the element, a
+// doc comment after the element. The markers are on the line of the `(`, where the form starts. One error in each
+// declaration unit (P-01).
+
+pub struct Hz(                                      //~ E0020
+  /// the value
+  F32)
+
+struct Gain(                                        //~ E0020
+  /// the value
+  F32
+)
+
+pub struct Aside(/// the value                      //~ E0020
+  F32)
+
+pub struct Wrap[T](                                 //~ E0020
+  T,
+  /// after the element
+)
+
+pub fn takes(h: Hz) -> Hz {
+  h
+}
+
+pub struct Named {
+  /// A field of a struct has its doc comment.
+  value: F32,
+}

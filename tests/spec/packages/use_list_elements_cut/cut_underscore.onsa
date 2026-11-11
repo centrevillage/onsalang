@@ -1,0 +1,8 @@
+// `_`, first: no name (the rule of the name of a declaration, §15.1), so the list is not read to the end.
+use kp.{_, g}                                       //~ E0002
+
+pub fn silent() -> I32 {
+  let _: Bool = zzz()
+  let _: Bool = g()
+  0
+}

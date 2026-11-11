@@ -1,0 +1,13 @@
+// The names of a list with an element that is no name (`3`) are failed names, before it and after it (S-696):
+// the same as main.onsa, with one E0002 at the list.
+use kp.{Point, 3, Ring}                             //~ E0002
+
+pub fn before_the_element() -> F32 {
+  let b = [10.0; Point.N] at sample
+  b[0]
+}
+
+pub fn after_the_element() -> F32 {
+  let b = [10.0; Ring.N] at sample
+  b[0]
+}

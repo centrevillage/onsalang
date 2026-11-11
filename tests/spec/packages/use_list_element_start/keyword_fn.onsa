@@ -1,0 +1,2 @@
+// The keyword `fn` as an element, followed with no `,` by a number (spec §15.1, R-272): the error of the word.
+use kp.{fn 3}                                       //~ E0002 @9

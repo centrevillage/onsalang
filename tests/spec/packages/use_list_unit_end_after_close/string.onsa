@@ -1,0 +1,8 @@
+// A string in the list (S-696), and a blank line before the stray line (spec §18.1).
+use kp.{g, "s", h}                                  //~ E0002
+
+p                                                   //~ E0002
+
+pub fn after() -> Bool {
+  1                                                 //~ E0401
+}

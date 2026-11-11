@@ -159,7 +159,13 @@ fn element_starts(list: NodeKind) -> Option<fn(TokenKind) -> bool> {
         NodeKind::ArgList => |k| starts_operand(k) || matches!(k, KwMove | KwInout),
         NodeKind::TupleExpr | NodeKind::ArrayExpr => |k| starts_operand(k) || k == KwMove,
         NodeKind::StructLitFields => |k| matches!(k, Ident | DotDotDot),
-        NodeKind::VariantList | NodeKind::UseNames | NodeKind::EffectRow => |k| k == Ident,
+        NodeKind::VariantList | NodeKind::EffectRow => |k| k == Ident,
+        // A name, a keyword and the elements that are no name (§15.1, S-696); an
+        // `as` goes with the name before it (`g as h`, one element).
+        NodeKind::UseNames => |k| {
+            (names_a_member(k) && k != KwAs)
+                || matches!(k, Int | Float | Char | Str | Underscore | LBrace | LParen | LBracket)
+        },
         NodeKind::FieldList => |k| matches!(k, Ident | KwPub | KwPriv),
         NodeKind::ParamList => |k| matches!(k, Ident | KwSelf | Underscore | At | KwInout | KwMove),
         NodeKind::GenericParams => |k| matches!(k, Ident | KwConst),

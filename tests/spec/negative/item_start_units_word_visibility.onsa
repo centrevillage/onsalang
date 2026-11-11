@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1"]
+
+// Words that stand before a heading at the head of a line start an item (spec §18.1; R-423), whatever follows them
+// that can start a heading: a visibility (`Ask pub`, `Ask priv`), more than one word (`Ask Bid pub`). The extra line
+// before them (`stray1`) is a unit of its own and ends there, so each of the two lines has an E0002 (one error in
+// each unit, P-01). The function after a pair is read as a unit of its own.
+
+pub fn first() -> I32 { 1 }
+
+stray1                                              //~ E0002
+Ask pub                                             //~ E0002
+pub fn after_pub() -> I32 { 1 }
+
+stray2                                              //~ E0002
+Ask priv                                            //~ E0002
+pub fn after_priv() -> I32 { 1 }
+
+stray3                                              //~ E0002
+Ask Bid pub                                         //~ E0002
+pub fn after_two_words() -> I32 { 1 }

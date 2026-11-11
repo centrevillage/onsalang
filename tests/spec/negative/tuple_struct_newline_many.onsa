@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§2.5", "§18.1"]
+// fixes = 0
+
+// E0002, with no candidate, for a struct written with a tuple of two elements or more with line breaks inside the
+// parentheses (spec §4.4, §2.5, §18.1; R-414; the row `tuple_struct_many` of spec/foreign-forms.toml): a line break
+// inside parentheses does not change the form (§2.5), so these are the same as `struct Pair(F32, F32)` of
+// negative/tuple_struct_many.onsa: the names of the fields would have to be made up, so there is no candidate, and
+// the note says to write a struct with named fields. The marker is on the line of the `(`, where the form starts
+// (the main position is the `(` for the form on one line). The function below, that uses the type, has no
+// diagnostic. One error in each declaration unit (P-01).
+
+pub struct Pair(                                    //~ E0002
+  F32,
+  F32)
+
+struct Rgb(                                         //~ E0002
+  U8,
+  U8,
+  U8
+)
+
+pub struct Wide[T](                                 //~ E0002
+  T,
+  T,
+)
+
+pub fn takes(p: Pair) -> Pair {
+  p
+}
+
+pub struct Named {
+  a: F32,
+  b: F32,
+}

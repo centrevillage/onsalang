@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+// fixes = 0
+
+// S-696 (spec §15.1, §18.1): a list of a `use` that has an element that is no name (`3`, `"s"`, `a.b`, `g as x`,
+// `{x, y}`, `_`) is a list that was not read to the end, whatever follows the element and even if the names after it
+// are read: the module that has the `use` is silent for the names that it does not find, and the names that were
+// read are the names of a `use` with an error. There is no E0302 and no E0401 in the functions below. The report of
+// the `use` is one E0002 (the first element). Each form is in a module of its own (cut_*.onsa).
+// A string, in the middle.
+use kp.{g, "s", h}                                  //~ E0002
+
+pub fn silent() -> I32 {
+  let _: Bool = zzz()
+  let _: Bool = g()
+  let _: Bool = h()
+  0
+}

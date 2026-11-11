@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§15.1", "§18.1"]
+// fixes = 1
+
+// R-416 (spec §2.5, §15.1, §18.1): a list of a `use` with no `,` between two names (`use kp.{g h}`) is the E0002 of
+// §2.5 for two elements with no `,` between them, with the candidate that puts a `,` there (`fixes = 1`). It is not
+// an element that is no name, so the list is read to the end: the names `g` and `h` are the names of a `use` with an
+// error (nothing is reported for `h()`), and the name that this `use` does not take is reported as with
+// `use kp.{g, h}`: `zzz()` is E0302.
+use kp.{g h}                                        //~ E0002
+
+pub fn t() -> Bool {
+  h()
+}
+
+pub fn u() -> I32 {
+  zzz()                                             //~ E0302
+}

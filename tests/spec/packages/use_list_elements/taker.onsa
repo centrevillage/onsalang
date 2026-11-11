@@ -1,0 +1,42 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1"]
+// fixes = 0
+
+// S-696 (spec §15.1, §18.1): an element of the list of a `use` that is no name (`3`, `"s"`, `a.b`, `g as x`, `{x, y}`,
+// `_`) is a syntax error of its own, and the reading goes on from the next `,` at depth 0, so the names after it are
+// read; the report of the `use` is the first error only. The names read are the names of a `use` with a syntax error,
+// and a list with such an element is one that was not read to the end, so the module that has it is silent for the
+// names it does not find. The modules re_*.onsa re-export (`pub use`) the names after the element. This module takes
+// them: a name that was read is found there, as a name of an error, and nothing is reported for it or for what
+// uses it; a name that was not in the list (`zzz1`...) is E0302 as always.
+use re_number.{g}
+use re_number.{h1}
+use re_number.{zzz1}                                //~ E0302
+use re_string.{h2}
+use re_string.{zzz2}                                //~ E0302
+use re_path.{h3}
+use re_path.{zzz3}                                  //~ E0302
+use re_alias.{h4}
+use re_alias.{zzz4}                                 //~ E0302
+use re_nested.{h5}
+use re_nested.{zzz5}                                //~ E0302
+use re_underscore.{h6}
+use re_underscore.{zzz6}                            //~ E0302
+use re_first.{h7}
+use re_first.{zzz7}                                 //~ E0302
+use re_two.{h8}
+use re_two.{zzz8}                                   //~ E0302
+
+pub fn silent() -> Bool {
+  let _: Bool = g()
+  let _: Bool = h1()
+  let _: Bool = h2()
+  let _: Bool = h3()
+  let _: Bool = h4()
+  let _: Bool = h5()
+  let _: Bool = h6()
+  let _: Bool = h7()
+  let _: Bool = h8()
+  true
+}

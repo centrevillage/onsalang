@@ -1,0 +1,7 @@
+// A nested list (`{x, y}`, spec §15.1; S-696): the element is the syntax error, the `,` inside its braces is at depth
+// 1 and does not end it, so the reading goes on from the next `,` at depth 0 and reads `h5`.
+pub use kp.{g, {x, y}, h5}                          //~ E0002
+
+pub fn silent() -> I32 {
+  zzz()
+}

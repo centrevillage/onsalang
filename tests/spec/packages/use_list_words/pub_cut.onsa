@@ -1,2 +1,2 @@
-// A `pub use` that is cut at `3`: `g` was read, `h` was not (S-596).
+// A `pub use` with an element that is no name (`3`): `g` is read, and `h` after it too (S-596, S-696).
 pub use kp.{g, 3, h}                                //~ E0002

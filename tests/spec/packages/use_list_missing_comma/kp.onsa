@@ -1,0 +1,11 @@
+pub fn g() -> I32 {
+  1
+}
+
+pub fn h() -> Bool {
+  true
+}
+
+pub fn k() -> I32 {
+  3
+}

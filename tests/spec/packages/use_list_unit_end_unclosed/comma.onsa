@@ -1,0 +1,12 @@
+// A `,` inside the `(` ends no element; a `const` and a `struct` after the `use` (spec §18.1, §15.1).
+use kp.{g, (h, 3}                                   //~ E0002
+
+const K: Bool = 1                                   //~ E0401
+
+struct S {
+  x: Bool,
+}
+
+pub fn after() -> Bool {
+  S { x: 1 }.x                                      //~ E0401
+}

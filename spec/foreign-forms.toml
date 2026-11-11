@@ -9869,6 +9869,18 @@ pub fn takes(h: Hz) -> Hz {
 }
 ''']
 
+# 括弧の中の改行は形を変えない（§2.5、R-414）。
+[[form.example]]
+source = '''
+pub struct Hz(
+  F32)
+'''
+fixed = ['''
+pub struct Hz {
+  priv value: F32,
+}
+''']
+
 # 要素が二つ以上か、型として読めない要素か、要素の無いタプル形の struct。フィールドを一つに決められないので
 # 候補が無く、E0002 と note（名前付きのフィールドの struct で書く）。
 [[form]]

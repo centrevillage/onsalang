@@ -257,10 +257,12 @@ impl<'a> Lower<'a> {
             }
             NodeKind::Test => self.read_test(d),
             // A `use` cut before its names were all read (R-180): the path and
-            // the names of its list read so far.
+            // the names of its list read so far. One whose list was read to
+            // its `}` (a missing `,`, R-416) has its heading read (`Failed::Body`).
             NodeKind::Use => {
                 let tree = self.child(d, NodeKind::UseTree)?;
-                Some((ItemKind::Use(self.use_decl(tree)), !cut))
+                let list = self.child(tree, NodeKind::UseNames).is_some_and(|n| self.cst.is_complete(n));
+                Some((ItemKind::Use(self.use_decl(tree)), !cut || list))
             }
             // What is not a declaration.
             _ => None,

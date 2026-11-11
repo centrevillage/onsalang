@@ -1,0 +1,6 @@
+// `[` as an element after a name (spec §18.1, §15.1).
+use kp.{g, [h}                                      //~ E0002
+
+pub fn after() -> Bool {
+  1                                                 //~ E0401
+}

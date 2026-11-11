@@ -1,0 +1,8 @@
+// `g5`, a line break and a `(`: a line break parts the `(` from the name (spec §2.5), so `g5` is read and `(3)` is an
+// element that is no name.
+pub use kp.{g5
+  (3)}                                              //~ E0002
+
+pub fn silent() -> I32 {
+  zzz()
+}

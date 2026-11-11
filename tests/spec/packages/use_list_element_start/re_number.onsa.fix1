@@ -1,0 +1,6 @@
+// `g1` and then a number with no `,` (spec §2.5, §15.1): `g1` is read, and the number is an element that is no name.
+pub use kp.{g1, 3}                                   //~ E0002
+
+pub fn silent() -> I32 {
+  zzz()
+}

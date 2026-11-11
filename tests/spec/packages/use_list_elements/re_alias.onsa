@@ -1,0 +1,7 @@
+// A name with an alias in the list (`g as x`, spec §15.1; S-696): the element is the syntax error (an alias cannot be
+// written), and `h4` after it is read.
+pub use kp.{g as x, h4}                             //~ E0002
+
+pub fn silent() -> I32 {
+  zzz()
+}

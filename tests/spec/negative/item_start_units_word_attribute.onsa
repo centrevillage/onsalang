@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1"]
+
+// The start of an attribute ends a run of extra tokens, and a word before an attribute or an item keyword at the
+// head of a line starts an item (spec §18.1; R-423): the extra line (`stray1`) is a unit of its own. An `@` on
+// the next line starts the item of the function after it, so its error (`@fp(bogus)` is E0005, §6.5) is reported
+// with the E0002 of `stray1`. A word and an `@` (`Ask @fp(bogus)`), a word and `#[`, a word and an item keyword
+// (`Ask fn …`) start a unit of their own: the word is no part of a heading, E0002. The runs of the extra lines
+// that follow one another with no start between are one unit and one E0002 (item_start_units_run.onsa).
+
+pub fn first() -> I32 { 1 }
+
+stray1                                              //~ E0002
+@fp(bogus)                                          //~ E0005
+pub fn after_attribute() -> I32 { 1 }
+
+stray2                                              //~ E0002
+Ask @fp(bogus)                                      //~ E0002
+pub fn after_word_and_attribute() -> I32 { 1 }
+
+stray3                                              //~ E0002
+Ask #[inline]                                       //~ E0002
+pub fn after_word_and_other_attribute() -> I32 { 1 }
+
+stray4                                              //~ E0002
+Ask fn word_before_fn() -> I32 { 1 }                //~ E0002
+pub fn after_word_and_fn() -> I32 { 1 }

@@ -1,0 +1,7 @@
+// Two elements that are no names (spec §15.1; S-696): each is a syntax error, and the report of the unit is the
+// first one only (one E0002 for the `use`); the reading goes on past both and reads `h8`.
+pub use kp.{3, g, "s", h8}                          //~ E0002
+
+pub fn silent() -> I32 {
+  zzz()
+}

@@ -1,0 +1,7 @@
+// `_` in the list (spec §15.1; S-696): `_` is no name (the rule of the name of a declaration, E0002), and it is the
+// first element here; the reading goes on from the next `,` and reads `h6`.
+pub use kp.{_, h6}                                  //~ E0002
+
+pub fn silent() -> I32 {
+  zzz()
+}

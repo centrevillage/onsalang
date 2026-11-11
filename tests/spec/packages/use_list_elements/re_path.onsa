@@ -1,0 +1,7 @@
+// A path in the list (`a.b`, spec §15.1; S-696): the element is the syntax error, and the `.` of the path is no end of
+// the element, so the reading goes on from the next `,`: `h3` is read.
+pub use kp.{g, a.b, h3}                             //~ E0002
+
+pub fn silent() -> I32 {
+  zzz()
+}

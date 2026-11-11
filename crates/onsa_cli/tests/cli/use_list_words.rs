@@ -190,17 +190,17 @@ fn a_cut_list_silences_its_module() {
     assert_eq!(found(&doc), want(&[("main.onsa", 1, "E0002")]), "{doc}");
 }
 
-/// §18.1, S-596: a `pub use` cut at `3`: for the other modules `g` (read before the cut) is a failed name and is
-/// silent, and `h` (after the cut, not read) is not there, E0302.
+/// §18.1, S-596, S-696: a `pub use` with an element that is no name (`3`): for the other modules `g` (before it)
+/// and `h` (after it, read on) are failed names and are silent; a name it does not take (`zzz`) is E0302.
 #[test]
-fn a_cut_pub_use_has_the_names_before_the_cut_for_the_other_modules() {
+fn a_cut_pub_use_has_the_names_round_the_element_for_the_other_modules() {
     let d = Dir::pkg("cut_pub");
     d.write("kp.onsa", KP);
     d.write("main.onsa", "pub use kp.{g, 3, h}\n");
-    d.write("user.onsa", "use main.{g}\nuse main.{h}\n");
+    d.write("user.onsa", "use main.{g}\nuse main.{h}\nuse main.{zzz}\n");
     let (out, doc) = check_json(d.root());
     assert_eq!(out.code, 1, "{doc}");
-    assert_eq!(found(&doc), want(&[("main.onsa", 1, "E0002"), ("user.onsa", 2, "E0302")]), "{doc}");
+    assert_eq!(found(&doc), want(&[("main.onsa", 1, "E0002"), ("user.onsa", 3, "E0302")]), "{doc}");
 }
 
 /// §15.1, §2.2: the words before the taken name are names of modules (`use kp.clock.{tick}` takes `tick` of the

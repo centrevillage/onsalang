@@ -1,0 +1,3 @@
+// A `pub use` with the `,` missing (R-416; spec §2.5, §15.1, §18.1): the list is read to the end, so the names that it
+// had are found by the module that takes them (taker2.onsa), as names of a `use` with an error.
+pub use kp.{g, h}                                    //~ E0002

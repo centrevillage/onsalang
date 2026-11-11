@@ -26,7 +26,8 @@
 //! read them where the parser attached them, on the CST.
 
 // A run of doc comments that document nothing is one E0004, with one candidate (S-442).
-// SPEC-GAP(S-433): a `///` before an element of a variant is in no `Docs`: E0004 (there is no tuple struct, S-39).
+// A `///` before an element of a variant is in no `Docs`: E0004 (§2.1, S-433); before one of a tuple
+// struct, the E0020 of the tuple struct before it is reported first (R-414).
 // SPEC-GAP(S-444): a `///` after code on its line is in no `Docs` (`Parser::starts_its_line`): E0004.
 // SPEC-GAP(S-434): a `//!` after the `///` of the first item is not at the head of the file: E0004.
 
@@ -365,7 +366,7 @@ mod tests {
             // SPEC-GAP(S-444): after code on its line.
             ("const A: I32 = 1 /// doc\nfn f() {\n}\n", "/// doc"),
             ("struct S {\n  a: I32, /// a\n  b: I32,\n}\n", "/// a"),
-            // SPEC-GAP(S-433): an element of a variant (there is no tuple struct, S-39).
+            // S-433: an element of a variant.
             ("enum E {\n  V(\n    /// x\n    F32\n  ),\n}\n", "/// x"),
             // A `use` takes none, so neither does a `///` after its attribute.
             ("@fp(relaxed)\n/// u\nuse std.math\n", "/// u"),

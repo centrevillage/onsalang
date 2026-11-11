@@ -1,0 +1,6 @@
+// `g3`, then `_` and `h` with no `,` (spec §2.5, §15.1): `g3` and `h` are read.
+pub use kp.{g3 _ h}                                 //~ E0002
+
+pub fn silent() -> I32 {
+  zzz()
+}

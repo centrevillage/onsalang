@@ -1,0 +1,6 @@
+// `g4` and then a nested list with no `,` (spec §2.5, §15.1).
+pub use kp.{g4 {h}}                                 //~ E0002
+
+pub fn silent() -> I32 {
+  zzz()
+}

@@ -1,0 +1,6 @@
+// `(` right after a name, which goes with it (spec §2.5, §18.1, §15.1).
+use kp.{g (h}                                       //~ E0002
+
+pub fn after() -> Bool {
+  1                                                 //~ E0401
+}

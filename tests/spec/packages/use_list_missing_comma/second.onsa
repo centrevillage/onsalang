@@ -1,0 +1,11 @@
+// The `,` is missing after the second name of three (`use kp.{g, h k}`): the same E0002 and candidate, and the list is
+// read to the end (R-416; spec §2.5, §15.1, §18.1).
+use kp.{g, h k}                                     //~ E0002
+
+pub fn t() -> I32 {
+  k()
+}
+
+pub fn u() -> I32 {
+  zzz()                                             //~ E0302
+}

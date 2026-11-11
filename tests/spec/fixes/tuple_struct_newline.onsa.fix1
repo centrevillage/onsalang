@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§2.5", "§18.1"]
+// fixes = 1
+
+// E0020 for a struct written with a tuple of one element with a line break inside the parentheses (spec §4.4, §2.5,
+// §18.1; R-414; the row `tuple_struct` of spec/foreign-forms.toml): a line break inside parentheses does not change
+// the form (§2.5), so these are the same as `struct P(F32)` of fixes/e0020_tuple_struct.onsa, with the same code and
+// the same candidate, a struct with one named field. The forms: the break after the `(`; the break after the element
+// as well, with the `)` on a line of its own; a `,` after the element; a type parameter; `priv`. The fields that were
+// not read are a wrong type for the code that uses the type, so the function below has no diagnostic. The marker is on the
+// line of the `(`, where the form starts (the main position is not in the spec, and is the `(` for the form on one
+// line). One error in each declaration unit (P-01).
+
+pub struct Hz {
+  //~ E0020
+  priv value: F32,
+}
+
+struct Gain {
+  //~ E0020
+  priv value: F32,
+}
+
+pub struct Wrap[T] {
+  //~ E0020
+  priv value: T,
+}
+
+priv struct Level {
+  //~ E0020
+  value: I32,
+}
+
+pub fn takes(h: Hz) -> Hz {
+  h
+}
+
+pub struct Named {
+  value: F32,
+}

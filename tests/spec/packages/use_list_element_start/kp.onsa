@@ -1,0 +1,23 @@
+pub fn g1() -> I32 {
+  1
+}
+
+pub fn g2() -> I32 {
+  2
+}
+
+pub fn g3() -> I32 {
+  3
+}
+
+pub fn g4() -> I32 {
+  4
+}
+
+pub fn g5() -> I32 {
+  5
+}
+
+pub fn h() -> I32 {
+  6
+}

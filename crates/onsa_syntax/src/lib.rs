@@ -232,7 +232,7 @@ pub(crate) fn read(file: FileId, text: &str, ctx: parser::ItemCtx) -> Read {
     // The doc comments are checked before the units are made: a run of
     // tokens of no item takes trivia with a diagnostic (S-259).
     docs::check(&cst, text, &mut diagnostics);
-    let units = units::build(&cst, &map, text, &out.items, &diagnostics);
+    let units = units::build(&cst, &map, text, (&out.items, &out.item_starts), &diagnostics);
     let limit = nesting::Limit { text, units: &units };
     // The operator groups (E0010) are checked on the AST, so an E0010 in the
     // part of a failed body that has no AST is not found, and the parse error

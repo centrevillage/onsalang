@@ -1,0 +1,7 @@
+// A `;` between two names (spec §2.5, S-248): the same end of the unit (spec §18.1).
+use kp.{g; h}                                       //~ E0020
+hello                                               //~ E0002
+
+pub fn after() -> Bool {
+  1                                                 //~ E0401
+}

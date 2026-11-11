@@ -1,0 +1,7 @@
+// A path in the list (S-696), and two stray tokens on the next line (spec §18.1).
+use kp.{g, a.b, h}                                  //~ E0002
+foo bar                                             //~ E0002
+
+pub fn after() -> Bool {
+  1                                                 //~ E0401
+}

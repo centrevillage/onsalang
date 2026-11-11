@@ -1,0 +1,9 @@
+// A number in the list of a `pub use` (spec §15.1, §18.1; S-696): the element is a syntax error, and the reading goes
+// on from the next `,` at depth 0, so `h1` after it is read. The names read are the names of a `use` with an error
+// (failed names), and the list is one that was not read to the end: the names that no `use` of this module takes are
+// not reported here (`zzz`). The module that takes `h1` from here (taker.onsa) finds it.
+pub use kp.{g, 3, h1}                               //~ E0002
+
+pub fn silent() -> I32 {
+  zzz()
+}

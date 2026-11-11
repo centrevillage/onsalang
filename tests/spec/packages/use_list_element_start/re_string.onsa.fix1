@@ -1,0 +1,6 @@
+// `g2` and then a string with no `,` (spec §2.5, §15.1).
+pub use kp.{g2, "s"}                                 //~ E0002
+
+pub fn silent() -> I32 {
+  zzz()
+}

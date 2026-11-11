@@ -1,0 +1,13 @@
+// A `{` that is never closed (spec §15.1: "the reading stops there"): the unit of the `use` ends at the next item
+// that starts at the head of a line (§18.1), so the function after it is a unit of its own with its own error, and
+// the module is silent for the names that it does not find (the list was not read to the end).
+use kp.{g, 3, h                                     //~ E0002
+
+pub fn after() -> Bool {
+  1                                                 //~ E0401
+}
+
+pub fn silent() -> I32 {
+  let _: Bool = zzz()
+  0
+}

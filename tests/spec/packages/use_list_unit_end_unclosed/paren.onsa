@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§15.1"]
+// fixes = 0
+
+// A `(` or `[` that is never closed inside the list of a `use` whose `{` the `}` closes (spec §18.1: a bracket that is
+// not closed ends the unit at the first start of an item at the head of a line indented as much as or less than the
+// line that opened it; spec §15.1, S-696: an element that is no name is a syntax error of its own): the unit of the
+// `use` does not go on to the end of the file, so the items after it are units of their own, each with its own error.
+// The forms: `(` and `[` as an element after a name, after the last name, after a number, right after a name, and with
+// a `,` inside the `(`; one module each.
+use kp.{g, (h}                                      //~ E0002
+
+pub fn after() -> Bool {
+  1                                                 //~ E0401
+}
+
+pub fn later() -> Bool {
+  2                                                 //~ E0401
+}

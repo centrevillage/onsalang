@@ -1,0 +1,8 @@
+// A name with an alias (`g as x`), first.
+use kp.{g as x, h}                                  //~ E0002
+
+pub fn silent() -> I32 {
+  let _: Bool = zzz()
+  let _: Bool = h()
+  0
+}

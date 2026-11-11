@@ -459,7 +459,7 @@ impl<'a> Parser<'a> {
     /// Whether the head goes on at `tokens[i]`: a token that starts a head,
     /// or the words before one (§18.1, S-593).
     fn head_goes_on(&self, i: usize) -> bool {
-        starts_heading(self.tokens[i].kind) || self.words_before_head_at(i).is_some()
+        self.heading_at(i) || self.words_before_head_at(i).is_some()
     }
 
     /// The run of words from token `first` before a head on its line
@@ -475,7 +475,7 @@ impl<'a> Parser<'a> {
             let n = self.on_line_after(last)?;
             match self.tokens[n].kind {
                 k if word(k) || k == TokenKind::Str => last = n,
-                k if starts_heading(k) => return Some((last, n)),
+                _ if self.heading_at(n) => return Some((last, n)),
                 _ => return None,
             }
         }

@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1"]
+
+// The start of an item ends a run of extra tokens, and the next unit has its own error (spec §18.1; R-423): a
+// function with an error, an extra line (`stray1`) that belongs to no item, and on the next line a word and a
+// visibility (`Ask pub`, a "word that stands before a heading at the head of a line"). The words `Ask pub` start
+// an item, so `stray1` is a unit of its own and `Ask pub` is another, each with its E0002. The function after
+// is read as the next unit (it has no error). The unit of the first function ends at the `}` on line 3 where the
+// reading stopped. Only the line of each error is pinned.
+
+pub fn broken() -> I32 {
+  1 +
+}                                                   //~ E0002
+stray1                                              //~ E0002
+Ask pub                                             //~ E0002
+pub fn after() -> I32 { 1 }

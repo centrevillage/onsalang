@@ -1,0 +1,11 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1"]
+
+// The same as item_start_units_after_an_error.onsa with the extra line at the start of the file (spec §18.1; R-423):
+// `stray1` is a unit of its own, and `Ask pub` on the next line starts another (a word that stands before a
+// heading at the head of a line), each with its E0002. The function after is a unit with no error.
+
+stray1                                              //~ E0002
+Ask pub                                             //~ E0002
+pub fn after() -> I32 { 1 }
