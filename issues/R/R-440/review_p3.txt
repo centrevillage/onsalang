@@ -1,0 +1,40 @@
+=== mod_closure
+--- main.onsa
+use m
+type B = [F32; (fn() { m.A.N })]
+--- m.onsa
+pub type A = (F32, F32)
+=== mod_closure_rev
+--- main.onsa
+use m
+pub type A = (F32, F32)
+--- m.onsa
+use main
+type B = [F32; (fn() { main.A.N })]
+=== mod_plain_last
+--- main.onsa
+use m
+type B = [F32; m.A]
+--- m.onsa
+pub type A = F32
+=== mod_mid3
+--- main.onsa
+use m
+type B = [F32; m.A.N.x]
+--- m.onsa
+pub type A = (F32, F32)
+=== mod_use_name
+--- main.onsa
+use m.A
+type B = [F32; (fn() { A.N })]
+--- m.onsa
+pub type A = (F32, F32)
+=== mid3_test
+pub struct S { x: U32 }
+impl S { const N: S = S { x: 1 } }
+type B = [F32; A.N.x]
+type A = S
+test "t" {
+  let b: B = [0.0; 3]
+  assert(b[0] == 0.0)
+}

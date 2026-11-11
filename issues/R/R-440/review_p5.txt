@@ -1,0 +1,30 @@
+=== foreign_nocomma_sig
+pub struct W[T] { x: T }
+impl[T] W[T] { const K: U32 = 4 }
+pub fn f(a: [F32; W[F32].K]) -> U32 { 1 }
+=== foreign_nocomma_body
+pub struct W[T] { x: T }
+impl[T] W[T] { const K: U32 = 4 }
+pub fn f() -> U32 {
+  let a = [0.0; W[F32].K]
+  1
+}
+=== foreign_comma_sig
+pub struct Rg[T, const N: U32] { n: U32 }
+impl[T, const N: U32] Rg[T, N] { const CAP: U32 = 4 }
+pub fn f(a: [F32; Rg[F32, 4].CAP]) -> U32 { 1 }
+=== foreign_call_sig
+fn id[T](x: T) -> T { x }
+pub fn f(a: [F32; id[U32](4)]) -> U32 { 1 }
+=== e0304_cycle_today
+type B = [F32; (fn(A: U32) { A })]
+type A = B
+=== two_cycle_len
+type A = [F32; B]
+type B = [F32; A]
+=== alias_nope_len_b_first
+type B = [F32; A]
+type A = Nope
+=== alias_nope_len_a_first
+type A = Nope
+type B = [F32; A]

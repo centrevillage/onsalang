@@ -1,0 +1,114 @@
+=== mid3_b_first
+pub struct S { x: U32 }
+impl S { const N: S = S { x: 1 } }
+type B = [F32; A.N.x]
+type A = S
+=== mid3_a_first
+pub struct S { x: U32 }
+impl S { const N: S = S { x: 1 } }
+type A = S
+type B = [F32; A.N.x]
+=== mid3_tuple_b_first
+type B = [F32; A.N.x]
+type A = (F32, F32)
+=== mid3_tuple_a_first
+type A = (F32, F32)
+type B = [F32; A.N.x]
+=== mid3_closure_tuple_b_first
+type B = [F32; (fn() { A.N.x })]
+type A = (F32, F32)
+=== mid3_closure_tuple_a_first
+type A = (F32, F32)
+type B = [F32; (fn() { A.N.x })]
+=== mid3_self
+type A = [F32; A.N.x]
+=== sig_args_closure_local
+pub struct Rg[T, const N: U32] { n: U32 }
+impl[T, const N: U32] Rg[T, N] { const CAP: U32 = 4 }
+pub fn f(a: [F32; (fn(k: U32) { Rg::[F32, k].CAP })]) -> U32 { 1 }
+=== body_args_closure_local
+pub struct Rg[T, const N: U32] { n: U32 }
+impl[T, const N: U32] Rg[T, N] { const CAP: U32 = 4 }
+pub fn f() -> U32 {
+  let a = [0.0; (fn(k: U32) { Rg::[F32, k].CAP })]
+  1
+}
+=== sig_args_closure_local_ty
+pub struct Rg[T, const N: U32] { n: U32 }
+impl[T, const N: U32] Rg[T, N] { const CAP: U32 = 4 }
+pub fn f(a: [F32; (fn(k: U32) { Rg::[k, 4].CAP })]) -> U32 { 1 }
+=== body_args_closure_local_ty
+pub struct Rg[T, const N: U32] { n: U32 }
+impl[T, const N: U32] Rg[T, N] { const CAP: U32 = 4 }
+pub fn f() -> U32 {
+  let a = [0.0; (fn(k: U32) { Rg::[k, 4].CAP })]
+  1
+}
+=== alias_args_closure_local
+pub struct Rg[T, const N: U32] { n: U32 }
+impl[T, const N: U32] Rg[T, N] { const CAP: U32 = 4 }
+type A = [F32; (fn(k: U32) { Rg::[F32, k].CAP })]
+=== bodyty_args_closure_local
+pub struct Rg[T, const N: U32] { n: U32 }
+impl[T, const N: U32] Rg[T, N] { const CAP: U32 = 4 }
+pub fn f() -> U32 {
+  let a: [F32; (fn(k: U32) { Rg::[F32, k].CAP })] = [0.0; 1]
+  1
+}
+=== pat_alias_b_first
+type B = [F32; (match 1 { A.V => 1, _ => 2 })]
+type A = (F32, F32)
+=== pat_alias_a_first
+type A = (F32, F32)
+type B = [F32; (match 1 { A.V => 1, _ => 2 })]
+=== lit_alias_b_first
+type B = [F32; (A { x: 1 }).x]
+type A = (F32, F32)
+=== lit_alias_a_first
+type A = (F32, F32)
+type B = [F32; (A { x: 1 }).x]
+=== call_alias_b_first
+type B = [F32; A.new()]
+type A = (F32, F32)
+=== call_alias_a_first
+type A = (F32, F32)
+type B = [F32; A.new()]
+=== e0304_closure_param_alias_body
+type A = F32
+pub fn f() -> U32 {
+  let a = [0.0; (fn(A: U32) { A })]
+  1
+}
+=== e0304_closure_param_alias_sig
+type A = F32
+pub fn f(a: [F32; (fn(A: U32) { A })]) -> U32 { 1 }
+=== e0304_alias_in_alias
+type B = [F32; (fn(A: U32) { A })]
+type A = B
+=== e0304_let_alias_in_alias
+type B = [F32; ({ let A = 1
+ A })]
+type A = B
+=== flow_in_closure_nope
+pub flow g(x: [F32; (fn() { nope })] at sample) -> F32 at sample { 0.0 }
+=== flow_in_plain_nope
+pub flow g(x: [F32; nope + 1] at sample) -> F32 at sample { 0.0 }
+=== flow_in_closure_param_nope
+pub flow g(x: [F32; (fn(a: Nope) { 1 })] at sample) -> F32 at sample { 0.0 }
+=== flow_in_cast_nope
+pub flow g(x: [F32; (1 as Nope)] at sample) -> F32 at sample { 0.0 }
+=== flow_body_ty_closure_nope
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let a: [F32; (fn() { nope })] = [0.0; 1]
+  x
+}
+=== flow_body_ty_cast_nope
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let a: [F32; (1 as Nope)] = [0.0; 1]
+  x
+}
+=== flow_body_rep_cast_nope
+pub flow g(x: F32 at sample) -> F32 at sample {
+  let a = [0.0; (1 as Nope)]
+  x
+}
