@@ -1,0 +1,36 @@
+=== last_alias_ok_b_first_use
+type B = [F32; A]
+type A = F32
+pub fn f(b: B) -> U32 { 1 }
+=== last_alias_struct_b_first
+type B = [F32; A]
+type A = S
+pub struct S { x: U32 }
+=== last_alias_tuple_b_first
+type B = [F32; A]
+type A = (F32, F32)
+=== mid_alias_ok_b_first
+type B = [F32; A.MAX]
+type A = U32
+=== mid_alias_ok_a_first
+type A = U32
+type B = [F32; A.MAX]
+=== sig_last_alias
+pub fn f(b: [F32; A]) -> U32 { 1 }
+type A = F32
+=== const_ty_last_alias_b_first
+const K: [F32; A] = [0.0; 1]
+type A = F32
+=== targ_last_alias_b_first
+pub struct Rg[T, const N: U32] { n: U32 }
+type B = Rg[F32, A]
+type A = F32
+=== targ_last_alias_a_first
+pub struct Rg[T, const N: U32] { n: U32 }
+type A = F32
+type B = Rg[F32, A]
+=== targ_in_len_last_alias_b_first
+pub struct Rg[T, const N: U32] { n: U32 }
+impl[T, const N: U32] Rg[T, N] { const CAP: U32 = 4 }
+type B = [F32; Rg::[F32, A].CAP]
+type A = F32

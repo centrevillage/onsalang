@@ -1,0 +1,7 @@
+=== b_first_test
+type B = [F32; A]
+type A = F32
+test "t" {
+  let b: B = [0.0; 3]
+  assert(b[0] == 0.0)
+}

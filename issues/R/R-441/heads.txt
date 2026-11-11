@@ -1,0 +1,21 @@
+=== sig_interp_local
+pub fn f(k: U32, a: [F32; ("{k}" == "")]) -> U32 { 1 }
+=== body_rep_interp_local
+pub fn f(k: U32) -> U32 {
+  let a = [0.0; ("{k}" == "")]
+  1
+}
+=== sig_interp_nope
+pub fn f(a: [F32; ("{nope}" == "")]) -> U32 { 1 }
+=== interp_alias_b_first
+type B = [F32; ("{A.N}" == "")]
+type A = (F32, F32)
+=== interp_alias_a_first
+type A = (F32, F32)
+type B = [F32; ("{A.N}" == "")]
+=== unsafe_self
+type A = [F32; unsafe { A.N }]
+=== unsafe_nope
+pub fn f(a: [F32; unsafe { nope }]) -> U32 { 1 }
+=== sig_closure_local_shadow_type
+pub fn f(a: [F32; (fn(T: U32, b: T) { 1 })]) -> U32 { 1 }

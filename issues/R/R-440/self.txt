@@ -1,0 +1,22 @@
+=== self_len
+type A = [F32; A]
+=== self_targ
+pub struct Rg[T, const N: U32] { n: U32 }
+type A = Rg[F32, A]
+=== self_mid
+type A = [F32; A.N]
+=== const_closure_k_cycle
+type A = [F32; (fn() { K })]
+const K: A = [0.0; 1]
+=== const_len_k_cycle
+type A = [F32; K]
+const K: A = [0.0; 1]
+=== closure_param_const_arg_k
+pub struct Rg[T, const N: U32] { n: U32 }
+type A = [F32; (fn(r: Rg[F32, K]) { 1 })]
+const K: U32 = 4
+=== m_alias_mid
+mod m {
+  pub type A = (F32, F32)
+}
+type B = [F32; m.A.N]
