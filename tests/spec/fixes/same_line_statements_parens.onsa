@@ -1,0 +1,80 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§18.1"]
+// fixes = 1
+
+// Two statements on one line in a block that is inside parentheses (§2.5, §18.1, S-401): the body of a
+// closure, the block of an arm of a `match`, a block expression as the argument of a call, the block
+// of a branch. A newline in parentheses is a space, but the block has its own statements: the end of
+// a statement is followed by a newline or a `}` all the same, so `let a = 1 let b = 2` in it is the
+// E0002 of the block ("expected newline or `}`") with the same candidate as outside parentheses: the
+// token that can start a statement only is put on its own line. One diagnostic in each function; the
+// main position is the token on the same line.
+
+use std.array
+
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn in_a_closure_body() -> [U32; 4] {
+  array.from_fn(fn(i) {
+    let k = i let m = k + 1                         //~ E0002
+    m
+  })
+}
+
+pub fn in_a_closure_body_with_a_return(xs: [I32; 3]) -> I32 {
+  let f = fn(x: I32) -> I32 {
+    let y = x return y                              //~ E0002
+  }
+  f.(xs[0])
+}
+
+pub fn in_a_match_arm_block(o: Option[I32]) -> I32 {
+  match o {
+    Some(v) => {
+      let w = v let z = w + 1                       //~ E0002
+      z
+    },
+    None => 0,
+  }
+}
+
+pub fn in_a_block_argument(a: I32) -> I32 {
+  two({ let k = a let m = k + 1                     //~ E0002
+    m }, 1)
+}
+
+pub fn in_a_block_of_a_branch_in_a_call(c: Bool) -> I32 {
+  two(if c {
+    let a = 1 let b = 2                             //~ E0002
+    a + b
+  } else {
+    0
+  }, 1)
+}
+
+pub fn in_a_grouping(a: I32) -> I32 {
+  let r = ({ let k = a var m = k + 1                //~ E0002
+    m + k })
+  r
+}
+
+pub fn in_a_loop_in_a_closure(c: Bool) -> I32 {
+  let f = fn(d: Bool) -> I32 {
+    var t = 0
+    while d {
+      t = 1 break                                   //~ E0002
+    }
+    t
+  }
+  f.(c)
+}
+
+pub fn fine(a: I32) -> I32 {
+  two({
+    let k = a
+    k + 1
+  }, 1)
+}

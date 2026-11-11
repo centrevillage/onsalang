@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// mode = "check"
+// spec = ["§8.3", "§4.4"]
+
+// The `{` after a named handler with arguments, and after a name that nothing follows, in the
+// positions where the `{` is the body of a header or the handler stands alone (§8.3, §4.4, S-480).
+// `with arena(inout s)` ends at its `)`, so a `{` at depth 0 of a header after it was always the body
+// of the header, and it still is; the `handle` expression is then the one that this version does not
+// implement: E0200, on the `handle`. A `handle` with a named handler and nothing after it is the
+// plain form of the same E0200. These are the forms that the change of S-480 must leave alone (the
+// forms of the change are in handler_name_brace_header.onsa). One diagnostic in each function.
+
+pub fn if_header_with_arguments(inout s: Span[U8]) -> I32 {
+  if handle { true } with arena(inout s) { 1 } else { 2 }   //~ E0200
+}
+
+pub fn while_header_with_arguments(inout s: Span[U8]) -> I32 {
+  var t = 0
+  while handle { true } with arena(inout s) {       //~ E0200
+    t = 1
+    break
+  }
+  t
+}
+
+pub fn match_header_with_arguments(inout s: Span[U8]) -> I32 {
+  match handle { 1 } with arena(inout s) {          //~ E0200
+    _ => 1,
+  }
+}
+
+pub fn plain_in_a_let() -> I32 {
+  let r = handle { 1 } with quiet                   //~ E0200
+  r
+}
+
+pub fn plain_with_arguments(inout s: Span[U8]) -> I32 {
+  let r = handle { 1 } with arena(inout s)          //~ E0200
+  r
+}
+
+pub fn plain_in_a_header_grouping() -> I32 {
+  if (handle { true } with quiet) {                 //~ E0200
+    1
+  } else {
+    2
+  }
+}

@@ -27,6 +27,17 @@ pub(super) fn join_fix(c: &Cursor) -> Option<Fix> {
     crate::edits::move_up(c.file, c.text, c.all, title, c.span(prev).end, c.tokens[c.at], "")
 }
 
+/// The candidate of the general E0002 at a token after a statement or an
+/// item on its line that starts only a statement or an item there (§2.5,
+/// S-401): the line ends before it, the next one at the indentation of this
+/// one, as at a `;` (`semicolons::semicolon`).
+pub(super) fn line_break_fix(c: &Cursor) -> Fix {
+    let at = c.span(c.at).start;
+    let from = c.space_before(c.at).map_or(at, |s| s.start);
+    let text = format!("{}{}", c.line_break(at), c.indent(at));
+    Fix::replace("end the line before it", c.file_span(from, at), text)
+}
+
 /// The candidates of the general E0002 at the token after an element of a
 /// list of `list`, where a `,` or the closing bracket goes (§2.5), in the
 /// order of the decisions (out of a list, `None`: only the opener after a

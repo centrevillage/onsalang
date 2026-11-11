@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "20:15"
+// code = "E0002"
+// candidate = 1
+// clean = true
+
+// The block of a closure in parentheses is a block like any other (§2.5, §18.1, S-401): a `let` after
+// a `let` on the same line in its body gets the candidate that puts the second on its own line, and
+// the file has no diagnostic after it (`clean = true`).
+
+use std.array
+
+pub fn table() -> [U32; 4] {
+  array.from_fn(fn(i) {
+    let k = i
+    let m = k + 1                         //~ E0002
+    m
+  })
+}

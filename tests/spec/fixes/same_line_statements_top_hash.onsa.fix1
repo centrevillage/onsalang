@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.4", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "20:45"
+// code = "E0002"
+// candidate = 1
+// leaves = ["21:1 E0020"]
+
+// `#[` after a declaration on the same line at the top level (§2.5, §6.4, §18.1, S-401). `#[` starts
+// the attribute of an item in other languages (Rust), and at the top level it starts an item only, so
+// the E0002 has one candidate: the `#[` is put on its own line. That is the only thing the candidate
+// does: `#[derive(PartialEq)]` is not an Onsa attribute (the derived traits are written at the head
+// of the declaration, §6.4), so on its own line it is the E0020 of the old attribute form, with its
+// own candidate, and that E0020 stays after the candidate (`leaves`, which is of the same stage as
+// the E0002). The main position of the E0002 is the `#[`.
+
+pub fn hash_after_a_function() -> I32 { 1 }
+#[derive(PartialEq)] pub struct HashKey { id: U32 }   //~ E0002

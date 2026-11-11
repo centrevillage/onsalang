@@ -620,7 +620,9 @@ fn the_brace_of_a_struct_literal_pattern_or_effect_row_in_brackets() {
 #[test]
 fn the_brace_of_a_handler_written_in_place() {
     // S-421: after an effect's name the body follows on its line, E0003 in
-    // brackets and out of them; a named handler is read as before.
+    // brackets and out of them. A named handler has no body (S-480): out of
+    // brackets the line ends at its name, and the `{` on the next line is a
+    // block of its own.
     let h = "effect Ask {\n  fn ask() -> I32\n}\n";
     let g = |e: &str| format!("{h}{DECLS}fn g() -> I32 {{\n{e}\n}}\n");
     check(

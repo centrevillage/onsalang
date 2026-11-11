@@ -1,0 +1,119 @@
+// onsa.toml
+// [test]
+// mode = "check"
+// spec = ["§4.4"]
+
+// A `{` inside an index `[…]` in the header of an `if`, `while`, `match` or `for` is a block
+// expression, not the start of the body (§4.4, S-376). In a header, a `{` that starts a body is
+// one outside every bracket that is still open (depth 0); inside the `[` of an index (and inside
+// parentheses and the arms of a `match`) it is read as the block expression it is. The body's `{`
+// after the `]` closes the index is at depth 0 again and starts the body. The index with a block is
+// legal in a statement already; the cases here are the same indexes in the four headers. (The `par~`
+// header is in header_brace_inside_par.onsa, which reads the syntax only: its end must be a constant.)
+
+pub fn if_index(xs: [I32; 3], i: U32) -> I32 {
+  if xs[{ i }] == 1 {
+    1
+  } else {
+    0
+  }
+}
+
+pub fn if_index_body_follows_the_bracket(flags: [Bool; 3], i: U32) -> I32 {
+  if flags[{ i }] {
+    1
+  } else {
+    0
+  }
+}
+
+pub fn else_if_index(xs: [I32; 3], i: U32) -> I32 {
+  if xs[0] == 0 {
+    0
+  } else if xs[{ i }] == 1 {
+    1
+  } else {
+    2
+  }
+}
+
+pub fn while_index(xs: [I32; 3], i: U32) -> I32 {
+  var t = 0
+  while xs[{ i }] == 0 {
+    t = t + 1
+    break
+  }
+  t
+}
+
+pub fn for_range_end_index(xs: [U32; 3]) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..< xs[{ 1 }] {
+    t = t + i
+  }
+  t
+}
+
+pub fn for_range_start_index(xs: [U32; 3]) -> U32 {
+  var t: U32 = 0
+  for i in xs[{ 0 }] ..< 3 {
+    t = t + i
+  }
+  t
+}
+
+pub fn for_iterated_index(xs: [[U32; 2]; 3], i: U32) -> U32 {
+  var t: U32 = 0
+  for x in xs[{ i }] {
+    t = t + x
+  }
+  t
+}
+
+pub fn match_index(xs: [I32; 3]) -> I32 {
+  match xs[{ 0 }] {
+    _ => 1,
+  }
+}
+
+pub fn match_bool_index(flags: [Bool; 3], i: U32) -> I32 {
+  match flags[{ i }] {
+    true => 1,
+    false => 0,
+  }
+}
+
+pub fn nested_blocks_in_indexes(xs: [U32; 3], ys: [U32; 3], i: U32) -> I32 {
+  if xs[{ ys[{ i }] }] == 1 {
+    1
+  } else {
+    0
+  }
+}
+
+pub fn block_with_a_statement_in_the_index(xs: [I32; 3], i: U32) -> I32 {
+  if xs[{
+    let j = i
+    j
+  }] == 1 {
+    1
+  } else {
+    0
+  }
+}
+
+pub fn block_in_the_second_index(xs: [[I32; 3]; 3], i: U32) -> I32 {
+  if xs[0][{ i }] == 1 {
+    1
+  } else {
+    0
+  }
+}
+
+pub fn two_indexes_with_blocks(xs: [U32; 3], i: U32) -> I32 {
+  if xs[{ i }] == xs[{ 0 }] {
+    1
+  } else {
+    0
+  }
+}

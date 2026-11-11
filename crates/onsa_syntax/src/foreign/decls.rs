@@ -69,7 +69,12 @@ pub(super) const HASH_ATTRIBUTE_ROWS: &[RowId] =
 /// the declaration (`c.place`, `c.declaration`; [`super::at_heading_hash`]).
 /// At an input of a flow (the node opened at the `#`), the parser fails at
 /// it.
+/// After an item on its line, a `#[` before an item starts the next one,
+/// whose line the general E0002 makes (S-401, [`Want::LineEnd`]).
 pub(super) fn hash_attribute(c: &Cursor) -> Option<(RowId, Hit)> {
+    if c.want == (Want::LineEnd { breaks: true }) {
+        return None;
+    }
     hash_attribute_in(c, false)
 }
 

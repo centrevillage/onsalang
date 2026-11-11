@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "17:29"
+// code = "E0002"
+// candidate = 1
+// clean = true
+
+// A declaration after a declaration on the same line at the top level (§2.5, §18.1, S-401): after the
+// `}` of the first function the next token, `pub`, starts an item only, so the E0002 ("expected newline
+// after the declaration") has the candidate that puts the second declaration on its own line, and the
+// file has no diagnostic after it (`clean = true`).
+
+pub fn first() -> I32 { 1 }
+pub fn second() -> I32 { 2 } //~ E0002

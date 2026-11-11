@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§2.5", "§4.5"]
+
+// `x.f::[U8](y)` is three levels (§2.5, §4.5, S-332): `.f`, `::[` and the call; the list `U8` is no
+// level of its own. `::[` is one level on top of its receiver, like any postfix form, so a chain of
+// `.f::[U8](a)` segments is three levels a segment, and a deep receiver with a list of one name is
+// the receiver's height plus two. A function body is level 1 and a `let` is no level, so a `let g = …`
+// whose last form is 255 high is the deepest the limit accepts (level 256) and one more is E0006.
+// 86 segments `.f::[U8](a)` after `s` are 258 high (85 are 255 and fit, in
+// nesting/nesting_type_args_expr_three_levels_fits.onsa). A receiver of 253 fields, parentheses or
+// indexes with `.m::[U8](y)` is 256 high (252 fit, in the same file). Each function gets one E0006 and
+// nothing else. The file reads the syntax only (`mode = "parse"`).
+
+pub fn chain_86_over(s: S, xs: [S; 1], y: U8, a: U8, c: Bool) -> I32 {
+  let g = s.f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a).f::[U8](a)   //~ E0006
+  1
+}
+
+pub fn field_253_over(s: S, xs: [S; 1], y: U8, a: U8, c: Bool) -> I32 {
+  let g = s.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.m::[U8](y)   //~ E0006
+  1
+}
+
+pub fn paren_253_over(s: S, xs: [S; 1], y: U8, a: U8, c: Bool) -> I32 {
+  let g = (((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((s))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))).m::[U8](y)   //~ E0006
+  1
+}
+
+pub fn index_253_over(s: S, xs: [S; 1], y: U8, a: U8, c: Bool) -> I32 {
+  let g = xs[0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0][0].m::[U8](y)   //~ E0006
+  1
+}

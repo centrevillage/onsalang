@@ -21,6 +21,16 @@ impl<'a> Parser<'a> {
         r
     }
 
+    /// `f` inside a bracket (`(`, `[`, the arms' `{`), where a line break is
+    /// a blank and a `{` is no body of a header (§4.4, S-376: only one at
+    /// depth 0 of the header is).
+    pub(super) fn in_brackets<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
+        let saved = std::mem::replace(&mut self.no_struct_lit, false);
+        let r = self.with_nl(false, f);
+        self.no_struct_lit = saved;
+        r
+    }
+
     /// Index of the next token that is not trivia under the current context:
     /// where a newline is significant, a newline that goes on with the line
     /// is trivia too ([`Lines::goes_on`], §2.5).

@@ -439,21 +439,26 @@ impl<'a> Flat<'a> {
     /// not promise one, X-3; S-347 was dropped): at each pair without a
     /// strength, met from the left, the key that appears first in the
     /// expression is taken as the stronger one first. Each pair decided one
-    /// way or the other makes a different tree, so the readings differ;
-    /// more than three are not all made.
-    fn readings(&self) -> (Vec<Reading>, bool) {
+    /// way or the other makes a different tree, so the readings differ.
+    /// Each goes to `each` until it says to stop, or until [`READS_MAX`]
+    /// readings of the chain are read: then `false`.
+    fn readings(&self, mut each: impl FnMut(Reading) -> bool) -> bool {
         let mut first = [usize::MAX; KEYS];
         for (i, &k) in self.keys.iter().enumerate().rev() {
             first[k] = i;
         }
-        let mut readings = Vec::new();
         let mut todo = vec![Order::of_the_spec()];
+        let mut reads = 0;
         while let Some(order) = todo.pop() {
+            reads += 1;
+            if reads > READS_MAX {
+                return false;
+            }
             let mut undecided = None;
             let reading = self.read(&order, &mut undecided);
             match undecided {
-                None if readings.len() == 3 => return (readings, true),
-                None => readings.push(reading),
+                None if !each(reading) => break,
+                None => {}
                 Some((a, b)) => {
                     let (s, w) = if first[a] < first[b] { (a, b) } else { (b, a) };
                     todo.push(order.with(w, s));
@@ -461,9 +466,16 @@ impl<'a> Flat<'a> {
                 }
             }
         }
-        (readings, false)
+        true
     }
 }
+
+/// The most readings of a chain, decided or not, that its E0010 reads to
+/// find its candidates: a bound of the time on a chain of many groups. One
+/// with more has more than three readings, and keeps what it had before
+/// S-346: no candidate, and the note of more than three readings (a rare
+/// form, whose candidates the implementation decides).
+const READS_MAX: usize = 256;
 
 /// The longest chain, in characters, whose readings the message and the
 /// titles show (S-345: the implementation chooses it).
@@ -500,33 +512,38 @@ impl Flat<'_> {
     fn e0010(&self, parts: Vec<String>, limit: Limit) -> Diagnostic {
         let found = &self.text[self.span.start as usize..self.span.end as usize];
         let mut message = parts.join("; ");
-        let (readings, more) = self.readings();
-        let mut rule = None;
+        // The readings that cannot be written (a middle evaluated twice, one
+        // over the nesting limit) are no candidates and have their notes;
+        // the others are counted (§18.1, S-346).
+        let (mut twice, mut deep, mut more) = (false, false, false);
         let mut candidates = Vec::new();
-        if more {
-            rule = Some(
+        let read = self.readings(|r| {
+            match self.render(&r) {
+                Err(TwiceEvaluated) => twice = true,
+                Ok(ins) if self.nests_too_deep(&ins, limit) => deep = true,
+                Ok(_) if candidates.len() == 3 => more = true,
+                Ok(ins) => candidates.push(ins),
+            }
+            !more
+        });
+        let mut rules = Vec::new();
+        if more || !read {
+            candidates.clear();
+            (twice, deep) = (false, false);
+            rules.push(
                 "it has more than three readings: parenthesize the operators of groups without a strength between \
                  them, so that it reads one way",
             );
         }
-        for r in readings.iter().filter(|_| !more) {
-            match self.render(r) {
-                // SPEC-GAP(S-346): a reading that cannot be written (a middle
-                // evaluated twice) drops every candidate, and one over the
-                // nesting limit drops itself.
-                Err(TwiceEvaluated) => {
-                    rule = Some(
-                        "the middle operand of a chain of comparisons would be evaluated twice: bind it with `let`, \
-                         then write `a < m && m < c`",
-                    );
-                    candidates.clear();
-                    break;
-                }
-                Ok(ins) if self.nests_too_deep(&ins, limit) => {
-                    rule = Some(TOO_DEEP_RULE);
-                }
-                Ok(ins) => candidates.push(ins),
-            }
+        if twice {
+            rules.push(
+                "a reading that chains comparisons around a middle operand that is no name, literal or path of \
+                 fields is no candidate, as that operand would be evaluated twice: bind it with `let`, then write \
+                 `a < m && m < c`",
+            );
+        }
+        if deep {
+            rules.push(TOO_DEEP_RULE);
         }
         let texts: Vec<String> = candidates.iter().map(|ins| self.reading_text(ins)).collect();
         // A long chain, or one over lines, has its readings in the candidates
@@ -542,7 +559,7 @@ impl Flat<'_> {
         }
         let mut d =
             Diagnostic::new(Stage::Syntax, Code::E0010, self.span, format!("{message} (§3.1)")).with_found(found);
-        if let Some(rule) = rule.filter(|_| candidates.is_empty()) {
+        for rule in rules {
             d = d.with_rule(rule);
         }
         let n = candidates.len();
@@ -849,7 +866,9 @@ mod tests {
         // A middle evaluated twice: no candidate.
         assert!(c("a < g(b) < c").is_empty());
         assert!(c("a < (b) < c").is_empty());
-        assert!(c("a < x & b < c").is_empty());
+        // Only that reading is no candidate; the others are (S-346).
+        assert_eq!(c("a < x & b < c"), ["(a < x) & (b < c)"]);
+        assert_eq!(c("a < b & h < c | d").len(), 3);
     }
 
     /// The examples of `onsa explain E0010` read as the table of the

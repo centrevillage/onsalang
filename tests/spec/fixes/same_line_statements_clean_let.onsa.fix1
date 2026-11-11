@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "18:13"
+// code = "E0002"
+// candidate = 1
+// clean = true
+
+// A `let` after a `let` on the same line (§2.5, §18.1, S-401): the end of the first statement is not
+// followed by a newline or a `}`, and the next token, `let`, can start a statement only, so the
+// E0002 has a candidate that puts the `let` on its own line, and the file has no diagnostic after
+// it (`clean = true`). One function, so that the whole file is the unit that the candidate fixes.
+
+pub fn sum() -> I32 {
+  let a = 1
+  let b = 2                               //~ E0002
+  a + b
+}

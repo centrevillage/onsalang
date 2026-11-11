@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// mode = "check"
+// spec = ["§4.4", "§4.5"]
+
+// A `{` inside the `[` of the type arguments of an expression (`Rg::[F32, { 4 }]`) in a header is
+// not the start of the body (§4.4, S-376): the syntax stage reads it as a block expression in the
+// argument list, and the argument is then not a constant expression (a block is not one, whatever it
+// holds), which is E0417 (§4.5). Before S-376 the `{` was read as the body's and the program was
+// E0002. A `{` that is the body's, after the list closed, is not affected. One diagnostic in each
+// function, on the line of the header.
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+pub fn if_type_args_block(n: U32) -> I32 {
+  if Rg::[F32, { 4 }].CAP == 4 {                    //~ E0417
+    1
+  } else {
+    0
+  }
+}
+
+pub fn while_type_args_block(n: U32) -> I32 {
+  var t = 0
+  while Rg::[F32, { 4 }].CAP == 4 {                 //~ E0417
+    t = 1
+    break
+  }
+  t
+}
+
+pub fn match_type_args_block(n: U32) -> I32 {
+  match Rg::[F32, { 4 }].CAP {                      //~ E0417
+    _ => 1,
+  }
+}
+
+pub fn for_type_args_block(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..< Rg::[F32, { 4 }].CAP {             //~ E0417
+    t = t + i
+  }
+  t
+}

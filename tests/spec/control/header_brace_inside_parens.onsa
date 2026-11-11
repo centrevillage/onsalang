@@ -1,0 +1,113 @@
+// onsa.toml
+// [test]
+// mode = "check"
+// spec = ["§4.4"]
+
+// A `{` inside parentheses in a header is a block expression or a struct literal (§4.4): the
+// parenthesis is open, so the `{` is not at depth 0. This was already so before S-376; the cases pin
+// it next to the new ones (header_brace_inside_index.onsa and the files beside it): in the
+// parentheses of a call and of a grouping, in an array literal, in a closure passed to a call, and
+// mixed with an index and a match in the same header.
+
+pub struct S {
+  a: I32,
+}
+
+pub fn id(b: Bool) -> Bool {
+  b
+}
+
+pub fn id_i(a: I32) -> I32 {
+  a
+}
+
+pub fn apply(g: fn(I32) -> I32, x: I32) -> I32 {
+  g.(x)
+}
+
+pub fn block_in_a_grouping(c: Bool) -> I32 {
+  if ({ c }) {
+    1
+  } else {
+    0
+  }
+}
+
+pub fn block_in_a_call_argument(c: Bool) -> I32 {
+  if id({ c }) {
+    1
+  } else {
+    0
+  }
+}
+
+pub fn struct_in_a_call_argument(n: I32) -> I32 {
+  if id_i(S { a: n }.a) == 1 {
+    1
+  } else {
+    0
+  }
+}
+
+pub fn struct_in_a_grouping(n: I32) -> I32 {
+  if (S { a: n }.a == 1) {
+    1
+  } else {
+    0
+  }
+}
+
+pub fn block_in_an_array_literal(c: Bool) -> I32 {
+  if [{ c }][0] {
+    1
+  } else {
+    0
+  }
+}
+
+pub fn closure_in_a_call_argument(n: I32) -> I32 {
+  if apply(fn(x: I32) -> I32 { x }, n) == 1 {
+    1
+  } else {
+    0
+  }
+}
+
+pub fn while_with_a_call_argument(c: Bool) -> I32 {
+  var t = 0
+  while id({ c }) {
+    t = 1
+    break
+  }
+  t
+}
+
+pub fn match_with_a_call_argument(n: I32) -> I32 {
+  match id_i({ n }) {
+    _ => 1,
+  }
+}
+
+pub fn for_with_a_call_argument(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..< ({ n }) {
+    t = t + i
+  }
+  t
+}
+
+pub fn index_inside_a_grouping(xs: [I32; 3], i: U32) -> I32 {
+  if (xs[{ i }] == 1) {
+    1
+  } else {
+    0
+  }
+}
+
+pub fn match_inside_a_grouping(n: I32) -> I32 {
+  if (match n { _ => { true } }) {
+    1
+  } else {
+    0
+  }
+}

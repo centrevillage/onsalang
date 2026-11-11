@@ -1,0 +1,80 @@
+// onsa.toml
+// [test]
+// mode = "check"
+// spec = ["§4.4"]
+
+// A `{` in the arms of a `match` that is itself in a header is not the start of the body (§4.4,
+// S-376): the `{` after the scrutinee opens the arms of that `match`, and every `{` inside is at
+// depth 1 or more, so the block of an arm is a block expression. The `{` that follows the closing `}`
+// of the `match` at depth 0 starts the body of the header's `if`, `while`, `match` or `for`.
+// `if match n { _ => { true } } {` is the form of the decision. (A `match` after a keyword in a
+// header was already read as that expression, `if if a { b } else { c } {` is in
+// negative/header_block_expression.onsa; what changes is the `{` of the arms' blocks.)
+
+pub fn if_match_arm_block(n: I32) -> I32 {
+  if match n { _ => { true } } {
+    1
+  } else {
+    0
+  }
+}
+
+pub fn if_match_two_arms(n: I32) -> I32 {
+  if match n { 0 => { true }, _ => { false } } {
+    1
+  } else {
+    0
+  }
+}
+
+pub fn if_match_block_with_a_statement(n: I32) -> I32 {
+  if match n {
+    0 => {
+      let t = true
+      t
+    },
+    _ => false,
+  } {
+    1
+  } else {
+    0
+  }
+}
+
+pub fn while_match_arm_block(n: I32) -> I32 {
+  var t = 0
+  while match n { _ => { false } } {
+    t = 1
+  }
+  t
+}
+
+pub fn match_match_arm_block(n: I32) -> I32 {
+  match match n { _ => { n } } {
+    _ => 1,
+  }
+}
+
+pub fn for_match_arm_block(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..< match n { _ => { 3 } } {
+    t = t + i
+  }
+  t
+}
+
+pub fn match_in_an_arm(n: I32) -> I32 {
+  if match n { _ => match n { _ => { true } } } {
+    1
+  } else {
+    0
+  }
+}
+
+pub fn option_arms(o: Option[U32]) -> U32 {
+  if match o { Some(v) => { v == 1 }, None => { false } } {
+    1
+  } else {
+    0
+  }
+}

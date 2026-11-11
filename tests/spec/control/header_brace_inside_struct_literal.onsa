@@ -1,0 +1,88 @@
+// onsa.toml
+// [test]
+// mode = "check"
+// spec = ["§4.4"]
+
+// A struct literal inside an index `[…]` or inside the arms of a `match` in a header is a struct
+// literal, not the start of the body (§4.4, S-376): the `{` after the name of the type is at depth 1
+// or more, like the `{` of a block. `if xs[S { a: 0 }.a] == 1 {` and
+// `if match n { _ => S { a: 1 }.a == 1 } {` are the forms of the decision. A struct literal in
+// parentheses or in the arguments of a call was already allowed (negative/header_block_expression.onsa
+// and header_brace_inside_parens.onsa).
+
+pub struct S {
+  a: U32,
+}
+
+pub struct T {
+  a: I32,
+}
+
+pub fn if_struct_in_index(xs: [I32; 3]) -> I32 {
+  if xs[S { a: 0 }.a] == 1 {
+    1
+  } else {
+    0
+  }
+}
+
+pub fn while_struct_in_index(xs: [I32; 3]) -> I32 {
+  var t = 0
+  while xs[S { a: 0 }.a] == 0 {
+    t = t + 1
+    break
+  }
+  t
+}
+
+pub fn for_struct_in_index(xs: [U32; 3]) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..< xs[S { a: 1 }.a] {
+    t = t + i
+  }
+  t
+}
+
+pub fn match_struct_in_index(xs: [I32; 3]) -> I32 {
+  match xs[S { a: 0 }.a] {
+    _ => 1,
+  }
+}
+
+pub fn if_struct_in_a_match_arm(n: I32) -> I32 {
+  if match n { _ => T { a: 1 }.a == 1 } {
+    1
+  } else {
+    0
+  }
+}
+
+pub fn match_struct_in_a_match_arm(n: I32) -> I32 {
+  match match n { _ => T { a: n }.a } {
+    _ => 1,
+  }
+}
+
+pub fn struct_with_a_block_field(xs: [I32; 3]) -> I32 {
+  if xs[S { a: { 1 } }.a] == 1 {
+    1
+  } else {
+    0
+  }
+}
+
+pub fn struct_in_a_nested_index(xs: [U32; 3], ys: [U32; 3]) -> I32 {
+  if xs[ys[S { a: 0 }.a]] == 1 {
+    1
+  } else {
+    0
+  }
+}
+
+pub fn struct_in_a_block_in_an_index(xs: [I32; 3]) -> I32 {
+  if xs[{ S { a: 0 }.a }] == 1 {
+    1
+  } else {
+    0
+  }
+}

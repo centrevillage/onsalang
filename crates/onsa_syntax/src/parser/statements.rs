@@ -93,7 +93,10 @@ impl<'a> Parser<'a> {
             self.parse_stmt()?;
             match self.peek_kind() {
                 TokenKind::Newline | TokenKind::RBrace => {}
-                _ => return Err(self.unexpected("newline or `}`")),
+                _ => {
+                    let breaks = self.starts_only_a_line(self.peek_index(), false);
+                    return Err(self.fail(Want::LineEnd { breaks }, "newline or `}`"));
+                }
             }
         }
         self.expect(TokenKind::RBrace)?;

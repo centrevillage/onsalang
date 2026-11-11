@@ -1,0 +1,105 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§18.1"]
+// fixes = 1
+
+// E0010 where one of the readings is a chain of comparisons whose middle operand would be evaluated
+// twice (§3.1, §18.1, S-346). The comparison group and the bit group have no strength between them,
+// so `a < b & h < c` has two readings: with the comparisons first, `(a < b) & (h < c)`; with `&`
+// first, the chain `a < (b & h) < c`, whose middle operand `b & h` is not a name, a literal or a
+// field path, so it would be evaluated twice and is not a candidate. That reading is left out of the
+// candidates (and its way of writing, with a `let`, is shown in a note, which the runner does not
+// compare), and the other reading is offered: one candidate for each diagnostic (`fixes = 1`).
+//
+// One diagnostic in each function. A candidate adds parentheses only where the strength is not
+// fixed: `a + 1 < b & h < c * 2` is `(a + 1 < b) & (h < c * 2)`, the additive and multiplicative
+// operators are stronger than the comparison. What the candidate reads is a type error (`&` of two
+// comparisons), which belongs to a later stage; this case is about the syntax stage.
+
+pub fn bit_and(a: U32, b: U32, h: U32, c: U32) -> Bool {
+  a < b & h < c                                     //~ E0010
+}
+
+pub fn bit_xor(a: U32, b: U32, h: U32, c: U32) -> Bool {
+  a < b ^ h < c                                     //~ E0010
+}
+
+pub fn equality_and_bit_or(a: U32, b: U32, h: U32, c: U32) -> Bool {
+  a == b | h != c                                   //~ E0010
+}
+
+pub fn shift_between(a: U32, b: U32, s: U32, c: U32) -> Bool {
+  a < b << s < c                                    //~ E0010
+}
+
+pub fn longer_operands(a: U32, b: U32, h: U32, c: U32) -> Bool {
+  a + 1 < b & h < c * 2                             //~ E0010
+}
+
+pub fn same_bit_operator_twice(a: U32, b: U32, h: U32, d: U32, c: U32) -> Bool {
+  a < b & h & d < c                                 //~ E0010
+}
+
+pub fn call_in_the_first_comparison(a: U32, b: U32, h: U32, c: U32) -> Bool {
+  a < id(b) & h < c                                 //~ E0010
+}
+
+pub fn in_a_return(a: U32, b: U32, h: U32, c: U32) -> Bool {
+  return a < b & h < c                              //~ E0010
+}
+
+pub fn in_a_let(a: U32, b: U32, h: U32, c: U32) -> Bool {
+  let r = a < b & h < c                             //~ E0010
+  r
+}
+
+pub fn as_an_argument(a: U32, b: U32, h: U32, c: U32) -> Bool {
+  id_bool(a < b & h < c)                            //~ E0010
+}
+
+pub fn inside_parentheses(ok: Bool, a: U32, b: U32, h: U32, c: U32) -> Bool {
+  ok && (a < b & h < c)                             //~ E0010
+}
+
+pub fn in_an_if_header(a: U32, b: U32, h: U32, c: U32) -> U32 {
+  if a < b & h < c {                                //~ E0010
+    1
+  } else {
+    0
+  }
+}
+
+pub fn in_a_while_header(a: U32, b: U32, h: U32, c: U32) -> U32 {
+  var t: U32 = 0
+  while a < b & h < c {                             //~ E0010
+    t = t + 1
+    break
+  }
+  t
+}
+
+pub fn in_a_closure(a: U32, b: U32, h: U32, c: U32) -> Bool {
+  let k = fn(x: U32) -> Bool {
+    x < b & h < c                                   //~ E0010
+  }
+  k.(a)
+}
+
+pub fn in_a_match_arm(o: Option[U32], a: U32, b: U32, h: U32, c: U32) -> Bool {
+  match o {
+    Some(v) => v < b & h < c,                       //~ E0010
+    None => a < b,
+  }
+}
+
+pub fn id(a: U32) -> U32 {
+  a
+}
+
+pub fn id_bool(a: Bool) -> Bool {
+  a
+}
+
+pub fn fine(a: U32, b: U32, h: U32, c: U32) -> Bool {
+  (a < b) && (h < c)
+}

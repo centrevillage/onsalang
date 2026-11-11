@@ -196,6 +196,11 @@ pub enum Want {
     /// A tuple index after its `.` that starts with a `0` and is not `0`
     /// itself (`t.01`, §2.4, S-508): the parser judged its digits.
     TupleIndex,
+    /// The line break or the `}` after a statement of a block or an item of
+    /// the top level (§2.5); `breaks`: the token on the line starts only a
+    /// statement or an item there (the parser judged it), so the general
+    /// E0002 ends the line before it (S-401, `lists::line_break_fix`).
+    LineEnd { breaks: bool },
 }
 
 /// What the parser gives the table at a failure.
@@ -732,6 +737,7 @@ pub(crate) fn at_failure(c: &Cursor) -> Failure {
     // an opener after a line break takes it out (S-89).
     let general = (rows.is_empty() || misplaced).then(|| match c.want {
         Want::Separator(list) => lists::list_fixes(c, Some(list)),
+        Want::LineEnd { breaks: true } => vec![lists::line_break_fix(c)],
         _ => lists::list_fixes(c, None),
     });
     Failure { rows, general, prefixed, resume }

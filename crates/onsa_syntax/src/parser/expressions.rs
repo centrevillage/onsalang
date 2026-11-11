@@ -25,6 +25,9 @@ const FN_TYPE_RULE: &str = "`fn(…)` with no body is a function type, which is 
 /// The note of a handler written in place with no body (§8.3, S-421).
 const HANDLER_BODY_RULE: &str = "after the name of an effect, the body `{ ... }` of a handler written in place follows on its line (§8.3); a named handler is a `snake_case` name (§2.3)";
 
+/// The note of a `{` after a named handler (§8.3, S-480).
+pub(super) const NAMED_HANDLER_RULE: &str = "a named handler (a `snake_case` name) has no body, and the `{` after it is no part of the `handle`; the body `{ ... }` of a handler written in place follows the name of an effect on its line (§8.3)";
+
 impl<'a> Parser<'a> {
     // ------------------------------------------------------------ expressions
 
@@ -263,12 +266,18 @@ impl<'a> Parser<'a> {
                 TokenKind::ColonColon
                     if self.lines.type_args_mark(&self.tokens, self.peek_index()) && callee.last().names_a_path() =>
                 {
+                    // As a postfix, the list is one level over the receiver
+                    // and its types over that (§2.5, S-332): `x.f::[U8](y)`
+                    // is three levels.
                     let m = self.precede(expr, NodeKind::TypeArgsExpr)?;
+                    let top = self.open.len() - 1;
+                    self.open[top].level += expr.height;
                     self.bump();
                     let a = self.start(NodeKind::TypeArgs)?;
                     self.bump();
-                    self.with_nl(false, |p| p.parse_type_args())?;
-                    self.complete(a, NodeKind::TypeArgs);
+                    self.in_brackets(|p| p.parse_type_args())?;
+                    let list = self.complete(a, NodeKind::TypeArgs);
+                    self.open[top].children = expr.height + list.height;
                     // The name before the list stays the last name of a chain
                     // (`Pr::[U8] { a: 1 }`).
                     expr = self.complete(m, NodeKind::TypeArgsExpr);
@@ -340,7 +349,7 @@ impl<'a> Parser<'a> {
                 TokenKind::LBracket if self.touches(TokenKind::LBracket, callee.by_name(), true) => {
                     let m = self.precede(expr, NodeKind::IndexExpr)?;
                     self.bump();
-                    self.with_nl(false, |p| {
+                    self.in_brackets(|p| {
                         p.parse_expr()?;
                         p.expect(TokenKind::RBracket)?;
                         Ok(())
@@ -416,8 +425,7 @@ impl<'a> Parser<'a> {
     fn parse_arg_list(&mut self) -> PResult<()> {
         let m = self.start(NodeKind::ArgList)?;
         self.bump(); // `(`
-        self.with_nl(false, |p| {
-            let saved = std::mem::replace(&mut p.no_struct_lit, false);
+        self.in_brackets(|p| {
             while !p.at(TokenKind::RParen) {
                 let a = p.start(NodeKind::Arg)?;
                 if p.at(TokenKind::KwMove) {
@@ -434,7 +442,6 @@ impl<'a> Parser<'a> {
                     break;
                 }
             }
-            p.no_struct_lit = saved;
             p.close_list(NodeKind::ArgList, TokenKind::RParen)?;
             Ok(())
         })?;
@@ -486,23 +493,13 @@ impl<'a> Parser<'a> {
             TokenKind::LParen => {
                 let m = self.start(NodeKind::TupleExpr)?;
                 self.bump();
-                let kind = self.with_nl(false, |p| {
-                    let saved = std::mem::replace(&mut p.no_struct_lit, false);
-                    let r = p.parse_paren_rest();
-                    p.no_struct_lit = saved;
-                    r
-                })?;
+                let kind = self.in_brackets(|p| p.parse_paren_rest())?;
                 return Ok(self.complete(m, kind));
             }
             TokenKind::LBracket => {
                 let m = self.start(NodeKind::ArrayExpr)?;
                 self.bump();
-                let kind = self.with_nl(false, |p| {
-                    let saved = std::mem::replace(&mut p.no_struct_lit, false);
-                    let r = p.parse_array_rest();
-                    p.no_struct_lit = saved;
-                    r
-                })?;
+                let kind = self.in_brackets(|p| p.parse_array_rest())?;
                 return Ok(self.complete(m, kind));
             }
             // In a header, a `{` at the start of an expression outside
@@ -540,7 +537,7 @@ impl<'a> Parser<'a> {
                 let arms = self.start(NodeKind::MatchArms)?;
                 self.e0003_unless_on_the_line(TokenKind::LBrace);
                 self.expect(TokenKind::LBrace)?;
-                self.with_nl(false, |p| {
+                self.in_brackets(|p| {
                     while !p.at(TokenKind::RBrace) {
                         if p.unit_ends_unclosed() {
                             return Err(ParseError);
@@ -597,7 +594,9 @@ impl<'a> Parser<'a> {
                 // body of a handler written in place follows, on the line of
                 // the name in brackets and out of them (E0003 else); with no
                 // `{` there is no body (E0002). A named handler (`snake_case`)
-                // is read as before (S-480).
+                // has none (S-480): a `{` after it is no part of the `handle`
+                // (the body of a header at its depth 0, else a token too many,
+                // whose E0002 has the note, `Parser::fail_at`).
                 if crate::naming::reads_uppercase(self.token_text(path.last)) {
                     if !self.e0003_unless_on_the_line(TokenKind::LBrace) {
                         let found = self.peek();
@@ -605,12 +604,14 @@ impl<'a> Parser<'a> {
                         return Err(self.fail_noting(Want::Other, expected, found, HANDLER_BODY_RULE));
                     }
                     self.parse_item_body(ItemCtx::InlineHandler)?;
-                } else if self.at(TokenKind::LBrace) {
-                    self.parse_item_body(ItemCtx::InlineHandler)?;
-                // S-412: the `(` after the handler of `with` follows the rule of
-                // the postfix `(` (a blank before it is E0020).
-                } else if self.touches_bare(TokenKind::LParen)? {
-                    self.parse_arg_list()?;
+                } else {
+                    // S-412: the `(` after the handler of `with` follows the
+                    // rule of the postfix `(` (a blank before it is E0020).
+                    if self.touches_bare(TokenKind::LParen)? {
+                        self.parse_arg_list()?;
+                    }
+                    let next = self.past_newlines();
+                    self.named_handler = Some(next).filter(|&k| self.tokens[k].kind == TokenKind::LBrace);
                 }
                 return Ok(self.complete(m, NodeKind::HandleExpr));
             }

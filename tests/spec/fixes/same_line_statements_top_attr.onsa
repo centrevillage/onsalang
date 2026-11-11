@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§6.5", "§18.1"]
+// fixes = 1
+
+// An attribute after a declaration on the same line at the top level (§2.5, §6.5, §18.1, S-401).
+// `@` at the top level starts the attribute of an item, so it starts an item only: after the `}` of
+// a declaration the E0002 ("expected newline after the declaration") has one candidate, which puts
+// the `@` on its own line (an attribute does not end an item, so the attribute and its item stay
+// together). `#[` is in same_line_statements_top_hash.onsa. One diagnostic for each pair; the main
+// position is the `@`.
+
+pub fn fp_after_a_function() -> I32 { 1 } @fp(relaxed) fn fp_second() -> F32 { 1.0 }   //~ E0002
+
+pub fn fp_pub_after_a_function() -> I32 { 1 } @fp(relaxed) pub fn fp_pub_second() -> F32 { 1.0 }   //~ E0002
+
+pub fn repr_after_a_function() -> I32 { 1 } @repr(c) pub struct ReprSecond { a: I32 }   //~ E0002
+
+pub struct ReprFirst { a: I32 }   @repr(c) pub struct ReprThird { a: I32 }   //~ E0002
+
+const ATTR_CONST: I32 = 1 @fp(relaxed) fn fp_after_a_const() -> F32 { 1.0 }   //~ E0002
+
+pub flow fp_after_a_flow(x: F32 at sample) -> F32 at sample { x } @fp(relaxed) pub flow fp_flow_second(x: F32 at sample) -> F32 at sample { x }   //~ E0002

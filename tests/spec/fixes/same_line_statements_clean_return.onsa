@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "17:13"
+// code = "E0002"
+// candidate = 1
+// clean = true
+
+// A `return` after a `let` on the same line (§2.5, §18.1, S-401): `return` starts a statement only,
+// so the E0002 has the candidate that puts it on its own line, and the file has no diagnostic after
+// it (`clean = true`).
+
+pub fn first() -> I32 {
+  let a = 1 return a                                //~ E0002
+}

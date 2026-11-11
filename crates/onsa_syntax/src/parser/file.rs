@@ -37,7 +37,8 @@ impl<'a> Parser<'a> {
                         _ => {
                             // The tokens after the item on its line are of its
                             // unit (`crate::units`, S-274).
-                            let _ = self.unexpected("newline after the declaration");
+                            let breaks = ctx == ItemCtx::Top && self.starts_only_a_line(self.peek_index(), true);
+                            let _ = self.fail(Want::LineEnd { breaks }, "newline after the declaration");
                             self.skip_unit(start, 0, false, true);
                         }
                     }
@@ -340,6 +341,29 @@ impl<'a> Parser<'a> {
     pub(super) fn starts_an_item(&self, i: usize) -> bool {
         let kind = self.tokens[i].kind;
         (starts_heading(kind) && !self.function_value_at(i)) || kind.is_doc() || self.words_before_head_at(i).is_some()
+    }
+
+    /// Whether the token `i` after a statement on its line (`top`: after an
+    /// item of the top level) starts only a statement (an item) there, so a
+    /// line break before it makes the line right (§2.5, S-401): a keyword of
+    /// a statement that is no expression but `move` (which marks the value
+    /// of one), or attributes before a `let`; at the top level, the start of
+    /// an item but `fn(`, or attributes (`@`, `#[`) before one. An attribute
+    /// is looked at to its end on its line, without a trial reading (§18.1:
+    /// else a line break leaves its error).
+    pub(super) fn starts_only_a_line(&self, i: usize, top: bool) -> bool {
+        use TokenKind::*;
+        let mut k = i;
+        while matches!(self.tokens[k].kind, At | Hash) {
+            let Some(end) = self.attribute_end(k) else { return false };
+            k = self.next_code(end);
+        }
+        let kind = self.tokens[k].kind;
+        match top {
+            true => starts_heading(kind) && !self.function_value_at(k),
+            false if k > i => kind == KwLet,
+            false => crate::starts::starts_statement(kind) && kind != KwMove,
+        }
     }
 
     /// Whether `fn` at `tokens[i]`, or after the `rt` there on its line, opens

@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// mode = "check"
+// spec = ["§8.3", "§18.1"]
+// fixes = 0
+
+// A named handler (`snake_case`) has no body, and a `{` after it is not part of the `handle`
+// expression (§8.3, S-480): the inline form `handle { … } with Fs { … }` is for the name of an effect
+// (`UpperCamel`), and a `{` after `with quiet` is an extra token after the expression, an E0002 of
+// the syntax stage with a note that the inline body follows the name of an effect. The `{` is not
+// read as a body whatever follows the name: the name alone, a path, or a name with arguments
+// (`with arena(inout s)`). The cases here are the places where no parenthesis is open, so the
+// diagnostic has no candidate (`fixes = 0`): after a `let`, a `return`, in a statement, in an
+// assignment, and in the block of a branch or of a loop. Inside parentheses the extra `{` can also
+// start a next element without a `,` (§2.5), which is in handler_name_brace_in_parens.onsa. The `{`
+// at depth 0 of a header is the body of that header's statement (handler_name_brace_header.onsa).
+// One diagnostic in each function; the unit is not read further, so the handler that this version
+// does not implement (E0200) is not reported.
+
+pub fn in_a_let() -> I32 {
+  let r = handle { 1 } with quiet { 2 }             //~ E0002
+  r
+}
+
+pub fn in_a_return() -> I32 {
+  return handle { 1 } with quiet { 2 }              //~ E0002
+}
+
+pub fn in_a_statement() -> I32 {
+  handle { 1 } with quiet { 2 }                     //~ E0002
+  3
+}
+
+pub fn a_path() -> I32 {
+  let r = handle { 1 } with std.fs.quiet { 2 }      //~ E0002
+  r
+}
+
+pub fn a_name_with_arguments(inout s: Span[U8]) -> I32 {
+  let r = handle { 1 } with arena(inout s) { 2 }    //~ E0002
+  r
+}
+
+pub fn in_the_block_of_a_branch(c: Bool) -> I32 {
+  let r = if c { handle { 1 } with quiet { 2 } } else { 3 }   //~ E0002
+  r
+}
+
+pub fn in_the_block_of_a_loop(c: Bool) -> I32 {
+  var t = 0
+  while c {
+    t = handle { 1 } with quiet { 2 }               //~ E0002
+    break
+  }
+  t
+}

@@ -1,0 +1,63 @@
+// onsa.toml
+// [test]
+// mode = "check"
+// spec = ["§8.3", "§2.5", "§18.1"]
+
+// A `{` on the line after a named handler, inside parentheses or brackets (§8.3, §2.5, S-480).
+// Inside parentheses a newline is a space, so the `{` is read after `with quiet` as if it were on the
+// same line: it is not the inline body (a named handler has no body), it is an extra token after the
+// expression, an E0002 of the syntax stage. Before S-480 the layout rule of the `{` (it belongs on the
+// line of the last token of its form) made it an E0003 whose candidate moved the `{` up, which left an
+// E0002 behind. Now it is the E0002 only. Inside a `(` or `[` the token also starts a next element
+// without a `,` (§2.5), so whether the diagnostic carries the `,` of §2.5 as a candidate is not decided
+// by S-480 (the report names it); `fixes` is not written, so the candidates are not counted. The marker
+// is on the line of the `{`, the extra token. One diagnostic in each function.
+
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn as_an_argument() -> I32 {
+  two(handle { 1 } with quiet
+    { 2 }, 1)                                       //~ E0002
+}
+
+pub fn as_an_array_element() -> I32 {
+  let xs = [handle { 1 } with quiet
+    { 2 }]                                          //~ E0002
+  3
+}
+
+pub fn as_a_tuple_element() -> I32 {
+  let t = (handle { 1 } with quiet
+    { 2 }, 1)                                       //~ E0002
+  3
+}
+
+pub fn in_a_grouping() -> I32 {
+  let r = (handle { 1 } with quiet
+    { 2 })                                          //~ E0002
+  r
+}
+
+pub fn in_a_header_grouping() -> I32 {
+  if (handle { true } with quiet
+    { 1 }) {                                        //~ E0002
+    1
+  } else {
+    2
+  }
+}
+
+pub fn a_path() -> I32 {
+  let r = (handle { 1 } with std.fs.quiet
+    { 2 })                                          //~ E0002
+  r
+}
+
+pub fn after_a_comment_line() -> I32 {
+  let r = (handle { 1 } with quiet
+    // the body of an inline handler follows the name of an effect
+    { 2 })                                          //~ E0002
+  r
+}

@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§18.1"]
+// fixes = 1
+
+// Two declarations on one line at the top level (§2.5, §18.1, S-401). A declaration ends at the
+// newline; when the end of one (its `}`, or the end of a `const` or a `type`) is followed on the same
+// line by a token that starts an item only, the E0002 ("expected newline after the declaration") has
+// one candidate: the token is put on its own line. The tokens: `pub`, `fn`, `rt`, `struct`, `enum`,
+// `impl`, `type`, `use`, `const`, `test`, `flow`. (A token that can start an expression as
+// well, as the `x` of `const A: I32 = x y`, has no candidate:
+// negative/same_line_statements_expression_start.onsa. The attribute forms `@` and `#[` are in
+// same_line_statements_top_attr.onsa and same_line_statements_top_hash.onsa.) One diagnostic for each
+// pair; the main position is the second token.
+
+pub fn pub_after_a_function() -> I32 { 1 }
+pub fn pub_second() -> I32 { 2 }   //~ E0002
+
+pub fn fn_after_a_function() -> I32 { 1 }
+fn fn_second() -> I32 { 2 }   //~ E0002
+
+pub fn rt_after_a_function() -> I32 { 1 }
+rt fn rt_second() -> I32 { 2 }   //~ E0002
+
+pub fn struct_after_a_function() -> I32 { 1 }
+pub struct StructSecond { a: I32 }   //~ E0002
+
+pub fn enum_after_a_function() -> I32 { 1 }
+pub enum EnumSecond { A, B }   //~ E0002
+
+pub struct ImplFirst {
+  a: I32,
+}
+
+impl ImplFirst { pub fn first(self) -> I32 { self.a } }
+impl ImplFirst { pub fn second(self) -> I32 { self.a } }   //~ E0002
+
+pub fn type_after_a_function() -> I32 { 1 }
+type TypeSecond = I32   //~ E0002
+
+type TypeFirst = I32
+type TypeAfterType = I32   //~ E0002
+
+use std.math
+use std.array   //~ E0002
+
+const CONST_FIRST: I32 = 1
+const CONST_SECOND: I32 = 2   //~ E0002
+
+const CONST_THIRD: I32 = 1
+pub fn fn_after_a_const() -> I32 { 1 }   //~ E0002
+
+pub fn test_after_a_function() -> I32 { 1 }
+test "after a function" { }   //~ E0002
+
+pub flow flow_first(x: F32 at sample) -> F32 at sample { x }
+pub flow flow_second(x: F32 at sample) -> F32 at sample { x }   //~ E0002

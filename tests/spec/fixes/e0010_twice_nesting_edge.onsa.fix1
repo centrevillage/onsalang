@@ -1,0 +1,16 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.1", "§18.1"]
+// fixes = 1
+
+// E0010 with a twice evaluated reading at the boundary of the nesting depth (§2.5, §3.1, §18.1,
+// S-346). `a < b & h < c` has two readings: `(a < b) & (h < c)`, and the chain `a < (b & h) < c`
+// whose middle operand would be evaluated twice, which is left out of the candidates. The
+// function body is level 1, each parenthesis one level (252 of them), and the candidate is three
+// levels (`&`, the parenthesis around the first comparison, `<`): 1 + 252 + 3 = 256, so the
+// candidate stays within the limit and is offered (`fixes = 1`). The expression itself is at most
+// three levels in every reading, so it is read and reports its E0010, not E0006.
+
+pub fn candidate_fits(a: U32, b: U32, h: U32, c: U32) -> Bool {
+  (((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((a < b) & (h < c)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))   //~ E0010
+}

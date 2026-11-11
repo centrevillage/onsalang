@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// mode = "check"
+// spec = ["§8.3", "§2.5", "§18.1"]
+
+// A `{` after a named handler inside parentheses or brackets, on the same line (§8.3, S-480): the
+// `{` is not part of the `handle` expression (a named handler has no body), so it is an extra token
+// after the expression, an E0002 of the syntax stage. Inside a `(` or `[` the token also starts a
+// next element without a `,` (§2.5, a call, an array, a tuple, and a parenthesis that is a grouping
+// or the start of a tuple), so whether the diagnostic carries the `,` of §2.5 as a candidate is not
+// decided by S-480 (the report names it). `fixes` is not written, so the candidates are not counted.
+// One diagnostic in each function.
+
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn as_an_argument() -> I32 {
+  two(handle { 1 } with quiet { 2 }, 1)             //~ E0002
+}
+
+pub fn as_the_last_argument() -> I32 {
+  two(1, handle { 1 } with quiet { 2 })             //~ E0002
+}
+
+pub fn as_an_array_element() -> I32 {
+  let xs = [handle { 1 } with quiet { 2 }]          //~ E0002
+  3
+}
+
+pub fn as_a_tuple_element() -> I32 {
+  let t = (handle { 1 } with quiet { 2 }, 1)        //~ E0002
+  3
+}
+
+pub fn in_a_grouping() -> I32 {
+  let r = (handle { 1 } with quiet { 2 })           //~ E0002
+  r
+}
+
+pub fn in_a_header_grouping() -> I32 {
+  if (handle { true } with quiet { 1 }) {           //~ E0002
+    1
+  } else {
+    2
+  }
+}
+
+pub fn a_name_with_arguments_as_an_argument(inout s: Span[U8]) -> I32 {
+  two(handle { 1 } with arena(inout s) { 2 }, 1)    //~ E0002
+}

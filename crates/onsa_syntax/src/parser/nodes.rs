@@ -22,6 +22,7 @@ impl<'a> Parser<'a> {
             no_struct_lit: self.no_struct_lit,
             detached: self.detached,
             value_bang: self.value_bang,
+            named_handler: self.named_handler,
             ends: self.ends.len(),
             prefixed: self.prefixed.len(),
             guarded: self.guard.as_ref().map_or(0, |g| g.forms.len()),
@@ -42,6 +43,7 @@ impl<'a> Parser<'a> {
         self.no_struct_lit = s.no_struct_lit;
         self.detached = s.detached;
         self.value_bang = s.value_bang;
+        self.named_handler = s.named_handler;
         self.ends.truncate(s.ends);
         self.prefixed.truncate(s.prefixed);
         self.guard.iter_mut().for_each(|g| g.forms.truncate(s.guarded));

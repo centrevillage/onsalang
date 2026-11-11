@@ -1,0 +1,81 @@
+// onsa.toml
+// [test]
+// mode = "check"
+// spec = ["§4.4", "§18.1"]
+
+// A `{` at depth 0 of a header still starts the body (§4.4, S-376): the `{` inside brackets
+// (header_brace_inside_index.onsa and its neighbours in control/) is a block or a struct literal, but
+// a `{` outside every open bracket is the body's, so a block or a struct literal there is E0002 of
+// the syntax stage, with no candidate. The cases are the ones that the new reading could take for
+// brackets: `if { n } == 1 {` (a block that begins the condition), a struct literal at depth 0
+// (`if S { a: n }.a == 1 {`, as in Rust), and a `{` after the brackets of an index or of a `match`
+// have closed (depth 0 again). negative/header_block_expression.onsa has the block forms in the
+// positions of an end, a scrutinee, an iterated value and a comparison. One diagnostic in each
+// function.
+
+pub struct S {
+  a: I32,
+}
+
+pub fn block_starts_the_condition(n: I32) -> I32 {
+  if { n } == 1 {                                   //~ E0002
+    1
+  } else {
+    0
+  }
+}
+
+pub fn block_starts_the_while_condition(n: I32) -> I32 {
+  var t = 0
+  while { n } < 3 {                                 //~ E0002
+    t = 1
+    break
+  }
+  t
+}
+
+pub fn struct_literal_in_the_condition(n: I32) -> I32 {
+  if S { a: n }.a == 1 {                            //~ E0002
+    1
+  } else {
+    0
+  }
+}
+
+pub fn struct_literal_as_the_scrutinee(n: I32) -> I32 {
+  match S { a: n }.a {                              //~ E0002
+    _ => 1,
+  }
+}
+
+pub fn struct_literal_as_the_end(n: U32) -> U32 {
+  var t: U32 = 0
+  for i in 0 ..< S { a: 1 }.a {                     //~ E0002
+    t = t + i
+  }
+  t
+}
+
+pub fn block_after_the_index_closes(xs: [U32; 3], i: U32) -> I32 {
+  if xs[{ i }] == { 1 } {                           //~ E0002
+    1
+  } else {
+    0
+  }
+}
+
+pub fn struct_literal_after_the_index_closes(xs: [U32; 3]) -> I32 {
+  if xs[S { a: 0 }.a] == S { a: 1 }.a {             //~ E0002
+    1
+  } else {
+    0
+  }
+}
+
+pub fn block_after_the_grouping_closes(c: Bool) -> I32 {
+  if ({ c }) == { true } {                          //~ E0002
+    1
+  } else {
+    0
+  }
+}

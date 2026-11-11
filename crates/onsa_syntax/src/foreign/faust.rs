@@ -173,7 +173,7 @@ pub(super) fn faust_compose(c: &Cursor) -> Option<Hit> {
         Colon if c.want == Want::Expr => (c.before(at).filter(|&b| c.kind(b) == Lt && c.gap(at) == Gap::None)?, at),
         Colon if c.gap_after(at) == Gap::None && c.kind(at + 1) == Gt => (at, at + 1),
         Colon => (at, at),
-        Comma if c.want == Want::Other => (at, at),
+        Comma if matches!(c.want, Want::Other | Want::LineEnd { .. }) => (at, at),
         _ => return None,
     };
     if (c.kind(at) == Colon && c.gap(first) != Gap::Space)

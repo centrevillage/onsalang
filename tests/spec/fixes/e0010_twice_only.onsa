@@ -1,0 +1,82 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§18.1"]
+// fixes = 0
+
+// E0010 whose only reading is a chain of comparisons with a middle operand that would be evaluated
+// twice (§3.1, §18.1, S-346): the middle operand is not a name, a literal or a field path, so the
+// reading `a < m && m < c` cannot be offered, and no other reading exists, so the diagnostic has no
+// candidate (`fixes = 0` checks that no diagnostic of the file carries one). Its note shows how to
+// write it: bind the middle operand with `let`. A comparison chain with an operand of the groups that
+// bind tighter than the comparison (`a < b + 1 < d`) is the same chain; a chain with an operand that
+// is a name, a literal or a field path has its candidate (tests/spec/fixes/e0010_candidates.onsa).
+//
+// One diagnostic in each function.
+
+pub struct Pt {
+  x: I32,
+  y: I32,
+}
+
+pub fn id(a: I32) -> I32 {
+  a
+}
+
+impl Pt {
+  pub fn sum(self) -> I32 {
+    self.x + self.y
+  }
+}
+
+pub fn middle_is_a_call(a: I32, b: I32, d: I32) -> Bool {
+  a < id(b) < d                                     //~ E0010
+}
+
+pub fn middle_is_a_sum(a: I32, b: I32, d: I32) -> Bool {
+  a < b + 1 < d                                     //~ E0010
+}
+
+pub fn middle_is_a_product(a: I32, b: I32, d: I32) -> Bool {
+  a <= b * 2 <= d                                   //~ E0010
+}
+
+pub fn middle_is_an_index(a: I32, xs: [I32; 3], d: I32) -> Bool {
+  a < xs[0] < d                                     //~ E0010
+}
+
+pub fn middle_is_a_negation(a: I32, b: I32, d: I32) -> Bool {
+  a < -b < d                                        //~ E0010
+}
+
+pub fn middle_is_a_method_call(a: I32, p: Pt, d: I32) -> Bool {
+  a < p.sum() < d                                   //~ E0010
+}
+
+pub fn middle_is_a_cast(a: I64, b: I32, d: I64) -> Bool {
+  a < b as I64 < d                                  //~ E0010
+}
+
+pub fn equality_then_less(a: I32, b: I32, d: I32) -> Bool {
+  a == id(b) < d                                    //~ E0010
+}
+
+pub fn in_a_header(a: I32, b: I32, d: I32) -> I32 {
+  if a < id(b) < d {                                //~ E0010
+    1
+  } else {
+    0
+  }
+}
+
+pub fn as_an_argument(a: I32, b: I32, d: I32) -> Bool {
+  keep(a < id(b) < d)                               //~ E0010
+}
+
+pub fn keep(c: Bool) -> Bool {
+  c
+}
+
+pub fn fine(a: I32, b: I32, d: I32) -> Bool {
+  let m = id(b)
+  a < m && m < d
+}

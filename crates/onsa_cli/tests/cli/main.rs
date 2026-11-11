@@ -23,6 +23,7 @@ mod doc_comment_targets;
 mod effect_names;
 mod empty_brackets;
 mod error_type_sweep;
+mod excluded_readings_notes;
 mod exit_codes;
 mod explain_e0200;
 mod failed_names;

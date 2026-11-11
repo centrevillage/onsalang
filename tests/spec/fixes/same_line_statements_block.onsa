@@ -1,0 +1,133 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§18.1"]
+// fixes = 1
+
+// Two statements on one line in a block (§2.5, §18.1, S-401). A statement ends at the newline or at the
+// `}` of its block; when the end is followed by a token on the same line that can start a statement
+// only (`let`, `var`, `return`, `break`, `continue`, `assert`, `while`, `for`, and the `@` of the
+// attribute of a `let`), the lines were run together: the E0002 ("expected newline or `}`") has one
+// candidate, which puts that token on its own line (the same edit as the candidate of the `;` in
+// e0020_semicolon_next.onsa, S-236). The statement before the token ends in many ways: a `let`, a `var`,
+// an assignment, a call, the `}` of an `if`, of a `for`, of a block expression. The runner compares the
+// candidate by the tokens and the line breaks, not by the indentation of the new line. One diagnostic
+// in each function; the main position is the token on the same line. The forms whose next token can
+// also start an expression (`a b`, `neg x`, `if`, `match`) have no candidate: negative/
+// same_line_statements_expression_start.onsa.
+
+pub fn let_after_let() -> I32 {
+  let a = 1 let b = 2                               //~ E0002
+  a + b
+}
+
+pub fn var_after_let() -> I32 {
+  let a = 1 var b = 2                               //~ E0002
+  b = b + a
+  b
+}
+
+pub fn let_after_var() -> I32 {
+  var a = 1 let b = 2                               //~ E0002
+  a = a + b
+  a
+}
+
+pub fn var_after_var() -> I32 {
+  var a = 1 var b = 2                               //~ E0002
+  a = a + b
+  a
+}
+
+pub fn return_after_let() -> I32 {
+  let a = 1 return a                                //~ E0002
+}
+
+pub fn break_after_assignment(c: Bool) -> I32 {
+  var t = 0
+  while c {
+    t = 1 break                                     //~ E0002
+  }
+  t
+}
+
+pub fn continue_after_assignment(c: Bool) -> I32 {
+  var t = 0
+  while c {
+    t = 1 continue                                  //~ E0002
+  }
+  t
+}
+
+pub fn assert_after_let() -> I32 {
+  let a = 1 assert a == 1                           //~ E0002
+  a
+}
+
+pub fn assert_after_a_call() -> I32 {
+  let a = id(1) assert true                         //~ E0002
+  a
+}
+
+pub fn while_after_var(c: Bool) -> I32 {
+  var t = 0 while c {                               //~ E0002
+    t = 1
+    break
+  }
+  t
+}
+
+pub fn for_after_var() -> I32 {
+  var t = 0 for i in 0 ..< 3 {                      //~ E0002
+    t = t + i
+  }
+  t
+}
+
+pub fn let_after_an_if_block(c: Bool) -> I32 {
+  var t = 0
+  if c { t = 1 } let u = 2                          //~ E0002
+  t + u
+}
+
+pub fn return_after_a_for_block() -> I32 {
+  var t = 0
+  for i in 0 ..< 3 { t = t + i } return t           //~ E0002
+}
+
+pub fn let_after_a_block_expression(a: I32) -> I32 {
+  let b = { a } let c = 3                           //~ E0002
+  b + c
+}
+
+pub fn inside_an_if_block(c: Bool) -> I32 {
+  if c {
+    let a = 1 let b = 2                             //~ E0002
+    a + b
+  } else {
+    0
+  }
+}
+
+pub fn inside_a_for_block() -> I32 {
+  var t = 0
+  for i in 0 ..< 3 {
+    t = t + i var u = 1                             //~ E0002
+    t = t + u
+  }
+  t
+}
+
+pub flow attribute_of_a_let_after_a_let(x: F32 at sample) -> F32 at sample {
+  let a = x * 0.5 @mem(bulk) let y = delay~(a, 4)   //~ E0002
+  y
+}
+
+pub fn id(a: I32) -> I32 {
+  a
+}
+
+pub fn fine(a: I32, b: I32) -> I32 {
+  let c = a
+  let d = b
+  c + d
+}

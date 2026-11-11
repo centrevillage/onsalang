@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// mode = "check"
+// spec = ["§8.3", "§2.5", "§18.1"]
+
+// A `{` on the line after a named handler with arguments (`with arena(inout s)`), inside parentheses
+// (§8.3, §2.5, S-480). The arguments end at their `)`, and a named handler has no body, so the `{` is
+// an extra token after the expression: an E0002 of the syntax stage. It was already so before S-480
+// (the layout rule of the `{` does not look at the `{` that follows a `)`), and S-480 leaves it alone;
+// the case pins it next to handler_name_brace_next_line.onsa, where the name stands without arguments.
+// Inside a `(` the token also starts a next element without a `,` (§2.5), so whether the diagnostic
+// carries the `,` as a candidate is not decided by S-480 (the report names it); `fixes` is not
+// written. The marker is on the line of the `{`. One diagnostic in each function.
+
+pub fn two(a: I32, b: I32) -> I32 {
+  a + b
+}
+
+pub fn as_an_argument(inout s: Span[U8]) -> I32 {
+  two(handle { 1 } with arena(inout s)
+    { 2 }, 1)                                       //~ E0002
+}
+
+pub fn in_a_grouping(inout s: Span[U8]) -> I32 {
+  let r = (handle { 1 } with arena(inout s)
+    { 2 })                                          //~ E0002
+  r
+}

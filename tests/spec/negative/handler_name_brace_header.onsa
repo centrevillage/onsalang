@@ -1,0 +1,61 @@
+// onsa.toml
+// [test]
+// mode = "check"
+// spec = ["§8.3", "§4.4"]
+
+// A `{` after a named handler at depth 0 of a header is the body of that header (§8.3, §4.4, S-480):
+// `if handle { true } with quiet { 1 } else { 2 }` reads as `if (handle { true } with quiet) { 1 }
+// else { 2 }`, so it is no longer a syntax error and gets as far as the `handle` expression, which
+// this version does not implement: E0200 (the handlers are not implemented in this version), on the
+// `handle`. The same for `while`, `match`, `for` and an `else if`. The handler is not declared in the
+// file, which the E0200 does not look at. One diagnostic in each function. (With arguments,
+// `with arena(inout s) { 1 }`, the `{` was already the body's: handler_name_brace_header_args.onsa.)
+
+pub fn if_header() -> I32 {
+  if handle { true } with quiet { 1 } else { 2 }    //~ E0200
+}
+
+pub fn if_header_block_on_the_next_lines() -> I32 {
+  if handle { true } with quiet {                   //~ E0200
+    1
+  } else {
+    2
+  }
+}
+
+pub fn else_if_header(c: Bool) -> I32 {
+  if c {
+    1
+  } else if handle { true } with quiet {          //~ E0200
+    2
+  } else {
+    3
+  }
+}
+
+pub fn while_header() -> I32 {
+  var t = 0
+  while handle { true } with quiet {                //~ E0200
+    t = 1
+    break
+  }
+  t
+}
+
+pub fn match_header() -> I32 {
+  match handle { 1 } with quiet {                   //~ E0200
+    _ => 1,
+  }
+}
+
+pub fn for_header() -> I32 {
+  var t: U32 = 0
+  for i in 0 ..< handle { 3 } with quiet {          //~ E0200
+    t = t + i
+  }
+  1
+}
+
+pub fn path_in_the_header() -> I32 {
+  if handle { true } with std.fs.quiet { 1 } else { 2 }   //~ E0200
+}
