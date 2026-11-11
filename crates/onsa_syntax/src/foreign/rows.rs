@@ -981,7 +981,7 @@ pub static ROWS: &[Row] = &[
         name: "type_args_square_comma",
         phase: Phase::Syntax,
         code: Code::E0020,
-        message: "type arguments in an expression are written `name::[…]`; a `[…]` with `,` is no index",
+        message: "a `[…]` with `,` is no index: type arguments in an expression are written `name::[…]`, and an index of each element `xs[i][j]`",
         rule: TYPE_ARGS_RULE,
         detect: Detect::Tree,
     },

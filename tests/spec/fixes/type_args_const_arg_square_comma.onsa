@@ -3,10 +3,16 @@
 // spec = ["§4.5", "§18.1"]
 //
 // [[test.fix]]
-// at = "83:37"
+// at = "89:37"
 // code = "E0020"
 // candidate = 1
-// leaves = ["83:55 E0020"]
+// leaves = ["89:55 E0020"]
+//
+// [[test.fix]]
+// at = "89:37"
+// code = "E0020"
+// candidate = 2
+// leaves = ["89:53 E0020"]
 
 // S-329 (W5-24 U6a): E0020 for a `[…]` with a `,` after a name in a const argument of a type (§4.5, §18.1), in the shapes
 // that tests/spec/fixes/e0020_type_args_square_const_arg.onsa (the places of a heading, one list of two elements) does not

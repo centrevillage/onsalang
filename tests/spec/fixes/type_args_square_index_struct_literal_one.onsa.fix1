@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.4", "§18.1"]
+// fixes = 1
+
+// S-333 (W5-24 U6b): an element of a list in brackets is in brackets, so a `{` in it is a struct literal (§4.4, S-376), and
+// the index form of `xs[P { a: 1 }, 2]` is `xs[P { a: 1 }][2]`. A struct literal is no constant expression (§4.5), so the
+// list does not read as type arguments and the index form is the one candidate. The places are an element alone, with a
+// member after it, and as the second element.
+
+pub struct P {
+  a: U32,
+}
+
+pub fn alone(xs: [[I32; 2]; 2]) -> I32 {
+  xs[P { a: 1 }][1]                                 //~ E0020
+}
+
+pub fn with_a_member(xs: [[I32; 2]; 2]) -> I32 {
+  xs[P { a: 1 }.a][1]                               //~ E0020
+}
+
+pub fn second(xs: [[I32; 2]; 2]) -> I32 {
+  xs[1][P { a: 1 }.a]                               //~ E0020
+}

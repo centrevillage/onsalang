@@ -356,6 +356,7 @@ impl<'a> Parser<'a> {
                 }
                 TokenKind::LBrace
                     if !self.no_struct_lit
+                        && callee.takes_fields()
                         && chain.is_some_and(|c| crate::naming::reads_uppercase(self.token_text(c))) =>
                 {
                     // In brackets the `{` is on the line of the name (E0003, S-413).
@@ -805,11 +806,18 @@ const LITERAL_REST_RULE: &str = "the `...` that fills the fields not written wit
 
 /// Whether the tokens `tokens` (a run of those of a file, some of them read
 /// as other kinds) are one expression,
-/// read as an end of a range in a header (no struct literal and no block
-/// at its start, §4.4, S-338; newlines not significant): the ends of a
-/// range pattern (§7, S-341), read by the parser's own grammar (one
-/// reading). Its diagnostics are not kept.
-pub(crate) fn reads_as_expr(file: FileId, text: &str, mut tokens: Vec<Token>, literals: &Literals) -> bool {
+/// read as an end of a range in a header (`no_struct_lit`: no struct
+/// literal and no block at its start, §4.4, S-338; newlines not
+/// significant): the ends of a range pattern (§7, S-341), and an element in
+/// brackets (with struct literals, S-376), read by the parser's own grammar
+/// (one reading). Its diagnostics are not kept.
+pub(crate) fn reads_as_expr(
+    file: FileId,
+    text: &str,
+    mut tokens: Vec<Token>,
+    literals: &Literals,
+    no_struct_lit: bool,
+) -> bool {
     let (Some(first), Some(last)) = (tokens.first().copied(), tokens.last().copied()) else { return false };
     let end = last.span.end;
     tokens.push(Token { kind: TokenKind::Eof, span: Span::new(file, end, end) });
@@ -818,6 +826,6 @@ pub(crate) fn reads_as_expr(file: FileId, text: &str, mut tokens: Vec<Token>, li
     let literals = literals.within(first.span.start, end);
     let mut p = Parser::new(file, text, crate::Lexed { tokens, diagnostics: Vec::new(), literals });
     p.nl = vec![false];
-    p.no_struct_lit = true;
+    p.no_struct_lit = no_struct_lit;
     p.parse_expr_inner(false).is_ok() && p.at(TokenKind::Eof) && p.diagnostics.is_empty()
 }

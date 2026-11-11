@@ -1,0 +1,60 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1", "§4.4", "§6.1"]
+// fixes = 1
+
+// S-333 and §18.1 (W5-24 U6b): a list `name[A, B]` with what may follow type arguments but no index after its `]` has the
+// one candidate `::`. The index form would leave an error of the syntax stage: the fields of a struct literal follow a path
+// of names and type arguments (`Rg::[F32, 4] { d: x }`, §4.4) and not an index; the marks `~(` and `!(` follow what names an
+// item, a method or a flow (§2.6) and not an index (§6.1). The places are a struct literal, a struct literal with a member
+// after it, a flow call (`delay~`, `prev~`), a call with the mark `!`, and a method of a value with a mark.
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+pub struct V {
+  n: I32,
+}
+
+impl V {
+  pub fn m[A, B](self, a: A, b: B) -> A {
+    a
+  }
+}
+
+pub fn mk() -> V {
+  V { n: 1 }
+}
+
+pub fn pair[A, B](a: A, b: B) -> A {
+  a
+}
+
+pub fn a_struct_literal() -> Rg[F32, 4] {
+  Rg[F32, 4] { d: [1.0; 4] }                        //~ E0020
+}
+
+pub fn a_struct_literal_and_a_member() -> [I32; 4] {
+  Rg[I32, 4] { d: [1; 4] }.d                        //~ E0020
+}
+
+pub flow a_flow_call(x: F32) -> F32 {
+  delay[F32, 4]~(x)                                 //~ E0020
+}
+
+pub flow the_flow_prev(x: F32) -> F32 {
+  prev[F32, 4]~(x, 0.0)                             //~ E0020
+}
+
+pub fn a_call_with_a_bang() -> I32 {
+  pair[I32, F32]!(1)                                //~ E0020
+}
+
+pub fn an_index_with_a_bang(xs: [[I32; 2]; 2], i: U32, j: U32) -> I32 {
+  xs[i, j]!(1)                                      //~ E0020
+}
+
+pub fn a_method_with_a_bang() -> I32 {
+  mk().m[I32, F32]!(1)                              //~ E0020
+}

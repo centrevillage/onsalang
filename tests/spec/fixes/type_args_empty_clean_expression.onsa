@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§4.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "17:26"
+// code = "E0002"
+// candidate = 1
+// clean = true
+
+// S-548 (W5-24 U6b): the candidate of `Buf::[].zeroed(4)` takes out the `::[]` (`Buf.zeroed(4)`) and leaves nothing behind when
+// the type is decided by another way (an annotation, §4.7). `clean` is about the whole file, so the file has this one unit with
+// an error. The main range of the diagnostic is not asked.
+
+pub fn zeros() -> U32 uses {Alloc} {
+  let b: Buf[F32] = Buf::[].zeroed(4)              //~ E0002
+  b.len()
+}

@@ -239,7 +239,7 @@ impl<'c, 'a> Toks<'c, 'a> {
         let from = if minus { a + 1 } else { a };
         let (first, last) = (c.full[self.toks[from]] as usize, c.full[self.toks[b]] as usize);
         let read = as_operands(&c.all[first..=last]);
-        if !crate::parser::reads_as_expr(c.file, c.text, read.clone(), c.literals) {
+        if !crate::parser::reads_as_expr(c.file, c.text, read.clone(), c.literals, true) {
             return None;
         }
         let tight = minus && c.kind(self.toks[a + 1]) != TokenKind::MinusMinus;

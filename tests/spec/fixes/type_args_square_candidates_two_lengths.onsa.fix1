@@ -1,0 +1,108 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 2
+
+// S-333 (W5-24 U6b): the number of the candidates when the list is in the length of an array type, in a const argument of a type
+// and in the length of an array that is inside a list of type arguments (§4.5, §18.1): two, as in a value
+// (type_args_square_candidates_two_value.onsa). The elements read as types or as constant expressions, so the list can be the
+// type arguments (`Rg::[F32, 4].CAP`) or the indexes (`Rg[F32][4].CAP`), and the candidate of each reading is given. The
+// candidates are applied by the runner and leave only errors of later stages.
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = 4
+}
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub struct Mat[T, const R: U32, const C: U32] {
+  d: [T; R],
+}
+
+pub const TABLE: U32 = 8
+
+pub fn in_an_array_length(a: [F32; Rg::[F32, 4].CAP]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_an_array_length_with_three(a: [F32; Rg::[F32, 4, 2].CAP]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_an_array_length_with_an_operator(a: [F32; Rg::[F32, 2 + 2].CAP]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_an_array_length_of_a_constant(a: [F32; TABLE::[1, 2]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_an_array_length_of_names(a: [F32; TABLE::[i, j]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_repeat() -> U32 {
+  let a = [0.0; TABLE::[1, 2]]                        //~ E0020
+  1
+}
+
+pub fn in_a_const_argument(r: Ring[F32, Rg::[F32, 4].CAP]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_const_argument_with_an_operator(r: Ring[F32, Rg::[Option[F32], 4].CAP * 2]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_const_argument_after_an_operator(r: Ring[F32, 2 + Rg::[F32, 4].CAP]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_the_second_of_two_const_arguments(m: Mat[F32, 2, Rg::[F32, 4].CAP]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_const_argument_in_a_branch(c: Bool) -> U32 {
+  if c {
+    let r: Ring[F32, Rg::[F32, 4].CAP] = Ring { d: [0.0; 4] } //~ E0020
+    1
+  } else {
+    2
+  }
+}
+
+pub fn in_a_length_in_a_type_argument(o: Option[[F32; Rg::[F32, 4].CAP]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_length_of_a_constant_in_a_type_argument(o: Option[[F32; TABLE::[1, 2]]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_length_in_the_second_type_argument(r: Result[U8, [F32; TABLE::[i, j]]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_length_in_two_levels(o: Option[Option[[F32; Rg::[F32, 4].CAP]]]) -> U32 { //~ E0020
+  1
+}
+
+pub struct InAField {
+  a: [F32; Rg::[F32, 4].CAP],                         //~ E0020
+}
+
+pub struct InAFieldOfATypeArgument {
+  o: Option[[F32; Rg::[F32, 4].CAP]],                 //~ E0020
+}
+
+type InAnAlias = Ring[F32, Rg::[F32, 4].CAP]          //~ E0020
+
+pub fn fine(a: [F32; Rg::[F32, 4].CAP]) -> U32 {
+  1
+}

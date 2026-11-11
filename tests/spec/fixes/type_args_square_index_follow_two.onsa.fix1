@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1", "§6.1"]
+// fixes = 2
+
+// S-333 and §18.1 (W5-24 U6b): what follows the `]` of a list `name[A, B]` and may follow an index keeps both candidates:
+// `.(`, the call of a function value, follows any expression (§6.1), so `mk().m[I32][F32].(1)` is read by the syntax stage
+// as `mk().m::[I32, F32].(1)` is. The same with an index, a field and a `?` after the list.
+
+pub struct V {
+  n: I32,
+}
+
+impl V {
+  pub fn m[A, B](self, a: A, b: B) -> A {
+    a
+  }
+}
+
+pub fn mk() -> V {
+  V { n: 1 }
+}
+
+pub fn a_value_called_after_a_method() -> I32 {
+  mk().m::[I32, F32].(1)                              //~ E0020
+}
+
+pub fn a_value_called_after_a_path(v: V) -> I32 {
+  v.m::[I32, F32].(1)                                 //~ E0020
+}
+
+pub fn an_index_after(xs: [[[I32; 2]; 2]; 2], i: U32, j: U32) -> I32 {
+  xs::[i, j][0]                                       //~ E0020
+}

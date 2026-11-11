@@ -3,7 +3,8 @@
 // spec = ["§2.5", "§2.6", "§4.5", "§18.1"]
 
 // E0002: the places where `::[…]` cannot be read (§4.5, §2.5, §2.6). The syntax cannot say what the
-// writer meant, so there is no candidate. One error per function (or per member / item, §18.1), and
+// writer meant, so there is no candidate, but for an empty list (`id::[](1)`), whose candidate takes the
+// list out with its `::` (§2.5, S-548). One error per function (or per member / item, §18.1), and
 // the functions around it are checked on their own.
 //
 // The forms that are read (§4.5) are in tests/spec/types/type_args_syntax.onsa, the forms of other

@@ -1,0 +1,128 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 1
+
+// S-333 (W5-24 U6b): the number of the candidates when an element of the list is neither a type nor a constant expression
+// (§4.5: "中身が型引数として読めない並び（型でも下の定数式でもない要素を含む。`xs["s", 2]`、`xs[a && b, 2]`）の候補は
+// `xs["s"][2]` の形だけ"): one, the candidate of the multi-dimensional index, because the list cannot be the type arguments.
+// The elements are a string, a float, a comparison, a logical operator, a `!`, and a call, in a value, in the length of an array
+// type, in a const argument and in the length of an array inside a list of type arguments. The `,` at the end of the list is
+// not carried over into the index form. The lists that read as type arguments (two candidates) are in
+// type_args_square_candidates_two_value.onsa and type_args_square_candidates_two_lengths.onsa.
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = 4
+}
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub struct Mat[T, const R: U32, const C: U32] {
+  d: [T; R],
+}
+
+pub const TABLE: U32 = 8
+
+pub fn a_string(i: U32) -> F32 {
+  xs["s"][2]                                        //~ E0020
+}
+
+pub fn a_string_after(i: U32) -> F32 {
+  xs[1]["s"]                                        //~ E0020
+}
+
+pub fn a_float() -> F32 {
+  xs[1.5][2]                                        //~ E0020
+}
+
+pub fn a_logical_and(a: Bool, b: Bool) -> F32 {
+  xs[a && b][2]                                     //~ E0020
+}
+
+pub fn a_logical_or(a: Bool, b: Bool) -> F32 {
+  xs[a || b][2]                                     //~ E0020
+}
+
+pub fn a_comparison(a: U32, b: U32) -> F32 {
+  xs[a == b][2]                                     //~ E0020
+}
+
+pub fn a_less_than(a: U32, b: U32) -> F32 {
+  xs[a < b][2]                                      //~ E0020
+}
+
+pub fn a_not(a: Bool) -> F32 {
+  xs[!a][2]                                         //~ E0020
+}
+
+pub fn a_call() -> F32 {
+  xs[size(1)][2]                                    //~ E0020
+}
+
+pub fn a_method_call(a: V) -> F32 {
+  xs[a.size()][2]                                   //~ E0020
+}
+
+pub fn with_a_trailing_comma() -> F32 {
+  xs["s"][2]                                       //~ E0020
+}
+
+pub fn of_a_method(v: V) -> F32 {
+  v.m["s"][2](1)                                    //~ E0020
+}
+
+pub fn after_a_path_of_modules() -> F32 {
+  m.xs["s"][2]                                      //~ E0020
+}
+
+pub fn in_an_array_length_a_string(a: [F32; TABLE["s"][2]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_an_array_length_a_float(a: [F32; TABLE[1.5][2]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_an_array_length_a_logical_operator(a: [F32; TABLE[x && y][2]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_an_array_length_a_comparison(a: [F32; TABLE[x < y][2]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_an_array_length_a_call(a: [F32; TABLE[size(1)][2]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_const_argument_a_string(r: Ring[F32, Rg[F32]["s"].CAP]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_const_argument_a_comparison(r: Ring[F32, Rg[F32][a == b].CAP]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_const_argument_a_call_with_an_operator(r: Ring[F32, TABLE[size(1)][2] * 2]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_length_in_a_type_argument_a_string(o: Option[[F32; TABLE["s"][2]]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_length_in_a_type_argument_a_logical_operator(o: Option[[F32; Rg[F32][a && b].CAP]]) -> U32 { //~ E0020
+  1
+}
+
+pub struct InAField {
+  a: [F32; TABLE["s"][2]],                          //~ E0020
+}
+
+type InAnAlias = [F32; TABLE["s"][2]]               //~ E0020

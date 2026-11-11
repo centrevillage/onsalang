@@ -1,0 +1,97 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§4.5", "§18.1"]
+// fixes = 1
+
+// S-548 (W5-24 U6b): an empty list of type arguments after a name in the type position (`P[]`, `Buf[]`) is an E0002 whose one
+// candidate takes the empty list out, from the `[` to the `]` (§2.5: "型の位置の `Buf[]` も E0002 で、修正候補は同じく空の並びを
+// 除く形（`Buf[]` は `Buf`）"). The places are a parameter, a result, a field, the payload of a variant, an alias, the heading of
+// an `impl`, a function type, a tuple, an array, the arguments of another type, an annotation, a branch and the input of a
+// flow. The type without the list is a generic type with no arguments, so the candidate leaves the E0412 of a later stage,
+// which is the error of the program without the list.
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = 4
+}
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub struct Mat[T, const R: U32, const C: U32] {
+  d: [T; R],
+}
+
+pub const TABLE: U32 = 8
+
+pub struct Q[T] {
+  d: T,
+}
+
+pub fn as_a_parameter(p: P) -> U32 {              //~ E0002
+  1
+}
+
+pub fn as_a_result() -> P {                       //~ E0002
+  mk()
+}
+
+pub struct AsAField {
+  p: P,                                           //~ E0002
+}
+
+pub enum AsAPayload {
+  A(P),                                           //~ E0002
+  B,
+}
+
+type AsAnAlias = P                                //~ E0002
+
+impl P {                                          //~ E0002
+}
+
+pub fn in_a_function_type(f: fn(P) -> U8) -> U8 { //~ E0002
+  1
+}
+
+pub fn in_a_tuple(t: (U8, P)) -> U8 {             //~ E0002
+  t.0
+}
+
+pub fn in_an_array(a: [P; 2]) -> U32 {            //~ E0002
+  1
+}
+
+pub fn in_a_type_argument(o: Option[P]) -> U32 {  //~ E0002
+  1
+}
+
+pub fn in_a_const_argument_list(r: Ring[P, 4]) -> U32 { //~ E0002
+  1
+}
+
+pub fn in_an_annotation() -> U32 {
+  let p: Buf = mk()                               //~ E0002
+  1
+}
+
+pub fn in_a_branch(c: Bool) -> U32 {
+  if c {
+    let p: Buf = mk()                             //~ E0002
+    1
+  } else {
+    2
+  }
+}
+
+pub flow as_a_flow_input(x: P at sample) -> F32 at sample { //~ E0002
+  0.0
+}
+
+pub fn fine(p: Q[U8]) -> U32 {
+  1
+}

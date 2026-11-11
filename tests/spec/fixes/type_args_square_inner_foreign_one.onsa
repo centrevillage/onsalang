@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "48:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["48:19 E0020"]
+//
+// [[test.fix]]
+// at = "51:38"
+// code = "E0020"
+// candidate = 1
+// leaves = ["51:52 E0020"]
+//
+// [[test.fix]]
+// at = "55:41"
+// code = "E0020"
+// candidate = 1
+// leaves = ["55:55 E0020"]
+
+// S-333 and §18.1 (W5-24 U6b): a list `name[A, B]` with a form of another language of the same stage in an element (the `::`
+// of `Rg::[F32, 4]` in a type, an E0020 of its own) still reads as type arguments: "候補が写すか動かす部分…に同じ段の別の誤り
+// （既存言語の書き方の形…）があっても、形そのものが読めれば候補を出し、残りの誤りは当てた後の検査で報告する". The candidate is
+// `::`, and the E0020 in the element is left (two errors before, outside the promise). The index form is not given: the
+// element `Q::[Rg::[F32, 4]].CAP` with its E0020 does not read as an expression. The places are a value, the length of an
+// array type and a const argument.
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = 4
+}
+
+pub struct Q[T] {
+  d: T,
+}
+
+impl[T] Q[T] {
+  pub const CAP: U32 = 4
+}
+
+pub fn a_value() -> U32 {
+  Rg[F32, Q::[Rg::[F32, 4]].CAP].CAP                //~ E0020
+}
+
+pub fn in_an_array_length(a: [F32; Rg[F32, Q::[Rg::[F32, 4]].CAP].CAP]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_const_argument(r: Rg[F32, Rg[F32, Q::[Rg::[F32, 4]].CAP].CAP]) -> U32 { //~ E0020
+  1
+}

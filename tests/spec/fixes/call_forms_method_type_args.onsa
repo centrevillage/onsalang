@@ -1,7 +1,7 @@
 // onsa.toml
 // [test]
 // spec = ["§4.5", "§6.1", "§6.2", "§18.1"]
-// fixes = 1
+// fixes = 2
 
 // E0020 for the type arguments of a method written with `[…]` (§4.5, S-239, S-256): in an expression the
 // type arguments are `名前::[…]` (`v.conv::[I32](x)`), and `[` alone is an index, so `v.conv[I32](x)` is the
@@ -9,7 +9,8 @@
 // `conv` is a method of the type of `v` (§4.5: "メソッドに付けた `[…]` は型の段"). The one candidate puts
 // `::` before the `[` and keeps the type arguments (a syntactic edit that does not read the declaration of
 // the callee): `v.conv::[I32](1)`; several type arguments are kept in one list (`v.pair::[I32, F32](1, 2.0)`;
-// a list of two or more is no index, so the syntax stage reports it, with the same code and candidate).
+// a list of two or more is no index, so the syntax stage reports it, with the same code and candidate, and the
+// candidate of the multi-dimensional index, `v.pair[I32][F32](7, 2.0)`, as a second one, S-333).
 // The head of the method is any value: an argument, a local binding, a field of a field, an element of an
 // array, `self`, the result of a function, a constant. The right form is an error of the names stage until
 // the type arguments are put in (E0200, W5-10), so the file does not name a right form and `clean` is not

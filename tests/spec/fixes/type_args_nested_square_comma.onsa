@@ -3,70 +3,136 @@
 // spec = ["§4.5", "§18.1"]
 //
 // [[test.fix]]
-// at = "102:13"
+// at = "168:13"
 // code = "E0020"
 // candidate = 1
-// leaves = ["102:23 E0020"]
+// leaves = ["168:23 E0020"]
 //
 // [[test.fix]]
-// at = "107:5"
+// at = "168:13"
 // code = "E0020"
-// candidate = 1
-// leaves = ["107:15 E0020"]
+// candidate = 2
+// leaves = ["168:21 E0020"]
 //
 // [[test.fix]]
-// at = "111:8"
+// at = "173:5"
 // code = "E0020"
 // candidate = 1
-// leaves = ["111:13 E0020"]
+// leaves = ["173:15 E0020"]
 //
 // [[test.fix]]
-// at = "114:38"
+// at = "173:5"
 // code = "E0020"
-// candidate = 1
-// leaves = ["114:48 E0020"]
+// candidate = 2
+// leaves = ["173:13 E0020"]
 //
 // [[test.fix]]
-// at = "118:55"
+// at = "177:8"
 // code = "E0020"
 // candidate = 1
-// leaves = ["118:60 E0020"]
+// leaves = ["177:13 E0020"]
 //
 // [[test.fix]]
-// at = "122:43"
+// at = "177:8"
 // code = "E0020"
-// candidate = 1
-// leaves = ["122:53 E0020"]
+// candidate = 2
+// leaves = ["177:11 E0020"]
 //
 // [[test.fix]]
-// at = "126:52"
+// at = "180:38"
 // code = "E0020"
 // candidate = 1
-// leaves = ["126:62 E0020"]
+// leaves = ["180:48 E0020"]
 //
 // [[test.fix]]
-// at = "132:7"
+// at = "180:38"
 // code = "E0020"
-// candidate = 1
-// leaves = ["132:17 E0020"]
+// candidate = 2
+// leaves = ["180:46 E0020"]
 //
 // [[test.fix]]
-// at = "140:7"
+// at = "184:55"
 // code = "E0020"
 // candidate = 1
-// leaves = ["140:17 E0020"]
+// leaves = ["184:60 E0020"]
 //
 // [[test.fix]]
-// at = "145:30"
+// at = "184:55"
 // code = "E0020"
-// candidate = 1
-// leaves = ["145:40 E0020"]
+// candidate = 2
+// leaves = ["184:58 E0020"]
 //
 // [[test.fix]]
-// at = "150:25"
+// at = "188:43"
 // code = "E0020"
 // candidate = 1
-// leaves = ["150:35 E0020"]
+// leaves = ["188:53 E0020"]
+//
+// [[test.fix]]
+// at = "188:43"
+// code = "E0020"
+// candidate = 2
+// leaves = ["188:51 E0020"]
+//
+// [[test.fix]]
+// at = "192:52"
+// code = "E0020"
+// candidate = 1
+// leaves = ["192:62 E0020"]
+//
+// [[test.fix]]
+// at = "192:52"
+// code = "E0020"
+// candidate = 2
+// leaves = ["192:60 E0020"]
+//
+// [[test.fix]]
+// at = "198:7"
+// code = "E0020"
+// candidate = 1
+// leaves = ["198:17 E0020"]
+//
+// [[test.fix]]
+// at = "198:7"
+// code = "E0020"
+// candidate = 2
+// leaves = ["198:15 E0020"]
+//
+// [[test.fix]]
+// at = "206:7"
+// code = "E0020"
+// candidate = 1
+// leaves = ["206:17 E0020"]
+//
+// [[test.fix]]
+// at = "206:7"
+// code = "E0020"
+// candidate = 2
+// leaves = ["206:15 E0020"]
+//
+// [[test.fix]]
+// at = "211:30"
+// code = "E0020"
+// candidate = 1
+// leaves = ["211:40 E0020"]
+//
+// [[test.fix]]
+// at = "211:30"
+// code = "E0020"
+// candidate = 2
+// leaves = ["211:38 E0020"]
+//
+// [[test.fix]]
+// at = "216:25"
+// code = "E0020"
+// candidate = 1
+// leaves = ["216:35 E0020"]
+//
+// [[test.fix]]
+// at = "216:25"
+// code = "E0020"
+// candidate = 2
+// leaves = ["216:33 E0020"]
 
 // S-329 (W5-24 U6a): a name followed by a `[…]` with a `,` that holds another one (`Rg[F32, Rg[F32, 4].CAP].CAP`) is one
 // E0020 for the unit, at the outer `[` (§18.1: "最初のエラーで検査を止める", and of the errors left, the one that starts first). The

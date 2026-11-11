@@ -1,0 +1,87 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 2
+
+// E0020 for a name followed by a `[…]` with a `,` in the length of an array type (§4.5, §18.1): the
+// form that another language reads as a multi-dimensional index (`xs[i, j]`). A constant expression
+// has no index, but the syntax stage does not read the meaning of a name: a `[…]` with a `,` after a
+// name is the same error everywhere an expression is read, in a value (tests/spec/fixes/
+// e0020_type_args_square.onsa) and in the length of an array type, in a list of type arguments too
+// (`Option[[F32; TABLE[1, 2]]]`, S-329, W5-24 U6a). The candidates (`::` and
+// the index form, S-333) are applied by the runner (§18.1) and leave only errors of later stages.
+
+pub const TABLE: U32 = 8
+
+pub fn as_a_parameter(a: [F32; TABLE::[1, 2]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn as_a_result() -> [F32; TABLE::[1, 2]] {        //~ E0020
+  [0.0; 4]
+}
+
+pub struct AsAField {
+  a: [F32; TABLE::[1, 2]],                            //~ E0020
+}
+
+pub enum AsAPayload {
+  A([F32; TABLE::[1, 2]]),                            //~ E0020
+  B,
+}
+
+type AsAnAlias = [F32; TABLE::[1, 2]]                 //~ E0020
+
+pub fn as_an_annotation() -> U32 {
+  let a: [F32; TABLE::[1, 2]] = [0.0; 4]              //~ E0020
+  1
+}
+
+pub fn in_a_branch(c: Bool) -> U32 {
+  if c {
+    let a: [F32; TABLE::[1, 2]] = [0.0; 4]            //~ E0020
+    1
+  } else {
+    2
+  }
+}
+
+pub fn in_a_generic_function[T](a: [T; TABLE::[1, 2]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn with_names(a: [F32; TABLE::[i, j]]) -> U32 {   //~ E0020
+  1
+}
+
+pub fn of_a_qualified_name(a: [F32; cfg.TABLE::[1, 2]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn of_a_const_parameter[const N: U32](a: [F32; N::[1, 2]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn after_an_arithmetic_operator(a: [F32; 2 + TABLE::[1, 2]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn before_an_arithmetic_operator(a: [F32; TABLE::[1, 2] * 2]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_parentheses(a: [F32; (TABLE::[1, 2])]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_type_argument(o: Option[[F32; TABLE::[1, 2]]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_an_outer_array(a: [[F32; TABLE::[1, 2]]; 2]) -> U32 { //~ E0020
+  1
+}
+
+pub fn fine(a: [F32; TABLE]) -> U32 {
+  1
+}

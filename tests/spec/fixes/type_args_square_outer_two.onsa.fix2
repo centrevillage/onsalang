@@ -1,0 +1,101 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 2
+
+// S-975 and its detail S-999 (W5-24 U6b): a `[…]` with a `,` inside the `[…]` that follows a name or a method, when the whole
+// of the outer `[…]` reads as a type (`id[Result[I32, Str]](x)`), has two candidates: the `::` before the outermost `[`
+// (`id::[Result[I32, Str]](x)`) and the index form of the inner list (`id[Result[I32][Str]](x)`), and not `::` in the inner list
+// (§4.5: "外の `[` が何重でも一番外に挿す"; that candidate would put a type in a value position). The detail S-999: what follows
+// the outer `]` (`Q[Rg[F32, 4]].CAP`) does not change it, because the content of the outer brackets is a type. The places are
+// a value, a method, the length of an array type, a const argument and the length of an array inside a list of type
+// arguments. Where the content of the outer brackets is not a type, the rule of the inner list applies
+// (type_args_square_outer_inner_rule_two.onsa).
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = 4
+}
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub struct Mat[T, const R: U32, const C: U32] {
+  d: [T; R],
+}
+
+pub const TABLE: U32 = 8
+
+pub fn id_of_a_generic_type(x: Result[I32, Str]) -> Result[I32, Str] {
+  id[Result[I32][Str]](x)                           //~ E0020
+}
+
+pub fn id_of_two_levels(x: Option[Result[I32, Str]]) -> Option[Result[I32, Str]] {
+  id[Option[Result[I32][Str]]](x)                   //~ E0020
+}
+
+pub fn id_of_three_levels(x: Option[Option[Result[I32, Str]]]) -> Option[Option[Result[I32, Str]]] {
+  id[Option[Option[Result[I32][Str]]]](x)           //~ E0020
+}
+
+pub fn id_of_a_tuple(x: (Result[I32, Str], F32)) -> (Result[I32, Str], F32) {
+  id[(Result[I32][Str], F32)](x)                    //~ E0020
+}
+
+pub fn of_a_method(v: V, x: Result[I32, Str]) -> Result[I32, Str] {
+  v.m[Result[I32][Str]](x)                          //~ E0020
+}
+
+pub fn of_a_path_of_modules(x: Result[I32, Str]) -> Result[I32, Str] {
+  util.id[Result[I32][Str]](x)                      //~ E0020
+}
+
+pub fn of_a_local_value(xs: [Rg[F32, 4]; 2]) -> U32 {
+  xs[Rg[F32][4]]                                    //~ E0020
+}
+
+pub fn with_a_member_after_the_outer() -> U32 {
+  Q[Rg[F32][4]].CAP                                 //~ E0020
+}
+
+pub fn with_a_member_and_two_levels() -> U32 {
+  Q[Option[Rg[F32][4]]].CAP                         //~ E0020
+}
+
+pub fn with_a_call_after_the_outer() -> Q[Rg[F32, 4]] {
+  Q[Rg[F32][4]].zeroed()                            //~ E0020
+}
+
+pub fn in_a_branch(c: Bool) -> U32 {
+  if c {
+    Q[Rg[F32][4]].CAP                               //~ E0020
+  } else {
+    2
+  }
+}
+
+pub fn in_a_closure() -> [U32; 2] {
+  array.from_fn(fn(_) {
+    id[Result[I32][Str]](r)                         //~ E0020
+  })
+}
+
+pub fn in_an_array_length(a: [F32; Q[Rg[F32][4]].CAP]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_an_array_length_with_two_levels(a: [F32; Q[Option[Rg[F32][4]]].CAP]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_const_argument(r: Ring[F32, Q[Rg[F32][4]].CAP]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_length_in_a_type_argument(o: Option[[F32; Q[Rg[F32][4]].CAP]]) -> U32 { //~ E0020
+  1
+}

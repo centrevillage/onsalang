@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 1
+
+// S-975 (W5-24 U6b): the content of the outer `[…]` is not a type when an element of the inner list is a string, a float, a
+// comparison or a call, so the rule of the inner list applies (§4.5), and the inner list cannot be type arguments: one
+// candidate, the index form of the inner list (`Rg[F32]["s"]`). This is also the boundary of the rule that puts the `::` before
+// the outermost `[` (type_args_square_outer_two.onsa): `id[Result[I32, "s"]](x)` has a `"s"` where a type is, so it is not
+// read as a type and has no `::` before the outer `[`. The places are a value, a method, the length of an array type, a
+// const argument and the length of an array inside a list of type arguments.
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = 4
+}
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub struct Mat[T, const R: U32, const C: U32] {
+  d: [T; R],
+}
+
+pub const TABLE: U32 = 8
+
+pub fn a_string_in_the_inner(xs: [U32; 8]) -> U32 {
+  xs[Rg[F32]["s"].CAP]                              //~ E0020
+}
+
+pub fn a_comparison_in_the_inner(xs: [U32; 8], a: U32) -> U32 {
+  xs[Rg[F32][a == 1].CAP]                           //~ E0020
+}
+
+pub fn a_string_where_a_type_is(x: Result[I32, Str]) -> Result[I32, Str] {
+  id[Result[I32]["s"]](x)                           //~ E0020
+}
+
+pub fn a_float_where_a_type_is(x: Result[I32, Str]) -> Result[I32, Str] {
+  id[Result[I32][1.5]](x)                           //~ E0020
+}
+
+pub fn a_call_in_a_member_after_the_inner() -> U32 {
+  Q[Rg[F32][size(1)]].CAP                           //~ E0020
+}
+
+pub fn of_a_method(v: V) -> U32 {
+  v.m[Result[I32]["s"]](1)                          //~ E0020
+}
+
+pub fn in_an_array_length(a: [F32; Q[Rg[F32]["s"]].CAP]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_const_argument(r: Ring[F32, TABLE[Rg[F32]["s"].CAP] * 2]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_length_in_a_type_argument(o: Option[[F32; Q[Rg[F32]["s"]].CAP]]) -> U32 { //~ E0020
+  1
+}

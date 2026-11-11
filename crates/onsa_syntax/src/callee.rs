@@ -16,6 +16,7 @@
 //! the same links in the text.
 
 use crate::cst::NodeKind;
+use crate::token::TokenKind;
 
 /// A link of a postfix chain: what the expression that ends there is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -123,6 +124,27 @@ impl Callee {
     /// The last link of the chain.
     pub(crate) fn last(self) -> Link {
         self.last
+    }
+
+    /// Whether a struct literal's fields may follow the chain: a path of
+    /// names, with the fields and `::[…]` after it (`a.b.C { … }`,
+    /// `Pr::[U8] { … }`, S-08).
+    pub(crate) fn takes_fields(self) -> bool {
+        self.chain == Chain::Names
+    }
+
+    /// Whether the parser reads the postfix node of `kind` after the chain,
+    /// its first child; `mark`, the first token of the node (`!` and `~`
+    /// of a marked call, `.` of `.(`): a call by name, a marked call after
+    /// a link that takes a mark, a struct literal after a path of names.
+    /// Any other postfix (a field, an index, `.(`, `?`) follows any chain.
+    pub(crate) fn takes(self, kind: NodeKind, mark: Option<TokenKind>) -> bool {
+        match (kind, mark) {
+            (NodeKind::CallExpr, None) => self.by_name(),
+            (NodeKind::CallExpr, Some(TokenKind::Bang | TokenKind::Tilde)) => self.last.takes_a_mark(),
+            (NodeKind::StructLit, _) => self.takes_fields(),
+            _ => true,
+        }
     }
 
     /// Whether a call of the chain is written by name, so that a later stage

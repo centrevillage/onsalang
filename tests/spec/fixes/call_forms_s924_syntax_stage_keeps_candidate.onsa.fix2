@@ -1,0 +1,54 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 2
+
+// S-924 (§4.5: "添字として読めない `[…]`（`pair[I32, F32](1, 2.0)`）… は構文の段 … メソッドに付けた `[…]`
+// （`v.m[I32](x)`）は型の段"): a list of two or more type arguments is no index, so the syntax stage finds
+// it before any type is known, and the candidate is the syntactic edit that puts `::` before the `[` and
+// keeps the type arguments (§4.5: "呼び先の宣言を読まない構文上の編集"); the second is the index form
+// (`v.plain[I32][F32](x)`, S-333). It is kept when the number does not
+// match the method (`v.plain[I32, F32](x)` for a method with no type parameter, `v.conv[I32, F32](x)` for one
+// parameter): the E0412 that stays after the edit belongs to a later stage (§18.1), unlike the single
+// type argument that the type stage finds (tests/spec/negative/call_forms_s924_method_type_args_mismatch.onsa,
+// where there is no candidate). The right form is an error of the names stage until the type arguments are
+// put in (E0200, W5-10), so the file does not name a right form and `clean` is not asked. One error per
+// function (P-01).
+
+pub struct V {
+  n: I32,
+}
+
+impl V {
+  pub fn plain(self, x: I32) -> I32 {
+    x
+  }
+
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+
+  pub fn pair[A, B](self, a: A, b: B) -> A {
+    a
+  }
+}
+
+pub fn mk() -> V {
+  V { n: 1 }
+}
+
+pub fn two_for_a_method_with_none(v: V) -> I32 {
+  v.plain[I32][F32](1)                              //~ E0020
+}
+
+pub fn two_for_a_method_with_one(v: V) -> I32 {
+  v.conv[I32][F32](2)                               //~ E0020
+}
+
+pub fn three_for_a_method_with_two(v: V) -> I32 {
+  v.pair[I32][F32][U8](3, 2.0)                      //~ E0020
+}
+
+pub fn two_for_the_result_of_a_function() -> I32 {
+  mk().plain[I32, F32](4)                           //~ E0020
+}

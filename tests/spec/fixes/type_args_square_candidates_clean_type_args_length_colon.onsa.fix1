@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 2
+//
+// [[test.fix]]
+// at = "24:30"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// S-333 and S-329 (W5-24 U6a, U6b): the candidate `::` of `Rg[F32, 4].CAP` in the length of an array inside a list of type
+// arguments leaves nothing behind: `Option[[F32; Rg::[F32, 4].CAP]]` is `Option[[F32; 4]]` (§4.5). `clean` is about the
+// whole file, so the file has this one unit with an error. The entry waits for W5-24 U6a: today it is an E0002.
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = 4
+}
+
+pub fn len(o: Option[[F32; Rg::[F32, 4].CAP]]) -> U32 { //~ E0020
+  match o {
+    Some(a) => a.len(),
+    None => 0,
+  }
+}

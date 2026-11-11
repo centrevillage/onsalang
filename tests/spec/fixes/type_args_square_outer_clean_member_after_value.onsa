@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 2
+//
+// [[test.fix]]
+// at = "33:4"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// S-999 (W5-24 U6b): the same as type_args_square_outer_clean_member_after.onsa, in a value: `Q::[Rg[F32, 4]].CAP` is 4 and
+// leaves nothing behind. `clean` is about the whole file, so the file has this one unit with an error. The main position of
+// the diagnostic is not asked (the entry says the outer `[`, which the implementation may change).
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = 4
+}
+
+pub struct Q[T] {
+  d: T,
+}
+
+impl[T] Q[T] {
+  pub const CAP: U32 = 4
+}
+
+pub fn cap() -> U32 {
+  Q[Rg[F32, 4]].CAP                                //~ E0020
+}

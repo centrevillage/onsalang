@@ -1498,30 +1498,5 @@ reasons = ["S-329"]
 until = "W9-03"
 note = "W5-16 U1d から控えにしていた事例を W5-24 U6a で戻した（const 引数の `X::[…]`・`X[a, b]`、85 段の高さ）。演算を含む長さは W9-03 まで E0200。"
 
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/e0002_index_comma_array_length_in_type_args.onsa:13:46 E0020 fix1"
-reasons = ["S-333", "R-418"]
-until = "W5-24"
-note = "U6a で E0002 から E0020 になり、候補は今の `::` の一つ。当てると `xs::[1, 2]` の要素の `::` の E0020（型の位置）が残る。U6b の候補の作り分け（添字の形）で閉じる"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/e0002_index_comma_array_length_in_type_args.onsa:15:39 E0020 fix1"
-reasons = ["S-333", "R-418"]
-until = "W5-24"
-note = "U6a で E0002 から E0020 になり、候補は今の `::` の一つ。当てると `as` の連鎖の E0011 が残る。U6b の候補の作り分け（添字の形）で閉じる"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/e0002_index_comma_array_length_in_type_args.onsa:17:39 E0020 fix1"
-reasons = ["S-333", "R-418"]
-until = "W5-24"
-note = "U6a で E0002 から E0020 になり、候補は今の `::` の一つ。当てると入れ子の内の E0020 が残る。U6b の候補の作り分け（添字の形）で閉じる"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/e0002_index_comma_array_length_in_type_args.onsa:19:32 E0020 fix1"
-reasons = ["S-333", "R-418"]
-until = "W5-24"
-note = "U6a で E0002 から E0020 になり、候補は今の `::` の一つ。当てると `if` の E0013 が残る。U6b の候補の作り分け（添字の形）で閉じる"
+# --- W5-24 U6b: `,` を含む `[…]` の候補（S-333・S-975・R-418）と空の型引数（S-548）の事例と、W5-16 U1d の控えの事例（2026-11-11）
+# W5-24 U6/t の実装待ちの項目（親が tests/pending.toml に足す）

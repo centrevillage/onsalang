@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 2
+//
+// [[test.fix]]
+// at = "22:5"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// S-975 (W5-24 U6b): the candidate of `id[Result[I32, U8]](x)` that puts `::` before the outer `[` (`id::[Result[I32, U8]](x)`)
+// leaves nothing behind. The index form of the inner list, `id[Result[I32][U8]](x)`, is an error of the names stage, so it is
+// not asked to be clean. `clean` is about the whole file, so the file has this one unit with an error. The main position
+// of the diagnostic is not asked (the entry says the outer `[`, which the implementation may change).
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn pass(x: Result[I32, U8]) -> Result[I32, U8] {
+  id[Result[I32][U8]](x)                           //~ E0020
+}

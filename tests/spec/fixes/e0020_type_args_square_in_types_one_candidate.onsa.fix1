@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 1
+
+// The number of the candidates of the E0020 of a `[…]` with a `,` after a name, in the length of an
+// array type (§4.5, §18.1), when an element is neither a type nor a constant expression (a string
+// or a float literal, a comparison or a logical operator, a call): one, the candidate of the
+// multi-dimensional index (`TABLE["s"][2]`), because the list cannot be the type arguments. The
+// lists that read as type arguments have two candidates:
+// e0020_type_args_square_in_types_two_candidates.onsa.
+
+pub const TABLE: U32 = 8
+
+pub fn a_string(a: [F32; TABLE["s"][2]]) -> U32 {   //~ E0020
+  1
+}
+
+pub fn a_string_after(a: [F32; TABLE[1]["s"]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn a_float(a: [F32; TABLE[1.5][2]]) -> U32 {    //~ E0020
+  1
+}
+
+pub fn a_logical_operator(a: [F32; TABLE[x && y][2]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn a_comparison(a: [F32; TABLE[x < y][2]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn a_call(a: [F32; TABLE[size(1)][2]]) -> U32 { //~ E0020
+  1
+}
+
+pub struct InAField {
+  a: [F32; TABLE["s"][2]],                          //~ E0020
+}
+
+type InAnAlias = [F32; TABLE["s"][2]]               //~ E0020
+
+pub fn in_an_annotation() -> U32 {
+  let a: [F32; TABLE["s"][2]] = [0.0; 4]            //~ E0020
+  1
+}

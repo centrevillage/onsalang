@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 2
+//
+// [[test.fix]]
+// at = "57:7"
+// code = "E0020"
+// candidate = 2
+// leaves = ["57:7 E0020"]
+//
+// [[test.fix]]
+// at = "60:38"
+// code = "E0020"
+// candidate = 2
+// leaves = ["60:38 E0020"]
+//
+// [[test.fix]]
+// at = "64:43"
+// code = "E0020"
+// candidate = 2
+// leaves = ["64:43 E0020"]
+//
+// [[test.fix]]
+// at = "68:57"
+// code = "E0020"
+// candidate = 2
+// leaves = ["68:57 E0020"]
+
+// S-333 and S-975 (W5-24 U6b): an outer `[…]` that has a `,` of its own and holds an inner list with a `,` is one E0020 at the
+// outer `[` (§18.1: the error that starts first; the unit is not read further). It is the case of S-333 ("名前の後の `,` を
+// 含む `[…]`") and not of S-975, whose outer brackets have no `,` of their own: the candidates are `::` before the outer
+// `[` (the inner list is then a type in a type position, no error) and the index form of the outer list (`pair[Result[I32, Str]][U8]`),
+// which puts the inner list in a value position, where it is the next E0020: the entries of the second candidate say so with
+// `leaves` (their positions, after the edit, are written by whoever turns the entries on). The places are a value, the length
+// of an array type, a const argument and the length of an array inside a list of type arguments.
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = 4
+}
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub struct Mat[T, const R: U32, const C: U32] {
+  d: [T; R],
+}
+
+pub const TABLE: U32 = 8
+
+pub fn in_a_value() -> (Result[I32, Str], U8) {
+  pair[Result[I32, Str], U8](a, b)                 //~ E0020
+}
+
+pub fn in_an_array_length(a: [F32; Rg[Result[I32, Str], 4].CAP]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_const_argument(r: Ring[F32, Rg[Result[I32, Str], 4].CAP]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_length_in_a_type_argument(o: Option[[F32; Rg[Result[I32, Str], 4].CAP]]) -> U32 { //~ E0020
+  1
+}

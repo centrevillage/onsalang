@@ -1,0 +1,113 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 2
+
+// S-333 (W5-24 U6b): a name followed by a `[…]` with a `,` in a value is the type arguments of another language and the
+// multi-dimensional index of another language (§4.5: "型引数の読みと多次元の添字の読み（C#）に割れるので、修正候補は
+// `xs::[i, j]` と `xs[i][j]` の二つ"; §18.1: the candidates of each reading). The file has the lists whose elements all read as a
+// type or as a constant expression (a name, a number, an operator of §4.5, a qualified name, a type with arguments): two
+// candidates for each, whatever stands before the name (a path of modules, a call, an element of an array, a method). The
+// place is a value in a branch, a closure and a `par~`. The lists that cannot be type arguments (one candidate) are in
+// type_args_square_candidates_one_unreadable.onsa; the lengths and the const arguments in
+// type_args_square_candidates_two_lengths.onsa. The candidates are applied by the runner and leave only errors of later stages.
+
+use std.array
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = 4
+}
+
+pub fn two_elements() -> (U8, F32) {
+  pair[U8][F32](1, 2.0)                             //~ E0020
+}
+
+pub fn three_elements() -> (U8, F32, Str) {
+  triple[U8][F32][Str](1, 2.0, "s")                 //~ E0020
+}
+
+pub fn two_names(i: U32, j: U32) -> F32 {
+  grid[i][j]                                        //~ E0020
+}
+
+pub fn two_numbers() -> F32 {
+  grid[1][2]                                        //~ E0020
+}
+
+pub fn a_constant_expression() -> F32 {
+  grid[1 + 1][2 * 3]                                //~ E0020
+}
+
+pub fn a_negative_number() -> F32 {
+  grid[-1][2]                                       //~ E0020
+}
+
+pub fn a_parenthesized_expression() -> F32 {
+  grid[(1 + 1)][2]                                  //~ E0020
+}
+
+pub fn a_qualified_name() -> F32 {
+  grid[cfg.N][cfg.M]                                //~ E0020
+}
+
+pub fn a_type_with_arguments() -> (Option[U8], F32) {
+  pair[Option[U8]][F32](None, 2.0)                  //~ E0020
+}
+
+pub fn an_associated_constant() -> U32 {
+  Rg[F32][4].CAP                                    //~ E0020
+}
+
+pub fn a_method(v: V) -> I32 {
+  v.conv2[I32][F32](1, 2.0)                         //~ E0020
+}
+
+pub fn a_path_of_modules() -> I32 {
+  conv.parse2[I32][F32]("3")                        //~ E0020
+}
+
+pub fn after_a_call() -> I32 {
+  mk().conv2[I32, F32](1)                           //~ E0020
+}
+
+pub fn after_an_element_of_an_array() -> I32 {
+  vs[0].conv2[I32][F32](4)                          //~ E0020
+}
+
+pub fn in_a_branch(c: Bool) -> U32 {
+  if c {
+    Rg[F32][4].CAP                                  //~ E0020
+  } else {
+    2
+  }
+}
+
+pub fn in_an_arm(o: Option[U32]) -> U32 {
+  match o {
+    Some(n) => n,
+    None => Rg[F32][4].CAP,                         //~ E0020
+  }
+}
+
+pub fn in_a_closure() -> [U32; 2] {
+  array.from_fn(fn(_) {
+    Rg[F32][4].CAP                                  //~ E0020
+  })
+}
+
+pub fn in_a_repeat() -> [F32; 4] {
+  [0.0; Rg[F32][4].CAP]                             //~ E0020
+}
+
+pub flow in_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< Rg[F32][4].CAP { x }     //~ E0020
+  x
+}
+
+pub fn fine() -> U32 {
+  Rg::[F32, 4].CAP
+}

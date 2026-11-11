@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§4.5", "§18.1"]
+// fixes = 0
+
+// S-548 (W5-24 U6b): an empty list of type arguments with a comment inside it is still the E0002, but it has no candidate
+// (§2.5: "中にコメントがあれば候補を作らない": the candidate that takes out the list would take the comment with it);
+// `fixes = 0` checks that no diagnostic of the file has one. The comment is a line comment, so the list goes on to the next
+// line (a line break in the brackets makes a multi-line diagnostic, whose line is the line of the opening `[`). The places
+// are the expression, with a `::`, and the type position.
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn in_an_expression() -> U8 {
+  id::[ // a comment in the list                    //~ E0002
+  ](1)
+}
+
+pub fn in_an_expression_on_its_own_line() -> U8 {
+  id::[                                             //~ E0002
+    // a comment on a line of its own
+  ](1)
+}
+
+pub fn in_a_method(v: V) -> I32 {
+  v.conv::[ // a comment in the list                //~ E0002
+  ](1)
+}
+
+pub fn in_a_type(p: P[ // a comment in the list     //~ E0002
+]) -> U32 {
+  1
+}
+
+pub fn in_a_type_in_an_annotation() -> U32 {
+  let p: Buf[ // a comment in the list              //~ E0002
+  ] = mk()
+  1
+}

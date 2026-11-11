@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 2
+//
+// [[test.fix]]
+// at = "28:27"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// S-333 (W5-24 U6b): the candidate `::` of `Rg[F32, 4].CAP` in a const argument of a type leaves nothing behind: the
+// argument is `Rg::[F32, 4].CAP`, which is 4 (§4.5), and the parameter has the type `Ring[F32, 4]`. `clean` is about the
+// whole file, so the file has this one unit with an error. The entry waits for W5-24 U6a: today the const argument is an E0002.
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = 4
+}
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub fn len(r: Ring[F32, Rg::[F32, 4].CAP]) -> U32 {  //~ E0020
+  r.d.len()
+}

@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 2
+
+// S-333 (W5-24 U6b): a list of one element and a `,` at its end (`xs[1,]`) holds a `,`, so it is the E0020 of a `[…]` with a `,`
+// after a name (§4.5: "名前の後の `,` を含む `[…]`") with the two candidates `xs::[1,]` and `xs[1]` (the `,` is dropped in
+// the index form). Today it is the E0002 "expected `]`, found `,`" of the index, which has no candidate. The reading of a
+// list of one element follows from the words of the rule only, so it is a case of its own.
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = 4
+}
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub struct Mat[T, const R: U32, const C: U32] {
+  d: [T; R],
+}
+
+pub const TABLE: U32 = 8
+
+pub fn in_a_value() -> F32 {
+  xs[1,]                                            //~ E0020
+}
+
+pub fn of_a_name(i: U32) -> F32 {
+  xs[i,]                                            //~ E0020
+}
+
+pub fn in_an_array_length(a: [F32; TABLE[1,]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_const_argument(r: Ring[F32, Rg[F32,].CAP]) -> U32 { //~ E0020
+  1
+}

@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 2
+
+// S-975 (W5-24 U6b): the content of the outer `[…]` that reads as a type may be an array type `[T; N]`
+// (`id[[Result[I32, Str]; 4]](x)`): the candidates are the `::` before the outermost `[` (`id::[[Result[I32, Str]; 4]](x)`)
+// and the index form of the inner list, and not `::` in the inner list (§4.5: "外の `[…]` の中身の全体が型として読めるとき").
+// The places are a value, the length of the array a literal and a name, and a member after the outer `]` (S-999).
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+pub struct Q[T] {
+  d: T,
+}
+
+impl[T] Q[T] {
+  pub const CAP: U32 = 4
+}
+
+pub const K: U32 = 3
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn an_array_of_a_generic_type(x: [Result[I32, Str]; 4]) -> [Result[I32, Str]; 4] {
+  id[[Result[I32, Str]; 4]](x)                      //~ E0020
+}
+
+pub fn a_member_after_the_outer() -> U32 {
+  Q[[Rg[F32, 4]; 3]].CAP                            //~ E0020
+}
+
+pub fn a_length_that_is_a_name() -> U32 {
+  Q[[Rg[F32, 4]; K]].CAP                            //~ E0020
+}

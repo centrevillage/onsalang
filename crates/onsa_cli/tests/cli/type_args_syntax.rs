@@ -270,8 +270,9 @@ fn fmt_does_not_change_the_program_that_has_a_list() {
 #[test]
 fn a_form_that_cannot_be_read_is_one_e0002_with_no_candidate() {
     // §4.5, §18.1: the syntax cannot say what the writer meant. One diagnostic in the function, E0002,
-    // no candidate (a candidate needs a reading of the form). The note may show the form. A list that
-    // is not closed is left out: where the recovery stops is not in the spec for a bracket.
+    // no candidate (a candidate needs a reading of the form), but for an empty list, whose candidate
+    // takes it out with its `::` (§2.5, S-548). The note may show the form. A list that is not closed
+    // is left out: where the recovery stops is not in the spec for a bracket.
     let d = Dir::bare("e0002");
     for (what, text, want) in
         SYNTAX_ERRORS.iter().filter(|(w, _, c)| *c == "E0002" && *w != "a list that is not closed")
@@ -280,7 +281,8 @@ fn a_form_that_cannot_be_read_is_one_e0002_with_no_candidate() {
         let diags = check(&path);
         assert_eq!(diags.len(), 1, "{what}: {diags:?}");
         assert_eq!(code_of(&diags[0]), *want, "{what}: {}", diags[0]);
-        assert!(fixes_of(&diags[0]).is_empty(), "{what}: E0002 has no candidate: {}", diags[0]);
+        let empty = *what == "an empty list";
+        assert_eq!(fixes_of(&diags[0]).len(), usize::from(empty), "{what}: the candidates of E0002: {}", diags[0]);
     }
 }
 
@@ -317,8 +319,8 @@ const CANDIDATES: &[(&str, &[&str])] = &[
     ("  v.conv<I32>(1)", &["  v.conv::[I32](1)", "  v.conv < I32 && I32 > (1)"]),
     ("  id::<U8>(250)", &["  id::[U8](250)"]),
     ("  id::<Option<U8>>(None)", &["  id::[Option[U8]](None)"]),
-    ("  pair[U8, F32](1, 2.0)", &["  pair::[U8, F32](1, 2.0)"]),
-    ("  Rg[F32, 4].CAP", &["  Rg::[F32, 4].CAP"]),
+    ("  pair[U8, F32](1, 2.0)", &["  pair::[U8, F32](1, 2.0)", "  pair[U8][F32](1, 2.0)"]),
+    ("  Rg[F32, 4].CAP", &["  Rg::[F32, 4].CAP", "  Rg[F32][4].CAP"]),
     ("  id ::[U8](250)", &["  id::[U8](250)"]),
     ("  id:: [U8](250)", &["  id::[U8](250)"]),
     ("  Buf::[F32]::zeroed(4)", &["  Buf::[F32].zeroed(4)"]),

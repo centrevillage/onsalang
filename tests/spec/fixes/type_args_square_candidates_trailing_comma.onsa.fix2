@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 2
+
+// S-333 (W5-24 U6b): a list with a `,` at its end (`xs[i, j,]`) is a `[…]` with a `,` after a name, so it is the same E0020 with
+// two candidates; the type arguments are written `xs::[i, j,]` (the list of the `::[` takes a `,` at its end) and the
+// multi-dimensional index drops it (§4.5: "末尾の `,` は添字の形では落とす（`xs[i, j,]` の添字の形は `xs[i][j]`）"). The places are a
+// value, the length of an array type, a const argument and the length of an array inside a list of type arguments.
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = 4
+}
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub struct Mat[T, const R: U32, const C: U32] {
+  d: [T; R],
+}
+
+pub const TABLE: U32 = 8
+
+pub fn in_a_value(i: U32, j: U32) -> F32 {
+  xs[i][j]                                         //~ E0020
+}
+
+pub fn in_a_value_of_types() -> (U8, F32) {
+  pair[U8][F32](1, 2.0)                            //~ E0020
+}
+
+pub fn of_a_method(v: V) -> I32 {
+  v.conv2[I32][F32](1, 2.0)                        //~ E0020
+}
+
+pub fn in_an_array_length(a: [F32; Rg[F32][4].CAP]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_const_argument(r: Ring[F32, Rg[F32][4].CAP]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_length_in_a_type_argument(o: Option[[F32; TABLE[1][2]]]) -> U32 { //~ E0020
+  1
+}

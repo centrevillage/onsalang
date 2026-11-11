@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 2
+//
+// [[test.fix]]
+// at = "43:46"
+// code = "E0020"
+// candidate = 1
+// leaves = ["43:56 E0020"]
+//
+// [[test.fix]]
+// at = "45:39"
+// code = "E0020"
+// candidate = 1
+// leaves = ["45:45 E0011"]
+//
+// [[test.fix]]
+// at = "47:39"
+// code = "E0020"
+// candidate = 1
+// leaves = ["47:39 E0020"]
+//
+// [[test.fix]]
+// at = "49:32"
+// code = "E0020"
+// candidate = 1
+// leaves = ["49:38 E0013"]
+
+// E0020 at the `[` of a `[…]` with a `,` after a name in the length of an array type inside a list
+// of type arguments (§4.5, S-329): the length is read like an expression, as outside a list of type
+// arguments (tests/spec/fixes/e0020_type_args_square_array_length.onsa), also when the `[…]` does
+// not read as a list of type arguments either: the `as` that is chained (E0011), the `if` that is an
+// operand (E0013), the inner `x[a, b]` of the same form. These lists cannot be type arguments, so the
+// one candidate is the index form (§4.5, S-333, R-418): a `::` there would leave an error in the same
+// place (§18.1). The index form leaves the error the unit had hidden behind the E0020 (the syntax
+// stage reports the first error of a unit), as the entries say with `leaves`; the inner `x[a, b]` is
+// then in an index whose content `[F32; x[a, b]]` is a type, and reported at its `[` (S-975).
+// The `::` of `xs::[1, 2]` read as a type is a form of another language (E0020): the list reads as
+// type arguments with it (§18.1: "写す部分に同じ段の別の誤り（既存言語の書き方の形）があっても、形そのもの
+// が読めれば候補を出す"), so it has the two candidates, and `::` leaves the E0020 of `xs::`.
+
+pub fn with_a_list_after_a_name(r: Q[[F32; Rg[F32][xs::[1, 2]].CAP]]) -> U32 { 0 } //~ E0020
+
+pub fn with_a_chained_as(r: Q[[F32; Rg[F32, 1 as U32 as U32].CAP]]) -> U32 { 0 } //~ E0020
+
+type WithTheSameFormInside = Q[[F32; e[[F32; x[a, b]], l]]] //~ E0020
+
+pub fn with_an_if(r: Q[[F32; Rg[F32, if c { 1 } else { 2 } as U32].CAP]]) -> U32 { 0 } //~ E0020

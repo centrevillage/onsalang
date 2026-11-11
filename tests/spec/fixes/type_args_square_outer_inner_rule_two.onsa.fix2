@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 2
+
+// S-975 (W5-24 U6b): when the content of the outer `[…]` is not a type, the rule of the inner list applies (§4.5: "外の中身が型と
+// して読めない形は、内の `[…]` の規則のまま"): the outer brackets here have no `,` of their own and hold an operator or a
+// member after the inner list (`xs[Rg[F32, 4].CAP]`, `TABLE[a + Rg[F32, 4].CAP]`), so the E0020 is the one of the inner list,
+// with its two candidates, `Rg::[F32, 4]` (the `::` is put in the inner list, which is now a name with type arguments in a
+// value) and `Rg[F32][4]`. The places are a value, the length of an array type, a const argument and the length of an array
+// inside a list of type arguments. The inner list whose elements cannot be type arguments (one candidate) is in
+// type_args_square_outer_inner_rule_one.onsa.
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = 4
+}
+
+pub struct Ring[T, const N: U32] {
+  d: [T; N],
+}
+
+pub struct Mat[T, const R: U32, const C: U32] {
+  d: [T; R],
+}
+
+pub const TABLE: U32 = 8
+
+pub fn a_member_after_the_inner(xs: [U32; 8]) -> U32 {
+  xs[Rg[F32][4].CAP]                                //~ E0020
+}
+
+pub fn an_operator_before_the_inner(xs: [U32; 8], a: U32) -> U32 {
+  xs[a + Rg[F32][4].CAP]                            //~ E0020
+}
+
+pub fn an_operator_after_the_inner(xs: [U32; 8], a: U32) -> U32 {
+  xs[Rg[F32][4].CAP * a]                            //~ E0020
+}
+
+pub fn in_a_call(a: U32) -> U32 {
+  size(Rg[F32][4].CAP)                              //~ E0020
+}
+
+pub fn of_a_method(v: V, xs: [U32; 8]) -> U32 {
+  v.m[Rg[F32][4].CAP](1)                            //~ E0020
+}
+
+pub fn in_an_array_length(a: [F32; TABLE[Rg[F32][4].CAP]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_an_array_length_with_an_operator(a: [F32; TABLE[2 + Rg[F32][4].CAP]]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_const_argument(r: Ring[F32, TABLE[Rg[F32][4].CAP] * 2]) -> U32 { //~ E0020
+  1
+}
+
+pub fn in_a_length_in_a_type_argument(o: Option[[F32; TABLE[Rg[F32][4].CAP]]]) -> U32 { //~ E0020
+  1
+}

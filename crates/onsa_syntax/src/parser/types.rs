@@ -156,11 +156,17 @@ impl<'a> Parser<'a> {
 
     /// The elements of a list of type arguments after its `[`, and its `]`:
     /// the one reading of the lists of a type position and of `::[…]` in an
-    /// expression (§4.5). An empty list is E0002.
+    /// expression (§4.5). An empty list is E0002, whose candidate takes it
+    /// out with the `::` before it (§2.5, S-548).
     pub(super) fn parse_type_args(&mut self) -> PResult<usize> {
         let close = TokenKind::RBracket;
         if self.at(close) {
-            return Err(self.fail(Want::Type, "a type argument"));
+            let open = self.pos - 1;
+            let before = (0..open).rev().find(|&k| !self.tokens[k].kind.is_trivia());
+            let from = before.filter(|&k| self.tokens[k].kind == TokenKind::ColonColon).unwrap_or(open);
+            let what = ("an empty list of type arguments", EMPTY_TYPE_ARGS_RULE, "remove the empty list");
+            self.report_empty((open, self.peek_index()), from, what);
+            return Err(ParseError);
         }
         let mut n = 0;
         while !self.at(close) {
@@ -284,6 +290,9 @@ impl<'a> Parser<'a> {
         }
     }
 }
+
+/// The rule of an empty list of type arguments (§2.5, §4.5, S-548).
+const EMPTY_TYPE_ARGS_RULE: &str = "a name with no type arguments is written without the list, and without its `::` in an expression: `f(1)`, `Buf.zeroed(4)`, `P` (§2.5, §4.5)";
 
 /// Whether a token of `kind` after `gap` goes on with an expression before
 /// it: a binary operator, a range symbol (whose place the table judges,

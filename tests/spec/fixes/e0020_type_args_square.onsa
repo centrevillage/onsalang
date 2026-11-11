@@ -1,13 +1,13 @@
 // onsa.toml
 // [test]
 // spec = ["§4.5", "§18.1"]
-// fixes = 1
+// fixes = 2
 
 // E0020 for a `[…]` after a name that cannot be an index (§4.5, §18.1): it holds a `,` (an index is one
 // expression). Scala and Go write the type arguments of a call so. The syntax alone decides, so the
 // stage is the syntax stage; a `[…]` that can be an index (`id[U8](250)`) is read only once the name is
-// known (the name stage, spec/foreign-forms.toml `type_args_square`). The one candidate puts `::` in
-// front of the `[`.
+// known (the name stage, spec/foreign-forms.toml `type_args_square`). The candidates put `::` in
+// front of the `[`, and write the list as the multi-dimensional index (`pair[U8][F32](1, 2.0)`, S-333).
 
 pub fn show(x: U8) -> U8 {
   x

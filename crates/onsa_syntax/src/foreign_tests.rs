@@ -214,7 +214,7 @@ fn type_args_in_an_expression() {
     e0020(&body("  id :: [U8](1)"), &body("  id::[U8](1)"));
     assert_eq!(codes(&body("  let a = id\n  ::[U8](1)")), [Code::E0002]);
     // Where `::[` cannot be read: E0002 with no candidate.
-    for src in ["  (id)::[U8](1)", "  id::[U8]::[U8](1)", "  id::[](1)", "  1::[U8]"] {
+    for src in ["  (id)::[U8](1)", "  id::[U8]::[U8](1)", "  1::[U8]"] {
         let p = parse(&body(src));
         assert_eq!(codes(&body(src)), [Code::E0002], "{src}");
         assert!(p.diagnostics[0].fixes.is_empty(), "{src}");
@@ -223,7 +223,34 @@ fn type_args_in_an_expression() {
     for src in ["fn f(r: Rg[F32, 2 * N * 3, N - 1]) { }\n", "fn f(r: Rg[F32, (1 + 2) * 3, -(1), size(3)]) { }\n"] {
         assert!(codes(src).is_empty(), "{src}");
     }
+    // An empty list: E0002, whose candidate takes it out, with its `::` in
+    // an expression (§2.5, S-548).
     assert_eq!(codes("fn f(r: Rg[]) { }\n"), [Code::E0002]);
+    assert_eq!(fixed("fn f(r: Rg[]) { }\n"), "fn f(r: Rg) { }\n");
+    assert_eq!(codes(&body("  id::[](1)")), [Code::E0002]);
+    assert_eq!(fixed(&body("  id::[](1)")), body("  id(1)"));
+}
+
+/// W5-24 U6b: the content of an index that holds lists `name[A, B]` is read
+/// as a type once, whatever the number of lists in it (S-975), in the file
+/// and in the readings of its candidates: the tokens read for 300 lists in a
+/// tuple are at most 3.5 times those for 100, whether the content is a type
+/// or not (a string after the lists).
+#[test]
+fn the_content_of_an_outer_index_is_read_once() {
+    let src = |n: usize, last: &str| body(&format!("  id[({}{last})](x)", vec!["f[1, 2]"; n].join(", ")));
+    onsa_diag::stack::run(|| {
+        for last in ["", ", \"s\""] {
+            let bumped = |n| {
+                let before = crate::parser::BUMPED.get();
+                parse(&src(n, last));
+                crate::parser::BUMPED.get() - before
+            };
+            let (few, many) = (bumped(100), bumped(300));
+            // Each list has 6 tokens: all are read.
+            assert!(few > 100 * 6 && many * 2 <= few * 7, "`{last}`: {few} tokens for 100 lists, {many} for 300");
+        }
+    });
 }
 
 /// W3-19/b: the forms of a call's type arguments are found from the tokens
@@ -262,6 +289,8 @@ fn type_args_before_a_call_whatever_follows() {
         "  1::<T>(x)",
         "  f::<>(x)",
         "  a[i][j, k]",
+        "  xs[,]",
+        "  xs[1, 2 +]",
         "  pair::[U8, _](1, 2)",
         "  d<->>(x)",
         "  f<A,>(x)",
@@ -270,10 +299,15 @@ fn type_args_before_a_call_whatever_follows() {
         let p = parse(&body(src));
         assert!(p.diagnostics.iter().all(|d| d.fixes.is_empty()), "{src}: {:?}", p.diagnostics);
     }
-    // A list after a name that does not read whole is the E0020 of its `[`
-    // all the same, the first error of the unit (§18.1, S-329, W5-24 U6a).
-    let first = |src: &str| parse(&body(src)).diagnostics.iter().min_by_key(|d| d.span.start).map(|d| d.code);
-    assert_eq!(first("  a[i, _]"), Some(Code::E0020));
+    // A list after a name that does not read as type arguments has the
+    // index form alone (§4.5, S-333): `_` is an expression (a hole). The
+    // E0020 of its `[` is the first error of the unit (§18.1).
+    let src = body("  a[i, _]");
+    let p = parse(&src);
+    let first = p.diagnostics.iter().min_by_key(|d| d.span.start).unwrap();
+    assert_eq!((first.code, first.fixes.len()), (Code::E0020, 1));
+    let edits: Vec<_> = first.fixes[0].edits().iter().collect();
+    assert_eq!(onsa_diag::apply_text(&src, &edits).unwrap(), body("  a[i][_]"));
     for src in ["fn g(x: Buf::[]) { }\n", "fn g(x: Buf::[F32].Inner) { }\n"] {
         assert!(parse(src).diagnostics.iter().all(|d| d.fixes.is_empty()), "{src}");
     }

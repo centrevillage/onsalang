@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 2
+//
+// [[test.fix]]
+// at = "24:23"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// S-333 (W5-24 U6b): the candidate `::` of `Rg[F32, 4].CAP` in the length of an array type leaves nothing behind: the
+// length is `Rg::[F32, 4].CAP`, which is 4 (§4.5), and the parameter has the type `[F32; 4]`. `clean` is about the whole file,
+// so the file has this one unit with an error.
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = 4
+}
+
+pub fn len(a: [F32; Rg::[F32, 4].CAP]) -> U32 {      //~ E0020
+  a.len()
+}

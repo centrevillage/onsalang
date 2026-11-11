@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 2
+//
+// [[test.fix]]
+// at = "26:5"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// S-333 (W5-24 U6b): the candidate `::` of `Rg[F32, 4].CAP` in a value (§4.5, §18.1) leaves nothing behind: `Rg::[F32, 4].CAP`
+// checks without a report. The other candidate, the index form `Rg[F32][4].CAP`, is an error of the names stage, so it is
+// not asked to be clean. `clean` is about the whole file, so the file has this one unit with an error. The main position is
+// the `[` after the name.
+
+pub struct Rg[T, const N: U32] {
+  d: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = 4
+}
+
+pub fn cap() -> U32 {
+  Rg::[F32, 4].CAP                                   //~ E0020
+}

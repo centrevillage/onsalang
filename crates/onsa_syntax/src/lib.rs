@@ -242,6 +242,6 @@ pub(crate) fn read(file: FileId, text: &str, ctx: parser::ItemCtx) -> Read {
     groups::check(&ast, &|e| map.expr_kind(&cst, e), limit, &mut diagnostics);
     let mut apart = out.apart;
     foreign::clocks(&cst, limit, &mut diagnostics, &mut apart);
-    foreign::square_lists(&cst, text, &mut diagnostics);
+    foreign::square_lists(&cst, text, &out.literals, &mut diagnostics);
     Read { ast, cst, map, diagnostics, levels: out.levels, units, apart, literals: out.literals }
 }

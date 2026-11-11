@@ -1,6 +1,7 @@
 // onsa.toml
 // [test]
 // spec = ["§4.5", "§18.1"]
+// fixes = 2
 
 // E0020 for a `[…]` with a `,` after a name in the length of an array type (§4.5, §18.1). The length
 // is a constant expression, and it is read like an expression: `Rg::[F32, 4].CAP` is the form of
@@ -9,8 +10,7 @@
 // e0020_type_args_square.onsa): the syntax cannot read it as an index (it holds a `,`), so the
 // stage is the syntax stage, and every place where an array type is read gives it, in a list of
 // type arguments too (`Option[[F32; Rg[F32, 4].CAP]]`, S-329, W5-24 U6a). The candidates are applied by the runner (§18.1), and each leaves only an error of a
-// later stage. The counts of the candidates and the const arguments of a type wait for W5-24
-// (S-333, S-329), whose unit U6 brings their cases back.
+// later stage. The two candidates are `::` and the index form (S-333, W5-24 U6b).
 //
 // The index forms
 // (`TABLE[1, 2]`) are in e0020_index_square_comma_array_length.onsa. What is not an error is in

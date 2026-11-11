@@ -7818,7 +7818,7 @@ origin = "Scala と Go"
 stage = "syntax"
 code = "E0020"
 spec = ["4.5", "18.1"]
-rule = "式の中の型引数は `名前::[…]` と書く。`,` を含む `[…]` は添字として読めないので、構文の段で `[` の前に `::` を挿す"
+rule = "式の中の型引数は `名前::[…]` と書く。`,` を含む `[…]` は添字として読めないので、構文の段で、型引数の読みの `xs::[i, j]` と多次元の添字の読みの `xs[i][j]` の二つを候補にする（型引数として読めない並びは添字の形だけ。外の `[…]` の中身の全体が型として読めるときは一番外の `[` の前に `::` を挿す）"
 
 [[form.example]]
 source = '''
@@ -7839,6 +7839,14 @@ pub fn pair[A, B](a: A, b: B) -> (A, B) {
 pub fn f() -> (U8, F32) {
   pair::[U8, F32](1, 2.0)
 }
+''', '''
+pub fn pair[A, B](a: A, b: B) -> (A, B) {
+  (a, b)
+}
+
+pub fn f() -> (U8, F32) {
+  pair[U8][F32](1, 2.0)
+}
 ''']
 
 [[form.example]]
@@ -7851,6 +7859,10 @@ at = "2:5"
 fixed = ['''
 pub fn f() -> U32 {
   Rg::[F32, 4].CAP
+}
+''', '''
+pub fn f() -> U32 {
+  Rg[F32][4].CAP
 }
 ''']
 
@@ -7884,6 +7896,51 @@ impl V {
 
 pub fn f(v: V) -> I32 {
   v.conv2::[I32, F32](1, 2.0)
+}
+''', '''
+pub struct V {
+  n: I32,
+}
+
+impl V {
+  pub fn conv2[A, B](self, a: A, b: B) -> A {
+    a
+  }
+}
+
+pub fn f(v: V) -> I32 {
+  v.conv2[I32][F32](1, 2.0)
+}
+''']
+
+# S-975: `,` を含む `[…]` が名前の後の `[…]` の中にあり、外の中身の全体が型として読める。候補は一番外の `[` の前の
+# `::` と、内の添字の形
+[[form.example]]
+source = '''
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn f(x: Result[I32, Str]) -> Result[I32, Str] {
+  id[Result[I32, Str]](x)
+}
+'''
+at = "6:5"
+fixed = ['''
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn f(x: Result[I32, Str]) -> Result[I32, Str] {
+  id::[Result[I32, Str]](x)
+}
+''', '''
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn f(x: Result[I32, Str]) -> Result[I32, Str] {
+  id[Result[I32][Str]](x)
 }
 ''']
 

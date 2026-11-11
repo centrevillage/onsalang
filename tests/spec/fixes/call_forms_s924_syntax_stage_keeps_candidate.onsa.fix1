@@ -1,12 +1,13 @@
 // onsa.toml
 // [test]
 // spec = ["§4.5", "§18.1"]
-// fixes = 1
+// fixes = 2
 
 // S-924 (§4.5: "添字として読めない `[…]`（`pair[I32, F32](1, 2.0)`）… は構文の段 … メソッドに付けた `[…]`
 // （`v.m[I32](x)`）は型の段"): a list of two or more type arguments is no index, so the syntax stage finds
 // it before any type is known, and the candidate is the syntactic edit that puts `::` before the `[` and
-// keeps the type arguments (§4.5: "呼び先の宣言を読まない構文上の編集"). It is kept when the number does not
+// keeps the type arguments (§4.5: "呼び先の宣言を読まない構文上の編集"); the second is the index form
+// (`v.plain[I32][F32](x)`, S-333). It is kept when the number does not
 // match the method (`v.plain[I32, F32](x)` for a method with no type parameter, `v.conv[I32, F32](x)` for one
 // parameter): the E0412 that stays after the edit belongs to a later stage (§18.1), unlike the single
 // type argument that the type stage finds (tests/spec/negative/call_forms_s924_method_type_args_mismatch.onsa,
