@@ -175,10 +175,39 @@ impl Walker<'_> {
             }
         }
         let typed = indices.len() == 1 && matches!(self.ast.expr(head).kind, ExprKind::Field { .. });
-        indices.iter().try_for_each(|&i| match typed {
-            true => self.name_at(i, Place::TypeOrValue),
-            false => self.expr(i),
-        })
+        match (typed, indices) {
+            (true, &[i]) => self.type_or_value(i, true),
+            _ => self.exprs(indices.iter().copied()),
+        }
+    }
+
+    /// The one `[…]` `i` after a field (`top`), which the types stage reads
+    /// as the type arguments of a method or as an index (§4.5): its names
+    /// are taken as types or values, a type parameter alone too
+    /// (`self.conv[T](x)`; the types stage's E0401 of an index), and so the
+    /// other elements of a tuple or an array in it (`v.conv[(I32, I32)](1)`,
+    /// the E0020 of no candidate of the types stage, S-974).
+    fn type_or_value(&mut self, i: ExprId, top: bool) -> W {
+        let ast = self.ast;
+        match &ast.expr(i).kind {
+            // In a tuple or an array, the E0308 of no value, as ever.
+            ExprKind::Path(p) if self.form_of(p) == Form::Type(None) => {
+                let Some(r) = self.heading(&p.segments[0]).filter(|_| top) else { return self.expr(i) };
+                self.out.paths.insert(i, r);
+                return Ok(());
+            }
+            ExprKind::Tuple(_) | ExprKind::Array(_) | ExprKind::Paren(_) => {
+                ast.sub_exprs(i).into_iter().try_for_each(|x| self.type_or_value(x, false))?
+            }
+            ExprKind::Repeat { elem, len } => {
+                self.type_or_value(*elem, false)?;
+                self.const_expr(*len)?
+            }
+            _ if self.chain(i).is_some() => return self.name_at(i, Place::TypeOrValue),
+            _ => return self.expr(i),
+        }
+        self.out.diverging.note_expr(ast, i, false);
+        Ok(())
     }
 
     /// The `[…]` `e` that is no callee, at `at` ([`Self::square`]), then its indices.

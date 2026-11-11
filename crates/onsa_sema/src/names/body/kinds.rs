@@ -15,6 +15,9 @@ use super::{Fail, Walker};
 use crate::names::{BuiltinMember, PathEnd};
 use crate::resolve::{Callee, Entity, NameKind, ResolveError, no_members};
 
+/// What the place of a value takes, in the words of its E0308.
+const A_VALUE: &str = "a value";
+
 /// What a path of a pattern or a struct literal names (§7, §15.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Want {
@@ -55,7 +58,7 @@ impl Walker<'_> {
     /// E0821 outside); the callee of an instance is `flow.rs`'s.
     pub(super) fn kind_fail(&self, kind: NameKind, segs: &[&Ident], place: Place) -> Option<Fail> {
         let want = match place {
-            Place::Value | Place::DotCallee => "a value",
+            Place::Value | Place::DotCallee => A_VALUE,
             Place::Callee(call) => match kind.at_callee(self.bang(call)) {
                 Callee::Called | Callee::Flow | Callee::NoFunction => return None,
                 Callee::Value => return self.value_called(segs, call),
@@ -69,8 +72,20 @@ impl Walker<'_> {
     /// E0308 for the name `segs` of the kind `kind`, at a place that takes
     /// `want` (§15.1).
     fn kind_error(&self, kind: NameKind, segs: &[&Ident], want: &'static str) -> Fail {
-        let span = span_of(segs);
-        Fail::Report(ResolveError::Kind { shown: self.src(span), span, kind, want }.into_diagnostic())
+        let (span, shown) = (span_of(segs), self.src(span_of(segs)));
+        let d = ResolveError::Kind { shown: shown.clone(), span, kind, want }.into_diagnostic();
+        // A flow at the place of a value (`lp.(x)`, `lp[F32](x)`), no
+        // constant: how a flow is used there instead (§15.1, S-816, S-822, R-422).
+        Fail::Report(match (kind, want == A_VALUE && !self.in_const, self.flow) {
+            (NameKind::Flow, true, true) => {
+                d.with_rule(format!("in a flow body, a flow is called as an instance, `{shown}~(…)` (§11.5)"))
+            }
+            (NameKind::Flow, true, false) => d.with_rule(format!(
+                "outside a flow body, a flow is used through the functions of its namespace (`{shown}.init`, \
+                 `{shown}.process`, §11.6)"
+            )),
+            _ => d,
+        })
     }
 
     /// The error of a method `cur` named through its type at `place` (§15.1,

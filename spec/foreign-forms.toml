@@ -8077,6 +8077,42 @@ pub fn f(v: V) -> I32 {
 }
 ''']
 
+[[form.example]]
+source = '''
+pub struct V {
+  n: U8,
+}
+
+pub const K: U32 = 4
+
+impl V {
+  pub fn arr[const N: U32](self) -> [U8; N] {
+    [self.n; N]
+  }
+}
+
+pub fn f(v: V) -> [U8; 4] {
+  v.arr[K]()
+}
+'''
+fixed = ['''
+pub struct V {
+  n: U8,
+}
+
+pub const K: U32 = 4
+
+impl V {
+  pub fn arr[const N: U32](self) -> [U8; N] {
+    [self.n; N]
+  }
+}
+
+pub fn f(v: V) -> [U8; 4] {
+  v.arr::[K]()
+}
+''']
+
 # 呼び先が名前の経路でもメソッドでもない形には `::[` を書けない。型引数を除いて `.(` で呼ぶ形を候補にする
 # （関数値の型は総称でないので、除いても型は変わらない）。候補は一つ（比較の連鎖の候補は無い、S-277）。
 # 候補の `.(` は W3-07 が読めるようにする。

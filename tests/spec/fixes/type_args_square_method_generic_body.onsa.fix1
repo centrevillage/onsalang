@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 1
+
+// W5-10 U3b (S-974, S-995): in the body of a generic impl, a type parameter (`self.conv[T](x)`) or a const parameter (`self.arr[N]()`) of the
+// impl written in the `[…]` after a method gets the E0020 of the type stage with the candidate `::`: the content is one name that fits the kind of
+// the parameter of the method, and the edit `self.conv::[T](x)` leaves no error (§4.5: "型の段で見つける `v.m[I32](x)` は …"; "並びが型引数として
+// 読め … には修正候補を出し"). A type parameter in scope is a name like any other type (§4.5), so it is no E0302. Each candidate is the only error
+// of its unit, so it leaves nothing there (§18.1). One error per function (P-01).
+
+pub struct Box[T] {
+  v: T,
+}
+
+impl[T] Box[T] {
+  pub fn conv[U](self, x: U) -> U {
+    x
+  }
+
+  pub fn run(self, x: T) -> T {
+    self.conv::[T](x)                 //~ E0020
+  }
+}
+
+pub struct Ring[const N: U32] {
+  n: U8,
+}
+
+impl[const N: U32] Ring[N] {
+  pub fn arr[const M: U32](self) -> [U8; M] {
+    [self.n; M]
+  }
+
+  pub fn run(self) -> [U8; N] {
+    self.arr::[N]()                   //~ E0020
+  }
+}

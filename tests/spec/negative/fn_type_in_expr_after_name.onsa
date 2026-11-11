@@ -1,0 +1,94 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§4.5", "§18.1"]
+// fixes = 0
+
+// W5-10 U3b (S-330): a function type without a body in the `[…]` after a name (`idf[fn(I32) -> I32](f)`, `idf[rt fn(I32) -> I32](f)`) is not read as an
+// expression, so it is the E0002 of the syntax stage, the general error of a token that cannot go on, and not the E0020 of the names stage (S-330: "式として
+// 読めない本体の無い関数型（`f[fn(I32) -> I32](x)`、`rt fn`）は構文の段の一般の E0002のまま"; §4.5 puts in the names stage only the `[…]` whose content reads as
+// an expression, so a type name, a type with arguments, an array type, a tuple type and `()` are the E0020 of the names stage and `fn(…) -> T` is
+// not). There is no candidate: `fixes = 0` checks that no error of the file has one. The same holds after a type with an associated function, after a method,
+// after a name taken as a value, after a local value and after a name of another module's kind. The note, which the test does not compare, says that
+// `fn(…)` without a body is a type and cannot be written in the place of an expression. One error per function (P-01).
+
+pub struct V {
+  n: I32,
+}
+
+pub fn idf[T](x: T) -> T {
+  x
+}
+
+pub fn parse[T](s: Str) -> Option[T] {
+  None
+}
+
+pub fn z[const N: U32]() -> [U8; N] {
+  [0; N]
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+}
+
+pub fn after_a_function(f: fn(I32) -> I32) -> I32 {
+  idf[fn(I32) -> I32](f).(1)                        //~ E0002
+}
+
+pub fn after_a_function_with_rt(f: fn(I32) -> I32) -> I32 {
+  idf[rt fn(I32) -> I32](f).(1)                     //~ E0002
+}
+
+pub fn after_a_function_with_no_argument() -> I32 {
+  let g = idf[fn() -> I32]                          //~ E0002
+  1
+}
+
+pub fn after_a_function_returning_a_function(f: fn(I32) -> I32) -> I32 {
+  idf[fn(I32) -> fn(I32) -> I32](f)                 //~ E0002
+}
+
+pub fn after_parse() -> Option[I32] {
+  parse[fn(I32) -> I32]("3")                        //~ E0002
+}
+
+pub fn after_a_function_with_a_const_parameter() -> U32 {
+  z[fn() -> U32]().len()                            //~ E0002
+}
+
+pub fn after_a_type(f: fn(I32) -> I32) -> U32 uses {Alloc} {
+  let b = Buf[fn(I32) -> I32].zeroed(4)             //~ E0002
+  b.len()
+}
+
+pub fn after_a_method(v: V, f: fn(I32) -> I32) -> I32 {
+  v.conv[fn(I32) -> I32](f).(1)                     //~ E0002
+}
+
+pub fn taken_as_a_value() -> I32 {
+  let g = idf[fn(I32) -> I32]                       //~ E0002
+  1
+}
+
+pub fn in_a_closure(f: fn(I32) -> I32) -> I32 {
+  let h = fn(g: fn(I32) -> I32) -> I32 { idf[fn(I32) -> I32](g).(2) }   //~ E0002
+  h.(f)
+}
+
+pub fn in_a_match_arm(c: Bool, f: fn(I32) -> I32) -> I32 {
+  match c {
+    true => idf[fn(I32) -> I32](f).(3),             //~ E0002
+    false => 0,
+  }
+}
+
+test "a function type without a body after a name" {
+  let y = idf[fn(I32) -> I32](fn(x: I32) -> I32 { x }).(4)   //~ E0002
+  assert y == 4
+}
+
+pub fn fine() -> I32 {
+  idf::[I32](1)
+}

@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§11.4", "§15.1", "§18.1"]
+// fixes = 0
+
+// W5-10 U3b (S-720, S-822): the name of a builtin flow of a delay (`prev`, `delay`, `vdelay`) with a `[…]` after it is a name in a place that is not the
+// form of its own call (`prev~(e)`), so the body of a flow reads it as the E0308 of a name of a wrong kind, with no candidate (S-720: "他の全ての位置 …
+// は E0308 で、修正候補は無く、note で呼び出しの形を示す"). It is not the E0020 of an item called as `f(x)`, and a builtin flow takes no type
+// argument at all (§4.5: `prev::[F32]~(x, 0.0)` is an E0412), so there is no candidate to give. The name is not seen outside a flow (§11.4), so
+// the same form in a function is the E0302 of a name that is
+// not found (S-720: "flow の外 … では見えない名前なので … E0302 のまま"). The mark `~` is not written, so the E0821 of a flow outside a flow
+// is not the code. `fixes = 0` checks that no error of the file has a candidate. One error per function or flow (P-01).
+
+pub flow prev_with_a_type(x: F32 at sample) -> F32 at sample {
+  let y = prev[F32](x, 0.0)                         //~ E0308
+  y
+}
+
+pub flow prev_with_an_integer(x: F32 at sample) -> F32 at sample {
+  let y = prev[0](x)                                //~ E0308
+  y
+}
+
+pub flow delay_with_a_type(x: F32 at sample) -> F32 at sample {
+  let y = delay[F32](x, 4)                          //~ E0308
+  y
+}
+
+pub flow vdelay_with_a_type(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  let y = vdelay[F32](x, d, 8)                      //~ E0308
+  y
+}
+
+pub flow prev_taken_as_a_value(x: F32 at sample) -> F32 at sample {
+  let f = prev[F32]                                 //~ E0308
+  x
+}
+
+pub flow prev_called_with_a_dot(x: F32 at sample) -> F32 at sample {
+  let y = prev[F32].(x)                             //~ E0308
+  y
+}
+
+pub fn outside_a_flow(x: F32) -> F32 {
+  prev[F32](x)                                      //~ E0302
+}
+
+pub fn outside_a_flow_delay(x: F32) -> F32 {
+  delay[F32](x, 4)                                  //~ E0302
+}
+
+test "a builtin flow outside a flow with a type argument in square brackets" {
+  let y = prev[F32](1.0)                            //~ E0302
+  assert y == 1.0
+}
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  prev~(x, 0.0)
+}

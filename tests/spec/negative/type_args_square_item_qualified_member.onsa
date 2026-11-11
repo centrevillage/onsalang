@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 0
+
+// W5-10 U3b (S-974): a path of more names than one in the `[…]` after a function whose parameter is a const parameter is one name of the
+// candidate `::` only when it reads to an item that is no method (`z[m.K]()`, `z[V.C]()`). A method named through its type (`V.meth`), a
+// method of a builtin type (`Str.len`, `Option.unwrap`) and a name after a type parameter (`T.NOPE`) would leave an error of the names
+// stage after `z::[…]()` (the E0308 of a method in the place of a value, the E0302 of a name not found), so the E0020 has no candidate
+// (§4.5: "当てた後に名前の段までの誤りが残らないときだけ出す"). Found by the breaker of U3b. One error per function (P-01).
+
+pub struct V {
+  n: U8,
+}
+
+impl V {
+  pub fn meth(self) -> U8 {
+    1
+  }
+}
+
+pub fn z[const N: U32]() -> [U8; N] {
+  [0; N]
+}
+
+pub fn a_method_of_a_builtin_type() -> U32 {
+  let _ = z[Str.len]()                              //~ E0020
+  0
+}
+
+pub fn a_method_of_the_prelude() -> U32 {
+  let _ = z[Option.unwrap]()                        //~ E0020
+  0
+}
+
+pub fn a_method_named_through_its_type() -> U32 {
+  let _ = z[V.meth]()                               //~ E0020
+  0
+}
+
+pub fn a_name_after_a_type_parameter[T]() -> U32 {
+  let _ = z[T.NOPE]()                               //~ E0020
+  0
+}

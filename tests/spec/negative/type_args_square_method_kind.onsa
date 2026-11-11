@@ -1,0 +1,89 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 0
+
+// W5-10 U3b (S-974, the line of the method): the content of a `[…]` after a method whose kind does not agree with the position gets the E0020
+// and no candidate, as it does after a function (tests/spec/negative/type_args_square_item_kind_mismatch.onsa): an integer (`v.conv[4](1)`), a
+// local value (`v.conv[i](1)`) and a constant (`v.conv[K](1)`) in the place of a type parameter, and a type (`v.arr[U8]()`) in the place of a
+// const parameter. The type stage reads the list after the method, so the edit `v.conv::[4](1)` would leave the E0308 of a kind that is not
+// the one of the position (§4.5: "メソッド自身の型引数は … 種類と数を型の段で判定する"), an error of the same stage as the original one, and the
+// candidate is not offered (§18.1). The content that is a local value in the place of a const parameter (`v.arr[k]()`) is not in the file: the
+// spec leaves it to the E0417 that the candidate would leave. The right content has its candidate in
+// tests/spec/fixes/type_args_square_method_const.onsa and call_forms_method_type_args.onsa. `fixes = 0` checks that no error of the file has
+// a candidate. One error per function (P-01).
+
+pub struct V {
+  n: I32,
+}
+
+pub struct Holder {
+  v: V,
+}
+
+pub const K: U32 = 4
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+
+  pub fn arr[const N: U32](self) -> [I32; N] {
+    [self.n; N]
+  }
+
+  pub fn through_self(self) -> I32 {
+    self.conv[4](1)                                 //~ E0020
+  }
+}
+
+pub fn mk() -> V {
+  V { n: 1 }
+}
+
+pub fn integer_for_a_type_parameter(v: V) -> I32 {
+  v.conv[4](1)                                      //~ E0020
+}
+
+pub fn local_value_for_a_type_parameter(v: V, i: I32) -> I32 {
+  v.conv[i](1)                                      //~ E0020
+}
+
+pub fn constant_for_a_type_parameter(v: V) -> I32 {
+  v.conv[K](1)                                      //~ E0020
+}
+
+pub fn type_for_a_const_parameter(v: V) -> U32 {
+  v.arr[I32]().len()                                //~ E0020
+}
+
+pub fn another_type_for_a_const_parameter(v: V) -> U32 {
+  v.arr[F32]().len()                                //~ E0020
+}
+
+pub fn a_field_of_a_field(h: Holder, i: I32) -> I32 {
+  h.v.conv[i](2)                                    //~ E0020
+}
+
+pub fn the_result_of_a_function() -> I32 {
+  mk().conv[4](3)                                   //~ E0020
+}
+
+pub fn an_element_of_an_array(vs: [V; 2]) -> U32 {
+  vs[0].arr[I32]().len()                            //~ E0020
+}
+
+pub fn in_a_closure(v: V) -> I32 {
+  let g = fn(u: V, x: I32) -> I32 { u.conv[x](x) }  //~ E0020
+  g.(v, 4)
+}
+
+test "a method with an integer in the place of a type argument" {
+  let v = mk()
+  let y = v.conv[4](5)                              //~ E0020
+  assert y == 5
+}
+
+pub fn fine(v: V) -> U32 {
+  v.arr::[K]().len() + v.conv::[U32](1)
+}

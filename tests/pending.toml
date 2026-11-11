@@ -1348,13 +1348,6 @@ until = "W9-03"
 note = "フィールドの既定値の式の panic（桁あふれ、呼び出しの中の panic）が `const` と同じく E0419 にならない（§6.6）。今は onsa check で 0 件"
 
 [[pending]]
-kind = "fuzz-input"
-target = "tests/fuzz/596f9321.onsa"
-reasons = ["S-239", "S-256"]
-until = "W5-10"
-note = "fix-same-place: fix|E0020|write the type arguments as `…`|E0401。`self.conv[I32](x)`（`x: T`）の候補 `self.conv::[I32](x)` を当てると、同じ段の引数の型の E0401 が残る。メソッドの行の候補を出す条件（`fits_parameter`）は W5-10 U3 で見る"
-
-[[pending]]
 kind = "test-case"
 target = "tests/spec/semantics/naming_pattern_constants.onsa"
 reasons = ["S-185"]

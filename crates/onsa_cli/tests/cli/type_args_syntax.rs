@@ -395,6 +395,68 @@ fn the_note_of_square_brackets_after_an_item_shows_the_mark() {
     }
 }
 
+/// The messages of the notes of the one diagnostic of `text`, which has the code `code`.
+fn notes_of_one(d: &Dir, text: &str, code: &str) -> Vec<String> {
+    let diags = check(&d.file("a.onsa", text));
+    assert_eq!(diags.len(), 1, "{text}: {diags:?}");
+    assert_eq!(code_of(&diags[0]), code, "{text}: {diags:?}");
+    assert!(fixes_of(&diags[0]).is_empty(), "{text}: a candidate: {}", diags[0]);
+    let notes = diags[0]["notes"].as_array().unwrap_or_else(|| panic!("{text}: no notes in {}", diags[0]));
+    notes.iter().filter_map(|n| n["message"].as_str().map(str::to_string)).collect()
+}
+
+#[test]
+fn the_note_of_square_brackets_after_a_method_with_no_candidate_shows_the_mark() {
+    // §4.5 (S-974, S-995): `[…]` after a method whose content is no one name (`Option[I32]`, a tuple
+    // type) or a local value for a const parameter (`k`) is an E0020 with no candidate, whose note
+    // shows that a type argument in an expression is written `name::[…]` (§18.1).
+    let forms = ["  v.conv[Option[I32]](1)", "  v.conv[(I32, I32)](1)", "  let k: U32 = 4\n  v.arr[k]().len()"];
+    let d = Dir::bare("method_notes");
+    for written in forms {
+        let text = format!(
+            "pub struct V {{\n  n: I32,\n}}\n\nimpl V {{\n  pub fn conv[T](self, x: T) -> T {{\n    x\n  }}\n\n  \
+             pub fn arr[const N: U32](self) -> [I32; N] {{\n    [self.n; N]\n  }}\n}}\n\n\
+             pub fn user(v: V) -> I32 {{\n{written}\n}}\n"
+        );
+        let notes = notes_of_one(&d, &text, "E0020");
+        assert!(notes.iter().any(|m| m.contains("::[")), "{written}: no note shows `::[`: {notes:?}");
+    }
+}
+
+#[test]
+fn the_note_of_a_flow_in_the_place_of_a_value_shows_how_a_flow_is_used() {
+    // §15.1 (S-816, S-822, R-422): a flow called with `.(` or with `[…]` after its name is the E0308 of a
+    // flow in the place of a value, with no candidate; its note shows `lp~(…)` in a flow body, and the
+    // functions of the namespace outside (§11.6).
+    let flow = "pub flow lp(x: F32 at sample) -> F32 at sample {\n  x\n}\n\n";
+    let in_flow =
+        |e: &str| format!("{flow}pub flow user(x: F32 at sample) -> F32 at sample {{\n  let y = {e}\n  y\n}}\n");
+    let in_fn = |e: &str| format!("{flow}pub fn user(x: F32) -> F32 {{\n  {e}\n}}\n");
+    let d = Dir::bare("flow_notes");
+    for e in ["lp.(x)", "lp[F32](x)"] {
+        let notes = notes_of_one(&d, &in_flow(e), "E0308");
+        assert!(notes.iter().any(|m| m.contains("lp~(")), "{e} in a flow: no note shows `lp~(`: {notes:?}");
+        let notes = notes_of_one(&d, &in_fn(e), "E0308");
+        let shows = notes.iter().any(|m| m.contains("namespace") && m.contains("lp.process"));
+        assert!(shows, "{e} in a function: no note shows the functions of the namespace: {notes:?}");
+    }
+}
+
+#[test]
+fn the_note_of_a_function_type_in_an_expression_says_it_is_a_type() {
+    // S-330: a function type with no body where an expression goes is the general E0002 of the syntax
+    // stage, with a note that `fn(…)` with no body is a type, which is not written there.
+    let forms = [
+        "pub fn idf[T](x: T) -> T {\n  x\n}\n\npub fn user(f: fn(I32) -> I32) -> I32 {\n  idf[fn(I32) -> I32](f).(1)\n}\n",
+        "pub fn user() -> I32 {\n  let t = fn(I32) -> I32\n  1\n}\n",
+    ];
+    let d = Dir::bare("fn_type_notes");
+    for text in forms {
+        let notes = notes_of_one(&d, text, "E0002");
+        assert!(notes.iter().any(|m| m.contains("function type")), "{text}: no note says a type: {notes:?}");
+    }
+}
+
 #[test]
 fn the_edits_of_a_candidate_change_the_brackets_and_not_the_types() {
     // §18.1 (S-251): the edits replace the tokens that change and nothing between them, so the

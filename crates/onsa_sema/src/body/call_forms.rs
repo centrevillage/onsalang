@@ -9,7 +9,7 @@ use onsa_syntax::foreign::{self, RowId};
 
 use super::slot::{Slot, slot_of};
 use super::*;
-use crate::resolve::NameKind;
+use crate::names::body::Form;
 
 impl<'a> Checker<'a> {
     /// The call `e` of `callee`, `recv.name(…)`, where `recv` has no method
@@ -82,6 +82,14 @@ impl<'a> Checker<'a> {
             return self.check_method_call(e, callee, bt, name, args, expected, kind);
         }
         let t = self.field_type(bt, name)?;
+        // A type parameter, which the names stage took as a type there
+        // (`self.conv[T](x)`), is no index (as `q.ops[I32](1)`, E0401).
+        if let ExprKind::Index { index, .. } = self.expr(callee).kind
+            && let Some(PathRes::TypeParam(_)) = self.names.paths.get(&index).filter(|_| one)
+        {
+            let span = self.expr(index).span;
+            return Err(self.err(Code::E0401, span, format!("`{}` is not a value", self.src(span))));
+        }
         self.record(head, t);
         let ft = self.elements(callee, head, t)?;
         let ft = self.known_shape(ft, self.expr(callee).span, "callee")?;
@@ -150,10 +158,8 @@ impl<'a> Checker<'a> {
 
     /// E0020 for the `[index]` of the method `md` in `callee` (§4.5).
     pub(super) fn method_brackets(&mut self, callee: ExprId, md: DefId, index: ExprId) -> Stop {
-        let def = self.a.def(md);
-        let inherited = def.owner.map_or(0, |o| self.a.def(o).generics().len());
-        let fixes = match &def.generics()[inherited..] {
-            [g] if self.fits_parameter(g, index) => self.colons(callee),
+        let fixes = match crate::names::body::own_params(self.a, md)[..] {
+            [k] if self.fits_parameter(&self.a.def(md).generics()[k].clone(), index) => self.colons(callee),
             _ => Vec::new(),
         };
         self.brackets_on_method(callee, fixes)
@@ -167,18 +173,30 @@ impl<'a> Checker<'a> {
         vec![Fix::new(foreign::TYPE_ARGS_WITH_COLONS, vec![Edit::insert(at.file, at.end, "::")])]
     }
 
-    /// Whether the `[…]` written `index` is an argument of the parameter
-    /// `g`: the method's only one, or the candidate would leave an E0412
-    /// (S-924). A type of a type parameter, a whole number of a const one.
-    fn fits_parameter(&self, g: &GenericDef, index: ExprId) -> bool {
-        match g.kind {
-            GenericKind::Type { .. } => match self.names.paths.get(&index) {
-                Some(PathRes::TypeParam(_)) => true,
-                Some(&PathRes::Item { entity, .. }) => NameKind::of(entity, &self.a.defs) == Some(NameKind::Type),
-                _ => false,
-            },
-            GenericKind::Const(_) => matches!(self.expr(index).kind, ExprKind::Lit(Lit::Int { .. })),
-            GenericKind::Effect => false,
+    /// Whether the `[…]` written `index` reads as the argument of `g`, the
+    /// method's only own parameter (a count left is an E0412 of this stage,
+    /// S-924), with no other error of this stage in it (§4.5, S-995): one
+    /// name or an integer literal of the kind of `g` ([`Form::fits`], the
+    /// table of the names stage's `f[…]`), a type that takes no type
+    /// arguments, a constant expression of `U32` (not a local, E0417).
+    fn fits_parameter(&mut self, g: &GenericDef, index: ExprId) -> bool {
+        // Of the type an alias or `Self` names, its arguments are known.
+        let (form, known) = match (&self.expr(index).kind, self.names.paths.get(&index)) {
+            (ExprKind::Lit(Lit::Int { .. }), _) => (Form::Value, false),
+            (_, Some(r)) if crate::names::body::names_only(self.ast, index) => {
+                (Form::of_record(self.a, r), matches!(r, PathRes::Item { owner: Some(_), .. }))
+            }
+            _ => return false,
+        };
+        let constant = match g.kind {
+            GenericKind::Effect => return false,
+            ref k => matches!(k, GenericKind::Const(_)),
+        };
+        match form {
+            _ if !form.fits(Some(constant)) => false,
+            Form::Type(Some(e)) => known || crate::sig::declared_params(self.a, e).is_some_and(|ps| ps.is_empty()),
+            Form::Type(None) => true,
+            _ => self.const_expr(index).is_ok(),
         }
     }
 

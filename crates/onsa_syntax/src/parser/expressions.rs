@@ -19,6 +19,9 @@ const TYPE_ARGS_RULE: &str = "type arguments in an expression, `::[…]`, are wr
 const IF_TILDE_ELSE_RULE: &str =
     "`if~` evaluates every branch and takes one, so its chain ends with an `else` block (§11.5)";
 
+/// The note of a function type where an expression goes (S-330).
+const FN_TYPE_RULE: &str = "`fn(…)` with no body is a function type, which is not written where an expression goes; an anonymous function has a body (`fn(x: I32) -> I32 { x }`, §6.1)";
+
 /// The note of a handler written in place with no body (§8.3, S-421).
 const HANDLER_BODY_RULE: &str = "after the name of an effect, the body `{ ... }` of a handler written in place follows on its line (§8.3); a named handler is a `snake_case` name (§2.3)";
 
@@ -575,7 +578,12 @@ impl<'a> Parser<'a> {
                     self.parse_type()?;
                 }
                 self.parse_effect_row_opt()?;
-                self.parse_body()?;
+                // With no body, a function type, no expression (S-330).
+                if !self.e0003_unless_on_the_line(TokenKind::LBrace) {
+                    let found = self.peek();
+                    return Err(self.fail_noting(Want::Other, TokenKind::LBrace.describe(), found, FN_TYPE_RULE));
+                }
+                self.parse_block_expr()?;
                 return Ok(self.complete(m, NodeKind::ClosureExpr));
             }
             TokenKind::KwHandle => {

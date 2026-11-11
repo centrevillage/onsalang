@@ -1,0 +1,60 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§4.5", "§6.1", "§18.1"]
+// fixes = 0
+
+// W5-10 U3b (S-330): a function type without a body in the place of an expression (`let t = fn(I32) -> I32`) is the E0002 of the syntax stage, the
+// same general error as the one after a name (tests/spec/negative/fn_type_in_expr_after_name.onsa): `fn(…) -> T` is a type, and the anonymous function that is
+// an expression has a body (§6.1: "無名関数は `fn(x: F32) -> F32 { x * 2.0 }`"). S-330 gives the note, which the test does not compare, to every place
+// where the function type without a body stands in an expression: a binding, an argument, in parentheses, an element of an array, the arm of a
+// `match` and a `test`. There is no candidate; `fixes = 0` checks that no error of the file has one. The anonymous function with a body is fine.
+// One error per function (P-01).
+
+pub fn take(f: fn(I32) -> I32) -> I32 {
+  f.(1)
+}
+
+pub fn a_binding() -> I32 {
+  let t = fn(I32) -> I32                            //~ E0002
+  1
+}
+
+pub fn a_binding_with_rt() -> I32 {
+  let t = rt fn(I32) -> I32                         //~ E0002
+  1
+}
+
+pub fn an_argument() -> I32 {
+  take(fn(I32) -> I32)                              //~ E0002
+}
+
+pub fn in_parentheses() -> I32 {
+  let t = (fn(I32) -> I32)                          //~ E0002
+  1
+}
+
+pub fn an_element_of_an_array() -> I32 {
+  let ts = [fn(I32) -> I32]                         //~ E0002
+  1
+}
+
+pub fn a_match_arm(c: Bool) -> I32 {
+  match c {
+    true => take(fn(I32) -> I32),                   //~ E0002
+    false => 0,
+  }
+}
+
+pub fn in_a_closure() -> I32 {
+  let g = fn(x: I32) -> I32 { take(fn(I32) -> I32) }   //~ E0002
+  g.(1)
+}
+
+test "a function type without a body in the place of an expression" {
+  let t = fn(I32) -> I32                            //~ E0002
+  assert true
+}
+
+pub fn fine() -> I32 {
+  take(fn(x: I32) -> I32 { x + 1 })
+}

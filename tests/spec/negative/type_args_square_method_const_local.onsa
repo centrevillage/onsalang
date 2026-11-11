@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 0
+
+// W5-10 U3b (S-995): a local value written in the `[…]` after a method whose parameter is a const parameter (`v.arr[k]()`) gets the E0020 of the
+// type stage and no candidate. The edit `v.arr::[k]()` would leave the E0417 of a const argument that is not a constant expression, an error of the
+// type stage, which is the stage that finds the original one (§4.5: "並びの中のほかの誤りが同じ段に残る形も同じである（… const パラメータに書いた
+// ローカルの値の `v.arr[k]()`）"; §18.1). It is the contrary of the function `z[k]()`, whose names stage keeps the candidate because the E0417 is of a
+// later stage (tests/spec/fixes/type_args_square_item_const_local.onsa). A parameter and a `let` are read the same way. `fixes = 0` checks that no
+// error of the file has a candidate. One error per function (P-01).
+
+pub struct V {
+  n: U8,
+}
+
+impl V {
+  pub fn arr[const N: U32](self) -> [U8; N] {
+    [self.n; N]
+  }
+}
+
+pub fn a_parameter(v: V, k: U32) {
+  let _ = v.arr[k]()                                //~ E0020
+}
+
+pub fn a_local(v: V) {
+  let k: U32 = 4
+  let _ = v.arr[k]()                                //~ E0020
+}
+
+pub fn fine(v: V) -> [U8; 4] {
+  v.arr::[4]()
+}

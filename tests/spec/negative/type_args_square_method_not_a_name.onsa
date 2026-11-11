@@ -1,0 +1,91 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 0
+
+// W5-10 U3b (S-974, the addition of 2026-11-10; W5-15 carried the form over): the content of the `[…]` after a method that is not one name or
+// one integer literal gets the E0020 of the type stage and no candidate (§4.5: "名前の段で見つける形の修正候補は、中身が一つの名前か整数のリテラルで、
+// …ときだけ出す。… メソッドの形も同じ"; "名前一つでない中身（`f[Option[I32]](x)`、`f[[1; 4]](x)`）にも出さない"). The content is a type with arguments
+// (`v.conv[Option[I32]](1)`), a tuple (`(I32, I32)`), an array type (`[F32; 4]`), an array (`[1; 4]`), `()` or an expression of constants
+// (`v.arr[K + 1]()`). The note shows how to write the type arguments (`名前::[…]`), which the test does not compare. The one name and the
+// integer literal have their candidate (tests/spec/fixes/call_forms_method_type_args.onsa and type_args_square_method_const.onsa).
+// `fixes = 0` checks that no error of the file has a candidate. One error per function (P-01).
+
+pub struct V {
+  n: I32,
+}
+
+pub struct Holder {
+  v: V,
+}
+
+pub const K: U32 = 4
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+
+  pub fn arr[const N: U32](self) -> [I32; N] {
+    [self.n; N]
+  }
+
+  pub fn through_self(self) -> I32 {
+    self.conv[Option[I32]](1)                       //~ E0020
+  }
+}
+
+pub fn mk() -> V {
+  V { n: 1 }
+}
+
+pub fn a_type_with_arguments(v: V) -> I32 {
+  v.conv[Option[I32]](1)                            //~ E0020
+}
+
+pub fn a_tuple_type(v: V) -> I32 {
+  v.conv[(I32, I32)](1)                             //~ E0020
+}
+
+pub fn an_array_type(v: V) -> I32 {
+  v.conv[[F32; 4]](1)                               //~ E0020
+}
+
+pub fn an_array_of_integers(v: V) -> I32 {
+  v.conv[[1; 4]](1)                                 //~ E0020
+}
+
+pub fn the_unit(v: V) -> I32 {
+  v.conv[()](1)                                     //~ E0020
+}
+
+pub fn an_expression_of_constants(v: V) -> U32 {
+  v.arr[K + 1]().len()                              //~ E0020
+}
+
+pub fn a_field_of_a_field(h: Holder) -> I32 {
+  h.v.conv[Option[I32]](2)                          //~ E0020
+}
+
+pub fn the_result_of_a_function() -> I32 {
+  mk().conv[(I32, I32)](3)                          //~ E0020
+}
+
+pub fn an_element_of_an_array(vs: [V; 2]) -> I32 {
+  vs[1].conv[Option[I32]](4)                        //~ E0020
+}
+
+pub fn in_a_closure(v: V) -> I32 {
+  let g = fn(u: V, x: I32) -> I32 { u.conv[Option[I32]](x) }   //~ E0020
+  g.(v, 5)
+}
+
+test "a method with a type that is not one name in square brackets" {
+  let v = mk()
+  let y = v.conv[Option[I32]](6)                    //~ E0020
+  assert y == 6
+}
+
+pub fn fine(v: V) -> Option[I32] {
+  v.conv::[Option[I32]](Some(1))
+}

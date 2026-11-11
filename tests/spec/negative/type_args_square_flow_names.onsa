@@ -1,0 +1,79 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.1", "§11.1", "§15.1", "§18.1"]
+// fixes = 0
+
+// W5-10 U3b (S-822, R-422): a flow with a `[…]` after its name (`lp[F32](x)`, `lp[0](x)`, `lp[F32].(x)`, `let f = lp[F32]`) is the E0308 of a flow in the
+// place of a value (§15.1: "flow の名前に `[…]` を付けた形（`lp[F32](x)`、`lp[0](x)`、`let f = lp[F32]`）は、flow を値の位置に書く E0308 で、候補は無い"),
+// in a function and in the body of a flow. It is not the E0020 of an item called as `f(x)` (§6.1: "flow の名前に付けた `[…]` は値の位置の誤り"), and
+// not the E0821 of a flow called outside a flow, whatever the content is (a type, an integer, a local value). There is no candidate: `lp::[F32](x)`
+// would still be a flow in the place of a value, and `lp~(x)` is the call of the instance, which a function cannot write (§11.1). The note,
+// which the test does not compare, shows `lp~(…)` in a flow and a function of the namespace outside (§11.6). The call with `.(` and no
+// bracket (`lp.(x)`) is in tests/spec/negative/flow_called_with_dot.onsa. `fixes = 0` checks that no error of the file has a candidate.
+// One error per function or flow (P-01).
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub fn a_type(x: F32) -> F32 {
+  lp[F32](x)                                        //~ E0308
+}
+
+pub fn an_integer(x: F32) -> F32 {
+  lp[0](x)                                          //~ E0308
+}
+
+pub fn a_local_value(k: U32, x: F32) -> F32 {
+  lp[k](x)                                          //~ E0308
+}
+
+pub fn called_with_a_dot(x: F32) -> F32 {
+  lp[F32].(x)                                       //~ E0308
+}
+
+pub fn taken_as_a_value() -> F32 {
+  let f = lp[F32]                                   //~ E0308
+  0.0
+}
+
+pub fn in_an_argument(x: F32) -> F32 {
+  x + lp[F32](x)                                    //~ E0308
+}
+
+pub fn in_a_closure(x: F32) -> F32 {
+  let g = fn(y: F32) -> F32 { lp[F32](y) }          //~ E0308
+  g.(x)
+}
+
+pub fn in_an_if_arm(c: Bool, x: F32) -> F32 {
+  if c {
+    lp[F32](x)                                      //~ E0308
+  } else {
+    x
+  }
+}
+
+test "a flow with a type argument in square brackets" {
+  let y = lp[F32](1.0)                              //~ E0308
+  assert y == 1.0
+}
+
+pub flow in_a_flow_body(x: F32 at sample) -> F32 at sample {
+  let y = lp[F32](x)                                //~ E0308
+  y
+}
+
+pub flow in_a_flow_body_with_a_dot(x: F32 at sample) -> F32 at sample {
+  let y = lp[F32].(x)                               //~ E0308
+  y
+}
+
+pub flow in_a_flow_body_as_a_value(x: F32 at sample) -> F32 at sample {
+  let f = lp[0]                                     //~ E0308
+  x
+}
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  lp~(x)
+}

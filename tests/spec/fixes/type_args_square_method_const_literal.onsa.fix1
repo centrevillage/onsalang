@@ -1,0 +1,80 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.2", "§18.1"]
+// fixes = 1
+
+// W5-10 U3b (S-974, the line of the method): the const argument of a method written as an integer literal in square brackets, `v.arr[4]()`, is the E0020
+// of the type stage (§4.5: "メソッドに付けた `,` の無い `[…]`（`v.m[I32](x)`）は型の段"), with a candidate. The content is one integer literal, the kind
+// a const parameter takes, so nothing of the type stage or before is left after the candidate (§4.5: "名前の段で見つける形の修正候補は、… メソッドの形も
+// 同じ"; §18.1). The one candidate puts `::` before the `[` (`v.arr::[4]()`). The form has the candidate in the old reading too; the file
+// keeps it so that the change for the name of a constant (tests/spec/fixes/type_args_square_method_const_name.onsa) does not take it away. The
+// receiver is an argument, a local binding, `self`, an element of an array, the result of a function and a constant, as in
+// tests/spec/fixes/call_forms_method_type_args.onsa. One error per function (P-01).
+
+pub struct V {
+  n: U8,
+}
+
+pub const KV: V = V { n: 2 }
+
+impl V {
+  pub fn arr[const N: U32](self) -> [U8; N] {
+    [self.n; N]
+  }
+
+  pub fn through_self(self) -> [U8; 4] {
+    self.arr::[4]()                                   //~ E0020
+  }
+}
+
+pub fn mk() -> V {
+  V { n: 1 }
+}
+
+pub fn an_argument(v: V) -> [U8; 4] {
+  v.arr::[4]()                                        //~ E0020
+}
+
+pub fn a_local_binding() -> [U8; 3] {
+  let v = mk()
+  v.arr::[3]()                                        //~ E0020
+}
+
+pub fn an_element_of_an_array(vs: [V; 2]) -> [U8; 2] {
+  vs[0].arr::[2]()                                    //~ E0020
+}
+
+pub fn the_result_of_a_function() -> [U8; 4] {
+  mk().arr::[4]()                                     //~ E0020
+}
+
+pub fn a_constant() -> [U8; 5] {
+  KV.arr::[5]()                                       //~ E0020
+}
+
+pub fn the_length_of_the_result(v: V) -> U32 {
+  v.arr::[4]().len()                                  //~ E0020
+}
+
+pub fn in_a_closure(v: V) -> [U8; 4] {
+  let g = fn(u: V) -> [U8; 4] { u.arr::[4]() }        //~ E0020
+  g.(v)
+}
+
+pub fn in_an_if_arm(v: V, c: Bool) -> [U8; 4] {
+  if c {
+    v.arr::[4]()                                      //~ E0020
+  } else {
+    [0; 4]
+  }
+}
+
+test "the const argument of a method as a literal in square brackets" {
+  let v = mk()
+  let a = v.arr::[2]()                                //~ E0020
+  assert a.len() == 2
+}
+
+pub fn fine(v: V) -> [U8; 4] {
+  v.arr::[4]()
+}

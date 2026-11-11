@@ -556,3 +556,10 @@ left = "a block whose members have a visibility of their own takes no visibility
 input = "tests/fuzz/a2f2f543.onsa"
 reasons = ["S-384", "S-236"]
 note = "an input with two errors: `rt` and `pub` on the head of an `impl` (`rt pub impl P`), which the input has before the candidate; from before (the base 81fefab shows it), found after W5-24 U1b and U2a added cases"
+
+[[allowed]]
+class = "fix|E0020|write the type arguments as `…`|E0401"
+left = "expected `…`, found `…`"
+input = "tests/fuzz/596f9321.onsa"
+reasons = ["S-995"]
+note = "the type arguments of a method written `[…]` that read as its own (`self.conv[I32](x)`) have the candidate `::` when the call does not fit them either (an argument `x: T`); the candidate leaves the E0401 of the argument, which the check after it reports (W5-10 U3b)"

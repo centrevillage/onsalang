@@ -1,0 +1,88 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "66:3"
+// code = "E0020"
+// candidate = 1
+// leaves = ["66:16 E0401"]
+//
+// [[test.fix]]
+// at = "70:3"
+// code = "E0020"
+// candidate = 1
+// leaves = ["70:16 E0408"]
+//
+// [[test.fix]]
+// at = "74:16"
+// code = "E0020"
+// candidate = 1
+// leaves = ["74:16 E0401"]
+//
+// [[test.fix]]
+// at = "79:3"
+// code = "E0020"
+// candidate = 1
+// leaves = ["79:3 E0416"]
+//
+// [[test.fix]]
+// at = "83:3"
+// code = "E0020"
+// candidate = 1
+// leaves = ["83:3 E0415"]
+
+// W5-10 U3b (S-995): the `[…]` after a method that reads as the method's own type arguments gets the E0020 of the type stage with the
+// candidate `::` also when the call with the list does not fit the rest of the call: an argument of another type, a literal out of the range,
+// an expected type of another type, a bound the type argument does not meet, a receiver that is not a place. That error is reported by the
+// check after the candidate (§4.5: "並びが型引数として読め、呼び出しのほかの部分（引数、受け手、期待型、型パラメータの要求）と合わない形
+// （`v.conv[U8](true)`）には修正候補を出し、その誤りは当てた後の検査で報告する"), so each candidate `leaves` it. The bound and the receiver are
+// errors of the call without the list too (`v.conv3(true)`, `mk().bump(1)`). One error per function (P-01).
+
+pub struct V {
+  n: U8,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+
+  pub fn conv3[T: Num](self, x: T) -> T {
+    x
+  }
+
+  pub fn bump[T](inout self, x: T) -> T {
+    x
+  }
+}
+
+pub fn mk() -> V {
+  V { n: 1 }
+}
+
+pub fn an_argument_of_another_type(v: V) -> U8 {
+  v.conv::[U8](true)                  //~ E0020
+}
+
+pub fn a_literal_out_of_range(v: V) -> U8 {
+  v.conv::[U8](300)                   //~ E0020
+}
+
+pub fn an_expected_type_of_another_type(v: V) -> I32 {
+  let y: I32 = v.conv::[U8](250)      //~ E0020
+  y
+}
+
+pub fn a_bound_not_met(v: V) -> Bool {
+  v.conv3::[Bool](true)               //~ E0020
+}
+
+pub fn a_receiver_not_a_place() -> U8 {
+  mk().bump::[U8](1)                  //~ E0020
+}
+
+pub fn fine(v: V) -> U8 {
+  v.conv::[U8](1)
+}

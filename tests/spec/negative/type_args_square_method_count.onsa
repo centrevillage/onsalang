@@ -1,0 +1,60 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§18.1"]
+// fixes = 0
+
+// W5-10 U3b (S-924, S-974): the name of a generic type with no type arguments in the `[…]` after a method (`v.conv[Wrap](1)`) gets the E0020 of the
+// type stage and no candidate. The edit `v.conv::[Wrap](1)` would leave the E0412 of the number of type arguments of `Wrap` (§4.5: "数が宣言と
+// 合わなければ E0412"), an error of the type stage, which is the stage that finds the original one, so the candidate is not offered (§4.5: "型の段で見つける
+// `v.m[I32](x)` は、当てた後に同じ段の E0412 が残る形 … には修正候補を出さない"; §18.1). It is the contrary of the function, whose names stage keeps
+// the candidate because the E0412 is of a later stage (tests/spec/fixes/type_args_square_item_bare_generic.onsa). `Option` is a generic type of
+// the prelude and is read the same way. `fixes = 0` checks that no error of the file has a candidate. One error per function (P-01).
+
+pub struct V {
+  n: I32,
+}
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+impl V {
+  pub fn conv[T](self, x: T) -> T {
+    x
+  }
+
+  pub fn through_self(self, w: Wrap[U8]) -> Wrap[U8] {
+    self.conv[Wrap](w)                              //~ E0020
+  }
+}
+
+pub fn mk() -> V {
+  V { n: 1 }
+}
+
+pub fn a_bare_generic_type(v: V, w: Wrap[U8]) -> Wrap[U8] {
+  v.conv[Wrap](w)                                   //~ E0020
+}
+
+pub fn a_bare_prelude_type(v: V, o: Option[U8]) -> Option[U8] {
+  v.conv[Option](o)                                 //~ E0020
+}
+
+pub fn the_result_of_a_function(w: Wrap[U8]) -> Wrap[U8] {
+  mk().conv[Wrap](w)                                //~ E0020
+}
+
+pub fn in_a_closure(v: V, w: Wrap[U8]) -> Wrap[U8] {
+  let g = fn(u: V, x: Wrap[U8]) -> Wrap[U8] { u.conv[Wrap](x) }   //~ E0020
+  g.(v, w)
+}
+
+test "a generic type with no type arguments in square brackets after a method" {
+  let v = mk()
+  let w = v.conv[Wrap](Wrap { v: 1 })               //~ E0020
+  assert w.v == 1
+}
+
+pub fn fine(v: V, w: Wrap[U8]) -> Wrap[U8] {
+  v.conv::[Wrap[U8]](w)
+}
