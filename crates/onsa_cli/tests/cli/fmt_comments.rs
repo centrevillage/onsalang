@@ -45,18 +45,22 @@
 //! of a line that holds only a `,` and a comment (`[1 // c1` and `, // c2` and `2]`) stays in its place as a
 //! line of a comment; a line of a comment between an element and its `,` stays before the next element.
 //!
+//! The decisions of 2026-11-09 (W5-24 U8) have their tests at the end of the file: the run of the comments at
+//! the end of lines is cut by a blank line and not by a line of a comment alone (S-532 (c), R-420; (a), (b)
+//! and (d) are as they were: the trailing spaces of a comment go (a test of its own), a line that ends with an
+//! opening bracket and a line of a closing bracket alone are in the run); whether lines are consecutive is decided on the output
+//! (S-526; the `=` is not in a column any more, S-970, so only the columns of the comments are asked); the
+//! columns are counted in Unicode scalar values (S-523); a line of a comment alone in the one-line form and
+//! the continuation is at the column of the next element, and before the closing bracket one level deeper
+//! than the line the list starts on (S-531).
+//!
 //! What is not here, and why:
-//! - the places that the text of §3.2 and §3.4 does not decide yet (S-523, S-531, S-532; no expectation is
-//!   written): a line of a comment before the closing bracket in the one-line form and in the continuation,
-//!   a line of a comment between the elements of a continuation (S-529 and S-530 in these forms too), the
-//!   width of the characters that are wider than one column in the columns of the comments, and the spaces
-//!   at the end of the text of a comment;
 //! - the fixed points of the case files (`tests/spec/fmt/comments_places.onsa`), and what `fmt_lines_lists.rs`
 //!   has already (S-497 (β) in five forms, `@mem(bulk)` and a comment, a comment inside the empty braces of a
 //!   function, the blank lines at the start and the end of a block);
-//! - S-526 and S-527 (the `let` that is continued, the comment between the attribute of a `let` and the
-//!   `let`, the arguments of an attribute over many lines), the rewrites of the tree (W3-12) and the check
-//!   before writing (U5).
+//! - the `let` after an attribute of many lines and after a comment (S-527) and the line after an attribute in
+//!   a continuation (S-524) are in `fmt_lines_lists.rs`; the rewrites of the tree (W3-12) and the check
+//!   before writing (U5) are elsewhere.
 //!
 //! The texts of `fmt` are made by the function `onsa fmt` calls (`test_support::fmt`, no file written), the
 //! refused files by the binary.
@@ -459,7 +463,7 @@ fn in_kind(k: &Kind, shape: &str, input: Vec<String>, expected: Vec<String>) -> 
         v.extend(k.tail.iter().map(|l| l.to_string()));
         src_s(&v)
     };
-    Case { what: format!("{}: {shape}", k.name), input: wrap(input), expected: wrap(cols(&expected)) }
+    Case { what: format!("{}: {shape}", k.name), input: wrap(input), expected: wrap(cols_over(&expected)) }
 }
 
 fn indent_of(k: &Kind) -> String {
@@ -568,25 +572,25 @@ fn block_open_line(k: &Kind) -> Case {
 
 /// The block form with every place of a comment: the line of the opening bracket, before an element, after
 /// an element, after the last element (no `,` written) and before the closing bracket. The first element
-/// has a line of a comment before it, so the comment of the opening bracket and the comment after the
-/// first element are not on consecutive lines.
+/// has a line of a comment before it, which does not cut the run of the comment of the opening bracket and
+/// the comment after the first element (§3.2, S-532 (c)).
 fn block_all(k: &Kind) -> Case {
     let ind = indent_of(k);
     let close = format!("{ind}{}{}", k.close, k.post);
     let n = k.elems.len();
     let mut input = vec![format!("{} // open", k.pre), format!("{ind}  // lead")];
-    let mut expected = input.clone();
+    let mut expected = vec![format!("{}\t// open", k.pre), format!("{ind}  // lead")];
     for (i, e) in k.elems.iter().enumerate() {
         let comma = if i + 1 < n { "," } else { "" };
         if i == 0 {
             input.push(format!("{ind}  {e}, // c0"));
-            expected.push(format!("{ind}  {e}, // c0"));
+            expected.push(format!("{ind}  {e},\t// c0"));
         } else if i + 1 < n {
             input.push(format!("{ind}  {e},"));
             expected.push(format!("{ind}  {e},"));
         } else {
             input.push(format!("{ind}  {e}{comma} // c{i}"));
-            expected.push(format!("{ind}  {e}, // c{i}"));
+            expected.push(format!("{ind}  {e},\t// c{i}"));
         }
     }
     input.push(format!("{ind}  // end"));
@@ -1272,9 +1276,9 @@ fn a_comment_at_the_end_of_the_line_of_an_attribute_stays_on_that_line() {
             &["@repr(c) // layout", "pub struct P {", "  x: F32,", "}"],
         ),
         case(
-            "the comment of the attribute and the comment of the item are not on the lines of one run",
+            "the comment of the attribute and the comment of the item are one run over a line of a comment alone",
             &["@fp(relaxed) // fast", "// note", "fn f(x: F32) -> F32 { // body", "  x", "}"],
-            &["@fp(relaxed) // fast", "// note", "fn f(x: F32) -> F32 { // body", "  x", "}"],
+            &["@fp(relaxed)          // fast", "// note", "fn f(x: F32) -> F32 { // body", "  x", "}"],
         ),
     ];
     expect_fmt("attribute_line_comment", &cases);
@@ -1715,7 +1719,7 @@ pub struct P[T] {
 pub fn pick[T,                    // the type
             U](a: T, b: U) -> T { // keep a
   // look
-  let c = if a < b { // smaller
+  let c = if a < b {              // smaller
     // first
     a
   } else { // other
@@ -1884,4 +1888,319 @@ fn a_block_comment_is_refused() {
             ("code after the end of it", "fn f() -> I32 {\n  let a = 1 /* x\n  */ + 2\n  a\n}\n".to_string()),
         ],
     );
+}
+
+// ---- the run of the comments over a line of a comment alone (S-532 (c), R-420, W5-24 U8) -------------------
+
+/// `cols`, but a line of a comment alone (no TAB, the first characters `//`) does not end the run
+/// (spec/tools.md §3.2: the run of the comments at the end of lines is cut by a blank line, not by a line of a
+/// comment alone). The line of the comment alone stays as it is; the width is the one of the lines with a TAB.
+fn cols_over(lines: &[String]) -> Vec<String> {
+    let alone = |l: &String| !l.contains('\t') && l.trim_start().starts_with("//");
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < lines.len() {
+        if !lines[i].contains('\t') {
+            out.push(lines[i].clone());
+            i += 1;
+            continue;
+        }
+        let mut j = i;
+        while j < lines.len() && (lines[j].contains('\t') || alone(&lines[j])) {
+            j += 1;
+        }
+        let w = lines[i..j]
+            .iter()
+            .filter(|l| l.contains('\t'))
+            .map(|l| l.split('\t').next().unwrap().chars().count())
+            .max()
+            .unwrap()
+            + 1;
+        for l in &lines[i..j] {
+            match l.split_once('\t') {
+                Some((code, c)) => out.push(format!("{code:<w$}{c}")),
+                None => out.push(l.clone()),
+            }
+        }
+        i = j;
+    }
+    out
+}
+
+/// A case of a function body whose expected lines may hold the TAB of `cols_over`.
+fn bodyr(what: impl Into<String>, input: &[&str], expected: &[&str]) -> Case {
+    let exp = cols_over(&strs(expected));
+    Case {
+        what: what.into(),
+        input: src_s(&in_fn(input)),
+        expected: src_s(&{
+            let mut v = vec!["fn f(a: I32, b: I32) -> I32 {".to_string()];
+            v.extend(exp);
+            v.push("}".to_string());
+            v
+        }),
+    }
+}
+
+#[test]
+fn the_comments_of_consecutive_lines_are_in_one_column_over_a_line_of_a_comment_alone_s532_c() {
+    // S-532 (c), R-420, §3.2: a run of the comments at the end of lines is cut by a blank line, not by a line
+    // of a comment alone. The line of the comment alone stays at the column of the next line and is not in
+    // the column; the width is the one of the lines that hold a comment after code.
+    let cases = vec![
+        bodyr(
+            "a line of a comment alone between two lines",
+            &["  g(1) // c1", "  // d", "  g(2222) // c2", "  1"],
+            &["  g(1)\t// c1", "  // d", "  g(2222)\t// c2", "  1"],
+        ),
+        bodyr(
+            "two lines of a comment alone, written at other columns",
+            &["  g(1)   // c1", "      // d1", "// d2", "  g(2222) // c2", "  1"],
+            &["  g(1)\t// c1", "  // d1", "  // d2", "  g(2222)\t// c2", "  1"],
+        ),
+        bodyr(
+            "three lines, a line of a comment alone between each",
+            &["  g(1) // c1", "  // d1", "  g(22) // c2", "  // d2", "  g(333) // c3", "  1"],
+            &["  g(1)\t// c1", "  // d1", "  g(22)\t// c2", "  // d2", "  g(333)\t// c3", "  1"],
+        ),
+        bodyr(
+            "a line of a comment alone before the first and after the last",
+            &["  // top", "  g(1) // c1", "  // d", "  g(22) // c2", "  // end", "  1"],
+            &["  // top", "  g(1)\t// c1", "  // d", "  g(22)\t// c2", "  // end", "  1"],
+        ),
+        bodyr(
+            "`let` lines: the `=` is not in a column, the comments are",
+            &["  let x = 1 // c1", "  // d", "  let yy = 22 // c2", "  x + yy"],
+            &["  let x = 1\t// c1", "  // d", "  let yy = 22\t// c2", "  x + yy"],
+        ),
+        bodyr(
+            "a line that ends with an opening bracket",
+            &["  g( // one", "    // d", "    a, // two", "  )", "  1"],
+            &["  g(\t// one", "    // d", "    a,\t// two", "  )", "  1"],
+        ),
+        bodyr(
+            "a line that holds only a closing bracket",
+            &["  g(", "    a, // c1", "    // d", "    b, // c2", "  ) // c3", "  1"],
+            &["  g(", "    a,\t// c1", "    // d", "    b,\t// c2", "  )\t// c3", "  1"],
+        ),
+        bodyr(
+            "lines of different depths, the line of a comment alone is at the depth of the next line",
+            &["  if a < 0 { // one", "    // d", "    1 // two", "  } else { // three", "    2 // four", "  } // five"],
+            &[
+                "  if a < 0 {\t// one",
+                "    // d",
+                "    1\t// two",
+                "  } else {\t// three",
+                "    2\t// four",
+                "  }\t// five",
+            ],
+        ),
+    ];
+    expect_fmt("comment_run_over_alone", &cases);
+}
+
+#[test]
+fn a_blank_line_and_a_line_with_no_comment_cut_the_run_also_beside_a_line_of_a_comment_alone() {
+    // S-532 (c), §3.2: the run is cut by a blank line (before or after the line of a comment alone) and
+    // by a line with no comment; a comment that is alone in its run has one space before it.
+    let cases = vec![
+        case(
+            "a blank line after the line of a comment alone",
+            &["fn f() -> I32 {", "  g(1)   // c1", "  // d", "", "  g(2222)   // c2", "  1", "}"],
+            &["fn f() -> I32 {", "  g(1) // c1", "  // d", "", "  g(2222) // c2", "  1", "}"],
+        ),
+        case(
+            "a blank line before the line of a comment alone",
+            &["fn f() -> I32 {", "  g(1)   // c1", "", "  // d", "  g(2222)   // c2", "  1", "}"],
+            &["fn f() -> I32 {", "  g(1) // c1", "", "  // d", "  g(2222) // c2", "  1", "}"],
+        ),
+        case(
+            "a line with no comment after the line of a comment alone",
+            &["fn f() -> I32 {", "  g(1)   // c1", "  // d", "  g(22)", "  g(333)   // c2", "  1", "}"],
+            &["fn f() -> I32 {", "  g(1) // c1", "  // d", "  g(22)", "  g(333) // c2", "  1", "}"],
+        ),
+        case(
+            "a line of a comment alone and a blank line: the second run is cut again",
+            &[
+                "fn f() -> I32 {",
+                "  g(1) // c1",
+                "  // d",
+                "  g(22) // c2",
+                "",
+                "  g(333) // c3",
+                "  // e",
+                "  g(4444) // c4",
+                "  1",
+                "}",
+            ],
+            &[
+                "fn f() -> I32 {",
+                "  g(1)  // c1",
+                "  // d",
+                "  g(22) // c2",
+                "",
+                "  g(333)  // c3",
+                "  // e",
+                "  g(4444) // c4",
+                "  1",
+                "}",
+            ],
+        ),
+    ];
+    expect_fmt("comment_run_cut", &cases);
+}
+
+#[test]
+fn the_run_of_the_comments_is_decided_by_the_lines_of_the_output_s526() {
+    // S-526, §3.2: whether the lines are consecutive is decided on the output. The line breaks inside an
+    // element that fmt removes (after `as` in brackets) and the closing bracket that fmt moves to a line of
+    // its own (S-528) change which lines are next to each other and how wide their code is.
+    let cases = vec![
+        bodyr(
+            "a `let` that is on two lines in the input and on one in the output",
+            &["  let a = 1 // c1", "  let yy = g(a as", "  I64) // c2", "  yy"],
+            &["  let a = 1\t// c1", "  let yy = g(a as I64)\t// c2", "  yy"],
+        ),
+        bodyr(
+            "the comment of a closing bracket that is moved to a line of its own, with the line after it",
+            &["  g(", "    a,", "    bbbb)  // c1", "  h(c) // c2", "  1"],
+            &["  g(", "    a,", "    bbbb,", "  )\t// c1", "  h(c)\t// c2", "  1"],
+        ),
+    ];
+    expect_fmt("comment_run_output_lines", &cases);
+}
+
+#[test]
+fn the_columns_are_counted_in_unicode_scalar_values_s523() {
+    // S-523, §3.2: the columns of the comments and of a continuation are counted in characters (Unicode
+    // scalar values, as the columns of spec §18.1): neither in bytes, nor in UTF-16 units, nor in the width
+    // on a display, nor in grapheme clusters (an `e` with a combining accent is two characters).
+    let cases = vec![
+        bodyr(
+            "Japanese letters (3 bytes, 1 character each)",
+            &["  g(\"日本語\") // c1", "  g(a) // c2", "  1"],
+            &["  g(\"日本語\")\t// c1", "  g(a)\t// c2", "  1"],
+        ),
+        bodyr(
+            "an emoji (4 bytes, 2 UTF-16 units, 1 character)",
+            &["  g(\"😀😀\") // c1", "  g(abcde) // c2", "  1"],
+            &["  g(\"😀😀\")\t// c1", "  g(abcde)\t// c2", "  1"],
+        ),
+        bodyr(
+            "an `e` and a combining accent (2 characters, 1 grapheme cluster): the same width as `abcd`",
+            &["  g(\"e\u{301}\") // c1", "  g(abcd) // c2", "  1"],
+            &["  g(\"e\u{301}\")\t// c1", "  g(abcd)\t// c2", "  1"],
+        ),
+        bodyr(
+            "the elements of a continuation are under the first element, after Japanese letters",
+            &["  g(\"日本語\", f(a,", "b))", "  1"],
+            &["  g(\"日本語\", f(a,", "             b))", "  1"],
+        ),
+        bodyr(
+            "the elements of a continuation are under the first element, after an emoji",
+            &["  g(\"😀\", f(a,", "b))", "  1"],
+            &["  g(\"😀\", f(a,", "           b))", "  1"],
+        ),
+        bodyr(
+            "the elements of a continuation are under the first element, after an accent",
+            &["  g(\"e\u{301}\", f(a,", "b))", "  1"],
+            &["  g(\"e\u{301}\", f(a,", "            b))", "  1"],
+        ),
+    ];
+    expect_fmt("scalar_columns", &cases);
+}
+
+#[test]
+fn a_line_of_a_comment_alone_in_the_one_line_form_and_the_continuation_s531() {
+    // S-531, §3.2: in the one-line form and the continuation, a line of a comment alone is at the column of
+    // the next element (the next line); before the closing bracket it is one level deeper than the line the
+    // list starts on, and the closing bracket is on a line of its own, at the indentation of that line.
+    let cases = vec![
+        body(
+            "between two elements (§3.2's own example)",
+            &["  g(a,", "// c", "b)", "  1"],
+            &["  g(a,", "    // c", "    b)", "  1"],
+        ),
+        body(
+            "between two elements, written at the column of the next element",
+            &["  g(a,", "    // c", "    b)", "  1"],
+            &["  g(a,", "    // c", "    b)", "  1"],
+        ),
+        body(
+            "before the closing bracket of the one-line form",
+            &["  g(a, b", "// c", ")", "  1"],
+            &["  g(a, b", "    // c", "  )", "  1"],
+        ),
+        body(
+            "before the closing bracket of the one-line form, written at other columns",
+            &["  g(a, b", "          // c", "      )", "  1"],
+            &["  g(a, b", "    // c", "  )", "  1"],
+        ),
+        body(
+            "between all the elements of a continuation",
+            &["  let y = g(a,", "// c1", "b,", "      // c2", "c)", "  y"],
+            &["  let y = g(a,", "            // c1", "            b,", "            // c2", "            c)", "  y"],
+        ),
+        body(
+            "in a list inside an element of another list",
+            &["  g(h(a,", "// c", "b), c)", "  1"],
+            &["  g(h(a,", "      // c", "      b), c)", "  1"],
+        ),
+    ];
+    expect_fmt("comment_alone_one_line_continuation", &cases);
+}
+
+#[test]
+fn a_line_of_a_comment_before_the_closing_bracket_of_a_continuation_is_one_level_deeper_than_its_line_s531() {
+    // S-531, §3.2: "a line of a comment before a closing bracket is one level deeper than the line the
+    // bracket is based on; in the one-line form and the continuation too". The head is long so that the
+    // column of the elements (12) is not the column one level deeper (4); the closing bracket is on a line
+    // of its own, at the indentation of the line the list starts on.
+    let cases = vec![
+        body(
+            "after the last element of a continuation",
+            &["  let y = g(a,", "b,", "c", "// c3", ")", "  y"],
+            &["  let y = g(a,", "            b,", "            c", "    // c3", "  )", "  y"],
+        ),
+        body(
+            "after the last element of a continuation, in the block of an `if`",
+            &["  if a < 0 {", "    let y = g(a,", "b,", "c", "// c3", ")", "    y", "  } else {", "    a", "  }"],
+            &[
+                "  if a < 0 {",
+                "    let y = g(a,",
+                "              b,",
+                "              c",
+                "      // c3",
+                "    )",
+                "    y",
+                "  } else {",
+                "    a",
+                "  }",
+            ],
+        ),
+    ];
+    expect_fmt("comment_before_close_continuation", &cases);
+}
+
+#[test]
+fn the_spaces_and_tabs_at_the_end_of_a_comment_go_s532_a() {
+    // S-532 (a), §3.4: the spaces and tabs at the end of the text of a comment (a doc comment too) are
+    // taken off; the ones inside the text stay. The width of a run does not count them.
+    let cases = vec![
+        body("a comment at the end of a line", &["  g(a) // one  \t ", "  1"], &["  g(a) // one", "  1"]),
+        body("a line of a comment alone", &["  // c \t", "  g(a)", "  1"], &["  // c", "  g(a)", "  1"]),
+        body("an empty comment", &["  g(a) //   ", "  1"], &["  g(a) //", "  1"]),
+        body("spaces and tabs inside the text", &["  g(a) // a \t b  ", "  1"], &["  g(a) // a \t b", "  1"]),
+        case(
+            "a doc comment",
+            &["/// doc  ", "fn g() -> I32 {", "  1", "}"],
+            &["/// doc", "fn g() -> I32 {", "  1", "}"],
+        ),
+        bodyr(
+            "the comments of a run",
+            &["  g(a) // one   ", "  g(bbb) // two\t", "  1"],
+            &["  g(a)\t// one", "  g(bbb)\t// two", "  1"],
+        ),
+    ];
+    expect_fmt("comment_trailing_white", &cases);
 }

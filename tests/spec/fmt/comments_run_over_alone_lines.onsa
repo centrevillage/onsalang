@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// mode = "parse"
+// spec = ["§2.5", "§18.2"]
+
+// The comments at the end of consecutive lines are in one column (spec/tools.md §3.2, S-532, R-420). The
+// run is cut by a blank line and by a line with no comment, and not by a line of a comment alone; a line
+// that ends with an opening bracket and a line of a closing bracket alone are in the run. The comment alone
+// is not in the column. The file is canonical, so `onsa fmt` leaves it unchanged. Only the syntax is read
+// here (`mode = "parse"`).
+
+fn g(x: I32) -> I32 { x }
+
+pub fn over_a_line_of_a_comment_alone(a: I32) -> I32 {
+  let b = g(a)    // one
+  // a line of a comment alone does not cut the run
+  let cc = g(b)   // two
+  // and again
+  let ddd = g(cc) // three
+  ddd
+}
+
+pub fn cut_by_a_blank_line_and_by_a_line_with_no_comment(a: I32) -> I32 {
+  g(1) // one
+
+  g(a) // a run of one line after a blank line
+  g(22)
+  g(333) // two
+  a
+}
+
+pub fn in_a_list(a: I32, b: I32) -> I32 {
+  g(   // the opening bracket is in the run
+    // a line of a comment alone in a list
+    a, // an element
+    b, // another
+  )    // the closing bracket too
+  a
+}

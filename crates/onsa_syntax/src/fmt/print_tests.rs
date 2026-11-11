@@ -470,8 +470,9 @@ fn joined(src: &str) -> Vec<String> {
 /// The line breaks inside an element of a list or an enclosure go, but those at a place of a
 /// continuation (§2.5: after a binary operator, `->`, the `|` of a pattern, before `.` and `uses`,
 /// after an attribute; a range is not written in brackets), after the opening bracket, between the elements, in a block and
-/// between statements (§3.2, S-497, S-505). The line breaks between the attribute of a `let` and the
-/// `let` go too (§3.2). The `JOIN` goes on the code token after the line break (W3-11 U3c).
+/// between statements (§3.2, S-497, S-505). The line break between the attribute of a `let` and the
+/// `let` is the printer's, not the plan's (§3.2, S-527). The `JOIN` goes on the code token after the
+/// line break (W3-11 U3c).
 #[test]
 fn the_plan_removes_the_line_breaks_inside_an_element_but_at_a_place_of_a_continuation() {
     let body = |lines: &[&str]| format!("fn f() {{\n{}\n}}\n", lines.join("\n"));
@@ -503,7 +504,7 @@ fn the_plan_removes_the_line_breaks_inside_an_element_but_at_a_place_of_a_contin
         (body(&["two(a", ", b)"]), &[]),
         (body(&["two(if a {", "1", "} else {", "2", "}, 3)"]), &[]),
         (body(&["let a = 1", "a"]), &[]),
-        // After an attribute: kept but after that of a `let`.
+        // After an attribute: kept, after that of a `let` too (the printer decides, S-527).
         (
             "flow g(@param(min: 0.0, max: 1.0, default: 0.5)\nlevel: F32 at block, x: F32 at sample) -> F32 at \
              sample {\n  x\n}\n"
@@ -511,7 +512,7 @@ fn the_plan_removes_the_line_breaks_inside_an_element_but_at_a_place_of_a_contin
             &[],
         ),
         ("@repr(c)\nstruct P {\n  x: F32,\n}\n".to_string(), &[]),
-        (flow(&["@mem(bulk)", "let d = delay~(x, 4800)", "d"]), &["let"]),
+        (flow(&["@mem(bulk)", "let d = delay~(x, 4800)", "d"]), &[]),
     ];
     for (src, want) in rows {
         assert_eq!(joined(src), *want, "{src}");

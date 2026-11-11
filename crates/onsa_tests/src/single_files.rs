@@ -23,7 +23,7 @@ pub fn text_of(bytes: std::io::Result<Vec<u8>>) -> Result<String, String> {
 /// with the command's function and ends as `onsa fmt` does: 2 when the file
 /// cannot be read or has a syntax diagnostic, 101 on an internal error.
 pub fn fmt(path: &str, text: std::io::Result<String>) -> Result<String, (u8, String)> {
-    let text = text.map_err(|e| (2, format!("onsa: cannot read {path}: {e}\n")))?;
+    let text = text.map_err(|e| (2, format!("{}\n", onsa_cli::fmt_cannot_read(std::path::Path::new(path), &e))))?;
     let mut sources = onsa_diag::SourceMap::default();
     let file = sources.add(onsa_driver::slash_path(std::path::Path::new(path)), text);
     // The diagnostics are made inside the guard, as the command makes them: a broken span is an internal error.

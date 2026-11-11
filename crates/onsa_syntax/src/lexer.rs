@@ -51,8 +51,9 @@ pub fn lex(file: FileId, text: &str) -> Lexed {
 /// U+202E, U+2066 to U+2069). The lexer takes the tab and the line feed
 /// out of it (and a carriage return before a line feed, a line break); the
 /// value of the name of a test may hold none of them (§11.8,
-/// [`crate::test_name`]). The one list.
-pub(crate) fn unwritable(c: char) -> bool {
+/// [`crate::test_name`]), and the text of `onsa test` writes them as escapes
+/// (`spec/tools.md` §4). The one list.
+pub fn unwritable(c: char) -> bool {
     matches!(c, '\u{0}'..='\u{1f}' | '\u{7f}'..='\u{9f}' | '\u{2028}' | '\u{2029}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
 }
 

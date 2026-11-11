@@ -24,9 +24,9 @@
 //! - **Removed line breaks:** before the closing bracket of a list on one
 //!   line or in the continuation form (S-507), and between brackets with
 //!   nothing in them (S-496); inside an element of a list or an enclosure,
-//!   but at a place of a continuation (S-497, S-505); between the attribute
-//!   of a `let` and the `let` (§3.2). The printer keeps them when a comment
-//!   is between (§3.4, S-497).
+//!   but at a place of a continuation (S-497, S-505). The printer keeps them
+//!   when a comment is between (§3.4, S-497). The line break between the
+//!   attributes of a `let` and the `let` is the printer's (§3.2, S-527).
 
 use super::rewrites::Choices;
 use super::shape::{self, Form, Shape};
@@ -222,8 +222,7 @@ impl Plan {
 
     /// The line breaks of the writer that go (§3.2, S-497, S-505): the
     /// line breaks inside an element of a list or inside an enclosure, but
-    /// those at a place of a continuation (§2.5), and the line breaks between
-    /// the attributes of a `let` and the `let`. A `JOIN` goes on the code
+    /// those at a place of a continuation (§2.5). A `JOIN` goes on the code
     /// token after them, which the printer reads only when no comment is
     /// between (S-497 (β), §3.4).
     ///
@@ -243,7 +242,6 @@ impl Plan {
     fn inside_elements(&mut self, cst: &Cst, nodes: &[NodeId]) {
         const STARTS_ELEMENT: u8 = 1;
         const ENDS_ATTRIBUTE: u8 = 2;
-        const ENDS_LET_ATTRIBUTE: u8 = 4;
         let tokens = cst.tokens();
         let mut marks = vec![0u8; tokens.len()];
         // (opening, closing, whether the pair holds statements or items), in the order of the tokens.
@@ -251,9 +249,8 @@ impl Plan {
         for &n in nodes {
             match cst.kind(n) {
                 NodeKind::Attr => {
-                    let let_attribute = cst.parent(n).is_some_and(|p| cst.kind(p) == NodeKind::LetStmt);
                     if let Some((_, last)) = cst.significant_tokens(n) {
-                        marks[last.index()] |= if let_attribute { ENDS_LET_ATTRIBUTE } else { ENDS_ATTRIBUTE };
+                        marks[last.index()] |= ENDS_ATTRIBUTE;
                     }
                 }
                 kind => {
@@ -280,13 +277,10 @@ impl Plan {
                 continue;
             }
             if let (Some(p), Some(newline), true) = (prev, newline, self.kept(t)) {
-                let joins = match marks[p.index()] {
-                    m if m & ENDS_LET_ATTRIBUTE != 0 => true,
-                    m if m & ENDS_ATTRIBUTE != 0 => false,
-                    _ => stack.last().is_some_and(|&(open, close, container)| {
+                let joins = marks[p.index()] & ENDS_ATTRIBUTE == 0
+                    && stack.last().is_some_and(|&(open, close, container)| {
                         !container && p != open && t != close && marks[i] & STARTS_ELEMENT == 0 && !cst.goes_on(newline)
-                    }),
-                };
+                    });
                 if joins {
                     self.set(t, JOIN);
                 }

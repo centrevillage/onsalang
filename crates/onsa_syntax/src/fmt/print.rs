@@ -29,7 +29,9 @@
 //!   line where its owner starts: the innermost statement or item, element of
 //!   a list, or content of an enclosure that holds the line break. Levels do
 //!   not add up over continuations. The line after a line that starts with
-//!   an attribute has the indentation of that line.
+//!   an attribute has the indentation of that line; the line after another
+//!   attribute of an element of a list in the continuation form is at the
+//!   column of the first element (S-524).
 //! - **Comments** stay where they are written (§3.4): a comment after code
 //!   at the end of that line, a comment on a line of its own with the
 //!   indentation of the next line (inside the brackets when that line is a
@@ -67,10 +69,11 @@ pub(super) fn print(cst: &Cst, src: &str, choices: &Choices) -> String {
         indent: 0,
         line_head: None,
         comment_marks: Vec::new(),
+        comment_lines: Vec::new(),
         attribute: None,
     };
     p.walk();
-    align::finish(p.out, p.comment_marks)
+    align::finish(p.out, p.comment_marks, &p.comment_lines)
 }
 
 /// A node the walk is in.
@@ -80,6 +83,8 @@ struct Frame {
     next: usize,
     /// The indentation of the line of its first code token, once it is written.
     start: Option<usize>,
+    /// The output line of its first code token, once it is written.
+    line: usize,
     /// Whether its first code token began a line.
     heads_line: bool,
     /// A statement or an item: a child of the file or of a container (`shape::holds_statements`).
@@ -165,8 +170,20 @@ struct Printer<'a> {
     /// The first code token of the output line.
     line_head: Option<TokenIdx>,
     comment_marks: Vec<(usize, String)>,
-    /// The attributes on a line that one starts: their last token, the line and its indentation.
-    attribute: Option<(TokenIdx, usize, usize)>,
+    /// The output lines of the comments on lines of their own.
+    comment_lines: Vec<usize>,
+    /// The attributes the walk left last ([`Printer::leave`]).
+    attribute: Option<Attributes>,
+}
+
+/// Attributes one after the other on a line: the last token of the last one,
+/// the output lines of the first token of the first one and of that last
+/// token, and the indentation of the line when the first one starts it.
+struct Attributes {
+    end: TokenIdx,
+    first: usize,
+    line: usize,
+    indent: Option<usize>,
 }
 
 impl<'a> Printer<'a> {
@@ -211,7 +228,7 @@ impl<'a> Printer<'a> {
             Brackets { pairs, what }
         });
         let statement = cst.parent(n).is_some_and(|p| shape::holds_statements(cst.kind(p)));
-        self.frames.push(Frame { node: n, next: 0, start: None, heads_line: false, statement, brackets });
+        self.frames.push(Frame { node: n, next: 0, start: None, line: 0, heads_line: false, statement, brackets });
     }
 
     /// Leave the frame `f`; `last` is the last code token written.
@@ -219,10 +236,10 @@ impl<'a> Printer<'a> {
         if self.cst.kind(f.node) == NodeKind::Attr
             && let (Some(last), Some(indent)) = (last, f.start)
         {
+            let (first, line, indent) = (f.line, self.line, f.heads_line.then_some(indent));
             match &mut self.attribute {
-                Some((end, line, _)) if !f.heads_line && *line == self.line => *end = last,
-                _ if f.heads_line => self.attribute = Some((last, self.line, indent)),
-                _ => {}
+                Some(a) if !f.heads_line && a.line == line => a.end = last,
+                _ => self.attribute = Some(Attributes { end: last, first, line, indent }),
             }
         }
     }
@@ -233,8 +250,17 @@ impl<'a> Printer<'a> {
         // The deepest node that holds both tokens; the nodes above it start at `t`.
         let deepest = self.begun.max(1) - 1;
         let mut gap = self.gap(prev, t);
-        // The line breaks of the plan.
-        if self.plan.joins(t) && gap.trailing.is_none() && gap.lines.is_empty() {
+        // After the attributes of a `let`, the `let` is on their line when they are on one line of the output
+        // and no comment is between, else on the next line (§3.2, S-527). Then the line breaks of the plan.
+        let comment = gap.trailing.is_some() || !gap.lines.is_empty();
+        let of_let = self.attribute.as_ref().filter(|a| prev == Some(a.end));
+        if let Some(a) = of_let.filter(|_| cst.kind(self.frames[deepest].node) == NodeKind::LetStmt) {
+            if a.first == self.line && !comment {
+                (gap.breaks, gap.blanks) = (false, 0);
+            } else {
+                gap.breaks = true;
+            }
+        } else if self.plan.joins(t) && !comment {
             (gap.breaks, gap.blanks) = (false, 0);
         } else if self.plan.breaks_before(t) {
             gap.breaks = true;
@@ -258,6 +284,7 @@ impl<'a> Printer<'a> {
             let mut content_before = !place.head;
             for &(blanks, c) in &gap.lines {
                 self.new_line(place.separates && content_before && blanks > 0, place.comments);
+                self.comment_lines.push(self.line);
                 self.write(self.comment(c));
                 content_before = true;
             }
@@ -282,9 +309,10 @@ impl<'a> Printer<'a> {
 
     /// Record what the token `t`, written at `col`, starts.
     fn started(&mut self, deepest: usize, prev: Option<TokenIdx>, t: TokenIdx, col: usize, heads_line: bool) {
-        let indent = self.indent;
+        let (indent, line) = (self.indent, self.line);
         for f in &mut self.frames[deepest + 1..] {
             f.start = Some(indent);
+            f.line = line;
             f.heads_line = heads_line;
         }
         self.begun = self.frames.len();
@@ -386,8 +414,9 @@ impl<'a> Printer<'a> {
                 What::Enclosure { .. } if head || tail => return at(inner, false),
                 What::List { form, starts, first_col, .. } => {
                     if head || tail || starts.binary_search(&t).is_ok() {
+                        // A comment before the closing bracket is one level deeper than the base line (S-531).
                         let inner = match (form, first_col) {
-                            (Form::Continuation, Some(col)) => *col,
+                            (Form::Continuation, Some(col)) if !tail => *col,
                             _ => inner,
                         };
                         return at(inner, true);
@@ -396,11 +425,23 @@ impl<'a> Printer<'a> {
                 What::Enclosure { .. } | What::Container => {}
             }
         }
-        let indent = match self.attribute {
-            Some((end, _, indent)) if prev == Some(end) => indent,
-            _ => self.owner(deepest) + STEP,
+        // After attributes that start their line, their indentation; after others of an element of a list in
+        // the continuation form, the column of its first element (S-524).
+        let indent = match &self.attribute {
+            Some(a) if prev == Some(a.end) => a.indent.or_else(|| self.continuation(deepest)),
+            _ => None,
         };
+        let indent = indent.unwrap_or_else(|| self.owner(deepest) + STEP);
         Place { indent, comments: indent, separates: false, head: false, tail: false }
+    }
+
+    /// The column of the first element of the list in the continuation form
+    /// whose element is the frame `deepest`.
+    fn continuation(&self, deepest: usize) -> Option<usize> {
+        match &self.frames[..deepest].last()?.brackets.as_ref()?.what {
+            What::List { form: Form::Continuation, first_col, .. } => *first_col,
+            _ => None,
+        }
     }
 
     /// The indentation of the line where the owner of a line break in the

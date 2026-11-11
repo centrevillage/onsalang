@@ -35,6 +35,10 @@
 //! - CR LF is LF (S-201); an empty `{}` has no space and no line break inside, unless it has a comment
 //!   (S-496, §3.4).
 //!
+//! W5-24 U8 (the end of the file): the line after an attribute of an input that does not start its line, in the
+//! continuation and in the one-line form (S-524), and the `let` after an attribute on many lines or with a comment
+//! between (S-527).
+//!
 //! What is not here: the fixed points (the case files of the unit U3a), the places of the comments that
 //! move in a list (unit U4), the lists with no element (S-513), the spelling of a tuple index (S-508), the
 //! rewrites of the tree (W3-12) and the check before writing (unit U5). The three tests of
@@ -1654,4 +1658,298 @@ fn the_lists_of_the_items_of_a_module_are_written_in_their_forms() {
         "}",
     ];
     expect_fmt("module", &[case("a module", &input, &expected)]);
+}
+
+// ---- the line after an attribute that is not at the start of its line (S-524, W5-24 U8) ----------------
+
+/// A flow whose heading is `head` (the text up to and including the opening bracket, so that its length is
+/// the column of the first input), the input lines after it and a body of one line. The first line of
+/// `input` and of `expected` follows `head`.
+fn flow_heading(what: impl Into<String>, head: &str, input: &[&str], expected: &[&str]) -> Case {
+    let wrap = |lines: &[&str]| {
+        let mut v: Vec<String> = vec![format!("{head}{}", lines[0])];
+        v.extend(lines[1..].iter().map(|s| s.to_string()));
+        v.push("  x at sample".to_string());
+        v.push("}".to_string());
+        src_s(&v)
+    };
+    Case { what: what.into(), input: wrap(input), expected: wrap(expected) }
+}
+
+#[test]
+fn in_a_continuation_the_line_after_an_attribute_that_is_not_at_the_start_of_its_line_is_under_the_first_element() {
+    // S-524, §3.2: in the continuation (a line break between two inputs) the inputs are under the first
+    // one. A line break after an attribute that follows `(` or another input is a line break inside the
+    // input, and the next line is under the first input too; when the attribute follows `(`, that is the
+    // column of the attribute (`pub flow i(` has 11 characters, so the inputs are at column 11). It was
+    // one level deeper than the line (column 2) for the first input, and the next input was at column 11.
+    let c11 = " ".repeat(11);
+    let cases = vec![
+        flow_heading(
+            "the attribute of the first input follows `(`",
+            "pub flow i(",
+            &["@param(min: 0.0, max: 1.0)", "  x: F32 at block,", "  y: F32 at block) -> F32 at sample {"],
+            &[
+                "@param(min: 0.0, max: 1.0)",
+                &format!("{c11}x: F32 at block,"),
+                &format!("{c11}y: F32 at block) -> F32 at sample {{"),
+            ],
+        ),
+        flow_heading(
+            "the attribute of the first input follows `(`, the next lines written without an indentation",
+            "pub flow i(",
+            &["@param(min: 0.0, max: 1.0)", "x: F32 at block,", "y: F32 at block) -> F32 at sample {"],
+            &[
+                "@param(min: 0.0, max: 1.0)",
+                &format!("{c11}x: F32 at block,"),
+                &format!("{c11}y: F32 at block) -> F32 at sample {{"),
+            ],
+        ),
+        flow_heading(
+            "the attribute of the second input follows the first input",
+            "pub flow i(",
+            &[
+                "z: F32 at sample, @param(min: 0.0, max: 1.0)",
+                "x: F32 at block,",
+                "w: F32 at block) -> F32 at sample {",
+            ],
+            &[
+                "z: F32 at sample, @param(min: 0.0, max: 1.0)",
+                &format!("{c11}x: F32 at block,"),
+                &format!("{c11}w: F32 at block) -> F32 at sample {{"),
+            ],
+        ),
+        flow_heading(
+            "the attribute of the second input follows the first input, the next line written more indented",
+            "pub flow i(",
+            &[
+                "z: F32 at sample, @param(min: 0.0, max: 1.0)",
+                "          x: F32 at block,",
+                "w: F32 at block) -> F32 at sample {",
+            ],
+            &[
+                "z: F32 at sample, @param(min: 0.0, max: 1.0)",
+                &format!("{c11}x: F32 at block,"),
+                &format!("{c11}w: F32 at block) -> F32 at sample {{"),
+            ],
+        ),
+        flow_heading(
+            "an attribute after `(` and an attribute at the start of a line",
+            "pub flow i(",
+            &[
+                "@param(min: 0.0, max: 1.0)",
+                "x: F32 at block,",
+                "@param(min: 0.0, max: 1.0)",
+                "y: F32 at block) -> F32 at sample {",
+            ],
+            &[
+                "@param(min: 0.0, max: 1.0)",
+                &format!("{c11}x: F32 at block,"),
+                &format!("{c11}@param(min: 0.0, max: 1.0)"),
+                &format!("{c11}y: F32 at block) -> F32 at sample {{"),
+            ],
+        ),
+        flow_heading(
+            "a shorter heading, a shorter column",
+            "flow v(",
+            &["@param(default: 0.5)", "a: F32 at block,", "b: F32 at block) -> F32 at sample {"],
+            &["@param(default: 0.5)", "       a: F32 at block,", "       b: F32 at block) -> F32 at sample {"],
+        ),
+        flow_heading(
+            "three inputs, the attribute of the middle one and of the last one",
+            "flow v(",
+            &[
+                "a: F32 at sample, @param(default: 0.5)",
+                "b: F32 at block,",
+                "@param(default: 0.5)",
+                "c: F32 at block) -> F32 at sample {",
+            ],
+            &[
+                "a: F32 at sample, @param(default: 0.5)",
+                "       b: F32 at block,",
+                "       @param(default: 0.5)",
+                "       c: F32 at block) -> F32 at sample {",
+            ],
+        ),
+    ];
+    expect_fmt("attr_input_continuation_column", &cases);
+}
+
+#[test]
+fn the_line_after_an_attribute_at_the_start_of_a_line_is_at_the_column_of_the_attribute() {
+    // S-524, §3.2: an attribute that is at the start of its line (the continuation puts it under the first
+    // input) puts the next line at its own indentation, as it did.
+    let cases = vec![
+        flow_heading(
+            "the attribute of the second input is alone on its line",
+            "pub flow i(",
+            &["z: F32 at sample,", "@param(min: 0.0, max: 1.0)", "x: F32 at block) -> F32 at sample {"],
+            &[
+                "z: F32 at sample,",
+                "           @param(min: 0.0, max: 1.0)",
+                "           x: F32 at block) -> F32 at sample {",
+            ],
+        ),
+        flow_heading(
+            "the attribute is alone on its line, and the input after it is written more indented",
+            "pub flow i(",
+            &["z: F32 at sample,", "      @param(min: 0.0, max: 1.0)", "          x: F32 at block) -> F32 at sample {"],
+            &[
+                "z: F32 at sample,",
+                "           @param(min: 0.0, max: 1.0)",
+                "           x: F32 at block) -> F32 at sample {",
+            ],
+        ),
+    ];
+    expect_fmt("attr_input_line_start", &cases);
+}
+
+#[test]
+fn in_the_one_line_form_the_line_after_an_attribute_is_one_level_deeper_than_the_line_of_the_input() {
+    // S-524, §3.2: the list is in the one-line form when there is no line break after `(` and none between
+    // the inputs (a break after an attribute is inside an input); the next line is one level deeper than
+    // the line the input starts on, also when the attribute is the one of the second input.
+    let cases = vec![
+        flow_heading(
+            "the attribute of the first input",
+            "pub flow i(",
+            &["@param(min: 0.0, max: 1.0)", "x: F32 at block, y: F32 at block) -> F32 at sample {"],
+            &["@param(min: 0.0, max: 1.0)", "  x: F32 at block, y: F32 at block) -> F32 at sample {"],
+        ),
+        flow_heading(
+            "the attribute of the second input",
+            "pub flow i(",
+            &["z: F32 at sample, @param(min: 0.0, max: 1.0)", "x: F32 at block) -> F32 at sample {"],
+            &["z: F32 at sample, @param(min: 0.0, max: 1.0)", "  x: F32 at block) -> F32 at sample {"],
+        ),
+        flow_heading(
+            "one input, the attribute after `(`",
+            "pub flow i(",
+            &["@param(min: 0.0, max: 1.0)", "x: F32 at block) -> F32 at sample {"],
+            &["@param(min: 0.0, max: 1.0)", "  x: F32 at block) -> F32 at sample {"],
+        ),
+    ];
+    expect_fmt("attr_input_one_line", &cases);
+}
+
+// ---- the `let` after an attribute of many lines (S-527, W5-24 U8) ---------------------------------------
+
+#[test]
+fn the_let_is_on_the_line_after_an_attribute_that_is_on_many_lines() {
+    // S-527, §3.2: `@mem(bulk)` is on the line of its `let` only when the attribute is on one line in the
+    // output and nothing is written between them. An attribute whose arguments are in the block form or
+    // in the continuation is on many lines, and its `let` is on the next line, at the indentation of the
+    // attribute. It was `) let d = ...`.
+    let cases = vec![
+        flow_body(
+            "the arguments in the block form",
+            &["  @mem(", "    bulk", "  )", "  let d = delay~(x, 4800)", "  d"],
+            &["  @mem(", "    bulk,", "  )", "  let d = delay~(x, 4800)", "  d"],
+        ),
+        flow_body(
+            "the arguments in the block form, the `let` written on the line of the closing bracket",
+            &["  @mem(", "    bulk,", "  ) let d = delay~(x, 4800)", "  d"],
+            &["  @mem(", "    bulk,", "  )", "  let d = delay~(x, 4800)", "  d"],
+        ),
+        flow_body(
+            "the arguments in the continuation",
+            &["  @mem(bulk,", "  other)", "  let d = delay~(x, 4800)", "  d"],
+            &["  @mem(bulk,", "       other)", "  let d = delay~(x, 4800)", "  d"],
+        ),
+        flow_body(
+            "the arguments in the continuation, the `let` written on the line of the closing bracket",
+            &["  @mem(bulk,", "       other) let d = delay~(x, 4800)", "  d"],
+            &["  @mem(bulk,", "       other)", "  let d = delay~(x, 4800)", "  d"],
+        ),
+        flow_body(
+            "the attribute is on many lines and the `let` is in a block that is more indented",
+            &[
+                "  if p > 0.0 {",
+                "    @mem(",
+                "      bulk",
+                "    )",
+                "    let d = delay~(x, 4800)",
+                "    d",
+                "  } else {",
+                "    x",
+                "  }",
+            ],
+            &[
+                "  if p > 0.0 {",
+                "    @mem(",
+                "      bulk,",
+                "    )",
+                "    let d = delay~(x, 4800)",
+                "    d",
+                "  } else {",
+                "    x",
+                "  }",
+            ],
+        ),
+    ];
+    expect_fmt("attr_let_many_lines", &cases);
+}
+
+#[test]
+fn the_let_is_on_the_line_of_an_attribute_that_is_on_one_line_in_the_output() {
+    // S-527, §3.2: the condition is on the output. An attribute that was written on many lines and comes
+    // to one line (the closing bracket of the one-line form follows the last element) is on the line of its
+    // `let`, as an attribute written on one line is.
+    let cases = vec![
+        flow_body(
+            "the attribute is written on one line",
+            &["  @mem(bulk)", "  let d = delay~(x, 4800)", "  d"],
+            &["  @mem(bulk) let d = delay~(x, 4800)", "  d"],
+        ),
+        flow_body(
+            "the closing bracket is written on the next line",
+            &["  @mem(bulk", "  )", "  let d = delay~(x, 4800)", "  d"],
+            &["  @mem(bulk) let d = delay~(x, 4800)", "  d"],
+        ),
+        flow_body(
+            "spaces round the argument",
+            &["  @mem( bulk )", "  let d = delay~(x, 4800)", "  d"],
+            &["  @mem(bulk) let d = delay~(x, 4800)", "  d"],
+        ),
+    ];
+    expect_fmt("attr_let_one_line", &cases);
+}
+
+#[test]
+fn the_let_is_on_the_line_after_a_comment_between_it_and_its_attribute() {
+    // S-527, §3.2: a comment between them (a comment at the end of a line of the attribute or a line of
+    // a comment) keeps the `let` on its own line, at the indentation of the attribute.
+    let cases = vec![
+        flow_body(
+            "a line of a comment after an attribute on one line",
+            &["  @mem(bulk)", "  // c", "  let d = delay~(x, 4800)", "  d"],
+            &["  @mem(bulk)", "  // c", "  let d = delay~(x, 4800)", "  d"],
+        ),
+        flow_body(
+            "a line of a comment, written at another column",
+            &["  @mem(bulk)", "          // c", "let d = delay~(x, 4800)", "  d"],
+            &["  @mem(bulk)", "  // c", "  let d = delay~(x, 4800)", "  d"],
+        ),
+        flow_body(
+            "two lines of a comment",
+            &["  @mem(bulk)", "  // c1", "  // c2", "  let d = delay~(x, 4800)", "  d"],
+            &["  @mem(bulk)", "  // c1", "  // c2", "  let d = delay~(x, 4800)", "  d"],
+        ),
+        flow_body(
+            "a line of a comment after an attribute on many lines",
+            &["  @mem(", "    bulk,", "  )", "  // c", "  let d = delay~(x, 4800)", "  d"],
+            &["  @mem(", "    bulk,", "  )", "  // c", "  let d = delay~(x, 4800)", "  d"],
+        ),
+        flow_body(
+            "a comment at the end of the line of the closing bracket of an attribute on many lines",
+            &["  @mem(", "    bulk,", "  ) // c", "  let d = delay~(x, 4800)", "  d"],
+            &["  @mem(", "    bulk,", "  ) // c", "  let d = delay~(x, 4800)", "  d"],
+        ),
+        flow_body(
+            "a comment inside the arguments: the attribute is on many lines",
+            &["  @mem(bulk // c", "  )", "  let d = delay~(x, 4800)", "  d"],
+            &["  @mem(bulk // c", "  )", "  let d = delay~(x, 4800)", "  d"],
+        ),
+    ];
+    expect_fmt("attr_let_comment_between", &cases);
 }

@@ -1,0 +1,42 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§11.7", "§18.2"]
+
+// A line break after the attribute of an input in a continuation (spec/tools.md §3.2, S-524). In the
+// continuation (a line break between two inputs) the inputs are under the first one. When an attribute that
+// is not at the start of its line has a line break after it, the next line is under the first input too: at
+// the column of the attribute when the attribute follows the opening bracket, and under the first input when
+// it follows another input. An attribute at the start of its line puts the next line at its own column. In the
+// one-line form (no line break between the inputs) the next line is one level deeper than the line of the
+// input. The file is canonical, so `onsa fmt` leaves it unchanged.
+
+pub flow attr_after_the_bracket(@param(min: 0.0, max: 1.0)
+                                level: F32 at block,
+                                x: F32 at sample) -> F32 at sample {
+  x * level
+}
+
+pub flow attr_after_the_first_input(x: F32 at sample, @param(min: 0.0, max: 1.0)
+                                    level: F32 at block,
+                                    gain: F32 at block) -> F32 at sample {
+  x * level * gain
+}
+
+pub flow attr_alone_on_its_line(x: F32 at sample,
+                                @param(min: 0.0, max: 1.0)
+                                level: F32 at block) -> F32 at sample {
+  x * level
+}
+
+pub flow attrs_in_both_places(@param(min: 0.0, max: 1.0)
+                              level: F32 at block,
+                              @param(min: 0.0, max: 2.0)
+                              gain: F32 at block,
+                              x: F32 at sample) -> F32 at sample {
+  x * level * gain
+}
+
+pub flow in_the_one_line_form(@param(min: 0.0, max: 1.0)
+  level: F32 at block, x: F32 at sample) -> F32 at sample {
+  x * level
+}

@@ -187,9 +187,22 @@ impl TestReport {
 const CONTINUATION: &str = "    ";
 
 /// The lines of `message`, split at the line breaks of spec §2.5 (LF, and CR
-/// LF as one). A CR that no LF follows is not a line break.
-fn message_lines(message: &str) -> impl Iterator<Item = &str> {
-    message.split('\n').map(|l| l.strip_suffix('\r').unwrap_or(l))
+/// LF as one), each with the characters that may not be written there (a CR
+/// that no LF follows among them) as escapes `\u{…}` (`spec/tools.md` §4,
+/// S-299), in lower case and with no leading zero, as in `a\u{1b}[31m`.
+fn message_lines(message: &str) -> impl Iterator<Item = String> {
+    let last = message.split('\n').count() - 1;
+    message.split('\n').enumerate().map(move |(i, l)| {
+        let l = if i < last { l.strip_suffix('\r').unwrap_or(l) } else { l };
+        l.chars().fold(String::new(), |mut s, c| {
+            if c != '\t' && onsa_syntax::lexer::unwritable(c) {
+                s.push_str(&format!("\\u{{{:x}}}", c as u32));
+            } else {
+                s.push(c);
+            }
+            s
+        })
+    })
 }
 
 /// What `onsa test` did with a lowered module.

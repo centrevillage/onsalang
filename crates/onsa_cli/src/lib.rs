@@ -372,6 +372,18 @@ fn print_diagnostics(
     }
 }
 
+/// The line of `onsa fmt` for the file `path` it cannot read, which names a
+/// directory as one, also when the error is another (a directory that may
+/// not be read): fmt takes files (`spec/tools.md` §3.1, S-599).
+pub fn fmt_cannot_read(path: &Path, e: &std::io::Error) -> String {
+    let directory = std::fs::metadata(path).is_ok_and(|m| m.is_dir());
+    if directory || e.kind() == std::io::ErrorKind::IsADirectory {
+        format!("onsa: {} is a directory; onsa fmt takes files", path.display())
+    } else {
+        format!("onsa: cannot read {}: {e}", path.display())
+    }
+}
+
 /// `onsa fmt [--check] <path...>`: every file is processed, also after one
 /// that cannot be read or has a syntax diagnostic; only the files without one
 /// are written (`spec/tools.md` §3.1). On the standard output: `would
@@ -396,7 +408,7 @@ fn fmt(io: &mut Io<'_>, check: bool, paths: &[PathBuf]) -> Outcome {
         let text = match io.files.read(path) {
             Ok(t) => t,
             Err(e) => {
-                errln!(io, "onsa: cannot read {}: {e}", path.display());
+                errln!(io, "{}", fmt_cannot_read(path, &e));
                 failed = true;
                 continue;
             }
@@ -409,10 +421,10 @@ fn fmt(io: &mut Io<'_>, check: bool, paths: &[PathBuf]) -> Outcome {
                 failed = true;
                 continue;
             }
-            // SPEC-GAP(S-533): an internal error (the check before writing
-            // failed, §3.5) stops at once: the files before it stay written,
-            // the files after it are not taken, and the syntax diagnostics of
-            // the files before it are not printed.
+            // An internal error (the check before writing failed, §3.5) stops
+            // at once: the files before it stay written, the files after it
+            // are not taken, and the syntax diagnostics of the files before
+            // it are not printed (`spec/tools.md` §3.1, S-533).
             Err(e) => return internal(io, &sources, &e),
         };
         if out == text {

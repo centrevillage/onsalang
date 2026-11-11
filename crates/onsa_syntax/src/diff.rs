@@ -14,7 +14,9 @@ use std::fmt;
 use onsa_diag::Span;
 
 use crate::Parsed;
-use crate::ast::{Ast, Block, Derives, EffectRow, ExprKind, GenericParam, ImplDecl, ItemId, ItemKind, TypeKind};
+use crate::ast::{
+    Ast, Attr, Block, Derives, EffectRow, ExprKind, GenericParam, ImplDecl, ItemId, ItemKind, Param, StmtKind, TypeKind,
+};
 use crate::dump::{dump_item, dump_stmt, dump_type, dump_type_args};
 use crate::fmt::rewrites::Choices;
 use crate::lexer::comment_text;
@@ -207,23 +209,34 @@ impl<'a> Side<'a> {
     }
 }
 
-/// The lists of `ast` read as sets (`spec/tools.md` §3.5, S-750), the bounds
-/// of a type parameter, a derive list and an effect row, each sorted by the
-/// names of its elements: their order is no difference to `diff --ast`. An
-/// element written twice stays twice. The check of `onsa fmt` does not sort
-/// them: fmt keeps the order written.
+/// The lists of `ast` read as sets (`spec/tools.md` §3.5, S-750, S-993), the
+/// bounds of a type parameter, a derive list, the attributes of one place (an
+/// item, an input or a parameter, a `let`) and an effect row, each sorted by
+/// the names of its elements: their order is no difference to `diff --ast`.
+/// An element written twice stays twice; the arguments of an attribute keep
+/// their order. The check of `onsa fmt` does not sort them: fmt keeps the
+/// order written.
 fn in_one_order(ast: &mut Ast) {
     fn row(e: &mut Option<EffectRow>) {
         if let Some(e) = e {
             e.effects.sort_by_cached_key(|p| p.dotted());
         }
     }
+    fn attrs(attrs: &mut [Attr]) {
+        attrs.sort_by(|a, b| a.name.name.cmp(&b.name.name));
+    }
+    fn params(params: &mut [Param]) {
+        params.iter_mut().for_each(|p| attrs(&mut p.attrs));
+    }
     fn item(kind: &mut ItemKind) {
         let (generics, derives) = match kind {
             ItemKind::Fn(f) => {
                 row(&mut f.effects);
+                params(&mut f.params);
                 (&mut f.generics, None)
             }
+            ItemKind::Flow(f) => return params(&mut f.params),
+            ItemKind::Handler(h) => return params(&mut h.params),
             ItemKind::Struct(s) => (&mut s.generics, Some(&mut s.derives)),
             ItemKind::Enum(e) => (&mut e.generics, Some(&mut e.derives)),
             ItemKind::Trait(t) => (&mut t.generics, None),
@@ -240,14 +253,23 @@ fn in_one_order(ast: &mut Ast) {
             }
         }
     }
-    ast.items.iter_mut().for_each(|i| item(&mut i.kind));
+    for i in &mut ast.items {
+        attrs(&mut i.attrs);
+        item(&mut i.kind);
+    }
+    for s in &mut ast.stmts {
+        if let StmtKind::Let { attrs: a, .. } = &mut s.kind {
+            attrs(a);
+        }
+    }
     for t in &mut ast.types {
         if let TypeKind::Fn { effects, .. } = &mut t.kind {
             row(effects);
         }
     }
     for e in &mut ast.exprs {
-        if let ExprKind::Closure { effects, .. } = &mut e.kind {
+        if let ExprKind::Closure { params: p, effects, .. } = &mut e.kind {
+            params(p);
             row(effects);
         }
     }
