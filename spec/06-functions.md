@@ -111,7 +111,7 @@ impl Describe for Point {
 - 既定メソッドは可。トレイトオブジェクト（動的ディスパッチ）は無い（§19）。
 - 演算子 trait: `Add Sub Mul Div Rem Neg PartialEq PartialOrd BitAnd BitOr BitXor Shl Shr Not WrappingAdd WrappingSub WrappingMul SaturatingAdd SaturatingSub SaturatingMul`。演算子との対応は §3.2、意味は §3.4。
   各演算子は、被演算子の型がその演算子の trait を満たすことを要する。ラップと飽和の trait は Rust の標準ライブラリに無い。
-- 標準 trait: `PartialEq`, `PartialOrd`（演算子用。浮動小数は IEEE 比較で、NaN は何とも等しくなく大小も無い）、`Eq`, `Ord`（全順序。ソートと `Map` / `Set` の鍵に使う。浮動小数は実装しない）、`Hash`, `Show`, `Default`, `Iter[T]`, `IntoIter[T]`（ユーザ定義型の反復は必要になるまで延期、§19.1）, `Drop`, `AnyNum`, `Num`, `Float`, `Int`, `Unsigned`, `Ordinal`（§6.4）。
+- 標準 trait: `PartialEq`, `PartialOrd`（演算子用。浮動小数は IEEE 比較で、NaN は何とも等しくなく大小も無い）、`Eq`, `Ord`（全順序。ソートと `Map` / `Set` の鍵に使う。浮動小数は実装しない）、`Hash`, `Show`, `Default`, `Iter[T]`, `IntoIter[T]`（ユーザ定義型の反復は必要になるまで延期、§19.1）, `Drop`, `AnyNum`, `Num`, `Float`, `Int`, `Unsigned`, `Ordinal`（§6.4）。`Show` は補間（§2.4）が値に求める trait で、第 1 期はメソッドを持たない。
   `Copy` と `Dup` は trait ではなく種の制約である（§4.6）。名前は Rust と同じで、意味は次の項と下の約束で定める（§0.3 の規則 3）。数の trait（`AnyNum` `Num` `Float` `Int` `Unsigned`）は Rust の標準ライブラリに無いので、次の項で定める。
   標準 trait は std で `trait` として宣言され、組込み型の実装（下の表）も std の `impl` である（孤児規則、上記）。演算子 trait と標準 trait は全て prelude にあり、`use` 無しで境界と derive に書ける（§15.1）。
 - 等値・順序・ハッシュの約束: `PartialEq` の `==` は対称で推移的（浮動小数の NaN は自分とも等しくない）。`Eq` は加えて反射的（`a == a`）。`PartialOrd` の大小は `==` と矛盾しない。`Ord` は `Eq` と矛盾しない全順序である。`Hash` は、`==` で等しい値に等しいハッシュを与える。
