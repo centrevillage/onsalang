@@ -1,0 +1,13 @@
+struct S { a: [U8; 4], n: U32 }
+
+rt fn view_len(s: Span[U8]) -> U32 { s.len() }
+
+fn of_param(s: S) -> U32 { view_len(s.a) }
+
+fn sliced(s: S) -> U32 { view_len(s.a.slice(0, s.n)) }
+
+@export
+pub fn go(k: U32) -> U32 {
+  let s = S { a: [1, 2, 3, 4], n: k }
+  of_param(s) + sliced(s)
+}
