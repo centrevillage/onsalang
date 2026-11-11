@@ -1,5 +1,6 @@
 # The classes of the fix stage with an error left at a candidate's place that the parent has read
 # (X-25): `class<TAB>left` a line, sorted. tools/fuzz.py left --seen adds them.
+fix|E0002|end the line before it|E0020	attributes are written `…`
 fix|E0002|write the attribute before the visibility and `…`|E0002	`…` cannot be written here: attributes come first in a head
 fix|E0002|write the attribute before the visibility and `…`|E0002	expected a declaration, found `…`
 fix|E0002|write the attribute before the visibility and `…`|E0005	`…` cannot be attached to a function of the top level; it goes on a `…`
@@ -10,5 +11,16 @@ fix|E0002|write the attribute before the visibility and `…`|E0005	the value of
 fix|E0002|write the attribute before the visibility and `…`|E0005	there is no attribute `…`
 fix|E0002|write the attribute before the visibility and `…`|E0020	derived traits are written at the head of the declaration, not as an attribute
 fix|E0002|write the attribute before the visibility and `…`|E0020	the relaxed floating-point rules are written `…`
+fix|E0020|compare in a guard, with the end (`…`)|E0020	literals have no type suffix; the type comes from the context
+fix|E0020|compare in a guard, without the end (`…`)|E0020	literals have no type suffix; the type comes from the context
+fix|E0020|compare in a guard|E0002	expected an operand right after the prefix operator, found `…`
+fix|E0020|compare in a guard|E0002	there is no `…` or `…`, and an assignment is a statement, not an expression
+fix|E0020|compare in a guard|E0020	Onsa has no octal numbers
+fix|E0020|compare in a guard|E0020	a decimal integer does not start with #; C, Go and Java read it as octal and Rus
+fix|E0020|compare in a guard|E0020	a float literal needs digits on both sides of the point
+fix|E0020|compare in a guard|E0020	literals have no type suffix; the type comes from the context
+fix|E0020|compare in a guard|E0020	there is no prefix `…`
 fix|E0020|remove the `…`|E0002	expected an expression, found `…`
+fix|E0020|write the type arguments as `…`|E0415	the receiver of an `…` method must be a place (a `…`, an `…` parameter, or a fie
+fix|E0020|write the type arguments as `…`|E0416	`…` does not satisfy the bound `…` of `…` (§#.#)
 fix|E0411|call `…`|E0401	expected `…`, found `…`
