@@ -23,6 +23,8 @@ mod effects;
 #[cfg(test)]
 mod effects_tests;
 mod exhaust;
+#[cfg(test)]
+mod exhaust_tests;
 pub mod flow;
 pub mod flow_names;
 #[cfg(test)]

@@ -49,8 +49,11 @@ struct Ctors {
 #[derive(Default)]
 pub(crate) struct Seen {
     rows: Vec<P>,
-    /// The rows by the head of a constructor (with no fields) or a literal.
+    /// The rows of a choice by the heads of its branches.
     heads: HashMap<P, Vec<u32>>,
+    /// The rows with a head of a constructor, or a literal, by all of their
+    /// heads.
+    tree: Tree,
     /// The rows with a head of a constructor.
     ctors_named: Vec<u32>,
     /// The rows with a head of `_`.
@@ -65,23 +68,27 @@ impl Seen {
     /// The arm of the pattern `p` at `at` takes part in covering.
     pub(crate) fn add(&mut self, p: P, at: Span) {
         let row = self.rows.len() as u32;
-        self.index(&p, row);
+        self.index(&p, row, false);
         if matches!(p, P::Wild) {
             self.whole.get_or_insert(at);
         }
         self.rows.push(p);
     }
 
-    fn index(&mut self, p: &P, row: u32) {
+    fn index(&mut self, p: &P, row: u32, choice: bool) {
         match p {
-            P::Or(alts) => alts.iter().for_each(|alt| self.index(alt, row)),
+            P::Or(alts) => alts.iter().for_each(|alt| self.index(alt, row, true)),
             P::Wild => self.wild.push(row),
             P::Const => {}
             P::Ctor(..) | P::Lit(_) | P::Str(_) => {
                 if matches!(p, P::Ctor(..)) {
                     self.ctors_named.push(row);
                 }
-                self.heads.entry(head_key(p)).or_default().push(row);
+                if choice {
+                    self.heads.entry(head_key(p)).or_default().push(row);
+                } else {
+                    self.tree.add(p, row);
+                }
             }
         }
     }
@@ -94,6 +101,108 @@ impl Seen {
             P::Wild | P::Const => out.extend_from_slice(&self.ctors_named),
             P::Ctor(..) | P::Lit(_) | P::Str(_) => {
                 out.extend(self.heads.get(&head_key(q)).into_iter().flatten().copied());
+                #[cfg(test)]
+                if WHOLE.get() {
+                    let root = self.tree.edges.get(&(0, head_key(q)));
+                    return out.extend(root.into_iter().flat_map(|&k| &self.tree.nodes[k as usize].below));
+                }
+                self.tree.meet(q, out);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// The rows of a head are those of [`Seen::rows_for`] before [`Tree`]
+    /// (the test of R-386 in `exhaust_tests.rs`).
+    pub(crate) static WHOLE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// The rows of no choice at the head, by their heads in the order the search
+/// reads them (the head, then its fields): a tree whose edges are heads and
+/// whose nodes hold the rows that end there, or that go on with a choice or a
+/// constant there (R-386). An arm with a head that names one meets only the
+/// rows along that head and `_`: a row with another head is dropped where the
+/// search drops it, and before that it opens no choice, counts no step and
+/// joins no group of constructors, so the search reads the same without it.
+#[derive(Default)]
+struct Tree {
+    /// The child of a node by a head, `_` too; node 0 is the root.
+    edges: HashMap<(u32, P), u32>,
+    nodes: Vec<Node>,
+}
+
+#[derive(Default)]
+struct Node {
+    kids: Vec<u32>,
+    /// The rows that end here, or go on with a choice or a constant.
+    rows: Vec<u32>,
+    /// The rows here and below, which a head of `q` that names none, or a
+    /// choice, meets all of.
+    below: Vec<u32>,
+}
+
+/// The heads of a pattern as the search reads them, each with the index past
+/// its fields.
+fn heads_in_order<'p>(p: &'p P, out: &mut Vec<(&'p P, usize)>) {
+    let at = out.len();
+    out.push((p, 0));
+    if let P::Ctor(_, subs) = p {
+        subs.iter().for_each(|sub| heads_in_order(sub, out));
+    }
+    out[at].1 = out.len();
+}
+
+impl Tree {
+    /// The row `row` of the pattern `p`, whose head names one.
+    fn add(&mut self, p: &P, row: u32) {
+        if self.nodes.is_empty() {
+            self.nodes.push(Default::default());
+        }
+        let (mut node, mut todo) = (0, vec![p]);
+        while let Some(p) = todo.pop() {
+            if matches!(p, P::Or(_) | P::Const) {
+                break;
+            }
+            let next = self.nodes.len() as u32;
+            node = *self.edges.entry((node, head_key(p))).or_insert_with(|| {
+                self.nodes[node as usize].kids.push(next);
+                self.nodes.push(Default::default());
+                next
+            });
+            self.nodes[node as usize].below.push(row);
+            if let P::Ctor(_, subs) = p {
+                todo.extend(subs.iter().rev());
+            }
+        }
+        self.nodes[node as usize].rows.push(row);
+    }
+
+    /// The rows that `q` can meet, a head that names one at its root: past a
+    /// head of `q` that names none, every row with one, which the search
+    /// sorts into its groups.
+    fn meet(&self, q: &P, out: &mut Vec<u32>) {
+        let mut heads = Vec::new();
+        heads_in_order(q, &mut heads);
+        // The node and the head of `q` it reads next.
+        let mut todo = if self.nodes.is_empty() { vec![] } else { vec![(0, 0)] };
+        let below = |out: &mut Vec<u32>, k: u32| out.extend_from_slice(&self.nodes[k as usize].below);
+        while let Some((node, i)) = todo.pop() {
+            let Node { kids, rows, .. } = &self.nodes[node as usize];
+            out.extend_from_slice(rows);
+            let wild = || self.edges.get(&(node, P::Wild)).copied();
+            match heads.get(i) {
+                Some(&(h @ (P::Ctor(..) | P::Lit(_) | P::Str(_)), past)) => {
+                    todo.extend(wild().map(|w| (w, past)));
+                    todo.extend(self.edges.get(&(node, head_key(h))).map(|&k| (k, i + 1)));
+                }
+                Some((P::Wild | P::Const, _)) => {
+                    let wild = wild();
+                    todo.extend(wild.map(|w| (w, i + 1)));
+                    kids.iter().filter(|&&k| Some(k) != wild).for_each(|&k| below(out, k));
+                }
+                _ => kids.iter().for_each(|&k| below(out, k)),
             }
         }
     }
@@ -425,7 +534,8 @@ impl Checker<'_> {
         let mut found = Vec::new();
         seen.rows_for(q, &mut found);
         found.extend_from_slice(&seen.wild);
-        found.sort_unstable();
+        // Runs of rows in order, one for each part of the tree.
+        found.sort();
         found.dedup();
         let end = Cell { head: &WILD, tail: 0, wild: true };
         let Seen { rows, steps, ctors, .. } = seen;

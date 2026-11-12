@@ -2,7 +2,7 @@
 
   measure_stages.py corpus BIN OUT.jsonl   the cases of tests/spec, the files of std, examples/
   measure_stages.py scale BIN OUT.jsonl    a usual file (tests/spec/examples/voice.onsa) times 1 to 16
-  measure_stages.py quad BIN OUT.jsonl [NAME...]  the quadratic forms left to X-20 by W4-05 to W4-10
+  measure_stages.py quad BIN OUT.jsonl [NAME...]  the quadratic forms left to X-20 by W4-05 to W4-10, and R-386
   measure_stages.py report OUT.jsonl...    the sums, the slowest inputs, the growth by family
 
 BIN is an `onsa_cases` (debug or release). Each input is checked (and lowered to Core when the
@@ -12,6 +12,7 @@ the process and its largest resident memory. Run it on a quiet machine, one at a
 parallel runs: the memory is measured too). A generated family stops growing past 10 s
 (rules/common.md 3). Generated inputs go to OUT's directory, under gen/.
 """
+import itertools
 import json
 import os
 import re
@@ -156,6 +157,27 @@ def w405_nested(fields, depth):
             + "".join(f"  f{i}: {ty},\n" for i in range(fields)) + "}\n")
 
 
+def r386_arms(form, n):
+    """R-386 (W5-13 U6b): a match of n arms and a `_`: `Some(i)`, the first n of the 5 columns of an enum of
+    8 variants (rows of one head, which an arm passes by), or `(i, _)` and `(_, i)` in turn (rows a `_` of
+    the arm meets, still n x n), or n arms `(i, 0, ..)` of 8 columns, a `_` and n arms `(_, 0, ..)` (each
+    of the last meets all of the first under its `_`, as many rows as nodes of the tree before)."""
+    if form == "table":
+        rows = itertools.islice(itertools.product(range(8), repeat=5), n)
+        arms = ["(%s)" % ", ".join(f"E.V{v}" for v in t) for t in rows]
+        head, ty = "pub enum E { %s }\n" % ", ".join(f"V{i}" for i in range(8)), "(E, E, E, E, E)"
+    elif form == "tail":
+        zeros = ", 0" * 7
+        arms = [f"({i}{zeros})" for i in range(n)] + ["_"] + [f"(_{zeros})"] * n
+        head, ty = "", "(%s)" % ", ".join(["I32"] * 8)
+    else:
+        arms = [f"Some({i})" for i in range(n)] if form == "some" else [
+            f"({i}, _)" if i % 2 else f"(_, {i})" for i in range(n)]
+        head, ty = "", "Option[I32]" if form == "some" else "(I32, I32)"
+    body = "".join(f"    {a} => 0,\n" for a in arms + ["_"])
+    return f"{head}pub fn f(x: {ty}) -> I32 {{\n  match x {{\n{body}  }}\n}}\n"
+
+
 SCALE = [("voice", "decls x", voice_times, [(k,) for k in (1, 2, 4, 8, 16)])]
 
 QUAD = [
@@ -171,6 +193,10 @@ QUAD = [
     ("w410_chain", "writes=100, chain", w410_chain, [(c, 100) for c in (125, 250, 500, 1000)]),
     ("w405_nested_f", "depth=250, fields", w405_nested, [(f, 250) for f in (250, 500, 1000, 2000)]),
     ("w405_nested_d", "fields=1000, depth", w405_nested, [(1000, d) for d in (30, 60, 120, 240)]),
+    ("r386_some", "arms", r386_arms, [("some", n) for n in (5000, 10000, 20000, 40000)]),
+    ("r386_table", "arms", r386_arms, [("table", n) for n in (4000, 8000, 16000, 32000)]),
+    ("r386_cross", "arms", r386_arms, [("cross", n) for n in (2500, 5000, 10000, 20000)]),
+    ("r386_tail", "arms", r386_arms, [("tail", n) for n in (1000, 2000, 4000, 8000)]),
 ]
 
 
