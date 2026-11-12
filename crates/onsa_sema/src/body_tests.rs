@@ -1020,7 +1020,7 @@ fn the_joined_line_reads_the_type_a_later_statement_decides() {
         "fn make[T: Default]() -> T {\n  panic(\"no\")\n}\nfn f() -> I32 {\n  let v = {\n    make()",
         "\n  }\n  let w: I32 = v\n  w\n}\n",
     );
-    // SPEC-GAP(S-1027): the joined form of an open `a` is given when the body reads clean with it.
+    // S-1027: the joined form of an open `a` is given when the body reads clean with it.
     let src = format!("{head}\n    -make(){tail}");
     assert_eq!(after_candidates(&src), [format!("{head} - make(){tail}")]);
     // When the later statement decides another type, the form reads an error.

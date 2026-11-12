@@ -41,9 +41,8 @@ impl<'a> Parser<'a> {
         if self.at(TokenKind::Ident) {
             return Ok(self.bump());
         }
-        // SPEC-GAP(S-1017): §2.3 gives the short form `P { in }` the candidate
-        // too, but §7 has no short form, and `P { in_ }` would be the E0002
-        // of its `:` (§18.1): a candidate only before a `:`.
+        // S-1017 (§2.3): a candidate only before a `:`; there is no short form
+        // `P { in }` (§7), and `P { in_ }` would be the E0002 of its `:` (§18.1).
         let colon = self.on_line_after(self.peek_index()).is_some_and(|k| self.tokens[k].kind == TokenKind::Colon);
         Err(if colon {
             self.fail_name(Declared::Field, Want::Other, "field name")

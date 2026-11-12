@@ -61,7 +61,7 @@ impl<'a> Checker<'a> {
         let mut d = Diagnostic::new(Stage::Types, Code::E0418, span, msg).with_found(self.src(span));
         // `let _ = e` gives what is open nothing that decides it, and a
         // literal the type its default is (`5000000000` does not fit it).
-        // SPEC-GAP(S-1023): only this form is tried; a `let _` that brings out an error of the
+        // S-1023: only this form is tried; a `let _` that brings out an error of the
         // statement itself in another (`Some(5000000000)`, E0408) is given.
         let literal = matches!(ty, Ty::Var(_));
         d = if self.infer.has_undefaulted_vars(&self.a.types, t) {
@@ -99,9 +99,9 @@ impl<'a> Checker<'a> {
         let (at, end, x_at) = (self.expr(last).span, self.expr(a).span.end, self.expr(x).span);
         let fix = self.join_edits("join it to the line before", end, at, Span::new(at.file, at.start + 1, x_at.end));
         let patch = Patch::Operand(id, Block { stmts: b.stmts[..i].to_vec(), tail: Some(last) }, last, a);
-        // SPEC-GAP(S-1025): the read again of the whole body judges the join, so a body with
+        // S-1025: the read again of the whole body judges the join, so a body with
         // another error or with names read only in part gets no join (as E0503, S-876).
-        // SPEC-GAP(S-1027): and a type a later statement decides counts in whether `a - x` fits.
+        // S-1027: and a type a later statement decides counts in whether `a - x` fits.
         Some(Try { fix, patch })
     }
 
