@@ -157,6 +157,9 @@ impl<'a> Walker<'a> {
     /// form, lowered as one: a form that is no type, or a path of a value
     /// ([`Self::form_of`]). The types stage judges its kind against the
     /// parameter (E0308, S-977); a name not found is a type's E0302.
+    /// The forms hold as long as no path past a type parameter is a type:
+    /// with no associated type in this version, `T.N` is a value (R-427);
+    /// an associated type makes this read again.
     fn const_form(&self, t: TypeId) -> bool {
         match &self.ast.ty(t).kind {
             TypeKind::Path { path, .. } => self.form_of(path) == Form::Value,
@@ -309,7 +312,7 @@ impl<'a> Walker<'a> {
 /// The E0412 of the `n` type arguments at `span` (written `found`) after
 /// `name`, whose own parameters are `params` (§4.5, S-306): no candidate,
 /// and a note of the parameters, or of the item that takes them (`rule`).
-pub(crate) fn count_error(
+fn count_error(
     name: &str,
     (params, n): (&[String], usize),
     (span, found): (Span, String),
@@ -328,6 +331,26 @@ pub(crate) fn count_error(
         ),
     };
     Diagnostic::new(Stage::Types, Code::E0412, span, msg).with_found(found).with_rule(rule)
+}
+
+/// The kinds of the own parameters of the function `d` ([`own_params`]),
+/// `true` a constant: the type arguments written after its name are judged
+/// by them within their count first, then by the count
+/// ([`own_count_error`], §4.5, S-306). The one table of both stages that
+/// judge them: the names stage for a function (`sig::types`), the types
+/// stage for a method, whose parameters are known there (S-977, S-981).
+pub(crate) fn own_kinds(a: &Analysis, d: DefId) -> Vec<bool> {
+    let generics = a.def(d).generics();
+    own_params(a, d).into_iter().map(|k| matches!(generics[k].kind, GenericKind::Const(_))).collect()
+}
+
+/// The E0412 of the `n` type arguments at `at` (with what is written there)
+/// after `name`, the function `d`, that are not the count of its own
+/// parameters ([`own_kinds`]): a note of them, `` `T`, `U` `` (S-306).
+pub(crate) fn own_count_error(a: &Analysis, d: DefId, name: &str, n: usize, at: (Span, String)) -> Diagnostic {
+    let generics = a.def(d).generics();
+    let shown: Vec<String> = own_params(a, d).into_iter().map(|k| format!("`{}`", generics[k].name)).collect();
+    count_error(name, (&shown, n), at, None)
 }
 
 /// The own type and const parameters of the function `d` (§4.5), at their

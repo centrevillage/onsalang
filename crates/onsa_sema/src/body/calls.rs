@@ -1,6 +1,7 @@
 //! The calls of functions and methods, and their arguments.
 
 use super::conversions::ConversionCall;
+use super::named::Use;
 use super::*;
 use crate::names::body::PathRes;
 
@@ -116,7 +117,7 @@ impl<'a> Checker<'a> {
         match entity {
             Entity::Def(d) | Entity::Member(d) => {
                 let def = self.a.def(d).clone();
-                if self.a.heading_failed(d) || crate::names::self_outside_impl(self.a, entity) {
+                if crate::names::unknown_callee(self.a, entity) {
                     return self.args_of_unknown_callee(args);
                 }
                 let DefKind::Fn(f) = &def.kind else {
@@ -136,10 +137,8 @@ impl<'a> Checker<'a> {
                             .with_fix(Fix::delete("remove `!`", Span::new(span.file, at, at + 1))),
                     ));
                 }
-                let targs = self.fresh_args(d);
-                self.of_owner(d, &targs, owner, span)?;
-                self.own_args(crate::names::body::named(self.ast, callee), d, &targs, span)?;
-                let of = self.param_of(owner);
+                let own = Some(crate::names::body::named(self.ast, callee));
+                let (targs, of) = self.generic_use(d, Use::Path { owner, own }, span)?;
                 let (params, ret) = self.member_sig(d, f, &targs, of);
                 // A conversion is judged by its source, which is not in its
                 // result, before the result meets `expected` (§3.3, S-231).
@@ -163,8 +162,7 @@ impl<'a> Checker<'a> {
                 Ok(ret)
             }
             Entity::Variant(d, i) => {
-                let targs = self.fresh_args(d);
-                self.of_owner(d, &targs, owner, span)?;
+                let (targs, _) = self.generic_use(d, Use::Path { owner, own: None }, span)?;
                 let variant = self.a.def(d).as_enum().unwrap().variants[i as usize].clone();
                 if variant.fields.is_empty() {
                     return Err(self.unit_variant_called(e, callee, kind, args));
@@ -245,10 +243,7 @@ impl<'a> Checker<'a> {
                 if f.self_mode == Some(Mode::Inout) {
                     self.inout_receiver(callee)?;
                 }
-                let targs = self.fresh_args(md);
-                self.method_args(callee, md, &targs, span)?;
-                // The `Self` of a member of a type parameter is the receiver.
-                let of = matches!(self.ty(recv), Ty::Param(_)).then_some(recv);
+                let (targs, of) = self.generic_use(md, Use::Method { callee, recv }, span)?;
                 // The impl's own generic arguments come from the receiver; of
                 // std's `impl` of a sequence, its element (S-853).
                 let mut element = None;

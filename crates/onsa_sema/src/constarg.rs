@@ -211,13 +211,10 @@ fn node(a: &mut Analysis, cx: &ConstCx, e: ExprId) -> Result<Got, ConstErr> {
         }
         // An integer literal, and a literal of another type (§4.5, S-966).
         ConstForm::Lit(lit) => {
-            let form = match lit {
-                Lit::Int { value, .. } => return Ok(int_literal(*value, shown(), expr.span)?),
-                Lit::Float { .. } => "a float literal",
-                Lit::Bool(_) => "a `Bool` literal",
-                Lit::Str(_) => "a string literal",
-                Lit::Char(_) => "a character literal",
-            };
+            if let Lit::Int { value, .. } = lit {
+                return Ok(int_literal(*value, shown(), expr.span)?);
+            }
+            let form = crate::body::literal_noun(lit);
             let msg = format!("a constant expression has the type `U32`; found {form} (§4.5)");
             Err(Diagnostic::new(Stage::Types, Code::E0401, expr.span, msg).with_found(shown()).into())
         }
@@ -227,14 +224,13 @@ fn node(a: &mut Analysis, cx: &ConstCx, e: ExprId) -> Result<Got, ConstErr> {
                 ExprKind::Call { .. } => "a call",
                 ExprKind::Field { .. } | ExprKind::TupleIndex { .. } => "a field of a value",
                 ExprKind::Index { .. } => "an element of a value",
-                ExprKind::Tuple(_) => "a tuple",
-                ExprKind::Array(_) | ExprKind::Repeat { .. } => "an array",
                 ExprKind::Struct { .. } => "a struct literal",
                 ExprKind::Binary { .. } | ExprKind::Unary { .. } | ExprKind::Cast { .. } => {
                     "an operation other than `+ - * / %` and prefix `-`"
                 }
-                // A hole `_` (§18.1, E0421 at an expression) is E0417 here (§4.5, S-971).
-                _ => "an expression of another form",
+                // A tuple, an array (a literal is `ConstForm::Lit`). A hole
+                // `_` (§18.1, E0421 at an expression) is E0417 here (§4.5, S-971).
+                kind => crate::body::non_integer_noun(kind).unwrap_or("an expression of another form"),
             };
             Err(value_not_constant(shown(), noun, expr.span).into())
         }

@@ -108,10 +108,9 @@ impl<'p> Sema<'p> {
         self.drop_bound(cx, RowId::ImplicitBound, head, bounds, k);
     }
 
-    /// The E0020 of the Rust `Sized` or `?Sized`, the bound `b` of `bounds`
-    /// (§4.5, S-746): every type has a size. The candidate takes it out.
-    pub(super) fn sized_bound(&mut self, cx: &Cx<'p>, head: u32, bounds: &[Written], b: &Written) {
-        let k = bounds.iter().position(|x| std::ptr::eq(x, b)).unwrap();
+    /// The E0020 of the Rust `Sized` or `?Sized`, the element `k` of
+    /// `bounds` (§4.5, S-746): every type has a size. The candidate takes it out.
+    pub(super) fn sized_bound(&mut self, cx: &Cx<'p>, head: u32, bounds: &[Written], k: usize) {
         self.drop_bound(cx, RowId::SizedBound, head, bounds, k);
     }
 

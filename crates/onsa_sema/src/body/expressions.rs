@@ -425,7 +425,7 @@ impl<'a> Checker<'a> {
                 return Err(self.err(Code::E0410, name.span, format!("field `{}` is given twice", name.name)));
             }
             seen.push(&name.name);
-            let Some(f) = defs.iter().find(|f| f.name == name.name) else {
+            let Some((k, _)) = self.a.named_field(d, &name.name) else {
                 if failed {
                     let error = self.a.types.error();
                     self.check_expr(*value, Some(error))?;
@@ -434,6 +434,7 @@ impl<'a> Checker<'a> {
                 let shown = self.a.def(d).name.clone();
                 return Err(self.err(Code::E0410, name.span, format!("`{shown}` has no field `{}`", name.name)));
             };
+            let f = &defs[k];
             self.a.note_use(f.span, name.span);
             let ft = self.a.types.subst(f.ty, &args);
             self.with_why(format!("the field `{}`", name.name), ft, |ck| ck.check_expr(*value, Some(ft)))?;

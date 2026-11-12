@@ -299,6 +299,17 @@ impl Analysis {
         &self.defs[id.0 as usize]
     }
 
+    /// The field `name` of the struct `d`, with its index, when `d` is a
+    /// struct of named fields that declares it (§6.1): the first of that
+    /// name, as every use of a field reads it (a pattern's reach asks for the
+    /// first of that name not visible, `structpat.rs::written_reach`);
+    /// whether it is visible, reached or of a struct a syntax error cut
+    /// ([`Self::partly_read`]) is the caller's.
+    pub(crate) fn named_field(&self, d: DefId, name: &str) -> Option<(usize, &def::FieldDef)> {
+        let def::Fields::Named(fields) = &self.def(d).as_struct()?.fields else { return None };
+        fields.iter().enumerate().find(|(_, f)| f.name == name)
+    }
+
     /// The name of `owner` in the path of its member: the type of an `impl`.
     pub fn owner_name(&self, owner: DefId) -> String {
         let def = self.def(owner);

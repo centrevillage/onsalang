@@ -29,7 +29,7 @@ pub(crate) use exprs::heads;
 pub(crate) use flow::clock_after;
 pub(crate) use kinds::METHOD_IS_CALLED;
 pub(crate) use paths::{is_value, not_a_struct};
-pub(crate) use type_args::{Form, count_error, names_only, own_params};
+pub(crate) use type_args::{Form, names_only, own_count_error, own_kinds, own_params};
 mod scope;
 #[cfg(test)]
 mod tests;

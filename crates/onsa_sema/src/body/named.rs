@@ -202,11 +202,35 @@ impl<'a> Checker<'a> {
         self.unify_at(span, ty, owner)
     }
 
+    /// The first half of a use of the generic item `d` at `span`, as the
+    /// item is used (`by`): the variables of its type arguments, met by what
+    /// is written ([`Self::of_owner`] and [`Self::own_args`] of a path,
+    /// [`Self::method_args`] of a method), and the type parameter before it
+    /// (`of`, [`Self::param_of`]; the receiver of a type parameter). The
+    /// caller goes on with the type of the member, then its instance.
+    pub(super) fn generic_use(&mut self, d: DefId, by: Use, span: Span) -> R<(Vec<TyId>, Option<TyId>)> {
+        let args = self.fresh_args(d);
+        let of = match by {
+            Use::Path { owner, own } => {
+                self.of_owner(d, &args, owner, span)?;
+                if let Some(e) = own {
+                    self.own_args(e, d, &args, span)?;
+                }
+                self.param_of(owner)
+            }
+            Use::Method { callee, recv } => {
+                self.method_args(callee, d, &args, span)?;
+                matches!(self.ty(recv), Ty::Param(_)).then_some(recv)
+            }
+        };
+        Ok((args, of))
+    }
+
     /// The type arguments written after the function `d` named at `e` for
     /// its own parameters (`id::[U8]`, §4.5), as the names stage lowered
     /// them ([`BodyNames::own`]): the variables `args` of those parameters
     /// meet them at `span`, in the statement. Their error is reported before.
-    pub(crate) fn own_args(&mut self, e: ExprId, d: DefId, args: &[TyId], span: Span) -> R<()> {
+    fn own_args(&mut self, e: ExprId, d: DefId, args: &[TyId], span: Span) -> R<()> {
         let Some(&written) = self.names.own.get(&e) else { return Ok(()) };
         self.meet_own(d, args, written, span)
     }
@@ -227,23 +251,21 @@ impl<'a> Checker<'a> {
     /// count of the own parameters of `md` (E0308), then their count (E0412
     /// with no candidate, S-306, S-981), then their diagnostic; the variables
     /// `args` of those parameters meet them at `span`.
-    pub(super) fn method_args(&mut self, callee: ExprId, md: DefId, args: &[TyId], span: Span) -> R<()> {
+    fn method_args(&mut self, callee: ExprId, md: DefId, args: &[TyId], span: Span) -> R<()> {
         let ExprKind::TypeArgs { base, args: list } = &self.expr(callee).kind else { return Ok(()) };
         let Some((kinds, written, d)) = self.names.members.get(&callee).cloned() else {
             onsa_diag::internal::bug(Some(list.span), "type arguments of a method the names stage did not read")
         };
-        let own = crate::names::body::own_params(self.a, md);
-        let params: Vec<GenericDef> = own.iter().map(|&k| self.a.def(md).generics()[k].clone()).collect();
-        for ((g, &constant), &x) in params.iter().zip(&kinds).zip(&list.args) {
-            if matches!(g.kind, GenericKind::Const(_)) != constant {
+        let own = crate::names::body::own_kinds(self.a, md);
+        for ((&want, &constant), &x) in own.iter().zip(&kinds).zip(&list.args) {
+            if want != constant {
                 let at = self.ast.ty(x).span;
                 return Err(self.diag(crate::sig::arg_kind_error(Stage::Types, at, self.src(at), constant)));
             }
         }
-        if params.len() != kinds.len() {
+        if own.len() != kinds.len() {
             let (name, at) = (self.last_name(*base).name, self.expr(callee).span);
-            let shown: Vec<String> = params.iter().map(|g| format!("`{}`", g.name)).collect();
-            let d = crate::names::body::count_error(&name, (&shown, kinds.len()), (at, self.src(at)), None);
+            let d = crate::names::body::own_count_error(self.a, md, &name, kinds.len(), (at, self.src(at)));
             return Err(self.diag(d));
         }
         if let Some(d) = d {
@@ -293,17 +315,12 @@ impl<'a> Checker<'a> {
             Entity::Def(d) | Entity::Member(d) => {
                 let def = self.a.def(d).clone();
                 match &def.kind {
-                    DefKind::Fn(_) if self.a.heading_failed(d) || crate::names::self_outside_impl(self.a, entity) => {
-                        Ok(Some(self.a.types.error()))
-                    }
+                    DefKind::Fn(_) if crate::names::unknown_callee(self.a, entity) => Ok(Some(self.a.types.error())),
                     DefKind::Fn(f) => {
                         if f.self_mode.is_some() {
                             onsa_diag::internal::bug(Some(name.span), "a method as a value the names stage took");
                         }
-                        let args = self.fresh_args(d);
-                        self.of_owner(d, &args, owner, span)?;
-                        self.own_args(e, d, &args, span)?;
-                        let of = self.param_of(owner);
+                        let (args, of) = self.generic_use(d, Use::Path { owner, own: Some(e) }, span)?;
                         let fty = self.fn_type(f, &args);
                         let fty = self.member_ty(d, fty, &[], of);
                         if let Some(exp) = expected {
@@ -339,8 +356,7 @@ impl<'a> Checker<'a> {
                 }
             }
             Entity::Variant(d, i) => {
-                let args = self.fresh_args(d);
-                self.of_owner(d, &args, owner, span)?;
+                let (args, _) = self.generic_use(d, Use::Path { owner, own: None }, span)?;
                 let variant = self.a.def(d).as_enum().unwrap().variants[i as usize].clone();
                 let enum_ty = self.a.types.intern(Ty::Named(d, args.clone()));
                 let t = if variant.fields.is_empty() {
@@ -373,9 +389,7 @@ impl<'a> Checker<'a> {
         if crate::constarg::unread(self.a, d) {
             self.a.read_held.insert(self.def);
         }
-        let args = self.fresh_args(d);
-        self.of_owner(d, &args, owner, span)?;
-        let of = self.param_of(owner);
+        let (args, of) = self.generic_use(d, Use::Path { owner, own: None }, span)?;
         let t = self.member_ty(d, c.ty, &args, of);
         let inst = self.finish_instance(d, args, span)?;
         Ok((t, Target::Const { def: d, of, inst }))
@@ -391,13 +405,9 @@ impl<'a> Checker<'a> {
     pub(crate) fn field_type(&mut self, base: TyId, name: &Ident) -> R<TyId> {
         match self.ty(base) {
             Ty::Named(d, args) => {
-                let def = self.a.def(d).clone();
-                if let DefKind::Struct(s) = &def.kind
-                    && let Fields::Named(fs) = &s.fields
-                    && let Some(f) = fs.iter().find(|f| f.name == name.name)
-                {
+                if let Some(f) = self.a.named_field(d, &name.name).map(|(_, f)| f.clone()) {
                     self.a.note_use(f.span, name.span);
-                    self.field_reach(d, f, name.span)?;
+                    self.field_reach(d, &f, name.span)?;
                     return Ok(self.a.types.subst(f.ty, &args));
                 }
                 // SPEC-GAP(S-260): a field of a struct whose unit failed in the
@@ -425,4 +435,13 @@ impl<'a> Checker<'a> {
         let of_method = self.is_method(base, &name.name);
         self.diag(if of_method { d.with_rule(METHOD_IS_CALLED) } else { d })
     }
+}
+
+/// How a generic item is used ([`Checker::generic_use`]): by a path, with
+/// the type `owner` an alias or `Self` names it by and the expression `own`
+/// the names stage recorded the type arguments of its own parameters at (a
+/// function's); or as a method of the receiver `recv`, called at `callee`.
+pub(super) enum Use {
+    Path { owner: Option<TyId>, own: Option<ExprId> },
+    Method { callee: ExprId, recv: TyId },
 }

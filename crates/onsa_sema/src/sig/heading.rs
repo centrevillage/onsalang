@@ -23,7 +23,7 @@ impl<'p> Sema<'p> {
                     // R-278): a trait of the prelude, or a kind constraint; a
                     // user trait is an E0200 (S-719), a name of another kind
                     // an E0308 (S-713 (c)).
-                    for b in bounds {
+                    for (k, b) in bounds.iter().enumerate() {
                         let n = b.path.segments.last().unwrap();
                         if b.path.segments.len() > 1 && listed.iter().any(|l| l.0 == b.path.segments[0].name) {
                             after.push((out.len(), b));
@@ -58,7 +58,7 @@ impl<'p> Sema<'p> {
                             Err(crate::ResolveError::NotFound { .. })
                                 if b.path.segments.len() == 1 && n.name == foreign::SIZED =>
                             {
-                                self.sized_bound(cx, name.span.end, bounds, b);
+                                self.sized_bound(cx, name.span.end, bounds, k);
                                 unknown = true;
                             }
                             // A bound with an error of its name is a part of the

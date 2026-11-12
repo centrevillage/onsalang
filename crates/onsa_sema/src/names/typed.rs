@@ -74,11 +74,19 @@ impl PathEnd {
     }
 }
 
+/// Whether the item `entity` names is a callee whose signature is not
+/// known: its heading a syntax error cut (S-260), or a function declared
+/// with `self` outside an `impl` ([`self_outside_impl`]). Its value and its
+/// call are of the error type, with no diagnostic (§18.1).
+pub(crate) fn unknown_callee(a: &Analysis, entity: Entity) -> bool {
+    matches!(entity, Entity::Def(d) | Entity::Member(d) if a.heading_failed(d)) || self_outside_impl(a, entity)
+}
+
 /// A function declared with `self` outside an `impl` (`fn f(self)`), whose
 /// E0002 is its declaration's (§6.2): what names it sees a declaration with
 /// an error, a value of the error type with no diagnostic (§18.1). A method
 /// is a member of an `impl`, named through its type ([`PathEnd::method`]).
-pub(crate) fn self_outside_impl(a: &Analysis, entity: Entity) -> bool {
+fn self_outside_impl(a: &Analysis, entity: Entity) -> bool {
     let (Entity::Def(d) | Entity::Member(d)) = entity else { return false };
     let def = a.def(d);
     def.owner.is_none() && def.as_fn().is_some_and(|f| f.self_mode.is_some())

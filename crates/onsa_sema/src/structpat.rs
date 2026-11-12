@@ -87,7 +87,7 @@ impl<'a> Checker<'a> {
         }
         let mut seen: Vec<&str> = Vec::new();
         for (field, fp) in fields {
-            let Some(i) = defs.iter().position(|f| f.name == field.name) else {
+            let Some((i, _)) = self.a.named_field(d, &field.name) else {
                 if failed {
                     let error = self.a.types.error();
                     sub(self, *fp, error, None)?;

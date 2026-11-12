@@ -30,7 +30,7 @@ pub(crate) use clash::hides;
 pub(crate) use cycles::{ImportGraph, cycle_diagnostic};
 pub use cycles::{cyclic, file_key};
 pub(crate) use heading::{param_clashes, param_name};
-pub(crate) use typed::{BuiltinMember, PathEnd, builtin_member, builtin_ty, self_outside_impl};
+pub(crate) use typed::{BuiltinMember, PathEnd, builtin_member, builtin_ty, unknown_callee};
 
 /// The name of the receiver of a method (§2.2, §6.2): the binding its
 /// heading and its body see.

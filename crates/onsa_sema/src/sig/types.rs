@@ -210,16 +210,13 @@ impl<'p> Sema<'p> {
     /// none is read, the E0412 of the count with no candidate and a note of
     /// the parameters (S-306); the error type.
     fn own_args(&mut self, cx: &Cx<'p>, d: DefId, args: &[TypeId], (span, path): (Span, &Path)) -> TyId {
-        let own = crate::names::body::own_params(self.a, d);
-        let params: Vec<_> = own.iter().map(|&k| self.a.def(d).generics()[k].clone()).collect();
-        let kinds: Vec<bool> = params.iter().map(|g| matches!(g.kind, GenericKind::Const(_))).collect();
-        if args.len() == params.len() {
+        let kinds = crate::names::body::own_kinds(self.a, d);
+        if args.len() == kinds.len() {
             return self.args_of_kinds(cx, args, &kinds);
         }
         args.iter().zip(&kinds).for_each(|(&x, &k)| _ = self.lower_type_arg(cx, x, Some(k)));
         let name = &path.segments[path.segments.len() - 1].name;
-        let shown: Vec<String> = params.iter().map(|g| format!("`{}`", g.name)).collect();
-        let d = crate::names::body::count_error(name, (&shown, args.len()), (span, src(cx, span)), None);
+        let d = crate::names::body::own_count_error(self.a, d, name, args.len(), (span, src(cx, span)));
         self.report(cx.def, d);
         self.a.types.error()
     }

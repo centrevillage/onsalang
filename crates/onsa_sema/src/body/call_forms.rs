@@ -30,10 +30,7 @@ impl<'a> Checker<'a> {
         kind: CallKind,
     ) -> Option<R<TyId>> {
         let Ty::Named(d, targs) = self.ty(recv) else { return None };
-        let def = self.a.def(d);
-        let DefKind::Struct(s) = &def.kind else { return None };
-        let Fields::Named(fields) = &s.fields else { return None };
-        let field = fields.iter().find(|f| f.name == name.name).filter(|f| self.field_visible(d, f))?;
+        let (_, field) = self.a.named_field(d, &name.name).filter(|(_, f)| self.field_visible(d, f))?;
         if let ExprKind::TypeArgs { .. } = self.expr(callee).kind {
             return Some(Err(self.args_after_field(callee)));
         }
@@ -106,10 +103,7 @@ impl<'a> Checker<'a> {
         match self.ty(t) {
             Ty::Error => false,
             Ty::Named(d, _) => match &self.a.def(d).kind {
-                DefKind::Struct(s) => {
-                    let has = matches!(&s.fields, Fields::Named(fs) if fs.iter().any(|f| f.name == name));
-                    !has && !self.a.partly_read(d)
-                }
+                DefKind::Struct(_) => self.a.named_field(d, name).is_none() && !self.a.partly_read(d),
                 _ => true,
             },
             _ => self.infer.lit_of(&self.a.types, t).is_none(),

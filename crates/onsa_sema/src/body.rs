@@ -634,13 +634,7 @@ impl<'a> Checker<'a> {
         match &self.expr(e).kind {
             ExprKind::Paren(x) | ExprKind::Unary { expr: x, .. } => self.non_integer_form(*x),
             ExprKind::Binary { lhs, rhs, .. } => self.non_integer_form(*lhs).or_else(|| self.non_integer_form(*rhs)),
-            ExprKind::Lit(Lit::Float { .. }) => Some("a float literal"),
-            ExprKind::Lit(Lit::Str(_)) => Some("a string literal"),
-            ExprKind::Lit(Lit::Char(_)) => Some("a character literal"),
-            ExprKind::Lit(Lit::Bool(_)) => Some("a `Bool` literal"),
-            ExprKind::Tuple(_) => Some("a tuple"),
-            ExprKind::Array(_) | ExprKind::Repeat { .. } => Some("an array"),
-            _ => None,
+            kind => non_integer_noun(kind),
         }
     }
 
@@ -886,4 +880,30 @@ pub(crate) fn view_base(
     let span = info.expr_types.get(&e).is_some_and(|&t| matches!(a.types.get(ty(t)), Ty::Builtin(BuiltinTy::Span, _)));
     let std = matches!(info.targets.get(&e), Some(Target::Method { def, .. }) if a.modules.is_std(a.def(*def).module));
     (span && std).then_some(base)
+}
+
+/// The noun of the form `kind` of a value that is no integer, as a message
+/// names it (§7, §4.5): a float, string, character or `Bool` literal
+/// ([`literal_noun`]), a tuple, an array. The one table of
+/// [`Checker::non_integer_form`] and of a constant expression
+/// (`crate::constarg`).
+pub(crate) fn non_integer_noun(kind: &ExprKind) -> Option<&'static str> {
+    match kind {
+        ExprKind::Lit(Lit::Int { .. }) => None,
+        ExprKind::Lit(lit) => Some(literal_noun(lit)),
+        ExprKind::Tuple(_) => Some("a tuple"),
+        ExprKind::Array(_) | ExprKind::Repeat { .. } => Some("an array"),
+        _ => None,
+    }
+}
+
+/// The noun of the literal `lit`, as a message names it.
+pub(crate) fn literal_noun(lit: &Lit) -> &'static str {
+    match lit {
+        Lit::Int { .. } => "an integer literal",
+        Lit::Float { .. } => "a float literal",
+        Lit::Bool(_) => "a `Bool` literal",
+        Lit::Str(_) => "a string literal",
+        Lit::Char(_) => "a character literal",
+    }
 }
