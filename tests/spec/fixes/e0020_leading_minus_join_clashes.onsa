@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.1", "§18.1"]
+// fixes = 1
+
+// R-443 (W5-13 U7c): a line that starts with `- b` or `^ b` after an operand is E0020 (S-123), and its
+// candidates are the space removed and the line joined to the line before (e0020_leading_minus.onsa).
+// The joined line is no candidate when it does not read (§18.1): the operator joins the chain of the
+// line before and the rest of its own line, and an edge of that chain the strengths of §3.1 do not allow
+// is E0010 (`%`, the bitwise group, a comparison chained), and a cast as an operand is E0011. The space
+// removed is the one candidate left. The joins that read are in e0020_leading_minus_join_reads.onsa.
+
+pub fn after_a_remainder(a: I32, b: I32) -> I32 {
+  a % b
+  - b                                               //~ E0020
+}
+
+pub fn after_a_bitwise_operator(a: I32, b: I32) -> I32 {
+  a & b
+  - b                                               //~ E0020
+}
+
+pub fn after_a_cast(a: I32, b: I32) -> I32 {
+  a as I32
+  - b                                               //~ E0020
+}
+
+pub fn a_cast_on_its_line(a: I32, b: I32) -> I32 {
+  a
+  - b as I32                                        //~ E0020
+}
+
+pub fn a_comparison_on_its_line(a: I32, b: I32) -> Bool {
+  a < b
+  - b < a                                           //~ E0020
+}
+
+pub fn a_caret_after_an_addition(a: U32, b: U32) -> U32 {
+  a + b
+  ^ b                                               //~ E0020
+}

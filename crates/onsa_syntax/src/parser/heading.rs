@@ -449,7 +449,7 @@ impl<'a> Parser<'a> {
     /// and that `{`; `None` when there is none, or when the brackets before
     /// it do not close (the range of the form closes on its line, §18.1).
     fn extern_head_on_line(&self, first: usize) -> Option<(Vec<usize>, usize)> {
-        let (mut head, mut open) = (Vec::new(), Vec::new());
+        let (mut head, mut open) = (Vec::new(), crate::scan::OpenBrackets::default());
         let mut at = first;
         loop {
             at = self.on_line_after(at)?;

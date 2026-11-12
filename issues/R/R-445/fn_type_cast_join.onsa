@@ -23,7 +23,12 @@ pub fn ro(x: Bool) -> Result[I32, I32] {
   Ok(1)
 }
 
+
+pub fn two(x: I32, y: I32) -> I32 {
+  x
+}
+
 pub fn f(a: I32, b: I32, c: Bool, p: P, o: Option[I32]) -> I32 {
-  a as I32
+  a as fn(I32) -> I32
   - b
 }

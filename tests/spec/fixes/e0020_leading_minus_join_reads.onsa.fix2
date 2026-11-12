@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.1", "§18.1"]
+// fixes = 2
+
+// R-443 (W5-13 U7c): the line `- b` after an operand keeps its second candidate, the line joined to the
+// line before, when the joined line reads (§18.1): `a < b - b` is `a < (b - b)` (§3.1: the additive
+// group is stronger than a comparison), `a * b - b` is `(a * b) - b`, and a block-like operand before
+// it is put in parentheses (S-537). The joins that leave an error are in
+// e0020_leading_minus_join_clashes.onsa.
+
+pub fn after_a_comparison(a: I32, b: I32) -> Bool {
+  a < b - b
+  //~ E0020
+}
+
+pub fn after_a_multiplication(a: I32, b: I32) -> I32 {
+  a * b - b
+  //~ E0020
+}
+
+pub fn after_an_if(c: Bool, a: I32, b: I32) -> I32 {
+  (if c { a } else { b }) - b
+  //~ E0020
+}

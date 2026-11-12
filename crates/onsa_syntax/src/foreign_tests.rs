@@ -508,16 +508,19 @@ fn a_closer_closes_the_innermost_bracket_of_its_kind() {
     use crate::token::TokenKind::{LBrace, LParen, RBrace, RBracket, RParen};
     let tokens = crate::layout::code_tokens(&crate::lex(FileId(0), "{ f ( a ] } )").tokens).0;
     let at = |kind| tokens.iter().position(|t| t.kind == kind).unwrap();
-    let mut open = Vec::new();
+    let mut open = crate::scan::OpenBrackets::default();
     let closed: Vec<Option<usize>> = (0..tokens.len()).map(|i| crate::scan::pair(&mut open, &tokens, i, 0)).collect();
     assert_eq!(closed[at(RBracket)], None);
     assert_eq!(closed[at(RBrace)], Some(at(LBrace)), "the `}}` closes the `{{` with the `(` in it");
     assert_eq!(closed[at(RParen)], None);
     assert!(open.is_empty());
     // A `}` whose `{` is below the base closes nothing, and leaves it open.
-    let mut open = vec![at(LBrace), at(LParen)];
+    let mut open = crate::scan::OpenBrackets::default();
+    for opener in [at(LBrace), at(LParen)] {
+        crate::scan::pair(&mut open, &tokens, opener, 0);
+    }
     assert_eq!(crate::scan::pair(&mut open, &tokens, at(RBrace), 1), None);
-    assert_eq!(open, [at(LBrace), at(LParen)]);
+    assert_eq!(*open, [at(LBrace), at(LParen)]);
     let tokens = crate::layout::code_tokens(&crate::lex(FileId(0), "( [ { ] ) ( [ ] )").tokens).0;
     assert_eq!(crate::scan::Brackets::new(&tokens).closing(0), None);
     let second = tokens.iter().rposition(|t| t.kind == LParen).unwrap();

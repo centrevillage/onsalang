@@ -246,7 +246,7 @@ pub(crate) struct Parser<'a> {
     no_struct_lit: bool,
     /// The `(`, `[` and `{` the cursor is inside, innermost last: their
     /// indices in `tokens` (the recovery, [`Parser::skip_unit`]).
-    braces: Vec<usize>,
+    braces: crate::scan::OpenBrackets,
     /// For each `{` of `tokens`, whether a `}` closes it when the brackets of
     /// the file are paired in order (the recovery where a `{` is never
     /// closed, [`Parser::unit_ends_unclosed`]).
@@ -349,7 +349,7 @@ struct Snapshot {
     diagnostics: usize,
     open: Vec<Open>,
     closed: Vec<(NodeKind, u32)>,
-    braces: Vec<usize>,
+    braces: crate::scan::OpenBrackets,
     nl: Vec<bool>,
     no_struct_lit: bool,
     detached: Option<Detached>,
@@ -369,7 +369,7 @@ impl<'a> Parser<'a> {
         let (tokens, full, lines) = crate::layout::code_tokens(&all);
         // Whether each `{` is ever closed, the braces paired among themselves.
         let mut brace_closed = vec![false; tokens.len()];
-        let mut open = Vec::new();
+        let mut open = crate::scan::OpenBrackets::default();
         for k in (0..tokens.len()).filter(|&k| matches!(tokens[k].kind, TokenKind::LBrace | TokenKind::RBrace)) {
             if let Some(o) = crate::scan::pair(&mut open, &tokens, k, 0) {
                 brace_closed[o] = true;
@@ -386,7 +386,7 @@ impl<'a> Parser<'a> {
             last_end: 0,
             nl: vec![true],
             no_struct_lit: false,
-            braces: Vec::new(),
+            braces: Default::default(),
             brace_closed,
             attribute_lines: std::cell::Cell::new((0, 0)),
             unit_brackets: 0,

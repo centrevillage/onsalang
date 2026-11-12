@@ -34,14 +34,14 @@ impl Brackets {
         MADE.set(MADE.get() + 1);
         let mut b =
             Brackets { contents: vec![None; tokens.len()], closing: vec![None; tokens.len()], unclosed: Vec::new() };
-        let (mut any, mut kinds) = (Vec::<(usize, bool, bool)>::new(), Vec::new());
+        let (mut any, mut kinds) = (Vec::<(usize, bool, bool)>::new(), OpenBrackets::default());
         for (i, t) in tokens.iter().enumerate() {
             #[cfg(test)]
             WALKED.set(WALKED.get() + 1);
             match t.kind {
                 TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace => {
                     any.push((i, false, false));
-                    kinds.push(i);
+                    pair(&mut kinds, tokens, i, 0);
                 }
                 TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace => {
                     if let Some((o, comma, semi)) = any.pop() {
@@ -50,7 +50,7 @@ impl Brackets {
                     let innermost = kinds.last().copied();
                     match pair(&mut kinds, tokens, i, 0) {
                         Some(o) if Some(o) == innermost => b.closing[o] = Some(i),
-                        _ => kinds.clear(),
+                        _ => kinds.truncate(0),
                     }
                 }
                 TokenKind::Comma | TokenKind::Semi => {
@@ -135,7 +135,7 @@ pub(crate) fn closing_on_line(tokens: &[Token], open: usize) -> Option<usize> {
 /// reading [`Brackets::closing`] makes for every opener at once.
 fn scan_closing(tokens: &[Token], open: usize, on_line: bool) -> Option<usize> {
     closer(tokens.get(open)?.kind)?;
-    let mut brackets = Vec::new();
+    let mut brackets = OpenBrackets::default();
     for (i, t) in tokens.iter().enumerate().skip(open) {
         #[cfg(test)]
         WALKED.set(WALKED.get() + 1);
@@ -153,6 +153,38 @@ fn scan_closing(tokens: &[Token], open: usize, on_line: bool) -> Option<usize> {
     None
 }
 
+/// The brackets left open, innermost last (their positions in the tokens),
+/// with where in them the openers of each kind are (R-409): a closer finds
+/// the innermost opener of its kind without walking those open, so that a
+/// line of closers that close nothing is read in linear time. It reads as
+/// the slice of the positions; [`pair`] and [`OpenBrackets::truncate`]
+/// change it.
+#[derive(Clone, Default)]
+pub(crate) struct OpenBrackets {
+    at: Vec<usize>,
+    /// For each kind (as in [`OPENERS`]), the indices in `at` of its openers, ascending.
+    of: [Vec<usize>; 3],
+}
+
+impl std::ops::Deref for OpenBrackets {
+    type Target = [usize];
+    fn deref(&self) -> &[usize] {
+        &self.at
+    }
+}
+
+impl OpenBrackets {
+    /// Keep the `k` outermost brackets open.
+    pub(crate) fn truncate(&mut self, k: usize) {
+        self.at.truncate(k);
+        for of in &mut self.of {
+            while of.last().is_some_and(|&j| j >= k) {
+                of.pop();
+            }
+        }
+    }
+}
+
 /// Read the token at `i` on the brackets left open, `open` (their positions;
 /// those above `base` are of the run read): an opener is opened, and a
 /// closer closes the innermost opener of its kind above `base`, with the
@@ -160,19 +192,17 @@ fn scan_closing(tokens: &[Token], open: usize, on_line: bool) -> Option<usize> {
 /// `(`). The opener a closer closed; none for one that matches none (it
 /// closes nothing) and for any other token. The one judgment of which
 /// bracket a closer closes, for the parser and [`Brackets::closing`].
-pub(crate) fn pair(open: &mut Vec<usize>, tokens: &[Token], i: usize, base: usize) -> Option<usize> {
-    let kind = tokens[i].kind;
-    if closer(kind).is_some() {
-        open.push(i);
-        return None;
-    }
+pub(crate) fn pair(open: &mut OpenBrackets, tokens: &[Token], i: usize, base: usize) -> Option<usize> {
     // A token that closes nothing, without looking at those open (R-403).
-    if !matches!(kind, TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace) {
+    let kind = tokens[i].kind;
+    let c = OPENERS.iter().position(|&o| o == kind || closer(o) == Some(kind))?;
+    if OPENERS[c] == kind {
+        open.of[c].push(open.at.len());
+        open.at.push(i);
         return None;
     }
-    let from = base.min(open.len());
-    let k = from + open[from..].iter().rposition(|&b| closer(tokens[b].kind) == Some(kind))?;
-    let opener = open[k];
+    let k = *open.of[c].last().filter(|&&k| k >= base)?;
+    let opener = open.at[k];
     open.truncate(k);
     Some(opener)
 }
@@ -180,7 +210,7 @@ pub(crate) fn pair(open: &mut Vec<usize>, tokens: &[Token], i: usize, base: usiz
 /// Whether the brackets of `tokens` close among themselves, in order.
 pub(crate) fn balanced(tokens: &[Token]) -> bool {
     let mut open = Vec::new();
-    let closes = |k| [TokenKind::LParen, TokenKind::LBracket, TokenKind::LBrace].iter().any(|&o| closer(o) == Some(k));
+    let closes = |k| OPENERS.iter().any(|&o| closer(o) == Some(k));
     tokens.iter().all(|t| match closer(t.kind) {
         Some(c) => {
             open.push(c);
@@ -189,6 +219,9 @@ pub(crate) fn balanced(tokens: &[Token]) -> bool {
         None => !closes(t.kind) || open.pop() == Some(t.kind),
     }) && open.is_empty()
 }
+
+/// The opening brackets.
+const OPENERS: [TokenKind; 3] = [TokenKind::LParen, TokenKind::LBracket, TokenKind::LBrace];
 
 /// The closer of an opening bracket.
 fn closer(kind: TokenKind) -> Option<TokenKind> {

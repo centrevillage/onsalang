@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.1", "§18.1"]
+// fixes = 0
+
+// R-443 (W5-13 U7c): an operator only binary at the head of a line is E0020, and its candidate moves it
+// to the end of the line before (e0020_leading_operator.onsa). The candidate is not made when the line
+// so joined does not read (§18.1): an edge of its chain that the strengths of §3.1 do not allow (E0010:
+// `%` and `*`, `<` chained) or a cast as an operand (E0011). In a pair of brackets, a `- b` at the head of
+// a line joins the line before as its one candidate, and a join that leaves an E0010 is none either. An
+// E0020 with no candidate is E0002 (S-114).
+
+pub fn two(c: Bool, y: I32) -> I32 {
+  y
+}
+
+pub fn after_a_remainder(a: I32, b: I32) -> I32 {
+  a % b
+  * b                                               //~ E0002
+}
+
+pub fn after_a_cast(a: I32, b: I32) -> I32 {
+  let x = a as I32
+  + b                                               //~ E0002
+  x
+}
+
+pub fn a_cast_on_its_line(a: I32, b: I32) -> I32 {
+  a
+  * b as I32                                        //~ E0002
+}
+
+pub fn a_comparison_chained(a: I32, b: I32) -> Bool {
+  a < b
+  < b                                               //~ E0002
+}
+
+pub fn in_brackets(c: Bool, a: I32, b: I32) -> I32 {
+  two(c, a % b
+    - b)                                            //~ E0002
+}

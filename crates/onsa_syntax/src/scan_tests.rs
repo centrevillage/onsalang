@@ -4,7 +4,7 @@
 
 use onsa_diag::FileId;
 
-use crate::scan::{Brackets, MADE, WALKED, pair};
+use crate::scan::{Brackets, MADE, OpenBrackets, WALKED, pair};
 use crate::token::{Token, TokenKind};
 
 /// The scan the table's contents replaced: from `open` on, brackets of any
@@ -34,7 +34,7 @@ fn scan_contents(tokens: &[Token], open: usize) -> Option<(usize, bool, bool)> {
 /// ([`pair`]), none when a closer closes another than the innermost (the
 /// reference).
 fn scan_closing(tokens: &[Token], open: usize) -> Option<usize> {
-    let mut brackets = Vec::new();
+    let mut brackets = OpenBrackets::default();
     for (i, t) in tokens.iter().enumerate().skip(open) {
         let innermost = brackets.last().copied();
         let closed = pair(&mut brackets, tokens, i, 0);

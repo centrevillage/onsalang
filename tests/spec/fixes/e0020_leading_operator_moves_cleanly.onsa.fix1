@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.1", "§18.1"]
+// fixes = 1
+
+// R-443 (W5-13 U7c): the operator at the head of a line keeps its candidate, moved to the end of the
+// line before, when the line so joined reads (§3.1, §18.1): `a + b * b` and `a < b * b` are allowed. In
+// a pair of brackets, the `- b` joined to the line before (`a < b - b`) reads too. The forms whose join
+// leaves an error are in e0020_leading_operator_clashes.onsa.
+
+pub fn two(c: Bool, y: Bool) -> Bool {
+  y
+}
+
+pub fn after_an_addition(a: I32, b: I32) -> I32 {
+  a + b *
+  b                                               //~ E0020
+}
+
+pub fn after_a_comparison(a: I32, b: I32) -> Bool {
+  a < b *
+  b                                               //~ E0020
+}
+
+pub fn in_brackets(c: Bool, a: I32, b: I32) -> Bool {
+  two(c, a < b - b)
+    //~ E0020
+}

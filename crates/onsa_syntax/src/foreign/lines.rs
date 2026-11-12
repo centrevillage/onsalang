@@ -10,6 +10,7 @@
 use super::edits::{move_token_down, move_token_up};
 use super::lists::comma_before_sign;
 use super::*;
+use crate::ast::{BinOp, Chain, Operand, Side};
 use crate::edits::move_up;
 use crate::scan::arm_ahead;
 
@@ -102,7 +103,8 @@ pub(super) fn leading_symbol(c: &Cursor) -> Option<(RowId, Hit)> {
         Gap::Newline if sign => return None,
         Gap::Space if sign => {
             let title = "join it to the line before";
-            move_up(c.file, c.text, c.all, title, c.span(prev).end, c.tokens[s], " ").into_iter().collect()
+            let joined = move_up(c.file, c.text, c.all, title, c.span(prev).end, c.tokens[s], " ");
+            joined.filter(|_| joins_cleanly(c, prev, s)).into_iter().collect()
         }
         gap => moved_to_the_line_before(c, s, prev, gap),
     };
@@ -117,13 +119,91 @@ fn moved_to_the_line_before(c: &Cursor, s: usize, prev: usize, gap: Gap) -> Vec<
     use TokenKind::*;
     let symbol = &c.text[c.span(s).start as usize..c.span(s).end as usize];
     let title = "move it to the end of the line before";
-    let mut fixes: Vec<Fix> = super::edits::move_token_up_as(c, title, s, &format!(" {symbol}")).into_iter().collect();
+    let moved = super::edits::move_token_up_as(c, title, s, &format!(" {symbol}"));
+    let mut fixes: Vec<Fix> = moved.filter(|_| joins_cleanly(c, prev, s)).into_iter().collect();
     let list = super::lists::expression_list(c);
     let operand = gap == Gap::None && crate::starts::starts_operand(c.kind(s + 1));
     if list && operand && matches!(c.kind(s), Minus | Caret | Plus) {
         fixes.push(comma_before_sign(c, prev, s));
     }
     fixes
+}
+
+/// Whether the binary operator `s` at the head of a line, joined to the line
+/// before after its last token `prev`, leaves a chain that reads (§3.1,
+/// §18.1, R-443): the operators of the chain before it and of its own line
+/// after it, at its depth ([`chain_from`]), read as the tree of §3.1
+/// ([`Chain`]), each edge judged by [`BinOp::bare`] (E0010, and E0011 for an
+/// operand with `as` or `at`). Another symbol joins as it is.
+pub(super) fn joins_cleanly(c: &Cursor, prev: usize, s: usize) -> bool {
+    let Some(op) = c.kind(s).binop() else { return true };
+    let (mut operands, mut ops) = chain_from(c, prev, true);
+    operands.reverse();
+    ops.reverse();
+    let (after, ops_after) = chain_from(c, c.sig_after(s), false);
+    let mut fits = true;
+    let mut join = |l, o: BinOp, r| {
+        fits &= o.bare(Side::Left, l) && o.bare(Side::Right, r);
+        Operand::Binary(o)
+    };
+    let tighter = |o: BinOp, w: BinOp| o.group().stronger(w.group());
+    let mut operands = operands.into_iter().chain(after);
+    let mut chain = Chain::new(operands.next().unwrap_or(Operand::Plain));
+    for (o, operand) in ops.into_iter().chain([op]).chain(ops_after).zip(operands) {
+        chain.operator(o, tighter, &mut join);
+        chain.operand(operand);
+    }
+    chain.finish(&mut join);
+    fits
+}
+
+/// The operands (with `as` or `at` or plain) and the binary operators of the
+/// chain from token `from`, the last token of an operand going back to its
+/// start (`back`), or its first going on to its end: in the order of the
+/// scan, at the depth of `from`, the brackets an operand holds passed. It
+/// stops at what is no part of a chain there: a bracket that closes none, a
+/// line break that ends the line, a keyword but `as` and `at` (a block-like
+/// operand ends the scan), a separator.
+fn chain_from(c: &Cursor, from: usize, back: bool) -> (Vec<Operand>, Vec<BinOp>) {
+    use TokenKind::*;
+    let (mut operands, mut ops, mut depth) = (vec![Operand::Plain], Vec::new(), 0u32);
+    let (opener, closer) = (|k| matches!(k, LParen | LBracket | LBrace), |k| matches!(k, RParen | RBracket | RBrace));
+    let mut i = from;
+    loop {
+        let k = c.kind(i);
+        let (inward, outward) = if back { (closer(k), opener(k)) } else { (opener(k), closer(k)) };
+        let binary = k.binop().filter(|_| after_operand(c, i));
+        match k {
+            Eof => break,
+            _ if inward => depth += 1,
+            _ if outward && depth == 0 => break,
+            _ if outward => depth -= 1,
+            _ if depth > 0 || c.comment(i) => {}
+            Newline if c.lines.goes_on(i) => {}
+            KwAs | KwAt => operands.iter_mut().last().into_iter().for_each(|o| *o = Operand::AsAt),
+            _ if binary.is_some() => {
+                ops.extend(binary);
+                operands.push(Operand::Plain);
+            }
+            _ if k.binop().is_some()
+                || ends_operand(k)
+                || matches!(k, Underscore | Dot | ColonColon | Tilde | Bang) => {}
+            _ => break,
+        }
+        match back {
+            true if i == 0 => break,
+            true => i -= 1,
+            false => i += 1,
+        }
+    }
+    (operands, ops)
+}
+
+/// Whether the token at `i` follows an operand on its line: an operator there
+/// is binary, else a prefix one (a `-`, `!` or `^` at the head of a line, or
+/// after another operator).
+pub(super) fn after_operand(c: &Cursor, i: usize) -> bool {
+    c.before(i).is_some_and(|p| ends_operand(c.kind(p)))
 }
 
 /// Whether the failure is at a symbol at the head of a line that goes on with
