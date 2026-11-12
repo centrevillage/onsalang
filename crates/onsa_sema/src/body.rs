@@ -1,7 +1,8 @@
 //! Function-body checking (T2-5 .. T2-7, T2-10, T2-11): the inference of spec
 //! §4.7 — statement order, unification variables, downward expected types —
-//! plus generics instantiation, closures as arguments, builtin methods
-//! and `const` evaluation; the names and the bindings are the names stage's
+//! plus generics instantiation, closures as arguments, the members this
+//! version does not give a builtin type (`crate::builtin::MISSING`) and
+//! `const` evaluation; the names and the bindings are the names stage's
 //! record (`crate::names::body`). Argument modes / exclusivity (T2-8)
 //! and `rt` (T2-9) run after this pass over the tables in [`BodyInfo`].
 //!
@@ -177,14 +178,6 @@ pub enum Target {
         def: DefId,
         of: Option<TyId>,
         inst: Option<InstId>,
-    },
-    /// A method of the compiler's table (`xs.len()` of an array,
-    /// `crate::builtin`).
-    BuiltinMethod {
-        name: String,
-        /// The mode of `self`, as the types stage chose it (§5.2; the modes
-        /// stage reads it, not the name).
-        self_mode: Mode,
     },
     /// A call through a function value (closure or `fn` value).
     Value,

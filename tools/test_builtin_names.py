@@ -235,19 +235,19 @@ fn f(n: &str) -> bool {
         ):
             self.assertEqual(builtin_names.is_test_file(rel), is_test, rel)
 
-    def run_main(self, args=(), members=()):
+    def run_main(self, args=(), std=("zeroed",)):
         split_spec(NAMES_SPEC, self.root)
         out = io.StringIO()
-        cmd = json_cmd({"--std-names": ["zeroed"], "--builtin-members": list(members)})
+        cmd = json_cmd({"--std-names": list(std)})
         with mock.patch("sys.stdout", out):
             code = builtin_names.main(["--root", str(self.root), *args], cmd=cmd)
         return code, out.getvalue()
 
-    def test_members_of_sema_are_names(self):
-        # the builtin methods of sema's table (`--builtin-members`) are builtin names
+    def test_std_names_are_names(self):
+        # the names std declares (`--std-names`), its members among them, are builtin names
         self.write("crates/a/src/lib.rs", 'fn f(n: &str) -> bool { n == "checked_add" || n.starts_with("narrow_") }\n')
         self.write(builtin_names.ALLOW, "")
-        code, out = self.run_main(members=["checked_add", "narrow_u8"])
+        code, out = self.run_main(std=["checked_add", "narrow_u8"])
         self.assertEqual(code, 1)
         self.assertIn('"checked_add" is written 1 time(s), the list allows 0', out)
         self.assertIn('"narrow_" is written 1 time(s)', out)
@@ -257,25 +257,25 @@ fn f(n: &str) -> bool {
         self.write("crates/a/src/lib.rs", 'fn f(n: &str) -> bool { n == "zeroed" || n == "min" }\n')
         listed = '[allow."crates/a/src/lib.rs"]\n"zeroed" = 1\n\n[same_spelling."crates/a/src/lib.rs"]\n"min" = { count = 1, note = "@param のキー" }\n'
         self.write(builtin_names.ALLOW, listed)
-        self.assertEqual(self.run_main(members=["min"])[0], 0)
+        self.assertEqual(self.run_main(std=["zeroed", "min"])[0], 0)
         # --print keeps the same_spelling entries and their notes
-        self.assertEqual(self.run_main(["--print"], members=["min"]), (0, listed))
+        self.assertEqual(self.run_main(["--print"], std=["zeroed", "min"]), (0, listed))
         # both tables count: one more fails, asking for the place or a note
         self.write("crates/a/src/lib.rs", 'fn f(n: &str) -> bool { n == "zeroed" || n == "min" || n == "min" }\n')
-        code, out = self.run_main(members=["min"])
+        code, out = self.run_main(std=["zeroed", "min"])
         self.assertEqual(code, 1)
         self.assertIn('"min" is written 2 time(s), the list allows 1', out)
         self.assertIn("[same_spelling]", out)
         # one fewer asks to lower the count
         self.write("crates/a/src/lib.rs", 'fn f(n: &str) -> bool { n == "zeroed" }\n')
-        code, out = self.run_main(members=["min"])
+        code, out = self.run_main(std=["zeroed", "min"])
         self.assertEqual(code, 1)
         self.assertIn('"min" is written 0 time(s), the list allows 1; lower the count', out)
         # an entry needs a count and a note
         for bad in ('"min" = 1', '"min" = { count = 1 }', '"min" = { count = 1, note = " " }', '"min" = { count = 0, note = "x" }'):
             with self.subTest(bad=bad):
                 self.write(builtin_names.ALLOW, f'[same_spelling."crates/a/src/lib.rs"]\n{bad}\n')
-                code, out = self.run_main(members=["min"])
+                code, out = self.run_main(std=["zeroed", "min"])
                 self.assertEqual(code, 1)
                 self.assertIn("cannot check", out)
 

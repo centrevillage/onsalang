@@ -8,19 +8,17 @@ number per file and name with the list `tools/builtin_names.toml`:
 
 - a literal the list does not allow (a new hard-coded name) fails;
 - a list entry larger than what is found fails too, so that the list only
-  shrinks (C-118: the first list is every literal of today; W5-02 reduces it);
+  shrinks (C-118: the first list was every literal of W1-02; moving a
+  decision to its place lowers it);
 - a table out of the order `--print` writes (the files, and the literals of each, sorted) fails.
 The list has two tables (`TABLES`): `allow`, the builtin names written in the
 code, and `same_spelling`, literals spelled like a builtin name with another
 meaning, each with a note of its meaning; they are counted together.
 
 The builtin names are the names the spec defines and the compiler tells by
-name. They come from three sources:
-- the names the embedded std declares (from the compiler, `onsa_cases
-  --std-names`);
-- the builtin methods, associated constants and associated functions of
-  sema's one table of them (`onsa_cases --builtin-members`, until W5-02 moves
-  them into std);
+name. They come from two sources:
+- the names the embedded std declares, the members of the builtin types
+  among them (from the compiler, `onsa_cases --std-names`);
 - fixed places of the spec (`SPEC_PLACES`): the builtin types (§4.1), the
   prelude (§15.1), the operator and standard traits (§6.3), the standard
   effects (§8.1), the builtin names reserved in a flow (§2.2), the generated
@@ -267,7 +265,7 @@ def keywords(spec_text):
     return words
 
 
-def names_by_kind(spec_text, std_names, members=(), baselines=None):
+def names_by_kind(spec_text, std_names, baselines=None):
     """{kind: names} of every source of builtin names, before keywords and
     one-letter names are removed. Fails when a place does not give the names
     of its baseline (`BASELINES` by default)."""
@@ -281,13 +279,12 @@ def names_by_kind(spec_text, std_names, members=(), baselines=None):
                 "change BASELINES in tools/builtin_names.py with it"
             )
     kinds["std declarations"] = set(std_names)
-    kinds["builtin members of sema"] = set(members)
     return kinds
 
 
-def builtin_names(spec_text, std_names, members=(), baselines=None):
+def builtin_names(spec_text, std_names, baselines=None):
     """The builtin names, without keywords and one-letter names."""
-    every = set().union(*names_by_kind(spec_text, std_names, members, baselines).values())
+    every = set().union(*names_by_kind(spec_text, std_names, baselines).values())
     return {n for n in every if len(n) > 1} - keywords(spec_text)
 
 
@@ -464,7 +461,7 @@ def scan(root, names):
 
 
 # The two tables of the list. `allow`: builtin names written in the code (the
-# hard-coding W5-02 removes), `{file: {literal: count}}`. `same_spelling`: a
+# hard-coding that moving a decision to its place removes), `{file: {literal: count}}`. `same_spelling`: a
 # literal spelled like a builtin name with another meaning (an `@param` key,
 # a clock name, a C type name), `{file: {literal: {count, note}}}`; the note
 # says the meaning. Both work the same: more literals than listed fail, fewer
@@ -573,8 +570,7 @@ def main(argv=None, root=ROOT, cmd=repo.CASES_CMD):
     root = args.root or root
     try:
         std = repo.cases_json(root, cmd, "--std-names")
-        members = repo.cases_json(root, cmd, "--builtin-members")
-        names = builtin_names(repo.spec_text(root), std, members)
+        names = builtin_names(repo.spec_text(root), std)
         found = scan(root, names)
         if args.print:
             lists, notes = load_allow(root / ALLOW) if (root / ALLOW).is_file() else (None, None)

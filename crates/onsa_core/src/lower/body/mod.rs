@@ -2,7 +2,7 @@
 //!
 //! This module holds the context of a body ([`FnCx`]), the function bodies
 //! and the statements; [`pat`] the patterns and `match`, [`expr`] the
-//! expressions, [`call`] the calls and the builtin methods.
+//! expressions, [`call`] the calls.
 
 use onsa_diag::Span;
 use onsa_diag::unsupported::Feature;

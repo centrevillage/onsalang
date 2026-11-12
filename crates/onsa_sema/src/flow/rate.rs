@@ -229,7 +229,6 @@ impl<'a> Rater<'a> {
                     "a flow body cannot contain function values; call the function directly (§11.2)",
                 ));
             }
-            Target::BuiltinMethod { .. } => return Ok(None),
         }))
     }
 
@@ -391,7 +390,6 @@ impl<'a> Rater<'a> {
                 }
                 Ok(r.max(FlowRate::Init))
             }
-            Some(Target::BuiltinMethod { .. }) => Ok(r.max(FlowRate::Init)),
             Some(Target::Variant { .. }) | Some(Target::Panic) => Ok(r),
             Some(Target::Value) => Err(self.err(
                 Code::E0806,

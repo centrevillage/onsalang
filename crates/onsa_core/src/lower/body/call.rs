@@ -1,5 +1,4 @@
-//! Lowering of function bodies: calls, the `target fn`s of std and the
-//! methods of the compiler's table (T3-3).
+//! Lowering of function bodies: calls and the `target fn`s of std (T3-3).
 
 use super::*;
 
@@ -28,7 +27,7 @@ pub(crate) fn coerce(lw: &mut Lowerer, cx: &mut FnCx, e: Expr, want: &Ty, mode: 
         (Ty::Span(_), Ty::Array(..) | Ty::Buf(_)) => span_of(cx, e, mode),
         // A `FixedStr[N]` at a `Span[U8]`: its used part (§4.2).
         (Ty::Span(_), Ty::Struct(_)) => crate::lower::fixed_str::view(lw, cx, e),
-        (Ty::Array(elem, n), Ty::Array(from, m)) if matches!(**elem, Ty::Span(_)) && n == m => {
+        (Ty::Array(elem, n), Ty::Array(_, m)) if matches!(**elem, Ty::Span(_)) && n == m => {
             let n = *n;
             // Planar: `[a, b]` written in the argument, or an array of arrays / Bufs.
             if let ExprKind::Array(items) = e.kind {
@@ -38,7 +37,6 @@ pub(crate) fn coerce(lw: &mut Lowerer, cx: &mut FnCx, e: Expr, want: &Ty, mode: 
                 }
                 return Ok(Expr::new(want.clone(), span, ExprKind::Array(out)));
             }
-            let _ = from;
             if e.as_place().is_none() {
                 return Err(unsupported(span, Feature::PlanarTemporary, &[]));
             }
@@ -121,7 +119,7 @@ pub(super) fn lower_call(
             if f.target {
                 return lower_target_call(lw, cx, e, (def, f), &gargs, None, args, ty);
             }
-            let params = sig_params(lw, cx, f, &gargs, span)?;
+            let params = sig_params(lw, f, &gargs, span)?;
             let cargs = lower_args(lw, cx, args, &params)?;
             let fid = lw.fn_id(def, gargs, span)?;
             Ok(Expr::new(ty, span, ExprKind::Call { fn_: fid, args: cargs }))
@@ -148,13 +146,12 @@ pub(super) fn lower_call(
                 Some(this @ Ty::Span(_)) => coerce(lw, cx, recv, &this, self_mode)?,
                 _ => recv,
             };
-            let params = sig_params(lw, cx, f, &gargs, span)?;
+            let params = sig_params(lw, f, &gargs, span)?;
             let mut cargs = vec![Arg { mode: self_mode, expr: recv }];
             cargs.extend(lower_args(lw, cx, args, &params)?);
             let fid = lw.fn_id(def, gargs, span)?;
             Ok(Expr::new(ty, span, ExprKind::Call { fn_: fid, args: cargs }))
         }
-        Target::BuiltinMethod { name, .. } => lower_builtin_method(lw, cx, e, callee, &name),
         Target::Variant { index, .. } => {
             let Ty::Enum(id) = &ty else { return Err(internal(span, "variant call type")) };
             let id = *id;
@@ -178,8 +175,7 @@ pub(super) fn lower_call(
     }
 }
 
-fn sig_params(lw: &mut Lowerer, cx: &FnCx, f: &SFnDef, gargs: &[GenericArg], span: Span) -> R<Vec<(Mode, Ty)>> {
-    let _ = cx;
+fn sig_params(lw: &mut Lowerer, f: &SFnDef, gargs: &[GenericArg], span: Span) -> R<Vec<(Mode, Ty)>> {
     let mut out = Vec::new();
     for p in &f.params {
         out.push((core_mode(p.mode), lw.core_ty(p.ty, gargs, span)?));
@@ -217,7 +213,7 @@ fn lower_target_call(
         let Some(GenericArg::Ty(this)) = &own else { return Err(internal(span, "a `target` method of no type")) };
         cargs.push(Arg { mode, expr: coerce(lw, cx, recv, this, mode)? });
     }
-    let params = sig_params(lw, cx, f, gargs, span)?;
+    let params = sig_params(lw, f, gargs, span)?;
     cargs.extend(lower_args(lw, cx, args, &params)?);
     Ok(Expr::new(ty, span, ExprKind::Prim { prim, args: cargs }))
 }
@@ -307,20 +303,4 @@ fn lower_from_fn(lw: &mut Lowerer, cx: &mut FnCx, args: &[ast::Arg], ty: Ty, spa
         stmt(span, StmtKind::ForRange(i, u32_lit(span, 0), u32_lit(span, n), Block { stmts: body, value: None })),
     ];
     Ok(Expr::new(ty, span, ExprKind::Block(Block { stmts, value: Some(Box::new(local_expr(cx, arr, span))) })))
-}
-
-fn lower_builtin_method(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, callee: ExprId, name: &str) -> R<Expr> {
-    let span = cx.expr(e).span;
-    let Some(base) = onsa_sema::receiver(cx.ast, callee) else {
-        return Err(internal(span, "builtin method shape"));
-    };
-    let recv = lower_expr(lw, cx, base)?;
-    match &recv.ty {
-        // The one method of the table of an array, `len` (§5.3; the others
-        // are std's): its length.
-        Ty::Array(_, n) => Ok(u32_lit(span, *n)),
-        // The stand-in `()` of a receiver of a type lowering does not support
-        // (`v.len()` of a `[Str; 2]`, S-67): its hole is used.
-        other => Err(unsupported(span, Feature::Methods, &[name, &crate::dump::type_name(&lw.m, other)])),
-    }
 }

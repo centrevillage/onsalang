@@ -59,9 +59,3 @@ pub(crate) fn missing(types: &Types, recv: TyId, name: &str) -> Option<(Form, Fe
     let t = types.get(recv);
     MISSING.iter().find(|m| m.name == name && (m.of)(t)).map(|m| (m.form, m.feature))
 }
-
-/// The names of the builtin methods (for the gate, Q-14): none, all are
-/// std's since `len` of an array is (S-862).
-pub fn names() -> Vec<String> {
-    Vec::new()
-}

@@ -49,13 +49,6 @@ pub fn std_names() -> Result<Vec<String>, String> {
     Ok(names)
 }
 
-/// The names of the builtin methods std does not declare yet, from the one
-/// table of sema that holds them (the `len` of an array; W5-17 removes it).
-/// The other members are std's ([`std_names`]).
-pub fn builtin_member_names() -> Vec<String> {
-    onsa_sema::builtin_member_names()
-}
-
 /// The names one item declares. Members are items of their own in the arena,
 /// so they are reached by the caller's loop.
 fn item_names(kind: &ItemKind, out: &mut Vec<String>) {

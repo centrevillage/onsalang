@@ -206,7 +206,7 @@ fn lower_target_value(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, t: Target, ty:
             ExprKind::Variant { ty: *id, tag: index, fields: Vec::new() }
         }
         Target::Fn { .. } | Target::Panic => return Err(unsupported(span, Feature::FnValues, &[])),
-        Target::Method { .. } | Target::BuiltinMethod { .. } | Target::Value => {
+        Target::Method { .. } | Target::Value => {
             return Err(internal(span, "call target on a non-call"));
         }
     };

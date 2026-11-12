@@ -182,8 +182,6 @@ features! {
     /// which is a place.
     PlanarInoutIndex: Language, "an `inout` planar span of an element whose index has an effect",
         Some("bind the index to a name with `let` first");
-    /// `{}`, `{}`: the method's name and the receiver's type.
-    Methods: Language, "the method `{}` on `{}`", None;
     ConstBindings: Language, "a `const` initializer with local bindings", None;
     /// `{}`: the function's path (`std.test.gen.f32`). W2-03: `onsa test`
     /// finds them before it runs the tests.

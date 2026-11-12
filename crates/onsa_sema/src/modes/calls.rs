@@ -87,8 +87,7 @@ impl Walker<'_> {
     }
 
     /// What the call `e` of `callee` takes (§5.2): of a function or a
-    /// method, its declaration; of a function value, its type; of a builtin
-    /// method, the mode of `self` the types stage chose, and borrows; of a
+    /// method, its declaration; of a function value, its type; of a
     /// constructor, elements (`n` the number of the arguments). `None` of
     /// any other callee.
     fn takes(&self, e: ExprId, callee: ExprId, n: usize) -> Option<Takings> {
@@ -103,7 +102,6 @@ impl Walker<'_> {
                 Ty::Fn(f) => (None, f.params.iter().map(|&(m, t)| Takes::Param(m, Some(t))).collect()),
                 _ => return None,
             },
-            Target::BuiltinMethod { self_mode, .. } => (Some(*self_mode), vec![Takes::Param(Mode::Borrow, None); n]),
             Target::Variant { .. } | Target::Panic => (None, vec![Takes::Element; n]),
             _ => return None,
         })

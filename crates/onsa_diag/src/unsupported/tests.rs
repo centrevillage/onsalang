@@ -13,11 +13,11 @@ fn names_are_distinct_and_details_fill_in_order() {
         Feature::BulkInType.phrase(&["A", "B"]),
         "a flow with a bulk region (`A`) used inside another type (`B`)"
     );
-    assert_eq!(Feature::Methods.list_phrase(), "the method `…` on `…`");
-    assert_eq!(Feature::Methods.phrase(&["foo", "F32"]), "the method `foo` on `F32`");
+    assert_eq!(Feature::StdTargetType.list_phrase(), "the `std` function `…` for the type `…`");
+    assert_eq!(Feature::StdTargetType.phrase(&["std.f", "F32"]), "the `std` function `std.f` for the type `F32`");
     // another number of details than the phrase takes is an internal error
     for details in [&[][..], &["foo"][..], &["a", "b", "c"][..]] {
-        let r = std::panic::catch_unwind(|| Feature::Methods.phrase(details));
+        let r = std::panic::catch_unwind(|| Feature::StdTargetType.phrase(details));
         let bug = r.expect_err("a wrong number of details is a bug");
         assert!(bug.downcast_ref::<crate::internal::InternalBug>().is_some());
     }

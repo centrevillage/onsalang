@@ -15,7 +15,6 @@
 //! onsa_cases --continuing    the symbols after which a line goes on, `onsa_tests::inventory::continuing_spellings` (tools/fmt_props.py)
 //! onsa_cases --symbols       the symbols of more than one character, `onsa_tests::inventory::long_symbols` (tools/fmt_props.py)
 //! onsa_cases --std-names     the names the embedded std declares (tools/builtin_names.py, Q-14)
-//! onsa_cases --builtin-members  the builtin methods and associated items of sema's table (the same)
 //! onsa_cases --fix-same-place FILE...  the near "same place" of the fix contract for the fuzzing
 //!                            (tools/fuzz.py, S-236, W3-17; `onsa_tests::fix_contract::same_place`)
 //! onsa_cases --fix-contract FILE...  the contract of the fix candidates of §18.1, as a case's,
@@ -168,7 +167,6 @@ const FORMS: &[(&str, usize, usize, &str)] = &[
     ("--continuing", 0, 0, ""),
     ("--symbols", 0, 0, ""),
     ("--std-names", 0, 0, ""),
-    ("--builtin-members", 0, 0, ""),
     ("--fix-same-place", 1, MANY, "FILE..."),
     ("--fix-contract", 1, MANY, "FILE..."),
     ("--default-inits", 1, MANY, "FILE..."),
@@ -309,10 +307,6 @@ fn main() -> ExitCode {
         }
         "--symbols" => {
             print(&serde_json::json!(onsa_tests::inventory::long_symbols()));
-            ExitCode::SUCCESS
-        }
-        "--builtin-members" => {
-            print(&serde_json::json!(onsa_tests::inventory::builtin_member_names()));
             ExitCode::SUCCESS
         }
         "--std-names" => match onsa_tests::inventory::std_names() {
