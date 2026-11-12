@@ -125,11 +125,17 @@ pub fn run_each(
 ///
 /// ```text
 /// {"cases": [{"path": "tests/spec/negative/flow.onsa", "mode": "check", "ran": true,
+///             "host_names": ["scale"],
+///             "hosts": [{"name": "scale", "target": "host", "outcome": "passed"}],
 ///             "markers": [{"code": "E0815", "file": "tests/spec/negative/flow.onsa",
 ///                          "line": 75, "stage": "check", "target": null, "matched": true}],
 ///             "problems": [{"kind": "failed", "text": "..."}]}],
 ///  "errors": []}
 /// ```
+///
+/// `hosts` holds the host sequences that ran or were to run (only when the
+/// run makes them, [`HostSteps::Run`]): `passed`, `failed` or `not-run`; the
+/// problems say why.
 ///
 /// The kinds of a problem: `failed`, `test-failed`, `case` and `internal`
 /// ([`Problem::kind`](super::Problem::kind)).
@@ -159,6 +165,15 @@ pub fn runs_json(runs: &[CaseRun], errors: &[String]) -> serde_json::Value {
                 "mode": r.mode,
                 "ran": r.ran,
                 "host_names": r.host_names,
+                "hosts": r.hosts.iter().map(|h| serde_json::json!({
+                    "name": h.name,
+                    "target": h.target,
+                    "outcome": match h.outcome {
+                        crate::host::Outcome::Passed { .. } => "passed",
+                        crate::host::Outcome::Failed(_) => "failed",
+                        crate::host::Outcome::NotRun(_) => "not-run",
+                    },
+                })).collect::<Vec<_>>(),
                 "markers": markers,
                 "problems": r.problems.iter().map(|p| serde_json::json!({ "kind": p.kind(), "text": p.text() })).collect::<Vec<_>>(),
             })

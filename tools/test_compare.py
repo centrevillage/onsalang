@@ -215,27 +215,47 @@ class Compare(unittest.TestCase):
         self.assertEqual(quiet_out(compare.main, ["core", before, after, "--root", str(self.root / "empty")]), (1, [
             f"core: no case in tests (but tests/review-phase1) and examples of {self.root / 'empty'}"]))
 
-    def test_fragment_manifest(self):
-        # The fragment without its [test] tables, to its first line of another form; none without a fragment or with
-        # [test] alone. Line ends CR LF too.
-        text = ("// onsa.toml\r\n// [package]\r\n// name = \"a\"\r\n//\r\n// [test]\r\n// mode = \"check\"\r\n"
-                "//   [[ test.fix ]]\r\n// [targets.t]\r\n// kind = \"source\"\r\n\r\n// [targets.u]\r\n")
-        self.assertEqual(compare.fragment_manifest(text), '[package]\nname = "a"\n\n[targets.t]\nkind = "source"\n')
-        for text in ("// onsa.toml\n// [test]\n// mode = \"check\"\n//\n\npub fn f() {}\n", "pub fn f() {}\n",
-                     "// onsa.toml \n// [package]\n"):
-            self.assertIsNone(compare.fragment_manifest(text), text)
+    def test_cst(self):
+        # W5-13 U9b: `dump --cst --tree` of each seed file, tests/review-phase1 too (the syntax only); the exit code and
+        # the output tell, and no file to exit 0 in both is no pass.
+        (self.root / "tests/review-phase1").mkdir()
+        (self.root / "tests/review-phase1/r.onsa").write_text("")
+        want = ["tests/a.onsa", "tests/b.onsa", "tests/c.onsa", "tests/d.onsa", "tests/p/sub/y.onsa", "tests/p/x.onsa",
+                "tests/review-phase1/r.onsa"]  # fmt: skip
+        out = {c: [0, "SourceFile@0..1\n"] for c in want}
+        before, after = self.fakes({"before": out, "after": {**out, "tests/p/x.onsa": [0, "SourceFile@0..2\n"]}},
+                                   "before", "after")  # fmt: skip
+        argv = ["cst", before, after, "--root", str(self.root)]
+        self.assertEqual(quiet_out(compare.main, argv), (1, [
+            "tests/p/x.onsa", "  before: exit 0, 2 lines", "  after:  exit 0, 2 lines",
+            "  line 1: 'SourceFile@0..1' -> 'SourceFile@0..2'",
+            "7 cases, 1 differ, 0 fell in one binary only, 0 fell in both"]))  # fmt: skip
+        calls = (self.bin / "calls").read_text().splitlines()
+        self.assertEqual(sorted(x.split()[-1] for x in calls if x.startswith("before ")), want)
+        self.assertTrue(all(x.split()[1:4] == ["dump", "--cst", "--tree"] for x in calls), calls)
+        self.assertEqual(quiet_out(compare.main, ["cst", before, before, "--root", str(self.root)])[0], 0)
+        before, after = self.fakes({"before": {"*": [1, "x"]}, "after": {"*": [1, "x"]}}, "before", "after")
+        self.assertEqual(quiet_out(compare.main, ["cst", before, after, "--root", str(self.root)]), (1, [
+            "7 cases, 0 differ, 0 fell in one binary only, 0 fell in both",
+            "cst: no case ran to exit 0 in both binaries"]))  # fmt: skip
 
     def test_c(self):
         # Every target of the inputs of `core` as they are in the HEAD (tests/fuzz and tests/review-phase1 left out),
-        # a fragment as a package of its own; the files written, an archive by its name alone, the out directory and
-        # the package named, the output and its codes compared.
+        # a fragment as a package of its own with the manifest `onsa_cases` lists (W5-13 U9b: here a made-up list);
+        # the files written, an archive by its name alone, the out directory and the package named, the output and its
+        # codes compared. A file the list does not have is an error.
+        listed = [{"path": "tests/a.onsa", "manifest": '[package]\nname = "a"\n[targets.t1]\n[targets.t2]\n'},
+                  {"path": "tests/b.onsa", "manifest": None}, {"path": "tests/c.onsa", "manifest": None},
+                  {"path": "tests/d.onsa", "manifest": None}]  # fmt: skip
+        (self.bin / "cases.json").write_text(json.dumps(listed))
+        fake = (sys.executable, "-c", "import sys; sys.stdout.write(open(sys.argv[1]).read())", str(self.bin / "cases.json"))
+        self.enterContext(mock.patch.object(compare, "CASES", fake))
         (self.root / "tests/review-phase1").mkdir()
         for rel in ("tests/a.onsa", "tests/fuzz/z.onsa", "tests/review-phase1/r.onsa"):
             (self.root / rel).write_text("// onsa.toml\n// [package]\n// name = \"a\"\n// [targets.t1]\n// [test]\n"
                                          "// mode = \"check\"\n// [targets.t2]\n\npub fn f() {}\n")  # fmt: skip
         (self.root / "tests/b.onsa").write_text("// onsa.toml\n// [test]\n// mode = \"check\"\n\npub fn f() {}\n")
         (self.root / "tests/p/onsa.toml").write_text("[package]\n[targets.host]\n")
-        (self.root / "tests/c.onsa").write_text("// onsa.toml\n// [targets\n")  # not TOML: nothing to build
         (self.root / "examples/e").mkdir(parents=True)
         (self.root / "examples/e/onsa.toml").write_text("[package]\n[targets.ex]\n")
         (self.root / "examples/e/m.onsa").write_text("pub fn f() {}\n")
@@ -257,6 +277,10 @@ class Compare(unittest.TestCase):
             (self.bin / n).chmod(0o755)
         def run(*names):
             return quiet_out(compare.main, ["c", *(str(self.bin / n) for n in names), "--root", str(self.root)])
+        (self.bin / "cases.json").write_text(json.dumps(listed[:3]))
+        self.assertEqual(run("before", "before"), (1, ["c: tests/d.onsa: not a case that `onsa_cases` lists (a file is "
+                                                       "built with the manifest of its fragment)"]))  # fmt: skip
+        (self.bin / "cases.json").write_text(json.dumps(listed))
         head = f"c: 4 builds of 3 inputs with targets in the HEAD of {self.root}"
         self.assertEqual(run("before", "before"), (0, [head, "4 cases, 0 differ, 0 fell in one binary only, 0 fell in "
                                                        "both"]))  # fmt: skip
@@ -401,7 +425,7 @@ class Compare(unittest.TestCase):
                 want = [n for n, c in compare.COMMANDS.items() if role in c.roles]
                 self.assertEqual((code, [x.split()[0] for x in lines if not x.startswith(" ")]), (0, want or ["（役割"]))
         names = list(compare.COMMANDS)
-        self.assertEqual(names, ["diags", "fmt", "core", "c", "speed", "probe"])
+        self.assertEqual(names, ["diags", "fmt", "cst", "core", "c", "speed", "probe"])
         self.assertEqual([x.split()[0] for x in quiet_out(compare.main, ["help"])[1][: len(names)]], names)
         for argv, code in (([], 2), (["--help"], 0)):  # no command is a usage error; `--help` lists the commands
             buf = io.StringIO()

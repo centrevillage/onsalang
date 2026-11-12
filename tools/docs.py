@@ -67,7 +67,8 @@ depth 0 with `-` for the type and from).
   count, never failing the check: `units`, the decisions and the issues of `ticket` a work DOING or DONE does not
   name in its `単位`; `paths`, `scratch`, the paths `crates/…` not there and the variables `P<n>/` of a ticket in
   the living documents (LIVE; not an R's place); `line-refs`, a reference by a line number in those and the S;
-  `no-fix`, an OPEN R with no `fix`); to add a
+  `no-fix`, an OPEN R with no `fix`; `spec-said`, a section the `決定` of an S says of the spec, `仕様 §x`, under
+  none of its `spec`); to add a
   subcommand, add `name: repo.Command(add_arguments, run, roles, purpose, when, example)` to COMMANDS
   (its help, X9-7; `docs.py help`).
 
@@ -1218,6 +1219,22 @@ def warn_line_refs(ids):
             yield Finding(rel, n, f"`{shown}`: a reference by a line number; name a section, an ID, a function or a quote")
 
 
+# what the `決定` of an S says of the spec: `仕様 §4.5`, `仕様は §8.1`, `仕様: `spec/tools.md` §3.5`, `仕様 §5.3、§5.4`
+SPEC_SAID = re.compile(r"仕様\s*[はの:：]?\s*(`?spec/tools\.md`?\s*)?(§\d+(?:\.\d+)*(?:\s*[・、]\s*§\d+(?:\.\d+)*)*)")
+
+
+def warn_spec_said(ids):
+    """The sections the `決定` of an S says of the spec (SPEC_SAID) under none of its head's `spec`, which
+    `list --section` and the search for the decided S of a section read (117th session's tool idea)."""
+    for _, rel, v in ids.heads(["S"]):
+        heads = _listed(v.get("spec"))
+        for n, line, label in labelled(ids.tree, rel):
+            for m in SPEC_SAID.finditer(line) if label == "決定" else ():
+                for sec in (f"{'tools.md ' * bool(m.group(1))}§{x}" for x in BODY_SECTION.findall(m.group(2))):
+                    if not any(under(sec, h) for h in heads):
+                        yield Finding(rel, n, f"`{sec}` of `決定` is under none of `spec` of the head")
+
+
 def warn_no_fix(ids):
     """The R that are OPEN with no `fix` (no work is to fix them)."""
     for _, rel, v in ids.heads(["R"]):
@@ -1232,6 +1249,7 @@ WARNINGS = [
     ("scratch", warn_scratch),
     ("line-refs", warn_line_refs),
     ("no-fix", warn_no_fix),
+    ("spec-said", warn_spec_said),
 ]
 
 
@@ -2509,7 +2527,7 @@ COMMANDS = {
                "文書を編集する前に、スワップファイルが無いことを確かめる。確かめは、編集と別のコマンドで行う"
                "（`.claude/agents/` は見ないので、定義を開いているかは利用者に聞く）", "docs.py swaps"),
     "check": C(lambda p: None, cmd_check, EDITORS, "文書の表・頭の欄・ID と § の参照・関係・README のリンクを確かめる（gate の `docs`）。"
-               "警告（`warning:` の行。作業の `単位` に無い決定と R、生きている文書の無い経路と票の変数、S と生きている文書の行の番号の参照、`fix` の空の R）は終了コードを落とさない",
+               "警告（`warning:` の行。作業の `単位` に無い決定と R、生きている文書の無い経路と票の変数、S と生きている文書の行の番号の参照、`fix` の空の R、S の `決定` の「仕様 §x」が頭の `spec` に無いもの）は終了コードを落とさない",
                "文書を編集した後に、`fmt` で行を整えてから通す。文書の点検の担当は始めに回し、落ちていれば、その出力を報告して止める",
                "docs.py check"),
     "due": C(lambda p: p.add_argument("--stage-end", metavar="STAGE"), cmd_due, ("parent",),

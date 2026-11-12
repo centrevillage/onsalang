@@ -892,6 +892,22 @@ class DocsLayout(DocsTree):
         self.assertOne("README.md", "[仕様](spec/README.md)", "[仕様](spec/README.md)、[無い](docs/none.md#x)", "README.md:3: the link docs/none.md#x is not found")
         self.assertOne("rules/README.md", "(common.md)", "(commons.md)", "rules/README.md:3: the link commons.md is not found")
 
+    def test_check_spec_said(self):
+        """W5-13 U9b: a section the `決定` of an S says of the spec (`仕様 §x`, a list of them, `spec/tools.md`) warns when
+        it is under none of the head's `spec`; one under it, another item and a section of other words do not."""
+        self.layout()
+        s = "decisions/S/S-1.md"  # spec = ["§2.1"]
+        self.write(s, self.read_(s) + "- 決定: 仕様は §3.1 と §2.2 を改めた。仕様 §2.1、§3・§2.2 に書いた。\n"
+                   "  仕様: `spec/tools.md` §1 と仕様 §3 の文。\n- 経緯: 仕様 §2.2\n")  # fmt: skip
+        n = len(self.read_(s).splitlines())
+        what = "of `決定` is under none of `spec` of the head (spec-said)"
+        self.assertEqual(self.check(), (0, [
+            f"warning: {s}:{n - 2}: `§3.1` {what}", f"warning: {s}:{n - 2}: `§3` {what}",
+            f"warning: {s}:{n - 2}: `§2.2` {what}", f"warning: {s}:{n - 1}: `tools.md §1` {what}",
+            f"warning: {s}:{n - 1}: `§3` {what}"]))  # fmt: skip
+        self.edit(s, 'spec = ["§2.1"]', 'spec = ["§2.1", "§3", "§2.2", "tools.md §1"]')
+        self.assertEqual(self.check(), (0, []))
+
     def test_check_line_refs(self):
         """rules/documents.md 5.3: a reference by a line number in an S or a living document warns, by a section, a file
         or `path:line`; the position in a diagnostic's output, a count of lines, an R's place and a DONE work do not."""
@@ -945,7 +961,7 @@ class DocsLayout(DocsTree):
         out = io.StringIO()
         with mock.patch.object(sys, "stdout", out):
             docs_tool.main(["check", "--root", str(self.root)])
-        self.assertEqual(out.getvalue().splitlines()[-2], "docs check: 8 warning(s), not failing it (units 2, paths 3, scratch 2, line-refs 0, no-fix 1)")
+        self.assertEqual(out.getvalue().splitlines()[-2], "docs check: 8 warning(s), not failing it (units 2, paths 3, scratch 2, line-refs 0, no-fix 1, spec-said 0)")
         self.edit(r1, 'status = "OPEN"', 'status = "DONE"')  # not living: no paths, no variables
         self.edit(w2, 'status = "DOING"', 'status = "PLAN"')  # not in progress: its `単位` not read; still living
         self.edit(w2, 'doing = ["U2/i"]', 'commit = "x"')  # the same lines

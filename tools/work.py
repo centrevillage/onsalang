@@ -47,7 +47,9 @@ repository) differs from the base, it prints the files that differ between
 them and the files of the patch among them (3.3: when only documents moved,
 the patch from the base still applies). It prints the lines added and removed
 per file, the new files, the totals, and the totals without the tests and
-the data (`is_code`: the files ending in `CODE_SUFFIXES` that are not under
+the data (`is_code`: the files ending in `CODE_SUFFIXES`, and the Onsa source of
+`ONSA_CODE` (the std and the examples; the other `.onsa` files, the cases and
+the inputs of the reviews and the decisions, are data), that are not under
 `tests/` or `crates/*/tests/`, not `tests.rs` nor `*_tests.rs`, and not
 `tools/test_*.py` nor `tools/*/test_*.py`; in a Rust file of the code, the
 lines of a `#[cfg(test)] mod … { … }` block are tests too, on the new side for
@@ -159,6 +161,7 @@ REFACTOR = "リファクタリングに入る大きさ"  # the row of rules/budg
 REFACTOR_FORM = re.compile(r"(\d+)\s*倍を超え.*?差が\s*(\d+)\s*行以上")  # (ratio, lines): over ratio times and lines more
 AGAIN = "work check: run it again in the main tree"
 CODE_SUFFIXES = (".rs", ".py", ".sh", ".c", ".h", ".js")
+ONSA_CODE = ("std/", "examples/")  # the directories whose `.onsa` files are code (W5-12 (3))
 ALREADY = "already in the tree (its reverse applies); nothing to do"
 
 
@@ -167,7 +170,8 @@ class Failed(Exception):
 
 
 def is_code(path):
-    return path.endswith(CODE_SUFFIXES) and not repo.is_test_file(path)
+    code = path.endswith(CODE_SUFFIXES) or (path.endswith(".onsa") and path.startswith(ONSA_CODE))
+    return code and not repo.is_test_file(path)
 
 
 HUNK = re.compile(r"@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")

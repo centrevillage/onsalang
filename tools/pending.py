@@ -9,7 +9,9 @@ the form of `target`:
     spec-example  "§<section> <hash>: <first line>" of a ```onsa block of the
                   spec (`spec_blocks.ID_FORM`)
     diag-code     a diagnostic code with fewer negative examples than the
-                  gate requires, "E0812"        (matched by tools/diag_codes.py, W1-02)
+                  gate requires, "E0812"        (matched by tools/diag_codes.py, W1-02);
+                  until: the work that makes or changes the code's rule (the last of
+                  several), W1-10 for an implemented code no work touches (K-13)
     gate          a pendable gate item of `tools/gate_steps.py` ("c-header"),
                   or a case that the item itself reports, "<item>/<case>": the
                   item applies those entries (a listed case that fails is
@@ -25,16 +27,25 @@ the form of `target`:
                   (`fix-loop/tests/fuzz/x.onsa`; onsa_tests::fix_loop::gate, S-475)
     test-case     a test case: a path from the repository root (a file or a
                   package directory), optionally "<path>::<test name>"   (W1-03)
+                  or "<path>::<sequence name>" of a `[[test.host]]` (K-14, W1-11; the
+                  tests and the sequences of a case are one namespace). A sequence's
+                  entry silences only the failures of its steps (a wrong value, the
+                  process ending in a step, a step this version's C API cannot
+                  express), never an error of the case or of the harness, nor a
+                  sequence that did not run: a listed sequence keeps only the failing
+                  step and the steps before it that make its state, which a sequence
+                  not listed checks too
     fuzz-input    a saved fuzz input: a path from the repository root  (W1-04)
     fix-contract  one fix candidate that breaks the contract of spec §18.1
                   (S-236): "<file from the repository root>:<line>:<col>
                   <code> fix<K>", the K-th candidate of the diagnostic of that
                   code at that place of a case's check (matched by the test
-                  runner, `onsa_tests::run::reconcile`, W3-17)
+                  runner, `onsa_tests::run::reconcile`, W3-17); an entry that names
+                  no candidate, or one that keeps the contract, fails
     foreign-form  a row of the closed list of the forms of other languages,
                   `spec/foreign-forms.toml` (S-250), whose examples do not pass
                   yet: the row's `id`, "semicolon" (matched by
-                  `onsa_tests::foreign_forms`, W3-15)
+                  `onsa_tests::foreign_forms`, W3-15; an id of no row fails)
 
 Paths are in their canonical form: relative, `/`-separated, no `.` or `..`
 component, no empty component, no trailing `/`.

@@ -4,7 +4,8 @@
 //!
 //! ```text
 //! onsa_cases [ROOT]          the cases under tests/ and their settings (tools/spec_sections.py)
-//! onsa_cases --run [ROOT]    run every case; the markers each compared (tools/diag_codes.py, K-13)
+//! onsa_cases --run [--hosts] [ROOT]  run every case; the markers each compared (tools/diag_codes.py, K-13);
+//!                            with `--hosts`, the host sequences too (tools/run_cases.py)
 //! onsa_cases --c ITEM [ROOT] a gate item of the C checks (Q-07, W1-06; `onsa_tests::ccheck`)
 //! onsa_cases --c-items       the names of those items (the cross-check item, tools/crosscheck.py, matches them with the gate's)
 //! onsa_cases --vectors IMPL [ROOT]  the test vectors against `interp` or `c` (gate items vectors-interp,
@@ -17,6 +18,9 @@
 //! onsa_cases --builtin-members  the builtin methods and associated items of sema's table (the same)
 //! onsa_cases --fix-same-place FILE...  the near "same place" of the fix contract for the fuzzing
 //!                            (tools/fuzz.py, S-236, W3-17; `onsa_tests::fix_contract::same_place`)
+//! onsa_cases --fix-contract FILE...  the contract of the fix candidates of §18.1, as a case's,
+//!                            on each file (`onsa_tests::single_files::fix_contract`)
+//! onsa_cases --default-inits FILE...  the delay calls whose `init` is the default (tools/default_inits.py, S-539)
 //! onsa_cases --fix-loop [--json] [--branches] [--pick first|last] [--steps N] [--states N] [--diverge N] FILE...
 //!                            the fix candidates applied again and again until the loop stops
 //!                            (S-236, rules/criteria.md 7.27, W3-22; `onsa_tests::fix_loop`)
@@ -36,9 +40,14 @@
 //! ```text
 //! [{"path": "tests/spec/fn/mean.onsa", "kind": "file", "name": "mean",
 //!   "mode": "check", "spec": ["§6.1"], "golden": [], "golden_graph": [],
-//!   "conformance": false, "targets": [],
+//!   "conformance": false, "targets": [], "manifest": null,
 //!   "files": [{"path": "tests/spec/fn/mean.onsa", "syntax_errors": false}]}, ...]
 //! ```
+//!
+//! `manifest` is the manifest of a file's fragment without its `[test]`
+//! table, as TOML (an `onsa.toml` does not take it; `tools/compare.py c`
+//! builds the case as a package with it), `null` for a package and for a
+//! fragment of `[test]` alone.
 //!
 //! `files` are the source files of the case (from the repository root), and
 //! whether the lexer or the parser reports a diagnostic on each
@@ -46,8 +55,9 @@
 //! refuse a file; `tools/fmt_props.py` reads it, W3-02/b 5).
 //!
 //! `--run` prints the form of `onsa_tests::run::runs_json`; it does not run
-//! the host sequences of the cases (`host_names` names them), which only
-//! `cargo test -p onsa_tests --test cases` does. Exits 1 when a
+//! the host sequences of the cases (`host_names` names them) unless
+//! `--hosts` is given: they then run as `cargo test -p onsa_tests --test cases`
+//! runs them (without a C compiler, a problem of kind `harness`). Exits 1 when a
 //! case or a std module cannot be read (`--run` reports those in its
 //! `errors` and in the runs instead, and exits 0), 2 on a usage error.
 //!
@@ -69,6 +79,15 @@
 //! `internal`: the check of the file itself ended in an internal error;
 //! `unreadable`: the file cannot be read (or is not UTF-8). Exits 0, 2 on a
 //! usage error.
+//!
+//! `--fix-contract` prints a line per problem and a line of the counts
+//! (`onsa_tests::single_files::fix_contract`; give it inputs that hold one
+//! error a unit) and exits 0 when it passes, 1 otherwise, 2 on a usage error:
+//!
+//! ```text
+//! m.onsa:2:11 E0010 fix1 `read it as `(a && b) || c``: after it, the units its edits touch hold 3:3 E0010 ...
+//! fix-contract: 1 file(s), 2 candidate(s), 1 problem(s)
+//! ```
 //!
 //! `--fix-loop` checks each file as `--fix-same-place` does and, step by
 //! step, applies the first candidate of the first reported diagnostic that
@@ -140,7 +159,7 @@ mod scan;
 /// the least and the most arguments after it, and the words of the usage after it.
 const FORMS: &[(&str, usize, usize, &str)] = &[
     ("", 0, 1, "[ROOT]"),
-    ("--run", 0, 1, "[ROOT]"),
+    ("--run", 0, 2, "[--hosts] [ROOT]"),
     ("--c", 1, 2, "ITEM [ROOT]"),
     ("--vectors", 1, 2, "interp|c [ROOT]"),
     ("--c-items", 0, 0, ""),
@@ -151,6 +170,7 @@ const FORMS: &[(&str, usize, usize, &str)] = &[
     ("--std-names", 0, 0, ""),
     ("--builtin-members", 0, 0, ""),
     ("--fix-same-place", 1, MANY, "FILE..."),
+    ("--fix-contract", 1, MANY, "FILE..."),
     ("--default-inits", 1, MANY, "FILE..."),
     ("--fix-loop", 1, MANY, "[--json] [--branches] [--pick first|last] [--steps N] [--states N] [--diverge N] FILE..."),
     ("--fix-loop-gate", 0, 1, "[ROOT]"),
@@ -187,14 +207,15 @@ fn main() -> ExitCode {
     match mode {
         "" => cases(&root()),
         "--run" => {
-            let root = root();
+            let hosts = rest.first().is_some_and(|a| a == "--hosts");
+            let rest = &rest[usize::from(hosts)..];
+            if rest.len() > 1 || rest.first().is_some_and(|a| a.starts_with("--")) {
+                return usage("--run takes `--hosts` and then the root");
+            }
+            let root = rest.first().map(PathBuf::from).unwrap_or_else(onsa_tests::case::repo_root);
             let (cases, errors) = onsa_tests::case::collect(&root);
-            let runs = onsa_tests::run::run_each(
-                &root,
-                &cases,
-                |_| onsa_tests::golden::Update::Off,
-                onsa_tests::run::HostSteps::Skip,
-            );
+            let steps = if hosts { onsa_tests::run::HostSteps::Run } else { onsa_tests::run::HostSteps::Skip };
+            let runs = onsa_tests::run::run_each(&root, &cases, |_| onsa_tests::golden::Update::Off, steps);
             print(&onsa_tests::run::runs_json(&runs, &errors));
             ExitCode::SUCCESS
         }
@@ -222,6 +243,11 @@ fn main() -> ExitCode {
         "--fix-same-place" => {
             print!("{}", onsa_tests::single_files::fix_same_place(rest, onsa_tests::single_files::read_input));
             ExitCode::SUCCESS
+        }
+        "--fix-contract" => {
+            let (out, passed) = onsa_tests::single_files::fix_contract(rest, onsa_tests::single_files::read_input);
+            print!("{out}");
+            if passed { ExitCode::SUCCESS } else { ExitCode::FAILURE }
         }
         "--serve" => {
             // As `onsa` does before its command.
@@ -304,6 +330,18 @@ fn main() -> ExitCode {
             ExitCode::from(2)
         }
     }
+}
+
+/// The manifest of the fragment of a file case without its `[test]` table,
+/// as TOML (`None`: a package, or `[test]` alone).
+fn fragment_manifest(s: &onsa_tests::case::Setup) -> Result<Option<String>, String> {
+    let Some(m) = s.input.manifest.as_ref().filter(|m| m.form == onsa_driver::ManifestForm::Fragment) else {
+        return Ok(None);
+    };
+    let mut table: toml::Table = toml::from_str(&m.text).map_err(|e| format!("fragment: {e}"))?;
+    table.remove("test");
+    let text = toml::to_string(&table).map_err(|e| format!("fragment without [test]: {e}"))?;
+    Ok((!table.is_empty()).then_some(text))
 }
 
 /// The source files of a case, from the repository root, with whether the
@@ -447,8 +485,9 @@ fn cases(root: &std::path::Path) -> ExitCode {
         failed = true;
     }
     for c in cases {
-        match c.setup.clone().and_then(|s| s.targets().map(|t| (s, t))) {
-            Ok((s, targets)) => items.push(serde_json::json!({
+        let read = c.setup.clone().and_then(|s| Ok((s.targets()?, fragment_manifest(&s)?, s)));
+        match read {
+            Ok((targets, manifest, s)) => items.push(serde_json::json!({
                 "path": c.path,
                 "kind": c.kind,
                 "name": c.name,
@@ -458,6 +497,7 @@ fn cases(root: &std::path::Path) -> ExitCode {
                 "golden_graph": s.test.golden_graph,
                 "conformance": s.test.conformance,
                 "targets": targets,
+                "manifest": manifest,
                 "files": files(&c, &s),
             })),
             Err(e) => {
@@ -468,4 +508,31 @@ fn cases(root: &std::path::Path) -> ExitCode {
     }
     print(&serde_json::json!(items));
     if failed { ExitCode::FAILURE } else { ExitCode::SUCCESS }
+}
+
+#[cfg(test)]
+mod tests {
+    use onsa_driver::ManifestForm;
+
+    /// W5-13 U9b: the `manifest` of the list is the fragment without its
+    /// `[test]` table (its tables below it too), none for `[test]` alone or a
+    /// package's `onsa.toml`.
+    #[test]
+    fn the_manifest_of_a_fragment_leaves_its_test_table() {
+        let setup = |text: &str, form| onsa_tests::case::Setup {
+            input: onsa_driver::PackageInput {
+                manifest: Some(onsa_driver::ManifestSource { path: "m.onsa".into(), text: text.into(), form }),
+                ..Default::default()
+            },
+            test: Default::default(),
+        };
+        let text = "[package]\nname = \"a\"\n[targets.t1]\n[test]\nmode = \"check\"\n[[test.fix]]\nat = \"1:1\"\n\
+                    [targets.t2]\nkind = \"source\"\n";
+        let got = super::fragment_manifest(&setup(text, ManifestForm::Fragment)).unwrap().unwrap();
+        let want = "[package]\nname = \"a\"\n[targets.t1]\n[targets.t2]\nkind = \"source\"\n";
+        assert_eq!(toml::from_str::<toml::Table>(&got).unwrap(), toml::from_str::<toml::Table>(want).unwrap());
+        let alone = setup("[test]\nmode = \"check\"\n", ManifestForm::Fragment);
+        assert_eq!(super::fragment_manifest(&alone), Ok(None));
+        assert_eq!(super::fragment_manifest(&setup(text, ManifestForm::File)), Ok(None));
+    }
 }

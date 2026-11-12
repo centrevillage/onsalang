@@ -532,6 +532,32 @@ fn the_runner_runs_and_compares() {
     assert!(r.summary().contains("host sequences:"), "{}", r.summary());
 }
 
+/// `onsa_cases --run --hosts` (W5-13 U9b): the runs as JSON name the outcome
+/// of each sequence when the run makes them, and none when it skips them.
+#[test]
+fn the_runs_as_json_hold_the_outcomes_of_the_sequences() {
+    c::require("clang").unwrap();
+    let wrong = GOOD.replacen("result = 3", "result = 4", 1);
+    let repo = Repo::new("json", &[("tests/good/m.onsa", &case(GOOD)), ("tests/wrong/m.onsa", &case(&wrong))]);
+    let (cases, errors) = crate::case::collect(&repo.0);
+    assert!(errors.is_empty(), "{errors:?}");
+    let outcomes = |steps| {
+        let runs = run::run_each(&repo.0, &cases, |_| crate::golden::Update::Off, steps);
+        let json = run::runs_json(&runs, &[]);
+        let cases = json["cases"].as_array().unwrap().clone();
+        cases.iter().map(|c| (c["path"].clone(), c["hosts"].clone(), c["problems"].as_array().unwrap().len())).collect()
+    };
+    let passed = serde_json::json!([{"name": "scale", "target": "t", "outcome": "passed"},
+                                    {"name": "sub", "target": "t", "outcome": "passed"}]);
+    let failed = serde_json::json!([{"name": "scale", "target": "t", "outcome": "passed"},
+                                    {"name": "sub", "target": "t", "outcome": "failed"}]);
+    let got: Vec<(serde_json::Value, serde_json::Value, usize)> = outcomes(run::HostSteps::Run);
+    assert_eq!(got, [("tests/good/m.onsa".into(), passed, 0), ("tests/wrong/m.onsa".into(), failed, 1)]);
+    let none: Vec<(serde_json::Value, serde_json::Value, usize)> = outcomes(run::HostSteps::Skip);
+    let empty = serde_json::json!([]);
+    assert_eq!(none, [("tests/good/m.onsa".into(), empty.clone(), 0), ("tests/wrong/m.onsa".into(), empty, 0)]);
+}
+
 const SHAPES_HEAD: &str = "// onsa.toml\n// [package]\n// name = \"s\"\n// edition = \"2026\"\n//\n// [export]\n\
 // prefix = \"s_\"\n//\n// [targets.t]\n\
 // kind = \"source\"\n// lang = \"c\"\n// platform = \"host\"\n// panic = \"poison\"\n// provides = []\n//\n// [test]\n";

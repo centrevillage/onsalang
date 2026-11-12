@@ -16,10 +16,13 @@ import repo  # noqa: E402
 
 FAKE_RUNNER = """#!{exe}
 import json, os, sys
-root = sys.argv[2]
+root, ran = sys.argv[-1], sys.argv[2:-1] == ["--hosts"]
 paths = sorted(os.path.relpath(os.path.join(d, f), root) for d, _, fs in os.walk(root) for f in fs)
 hosts = lambda p: ["one", "two"] if p.endswith("fix1") else []
-print(json.dumps({{"cases": [{{"path": p, "problems": [], "host_names": hosts(p)}} for p in paths]}}))
+outcomes = lambda p: [{{"name": n, "outcome": "passed" if n == "one" else "failed"}} for n in hosts(p)] if ran else []
+problems = lambda p: ["two failed"] if ran and hosts(p) else []
+print(json.dumps({{"cases": [{{"path": p, "problems": problems(p), "host_names": hosts(p), "hosts": outcomes(p)}}
+                            for p in paths]}}))
 """
 
 
@@ -39,8 +42,8 @@ class RunCases(unittest.TestCase):
         self.runner.write_text(FAKE_RUNNER.format(exe=sys.executable))
         self.runner.chmod(0o755)
 
-    def run_cases(self, work, cwd=None):
-        argv = ["--tree", str(self.tree), "--bin", str(self.runner), "--work", str(work), "a.onsa"]
+    def run_cases(self, work, cwd=None, more=()):
+        argv = ["--tree", str(self.tree), "--bin", str(self.runner), *more, "--work", str(work), "a.onsa"]
         r = subprocess.run([sys.executable, "-B", str(repo.ROOT / "tools/run_cases.py"), *argv], cwd=cwd or self.top,
                            capture_output=True, text=True, timeout=60)  # fmt: skip
         return r.returncode, r.stdout.splitlines()
@@ -63,9 +66,16 @@ class RunCases(unittest.TestCase):
         work.mkdir()
         (work / "stale").write_text("")
         # a case with host sequences says that they did not run: its `ok` is not about them
-        not_run = "(2 host sequence(s) not run: only `cargo test -p onsa_tests --test cases` runs them)"
+        not_run = "(2 host sequence(s) not run: pass --hosts, or `cargo test -p onsa_tests --test cases` runs them)"
         self.assertEqual(self.run_cases(work), (0, ["ok   tests/a.onsa", f"ok   tests/a.onsa.fix1 {not_run}"]))
         self.assertFalse((work / "stale").exists())
+
+    def test_hosts(self):
+        """W5-13 U9b: with `--hosts` the runner gets `--run --hosts`, and the line of a case says how many of its host
+        sequences passed; one that failed is a problem of the case."""
+        got = self.run_cases(self.top / "out", more=["--hosts"])
+        self.assertEqual(got, (1, ["ok   tests/a.onsa", "FAIL tests/a.onsa.fix1 (1 of 2 host sequence(s) passed)",
+                                   "      two failed"]))  # fmt: skip
 
 
 if __name__ == "__main__":

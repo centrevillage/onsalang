@@ -74,9 +74,10 @@ class Take(unittest.TestCase):
         text = self.patch.read_text()
         self.assertIn("+two", text)
         self.assertIn("b/tests/x.rs", text)
-        self.assertTrue(work.is_code("tools/work.py"))
+        self.assertTrue(all(map(work.is_code, ("tools/work.py", "std/core.onsa", "std/dsp/x.onsa", "examples/h/d.onsa"))))
         self.assertFalse(any(map(work.is_code, ("tools/test_gate.py", "crates/a/tests/t.rs", "crates/a/src/tests.rs",
-                                                "crates/a/src/cst_tests.rs", "tests/pending.toml", "docs/x.md"))))
+                                                "crates/a/src/cst_tests.rs", "tests/pending.toml", "docs/x.md",
+                                                "tests/spec/a.onsa", "issues/R/R-1/a.onsa", "decisions/S/S-1/a.onsa"))))
         other = git_in(self.main, "commit-tree", "-m", "x", git_in(self.main, "write-tree").strip()).strip()
         self.assertEqual(self.take("patch", self.wt, other, self.patch, "--main", self.main)[0], 1)
 

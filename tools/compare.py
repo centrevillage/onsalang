@@ -2,7 +2,7 @@
 """Before and after: the diagnostics, the formatting, the Core and the time of `onsa` binaries (rules/refactoring.md 8;
 X-9 X9-18, X9-19; X-6 B1).
 
-Its commands are `diags`, `fmt`, `core`, `c`, `speed` and `probe` (COMMANDS, rules/tools.md 9.1); `compare.py help`
+Its commands are `diags`, `fmt`, `cst`, `core`, `c`, `speed` and `probe` (COMMANDS, rules/tools.md 9.1); `compare.py help`
 shows them.
 `diags` runs `check --json` of both binaries on every case of tests/: the seed files of the gate's fuzz
 (`fuzz.seeds`), a file in a package (a directory below tests/ with an `onsa.toml`, the outermost, as the case
@@ -13,13 +13,14 @@ It exits 1 when a case differs (a case where both fell the same way is listed, b
 case gave JSON on both sides.
 `fmt` runs `onsa fmt` of both binaries on the fuzz's seed files, a file at a time, each run on its own copy in a
 temporary directory of its own, and lists the files whose exit code, written text, stdout or the names of the files
-left in the directory differ. `core` runs `dump --core` of both on the cases of tests/ and examples (`core_cases`) and
+left in the directory differ. `cst` runs `dump --cst --tree` of both on the fuzz's seed files, a file at a time (the
+syntax only: tests/review-phase1 too), and lists those whose exit code or output differ. `core` runs `dump --core` of both on the cases of tests/ and examples (`core_cases`) and
 lists those whose exit code or output differ. `c` builds every target (`build --target … --out`) of the inputs of `core`
 as they are in the HEAD of `--root` (a copy of its tests/ but REVIEW and the fuzz's inputs, and examples, `c_builds`),
 a file with a manifest in its `// onsa.toml` fragment as a package of its own whose onsa.toml is the fragment without
-its `[test]` tables, and lists the builds whose exit code, output (the diagnostics) or files written (the C, the
+its `[test]` table (the `manifest` of the list of `onsa_cases`: every file it builds is a case), and lists the builds whose exit code, output (the diagnostics) or files written (the C, the
 headers, `onsa_build.json`; of an object or an archive, the name) differ, the out directory named `<out>` and the
-package `<pkg>`. All three list the falls and exit 1 as `diags` does, and when no case ran to exit 0 in both binaries.
+package `<pkg>`. All four list the falls and exit 1 as `diags` does, and when no case ran to exit 0 in both binaries.
 `speed` measures as the removed `tools/speed.py` did (X9-19), the order of the binaries turned round every other round;
 the long inputs get `check` and `fmt --check`, shown apart, and in `all` the inputs of `core` that every binary checks
 to exit 0 and the first then lowers (exit 0) get `dump --core`: a binary before a fix may fall lowering an input that
@@ -58,9 +59,8 @@ REVIEW = "tests/review-phase1"  # left by `core`: unknown inputs, not lowered al
 PARTS = ((2, "message"), (3, "fix titles"), (4, "fix edits"), (5, "notes"))  # the parts of `diagnostic` a pair names
 CASE_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")  # a case of `probe`: a directory below --out
 DIAG_LINE = re.compile(r"^(.+?):(\d+):(\d+): \w+\[(\w+)\]", re.M)  # the text form: `file:line:col: error[E…]`
-FRAGMENT = "// onsa.toml"  # the first line of a fragment (onsa_tests::fragment::HEADER)
-TEST_TABLE = re.compile(r"\s*\[\[?\s*test\s*[.\]]")  # a header of `[test]` or a table below it, the runner's
 BINARY = (".o", ".a")  # files of `build` compared by the name alone
+CASES = repo.CASES_CMD  # the list of the cases of `c` (the self-test gives its own)
 
 
 def packaged(root, rels) -> list:
@@ -234,27 +234,15 @@ def fmt(args) -> int:
         return compared(args, rels, lambda b, rel: formatted(b, rel, args.root, tmp), texts, ok)
 
 
+def cst(args) -> int:
+    run = lambda b, rel: outcome([b, "dump", "--cst", "--tree", rel], args.root)  # noqa: E731
+    return compared(args, [rel for rel, _ in fuzz.seeds(args.root)], run, texts, ok)
+
+
 def core(args) -> int:
     units = core_cases(args.root)
     run = lambda b, c: outcome([b, "dump", "--core", c], args.root)  # noqa: E731
     return compared(args, units, run, texts, ok, f"tests (but {REVIEW}) and examples")
-
-
-def fragment_manifest(text):
-    """The manifest of a case file without its `[test]` tables (the runner's, which an onsa.toml does not take): the
-    lines of its `// onsa.toml` fragment (`//`, or `// ` and the TOML, to the first other line), as
-    `onsa_tests::fragment::parse` reads them. None when the file has no fragment or nothing but `[test]` in it."""
-    lines = [x.rstrip("\r") for x in text.split("\n")]
-    if lines[0] != FRAGMENT:
-        return None
-    toml, test = [], False
-    for x in lines[1:]:
-        if x != "//" and not x.startswith("// "):
-            break
-        x = x[3:]
-        test = bool(TEST_TABLE.match(x)) if x.lstrip().startswith("[") else test
-        toml += [] if test else [x]
-    return "\n".join(toml) + "\n" if "".join(toml).strip() else None
 
 
 class Build(NamedTuple):
@@ -267,7 +255,9 @@ class Build(NamedTuple):
 
 
 def c_builds(root, tmp) -> list:
-    """[Build] of every target of the inputs of `core_cases` in a copy of the HEAD of `root` below `tmp`."""
+    """[Build] of every target of the inputs of `core_cases` in a copy of the HEAD of `root` below `tmp`; the manifest of
+    a file is the `manifest` of the list of `onsa_cases` (CASES) of the copy. Raises OSError for a file it does not
+    list."""
     tree, packages = Path(tmp) / "head", Path(tmp) / "packages"
     paths = ["tests", f":!{REVIEW}", f":!{repo.HEAVY}", f":!{fuzz.FUZZ_DIR}", "examples"]
     git = subprocess.run(["git", "-C", str(root), "archive", "HEAD", "--", *paths], capture_output=True)
@@ -275,11 +265,13 @@ def c_builds(root, tmp) -> list:
         raise OSError(f"git archive HEAD in {root}: {git.stderr.decode('utf-8', 'replace').strip()}")
     with tarfile.open(fileobj=io.BytesIO(git.stdout)) as tar:
         tar.extractall(tree, filter="data")
-    builds = []
+    builds, listed = [], {c["path"]: c["manifest"] for c in repo.cases_json(repo.ROOT, CASES, str(tree))}
     for i, case in enumerate(core_cases(tree)):
         package = tree / case
         manifest = (package / "onsa.toml") if package.is_dir() else None
-        text = manifest.read_text(encoding="utf-8") if manifest else fragment_manifest(fuzz.read_input(package))
+        if not manifest and case not in listed:
+            raise OSError(f"{case}: not a case that `onsa_cases` lists (a file is built with the manifest of its fragment)")
+        text = manifest.read_text(encoding="utf-8") if manifest else listed[case]
         if text is not None and not manifest:
             package = packages / str(i)
             package.mkdir(parents=True)
@@ -337,7 +329,7 @@ def c(args) -> int:
         tmp = os.path.realpath(tmp)  # as the binaries print it
         try:
             builds = c_builds(args.root, tmp)
-        except (OSError, tarfile.TarError) as e:
+        except (OSError, tarfile.TarError, repo.RepoError) as e:
             print(f"c: {e}")
             return 1
         inputs = len({b.case for b in builds})
@@ -568,6 +560,10 @@ COMMANDS = {
              "二つのバイナリの fmt を、fuzz の種の .onsa を 1 回ごとに一時のディレクトリに写して回し、終了コード・書いた後のファイル・stdout・ディレクトリに残ったファイルの名前のどれかが違う事例と落ちた事例を並べる",
              "字句・行の配置・fmt のリファクタリングの前後で、整形の結果が変わっていないかを見るとき（マージの前の確かめ）。前のバイナリは diags と同じ",
              "compare.py fmt <主のツリー>/target/base/<基>/onsa target/debug/onsa"),
+    "cst": C(diags_args, cst, ("parent", "i", "b"),
+             "二つのバイナリの dump --cst --tree を fuzz の種の .onsa に 1 ファイルずつ回し（構文だけなので tests/review-phase1 も）、終了コードか出力（CST の木）が違うファイルと落ちたファイルを並べる。両方で終了コード 0 のファイルが無ければ失敗",
+             "字句・構文解析のリファクタリングの前後で、CST が変わっていないかを見るとき（diags と fmt より直接。AST への降下は見ない）。前のバイナリは diags と同じ",
+             "compare.py cst <主のツリー>/target/base/<基>/onsa target/debug/onsa"),
     "core": C(diags_args, core, ("parent", "i", "b"),
               "二つのバイナリの dump --core を、tests/ の事例（diags と同じ。未知の入力を持つ tests/review-phase1 は、"
               "降下に進む命令に一括でかけないので除く。rules/common.md 3.2）と examples（パッケージはディレクトリで）に回し、終了コードか出力が違う入力と落ちた入力を並べる。両方で終了コード 0 の入力が無ければ失敗",
