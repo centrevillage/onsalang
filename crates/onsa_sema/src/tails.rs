@@ -6,9 +6,8 @@
 //! [`Diverging`], the table it makes once and every later stage reads.
 
 use onsa_diag::hash::HashSet;
+use onsa_syntax::ast::{Ast, BinOp, Block, ExprId, ExprKind, Lit, MatchArm, StmtId, StmtKind};
 use serde::{Deserialize, Serialize};
-
-use crate::ast::{Arg, Ast, BinOp, Block, ExprId, ExprKind, Lit, MatchArm, Mode, StmtId, StmtKind, StrSeg};
 
 /// What diverges in a body (§7): the table the walk of the names stage
 /// fills, child before parent, and the later stages read (D-15).
@@ -167,7 +166,7 @@ impl Diverging {
         let StmtKind::While { cond, body } = ast.stmt(s).kind else { return };
         // A parenthesis is the same as none (`fmt` takes it off, §18.2).
         let forever = matches!(ast.expr(ast.without_parens(cond)).kind, ExprKind::Lit(Lit::Bool(true)));
-        if forever && !ast.leaves_loop(body, patch) {
+        if forever && !leaves_loop(ast, body, patch) {
             self.loops.insert(s);
         }
     }
@@ -267,84 +266,68 @@ pub enum Tail {
     Unit(ExprId),
 }
 
-impl Ast {
-    /// The tails of `e` (§5.2: the tail of a block, of each branch of an `if`
-    /// and of each arm of a `match`), through parentheses, in source order.
-    /// The depth of the walk is that of the nesting of `e` (§2.5).
-    pub fn tails(&self, e: ExprId, diverging: &Diverging, out: &mut Vec<Tail>) {
-        if diverging.expr(e) {
-            return out.push(Tail::Exits);
-        }
-        let e = self.without_parens(e);
-        match &self.expr(e).kind {
-            ExprKind::If { then, else_: Some(other), .. } => {
-                self.tails(*then, diverging, out);
-                self.tails(*other, diverging, out);
-            }
-            ExprKind::If { else_: None, .. } => out.push(Tail::Unit(e)),
-            ExprKind::Match { arms, .. } => {
-                for arm in arms {
-                    self.tails(arm.body, diverging, out);
-                }
-            }
-            ExprKind::Block(b) => match b.tail {
-                Some(t) => self.tails(t, diverging, out),
-                None => out.push(Tail::Unit(e)),
-            },
-            _ => out.push(Tail::Value(e)),
-        }
+/// The tails of `e` (§5.2: the tail of a block, of each branch of an `if`
+/// and of each arm of a `match`), through parentheses, in source order.
+/// The depth of the walk is that of the nesting of `e` (§2.5).
+pub fn tails(ast: &Ast, e: ExprId, diverging: &Diverging, out: &mut Vec<Tail>) {
+    if diverging.expr(e) {
+        return out.push(Tail::Exits);
     }
-
-    /// Whether `e`, in the body of a loop, holds a `break` of that loop (§7):
-    /// not one in the body of a loop inside it (the head of such a loop is
-    /// evaluated in this one, so a `break` there counts) or in an anonymous
-    /// function. By the structure alone, of the form `patch` has of it: one
-    /// that is not reached counts.
-    pub fn leaves_loop(&self, e: ExprId, patch: Option<&Patch>) -> bool {
-        let leaves = |x: ExprId| self.leaves_loop(x, patch);
-        match &self.expr(e).kind {
-            ExprKind::Closure { .. } => false,
-            ExprKind::Block(b) => {
-                let b = Patch::block(patch, e, b);
-                b.stmts.iter().any(|&s| self.stmt_leaves_loop(s, patch)) || b.tail.is_some_and(leaves)
-            }
-            ExprKind::Match { scrutinee, arms, .. } => {
-                let mut arms = Patch::arms(patch, e, arms).iter();
-                leaves(*scrutinee) || arms.any(|a| a.guard.is_some_and(leaves) || leaves(a.body))
-            }
-            // The left operand a form gives `-x` is out of the block (`a - x`).
-            _ => self.sub_exprs(e).into_iter().chain(Patch::left(patch, e)).any(leaves),
+    let e = ast.without_parens(e);
+    match &ast.expr(e).kind {
+        ExprKind::If { then, else_: Some(other), .. } => {
+            tails(ast, *then, diverging, out);
+            tails(ast, *other, diverging, out);
         }
+        ExprKind::If { else_: None, .. } => out.push(Tail::Unit(e)),
+        ExprKind::Match { arms, .. } => {
+            for arm in arms {
+                tails(ast, arm.body, diverging, out);
+            }
+        }
+        ExprKind::Block(b) => match b.tail {
+            Some(t) => tails(ast, t, diverging, out),
+            None => out.push(Tail::Unit(e)),
+        },
+        _ => out.push(Tail::Value(e)),
     }
+}
 
-    /// [`Ast::leaves_loop`] of a statement.
-    fn stmt_leaves_loop(&self, s: StmtId, patch: Option<&Patch>) -> bool {
-        let leaves = |x: ExprId| self.leaves_loop(x, patch);
-        match &self.stmt(s).kind {
-            StmtKind::Break => true,
-            StmtKind::Continue => false,
-            StmtKind::Return(None) => Patch::joined(patch, s).is_some_and(leaves),
-            StmtKind::While { cond: head, .. } | StmtKind::For { iter: head, .. } => leaves(*head),
-            StmtKind::Let { init: x, .. }
-            | StmtKind::Var { init: x, .. }
-            | StmtKind::Return(Some(x))
-            | StmtKind::Assert(x)
-            | StmtKind::Expr(x) => leaves(*x),
-            StmtKind::Assign { target, value } => leaves(*target) || leaves(*value),
+/// Whether `e`, in the body of a loop, holds a `break` of that loop (§7):
+/// not one in the body of a loop inside it (the head of such a loop is
+/// evaluated in this one, so a `break` there counts) or in an anonymous
+/// function. By the structure alone, of the form `patch` has of it: one
+/// that is not reached counts.
+pub fn leaves_loop(ast: &Ast, e: ExprId, patch: Option<&Patch>) -> bool {
+    let leaves = |x: ExprId| leaves_loop(ast, x, patch);
+    match &ast.expr(e).kind {
+        ExprKind::Closure { .. } => false,
+        ExprKind::Block(b) => {
+            let b = Patch::block(patch, e, b);
+            b.stmts.iter().any(|&s| stmt_leaves_loop(ast, s, patch)) || b.tail.is_some_and(leaves)
         }
+        ExprKind::Match { scrutinee, arms, .. } => {
+            let mut arms = Patch::arms(patch, e, arms).iter();
+            leaves(*scrutinee) || arms.any(|a| a.guard.is_some_and(leaves) || leaves(a.body))
+        }
+        // The left operand a form gives `-x` is out of the block (`a - x`).
+        _ => ast.sub_exprs(e).into_iter().chain(Patch::left(patch, e)).any(leaves),
     }
+}
 
-    /// The text of the argument `arg` of `panic` (§9.2): a string literal
-    /// with no interpolation, through parentheses; none for anything else.
-    pub fn panic_message(&self, arg: &Arg) -> Option<String> {
-        let ExprKind::Lit(Lit::Str(s)) = &self.expr(self.without_parens(arg.expr)).kind else { return None };
-        let mut text = String::new();
-        for seg in &s.segments {
-            match seg {
-                StrSeg::Text(t) => text.push_str(t),
-                StrSeg::Interp(_) => return None,
-            }
-        }
-        (arg.mode == Mode::Borrow && !s.pathless_hole).then_some(text)
+/// [`leaves_loop`] of a statement.
+fn stmt_leaves_loop(ast: &Ast, s: StmtId, patch: Option<&Patch>) -> bool {
+    let leaves = |x: ExprId| leaves_loop(ast, x, patch);
+    match &ast.stmt(s).kind {
+        StmtKind::Break => true,
+        StmtKind::Continue => false,
+        StmtKind::Return(None) => Patch::joined(patch, s).is_some_and(leaves),
+        StmtKind::While { cond: head, .. } | StmtKind::For { iter: head, .. } => leaves(*head),
+        StmtKind::Let { init: x, .. }
+        | StmtKind::Var { init: x, .. }
+        | StmtKind::Return(Some(x))
+        | StmtKind::Assert(x)
+        | StmtKind::Expr(x) => leaves(*x),
+        StmtKind::Assign { target, value } => leaves(*target) || leaves(*value),
     }
 }

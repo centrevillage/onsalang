@@ -140,7 +140,7 @@ pub(crate) struct BodyNames {
     /// A call of [`Self::instances`] to its index there.
     pub instance_of: HashMap<ExprId, usize>,
     /// What diverges (§7), which [`crate::body::BodyInfo::diverging`] takes.
-    pub diverging: onsa_syntax::tails::Diverging,
+    pub diverging: crate::tails::Diverging,
     /// `false` when the walk stopped before the end of the body: at an error
     /// of the names stage ([`Self::reported`]), or at a name the names stage
     /// holds as an error (§18.1, S-692), where the types stage stops too with

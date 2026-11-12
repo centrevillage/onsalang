@@ -22,7 +22,6 @@ use onsa_syntax::ast::{
     Arg, Ast, BinOp, Block, CallKind, Expr, ExprId, ExprKind, Ident, Lit, MatchArm, Mode, OpGroup, Param, ParamName,
     PatId, PatKind, Path, RangeEnd, RangeHead, StmtId, StmtKind, StrSeg, UnOp,
 };
-use onsa_syntax::tails::{Diverging, Patch};
 use serde::{Deserialize, Serialize};
 
 use crate::binding::{Bind, Head, HeadRow, LitClass};
@@ -37,6 +36,7 @@ use crate::names::body::{BindingKind, BodyNames, Origin, PatRes, PathRes, Struct
 use crate::requirement::{ArgumentName, Required};
 use crate::resolve::{Builtin, Entity, ResolveError};
 use crate::structpat::Written;
+use crate::tails::{Diverging, Patch};
 use crate::traits::OpNeed;
 use crate::ty::{BuiltinTy, FnTy, IntKind, Len, Ty, TyId, Types};
 use crate::{Analysis, DefId, Kind, ModId, Package, flatten};
@@ -227,7 +227,7 @@ pub struct BodyInfo {
     /// lowering reads them (S-71, D-15).
     pub tries: HashMap<ExprId, TryArms>,
     /// What diverges (§7), as the names stage recorded it.
-    pub diverging: onsa_syntax::tails::Diverging,
+    pub diverging: crate::tails::Diverging,
     /// The rows of the heads of the bindings (§5.4), and the marks of the
     /// static values, the literals that need no drop and the owned aggregate
     /// literals with their first element, settled with the states of the

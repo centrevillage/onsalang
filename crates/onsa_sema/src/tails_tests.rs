@@ -1,10 +1,10 @@
 //! Tests of the tails of a value and of what diverges
-//! (`onsa_syntax::tails`, §5.2, §5.4, §7), on the table of the names stage.
+//! (`crate::tails`, §5.2, §5.4, §7), on the table of the names stage.
 
 use onsa_diag::FileId;
 use onsa_syntax::ast::{Block, ExprId, ExprKind, ItemKind, StmtId, StmtKind};
-use onsa_syntax::tails::{Patch, Tail};
 
+use crate::tails::{Patch, Tail, tails};
 use crate::tests::{check, def};
 
 /// The tails of the body of the first item of `src`, a function `f`, by
@@ -16,7 +16,7 @@ fn tails_of(src: &str) -> Vec<String> {
     let ItemKind::Fn(f) = &p.ast.item(p.ast.root[0]).kind else { panic!("not a function") };
     let a = check(src);
     let mut out = Vec::new();
-    p.ast.tails(f.body.expect("a body"), &a.bodies[&def(&a, "f")].diverging, &mut out);
+    tails(&p.ast, f.body.expect("a body"), &a.bodies[&def(&a, "f")].diverging, &mut out);
     let text = |e| {
         let s = p.ast.expr(e).span;
         src[s.start as usize..s.end as usize].to_string()
@@ -78,7 +78,7 @@ fn a_match_with_no_arm_does_not_diverge() {
 }
 
 /// §7: a `while` of the literal `true` with no `break` of its own; the table
-/// of what is searched is in `Ast::leaves_loop`.
+/// of what is searched is in `leaves_loop`.
 #[test]
 fn a_while_diverges_by_its_condition_and_its_breaks() {
     let whole = |body: &str| format!("fn f(c: Bool, xs: [I32; 2]) {{\n  {{ {body}\n  }}\n}}\n");

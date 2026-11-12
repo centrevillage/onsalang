@@ -4,7 +4,6 @@
 
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast::{ExprId, ExprKind, PatId};
-use onsa_syntax::tails::Tail;
 
 use super::check::Walker;
 use super::flow::Run;
@@ -14,6 +13,7 @@ use crate::binding::Bind;
 use crate::body::{LocalId, Target, view_base};
 use crate::bounds::Bounds;
 use crate::sig::second_class;
+use crate::tails::Tail;
 use crate::ty::{BuiltinTy, Ty, TyId};
 
 /// S-190: what keeps a function value instead.
@@ -99,7 +99,7 @@ impl Walker<'_> {
     /// on one: the first (they are of one type).
     pub(super) fn tail_class(&self, e: ExprId) -> Option<SecondClass> {
         let mut tails = Vec::new();
-        self.ast.tails(e, &self.info.diverging, &mut tails);
+        crate::tails::tails(self.ast, e, &self.info.diverging, &mut tails);
         tails.into_iter().find_map(|t| match t {
             Tail::Value(v) => match self.ast.expr(v).kind {
                 ExprKind::Move(x) => self.second_class(x),

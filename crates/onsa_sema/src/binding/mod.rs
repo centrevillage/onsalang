@@ -18,13 +18,13 @@
 use onsa_diag::Stage;
 use onsa_diag::hash::HashMap;
 use onsa_syntax::ast::{Ast, ExprId, ExprKind, Mode, StmtId, StmtKind};
-use onsa_syntax::tails::Tail;
 use serde::{Deserialize, Serialize};
 
 use crate::body::{BodyInfo, LocalId, view_base};
 use crate::def::GenericDef;
 use crate::kind::Kind;
 use crate::names::body::{BindingKind, BodyNames, Origin, PathRes};
+use crate::tails::Tail;
 use crate::ty::TyId;
 use crate::{Analysis, DefId, Package, module_of_def};
 
@@ -235,7 +235,7 @@ impl<'a> Settle<'a> {
     /// only from a borrow (S-41).
     fn head(&self, e: ExprId, any_place: bool) -> HeadRow {
         let mut tails = Vec::new();
-        self.ast.tails(e, &self.info.diverging, &mut tails);
+        crate::tails::tails(self.ast, e, &self.info.diverging, &mut tails);
         let (mut sources, mut no_drop, mut borrows) = (Vec::new(), true, false);
         for tail in tails {
             match tail {

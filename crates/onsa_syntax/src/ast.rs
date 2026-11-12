@@ -110,6 +110,20 @@ impl Ast {
         e
     }
 
+    /// The text of the argument `arg` of `panic` (§9.2): a string literal
+    /// with no interpolation, through parentheses; none for anything else.
+    pub fn panic_message(&self, arg: &Arg) -> Option<String> {
+        let ExprKind::Lit(Lit::Str(s)) = &self.expr(self.without_parens(arg.expr)).kind else { return None };
+        let mut text = String::new();
+        for seg in &s.segments {
+            match seg {
+                StrSeg::Text(t) => text.push_str(t),
+                StrSeg::Interp(_) => return None,
+            }
+        }
+        (arg.mode == Mode::Borrow && !s.pathless_hole).then_some(text)
+    }
+
     /// The literal of a negative literal (spec §4.7, S-184, S-227): `e` is a prefix
     /// `-` whose operand, without its parentheses, is a numeric literal itself
     /// (`-1`, `-(128)`, `-((1.5))`). The `-` is then a part of the literal's

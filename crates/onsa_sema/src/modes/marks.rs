@@ -11,12 +11,12 @@
 use onsa_diag::internal::bug;
 use onsa_diag::{Edit, Fix};
 use onsa_syntax::ast::{ExprId, ExprKind};
-use onsa_syntax::tails::Tail;
 
 use super::check::Walker;
 use super::consume::Movable;
 use super::place::place_of;
 use super::walk::Pos;
+use crate::tails::Tail;
 
 impl Walker<'_> {
     /// The candidate of the E0711 of the `move` at `m` on `e`, no place, at
@@ -29,7 +29,7 @@ impl Walker<'_> {
             return Some(remove);
         }
         let mut tails = Vec::new();
-        self.ast.tails(x, &self.info.diverging, &mut tails);
+        crate::tails::tails(self.ast, x, &self.info.diverging, &mut tails);
         let mut edits = remove.edits().to_vec();
         for tail in tails {
             let Tail::Value(v) = tail else { continue };
