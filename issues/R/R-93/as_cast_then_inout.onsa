@@ -1,0 +1,61 @@
+struct P { a: I32, b: I32 }
+
+fn bump8(inout c: I8) -> I64 {
+  c = 100
+  1
+}
+
+fn bump_s(inout s: P) -> I32 {
+  s = P { a: 50, b: 60 }
+  1
+}
+
+fn bump_arr(inout a: [I32; 3]) -> I32 {
+  a = [7, 8, 9]
+  1
+}
+
+//@ g_cast 2
+@export
+pub fn g_cast() -> I64 {
+  var c: I8 = 1
+  (c as I64) + bump8(inout c)
+}
+
+//@ g_cast_rev 101
+@export
+pub fn g_cast_rev() -> I64 {
+  var c: I8 = 1
+  bump8(inout c) + (c as I64)
+}
+
+//@ g_tup 12
+@export
+pub fn g_tup() -> I32 {
+  var s = P { a: 1, b: 2 }
+  let t = (s.a, bump_s(inout s))
+  t.0 * 10 + t.1 + 1
+}
+
+//@ g_arr 11
+@export
+pub fn g_arr() -> I32 {
+  var a = [1, 2, 3]
+  a[0] + bump_arr(inout a) * 10 + 0
+}
+
+//@ g_spill 52
+@export
+pub fn g_spill() -> I32 {
+  var s = P { a: 1, b: 2 }
+  let t = (s, bump_s(inout s))
+  t.0.a + t.1 * 0 + t.0.b + 49
+}
+
+//@ g_idx 12
+@export
+pub fn g_idx() -> I32 {
+  var a = [1, 2, 3]
+  let t = (a, bump_arr(inout a))
+  t.0[1] + t.1 * 10
+}
