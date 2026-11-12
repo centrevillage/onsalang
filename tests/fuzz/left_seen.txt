@@ -63,6 +63,8 @@ fix|E0020|join it to the line before|E0002	this `…` is never closed
 fix|E0020|join it to the line before|E0020	a `…` that opens a list is written right after the token before it
 fix|E0020|move it to the end of the line before|E0002	`…` is no part of the head of a declaration
 fix|E0020|move it to the end of the line before|E0002	expected a declaration, found `…`
+fix|E0020|move it to the end of the line before|E0002	expected a declaration, found integer literal
+fix|E0020|move it to the end of the line before|E0020	a callee that is no path of names is a function value; it is called with `…`
 fix|E0020|move it to the end of the line before|E0020	a float literal needs digits on both sides of the point
 fix|E0020|move it to the end of the line before|E0408	integer literal is larger than any integer type holds
 fix|E0020|remove the `…`|E0002	Onsa has no string of this delimiter
