@@ -7,9 +7,9 @@
 use onsa_diag::Edit;
 use onsa_syntax::foreign::{self, RowId};
 
-use super::slot::{Slot, slot_of};
 use super::*;
 use crate::names::body::Form;
+use crate::slot::{Slot, slot_of};
 
 impl<'a> Checker<'a> {
     /// The call `e` of `callee`, `recv.name(…)`, where `recv` has no method

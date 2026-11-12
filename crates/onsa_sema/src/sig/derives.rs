@@ -6,7 +6,7 @@ use onsa_syntax::ast::Variant;
 
 use super::wellformed::{Slot, payloads};
 use super::*;
-use crate::body::bounds::Bounds;
+use crate::bounds::Bounds;
 use crate::stages::Failures;
 use crate::traits::{DERIVABLE, ItemTy, TRAIT_ITEMS, TraitItem, derived};
 

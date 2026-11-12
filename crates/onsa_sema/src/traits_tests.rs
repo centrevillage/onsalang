@@ -1,6 +1,6 @@
 //! The tables of the traits against §6.3 and against each other.
 
-use crate::body::bounds::Bounds;
+use crate::bounds::Bounds;
 use crate::def::{Bound, DefKind, TRAITS};
 use crate::tests::analyze;
 use crate::tests::std_package;

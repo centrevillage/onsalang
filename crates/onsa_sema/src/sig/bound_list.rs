@@ -10,7 +10,7 @@ use onsa_syntax::ast::Bound as Written;
 
 use super::derives::drop_element;
 use super::*;
-use crate::body::bounds::implies;
+use crate::traits::implies;
 
 /// The rule a `?` keeps to (§4.5).
 const RELAXED_RULE: &str = "`?` lifts an implicit requirement of a type parameter, `Dup` or `Escape`, and only those: to take Affine types too, write `?Dup`";

@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use onsa_diag::{Code, FileId};
 
-use crate::body::bounds::Bounds;
+use crate::bounds::Bounds;
 use crate::cast::Instead;
 use crate::def::{Bound, DefId, DefKind, FnDef, GenericKind};
 use crate::prim::{INTS, MathFn, NARROW_FROM, Prim, PrimRow, Scalar, key_of, row, rows};

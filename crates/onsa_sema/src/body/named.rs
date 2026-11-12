@@ -5,8 +5,9 @@
 //! flow stage reports after `^` (W7-04: `flow_map.rs`).
 
 use super::*;
-use crate::deferred::{DeferredKind, Required};
+use crate::deferred::DeferredKind;
 use crate::names::body::{METHOD_IS_CALLED, PathRes};
+use crate::requirement::Required;
 
 impl<'a> Checker<'a> {
     // ------------------------------------------------------------ names

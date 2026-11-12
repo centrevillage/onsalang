@@ -5,7 +5,7 @@ use std::cell::{Cell, RefCell};
 use onsa_diag::hash::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 
-use crate::body::bounds::Bounds;
+use crate::bounds::Bounds;
 use crate::def::{Bound, GenericDef, GenericKind};
 use crate::summary::{Facts, Read};
 use crate::ty::{BuiltinTy, Ty, TyId};

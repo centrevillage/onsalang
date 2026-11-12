@@ -3,31 +3,15 @@
 //! the well-formedness of the types written (`sig::wellformed`, R-37); the
 //! tables they read are [`crate::traits`].
 
-use super::*;
-pub(crate) use crate::traits::implies;
-use crate::traits::{Class, derive_of};
+use crate::def::{Bound, GenericDef, GenericKind};
+use crate::traits::{Class, derive_of, implies};
+use crate::ty::{BuiltinTy, Ty, TyId};
+use crate::{Analysis, DefId, Kind};
 
 /// The judgments of the bounds under the generics in scope `generics`.
 pub(crate) struct Bounds<'b> {
     pub(crate) a: &'b Analysis,
     pub(crate) generics: &'b [GenericDef],
-}
-
-impl<'a> Checker<'a> {
-    // ------------------------------------------------------------ bounds
-
-    /// The judgments of the bounds under the generics of the body.
-    pub(crate) fn bounds(&self) -> Bounds<'_> {
-        Bounds { a: self.a, generics: &self.generics }
-    }
-
-    pub(crate) fn traits_unknown(&self, t: TyId) -> bool {
-        self.bounds().traits_unknown(t)
-    }
-
-    pub(crate) fn satisfies(&self, t: TyId, b: Bound) -> bool {
-        self.bounds().satisfies(t, b)
-    }
 }
 
 /// Whether the type parameter `g` satisfies `b`: by its bounds, and any `b`

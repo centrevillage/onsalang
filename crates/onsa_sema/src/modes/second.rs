@@ -11,8 +11,8 @@ use super::flow::Run;
 use super::place::place_of;
 use super::walk::Pos;
 use crate::binding::Bind;
-use crate::body::bounds::Bounds;
 use crate::body::{LocalId, Target, view_base};
+use crate::bounds::Bounds;
 use crate::sig::second_class;
 use crate::ty::{BuiltinTy, Ty, TyId};
 

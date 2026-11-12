@@ -2,7 +2,7 @@
 //! instances.
 
 use super::*;
-use crate::deferred::{GENERIC_VIEW, LIFTED_VIEW, VIEW_OF_ARRAY};
+use crate::requirement::{Requirement, alias_way, head_of, parameter, requirements};
 
 impl<'a> Checker<'a> {
     // ------------------------------------------------------------ generics
@@ -141,58 +141,4 @@ impl<'a> Checker<'a> {
         self.info.instances.push(Instance { def, args, span });
         Ok(Some(id))
     }
-}
-
-/// A requirement of a type parameter on its argument (§4.5), of [`requirements`].
-#[derive(Clone, Copy)]
-pub(crate) enum Requirement {
-    /// The implicit `Escape` (E0710 of the rule `rule`); `lifted`: the parameter is `?Escape`.
-    Escape { rule: &'static str, lifted: bool },
-    /// The implicit `Dup` or a bound (E0416).
-    Bound(Bound),
-}
-
-/// What the type parameter `g` requires of its argument, in the order it is
-/// judged (§4.5, S-862): its implicit `Escape`, then the implicit `Dup` and
-/// its bounds. The first one an argument does not meet is its error, and the
-/// others are not judged (a second-class argument is E0710 alone): a use of a
-/// value makes them items in this order (the first one to fail is reported,
-/// [`Checker::check_deferred_now`]), a constant expression judges them at once
-/// ([`crate::constarg`]). None of a const parameter, nor of one with an
-/// unknown bound, which requires nothing of its users (§18.1, S-768).
-/// `of_seq`: of the element of a method of an array.
-pub(crate) fn requirements(g: &GenericDef, of_seq: bool) -> Option<impl Iterator<Item = Requirement> + '_> {
-    let GenericKind::Type { bounds, dup, unknown: false, .. } = &g.kind else { return None };
-    let lifted = g.lifts_escape();
-    let rule = match (lifted, of_seq) {
-        (true, _) => LIFTED_VIEW,
-        (false, true) => VIEW_OF_ARRAY,
-        (false, false) => GENERIC_VIEW,
-    };
-    let wants = dup.then_some(Bound::Dup).into_iter().chain(bounds.iter().copied());
-    Some(std::iter::once(Requirement::Escape { rule, lifted }).chain(wants.map(Requirement::Bound)))
-}
-
-/// The name of the type `t` with no type argument (`Rg` of `Rg[T, N]`,
-/// `Buf` of `Buf[T]`); none of another form.
-pub(crate) fn head_of(a: &Analysis, t: TyId) -> Option<String> {
-    match a.types.get(t) {
-        Ty::Named(d, _) => Some(a.def(*d).name.clone()),
-        Ty::Builtin(b, _) => Some(b.name().to_string()),
-        _ => None,
-    }
-}
-
-/// The generic parameter `g` of `owner` (``the `impl` of `Rg` ``) as a
-/// message names it.
-pub(crate) fn parameter(g: &GenericDef, owner: &str) -> String {
-    let kind = if matches!(g.kind, GenericKind::Const(_)) { "const" } else { "type" };
-    format!("the {kind} parameter `{}` of {owner}", g.name)
-}
-
-/// The note of an E0406 of the constant `name` of the `impl` of the type
-/// `head` (S-304): how its arguments are given, after its name or by an
-/// alias.
-pub(crate) fn alias_way(head: &str, name: &str) -> String {
-    format!("give the type its arguments: `{head}::[…].{name}`, or by an alias, `type R = {head}[…]`, then `R.{name}`")
 }

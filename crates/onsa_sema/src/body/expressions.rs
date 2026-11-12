@@ -383,7 +383,7 @@ impl<'a> Checker<'a> {
         let Some(&StructRes { entity, owner }) = self.names.structs.get(&e) else { return Err(self.held_stop()) };
         let d = match entity {
             Entity::Def(d) | Entity::Member(d) if matches!(self.a.def(d).kind, DefKind::Struct(_)) => d,
-            _ => return Err(self.diag(crate::body::not_a_struct(self.src(path.span), path.span))),
+            _ => return Err(self.diag(crate::names::body::not_a_struct(self.src(path.span), path.span))),
         };
         let s = self.a.def(d).as_struct().unwrap().clone();
         let Fields::Named(defs) = &s.fields else {

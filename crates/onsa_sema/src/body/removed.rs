@@ -9,8 +9,8 @@ use onsa_syntax::ast::{OperandPlace, Vis};
 use crate::def::ParamSig;
 use crate::lang;
 
-use super::slot::{Form, Slot, slot_of};
 use super::*;
+use crate::slot::{Form, Slot, slot_of};
 
 /// What the spec gives instead of a method it leaves out.
 #[derive(Debug, Clone, Copy)]

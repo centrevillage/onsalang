@@ -28,7 +28,7 @@ pub(crate) use consts::{ConstScope, const_names, const_path_names};
 pub(crate) use exprs::heads;
 pub(crate) use flow::clock_after;
 pub(crate) use kinds::METHOD_IS_CALLED;
-pub(crate) use paths::is_value;
+pub(crate) use paths::{is_value, not_a_struct};
 pub(crate) use type_args::{Form, count_error, names_only, own_params};
 mod scope;
 #[cfg(test)]
@@ -610,7 +610,7 @@ struct Walker<'a> {
     /// walk stops after the expression (`Walker::const_expr`).
     const_held: bool,
     /// The expression of the body, under which a candidate finds the place
-    /// of an expression (`crate::body::slot`).
+    /// of an expression (`crate::slot`).
     root: ExprId,
     /// The parameters of the anonymous function whose heading is walked,
     /// which the whole heading sees (§5.1, S-739).

@@ -8,11 +8,11 @@
 use onsa_diag::Edit;
 use onsa_syntax::ast::{OperandPlace, TypeId, TypeKind};
 
-use super::slot::{Form, Slot, opens_a_brace};
 use super::*;
 use crate::cast::{Instead, cast_instead};
 use crate::lang;
 use crate::prim::NARROW_FROM;
+use crate::slot::{Form, Slot, opens_a_brace};
 
 /// The call a candidate replaces: the expression and the type expected of it
 /// (§4.7).

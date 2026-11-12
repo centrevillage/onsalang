@@ -17,8 +17,8 @@
 //! error type (S-757). Its second-class parts are judged where it is named.
 
 use super::*;
-use crate::body::bounds::Bounds;
-use crate::deferred::Required;
+use crate::bounds::Bounds;
+use crate::requirement::Required;
 
 /// The place of a root (§5.3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

@@ -14,7 +14,7 @@
 //! error of the names stage that stops the walk of the body (§18.1); a name
 //! the names stage holds as an error stops it with no diagnostic (S-692).
 
-use onsa_diag::{Code, Diagnostic, Edit, Fix, Stage};
+use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 use onsa_syntax::ast::{ExprId, ExprKind, Ident, PatId, Path, TypeArgList};
 use onsa_syntax::constexpr::NameChain;
 pub(super) use onsa_syntax::constexpr::{path_of, span_of};
@@ -23,12 +23,12 @@ use super::calls::Square;
 use super::kinds::Want;
 use super::{Fail, PatRes, PathRes, StructRes, W, Walker};
 use crate::Analysis;
-use crate::body::slot::{Form, slot_of};
 use crate::def::{Bound, GenericKind};
 use crate::flow_names::FlowBuiltin;
 use crate::names::{BuiltinMember, builtin_ty};
 use crate::resolve::NameKind;
 use crate::resolve::{Builtin, Entity, ResolveError};
+use crate::slot::{Form, slot_of};
 use crate::traits::{MAX, MIN, implies, member_note};
 use crate::ty::{Ty, TyId};
 
@@ -472,7 +472,7 @@ impl<'a> Walker<'a> {
         if let ([_], Some(r)) = (&segs[..], self.heading(head)) {
             let kind = if matches!(r, PathRes::ConstParam(_)) { NameKind::ConstParam } else { NameKind::Type };
             // A type parameter is a type, and no struct (`T { x: 1 }`).
-            let no_struct = || Fail::Report(crate::body::not_a_struct(head.name.clone(), head.span));
+            let no_struct = || Fail::Report(not_a_struct(head.name.clone(), head.span));
             return Err(self.want(kind, &segs, want).unwrap_or_else(no_struct));
         }
         if let Some(f) = self.effect_var(&segs, None) {
@@ -559,4 +559,12 @@ impl<'a> Walker<'a> {
         self.struct_args(e, path, lists, end);
         Ok(())
     }
+}
+
+/// E0401 for the struct literal whose path `shown` at `span` names a type
+/// that is no struct (`I32 { x: 1 }`, a type parameter `T { x: 1 }`; the form
+/// in a kind, not E0308, §15.1, S-713).
+pub(crate) fn not_a_struct(shown: String, span: Span) -> Diagnostic {
+    let msg = format!("`{shown}` is not a struct");
+    Diagnostic::new(Stage::Types, Code::E0401, span, msg).with_found(shown)
 }

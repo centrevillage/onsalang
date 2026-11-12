@@ -3,7 +3,7 @@
 //! The functions are std's (`std/core/num.onsa`); a unit test checks the
 //! names suggested against them (`prim_tests.rs`).
 
-use crate::body::bounds::Bounds;
+use crate::bounds::Bounds;
 use crate::def::Bound;
 use crate::prim::{ROUND_FROM, TRUNC_FROM, TRUNC_SAT_FROM};
 use crate::ty::{FloatKind, Ty, TyId, Types};

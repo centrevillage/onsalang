@@ -12,6 +12,7 @@ pub mod binding;
 pub mod body;
 #[cfg(test)]
 mod body_tests;
+mod bounds;
 mod builtin;
 pub(crate) mod cast;
 mod constarg;
@@ -45,9 +46,11 @@ pub mod package_tree;
 pub mod prim;
 #[cfg(test)]
 mod prim_tests;
+mod requirement;
 pub mod resolve;
 mod rt;
 mod sig;
+mod slot;
 mod stages;
 #[cfg(test)]
 mod stages_tests;

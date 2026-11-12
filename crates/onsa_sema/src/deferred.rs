@@ -17,12 +17,14 @@
 
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::FloatRange;
-use onsa_syntax::ast::{BinOp, ExprId, ExprKind, Lit};
+use onsa_syntax::ast::{ExprId, ExprKind, Lit};
 
 use crate::body::{Checker, LocalId, R};
 use crate::def::Bound;
 use crate::infer::Cause;
-use crate::ty::{BuiltinTy, FloatKind, IntKind, Ty, TyId};
+use crate::requirement::{ArgumentName, Required, second_class_argument};
+use crate::traits::OpNeed;
+use crate::ty::{FloatKind, IntKind, Ty, TyId};
 
 /// What a deferred item checks.
 #[derive(Debug, Clone)]
@@ -70,41 +72,6 @@ pub(crate) enum DeferredKind {
     Limit,
 }
 
-/// The operator an [`DeferredKind::Operator`] item checks (§3.2): a binary one, or a
-/// prefix `-` / `!`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum OpNeed {
-    Binary(BinOp),
-    Neg,
-    Not,
-}
-
-impl OpNeed {
-    pub(crate) fn symbol(self) -> &'static str {
-        match self {
-            OpNeed::Binary(b) => b.symbol(),
-            OpNeed::Neg => "-",
-            OpNeed::Not => "!",
-        }
-    }
-}
-
-/// The message of the E0710 of the type argument `shown` of `what`, a
-/// second-class type (§4.5, §5.3).
-pub(crate) fn second_class_argument(shown: &str, what: &str) -> String {
-    format!("`{shown}` is second-class: {what} cannot take it (§4.5, §5.3)")
-}
-
-/// The rule of the E0710 of a type argument with no kind (§5.3, S-862).
-pub(crate) const GENERIC_VIEW: &str = "to take a view generically, declare the parameter `xs: Span[T]` or `xs: [Span[T]; N]` (§5.3), or give the type parameter `?Escape` (§4.5)";
-
-/// The rule of that E0710 of a `?Escape` parameter (S-927).
-pub(crate) const LIFTED_VIEW: &str =
-    "a `?Escape` type parameter takes a `Span` and a planar array, no other second-class type (§4.5)";
-
-/// The rule of that E0710 of the element of a method of an array.
-pub(crate) const VIEW_OF_ARRAY: &str = "call the method on one view of the array (`xs[k].get(i)`, §5.3)";
-
 /// What an operator requires of a type ([`Checker::operator_verdict`]), and a
 /// conversion function ([`Checker::conversion_verdict`]).
 pub(crate) enum Verdict {
@@ -113,89 +80,6 @@ pub(crate) enum Verdict {
     Wait,
     /// The message of the E0401, of the E0413.
     Unmet(String),
-}
-
-/// The type a requirement is on.
-#[derive(Debug, Clone)]
-pub(crate) enum Required {
-    /// A type parameter `param` of `owner` (`` `need_f` ``, ``the `impl` of `Wrap` ``):
-    /// its bounds and the implicit `Dup`. `std`: `owner` is std's, whose
-    /// declaration the user does not change.
-    Param { param: String, owner: String, std: bool },
-    /// The element of `[e; N]` (`Dup`, §2.4).
-    RepeatElement,
-    /// The element of `Buf` / `Span` (`Copy`, §4.5), named as written (R-351).
-    BufElement(BuiltinTy),
-    /// The element of `Array` / `Set`, the key and the value of `Map`
-    /// (`Dup`, §4.5, S-767).
-    SharedElement,
-    /// The element of the receiver of the type `recv` of the method `method`
-    /// of std's `impl` of a sequence: its bounds (§5.3, S-853).
-    SeqElement { recv: TyId, method: String },
-    /// The value of a hole of a string (`Show`, §2.4, R-292).
-    HoleValue,
-}
-
-/// What the message of a type argument calls it.
-#[derive(Debug, Clone)]
-pub(crate) enum ArgumentName {
-    Text(String),
-    /// The element of the receiver of the type `recv` of the method `method`,
-    /// shown when the error is reported, as [`Required::SeqElement`] is.
-    SeqElement {
-        recv: TyId,
-        method: String,
-    },
-}
-
-impl ArgumentName {
-    fn text(&self, show: impl FnOnce(TyId) -> String) -> String {
-        match self {
-            ArgumentName::Text(t) => t.clone(),
-            ArgumentName::SeqElement { recv, method } => {
-                format!("the element type of `{method}` of `{}`", show(*recv))
-            }
-        }
-    }
-}
-
-impl Required {
-    /// The message of the E0416 of the type `shown` that does not meet `bound`
-    /// as this requirement: of a body, and of a type written (`sig::wellformed`).
-    /// `show` shows another type, when the error is reported.
-    pub(crate) fn unmet(&self, shown: &str, bound: Bound, show: &mut dyn FnMut(TyId) -> String) -> String {
-        match self {
-            Required::HoleValue => {
-                format!("a hole of a string takes a value that implements `Show`; `{shown}` does not (§2.4)")
-            }
-            Required::RepeatElement => format!(
-                "`[e; N]` repeats the value of `e`, so its type must be Copy or Shared (`Dup`); `{shown}` is not; make an Affine array with `array.from_fn` (§2.4)"
-            ),
-            Required::BufElement(b) => {
-                format!("the element type of `{}` must be Copy; `{shown}` is not (§4.5)", b.name())
-            }
-            Required::SharedElement => format!(
-                "the elements of `Array`, `Set` and `Map` are Copy or Shared (`Dup`); `{shown}` is Affine (§4.5)"
-            ),
-            Required::Param { param, owner, std: true } if bound == Bound::Dup => {
-                format!("`{shown}` is not Copy or Shared, so it does not satisfy `{param}: Dup` of {owner} (§4.5)")
-            }
-            Required::Param { param, owner, .. } if bound == Bound::Dup => format!(
-                "`{shown}` is not Copy or Shared, so it does not satisfy `{param}: Dup` of {owner}; a type parameter takes only Copy or Shared types unless it is declared `{param}: ?Dup` (§4.5)"
-            ),
-            Required::Param { param, owner, .. } => {
-                format!("`{shown}` does not satisfy the bound `{param}: {}` of {owner} (§4.5)", bound.name())
-            }
-            Required::SeqElement { recv, method } => {
-                let need = match bound {
-                    Bound::Dup => "a Copy or Shared (`Dup`) element".to_string(),
-                    Bound::Copy => "a Copy element".to_string(),
-                    b => format!("an element that meets `{}`", b.name()),
-                };
-                format!("`{}` has `{method}` only with {need}; its element `{shown}` is not (§5.3)", show(*recv))
-            }
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -511,7 +395,7 @@ impl<'a> Checker<'a> {
                     format!("`-` on the unsigned type `{}`; it has no unary `-`, also for `-0` (§3.4, §4.7)", k.name()),
                 )
                 .with_found(self.src(item.span))
-                .with_rule(crate::body::operator_fix::UNSIGNED_NEGATION),
+                .with_rule(crate::body::UNSIGNED_NEGATION),
             );
         }
         let v = if neg { -(value as i128) } else { value as i128 };

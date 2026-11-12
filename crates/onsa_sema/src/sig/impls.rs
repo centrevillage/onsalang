@@ -4,7 +4,7 @@
 //! Dup` (§4.6).
 
 use super::*;
-use crate::body::bounds::Bounds;
+use crate::bounds::Bounds;
 use crate::names::collect::reads_members;
 use crate::traits::no_impl;
 

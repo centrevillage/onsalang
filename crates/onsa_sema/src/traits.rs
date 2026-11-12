@@ -4,12 +4,11 @@
 //! declarations of std: a row of [`IMPLS`] its `impl`s, a row of [`SUPERS`]
 //! the heading of a `trait`, a row of [`MEMBERS`] the items of a `trait`; the
 //! table of the operators stays. The judgments under the generics in scope
-//! are [`crate::body::bounds`], which reads these.
+//! are [`crate::bounds`], which reads these.
 
 use onsa_syntax::ast::{BinOp, Mode};
 
 use crate::def::{Bound, DefKind, Derive, DerivedFn};
-use crate::deferred::OpNeed;
 use crate::prim::{NARROW_FROM, ROUND_FROM, TRUNC_FROM, TRUNC_SAT_FROM};
 use crate::ty::{BuiltinTy, FloatKind, IntKind, Ty, TyId};
 use crate::{Analysis, DefId};
@@ -362,6 +361,25 @@ fn named(bs: &[Bound]) -> String {
     match names.split_last() {
         Some((last, rest)) if !rest.is_empty() => format!("{} and {last}", rest.join(", ")),
         _ => names.concat(),
+    }
+}
+
+/// The operator an [`crate::deferred::DeferredKind::Operator`] item checks (§3.2): a binary one, or a
+/// prefix `-` / `!`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum OpNeed {
+    Binary(BinOp),
+    Neg,
+    Not,
+}
+
+impl OpNeed {
+    pub(crate) fn symbol(self) -> &'static str {
+        match self {
+            OpNeed::Binary(b) => b.symbol(),
+            OpNeed::Neg => "-",
+            OpNeed::Not => "!",
+        }
     }
 }
 

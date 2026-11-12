@@ -6,9 +6,8 @@ use onsa_diag::{Code, Diagnostic, FileId};
 use onsa_syntax::ast::BinOp;
 
 use crate::def::Bound;
-use crate::deferred::OpNeed;
 use crate::tests::analyze;
-use crate::traits::{implies, member_note, narrowable, narrowed_bound, op_bound};
+use crate::traits::{OpNeed, implies, member_note, narrowable, narrowed_bound, op_bound};
 use crate::{Module, Package};
 
 /// The one diagnostic of `src`, with std.

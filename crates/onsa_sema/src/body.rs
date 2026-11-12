@@ -7,10 +7,11 @@
 //! and `rt` (T2-9) run after this pass over the tables in [`BodyInfo`].
 //!
 //! Where the code is: this module holds the tables ([`BodyInfo`], the locals,
-//! the targets), the checker (`Checker`, `check_all`), its helpers and
-//! locals, and the accessors that the later passes read. The
+//! the targets), the checker (`Checker`, `check_all`), its helpers, its
+//! locals and its bounds (`crate::bounds`), and the accessors that the
+//! later passes read. The
 //! rest of the checking is in a module per part, each an `impl` of
-//! `Checker`: `entry` (a function body, a `const`), `bounds`, `generics`,
+//! `Checker`: `entry` (a function body, a `const`), `generics`,
 //! `named` (the names the names stage resolved), `expressions`, `calls`, `statements` and `patterns`. The tests
 //! are `body_tests.rs`.
 
@@ -25,20 +26,22 @@ use onsa_syntax::tails::{Diverging, Patch};
 use serde::{Deserialize, Serialize};
 
 use crate::binding::{Bind, Head, HeadRow, LitClass};
+use crate::bounds::Bounds;
 use crate::builtin;
 use crate::def::{Bound, DefKind, Fields, FnDef, GenericDef, GenericKind};
-use crate::deferred::{ArgumentName, Deferred, DeferredKind, OpNeed, Required, Verdict};
+use crate::deferred::{Deferred, DeferredKind, Verdict};
 use crate::exhaust::{Missing, P, Seen};
 use crate::infer::{Cause, Infer, LitKind, Mismatch};
 use crate::modes::Proj;
 use crate::names::body::{BindingKind, BodyNames, Origin, PatRes, PathRes, StructRes};
+use crate::requirement::{ArgumentName, Required};
 use crate::resolve::{Builtin, Entity, ResolveError};
 use crate::structpat::Written;
+use crate::traits::OpNeed;
 use crate::ty::{BuiltinTy, FnTy, IntKind, Len, Ty, TyId, Types};
 use crate::{Analysis, DefId, Kind, ModId, Package, flatten};
 
 mod arms;
-pub(crate) mod bounds;
 mod call_forms;
 mod calls;
 mod const_patterns;
@@ -46,16 +49,17 @@ mod conversions;
 mod entry;
 mod expressions;
 mod fixed_str;
-pub(crate) mod generics;
+mod generics;
 mod named;
-pub(crate) mod operator_fix;
+mod operator_fix;
 mod patterns;
 mod reach;
 mod receivers;
 mod removed;
 mod reread;
-pub(crate) mod slot;
 mod statements;
+
+pub(crate) use operator_fix::UNSIGNED_NEGATION;
 
 // ---------------------------------------------------------------- tables
 
@@ -383,7 +387,7 @@ fn read_body<'c>(
     let typed = vec![false; info.locals.len()];
     let generics = job.generics.clone();
     let float_params =
-        (0..).zip(&generics).filter(|(_, g)| bounds::param_holds(g, Bound::Float)).map(|(i, _)| i).collect();
+        (0..).zip(&generics).filter(|(_, g)| crate::bounds::param_holds(g, Bound::Float)).map(|(i, _)| i).collect();
     let mut ck = Checker {
         a,
         ast: &job.module.parsed.ast,
@@ -841,6 +845,23 @@ impl<'a> Checker<'a> {
     }
 }
 
+impl<'a> Checker<'a> {
+    // ------------------------------------------------------------ bounds
+
+    /// The judgments of the bounds under the generics of the body.
+    pub(crate) fn bounds(&self) -> Bounds<'_> {
+        Bounds { a: self.a, generics: &self.generics }
+    }
+
+    pub(crate) fn traits_unknown(&self, t: TyId) -> bool {
+        self.bounds().traits_unknown(t)
+    }
+
+    pub(crate) fn satisfies(&self, t: TyId, b: Bound) -> bool {
+        self.bounds().satisfies(t, b)
+    }
+}
+
 /// The E0714 of `!` on a call of no `inout self` method (§5.2), wherever it
 /// stands: the types stage's, the flow stage's and the modes stage's.
 pub(crate) const BANG_ON_NO_INOUT_SELF: &str = "`!` marks `inout self` method calls only (§5.2)";
@@ -860,12 +881,4 @@ pub(crate) fn view_base(
     let span = info.expr_types.get(&e).is_some_and(|&t| matches!(a.types.get(ty(t)), Ty::Builtin(BuiltinTy::Span, _)));
     let std = matches!(info.targets.get(&e), Some(Target::Method { def, .. }) if a.modules.is_std(a.def(*def).module));
     (span && std).then_some(base)
-}
-
-/// E0401 for the struct literal whose path `shown` at `span` names a type
-/// that is no struct (`I32 { x: 1 }`, a type parameter `T { x: 1 }`; the form
-/// in a kind, not E0308, §15.1, S-713).
-pub(crate) fn not_a_struct(shown: String, span: Span) -> Diagnostic {
-    let msg = format!("`{shown}` is not a struct");
-    Diagnostic::new(Stage::Types, Code::E0401, span, msg).with_found(shown)
 }
