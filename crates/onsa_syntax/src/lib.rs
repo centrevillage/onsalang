@@ -7,6 +7,9 @@ pub mod ast;
 pub mod attrs;
 mod callee;
 mod chars;
+pub mod constexpr;
+#[cfg(test)]
+mod constexpr_tests;
 pub mod cst;
 #[cfg(test)]
 mod cst_tests;

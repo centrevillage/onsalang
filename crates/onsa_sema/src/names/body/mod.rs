@@ -618,7 +618,7 @@ struct Walker<'a> {
     /// The locals a type sees, of the walk of a constant expression of it
     /// (`consts.rs`), by name: found after the bindings of the walk.
     outer: HashMap<String, BindingId>,
-    /// The type arguments of the chain resolved, as [`Walker::chain`] has
+    /// The type arguments of the chain resolved, as [`onsa_syntax::ast::Ast::chain`] has
     /// them: a candidate that rewrites its names is none (`kinds.rs`), or
     /// keeps them (`paths.rs::qualified_variant`).
     listed: Vec<(usize, ExprId)>,

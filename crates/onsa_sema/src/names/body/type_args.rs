@@ -192,10 +192,10 @@ impl<'a> Walker<'a> {
     /// `m.W`) or an integer literal, that [`Form::fits`] the first parameter
     /// the arguments go to.
     pub(super) fn fits_square(&self, r: &PathRes, name: &Ident, x: ExprId) -> bool {
-        let form = match (&self.ast.expr(x).kind, self.chain(x)) {
+        let form = match (&self.ast.expr(x).kind, self.ast.chain(x)) {
             (ExprKind::Lit(Lit::Int { .. }), _) => Form::Value,
-            (_, Some((names, lists))) if lists.is_empty() => {
-                let path = path_of(&names.iter().map(|&(_, n)| n).collect::<Vec<_>>());
+            (_, Some(c)) if c.lists.is_empty() => {
+                let path = c.path(c.names.len());
                 if path.segments.len() > 1 && !self.reads_to_item(&path) {
                     return false;
                 }

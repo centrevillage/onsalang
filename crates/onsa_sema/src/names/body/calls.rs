@@ -203,7 +203,7 @@ impl Walker<'_> {
                 self.type_or_value(*elem, false)?;
                 self.const_expr(*len)?
             }
-            _ if self.chain(i).is_some() => return self.name_at(i, Place::TypeOrValue),
+            _ if self.ast.chain(i).is_some() => return self.name_at(i, Place::TypeOrValue),
             _ => return self.expr(i),
         }
         self.out.diverging.note_expr(ast, i, false);
@@ -226,7 +226,7 @@ impl Walker<'_> {
     /// not called or a value), an item not called with `.(` (S-974). A type
     /// is read by its form, no value there (its E0308).
     fn square(&mut self, x: ExprId, (head, indices): (ExprId, &[ExprId]), at: Square) -> W {
-        let names = self.chain(head).filter(|(_, lists)| lists.is_empty()).map(|(c, _)| c);
+        let names = self.ast.chain(head).filter(|c| c.lists.is_empty()).map(|c| c.names);
         let names: Vec<&Ident> = names.iter().flatten().map(|&(_, n)| n).collect();
         let Some(&last) = names.last() else { return self.name_at(head, Place::Value) };
         let (r, takes) = match self.form_of(&path_of(&names)) {

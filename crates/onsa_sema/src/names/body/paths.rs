@@ -14,8 +14,10 @@
 //! error of the names stage that stops the walk of the body (§18.1); a name
 //! the names stage holds as an error stops it with no diagnostic (S-692).
 
-use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
+use onsa_diag::{Code, Diagnostic, Edit, Fix, Stage};
 use onsa_syntax::ast::{ExprId, ExprKind, Ident, PatId, Path, TypeArgList};
+use onsa_syntax::constexpr::NameChain;
+pub(super) use onsa_syntax::constexpr::{path_of, span_of};
 
 use super::calls::Square;
 use super::kinds::Want;
@@ -29,10 +31,6 @@ use crate::resolve::NameKind;
 use crate::resolve::{Builtin, Entity, ResolveError};
 use crate::traits::{MAX, MIN, implies, member_note};
 use crate::ty::{Ty, TyId};
-
-/// The names of a chain with their nodes, and its type arguments, each with
-/// the index of the name before it ([`Walker::chain`]).
-pub(super) type Chain<'a> = (Vec<(ExprId, &'a Ident)>, Vec<(usize, ExprId)>);
 
 /// What the types stage does with the end of a chain of names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -67,22 +65,12 @@ pub(crate) fn is_value(a: &Analysis, e: Entity) -> bool {
     NameKind::of(e, &a.defs).is_some_and(NameKind::is_value)
 }
 
-/// The span from the first name of `segs` to its last.
-pub(super) fn span_of(segs: &[&Ident]) -> Span {
-    let (first, last) = (segs[0].span, segs[segs.len() - 1].span);
-    Span::new(first.file, first.start, last.end)
-}
-
-pub(super) fn path_of(segs: &[&Ident]) -> Path {
-    Path { segments: segs.iter().map(|&s| s.clone()).collect(), span: span_of(segs) }
-}
-
 impl<'a> Walker<'a> {
     /// The records of the chain of names `e` ends at the place `place`, at
     /// the nodes of the names it resolves; a node that is no chain walks its
     /// children.
     pub(super) fn name_at(&mut self, e: ExprId, place: Place) -> W {
-        let Some((chain, lists)) = self.chain(e) else {
+        let Some(NameChain { names: chain, lists }) = self.ast.chain(e) else {
             return match &self.ast.expr(e).kind {
                 // A member after `[…]` (`Buf[F32].zeroed`, `ops[i].x`).
                 ExprKind::Field { base, .. } if matches!(self.ast.expr(*base).kind, ExprKind::Index { .. }) => {
@@ -453,35 +441,6 @@ impl<'a> Walker<'a> {
         match segs {
             [head, next, ..] => Some(Fail::Report(crate::sig::member_error(head, next, kind).into_diagnostic())),
             _ => self.kind_fail(kind, segs, place?),
-        }
-    }
-
-    /// The chain of names `e` ends (`a.b.c` is `Field(Field(Path(a), b), c)`),
-    /// from its head, with the node of each, and its type arguments
-    /// (`Buf::[F32].zeroed`, §4.5), each with the index of the name before
-    /// it; none when its head is no name (`f().x`).
-    pub(super) fn chain(&self, e: ExprId) -> Option<Chain<'a>> {
-        let ast = self.ast;
-        let (mut out, mut lists) = (Vec::new(), Vec::new());
-        let mut cur = e;
-        loop {
-            match &ast.expr(cur).kind {
-                ExprKind::Field { base, name } => {
-                    out.push((cur, name));
-                    cur = *base;
-                }
-                ExprKind::TypeArgs { base, .. } => {
-                    lists.push((out.len(), cur));
-                    cur = *base;
-                }
-                ExprKind::Path(p) if p.segments.len() == 1 => {
-                    out.push((cur, &p.segments[0]));
-                    out.reverse();
-                    let n = out.len();
-                    return Some((out, lists.into_iter().rev().map(|(after, x)| (n - after - 1, x)).collect()));
-                }
-                _ => return None,
-            }
         }
     }
 

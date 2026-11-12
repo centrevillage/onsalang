@@ -161,7 +161,8 @@ impl Graph<'_> {
     }
 
     /// The constants the constant expression `e` reads, and anywhere the
-    /// aliases its paths pass (`Al.N`).
+    /// aliases its paths pass (`Al.N`): of the chains under its operators
+    /// ([`crate::constarg::operands`], any operator).
     fn expr(&mut self, w: &From, e: ExprId, value: bool, under: Under) {
         if !value && !w.anywhere {
             return;
@@ -178,20 +179,12 @@ impl Graph<'_> {
     /// The path of the chain of names `e` without its type arguments
     /// (`Rg.CAP` of `Rg::[F32, K].CAP`, S-329), after what they read.
     fn chain(&mut self, w: &From, e: ExprId, value: bool, under: Under) -> Option<Path> {
-        match &w.ast.expr(e).kind {
-            ExprKind::Path(p) => Some(p.clone()),
-            ExprKind::Field { base, name } => {
-                let mut p = self.chain(w, *base, value, under)?;
-                p.segments.push(name.clone());
-                Some(p)
-            }
-            ExprKind::TypeArgs { base, args } => {
-                let p = self.chain(w, *base, value, under)?;
-                self.listed(w, &p, &args.args, value, under);
-                Some(p)
-            }
-            _ => None,
+        let c = w.ast.chain(e)?;
+        for &(k, x) in &c.lists {
+            let ExprKind::TypeArgs { args, .. } = &w.ast.expr(x).kind else { continue };
+            self.listed(w, &c.path(k + 1), &args.args, value, under);
         }
+        Some(c.path(c.names.len()))
     }
 
     /// The type arguments `args` of the type `path` in a constant expression

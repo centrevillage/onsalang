@@ -293,7 +293,8 @@ impl<'p> Sema<'p> {
             // (`Wrap[3]`, `Ring[F32, (F32, F32)]`; §4.5, §15.1, S-732).
             (TypeKind::ConstArg(e), Some(false) | None) => {
                 // `Option[self]`: a local, as of a path (R-309).
-                let local = crate::constarg::path_of(cx.ast, *e).and_then(|p| self.local_as_type(cx, &p, te.span));
+                let chain = cx.ast.chain(*e).filter(|c| c.lists.is_empty());
+                let local = chain.and_then(|c| self.local_as_type(cx, &c.path(c.names.len()), te.span));
                 local.unwrap_or_else(|| self.wrong_kind_arg(cx, te.span, true))
             }
             (TypeKind::ConstArg(e), Some(true)) => {

@@ -34,7 +34,7 @@ impl<'a> Checker<'a> {
     pub(super) fn field_base(&mut self, e: ExprId, base: ExprId) -> R<TyId> {
         // The span of the operand: of the chain so far when it is one of
         // names (`p.x.y`), else of the value (`f().x`).
-        let at = if self.of_names(base) { e } else { base };
+        let at = if self.ast.chain(base).is_some() { e } else { base };
         let bt = self.check_expr(base, None)?;
         self.known_shape(bt, self.expr(at).span, "value")
     }
@@ -155,15 +155,6 @@ impl<'a> Checker<'a> {
             ExprKind::Field { name, .. } => name.clone(),
             ExprKind::Path(p) => p.segments[0].clone(),
             _ => onsa_diag::internal::bug(Some(self.expr(e).span), "a chain of names with no name"),
-        }
-    }
-
-    /// Whether `e` is a chain of names (`a`, `a.b`), by its form.
-    fn of_names(&self, e: ExprId) -> bool {
-        match &self.expr(e).kind {
-            ExprKind::Field { base, .. } | ExprKind::TypeArgs { base, .. } => self.of_names(*base),
-            ExprKind::Path(p) => p.segments.len() == 1,
-            _ => false,
         }
     }
 

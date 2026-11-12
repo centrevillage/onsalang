@@ -111,6 +111,8 @@ mod square;
 pub(crate) use flow::clocks;
 pub(crate) use literals::unpadded_index;
 pub(crate) use spaces::{held_errors, with_mark};
+#[cfg(test)]
+pub(crate) use square::constant;
 pub(crate) use square::square_lists;
 
 /// The kind constraint `Copy` (§4.6): written in bounds, never derived.

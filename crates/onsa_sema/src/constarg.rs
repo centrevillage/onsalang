@@ -8,7 +8,8 @@
 //! the nodes by the grammar (S-966).
 
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
-use onsa_syntax::ast::{Ast, BinOp, ExprId, ExprKind, Ident, ItemKind, Lit, Path, UnOp};
+use onsa_syntax::ast::{Ast, ExprId, ExprKind, ItemKind, Lit, Path};
+use onsa_syntax::constexpr::ConstForm;
 
 use crate::def::{DefKind, GenericKind};
 use crate::names::body::{BodyNames, PathRes};
@@ -168,6 +169,7 @@ fn settle(r: Result<Got, ConstErr>) -> Result<Got, ConstErr> {
 /// of the expected type `U32`), stopping at the first error. The leaves are
 /// read by their type, and the nodes by the grammar (S-966): a node outside
 /// it is E0417 whatever is in it, whose names the names stage read (S-968).
+/// The grammar is the syntax's ([`Ast::const_form`]).
 fn node(a: &mut Analysis, cx: &ConstCx, e: ExprId) -> Result<Got, ConstErr> {
     let expr = cx.ast.expr(e);
     let shown = || cx.text[expr.span.start as usize..expr.span.end as usize].to_string();
@@ -175,26 +177,27 @@ fn node(a: &mut Analysis, cx: &ConstCx, e: ExprId) -> Result<Got, ConstErr> {
     if cx.ast.negated_literal(e).is_some() {
         return Err(no_negative(shown(), expr.span).into());
     }
-    if let Some((nodes, head)) = chain_nodes(cx.ast, e) {
-        if cx.names.held.contains(&e) {
-            return Ok(Got::Unknown);
+    match cx.ast.const_form(e) {
+        ConstForm::Chain(c) => {
+            if cx.names.held.contains(&e) {
+                return Ok(Got::Unknown);
+            }
+            // Its type arguments (`Pl::[F32].K`, E0412; S-329), before what it names.
+            if let Some(d) = cx.names.args_diag(cx.ast, e) {
+                return Err(d.clone().into());
+            }
+            let records: Vec<PathRes> = c.names.iter().map_while(|(n, _)| cx.names.paths.get(n).cloned()).collect();
+            let at = (&c.names[0].1.name[..], shown(), expr.span);
+            settle(chain(a, (cx.m, cx.ast, cx.text), &records, c.names.len(), at))
         }
-        // Its type arguments (`Pl::[F32].K`, E0412; S-329), before what it names.
-        if let Some(d) = cx.names.args_diag(cx.ast, e) {
-            return Err(d.clone().into());
-        }
-        let records: Vec<PathRes> = nodes.iter().map_while(|n| cx.names.paths.get(n).cloned()).collect();
-        return settle(chain(a, (cx.m, cx.ast, cx.text), &records, nodes.len(), (&head.name, shown(), expr.span)));
-    }
-    match &expr.kind {
-        ExprKind::Paren(x) => node(a, cx, *x),
+        ConstForm::Paren(x) => node(a, cx, x),
         // `U32` has no prefix `-` (§3.4, S-228), but of the error type.
-        ExprKind::Unary { op: UnOp::Neg, expr: x } => match node(a, cx, *x)? {
+        ConstForm::Neg(x) => match node(a, cx, x)? {
             Got::Unknown => Ok(Got::Unknown),
             x => Err(held(x.owners(a), no_negative(shown(), expr.span).into())),
         },
-        ExprKind::Binary { op: BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem, lhs, rhs, .. } => {
-            let (l, r) = (node(a, cx, *lhs)?, node(a, cx, *rhs)?);
+        ConstForm::Arith(lhs, rhs) => {
+            let (l, r) = (node(a, cx, lhs)?, node(a, cx, rhs)?);
             let owners = [l.owners(a), r.owners(a)].concat();
             match (l, r) {
                 (Got::Unknown, _) | (_, Got::Unknown) => Ok(Got::Unknown),
@@ -207,7 +210,7 @@ fn node(a: &mut Analysis, cx: &ConstCx, e: ExprId) -> Result<Got, ConstErr> {
             }
         }
         // An integer literal, and a literal of another type (§4.5, S-966).
-        ExprKind::Lit(lit) => {
+        ConstForm::Lit(lit) => {
             let form = match lit {
                 Lit::Int { value, .. } => return Ok(int_literal(*value, shown(), expr.span)?),
                 Lit::Float { .. } => "a float literal",
@@ -218,9 +221,9 @@ fn node(a: &mut Analysis, cx: &ConstCx, e: ExprId) -> Result<Got, ConstErr> {
             let msg = format!("a constant expression has the type `U32`; found {form} (§4.5)");
             Err(Diagnostic::new(Stage::Types, Code::E0401, expr.span, msg).with_found(shown()).into())
         }
-        ExprKind::Error => Ok(Got::Unknown),
-        kind => {
-            let noun = match kind {
+        ConstForm::Error => Ok(Got::Unknown),
+        ConstForm::Outside => {
+            let noun = match &expr.kind {
                 ExprKind::Call { .. } => "a call",
                 ExprKind::Field { .. } | ExprKind::TupleIndex { .. } => "a field of a value",
                 ExprKind::Index { .. } => "an element of a value",
@@ -234,29 +237,6 @@ fn node(a: &mut Analysis, cx: &ConstCx, e: ExprId) -> Result<Got, ConstErr> {
                 _ => "an expression of another form",
             };
             Err(value_not_constant(shown(), noun, expr.span).into())
-        }
-    }
-}
-
-/// The nodes of the names of the chain `e` (`a.b.c`, from its head `a`) and
-/// its first name; none when `e` is no chain (`f().x`, `(K).x`, a literal).
-/// Through its type arguments (`Rg::[F32, 4].CAP`, S-329), which the record
-/// after them has as its `owner`.
-fn chain_nodes(ast: &Ast, e: ExprId) -> Option<(Vec<ExprId>, &Ident)> {
-    let (mut out, mut cur) = (Vec::new(), e);
-    loop {
-        match &ast.expr(cur).kind {
-            ExprKind::Field { base, .. } => {
-                out.push(cur);
-                cur = *base;
-            }
-            ExprKind::TypeArgs { base, .. } => cur = *base,
-            ExprKind::Path(p) if p.segments.len() == 1 => {
-                out.push(cur);
-                out.reverse();
-                return Some((out, &p.segments[0]));
-            }
-            _ => return None,
         }
     }
 }
@@ -325,7 +305,10 @@ fn no_negative(shown: String, span: Span) -> Diagnostic {
 }
 
 /// The operands of the arithmetic of `e`, under parentheses, prefix `-` and
-/// binary operators; `e` itself when it is none of them.
+/// binary operators; `e` itself when it is none of them. It goes under every
+/// unary and binary operator (`!K`, `K < 1`): more than the grammar of
+/// [`Ast::const_form`], whose operators are those of `BinOp::in_constant`,
+/// so the order of the declarations reads more names than `node` does.
 pub(crate) fn operands(ast: &Ast, e: ExprId, out: &mut Vec<ExprId>) {
     match &ast.expr(e).kind {
         ExprKind::Paren(x) | ExprKind::Unary { expr: x, .. } => operands(ast, *x, out),
@@ -352,21 +335,6 @@ pub(crate) fn not_constant(kind: NameKind, shown: String, span: Span) -> ConstEr
 pub(crate) fn value_not_constant(shown: String, noun: &str, span: Span) -> Diagnostic {
     let msg = format!("`{shown}` is {noun}, not a constant: a constant expression names constants (§4.5)");
     Diagnostic::new(Stage::Types, Code::E0417, span, msg).with_found(shown)
-}
-
-/// `N`, `cfg.N`, `I32.BITS` as a path (a field chain of names is a qualified name here).
-pub(crate) fn path_of(ast: &Ast, e: ExprId) -> Option<Path> {
-    let expr = ast.expr(e);
-    match &expr.kind {
-        ExprKind::Path(p) => Some(p.clone()),
-        ExprKind::Field { base, name } => {
-            let mut p = path_of(ast, *base)?;
-            p.segments.push(name.clone());
-            p.span = expr.span;
-            Some(p)
-        }
-        _ => None,
-    }
 }
 
 /// The integer literal `shown` at `span` of the value `value`: E0408 when

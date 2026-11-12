@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use onsa_diag::{Diagnostic, Edit, Fix, FixRule, Span, Stage};
 
 use super::{Hit, RowId, TYPE_ARGS_WITH_COLONS, diagnostic};
+use crate::ast::BinOp;
 use crate::callee::{Callee, Link};
 use crate::cst::{Class, Cst, NodeId, NodeKind, TokenIdx};
 use crate::literal::Literals;
@@ -76,7 +77,8 @@ pub(crate) fn square_lists(cst: &Cst, text: &str, literals: &Literals, out: &mut
 /// the parser stopped in reads when its nodes read (a form of another
 /// language in it, §18.1). The forms are those of
 /// the syntax; `onsa_sema`'s `constarg.rs` checks the same grammar on the AST
-/// (to be one judgment, W5-13).
+/// ([`crate::ast::Ast::const_form`]), with the same operators
+/// ([`BinOp::in_constant`]); the two are compared by `constexpr_tests`.
 fn type_arg(cst: &Cst, n: NodeId, partial: bool) -> bool {
     if !cst.is_complete(n) {
         return partial && cst.child_nodes(n).all(|c| type_arg(cst, c, partial));
@@ -93,23 +95,22 @@ fn type_arg(cst: &Cst, n: NodeId, partial: bool) -> bool {
 /// `+ - * / %`, a prefix `-`, parentheses. `as`, `!`, `?`, comparisons,
 /// calls, strings and floats are not (S-333, R-418). `partial` as for
 /// [`type_arg`].
-fn constant(cst: &Cst, n: NodeId, partial: bool) -> bool {
+pub(crate) fn constant(cst: &Cst, n: NodeId, partial: bool) -> bool {
     use TokenKind::*;
-    let tokens_are = |kinds: &[TokenKind]| {
-        cst.child_tokens(n).map(|t| cst.token(t).kind).all(|k| !k.is_code() || kinds.contains(&k))
-    };
+    let tokens_are =
+        |ok: &dyn Fn(TokenKind) -> bool| cst.child_tokens(n).map(|t| cst.token(t).kind).all(|k| !k.is_code() || ok(k));
     let nodes = || cst.child_nodes(n);
     if !cst.is_complete(n) {
         return type_arg(cst, n, partial);
     }
     match cst.kind(n) {
-        NodeKind::Literal => tokens_are(&[Int]),
+        NodeKind::Literal => tokens_are(&|k| k == Int),
         NodeKind::PathExpr => true,
         NodeKind::ParenExpr => nodes().all(|c| constant(cst, c, partial)),
         NodeKind::BinaryExpr => {
-            tokens_are(&[Plus, Minus, Star, Slash, Percent]) && nodes().all(|c| constant(cst, c, partial))
+            tokens_are(&|k| k.binop().is_some_and(BinOp::in_constant)) && nodes().all(|c| constant(cst, c, partial))
         }
-        NodeKind::PrefixExpr => tokens_are(&[Minus]) && nodes().all(|c| constant(cst, c, partial)),
+        NodeKind::PrefixExpr => tokens_are(&|k| k == Minus) && nodes().all(|c| constant(cst, c, partial)),
         NodeKind::FieldExpr => nodes().next().is_some_and(|r| match cst.kind(r) {
             NodeKind::PathExpr | NodeKind::FieldExpr => constant(cst, r, partial),
             NodeKind::TypeArgsExpr => cst.child_nodes(r).all(|c| match cst.kind(c) {
