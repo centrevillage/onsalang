@@ -1,0 +1,31 @@
+pub fn h(x: Bool) -> I32 {
+  1
+}
+
+pub fn f(c: Bool, b: I32) -> I32 {
+  let v = {
+    h(
+      true
+    )
+    -b
+  }
+  v
+}
+
+pub fn g(c: Bool, b: I32) -> I32 {
+  let v = {
+    h(true)
+    -b
+  }
+  v
+}
+
+pub fn k(c: Bool, b: I32) -> I32 {
+  let v = {
+    h({
+      true
+    })
+    -b
+  }
+  v
+}
