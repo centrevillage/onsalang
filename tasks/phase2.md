@@ -19,11 +19,11 @@
   extern のブロックの中の名前（関数と型）にも §2.3 の名前の規則を当てる（`naming::check` は今ブロックの中を見ない。R-246 の補い）。
   第 1 期に extern のブロックを開くなら、その作業に移す。今通る形の検査は W4-03 の U4。
 - **第 2 期（第 88 組、2026-11-06、117 回目）:** 利用者の trait を開くとき、二つの trait の同名のメンバを決め直す（S-851。§6.2 の文を改める）。Shared を含む型と型引数に頼る型のフィールドの既定値は E0200 で、開く向きである（S-697）。
-- **第 2 期（S-1019、W5-13 U11 の壊す側の低、2026-11-12、142 回目）:** trait の `impl` を開くと、§18.1 の 114 行（trait の名前が読めない `impl` の対象の型を黙らせる）の判定 `sig/decls.rs::mark_unknown_impls` を見直す。今は trait の名前の読みを `sig/heading.rs::names_trait`（下ろす前の `[ ]` の名前で）と `lower_trait`（下ろした総称で）の二回引き、`impl[T: …] T.X for P` の形だけ入力が違う（今は束縛が trait の種類のメンバを持てないので食い違わない）。種の制約の `impl` を trait の実装から外す `kind_constraint` も `lower_impl` と `mark_unknown_impls` の二か所。trait の種類のメンバか第 3 の呼び手が増えるなら一つに寄せる。
+- **第 2 期（S-1019、W5-13 U11 の壊す側の低、2026-11-12、142 回目）:** trait の `impl` を開くと、§18.1 の「trait の名前を名前の段で読めなかった `impl Tr for Ty`」の段落（trait の名前が読めない `impl` の対象の型を黙らせる）の判定 `sig/decls.rs::mark_unknown_impls` を見直す。今は trait の名前の読みを `sig/heading.rs::names_trait`（下ろす前の `[ ]` の名前で）と `lower_trait`（下ろした総称で）の二回引き、`impl[T: …] T.X for P` の形だけ入力が違う（今は束縛が trait の種類のメンバを持てないので食い違わない）。種の制約の `impl` を trait の実装から外す `kind_constraint` も `lower_impl` と `mark_unknown_impls` の二か所。trait の種類のメンバか第 3 の呼び手が増えるなら一つに寄せる。
 - **第 2 期（S-900、2026-11-06、117 回目）:** 手書きの標準 trait の `impl` を開くとき、derive は手で実装した上位の trait を生成しない（§6.4）。`struct P: Eq` と手書きの `impl PartialEq for P` がこの形である。第 1 期は手書きが `impl Default` だけなので当たる形が無い。
 - **第 2 期（S-659、R-127、2026-10-26、71 回目）:** 標準 trait を std の `trait` 宣言にし、組込み型の実装を std の `impl` にする（§6.3）。そのとき、W4-03 U5 が `std.core` の項目として仮に引く trait の名前（(c2) の印）を消す。
   std の標準の効果の操作は、W4-03 U5 が置いた操作の無い宣言（`std.fs`・`std.io`・`std.time`・`std.random`・`std.log`）に足す（名前は変えない）。
-  §17.2 の例が引く `std.text.count_lines` は std に無い（第 1 期の `std.text` は `FixedStr` だけ。事例 `examples/line_count.onsa` は `mode = "parse"`）。`Str` の作業で足すか、例を改める（140 回目の文書の点検）。
+  §17.2 の例が引く `std.text.count_lines` は std に無い（第 1 期の `std.text` は `FixedStr` だけ。事例 `tests/spec/examples/line_count.onsa` は `mode = "parse"`）。`Str` の作業で足すか、例を改める（140 回目の文書の点検）。
 - **第 2 期（S-701、2026-10-26、71 回目）:** `Fs` の操作を入れるとき、資源ごとの権限（読みか書きか、開く形の `w`・`w+` など）は効果に分けず、操作の側（開く操作の引数など）で扱う。
 - **第 2 期（W4-04 U2a、2026-10-27、75 回目）:** handler を受け付ける作業で、`Ast::sub_exprs`（`crates/onsa_syntax/src/ast.rs`、子の式の唯一の列挙）が `handle` の `with h(args)` の引数も返すように直す（今は本体だけを返す）。
   W4-04 の名前の段の歩き手は自分の腕で引数も歩くが、`sub_exprs` を読む他の歩き（flow の状態の印、`onsa graph`）は引数を見ない。今は `handle` が E0200 なので実害は無い。
