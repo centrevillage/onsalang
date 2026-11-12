@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -106,8 +107,8 @@ class AutoSweep(unittest.TestCase):
             code = after_commit.main(["--root", str(root or self.root), *args])
         return code, out.getvalue()
 
-    def head(self):
-        return git_in(self.root, "rev-parse", "HEAD").strip()
+    def head(self, back=0):
+        return git_in(self.root, "rev-parse", f"HEAD~{back}").strip()
 
     def request(self):
         return gate_runs.read_json(self.root, "request")
@@ -315,6 +316,88 @@ class AutoSweep(unittest.TestCase):
         self.assertTrue(self.line().startswith(f"auto sweep: saving the base at {first[:7]} since "), self.line())
         lock.close()
 
+    def wait(self, *args):
+        """`after_commit.py --wait <args>`: (the exit, its lines, the seconds it took)."""
+        t0 = time.monotonic()
+        code, out = self.hook("--wait", *args)
+        return code, out.splitlines(), time.monotonic() - t0
+
+    def test_wait(self):
+        """`--wait` (the cases (a)–(g) of the work W5-13): the sweep of the last commit of the code or the cases."""
+        for name, value in (("POLL", 0.05), ("START_GRACE", 0.5)):
+            p = mock.patch.object(after_commit, name, value)
+            p.start()
+            self.addCleanup(p.stop)
+        # (c) while the runner waits and runs, it waits; it returns after `done`
+        self.commit("crates/x.rs")
+        self.hook()
+        runner = threading.Thread(target=after_commit.drive, args=(self.root,))
+        runner.start()
+        code, lines, took = self.wait()
+        runner.join()
+        self.assertEqual((code, lines), (0, [f"auto sweep: last PASS at {self.head()[:7]} (0 commits ago)"]))
+        self.assertGreaterEqual(took, after_commit.QUIET)
+        self.assertEqual(self.gate_log(), [self.head()])
+        # (a) done: at once; (b) a commit of the documents after it does not move what it waits for
+        self.assertEqual(self.wait()[0], 0)
+        self.commit("docs/e.md")
+        self.hook()
+        code, lines, took = self.wait()
+        self.assertEqual((code, lines[0].endswith("(1 commit ago)"), took < 0.5), (0, True, True))
+        # (e) a sweep that fails: 1, the line points to its output
+        self.write("target/gate-code", "1\n")
+        self.commit("crates/y.rs")
+        self.hook()
+        after_commit.drive(self.root)
+        code, lines, _ = self.wait()
+        self.assertEqual(code, 1)
+        self.assertRegex(lines[0], rf"FAILED at {self.head()[:7]}: fuzz \(.*-{self.head()[:7]}\.out\)$")
+        (self.root / "target/gate-code").unlink()
+        # (g) the runner leaves the request to a whole run of the same HEAD and writes no state: the state is old
+        self.commit("crates/z.rs")
+        self.hook()
+        time.sleep(1.1)  # the history keeps the time in seconds
+        gate_runs.record(self.root, "whole", [], {}, "PASS", 1.0, "t")
+        after_commit.drive(self.root)
+        self.assertEqual((self.request(), gate_runs.read_json(self.root, "state")["commit"]), (None, self.head(1)))
+        self.assertEqual(self.wait()[0], 0)
+        # (d) the hold: 3
+        (self.root / gate_runs.HOLD).touch()
+        self.commit("tests/h.onsa")
+        self.hook()
+        self.assertEqual(self.wait()[:2], (3, [self.line(), "after_commit: --wait: target/gate/hold is there"]))
+        after_commit.drive(self.root)  # held: the request stays
+        self.assertEqual(self.wait()[0], 3)
+        (self.root / gate_runs.HOLD).unlink()
+        # (f) a request whose runner does not come: it waits START_GRACE, up to --max
+        code, lines, took = self.wait("--max", "0.2")
+        self.assertEqual((code, lines[-1], took >= 0.2), (3, "after_commit: --wait: not done after 0.2 s", True))
+        self.assertEqual(self.wait()[1][-1], "after_commit: --wait: requested, no runner")
+        # skipped
+        self.write("crates/c.rs", "changed\n")
+        after_commit.drive(self.root)
+        self.assertEqual(self.wait()[1][-1], "after_commit: --wait: skipped: uncommitted crates/c.rs")
+        git_in(self.root, "checkout", "--", "crates/c.rs")
+        after_commit.drive(self.root)  # the request left runs
+        self.assertEqual((self.wait()[0], self.request()), (0, None))
+        # --no-sweep: no sweep asked for
+        self.commit("crates/n.rs")
+        after_commit.on_commit(self.root, sweep=False)
+        after_commit.drive(self.root)
+        self.assertEqual(self.gate_log("base-log"), [self.head()])
+        self.assertEqual(self.wait()[:2], (3, [self.line(), f"after_commit: --wait: no sweep at {self.head()[:7]} "
+                                                    "or after, none asked for (--no-sweep, held, or skipped?)"]))  # fmt: skip
+        with mock.patch.object(after_commit.narrowing, "git", side_effect=after_commit.narrowing.NarrowError("git log: x")):
+            self.assertEqual(self.wait()[:2], (3, []))  # not 1: no sweep failed
+        # the usage: with --now or --drive, --max alone, a worktree
+        for args in (("--wait", "--now"), ("--wait", "--drive"), ("--now", "--max", "5")):
+            with self.subTest(args=args), self.assertRaises(SystemExit) as e:
+                self.hook(*args)
+            self.assertEqual(e.exception.code, 2)
+        wt = self.root.parent / "wt"
+        git_in(self.root, "worktree", "add", "-q", "-b", "work", str(wt))
+        self.assertEqual(self.hook("--wait", root=wt)[0], 2)
+
     def test_the_help(self):
         out = io.StringIO()
         with mock.patch.object(sys, "stdout", out), mock.patch.dict(os.environ), self.assertRaises(SystemExit):
@@ -327,7 +410,11 @@ class AutoSweep(unittest.TestCase):
                      "commits start it: tools/work.py commit (the main tree; --no-sweep: the base binaries alone)",
                      "save-base exit N at <commit> the base binaries were not saved",
                      "right after --now it says so too", "the inputs the fuzzing made small, in target/fuzz/new/",
-                     "until the class is in tests/fuzz/allowed.toml or in an R", "it can take 2 sweeps"):  # fmt: skip
+                     "until the class is in tests/fuzz/allowed.toml or in an R", "it can take 2 sweeps",
+                     "--wait wait for the sweep of the last commit", "--max S with --wait", "default 3600 s) for the sweep",
+                     "later commits of the documents alone do not move it", "Exit 0: it passed; 1: it failed",
+                     "3: it does not come", "example: python3 -B tools/after_commit.py --now "
+                     "python3 -B tools/after_commit.py --wait --max 1800"):  # fmt: skip
             self.assertIn(part, text)
 
 

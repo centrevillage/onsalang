@@ -80,7 +80,8 @@ entry left whose until is not PH2 (K-13: what is left after M9 is only PH2).
 This module is the only place that validates the list (the Rust reader in
 `onsa_tests::pending` only reads it). Its commands are `check`, `list`, `add`
 and `remove` (COMMANDS, rules/tools.md 9.1); `pending.py help` shows their
-purposes, times, roles and examples (`--help` lists them). A call with no
+purposes, times, roles and examples (`--help` lists them), and alone the kinds
+and the fields above (`kinds_help`). A call with no
 command (no argument, or a first argument `-…` but `-h` and `--help`: the
 gate's `pending`) is `check`: exit 0 if the list is
 valid (and, with --stage-end, nothing of that stage is left), 1 otherwise, 2 on
@@ -543,12 +544,21 @@ def COMMON(p):
     p.add_argument("--pending", type=Path, default=None, help=f"the list (default: <root>/{PENDING})")
 
 
+def kinds_help():
+    """What `pending.py help` prints after the commands: the kinds, the form of `target` and the fields of an entry,
+    cut from the docstring (the one place they are written), from the table of the kinds to `until = "PH2"`."""
+    text = __doc__[__doc__.index("The kinds and") : __doc__.index("\n\nThis module is the only place")]
+    head, rest = text.split(":\n", 1)
+    return " ".join(head.split()) + ":\n" + rest
+
+
 def main(argv=None):
     """`pending.py <command> …`; with no command (no argument, or `-…` first but `-h` and `--help`: the gate's
     `pending`), `check`."""
     argv = sys.argv[1:] if argv is None else list(argv)
     named = argv[:1] and (not argv[0].startswith("-") or argv[0] in ("-h", "--help"))
-    args = repo.parse_command("pending.py", __doc__.split("\n")[0], COMMANDS, argv if named else ["check", *argv], COMMON)
+    argv = argv if named else ["check", *argv]
+    args = repo.parse_command("pending.py", __doc__.split("\n")[0], COMMANDS, argv, COMMON, kinds_help)
     return args.run_(args)
 
 

@@ -4,6 +4,7 @@
     python3 -B tools/work.py commit … [--no-sweep]   the parent's commit calls `on_commit`
     python3 -B tools/after_commit.py --now          by hand: run the sweep of HEAD now
     python3 -B tools/after_commit.py --drive        the runner (`on_commit` starts it; not by hand)
+    python3 -B tools/after_commit.py --wait [--max S]  the parent, after a commit: wait for the sweep
 
 `on_commit` returns at once with the line `auto sweep: …` of what it did. It does nothing in a worktree
 or after a commit that touches no file of `narrowing.SWEPT` (the code and the cases). Else it
@@ -45,6 +46,9 @@ QUIET = 180  # seconds after the last request before the sweep runs
 CLEAN_POLL = 60  # seconds between two looks at a dirty tree
 CLEAN_WAIT = 3600  # seconds a request waits for a clean tree before it is skipped
 NAP = 5  # the longest sleep while waiting for the quiet (a new request moves it)
+POLL = 10  # seconds between two looks of --wait
+START_GRACE = 30  # seconds --wait gives a request to find the runner `on_commit` starts
+WAIT_MAX = 3600  # the default of --max
 GATE = "tools/gate.sh"
 
 EPILOG = f"""\
@@ -78,7 +82,14 @@ when it says FAILED:
             tests/fuzz/allowed.toml or in an R; the commit of that touches tests/, so it starts a
             sweep. The line clears when that shard passes; a sweep runs the next shard, so it can
             take {gate_steps.SHARDS} sweeps (more commits of the code or the cases, or --now)
-example: python3 -B tools/after_commit.py --now"""
+  --wait    after a commit of the code or the cases, before going on: waits (up to --max, default
+            {WAIT_MAX} s) for the sweep of the last commit that touches them (later commits of the
+            documents alone do not move it), or a whole run of the gate at it or after; prints the
+            line `auto sweep:`. Exit 0: it passed; 1: it failed (the line says where the output is);
+            3: it does not come (held, skipped, no runner, no sweep asked for (--no-sweep), --max
+            passed, git fails), with the reason in a line after
+example: python3 -B tools/after_commit.py --now
+         python3 -B tools/after_commit.py --wait --max 1800"""
 
 
 def touches(root, paths):
@@ -234,6 +245,56 @@ def drive(root):
                 (Path(root) / gate_runs.AUTO / "request").unlink(missing_ok=True)
 
 
+def target(root):
+    """What `--wait` waits for: the last commit from HEAD that touches `narrowing.SWEPT` (later ones of the documents
+    alone start no sweep), or None."""
+    return narrowing.git(root, "log", "-1", "--format=%H", "HEAD", "--", *narrowing.SWEPT).strip() or None
+
+
+def outcome(root, commit):
+    """One look of `--wait` at the sweep of `commit`: None while it is to come, else (the exit, the reason or None)."""
+    with gate_runs.request_lock(root):
+        lock = gate_runs.try_runner(root)
+        req = gate_runs.read_json(root, "request")
+    if lock is None:
+        return None  # the runner lives: it waits, runs, or takes a request after
+    lock.close()
+    state, held = gate_runs.read_json(root, "state") or {}, (Path(root) / gate_runs.HOLD).exists()
+    if req is not None and not req.get("taken") and req.get("sweep", True):
+        if held:
+            return 3, f"{gate_runs.HOLD} is there"
+        if state.get("state") == "skipped" and state.get("time", 0) >= req.get("time", 0):
+            return 3, f"skipped: uncommitted {state.get('path')}"
+        if time.time() - req.get("time", 0) < START_GRACE:
+            return None  # the runner `on_commit` started has not taken its lock yet
+        return 3, "requested, no runner"
+    after = {commit, *narrowing.git(root, "rev-list", "--ancestry-path", f"{commit}..HEAD").split()}
+    rows = gate_runs.read_history(root)[0]
+    counted = {id(r) for _, r in gate_runs._sweeps(rows, gate_steps.SHARDS)}  # a sweep, or a whole run (`_done`)
+    done = [r for r in rows if id(r) in counted and r.get("commit") in after]
+    if done:
+        return (0 if done[-1].get("verdict") == "PASS" else 1), None
+    if req is not None and req.get("sweep", True):
+        return 3, "the run of the request ended with no sweep (the runner died, or the gate could not run)"
+    return 3, f"no sweep at {commit[:narrowing.SHORT]} or after, none asked for (--no-sweep, held, or skipped?)"
+
+
+def wait(root, most):
+    """`--wait`: look at `outcome` every POLL seconds up to `most`; print the line `auto sweep:` (and the reason)."""
+    commit, end = target(root), time.monotonic() + most
+    while True:
+        got = outcome(root, commit) if commit else (3, "no commit of the code or the cases")
+        if got is None and time.monotonic() >= end:
+            got = (3, f"not done after {most:g} s")
+        if got is not None:
+            break
+        time.sleep(max(min(POLL, end - time.monotonic()), 0))
+    print(gate_runs.auto_line(root, gate_runs.read_history(root)[0], gate_steps.SHARDS))
+    if got[1]:
+        print(f"after_commit: --wait: {got[1]}")
+    return got[0]
+
+
 def main(argv=None):
     for name in [k for k in os.environ if k.startswith("GIT_")]:
         del os.environ[name]  # a git's: the git of the gate must find the tree from its cwd
@@ -244,8 +305,13 @@ def main(argv=None):
     how.add_argument("--now", action="store_true", help="run the sweep of HEAD now, in the background (after a "
                      "restart, after removing the hold, after `skipped`); refused while the hold is there")
     how.add_argument("--drive", action="store_true", help="be the runner (a commit starts it; not by hand)")
+    how.add_argument("--wait", action="store_true", help="wait for the sweep of the last commit of the code or the "
+                     "cases; exit 0 passed, 1 failed, 3 it does not come (the epilog)")
+    ap.add_argument("--max", type=float, metavar="S", help=f"with --wait: the most seconds to wait (default {WAIT_MAX})")
     ap.add_argument("--root", default=str(ROOT), help="the main tree (default the tree of this file)")
     args = ap.parse_args(argv)
+    if args.max is not None and not args.wait:
+        ap.error("--max goes with --wait")
     root = Path(args.root).resolve()
     if repo.tree_kind(root) != "main":
         print(f"after_commit: {root} is not the main tree; the sweep is the parent's", file=sys.stderr)
@@ -253,6 +319,8 @@ def main(argv=None):
     try:
         if args.drive:
             return drive(root)
+        if args.wait:
+            return wait(root, WAIT_MAX if args.max is None else args.max)
         if (root / gate_runs.HOLD).exists():
             print(f"after_commit: {gate_runs.HOLD} is there; remove it first", file=sys.stderr)
             return 1
@@ -261,7 +329,7 @@ def main(argv=None):
         return 0
     except (narrowing.NarrowError, OSError) as e:
         print(f"after_commit: {e}", file=sys.stderr)
-        return 1
+        return 3 if args.wait else 1  # --wait: 1 is a sweep that failed
 
 
 if __name__ == "__main__":

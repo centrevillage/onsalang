@@ -4,6 +4,7 @@
 Alone: python3 -B tools/test_pending.py
 """
 import io
+import re
 import shutil
 import sys
 import tempfile
@@ -502,7 +503,24 @@ class PendingEdit(TempRepo):
                 want = [n for n, c in pending.COMMANDS.items() if role in c.roles]
                 self.assertEqual((code, [x.split()[0] for x in lines if not x.startswith(" ")]), (0, want or ["（役割"]))
         names = list(pending.COMMANDS)
-        self.assertEqual([x.split()[0] for x in quiet_out(pending.main, ["help"])[1][: len(names)]], names)
+        code, lines = quiet_out(pending.main, ["help"])
+        self.assertEqual((code, [x.split()[0] for x in lines[: len(names)]]), (0, names))
+        # alone, the kinds and the fields of an entry after the commands, cut from the docstring (W5-13)
+        rest = "\n".join(lines[len(names):])
+        self.assertIn(pending.kinds_help().rstrip(), rest)
+        self.assertEqual([k for k in pending.KINDS if f"\n    {k} " not in rest], [])
+        every = rest[rest.index("Every entry has all of:") :].split("\n\n")[0]
+        self.assertEqual([f for f in pending.FIELDS if not re.search(rf"\b{f}\b", every)], [])
+        for part in ("Every entry has all of: kind, target, reasons", "`rows = N`", "`expect = \"internal\"`",
+                     "`until = \"PH2\"`", "the second); `--stage-end` the last stage"):  # fmt: skip
+            self.assertIn(part, rest)
+        self.assertNotIn("This module is the only place", rest)
+        parsers = repo.command_parsers("pending.py", "", pending.COMMANDS, pending.COMMON)[1]
+        for role, name in (("i", None), (None, "list"), ("b", "add")):  # the rest of `help` as before: no kinds
+            args = ["help", *(["--role", role] if role else []), *([name] if name else [])]
+            with self.subTest(args=args):
+                want = repo.help_text("pending.py", pending.COMMANDS, parsers, role, name).splitlines()
+                self.assertEqual(quiet_out(pending.main, args), (0, want))
         self.assertEqual(names, ["check", "list", "add", "remove"])  # in the order of the work (X-9 U9)
         for flag in ("-h", "--help"):  # the list of the commands, not `check --help` (rules/common.md 1.14)
             with self.subTest(flag=flag), self.assertRaises(SystemExit) as e:
