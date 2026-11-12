@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.1", "§18.1"]
+// fixes = 2
+
+// R-445 (W5-13 U7d): the line `- b` after an operand keeps the line joined to the line before as a
+// candidate (the second after the space removed; in a bracket and a head the one) where the scans of
+// the joined chain (§3.1, §18.1) read a block-like operand whole (S-537), know the ends of a chain at a
+// `:` of a field and after a range's marks, and the `{` of the body of the head it is in. Past the
+// keyword of a block-like operand its operand ends, so the `if` of a guard before it ends the chain.
+
+pub struct P {
+  x: I32,
+}
+
+pub fn after_a_match(a: I32, b: I32) -> I32 {
+  match a { _ => b }
+  - b                                               //~ E0020
+}
+
+pub fn in_a_field(a: I32, b: I32) -> I32 {
+  let q = P { x: a
+    - b }                                           //~ E0020
+  q.x
+}
+
+pub fn in_a_head(c: Bool, a: I32, b: I32) -> I32 {
+  if a < b
+    - b {                                           //~ E0020
+    a
+  } else {
+    b
+  }
+}
+
+pub fn after_a_range(a: I32, b: I32) -> I32 {
+  var s = 0
+  for i in 0 ..< a
+    - b {                                           //~ E0020
+    s = i
+  }
+  s
+}
+
+pub fn in_a_guard_after_an_if(c: Bool, a: I32, b: I32) -> I32 {
+  match a {
+    x if if c { a } else { b }
+    - b < x => 1,                                   //~ E0020
+    _ => 0,
+  }
+}
+
+pub fn in_a_guard_after_a_comparison_with_an_if(c: Bool, a: I32, b: I32) -> I32 {
+  match a {
+    x if x < if c { a } else { b }
+    - b => 1,                                       //~ E0020
+    _ => 0,
+  }
+}

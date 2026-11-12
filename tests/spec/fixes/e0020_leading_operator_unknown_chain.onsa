@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.1", "§18.1"]
+// fixes = 0
+
+// R-445 (W5-13 U7d): an operator only binary at the head of a line is moved to the end of the line
+// before (a `-` joined to it) only when the scans of the chain so joined (§3.1) know every token they
+// stop at (§18.1): the `->` of a function type after `as` they do not, and a block-like operand after
+// a binary operator is read whole, so its operator meets the one moved or joined (E0010; in the head
+// of an `if`, an `else if` and a `match` too, and a `par~` with the `in` and the range of its head).
+// With no candidate the E0020 is E0002 (S-114).
+
+pub fn after_a_cast_to_a_function_type(a: I32, b: I32) -> I32 {
+  a as fn(I32) -> I32
+  * b                                               //~ E0002
+}
+
+pub fn after_a_remainder_by_an_if(c: Bool, a: I32, b: I32) -> I32 {
+  a % if c { b } else { a }
+  * b                                               //~ E0002
+}
+
+pub fn after_a_remainder_by_a_match(a: I32, b: I32) -> I32 {
+  a % match a { _ => b }
+  + b                                               //~ E0002
+}
+
+pub fn after_a_comparison_with_an_if(c: Bool, a: I32, b: I32) -> Bool {
+  a < if c { a } else { b }
+  < b                                               //~ E0002
+}
+
+pub fn in_the_head_of_an_if(c: Bool, a: I32, b: I32) -> I32 {
+  if a % if c { a } else { b }
+    - b {                                           //~ E0002
+    a
+  } else {
+    b
+  }
+}
+
+pub fn in_the_head_of_an_else_if(c: Bool, a: I32, b: I32) -> I32 {
+  if c {
+    a
+  } else if a % if c { a } else { b }
+    - b {                                           //~ E0002
+    b
+  } else {
+    a
+  }
+}
+
+pub fn in_the_head_of_a_match(a: I32, b: I32) -> I32 {
+  match a % match a { _ => b }
+    - b {                                           //~ E0002
+    _ => a,
+  }
+}
+
+pub fn after_a_remainder_by_a_par_to_an_exclusive_end(a: I32, b: I32) -> I32 {
+  let s = a % par~ i in 0 ..< 4 { i }
+    * b                                             //~ E0002
+  s
+}
+
+pub fn after_a_remainder_by_a_par_to_an_inclusive_end(a: I32, b: I32) -> I32 {
+  let s = a % par~ i in 0 ..= 4 { i }
+    * b                                             //~ E0002
+  s
+}

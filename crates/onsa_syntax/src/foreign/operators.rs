@@ -10,8 +10,7 @@ use crate::ast::OpGroup;
 /// its line: the token is in the place of a binary operator of an
 /// expression (not after a type, a pattern or a path of a `use`).
 fn after_operand(c: &Cursor) -> Option<(NodeKind, u32)> {
-    c.before(c.at).filter(|&b| ends_operand(c.kind(b)))?;
-    closed_expr(c)
+    super::lines::after_operand(c, c.at).then(|| closed_expr(c)).flatten()
 }
 
 /// `a === b`, `a !== b` (S-450): the candidate is `==` / `!=` (Onsa
@@ -88,7 +87,7 @@ fn compares(c: &Cursor, first: usize) -> bool {
 /// Whether a `{` after the operand after the failure opens the body of the
 /// head the failure is in (`if`, `while`, `for`, `match`, `par~`, where no
 /// struct literal is read, S-08).
-fn in_head(c: &Cursor) -> bool {
+pub(super) fn in_head(c: &Cursor) -> bool {
     use NodeKind::*;
     matches!(c.context(), Some((_, IfExpr | WhileStmt | ForStmt | MatchExpr | ParExpr)))
 }

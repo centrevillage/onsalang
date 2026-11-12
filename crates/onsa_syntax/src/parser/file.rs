@@ -297,7 +297,15 @@ impl<'a> Parser<'a> {
     /// read only in a file with an error, and never to pair the brackets (S-948).
     fn ends_open(&self, i: usize, open: &[usize]) -> bool {
         let indent = self.indent(self.tokens[self.item_line(i)].span.start);
-        open.iter().all(|&b| self.indent(self.tokens[b].span.start) >= indent)
+        // The brackets are in order (outermost first): the text is read back
+        // to the start of each line once, not for each bracket on it (R-446).
+        let (mut from, mut start) = (0, 0);
+        open.iter().all(|&b| {
+            let at = self.tokens[b].span.start as usize;
+            start = self.text[from..at].rfind('\n').map_or(start, |k| from + k + 1);
+            from = at;
+            self.indent(start as u32) >= indent
+        })
     }
 
     /// The first token of the line that an item starting at `tokens[i]`, at

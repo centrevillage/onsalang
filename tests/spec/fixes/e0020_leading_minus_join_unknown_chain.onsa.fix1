@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.1", "§18.1"]
+// fixes = 1
+
+// R-445 (W5-13 U7d): the line `- b` after an operand keeps the line joined to the line before as a
+// candidate only when the scans of the joined chain (§3.1) know every token they stop at (§18.1): the
+// `->` of a function type after `as` is no end of a chain that they know. The space removed is the one
+// candidate left. The joins that read are in e0020_leading_minus_join_reads.onsa and
+// e0020_leading_minus_join_block_like.onsa.
+
+pub fn after_a_cast_to_a_function_type(a: I32, b: I32) -> I32 {
+  a as fn(I32) -> I32
+  -b                                               //~ E0020
+}
+
+pub fn in_a_binding(a: I32, b: I32) -> I32 {
+  let y = a as fn(I32) -> I32
+  -b                                               //~ E0020
+  y
+}

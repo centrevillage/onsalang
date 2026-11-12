@@ -131,25 +131,27 @@ fn moved_to_the_line_before(c: &Cursor, s: usize, prev: usize, gap: Gap) -> Vec<
 
 /// Whether the binary operator `s` at the head of a line, joined to the line
 /// before after its last token `prev`, leaves a chain that reads (§3.1,
-/// §18.1, R-443): the operators of the chain before it and of its own line
-/// after it, at its depth ([`chain_from`]), read as the tree of §3.1
-/// ([`Chain`]), each edge judged by [`BinOp::bare`] (E0010, and E0011 for an
-/// operand with `as` or `at`). Another symbol joins as it is.
+/// §18.1, R-443): the operands and operators from the start of the chain
+/// before it ([`chain_start`]) to the end of its own line's operand
+/// ([`read_chain`]) read as the tree of §3.1 ([`Chain`]), each edge judged
+/// by [`BinOp::bare`] (E0010, and E0011 for an operand with `as` or `at`).
+/// Where a scan stops at a token it does not know, the chain does not read
+/// (R-445: no candidate, as the comparisons of [`super::operators`]).
+/// Another symbol joins as it is.
 pub(super) fn joins_cleanly(c: &Cursor, prev: usize, s: usize) -> bool {
     let Some(op) = c.kind(s).binop() else { return true };
-    let (mut operands, mut ops) = chain_from(c, prev, true);
-    operands.reverse();
-    ops.reverse();
-    let (after, ops_after) = chain_from(c, c.sig_after(s), false);
+    let Some((operands, ops)) = chain_start(c, prev).and_then(|from| read_chain(c, from, s, op)) else {
+        return false;
+    };
     let mut fits = true;
     let mut join = |l, o: BinOp, r| {
         fits &= o.bare(Side::Left, l) && o.bare(Side::Right, r);
         Operand::Binary(o)
     };
     let tighter = |o: BinOp, w: BinOp| o.group().stronger(w.group());
-    let mut operands = operands.into_iter().chain(after);
+    let mut operands = operands.into_iter();
     let mut chain = Chain::new(operands.next().unwrap_or(Operand::Plain));
-    for (o, operand) in ops.into_iter().chain([op]).chain(ops_after).zip(operands) {
+    for (o, operand) in ops.into_iter().zip(operands) {
         chain.operator(o, tighter, &mut join);
         chain.operand(operand);
     }
@@ -157,46 +159,122 @@ pub(super) fn joins_cleanly(c: &Cursor, prev: usize, s: usize) -> bool {
     fits
 }
 
-/// The operands (with `as` or `at` or plain) and the binary operators of the
-/// chain from token `from`, the last token of an operand going back to its
-/// start (`back`), or its first going on to its end: in the order of the
-/// scan, at the depth of `from`, the brackets an operand holds passed. It
-/// stops at what is no part of a chain there: a bracket that closes none, a
-/// line break that ends the line, a keyword but `as` and `at` (a block-like
-/// operand ends the scan), a separator.
-fn chain_from(c: &Cursor, from: usize, back: bool) -> (Vec<Operand>, Vec<BinOp>) {
+/// The first token of the chain whose last operand ends at `prev`: going
+/// back at its depth over the tokens of a chain ([`in_chain`]) and the
+/// brackets an operand holds, to the bracket it is in or a token that ends
+/// a chain ([`ends_chain`]). A block-like operand (§3.1, S-537) is passed
+/// whole: after a block (`{ … }`) the keyword of an `if` with its `else`
+/// arms, a `match`, an anonymous function (its `->` too), an `unsafe`, a
+/// `handle` or a `par~` (the `in` and the range of its head too) is in it,
+/// and the operand ends there (an `if` after an `else` goes on with it);
+/// with no block passed since, or after an operand on its line (a guard),
+/// an `if` or a `match` is the head the chain is the condition of. None at
+/// another token, which the scan does not know (R-445: the `->` of `a as
+/// fn(I32) -> I32`; an `in` or a range after a block with no `par~`
+/// before), and at the start of the file.
+fn chain_start(c: &Cursor, prev: usize) -> Option<usize> {
     use TokenKind::*;
-    let (mut operands, mut ops, mut depth) = (vec![Operand::Plain], Vec::new(), 0u32);
-    let (opener, closer) = (|k| matches!(k, LParen | LBracket | LBrace), |k| matches!(k, RParen | RBracket | RBrace));
+    let (mut i, mut depth, mut braced, mut ranged) = (prev, 0u32, false, false);
+    let start = loop {
+        let k = c.kind(i);
+        match k {
+            RParen | RBracket | RBrace => depth += 1,
+            LParen | LBracket | LBrace if depth == 0 => break i + 1,
+            LParen | LBracket | LBrace => {
+                depth -= 1;
+                braced |= depth == 0 && k == LBrace;
+            }
+            _ if depth > 0 || in_chain(c, i) => {}
+            KwIf | KwMatch if !braced || after_operand(c, i) => break i + 1,
+            KwElse | Arrow if braced => {}
+            DotDotLt | DotDotEq | KwIn if braced => ranged = true,
+            KwIf | KwMatch | KwFn | KwUnsafe | KwHandle | KwPar if braced => {
+                braced = c.sig_before(i).is_some_and(|p| c.kind(p) == KwElse);
+                ranged &= k != KwPar;
+            }
+            _ if ends_chain(k, true) => break i + 1,
+            _ => return None,
+        }
+        i = i.checked_sub(1)?;
+    };
+    (!ranged).then_some(start)
+}
+
+/// The operands (with `as` or `at` or plain) and the binary operators of the
+/// chain from token `from` ([`chain_start`]) with `op` in place of the symbol
+/// `s`, to the end of the operand after it: at the depth of `from`, the
+/// brackets an operand holds passed, and the head of a block-like operand
+/// (from its keyword or `else` to its `{` on its lines) too. It ends at a bracket that
+/// closes none, the end of the file, a token that ends a chain
+/// ([`ends_chain`]; the line break that ends the line of `s`), and the `{`
+/// of the body of the head the failure is in ([`super::operators::in_head`]).
+/// None at another token, which the scan does not know (R-445).
+fn read_chain(c: &Cursor, from: usize, s: usize, op: BinOp) -> Option<(Vec<Operand>, Vec<BinOp>)> {
+    use TokenKind::*;
+    let (mut operands, mut ops, mut depth, mut head) = (vec![Operand::Plain], Vec::new(), 0u32, false);
     let mut i = from;
     loop {
+        if i == s {
+            if depth > 0 || head {
+                return None;
+            }
+            ops.push(op);
+            operands.push(Operand::Plain);
+            i = c.sig_after(s);
+            continue;
+        }
         let k = c.kind(i);
-        let (inward, outward) = if back { (closer(k), opener(k)) } else { (opener(k), closer(k)) };
-        let binary = k.binop().filter(|_| after_operand(c, i));
         match k {
             Eof => break,
-            _ if inward => depth += 1,
-            _ if outward && depth == 0 => break,
-            _ if outward => depth -= 1,
-            _ if depth > 0 || c.comment(i) => {}
-            Newline if c.lines.goes_on(i) => {}
+            LBrace if depth == 0 && !head && i > s && super::operators::in_head(c) => break,
+            LParen | LBracket | LBrace => {
+                head &= depth > 0 || k != LBrace;
+                depth += 1;
+            }
+            RParen | RBracket | RBrace if depth == 0 => break,
+            RParen | RBracket | RBrace => depth -= 1,
+            _ if depth > 0 || (k == Newline && i < s) || (head && (k != Newline || c.lines.goes_on(i))) => {}
+            Newline if head => return None,
+            KwIf | KwMatch | KwFn | KwUnsafe | KwHandle | KwPar if !after_operand(c, i) => head = true,
+            KwElse => head = true,
             KwAs | KwAt => operands.iter_mut().last().into_iter().for_each(|o| *o = Operand::AsAt),
-            _ if binary.is_some() => {
-                ops.extend(binary);
+            _ if k.binop().is_some() && after_operand(c, i) => {
+                ops.extend(k.binop());
                 operands.push(Operand::Plain);
             }
-            _ if k.binop().is_some()
-                || ends_operand(k)
-                || matches!(k, Underscore | Dot | ColonColon | Tilde | Bang) => {}
-            _ => break,
+            _ if in_chain(c, i) => {}
+            _ if ends_chain(k, false) => break,
+            _ => return None,
         }
-        match back {
-            true if i == 0 => break,
-            true => i -= 1,
-            false => i += 1,
-        }
+        i += 1;
     }
-    (operands, ops)
+    Some((operands, ops)).filter(|_| i > s)
+}
+
+/// Whether the token `i` goes on a chain at its depth (§3.1): a comment, a
+/// line break that goes on with its line, an operator, `as` and `at`, and
+/// what ends an operand or goes on with one (`_`, `.`, `::`, `~`, `!`, the
+/// `with` of a `handle`).
+fn in_chain(c: &Cursor, i: usize) -> bool {
+    use TokenKind::*;
+    let k = c.kind(i);
+    c.comment(i)
+        || (k == Newline && c.lines.goes_on(i))
+        || k.binop().is_some()
+        || ends_operand(k)
+        || matches!(k, KwAs | KwAt | KwWith | Underscore | Dot | ColonColon | Tilde | Bang)
+}
+
+/// Whether a token of `kind` ends a chain at its depth, going back (`back`)
+/// or on (§3.1): a line break, a `,`, the `;` of the repetition of an array,
+/// a `=>`, the `if` of a guard and the marks of a range (they are weaker than
+/// every binary operator, §7); going back, what an expression follows too: a
+/// `=`, the `:` of a field, and the keywords `return`, `assert`, `break`,
+/// `while` and `in`.
+fn ends_chain(kind: TokenKind, back: bool) -> bool {
+    use TokenKind::*;
+    matches!(kind, Newline | Comma | Semi | FatArrow | KwIf | DotDotLt | DotDotEq)
+        || (back && matches!(kind, Eq | Colon | KwReturn | KwAssert | KwBreak | KwWhile | KwIn))
 }
 
 /// Whether the token at `i` follows an operand on its line: an operator there
