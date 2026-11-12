@@ -58,6 +58,7 @@ mod receivers;
 mod removed;
 mod reread;
 mod statements;
+mod trial;
 
 pub(crate) use operator_fix::UNSIGNED_NEGATION;
 
@@ -287,6 +288,9 @@ pub(crate) struct Checker<'a> {
     pub(crate) blocks: Vec<(ExprId, &'a Block, usize)>,
     pub(crate) info: BodyInfo,
     pub(crate) failed: bool,
+    /// Whether a trial of a candidate ran ([`Checker::quietly`]): the body
+    /// stops with an error then.
+    tried: bool,
     /// The constants of a type no pattern compares found in the pattern
     /// being bound, with their types ([`Checker::bind_pat`]).
     bad_consts: Vec<(Span, TyId)>,
@@ -402,6 +406,7 @@ fn read_body<'c>(
         blocks: Vec::new(),
         info,
         failed: false,
+        tried: false,
         bad_consts: Vec::new(),
         how,
         tries: None,

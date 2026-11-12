@@ -8,7 +8,7 @@
 //! [`How::First`] makes candidates: a body is read at most three times, and
 //! the cost of a file is linear in its bodies.
 
-use super::removed::Marks;
+use super::trial::Marks;
 use super::*;
 
 /// A candidate of the error a read stopped at, and the form of the body with

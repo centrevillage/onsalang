@@ -235,6 +235,10 @@ impl<'a> Checker<'a> {
 
     /// The end of the body and the resolution of the tables.
     pub(super) fn finish(mut self) -> BodyInfo {
+        if self.tried && !self.failed {
+            let at = self.a.def(self.def).span;
+            onsa_diag::internal::bug(Some(at), "a trial of a candidate in a body that goes on (`quietly`)");
+        }
         self.end_checks();
         #[cfg(test)]
         crate::limits::MEASURED.with(|c| c.set(c.get() + self.limits.measured));

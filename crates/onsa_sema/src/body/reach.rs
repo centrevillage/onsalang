@@ -61,6 +61,8 @@ impl<'a> Checker<'a> {
         let mut d = Diagnostic::new(Stage::Types, Code::E0418, span, msg).with_found(self.src(span));
         // `let _ = e` gives what is open nothing that decides it, and a
         // literal the type its default is (`5000000000` does not fit it).
+        // SPEC-GAP(S-1023): only this form is tried; a `let _` that brings out an error of the
+        // statement itself in another (`Some(5000000000)`, E0408) is given.
         let literal = matches!(ty, Ty::Var(_));
         d = if self.infer.has_undefaulted_vars(&self.a.types, t) {
             let written = Some(self.src(span)).filter(|s| !s.contains('\n')).unwrap_or_else(|| "…".to_string());
@@ -208,25 +210,6 @@ impl<'a> Checker<'a> {
         let fix = self.join_edits("join it to the `return`", stmt.span.end, at, at, " ");
         let patch = Patch::Joined(id, Block { stmts: b.stmts.clone(), tail: None }, b.stmts[i], x);
         Some(Try { fix, patch })
-    }
-
-    /// Whether the end of the body has no error with what has been checked
-    /// so far. A trial, as [`Checker::quietly`], which the end of the body
-    /// leaves nothing in the tables of: what it decides and looks at is undone.
-    pub(super) fn end_is_clean(&mut self) -> bool {
-        if self.failed {
-            return false;
-        }
-        let kept = (self.infer.clone(), self.deferred.clone(), self.deferred_end.clone());
-        let mark = self.a.diagnostics.len();
-        let clean = self.quietly(|ck| {
-            ck.failed = false;
-            ck.end_checks();
-            if ck.failed { Err(Stop) } else { Ok(()) }
-        });
-        self.a.diagnostics.truncate(mark);
-        (self.infer, self.deferred, self.deferred_end) = kept;
-        clean.is_some()
     }
 
     /// The E0503 of the expression or statement at `span`, whose part `part`

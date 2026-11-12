@@ -4,13 +4,13 @@
 //! §18.1 (the form put there would leave an error).
 
 use onsa_diag::Edit;
-use onsa_syntax::ast::{OperandPlace, Vis};
+use onsa_syntax::ast::Vis;
 
 use crate::def::ParamSig;
 use crate::lang;
 
 use super::*;
-use crate::slot::{Form, Slot, slot_of};
+use crate::slot::Form;
 
 /// What the spec gives instead of a method it leaves out.
 #[derive(Debug, Clone, Copy)]
@@ -41,24 +41,6 @@ const LEN: &str = "len";
 
 /// The note of an `is_empty` with no candidate.
 const LEN_RULE: &str = "a type with a length has `len()` only, and an empty test is `len() == 0` (§4.2)";
-
-/// Where what a read that is not kept leaves in the analysis starts.
-pub(super) struct Marks {
-    held: bool,
-    uses: usize,
-}
-
-impl Marks {
-    pub(super) fn of(a: &Analysis, def: DefId) -> Marks {
-        Marks { held: a.read_held.contains(&def), uses: a.uses.borrow().len() }
-    }
-
-    /// Undo it: whether the read read what the check does not read.
-    pub(super) fn undo(self, a: &mut Analysis, def: DefId) -> bool {
-        a.uses.borrow_mut().truncate(self.uses);
-        !self.held && a.read_held.remove(&def)
-    }
-}
 
 impl<'a> Checker<'a> {
     /// E0413 for the method `name` that `recv` has not, called by `e` with
@@ -195,33 +177,6 @@ impl<'a> Checker<'a> {
         Ok(Fix::new(title, edits))
     }
 
-    /// The slot of `e` when a value of the type `c` put there by a candidate
-    /// leaves no error of its parent (§18.1); none in an expression
-    /// statement (its value is dropped). As a receiver, only of a method `c`
-    /// has (in `x.abs().sqrt()` the missing `sqrt` would be the error left);
-    /// before `as`, only where `as` converts `c` (§3.3); before `at`, any (the
-    /// type of `e at k` is that of `e`, §11.3). In parentheses, the place of
-    /// the outermost. The one answer of the candidates of every family.
-    pub(super) fn place_fits(&mut self, e: ExprId, c: TyId) -> Option<Slot> {
-        let place = slot_of(self.ast, self.root, e)?;
-        let parent = place.parent.map(|p| &self.ast.expr(p).kind);
-        let fits = match (place.outer, parent) {
-            (Slot::Discarded, _) => false,
-            (Slot::Operand(OperandPlace::Postfix), Some(ExprKind::Field { name, .. })) => {
-                self.has_method(c, &name.name)
-            }
-            (Slot::Operand(OperandPlace::Postfix), _) => false,
-            (Slot::Operand(OperandPlace::AsAtLeft), Some(&ExprKind::Cast { ty, .. })) => {
-                // The type after `as`, lowered as its check does, quietly.
-                let to = self.quietly(|ck| ck.lower_type_expr(ty));
-                let error = |t: TyId| matches!(self.a.types.get(t), Ty::Error);
-                to.is_some_and(|to| crate::cast::cast_allowed(&self.a.types, c, to) || error(to))
-            }
-            _ => true,
-        };
-        fits.then_some(place.slot)
-    }
-
     /// The edits of `x.f(a, …)` into `f(x, a, …)` (§18.1): `f(` before the
     /// receiver, and `.f(` taken off or made `, `; the `)` stays. A call is a
     /// postfix form, written bare in every place (§3.1).
@@ -267,27 +222,6 @@ impl<'a> Checker<'a> {
         self.quietly(|ck| ck.check_args(args, &params, e)).is_some()
     }
 
-    /// A trial of a candidate: `f` run with no diagnostic. Its `Err` is the
-    /// answer "it does not fit", not a failure dropped. What it leaves in
-    /// this body stops with the E0413; what leaks out of it (`read_held`,
-    /// `uses`) is undone. Of what reads what the check does not, an error is
-    /// elsewhere (§18.1): none.
-    pub(super) fn quietly<T>(&mut self, f: impl FnOnce(&mut Self) -> R<T>) -> Option<T> {
-        let (failed, marks) = (self.failed, Marks::of(self.a, self.def));
-        self.failed = true;
-        let out = f(self);
-        self.failed = failed;
-        let read_unread = marks.undo(self.a, self.def);
-        out.ok().filter(|_| !read_unread)
-    }
-
-    /// Whether the builtin type `recv` has the method `name`: of `len`,
-    /// whether it is a type with a length (§4.2), as far as this version
-    /// gives it `len`. A method of a user type is none.
-    fn has_method(&mut self, recv: TyId, name: &str) -> bool {
-        self.method_key(recv, name).1.is_none() && self.is_method(recv, name)
-    }
-
     /// Whether `recv` has the method `name`, declared or builtin.
     pub(super) fn is_method(&mut self, recv: TyId, name: &str) -> bool {
         let (key, owner, _) = self.method_key(recv, name);
@@ -329,24 +263,5 @@ impl<'a> Checker<'a> {
             edits.insert(0, Edit::insert(span.file, span.start, "("));
         }
         Some(Fix::new("test `len() == 0`", edits))
-    }
-
-    /// Whether a value of the type `c` may be where the type `t` is expected
-    /// (§4.7): `t` is `c`, a variable not of a literal or of a literal of
-    /// the kind of `c`, the error type, or the same type of what fits. `c`
-    /// has no variable and is a number, `Bool`, a type parameter or an
-    /// `Option` of one: this is whether they unify.
-    pub(super) fn may_fit(&self, t: TyId, c: TyId) -> bool {
-        let t = self.shallow(t);
-        match (self.ty(t), self.ty(c)) {
-            (Ty::Error, _) => true,
-            (Ty::Var(i), c) => match self.infer.var_lit(i) {
-                None => true,
-                Some(LitKind::Int) => matches!(c, Ty::Int(_)),
-                Some(LitKind::Float) => self.infer.float_fits(&c),
-            },
-            (Ty::Named(a, t), Ty::Named(b, c)) if a == b => t.iter().zip(&c).all(|(&t, &c)| self.may_fit(t, c)),
-            _ => t == c,
-        }
     }
 }
