@@ -1,0 +1,24 @@
+// R-450: each function below is fine for `onsa check` at ea8d73f6 (no diagnostic), and each returns a capturing
+// anonymous function as a first-class value. The direct call `keep_t(fn(x: U32) -> U32 { x + k })` is E0710 (S-809).
+
+pub fn keep_t[T](x: T) -> T {
+  x
+}
+
+pub fn by_value(k: U32) -> fn(U32) -> U32 {
+  let r = keep_t::[fn(U32) -> U32]
+  r.(fn(x: U32) -> U32 { x + k })
+}
+
+pub fn by_annotation(k: U32) -> fn(U32) -> U32 {
+  let r: fn(fn(U32) -> U32) -> fn(U32) -> U32 = keep_t
+  r.(fn(x: U32) -> U32 { x + k })
+}
+
+pub fn run(f: fn(fn(U32) -> U32) -> fn(U32) -> U32, k: U32) -> fn(U32) -> U32 {
+  f.(fn(x: U32) -> U32 { x + k })
+}
+
+pub fn by_a_higher_order_function(k: U32) -> fn(U32) -> U32 {
+  run(keep_t, k)
+}
