@@ -1,0 +1,19 @@
+// R-451: at ea8d73f6, `onsa check` gives E0901 on the call of `heavy` in each anonymous function below.
+// Each anonymous function is put in a place whose function type is not `rt` (the return of `mk`, the field of `Op`),
+// so §8.1 checks its body by the rules of that type, not by the rules of the `rt` function around it.
+
+pub fn heavy(x: U32) -> U32 {
+  x + 1
+}
+
+pub rt fn mk() -> fn(U32) -> U32 {
+  fn(y: U32) -> U32 { heavy(y) }
+}
+
+pub struct Op {
+  f: fn(U32) -> U32,
+}
+
+pub rt fn mk_op() -> Op {
+  Op { f: fn(y: U32) -> U32 { heavy(y) } }
+}
