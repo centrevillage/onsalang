@@ -22,7 +22,7 @@ use onsa_syntax::ast::{ExprId, ExprKind, Lit};
 use crate::body::{Checker, LocalId, R};
 use crate::def::Bound;
 use crate::infer::Cause;
-use crate::requirement::{ArgumentName, Required, second_class_argument};
+use crate::requirement::{ArgumentName, Required, Requirement, escape_error, met, unmet_error, unmet_rules};
 use crate::traits::OpNeed;
 use crate::ty::{FloatKind, IntKind, Ty, TyId};
 
@@ -325,31 +325,24 @@ impl<'a> Checker<'a> {
                 if self.infer.has_vars(&self.a.types, r) {
                     return Look::Wait;
                 }
-                if !crate::sig::no_kind_argument(&self.bounds(), r, *lifted) {
+                if met(&self.bounds(), r, Requirement::Escape { rule, lifted: *lifted }) {
                     return Look::Done;
                 }
                 let (shown, what) = (self.display(r), what.text(|t| self.display(t)));
-                let msg = second_class_argument(&shown, &what);
-                let d = Diagnostic::new(Stage::Types, Code::E0710, item.span, msg).with_found(self.src(item.span));
+                let d = escape_error(item.span, &shown, &what).with_found(self.src(item.span));
                 Look::Fail(self.decided_note(d, item.ty, &shown, false).with_rule(*rule))
             }
             DeferredKind::Require { bound, what } => {
                 if self.infer.has_vars(&self.a.types, r) {
                     return Look::Wait;
                 }
-                if self.bounds().meets(r, *bound) {
+                if met(&self.bounds(), r, Requirement::Bound(*bound)) {
                     return Look::Done;
                 }
                 let shown = self.display(r);
-                let msg = what.unmet(&shown, *bound, &mut |t| self.display(t));
-                let mut d = Diagnostic::new(Stage::Types, Code::E0416, item.span, msg).with_found(self.src(item.span));
-                d = self.decided_note(d, item.ty, &shown, true);
-                if let Some(note) = crate::traits::number_traits_note(&self.ty(r), &shown, *bound) {
-                    d = d.with_rule(note);
-                }
-                if let Some(note) = crate::traits::generated_note(self.a, &self.ty(r), *bound) {
-                    d = d.with_rule(note);
-                }
+                let d = unmet_error(item.span, what, &shown, *bound, &mut |t| self.display(t));
+                let d = self.decided_note(d.with_found(self.src(item.span)), item.ty, &shown, true);
+                let mut d = unmet_rules(self.a, r, &shown, *bound).fold(d, Diagnostic::with_rule);
                 if let Required::SeqElement { .. } = what {
                     d = self.seq_element_notes(d, r, &shown, *bound);
                 }

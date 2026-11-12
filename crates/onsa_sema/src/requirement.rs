@@ -3,9 +3,14 @@
 //! ([`requirements`]), the type a requirement is on ([`Required`]) and the
 //! words of their errors (E0710, E0416, E0406). Of no stage: the checks of a
 //! body that wait ([`crate::deferred`]), the constant expressions
-//! ([`crate::constarg`]) and the types written (`sig::wellformed`) read them.
+//! ([`crate::constarg`]) and the types written (`sig::wellformed`) judge a
+//! requirement ([`met`], [`first_unmet`]) and build its error here; each
+//! keeps when it judges (waits or not) and its notes at a place.
+
+use onsa_diag::{Code, Diagnostic, Span, Stage};
 
 use crate::Analysis;
+use crate::bounds::Bounds;
 use crate::def::{Bound, GenericDef, GenericKind};
 use crate::ty::{BuiltinTy, Ty, TyId};
 
@@ -39,6 +44,57 @@ pub(crate) fn requirements(g: &GenericDef, of_seq: bool) -> Option<impl Iterator
     Some(std::iter::once(Requirement::Escape { rule, lifted }).chain(wants.map(Requirement::Bound)))
 }
 
+/// Whether the decided type argument `arg` meets `q` under `under` (§4.5):
+/// the implicit `Escape` when it stands in its place
+/// ([`crate::sig::no_kind_argument`]), the implicit `Dup` and a bound by
+/// [`Bounds::meets`]. The one judgment of a requirement.
+pub(crate) fn met(under: &Bounds, arg: TyId, q: Requirement) -> bool {
+    match q {
+        Requirement::Escape { lifted, .. } => !crate::sig::no_kind_argument(under, arg, lifted),
+        Requirement::Bound(b) => under.meets(arg, b),
+    }
+}
+
+/// The first requirement of `g` ([`requirements`], in their order) that its
+/// argument `arg` does not meet, the implicit `Escape` by `out_of_place`, as
+/// the caller judges it (a type written, by its place); none when it
+/// meets them all, or `g` requires nothing.
+pub(crate) fn first_unmet(under: &Bounds, g: &GenericDef, arg: TyId, out_of_place: bool) -> Option<Requirement> {
+    requirements(g, false)?.find(|&q| match q {
+        Requirement::Escape { .. } => out_of_place,
+        q => !met(under, arg, q),
+    })
+}
+
+/// The E0710 at `span` of the type argument `shown` of `what`, a
+/// second-class type (§4.5, §5.3). The caller adds its notes at a place,
+/// then the rule of the [`Requirement::Escape`].
+pub(crate) fn escape_error(span: Span, shown: &str, what: &str) -> Diagnostic {
+    let msg = format!("`{shown}` is second-class: {what} cannot take it (§4.5, §5.3)");
+    Diagnostic::new(Stage::Types, Code::E0710, span, msg)
+}
+
+/// The E0416 at `span` of the type `shown` that does not meet `bound` as
+/// `what` (§4.5); `show` shows another type. The caller adds its notes at a
+/// place, then [`unmet_rules`].
+pub(crate) fn unmet_error(
+    span: Span,
+    what: &Required,
+    shown: &str,
+    bound: Bound,
+    show: &mut dyn FnMut(TyId) -> String,
+) -> Diagnostic {
+    Diagnostic::new(Stage::Types, Code::E0416, span, what.unmet(shown, bound, show))
+}
+
+/// The rules of the E0416 of the type `ty` (shown as `shown`) that does not
+/// meet `bound`, at every place of it: the number traits it meets (§6.3), and
+/// that a type a flow generates implements no trait (§11.6, S-908).
+pub(crate) fn unmet_rules(a: &Analysis, ty: TyId, shown: &str, bound: Bound) -> impl Iterator<Item = String> {
+    let number = crate::traits::number_traits_note(a.types.get(ty), shown, bound);
+    number.into_iter().chain(crate::traits::generated_note(a, a.types.get(ty), bound).map(String::from))
+}
+
 /// The name of the type `t` with no type argument (`Rg` of `Rg[T, N]`,
 /// `Buf` of `Buf[T]`); none of another form.
 pub(crate) fn head_of(a: &Analysis, t: TyId) -> Option<String> {
@@ -61,12 +117,6 @@ pub(crate) fn parameter(g: &GenericDef, owner: &str) -> String {
 /// alias.
 pub(crate) fn alias_way(head: &str, name: &str) -> String {
     format!("give the type its arguments: `{head}::[…].{name}`, or by an alias, `type R = {head}[…]`, then `R.{name}`")
-}
-
-/// The message of the E0710 of the type argument `shown` of `what`, a
-/// second-class type (§4.5, §5.3).
-pub(crate) fn second_class_argument(shown: &str, what: &str) -> String {
-    format!("`{shown}` is second-class: {what} cannot take it (§4.5, §5.3)")
 }
 
 /// The rule of the E0710 of a type argument with no kind (§5.3, S-862).
@@ -125,9 +175,9 @@ impl ArgumentName {
 
 impl Required {
     /// The message of the E0416 of the type `shown` that does not meet `bound`
-    /// as this requirement: of a body, and of a type written (`sig::wellformed`).
-    /// `show` shows another type, when the error is reported.
-    pub(crate) fn unmet(&self, shown: &str, bound: Bound, show: &mut dyn FnMut(TyId) -> String) -> String {
+    /// as this requirement ([`unmet_error`]). `show` shows another type, when
+    /// the error is reported.
+    fn unmet(&self, shown: &str, bound: Bound, show: &mut dyn FnMut(TyId) -> String) -> String {
         match self {
             Required::HoleValue => {
                 format!("a hole of a string takes a value that implements `Show`; `{shown}` does not (§2.4)")

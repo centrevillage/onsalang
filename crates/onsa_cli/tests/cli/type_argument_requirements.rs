@@ -324,7 +324,6 @@ fn a_type_written_names_the_first_unmet_requirement_where_the_bound_is_not_also_
 }
 
 #[test]
-#[ignore = "W5-13 U5b: S-1013 (i), a type written names the implicit Dup before the bound written (E0416 names the bound today)"]
 fn a_type_written_names_the_implicit_dup_before_a_bound_written() {
     // S-1013 (i): the cells that fail the implicit `Dup` and the bound written together (`T: Eq` and a `Buf[F32]`,
     // `T: ?Escape + Eq` and an Affine struct, `T: Eq` and `U: ?Dup`) have to name `Dup`, as a value use does; a type
@@ -338,7 +337,6 @@ fn a_type_written_names_the_implicit_dup_before_a_bound_written() {
 }
 
 #[test]
-#[ignore = "W5-13 U5b: S-1013 (i) with S-1021 provisional (1), a type written names the implicit Dup before a bound that needs Dup"]
 fn s1021_a_type_written_names_the_implicit_dup_first_for_a_bound_that_needs_dup() {
     // S-1021 (OPEN), provisional reading (1): as the value use above, in the six places and the two of a type
     // parameter as the argument (`impl` heading and signature).
@@ -349,7 +347,6 @@ fn s1021_a_type_written_names_the_implicit_dup_first_for_a_bound_that_needs_dup(
 }
 
 #[test]
-#[ignore = "W5-13 U5b: S-1013 (i), a type written and a value use name the same requirement"]
 fn a_type_written_and_a_value_use_name_the_same_requirement() {
     // The property of S-1013 itself, with no oracle: for a parameter and an argument the places of a type written
     // and the value use give one answer. It holds for the S-1021 cells too, whichever way S-1021 is read.
@@ -398,7 +395,6 @@ fn s1020_the_type_written_reports_the_outer_requirement_before_a_second_class_ar
 }
 
 #[test]
-#[ignore = "W5-13 U5b: S-1013 (i) with S-1020 provisional (2), the second argument names the implicit Dup"]
 fn s1020_with_the_implicit_dup_of_the_second_argument() {
     // The same with a second argument `Buf[F32]` that also fails the implicit `Dup` (S-1013 (i): the implicit
     // `Dup` is named before the bound `B: Eq`), and S-1020 (2): E0416 and no E0710 for the first argument.

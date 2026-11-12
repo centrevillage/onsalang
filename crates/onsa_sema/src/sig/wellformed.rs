@@ -18,7 +18,7 @@
 
 use super::*;
 use crate::bounds::Bounds;
-use crate::requirement::Required;
+use crate::requirement::{Required, Requirement, first_unmet, unmet_error, unmet_rules};
 
 /// The place of a root (§5.3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -140,6 +140,14 @@ pub(crate) fn no_kind_argument(under: &Bounds, t: TyId, lifted: bool) -> bool {
 
 /// The place of a type argument: inside another type.
 const ARGUMENT: (Pos, u8) = (Pos::Other, INSIDE);
+
+/// What [`Sema::required`] asks of an argument: the bound of the element of
+/// a builtin type, or the requirements of the parameter `k` of a declared one.
+#[derive(Clone)]
+enum Want {
+    Element(Bound, Required),
+    Param(DefId, usize),
+}
 
 /// A part of a type as written: here at a place of the source, named by an
 /// alias (read as its right side is, the error type where it has an error,
@@ -450,8 +458,9 @@ impl<'p> Sema<'p> {
     /// The E0416 of the first argument of `shape`, written here, that does
     /// not meet the requirement of its parameter (§4.5): the element of
     /// `Buf` / `Span`, of `Array` / `Set` and the key and value of `Map`
-    /// (S-767), the bounds and the implicit `Dup` of a declared type,
-    /// judged under the generics in scope (an unknown bound is met, S-689).
+    /// (S-767), the first unmet of the requirements of a parameter of a
+    /// declared type, in the order of a use of a value (S-1013), judged
+    /// under the generics in scope (an unknown bound is met, S-689).
     /// The arguments are judged as `read` ([`Self::part`]: an alias with an
     /// error in them, the error type, meets every requirement).
     fn required(
@@ -462,58 +471,49 @@ impl<'p> Sema<'p> {
         kids: &[Written],
         span: Span,
     ) -> Result<(), Diagnostic> {
-        let (wants, args): (Vec<_>, _) = match shape {
+        let (wants, args): (Vec<Want>, _) = match shape {
             &Ty::Builtin(b @ (BuiltinTy::Buf | BuiltinTy::Span), ref args) => {
-                (vec![(vec![Bound::Copy], Required::BufElement(b), None)], args)
+                (vec![Want::Element(Bound::Copy, Required::BufElement(b))], args)
             }
             // The elements, keys and values of the Shared collections (S-767).
             Ty::Builtin(BuiltinTy::Array | BuiltinTy::Map | BuiltinTy::Set, args) => {
-                (vec![(vec![Bound::Dup], Required::SharedElement, None); args.len()], args)
+                (vec![Want::Element(Bound::Dup, Required::SharedElement); args.len()], args)
             }
-            Ty::Named(d, args) => {
-                let owner = format!("`{}`", self.a.shown_name(*d));
-                let std = self.a.modules.is_std(self.a.def(*d).module);
-                let want = |g: &GenericDef| match &g.kind {
-                    GenericKind::Type { bounds, dup, unknown: false, .. } => {
-                        let all = bounds.iter().copied().chain(dup.then_some(Bound::Dup)).collect();
-                        (all, Required::Param { param: g.name.clone(), owner: owner.clone(), std }, Some(g.span))
-                    }
-                    _ => (Vec::new(), Required::BufElement(BuiltinTy::Buf), None),
-                };
-                (self.a.def(*d).generics().iter().map(want).collect(), args)
-            }
+            Ty::Named(d, args) => ((0..self.a.def(*d).generics().len()).map(|k| Want::Param(*d, k)).collect(), args),
             _ => return Ok(()),
         };
         let at = places(self.a, shape, ARGUMENT);
-        for (((bounds, what, declared), ((&arg, &shown), w)), (_, place)) in
-            wants.into_iter().zip(read.iter().zip(args).zip(kids)).zip(at)
+        for ((want, ((&arg, &shown), w)), (_, place)) in wants.into_iter().zip(read.iter().zip(args).zip(kids)).zip(at)
         {
             // A second-class argument has no kind: its E0710 alone (§4.6, S-766).
             // S-771: so is an argument that holds one out of its place
             // (`C[(Span[F32], F32)]`, `N[[Span[F32]; 2]]`), not one at the
             // argument of a function type (`N[fn(Span[F32]) -> F32]`). A
             // `?Escape` parameter takes a `Span`, and judges its bounds (S-927).
-            if self.holds(cx, arg, place) {
-                continue;
-            }
+            // That E0710 is the error of the part ([`Self::parts`]).
+            let out = self.holds(cx, arg, place);
             let under = Bounds { a: self.a, generics: &cx.generics };
-            let Some(b) = bounds.into_iter().find(|&b| !under.meets(arg, b)) else { continue };
+            let (b, what, declared) = match want {
+                Want::Element(b, what) if !out && !under.meets(arg, b) => (b, what, None),
+                Want::Param(d, k) => {
+                    let g = &self.a.def(d).generics()[k];
+                    let Some(Requirement::Bound(b)) = first_unmet(&under, g, arg, out) else { continue };
+                    let owner = format!("`{}`", self.a.shown_name(d));
+                    let std = self.a.modules.is_std(self.a.def(d).module);
+                    (b, Required::Param { param: g.name.clone(), owner, std }, Some(g.span))
+                }
+                Want::Element(..) => continue,
+            };
             let at = match w {
                 Written::Here(t) => cx.ast.ty(*t).span,
                 _ => span,
             };
-            let mut d = Diagnostic::new(
-                Stage::Types,
-                Code::E0416,
-                at,
-                what.unmet(&self.shown(cx, shown), b, &mut |t| self.shown(cx, t)),
-            );
+            let shown = self.shown(cx, shown);
+            let mut d = unmet_error(at, &what, &shown, b, &mut |t| self.shown(cx, t));
             if let (Some(decl), Required::Param { param, owner, .. }) = (declared, &what) {
                 d = d.with_note(decl, format!("the parameter `{param}` of {owner} is declared here"));
             }
-            if let Some(note) = crate::traits::number_traits_note(self.a.types.get(arg), &self.shown(cx, shown), b) {
-                d = d.with_rule(note);
-            }
+            let d = unmet_rules(self.a, arg, &shown, b).fold(d, Diagnostic::with_rule);
             return Err(d.with_found(src(cx, at)));
         }
         Ok(())

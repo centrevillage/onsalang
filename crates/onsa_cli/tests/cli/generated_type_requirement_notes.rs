@@ -110,7 +110,6 @@ fn a_trait_asked_of_a_generated_type_in_a_value_use_notes_that_it_has_none() {
 }
 
 #[test]
-#[ignore = "W5-13 U5b: S-908 (D4), the note of a generated type in the E0416 of a type written and of a constant expression"]
 fn a_trait_asked_of_a_generated_type_in_a_type_notes_that_it_has_none() {
     // S-908 does not limit the place (W5-13, D4): written in a signature, a field, the right side of an alias, an
     // annotation, and in a constant expression (`N::[g.Params].K` in a body and in the length of an array type).
