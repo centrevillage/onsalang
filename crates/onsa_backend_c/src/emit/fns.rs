@@ -241,7 +241,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
 
     fn temp(&mut self, ty: &Ty) -> (String, String) {
         self.temps += 1;
-        let name = format!("onsa_t{}", self.temps);
+        let name = format!("{TEMP}{}", self.temps);
         let tn = self.cx.names.name(ty);
         (name, tn)
     }
@@ -315,7 +315,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
 
     /// A stable C expression: unaffected by later side effects.
     fn is_stable(s: &str) -> bool {
-        s.starts_with("onsa_t")
+        is_temp(s)
             || s.starts_with("INT")
             || s.starts_with("UINT")
             || s.starts_with("((int")
@@ -1230,6 +1230,15 @@ fn dot(base: &str) -> String {
         return format!("{inner}->");
     }
     format!("{base}.")
+}
+
+/// The head of the name of a temporary ([`FnEmitter::temp`]), before its number.
+const TEMP: &str = "onsa_t";
+
+/// Whether `s` is a temporary: [`TEMP`] and digits only, not a call of
+/// `onsa_trunc_*` nor a local `onsa_t` (`onsa_t_`, R-438).
+fn is_temp(s: &str) -> bool {
+    s.strip_prefix(TEMP).is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
 }
 
 fn is_c_ident(s: &str) -> bool {

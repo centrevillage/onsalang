@@ -728,7 +728,7 @@ impl<'a> Checker<'a> {
         let ast = self.ast;
         let plain = |e: ExprId| {
             let kind = &ast.expr(ast.without_parens(e)).kind;
-            matches!(kind, ExprKind::Lit(Lit::Str(s)) if onsa_syntax::test_name::value(s).is_some())
+            matches!(kind, ExprKind::Lit(Lit::Str(s)) if s.value().is_some())
         };
         let (left, right) = (plain(lhs), plain(rhs));
         let t = if left && !right {

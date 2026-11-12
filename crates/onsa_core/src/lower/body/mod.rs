@@ -16,7 +16,8 @@ use onsa_syntax::ast::{
 };
 
 use super::build::{
-    after, bool_lit, field, field_by_name, index, lit, local_expr, materialize, payload, stmt, tag_of, u32_lit,
+    after, bool_lit, field, field_by_name, float_text, index, lit, local_expr, materialize, payload, stmt, tag_of,
+    u32_lit,
 };
 use super::{FailKind, GenericArg, Hole, Lowerer, R, at_hole, core_mode, internal, unsupported};
 use crate::ir::*;

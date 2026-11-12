@@ -1,0 +1,77 @@
+// onsa.toml
+// [package]
+// name = "c_return_in_index"
+// edition = "2026"
+//
+// [export]
+// prefix = "cri_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§7", "§13.4"]
+//
+// [[test.host]]
+// name = "returns_in_the_index"
+// target = "host"
+// fn = "c_return_in_index.returns_in_the_index"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 2001 },
+// ]
+//
+// [[test.host]]
+// name = "assigns_through_the_index"
+// target = "host"
+// fn = "c_return_in_index.assigns_through_the_index"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 5002 },
+// ]
+
+// R-439: a function returning an aggregate with a `return` in the index of
+// an assigned place (the result is not built in place).
+
+struct S { a: I32, b: I32 }
+
+fn swap_s(p: S) -> S {
+  var r = S { a: 0, b: 0 }
+  r.a = p.b
+  r.b = p.a
+  r
+}
+
+fn pick(c: Bool) -> S {
+  var s = S { a: 1, b: 2 }
+  var arr = [0, 0, 0]
+  arr[{
+    if c { return swap_s(s) }
+    1
+  }] = 5
+  s.a = arr[1]
+  s
+}
+
+@export
+pub fn returns_in_the_index() -> I32 {
+  let s = pick(true)
+  s.a * 1000 + s.b
+}
+
+@export
+pub fn assigns_through_the_index() -> I32 {
+  let s = pick(false)
+  s.a * 1000 + s.b
+}
+
+test "returns in the index" {
+  assert returns_in_the_index() == 2001
+}
+
+test "assigns through the index" {
+  assert assigns_through_the_index() == 5002
+}

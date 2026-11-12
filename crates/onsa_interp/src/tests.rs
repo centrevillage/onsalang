@@ -685,7 +685,7 @@ fn u64_products_beyond_i128() {
 fn min_rem_minus_one_is_zero() {
     on_stack(|| {
         for k in [IntKind::I8, IntKind::I16, IntKind::I32, IntKind::I64] {
-            let (min, _) = crate::value::int_range(k);
+            let (min, _) = k.range();
             let rem = eval(bin(BinOp::Rem, Overflow::Checked, int(k, min), int(k, -1))).unwrap();
             assert_eq!(as_i128(rem), 0, "{k:?}");
             let e = eval(bin(BinOp::Div, Overflow::Checked, int(k, min), int(k, -1))).unwrap_err();

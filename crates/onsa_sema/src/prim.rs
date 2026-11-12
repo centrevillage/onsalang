@@ -273,6 +273,35 @@ impl Prim {
         }
     }
 
+    /// Whether it only computes a value from its arguments: a second call
+    /// gives the same value or the same panic (what Core may evaluate again,
+    /// `has_effect`). Without a `_`, so that a new primitive must say.
+    pub fn computes_only(&self) -> bool {
+        match self {
+            Prim::Math(..)
+            | Prim::IntAbs(_)
+            | Prim::IntMin(_)
+            | Prim::IntMax(_)
+            | Prim::NarrowParts { .. }
+            | Prim::IntToFloat { .. }
+            | Prim::FloatToFloat { .. }
+            | Prim::TruncToInt { .. }
+            | Prim::ToBits(_)
+            | Prim::FromBits(_)
+            | Prim::Parts(..)
+            | Prim::DivEuclid(_)
+            | Prim::RemEuclid(_)
+            | Prim::IsNan(_)
+            | Prim::IsFinite(_)
+            | Prim::Len
+            | Prim::Slice
+            | Prim::StrLen => true,
+            Prim::Fill | Prim::AddFrom | Prim::CopyFrom | Prim::BufZeroed | Prim::AssertNear | Prim::Pending(_) => {
+                false
+            }
+        }
+    }
+
     /// The `std` declaration whose primitive this is, by its qualified name
     /// (`std.test.gen.u32`): the E0200 of a backend that does not provide it
     /// names the declaration (spec §15.2). `None` of a family with no row.

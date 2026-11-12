@@ -62,7 +62,7 @@ impl<'a> Checker<'a> {
                         }
                         // Its value, as the lowering reads it; one with an
                         // interpolation (E0020 of the syntax) covers none.
-                        Ok(onsa_syntax::test_name::value(s).map_or(P::Const, P::Str))
+                        Ok(s.value().map_or(P::Const, P::Str))
                     }
                 }
             }

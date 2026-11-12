@@ -193,13 +193,7 @@ impl Lowerer<'_> {
             }
             _ => return Err(internal(span, "a derived member of another form of type")),
         };
-        let fd = &mut self.m.fns[fid.0 as usize];
-        fd.params = params;
-        fd.sret = ret.is_aggregate();
-        fd.ret = ret;
-        fd.rt = f.rt;
-        fd.locals = locals;
-        fd.body = Some(block);
+        self.fill_fn(fid, params, ret, f.rt, locals, Some(block));
         Ok(())
     }
 }

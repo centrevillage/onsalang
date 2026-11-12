@@ -955,3 +955,44 @@ fn a_fixed_str_literal_is_of_the_size_of_its_text() {
     assert!(t.len() < 2000, "{t}");
     assert!(t.contains("[0:U8; 1000000]") && t.contains("= 98:U8"), "{t}");
 }
+
+/// `has_return` walks each node once (R-439): a value block nested 64 deep,
+/// each in the `let` of the one around it, is answered at once, with no
+/// `return`, with one at the bottom, and with one in the index of an assigned
+/// place at the bottom.
+#[test]
+fn has_return_walks_a_deep_nesting_once() {
+    let sp = onsa_diag::Span::new(FileId(0), 0, 0);
+    let int = Ty::Int(IntKind::I32);
+    let zero = || Expr::new(Ty::Int(IntKind::I32), sp, ExprKind::Lit(Lit::Int(0)));
+    let local = |l: u32| Expr::new(Ty::Int(IntKind::I32), sp, ExprKind::Local(LocalId(l)));
+    let st = |kind: StmtKind| Stmt { span: sp, kind };
+    let nested = |bottom: Stmt| {
+        let mut e =
+            Expr::new(int.clone(), sp, ExprKind::Block(Block { stmts: vec![bottom], value: Some(Box::new(zero())) }));
+        for _ in 0..64 {
+            let b = Block { stmts: vec![st(StmtKind::Let(LocalId(0), e))], value: Some(Box::new(local(0))) };
+            e = Expr::new(int.clone(), sp, ExprKind::Block(b));
+        }
+        FnDef {
+            name: "f".into(),
+            params: Vec::new(),
+            ret: int.clone(),
+            sret: false,
+            rt: false,
+            locals: vec![Local { name: "v".into(), ty: int.clone() }],
+            body: Some(Block { stmts: Vec::new(), value: Some(Box::new(e)) }),
+            span: sp,
+            fp_relaxed: false,
+            test: None,
+            decl: None,
+        }
+    };
+    let ret = || st(StmtKind::Return(Some(zero())));
+    let in_index =
+        Expr::new(int.clone(), sp, ExprKind::Block(Block { stmts: vec![ret()], value: Some(Box::new(zero())) }));
+    let place = Place::Index(Box::new(Place::Local(LocalId(0))), Box::new(in_index), sp);
+    assert!(!crate::walk::has_return(&nested(st(StmtKind::Expr(zero())))));
+    assert!(crate::walk::has_return(&nested(ret())));
+    assert!(crate::walk::has_return(&nested(st(StmtKind::Assign(place, zero())))));
+}

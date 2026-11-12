@@ -119,7 +119,7 @@ fn pat_test(lw: &mut Lowerer, cx: &mut FnCx, pat: PatId, place: &Expr) -> R<Opti
                     let id = *id;
                     let rhs =
                         Expr::new(place.ty.clone(), span, crate::lower::fixed_str::value(lw, cx, text, id, span)?);
-                    return crate::lower::eq::eq_expr(lw, place.clone(), rhs, span).map(Some);
+                    return crate::lower::eq::eq_expr(lw, place.clone(), rhs, span, span).map(Some);
                 }
                 (ALit::Str(_), _) => return Err(unsupported(span, Feature::StrPatterns, &[])),
                 _ => return Err(internal(span, "literal pattern type")),

@@ -196,12 +196,7 @@ impl<'b> Gen<'b> {
     }
 
     pub(super) fn finish(self, lw: &mut Lowerer, fid: FnId, ret: Ty, rt: bool, value: Option<Expr>) {
-        let fd = &mut lw.m.fns[fid.0 as usize];
-        fd.params = self.params;
-        fd.sret = ret.is_aggregate();
-        fd.ret = ret;
-        fd.rt = rt;
-        fd.locals = self.cx.locals;
-        fd.body = Some(Block { stmts: self.stmts, value: value.map(Box::new) });
+        let body = Block { stmts: self.stmts, value: value.map(Box::new) };
+        lw.fill_fn(fid, self.params, ret, rt, self.cx.locals, Some(body));
     }
 }

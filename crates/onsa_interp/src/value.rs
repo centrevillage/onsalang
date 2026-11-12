@@ -193,22 +193,8 @@ impl Value {
     }
 }
 
-/// Range of an integer kind as `(min, max)`.
-pub fn int_range(k: IntKind) -> (i128, i128) {
-    match k {
-        IntKind::I8 => (i8::MIN as i128, i8::MAX as i128),
-        IntKind::I16 => (i16::MIN as i128, i16::MAX as i128),
-        IntKind::I32 => (i32::MIN as i128, i32::MAX as i128),
-        IntKind::I64 => (i64::MIN as i128, i64::MAX as i128),
-        IntKind::U8 => (0, u8::MAX as i128),
-        IntKind::U16 => (0, u16::MAX as i128),
-        IntKind::U32 => (0, u32::MAX as i128),
-        IntKind::U64 => (0, u64::MAX as i128),
-    }
-}
-
 pub fn in_range(k: IntKind, v: i128) -> bool {
-    let (lo, hi) = int_range(k);
+    let (lo, hi) = k.range();
     lo <= v && v <= hi
 }
 
@@ -216,12 +202,12 @@ pub fn in_range(k: IntKind, v: i128) -> bool {
 pub fn wrap_int(k: IntKind, v: i128) -> i128 {
     let bits = k.bits();
     let m = v.rem_euclid(1i128 << bits);
-    let (_, hi) = int_range(k);
+    let (_, hi) = k.range();
     if m > hi { m - (1i128 << bits) } else { m }
 }
 
 pub fn clamp_int(k: IntKind, v: i128) -> i128 {
-    let (lo, hi) = int_range(k);
+    let (lo, hi) = k.range();
     v.clamp(lo, hi)
 }
 

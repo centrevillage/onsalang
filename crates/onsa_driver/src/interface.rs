@@ -289,7 +289,7 @@ impl Builder<'_> {
             .map(|g| match &g.kind {
                 GenericKind::Type { bounds, dup, escape, .. } => {
                     let mut s = g.name.clone();
-                    let mut bs: Vec<String> = bounds.iter().map(|b| format!("{b:?}")).collect();
+                    let mut bs: Vec<String> = bounds.iter().map(|b| b.name().to_string()).collect();
                     if !*dup {
                         bs.push("?Dup".into());
                     }
@@ -308,16 +308,22 @@ impl Builder<'_> {
             .collect()
     }
 
+    /// The type parameters of the `impl` that owns `d`, none of another
+    /// item: what the type of a constant of it names (R-375), and the first
+    /// ones of a method's (sig.rs), which the heading of the `impl` shows
+    /// (R-382).
+    fn owner_generics(&self, d: DefId) -> &[onsa_sema::def::GenericDef] {
+        match self.a.def(d).owner {
+            Some(o) if matches!(self.a.def(o).kind, DefKind::Impl(_)) => self.a.def(o).generics(),
+            _ => &[],
+        }
+    }
+
     fn fn_item(&self, d: DefId, display: &str) -> FnIface {
         let def = self.a.def(d);
         let f = def.as_fn().expect("fn def");
-        // A method's generics start with its impl's (sig.rs), which the
-        // heading of the `impl` shows (R-382).
         let generics = &f.generics;
-        let of_impl = match def.owner {
-            Some(o) if matches!(self.a.def(o).kind, DefKind::Impl(_)) => self.a.def(o).generics().len(),
-            _ => 0,
-        };
+        let of_impl = self.owner_generics(d).len();
         let mut params: Vec<ParamIface> = Vec::new();
         if let Some(m) = f.self_mode {
             params.push(ParamIface { mode: mode_str(m).into(), name: "self".into(), ty: "Self".into() });
@@ -449,7 +455,8 @@ impl Builder<'_> {
         let def = self.a.def(d);
         let DefKind::Const(c) = &def.kind else { unreachable!() };
         let value = self.const_text(d);
-        Item::Const { name: display.to_string(), vis: vis_str(def.vis).into(), ty: self.ty(c.ty, &[]), value }
+        let ty = self.ty(c.ty, self.owner_generics(d));
+        Item::Const { name: display.to_string(), vis: vis_str(def.vis).into(), ty, value }
     }
 
     /// The value of the constant `d` as it is written, when it is folded.

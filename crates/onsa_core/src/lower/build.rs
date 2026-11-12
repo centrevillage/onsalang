@@ -106,7 +106,6 @@ pub(super) fn materialize(cx: &mut FnCx, e: Expr, stmts: &mut Vec<Stmt>, name: &
 /// block. Of one without (`i + 1`, `ys[j] as U32`, `min(i, 1)`), a second
 /// evaluation gives the same value or the same panic, in the same order.
 fn has_effect(e: &Expr) -> bool {
-    use crate::prim::Prim as P;
     match &e.kind {
         ExprKind::Lit(_) | ExprKind::Local(_) | ExprKind::Const(_) | ExprKind::Zeroed => false,
         ExprKind::Unary(_, x)
@@ -118,31 +117,8 @@ fn has_effect(e: &Expr) -> bool {
         | ExprKind::Cmp { lhs, rhs, .. }
         | ExprKind::Logic { lhs, rhs, .. }
         | ExprKind::Index { base: lhs, index: rhs } => has_effect(lhs) || has_effect(rhs),
-        // The primitives that only compute a value (a new one has an effect
-        // until it is added here).
         ExprKind::Prim { prim, args } => {
-            let computes = matches!(
-                prim,
-                P::Math(..)
-                    | P::IntAbs(_)
-                    | P::IntMin(_)
-                    | P::IntMax(_)
-                    | P::NarrowParts { .. }
-                    | P::IntToFloat { .. }
-                    | P::FloatToFloat { .. }
-                    | P::TruncToInt { .. }
-                    | P::ToBits(_)
-                    | P::FromBits(_)
-                    | P::Parts(..)
-                    | P::DivEuclid(_)
-                    | P::RemEuclid(_)
-                    | P::IsNan(_)
-                    | P::IsFinite(_)
-                    | P::Len
-                    | P::Slice
-                    | P::StrLen
-            );
-            !computes || args.iter().any(|a| a.mode == Mode::Inout || has_effect(&a.expr))
+            !prim.computes_only() || args.iter().any(|a| a.mode == Mode::Inout || has_effect(&a.expr))
         }
         _ => true,
     }
@@ -157,6 +133,18 @@ pub(super) fn after(stmts: Vec<Stmt>, value: Expr) -> Expr {
             Expr::new(value.ty.clone(), value.span, ExprKind::Block(Block { stmts, value: Some(Box::new(value)) }))
         }
     }
+}
+
+/// The one conversion of a float literal's `text` (§2.4, R-20): its value
+/// rounded once to `k` (for `F32`, `float_value` gives a value that is an
+/// `F32` already, so `as f32` is exact). The types stage reported one out of
+/// its range (E0408).
+pub(super) fn float_text(text: &str, k: FloatKind, span: Span) -> R<Lit> {
+    let v = onsa_syntax::float_value(text, k.width()).map_err(|_| internal(span, "float literal out of range"))?;
+    Ok(match k {
+        FloatKind::F32 => Lit::F32(v as f32),
+        FloatKind::F64 => Lit::F64(v),
+    })
 }
 
 pub(super) fn float_lit(ty: &Ty, v: f64, span: Span) -> R<Expr> {

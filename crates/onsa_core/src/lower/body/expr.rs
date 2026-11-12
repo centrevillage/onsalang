@@ -51,20 +51,10 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
     let kind = match &cx.expr(e).kind {
         AK::Lit(l) => match l {
             ALit::Int { value, .. } => ExprKind::Lit(Lit::Int(*value as i128)),
-            // The one conversion of a float literal (§2.4, R-20): the value
-            // rounded once to the type; the types stage reported one out of
-            // its range (E0408).
-            ALit::Float { text } => {
-                let value = |k: FloatKind| {
-                    onsa_syntax::float_value(text, k.width()).map_err(|_| internal(span, "float literal out of range"))
-                };
-                match ty {
-                    // Exact: the value is one of `F32` already.
-                    Ty::Float(FloatKind::F32) => ExprKind::Lit(Lit::F32(value(FloatKind::F32)? as f32)),
-                    Ty::Float(FloatKind::F64) => ExprKind::Lit(Lit::F64(value(FloatKind::F64)?)),
-                    _ => return Err(internal(span, "float literal type")),
-                }
-            }
+            ALit::Float { text } => match ty {
+                Ty::Float(k) => ExprKind::Lit(float_text(text, k, span)?),
+                _ => return Err(internal(span, "float literal type")),
+            },
             ALit::Char(c) => ExprKind::Lit(Lit::Char(*c)),
             ALit::Bool(b) => ExprKind::Lit(Lit::Bool(*b)),
             ALit::Str(s) => match &ty {
@@ -235,6 +225,9 @@ fn lower_binary(
     let sp = cx.expr(e).span;
     let l = lower_expr(lw, cx, lhs)?;
     let r = lower_expr(lw, cx, rhs)?;
+    // One arm for each operator in the two inner matches, without a `_`, so
+    // that a new one must say.
+    let not_in_group = || internal(op_span, "an operator out of its group");
     let out = match op.group() {
         OpGroup::And | OpGroup::Or => {
             let lop = if op.group() == OpGroup::And { LogicOp::And } else { LogicOp::Or };
@@ -247,20 +240,30 @@ fn lower_binary(
                 ABinOp::Lt => CmpOp::Lt,
                 ABinOp::Le => CmpOp::Le,
                 ABinOp::Gt => CmpOp::Gt,
-                _ => CmpOp::Ge,
+                ABinOp::Ge => CmpOp::Ge,
+                ABinOp::Add
+                | ABinOp::Sub
+                | ABinOp::Mul
+                | ABinOp::Div
+                | ABinOp::Rem
+                | ABinOp::WrapAdd
+                | ABinOp::WrapSub
+                | ABinOp::WrapMul
+                | ABinOp::SatAdd
+                | ABinOp::SatSub
+                | ABinOp::SatMul
+                | ABinOp::And
+                | ABinOp::Or
+                | ABinOp::BitAnd
+                | ABinOp::BitOr
+                | ABinOp::BitXor
+                | ABinOp::Shl
+                | ABinOp::Shr => return Err(not_in_group()),
             };
             if super::eq::compared_directly(&l.ty) {
                 super::eq::compare(cop, l, r, sp)?
             } else if matches!(cop, CmpOp::Eq | CmpOp::Ne) {
-                let f = super::eq::eq_fn(lw, &l.ty, op_span)?;
-                let call = Expr::new(
-                    Ty::Bool,
-                    sp,
-                    ExprKind::Call {
-                        fn_: f,
-                        args: vec![Arg { mode: Mode::Borrow, expr: l }, Arg { mode: Mode::Borrow, expr: r }],
-                    },
-                );
+                let call = super::eq::eq_expr(lw, l, r, sp, op_span)?;
                 if cop == CmpOp::Eq {
                     call
                 } else {
@@ -288,7 +291,14 @@ fn lower_binary(
                 ABinOp::BitXor => (BinOp::BitXor, Overflow::Checked),
                 ABinOp::Shl => (BinOp::Shl, Overflow::Checked),
                 ABinOp::Shr => (BinOp::Shr, Overflow::Checked),
-                _ => unreachable!(),
+                ABinOp::Eq
+                | ABinOp::Ne
+                | ABinOp::Lt
+                | ABinOp::Le
+                | ABinOp::Gt
+                | ABinOp::Ge
+                | ABinOp::And
+                | ABinOp::Or => return Err(not_in_group()),
             };
             let t = l.ty.clone();
             if bop == BinOp::Rem && t.is_float() {
@@ -335,10 +345,6 @@ fn lower_try(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, inner: ExprId, ty: Ty, 
     let good_block = Block { stmts: Vec::new(), value: Some(Box::new(payload(lw, tmp.clone(), keep, 0)?)) };
     let mut arms = vec![(keep, good_block), (exit, bad_block)];
     arms.sort_by_key(|(t, _)| *t);
-    let sw = Expr::new(ty.clone(), span, ExprKind::Switch { scrutinee: Box::new(tmp), arms, default: None });
-    Ok(if stmts.is_empty() {
-        sw
-    } else {
-        Expr::new(ty, span, ExprKind::Block(Block { stmts, value: Some(Box::new(sw)) }))
-    })
+    let sw = Expr::new(ty, span, ExprKind::Switch { scrutinee: Box::new(tmp), arms, default: None });
+    Ok(after(stmts, sw))
 }

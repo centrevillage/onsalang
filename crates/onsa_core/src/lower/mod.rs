@@ -643,6 +643,27 @@ impl<'a> Lowerer<'a> {
         Ok(id)
     }
 
+    /// Fill the function `fid` that [`Self::fn_id`] put empty: the one place
+    /// of its parts, with `sret` of its result (§12.7).
+    pub(crate) fn fill_fn(
+        &mut self,
+        fid: FnId,
+        params: Vec<Param>,
+        ret: Ty,
+        rt: bool,
+        locals: Vec<Local>,
+        body: Option<Block>,
+    ) -> &mut FnDef {
+        let fd = &mut self.m.fns[fid.0 as usize];
+        fd.params = params;
+        fd.sret = ret.is_aggregate();
+        fd.ret = ret;
+        fd.rt = rt;
+        fd.locals = locals;
+        fd.body = body;
+        fd
+    }
+
     /// The Core constant of the constant `d` at the arguments of its `impl`,
     /// or of the struct of a default (one for each instance, §6.6, S-304,
     /// S-918). A `ConstValue` depends on no
@@ -691,16 +712,8 @@ impl<'a> Lowerer<'a> {
             // Exact: the evaluation rounded the literal to `F32` once (R-20).
             (C::Float(f), Ty::Float(FloatKind::F32)) => ExprKind::Lit(Lit::F32(*f as f32)),
             (C::Float(f), Ty::Float(FloatKind::F64)) => ExprKind::Lit(Lit::F64(*f)),
-            // Rounded once, now that the type is decided; the types stage
-            // reported a literal out of its range (E0408).
-            (C::FloatText(t), Ty::Float(k)) => {
-                let v =
-                    onsa_syntax::float_value(t, k.width()).map_err(|_| internal(span, "float literal out of range"))?;
-                match k {
-                    FloatKind::F32 => ExprKind::Lit(Lit::F32(v as f32)),
-                    FloatKind::F64 => ExprKind::Lit(Lit::F64(v)),
-                }
-            }
+            // Rounded once, now that the type is decided.
+            (C::FloatText(t), Ty::Float(k)) => ExprKind::Lit(build::float_text(t, *k, span)?),
             (C::Bool(b), Ty::Bool) => ExprKind::Lit(Lit::Bool(*b)),
             (C::Char(c), Ty::Char) => ExprKind::Lit(Lit::Char(*c)),
             (C::Unit, Ty::Unit) => ExprKind::Lit(Lit::Unit),
@@ -758,12 +771,7 @@ impl<'a> Lowerer<'a> {
                         locals.push(Local { name: p.name.clone(), ty: ty.clone() });
                         params.push(Param { local, mode: core_mode(p.mode), ty });
                     }
-                    let fd = &mut self.m.fns[fid.0 as usize];
-                    fd.params = params;
-                    fd.sret = ret.is_aggregate();
-                    fd.ret = ret;
-                    fd.rt = f.rt;
-                    fd.locals = locals;
+                    self.fill_fn(fid, params, ret, f.rt, locals, None);
                     return Ok(());
                 }
                 let Some(info) = self.a.bodies.get(&d) else {
@@ -775,13 +783,7 @@ impl<'a> Lowerer<'a> {
                 let mut cx = body::FnCx::new(self, d, args.to_vec(), info, ret.clone())?;
                 let params = body::bind_params(self, &mut cx, d, f)?;
                 let block = body::lower_fn_body(self, &mut cx, f.body.unwrap())?;
-                let fd = &mut self.m.fns[fid.0 as usize];
-                fd.params = params;
-                fd.sret = ret.is_aggregate();
-                fd.ret = ret;
-                fd.rt = f.rt;
-                fd.locals = cx.locals;
-                fd.body = Some(block);
+                self.fill_fn(fid, params, ret, f.rt, cx.locals, Some(block));
                 Ok(())
             }
             DefKind::Test { name, body } => {
@@ -795,11 +797,8 @@ impl<'a> Lowerer<'a> {
                 let block = body::lower_fn_body(self, &mut cx, *body)?;
                 // The mark that identifies the test (§11.8, S-55).
                 let module = self.a.modules.get(def.module).path.clone();
-                let fd = &mut self.m.fns[fid.0 as usize];
-                fd.ret = Ty::Unit;
-                fd.locals = cx.locals;
-                fd.body = Some(block);
-                fd.test = Some(TestMark { module, name: name.clone() });
+                self.fill_fn(fid, Vec::new(), Ty::Unit, false, cx.locals, Some(block)).test =
+                    Some(TestMark { module, name: name.clone() });
                 Ok(())
             }
             _ => Err(internal(def.span, "not a function")),

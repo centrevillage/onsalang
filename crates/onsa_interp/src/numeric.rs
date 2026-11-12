@@ -180,7 +180,7 @@ fn arith(op: BinOp, overflow: Overflow, k: IntKind, x: i128, y: i128, span: Span
         (Overflow::Wrap, _) => wrap_int(k, wrapped),
         (Overflow::Sat, Some(r)) => clamp_int(k, r),
         (Overflow::Sat, None) => {
-            let (lo, hi) = value::int_range(k);
+            let (lo, hi) = k.range();
             if (x < 0) != (y < 0) { lo } else { hi }
         }
         (Overflow::Checked, Some(r)) if in_range(k, r) => r,
@@ -197,7 +197,7 @@ fn arith(op: BinOp, overflow: Overflow, k: IntKind, x: i128, y: i128, span: Span
 /// type's maximum: both exact as `f64`, where the maximum of a 64-bit type is
 /// not (R-19).
 pub(super) fn trunc_to_int(x: f64, from: FloatKind, to: IntKind, sat: bool, span: Span) -> R<i128> {
-    let (lo, hi) = value::int_range(to);
+    let (lo, hi) = to.range();
     let above = (hi + 1) as f64;
     if x.is_nan() {
         return if sat { Ok(0) } else { panic(span, "conversion of NaN to an integer") };

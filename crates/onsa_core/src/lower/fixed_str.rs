@@ -46,7 +46,7 @@ pub(super) fn view(lw: &Lowerer, cx: &mut FnCx, e: Expr) -> R<Expr> {
 pub(super) fn value(lw: &Lowerer, cx: &mut FnCx, text: &StrLit, id: TypeId, span: Span) -> R<ExprKind> {
     let row = row(lw, id, span)?;
     // The value of a literal with no interpolation (the types stage).
-    let text = onsa_syntax::test_name::value(text).ok_or_else(|| internal(span, "an interpolation of a `FixedStr`"))?;
+    let text = text.value().ok_or_else(|| internal(span, "an interpolation of a `FixedStr`"))?;
     let fields = lw.struct_fields(id);
     let (Some((_, bytes)), Some((_, len))) = (fields.get(row.bytes as usize), fields.get(row.len as usize)) else {
         return Err(internal(span, "the fields of a `FixedStr`"));

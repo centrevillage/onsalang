@@ -97,7 +97,8 @@ pub fn for_each_child<'e>(e: &'e Expr, f: &mut dyn FnMut(Child<'e>)) {
     }
 }
 
-/// Whether a function body contains a `Return` statement anywhere.
+/// Whether a function body contains a `Return` statement anywhere: each
+/// node once (R-439), the index of an assigned place too.
 pub fn has_return(def: &FnDef) -> bool {
     fn block(b: &Block) -> bool {
         b.stmts.iter().any(stmt) || b.value.as_ref().is_some_and(|v| expr(v))
@@ -106,26 +107,28 @@ pub fn has_return(def: &FnDef) -> bool {
         match &s.kind {
             StmtKind::Return(_) => true,
             StmtKind::Let(_, e) | StmtKind::Expr(e) => expr(e),
-            StmtKind::Assign(_, e) => expr(e),
+            StmtKind::Assign(p, e) => place(p) || expr(e),
             StmtKind::If(c, a, b) => expr(c) || block(a) || block(b),
             StmtKind::While(c, b) => expr(c) || block(b),
             StmtKind::ForRange(_, lo, hi, b) => expr(lo) || expr(hi) || block(b),
             StmtKind::Break | StmtKind::Continue => false,
         }
     }
+    fn place(p: &Place) -> bool {
+        match p {
+            Place::Local(_) => false,
+            Place::Field(b, _) => place(b),
+            Place::Index(b, i, _) => place(b) || expr(i),
+        }
+    }
     fn expr(e: &Expr) -> bool {
         let mut found = false;
-        walk_expr(e, &mut |x| {
-            if let ExprKind::IfExpr { then, else_, .. } = &x.kind {
-                found |= then.stmts.iter().any(stmt) || else_.stmts.iter().any(stmt);
-            }
-            if let ExprKind::Switch { arms, default, .. } = &x.kind {
-                found |= arms.iter().any(|(_, b)| b.stmts.iter().any(stmt))
-                    || default.as_ref().is_some_and(|b| b.stmts.iter().any(stmt));
-            }
-            if let ExprKind::Block(b) = &x.kind {
-                found |= b.stmts.iter().any(stmt);
-            }
+        for_each_child(e, &mut |c| {
+            found = found
+                || match c {
+                    Child::Expr(x) => expr(x),
+                    Child::Block(b) => block(b),
+                }
         });
         found
     }

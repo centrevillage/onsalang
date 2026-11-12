@@ -263,6 +263,26 @@ pub struct StrLit {
     pub pathless_hole: bool,
 }
 
+impl StrLit {
+    /// The value of the literal: its text with its escapes read (`"\u{61}"`
+    /// is `a`, S-244), or `None` when it holds an interpolation. The one place
+    /// the value of a literal with no interpolation is made: of a `FixedStr`
+    /// (S-614) and of the name of a test ([`crate::test_name::value`]).
+    pub fn value(&self) -> Option<String> {
+        if self.pathless_hole {
+            return None;
+        }
+        let mut out = String::new();
+        for s in &self.segments {
+            match s {
+                StrSeg::Text(text) => out.push_str(text),
+                StrSeg::Interp(_) => return None,
+            }
+        }
+        Some(out)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StrSeg {
     /// Literal text with escapes resolved.

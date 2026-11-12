@@ -59,7 +59,7 @@ impl Settle<'_> {
     /// Whether `e` is a leaf static value (its own type aside).
     fn leaf(&self, e: ExprId) -> bool {
         match &self.ast.expr(e).kind {
-            ExprKind::Lit(Lit::Str(s)) => onsa_syntax::test_name::value(s).is_some(),
+            ExprKind::Lit(Lit::Str(s)) => s.value().is_some(),
             ExprKind::Lit(Lit::Int { .. } | Lit::Float { .. } | Lit::Bool(_) | Lit::Char(_)) => true,
             ExprKind::Path(_) | ExprKind::Field { .. } => match self.info.targets.get(&e) {
                 Some(Target::Const { .. } | Target::ConstParam(_)) => true,

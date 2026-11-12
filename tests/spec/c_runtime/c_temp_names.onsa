@@ -1,0 +1,150 @@
+// onsa.toml
+// [package]
+// name = "c_temp_names"
+// edition = "2026"
+//
+// [export]
+// prefix = "ctn_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§3.5", "§13.4"]
+//
+// [[test.host]]
+// name = "trunc_then_inout"
+// target = "host"
+// fn = "c_temp_names.trunc_then_inout"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 2 },
+// ]
+//
+// [[test.host]]
+// name = "trunc_sat_then_inout"
+// target = "host"
+// fn = "c_temp_names.trunc_sat_then_inout"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 2 },
+// ]
+//
+// [[test.host]]
+// name = "local_onsa_t_then_inout"
+// target = "host"
+// fn = "c_temp_names.local_onsa_t_then_inout"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 11 },
+// ]
+//
+// [[test.host]]
+// name = "plain_then_inout"
+// target = "host"
+// fn = "c_temp_names.plain_then_inout"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 11 },
+// ]
+//
+// [[test.host]]
+// name = "range_end_local_onsa_t"
+// target = "host"
+// fn = "c_temp_names.range_end_local_onsa_t"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 3 },
+// ]
+//
+// [[test.host]]
+// name = "range_end_trunc"
+// target = "host"
+// fn = "c_temp_names.range_end_trunc"
+// steps = [
+//   { call = "fn", args = {}, status = 0, result = 3 },
+// ]
+
+// R-438: the left operand is read before the call on the right changes `x` (§3.5).
+
+fn bump(inout x: F32) -> I32 {
+  x = 9.5
+  1
+}
+
+fn bump_i(inout x: I32) -> I32 {
+  x = 5
+  10
+}
+
+@export
+pub fn trunc_then_inout() -> I32 {
+  var x: F32 = 1.5
+  I32.trunc_from(x) + bump(inout x)
+}
+
+@export
+pub fn trunc_sat_then_inout() -> I32 {
+  var x: F32 = 1.5
+  I32.trunc_sat_from(x) + bump(inout x)
+}
+
+@export
+pub fn local_onsa_t_then_inout() -> I32 {
+  var onsa_t: I32 = 1
+  onsa_t + bump_i(inout onsa_t)
+}
+
+@export
+pub fn plain_then_inout() -> I32 {
+  var plain: I32 = 1
+  plain + bump_i(inout plain)
+}
+
+test "trunc then inout" {
+  assert trunc_then_inout() == 2
+}
+
+test "trunc_sat then inout" {
+  assert trunc_sat_then_inout() == 2
+}
+
+test "local onsa_t then inout" {
+  assert local_onsa_t_then_inout() == 11
+}
+
+test "plain then inout" {
+  assert plain_then_inout() == 11
+}
+
+// The end of a range is read once, before the body changes what it read (§7).
+
+@export
+pub fn range_end_local_onsa_t() -> I32 {
+  var onsa_t: I32 = 3
+  var n: I32 = 0
+  for _ in 0 ..< onsa_t {
+    onsa_t = 10
+    n = n + 1
+  }
+  n
+}
+
+@export
+pub fn range_end_trunc() -> I32 {
+  var x: F32 = 3.5
+  var n: I32 = 0
+  for _ in 0 ..< I32.trunc_from(x) {
+    x = 10.5
+    n = n + 1
+  }
+  n
+}
+
+test "range end local onsa_t" {
+  assert range_end_local_onsa_t() == 3
+}
+
+test "range end trunc" {
+  assert range_end_trunc() == 3
+}

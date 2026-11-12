@@ -69,12 +69,13 @@ pub(crate) fn compare(op: CmpOp, l: Expr, r: Expr, span: Span) -> R<Expr> {
     Ok(Expr::new(Ty::Bool, span, ExprKind::Block(Block { stmts, value: Some(Box::new(value)) })))
 }
 
-/// `a == b` as an expression (scalars compare, aggregates call their eq fn).
-pub(super) fn eq_expr(lw: &mut Lowerer, a: Expr, b: Expr, span: Span) -> R<Expr> {
+/// `a == b` as an expression (scalars compare, aggregates call their eq fn),
+/// at `span`; `at`: where the eq fn of the type is asked for (the operator).
+pub(super) fn eq_expr(lw: &mut Lowerer, a: Expr, b: Expr, span: Span, at: Span) -> R<Expr> {
     if compared_directly(&a.ty) {
         return compare(CmpOp::Eq, a, b, span);
     }
-    let f = eq_fn(lw, &a.ty, span)?;
+    let f = eq_fn(lw, &a.ty, at)?;
     Ok(Expr::new(
         Ty::Bool,
         span,
@@ -102,14 +103,14 @@ fn eq_body(lw: &mut Lowerer, locals: &mut Vec<Local>, ty: &Ty, a: Expr, b: Expr,
             let fields = lw.struct_fields(*id);
             let mut parts = Vec::new();
             for (i, (_, t)) in fields.iter().enumerate() {
-                parts.push(eq_expr(lw, field(&a, i as u32, t), field(&b, i as u32, t), span)?);
+                parts.push(eq_expr(lw, field(&a, i as u32, t), field(&b, i as u32, t), span, span)?);
             }
             Ok(Block { stmts: Vec::new(), value: Some(Box::new(and_all(parts, span))) })
         }
         Ty::Tuple(ts) => {
             let mut parts = Vec::new();
             for (i, t) in ts.iter().enumerate() {
-                parts.push(eq_expr(lw, field(&a, i as u32, t), field(&b, i as u32, t), span)?);
+                parts.push(eq_expr(lw, field(&a, i as u32, t), field(&b, i as u32, t), span, span)?);
             }
             Ok(Block { stmts: Vec::new(), value: Some(Box::new(and_all(parts, span))) })
         }
@@ -120,7 +121,7 @@ fn eq_body(lw: &mut Lowerer, locals: &mut Vec<Local>, ty: &Ty, a: Expr, b: Expr,
             let ea =
                 Expr::new((**elem).clone(), span, ExprKind::Index { base: Box::new(a), index: Box::new(li.clone()) });
             let eb = Expr::new((**elem).clone(), span, ExprKind::Index { base: Box::new(b), index: Box::new(li) });
-            let test = eq_expr(lw, ea, eb, span)?;
+            let test = eq_expr(lw, ea, eb, span, span)?;
             let not = Expr::new(Ty::Bool, span, ExprKind::Unary(UnOp::Not, Box::new(test)));
             let ret_false = Block {
                 stmts: vec![Stmt {
@@ -166,7 +167,7 @@ fn eq_body(lw: &mut Lowerer, locals: &mut Vec<Local>, ty: &Ty, a: Expr, b: Expr,
                         span,
                         ExprKind::Payload { base: Box::new(b.clone()), tag: tag as u32, index: i as u32 },
                     );
-                    parts.push(eq_expr(lw, pa, pb, span)?);
+                    parts.push(eq_expr(lw, pa, pb, span, span)?);
                 }
                 arms.push((tag as u32, Block { stmts: Vec::new(), value: Some(Box::new(and_all(parts, span))) }));
             }

@@ -21,7 +21,7 @@ impl Checker<'_> {
             return Ok(None);
         }
         // The value of a literal with no interpolation.
-        let Some(text) = onsa_syntax::test_name::value(lit) else {
+        let Some(text) = lit.value() else {
             let shown = self.display(want);
             let msg = format!("a string literal with an interpolation makes a new `Str`, not a `{shown}` (§2.4, §4.2)");
             return Err(self.err(Code::E0401, span, msg));
