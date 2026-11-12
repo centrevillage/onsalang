@@ -1,20 +1,8 @@
 //! Unit tests for T3-13 (E0601).
 
-use onsa_diag::{Code, FileId};
+use onsa_diag::Code;
 
-use crate::tests::analyze;
-use crate::{Analysis, Module, Package};
-
-fn check(src: &str) -> Analysis {
-    let m = Module::new(vec!["main".into()], FileId(0), src.into(), onsa_syntax::parse(FileId(0), src));
-    analyze(&Package::new("t", vec![m], vec![crate::flow_tests::std_package()]))
-}
-
-fn codes(a: &Analysis) -> Vec<Code> {
-    let mut v: Vec<Code> = a.diagnostics.iter().map(|d| d.code).collect();
-    v.sort();
-    v
-}
+use crate::tests::{check, codes};
 
 #[test]
 fn calling_an_alloc_fn_needs_alloc_in_the_row() {

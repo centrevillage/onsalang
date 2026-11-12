@@ -96,3 +96,21 @@ mod use_reexport;
 mod use_repair_loop;
 mod use_shapes;
 mod visibility;
+
+/// Every file of tests in this directory is a module above: a file with no `mod` line is not
+/// compiled, and its tests go unrun without a failure.
+#[test]
+fn every_file_of_the_directory_is_a_module() {
+    let main = include_str!("main.rs");
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/cli");
+    let mut missing = Vec::new();
+    for entry in std::fs::read_dir(&dir).unwrap() {
+        let path = entry.unwrap().path();
+        let name = path.file_stem().unwrap().to_string_lossy().into_owned();
+        let module = path.is_dir() || path.extension().is_some_and(|e| e == "rs");
+        if module && name != "main" && !main.lines().any(|l| l == format!("mod {name};")) {
+            missing.push(name);
+        }
+    }
+    assert!(missing.is_empty(), "files of tests with no `mod` line in `main.rs`: {missing:?}");
+}

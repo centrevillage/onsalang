@@ -10,7 +10,7 @@ use onsa_diag::FileId;
 use onsa_diag::hash::with_seed;
 use onsa_diag::internal::InternalBug;
 
-use crate::flow_tests::std_package;
+use crate::tests::std_package;
 use crate::{Analysis, Base, BaseError, DefId, Module, Package, analyze, analyze_on};
 
 /// std and its base, made once for the tests of the crate.

@@ -12,11 +12,9 @@
 //! still be pending), and it is removed together with the item (W3-14). A process that ends by a
 //! signal fails the test either way.
 
-use crate::test_support::Dir;
+use crate::test_support::{Dir, ONSA};
 use std::path::Path;
 use std::process::{Command, Output};
-
-const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
 
 /// Steps of nesting in the deep inputs: well over 256 and under the 300 the machine tolerates.
 const DEEP: usize = 290;

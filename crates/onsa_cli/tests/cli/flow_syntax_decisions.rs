@@ -33,7 +33,7 @@
 //! The tests were written before W3-09 and ran ignored until W3-09/i (the parser did not read `at`
 //! and `if~`; an ignored test is not silenced by `tests/pending.toml`).
 
-use crate::test_support::{Dir, check, code, code_of, onsa};
+use crate::test_support::{Dir, apply, check, code, code_of, edits_of, onsa};
 use serde_json::Value;
 
 fn read(path: &str) -> String {
@@ -54,59 +54,6 @@ fn in_a_fn(body: &str) -> String {
 
 fn array_of<'a>(d: &'a Value, key: &str) -> Vec<&'a Value> {
     d.get(key).and_then(Value::as_array).map(|a| a.iter().collect()).unwrap_or_default()
-}
-
-/// One edit of a candidate: a range as (line, column, end line, end column), 1-based, columns in
-/// characters, and the text that replaces it.
-struct Edit {
-    start: (usize, usize),
-    end: (usize, usize),
-    replace: String,
-}
-
-fn edits_of(fix: &Value) -> Vec<Edit> {
-    let pos = |s: &Value, l: &str, c: &str| -> (usize, usize) {
-        let get = |k: &str| usize::try_from(s[k].as_u64().unwrap_or_else(|| panic!("no `{k}` in {s}"))).unwrap();
-        (get(l), get(c))
-    };
-    fix["edits"]
-        .as_array()
-        .expect("`edits` is an array")
-        .iter()
-        .map(|e| Edit {
-            start: pos(&e["span"], "line", "col"),
-            end: pos(&e["span"], "end_line", "end_col"),
-            replace: e["replace"].as_str().expect("`replace` is a string").to_string(),
-        })
-        .collect()
-}
-
-/// The byte offset of a (line, column in characters) position of `text`.
-fn offset(text: &str, (line, col): (usize, usize)) -> usize {
-    let mut start = 0;
-    for _ in 1..line {
-        start += text[start..].find('\n').expect("a line past the end of the file") + 1;
-    }
-    let rest = &text[start..];
-    let line_len = rest.find('\n').unwrap_or(rest.len());
-    match rest[..line_len].char_indices().nth(col - 1) {
-        Some((i, _)) => start + i,
-        None => start + line_len,
-    }
-}
-
-fn apply(text: &str, edits: &[Edit]) -> String {
-    let mut spans: Vec<(usize, usize, &str)> =
-        edits.iter().map(|e| (offset(text, e.start), offset(text, e.end), e.replace.as_str())).collect();
-    spans.sort_by_key(|&(a, b, _)| (a, b));
-    for w in spans.windows(2) {
-        assert!(w[0].1 <= w[1].0, "edits of one candidate overlap: {:?} and {:?}", w[0], w[1]);
-    }
-    let mut out = text.to_string();
-    for &(a, b, r) in spans.iter().rev() {
-        out.replace_range(a..b, r);
-    }
-    out
 }
 
 /// The text without the blanks of each line and without the empty lines. The spec fixes the tokens

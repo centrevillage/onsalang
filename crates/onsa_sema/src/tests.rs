@@ -2,7 +2,7 @@
 //! the unit tests of the crate share: a package of sources parsed in
 //! memory, its analysis, its codes and its declarations by name.
 
-use std::sync::{LazyLock, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 
 use onsa_diag::{Code, FileId};
 
@@ -22,12 +22,36 @@ pub(crate) fn pkg(files: &[(&str, &str)]) -> Package {
             )
         })
         .collect();
-    Package::new("t", modules, vec![crate::flow_tests::std_package()])
+    Package::new("t", modules, vec![std_package()])
+}
+
+/// The embedded standard library (D-07, R-80 (4)), so that the spec examples
+/// (`use std.math.{exp, cos}`) check here as they do in the driver.
+pub(crate) fn std_package() -> Arc<Package> {
+    static STD: LazyLock<Arc<Package>> = LazyLock::new(parsed_std);
+    STD.clone()
+}
+
+fn parsed_std() -> Arc<Package> {
+    let modules = crate::std_modules()
+        .iter()
+        .enumerate()
+        .map(|(i, m)| {
+            let id = FileId(100 + i as u32);
+            Module::new(
+                m.segments.iter().map(|s| s.to_string()).collect(),
+                id,
+                m.text.to_string(),
+                onsa_syntax::parse(id, m.text),
+            )
+        })
+        .collect();
+    Arc::new(Package::std(modules))
 }
 
 /// The one analysis of std the tests continue, which only a test of more than
 /// that makes again.
-static BASE: LazyLock<Mutex<Base>> = LazyLock::new(|| Mutex::new(Base::new(crate::flow_tests::std_package())));
+static BASE: LazyLock<Mutex<Base>> = LazyLock::new(|| Mutex::new(Base::new(std_package())));
 
 /// The analysis of `p`, on [`BASE`] when it depends on the std of the tests.
 pub(crate) fn analyze(p: &Package) -> Analysis {
@@ -42,6 +66,11 @@ pub(crate) fn codes(a: &Analysis) -> Vec<Code> {
     let mut v: Vec<Code> = a.diagnostics.iter().map(|d| d.code).collect();
     v.sort();
     v
+}
+
+/// The codes of [`check`] of `src`, sorted.
+pub(crate) fn codes_of(src: &str) -> Vec<Code> {
+    codes(&check(src))
 }
 
 pub(crate) fn named(a: &Analysis, name: &str) -> crate::TyId {

@@ -11,10 +11,8 @@
 
 use std::process::Command;
 
-use crate::test_support::{Dir, code_of};
+use crate::test_support::{Dir, ONSA, code_of, offset};
 use serde_json::Value;
-
-const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
 
 /// The `diagnostics` array of the document `onsa check --json <paths>` prints (§18.1: the output
 /// is one JSON object).
@@ -118,30 +116,13 @@ fn edits_of(fix: &Value, what: &str) -> Vec<Edit> {
         .collect()
 }
 
-/// The byte offset of the (1-based line, 1-based column in characters) position in `text`.
-fn offset(text: &str, line: usize, col: usize) -> usize {
-    let mut start = 0;
-    for _ in 1..line {
-        start += text[start..].find('\n').expect("a line past the end of the file") + 1;
-    }
-    let rest = &text[start..];
-    let line_len = rest.find('\n').unwrap_or(rest.len());
-    let mut chars = rest[..line_len].char_indices();
-    match chars.nth(col - 1) {
-        Some((i, _)) => start + i,
-        None => {
-            assert_eq!(rest[..line_len].chars().count() + 1, col, "a column past the end of line {line}");
-            start + line_len
-        }
-    }
-}
-
 /// Applies edits (all in one file) to `text` at once. The ranges must not overlap.
 fn apply(text: &str, edits: &[&Edit]) -> String {
     let mut spans: Vec<(usize, usize, &str)> = edits
         .iter()
         .map(|e| {
-            (offset(text, e.span.line, e.span.col), offset(text, e.span.end_line, e.span.end_col), e.replace.as_str())
+            let span = &e.span;
+            (offset(text, (span.line, span.col)), offset(text, (span.end_line, span.end_col)), e.replace.as_str())
         })
         .collect();
     spans.sort_by_key(|&(a, b, _)| (a, b));

@@ -14,7 +14,7 @@ use crate::{Module, Package};
 /// The one diagnostic of `src`, with std.
 fn one(src: &str) -> Diagnostic {
     let module = Module::new(vec!["main".into()], FileId(0), src.to_string(), onsa_syntax::parse(FileId(0), src));
-    let mut d = analyze(&Package::new("t", vec![module], vec![crate::flow_tests::std_package()])).diagnostics;
+    let mut d = analyze(&Package::new("t", vec![module], vec![crate::tests::std_package()])).diagnostics;
     assert_eq!(d.len(), 1, "{src}: {d:?}");
     d.remove(0)
 }

@@ -31,7 +31,7 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 
 use serde_json::Value;
-use test_support::sweep::{Texts, check_input_out, input_of, write_texts};
+use test_support::sweep::{Texts, apply_fix_texts, check_input_out, input_of, write_texts};
 use test_support::*;
 
 /// The files of a scratch package (with the manifest of `Dir::pkg`), kept in memory (X-16).
@@ -58,6 +58,11 @@ impl Pkg {
 
 /// `onsa check --json <args>` in the package. With `.`, the package is checked in this process with no file
 /// written (`check_input_out`); with a file, the files are written to a scratch directory and the command runs.
+/// Apply every edit of one candidate to the files of `d`.
+fn apply(d: &Pkg, fix: &Value) {
+    apply_fix_texts(&mut d.0.borrow_mut(), fix);
+}
+
 fn check_json(pkg: &Pkg, args: &[&str]) -> (Out, Value) {
     let out = if args == ["."] {
         check_input_out(&input_of("demo", &pkg.0.borrow()))
@@ -70,18 +75,6 @@ fn check_json(pkg: &Pkg, args: &[&str]) -> (Out, Value) {
     };
     let doc = doc_of(&out);
     (out, doc)
-}
-
-fn codes(doc: &Value) -> BTreeSet<String> {
-    diagnostics(doc).iter().map(|d| str_of(d, "code").to_string()).collect()
-}
-
-fn set(items: &[&str]) -> BTreeSet<String> {
-    items.iter().map(|c| c.to_string()).collect()
-}
-
-fn fixes_of(d: &Value) -> &Vec<Value> {
-    array_of(d, "fixes")
 }
 
 /// The lines (from 1) of `main.onsa` that have a diagnostic, in the order of the document.
@@ -99,43 +92,6 @@ const HIDDEN: &str = "priv fn hidden() -> I32 {\n  1\n}\n";
 fn user(name: &str, expr: &str) -> String {
     let name = name.to_lowercase();
     format!("\npub fn use_{name}() -> I32 {{\n  {expr}\n}}\n")
-}
-
-fn offset(text: &str, line: u64, col: u64) -> usize {
-    let mut start = 0;
-    for (i, l) in text.split_inclusive('\n').enumerate() {
-        if i as u64 + 1 == line {
-            let in_line = l.char_indices().nth(col as usize - 1).map(|(b, _)| b).unwrap_or(l.len());
-            return start + in_line;
-        }
-        start += l.len();
-    }
-    text.len()
-}
-
-type FileEdits = (String, Vec<(usize, usize, String)>);
-
-/// Apply every edit of one candidate to the files of `d` (all edits together, from the end of each file).
-fn apply(d: &Pkg, fix: &Value) {
-    let mut by_file: Vec<FileEdits> = Vec::new();
-    for e in array_of(fix, "edits") {
-        let sp = span_of(&e["span"]);
-        let text = d.read(&sp.file);
-        let (a, b) = (offset(&text, sp.line, sp.col), offset(&text, sp.end_line, sp.end_col));
-        let rep = str_of(e, "replace").to_string();
-        match by_file.iter_mut().find(|(f, _)| *f == sp.file) {
-            Some((_, v)) => v.push((a, b, rep)),
-            None => by_file.push((sp.file.clone(), vec![(a, b, rep)])),
-        }
-    }
-    for (file, mut edits) in by_file {
-        let mut text = d.read(&file);
-        edits.sort_by(|x, y| y.0.cmp(&x.0));
-        for (a, b, rep) in edits {
-            text.replace_range(a..b, &rep);
-        }
-        d.write(&file, &text);
-    }
 }
 
 /// A package with `util.onsa` (the real `double`, and `Color`), `hidden.onsa` (a `priv fn`) and `main.onsa`.
@@ -723,7 +679,7 @@ fn the_candidate_of_a_failed_use_leaves_the_units_that_did_not_read_it_clean() {
             problems.push(format!("{label}: want one E0302 with one candidate: exit {}: {doc}", out.code));
             continue;
         }
-        apply(&d, &fixes_of(uses_diag[0])[0]);
+        apply(&d, fixes_of(uses_diag[0])[0]);
         let (out, doc) = check_json(d.root(), &["."]);
         let ctl_line = d.read("main.onsa").lines().position(|l| l.starts_with("pub fn ctl_unit")).unwrap() as u64 + 1;
         let bad: Vec<&Value> = diagnostics(&doc)
@@ -925,7 +881,7 @@ fn an_empty_list_is_an_e0002_whose_candidate_takes_the_use_off() {
     assert_eq!(span_of(&e0002["span"]).line, 1, "{doc}");
     let fixes = fixes_of(&e0002);
     assert_eq!(fixes.len(), 1, "the candidate takes the `use` off: {e0002}");
-    apply(&d, &fixes[0]);
+    apply(&d, fixes[0]);
     let text = d.read("main.onsa");
     assert!(!text.contains("use util"), "the `use` is taken off: {text:?}");
     let (out, doc) = check_json(d.root(), &["."]);

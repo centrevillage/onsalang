@@ -11,30 +11,8 @@
 
 use std::process::Command;
 
-use crate::test_support::{Dir, code_of};
+use crate::test_support::{Dir, ONSA, check_coded, code_of};
 use serde_json::Value;
-
-const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
-
-/// The exit code and the diagnostics of `onsa check --json <path>`.
-fn check(path: &str) -> (i32, Vec<Value>) {
-    let out = Command::new(ONSA).args(["check", "--json", path]).output().expect("run onsa");
-    let code = out.status.code().unwrap_or_else(|| panic!("ended by a signal: {out:?}"));
-    assert!(
-        code == 0 || code == 1,
-        "onsa check {path}: exit code {code} (stderr: {})",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    let text = String::from_utf8(out.stdout).expect("utf-8 output");
-    let diags = match serde_json::from_str::<Value>(&text) {
-        Ok(v) => match v.get("diagnostics") {
-            Some(Value::Array(a)) => a.clone(),
-            _ => panic!("the document has no `diagnostics` array: {v}"),
-        },
-        Err(e) => panic!("onsa check --json printed no JSON ({e}): {text}"),
-    };
-    (code, diags)
-}
 
 fn found_of(d: &Value) -> &str {
     d["found"].as_str().unwrap_or_else(|| panic!("no `found` in {d}"))
@@ -47,7 +25,7 @@ fn count(d: &Value, key: &str) -> usize {
 /// `onsa check` of `src` reports one diagnostic, and it is `code`.
 fn one(d: &Dir, name: &str, src: &str, code: &str) -> Value {
     let path = d.file(&format!("{name}.onsa"), src);
-    let (_, diags) = check(&path);
+    let (_, diags) = check_coded(&path);
     assert_eq!(diags.len(), 1, "{name}: one diagnostic expected, got {diags:?}\n{src}");
     assert_eq!(code_of(&diags[0]), code, "{name}: {}", diags[0]);
     diags[0].clone()
@@ -261,13 +239,13 @@ fn the_candidate_of_angle_brackets_is_made_only_for_a_list_that_reads() {
     ];
     for (name, src) in unreadable {
         let path = d.file(&format!("{name}.onsa"), src);
-        let (_, diags) = check(&path);
+        let (_, diags) = check_coded(&path);
         assert!(!diags.is_empty(), "{name}: an error is expected");
         assert_eq!(code_of(&diags[0]), "E0002", "{name}: {diags:?}");
         assert_eq!(count(&diags[0], "fixes"), 0, "{name}: no candidate: {}", diags[0]);
     }
     let readable = d.file("readable.onsa", "pub fn b(x: Option<I32>) -> I32 {\n  1\n}\n");
-    let (_, diags) = check(&readable);
+    let (_, diags) = check_coded(&readable);
     assert_eq!(code_of(&diags[0]), "E0020", "{diags:?}");
     assert_eq!(count(&diags[0], "fixes"), 1, "{}", diags[0]);
 }
@@ -334,7 +312,7 @@ fn mem_bulk_is_read_and_then_stopped_with_e0200_until_w9_06() {
     // what the spec has and the compiler does not handle yet). W9-06 takes this test out.
     let d = Dir::bare("bulk");
     let path = d.file("bulk.onsa", RIGHT_FORMS);
-    let (code, diags) = check(&path);
+    let (code, diags) = check_coded(&path);
     assert_eq!(code, 1, "{diags:?}");
     assert_eq!(diags.len(), 1, "{diags:?}");
     assert_eq!(code_of(&diags[0]), "E0200", "{}", diags[0]);

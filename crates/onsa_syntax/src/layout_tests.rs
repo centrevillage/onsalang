@@ -7,6 +7,7 @@
 
 use onsa_diag::{Code, Diagnostic, FileId};
 
+use crate::parser_tests::codes;
 use crate::token::{Gap, TokenKind};
 
 fn parse(src: &str) -> crate::Parsed {
@@ -534,11 +535,6 @@ fn a_stack_of_prefix_operators_over_lines() {
 }
 
 // ------------------------------------------------------------ W3-06 unit 2: lines
-
-/// The codes of the parser's diagnostics of `src`.
-fn codes(src: &str) -> Vec<Code> {
-    parse(src).diagnostics.iter().map(|d| d.code).collect()
-}
 
 #[test]
 fn a_line_goes_on_after_its_continuing_tokens_at_the_top_level_too() {

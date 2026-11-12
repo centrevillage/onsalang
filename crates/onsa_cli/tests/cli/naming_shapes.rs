@@ -34,54 +34,6 @@ use test_support::*;
 const BUILD_MANIFEST: &str = "[package]\nname = \"demo\"\nedition = \"2026\"\n\n[targets.host]\nkind = \"source\"\nlang = \"c\"\nplatform = \"host\"\nprovides = []\n";
 const EXPORT_MANIFEST: &str = "[package]\nname = \"demo\"\nedition = \"2026\"\n\n[export]\nprefix = \"t_\"\n\n[targets.host]\nkind = \"staticlib\"\nplatform = \"host\"\nprovides = []\n";
 
-/// One edit: a range as (line, column in characters), 1-based, and the new text.
-struct Edit {
-    start: (usize, usize),
-    end: (usize, usize),
-    replace: String,
-}
-
-fn edits_of(fix: &Value) -> Vec<Edit> {
-    let pos = |s: &Value, l: &str, c: &str| -> (usize, usize) {
-        let get = |k: &str| usize::try_from(s[k].as_u64().unwrap_or_else(|| panic!("no `{k}` in {s}"))).unwrap();
-        (get(l), get(c))
-    };
-    fix["edits"]
-        .as_array()
-        .expect("`edits` is an array")
-        .iter()
-        .map(|e| Edit {
-            start: pos(&e["span"], "line", "col"),
-            end: pos(&e["span"], "end_line", "end_col"),
-            replace: e["replace"].as_str().expect("`replace` is a string").to_string(),
-        })
-        .collect()
-}
-
-fn offset(text: &str, (line, col): (usize, usize)) -> usize {
-    let mut start = 0;
-    for _ in 1..line {
-        start += text[start..].find('\n').expect("a line past the end of the file") + 1;
-    }
-    let rest = &text[start..];
-    let line_len = rest.find('\n').unwrap_or(rest.len());
-    match rest[..line_len].char_indices().nth(col - 1) {
-        Some((i, _)) => start + i,
-        None => start + line_len,
-    }
-}
-
-fn apply(text: &str, edits: &[Edit]) -> String {
-    let mut spans: Vec<(usize, usize, &str)> =
-        edits.iter().map(|e| (offset(text, e.start), offset(text, e.end), e.replace.as_str())).collect();
-    spans.sort_by_key(|&(a, b, _)| (a, b));
-    let mut out = text.to_string();
-    for &(a, b, r) in spans.iter().rev() {
-        out.replace_range(a..b, r);
-    }
-    out
-}
-
 /// `onsa check --json main.onsa` of a single file (no manifest above it): the exit code and the document.
 fn check_file(tag: &str, source: &str) -> (Out, Value) {
     let d = Dir::bare(tag);
@@ -89,13 +41,6 @@ fn check_file(tag: &str, source: &str) -> (Out, Value) {
     let out = run(d.root(), &["check", "--json", "main.onsa"]);
     let doc = doc_of(&out);
     (out, doc)
-}
-
-fn fixes_of(d: &Value) -> Vec<&Value> {
-    match d.get("fixes") {
-        None => vec![],
-        Some(f) => f.as_array().expect("`fixes` is an array").iter().collect(),
-    }
 }
 
 /// The only diagnostic of a source, which must be one E0320.

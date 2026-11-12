@@ -2,14 +2,8 @@
 
 use onsa_diag::FileId;
 
-use crate::tests::analyze;
-use crate::{Analysis, Module, Package};
-
-fn check(src: &str) -> Analysis {
-    let modules =
-        vec![Module::new(vec!["main".into()], FileId(0), src.to_string(), onsa_syntax::parse(FileId(0), src))];
-    analyze(&Package::new("t", modules, vec![crate::flow_tests::std_package()]))
-}
+use crate::Analysis;
+use crate::tests::check;
 
 /// The names of the defs of the file whose spans `unread_users` gives, in
 /// the order of the defs.

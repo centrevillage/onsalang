@@ -2,8 +2,8 @@
 
 use crate::body::bounds::Bounds;
 use crate::def::{Bound, DefKind, TRAITS};
-use crate::flow_tests::std_package;
 use crate::tests::analyze;
+use crate::tests::std_package;
 use crate::traits::{
     Class, DERIVABLE, IMPLS, MEMBERS, Rep, SUPERS, TRAIT_ITEMS, derive_of, derived, implies, member, member_rep,
 };

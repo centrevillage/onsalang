@@ -15,7 +15,7 @@ use std::path::Path;
 use onsa_driver::{ManifestForm, ManifestSource, PackageInput, SourceFile};
 use serde_json::Value;
 
-use super::{Dir, Out, doc_of, run};
+use super::{Dir, Edit, Out, apply, doc_of, edits_of, run};
 
 /// A small generator with a fixed seed (splitmix64), so that a failing package can be written again
 /// from its seed alone.
@@ -228,37 +228,24 @@ pub fn ended_well(c: &Checked) -> bool {
     (c.code == 0 || c.code == 1) && !c.stderr.contains("internal error")
 }
 
-/// The byte offset of a line and column (from 1, in characters) in `text`.
-pub fn offset(text: &str, line: u64, col: u64) -> usize {
-    let mut start = 0;
-    for (i, l) in text.split_inclusive('\n').enumerate() {
-        if i as u64 + 1 == line {
-            let in_line = l.char_indices().nth(col as usize - 1).map(|(b, _)| b).unwrap_or(l.len());
-            return start + in_line;
-        }
-        start += l.len();
+/// Apply every edit of one candidate (a `fixes` entry) to the texts (`apply` on each file it edits).
+pub fn apply_fix_texts(texts: &mut Texts, fix: &Value) {
+    let mut by_file: BTreeMap<String, Vec<Edit>> = BTreeMap::new();
+    for e in edits_of(fix) {
+        by_file.entry(e.file.clone()).or_default().push(e);
     }
-    text.len()
+    for (file, edits) in by_file {
+        let text = texts.get_mut(&file).unwrap_or_else(|| panic!("an edit of {file}, which is not in the package"));
+        *text = apply(text, &edits);
+    }
 }
 
-/// Apply every edit of one candidate (a `fixes` entry) to the texts, from the end of each file.
-pub fn apply_fix_texts(texts: &mut Texts, fix: &Value) {
-    let mut by_file: BTreeMap<String, Vec<(usize, usize, String)>> = BTreeMap::new();
-    for e in fix["edits"].as_array().expect("edits") {
-        let sp = &e["span"];
-        let file = sp["file"].as_str().expect("file").to_string();
-        let text = texts.get(&file).unwrap_or_else(|| panic!("an edit of {file}, which is not in the package"));
-        let a = offset(text, sp["line"].as_u64().unwrap(), sp["col"].as_u64().unwrap());
-        let b = offset(text, sp["end_line"].as_u64().unwrap(), sp["end_col"].as_u64().unwrap());
-        by_file.entry(file).or_default().push((a, b, e["replace"].as_str().expect("replace").to_string()));
-    }
-    for (file, mut edits) in by_file {
-        edits.sort_by(|x, y| y.0.cmp(&x.0));
-        let text = texts.get_mut(&file).unwrap();
-        for (a, b, rep) in edits {
-            text.replace_range(a..b, &rep);
-        }
-    }
+/// Apply one candidate to the files of `d` it edits (read, edited and written again).
+pub fn apply_fix_dir(d: &Dir, fix: &Value) {
+    let read = |f: &String| std::fs::read_to_string(d.root().join(f)).unwrap_or_else(|e| panic!("read {f}: {e}"));
+    let mut texts: Texts = edits_of(fix).iter().map(|e| (e.file.clone(), read(&e.file))).collect();
+    apply_fix_texts(&mut texts, fix);
+    write_texts(d, &texts);
 }
 
 /// The names in backticks of a message (`the modules `a`, `b.c` import each other`), as written.

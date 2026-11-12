@@ -42,7 +42,7 @@ fn analyzed(src: &str) -> (crate::Package, crate::Analysis) {
     let parsed = onsa_syntax::parse(FileId(0), src);
     assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
     let modules = vec![crate::Module::new(vec!["main".into()], FileId(0), src.into(), parsed)];
-    let pkg = crate::Package::new("t", modules, vec![crate::flow_tests::std_package()]);
+    let pkg = crate::Package::new("t", modules, vec![crate::tests::std_package()]);
     let a = crate::tests::analyze(&pkg);
     let modes = Stage::Modes.check_rank().expect("a check stage");
     let early: Vec<_> = (a.diagnostics.iter())

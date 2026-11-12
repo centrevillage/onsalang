@@ -25,11 +25,9 @@
 //! last); a type with arguments (`Option[...]`: the name or the `[`), a struct literal, an enum or
 //! struct pattern. Their lines are tested in the case files.
 
-use crate::test_support::Dir;
+use crate::test_support::{Dir, ONSA};
 use std::path::Path;
 use std::process::{Command, Output};
-
-const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
 
 const LIMIT: usize = 256;
 

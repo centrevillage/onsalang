@@ -23,7 +23,7 @@
 //! names the work that removes the mark (an ignored test is not silenced by `tests/pending.toml`: it
 //! is skipped). Run them with `cargo test -p onsa_cli --test call_forms_syntax -- --ignored`.
 
-use crate::test_support::{Dir, check, code, code_of, onsa};
+use crate::test_support::{Dir, apply, check, code, code_of, edits_of, fixes_of, onsa, replaced_texts};
 use serde_json::Value;
 
 fn read(path: &str) -> String {
@@ -35,10 +35,6 @@ fn in_a_function(body: &str) -> String {
     format!("pub fn f() -> U8 {{\n{body}\n}}\n")
 }
 
-fn fixes_of(d: &Value) -> Vec<&Value> {
-    d.get("fixes").and_then(Value::as_array).map(|a| a.iter().collect()).unwrap_or_default()
-}
-
 fn notes_of(d: &Value) -> Vec<String> {
     d.get("notes")
         .and_then(Value::as_array)
@@ -48,63 +44,6 @@ fn notes_of(d: &Value) -> Vec<String> {
 
 fn start_of(d: &Value) -> (u64, u64) {
     (d["span"]["line"].as_u64().expect("line"), d["span"]["col"].as_u64().expect("col"))
-}
-
-/// One edit: a range as (line, column, end line, end column), 1-based, columns in characters.
-struct Edit {
-    start: (usize, usize),
-    end: (usize, usize),
-    replace: String,
-}
-
-fn edits_of(fix: &Value) -> Vec<Edit> {
-    let pos = |s: &Value, l: &str, c: &str| -> (usize, usize) {
-        let get = |k: &str| usize::try_from(s[k].as_u64().unwrap_or_else(|| panic!("no `{k}` in {s}"))).unwrap();
-        (get(l), get(c))
-    };
-    fix["edits"]
-        .as_array()
-        .expect("`edits` is an array")
-        .iter()
-        .map(|e| Edit {
-            start: pos(&e["span"], "line", "col"),
-            end: pos(&e["span"], "end_line", "end_col"),
-            replace: e["replace"].as_str().expect("`replace` is a string").to_string(),
-        })
-        .collect()
-}
-
-/// The byte offset of a (line, column in characters) position of `text`.
-fn offset(text: &str, (line, col): (usize, usize)) -> usize {
-    let mut start = 0;
-    for _ in 1..line {
-        start += text[start..].find('\n').expect("a line past the end of the file") + 1;
-    }
-    let rest = &text[start..];
-    let line_len = rest.find('\n').unwrap_or(rest.len());
-    match rest[..line_len].char_indices().nth(col - 1) {
-        Some((i, _)) => start + i,
-        None => start + line_len,
-    }
-}
-
-/// The text each edit replaces, in the order of the edits.
-fn replaced_texts(text: &str, edits: &[Edit]) -> Vec<String> {
-    edits.iter().map(|e| text[offset(text, e.start)..offset(text, e.end)].to_string()).collect()
-}
-
-fn apply(text: &str, edits: &[Edit]) -> String {
-    let mut spans: Vec<(usize, usize, &str)> =
-        edits.iter().map(|e| (offset(text, e.start), offset(text, e.end), e.replace.as_str())).collect();
-    spans.sort_by_key(|&(a, b, _)| (a, b));
-    for w in spans.windows(2) {
-        assert!(w[0].1 <= w[1].0, "edits of one candidate overlap: {:?} and {:?}", w[0], w[1]);
-    }
-    let mut out = text.to_string();
-    for &(a, b, r) in spans.iter().rev() {
-        out.replace_range(a..b, r);
-    }
-    out
 }
 
 // ---- fmt: the normal form of a call through a function value (spec/tools.md §3.2) ---------

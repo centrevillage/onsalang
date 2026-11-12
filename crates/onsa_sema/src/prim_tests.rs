@@ -13,9 +13,9 @@ use onsa_diag::{Code, FileId};
 use crate::body::bounds::Bounds;
 use crate::cast::Instead;
 use crate::def::{Bound, DefId, DefKind, FnDef, GenericKind};
-use crate::flow_tests::std_package;
 use crate::prim::{INTS, MathFn, NARROW_FROM, Prim, PrimRow, Scalar, key_of, row, rows};
 use crate::tests::analyze;
+use crate::tests::std_package;
 use crate::traits::no_impl;
 use crate::ty::{BuiltinTy, FloatKind, IntKind, Ty, TyId};
 use crate::{Analysis, Module, Package};
@@ -320,16 +320,26 @@ fn no_missing_name_is_a_member_of_std() {
 /// The `else` body of `abs` in the embedded std.
 const ABS: &str = "pub target rt fn abs[T: Num](x: T) -> T else {\n  if x < T.ZERO { -x } else { x }\n}\n";
 
-/// The codes of the embedded std with `ABS` replaced by `abs`.
+/// The codes of the embedded std with `ABS` replaced by `abs`, of the
+/// diagnostics in the replaced text: those of the rest of std, as of a use of
+/// `abs` at another signature, are not of the `else` body.
 fn codes_of_abs(abs: &str) -> Vec<Code> {
+    let mut place = None;
     let modules = (crate::std_modules().iter().enumerate()).map(|(i, m)| {
-        let text = if m.segments == ["math"] { m.text.replacen(ABS, abs, 1) } else { m.text.to_string() };
-        assert!(m.segments != ["math"] || m.text.contains(ABS), "no `abs` to replace");
-        module(m.segments, 100 + i as u32, &text)
+        let file = FileId(100 + i as u32);
+        let mut text = m.text.to_string();
+        if m.segments == ["math"] {
+            let at = text.find(ABS).expect("no `abs` to replace");
+            text.replace_range(at..at + ABS.len(), abs);
+            place = Some((file, at as u32, (at + abs.len()) as u32));
+        }
+        module(m.segments, file.0, &text)
     });
     let std = Arc::new(Package::std(modules.collect()));
+    let (file, start, end) = place.expect("no module `math`");
     let a = analyze(&Package::new("t", vec![module(&["main"], 0, "")], vec![std]));
-    a.diagnostics.iter().map(|d| d.code).collect()
+    let inside = |s: &onsa_diag::Span| s.file == file && start <= s.start && s.end <= end;
+    a.diagnostics.iter().filter(|d| inside(&d.span)).map(|d| d.code).collect()
 }
 
 /// The `else` bodies are checked as the bodies of generic functions: the

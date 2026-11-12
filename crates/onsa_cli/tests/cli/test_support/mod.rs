@@ -106,14 +106,19 @@ pub fn code(out: &Output) -> i32 {
     out.status.code().unwrap_or_else(|| panic!("ended by a signal: {out:?}"))
 }
 
-/// The diagnostics of `onsa check --json <path>` (exit code 0 or 1).
-pub fn check(path: &str) -> Vec<Value> {
+/// The exit code (0 or 1) and the diagnostics of `onsa check --json <path>`.
+pub fn check_coded(path: &str) -> (i32, Vec<Value>) {
     let out = onsa(&["check", "--json", path]);
     let c = code(&out);
     assert!(c == 0 || c == 1, "onsa check {path}: exit code {c} (stderr: {})", String::from_utf8_lossy(&out.stderr));
     let text = String::from_utf8(out.stdout).expect("utf-8 output");
     let v: Value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("no JSON ({e}): {text}"));
-    v["diagnostics"].as_array().unwrap_or_else(|| panic!("no `diagnostics` array: {v}")).clone()
+    (c, v["diagnostics"].as_array().unwrap_or_else(|| panic!("no `diagnostics` array: {v}")).clone())
+}
+
+/// The diagnostics of `onsa check --json <path>` (exit code 0 or 1).
+pub fn check(path: &str) -> Vec<Value> {
+    check_coded(path).1
 }
 
 /// The `code` of a diagnostic.
@@ -190,6 +195,25 @@ pub fn diagnostics(doc: &Value) -> &Vec<Value> {
     array_of(doc, "diagnostics")
 }
 
+/// The codes of the diagnostics of a document, as a set (to compare with [`set`]).
+pub fn codes(doc: &Value) -> std::collections::BTreeSet<String> {
+    diagnostics(doc).iter().map(|d| code_of(d).to_string()).collect()
+}
+
+pub fn set(items: &[&str]) -> std::collections::BTreeSet<String> {
+    items.iter().map(|c| c.to_string()).collect()
+}
+
+/// The candidates of a diagnostic: `fixes`, written out even when empty (§18.1).
+pub fn fixes_of(d: &Value) -> Vec<&Value> {
+    array_of(d, "fixes").iter().collect()
+}
+
+/// The notes of a diagnostic: `notes`, written out even when empty (§18.1).
+pub fn notes_of(d: &Value) -> Vec<&Value> {
+    array_of(d, "notes").iter().collect()
+}
+
 pub fn tests_of(doc: &Value) -> &Vec<Value> {
     array_of(doc, "tests")
 }
@@ -262,6 +286,72 @@ pub fn span_of(v: &Value) -> Span {
 
 pub fn span(file: &str, line: u64, col: u64, end_line: u64, end_col: u64) -> Span {
     Span { file: file.to_string(), line, col, end_line, end_col }
+}
+
+/// A position of a `span`: (line, column), from 1, the column in characters (§18.1).
+pub type Pos = (usize, usize);
+
+/// One edit of a candidate (an entry of `edits`, §18.1): the file and the range of its `span`, and `replace`.
+pub struct Edit {
+    pub file: String,
+    pub start: Pos,
+    pub end: Pos,
+    pub replace: String,
+}
+
+/// The edits of one candidate (a `fixes` entry), in the order of the document.
+pub fn edits_of(fix: &Value) -> Vec<Edit> {
+    let pos = |s: &Value, l: &str, c: &str| -> Pos {
+        let get = |k: &str| usize::try_from(int_of(s, k)).unwrap();
+        (get(l), get(c))
+    };
+    let edit = |e: &Value| Edit {
+        file: str_of(&e["span"], "file").to_string(),
+        start: pos(&e["span"], "line", "col"),
+        end: pos(&e["span"], "end_line", "end_col"),
+        replace: str_of(e, "replace").to_string(),
+    };
+    array_of(fix, "edits").iter().map(edit).collect()
+}
+
+/// The byte offset of a position in `text`. A position out of the text fails the test, as an error of the
+/// output that a rounding would hide: the last position of a line is the column after its last character,
+/// and that of a text that ends with a line break is the column 1 of the line after it.
+pub fn offset(text: &str, (line, col): Pos) -> usize {
+    let mut start = 0;
+    for _ in 1..line {
+        start += text[start..].find('\n').unwrap_or_else(|| panic!("line {line} is past the end of the text")) + 1;
+    }
+    let rest = &text[start..];
+    let line_len = rest.find('\n').unwrap_or(rest.len());
+    match rest[..line_len].char_indices().nth(col - 1) {
+        Some((i, _)) => start + i,
+        None => {
+            assert_eq!(rest[..line_len].chars().count() + 1, col, "column {col} is past the end of line {line}");
+            start + line_len
+        }
+    }
+}
+
+/// The text each edit replaces, in the order of the edits.
+pub fn replaced_texts(text: &str, edits: &[Edit]) -> Vec<String> {
+    edits.iter().map(|e| text[offset(text, e.start)..offset(text, e.end)].to_string()).collect()
+}
+
+/// `text` after the edits of one candidate, applied together (§18.1): edits that overlap fail the test, and
+/// insertions at one place go in the order of the edits.
+pub fn apply(text: &str, edits: &[Edit]) -> String {
+    let mut spans: Vec<(usize, usize, &str)> =
+        edits.iter().map(|e| (offset(text, e.start), offset(text, e.end), e.replace.as_str())).collect();
+    spans.sort_by_key(|&(a, b, _)| (a, b));
+    for w in spans.windows(2) {
+        assert!(w[0].1 <= w[1].0, "edits of one candidate overlap: {:?} and {:?}", w[0], w[1]);
+    }
+    let mut out = text.to_string();
+    for &(a, b, r) in spans.iter().rev() {
+        out.replace_range(a..b, r);
+    }
+    out
 }
 
 /// The record of `tests` for `(module, name)`; exactly one.

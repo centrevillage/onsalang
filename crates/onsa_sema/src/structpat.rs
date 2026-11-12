@@ -295,7 +295,7 @@ mod tests {
     fn first(src: &str) -> (Code, String, usize) {
         let modules =
             vec![Module::new(vec!["main".into()], FileId(0), src.to_string(), onsa_syntax::parse(FileId(0), src))];
-        let a = analyze(&Package::new("t", modules, vec![crate::flow_tests::std_package()]));
+        let a = analyze(&Package::new("t", modules, vec![crate::tests::std_package()]));
         assert_eq!(a.diagnostics.len(), 1, "{:?}", a.diagnostics);
         let d = &a.diagnostics[0];
         let (from, to) = (d.span.start as usize, d.span.end as usize);
@@ -340,7 +340,7 @@ mod tests {
     fn removal(src: &str) -> (String, String) {
         let modules =
             vec![Module::new(vec!["main".into()], FileId(0), src.to_string(), onsa_syntax::parse(FileId(0), src))];
-        let a = analyze(&Package::new("t", modules, vec![crate::flow_tests::std_package()]));
+        let a = analyze(&Package::new("t", modules, vec![crate::tests::std_package()]));
         assert_eq!(a.diagnostics.len(), 1, "{:?}", a.diagnostics);
         let fix = &a.diagnostics[0].fixes[0];
         let s = fix.edits()[0].span;

@@ -22,7 +22,6 @@
 
 use crate::test_support;
 
-use std::collections::BTreeSet;
 use std::path::Path;
 
 use serde_json::Value;
@@ -32,14 +31,6 @@ fn check_json(cwd: &Path) -> (Out, Value) {
     let out = run(cwd, &["check", "--json", "."]);
     let doc = doc_of(&out);
     (out, doc)
-}
-
-fn codes(doc: &Value) -> BTreeSet<String> {
-    diagnostics(doc).iter().map(|d| str_of(d, "code").to_string()).collect()
-}
-
-fn set(items: &[&str]) -> BTreeSet<String> {
-    items.iter().map(|c| c.to_string()).collect()
 }
 
 fn note_text(diagnostic: &Value) -> String {

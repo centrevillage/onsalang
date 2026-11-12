@@ -22,16 +22,8 @@
 //! A test that needs the reading of §3.1 (the partial order of the groups) ran ignored until W3-07/i; each
 //! ignore names the work that removes it (a test cannot be silenced by `tests/pending.toml`).
 
-use crate::test_support::{Dir, check, code_of};
+use crate::test_support::{Dir, Pos, apply, check, code_of, edits_of, fixes_of, notes_of};
 use serde_json::Value;
-
-fn fixes_of(d: &Value) -> Vec<&Value> {
-    d.get("fixes").and_then(Value::as_array).map(|a| a.iter().collect()).unwrap_or_default()
-}
-
-fn notes_of(d: &Value) -> Vec<&Value> {
-    d.get("notes").and_then(Value::as_array).map(|a| a.iter().collect()).unwrap_or_default()
-}
 
 fn expect_one<'a>(diags: &'a [Value], want: &str, what: &str) -> &'a Value {
     assert_eq!(diags.len(), 1, "{what}: one diagnostic: {diags:?}");
@@ -39,63 +31,10 @@ fn expect_one<'a>(diags: &'a [Value], want: &str, what: &str) -> &'a Value {
     &diags[0]
 }
 
-/// A position as (line, column), 1-based, columns in characters.
-type Pos = (usize, usize);
-
-struct Edit {
-    start: Pos,
-    end: Pos,
-    replace: String,
-}
-
 fn span_of(d: &Value) -> (Pos, Pos) {
     let s = &d["span"];
     let get = |k: &str| usize::try_from(s[k].as_u64().unwrap_or_else(|| panic!("no `{k}` in {s}"))).unwrap();
     ((get("line"), get("col")), (get("end_line"), get("end_col")))
-}
-
-fn edits_of(fix: &Value) -> Vec<Edit> {
-    fix["edits"]
-        .as_array()
-        .expect("`edits` is an array")
-        .iter()
-        .map(|e| {
-            let s = &e["span"];
-            let get = |k: &str| usize::try_from(s[k].as_u64().unwrap_or_else(|| panic!("no `{k}` in {s}"))).unwrap();
-            Edit {
-                start: (get("line"), get("col")),
-                end: (get("end_line"), get("end_col")),
-                replace: e["replace"].as_str().expect("`replace` is a string").to_string(),
-            }
-        })
-        .collect()
-}
-
-fn offset(text: &str, (line, col): Pos) -> usize {
-    let mut start = 0;
-    for _ in 1..line {
-        start += text[start..].find('\n').expect("a line past the end of the file") + 1;
-    }
-    let rest = &text[start..];
-    let line_len = rest.find('\n').unwrap_or(rest.len());
-    match rest[..line_len].char_indices().nth(col - 1) {
-        Some((i, _)) => start + i,
-        None => start + line_len,
-    }
-}
-
-fn apply(text: &str, edits: &[Edit]) -> String {
-    let mut spans: Vec<(usize, usize, &str)> =
-        edits.iter().map(|e| (offset(text, e.start), offset(text, e.end), e.replace.as_str())).collect();
-    spans.sort_by_key(|&(a, b, _)| (a, b));
-    for w in spans.windows(2) {
-        assert!(w[0].1 <= w[1].0, "edits of one candidate overlap: {:?} and {:?}", w[0], w[1]);
-    }
-    let mut out = text.to_string();
-    for &(a, b, r) in spans.iter().rev() {
-        out.replace_range(a..b, r);
-    }
-    out
 }
 
 /// A file with a struct, an identity function and `pub fn f(params) -> ret { expr }`.

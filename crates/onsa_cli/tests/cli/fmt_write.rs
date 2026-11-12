@@ -5,12 +5,11 @@
 //! processed, `spec/tools.md` §3.1), and no temporary file is left. The hard link is in
 //! `fmt_rewrites.rs` (`fmt_writes_a_new_file_and_leaves_the_old_one_whole`).
 
-use crate::test_support::{Dir, code};
+use crate::test_support::{Dir, ONSA, code};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
 const ROUGH: &str = "fn f(a: I32) -> I32 {\n  let x = 0XaB + a\n  return x\n}\n";
 const ROUGH_OUT: &str = "fn f(a: I32) -> I32 {\n  let x = 0xAB + a\n  x\n}\n";
 

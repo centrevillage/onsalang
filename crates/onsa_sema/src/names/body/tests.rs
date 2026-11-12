@@ -23,7 +23,7 @@ fn analysis(src: &str) -> (Analysis, Module) {
 /// [`analysis`] with std, which declares the members of the builtin types
 /// (`F32.PI`, §6.6).
 fn analysis_with_std(src: &str) -> (Analysis, Module) {
-    analysis_in(src, vec![crate::flow_tests::std_package()])
+    analysis_in(src, vec![crate::tests::std_package()])
 }
 
 fn analysis_in(src: &str, deps: Vec<std::sync::Arc<Package>>) -> (Analysis, Module) {
@@ -316,7 +316,7 @@ fn chains_record_the_namespaces_they_pass_and_the_item_they_end_at() {
     };
     let m = module(&["main"], 0, main);
     // With std, which declares the members of the builtin types (§6.6).
-    let std = vec![crate::flow_tests::std_package()];
+    let std = vec![crate::tests::std_package()];
     let mut a = analyze(&Package::new("t", vec![module(&["main"], 0, main), module(&["util"], 1, util)], std));
     let f32 = a.types.float(crate::ty::FloatKind::F32);
     let i32 = a.types.int(crate::ty::IntKind::I32);

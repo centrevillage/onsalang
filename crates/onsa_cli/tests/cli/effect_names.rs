@@ -27,7 +27,14 @@ use crate::test_support;
 use std::path::Path;
 
 use serde_json::Value;
+use test_support::sweep::apply_fix_dir;
 use test_support::*;
+
+/// Apply every edit of one candidate, all of them in `file`, to `d`.
+fn apply(d: &Dir, file: &str, fix: &Value) {
+    assert!(edits_of(fix).iter().all(|e| e.file == file), "a candidate edits the file of the diagnostic: {fix}");
+    apply_fix_dir(d, fix);
+}
 
 fn check_json(cwd: &Path, args: &[&str]) -> (Out, Value) {
     let mut a = vec!["check", "--json"];
@@ -35,36 +42,6 @@ fn check_json(cwd: &Path, args: &[&str]) -> (Out, Value) {
     let out = run(cwd, &a);
     let doc = doc_of(&out);
     (out, doc)
-}
-
-fn offset(text: &str, line: u64, col: u64) -> usize {
-    let mut start = 0;
-    for (i, l) in text.split_inclusive('\n').enumerate() {
-        if i as u64 + 1 == line {
-            let in_line = l.char_indices().nth(col as usize - 1).map(|(b, _)| b).unwrap_or(l.len());
-            return start + in_line;
-        }
-        start += l.len();
-    }
-    text.len()
-}
-
-/// Apply every edit of one candidate to `file` of `d` (all edits together, from the end).
-fn apply(d: &Dir, file: &str, fix: &Value) {
-    let mut text = std::fs::read_to_string(d.root().join(file)).unwrap();
-    let mut edits: Vec<(usize, usize, String)> = array_of(fix, "edits")
-        .iter()
-        .map(|e| {
-            let sp = span_of(&e["span"]);
-            assert_eq!(sp.file, file, "a candidate edits the file of the diagnostic: {fix}");
-            (offset(&text, sp.line, sp.col), offset(&text, sp.end_line, sp.end_col), str_of(e, "replace").to_string())
-        })
-        .collect();
-    edits.sort_by(|x, y| y.0.cmp(&x.0));
-    for (a, b, rep) in edits {
-        text.replace_range(a..b, &rep);
-    }
-    d.write(file, &text);
 }
 
 /// The places an effect row is written. Each is a unit of its own, and `row` is the text of the row

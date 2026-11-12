@@ -8,10 +8,8 @@
 
 use std::process::{Command, Output};
 
-use crate::test_support::Dir;
+use crate::test_support::{Dir, ONSA};
 use serde_json::Value;
-
-const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
 
 /// The functions: (the header written in the source, its body). The headers are the signatures
 /// `onsa interface` writes.

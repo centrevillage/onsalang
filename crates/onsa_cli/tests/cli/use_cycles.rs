@@ -39,10 +39,10 @@
 
 use crate::test_support;
 
-use std::collections::BTreeSet;
 use std::path::Path;
 
 use serde_json::Value;
+use test_support::sweep::apply_fix_dir;
 use test_support::*;
 
 fn check_json(cwd: &Path, args: &[&str]) -> (Out, Value) {
@@ -53,62 +53,9 @@ fn check_json(cwd: &Path, args: &[&str]) -> (Out, Value) {
     (out, doc)
 }
 
-fn codes(doc: &Value) -> BTreeSet<String> {
-    diagnostics(doc).iter().map(|d| str_of(d, "code").to_string()).collect()
-}
-
-fn set(items: &[&str]) -> BTreeSet<String> {
-    items.iter().map(|c| c.to_string()).collect()
-}
-
 /// The diagnostics of `code`, in the order of the document.
 fn of_code<'a>(doc: &'a Value, code: &str) -> Vec<&'a Value> {
     diagnostics(doc).iter().filter(|d| str_of(d, "code") == code).collect()
-}
-
-fn fixes_of(diagnostic: &Value) -> &Vec<Value> {
-    array_of(diagnostic, "fixes")
-}
-
-fn notes_of(diagnostic: &Value) -> &Vec<Value> {
-    array_of(diagnostic, "notes")
-}
-
-fn offset(text: &str, line: u64, col: u64) -> usize {
-    let mut start = 0;
-    for (i, l) in text.split_inclusive('\n').enumerate() {
-        if i as u64 + 1 == line {
-            let in_line = l.char_indices().nth(col as usize - 1).map(|(b, _)| b).unwrap_or(l.len());
-            return start + in_line;
-        }
-        start += l.len();
-    }
-    text.len()
-}
-
-type FileEdits = (String, Vec<(usize, usize, String)>);
-
-/// Apply every edit of one candidate to the files of `d` (all edits together, from the end of each file).
-fn apply(d: &Dir, fix: &Value) {
-    let mut by_file: Vec<FileEdits> = Vec::new();
-    for e in array_of(fix, "edits") {
-        let sp = span_of(&e["span"]);
-        let text = std::fs::read_to_string(d.root().join(&sp.file)).unwrap();
-        let (a, b) = (offset(&text, sp.line, sp.col), offset(&text, sp.end_line, sp.end_col));
-        let rep = str_of(e, "replace").to_string();
-        match by_file.iter_mut().find(|(f, _)| *f == sp.file) {
-            Some((_, v)) => v.push((a, b, rep)),
-            None => by_file.push((sp.file.clone(), vec![(a, b, rep)])),
-        }
-    }
-    for (file, mut edits) in by_file {
-        let mut text = std::fs::read_to_string(d.root().join(&file)).unwrap();
-        edits.sort_by(|x, y| y.0.cmp(&x.0));
-        for (a, b, rep) in edits {
-            text.replace_range(a..b, &rep);
-        }
-        d.write(&file, &text);
-    }
 }
 
 /// The lines of `file` that start with `use `, trimmed.
@@ -489,7 +436,7 @@ fn the_candidate_is_given_when_the_use_closes_no_cycle() {
     assert_eq!(codes(&doc), set(&["E0302"]), "{doc}");
     let fixes = fixes_of(&diagnostics(&doc)[0]);
     assert!(!fixes.is_empty(), "{doc}");
-    apply(&d, &fixes[0]);
+    apply_fix_dir(&d, fixes[0]);
     assert_clean(&d, "after the candidate");
 }
 
@@ -512,7 +459,7 @@ fn a_candidate_for_the_path_through_the_child_does_not_close_the_cycle() {
     assert_eq!(codes(&doc), set(&["E0302"]), "{doc}");
     let fixes = fixes_of(&diagnostics(&doc)[0]).clone();
     if let Some(first) = fixes.first() {
-        apply(&d, first);
+        apply_fix_dir(&d, first);
         let (_, doc) = check_json(d.root(), &["."]);
         assert!(!codes(&doc).contains("E0310"), "the candidate closes the cycle: {doc}");
     }
@@ -538,7 +485,7 @@ fn the_head_that_a_use_took_gets_the_candidate_of_its_full_path() {
         assert_eq!(codes(&doc), set(&["E0302"]), "{tag}: {doc}");
         let fixes = fixes_of(&diagnostics(&doc)[0]);
         assert_eq!(fixes.len(), 1, "{tag}: one candidate: {doc}");
-        apply(&d, &fixes[0]);
+        apply_fix_dir(&d, fixes[0]);
         assert!(use_lines(&d, "main.onsa").iter().any(|l| l == want), "{tag}: {:?}", use_lines(&d, "main.onsa"));
         assert_clean(&d, &format!("{tag}: after the candidate"));
     }
@@ -629,7 +576,7 @@ fn the_own_package_name_at_the_head_gets_the_candidate_that_takes_it_off() {
         assert_eq!(diagnostics(&doc).len(), 1, "{tag}: {doc}");
         let fixes = fixes_of(&diagnostics(&doc)[0]);
         assert_eq!(fixes.len(), 1, "{tag}: one candidate: {doc}");
-        apply(&d, &fixes[0]);
+        apply_fix_dir(&d, fixes[0]);
         let got = use_lines(&d, "main.onsa");
         assert_eq!(got, want.iter().map(|s| s.to_string()).collect::<Vec<_>>(), "{tag}");
         assert_clean(&d, &format!("{tag}: after the candidate"));
@@ -730,16 +677,16 @@ fn modules_that_take_each_other_by_the_own_package_name_end_in_the_cycle() {
     }
     let first = fixes_of(&diagnostics(&doc)[0])[0].clone();
     let second = fixes_of(&diagnostics(&doc)[1])[0].clone();
-    apply(&d, &first);
+    apply_fix_dir(&d, &first);
     let (_, doc) = check_json(d.root(), &["."]);
     assert_eq!(codes(&doc), set(&["E0302"]), "after one candidate: {doc}");
     assert_eq!(diagnostics(&doc).len(), 1, "after one candidate: {doc}");
     d.write("a.onsa", a);
     d.write("b.onsa", b);
-    apply(&d, &first);
+    apply_fix_dir(&d, &first);
     // The second candidate was made for the text before the first was applied; the spans of the two
     // files are separate, so it applies to the other file as it is.
-    apply(&d, &second);
+    apply_fix_dir(&d, &second);
     assert_cycle(&d, "both package names taken off");
 }
 
@@ -763,7 +710,7 @@ fn assert_body_candidate(d: &Dir, file: &str, uses: &[&str], what: &str) {
     let e = &diagnostics(&doc)[0];
     assert_eq!(span_of(&e["span"]).file, file, "{what}: {doc}");
     assert_eq!(fixes_of(e).len(), 1, "{what}: one candidate: {e}");
-    apply(d, &fixes_of(e)[0]);
+    apply_fix_dir(d, fixes_of(e)[0]);
     assert_eq!(use_lines(d, file), uses.iter().map(|s| s.to_string()).collect::<Vec<_>>(), "{what}");
     assert_clean(d, &format!("{what}: after the candidate"));
 }

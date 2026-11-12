@@ -27,10 +27,8 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::test_support::{Dir, code_of};
+use crate::test_support::{Dir, ONSA, code_of, offset};
 use serde_json::Value;
-
-const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
 
 struct Out {
     code: i32,
@@ -302,8 +300,8 @@ fn found_is_the_source_text_of_the_range_and_is_left_out_for_an_empty_or_blank_r
     for x in diagnostics(&doc) {
         let s = &x["span"];
         let text = std::fs::read_to_string(d.root().join(file_of(x))).expect("the file of the span");
-        let a = offset(&text, int(s, "line"), int(s, "col"));
-        let b = offset(&text, int(s, "end_line"), int(s, "end_col"));
+        let a = offset(&text, (int(s, "line") as usize, int(s, "col") as usize));
+        let b = offset(&text, (int(s, "end_line") as usize, int(s, "end_col") as usize));
         let range = &text[a..b];
         let blank = range.trim().is_empty();
         match x.get("found") {
@@ -318,21 +316,6 @@ fn found_is_the_source_text_of_the_range_and_is_left_out_for_an_empty_or_blank_r
         }
     }
     assert!(with_found >= 4, "too few diagnostics with `found`: {with_found}");
-}
-
-/// The byte offset of the (1-based line, 1-based column in characters) position in `text`.
-fn offset(text: &str, line: u64, col: u64) -> usize {
-    let mut start = 0;
-    for _ in 1..line {
-        start += text[start..].find('\n').expect("a line past the end of the file") + 1;
-    }
-    let rest = &text[start..];
-    let line_len = rest.find('\n').unwrap_or(rest.len());
-    let mut chars = rest[..line_len].char_indices();
-    match chars.nth(usize::try_from(col).unwrap() - 1) {
-        Some((i, _)) => start + i,
-        None => start + line_len,
-    }
 }
 
 // ---- span.file -----------------------------------------------------------------------------------

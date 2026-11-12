@@ -3,10 +3,8 @@
 //! of the `f64` that holds the `F32` value), through arrays, tuples and structs (W3-05), each
 //! written as in the source (`P { a: 0.1, b: 0.1 }`).
 
-use crate::test_support::Dir;
+use crate::test_support::{Dir, ONSA};
 use std::process::Command;
-
-const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
 
 const SOURCE: &str = "pub struct P {
   a: F32,

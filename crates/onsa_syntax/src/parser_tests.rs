@@ -20,7 +20,9 @@ fn parse(src: &str) -> crate::Parsed {
     crate::parse(FileId(0), src)
 }
 
-fn codes(src: &str) -> Vec<Code> {
+/// The codes of the parser's diagnostics of `src`, in their order (the
+/// helper of the tests of the crate).
+pub(crate) fn codes(src: &str) -> Vec<Code> {
     parse(src).diagnostics.iter().map(|d| d.code).collect()
 }
 

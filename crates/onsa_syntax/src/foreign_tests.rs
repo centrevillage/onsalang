@@ -8,13 +8,10 @@
 use onsa_diag::{Code, FileId, Span};
 
 use crate::foreign::{ROWS, RowId, WAITING};
+use crate::parser_tests::codes;
 
 fn parse(src: &str) -> crate::Parsed {
     crate::parse(FileId(0), src)
-}
-
-fn codes(src: &str) -> Vec<Code> {
-    parse(src).diagnostics.iter().map(|d| d.code).collect()
 }
 
 /// `src` after candidate `k` (from 0) of its first diagnostic.

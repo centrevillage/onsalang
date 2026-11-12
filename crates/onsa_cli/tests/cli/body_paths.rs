@@ -32,6 +32,7 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 use serde_json::Value;
+use test_support::sweep::apply_fix_dir;
 use test_support::*;
 
 fn check_json(cwd: &Path, args: &[&str]) -> (Out, Value) {
@@ -68,54 +69,6 @@ fn lines_of(doc: &Value) -> BTreeSet<(String, u64)> {
         .collect()
 }
 
-fn codes(doc: &Value) -> BTreeSet<String> {
-    diagnostics(doc).iter().map(|d| str_of(d, "code").to_string()).collect()
-}
-
-/// The `fixes` of a diagnostic, an array that is always present (§18.1).
-fn fixes_of(diagnostic: &Value) -> &Vec<Value> {
-    array_of(diagnostic, "fixes")
-}
-
-/// The byte offset of the position (`line`, `col`: from 1, columns count characters) in `text`.
-fn offset(text: &str, line: u64, col: u64) -> usize {
-    let mut start = 0;
-    for (i, l) in text.split_inclusive('\n').enumerate() {
-        if i as u64 + 1 == line {
-            let in_line = l.char_indices().nth(col as usize - 1).map(|(b, _)| b).unwrap_or(l.len());
-            return start + in_line;
-        }
-        start += l.len();
-    }
-    text.len()
-}
-
-/// The edits of one file: the start and end offsets and the replacement.
-type FileEdits = (String, Vec<(usize, usize, String)>);
-
-/// Apply every edit of one candidate to the files of `d` (all edits together, from the end of each file).
-fn apply(d: &Dir, fix: &Value) {
-    let mut by_file: Vec<FileEdits> = Vec::new();
-    for e in array_of(fix, "edits") {
-        let sp = span_of(&e["span"]);
-        let text = std::fs::read_to_string(d.root().join(&sp.file)).unwrap();
-        let (a, b) = (offset(&text, sp.line, sp.col), offset(&text, sp.end_line, sp.end_col));
-        let rep = str_of(e, "replace").to_string();
-        match by_file.iter_mut().find(|(f, _)| *f == sp.file) {
-            Some((_, v)) => v.push((a, b, rep)),
-            None => by_file.push((sp.file.clone(), vec![(a, b, rep)])),
-        }
-    }
-    for (file, mut edits) in by_file {
-        let mut text = std::fs::read_to_string(d.root().join(&file)).unwrap();
-        edits.sort_by(|x, y| y.0.cmp(&x.0));
-        for (a, b, rep) in edits {
-            text.replace_range(a..b, &rep);
-        }
-        d.write(&file, &text);
-    }
-}
-
 const UTIL: &str = "pub fn double(x: I32) -> I32 {\n  x * 2\n}\n";
 const SUB: &str = "pub fn h() -> I32 {\n  3\n}\n";
 
@@ -142,7 +95,7 @@ fn a_path_with_no_use_is_e0302_and_applying_the_candidate_ends_the_repair() {
         assert_eq!(places(&doc), set(&[("E0302", "main.onsa", 2)]), "{tag}: {doc}");
         let fixes = fixes_of(&diagnostics(&doc)[0]);
         assert!(!fixes.is_empty(), "{tag}: the candidate adds a `use`: {doc}");
-        apply(&d, &fixes[0]);
+        apply_fix_dir(&d, fixes[0]);
         let text = std::fs::read_to_string(d.root().join("main.onsa")).unwrap();
         assert!(text.lines().any(|l| l.starts_with("use ")), "{tag}: the candidate adds a `use` line:\n{text}");
         let (out, doc) = check_json(d.root(), &["."]);
@@ -162,7 +115,7 @@ fn a_single_file_with_a_path_to_std_and_no_use_is_e0302_with_a_candidate() {
     assert_eq!(places(&doc), set(&[("E0302", "one.onsa", 2)]), "{doc}");
     let fixes = fixes_of(&diagnostics(&doc)[0]);
     assert!(!fixes.is_empty(), "{doc}");
-    apply(&d, &fixes[0]);
+    apply_fix_dir(&d, fixes[0]);
     let (out, doc) = check_json(d.root(), &["one.onsa"]);
     assert_eq!(out.code, 0, "{}{}", out.stdout, out.stderr);
     assert!(diagnostics(&doc).is_empty(), "{doc}");
@@ -329,7 +282,7 @@ fn a_module_does_not_name_itself() {
     assert_eq!(places(&doc), set(&[("E0302", "main.onsa", 6)]), "{doc}");
     let fixes = fixes_of(&diagnostics(&doc)[0]).clone();
     assert_eq!(fixes.len(), 1, "{doc}");
-    apply(&d, &fixes[0]);
+    apply_fix_dir(&d, fixes[0]);
     let (out, doc) = check_json(d.root(), &["."]);
     assert_eq!(out.code, 0, "after the candidate: {}{}", out.stdout, out.stderr);
     assert!(diagnostics(&doc).is_empty(), "{doc}");

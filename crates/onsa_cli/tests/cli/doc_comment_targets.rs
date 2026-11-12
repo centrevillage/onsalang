@@ -14,7 +14,7 @@
 //!   line breaks); `onsa fmt` stops at the syntax error and writes nothing, so it does not move the
 //!   comment by itself (§18.2); the reverse order (`///` before the attribute) is attached.
 
-use crate::test_support::{Dir, code, onsa};
+use crate::test_support::{Dir, apply, code, edits_of, onsa};
 use serde_json::Value;
 
 /// The diagnostics of `check --json` as JSON values, with the exit code.
@@ -29,45 +29,6 @@ fn check(path: &str) -> (i32, Vec<Value>) {
 
 fn codes(diags: &[Value]) -> Vec<String> {
     diags.iter().map(|d| d["code"].as_str().unwrap_or("?").to_string()).collect()
-}
-
-/// The byte offset of a 1-based line and column (the column counts characters).
-fn offset(src: &str, line: u64, col: u64) -> usize {
-    let mut off = 0;
-    for (i, l) in src.split_inclusive('\n').enumerate() {
-        if i as u64 + 1 == line {
-            let chars: usize = l.chars().take(col as usize - 1).map(char::len_utf8).sum();
-            return off + chars;
-        }
-        off += l.len();
-    }
-    src.len()
-}
-
-/// The source with the edits of one candidate applied.
-fn apply(src: &str, fix: &Value) -> String {
-    let mut edits: Vec<(usize, usize, String)> = fix["edits"]
-        .as_array()
-        .expect("a candidate has edits")
-        .iter()
-        .map(|e| {
-            let s = &e["span"];
-            (
-                offset(src, s["line"].as_u64().unwrap(), s["col"].as_u64().unwrap()),
-                offset(src, s["end_line"].as_u64().unwrap(), s["end_col"].as_u64().unwrap()),
-                e["replace"].as_str().unwrap().to_string(),
-            )
-        })
-        .collect();
-    edits.sort();
-    for w in edits.windows(2) {
-        assert!(w[0].1 <= w[1].0, "the edits of one candidate overlap: {edits:?}");
-    }
-    let mut out = src.to_string();
-    for (a, b, r) in edits.into_iter().rev() {
-        out.replace_range(a..b, &r);
-    }
-    out
 }
 
 /// The lines of a text with the white space at the start and the end of each line dropped and the
@@ -145,7 +106,7 @@ fn a_doc_comment_after_the_last_member_of_those_is_still_e0004() {
         assert_eq!(strays[0]["span"]["line"].as_u64(), Some(stray_line), "{what}: at the stray line: {diags:?}");
         let fixes = strays[0]["fixes"].as_array().unwrap();
         assert_eq!(fixes.len(), 1, "{what}: one candidate: {diags:?}");
-        let fixed = apply(src, &fixes[0]);
+        let fixed = apply(src, &edits_of(&fixes[0]));
         assert_eq!(fixed, src.replace("/// stray", "// stray"), "{what}: the candidate is `//`");
     }
 }
@@ -215,7 +176,7 @@ fn a_doc_comment_after_the_attributes_is_one_e0004_with_one_candidate_that_moves
         assert_eq!(codes(&diags), vec!["E0004".to_string()], "{what}: one E0004: {diags:?}");
         let fixes = diags[0]["fixes"].as_array().unwrap();
         assert_eq!(fixes.len(), 1, "{what}: exactly one candidate (S-432): {diags:?}");
-        let fixed = apply(src, &fixes[0]);
+        let fixed = apply(src, &edits_of(&fixes[0]));
         assert_eq!(
             lines(&fixed),
             lines(expected),

@@ -3,10 +3,8 @@
 //! of a `const` of a generic struct, each in the type its argument gives; and the type of a constant
 //! of a generic `impl` by the names of its parameters (§15.1, R-375).
 
-use crate::test_support::Dir;
+use crate::test_support::{Dir, ONSA};
 use std::process::Command;
-
-const ONSA: &str = env!("CARGO_BIN_EXE_onsa");
 
 const SOURCE: &str = "pub struct Pair[T] {
   a: T,
