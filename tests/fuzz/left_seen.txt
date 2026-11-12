@@ -1,6 +1,8 @@
 # The classes of the fix stage with an error left at a candidate's place that the parent has read
 # (X-25): `class<TAB>left` a line, sorted. tools/fuzz.py left --seen adds them.
+fix|E0002|end the line before it|E0005	there is no attribute `…`
 fix|E0002|end the line before it|E0020	attributes are written `…`
+fix|E0002|remove the empty brackets|E0002	expected `…` or `…`, found `…`
 fix|E0002|remove the empty brackets|E0002	expected `…`, found newline
 fix|E0002|remove the line break|E0002	this `…` is never closed
 fix|E0002|write the `…` between the elements|E0002	expected imported name, found `…`
@@ -38,6 +40,7 @@ fix|E0003|move `…` to the end of the line before|E0002	this `…` is never clo
 fix|E0003|move `…` to the end of the line before|E0408	integer literal is larger than any integer type holds
 fix|E0004|move it before the attributes|E0001	U+# (a bidirectional control) cannot be written, also in a comment or a string (
 fix|E0004|move it before the attributes|E0004	this doc comment documents no declaration; `…` goes right before an item, a memb
+fix|E0020|call the function value with `…`|E0002	`…` needs a range `…` or `…`
 fix|E0020|call the function value with `…`|E0020	a tuple index does not start with #
 fix|E0020|compare in a guard, with the end (`…`)|E0020	literals have no type suffix; the type comes from the context
 fix|E0020|compare in a guard, without the end (`…`)|E0020	literals have no type suffix; the type comes from the context
@@ -52,10 +55,12 @@ fix|E0020|drop the message: `…` takes none|E0002	expected newline or `…`, fo
 fix|E0020|index with each element in brackets of its own|E0020	a `…` with `…` is no index: type arguments in an expression are written `…`, and
 fix|E0020|join it to the line before|E0001	`…` (U+#) cannot be written outside comments and strings: a name is written with
 fix|E0020|join it to the line before|E0001	a number has no suffix
+fix|E0020|join it to the line before|E0001	number prefix without digits
 fix|E0020|join it to the line before|E0002	expected newline after the declaration, found `…`
 fix|E0020|join it to the line before|E0002	expected trait bound, found `…`
 fix|E0020|join it to the line before|E0002	the `…` of a flow call is written right after the name
 fix|E0020|join it to the line before|E0002	this `…` is never closed
+fix|E0020|join it to the line before|E0020	a `…` that opens a list is written right after the token before it
 fix|E0020|move it to the end of the line before|E0002	`…` is no part of the head of a declaration
 fix|E0020|move it to the end of the line before|E0002	expected a declaration, found `…`
 fix|E0020|move it to the end of the line before|E0020	a float literal needs digits on both sides of the point
@@ -68,17 +73,22 @@ fix|E0020|remove the `…`|E0002	expected newline after the declaration, found `
 fix|E0020|remove the `…`|E0002	this `…` is never closed
 fix|E0020|remove the spaces|E0002	expected `…` or `…`, found `…`
 fix|E0020|remove the space|E0002	empty brackets are not written here
+fix|E0020|remove the space|E0002	expected an expression, found `…`
 fix|E0020|remove the space|E0002	expected module path, found `…`
 fix|E0020|remove the space|E0020	a callee that is no path of names is a function value; it is called with `…`
+fix|E0020|take the `…` out|E0002	expected a pattern, found `…`
+fix|E0020|write `…`|E0002	expected `…`, found `…`
 fix|E0020|write a doc comment `…`|E0004	this doc comment documents no declaration; `…` goes right before an item, a memb
 fix|E0020|write a line comment|E0002	expected newline or `…`, found identifier
 fix|E0020|write a line comment|E0020	a postfix `…` is written right after its operand
+fix|E0020|write each `…` as `…`|E0002	expected a declaration, found `…`
 fix|E0020|write it against its operand|E0002	expected a declaration, found identifier
 fix|E0020|write it against its operand|E0020	a callee that is no path of names is a function value; it is called with `…`
 fix|E0020|write the rate as the clock `…`|E0020	a rate is no type; it is written as the clock after the type
 fix|E0020|write the rate as the clock `…`|E0302	cannot find `…`
 fix|E0020|write the type arguments as `…`|E0020	a `…` with `…` is no index: type arguments in an expression are written `…`, and
 fix|E0020|write the type arguments as `…`|E0020	a type writes its arguments in `…` without `…`
+fix|E0020|write the type arguments as `…`|E0020	paths are separated with `…`
 fix|E0020|write the type arguments as `…`|E0020	type arguments in an expression are written `…`; a `…` with `…` is no index
 fix|E0020|write the type arguments as `…`|E0415	the receiver of an `…` method must be a place (a `…`, an `…` parameter, or a fie
 fix|E0020|write the type arguments as `…`|E0416	`…` does not satisfy the bound `…` of `…` (§#.#)
