@@ -2,12 +2,13 @@
 // [test]
 // spec = ["§18.1", "§6.3", "§4.5"]
 
-// R-379 (§18.1): an `impl Tr for P` whose trait is not found (`Defualt`, E0302 of its heading) gives `P` members and a trait
-// that are not known: the names after `P.` that are not found (`P.default()`, `P.other()`) and whether `P` meets a trait (the
-// bound `T: Default` of `g`, the operator `==`) get no diagnostic, as for the types of a module with an `impl` whose heading was
-// not read (S-850). Fixing the name of the trait removes them all, so they would be the chain §18.1 does not report. A field
-// that is not found is still reported (failed_impl_trait_name_other.onsa, with a type of the same module that the `impl` is
-// not of). The file has the one diagnostic, the E0302 of the heading.
+// S-1019, R-379 (§18.1): an `impl Tr for P` whose trait is not found (`Defualt`, E0302 of its heading) gives `P`
+// members and a trait that are not known: the names after `P.` that are not found (`P.default()`, `P.other()`) and
+// whether `P` meets a trait (the bound `T: Default` of `g`, the operator `==`) get no diagnostic, as for the types of a
+// module with an `impl` whose heading was not read (S-850). Fixing the name of the trait removes them all, so they
+// would be the chain §18.1 does not report. A field that is not found is still reported
+// (failed_impl_trait_name_other.onsa, with a type of the same module that the `impl` is not of). The file has the one
+// diagnostic, the E0302 of the heading.
 
 pub struct P {
   n: I32,

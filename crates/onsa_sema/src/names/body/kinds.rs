@@ -12,7 +12,7 @@ use onsa_syntax::foreign::{self, RowId};
 
 use super::paths::{Place, path_of, span_of};
 use super::{Fail, Walker};
-use crate::def::{Bound, TRAITS};
+use crate::def::{Bound, Declared, DefKind, TRAITS};
 use crate::names::{BuiltinMember, PathEnd};
 use crate::resolve::{Builtin, Callee, Entity, NameKind, ResolveError, no_members};
 use crate::traits::member_rep;
@@ -50,6 +50,10 @@ impl Walker<'_> {
             Entity::Builtin(Builtin::Trait(row)) => TRAITS[row as usize].1,
             _ => None,
         };
+        // A trait declared, whose members are not read (§18.1): whether
+        // `member` is one is not known.
+        let declared =
+            matches!(entity, Entity::Def(t) if matches!(self.a.def(t).kind, DefKind::Unsupported(Declared::Trait)));
         const NAMED: &str = "an associated function or constant is named after a type (`F32.from_bits(b)`, §6.6)";
         // The method form of a member that takes `self` alone (`Float.PI`, `Default.default` are none).
         let method =
@@ -65,6 +69,7 @@ impl Walker<'_> {
                 "`{}` has no members: a value is shown by an interpolation, `\"{{x}}\"` (§2.4, §6.3)",
                 name.name
             ),
+            _ if declared => NAMED.to_string(),
             _ => format!("`{}` is no member of `{}`; {NAMED}", member.name, name.name),
         };
         d.with_note(name.span, note)

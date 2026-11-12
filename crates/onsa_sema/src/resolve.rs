@@ -542,8 +542,9 @@ pub struct Modules {
     /// known (§18.1, S-460, S-774). A use of a name of the trait is an error
     /// with no diagnostic ([`Self::holds_member`]).
     pub held: HashSet<(DefId, crate::def::Bound)>,
-    /// The types of an `impl Tr for Ty` whose trait was not read (§18.1,
-    /// R-379): what it gives them is not known ([`Self::unread_members`]).
+    /// The types of an `impl Tr for Ty` of their module whose trait name was
+    /// not read (§18.1, S-1019): what it gives them is not known
+    /// ([`Self::unread_members`]).
     pub unknown_impls: HashSet<DefId>,
     /// The `impl` written of a trait for a type, the first in the source: a
     /// row is one `impl` (R-127), of the same trait key as `held` and the

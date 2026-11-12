@@ -468,15 +468,22 @@ fn row_heads<'a>(row: &'a onsa_syntax::ast::EffectRow, out: &mut Vec<&'a Ident>)
     out.extend(row.effects.iter().filter_map(|p| p.segments.first()));
 }
 
+/// The names at the head of the chains of the constant expression `e`, in
+/// its grammar ([`Ast::const_form`]; the names stage reads no other, S-989).
 pub(super) fn expr_heads<'a>(ast: &'a Ast, e: ExprId, out: &mut Vec<&'a Ident>) {
-    match &ast.expr(e).kind {
-        ExprKind::Path(p) => out.extend(p.segments.first()),
-        // The types of the list after a name (`Rg::[F32, n].CAP`, §4.5).
-        ExprKind::TypeArgs { base, args } => {
-            expr_heads(ast, *base, out);
-            args.args.iter().for_each(|&x| heads(ast, x, out));
+    match ast.const_form(e) {
+        ConstForm::Chain(chain) => {
+            out.push(chain.names[0].1);
+            // The types of the lists after a name (`Rg::[F32, n].CAP`, §4.5).
+            for (_, at) in chain.lists {
+                if let ExprKind::TypeArgs { args, .. } = &ast.expr(at).kind {
+                    args.args.iter().for_each(|&x| heads(ast, x, out));
+                }
+            }
         }
-        _ => ast.sub_exprs(e).into_iter().for_each(|x| expr_heads(ast, x, out)),
+        ConstForm::Paren(x) | ConstForm::Neg(x) => expr_heads(ast, x, out),
+        ConstForm::Arith(l, r) => [l, r].into_iter().for_each(|x| expr_heads(ast, x, out)),
+        ConstForm::Lit(_) | ConstForm::Error | ConstForm::Outside => {}
     }
 }
 

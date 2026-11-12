@@ -329,8 +329,8 @@ impl Modules {
 
     /// Whether the members and the traits of the type `d` are not all read:
     /// its module has an `impl` whose heading was not read, and only the module
-    /// of a type adds to it (§18.1, §6.3, S-850), or an `impl` of it names a
-    /// trait not read (R-379). Its uses get no diagnostic, from whatever
+    /// of a type adds to it (§18.1, §6.3, S-850), or an `impl` of it in its
+    /// module names no trait it reads (S-1019). Its uses get no diagnostic, from whatever
     /// module. Of the module of the type, not of the use.
     pub(crate) fn unread_members(&self, d: crate::DefId, def: &Def) -> bool {
         matches!(def.kind, DefKind::Struct(_) | DefKind::Enum(_))

@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.3", "§4.4", "§4.5"]
+
+// S-1019 (§18.1): an `impl Tr for Al` whose trait is not found names its type through the alias `Al`, so the type whose
+// members and traits are not known is `P`, the head of the alias. They are not known before any type is lowered: an alias
+// or a constant that reads `P.NOPE` in its type, before the `impl` or after it, gets no diagnostic. Nor does a bound met
+// through a type that holds `P` (a tuple, an array, `Option`). The file has the one diagnostic, the E0302 of the heading.
+
+pub struct P {
+  n: I32,
+}
+
+type Before = [F32; P.NOPE]
+
+type Al = P
+
+impl Defualt for Al {                               //~ E0302
+  rt fn default() -> P {
+    P { n: 1 }
+  }
+}
+
+type After = [F32; P.NOPE]
+
+const E: [F32; P.NOPE] = [0.0; 2]
+
+rt fn g[T: Default]() -> T {
+  T.default()
+}
+
+fn by_its_name() -> P {
+  P.default()
+}
+
+fn through_a_bound() -> P {
+  g()
+}
+
+fn a_tuple() -> (P, I32) {
+  g()
+}
+
+fn an_array() -> [P; 2] {
+  g()
+}
+
+fn an_option(x: Option[P], y: Option[P]) -> Bool {
+  x == y
+}

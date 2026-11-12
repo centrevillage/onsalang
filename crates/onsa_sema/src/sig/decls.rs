@@ -308,6 +308,7 @@ impl<'p> Sema<'p> {
     /// their clauses. Falls back where a package writes in std's tables.
     pub(super) fn order_declarations(&mut self) -> Result<(), crate::base::Fallback> {
         self.alias_heads();
+        self.mark_unknown_impls();
         self.name_members()?;
         let mut g = Graph {
             a: &*self.a,
@@ -448,12 +449,37 @@ impl<'p> Sema<'p> {
         }
     }
 
-    /// The type of the `impl` `id` names by its declaration, as written.
-    fn impl_target(&self, id: DefId) -> Option<Entity> {
+    /// The type of the `impl` `id` names by its declaration, as written: of
+    /// one whose members are read, or of any (`all`).
+    fn impl_target(&self, id: DefId, all: bool) -> Option<Entity> {
         let def = self.a.def(id);
         let (ast, i) = self.impl_decl(id)?;
         let TypeKind::Path { path, .. } = &ast.ty(i.self_ty).kind else { return None };
-        reads_members(i).then(|| self.a.resolve_path(def.module, path).ok()).flatten()
+        (all || reads_members(i)).then(|| self.a.resolve_path(def.module, path).ok()).flatten()
+    }
+
+    /// The types whose members and traits are not read for an `impl Tr for
+    /// Ty` whose `Tr` names no trait by the names stage ([`names_trait`]):
+    /// `Ty`, through an alias its head, when it is a struct or an enum of
+    /// the module of the `impl` (§18.1, S-1019). From the names alone, before
+    /// a type is lowered, so that one the order of the declarations lowers
+    /// has it too.
+    fn mark_unknown_impls(&mut self) {
+        for d in self.a.new_defs() {
+            let Some((_, i)) = self.impl_decl(d) else { continue };
+            let m = self.a.def(d).module;
+            let Some(tr) = &i.trait_ else { continue };
+            // A kind constraint is no trait (`Sema::copy_impl`).
+            if kind_constraint(tr).is_some() || names_trait(self.a, m, &i.generics, tr) {
+                continue;
+            }
+            let ty = self.impl_target(d, true).and_then(|e| self.head(e)).and_then(|e| self.type_key(e));
+            if let Some((Some(t), _)) = ty
+                && self.a.def(t).module == m
+            {
+                self.a.modules.unknown_impls.insert(t);
+            }
+        }
     }
 
     /// The AST of the `impl` `id`: none of what a derive makes.
@@ -616,7 +642,12 @@ impl<'p> Sema<'p> {
     /// The type the inherent `impl` `id` is of: what it names, and of an
     /// alias (E0307), what the alias stands for ([`Decls::heads`]).
     fn impl_type(&self, id: DefId) -> Option<Entity> {
-        match self.impl_target(id)? {
+        self.head(self.impl_target(id, false)?)
+    }
+
+    /// What `e` names: of an alias, what it stands for ([`Decls::heads`]).
+    fn head(&self, e: Entity) -> Option<Entity> {
+        match e {
             Entity::Def(al) if matches!(self.a.def(al).kind, DefKind::Alias(_)) => {
                 self.a.decls.heads.get(&al).copied().flatten()
             }

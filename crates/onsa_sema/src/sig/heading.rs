@@ -283,6 +283,15 @@ pub(crate) fn read_effects(
     (set, errors)
 }
 
+/// Whether the path `tr` of `impl[gs] tr for Ty` names a trait by the names
+/// alone, read as [`Sema::lower_trait`] reads it before the list `gs` is
+/// lowered (§18.1, S-1019): a name not found, held, or of another kind
+/// (a parameter of `gs`) is none.
+pub(super) fn names_trait(a: &Analysis, m: ModId, gs: &[GenericParam], tr: &Path) -> bool {
+    let read = heading_name(a, m, tr, (&listed(gs, &[]), &[], &HashSet::default()), None);
+    matches!(read, Ok((NameKind::Trait, _)))
+}
+
 /// What [`heading_name`] reads of a path.
 type Named = Result<(NameKind, Option<Entity>), crate::ResolveError>;
 

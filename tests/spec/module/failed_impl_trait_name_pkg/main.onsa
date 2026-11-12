@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.3", "§15.1"]
+
+// S-1019 (§18.1): an `impl Tr for Ty` whose trait is not found leaves the members and the traits of `Ty` not known only
+// when `Ty` is declared in the module of the `impl`. `b.P` is declared in another module, so a name after `P.` that is
+// not found is E0302 here and in `b`, and a method of `P` that is not found is E0413 in `b`. One error in each unit.
+
+use b
+
+impl Defualt for b.P {                              //~ E0302
+  fn hh() -> I32 {
+    1
+  }
+}
+
+fn here() -> I32 {
+  b.P.nope()                                        //~ E0302
+}

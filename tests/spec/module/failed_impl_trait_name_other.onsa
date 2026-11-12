@@ -2,16 +2,17 @@
 // [test]
 // spec = ["§18.1", "§6.3", "§4.5"]
 
-// R-379 (§18.1): what is not known after an `impl Tr for P` whose trait (or an argument of it, `Default[Gone]`) is not read
-// is of `P` alone, the type the `impl` is written for (failed_impl_trait_name.onsa): another type of the module (`Q`) has its
-// members and traits, so `Q.default()` is the E0302 of a name that is not found and `Q` passed to `T: Default` is E0416. A
-// field of `P` that is not found is still E0413 (the fields are read, §18.1). One error in each unit.
+// S-1019 (§18.1): what is not known after an `impl Tr for P` whose trait name is not read is of `P` alone, the type the
+// `impl` is written for (failed_impl_trait_name.onsa): another type of the module (`Q`) has its members and traits, so
+// `Q.default()` is the E0302 of a name that is not found and `Q` passed to `T: Default` is E0416. A field of `P` that is not
+// found is still E0413 (the fields are read, §18.1). One error in each unit. An error in the arguments of a trait whose name
+// is read is not of this kind (failed_impl_trait_args.onsa).
 
 pub struct P {
   n: I32,
 }
 
-impl Default[Gone] for P {                          //~ E0302
+impl Defualt for P {                                //~ E0302
   rt fn default() -> P {
     P { n: 1 }
   }

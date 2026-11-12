@@ -1,0 +1,11 @@
+pub struct P {
+  n: I32,
+}
+
+fn by_its_name() -> I32 {
+  P.nope()                                          //~ E0302
+}
+
+fn a_method(p: P) -> I32 {
+  p.nope()                                          //~ E0413
+}

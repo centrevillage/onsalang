@@ -80,14 +80,8 @@ impl<'p> Sema<'p> {
     /// of the form, and its E0416 is not judged (`Sema::wellformed`).
     fn trait_heading(&mut self, cx: &Cx<'p>, i: &ImplDecl, tr: &Path, aliased: bool, self_ty: TyId) {
         let named = self.lower_trait(cx, tr);
-        let args: Vec<TyId> = i.trait_args.iter().map(|&t| self.lower_type(cx, t)).collect();
+        i.trait_args.iter().for_each(|&t| _ = self.lower_type(cx, t));
         let target = self.target_type(cx, i.self_ty);
-        // A trait (or an argument of it) not read: what the `impl` gives the
-        // type is not known (§18.1, R-379).
-        let read = named.is_some() && args.iter().all(|&t| !matches!(self.a.types.get(t), Ty::Error));
-        if let (false, Some(Entity::Def(d))) = (read, target) {
-            self.a.modules.unknown_impls.insert(d);
-        }
         let shown = one_line(&src(cx, cx.ast.ty(i.self_ty).span));
         match (named, target) {
             (Some(Entity::Builtin(Builtin::Trait(row))), _) if TRAITS[row as usize].1.is_some_and(no_impl) => {

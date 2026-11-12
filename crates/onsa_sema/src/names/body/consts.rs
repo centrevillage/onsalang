@@ -70,8 +70,12 @@ pub(crate) fn const_names(
     super::exprs::expr_heads(ast, e, &mut heads);
     w.outer_locals(scope, heads, ast.expr(e).span);
     let _ = w.const_expr(e);
-    // What else it types is no constant: the reader's E0417.
-    let lists = w.type_sites.into_iter().filter_map(|(t, _)| if let Typed::Args(at) = t { Some(*at) } else { None });
+    // The walk types the lists after a name alone: a type in another form
+    // is out of the grammar, which it does not walk (§4.5, S-989).
+    let lists = w.type_sites.into_iter().map(|(t, _)| match t {
+        Typed::Args(at) => *at,
+        _ => onsa_diag::internal::bug(Some(ast.expr(e).span), "a type of a constant expression out of a list"),
+    });
     let failure = if let Some(Fail::Report(d)) = w.failure { Some(d) } else { None };
     ConstNames { names: w.out, lists: lists.collect(), failure }
 }

@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.3"]
+
+// S-1019 (§18.1): an `impl Tr for Ty` whose trait is not found leaves the members and the traits of `Ty` not known only
+// when `Ty` is declared in the module of the `impl`. A type of std (`Option`) keeps them: a method that is not found is
+// E0413, a name after `Option.` that is not found E0302, and `==` of a type that does not meet `Eq` E0401. One error in
+// each unit.
+
+impl[T] Defualt for Option[T] {                     //~ E0302
+  fn hh(self) -> U64 {
+    1
+  }
+}
+
+fn a_method(o: Option[I32]) -> U64 {
+  o.nope()                                          //~ E0413
+}
+
+fn by_its_name() -> I32 {
+  Option.nope()                                     //~ E0302
+}
+
+fn an_operator(o: Option[fn() -> I32], p: Option[fn() -> I32]) -> Bool {
+  o == p                                            //~ E0401
+}

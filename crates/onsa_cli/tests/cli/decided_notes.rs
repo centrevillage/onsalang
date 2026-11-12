@@ -2,7 +2,8 @@
 //! cases does not compare notes): S-1005 (§4.2, how a literal is given to a `FixedStr[N]` whose
 //! capacity is a parameter), S-908 (§11.6, a type a flow generates implements no trait), S-912
 //! (§4.4, the default value of a tuple, an array and `()`) and S-1014 (§15.1, the method form only
-//! of a member of the trait before the `.`; `Show` shows an interpolation).
+//! of a member of the trait before the `.`; `Show` shows an interpolation), and of W5-13 U11 (§18.1,
+//! the members of a trait declared are not read: no note says whether a name is one).
 //!
 //! The inputs are the case files of `tests/spec/` (read where they are, nothing written); each test
 //! checks the words that tell what the note shows, not its whole text, which the spec does not fix.
@@ -87,4 +88,19 @@ fn a_dot_after_a_trait_shows_the_method_form_of_a_member_alone() {
         }
     }
     assert_eq!(seen, [5, 1, 3, 3], "the forms of {path}");
+}
+
+#[test]
+fn a_dot_after_a_declared_trait_does_not_say_whether_the_name_is_a_member() {
+    // §18.1: the members of a trait declared (an E0200 of this version) are not read, so the note
+    // of `Tr.y()` and `Tr.y` shows where an associated function is named, not whether `y` is a
+    // member of `Tr`.
+    let path = "module/kind_failed_declaration_names.onsa";
+    let text = std::fs::read_to_string(case(path)).expect("the case file");
+    let at = |d: &Value| text.lines().nth(span_of(&d["span"]).line as usize - 1).unwrap_or("").to_string();
+    let diags: Vec<Value> = of_code(path, "E0308", 25).into_iter().filter(|d| at(d).contains("Tr.y")).collect();
+    assert_eq!(diags.len(), 2, "{diags:?}");
+    for d in &diags {
+        assert!(noted(d, &["named after a type"]) && !notes(d).iter().any(|n| n.contains("member")), "{d}");
+    }
 }

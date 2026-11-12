@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.3"]
+
+// S-1019 (§18.1): an error in the arguments of the trait of `impl Tr[...] for P` is not a trait name that is not read:
+// the trait is known, and with the error fixed the `impl` is of the form this version does not read (`Default[I32]`,
+// `Hash[I32]`: E0200, S-895). So the type has the members and the traits it has without the `impl`: a name after `P.`
+// that is not found is E0302, and `P` passed to `T: Default` is E0416, whether the error is a name not found (the E0302
+// of the heading) or one of the types stage (an E0412, which goes out with the E0200 of the form). One error in each
+// unit.
+
+pub struct P {
+  n: I32,
+}
+
+impl Default[Gone] for P {                          //~ E0302
+  rt fn default() -> P {
+    P { n: 1 }
+  }
+}
+
+pub struct Q {
+  n: I32,
+}
+
+impl Hash[Gone] for Q {                             //~ E0302
+  fn hh(self) -> U64 {
+    1
+  }
+}
+
+pub struct W[T] {
+  n: T,
+}
+
+pub struct R {
+  n: I32,
+}
+
+impl Hash[W[I32, I32]] for R {                      //~ E0200
+  fn hh() -> I32 {
+    1
+  }
+}
+
+rt fn g[T: Default]() -> T {
+  T.default()
+}
+
+fn by_its_name() -> P {
+  P.default()                                       //~ E0302
+}
+
+fn through_a_bound() -> P {
+  g()                                               //~ E0416
+}
+
+fn a_member_of_q(q: Q) -> U64 {
+  Q.hh(q)                                           //~ E0302
+}
+
+fn a_member_of_r() -> I32 {
+  R.hh()                                            //~ E0302
+}
