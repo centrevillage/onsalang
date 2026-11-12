@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "27:5"
+// code = "E0418"
+// candidate = 1
+// leaves = ["31:3 E0401"]
+//
+// [[test.fix]]
+// at = "36:5"
+// code = "E0418"
+// candidate = 1
+// leaves = ["39:3 E0418"]
+
+// S-1025 (U8b of W5-13; provisional reading (1)): the candidate that joins the line before (`a` newline `-b` as `a - b`, §6.1) is made only when the file after it has
+// no error of the stage of the types (§18.1), and the body is read again whole with the candidate applied, so a body that has another error of its own (a later statement that
+// reads the variable with another type, a later statement that is an E0418 too) has no joined form, as the candidates of an E0503 have none in such a body (S-876). Only `let _ = a` is made (`fixes = 1`).
+// The other error is the second error of the input, so the candidate `let _` that leaves it states it in `leaves` (S-266). The text after the candidate is not written here.
+// One error per function (P-01); the marker is on the line of `a`.
+
+pub fn later_return_reads_the_variable_with_another_type(r: I64) -> I64 {
+  let n = 5
+  let v = {
+    r                                               //~ E0418
+    -n
+  }
+  let w: I32 = n
+  v
+}
+
+pub fn later_statement_is_an_e0418_too(a: I32, b: I32) -> I32 {
+  let v = {
+    a                                               //~ E0418
+    -b
+  }
+  1
+  v
+}

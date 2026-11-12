@@ -1,0 +1,86 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§2.5", "§18.1"]
+// fixes = 2
+
+// R-389 (U8b of W5-13): the candidate that joins the line before (`a` newline `-b` as `a - b`, §6.1) is made together with `let _ = a` ("も並べる") when the file
+// after it has no error that it makes (§18.1). The joined form decides the type of a variable (`let n = 5`, `r - n` is an `I64`, so `n` is an `I64`) and the value
+// of the block, and the statements that follow read them with the same type or do not read them, so both candidates are made. The same contexts as in e0418_joined_reread_leaves.onsa
+// (the value of a `let`, an arm of a `match`, a branch of an `if`, an anonymous function), and a `break` in the line before, which a loop
+// that follows reads as a way out of the loop (§7). The text after the candidates is not written here. One error per function (P-01); the marker is on the line of `r`.
+
+pub fn h(x: Bool) -> I32 {
+  1
+}
+
+pub fn value_of_an_if_of_the_type_of_the_function(c: Bool, r: I64) -> I64 {
+  let n = 5
+  let v = if c {
+    r - n                                               //~ E0418
+  } else {
+    3
+  }
+  v
+}
+
+pub fn variable_decided_again_by_a_later_let(c: Bool, r: I64) -> I64 {
+  let n = 5
+  let v = if c {
+    r - n                                               //~ E0418
+  } else {
+    3
+  }
+  let k: I64 = n
+  v + k
+}
+
+pub fn variable_not_read_again(r: I64) -> I64 {
+  let n = 5
+  r - n                                                 //~ E0418
+}
+
+pub fn in_an_arm(o: Option[I32], r: I64) -> I64 {
+  let n = 5
+  let v = match o {
+    Some(_) => {
+      r - n                                             //~ E0418
+    },
+    None => 3,
+  }
+  v
+}
+
+pub fn in_a_branch(c: Bool, r: I64) -> I64 {
+  let n = 5
+  if c {
+    let v = {
+      r - n                                             //~ E0418
+    }
+    v
+  } else {
+    3
+  }
+}
+
+pub fn in_an_anonymous_function(r: I64) -> I64 {
+  let f = fn(c: Bool, p: I64) -> I64 {
+    let n = 5
+    let v = if c {
+      p - n                                             //~ E0418
+    } else {
+      3
+    }
+    v
+  }
+  f.(true, r)
+}
+
+pub fn break_in_the_line_before(c: Bool, b: I32) -> I32 {
+  while true {
+    let v = {
+      h(if c { break } else { true }) - b               //~ E0418
+    }
+    let _ = v
+  }
+  1
+}

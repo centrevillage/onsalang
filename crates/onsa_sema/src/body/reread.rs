@@ -1,4 +1,4 @@
-//! The candidates of an E0503, and the one of `return` of an E0401 (§7, §18.1,
+//! The candidates of an E0503 or an E0418, and the `return` of an E0401 (§7, §18.1,
 //! S-876): the first read makes them at the error, where it has not read what
 //! follows, so each is judged by reading the body again with it applied, from
 //! a new state, with the table of what diverges of that form. A candidate
@@ -61,6 +61,11 @@ impl<'a> Checker<'a> {
     pub(super) fn joined_value(&self, s: StmtId) -> Option<ExprId> {
         Patch::joined(self.patch(), s)
     }
+
+    /// The left operand this read gives the `-x` node `e`, read as `a - x`.
+    pub(super) fn joined_left(&self, e: ExprId) -> Option<ExprId> {
+        Patch::left(self.patch(), e)
+    }
 }
 
 /// Give the diagnostic of `tries` the candidates that read clean, in their
@@ -97,6 +102,7 @@ fn reads_clean(
     let (mark, marks) = (a.diagnostics.len(), Marks::of(a, job.id));
     let table = diverging.patched(&job.module.parsed.ast, job.body, patch);
     let mut ck = read_body(a, bound, job, std::mem::take(names), table, How::Applied(patch));
+    ck.no_trial_goes_on();
     ck.end_checks();
     let stopped = ck.failed;
     *names = std::mem::take(&mut ck.names);

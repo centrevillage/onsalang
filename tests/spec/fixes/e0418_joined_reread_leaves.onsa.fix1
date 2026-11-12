@@ -1,0 +1,84 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§2.5", "§18.1"]
+// fixes = 1
+
+// R-389 (U8b of W5-13): the candidate that joins the line before (`a` newline `-b` as `a - b`, §6.1) is made only when the file after it has no error
+// that it makes (§18.1: "この約束を満たす候補を作れなければ、候補を出さない"), so a joined form that decides the type of a variable which a later
+// statement reads with another type is not made. In each function below the joined form `r - n` is an `I64`, which decides `n` (`let n = 5`) and
+// the value of the block to be an `I64`, and the later statement `v` (a value of an `I32`) or `v + n` is E0401 with the joined form,
+// while it has no error with the other form `let _ = r`, so `let _ = r` is the one candidate (`fixes = 1`). The contexts: the value of a `let`, an arm
+// of a `match`, a branch of an `if`, an anonymous function and a block of a `let` in a branch. The text after the candidate is not written here.
+// One error per function (P-01); the marker is on the line of `r`.
+
+pub fn need_i32(x: I32) -> I32 {
+  x
+}
+
+pub fn in_the_value_of_an_if(c: Bool, r: I64) -> I32 {
+  let n = 5
+  let v = if c {
+    let _ = r                                               //~ E0418
+    -n
+  } else {
+    3
+  }
+  v
+}
+
+pub fn in_the_value_of_a_block(r: I64) -> I32 {
+  let n = 5
+  let v = {
+    let _ = r                                               //~ E0418
+    -n
+  }
+  v
+}
+
+pub fn in_an_arm(o: Option[I32], r: I64) -> I32 {
+  let n = 5
+  let v = match o {
+    Some(_) => {
+      let _ = r                                             //~ E0418
+      -n
+    },
+    None => 3,
+  }
+  v
+}
+
+pub fn in_a_branch(c: Bool, r: I64) -> I32 {
+  let n = 5
+  if c {
+    let v = {
+      let _ = r                                             //~ E0418
+      -n
+    }
+    v
+  } else {
+    3
+  }
+}
+
+pub fn in_an_anonymous_function(r: I64) -> I32 {
+  let f = fn(c: Bool, p: I64) -> I32 {
+    let n = 5
+    let v = if c {
+      let _ = p                                             //~ E0418
+      -n
+    } else {
+      3
+    }
+    v
+  }
+  f.(true, r)
+}
+
+pub fn decided_by_a_later_call(r: I64) -> I32 {
+  let n = 5
+  let v = {
+    let _ = r                                               //~ E0418
+    -n
+  }
+  v + need_i32(n)
+}

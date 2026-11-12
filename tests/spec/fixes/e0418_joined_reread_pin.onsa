@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§18.1"]
+// fixes = 2
+//
+// [[test.fix]]
+// at = "24:5"
+// code = "E0418"
+// candidate = 1
+// clean = true
+//
+// [[test.fix]]
+// at = "24:5"
+// code = "E0418"
+// candidate = 2
+// clean = true
+
+// R-389 (U8b of W5-13): in a function whose later statement decides the same type of the variable as the joined form does (`n` is an `I64`), both candidates are made, and the file after each of them has no
+// diagnostic (`clean`). The pin makes a lost candidate a failure, and a diagnostic of a stage after the types that the joined form would leave a failure too.
+
+pub fn variable_decided_again_by_a_later_let(c: Bool, r: I64) -> I64 {
+  let n = 5
+  let v = if c {
+    r                                               //~ E0418
+    -n
+  } else {
+    3
+  }
+  let k: I64 = n
+  v + k
+}

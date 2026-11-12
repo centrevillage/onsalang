@@ -2,8 +2,9 @@
 //! statement in a block (E0418, §6.1, S-127, S-848), what follows a statement
 //! that diverges (E0503, §7, S-128, S-268) and a form that diverges in a part
 //! that is always evaluated (E0503, S-291, S-889). The candidates that take
-//! the rest of a block away or join it to a `return` are read in
-//! [`super::reread`] (§18.1, S-876). The E0503 of an arm is in `arms.rs`.
+//! the rest of a block away, join it to a `return` or join a line to the one
+//! before are read in [`super::reread`] (§18.1, S-876, R-389). The E0503 of an
+//! arm is in `arms.rs`.
 
 use onsa_diag::Edit;
 
@@ -36,9 +37,8 @@ impl<'a> Checker<'a> {
     /// After a statement of the open block, with the deferred items of the
     /// statement seen: nothing follows one that diverges (§7), and the type
     /// of a statement's value is decided to be `()` by now, or it never is
-    /// (no later statement is waited for, S-848). `expected` is the type of
-    /// the block.
-    pub(super) fn after_stmt(&mut self, expected: Option<TyId>) -> R<()> {
+    /// (no later statement is waited for, S-848).
+    pub(super) fn after_stmt(&mut self) -> R<()> {
         let (_, b, i) = self.open_block();
         if self.info.diverging.stmt(self.ast, b.stmts[i]) {
             return match self.item(b, i + 1) {
@@ -72,21 +72,19 @@ impl<'a> Checker<'a> {
         } else {
             d.with_fix(Fix::insert("discard the value with `let _`", span.file, span.start, "let _ = "))
         };
-        if let Some(fix) = self.joined_line(b, i, t, expected) {
-            d = d.with_fix(fix);
-        }
-        Err(self.diag(d))
+        let tries = self.joined_line().into_iter().collect();
+        Err(self.stop_with(d, tries))
     }
 
-    /// The candidate that joins the statement `i` of `b`, a value `a` of type
-    /// `t`, and the last expression `-x` of the block into `a - x` (§6.1,
-    /// §2.5), when `a` is read as the left operand there and `a - x` fits.
-    /// Of the forms that start with a `-`, only `-x` keeps its operand
-    /// (`-x * y` would be another tree to check). The trial binds what it
-    /// fits, and this body stops at the E0418 the candidate is for.
-    fn joined_line(&mut self, b: &Block, i: usize, t: TyId, expected: Option<TyId>) -> Option<Fix> {
+    /// The candidate that joins the statement the open block is at, a value
+    /// `a`, and its last expression `-x` into `a - x` (§6.1, §2.5), when
+    /// `a` is read as the left operand there; whether `a - x` fits is the read
+    /// of that form. Of the forms that start with a `-`, only `-x` keeps its
+    /// operand (`-x * y` would be another tree to check).
+    fn joined_line(&self) -> Option<Try> {
+        let (id, b, i) = self.open_block();
         let StmtKind::Expr(a) = self.ast.stmt(b.stmts[i]).kind else { return None };
-        let last = b.tail.filter(|_| i + 1 == b.stmts.len())?;
+        let last = b.tail.filter(|_| i + 1 == b.stmts.len() && self.makes_candidates())?;
         let ExprKind::Unary { op: UnOp::Neg, expr: x } = self.expr(last).kind else { return None };
         let on_the_left = match &self.expr(a).kind {
             ExprKind::If { .. } | ExprKind::Match { .. } | ExprKind::Block(_) => false,
@@ -98,32 +96,30 @@ impl<'a> Checker<'a> {
         if !on_the_left {
             return None;
         }
-        let at = self.expr(last).span;
-        self.quietly(|ck| {
-            if let Some(expected) = expected {
-                ck.unify_at(at, t, expected)?;
-            }
-            ck.check_expr(x, Some(t))?;
-            ck.require_op(OpNeed::Binary(BinOp::Sub), t, at)?;
-            ck.check_deferred_now()
-        })?;
-        let decided = !self.infer.has_undefaulted_vars(&self.a.types, t);
-        let (end, x) = (self.expr(a).span.end, self.expr(x).span);
-        decided.then(|| {
-            self.join_edits("join it to the line before", end, at, Span::new(x.file, at.start + 1, x.end), " - ")
-        })
+        let (at, end, x_at) = (self.expr(last).span, self.expr(a).span.end, self.expr(x).span);
+        let fix = self.join_edits("join it to the line before", end, at, Span::new(at.file, at.start + 1, x_at.end));
+        let patch = Patch::Operand(id, Block { stmts: b.stmts[..i].to_vec(), tail: Some(last) }, last, a);
+        // SPEC-GAP(S-1025): the read again of the whole body judges the join, so a body with
+        // another error or with names read only in part gets no join (as E0503, S-876).
+        // SPEC-GAP(S-1027): and a type a later statement decides counts in whether `a - x` fits.
+        Some(Try { fix, patch })
     }
 
     /// The edits that bring `line`, an item, up to `end`, the end of the line
-    /// before, with `lead` for all before `kept`, its end: the line break
-    /// becomes `lead`, or with a comment in it, which stays where it is
-    /// (§18.1, as `edits::move_up`), the item moves before that comment and
-    /// takes its line with it.
-    fn join_edits(&self, title: &str, end: u32, line: Span, kept: Span, lead: &str) -> Fix {
+    /// before: the line break becomes a space, and what is before `kept`, its
+    /// end, an operator (the `-` of `-x`), gets one after it (`a - x`), by an
+    /// edit of its own (§18.1, S-251). With a comment in the line break, which
+    /// stays where it is (§18.1, as `edits::move_up`), the item moves before
+    /// that comment and takes its line with it.
+    fn join_edits(&self, title: &str, end: u32, line: Span, kept: Span) -> Fix {
         let file = line.file;
+        let operator = self.src(Span::new(file, line.start, kept.start));
         if self.src(Span::new(file, end, line.start)).trim().is_empty() {
-            return Fix::replace(title, Span::new(file, end, kept.start), lead);
+            let mut edits = vec![Edit::replace(Span::new(file, end, line.start), " ")];
+            edits.extend((!operator.is_empty()).then(|| Edit::insert(file, kept.start, " ")));
+            return Fix::new(title, edits);
         }
+        let lead = if operator.is_empty() { " ".to_string() } else { format!(" {operator} ") };
         let (before, after) = (&self.text[..line.start as usize], &self.text[line.end as usize..]);
         let line_start = before.rfind('\n').map_or(0, |n| n + 1);
         let blanks = after.len() - after.trim_start_matches([' ', '\t', '\r']).len();
@@ -207,7 +203,7 @@ impl<'a> Checker<'a> {
             return None;
         }
         let at = self.expr(x).span;
-        let fix = self.join_edits("join it to the `return`", stmt.span.end, at, at, " ");
+        let fix = self.join_edits("join it to the `return`", stmt.span.end, at, at);
         let patch = Patch::Joined(id, Block { stmts: b.stmts.clone(), tail: None }, b.stmts[i], x);
         Some(Try { fix, patch })
     }

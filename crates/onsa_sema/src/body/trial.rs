@@ -9,7 +9,7 @@
 //! - Read again ([`super::reread`]), when the candidate changes a type the
 //!   later statements see (it takes statements away, or joins two items):
 //!   the body is read with it applied, from a new state, after the first
-//!   read. The join of an E0418 is still a trial in the state of now (R-389).
+//!   read (the join of an E0418 too, R-389).
 
 use onsa_syntax::ast::OperandPlace;
 
@@ -40,8 +40,8 @@ impl<'a> Checker<'a> {
     /// (`read_held`, `uses`) is undone; of what reads what the check does not,
     /// an error is elsewhere (§18.1): none. What it binds and defers stays in
     /// this body, which the caller stops with the diagnostic the candidate is
-    /// for, so its end is not checked ([`Checker::finish`] holds it to that);
-    /// a later trial of the same diagnostic sees what this one bound.
+    /// for, so its end is not checked ([`Checker::no_trial_goes_on`] holds it
+    /// to that); a later trial of the same diagnostic sees what this one bound.
     pub(super) fn quietly<T>(&mut self, f: impl FnOnce(&mut Self) -> R<T>) -> Option<T> {
         let (failed, marks) = (self.failed, Marks::of(self.a, self.def));
         self.tried = true;
@@ -52,13 +52,21 @@ impl<'a> Checker<'a> {
         out.ok().filter(|_| !read_unread)
     }
 
+    /// Before the end of a read: a body a trial was in stops at the
+    /// diagnostic it was for ([`Checker::quietly`]), or an internal error.
+    pub(super) fn no_trial_goes_on(&self) {
+        if self.tried && !self.failed {
+            let at = self.a.def(self.def).span;
+            onsa_diag::internal::bug(Some(at), "a trial of a candidate in a body that goes on (`quietly`)");
+        }
+    }
+
     /// Whether the end of the body has no error with what has been checked
     /// so far: the trial of the `let _` of an E0418 at a statement whose type
     /// is the variable of an integer literal itself, which `let _` leaves to
     /// its default (`5000000000` does not fit it, §6.1). A trial, as
     /// [`Checker::quietly`], that also undoes what the end of the body decides
-    /// and reports: the join of the same E0418 is tried after it, with the
-    /// literal not defaulted.
+    /// and reports.
     pub(super) fn end_is_clean(&mut self) -> bool {
         if self.failed {
             return false;

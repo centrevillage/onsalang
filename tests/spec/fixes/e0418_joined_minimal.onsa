@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§6.1", "§2.5", "§18.1"]
+// fixes = 2
+
+// R-442 (U8b of W5-13): the candidate that joins the line before (`a` newline `-b` as `a - b`, §6.1) with no comment between the two lines is
+// minimal (§18.1, S-251): the line break becomes a space, and a space goes after the `-`, which no edit replaces. The line before ends far
+// from its marker (a call over lines), so no comment is between the lines; in the body of the function and in a block of a `let`. The
+// candidates are `let _ = a` and the joined form. One error per function (P-01); the marker is on the first line of `a`.
+
+pub fn h(x: Bool) -> I32 {
+  1
+}
+
+pub fn in_the_body(b: I32) -> I32 {
+  h(                                                //~ E0418
+    true
+  )
+  -b
+}
+
+pub fn in_a_block_of_a_let(b: I32) -> I32 {
+  let v = {
+    h(                                              //~ E0418
+      true
+    )
+    -b
+  }
+  v
+}
+
+pub fn a_block_in_the_call(b: I32) -> I32 {
+  let v = {
+    h({                                             //~ E0418
+      true
+    })
+    -b
+  }
+  v
+}

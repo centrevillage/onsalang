@@ -229,7 +229,11 @@ impl<'a> Checker<'a> {
                 let d = self.cast_error(span, *inner, *ty, from, to);
                 Err(self.diag(d))
             }
-            ExprKind::Unary { op, expr: inner } => self.check_unary(e, *op, *inner, span),
+            ExprKind::Unary { op, expr: inner } => match self.joined_left(e) {
+                // `a`, then `-x` on the next line, in the form of the candidate `a - x` (§6.1).
+                Some(a) => self.check_binary(BinOp::Sub, Span::new(span.file, span.start, span.start + 1), a, *inner),
+                None => self.check_unary(e, *op, *inner, span),
+            },
             ExprKind::Call { callee, kind, args } => self.check_call(e, *callee, *kind, args, expected),
             ExprKind::TupleIndex { base, index, index_span } => {
                 let bt = self.check_expr(*base, None)?;
@@ -451,7 +455,7 @@ impl<'a> Checker<'a> {
             for (i, &s) in b.stmts.iter().enumerate() {
                 self.blocks.last_mut().unwrap().2 = i;
                 self.check_stmt(s)?;
-                self.after_stmt(expected)?;
+                self.after_stmt()?;
             }
             match b.tail {
                 Some(t) => self.check_expr(t, expected),

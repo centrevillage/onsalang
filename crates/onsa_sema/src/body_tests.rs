@@ -997,10 +997,11 @@ fn the_rest_of_the_block_goes_from_its_first_token() {
     assert_eq!(after_candidates(src), ["fn f() -> I32 {\n  { return 1 } // why\n  \n}\n"]);
 }
 
-/// S-876: the look at the end of the body leaves no trace. A later trial
-/// reads the literal as it was (`n` is a `U8` after the join), and a trial
-/// around the E0503 keeps it to itself (§18.1: one diagnostic). The body
-/// reads with `g(n)` taken away too: `n` is an integer literal then.
+/// S-876, R-389: each candidate is read from the state of the first read.
+/// The body reads with `g(n)` taken away (`n` is an integer literal then) and
+/// with it joined to the `return` (`n` is a `U8`); the joined line of the
+/// E0418 reads an E0503 in `-(…)`, so it is not given, and the first read
+/// keeps its one diagnostic (§18.1).
 #[test]
 fn the_look_at_the_end_of_the_body_is_undone() {
     let (head, tail) = ("fn g(x: U8) {}\nfn f() {\n  let n = 1\n  return", "\n}\n");
@@ -1008,6 +1009,23 @@ fn the_look_at_the_end_of_the_body_is_undone() {
     assert_eq!(after_candidates(&src), [format!("{head}\n  {tail}"), format!("{head} g(n){tail}")]);
     let src = "fn f(a: I32) -> I32 {\n  a\n  -({ return 1\n    2 })\n}\n";
     assert_eq!(codes(src), [Code::E0418]);
+}
+
+/// S-1027, provisional: the joined line is given when a later statement
+/// decides the type that makes `a - x` fit, where `let _` is not (§6.1: the
+/// type is open).
+#[test]
+fn the_joined_line_reads_the_type_a_later_statement_decides() {
+    let (head, tail) = (
+        "fn make[T: Default]() -> T {\n  panic(\"no\")\n}\nfn f() -> I32 {\n  let v = {\n    make()",
+        "\n  }\n  let w: I32 = v\n  w\n}\n",
+    );
+    // SPEC-GAP(S-1027): the joined form of an open `a` is given when the body reads clean with it.
+    let src = format!("{head}\n    -make(){tail}");
+    assert_eq!(after_candidates(&src), [format!("{head} - make(){tail}")]);
+    // When the later statement decides another type, the form reads an error.
+    let src = src.replace("let w: I32 = v", "let w: Bool = v");
+    assert_eq!(after_candidates(&src).len(), 0);
 }
 
 /// §7, §18.1, S-886: the line after a `return` joins it, and a comment

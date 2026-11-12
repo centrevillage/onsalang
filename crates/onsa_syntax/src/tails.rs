@@ -201,8 +201,9 @@ impl Diverging {
     }
 }
 
-/// A candidate of an E0503 as a form of the body (§7, §18.1): one node read
-/// as another, so a body is read with it applied and no copy of the tree.
+/// A candidate as a form of the body (§18.1): of an E0503 (§7), of the `return`
+/// of an E0401 and of the join of an E0418 (§6.1). One node read as another,
+/// so a body is read with it applied and no copy of the tree.
 #[derive(Debug, Clone)]
 pub enum Patch {
     /// The block reads as this one: as the parser reads what is left, the
@@ -214,13 +215,17 @@ pub enum Patch {
     /// that expression is the value of the `return` statement: `return`, then
     /// `x` on the next line, read as `return x` (§7, S-886).
     Joined(ExprId, Block, StmtId, ExprId),
+    /// The block reads as this one, which has lost the statement before its
+    /// last expression `-x`, and that statement is the left operand of it:
+    /// `a`, then `-x` on the next line, read as `a - x` (§6.1, §2.5).
+    Operand(ExprId, Block, ExprId, ExprId),
 }
 
 impl Patch {
     /// The block `b` of the node `e` in the form `patch` has of it.
     pub fn block<'x>(patch: Option<&'x Patch>, e: ExprId, b: &'x Block) -> &'x Block {
         match patch {
-            Some(Patch::Block(id, patched) | Patch::Joined(id, patched, ..)) if *id == e => patched,
+            Some(Patch::Block(id, p) | Patch::Joined(id, p, ..) | Patch::Operand(id, p, ..)) if *id == e => p,
             _ => b,
         }
     }
@@ -237,6 +242,14 @@ impl Patch {
     pub fn joined(patch: Option<&Patch>, s: StmtId) -> Option<ExprId> {
         match patch {
             Some(Patch::Joined(_, _, at, x)) if *at == s => Some(*x),
+            _ => None,
+        }
+    }
+
+    /// The left operand `patch` gives the `-x` node `e`, read as `a - x`.
+    pub fn left(patch: Option<&Patch>, e: ExprId) -> Option<ExprId> {
+        match patch {
+            Some(Patch::Operand(_, _, at, a)) if *at == e => Some(*a),
             _ => None,
         }
     }
@@ -299,7 +312,8 @@ impl Ast {
                 let mut arms = Patch::arms(patch, e, arms).iter();
                 leaves(*scrutinee) || arms.any(|a| a.guard.is_some_and(leaves) || leaves(a.body))
             }
-            _ => self.sub_exprs(e).into_iter().any(leaves),
+            // The left operand a form gives `-x` is out of the block (`a - x`).
+            _ => self.sub_exprs(e).into_iter().chain(Patch::left(patch, e)).any(leaves),
         }
     }
 

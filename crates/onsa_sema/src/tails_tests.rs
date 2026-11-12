@@ -2,7 +2,7 @@
 //! (`onsa_syntax::tails`, §5.2, §5.4, §7), on the table of the names stage.
 
 use onsa_diag::FileId;
-use onsa_syntax::ast::{ExprId, ExprKind, ItemKind, StmtId};
+use onsa_syntax::ast::{Block, ExprId, ExprKind, ItemKind, StmtId, StmtKind};
 use onsa_syntax::tails::{Patch, Tail};
 
 use crate::tests::{check, def};
@@ -108,6 +108,34 @@ fn a_while_diverges_by_its_condition_and_its_breaks() {
         let src = whole(body);
         assert!(matches!(&tails_of(&src)[..], [t] if t.starts_with("() of ")), "{body}");
     }
+}
+
+/// R-389: the form of the join of an E0418 takes `a` out of the block and
+/// gives it to `-b` as its left operand (`a - b`), so a `break` in `a` still
+/// leaves the loop (§7); the form that only takes `a` out has none.
+#[test]
+fn the_left_operand_of_a_joined_line_is_searched_for_a_break() {
+    let src = "fn f(c: Bool, b: I32) -> I32 {\n  while true {\n    let v = {\n      h(if c { break } else { true })\n      -b\n    }\n  }\n  1\n}\nfn h(x: Bool) -> I32 {\n  1\n}\n";
+    let p = onsa_syntax::parse(FileId(0), src);
+    let ItemKind::Fn(f) = &p.ast.item(p.ast.root[0]).kind else { panic!("not a function") };
+    let root = f.body.expect("a body");
+    let block = |e: ExprId| match &p.ast.expr(e).kind {
+        ExprKind::Block(b) => b.clone(),
+        _ => panic!("no block"),
+    };
+    let s = block(root).stmts[0];
+    let StmtKind::While { body, .. } = p.ast.stmt(s).kind else { panic!("no while") };
+    let StmtKind::Let { init, .. } = p.ast.stmt(block(body).stmts[0]).kind else { panic!("no let") };
+    let b = block(init);
+    let StmtKind::Expr(left) = p.ast.stmt(b.stmts[0]).kind else { panic!("no statement") };
+    let last = b.tail.expect("a last expression");
+    let rest = Block { stmts: Vec::new(), tail: Some(last) };
+    let a = check(src);
+    let table = &a.bodies[&def(&a, "f")].diverging;
+    assert!(!table.forever(s), "the names stage reads the `break`");
+    let joined = Patch::Operand(init, rest.clone(), last, left);
+    assert!(!table.patched(&p.ast, root, &joined).forever(s));
+    assert!(table.patched(&p.ast, root, &Patch::Block(init, rest)).forever(s));
 }
 
 /// Whether `Diverging::patched` of a form that changes no node gives the
