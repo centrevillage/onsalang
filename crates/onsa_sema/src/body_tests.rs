@@ -1037,7 +1037,7 @@ fn the_e0406_of_a_constant_says_how_to_give_the_arguments() {
             d.notes.iter().map(|n| n.message.as_str()).collect()
         })
         .collect();
-    let alias = "give the type its arguments by an alias: `type R = R[…]`, then `R.A`";
+    let alias = "give the type its arguments: `R::[…].A`, or by an alias, `type R = R[…]`, then `R.A`";
     assert_eq!(notes, [vec![format!("{alias}; inside this `impl`, `Self.A`").as_str()], vec![alias]]);
 }
 

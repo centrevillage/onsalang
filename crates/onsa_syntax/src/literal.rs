@@ -389,7 +389,7 @@ pub(crate) fn point_after_int(rest: &str) -> Point {
         Some(b'.') => Point::Range,
         // A sign (`1.e-3`, S-452) and `_` (`1.e_3`, S-472) are in the exponent of S-62 too.
         Some(b'e' | b'E') if exponent_end(b, 1).is_some() => Point::Exponent,
-        // SPEC-GAP(S-453): `1.f`, the float suffix of C after a point, is the member `.f`.
+        // `1.f`, the float suffix of C after a point, is the member `.f` (§2.4, S-453).
         Some(n) if crate::chars::is_ident_start(n) || n == b'(' => Point::Member,
         _ => Point::TrailingDot,
     }

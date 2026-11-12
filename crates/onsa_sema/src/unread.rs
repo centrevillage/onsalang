@@ -62,7 +62,7 @@ impl Analysis {
                     || self.rt_unread(id)
                     || self.partly_read(id)
                     || self.read_held.contains(&id)
-                    || self.modules.unread_members(self.def(id))
+                    || self.modules.unread_members(id, self.def(id))
             })
             .collect();
         loop {

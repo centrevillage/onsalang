@@ -44,13 +44,16 @@ impl Checker<'_> {
                 self.unify_at(span, t, n)?;
                 Ok(Some(want))
             }
-            // SPEC-GAP(S-1005): a capacity that is a const parameter of the
-            // item is not known at the check, so the literal is not read as
-            // one (as an array literal where `[U8; N]` is expected).
+            // A capacity that is a const parameter of the item is not known
+            // where it is defined, so no literal has the type (§4.2, S-1005).
             Ty::Param(_) => {
                 let shown = self.display(want);
                 let msg = format!("a string literal cannot have type `{shown}`: its capacity is a parameter (§4.2)");
-                Err(self.err(Code::E0401, span, msg))
+                let rule = "a literal goes to an argument with its own capacity: `u.put_str!(\"warm\")`, or a \
+                            function of two capacities, `fn same[const N: U32, const M: U32](a: FixedStr[N], b: \
+                            FixedStr[M])` (§4.2)";
+                let d = Diagnostic::new(Stage::Types, Code::E0401, span, msg).with_found(self.src(span));
+                Err(self.diag(d.with_rule(rule)))
             }
             _ => Ok(Some(want)),
         }

@@ -266,7 +266,7 @@ impl<'a> Parser<'a> {
                                 break;
                             }
                             let f = p.start(NodeKind::StructPatField)?;
-                            p.parse_ident("field name")?;
+                            p.parse_field_name()?;
                             p.expect(TokenKind::Colon)?;
                             p.parse_pattern()?;
                             p.complete(f, NodeKind::StructPatField);

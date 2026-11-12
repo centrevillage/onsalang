@@ -200,7 +200,7 @@ impl<'a> Walker<'a> {
                 method
             }
             Some(ResolveError::NotANamespace { kind: Some(k), .. }) if !k.is_namespace() => {
-                Some(Fail::Report(self.no_namespace(&segs[..=at], k)))
+                Some(Fail::Report(self.no_namespace(&segs[..=at], k, cur)))
             }
             // What is no namespace before the method of a call (a namespace
             // with no such member is the E0302 below: `Alloc.x()`, R-300).
@@ -273,7 +273,13 @@ impl<'a> Walker<'a> {
         place: Place,
         (at, of, owner): (usize, Entity, Option<TyId>),
     ) -> Fail {
-        let fail = self.member_error(&path_of(&segs[..=at]), self.written(err, &segs[..=at], owner));
+        let fail = match self.member_error(&path_of(&segs[..=at]), self.written(err, &segs[..=at], owner)) {
+            Fail::Report(d) => Fail::Report(match self.a.default_note(of, &segs[at].name) {
+                Some(note) => d.with_rule(note),
+                None => d,
+            }),
+            fail => fail,
+        };
         let float = builtin_ty(self.a, of).is_some_and(|t| matches!(self.a.types.get(t), Ty::Float(_)));
         match (fail, float.then(|| self.float_min(segs, at, nodes, place)).flatten()) {
             (Fail::Report(d), Some(fix)) => Fail::Report(d.with_fix(fix)),

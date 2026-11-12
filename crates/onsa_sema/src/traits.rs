@@ -8,7 +8,7 @@
 
 use onsa_syntax::ast::{BinOp, Mode};
 
-use crate::def::{Bound, Derive, DerivedFn};
+use crate::def::{Bound, DefKind, Derive, DerivedFn};
 use crate::deferred::OpNeed;
 use crate::prim::{NARROW_FROM, ROUND_FROM, TRUNC_FROM, TRUNC_SAT_FROM};
 use crate::ty::{BuiltinTy, FloatKind, IntKind, Ty, TyId};
@@ -326,6 +326,16 @@ pub(crate) fn no_impl(b: Bound) -> bool {
 
 /// The number traits (§6.3), in the order a note names them.
 const NUMBER_TRAITS: [Bound; 5] = [Bound::AnyNum, Bound::Num, Bound::Float, Bound::Int, Bound::Unsigned];
+
+/// The note of an error that asks the trait `want` of the type `ty`, of a
+/// type a flow generates (§11.6, S-908): it implements none.
+pub(crate) fn generated_note(a: &Analysis, ty: &Ty, want: Bound) -> Option<&'static str> {
+    let Ty::Named(d, _) = ty else { return None };
+    let generated = matches!(&a.def(*d).kind, DefKind::Struct(s) if s.flow_ty.is_some());
+    (generated && !want.is_kind_constraint()).then_some(
+        "a type a flow generates implements no trait: use its fields (`p.x == q.x`), or write a method of it in an `impl` (§11.6)",
+    )
+}
 
 /// The note of the E0416 of the type `ty`, shown as `shown`, that does not
 /// meet `want` (§6.3): the number traits it does, of its row of [`IMPLS`];

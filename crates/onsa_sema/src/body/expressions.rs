@@ -776,8 +776,8 @@ impl<'a> Checker<'a> {
     /// when it is decided, else after the statement that decides it (§4.7, S-235, R-55).
     /// E0401 at `span`, the operator.
     pub(crate) fn require_op(&mut self, op: OpNeed, t: TyId, span: Span) -> R<()> {
-        // SPEC-GAP(S-857): an operand whose type is decided here is judged here, not after the
-        // statement: in one statement, its E0401 comes before the E0401 of an operator that
+        // An operand whose type is decided here is judged here, not after the statement
+        // (S-857): in one statement, its E0401 comes before the E0401 of an operator that
         // waited and before a later type error of the statement.
         match self.operator_verdict(op, t) {
             Verdict::Met => Ok(()),

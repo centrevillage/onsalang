@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§7", "§18.1"]
+// fixes = 0
+
+// S-986 (§2.3) names the short form of a struct pattern (`P { in }`) among the places of a field name used whose keyword has the
+// candidate `in_`. §7 writes the fields of a struct pattern as `name: pattern` alone (a field name written alone, `P { x }`, is
+// the E0002 of the `:` after it), so `P { in_ }` would leave an E0002 of the same stage, which §18.1 does not let a candidate
+// leave. The conservative reading: no candidate here (`fixes = 0`), the candidate only before a `:` (keyword_name_field_use.onsa);
+// a gap reported to the parent. One error in each unit.
+
+pub struct P {
+  in_: F32,
+  b: F32,
+}
+
+pub fn short_form_of_a_let(p: P) -> F32 {
+  let P { in } = p                                  //~ E0002
+  0.0
+}
+
+pub fn short_form_later(p: P) -> F32 {
+  let P { in_: v, type } = p                        //~ E0002
+  v
+}

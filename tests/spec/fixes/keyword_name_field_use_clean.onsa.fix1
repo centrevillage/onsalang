@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§4.4", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "20:7"
+// code = "E0002"
+// candidate = 1
+// clean = true
+
+// S-986 (§2.3): the candidate `in_` of a keyword written as a field name in a struct literal, where the struct has the field `in_`
+// (as its declaration has after the candidate of keyword_name_field.onsa): the check after it has no diagnostic (`clean`). The
+// other places are in keyword_name_field_use.onsa.
+
+pub struct P {
+  in_: F32,
+}
+
+pub fn make() -> P {
+  P { in_: 1.0 }                                     //~ E0002
+}

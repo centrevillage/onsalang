@@ -523,9 +523,9 @@ impl<'a> Checker<'a> {
     /// an array, a `Buf` or a `Span` of the element (the error type too),
     /// and a `FixedStr[N]` as a `Span[U8]` of its used part (§4.2), which
     /// the parameter of the mode `mode` `inout` does not take (E0401: its
-    /// bytes change by the appends alone).
-    // SPEC-GAP(S-1008): the element of a planar argument and a generic
-    // `Span[T]` (`T = U8`) take a `FixedStr` too, as this one judgment.
+    /// bytes change by the appends alone). The element of a planar argument
+    /// and a generic `Span[T]` (`T = U8`) take a `FixedStr` too, by this one
+    /// judgment (§4.2, S-1008).
     fn views(&mut self, t: TyId, elem: TyId, at: Span, mode: Mode) -> R<bool> {
         let cause = self.cause(at, None);
         let el = match self.ty(self.shallow(t)) {

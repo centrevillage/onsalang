@@ -233,7 +233,7 @@ fn node(a: &mut Analysis, cx: &ConstCx, e: ExprId) -> Result<Got, ConstErr> {
                 ExprKind::Binary { .. } | ExprKind::Unary { .. } | ExprKind::Cast { .. } => {
                     "an operation other than `+ - * / %` and prefix `-`"
                 }
-                // SPEC-GAP(S-971): a hole `_` (§18.1, E0421 at an expression) is E0417 here.
+                // A hole `_` (§18.1, E0421 at an expression) is E0417 here (§4.5, S-971).
                 _ => "an expression of another form",
             };
             Err(value_not_constant(shown(), noun, expr.span).into())

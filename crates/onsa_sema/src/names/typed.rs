@@ -9,7 +9,7 @@
 use onsa_diag::unsupported::Feature;
 use onsa_syntax::ast::{Ident, Path};
 
-use crate::def::{DefKind, ModId};
+use crate::def::{DefKind, DerivedFn, ModId};
 use crate::resolve::{Builtin, Entity, NameKind, ResolveError};
 use crate::ty::{Ty, TyId};
 use crate::{Analysis, builtin};
@@ -88,9 +88,8 @@ impl Analysis {
     /// The namespace of the type `ty` an alias or `Self` stands for: a
     /// struct, an enum or a type a flow generates by its def, a builtin type;
     /// none for a type with no members (a tuple, an array, a function, a
-    /// type parameter) and for the error type.
-    // SPEC-GAP(S-912): an alias of a tuple, an array or `()` has no members,
-    // so its `A.default()` is an E0302.
+    /// type parameter) and for the error type. An alias of one has no
+    /// members either, so its `A.default()` is an E0302 (§4.4, S-912).
     fn type_namespace(&self, ty: TyId) -> Option<Entity> {
         match self.types.get(ty) {
             Ty::Named(d, _) => Some(Entity::Def(*d)),
@@ -98,6 +97,18 @@ impl Analysis {
             Ty::Int(_) | Ty::Float(_) | Ty::Bool | Ty::Char => Some(Entity::Builtin(Builtin::Scalar(ty))),
             _ => None,
         }
+    }
+
+    /// The note of the E0302 of the member `name` of `of`, `A.default()` of
+    /// an alias of a tuple, an array or `()` (§4.4, §6.3, S-912).
+    pub(crate) fn default_note(&self, of: Entity, name: &str) -> Option<&'static str> {
+        let Entity::Def(d) = of else { return None };
+        let DefKind::Alias(t) = self.def(d).kind else { return None };
+        let parts = matches!(self.types.get(t), Ty::Tuple(_) | Ty::Array(..) | Ty::Unit);
+        (parts && name == DerivedFn::Default.name()).then_some(
+            "a tuple, an array and `()` have no members, nor an alias of one: their default value is a literal \
+             (`(0.0, 0)`, `[0.0; N]`, `()`), or `T.default()` of a type parameter (§4.4, §6.3)",
+        )
     }
 
     /// The type the alias `e` stands for, by its namespace: none for what is

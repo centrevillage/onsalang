@@ -379,7 +379,7 @@ impl<'a> Parser<'a> {
                                 break;
                             }
                             let f = p.start(NodeKind::StructLitField)?;
-                            p.parse_ident("field name")?;
+                            p.parse_field_name()?;
                             p.expect(TokenKind::Colon)?;
                             p.parse_consumed()?;
                             p.complete(f, NodeKind::StructLitField);

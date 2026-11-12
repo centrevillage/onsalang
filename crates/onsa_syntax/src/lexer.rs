@@ -613,8 +613,8 @@ impl<'a> Lexer<'a> {
                 None
             }
         };
-        // SPEC-GAP(S-449): a reserved word at the head of a hole of another
-        // form is not reported; the form's E0001 is.
+        // A reserved word at the head of a hole of another form is not
+        // reported; the form's E0001 is (§2.4, S-449).
         let head = path.as_ref().map(|p| p[0].0);
         let word = |s: Span| &self.text[s.start as usize..s.end as usize];
         let reserved = head.and_then(|h| TokenKind::keyword(word(h)).and_then(TokenKind::reserved));
@@ -662,9 +662,8 @@ impl<'a> Lexer<'a> {
                 let span = self.span(start);
                 self.content_error(span, "empty char literal");
             }
-            // SPEC-GAP(S-445): a character other than ASCII may be written in
-            // a character literal, as in a string (§2.5 names comments and
-            // strings).
+            // A character other than ASCII may be written in a character
+            // literal, as in a string (§2.5, S-445).
             _ => {
                 if !self.unwritable_run() {
                     self.bump_char();

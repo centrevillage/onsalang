@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§6.3", "§18.1"]
+// fixes = 0
+
+// S-912 (§4.4): a tuple, an array `[T; N]` and `()` have no declared name, so no associated items are named after them with a
+// `.`, and an alias of one has none either (an alias is used as the type it stands for, and adds no form that type does not
+// have): `A.default()` is the E0302 of a name that has no members. The default value is written as a literal (`(0.0, 0)`,
+// `[0.0; 4]`, `()`), or as `T.default()` of a type parameter with the bound `Default` (`fine` below, called as
+// `dflt::[Pair]()`). The note of the E0302 says so (checked by crates/onsa_cli/tests/cli/decided_notes.rs; its text is not
+// promised). No candidate. One error in each unit (§18.1).
+
+type Pair = (F32, I32)
+type Four = [F32; 4]
+type Nothing = ()
+
+fn tuple_alias() -> Pair {
+  Pair.default()                                    //~ E0302
+}
+
+fn array_alias() -> Four {
+  Four.default()                                    //~ E0302
+}
+
+fn unit_alias() -> Nothing {
+  Nothing.default()                                 //~ E0302
+}
+
+rt fn dflt[T: Default]() -> T {
+  T.default()
+}
+
+fn fine() -> (Pair, Four, Nothing) {
+  ((0.0, 0), [0.0; 4], dflt::[Nothing]())
+}
+
+fn through_a_parameter() -> Pair {
+  dflt::[Pair]()
+}

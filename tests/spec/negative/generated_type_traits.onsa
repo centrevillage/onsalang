@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§3.2", "§4.5", "§6.4", "§18.1"]
+// fixes = 0
+
+// S-908 (§11.6): the types a flow generates (`g.Params`, `g.Config`) implement no standard trait and no operator trait, as a
+// declaration with no list of derives. An operator that needs a trait of one is E0401 (`==` needs `PartialEq`, `<` needs
+// `PartialOrd`), a struct that derives a trait its field of such a type does not have is E0416, and so is such a type passed
+// where a bound asks a trait. The note of each says that the type implements no trait and that it is compared by its fields
+// or by a method written for it (the note is checked by crates/onsa_cli/tests/cli/decided_notes.rs; its text is not
+// promised). No candidate. One error in each unit (§18.1).
+
+pub flow g(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+fn equal(p: g.Params, q: g.Params) -> Bool {
+  p == q                                            //~ E0401
+}
+
+fn before(p: g.Config, q: g.Config) -> Bool {
+  p < q                                             //~ E0401
+}
+
+struct Holder: PartialEq {
+  p: g.Params,                                      //~ E0416
+}
+
+fn need[T: Eq](x: T) -> T {
+  x
+}
+
+fn passed(p: g.Params) -> g.Params {
+  need(p)                                           //~ E0416
+}

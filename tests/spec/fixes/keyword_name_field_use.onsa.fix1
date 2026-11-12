@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§2.3", "§4.4", "§7", "§18.1"]
+// fixes = 1
+
+// S-986 (§2.3): a keyword written as a field name where the field is used, in a struct literal and in a struct pattern (of a `let`
+// and of a `match` arm), first or later in the list, is the E0002 of the syntax stage, and its candidate is the same `in_` (the name
+// with a `_` at its end) as where the field is declared (keyword_name_field.onsa). The struct here has the fields `in_` and `type_`,
+// so the file that has the candidates applied has no other error (one unit with the property `clean` is
+// keyword_name_field_use_clean.onsa). The short form of a pattern (`P { in }`) is in keyword_name_field_use_short.onsa. One error
+// in each unit.
+
+pub struct P {
+  in_: F32,
+  type_: I32,
+}
+
+pub fn literal_first() -> P {
+  P { in_: 1.0, type_: 1 }                           //~ E0002
+}
+
+pub fn literal_later() -> P {
+  P { in_: 1.0, type_: 1 }                           //~ E0002
+}
+
+pub fn pattern_of_a_let(p: P) -> F32 {
+  let P { in_: v, type_: _ } = p                     //~ E0002
+  v
+}
+
+pub fn pattern_of_an_arm(p: P) -> I32 {
+  match p {
+    P { in_: _, type_: t } => t,                     //~ E0002
+  }
+}

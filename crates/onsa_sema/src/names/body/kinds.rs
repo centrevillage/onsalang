@@ -12,8 +12,10 @@ use onsa_syntax::foreign::{self, RowId};
 
 use super::paths::{Place, path_of, span_of};
 use super::{Fail, Walker};
+use crate::def::{Bound, TRAITS};
 use crate::names::{BuiltinMember, PathEnd};
-use crate::resolve::{Callee, Entity, NameKind, ResolveError, no_members};
+use crate::resolve::{Builtin, Callee, Entity, NameKind, ResolveError, no_members};
+use crate::traits::member_rep;
 
 /// What the place of a value takes, in the words of its E0308.
 const A_VALUE: &str = "a value";
@@ -33,23 +35,39 @@ pub(super) enum Want {
 impl Walker<'_> {
     /// E0308 for a `.` after a name of the kind `kind`, neither a value nor
     /// a namespace (a trait, a kind constraint, a handler; §15.1, S-713 (e),
-    /// S-719, S-721), with no candidate; after a trait or a kind constraint,
-    /// a note shows where a method and an associated function are named.
-    pub(super) fn no_namespace(&self, segs: &[&Ident], kind: NameKind) -> Diagnostic {
+    /// S-719, S-721), with no candidate; after a trait or a kind constraint
+    /// (`entity`), a note shows where an associated function is named, and
+    /// the method form only of a member of the trait that takes `self`
+    /// (`Show`, which has none, shows an interpolation; S-1014).
+    pub(super) fn no_namespace(&self, segs: &[&Ident], kind: NameKind, entity: Entity) -> Diagnostic {
         let (name, member) = (segs[segs.len() - 2], segs[segs.len() - 1]);
         let span = span_of(segs);
         let d = no_members(&name.name, kind, span).with_found(self.src(span));
         if !matches!(kind, NameKind::Trait | NameKind::KindConstraint | NameKind::Escape) {
             return d;
         }
-        d.with_note(
-            name.span,
-            format!(
-                "a method is called on a value (`x.{}()`), and an associated function or constant is named after \
-                 a type (`F32.from_bits(b)`, §6.6)",
-                member.name
+        let bound = match entity {
+            Entity::Builtin(Builtin::Trait(row)) => TRAITS[row as usize].1,
+            _ => None,
+        };
+        const NAMED: &str = "an associated function or constant is named after a type (`F32.from_bits(b)`, §6.6)";
+        // The method form of a member that takes `self` alone (`Float.PI`, `Default.default` are none).
+        let method =
+            |b| crate::traits::member(self.a, &[b], &member.name).and_then(|d| self.a.def(d).as_fn()?.self_mode);
+        let note = match bound {
+            Some(b) if method(b).is_some() => {
+                format!("a method is called on a value (`x.{}()`), and {NAMED}", member.name)
+            }
+            Some(b) if member_rep(&[b], &member.name).is_some() => {
+                format!("`{}` is no method; {NAMED}", member.name)
+            }
+            Some(Bound::Show) => format!(
+                "`{}` has no members: a value is shown by an interpolation, `\"{{x}}\"` (§2.4, §6.3)",
+                name.name
             ),
-        )
+            _ => format!("`{}` is no member of `{}`; {NAMED}", member.name, name.name),
+        };
+        d.with_note(name.span, note)
     }
 
     /// E0308 when the name `segs` of the kind `kind` is no value at the place

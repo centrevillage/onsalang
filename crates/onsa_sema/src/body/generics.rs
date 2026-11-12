@@ -191,8 +191,8 @@ pub(crate) fn parameter(g: &GenericDef, owner: &str) -> String {
 }
 
 /// The note of an E0406 of the constant `name` of the `impl` of the type
-/// `head` (S-304): how its arguments are given, by an alias.
-/// `{head}::[…].{name}` is E0200 until W5-10, and the note gives it then.
+/// `head` (S-304): how its arguments are given, after its name or by an
+/// alias.
 pub(crate) fn alias_way(head: &str, name: &str) -> String {
-    format!("give the type its arguments by an alias: `type R = {head}[…]`, then `R.{name}`")
+    format!("give the type its arguments: `{head}::[…].{name}`, or by an alias, `type R = {head}[…]`, then `R.{name}`")
 }

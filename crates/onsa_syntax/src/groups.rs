@@ -60,8 +60,8 @@ pub(crate) fn check(ast: &Ast, kind_of: &dyn Fn(ExprId) -> NodeKind, limit: Limi
                 let (ops, operands) = chain_nodes(ast, id);
                 // E0011: a cast or a clock is parenthesized as an operand of
                 // a chain.
-                // SPEC-GAP(S-348): those of one chain are one form,
-                // parenthesized whole.
+                // Those of one chain are one form, parenthesized whole
+                // (§3.3, S-348).
                 let casts: Vec<Span> = operands
                     .iter()
                     .filter(|&&o| ast.as_or_at_operand(o).is_some())
@@ -265,9 +265,9 @@ fn chain_nodes(ast: &Ast, root: ExprId) -> (Vec<ExprId>, Vec<ExprId>) {
 /// `ops` from [`chain_nodes`]): each operator with an operator operand the
 /// strengths of §3.1 do not allow ([`BinOp::takes`]), said once per pair
 /// of keys, in the order of the joins. Empty when the chain is allowed.
-// SPEC-GAP(S-344): groups without a strength between them that are not
-// next to each other in the tree (`a % b == c + d`) pass: the judgment
-// is on the edges of the tree.
+// Groups without a strength between them that are not next to each other
+// in the tree (`a % b == c + d`) pass: the judgment is on the edges of the
+// tree (§3.1, S-344).
 fn clashes(ast: &Ast, ops: &[ExprId]) -> Vec<String> {
     let binary = |e: ExprId| match ast.expr(e).kind {
         ExprKind::Binary { op, op_span, .. } => Some((op, op_span)),

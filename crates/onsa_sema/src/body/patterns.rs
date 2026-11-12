@@ -217,8 +217,8 @@ impl<'a> Checker<'a> {
         }
         // A constant of no known type: the arms after it would report what
         // follows from that (§18.1).
-        // SPEC-GAP(S-935): the unit stops here, as at a failed name; an
-        // expression goes on with the error type.
+        // The unit stops here, as at a failed name (S-935); an expression
+        // goes on with the error type.
         if self.a.heading_failed(d) {
             return Err(self.held_stop());
         }

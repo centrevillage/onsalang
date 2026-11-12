@@ -34,6 +34,24 @@ impl<'a> Parser<'a> {
         self.fail(want, expected)
     }
 
+    /// A field name where it is used (a struct literal's, a struct
+    /// pattern's): a keyword there takes the candidate of a field's (§2.3,
+    /// S-986), so the use is fixed as its declaration was.
+    pub(super) fn parse_field_name(&mut self) -> PResult<Token> {
+        if self.at(TokenKind::Ident) {
+            return Ok(self.bump());
+        }
+        // SPEC-GAP(S-1017): §2.3 gives the short form `P { in }` the candidate
+        // too, but §7 has no short form, and `P { in_ }` would be the E0002
+        // of its `:` (§18.1): a candidate only before a `:`.
+        let colon = self.on_line_after(self.peek_index()).is_some_and(|k| self.tokens[k].kind == TokenKind::Colon);
+        Err(if colon {
+            self.fail_name(Declared::Field, Want::Other, "field name")
+        } else {
+            self.unexpected("field name")
+        })
+    }
+
     pub(super) fn parse_ident(&mut self, what: &str) -> PResult<Token> {
         let t = self.peek();
         if t.kind == TokenKind::Ident {

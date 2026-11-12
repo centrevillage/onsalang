@@ -15,6 +15,7 @@ mod candidate_shapes;
 mod check_json_document;
 mod command_paths;
 mod const_placement_model;
+mod decided_notes;
 mod declaration_headings;
 mod declaration_order;
 mod deep_recursion;

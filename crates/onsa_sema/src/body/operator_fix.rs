@@ -11,7 +11,7 @@ use onsa_diag::Edit;
 use onsa_syntax::ast::{self, GenericParam, Ident, ItemKind};
 
 use super::*;
-use crate::traits::{implies, narrowable, narrowed_bound};
+use crate::traits::{generated_note, implies, narrowable, narrowed_bound, op_bound};
 
 /// The note of the negation of an unsigned integer type (§3.4, §6.3).
 pub(crate) const UNSIGNED_NEGATION: &str = "the two's complement negation of an unsigned integer is `0 -% u` (§3.4)";
@@ -24,6 +24,10 @@ impl<'a> Checker<'a> {
         let t = self.infer.resolve(&mut self.a.types, t);
         let d = match self.bound_fix(op, t) {
             Some(fix) => d.with_fix(fix),
+            None => d,
+        };
+        let d = match generated_note(self.a, &self.ty(t), op_bound(op)) {
+            Some(note) => d.with_rule(note),
             None => d,
         };
         if op != OpNeed::Neg || !self.satisfies(t, Bound::Unsigned) {

@@ -68,7 +68,7 @@ impl Bounds<'_> {
     /// bounds of other functions.
     pub(crate) fn traits_unknown(&self, t: TyId) -> bool {
         self.unknown(t)
-            || matches!(self.a.types.get(t), Ty::Named(d, _) if self.a.modules.unread_members(self.a.def(*d)))
+            || matches!(self.a.types.get(t), Ty::Named(d, _) if self.a.modules.unread_members(*d, self.a.def(*d)))
     }
 
     /// The error type, or a type parameter with an unknown bound (§18.1,

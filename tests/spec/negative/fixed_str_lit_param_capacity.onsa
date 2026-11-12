@@ -2,12 +2,13 @@
 // [test]
 // spec = ["§4.2", "§4.7"]
 
-// S-1005 (the parent's temporary treatment, W5-12 U2): a string literal whose expected type is `FixedStr[N]` with the capacity `N` that is a const parameter of the enclosing function
-// (`fn is_warm[const N: U32](t: FixedStr[N]) -> Bool { t == "warm" }`) cannot be checked against the capacity (§4.2 and §4.7 say E0408 for a literal that is longer than `N`; with a
-// parameter the capacity is not known at the check). The temporary treatment is E0401 in the stage of the types, the same as an array literal put where `[U8; N]` is expected (the
-// message is the type that is expected against the type that is found). If the decision of S-1005 goes another way this file is changed. The positions are the comparison on
-// either side, the annotation of a `let`, `return`, the last value and a field of a generic struct whose capacity is the parameter. The literal that is passed to such a function is
-// fine: its capacity is decided by the argument (tests/spec/types/fixed_str_lit_generic.onsa). One error in each function (P-01).
+// S-1005 (§4.2: "容量が囲む総称の項目の定数のパラメータである `FixedStr[N]` ... は文字列リテラルの型にならない（E0401。値を作る位置、比較の他方、`match` のパターンのどれでも同じ）"):
+// a string literal whose expected type is `FixedStr[N]` with the capacity `N` that is a const parameter of the enclosing item
+// (`fn is_warm[const N: U32](t: FixedStr[N]) -> Bool { t == "warm" }`) is E0401 in the stage of the types: whether it fits is not decided before the item is instantiated, so it
+// cannot be checked where it is defined (as an integer literal of a type parameter, §6.6). The note shows how a literal is given to an argument with its own capacity
+// (`u.put_str!("warm")`, a function of two capacities; checked by crates/onsa_cli/tests/cli/decided_notes.rs). The positions are the comparison on either side, the annotation
+// of a `let`, `return`, the last value and a field of a generic struct whose capacity is the parameter. The literal that is passed to such a function is fine: its capacity is
+// decided by the argument (tests/spec/types/fixed_str_lit_generic.onsa). One error in each function (P-01).
 
 use std.text.FixedStr
 

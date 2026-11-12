@@ -418,8 +418,8 @@ impl Builder<'_> {
 
     /// Tokens outside the items: of the unit before them when they are on
     /// the line where it ends (S-254, S-274), else a run of their own.
-    // SPEC-GAP(S-274): the tokens other than `;` after an item on its line are
-    // of the item's unit, like the `;` of S-254.
+    // The tokens other than `;` after an item on its line are of the item's
+    // unit, like the `;` of S-254 (§18.1, S-274).
     fn after(&mut self, span: Span, parent: Option<usize>, last: &mut Option<(usize, bool)>) {
         if let Some((u, _)) = *last {
             let end = self.list[u].span.end;

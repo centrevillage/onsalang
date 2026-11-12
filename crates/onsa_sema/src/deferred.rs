@@ -463,6 +463,9 @@ impl<'a> Checker<'a> {
                 if let Some(note) = crate::traits::number_traits_note(&self.ty(r), &shown, *bound) {
                     d = d.with_rule(note);
                 }
+                if let Some(note) = crate::traits::generated_note(self.a, &self.ty(r), *bound) {
+                    d = d.with_rule(note);
+                }
                 if let Required::SeqElement { .. } = what {
                     d = self.seq_element_notes(d, r, &shown, *bound);
                 }

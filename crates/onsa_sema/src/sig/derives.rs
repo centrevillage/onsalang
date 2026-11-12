@@ -230,7 +230,11 @@ impl<'p> Sema<'p> {
             b.name(),
             self.shown(&cx, ty),
         );
-        self.report(id, Diagnostic::new(Stage::Types, Code::E0416, span, msg).with_found(src(&cx, span)));
+        let mut d = Diagnostic::new(Stage::Types, Code::E0416, span, msg).with_found(src(&cx, span));
+        if let Some(note) = crate::traits::generated_note(self.a, self.a.types.get(ty), b) {
+            d = d.with_rule(note);
+        }
+        self.report(id, d);
     }
 }
 

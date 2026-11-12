@@ -145,8 +145,8 @@ pub(super) fn block_comment(c: &Cursor) -> Option<(RowId, Hit)> {
     };
     // The words of each line without the blanks around them (§2.5: other
     // characters, NBSP and U+3000 too, are the comment's text).
-    // SPEC-GAP(S-447): a character written nowhere (a control, a CR alone)
-    // is carried into the `//` lines as it is.
+    // A character written nowhere (a control, a CR alone) is carried into
+    // the `//` lines as it is (§2.1, S-447).
     let mut lines: Vec<&str> =
         inner.split('\n').map(|l| l.strip_suffix('\r').unwrap_or(l).trim_matches(BLANKS)).collect();
     if lines.len() > 1 && lines[0].is_empty() {

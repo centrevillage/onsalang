@@ -190,9 +190,10 @@ impl<'a> Parser<'a> {
     }
 
     /// The candidate of the keyword at token `at` written as a name (§2.3,
-    /// S-654): where a name of `named` is declared, or where an operand is
-    /// (`want`), when the token after it goes on after a name; the name of
-    /// an item with `@export` takes none (§14.2).
+    /// S-654): where a name of `named` is declared (a field name where it is
+    /// used too, S-986), or where an operand is (`want`), when the token
+    /// after it goes on after a name; the name of an item with `@export`
+    /// takes none (§14.2).
     fn keyword_name(&self, at: usize, want: Want, named: Option<Declared>) -> Option<String> {
         let t = self.tokens[at];
         if named.is_none() && want != Want::Expr {
@@ -205,8 +206,8 @@ impl<'a> Parser<'a> {
             return None;
         }
         let function = matches!(named, Some(Declared::Function | Declared::Flow));
-        // SPEC-GAP(S-985): the name of a member of an `extern` block is the
-        // symbol of C it binds, which a `_` at its end would change: none.
+        // The name of a member of an `extern` block is the symbol of C it
+        // binds, which a `_` at its end would change: none (§2.3, S-985).
         if function && self.innermost(NodeKind::Extern).is_some() {
             return None;
         }

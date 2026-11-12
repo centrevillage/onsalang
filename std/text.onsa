@@ -112,10 +112,9 @@ impl[const N: U32] FixedStr[N] {
   }
 
   /// Writes the bytes used into `out`, as many as fit, and returns their
-  /// number. This version leaves the bytes of `out` after that number as
-  /// they were (§4.2 does not fix them).
+  /// number. The bytes of `out` after that number are left as they were
+  /// (§4.2).
   pub rt fn write_to(self, inout out: Span[U8]) -> U32 {
-    // SPEC-GAP(S-1012): §4.2 does not say what becomes of the bytes of `out` after the count; they are left as they were.
     var k: U32 = 0
     while k < self.len && k < out.len() {
       out[k] = self.bytes[k]

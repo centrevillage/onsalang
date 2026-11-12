@@ -28,8 +28,8 @@
 // A run of doc comments that document nothing is one E0004, with one candidate (S-442).
 // A `///` before an element of a variant is in no `Docs`: E0004 (§2.1, S-433); before one of a tuple
 // struct, the E0020 of the tuple struct before it is reported first (R-414).
-// SPEC-GAP(S-444): a `///` after code on its line is in no `Docs` (`Parser::starts_its_line`): E0004.
-// SPEC-GAP(S-434): a `//!` after the `///` of the first item is not at the head of the file: E0004.
+// A `///` after code on its line is in no `Docs` (`Parser::starts_its_line`): E0004 (§2.1, S-444).
+// A `//!` after the `///` of the first item is not at the head of the file: E0004 (§2.1, S-434).
 
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 
@@ -363,7 +363,7 @@ mod tests {
             ("/// t\ntest \"a\" {\n  assert true\n}\n", "/// t"),
             ("fn f() {\n}\n/// end", "/// end"),
             ("struct S {\n  a: I32,\n  /// none\n}\n", "/// none"),
-            // SPEC-GAP(S-444): after code on its line.
+            // After code on its line (S-444).
             ("const A: I32 = 1 /// doc\nfn f() {\n}\n", "/// doc"),
             ("struct S {\n  a: I32, /// a\n  b: I32,\n}\n", "/// a"),
             // S-433: an element of a variant.
@@ -490,7 +490,7 @@ mod tests {
         let src = "fn f() {\n}\n//! a\n//! b\nfn g() {\n}\n";
         let want = ("//! a\n//! b".to_string(), Some("fn f() {\n}\n/// a\n/// b\nfn g() {\n}\n".to_string()));
         assert_eq!(e0004(src), vec![want]);
-        // SPEC-GAP(S-434): after the `///` of the first item.
+        // After the `///` of the first item (S-434).
         let want = ("//! b".to_string(), Some("/// a\n/// b\nfn f() {\n}\n".to_string()));
         assert_eq!(e0004("/// a\n//! b\nfn f() {\n}\n"), vec![want]);
         // Nothing to document: no candidate (S-430).

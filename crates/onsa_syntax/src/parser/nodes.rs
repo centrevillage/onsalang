@@ -149,8 +149,8 @@ impl<'a> Parser<'a> {
             // A `::[…]` counts at its `[` (the `TypeArgs`), as a type with arguments.
             Literal | HoleExpr | PathExpr | BinaryExpr | MatchArms | MatchArm | ArgList | Arg | StructLitFields
             | StructLitField | StructLitRest | TypeArgsExpr | FeedbackExpr => 0,
-            // SPEC-GAP(S-361): the clock of an input or output counts no level
-            // (the heading counts none); in an expression it is in an `AtExpr`.
+            // The clock of an input or output counts no level (the heading
+            // counts none, §2.5, S-361); in an expression it is in an `AtExpr`.
             Clock => 0,
             ParenExpr | TupleExpr | ArrayExpr | RepeatExpr | IfExpr | MatchExpr | ClosureExpr | HandleExpr
             | UnsafeExpr | ParExpr | MoveExpr | RangeExpr | CastExpr | AtExpr | PrefixExpr | CallExpr | FieldExpr

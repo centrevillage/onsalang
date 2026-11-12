@@ -7,8 +7,8 @@
 // the decision C1: `fn show[const N: U32](t: FixedStr[N])` with `show("warm")`, the same as `cap([1, 2, 3])` for an array). Where the `N` is decided by a type argument that is written
 // (`cap_of::[8]("warm")`) or by the type of another argument, the literal is a `FixedStr` of that capacity. Two parameters have two `N` that are decided one by one. The value of
 // `N` is read in the body, so the capacity is observed. A literal that does not fit the capacity that is written is E0408 (tests/spec/negative/fixed_str_lit_too_long.onsa).
-// The capacity that is a const parameter of the enclosing function is S-1005 (tests/spec/negative/fixed_str_lit_param_capacity.onsa). What the order of two arguments does to the
-// `N` that two parameters share is not written here (it is a gap, reported to the parent).
+// A literal whose capacity is a const parameter of the enclosing function is E0401 (S-1005, §4.2; tests/spec/negative/fixed_str_lit_param_capacity.onsa). Of one call, the capacities are decided from the
+// left (§4.2: "一つの呼び出しの引数と配列の要素では、容量と型変数は左から順に決まる"; `same("ab", t8)` with `t8: FixedStr[8]` is E0401), which this file does not test.
 
 use std.text.FixedStr
 
