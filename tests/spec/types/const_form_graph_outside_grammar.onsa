@@ -2,12 +2,12 @@
 // [test]
 // spec = ["§4.4", "§4.5", "§18.1"]
 
-// W5-13 U2b/t, S-1016 (provisional reading (1), E0417; the other reading (2) is the E0311 of a cycle through the form): a name under a form outside
+// W5-13 U2b/t, S-1016 (decided as (1), E0417; the other reading (2), the E0311 of a cycle through the form, was not taken): a name under a form outside
 // the grammar of a constant expression (a comparison `K < 1`, a `!K`, an equality, a logical form) is not read (§4.5: "文法の外の形 ... の中 ... は読まない"), and
 // that includes the order of the aliases and the constants: the type of the constant `K` is not followed from the length `(K < 1)` of the alias `A` that is the type of
 // `K` (§4.4: "固定長配列の長さと const 引数が読む定数は、その定数の宣言の型を辿る" is about the constants that the length reads), so there is no cycle and the
 // length is the E0417 of its form, whichever of the alias and the constant is declared first. The constant whose type is an alias of an
-// error is not reported again (§4.4: "使う所には出さない"). If S-1016 is decided as (2), the units of this file become E0311 and the file changes alone.
+// error is not reported again (§4.4: "使う所には出さない").
 // The same length with a name that the grammar reads (`[F32; K]`, `const K: A`) is the cycle of §4.4 (types/cycle_type_const_later.onsa).
 // One error per unit (§18.1).
 

@@ -3,7 +3,7 @@
 // spec = ["§6.1", "§18.1"]
 // fixes = 1
 
-// S-1025 (U8b of W5-13; provisional reading (1)): the candidate that joins the line before (`a` newline `-b` as `a - b`, §6.1) is made only when the body read again with it
+// S-1025 (U8b of W5-13; decided as (1)): the candidate that joins the line before (`a` newline `-b` as `a - b`, §6.1) is made only when the body read again with it
 // applied has no error of the stage of the types (§18.1), and a body whose record of the names is not complete (a `use` that is an E0302, S-692) is not read again for a candidate when a later statement reads a name that the `use`
 // should bring: the file after the candidate holds an error that the first reading could not see. Only `let _ = a` is made (`fixes = 1`), as the candidates of an E0503 in such a body (S-876).
 // The text after the candidate is not written here. One error per function (P-01); the marker is on the line of `a`.

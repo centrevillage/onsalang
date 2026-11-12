@@ -2,13 +2,13 @@
 // [test]
 // spec = ["§4.4", "§4.5", "§18.1"]
 
-// W5-13 U2b/t, S-1015 (provisional reading (1), E0311; the other reading (2) is E0308, the type written as a length, which is what an alias declared
+// W5-13 U2b/t, S-1015 (decided as (1), E0311; the other reading (2) was E0308, the type written as a length, which is what an alias declared
 // earlier gives, types/const_order_alias_names.onsa): an alias that reaches itself through the constant expression of its own right side
 // is the cycle of aliases of §4.4 ("別名は右辺に置き換えるので ... 展開が終わらず E0311"; "固定長配列の長さと const 引数が読む定数は、その定数の宣言の型を辿る"),
 // whether the name is the whole length (`[F32; A1]`), a const argument (`Rg[F32, A2]`) or the head of a path (`A3.N.x`), and whether the cycle is one
 // alias or two or three that name each other. One E0311 for a set of declarations that reach each other, at the first of them (§18.1: "互いに辿り合う宣言の集まり
-// （自分を指す一つの宣言を含む）ごとに一つ報告する", "診断の並べ方で最初のものの名前"); the other aliases of the set are not reported again. If S-1015 is decided as (2), the units of this file
-// become E0308 (one for each use) and the file changes alone.
+// （自分を指す一つの宣言を含む）ごとに一つ報告する", "診断の並べ方で最初のものの名前"); the other aliases of the set are not reported again.
+// (S-1015 did not take the reading (2), one E0308 for each use.)
 
 pub struct Rg[T, const N: U32] {
   data: [T; N],

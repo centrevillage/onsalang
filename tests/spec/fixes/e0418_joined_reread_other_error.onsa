@@ -15,7 +15,7 @@
 // candidate = 1
 // leaves = ["39:3 E0418"]
 
-// S-1025 (U8b of W5-13; provisional reading (1)): the candidate that joins the line before (`a` newline `-b` as `a - b`, §6.1) is made only when the file after it has
+// S-1025 (U8b of W5-13; decided as (1)): the candidate that joins the line before (`a` newline `-b` as `a - b`, §6.1) is made only when the file after it has
 // no error of the stage of the types (§18.1), and the body is read again whole with the candidate applied, so a body that has another error of its own (a later statement that
 // reads the variable with another type, a later statement that is an E0418 too) has no joined form, as the candidates of an E0503 have none in such a body (S-876). Only `let _ = a` is made (`fixes = 1`).
 // The other error is the second error of the input, so the candidate `let _` that leaves it states it in `leaves` (S-266). The text after the candidate is not written here.

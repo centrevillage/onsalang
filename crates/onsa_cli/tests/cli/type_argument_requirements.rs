@@ -23,10 +23,10 @@
 //! The cells split into three kinds of tests, so that a decision that moves one kind does not hide the others:
 //! - settled by the spec: the code and the requirement of every cell whose first unmet requirement is not a
 //!   `Dup` that the bound also asks for;
-//! - S-1021 (OPEN, provisional reading (1)): a bound that itself needs `Dup` (`T: Copy`, `T: Num`) and an argument
-//!   that is not `Dup`: the first requirement reported is the implicit `Dup`, as the value use does today. If
-//!   S-1021 is decided as (3) the bound is reported instead, in both places, and these cells change together;
-//! - S-1020 (OPEN, provisional reading (2)): two type arguments of one type that each fail a requirement.
+//! - S-1021 (decided as (1)): a bound that itself needs `Dup` (`T: Copy`, `T: Num`) and an argument
+//!   that is not `Dup`: the first requirement reported is the implicit `Dup`, as the value use does. The
+//!   same in both places (the reading (3), the bound reported instead, was not taken);
+//! - S-1020 (decided as (2)): two type arguments of one type that each fail a requirement.
 //!
 //! Every input is checked in this process (`check_file`), nothing is written to the disk.
 
@@ -305,10 +305,10 @@ fn a_value_use_names_the_first_unmet_requirement() {
 
 #[test]
 fn s1021_a_value_use_names_the_implicit_dup_first_for_a_bound_that_needs_dup() {
-    // S-1021 (OPEN), provisional reading (1): `T: Copy` and `T: Num` with an argument that is not `Dup` (`Buf[F32]`,
+    // S-1021 (decided as (1)): `T: Copy` and `T: Num` with an argument that is not `Dup` (`Buf[F32]`,
     // an Affine struct, `Option[Buf[F32]]`, and `U: ?Dup`, `U: ?Dup + Eq`) report `T: Dup` as §4.5 lists the
-    // requirements: the implicit `Dup` before the bound written. The value use does so today. If S-1021 is decided
-    // as (3) the bound is reported instead, here and in the type written, and these cells change together.
+    // requirements: the implicit `Dup` before the bound written. The value use does so (the reading (3),
+    // the bound reported here and in the type written, was not taken).
     let cells: Vec<&Seen> = grid().iter().filter(|s| s.place.is_value() && depends_on_s1021(s.param, s.arg)).collect();
     assert_eq!(cells.len(), 2 * (3 + 2), "the number of S-1021 value uses");
     let failed: Vec<&Seen> = cells.into_iter().filter(|s| s.want != s.got).collect();
@@ -338,7 +338,7 @@ fn a_type_written_names_the_implicit_dup_before_a_bound_written() {
 
 #[test]
 fn s1021_a_type_written_names_the_implicit_dup_first_for_a_bound_that_needs_dup() {
-    // S-1021 (OPEN), provisional reading (1): as the value use above, in the six places and the two of a type
+    // S-1021 (decided as (1)): as the value use above, in the six places and the two of a type
     // parameter as the argument (`impl` heading and signature).
     let cells: Vec<&Seen> = grid().iter().filter(|s| !s.place.is_value() && depends_on_s1021(s.param, s.arg)).collect();
     assert_eq!(cells.len(), 2 * (3 * 6 + 2 * 2), "the number of S-1021 cells of a type written");
@@ -384,7 +384,7 @@ fn two_value(bound: &str, second: &str) -> Checked {
 
 #[test]
 fn s1020_the_type_written_reports_the_outer_requirement_before_a_second_class_argument_before_it() {
-    // S-1020 (OPEN), provisional reading (2): `P[Span[F32], Bool]` with `P[A, B: Num]`: the first argument is
+    // S-1020 (decided as (2)): `P[Span[F32], Bool]` with `P[A, B: Num]`: the first argument is
     // second-class for `A` (E0710) and the second fails `B: Num` (E0416). The type written reports the
     // requirement of the outer type first, so E0416 and no E0710 (the value use `mk(s, b)` reports the first
     // argument: E0710). The reading (1) would make the type written E0710 too.

@@ -1011,7 +1011,7 @@ fn the_look_at_the_end_of_the_body_is_undone() {
     assert_eq!(codes(src), [Code::E0418]);
 }
 
-/// S-1027, provisional: the joined line is given when a later statement
+/// S-1027 (decided as (1)): the joined line is given when a later statement
 /// decides the type that makes `a - x` fit, where `let _` is not (§6.1: the
 /// type is open).
 #[test]

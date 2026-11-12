@@ -3,11 +3,11 @@
 // spec = ["§2.3", "§7", "§18.1"]
 // fixes = 0
 
-// S-986 (§2.3) names the short form of a struct pattern (`P { in }`) among the places of a field name used whose keyword has the
+// S-986 named the short form of a struct pattern (`P { in }`) among the places of a field name used whose keyword has the
 // candidate `in_`. §7 writes the fields of a struct pattern as `name: pattern` alone (a field name written alone, `P { x }`, is
 // the E0002 of the `:` after it), so `P { in_ }` would leave an E0002 of the same stage, which §18.1 does not let a candidate
-// leave. The conservative reading: no candidate here (`fixes = 0`), the candidate only before a `:` (keyword_name_field_use.onsa);
-// a gap reported to the parent. One error in each unit.
+// leave. S-1017 (decided, §2.3): no candidate here (`fixes = 0`), the candidate only before a `:` (keyword_name_field_use.onsa);
+// §2.3 says so since S-1017. One error in each unit.
 
 pub struct P {
   in_: F32,
