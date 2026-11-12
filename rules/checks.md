@@ -29,4 +29,4 @@ gate の各項目は全てのコアを使い、1 回に数分かかる。検証�
 4.6 gate の出力の FAIL の行は、実装待ちの項目の中身のことがある。判定は最後の行で見る。作業の判定になるのは `gate: PASS` / `gate: FAIL` だけで、`gate (quick): …`・`gate (only): …`・`gate (sweep k/K): …` は一部を回した結果である。
 
 4.7 事例を絞って走らせる: 事例の器 `onsa_cases --run <根>` の引数は `tests/` を持つ根のディレクトリで、ファイルは受けない。一つの事例だけを走らせるには、作業用のディレクトリ（scratchpad の自分の下）に `tests/<元の経路>` の形で事例と `.fixK` を写し、そのディレクトリを根に渡す。結果は JSON の `cases[].problems`。
-  `tools/run_cases.py --work <作業用のディレクトリ> <tests/ の下の経路>...` がこの写しと実行を行う。
+  `tools/run_cases.py --work <作業用のディレクトリ> <tests/ の下の経路>...` がこの写しと実行を行う。`[[test.host]]` の手順も回すときは `--hosts` を付ける。

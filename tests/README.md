@@ -67,7 +67,7 @@
 | `heavy/` | 1 件で約 1 秒を超える事例。既定の走査から外し、gate の項目 `heavy` だけが回す（X-24）。印は `diag-negatives` が走らせずに数える。同じ重さの Rust のテストは、名前を `heavy_` で始めて `#[ignore = "heavy: …"]` を付ける |
 | `fuzz/` | ファズが保存した入力（事例ではない。`tools/fuzz.py` と `fix-loop` が読む） |
 | `review-phase1/` | レビューの再現の入力（事例ではない。[`review-phase1/README.md`](review-phase1/README.md)） |
-| `pending.toml` | 実装待ちの一覧（形はファイルの頭のコメント） |
+| `pending.toml` | 実装待ちの一覧（形は `tools/pending.py help`） |
 
 ## 絞った確かめ
 
