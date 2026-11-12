@@ -107,6 +107,10 @@ impl Analysis {
     pub(crate) fn alias_type(&self, e: Entity) -> Result<Option<(Entity, TyId)>, ResolveError> {
         let Entity::Def(d) = e else { return Ok(None) };
         let DefKind::Alias(t) = self.def(d).kind else { return Ok(None) };
+        // Read as the order of the declarations lowers: only once lowered.
+        if self.decls.ordering.is_some() && self.decls.lowered.get(&d) != Some(&true) {
+            onsa_diag::internal::bug(Some(self.def(d).name_span), "an alias read before the order lowered it");
+        }
         match self.type_namespace(t) {
             Some(ns) => Ok(Some((ns, t))),
             None if matches!(self.types.get(t), Ty::Error) => Err(ResolveError::Failed),

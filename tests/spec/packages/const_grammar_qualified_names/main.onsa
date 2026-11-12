@@ -5,9 +5,10 @@
 // W5-16 U1b/t, R-61, S-50: a constant of a module (`cfg.N`) or of a type of a module (`cfg.Dev.CAP`) is read as a constant expression in
 // every place where one is written, and the same in a length and in a const argument: `[F32; cfg.N]` and `Ring[F32, cfg.N]` are fine,
 // and a constant whose type is not `U32` (`cfg.M: I64`, `cfg.Dev.WIDE: I64`) is E0401 in both (§4.5: "期待型でない定数は E0401"). The places
-// are the heading of an item, the repeat and the annotation of a body, and the places of a flow body. A name of the module that it does not
-// have, inside a form outside the grammar, is E0302 (§15.1; §18.1: the names stage goes first), and the form itself is E0417 as it is for an
-// unqualified name (const_grammar_qualified_forms has the forms that change with W5-16 U1b1). One error per unit (§18.1).
+// are the heading of an item, the repeat and the annotation of a body, and the places of a flow body. A form outside the grammar around a
+// qualified name is E0417 (§4.5), and a name of the module that it does not have inside such a form (`(cfg.Nope, 1)`) is not read, so it is the E0417
+// of the form too and not an E0302 (W5-13 U2b, S-989 (3); const_grammar_qualified_forms has the forms that change with W5-16 U1b1).
+// One error per unit (§18.1).
 use cfg
 
 pub struct Ring[T, const N: U32] {
@@ -134,30 +135,30 @@ pub flow block_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
   ys[0]
 }
 
-// ---- E0302: a name of the module that it does not have, inside the form ----
+// ---- E0417: a name of the module that it does not have, inside the form (the form is first, the name is not read) ----
 
-pub fn missing_in_a_tuple_in_a_parameter(x: [F32; (cfg.Nope, 1)]) -> F32 {   //~ E0302
+pub fn missing_in_a_tuple_in_a_parameter(x: [F32; (cfg.Nope, 1)]) -> F32 {   //~ E0417
   1.0
 }
 
 pub fn missing_in_a_comparison_in_a_repeat() -> F32 {
-  let a = [0.0; cfg.Nope < 2]   //~ E0302
+  let a = [0.0; cfg.Nope < 2]   //~ E0417
   a[0]
 }
 
-pub fn missing_in_an_if_in_a_const_argument(r: Ring[F32, if true { cfg.Nope } else { 2 }]) -> U32 {   //~ E0302
+pub fn missing_in_an_if_in_a_const_argument(r: Ring[F32, if true { cfg.Nope } else { 2 }]) -> U32 {   //~ E0417
   r.head
 }
 
 pub flow missing_in_a_tuple_in_a_delay(x: F32 at sample) -> F32 at sample {
-  delay~(x, (cfg.Nope, 1))   //~ E0302
+  delay~(x, (cfg.Nope, 1))   //~ E0417
 }
 
 pub flow missing_in_a_comparison_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
-  let a = [x; cfg.Nope == 2]   //~ E0302
+  let a = [x; cfg.Nope == 2]   //~ E0417
   a[0]
 }
 
-pub flow missing_in_a_cast_in_a_flow_input(a: [F32; cfg.Nope as U32] at sample) -> F32 at sample {   //~ E0302
+pub flow missing_in_a_cast_in_a_flow_input(a: [F32; cfg.Nope as U32] at sample) -> F32 at sample {   //~ E0417
   0.0
 }

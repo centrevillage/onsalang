@@ -406,6 +406,9 @@ impl<'p> Sema<'p> {
             }
             Some(false) => onsa_diag::internal::bug(at, "an alias read as it is lowered: a cycle not in the order"),
             None if self.flat.is_empty() => onsa_diag::internal::bug(at, "an alias the signatures did not lower"),
+            None if self.a.decls.ordering.is_some_and(|d| d != id) => {
+                onsa_diag::internal::bug(at, "an alias lowered out of the order of the declarations")
+            }
             None => {}
         }
         let ty = match (self.cx_for(id, Vec::new(), None), self.a.defs[id.0 as usize].item) {

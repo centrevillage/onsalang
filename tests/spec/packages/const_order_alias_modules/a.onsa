@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// W5-13 U2b/t, R-440: a type of another module written as the length of an array or as a const argument is E0308 (§4.5: "値でない名前（型 ...）は E0308"; §15.1: "型を
+// const 引数の位置に書く"), whichever of the two modules is read first: a and b come before the module `defs` that declares the type, y and z come after it
+// (§4.5: "書いた順によらずに引く"). The type is written as a path (`defs.M`, a and y) and as an imported name (`use defs.M`, b and z), as a length and as a const
+// argument. The same error in all of them; one error per unit (§18.1).
+use defs
+
+type FromA = [F32; defs.M]   //~ E0308
+
+type FromA2 = defs.Rg[F32, defs.M]   //~ E0308

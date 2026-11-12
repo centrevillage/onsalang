@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§4.5", "§18.1"]
+
+// W5-13 U2b/t, S-1016 (provisional reading (1), E0417; the other reading (2) is the E0311 of a cycle through the form): a name under a form outside
+// the grammar of a constant expression (a comparison `K < 1`, a `!K`, an equality, a logical form) is not read (§4.5: "文法の外の形 ... の中 ... は読まない"), and
+// that includes the order of the aliases and the constants: the type of the constant `K` is not followed from the length `(K < 1)` of the alias `A` that is the type of
+// `K` (§4.4: "固定長配列の長さと const 引数が読む定数は、その定数の宣言の型を辿る" is about the constants that the length reads), so there is no cycle and the
+// length is the E0417 of its form, whichever of the alias and the constant is declared first. The constant whose type is an alias of an
+// error is not reported again (§4.4: "使う所には出さない"). If S-1016 is decided as (2), the units of this file become E0311 and the file changes alone.
+// The same length with a name that the grammar reads (`[F32; K]`, `const K: A`) is the cycle of §4.4 (types/cycle_type_const_later.onsa).
+// One error per unit (§18.1).
+
+// ---- the alias before the constant ----
+
+type Cmp1 = [F32; (K1 < 1)]   //~ E0417
+
+const K1: Cmp1 = 1
+
+type Not1 = [F32; !K2]   //~ E0417
+
+const K2: Not1 = 1
+
+type Eq1 = [F32; (K3 == 1)]   //~ E0417
+
+const K3: Eq1 = 1
+
+// ---- the constant before the alias ----
+
+const K4: Cmp2 = 1
+
+type Cmp2 = [F32; (K4 < 1)]   //~ E0417
+
+const K5: Not2 = 1
+
+type Not2 = [F32; !K5]   //~ E0417
+
+const K6: Eq2 = 1
+
+type Eq2 = [F32; (K6 == 1)]   //~ E0417
+
+// ---- in a const argument ----
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+}
+
+type Arg1 = Ring[F32, (K7 < 1)]   //~ E0417
+
+const K7: Arg1 = Ring { data: [0.0; 1] }
+
+const K8: Arg2 = Ring { data: [0.0; 1] }
+
+type Arg2 = Ring[F32, !K8]   //~ E0417
+
+// ---- a call is also a form outside the grammar ----
+
+type Call1 = [F32; f(K9)]   //~ E0417
+
+const K9: Call1 = 1
+
+fn f(a: U32) -> U32 {
+  a
+}

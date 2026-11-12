@@ -1,0 +1,110 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// W5-13 U2b/t, R-440: a name written alone in a constant expression is looked for wherever it is declared, whichever of the two is written first
+// (§4.5: "書いた順によらずに引く"; §15.1). An alias is a type, and a type is no value: written as a length or as a const argument it is E0308 (§4.5:
+// "値でない名前（型、モジュール、flow、trait、効果など）は E0308"; §15.1: "型を const 引数の位置に書く"), whether the alias is declared before the
+// use (`type A2 = F32` then `type B2 = [F32; A2]`) or after it (`type B1 = [F32; A1]` then `type A1 = F32`). Each pair is in both orders and the error is
+// at the use, never at the alias. The places are the right side of an alias, the type of a `const`, the type of an associated `const`, a const
+// argument, the type arguments of a path (`Rg::[F32, A].CAP`) and a path with the alias at its head (`A.N.x`: the field `x` of the value `S.N`
+// through the alias of `S`, E0417 by §4.5: "値のフィールド（`K.x`、`P.N.x`、`(K).x` ...）は ... E0417"). The same program is rejected in either order,
+// and the use before the alias is no internal error of a later stage (const_order_alias_test_block.onsa). One error per unit (§18.1).
+
+pub struct Rg[T, const N: U32] {
+  data: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+pub struct S {
+  x: U32,
+}
+
+impl S {
+  pub const N: S = S { x: 1 }
+}
+
+pub struct H1 {
+  x: U32,
+}
+
+pub struct H2 {
+  x: U32,
+}
+
+// ---- the right side of an alias ----
+
+type B1 = [F32; A1]   //~ E0308
+
+type A1 = F32
+
+type A2 = F32
+
+type B2 = [F32; A2]   //~ E0308
+
+// ---- the type of a const ----
+
+const K1: [F32; AK1] = [0.0; 4]   //~ E0308
+
+type AK1 = F32
+
+type AK2 = F32
+
+const K2: [F32; AK2] = [0.0; 4]   //~ E0308
+
+// ---- the type of an associated const ----
+
+impl H1 {
+  pub const C1: [F32; AH1] = [0.0; 4]   //~ E0308
+}
+
+type AH1 = F32
+
+type AH2 = F32
+
+impl H2 {
+  pub const C2: [F32; AH2] = [0.0; 4]   //~ E0308
+}
+
+// ---- a const argument ----
+
+type B3 = Rg[F32, A3]   //~ E0308
+
+type A3 = F32
+
+type A4 = F32
+
+type B4 = Rg[F32, A4]   //~ E0308
+
+// ---- the type arguments of a path ----
+
+type B5 = [F32; Rg::[F32, A5].CAP]   //~ E0308
+
+type A5 = F32
+
+type A6 = F32
+
+type B6 = [F32; Rg::[F32, A6].CAP]   //~ E0308
+
+// ---- an alias in the middle of a path: a field of a value ----
+
+type B7 = [F32; A7.N.x]   //~ E0417
+
+type A7 = S
+
+type A8 = S
+
+type B8 = [F32; A8.N.x]   //~ E0417
+
+// ---- the alias is never wrong where it is used as a type ----
+
+type Fine1 = [F32; 4]
+
+type FineUser = [Fine1; 2]
+
+type FineLater = [FineLaterOf; 2]
+
+type FineLaterOf = [F32; 4]

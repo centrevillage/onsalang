@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.4", "§18.1"]
+
+// W5-13 U2b/t, R-436, S-989 (3): a function value in the length of an alias that names the alias itself in what it holds is a form outside the grammar of a
+// constant expression, and what is inside it is not read (§4.5: "文法の外の形（呼び出しと上の形）の中 ... は読まない"), so the alias reaches nothing: it is the E0417
+// of the form and neither a cycle (E0311) nor an internal error of a later stage (`an alias read as it is lowered: a cycle not in the order`, exit 101).
+// The name is in the type arguments of a path (`Rg::[A1, 4].CAP`). The forms of this kind that already give E0417 are in const_forms_not_read_unchanged.onsa.
+// One error per unit (§18.1).
+
+pub struct Rg[T, const N: U32] {
+  data: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+type A1 = [F32; (fn() { Rg::[A1, 4].CAP })]   //~ E0417

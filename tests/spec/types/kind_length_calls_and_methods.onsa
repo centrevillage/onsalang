@@ -2,16 +2,15 @@
 // [test]
 // spec = ["§4.5", "§15.1", "§18.1", "§6.1"]
 
-// W4-04 U8b (the faults 1 to 4 of its breaker): the names of a constant expression are read by the kind
-// the place needs (§15.1) before the E0417 of the types stage (§18.1: the names stage first), the same
-// in a signature, a body and a flow:
-//  - a call in a length is E0417 (§4.5: "関数の呼び出しは書けない"), but its callee and its arguments are
-//    read first: a name not found is E0302, a name that is no value at the callee is E0308, and a constant
-//    called as `K()` is the E0020 of a value called with `(` (§15.1: "値を `x(...)` の形で呼ぶと、型に
-//    よらず E0020"), as `let _ = K()` of a body is;
+// W4-04 U8b (the faults 1 to 4 of its breaker), W5-13 U2b: the names of a constant expression are read by the kind
+// the place needs (§15.1) inside the grammar of a constant expression (§4.5), the same in a signature, a body and a flow:
+//  - a call in a length is E0417 (§4.5: "関数の呼び出しは書けない"), and its callee and its arguments are not read
+//    (S-989 (3); §4.5: "文法の外の形（呼び出しと上の形）の中 … は読まない"; §15.1: "定数式の位置では §4.5 の規則が先"): a name not
+//    found, a name that is no value at the callee, an argument that is no value and a constant called as `K()` (the
+//    E0020 of a value called with `(` in a body, as `let _ = K()` is) are the E0417 of the call as well;
 //  - a method named through its type (`P.get`, `Str.len`) is the E0308 of a method that is no value
-//    (§15.1, S-205), and an associated function of a builtin type (`F32.from_bits`) is a value that is no
-//    constant, E0417 (§4.5: "値だが定数でない名前（関数、列挙子）も ... E0417");
+//    (§15.1, S-205) where it is not called (a method called with `(` is a call, E0417 as above), and an associated
+//    function of a builtin type (`F32.from_bits`) is a value that is no constant, E0417 (§4.5: "値だが定数でない名前（関数、列挙子）も ... E0417");
 //  - a type whose head is a name, at a const argument (`Ring[F32, Wrap[F32]]`), is E0308 by the kind of
 //    its head (§15.1: "型を const 引数の位置に書く"), and a head that is not found is E0302 (the types
 //    that are no name are E0308 too, S-732, in kind_type_argument_shapes.onsa).
@@ -43,27 +42,27 @@ fn g(x: U32) -> U32 {
 
 // ---- A call in the length of a signature ----
 
-pub fn unknown_callee(x: [F32; zz()]) -> F32 {   //~ E0302
+pub fn unknown_callee(x: [F32; zz()]) -> F32 {   //~ E0417
   1.0
 }
 
-pub fn unknown_argument(x: [F32; g(zz)]) -> F32 {   //~ E0302
+pub fn unknown_argument(x: [F32; g(zz)]) -> F32 {   //~ E0417
   1.0
 }
 
-pub fn type_called(x: [F32; P()]) -> F32 {   //~ E0308
+pub fn type_called(x: [F32; P()]) -> F32 {   //~ E0417
   1.0
 }
 
-pub fn effect_called(x: [F32; Alloc()]) -> F32 {   //~ E0308
+pub fn effect_called(x: [F32; Alloc()]) -> F32 {   //~ E0417
   1.0
 }
 
-pub fn constant_called(x: [F32; K()]) -> F32 {   //~ E0020
+pub fn constant_called(x: [F32; K()]) -> F32 {   //~ E0417
   1.0
 }
 
-pub fn type_as_an_argument(x: [F32; g(P)]) -> F32 {   //~ E0308
+pub fn type_as_an_argument(x: [F32; g(P)]) -> F32 {   //~ E0417
   1.0
 }
 
@@ -78,12 +77,12 @@ pub fn associated_function_called(x: [F32; F32.from_bits(1)]) -> F32 {   //~ E04
 // ---- The same calls in the repeat of a body ----
 
 pub fn unknown_argument_in_a_repeat() -> F32 {
-  let a = [1.0; g(zz)]   //~ E0302
+  let a = [1.0; g(zz)]   //~ E0417
   a[0]
 }
 
 pub fn constant_called_in_a_repeat() -> F32 {
-  let a = [1.0; K()]   //~ E0020
+  let a = [1.0; K()]   //~ E0417
   a[0]
 }
 
@@ -97,7 +96,7 @@ pub fn builtin_method_in_a_parameter(x: [F32; Str.len]) -> F32 {   //~ E0308
   1.0
 }
 
-pub fn builtin_method_called_in_a_parameter(x: [F32; Str.len("a")]) -> F32 {   //~ E0308
+pub fn builtin_method_called_in_a_parameter(x: [F32; Str.len("a")]) -> F32 {   //~ E0417
   1.0
 }
 

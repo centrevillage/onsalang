@@ -1,0 +1,109 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§11.1", "§15.1", "§18.1"]
+
+// W5-13 U2b/t, S-989 (3), R-436: the names stage reads a constant expression only inside the grammar of a constant expression, so a form
+// outside it is E0417 and nothing inside it is looked for: not a type in the signature of a function value (`(fn(a: Nope) { 1 })`, `(fn() -> Nope { 1 })`), not
+// the annotation of a `let` in a block, not the type of an `as` (`(1 as Nope)`), not a name in a tuple (`(zz, 1)`) or in the callee and the
+// arguments of a call (`K(1)`), not the flow called in a length (`lp~(1.0)`; §11.1: "定数式（§4.5）の中のこれらの形は、flow の中でも外でも、定数式でない形の
+// E0417 である"). §4.5: "名前の段は、定数式の文法の中（名前の鎖とその `::[…]` の並び、括弧、前置の `-`、算術の演算子の被演算子）だけを読み、文法の外の形（呼び出しと
+// 上の形）の中と文字列リテラルの穴は読まない。そのため、中の名前の誤り（E0302・E0308）、値を `(` で呼ぶ形の E0020（§15.1）、flow だけの構文の E0821（§11.1）より、形の
+// E0417 が先である ... 定数式が型の中にあっても式の中にあっても同じである". The same form gives the same E0417 in every place where a constant expression is
+// written: the parameter and the result of a function, an alias, the field of a struct, the type of a `const`, the annotation of a `let`, a const
+// argument, the repeat `[e; N]` and the type of the input of a flow. The mark of a form of several lines is on the line where the form starts.
+// The forms that other files already put in a place (the tuple and the call in the parameter, the result, the annotation and the repeat: const_grammar_names_unchanged.onsa,
+// length_names_constant_called.onsa, kind_length_calls_and_methods.onsa, negative/e0417_flow_calls_in_const_exprs.onsa) are not repeated. These are the units that
+// are another code before W5-13 U2b: E0302 for the name in a tuple or in a function value, a block and a cast in the repeat of a body, E0020 for the call of
+// a constant, E0821 for the flow called. The units that already pass are in const_forms_positions_unchanged.onsa. One error per unit (§18.1).
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+  head: U32,
+}
+
+pub struct Rg[T, const N: U32] {
+  data: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+const K: U32 = 4
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+// ---- the type of a parameter ----
+
+// ---- the result type ----
+
+// ---- an alias ----
+
+type AliasTuple = [F32; (zz, 1)]   //~ E0417
+
+type AliasCall = [F32; K(1)]   //~ E0417
+
+type AliasInstance = [F32; lp~(1.0)]   //~ E0417
+
+// ---- the field of a struct ----
+
+pub struct FieldTuple {
+  a: [F32; (zz, 1)],   //~ E0417
+}
+
+pub struct FieldCall {
+  a: [F32; K(1)],   //~ E0417
+}
+
+pub struct FieldInstance {
+  a: [F32; lp~(1.0)],   //~ E0417
+}
+
+// ---- the type of a const ----
+
+const CONST_TYPE_TUPLE: [F32; (zz, 1)] = [0.0; 4]   //~ E0417
+
+const CONST_TYPE_CALL: [F32; K(1)] = [0.0; 4]   //~ E0417
+
+const CONST_TYPE_INSTANCE: [F32; lp~(1.0)] = [0.0; 4]   //~ E0417
+
+// ---- the annotation of a let ----
+
+// ---- a const argument ----
+
+pub fn const_arg_instance(r: Ring[F32, lp~(1.0)]) -> U32 {   //~ E0417
+  r.head
+}
+
+// ---- the repeat [e; N] ----
+
+pub fn repeat_closure_argument() -> F32 {
+  let a = [0.0; (fn(a: Nope) { 1 })]   //~ E0417
+  a[0]
+}
+
+pub fn repeat_block_let() -> F32 {
+  let a = [0.0; {   //~ E0417
+    let x: Nope = 1
+    x
+  }]
+  a[0]
+}
+
+pub fn repeat_cast() -> F32 {
+  let a = [0.0; (1 as Nope)]   //~ E0417
+  a[0]
+}
+
+pub fn repeat_closure_result() -> F32 {
+  let a = [0.0; (fn() -> Nope { 1 })]   //~ E0417
+  a[0]
+}
+
+// ---- the type of the input of a flow ----
+
+pub flow flow_input_tuple(a: [F32; (zz, 1)] at sample) -> F32 at sample {   //~ E0417
+  0.0
+}

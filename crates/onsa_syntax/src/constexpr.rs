@@ -93,18 +93,27 @@ impl Ast {
     }
 
     /// The form of the node `e` of a constant expression (§4.5): its
-    /// operands are not looked at.
+    /// operands are not looked at. Each kind of node is named, so a new one
+    /// is put in or out of the grammar here (the names stage, the reader
+    /// and the order of the declarations read by it, S-989).
     pub fn const_form(&self, e: ExprId) -> ConstForm<'_> {
         if let Some(chain) = self.chain(e) {
             return ConstForm::Chain(chain);
         }
+        use {ConstForm::Outside, ExprKind as K};
         match &self.expr(e).kind {
-            ExprKind::Paren(x) => ConstForm::Paren(*x),
-            ExprKind::Unary { op: UnOp::Neg, expr } => ConstForm::Neg(*expr),
-            ExprKind::Binary { op, lhs, rhs, .. } if op.in_constant() => ConstForm::Arith(*lhs, *rhs),
-            ExprKind::Lit(lit) => ConstForm::Lit(lit),
-            ExprKind::Error => ConstForm::Error,
-            _ => ConstForm::Outside,
+            K::Paren(x) => ConstForm::Paren(*x),
+            K::Unary { op: UnOp::Neg, expr } => ConstForm::Neg(*expr),
+            K::Binary { op, lhs, rhs, .. } if op.in_constant() => ConstForm::Arith(*lhs, *rhs),
+            K::Lit(lit) => ConstForm::Lit(lit),
+            K::Error => ConstForm::Error,
+            // A chain whose head is no name (`f().x`, `(K).x`), the other
+            // operators, and every other form.
+            K::Path(_) | K::Field { .. } | K::TypeArgs { .. } | K::TupleIndex { .. } | K::Unary { .. } => Outside,
+            K::Binary { .. } | K::Cast { .. } | K::Call { .. } | K::Index { .. } | K::Try(_) | K::Move(_) => Outside,
+            K::Tuple(_) | K::Array(_) | K::Repeat { .. } | K::Struct { .. } | K::Block(_) | K::If { .. } => Outside,
+            K::Match { .. } | K::Closure { .. } | K::Handle { .. } | K::Unsafe(_) | K::Par { .. } => Outside,
+            K::Range(_) | K::At { .. } | K::Feedback(_) | K::Hole => Outside,
         }
     }
 }

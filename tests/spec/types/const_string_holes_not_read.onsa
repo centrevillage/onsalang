@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// W5-13 U2b/t, R-441, S-989 (3): the holes of a string literal are not read in a constant expression (§4.5: "文字列リテラルの穴は読まない"), so a parameter that is written
+// in a hole (`"{k}"`) is not looked for, in the signature as in the body: the form around the literal (a comparison, `("{k}" == "")`) is the E0417 of a form outside
+// the grammar of a constant expression and not "cannot find `k`" (E0302) in the signature and E0417 in the body. A string literal alone, with a hole, is a literal
+// that is no integer: E0401 (§4.5: "整数でないリテラル（`1.5`、`true`、`"s"`）も E0401"), whatever it holds. A name that does not exist in a hole (`"{zz}"`)
+// is not looked for either. One error per unit (§18.1).
+
+// ---- a form around a string with a hole: E0417 ----
+
+pub fn hole_in_a_parameter(k: U32, a: [F32; ("{k}" == "")]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn hole_in_a_result(k: U32) -> [F32; ("{k}" == "")] {   //~ E0417
+  [0.0; 4]
+}
+
+pub fn hole_in_a_repeat(k: U32) -> F32 {
+  let a = [0.0; ("{k}" == "")]   //~ E0417
+  a[0]
+}
+
+pub fn hole_in_an_annotation(k: U32) -> F32 {
+  let _: [F32; ("{k}" == "")] = [0.0; 4]   //~ E0417
+  1.0
+}
+
+pub fn hole_of_a_name_that_is_not_there(k: U32, a: [F32; ("{zz}" == "")]) -> F32 {   //~ E0417
+  1.0
+}
+
+pub fn hole_of_a_name_that_is_not_there_in_a_repeat() -> F32 {
+  let a = [0.0; ("{zz}" == "")]   //~ E0417
+  a[0]
+}
+
+// ---- a string alone: E0401 ----
+
+pub fn string_with_a_hole_in_a_parameter(k: U32, a: [F32; "{k}"]) -> F32 {   //~ E0401
+  1.0
+}
+
+pub fn string_with_a_hole_in_a_repeat(k: U32) -> F32 {
+  let a = [0.0; "{k}"]   //~ E0401
+  a[0]
+}
+
+pub fn string_with_a_hole_of_a_name_that_is_not_there(a: [F32; "{zz}"]) -> F32 {   //~ E0401
+  1.0
+}

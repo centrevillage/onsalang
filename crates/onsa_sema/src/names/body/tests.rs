@@ -635,9 +635,9 @@ fn a_tilde_outside_a_flow_body_does_not_look_up_its_callee() {
     }
 }
 
-/// The E0821 of the walk, of a heading and of a constant expression of a
-/// signature is the one of `flow.rs` (D-15). In a flow body, a constant
-/// expression of a type holds an instance: E0417, no E0821.
+/// The E0821 of the walk and of a heading is the one of `flow.rs` (D-15).
+/// A call in a constant expression of a type, of a signature or a flow
+/// body, is outside its grammar: E0417, no E0821 (S-989).
 #[test]
 fn the_e0821_of_a_body_a_heading_and_a_constant_is_one_diagnostic() {
     use super::flow::{Outside, outside_flow};
@@ -651,8 +651,6 @@ fn the_e0821_of_a_body_a_heading_and_a_constant_is_one_diagnostic() {
             Some(" at block"),
         ),
         ("pub fn u(x: F32) -> F32 {\n  lp~(x)\n}\n", "lp~(x)", None),
-        ("pub fn u(x: [F32; lp~(1.0)]) -> F32 {\n  1.0\n}\n", "lp~(1.0)", None),
-        ("pub fn u(x: [F32; lp(1.0)]) -> F32 {\n  1.0\n}\n", "lp(1.0)", None),
     ] {
         let src = format!("{pre}{unit}");
         let (a, _) = analysis(&src);
@@ -661,10 +659,14 @@ fn the_e0821_of_a_body_a_heading_and_a_constant_is_one_diagnostic() {
         let form = form.map_or(Outside::Flow, |c| Outside::Clock(src.rfind(c).unwrap() as u32));
         assert_eq!(format!("{:?}", a.diagnostics), format!("{:?}", [outside_flow(form, span, &src)]), "{unit}");
     }
-    let (a, _) = analysis(&format!(
-        "{pre}pub flow u(x: F32 at sample) -> F32 at sample {{\n  let a: [F32; lp~(1.0)] = [x; 2]\n  x\n}}\n"
-    ));
-    assert_eq!(stages(&a), [(onsa_diag::Code::E0417, onsa_diag::Stage::Types)]);
+    for unit in [
+        "pub flow u(x: F32 at sample) -> F32 at sample {\n  let a: [F32; lp~(1.0)] = [x; 2]\n  x\n}\n",
+        "pub fn u(x: [F32; lp~(1.0)]) -> F32 {\n  1.0\n}\n",
+        "pub fn u(x: [F32; lp(1.0)]) -> F32 {\n  1.0\n}\n",
+    ] {
+        let (a, _) = analysis(&format!("{pre}{unit}"));
+        assert_eq!(stages(&a), [(onsa_diag::Code::E0417, onsa_diag::Stage::Types)], "{unit}");
+    }
 }
 
 /// A unit with an E0821 is checked as any other (§18.1): its heading is

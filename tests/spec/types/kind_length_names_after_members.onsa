@@ -3,10 +3,10 @@
 // spec = ["§4.5", "§15.1", "§18.1"]
 
 // W4-04 U8b/i3: the names of a constant expression after a member, the same in a signature and a body.
-//  - A method named through its type (`P.get`, `Str.len`) is no value whatever follows it (§15.1, S-205), so
-//    `P.get.zz()` and `Str.len.zz()` at the callee of a call in a length are its E0308 before the E0417 of
-//    the call (§18.1: the names stage first), as in a body; `P.mk.zz()` (an associated function, a value)
-//    is the E0417 of the call.
+//  - A call in a length is a form outside the grammar of a constant expression, and its callee is not read
+//    (W5-13 U2b, S-989 (3); §4.5), so `P.get.zz()` and `Str.len.zz()` (a method named through its type, which is
+//    no value, §15.1, S-205), `P.get.zz(zz)` and `P.mk.zz()` (an associated function, a value) are all the E0417 of the
+//    call in a length; in a body, as an ordinary expression, `P.get.zz()` is E0308.
 //  - A builtin associated constant or function with a name after it (`F32.PI.x`, `F32.from_bits.x`) is a value with a name after it,
 //    E0417 in a constant expression, as the user's `P.N.x` (§4.5, §15.1; S-967), not "cannot find `PI`"; as a type (`x: F32.PI.x`) the
 //    name is no namespace, E0308.
@@ -30,24 +30,24 @@ impl P {
 
 // ---- A method before a name, at the callee of a call ----
 
-pub fn method_member_called(x: [F32; P.get.zz()]) -> F32 {   //~ E0308
+pub fn method_member_called(x: [F32; P.get.zz()]) -> F32 {   //~ E0417
   1.0
 }
 
-pub fn method_member_called_with_unknown(x: [F32; P.get.zz(zz)]) -> F32 {   //~ E0308
+pub fn method_member_called_with_unknown(x: [F32; P.get.zz(zz)]) -> F32 {   //~ E0417
   1.0
 }
 
-pub fn method_members_called(x: [F32; P.get.zz.yy()]) -> F32 {   //~ E0308
+pub fn method_members_called(x: [F32; P.get.zz.yy()]) -> F32 {   //~ E0417
   1.0
 }
 
-pub fn builtin_method_member_called(x: [F32; Str.len.zz()]) -> F32 {   //~ E0308
+pub fn builtin_method_member_called(x: [F32; Str.len.zz()]) -> F32 {   //~ E0417
   1.0
 }
 
 pub fn method_member_called_in_a_body(x: F32) -> F32 {
-  let a = [x; P.get.zz()]   //~ E0308
+  let a = [x; P.get.zz()]   //~ E0417
   a[0]
 }
 

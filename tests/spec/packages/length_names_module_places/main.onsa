@@ -2,10 +2,11 @@
 // [test]
 // spec = ["§4.5", "§15.1", "§18.1", "§11.4", "§11.5"]
 
-// W5-16 U1a/t: the name of a module written in a constant expression is E0308 (a module is a namespace and no value, §4.5:
+// W5-16 U1a/t, W5-13 U2b: the name of a module written in a constant expression is E0308 (a module is a namespace and no value, §4.5:
 // "値でない名前（型、モジュール、flow、trait、効果など）は E0308"; §15.1), a function of a module is E0417 (a value that is no
-// constant), a name that the module does not have is E0302, and a constant of a module is fine: the same code in every place
-// where a constant expression is written. packages/kind_signature_places_modules has the heading of an item; this package
+// constant), a name that the module does not have is E0302, a constant of a module called with `(` (`util.K()`) is E0417 (a call is a form
+// outside the grammar, §4.5, §15.1: "定数式の位置では §4.5 の規則が先" and S-989 (3)), and a constant of a module is fine: the same code in every
+// place where a constant expression is written. packages/kind_signature_places_modules has the heading of an item; this package
 // has the repeat and the annotation of a body, the places of a flow body (the length of `delay~` and `vdelay~`, the ends of a
 // `par~`, the repeat) and the input of a flow, and the qualified constants (`util.K`, `util.Cfg.SIZE`) that are fine in all of them.
 // One error per unit (§18.1), so each form is in its own unit.
@@ -37,7 +38,7 @@ pub fn missing_name_in_a_repeat() -> F32 {
 }
 
 pub fn constant_called_in_a_repeat() -> F32 {
-  let a = [0.0; util.K()]                           //~ E0020
+  let a = [0.0; util.K()]                           //~ E0417
   a[0]
 }
 
@@ -86,7 +87,7 @@ pub flow missing_name_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow constant_called_in_a_delay(x: F32 at sample) -> F32 at sample {
-  delay~(x, util.K())                               //~ E0020
+  delay~(x, util.K())                               //~ E0417
 }
 
 pub flow member_of_a_constant_in_a_delay(x: F32 at sample) -> F32 at sample {

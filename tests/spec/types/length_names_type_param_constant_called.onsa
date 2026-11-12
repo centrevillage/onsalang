@@ -2,16 +2,13 @@
 // [test]
 // spec = ["§4.5", "§6.1", "§15.1", "§18.1"]
 
-// W5-16 U1a/t: the associated constant of a type parameter called with `(` (`T.BITS()` for `T: Int`) in a constant expression
+// W5-16 U1a/t, W5-13 U2b: the associated constant of a type parameter called with `(` (`T.BITS()` for `T: Int`) in a constant expression
 // that is written in a heading (the type of a parameter, a result, the field of a struct, the variant of an enum, a
-// method) or in the annotation of a body is E0020, as the same form in the repeat `[0.0; T.BITS()]` of a body is
-// (length_names_constant_called.onsa). A value is called as `f.(x)` whatever its type, and a constant is read without `(…)`
-// (§6.1, §15.1: "値を `x(...)` の形で呼ぶと、型によらず E0020"); the name `BITS` comes from the bounds of `T` (`Int`), so it
-// is found and it is the form that is wrong: it is not the E0302 of a name that is not found (§15.1). The code does
-// not depend on where the constant expression is written (§4.5: "位置によらず").
-// The heading and the annotation of this version read the head of the path (`T`) before the type parameters are
-// visible, and say "cannot find `T`" (E0302); the constant expression is read by the names stage once for every
-// place in the unit of W5-16 U1a, so these forms are pending until then. A flow has no type parameter (§11.6).
+// method) or in the annotation of a body is E0417, as the same form in the repeat `[0.0; T.BITS()]` of a body is
+// (length_names_constant_called.onsa). A call is a form outside the grammar of a constant expression and its callee is not read, so
+// the name `T` is not looked for and the value called with `(` is no E0020 (§4.5: "関数の呼び出しは書けない"; §15.1: "定数式の位置では §4.5 の規則が先";
+// S-989 (3)). The code does not depend on where the constant expression is written (§4.5: "位置によらず").
+// A flow has no type parameter (§11.6).
 // One error per unit (§18.1), so each form is in its own unit.
 
 pub struct P {
@@ -24,50 +21,50 @@ pub struct G[const N: U32] {
 
 // ---- The heading of a function ----
 
-pub fn bits_called_in_a_parameter[T: Int](a: [F32; T.BITS()]) -> F32 {   //~ E0020
+pub fn bits_called_in_a_parameter[T: Int](a: [F32; T.BITS()]) -> F32 {   //~ E0417
   0.0
 }
 
-pub fn bits_called_in_a_result[T: Int](x: T) -> [F32; T.BITS()] {   //~ E0020
+pub fn bits_called_in_a_result[T: Int](x: T) -> [F32; T.BITS()] {   //~ E0417
   [0.0; 2]
 }
 
-pub fn bits_called_in_a_sum[T: Int](a: [F32; T.BITS() + 1]) -> F32 {   //~ E0020
+pub fn bits_called_in_a_sum[T: Int](a: [F32; T.BITS() + 1]) -> F32 {   //~ E0417
   0.0
 }
 
-pub fn bits_called_in_a_const_argument[T: Int](g: G[T.BITS()]) -> F32 {   //~ E0020
+pub fn bits_called_in_a_const_argument[T: Int](g: G[T.BITS()]) -> F32 {   //~ E0417
   0.0
 }
 
-pub fn bits_called_in_a_tuple[T: Int](t: (U32, [F32; T.BITS()])) -> F32 {   //~ E0020
+pub fn bits_called_in_a_tuple[T: Int](t: (U32, [F32; T.BITS()])) -> F32 {   //~ E0417
   0.0
 }
 
-pub fn bits_called_in_a_function_type[T: Int](f: fn([F32; T.BITS()]) -> F32) -> F32 {   //~ E0020
+pub fn bits_called_in_a_function_type[T: Int](f: fn([F32; T.BITS()]) -> F32) -> F32 {   //~ E0417
   0.0
 }
 
-pub fn one_called_in_a_parameter[T: Int](a: [F32; T.ONE()]) -> F32 {   //~ E0020
+pub fn one_called_in_a_parameter[T: Int](a: [F32; T.ONE()]) -> F32 {   //~ E0417
   0.0
 }
 
-pub fn pi_called_in_a_parameter[T: Float](a: [F32; T.PI()]) -> F32 {   //~ E0020
+pub fn pi_called_in_a_parameter[T: Float](a: [F32; T.PI()]) -> F32 {   //~ E0417
   0.0
 }
 
 // ---- The other headings ----
 
 pub struct BitsCalledInAField[T: Int] {
-  a: [F32; T.BITS()],                               //~ E0020
+  a: [F32; T.BITS()],                               //~ E0417
 }
 
 pub enum BitsCalledInAVariant[T: Int] {
-  A([F32; T.BITS()]),                               //~ E0020
+  A([F32; T.BITS()]),                               //~ E0417
 }
 
 impl P {
-  pub fn bits_called_in_a_method[T: Int](self, a: [F32; T.BITS()]) -> F32 {   //~ E0020
+  pub fn bits_called_in_a_method[T: Int](self, a: [F32; T.BITS()]) -> F32 {   //~ E0417
     0.0
   }
 }
@@ -75,24 +72,24 @@ impl P {
 // ---- The annotation of a body ----
 
 pub fn bits_called_in_an_annotation[T: Int](g: G[4]) -> F32 {
-  let h: G[T.BITS()] = g                            //~ E0020
+  let h: G[T.BITS()] = g                            //~ E0417
   0.0
 }
 
 pub fn bits_called_in_a_length_annotation[T: Int]() -> F32 {
-  let _: [F32; T.BITS()] = [0.0; 4]                 //~ E0020
+  let _: [F32; T.BITS()] = [0.0; 4]                 //~ E0417
   1.0
 }
 
 pub fn bits_called_in_a_closure_annotation[T: Int]() -> F32 {
   let f = fn(x: F32) -> F32 {
-    let _: [F32; T.BITS()] = [x; 4]                 //~ E0020
+    let _: [F32; T.BITS()] = [x; 4]                 //~ E0417
     x
   }
   f.(1.0)
 }
 
 pub fn bits_called_in_a_closure_parameter[T: Int]() -> F32 {
-  let f = fn(a: [F32; T.BITS()]) -> F32 { 1.0 }     //~ E0020
+  let f = fn(a: [F32; T.BITS()]) -> F32 { 1.0 }     //~ E0417
   1.0
 }

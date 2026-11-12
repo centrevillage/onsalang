@@ -5,12 +5,13 @@
 // A name after a value item (a constant, a function, a variant, an associated constant of a user type or of a builtin type) in a constant
 // expression is the field of a value: it is outside the grammar of a constant expression and is E0417 wherever the expression is written
 // (§4.5: "値のフィールド（`K.x`、`P.N.x`、`(K).x`。値の後の `.` は型の段が読む、§15.1）… E0417"; S-967), with a parenthesis (`(K).x`) and a call
-// (`K.x()`, `K.x.()`) alike, and whether the field exists (`K.zz`). A method named through its type is no value, so a name after it and the method
-// itself are E0308 as before (§15.1; S-205).
+// (`K.x()`, `K.x.()`) alike, and whether the field exists (`K.zz`). A method named through its type is no value: the method alone (`P.get`) is E0308 as
+// before (§15.1; S-205), but a chain called with `(` (`P.get.zz()`, `Str.len.zz()`) is a call, a form outside the grammar, and its callee is not read:
+// E0417 (W5-13 U2b, S-989 (3); §4.5: "文法の外の形（呼び出しと上の形）の中 … は読まない").
 // The places are those of a flow: the length of `delay~`, the maximum of `vdelay~`, the ends of a `par~`, the repeat and the annotation of
 // a flow body, and the type of an input.
-// These are the units of const_after_value_names.onsa whose result the reader of W5-16 U1b2 does not change (they pass before it): they are in
-// its own file so that a regression of them is not silenced with the units that change.
+// These units were in const_after_value_names.onsa before W5-16 U1b2 and passed before it: they are in its own file so that a regression
+// of them is not silenced with the units that change.
 
 pub struct Ring[T, const N: U32] {
   data: [T; N],
@@ -73,23 +74,23 @@ pub flow method_through_its_type_in_a_flow_repeat(x: F32 at sample) -> F32 at sa
 }
 
 pub flow member_of_a_method_through_its_type_called_in_a_delay(x: F32 at sample) -> F32 at sample {
-  delay~(x, P.get.zz())   //~ E0308
+  delay~(x, P.get.zz())   //~ E0417
 }
 
 pub flow member_of_a_method_through_its_type_called_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
-  vdelay~(x, d, P.get.zz())   //~ E0308
+  vdelay~(x, d, P.get.zz())   //~ E0417
 }
 
 pub flow member_of_a_method_through_its_type_called_in_a_flow_annotation(x: F32 at sample) -> F32 at sample {
-  let a: [F32; P.get.zz()] = [x; 4]   //~ E0308
+  let a: [F32; P.get.zz()] = [x; 4]   //~ E0417
   a[0]
 }
 
 pub flow member_of_a_builtin_method_called_in_a_delay(x: F32 at sample) -> F32 at sample {
-  delay~(x, Str.len.zz())   //~ E0308
+  delay~(x, Str.len.zz())   //~ E0417
 }
 
 pub flow member_of_a_builtin_method_called_as_the_start_of_a_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in Str.len.zz()..<8 { x * F32.round_from(i) }   //~ E0308
+  let ys = par~ i in Str.len.zz()..<8 { x * F32.round_from(i) }   //~ E0417
   ys[0]
 }

@@ -168,8 +168,8 @@ fn settle(r: Result<Got, ConstErr>) -> Result<Got, ConstErr> {
 /// The node `e`, its operands first (§4.5, §4.7: as an ordinary expression
 /// of the expected type `U32`), stopping at the first error. The leaves are
 /// read by their type, and the nodes by the grammar (S-966): a node outside
-/// it is E0417 whatever is in it, whose names the names stage read (S-968).
-/// The grammar is the syntax's ([`Ast::const_form`]).
+/// it is E0417 whatever is in it, whose names the names stage does not read
+/// (S-989). The grammar is the syntax's ([`Ast::const_form`]).
 fn node(a: &mut Analysis, cx: &ConstCx, e: ExprId) -> Result<Got, ConstErr> {
     let expr = cx.ast.expr(e);
     let shown = || cx.text[expr.span.start as usize..expr.span.end as usize].to_string();
@@ -302,22 +302,6 @@ fn uninstantiated(shown: String, head: &str, span: Span) -> Diagnostic {
 fn no_negative(shown: String, span: Span) -> Diagnostic {
     let msg = "a constant expression has the type `U32`, which has no prefix `-` (also not `-0`) (§3.4, §4.5)";
     Diagnostic::new(Stage::Types, Code::E0401, span, msg).with_found(shown)
-}
-
-/// The operands of the arithmetic of `e`, under parentheses, prefix `-` and
-/// binary operators; `e` itself when it is none of them. It goes under every
-/// unary and binary operator (`!K`, `K < 1`): more than the grammar of
-/// [`Ast::const_form`], whose operators are those of `BinOp::in_constant`,
-/// so the order of the declarations reads more names than `node` does.
-pub(crate) fn operands(ast: &Ast, e: ExprId, out: &mut Vec<ExprId>) {
-    match &ast.expr(e).kind {
-        ExprKind::Paren(x) | ExprKind::Unary { expr: x, .. } => operands(ast, *x, out),
-        ExprKind::Binary { lhs, rhs, .. } => {
-            operands(ast, *lhs, out);
-            operands(ast, *rhs, out);
-        }
-        _ => out.push(e),
-    }
 }
 
 /// The error of the name `shown` at `span` of a constant expression, of the

@@ -1,0 +1,52 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§6.1", "§18.1"]
+// fixes = 0
+
+// W4-12 U3, S-191, S-812, R-341, W5-13 U2b (S-989 (3)): a constant parameter called as `N(1)` in the length of an array type is a call, a form
+// outside the grammar of a constant expression: E0417 (§4.5: "関数の呼び出しは書けない"), in the signature of a declaration as in its body. It is
+// no longer the E0020 of a value called as `x(...)` (§15.1: "定数式の位置では §4.5 の規則が先で、文法の外の形は中を読まずに E0417"; §6.1: a
+// function value is called `x.(...)`; the `N(1)` of `a_constant_parameter` in fixes/e0020_value_call_not_a_function.onsa is a value position),
+// and so the E0417 has no candidate (`fixes = 0` checks it; the candidate of the E0020 put a `.` before the `(`). One error per unit (P-01).
+
+pub struct Voice {
+  v: F32,
+}
+
+pub fn call_in_an_input_length[const N: U32](x: [F32; N(1)]) -> F32 {  //~ E0417
+  1.0
+}
+
+pub fn call_in_an_output_length[const N: U32](x: F32) -> [F32; N(1)] {  //~ E0417
+  [x; 2]
+}
+
+pub fn call_with_no_argument_in_an_input_length[const N: U32](x: [F32; N()]) -> F32 {  //~ E0417
+  1.0
+}
+
+pub fn call_in_a_nested_type[const N: U32](x: [[F32; N(1)]; 2]) -> F32 {  //~ E0417
+  1.0
+}
+
+impl Voice {
+  pub fn call_in_a_method_input[const N: U32](self, x: [F32; N(1)]) -> F32 {  //~ E0417
+    1.0
+  }
+}
+
+pub fn call_in_a_repeat_length[const N: U32](x: F32) -> F32 {
+  let a = [0; N(1)]                                 //~ E0417
+  x
+}
+
+pub fn call_in_a_type_of_a_let[const N: U32](x: F32) -> F32 {
+  let a: [F32; N(1)] = [0.0; 2]                     //~ E0417
+  x
+}
+
+// ---- the right forms --------------------------------------------------------------------------------
+
+pub fn length_is_the_parameter[const N: U32](x: [F32; N]) -> [F32; N] {
+  x
+}

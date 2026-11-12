@@ -1,0 +1,6 @@
+use defs.M
+use defs.Rg
+
+type FromZ = [F32; M]   //~ E0308
+
+type FromZ2 = Rg[F32, M]   //~ E0308

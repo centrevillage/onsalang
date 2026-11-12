@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§11.1", "§11.4", "§11.5", "§15.1", "§18.1"]
+
+// W5-13 U2b/t, S-989 (3), R-436, R-441: the places of a constant expression in the body of a flow (the length of `delay~`, the maximum of `vdelay~`, the ends of a `par~`, the
+// repeat `[e; N]` and the annotation of a `let`) read it as the others do: only inside the grammar of a constant expression (§4.5: "名前の段は、定数式の文法の中 ... だけを読み、
+// 文法の外の形（呼び出しと上の形）の中と文字列リテラルの穴は読まない"; §11.4, §11.5). A form outside it is E0417 whatever it holds: the type of the parameter of a function value
+// (`(fn(a: Nope) { 1 })`), the annotation of a `let` in a block, the type of an `as` (`(1 as Nope)`), and a comparison of a string with a hole that names an input of the flow
+// (`("{x}" == "")`; the hole is not read, as in a function: types/const_string_holes_not_read.onsa). A string with a hole alone is a literal that is no integer: E0401. The mark of a form
+// of several lines is on the line where the form starts. These are the units that are another code before W5-13 U2b (the names inside the form are read first); the units that already give the code are in const_forms_flow_positions_unchanged.onsa. One error per unit (§18.1).
+
+pub flow cast_in_delay(x: F32 at sample) -> F32 at sample {
+  delay~(x, (1 as Nope))   //~ E0417
+}
+
+pub flow cast_in_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, (1 as Nope))   //~ E0417
+}
+
+pub flow cast_in_par_end(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<(1 as Nope) { x * F32.round_from(i) }   //~ E0417
+  ys[0]
+}
+
+pub flow cast_in_repeat(x: F32 at sample) -> F32 at sample {
+  let a = [x; (1 as Nope)]   //~ E0417
+  a[0]
+}
+
+pub flow hole_form_in_annotation(x: F32 at sample) -> F32 at sample {
+  let a: [F32; ("{x}" == "")] = [x; 4]   //~ E0417
+  a[0]
+}
+
+pub flow hole_alone_in_annotation(x: F32 at sample) -> F32 at sample {
+  let a: [F32; "{x}"] = [x; 4]   //~ E0401
+  a[0]
+}
+

@@ -2,14 +2,12 @@
 // [test]
 // spec = ["§4.5", "§15.1", "§18.1", "§11.4", "§11.5", "§6.1"]
 
-// W5-16 U1a/t: a call in the length of `delay~` and `vdelay~`, in the ends of a `par~`, in the repeat of a flow and in the input
-// of a flow is read by the names stage first and then rejected by the types stage, with the codes it has in the heading and
-// in the repeat of a function (types/kind_length_calls_and_methods.onsa): a callee or an argument that is not found is
-// E0302, one that is no value is E0308, a constant called as `K()` is the E0020 of a value called with `(` (§15.1: "値を
-// `x(...)` の形で呼ぶと、型によらず E0020"), and a call of a function is the E0417 of §4.5 ("関数の呼び出しは書けない";
-// §18.1: the stages go first). A name after a value (`U.x.()`, `g(U.x)`) is no error of the names stage, so the call is the
-// E0417 (S-967). The same names with a name after a constant are in length_names_after_constant_flow_calls.onsa.
-// One error per unit (§18.1), so each form is in its own unit.
+// W5-16 U1a/t, W5-13 U2b: a call in the length of `delay~` and `vdelay~`, in the ends of a `par~`, in the repeat of a flow and in the input
+// of a flow is a form outside the grammar of a constant expression, E0417 (§4.5: "関数の呼び出しは書けない"; §15.1: "定数式の位置では §4.5 の規則が先で、
+// 文法の外の形は中を読まずに E0417"), and the names stage does not read its callee and its arguments (S-989 (3)): a callee or an argument that is
+// not found (`zz()`, `g(zz)`) or that is no value (`g(P)`), and a constant called as `K()` (the E0020 of a value called with `(` in a body, §15.1), are
+// the E0417 of the call as well as a call of a function (`g(1)`) and a name after a value (`U.x.()`, `g(U.x)`, S-967). The same names with a name after
+// a constant are in length_names_after_constant_flow_calls.onsa. One error per unit (§18.1), so each form is in its own unit.
 
 pub struct P {
   x: I32,
@@ -22,19 +20,19 @@ fn g(a: U32) -> U32 {
 }
 
 pub flow unknown_callee_in_a_delay(x: F32 at sample) -> F32 at sample {
-  delay~(x, zz())                                   //~ E0302
+  delay~(x, zz())                                   //~ E0417
 }
 
 pub flow unknown_argument_in_a_delay(x: F32 at sample) -> F32 at sample {
-  delay~(x, g(zz))                                  //~ E0302
+  delay~(x, g(zz))                                  //~ E0417
 }
 
 pub flow type_as_an_argument_in_a_delay(x: F32 at sample) -> F32 at sample {
-  delay~(x, g(P))                                   //~ E0308
+  delay~(x, g(P))                                   //~ E0417
 }
 
 pub flow constant_called_in_a_delay(x: F32 at sample) -> F32 at sample {
-  delay~(x, U())                                    //~ E0020
+  delay~(x, U())                                    //~ E0417
 }
 
 pub flow function_called_in_a_delay(x: F32 at sample) -> F32 at sample {
@@ -42,7 +40,7 @@ pub flow function_called_in_a_delay(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow unknown_argument_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
-  vdelay~(x, d, g(zz))                              //~ E0302
+  vdelay~(x, d, g(zz))                              //~ E0417
 }
 
 pub flow function_called_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
@@ -50,17 +48,17 @@ pub flow function_called_in_a_vdelay(x: F32 at sample, d: F32 at sample) -> F32 
 }
 
 pub flow unknown_argument_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0..<g(zz) { x * F32.round_from(i) }    //~ E0302
+  let ys = par~ i in 0..<g(zz) { x * F32.round_from(i) }    //~ E0417
   ys[0]
 }
 
 pub flow type_as_an_argument_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0..<g(P) { x * F32.round_from(i) }     //~ E0308
+  let ys = par~ i in 0..<g(P) { x * F32.round_from(i) }     //~ E0417
   ys[0]
 }
 
 pub flow constant_called_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0..<U() { x * F32.round_from(i) }      //~ E0020
+  let ys = par~ i in 0..<U() { x * F32.round_from(i) }      //~ E0417
   ys[0]
 }
 
@@ -70,7 +68,7 @@ pub flow function_called_as_the_end_of_a_par(x: F32 at sample) -> F32 at sample 
 }
 
 pub flow unknown_argument_in_a_flow_repeat(x: F32 at sample) -> F32 at sample {
-  let a = [x; g(zz)]                                //~ E0302
+  let a = [x; g(zz)]                                //~ E0417
   a[0]
 }
 
@@ -88,7 +86,7 @@ pub flow member_as_an_argument_in_a_flow_input(a: [F32; g(U.x)] at sample) -> F3
   0.0
 }
 
-pub flow unknown_argument_in_a_flow_input(a: [F32; g(zz)] at sample) -> F32 at sample {   //~ E0302
+pub flow unknown_argument_in_a_flow_input(a: [F32; g(zz)] at sample) -> F32 at sample {   //~ E0417
   0.0
 }
 

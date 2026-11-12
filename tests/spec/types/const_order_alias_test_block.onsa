@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§4.5", "§15.1", "§18.1"]
+
+// W5-13 U2b/t, R-440: a type written as the length of an array in an alias that is declared before the type is E0308 (§4.5: "値でない名前（型 ...）は
+// E0308", "書いた順によらずに引く"), so `check` stops there and a `test` block that uses the alias is not run: the error is the E0308 of the length
+// and not a failure of a later stage (`internal lowering error: unresolved type`, exit 101). The same alias written after the type
+// (`type Later = F32` then `type Back = [F32; Later]`) is the same error. One error per unit (§18.1).
+
+type Forward = [F32; Later]   //~ E0308
+
+type Later = F32
+
+type Earlier = F32
+
+type Back = [F32; Earlier]   //~ E0308
+
+test "a use of an alias with a type as its length" {
+  let a: Forward = [0.0; 3]
+  assert(a[0] == 0.0)
+}
+
+test "a use of the alias written after the type" {
+  let a: Back = [0.0; 3]
+  assert(a[0] == 0.0)
+}

@@ -25,6 +25,7 @@
 //! is as deep as a type written (§2.5).
 
 use onsa_syntax::ast::ExprId;
+use onsa_syntax::constexpr::{ConstForm, NameChain};
 use serde::{Deserialize, Serialize};
 
 use super::*;
@@ -49,6 +50,10 @@ pub struct Decls {
     /// What the head of the right side of each alias names, through the
     /// aliases there ([`Sema::alias_heads`]).
     pub(crate) heads: HashMap<DefId, Option<Entity>>,
+    /// The declaration the order lowers now: an alias it reads that is not
+    /// lowered is an edge the graph missed (an internal error, R-440).
+    #[serde(skip)]
+    pub(crate) ordering: Option<DefId>,
 }
 
 /// The generic arguments `(e, k)` a place is under, a chain of
@@ -161,30 +166,35 @@ impl Graph<'_> {
     }
 
     /// The constants the constant expression `e` reads, and anywhere the
-    /// aliases its paths pass (`Al.N`): of the chains under its operators
-    /// ([`crate::constarg::operands`], any operator).
+    /// aliases its paths reach: of its chains by its grammar
+    /// ([`Ast::const_form`]), as the names stage reads them; none under a
+    /// form outside it, whose E0417 comes first (S-989, S-1016).
     fn expr(&mut self, w: &From, e: ExprId, value: bool, under: Under) {
         if !value && !w.anywhere {
             return;
         }
-        let mut leaves = Vec::new();
-        crate::constarg::operands(w.ast, e, &mut leaves);
-        for l in leaves {
-            if let Some(p) = self.chain(w, l, value, under) {
+        match w.ast.const_form(e) {
+            ConstForm::Chain(c) => {
+                let p = self.chain(w, &c, value, under);
                 self.read(w, &p, under);
             }
+            ConstForm::Paren(x) | ConstForm::Neg(x) => self.expr(w, x, value, under),
+            ConstForm::Arith(lhs, rhs) => {
+                self.expr(w, lhs, value, under);
+                self.expr(w, rhs, value, under);
+            }
+            ConstForm::Lit(_) | ConstForm::Error | ConstForm::Outside => {}
         }
     }
 
-    /// The path of the chain of names `e` without its type arguments
+    /// The path of the chain of names `c` without its type arguments
     /// (`Rg.CAP` of `Rg::[F32, K].CAP`, S-329), after what they read.
-    fn chain(&mut self, w: &From, e: ExprId, value: bool, under: Under) -> Option<Path> {
-        let c = w.ast.chain(e)?;
+    fn chain(&mut self, w: &From, c: &NameChain, value: bool, under: Under) -> Path {
         for &(k, x) in &c.lists {
             let ExprKind::TypeArgs { args, .. } = &w.ast.expr(x).kind else { continue };
             self.listed(w, &c.path(k + 1), &args.args, value, under);
         }
-        Some(c.path(c.names.len()))
+        c.path(c.names.len())
     }
 
     /// The type arguments `args` of the type `path` in a constant expression
@@ -208,17 +218,18 @@ impl Graph<'_> {
     }
 
     /// The constant the path `p` of a constant expression reads (a const
-    /// argument `B[K]` too), and anywhere the alias it passes.
+    /// argument `B[K]` too), and anywhere the alias it reaches last from its
+    /// head (`A`, `Al.N`, `m.Al.N.x`), whose type the names stage reads
+    /// there (`Analysis::typed_members`, R-440).
     fn read(&mut self, w: &From, p: &Path, under: Under) {
         if let [seg] = &p.segments[..]
             && w.generics.contains(&seg.name.as_str())
         {
             return;
         }
-        let before = Path { segments: p.segments[..p.segments.len() - 1].to_vec(), span: p.span };
-        let mut read = self.resolve(w, p);
-        if !before.segments.is_empty()
-            && let Some(Entity::Def(al)) = self.resolve(w, &before)
+        let reached = self.reached(w, p);
+        let mut read = reached.get(p.segments.len() - 1).copied();
+        if let Some((k, &Entity::Def(al))) = reached.iter().enumerate().next_back()
             && matches!(self.a.def(al).kind, DefKind::Alias(_))
         {
             if w.anywhere {
@@ -227,7 +238,8 @@ impl Graph<'_> {
             // `Al.N`: of the type the alias stands for (R-299).
             let names = (&self.a.prelude, &self.a.defs[..], &self.a.builtin_key);
             let ty = self.a.decls.heads.get(&al).copied().flatten();
-            read = ty.and_then(|t| self.a.modules.member(t, p.segments.last()?, w.m, names).ok());
+            let n = p.segments.get(k + 1).filter(|_| k + 2 == p.segments.len());
+            read = ty.zip(n).and_then(|(t, n)| self.a.modules.member(t, n, w.m, names).ok());
         }
         if let Some(Entity::Def(c) | Entity::Member(c)) = read
             && matches!(self.a.def(c).kind, DefKind::Const(_))
@@ -236,23 +248,29 @@ impl Graph<'_> {
         }
     }
 
-    /// What `p` names; `Self` and `Self.N` through the type of the `impl`
-    /// (§2.2), whose members are named before ([`Sema::name_members`]).
-    fn resolve(&self, w: &From, p: &Path) -> Option<Entity> {
+    /// What `p` names from its head, one for each name up to the last that
+    /// is found ([`crate::resolve::Modules::members`]); `Self` and `Self.N`
+    /// through the type of the `impl` (§2.2), whose members are named before
+    /// ([`Sema::name_members`]).
+    fn reached(&self, w: &From, p: &Path) -> Vec<Entity> {
         let a = self.a;
-        let ([head, rest @ ..], Some(this)) = (&p.segments[..], w.this) else { return a.resolve_path(w.m, p).ok() };
-        if !crate::names::is_self_type(&head.name) {
-            return a.resolve_path(w.m, p).ok();
-        }
+        let [head, rest @ ..] = &p.segments[..] else { return Vec::new() };
+        let Some(this) = w.this.filter(|_| crate::names::is_self_type(&head.name)) else {
+            let Some(first) = a.modules.lookup(w.m, &head.name, &a.prelude) else { return Vec::new() };
+            let names = (&a.prelude, &a.defs[..], &a.builtin_key);
+            return std::iter::once(first).chain(a.modules.members(first, rest, w.m, names).0).collect();
+        };
         let table = match this {
             Entity::Def(d) => a.modules.assoc.get(&d),
             e => builtin_ty(a, e).and_then(|t| a.modules.assoc_builtin.get(&t)),
         };
-        match rest {
-            [] => Some(this),
-            [n] => table.and_then(|t| t.get(&n.name)).map(|&d| Entity::Member(d)),
-            _ => None,
-        }
+        let member = rest.first().and_then(|n| table?.get(&n.name)).map(|&d| Entity::Member(d));
+        std::iter::once(this).chain(member).collect()
+    }
+
+    /// What `p` names ([`Self::reached`]).
+    fn resolve(&self, w: &From, p: &Path) -> Option<Entity> {
+        self.reached(w, p).get(p.segments.len() - 1).copied()
     }
 }
 
@@ -356,12 +374,14 @@ impl<'p> Sema<'p> {
                 continue;
             }
             let _scope = onsa_diag::internal::item_scope(self.a.def(d).span);
+            self.a.decls.ordering = Some(d);
             match self.a.def(d).kind {
                 DefKind::Alias(_) => _ = self.alias_ty(d),
                 DefKind::Const(_) => self.const_ty(d),
                 _ => {}
             }
         }
+        self.a.decls.ordering = None;
         Ok(())
     }
 
@@ -641,7 +661,8 @@ impl<'p> Sema<'p> {
     fn param_value(&self, cx: &Cx<'p>, v: ExprId) -> Option<u32> {
         let v = cx.ast.without_parens(v);
         let ExprKind::Path(p) = &cx.ast.expr(v).kind else { return None };
-        if p.segments.len() != 1 || !cx.generics.iter().any(|g| matches!(g.kind, GenericKind::Const(_))) {
+        let param = |g: &GenericDef| matches!(g.kind, GenericKind::Const(_)) && g.name == p.segments[0].name;
+        if p.segments.len() != 1 || !cx.generics.iter().any(param) {
             return None;
         }
         let names = crate::names::body::const_names(self.a, cx.m, (cx.ast, cx.text), cx.consts(), v);

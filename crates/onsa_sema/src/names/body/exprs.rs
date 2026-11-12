@@ -8,6 +8,7 @@ use onsa_syntax::ast::{
     Ast, Block, Clock, ExprId, ExprKind, Ident, Lit, MatchArm, Param, ParamName, PatId, PatKind, StmtId, StmtKind,
     StrLit, StrSeg, TypeId, TypeKind,
 };
+use onsa_syntax::constexpr::ConstForm;
 
 use super::flow::{Outside, par_head};
 use super::kinds::Want;
@@ -94,7 +95,7 @@ impl Walker<'_> {
                 self.exprs(ast.sub_exprs(e))
             }
             // A block with statements in a flow body is the flow stage's
-            // E0806 (`Self::stmt`); in a constant expression, no constant.
+            // E0806 (`Self::stmt`).
             ExprKind::Block(b) if self.flow && !b.stmts.is_empty() => self.later(),
             ExprKind::Block(b) => self.block(b),
             ExprKind::Match { scrutinee, arms, .. } => self.match_arms(*scrutinee, arms),
@@ -123,14 +124,9 @@ impl Walker<'_> {
     }
 
     /// A form whose error is of a later stage, whose names the walk does not
-    /// read: it stops the walk, but in a constant expression, where it is no
-    /// constant (the E0417 or E0200 of the reader, `crate::constarg`) and the
-    /// names after it are read.
+    /// read: it stops the walk.
     pub(super) fn later(&mut self) -> W {
-        match self.in_const {
-            true => Ok(()),
-            false => Err(self.fail(Fail::Later)),
-        }
+        Err(self.fail(Fail::Later))
     }
 
     pub(super) fn exprs(&mut self, es: impl IntoIterator<Item = ExprId>) -> W {
@@ -138,20 +134,36 @@ impl Walker<'_> {
     }
 
     /// A constant expression (§4.5: the length of `[x; n]`, a bound of
-    /// `par`, the constant of a delay), walked as any expression; a name in
+    /// `par`, the constant of a delay), walked by its grammar; a name in
     /// it has no candidate that would leave it no constant (§18.1, S-236).
     /// A name held as an error in it stops the walk after it (§18.1, S-692),
     /// and the names after that name in it are read: the reader of the types
     /// stage tells an error of them from a use of the held one
     /// ([`super::BodyNames::held`]).
     pub(super) fn const_expr(&mut self, e: ExprId) -> W {
-        let outer = std::mem::replace(&mut self.in_const, true);
-        let r = self.expr(e);
-        self.in_const = outer;
+        self.in_const = true;
+        let r = self.const_node(e);
+        self.in_const = false;
         r?;
-        match !outer && std::mem::take(&mut self.const_held) {
+        match std::mem::take(&mut self.const_held) {
             true => Err(self.fail(Fail::Held)),
             false => Ok(()),
+        }
+    }
+
+    /// The node `e` of a constant expression by its grammar ([`Ast::const_form`]):
+    /// a chain of names, and the operands of parentheses, a prefix `-` and
+    /// arithmetic. A form outside it is the reader's E0417 whatever is in it,
+    /// whose names are not read, as the holes of a string literal (S-989).
+    fn const_node(&mut self, e: ExprId) -> W {
+        match self.ast.const_form(e) {
+            ConstForm::Chain(_) => self.name_at(e, Place::Value),
+            ConstForm::Paren(x) | ConstForm::Neg(x) => self.const_node(x),
+            ConstForm::Arith(lhs, rhs) => {
+                self.const_node(lhs)?;
+                self.const_node(rhs)
+            }
+            ConstForm::Lit(_) | ConstForm::Error | ConstForm::Outside => Ok(()),
         }
     }
 

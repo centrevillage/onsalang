@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.4", "§18.1"]
+
+// W5-13 U2b/t, R-436, S-989 (3): a form outside the grammar of a constant expression that holds the name of the alias it is the length of is the E0417 of the
+// form, not a cycle (E0311): what is inside the form is not read (§4.5: "文法の外の形（呼び出しと上の形）の中 ... は読まない"). These are the units of
+// const_forms_not_read_self.onsa that already give E0417 before W5-13 U2b (the name is in the type of the parameter of a function value, in a block and in
+// a function value in a const argument, and a hole of a string literal in a field): they are in their own file so that a regression of them is not silenced with the unit that changes.
+// One error per unit (§18.1).
+
+pub struct Rg[T, const N: U32] {
+  data: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+type A2 = [F32; (fn(t: A2) { 1 })]   //~ E0417
+
+type A3 = [F32; {   //~ E0417
+    let t: A3 = [0.0; 1]
+    1
+  }]
+
+type A4 = Rg[F32, (fn() { A4.CAP })]   //~ E0417
+
+// ---- the hole of a string literal in a form ----
+
+const K: U32 = 4
+
+pub struct Holder {
+  a: [F32; ("{K}" == "")],   //~ E0417
+}

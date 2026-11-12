@@ -1,0 +1,86 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.4", "§18.1"]
+
+// W5-13 U2b/t, R-436, S-989 (3): what is inside a form outside the grammar of a constant expression is not read, so the order in which the aliases and the
+// constants are written cannot change the code and the order graph has nothing to follow in it (§4.5: "文法の外の形（呼び出しと上の形）の中 ... は読まない"; "書いた順によらずに
+// 引く"). A function value that reads a member of an alias declared before it and one declared
+// after it (`A2.N`, `A3.N`) is E0417 in both orders. The same for a name in the hole of a string
+// literal (`"{A4.N}" == ""`: §4.5: "文字列リテラルの穴は読まない") and for a call and a tuple. The E0417 is at the alias that has the length.
+// The function value that names its own alias is in const_forms_not_read_self.onsa. One error per unit (§18.1).
+
+pub struct Rg[T, const N: U32] {
+  data: [T; N],
+}
+
+impl[T, const N: U32] Rg[T, N] {
+  pub const CAP: U32 = N
+}
+
+// ---- a function value ----
+
+type B2 = [F32; (fn() { A2.N })]   //~ E0417
+
+type A2 = (F32, F32)
+
+type A3 = (F32, F32)
+
+type B3 = [F32; (fn() { A3.N })]   //~ E0417
+
+type B4 = [F32; (fn(t: A4) { 1 })]   //~ E0417
+
+type A4 = (F32, F32)
+
+type A5 = (F32, F32)
+
+type B5 = [F32; (fn(t: A5) { 1 })]   //~ E0417
+
+// ---- the hole of a string literal ----
+
+type B6 = [F32; ("{A6.N}" == "")]   //~ E0417
+
+type A6 = (F32, F32)
+
+type A7 = (F32, F32)
+
+type B7 = [F32; ("{A7.N}" == "")]   //~ E0417
+
+// ---- a block ----
+
+type B8 = [F32; {   //~ E0417
+    let t: A8 = (1.0, 2.0)
+    1
+  }]
+
+type A8 = (F32, F32)
+
+type A9 = (F32, F32)
+
+type B9 = [F32; {   //~ E0417
+    let t: A9 = (1.0, 2.0)
+    1
+  }]
+
+// ---- a call and a tuple ----
+
+type B10 = [F32; g(A10.N)]   //~ E0417
+
+type A10 = (F32, F32)
+
+type A11 = (F32, F32)
+
+type B11 = [F32; (A11.N, 1)]   //~ E0417
+
+// ---- in a const argument ----
+
+pub struct Ring[T, const N: U32] {
+  data: [T; N],
+}
+
+type B12 = Ring[F32, (fn() { A12.N })]   //~ E0417
+
+type A12 = (F32, F32)
+
+fn g(a: U32) -> U32 {
+  a
+}

@@ -4,9 +4,9 @@
 
 // W5-16 U1b/t, S-966, S-968, S-228: the grammar of a constant expression is the same inside a generic function, where a name can be a
 // const parameter (`M`) or an associated constant of a type parameter (`T.BITS`): a form outside the grammar is E0417 whatever the names in it
-// are (§4.5), a float and a prefix `-` are E0401, and a name that is not found is E0302 first (§18.1). A const parameter and the constant of a
+// are, also a name that is not found in it (`(M, zz)`, `M < zz`), which is not read (§4.5; W5-13 U2b, S-989 (3)); a float and a prefix `-` are E0401. A const parameter and the constant of a
 // type parameter alone are the cases of types/const_type_param.onsa and num_traits/tp_const_expression_e0417.onsa. One error per unit (§18.1).
-// These are the units of const_grammar_generic_places.onsa whose result W5-16 U1b1 does not change (they pass before it): they are in their own file
+// These are the units of const_grammar_generic_places.onsa whose result W5-16 U1b1 does not change (they passed before it): they are in their own file
 // so that a regression of them is not silenced with the units that change.
 
 pub struct Ring[T, const N: U32] {
@@ -18,11 +18,11 @@ pub fn comparison_of_a_type_parameter_constant[T: Int](x: [F32; T.BITS > 8]) -> 
   1.0
 }
 
-pub fn unknown_beside_a_const_parameter[const M: U32](x: [F32; (M, zz)]) -> F32 {   //~ E0302
+pub fn unknown_beside_a_const_parameter[const M: U32](x: [F32; (M, zz)]) -> F32 {   //~ E0417
   1.0
 }
 
-pub fn unknown_in_a_comparison_of_a_const_parameter[const M: U32](r: Ring[F32, M < zz]) -> U32 {   //~ E0302
+pub fn unknown_in_a_comparison_of_a_const_parameter[const M: U32](r: Ring[F32, M < zz]) -> U32 {   //~ E0417
   r.head
 }
 

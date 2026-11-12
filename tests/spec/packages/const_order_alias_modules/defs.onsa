@@ -1,0 +1,5 @@
+pub type M = F32
+
+pub struct Rg[T, const N: U32] {
+  data: [T; N],
+}
