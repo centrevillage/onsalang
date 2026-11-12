@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.4", "§6.2", "§18.1"]
+// fixes = 0
+
+// S-1013 (§4.5: "要求を複数満たさない型引数には、値の使用と同じ順(暗黙の `Escape`、暗黙の `Dup`、書いた境界)で最初に満たさない
+// ものを報告する"). A type argument that fails the implicit `Dup` and the bound written together (a `Buf[F32]` for the
+// `T: Eq` of `N`, a type parameter `U: ?Dup` for the same) is E0416 in the places of a type: a signature, the target of an
+// `impl` heading (whose arguments are the type parameters of the `impl` only, §6.2) and the right side of an alias (reported
+// at the alias, §4.4). The case pins the code and the line; which requirement the message names (the implicit `Dup`, as for a
+// value use `mk(b)`) is pinned by crates/onsa_cli/tests/cli/type_argument_requirements.rs, because a marker compares the
+// code and the place alone. One error per unit (§18.1).
+
+pub struct N[T: Eq] {
+  a: T,
+}
+
+pub fn in_a_signature(x: N[Buf[F32]]) -> U32 {   //~ E0416
+  0
+}
+
+impl[U: ?Dup] N[U] {   //~ E0416
+  pub fn k(self) -> U32 {
+    0
+  }
+}
+
+pub type InAnAlias = N[Buf[F32]]   //~ E0416
