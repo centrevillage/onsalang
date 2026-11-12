@@ -1,0 +1,2 @@
+use std::
+pub fn f() -> I32 { 1 }
