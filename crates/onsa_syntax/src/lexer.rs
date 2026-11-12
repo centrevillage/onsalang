@@ -178,7 +178,7 @@ impl<'a> Lexer<'a> {
                 self.push(TokenKind::Newline, start);
                 continue;
             }
-            if matches!(b, b'"' | b'\'' | b'`' | b'$' | b'@' | b'#')
+            if (matches!(b, b'"' | b'\'' | b'`' | b'#') || is_mark(b))
                 && !self.after_unopened(start)
                 && let Some((open, close)) = foreign_open(&self.text[start..])
             {
@@ -259,7 +259,7 @@ impl<'a> Lexer<'a> {
     fn after_unopened(&self, start: usize) -> bool {
         match self.bytes[start] {
             b'#' => self.out.tokens.last().is_some_and(|t| t.kind == TokenKind::Hash && t.span.end as usize == start),
-            b'$' | b'@' => start > 0 && matches!(self.bytes[start - 1], b'$' | b'@'),
+            b if is_mark(b) => start > 0 && is_mark(self.bytes[start - 1]),
             _ => false,
         }
     }
@@ -829,6 +829,13 @@ impl Close {
     }
 }
 
+/// A mark of a string of other languages before its quotes (`$"…"`,
+/// `@"…"`): the one set of them, for [`foreign_open`] and the run of them
+/// ([`Lexer::after_unopened`]).
+fn is_mark(b: u8) -> bool {
+    matches!(b, b'$' | b'@')
+}
+
 /// The opening delimiter of a string of other languages at the start of
 /// `rest`, read as long as it goes (§2.4, S-406, S-455, S-856): its length
 /// and the closing delimiter. They are a run of `$` and `@` before a `"` or
@@ -839,7 +846,7 @@ impl Close {
 /// run ([`Lexer::runs`]). Two `"` after a `$` are a delimiter and its close.
 fn foreign_open(rest: &str) -> Option<(usize, Close)> {
     let b = rest.as_bytes();
-    let marks = b.iter().take_while(|&&c| matches!(c, b'$' | b'@')).count();
+    let marks = b.iter().take_while(|&&c| is_mark(c)).count();
     let quotes = b[marks..].iter().take_while(|&&c| c == b'"').count();
     let close = |mark, count, hashes| Close { mark, count, hashes };
     if quotes >= 3 {

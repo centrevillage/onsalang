@@ -1,7 +1,7 @@
 //! The declarations: their doc comments, attributes and visibility, the
 //! dispatch on [`DECLARATIONS`](super::declarations::DECLARATIONS) and the parser of each declaration.
 
-use super::heading::Heading;
+use super::heading::{EXTERN_HEAD, Heading};
 use super::*;
 
 impl<'a> Parser<'a> {
@@ -140,7 +140,7 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::At)?;
         // A line break before the name is read, the table's E0020 (S-957),
         // and before a block comment, whose own E0020 is first.
-        if matches!(self.tokens[self.next_code(at)].kind, TokenKind::Ident | TokenKind::BlockComment) {
+        if matches!(self.tokens[self.next_past_line_ends(at)].kind, TokenKind::Ident | TokenKind::BlockComment) {
             self.skip_newlines();
         }
         let name = self.peek();
@@ -873,13 +873,14 @@ impl<'a> Parser<'a> {
         let m = self.start(NodeKind::Extern)?;
         if !self.extern_head_read_on() {
             self.expect(TokenKind::KwExtern)?;
-            self.expect(TokenKind::Str)?;
-            let t = self.peek();
-            if !self.is_ident(t, "lib") {
-                return Err(self.unexpected("`lib`"));
+            for (k, part) in EXTERN_HEAD.iter().enumerate() {
+                if !self.extern_part(k, self.peek_index()) {
+                    return Err(
+                        self.unexpected(&part.map_or(TokenKind::Str.describe().to_string(), |w| format!("`{w}`")))
+                    );
+                }
+                self.bump();
             }
-            self.bump();
-            self.expect(TokenKind::Str)?;
         }
         self.parse_members(NodeKind::Extern)?;
         self.complete(m, NodeKind::Extern);

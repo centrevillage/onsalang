@@ -72,8 +72,9 @@ impl<'a> Parser<'a> {
         self.tokens[i].kind == TokenKind::Dot && (self.gap(i) == Gap::Space || self.gap_after(i).is_some())
     }
 
-    /// The token after `tokens[i]`, newlines and comments skipped.
-    pub(super) fn next_code(&self, i: usize) -> usize {
+    /// The token after `tokens[i]`, past the line breaks and the line
+    /// comments: a block comment is a token here, which the callers read.
+    pub(super) fn next_past_line_ends(&self, i: usize) -> usize {
         let mut j = i + 1;
         while j + 1 < self.tokens.len()
             && (self.tokens[j].kind == TokenKind::Newline || self.tokens[j].kind.is_line_comment())

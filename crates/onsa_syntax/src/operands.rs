@@ -278,28 +278,20 @@ struct Applied {
     end: u32,
 }
 
-/// `text` with `edits` (sorted, apart).
+/// `text` with `edits` (sorted, apart): where each goes and where `last`
+/// goes are [`onsa_diag::Applied`]'s.
 fn applied(text: &str, edits: &[Edit], last: u32) -> Result<Applied, String> {
     let mut edits: Vec<&Edit> = edits.iter().collect();
     onsa_diag::sort_edits(&mut edits);
-    let after = onsa_diag::apply_text(text, &edits)?;
-    let mut delta: i64 = 0;
-    let mut moved = None;
-    let mut writers = Vec::new();
-    let regions = edits
-        .iter()
-        .map(|e| {
-            let a = (e.span.start as i64 + delta) as u32;
-            let b = a + e.replace.len() as u32;
-            writers.extend(e.writers().iter().map(|&(x, y)| (a + x, a + y)));
-            if moved.is_none() && last < e.span.end {
-                moved = Some(if e.span.start < last { b } else { (last as i64 + delta) as u32 });
-            }
-            delta += e.replace.len() as i64 - e.span.len() as i64;
-            (a, b)
-        })
+    let file = edits.first().map_or(onsa_diag::FileId(0), |e| e.span.file);
+    let mut moved = onsa_diag::apply_text_moved(file, text, &edits)?;
+    let regions: Vec<(u32, u32)> = moved.ranges.iter().map(|r| (r.start, r.end)).collect();
+    let writers = (edits.iter().zip(&regions))
+        .flat_map(|(e, &(a, _))| e.writers().iter().map(move |&(x, y)| (a + x, a + y)))
         .collect();
-    Ok(Applied { text: after, regions, writers, end: moved.unwrap_or((last as i64 + delta) as u32) })
+    let end = moved.map_span(Span::new(file, last, last)).end;
+    let after = moved.texts.remove(&file).unwrap_or_else(|| text.to_string());
+    Ok(Applied { text: after, regions, writers, end })
 }
 
 /// The edits `local` (sorted; `regions` the ranges of their replacements in

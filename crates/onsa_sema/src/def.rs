@@ -106,9 +106,9 @@ impl Bound {
     /// constraint (§4.6), or `Escape` (§4.5).
     pub fn name(self) -> &'static str {
         match self {
-            Bound::Copy => onsa_syntax::foreign::COPY,
-            Bound::Dup => onsa_syntax::foreign::DUP,
-            Bound::Escape => onsa_syntax::foreign::ESCAPE,
+            Bound::Copy => onsa_syntax::kinds::COPY,
+            Bound::Dup => onsa_syntax::kinds::DUP,
+            Bound::Escape => onsa_syntax::kinds::ESCAPE,
             b => match TRAITS.iter().find(|(_, t)| *t == Some(b)) {
                 Some((name, _)) => name,
                 None => onsa_diag::internal::bug(None, format!("the bound {b:?} is in no row of the traits")),

@@ -439,8 +439,10 @@ impl<'a> Lower<'a> {
         let mut heading = true;
         let toks = self.toks(d);
         let string = |k: usize| toks.get(k).filter(|&&t| self.kind_of(t) == TokenKind::Str).map(|&t| self.str_lit(t));
+        // The first part of the head after `extern`, and the string after its
+        // word wherever a head read on has it (`parser::EXTERN_HEAD`).
         let abi = string(1);
-        let lib = toks.iter().position(|&t| self.text_of(t) == "lib").and_then(|k| string(k + 1));
+        let lib = toks.iter().position(|&t| self.text_of(t) == crate::parser::LIB).and_then(|k| string(k + 1));
         let items = self.read_members(d, &mut heading);
         Some((ItemKind::Extern(ExternDecl { abi, lib, items }), heading))
     }

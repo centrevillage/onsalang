@@ -71,11 +71,9 @@ impl<'a> Parser<'a> {
         let place = read.as_ref().ok().map(|h| h.place);
         let keyword = read.is_ok().then(|| self.peek_index());
         let failed = matches!(read, Err(Unread::Failed));
-        for at in hashes {
+        for (at, after_rt) in hashes {
             // After `rt` it is the error of its place (§18.1): asked with no
             // place, it has no candidate.
-            let before = self.tokens[..at].iter().rev().find(|t| !t.kind.is_comment());
-            let after_rt = before.is_some_and(|t| t.kind == TokenKind::KwRt);
             let mut cursor = self.cursor(at, Want::Other);
             if !after_rt {
                 (cursor.place, cursor.declaration) = (place, keyword);
@@ -96,12 +94,15 @@ impl<'a> Parser<'a> {
     }
 
     /// The head of [`Parser::parse_heading`]; the `#` of each attribute of
-    /// another language read on go to `hashes`; a member when `ctx` is the
-    /// list of a declaration (the place of its attributes, §6.5).
-    fn read_heading(&mut self, hashes: &mut Vec<usize>, ctx: ItemCtx) -> Result<Heading, Unread> {
+    /// another language read on go to `hashes`, with whether `rt` is right
+    /// before it; a member when `ctx` is the list of a declaration (the place
+    /// of its attributes, §6.5).
+    fn read_heading(&mut self, hashes: &mut Vec<(usize, bool)>, ctx: ItemCtx) -> Result<Heading, Unread> {
         let member = ctx != ItemCtx::Top;
         let mut attrs = Vec::new();
         let mut vis = None;
+        // The form after the last `rt` read on ([`Parser::rt_before_form`]).
+        let mut rt_form = None;
         loop {
             let read = self.parse_attrs(true)?;
             if !read.is_empty() {
@@ -124,8 +125,9 @@ impl<'a> Parser<'a> {
                 VisRead::Absent => {}
             }
             // In this order: the attribute after `rt` is not for `parse_attrs`.
-            let rt = self.rt_before_form();
-            if self.late_attribute()? || rt {
+            let rt = self.rt_before_form().then(|| self.peek_index());
+            if self.late_attribute()? || rt.is_some() {
+                rt_form = rt.or(rt_form);
                 continue;
             }
             let t = self.peek();
@@ -138,7 +140,7 @@ impl<'a> Parser<'a> {
             }
             // Another attribute that fails (not closed on its line, or no
             // declaration after it): no declaration was begun.
-            if self.foreign_attribute(hashes).map_err(|_| Unread::NoDeclaration)? || self.words_before_head() {
+            if self.foreign_attribute(hashes, rt_form).map_err(|_| Unread::NoDeclaration)? || self.words_before_head() {
                 continue;
             }
             if let Some(unread) = self.static_head(ctx) {
@@ -174,11 +176,12 @@ impl<'a> Parser<'a> {
     /// come (not before the `}` of the list or the end of the file), is read
     /// on after, on the line of the declaration or on a line of its own; its
     /// node is incomplete, an attribute that was not read (S-460), and its
-    /// `#` goes to `hashes`: the table names its form when the head is read
+    /// `#` goes to `hashes`, with whether it is `rt_form`, the form after
+    /// `rt`: the table names its form when the head is read
     /// ([`Parser::parse_heading`]). At any other, the parser fails, and the
     /// table names the form (`hash_attribute`). `Ok(false)` when no `#` is
     /// next.
-    fn foreign_attribute(&mut self, hashes: &mut Vec<usize>) -> PResult<bool> {
+    fn foreign_attribute(&mut self, hashes: &mut Vec<(usize, bool)>, rt_form: Option<usize>) -> PResult<bool> {
         if !self.at(TokenKind::Hash) {
             return Ok(false);
         }
@@ -186,12 +189,12 @@ impl<'a> Parser<'a> {
         self.start(NodeKind::Attr)?;
         let close = self
             .hash_end(at)
-            .filter(|&e| !matches!(self.tokens[self.next_code(e)].kind, TokenKind::RBrace | TokenKind::Eof));
+            .filter(|&e| !matches!(self.tokens[self.next_past_line_ends(e)].kind, TokenKind::RBrace | TokenKind::Eof));
         let Some(close) = close else { return Err(self.fail(Want::Other, "a declaration")) };
         self.read_on(close + 1);
         self.finish(None, false);
         self.skip_newlines();
-        hashes.push(at);
+        hashes.push((at, rt_form == Some(at)));
         Ok(true)
     }
 
@@ -414,11 +417,8 @@ impl<'a> Parser<'a> {
         let first = self.peek_index();
         let linked = self.linked.take() == Some(first);
         let Some((head, brace)) = self.extern_head_on_line(first) else { return false };
-        let string = |&t: &usize| self.tokens[t].kind == TokenKind::Str;
-        let fits =
-            |k: usize, t: &usize| if k == 1 { self.is_ident(self.tokens[*t], "lib") } else { k < 3 && string(t) };
-        let failing = head.iter().enumerate().find(|&(k, t)| !fits(k, t)).map(|(k, _)| k);
-        if failing.is_none() && head.len() == 3 {
+        let failing = head.iter().enumerate().find(|&(k, &t)| !self.extern_part(k, t)).map(|(k, _)| k);
+        if failing.is_none() && head.len() == EXTERN_HEAD.len() {
             return false;
         }
         let end = self.tokens[*head.last().unwrap_or(&first)].span.end;
@@ -434,6 +434,15 @@ impl<'a> Parser<'a> {
         }
         self.read_on(brace);
         true
+    }
+
+    /// Whether `tokens[t]` is the part `k` of [`EXTERN_HEAD`].
+    pub(super) fn extern_part(&self, k: usize, t: usize) -> bool {
+        match EXTERN_HEAD.get(k) {
+            Some(Some(word)) => self.is_ident(self.tokens[t], word),
+            Some(None) => self.tokens[t].kind == TokenKind::Str,
+            None => false,
+        }
     }
 
     /// The tokens between `extern` at `first` and the first `{` on its line,
@@ -518,6 +527,16 @@ const KEYWORD_RULE: &str =
 
 /// The note of an attribute after a visibility or `rt` (S-593).
 const ATTRIBUTE_RULE: &str = "the attributes of a declaration are written before its visibility and `rt`: `@fp(relaxed) pub rt fn h` (§6.5, §18.1)";
+
+/// The head of an `extern` block after `extern` (§14.1, `extern "C" lib "m"`):
+/// a string (`None`, the ABI), the word [`LIB`] of its context (§2.2) and a
+/// string (the name of the library). The one form of it: the parser reads it
+/// ([`Parser::extern_part`]), and the AST takes the strings at their places
+/// (`crate::lower`).
+pub(crate) const EXTERN_HEAD: [Option<&str>; 3] = [None, Some(LIB), None];
+
+/// The word before the name of the library in [`EXTERN_HEAD`].
+pub(crate) const LIB: &str = "lib";
 
 /// The note of the head of an `extern` block that does not read (S-477).
 const EXTERN_RULE: &str =

@@ -329,5 +329,5 @@ pub(super) fn drop_element(cx: &Cx<'_>, list: &[Span], k: usize, shown: &str, he
 /// trait implementation, S-140).
 pub(crate) fn kind_constraint(p: &Path) -> Option<bool> {
     let [n] = p.segments.as_slice() else { return None };
-    foreign::KIND_CONSTRAINTS.contains(&n.name.as_str()).then(|| n.name == foreign::DUP)
+    onsa_syntax::kinds::KIND_CONSTRAINTS.contains(&n.name.as_str()).then(|| n.name == onsa_syntax::kinds::DUP)
 }

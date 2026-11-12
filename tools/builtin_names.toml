@@ -228,10 +228,7 @@
 "repr" = 1
 
 [allow."crates/onsa_syntax/src/foreign.rs"]
-"Copy" = 1
 "Ctl" = 1
-"Dup" = 1
-"Escape" = 1
 "Init" = 1
 "Sig" = 1
 
@@ -249,6 +246,11 @@
 "U32" = 2
 "U64" = 1
 "U8" = 1
+
+[allow."crates/onsa_syntax/src/kinds.rs"]
+"Copy" = 1
+"Dup" = 1
+"Escape" = 1
 
 [same_spelling."crates/onsa_backend_c/src/emit.rs"]
 "INFINITY" = { count = 2, note = "C の <math.h> のマクロ名（生成する C の字面）" }

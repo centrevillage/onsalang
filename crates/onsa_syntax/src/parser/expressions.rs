@@ -168,7 +168,7 @@ impl<'a> Parser<'a> {
             // (`- - x`, `-` and `-a` on the next line) is one form, the
             // E0012 of the stack (S-410, S-248).
             let i = self.peek_index();
-            let stacked = matches!(self.tokens[self.next_code(i)].kind, TokenKind::Minus | TokenKind::Bang);
+            let stacked = matches!(self.tokens[self.next_past_line_ends(i)].kind, TokenKind::Minus | TokenKind::Bang);
             let gap = self.gap_after(i);
             if gap.is_some() && !(stacked || in_a_stack) {
                 return Err(self.fail(Want::Prefix, "an operand right after the prefix operator"));
@@ -212,7 +212,7 @@ impl<'a> Parser<'a> {
                     chain = None;
                 }
                 TokenKind::Tilde | TokenKind::Bang
-                    if self.tokens[self.next_code(self.peek_index())].kind == TokenKind::LParen =>
+                    if self.tokens[self.next_past_line_ends(self.peek_index())].kind == TokenKind::LParen =>
                 {
                     // The mark touches the name and the `(` touches the mark
                     // (S-123, S-412): a gap after the mark makes the call's

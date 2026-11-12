@@ -72,12 +72,14 @@ pub(crate) fn nests_too_deep(text: &str, within: Within, span: Span, edits: &[Ed
     let Some(_counting) = Counting::start() else { return false };
     let own = within.of(text);
     let local: Vec<Edit> = edits.iter().map(|e| within.local(e)).collect();
-    let Ok(after) = onsa_diag::apply_text(own, &local.iter().collect::<Vec<_>>()) else { return true };
+    let file = span.file;
+    let Ok(mut moved) = onsa_diag::apply_text_moved(file, own, &local.iter().collect::<Vec<_>>()) else { return true };
+    let after = moved.texts.remove(&file).unwrap_or_else(|| own.to_string());
     #[cfg(test)]
     READ.set(READ.get() + after.len());
-    let longer = after.len().saturating_sub(own.len()) as u32;
-    let (start, end) = (span.start - within.span.start, span.end - within.span.start + longer);
-    let file = span.file;
+    // Where the form is with the candidate.
+    let form = moved.map_span(Span::new(file, span.start - within.span.start, span.end - within.span.start));
+    let (start, end) = (form.start, form.end);
     let out = crate::parser::Parser::new(file, &after, crate::lex(file, &after)).parse_units(within.ctx);
     over_limit(&out.diagnostics, start..end)
 }

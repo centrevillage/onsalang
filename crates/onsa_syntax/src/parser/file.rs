@@ -312,7 +312,7 @@ impl<'a> Parser<'a> {
         }
         let mut line = i;
         while let Some(end) = self.attributes_alone(line) {
-            line = self.next_code(end);
+            line = self.next_past_line_ends(end);
         }
         self.attribute_lines.set((i, line));
         line
@@ -380,7 +380,7 @@ impl<'a> Parser<'a> {
         let mut k = i;
         while matches!(self.tokens[k].kind, At | Hash) {
             let Some(end) = self.attribute_end(k) else { return false };
-            k = self.next_code(end);
+            k = self.next_past_line_ends(end);
         }
         let kind = self.tokens[k].kind;
         match top {

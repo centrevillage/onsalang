@@ -62,19 +62,10 @@
 //! Where the code is: this module holds the types ([`Row`], [`RowId`],
 //! [`Cursor`], [`Want`], [`Hit`], [`Detect`], [`Detached`], [`End`]), the
 //! entries ([`at_failure`], [`report`]) and the helpers of the cursor that
-//! many rows read; `lists` the candidates of the general E0002 and `edits`
-//! the edits that move a symbol to its partner's line. The table
-//! of the rows ([`ROWS`], [`WAITING`]) is `foreign/rows.rs`; the matchers are
-//! in a module per family of forms: `semicolons` (`;`), `paths` (the `::` of
-//! a path, `<T>`, the type arguments of other languages, the type names of
-//! other languages), `calls` (a callee that is no path), `modes` (`&mut`,
-//! `mut self`), `decls` (`let mut`, `loop`, `proc`, `#[…]`, `pub(crate)`),
-//! `literals` (the number literals, the string delimiters), `faust` (the
-//! forms of FAUST, the prefix `~` of C), `comments` (the block comments), `assign` (`+=`, `++`),
-//! `ranges` (the range symbols out of place), `operators` (`===`, `**`),
-//! `asserts` (the `assert` of Rust and Python), `guard` (the patterns written
-//! as guards), `flow` (`if~`, the clocks) and `spaces` (the blanks inside a
-//! line, a literal against a name).
+//! many rows read. The table of the rows ([`ROWS`], [`WAITING`]) is
+//! `foreign/rows.rs`; the matchers are in a module per family of forms, and
+//! the candidates and edits several rows share in modules of their own (the
+//! `mod` lines; each module says its family in its head).
 //!
 //! To add a row:
 //!
@@ -115,19 +106,8 @@ pub(crate) use spaces::{held_errors, with_mark};
 pub(crate) use square::constant;
 pub(crate) use square::square_lists;
 
-/// The kind constraint `Copy` (§4.6): written in bounds, never derived.
-pub const COPY: &str = "Copy";
-/// The kind constraint `Dup` (§4.6).
-pub const DUP: &str = "Dup";
-/// The implicit requirement `Escape` of a type parameter (§4.5): a name of
-/// the prelude (§15.1), no kind constraint.
-pub const ESCAPE: &str = "Escape";
 /// The Rust `Sized` of a bound (§4.5, `sized_bound`): no name of Onsa.
 pub const SIZED: &str = "Sized";
-/// The kind constraints (§4.6): the names a bound takes that are no trait, so
-/// that the head of a declaration does not take them (`copy_bound`) and the
-/// candidate of a derive leaves them out (S-463). The one list.
-pub const KIND_CONSTRAINTS: [&str; 2] = [COPY, DUP];
 
 /// The rates written as a type (`Sig[F32]`, the form of the 0.3 draft, the
 /// row `rate_as_type`, S-120), in the order of the clocks, slowest first
@@ -1067,6 +1047,12 @@ pub(crate) fn closing(c: &Cursor, open: usize) -> Option<usize> {
 /// its call; the `if` of `if c { f } else { g }`, not its last block, S-316).
 fn closed_expr(c: &Cursor) -> Option<(NodeKind, u32)> {
     c.closed.iter().copied().rfind(|n| n.0.class() == Class::Expr)
+}
+
+/// Whether the expression that ended right before the failure
+/// ([`closed_expr`]) is a path of names ([`crate::callee::Link::names_a_path`]).
+fn after_a_path(c: &Cursor) -> bool {
+    closed_expr(c).is_some_and(|n| crate::callee::Link::of(n.0).names_a_path())
 }
 
 // ------------------------------------------------------------ the rows by their families

@@ -137,7 +137,7 @@ impl<'a> Parser<'a> {
             // is no pattern whatever the blank (the general E0002).
             TokenKind::Minus
                 if self.gap_after(self.peek_index()).is_some()
-                    && (self.tokens[self.next_code(self.peek_index())].kind == TokenKind::Int
+                    && (self.tokens[self.next_past_line_ends(self.peek_index())].kind == TokenKind::Int
                         || self.parenthesised_int_after_minus()) =>
             {
                 return Err(self.fail(Want::Prefix, "a pattern"));

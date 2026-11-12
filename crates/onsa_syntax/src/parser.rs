@@ -31,17 +31,11 @@
 //!
 //! Where the code is: this module holds the types (`Parser`, the markers
 //! of the nodes), the construction of the parser, and the helpers that
-//! several parts read (the brackets). The parser is in a module
-//! per part, each an `impl` of `Parser`: `nodes` (the trial readings, the
-//! nodes and their levels), `cursor` (the reading of the tokens),
-//! `failure` (the diagnostics and the questions to the table of the forms
-//! of other languages), `declarations` (`DECLARATIONS`, the declarations
-//! and where they are written), and the grammar: `file` (the file, the
-//! units and the recovery), `heading` (the head of a declaration before its
-//! keyword), `items` (the declarations), `signatures`, `types`,
-//! `statements` (the blocks and the statements), `expressions` (with
-//! `reads_as_expr`) and `patterns`; `chain` is `ChainHeight`, the height
-//! of a binary chain. The tests are `parser_tests.rs`.
+//! several parts read (the brackets). The parser is in a module per part,
+//! each an `impl` of `Parser` (the `mod` lines; each module says its part
+//! in its head): the cursor, the nodes, the failures and the grammar, from
+//! the file and its recovery down to the patterns. The tests are
+//! `parser_tests.rs`.
 
 use onsa_diag::{Code, Diagnostic, FileId, Fix, Span, Stage};
 use serde::{Deserialize, Serialize};
@@ -79,6 +73,7 @@ use declarations::{Declaration, declaration, is_declaration_keyword, starts_head
 pub(crate) use expressions::reads_as_expr;
 use failure::Own;
 pub(crate) use guard_reading::{Guarded, reads_as_pattern, with_cursor};
+pub(crate) use heading::LIB;
 use statements::MoveAs;
 use types::ClockAfter;
 pub(crate) use types::{reads_as_type, reads_as_type_list};

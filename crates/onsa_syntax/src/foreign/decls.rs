@@ -5,6 +5,7 @@ use std::collections::HashSet;
 
 use super::spaces::{marked_name, with_mark};
 use super::*;
+use crate::kinds::KIND_CONSTRAINTS;
 
 /// `let mut x` of Rust: `var x` (§5.1).
 pub(super) fn let_mut(c: &Cursor) -> Option<Hit> {

@@ -24,6 +24,7 @@ pub mod foreign;
 #[cfg(test)]
 mod foreign_tests;
 mod groups;
+pub mod kinds;
 mod layout;
 #[cfg(test)]
 mod layout_tests;

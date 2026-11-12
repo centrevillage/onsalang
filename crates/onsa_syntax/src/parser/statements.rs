@@ -125,7 +125,7 @@ impl<'a> Parser<'a> {
         // E0005, and the statement is read on.
         let i = self.peek_index();
         if self.tokens[i].kind == TokenKind::At
-            && matches!(self.tokens[self.next_code(i)].kind, TokenKind::Ident | TokenKind::BlockComment)
+            && matches!(self.tokens[self.next_past_line_ends(i)].kind, TokenKind::Ident | TokenKind::BlockComment)
         {
             let attrs = self.parse_attrs(false)?;
             self.skip_newlines();

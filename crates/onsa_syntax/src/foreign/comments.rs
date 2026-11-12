@@ -77,8 +77,7 @@ pub(super) fn in_gap(c: &Cursor) -> Option<usize> {
     use TokenKind::*;
     let i = (c.at + 1..c.tokens.len()).find(|&i| c.kind(i) != Newline && !c.kind(i).is_line_comment())?;
     let operand = || c.want == Want::Expr;
-    let by_name = || closed_expr(c).is_some_and(|n| crate::callee::Link::of(n.0).names_a_path());
-    let mark = || c.kind(c.sig_after(c.at)) == LParen && by_name();
+    let mark = || c.kind(c.sig_after(c.at)) == LParen && after_a_path(c);
     let fits = match c.kind(c.at) {
         Minus => matches!(c.want, Want::Prefix | Want::Pattern),
         Caret | PlusPlus => operand(),

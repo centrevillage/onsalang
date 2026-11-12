@@ -364,6 +364,21 @@ impl Applied {
         };
         Span { file: span.file, start: shift(span.start, true), end: shift(span.end, false) }
     }
+
+    /// The edits of `file` (`text`), those of `edits` at `idx`, applied.
+    fn add(&mut self, file: FileId, text: &str, edits: &[&Edit], idx: &[usize]) -> Result<(), String> {
+        let mine: Vec<&Edit> = idx.iter().map(|&i| edits[i]).collect();
+        let (text, ranges) = apply_text_mapped(text, &mine, None)?;
+        let mut moves = Vec::with_capacity(idx.len());
+        for (k, &i) in idx.iter().enumerate() {
+            self.ranges[i] = Span::new(file, ranges[k].0, ranges[k].1);
+            moves.push([edits[i].span.start, edits[i].span.end, ranges[k].0, ranges[k].1]);
+        }
+        moves.sort();
+        self.moves.insert(file, moves);
+        self.texts.insert(file, text);
+        Ok(())
+    }
 }
 
 /// Apply edits to the files of `sources` at once, as [`apply`] (the one place
@@ -373,17 +388,16 @@ pub fn apply_mapped<'a>(sources: &SourceMap, edits: impl IntoIterator<Item = &'a
     let edits: Vec<&Edit> = edits.into_iter().collect();
     let mut out = Applied { ranges: edits.iter().map(|e| e.span).collect(), ..Applied::default() };
     for (file, idx) in by_file(sources, &edits)? {
-        let mine: Vec<&Edit> = idx.iter().map(|&i| edits[i]).collect();
-        let (text, ranges) = apply_text_mapped(sources.file(file).text(), &mine, None)?;
-        let mut moves = Vec::with_capacity(idx.len());
-        for (k, &i) in idx.iter().enumerate() {
-            out.ranges[i] = Span::new(file, ranges[k].0, ranges[k].1);
-            moves.push([edits[i].span.start, edits[i].span.end, ranges[k].0, ranges[k].1]);
-        }
-        moves.sort();
-        out.moves.insert(file, moves);
-        out.texts.insert(file, text);
+        out.add(file, sources.file(file).text(), &edits, &idx)?;
     }
+    Ok(out)
+}
+
+/// [`apply_mapped`] on one text, `text` of the file `file` of all `edits`:
+/// for a part of a file read again on its own (a unit, `onsa_syntax`).
+pub fn apply_text_moved(file: FileId, text: &str, edits: &[&Edit]) -> Result<Applied, String> {
+    let mut out = Applied { ranges: edits.iter().map(|e| e.span).collect(), ..Applied::default() };
+    out.add(file, text, edits, &(0..edits.len()).collect::<Vec<_>>())?;
     Ok(out)
 }
 
@@ -940,6 +954,13 @@ mod tests {
         assert!(apply_mapped(&sources, bad.iter()).is_err());
         let outside = [Edit::replace(Span::new(b, 2, 9), "v")];
         assert!(apply_mapped(&sources, outside.iter()).is_err());
+        // On one text, as on its file of the map.
+        let mine: Vec<&Edit> = edits.iter().filter(|e| e.span.file == a).collect();
+        let text = apply_text_moved(a, sources.file(a).text(), &mine).unwrap();
+        assert_eq!(text.texts[&a], out.texts[&a]);
+        assert_eq!(text.ranges, out.ranges[..3]);
+        assert_eq!(text.map_span(Span::new(a, 16, 16)), out.map_span(Span::new(a, 16, 16)));
+        assert!(apply_text_moved(b, "abc", &[&outside[0]]).is_err());
     }
 
     #[test]

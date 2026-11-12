@@ -416,7 +416,7 @@ pub(super) fn type_position_path(c: &Cursor) -> Option<Hit> {
 /// (S-327): the candidate removes them ([`bracket_up`]).
 pub(super) fn space_in_type_args_mark(c: &Cursor) -> Option<Hit> {
     let open = type_args_bracket(c)?;
-    if c.gap(c.at) == Gap::Newline || !closed_expr(c).is_some_and(|n| Link::of(n.0).names_a_path()) {
+    if c.gap(c.at) == Gap::Newline || !after_a_path(c) {
         return None;
     }
     let mut edits: Vec<Edit> = c.space_before(c.at).into_iter().map(Edit::delete).collect();

@@ -267,7 +267,8 @@ impl<'p> Sema<'p> {
             let fails = |k: Kind| if dup { k == Kind::Affine } else { k != Kind::Copy };
             let shown = fields.into_iter().find(|(_, t, _)| crate::kind::kind_of(self.a, *t).is_some_and(fails));
             if let Some((what, _, span)) = shown {
-                let (kind, name) = if dup { ("Affine", foreign::DUP) } else { ("not Copy", foreign::COPY) };
+                let (kind, name) =
+                    if dup { ("Affine", onsa_syntax::kinds::DUP) } else { ("not Copy", onsa_syntax::kinds::COPY) };
                 let d = self.a.diagnostics[at].clone();
                 self.a.diagnostics[at] = d.with_note(span, format!("{what} is {kind}, so the type is not {name}"));
             }

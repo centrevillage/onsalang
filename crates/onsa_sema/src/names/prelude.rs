@@ -42,9 +42,9 @@ pub(super) fn build(a: &mut Analysis) {
         put(name, Builtin::Trait(i as u8));
     }
     put(PANIC, Builtin::Panic);
-    put(onsa_syntax::foreign::COPY, Builtin::Kind(Bound::Copy));
-    put(onsa_syntax::foreign::DUP, Builtin::Kind(Bound::Dup));
-    put(onsa_syntax::foreign::ESCAPE, Builtin::Kind(Bound::Escape));
+    put(onsa_syntax::kinds::COPY, Builtin::Kind(Bound::Copy));
+    put(onsa_syntax::kinds::DUP, Builtin::Kind(Bound::Dup));
+    put(onsa_syntax::kinds::ESCAPE, Builtin::Kind(Bound::Escape));
     for name in SCALARS {
         let Some(t) = a.types.scalar(name) else {
             onsa_diag::internal::bug(None, format!("`{name}` is not a scalar type"))
