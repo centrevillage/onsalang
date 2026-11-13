@@ -205,6 +205,16 @@ def r386_arms(form, n):
     return f"{head}pub fn f(x: {ty}) -> I32 {{\n  match x {{\n{body}  }}\n}}\n"
 
 
+def w602_guards(n):
+    """W6-02 U2b: one owned `match` with n guarded arms, each binding three owned values (a guard that is false
+    gives them back to the head; after U2a and before U2b, the paths an arm is tried at kept the bindings of
+    every arm before it, n x n)."""
+    h = "pub fn len_of(b: Buf[F32]) -> U32 { b.len() }\n"
+    arms = [f"    ({i}, b, c, d) if len_of(b) > {i} && len_of(c) > 0 && len_of(d) > 0 => len_of(b) + len_of(c),"
+            for i in range(n)]
+    return (h + "pub fn t(move o: (U32, Buf[F32], Buf[F32], Buf[F32])) -> U32 uses {Alloc} {\n  match move o {\n"
+            + "\n".join(arms) + "\n    _ => 0,\n  }\n}\n")
+
 SCALE = [("voice", "decls x", voice_times, [(k,) for k in (1, 2, 4, 8, 16)])]
 
 QUAD = [
@@ -215,6 +225,7 @@ QUAD = [
     ("w602_reassign_continue", "continues", w602_shape, [("w1", n) for n in (1000, 2000, 4000, 8000)]),
     ("w602_loops_only", "loops", w602_shape, [("w12", n) for n in (2000, 4000, 8000, 16000)]),
     ("w602_continue_moves", "moves, continues and breaks", w602_shape, [("w8", n) for n in (250, 500, 1000, 2000)]),
+    ("w602_guards", "guarded arms", w602_guards, [(n,) for n in (1000, 2000, 4000, 8000)]),
     ("w409_held_w", "F=120, W", w409_held, [(120, w) for w in (1500, 3000, 6000, 12000)]),
     ("w409_held_f", "W=6000, F", w409_held, [(f, 6000) for f in (15, 30, 60, 120)]),
     ("w409_same_w", "S=100, W", w409_same, [(100, w) for w in (750, 1500, 3000, 6000)]),
