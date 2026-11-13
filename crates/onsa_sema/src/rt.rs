@@ -5,14 +5,13 @@
 
 use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::{Code, Diagnostic, Span, Stage};
-use onsa_syntax::ast::{ExprKind, Lit, StmtKind, StrSeg};
+use onsa_syntax::ast::{ExprKind, Lit, StrSeg};
 
-use crate::body::{BodyInfo, Target};
+use crate::body::Target;
 use crate::def::DefKind;
-use crate::modes::{MovedLocals, Proj};
-use crate::summary::{Read, any};
-use crate::ty::{Ty, TyId};
-use crate::walk::{Holds, Walk};
+use crate::drop_alloc::{Drop, alloc_drops};
+use crate::modes::MovedLocals;
+use crate::ty::Ty;
 use crate::{Analysis, DefId, Package, module_of_def};
 
 pub(crate) fn check_all(pkg: &Package, a: &mut Analysis, moved: &MovedLocals) {
@@ -150,7 +149,6 @@ fn body_rules(
     let ast = &module.parsed.ast;
     let text = &module.text;
     let body = &a.bodies[&id];
-    let def_span = a.def(id).span;
     let src = |span: Span| text[span.start as usize..span.end as usize].to_string();
     let mut found: Vec<Diagnostic> = Vec::new();
 
@@ -208,140 +206,28 @@ fn body_rules(
             );
         }
     }
-    // Drops (§12.2): an owned value whose destruction needs `Alloc` and that is not moved on.
-    for (i, l) in body.locals.iter().enumerate() {
-        let owned = l.state.owned();
-        if !owned || moved.is_some_and(|m| m.contains(&crate::body::LocalId(i as u32))) {
-            continue;
-        }
-        if needs_alloc_drop(a, l.ty) {
-            let shown = a.display_type(l.ty);
-            found.push(
-                Diagnostic::new(
-                    Stage::Effects, Code::E0901,
-                    l.span,
-                    format!(
-                        "`{}` owns a `{shown}`, whose destruction needs `Alloc`; an `rt` function can only borrow it or move it on (§10, §12.2)",
-                        l.name
-                    ),
-                )
-                .with_found(src(l.span)),
-            );
-        }
-    }
-    // The rest of a value a field is taken out of (S-85).
-    for (at, root) in rest_drops(a, body) {
-        let message = format!(
-            "taking `{}` out of `{root}` drops the rest of it here, whose destruction needs `Alloc`; `rt` functions cannot allocate (§10, §12.2)",
-            src(at)
-        );
+    // Drops (§12.2) whose destruction needs `Alloc`.
+    for d in alloc_drops(a, body, moved) {
+        let (at, message) = match d {
+            Drop::Local(l) => (
+                l.span,
+                format!(
+                    "`{}` owns a `{}`, whose destruction needs `Alloc`; an `rt` function can only borrow it or move it on (§10, §12.2)",
+                    l.name,
+                    a.display_type(l.ty)
+                ),
+            ),
+            Drop::Rest { taken, root } => (
+                taken.at,
+                format!(
+                    "taking `{}` out of `{}` drops the rest of it here, whose destruction needs `Alloc`; `rt` functions cannot allocate (§10, §12.2)",
+                    src(taken.at),
+                    root.name
+                ),
+            ),
+        };
         found.push(Diagnostic::new(Stage::Effects, Code::E0901, at, message).with_found(src(at)));
-    }
-    // A temporary dropped by an expression statement.
-    for stmt in &ast.stmts {
-        if !def_span.contains(stmt.span.start) {
-            continue;
-        }
-        if let StmtKind::Expr(e) = &stmt.kind
-            && let Some(t) = body.expr_types.get(e)
-            && needs_alloc_drop(a, *t)
-        {
-            let shown = a.display_type(*t);
-            found.push(
-                Diagnostic::new(
-                    Stage::Effects, Code::E0901,
-                    stmt.span,
-                    format!("this `{shown}` is dropped here, which needs `Alloc`; `rt` functions cannot allocate (§10, §12.2)"),
-                )
-                .with_found(src(stmt.span)),
-            );
-        }
     }
     found.sort_by_key(|d| d.span.start);
     found.into_iter().next()
-}
-
-/// Whether dropping a value of this type needs `Alloc` (§12.2): Shared values
-/// and `Buf`, or anything containing them. Flow state is Affine but drops freely.
-/// A type that holds itself has no answer ([`crate::summary::Facts`]), so no use.
-pub(crate) fn needs_alloc_drop(a: &Analysis, t: TyId) -> bool {
-    Read::new(a, Vec::new()).of(t).drops.unwrap_or(false)
-}
-
-/// The fields taken out of a value in `body` whose rest needs `Alloc` to
-/// drop (S-85, §12.2): where, and the name of the value.
-pub(crate) fn rest_drops<'b>(a: &'b Analysis, body: &'b BodyInfo) -> impl Iterator<Item = (Span, &'b str)> {
-    body.taken.iter().filter_map(move |t| {
-        let local = &body.locals[t.root.0 as usize];
-        // As `needs_alloc_drop`: no answer, so no use.
-        let rest = rest_drops_alloc(&Walk::new(a), (local.ty, &Frame::root(a), 0), &t.path, t.at).unwrap_or(false);
-        rest.then_some((t.at, local.name.as_str()))
-    })
-}
-
-/// A declaration a path goes through ([`rest_drops_alloc`]): the arguments
-/// of its use, written in the frame `outer`, and their facts in `read`.
-/// Each is found once, so a long path through arguments that grow reads no
-/// more than the types it writes (S-782).
-struct Frame<'f> {
-    read: Read<'f>,
-    args: &'f [TyId],
-    outer: Option<&'f Frame<'f>>,
-}
-
-impl<'f> Frame<'f> {
-    /// Of a type with no parameters read as arguments: a local, an alias.
-    fn root(a: &'f Analysis) -> Self {
-        Frame { read: Read::new(a, Vec::new()), args: &[], outer: None }
-    }
-}
-
-/// `t` written in `frame`: a parameter is followed to its argument, written
-/// in the frame around.
-fn follow<'f>(a: &'f Analysis, mut t: TyId, mut frame: &'f Frame<'f>) -> (&'f Ty, &'f Frame<'f>) {
-    loop {
-        match (a.types.get(t), frame.outer) {
-            (Ty::Param(i), Some(outer)) if (*i as usize) < frame.args.len() => {
-                (t, frame) = (frame.args[*i as usize], outer);
-            }
-            (ty, _) => return (ty, frame),
-        }
-    }
-}
-
-/// Whether dropping what is left of a value of the type `t` (written in
-/// `frame`, `depth` named types in) when `path` is taken out of it at `at`
-/// needs `Alloc`: the parts beside each step ([`Read`]).
-fn rest_drops_alloc(w: &Walk, (t, frame, depth): (TyId, &Frame, u32), path: &[Proj], at: Span) -> Option<bool> {
-    let Some((step, more)) = path.split_first() else { return Some(false) };
-    let (ty, frame) = follow(w.a, t, frame);
-    let taken = |name: &str| matches!(step, Proj::Field(n) if n == name);
-    let inner;
-    let (parts, frame, depth): (Vec<_>, _, _) = match (ty, step) {
-        (Ty::Tuple(ts), Proj::Elem(i)) => {
-            (ts.iter().enumerate().map(|(k, &t)| (t, k as u32 == *i)).collect(), frame, depth)
-        }
-        (Ty::Named(d, args), _) => match w.enter(*d, args, None, (depth, None))? {
-            (Holds::Alias(t), _, depth) => return rest_drops_alloc(w, (t, &Frame::root(w.a), depth), path, at),
-            (Holds::Fields(fs, _), _, depth) => {
-                let params = args.iter().map(|&t| frame.read.of(t)).collect();
-                inner = Frame { read: Read::new(w.a, params), args, outer: Some(frame) };
-                (fs.iter().map(|f| (f.ty, taken(&f.name))).collect(), &inner, depth)
-            }
-            _ => (Vec::new(), frame, depth),
-        },
-        _ => (Vec::new(), frame, depth),
-    };
-    let (mut rest, mut on) = (Some(false), None);
-    for (t, taken) in parts {
-        match taken {
-            true => on = Some(t),
-            false => rest = any(rest, frame.read.of(t).drops),
-        }
-    }
-    if rest == Some(true) {
-        return rest;
-    }
-    let Some(t) = on else { onsa_diag::internal::bug(Some(at), "a field taken out that its type does not have") };
-    any(rest, rest_drops_alloc(w, (t, frame, depth), more, at))
 }

@@ -248,7 +248,7 @@ pub struct BodyInfo {
     /// The paths of Affine fields taken out of owned locals (S-85, §5.2),
     /// each once, in the order the modes stage walked them: their roots are
     /// moved, and what is left is dropped where it is taken
-    /// (`rt::rest_drops_alloc`; lowered from W8-04).
+    /// (`drop_alloc::rest_drops_alloc`; lowered from W8-04).
     pub taken: Vec<Taken>,
 }
 

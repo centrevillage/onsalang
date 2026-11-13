@@ -6,12 +6,12 @@
 
 use onsa_diag::hash::HashSet;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
-use onsa_syntax::ast::{ExprKind, ItemKind, Lit, StmtKind, StrSeg};
+use onsa_syntax::ast::{ExprKind, ItemKind, Lit, StrSeg};
 
 use crate::body::Target;
 use crate::def::DefKind;
+use crate::drop_alloc::{Drop, alloc_drops};
 use crate::modes::MovedLocals;
-use crate::rt::{needs_alloc_drop, rest_drops};
 use crate::ty::Ty;
 use crate::{Analysis, DefId, Package, module_of_def};
 
@@ -78,33 +78,17 @@ fn first_use(
             uses.push((expr.span, "string interpolation creates a `Str`".into()));
         }
     }
-    // Drops (§12.2): owned values whose destruction needs `Alloc`, unless moved on.
-    for (i, l) in body.locals.iter().enumerate() {
-        let owned = l.state.owned();
-        if !owned || moved.is_some_and(|m| m.contains(&crate::body::LocalId(i as u32))) {
-            continue;
-        }
-        if needs_alloc_drop(a, l.ty) {
-            uses.push((
-                l.span,
-                format!("`{}` owns a `{}`, whose destruction needs `Alloc`", l.name, a.display_type(l.ty)),
-            ));
-        }
-    }
-    // The rest of a value a field is taken out of (S-85).
-    for (at, root) in rest_drops(a, body) {
-        uses.push((at, format!("taking `{}` out of `{root}` drops the rest of it, which needs `Alloc`", src(at))));
-    }
-    for stmt in &ast.stmts {
-        if !def.span.contains(stmt.span.start) {
-            continue;
-        }
-        if let StmtKind::Expr(e) = &stmt.kind
-            && let Some(t) = body.expr_types.get(e)
-            && needs_alloc_drop(a, *t)
-        {
-            uses.push((stmt.span, format!("a `{}` is dropped here, which needs `Alloc`", a.display_type(*t))));
-        }
+    // Drops (§12.2) whose destruction needs `Alloc`.
+    for d in alloc_drops(a, body, moved) {
+        uses.push(match d {
+            Drop::Local(l) => {
+                (l.span, format!("`{}` owns a `{}`, whose destruction needs `Alloc`", l.name, a.display_type(l.ty)))
+            }
+            Drop::Rest { taken, root } => (
+                taken.at,
+                format!("taking `{}` out of `{}` drops the rest of it, which needs `Alloc`", src(taken.at), root.name),
+            ),
+        });
     }
     uses.sort_by_key(|(s, _)| s.start);
     let (at, why) = uses.into_iter().next()?;

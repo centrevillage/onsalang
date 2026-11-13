@@ -3475,8 +3475,12 @@ pub fn of_t[T: ?Dup](move g: G[T]) -> Buf[F32] uses {Alloc} { g.a }
 ",
     );
     let rest = |n: &str| {
-        let found: Vec<_> =
-            crate::rt::rest_drops(&a, &a.bodies[&def(&a, n)]).map(|(at, root)| (at, root.to_string())).collect();
+        use crate::drop_alloc::{Drop, alloc_drops};
+        let rests = alloc_drops(&a, &a.bodies[&def(&a, n)], None).filter_map(|d| match d {
+            Drop::Rest { taken, root } => Some((taken.at, root.name.clone())),
+            Drop::Local(_) => None,
+        });
+        let found: Vec<_> = rests.collect();
         assert!(found.iter().all(|(at, _)| src[..at.start as usize].ends_with("{ ")), "{found:?}");
         found.into_iter().map(|(_, root)| root).collect::<Vec<_>>()
     };
