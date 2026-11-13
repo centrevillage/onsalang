@@ -1,0 +1,92 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§8.1", "§9.1", "§10", "§12.2"]
+
+// W6-02 U3/t, R-32 (§3.5: "左から右に評価する ... 呼び出しは呼び先の式、レシーバ、引数の順に、struct / 配列 / タプルのリテラルは書いた順に評価する"; "引数を全て評価してから呼び出す";
+// §5.2: "`move` の引数で移した変数は、その引数を評価した時点で使えなくなる"; §9.1: a `?` that returns leaves like a `return`; §12.2: the drop of an owned `Buf` needs `Alloc`):
+// a value that is moved into an argument, a tuple, an array, a struct literal, a constructor or the receiver of a `move self` is evaluated and then waits for the
+// operands that come after it. If a later operand is a `?` that returns, the value that waits is dropped (no call, no literal consumes it), and the drop needs
+// `Alloc`. A function without `uses {Alloc}` is an E0601 and an `rt fn` an E0901. The local is moved on the path that goes on, so at the end of the function it is not
+// alive, and the waiting value is the only drop; this version counts no drop at a `?` and no value that waits (U3), so none of these is reported today. The `?` before the
+// `move` (`wrap_after(r?, move b)`), where the local is still alive at the `?`, is in negative/drop_exit_try.onsa. The values that are Copy or borrowed, and `uses {Alloc}`,
+// are in negative/drop_pending_contrast.onsa. A `return` in a branch of a later operand waits the same way (`pending_return`). The assignment of a call that waits (`x = mk(move b, r?)`) needs a `var` and a statement after it, so it is not a one-liner
+// (S-783). The functions are one-liners (S-783). One error per function (P-01), also where two values wait (`wait_two`).
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub rt fn wrap(move b: Buf[F32], n: U32) -> Option[Buf[F32]] { Some(move b) }
+
+pub rt fn wrap2(move a: Buf[F32], move b: Buf[F32], n: U32) -> Option[(Buf[F32], Buf[F32])] { Some((move a, move b)) }
+
+impl Holder {
+  pub rt fn absorb(move self, n: U32) -> Option[Holder] { Some(move self) }
+}
+
+// ------------------------------------------------------------------ the argument of a call
+
+pub fn call_option(r: Option[U32], move b: Buf[F32]) -> Option[Option[Buf[F32]]] { Some(wrap(move b, r?)) }   //~ E0601
+
+pub rt fn rt_call_option(r: Option[U32], move b: Buf[F32]) -> Option[Option[Buf[F32]]] { Some(wrap(move b, r?)) }   //~ E0901
+
+pub fn call_result(r: Result[U32, U32], move b: Buf[F32]) -> Result[Option[Buf[F32]], U32] { Ok(wrap(move b, r?)) }   //~ E0601
+
+pub rt fn rt_call_result(r: Result[U32, U32], move b: Buf[F32]) -> Result[Option[Buf[F32]], U32] { Ok(wrap(move b, r?)) }   //~ E0901
+
+pub fn call_in_heading(r: Option[U32], move b: Buf[F32]) -> Option[Buf[F32]] { match wrap(move b, r?) { Some(x) => Some(move x), None => None } }   //~ E0601
+
+pub fn call_arm_binding(r: Option[U32], move o: Option[Buf[F32]]) -> Option[Option[Buf[F32]]] { match move o { Some(v) => Some(wrap(move v, r?)), None => None } }   //~ E0601
+
+pub rt fn rt_call_arm_binding(r: Option[U32], move o: Option[Buf[F32]]) -> Option[Option[Buf[F32]]] { match move o { Some(v) => Some(wrap(move v, r?)), None => None } }   //~ E0901
+
+pub fn call_in_branch(c: Bool, r: Option[U32], move b: Buf[F32]) -> Option[Option[Buf[F32]]] { if c { Some(wrap(move b, r?)) } else { Some(wrap(move b, 0)) } }   //~ E0601
+
+pub rt fn rt_call_in_branch(c: Bool, r: Option[U32], move b: Buf[F32]) -> Option[Option[Buf[F32]]] { if c { Some(wrap(move b, 0)) } else { Some(wrap(move b, r?)) } }   //~ E0901
+
+pub fn call_returned(r: Option[U32], move b: Buf[F32]) -> Option[Option[Buf[F32]]] { while true { return Some(wrap(move b, r?)) } }   //~ E0601
+
+// ------------------------------------------------------------------ an element of a tuple, an array, a struct literal or a constructor
+
+pub fn in_tuple(r: Option[U32], move b: Buf[F32]) -> Option[(Buf[F32], U32)] { Some((move b, r?)) }   //~ E0601
+
+pub rt fn rt_in_tuple(r: Option[U32], move b: Buf[F32]) -> Option[(Buf[F32], U32)] { Some((move b, r?)) }   //~ E0901
+
+pub fn in_nested_tuple(r: Option[U32], move b: Buf[F32]) -> Option[((Buf[F32], U32), U32)] { Some(((move b, 1), r?)) }   //~ E0601
+
+pub fn in_array(move r: Option[Buf[F32]], move b: Buf[F32]) -> Option[[Buf[F32]; 2]] { Some([move b, r?]) }   //~ E0601
+
+pub rt fn rt_in_array(move r: Option[Buf[F32]], move b: Buf[F32]) -> Option[[Buf[F32]; 2]] { Some([move b, r?]) }   //~ E0901
+
+pub fn in_struct(r: Option[F32], move b: Buf[F32]) -> Option[Holder] { Some(Holder { buf: move b, gain: r? }) }   //~ E0601
+
+pub rt fn rt_in_struct(r: Option[F32], move b: Buf[F32]) -> Option[Holder] { Some(Holder { buf: move b, gain: r? }) }   //~ E0901
+
+pub fn in_result_constructor(r: Result[U32, U32], move b: Buf[F32]) -> Result[(Buf[F32], U32), U32] { Ok((move b, r?)) }   //~ E0601
+
+pub rt fn rt_in_result_constructor(r: Result[U32, U32], move b: Buf[F32]) -> Result[(Buf[F32], U32), U32] { Ok((move b, r?)) }   //~ E0901
+
+pub fn in_struct_param(r: Option[U32], move h: Holder) -> Option[(Holder, U32)] { Some((move h, r?)) }   //~ E0601
+
+pub rt fn rt_in_option_param(r: Option[U32], move o: Option[Buf[F32]]) -> Option[(Option[Buf[F32]], U32)] { Some((move o, r?)) }   //~ E0901
+
+// ------------------------------------------------------------------ a `return` in a later operand (a branch of an `if` stands where a value is needed, §7)
+
+pub fn pending_return(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { wrap(move b, if c { return None } else { 1 }) }   //~ E0601
+
+pub rt fn rt_pending_return(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { wrap(move b, if c { return None } else { 1 }) }   //~ E0901
+
+pub fn pending_return_in_tuple(c: Bool, move b: Buf[F32]) -> Option[(Buf[F32], U32)] { Some((move b, match c { true => { return None }, false => 1 })) }   //~ E0601
+
+pub rt fn rt_pending_return_in_struct(c: Bool, move b: Buf[F32]) -> Option[Holder] { Some(Holder { buf: move b, gain: if c { return None } else { 1.0 } }) }   //~ E0901
+
+// ------------------------------------------------------------------ the receiver of a `move self`
+
+pub fn receiver(r: Option[U32], move h: Holder) -> Option[Option[Holder]] { Some(h.absorb(r?)) }   //~ E0601
+
+pub rt fn rt_receiver(r: Option[U32], move h: Holder) -> Option[Option[Holder]] { Some(h.absorb(r?)) }   //~ E0901
+
+// ------------------------------------------------------------------ two values wait
+
+pub fn wait_two(r: Option[U32], move a: Buf[F32], move b: Buf[F32]) -> Option[Option[(Buf[F32], Buf[F32])]] { Some(wrap2(move a, move b, r?)) }   //~ E0601

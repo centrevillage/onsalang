@@ -164,9 +164,7 @@ impl Diverging {
 
     fn read_while(&mut self, ast: &Ast, s: StmtId, patch: Option<&Patch>) {
         let StmtKind::While { cond, body } = ast.stmt(s).kind else { return };
-        // A parenthesis is the same as none (`fmt` takes it off, §18.2).
-        let forever = matches!(ast.expr(ast.without_parens(cond)).kind, ExprKind::Lit(Lit::Bool(true)));
-        if forever && !leaves_loop(ast, body, patch) {
+        if literal_true(ast, cond) && !leaves_loop(ast, body, patch) {
             self.loops.insert(s);
         }
     }
@@ -330,4 +328,12 @@ fn stmt_leaves_loop(ast: &Ast, s: StmtId, patch: Option<&Patch>) -> bool {
         | StmtKind::Expr(x) => leaves(*x),
         StmtKind::Assign { target, value } => leaves(*target) || leaves(*value),
     }
+}
+
+/// Whether the condition `cond` of a `while` is the literal `true` (§7):
+/// such a loop is left by a `break` only (S-1042), and diverges with none.
+/// A parenthesis is the same as none (`fmt` takes it off, §18.2); a
+/// constant or another expression is not (S-40). The one test of the form.
+pub(crate) fn literal_true(ast: &Ast, cond: ExprId) -> bool {
+    matches!(ast.expr(ast.without_parens(cond)).kind, ExprKind::Lit(Lit::Bool(true)))
 }

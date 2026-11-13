@@ -1,5 +1,6 @@
-//! The drop at the end of a block, counted by the paths that reach it, against a model of the paths (spec
-//! §12.2, §8.1, §10 rule 1, §9.2, §7, §3.5, §5.2, §5.4; S-873, S-1042; W6-02 U2a/t2).
+//! The drop at the end of a block and at an early exit, counted by the paths that reach it, against a model
+//! of the paths (spec §12.2, §8.1, §10 rule 1, §9.1, §9.2, §7, §3.5, §5.2, §5.4; S-873, S-1042; W6-02
+//! U2a/t2, U3/t).
 //!
 //! §12.2: the destruction of an owned `Buf` and of a value that holds one needs `Alloc` (a function with no
 //! `uses {Alloc}` gets E0601, §8.1; an `rt fn` gets E0901, §10 rule 1), and the destruction on the way out by
@@ -8,24 +9,44 @@
 //! that reaches the end is not dropped, and nor is one that is alive only on a path a `panic` ends, or in
 //! front of a `while true` with no `break` that never ends (§7, S-873).
 //!
+//! The early exits drop the same way (§5.4: the drop of what a binding owns is "`return`・`break`・`continue`・
+//! `?` で出るときを含む"): a `return`, and a `?` that returns (§9.1: the same exit as `return`), drop every
+//! owned local that may be alive where they stand, in every block of the function; a `break` drops the
+//! locals declared in the body of the loop it leaves, a `continue` those declared in the body of the loop it
+//! ends (the locals declared before the loop stay alive and are dropped at the end of their own block). A
+//! `return Some(move x)` carries `x` out and does not drop it. A value that is moved into an operand and waits
+//! for a later `?` (`wrap(move b, k?)`, §3.5: the operands are evaluated from the left, and the `move` takes
+//! `b` when its operand is evaluated, §5.2) is dropped if the `?` returns, so the local that waits counts as
+//! alive at the `?`: the same set as if the `?` came first. The model cannot tell the two apart, and the spec
+//! does not either (both are an error); the files `tests/spec/negative/drop_exit_try.onsa` and `drop_pending.onsa`
+//! have the two forms.
+//!
 //! The model counts it by the paths. It runs a body over a set of states (the set of the owned locals that
 //! may be alive on a path that arrives), block by block: a branch of an `if` (an `else if` chain, with or
 //! without the last `else`), an arm of a `match` (the heading is a Copy value, a borrow, or an owned value
 //! whose binding the arm owns), the right operand of `&&` and `||` (§3.5: it is skipped when the left one
 //! decides, so the way past it is a path too), the body of a `while c` and of a `for _ in 0 ..< n` (which
-//! may run no time, and runs again from the states it ended with), and the end of the body of the function.
-//! A local that is alive on some path that reaches the end of its block is dropped there, and the function
-//! needs `Alloc` for the first one of them in the order of the declarations (the parameters in the order
-//! written, then the locals in the order of the text). The test writes the same body as a `fn` (E0601), as an
-//! `rt fn` with the parameters in the other order (E0901), and as a method with `move self`, and compares
-//! the code and the local the diagnostic names with the model's.
+//! may run no time, and runs again from the states it ended with and from those a `continue` ends with),
+//! the loop `while true` that is left by a `break` only (S-1042: no path leaves it by its condition, so the
+//! states after it are the states at the `break`s), and the end of the body of the function.
+//! A local that is alive on some path that reaches the end of its block or an early exit is dropped there, and
+//! the function needs `Alloc` for the first one of them in the order of the declarations (the parameters in
+//! the order written, then the locals in the order of the text). The test writes the same body as a `fn`
+//! (E0601), as an `rt fn` with the parameters in the other order (E0901), and as a method with `move self`,
+//! and compares the code and the local the diagnostic names with the model's. The spec does not say which
+//! local a diagnostic names where several are dropped, so the name is compared for a function with no early exit
+//! and no `break` (as in U2a/t2) and for one where the model drops one local only (the diagnostic has to name it;
+//! not where a value waits for a `?`); for the others the code and the number of diagnostics (one for each
+//! function) are compared.
 //!
-//! The values are `Buf[F32]`, `Option[Buf[F32]]` and a struct that holds a `Buf`. Not generated: an early
-//! exit (`return`, `?`, `continue`: no drop is counted at them until U3 puts the drop points there, W6-02
-//! U3), and the pattern of a `for` that binds an owned value and a guard (U2b), a value with no name,
-//! an overwrite, `_`, a Dup value, a type parameter `T` and an anonymous function (the later units).
-//! The `break` of a `while true` (the loop that only a `break` leaves, S-1042: no path leaves it by its
-//! condition) is generated only when `WHILE_TRUE_BREAK` is true.
+//! The values are `Buf[F32]`, `Option[Buf[F32]]` and a struct that holds a `Buf`. Not generated: the pattern of
+//! a `for` that binds an owned value and a guard (U2b), the iterated value of an owned `for` (S-1037), a value
+//! with no name, an overwrite, `_`, a Dup value, a type parameter `T` and an anonymous function (the later
+//! units).
+//! The model has two tests. The first (U2a/t2) writes no early exit and no `break` of a `while true`, and passes. The
+//! second writes them (`EARLY_EXITS`: `return`, `?`, a value that waits for a `?`, `break`, `continue`, and the
+//! `while true` that only a `break` leaves, S-1042), and fails until the early exits drop (W6-02 U3); the bodies
+//! of the two are separate, so that the first keeps the end-of-block count from a regression meanwhile.
 //!
 //! The bodies come from a fixed seed (`Rng`), many in each of a few packages, kept in memory
 //! (`check_input`, no file written: `rules/common.md` 3.7). A function that gets a diagnostic other than
@@ -39,15 +60,32 @@ use onsa_driver::PackageInput;
 use crate::test_support::doc_of;
 use crate::test_support::sweep::{Rng, check_input_out};
 
-/// Whether the generator writes a `while true` that is left by a `break` (S-1042, the loop's only way out
-/// is the `break`). It is false until U3: the drop points of the early exits are not in yet, and the check
-/// counts a path where the condition is false after such a loop. **U3 sets it to true.** The model then
-/// also counts the owned locals of the body that are alive at the `break` (the drop of the early exit).
-const WHILE_TRUE_BREAK: bool = false;
+/// What a sweep writes.
+#[derive(Clone, Copy)]
+struct Cfg {
+    /// Whether the generator writes a `while true` that is left by a `break` (S-1042, the loop's only way out
+    /// is the `break`). The model counts no path where the condition is false after such a loop, and counts the
+    /// owned locals of the body that are alive at the `break` (the drop of the early exit).
+    while_true_break: bool,
+    /// The part of the statements that are an early exit or a `?` where an owned local may be alive (in a hundred; where
+    /// none is, and in a loop that a `break` or a `continue` leaves, there are more, see `Gen::stmt`). 0: none.
+    exit_percent: usize,
+    seed: u64,
+    /// The packages (each from the seed plus its number).
+    chunks: usize,
+    /// The answers "no drop" are at least a part of all (1 in this many): the early exits drop more.
+    clean_one_in: usize,
+}
 
-const SEED: u64 = 0x2a02_0602;
-/// The packages (each from the seed plus its number) and the bodies of each.
-const CHUNKS: usize = 12;
+/// The end of a block (U2a/t2).
+const END_OF_BLOCK: Cfg =
+    Cfg { while_true_break: false, exit_percent: 0, seed: 0x2a02_0602, chunks: 12, clean_one_in: 5 };
+
+/// The early exits and the `while true` left by a `break` (U3/t).
+const EARLY_EXITS: Cfg =
+    Cfg { while_true_break: true, exit_percent: 18, seed: 0x2a03_0602, chunks: 24, clean_one_in: 8 };
+
+/// The bodies of each package.
 const TREES: usize = 30;
 /// What the compared functions must show, so that a sweep that checks nothing does not pass.
 const MIN_FUNCTIONS: usize = 700;
@@ -55,8 +93,8 @@ const MIN_FUNCTIONS: usize = 700;
 /// The statements of a function (each block has one to four, so that the nesting would multiply them).
 const BUDGET: usize = 12;
 
-const HEAD: &str =
-    "pub struct Holder { buf: Buf[F32], n: U32 }\n\npub rt fn pass(move b: Buf[F32]) -> Buf[F32] { b }\n";
+const HEAD: &str = "pub struct Holder { buf: Buf[F32], n: U32 }\n\npub rt fn pass(move b: Buf[F32]) -> Buf[F32] { b }\n\n\
+                    pub rt fn wrap(move b: Buf[F32], n: U32) -> Option[Buf[F32]] { Some(move b) }\n";
 
 // ---------------------------------------------------------------------------------------------- the tree
 
@@ -76,6 +114,8 @@ enum Kind {
     Holder,
     /// A `Bool` local (not owned).
     Flag,
+    /// A fixed-length array of two `Buf`s, which an owned `for` iterates (it is alive in the loop only).
+    Arr,
 }
 
 struct Local {
@@ -95,12 +135,14 @@ enum Src {
     Wrap(Id),
     /// `pass(move h.buf)`: takes the field out and consumes `h` (§5.2).
     Take(Id),
+    /// `wrap(move b, k?)`: `b` waits for the `?`, which may return (§3.5, §5.2, §9.1). It is an `Option` of a `Buf`.
+    Pend(Id),
 }
 
 impl Src {
     fn id(&self) -> Id {
         match self {
-            Src::Pass(i) | Src::Hold(i) | Src::Wrap(i) | Src::Take(i) => *i,
+            Src::Pass(i) | Src::Hold(i) | Src::Wrap(i) | Src::Take(i) | Src::Pend(i) => *i,
         }
     }
 }
@@ -135,8 +177,20 @@ enum Node {
     /// `let g = c && ({ .. })` (`true`: `&&`, else `||`): the block is the right operand.
     Logic(bool, Id, Block),
     Loop(Loop, Block),
+    /// `let z = [pass(move x), pass(move y)]` and `for e in move z { .. }` (§5.4, S-1037): the loop owns the binding `e` of each
+    /// iteration, and, where it is left by an exit other than the end, the elements not iterated yet (`z` stands for them).
+    ForOwned(Id, Id, Id, Id, Block),
+    /// `match move o { Some(v) if G => .., Some(u) => .., None => .. }` (§7): `G` is `v.len() > 0`, or, with `(w, z)`, the block
+    /// `{ w = pass(move z) \n v.len() > 0 }` that moves the outer `z` into the dead `var` `w` (the guard is no consumer of `v`).
+    MatchG(Id, Id, Id, Option<(Id, Id)>, Block, Block, Block),
     Panic,
     Break,
+    /// `continue`, in the body of a `while c` or a `for`.
+    Continue,
+    /// `return None`, or `return Some(move x)` (the value carries `x` out).
+    Return(Option<Id>),
+    /// `let g = k?`: it returns the `None` of `k` (§9.1), or goes on.
+    Try(Id),
     // Values.
     SomeOf(Id),
     SomeField(Id),
@@ -177,6 +231,8 @@ fn blocks_of(n: &Node) -> Vec<&Block> {
         Node::MatchN(bs) => bs.iter().collect(),
         Node::MatchQ(a, b) | Node::MatchO(_, _, a, b) => vec![a, b],
         Node::MatchB(_, _, b) | Node::Logic(_, _, b) | Node::Loop(_, b) | Node::Group(b) => vec![b],
+        Node::ForOwned(.., b) => vec![b],
+        Node::MatchG(.., a, b, c) => vec![a, b, c],
         _ => Vec::new(),
     }
 }
@@ -187,6 +243,7 @@ fn tag(n: &Node) -> &'static str {
         Node::Let(_, Src::Take(_)) => "take",
         Node::Let(_, Src::Hold(_)) => "struct",
         Node::Let(_, Src::Wrap(_)) => "some",
+        Node::Let(_, Src::Pend(_)) => "pend",
         Node::Let(..) => "let",
         Node::Var(..) => "var",
         Node::Assign(..) => "assign",
@@ -204,13 +261,39 @@ fn tag(n: &Node) -> &'static str {
         Node::Loop(Loop::For, _) => "for",
         Node::Loop(Loop::Spin, _) => "spin",
         Node::Loop(Loop::SpinBreak, _) => "spin-break",
+        Node::ForOwned(..) => "for-owned",
+        Node::MatchG(..) => "match-guard",
         Node::Panic => "panic",
         Node::Break => "break",
+        Node::Continue => "continue",
+        Node::Return(None) => "return",
+        Node::Return(Some(_)) => "return-move",
+        Node::Try(_) => "try",
         Node::SomeField(_) => "move-field",
         Node::MoveOf(_) => "move-value",
         Node::Group(_) => "group",
         _ => "leaf",
     }
+}
+
+/// The forms of early exit the body has: a `return`, a `?`, a value that waits for a `?`, a `break`, a `continue`, and
+/// the loop `while true` that is left by a `break` only (S-1042).
+fn exits_of(f: &Func) -> Vec<&'static str> {
+    let mut out = BTreeSet::new();
+    walk(&f.body, &mut |n| {
+        if matches!(
+            n,
+            Node::Return(_)
+                | Node::Continue
+                | Node::Try(_)
+                | Node::Break
+                | Node::Let(_, Src::Pend(_))
+                | Node::Loop(Loop::SpinBreak, _)
+        ) {
+            out.insert(tag(n));
+        }
+    });
+    out.into_iter().collect()
 }
 
 fn walk(b: &Block, f: &mut dyn FnMut(&Node)) {
@@ -229,21 +312,24 @@ struct Flow {
     n: Sts,
     /// The states at a `break` that leaves the loop around.
     b: Sts,
+    /// The states at a `continue` that ends the iteration of the loop around.
+    c: Sts,
 }
 
 impl Flow {
     fn normal(n: Sts) -> Flow {
-        Flow { n, b: Sts::new() }
+        Flow { n, b: Sts::new(), c: Sts::new() }
     }
     fn none() -> Flow {
-        Flow { n: Sts::new(), b: Sts::new() }
+        Flow { n: Sts::new(), b: Sts::new(), c: Sts::new() }
     }
 }
 
 /// The paths: R-32 (an owned local that is alive on a path that reaches the end of its block is dropped
 /// there), S-873 (a `panic` and a `while true` with no `break` end the path, no state goes on),
 /// §3.5 (the right operand of `&&` and `||` is a path or it is not), S-1042 (a `while true` with a `break`
-/// is left by the `break` only).
+/// is left by the `break` only), §5.4 and §9.1 (a `return` and a `?` that returns drop every owned local
+/// that is alive; a `break` and a `continue` those of the loop's body).
 struct Model {
     owned: St,
     /// The locals dropped at the end of their block on some path that reaches it.
@@ -252,11 +338,14 @@ struct Model {
     invalid: bool,
     /// For each loop around: the locals declared in it.
     loops: Vec<St>,
+    /// For each loop around: the elements it has not iterated yet (an owned `for`; they are dropped by a `break`, not by a
+    /// `continue`: S-1037), as the bit of the array.
+    rests: Vec<St>,
 }
 
 impl Model {
     fn new(f: &Func) -> Model {
-        Model { owned: f.owned_mask(), flagged: 0, invalid: false, loops: Vec::new() }
+        Model { owned: f.owned_mask(), flagged: 0, invalid: false, loops: Vec::new(), rests: Vec::new() }
     }
 
     fn take(&mut self, s: &Src, st: St) -> St {
@@ -289,18 +378,24 @@ impl Model {
         }
         let mut cur = states.clone();
         let mut brk = Sts::new();
+        let mut cnt = Sts::new();
         for n in blk.stmts.iter().chain(blk.tail.iter().map(|t| &**t)) {
             if cur.is_empty() {
                 break;
             }
             let f = self.node(n, &cur, &mut declared);
             brk.extend(f.b);
+            cnt.extend(f.c);
             cur = f.n;
         }
         for &st in &cur {
             self.flagged |= st & declared & self.owned;
         }
-        Flow { n: cur.iter().map(|st| st & !declared).collect(), b: brk.iter().map(|st| st & !declared).collect() }
+        Flow {
+            n: cur.iter().map(|st| st & !declared).collect(),
+            b: brk.iter().map(|st| st & !declared).collect(),
+            c: cnt.iter().map(|st| st & !declared).collect(),
+        }
     }
 
     fn branches<'a>(&mut self, blks: impl Iterator<Item = &'a Block>, cur: &Sts) -> Flow {
@@ -309,6 +404,7 @@ impl Model {
             let f = self.block(blk, cur, &[]);
             out.n.extend(f.n);
             out.b.extend(f.b);
+            out.c.extend(f.c);
         }
         out
     }
@@ -316,7 +412,16 @@ impl Model {
     fn node(&mut self, n: &Node, cur: &Sts, declared: &mut St) -> Flow {
         match n {
             Node::Let(l, s) | Node::Var(l, s) => {
-                let out = cur.iter().map(|&st| self.take(s, st) | bit(*l)).collect();
+                let out = cur
+                    .iter()
+                    .map(|&st| {
+                        if let Src::Pend(_) = s {
+                            // The `?` that may return comes while the value waits: it is dropped with the locals alive.
+                            self.flagged |= st & self.owned;
+                        }
+                        self.take(s, st) | bit(*l)
+                    })
+                    .collect();
                 self.declare(*l, declared);
                 Flow::normal(out)
             }
@@ -333,12 +438,39 @@ impl Model {
             }
             Node::Panic => Flow::none(),
             Node::Break => {
-                // The drop of the early exit: the locals of the loop's body alive at the `break`.
+                // The drop of the early exit: the locals of the loop's body alive at the `break`, and the rest of an owned `for`.
+                let top = self.loops.last().copied().unwrap_or(0) | self.rests.last().copied().unwrap_or(0);
+                for &st in cur {
+                    self.flagged |= st & top & self.owned;
+                }
+                Flow { n: Sts::new(), b: cur.clone(), c: Sts::new() }
+            }
+            Node::Continue => {
+                // The same for the `continue`, which ends the iteration (the next one starts from the head).
                 let top = self.loops.last().copied().unwrap_or(0);
                 for &st in cur {
                     self.flagged |= st & top & self.owned;
                 }
-                Flow { n: Sts::new(), b: cur.clone() }
+                Flow { n: Sts::new(), b: Sts::new(), c: cur.clone() }
+            }
+            Node::Return(v) => {
+                // Every owned local alive at the `return` is dropped, except the one it carries out.
+                for &st in cur {
+                    let st = match v {
+                        Some(x) => self.take(&Src::Pass(*x), st),
+                        None => st,
+                    };
+                    self.flagged |= st & self.owned;
+                }
+                Flow::none()
+            }
+            Node::Try(g) => {
+                // The `?` may return: every owned local alive is dropped there. If it does not, the path goes on.
+                self.declare(*g, declared);
+                for &st in cur {
+                    self.flagged |= st & self.owned;
+                }
+                Flow::normal(cur.clone())
             }
             Node::If(bs, e) => {
                 let mut f = self.branches(bs.iter().chain(e.iter()), cur);
@@ -357,7 +489,11 @@ impl Model {
                 let with_v: Sts = after.iter().map(|st| st | bit(*v)).collect();
                 let a = self.block(some, &with_v, &[*v]);
                 let b = self.block(none, &after, &[]);
-                Flow { n: a.n.into_iter().chain(b.n).collect(), b: a.b.into_iter().chain(b.b).collect() }
+                Flow {
+                    n: a.n.into_iter().chain(b.n).collect(),
+                    b: a.b.into_iter().chain(b.b).collect(),
+                    c: a.c.into_iter().chain(b.c).collect(),
+                }
             }
             Node::MatchB(b, t, arm) => {
                 let with_t: Sts = cur.iter().map(|&st| self.take(&Src::Pass(*b), st) | bit(*t)).collect();
@@ -370,8 +506,59 @@ impl Model {
                 f.n.extend(cur.iter().copied());
                 f
             }
+            Node::ForOwned(x, y, z, e, body) => {
+                let entry: Sts = cur
+                    .iter()
+                    .map(|&st| {
+                        let st = self.take(&Src::Pass(*x), st);
+                        self.take(&Src::Pass(*y), st) | bit(*z)
+                    })
+                    .collect();
+                self.loops.push(0);
+                self.rests.push(bit(*z));
+                let mut heads = entry;
+                let mut leave = Sts::new();
+                loop {
+                    let with_e: Sts = heads.iter().map(|st| st | bit(*e)).collect();
+                    let f = self.block(body, &with_e, &[*e]);
+                    leave.extend(f.b);
+                    let mut next = heads.clone();
+                    next.extend(f.n);
+                    next.extend(f.c);
+                    if next == heads {
+                        break;
+                    }
+                    heads = next;
+                }
+                self.loops.pop();
+                self.rests.pop();
+                // The loop ends (all the elements are iterated) or is left by a `break`: no element is left.
+                Flow::normal(heads.into_iter().chain(leave).map(|st| st & !bit(*z)).collect())
+            }
+            Node::MatchG(o, v, u, mv, b1, b2, b3) => {
+                // The heading is consumed. The guard is evaluated if the first pattern matches; if it is false the second arm is
+                // tested on the states after the guard, and, past the pattern that did not match, on the states before it (the
+                // flow of §7: "ガードが偽なら後の腕が同じ値で判定される"), so what the guard moved is moved on some paths only.
+                let s0: Sts = cur.iter().map(|&st| self.take(&Src::Pass(*o), st)).collect();
+                let s0g: Sts = match mv {
+                    Some((w, z)) => s0.iter().map(|&st| self.take(&Src::Pass(*z), st) | bit(*w)).collect(),
+                    None => s0.clone(),
+                };
+                let with_v: Sts = s0g.iter().map(|st| st | bit(*v)).collect();
+                let a = self.block(b1, &with_v, &[*v]);
+                let s1: Sts = s0.iter().chain(s0g.iter()).copied().collect();
+                let with_u: Sts = s1.iter().map(|st| st | bit(*u)).collect();
+                let b = self.block(b2, &with_u, &[*u]);
+                let c = self.block(b3, &s1, &[]);
+                Flow {
+                    n: a.n.into_iter().chain(b.n).chain(c.n).collect(),
+                    b: a.b.into_iter().chain(b.b).chain(c.b).collect(),
+                    c: a.c.into_iter().chain(b.c).chain(c.c).collect(),
+                }
+            }
             Node::Loop(kind, body) => {
                 self.loops.push(0);
+                self.rests.push(0);
                 // The state at the head: the states the loop is entered with, and the ones the body ends with.
                 let mut heads = cur.clone();
                 let mut leave = Sts::new();
@@ -380,14 +567,17 @@ impl Model {
                     leave.extend(f.b);
                     let mut next = heads.clone();
                     next.extend(f.n);
+                    next.extend(f.c);
                     if next == heads {
                         break;
                     }
                     heads = next;
                 }
                 self.loops.pop();
+                self.rests.pop();
                 Flow::normal(match kind {
-                    Loop::While | Loop::For => heads,
+                    // Left by the condition (the head) or by a `break`.
+                    Loop::While | Loop::For => heads.into_iter().chain(leave).collect(),
                     Loop::Spin => Sts::new(),
                     Loop::SpinBreak => leave,
                 })
@@ -410,6 +600,7 @@ fn first_flagged(f: &Func, flagged: St, order: &[Id]) -> Option<Id> {
 // ------------------------------------------------------------------------------------------- the generator
 
 struct Gen<'r> {
+    cfg: Cfg,
     rng: &'r mut Rng,
     f: Func,
     depth: usize,
@@ -419,6 +610,8 @@ struct Gen<'r> {
     floor: Vec<Id>,
     /// How many statements are still to be written in the function (the nesting multiplies them).
     budget: usize,
+    /// The loops around, the innermost last (a `break` and a `continue` leave the innermost one).
+    kinds: Vec<Loop>,
 }
 
 fn live_all(states: &Sts) -> St {
@@ -493,6 +686,19 @@ impl Gen<'_> {
         if !self.room() {
             return None;
         }
+        // An exit where an owned local may be alive drops it (the answers would be mostly "drop" if they were as
+        // frequent as the clean ones), and the loops make a `break` and a `continue` likely.
+        let alive = cur.iter().fold(0u128, |a, &s| a | s) & self.f.owned_mask();
+        let mut percent = if alive == 0 { self.cfg.exit_percent } else { self.cfg.exit_percent / 3 };
+        if self.kinds.last().is_some_and(|k| *k != Loop::Spin) {
+            // A `break` and a `continue` drop only what the loop owns, which is little.
+            percent = self.cfg.exit_percent;
+        }
+        if percent > 0 && self.rng.chance(percent) {
+            if let Some(n) = self.exit(cur, &bl) {
+                return Some(n);
+            }
+        }
         // A `var` that was moved gets a whole new value (§5.2); a `var` that is alive is moved on.
         let live = live_all(cur);
         let floor = self.floor.last().copied().unwrap_or(0);
@@ -566,7 +772,7 @@ impl Gen<'_> {
             let arm = self.block(&with_t, d + 1, false, &[t]);
             return Some(Node::MatchB(b, t, arm));
         }
-        if c < 87 && !bl.is_empty() {
+        if c < 85 && !bl.is_empty() {
             let and = self.rng.chance(50);
             let g = self.fresh('g', Kind::Flag, false);
             let mut rhs = self.sub(cur, d, false);
@@ -575,36 +781,111 @@ impl Gen<'_> {
             }
             return Some(Node::Logic(and, g, rhs));
         }
-        if c < 93 {
+        if c < 90 {
             return Some(self.looped(cur, d));
         }
-        if c < 96 {
+        if c < 92 {
             return Some(Node::Panic);
+        }
+        if c < 96 && bl.len() >= 2 {
+            let (x, y) = (bl[0], bl[1 + self.rng.below(bl.len() - 1)]);
+            let z = self.fresh('z', Kind::Arr, false);
+            let after: Sts = cur.iter().map(|st| (st & !bit(x) & !bit(y)) | bit(z)).collect();
+            self.floor.push(self.f.locals.len());
+            self.kinds.push(Loop::For);
+            let e = self.fresh('e', Kind::Buf, false);
+            let with_e: Sts = after.iter().map(|st| st | bit(e)).collect();
+            let body = self.block(&with_e, d + 1, false, &[e]);
+            self.kinds.pop();
+            self.floor.pop();
+            return Some(Node::ForOwned(x, y, z, e, body));
+        }
+        if c >= 96 && !ol.is_empty() {
+            let o = *self.rng.pick(&ol);
+            let v = self.fresh('v', Kind::Buf, false);
+            let s0: Sts = cur.iter().map(|st| st & !bit(o)).collect();
+            // The guard moves the outer `z` into a `var` that is dead (not alive on any path), or only reads `v`.
+            let mv = match (dead.first(), bl.first()) {
+                (Some(&w), Some(&z)) if self.rng.chance(60) => Some((w, z)),
+                _ => None,
+            };
+            let s0g: Sts = match mv {
+                Some((w, z)) => s0.iter().map(|st| (st & !bit(z)) | bit(w)).collect(),
+                None => s0.clone(),
+            };
+            let with_v: Sts = s0g.iter().map(|st| st | bit(v)).collect();
+            let b1 = self.block(&with_v, d + 1, false, &[v]);
+            let u = self.fresh('v', Kind::Buf, false);
+            let s1: Sts = s0.iter().chain(s0g.iter()).copied().collect();
+            let with_u: Sts = s1.iter().map(|st| st | bit(u)).collect();
+            let b2 = self.block(&with_u, d + 1, false, &[u]);
+            let b3 = self.sub(&s1, d, false);
+            return Some(Node::MatchG(o, v, u, mv, b1, b2, b3));
         }
         None
     }
 
     fn looped(&mut self, cur: &Sts, d: usize) -> Node {
         let pick = self.rng.below(100);
-        let spin_break = WHILE_TRUE_BREAK && pick < 30;
+        let spin_break = self.cfg.while_true_break && pick < 30;
         if spin_break {
-            // The body runs once (it ends with the `break`), so it may move what the function owns.
+            // The body runs once (every path ends with a `break`, a `return` or a `panic`, and no `continue`
+            // is written in it), so it may move what the function owns.
+            self.kinds.push(Loop::SpinBreak);
             let mut body = self.sub(cur, d, false);
+            self.kinds.pop();
             if self.completes(&body, cur, &[]) {
                 body.stmts.push(Node::Break);
-                return Node::Loop(Loop::SpinBreak, body);
             }
-            return Node::Loop(Loop::Spin, body);
+            return Node::Loop(Loop::SpinBreak, body);
         }
         let kind = match pick {
             0..=44 => Loop::While,
             45..=79 => Loop::For,
             _ => Loop::Spin,
         };
+        self.kinds.push(kind);
         self.floor.push(self.f.locals.len());
         let body = self.sub(cur, d, false);
         self.floor.pop();
+        self.kinds.pop();
         Node::Loop(kind, body)
+    }
+
+    /// An early exit or a `?` (the `Pend` is a value that waits for a `?`). A `break` and a `continue` are written
+    /// in the loops they may leave: a `while true` with no `break` (it never ends) has none of them, and the
+    /// `while true` that is left by a `break` has no `continue` (its body runs once).
+    fn exit(&mut self, cur: &Sts, bl: &[Id]) -> Option<Node> {
+        let live = live_all(cur);
+        // A `return` ends the path, so it may carry out any alive `Buf`, also one the loop around does not own.
+        let any: Vec<Id> =
+            (0..self.f.locals.len()).filter(|&i| live & bit(i) != 0 && self.f.locals[i].kind == Kind::Buf).collect();
+        let kind = self.kinds.last().copied();
+        let can_continue = matches!(kind, Some(Loop::While | Loop::For));
+        let can_break = can_continue || kind == Some(Loop::SpinBreak);
+        // In a loop that a `break` or a `continue` may leave, they are most of the exits.
+        let mut r = self.rng.below(100);
+        if can_break {
+            r = match r {
+                0..=29 if can_continue => 35,
+                0..=59 => 55,
+                60..=69 => 0,
+                70..=74 => 20,
+                _ => r,
+            };
+        }
+        match r {
+            0..=19 => Some(Node::Return(None)),
+            20..=34 if !any.is_empty() => Some(Node::Return(Some(*self.rng.pick(&any)))),
+            35..=54 if can_continue => Some(Node::Continue),
+            55..=74 if can_break => Some(Node::Break),
+            75..=86 => Some(Node::Try(self.fresh('g', Kind::Flag, false))),
+            87..=99 if !bl.is_empty() => {
+                let b = *self.rng.pick(bl);
+                Some(Node::Let(self.fresh('o', Kind::Opt, false), Src::Pend(b)))
+            }
+            _ => None,
+        }
     }
 
     fn val(&mut self, cur: &Sts, d: usize) -> Node {
@@ -670,15 +951,17 @@ impl Gen<'_> {
 }
 
 /// A function body over owned parameters.
-fn gen_func(rng: &mut Rng) -> Func {
+fn gen_func(rng: &mut Rng, cfg: Cfg) -> Func {
     let depth = *rng.pick(&[2, 3, 4, 5]);
     let mut g = Gen {
+        cfg,
         rng,
         f: Func { locals: Vec::new(), params: Vec::new(), body: Block::default() },
         depth,
         vis: Vec::new(),
         floor: Vec::new(),
         budget: BUDGET,
+        kinds: Vec::new(),
     };
     // A body with one owned parameter can move it on every path (a value cannot be split in two).
     let single = g.rng.chance(40);
@@ -722,6 +1005,7 @@ impl Writer<'_> {
             Src::Hold(i) => format!("Holder {{ buf: pass(move {}), n: 0 }}", self.name(*i)),
             Src::Wrap(i) => format!("Some(move {})", self.name(*i)),
             Src::Take(i) => format!("pass(move {}.buf)", self.name(*i)),
+            Src::Pend(i) => format!("wrap(move {}, k?)", self.name(*i)),
         }
     }
 
@@ -785,6 +1069,36 @@ impl Writer<'_> {
             Node::Logic(and, g, rhs) => {
                 format!("let {} = c {} ({})", self.name(*g), if *and { "&&" } else { "||" }, self.block(rhs))
             }
+            Node::ForOwned(x, y, z, e, b) => format!(
+                "let {z} = [pass(move {x}), pass(move {y})]\nfor {e} in move {z} {b}",
+                x = self.name(*x),
+                y = self.name(*y),
+                z = self.name(*z),
+                e = self.name(*e),
+                b = self.block(b)
+            ),
+            Node::MatchG(o, v, u, mv, b1, b2, b3) => {
+                let guard = match mv {
+                    Some((w, z)) => {
+                        format!(
+                            "{{\n  {} = pass(move {})\n  {}.len() > 0\n}}",
+                            self.name(*w),
+                            self.name(*z),
+                            self.name(*v)
+                        )
+                    }
+                    None => format!("{}.len() > 0", self.name(*v)),
+                };
+                format!(
+                    "match move {} {}",
+                    self.name(*o),
+                    self.arms(&[
+                        format!("Some({}) if {guard} => {}", self.name(*v), self.block(b1)),
+                        format!("Some({}) => {}", self.name(*u), self.block(b2)),
+                        format!("None => {}", self.block(b3))
+                    ])
+                )
+            }
             Node::Loop(kind, b) => match kind {
                 Loop::While => format!("while c {}", self.block(b)),
                 Loop::For => format!("for _ in 0 ..< n {}", self.block(b)),
@@ -792,6 +1106,10 @@ impl Writer<'_> {
             },
             Node::Panic => "panic(\"x\")".to_string(),
             Node::Break => "break".to_string(),
+            Node::Continue => "continue".to_string(),
+            Node::Return(None) => "return None".to_string(),
+            Node::Return(Some(x)) => format!("return Some(move {})", self.name(*x)),
+            Node::Try(g) => format!("let {} = k?", self.name(*g)),
             Node::SomeOf(i) => format!("Some(move {})", self.name(*i)),
             Node::SomeField(i) => format!("Some(move {}.buf)", self.name(*i)),
             Node::MoveOf(i) => format!("move {}", self.name(*i)),
@@ -811,7 +1129,7 @@ impl Writer<'_> {
     }
 
     fn header_tail(&self, order: &[Id]) -> String {
-        let mut s = String::from("c: Bool, d: Bool, n: U32, q0: Option[Buf[F32]]");
+        let mut s = String::from("c: Bool, d: Bool, n: U32, q0: Option[Buf[F32]], k: Option[U32]");
         for &p in order {
             s += &format!(", {}", self.param(p));
         }
@@ -830,6 +1148,10 @@ struct Case {
     rt: bool,
     /// The local the diagnostic names, if the model says there is one.
     expect: Option<String>,
+    /// True where the name is compared too (the spec does not say which of several locals a diagnostic names).
+    strict: bool,
+    /// The forms of the early exits the body has (`return`, `break`, `try`, ...), for the tally of the answers that differ.
+    exits: Vec<&'static str>,
 }
 
 struct Package {
@@ -838,16 +1160,18 @@ struct Package {
 }
 
 fn build_package(
+    cfg: Cfg,
     rng: &mut Rng,
     tally: &mut std::collections::BTreeMap<&'static str, usize>,
     invalid: &mut usize,
 ) -> Package {
     let mut text = HEAD.to_string();
     let mut cases = Vec::new();
-    let mut methods: Vec<(String, String, Option<String>)> = Vec::new();
+    // The text of each method and its case (the line is known when the text is put in the `impl`).
+    let mut methods: Vec<(String, Case)> = Vec::new();
     let mut k = 0;
     while k < TREES {
-        let f = gen_func(rng);
+        let f = gen_func(rng, cfg);
         let mut m = Model::new(&f);
         m.run(&f);
         if m.invalid {
@@ -855,6 +1179,12 @@ fn build_package(
             continue;
         }
         walk(&f.body, &mut |n| *tally.entry(tag(n)).or_default() += 1);
+        let exits = exits_of(&f);
+        // The name is compared where the spec leaves nothing else to say: no early exit (as in U2a/t2), or one local only
+        // that is dropped (the diagnostic has to name it; not where a value waits for a `?`, which may be named otherwise).
+        let arrays: St = (0..f.locals.len()).filter(|&i| f.locals[i].kind == Kind::Arr).fold(0, |a, i| a | bit(i));
+        let strict =
+            (exits.is_empty() || (m.flagged.count_ones() == 1 && !exits.contains(&"pend"))) && m.flagged & arrays == 0;
         let w = Writer { f: &f, self_id: None };
         let name_of = |i: Option<Id>| i.map(|i| w.name(i));
         // The `fn`: the parameters in the order written.
@@ -871,7 +1201,14 @@ fn build_package(
                 w.header_tail(order),
                 w.block(&f.body)
             );
-            cases.push(Case { name: nm, line, rt, expect: name_of(first_flagged(&f, m.flagged, order)) });
+            cases.push(Case {
+                name: nm,
+                line,
+                rt,
+                expect: name_of(first_flagged(&f, m.flagged, order)),
+                strict,
+                exits: exits.clone(),
+            });
         }
         if let Some(&q) = f.params.iter().find(|&&p| f.locals[p].kind == Kind::Holder) {
             let ws = Writer { f: &f, self_id: Some(q) };
@@ -884,16 +1221,17 @@ fn build_package(
                 ws.block(&f.body)
             );
             let expect = first_flagged(&f, m.flagged, &order).map(|i| ws.name(i));
-            methods.push((format!("m{k}"), head, expect));
+            methods
+                .push((head, Case { name: format!("m{k}"), line: 0, rt: false, expect, strict, exits: exits.clone() }));
         }
         k += 1;
     }
     if !methods.is_empty() {
         text += "\nimpl Holder {\n";
-        for (name, head, expect) in methods {
-            let at = text.lines().count() + 1;
+        for (head, mut case) in methods {
+            case.line = text.lines().count() + 1;
             text += &format!("{}\n\n", indent(&head));
-            cases.push(Case { name, line: at, rt: false, expect });
+            cases.push(case);
         }
         text += "}\n";
     }
@@ -964,18 +1302,27 @@ fn slice_of(p: &Package, i: usize) -> String {
 
 #[test]
 fn the_drop_at_the_end_of_a_block_follows_the_paths_the_model_counts() {
-    onsa_diag::stack::run(run_sweep);
+    onsa_diag::stack::run(|| run_sweep(END_OF_BLOCK));
 }
 
-fn run_sweep() {
+/// W6-02 U3: the early exits drop what is alive (§5.4, §9.1, §12.2), and a `while true` that a `break` leaves is left by
+/// the `break` only (S-1042). It fails until U3 (the end-of-block test above passes).
+#[test]
+fn the_drop_at_an_early_exit_follows_the_paths_the_model_counts() {
+    onsa_diag::stack::run(|| run_sweep(EARLY_EXITS));
+}
+
+fn run_sweep(cfg: Cfg) {
     let mut tally = std::collections::BTreeMap::new();
     let (mut invalid, mut functions, mut skipped, mut expect_flag, mut expect_clean) = (0, 0, 0, 0, 0);
+    let (mut strict_functions, mut strict_failed, mut failed_clean, mut failed_reported) = (0, 0, 0, 0);
+    let mut failed_by: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
     let mut failed: Vec<String> = Vec::new();
     let mut other_shown: Vec<String> = Vec::new();
-    for chunk in 0..CHUNKS {
-        let seed = SEED + chunk as u64;
+    for chunk in 0..cfg.chunks {
+        let seed = cfg.seed + chunk as u64;
         let mut rng = Rng::new(seed);
-        let p = build_package(&mut rng, &mut tally, &mut invalid);
+        let p = build_package(cfg, &mut rng, &mut tally, &mut invalid);
         let mut got: Vec<Got> = p.cases.iter().map(|_| Got { own: Vec::new(), other: Vec::new() }).collect();
         let mut strays = Vec::new();
         if let Err(e) = diagnostics_of(&p, &mut got, &mut strays) {
@@ -1001,29 +1348,56 @@ fn run_sweep() {
             }
             let want_code = if c.rt { "E0901" } else { "E0601" };
             let ok = match &c.expect {
-                Some(n) => got[i].own.len() == 1 && got[i].own[0].0 == want_code && &got[i].own[0].1 == n,
+                Some(n) => {
+                    got[i].own.len() == 1 && got[i].own[0].0 == want_code && (!c.strict || &got[i].own[0].1 == n)
+                }
                 None => got[i].own.is_empty(),
             };
+            if c.exits.is_empty() {
+                strict_functions += 1;
+            }
+            if !ok && c.exits.is_empty() {
+                strict_failed += 1;
+            }
+            if !ok && c.expect.is_none() {
+                failed_clean += 1;
+            }
+            if !ok && !got[i].own.is_empty() {
+                failed_reported += 1;
+            }
             if !ok {
-                failed.push(format!(
+                for e in &c.exits {
+                    *failed_by.entry(*e).or_default() += 1;
+                }
+            }
+            if !ok {
+                let text = format!(
                     "seed {seed:#x}, `{}` ({}): the model says {}, the check says {:?}\n{}",
                     c.name,
                     if c.rt { "rt fn" } else { "fn" },
                     c.expect.as_ref().map_or("no drop".to_string(), |n| format!("{want_code} naming `{n}`")),
                     got[i].own,
                     slice_of(&p, i)
-                ));
+                );
+                // The ones where the check reports a drop are the ones to look at first (the others lack a drop).
+                if got[i].own.is_empty() {
+                    failed.push(text);
+                } else {
+                    failed.insert(0, text);
+                }
             }
         }
     }
     eprintln!(
         "drop_path_model: {functions} functions compared, {skipped} left out for another diagnostic, {invalid} bodies out of the model; \
-         the model says drop in {expect_flag}, none in {expect_clean}; forms {tally:?}"
+         the model says drop in {expect_flag}, none in {expect_clean}; {strict_functions} have no early exit and no `break`; forms {tally:?}"
     );
     let shown = failed.iter().take(5).cloned().collect::<Vec<_>>().join("\n\n");
     assert!(
         failed.is_empty(),
-        "{} of {functions} functions differ from the model (the first 5; the seed makes the package again):\n{shown}",
+        "{} of {functions} functions differ from the model, {strict_failed} of them with no early exit and no `break`, \
+         {failed_clean} where the model says no drop, {failed_reported} where the check reports a drop; the forms of exit in the ones that differ: {failed_by:?} \
+         (the first 5; the seed makes the package again):\n{shown}",
         failed.len()
     );
     assert!(
@@ -1033,7 +1407,7 @@ fn run_sweep() {
     );
     assert!(functions >= MIN_FUNCTIONS, "only {functions} functions compared");
     assert!(
-        expect_flag * 5 >= functions && expect_clean * 5 >= functions,
+        expect_flag * 5 >= functions && expect_clean * cfg.clean_one_in >= functions,
         "the answers are not mixed: drop {expect_flag}, none {expect_clean}"
     );
     let mut missing: Vec<&str> = [
@@ -1060,11 +1434,18 @@ fn run_sweep() {
         "move-field",
         "move-value",
         "group",
+        "for-owned",
+        "match-guard",
     ]
     .into_iter()
     .filter(|t| !tally.contains_key(t))
     .collect();
-    if WHILE_TRUE_BREAK {
+    if cfg.exit_percent > 0 {
+        missing.extend(
+            ["return", "return-move", "continue", "try", "pend"].into_iter().filter(|t| !tally.contains_key(t)),
+        );
+    }
+    if cfg.while_true_break {
         missing.extend(["spin-break", "break"].into_iter().filter(|t| !tally.contains_key(t)));
     }
     assert!(missing.is_empty(), "forms never generated: {missing:?}");

@@ -80,6 +80,17 @@ fn first_use(pkg: &Package, a: &Analysis, id: DefId) -> Option<Diagnostic> {
             Drop::Rest { at, root, .. } => {
                 (at, format!("taking `{}` out of `{}` drops the rest of it, which needs `Alloc`", src(at), root.name))
             }
+            Drop::Value { value, .. } => {
+                let at = ast.expr(value).span;
+                (at, format!("`{}` is dropped by an exit before it is consumed, which needs `Alloc`", src(at)))
+            }
+            Drop::IterRest { iter, early, .. } => {
+                let (at, what) = (
+                    ast.expr(iter).span,
+                    if early { "what it has not iterated and its container" } else { "its container" },
+                );
+                (at, format!("the `for` that consumes `{}` drops {what} when it is left, which needs `Alloc`", src(at)))
+            }
         });
     }
     uses.sort_by_key(|(s, _)| s.start);

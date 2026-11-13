@@ -1,0 +1,84 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§7", "§8.1", "§9.2", "§10", "§12.2"]
+
+// W6-02 U3/t, S-1037, R-32 (§5.4, §12.2): the contrasts of negative/drop_iter_rest.onsa and negative/drop_iter_rest_array.onsa. Every function is legal and stays legal after the
+// owned `for` drops the elements it has not iterated and the heap container when it is left: a fixed-length array that is iterated to its end (S-1037: "固定長の配列を終わりまで
+// 回せば残りは無い"; its container is no heap object), a `continue` (not an exit from the iterated value, S-1037), a `panic` that leaves the loop (§9.2, §12.2: "panic で抜ける道の、
+// 生きている値の破棄: 要らない"), a `break` or a `return` over elements that need no drop (a Copy element), a borrowed `for` (§5.4: no drop), a loop over a range, and a function
+// with `uses {Alloc}` (the drop is allowed). The helpers `sink` and `eat` are `rt` functions that drop their argument, so their own E0901 is reported (the same as
+// negative/drop_for_one_path.onsa). This version already accepts all of these. The callers are one-liners (S-783).
+
+pub rt fn sink(move b: Buf[F32]) {}   //~ E0901
+
+pub rt fn eat(move b: Buf[F32]) -> Bool { true }   //~ E0901
+
+// ------------------------------------------------------------------ a fixed-length array iterated to its end
+
+pub fn to_the_end(move xs: [Buf[F32]; 2]) { for s in move xs { sink(move s) } }
+
+pub rt fn rt_to_the_end(move xs: [Buf[F32]; 2]) { for s in move xs { sink(move s) } }
+
+pub rt fn rt_to_the_end_three(c: Bool, move xs: [Buf[F32]; 3]) { for s in move xs { if c { sink(move s) } else { sink(move s) } } }
+
+pub rt fn rt_to_the_end_nested(move xss: [[Buf[F32]; 2]; 2]) { for row in move xss { for s in move row { sink(move s) } } }
+
+pub rt fn rt_to_the_end_tuple(move ps: [(Buf[F32], Buf[F32]); 2]) { for (a, b) in move ps { if eat(move a) { sink(move b) } else { sink(move b) } } }
+
+// ------------------------------------------------------------------ `continue` is no exit from the iterated value
+
+pub rt fn rt_continue_after_move(move xs: [Buf[F32]; 2]) { for s in move xs { if eat(move s) { continue } else {} } }
+
+pub fn continue_after_move(move xs: [Buf[F32]; 2]) { for s in move xs { if eat(move s) { continue } else {} } }
+
+pub rt fn rt_continue_in_arm(n: U32, move xs: [Buf[F32]; 2]) { for s in move xs { if eat(move s) { match n { 0 => { continue }, _ => {} } } } }
+
+// ------------------------------------------------------------------ a `panic` leaves the loop: no drop of what is left
+
+pub rt fn rt_panic_break(move xs: [Buf[F32]; 2]) { for s in move xs { if eat(move s) { panic("x") } else {} } }
+
+pub fn panic_break(move xs: [Buf[F32]; 2]) { for s in move xs { if eat(move s) { panic("x") } else {} } }
+
+// ------------------------------------------------------------------ an element that needs no drop
+
+pub rt fn rt_copy_break(c: Bool, move ks: [U32; 4]) { for k in move ks { if c && k > 0 { break } } }
+
+pub rt fn rt_copy_return(c: Bool, move ks: [U32; 4]) { for k in move ks { if c && k > 0 { return } } }
+
+pub rt fn rt_copy_pairs(c: Bool, move ps: [(U32, F32); 2]) { for (k, g) in move ps { if c && k > 0 && g > 0.0 { break } } }
+
+pub rt fn rt_range_break(c: Bool, n: U32) { for i in 0 ..< n { if c && i > 0 { break } } }
+
+pub rt fn rt_range_return(c: Bool, n: U32) { for i in 0 ..< n { if c && i > 0 { return } } }
+
+// ------------------------------------------------------------------ a borrowed `for` drops nothing
+
+pub fn borrowed_break(c: Bool, xs: [Buf[F32]; 2]) { for s in xs { if c && s.len() > 0 { break } } }
+
+pub rt fn rt_borrowed_break(c: Bool, xs: [Buf[F32]; 2]) { for s in xs { if c && s.len() > 0 { break } } }
+
+pub rt fn rt_borrowed_return(c: Bool, xs: [Buf[F32]; 2]) { for s in xs { if c && s.len() > 0 { return } } }
+
+pub rt fn rt_borrowed_buf_break(xs: Buf[F32]) { for s in xs { if s > 0.0 { break } } }
+
+pub rt fn rt_borrowed_buf_end(xs: Buf[F32]) { for s in xs { if s > 0.0 {} } }
+
+pub rt fn rt_borrowed_array_break(xs: Array[F32]) { for s in xs { if s > 0.0 { break } } }
+
+pub rt fn rt_borrowed_array_end(xs: Array[F32]) { for s in xs { if s > 0.0 {} } }
+
+pub rt fn rt_borrowed_array_nested(c: Bool, xs: Array[F32]) { for s in xs { for t in xs { if c && s > t { return } } } }
+
+// ------------------------------------------------------------------ `uses {Alloc}`: the drop of the rest and of the container is allowed
+
+pub fn alloc_buf_end(move xs: Buf[F32]) uses {Alloc} { for s in move xs { if s > 0.0 {} } }
+
+pub fn alloc_buf_break(move xs: Buf[F32]) uses {Alloc} { for s in move xs { if s > 0.0 { break } } }
+
+pub fn alloc_rest_break(move xs: [Buf[F32]; 2]) uses {Alloc} { for s in move xs { if eat(move s) { break } else {} } }
+
+pub fn alloc_rest_return(c: Bool, move xs: [Buf[F32]; 2]) uses {Alloc} { for s in move xs { if c { return sink(move s) } else { sink(move s) } } }
+
+pub fn alloc_array_end(move xs: Array[F32]) uses {Alloc} { for s in move xs { if s > 0.0 {} } }
+
+pub fn alloc_array_borrowed(xs: Array[F32]) uses {Alloc} { for s in move xs { if s > 0.0 { break } } }

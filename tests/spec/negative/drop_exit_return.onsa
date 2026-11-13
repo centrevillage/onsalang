@@ -1,0 +1,107 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§7", "§8.1", "§9.2", "§10", "§12.2"]
+
+// W6-02 U3/t, R-32 (§12.2: "所有する Shared 値・`Buf` と、それらを含む値の破棄: 要る"; §8.1: 暗黙の `Alloc` に所有する値の破棄を含む;
+// §10 rule 1; §5.4: a binding of `move` is "所有 / 起きる", and the drop of what an arm or an iteration did not bind is "`return`・`break`・
+// `continue`・`?` で出るときを含む"): a `return` leaves the function, so every owned local that may be alive where it is written is dropped
+// there, and the drop needs `Alloc`. A function without `uses {Alloc}` is an E0601 and an `rt fn` an E0901 (the code of a drop in an `rt fn`
+// of this version, the same as negative/drop_end_one_path.onsa). The local is a parameter, the binding of an arm of an owned `match`, or a
+// `move self`; the `return` is in the branch of an `if`, in the arm of a `match`, in the loop `while true` (the only loop that a function
+// can end with a value, where every path returns), after a `panic` path, or without a value. The other path moves the local, so that the
+// drop at the `return` is the only one (the function ends with the local moved on every other path). This version counts no drop at a
+// `return` (the early exits are U3), so none of these is reported today. The `return` that carries the local out (`return Some(move b)`),
+// the `uses {Alloc}`, the borrowed and Copy locals are in negative/drop_exit_contrast.onsa. The functions are one-liners, so that the line
+// does not depend on where the drop is reported (S-783). One error per function (P-01), also where two `return`s drop the same local.
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub rt fn sink(move b: Buf[F32]) {}   //~ E0901
+
+impl Holder {
+  pub fn keep_early(move self, c: Bool) -> Option[Holder] { if c { return None } else { Some(move self) } }   //~ E0601
+  pub rt fn rt_keep_early(move self, c: Bool) -> Option[Holder] { if c { return None } else { Some(move self) } }   //~ E0901
+}
+
+// ------------------------------------------------------------------ the branch of an `if`
+
+pub fn in_then(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { return None } else { Some(move b) } }   //~ E0601
+
+pub rt fn rt_in_then(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { return None } else { Some(move b) } }   //~ E0901
+
+pub fn in_else(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { Some(move b) } else { return None } }   //~ E0601
+
+pub rt fn rt_in_else(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { Some(move b) } else { return None } }   //~ E0901
+
+pub fn in_nested(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { if d { return None } else { Some(move b) } } else { Some(move b) } }   //~ E0601
+
+pub rt fn rt_in_nested(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { Some(move b) } else { if d { Some(move b) } else { return None } } }   //~ E0901
+
+pub fn in_chain(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { Some(move b) } else if d { return None } else { Some(move b) } }   //~ E0601
+
+pub rt fn rt_in_chain(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { return None } else if d { Some(move b) } else { Some(move b) } }   //~ E0901
+
+pub fn two_returns(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { return None } else if d { return None } else { Some(move b) } }   //~ E0601
+
+pub rt fn rt_two_returns(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { return None } else if d { return None } else { Some(move b) } }   //~ E0901
+
+// ------------------------------------------------------------------ the arm of a `match`
+
+pub fn in_arm(n: U32, move b: Buf[F32]) -> Option[Buf[F32]] { match n { 0 => { return None }, _ => Some(move b) } }   //~ E0601
+
+pub rt fn rt_in_arm(n: U32, move b: Buf[F32]) -> Option[Buf[F32]] { match n { 0 => Some(move b), _ => { return None } } }   //~ E0901
+
+pub fn in_one_of_three(n: U32, move b: Buf[F32]) -> Option[Buf[F32]] { match n { 0 => Some(move b), 1 => { return None }, _ => Some(move b) } }   //~ E0601
+
+pub rt fn rt_in_one_of_three(n: U32, move b: Buf[F32]) -> Option[Buf[F32]] { match n { 0 => { return None }, 1 => Some(move b), _ => Some(move b) } }   //~ E0901
+
+pub fn in_arm_of_branch(c: Bool, n: U32, move b: Buf[F32]) -> Option[Buf[F32]] { if c { match n { 0 => { return None }, _ => Some(move b) } } else { Some(move b) } }   //~ E0601
+
+// ------------------------------------------------------------------ the loop `while true`
+
+pub fn in_loop(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { while true { if c { return None } else { return Some(move b) } } }   //~ E0601
+
+pub rt fn rt_in_loop(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { while true { if c { return None } else { return Some(move b) } } }   //~ E0901
+
+pub fn in_loop_arms(n: U32, move b: Buf[F32]) -> Option[Buf[F32]] { while true { match n { 0 => { return None }, _ => { return Some(move b) } } } }   //~ E0601
+
+pub rt fn rt_in_loop_arms(n: U32, move b: Buf[F32]) -> Option[Buf[F32]] { while true { match n { 0 => { return Some(move b) }, _ => { return None } } } }   //~ E0901
+
+// ------------------------------------------------------------------ a `return` without a value, the other values that are owned
+
+pub fn without_value(c: Bool, move b: Buf[F32]) { if c { return } else { sink(move b) } }   //~ E0601
+
+pub rt fn rt_without_value(c: Bool, move b: Buf[F32]) { if c { return } else { sink(move b) } }   //~ E0901
+
+pub fn option_param(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { if c { return None } else { o } }   //~ E0601
+
+pub rt fn rt_option_param(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { if c { return None } else { o } }   //~ E0901
+
+pub fn struct_param(c: Bool, move h: Holder) -> Option[Holder] { if c { return None } else { Some(move h) } }   //~ E0601
+
+pub rt fn rt_struct_param(c: Bool, move h: Holder) -> Option[Holder] { if c { return None } else { Some(move h) } }   //~ E0901
+
+pub fn array_param(c: Bool, move xs: [Buf[F32]; 2]) -> Option[[Buf[F32]; 2]] { if c { return None } else { Some(move xs) } }   //~ E0601
+
+pub rt fn rt_array_param(c: Bool, move xs: [Buf[F32]; 2]) -> Option[[Buf[F32]; 2]] { if c { return None } else { Some(move xs) } }   //~ E0901
+
+// ------------------------------------------------------------------ the binding of an arm of an owned `match`
+
+pub fn arm_binding(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) => if c { return None } else { Some(move v) }, None => None } }   //~ E0601
+
+pub rt fn rt_arm_binding(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) => if c { return None } else { Some(move v) }, None => None } }   //~ E0901
+
+pub fn arm_binding_whole(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { match move b { t => if c { return None } else { Some(move t) } } }   //~ E0601
+
+pub rt fn rt_arm_binding_whole(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { match move b { t => if c { Some(move t) } else { return None } } }   //~ E0901
+
+pub fn arm_binding_struct(c: Bool, move o: Option[Holder]) -> Option[Holder] { match move o { Some(h) => if c { return None } else { Some(move h) }, None => None } }   //~ E0601
+
+// ------------------------------------------------------------------ a path that panics in between (the path that returns with the local alive is the error)
+
+pub fn with_panic(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { return None } else if d { panic("x") } else { Some(move b) } }   //~ E0601
+
+pub rt fn rt_with_panic(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { panic("x") } else if d { return None } else { Some(move b) } }   //~ E0901

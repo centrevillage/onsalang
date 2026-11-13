@@ -59,12 +59,13 @@ impl Walker<'_> {
         if receiver.is_none() {
             self.expr(r, callee, Pos::Read);
         }
-        let start = self.inside.changes.len();
+        let (start, values) = (self.inside.changes.len(), r.items());
         self.inside.calls += 1;
         match receiver {
             Some((base, Mode::Move)) => {
                 self.inside.direct = place_of(self.ast, self.names, base).is_some();
-                self.expr(r, base, Pos::Extract)
+                self.expr(r, base, Pos::Extract);
+                self.waits(r, base);
             }
             Some((base, Mode::Inout)) => self.write_place(r, base, How::Bang),
             Some((base, m)) => self.expr(r, base, Pos::Arg(m)),
@@ -78,7 +79,12 @@ impl Walker<'_> {
             let outer = replace(&mut self.inside.excuse, excuse.map(|&(_, l)| (l, span)));
             self.arg(r, a, t);
             self.inside.excuse = outer;
+            // Taken by value, it waits for the arguments after it (A-1).
+            if matches!(t, Takes::Param(Mode::Move, _) | Takes::Element) && a.mode != Mode::Inout {
+                self.waits(r, a.expr);
+            }
         }
+        r.forget(values);
         self.inside.calls -= 1;
         self.changed_in_args(start, &passed);
         for (place, at) in replace(&mut self.inside.after_call, outer) {

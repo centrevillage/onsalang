@@ -259,7 +259,7 @@ pub struct BodyInfo {
 
 /// A drop point of a body: where (`at`, by what it drops: of an `End` the
 /// empty span at the end of the scope, of a `Rest` the expression that takes
-/// out), of what, in the innermost anonymous function (`closure`; the
+/// out, of the others the exit, the end of a `for` its value), of what, in the innermost anonymous function (`closure`; the
 /// readers count it as the function's, W6-02), and whether the value is
 /// live on every path that reaches it (`sure`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -277,8 +277,16 @@ pub enum Dropped {
     /// of a `for` and its pattern's bindings, a body and the parameters of a
     /// function or an anonymous function).
     End(LocalId),
+    /// An owned local an exit leaves (`return`, `?`, `break`, `continue`).
+    Exit(LocalId),
     /// What is left where a path of fields is taken out at `at` (S-85).
     Rest(Taken),
+    /// The value of an operand an exit leaves before its consumer runs (A-1).
+    Value(ExprId),
+    /// The rest of the value `iter` an owned `for` iterates (S-1037): at its
+    /// end its container; left `early` (a `break`, a `return`, a `?`), the
+    /// elements not iterated too.
+    IterRest { iter: ExprId, early: bool },
 }
 
 /// A path of fields taken out of the owned local `root` (S-85).

@@ -1,0 +1,203 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§5.4", "§7", "§8.1", "§9.1", "§9.2", "§10", "§12.2"]
+
+// W6-02 U3/t, R-32 (§12.2, §9.2, §7): the contrasts of negative/drop_exit_return.onsa, negative/drop_exit_try.onsa, negative/drop_exit_loop.onsa and negative/drop_exit_guard.onsa.
+// Every function is legal and stays legal after a drop is counted at the early exits (`return`, `?`, `break`, `continue`): a `return` that carries the local out
+// (`return Some(move b)`, where the value is not dropped), a local that is moved before the exit, a `panic` that leaves (§9.2, §12.2: "panic で抜ける道の、生きている値の
+// 破棄: 要らない"), a local that is borrowed or Copy (no drop), a function with `uses {Alloc}` (the drop is allowed), a local that the loop does not own (it is declared
+// before the loop, so that a `break` or a `continue` leaves it alive: the end of its own block drops it, §7), the `?` and the exits in a guard of a borrowed `match`
+// (nothing is owned) and the guard that does not leave. This version already accepts all of these. The helpers `sink` and `mk` are `rt` functions, and `sink` drops
+// its argument, so its own E0901 is reported (the same as negative/drop_for_one_path.onsa). The functions with a statement list are on several lines (no error
+// is expected, so the line of a drop does not matter, S-783).
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub rt fn sink(move b: Buf[F32]) {}   //~ E0901
+
+pub rt fn mk(i: U32) -> Option[Buf[F32]] { None }
+
+pub rt fn len_of(b: Buf[F32], n: U32) -> U32 { n }
+
+// ------------------------------------------------------------------ a `return` that carries the local out, a local moved before the exit
+
+pub rt fn return_moved(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { return Some(move b) } else { Some(move b) } }
+
+pub rt fn return_moved_else(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { Some(move b) } else { return Some(move b) } }
+
+pub rt fn return_moved_loop(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { while true { if c { return Some(move b) } else { return Some(move b) } } }
+
+pub rt fn return_moved_arms(n: U32, move b: Buf[F32]) -> Option[Buf[F32]] { match n { 0 => { return Some(move b) }, _ => Some(move b) } }
+
+pub rt fn return_option(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { if c { return o } else { o } }
+
+pub rt fn return_moved_unit(c: Bool, move b: Buf[F32]) { if c { return sink(move b) } else { sink(move b) } }
+
+pub rt fn return_arm_binding(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) => if c { return Some(move v) } else { Some(move v) }, None => None } }
+
+pub rt fn return_after_move(c: Bool, move b: Buf[F32]) -> Option[U32] {
+  sink(move b)
+  if c { return None } else { Some(1) }
+}
+
+pub rt fn try_after_move(r: Option[U32], move b: Buf[F32]) -> Option[U32] {
+  sink(move b)
+  Some(r?)
+}
+
+pub rt fn try_after_move_struct(r: Option[U32], move h: Holder) -> Option[U32] {
+  let Holder { buf: b, gain: _ } = move h
+  sink(move b)
+  Some(r?)
+}
+
+// ------------------------------------------------------------------ a `panic` leaves: no drop of what is alive
+
+pub rt fn panic_instead(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { panic("x") } else { Some(move b) } }
+
+pub rt fn panic_in_arm(n: U32, move b: Buf[F32]) -> Option[Buf[F32]] { match n { 0 => panic("x"), _ => Some(move b) } }
+
+pub fn panic_in_arm_binding(c: Bool, n: U32) { for i in 0 ..< n { match mk(i) { Some(v) => if c { panic("x") } else { sink(move v) }, None => {} } } }
+
+pub rt fn rt_panic_in_arm_binding(c: Bool, n: U32) { for i in 0 ..< n { match mk(i) { Some(v) => if c { panic("x") } else { sink(move v) }, None => {} } } }
+
+// ------------------------------------------------------------------ a borrowed or a Copy local: nothing to drop
+
+pub rt fn borrowed_return(c: Bool, b: Buf[F32]) -> Option[U32] { if c { return None } else { Some(b.len()) } }
+
+pub rt fn borrowed_try(r: Option[U32], b: Buf[F32]) -> Option[U32] { Some(len_of(b, r?)) }
+
+pub rt fn copy_return(c: Bool, n: U32) -> Option[U32] { if c { return None } else { Some(n) } }
+
+pub rt fn copy_try(r: Option[U32], n: U32) -> Option[U32] { Some(n + r?) }
+
+pub rt fn borrowed_match_try(r: Option[U32], q: Option[Buf[F32]]) -> Option[U32] { match q { Some(_) => Some(r?), None => None } }
+
+// ------------------------------------------------------------------ `uses {Alloc}`: the drop at the exit is allowed
+
+pub fn alloc_return(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] uses {Alloc} { if c { return None } else { Some(move b) } }
+
+pub fn alloc_try(r: Option[U32], move b: Buf[F32]) -> Option[Buf[F32]] uses {Alloc} { if r? > 0 { Some(move b) } else { Some(move b) } }
+
+pub fn alloc_arm_binding(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] uses {Alloc} { match move o { Some(v) => if c { return None } else { Some(move v) }, None => None } }
+
+pub fn alloc_continue(c: Bool, move xs: [Buf[F32]; 2]) uses {Alloc} { for s in move xs { if c { continue } else { sink(move s) } } }
+
+pub fn alloc_break(c: Bool, move xs: [Buf[F32]; 2]) uses {Alloc} { for s in move xs { if c { break } else { sink(move s) } } }
+
+pub fn alloc_break_arm(c: Bool, n: U32) uses {Alloc} { for i in 0 ..< n { match mk(i) { Some(v) => if c { break } else { sink(move v) }, None => {} } } }
+
+pub fn alloc_guard_try(r: Option[U32], move o: Option[Buf[F32]]) -> Option[Buf[F32]] uses {Alloc} { match move o { Some(v) if r? > 0 => Some(move v), Some(w) => Some(move w), None => None } }
+
+pub fn alloc_guard_return(d: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] uses {Alloc} { match move o { Some(v) if (if d { return None } else { true }) => Some(move v), Some(w) => Some(move w), None => None } }
+
+// ------------------------------------------------------------------ the loop does not own the local: a `break` and a `continue` leave it alive
+
+pub rt fn break_keeps_the_outer_local(n: U32, c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] {
+  for _ in 0 ..< n {
+    if c { break }
+  }
+  Some(move b)
+}
+
+pub rt fn continue_keeps_the_outer_local(n: U32, c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] {
+  for _ in 0 ..< n {
+    if c { continue }
+  }
+  Some(move b)
+}
+
+pub rt fn while_true_break_keeps_the_outer_local(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] {
+  while true {
+    if c { break }
+  }
+  Some(move b)
+}
+
+pub rt fn while_break_keeps_the_outer_local(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] {
+  while d {
+    if c { break } else { continue }
+  }
+  Some(move b)
+}
+
+pub rt fn inner_break_keeps_the_outer_binding(c: Bool, n: U32, move xs: [Buf[F32]; 2]) {
+  for s in move xs {
+    for _ in 0 ..< n {
+      if c { break }
+    }
+    sink(move s)
+  }
+}
+
+pub rt fn inner_continue_keeps_the_outer_arm_binding(c: Bool, n: U32, move o: Option[Buf[F32]]) {
+  match move o {
+    Some(v) => {
+      for _ in 0 ..< n {
+        if c { continue }
+      }
+      sink(move v)
+    },
+    None => {}
+  }
+}
+
+// ------------------------------------------------------------------ the local of the loop is moved before the exit
+
+pub rt fn break_after_move(n: U32) {
+  for i in 0 ..< n {
+    match mk(i) {
+      Some(v) => {
+        sink(move v)
+        break
+      },
+      None => {}
+    }
+  }
+}
+
+pub rt fn continue_after_move(n: U32) {
+  for i in 0 ..< n {
+    match mk(i) {
+      Some(v) => {
+        sink(move v)
+        continue
+      },
+      None => {}
+    }
+  }
+}
+
+pub rt fn continue_binding_after_move(move xs: [Buf[F32]; 2]) {
+  for s in move xs {
+    sink(move s)
+    continue
+  }
+}
+
+pub rt fn while_true_break_after_move(c: Bool, n: U32) {
+  while true {
+    match mk(n) {
+      Some(v) => {
+        sink(move v)
+        break
+      },
+      None => {
+        if c { break } else { continue }
+      }
+    }
+  }
+}
+
+// ------------------------------------------------------------------ the guard of a borrowed `match`, a guard that does not leave
+
+pub rt fn borrowed_guard_try(r: Option[U32], q: Option[Buf[F32]]) -> Option[U32] { Some(match q { Some(_) if r? > 0 => 1, _ => 0 }) }
+
+pub rt fn borrowed_guard_return(d: Bool, q: Option[Buf[F32]]) -> U32 { match q { Some(_) if (if d { return 7 } else { true }) => 1, _ => 0 } }
+
+pub rt fn copy_guard_try(r: Option[U32], move o: Option[U32]) -> Option[U32] { match move o { Some(n) if r? > n => Some(n), Some(m) => Some(m), None => None } }
+
+pub rt fn guard_that_stays(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) if c && v.len() > 0 => Some(move v), Some(w) => Some(move w), None => None } }

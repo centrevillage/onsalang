@@ -36,15 +36,15 @@ impl Walker<'_> {
             return;
         }
         self.uncapturable(e);
-        let (outer, changes) = (replace(r, Run::new()), self.inside.changes.len());
-        self.inside.frames.push(Frame { closure: e, read: Vec::new() });
-        self.expr(r, body, Pos::Return);
-        // The drop points of its parameters, at the end of its body (R-32).
+        // Its parameters, its outermost scope: their drop points at the end of its body (R-32).
         let ExprKind::Closure { params, .. } = &self.ast.expr(e).kind else { bug(None, "a closure that is not one") };
         let params: Vec<_> = (0..params.len() as u32)
             .filter_map(|param| self.origins.get(&Origin::Closure { closure: e, param }).copied())
             .collect();
-        self.ends(r, &params, self.ast.expr(body).span);
+        let (outer, changes) = (replace(r, Run::with(params)), self.inside.changes.len());
+        self.inside.frames.push(Frame { closure: e, read: Vec::new() });
+        self.expr(r, body, Pos::Return);
+        self.ends(r, 0, self.ast.expr(body).span);
         self.inside.frames.pop();
         // Its body is not evaluated with the arguments it may be in (S-799).
         self.inside.changes.truncate(changes);

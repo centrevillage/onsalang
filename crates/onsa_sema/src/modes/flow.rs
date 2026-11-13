@@ -10,6 +10,8 @@ use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast::{BinOp, ExprId, ExprKind, Mode, PatId, PatKind, StmtId, StmtKind};
 
 use super::check::Walker;
+use super::consume::Movable;
+use super::place::place_of;
 use super::state::{LoopSum, Paths, Trail};
 use super::walk::Pos;
 use super::write::How;
@@ -17,51 +19,69 @@ use crate::Kind;
 use crate::binding::{Head, HeadRow};
 use crate::body::{DropPoint, Dropped, LocalId, LocalKind};
 use crate::names::body::Origin;
+use crate::tails::literal_true;
 
-/// A walk's state, the innermost loop it is in, and the bindings declared
-/// in the blocks it is in (innermost last), which leave the table at the
-/// end of their block (no name reads them after it: the table stays small).
+/// A walk's state, the innermost loop it is in, and the items of the
+/// scopes it is in (innermost last): the bindings declared in its blocks,
+/// which leave the table at the end of their block (no name reads them
+/// after it: the table stays small), the parameters under them.
 pub(super) struct Run {
     pub(super) cur: Trail,
     exits: Exits,
-    declared: Vec<LocalId>,
+    declared: Vec<Item>,
+}
+
+/// What a scope or an exit leaves (R-32, §12.2): a binding; a value
+/// evaluated at a consuming position that waits for the operands after it
+/// (A-1); the rest of the iterated value of an owned `for` (S-1037).
+#[derive(Clone, Copy)]
+enum Item {
+    Local(LocalId),
+    Value(ExprId),
+    IterRest(ExprId),
 }
 
 /// The paths from the head of a loop (at the mark `at`) to its exit (`brk`:
 /// the end of the condition, the `break`s) and to its back edge (`cont`:
-/// the end of the body, the `continue`s).
+/// the end of the body, the `continue`s); the first item a `break` and a
+/// `continue` leave (`from`: the rest of an owned `for` is the `break`'s only).
 struct Exits {
     brk: Paths,
     cont: Paths,
     at: usize,
+    from: (usize, usize),
 }
 
 impl Run {
     pub(super) fn new() -> Self {
-        let exits = Exits { brk: Paths::none(), cont: Paths::none(), at: 0 };
-        Run { cur: Trail::new(), exits, declared: Vec::new() }
+        Run::with(Vec::new())
+    }
+
+    /// The walk of a body from its start, its parameters `params` in its
+    /// outermost scope (which a `return` and a `?` leave).
+    pub(super) fn with(params: Vec<LocalId>) -> Self {
+        let exits = Exits { brk: Paths::none(), cont: Paths::none(), at: 0, from: (0, 0) };
+        Run { cur: Trail::new(), exits, declared: params.into_iter().map(Item::Local).collect() }
     }
 
     fn declare(&mut self, l: LocalId) {
         self.cur.declare(l);
-        self.declared.push(l);
+        self.declared.push(Item::Local(l));
     }
 
-    /// The bindings declared after the first `outer` leave the table: their
-    /// block or arm ended.
-    fn forget(&mut self, outer: usize) {
-        for l in self.declared.split_off(outer) {
-            self.cur.change(l, |d| d.forget(l));
+    /// The items after the first `outer` leave: their block, arm or
+    /// consumption ended, and the bindings the table.
+    pub(super) fn forget(&mut self, outer: usize) {
+        for item in self.declared.split_off(outer) {
+            if let Item::Local(l) = item {
+                self.cur.change(l, |d| d.forget(l));
+            }
         }
     }
 
-    /// A `break` (`back`: a `continue`): the bindings declared in the loop
-    /// leave (no drop point until U3), then the state joins the loop's exit
-    /// (or its back edge).
-    fn leave(&mut self, back: bool) {
-        let paths = if back { &mut self.exits.cont } else { &mut self.exits.brk };
-        self.cur.join_into(self.exits.at, paths, true);
-        self.cur.stop();
+    /// The number of the items: where the values that wait for a consumer start.
+    pub(super) fn items(&self) -> usize {
+        self.declared.len()
     }
 }
 
@@ -81,7 +101,7 @@ impl Walker<'_> {
                 if let Some(t) = b.tail {
                     self.expr(r, t, pos);
                 }
-                self.ends(r, &r.declared[outer..], ast.expr(e).span);
+                self.ends(r, outer, ast.expr(e).span);
                 r.forget(outer);
             }
             ExprKind::If { cond, then, else_, .. } => {
@@ -122,7 +142,7 @@ impl Walker<'_> {
                         r.cur.join_into(m, &mut tried, true);
                     }
                     self.expr(r, arm.body, pos);
-                    self.ends(r, &r.declared[outer..], ast.expr(arm.body).span);
+                    self.ends(r, outer, ast.expr(arm.body).span);
                     r.forget(outer);
                     r.cur.join_into(m, &mut out, false);
                 }
@@ -163,15 +183,20 @@ impl Walker<'_> {
                 };
                 r.declare(l);
             }
-            // The value, then the target (§3.5).
+            // The value, then the target (§3.5), which it waits for (A-1).
             StmtKind::Assign { target, value } => {
+                let base = r.items();
                 self.expr(r, *value, Pos::Value);
+                self.waits(r, *value);
                 self.write_place(r, *target, How::Assign);
+                r.forget(base);
             }
             StmtKind::For { pat, moved, iter, body } => {
+                let range = matches!(ast.expr(*iter).kind, ExprKind::Range(_));
+                let head = self.head_pos(Head::For(s), Pos::Arg(Mode::Borrow));
                 match moved {
                     // S-362: a range has no value to consume (§7).
-                    Some(m) if matches!(ast.expr(*iter).kind, ExprKind::Range(_)) => {
+                    Some(m) if range => {
                         let message = "a range has no value to consume: `move` is not written on it (§7)";
                         let d = Diagnostic::new(Stage::Modes, Code::E0703, ast.expr(*iter).span, message);
                         self.report(d.with_fix(self.unmark(m.file, m.start, "move")));
@@ -179,28 +204,27 @@ impl Walker<'_> {
                     }
                     Some(m) => self.consume(r, *iter, Pos::Own, Some(m.start)),
                     None => {
-                        let head = self.head_pos(Head::For(s), Pos::Arg(Mode::Borrow));
                         if head != Pos::Own {
                             self.view_of_inout(*iter, [*pat]);
                         }
                         self.expr(r, *iter, head)
                     }
                 }
+                // The value an owned `for` iterates (S-1037), not Copy.
+                let ty = self.info.expr_types.get(iter).copied().filter(|_| head == Pos::Own && !range);
+                let rest = ty.is_some_and(|t| self.kind_of(t) != Some(Kind::Copy)).then_some(*iter);
                 let mut held = self.frame(Head::For(s));
-                self.holding(&mut held, |w| w.run_loop(r, s, (None, Some(*pat), *body)));
+                self.holding(&mut held, |w| w.run_loop(r, s, (None, Some(*pat), rest, *body)));
             }
-            StmtKind::While { cond, body } => {
-                self.run_loop(r, s, (Some(*cond), None, *body));
-                if self.info.diverging.forever(s) {
-                    r.cur.stop();
-                }
-            }
-            StmtKind::Break => r.leave(false),
-            StmtKind::Continue => r.leave(true),
+            // A `while true` with no `break` is left by no path (S-1042: `iterate`).
+            StmtKind::While { cond, body } => self.run_loop(r, s, (Some(*cond), None, None, *body)),
+            StmtKind::Break => self.leave(r, false, ast.stmt(s).span),
+            StmtKind::Continue => self.leave(r, true, ast.stmt(s).span),
             StmtKind::Return(x) => {
                 if let Some(x) = x {
                     self.expr(r, *x, Pos::Return);
                 }
+                self.drops(r, 0, ast.stmt(s).span, true);
                 r.cur.stop();
             }
             StmtKind::Assert(x) | StmtKind::Expr(x) => self.expr(r, *x, Pos::Read),
@@ -230,13 +254,14 @@ impl Walker<'_> {
                 self.reports = reports;
                 let exit = run.cur.state().clone();
                 run.cur.reset(0, &back);
-                let back = run.cur.state().clone();
-                let sum = LoopSum { exit: LoopSum::head(&back).then(&exit), back };
+                let (back, leaves) = (run.cur.state().clone(), run.exits.brk.reaches() || run.exits.cont.reaches());
+                let sum = LoopSum { exit: LoopSum::head(&back).then(&exit), back, leaves };
                 self.m.loops.insert(s, sum.clone());
                 sum
             }
         };
-        if self.reports {
+        // One whose condition leaves the loop around is walked, its paths to that loop's exits too.
+        if self.reports || sum.leaves {
             r.cur.then(&LoopSum::head(&sum.back));
             self.iterate(r, parts);
         } else {
@@ -245,57 +270,112 @@ impl Walker<'_> {
     }
 
     /// One iteration of a loop from its head in `r`, which it leaves at the
-    /// exit (the end of the condition of a `while`, the head of a `for`, a
-    /// `break`); the paths from the head to the back edge (the end of the
-    /// body, a `continue`). A `for` declares its pattern at each iteration
-    /// (R-29), whose bindings end with it (R-32: their drop points).
-    fn iterate(&mut self, r: &mut Run, (cond, pat, body): Loop) -> Paths {
-        let exits = Exits { brk: Paths::none(), cont: Paths::none(), at: r.cur.mark() };
-        let outer = replace(&mut r.exits, exits);
+    /// exit (the end of the condition of a `while` but the literal `true`,
+    /// S-1042; the head of a `for`; a `break`); the paths from the head to
+    /// the back edge (the end of the body, a `continue`). A `for` declares
+    /// its pattern at each iteration (R-29), whose bindings end with it
+    /// (R-32: their drop points); an owned one, the rest of the value it
+    /// iterates `rest` in the scope a `break` leaves (S-1037).
+    fn iterate(&mut self, r: &mut Run, (cond, pat, rest, body): Loop) -> Paths {
+        let from = r.declared.len();
+        r.declared.extend(rest.map(Item::IterRest));
+        let (scope, at) = (r.declared.len(), r.cur.mark());
+        // Out of the body: a `break` or a `continue` in it is the outer loop's (§7).
         if let Some(c) = cond {
             self.expr(r, c, Pos::Read);
         }
-        r.cur.join_into(r.exits.at, &mut r.exits.brk, false);
-        let scope = r.declared.len();
+        let exits = Exits { brk: Paths::none(), cont: Paths::none(), at, from: (from, scope) };
+        let outer = replace(&mut r.exits, exits);
+        // The end of an owned `for` drops the container of its value (S-1037).
+        if let Some(x) = rest {
+            self.drop_point(r, self.ast.expr(x).span, Dropped::IterRest { iter: x, early: false }, true);
+        }
+        if !cond.is_some_and(|c| literal_true(self.ast, c)) {
+            r.cur.join_into(r.exits.at, &mut r.exits.brk, false);
+        }
         if let Some(p) = pat {
             self.declare(r, p);
         }
         self.expr(r, body, Pos::Read);
-        self.ends(r, &r.declared[scope..], self.ast.expr(body).span);
-        r.forget(scope);
-        let Exits { brk, mut cont, at } = replace(&mut r.exits, outer);
+        self.ends(r, scope, self.ast.expr(body).span);
+        r.forget(from);
+        let Exits { brk, mut cont, at, .. } = replace(&mut r.exits, outer);
         r.cur.join_into(at, &mut cont, false);
         r.cur.settle(at, &brk);
         cont
     }
 
-    /// The drop points at the end of `scope`, of the locals `ls` it ends
-    /// (R-32, §12.2): each owned one that may be live there, not Copy; none
-    /// where no path reaches (S-873).
-    pub(super) fn ends(&mut self, r: &Run, ls: &[LocalId], scope: Span) {
-        let info = self.info;
-        for &l in ls {
-            let local = &info.locals[l.0 as usize];
-            if !local.state.owned() {
-                continue;
-            }
-            if let Some(sure) = r.cur.state().lives(l)
-                && self.kind_of(local.ty) != Some(Kind::Copy)
-            {
-                self.drop_point(r, Span::empty(scope.file, scope.end), Dropped::End(l), sure);
-            }
+    /// A `break` (`back`: a `continue`) at `at`: the drop points of what it
+    /// leaves, then the bindings declared in the loop leave the table with
+    /// no other (`Trail::join_into`), and the state joins the loop's exit (or
+    /// its back edge).
+    fn leave(&mut self, r: &mut Run, back: bool, at: Span) {
+        self.drops(r, if back { r.exits.from.1 } else { r.exits.from.0 }, at, true);
+        let paths = if back { &mut r.exits.cont } else { &mut r.exits.brk };
+        r.cur.join_into(r.exits.at, paths, true);
+        r.cur.stop();
+    }
+
+    /// The drop points at the end of `scope`, of the items after the first
+    /// `outer`: its bindings.
+    pub(super) fn ends(&mut self, r: &Run, outer: usize, scope: Span) {
+        self.drops(r, outer, Span::empty(scope.file, scope.end), false);
+    }
+
+    /// The drop points of the items after the first `from`, which the end
+    /// of their scope or an exit at `at` (`exit`: a `return`, a `?`, a
+    /// `break`, a `continue`) leaves (R-32, §12.2): each owned binding that
+    /// may be live there, not Copy; a value that waits (A-1); the rest of an
+    /// owned `for` (S-1037); none where no path reaches (S-873). The one
+    /// place that decides them.
+    pub(super) fn drops(&mut self, r: &Run, from: usize, at: Span, exit: bool) {
+        for i in from..r.declared.len() {
+            let (what, sure) = match r.declared[i] {
+                Item::Local(l) => {
+                    let local = &self.info.locals[l.0 as usize];
+                    let lives = r.cur.state().lives(l).filter(|_| local.state.owned());
+                    let Some(sure) = lives.filter(|_| self.kind_of(local.ty) != Some(Kind::Copy)) else { continue };
+                    (if exit { Dropped::Exit(l) } else { Dropped::End(l) }, sure)
+                }
+                Item::Value(e) => (Dropped::Value(e), true),
+                Item::IterRest(e) => (Dropped::IterRest { iter: e, early: true }, true),
+            };
+            self.drop_point(r, at, what, sure);
         }
+    }
+
+    /// The operand `e`, walked at a consuming position of a call, a literal
+    /// or an assignment: its value, owned and Affine (a moved place, a new
+    /// value), waits there for the operands after it (A-1), until the
+    /// consumer runs (`Run::forget`). Of a Dup value, U4a.
+    pub(super) fn waits(&mut self, r: &mut Run, e: ExprId) {
+        let mut x = self.ast.without_parens(e);
+        while let ExprKind::Move(y) = &self.ast.expr(x).kind {
+            x = self.ast.without_parens(*y);
+        }
+        let Some(&ty) = self.info.expr_types.get(&x) else { return };
+        let owned = match place_of(self.ast, self.names, x) {
+            Some(p) => self.movable(&p, ty) == Some(Movable::Owned),
+            None => self.kind_of(ty) == Some(Kind::Affine),
+        };
+        if owned {
+            r.declared.push(Item::Value(x));
+        }
+    }
+
+    /// The parameters of the body: its outermost scope ([`Run::with`]).
+    pub(super) fn params(&self) -> Vec<LocalId> {
+        let info = self.info;
+        let params = (0..info.locals.len() as u32).map(LocalId);
+        params
+            .filter(|l| matches!(info.locals[l.0 as usize].kind, LocalKind::Param(_) | LocalKind::SelfParam(_)))
+            .collect()
     }
 
     /// The end of the body `root` walked in `r`: the drop points of the
     /// parameters.
     pub(super) fn body_end(&mut self, r: &Run, root: ExprId) {
-        let info = self.info;
-        let params = (0..info.locals.len() as u32).map(LocalId);
-        let params: Vec<_> = params
-            .filter(|l| matches!(info.locals[l.0 as usize].kind, LocalKind::Param(_) | LocalKind::SelfParam(_)))
-            .collect();
-        self.ends(r, &params, self.ast.expr(root).span);
+        self.ends(r, 0, self.ast.expr(root).span);
     }
 
     /// A drop point met by the walk that reports, where a path reaches.
@@ -330,6 +410,6 @@ impl Walker<'_> {
     }
 }
 
-/// The parts of a loop: the condition of a `while`, the pattern of a `for`,
-/// the body.
-type Loop = (Option<ExprId>, Option<PatId>, ExprId);
+/// The parts of a loop: the condition of a `while`, the pattern of a `for`
+/// and the value an owned one iterates, the body.
+type Loop = (Option<ExprId>, Option<PatId>, Option<ExprId>, ExprId);

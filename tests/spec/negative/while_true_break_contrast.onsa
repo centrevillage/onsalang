@@ -1,0 +1,117 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§7", "§8.1"]
+
+// W6-02 U3/t, S-1042 (§7: "`break` を含む `while true` を抜けるのは `break` だけで、条件が偽になって抜ける道は無い。ループの後の値の状態（移した値、破棄）は `break` の時点の状態から決まる";
+// "定数（`while ALWAYS`）や式（`while 1 == 1`）の条件は対象外"; §5.2: a moved local cannot be used again, E0704): the loops that keep the path on which the condition is false, and the
+// reads that stay moved. A `while c` (the condition is a variable), a `while ALWAYS` (the condition is a constant) and a `while 1 == 1` (the condition is an expression) are left
+// by the condition too, so the `var` that the body gave a new value before the `break` is still moved on that path and the read after the loop is an E0704 (the line
+// of a drop would depend on S-783, so the read stands for the path: the moved local that looks alive after such a loop is dropped there, which is in the model
+// test `drop_path_model`). A `while true` is left by the `break` only, so a local that the body moved before the `break` is moved after the loop and a read of it is an
+// E0704, and a local that the loop did not move is alive after it and may be read. This version already reports exactly these. The helper `sink` is an `rt` function that
+// drops its argument, so its own E0901 is reported (the same as negative/drop_for_one_path.onsa).
+
+const ALWAYS: Bool = true
+
+pub rt fn sink(move b: Buf[F32]) {}   //~ E0901
+
+// ------------------------------------------------------------------ a condition that is not the literal `true` keeps the path on which it is false
+
+pub fn while_variable(c: Bool, move a: Buf[F32]) -> Buf[F32] uses {Alloc} {
+  var b = move a
+  sink(move b)
+  while c {
+    b = Buf.zeroed(1)
+    break
+  }
+  b   //~ E0704
+}
+
+pub fn while_constant(move a: Buf[F32]) -> Buf[F32] uses {Alloc} {
+  var b = move a
+  sink(move b)
+  while ALWAYS {
+    b = Buf.zeroed(1)
+    break
+  }
+  b   //~ E0704
+}
+
+pub fn while_expression(move a: Buf[F32]) -> Buf[F32] uses {Alloc} {
+  var b = move a
+  sink(move b)
+  while 1 == 1 {
+    b = Buf.zeroed(1)
+    break
+  }
+  b   //~ E0704
+}
+
+pub fn while_false(move a: Buf[F32]) -> Buf[F32] uses {Alloc} {
+  var b = move a
+  sink(move b)
+  while false {
+    b = Buf.zeroed(1)
+    break
+  }
+  b   //~ E0704
+}
+
+pub fn while_variable_in_the_branch(c: Bool, d: Bool, move a: Buf[F32]) -> Buf[F32] uses {Alloc} {
+  var b = move a
+  sink(move b)
+  while d {
+    if c {
+      b = Buf.zeroed(1)
+      break
+    }
+  }
+  b   //~ E0704
+}
+
+// ------------------------------------------------------------------ the local that the loop moved is moved after the loop
+
+pub fn read_after_the_move(move a: Buf[F32]) {
+  while true {
+    sink(move a)
+    break
+  }
+  if a.len() > 0 {}   //~ E0704
+}
+
+pub fn read_after_the_move_in_the_branch(c: Bool, move a: Buf[F32]) {
+  while true {
+    if c {
+      sink(move a)
+      break
+    } else {
+      continue
+    }
+  }
+  if a.len() > 0 {}   //~ E0704
+}
+
+pub fn read_after_the_move_of_a_var(move a: Buf[F32]) {
+  var b = move a
+  while (true) {
+    sink(move b)
+    break
+  }
+  if b.len() > 0 {}   //~ E0704
+}
+
+// ------------------------------------------------------------------ the local that the loop did not move is alive after it
+
+pub fn read_after_the_loop(c: Bool, move a: Buf[F32]) -> Buf[F32] {
+  while true {
+    if c { break }
+  }
+  a
+}
+
+pub rt fn rt_read_after_the_loop(c: Bool, move a: Buf[F32]) -> Buf[F32] {
+  while true {
+    if c { break } else { continue }
+  }
+  a
+}

@@ -38,7 +38,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
         };
         let _scope = onsa_diag::internal::item_scope(a.def(id).span);
         let mut w = Walker::new(a, (&module.parsed.ast, &module.text), (names, info, root), generics_of(a, id));
-        let mut run = Run::new();
+        let mut run = Run::with(w.params());
         w.expr(&mut run, root, Pos::Return);
         w.body_end(&run, root);
         found.extend(w.m.found.into_iter().min_by(|x, y| x.order_in_file().cmp(&y.order_in_file())));

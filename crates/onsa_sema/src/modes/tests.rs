@@ -91,8 +91,8 @@ fn moved(a: &crate::Analysis, def: crate::DefId) -> BTreeSet<String> {
     let info = &a.bodies[&def];
     let ends: BTreeSet<_> = (info.drops.iter())
         .filter_map(|d| match d.what {
-            crate::body::Dropped::End(l) => Some(l),
-            crate::body::Dropped::Rest(_) => None,
+            crate::body::Dropped::End(l) | crate::body::Dropped::Exit(l) => Some(l),
+            _ => None,
         })
         .collect();
     let generics = crate::body::generics_of(a, def);
@@ -193,6 +193,39 @@ fn a_var_assigned_again_is_live() {
 }
 ";
     assert_eq!(diags(src), []);
+}
+
+/// §7: the condition of an inner `while` is out of its body, so a `break`
+/// or a `continue` in it is the outer loop's, also where the outer loop is
+/// walked by a summary (S-1042: a `while true` is left by its `break`s only).
+#[test]
+fn a_break_in_the_condition_of_an_inner_loop_leaves_the_outer() {
+    let src = "pub fn by_break(c: Bool, move a: Buf[F32]) uses {Alloc} {
+  take(move a)
+  while true {
+    while (if c { break } else { false }) {}
+  }
+  take(move a)
+}
+pub fn by_continue(c: Bool, d: Bool, move a: Buf[F32]) uses {Alloc} {
+  var x = move a
+  while d {
+    take(move x)
+    while (if c { continue } else { false }) {}
+    x = mk()
+  }
+}
+pub fn nested(c: Bool, d: Bool, move a: Buf[F32]) uses {Alloc} {
+  var x = move a
+  while d {
+    take(move x)
+    while true {
+      while (if c { break } else { false }) {}
+    }
+  }
+}
+";
+    assert_eq!(diags(src), [at(6, MOVED), at(11, BY_LOOP), at(19, BY_LOOP)]);
 }
 
 #[test]
@@ -3436,7 +3469,7 @@ pub fn points(c: Bool, move a: Buf[F32], move b: Buf[F32], n: U32) -> U32 uses {
     let points: Vec<_> = (info.drops.iter())
         .map(|d| match d.what {
             crate::body::Dropped::End(l) => (info.locals[l.0 as usize].name.as_str(), d.sure, d.closure.is_some()),
-            crate::body::Dropped::Rest(_) => panic!("no field is taken out"),
+            _ => panic!("no field is taken out, no exit"),
         })
         .collect();
     assert_eq!(points, [("d", true, false), ("x", false, true), ("a", false, false), ("b", true, false)]);
@@ -3462,12 +3495,46 @@ pub fn guarded(move o: Option[Buf[F32]]) -> U32 uses {Alloc} {
         let info = &a.bodies[&def(&a, n)];
         let name = |d: &crate::body::DropPoint| match d.what {
             crate::body::Dropped::End(l) => info.locals[l.0 as usize].name.clone(),
-            crate::body::Dropped::Rest(_) => panic!("no field is taken out"),
+            crate::body::Dropped::IterRest { early: false, .. } => "the end of the `for`".to_string(),
+            _ => panic!("no field is taken out, no exit"),
         };
         (info.drops.iter()).map(|d| (name(d), &src[d.at.start as usize - 1..d.at.end as usize])).collect::<Vec<_>>()
     };
-    assert_eq!(at_of("each"), [("s".to_string(), "}")]);
+    // The end of the `for` drops the container of `xs` at its head (S-1037: a fixed-length array has none, `drop_alloc`).
+    assert_eq!(at_of("each"), [("the end of the `for`".to_string(), " xs"), ("s".to_string(), "}")]);
     assert_eq!(at_of("guarded"), [("b".to_string(), ")")]);
+}
+
+/// R-32 (§5.4, §9.1, §12.2), A-1, S-1037: an exit drops what it leaves, at
+/// the exit: a `?` the values that wait for it (`move b`, an argument of
+/// `wrap`); a `break` the rest of an owned `for` and the binding alive; a
+/// `continue` the binding only. The end of an owned `for` drops its
+/// container, at its value (a fixed-length array has none: `drop_alloc`).
+#[test]
+fn the_drop_points_of_the_exits() {
+    let (src, a, def) = clean(
+        "pub fn wrap(move b: Buf[F32], n: U32) -> Option[Buf[F32]] uses {Alloc} { Some(move b) }
+pub fn early(r: Option[U32], move b: Buf[F32]) -> Option[Option[Buf[F32]]] uses {Alloc} { Some(wrap(move b, r?)) }
+pub fn loops(c: Bool, move xs: [Buf[F32]; 2]) uses {Alloc} {
+  for s in move xs { if c { break } else if len_of(s) > 0 { continue } else { take(move s) } }
+}
+",
+    );
+    use crate::body::Dropped;
+    let at_of = |n: &str| {
+        let info = &a.bodies[&def(&a, n)];
+        let what = |d: &crate::body::DropPoint| match d.what {
+            Dropped::Exit(l) => info.locals[l.0 as usize].name.clone(),
+            Dropped::Value(_) => "a value".to_string(),
+            Dropped::IterRest { early, .. } => format!("the rest, early: {early}"),
+            _ => panic!("no other point"),
+        };
+        (info.drops.iter()).map(|d| (what(d), &src[d.at.start as usize..d.at.end as usize])).collect::<Vec<_>>()
+    };
+    assert_eq!(at_of("early"), [("a value".to_string(), "r?")]);
+    let rest = |early: bool| format!("the rest, early: {early}");
+    let s = || "s".to_string();
+    assert_eq!(at_of("loops"), [(rest(false), "xs"), (rest(true), "break"), (s(), "break"), (s(), "continue")]);
 }
 
 /// S-85 (§5.2): a field taken out is kept once (a loop's summary walks it
@@ -3492,7 +3559,7 @@ pub fn t(n: U32) uses {Alloc} {
     let taken: Vec<_> = (info.drops.iter())
         .filter_map(|d| match &d.what {
             crate::body::Dropped::Rest(t) => Some((d.at, t)),
-            crate::body::Dropped::End(_) => None,
+            _ => None,
         })
         .map(|(at, t)| {
             (&src[at.start as usize..at.end as usize], info.locals[t.root.0 as usize].name.as_str(), &t.path)
@@ -3566,7 +3633,7 @@ pub fn of_t[T: ?Dup](move g: G[T]) -> Buf[F32] uses {Alloc} { g.a }
         use crate::drop_alloc::{Drop, alloc_drops};
         let rests = alloc_drops(&a, &a.bodies[&def(&a, n)]).filter_map(|d| match d {
             Drop::Rest { at, root, .. } => Some((at, root.name.clone())),
-            Drop::Local(_) => None,
+            _ => None,
         });
         let found: Vec<_> = rests.collect();
         assert!(found.iter().all(|(at, _)| src[..at.start as usize].ends_with("{ ")), "{found:?}");

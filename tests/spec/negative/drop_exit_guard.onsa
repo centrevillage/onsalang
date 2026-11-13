@@ -1,0 +1,61 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.4", "§7", "§8.1", "§9.1", "§10", "§12.2"]
+
+// W6-02 U3/t, R-32 (§7: "所有の `match` ... のガードでは、その腕の束縛を消費できない ... 腕が選ばれるまで対象の値は一つのままで、ガードが偽なら後の腕が同じ値で判定される";
+// "部分式の位置のうち外は、`&&`・`||` の右と `match` の腕のガード（常には評価されない、§3.5）"; §9.1; §12.2): the guard of an arm of an owned `match`
+// (`match move o`) may leave the function by a `?` or a `return`, and the loop by a `break`. The value of the heading is alive there (the arm is not
+// chosen yet), so it is dropped at the exit, and the drop needs `Alloc`. A function without `uses {Alloc}` is an E0601 and an `rt fn` an E0901.
+// The guard does not consume the binding (that is the E0715 of negative/guard_owned_consume.onsa), and the arms that follow move the value, so
+// that the drop at the exit is the only one. The heading is a parameter (a place) in every function: the value of a heading that is a call is a
+// temporary value, which is U5a. The `return` is in the branch of an `if` that is the guard (a `return` is a statement and the guard is an
+// expression; the branch is a block, and a diverging branch of an `if` stands where a value is needed, §7). The `continue` and the `break` are in a
+// `for` over a fixed-length array of `Option[Buf[F32]]`: the `continue` drops the value of the heading alone, the `break` also the elements that are not
+// iterated yet (negative/drop_iter_rest.onsa), so the `break` is a `fn` only (one E0601 for both). This version counts no drop at an early exit in a
+// guard (U3), so none of these is reported today. The guards of a borrowed `match`, the guard that does not leave, and `uses {Alloc}` are in
+// negative/drop_exit_contrast.onsa. The functions are one-liners (S-783). One error per function (P-01).
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub rt fn sink(move b: Buf[F32]) {}   //~ E0901
+
+// ------------------------------------------------------------------ a `?` in the guard
+
+pub fn try_in_guard(r: Option[U32], move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) if r? > 0 => Some(move v), Some(w) => Some(move w), None => None } }   //~ E0601
+
+pub rt fn rt_try_in_guard(r: Option[U32], move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) if r? > 0 => Some(move v), Some(w) => Some(move w), None => None } }   //~ E0901
+
+pub fn try_in_second_guard(r: Option[U32], move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) if v.len() > 4 => Some(move v), Some(w) if r? > 0 => Some(move w), Some(x) => Some(move x), None => None } }   //~ E0601
+
+pub rt fn rt_try_in_second_guard(r: Option[U32], move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) if v.len() > 4 => Some(move v), Some(w) if r? > 0 => Some(move w), Some(x) => Some(move x), None => None } }   //~ E0901
+
+pub fn try_with_and(c: Bool, r: Option[U32], move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) if c && r? > 0 => Some(move v), Some(w) => Some(move w), None => None } }   //~ E0601
+
+pub fn try_in_struct_guard(r: Option[F32], move h: Holder) -> Option[Buf[F32]] { match move h { Holder { buf: b, gain: g } if g > r? => Some(move b), Holder { buf: c, gain: _ } => Some(move c) } }   //~ E0601
+
+pub rt fn rt_try_in_struct_guard(r: Option[F32], move h: Holder) -> Option[Buf[F32]] { match move h { Holder { buf: b, gain: g } if g > r? => Some(move b), Holder { buf: c, gain: _ } => Some(move c) } }   //~ E0901
+
+pub fn try_in_tuple_guard(r: Option[U32], move p: (Buf[F32], U32)) -> Option[Buf[F32]] { match move p { (b, k) if k > r? => Some(move b), (c, _) => Some(move c) } }   //~ E0601
+
+pub fn try_in_binding_guard(r: Option[U32], move b: Buf[F32]) -> Option[Buf[F32]] { match move b { t if r? > 0 => Some(move t), u => Some(move u) } }   //~ E0601
+
+// ------------------------------------------------------------------ a `return` in the guard
+
+pub fn return_in_guard(d: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) if (if d { return None } else { true }) => Some(move v), Some(w) => Some(move w), None => None } }   //~ E0601
+
+pub rt fn rt_return_in_guard(d: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) if (if d { return None } else { true }) => Some(move v), Some(w) => Some(move w), None => None } }   //~ E0901
+
+pub fn return_in_guard_else(d: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) if (if d { true } else { return None }) => Some(move v), Some(w) => Some(move w), None => None } }   //~ E0601
+
+pub rt fn rt_return_in_guard_struct(d: Bool, move h: Holder) -> Option[Buf[F32]] { match move h { Holder { buf: b, gain: _ } if (if d { return None } else { true }) => Some(move b), Holder { buf: c, gain: _ } => Some(move c) } }   //~ E0901
+
+// ------------------------------------------------------------------ a `continue` and a `break` in the guard (the loop is a `for` over a fixed-length array; `os` is consumed by `move`)
+
+pub fn continue_in_guard(c: Bool, move os: [Option[Buf[F32]]; 2]) { for o in move os { match move o { Some(v) if (if c { continue } else { true }) => sink(move v), Some(w) => sink(move w), None => {} } } }   //~ E0601
+
+pub rt fn rt_continue_in_guard(c: Bool, move os: [Option[Buf[F32]]; 2]) { for o in move os { match move o { Some(v) if (if c { continue } else { true }) => sink(move v), Some(w) => sink(move w), None => {} } } }   //~ E0901
+
+pub fn break_in_guard(c: Bool, move os: [Option[Buf[F32]]; 2]) { for o in move os { match move o { Some(v) if (if c { break } else { true }) => sink(move v), Some(w) => sink(move w), None => {} } } }   //~ E0601

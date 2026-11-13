@@ -202,7 +202,8 @@ fn body_rules(pkg: &Package, a: &Analysis, id: DefId) -> Option<Diagnostic> {
     }
     // Drops (§12.2) whose destruction needs `Alloc`.
     for d in alloc_drops(a, body) {
-        let (at, message) = match d {
+        let rt = "`rt` functions cannot allocate (§10, §12.2)";
+        let (at, message, left) = match d {
             Drop::Local(l) => (
                 l.span,
                 format!(
@@ -210,17 +211,39 @@ fn body_rules(pkg: &Package, a: &Analysis, id: DefId) -> Option<Diagnostic> {
                     l.name,
                     a.display_type(l.ty)
                 ),
+                None,
             ),
             Drop::Rest { at, root, .. } => (
                 at,
                 format!(
-                    "taking `{}` out of `{}` drops the rest of it here, whose destruction needs `Alloc`; `rt` functions cannot allocate (§10, §12.2)",
+                    "taking `{}` out of `{}` drops the rest of it here, whose destruction needs `Alloc`; {rt}",
                     src(at),
                     root.name
                 ),
+                None,
             ),
+            Drop::Value { value, exit, .. } => {
+                let at = ast.expr(value).span;
+                let message = format!(
+                    "`{}` is dropped by an exit before it is consumed, whose destruction needs `Alloc`; {rt}",
+                    src(at)
+                );
+                (at, message, Some(exit))
+            }
+            Drop::IterRest { iter, exit, early, .. } => {
+                let (at, what) = (
+                    ast.expr(iter).span,
+                    if early { "what it has not iterated and its container" } else { "its container" },
+                );
+                let message = format!(
+                    "the `for` that consumes `{}` drops {what} when it is left, whose destruction needs `Alloc`; {rt}",
+                    src(at)
+                );
+                (at, message, early.then_some(exit))
+            }
         };
-        found.push(Diagnostic::new(Stage::Effects, Code::E0901, at, message).with_found(src(at)));
+        let d = Diagnostic::new(Stage::Effects, Code::E0901, at, message).with_found(src(at));
+        found.push(left.into_iter().fold(d, |d, x| d.with_note(x, "left here")));
     }
     found.sort_by_key(|d| d.span.start);
     found.into_iter().next()

@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§7", "§8.1", "§10", "§12.2"]
+
+// W6-02 U3/t, S-1037, R-32 (§5.4: "`for s in move xs` ... ループを出るとき（終わり、`break`、`return`、`?`）に、まだ反復していない要素とヒープの容れ物（`Array`・`Buf`）が
+// 破棄される（§12.2）"; "Dup の値の所有の反復（`for s in move bs`。複製を反復する）"; §12.2: "所有する Shared 値 ... の破棄: 要る"): a borrowed parameter `xs: Array[F32]` that is the
+// iterated value of `for s in move xs` is iterated as a copy (a Dup value is copied, §5.2), and the loop drops the copy, a heap container, when it is left, at its end and at
+// every exit, so the function needs `Alloc`: an E0601 without `uses {Alloc}`, an E0901 in an `rt fn`. The drop of a Shared value needs `Alloc` even where the count cannot
+// reach 0 (§12.2 does not look at the count). A borrowed parameter cannot be moved, so the verdict does not depend on how the last use of a moved Dup value is read
+// (U4a, S-1030). The elements are `F32`, so there is no other drop. This version counts no drop of the copy (the borrowed parameter is not owned), so none of
+// these is reported today. The `move` parameter, which this version already reports, is in negative/drop_iter_rest_array_move.onsa, the borrowed loop (`for s in xs`),
+// which drops nothing, in negative/drop_iter_rest_contrast.onsa. The callers are one-liners (S-783). One error per function (P-01).
+
+// ------------------------------------------------------------------ a borrowed parameter
+
+pub fn borrowed_end(xs: Array[F32]) { for s in move xs { if s > 0.0 {} } }   //~ E0601
+
+pub rt fn rt_borrowed_end(xs: Array[F32]) { for s in move xs { if s > 0.0 {} } }   //~ E0901
+
+pub fn borrowed_break(xs: Array[F32]) { for s in move xs { if s > 0.0 { break } } }   //~ E0601
+
+pub rt fn rt_borrowed_break(xs: Array[F32]) { for s in move xs { if s > 0.0 { break } } }   //~ E0901
+
+pub fn borrowed_return(xs: Array[F32]) { for s in move xs { if s > 0.0 { return } } }   //~ E0601
+
+pub rt fn rt_borrowed_return(xs: Array[F32]) { for s in move xs { if s > 0.0 { return } } }   //~ E0901
+
+pub fn borrowed_in_branch(c: Bool, xs: Array[F32]) { if c { for s in move xs { if s > 0.0 {} } } }   //~ E0601
+
+pub rt fn rt_borrowed_in_branch(c: Bool, xs: Array[F32]) { if c { for s in move xs { if s > 0.0 {} } } }   //~ E0901

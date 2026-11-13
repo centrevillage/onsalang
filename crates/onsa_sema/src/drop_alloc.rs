@@ -8,6 +8,8 @@
 use std::collections::BTreeSet;
 
 use onsa_diag::Span;
+use onsa_diag::internal::bug;
+use onsa_syntax::ast::ExprId;
 
 use crate::Analysis;
 use crate::body::{BodyInfo, Dropped, LocalId, LocalInfo};
@@ -23,6 +25,12 @@ pub(crate) enum Drop<'b> {
     Local(&'b LocalInfo),
     /// What is left of `root` where the path `path` is taken out at `at` (S-85).
     Rest { at: Span, path: &'b [Proj], root: &'b LocalInfo },
+    /// The value of `value`, of the type `ty`, the exit at `exit` leaves before
+    /// its consumer runs (A-1).
+    Value { value: ExprId, ty: TyId, exit: Span },
+    /// The rest of the value `iter` of the type `ty` an owned `for` iterates,
+    /// where the loop is left at `exit` (`early`) or ends (S-1037).
+    IterRest { iter: ExprId, ty: TyId, exit: Span, early: bool },
 }
 
 /// Whether the drop `d` needs `Alloc` (§12.2): the one test of a drop.
@@ -33,27 +41,37 @@ pub(crate) fn needs_alloc(a: &Analysis, d: &Drop) -> bool {
         Drop::Rest { at, path, root } => {
             rest_drops_alloc(&Walk::new(a), (root.ty, &Frame::root(a), 0), path, *at).unwrap_or(false)
         }
+        Drop::Value { ty, .. } => needs_alloc_drop(a, *ty),
+        // At its end, its container: a fixed-length array has none (S-1037).
+        Drop::IterRest { ty, early, .. } => {
+            (*early || !matches!(a.types.get(*ty), Ty::Array(..))) && needs_alloc_drop(a, *ty)
+        }
     }
 }
 
-/// The drops of `body` that need `Alloc`: the locals of its drop points,
-/// each once in the order of the locals, then the rests in the order the
-/// modes stage took them out. A reader takes the earliest in the source by
-/// a stable sort, so this order breaks the ties.
+/// The drops of `body` that need `Alloc`: the locals of its drop points
+/// (at the end of a scope and at an exit alike), each once in the order of
+/// the locals, then the others in the order the modes stage met them. A
+/// reader takes the earliest in the source by a stable sort, so this order
+/// breaks the ties.
 pub(crate) fn alloc_drops<'b>(a: &'b Analysis, body: &'b BodyInfo) -> impl Iterator<Item = Drop<'b>> {
     let local = |l: &LocalId| &body.locals[l.0 as usize];
     let locals: BTreeSet<LocalId> = (body.drops.iter())
         .filter_map(|d| match d.what {
-            Dropped::End(l) => Some(l),
-            Dropped::Rest(_) => None,
+            Dropped::End(l) | Dropped::Exit(l) => Some(l),
+            _ => None,
         })
         .collect();
-    let rests = body.drops.iter().filter_map(move |d| match &d.what {
+    let ty =
+        |e: &ExprId, at| *body.expr_types.get(e).unwrap_or_else(|| bug(Some(at), "a drop of a value with no type"));
+    let others = body.drops.iter().filter_map(move |d| match &d.what {
         Dropped::Rest(t) => Some(Drop::Rest { at: d.at, path: &t.path, root: local(&t.root) }),
-        Dropped::End(_) => None,
+        Dropped::Value(e) => Some(Drop::Value { value: *e, ty: ty(e, d.at), exit: d.at }),
+        &Dropped::IterRest { iter, early } => Some(Drop::IterRest { iter, ty: ty(&iter, d.at), exit: d.at, early }),
+        Dropped::End(_) | Dropped::Exit(_) => None,
     });
     let locals = locals.into_iter().map(move |l| Drop::Local(local(&l)));
-    locals.chain(rests).filter(move |d| needs_alloc(a, d))
+    locals.chain(others).filter(move |d| needs_alloc(a, d))
 }
 
 /// Whether dropping a value of this type needs `Alloc` (§12.2): Shared values

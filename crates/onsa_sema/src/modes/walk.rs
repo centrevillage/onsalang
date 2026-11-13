@@ -102,9 +102,13 @@ impl<'a> Walker<'a> {
                     }
                 }
             }
-            ExprKind::Tuple(xs) | ExprKind::Array(xs) => xs.iter().for_each(|&x| self.expr(r, x, element)),
-            ExprKind::Struct { fields, .. } => fields.iter().for_each(|&(_, x)| self.expr(r, x, element)),
-            ExprKind::Try(x) => self.expr(r, *x, Pos::Extract),
+            ExprKind::Tuple(xs) | ExprKind::Array(xs) => self.elements(r, xs.iter().copied(), element),
+            ExprKind::Struct { fields, .. } => self.elements(r, fields.iter().map(|&(_, x)| x), element),
+            // The path of an error leaves the function (§9.1).
+            ExprKind::Try(x) => {
+                self.expr(r, *x, Pos::Extract);
+                self.drops(r, 0, ast.expr(e).span, true);
+            }
             ExprKind::Repeat { elem, len } => {
                 self.expr(r, *elem, element);
                 self.expr(r, *len, Pos::Read);
@@ -122,6 +126,19 @@ impl<'a> Walker<'a> {
             }
             _ => ast.sub_exprs(e).into_iter().for_each(|x| self.expr(r, x, Pos::Read)),
         }
+    }
+
+    /// The elements `xs` of a literal at `pos`, in the order written (§3.5):
+    /// each waits for the ones after it (A-1).
+    fn elements(&mut self, r: &mut Run, xs: impl Iterator<Item = ExprId>, pos: Pos) {
+        let base = r.items();
+        for x in xs {
+            self.expr(r, x, pos);
+            if pos.consumes() {
+                self.waits(r, x);
+            }
+        }
+        r.forget(base);
     }
 
     /// The place `e` is, the indexes in it walked first, the inner first

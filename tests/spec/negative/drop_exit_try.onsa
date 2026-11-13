@@ -1,0 +1,85 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§7", "§8.1", "§9.1", "§9.2", "§10", "§12.2"]
+
+// W6-02 U3/t, R-32 (§9.1: `?` returns the `None` or the `Err` from "それを含む最も内側の関数 ... `return` と同じ脱出先"; §12.2: "所有する Shared 値・`Buf` と、
+// それらを含む値の破棄: 要る"; §8.1; §10 rule 1): a `?` that returns leaves the function like a `return`, so every owned local that may be alive
+// where it is written is dropped there, and the drop needs `Alloc`. A function without `uses {Alloc}` is an E0601 and an `rt fn` an E0901. The
+// operand is an `Option` or a `Result` of Copy values (a borrowed parameter; the operand of `?` is a consuming position, §9.1, so a `Buf` in it
+// would be moved by it), the condition of an `if`, the heading of a `match`, a call argument, or an element; the owned local is a parameter or the
+// binding of an arm of an owned `match`, and it is moved on every path after the `?`, so that the drop at the `?` is the only one. The order of
+// the evaluation is that of §3.5 (from the left), so a `?` that is written before the `move` of the local (`wrap_after(r?, move b)`) is evaluated
+// while the local is still alive and the drop is of the local; the `?` after the `move` (a value that waits for the call) is in
+// negative/drop_pending.onsa. This version counts no drop at a `?` (the early exits are U3), so none of these is reported today. The forms
+// that do not drop are in negative/drop_exit_contrast.onsa. The functions are one-liners (S-783). One error per function (P-01).
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub rt fn wrap_after(n: U32, move b: Buf[F32]) -> Option[Buf[F32]] { Some(move b) }
+
+// ------------------------------------------------------------------ an `Option`
+
+pub fn in_condition(r: Option[U32], move b: Buf[F32]) -> Option[Buf[F32]] { if r? > 0 { Some(move b) } else { Some(move b) } }   //~ E0601
+
+pub rt fn rt_in_condition(r: Option[U32], move b: Buf[F32]) -> Option[Buf[F32]] { if r? > 0 { Some(move b) } else { Some(move b) } }   //~ E0901
+
+pub fn in_heading(r: Option[U32], move b: Buf[F32]) -> Option[Buf[F32]] { match r? { 0 => Some(move b), _ => Some(move b) } }   //~ E0601
+
+pub rt fn rt_in_heading(r: Option[U32], move b: Buf[F32]) -> Option[Buf[F32]] { match r? { 0 => Some(move b), _ => Some(move b) } }   //~ E0901
+
+pub fn in_else_if(c: Bool, r: Option[U32], move b: Buf[F32]) -> Option[Buf[F32]] { if c { Some(move b) } else if r? > 0 { Some(move b) } else { Some(move b) } }   //~ E0601
+
+pub rt fn rt_in_else_if(c: Bool, r: Option[U32], move b: Buf[F32]) -> Option[Buf[F32]] { if c { Some(move b) } else if r? > 0 { Some(move b) } else { Some(move b) } }   //~ E0901
+
+pub fn in_branch(c: Bool, r: Option[U32], move b: Buf[F32]) -> Option[Buf[F32]] { if c { if r? > 0 { Some(move b) } else { Some(move b) } } else { Some(move b) } }   //~ E0601
+
+pub rt fn rt_in_arm(n: U32, r: Option[U32], move b: Buf[F32]) -> Option[Buf[F32]] { match n { 0 => if r? > 0 { Some(move b) } else { Some(move b) }, _ => Some(move b) } }   //~ E0901
+
+// ------------------------------------------------------------------ a `Result`
+
+pub fn result_condition(r: Result[U32, U32], move b: Buf[F32]) -> Result[Buf[F32], U32] { if r? > 0 { Ok(move b) } else { Ok(move b) } }   //~ E0601
+
+pub rt fn rt_result_condition(r: Result[U32, U32], move b: Buf[F32]) -> Result[Buf[F32], U32] { if r? > 0 { Ok(move b) } else { Ok(move b) } }   //~ E0901
+
+pub fn result_heading(r: Result[U32, U32], move b: Buf[F32]) -> Result[Buf[F32], U32] { match r? { 0 => Ok(move b), _ => Ok(move b) } }   //~ E0601
+
+pub rt fn rt_result_heading(r: Result[U32, U32], move b: Buf[F32]) -> Result[Buf[F32], U32] { match r? { 0 => Ok(move b), _ => Ok(move b) } }   //~ E0901
+
+// ------------------------------------------------------------------ the other owned locals
+
+pub fn struct_param(r: Option[U32], move h: Holder) -> Option[Holder] { if r? > 0 { Some(move h) } else { Some(move h) } }   //~ E0601
+
+pub rt fn rt_struct_param(r: Option[U32], move h: Holder) -> Option[Holder] { if r? > 0 { Some(move h) } else { Some(move h) } }   //~ E0901
+
+pub fn option_param(r: Option[U32], move o: Option[Buf[F32]]) -> Option[Buf[F32]] { if r? > 0 { o } else { o } }   //~ E0601
+
+pub rt fn rt_option_param(r: Option[U32], move o: Option[Buf[F32]]) -> Option[Buf[F32]] { if r? > 0 { o } else { o } }   //~ E0901
+
+pub fn array_param(r: Option[U32], move xs: [Buf[F32]; 2]) -> Option[[Buf[F32]; 2]] { if r? > 0 { Some(move xs) } else { Some(move xs) } }   //~ E0601
+
+pub fn arm_binding(r: Option[U32], move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) => if r? > 0 { Some(move v) } else { Some(move v) }, None => None } }   //~ E0601
+
+pub rt fn rt_arm_binding(r: Option[U32], move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) => if r? > 0 { Some(move v) } else { Some(move v) }, None => None } }   //~ E0901
+
+pub fn arm_binding_whole(r: Option[U32], move b: Buf[F32]) -> Option[Buf[F32]] { match move b { t => if r? > 0 { Some(move t) } else { Some(move t) } } }   //~ E0601
+
+// ------------------------------------------------------------------ the `?` is written before the `move` (it is evaluated first, §3.5)
+
+pub fn before_the_move(r: Option[U32], move b: Buf[F32]) -> Option[Option[Buf[F32]]] { Some(wrap_after(r?, move b)) }   //~ E0601
+
+pub rt fn rt_before_the_move(r: Option[U32], move b: Buf[F32]) -> Option[Option[Buf[F32]]] { Some(wrap_after(r?, move b)) }   //~ E0901
+
+pub fn before_the_move_in_tuple(r: Option[U32], move b: Buf[F32]) -> Option[(U32, Buf[F32])] { Some((r?, move b)) }   //~ E0601
+
+pub rt fn rt_before_the_move_in_struct(r: Option[F32], move b: Buf[F32]) -> Option[Holder] { Some(Holder { gain: r?, buf: move b }) }   //~ E0901
+
+pub fn before_the_move_in_array(move r: Option[Buf[F32]], move b: Buf[F32]) -> Option[[Buf[F32]; 2]] { Some([r?, move b]) }   //~ E0601
+
+// ------------------------------------------------------------------ the loop `while true`
+
+pub fn in_loop(r: Option[U32], move b: Buf[F32]) -> Option[Buf[F32]] { while true { if r? > 0 { return Some(move b) } else { return Some(move b) } } }   //~ E0601
+
+pub rt fn rt_in_loop(r: Option[U32], move b: Buf[F32]) -> Option[Buf[F32]] { while true { if r? > 0 { return Some(move b) } else { return Some(move b) } } }   //~ E0901

@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.4", "§7", "§8.1", "§10", "§12.2"]
+
+// W6-02 U3/t, R-32 (§5.4: "`match move x` と ... 対象（`match f(...)`）の腕の束縛: 所有 / 起きる"; "`for s in move xs`: 所有。`xs` を消費する / 要素ごとに起きる。ループを出るとき（終わり、
+// `break`、`return`、`?`）に ... 破棄される"; "腕と `for` の本体ではその腕・反復の終わり（`return`・`break`・`continue`・`?` で出るときを含む）に破棄される"; §12.2; §8.1; §10 rule 1):
+// a `break` leaves the loop and a `continue` ends the iteration, so every owned local that is declared in the body of that loop (the binding of the `for`, the binding of
+// an arm in the body) and may be alive there is dropped at it, and the drop needs `Alloc`. A function without `uses {Alloc}` is an E0601 and an `rt fn` an E0901. A `continue`
+// is no exit from the iterated value (S-1037: "`continue` は出口でない"), so a `continue` over the binding of a fixed-length array drops the binding alone; a `break` of such a
+// `for` also drops the elements that are not iterated yet (negative/drop_iter_rest.onsa), so those are `fn`s only (one E0601 for both). The loop over a range binds a Copy index,
+// and the owned value is the binding of an arm of `match mk(i)` (`mk` returns `None`, so that it needs no `Alloc`). This version counts no drop at a `break` or a `continue`, so none
+// of these is reported today. The locals that the loop does not own (declared before it) and the exits after a
+// move are in negative/drop_exit_contrast.onsa. The helpers `sink` and `eat` are `rt` functions that drop their argument, so their own E0901 is reported (the same as
+// negative/drop_for_one_path.onsa). The callers are one-liners (S-783). One error per function (P-01).
+
+pub rt fn sink(move b: Buf[F32]) {}   //~ E0901
+
+pub rt fn eat(move b: Buf[F32]) -> Bool { true }   //~ E0901
+
+pub rt fn mk(i: U32) -> Option[Buf[F32]] { None }
+
+// ------------------------------------------------------------------ `continue` over the binding of a `for`
+
+pub fn continue_binding(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c { continue } else { sink(move s) } } }   //~ E0601
+
+pub rt fn rt_continue_binding(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c { continue } else { sink(move s) } } }   //~ E0901
+
+pub fn continue_binding_else(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c { sink(move s) } else { continue } } }   //~ E0601
+
+pub rt fn rt_continue_binding_else(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c { sink(move s) } else { continue } } }   //~ E0901
+
+pub rt fn rt_continue_in_arm(n: U32, move xs: [Buf[F32]; 2]) { for s in move xs { match n { 0 => { continue }, _ => sink(move s) } } }   //~ E0901
+
+pub fn continue_tuple(c: Bool, move ps: [(Buf[F32], Buf[F32]); 2]) { for (a, b) in move ps { if eat(move a) { continue } else { sink(move b) } } }   //~ E0601
+
+pub rt fn rt_continue_tuple(c: Bool, move ps: [(Buf[F32], Buf[F32]); 2]) { for (a, b) in move ps { if eat(move a) { continue } else { sink(move b) } } }   //~ E0901
+
+pub fn continue_nested(c: Bool, move xss: [[Buf[F32]; 2]; 2]) { for row in move xss { for s in move row { if c { continue } else { sink(move s) } } } }   //~ E0601
+
+// ------------------------------------------------------------------ the binding of an arm in the body of a loop
+
+pub fn continue_arm(c: Bool, n: U32) { for i in 0 ..< n { match mk(i) { Some(v) => if c { continue } else { sink(move v) }, None => {} } } }   //~ E0601
+
+pub rt fn rt_continue_arm(c: Bool, n: U32) { for i in 0 ..< n { match mk(i) { Some(v) => if c { continue } else { sink(move v) }, None => {} } } }   //~ E0901
+
+pub fn break_arm(c: Bool, n: U32) { for i in 0 ..< n { match mk(i) { Some(v) => if c { break } else { sink(move v) }, None => {} } } }   //~ E0601
+
+pub rt fn rt_break_arm(c: Bool, n: U32) { for i in 0 ..< n { match mk(i) { Some(v) => if c { break } else { sink(move v) }, None => {} } } }   //~ E0901
+
+pub fn break_arm_else(c: Bool, n: U32) { for i in 0 ..< n { match mk(i) { Some(v) => if c { sink(move v) } else { break }, None => {} } } }   //~ E0601
+
+pub rt fn rt_break_arm_else(c: Bool, n: U32) { for i in 0 ..< n { match mk(i) { Some(v) => if c { sink(move v) } else { break }, None => {} } } }   //~ E0901
+
+pub fn break_arm_while(c: Bool, d: Bool) { while d { match mk(1) { Some(v) => if c { break } else { sink(move v) }, None => {} } } }   //~ E0601
+
+pub rt fn rt_continue_arm_while(c: Bool, d: Bool) { while d { match mk(1) { Some(v) => if c { continue } else { sink(move v) }, None => {} } } }   //~ E0901
+
+pub fn break_arm_while_true(c: Bool, n: U32) { while true { match mk(n) { Some(v) => if c { break } else { sink(move v) }, None => { break } } } }   //~ E0601
+
+pub rt fn rt_break_arm_while_true(c: Bool, n: U32) { while true { match mk(n) { Some(v) => if c { break } else { sink(move v) }, None => { break } } } }   //~ E0901
+
+pub fn break_arm_in_branch(c: Bool, d: Bool, n: U32) { for i in 0 ..< n { if d { match mk(i) { Some(v) => if c { break } else { sink(move v) }, None => {} } } } }   //~ E0601
+
+// ------------------------------------------------------------------ `break` over the binding of a `for` over a fixed-length array (the binding and the elements not iterated yet: one E0601)
+
+pub fn break_binding(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c { break } else { sink(move s) } } }   //~ E0601
+
+pub fn break_tuple(move ps: [(Buf[F32], Buf[F32]); 2]) { for (a, b) in move ps { if eat(move a) { break } else { sink(move b) } } }   //~ E0601
+
+pub fn break_inner(c: Bool, move xss: [[Buf[F32]; 2]; 2]) { for row in move xss { for s in move row { if c { break } else { sink(move s) } } } }   //~ E0601

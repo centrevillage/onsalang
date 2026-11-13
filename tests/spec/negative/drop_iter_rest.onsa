@@ -1,0 +1,101 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§7", "§8.1", "§9.2", "§10", "§12.2"]
+
+// W6-02 U3/t, S-1037, R-32 (§5.4: "`for s in move xs`: 所有。`xs` を消費する / 要素ごとに起きる。ループを出るとき（終わり、`break`、`return`、`?`）に、
+// まだ反復していない要素とヒープの容れ物（`Array`・`Buf`）が破棄される（§12.2）"; §12.2: "所有する Shared 値・`Buf` と、それらを含む値（`[Str; 2]` など）の破棄:
+// 要る"; §8.1; §10 rule 1): the owned `for` drops what it has not iterated and the heap container of the iterated value when it is left. The container of a
+// fixed-length array `[T; N]` is no heap object, so a loop over it that runs to its end has nothing left (S-1037: "固定長の配列を終わりまで回せば残りは無い")
+// and a `break` or a `return` leaves the elements that are not iterated yet, which are `Buf`s here. The container of a `Buf[F32]` is a heap object, so a loop
+// over it drops it at its end and at every exit (the elements are `F32`, so there is no other drop). A function without `uses {Alloc}` is an E0601 and an
+// `rt fn` an E0901. Every element that is iterated is moved on all paths (the binding is moved by `sink` or `eat` before the exit, or it is a Copy value), so
+// the drop of the rest or of the container is the only one. The `?` is not here: a body with a `?` needs a result after the loop, which is not a one-liner
+// (S-783). This version counts no drop of the rest or the container, so none of these is reported today. The loops that have nothing left or that
+// run in a function with `uses {Alloc}` are in negative/drop_iter_rest_contrast.onsa, the `Array` (a Dup value, U4a) in negative/drop_iter_rest_array.onsa.
+// The helpers `sink`, `eat`, `sink_h` and `sink_o` are `rt` functions that drop their argument, so their own E0901 is reported (the same as
+// negative/drop_for_one_path.onsa). The callers are one-liners (S-783). One error per function (P-01).
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub rt fn sink(move b: Buf[F32]) {}   //~ E0901
+
+pub rt fn eat(move b: Buf[F32]) -> Bool { true }   //~ E0901
+
+pub rt fn sink_h(move h: Holder) {}   //~ E0901
+
+pub rt fn sink_o(move o: Option[Buf[F32]]) {}   //~ E0901
+
+// ------------------------------------------------------------------ the container of a `Buf`, at the end and at every exit
+
+pub fn buf_end(move xs: Buf[F32]) { for s in move xs { if s > 0.0 {} } }   //~ E0601
+
+pub rt fn rt_buf_end(move xs: Buf[F32]) { for s in move xs { if s > 0.0 {} } }   //~ E0901
+
+pub fn buf_break(move xs: Buf[F32]) { for s in move xs { if s > 0.0 { break } } }   //~ E0601
+
+pub rt fn rt_buf_break(move xs: Buf[F32]) { for s in move xs { if s > 0.0 { break } } }   //~ E0901
+
+pub fn buf_return(move xs: Buf[F32]) { for s in move xs { if s > 0.0 { return } } }   //~ E0601
+
+pub rt fn rt_buf_return(move xs: Buf[F32]) { for s in move xs { if s > 0.0 { return } } }   //~ E0901
+
+pub fn buf_continue(move xs: Buf[F32]) { for s in move xs { if s > 0.0 { continue } } }   //~ E0601
+
+pub rt fn rt_buf_continue(move xs: Buf[F32]) { for s in move xs { if s > 0.0 { continue } } }   //~ E0901
+
+pub fn buf_in_branch(c: Bool, move xs: Buf[F32]) { if c { for s in move xs { if s > 0.0 {} } } else { for s in move xs { if s > 1.0 {} } } }   //~ E0601
+
+pub rt fn rt_buf_in_branch(c: Bool, move xs: Buf[F32]) { if c { for s in move xs { if s > 0.0 {} } } else { for s in move xs { if s > 1.0 {} } } }   //~ E0901
+
+pub fn buf_of_rows(move rows: [Buf[F32]; 2]) { for row in move rows { for s in move row { if s > 0.0 {} } } }   //~ E0601
+
+pub rt fn rt_buf_of_rows(move rows: [Buf[F32]; 2]) { for row in move rows { for s in move row { if s > 0.0 {} } } }   //~ E0901
+
+// ------------------------------------------------------------------ a fixed-length array of `Buf`, left by a `return`
+
+pub fn rest_return(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c { return sink(move s) } else { sink(move s) } } }   //~ E0601
+
+pub rt fn rt_rest_return(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c { return sink(move s) } else { sink(move s) } } }   //~ E0901
+
+pub fn rest_return_of_three(c: Bool, move xs: [Buf[F32]; 3]) { for s in move xs { if c { return sink(move s) } else { sink(move s) } } }   //~ E0601
+
+pub rt fn rt_rest_return_in_arm(n: U32, move xs: [Buf[F32]; 2]) { for s in move xs { match n { 0 => { return sink(move s) }, _ => sink(move s) } } }   //~ E0901
+
+pub fn rest_return_tuple(c: Bool, move ps: [(Buf[F32], Buf[F32]); 2]) { for (a, b) in move ps { if eat(move a) { return sink(move b) } else { sink(move b) } } }   //~ E0601
+
+pub rt fn rt_rest_return_tuple(c: Bool, move ps: [(Buf[F32], Buf[F32]); 2]) { for (a, b) in move ps { if eat(move a) { return sink(move b) } else { sink(move b) } } }   //~ E0901
+
+pub fn rest_return_struct(c: Bool, move hs: [Holder; 2]) { for h in move hs { if c { return sink_h(move h) } else { sink_h(move h) } } }   //~ E0601
+
+pub rt fn rt_rest_return_struct(c: Bool, move hs: [Holder; 2]) { for h in move hs { if c { return sink_h(move h) } else { sink_h(move h) } } }   //~ E0901
+
+pub fn rest_return_option(c: Bool, move os: [Option[Buf[F32]]; 2]) { for o in move os { if c { return sink_o(move o) } else { sink_o(move o) } } }   //~ E0601
+
+pub rt fn rt_rest_return_option(c: Bool, move os: [Option[Buf[F32]]; 2]) { for o in move os { if c { return sink_o(move o) } else { sink_o(move o) } } }   //~ E0901
+
+// ------------------------------------------------------------------ a fixed-length array of `Buf`, left by a `break` (the element is consumed by the condition)
+
+pub fn rest_break(move xs: [Buf[F32]; 2]) { for s in move xs { if eat(move s) { break } else {} } }   //~ E0601
+
+pub rt fn rt_rest_break(move xs: [Buf[F32]; 2]) { for s in move xs { if eat(move s) { break } else {} } }   //~ E0901
+
+pub fn rest_break_else(move xs: [Buf[F32]; 2]) { for s in move xs { if eat(move s) {} else { break } } }   //~ E0601
+
+pub rt fn rt_rest_break_else(move xs: [Buf[F32]; 2]) { for s in move xs { if eat(move s) {} else { break } } }   //~ E0901
+
+pub fn rest_break_of_three(c: Bool, move xs: [Buf[F32]; 3]) { for s in move xs { if eat(move s) && c { break } } }   //~ E0601
+
+pub rt fn rt_rest_break_in_arm(n: U32, move xs: [Buf[F32]; 2]) { for s in move xs { if eat(move s) { match n { 0 => { break }, _ => {} } } } }   //~ E0901
+
+pub fn rest_break_inner(move xss: [[Buf[F32]; 2]; 2]) { for row in move xss { for s in move row { if eat(move s) { break } else {} } } }   //~ E0601
+
+pub rt fn rt_rest_break_inner(move xss: [[Buf[F32]; 2]; 2]) { for row in move xss { for s in move row { if eat(move s) { break } else {} } } }   //~ E0901
+
+pub fn rest_break_in_branch(c: Bool, move xs: [Buf[F32]; 2]) { if c { for s in move xs { if eat(move s) { break } else {} } } else { for s in move xs { sink(move s) } } }   //~ E0601
+
+// ------------------------------------------------------------------ the rest of two loops (the inner loop and the outer one are left by a `return`)
+
+pub fn rest_return_nested(move xss: [[Buf[F32]; 2]; 2]) { for row in move xss { for s in move row { return sink(move s) } } }   //~ E0601

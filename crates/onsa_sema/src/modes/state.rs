@@ -453,16 +453,22 @@ impl Paths {
     pub(super) fn none() -> Paths {
         Paths { ends: Delta::bottom(), lone: Vec::new() }
     }
+
+    pub(super) fn reaches(&self) -> bool {
+        self.ends.reach
+    }
 }
 
 /// A loop's summary, made once: the back edge from its head (through the
 /// condition of a `while` and the body, and its `continue`s), and its exit
 /// from the state before its head (the end of the condition or of the
-/// iteration, and its `break`s).
+/// iteration, and its `break`s); `leaves`: its condition leaves the loop
+/// around it (§7), by paths a summary does not hold.
 #[derive(Clone, Debug)]
 pub(super) struct LoopSum {
     pub(super) back: Delta,
     pub(super) exit: Delta,
+    pub(super) leaves: bool,
 }
 
 impl LoopSum {
