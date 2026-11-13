@@ -224,6 +224,12 @@ def w602_guard_moves(n):
     return (h + f"pub fn t(move o: Option[Buf[F32]], {ps}) -> U32 uses {{Alloc}} {{\n  match move o {{\n{arms}"
             + "    _ => 0,\n  }\n}\n")
 
+def w602_try_copy(n):
+    """W6-02 U3: n Copy locals, each made by a `?`: each `?` walks the items of the scopes it leaves (memo 1.6,
+    O(sum of S_k)) though none of them drops (n x n with no output; the walk past Copy and dead items is W6-04's)."""
+    body = [f"  let k{i}: U32 = r? + {i}\n  s = s + k{i}" for i in range(n)]
+    return "pub fn t(r: Option[U32]) -> Option[U32] {\n  var s: U32 = 0\n" + "\n".join(body) + "\n  Some(s)\n}\n"
+
 SCALE = [("voice", "decls x", voice_times, [(k,) for k in (1, 2, 4, 8, 16)])]
 
 QUAD = [
@@ -236,6 +242,7 @@ QUAD = [
     ("w602_continue_moves", "moves, continues and breaks", w602_shape, [("w8", n) for n in (250, 500, 1000, 2000)]),
     ("w602_guards", "guarded arms", w602_guards, [(n,) for n in (1000, 2000, 4000, 8000)]),
     ("w602_guard_moves", "guards moving outer locals", w602_guard_moves, [(n,) for n in (500, 1000, 2000, 4000)]),
+    ("w602_try_copy", "Copy locals and ?", w602_try_copy, [(n,) for n in (1000, 2000, 4000, 8000)]),
     ("w409_held_w", "F=120, W", w409_held, [(120, w) for w in (1500, 3000, 6000, 12000)]),
     ("w409_held_f", "W=6000, F", w409_held, [(f, 6000) for f in (15, 30, 60, 120)]),
     ("w409_same_w", "S=100, W", w409_same, [(100, w) for w in (750, 1500, 3000, 6000)]),
