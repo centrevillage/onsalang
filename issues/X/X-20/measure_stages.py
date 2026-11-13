@@ -215,6 +215,15 @@ def w602_guards(n):
     return (h + "pub fn t(move o: (U32, Buf[F32], Buf[F32], Buf[F32])) -> U32 uses {Alloc} {\n  match move o {\n"
             + "\n".join(arms) + "\n    _ => 0,\n  }\n}\n")
 
+def w602_guard_moves(n):
+    """W6-02 U2b, the break side (L1): one owned `match` with n guarded arms, each guard moving a distinct
+    outer local (each arm is tried at the paths of every guard before it, n x n; to W6-04)."""
+    h = ("pub fn eat(move b: Buf[F32]) -> Bool uses {Alloc} { true }\n")
+    ps = ", ".join(f"move z{i}: Buf[F32]" for i in range(n))
+    arms = "".join(f"    Some(b{i}) if eat(move z{i}) => {i},\n" for i in range(n))
+    return (h + f"pub fn t(move o: Option[Buf[F32]], {ps}) -> U32 uses {{Alloc}} {{\n  match move o {{\n{arms}"
+            + "    _ => 0,\n  }\n}\n")
+
 SCALE = [("voice", "decls x", voice_times, [(k,) for k in (1, 2, 4, 8, 16)])]
 
 QUAD = [
@@ -226,6 +235,7 @@ QUAD = [
     ("w602_loops_only", "loops", w602_shape, [("w12", n) for n in (2000, 4000, 8000, 16000)]),
     ("w602_continue_moves", "moves, continues and breaks", w602_shape, [("w8", n) for n in (250, 500, 1000, 2000)]),
     ("w602_guards", "guarded arms", w602_guards, [(n,) for n in (1000, 2000, 4000, 8000)]),
+    ("w602_guard_moves", "guards moving outer locals", w602_guard_moves, [(n,) for n in (500, 1000, 2000, 4000)]),
     ("w409_held_w", "F=120, W", w409_held, [(120, w) for w in (1500, 3000, 6000, 12000)]),
     ("w409_held_f", "W=6000, F", w409_held, [(f, 6000) for f in (15, 30, 60, 120)]),
     ("w409_same_w", "S=100, W", w409_same, [(100, w) for w in (750, 1500, 3000, 6000)]),
