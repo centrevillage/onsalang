@@ -5,7 +5,6 @@ use super::arms::Arms;
 use super::*;
 use crate::constarg::Unheld;
 use crate::traits::{Class, op_bound};
-use onsa_diag::Edit;
 
 impl<'a> Checker<'a> {
     // ------------------------------------------------------------ expressions
@@ -17,7 +16,12 @@ impl<'a> Checker<'a> {
         }
         let t = self.check_expr_inner(e, expected)?;
         let Some(exp) = expected else { return self.record_within(e, t) };
-        self.fit_at(span, t, exp)?;
+        // A path and an anonymous function in parentheses were fit inside.
+        let found = match self.expr(e).kind {
+            ExprKind::Closure { .. } => Found::Closure(None),
+            _ => Found::Other,
+        };
+        self.fit_at(span, t, exp, found)?;
         // A function fit to a function type has the type expected, so that
         // what is made of it (a tuple, an arm) has it; `e` keeps its own
         // (§8.1, §4.7).
@@ -643,8 +647,12 @@ impl<'a> Checker<'a> {
         self.frames.pop();
         r?;
         let t = self.a.types.intern(Ty::Fn(FnTy { rt, params: ptys, ret: ret_ty, effects }));
-        if is_arg && let (Some(f), Some(exp)) = (&exp_fn, expected) {
-            self.unify_arg_closure(span, params, t, f, exp)?;
+        // Written as an argument, it may have the candidate of S-872 ([`Self::modes_help`]).
+        if is_arg
+            && exp_fn.is_some()
+            && let Some(exp) = expected
+        {
+            self.fit_at(span, t, exp, Found::Closure(Some(params)))?;
         }
         Ok(t)
     }
@@ -673,32 +681,6 @@ impl<'a> Checker<'a> {
         let t = self.a.types.intern(Ty::Fn(FnTy { rt: f.rt, params: ptys, ret, effects }));
         self.unify_at(span, t, exp)?;
         Ok(t)
-    }
-
-    /// Unify the type `t` of an anonymous function written directly as an
-    /// argument with the expected `exp`, which is the function type `f`. Its
-    /// E0401 has a candidate when only the modes keep them apart, and each
-    /// difference is a parameter of the default mode where `move` is expected
-    /// (§8.1, S-872): the one fix adds `move` to all of them. A fix leaves
-    /// fewer such parameters, so the candidates end; §5.2 judges the result.
-    fn unify_arg_closure(&mut self, span: Span, params: &[Param], t: TyId, f: &FnTy, exp: TyId) -> R<()> {
-        let Some(d) = self.mismatch_at(span, t, exp, true) else { return Ok(()) };
-        let Ty::Fn(mut written) = self.ty(t) else { unreachable!("an anonymous function has a function type") };
-        let mut edits = Vec::new();
-        for ((p, (mode, _)), &(wanted, _)) in params.iter().zip(&mut written.params).zip(&f.params) {
-            match (*mode, wanted, &p.name) {
-                (m, w, _) if m == w => continue,
-                (Mode::Borrow, Mode::Move, ParamName::Ident(Ident { span: at, .. }) | ParamName::Wild(at)) => {
-                    edits.push(Edit::insert(at.file, at.start, "move "));
-                }
-                _ => return Err(self.diag(d)),
-            }
-            *mode = wanted;
-        }
-        let marked = self.a.types.intern(Ty::Fn(written));
-        let cause = self.cause(span, None);
-        let fits = self.infer.fits(&mut self.a.types, marked, exp, &cause).is_ok();
-        Err(self.diag(if fits { d.with_fix(Fix::new("add `move`", edits)) } else { d }))
     }
 
     /// One operator of a chain (the tree of §3.1): the left operand, the

@@ -5,6 +5,7 @@
 
 use onsa_diag::Span;
 use onsa_diag::hash::{HashMap, HashSet};
+use onsa_syntax::ast::Mode;
 
 use crate::ty::{FnTy, Len, Measure, TYPE_DEPTH_LIMIT, Ty, TyId, Types};
 
@@ -85,12 +86,16 @@ pub struct Measured {
 }
 
 /// Why two types did not unify (for messages).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Mismatch {
     /// Plain structural mismatch.
     Types,
     /// An integer literal where a non-integer type is required (or vice versa).
     Literal,
+    /// Of the function type fit to an expected one ([`Infer::fits`]), the
+    /// modes of these parameters alone, each the default on one side and
+    /// `move` on the other (the note of §8.1, S-874).
+    Modes(Vec<usize>),
 }
 
 impl Infer {
@@ -338,12 +343,19 @@ impl Infer {
             self.unify(types, *x, *y, cause)?;
         }
         self.unify(types, found.ret, wanted.ret, cause)?;
-        let modes = found.params.iter().map(|p| p.0).eq(wanted.params.iter().map(|p| p.0));
+        let pairs = found.params.iter().zip(&wanted.params).map(|(x, y)| [x.0, y.0]);
+        let differ: Vec<(usize, [Mode; 2])> = (0..).zip(pairs).filter(|(_, m)| m[0] != m[1]).collect();
         let (row, other) = (&found.effects, &wanted.effects);
         let open = row.is_open() || other.is_open();
         let effects = open || row.within(other) && (directed || other.within(row));
         let rt = found.rt == wanted.rt || directed && found.rt;
-        if modes && effects && rt { Ok(()) } else { Err(Mismatch::Types) }
+        // Of a pair that differs with no `inout`, one is the default and the other `move`.
+        let alone = directed && differ.iter().all(|(_, m)| !m.contains(&Mode::Inout));
+        match (effects && rt, differ.is_empty()) {
+            (true, true) => Ok(()),
+            (true, false) if alone => Err(Mismatch::Modes(differ.into_iter().map(|(k, _)| k).collect())),
+            _ => Err(Mismatch::Types),
+        }
     }
 
     /// `ty` unified with the error type `err`: each variable of `ty` (of a

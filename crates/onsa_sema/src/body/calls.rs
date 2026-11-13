@@ -144,7 +144,7 @@ impl<'a> Checker<'a> {
                 // result, before the result meets `expected` (§3.3, S-231).
                 let conversion = self.conversion_to(d, of);
                 if let (Some(exp), None) = (expected, conversion) {
-                    self.fit_at(span, ret, exp)?;
+                    self.fit_at(span, ret, exp, Found::Other)?;
                 }
                 self.check_args(args, &params, e)?;
                 if let Some(to) = conversion {
@@ -152,7 +152,7 @@ impl<'a> Checker<'a> {
                     let call = ConversionCall { e, expected };
                     self.conversion_use(name.span, targs[0], to, ret, Some(call))?;
                     if let Some(exp) = expected {
-                        self.fit_at(span, ret, exp)?;
+                        self.fit_at(span, ret, exp, Found::Other)?;
                     }
                 }
                 let inst = self.instance(d, targs, span, (self.buf_element(d), None))?;
@@ -171,7 +171,7 @@ impl<'a> Checker<'a> {
                     variant.fields.iter().map(|&f| (Mode::Borrow, self.a.types.subst(f, &targs))).collect();
                 let ret = self.a.types.intern(Ty::Named(d, targs.clone()));
                 if let Some(exp) = expected {
-                    self.fit_at(span, ret, exp)?;
+                    self.fit_at(span, ret, exp, Found::Other)?;
                 }
                 self.check_args(args, &params, e)?;
                 self.finish_instance(d, targs, span)?;
@@ -256,7 +256,7 @@ impl<'a> Checker<'a> {
                 }
                 let (params, ret) = self.member_sig(md, f, &targs, of);
                 if let Some(exp) = expected {
-                    self.fit_at(span, ret, exp)?;
+                    self.fit_at(span, ret, exp, Found::Other)?;
                 }
                 self.check_args(args, &params, e)?;
                 let inst = self.instance(md, targs, span, (element, None))?;

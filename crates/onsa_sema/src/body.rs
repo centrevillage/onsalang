@@ -50,6 +50,7 @@ mod entry;
 mod expressions;
 mod fixed_str;
 mod generics;
+mod mode_note;
 mod named;
 mod operator_fix;
 mod patterns;
@@ -60,6 +61,7 @@ mod reread;
 mod statements;
 mod trial;
 
+pub(crate) use mode_note::Found;
 pub(crate) use operator_fix::UNSIGNED_NEGATION;
 
 // ---------------------------------------------------------------- tables
@@ -699,47 +701,50 @@ impl<'a> Checker<'a> {
 
     /// Unify, reporting E0401 at `span` on failure.
     pub(crate) fn unify_at(&mut self, span: Span, actual: TyId, expected: TyId) -> R<()> {
-        match self.mismatch_at(span, actual, expected, false) {
+        match self.mismatch_at(span, actual, expected, None) {
             Some(d) => Err(self.diag(d)),
             None => Ok(()),
         }
     }
 
-    /// The value of the type `actual` at `span` used where `expected` is
-    /// expected ([`Infer::fits`], §8.1), reporting E0401 on failure.
-    pub(crate) fn fit_at(&mut self, span: Span, actual: TyId, expected: TyId) -> R<()> {
-        match self.mismatch_at(span, actual, expected, true) {
+    /// The value of the type `actual` at `span`, of the form `found`, used
+    /// where `expected` is expected ([`Infer::fits`], §8.1), reporting E0401
+    /// on failure.
+    pub(crate) fn fit_at(&mut self, span: Span, actual: TyId, expected: TyId, found: Found) -> R<()> {
+        match self.mismatch_at(span, actual, expected, Some(found)) {
             Some(d) => Err(self.diag(d)),
             None => Ok(()),
         }
     }
 
-    /// Unify, or fit if `directed` ([`Infer::fits`]), giving the E0401 at
-    /// `span` on failure, for the caller to report.
+    /// Unify, or fit a value of the form `fit` ([`Infer::fits`]), giving the
+    /// E0401 at `span` on failure, for the caller to report.
     pub(crate) fn mismatch_at(
         &mut self,
         span: Span,
         actual: TyId,
         expected: TyId,
-        directed: bool,
+        fit: Option<Found>,
     ) -> Option<Diagnostic> {
         let cause = self.cause(span, Some(expected));
         let types = &mut self.a.types;
-        let r = if directed {
-            self.infer.fits(types, actual, expected, &cause)
-        } else {
-            self.infer.unify(types, actual, expected, &cause)
+        let r = match fit {
+            Some(_) => self.infer.fits(types, actual, expected, &cause),
+            None => self.infer.unify(types, actual, expected, &cause),
         };
         let Err(mismatch) = r else { return None };
         let (a, e) = (self.display(actual), self.display(expected));
         let (found, wanted) = (self.infer.lit_of(&self.a.types, actual), self.infer.lit_of(&self.a.types, expected));
-        let text = match (mismatch, found, wanted) {
+        let text = match (&mismatch, found, wanted) {
             (Mismatch::Literal, Some(k), _) => format!("{} literal cannot have type `{e}`", k.words()),
             (Mismatch::Literal, None, Some(k)) => format!("expected {}, found `{a}`", k.words()),
             // A literal in a part of the types (`fn({integer})`): neither is one.
             _ => format!("expected `{e}`, found `{a}`"),
         };
         let d = Diagnostic::new(Stage::Types, Code::E0401, span, text).with_found(self.src(span));
+        if let (Some(fit), Mismatch::Modes(ps)) = (fit, &mismatch) {
+            return Some(self.modes_help(d, fit, ps, (actual, expected)));
+        }
         // The other side of a float literal (§6.6, S-881).
         let other = match (found, wanted) {
             (Some(LitKind::Float), _) => expected,

@@ -60,6 +60,7 @@ mod manifest_prefix;
 mod manifest_required;
 mod manifest_targets;
 mod manifest_values;
+mod mode_only_notes;
 mod name_overlaps;
 mod naming_shapes;
 mod nesting;

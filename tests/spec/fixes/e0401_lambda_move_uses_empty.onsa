@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§6.1", "§5.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "24:10"
+// code = "E0401"
+// candidate = 1
+// clean = true
+
+// W6-01 U3/t, S-872 after U2a (§8.1: "引数の位置に直接書いた無名関数が、期待する関数型と引数のモードだけ違う（引数の数と型は一致し、期待が `move` で、書いたのが
+// 既定のモード）E0401 は、その引数に `move` を足す修正候補を示す"; the second rule of the compatibility of function types: the effect row of what is found is within the
+// expected one, so a pure function is used where `uses {Alloc}` is expected): an anonymous function that writes the empty row `uses {}`, given where
+// `fn(move U32) -> U32 uses {Alloc}` is expected, differs from the expected type in the mode of its parameter alone (the row is within the expected one), so the E0401 has the
+// candidate that adds `move`, as one of a function with no row (negative/lambda_move_candidates.onsa has those). After it the file is clean (`clean`). One diagnostic in the
+// file, because `clean` is about the whole file (tests/README.md). When the row is not within the expected one (`uses {Alloc}` where nothing is allowed) `move` would not make it fit,
+// and there is no candidate: that is in the Rust test `mode_only_notes.rs`, which also has the notes of the E0401 of the modes alone.
+
+pub fn take_m(f: fn(move U32) -> U32 uses {Alloc}) -> U32 uses {Alloc} {
+  f.(1)
+}
+
+pub fn run() -> U32 uses {Alloc} {
+  take_m(fn(x: U32) -> U32 uses {} { x })                        //~ E0401
+}
