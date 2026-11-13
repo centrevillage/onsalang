@@ -1,6 +1,8 @@
 //! The entry of the modes stage: one walk of each body the stage reads,
 //! in source order, and its one diagnostic (§18.1).
 
+use std::rc::Rc;
+
 use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::internal::bug;
 use onsa_diag::{Code, Diagnostic, Span, Stage};
@@ -10,7 +12,7 @@ use super::capture::Frame;
 use super::flow::Run;
 use super::frozen::Frozen;
 use super::place::{Change, Deps, Place, Proj, path_text};
-use super::state::{LoopSum, Status};
+use super::state::{LoopSum, Releases, Status};
 use super::walk::Pos;
 use super::write::Of;
 use crate::body::{BodyInfo, DropPoint, Dropped, LocalId, Taken, generics_of, root_of};
@@ -44,9 +46,13 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
         found.extend(w.m.found.into_iter().min_by(|x, y| x.order_in_file().cmp(&y.order_in_file())));
         // Not of a flow's body (§12.4: its state drops freely; R-453 is W7-04).
         if !matches!(a.def(id).kind, DefKind::Flow(_)) {
-            // A point of a binding released on every path is kept if one of its releases copied (S-1030).
-            let reverted = &w.m.reverted;
-            let gone = (w.m.unless.iter()).filter(|(_, at)| !at.iter().any(|x| reverted.contains(x)));
+            // A point of a binding released on every path is kept if one of its releases copied (S-1030);
+            // a set the points share is read once.
+            let (reverted, mut moves) = (&w.m.reverted, HashMap::default());
+            debug_assert!(w.m.unless.windows(2).all(|p| p[0].0 < p[1].0), "the points of `unless` in order, once");
+            let gone = (w.m.unless.iter()).filter(|(_, at)| {
+                *moves.entry(Rc::as_ptr(at)).or_insert_with(|| !at.iter().any(|x| reverted.contains(x)))
+            });
             let (mut gone, mut points, mut k) = (gone.map(|p| p.0).peekable(), w.m.drops, 0);
             if gone.peek().is_some() {
                 points.retain(|_| {
@@ -137,7 +143,7 @@ pub(super) struct Made {
     pub(super) drops: Vec<DropPoint>,
     /// Of a point of a binding released on every path to it, its number
     /// and the releases: it is one only if one of them copies (S-1030).
-    pub(super) unless: Vec<(usize, Vec<ExprId>)>,
+    pub(super) unless: Vec<(usize, Releases)>,
     /// The releases used after, by every walk: copies (S-1030, [`Walker::restore`]).
     reverted: HashSet<ExprId>,
     /// The expressions visited (at most twice each: by the walk that
@@ -262,7 +268,7 @@ impl<'a> Walker<'a> {
         let roots = if self.deps.indexed(l) { self.deps.origins(l) } else { Default::default() };
         for root in roots.into_iter().chain([l]) {
             if let Some(at) = r.cur.restore(root) {
-                self.m.reverted.extend(at);
+                self.m.reverted.extend(at.iter());
             }
         }
     }

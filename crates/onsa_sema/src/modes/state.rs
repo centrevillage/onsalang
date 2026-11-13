@@ -8,6 +8,7 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::mem::replace;
+use std::rc::Rc;
 
 use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::internal::bug;
@@ -30,8 +31,9 @@ pub(super) enum Status {
     Released { at: Releases },
 }
 
-/// The consuming expressions that released a binding (S-1030).
-pub(super) type Releases = BTreeSet<ExprId>;
+/// The consuming expressions that released a binding (S-1030), shared by
+/// the states that hold them (a copy is made only when a join adds to it).
+pub(super) type Releases = Rc<BTreeSet<ExprId>>;
 
 impl Status {
     /// A semilattice (so the order of a join does not matter): moved over
@@ -42,7 +44,11 @@ impl Status {
     /// a release meets no other.
     fn join(&mut self, other: &Status) {
         match (&mut *self, other) {
-            (Status::Released { at }, Status::Released { at: more }) => at.extend(more),
+            (Status::Released { at }, Status::Released { at: more }) => {
+                if !Rc::ptr_eq(at, more) {
+                    Rc::make_mut(at).extend(more.iter())
+                }
+            }
             (Status::Released { .. }, _) | (_, Status::Released { .. }) => {
                 bug(None, "a release joined with a move or a change of the same binding")
             }
@@ -189,7 +195,7 @@ impl Delta {
     /// The Dup value of `l` released by the expression `at`: as a move,
     /// until a use after it ([`Delta::restored`]).
     pub(super) fn released(&mut self, l: LocalId, at: ExprId) {
-        self.consumed(l, Status::Released { at: BTreeSet::from([at]) });
+        self.consumed(l, Status::Released { at: Rc::new(BTreeSet::from([at])) });
     }
 
     /// Its releases copied (each path that released `l` holds it): live.
@@ -298,27 +304,34 @@ enum Undo {
 /// from a mark finds one change of each binding for each mark open since.
 /// `last`: of each binding, the place + 1 of its last change in the record
 /// (none: 0, and not kept). `copies`: the releases this walk found used
-/// after (S-1030, [`Trail::restore`]).
+/// after (S-1030, [`Trail::restore`]); `copied`: the sets of them it added,
+/// by their address (each kept, so the address is not used again).
 pub(super) struct Trail {
     now: Delta,
     log: Vec<Undo>,
     marks: Vec<usize>,
     last: HashMap<LocalId, usize>,
     copies: HashSet<ExprId>,
+    copied: HashMap<*const BTreeSet<ExprId>, Releases>,
 }
 
 impl Trail {
     pub(super) fn new() -> Trail {
-        let (log, marks, last, copies) = Default::default();
-        Trail { now: Delta::start(), log, marks, last, copies }
+        let (log, marks, last, copies, copied) = Default::default();
+        Trail { now: Delta::start(), log, marks, last, copies, copied }
     }
 
-    /// `l` used: its releases here copy, and it is live ([`Delta::restored`]); them.
+    /// `l` used: its releases here copy, and it is live ([`Delta::restored`]);
+    /// them, unless this walk found the same set used before (a loop's
+    /// head, met by each arm: the work of a use is not of the set).
     pub(super) fn restore(&mut self, l: LocalId) -> Option<Releases> {
         let Some(Status::Released { at }) = self.now.status(l) else { return None };
         let at = at.clone();
-        self.copies.extend(&at);
         self.change(l, |d| d.restored(l));
+        if self.copied.insert(Rc::as_ptr(&at), at.clone()).is_some() {
+            return None;
+        }
+        self.copies.extend(at.iter());
         Some(at)
     }
 
@@ -330,8 +343,8 @@ impl Trail {
         if !at.iter().any(|x| self.copies.contains(x)) {
             return Cow::Borrowed(e);
         }
-        let left: Releases = at.iter().filter(|x| !self.copies.contains(x)).copied().collect();
-        let dead = (!left.is_empty()).then_some(Status::Released { at: left });
+        let left: BTreeSet<ExprId> = at.iter().filter(|x| !self.copies.contains(x)).copied().collect();
+        let dead = (!left.is_empty()).then(|| Status::Released { at: Rc::new(left) });
         Cow::Owned(Ends { through: e.through, dead, live: true })
     }
 

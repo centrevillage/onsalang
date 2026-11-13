@@ -234,10 +234,19 @@ def w602_releases(form, n):
     """W6-02 U4a (D12): one owned `Str` released in n branches (S-1030, R-255): `ret`, each branch returns its
     release (sets of one); `arms`, the n arms of a `match` release it and it is used after their join (one set
     of n, restored once); `seq`, n `if`s each release it after the release before is used (each join meets
-    the set of the ifs before, n x n with the sets of the releases a join copies). The lowering of these forms is
-    n x n before U4a too (4000 `if`s: about 12 to 20 s, the check about 0.05 s), so the sizes stop at 4000."""
+    the set of the ifs before, n x n with the sets of the releases a join copies). W6-02 U4a2: `loop`, the n arms
+    of a `match` in a loop release it, used by each arm as the loop's head (the set of n each arm meets, n x n
+    if copied by each use); `exits`, the n arms release it, then n `if`s return (the set of n each exit's drop
+    point keeps, n x n if copied by each). The lowering of these forms is n x n before U4a too (4000 `if`s:
+    about 12 to 20 s, the check about 0.05 s), so the sizes stop at 4000."""
     h = "pub fn eat(move s: Str) -> U32 uses {Alloc} { s.len() }\n"
-    if form == "ret":
+    eats = "".join(f"    {i} => {{ a = a + eat(s) }},\n" for i in range(n))
+    if form == "loop":
+        body = f"  var a: U32 = 0\n  while c {{\n  match k {{\n{eats}    _ => {{ a = a + s.len() }},\n  }}\n  }}\n  a\n"
+    elif form == "exits":
+        body = f"  var a: U32 = 0\n  match k {{\n{eats}    _ => {{ a = a + eat(s) }},\n  }}\n"
+        body += "  if c { return a }\n" * n + "  a\n"
+    elif form == "ret":
         body = "".join(f"  if k == {i} {{ return eat(s) }}\n" for i in range(n)) + "  0\n"
     elif form == "arms":
         arms = "".join(f"    {i} => eat(s),\n" for i in range(n))
@@ -245,7 +254,8 @@ def w602_releases(form, n):
     else:
         body = "  var a: U32 = 0\n" + "".join(f"  if k == {i} {{ a = a + eat(s) }}\n" for i in range(n))
         body += "  a + s.len()\n"
-    return h + "pub fn t(move s: Str, k: U32) -> U32 uses {Alloc} {\n" + body + "}\n"
+    c = ", c: Bool" if form in ("loop", "exits") else ""
+    return h + f"pub fn t(move s: Str, k: U32{c}) -> U32 uses {{Alloc}} {{\n" + body + "}\n"
 
 SCALE = [("voice", "decls x", voice_times, [(k,) for k in (1, 2, 4, 8, 16)])]
 
@@ -263,6 +273,8 @@ QUAD = [
     ("w602_releases", "returned releases", w602_releases, [("ret", n) for n in (500, 1000, 2000, 4000)]),
     ("w602_release_arms", "releases joined", w602_releases, [("arms", n) for n in (500, 1000, 2000, 4000)]),
     ("w602_release_seq", "releases used after", w602_releases, [("seq", n) for n in (500, 1000, 2000, 4000)]),
+    ("w602_release_loop_arms", "releases at a loop's head", w602_releases, [("loop", n) for n in (500, 1000, 2000, 4000)]),
+    ("w602_release_exits", "releases, then exits", w602_releases, [("exits", n) for n in (500, 1000, 2000, 4000)]),
     ("w409_held_w", "F=120, W", w409_held, [(120, w) for w in (1500, 3000, 6000, 12000)]),
     ("w409_held_f", "W=6000, F", w409_held, [(f, 6000) for f in (15, 30, 60, 120)]),
     ("w409_same_w", "S=100, W", w409_same, [(100, w) for w in (750, 1500, 3000, 6000)]),

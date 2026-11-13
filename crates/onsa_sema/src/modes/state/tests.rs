@@ -5,6 +5,7 @@
 //! no identity, and a loop's head is the least fixpoint of `h = x ⊔ back(h)`.
 
 use std::collections::BTreeMap;
+use std::rc::Rc;
 
 use onsa_diag::{FileId, Span};
 use onsa_syntax::ast::ExprId;
@@ -35,7 +36,7 @@ fn all() -> Vec<Ends> {
 /// Of a binding of a Dup value (S-1030), which is only released: none, and
 /// released at one place, another, or both.
 fn released() -> Vec<Ends> {
-    let rel = |xs: &[u32]| Some(Status::Released { at: xs.iter().map(|&x| ExprId(x)).collect() });
+    let rel = |xs: &[u32]| Some(Status::Released { at: Rc::new(xs.iter().map(|&x| ExprId(x)).collect()) });
     with_deads(&[None, rel(&[1]), rel(&[2]), rel(&[1, 2])])
 }
 
@@ -489,4 +490,26 @@ fn a_mark_inside_a_mark_records_each_binding_once_and_joins_as_the_whole_states(
             }
         }
     }
+}
+
+/// A binding released at two places, used in each arm from a mark (a
+/// loop's head met by each arm): the first use gives the releases, the
+/// arms after it meet the same shared set and get none (copied once, the
+/// work of a use not of the set); each use leaves it live, and the mark
+/// gives back the set as it was.
+#[test]
+fn a_set_of_releases_used_again_is_copied_once() {
+    let (mut t, l) = (Trail::new(), LocalId(0));
+    t.change(l, |d| d.released(l, ExprId(1)));
+    t.change(l, |d| d.released(l, ExprId(2)));
+    let Some(Status::Released { at: head }) = t.now.status(l).cloned() else { panic!("not released") };
+    let m = t.mark();
+    for arm in 0..3 {
+        t.back_to(m);
+        assert!(matches!(t.now.status(l), Some(Status::Released { at }) if Rc::ptr_eq(at, &head)), "arm {arm}");
+        let got = t.restore(l);
+        assert_eq!(got.as_deref().cloned(), (arm == 0).then(|| (*head).clone()), "arm {arm}");
+        assert!(t.now.status(l).is_none(), "arm {arm}: live");
+    }
+    assert_eq!(t.copies.len(), 2);
 }

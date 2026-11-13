@@ -394,7 +394,7 @@ impl Walker<'_> {
         if self.reports && r.cur.state().reaches() {
             let closure = self.closure_in();
             if let Some(xs) = unless {
-                self.m.unless.push((self.m.drops.len(), xs.iter().copied().collect()));
+                self.m.unless.push((self.m.drops.len(), xs.clone()));
             }
             self.m.drops.push(DropPoint { at, what, closure, sure });
         }
