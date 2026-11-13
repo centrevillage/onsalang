@@ -10,6 +10,22 @@ impl<'a> Checker<'a> {
     // ------------------------------------------------------------ expressions
 
     pub(crate) fn check_expr(&mut self, e: ExprId, expected: Option<TyId>) -> R<TyId> {
+        self.check_expr_as(e, expected, false)
+    }
+
+    /// `e`, with `expected` the type of an earlier branch of a merge that
+    /// joins function types when `join` (§4.7, S-1031): a function found in
+    /// `e` is joined with it, and `e` has its own type. What gives `e`'s
+    /// expected type on (a block to its end, parentheses, a merge) gives
+    /// `join` too.
+    pub(crate) fn check_expr_as(&mut self, e: ExprId, expected: Option<TyId>, join: bool) -> R<TyId> {
+        let outer = std::mem::replace(&mut self.joining, join);
+        let t = self.check_expr_fit(e, expected);
+        self.joining = outer;
+        t
+    }
+
+    fn check_expr_fit(&mut self, e: ExprId, expected: Option<TyId>) -> R<TyId> {
         let span = self.expr(e).span;
         if let Some(part) = self.info.diverging.evaluated_part(self.ast, e) {
             return Err(self.never_carried_out(span, part));
@@ -21,13 +37,44 @@ impl<'a> Checker<'a> {
             ExprKind::Closure { .. } => Found::Closure(None),
             _ => Found::Other,
         };
-        self.fit_at(span, t, exp, found)?;
+        let fns = self.fit_at(span, t, exp, found)?;
         // A function fit to a function type has the type expected, so that
-        // what is made of it (a tuple, an arm) has it; `e` keeps its own
-        // (§8.1, §4.7).
+        // what is made of it (a tuple, an arm) has it; one joined has its
+        // own, and `e` keeps its own (§8.1, §4.7).
         let found = self.record_within(e, t)?;
-        let fns = [found, exp].map(|t| matches!(self.a.types.get(self.shallow(t)), Ty::Fn(_)));
-        Ok(if fns == [true, true] { exp } else { found })
+        Ok(if fns && !self.joining { exp } else { found })
+    }
+
+    /// Whether a merge (`if`, `match`, an array) with the expected type
+    /// `expected` of its branches joins their function types (§4.7,
+    /// S-1031): with none, or one that is an undecided variable itself.
+    fn undecided(&self, expected: Option<TyId>) -> bool {
+        expected
+            .is_none_or(|t| self.infer.is_unresolved(&self.a.types, t) && self.infer.lit_of(&self.a.types, t).is_none())
+    }
+
+    /// The expected type of the next branch of a merge after the branches
+    /// of the types `ts` (§4.7): the first that is decided, so that each
+    /// pair of function types is joined (S-1031), else the first.
+    fn join_hint(&self, ts: &[TyId], expected: Option<TyId>) -> Option<TyId> {
+        let decided = ts.iter().find(|&&t| !self.infer.is_unresolved(&self.a.types, t));
+        decided.or(ts.first()).copied().or(expected)
+    }
+
+    /// The type of a merge at `span` whose branches of the types `ts` are
+    /// joined (§4.7, S-1031): their join, which a branch of an undecided
+    /// variable (the value of a `None` read, a diverging branch) takes once.
+    pub(super) fn join_arms(&mut self, span: Span, ts: &[TyId]) -> R<TyId> {
+        let mut t = ts[0];
+        for &u in &ts[1..] {
+            t = self.infer.join(&mut self.a.types, t, u);
+        }
+        for &u in ts {
+            if self.infer.is_unresolved(&self.a.types, u) {
+                self.unify_at(span, u, t)?;
+            }
+        }
+        Ok(t)
     }
 
     /// The type of `e`, the `?` on `inner` (§9.1), with the constructors it
@@ -104,10 +151,10 @@ impl<'a> Checker<'a> {
                 self.defer(span, t, DeferredKind::Hole { visible });
                 Ok(self.record(e, t))
             }
-            ExprKind::Paren(inner) => self.check_expr(*inner, expected),
+            ExprKind::Paren(inner) => self.check_expr_as(*inner, expected, self.joining),
             // `move x` (§5.2, S-21): same type as its operand. Whether it is a
             // place is the modes stage's (R-198: its candidate asks the kinds).
-            ExprKind::Move(inner) => self.check_expr(*inner, expected),
+            ExprKind::Move(inner) => self.check_expr_as(*inner, expected, self.joining),
             ExprKind::Tuple(elems) => {
                 if elems.is_empty() {
                     return Ok(self.unit());
@@ -141,11 +188,13 @@ impl<'a> Checker<'a> {
                     };
                     return Ok(self.a.types.intern(Ty::Array(el, Len::Const(0))));
                 }
-                let first = self.check_expr(elems[0], exp_elem)?;
+                let join = self.undecided(exp_elem);
+                let mut ts = vec![self.check_expr_as(elems[0], exp_elem, join)?];
                 for &el in &elems[1..] {
-                    self.check_expr(el, Some(first))?;
+                    ts.push(self.check_expr_as(el, self.join_hint(&ts, exp_elem), join)?);
                 }
-                Ok(self.a.types.intern(Ty::Array(first, Len::Const(elems.len() as u32))))
+                let el = if join { self.join_arms(span, &ts)? } else { ts[0] };
+                Ok(self.a.types.intern(Ty::Array(el, Len::Const(elems.len() as u32))))
             }
             ExprKind::Repeat { elem, len } => {
                 let exp_elem = expected.and_then(|t| match self.ty(self.shallow(t)) {
@@ -177,7 +226,8 @@ impl<'a> Checker<'a> {
                 // After a member of a value, not called: a field, or what is
                 // no field, as with no type arguments (E0413, S-992).
                 if !self.names.members.contains_key(&e) {
-                    return self.check_expr(*base, expected);
+                    self.written = Some((*base, span));
+                    return self.check_expr_as(*base, expected, self.joining);
                 }
                 // The error of the member comes first (§4.5, S-992).
                 self.check_expr(*base, None)?;
@@ -205,10 +255,11 @@ impl<'a> Checker<'a> {
                 self.check_expr(*cond, Some(bool_))?;
                 match else_ {
                     Some(el) => {
-                        let t = self.check_expr(*then, expected)?;
+                        let join = self.joining || self.undecided(expected);
+                        let t = self.check_expr_as(*then, expected, join)?;
                         // Merged with the other branch: not the reason of the outer expectation.
-                        self.without_why(|ck| ck.check_expr(*el, Some(t)))?;
-                        Ok(t)
+                        let u = self.without_why(|ck| ck.check_expr_as(*el, Some(t), join))?;
+                        if join { self.join_arms(span, &[t, u]) } else { Ok(t) }
                     }
                     None => {
                         let unit = self.unit();
@@ -467,7 +518,7 @@ impl<'a> Checker<'a> {
                 self.after_stmt()?;
             }
             match b.tail {
-                Some(t) => self.check_expr(t, expected),
+                Some(t) => self.check_expr_as(t, expected, self.joining),
                 // A block that ends in a diverging statement takes any type
                 // (§7; a trailing `return e` is allowed, §6.1).
                 None if self.info.diverging.block(self.ast, b) => Ok(expected.unwrap_or_else(|| self.fresh())),
@@ -493,9 +544,9 @@ impl<'a> Checker<'a> {
         let span = self.expr(e).span;
         let st = self.check_expr(scrutinee, None)?;
         let st = self.known(st, self.expr(scrutinee).span, "`match` operand")?;
-        let mut result: Option<TyId> = expected;
-        let mut seen = Seen::default();
-        self.read_arms(&Arms { expr: e, arms, st, expected }, &mut seen, &mut result)?;
+        let join = self.joining || self.undecided(expected);
+        let (mut seen, mut types) = (Seen::default(), Vec::new());
+        self.read_arms(&Arms { expr: e, arms, st, expected, join }, &mut seen, &mut types)?;
         if self.judges_arms(st)
             && let Some(missing) = self.missing_pattern(&mut seen, st)
         {
@@ -510,7 +561,11 @@ impl<'a> Checker<'a> {
                 Missing::OverLimit => d.with_rule("the arms are too many ways to read through; write a `_` arm"),
             }));
         }
-        Ok(result.unwrap_or_else(|| self.unit()))
+        match expected {
+            _ if join && !types.is_empty() => self.join_arms(span, &types),
+            Some(t) => Ok(t),
+            None => Ok(self.unit()),
+        }
     }
 
     /// Whether the arms of a `match` of a value of type `st` are judged, for
@@ -527,7 +582,7 @@ impl<'a> Checker<'a> {
     /// and the body. An arm with a guard is asked about but covers nothing.
     /// Stops at an arm that gets no value and gives its index, with nothing
     /// reported ([`Self::read_arms`]).
-    pub(super) fn check_arms(&mut self, m: &Arms<'_>, seen: &mut Seen, result: &mut Option<TyId>) -> R<Option<usize>> {
+    pub(super) fn check_arms(&mut self, m: &Arms<'_>, seen: &mut Seen, types: &mut Vec<TyId>) -> R<Option<usize>> {
         let (st, expected) = (m.st, m.expected);
         for (k, arm) in m.arms.iter().enumerate() {
             let waiting = (self.deferred.len(), self.deferred_end.len());
@@ -552,14 +607,13 @@ impl<'a> Checker<'a> {
                 seen.add(p, self.ast.pat(arm.pat).span);
             }
             // The arms after the first are merged with it (not the outer reason).
-            let t = if *result == expected {
-                self.check_expr(arm.body, *result)?
+            let hint = if m.join { self.join_hint(types, expected) } else { expected };
+            let t = if hint == expected {
+                self.check_expr_as(arm.body, hint, m.join)?
             } else {
-                self.without_why(|ck| ck.check_expr(arm.body, *result))?
+                self.without_why(|ck| ck.check_expr_as(arm.body, hint, m.join))?
             };
-            if result.is_none() {
-                *result = Some(t);
-            }
+            types.push(t);
         }
         Ok(None)
     }
@@ -624,7 +678,8 @@ impl<'a> Checker<'a> {
                 None => self.fresh(),
             },
         };
-        let rt = exp_fn.as_ref().map(|f| f.rt).unwrap_or(false);
+        // A later branch of a merge takes no `rt` (§4.7; its effects, S-1032).
+        let rt = !self.joining && exp_fn.as_ref().is_some_and(|f| f.rt);
         // The body runs in its own frame: `return` targets the closure (its
         // captures are the record's, §5.3).
         self.frames.push(Frame { ret: ret_ty, loop_depth: 0 });

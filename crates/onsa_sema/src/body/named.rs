@@ -324,7 +324,7 @@ impl<'a> Checker<'a> {
                         let fty = self.fn_type(f, &args);
                         let fty = self.member_ty(d, fty, &[], of);
                         if let Some(exp) = expected {
-                            self.fit_at(name.span, fty, exp, Found::Item(self.expr(e).span))?;
+                            self.fit_at(name.span, fty, exp, Found::Item(self.expr(e).span, self.written(e)))?;
                         }
                         // The value of a conversion function is judged as a
                         // call of it is (`F64.round_from` at `fn(F32) -> F64`,
@@ -367,7 +367,7 @@ impl<'a> Checker<'a> {
                     self.a.types.intern(Ty::Fn(FnTy { rt: true, params, ret: enum_ty, effects: Default::default() }))
                 };
                 if let Some(exp) = expected {
-                    self.fit_at(name.span, t, exp, Found::Ctor(self.expr(e).span))?;
+                    self.fit_at(name.span, t, exp, Found::Ctor(self.written(e)))?;
                 }
                 // The whole path (`E.A`), where the variable is made.
                 self.finish_instance(d, args, span)?;

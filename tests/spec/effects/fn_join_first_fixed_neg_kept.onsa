@@ -1,0 +1,529 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§8.1", "§10"]
+
+// W6-01 U2b/t, S-1031 (§4.7, §8.1, §10). The refused ones of the form of fn_join_first_fixed_ok.onsa (see there): the later branch stronger than the first (`if c { Some(r) } else { Some(k) }`: the type of the
+// first branch is `Option[rt fn(U32) -> U32]`, and `k` is not `rt`; `Some(k)` and `Some(b)`; tuples and structs the same; `match` the same), written on one line so the mark does not depend on which branch is reported;
+// `pick(r, k)` and the later argument that is a join with an arm stronger than the first argument (`pick(r, if c { k } else { r })`, `pick(k, if c { b } else { k })`); the assignment to a `var` of a function that is
+// stronger than the type of its initialization; the tail of a lambda that is stronger than the type that its `return` fixed; and the type of the result, which is the type of the first branch, tried at the places
+// and at the types of `Option` and `W` that it is not. Checked, not run.
+//
+// The units of this file are the ones that the code before U2b already answers as written here; they are kept apart from the units that need the join (in fn_join_first_fixed_neg.onsa), so that a change in them is not hidden by that file.
+
+pub fn k(x: U32) -> U32 {
+  x
+}
+
+pub rt fn r(x: U32) -> U32 {
+  x
+}
+
+pub fn b(x: U32) -> U32 uses {Alloc} {
+  x
+}
+
+// The places the joined type is tried at: an `rt` place, a place with an empty effect row, a place with `uses {Alloc}`, and the same three
+// in an array type (an element of a type argument is compared as equal, so these say what the type of the join is).
+pub rt fn at_rt(g: rt fn(U32) -> U32) -> U32 {
+  g.(1)
+}
+
+pub fn at_pure(g: fn(U32) -> U32) -> U32 {
+  g.(1)
+}
+
+pub fn at_alloc(g: fn(U32) -> U32 uses {Alloc}) -> U32 uses {Alloc} {
+  g.(1)
+}
+
+pub rt fn arr_rt(a: [rt fn(U32) -> U32; 2]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr_pure(a: [fn(U32) -> U32; 2]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr_alloc(a: [fn(U32) -> U32 uses {Alloc}; 2]) -> U32 uses {Alloc} {
+  a[0].(1)
+}
+
+pub rt fn arr3_rt(a: [rt fn(U32) -> U32; 3]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr3_pure(a: [fn(U32) -> U32; 3]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr3_alloc(a: [fn(U32) -> U32 uses {Alloc}; 3]) -> U32 uses {Alloc} {
+  a[0].(1)
+}
+
+pub fn first[T](xs: [T; 2]) -> T {
+  xs[0]
+}
+
+pub fn pick[T](a: T, c: T) -> T {
+  a
+}
+
+pub struct W[T] {
+  h: T,
+}
+
+pub fn opt_rt(o: Option[rt fn(U32) -> U32]) -> U32 {
+  match o {
+    Some(f) => f.(1),
+    None => 0,
+  }
+}
+
+pub fn opt_pure(o: Option[fn(U32) -> U32]) -> U32 {
+  match o {
+    Some(f) => f.(1),
+    None => 0,
+  }
+}
+
+pub fn opt_alloc(o: Option[fn(U32) -> U32 uses {Alloc}]) -> U32 uses {Alloc} {
+  match o {
+    Some(f) => f.(1),
+    None => 0,
+  }
+}
+
+pub fn w_rt(w: W[rt fn(U32) -> U32]) -> U32 {
+  w.h.(1)
+}
+
+pub fn w_pure(w: W[fn(U32) -> U32]) -> U32 {
+  w.h.(1)
+}
+
+pub fn w_alloc(w: W[fn(U32) -> U32 uses {Alloc}]) -> U32 uses {Alloc} {
+  w.h.(1)
+}
+
+pub fn if_some_kr_type_rt(c: Bool) -> U32 {
+  let v = if c { Some(k) } else { Some(r) }
+  opt_rt(v)   //~ E0401
+}
+
+pub fn if_some_kr_type_alloc(c: Bool) -> U32 uses {Alloc} {
+  let v = if c { Some(k) } else { Some(r) }
+  opt_alloc(v)   //~ E0401
+}
+
+pub fn if_some_kk_type_rt(c: Bool) -> U32 {
+  let v = if c { Some(k) } else { Some(k) }
+  opt_rt(v)   //~ E0401
+}
+
+pub fn if_some_kk_type_alloc(c: Bool) -> U32 uses {Alloc} {
+  let v = if c { Some(k) } else { Some(k) }
+  opt_alloc(v)   //~ E0401
+}
+
+pub fn if_some_bk_type_pure(c: Bool) -> U32 {
+  let v = if c { Some(b) } else { Some(k) }
+  opt_pure(v)   //~ E0401
+}
+
+pub fn if_some_bk_type_rt(c: Bool) -> U32 {
+  let v = if c { Some(b) } else { Some(k) }
+  opt_rt(v)   //~ E0401
+}
+
+pub fn if_some_br_type_pure(c: Bool) -> U32 {
+  let v = if c { Some(b) } else { Some(r) }
+  opt_pure(v)   //~ E0401
+}
+
+pub fn if_some_br_type_rt(c: Bool) -> U32 {
+  let v = if c { Some(b) } else { Some(r) }
+  opt_rt(v)   //~ E0401
+}
+
+pub fn if_some_rr_type_pure(c: Bool) -> U32 {
+  let v = if c { Some(r) } else { Some(r) }
+  opt_pure(v)   //~ E0401
+}
+
+pub fn if_some_rr_type_alloc(c: Bool) -> U32 uses {Alloc} {
+  let v = if c { Some(r) } else { Some(r) }
+  opt_alloc(v)   //~ E0401
+}
+
+pub fn if_some_bb_type_pure(c: Bool) -> U32 {
+  let v = if c { Some(b) } else { Some(b) }
+  opt_pure(v)   //~ E0401
+}
+
+pub fn if_some_bb_type_rt(c: Bool) -> U32 {
+  let v = if c { Some(b) } else { Some(b) }
+  opt_rt(v)   //~ E0401
+}
+
+pub fn if_some_rk_stronger(c: Bool) -> U32 {
+  let _ = if c { Some(r) } else { Some(k) }   //~ E0401
+  0
+}
+
+pub fn if_some_kb_stronger(c: Bool) -> U32 {
+  let _ = if c { Some(k) } else { Some(b) }   //~ E0401
+  0
+}
+
+pub fn if_some_rb_stronger(c: Bool) -> U32 {
+  let _ = if c { Some(r) } else { Some(b) }   //~ E0401
+  0
+}
+
+pub fn match_some_kr_type_rt(n: U32) -> U32 {
+  let v = match n { 0 => Some(k), _ => Some(r) }
+  opt_rt(v)   //~ E0401
+}
+
+pub fn match_some_kr_type_alloc(n: U32) -> U32 uses {Alloc} {
+  let v = match n { 0 => Some(k), _ => Some(r) }
+  opt_alloc(v)   //~ E0401
+}
+
+pub fn match_some_kk_type_rt(n: U32) -> U32 {
+  let v = match n { 0 => Some(k), _ => Some(k) }
+  opt_rt(v)   //~ E0401
+}
+
+pub fn match_some_kk_type_alloc(n: U32) -> U32 uses {Alloc} {
+  let v = match n { 0 => Some(k), _ => Some(k) }
+  opt_alloc(v)   //~ E0401
+}
+
+pub fn match_some_bk_type_pure(n: U32) -> U32 {
+  let v = match n { 0 => Some(b), _ => Some(k) }
+  opt_pure(v)   //~ E0401
+}
+
+pub fn match_some_bk_type_rt(n: U32) -> U32 {
+  let v = match n { 0 => Some(b), _ => Some(k) }
+  opt_rt(v)   //~ E0401
+}
+
+pub fn match_some_br_type_pure(n: U32) -> U32 {
+  let v = match n { 0 => Some(b), _ => Some(r) }
+  opt_pure(v)   //~ E0401
+}
+
+pub fn match_some_br_type_rt(n: U32) -> U32 {
+  let v = match n { 0 => Some(b), _ => Some(r) }
+  opt_rt(v)   //~ E0401
+}
+
+pub fn match_some_rr_type_pure(n: U32) -> U32 {
+  let v = match n { 0 => Some(r), _ => Some(r) }
+  opt_pure(v)   //~ E0401
+}
+
+pub fn match_some_rr_type_alloc(n: U32) -> U32 uses {Alloc} {
+  let v = match n { 0 => Some(r), _ => Some(r) }
+  opt_alloc(v)   //~ E0401
+}
+
+pub fn match_some_bb_type_pure(n: U32) -> U32 {
+  let v = match n { 0 => Some(b), _ => Some(b) }
+  opt_pure(v)   //~ E0401
+}
+
+pub fn match_some_bb_type_rt(n: U32) -> U32 {
+  let v = match n { 0 => Some(b), _ => Some(b) }
+  opt_rt(v)   //~ E0401
+}
+
+pub fn match_some_rk_stronger(n: U32) -> U32 {
+  let _ = match n { 0 => Some(r), _ => Some(k) }   //~ E0401
+  0
+}
+
+pub fn match_some_kb_stronger(n: U32) -> U32 {
+  let _ = match n { 0 => Some(k), _ => Some(b) }   //~ E0401
+  0
+}
+
+pub fn match_some_rb_stronger(n: U32) -> U32 {
+  let _ = match n { 0 => Some(r), _ => Some(b) }   //~ E0401
+  0
+}
+
+pub fn if_tuple_rk_stronger(c: Bool) -> U32 {
+  let _ = if c { (r, 1) } else { (k, 2) }   //~ E0401
+  0
+}
+
+pub fn if_tuple_kb_stronger(c: Bool) -> U32 {
+  let _ = if c { (k, 1) } else { (b, 2) }   //~ E0401
+  0
+}
+
+pub fn if_tuple_rb_stronger(c: Bool) -> U32 {
+  let _ = if c { (r, 1) } else { (b, 2) }   //~ E0401
+  0
+}
+
+pub fn match_tuple_rk_stronger(n: U32) -> U32 {
+  let _ = match n { 0 => (r, 1), _ => (k, 2) }   //~ E0401
+  0
+}
+
+pub fn match_tuple_kb_stronger(n: U32) -> U32 {
+  let _ = match n { 0 => (k, 1), _ => (b, 2) }   //~ E0401
+  0
+}
+
+pub fn match_tuple_rb_stronger(n: U32) -> U32 {
+  let _ = match n { 0 => (r, 1), _ => (b, 2) }   //~ E0401
+  0
+}
+
+pub fn if_struct_kr_type_rt(c: Bool) -> U32 {
+  let v = if c { W { h: k } } else { W { h: r } }
+  w_rt(v)   //~ E0401
+}
+
+pub fn if_struct_kr_type_alloc(c: Bool) -> U32 uses {Alloc} {
+  let v = if c { W { h: k } } else { W { h: r } }
+  w_alloc(v)   //~ E0401
+}
+
+pub fn if_struct_kk_type_rt(c: Bool) -> U32 {
+  let v = if c { W { h: k } } else { W { h: k } }
+  w_rt(v)   //~ E0401
+}
+
+pub fn if_struct_kk_type_alloc(c: Bool) -> U32 uses {Alloc} {
+  let v = if c { W { h: k } } else { W { h: k } }
+  w_alloc(v)   //~ E0401
+}
+
+pub fn if_struct_bk_type_pure(c: Bool) -> U32 {
+  let v = if c { W { h: b } } else { W { h: k } }
+  w_pure(v)   //~ E0401
+}
+
+pub fn if_struct_bk_type_rt(c: Bool) -> U32 {
+  let v = if c { W { h: b } } else { W { h: k } }
+  w_rt(v)   //~ E0401
+}
+
+pub fn if_struct_br_type_pure(c: Bool) -> U32 {
+  let v = if c { W { h: b } } else { W { h: r } }
+  w_pure(v)   //~ E0401
+}
+
+pub fn if_struct_br_type_rt(c: Bool) -> U32 {
+  let v = if c { W { h: b } } else { W { h: r } }
+  w_rt(v)   //~ E0401
+}
+
+pub fn if_struct_rr_type_pure(c: Bool) -> U32 {
+  let v = if c { W { h: r } } else { W { h: r } }
+  w_pure(v)   //~ E0401
+}
+
+pub fn if_struct_rr_type_alloc(c: Bool) -> U32 uses {Alloc} {
+  let v = if c { W { h: r } } else { W { h: r } }
+  w_alloc(v)   //~ E0401
+}
+
+pub fn if_struct_bb_type_pure(c: Bool) -> U32 {
+  let v = if c { W { h: b } } else { W { h: b } }
+  w_pure(v)   //~ E0401
+}
+
+pub fn if_struct_bb_type_rt(c: Bool) -> U32 {
+  let v = if c { W { h: b } } else { W { h: b } }
+  w_rt(v)   //~ E0401
+}
+
+pub fn if_struct_rk_stronger(c: Bool) -> U32 {
+  let _ = if c { W { h: r } } else { W { h: k } }   //~ E0401
+  0
+}
+
+pub fn if_struct_kb_stronger(c: Bool) -> U32 {
+  let _ = if c { W { h: k } } else { W { h: b } }   //~ E0401
+  0
+}
+
+pub fn if_struct_rb_stronger(c: Bool) -> U32 {
+  let _ = if c { W { h: r } } else { W { h: b } }   //~ E0401
+  0
+}
+
+pub fn match_struct_kr_type_rt(n: U32) -> U32 {
+  let v = match n { 0 => W { h: k }, _ => W { h: r } }
+  w_rt(v)   //~ E0401
+}
+
+pub fn match_struct_kr_type_alloc(n: U32) -> U32 uses {Alloc} {
+  let v = match n { 0 => W { h: k }, _ => W { h: r } }
+  w_alloc(v)   //~ E0401
+}
+
+pub fn match_struct_kk_type_rt(n: U32) -> U32 {
+  let v = match n { 0 => W { h: k }, _ => W { h: k } }
+  w_rt(v)   //~ E0401
+}
+
+pub fn match_struct_kk_type_alloc(n: U32) -> U32 uses {Alloc} {
+  let v = match n { 0 => W { h: k }, _ => W { h: k } }
+  w_alloc(v)   //~ E0401
+}
+
+pub fn match_struct_bk_type_pure(n: U32) -> U32 {
+  let v = match n { 0 => W { h: b }, _ => W { h: k } }
+  w_pure(v)   //~ E0401
+}
+
+pub fn match_struct_bk_type_rt(n: U32) -> U32 {
+  let v = match n { 0 => W { h: b }, _ => W { h: k } }
+  w_rt(v)   //~ E0401
+}
+
+pub fn match_struct_br_type_pure(n: U32) -> U32 {
+  let v = match n { 0 => W { h: b }, _ => W { h: r } }
+  w_pure(v)   //~ E0401
+}
+
+pub fn match_struct_br_type_rt(n: U32) -> U32 {
+  let v = match n { 0 => W { h: b }, _ => W { h: r } }
+  w_rt(v)   //~ E0401
+}
+
+pub fn match_struct_rr_type_pure(n: U32) -> U32 {
+  let v = match n { 0 => W { h: r }, _ => W { h: r } }
+  w_pure(v)   //~ E0401
+}
+
+pub fn match_struct_rr_type_alloc(n: U32) -> U32 uses {Alloc} {
+  let v = match n { 0 => W { h: r }, _ => W { h: r } }
+  w_alloc(v)   //~ E0401
+}
+
+pub fn match_struct_bb_type_pure(n: U32) -> U32 {
+  let v = match n { 0 => W { h: b }, _ => W { h: b } }
+  w_pure(v)   //~ E0401
+}
+
+pub fn match_struct_bb_type_rt(n: U32) -> U32 {
+  let v = match n { 0 => W { h: b }, _ => W { h: b } }
+  w_rt(v)   //~ E0401
+}
+
+pub fn match_struct_rk_stronger(n: U32) -> U32 {
+  let _ = match n { 0 => W { h: r }, _ => W { h: k } }   //~ E0401
+  0
+}
+
+pub fn match_struct_kb_stronger(n: U32) -> U32 {
+  let _ = match n { 0 => W { h: k }, _ => W { h: b } }   //~ E0401
+  0
+}
+
+pub fn match_struct_rb_stronger(n: U32) -> U32 {
+  let _ = match n { 0 => W { h: r }, _ => W { h: b } }   //~ E0401
+  0
+}
+
+pub fn pick_r_then_kr(c: Bool) -> U32 {
+  let _ = pick(r, if c { k } else { r })   //~ E0401
+  0
+}
+
+pub fn pick_r_then_rk(c: Bool) -> U32 {
+  let _ = pick(r, if c { r } else { k })   //~ E0401
+  0
+}
+
+pub fn pick_k_then_bk(c: Bool) -> U32 {
+  let _ = pick(k, if c { b } else { k })   //~ E0401
+  0
+}
+
+pub fn pick_k_then_kb(c: Bool) -> U32 {
+  let _ = pick(k, if c { k } else { b })   //~ E0401
+  0
+}
+
+pub fn pick_r_then_b(c: Bool) -> U32 {
+  let _ = pick(r, if c { b } else { r })   //~ E0401
+  0
+}
+
+pub fn pick_k_then_kr_to_rt(c: Bool) -> U32 {
+  let f = pick(k, if c { k } else { r })
+  at_rt(f)   //~ E0401
+}
+
+pub fn pick_b_then_kr_to_pure(c: Bool) -> U32 {
+  let f = pick(b, if c { k } else { r })
+  at_pure(f)   //~ E0401
+}
+
+pub fn pick_type_argument_arm(c: Bool) -> U32 {
+  let _ = pick::[fn(U32) -> U32](if c { k } else { b }, k)   //~ E0401
+  0
+}
+
+pub fn pick_type_argument_rt(c: Bool) -> U32 {
+  let _ = pick::[rt fn(U32) -> U32](r, if c { r } else { k })   //~ E0401
+  0
+}
+
+pub fn var_kr_assign_b(c: Bool) -> U32 {
+  var f = if c { k } else { r }
+  f = b   //~ E0401
+  at_pure(f)
+}
+
+pub fn var_rr_assign_k(c: Bool) -> U32 {
+  var f = if c { r } else { r }
+  f = k   //~ E0401
+  at_rt(f)
+}
+
+pub fn var_rr_assign_b(c: Bool) -> U32 {
+  var f = if c { r } else { r }
+  f = b   //~ E0401
+  at_rt(f)
+}
+
+pub fn lambda_return_r_then_k(c: Bool) -> U32 {
+  let g = fn(d: Bool) {
+    if d {
+      return r
+    }
+    k   //~ E0401
+  }
+  at_pure(g.(c))
+}
+
+pub fn lambda_return_k_then_b(c: Bool) -> U32 {
+  let g = fn(d: Bool) {
+    if d {
+      return k
+    }
+    b   //~ E0401
+  }
+  at_pure(g.(c))
+}
+
+pub fn lambda_return_k_to_rt(c: Bool) -> U32 {
+  let g = fn(d: Bool) {
+    if d {
+      return k
+    }
+    r
+  }
+  at_rt(g.(c))   //~ E0401
+}

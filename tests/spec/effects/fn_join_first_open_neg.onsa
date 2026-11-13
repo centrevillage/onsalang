@@ -1,0 +1,86 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§8.1", "§10"]
+
+// W6-01 U2b, S-1031 (§4.7, "関数型の合わせ": "引数の型とモード、返り値の型は等しくなければならず（E0401）", "書く順によらない"). A join whose first branch has
+// a type not yet decided (a diverging branch, `return` or `panic`, or the value of a `None` read) still needs each pair of the other branches that
+// are function types to have equal parameter types, modes and result (the finding of the break side of W6-01 U2b: the later branches were each
+// compared with the first one only, so `k` and `kf` after it were not compared). Both orders of the two branches are here. Each `match` and array is
+// written on one line, so the mark does not depend on which branch is reported. The last unit, of branches of the same type, is accepted. Checked, not run.
+
+pub fn k(x: U32) -> U32 {
+  x
+}
+
+pub fn k2(x: U32) -> U32 {
+  x
+}
+
+pub fn kf(x: F32) -> F32 {
+  x
+}
+
+pub fn km(move x: U32) -> U32 {
+  x
+}
+
+pub fn k2a(x: U32, y: U32) -> U32 {
+  x + y
+}
+
+pub fn ret_first_k_kf(n: U32) -> U32 {
+  let _ = match n { 0 => { return 5 }, 1 => k, _ => kf }   //~ E0401
+  0
+}
+
+pub fn ret_first_kf_k(n: U32) -> U32 {
+  let _ = match n { 0 => { return 5 }, 1 => kf, _ => k }   //~ E0401
+  0
+}
+
+pub fn ret_first_k_km(n: U32) -> U32 {
+  let _ = match n { 0 => { return 5 }, 1 => k, _ => km }   //~ E0401
+  0
+}
+
+pub fn ret_first_km_k(n: U32) -> U32 {
+  let _ = match n { 0 => { return 5 }, 1 => km, _ => k }   //~ E0401
+  0
+}
+
+pub fn panic_first_k_k2a(n: U32) -> U32 {
+  let _ = match n { 0 => panic("x"), 1 => k, _ => k2a }   //~ E0401
+  0
+}
+
+pub fn panic_first_k2a_k(n: U32) -> U32 {
+  let _ = match n { 0 => panic("x"), 1 => k2a, _ => k }   //~ E0401
+  0
+}
+
+pub fn panic_first_k_kf(n: U32) -> U32 {
+  let _ = match n { 0 => panic("x"), 1 => k, _ => kf }   //~ E0401
+  0
+}
+
+pub fn panic_first_kf_k(n: U32) -> U32 {
+  let _ = match n { 0 => panic("x"), 1 => kf, _ => k }   //~ E0401
+  0
+}
+
+pub fn arr_var_first_k_kf() -> U32 {
+  let o = None
+  let _ = match o { Some(g) => [g, k, kf], None => [k, k, k] }   //~ E0401
+  0
+}
+
+pub fn arr_var_first_kf_k() -> U32 {
+  let o = None
+  let _ = match o { Some(g) => [g, kf, k], None => [k, k, k] }   //~ E0401
+  0
+}
+
+pub fn ret_first_same_type(n: U32) -> U32 {
+  let f = match n { 0 => { return 5 }, 1 => k, _ => k2 }
+  f.(7)
+}

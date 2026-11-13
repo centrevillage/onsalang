@@ -87,7 +87,7 @@ pub mod ty;
 #[cfg(test)]
 mod ty_tests;
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::timing::{Phase, phase};
@@ -122,13 +122,16 @@ pub struct Module {
     /// None in a module of a std read back ([`Base::decode`], W5-19), whose
     /// analysis has no diagnostic: what reads it is on the way to one.
     pub tree: Option<Tree>,
+    /// The words of `text`, made when first asked: the names of a wrapping
+    /// function in a note avoid them (S-874).
+    pub words: OnceLock<HashSet<String>>,
 }
 
 impl Module {
     /// The module of a file just parsed.
     pub fn new(segments: Vec<String>, file: FileId, text: String, parsed: Parsed) -> Module {
         let (parsed, tree) = parsed.split();
-        Module { segments, file, text, parsed, tree: Some(tree) }
+        Module { segments, file, text, parsed, tree: Some(tree), words: OnceLock::new() }
     }
 
     /// The module path as diagnostics show it: `dsp.voice`.

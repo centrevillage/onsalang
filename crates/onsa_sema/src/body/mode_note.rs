@@ -14,8 +14,9 @@ use super::*;
 pub(crate) enum Found<'p> {
     /// A constructor (`Mode.Gain`), written at the span.
     Ctor(Span),
-    /// A function item (`conv`, `Calc.bump`, `id::[U32]`), written at the span.
-    Item(Span),
+    /// A function item (`conv`, `Calc.bump`, `id::[U32]`), named at the
+    /// first span and written, with its type arguments, at the second.
+    Item(Span, Span),
     /// An anonymous function, with its parameters when it is written
     /// directly as an argument (the candidate of S-872).
     Closure(Option<&'p [Param]>),
@@ -73,8 +74,8 @@ impl Checker<'_> {
             Found::Ctor(at) if kinds(self, &every, Bound::Dup) => {
                 format!("; wrap the constructor: `{}`", self.wrap(at, &g))
             }
-            Found::Item(at) if kinds(self, ps, Bound::Copy) => {
-                let name = self.src(at);
+            Found::Item(named, at) if kinds(self, ps, Bound::Copy) => {
+                let name = self.src(named);
                 format!("; change the modes in the declaration of `{name}`, or wrap it: `{}`", self.wrap(at, &g))
             }
             Found::Closure(_) => "; write each in the mode expected (`move x` takes the value, `x` borrows it)".into(),
@@ -83,14 +84,29 @@ impl Checker<'_> {
         d.with_rule(format!("only {which} from the expected type, the default or `move` (§4.1){mend}"))
     }
 
+    /// What is written of the path `e`: with the type arguments after it
+    /// (`pick::[U8]`), when it is their base.
+    pub(crate) fn written(&self, e: ExprId) -> Span {
+        match self.written {
+            Some((base, span)) if base == e => span,
+            _ => self.expr(e).span,
+        }
+    }
+
     /// An anonymous function of the type `g` that calls what is written at
-    /// `at` with its parameters (`fn(x) { Mode.Gain(x) }`).
+    /// `at` with its parameters (`fn(x) { Mode.Gain(x) }`), named as no word
+    /// of the source is, so as to hide no name (§5.1).
     fn wrap(&self, at: Span, g: &FnTy) -> String {
         let one = g.params.len() == 1;
+        let split = || self.text.split(|c: char| !c.is_alphanumeric() && c != '_').map(String::from).collect();
+        let words = self.module.words.get_or_init(split);
+        let name = |x: &str, k: usize| if one { x.to_string() } else { format!("{x}{k}") };
+        let free = |x: &String| (1..=g.params.len()).all(|k| !words.contains(name(x, k).as_str()));
+        let x = (1..).map(|n| "x".repeat(n)).find(free).unwrap_or_default();
         let (params, args): (Vec<String>, Vec<String>) = (1..)
             .zip(&g.params)
             .map(|(k, (mode, _))| {
-                let x = if one { "x".to_string() } else { format!("x{k}") };
+                let x = name(&x, k);
                 match mode {
                     Mode::Borrow => (x.clone(), x),
                     Mode::Move => (format!("move {x}"), x),

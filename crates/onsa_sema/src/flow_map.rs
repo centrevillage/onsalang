@@ -56,7 +56,7 @@ impl Checker<'_> {
     /// rate pass's ([`Rater::rate_at`]).
     pub(super) fn check_at(&mut self, e: ExprId, inner: ExprId, clock: &Clock, expected: Option<TyId>) -> R<TyId> {
         let rate = clock_rate(clock).map_err(|d| self.diag(d))?;
-        let t = self.check_expr(inner, expected)?;
+        let t = self.check_expr_as(inner, expected, self.joining)?;
         self.fcx().ats.insert(e, FlowRate::from_rate(rate));
         Ok(t)
     }

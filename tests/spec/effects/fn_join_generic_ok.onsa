@@ -1,0 +1,109 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§8.1", "§10"]
+
+// W6-01 U2b/t, S-1031 (§4.7, "関数型の合わせ": the join of functions with no expected type; the parameter types and the result are equal, so the type argument of a generic function that is an arm is the one that the other arm has).
+// `if c { r } else { id }` and `if c { id } else { r }` (with `id[T](x: T) -> T`, which is not `rt`): the type is `fn(U32) -> U32`, not `rt` because `id` is not, the same in either order, in a `match` and in an
+// array literal; with `k` the same; with `b` the type has `uses {Alloc}`. It is tried at the places that are exactly it, at the elements of an array type that is bound first, and the weaker places. An arm that is
+// a variable whose type is not decided yet (`let v = None`, then `match v { Some(g) => g, None => r }`, in either order of the arms) is the other arm's type: the join is a function type that the places for a function without an `rt` or
+// an effect accept (what the join takes of `rt` from such an arm is not written in the spec, so it is not tried at an `rt` place). The refused uses are in fn_join_generic_neg.onsa. Checked, not run.
+
+pub fn k(x: U32) -> U32 {
+  x
+}
+
+pub rt fn r(x: U32) -> U32 {
+  x
+}
+
+pub fn b(x: U32) -> U32 uses {Alloc} {
+  x
+}
+
+// The places the joined type is tried at: an `rt` place, a place with an empty effect row, a place with `uses {Alloc}`, and the same three
+// in an array type (an element of a type argument is compared as equal, so these say what the type of the join is).
+pub rt fn at_rt(g: rt fn(U32) -> U32) -> U32 {
+  g.(1)
+}
+
+pub fn at_pure(g: fn(U32) -> U32) -> U32 {
+  g.(1)
+}
+
+pub fn at_alloc(g: fn(U32) -> U32 uses {Alloc}) -> U32 uses {Alloc} {
+  g.(1)
+}
+
+pub rt fn arr_rt(a: [rt fn(U32) -> U32; 2]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr_pure(a: [fn(U32) -> U32; 2]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr_alloc(a: [fn(U32) -> U32 uses {Alloc}; 2]) -> U32 uses {Alloc} {
+  a[0].(1)
+}
+
+pub rt fn arr3_rt(a: [rt fn(U32) -> U32; 3]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr3_pure(a: [fn(U32) -> U32; 3]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr3_alloc(a: [fn(U32) -> U32 uses {Alloc}; 3]) -> U32 uses {Alloc} {
+  a[0].(1)
+}
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn id_alloc[T](x: T) -> T uses {Alloc} {
+  x
+}
+
+pub fn gen_r_id_exact(c: Bool) -> U32 {
+  let f = if c { r } else { id }
+  f.(1) + at_pure(f)
+}
+
+pub fn gen_r_id_type(c: Bool) -> U32 {
+  let f = if c { r } else { id }
+  let fs = [f, f]
+  arr_pure(fs)
+}
+
+pub fn gen_id_b_exact(c: Bool) -> U32 uses {Alloc} {
+  let f = if c { id } else { b }
+  f.(1) + at_alloc(f)
+}
+
+pub fn gen_id_b_type(c: Bool) -> U32 uses {Alloc} {
+  let f = if c { id } else { b }
+  let fs = [f, f]
+  arr_alloc(fs)
+}
+
+pub fn gen_match_r_id_exact(n: U32) -> U32 {
+  let f = match n { 0 => r, _ => id }
+  f.(1) + at_pure(f)
+}
+
+pub fn gen_array_r_id_exact(c: Bool) -> U32 {
+  let fs = [r, id]
+  arr_pure(fs)
+}
+
+pub fn gen_match_id_b_exact(n: U32) -> U32 uses {Alloc} {
+  let f = match n { 0 => id, _ => b }
+  f.(1) + at_alloc(f)
+}
+
+pub fn gen_array_id_b_exact(c: Bool) -> U32 uses {Alloc} {
+  let fs = [id, b]
+  arr_alloc(fs)
+}

@@ -1,0 +1,110 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§8.1", "§10"]
+
+// W6-01 U2b/t, S-1031 (§4.7, §8.1, §10). The refused ones of the form of fn_join_first_fixed_ok.onsa (see there): the later branch stronger than the first (`if c { Some(r) } else { Some(k) }`: the type of the
+// first branch is `Option[rt fn(U32) -> U32]`, and `k` is not `rt`; `Some(k)` and `Some(b)`; tuples and structs the same; `match` the same), written on one line so the mark does not depend on which branch is reported;
+// `pick(r, k)` and the later argument that is a join with an arm stronger than the first argument (`pick(r, if c { k } else { r })`, `pick(k, if c { b } else { k })`); the assignment to a `var` of a function that is
+// stronger than the type of its initialization; the tail of a lambda that is stronger than the type that its `return` fixed; and the type of the result, which is the type of the first branch, tried at the places
+// and at the types of `Option` and `W` that it is not. Checked, not run.
+
+pub fn k(x: U32) -> U32 {
+  x
+}
+
+pub rt fn r(x: U32) -> U32 {
+  x
+}
+
+pub fn b(x: U32) -> U32 uses {Alloc} {
+  x
+}
+
+// The places the joined type is tried at: an `rt` place, a place with an empty effect row, a place with `uses {Alloc}`, and the same three
+// in an array type (an element of a type argument is compared as equal, so these say what the type of the join is).
+pub rt fn at_rt(g: rt fn(U32) -> U32) -> U32 {
+  g.(1)
+}
+
+pub fn at_pure(g: fn(U32) -> U32) -> U32 {
+  g.(1)
+}
+
+pub fn at_alloc(g: fn(U32) -> U32 uses {Alloc}) -> U32 uses {Alloc} {
+  g.(1)
+}
+
+pub rt fn arr_rt(a: [rt fn(U32) -> U32; 2]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr_pure(a: [fn(U32) -> U32; 2]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr_alloc(a: [fn(U32) -> U32 uses {Alloc}; 2]) -> U32 uses {Alloc} {
+  a[0].(1)
+}
+
+pub rt fn arr3_rt(a: [rt fn(U32) -> U32; 3]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr3_pure(a: [fn(U32) -> U32; 3]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr3_alloc(a: [fn(U32) -> U32 uses {Alloc}; 3]) -> U32 uses {Alloc} {
+  a[0].(1)
+}
+
+pub fn first[T](xs: [T; 2]) -> T {
+  xs[0]
+}
+
+pub fn pick[T](a: T, c: T) -> T {
+  a
+}
+
+pub struct W[T] {
+  h: T,
+}
+
+pub fn opt_rt(o: Option[rt fn(U32) -> U32]) -> U32 {
+  match o {
+    Some(f) => f.(1),
+    None => 0,
+  }
+}
+
+pub fn opt_pure(o: Option[fn(U32) -> U32]) -> U32 {
+  match o {
+    Some(f) => f.(1),
+    None => 0,
+  }
+}
+
+pub fn opt_alloc(o: Option[fn(U32) -> U32 uses {Alloc}]) -> U32 uses {Alloc} {
+  match o {
+    Some(f) => f.(1),
+    None => 0,
+  }
+}
+
+pub fn w_rt(w: W[rt fn(U32) -> U32]) -> U32 {
+  w.h.(1)
+}
+
+pub fn w_pure(w: W[fn(U32) -> U32]) -> U32 {
+  w.h.(1)
+}
+
+pub fn w_alloc(w: W[fn(U32) -> U32 uses {Alloc}]) -> U32 uses {Alloc} {
+  w.h.(1)
+}
+
+pub fn var_rk_assign_b(c: Bool) -> U32 {
+  var f = if c { r } else { k }
+  f = b   //~ E0401
+  at_pure(f)
+}

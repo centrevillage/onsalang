@@ -179,6 +179,7 @@ impl Base {
                 text: m.text.to_string(),
                 parsed,
                 tree: None,
+                words: Default::default(),
             })
             .collect();
         let std = Arc::new(Package::std(modules));

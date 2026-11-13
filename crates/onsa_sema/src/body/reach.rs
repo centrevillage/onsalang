@@ -180,7 +180,7 @@ impl<'a> Checker<'a> {
     /// to be the value of.
     pub(super) fn bare_return(&mut self, span: Span, ret: TyId) -> R<()> {
         let unit = self.unit();
-        let Some(mut d) = self.mismatch_at(span, unit, ret, None) else { return Ok(()) };
+        let Err(mut d) = self.mismatch_at(span, unit, ret, None) else { return Ok(()) };
         let (_, b, i) = self.open_block();
         if self.item(b, i + 1).is_some() {
             d = d.with_note(span, RETURN_ENDS_ITS_LINE);

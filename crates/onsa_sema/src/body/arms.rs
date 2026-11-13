@@ -17,13 +17,15 @@ pub(super) struct Arms<'x> {
     pub(super) arms: &'x [MatchArm],
     pub(super) st: TyId,
     pub(super) expected: Option<TyId>,
+    /// The arms are joined (§4.7).
+    pub(super) join: bool,
 }
 
 impl<'a> Checker<'a> {
     /// The arms of `m` in turn: the first that gets no value stops the body
     /// with an E0503 (§7, one in a body, §18.1).
-    pub(super) fn read_arms(&mut self, m: &Arms<'_>, seen: &mut Seen, result: &mut Option<TyId>) -> R<()> {
-        let Some(k) = self.check_arms(m, seen, result)? else { return Ok(()) };
+    pub(super) fn read_arms(&mut self, m: &Arms<'_>, seen: &mut Seen, types: &mut Vec<TyId>) -> R<()> {
+        let Some(k) = self.check_arms(m, seen, types)? else { return Ok(()) };
         let d = self.unreachable_arm(m.arms[k].pat, seen.whole);
         let tries = if self.makes_candidates() { self.arm_tries(m, k, seen) } else { Vec::new() };
         Err(self.stop_with(d, tries))

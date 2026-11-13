@@ -1,0 +1,558 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§8.1", "§10"]
+
+// W6-01 U2b/t, S-1031 (§4.7, "関数型の合わせ": the type of an `if` or a `match` with no expected type is the join of the types of its branches, and "書く順によらない"). The branches that are
+// not a plain name: the block that ends in the value after a statement (`if c { let _ = 1 ... k }`, and an arm that is a block), a value in parentheses, the whole join in parentheses,
+// a join in a branch of a join (`if c { if d { X } else { Y } } else { Z }` and in the else branch, `else if` chains, a `match` in an `if` and an `if` in a `match`, a `match` in a `match`),
+// and the arms that have a guard (`x if x > 3 => X`; the guard is not a part of the type). The type is the join of the leaves, in whatever order (the union of the effect rows, `rt` only if every leaf
+// is `rt`); the leaf that is not `rt` in an inner join makes the outer join not `rt` too (`if c { if d { r } else { k } } else { r }`). The type is tried at the places that are exactly it and at the weaker
+// places, as in fn_join_if_ok.onsa. The refused uses are in fn_join_passthrough_neg.onsa. Checked, not run.
+//
+// The units of this file are the ones that the code before U2b already answers as written here; they are kept apart from the units that need the join (in fn_join_passthrough_ok.onsa), so that a change in them is not hidden by that file.
+
+pub fn k(x: U32) -> U32 {
+  x
+}
+
+pub rt fn r(x: U32) -> U32 {
+  x
+}
+
+pub fn b(x: U32) -> U32 uses {Alloc} {
+  x
+}
+
+// The places the joined type is tried at: an `rt` place, a place with an empty effect row, a place with `uses {Alloc}`, and the same three
+// in an array type (an element of a type argument is compared as equal, so these say what the type of the join is).
+pub rt fn at_rt(g: rt fn(U32) -> U32) -> U32 {
+  g.(1)
+}
+
+pub fn at_pure(g: fn(U32) -> U32) -> U32 {
+  g.(1)
+}
+
+pub fn at_alloc(g: fn(U32) -> U32 uses {Alloc}) -> U32 uses {Alloc} {
+  g.(1)
+}
+
+pub rt fn arr_rt(a: [rt fn(U32) -> U32; 2]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr_pure(a: [fn(U32) -> U32; 2]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr_alloc(a: [fn(U32) -> U32 uses {Alloc}; 2]) -> U32 uses {Alloc} {
+  a[0].(1)
+}
+
+pub rt fn arr3_rt(a: [rt fn(U32) -> U32; 3]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr3_pure(a: [fn(U32) -> U32; 3]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr3_alloc(a: [fn(U32) -> U32 uses {Alloc}; 3]) -> U32 uses {Alloc} {
+  a[0].(1)
+}
+
+pub rt fn block_rr_exact(c: Bool) -> U32 {
+  let f = if c {
+    let _ = 1
+    r
+  } else {
+    let _ = 2
+    r
+  }
+  f.(1) + at_rt(f)
+}
+
+pub fn block_rr_weaker(c: Bool) -> U32 uses {Alloc} {
+  let f = if c {
+    let _ = 1
+    r
+  } else {
+    let _ = 2
+    r
+  }
+  at_pure(f) + at_alloc(f)
+}
+
+pub fn block_rr_type(c: Bool) -> U32 {
+  let f = if c {
+    let _ = 1
+    r
+  } else {
+    let _ = 2
+    r
+  }
+  let fs = [f, f]
+  arr_rt(fs)
+}
+
+pub fn block_br_exact(c: Bool) -> U32 uses {Alloc} {
+  let f = if c {
+    let _ = 1
+    b
+  } else {
+    let _ = 2
+    r
+  }
+  f.(1) + at_alloc(f)
+}
+
+pub fn block_br_type(c: Bool) -> U32 uses {Alloc} {
+  let f = if c {
+    let _ = 1
+    b
+  } else {
+    let _ = 2
+    r
+  }
+  let fs = [f, f]
+  arr_alloc(fs)
+}
+
+pub rt fn paren_rr_exact(c: Bool) -> U32 {
+  let f = if c { (r) } else { ((r)) }
+  f.(1) + at_rt(f)
+}
+
+pub fn paren_rr_weaker(c: Bool) -> U32 uses {Alloc} {
+  let f = if c { (r) } else { ((r)) }
+  at_pure(f) + at_alloc(f)
+}
+
+pub fn paren_rr_type(c: Bool) -> U32 {
+  let f = if c { (r) } else { ((r)) }
+  let fs = [f, f]
+  arr_rt(fs)
+}
+
+pub fn paren_br_exact(c: Bool) -> U32 uses {Alloc} {
+  let f = if c { (b) } else { ((r)) }
+  f.(1) + at_alloc(f)
+}
+
+pub fn paren_br_type(c: Bool) -> U32 uses {Alloc} {
+  let f = if c { (b) } else { ((r)) }
+  let fs = [f, f]
+  arr_alloc(fs)
+}
+
+pub rt fn paren_all_rr_exact(c: Bool) -> U32 {
+  let f = (if c { r } else { r })
+  f.(1) + at_rt(f)
+}
+
+pub fn paren_all_rr_weaker(c: Bool) -> U32 uses {Alloc} {
+  let f = (if c { r } else { r })
+  at_pure(f) + at_alloc(f)
+}
+
+pub fn paren_all_rr_type(c: Bool) -> U32 {
+  let f = (if c { r } else { r })
+  let fs = [f, f]
+  arr_rt(fs)
+}
+
+pub fn paren_all_br_exact(c: Bool) -> U32 uses {Alloc} {
+  let f = (if c { b } else { r })
+  f.(1) + at_alloc(f)
+}
+
+pub fn paren_all_br_type(c: Bool) -> U32 uses {Alloc} {
+  let f = (if c { b } else { r })
+  let fs = [f, f]
+  arr_alloc(fs)
+}
+
+pub rt fn nest_then_rrr_exact(c: Bool, d: Bool) -> U32 {
+  let f = if c { if d { r } else { r } } else { r }
+  f.(1) + at_rt(f)
+}
+
+pub fn nest_then_rrr_weaker(c: Bool, d: Bool) -> U32 uses {Alloc} {
+  let f = if c { if d { r } else { r } } else { r }
+  at_pure(f) + at_alloc(f)
+}
+
+pub fn nest_then_rrr_type(c: Bool, d: Bool) -> U32 {
+  let f = if c { if d { r } else { r } } else { r }
+  let fs = [f, f]
+  arr_rt(fs)
+}
+
+pub fn nest_then_brr_exact(c: Bool, d: Bool) -> U32 uses {Alloc} {
+  let f = if c { if d { b } else { r } } else { r }
+  f.(1) + at_alloc(f)
+}
+
+pub fn nest_then_brr_type(c: Bool, d: Bool) -> U32 uses {Alloc} {
+  let f = if c { if d { b } else { r } } else { r }
+  let fs = [f, f]
+  arr_alloc(fs)
+}
+
+pub fn nest_then_krr_exact(c: Bool, d: Bool) -> U32 {
+  let f = if c { if d { k } else { r } } else { r }
+  f.(1) + at_pure(f)
+}
+
+pub fn nest_then_krr_weaker(c: Bool, d: Bool) -> U32 uses {Alloc} {
+  let f = if c { if d { k } else { r } } else { r }
+  f.(1) + at_alloc(f)
+}
+
+pub fn nest_then_krr_type(c: Bool, d: Bool) -> U32 {
+  let f = if c { if d { k } else { r } } else { r }
+  let fs = [f, f]
+  arr_pure(fs)
+}
+
+pub rt fn nest_else_rrr_exact(c: Bool, d: Bool) -> U32 {
+  let f = if c { r } else { if d { r } else { r } }
+  f.(1) + at_rt(f)
+}
+
+pub fn nest_else_rrr_weaker(c: Bool, d: Bool) -> U32 uses {Alloc} {
+  let f = if c { r } else { if d { r } else { r } }
+  at_pure(f) + at_alloc(f)
+}
+
+pub fn nest_else_rrr_type(c: Bool, d: Bool) -> U32 {
+  let f = if c { r } else { if d { r } else { r } }
+  let fs = [f, f]
+  arr_rt(fs)
+}
+
+pub fn nest_else_brr_exact(c: Bool, d: Bool) -> U32 uses {Alloc} {
+  let f = if c { b } else { if d { r } else { r } }
+  f.(1) + at_alloc(f)
+}
+
+pub fn nest_else_brr_type(c: Bool, d: Bool) -> U32 uses {Alloc} {
+  let f = if c { b } else { if d { r } else { r } }
+  let fs = [f, f]
+  arr_alloc(fs)
+}
+
+pub fn nest_else_krr_exact(c: Bool, d: Bool) -> U32 {
+  let f = if c { k } else { if d { r } else { r } }
+  f.(1) + at_pure(f)
+}
+
+pub fn nest_else_krr_weaker(c: Bool, d: Bool) -> U32 uses {Alloc} {
+  let f = if c { k } else { if d { r } else { r } }
+  f.(1) + at_alloc(f)
+}
+
+pub fn nest_else_krr_type(c: Bool, d: Bool) -> U32 {
+  let f = if c { k } else { if d { r } else { r } }
+  let fs = [f, f]
+  arr_pure(fs)
+}
+
+pub rt fn elseif_rrr_exact(c: Bool, d: Bool) -> U32 {
+  let f = if c { r } else if d { r } else { r }
+  f.(1) + at_rt(f)
+}
+
+pub fn elseif_rrr_weaker(c: Bool, d: Bool) -> U32 uses {Alloc} {
+  let f = if c { r } else if d { r } else { r }
+  at_pure(f) + at_alloc(f)
+}
+
+pub fn elseif_rrr_type(c: Bool, d: Bool) -> U32 {
+  let f = if c { r } else if d { r } else { r }
+  let fs = [f, f]
+  arr_rt(fs)
+}
+
+pub fn elseif_brr_exact(c: Bool, d: Bool) -> U32 uses {Alloc} {
+  let f = if c { b } else if d { r } else { r }
+  f.(1) + at_alloc(f)
+}
+
+pub fn elseif_brr_type(c: Bool, d: Bool) -> U32 uses {Alloc} {
+  let f = if c { b } else if d { r } else { r }
+  let fs = [f, f]
+  arr_alloc(fs)
+}
+
+pub fn elseif_krr_exact(c: Bool, d: Bool) -> U32 {
+  let f = if c { k } else if d { r } else { r }
+  f.(1) + at_pure(f)
+}
+
+pub fn elseif_krr_weaker(c: Bool, d: Bool) -> U32 uses {Alloc} {
+  let f = if c { k } else if d { r } else { r }
+  f.(1) + at_alloc(f)
+}
+
+pub fn elseif_krr_type(c: Bool, d: Bool) -> U32 {
+  let f = if c { k } else if d { r } else { r }
+  let fs = [f, f]
+  arr_pure(fs)
+}
+
+pub rt fn match_in_if_rrr_exact(c: Bool, n: U32) -> U32 {
+  let f = if c { match n { 0 => r, _ => r } } else { r }
+  f.(1) + at_rt(f)
+}
+
+pub fn match_in_if_rrr_weaker(c: Bool, n: U32) -> U32 uses {Alloc} {
+  let f = if c { match n { 0 => r, _ => r } } else { r }
+  at_pure(f) + at_alloc(f)
+}
+
+pub fn match_in_if_rrr_type(c: Bool, n: U32) -> U32 {
+  let f = if c { match n { 0 => r, _ => r } } else { r }
+  let fs = [f, f]
+  arr_rt(fs)
+}
+
+pub fn match_in_if_brr_exact(c: Bool, n: U32) -> U32 uses {Alloc} {
+  let f = if c { match n { 0 => b, _ => r } } else { r }
+  f.(1) + at_alloc(f)
+}
+
+pub fn match_in_if_brr_type(c: Bool, n: U32) -> U32 uses {Alloc} {
+  let f = if c { match n { 0 => b, _ => r } } else { r }
+  let fs = [f, f]
+  arr_alloc(fs)
+}
+
+pub fn match_in_if_krr_exact(c: Bool, n: U32) -> U32 {
+  let f = if c { match n { 0 => k, _ => r } } else { r }
+  f.(1) + at_pure(f)
+}
+
+pub fn match_in_if_krr_weaker(c: Bool, n: U32) -> U32 uses {Alloc} {
+  let f = if c { match n { 0 => k, _ => r } } else { r }
+  f.(1) + at_alloc(f)
+}
+
+pub fn match_in_if_krr_type(c: Bool, n: U32) -> U32 {
+  let f = if c { match n { 0 => k, _ => r } } else { r }
+  let fs = [f, f]
+  arr_pure(fs)
+}
+
+pub rt fn if_in_match_rrr_exact(c: Bool, n: U32) -> U32 {
+  let f = match n { 0 => if c { r } else { r }, _ => r }
+  f.(1) + at_rt(f)
+}
+
+pub fn if_in_match_rrr_weaker(c: Bool, n: U32) -> U32 uses {Alloc} {
+  let f = match n { 0 => if c { r } else { r }, _ => r }
+  at_pure(f) + at_alloc(f)
+}
+
+pub fn if_in_match_rrr_type(c: Bool, n: U32) -> U32 {
+  let f = match n { 0 => if c { r } else { r }, _ => r }
+  let fs = [f, f]
+  arr_rt(fs)
+}
+
+pub fn if_in_match_brr_exact(c: Bool, n: U32) -> U32 uses {Alloc} {
+  let f = match n { 0 => if c { b } else { r }, _ => r }
+  f.(1) + at_alloc(f)
+}
+
+pub fn if_in_match_brr_type(c: Bool, n: U32) -> U32 uses {Alloc} {
+  let f = match n { 0 => if c { b } else { r }, _ => r }
+  let fs = [f, f]
+  arr_alloc(fs)
+}
+
+pub fn if_in_match_krr_exact(c: Bool, n: U32) -> U32 {
+  let f = match n { 0 => if c { k } else { r }, _ => r }
+  f.(1) + at_pure(f)
+}
+
+pub fn if_in_match_krr_weaker(c: Bool, n: U32) -> U32 uses {Alloc} {
+  let f = match n { 0 => if c { k } else { r }, _ => r }
+  f.(1) + at_alloc(f)
+}
+
+pub fn if_in_match_krr_type(c: Bool, n: U32) -> U32 {
+  let f = match n { 0 => if c { k } else { r }, _ => r }
+  let fs = [f, f]
+  arr_pure(fs)
+}
+
+pub rt fn match_in_match_rrr_exact(n: U32, m: U32) -> U32 {
+  let f = match n { 0 => match m { 0 => r, _ => r }, _ => r }
+  f.(1) + at_rt(f)
+}
+
+pub fn match_in_match_rrr_weaker(n: U32, m: U32) -> U32 uses {Alloc} {
+  let f = match n { 0 => match m { 0 => r, _ => r }, _ => r }
+  at_pure(f) + at_alloc(f)
+}
+
+pub fn match_in_match_rrr_type(n: U32, m: U32) -> U32 {
+  let f = match n { 0 => match m { 0 => r, _ => r }, _ => r }
+  let fs = [f, f]
+  arr_rt(fs)
+}
+
+pub fn match_in_match_brr_exact(n: U32, m: U32) -> U32 uses {Alloc} {
+  let f = match n { 0 => match m { 0 => b, _ => r }, _ => r }
+  f.(1) + at_alloc(f)
+}
+
+pub fn match_in_match_brr_type(n: U32, m: U32) -> U32 uses {Alloc} {
+  let f = match n { 0 => match m { 0 => b, _ => r }, _ => r }
+  let fs = [f, f]
+  arr_alloc(fs)
+}
+
+pub fn match_in_match_krr_exact(n: U32, m: U32) -> U32 {
+  let f = match n { 0 => match m { 0 => k, _ => r }, _ => r }
+  f.(1) + at_pure(f)
+}
+
+pub fn match_in_match_krr_weaker(n: U32, m: U32) -> U32 uses {Alloc} {
+  let f = match n { 0 => match m { 0 => k, _ => r }, _ => r }
+  f.(1) + at_alloc(f)
+}
+
+pub fn match_in_match_krr_type(n: U32, m: U32) -> U32 {
+  let f = match n { 0 => match m { 0 => k, _ => r }, _ => r }
+  let fs = [f, f]
+  arr_pure(fs)
+}
+
+pub rt fn guard_first_rr_exact(n: U32) -> U32 {
+  let f = match n { x if x > 3 => r, _ => r }
+  f.(1) + at_rt(f)
+}
+
+pub fn guard_first_rr_weaker(n: U32) -> U32 uses {Alloc} {
+  let f = match n { x if x > 3 => r, _ => r }
+  at_pure(f) + at_alloc(f)
+}
+
+pub fn guard_first_rr_type(n: U32) -> U32 {
+  let f = match n { x if x > 3 => r, _ => r }
+  let fs = [f, f]
+  arr_rt(fs)
+}
+
+pub fn guard_first_br_exact(n: U32) -> U32 uses {Alloc} {
+  let f = match n { x if x > 3 => b, _ => r }
+  f.(1) + at_alloc(f)
+}
+
+pub fn guard_first_br_type(n: U32) -> U32 uses {Alloc} {
+  let f = match n { x if x > 3 => b, _ => r }
+  let fs = [f, f]
+  arr_alloc(fs)
+}
+
+pub rt fn guard_mid_rrr_exact(n: U32) -> U32 {
+  let f = match n { 0 => r, x if x > 3 => r, _ => r }
+  f.(1) + at_rt(f)
+}
+
+pub fn guard_mid_rrr_weaker(n: U32) -> U32 uses {Alloc} {
+  let f = match n { 0 => r, x if x > 3 => r, _ => r }
+  at_pure(f) + at_alloc(f)
+}
+
+pub fn guard_mid_rrr_type(n: U32) -> U32 {
+  let f = match n { 0 => r, x if x > 3 => r, _ => r }
+  let fs = [f, f]
+  arr_rt(fs)
+}
+
+pub fn guard_mid_brr_exact(n: U32) -> U32 uses {Alloc} {
+  let f = match n { 0 => b, x if x > 3 => r, _ => r }
+  f.(1) + at_alloc(f)
+}
+
+pub fn guard_mid_brr_type(n: U32) -> U32 uses {Alloc} {
+  let f = match n { 0 => b, x if x > 3 => r, _ => r }
+  let fs = [f, f]
+  arr_alloc(fs)
+}
+
+pub fn guard_mid_krr_exact(n: U32) -> U32 {
+  let f = match n { 0 => k, x if x > 3 => r, _ => r }
+  f.(1) + at_pure(f)
+}
+
+pub fn guard_mid_krr_weaker(n: U32) -> U32 uses {Alloc} {
+  let f = match n { 0 => k, x if x > 3 => r, _ => r }
+  f.(1) + at_alloc(f)
+}
+
+pub fn guard_mid_krr_type(n: U32) -> U32 {
+  let f = match n { 0 => k, x if x > 3 => r, _ => r }
+  let fs = [f, f]
+  arr_pure(fs)
+}
+
+pub rt fn arm_block_rr_exact(n: U32) -> U32 {
+  let f = match n {
+    0 => {
+      let _ = 1
+      r
+    },
+    _ => r,
+  }
+  f.(1) + at_rt(f)
+}
+
+pub fn arm_block_rr_weaker(n: U32) -> U32 uses {Alloc} {
+  let f = match n {
+    0 => {
+      let _ = 1
+      r
+    },
+    _ => r,
+  }
+  at_pure(f) + at_alloc(f)
+}
+
+pub fn arm_block_rr_type(n: U32) -> U32 {
+  let f = match n {
+    0 => {
+      let _ = 1
+      r
+    },
+    _ => r,
+  }
+  let fs = [f, f]
+  arr_rt(fs)
+}
+
+pub fn arm_block_br_exact(n: U32) -> U32 uses {Alloc} {
+  let f = match n {
+    0 => {
+      let _ = 1
+      b
+    },
+    _ => r,
+  }
+  f.(1) + at_alloc(f)
+}
+
+pub fn arm_block_br_type(n: U32) -> U32 uses {Alloc} {
+  let f = match n {
+    0 => {
+      let _ = 1
+      b
+    },
+    _ => r,
+  }
+  let fs = [f, f]
+  arr_alloc(fs)
+}

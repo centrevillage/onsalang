@@ -1,0 +1,257 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§8.1", "§10"]
+
+// W6-01 U2b/t, S-1031 (§4.7, "関数型の合わせ"; §8.1; §10). `let f = match n { 0 => X, _ => Y }` and the match with three arms (`k`, `b` and `r` in all six orders, and some
+// with two or three `r` arms) have no expected type. The type of the match is the joined type: the union of the effect rows, and `rt` only when every arm is `rt`, in whatever order
+// the arms are written. It is tried at the same places as in fn_join_if_ok.onsa (an `rt` place, a place with an empty row, a place with `uses {Alloc}`, and the elements of an
+// array type that is bound first, which are compared as equal). This file is the accepted uses; fn_join_match_neg.onsa the refused ones. Checked, not run.
+//
+// The units of this file are the ones that the code before U2b already answers as written here; they are kept apart from the units that need the join (in fn_join_match_ok.onsa), so that a change in them is not hidden by that file.
+
+pub fn k(x: U32) -> U32 {
+  x
+}
+
+pub rt fn r(x: U32) -> U32 {
+  x
+}
+
+pub fn b(x: U32) -> U32 uses {Alloc} {
+  x
+}
+
+// The places the joined type is tried at: an `rt` place, a place with an empty effect row, a place with `uses {Alloc}`, and the same three
+// in an array type (an element of a type argument is compared as equal, so these say what the type of the join is).
+pub rt fn at_rt(g: rt fn(U32) -> U32) -> U32 {
+  g.(1)
+}
+
+pub fn at_pure(g: fn(U32) -> U32) -> U32 {
+  g.(1)
+}
+
+pub fn at_alloc(g: fn(U32) -> U32 uses {Alloc}) -> U32 uses {Alloc} {
+  g.(1)
+}
+
+pub rt fn arr_rt(a: [rt fn(U32) -> U32; 2]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr_pure(a: [fn(U32) -> U32; 2]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr_alloc(a: [fn(U32) -> U32 uses {Alloc}; 2]) -> U32 uses {Alloc} {
+  a[0].(1)
+}
+
+pub rt fn arr3_rt(a: [rt fn(U32) -> U32; 3]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr3_pure(a: [fn(U32) -> U32; 3]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr3_alloc(a: [fn(U32) -> U32 uses {Alloc}; 3]) -> U32 uses {Alloc} {
+  a[0].(1)
+}
+
+pub fn match2_kr_exact(n: U32) -> U32 {
+  let f = match n {
+    0 => k,
+    _ => r,
+  }
+  f.(1) + at_pure(f)
+}
+
+pub fn match2_kr_weaker(n: U32) -> U32 uses {Alloc} {
+  let f = match n {
+    0 => k,
+    _ => r,
+  }
+  f.(1) + at_alloc(f)
+}
+
+pub fn match2_kr_type(n: U32) -> U32 {
+  let f = match n {
+    0 => k,
+    _ => r,
+  }
+  let fs = [f, f]
+  arr_pure(fs)
+}
+
+pub rt fn match2_rr_exact(n: U32) -> U32 {
+  let f = match n {
+    0 => r,
+    _ => r,
+  }
+  f.(1) + at_rt(f)
+}
+
+pub fn match2_rr_weaker(n: U32) -> U32 uses {Alloc} {
+  let f = match n {
+    0 => r,
+    _ => r,
+  }
+  at_pure(f) + at_alloc(f)
+}
+
+pub fn match2_rr_type(n: U32) -> U32 {
+  let f = match n {
+    0 => r,
+    _ => r,
+  }
+  let fs = [f, f]
+  arr_rt(fs)
+}
+
+pub fn match2_bk_exact(n: U32) -> U32 uses {Alloc} {
+  let f = match n {
+    0 => b,
+    _ => k,
+  }
+  f.(1) + at_alloc(f)
+}
+
+pub fn match2_bk_type(n: U32) -> U32 uses {Alloc} {
+  let f = match n {
+    0 => b,
+    _ => k,
+  }
+  let fs = [f, f]
+  arr_alloc(fs)
+}
+
+pub fn match2_br_exact(n: U32) -> U32 uses {Alloc} {
+  let f = match n {
+    0 => b,
+    _ => r,
+  }
+  f.(1) + at_alloc(f)
+}
+
+pub fn match2_br_type(n: U32) -> U32 uses {Alloc} {
+  let f = match n {
+    0 => b,
+    _ => r,
+  }
+  let fs = [f, f]
+  arr_alloc(fs)
+}
+
+pub fn match3_bkr_exact(n: U32) -> U32 uses {Alloc} {
+  let f = match n {
+    0 => b,
+    1 => k,
+    _ => r,
+  }
+  f.(1) + at_alloc(f)
+}
+
+pub fn match3_bkr_type(n: U32) -> U32 uses {Alloc} {
+  let f = match n {
+    0 => b,
+    1 => k,
+    _ => r,
+  }
+  let fs = [f, f]
+  arr_alloc(fs)
+}
+
+pub fn match3_brk_exact(n: U32) -> U32 uses {Alloc} {
+  let f = match n {
+    0 => b,
+    1 => r,
+    _ => k,
+  }
+  f.(1) + at_alloc(f)
+}
+
+pub fn match3_brk_type(n: U32) -> U32 uses {Alloc} {
+  let f = match n {
+    0 => b,
+    1 => r,
+    _ => k,
+  }
+  let fs = [f, f]
+  arr_alloc(fs)
+}
+
+pub fn match3_krr_exact(n: U32) -> U32 {
+  let f = match n {
+    0 => k,
+    1 => r,
+    _ => r,
+  }
+  f.(1) + at_pure(f)
+}
+
+pub fn match3_krr_weaker(n: U32) -> U32 uses {Alloc} {
+  let f = match n {
+    0 => k,
+    1 => r,
+    _ => r,
+  }
+  f.(1) + at_alloc(f)
+}
+
+pub fn match3_krr_type(n: U32) -> U32 {
+  let f = match n {
+    0 => k,
+    1 => r,
+    _ => r,
+  }
+  let fs = [f, f]
+  arr_pure(fs)
+}
+
+pub rt fn match3_rrr_exact(n: U32) -> U32 {
+  let f = match n {
+    0 => r,
+    1 => r,
+    _ => r,
+  }
+  f.(1) + at_rt(f)
+}
+
+pub fn match3_rrr_weaker(n: U32) -> U32 uses {Alloc} {
+  let f = match n {
+    0 => r,
+    1 => r,
+    _ => r,
+  }
+  at_pure(f) + at_alloc(f)
+}
+
+pub fn match3_rrr_type(n: U32) -> U32 {
+  let f = match n {
+    0 => r,
+    1 => r,
+    _ => r,
+  }
+  let fs = [f, f]
+  arr_rt(fs)
+}
+
+pub fn match3_brr_exact(n: U32) -> U32 uses {Alloc} {
+  let f = match n {
+    0 => b,
+    1 => r,
+    _ => r,
+  }
+  f.(1) + at_alloc(f)
+}
+
+pub fn match3_brr_type(n: U32) -> U32 uses {Alloc} {
+  let f = match n {
+    0 => b,
+    1 => r,
+    _ => r,
+  }
+  let fs = [f, f]
+  arr_alloc(fs)
+}

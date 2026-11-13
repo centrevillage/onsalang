@@ -30,7 +30,7 @@ use crate::builtin;
 use crate::def::{Bound, DefKind, Fields, FnDef, GenericDef, GenericKind};
 use crate::deferred::{Deferred, DeferredKind, Verdict};
 use crate::exhaust::{Missing, P, Seen};
-use crate::infer::{Cause, Infer, LitKind, Mismatch};
+use crate::infer::{Cause, Fit, Infer, LitKind, Mismatch};
 use crate::modes::Proj;
 use crate::names::body::{BindingKind, BodyNames, Origin, PatRes, PathRes, StructRes};
 use crate::requirement::{ArgumentName, Required};
@@ -322,6 +322,13 @@ pub(crate) struct Checker<'a> {
     /// The anonymous function written directly as the argument being checked
     /// (the one whose E0401 has a candidate, §8.1; not one in parentheses).
     pub(crate) arg_closure: Option<ExprId>,
+    /// The expected type of the expression being checked is the type of an
+    /// earlier branch of a merge that joins function types (§4.7, S-1031):
+    /// a function found there is joined, not fit ([`Self::check_expr_as`]).
+    pub(crate) joining: bool,
+    /// A path checked as the base of type arguments written after it, with
+    /// the span of both (the text of a wrapping function, S-874).
+    pub(crate) written: Option<(ExprId, Span)>,
     /// The names of the body, which the names stage resolved (W4-04).
     pub(crate) names: crate::names::body::BodyNames,
     /// The local of each binding no pattern makes, by its [`Origin`].
@@ -420,6 +427,8 @@ fn read_body<'c>(
         limits: Default::default(),
         why: None,
         arg_closure: None,
+        joining: false,
+        written: None,
         flow: None,
         names,
         origins,
@@ -559,6 +568,12 @@ impl<'a> Checker<'a> {
     /// A diagnostic of the typing pass (stage `Types`).
     pub(crate) fn err(&mut self, code: Code, span: Span, msg: impl Into<String>) -> Stop {
         self.diag(Diagnostic::new(Stage::Types, code, span, msg).with_found(self.src(span)))
+    }
+
+    /// Whether the error type is in `t` (§18.1).
+    fn mentions_error(&mut self, t: TyId) -> bool {
+        let t = self.infer.resolve(&mut self.a.types, t);
+        self.a.types.has_error(t)
     }
 
     /// A type that holds a struct or enum whose unit failed in the syntax
@@ -702,37 +717,40 @@ impl<'a> Checker<'a> {
     /// Unify, reporting E0401 at `span` on failure.
     pub(crate) fn unify_at(&mut self, span: Span, actual: TyId, expected: TyId) -> R<()> {
         match self.mismatch_at(span, actual, expected, None) {
-            Some(d) => Err(self.diag(d)),
-            None => Ok(()),
+            Err(d) => Err(self.diag(d)),
+            Ok(_) => Ok(()),
         }
     }
 
     /// The value of the type `actual` at `span`, of the form `found`, used
-    /// where `expected` is expected ([`Infer::fits`], §8.1), reporting E0401
-    /// on failure.
-    pub(crate) fn fit_at(&mut self, span: Span, actual: TyId, expected: TyId, found: Found) -> R<()> {
-        match self.mismatch_at(span, actual, expected, Some(found)) {
-            Some(d) => Err(self.diag(d)),
-            None => Ok(()),
-        }
+    /// where `expected` is expected ([`Infer::fits`], §8.1), or joined with
+    /// it ([`Self::joining`]), reporting E0401 on failure. Whether both are
+    /// function types.
+    pub(crate) fn fit_at(&mut self, span: Span, actual: TyId, expected: TyId, found: Found) -> R<bool> {
+        self.mismatch_at(span, actual, expected, Some(found)).map_err(|d| self.diag(d))
     }
 
-    /// Unify, or fit a value of the form `fit` ([`Infer::fits`]), giving the
-    /// E0401 at `span` on failure, for the caller to report.
+    /// Unify, or fit a value of the form `fit` ([`Infer::fits`]: whether
+    /// both are function types), giving the E0401 at `span` on failure, for
+    /// the caller to report.
     pub(crate) fn mismatch_at(
         &mut self,
         span: Span,
         actual: TyId,
         expected: TyId,
         fit: Option<Found>,
-    ) -> Option<Diagnostic> {
+    ) -> Result<bool, Diagnostic> {
         let cause = self.cause(span, Some(expected));
         let types = &mut self.a.types;
+        let how = if self.joining { Fit::Join } else { Fit::Directed };
         let r = match fit {
-            Some(_) => self.infer.fits(types, actual, expected, &cause),
-            None => self.infer.unify(types, actual, expected, &cause),
+            Some(_) => self.infer.fits(types, (actual, expected), how, &cause),
+            None => self.infer.unify(types, actual, expected, &cause).map(|()| false),
         };
-        let Err(mismatch) = r else { return None };
+        let mismatch = match r {
+            Ok(both) => return Ok(both),
+            Err(m) => m,
+        };
         let (a, e) = (self.display(actual), self.display(expected));
         let (found, wanted) = (self.infer.lit_of(&self.a.types, actual), self.infer.lit_of(&self.a.types, expected));
         let text = match (&mismatch, found, wanted) {
@@ -742,17 +760,20 @@ impl<'a> Checker<'a> {
             _ => format!("expected `{e}`, found `{a}`"),
         };
         let d = Diagnostic::new(Stage::Types, Code::E0401, span, text).with_found(self.src(span));
-        if let (Some(fit), Mismatch::Modes(ps)) = (fit, &mismatch) {
-            return Some(self.modes_help(d, fit, ps, (actual, expected)));
+        if let (Some(fit), Mismatch::Modes(ps)) = (fit, &mismatch)
+            && !self.mentions_error(actual)
+            && !self.mentions_error(expected)
+        {
+            return Err(self.modes_help(d, fit, ps, (actual, expected)));
         }
         // The other side of a float literal (§6.6, S-881).
         let other = match (found, wanted) {
             (Some(LitKind::Float), _) => expected,
             (None, Some(LitKind::Float)) => actual,
-            _ => return Some(d),
+            _ => return Err(d),
         };
         let other = self.shallow(other);
-        Some(match self.ty(other) {
+        Err(match self.ty(other) {
             Ty::Param(_) => {
                 let t = self.display(other);
                 d.with_rule(format!(

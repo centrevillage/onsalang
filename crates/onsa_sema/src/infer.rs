@@ -98,6 +98,16 @@ pub enum Mismatch {
     Modes(Vec<usize>),
 }
 
+/// How a function type meets another (§8.1, §4.7): `Equal` inside other
+/// types, `Directed` where it is expected, `Join` as a branch of a merge with
+/// no expected type, where the effect rows and `rt` are joined instead.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Fit {
+    Equal,
+    Directed,
+    Join,
+}
+
 impl Infer {
     /// The state of a body with the type parameters `float_params`, those whose bounds hold `Float`.
     pub fn new(float_params: Vec<u32>) -> Infer {
@@ -304,28 +314,59 @@ impl Infer {
                 }
                 Ok(())
             }
-            (Ty::Fn(f1), Ty::Fn(f2)) => self.unify_fns(types, (f1, f2), false, cause),
+            (Ty::Fn(f1), Ty::Fn(f2)) => self.unify_fns(types, (f1, f2), Fit::Equal, cause),
             (Ty::ConstVal(n), Ty::ConstVal(m)) if n == m => Ok(()),
             _ => Err(Mismatch::Types),
         }
     }
 
     /// Whether a value of the type `actual` can be used where `expected` is
-    /// expected (§8.1, §4.7, S-1031): of two function types, the outermost
-    /// pair is directed (the row of `actual` is in that of `expected`, and
-    /// it is `rt` where `expected` is); any other pair unifies.
-    pub fn fits(&mut self, types: &mut Types, actual: TyId, expected: TyId, cause: &Cause) -> Result<(), Mismatch> {
+    /// expected (§8.1, §4.7, S-1031), and whether both are function types:
+    /// their outermost pair meets as `how` says (`Directed`: the row of
+    /// `actual` is in that of `expected`, and it is `rt` where `expected`
+    /// is). As a branch of a merge (`Join`), a function type and an
+    /// undecided variable are left to [`Infer::join`]. Any other pair unifies.
+    pub fn fits(
+        &mut self,
+        types: &mut Types,
+        (actual, expected): (TyId, TyId),
+        how: Fit,
+        cause: &Cause,
+    ) -> Result<bool, Mismatch> {
         let (a, b) = (self.shallow(types, actual), self.shallow(types, expected));
         match (types.get(a).clone(), types.get(b).clone()) {
-            (Ty::Fn(f1), Ty::Fn(f2)) => self.unify_fns(types, (&f1, &f2), true, cause),
-            _ => self.unify(types, a, b, cause),
+            (Ty::Fn(f1), Ty::Fn(f2)) => self.unify_fns(types, (&f1, &f2), how, cause).map(|()| true),
+            (Ty::Var(i), Ty::Fn(_)) | (Ty::Fn(_), Ty::Var(i)) if how == Fit::Join && self.var_lit(i).is_none() => {
+                Ok(false)
+            }
+            _ => self.unify(types, a, b, cause).map(|()| false),
+        }
+    }
+
+    /// The join of `a` and `b`, the types of two branches of a merge that
+    /// were fit with [`Fit::Join`] (§4.7, S-1031): of two function types, the
+    /// union of the effect rows, `rt` when both are; a function type, of it
+    /// and an undecided variable (a branch the join decides); `a` of any
+    /// other pair, which unified.
+    pub fn join(&mut self, types: &mut Types, a: TyId, b: TyId) -> TyId {
+        let (sa, sb) = (self.shallow(types, a), self.shallow(types, b));
+        match (types.get(sa).clone(), types.get(sb).clone()) {
+            (Ty::Var(_), Ty::Fn(_)) => b,
+            (Ty::Fn(f), Ty::Fn(g)) if f.rt && !g.rt || !g.effects.within(&f.effects) => {
+                let mut effects = f.effects.clone();
+                effects.alloc |= g.effects.alloc;
+                effects.other.extend(g.effects.other.iter().filter(|x| !f.effects.other.contains(x)).cloned());
+                let rt = f.rt && g.rt;
+                types.intern(Ty::Fn(FnTy { rt, effects, ..f }))
+            }
+            _ => a,
         }
     }
 
     /// The function types `found` and `wanted`, with the same parameter
     /// types, modes and result (§8.1 rule 1; modes are part of the type,
-    /// §4.1); `directed`, rules 2 and 3, else the same effect row (a set)
-    /// and the same `rt` (§10). A row with an effect row variable, on
+    /// §4.1); `Directed`, rules 2 and 3, `Equal`, the same effect row (a
+    /// set) and the same `rt` (§10), `Join`, any of either (§4.7). A row with an effect row variable, on
     /// either side, is not compared (R-27 (3), §8.1). The parts come
     /// first: the text of a mismatch of the modes, the effects or `rt`
     /// shows the types they decide (§18.1).
@@ -333,7 +374,7 @@ impl Infer {
         &mut self,
         types: &mut Types,
         (found, wanted): (&FnTy, &FnTy),
-        directed: bool,
+        how: Fit,
         cause: &Cause,
     ) -> Result<(), Mismatch> {
         if found.params.len() != wanted.params.len() {
@@ -347,10 +388,10 @@ impl Infer {
         let differ: Vec<(usize, [Mode; 2])> = (0..).zip(pairs).filter(|(_, m)| m[0] != m[1]).collect();
         let (row, other) = (&found.effects, &wanted.effects);
         let open = row.is_open() || other.is_open();
-        let effects = open || row.within(other) && (directed || other.within(row));
-        let rt = found.rt == wanted.rt || directed && found.rt;
+        let effects = open || how == Fit::Join || row.within(other) && (how == Fit::Directed || other.within(row));
+        let rt = found.rt == wanted.rt || how == Fit::Join || how == Fit::Directed && found.rt;
         // Of a pair that differs with no `inout`, one is the default and the other `move`.
-        let alone = directed && differ.iter().all(|(_, m)| !m.contains(&Mode::Inout));
+        let alone = how != Fit::Equal && differ.iter().all(|(_, m)| !m.contains(&Mode::Inout));
         match (effects && rt, differ.is_empty()) {
             (true, true) => Ok(()),
             (true, false) if alone => Err(Mismatch::Modes(differ.into_iter().map(|(k, _)| k).collect())),

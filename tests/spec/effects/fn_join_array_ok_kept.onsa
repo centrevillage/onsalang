@@ -1,0 +1,175 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§8.1", "§10"]
+
+// W6-01 U2b/t, S-1031 (§4.7, "関数型の合わせ": the elements of an array literal with no expected type are joined as the arms of an `if` are; §8.1; §10). `let fs = [X, Y]`
+// (every pair of `k`, `r` and `b`, in every order) and the arrays of three elements: the type of the elements is the joined type (the union of the effect rows, `rt` only when every
+// element is `rt`). The elements are tried at an `rt` place, a place with an empty row and a place with `uses {Alloc}`, and the array as a whole at the array types
+// (the elements of a type argument are compared as equal). This file is the accepted uses; fn_join_array_neg.onsa the refused ones. Checked, not run.
+//
+// The units of this file are the ones that the code before U2b already answers as written here; they are kept apart from the units that need the join (in fn_join_array_ok.onsa), so that a change in them is not hidden by that file.
+
+pub fn k(x: U32) -> U32 {
+  x
+}
+
+pub rt fn r(x: U32) -> U32 {
+  x
+}
+
+pub fn b(x: U32) -> U32 uses {Alloc} {
+  x
+}
+
+// The places the joined type is tried at: an `rt` place, a place with an empty effect row, a place with `uses {Alloc}`, and the same three
+// in an array type (an element of a type argument is compared as equal, so these say what the type of the join is).
+pub rt fn at_rt(g: rt fn(U32) -> U32) -> U32 {
+  g.(1)
+}
+
+pub fn at_pure(g: fn(U32) -> U32) -> U32 {
+  g.(1)
+}
+
+pub fn at_alloc(g: fn(U32) -> U32 uses {Alloc}) -> U32 uses {Alloc} {
+  g.(1)
+}
+
+pub rt fn arr_rt(a: [rt fn(U32) -> U32; 2]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr_pure(a: [fn(U32) -> U32; 2]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr_alloc(a: [fn(U32) -> U32 uses {Alloc}; 2]) -> U32 uses {Alloc} {
+  a[0].(1)
+}
+
+pub rt fn arr3_rt(a: [rt fn(U32) -> U32; 3]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr3_pure(a: [fn(U32) -> U32; 3]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr3_alloc(a: [fn(U32) -> U32 uses {Alloc}; 3]) -> U32 uses {Alloc} {
+  a[0].(1)
+}
+
+pub fn array2_kk_exact(c: Bool) -> U32 {
+  let fs = [k, k]
+  fs[0].(1) + at_pure(fs[1])
+}
+
+pub fn array2_kk_weaker(c: Bool) -> U32 uses {Alloc} {
+  let fs = [k, k]
+  fs[0].(1) + at_alloc(fs[1])
+}
+
+pub fn array2_kk_type(c: Bool) -> U32 {
+  let fs = [k, k]
+  arr_pure(fs)
+}
+
+pub fn array2_kr_exact(c: Bool) -> U32 {
+  let fs = [k, r]
+  fs[0].(1) + at_pure(fs[1])
+}
+
+pub fn array2_kr_weaker(c: Bool) -> U32 uses {Alloc} {
+  let fs = [k, r]
+  fs[0].(1) + at_alloc(fs[1])
+}
+
+pub fn array2_kr_type(c: Bool) -> U32 {
+  let fs = [k, r]
+  arr_pure(fs)
+}
+
+pub rt fn array2_rr_exact(c: Bool) -> U32 {
+  let fs = [r, r]
+  fs[0].(1) + at_rt(fs[1])
+}
+
+pub fn array2_rr_weaker(c: Bool) -> U32 uses {Alloc} {
+  let fs = [r, r]
+  at_pure(fs[0]) + at_alloc(fs[1])
+}
+
+pub fn array2_rr_type(c: Bool) -> U32 {
+  let fs = [r, r]
+  arr_rt(fs)
+}
+
+pub fn array2_bk_exact(c: Bool) -> U32 uses {Alloc} {
+  let fs = [b, k]
+  fs[0].(1) + at_alloc(fs[1])
+}
+
+pub fn array2_bk_type(c: Bool) -> U32 uses {Alloc} {
+  let fs = [b, k]
+  arr_alloc(fs)
+}
+
+pub fn array2_br_exact(c: Bool) -> U32 uses {Alloc} {
+  let fs = [b, r]
+  fs[0].(1) + at_alloc(fs[1])
+}
+
+pub fn array2_br_type(c: Bool) -> U32 uses {Alloc} {
+  let fs = [b, r]
+  arr_alloc(fs)
+}
+
+pub fn array2_bb_exact(c: Bool) -> U32 uses {Alloc} {
+  let fs = [b, b]
+  fs[0].(1) + at_alloc(fs[1])
+}
+
+pub fn array2_bb_type(c: Bool) -> U32 uses {Alloc} {
+  let fs = [b, b]
+  arr_alloc(fs)
+}
+
+pub fn array3_bkr_exact(c: Bool) -> U32 uses {Alloc} {
+  let fs = [b, k, r]
+  fs[0].(1) + at_alloc(fs[1])
+}
+
+pub fn array3_bkr_type(c: Bool) -> U32 uses {Alloc} {
+  let fs = [b, k, r]
+  arr3_alloc(fs)
+}
+
+pub rt fn array3_rrr_exact(c: Bool) -> U32 {
+  let fs = [r, r, r]
+  fs[0].(1) + at_rt(fs[1])
+}
+
+pub fn array3_rrr_weaker(c: Bool) -> U32 uses {Alloc} {
+  let fs = [r, r, r]
+  at_pure(fs[0]) + at_alloc(fs[1])
+}
+
+pub fn array3_rrr_type(c: Bool) -> U32 {
+  let fs = [r, r, r]
+  arr3_rt(fs)
+}
+
+pub fn array3_krr_exact(c: Bool) -> U32 {
+  let fs = [k, r, r]
+  fs[0].(1) + at_pure(fs[1])
+}
+
+pub fn array3_krr_weaker(c: Bool) -> U32 uses {Alloc} {
+  let fs = [k, r, r]
+  fs[0].(1) + at_alloc(fs[1])
+}
+
+pub fn array3_krr_type(c: Bool) -> U32 {
+  let fs = [k, r, r]
+  arr3_pure(fs)
+}

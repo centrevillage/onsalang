@@ -1,0 +1,526 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§8.1", "§10"]
+
+// W6-01 U2b/t, S-1031 (A6; §4.7, "関数型の合わせ": "引数の型とモード、返り値の型は等しくなければならず（E0401）"; §8.1 rule 1: the types and the modes of the parameters and the result are equal; "期待する関数型と
+// 引数の数が違う ... も同じ"; S-874: the mode is a part of the type, so `fn(U32)` and `fn(move U32)` are different types). The join of functions with no expected type is E0401 when the parameter type, the
+// result type, the number of parameters or the mode of a parameter differs, in every form (`if` in both orders, a `match` with two and three arms (the arm that differs is first, middle or last), an array
+// literal with two and three elements), and where the expected type is an undecided type variable (the tail of a lambda, `Some(...)`, `first([...])`, `W { h: ... }`, the first argument of `pick`). The effect row and `rt` do
+// not make the join an error but the type does, so a join that differs in the type is one E0401 whatever the effect rows are (`r` and `kb` below). Each join is written on one line, so the mark does not depend on which arm is
+// reported. The note on a join that differs only in the mode (S-874) belongs to the CLI tests. Checked, not run.
+
+pub fn k(x: U32) -> U32 {
+  x
+}
+
+pub rt fn r(x: U32) -> U32 {
+  x
+}
+
+pub fn b(x: U32) -> U32 uses {Alloc} {
+  x
+}
+
+// The places the joined type is tried at: an `rt` place, a place with an empty effect row, a place with `uses {Alloc}`, and the same three
+// in an array type (an element of a type argument is compared as equal, so these say what the type of the join is).
+pub rt fn at_rt(g: rt fn(U32) -> U32) -> U32 {
+  g.(1)
+}
+
+pub fn at_pure(g: fn(U32) -> U32) -> U32 {
+  g.(1)
+}
+
+pub fn at_alloc(g: fn(U32) -> U32 uses {Alloc}) -> U32 uses {Alloc} {
+  g.(1)
+}
+
+pub rt fn arr_rt(a: [rt fn(U32) -> U32; 2]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr_pure(a: [fn(U32) -> U32; 2]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr_alloc(a: [fn(U32) -> U32 uses {Alloc}; 2]) -> U32 uses {Alloc} {
+  a[0].(1)
+}
+
+pub rt fn arr3_rt(a: [rt fn(U32) -> U32; 3]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr3_pure(a: [fn(U32) -> U32; 3]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr3_alloc(a: [fn(U32) -> U32 uses {Alloc}; 3]) -> U32 uses {Alloc} {
+  a[0].(1)
+}
+
+pub fn kb(x: Bool) -> U32 {
+  0
+}
+
+pub fn kf(x: U32) -> F32 {
+  1.0
+}
+
+pub fn k2(x: U32, y: U32) -> U32 {
+  x
+}
+
+pub fn k0() -> U32 {
+  0
+}
+
+pub fn km(move x: U32) -> U32 {
+  x
+}
+
+pub fn first[T](xs: [T; 2]) -> T {
+  xs[0]
+}
+
+pub fn pick[T](a: T, c: T) -> T {
+  a
+}
+
+pub struct W[T] {
+  h: T,
+}
+
+pub fn if_k_kb(c: Bool) -> U32 {
+  let _ = if c { k } else { kb }   //~ E0401
+  0
+}
+
+pub fn if_kb_k(c: Bool) -> U32 {
+  let _ = if c { kb } else { k }   //~ E0401
+  0
+}
+
+pub fn match_k_kb(n: U32) -> U32 {
+  let _ = match n { 0 => k, _ => kb }   //~ E0401
+  0
+}
+
+pub fn match_kb_k(n: U32) -> U32 {
+  let _ = match n { 0 => kb, _ => k }   //~ E0401
+  0
+}
+
+pub fn match3_last_kb(n: U32) -> U32 {
+  let _ = match n { 0 => k, 1 => r, _ => kb }   //~ E0401
+  0
+}
+
+pub fn match3_middle_kb(n: U32) -> U32 {
+  let _ = match n { 0 => k, 1 => kb, _ => b }   //~ E0401
+  0
+}
+
+pub fn match3_first_kb(n: U32) -> U32 {
+  let _ = match n { 0 => kb, 1 => k, _ => r }   //~ E0401
+  0
+}
+
+pub fn array_k_kb(c: Bool) -> U32 {
+  let _ = [k, kb]   //~ E0401
+  0
+}
+
+pub fn array_kb_k(c: Bool) -> U32 {
+  let _ = [kb, k]   //~ E0401
+  0
+}
+
+pub fn array3_last_kb(c: Bool) -> U32 {
+  let _ = [r, b, kb]   //~ E0401
+  0
+}
+
+pub fn chain_kb(c: Bool, d: Bool) -> U32 {
+  let _ = if c { r } else if d { b } else { kb }   //~ E0401
+  0
+}
+
+pub fn nested_kb(c: Bool, d: Bool) -> U32 {
+  let _ = if c { if d { k } else { kb } } else { r }   //~ E0401
+  0
+}
+
+pub fn if_k_kf(c: Bool) -> U32 {
+  let _ = if c { k } else { kf }   //~ E0401
+  0
+}
+
+pub fn if_kf_k(c: Bool) -> U32 {
+  let _ = if c { kf } else { k }   //~ E0401
+  0
+}
+
+pub fn match_k_kf(n: U32) -> U32 {
+  let _ = match n { 0 => k, _ => kf }   //~ E0401
+  0
+}
+
+pub fn match_kf_k(n: U32) -> U32 {
+  let _ = match n { 0 => kf, _ => k }   //~ E0401
+  0
+}
+
+pub fn match3_last_kf(n: U32) -> U32 {
+  let _ = match n { 0 => k, 1 => r, _ => kf }   //~ E0401
+  0
+}
+
+pub fn match3_middle_kf(n: U32) -> U32 {
+  let _ = match n { 0 => k, 1 => kf, _ => b }   //~ E0401
+  0
+}
+
+pub fn match3_first_kf(n: U32) -> U32 {
+  let _ = match n { 0 => kf, 1 => k, _ => r }   //~ E0401
+  0
+}
+
+pub fn array_k_kf(c: Bool) -> U32 {
+  let _ = [k, kf]   //~ E0401
+  0
+}
+
+pub fn array_kf_k(c: Bool) -> U32 {
+  let _ = [kf, k]   //~ E0401
+  0
+}
+
+pub fn array3_last_kf(c: Bool) -> U32 {
+  let _ = [r, b, kf]   //~ E0401
+  0
+}
+
+pub fn chain_kf(c: Bool, d: Bool) -> U32 {
+  let _ = if c { r } else if d { b } else { kf }   //~ E0401
+  0
+}
+
+pub fn nested_kf(c: Bool, d: Bool) -> U32 {
+  let _ = if c { if d { k } else { kf } } else { r }   //~ E0401
+  0
+}
+
+pub fn if_k_k2(c: Bool) -> U32 {
+  let _ = if c { k } else { k2 }   //~ E0401
+  0
+}
+
+pub fn if_k2_k(c: Bool) -> U32 {
+  let _ = if c { k2 } else { k }   //~ E0401
+  0
+}
+
+pub fn match_k_k2(n: U32) -> U32 {
+  let _ = match n { 0 => k, _ => k2 }   //~ E0401
+  0
+}
+
+pub fn match_k2_k(n: U32) -> U32 {
+  let _ = match n { 0 => k2, _ => k }   //~ E0401
+  0
+}
+
+pub fn match3_last_k2(n: U32) -> U32 {
+  let _ = match n { 0 => k, 1 => r, _ => k2 }   //~ E0401
+  0
+}
+
+pub fn match3_middle_k2(n: U32) -> U32 {
+  let _ = match n { 0 => k, 1 => k2, _ => b }   //~ E0401
+  0
+}
+
+pub fn match3_first_k2(n: U32) -> U32 {
+  let _ = match n { 0 => k2, 1 => k, _ => r }   //~ E0401
+  0
+}
+
+pub fn array_k_k2(c: Bool) -> U32 {
+  let _ = [k, k2]   //~ E0401
+  0
+}
+
+pub fn array_k2_k(c: Bool) -> U32 {
+  let _ = [k2, k]   //~ E0401
+  0
+}
+
+pub fn array3_last_k2(c: Bool) -> U32 {
+  let _ = [r, b, k2]   //~ E0401
+  0
+}
+
+pub fn chain_k2(c: Bool, d: Bool) -> U32 {
+  let _ = if c { r } else if d { b } else { k2 }   //~ E0401
+  0
+}
+
+pub fn nested_k2(c: Bool, d: Bool) -> U32 {
+  let _ = if c { if d { k } else { k2 } } else { r }   //~ E0401
+  0
+}
+
+pub fn if_k_k0(c: Bool) -> U32 {
+  let _ = if c { k } else { k0 }   //~ E0401
+  0
+}
+
+pub fn if_k0_k(c: Bool) -> U32 {
+  let _ = if c { k0 } else { k }   //~ E0401
+  0
+}
+
+pub fn match_k_k0(n: U32) -> U32 {
+  let _ = match n { 0 => k, _ => k0 }   //~ E0401
+  0
+}
+
+pub fn match_k0_k(n: U32) -> U32 {
+  let _ = match n { 0 => k0, _ => k }   //~ E0401
+  0
+}
+
+pub fn match3_last_k0(n: U32) -> U32 {
+  let _ = match n { 0 => k, 1 => r, _ => k0 }   //~ E0401
+  0
+}
+
+pub fn match3_middle_k0(n: U32) -> U32 {
+  let _ = match n { 0 => k, 1 => k0, _ => b }   //~ E0401
+  0
+}
+
+pub fn match3_first_k0(n: U32) -> U32 {
+  let _ = match n { 0 => k0, 1 => k, _ => r }   //~ E0401
+  0
+}
+
+pub fn array_k_k0(c: Bool) -> U32 {
+  let _ = [k, k0]   //~ E0401
+  0
+}
+
+pub fn array_k0_k(c: Bool) -> U32 {
+  let _ = [k0, k]   //~ E0401
+  0
+}
+
+pub fn array3_last_k0(c: Bool) -> U32 {
+  let _ = [r, b, k0]   //~ E0401
+  0
+}
+
+pub fn chain_k0(c: Bool, d: Bool) -> U32 {
+  let _ = if c { r } else if d { b } else { k0 }   //~ E0401
+  0
+}
+
+pub fn nested_k0(c: Bool, d: Bool) -> U32 {
+  let _ = if c { if d { k } else { k0 } } else { r }   //~ E0401
+  0
+}
+
+pub fn if_k_km(c: Bool) -> U32 {
+  let _ = if c { k } else { km }   //~ E0401
+  0
+}
+
+pub fn if_km_k(c: Bool) -> U32 {
+  let _ = if c { km } else { k }   //~ E0401
+  0
+}
+
+pub fn match_k_km(n: U32) -> U32 {
+  let _ = match n { 0 => k, _ => km }   //~ E0401
+  0
+}
+
+pub fn match_km_k(n: U32) -> U32 {
+  let _ = match n { 0 => km, _ => k }   //~ E0401
+  0
+}
+
+pub fn match3_last_km(n: U32) -> U32 {
+  let _ = match n { 0 => k, 1 => r, _ => km }   //~ E0401
+  0
+}
+
+pub fn match3_middle_km(n: U32) -> U32 {
+  let _ = match n { 0 => k, 1 => km, _ => b }   //~ E0401
+  0
+}
+
+pub fn match3_first_km(n: U32) -> U32 {
+  let _ = match n { 0 => km, 1 => k, _ => r }   //~ E0401
+  0
+}
+
+pub fn array_k_km(c: Bool) -> U32 {
+  let _ = [k, km]   //~ E0401
+  0
+}
+
+pub fn array_km_k(c: Bool) -> U32 {
+  let _ = [km, k]   //~ E0401
+  0
+}
+
+pub fn array3_last_km(c: Bool) -> U32 {
+  let _ = [r, b, km]   //~ E0401
+  0
+}
+
+pub fn chain_km(c: Bool, d: Bool) -> U32 {
+  let _ = if c { r } else if d { b } else { km }   //~ E0401
+  0
+}
+
+pub fn nested_km(c: Bool, d: Bool) -> U32 {
+  let _ = if c { if d { k } else { km } } else { r }   //~ E0401
+  0
+}
+
+pub fn rt_and_kb(c: Bool) -> U32 {
+  let _ = if c { r } else { kb }   //~ E0401
+  0
+}
+
+pub fn alloc_and_kb(c: Bool) -> U32 {
+  let _ = if c { b } else { kb }   //~ E0401
+  0
+}
+
+pub fn rt_and_kf(c: Bool) -> U32 {
+  let _ = if c { r } else { kf }   //~ E0401
+  0
+}
+
+pub fn alloc_and_kf(c: Bool) -> U32 {
+  let _ = if c { b } else { kf }   //~ E0401
+  0
+}
+
+pub fn rt_and_km(c: Bool) -> U32 {
+  let _ = if c { r } else { km }   //~ E0401
+  0
+}
+
+pub fn alloc_and_km(c: Bool) -> U32 {
+  let _ = if c { b } else { km }   //~ E0401
+  0
+}
+
+pub fn lambda_kb(c: Bool) -> U32 {
+  let g = fn(d: Bool) { if d { k } else { kb } }   //~ E0401
+  let _ = g.(c)
+  0
+}
+
+pub fn some_kb(c: Bool) -> U32 {
+  let _ = Some(if c { k } else { kb })   //~ E0401
+  0
+}
+
+pub fn first_kb(c: Bool) -> U32 {
+  let _ = first([k, kb])   //~ E0401
+  0
+}
+
+pub fn struct_kb(c: Bool) -> U32 {
+  let _ = W { h: if c { k } else { kb } }   //~ E0401
+  0
+}
+
+pub fn pick_kb(c: Bool) -> U32 {
+  let _ = pick(if c { k } else { kb }, k)   //~ E0401
+  0
+}
+
+pub fn lambda_kf(c: Bool) -> U32 {
+  let g = fn(d: Bool) { if d { k } else { kf } }   //~ E0401
+  let _ = g.(c)
+  0
+}
+
+pub fn some_kf(c: Bool) -> U32 {
+  let _ = Some(if c { k } else { kf })   //~ E0401
+  0
+}
+
+pub fn first_kf(c: Bool) -> U32 {
+  let _ = first([k, kf])   //~ E0401
+  0
+}
+
+pub fn struct_kf(c: Bool) -> U32 {
+  let _ = W { h: if c { k } else { kf } }   //~ E0401
+  0
+}
+
+pub fn pick_kf(c: Bool) -> U32 {
+  let _ = pick(if c { k } else { kf }, k)   //~ E0401
+  0
+}
+
+pub fn lambda_k2(c: Bool) -> U32 {
+  let g = fn(d: Bool) { if d { k } else { k2 } }   //~ E0401
+  let _ = g.(c)
+  0
+}
+
+pub fn some_k2(c: Bool) -> U32 {
+  let _ = Some(if c { k } else { k2 })   //~ E0401
+  0
+}
+
+pub fn first_k2(c: Bool) -> U32 {
+  let _ = first([k, k2])   //~ E0401
+  0
+}
+
+pub fn struct_k2(c: Bool) -> U32 {
+  let _ = W { h: if c { k } else { k2 } }   //~ E0401
+  0
+}
+
+pub fn pick_k2(c: Bool) -> U32 {
+  let _ = pick(if c { k } else { k2 }, k)   //~ E0401
+  0
+}
+
+pub fn lambda_km(c: Bool) -> U32 {
+  let g = fn(d: Bool) { if d { k } else { km } }   //~ E0401
+  let _ = g.(c)
+  0
+}
+
+pub fn some_km(c: Bool) -> U32 {
+  let _ = Some(if c { k } else { km })   //~ E0401
+  0
+}
+
+pub fn first_km(c: Bool) -> U32 {
+  let _ = first([k, km])   //~ E0401
+  0
+}
+
+pub fn struct_km(c: Bool) -> U32 {
+  let _ = W { h: if c { k } else { km } }   //~ E0401
+  0
+}
+
+pub fn pick_km(c: Bool) -> U32 {
+  let _ = pick(if c { k } else { km }, k)   //~ E0401
+  0
+}

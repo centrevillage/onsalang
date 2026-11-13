@@ -1,0 +1,100 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§8.1", "§10"]
+
+// W6-01 U2b/t, S-1031 (§4.7, "関数型の合わせ": "期待型の無い `if`・`match`・配列のリテラル ... で、枝・腕・要素が関数型なら、式の型はそれらを合わせた関数型である。
+// 引数の型とモード、返り値の型は等しくなければならず（E0401）、効果行は和、`rt` は全ての枝が `rt` のときだけ付く（§8.1、§10）。書く順によらない").
+// `let f = if c { X } else { Y }` has no expected type, with X and Y each one of `k` (empty effect row), `r` (an `rt` function) and `b` (`uses {Alloc}`), in every order.
+// The joined type has the effect row of the union and is `rt` only if both branches are. It is tried at an `rt` place, a place with an empty effect row and a place
+// with `uses {Alloc}` (passing, and calling the value in a function whose effect row or `rt` is smaller: E0601 for the effect, E0901 for `rt` in an `rt` function),
+// and, as the type of the elements of an array that is bound first (`let fs = [f, f]`, then `arr_pure(fs)`: the elements of a type argument are compared as equal
+// with `rt` and the effect row, §8.1), so that the type is the joined one and not a weaker one. This file is the accepted uses, fn_join_if_neg.onsa the ones that are E0401,
+// E0601 and E0901. Checked, not run.
+
+pub fn k(x: U32) -> U32 {
+  x
+}
+
+pub rt fn r(x: U32) -> U32 {
+  x
+}
+
+pub fn b(x: U32) -> U32 uses {Alloc} {
+  x
+}
+
+// The places the joined type is tried at: an `rt` place, a place with an empty effect row, a place with `uses {Alloc}`, and the same three
+// in an array type (an element of a type argument is compared as equal, so these say what the type of the join is).
+pub rt fn at_rt(g: rt fn(U32) -> U32) -> U32 {
+  g.(1)
+}
+
+pub fn at_pure(g: fn(U32) -> U32) -> U32 {
+  g.(1)
+}
+
+pub fn at_alloc(g: fn(U32) -> U32 uses {Alloc}) -> U32 uses {Alloc} {
+  g.(1)
+}
+
+pub rt fn arr_rt(a: [rt fn(U32) -> U32; 2]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr_pure(a: [fn(U32) -> U32; 2]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr_alloc(a: [fn(U32) -> U32 uses {Alloc}; 2]) -> U32 uses {Alloc} {
+  a[0].(1)
+}
+
+pub rt fn arr3_rt(a: [rt fn(U32) -> U32; 3]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr3_pure(a: [fn(U32) -> U32; 3]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr3_alloc(a: [fn(U32) -> U32 uses {Alloc}; 3]) -> U32 uses {Alloc} {
+  a[0].(1)
+}
+
+pub fn if2_kb_exact(c: Bool) -> U32 uses {Alloc} {
+  let f = if c { k } else { b }
+  f.(1) + at_alloc(f)
+}
+
+pub fn if2_kb_type(c: Bool) -> U32 uses {Alloc} {
+  let f = if c { k } else { b }
+  let fs = [f, f]
+  arr_alloc(fs)
+}
+
+pub fn if2_rk_exact(c: Bool) -> U32 {
+  let f = if c { r } else { k }
+  f.(1) + at_pure(f)
+}
+
+pub fn if2_rk_weaker(c: Bool) -> U32 uses {Alloc} {
+  let f = if c { r } else { k }
+  f.(1) + at_alloc(f)
+}
+
+pub fn if2_rk_type(c: Bool) -> U32 {
+  let f = if c { r } else { k }
+  let fs = [f, f]
+  arr_pure(fs)
+}
+
+pub fn if2_rb_exact(c: Bool) -> U32 uses {Alloc} {
+  let f = if c { r } else { b }
+  f.(1) + at_alloc(f)
+}
+
+pub fn if2_rb_type(c: Bool) -> U32 uses {Alloc} {
+  let f = if c { r } else { b }
+  let fs = [f, f]
+  arr_alloc(fs)
+}

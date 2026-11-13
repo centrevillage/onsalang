@@ -1,0 +1,183 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§8.1", "§10"]
+
+// W6-01 U2b/t, S-1031 (§4.7, §8.1, §10). The refused uses of the type of `let f = if c { X } else { Y }` (see fn_join_if_ok.onsa): a joined type that has `uses {Alloc}`
+// (one branch is `b`) is E0401 at an empty-row place and at an `rt` place, and a call of it in a function with an empty effect row is E0601; a joined type that is not
+// `rt` (one branch is not `r`) is E0401 at an `rt` place, and a call of it in an `rt` function is E0901 (§10 rule 4). The type of the array of such values is
+// the joined type, so the array does not go to an array type that differs in the effect row or `rt` in either direction (`arr_alloc` for the type that is
+// pure, `arr_pure` for the type that is `rt`). Checked, not run.
+//
+// The units of this file are the ones that the code before U2b already answers as written here; they are kept apart from the units that need the join (in fn_join_if_neg.onsa), so that a change in them is not hidden by that file.
+
+pub fn k(x: U32) -> U32 {
+  x
+}
+
+pub rt fn r(x: U32) -> U32 {
+  x
+}
+
+pub fn b(x: U32) -> U32 uses {Alloc} {
+  x
+}
+
+// The places the joined type is tried at: an `rt` place, a place with an empty effect row, a place with `uses {Alloc}`, and the same three
+// in an array type (an element of a type argument is compared as equal, so these say what the type of the join is).
+pub rt fn at_rt(g: rt fn(U32) -> U32) -> U32 {
+  g.(1)
+}
+
+pub fn at_pure(g: fn(U32) -> U32) -> U32 {
+  g.(1)
+}
+
+pub fn at_alloc(g: fn(U32) -> U32 uses {Alloc}) -> U32 uses {Alloc} {
+  g.(1)
+}
+
+pub rt fn arr_rt(a: [rt fn(U32) -> U32; 2]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr_pure(a: [fn(U32) -> U32; 2]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr_alloc(a: [fn(U32) -> U32 uses {Alloc}; 2]) -> U32 uses {Alloc} {
+  a[0].(1)
+}
+
+pub rt fn arr3_rt(a: [rt fn(U32) -> U32; 3]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr3_pure(a: [fn(U32) -> U32; 3]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr3_alloc(a: [fn(U32) -> U32 uses {Alloc}; 3]) -> U32 uses {Alloc} {
+  a[0].(1)
+}
+
+pub fn if2_kk_to_rt(c: Bool) -> U32 {
+  let f = if c { k } else { k }
+  at_rt(f)   //~ E0401
+}
+
+pub rt fn if2_kk_call_in_rt(c: Bool) -> U32 { (if c { k } else { k }).(1) }   //~ E0901
+
+pub fn if2_kk_type_alloc(c: Bool) -> U32 uses {Alloc} {
+  let f = if c { k } else { k }
+  let fs = [f, f]
+  arr_alloc(fs)   //~ E0401
+}
+
+pub fn if2_kk_type_rt(c: Bool) -> U32 {
+  let f = if c { k } else { k }
+  let fs = [f, f]
+  arr_rt(fs)   //~ E0401
+}
+
+pub fn if2_kr_to_rt(c: Bool) -> U32 {
+  let f = if c { k } else { r }
+  at_rt(f)   //~ E0401
+}
+
+pub rt fn if2_kr_call_in_rt(c: Bool) -> U32 { (if c { k } else { r }).(1) }   //~ E0901
+
+pub fn if2_kr_type_alloc(c: Bool) -> U32 uses {Alloc} {
+  let f = if c { k } else { r }
+  let fs = [f, f]
+  arr_alloc(fs)   //~ E0401
+}
+
+pub fn if2_kr_type_rt(c: Bool) -> U32 {
+  let f = if c { k } else { r }
+  let fs = [f, f]
+  arr_rt(fs)   //~ E0401
+}
+
+pub fn if2_rr_type_pure(c: Bool) -> U32 {
+  let f = if c { r } else { r }
+  let fs = [f, f]
+  arr_pure(fs)   //~ E0401
+}
+
+pub fn if2_rr_type_alloc(c: Bool) -> U32 uses {Alloc} {
+  let f = if c { r } else { r }
+  let fs = [f, f]
+  arr_alloc(fs)   //~ E0401
+}
+
+pub fn if2_bk_to_pure(c: Bool) -> U32 {
+  let f = if c { b } else { k }
+  at_pure(f)   //~ E0401
+}
+
+pub fn if2_bk_call_in_pure(c: Bool) -> U32 { (if c { b } else { k }).(1) }   //~ E0601
+
+pub fn if2_bk_to_rt(c: Bool) -> U32 {
+  let f = if c { b } else { k }
+  at_rt(f)   //~ E0401
+}
+
+pub fn if2_bk_type_pure(c: Bool) -> U32 {
+  let f = if c { b } else { k }
+  let fs = [f, f]
+  arr_pure(fs)   //~ E0401
+}
+
+pub fn if2_bk_type_rt(c: Bool) -> U32 {
+  let f = if c { b } else { k }
+  let fs = [f, f]
+  arr_rt(fs)   //~ E0401
+}
+
+pub fn if2_br_to_pure(c: Bool) -> U32 {
+  let f = if c { b } else { r }
+  at_pure(f)   //~ E0401
+}
+
+pub fn if2_br_call_in_pure(c: Bool) -> U32 { (if c { b } else { r }).(1) }   //~ E0601
+
+pub fn if2_br_to_rt(c: Bool) -> U32 {
+  let f = if c { b } else { r }
+  at_rt(f)   //~ E0401
+}
+
+pub fn if2_br_type_pure(c: Bool) -> U32 {
+  let f = if c { b } else { r }
+  let fs = [f, f]
+  arr_pure(fs)   //~ E0401
+}
+
+pub fn if2_br_type_rt(c: Bool) -> U32 {
+  let f = if c { b } else { r }
+  let fs = [f, f]
+  arr_rt(fs)   //~ E0401
+}
+
+pub fn if2_bb_to_pure(c: Bool) -> U32 {
+  let f = if c { b } else { b }
+  at_pure(f)   //~ E0401
+}
+
+pub fn if2_bb_call_in_pure(c: Bool) -> U32 { (if c { b } else { b }).(1) }   //~ E0601
+
+pub fn if2_bb_to_rt(c: Bool) -> U32 {
+  let f = if c { b } else { b }
+  at_rt(f)   //~ E0401
+}
+
+pub fn if2_bb_type_pure(c: Bool) -> U32 {
+  let f = if c { b } else { b }
+  let fs = [f, f]
+  arr_pure(fs)   //~ E0401
+}
+
+pub fn if2_bb_type_rt(c: Bool) -> U32 {
+  let f = if c { b } else { b }
+  let fs = [f, f]
+  arr_rt(fs)   //~ E0401
+}

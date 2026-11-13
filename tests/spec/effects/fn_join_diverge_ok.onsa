@@ -1,0 +1,113 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§8.1", "§10"]
+
+// W6-01 U2b/t, S-1031 (§4.7, "関数型の合わせ": "発散する枝（`panic`、`return` など）は数えない"). A branch that diverges is not counted in the join: the type of `if c { r } else { panic("x") }`
+// is the type of `r`, which is `rt` (a branch that is `panic("x")` neither makes the join not `rt` nor adds an effect), the same for the branch `{ return 0 }` of an `if` and of a `match` (first or last arm), a
+// diverging arm in the middle of a `match` and of an `else if` chain. The leaf that is left is `r` (the join is `rt`), `k` (an empty effect row, not `rt`) or `b` (`uses {Alloc}`), or two leaves joined. The type is tried
+// at the places that are exactly it and at the weaker places, as in fn_join_if_ok.onsa; the functions that have the value of `r` and a diverging branch are `rt` where the call is made (`panic` is allowed in an `rt` function,
+// §9.2). The refused uses are in fn_join_diverge_neg.onsa. Checked, not run.
+
+pub fn k(x: U32) -> U32 {
+  x
+}
+
+pub rt fn r(x: U32) -> U32 {
+  x
+}
+
+pub fn b(x: U32) -> U32 uses {Alloc} {
+  x
+}
+
+// The places the joined type is tried at: an `rt` place, a place with an empty effect row, a place with `uses {Alloc}`, and the same three
+// in an array type (an element of a type argument is compared as equal, so these say what the type of the join is).
+pub rt fn at_rt(g: rt fn(U32) -> U32) -> U32 {
+  g.(1)
+}
+
+pub fn at_pure(g: fn(U32) -> U32) -> U32 {
+  g.(1)
+}
+
+pub fn at_alloc(g: fn(U32) -> U32 uses {Alloc}) -> U32 uses {Alloc} {
+  g.(1)
+}
+
+pub rt fn arr_rt(a: [rt fn(U32) -> U32; 2]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr_pure(a: [fn(U32) -> U32; 2]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr_alloc(a: [fn(U32) -> U32 uses {Alloc}; 2]) -> U32 uses {Alloc} {
+  a[0].(1)
+}
+
+pub rt fn arr3_rt(a: [rt fn(U32) -> U32; 3]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr3_pure(a: [fn(U32) -> U32; 3]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr3_alloc(a: [fn(U32) -> U32 uses {Alloc}; 3]) -> U32 uses {Alloc} {
+  a[0].(1)
+}
+
+pub fn match_middle_rk_exact(n: U32) -> U32 {
+  let f = match n { 0 => r, 1 => panic("x"), _ => k }
+  f.(1) + at_pure(f)
+}
+
+pub fn match_middle_rk_weaker(n: U32) -> U32 uses {Alloc} {
+  let f = match n { 0 => r, 1 => panic("x"), _ => k }
+  f.(1) + at_alloc(f)
+}
+
+pub fn match_middle_rk_type(n: U32) -> U32 {
+  let f = match n { 0 => r, 1 => panic("x"), _ => k }
+  let fs = [f, f]
+  arr_pure(fs)
+}
+
+pub fn match_middle_kb_exact(n: U32) -> U32 uses {Alloc} {
+  let f = match n { 0 => k, 1 => panic("x"), _ => b }
+  f.(1) + at_alloc(f)
+}
+
+pub fn match_middle_kb_type(n: U32) -> U32 uses {Alloc} {
+  let f = match n { 0 => k, 1 => panic("x"), _ => b }
+  let fs = [f, f]
+  arr_alloc(fs)
+}
+
+pub fn elseif_middle_rk_exact(c: Bool, d: Bool) -> U32 {
+  let f = if c { r } else if d { panic("x") } else { k }
+  f.(1) + at_pure(f)
+}
+
+pub fn elseif_middle_rk_weaker(c: Bool, d: Bool) -> U32 uses {Alloc} {
+  let f = if c { r } else if d { panic("x") } else { k }
+  f.(1) + at_alloc(f)
+}
+
+pub fn elseif_middle_rk_type(c: Bool, d: Bool) -> U32 {
+  let f = if c { r } else if d { panic("x") } else { k }
+  let fs = [f, f]
+  arr_pure(fs)
+}
+
+pub fn elseif_middle_kb_exact(c: Bool, d: Bool) -> U32 uses {Alloc} {
+  let f = if c { k } else if d { panic("x") } else { b }
+  f.(1) + at_alloc(f)
+}
+
+pub fn elseif_middle_kb_type(c: Bool, d: Bool) -> U32 uses {Alloc} {
+  let f = if c { k } else if d { panic("x") } else { b }
+  let fs = [f, f]
+  arr_alloc(fs)
+}

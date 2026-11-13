@@ -1,0 +1,254 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§8.1", "§10"]
+
+// W6-01 U2b/t, S-1031 (§4.7, §8.1, §10). The refused uses of the values of fn_join_open_var_ok.onsa (see there): the joined type of an undecided type variable is not a weaker one than the union
+// of the effect rows (`uses {Alloc}` when one of X and Y is `b`: E0401 at an empty-row place) and not `rt` unless both are `r` (E0401 at an `rt` place). In `Option` and in `W` and as the elements of an
+// array, the type is compared as equal, so the other types are E0401 too, in both directions (`rt` dropped: `Option[rt fn]` is not the type of the join of `r` and `k`; and not
+// `rt` kept: `Option[fn]` is not the type of the join of `r` and `r`). Checked, not run.
+//
+// The units of this file are the ones that the code before U2b already answers as written here; they are kept apart from the units that need the join (in fn_join_open_var_neg.onsa), so that a change in them is not hidden by that file.
+
+pub fn k(x: U32) -> U32 {
+  x
+}
+
+pub rt fn r(x: U32) -> U32 {
+  x
+}
+
+pub fn b(x: U32) -> U32 uses {Alloc} {
+  x
+}
+
+// The places the joined type is tried at: an `rt` place, a place with an empty effect row, a place with `uses {Alloc}`, and the same three
+// in an array type (an element of a type argument is compared as equal, so these say what the type of the join is).
+pub rt fn at_rt(g: rt fn(U32) -> U32) -> U32 {
+  g.(1)
+}
+
+pub fn at_pure(g: fn(U32) -> U32) -> U32 {
+  g.(1)
+}
+
+pub fn at_alloc(g: fn(U32) -> U32 uses {Alloc}) -> U32 uses {Alloc} {
+  g.(1)
+}
+
+pub rt fn arr_rt(a: [rt fn(U32) -> U32; 2]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr_pure(a: [fn(U32) -> U32; 2]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr_alloc(a: [fn(U32) -> U32 uses {Alloc}; 2]) -> U32 uses {Alloc} {
+  a[0].(1)
+}
+
+pub rt fn arr3_rt(a: [rt fn(U32) -> U32; 3]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr3_pure(a: [fn(U32) -> U32; 3]) -> U32 {
+  a[0].(1)
+}
+
+pub fn arr3_alloc(a: [fn(U32) -> U32 uses {Alloc}; 3]) -> U32 uses {Alloc} {
+  a[0].(1)
+}
+
+pub fn first[T](xs: [T; 2]) -> T {
+  xs[0]
+}
+
+pub fn pick[T](a: T, c: T) -> T {
+  a
+}
+
+pub struct W[T] {
+  h: T,
+}
+
+pub fn opt_rt(o: Option[rt fn(U32) -> U32]) -> U32 {
+  match o {
+    Some(f) => f.(1),
+    None => 0,
+  }
+}
+
+pub fn opt_pure(o: Option[fn(U32) -> U32]) -> U32 {
+  match o {
+    Some(f) => f.(1),
+    None => 0,
+  }
+}
+
+pub fn opt_alloc(o: Option[fn(U32) -> U32 uses {Alloc}]) -> U32 uses {Alloc} {
+  match o {
+    Some(f) => f.(1),
+    None => 0,
+  }
+}
+
+pub fn w_rt(w: W[rt fn(U32) -> U32]) -> U32 {
+  w.h.(1)
+}
+
+pub fn w_pure(w: W[fn(U32) -> U32]) -> U32 {
+  w.h.(1)
+}
+
+pub fn w_alloc(w: W[fn(U32) -> U32 uses {Alloc}]) -> U32 uses {Alloc} {
+  w.h.(1)
+}
+
+pub fn lam_kr_to_rt(c: Bool) -> U32 {
+  let g = fn(d: Bool) { if d { k } else { r } }
+  let f = g.(c)
+  at_rt(f)   //~ E0401
+}
+
+pub fn lam_kr_type_alloc(c: Bool) -> U32 uses {Alloc} {
+  let g = fn(d: Bool) { if d { k } else { r } }
+  let f = g.(c)
+  let fs = [f, f]
+  arr_alloc(fs)   //~ E0401
+}
+
+pub fn lam_bk_to_pure(c: Bool) -> U32 {
+  let g = fn(d: Bool) { if d { b } else { k } }
+  let f = g.(c)
+  at_pure(f)   //~ E0401
+}
+
+pub fn lam_bk_type_pure(c: Bool) -> U32 {
+  let g = fn(d: Bool) { if d { b } else { k } }
+  let f = g.(c)
+  let fs = [f, f]
+  arr_pure(fs)   //~ E0401
+}
+
+pub fn lam_rr_type_pure(c: Bool) -> U32 {
+  let g = fn(d: Bool) { if d { r } else { r } }
+  let f = g.(c)
+  let fs = [f, f]
+  arr_pure(fs)   //~ E0401
+}
+
+pub fn some_kr_type_rt(c: Bool) -> U32 {
+  let v = Some(if c { k } else { r })
+  opt_rt(v)   //~ E0401
+}
+
+pub fn some_kr_type_alloc(c: Bool) -> U32 uses {Alloc} {
+  let v = Some(if c { k } else { r })
+  opt_alloc(v)   //~ E0401
+}
+
+pub fn some_bk_type_pure(c: Bool) -> U32 {
+  let v = Some(if c { b } else { k })
+  opt_pure(v)   //~ E0401
+}
+
+pub fn some_bk_type_rt(c: Bool) -> U32 {
+  let v = Some(if c { b } else { k })
+  opt_rt(v)   //~ E0401
+}
+
+pub fn some_rr_type_pure(c: Bool) -> U32 {
+  let v = Some(if c { r } else { r })
+  opt_pure(v)   //~ E0401
+}
+
+pub fn some_rr_type_alloc(c: Bool) -> U32 uses {Alloc} {
+  let v = Some(if c { r } else { r })
+  opt_alloc(v)   //~ E0401
+}
+
+pub fn first_kr_to_rt(c: Bool) -> U32 {
+  let f = first([k, r])
+  at_rt(f)   //~ E0401
+}
+
+pub fn first_kr_type_alloc(c: Bool) -> U32 uses {Alloc} {
+  let f = first([k, r])
+  let fs = [f, f]
+  arr_alloc(fs)   //~ E0401
+}
+
+pub fn first_bk_to_pure(c: Bool) -> U32 {
+  let f = first([b, k])
+  at_pure(f)   //~ E0401
+}
+
+pub fn first_bk_type_pure(c: Bool) -> U32 {
+  let f = first([b, k])
+  let fs = [f, f]
+  arr_pure(fs)   //~ E0401
+}
+
+pub fn first_rr_type_pure(c: Bool) -> U32 {
+  let f = first([r, r])
+  let fs = [f, f]
+  arr_pure(fs)   //~ E0401
+}
+
+pub fn wstruct_kr_type_rt(c: Bool) -> U32 {
+  let v = W { h: if c { k } else { r } }
+  w_rt(v)   //~ E0401
+}
+
+pub fn wstruct_kr_type_alloc(c: Bool) -> U32 uses {Alloc} {
+  let v = W { h: if c { k } else { r } }
+  w_alloc(v)   //~ E0401
+}
+
+pub fn wstruct_bk_type_pure(c: Bool) -> U32 {
+  let v = W { h: if c { b } else { k } }
+  w_pure(v)   //~ E0401
+}
+
+pub fn wstruct_bk_type_rt(c: Bool) -> U32 {
+  let v = W { h: if c { b } else { k } }
+  w_rt(v)   //~ E0401
+}
+
+pub fn wstruct_rr_type_pure(c: Bool) -> U32 {
+  let v = W { h: if c { r } else { r } }
+  w_pure(v)   //~ E0401
+}
+
+pub fn wstruct_rr_type_alloc(c: Bool) -> U32 uses {Alloc} {
+  let v = W { h: if c { r } else { r } }
+  w_alloc(v)   //~ E0401
+}
+
+pub fn pick_kr_to_rt(c: Bool) -> U32 {
+  let f = pick(if c { k } else { r }, k)
+  at_rt(f)   //~ E0401
+}
+
+pub fn pick_kr_type_alloc(c: Bool) -> U32 uses {Alloc} {
+  let f = pick(if c { k } else { r }, k)
+  let fs = [f, f]
+  arr_alloc(fs)   //~ E0401
+}
+
+pub fn pick_bk_to_pure(c: Bool) -> U32 {
+  let f = pick(if c { b } else { k }, k)
+  at_pure(f)   //~ E0401
+}
+
+pub fn pick_bk_type_pure(c: Bool) -> U32 {
+  let f = pick(if c { b } else { k }, k)
+  let fs = [f, f]
+  arr_pure(fs)   //~ E0401
+}
+
+pub fn pick_rr_type_pure(c: Bool) -> U32 {
+  let f = pick(if c { r } else { r }, r)
+  let fs = [f, f]
+  arr_pure(fs)   //~ E0401
+}
