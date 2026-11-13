@@ -72,7 +72,7 @@ fn seen(body: &str) -> (Vec<(Code, usize, bool)>, BTreeSet<String>) {
     let src = format!("{PRELUDE}{body}");
     let (pkg, mut a) = analyzed(&src);
     let before = a.diagnostics.len();
-    let moved = check_all(&pkg, &mut a);
+    check_all(&pkg, &mut a);
     let line = |s: Span| {
         assert!(s.start as usize >= PRELUDE.len(), "in the prelude: {s:?}");
         src[PRELUDE.len()..s.start as usize].matches('\n').count() + 1
@@ -81,11 +81,28 @@ fn seen(body: &str) -> (Vec<(Code, usize, bool)>, BTreeSet<String>) {
         .filter(|d| d.span.file == FileId(0))
         .map(|d| (d.code, line(d.span), d.message.contains("previous iteration")))
         .collect();
-    let names = (moved.iter())
-        .filter(|(def, _)| a.def(**def).span.file == FileId(0))
-        .flat_map(|(def, ls)| ls.iter().map(|l| a.bodies[def].locals[l.0 as usize].name.clone()))
+    let names = (a.bodies.keys()).filter(|&&def| a.def(def).span.file == FileId(0)).flat_map(|&def| moved(&a, def));
+    (diags, names.collect())
+}
+
+/// The names of the owned Affine locals of `def` that have no drop point
+/// (`BodyInfo::drops`): moved on every path to the ends of their scopes.
+fn moved(a: &crate::Analysis, def: crate::DefId) -> BTreeSet<String> {
+    let info = &a.bodies[&def];
+    let ends: BTreeSet<_> = (info.drops.iter())
+        .filter_map(|d| match d.what {
+            crate::body::Dropped::End(l) => Some(l),
+            crate::body::Dropped::Rest(_) => None,
+        })
         .collect();
-    (diags, names)
+    let generics = crate::body::generics_of(a, def);
+    (info.locals.iter().enumerate())
+        .filter(|(i, l)| {
+            let affine = crate::kind::kind_in_body(a, l.ty, &generics) == Some(crate::Kind::Affine);
+            affine && l.state.owned() && !ends.contains(&LocalId(*i as u32))
+        })
+        .map(|(_, l)| l.name.clone())
+        .collect()
 }
 
 fn diags(body: &str) -> Vec<(Code, usize, bool)> {
@@ -350,17 +367,17 @@ pub fn twice() uses {Alloc} {
 fn the_head_of_a_loop_is_its_least_fixpoint() {
     let (l, at) = (LocalId, |n| Span::new(FileId(0), n, n + 1));
     let mut entry = Delta::start();
-    entry.set(l(0), Status::Moved { at: at(1), via_loop: false });
+    entry.moved(l(0), at(1));
     let stale = |n| Status::Stale { changes: std::collections::BTreeMap::from([(n, at(n))]) };
-    entry.set(l(2), stale(2));
-    entry.set(l(4), stale(4));
+    entry.stale(l(2), stale(2));
+    entry.stale(l(4), stale(4));
     let mut back = Delta::start();
     back.revive(l(1));
-    back.set(l(1), Status::Moved { at: at(5), via_loop: false });
+    back.moved(l(1), at(5));
     back.revive(l(2));
-    back.set(l(3), stale(3));
-    back.set(l(4), stale(6));
-    back.set(l(0), Status::Moved { at: at(7), via_loop: false });
+    back.stale(l(3), stale(3));
+    back.stale(l(4), stale(6));
+    back.moved(l(0), at(7));
     let plain = |d: &Delta| {
         (0..5)
             .map(|i| {
@@ -1484,7 +1501,8 @@ pub fn generic(a: Buf[F32], b: Buf[F32]) {
     let lines: Vec<_> = diags.into_iter().map(|(c, l, _)| (c, l - skip)).collect();
     assert_eq!(lines, [(Code::E0703, 2), (Code::E0711, 5), (Code::E0702, 16)]);
     assert_eq!(call_fixes(src).iter().filter(|f| !f.2.is_empty()).count(), 1);
-    assert_eq!(moved, BTreeSet::from(["a", "b", "x"].map(String::from)));
+    // `a` and `b` are each dropped at the end of `tails` on the path that does not move it (R-32).
+    assert_eq!(moved, BTreeSet::from(["x"].map(String::from)));
 }
 
 /// §18.1: of a callee the walk does not know (here its record removed, as
@@ -1505,9 +1523,9 @@ fn a_callee_not_known_checks_nothing() {
     let id = (0..a.defs.len() as u32).map(crate::DefId).find(|&d| a.def(d).name == "t").expect("t");
     a.bodies.get_mut(&id).expect("a body").targets.retain(|_, t| !matches!(t, crate::body::Target::Fn { .. }));
     let before = a.diagnostics.len();
-    let moved = check_all(&pkg, &mut a);
+    check_all(&pkg, &mut a);
     assert!(a.diagnostics[before..].iter().all(|d| d.span.file != FileId(0)));
-    assert!(!moved.contains_key(&id));
+    assert!(moved(&a, id).is_empty());
 }
 
 /// Each diagnostic the stage reports for [`CALLEES`] and `body` (after
@@ -3388,6 +3406,42 @@ fn clean(body: &str) -> (String, crate::Analysis, impl Fn(&crate::Analysis, &str
     (src, a, move |a: &crate::Analysis, n: &str| named(a, n).expect("the function"))
 }
 
+/// R-32 (§12.2, S-873): the drop points the walk that reports keeps, in the
+/// order it met them: at the end of a scope (a block, the body of an
+/// anonymous function and its parameters, the body and its parameters), of
+/// each owned local that is not Copy and may be live there, `sure` when no
+/// path moved it, in the anonymous function it is in; none where no path
+/// reaches (the arm that moves `v` or panics), nor of a local moved on every path.
+#[test]
+fn the_drop_points_of_a_body() {
+    let (_, a, def) = clean(
+        "pub fn run(f: fn(move Buf[F32]) -> U32 uses {Alloc}) -> U32 uses {Alloc} { f.(mk()) }
+pub fn points(c: Bool, move a: Buf[F32], move b: Buf[F32], n: U32) -> U32 uses {Alloc} {
+  if c { take(move a) }
+  let k: U32 = n
+  match mko() {
+    Some(v) => if c { take(move v) } else { panic(\"x\") },
+    None => {},
+  }
+  let e = {
+    let d = mk()
+    d.len()
+  }
+  k + e + run(fn(move x: Buf[F32]) -> U32 uses {Alloc} { if c { take(move x) }
+  0 })
+}
+",
+    );
+    let info = &a.bodies[&def(&a, "points")];
+    let points: Vec<_> = (info.drops.iter())
+        .map(|d| match d.what {
+            crate::body::Dropped::End(l) => (info.locals[l.0 as usize].name.as_str(), d.sure, d.closure.is_some()),
+            crate::body::Dropped::Rest(_) => panic!("no field is taken out"),
+        })
+        .collect();
+    assert_eq!(points, [("d", true, false), ("x", false, true), ("a", false, false), ("b", true, false)]);
+}
+
 /// S-85 (§5.2): a field taken out is kept once (a loop's summary walks it
 /// too, and keeps it not), with its root and path, for the stages after.
 #[test]
@@ -3407,8 +3461,14 @@ pub fn t(n: U32) uses {Alloc} {
 ",
     );
     let info = &a.bodies[&def(&a, "t")];
-    let taken: Vec<_> = (info.taken.iter())
-        .map(|t| (&src[t.at.start as usize..t.at.end as usize], info.locals[t.root.0 as usize].name.as_str(), &t.path))
+    let taken: Vec<_> = (info.drops.iter())
+        .filter_map(|d| match &d.what {
+            crate::body::Dropped::Rest(t) => Some((d.at, t)),
+            crate::body::Dropped::End(_) => None,
+        })
+        .map(|(at, t)| {
+            (&src[at.start as usize..at.end as usize], info.locals[t.root.0 as usize].name.as_str(), &t.path)
+        })
         .collect();
     let (h, buf, tf) = (Field("h".into()), Field("buf".into()), Field("t".into()));
     assert_eq!(taken, [("o.h.buf", "o", &vec![h, buf]), ("p.t.0", "p", &vec![tf, Elem(0)])]);
@@ -3476,8 +3536,8 @@ pub fn of_t[T: ?Dup](move g: G[T]) -> Buf[F32] uses {Alloc} { g.a }
     );
     let rest = |n: &str| {
         use crate::drop_alloc::{Drop, alloc_drops};
-        let rests = alloc_drops(&a, &a.bodies[&def(&a, n)], None).filter_map(|d| match d {
-            Drop::Rest { taken, root } => Some((taken.at, root.name.clone())),
+        let rests = alloc_drops(&a, &a.bodies[&def(&a, n)]).filter_map(|d| match d {
+            Drop::Rest { at, root, .. } => Some((at, root.name.clone())),
             Drop::Local(_) => None,
         });
         let found: Vec<_> = rests.collect();

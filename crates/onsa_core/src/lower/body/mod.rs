@@ -6,7 +6,7 @@
 
 use onsa_diag::Span;
 use onsa_diag::unsupported::Feature;
-use onsa_sema::body::{BodyInfo, InstId, Target, TryArms};
+use onsa_sema::body::{BodyInfo, Dropped, InstId, Target, TryArms};
 use onsa_sema::def::{DefKind, FnDef as SFnDef};
 use onsa_sema::ty::TyId;
 use onsa_sema::{DefId, ModId};
@@ -187,7 +187,7 @@ pub(crate) fn bind_params(lw: &mut Lowerer, cx: &mut FnCx, d: DefId, f: &SFnDef)
 
 pub(crate) fn lower_fn_body(lw: &mut Lowerer, cx: &mut FnCx, body: ExprId) -> R<Block> {
     // S-85, X-8: the rest is dropped over the whole body, so it stops whole (W8-04).
-    if let Some(t) = cx.info.taken.first() {
+    if let Some(t) = cx.info.drops.iter().find(|d| matches!(d.what, Dropped::Rest(_))) {
         return Err(unsupported(t.at, Feature::TakenFields, &[]));
     }
     let AK::Block(b) = &cx.expr(body).kind else {

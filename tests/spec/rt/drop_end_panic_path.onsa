@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§9.2", "§10", "§12.2"]
+
+// W6-02 U2a/t, S-873 (§9.2: "panic で抜ける道では、生きている値の破棄は起きない（巻き戻しは無い）。その破棄は `Alloc` に数えず"; §12.2:
+// "panic で抜ける道の、生きている値の破棄: 要らない"; §7: a statement that diverges, and `while true` without a `break`, never reach
+// the end of the block): an owned local that is never moved, and is live only where the function panics or never ends, has no drop,
+// so the function needs no `Alloc` and an `rt fn` is no E0901. Every function here is legal. This version counts a drop at the end of
+// a body where no path arrives (E0601 in a function without `uses {Alloc}`, E0901 in an `rt fn`), so all of them are reported today.
+// The local that is moved on the other path is in rt/drop_end_panic_moved.onsa (legal today), and the contrasts, a path that
+// reaches the end unmoved while another panics, are in negative/drop_end_panic_other_path.onsa.
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+// ------------------------------------------------------------------ the body ends with `panic`
+
+pub fn panic_unmoved(move b: Buf[F32]) -> U32 { panic("x") }
+
+pub rt fn rt_panic_unmoved(move b: Buf[F32]) -> U32 { panic("x") }
+
+pub fn panic_unmoved_unit(move b: Buf[F32]) { panic("x") }
+
+pub rt fn rt_panic_unmoved_unit(move b: Buf[F32]) { panic("x") }
+
+pub rt fn rt_panic_struct(move h: Holder) -> U32 { panic("x") }
+
+pub rt fn rt_panic_two_locals(move a: Buf[F32], move b: Buf[F32]) -> Option[Buf[F32]] { panic("x") }
+
+pub rt fn rt_panic_in_block(move b: Buf[F32]) -> U32 { { panic("x") } }
+
+// ------------------------------------------------------------------ every path panics
+
+pub fn both_panic(c: Bool, move b: Buf[F32]) -> U32 { if c { panic("x") } else { panic("y") } }
+
+pub rt fn rt_both_panic(c: Bool, move b: Buf[F32]) -> U32 { if c { panic("x") } else { panic("y") } }
+
+pub rt fn rt_nested_all_panic(c: Bool, d: Bool, move b: Buf[F32]) -> U32 { if c { if d { panic("x") } else { panic("y") } } else { panic("z") } }
+
+pub fn arms_all_panic(n: U32, move b: Buf[F32]) -> U32 { match n { 0 => panic("x"), _ => panic("y") } }
+
+pub rt fn rt_arms_all_panic(n: U32, move b: Buf[F32]) -> U32 { match n { 0 => panic("x"), 1 => panic("y"), _ => panic("z") } }
+
+// ------------------------------------------------------------------ the binding of an owned heading is live at a `panic`
+
+pub fn heading_arm_panics(move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) => if v.len() > 0 { panic("x") } else { panic("y") }, None => None } }
+
+pub rt fn rt_heading_arm_panics(move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) => if v.len() > 0 { panic("x") } else { panic("y") }, None => None } }
+
+pub rt fn rt_heading_binding_panics(move b: Buf[F32]) -> U32 { match move b { t => if t.len() > 0 { panic("x") } else { panic("y") } } }
+
+pub fn heading_binding_panics(move b: Buf[F32]) -> U32 { match move b { t => if t.len() > 0 { panic("x") } else { panic("y") } } }
+
+pub rt fn rt_heading_arm_if_panics(c: Bool, move o: Option[Buf[F32]]) -> U32 { match move o { Some(v) => if c && v.len() > 0 { panic("x") } else { panic("y") }, None => 0 } }
+
+// ------------------------------------------------------------------ `while true` without a `break`
+
+pub fn spin(move b: Buf[F32]) -> U32 { while true {} }
+
+pub rt fn rt_spin(move b: Buf[F32]) -> U32 { while true {} }
+
+pub rt fn rt_spin_unit(move b: Buf[F32]) { while true {} }
+
+pub rt fn rt_spin_panics(c: Bool, move b: Buf[F32]) -> U32 { while true { if c { panic("x") } } }
+
+pub fn spin_or_panic(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { while true {} } else { panic("x") } }
+
+pub rt fn rt_spin_in_block(move b: Buf[F32]) -> U32 { { while true {} } }

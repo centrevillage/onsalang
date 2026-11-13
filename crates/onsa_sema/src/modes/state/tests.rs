@@ -238,9 +238,10 @@ fn status(op: Op) -> Option<(u32, Status)> {
 fn on_delta(d: &mut Delta, ops: &[Op]) {
     for &op in ops {
         match op {
-            Op::Move(..) | Op::Stale(..) => {
+            Op::Move(l, n) => d.moved(LocalId(l), at(n)),
+            Op::Stale(..) => {
                 let (l, s) = status(op).unwrap();
-                d.set(LocalId(l), s)
+                d.stale(LocalId(l), s)
             }
             Op::Revive(l) | Op::Declare(l) => d.revive(LocalId(l)),
             Op::Forget(l) => d.forget(LocalId(l)),
@@ -253,9 +254,10 @@ fn on_delta(d: &mut Delta, ops: &[Op]) {
 fn on_trail(t: &mut Trail, ops: &[Op]) {
     for &op in ops {
         match op {
-            Op::Move(..) | Op::Stale(..) => {
+            Op::Move(l, n) => t.change(LocalId(l), |d| d.moved(LocalId(l), at(n))),
+            Op::Stale(..) => {
                 let (l, s) = status(op).unwrap();
-                t.change(LocalId(l), |d| d.set(LocalId(l), s))
+                t.change(LocalId(l), |d| d.stale(LocalId(l), s))
             }
             Op::Revive(l) => t.change(LocalId(l), |d| d.revive(LocalId(l))),
             Op::Declare(l) => t.declare(LocalId(l)),

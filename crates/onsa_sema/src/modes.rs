@@ -4,11 +4,6 @@
 //! bindings, for the bodies whose units did not fail before (§18.1), and
 //! reports the first diagnostic of each body (P-01).
 
-use onsa_diag::hash::{HashMap, HashSet};
-
-use crate::DefId;
-use crate::body::LocalId;
-
 mod calls;
 mod capture;
 mod check;
@@ -27,6 +22,3 @@ mod write;
 
 pub(crate) use check::check_all;
 pub(crate) use place::Proj;
-
-/// Locals moved somewhere in each body (the `rt` pass uses it for drops).
-pub(crate) type MovedLocals = HashMap<DefId, HashSet<LocalId>>;

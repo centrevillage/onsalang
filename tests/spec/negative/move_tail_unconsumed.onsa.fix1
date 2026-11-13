@@ -171,18 +171,18 @@ pub fn index_without_the_mark(c: Bool, i: U32, xs: [F32; 4]) -> F32 {
 
 // A returned block takes the tail with the mark: it is extra information that is not an error.
 
-pub fn returned_tail_with_the_mark(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] {
+pub fn returned_tail_with_the_mark(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] uses {Alloc} {
   if c { move a } else { move b }
 }
 
-pub fn returned_match_tail_with_the_mark(k: U32, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] {
+pub fn returned_match_tail_with_the_mark(k: U32, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] uses {Alloc} {
   match k {
     0 => move a,
     _ => move b,
   }
 }
 
-pub fn returned_with_return(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] {
+pub fn returned_with_return(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] uses {Alloc} {
   return if c { move a } else { move b }
 }
 

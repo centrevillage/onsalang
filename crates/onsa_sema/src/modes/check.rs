@@ -6,7 +6,6 @@ use onsa_diag::internal::bug;
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast::{Ast, ExprId, StmtId};
 
-use super::MovedLocals;
 use super::capture::Frame;
 use super::flow::Run;
 use super::frozen::Frozen;
@@ -14,19 +13,19 @@ use super::place::{Change, Deps, Place, Proj, path_text};
 use super::state::{LoopSum, Status};
 use super::walk::Pos;
 use super::write::Of;
-use crate::body::{BodyInfo, LocalId, Taken, generics_of, root_of};
-use crate::def::GenericDef;
+use crate::body::{BodyInfo, DropPoint, Dropped, LocalId, Taken, generics_of, root_of};
+use crate::def::{DefKind, GenericDef};
 use crate::names::body::{BodyNames, Origin};
 use crate::ty::TyId;
 use crate::{Analysis, DefId, Kind, Package, module_of_def};
 
 /// Check the argument modes and the moves of every body the stage reads
 /// (§5.2, §5.4, §7; §18.1: a body whose unit failed before is skipped), and
-/// the locals each moved.
-pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) -> MovedLocals {
+/// the drop points of each ([`BodyInfo::drops`]).
+pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
     let mut ids: Vec<DefId> = a.bodies.keys().copied().filter(|&id| a.is_new(id)).collect();
     ids.sort();
-    let (mut moved, mut found, mut taken) = (MovedLocals::default(), Vec::new(), Vec::new());
+    let (mut found, mut drops) = (Vec::new(), Vec::new());
     for id in ids {
         if !a.body_checked(id, Stage::Modes) {
             continue;
@@ -39,20 +38,21 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) -> MovedLocals {
         };
         let _scope = onsa_diag::internal::item_scope(a.def(id).span);
         let mut w = Walker::new(a, (&module.parsed.ast, &module.text), (names, info, root), generics_of(a, id));
-        w.expr(&mut Run::new(), root, Pos::Return);
+        let mut run = Run::new();
+        w.expr(&mut run, root, Pos::Return);
+        w.body_end(&run, root);
         found.extend(w.m.found.into_iter().min_by(|x, y| x.order_in_file().cmp(&y.order_in_file())));
-        taken.push((id, w.m.taken));
-        if !w.m.moved.is_empty() {
-            moved.insert(id, w.m.moved);
+        // Not of a flow's body (§12.4: its state drops freely; R-453 is W7-04).
+        if !matches!(a.def(id).kind, DefKind::Flow(_)) {
+            drops.push((id, w.m.drops));
         }
     }
     a.diagnostics.extend(found);
-    // The stages after read the fields taken out (S-85; D-15: decided here only).
-    for (id, t) in taken {
+    // The stages after read the drop points (R-32, R-83; D-15: decided here only).
+    for (id, d) in drops {
         let Some(info) = a.bodies.get_mut(&id) else { bug(Some(a.def(id).span), "a body walked and gone") };
-        info.taken = t;
+        info.drops = d;
     }
-    moved
 }
 
 /// The rule of an E0704 after a field was taken out (S-85, §5.2).
@@ -121,12 +121,13 @@ pub(super) struct Made {
     /// the depth of the loops).
     pub(super) loops: HashMap<StmtId, LoopSum>,
     pub(super) found: Vec<Diagnostic>,
-    /// The owned Affine locals a move made `Moved` ([`MovedLocals`]).
-    moved: HashSet<LocalId>,
-    /// The paths of fields taken out (S-85): where, by every walk (the
-    /// E0704 after), and in order by the walk that reports ([`BodyInfo::taken`]).
+    /// The owned Affine locals a move made `Moved`, of which a `for`'s
+    /// binding is dropped unless it is one (as before W6-02, until U2b).
+    pub(super) moved: HashSet<LocalId>,
+    /// The paths of fields taken out (S-85), by every walk: the E0704 after.
     takes: HashMap<Span, Place>,
-    pub(super) taken: Vec<Taken>,
+    /// The drop points the walk that reports met ([`BodyInfo::drops`]).
+    pub(super) drops: Vec<DropPoint>,
     /// The expressions visited (at most twice each: by the walk that
     /// reports and by the one that makes a loop's summary).
     #[cfg(test)]
@@ -275,12 +276,10 @@ impl<'a> Walker<'a> {
     pub(super) fn move_place(&mut self, r: &mut Run, p: &Place, at: Span, of: Of) {
         if !p.proj.is_empty() {
             self.m.takes.insert(at, p.clone());
-            if self.reports {
-                if p.proj.iter().any(|s| matches!(s, Proj::Index | Proj::Payload)) {
-                    bug(Some(at), "a field taken out through an element or a payload")
-                }
-                self.m.taken.push(Taken { at, root: p.root, path: p.proj.clone() });
+            if p.proj.iter().any(|s| matches!(s, Proj::Index | Proj::Payload)) {
+                bug(Some(at), "a field taken out through an element or a payload")
             }
+            self.drop_point(r, at, Dropped::Rest(Taken { root: p.root, path: p.proj.clone() }), true);
         }
         self.move_local(r, p, at, of);
     }
@@ -294,7 +293,7 @@ impl<'a> Walker<'a> {
         if self.held(&whole, at, (!p.proj.is_empty()).then_some(p)) {
             return self.record(&whole, at, of);
         }
-        r.cur.change(l, |d| d.set(l, Status::Moved { at, via_loop: false }));
+        r.cur.change(l, |d| d.moved(l, at));
         self.change(r, whole, at, of);
         if self.reports {
             self.m.moved.insert(l);

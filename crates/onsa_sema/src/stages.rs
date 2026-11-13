@@ -29,10 +29,10 @@ pub(crate) fn check_bodies(pkg: &Package, a: &mut Analysis) {
     timed(Phase::Types, || body::check_all(pkg, a));
     a.failures = Failures::of(pkg, a);
     timed(Phase::Bindings, || binding::settle_all(pkg, a));
-    let moved = timed(Phase::Modes, || modes::check_all(pkg, a));
+    timed(Phase::Modes, || modes::check_all(pkg, a));
     a.failures = Failures::of(pkg, a);
-    timed(Phase::Rt, || rt::check_all(pkg, a, &moved));
-    timed(Phase::Effects, || effects::check_all(pkg, a, &moved));
+    timed(Phase::Rt, || rt::check_all(pkg, a));
+    timed(Phase::Effects, || effects::check_all(pkg, a));
 }
 
 /// `f` in the phase `p` of the measurements (`onsa_diag::timing`).

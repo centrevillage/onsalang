@@ -245,17 +245,42 @@ pub struct BodyInfo {
     /// except the callers of an rt function: a call on a value of the error
     /// type makes no edge of the rt recursion (`Analysis::reached`).
     pub read_unread: bool,
-    /// The paths of Affine fields taken out of owned locals (S-85, §5.2),
-    /// each once, in the order the modes stage walked them: their roots are
-    /// moved, and what is left is dropped where it is taken
-    /// (`drop_alloc::rest_drops_alloc`; lowered from W8-04).
-    pub taken: Vec<Taken>,
+    /// The drop points (§12.2, R-32), each once, in the order the modes
+    /// stage's walk that reports met them (a point no path reaches is none,
+    /// S-873). Of an Affine value, a point where it may be live and is
+    /// dropped; of a Dup one, where its owned reference may be let go: the
+    /// count of `Alloc` (`crate::drop_alloc`, the one reader). Where the
+    /// copies and the drops are put is Core's (D-15, W8-04), which reads
+    /// these only to stop on a field taken out. Not of a flow's body. The
+    /// note of an owned aggregate literal names its first element from
+    /// [`BodyInfo::lits`] (`LitClass::Owned`, S-613, W6-03).
+    pub drops: Vec<DropPoint>,
 }
 
-/// A path of fields taken out of the owned local `root` at `at` (S-85).
+/// A drop point of a body: where (`at`), of what, in the innermost
+/// anonymous function (`closure`; the readers count it as the function's,
+/// W6-02), and whether the value is live on every path that reaches it (`sure`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DropPoint {
+    pub at: Span,
+    pub what: Dropped,
+    pub closure: Option<ExprId>,
+    pub sure: bool,
+}
+
+/// What a drop point drops.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Dropped {
+    /// An owned local at the end of its scope (a block, an arm, a body and
+    /// the parameters of a function or an anonymous function; `at` the end).
+    End(LocalId),
+    /// What is left where a path of fields is taken out at `at` (S-85).
+    Rest(Taken),
+}
+
+/// A path of fields taken out of the owned local `root` (S-85).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Taken {
-    pub at: Span,
     pub root: LocalId,
     /// Its steps: fields and tuple elements only.
     pub(crate) path: Vec<Proj>,

@@ -1,14 +1,16 @@
 //! Which drops of a body need `Alloc` (§12.2, R-83): the one test of a drop
-//! ([`needs_alloc`]) and the list of a body ([`alloc_drops`]). The rt stage
+//! ([`needs_alloc`]) and the list of a body ([`alloc_drops`]), from the drop
+//! points the modes stage met (`BodyInfo::drops`, R-32). The rt stage
 //! (E0901) and the effects stage (the note of E0601) read the same list and
 //! only word it. Phase 2's drops that free nothing (`tasks/phase2.md`) are
 //! conditions of [`needs_alloc`].
 
+use std::collections::BTreeSet;
+
 use onsa_diag::Span;
-use onsa_diag::hash::HashSet;
 
 use crate::Analysis;
-use crate::body::{BodyInfo, LocalId, LocalInfo, Taken};
+use crate::body::{BodyInfo, Dropped, LocalId, LocalInfo};
 use crate::modes::Proj;
 use crate::summary::{Read, any};
 use crate::ty::{Ty, TyId};
@@ -16,10 +18,11 @@ use crate::walk::{Holds, Walk};
 
 /// A drop of a body (§12.2), as the stages before tell it.
 pub(crate) enum Drop<'b> {
-    /// An owned local not moved on anywhere in the body (`MovedLocals`).
+    /// An owned local, at the drop points of it (one for all, W6-02: at its
+    /// declaration, which the readers name).
     Local(&'b LocalInfo),
-    /// What is left of `root` where `taken` takes a field out of it (S-85).
-    Rest { taken: &'b Taken, root: &'b LocalInfo },
+    /// What is left of `root` where the path `path` is taken out at `at` (S-85).
+    Rest { at: Span, path: &'b [Proj], root: &'b LocalInfo },
 }
 
 /// Whether the drop `d` needs `Alloc` (§12.2): the one test of a drop.
@@ -27,26 +30,30 @@ pub(crate) fn needs_alloc(a: &Analysis, d: &Drop) -> bool {
     match d {
         Drop::Local(l) => needs_alloc_drop(a, l.ty),
         // As `needs_alloc_drop`: no answer, so no use.
-        Drop::Rest { taken: t, root } => {
-            rest_drops_alloc(&Walk::new(a), (root.ty, &Frame::root(a), 0), &t.path, t.at).unwrap_or(false)
+        Drop::Rest { at, path, root } => {
+            rest_drops_alloc(&Walk::new(a), (root.ty, &Frame::root(a), 0), path, *at).unwrap_or(false)
         }
     }
 }
 
-/// The drops of `body` that need `Alloc`: the owned locals not in `moved`,
-/// then the rests in the order the modes stage took them out. A reader
-/// takes the earliest in the source by a stable sort, so this order breaks
-/// the ties.
-pub(crate) fn alloc_drops<'b>(
-    a: &'b Analysis,
-    body: &'b BodyInfo,
-    moved: Option<&'b HashSet<LocalId>>,
-) -> impl Iterator<Item = Drop<'b>> {
-    let locals = body.locals.iter().enumerate();
-    let locals =
-        locals.filter(move |(i, l)| l.state.owned() && !moved.is_some_and(|m| m.contains(&LocalId(*i as u32))));
-    let rests = body.taken.iter().map(|taken| Drop::Rest { taken, root: &body.locals[taken.root.0 as usize] });
-    locals.map(|(_, l)| Drop::Local(l)).chain(rests).filter(move |d| needs_alloc(a, d))
+/// The drops of `body` that need `Alloc`: the locals of its drop points,
+/// each once in the order of the locals, then the rests in the order the
+/// modes stage took them out. A reader takes the earliest in the source by
+/// a stable sort, so this order breaks the ties.
+pub(crate) fn alloc_drops<'b>(a: &'b Analysis, body: &'b BodyInfo) -> impl Iterator<Item = Drop<'b>> {
+    let local = |l: &LocalId| &body.locals[l.0 as usize];
+    let locals: BTreeSet<LocalId> = (body.drops.iter())
+        .filter_map(|d| match d.what {
+            Dropped::End(l) => Some(l),
+            Dropped::Rest(_) => None,
+        })
+        .collect();
+    let rests = body.drops.iter().filter_map(move |d| match &d.what {
+        Dropped::Rest(t) => Some(Drop::Rest { at: d.at, path: &t.path, root: local(&t.root) }),
+        Dropped::End(_) => None,
+    });
+    let locals = locals.into_iter().map(move |l| Drop::Local(local(&l)));
+    locals.chain(rests).filter(move |d| needs_alloc(a, d))
 }
 
 /// Whether dropping a value of this type needs `Alloc` (§12.2): Shared values

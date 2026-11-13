@@ -6,15 +6,16 @@
 use std::mem::replace;
 
 use onsa_diag::internal::bug;
-use onsa_diag::{Code, Diagnostic, Stage};
+use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast::{BinOp, ExprId, ExprKind, Mode, PatId, PatKind, StmtId, StmtKind};
 
 use super::check::Walker;
 use super::state::{LoopSum, Paths, Trail};
 use super::walk::Pos;
 use super::write::How;
+use crate::Kind;
 use crate::binding::{Head, HeadRow};
-use crate::body::LocalId;
+use crate::body::{DropPoint, Dropped, LocalId, LocalKind};
 use crate::names::body::Origin;
 
 /// A walk's state, the innermost loop it is in, and the bindings declared
@@ -79,6 +80,7 @@ impl Walker<'_> {
                 if let Some(t) = b.tail {
                     self.expr(r, t, pos);
                 }
+                self.ends(r, &r.declared[outer..], ast.expr(e).span);
                 r.forget(outer);
             }
             ExprKind::If { cond, then, else_, .. } => {
@@ -115,6 +117,7 @@ impl Walker<'_> {
                         r.cur.join_into(m, &mut tried, false);
                     }
                     self.expr(r, arm.body, pos);
+                    self.ends(r, &r.declared[outer..], ast.expr(arm.body).span);
                     r.forget(outer);
                     r.cur.join_into(m, &mut out, false);
                 }
@@ -256,6 +259,55 @@ impl Walker<'_> {
         r.cur.join_into(at, &mut cont, false);
         r.cur.settle(at, &brk);
         cont
+    }
+
+    /// The drop points at the end of `scope`, of the locals `ls` it ends
+    /// (R-32, §12.2): each owned one that may be live there, not Copy; none
+    /// where no path reaches (S-873). A `for`'s binding is U2b's.
+    pub(super) fn ends(&mut self, r: &Run, ls: &[LocalId], scope: Span) {
+        let info = self.info;
+        for &l in ls {
+            let local = &info.locals[l.0 as usize];
+            if !local.state.owned() || matches!(local.kind, LocalKind::For { .. }) {
+                continue;
+            }
+            if let Some(sure) = r.cur.state().lives(l)
+                && self.kind_of(local.ty) != Some(Kind::Copy)
+            {
+                self.drop_point(r, Span::empty(scope.file, scope.end), Dropped::End(l), sure);
+            }
+        }
+    }
+
+    /// The end of the body `root` walked in `r`: the drop points of the
+    /// parameters, and (as before W6-02, until U2b) of each owned binding of
+    /// a `for` not moved anywhere.
+    pub(super) fn body_end(&mut self, r: &Run, root: ExprId) {
+        let info = self.info;
+        let params = (0..info.locals.len() as u32).map(LocalId);
+        let params: Vec<_> = params
+            .filter(|l| matches!(info.locals[l.0 as usize].kind, LocalKind::Param(_) | LocalKind::SelfParam(_)))
+            .collect();
+        self.ends(r, &params, self.ast.expr(root).span);
+        for (i, local) in info.locals.iter().enumerate() {
+            let l = LocalId(i as u32);
+            if matches!(local.kind, LocalKind::For { .. })
+                && local.state.owned()
+                && !self.m.moved.contains(&l)
+                && self.kind_of(local.ty) != Some(Kind::Copy)
+            {
+                let point = DropPoint { at: local.span, what: Dropped::End(l), closure: None, sure: false };
+                self.m.drops.push(point);
+            }
+        }
+    }
+
+    /// A drop point met by the walk that reports, where a path reaches.
+    pub(super) fn drop_point(&mut self, r: &Run, at: Span, what: Dropped, sure: bool) {
+        if self.reports && r.cur.state().reaches() {
+            let closure = self.closure_in();
+            self.m.drops.push(DropPoint { at, what, closure, sure });
+        }
     }
 
     /// Declare the bindings of the pattern `p`: live.

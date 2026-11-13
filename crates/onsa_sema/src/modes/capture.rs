@@ -6,9 +6,10 @@
 
 use std::mem::replace;
 
+use onsa_diag::internal::bug;
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Span, Stage};
-use onsa_syntax::ast::ExprId;
+use onsa_syntax::ast::{ExprId, ExprKind};
 
 use super::check::Walker;
 use super::flow::Run;
@@ -17,6 +18,7 @@ use super::write::How;
 use crate::Kind;
 use crate::binding::Bind;
 use crate::body::LocalId;
+use crate::names::body::Origin;
 
 /// An anonymous function the walk is in, and the values it captures that
 /// its body has read so far.
@@ -37,10 +39,21 @@ impl Walker<'_> {
         let (outer, changes) = (replace(r, Run::new()), self.inside.changes.len());
         self.inside.frames.push(Frame { closure: e, read: Vec::new() });
         self.expr(r, body, Pos::Return);
+        // The drop points of its parameters, at the end of its body (R-32).
+        let ExprKind::Closure { params, .. } = &self.ast.expr(e).kind else { bug(None, "a closure that is not one") };
+        let params: Vec<_> = (0..params.len() as u32)
+            .filter_map(|param| self.origins.get(&Origin::Closure { closure: e, param }).copied())
+            .collect();
+        self.ends(r, &params, self.ast.expr(body).span);
         self.inside.frames.pop();
         // Its body is not evaluated with the arguments it may be in (S-799).
         self.inside.changes.truncate(changes);
         *r = outer;
+    }
+
+    /// The innermost anonymous function the walk is in.
+    pub(super) fn closure_in(&self) -> Option<ExprId> {
+        self.inside.frames.last().map(|f| f.closure)
     }
 
     fn captures(&self, e: ExprId) -> &[LocalId] {

@@ -4,18 +4,16 @@
 //! `rt` functions are covered by E0901 / E0902, `test` bodies get `Alloc`
 //! from the runner (D-08), and `const` initializers from the compiler (§6.6).
 
-use onsa_diag::hash::HashSet;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{ExprKind, ItemKind, Lit, StrSeg};
 
 use crate::body::Target;
 use crate::def::DefKind;
 use crate::drop_alloc::{Drop, alloc_drops};
-use crate::modes::MovedLocals;
 use crate::ty::Ty;
 use crate::{Analysis, DefId, Package, module_of_def};
 
-pub(crate) fn check_all(pkg: &Package, a: &mut Analysis, moved: &MovedLocals) {
+pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
     let mut diags = Vec::new();
     for id in a.new_defs() {
         let def = a.def(id);
@@ -24,7 +22,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis, moved: &MovedLocals) {
             continue;
         }
         let _scope = onsa_diag::internal::item_scope(def.span);
-        if let Some(d) = first_use(pkg, a, id, moved.get(&id)) {
+        if let Some(d) = first_use(pkg, a, id) {
             diags.push(d);
         }
     }
@@ -33,12 +31,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis, moved: &MovedLocals) {
 
 /// The earliest use of `Alloc` in the body of `id`, as an E0601 anchored at
 /// the signature (so the fix can insert the effect row) with a note at the use.
-fn first_use(
-    pkg: &Package,
-    a: &Analysis,
-    id: DefId,
-    moved: Option<&HashSet<crate::body::LocalId>>,
-) -> Option<Diagnostic> {
+fn first_use(pkg: &Package, a: &Analysis, id: DefId) -> Option<Diagnostic> {
     let module = module_of_def(pkg, a, id)?;
     let ast = &module.parsed.ast;
     let text = &module.text;
@@ -79,15 +72,14 @@ fn first_use(
         }
     }
     // Drops (§12.2) whose destruction needs `Alloc`.
-    for d in alloc_drops(a, body, moved) {
+    for d in alloc_drops(a, body) {
         uses.push(match d {
             Drop::Local(l) => {
                 (l.span, format!("`{}` owns a `{}`, whose destruction needs `Alloc`", l.name, a.display_type(l.ty)))
             }
-            Drop::Rest { taken, root } => (
-                taken.at,
-                format!("taking `{}` out of `{}` drops the rest of it, which needs `Alloc`", src(taken.at), root.name),
-            ),
+            Drop::Rest { at, root, .. } => {
+                (at, format!("taking `{}` out of `{}` drops the rest of it, which needs `Alloc`", src(at), root.name))
+            }
         });
     }
     uses.sort_by_key(|(s, _)| s.start);

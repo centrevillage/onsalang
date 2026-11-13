@@ -10,18 +10,17 @@ use onsa_syntax::ast::{ExprKind, Lit, StrSeg};
 use crate::body::Target;
 use crate::def::DefKind;
 use crate::drop_alloc::{Drop, alloc_drops};
-use crate::modes::MovedLocals;
 use crate::ty::Ty;
 use crate::{Analysis, DefId, Package, module_of_def};
 
-pub(crate) fn check_all(pkg: &Package, a: &mut Analysis, moved: &MovedLocals) {
+pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
     let mut diags = Vec::new();
     let rt_fns: Vec<DefId> = a.new_defs().filter(|&id| a.rt_checked(id)).collect();
     // Calls of each rt body, in source order: (span, callee) for rt callees.
     let mut edges: HashMap<DefId, Vec<(Span, DefId)>> = HashMap::default();
     for &id in &rt_fns {
         let _scope = onsa_diag::internal::item_scope(a.def(id).span);
-        if let Some(d) = body_rules(pkg, a, id, moved.get(&id)) {
+        if let Some(d) = body_rules(pkg, a, id) {
             diags.push(d);
             continue;
         }
@@ -139,12 +138,7 @@ impl Analysis {
 }
 
 /// E0901 for one rt body: the earliest violation in source order.
-fn body_rules(
-    pkg: &Package,
-    a: &Analysis,
-    id: DefId,
-    moved: Option<&HashSet<crate::body::LocalId>>,
-) -> Option<Diagnostic> {
+fn body_rules(pkg: &Package, a: &Analysis, id: DefId) -> Option<Diagnostic> {
     let module = module_of_def(pkg, a, id)?;
     let ast = &module.parsed.ast;
     let text = &module.text;
@@ -207,7 +201,7 @@ fn body_rules(
         }
     }
     // Drops (§12.2) whose destruction needs `Alloc`.
-    for d in alloc_drops(a, body, moved) {
+    for d in alloc_drops(a, body) {
         let (at, message) = match d {
             Drop::Local(l) => (
                 l.span,
@@ -217,11 +211,11 @@ fn body_rules(
                     a.display_type(l.ty)
                 ),
             ),
-            Drop::Rest { taken, root } => (
-                taken.at,
+            Drop::Rest { at, root, .. } => (
+                at,
                 format!(
                     "taking `{}` out of `{}` drops the rest of it here, whose destruction needs `Alloc`; `rt` functions cannot allocate (§10, §12.2)",
-                    src(taken.at),
+                    src(at),
                     root.name
                 ),
             ),

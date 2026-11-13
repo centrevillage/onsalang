@@ -80,9 +80,8 @@ impl Ends {
     /// The identity of [`Ends::then`]: no path touches the binding.
     const SAME: Ends = Ends { through: true, dead: None, live: false };
 
-    /// Declared, or assigned as a whole: no path goes through. (Not yet
-    /// `live`: the drops that read it come later; the state reads `dead`.)
-    const NEW: Ends = Ends { through: false, dead: None, live: false };
+    /// Declared, or assigned as a whole: no path goes through, all end live.
+    const NEW: Ends = Ends { through: false, dead: None, live: true };
 
     /// The paths of both: `self ⊔ other`, each field joined.
     fn join(&mut self, other: &Ends) {
@@ -142,18 +141,39 @@ impl Delta {
         out
     }
 
+    /// Whether a path reaches here.
+    pub(super) fn reaches(&self) -> bool {
+        self.reach
+    }
+
     /// Why `l` may not be live here, the first reason; `None`: live.
     pub(super) fn status(&self, l: LocalId) -> Option<&Status> {
         self.ends.get(&l)?.dead.as_ref()
     }
 
-    /// `l` is `s` here; it joins (a binding moved twice keeps the first).
-    pub(super) fn set(&mut self, l: LocalId, s: Status) {
+    /// Whether `l` may be live here (a path that reaches here leaves it
+    /// untouched, declared or assigned), and whether surely (no path leaves
+    /// it dead); `None`: not live on any path, or no path reaches here.
+    pub(super) fn lives(&self, l: LocalId) -> Option<bool> {
+        let e = self.ends.get(&l).unwrap_or(&Ends::SAME);
+        (self.reach && (e.through || e.live)).then_some(e.dead.is_none())
+    }
+
+    /// `l` moved here: no path goes through or ends live; the reason joins
+    /// (a binding moved twice keeps the first, its E0704 the record only).
+    pub(super) fn moved(&mut self, l: LocalId, at: Span) {
         if self.reach {
-            match &mut self.ends.entry(l).or_insert(Ends::SAME).dead {
-                Some(x) => x.join(&s),
-                dead => *dead = Some(s),
-            }
+            let e = self.ends.entry(l).or_insert(Ends::SAME);
+            (e.through, e.live) = (false, false);
+            join_dead(&mut e.dead, Some(&Status::Moved { at, via_loop: false }));
+        }
+    }
+
+    /// The borrow `l` is unusable here by the change `s` ([`Status::Stale`]);
+    /// it joins, and whether it is live is as before (no drop reads it).
+    pub(super) fn stale(&mut self, l: LocalId, s: Status) {
+        if self.reach {
+            join_dead(&mut self.ends.entry(l).or_insert(Ends::SAME).dead, Some(&s));
         }
     }
 
@@ -256,7 +276,7 @@ impl Trail {
         &self.now
     }
 
-    /// A change `f` of the binding `l` ([`Delta::set`], `revive`, `forget`), recorded.
+    /// A change `f` of the binding `l` ([`Delta::moved`], `stale`, `revive`, `forget`), recorded.
     pub(super) fn change(&mut self, l: LocalId, f: impl FnOnce(&mut Delta)) {
         if self.now.reach {
             self.keep(l, false);

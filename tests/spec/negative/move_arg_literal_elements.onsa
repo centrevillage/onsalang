@@ -171,11 +171,11 @@ pub fn pick_arg_moved(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> U32 uses {
   take(if c { move a } else { move b })
 }
 
-pub fn pick_tail(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] {
+pub fn pick_tail(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] uses {Alloc} {
   if c { a } else { b }
 }
 
-pub fn pick_tail_moved(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] {
+pub fn pick_tail_moved(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] uses {Alloc} {
   if c { move a } else { move b }
 }
 

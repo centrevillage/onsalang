@@ -1009,13 +1009,6 @@ reasons = ["S-85", "R-87", "S-82"]
 until = "W6-03"
 note = "取り出しの残りの破棄の診断を最初の使用の行に出す（`take_out_rest_alloc_position` と同じ待ち）"
 
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/drop_on_the_other_path.onsa"
-reasons = ["R-32", "S-85"]
-until = "W6-02"
-note = "片方の道で移すか取り出した値を、もう片方の道で全体として破棄する `Alloc`（E0601 / E0901、§12.2）。`MovedLocals` が本体で一つの集合なので数えない（R-32）。W4-09 U2 の壊す側が見つけ、親が事例にした（`rules/leader.md` 4.9）"
-
 # --- W4-20: `par~`（S-745）の事例のうち、後の作業を待つもの
 [[pending]]
 kind = "test-case"

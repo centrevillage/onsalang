@@ -127,7 +127,7 @@ impl Walker<'_> {
             places.len() as u32 - 1
         });
         for &l in places[k as usize].1.along.keys().filter(|&&l| deps.in_scope(l, at)) {
-            r.cur.change(l, |d| d.set(l, Status::Stale { changes: BTreeMap::from([(k, at)]) }));
+            r.cur.change(l, |d| d.stale(l, Status::Stale { changes: BTreeMap::from([(k, at)]) }));
         }
     }
 

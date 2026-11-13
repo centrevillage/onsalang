@@ -1,0 +1,93 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§5.4", "§7", "§8.1", "§10", "§12.2"]
+
+// W6-02 U2a/t, R-32 (§12.2): the contrasts of negative/drop_end_one_path.onsa and negative/drop_end_one_path_unit.onsa. Every function
+// is legal and stays legal after a drop is counted on each path to the end of a block: an owned local that is moved on every path
+// (a nested `if`, an `else if` chain, the arms of a `match`, an owned heading's binding, a struct, a method with `move self`), a
+// function with `uses {Alloc}` (the drop is allowed), a Copy value, a borrowed argument, and the arms of a variant without a
+// payload (`None =>`), where nothing is owned. This version already accepts all of them.
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+impl Holder {
+  pub rt fn keep_both(move self, c: Bool) -> Option[Holder] { if c { Some(move self) } else { Some(move self) } }
+  pub fn keep_if_alloc(move self, c: Bool) -> Option[Holder] uses {Alloc} { if c { Some(move self) } else { None } }
+}
+
+// ------------------------------------------------------------------ moved on every path
+
+pub rt fn both_paths(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { Some(move b) } else { Some(move b) } }
+
+pub rt fn nested_all(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { if d { Some(move b) } else { Some(move b) } } else { Some(move b) } }
+
+pub rt fn chain_all(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { Some(move b) } else if d { Some(move b) } else { Some(move b) } }
+
+pub rt fn arms_all(n: U32, move b: Buf[F32]) -> Option[Buf[F32]] { match n { 0 => Some(move b), 1 => Some(move b), _ => Some(move b) } }
+
+pub rt fn arms_all_borrowed_heading(q: Option[Buf[F32]], move b: Buf[F32]) -> Option[Buf[F32]] { match q { Some(_) => Some(move b), None => Some(move b) } }
+
+pub rt fn struct_all(c: Bool, move h: Holder) -> Option[Holder] { if c { Some(move h) } else { Some(move h) } }
+
+pub rt fn arm_in_branch_all(c: Bool, n: U32, move b: Buf[F32]) -> Option[Buf[F32]] { if c { match n { 0 => Some(move b), _ => Some(move b) } } else { Some(move b) } }
+
+// ------------------------------------------------------------------ the binding of an owned heading, moved on every path
+
+pub rt fn heading_arm_all(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) => if c { Some(move v) } else { Some(move v) }, None => None } }
+
+pub rt fn heading_arm_plain(move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) => Some(move v), None => None } }
+
+pub rt fn heading_arm_nested_all(n: U32, c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) => match n { 0 => Some(move v), _ => if c { Some(move v) } else { Some(move v) } }, None => None } }
+
+pub rt fn heading_binding_all(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { match move b { t => if c { Some(move t) } else { Some(move t) } } }
+
+pub rt fn heading_struct_all(move o: Option[Holder]) -> Option[Holder] { match move o { Some(h) => Some(move h), None => None } }
+
+// ------------------------------------------------------------------ `uses {Alloc}`: the drop on the other path is allowed
+
+pub fn alloc_eat(move b: Buf[F32]) -> Bool uses {Alloc} { true }
+
+pub fn alloc_if(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] uses {Alloc} { if c { Some(move b) } else { None } }
+
+pub fn alloc_nested(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] uses {Alloc} { if c { if d { Some(move b) } else { None } } else { None } }
+
+pub fn alloc_chain(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] uses {Alloc} { if c { None } else if d { Some(move b) } else { None } }
+
+pub fn alloc_arm(n: U32, move b: Buf[F32]) -> Option[Buf[F32]] uses {Alloc} { match n { 0 => Some(move b), _ => None } }
+
+pub fn alloc_heading_arm(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] uses {Alloc} { match move o { Some(v) => if c { Some(move v) } else { None }, None => None } }
+
+pub fn alloc_and_right(c: Bool, move b: Buf[F32]) -> Bool uses {Alloc} { c && alloc_eat(move b) }
+
+pub fn alloc_or_right(c: Bool, move b: Buf[F32]) -> Bool uses {Alloc} { c || alloc_eat(move b) }
+
+pub fn alloc_and_left(c: Bool, move b: Buf[F32]) -> Bool uses {Alloc} { alloc_eat(move b) && c }
+
+pub fn alloc_sink(move b: Buf[F32]) uses {Alloc} {}
+
+pub fn alloc_no_else(c: Bool, move b: Buf[F32]) uses {Alloc} { if c { alloc_sink(move b) } }
+
+// ------------------------------------------------------------------ Copy values and borrowed arguments
+
+pub rt fn copy_one_path(c: Bool, x: F32) -> F32 { if c { x } else { 0.0 } }
+
+pub rt fn copy_arms(n: U32, x: F32) -> F32 { match n { 0 => x, _ => 0.0 } }
+
+pub rt fn copy_short_circuit(c: Bool, d: Bool) -> Bool { c && d }
+
+pub rt fn borrowed_one_path(c: Bool, b: Buf[F32]) -> U32 { if c { b.len() } else { 0 } }
+
+pub rt fn borrowed_arms(n: U32, b: Buf[F32]) -> U32 { match n { 0 => b.len(), _ => 0 } }
+
+pub rt fn borrowed_heading_arm(q: Option[Buf[F32]]) -> U32 { match q { Some(x) => x.len(), None => 0 } }
+
+pub rt fn borrowed_struct(c: Bool, h: Holder) -> F32 { if c { h.gain } else { 0.0 } }
+
+// ------------------------------------------------------------------ the arms of a variant without a payload
+
+pub rt fn option_copy_heading(move o: Option[U32]) -> U32 { match move o { Some(k) => k, None => 0 } }
+
+pub rt fn option_buf_none_arm(move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { None => None, Some(v) => Some(move v) } }

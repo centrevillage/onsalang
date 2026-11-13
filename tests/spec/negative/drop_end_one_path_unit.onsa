@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§7", "§8.1", "§10", "§12.2"]
+
+// W6-02 U2a/t, R-32 (§12.2, §8.1, §10 rule 1; the same rule as negative/drop_end_one_path.onsa): the paths of a statement that has no
+// value to carry the moved local out: an `if` without `else` (and `else if` without the last `else`), a `match` whose arms are `()`,
+// and the right operand of `&&` and `||` (§3.5: it is not evaluated when the left one decides, so the local is live on that path). A
+// local that is moved on one path and not on another is live at the end of its block on the other path, and the drop needs `Alloc`
+// (E0601 in a function without `uses {Alloc}`, E0901 in an `rt fn`). This version counts a local moved anywhere in the body as
+// moved on every path, so none of these callers is reported today (R-32). No `rt` function can consume a `Buf` and return a `()` or
+// a `Bool` without a drop of its own, so the helpers `sink` and `eat` are `rt` functions that drop their argument: their own E0901
+// is reported today and after (the drop at the end of a body that does not move the parameter). The callers are one-liners, so that
+// the line does not depend on where the drop is reported (S-783). One error per function (P-01).
+
+pub rt fn sink(move b: Buf[F32]) {}   //~ E0901
+
+pub rt fn eat(move b: Buf[F32]) -> Bool { true }   //~ E0901
+
+// ------------------------------------------------------------------ `if` without `else`
+
+pub fn no_else(c: Bool, move b: Buf[F32]) { if c { sink(move b) } }   //~ E0601
+
+pub rt fn rt_no_else(c: Bool, move b: Buf[F32]) { if c { sink(move b) } }   //~ E0901
+
+pub fn no_else_nested(c: Bool, d: Bool, move b: Buf[F32]) { if c { if d { sink(move b) } } }   //~ E0601
+
+pub rt fn rt_no_else_nested(c: Bool, d: Bool, move b: Buf[F32]) { if c { if d { sink(move b) } } }   //~ E0901
+
+pub fn no_else_outer_else(c: Bool, d: Bool, move b: Buf[F32]) { if c { if d { sink(move b) } } else { sink(move b) } }   //~ E0601
+
+pub fn empty_else(c: Bool, move b: Buf[F32]) { if c { sink(move b) } else {} }   //~ E0601
+
+pub rt fn rt_chain_without_last_else(c: Bool, d: Bool, move b: Buf[F32]) { if c { sink(move b) } else if d { sink(move b) } }   //~ E0901
+
+pub fn chain_unit_middle(c: Bool, d: Bool, move b: Buf[F32]) { if c {} else if d { sink(move b) } else {} }   //~ E0601
+
+// ------------------------------------------------------------------ `match` with `()` arms
+
+pub fn unit_arm(n: U32, move b: Buf[F32]) { match n { 0 => sink(move b), _ => {} } }   //~ E0601
+
+pub rt fn rt_unit_arm(n: U32, move b: Buf[F32]) { match n { 0 => {}, _ => sink(move b) } }   //~ E0901
+
+pub fn unit_heading_arm(c: Bool, move o: Option[Buf[F32]]) { match move o { Some(v) => if c { sink(move v) }, None => {} } }   //~ E0601
+
+pub rt fn rt_unit_heading_arm(c: Bool, move o: Option[Buf[F32]]) { match move o { Some(v) => if c { sink(move v) }, None => {} } }   //~ E0901
+
+pub fn unit_heading_binding(c: Bool, move b: Buf[F32]) { match move b { t => if c { sink(move t) } } }   //~ E0601
+
+// ------------------------------------------------------------------ `&&` and `||`
+
+pub fn and_right(c: Bool, move b: Buf[F32]) -> Bool { c && eat(move b) }   //~ E0601
+
+pub rt fn rt_and_right(c: Bool, move b: Buf[F32]) -> Bool { c && eat(move b) }   //~ E0901
+
+pub fn or_right(c: Bool, move b: Buf[F32]) -> Bool { c || eat(move b) }   //~ E0601
+
+pub rt fn rt_or_right(c: Bool, move b: Buf[F32]) -> Bool { c || eat(move b) }   //~ E0901
+
+pub fn and_chain(c: Bool, d: Bool, move b: Buf[F32]) -> Bool { c && d && eat(move b) }   //~ E0601
+
+pub rt fn rt_or_and(c: Bool, d: Bool, move b: Buf[F32]) -> Bool { c || (d && eat(move b)) }   //~ E0901
+
+pub fn right_in_condition(c: Bool, d: Bool, move b: Buf[F32]) -> Bool { if c && eat(move b) { true } else { d } }   //~ E0601
+
+pub rt fn rt_right_in_arm(n: U32, c: Bool, move b: Buf[F32]) -> Bool { match n { 0 => c || eat(move b), _ => false } }   //~ E0901
+
+pub fn right_in_both_ops(c: Bool, d: Bool, move b: Buf[F32]) -> Bool { c && (d || eat(move b)) }   //~ E0601
