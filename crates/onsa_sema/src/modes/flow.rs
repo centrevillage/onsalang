@@ -26,24 +26,23 @@ pub(super) struct Run {
     declared: Vec<LocalId>,
 }
 
-/// The paths from the head of a loop (at the mark `at`, with `scope` bindings
-/// declared) to its exit (`brk`: the end of the condition, the `break`s)
-/// and to its back edge (`cont`: the end of the body, the `continue`s).
+/// The paths from the head of a loop (at the mark `at`) to its exit (`brk`:
+/// the end of the condition, the `break`s) and to its back edge (`cont`:
+/// the end of the body, the `continue`s).
 struct Exits {
     brk: Paths,
     cont: Paths,
     at: usize,
-    scope: usize,
 }
 
 impl Run {
     pub(super) fn new() -> Self {
-        let exits = Exits { brk: Paths::none(), cont: Paths::none(), at: 0, scope: 0 };
+        let exits = Exits { brk: Paths::none(), cont: Paths::none(), at: 0 };
         Run { cur: Trail::new(), exits, declared: Vec::new() }
     }
 
     fn declare(&mut self, l: LocalId) {
-        self.cur.change(l, |d| d.revive(l));
+        self.cur.declare(l);
         self.declared.push(l);
     }
 
@@ -58,11 +57,8 @@ impl Run {
     /// A `break` (`back`: a `continue`): the bindings declared in the loop
     /// leave, then the state joins the loop's exit (or its back edge).
     fn leave(&mut self, back: bool) {
-        for &l in &self.declared[self.exits.scope..] {
-            self.cur.change(l, |d| d.forget(l));
-        }
         let paths = if back { &mut self.exits.cont } else { &mut self.exits.brk };
-        self.cur.join_into(self.exits.at, paths);
+        self.cur.join_into(self.exits.at, paths, true);
         self.cur.stop();
     }
 }
@@ -89,12 +85,12 @@ impl Walker<'_> {
                 self.expr(r, *cond, Pos::Read);
                 let (m, mut paths) = (r.cur.mark(), Paths::none());
                 self.expr(r, *then, pos);
-                r.cur.join_into(m, &mut paths);
+                r.cur.join_into(m, &mut paths, false);
                 r.cur.back_to(m);
                 if let Some(x) = else_ {
                     self.expr(r, *x, pos);
                 }
-                r.cur.join_into(m, &mut paths);
+                r.cur.join_into(m, &mut paths, false);
                 r.cur.settle(m, &paths);
             }
             ExprKind::Match { scrutinee, arms, .. } => {
@@ -107,7 +103,7 @@ impl Walker<'_> {
                 // The paths an arm is tried at, from the head: no arm before
                 // matched, or one matched and its guard was false.
                 let (m, mut tried, mut out) = (r.cur.mark(), Paths::none(), Paths::none());
-                r.cur.join_into(m, &mut tried);
+                r.cur.join_into(m, &mut tried, false);
                 // A guard changes no place of the head (§7: E0715, `frozen.rs`).
                 let mut held = self.frame(subject);
                 for arm in arms {
@@ -116,11 +112,11 @@ impl Walker<'_> {
                     self.declare(r, arm.pat);
                     if let Some(g) = arm.guard {
                         self.holding(&mut held, |w| w.expr(r, g, Pos::Read));
-                        r.cur.join_into(m, &mut tried);
+                        r.cur.join_into(m, &mut tried, false);
                     }
                     self.expr(r, arm.body, pos);
                     r.forget(outer);
-                    r.cur.join_into(m, &mut out);
+                    r.cur.join_into(m, &mut out, false);
                 }
                 r.cur.settle(m, &out);
             }
@@ -128,9 +124,9 @@ impl Walker<'_> {
                 self.expr(r, *lhs, Pos::Read);
                 // The paths through the right and the paths that skip it, joined.
                 let (m, mut paths) = (r.cur.mark(), Paths::none());
-                r.cur.join_into(m, &mut paths);
+                r.cur.join_into(m, &mut paths, false);
                 self.expr(r, *rhs, Pos::Read);
-                r.cur.join_into(m, &mut paths);
+                r.cur.join_into(m, &mut paths, false);
                 r.cur.settle(m, &paths);
             }
             // A new frame (`capture.rs`); it changes no state outside.
@@ -246,18 +242,18 @@ impl Walker<'_> {
     /// body, a `continue`). A `for` declares its pattern at each iteration
     /// (R-29).
     fn iterate(&mut self, r: &mut Run, (cond, pat, body): Loop) -> Paths {
-        let exits = Exits { brk: Paths::none(), cont: Paths::none(), at: r.cur.mark(), scope: r.declared.len() };
+        let exits = Exits { brk: Paths::none(), cont: Paths::none(), at: r.cur.mark() };
         let outer = replace(&mut r.exits, exits);
         if let Some(c) = cond {
             self.expr(r, c, Pos::Read);
         }
-        r.cur.join_into(r.exits.at, &mut r.exits.brk);
+        r.cur.join_into(r.exits.at, &mut r.exits.brk, false);
         if let Some(p) = pat {
             self.declare(r, p);
         }
         self.expr(r, body, Pos::Read);
-        let Exits { brk, mut cont, at, .. } = replace(&mut r.exits, outer);
-        r.cur.join_into(at, &mut cont);
+        let Exits { brk, mut cont, at } = replace(&mut r.exits, outer);
+        r.cur.join_into(at, &mut cont, false);
         r.cur.settle(at, &brk);
         cont
     }

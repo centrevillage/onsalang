@@ -63,7 +63,7 @@ impl Walker<'_> {
         takes: &[Takes],
     ) -> (Vec<(Span, LocalId)>, Vec<Passed>) {
         let params = args.iter().zip(takes).filter_map(|(a, t)| match t {
-            Takes::Param(m, ty) => Some((a.expr, *m, *ty)),
+            Takes::Param(m, ty) => Some((a.expr, *m, Some(*ty))),
             Takes::Element => None,
         });
         let all = receiver.map(|(x, m)| (x, m, None)).into_iter().chain(params);

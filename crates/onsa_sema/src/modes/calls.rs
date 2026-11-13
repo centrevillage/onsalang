@@ -23,9 +23,9 @@ use crate::ty::{Ty, TyId};
 /// What a parameter takes (§5.2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Takes {
-    /// A parameter of the mode, and its type when the walk reads it (a
-    /// literal of a second-class type, [`Walker::argument`]).
-    Param(Mode, Option<TyId>),
+    /// A parameter of the mode, and its declared type (a literal of a
+    /// second-class type, [`Walker::argument`]).
+    Param(Mode, TyId),
     /// An element of a variant or of `Some`, `Ok`, `Err`: consumed as an
     /// element of a literal is (§5.2).
     Element,
@@ -96,10 +96,10 @@ impl Walker<'_> {
                 let DefKind::Fn(f) = &self.a.def(*def).kind else {
                     bug(Some(self.ast.expr(e).span), "a call of a function that is no function")
                 };
-                (f.self_mode, f.params.iter().map(|p| Takes::Param(p.mode, Some(p.ty))).collect())
+                (f.self_mode, f.params.iter().map(|p| Takes::Param(p.mode, p.ty)).collect())
             }
             Target::Value => match self.a.types.get(*self.info.expr_types.get(&callee)?) {
-                Ty::Fn(f) => (None, f.params.iter().map(|&(m, t)| Takes::Param(m, Some(t))).collect()),
+                Ty::Fn(f) => (None, f.params.iter().map(|&(m, t)| Takes::Param(m, t)).collect()),
                 _ => return None,
             },
             Target::Variant { .. } | Target::Panic => (None, vec![Takes::Element; n]),
@@ -151,7 +151,7 @@ impl Walker<'_> {
                 }
                 match m {
                     // A binding derived from its place, passed in the call, is `exclusive`'s E0702 (S-796).
-                    Mode::Inout => match self.planar_literal(e, ty) {
+                    Mode::Inout => match self.planar_literal(e, Some(ty)) {
                         Some(parts) => parts.iter().for_each(|&x| self.write_place(r, x, How::Inout)),
                         None => self.write_place(r, e, How::Inout),
                     },

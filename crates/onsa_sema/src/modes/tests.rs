@@ -1319,8 +1319,8 @@ pub fn move_move_dup(n: U32) {
 
 /// Memo 2.5: what each callee takes, by a missing `move` (E0703) on each: a
 /// function, a method (and its `move self` receiver, consumed with no
-/// mark), a function value, a generic function; a builtin method borrows;
-/// a constructor takes elements (E0711, consumed). `move` on a borrowed
+/// mark), a function value, a generic function; a method of the std borrows
+/// as declared; a constructor takes elements (E0711, consumed). `move` on a borrowed
 /// parameter of each is E0703 too.
 #[test]
 fn what_each_callee_takes() {

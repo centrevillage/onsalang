@@ -11,9 +11,9 @@
 // tail of an `if`, a `match`, a block, and a parenthesis keep the position of the tail; a capture is the use of the
 // parameter in the body of the anonymous function). No error has a candidate (`fixes = 0`: E0710 has none).
 // This file is the positions that return a value. The ones that store it are in negative/fn_param_second_class_store.onsa,
-// capture it or pass it to a `move` parameter in _capture.onsa, the other kinds of parameter in _kinds.onsa, the type parameter and
-// the builtin method in _generic.onsa, the head of a `match` in _match.onsa, the marks in _move_mark.onsa and _inout_mark.onsa, and
-// the module in fn_param_second_class_pkg/.
+// capture it or pass it to a `move` parameter in _capture.onsa, the other kinds of parameter in _kinds.onsa, a type parameter (and
+// `fill` of the std, its `v: T`) in _generic.onsa, the head of a `match` in _match.onsa, the marks in _move_mark.onsa and
+// _inout_mark.onsa, and the module in fn_param_second_class_pkg/.
 
 pub fn inc(x: I32) -> I32 {
   x + 1

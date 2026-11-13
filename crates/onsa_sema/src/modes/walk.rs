@@ -21,8 +21,8 @@ pub(super) enum Pos {
     /// `for` head.
     Arg(Mode),
     /// A borrowed argument of a parameter whose declared type is not a
-    /// function type (a `T`, a builtin method's): its callee may keep a copy
-    /// (S-809).
+    /// function type (a `T`, of a method of the std too): its callee may
+    /// keep a copy (S-809).
     Kept,
     /// The argument of a `move` parameter (S-609).
     MoveArg,
@@ -172,8 +172,8 @@ impl<'a> Walker<'a> {
     /// The borrowed argument `e` of a parameter of the type `param`, if
     /// read: a planar literal passes its elements on as arguments (§5.3:
     /// `planes([a, b])`). An `inout` one is a write (`write.rs`).
-    pub(super) fn argument(&mut self, r: &mut Run, e: ExprId, param: Option<TyId>) {
-        match self.planar_literal(e, param) {
+    pub(super) fn argument(&mut self, r: &mut Run, e: ExprId, param: TyId) {
+        match self.planar_literal(e, Some(param)) {
             Some(parts) => parts.iter().for_each(|&y| self.expr(r, y, Pos::Arg(Mode::Borrow))),
             None => self.expr(r, e, self.borrowed_at(param)),
         }
@@ -181,11 +181,10 @@ impl<'a> Walker<'a> {
 
     /// The position of a borrowed argument of a parameter of the declared
     /// type `param` (S-809): `Kept` unless a function type (an alias
-    /// resolved) or the error type; a builtin method's (`None`) is not one,
-    /// none being a function type now (W5-02 gives them their types).
-    pub(super) fn borrowed_at(&self, param: Option<TyId>) -> Pos {
-        match param.map(|t| self.a.types.get(t)) {
-            Some(Ty::Fn(_) | Ty::Error) => Pos::Arg(Mode::Borrow),
+    /// resolved) or the error type.
+    pub(super) fn borrowed_at(&self, param: TyId) -> Pos {
+        match self.a.types.get(param) {
+            Ty::Fn(_) | Ty::Error => Pos::Arg(Mode::Borrow),
             _ => Pos::Kept,
         }
     }

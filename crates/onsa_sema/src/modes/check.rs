@@ -148,8 +148,8 @@ impl<'a> Walker<'a> {
         w
     }
 
-    /// The kind of the values of the type `ty` (R-30: an unknown one is
-    /// Affine; `None` for a second-class value and the error type).
+    /// The kind of the values of the type `ty`, a type parameter by its
+    /// bounds (R-30, [`crate::kind::kind_in_body`]); `None` with no answer.
     pub(super) fn kind_of(&mut self, ty: TyId) -> Option<Kind> {
         let (a, generics) = (self.a, &self.generics);
         *self.m.kinds.entry(ty).or_insert_with(|| crate::kind::kind_in_body(a, ty, generics))

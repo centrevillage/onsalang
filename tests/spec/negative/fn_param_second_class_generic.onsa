@@ -9,8 +9,8 @@
 // captures, go only to a parameter whose declared type is a function type. A parameter of a type parameter `x: T` does not take
 // them, whatever the bounds of `T` are (`T`, `T: Copy`, `T: ?Dup`; the body of a generic function copies the value out, and the
 // function value is Copy, §4.1), and the parameter of a method of a builtin type does not either (`fs.fill!(f)` of an array;
-// a builtin method has no parameter of a function type in the first period, so each one counts as a type that is not a function
-// type). The error is at the value that is passed (the tail of an `if`, a `match` and a block and a parenthesis keep the
+// the std declares it `v: T`, a parameter of a type parameter as above, not of a function type). The error is at the value
+// that is passed (the tail of an `if`, a `match` and a block and a parenthesis keep the
 // position of the tail). The function item and the anonymous function without a capture are first class and pass
 // (values/fn_param_ok.onsa). One error per function (§18.1); no candidate (`fixes = 0`).
 

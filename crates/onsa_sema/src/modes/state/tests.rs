@@ -197,6 +197,7 @@ enum Op {
     Forget(u32),
     Stop,
     Then(u32),
+    Declare(u32),
 }
 
 const OPS: [Op; 10] = [
@@ -241,7 +242,7 @@ fn on_delta(d: &mut Delta, ops: &[Op]) {
                 let (l, s) = status(op).unwrap();
                 d.set(LocalId(l), s)
             }
-            Op::Revive(l) => d.revive(LocalId(l)),
+            Op::Revive(l) | Op::Declare(l) => d.revive(LocalId(l)),
             Op::Forget(l) => d.forget(LocalId(l)),
             Op::Stop => *d = Delta::bottom(),
             Op::Then(i) => *d = d.then(&region(i)),
@@ -257,6 +258,7 @@ fn on_trail(t: &mut Trail, ops: &[Op]) {
                 t.change(LocalId(l), |d| d.set(LocalId(l), s))
             }
             Op::Revive(l) => t.change(LocalId(l), |d| d.revive(LocalId(l))),
+            Op::Declare(l) => t.declare(LocalId(l)),
             Op::Forget(l) => t.change(LocalId(l), |d| d.forget(LocalId(l))),
             Op::Stop => t.stop(),
             Op::Then(i) => t.then(&region(i)),
@@ -304,11 +306,11 @@ fn the_trail_joins_two_branches_as_the_whole_states() {
                 on_trail(&mut t, p);
                 let (m, mut paths) = (t.mark(), Paths::none());
                 on_trail(&mut t, a);
-                t.join_into(m, &mut paths);
+                t.join_into(m, &mut paths, false);
                 t.back_to(m);
                 assert!(t.now.reach == before.reach && t.now.ends == before.ends, "back: {p:?} {a:?}");
                 on_trail(&mut t, b);
-                t.join_into(m, &mut paths);
+                t.join_into(m, &mut paths, false);
                 t.settle(m, &paths);
                 check(&t, &want, &format!("{p:?} {a:?} {b:?}"));
             }
@@ -350,18 +352,62 @@ fn the_trail_joins_the_arms_of_a_match_as_the_whole_states() {
             let mut t = Trail::new();
             on_trail(&mut t, p);
             let (m, mut tried, mut paths) = (t.mark(), Paths::none(), Paths::none());
-            t.join_into(m, &mut tried);
+            t.join_into(m, &mut tried, false);
             for &(g, body) in arms {
                 t.settle(m, &tried);
                 if let Some(g) = g {
                     on_trail(&mut t, g);
-                    t.join_into(m, &mut tried);
+                    t.join_into(m, &mut tried, false);
                 }
                 on_trail(&mut t, body);
-                t.join_into(m, &mut paths);
+                t.join_into(m, &mut paths, false);
             }
             t.settle(m, &paths);
             check(&t, &out, &format!("{p:?} {arms:?}"));
+        }
+    }
+}
+
+/// A `break` (D4): the bindings declared since the mark leave before the
+/// join, as if forgotten (those declared before it stay), the other path
+/// before or after it; the mark gives back the state before as it was.
+#[test]
+fn a_break_joins_as_if_the_bindings_declared_since_the_mark_were_forgotten() {
+    let ops: Vec<Op> = OPS.iter().copied().chain([Op::Declare(0), Op::Declare(1)]).collect();
+    let mut breaks = vec![vec![]];
+    breaks.extend(ops.iter().map(|&a| vec![a]));
+    breaks.extend(ops.iter().flat_map(|&a| ops.iter().map(move |&b| vec![a, b])));
+    let mut pre = prefixes();
+    pre.push(vec![Op::Declare(1), Op::Move(1, 2)]);
+    for p in &pre {
+        let mut before = Delta::start();
+        on_delta(&mut before, p);
+        for a in &breaks {
+            let mut left = before.clone();
+            on_delta(&mut left, a);
+            for op in a {
+                if let &Op::Declare(l) = op {
+                    left.forget(LocalId(l));
+                }
+            }
+            for b in &seqs(1) {
+                let mut want = before.clone();
+                on_delta(&mut want, b);
+                want.join(&left);
+                for leaves_first in [true, false] {
+                    let mut t = Trail::new();
+                    on_trail(&mut t, p);
+                    let (m, mut paths) = (t.mark(), Paths::none());
+                    for leaving in [leaves_first, !leaves_first] {
+                        on_trail(&mut t, if leaving { a } else { b });
+                        t.join_into(m, &mut paths, leaving);
+                        t.back_to(m);
+                        assert!(t.now.reach == before.reach && t.now.ends == before.ends, "back: {p:?} {a:?}");
+                    }
+                    t.settle(m, &paths);
+                    check(&t, &want, &format!("{p:?} {a:?} {b:?} {leaves_first}"));
+                }
+            }
         }
     }
 }
