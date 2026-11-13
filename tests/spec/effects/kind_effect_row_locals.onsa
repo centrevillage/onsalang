@@ -13,7 +13,8 @@
 // row of a signature (the result, the type of a parameter, the type of a result), in a function, a generic
 // function and a method.
 // One error per unit (§18.1), so each form is in its own unit. The right rows (`Alloc`, an effect row
-// variable) next to the locals are in the last units.
+// variable) next to the locals are in the last units; the variable is a right name, and the declaration of
+// one is E0200 in this version (§8.1, R-27 (3)), not the E0308 of a local.
 
 pub struct P {
   x: I32,
@@ -164,7 +165,7 @@ pub fn alloc_next_to_a_parameter(n: I32) -> I32 uses {Alloc} {
   n
 }
 
-pub fn effect_row_variable_next_to_a_parameter[e](n: I32, f: fn() -> I32 uses {e}) -> I32 uses {e} {
+pub fn effect_row_variable_next_to_a_parameter[e](n: I32, f: fn() -> I32 uses {e}) -> I32 uses {e} { //~ E0200 @48
   f.() + n
 }
 

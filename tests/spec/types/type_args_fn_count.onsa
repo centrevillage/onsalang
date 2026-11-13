@@ -6,7 +6,8 @@
 // S-239, S-306, S-982 (W5-10 U2a): the number of the elements of the list written after the name of a function is not the number of the
 // parameters of the function (§4.5: "型引数と const 引数の数が宣言と合わなければ E0412（関数の引数の数と同じコード）"). Too many, too few, a function
 // without type parameters, a const argument too many and missing, the effect row variable that is not counted (`fn mid[A, e, B]` has two type
-// parameters, so three elements are too many and one is too few, S-982: "式の中の型引数の数に、効果行変数は数えない"), a function of a module, and a
+// parameters, so three elements are too many and one is too few, S-982: "式の中の型引数の数に、効果行変数は数えない"; the declaration of the variable is E0200 in this
+// version, §8.1, R-27 (3), and the E0412 of the calls is the same), a function of a module, and a
 // function put as a value. There is no candidate in an expression (§4.5: "式の中の型引数の E0412 に修正候補は無く";
 // `fixes = 0`; S-306, the note is not promised). One error per item (P-01); the other items are fine.
 use std.math
@@ -31,7 +32,7 @@ pub fn tag[T, const N: U32](x: T) -> (T, U32) {
   (x, N)
 }
 
-pub fn mid[A, e, B](a: A, b: B) -> A {
+pub fn mid[A, e, B](a: A, b: B) -> A { //~ E0200 @15
   a
 }
 

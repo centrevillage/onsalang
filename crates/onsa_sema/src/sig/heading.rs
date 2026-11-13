@@ -90,7 +90,14 @@ impl<'p> Sema<'p> {
                     span: name.span,
                     kind: GenericKind::Const(self.a.types.error()),
                 },
+                // The first effect row variable of the list is an E0200 of
+                // the types stage (R-27 (3), §8.1): the errors of the names
+                // stage of the unit, its bodies' too, come first.
                 GenericParam::Effect { name } => {
+                    if !out[cx.generics.len()..].iter().any(|g| matches!(g.kind, GenericKind::Effect)) {
+                        let d = Feature::EffectRowVariables.diagnostic(Stage::Types, name.span, &[]);
+                        self.report(cx.def, d);
+                    }
                     GenericDef { name: name.name.clone(), span: name.span, kind: GenericKind::Effect }
                 }
             };

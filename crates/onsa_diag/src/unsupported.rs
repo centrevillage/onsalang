@@ -87,6 +87,8 @@ features! {
     EffectHandlers: Language, "effect handlers (`handle ... with`)", None;
     /// `{}`: the effect's name.
     Effects: Language, "effects other than `Alloc` (`{}`)", None;
+    /// R-27 (3), §8.1: effect polymorphism comes with the handlers.
+    EffectRowVariables: Language, "effect row variables", None;
     /// S-888: which clock a `panic` of a flow body takes (§11.3) is open.
     PanicInFlow: Language, "`panic` in a flow body", None;
     Extern: Language, "`extern` blocks", None;

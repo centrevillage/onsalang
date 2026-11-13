@@ -6,24 +6,27 @@
 // expected. An effect and an effect row variable in either order, two variables in either order, the same effect once in each of two functions, in a function and in a
 // function type, in a method and in an anonymous function, and an empty row. (The same effect twice in a row: effect_row_twice_*.onsa.) The functions that have a row are used,
 // with the row that their body needs.
+// The functions that declare an effect row variable (`[e]`, `[d, e]`) are E0200 in this version, at the name of the first variable of the list (§8.1, R-27 (3); the type
+// stage). That is the only diagnostic of the unit: if a row that is not the same effect twice were an E0602, the name stage would
+// report it in place of the E0200 (§18.1: one error per unit, the earlier stage first).
 
-pub fn alloc_then_variable[e](f: fn() -> U32 uses {e}) -> U32 uses {Alloc, e} {
+pub fn alloc_then_variable[e](f: fn() -> U32 uses {e}) -> U32 uses {Alloc, e} { //~ E0200 @28
   f.()
 }
 
-pub fn variable_then_alloc[e](f: fn() -> U32 uses {e}) -> U32 uses {e, Alloc} {
+pub fn variable_then_alloc[e](f: fn() -> U32 uses {e}) -> U32 uses {e, Alloc} { //~ E0200 @28
   f.()
 }
 
-pub fn two_variables[d, e](f: fn() -> U32 uses {d}, g: fn() -> U32 uses {e}) -> U32 uses {d, e} {
+pub fn two_variables[d, e](f: fn() -> U32 uses {d}, g: fn() -> U32 uses {e}) -> U32 uses {d, e} { //~ E0200 @22
   f.() + g.()
 }
 
-pub fn two_variables_swapped[d, e](f: fn() -> U32 uses {d}, g: fn() -> U32 uses {e}) -> U32 uses {e, d} {
+pub fn two_variables_swapped[d, e](f: fn() -> U32 uses {d}, g: fn() -> U32 uses {e}) -> U32 uses {e, d} { //~ E0200 @30
   f.() + g.()
 }
 
-pub fn two_variables_and_alloc[d, e](f: fn() -> U32 uses {d}, g: fn() -> U32 uses {e}) -> U32 uses {e, Alloc, d} {
+pub fn two_variables_and_alloc[d, e](f: fn() -> U32 uses {d}, g: fn() -> U32 uses {e}) -> U32 uses {e, Alloc, d} { //~ E0200 @32
   f.() + g.()
 }
 
@@ -66,7 +69,7 @@ pub fn closure(k: U32) -> U32 uses {Alloc} {
   call(fn(i: U32) -> U32 uses {Alloc} { i + k })
 }
 
-pub fn closure_with_a_variable[e](f: fn() -> U32 uses {e}) -> U32 uses {e} {
+pub fn closure_with_a_variable[e](f: fn() -> U32 uses {e}) -> U32 uses {e} { //~ E0200 @32
   let _ = fn(x: U32) -> U32 uses {e} { x }
   f.()
 }

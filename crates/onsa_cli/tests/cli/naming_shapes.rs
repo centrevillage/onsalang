@@ -52,7 +52,27 @@ fn the_e0320<'a>(tag: &str, out: &Out, doc: &'a Value) -> &'a Value {
     &ds[0]
 }
 
-/// The source after the only candidate of the only E0320, and the check of that text (it must be clean).
+/// A tag of a source that declares an effect row variable: its check without an error of the names stage has
+/// the one E0200 of the variable, of the types stage, in this version (R-27 (3), §8.1).
+const EFFECT_VAR: &str = "effect_var";
+
+/// The check of the source of `tag` has no error of the names stage: it is clean, or, of a source that
+/// declares an effect row variable, its one diagnostic is the E0200 of the variable.
+fn assert_clean(tag: &str, out: &Out, doc: &Value) {
+    let ds = diagnostics(doc);
+    if tag.starts_with(EFFECT_VAR) {
+        assert_eq!(out.code, 1, "{tag}: {}{}", out.stdout, out.stderr);
+        let e0200 =
+            |d: &Value| code_of(d) == "E0200" && d["message"].as_str().is_some_and(|m| m.contains("effect row"));
+        assert!(ds.len() == 1 && e0200(&ds[0]), "{tag}: the E0200 of the effect row variable alone: {doc}");
+    } else {
+        assert_eq!(out.code, 0, "{tag}: {}{}", out.stdout, out.stderr);
+        assert!(ds.is_empty(), "{tag}: {doc}");
+    }
+}
+
+/// The source after the only candidate of the only E0320, and the check of that text (it must be clean,
+/// [`assert_clean`]).
 fn after_the_candidate(tag: &str, source: &str) -> String {
     let (out, doc) = check_file(tag, source);
     let d = the_e0320(tag, &out, &doc);
@@ -61,8 +81,7 @@ fn after_the_candidate(tag: &str, source: &str) -> String {
     let fixed = apply(source, &edits_of(fixes[0]));
     assert_ne!(fixed, source, "{tag}: the candidate changes the source: {d}");
     let (out, doc) = check_file(&format!("{tag}_after"), &fixed);
-    assert_eq!(out.code, 0, "{tag}: after the candidate {fixed:?}: {}{}", out.stdout, out.stderr);
-    assert!(diagnostics(&doc).is_empty(), "{tag}: after the candidate {fixed:?}: {doc}");
+    assert_clean(&format!("{tag}: after the candidate {fixed:?}"), &out, &doc);
     fixed
 }
 
@@ -71,7 +90,8 @@ fn after_the_candidate(tag: &str, source: &str) -> String {
 /// §2.3, §7: a name that starts with `_` is E0320, for a function, a parameter, a binding, a pattern name,
 /// a struct, a variant, a constant, a type alias, a type parameter and an effect-row variable. The kind
 /// comes from the position, or from the first letter after the `_`. One candidate, after which the program
-/// is clean (the uses are renamed too, so there is no E0302).
+/// is clean (the uses are renamed too, so there is no E0302; the effect-row variable has the E0200 of this
+/// version alone, [`assert_clean`]).
 #[test]
 fn a_leading_underscore_is_e0320_with_one_candidate_that_leaves_the_program_clean() {
     let sources: [(&str, &str); 14] = [
@@ -99,8 +119,10 @@ fn a_leading_underscore_is_e0320_with_one_candidate_that_leaves_the_program_clea
 /// is a binding and the candidate is `x`. The result is the same text without the `_`.
 #[test]
 fn the_candidates_the_spec_names_drop_the_underscore() {
-    let fixed =
-        after_the_candidate("spec_e", "pub fn ap[T, _e](f: fn(T) -> T uses {_e}, x: T) -> T uses {_e} {\n  f.(x)\n}\n");
+    let fixed = after_the_candidate(
+        "effect_var_spec",
+        "pub fn ap[T, _e](f: fn(T) -> T uses {_e}, x: T) -> T uses {_e} {\n  f.(x)\n}\n",
+    );
     assert_eq!(fixed, "pub fn ap[T, e](f: fn(T) -> T uses {e}, x: T) -> T uses {e} {\n  f.(x)\n}\n");
     let fixed = after_the_candidate("spec_x", "pub fn l() -> I32 {\n  let _x = 1\n  _x + 1\n}\n");
     assert_eq!(fixed, "pub fn l() -> I32 {\n  let x = 1\n  x + 1\n}\n");
@@ -119,12 +141,16 @@ fn a_binding_with_a_leading_underscore_is_not_an_e0302() {
 
 /// §2.3: a `_` at the end is a spelling that avoids a keyword and is fine in every shape: `Self_`,
 /// `inout_` as an effect-row variable (R-260 gave a candidate that changed nothing, an internal error in
-/// the debug build), `match_`, `type_`, a field, a parameter, a binding, a constant.
+/// the debug build), `match_`, `type_`, a field, a parameter, a binding, a constant. The effect-row
+/// variable has the E0200 of this version alone ([`assert_clean`]).
 #[test]
 fn a_name_with_an_underscore_at_the_end_is_fine_in_every_shape() {
     let sources: [(&str, &str); 8] = [
         ("self_type", "pub struct Self_ {\n  x: I32,\n}\n"),
-        ("inout_var", "pub fn f[T, inout_](g: fn(T) -> T uses {inout_}, x: T) -> T uses {inout_} {\n  g.(x)\n}\n"),
+        (
+            "effect_var_inout",
+            "pub fn f[T, inout_](g: fn(T) -> T uses {inout_}, x: T) -> T uses {inout_} {\n  g.(x)\n}\n",
+        ),
         ("fn_names", "pub fn match_(type_: I32) -> I32 {\n  let self_ = type_ + 1\n  self_\n}\n"),
         ("field", "pub struct P {\n  x_: I32,\n}\n"),
         ("type_param", "pub fn id1[T_](x: T_) -> T_ {\n  x\n}\n"),
@@ -134,8 +160,7 @@ fn a_name_with_an_underscore_at_the_end_is_fine_in_every_shape() {
     ];
     for (tag, source) in sources {
         let (out, doc) = check_file(tag, source);
-        assert_eq!(out.code, 0, "{tag}: {}{}", out.stdout, out.stderr);
-        assert!(diagnostics(&doc).is_empty(), "{tag}: {doc}");
+        assert_clean(tag, &out, &doc);
     }
 }
 

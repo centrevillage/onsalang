@@ -1272,24 +1272,10 @@ note = "型引数を書いた prelude の列挙子を値に置いて呼ぶ形を
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/types/type_args_fn_effect_row.onsa"
-reasons = ["R-27", "S-982"]
-until = "W6-01"
-note = "効果行変数を持つ関数に型引数を書く形（`apply::[I32](inc, 1)`、効果行変数は数に入れない）。純粋な関数を `fn(T) -> T uses {e}` の引数に渡す呼び出しは、型引数の有無によらず今 E0401（効果の検査の作り直しを待つ）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/types/type_args_fn_mark_bang_flow.onsa"
 reasons = ["S-811"]
 until = "W7-04"
 note = "flow の本体の `id::[F32]!(x)` は E0806（§11.2）。今は `id!(x)` と同じ道で E0714（W5-10 の単位の行）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/types/type_args_fn_effect_row_declared.onsa"
-reasons = ["R-27", "S-982", "S-991"]
-until = "W6-01"
-note = "引数の型に現れない効果行変数を持つ関数（`fn mid[A, e, B](a: A, b: B)`）の呼び出しは、型引数の有無によらず今 E0406（効果行変数が決まらない。決まらない効果行の扱いは S-991）"
 
 [[pending]]
 kind = "test-case"
@@ -1304,20 +1290,6 @@ target = "tests/spec/types/type_args_method_const_arith_neg.onsa"
 reasons = ["S-713", "S-239"]
 until = "W9-03"
 note = "メソッド自身の型引数の const 引数の演算の誤り（E0417、E0419）。演算を含む const 引数は今 E0200"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/types/type_args_method_effect_row.onsa"
-reasons = ["R-27", "S-982"]
-until = "W6-01"
-note = "効果行変数を持つメソッドに型引数を書く形（効果行変数は数に入れない）。純粋な関数を `fn(T) -> T uses {e}` の引数に渡す呼び出しは、型引数の有無によらず今 E0401（types/type_args_fn_effect_row.onsa と同じ待ち）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/types/type_args_method_effect_row_declared.onsa"
-reasons = ["R-27", "S-982", "S-991"]
-until = "W6-01"
-note = "引数の型に現れない効果行変数を持つメソッドの呼び出しは、型引数の有無によらず今 E0406（決まらない効果行の扱いは S-991）"
 
 [[pending]]
 kind = "test-case"

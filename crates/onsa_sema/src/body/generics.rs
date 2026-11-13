@@ -26,6 +26,9 @@ impl<'a> Checker<'a> {
             .enumerate()
             .map(|(k, g)| match g.kind {
                 _ if k < unread => self.a.types.error(),
+                // An effect row variable (an E0200 of its declaration) is not
+                // decided by a use: no E0406 leans on it (R-27 (3), §8.1).
+                GenericKind::Effect => self.a.types.error(),
                 GenericKind::Const(_) => {
                     let len = self.infer.fresh_len();
                     let Len::Var(v) = len else { unreachable!() };

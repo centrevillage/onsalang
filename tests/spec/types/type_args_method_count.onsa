@@ -8,7 +8,8 @@
 // of the receiver, so the type stage reports it, "種類と数を型の段で判定する"). Too many, too few, a method without type parameters, the type parameter
 // of the `impl` that the receiver decides (§4.5: "与えるのはメソッド自身の型パラメータで、`impl` の型パラメータはレシーバで決まる"; S-306: "型パラメータを
 // 持たないメソッドに書いた並び"), a const argument too many and missing, the effect row variable that is not counted (`fn mid[A, e, B]` has two type
-// parameters, so three elements are too many and one is too few, S-982), and a method of a generic `impl`. There is no candidate in an expression
+// parameters, so three elements are too many and one is too few, S-982; the declaration of the variable is E0200 in this version, §8.1, R-27 (3), and the E0412 of the
+// calls is the same), and a method of a generic `impl`. There is no candidate in an expression
 // (§4.5: "式の中の型引数の E0412 に修正候補は無く"; `fixes = 0`; S-306, the note is not promised). One error per item (P-01); the other items are fine.
 
 pub struct V {
@@ -40,7 +41,7 @@ impl V {
     (x, N)
   }
 
-  pub fn mid[A, e, B](self, a: A, b: B) -> A {
+  pub fn mid[A, e, B](self, a: A, b: B) -> A { //~ E0200 @17
     a
   }
 }

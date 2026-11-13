@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§2.3", "§18.1"]
+
+// R-27 (3), W6-01 U1 (spec §8.1: "名前の規則（上の分け方、E0602 など）は名前の段でそのまま検査する"; §2.3: the shape of the name of an effect row variable is `snake_case`, and a name that starts with
+// `_` has no shape; §18.1: "依存する段の間では、位置によらず先の段の誤りを報告する"): a name of the list that breaks the naming rule is the E0320 of the name stage, and it is
+// reported in place of the E0200 of the type stage (at the name of the first variable, effect_row_var_e0200_decls.onsa), though the first variable comes before it in the
+// list and the E0200 is at the earlier position: the stage decides, not the position. The bad name is the first variable, the second variable (the first is fine), or a
+// type parameter beside a fine variable, in a function, a method, a struct and an enum. The names with a leading `_` (`_e`, and `_0`, which has no letter) are E0320
+// for any kind of name (the kind they are read as does not matter, effect row variable or type parameter), as in the names that are in the wrong shape (`itemKey`, `rowVar`).
+// The mark is on the line of the name. One error in each unit (P-01). The candidates of E0320 are not counted here.
+
+pub fn the_first_variable_is_bad[itemKey](f: fn() -> U32 uses {itemKey}) -> U32 uses {itemKey} { //~ E0320
+  f.()
+}
+
+pub fn the_second_variable_is_bad[e, itemKey](f: fn() -> U32 uses {e}, g: fn() -> U32 uses {itemKey}) -> U32 uses {e, itemKey} { //~ E0320
+  f.() + g.()
+}
+
+pub fn a_leading_underscore[T, _e](f: fn(T) -> T uses {_e}, x: T) -> T uses {_e} { //~ E0320
+  f.(x)
+}
+
+pub fn a_fine_variable_then_a_leading_underscore[e, _e](f: fn() -> U32 uses {e}) -> U32 uses {e} { //~ E0320
+  f.()
+}
+
+pub fn a_fine_variable_then_a_name_with_no_letter[e, _0](f: fn() -> U32 uses {e}) -> U32 uses {e} { //~ E0320
+  f.()
+}
+
+pub fn a_name_with_no_letter_then_a_fine_variable[_0, e](f: fn() -> U32 uses {e}) -> U32 uses {e} { //~ E0320
+  f.()
+}
+
+pub fn a_bad_type_parameter_beside_a_fine_variable[e, Item_Key](f: fn() -> U32 uses {e}, x: Item_Key) -> U32 uses {e} { //~ E0320
+  f.()
+}
+
+pub struct Holder {
+  n: U32,
+}
+
+impl Holder {
+  pub fn in_a_method[e, rowVar](self, f: fn() -> U32 uses {e}) -> U32 uses {e} { //~ E0320
+    f.()
+  }
+}
+
+pub struct Runner[e, rowVar] { //~ E0320
+  f: fn() -> U32 uses {e},
+}
+
+pub enum Task[_e] { //~ E0320
+  Run(fn() -> U32 uses {_e}),
+  Idle,
+}
+
+pub enum Either[T, e, item__key] { //~ E0320
+  Value(T),
+  Callback(fn() -> T uses {e}),
+}
+
+pub fn the_same_declaration_with_fine_names[e, item_key](f: fn() -> U32 uses {e}, g: fn() -> U32 uses {item_key}) -> U32 uses {e, item_key} { //~ E0200 @45
+  f.() + g.()
+}

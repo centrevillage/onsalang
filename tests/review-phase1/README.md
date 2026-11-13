@@ -26,7 +26,7 @@
 | ファイル | R |
 |---|---|
 | `body/r1_rt_fnvalue.onsa` | R-26 |
-| `body/r2_effect_fnvalue.onsa`、`body/ev1.onsa` | R-27 |
+| `body/r2_effect_fnvalue.onsa`、`body/ev1.onsa`、`types/eff.onsa` | R-27。効果行変数の部分（`ev1` の `apply[e]` に純粋な関数を渡す形、`eff` の `b[e]`・`k[e]`・`m[e](x: e)`）は、W6-01 U1/t で第 1 期の形（宣言が E0200、使う所は診断なし）の期待値付きのテストへ写した（入力は消さない）: `tests/spec/types/effect_row_var_e0200_uses_fn.onsa`（`ev1` の `apply(pure_one, 1)`、`eff` の `d` の `b(c)`）、`effect_row_var_e0200_names_other.onsa` の `the_variable_as_a_type`（`eff` の `m[e](x: e)`、E0308）、`tests/spec/negative/effect_row_var_e0200_decls.onsa`（宣言の種類）、`effect_row_var_e0200_names_*.onsa`（名前の段の誤りが先）。`eff` の `a`（`uses {Alloc, Alloc}`）は `tests/spec/effects/effect_row_twice_*.onsa`。クロージャの効果（`r2`）は W6-03 |
 | `body/m1_continue.onsa`〜`body/m4_while_cond.onsa` | R-28。W4-09 U1/t で期待値付きのテストへ移し、入力は消した: `tests/spec/negative/modes_moved_loop_exits.onsa`（`m1` の `continue` の道、`m2` の分岐の中の `continue`、`m3` の `break` の後の使用、`m4` の `while` の条件の `move`）。`continue` の道は `modes_moved_loop.onsa`・`modes_moved_next_iteration.onsa` にもある。W4-07 で直した |
 | `body/m5_for_move.onsa`、`body/m5b_for_move_once.onsa` | R-29 |
 | `body/q1_qdup.onsa`、`body/q2_qdup_copy.onsa`、`types/kindfb*.onsa` | R-30。W4-16 U3/t で期待値付きのテストへ写した: `tests/spec/negative/kind_maybe_dup_param.onsa`（`?Dup` の値の複製）、`kind_maybe_dup_struct.onsa`・`kind_generic_buf_holder.onsa`・`kind_dup_requirement.onsa`（総称の型）、`tests/spec/types/kind_dup_contrast.onsa`（Dup の対照）。W4-16 U3 で直した（今の `onsa check` は `q1` が 1 行の E0704・3 行の E0711・5 行の E0416、`q2` が 1 行の E0711、`kindfb` が 9・10 行の E0601・14・20 行の E0704・26 行の E0416、`kindfb2` が 12・17 行の E0416） |

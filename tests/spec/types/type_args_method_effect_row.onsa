@@ -5,11 +5,12 @@
 // S-982 (W5-10 U2b): the number of the type arguments of an expression does not count the effect row variable (§4.5: "式の中の型引数の数に、効果行変数
 // （§8.1）は数えない（`fn apply[T, e](f: fn(T) -> T uses {e}, x: T)` には `apply::[I32](inc, 1)` と書き、効果行は呼び出しから決まる）"), and the method is the
 // same: `ap[T, e]` has the type parameter `T` and the effect row variable `e` (a name that does not start with a capital letter, §8.1), so its list
-// has one element. The effect row is decided by the call: `inc` is pure, `bump` has `Alloc`, and the call has the effect row of `f`. No diagnostic.
+// has one element. The effect row is decided by the call: `inc` is pure, `bump` has `Alloc`, and the call has the effect row of `f`.
 // The errors of the number are in type_args_method_count.onsa. Only the check: the body calls a function value (`onsa test` stops at that with
-// E0200, R-295). This case waits for W6-01 (R-27): a pure function given to a parameter `fn(T) -> T uses {e}` is E0401 today, with the list and
-// without it (type_args_fn_effect_row.onsa is the same). The part that does not need that (the number) is in
-// type_args_method_effect_row_declared.onsa.
+// E0200, R-295). In this version the declaration of an effect row variable is E0200, at the name of the first variable of the list (§8.1, R-27 (3); the type
+// stage), and the places that use such a declaration do not rely on an effect row that has a variable (§8.1): the calls here, with the list and without it,
+// are no E0401 and no E0406, and no diagnostic is expected on them (type_args_fn_effect_row.onsa is the same). The part that has no function type with a row
+// (the number) is in type_args_method_effect_row_declared.onsa.
 
 pub struct V {
   n: I32,
@@ -28,11 +29,11 @@ pub fn to_f(x: I32) -> F32 {
 }
 
 impl V {
-  pub fn ap[T, e](self, f: fn(T) -> T uses {e}, x: T) -> T uses {e} {
+  pub fn ap[T, e](self, f: fn(T) -> T uses {e}, x: T) -> T uses {e} { //~ E0200 @16
     f.(x)
   }
 
-  pub fn ap2[T, U, e](self, f: fn(T) -> U uses {e}, x: T) -> U uses {e} {
+  pub fn ap2[T, U, e](self, f: fn(T) -> U uses {e}, x: T) -> U uses {e} { //~ E0200 @20
     f.(x)
   }
 }

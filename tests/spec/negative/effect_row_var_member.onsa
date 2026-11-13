@@ -7,7 +7,8 @@
 // it among the names that are neither a namespace nor a value), so a dot after it is the E0308 of a
 // name of another kind (§15.1: a dot written after a name that is no namespace), not the E0302 of a
 // name that is not found. It is the same in a body, a result type, a bound and an effect row. One error
-// in each unit (P-01); the last function is the right form. The variable alone at the place of a value
+// in each unit (P-01); the last function is the right form of the name (no dot, no value), and it is the E0200 of
+// the declaration of an effect row variable in this version (§8.1, R-27 (3)), at the name. The variable alone at the place of a value
 // or of a callee is no value (§15.1, R-411): the E0308 of a name of another kind.
 pub fn in_a_body[e](f: fn(F32) -> F32 uses {e}, x: F32) -> F32 uses {e} {
   e.x                                               //~ E0308
@@ -28,6 +29,6 @@ pub fn as_a_value[e](f: fn(F32) -> F32 uses {e}, x: F32) -> F32 uses {e} {
 pub fn as_a_callee[e](f: fn(F32) -> F32 uses {e}, x: F32) -> F32 uses {e} {
   e(x)                                              //~ E0308
 }
-pub fn right[e](f: fn(F32) -> F32 uses {e}, x: F32) -> F32 uses {e} {
+pub fn right[e](f: fn(F32) -> F32 uses {e}, x: F32) -> F32 uses {e} { //~ E0200 @14
   f.(x)
 }

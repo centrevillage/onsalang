@@ -371,7 +371,7 @@ impl<'a> Rater<'a> {
                 let f = self.a.def(def).as_fn().cloned();
                 let name = self.a.def(def).name.clone();
                 if let Some(f) = f {
-                    if self.final_pass && !f.effects.is_empty() {
+                    if self.final_pass && f.effects.has_effects() {
                         return Err(self.err(
                             Code::E0805,
                             span,

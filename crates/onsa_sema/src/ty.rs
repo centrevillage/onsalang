@@ -220,6 +220,17 @@ impl EffectSet {
     pub fn is_empty(&self) -> bool {
         !self.alloc && self.other.is_empty() && self.vars.is_empty()
     }
+
+    /// Whether the row has an effect row variable: no judgement of a use
+    /// leans on its variables (an E0200 of the declaration, R-27 (3), §8.1).
+    pub fn is_open(&self) -> bool {
+        !self.vars.is_empty()
+    }
+
+    /// Whether the row has an effect, its variables not counted (§8.1).
+    pub fn has_effects(&self) -> bool {
+        self.alloc || !self.other.is_empty()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

@@ -308,7 +308,10 @@ impl Infer {
                 }
                 self.unify(types, f1.ret, f2.ret, cause)?;
                 let modes = f1.params.iter().map(|p| p.0).eq(f2.params.iter().map(|p| p.0));
-                if modes && f1.effects == f2.effects { Ok(()) } else { Err(Mismatch::Types) }
+                // A row with an effect row variable, on either side, is not
+                // compared (R-27 (3), §8.1).
+                let open = f1.effects.is_open() || f2.effects.is_open();
+                if modes && (open || f1.effects == f2.effects) { Ok(()) } else { Err(Mismatch::Types) }
             }
             (Ty::ConstVal(n), Ty::ConstVal(m)) if n == m => Ok(()),
             _ => Err(Mismatch::Types),

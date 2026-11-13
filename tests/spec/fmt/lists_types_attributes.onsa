@@ -1,5 +1,6 @@
 // onsa.toml
 // [test]
+// mode = "parse"
 // spec = ["§6.5", "§8.1", "§11.7", "§15.1", "§18.2"]
 
 // The three forms of three lists that are not the lists of the values of an expression (spec/tools.md
@@ -11,7 +12,10 @@
 // to a line for each effect, and the closing `}` goes on the line of the item (`} {`); the effect row on
 // one line has no space inside its `{ }`. The file is canonical, so `onsa fmt` leaves it unchanged. The
 // lists of the types (type parameters, type arguments, tuple types, function types) are in
-// lists_types_generics.onsa, and the `use` lists are in list_forms_use.onsa.
+// lists_types_generics.onsa, and the `use` lists are in list_forms_use.onsa. Only the syntax is read here (`mode = "parse"`): the rows with a
+// second element are written with an effect row variable (`uses {Alloc, e}`), which the check of this version reports as E0200 at its declaration (§8.1,
+// R-27 (3)), and the version has no other effect than `Alloc` to put in its place (the effects other than `Alloc` are E0200 too), so a row of
+// more than one element, which the block and continuation forms need, cannot be written with no diagnostic in the check.
 
 // The arguments of an attribute: of an item, and of an input of a flow.
 @fp(relaxed)

@@ -1,0 +1,101 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§15.1", "§18.1"]
+
+// R-27 (3), W6-01 U1 (spec §8.1: "名前の規則（上の分け方、E0602 など）は名前の段でそのまま検査する"; §18.1: "依存する段の間では、位置によらず先の段の誤りを報告する"): the errors of the name stage
+// in a declaration that has an effect row variable are reported in place of the E0200 of the type stage (at the name of its first variable,
+// effect_row_var_e0200_decls.onsa), wherever they are in the unit: before or after the variable, in the heading or in the body. They are an effect that is not found in the row
+// (E0302, §15.1), a name that is found and is no effect (E0308, §8.1: `uses {I32}`), the variable itself written where a type is asked (E0308, §15.1: it counts as an effect), a type that is not found in a field (E0302), a name that is declared twice in the list or
+// that a parameter or a local of the body has too (E0304), and a name that is not found in the body (E0302). The mark is on the line of the error. One error in each unit
+// (P-01). The same declarations with the E0602 of a copy are in effect_row_var_e0200_names_dup.onsa, and with the E0320 of a name in effect_row_var_e0200_names_e0320.onsa.
+
+pub fn effect_not_found_in_the_result[e](f: fn() -> U32 uses {e}) -> U32 uses {Missing, e} { //~ E0302
+  f.()
+}
+
+pub fn effect_not_found_after_the_variable[e](f: fn() -> U32 uses {e}) -> U32 uses {e, Missing} { //~ E0302
+  f.()
+}
+
+pub fn effect_not_found_in_the_type_of_a_parameter[e](f: fn() -> U32 uses {e, Missing}) -> U32 { //~ E0302
+  1
+}
+
+pub fn type_in_the_row_of_the_result[e](f: fn() -> U32 uses {e}) -> U32 uses {I32, e} { //~ E0308
+  f.()
+}
+
+pub fn type_in_the_row_of_a_parameter[e](f: fn() -> U32 uses {e, I32}) -> U32 { //~ E0308
+  1
+}
+
+pub fn name_not_found_in_the_body[e](f: fn() -> U32 uses {e}) -> U32 uses {e} {
+  missing //~ E0302
+}
+
+pub fn the_variable_as_a_type[e](f: fn() -> U32 uses {e}, x: e) -> U32 { //~ E0308
+  1
+}
+
+pub fn the_variable_twice_in_the_list[e, e](f: fn() -> U32 uses {e}) -> U32 uses {e} { //~ E0304
+  f.()
+}
+
+pub fn the_variable_and_a_parameter[e](g: fn() -> U32 uses {e}, e: U32) -> U32 { //~ E0304
+  e
+}
+
+pub fn the_variable_and_a_let[e](g: fn() -> U32 uses {e}) -> U32 uses {e} {
+  let e = 1 //~ E0304
+  g.() + e
+}
+
+pub struct Holder {
+  n: U32,
+}
+
+impl Holder {
+  pub fn effect_not_found_in_a_method[e](self, f: fn() -> U32 uses {e}) -> U32 uses {Missing, e} { //~ E0302
+    f.()
+  }
+
+  pub fn type_in_the_row_of_a_method[e](self, f: fn() -> U32 uses {e, I32}) -> U32 { //~ E0308
+    self.n
+  }
+}
+
+pub struct Runner[e] {
+  f: fn() -> U32 uses {e, Missing}, //~ E0302
+}
+
+pub struct Typed[e] {
+  v: e, //~ E0308
+}
+
+pub struct Boxed[e] {
+  f: fn() -> U32 uses {e},
+  n: Missing, //~ E0302
+}
+
+pub struct Pair[T, e] {
+  item: T,
+  f: fn() -> T uses {I32, e}, //~ E0308
+}
+
+pub enum Task[e] {
+  Run(fn() -> U32 uses {Missing, e}), //~ E0302
+  Idle,
+}
+
+pub enum Either[T, e] {
+  Value(T),
+  Callback(fn() -> T uses {e, I32}), //~ E0308
+}
+
+pub struct Twice[e, e] { //~ E0304
+  f: fn() -> U32 uses {e},
+}
+
+pub fn the_same_declaration_with_no_error_of_the_name[e](f: fn() -> U32 uses {e}) -> U32 uses {e} { //~ E0200 @55
+  f.()
+}

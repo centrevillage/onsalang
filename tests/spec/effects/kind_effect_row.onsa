@@ -14,8 +14,9 @@
 // What the version does not support stays E0200: the name of a user `effect` (`uses {Ef}`), which is the
 // kind the place needs (§15.1: "E0200 は、要る種類の名前でこの版が扱えないもの"). With a wrong name in
 // the same row, the first in the place is reported (§15.1, §18.1, S-731: the order is the place's).
-// One error per unit (§18.1), so each form is in its own unit; the fine rows (`Alloc`, an empty row,
-// an effect row variable, a row of a function type) are the fine units at the end of the file.
+// One error per unit (§18.1), so each form is in its own unit; the fine rows (`Alloc`, an empty row, a
+// row of a function type) are the fine units at the end of the file. An effect row variable is a right
+// name of a row, but the declaration of one is E0200 in this version (§8.1, R-27 (3)), at its name.
 
 pub struct P {
   x: I32,
@@ -134,7 +135,7 @@ pub fn an_empty_row_is_fine() -> I32 uses {} {
   1
 }
 
-pub fn an_effect_row_variable_is_fine[e](f: fn() -> I32 uses {e}) -> I32 uses {e} {
+pub fn an_effect_row_variable_is_e0200_not_e0308[e](f: fn() -> I32 uses {e}) -> I32 uses {e} { //~ E0200 @50
   f.()
 }
 

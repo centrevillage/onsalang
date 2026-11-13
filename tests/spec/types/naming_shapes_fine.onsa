@@ -9,7 +9,8 @@
 // `T2D`). A name that is both `UpperCamel` and `UPPER_SNAKE` (`OK`, `N`, `LIMIT`) stands where either
 // is asked: a struct, an enum variant, a constant, a type parameter. R-260 had `struct Self_` and an
 // effect-row variable `inout_` give a candidate that changed nothing (an internal error in the debug
-// build); they are fine.
+// build); they are fine names. (The effect-row variables `inout_` and `item_key` are declared in effect_row_var_e0200_naming_shapes.onsa: the declaration of a
+// variable is E0200 in this version, §8.1, R-27 (3), and this case runs its `test` blocks.)
 
 pub fn g_() -> I32 {
   1
@@ -81,14 +82,6 @@ pub fn mk_point() -> Point_ {
 
 pub fn pick[T_, ItemKey, HTTP2, T2D2](x: T_, y: ItemKey, z: HTTP2, w: T2D2) -> T_ {
   x
-}
-
-pub fn run_inout[T, inout_](f: fn(T) -> T uses {inout_}, x: T) -> T uses {inout_} {
-  f.(x)
-}
-
-pub fn run_words[T, item_key](f: fn(T) -> T uses {item_key}, x: T) -> T uses {item_key} {
-  f.(x)
 }
 
 pub fn level_code(l: Level) -> I32 {

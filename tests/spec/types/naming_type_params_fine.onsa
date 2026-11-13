@@ -5,7 +5,8 @@
 // A type parameter is `UpperCamel` and an effect-row variable is `snake_case`, with no limit on the
 // number of words (spec 2.3, table): a single letter, a word, several words (`ItemKey`), capitals
 // in a row (`IO`, `HTTP`), a digit in the name (`T2`, `T2D`), a `_` at the end (`T_`). The rule is the
-// same on every declaration that has type parameters.
+// same on every declaration that has type parameters. The functions that declare an effect row variable (`run`, `run_words`,
+// `run_trailing`) are E0200 in this version (§8.1, R-27 (3)), at the name of the variable, and nothing else (the names are right).
 
 pub struct Pair[A, B] {
   a: A,
@@ -58,14 +59,14 @@ impl[OutKey] Keyed[OutKey] {
   }
 }
 
-pub fn run[T, e](f: fn(T) -> T uses {e}, x: T) -> T uses {e} {
+pub fn run[T, e](f: fn(T) -> T uses {e}, x: T) -> T uses {e} { //~ E0200 @15
   f.(x)
 }
 
-pub fn run_words[T, item_key](f: fn(T) -> T uses {item_key}, x: T) -> T uses {item_key} {
+pub fn run_words[T, item_key](f: fn(T) -> T uses {item_key}, x: T) -> T uses {item_key} { //~ E0200 @21
   f.(x)
 }
 
-pub fn run_trailing[T, inout_](f: fn(T) -> T uses {inout_}, x: T) -> T uses {inout_} {
+pub fn run_trailing[T, inout_](f: fn(T) -> T uses {inout_}, x: T) -> T uses {inout_} { //~ E0200 @24
   f.(x)
 }

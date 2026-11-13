@@ -1,0 +1,151 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§2.3", "§18.1"]
+
+// R-27 (3), W6-01 U1 (spec §8.1: "この版では、効果行変数を宣言すると（関数・メソッド・struct・enum の `[…]`）、最初の効果行変数の名前の位置で型の段の E0200 である"):
+// the declaration of an effect row variable (a name in a `[ ]` list that does not start with a capital letter, §8.1) is E0200 in this version, at the name of the
+// first variable of the list. It is one error for a declaration (§18.1: one error in a unit), whatever the number of the variables and the other elements of the list
+// (a type parameter before or after it, a bound, a const parameter). The declarations are a function, an associated function and a method of an `impl` (and of a generic
+// `impl`), a struct and an enum. The variable need not be used in the signature, and a function that is private is the same. The declarations with only type parameters
+// and const parameters are the fine units at the end of the file. The marks are on the line of the name, with its column.
+// (The names that break the naming rule are E0320 of the name stage, which is reported in their place: effect_row_var_e0200_names_*.onsa.)
+
+pub fn one_variable[e](f: fn() -> U32 uses {e}) -> U32 uses {e} { //~ E0200 @21
+  f.()
+}
+
+pub fn not_used_in_the_signature[e]() -> U32 { //~ E0200 @34
+  1
+}
+
+fn private_one[e](f: fn() -> U32 uses {e}) -> U32 uses {e} { //~ E0200 @16
+  f.()
+}
+
+pub fn type_then_variable[T, e](x: T, f: fn(T) -> T uses {e}) -> T uses {e} { //~ E0200 @30
+  f.(x)
+}
+
+pub fn variable_then_type[e, T](x: T, f: fn(T) -> T uses {e}) -> T uses {e} { //~ E0200 @27
+  f.(x)
+}
+
+pub fn bound_then_variable[T: Copy, e](x: T, f: fn(T) -> T uses {e}) -> T uses {e} { //~ E0200 @37
+  f.(x)
+}
+
+pub fn const_then_variable[const N: U32, e](f: fn() -> U32 uses {e}) -> U32 uses {e} { //~ E0200 @42
+  f.() + N
+}
+
+pub fn two_variables[d, e](f: fn() -> U32 uses {d}, g: fn() -> U32 uses {e}) -> U32 uses {d, e} { //~ E0200 @22
+  f.() + g.()
+}
+
+pub fn variables_apart[d, T, e](x: T, f: fn(T) -> T uses {d}, g: fn(T) -> T uses {e}) -> T uses {d, e} { //~ E0200 @24
+  g.(f.(x))
+}
+
+pub fn a_name_of_several_words[item_key](f: fn() -> U32 uses {item_key}) -> U32 uses {item_key} { //~ E0200 @32
+  f.()
+}
+
+pub fn a_name_with_a_trailing_underscore[inout_](f: fn() -> U32 uses {inout_}) -> U32 uses {inout_} { //~ E0200 @42
+  f.()
+}
+
+pub struct Holder {
+  n: U32,
+}
+
+impl Holder {
+  pub fn method[e](self, f: fn() -> U32 uses {e}) -> U32 uses {e} { //~ E0200 @17
+    f.()
+  }
+
+  pub fn associated[e](f: fn() -> U32 uses {e}) -> U32 uses {e} { //~ E0200 @21
+    f.()
+  }
+
+  pub fn method_after_a_type[T, e](self, x: T, f: fn(T) -> T uses {e}) -> T uses {e} { //~ E0200 @33
+    f.(x)
+  }
+
+  pub fn method_with_two[d, e](self, f: fn() -> U32 uses {d}, g: fn() -> U32 uses {e}) -> U32 uses {d, e} { //~ E0200 @26
+    f.() + g.()
+  }
+
+  pub fn method_not_used_in_the_signature[e](self) -> U32 { //~ E0200 @43
+    self.n
+  }
+
+  pub fn method_without_a_variable(self) -> U32 {
+    self.n
+  }
+}
+
+pub struct Gen[T] {
+  item: T,
+}
+
+impl[T] Gen[T] {
+  pub fn own_variable[e](self, f: fn() -> U32 uses {e}) -> U32 uses {e} { //~ E0200 @23
+    f.()
+  }
+
+  pub fn own_type_and_variable[U, e](self, u: U, f: fn(U) -> U uses {e}) -> U uses {e} { //~ E0200 @35
+    f.(u)
+  }
+
+  pub fn own_type_only[U](self, u: U) -> U {
+    u
+  }
+}
+
+pub struct Runner[e] { //~ E0200 @19
+  f: fn() -> U32 uses {e},
+}
+
+pub struct Pair[T, e] { //~ E0200 @20
+  item: T,
+  f: fn() -> T uses {e},
+}
+
+pub struct Triple[d, T, e] { //~ E0200 @19
+  item: T,
+  f: fn() -> T uses {d},
+  g: fn() -> T uses {e},
+}
+
+pub enum Task[e] { //~ E0200 @15
+  Run(fn() -> U32 uses {e}),
+  Idle,
+}
+
+pub enum Either[T, e] { //~ E0200 @20
+  Value(T),
+  Callback(fn() -> T uses {e}),
+}
+
+// The fine units: the same shapes with no effect row variable.
+
+pub fn only_a_type[T](x: T) -> T {
+  x
+}
+
+pub fn a_type_and_a_const[T, const N: U32](x: T) -> (T, U32) {
+  (x, N)
+}
+
+pub fn a_row_of_effects_only(f: fn() -> U32 uses {Alloc}) -> U32 uses {Alloc} {
+  f.()
+}
+
+pub struct OnlyAType[T] {
+  item: T,
+}
+
+pub enum OnlyATypeToo[T] {
+  Value(T),
+  Nothing,
+}

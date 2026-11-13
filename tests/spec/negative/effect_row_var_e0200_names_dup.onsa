@@ -1,0 +1,58 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§18.1"]
+// fixes = 0
+
+// R-27 (3), W6-01 U1 (spec §8.1: "名前の規則（上の分け方、E0602 など）は名前の段でそのまま検査する"; §18.1: "依存する段の間では、位置によらず先の段の誤りを報告する"): the same effect row
+// variable (or effect) written twice in one row is the E0602 of the name stage (§8.1), and a declaration that has an effect row variable has the E0200 of the type stage
+// (at the name of its first variable, effect_row_var_e0200_decls.onsa), so the unit reports the E0602 only, wherever the two are. The row is in a result, in the type of a
+// parameter, in a method, in the field of a struct and in the payload of an enum. The mark is on the line of the second name. There is no candidate (`fixes = 0`).
+// One error in each unit (P-01). The last function is the same declaration with no copy: its error is the E0200.
+
+pub fn in_the_result[e](f: fn() -> U32 uses {e}) -> U32 uses {e, e} { //~ E0602
+  f.()
+}
+
+pub fn in_the_type_of_a_parameter[e](f: fn() -> U32 uses {e, e}) -> U32 { //~ E0602
+  1
+}
+
+pub fn the_variable_and_an_effect[e](f: fn() -> U32 uses {e}) -> U32 uses {e, Alloc, e} { //~ E0602
+  f.()
+}
+
+pub fn the_second_variable[d, e](f: fn() -> U32 uses {d}, g: fn() -> U32 uses {e}) -> U32 uses {d, e, d} { //~ E0602
+  f.() + g.()
+}
+
+pub struct Holder {
+  n: U32,
+}
+
+impl Holder {
+  pub fn in_a_method[e](self, f: fn() -> U32 uses {e}) -> U32 uses {e, e} { //~ E0602
+    f.()
+  }
+
+  pub fn in_the_type_of_a_method_parameter[e](self, f: fn() -> U32 uses {e, e}) -> U32 { //~ E0602
+    self.n
+  }
+}
+
+pub struct Runner[e] {
+  f: fn() -> U32 uses {e, e}, //~ E0602
+}
+
+pub struct Pair[T, e] {
+  item: T,
+  f: fn() -> T uses {e, e}, //~ E0602
+}
+
+pub enum Task[e] {
+  Run(fn() -> U32 uses {e, e}), //~ E0602
+  Idle,
+}
+
+pub fn the_same_declaration_with_no_copy[e](f: fn() -> U32 uses {e}) -> U32 uses {e} { //~ E0200 @42
+  f.()
+}

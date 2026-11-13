@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§11.5"]
+
+// R-27 (3), W6-01 U1 (spec §8.1: "その宣言を使う所では、変数を含む効果行に頼る判定（…、呼ぶ側に数える効果）をしない"; §11.5: a flow calls effect-free functions
+// only, E0805): a function that declares an effect row variable is E0200 at its declaration, and a flow that calls it, whose row has the variable alone, reports no
+// E0805 (the variable is not an effect counted for the caller). A row with `Alloc` next to the variable keeps the E0805 of a flow that calls it. One error in each
+// unit (P-01).
+
+pub rt fn id_e[e](x: F32) -> F32 uses {e} { //~ E0200 @16
+  x
+}
+
+pub fn with_alloc_e[e](x: F32) -> F32 uses {Alloc, e} { //~ E0200 @21
+  x
+}
+
+pub flow use_id(x: F32 at sample) -> F32 at sample {
+  id_e(x)
+}
+
+pub flow use_with_alloc(x: F32 at sample) -> F32 at sample {
+  with_alloc_e(x) //~ E0805
+}

@@ -207,7 +207,11 @@ fn a_closure_reads_its_effect_row_as_a_signature_does() {
                 let g = fn(h: fn() -> I32 uses {e}) -> I32 uses {e} { h.() }\n  g.(f)\n}\n";
     let d = with_main("closure_effect_var", main);
     let (out, doc) = check_json(d.root(), &["."]);
-    assert_eq!(out.code, 0, "the row of the closure reads `e` as an effect variable: {doc}");
+    // The E0200 of the variable in this version (R-27 (3), §8.1) is of the types stage: alone, the names
+    // stage has no error.
+    assert_eq!(out.code, 1, "{}{}", out.stdout, out.stderr);
+    assert_eq!(codes(&doc), set(&["E0200"]), "the row of the closure reads `e` as an effect variable: {doc}");
+    assert_eq!(lines_of(&doc), vec![1], "{doc}");
 }
 
 /// §18.1, S-689 (1): a failed name in a bound of the heading of an `impl` is a bound that is not known, so the

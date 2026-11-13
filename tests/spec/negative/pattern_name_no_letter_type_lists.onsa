@@ -45,7 +45,8 @@ pub enum Maybe[__] {                                //~ E0320
   Something(I32),
 }
 
-// The right forms: a type parameter and an effect row variable with a letter.
-pub fn fine[T, e](f: fn(T) -> T uses {e}, x: T) -> T uses {e} {
+// The right forms: a type parameter and an effect row variable with a letter. The variable is a right name, and the declaration of one is E0200 in this version
+// (§8.1, R-27 (3)), at its name.
+pub fn fine[T, e](f: fn(T) -> T uses {e}, x: T) -> T uses {e} { //~ E0200 @16
   f.(x)
 }

@@ -1,0 +1,61 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§18.1"]
+
+// R-27 (3), W6-01 U1 (spec §8.1: "その宣言を使う所では、変数を含む効果行に頼る判定（E0401、E0406）をしない"): a struct and an enum that declare an effect row variable are E0200 at
+// their declarations (the first units), and the places that make a value of them (a struct literal, a constructor of a variant) and read a field report no E0401 and no E0406:
+// the field `f: fn() -> U32 uses {e}` takes a pure function and a function with `Alloc` (from a function that has `Alloc`, as the case of the call asks), and the variable that no
+// field decides (a value whose function is never given) is no E0406. One error in each unit (P-01). What is not decided by the section (the number of the arguments of the type
+// when it is written, the places of a type that has a variable as a function value) is not here.
+
+pub fn one() -> U32 {
+  1
+}
+
+pub fn alloc_one() -> U32 uses {Alloc} {
+  1
+}
+
+pub struct Runner[e] { //~ E0200 @19
+  f: fn() -> U32 uses {e},
+}
+
+pub struct Pair[T, e] { //~ E0200 @20
+  item: T,
+  f: fn() -> T uses {e},
+}
+
+pub enum Task[e] { //~ E0200 @15
+  Run(fn() -> U32 uses {e}),
+  Idle,
+}
+
+pub fn literal_with_a_pure_function() -> U32 {
+  let r = Runner { f: one }
+  r.f.()
+}
+
+pub fn literal_with_a_function_with_alloc() -> U32 uses {Alloc} {
+  let r = Runner { f: alloc_one }
+  r.f.()
+}
+
+pub fn literal_of_two_fields() -> U32 {
+  let p = Pair { item: 1, f: one }
+  p.item
+}
+
+pub fn constructor_with_a_pure_function() -> U32 {
+  let _ = Task.Run(one)
+  1
+}
+
+pub fn constructor_with_a_function_with_alloc() -> U32 uses {Alloc} {
+  let _ = Task.Run(alloc_one)
+  1
+}
+
+pub fn constructor_with_no_function() -> U32 {
+  let _ = Task.Idle
+  1
+}
