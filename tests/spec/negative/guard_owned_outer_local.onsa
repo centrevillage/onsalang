@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§7", "§8.1", "§10", "§12.2"]
+
+// W6-02 U2b/t, R-32 (§3.5: the right operand of `&&` and the guard of an arm are not always evaluated; §12.2: the drop of an owned `Buf` needs `Alloc`; §8.1,
+// §10 rule 1): the guard of an arm moves a local that is outside the `match` (`Some(n) if eat(move x) => n`). The guard is evaluated only if the pattern
+// matches, so on the path where it is not, `x` is live at the end of the function and its drop needs `Alloc`: a function without `uses {Alloc}` is an E0601 and an `rt fn` an
+// E0901. This is not the E0715 of S-1039 (the binding of an arm is not moved; `x` is not the subject of a borrowed `match` or the binding of an arm), and the
+// guard that moves it is legal if the function has `uses {Alloc}` (rt/guard_owned_contrast.onsa). The error is already reported in this version (U2a, R-32's
+// note of the 146th session: `Some(n) if keep(move x)`) and stays: this file is the contrast that keeps it. The helper `eat` is an `rt` function that drops its
+// argument, so its own E0901 is reported. The callers are one-liners (S-783). One error per function (P-01).
+
+pub rt fn eat(move b: Buf[F32]) -> Bool { true }   //~ E0901
+
+// ------------------------------------------------------------------ the heading is `move o`
+
+pub fn owned_heading(move o: Option[U32], move x: Buf[F32]) -> U32 { match move o { Some(n) if eat(move x) => n, _ => 0 } }   //~ E0601
+
+pub rt fn rt_owned_heading(move o: Option[U32], move x: Buf[F32]) -> U32 { match move o { Some(n) if eat(move x) => n, _ => 0 } }   //~ E0901
+
+pub fn owned_heading_and(c: Bool, move o: Option[U32], move x: Buf[F32]) -> U32 { match move o { Some(n) if c && eat(move x) => n, _ => 0 } }   //~ E0601
+
+pub rt fn rt_owned_heading_or(c: Bool, move o: Option[U32], move x: Buf[F32]) -> U32 { match move o { Some(n) if c || eat(move x) => n, _ => 0 } }   //~ E0901
+
+// ------------------------------------------------------------------ the heading is borrowed or a call
+
+pub fn borrowed_heading(o: Option[U32], move x: Buf[F32]) -> U32 { match o { Some(n) if eat(move x) => n, _ => 0 } }   //~ E0601
+
+pub rt fn rt_borrowed_heading(o: Option[U32], move x: Buf[F32]) -> U32 { match o { Some(n) if eat(move x) => n, _ => 0 } }   //~ E0901
+
+pub fn borrowed_heading_second(o: Option[U32], move x: Buf[F32]) -> U32 { match o { Some(n) if n > 4 => n, Some(m) if eat(move x) => m, _ => 0 } }   //~ E0601
+
+pub rt fn rt_borrowed_heading_second(o: Option[U32], move x: Buf[F32]) -> U32 { match o { Some(n) if n > 4 => n, Some(m) if eat(move x) => m, _ => 0 } }   //~ E0901
+
+pub rt fn rt_literal_heading(n: U32, move x: Buf[F32]) -> U32 { match n { k if eat(move x) => k, _ => 0 } }   //~ E0901

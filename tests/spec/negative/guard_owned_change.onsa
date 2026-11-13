@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§5.4", "§7"]
+
+// W6-02 U2b/t, S-1039 (§5.1: "`for` と `match` の腕の束縛も、所有するもの（§5.4）を含めて変更できない（E0701）"; §7: "変更（代入・`inout`・`!`）は所有の腕の束縛が書き換えられない
+// ので既に E0701"): the change of the binding of an arm of an owned `match` (`match move o`, `match f(...)`) in a guard or in the body is an E0701, not an E0715 (E0715 is for
+// the consumption in the guard of an owned `match`, negative/guard_owned_consume.onsa, and the change of the subject of a borrowed one, negative/match_guard_change.onsa). The binding
+// is read-only whoever owns it: the guard passes it as `inout` or calls a `!` method on it. This version already reports these and the case keeps them next to the E0715 of the
+// consumption. One error per function (P-01).
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+impl Holder {
+  pub fn clear(inout self) -> Bool { true }
+}
+
+pub fn bump(inout b: Buf[F32]) -> Bool { true }
+
+pub fn mk() -> Option[Buf[F32]] uses {Alloc} { Some(Buf.zeroed(2)) }
+
+pub fn mk_h() -> Option[Holder] uses {Alloc} { Some(Holder { buf: Buf.zeroed(2), gain: 0.5 }) }
+
+pub fn g_inout(move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(b) if bump(inout b) => Some(move b), Some(c) => Some(move c), None => None } }   //~ E0701
+
+pub fn g_inout_wild(move o: Option[Buf[F32]]) -> Option[Buf[F32]] uses {Alloc} { match move o { Some(b) if bump(inout b) => Some(move b), _ => None } }   //~ E0701
+
+pub fn g_bang(move o: Option[Holder]) -> Option[Holder] { match move o { Some(h) if h.clear!() => Some(move h), Some(k) => Some(move k), None => None } }   //~ E0701
+
+pub fn g_inout_temp() -> Option[Buf[F32]] uses {Alloc} { match mk() { Some(b) if bump(inout b) => Some(move b), Some(c) => Some(move c), None => None } }   //~ E0701
+
+pub fn g_bang_temp() -> Option[Holder] uses {Alloc} { match mk_h() { Some(h) if h.clear!() => Some(move h), Some(k) => Some(move k), None => None } }   //~ E0701
+
+pub fn g_and_right(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(b) if c && bump(inout b) => Some(move b), Some(d) => Some(move d), None => None } }   //~ E0701
+
+pub fn body_inout(move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(b) => if bump(inout b) { Some(move b) } else { None }, None => None } }   //~ E0701
+
+pub fn body_bang(move o: Option[Holder]) -> Option[Holder] { match move o { Some(h) => if h.clear!() { Some(move h) } else { None }, None => None } }   //~ E0701

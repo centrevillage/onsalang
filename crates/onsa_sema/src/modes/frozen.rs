@@ -2,12 +2,15 @@
 //! S-798) and a borrowed `match` while a guard of it is (§7, R-110): no
 //! change of one of them, nor of a part of
 //! one, where a derived binding stands for the places it derives from
-//! (S-796).
+//! (S-796). The bindings of an arm of an owned `match` are held the same
+//! way while its guard is walked (§7, S-1039): no consumption of them.
 
 use onsa_diag::internal::bug;
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 
 use std::collections::BTreeSet;
+
+use onsa_syntax::ast::PatId;
 
 use super::check::Walker;
 use super::place::{Place, head_places, path_text};
@@ -17,9 +20,11 @@ use crate::body::LocalId;
 /// The places of a head the walk is in (`Head::For` or `Head::Match`), and
 /// the text of each (S-604: of each tail; a view's base, S-217); none at an
 /// owned row. With the roots of each ([`super::place::Deps::origins`]).
+/// `arm`: the bindings of an arm of an owned `match` instead, and where each is.
 pub(super) struct Frozen {
     head: Head,
     places: Vec<(Place, Span, BTreeSet<LocalId>)>,
+    arm: bool,
 }
 
 impl Walker<'_> {
@@ -35,7 +40,19 @@ impl Walker<'_> {
             let roots = self.deps.origins(p.root);
             (p, at, roots)
         });
-        Some(Frozen { head, places: places.collect() })
+        Some(Frozen { head, places: places.collect(), arm: false })
+    }
+
+    /// The frame of a guard of the arm `pat` of the owned `match` `head`
+    /// (§7, S-1039): its bindings, which own the value only once the arm is
+    /// chosen (a Dup one is copied where it is consumed: no change).
+    pub(super) fn arm_frame(&self, head: Head, pat: PatId) -> Frozen {
+        let mut places = Vec::new();
+        self.each_local(pat, &mut |l| {
+            let whole = Place { root: l, proj: Vec::new() };
+            places.push((whole, self.info.locals[l.0 as usize].span, BTreeSet::from([l])));
+        });
+        Frozen { head, places, arm: true }
     }
 
     /// Walk `f` in the frame `held` (pushed, then popped and kept for the
@@ -54,7 +71,7 @@ impl Walker<'_> {
     /// derives from. The caller changes no state then (S-798).
     pub(super) fn held(&mut self, w: &Place, at: Span, taken: Option<&Place>) -> bool {
         let hits = self.hits(w);
-        let Some((head, p, first)) = hits.first() else { return false };
+        let Some(&(head, ref p, first, arm)) = hits.first() else { return false };
         let what = match taken {
             Some(t) => {
                 let whole = path_text(&self.info.locals[w.root.0 as usize].name, &w.proj);
@@ -62,12 +79,17 @@ impl Walker<'_> {
             }
             None => format!("`{}`", self.place_text(at, &[], w)),
         };
-        let ((place, section, _, rule), over) = (words(*head, *first), self.place_text(*first, &[], p));
-        let message = format!("cannot change {what} in {place} `{over}`, which it overlaps ({section})");
+        let ((place, section, _, rule), over) = (words(head, arm, first), self.place_text(first, &[], p));
+        let message = match arm {
+            false => format!("cannot change {what} in {place} `{over}`, which it overlaps ({section})"),
+            true => format!(
+                "cannot consume {what} in {place}: `{over}` owns its value only once the arm is chosen ({section})"
+            ),
+        };
         let mut d = Diagnostic::new(Stage::Modes, Code::E0715, at, message).with_rule(rule);
         let mut bound = Vec::new();
-        for (head, p, span) in &hits {
-            d = d.with_note(*span, words(*head, *span).2);
+        for &(head, ref p, span, arm) in &hits {
+            d = d.with_note(span, words(head, arm, span).2);
             if self.deps.indexed(p.root) && !bound.contains(&p.root) {
                 bound.push(p.root);
                 let (b, note) = self.bound_note(p.root);
@@ -85,23 +107,30 @@ impl Walker<'_> {
     }
 
     /// The places the frames hold that `w` overlaps, outermost first, with
-    /// the head of each frame.
-    fn hits(&self, w: &Place) -> Vec<(Head, Place, Span)> {
+    /// the head of each frame and whether it is of an arm.
+    fn hits(&self, w: &Place) -> Vec<(Head, Place, Span, bool)> {
         // A place of no root in common is passed over before `meets` (its ways are long).
         let mine = self.deps.origins(w.root);
         (self.inside.frozen.iter())
-            .flat_map(|f| f.places.iter().map(move |p| (f.head, p)))
-            .filter(|(_, (p, _, o))| !mine.is_disjoint(o) && self.deps.meets(w, p))
-            .map(|(head, (p, at, _))| (head, p.clone(), *at))
+            .flat_map(|f| f.places.iter().map(move |p| (f.head, p, f.arm)))
+            .filter(|(_, (p, _, o), _)| !mine.is_disjoint(o) && self.deps.meets(w, p))
+            .map(|(head, (p, at, _), arm)| (head, p.clone(), *at, arm))
             .collect()
     }
 }
 
-/// The words of an E0715 of a frame of `head` (holding a place at `at`):
-/// where the change is, the section of the rule, the note at a place it
-/// holds, and the rule. Only a `for` and a `match` make frames.
-fn words(head: Head, at: Span) -> (&'static str, &'static str, &'static str, &'static str) {
+/// The words of an E0715 of a frame of `head` (holding a place at `at`;
+/// `arm`: a binding of an arm of an owned `match`): where the change is,
+/// the section of the rule, the note at a place it holds, and the rule.
+/// Only a `for` and a `match` make frames.
+fn words(head: Head, arm: bool, at: Span) -> (&'static str, &'static str, &'static str, &'static str) {
     match head {
+        Head::Match { .. } if arm => (
+            "a guard of a `match`",
+            "§7",
+            "bound by this arm",
+            "if the guard is false, the later arms are tried on the same value; consume it in the arm's body (§7)",
+        ),
         Head::Match { .. } => (
             "a guard of a `match` on",
             "§7",

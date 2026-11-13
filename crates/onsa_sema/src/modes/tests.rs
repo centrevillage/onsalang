@@ -3442,6 +3442,34 @@ pub fn points(c: Bool, move a: Buf[F32], move b: Buf[F32], n: U32) -> U32 uses {
     assert_eq!(points, [("d", true, false), ("x", false, true), ("a", false, false), ("b", true, false)]);
 }
 
+/// R-32 (§5.4, §12.2): the binding of an owned `for` ends with each
+/// iteration, its point at the end of the body (as a block's, D6); S-1039
+/// (§7): a guard that is false goes back to the head with no point of the
+/// arm's binding, which the later arm binds again.
+#[test]
+fn the_drop_points_of_a_for_and_of_a_guard() {
+    let (src, a, def) = clean(
+        "pub fn each(c: Bool, move xs: [Buf[F32]; 2]) uses {Alloc} {
+  for s in move xs { if c { take(move s) } }
+}
+pub fn guarded(move o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match move o { Some(b) if len_of(b) > 0 => len_of(b), Some(v) => { take(move v)
+  0 }, None => 0 }
+}
+",
+    );
+    let at_of = |n: &str| {
+        let info = &a.bodies[&def(&a, n)];
+        let name = |d: &crate::body::DropPoint| match d.what {
+            crate::body::Dropped::End(l) => info.locals[l.0 as usize].name.clone(),
+            crate::body::Dropped::Rest(_) => panic!("no field is taken out"),
+        };
+        (info.drops.iter()).map(|d| (name(d), &src[d.at.start as usize - 1..d.at.end as usize])).collect::<Vec<_>>()
+    };
+    assert_eq!(at_of("each"), [("s".to_string(), "}")]);
+    assert_eq!(at_of("guarded"), [("b".to_string(), ")")]);
+}
+
 /// S-85 (§5.2): a field taken out is kept once (a loop's summary walks it
 /// too, and keeps it not), with its root and path, for the stages after.
 #[test]

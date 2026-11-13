@@ -1,0 +1,96 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§5.4", "§7", "§8.1", "§10", "§12.2"]
+
+// W6-02 U2b/t, S-1039, R-454 (§7: "所有の `match` のガードでは、その腕の束縛を消費できない … Dup の値は複製して読むので当たらない（§5.2）。… 消費は腕の本体に書く"):
+// the contrasts of negative/guard_owned_consume.onsa, negative/guard_owned_consume_next_arm.onsa and negative/guard_owned_consume_temp.onsa. Every function is legal and stays
+// legal after the consumption of the binding of an arm in the guard of an owned `match` is an E0715: a guard that only reads the binding (`b.len() > 0`, a field, a
+// call that borrows it, `&&` and `||`), the guard that is false so that a later arm binds the same value and moves it (an arm of a variant with a payload in
+// every arm, so that nothing is left to drop, which an `rt fn` needs: an arm `_` would drop the value that it leaves, §5.4), a heading that is a call or a
+// binding, the binding of a struct or a tuple, the guard of a borrowed `match` that reads, the consumption in the body of the arm (the way that §7 gives to write
+// it), a Dup value (`Str`) that the guard copies (§5.2, `uses {Alloc}` for its drop), and an outer local that the guard moves in a function with `uses {Alloc}` (the
+// drop on the path where the guard is not evaluated is allowed; without it the function is an E0601 or an E0901 already in this version, which is in
+// negative/guard_owned_outer_local.onsa). This version already accepts all of them.
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub rt fn pass(move o: Option[Buf[F32]]) -> Option[Buf[F32]] { o }
+
+pub rt fn pass_h(move o: Option[Holder]) -> Option[Holder] { o }
+
+pub fn eat(move b: Buf[F32]) -> Bool uses {Alloc} { true }
+
+pub fn keep(move s: Str) -> Bool uses {Alloc} { true }
+
+pub fn mk() -> Option[Buf[F32]] uses {Alloc} { Some(Buf.zeroed(2)) }
+
+pub rt fn len_of(b: Buf[F32]) -> U32 { b.len() }
+
+// ------------------------------------------------------------------ the guard reads the binding, a later arm binds the same value and moves it
+
+pub rt fn read_then_next(move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(b) if b.len() > 0 => Some(move b), Some(c) => Some(move c), None => None } }
+
+pub rt fn read_three_arms(move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(b) if b.len() > 4 => Some(move b), Some(c) if c.len() > 1 => Some(move c), Some(d) => Some(move d), None => None } }
+
+pub rt fn read_by_call(move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(b) if len_of(b) > 0 => Some(move b), Some(c) => Some(move c), None => None } }
+
+pub rt fn read_and(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(b) if c && b.len() > 0 => Some(move b), Some(d) => Some(move d), None => None } }
+
+pub rt fn read_or(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(b) if c || b.len() > 0 => Some(move b), Some(d) => Some(move d), None => None } }
+
+pub rt fn read_field(move o: Option[Holder]) -> Option[Holder] { match move o { Some(h) if h.buf.len() > 0 => Some(move h), Some(k) => Some(move k), None => None } }
+
+pub rt fn read_copy_field(move o: Option[Holder]) -> Option[Holder] { match move o { Some(h) if h.gain > 0.0 => Some(move h), Some(k) => Some(move k), None => None } }
+
+pub rt fn read_in_branch(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { if c { match move o { Some(b) if b.len() > 0 => Some(move b), Some(d) => Some(move d), None => None } } else { o } }
+
+// ------------------------------------------------------------------ the heading is a call, a binding, a struct or a tuple
+
+pub rt fn read_call_heading(move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match pass(move o) { Some(b) if b.len() > 0 => Some(move b), Some(c) => Some(move c), None => None } }
+
+pub rt fn read_call_heading_struct(move o: Option[Holder]) -> Option[Holder] { match pass_h(move o) { Some(h) if h.gain > 0.0 => Some(move h), Some(k) => Some(move k), None => None } }
+
+pub rt fn read_binding_heading(move b: Buf[F32]) -> Option[Buf[F32]] { match move b { t if t.len() > 0 => Some(move t), u => Some(move u) } }
+
+pub rt fn read_tuple_heading(move p: (Buf[F32], U32)) -> Option[Buf[F32]] { match move p { (b, n) if n > 0 => Some(move b), (c, _) => Some(move c) } }
+
+pub rt fn read_struct_heading(move h: Holder) -> Option[Buf[F32]] { match move h { Holder { buf: b, gain: g } if g > 0.0 => Some(move b), Holder { buf: c, gain: _ } => Some(move c) } }
+
+// ------------------------------------------------------------------ the guard of a borrowed `match` that reads
+
+pub rt fn borrowed_read(q: Option[Buf[F32]]) -> U32 { match q { Some(b) if b.len() > 0 => b.len(), _ => 0 } }
+
+pub rt fn borrowed_read_two(q: Option[Buf[F32]]) -> U32 { match q { Some(b) if b.len() > 4 => 1, Some(c) if c.len() > 1 => 2, _ => 0 } }
+
+pub rt fn borrowed_struct(h: Holder) -> U32 { match h { Holder { buf: b, gain: _ } if b.len() > 0 => 1, _ => 0 } }
+
+// ------------------------------------------------------------------ the consumption in the body of the arm
+
+pub fn body_consumes(move o: Option[Buf[F32]]) -> U32 uses {Alloc} { match move o { Some(b) => if eat(move b) { 1 } else { 0 }, None => 0 } }
+
+pub fn body_consumes_temp() -> U32 uses {Alloc} { match mk() { Some(b) => if eat(move b) { 1 } else { 0 }, None => 0 } }
+
+pub fn body_after_guard(move o: Option[Buf[F32]]) -> U32 uses {Alloc} { match move o { Some(b) if b.len() > 0 => if eat(move b) { 1 } else { 2 }, Some(c) => if eat(move c) { 3 } else { 4 }, None => 0 } }
+
+pub fn body_after_guard_wild(move o: Option[Buf[F32]]) -> U32 uses {Alloc} { match move o { Some(b) if b.len() > 0 => if eat(move b) { 1 } else { 2 }, _ => 0 } }
+
+pub fn guard_false_wild(move o: Option[Buf[F32]]) -> U32 uses {Alloc} { match move o { Some(b) if b.len() > 0 => 1, _ => 0 } }
+
+// ------------------------------------------------------------------ a Dup value that the guard copies
+
+pub fn dup_guard(move o: Option[Str]) -> U32 uses {Alloc} { match move o { Some(s) if keep(s) => 1, Some(t) => t.len(), None => 0 } }
+
+pub fn dup_guard_wild(move o: Option[Str]) -> U32 uses {Alloc} { match move o { Some(s) if keep(s) => 1, _ => 0 } }
+
+// ------------------------------------------------------------------ an outer local that the guard moves, in a function with `uses {Alloc}`
+
+pub fn outer_owned(move o: Option[U32], move x: Buf[F32]) -> U32 uses {Alloc} { match move o { Some(n) if eat(move x) => n, _ => 0 } }
+
+pub fn outer_borrowed(o: Option[U32], move x: Buf[F32]) -> U32 uses {Alloc} { match o { Some(n) if eat(move x) => n, _ => 0 } }
+
+pub fn outer_and(c: Bool, move o: Option[U32], move x: Buf[F32]) -> U32 uses {Alloc} { match move o { Some(n) if c && eat(move x) => n, _ => 0 } }
+
+pub rt fn outer_read(move o: Option[U32], x: Buf[F32]) -> U32 { match move o { Some(n) if x.len() > n => n, _ => 0 } }

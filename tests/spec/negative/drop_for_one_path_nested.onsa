@@ -1,0 +1,87 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§5.4", "§7", "§8.1", "§10", "§12.2"]
+
+// W6-02 U2b/t, R-32 (§5.4: "`for s in move xs`: 所有 / 要素ごとに起きる"; "この表は、文法の全ての束縛の場所を覆う。分解したパターンの各束縛は、
+// その行の種類を受け継ぐ"; §12.2: "所有する Shared 値・`Buf` と、それらを含む値の破棄: 要る"; §10 rule 1): the same rule as
+// negative/drop_for_one_path.onsa, for the binding that is not a plain name of a `Buf`: the binding of a loop that is nested in another
+// `for` (the inner binding, and the outer binding `row`, an array of `Buf` that is live on the path that does not iterate it), a loop in
+// a branch, the names of a pattern of the binding (a tuple, a struct: each name is an owned binding, and the one that is moved on one path
+// only is the error; the other one is moved by the condition, so that it is read and the error is from one binding), and an element
+// that is a struct with a `Buf` or an `Option` of a `Buf` (the drop of the whole element needs `Alloc`, §12.2). The container
+// of a fixed-length array needs no drop, so the error is from the binding alone. A function without `uses {Alloc}` is an E0601 and an
+// `rt fn` an E0901. This version counts a binding moved anywhere in the body as moved on every path, so none of these is reported
+// today (R-32). The helpers are `rt` functions that drop their argument, so their own E0901 is reported today and after (the same as
+// negative/drop_for_one_path.onsa). The callers are one-liners, so that the line does not depend on where the drop is reported
+// (S-783). One error per function (P-01).
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub rt fn sink(move b: Buf[F32]) {}   //~ E0901
+
+pub rt fn eat(move b: Buf[F32]) -> Bool { true }   //~ E0901
+
+pub rt fn sink_h(move h: Holder) {}   //~ E0901
+
+pub rt fn sink_o(move o: Option[Buf[F32]]) {}   //~ E0901
+
+// ------------------------------------------------------------------ a loop in a loop
+
+pub fn inner_binding(c: Bool, move xss: [[Buf[F32]; 2]; 2]) { for row in move xss { for s in move row { if c { sink(move s) } } } }   //~ E0601
+
+pub rt fn rt_inner_binding(c: Bool, move xss: [[Buf[F32]; 2]; 2]) { for row in move xss { for s in move row { if c { sink(move s) } } } }   //~ E0901
+
+pub fn inner_short_circuit(c: Bool, move xss: [[Buf[F32]; 2]; 2]) { for row in move xss { for s in move row { if c && eat(move s) {} } } }   //~ E0601
+
+pub rt fn rt_inner_match(n: U32, move xss: [[Buf[F32]; 2]; 2]) { for row in move xss { for s in move row { match n { 0 => sink(move s), _ => {} } } } }   //~ E0901
+
+pub fn outer_binding(c: Bool, move xss: [[Buf[F32]; 2]; 2]) { for row in move xss { if c { for s in move row { sink(move s) } } } }   //~ E0601
+
+pub rt fn rt_outer_binding(c: Bool, move xss: [[Buf[F32]; 2]; 2]) { for row in move xss { if c { for s in move row { sink(move s) } } } }   //~ E0901
+
+pub fn outer_binding_else(c: Bool, move xss: [[Buf[F32]; 2]; 2]) { for row in move xss { if c {} else { for s in move row { sink(move s) } } } }   //~ E0601
+
+// ------------------------------------------------------------------ a loop in a branch
+
+pub fn loop_in_branch(c: Bool, d: Bool, move xs: [Buf[F32]; 2]) { if c { for s in move xs { if d { sink(move s) } } } else { for s in move xs { sink(move s) } } }   //~ E0601
+
+pub rt fn rt_loop_in_branch(c: Bool, d: Bool, move xs: [Buf[F32]; 2]) { if c { for s in move xs { sink(move s) } } else { for s in move xs { if d { sink(move s) } } } }   //~ E0901
+
+pub fn loop_in_arm(n: U32, c: Bool, move xs: [Buf[F32]; 2]) { match n { 0 => { for s in move xs { if c { sink(move s) } } }, _ => { for s in move xs { sink(move s) } } } }   //~ E0601
+
+// ------------------------------------------------------------------ the names of a pattern
+
+pub fn tuple_second_unmoved(c: Bool, move ps: [(Buf[F32], Buf[F32]); 2]) { for (a, b) in move ps { if eat(move a) && c { sink(move b) } } }   //~ E0601
+
+pub rt fn rt_tuple_second_unmoved(c: Bool, move ps: [(Buf[F32], Buf[F32]); 2]) { for (a, b) in move ps { if eat(move a) && c { sink(move b) } } }   //~ E0901
+
+pub fn tuple_first_unmoved(c: Bool, move ps: [(Buf[F32], Buf[F32]); 2]) { for (a, b) in move ps { if eat(move b) && c { sink(move a) } } }   //~ E0601
+
+pub rt fn rt_tuple_first_unmoved(c: Bool, move ps: [(Buf[F32], Buf[F32]); 2]) { for (a, b) in move ps { if eat(move b) && c { sink(move a) } } }   //~ E0901
+
+pub fn tuple_with_copy(move ps: [(Buf[F32], U32); 2]) { for (a, k) in move ps { if k > 0 { sink(move a) } } }   //~ E0601
+
+pub rt fn rt_tuple_with_copy(move ps: [(Buf[F32], U32); 2]) { for (a, k) in move ps { if k > 0 { sink(move a) } } }   //~ E0901
+
+pub fn tuple_arms(n: U32, move ps: [(Buf[F32], Buf[F32]); 2]) { for (a, b) in move ps { if eat(move b) { match n { 0 => sink(move a), _ => {} } } else { sink(move a) } } }   //~ E0601
+
+pub fn struct_field(move hs: [Holder; 2]) { for Holder { buf: b, gain: g } in move hs { if g > 0.0 { sink(move b) } } }   //~ E0601
+
+pub rt fn rt_struct_field(move hs: [Holder; 2]) { for Holder { buf: b, gain: g } in move hs { if g > 0.0 { sink(move b) } } }   //~ E0901
+
+pub rt fn rt_struct_field_else(move hs: [Holder; 2]) { for Holder { buf: b, gain: g } in move hs { if g > 0.0 {} else { sink(move b) } } }   //~ E0901
+
+// ------------------------------------------------------------------ the element is a struct or an `Option` that holds a `Buf`
+
+pub fn struct_element(c: Bool, move hs: [Holder; 2]) { for h in move hs { if c { sink_h(move h) } } }   //~ E0601
+
+pub rt fn rt_struct_element(c: Bool, move hs: [Holder; 2]) { for h in move hs { if c { sink_h(move h) } } }   //~ E0901
+
+pub fn struct_element_arms(n: U32, move hs: [Holder; 2]) { for h in move hs { match n { 0 => sink_h(move h), _ => {} } } }   //~ E0601
+
+pub fn option_element(c: Bool, move os: [Option[Buf[F32]]; 2]) { for o in move os { if c { sink_o(move o) } } }   //~ E0601
+
+pub rt fn rt_option_element(c: Bool, move os: [Option[Buf[F32]]; 2]) { for o in move os { if c { sink_o(move o) } } }   //~ E0901

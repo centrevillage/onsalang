@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.1", "§5.2", "§5.4", "§7"]
+// fixes = 0
+
+// W6-02 U2b/t, S-1039, R-454 (§7: "所有の `match`（`match move x` と場所でない対象、§5.4）のガードでは、その腕の束縛を消費できない（… E0715。修正候補は無い）。
+// 腕が選ばれるまで対象の値は一つのままで、ガードが偽なら後の腕が同じ値で判定される"): the same forms as negative/guard_owned_consume.onsa, with the later arm that
+// binds the same value and uses it (a read, a consumption in the body of the arm: the way to write the consumption that §7 gives is the body of the arm). This is the
+// case that R-454 found: if the guard moves `b` and is false, `Some(c)` binds the value that was moved. This version accepts all of them. The error is at the
+// consumption in the guard, there is no candidate (`fixes = 0`), and the later arm is not a second error. The functions are one-liners (the `let` form is the only
+// block: its error is at its `let` line, the only line that consumes `b`), so that the line does not depend on where the drop is reported (S-783). One error per
+// function (P-01).
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+impl Holder {
+  pub fn eat_self(move self) -> Bool uses {Alloc} { true }
+}
+
+pub fn eat(move b: Buf[F32]) -> Bool uses {Alloc} { true }
+
+pub fn len_of(b: Buf[F32]) -> U32 { b.len() }
+
+// ------------------------------------------------------------------ the forms of the consumption (the heading is `move o`, the later arm binds the same value)
+
+pub fn n_move(move o: Option[Buf[F32]]) -> U32 uses {Alloc} { match move o { Some(b) if eat(move b) => 1, Some(c) => len_of(c), None => 0 } }   //~ E0715
+
+pub fn n_move_body(move o: Option[Buf[F32]]) -> U32 uses {Alloc} { match move o { Some(b) if eat(move b) => 1, Some(c) => if eat(move c) { 2 } else { 3 }, None => 0 } }   //~ E0715
+
+pub fn n_field(move o: Option[Holder]) -> U32 uses {Alloc} { match move o { Some(h) if eat(move h.buf) => 1, Some(k) => len_of(k.buf), None => 0 } }   //~ E0715
+
+pub fn n_heading(move o: Option[Buf[F32]]) -> U32 uses {Alloc} { match move o { Some(b) if (match move b { t => eat(move t) }) => 1, Some(c) => len_of(c), None => 0 } }   //~ E0715
+
+pub fn n_let_heading(move o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match move o {
+    Some(b) if {
+      let c = move b   //~ E0715
+      c.len() > 0
+    } => 1,
+    Some(d) => len_of(d),
+    None => 0,
+  }
+}
+
+pub fn n_try(move o: Option[Option[Buf[F32]]]) -> Option[U32] uses {Alloc} { match move o { Some(r) if eat(r?) => Some(1), Some(s) => if eat(s?) { Some(2) } else { Some(3) }, None => Some(0) } }   //~ E0715
+
+pub fn n_self(move o: Option[Holder]) -> U32 uses {Alloc} { match move o { Some(h) if h.eat_self() => 1, Some(k) => if k.eat_self() { 2 } else { 3 }, None => 0 } }   //~ E0715
+
+pub fn n_return(c: Bool, move o: Option[Buf[F32]]) -> Buf[F32] uses {Alloc} { match move o { Some(b) if (if c { return b } else { false }) => Buf.zeroed(1), Some(d) => d, None => Buf.zeroed(0) } }   //~ E0715
+
+// ------------------------------------------------------------------ the right operand of `&&` and `||`
+
+pub fn n_and_right(c: Bool, move o: Option[Buf[F32]]) -> U32 uses {Alloc} { match move o { Some(b) if c && eat(move b) => 1, Some(d) => len_of(d), None => 0 } }   //~ E0715
+
+pub fn n_or_right(c: Bool, move o: Option[Buf[F32]]) -> U32 uses {Alloc} { match move o { Some(b) if c || eat(move b) => 1, Some(d) => len_of(d), None => 0 } }   //~ E0715
+
+pub fn n_and_self(c: Bool, move o: Option[Holder]) -> U32 uses {Alloc} { match move o { Some(h) if c && h.eat_self() => 1, Some(k) => len_of(k.buf), None => 0 } }   //~ E0715
+
+// ------------------------------------------------------------------ the kinds of pattern, and more than two arms
+
+pub fn n_second_guard(move o: Option[Buf[F32]]) -> U32 uses {Alloc} { match move o { Some(b) if eat(move b) => 1, Some(c) if c.len() > 0 => 2, Some(d) => len_of(d), None => 0 } }   //~ E0715
+
+pub fn n_third_guard(move o: Option[Buf[F32]]) -> U32 uses {Alloc} { match move o { Some(b) if b.len() > 4 => 1, Some(c) if eat(move c) => 2, Some(d) => len_of(d), None => 0 } }   //~ E0715
+
+pub fn n_struct_pattern(move h: Holder) -> U32 uses {Alloc} { match move h { Holder { buf: b, gain: _ } if eat(move b) => 1, Holder { buf: c, gain: _ } => len_of(c) } }   //~ E0715
+
+pub fn n_tuple_pattern(move p: (Buf[F32], U32)) -> U32 uses {Alloc} { match move p { (b, n) if eat(move b) => n, (c, m) => m + len_of(c) } }   //~ E0715
+
+pub fn n_binding_pattern(move b: Buf[F32]) -> U32 uses {Alloc} { match move b { t if eat(move t) => 1, u => len_of(u) } }   //~ E0715
+
+pub fn n_nested_pattern(move o: Option[(Buf[F32], U32)]) -> U32 uses {Alloc} { match move o { Some((b, n)) if eat(move b) => n, Some((c, m)) => m + len_of(c), None => 0 } }   //~ E0715
+
+pub fn n_in_branch(c: Bool, move o: Option[Buf[F32]]) -> U32 uses {Alloc} { if c { match move o { Some(b) if eat(move b) => 1, Some(d) => len_of(d), None => 0 } } else { 2 } }   //~ E0715

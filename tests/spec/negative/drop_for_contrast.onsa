@@ -1,0 +1,126 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.4", "§7", "§8.1", "§9.2", "§10", "§12.2"]
+
+// W6-02 U2b/t, R-32 (§5.4, §12.2): the contrasts of negative/drop_for_one_path.onsa and negative/drop_for_one_path_nested.onsa. Every
+// caller below is legal and stays legal after a drop is counted at the end of each iteration of `for s in move xs`: a binding that is
+// moved on every path of the body (an `if`/`else`, the arms of a `match`, an `else if` chain, the left operand of `&&` and `||`, which
+// is always evaluated, a nested loop, the names of a tuple or struct pattern, a struct or an `Option` element), a borrowed `for`
+// (`for s in xs`, §5.4: no drop), a Copy element, a function with `uses {Alloc}` (the drop is allowed), and a path that is left by a panic
+// (§9.2, §12.2: "panic で抜ける道の、生きている値の破棄: 要らない"). The helpers `sink`, `eat`, `sink_h` and `sink_o` are `rt` functions that
+// drop their argument, so their own E0901 is reported (an `rt` function cannot consume a `Buf` without a drop of its own; a caller of a
+// function that needs `Alloc` needs it too, so the moves on every path cannot be written with a helper that is legal). This version
+// already reports exactly these. The last four functions are the forms that this version already reports and that stay reported: the
+// owned binding of the arm of a `match move` in the body (`t`, `b`), which is a binding of the arm and not of the loop
+// (negative/drop_end_one_path_unit.onsa has the same rule for the arm). The callers are one-liners (S-783).
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub rt fn sink(move b: Buf[F32]) {}   //~ E0901
+
+pub rt fn eat(move b: Buf[F32]) -> Bool { true }   //~ E0901
+
+pub rt fn sink_h(move h: Holder) {}   //~ E0901
+
+pub rt fn sink_o(move o: Option[Buf[F32]]) {}   //~ E0901
+
+pub fn alloc_sink(move b: Buf[F32]) uses {Alloc} {}
+
+pub fn alloc_eat(move b: Buf[F32]) -> Bool uses {Alloc} { true }
+
+// ------------------------------------------------------------------ moved on every path
+
+pub fn both_branches(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c { sink(move s) } else { sink(move s) } } }
+
+pub rt fn rt_both_branches(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c { sink(move s) } else { sink(move s) } } }
+
+pub fn chain_all(c: Bool, d: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c { sink(move s) } else if d { sink(move s) } else { sink(move s) } } }
+
+pub rt fn rt_arms_all(n: U32, move xs: [Buf[F32]; 2]) { for s in move xs { match n { 0 => sink(move s), 1 => sink(move s), _ => sink(move s) } } }
+
+pub fn nested_if_all(c: Bool, d: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c { if d { sink(move s) } else { sink(move s) } } else { sink(move s) } } }
+
+pub fn unconditional(move xs: [Buf[F32]; 2]) { for s in move xs { sink(move s) } }
+
+pub rt fn rt_unconditional(move xs: [Buf[F32]; 2]) { for s in move xs { sink(move s) } }
+
+pub fn left_operand(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if eat(move s) && c {} } }
+
+pub rt fn rt_left_operand_or(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if eat(move s) || c {} } }
+
+pub fn nested_loops(move xss: [[Buf[F32]; 2]; 2]) { for row in move xss { for s in move row { sink(move s) } } }
+
+pub rt fn rt_nested_loops_branch(c: Bool, move xss: [[Buf[F32]; 2]; 2]) { for row in move xss { for s in move row { if c { sink(move s) } else { sink(move s) } } } }
+
+pub fn loop_in_both_branches(c: Bool, move xs: [Buf[F32]; 2]) { if c { for s in move xs { sink(move s) } } else { for s in move xs { sink(move s) } } }
+
+// ------------------------------------------------------------------ the names of a pattern, a struct or an `Option` element
+
+pub fn tuple_all(move ps: [(Buf[F32], Buf[F32]); 2]) { for (a, b) in move ps { if eat(move a) { sink(move b) } else { sink(move b) } } }
+
+pub rt fn rt_tuple_all(move ps: [(Buf[F32], Buf[F32]); 2]) { for (a, b) in move ps { if eat(move a) { sink(move b) } else { sink(move b) } } }
+
+pub fn tuple_with_copy(move ps: [(Buf[F32], U32); 2]) { for (a, k) in move ps { if k > 0 { sink(move a) } else { sink(move a) } } }
+
+pub fn struct_pattern(move hs: [Holder; 2]) { for Holder { buf: b, gain: g } in move hs { if g > 0.0 { sink(move b) } else { sink(move b) } } }
+
+pub rt fn rt_struct_pattern(move hs: [Holder; 2]) { for Holder { buf: b, gain: g } in move hs { if g > 0.0 { sink(move b) } else { sink(move b) } } }
+
+pub fn struct_element(c: Bool, move hs: [Holder; 2]) { for h in move hs { if c { sink_h(move h) } else { sink_h(move h) } } }
+
+pub rt fn rt_option_element(move os: [Option[Buf[F32]]; 2]) { for o in move os { sink_o(move o) } }
+
+pub fn option_element_arms(move os: [Option[Buf[F32]]; 2]) { for o in move os { match move o { Some(b) => sink(move b), None => {} } } }
+
+pub rt fn rt_option_element_arms(move os: [Option[Buf[F32]]; 2]) { for o in move os { match move o { Some(b) => sink(move b), None => {} } } }
+
+// ------------------------------------------------------------------ a borrowed `for` and a Copy element: no drop
+
+pub fn borrowed_for(c: Bool, xs: [Buf[F32]; 2]) { for s in xs { if c && s.len() > 0 {} } }
+
+pub rt fn rt_borrowed_for(c: Bool, xs: [Buf[F32]; 2]) { for s in xs { if c && s.len() > 0 {} } }
+
+pub rt fn rt_borrowed_for_nested(c: Bool, xss: [[Buf[F32]; 2]; 2]) { for row in xss { for s in row { if c && s.len() > 0 {} } } }
+
+pub rt fn rt_copy_elements(c: Bool, move ks: [U32; 2]) { for k in move ks { if c && k > 0 {} } }
+
+pub rt fn rt_copy_elements_borrowed(c: Bool, ks: [U32; 2]) { for k in ks { if c && k > 0 {} } }
+
+pub rt fn rt_copy_pairs(c: Bool, move ps: [(U32, F32); 2]) { for (k, g) in move ps { if c && k > 0 && g > 0.0 {} } }
+
+// ------------------------------------------------------------------ `uses {Alloc}`: the drop on the other path is allowed
+
+pub fn alloc_no_else(c: Bool, move xs: [Buf[F32]; 2]) uses {Alloc} { for s in move xs { if c { alloc_sink(move s) } } }
+
+pub fn alloc_arms(n: U32, move xs: [Buf[F32]; 2]) uses {Alloc} { for s in move xs { match n { 0 => alloc_sink(move s), _ => {} } } }
+
+pub fn alloc_and_right(c: Bool, move xs: [Buf[F32]; 2]) uses {Alloc} { for s in move xs { if c && alloc_eat(move s) {} } }
+
+pub fn alloc_nested(c: Bool, move xss: [[Buf[F32]; 2]; 2]) uses {Alloc} { for row in move xss { if c { for s in move row { alloc_sink(move s) } } } }
+
+pub fn alloc_tuple(c: Bool, move ps: [(Buf[F32], Buf[F32]); 2]) uses {Alloc} { for (a, b) in move ps { if alloc_eat(move a) && c { alloc_sink(move b) } } }
+
+pub fn alloc_unused(move xs: [Buf[F32]; 2]) uses {Alloc} { for s in move xs { if s.len() > 0 {} } }
+
+// ------------------------------------------------------------------ the path that unmoved is left by a panic: no drop
+
+pub fn panic_other_path(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c { sink(move s) } else { panic("x") } } }
+
+pub rt fn rt_panic_other_path(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c { sink(move s) } else { panic("x") } } }
+
+pub rt fn rt_panic_in_arm(n: U32, move xs: [Buf[F32]; 2]) { for s in move xs { match n { 0 => sink(move s), 1 => panic("x"), _ => sink(move s) } } }
+
+pub fn panic_nested(c: Bool, d: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c { if d { sink(move s) } else { panic("x") } } else { sink(move s) } } }
+
+// ------------------------------------------------------------------ already reported: the binding of an arm in the body (the rule of the arm)
+
+pub fn arm_heading_binding(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { match move s { t => if c { sink(move t) } } } }   //~ E0601
+
+pub rt fn rt_arm_heading_binding(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { match move s { t => if c { sink(move t) } } } }   //~ E0901
+
+pub fn option_element_arm(c: Bool, move os: [Option[Buf[F32]]; 2]) { for o in move os { match move o { Some(b) => if c { sink(move b) }, None => {} } } }   //~ E0601
+
+pub rt fn rt_option_element_arm(c: Bool, move os: [Option[Buf[F32]]; 2]) { for o in move os { match move o { Some(b) => if c { sink(move b) }, None => {} } } }   //~ E0901

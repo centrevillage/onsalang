@@ -56,7 +56,8 @@ impl Run {
     }
 
     /// A `break` (`back`: a `continue`): the bindings declared in the loop
-    /// leave, then the state joins the loop's exit (or its back edge).
+    /// leave (no drop point until U3), then the state joins the loop's exit
+    /// (or its back edge).
     fn leave(&mut self, back: bool) {
         let paths = if back { &mut self.exits.cont } else { &mut self.exits.brk };
         self.cur.join_into(self.exits.at, paths, true);
@@ -106,15 +107,19 @@ impl Walker<'_> {
                 // matched, or one matched and its guard was false.
                 let (m, mut tried, mut out) = (r.cur.mark(), Paths::none(), Paths::none());
                 r.cur.join_into(m, &mut tried, false);
-                // A guard changes no place of the head (§7: E0715, `frozen.rs`).
+                // A guard changes no place of a borrowed head, and consumes
+                // no binding of its arm of an owned one (§7: E0715, `frozen.rs`).
                 let mut held = self.frame(subject);
                 for arm in arms {
                     r.cur.reset(m, &tried);
                     let outer = r.declared.len();
                     self.declare(r, arm.pat);
                     if let Some(g) = arm.guard {
-                        self.holding(&mut held, |w| w.expr(r, g, Pos::Read));
-                        r.cur.join_into(m, &mut tried, false);
+                        let mut arm_held = (head == Pos::Own).then(|| self.arm_frame(subject, arm.pat));
+                        let frame = if arm_held.is_some() { &mut arm_held } else { &mut held };
+                        self.holding(frame, |w| w.expr(r, g, Pos::Read));
+                        // False: back to the head, the arm's bindings out with no drop (S-1039).
+                        r.cur.join_into(m, &mut tried, true);
                     }
                     self.expr(r, arm.body, pos);
                     self.ends(r, &r.declared[outer..], ast.expr(arm.body).span);
@@ -243,7 +248,7 @@ impl Walker<'_> {
     /// exit (the end of the condition of a `while`, the head of a `for`, a
     /// `break`); the paths from the head to the back edge (the end of the
     /// body, a `continue`). A `for` declares its pattern at each iteration
-    /// (R-29).
+    /// (R-29), whose bindings end with it (R-32: their drop points).
     fn iterate(&mut self, r: &mut Run, (cond, pat, body): Loop) -> Paths {
         let exits = Exits { brk: Paths::none(), cont: Paths::none(), at: r.cur.mark() };
         let outer = replace(&mut r.exits, exits);
@@ -251,10 +256,13 @@ impl Walker<'_> {
             self.expr(r, c, Pos::Read);
         }
         r.cur.join_into(r.exits.at, &mut r.exits.brk, false);
+        let scope = r.declared.len();
         if let Some(p) = pat {
             self.declare(r, p);
         }
         self.expr(r, body, Pos::Read);
+        self.ends(r, &r.declared[scope..], self.ast.expr(body).span);
+        r.forget(scope);
         let Exits { brk, mut cont, at } = replace(&mut r.exits, outer);
         r.cur.join_into(at, &mut cont, false);
         r.cur.settle(at, &brk);
@@ -263,12 +271,12 @@ impl Walker<'_> {
 
     /// The drop points at the end of `scope`, of the locals `ls` it ends
     /// (R-32, §12.2): each owned one that may be live there, not Copy; none
-    /// where no path reaches (S-873). A `for`'s binding is U2b's.
+    /// where no path reaches (S-873).
     pub(super) fn ends(&mut self, r: &Run, ls: &[LocalId], scope: Span) {
         let info = self.info;
         for &l in ls {
             let local = &info.locals[l.0 as usize];
-            if !local.state.owned() || matches!(local.kind, LocalKind::For { .. }) {
+            if !local.state.owned() {
                 continue;
             }
             if let Some(sure) = r.cur.state().lives(l)
@@ -280,8 +288,7 @@ impl Walker<'_> {
     }
 
     /// The end of the body `root` walked in `r`: the drop points of the
-    /// parameters, and (as before W6-02, until U2b) of each owned binding of
-    /// a `for` not moved anywhere.
+    /// parameters.
     pub(super) fn body_end(&mut self, r: &Run, root: ExprId) {
         let info = self.info;
         let params = (0..info.locals.len() as u32).map(LocalId);
@@ -289,17 +296,6 @@ impl Walker<'_> {
             .filter(|l| matches!(info.locals[l.0 as usize].kind, LocalKind::Param(_) | LocalKind::SelfParam(_)))
             .collect();
         self.ends(r, &params, self.ast.expr(root).span);
-        for (i, local) in info.locals.iter().enumerate() {
-            let l = LocalId(i as u32);
-            if matches!(local.kind, LocalKind::For { .. })
-                && local.state.owned()
-                && !self.m.moved.contains(&l)
-                && self.kind_of(local.ty) != Some(Kind::Copy)
-            {
-                let point = DropPoint { at: local.span, what: Dropped::End(l), closure: None, sure: false };
-                self.m.drops.push(point);
-            }
-        }
     }
 
     /// A drop point met by the walk that reports, where a path reaches.

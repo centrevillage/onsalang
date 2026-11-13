@@ -1,7 +1,7 @@
 //! The entry of the modes stage: one walk of each body the stage reads,
 //! in source order, and its one diagnostic (§18.1).
 
-use onsa_diag::hash::{HashMap, HashSet};
+use onsa_diag::hash::HashMap;
 use onsa_diag::internal::bug;
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast::{Ast, ExprId, StmtId};
@@ -121,9 +121,6 @@ pub(super) struct Made {
     /// the depth of the loops).
     pub(super) loops: HashMap<StmtId, LoopSum>,
     pub(super) found: Vec<Diagnostic>,
-    /// The owned Affine locals a move made `Moved`, of which a `for`'s
-    /// binding is dropped unless it is one (as before W6-02, until U2b).
-    pub(super) moved: HashSet<LocalId>,
     /// The paths of fields taken out (S-85), by every walk: the E0704 after.
     takes: HashMap<Span, Place>,
     /// The drop points the walk that reports met ([`BodyInfo::drops`]).
@@ -295,8 +292,5 @@ impl<'a> Walker<'a> {
         }
         r.cur.change(l, |d| d.moved(l, at));
         self.change(r, whole, at, of);
-        if self.reports {
-            self.m.moved.insert(l);
-        }
     }
 }

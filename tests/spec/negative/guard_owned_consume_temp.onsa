@@ -1,0 +1,96 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.1", "§5.2", "§5.4", "§7"]
+// fixes = 0
+
+// W6-02 U2b/t, S-1039, R-454 (§7: "所有の `match`（`match move x` と場所でない対象、§5.4）のガードでは、その腕の束縛を消費できない"; §5.4: the heading
+// `match f(...)` that is no place, no static value and no literal that needs no drop is an owned `match`, "腕の束縛: 所有 / 起きる"): the forms of
+// negative/guard_owned_consume.onsa and negative/guard_owned_consume_next_arm.onsa, for a heading that is a call (a value without a name), with the later arm `_` and
+// the later arm that binds the same value. The result of the call is one value until an arm is chosen, so the consumption of the binding of the arm in a
+// guard is an E0715 here as well (R-454: its `guard_moves_owned_arm_temp`). This version accepts all of them. The error is at the consumption, there is no
+// candidate (`fixes = 0`). The functions are one-liners (the `let` form is the only block: its error is at its `let` line), so that the line does not depend
+// on where the drop is reported (S-783). One error per function (P-01).
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+impl Holder {
+  pub fn eat_self(move self) -> Bool uses {Alloc} { true }
+}
+
+pub fn eat(move b: Buf[F32]) -> Bool uses {Alloc} { true }
+
+pub fn len_of(b: Buf[F32]) -> U32 { b.len() }
+
+pub fn mk() -> Option[Buf[F32]] uses {Alloc} { Some(Buf.zeroed(2)) }
+
+pub fn mk_h() -> Option[Holder] uses {Alloc} { Some(Holder { buf: Buf.zeroed(2), gain: 0.5 }) }
+
+pub fn mk_r() -> Option[Option[Buf[F32]]] uses {Alloc} { Some(Some(Buf.zeroed(2))) }
+
+pub fn mk_p() -> (Buf[F32], U32) uses {Alloc} { (Buf.zeroed(2), 1) }
+
+// ------------------------------------------------------------------ the later arm is `_`
+
+pub fn t_move() -> U32 uses {Alloc} { match mk() { Some(b) if eat(move b) => 1, _ => 0 } }   //~ E0715
+
+pub fn t_field() -> U32 uses {Alloc} { match mk_h() { Some(h) if eat(move h.buf) => 1, _ => 0 } }   //~ E0715
+
+pub fn t_heading() -> U32 uses {Alloc} { match mk() { Some(b) if (match move b { t => eat(move t) }) => 1, _ => 0 } }   //~ E0715
+
+pub fn t_let_heading() -> U32 uses {Alloc} {
+  match mk() {
+    Some(b) if {
+      let c = move b   //~ E0715
+      c.len() > 0
+    } => 1,
+    _ => 0,
+  }
+}
+
+pub fn t_try() -> Option[U32] uses {Alloc} { match mk_r() { Some(r) if eat(r?) => Some(1), _ => Some(0) } }   //~ E0715
+
+pub fn t_self() -> U32 uses {Alloc} { match mk_h() { Some(h) if h.eat_self() => 1, _ => 0 } }   //~ E0715
+
+pub fn t_return(c: Bool) -> Buf[F32] uses {Alloc} { match mk() { Some(b) if (if c { return b } else { false }) => Buf.zeroed(1), _ => Buf.zeroed(0) } }   //~ E0715
+
+pub fn t_and_right(c: Bool) -> U32 uses {Alloc} { match mk() { Some(b) if c && eat(move b) => 1, _ => 0 } }   //~ E0715
+
+pub fn t_or_right(c: Bool) -> U32 uses {Alloc} { match mk() { Some(b) if c || eat(move b) => 1, _ => 0 } }   //~ E0715
+
+pub fn t_tuple_pattern() -> U32 uses {Alloc} { match mk_p() { (b, n) if eat(move b) => n, _ => 0 } }   //~ E0715
+
+pub fn t_binding_pattern() -> U32 uses {Alloc} { match Buf.zeroed(2) { t if eat(move t) => 1, _ => 0 } }   //~ E0715
+
+// ------------------------------------------------------------------ the later arm binds the same value
+
+pub fn tn_move() -> U32 uses {Alloc} { match mk() { Some(b) if eat(move b) => 1, Some(c) => len_of(c), None => 0 } }   //~ E0715
+
+pub fn tn_field() -> U32 uses {Alloc} { match mk_h() { Some(h) if eat(move h.buf) => 1, Some(k) => len_of(k.buf), None => 0 } }   //~ E0715
+
+pub fn tn_heading() -> U32 uses {Alloc} { match mk() { Some(b) if (match move b { t => eat(move t) }) => 1, Some(c) => len_of(c), None => 0 } }   //~ E0715
+
+pub fn tn_let_heading() -> U32 uses {Alloc} {
+  match mk() {
+    Some(b) if {
+      let c = move b   //~ E0715
+      c.len() > 0
+    } => 1,
+    Some(d) => len_of(d),
+    None => 0,
+  }
+}
+
+pub fn tn_try() -> Option[U32] uses {Alloc} { match mk_r() { Some(r) if eat(r?) => Some(1), Some(s) => if eat(s?) { Some(2) } else { Some(3) }, None => Some(0) } }   //~ E0715
+
+pub fn tn_self() -> U32 uses {Alloc} { match mk_h() { Some(h) if h.eat_self() => 1, Some(k) => if k.eat_self() { 2 } else { 3 }, None => 0 } }   //~ E0715
+
+pub fn tn_return(c: Bool) -> Buf[F32] uses {Alloc} { match mk() { Some(b) if (if c { return b } else { false }) => Buf.zeroed(1), Some(d) => d, None => Buf.zeroed(0) } }   //~ E0715
+
+pub fn tn_and_right(c: Bool) -> U32 uses {Alloc} { match mk() { Some(b) if c && eat(move b) => 1, Some(d) => len_of(d), None => 0 } }   //~ E0715
+
+pub fn tn_tuple_pattern() -> U32 uses {Alloc} { match mk_p() { (b, n) if eat(move b) => n, (c, m) => m + len_of(c) } }   //~ E0715
+
+pub fn tn_second_guard() -> U32 uses {Alloc} { match mk() { Some(b) if b.len() > 0 => 1, Some(c) if eat(move c) => 2, Some(d) => len_of(d), None => 0 } }   //~ E0715

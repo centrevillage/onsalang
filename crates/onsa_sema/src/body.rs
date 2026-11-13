@@ -257,9 +257,11 @@ pub struct BodyInfo {
     pub drops: Vec<DropPoint>,
 }
 
-/// A drop point of a body: where (`at`), of what, in the innermost
-/// anonymous function (`closure`; the readers count it as the function's,
-/// W6-02), and whether the value is live on every path that reaches it (`sure`).
+/// A drop point of a body: where (`at`, by what it drops: of an `End` the
+/// empty span at the end of the scope, of a `Rest` the expression that takes
+/// out), of what, in the innermost anonymous function (`closure`; the
+/// readers count it as the function's, W6-02), and whether the value is
+/// live on every path that reaches it (`sure`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DropPoint {
     pub at: Span,
@@ -271,8 +273,9 @@ pub struct DropPoint {
 /// What a drop point drops.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Dropped {
-    /// An owned local at the end of its scope (a block, an arm, a body and
-    /// the parameters of a function or an anonymous function; `at` the end).
+    /// An owned local at the end of its scope (a block, an arm, an iteration
+    /// of a `for` and its pattern's bindings, a body and the parameters of a
+    /// function or an anonymous function).
     End(LocalId),
     /// What is left where a path of fields is taken out at `at` (S-85).
     Rest(Taken),

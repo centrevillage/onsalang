@@ -339,8 +339,10 @@ impl Trail {
     }
 
     /// `paths ⊔=` this state, a path from the mark `m` (of `paths` too).
-    /// `leaving` (a `break`, a `continue`, D4): the bindings declared since
-    /// the mark leave first, as if forgotten (the work is of those changed).
+    /// `leaving` (a `break`, a `continue`, a guard that is false, back to
+    /// the head of its `match`): the bindings declared since the mark leave
+    /// first, as if forgotten, with no drop point (the work is of those
+    /// changed). The one place that decides what a path leaves.
     pub(super) fn join_into(&self, m: usize, paths: &mut Paths, leaving: bool) {
         if !self.now.reach {
             return;

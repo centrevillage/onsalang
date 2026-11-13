@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§8.1", "§10", "§12.2"]
+
+// W6-02 U2a/b, R-32, S-85 (§12.2: "所有する Shared 値・`Buf` と、それらを含む値（`[Str; 2]` など）の破棄: 要る"): a method that
+// takes a field out of `move self` on one path drops `self` whole on the other path, and that drop needs `Alloc` (E0601 in a
+// function without `uses {Alloc}`, E0901 in an `rt fn`). The field taken out leaves `n` (Copy) only, so the path that takes it
+// out needs no `Alloc`. Found by the break side of W6-02 U2a and added by the parent (rules/leader.md 4.9). The methods are
+// one-liners, so that the line does not depend on where the drop is reported (S-783). One error per function (P-01).
+
+pub struct Holder {
+  buf: Buf[F32],
+  n: U32,
+}
+
+impl Holder {
+  pub fn field_one_path(move self, c: Bool) -> Option[Buf[F32]] { if c { Some(move self.buf) } else { None } }   //~ E0601
+
+  pub rt fn rt_field_one_path(move self, c: Bool) -> Option[Buf[F32]] { if c { Some(move self.buf) } else { None } }   //~ E0901
+
+  pub rt fn rt_field_both_paths(move self, c: Bool) -> Option[Buf[F32]] { if c { Some(move self.buf) } else { Some(move self.buf) } }
+
+  pub fn field_one_path_alloc(move self, c: Bool) -> Option[Buf[F32]] uses {Alloc} { if c { Some(move self.buf) } else { None } }
+}
