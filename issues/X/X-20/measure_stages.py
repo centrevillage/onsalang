@@ -112,6 +112,23 @@ def w602_breaks(n):
     return h + "pub fn t(c: Bool) uses {Alloc} {\n  while c {\n" + "\n".join(body) + "\n  }\n}\n"
 
 
+
+def w602_shape(form, k):
+    """W6-02 U1d (the break side of U1c, `shapes.py`), each of k: `w1`, in a loop, `a` assigned again and a
+    `continue` under an `if`; `w12`, a loop with a local; `w8`, in a `while true`, `a` assigned, a `continue`,
+    `a` moved to a local and refilled, a `break`."""
+    h = ("pub fn mk() -> Buf[F32] uses {Alloc} { Buf.zeroed(1) }\n"
+         "pub fn take(move b: Buf[F32]) -> U32 uses {Alloc} { 0 }\n")
+    if form == "w1":
+        body = ["  for _ in 0..<n {"] + ["    a = mk()\n    if c { continue }"] * k + ["  }"]
+    elif form == "w12":
+        body = [f"  for i{j} in 0..<n {{\n    let u{j} = i{j} + 1\n    s = s + u{j}\n  }}" for j in range(k)]
+    else:
+        body = ["  while true {"] + [f"    a = mk()\n    if c {{ continue }}\n    let t{j} = take(move a)\n"
+                                     f"    a = mk()\n    s = s + t{j}\n    if c {{ break }}" for j in range(k)] + ["  }"]
+    return (h + "pub fn t(c: Bool, n: U32) -> U32 uses {Alloc} {\n  var a = mk()\n  var s = 0\n"
+            + "\n".join(body) + "\n  s + take(move a)\n}\n")
+
 def w409_held(f, w):
     """W4-09 (perf/distinct_F_W): F nested borrowing `for`s over distinct arrays, W writes inside."""
     s = "fn t() -> U32 {\n"
@@ -195,6 +212,9 @@ QUAD = [
     ("w407_manylocals_n", "M=1000, N", w407_manylocals, [(1000, n) for n in (1000, 2000, 4000, 8000)]),
     ("w407_manylocals_m", "N=1000, M", w407_manylocals, [(m, 1000) for m in (1000, 2000, 4000, 8000)]),
     ("w602_breaks", "moves and breaks", w602_breaks, [(n,) for n in (1000, 2000, 4000, 8000)]),
+    ("w602_reassign_continue", "continues", w602_shape, [("w1", n) for n in (1000, 2000, 4000, 8000)]),
+    ("w602_loops_only", "loops", w602_shape, [("w12", n) for n in (2000, 4000, 8000, 16000)]),
+    ("w602_continue_moves", "moves, continues and breaks", w602_shape, [("w8", n) for n in (250, 500, 1000, 2000)]),
     ("w409_held_w", "F=120, W", w409_held, [(120, w) for w in (1500, 3000, 6000, 12000)]),
     ("w409_held_f", "W=6000, F", w409_held, [(f, 6000) for f in (15, 30, 60, 120)]),
     ("w409_same_w", "S=100, W", w409_same, [(100, w) for w in (750, 1500, 3000, 6000)]),

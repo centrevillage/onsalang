@@ -8,6 +8,7 @@
 use std::collections::BTreeMap;
 use std::mem::replace;
 
+use onsa_diag::hash::HashMap;
 use onsa_diag::internal::bug;
 
 use onsa_diag::Span;
@@ -110,7 +111,7 @@ impl Ends {
 /// loop's summary, so
 /// their states differ only where the second does not know the state before
 /// the loop (the text of an E0704 at a loop's head, not whether it is one).
-/// Every operation keeps an unreachable state unreachable.
+/// Every operation keeps an unreachable state unreachable, and its table empty.
 #[derive(Clone, Debug)]
 pub(super) struct Delta {
     reach: bool,
@@ -148,15 +149,19 @@ impl Delta {
 
     /// `l` is `s` here; it joins (a binding moved twice keeps the first).
     pub(super) fn set(&mut self, l: LocalId, s: Status) {
-        match &mut self.ends.entry(l).or_insert(Ends::SAME).dead {
-            Some(x) => x.join(&s),
-            dead => *dead = Some(s),
+        if self.reach {
+            match &mut self.ends.entry(l).or_insert(Ends::SAME).dead {
+                Some(x) => x.join(&s),
+                dead => *dead = Some(s),
+            }
         }
     }
 
     /// Live again: declared, or assigned as a whole.
     pub(super) fn revive(&mut self, l: LocalId) {
-        self.ends.insert(l, Ends::NEW);
+        if self.reach {
+            self.ends.insert(l, Ends::NEW);
+        }
     }
 
     /// Out of the table: a binding whose scope ended (no later point reads it).
@@ -215,8 +220,8 @@ impl Delta {
 
 /// A change of a walk's state, to undo: a binding's [`Ends`] before it
 /// (`was`, `None`: not in the table), with its change before in the record
-/// (`prev`, its place + 1; 0: none) and whether it declared the binding; or
-/// the whole state before it stopped.
+/// (`prev`, its place + 1; 0: none) and whether it (or a later change kept
+/// in it, `Trail::keep`) declared the binding; or the whole state before it stopped.
 #[derive(Clone, Debug)]
 enum Undo {
     Ends { l: LocalId, was: Option<Ends>, prev: usize, declares: bool },
@@ -228,19 +233,23 @@ enum Undo {
 /// `break`) joins its changes into [`Paths`] and is undone, the next walks
 /// from the same state, and the state after is that of the paths: the work
 /// is of the bindings changed, not of the table. A state that stopped (no
-/// path falls through) is that of [`Delta::bottom`]; a path goes on from a
-/// mark only if it has not stopped since. `last`: of each binding, the
-/// place + 1 of its last change in the record (0: none), so a path finds
-/// the first change since a mark of each binding it changed in one pass.
+/// path falls through) is that of [`Delta::bottom`] and records no change;
+/// a path goes on from a mark only if it has not stopped since. `marks`:
+/// those open (innermost last); a binding is recorded once since the
+/// innermost (a later change keeps the ends before the first), so a path
+/// from a mark finds one change of each binding for each mark open since.
+/// `last`: of each binding, the place + 1 of its last change in the record
+/// (none: 0, and not kept).
 pub(super) struct Trail {
     now: Delta,
     log: Vec<Undo>,
-    last: Vec<usize>,
+    marks: Vec<usize>,
+    last: HashMap<LocalId, usize>,
 }
 
 impl Trail {
     pub(super) fn new() -> Trail {
-        Trail { now: Delta::start(), log: Vec::new(), last: Vec::new() }
+        Trail { now: Delta::start(), log: Vec::new(), marks: Vec::new(), last: HashMap::default() }
     }
 
     pub(super) fn state(&self) -> &Delta {
@@ -249,21 +258,27 @@ impl Trail {
 
     /// A change `f` of the binding `l` ([`Delta::set`], `revive`, `forget`), recorded.
     pub(super) fn change(&mut self, l: LocalId, f: impl FnOnce(&mut Delta)) {
-        self.keep(l, false);
-        f(&mut self.now);
+        if self.now.reach {
+            self.keep(l, false);
+            f(&mut self.now);
+        }
     }
 
     /// `l` declared (live again), recorded as its declaration.
     pub(super) fn declare(&mut self, l: LocalId) {
-        self.keep(l, true);
-        self.now.revive(l);
+        if self.now.reach {
+            self.keep(l, true);
+            self.now.revive(l);
+        }
     }
 
     /// No path falls through (`return`, `break`, a call that does not come
     /// back): the state of [`Delta::bottom`], the one before kept.
     pub(super) fn stop(&mut self) {
-        let before = replace(&mut self.now, Delta::bottom());
-        self.log.push(Undo::Stop(before));
+        if self.now.reach {
+            let before = replace(&mut self.now, Delta::bottom());
+            self.log.push(Undo::Stop(before));
+        }
     }
 
     /// This state, then the region `next` (each binding `next` touches).
@@ -277,17 +292,22 @@ impl Trail {
         }
     }
 
-    pub(super) fn mark(&self) -> usize {
+    /// A mark opened (until [`Trail::settle`]).
+    pub(super) fn mark(&mut self) -> usize {
+        self.marks.push(self.log.len());
         self.log.len()
     }
 
     /// The state at the mark `m`, the changes since undone.
     pub(super) fn back_to(&mut self, m: usize) {
-        let Trail { now, log, last } = self;
+        let Trail { now, log, last, .. } = self;
         for u in log.drain(m..).rev() {
             match u {
                 Undo::Ends { l, was, prev, .. } => {
-                    last[l.0 as usize] = prev;
+                    match prev {
+                        0 => drop(last.remove(&l)),
+                        p => drop(last.insert(l, p)),
+                    }
                     match was {
                         Some(e) => drop(now.ends.insert(l, e)),
                         None => drop(now.ends.remove(&l)),
@@ -309,7 +329,7 @@ impl Trail {
         let first = !replace(reach, true);
         // Changed on every path before, not on this one: as at the mark here.
         lone.retain(|&l| {
-            let kept = self.last.get(l.0 as usize).is_some_and(|&p| p > m);
+            let kept = self.last.get(&l).is_some_and(|&p| p > m);
             match ends.get_mut(&l) {
                 Some(e) if !kept => e.join(self.get(l)),
                 Some(_) => {}
@@ -319,12 +339,12 @@ impl Trail {
         });
         // Each binding changed since the mark, at its first change since: as it was at the mark.
         for u in &self.log[m..] {
-            let Undo::Ends { l, was, prev, .. } = u else { bug(None, "a path that stopped and goes on") };
+            let Undo::Ends { l, was, prev, declares } = u else { bug(None, "a path that stopped and goes on") };
             if *prev > m {
                 continue;
             }
             let (l, was) = (*l, was.as_ref().unwrap_or(&Ends::SAME));
-            let now = if leaving && self.declared_since(l, m) { &Ends::SAME } else { self.get(l) };
+            let now = if leaving && (*declares || self.declared_since(l, m)) { &Ends::SAME } else { self.get(l) };
             if let Some(e) = ends.get_mut(&l) {
                 e.join(now);
             } else if now != was {
@@ -338,9 +358,17 @@ impl Trail {
         }
     }
 
-    /// Back to the mark `m`, then the state of `paths` from it (stopped if
-    /// none falls through).
+    /// The mark `m` closed: back to it, then the state of `paths` from it.
     pub(super) fn settle(&mut self, m: usize, paths: &Paths) {
+        if self.marks.pop() != Some(m) {
+            bug(None, "a mark settled that is not the innermost open");
+        }
+        self.reset(m, paths);
+    }
+
+    /// Back to the mark `m`, then the state of `paths` from it (stopped if
+    /// none falls through); the mark stays open.
+    pub(super) fn reset(&mut self, m: usize, paths: &Paths) {
         self.back_to(m);
         if !paths.ends.reach {
             return self.stop();
@@ -352,7 +380,7 @@ impl Trail {
 
     /// Whether a change of `l` since the mark `m` declared it.
     fn declared_since(&self, l: LocalId, m: usize) -> bool {
-        let mut p = self.last[l.0 as usize];
+        let mut p = self.last.get(&l).copied().unwrap_or(0);
         while p > m {
             let Undo::Ends { prev, declares, .. } = &self.log[p - 1] else { bug(None, "a change that stopped") };
             if *declares {
@@ -367,13 +395,15 @@ impl Trail {
         self.now.ends.get(&l).unwrap_or(&Ends::SAME)
     }
 
-    /// The change of `l` (`declares`: its declaration), recorded.
+    /// The change of `l` (`declares`: its declaration), recorded, unless `l`
+    /// has a change since the innermost open mark (which keeps the ends before).
     fn keep(&mut self, l: LocalId, declares: bool) {
-        let i = l.0 as usize;
-        if self.last.len() <= i {
-            self.last.resize(i + 1, 0);
+        let prev = self.last.get(&l).copied().unwrap_or(0);
+        if prev > self.marks.last().copied().unwrap_or(0) {
+            let Undo::Ends { declares: d, .. } = &mut self.log[prev - 1] else { bug(None, "a change that stopped") };
+            return *d |= declares;
         }
-        let prev = replace(&mut self.last[i], self.log.len() + 1);
+        self.last.insert(l, self.log.len() + 1);
         self.log.push(Undo::Ends { l, was: self.now.ends.get(&l).cloned(), prev, declares });
     }
 

@@ -107,7 +107,7 @@ impl Walker<'_> {
                 // A guard changes no place of the head (§7: E0715, `frozen.rs`).
                 let mut held = self.frame(subject);
                 for arm in arms {
-                    r.cur.settle(m, &tried);
+                    r.cur.reset(m, &tried);
                     let outer = r.declared.len();
                     self.declare(r, arm.pat);
                     if let Some(g) = arm.guard {
@@ -221,7 +221,7 @@ impl Walker<'_> {
                 let back = self.iterate(&mut run, parts);
                 self.reports = reports;
                 let exit = run.cur.state().clone();
-                run.cur.settle(0, &back);
+                run.cur.reset(0, &back);
                 let back = run.cur.state().clone();
                 let sum = LoopSum { exit: LoopSum::head(&back).then(&exit), back };
                 self.m.loops.insert(s, sum.clone());

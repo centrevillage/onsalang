@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 
 use onsa_diag::{FileId, Span};
 
-use super::{Delta, Ends, LoopSum, Paths, Status, Trail};
+use super::{Delta, Ends, LoopSum, Paths, Status, Trail, Undo};
 use crate::body::LocalId;
 
 fn at(n: u32) -> Span {
@@ -354,7 +354,7 @@ fn the_trail_joins_the_arms_of_a_match_as_the_whole_states() {
             let (m, mut tried, mut paths) = (t.mark(), Paths::none(), Paths::none());
             t.join_into(m, &mut tried, false);
             for &(g, body) in arms {
-                t.settle(m, &tried);
+                t.reset(m, &tried);
                 if let Some(g) = g {
                     on_trail(&mut t, g);
                     t.join_into(m, &mut tried, false);
@@ -406,6 +406,69 @@ fn a_break_joins_as_if_the_bindings_declared_since_the_mark_were_forgotten() {
                     }
                     t.settle(m, &paths);
                     check(&t, &want, &format!("{p:?} {a:?} {b:?} {leaves_first}"));
+                }
+            }
+        }
+    }
+}
+
+/// Since the mark `m`, at most `n` changes of each binding (one for each
+/// mark open since) and `n` stops.
+fn recorded_once_per_mark(t: &Trail, m: usize, n: usize) {
+    for l in 0..2 {
+        let count = t.log[m..].iter().filter(|u| matches!(u, Undo::Ends { l: k, .. } if k.0 == l)).count();
+        assert!(count <= n, "{l} recorded {count} times since {m}: {:?}", t.log);
+    }
+    assert!(t.log[m..].iter().filter(|u| matches!(u, Undo::Stop(_))).count() <= n, "stops: {:?}", t.log);
+}
+
+/// Marks inside a mark (an `if` in a loop, before its `break`), each change
+/// made twice: a binding changed again since the innermost open mark is not
+/// recorded again, and the joins and the marks are as of the whole states.
+#[test]
+fn a_mark_inside_a_mark_records_each_binding_once_and_joins_as_the_whole_states() {
+    let (pre, seqs) = (prefixes(), seqs(1));
+    let twice = |s: &Vec<Op>| [s.as_slice(), s.as_slice()].concat();
+    for p in &pre {
+        let mut before = Delta::start();
+        on_delta(&mut before, p);
+        for (i, a) in seqs.iter().enumerate() {
+            let (a, c, other) = (twice(a), &seqs[(i + 5) % seqs.len()], &seqs[(i + 3) % seqs.len()]);
+            for x in seqs.iter().map(twice) {
+                for y in &seqs {
+                    // The body: `a`, then `if { x } else { y }`, then `c`, to a `break`; `other`: the other path.
+                    let mut body = before.clone();
+                    on_delta(&mut body, &a);
+                    let mut then = body.clone();
+                    on_delta(&mut then, &x);
+                    on_delta(&mut body, y);
+                    body.join(&then);
+                    on_delta(&mut body, c);
+                    let mut want = before.clone();
+                    on_delta(&mut want, other);
+                    want.join(&body);
+                    let mut t = Trail::new();
+                    on_trail(&mut t, p);
+                    let (m, mut paths) = (t.mark(), Paths::none());
+                    on_trail(&mut t, &a);
+                    let (n, mut branches) = (t.mark(), Paths::none());
+                    on_trail(&mut t, &x);
+                    recorded_once_per_mark(&t, n, 1);
+                    recorded_once_per_mark(&t, m, 2);
+                    t.join_into(n, &mut branches, false);
+                    t.back_to(n);
+                    on_trail(&mut t, y);
+                    t.join_into(n, &mut branches, false);
+                    t.settle(n, &branches);
+                    on_trail(&mut t, c);
+                    recorded_once_per_mark(&t, m, 1);
+                    t.join_into(m, &mut paths, false);
+                    t.back_to(m);
+                    assert!(t.now.reach == before.reach && t.now.ends == before.ends, "back: {p:?} {a:?}");
+                    on_trail(&mut t, other);
+                    t.join_into(m, &mut paths, false);
+                    t.settle(m, &paths);
+                    check(&t, &want, &format!("{p:?} {a:?} {x:?} {y:?} {c:?}"));
                 }
             }
         }
