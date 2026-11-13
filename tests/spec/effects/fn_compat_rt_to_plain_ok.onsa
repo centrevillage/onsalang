@@ -1,0 +1,294 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§4.7", "§10"]
+
+// W6-01 U2a/t, R-26 (the first half), S-1031 (§8.1, rule 3 of "関数型どうしの互換": "G が `rt` なら F も `rt` である"; §10: "`rt` の関数は、`rt` でない
+// 位置でも使える（§8.1 の関数型の互換）"). An `rt` function (a named one, a variable of an `rt` type, a constructor, which is `rt`, §4.4) is used where
+// a function type that is not `rt` is wanted: at the positions of §8.1 (an argument, an annotated `let`, a return value, a field and its default, a constant,
+// the right side of an assignment, an element of an array and of a tuple, an arm of an `if` and of a `match` that have the expected type), inside the values
+// made in place (`Some(r)`, `W { h: r }`), in a generic function whose type parameter is fixed first by the type that is not `rt` (the annotation, the type
+// arguments, the first argument, the `inout` argument that comes first, the receiver of `inout self`, the first field, the `var`), and inside an `rt`
+// function. The `rt` is kept by the type of the value (`var f = r` is an `rt` type), so a position that is `rt` takes `r` too. This file passes before the work
+// of U2a: the cases that give E0401 for the `rt` of the other direction are in fn_compat_rt_position_neg.onsa. Checked, not run.
+
+pub fn k(x: U32) -> U32 {
+  x
+}
+
+pub rt fn r(x: U32) -> U32 {
+  x
+}
+
+pub fn ap(g: fn(U32) -> U32) -> U32 {
+  g.(1)
+}
+
+pub rt fn ap_rt(g: rt fn(U32) -> U32) -> U32 {
+  g.(1)
+}
+
+pub rt fn mk_rt() -> rt fn(U32) -> U32 {
+  r
+}
+
+pub struct Maker {
+  n: U32,
+}
+
+impl Maker {
+  pub rt fn make(self) -> rt fn(U32) -> U32 {
+    r
+  }
+}
+
+pub struct Holder {
+  f: fn(U32) -> U32,
+}
+
+pub struct HolderRt {
+  f: rt fn(U32) -> U32,
+}
+
+pub struct Defaulted {
+  f: fn(U32) -> U32 = r,
+  n: U32 = 0,
+}
+
+pub struct W[T] {
+  h: T,
+}
+
+impl[T] W[T] {
+  pub fn set(inout self, v: T) {
+    self.h = v
+  }
+}
+
+pub struct P[T] {
+  first: T,
+  second: T,
+}
+
+pub enum Wrap {
+  W(U32),
+  Z,
+}
+
+pub fn ap_ctor(m: fn(move U32) -> Wrap) -> Wrap {
+  m.(1)
+}
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn pick[T](a: T, c: T) -> T {
+  a
+}
+
+pub fn put[T](inout g: T, v: T) {
+  g = v
+}
+
+const ONE: fn(U32) -> U32 = r
+
+const TABLE: [fn(U32) -> U32; 2] = [r, k]
+
+// The positions.
+pub fn arg_named() -> U32 {
+  ap(r)
+}
+
+pub fn arg_variable() -> U32 {
+  let v = r
+  ap(v)
+}
+
+pub fn arg_rt_parameter(f: rt fn(U32) -> U32) -> U32 {
+  ap(f)
+}
+
+pub fn arg_constructor() -> Wrap {
+  ap_ctor(Wrap.W)
+}
+
+pub fn arg_call_result() -> U32 {
+  ap(mk_rt())
+}
+
+pub fn arg_method_result(m: Maker) -> U32 {
+  ap(m.make())
+}
+
+pub fn let_named() -> U32 {
+  let f: fn(U32) -> U32 = r
+  f.(1)
+}
+
+pub fn let_call_result() -> U32 {
+  let f: fn(U32) -> U32 = mk_rt()
+  f.(1)
+}
+
+pub fn return_named() -> fn(U32) -> U32 {
+  r
+}
+
+pub fn return_variable() -> fn(U32) -> U32 {
+  let v = r
+  v
+}
+
+pub fn return_constructor() -> fn(move U32) -> Wrap {
+  Wrap.W
+}
+
+pub fn field_named() -> Holder {
+  Holder { f: r }
+}
+
+pub fn field_default() -> U32 {
+  let s = Defaulted { ... }
+  s.f.(1)
+}
+
+pub fn constant_initializer() -> U32 {
+  ONE.(1) + TABLE[0].(1)
+}
+
+pub fn assign_named() -> U32 {
+  var f: fn(U32) -> U32 = k
+  f = r
+  f.(1)
+}
+
+pub fn assign_to_an_element() -> U32 {
+  var fs: [fn(U32) -> U32; 2] = [k, k]
+  fs[0] = r
+  fs[0].(1)
+}
+
+pub fn array_elements() -> U32 {
+  let fs: [fn(U32) -> U32; 2] = [r, k]
+  fs[0].(1)
+}
+
+pub fn tuple_elements() -> U32 {
+  let t: (fn(U32) -> U32, U32) = (r, 1)
+  t.0.(t.1)
+}
+
+pub fn if_arms(c: Bool) -> U32 {
+  let f: fn(U32) -> U32 = if c { r } else { k }
+  f.(1)
+}
+
+pub fn match_arms(n: U32) -> U32 {
+  let f: fn(U32) -> U32 = match n {
+    0 => r,
+    _ => k,
+  }
+  f.(1)
+}
+
+// Inside the values made in place and in the generic functions.
+pub fn some_in_place() -> Option[fn(U32) -> U32] {
+  Some(r)
+}
+
+pub fn struct_in_place() -> W[fn(U32) -> U32] {
+  W { h: r }
+}
+
+pub fn array_in_an_option() -> Option[[fn(U32) -> U32; 2]] {
+  Some([r, k])
+}
+
+pub fn id_with_the_annotation() -> U32 {
+  let f: fn(U32) -> U32 = id(r)
+  f.(1)
+}
+
+pub fn pick_with_the_annotation() -> U32 {
+  let f: fn(U32) -> U32 = pick(r, k)
+  f.(1)
+}
+
+pub fn pick_with_the_type_arguments() -> U32 {
+  let f = pick::[fn(U32) -> U32](r, k)
+  f.(1)
+}
+
+pub fn pick_the_function_that_is_not_rt_first() -> U32 {
+  let f = pick(k, r)
+  f.(1)
+}
+
+pub fn put_after_the_inout_argument() -> U32 {
+  var g = k
+  put(inout g, r)
+  g.(1)
+}
+
+pub fn set_of_the_receiver() -> U32 {
+  var w = W { h: k }
+  w.set!(r)
+  w.h.(1)
+}
+
+pub fn the_struct_literal_written_in_the_order() -> U32 {
+  let p = P { second: k, first: r }
+  p.first.(1)
+}
+
+pub fn var_annotated_with_the_type_that_is_not_rt() -> U32 {
+  var f: fn(U32) -> U32 = r
+  f = k
+  f.(1)
+}
+
+pub fn pick_option_of_the_function_that_is_not_rt_first() -> U32 {
+  let o = pick(Some(k), Some(r))
+  match o {
+    Some(f) => f.(1),
+    None => 0,
+  }
+}
+
+pub fn the_struct_literal_with_the_function_that_is_not_rt_first() -> U32 {
+  let p = P { first: k, second: r }
+  p.first.(1)
+}
+
+pub fn var_of_the_function_that_is_not_rt() -> U32 {
+  var f = k
+  f = r
+  f.(1)
+}
+
+pub fn var_array_element() -> U32 {
+  var fs = [k, k]
+  fs[0] = r
+  fs[1].(1)
+}
+
+// Inside an `rt` function.
+pub rt fn in_rt_argument() -> U32 {
+  ap_rt(r)
+}
+
+pub rt fn in_rt_variable() -> U32 {
+  let g: rt fn(U32) -> U32 = r
+  ap_rt(g)
+}
+
+pub rt fn in_rt_into_a_plain_position() -> U32 {
+  let _ = Holder { f: r }
+  let _: fn(U32) -> U32 = r
+  1
+}
+
+pub rt fn in_rt_field() -> rt fn(U32) -> U32 {
+  let h = HolderRt { f: r }
+  h.f
+}

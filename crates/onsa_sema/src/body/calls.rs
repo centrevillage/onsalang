@@ -144,7 +144,7 @@ impl<'a> Checker<'a> {
                 // result, before the result meets `expected` (§3.3, S-231).
                 let conversion = self.conversion_to(d, of);
                 if let (Some(exp), None) = (expected, conversion) {
-                    self.unify_at(span, ret, exp)?;
+                    self.fit_at(span, ret, exp)?;
                 }
                 self.check_args(args, &params, e)?;
                 if let Some(to) = conversion {
@@ -152,7 +152,7 @@ impl<'a> Checker<'a> {
                     let call = ConversionCall { e, expected };
                     self.conversion_use(name.span, targs[0], to, ret, Some(call))?;
                     if let Some(exp) = expected {
-                        self.unify_at(span, ret, exp)?;
+                        self.fit_at(span, ret, exp)?;
                     }
                 }
                 let inst = self.instance(d, targs, span, (self.buf_element(d), None))?;
@@ -171,7 +171,7 @@ impl<'a> Checker<'a> {
                     variant.fields.iter().map(|&f| (Mode::Borrow, self.a.types.subst(f, &targs))).collect();
                 let ret = self.a.types.intern(Ty::Named(d, targs.clone()));
                 if let Some(exp) = expected {
-                    self.unify_at(span, ret, exp)?;
+                    self.fit_at(span, ret, exp)?;
                 }
                 self.check_args(args, &params, e)?;
                 self.finish_instance(d, targs, span)?;
@@ -256,7 +256,7 @@ impl<'a> Checker<'a> {
                 }
                 let (params, ret) = self.member_sig(md, f, &targs, of);
                 if let Some(exp) = expected {
-                    self.unify_at(span, ret, exp)?;
+                    self.fit_at(span, ret, exp)?;
                 }
                 self.check_args(args, &params, e)?;
                 let inst = self.instance(md, targs, span, (element, None))?;
@@ -480,6 +480,16 @@ impl<'a> Checker<'a> {
                     let kind = &self.expr(arg.expr).kind;
                     self.arg_closure = matches!(kind, ExprKind::Closure { .. }).then_some(arg.expr);
                     self.with_why(why.clone(), pt, |ck| ck.check_expr(arg.expr, Some(pt)))?;
+                    // An `inout` argument has no direction: its place has
+                    // the type of the parameter, which the callee writes
+                    // back (§8.1).
+                    if mode == Mode::Inout {
+                        let (place, span) = (self.ast.without_parens(arg.expr), self.expr(arg.expr).span);
+                        let Some(found) = self.body_type(place) else {
+                            onsa_diag::internal::bug(Some(span), "an argument checked has no type")
+                        };
+                        self.with_why(why.clone(), pt, |ck| ck.unify_at(span, found, pt))?;
+                    }
                 }
                 Some((elem, planar)) => {
                     let aspan = self.expr(arg.expr).span;

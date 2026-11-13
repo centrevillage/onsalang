@@ -1,0 +1,192 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§4.7"]
+
+// W6-01 U2a/t, R-27 (2), S-1031 (§8.1: "その場で作る値（`Some(f)`、`W { h: g }`）は、期待型が要素の型を先に決め、要素がその位置で比べられる";
+// §4.7: "これ以外で先に決まった型 … は、後の式の期待型として §8.1 で比べる。… `pick(k, r)` は通る。型引数（`pick::[fn(U32) -> U32](r, k)`）か注釈で先に決める").
+// A function with an empty effect row (`k`, the `rt` function `r`) is used where `fn(U32) -> U32 uses {Alloc}` is wanted inside a value that is made
+// in place: `Some(k)` and `W { h: k }` with the expected type that fixes the element type, an array or a tuple inside them, an `Ok`/`Err`, a generic
+// function whose type parameter is fixed first (by the annotation, by the type arguments, by the first argument, by the receiver of an `inout self`,
+// by the `inout` argument that comes first, by the field of a generic struct that is written first, by the type of a `var`). The functions that the
+// type is fixed by are written with the row (`b`, or `uses {Alloc}` in the type), so the later one that has no row is compared at that position. The
+// cases whose order of writing gives E0401 are in fn_compat_inference_alloc_neg.onsa, the values already made (`Option[F]` into `Option[G]`) in
+// fn_compat_type_args_alloc_neg.onsa. Checked, not run.
+
+pub fn k(x: U32) -> U32 {
+  x
+}
+
+pub rt fn r(x: U32) -> U32 {
+  x
+}
+
+pub fn b(x: U32) -> U32 uses {Alloc} {
+  x
+}
+
+pub struct W[T] {
+  h: T,
+}
+
+impl[T] W[T] {
+  pub fn set(inout self, v: T) {
+    self.h = v
+  }
+}
+
+pub struct P[T] {
+  first: T,
+  second: T,
+}
+
+pub fn id[T](x: T) -> T {
+  x
+}
+
+pub fn pick[T](a: T, c: T) -> T {
+  a
+}
+
+pub fn put[T](inout g: T, v: T) {
+  g = v
+}
+
+pub fn takes_alloc(g: fn(U32) -> U32 uses {Alloc}) -> U32 uses {Alloc} {
+  g.(1)
+}
+
+pub fn ap_outer(f: fn(fn(U32) -> U32 uses {Alloc}) -> U32 uses {Alloc}) -> U32 uses {Alloc} {
+  f.(b)
+}
+
+// The values made in place, with the type that is expected.
+pub fn some_in_place() -> Option[fn(U32) -> U32 uses {Alloc}] {
+  Some(k)
+}
+
+pub fn some_rt_in_place() -> Option[fn(U32) -> U32 uses {Alloc}] {
+  Some(r)
+}
+
+pub fn some_in_a_let() -> U32 uses {Alloc} {
+  let o: Option[fn(U32) -> U32 uses {Alloc}] = Some(k)
+  match o {
+    Some(f) => f.(1),
+    None => 0,
+  }
+}
+
+pub fn ok_in_place() -> Result[fn(U32) -> U32 uses {Alloc}, U32] {
+  Ok(k)
+}
+
+pub fn err_in_place() -> Result[U32, fn(U32) -> U32 uses {Alloc}] {
+  Err(k)
+}
+
+pub fn struct_in_place() -> W[fn(U32) -> U32 uses {Alloc}] {
+  W { h: k }
+}
+
+pub fn struct_rt_in_place() -> W[fn(U32) -> U32 uses {Alloc}] {
+  W { h: r }
+}
+
+pub fn struct_in_an_argument(f: fn(W[fn(U32) -> U32 uses {Alloc}]) -> U32 uses {Alloc}) -> U32 uses {Alloc} {
+  f.(W { h: k })
+}
+
+pub fn array_in_an_option() -> Option[[fn(U32) -> U32 uses {Alloc}; 2]] {
+  Some([k, b])
+}
+
+pub fn tuple_in_an_option() -> Option[(fn(U32) -> U32 uses {Alloc}, U32)] {
+  Some((k, 1))
+}
+
+pub fn struct_in_an_array() -> [W[fn(U32) -> U32 uses {Alloc}]; 2] {
+  [W { h: k }, W { h: b }]
+}
+
+// The generic function whose type parameter is fixed first.
+pub fn id_with_the_annotation() -> U32 uses {Alloc} {
+  let f: fn(U32) -> U32 uses {Alloc} = id(k)
+  f.(1)
+}
+
+pub fn id_as_an_argument() -> U32 uses {Alloc} {
+  takes_alloc(id(k))
+}
+
+pub fn pick_with_the_annotation() -> U32 uses {Alloc} {
+  let f: fn(U32) -> U32 uses {Alloc} = pick(k, r)
+  f.(1)
+}
+
+pub fn pick_with_the_type_arguments() -> U32 uses {Alloc} {
+  let f = pick::[fn(U32) -> U32 uses {Alloc}](k, r)
+  f.(1)
+}
+
+pub fn pick_the_function_with_the_row_first() -> U32 uses {Alloc} {
+  let f = pick(b, k)
+  f.(1)
+}
+
+pub fn pick_the_function_with_the_row_first_rt() -> U32 uses {Alloc} {
+  let f = pick(b, r)
+  f.(1)
+}
+
+pub fn pick_as_an_argument() -> U32 uses {Alloc} {
+  takes_alloc(pick(b, k))
+}
+
+pub fn put_after_the_inout_argument() -> U32 uses {Alloc} {
+  var g = b
+  put(inout g, k)
+  put(inout g, r)
+  g.(1)
+}
+
+pub fn set_of_the_receiver() -> U32 uses {Alloc} {
+  var w = W { h: b }
+  w.set!(k)
+  w.set!(r)
+  w.h.(1)
+}
+
+pub fn the_struct_literal_fixes_the_parameter_by_the_first_field() -> U32 uses {Alloc} {
+  let p = P { first: b, second: k }
+  p.first.(1) + p.second.(2)
+}
+
+pub fn the_struct_literal_written_in_the_other_order() -> U32 uses {Alloc} {
+  let p = P { second: b, first: k }
+  p.first.(1) + p.second.(2)
+}
+
+pub fn the_struct_literal_with_the_rt_function_second() -> U32 uses {Alloc} {
+  let p = P { first: b, second: r }
+  p.first.(1)
+}
+
+// The type of a `var` is the expected type of what is assigned later.
+pub fn var_of_the_function_with_the_row() -> U32 uses {Alloc} {
+  var f = b
+  f = k
+  f = r
+  f.(1)
+}
+
+pub fn var_array_element() -> U32 uses {Alloc} {
+  var fs = [b, b]
+  fs[0] = k
+  fs[1] = r
+  fs[0].(1)
+}
+
+// The function type inside a function type is equal, and the outermost one has the direction.
+pub fn the_outermost_type_has_the_direction(g: fn(fn(U32) -> U32 uses {Alloc}) -> U32) -> U32 uses {Alloc} {
+  ap_outer(g)
+}

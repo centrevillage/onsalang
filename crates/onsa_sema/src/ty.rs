@@ -231,6 +231,12 @@ impl EffectSet {
     pub fn has_effects(&self) -> bool {
         self.alloc || !self.other.is_empty()
     }
+
+    /// Whether each effect of the row is in `wider` (§8.1 rule 2), its
+    /// variables not counted ([`EffectSet::is_open`]).
+    pub fn within(&self, wider: &EffectSet) -> bool {
+        (!self.alloc || wider.alloc) && self.other.iter().all(|e| wider.other.contains(e))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

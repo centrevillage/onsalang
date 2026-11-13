@@ -1,0 +1,77 @@
+// onsa.toml
+// [test]
+// spec = ["§8.2", "§10"]
+
+// W6-01 U2a/t, R-452 (§8.2: "`rt fn` の効果行には rt 効果しか書けない（§10）。`Alloc` と `blocking` の効果は rt 効果ではない"; §10 rule 1: "効果行に `Alloc` を含まない（E0902）").
+// The row of a function type that is written in a type position (`rt fn(U32) -> U32 uses {Alloc}`) is the row of an `rt fn` too, so it cannot hold `Alloc`: E0902, as the row
+// of the declaration `pub rt fn f() uses {Alloc}` does. The type is written as the type of a parameter, of a field, of an annotated `let`, of the result, of an alias, of an
+// element of an array and of an `Option`, as a parameter of another function type, and as a type argument of an expression. The function types without the `rt` (that have
+// `uses {Alloc}`) and the `rt` function types with an empty row are accepted (`fine_*`). Before U2a only the declaration is checked, so the types here are accepted. Checked, not run.
+
+pub rt fn r(x: U32) -> U32 {
+  x
+}
+
+pub fn pick[T](a: T, c: T) -> T {
+  a
+}
+
+pub struct Holder {
+  f: rt fn(U32) -> U32 uses {Alloc},   //~ E0902
+}
+
+pub struct HolderFine {
+  f: rt fn(U32) -> U32,
+  g: fn(U32) -> U32 uses {Alloc},
+}
+
+type Alias = rt fn(U32) -> U32 uses {Alloc}   //~ E0902
+
+type AliasFine = rt fn(U32) -> U32
+
+pub fn as_a_parameter(g: rt fn(U32) -> U32 uses {Alloc}) -> U32 {   //~ E0902
+  0
+}
+
+pub fn as_a_result() -> rt fn(U32) -> U32 uses {Alloc} {   //~ E0902
+  r
+}
+
+pub fn as_an_annotation() -> U32 {
+  let _: rt fn(U32) -> U32 uses {Alloc} = r   //~ E0902
+  0
+}
+
+pub fn as_an_element_of_an_array(fs: [rt fn(U32) -> U32 uses {Alloc}; 2]) -> U32 {   //~ E0902
+  0
+}
+
+pub fn as_a_type_argument_of_a_type(o: Option[rt fn(U32) -> U32 uses {Alloc}]) -> U32 {   //~ E0902
+  0
+}
+
+pub fn as_a_parameter_of_a_function_type(f: fn(rt fn(U32) -> U32 uses {Alloc}) -> U32) -> U32 {   //~ E0902
+  0
+}
+
+pub fn as_a_type_argument_of_an_expression() -> U32 {
+  let _ = pick::[rt fn(U32) -> U32 uses {Alloc}](r, r)   //~ E0902
+  0
+}
+
+pub rt fn the_declaration_is_checked_as_before() -> U32 uses {Alloc} {   //~ E0902
+  0
+}
+
+pub fn fine_parameters(f: rt fn(U32) -> U32, g: fn(U32) -> U32 uses {Alloc}) -> U32 uses {Alloc} {
+  f.(1) + g.(2)
+}
+
+pub fn fine_result() -> fn(U32) -> U32 uses {Alloc} {
+  r
+}
+
+pub fn fine_annotation() -> U32 {
+  let _: rt fn(U32) -> U32 = r
+  0
+}

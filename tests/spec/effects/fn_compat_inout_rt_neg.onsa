@@ -1,0 +1,171 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§10", "§4.7"]
+
+// W6-01 U2a/t, R-26 (the first half), S-1031 (§8.1: "`inout` の引数には向きが無く、渡す場所の型と引数の型が等しいことを求める（呼ばれる側がその型の値を書き戻すため）"; §10: "型引数の中と
+// `inout` の引数では型が等しいことを求め"). An `inout` argument is a place that the called function writes back to, so its function type is equal to the type of the
+// parameter, with the `rt`: a variable of `rt fn(U32) -> U32` is not passed to `inout g: fn(U32) -> U32` (the function could write a function that is not `rt` into it), and a
+// variable of `fn(U32) -> U32` is not passed to `inout g: rt fn(U32) -> U32`. The place is a variable, a parameter of the caller, a field (`inout h.f`), an
+// element (`inout fs[0]`), a generic `inout` argument (`swap`, `put2`: the type is fixed by the value that comes first), the receiver of `inout self` (`w.set!(k)` for
+// `W { h: r }`), and a `Span` of the elements (`inout xs: Span[fn(U32) -> U32]` with an array of `rt` functions). The same type is accepted
+// (fn_compat_same_type_ok.onsa), and so are `put(inout g, r)` and `w.set!(r)` for a `g` and a `w` that are not `rt`, where the later argument is not an `inout` place
+// (fn_compat_rt_to_plain_ok.onsa). Before U2a these are accepted (the `rt` is not compared). Checked, not run.
+
+pub fn k(x: U32) -> U32 {
+  x
+}
+
+pub rt fn r(x: U32) -> U32 {
+  x
+}
+
+pub struct W[T] {
+  h: T,
+}
+
+impl[T] W[T] {
+  pub fn set(inout self, v: T) {
+    self.h = v
+  }
+}
+
+pub struct Hk {
+  f: fn(U32) -> U32,
+}
+
+pub struct Hr {
+  f: rt fn(U32) -> U32,
+}
+
+pub fn set_k(inout g: fn(U32) -> U32) {
+  g = k
+}
+
+pub fn set_r(inout g: rt fn(U32) -> U32) {
+  g = r
+}
+
+pub fn fill_k(inout xs: Span[fn(U32) -> U32]) {
+  xs[0] = k
+}
+
+pub fn fill_r(inout xs: Span[rt fn(U32) -> U32]) {
+  xs[0] = r
+}
+
+pub fn set_w_k(inout w: W[fn(U32) -> U32]) {
+  w.h = k
+}
+
+pub fn swap[T](inout p: T, inout q: T) {
+  let t = p
+  p = q
+  q = t
+}
+
+pub fn put2[T](v: T, inout g: T) {
+  g = v
+}
+
+// The `rt` type is passed to the parameter that is not `rt`.
+pub fn variable_to_the_plain() -> U32 {
+  var f: rt fn(U32) -> U32 = r
+  set_k(inout f)   //~ E0401
+  1
+}
+
+pub fn inferred_variable_to_the_plain() -> U32 {
+  var f = r
+  set_k(inout f)   //~ E0401
+  1
+}
+
+pub fn parameter_to_the_plain(inout g: rt fn(U32) -> U32) {
+  set_k(inout g)   //~ E0401
+}
+
+pub fn field_to_the_plain() -> U32 {
+  var h = Hr { f: r }
+  set_k(inout h.f)   //~ E0401
+  1
+}
+
+pub fn element_to_the_plain() -> U32 {
+  var fs = [r, r]
+  set_k(inout fs[0])   //~ E0401
+  1
+}
+
+pub fn span_to_the_plain() -> U32 {
+  var fs = [r, r]
+  fill_k(inout fs)   //~ E0401
+  1
+}
+
+pub fn generic_struct_to_the_plain() -> U32 {
+  var w = W { h: r }
+  set_w_k(inout w)   //~ E0401
+  1
+}
+
+// The plain type is passed to the parameter that is `rt`.
+pub fn variable_to_the_rt() -> U32 {
+  var f = k
+  set_r(inout f)   //~ E0401
+  1
+}
+
+pub fn parameter_to_the_rt(inout g: fn(U32) -> U32) {
+  set_r(inout g)   //~ E0401
+}
+
+pub fn field_to_the_rt() -> U32 {
+  var h = Hk { f: k }
+  set_r(inout h.f)   //~ E0401
+  1
+}
+
+pub fn element_to_the_rt() -> U32 {
+  var fs = [k, k]
+  set_r(inout fs[1])   //~ E0401
+  1
+}
+
+pub fn span_to_the_rt() -> U32 {
+  var fs = [k, k]
+  fill_r(inout fs)   //~ E0401
+  1
+}
+
+// The generic `inout` arguments and the receiver.
+pub fn swap_the_two_types() -> U32 {
+  var f = r
+  var g = k
+  swap(inout f, inout g)   //~ E0401
+  1
+}
+
+pub fn swap_the_two_types_reversed() -> U32 {
+  var f = k
+  var g = r
+  swap(inout f, inout g)   //~ E0401
+  1
+}
+
+pub fn put2_the_type_is_fixed_by_the_value() -> U32 {
+  var g = k
+  put2(r, inout g)   //~ E0401
+  1
+}
+
+pub fn put2_the_type_is_fixed_by_the_value_plain() -> U32 {
+  var g = r
+  put2(k, inout g)   //~ E0401
+  1
+}
+
+pub fn receiver_rt_takes_the_plain_function() -> U32 {
+  var w = W { h: r }
+  w.set!(k)   //~ E0401
+  1
+}

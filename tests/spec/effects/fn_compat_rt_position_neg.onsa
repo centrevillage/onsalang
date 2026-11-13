@@ -1,0 +1,251 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§4.7", "§10"]
+
+// W6-01 U2a/t, R-26 (the first half), S-1031 (§8.1, rule 3 of "関数型どうしの互換": "G が `rt` なら F も `rt` である（§10）"; §10: "`rt fn` の型の位置には `rt`
+// の関数しか置けない（E0401。関数型の互換、§8.1）"; "これらに反する使い方は全て E0401 である"). A function that is not `rt` (a named one, a variable of the type, a
+// parameter of the type, the result of a call) is not used where the function type is `rt`, at the positions of an argument, an annotated `let`, a return
+// value, a field and its default, a constant, the right side of an assignment, an element of an array and of a tuple, and the arms of an `if` and a
+// `match` that have the expected type. The function `r` is `rt`: it is accepted at each of these places (the controls are in the units named `fine_`).
+// The function `b` that uses `Alloc` is E0401 at an `rt` position too (fn_compat_alloc_position_neg.onsa). Before U2a these are accepted (the `rt` of a
+// function type is not compared). Checked, not run.
+
+pub fn k(x: U32) -> U32 {
+  x
+}
+
+pub rt fn r(x: U32) -> U32 {
+  x
+}
+
+pub fn apr(g: rt fn(U32) -> U32) -> U32 {
+  g.(1)
+}
+
+pub fn mk() -> fn(U32) -> U32 {
+  k
+}
+
+pub rt fn mkr() -> rt fn(U32) -> U32 {
+  r
+}
+
+pub struct Maker {
+  n: U32,
+}
+
+impl Maker {
+  pub fn make(self) -> fn(U32) -> U32 {
+    k
+  }
+
+  pub rt fn make_rt(self) -> rt fn(U32) -> U32 {
+    r
+  }
+}
+
+pub struct HolderRt {
+  f: rt fn(U32) -> U32,
+}
+
+pub struct DefaultedRt {
+  f: rt fn(U32) -> U32 = k,   //~ E0401
+  n: U32 = 0,
+}
+
+pub struct DefaultedRtFine {
+  f: rt fn(U32) -> U32 = r,
+  n: U32 = 0,
+}
+
+const ONE: rt fn(U32) -> U32 = k   //~ E0401
+
+const TABLE: [rt fn(U32) -> U32; 2] = [r, k]   //~ E0401
+
+const FINE: rt fn(U32) -> U32 = r
+
+// The argument.
+pub fn arg_named() -> U32 {
+  apr(k)   //~ E0401
+}
+
+pub fn arg_variable() -> U32 {
+  let v: fn(U32) -> U32 = k
+  apr(v)   //~ E0401
+}
+
+pub fn arg_inferred_variable() -> U32 {
+  let v = k
+  apr(v)   //~ E0401
+}
+
+pub fn arg_parameter(f: fn(U32) -> U32) -> U32 {
+  apr(f)   //~ E0401
+}
+
+pub fn arg_call_result() -> U32 {
+  apr(mk())   //~ E0401
+}
+
+pub fn arg_method_result(m: Maker) -> U32 {
+  apr(m.make())   //~ E0401
+}
+
+pub fn fine_arg_named() -> U32 {
+  apr(r)
+}
+
+pub fn fine_arg_call_result(m: Maker) -> U32 {
+  apr(mkr()) + apr(m.make_rt())
+}
+
+// The annotated `let`.
+pub fn let_named() -> U32 {
+  let f: rt fn(U32) -> U32 = k   //~ E0401
+  f.(1)
+}
+
+pub fn let_variable() -> U32 {
+  let v = k
+  let f: rt fn(U32) -> U32 = v   //~ E0401
+  f.(1)
+}
+
+pub fn let_call_result() -> U32 {
+  let f: rt fn(U32) -> U32 = mk()   //~ E0401
+  f.(1)
+}
+
+pub fn let_method_result(m: Maker) -> U32 {
+  let f: rt fn(U32) -> U32 = m.make()   //~ E0401
+  f.(1)
+}
+
+pub fn fine_let() -> U32 {
+  let f: rt fn(U32) -> U32 = r
+  f.(1)
+}
+
+// The return value.
+pub fn return_named() -> rt fn(U32) -> U32 {
+  k   //~ E0401
+}
+
+pub fn return_variable() -> rt fn(U32) -> U32 {
+  let v = k
+  v   //~ E0401
+}
+
+pub fn return_early(c: Bool) -> rt fn(U32) -> U32 {
+  if c {
+    return k   //~ E0401
+  }
+  r
+}
+
+pub fn return_call_result() -> rt fn(U32) -> U32 {
+  mk()   //~ E0401
+}
+
+pub fn fine_return() -> rt fn(U32) -> U32 {
+  r
+}
+
+// The field and its default (the defaults are above).
+pub fn field_named() -> HolderRt {
+  HolderRt { f: k }   //~ E0401
+}
+
+pub fn field_call_result() -> HolderRt {
+  HolderRt { f: mk() }   //~ E0401
+}
+
+pub fn fine_field() -> HolderRt {
+  HolderRt { f: r }
+}
+
+pub fn fine_field_default() -> U32 {
+  let s = DefaultedRtFine { ... }
+  s.f.(1) + FINE.(1)
+}
+
+pub fn field_default_is_used() -> U32 {
+  let s = DefaultedRt { ... }
+  s.f.(1)
+}
+
+// The right side of an assignment.
+pub fn assign_named() -> U32 {
+  var f: rt fn(U32) -> U32 = r
+  f = k   //~ E0401
+  f.(1)
+}
+
+pub fn assign_call_result() -> U32 {
+  var f: rt fn(U32) -> U32 = r
+  f = mk()   //~ E0401
+  f.(1)
+}
+
+pub fn assign_to_a_field() -> U32 {
+  var h = HolderRt { f: r }
+  h.f = k   //~ E0401
+  h.f.(1)
+}
+
+pub fn assign_to_an_element() -> U32 {
+  var fs: [rt fn(U32) -> U32; 2] = [r, r]
+  fs[0] = k   //~ E0401
+  fs[0].(1)
+}
+
+pub fn fine_assign() -> U32 {
+  var f: rt fn(U32) -> U32 = r
+  f = r
+  f.(1)
+}
+
+// The elements of an array and of a tuple that have the expected type.
+pub fn array_elements() -> U32 {
+  let fs: [rt fn(U32) -> U32; 2] = [r, k]   //~ E0401
+  fs[0].(1)
+}
+
+pub fn tuple_elements() -> U32 {
+  let t: (rt fn(U32) -> U32, U32) = (k, 1)   //~ E0401
+  t.0.(t.1)
+}
+
+pub fn fine_elements() -> U32 {
+  let fs: [rt fn(U32) -> U32; 2] = [r, r]
+  let t: (rt fn(U32) -> U32, U32) = (r, 1)
+  fs[0].(1) + t.0.(t.1)
+}
+
+// The arms of an `if` and of a `match` that have the expected type.
+pub fn if_arms(c: Bool) -> U32 {
+  let f: rt fn(U32) -> U32 = if c { r } else { k }   //~ E0401
+  f.(1)
+}
+
+pub fn if_arms_reversed(c: Bool) -> U32 {
+  let f: rt fn(U32) -> U32 = if c { k } else { r }   //~ E0401
+  f.(1)
+}
+
+pub fn match_arms(n: U32) -> U32 {
+  let f: rt fn(U32) -> U32 = match n {
+    0 => r,
+    _ => k,   //~ E0401
+  }
+  f.(1)
+}
+
+pub fn if_arms_as_an_argument(c: Bool) -> U32 {
+  apr(if c { r } else { k })   //~ E0401
+}
+
+pub fn fine_arms(c: Bool) -> U32 {
+  let f: rt fn(U32) -> U32 = if c { r } else { r }
+  f.(1)
+}

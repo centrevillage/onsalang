@@ -1,0 +1,232 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§4.7"]
+
+// W6-01 U2a/t, R-27 (2), S-1031 (§8.1, rule 2 of "関数型どうしの互換": "F の効果行が G の効果行に含まれる（純粋な関数は `uses {Alloc}` の位置で使える。
+// 逆は E0401）"; "これらに反する使い方は全て E0401 である"). The opposite direction of fn_compat_alloc_position_ok.onsa: a function that uses `Alloc` is not
+// used where the function type has an empty effect row, nor where it is `rt` (its row is not made of rt effects, §8.2). The value is a named function, a
+// variable of the type, a parameter of the type, an anonymous function that writes `uses {Alloc}`, and the result of a call (a function, a method), at the
+// positions of an argument, an annotated `let`, a return value, a field and its default, a constant, the right side of an assignment, an element of an
+// array and of a tuple, and the arms of an `if` and a `match` that have the expected type. Before U2a these are E0401 already (the effect rows are
+// compared for equality). Checked, not run.
+
+pub fn k(x: U32) -> U32 {
+  x
+}
+
+pub fn b(x: U32) -> U32 uses {Alloc} {
+  x
+}
+
+pub fn ap(g: fn(U32) -> U32) -> U32 {
+  g.(1)
+}
+
+pub fn ap_rt(g: rt fn(U32) -> U32) -> U32 {
+  g.(1)
+}
+
+pub fn mkb() -> fn(U32) -> U32 uses {Alloc} {
+  b
+}
+
+pub struct Maker {
+  n: U32,
+}
+
+impl Maker {
+  pub fn make(self) -> fn(U32) -> U32 uses {Alloc} {
+    b
+  }
+}
+
+pub struct Holder {
+  f: fn(U32) -> U32,
+}
+
+pub struct HolderRt {
+  f: rt fn(U32) -> U32,
+}
+
+pub struct Defaulted {
+  f: fn(U32) -> U32 = b,   //~ E0401
+  n: U32 = 0,
+}
+
+pub struct DefaultedRt {
+  f: rt fn(U32) -> U32 = b,   //~ E0401
+  n: U32 = 0,
+}
+
+const ONE: fn(U32) -> U32 = b   //~ E0401
+
+const TABLE: [fn(U32) -> U32; 2] = [k, b]   //~ E0401
+
+// The argument.
+pub fn arg_named() -> U32 {
+  ap(b)   //~ E0401
+}
+
+pub fn arg_variable() -> U32 {
+  let v: fn(U32) -> U32 uses {Alloc} = b
+  ap(v)   //~ E0401
+}
+
+pub fn arg_inferred_variable() -> U32 {
+  let v = b
+  ap(v)   //~ E0401
+}
+
+pub fn arg_parameter(f: fn(U32) -> U32 uses {Alloc}) -> U32 {
+  ap(f)   //~ E0401
+}
+
+pub fn arg_closure_with_a_written_row() -> U32 {
+  ap(fn(x: U32) -> U32 uses {Alloc} { x })   //~ E0401
+}
+
+pub fn arg_call_result() -> U32 {
+  ap(mkb())   //~ E0401
+}
+
+pub fn arg_method_result(m: Maker) -> U32 {
+  ap(m.make())   //~ E0401
+}
+
+pub fn arg_rt_position() -> U32 {
+  ap_rt(b)   //~ E0401
+}
+
+// The annotated `let`.
+pub fn let_named() -> U32 {
+  let f: fn(U32) -> U32 = b   //~ E0401
+  f.(1)
+}
+
+pub fn let_variable() -> U32 {
+  let v = b
+  let f: fn(U32) -> U32 = v   //~ E0401
+  f.(1)
+}
+
+pub fn let_closure_with_a_written_row() -> U32 {
+  let f: fn(U32) -> U32 = fn(x: U32) -> U32 uses {Alloc} { x }   //~ E0401
+  f.(1)
+}
+
+pub fn let_call_result() -> U32 {
+  let f: fn(U32) -> U32 = mkb()   //~ E0401
+  f.(1)
+}
+
+pub fn let_method_result(m: Maker) -> U32 {
+  let f: fn(U32) -> U32 = m.make()   //~ E0401
+  f.(1)
+}
+
+pub fn let_rt_position() -> U32 {
+  let f: rt fn(U32) -> U32 = b   //~ E0401
+  f.(1)
+}
+
+// The return value.
+pub fn return_named() -> fn(U32) -> U32 {
+  b   //~ E0401
+}
+
+pub fn return_variable() -> fn(U32) -> U32 {
+  let v = b
+  v   //~ E0401
+}
+
+pub fn return_early(c: Bool) -> fn(U32) -> U32 {
+  if c {
+    return b   //~ E0401
+  }
+  k
+}
+
+pub fn return_call_result() -> fn(U32) -> U32 {
+  mkb()   //~ E0401
+}
+
+pub fn return_rt_position() -> rt fn(U32) -> U32 {
+  b   //~ E0401
+}
+
+// The field and its default (the defaults are above).
+pub fn field_named() -> Holder {
+  Holder { f: b }   //~ E0401
+}
+
+pub fn field_call_result() -> Holder {
+  Holder { f: mkb() }   //~ E0401
+}
+
+pub fn field_rt_position() -> HolderRt {
+  HolderRt { f: b }   //~ E0401
+}
+
+pub fn field_default_is_used() -> U32 {
+  let s = Defaulted { ... }
+  s.f.(1)
+}
+
+// The right side of an assignment.
+pub fn assign_named() -> U32 {
+  var f: fn(U32) -> U32 = k
+  f = b   //~ E0401
+  f.(1)
+}
+
+pub fn assign_call_result() -> U32 {
+  var f: fn(U32) -> U32 = k
+  f = mkb()   //~ E0401
+  f.(1)
+}
+
+pub fn assign_to_a_field() -> U32 {
+  var h = Holder { f: k }
+  h.f = b   //~ E0401
+  h.f.(1)
+}
+
+pub fn assign_to_an_element() -> U32 {
+  var fs: [fn(U32) -> U32; 2] = [k, k]
+  fs[0] = b   //~ E0401
+  fs[0].(1)
+}
+
+// The elements of an array and of a tuple that have the expected type.
+pub fn array_elements() -> U32 {
+  let fs: [fn(U32) -> U32; 2] = [k, b]   //~ E0401
+  fs[0].(1)
+}
+
+pub fn tuple_elements() -> U32 {
+  let t: (fn(U32) -> U32, U32) = (b, 1)   //~ E0401
+  t.0.(t.1)
+}
+
+// The arms of an `if` and of a `match` that have the expected type.
+pub fn if_arms(c: Bool) -> U32 {
+  let f: fn(U32) -> U32 = if c { k } else { b }   //~ E0401
+  f.(1)
+}
+
+pub fn if_arms_reversed(c: Bool) -> U32 {
+  let f: fn(U32) -> U32 = if c { b } else { k }   //~ E0401
+  f.(1)
+}
+
+pub fn match_arms(n: U32) -> U32 {
+  let f: fn(U32) -> U32 = match n {
+    0 => k,
+    _ => b,   //~ E0401
+  }
+  f.(1)
+}
+
+pub fn if_arms_as_an_argument(c: Bool) -> U32 {
+  ap(if c { k } else { b })   //~ E0401
+}

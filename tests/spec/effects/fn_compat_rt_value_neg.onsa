@@ -1,0 +1,126 @@
+// onsa.toml
+// [test]
+// spec = ["§10", "§8.1"]
+
+// W6-01 U2a/t, R-26 (the first half; the reproduction is tests/review-phase1/body/r1_rt_fnvalue.onsa) (§10: "`rt fn` の型の位置には `rt` の関数しか置けない
+// （E0401。関数型の互換、§8.1）"; §8.1 rule 3: "G が `rt` なら F も `rt` である"; "E0901 は、`rt` の関数の中での `rt` でない関数と関数値の呼び出しだけに使う"). A function that is
+// not `rt` (a named one, a variable of a type that is not `rt`, a parameter of such a type, the result of a call) is put in a place of the type
+// `rt fn(F32) -> F32`: as the argument of an `rt` function, of a method, in an annotated `let` that is then called, as the value that an `rt` function
+// returns, from a function that is not `rt` and from inside an `rt` function. Each is E0401 at the value (the call that follows is the call of a value of an `rt`
+// type, so it is not E0901). The `rt` functions are accepted at the same places (`light_*`). The anonymous function with an `rt` body at such a place is the
+// work W6-03 (R-26, the second half). Checked, not run.
+
+pub fn heavy(x: F32) -> F32 {
+  x
+}
+
+pub rt fn light(x: F32) -> F32 {
+  x
+}
+
+pub fn heavy_maker() -> fn(F32) -> F32 {
+  heavy
+}
+
+pub rt fn apply(f: rt fn(F32) -> F32, x: F32) -> F32 {
+  f.(x)
+}
+
+pub struct Proc {
+  n: F32,
+}
+
+impl Proc {
+  pub rt fn run(self, f: rt fn(F32) -> F32) -> F32 {
+    f.(self.n)
+  }
+}
+
+// The three forms of the reproduction.
+pub fn named_value() -> F32 {
+  apply(heavy, 1.0)   //~ E0401
+}
+
+pub rt fn in_rt() -> F32 {
+  apply(heavy, 1.0)   //~ E0401
+}
+
+pub fn stored() -> F32 {
+  let g: rt fn(F32) -> F32 = heavy   //~ E0401
+  g.(2.0)
+}
+
+// The other values, and the other places.
+pub fn variable_value() -> F32 {
+  let h = heavy
+  apply(h, 1.0)   //~ E0401
+}
+
+pub fn parameter_value(h: fn(F32) -> F32) -> F32 {
+  apply(h, 1.0)   //~ E0401
+}
+
+pub rt fn in_rt_parameter(h: fn(F32) -> F32) -> F32 {
+  apply(h, 1.0)   //~ E0401
+}
+
+pub rt fn in_rt_variable() -> F32 {
+  let h = heavy
+  apply(h, 1.0)   //~ E0401
+}
+
+pub fn call_result_value() -> F32 {
+  apply(heavy_maker(), 1.0)   //~ E0401
+}
+
+pub rt fn in_rt_stored() -> F32 {
+  let _: rt fn(F32) -> F32 = heavy   //~ E0401
+  2.0
+}
+
+pub fn method_argument(p: Proc) -> F32 {
+  p.run(heavy)   //~ E0401
+}
+
+pub rt fn in_rt_method_argument(p: Proc) -> F32 {
+  p.run(heavy)   //~ E0401
+}
+
+pub rt fn in_rt_return() -> rt fn(F32) -> F32 {
+  heavy   //~ E0401
+}
+
+pub fn not_rt_return() -> rt fn(F32) -> F32 {
+  heavy   //~ E0401
+}
+
+// The `rt` functions at the same places.
+pub fn light_named_value() -> F32 {
+  apply(light, 1.0)
+}
+
+pub rt fn light_in_rt() -> F32 {
+  apply(light, 1.0)
+}
+
+pub fn light_stored() -> F32 {
+  let g: rt fn(F32) -> F32 = light
+  g.(2.0)
+}
+
+pub rt fn light_in_rt_variable() -> F32 {
+  let h = light
+  apply(h, 1.0)
+}
+
+pub rt fn light_in_rt_parameter(h: rt fn(F32) -> F32) -> F32 {
+  apply(h, 1.0)
+}
+
+pub fn light_method_argument(p: Proc) -> F32 {
+  p.run(light)
+}
+
+pub rt fn light_in_rt_return() -> rt fn(F32) -> F32 {
+  light
+}

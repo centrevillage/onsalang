@@ -1,0 +1,299 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§4.7", "§10"]
+
+// W6-01 U2a/t, R-27 (2), S-1031 (§8.1, "関数型どうしの互換": a function F is used where the expected type (§4.7) is a function type G
+// when "F の効果行が G の効果行に含まれる（純粋な関数は `uses {Alloc}` の位置で使える）" and, if G is `rt`, F is `rt`; the positions are
+// "引数、注釈付きの `let`、返り値、struct のフィールドとその既定値、定数の初期化式、代入の右辺、期待型のある配列・タプルの要素と合流の枝").
+// A function with an empty effect row (`k`, the `rt` function `r`, a constructor, which is `rt`, §4.4) is used at every position whose type is
+// `fn(U32) -> U32 uses {Alloc}`. The value is a named function, a variable of a function type, a function type parameter, a constructor, an
+// anonymous function that writes `uses {}`, and the result of a call (a function, a method), at the position of an argument, an annotated `let`,
+// a return value, a field and its default, a constant, the right side of an assignment, an element of an array and of a tuple, and the arms
+// of an `if` and a `match` that have the expected type. The opposite direction is in fn_compat_alloc_position_neg.onsa; the places inside a type
+// argument are in fn_compat_alloc_in_place_ok.onsa. Checked, not run.
+
+pub fn k(x: U32) -> U32 {
+  x
+}
+
+pub rt fn r(x: U32) -> U32 {
+  x
+}
+
+pub fn b(x: U32) -> U32 uses {Alloc} {
+  x
+}
+
+pub fn ap(g: fn(U32) -> U32 uses {Alloc}) -> U32 uses {Alloc} {
+  g.(1)
+}
+
+pub fn mk() -> fn(U32) -> U32 {
+  k
+}
+
+pub struct Maker {
+  n: U32,
+}
+
+impl Maker {
+  pub fn make(self) -> fn(U32) -> U32 {
+    k
+  }
+}
+
+pub struct Holder {
+  f: fn(U32) -> U32 uses {Alloc},
+}
+
+pub struct Defaulted {
+  f: fn(U32) -> U32 uses {Alloc} = k,
+  n: U32 = 0,
+}
+
+pub struct DefaultedRt {
+  f: fn(U32) -> U32 uses {Alloc} = r,
+  n: U32 = 0,
+}
+
+pub enum Wrap {
+  W(U32),
+  Z,
+}
+
+pub fn ap_ctor(m: fn(move U32) -> Wrap uses {Alloc}) -> Wrap uses {Alloc} {
+  m.(1)
+}
+
+const ONE: fn(U32) -> U32 uses {Alloc} = k
+
+const TABLE: [fn(U32) -> U32 uses {Alloc}; 3] = [k, r, b]
+
+// The argument.
+pub fn arg_named() -> U32 uses {Alloc} {
+  ap(k)
+}
+
+pub fn arg_rt_named() -> U32 uses {Alloc} {
+  ap(r)
+}
+
+pub fn arg_variable() -> U32 uses {Alloc} {
+  let v: fn(U32) -> U32 = k
+  ap(v)
+}
+
+pub fn arg_inferred_variable() -> U32 uses {Alloc} {
+  let v = k
+  ap(v)
+}
+
+pub fn arg_parameter(f: fn(U32) -> U32) -> U32 uses {Alloc} {
+  ap(f)
+}
+
+pub fn arg_rt_variable() -> U32 uses {Alloc} {
+  let v = r
+  ap(v)
+}
+
+pub fn arg_constructor() -> Wrap uses {Alloc} {
+  ap_ctor(Wrap.W)
+}
+
+pub fn arg_closure_with_a_written_row() -> U32 uses {Alloc} {
+  ap(fn(x: U32) -> U32 uses {} { x })
+}
+
+pub fn arg_call_result() -> U32 uses {Alloc} {
+  ap(mk())
+}
+
+pub fn arg_method_result(m: Maker) -> U32 uses {Alloc} {
+  ap(m.make())
+}
+
+// The annotated `let`.
+pub fn let_named() -> U32 uses {Alloc} {
+  let f: fn(U32) -> U32 uses {Alloc} = k
+  f.(1)
+}
+
+pub fn let_rt_named() -> U32 uses {Alloc} {
+  let f: fn(U32) -> U32 uses {Alloc} = r
+  f.(1)
+}
+
+pub fn let_variable() -> U32 uses {Alloc} {
+  let v = k
+  let f: fn(U32) -> U32 uses {Alloc} = v
+  f.(1)
+}
+
+pub fn let_closure_with_a_written_row() -> U32 uses {Alloc} {
+  let f: fn(U32) -> U32 uses {Alloc} = fn(x: U32) -> U32 uses {} { x }
+  f.(1)
+}
+
+pub fn let_call_result() -> U32 uses {Alloc} {
+  let f: fn(U32) -> U32 uses {Alloc} = mk()
+  f.(1)
+}
+
+pub fn let_method_result(m: Maker) -> U32 uses {Alloc} {
+  let f: fn(U32) -> U32 uses {Alloc} = m.make()
+  f.(1)
+}
+
+pub fn let_constructor() -> Wrap uses {Alloc} {
+  let m: fn(move U32) -> Wrap uses {Alloc} = Wrap.W
+  m.(1)
+}
+
+// The return value.
+pub fn return_named() -> fn(U32) -> U32 uses {Alloc} {
+  k
+}
+
+pub fn return_rt_named() -> fn(U32) -> U32 uses {Alloc} {
+  r
+}
+
+pub fn return_variable() -> fn(U32) -> U32 uses {Alloc} {
+  let v = k
+  v
+}
+
+pub fn return_early(c: Bool) -> fn(U32) -> U32 uses {Alloc} {
+  if c {
+    return k
+  }
+  b
+}
+
+pub fn return_call_result() -> fn(U32) -> U32 uses {Alloc} {
+  mk()
+}
+
+pub fn return_constructor() -> fn(move U32) -> Wrap uses {Alloc} {
+  Wrap.W
+}
+
+// The field and its default.
+pub fn field_named() -> Holder {
+  Holder { f: k }
+}
+
+pub fn field_rt_named() -> Holder {
+  Holder { f: r }
+}
+
+pub fn field_call_result() -> Holder {
+  Holder { f: mk() }
+}
+
+pub fn field_default() -> U32 uses {Alloc} {
+  let s = Defaulted { ... }
+  s.f.(1)
+}
+
+pub fn field_default_rt() -> U32 uses {Alloc} {
+  let s = DefaultedRt { ... }
+  s.f.(1)
+}
+
+// The constant.
+pub fn constant_initializer() -> U32 uses {Alloc} {
+  ONE.(1)
+}
+
+pub fn constant_array_elements() -> U32 uses {Alloc} {
+  TABLE[1].(1)
+}
+
+// The right side of an assignment.
+pub fn assign_named() -> U32 uses {Alloc} {
+  var f: fn(U32) -> U32 uses {Alloc} = b
+  f = k
+  f.(1)
+}
+
+pub fn assign_rt_named() -> U32 uses {Alloc} {
+  var f: fn(U32) -> U32 uses {Alloc} = b
+  f = r
+  f.(1)
+}
+
+pub fn assign_call_result() -> U32 uses {Alloc} {
+  var f: fn(U32) -> U32 uses {Alloc} = b
+  f = mk()
+  f.(1)
+}
+
+pub fn assign_to_a_field() -> U32 uses {Alloc} {
+  var h = Holder { f: b }
+  h.f = k
+  h.f.(1)
+}
+
+pub fn assign_to_an_element() -> U32 uses {Alloc} {
+  var fs: [fn(U32) -> U32 uses {Alloc}; 2] = [b, b]
+  fs[0] = k
+  fs[1] = r
+  fs[0].(1)
+}
+
+// The elements of an array and of a tuple that have the expected type.
+pub fn array_elements() -> U32 uses {Alloc} {
+  let fs: [fn(U32) -> U32 uses {Alloc}; 3] = [k, r, b]
+  fs[0].(1)
+}
+
+pub fn array_element_variable() -> U32 uses {Alloc} {
+  let v = k
+  let fs: [fn(U32) -> U32 uses {Alloc}; 2] = [v, b]
+  fs[0].(1)
+}
+
+pub fn tuple_elements() -> U32 uses {Alloc} {
+  let t: (fn(U32) -> U32 uses {Alloc}, U32) = (k, 1)
+  t.0.(t.1)
+}
+
+pub fn tuple_of_two_functions() -> U32 uses {Alloc} {
+  let t: (fn(U32) -> U32 uses {Alloc}, fn(U32) -> U32 uses {Alloc}) = (r, k)
+  t.0.(1)
+}
+
+// The arms of an `if` and of a `match` that have the expected type.
+pub fn if_arms(c: Bool) -> U32 uses {Alloc} {
+  let f: fn(U32) -> U32 uses {Alloc} = if c { k } else { b }
+  f.(1)
+}
+
+pub fn if_arms_reversed(c: Bool) -> U32 uses {Alloc} {
+  let f: fn(U32) -> U32 uses {Alloc} = if c { b } else { k }
+  f.(1)
+}
+
+pub fn if_arms_rt_and_pure(c: Bool) -> U32 uses {Alloc} {
+  let f: fn(U32) -> U32 uses {Alloc} = if c { r } else { k }
+  f.(1)
+}
+
+pub fn match_arms(n: U32) -> U32 uses {Alloc} {
+  let f: fn(U32) -> U32 uses {Alloc} = match n {
+    0 => k,
+    1 => r,
+    _ => b,
+  }
+  f.(1)
+}
+
+pub fn if_arms_as_an_argument(c: Bool) -> U32 uses {Alloc} {
+  ap(if c { k } else { r })
+}
+
+pub fn if_arms_as_a_return_value(c: Bool) -> fn(U32) -> U32 uses {Alloc} {
+  if c { k } else { b }
+}

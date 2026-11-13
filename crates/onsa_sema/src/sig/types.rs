@@ -59,7 +59,7 @@ impl<'p> Sema<'p> {
                     Some(x) => self.lower_type(cx, *x),
                     None => self.a.types.unit(),
                 };
-                let eff = self.lower_effects(cx, effects.as_ref());
+                let eff = self.lower_effects(cx, effects.as_ref(), *rt);
                 self.a.types.intern(Ty::Fn(FnTy { rt: *rt, params: ps, ret: r, effects: eff }))
             }
             TypeKind::Path { path, args } => {

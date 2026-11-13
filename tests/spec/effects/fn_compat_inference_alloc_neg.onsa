@@ -1,0 +1,105 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§8.1"]
+
+// W6-01 U2a/t, R-27 (2), S-1031 (§4.7: "これ以外で先に決まった型（型変数が先の引数・フィールド・`return` で決まった型、入れ子の合流の型引数の中、`var` の初期化の型）は、
+// 後の式の期待型として §8.1 で比べる … 型引数か注釈で先に決める"; §8.1: "代入は場所の型への比べ"). The effect row, in the order that gives E0401: the type that was fixed first by the
+// function with the empty row is the expected type of the later one that uses `Alloc`: `pick(k, b)` (the type parameter of a generic function is fixed by the first argument,
+// with a value made in place around them: `pick(Some(k), Some(b))`), `P { first: k, second: b }` (the first written field of a generic struct), and the type of a `var` (`var f = k`,
+// then `f = b`, an element, a field). The order that is accepted (`pick(b, k)`) is in fn_compat_alloc_in_place_ok.onsa. Before U2a these are E0401 already (the rows are
+// compared for equality). Checked, not run.
+
+pub fn k(x: U32) -> U32 {
+  x
+}
+
+pub fn b(x: U32) -> U32 uses {Alloc} {
+  x
+}
+
+pub struct P[T] {
+  first: T,
+  second: T,
+}
+
+pub struct W[T] {
+  h: T,
+}
+
+pub fn pick[T](a: T, c: T) -> T {
+  a
+}
+
+pub fn mkb() -> fn(U32) -> U32 uses {Alloc} {
+  b
+}
+
+// The type parameter of a generic function is fixed by the first argument.
+pub fn pick_pure_first() -> U32 {
+  let f = pick(k, b)   //~ E0401
+  f.(1)
+}
+
+pub fn pick_pure_first_variables() -> U32 {
+  let x = k
+  let y = b
+  let f = pick(x, y)   //~ E0401
+  f.(1)
+}
+
+pub fn pick_pure_first_call_result() -> U32 {
+  let f = pick(k, mkb())   //~ E0401
+  f.(1)
+}
+
+pub fn pick_option_of_pure_first() -> U32 {
+  let o = pick(Some(k), Some(b))   //~ E0401
+  match o {
+    Some(f) => f.(1),
+    None => 0,
+  }
+}
+
+pub fn pick_with_the_type_arguments_of_the_pure_one() -> U32 {
+  let f = pick::[fn(U32) -> U32](k, b)   //~ E0401
+  f.(1)
+}
+
+// The type parameter of a generic struct is fixed by the field that is written first.
+pub fn struct_pure_field_first() -> U32 {
+  let p = P { first: k, second: b }   //~ E0401
+  p.first.(1)
+}
+
+pub fn struct_pure_field_first_in_the_other_order() -> U32 {
+  let p = P { second: k, first: b }   //~ E0401
+  p.first.(1)
+}
+
+// The type of a `var` is the expected type of the later assignments.
+pub fn var_started_by_the_pure_function() -> U32 {
+  var f = k
+  f = b   //~ E0401
+  f.(1)
+}
+
+pub fn var_array_element() -> U32 {
+  var fs = [k, k]
+  fs[0] = b   //~ E0401
+  fs[1].(1)
+}
+
+pub fn var_struct_field() -> U32 {
+  var w = W { h: k }
+  w.h = b   //~ E0401
+  w.h.(1)
+}
+
+pub fn var_option() -> U32 {
+  var o = Some(k)
+  o = Some(b)   //~ E0401
+  match o {
+    Some(f) => f.(1),
+    None => 0,
+  }
+}

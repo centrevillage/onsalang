@@ -6,7 +6,7 @@
 use onsa_diag::Span;
 use onsa_diag::hash::{HashMap, HashSet};
 
-use crate::ty::{Len, Measure, TYPE_DEPTH_LIMIT, Ty, TyId, Types};
+use crate::ty::{FnTy, Len, Measure, TYPE_DEPTH_LIMIT, Ty, TyId, Types};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LitKind {
@@ -299,23 +299,51 @@ impl Infer {
                 }
                 Ok(())
             }
-            // `rt` is checked by the rt pass (T2-9); modes and effects are part of the type.
-            // The parts come first: the text of a mismatch of the modes or the
-            // effects shows the types they decide (§18.1).
-            (Ty::Fn(f1), Ty::Fn(f2)) if f1.params.len() == f2.params.len() => {
-                for ((_, x), (_, y)) in f1.params.iter().zip(&f2.params) {
-                    self.unify(types, *x, *y, cause)?;
-                }
-                self.unify(types, f1.ret, f2.ret, cause)?;
-                let modes = f1.params.iter().map(|p| p.0).eq(f2.params.iter().map(|p| p.0));
-                // A row with an effect row variable, on either side, is not
-                // compared (R-27 (3), §8.1).
-                let open = f1.effects.is_open() || f2.effects.is_open();
-                if modes && (open || f1.effects == f2.effects) { Ok(()) } else { Err(Mismatch::Types) }
-            }
+            (Ty::Fn(f1), Ty::Fn(f2)) => self.unify_fns(types, (f1, f2), false, cause),
             (Ty::ConstVal(n), Ty::ConstVal(m)) if n == m => Ok(()),
             _ => Err(Mismatch::Types),
         }
+    }
+
+    /// Whether a value of the type `actual` can be used where `expected` is
+    /// expected (§8.1, §4.7, S-1031): of two function types, the outermost
+    /// pair is directed (the row of `actual` is in that of `expected`, and
+    /// it is `rt` where `expected` is); any other pair unifies.
+    pub fn fits(&mut self, types: &mut Types, actual: TyId, expected: TyId, cause: &Cause) -> Result<(), Mismatch> {
+        let (a, b) = (self.shallow(types, actual), self.shallow(types, expected));
+        match (types.get(a).clone(), types.get(b).clone()) {
+            (Ty::Fn(f1), Ty::Fn(f2)) => self.unify_fns(types, (&f1, &f2), true, cause),
+            _ => self.unify(types, a, b, cause),
+        }
+    }
+
+    /// The function types `found` and `wanted`, with the same parameter
+    /// types, modes and result (§8.1 rule 1; modes are part of the type,
+    /// §4.1); `directed`, rules 2 and 3, else the same effect row (a set)
+    /// and the same `rt` (§10). A row with an effect row variable, on
+    /// either side, is not compared (R-27 (3), §8.1). The parts come
+    /// first: the text of a mismatch of the modes, the effects or `rt`
+    /// shows the types they decide (§18.1).
+    fn unify_fns(
+        &mut self,
+        types: &mut Types,
+        (found, wanted): (&FnTy, &FnTy),
+        directed: bool,
+        cause: &Cause,
+    ) -> Result<(), Mismatch> {
+        if found.params.len() != wanted.params.len() {
+            return Err(Mismatch::Types);
+        }
+        for ((_, x), (_, y)) in found.params.iter().zip(&wanted.params) {
+            self.unify(types, *x, *y, cause)?;
+        }
+        self.unify(types, found.ret, wanted.ret, cause)?;
+        let modes = found.params.iter().map(|p| p.0).eq(wanted.params.iter().map(|p| p.0));
+        let (row, other) = (&found.effects, &wanted.effects);
+        let open = row.is_open() || other.is_open();
+        let effects = open || row.within(other) && (directed || other.within(row));
+        let rt = found.rt == wanted.rt || directed && found.rt;
+        if modes && effects && rt { Ok(()) } else { Err(Mismatch::Types) }
     }
 
     /// `ty` unified with the error type `err`: each variable of `ty` (of a

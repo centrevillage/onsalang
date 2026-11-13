@@ -151,12 +151,18 @@ impl<'p> Sema<'p> {
         }
     }
 
-    /// The effects of a row of a signature or a function type
+    /// The effects of a row of a signature or a function type, `rt` or not
     /// ([`read_effects`]): its errors are reported, and the lowering goes on.
-    pub(super) fn lower_effects(&mut self, cx: &Cx<'p>, row: Option<&EffectRow>) -> EffectSet {
+    /// The row of an `rt` one cannot have `Alloc` (E0902, §10 rule 1, §8.2;
+    /// a function type too, R-452).
+    pub(super) fn lower_effects(&mut self, cx: &Cx<'p>, row: Option<&EffectRow>, rt: bool) -> EffectSet {
         let (set, errors) = read_effects(self.a, cx.def, cx.m, (&cx.generics, cx.self_ty, &cx.locals), row);
         for d in errors {
             self.report(cx.def, d);
+        }
+        if let Some(row) = row.filter(|_| rt && set.alloc) {
+            let msg = "`rt fn` cannot have `Alloc` in its effect row (§10)";
+            self.report(cx.def, Diagnostic::new(Stage::Effects, Code::E0902, row.span, msg));
         }
         set
     }

@@ -1,0 +1,238 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§10", "§4.7"]
+
+// W6-01 U2a/t, R-26 (the first half), S-1031 (§8.1: "型引数の中の関数型（`Option[F]` と `Option[G]`、配列・タプル・`Span` の要素、総称の型の引数）は `rt` と効果行を含めて
+// 完全に一致する（`Option[rt fn(U32) -> U32]` の値は `Option[fn(U32) -> U32]` の位置で使えない）"; §10: "型引数の中と `inout` の引数では型が等しいことを求め"). A value that was
+// made before, whose type has an `rt` function type inside (`Option[rt fn(U32) -> U32]`, `[rt fn(U32) -> U32; 2]`, a tuple, the error of a `Result`, a generic struct
+// of the user, a function type that has an `rt` function type as its parameter), is not used where the same type without the `rt` is wanted, and a value whose
+// type has no `rt` is not used where the type has it. The `Span` that only reads is the same (its element type is equal). Each is E0401 (the `?` of an error type that
+// differs is E0414, §9). Before U2a these are accepted (the `rt` of a function type is not compared, and the one of a type argument is not either). The effect row of
+// a type argument is in fn_compat_type_args_alloc_neg.onsa, the values made in place in fn_compat_rt_to_plain_ok.onsa. Checked, not run.
+
+pub fn k(x: U32) -> U32 {
+  x
+}
+
+pub rt fn r(x: U32) -> U32 {
+  x
+}
+
+pub struct W[T] {
+  h: T,
+}
+
+pub struct Holder {
+  o: Option[fn(U32) -> U32],
+}
+
+pub struct HolderRt {
+  o: Option[rt fn(U32) -> U32],
+}
+
+pub fn opt_r() -> Option[rt fn(U32) -> U32] {
+  Some(r)
+}
+
+pub fn opt_k() -> Option[fn(U32) -> U32] {
+  Some(k)
+}
+
+pub fn take_option_k(o: Option[fn(U32) -> U32]) -> U32 {
+  match o {
+    Some(f) => f.(1),
+    None => 0,
+  }
+}
+
+pub fn take_option_r(o: Option[rt fn(U32) -> U32]) -> U32 {
+  match o {
+    Some(f) => f.(1),
+    None => 0,
+  }
+}
+
+pub fn take_array_k(fs: [fn(U32) -> U32; 2]) -> U32 {
+  fs[0].(1)
+}
+
+pub fn take_array_r(fs: [rt fn(U32) -> U32; 2]) -> U32 {
+  fs[0].(1)
+}
+
+pub fn take_tuple_k(t: (fn(U32) -> U32, U32)) -> U32 {
+  t.0.(t.1)
+}
+
+pub fn take_tuple_r(t: (rt fn(U32) -> U32, U32)) -> U32 {
+  t.0.(t.1)
+}
+
+pub fn take_w_k(w: W[fn(U32) -> U32]) -> U32 {
+  w.h.(1)
+}
+
+pub fn take_w_r(w: W[rt fn(U32) -> U32]) -> U32 {
+  w.h.(1)
+}
+
+pub fn read_span_k(xs: Span[fn(U32) -> U32]) -> U32 {
+  xs[0].(1)
+}
+
+pub fn read_span_r(xs: Span[rt fn(U32) -> U32]) -> U32 {
+  xs[0].(1)
+}
+
+pub fn takes_outer_k(f: fn(fn(U32) -> U32) -> U32) -> U32 {
+  f.(k)
+}
+
+pub fn takes_outer_r(f: fn(rt fn(U32) -> U32) -> U32) -> U32 {
+  f.(r)
+}
+
+pub fn outer_with_k(g: fn(U32) -> U32) -> U32 {
+  g.(1)
+}
+
+pub fn outer_with_r(g: rt fn(U32) -> U32) -> U32 {
+  g.(1)
+}
+
+// The value with the `rt` inside, at the place without it.
+pub fn option_as_an_argument() -> U32 {
+  let o = opt_r()
+  take_option_k(o)   //~ E0401
+}
+
+pub fn option_of_a_call_result() -> U32 {
+  take_option_k(opt_r())   //~ E0401
+}
+
+pub fn option_in_a_let() -> U32 {
+  let o: Option[fn(U32) -> U32] = opt_r()   //~ E0401
+  take_option_k(o)
+}
+
+pub fn option_parameter(o: Option[rt fn(U32) -> U32]) -> U32 {
+  take_option_k(o)   //~ E0401
+}
+
+pub fn option_returned(o: Option[rt fn(U32) -> U32]) -> Option[fn(U32) -> U32] {
+  o   //~ E0401
+}
+
+pub fn option_in_a_field(o: Option[rt fn(U32) -> U32]) -> Holder {
+  Holder { o: o }   //~ E0401
+}
+
+pub fn option_assigned(o: Option[rt fn(U32) -> U32]) -> U32 {
+  var p = opt_k()
+  p = o   //~ E0401
+  take_option_k(p)
+}
+
+pub fn array_as_an_argument() -> U32 {
+  let fs = [r, r]
+  take_array_k(fs)   //~ E0401
+}
+
+pub fn array_parameter(fs: [rt fn(U32) -> U32; 2]) -> U32 {
+  take_array_k(fs)   //~ E0401
+}
+
+pub fn tuple_as_an_argument() -> U32 {
+  let t = (r, 1)
+  take_tuple_k(t)   //~ E0401
+}
+
+pub fn generic_struct_as_an_argument() -> U32 {
+  let w = W { h: r }
+  take_w_k(w)   //~ E0401
+}
+
+pub fn generic_struct_parameter(w: W[rt fn(U32) -> U32]) -> U32 {
+  take_w_k(w)   //~ E0401
+}
+
+pub fn span_of_the_array_read() -> U32 {
+  let fs = [r, r]
+  read_span_k(fs)   //~ E0401
+}
+
+pub fn span_parameter_read(xs: Span[rt fn(U32) -> U32]) -> U32 {
+  read_span_k(xs)   //~ E0401
+}
+
+pub fn result_error_returned() -> Result[U32, fn(U32) -> U32] {
+  let e: Result[U32, rt fn(U32) -> U32] = Err(r)
+  e   //~ E0401
+}
+
+pub fn result_error_through_the_question_mark(o: Result[U32, rt fn(U32) -> U32]) -> Result[U32, fn(U32) -> U32] {
+  let x = o?   //~ E0414
+  Ok(x)
+}
+
+pub fn option_through_the_question_mark(o: Option[Option[rt fn(U32) -> U32]]) -> Option[Option[fn(U32) -> U32]] {
+  let x = o?
+  Some(x)   //~ E0401
+}
+
+pub fn option_inside_an_option() -> U32 {
+  let o: Option[Option[rt fn(U32) -> U32]] = Some(opt_r())
+  let p: Option[Option[fn(U32) -> U32]] = o   //~ E0401
+  match p {
+    Some(q) => take_option_k(q),
+    None => 0,
+  }
+}
+
+pub fn function_with_an_rt_parameter() -> U32 {
+  takes_outer_k(outer_with_r)   //~ E0401
+}
+
+pub fn function_with_a_parameter_that_is_not_rt() -> U32 {
+  takes_outer_r(outer_with_k)   //~ E0401
+}
+
+// The value without the `rt`, at the place with it.
+pub fn option_k_as_an_argument() -> U32 {
+  let o = opt_k()
+  take_option_r(o)   //~ E0401
+}
+
+pub fn option_k_in_a_let() -> U32 {
+  let o: Option[rt fn(U32) -> U32] = opt_k()   //~ E0401
+  take_option_r(o)
+}
+
+pub fn option_k_in_a_field(o: Option[fn(U32) -> U32]) -> HolderRt {
+  HolderRt { o: o }   //~ E0401
+}
+
+pub fn array_k_as_an_argument() -> U32 {
+  let fs = [k, k]
+  take_array_r(fs)   //~ E0401
+}
+
+pub fn tuple_k_as_an_argument() -> U32 {
+  let t = (k, 1)
+  take_tuple_r(t)   //~ E0401
+}
+
+pub fn generic_struct_k_as_an_argument() -> U32 {
+  let w = W { h: k }
+  take_w_r(w)   //~ E0401
+}
+
+pub fn span_k_of_the_array_read() -> U32 {
+  let fs = [k, k]
+  read_span_r(fs)   //~ E0401
+}
+
+pub fn result_error_k_through_the_question_mark(o: Result[U32, fn(U32) -> U32]) -> Result[U32, rt fn(U32) -> U32] {
+  let x = o?   //~ E0414
+  Ok(x)
+}

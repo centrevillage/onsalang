@@ -699,18 +699,38 @@ impl<'a> Checker<'a> {
 
     /// Unify, reporting E0401 at `span` on failure.
     pub(crate) fn unify_at(&mut self, span: Span, actual: TyId, expected: TyId) -> R<()> {
-        match self.mismatch_at(span, actual, expected) {
+        match self.mismatch_at(span, actual, expected, false) {
             Some(d) => Err(self.diag(d)),
             None => Ok(()),
         }
     }
 
-    /// Unify, giving the E0401 at `span` on failure, for the caller to report.
-    pub(crate) fn mismatch_at(&mut self, span: Span, actual: TyId, expected: TyId) -> Option<Diagnostic> {
+    /// The value of the type `actual` at `span` used where `expected` is
+    /// expected ([`Infer::fits`], §8.1), reporting E0401 on failure.
+    pub(crate) fn fit_at(&mut self, span: Span, actual: TyId, expected: TyId) -> R<()> {
+        match self.mismatch_at(span, actual, expected, true) {
+            Some(d) => Err(self.diag(d)),
+            None => Ok(()),
+        }
+    }
+
+    /// Unify, or fit if `directed` ([`Infer::fits`]), giving the E0401 at
+    /// `span` on failure, for the caller to report.
+    pub(crate) fn mismatch_at(
+        &mut self,
+        span: Span,
+        actual: TyId,
+        expected: TyId,
+        directed: bool,
+    ) -> Option<Diagnostic> {
         let cause = self.cause(span, Some(expected));
-        let Err(mismatch) = self.infer.unify(&mut self.a.types, actual, expected, &cause) else {
-            return None;
+        let types = &mut self.a.types;
+        let r = if directed {
+            self.infer.fits(types, actual, expected, &cause)
+        } else {
+            self.infer.unify(types, actual, expected, &cause)
         };
+        let Err(mismatch) = r else { return None };
         let (a, e) = (self.display(actual), self.display(expected));
         let (found, wanted) = (self.infer.lit_of(&self.a.types, actual), self.infer.lit_of(&self.a.types, expected));
         let text = match (mismatch, found, wanted) {

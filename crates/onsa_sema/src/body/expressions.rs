@@ -16,10 +16,14 @@ impl<'a> Checker<'a> {
             return Err(self.never_carried_out(span, part));
         }
         let t = self.check_expr_inner(e, expected)?;
-        if let Some(exp) = expected {
-            self.unify_at(span, t, exp)?;
-        }
-        self.record_within(e, t)
+        let Some(exp) = expected else { return self.record_within(e, t) };
+        self.fit_at(span, t, exp)?;
+        // A function fit to a function type has the type expected, so that
+        // what is made of it (a tuple, an arm) has it; `e` keeps its own
+        // (§8.1, §4.7).
+        let found = self.record_within(e, t)?;
+        let fns = [found, exp].map(|t| matches!(self.a.types.get(self.shallow(t)), Ty::Fn(_)));
+        Ok(if fns == [true, true] { exp } else { found })
     }
 
     /// The type of `e`, the `?` on `inner` (§9.1), with the constructors it
@@ -678,7 +682,7 @@ impl<'a> Checker<'a> {
     /// (§8.1, S-872): the one fix adds `move` to all of them. A fix leaves
     /// fewer such parameters, so the candidates end; §5.2 judges the result.
     fn unify_arg_closure(&mut self, span: Span, params: &[Param], t: TyId, f: &FnTy, exp: TyId) -> R<()> {
-        let Some(d) = self.mismatch_at(span, t, exp) else { return Ok(()) };
+        let Some(d) = self.mismatch_at(span, t, exp, true) else { return Ok(()) };
         let Ty::Fn(mut written) = self.ty(t) else { unreachable!("an anonymous function has a function type") };
         let mut edits = Vec::new();
         for ((p, (mode, _)), &(wanted, _)) in params.iter().zip(&mut written.params).zip(&f.params) {
@@ -693,7 +697,7 @@ impl<'a> Checker<'a> {
         }
         let marked = self.a.types.intern(Ty::Fn(written));
         let cause = self.cause(span, None);
-        let fits = self.infer.unify(&mut self.a.types, marked, exp, &cause).is_ok();
+        let fits = self.infer.fits(&mut self.a.types, marked, exp, &cause).is_ok();
         Err(self.diag(if fits { d.with_fix(Fix::new("add `move`", edits)) } else { d }))
     }
 

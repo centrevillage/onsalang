@@ -509,20 +509,7 @@ impl<'p> Sema<'p> {
         if let Some(c) = &f.ret_clock {
             self.report(id, clock_after(cx.ast, cx.text, f.ret, c));
         }
-        let effects = self.lower_effects(&cx, f.effects.as_ref());
-        // §10 rule 1: an `rt` function cannot have `Alloc` in its effect row (E0902).
-        if f.rt && effects.alloc {
-            let span = f.effects.as_ref().map(|e| e.span).unwrap_or(f.name.span);
-            self.report(
-                id,
-                Diagnostic::new(
-                    Stage::Effects,
-                    Code::E0902,
-                    span,
-                    "`rt fn` cannot have `Alloc` in its effect row (§10)",
-                ),
-            );
-        }
+        let effects = self.lower_effects(&cx, f.effects.as_ref(), f.rt);
         let target = self.a.defs[id.0 as usize].as_fn().is_some_and(|d| d.target);
         if f.body.is_none() && !target {
             self.report(id, Diagnostic::new(Stage::Names, Code::E0002, f.name.span, "function needs a body"));

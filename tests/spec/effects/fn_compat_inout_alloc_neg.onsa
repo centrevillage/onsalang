@@ -1,0 +1,166 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§4.7"]
+
+// W6-01 U2a/t, R-27 (2), S-1031 (§8.1: "`inout` の引数には向きが無く、渡す場所の型と引数の型が等しいことを求める（呼ばれる側がその型の値を書き戻すため）"; "向きを持つのは
+// 期待型そのものが関数型である位置だけで"). An `inout` argument is a place that the called function writes back to, so its function type is equal to the type of the
+// parameter, with the effect row too: a variable of `fn(U32) -> U32` is not passed to `inout g: fn(U32) -> U32 uses {Alloc}`, and a variable of the type with the row
+// is not passed to the one without it. The place is a variable, a parameter of the caller, a field (`inout h.f`), an element (`inout fs[0]`), and an
+// `inout` argument of a generic function (`swap`, `put2`), the receiver of `inout self` (the type parameter is fixed by the receiver), and a `Span` of the
+// elements. The same type is accepted (fn_compat_same_type_ok.onsa), and so is `put(inout g, k)` and `w.set!(k)` for `g` and `w` with the row, where the later argument is not an `inout`
+// place (fn_compat_alloc_in_place_ok.onsa). Before U2a these are E0401 already (the rows are compared for equality). Checked, not run.
+
+pub fn k(x: U32) -> U32 {
+  x
+}
+
+pub fn b(x: U32) -> U32 uses {Alloc} {
+  x
+}
+
+pub struct W[T] {
+  h: T,
+}
+
+impl[T] W[T] {
+  pub fn set(inout self, v: T) {
+    self.h = v
+  }
+}
+
+pub struct Hk {
+  f: fn(U32) -> U32,
+}
+
+pub struct Hb {
+  f: fn(U32) -> U32 uses {Alloc},
+}
+
+pub fn set_k(inout g: fn(U32) -> U32) {
+  g = k
+}
+
+pub fn set_b(inout g: fn(U32) -> U32 uses {Alloc}) {
+  g = b
+}
+
+pub fn fill_k(inout xs: Span[fn(U32) -> U32]) {
+  xs[0] = k
+}
+
+pub fn fill_b(inout xs: Span[fn(U32) -> U32 uses {Alloc}]) {
+  xs[0] = b
+}
+
+pub fn swap[T](inout p: T, inout q: T) {
+  let t = p
+  p = q
+  q = t
+}
+
+pub fn put2[T](v: T, inout g: T) {
+  g = v
+}
+
+// The type without the row is passed to the parameter with the row.
+pub fn variable_to_the_larger() -> U32 {
+  var f = k
+  set_b(inout f)   //~ E0401
+  1
+}
+
+pub fn annotated_variable_to_the_larger() -> U32 {
+  var f: fn(U32) -> U32 = k
+  set_b(inout f)   //~ E0401
+  1
+}
+
+pub fn parameter_to_the_larger(inout g: fn(U32) -> U32) {
+  set_b(inout g)   //~ E0401
+}
+
+pub fn field_to_the_larger() -> U32 {
+  var h = Hk { f: k }
+  set_b(inout h.f)   //~ E0401
+  1
+}
+
+pub fn element_to_the_larger() -> U32 {
+  var fs = [k, k]
+  set_b(inout fs[0])   //~ E0401
+  1
+}
+
+pub fn span_to_the_larger() -> U32 {
+  var fs = [k, k]
+  fill_b(inout fs)   //~ E0401
+  1
+}
+
+// The type with the row is passed to the parameter without it.
+pub fn variable_to_the_smaller() -> U32 {
+  var f = b
+  set_k(inout f)   //~ E0401
+  1
+}
+
+pub fn annotated_variable_to_the_smaller() -> U32 uses {Alloc} {
+  var f: fn(U32) -> U32 uses {Alloc} = b
+  set_k(inout f)   //~ E0401
+  1
+}
+
+pub fn parameter_to_the_smaller(inout g: fn(U32) -> U32 uses {Alloc}) {
+  set_k(inout g)   //~ E0401
+}
+
+pub fn field_to_the_smaller() -> U32 {
+  var h = Hb { f: b }
+  set_k(inout h.f)   //~ E0401
+  1
+}
+
+pub fn element_to_the_smaller() -> U32 {
+  var fs = [b, b]
+  set_k(inout fs[1])   //~ E0401
+  1
+}
+
+pub fn span_to_the_smaller() -> U32 {
+  var fs = [b, b]
+  fill_k(inout fs)   //~ E0401
+  1
+}
+
+// The generic `inout` arguments and the receiver.
+pub fn swap_the_two_types() -> U32 {
+  var f = k
+  var g = b
+  swap(inout f, inout g)   //~ E0401
+  1
+}
+
+pub fn swap_the_two_types_reversed() -> U32 {
+  var f = b
+  var g = k
+  swap(inout f, inout g)   //~ E0401
+  1
+}
+
+pub fn put2_the_type_is_fixed_by_the_value() -> U32 {
+  var g = k
+  put2(b, inout g)   //~ E0401
+  1
+}
+
+pub fn put2_the_type_is_fixed_by_the_value_pure() -> U32 {
+  var g = b
+  put2(k, inout g)   //~ E0401
+  1
+}
+
+pub fn receiver_pure_takes_the_function_with_the_row() -> U32 {
+  var w = W { h: k }
+  w.set!(b)   //~ E0401
+  1
+}

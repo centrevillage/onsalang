@@ -1,0 +1,290 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§10"]
+
+// W6-01 U2a/t, R-27 (2), R-26, S-1031 (§8.1: "型引数の中の関数型 … は `rt` と効果行を含めて完全に一致する"; "`inout` の引数には向きが無く、渡す場所の型と引数の型が
+// 等しいことを求める"). The controls of the files that give E0401 for an inside of a type argument and for an `inout` argument: the same type is accepted in
+// each of those places, for the three kinds of the type (`fn(U32) -> U32`, `rt fn(U32) -> U32`, `fn(U32) -> U32 uses {Alloc}`). A value of a type
+// argument that was made before (a variable, a parameter, a result of a call) is used at a place of the same type; an `inout` argument is a variable, a
+// field and an element of the same type; the generic `swap` has two arguments of one type; `inout self` of a receiver that fixes the type parameter;
+// `Span` of the same element type; the function type inside a function type is the same. This file passes before the work of U2a (the cases that give
+// E0401 are in fn_compat_type_args_alloc_neg.onsa, fn_compat_type_args_rt_neg.onsa, fn_compat_inout_alloc_neg.onsa and fn_compat_inout_rt_neg.onsa). Checked, not run.
+
+pub fn k(x: U32) -> U32 {
+  x
+}
+
+pub rt fn r(x: U32) -> U32 {
+  x
+}
+
+pub fn b(x: U32) -> U32 uses {Alloc} {
+  x
+}
+
+pub struct W[T] {
+  h: T,
+}
+
+impl[T] W[T] {
+  pub fn set(inout self, v: T) {
+    self.h = v
+  }
+}
+
+pub struct Hr {
+  f: rt fn(U32) -> U32,
+}
+
+pub struct Hk {
+  f: fn(U32) -> U32,
+}
+
+pub struct Hb {
+  f: fn(U32) -> U32 uses {Alloc},
+}
+
+pub fn swap[T](inout p: T, inout q: T) {
+  let t = p
+  p = q
+  q = t
+}
+
+pub fn take_option_rt(o: Option[rt fn(U32) -> U32]) -> U32 {
+  match o {
+    Some(f) => f.(1),
+    None => 0,
+  }
+}
+
+pub fn take_option_k(o: Option[fn(U32) -> U32]) -> U32 {
+  match o {
+    Some(f) => f.(1),
+    None => 0,
+  }
+}
+
+pub fn take_option_b(o: Option[fn(U32) -> U32 uses {Alloc}]) -> U32 uses {Alloc} {
+  match o {
+    Some(f) => f.(1),
+    None => 0,
+  }
+}
+
+pub fn take_array_rt(fs: [rt fn(U32) -> U32; 2]) -> U32 {
+  fs[0].(1)
+}
+
+pub fn take_array_b(fs: [fn(U32) -> U32 uses {Alloc}; 2]) -> U32 uses {Alloc} {
+  fs[0].(1)
+}
+
+pub fn take_tuple_rt(t: (rt fn(U32) -> U32, U32)) -> U32 {
+  t.0.(t.1)
+}
+
+pub fn read_span_rt(xs: Span[rt fn(U32) -> U32]) -> U32 {
+  xs[0].(1)
+}
+
+pub fn read_span_k(xs: Span[fn(U32) -> U32]) -> U32 {
+  xs[0].(1)
+}
+
+pub fn read_span_b(xs: Span[fn(U32) -> U32 uses {Alloc}]) -> U32 uses {Alloc} {
+  xs[0].(1)
+}
+
+pub fn set_rt(inout g: rt fn(U32) -> U32) {
+  g = r
+}
+
+pub fn set_k(inout g: fn(U32) -> U32) {
+  g = k
+}
+
+pub fn set_b(inout g: fn(U32) -> U32 uses {Alloc}) {
+  g = b
+}
+
+pub fn fill_rt(inout xs: Span[rt fn(U32) -> U32]) {
+  xs[0] = r
+}
+
+pub fn fill_b(inout xs: Span[fn(U32) -> U32 uses {Alloc}]) {
+  xs[0] = b
+}
+
+pub fn takes_outer_rt(f: fn(rt fn(U32) -> U32) -> U32) -> U32 {
+  f.(r)
+}
+
+pub fn the_inner_rt_is_the_same(h: rt fn(U32) -> U32) -> U32 {
+  h.(1)
+}
+
+pub fn takes_outer_b(f: fn(fn(U32) -> U32 uses {Alloc}) -> U32 uses {Alloc}) -> U32 uses {Alloc} {
+  f.(b)
+}
+
+pub fn the_inner_b_is_the_same(h: fn(U32) -> U32 uses {Alloc}) -> U32 uses {Alloc} {
+  h.(1)
+}
+
+// The values made before are used at the place of the same type.
+pub fn option_rt_to_option_rt(o: Option[rt fn(U32) -> U32]) -> U32 {
+  take_option_rt(o)
+}
+
+pub fn option_k_to_option_k(o: Option[fn(U32) -> U32]) -> U32 {
+  take_option_k(o)
+}
+
+pub fn option_b_to_option_b(o: Option[fn(U32) -> U32 uses {Alloc}]) -> U32 uses {Alloc} {
+  take_option_b(o)
+}
+
+pub fn let_option_rt(o: Option[rt fn(U32) -> U32]) -> U32 {
+  let p: Option[rt fn(U32) -> U32] = o
+  take_option_rt(p)
+}
+
+pub fn array_rt_to_array_rt() -> U32 {
+  let fs = [r, r]
+  take_array_rt(fs)
+}
+
+pub fn array_b_to_array_b() -> U32 uses {Alloc} {
+  let fs = [b, b]
+  take_array_b(fs)
+}
+
+pub fn tuple_rt_to_tuple_rt() -> U32 {
+  let t = (r, 1)
+  take_tuple_rt(t)
+}
+
+pub fn span_rt_from_the_array_rt() -> U32 {
+  let fs = [r, r]
+  read_span_rt(fs)
+}
+
+pub fn span_k_from_the_array_k() -> U32 {
+  let fs = [k, k]
+  read_span_k(fs)
+}
+
+pub fn span_b_from_the_array_b() -> U32 uses {Alloc} {
+  let fs = [b, b]
+  read_span_b(fs)
+}
+
+pub fn result_error_rt(o: Result[U32, rt fn(U32) -> U32]) -> Result[U32, rt fn(U32) -> U32] {
+  let x = o?
+  Ok(x)
+}
+
+pub fn result_error_b(o: Result[U32, fn(U32) -> U32 uses {Alloc}]) -> Result[U32, fn(U32) -> U32 uses {Alloc}] {
+  let x = o?
+  Ok(x)
+}
+
+// The `inout` argument is a variable, a field and an element of the same type.
+pub fn inout_rt_variable() -> U32 {
+  var g: rt fn(U32) -> U32 = r
+  set_rt(inout g)
+  g.(1)
+}
+
+pub fn inout_k_variable() -> U32 {
+  var g: fn(U32) -> U32 = k
+  set_k(inout g)
+  g.(1)
+}
+
+pub fn inout_b_variable() -> U32 uses {Alloc} {
+  var g: fn(U32) -> U32 uses {Alloc} = b
+  set_b(inout g)
+  g.(1)
+}
+
+pub fn inout_rt_inferred_variable() -> U32 {
+  var g = r
+  set_rt(inout g)
+  g.(1)
+}
+
+pub fn inout_rt_field() -> U32 {
+  var h = Hr { f: r }
+  set_rt(inout h.f)
+  h.f.(1)
+}
+
+pub fn inout_k_field() -> U32 {
+  var h = Hk { f: k }
+  set_k(inout h.f)
+  h.f.(1)
+}
+
+pub fn inout_b_field() -> U32 uses {Alloc} {
+  var h = Hb { f: b }
+  set_b(inout h.f)
+  h.f.(1)
+}
+
+pub fn inout_rt_element() -> U32 {
+  var fs = [r, r]
+  set_rt(inout fs[0])
+  fs[0].(1)
+}
+
+pub fn inout_b_element() -> U32 uses {Alloc} {
+  var fs = [b, b]
+  set_b(inout fs[1])
+  fs[0].(1)
+}
+
+pub fn inout_span_rt() -> U32 {
+  var fs = [r, r]
+  fill_rt(inout fs)
+  fs[0].(1)
+}
+
+pub fn inout_span_b() -> U32 uses {Alloc} {
+  var fs = [b, b]
+  fill_b(inout fs)
+  fs[0].(1)
+}
+
+pub fn swap_rt() -> U32 {
+  var f = r
+  var g = r
+  swap(inout f, inout g)
+  f.(1)
+}
+
+pub fn swap_b() -> U32 uses {Alloc} {
+  var f = b
+  var g = b
+  swap(inout f, inout g)
+  f.(1)
+}
+
+pub fn swap_k() -> U32 {
+  var f = k
+  var g = k
+  swap(inout f, inout g)
+  f.(1)
+}
+
+pub fn receiver_rt() -> U32 {
+  var w = W { h: r }
+  w.set!(r)
+  w.h.(1)
+}
+
+pub fn receiver_b() -> U32 uses {Alloc} {
+  var w = W { h: b }
+  w.set!(b)
+  w.h.(1)
+}

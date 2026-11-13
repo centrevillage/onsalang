@@ -1,0 +1,173 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§8.1", "§10"]
+
+// W6-01 U2a/t, R-26 (the first half), S-1031 (§4.7: "これ以外で先に決まった型（型変数が先の引数・フィールド・`return` で決まった型、入れ子の合流の型引数の中、`var` の初期化の型）は、
+// 後の式の期待型として §8.1 で比べる。`r` を `rt` の関数、`k` を `rt` でない関数として、`pick[T](a: T, b: T)` の `pick(r, k)` は E0401、`pick(k, r)` は通る。型引数
+// （`pick::[fn(U32) -> U32](r, k)`）か注釈で先に決める"; §8.1: "代入は場所の型への比べ"). A type that was fixed first is the expected type of the expressions after it: the type
+// parameter that the first argument of a generic function fixes (`pick(r, k)`, with a value made in place around them: `pick(Some(r), Some(k))`), the type parameter that
+// the first written field of a generic struct fixes (`P { first: r, second: k }`; the order of writing decides, not the order of the declaration), the type of a
+// `var` that was started by an `rt` function (`var f = r`, then `f = k`, and an element and a field of it). Each is E0401 at the later value, where `k` is not `rt`. The
+// order that is accepted (`pick(k, r)`), the type arguments and the annotation are in fn_compat_rt_to_plain_ok.onsa. Before U2a the `rt` is not compared, so these are
+// accepted. Checked, not run.
+
+pub fn k(x: U32) -> U32 {
+  x
+}
+
+pub rt fn r(x: U32) -> U32 {
+  x
+}
+
+pub struct P[T] {
+  first: T,
+  second: T,
+}
+
+pub struct W[T] {
+  h: T,
+}
+
+pub fn pick[T](a: T, c: T) -> T {
+  a
+}
+
+pub fn first_of_three[T](a: T, c: T, d: T) -> T {
+  a
+}
+
+pub fn mk() -> fn(U32) -> U32 {
+  k
+}
+
+// The type parameter of a generic function is fixed by the first argument.
+pub fn pick_rt_first() -> U32 {
+  let f = pick(r, k)   //~ E0401
+  f.(1)
+}
+
+pub fn pick_rt_first_variables() -> U32 {
+  let x = r
+  let y = k
+  let f = pick(x, y)   //~ E0401
+  f.(1)
+}
+
+pub fn pick_rt_first_call_result() -> U32 {
+  let f = pick(r, mk())   //~ E0401
+  f.(1)
+}
+
+pub fn pick_in_an_argument() -> U32 {
+  pick(r, k).(1)   //~ E0401
+}
+
+pub fn pick_three() -> U32 {
+  let f = first_of_three(r, r, k)   //~ E0401
+  f.(1)
+}
+
+pub fn pick_three_the_middle() -> U32 {
+  let f = first_of_three(r, k, r)   //~ E0401
+  f.(1)
+}
+
+pub fn pick_option_of_rt_first() -> U32 {
+  let o = pick(Some(r), Some(k))   //~ E0401
+  match o {
+    Some(f) => f.(1),
+    None => 0,
+  }
+}
+
+pub fn pick_array_of_rt_first() -> U32 {
+  let a = pick([r, r], [r, k])   //~ E0401
+  a[0].(1)
+}
+
+pub fn pick_tuple_of_rt_first() -> U32 {
+  let t = pick((r, 1), (k, 2))   //~ E0401
+  t.0.(t.1)
+}
+
+// The type parameter of a generic struct is fixed by the field that is written first.
+pub fn struct_rt_field_first() -> U32 {
+  let p = P { first: r, second: k }   //~ E0401
+  p.first.(1)
+}
+
+pub fn struct_rt_field_first_in_the_other_order() -> U32 {
+  let p = P { second: r, first: k }   //~ E0401
+  p.first.(1)
+}
+
+// The type of a `var` is the expected type of the later assignments.
+pub fn var_started_by_the_rt_function() -> U32 {
+  var f = r
+  f = k   //~ E0401
+  f.(1)
+}
+
+pub fn var_started_by_the_rt_variable() -> U32 {
+  let x = r
+  var f = x
+  f = k   //~ E0401
+  f.(1)
+}
+
+pub fn var_started_by_the_call_of_an_rt_function() -> U32 {
+  var f = pick(r, r)
+  f = k   //~ E0401
+  f.(1)
+}
+
+pub fn var_array_element() -> U32 {
+  var fs = [r, r]
+  fs[0] = k   //~ E0401
+  fs[1].(1)
+}
+
+pub fn var_array_element_of_the_whole() -> U32 {
+  var fs = [r, r]
+  fs = [r, k]   //~ E0401
+  fs[1].(1)
+}
+
+pub fn var_struct_field() -> U32 {
+  var w = W { h: r }
+  w.h = k   //~ E0401
+  w.h.(1)
+}
+
+pub fn var_tuple_element() -> U32 {
+  var t = (r, 1)
+  t.0 = k   //~ E0401
+  t.0.(t.1)
+}
+
+pub fn var_option() -> U32 {
+  var o = Some(r)
+  o = Some(k)   //~ E0401
+  match o {
+    Some(f) => f.(1),
+    None => 0,
+  }
+}
+
+pub fn var_assigned_in_a_branch(c: Bool) -> U32 {
+  var f = r
+  if c {
+    f = k   //~ E0401
+  }
+  f.(1)
+}
+
+pub fn var_assigned_in_a_loop() -> U32 {
+  var f = r
+  var i = 0
+  while i < 2 {
+    f = k   //~ E0401
+    i = i + 1
+  }
+  f.(1)
+}
