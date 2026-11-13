@@ -1,0 +1,109 @@
+// onsa.toml
+// [test]
+// spec = ["§7", "§5.1", "§5.2", "§5.4"]
+// fixes = 0
+
+// W6-02 U2b/b, S-1039 (§7: "所有の `match`（`match move x` と場所でない対象、§5.4）のガードでは、その腕の束縛を消費できない（`move`、
+// Affine のフィールドの取り出し、束縛の見出しの `move`、`?` の被演算子、`move self` の受け手、返り値の位置は E0715。修正候補は無い）"): the forms
+// the break side of U2b checked that guard_owned_consume*.onsa do not hold. A consumption nested in a block, an `if`, a `match` or a
+// literal of the guard; an or pattern, the second binding of a tuple, a head that is no place; an assignment to an outer `var`;
+// `let _ = move b` and `match move b { _ => … }` in the guard (they consume the binding); an arm after a sibling of the same name.
+// Where the guard also changes the binding (`inout`, an E0701, §5.1), the first in the text is the one reported (P-01). The
+// contrasts: a Dup value is copied, a Copy field is read, the binding is consumed in the arm's body. Added by the parent from the
+// break side's tables (rules/leader.md 4.9). One error per function, none with a candidate.
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub struct Named {
+  name: Str,
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub enum E {
+  A(Buf[F32]),
+  B(Buf[F32]),
+  C,
+}
+
+pub fn eat(move b: Buf[F32]) -> Bool uses {Alloc} { true }
+
+pub fn eat_s(move s: Str) -> Bool uses {Alloc} { true }
+
+pub fn bump(inout b: Buf[F32]) -> Bool { true }
+
+pub fn use_f(g: F32) -> Bool { g > 0.0 }
+
+// ------------------------------------------------------------------ nested in the guard
+
+pub fn in_block_if(c: Bool, move o: Option[Buf[F32]]) -> U32 uses {Alloc} { match move o { Some(b) if { if c { eat(move b) } else { false } } => 1, _ => 0 } }   //~ E0715
+
+pub fn in_if_condition(c: Bool, move o: Option[Buf[F32]]) -> U32 uses {Alloc} { match move o { Some(b) if (if eat(move b) { true } else { c }) => 1, _ => 0 } }   //~ E0715
+
+pub fn in_match_arm(c: Bool, move o: Option[Buf[F32]]) -> U32 uses {Alloc} { match move o { Some(b) if (match c { true => eat(move b), false => false }) => 1, _ => 0 } }   //~ E0715
+
+pub fn in_struct_literal(move o: Option[Buf[F32]]) -> U32 uses {Alloc} { match move o { Some(b) if (Holder { buf: move b, gain: 1.0 }).gain > 0.0 => 1, _ => 0 } }   //~ E0715
+
+pub fn in_tuple_literal(move o: Option[Buf[F32]]) -> U32 uses {Alloc} { match move o { Some(b) if (move b, 1).1 > 0 => 1, _ => 0 } }   //~ E0715
+
+pub fn in_array_literal(move o: Option[Buf[F32]]) -> U32 uses {Alloc} { match move o { Some(b) if [move b].len() > 0 => 1, _ => 0 } }   //~ E0715
+
+pub fn in_inner_owned_match(move o: Option[Buf[F32]], move p: Option[Buf[F32]]) -> U32 uses {Alloc} { match move o { Some(b) if b.len() > 0 && (match move p { Some(c) if eat(move c) => true, _ => false }) => 1, _ => 0 } }   //~ E0715
+
+pub fn wild_heading(move o: Option[Buf[F32]]) -> U32 uses {Alloc} { match move o { Some(b) if (match move b { _ => true }) => 1, _ => 0 } }   //~ E0715
+
+pub fn let_wild(move o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match move o {
+    Some(b) if {
+      let _ = move b   //~ E0715
+      true
+    } => 1,
+    _ => 0,
+  }
+}
+
+pub fn assign_outer_var(move o: Option[Buf[F32]], move z: Buf[F32]) -> U32 uses {Alloc} {
+  var t = move z
+  match move o {
+    Some(b) if {
+      t = move b   //~ E0715
+      t.len() > 0
+    } => 1,
+    _ => 0,
+  }
+}
+
+// ------------------------------------------------------------------ patterns and heads
+
+pub fn or_pattern(move e: E) -> U32 uses {Alloc} { match move e { E.A(b) | E.B(b) if eat(move b) => 1, _ => 0 } }   //~ E0715
+
+pub fn tuple_second(move p: (U32, Buf[F32])) -> U32 uses {Alloc} { match move p { (n, b) if eat(move b) => n, _ => 0 } }   //~ E0715
+
+pub fn tuple_of_two_second(move o: Option[(Buf[F32], Buf[F32])]) -> U32 uses {Alloc} { match move o { Some((x, y)) if x.len() > 0 && eat(move y) => 1, _ => 0 } }   //~ E0715
+
+pub fn tuple_element_of_binding(move o: Option[(Buf[F32], Buf[F32])]) -> U32 uses {Alloc} { match move o { Some(p) if eat(move p.0) => 1, _ => 0 } }   //~ E0715
+
+pub fn tuple_heading(move a: Buf[F32], move c: Buf[F32]) -> U32 uses {Alloc} { match (move a, move c) { (x, y) if eat(move x) => y.len(), _ => 0 } }   //~ E0715
+
+pub fn constructor_heading(move a: Buf[F32]) -> U32 uses {Alloc} { match Some(move a) { Some(x) if eat(move x) => 1, _ => 0 } }   //~ E0715
+
+pub fn third_arm(move o: Option[Buf[F32]]) -> U32 uses {Alloc} { match move o { Some(b) if b.len() > 3 => 1, Some(c) if c.len() > 2 => 2, Some(d) if eat(move d) => 3, _ => 0 } }   //~ E0715
+
+pub fn sibling_of_the_same_name(move o: Option[Buf[F32]]) -> U32 uses {Alloc} { match move o { Some(b) if b.len() > 1 => 1, Some(b) if eat(move b) => 2, _ => 0 } }   //~ E0715
+
+// ------------------------------------------------------------------ a consumption and a change in one guard: the first in the text
+
+pub fn move_then_inout(move o: Option[Buf[F32]]) -> U32 uses {Alloc} { match move o { Some(b) if eat(move b) && bump(inout b) => 1, _ => 0 } }   //~ E0715
+
+pub fn inout_then_move(move o: Option[Buf[F32]]) -> U32 uses {Alloc} { match move o { Some(b) if bump(inout b) && eat(move b) => 1, _ => 0 } }   //~ E0701
+
+// ------------------------------------------------------------------ the contrasts
+
+pub fn dup_field_copied(move o: Option[Named]) -> U32 uses {Alloc} { match move o { Some(h) if eat_s(h.name) => if eat(move h.buf) { 1 } else { 2 }, _ => 0 } }
+
+pub fn copy_field_read(move o: Option[Named]) -> U32 uses {Alloc} { match move o { Some(h) if use_f(h.gain) => if eat(move h.buf) { 1 } else { 2 }, _ => 0 } }
+
+pub fn consumed_in_the_body(move o: Option[Buf[F32]]) -> U32 uses {Alloc} { match move o { Some(b) if b.len() > 1 => if eat(move b) { 1 } else { 0 }, Some(b) => if eat(move b) { 2 } else { 3 }, _ => 0 } }
