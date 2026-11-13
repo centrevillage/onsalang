@@ -389,7 +389,7 @@ codes! {
     E0714 = 714, Modes, [Types, Flow, Modes], Required, Optional,
         "`!` on a method that does not take `inout self`";
     E0715 = 715, Modes, [Modes], Optional, Optional,
-        "the place being iterated or matched is modified";
+        "the place being iterated or matched is modified, or a binding of an arm is consumed in its guard";
     E0801 = 801, Flow, [Flow], Optional, Optional,
         "name used before its definition in a flow (a later `let` is read as `^name` in the first argument of a delay)";
     E0805 = 805, Flow, [Flow], Optional, Optional,
