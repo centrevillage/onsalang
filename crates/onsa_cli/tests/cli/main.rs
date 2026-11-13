@@ -73,6 +73,7 @@ mod package_model;
 mod package_naming;
 mod package_tests_dir;
 mod package_tree;
+mod panic_insertions;
 mod pattern_guard_candidates;
 mod pattern_rows;
 mod prelude_names;
