@@ -344,7 +344,7 @@ pub fn twice() uses {Alloc} {
     assert_eq!(moved, BTreeSet::from(["b".to_string()]));
 }
 
-/// Memo 3: the head `x ⊔ G` is the least solution of `h = x ⊔ back(h)`,
+/// Memo 3: the head `x; head(back)` is the least solution of `h = x ⊔ back(h)`,
 /// against the iteration from `x` (the statuses, without the loop's mark).
 #[test]
 fn the_head_of_a_loop_is_its_least_fixpoint() {

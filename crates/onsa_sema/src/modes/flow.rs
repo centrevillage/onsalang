@@ -187,7 +187,7 @@ impl Walker<'_> {
     }
 
     /// The loop `s` from the state before its head ([`LoopSum`]). The walk
-    /// that reports goes in once from the head `x ⊔ G`; the other applies
+    /// that reports goes in once from the head `x; head(back)`; the other applies
     /// the summary, made once for each loop by a walk that does not go into
     /// the loops inside (their summaries are made first and kept).
     fn run_loop(&mut self, r: &mut Run, s: StmtId, parts: Loop) {
