@@ -1,0 +1,28 @@
+// The generic functions and types of another module whose body drops a value of a type parameter (W6-02 U4b/t, spec §6.3, §12.2, §15.1).
+// The drop is reported where it is written, wherever the function is called from and with whatever type: here, in the module that declares it.
+
+pub struct Holder[T] {
+  v: T,
+}
+
+pub struct HolderM[T: ?Dup] {
+  v: T,
+}
+
+pub fn eat[T](move t: T) {}   //~ E0601
+
+pub rt fn rt_eat[T](move t: T) {}   //~ E0901
+
+pub fn eat_maybe[T: ?Dup](move t: T) {}   //~ E0601
+
+pub rt fn rt_eat_maybe[T: ?Dup](move t: T) {}   //~ E0901
+
+pub fn eat_holder[T](move h: Holder[T]) {}   //~ E0601
+
+impl[T] Holder[T] {
+  pub fn eat(move self) {}   //~ E0601
+}
+
+impl[T: ?Dup] HolderM[T] {
+  pub rt fn rt_eat(move self) {}   //~ E0901
+}

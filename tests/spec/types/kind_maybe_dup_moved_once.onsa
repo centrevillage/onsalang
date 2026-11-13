@@ -74,8 +74,8 @@ pub fn moved_by_let_then_returned[T: ?Dup](move x: T) -> T {
   y
 }
 
-pub fn moved_in_each_branch[T: ?Dup](c: Bool, move x: T, move y: T) -> T {
-  if c { move x } else { move y }
+pub fn moved_in_each_branch[T: ?Dup](c: Bool, move x: T) -> T {
+  if c { move x } else { move x }
 }
 
 pub fn holder_passed_on[T: ?Dup](move h: Holder[T]) -> Holder[T] {

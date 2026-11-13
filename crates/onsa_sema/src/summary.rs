@@ -29,8 +29,9 @@ pub(crate) struct Facts {
     /// (a second-class type, the error type, a type parameter with no
     /// answer), which an Affine part outweighs.
     pub(crate) kind: Option<Kind>,
-    /// Whether dropping it needs `Alloc`: Shared values and `Buf`, not flow
-    /// state, Affine as it is. `None` only of a type that holds itself.
+    /// Whether dropping it needs `Alloc`: Shared values, `Buf` and a type
+    /// parameter not Copy, not flow state, Affine as it is. `None` only of a
+    /// type that holds itself.
     pub(crate) drops: Option<bool>,
     /// The type parameters of the declaration held as values: not those
     /// only named by a type whose arguments no value of it holds (`Ptr[T]`,
@@ -43,10 +44,16 @@ impl Facts {
         Facts { kind, drops: Some(drops), held: Vec::new() }
     }
 
+    /// Of a part that is Copy: nothing to drop.
+    fn copy() -> Facts {
+        Facts::leaf(Some(Kind::Copy), false)
+    }
+
     /// Of a type parameter of the kind `kind` when a question has it in
-    /// scope: nothing to drop, as `T: ?Dup` is not read here (W6-02).
+    /// scope: its drop needs `Alloc` unless it is Copy (§6.3, `?Dup` too).
+    /// With no answer it keeps quiet (§18.1).
     pub(crate) fn param(kind: Option<Kind>) -> Facts {
-        Facts::leaf(kind, false)
+        Facts::leaf(kind, kind.is_some_and(|k| k != Kind::Copy))
     }
 
     /// Of a type of which nothing is known (§18.1).
@@ -129,11 +136,11 @@ impl<'a> Read<'a> {
             Ty::Param(i) => {
                 return match &self.params {
                     Some(params) => params.get(*i as usize).cloned().unwrap_or_else(Facts::none),
-                    None => Facts { held: vec![*i], ..Facts::param(Some(Kind::Copy)) },
+                    None => Facts { held: vec![*i], ..Facts::copy() },
                 };
             }
             Ty::Int(_) | Ty::Float(_) | Ty::Bool | Ty::Char | Ty::Unit | Ty::Fn(_) | Ty::ConstVal(_) => {
-                return Facts::param(Some(Kind::Copy));
+                return Facts::copy();
             }
             Ty::Array(t, _) => return self.of(*t),
             Ty::Builtin(b, _) => return Facts::builtin(*b),
@@ -157,7 +164,7 @@ impl<'a> Read<'a> {
     }
 
     fn all(&self, ts: &[TyId]) -> Facts {
-        ts.iter().map(|&t| self.of(t)).fold(Facts::param(Some(Kind::Copy)), Facts::join)
+        ts.iter().map(|&t| self.of(t)).fold(Facts::copy(), Facts::join)
     }
 
     /// The summary of `d`, read when it is first asked ([`crate::walk::Known`]).

@@ -185,7 +185,7 @@ test "a generic call decided by a later statement inside a closure" {
   assert a[2] == 12
 }
 
-fn gen_later[T](x: T) -> T {
+fn gen_later[T: Copy](x: T) -> T {
   // T of the outer function is a fixed type here; the open parameter of `none` meets it.
   let o = none()
   let p: Option[T] = o

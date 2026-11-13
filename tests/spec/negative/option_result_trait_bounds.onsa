@@ -176,7 +176,7 @@ pub fn eq_of_a_parameter_with_the_bound[A: Eq](a: Option[A], b: Option[A]) -> Bo
   needs_eq(a) == b
 }
 
-pub fn all_of_a_parameter_with_the_bounds[A: Eq + Hash + Show](a: Option[A]) -> Option[A] {
+pub fn all_of_a_parameter_with_the_bounds[A: Eq + Hash + Show](a: Option[A]) -> Option[A] uses {Alloc} {
   let x = needs_eq(a)
   let y = needs_hash(x)
   needs_show(y)

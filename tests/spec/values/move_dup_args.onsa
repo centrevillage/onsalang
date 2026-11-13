@@ -44,7 +44,7 @@ pub fn ap(move f: fn(I32) -> I32) -> I32 {
 
 pub fn take(move b: Buf[F32]) uses {Alloc} {}
 
-pub fn sink[T: ?Dup](move x: T) {}
+pub fn sink[T: ?Dup](move x: T) uses {Alloc} {}
 
 // ------------------------------------------------------------------ Copy and Shared values
 
@@ -133,11 +133,11 @@ pub fn new_value_without_the_mark() uses {Alloc} {
   take(Buf.zeroed(4))
 }
 
-pub fn maybe_dup_with_the_mark[T: ?Dup](move x: T) {
+pub fn maybe_dup_with_the_mark[T: ?Dup](move x: T) uses {Alloc} {
   sink(move x)
 }
 
-pub fn maybe_dup_in_an_if[T: ?Dup](c: Bool, move x: T, move y: T) {
+pub fn maybe_dup_in_an_if[T: ?Dup](c: Bool, move x: T, move y: T) uses {Alloc} {
   sink(if c { move x } else { move y })
 }
 

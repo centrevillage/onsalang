@@ -58,7 +58,7 @@ pub struct W[T] {
   h: T,
 }
 
-impl[T] W[T] {
+impl[T: Copy] W[T] {
   pub fn set(inout self, v: T) {
     self.h = v
   }
@@ -86,7 +86,7 @@ pub fn pick[T](a: T, c: T) -> T {
   a
 }
 
-pub fn put[T](inout g: T, v: T) {
+pub fn put[T: Copy](inout g: T, v: T) {
   g = v
 }
 

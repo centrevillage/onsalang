@@ -8,6 +8,12 @@ use crate::tests::{check, codes, def};
 use crate::ty::{BuiltinTy, FloatKind, IntKind, Ty};
 use crate::{Analysis, Kind};
 
+/// Whether dropping a value of `t`, with no type parameters in scope, needs
+/// `Alloc` (§12.2). A type that holds itself has no answer, so no use.
+fn needs_alloc_drop(a: &Analysis, t: crate::ty::TyId) -> bool {
+    Read::new(a, Vec::new()).of(t).drops.unwrap_or(false)
+}
+
 /// A generic type nested in itself has the kind and the layout of what it
 /// holds (R-310), and a generic type with an Affine argument is Affine
 /// whether the substituted field types were interned elsewhere or not
@@ -32,11 +38,11 @@ fn kinds_and_layouts_read_generic_fields_under_their_arguments() {
     assert_eq!(a.kind_of(holder), Some(Kind::Affine));
     a.types.intern(field);
     assert_eq!(a.kind_of(holder), Some(Kind::Affine));
-    assert!(crate::drop_alloc::needs_alloc_drop(&a, holder));
+    assert!(needs_alloc_drop(&a, holder));
     let pair_of_str = a.types.builtin(BuiltinTy::Str, vec![]);
     let p1 = a.types.intern(Ty::Named(def(&a, "Pair"), vec![pair_of_str]));
     let p2 = a.types.intern(Ty::Named(def(&a, "Pair"), vec![p1]));
-    assert!(crate::drop_alloc::needs_alloc_drop(&a, p2), "`Pair[Pair[Str]]` holds a `Str`");
+    assert!(needs_alloc_drop(&a, p2), "`Pair[Pair[Str]]` holds a `Str`");
     // A const argument is read as the length of a field.
     let mut a = check("pub struct R[const N: U32] { xs: [F32; N] }\n");
     let three = a.types.intern(Ty::ConstVal(3));
@@ -55,7 +61,7 @@ fn a_type_that_holds_itself_has_no_kind_and_no_layout() {
         let run = move || {
             let mut a = check(src);
             let node = a.types.intern(Ty::Named(def(&a, "Node"), vec![]));
-            (a.kind_of(node), a.layout_of(node).is_none(), crate::drop_alloc::needs_alloc_drop(&a, node))
+            (a.kind_of(node), a.layout_of(node).is_none(), needs_alloc_drop(&a, node))
         };
         assert_eq!(onsa_diag::stack::spawn("t", run).unwrap().join().unwrap(), (None, true, false), "{src}");
     }
@@ -158,7 +164,7 @@ fn a_part_with_an_answer_outweighs_a_type_that_holds_itself() {
         let run = move || {
             let mut a = check(src);
             let n = a.types.intern(Ty::Named(def(&a, "N"), vec![]));
-            (a.kind_of(n), crate::drop_alloc::needs_alloc_drop(&a, n))
+            (a.kind_of(n), needs_alloc_drop(&a, n))
         };
         assert_eq!(onsa_diag::stack::spawn("t", run).unwrap().join().unwrap(), (Some(Kind::Affine), true), "{src}");
     }
@@ -173,5 +179,5 @@ fn a_type_made_from_one_type_twice_is_read_once() {
     for _ in 0..40 {
         t = a.types.intern(Ty::Tuple(vec![t, t]));
     }
-    assert_eq!((a.kind_of(t), crate::drop_alloc::needs_alloc_drop(&a, t)), (Some(Kind::Copy), false));
+    assert_eq!((a.kind_of(t), needs_alloc_drop(&a, t)), (Some(Kind::Copy), false));
 }

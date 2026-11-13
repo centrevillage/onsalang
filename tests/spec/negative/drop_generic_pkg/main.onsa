@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§6.3", "§8.1", "§10", "§12.2", "§15.1"]
+
+// W6-02 U4b/t, R-32, S-782 (§6.3: "ジェネリックな型パラメータ `T` の値の破棄は、`T: Copy` の制約が無い限り `Alloc` を要する（`?Dup` の `T` も同じ）"; §12.2; §15.1): the generic functions and types of another module
+// (`lib.onsa`: its own drops are marked there). The drop of a value of a type parameter is decided from the declaration where it is written, so a function of this module that owns a `T`, or a `lib.Holder[T]` or
+// a value that holds one, and does not move it is an E0601 (an E0901 in an `rt fn`), whatever module declares the type. The callers that only move the value on to `lib` are in negative/drop_generic_pkg_ok. The functions
+// are one-liners (S-783). This version counts no drop of a type parameter, so the marks are not reported today. One error per function (P-01).
+
+use lib.{Holder, HolderM}
+
+pub fn own_drop[T](move t: T) {}   //~ E0601
+
+pub rt fn rt_own_drop[T](move t: T) {}   //~ E0901
+
+pub fn drop_a_holder_of_the_other_module[T](move h: Holder[T]) {}   //~ E0601
+
+pub rt fn rt_drop_a_holder_of_the_other_module[T](move h: Holder[T]) {}   //~ E0901
+
+pub fn drop_a_maybe_holder_of_the_other_module[T: ?Dup](move h: HolderM[T]) {}   //~ E0601
+
+pub rt fn rt_drop_a_maybe_holder_of_the_other_module[T: ?Dup](move h: HolderM[T]) {}   //~ E0901
+
+pub fn drop_the_option_of_a_holder[T](move o: Option[Holder[T]]) {}   //~ E0601
+
+pub rt fn rt_drop_the_option_of_a_holder[T](move o: Option[Holder[T]]) {}   //~ E0901
+
+pub fn drop_the_tuple_of_a_holder[T](move p: (Holder[T], U32)) {}   //~ E0601
+
+pub rt fn rt_drop_the_tuple_of_a_holder[T](move p: (Holder[T], U32)) {}   //~ E0901

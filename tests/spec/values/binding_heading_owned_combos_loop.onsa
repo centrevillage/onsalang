@@ -70,9 +70,9 @@ pub fn pass_on[T: ?Dup](move x: T) -> Option[T] {
   Some(move x)
 }
 
-pub fn sink[T: ?Dup](move x: T) {}
+pub fn sink[T: ?Dup](move x: T) uses {Alloc} {}
 
-pub fn for_in_a_generic_function[T: ?Dup](move x: T) {
+pub fn for_in_a_generic_function[T: ?Dup](move x: T) uses {Alloc} {
   for z in [pass_on(move x)] {
     match move z {
       Some(w) => sink(move w),

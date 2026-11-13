@@ -72,7 +72,7 @@ fn first_use(pkg: &Package, a: &Analysis, id: DefId) -> Option<Diagnostic> {
         }
     }
     // Drops (§12.2) whose destruction needs `Alloc`.
-    for d in alloc_drops(a, body) {
+    for d in alloc_drops(a, id) {
         uses.push(match d {
             Drop::Local(l) => {
                 (l.span, format!("`{}` owns a `{}`, whose destruction needs `Alloc`", l.name, a.display_type(l.ty)))

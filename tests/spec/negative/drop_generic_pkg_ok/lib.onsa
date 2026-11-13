@@ -1,0 +1,22 @@
+// The generic functions and types of another module that do not drop a value of a type parameter (W6-02 U4b/t, spec §6.3, §12.2, §15.1): a `T` that is `Copy`, a function that moves its argument on
+// or returns it, a function with `uses {Alloc}`, and a method whose `self` is moved on.
+
+pub struct Holder[T] {
+  v: T,
+}
+
+pub fn eat_copy[T: Copy](move t: T) {}
+
+pub rt fn rt_eat_copy[T: Copy](move t: T) {}
+
+pub fn eat_alloc[T](move t: T) uses {Alloc} {}
+
+pub fn keep[T](move t: T) -> T { t }
+
+pub fn keep_maybe[T: ?Dup](move t: T) -> T { t }
+
+pub fn keep_holder[T](move h: Holder[T]) -> Holder[T] { h }
+
+impl[T] Holder[T] {
+  pub fn same(move self) -> Holder[T] { self }
+}

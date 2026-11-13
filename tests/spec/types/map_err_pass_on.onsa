@@ -40,7 +40,7 @@ pub fn lift_before_the_question_mark[F](f: fn(move Low) -> F) -> Result[U32, F] 
   Ok(n + 1)
 }
 
-pub fn lift_twice[E, F](r: Result[U32, E], f: fn(move E) -> F) -> Result[U32, F] {
+pub fn lift_twice[E, F: Copy](r: Result[U32, E], f: fn(move E) -> F) -> Result[U32, F] {
   let a = r.map_err(f)
   let _ = a
   r.map_err(f)

@@ -11,12 +11,13 @@ use onsa_diag::Span;
 use onsa_diag::internal::bug;
 use onsa_syntax::ast::ExprId;
 
-use crate::Analysis;
-use crate::body::{BodyInfo, Dropped, LocalId, LocalInfo};
+use crate::body::{Dropped, LocalId, LocalInfo, generics_of};
+use crate::kind::params_in_body;
 use crate::modes::Proj;
-use crate::summary::{Read, any};
+use crate::summary::{Facts, Read, any};
 use crate::ty::{Ty, TyId};
 use crate::walk::{Holds, Walk};
+use crate::{Analysis, DefId};
 
 /// A drop of a body (§12.2), as the stages before tell it.
 pub(crate) enum Drop<'b> {
@@ -33,28 +34,30 @@ pub(crate) enum Drop<'b> {
     IterRest { iter: ExprId, ty: TyId, exit: Span, early: bool },
 }
 
-/// Whether the drop `d` needs `Alloc` (§12.2): the one test of a drop.
-pub(crate) fn needs_alloc(a: &Analysis, d: &Drop) -> bool {
+/// Whether the drop `d` needs `Alloc` (§12.2): the one test of a drop, by
+/// the facts of the body's type parameters in `body` ([`Frame::body`]). A
+/// type that holds itself has no answer ([`crate::summary::Facts`]), so no use.
+fn needs_alloc(a: &Analysis, body: &Frame, d: &Drop) -> bool {
+    let drops = |t| body.read.of(t).drops.unwrap_or(false);
     match d {
-        Drop::Local(l) => needs_alloc_drop(a, l.ty),
-        // As `needs_alloc_drop`: no answer, so no use.
+        Drop::Local(l) => drops(l.ty),
         Drop::Rest { at, path, root } => {
-            rest_drops_alloc(&Walk::new(a), (root.ty, &Frame::root(a), 0), path, *at).unwrap_or(false)
+            rest_drops_alloc(&Walk::new(a), (root.ty, body, 0), path, *at).unwrap_or(false)
         }
-        Drop::Value { ty, .. } => needs_alloc_drop(a, *ty),
+        Drop::Value { ty, .. } => drops(*ty),
         // At its end, its container: a fixed-length array has none (S-1037).
-        Drop::IterRest { ty, early, .. } => {
-            (*early || !matches!(a.types.get(*ty), Ty::Array(..))) && needs_alloc_drop(a, *ty)
-        }
+        Drop::IterRest { ty, early, .. } => (*early || !matches!(a.types.get(*ty), Ty::Array(..))) && drops(*ty),
     }
 }
 
-/// The drops of `body` that need `Alloc`: the locals of its drop points
-/// (at the end of a scope and at an exit alike), each once in the order of
-/// the locals, then the others in the order the modes stage met them. A
-/// reader takes the earliest in the source by a stable sort, so this order
-/// breaks the ties.
-pub(crate) fn alloc_drops<'b>(a: &'b Analysis, body: &'b BodyInfo) -> impl Iterator<Item = Drop<'b>> {
+/// The drops of the body of `id` that need `Alloc`: the locals of its drop
+/// points (at the end of a scope and at an exit alike), each once in the
+/// order of the locals, then the others in the order the modes stage met
+/// them. A reader takes the earliest in the source by a stable sort, so this
+/// order breaks the ties.
+pub(crate) fn alloc_drops(a: &Analysis, id: DefId) -> impl Iterator<Item = Drop<'_>> {
+    let body = &a.bodies[&id];
+    let frame = Frame::body(a, params_in_body(a, &generics_of(a, id)));
     let local = |l: &LocalId| &body.locals[l.0 as usize];
     let locals: BTreeSet<LocalId> = (body.drops.iter())
         .filter_map(|d| match d.what {
@@ -71,14 +74,7 @@ pub(crate) fn alloc_drops<'b>(a: &'b Analysis, body: &'b BodyInfo) -> impl Itera
         Dropped::End(_) | Dropped::Exit(_) => None,
     });
     let locals = locals.into_iter().map(move |l| Drop::Local(local(&l)));
-    locals.chain(others).filter(move |d| needs_alloc(a, d))
-}
-
-/// Whether dropping a value of this type needs `Alloc` (§12.2): Shared values
-/// and `Buf`, or anything containing them. Flow state is Affine but drops freely.
-/// A type that holds itself has no answer ([`crate::summary::Facts`]), so no use.
-pub(crate) fn needs_alloc_drop(a: &Analysis, t: TyId) -> bool {
-    Read::new(a, Vec::new()).of(t).drops.unwrap_or(false)
+    locals.chain(others).filter(move |d| needs_alloc(a, &frame, d))
 }
 
 /// A declaration a path goes through ([`rest_drops_alloc`]): the arguments
@@ -92,9 +88,10 @@ struct Frame<'f> {
 }
 
 impl<'f> Frame<'f> {
-    /// Of a type with no parameters read as arguments: a local, an alias.
-    fn root(a: &'f Analysis) -> Self {
-        Frame { read: Read::new(a, Vec::new()), args: &[], outer: None }
+    /// Of a type written where the type parameters have the facts `params`:
+    /// in a body (a local, a value), or with none (an alias).
+    fn body(a: &'f Analysis, params: Vec<Facts>) -> Self {
+        Frame { read: Read::new(a, params), args: &[], outer: None }
     }
 }
 
@@ -124,7 +121,7 @@ fn rest_drops_alloc(w: &Walk, (t, frame, depth): (TyId, &Frame, u32), path: &[Pr
             (ts.iter().enumerate().map(|(k, &t)| (t, k as u32 == *i)).collect(), frame, depth)
         }
         (Ty::Named(d, args), _) => match w.enter(*d, args, None, (depth, None))? {
-            (Holds::Alias(t), _, depth) => return rest_drops_alloc(w, (t, &Frame::root(w.a), depth), path, at),
+            (Holds::Alias(t), _, depth) => return rest_drops_alloc(w, (t, &Frame::body(w.a, vec![]), depth), path, at),
             (Holds::Fields(fs, _), _, depth) => {
                 let params = args.iter().map(|&t| frame.read.of(t)).collect();
                 inner = Frame { read: Read::new(w.a, params), args, outer: Some(frame) };

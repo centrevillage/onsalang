@@ -37,13 +37,20 @@ pub fn kind_of(a: &Analysis, ty: TyId) -> Option<Kind> {
 
 /// The kind a value of `ty` in a body with the type parameters `generics` is
 /// taken for by the questions of the modes (R-30) and by the kind constraints
-/// of the types stage (R-176, [`Bounds::meets`]): a type parameter by its
-/// bounds wherever `ty` holds it (`Pair[T]` too): Copy if it meets `Copy`,
-/// Shared if `Dup`, else Affine (`?Dup`). With no answer it is none and
-/// keeps quiet (§18.1: the error type, a type parameter with an unknown
+/// of the types stage (R-176, [`Bounds::meets`]), of [`params_in_body`].
+pub(crate) fn kind_in_body(a: &Analysis, ty: TyId, generics: &[GenericDef]) -> Option<Kind> {
+    Read::new(a, params_in_body(a, generics)).of(ty).kind
+}
+
+/// The facts of the type parameters `generics` of a body, the one reading
+/// of their bounds for its kinds and its drops (`crate::drop_alloc`): a
+/// type parameter by its bounds wherever a type holds it (`Pair[T]` too):
+/// Copy if it meets `Copy`, Shared if `Dup`, else Affine (`?Dup`), and its
+/// drop needs `Alloc` unless it is Copy (§6.3). With no answer it is none
+/// and keeps quiet (§18.1: the error type, a type parameter with an unknown
 /// bound, whose kind each answer would claim, a declaration a syntax error
 /// cut, a type that holds itself; a second-class type has no kind, §4.6).
-pub(crate) fn kind_in_body(a: &Analysis, ty: TyId, generics: &[GenericDef]) -> Option<Kind> {
+pub(crate) fn params_in_body(a: &Analysis, generics: &[GenericDef]) -> Vec<Facts> {
     let bounds = Bounds { a, generics };
     let param = |(i, g): (usize, &GenericDef)| {
         let known = matches!(g.kind, GenericKind::Type { unknown: false, .. });
@@ -52,7 +59,7 @@ pub(crate) fn kind_in_body(a: &Analysis, ty: TyId, generics: &[GenericDef]) -> O
         let kinds = [(Bound::Copy, Kind::Copy), (Bound::Dup, Kind::Shared)];
         Some(kinds.into_iter().find(|&(b, _)| meets(b)).map_or(Kind::Affine, |(_, k)| k))
     };
-    Read::new(a, generics.iter().enumerate().map(|g| Facts::param(param(g))).collect()).of(ty).kind
+    generics.iter().enumerate().map(|g| Facts::param(param(g))).collect()
 }
 
 /// Kind of a user type by its def (`onsa interface`), without interning its `TyId`.

@@ -1,0 +1,254 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§4.6", "§6.3", "§8.1", "§10", "§12.2"]
+
+// W6-02 U4b/t, R-32, R-30 (A6), S-782 (§6.3: "ジェネリックな型パラメータ `T` の値の破棄は、`T: Copy` の制約が無い限り `Alloc` を要する（`?Dup` の `T` も同じ）。したがって `rt fn` の中で `T` の値を
+// 破棄できるのは `T: Copy` のときだけである"; §12.2: "ジェネリックな `T` の値の破棄（`T: Copy` の制約が無い場合、§6.3）: 要る"; §10 rule 1): the end of a body drops an owned value of a type
+// parameter that is not `Copy`, and a value that holds one, so a function without `uses {Alloc}` is an E0601 and an `rt fn` an E0901. A type parameter
+// that is not `Copy` is one without a bound (a Dup value), `T: ?Dup` (§4.5: it may be Affine; "`?Dup` の `T` も同じ") and one with a bound that is not a kind (`Eq`, `Ord`, `Show`, `Hash`,
+// `Default`: the bound of a trait does not make the type `Copy`, §4.6). The value is the parameter whole, an `Option`, a `Result`, a tuple, an array (with a constant length too), a struct, an enum or what
+// they hold in each other; a `T` is held by a part of the type only (`(U32, T)`, `Mixed[T]`) or the other part is a `Copy` type parameter (`(T, U)` with `T: Copy`: the `U` is dropped). `self` of a `move self`
+// method is dropped the same way (the type parameter of an `impl`), and the owned binding of an arm whose heading is a call (§5.4). R-30 (A6): `rt fn drop_q[T: ?Dup](move x: T) {}` is
+// an E0901 (a value whose kind is not known is not read as one that needs no drop). The `T` that is `Copy` (a number, `Copy`) and the other forms that drop nothing are in
+// negative/drop_generic_ok.onsa, the moves in negative/drop_generic_hand_off.onsa. This version counts no drop of a type parameter (R-32), so none of these is reported today. The functions are
+// one-liners (S-783). One error per function (P-01).
+
+pub struct Holder[T] {
+  v: T,
+}
+
+pub struct HolderM[T: ?Dup] {
+  v: T,
+}
+
+pub struct Mixed[T] {
+  n: U32,
+  v: T,
+}
+
+pub struct MixedM[T: ?Dup] {
+  n: U32,
+  v: T,
+}
+
+pub enum Slot[T] {
+  Empty,
+  Full(T),
+}
+
+pub enum SlotM[T: ?Dup] {
+  Empty,
+  Full(T),
+}
+
+pub rt fn keep[T](move t: T) -> T { t }
+
+pub rt fn keep_maybe[T: ?Dup](move t: T) -> T { move t }
+
+pub rt fn peek[T](t: T) -> U32 { 0 }
+
+pub rt fn peek_maybe[T: ?Dup](t: T) -> U32 { 0 }
+
+// ------------------------------------------------------------------ the parameter whole, with each kind of bound
+
+pub fn plain[T](move t: T) {}   //~ E0601
+
+pub rt fn rt_plain[T](move t: T) {}   //~ E0901
+
+pub fn maybe_dup[T: ?Dup](move t: T) {}   //~ E0601
+
+pub rt fn rt_maybe_dup[T: ?Dup](move t: T) {}   //~ E0901
+
+pub rt fn drop_q[T: ?Dup](move x: T) {}   //~ E0901
+
+pub fn bound_eq[T: Eq](move t: T) {}   //~ E0601
+
+pub rt fn rt_bound_eq[T: Eq](move t: T) {}   //~ E0901
+
+pub fn bound_ord[T: Ord](move t: T) {}   //~ E0601
+
+pub rt fn rt_bound_ord[T: Ord](move t: T) {}   //~ E0901
+
+pub fn bound_show[T: Show](move t: T) {}   //~ E0601
+
+pub rt fn rt_bound_show[T: Show](move t: T) {}   //~ E0901
+
+pub fn bound_two[T: Eq + Hash](move t: T) {}   //~ E0601
+
+pub rt fn rt_bound_two[T: Eq + Hash](move t: T) {}   //~ E0901
+
+pub fn bound_default[T: Default](move t: T) {}   //~ E0601
+
+pub rt fn rt_bound_default[T: Default](move t: T) {}   //~ E0901
+
+// ------------------------------------------------------------------ a value that holds a `T` (the type parameter has no bound)
+
+pub fn in_option[T](move o: Option[T]) {}   //~ E0601
+
+pub rt fn rt_in_option[T](move o: Option[T]) {}   //~ E0901
+
+pub fn in_result_ok[T](move r: Result[T, U32]) {}   //~ E0601
+
+pub rt fn rt_in_result_ok[T](move r: Result[T, U32]) {}   //~ E0901
+
+pub fn in_result_err[T](move r: Result[U32, T]) {}   //~ E0601
+
+pub rt fn rt_in_result_err[T](move r: Result[U32, T]) {}   //~ E0901
+
+pub fn in_tuple_first[T](move p: (T, U32)) {}   //~ E0601
+
+pub rt fn rt_in_tuple_first[T](move p: (T, U32)) {}   //~ E0901
+
+pub fn in_tuple_second[T](move p: (U32, T)) {}   //~ E0601
+
+pub rt fn rt_in_tuple_second[T](move p: (U32, T)) {}   //~ E0901
+
+pub fn in_array[T](move xs: [T; 2]) {}   //~ E0601
+
+pub rt fn rt_in_array[T](move xs: [T; 2]) {}   //~ E0901
+
+pub fn in_array_of_length_n[T, const N: U32](move xs: [T; N]) {}   //~ E0601
+
+pub rt fn rt_in_array_of_length_n[T, const N: U32](move xs: [T; N]) {}   //~ E0901
+
+pub fn in_struct[T](move h: Holder[T]) {}   //~ E0601
+
+pub rt fn rt_in_struct[T](move h: Holder[T]) {}   //~ E0901
+
+pub fn in_struct_with_a_copy_field[T](move m: Mixed[T]) {}   //~ E0601
+
+pub rt fn rt_in_struct_with_a_copy_field[T](move m: Mixed[T]) {}   //~ E0901
+
+pub fn in_enum[T](move s: Slot[T]) {}   //~ E0601
+
+pub rt fn rt_in_enum[T](move s: Slot[T]) {}   //~ E0901
+
+pub fn in_option_of_struct[T](move o: Option[Holder[T]]) {}   //~ E0601
+
+pub rt fn rt_in_option_of_struct[T](move o: Option[Holder[T]]) {}   //~ E0901
+
+pub fn in_nested_tuple[T](move p: ((T, U32), U32)) {}   //~ E0601
+
+pub rt fn rt_in_nested_tuple[T](move p: ((T, U32), U32)) {}   //~ E0901
+
+pub fn in_array_of_options[T](move xs: [Option[T]; 2]) {}   //~ E0601
+
+pub rt fn rt_in_array_of_options[T](move xs: [Option[T]; 2]) {}   //~ E0901
+
+pub fn in_option_with_a_bound[T: Eq](move o: Option[T]) {}   //~ E0601
+
+pub rt fn rt_in_option_with_a_bound[T: Eq](move o: Option[T]) {}   //~ E0901
+
+// ------------------------------------------------------------------ a value that holds a `T: ?Dup`
+
+pub fn maybe_in_option[T: ?Dup](move o: Option[T]) {}   //~ E0601
+
+pub rt fn rt_maybe_in_option[T: ?Dup](move o: Option[T]) {}   //~ E0901
+
+pub fn maybe_in_tuple[T: ?Dup](move p: (T, U32)) {}   //~ E0601
+
+pub rt fn rt_maybe_in_tuple[T: ?Dup](move p: (T, U32)) {}   //~ E0901
+
+pub fn maybe_in_array[T: ?Dup](move xs: [T; 2]) {}   //~ E0601
+
+pub rt fn rt_maybe_in_array[T: ?Dup](move xs: [T; 2]) {}   //~ E0901
+
+pub fn maybe_in_struct[T: ?Dup](move h: HolderM[T]) {}   //~ E0601
+
+pub rt fn rt_maybe_in_struct[T: ?Dup](move h: HolderM[T]) {}   //~ E0901
+
+pub fn maybe_in_enum[T: ?Dup](move s: SlotM[T]) {}   //~ E0601
+
+pub rt fn rt_maybe_in_enum[T: ?Dup](move s: SlotM[T]) {}   //~ E0901
+
+pub fn maybe_in_option_of_struct[T: ?Dup](move o: Option[HolderM[T]]) {}   //~ E0601
+
+pub rt fn rt_maybe_in_option_of_struct[T: ?Dup](move o: Option[HolderM[T]]) {}   //~ E0901
+
+pub fn maybe_in_result[T: ?Dup](move r: Result[T, U32]) {}   //~ E0601
+
+pub rt fn rt_maybe_in_result[T: ?Dup](move r: Result[T, U32]) {}   //~ E0901
+
+// ------------------------------------------------------------------ one of two type parameters is not `Copy`
+
+pub fn second_is_not_copy[T: Copy, U](move p: (T, U)) {}   //~ E0601
+
+pub rt fn rt_second_is_not_copy[T: Copy, U](move p: (T, U)) {}   //~ E0901
+
+pub fn first_is_not_copy[T, U: Copy](move p: (T, U)) {}   //~ E0601
+
+pub rt fn rt_first_is_not_copy[T, U: Copy](move p: (T, U)) {}   //~ E0901
+
+pub fn two_parameters[T, U](move t: T, u: U) {}   //~ E0601
+
+pub rt fn rt_two_parameters[T, U](move t: T, u: U) {}   //~ E0901
+
+pub fn numbers_and_a_bound[T: Num, U](move a: T, move u: U) {}   //~ E0601
+
+pub rt fn rt_numbers_and_a_bound[T: Num, U](move a: T, move u: U) {}   //~ E0901
+
+// ------------------------------------------------------------------ `self` of a `move self` method
+
+impl[T] Holder[T] {
+  pub fn eat(move self) {}   //~ E0601
+
+  pub rt fn rt_eat(move self) {}   //~ E0901
+
+  pub fn eat_with(move self, n: U32) -> U32 { n }   //~ E0601
+
+  pub rt fn rt_eat_with(move self, n: U32) -> U32 { n }   //~ E0901
+}
+
+impl[T: ?Dup] HolderM[T] {
+  pub fn eat(move self) {}   //~ E0601
+
+  pub rt fn rt_eat(move self) {}   //~ E0901
+
+  pub fn eat_with(move self, n: U32) -> U32 { n }   //~ E0601
+
+  pub rt fn rt_eat_with(move self, n: U32) -> U32 { n }   //~ E0901
+}
+
+impl[T] Slot[T] {
+  pub fn eat(move self) {}   //~ E0601
+
+  pub rt fn rt_eat(move self) {}   //~ E0901
+}
+
+impl[T] Mixed[T] {
+  pub fn eat(move self) {}   //~ E0601
+
+  pub rt fn rt_eat(move self) {}   //~ E0901
+}
+
+// ------------------------------------------------------------------ the owned binding of an arm whose heading is a call
+
+pub fn arm_binding[T](t: T) -> U32 { match keep(t) { x => peek(x) } }   //~ E0601
+
+pub rt fn rt_arm_binding[T](t: T) -> U32 { match keep(t) { x => peek(x) } }   //~ E0901
+
+pub fn arm_binding_maybe[T: ?Dup](move t: T) -> U32 { match keep_maybe(move t) { x => peek_maybe(x) } }   //~ E0601
+
+pub rt fn rt_arm_binding_maybe[T: ?Dup](move t: T) -> U32 { match keep_maybe(move t) { x => peek_maybe(x) } }   //~ E0901
+
+pub fn arm_binding_option[T](t: T) -> U32 { match Some(keep(t)) { Some(x) => peek(x), None => 0 } }   //~ E0601
+
+pub rt fn rt_arm_binding_option[T](t: T) -> U32 { match Some(keep(t)) { Some(x) => peek(x), None => 0 } }   //~ E0901
+
+// ------------------------------------------------------------------ the value is read, not moved
+
+pub fn read_only[T](move t: T) -> U32 { peek(t) }   //~ E0601
+
+pub rt fn rt_read_only[T](move t: T) -> U32 { peek(t) }   //~ E0901
+
+pub fn read_only_maybe[T: ?Dup](move t: T) -> U32 { peek_maybe(t) }   //~ E0601
+
+pub rt fn rt_read_only_maybe[T: ?Dup](move t: T) -> U32 { peek_maybe(t) }   //~ E0901
+
+pub fn read_a_copy_field[T: ?Dup](move m: MixedM[T]) -> U32 { m.n }   //~ E0601
+
+pub rt fn rt_read_a_copy_field[T: ?Dup](move m: MixedM[T]) -> U32 { m.n }   //~ E0901
+
+pub fn match_on_a_place[T](move o: Option[T]) -> U32 { match o { Some(x) => peek(x), None => 0 } }   //~ E0601
+
+pub rt fn rt_match_on_a_place[T](move o: Option[T]) -> U32 { match o { Some(x) => peek(x), None => 0 } }   //~ E0901

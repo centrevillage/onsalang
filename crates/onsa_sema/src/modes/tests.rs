@@ -32,7 +32,7 @@ pub fn apply(g: fn(U32) -> U32) -> U32 { g.(1) }
 pub struct Stereo { l: F32, r: F32 }
 pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample { Stereo { l: l, r: r } }
 pub fn mkr() -> Result[Buf[F32], U32] uses {Alloc} { Ok(Buf.zeroed(1)) }
-pub fn keep[T: ?Dup](move x: T) {}
+pub fn keep[T: ?Dup](move x: T) uses {Alloc} {}
 pub fn useout(o: pair.Out) {}
 ";
 
@@ -3610,8 +3610,8 @@ pub fn whole(move h: Holder) -> U32 uses {{Alloc}} {{
 /// S-85 (§12.2): the rest of a value a field is taken out of is dropped,
 /// and needs `Alloc` when a part beside a step of the path does: a `Buf`
 /// beside the field or beside a field on the way, of a generic struct by
-/// its argument, a tuple's; not a Copy rest, nor a `T` (as its whole drop,
-/// W6-02).
+/// its argument, a tuple's, a `T` not Copy (as its whole drop, §6.3); not a
+/// Copy rest.
 #[test]
 fn the_rest_of_a_value_a_field_is_taken_out_of() {
     let (src, a, def) = clean(
@@ -3631,7 +3631,7 @@ pub fn of_t[T: ?Dup](move g: G[T]) -> Buf[F32] uses {Alloc} { g.a }
     );
     let rest = |n: &str| {
         use crate::drop_alloc::{Drop, alloc_drops};
-        let rests = alloc_drops(&a, &a.bodies[&def(&a, n)]).filter_map(|d| match d {
+        let rests = alloc_drops(&a, def(&a, n)).filter_map(|d| match d {
             Drop::Rest { at, root, .. } => Some((at, root.name.clone())),
             _ => None,
         });
@@ -3648,7 +3648,7 @@ pub fn of_t[T: ?Dup](move g: G[T]) -> Buf[F32] uses {Alloc} { g.a }
         ("tuple", &["t"]),
         ("of_buf", &["g"]),
         ("of_u32", &none),
-        ("of_t", &none),
+        ("of_t", &["g"]),
     ] {
         assert_eq!(rest(n), roots, "{n}");
     }

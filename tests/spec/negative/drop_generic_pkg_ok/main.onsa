@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§6.3", "§8.1", "§10", "§12.2", "§15.1"]
+
+// W6-02 U4b/t, R-32, S-782 (§6.3: "捨てる操作を持たない関数（借用で受け取り、複製して返す、または移動する）はこの規則に触れない"; §12.2; §15.1): the contrasts of negative/drop_generic_pkg. The functions of this module
+// that hand a value of a type parameter over to the generic functions of `lib.onsa` (which do not drop: they return it, or the type parameter is `Copy`, or they have `uses {Alloc}`), with a `Str`, a number
+// or a `T`, and the method of a type of `lib` whose `self` is moved on, are legal and stay legal: the value is moved by the call (a `T` without a bound is the last use of an owned binding, and a `T: ?Dup` takes `move`),
+// the value that the callee has is its own, the callee with `uses {Alloc}` costs the caller the same effect, and a `T: Copy` is dropped with nothing. The type argument of the call does not change the verdict (the drop is
+// of the declaration, not of the instance). This version accepts all of them, and they stay accepted. The functions are one-liners.
+
+use lib.{Holder, eat_alloc, eat_copy, keep, keep_holder, keep_maybe, rt_eat_copy}
+
+pub fn call_keep_str(move s: Str) -> Str { keep(s) }
+
+pub fn call_keep_number(n: U32) -> U32 { keep(n) }
+
+pub fn call_keep[T](move t: T) -> T { keep(t) }
+
+pub fn call_keep_maybe[T: ?Dup](move t: T) -> T { keep_maybe(move t) }
+
+pub fn call_keep_holder[T](move h: Holder[T]) -> Holder[T] { keep_holder(h) }
+
+pub fn call_same[T](move h: Holder[T]) -> Holder[T] { h.same() }
+
+pub fn call_eat_copy[T: Copy](move t: T) { eat_copy(t) }
+
+pub rt fn rt_call_eat_copy[T: Copy](move t: T) { rt_eat_copy(t) }
+
+pub fn call_eat_alloc[T](move t: T) uses {Alloc} { eat_alloc(t) }
+
+pub fn call_eat_alloc_str(move s: Str) uses {Alloc} { eat_alloc(s) }
+
+pub fn call_eat_alloc_number(n: U32) uses {Alloc} { eat_alloc(n) }

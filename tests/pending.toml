@@ -983,13 +983,6 @@ note = "取り出し（S-85）の降下（取り出さなかった残りの破�
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/negative/take_out_rest_alloc_generic.onsa"
-reasons = ["S-85", "R-32"]
-until = "W6-02"
-note = "取り出しの残りが `T: ?Dup` の値のとき E0601 / E0901（§12.2）。総称の `T` の破棄は値の全体でも `Alloc` を要るとしない（R-32、`rt.rs::needs_alloc_drop`）。W4-09 U2 の `take_out_rest_alloc.onsa` から親が分けた"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/negative/take_out_rest_alloc_position.onsa"
 reasons = ["S-85", "R-87", "S-82"]
 until = "W6-03"
@@ -1314,3 +1307,10 @@ target = "tests/spec/control/fixed_str_match_value.onsa"
 reasons = ["S-614"]
 until = "W8-06"
 note = "値の形の `match`（腕が値を返す）は、整数のリテラルと同じく Core で E0200（ValueMatch）。W8-06 で降ろす。"
+
+[[pending]]
+kind = "fix-contract"
+target = "tests/spec/fixes/e0703_dup_unbounded_type_parameter.onsa:15:13 E0703 fix1"
+reasons = ["S-1030"]
+until = "W6-02"
+note = "U4b から U7 まで: 境界の無い `T` を値の位置に置く形は U7 まで複製。候補を当てた後の `Some(t)` の `t` が複製され、元の `t` の破棄が `Alloc` を要して（§6.3）E0601 になり、`clean = true` が落ちる"

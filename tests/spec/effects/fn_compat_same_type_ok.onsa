@@ -26,7 +26,7 @@ pub struct W[T] {
   h: T,
 }
 
-impl[T] W[T] {
+impl[T: Copy] W[T] {
   pub fn set(inout self, v: T) {
     self.h = v
   }
@@ -44,7 +44,7 @@ pub struct Hb {
   f: fn(U32) -> U32 uses {Alloc},
 }
 
-pub fn swap[T](inout p: T, inout q: T) {
+pub fn swap[T: Copy](inout p: T, inout q: T) {
   let t = p
   p = q
   q = t

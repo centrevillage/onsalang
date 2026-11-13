@@ -11,7 +11,7 @@
 // decides; the report of the case lists it. If that reading changes, only this file goes. The mark is of the line only: the line may carry
 // the E0710 of the type argument and the E0710 of the store, which the case does not tell apart. One error per function (P-01).
 
-fn sink[U](move y: U) -> U32 {
+fn sink[U](move y: U) -> U32 uses {Alloc} {
   1
 }
 

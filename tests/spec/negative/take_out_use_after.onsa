@@ -47,7 +47,7 @@ pub fn show(s: Holder) -> F32 {
   s.gain
 }
 
-pub fn sink[T: ?Dup](move x: T) {}
+pub fn sink[T: ?Dup](move x: T) uses {Alloc} {}
 
 pub fn apply(f: fn(U32) -> U32) -> U32 {
   f.(1)

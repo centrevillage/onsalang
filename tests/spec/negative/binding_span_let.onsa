@@ -17,7 +17,7 @@ pub fn clear(inout s: Span[F32]) {
   s.fill!(0.0)
 }
 
-pub fn sink[T](move x: T) {}
+pub fn sink[T](move x: T) uses {Alloc} {}
 
 pub fn apply(f: fn(U32) -> U32) -> U32 {
   f.(1)

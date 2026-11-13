@@ -1,0 +1,173 @@
+// onsa.toml
+// [test]
+// spec = ["§4.6", "§5.4", "§6.3", "§8.1", "§9.2", "§10", "§12.2"]
+// canonical = false
+
+// W6-02 U4b/t, R-32, S-782 (§6.3: "ジェネリックな型パラメータ `T` の値の破棄は、`T: Copy` の制約が無い限り `Alloc` を要する ... 捨てる操作を持たない関数（借用で受け取り、複製して返す、または移動する）は
+// この規則に触れない"; §12.2: "借用束縛（§5.4）の終了: 要らない", "panic で抜ける道の、生きている値の破棄: 要らない", "ジェネリックな `T` の値の破棄（`T: Copy` の制約が無い場合）: 要る"): the contrasts of
+// negative/drop_generic_end.onsa. Every function is legal and stays legal after the drop of a value of a type parameter needs `Alloc`. A `T` with a bound that makes it `Copy` (`Copy`, and the number traits
+// `AnyNum`, `Num`, `Float`, `Int` and `Unsigned`, whose list begins with `Copy`: §6.3), and the values that hold only such a `T`, are dropped without anything (§4.6: "Copy ... 破棄: 何もしない"); a `T` that is borrowed
+// (a default-mode parameter, a borrowed element or field, a borrowed `match` heading) has no drop (§5.4); a function with `uses {Alloc}` may drop; a path that panics drops nothing (§9.2). The moves
+// are in negative/drop_generic_hand_off.onsa. This version counts no drop of a type parameter, so all of these are accepted today, and they stay accepted (R-32: "`T: Copy` の制約が無い" is the only case
+// that drops). The functions are one-liners.
+
+pub struct Holder[T] {
+  v: T,
+}
+
+pub struct HolderM[T: ?Dup] {
+  v: T,
+}
+
+pub enum Slot[T] {
+  Empty,
+  Full(T),
+}
+
+pub rt fn keep[T](move t: T) -> T { t }
+
+pub rt fn peek[T](t: T) -> U32 { 0 }
+
+pub rt fn peek_holder[T: ?Dup](h: HolderM[T]) -> U32 { 0 }
+
+// ------------------------------------------------------------------ a `T` that is `Copy`
+
+pub fn copy_param[T: Copy](move t: T) {}
+
+pub rt fn rt_copy_param[T: Copy](move t: T) {}
+
+pub rt fn rt_copy_and_a_bound[T: Copy + Eq](move t: T) {}
+
+pub rt fn rt_a_bound_and_copy[T: Eq + Copy](move t: T) {}
+
+pub rt fn rt_any_num[T: AnyNum](move t: T) {}
+
+pub rt fn rt_num[T: Num](move t: T) {}
+
+pub rt fn rt_float[T: Float](move t: T) {}
+
+pub rt fn rt_int[T: Int](move t: T) {}
+
+pub rt fn rt_unsigned[T: Unsigned](move t: T) {}
+
+pub rt fn rt_num_and_a_bound[T: Num + Ord](move t: T) {}
+
+// ------------------------------------------------------------------ a value that holds only `Copy` type parameters
+
+pub rt fn rt_copy_in_option[T: Copy](move o: Option[T]) {}
+
+pub rt fn rt_num_in_option[T: Num](move o: Option[T]) {}
+
+pub rt fn rt_copy_in_result[T: Copy, E: Copy](move r: Result[T, E]) {}
+
+pub rt fn rt_copy_in_tuple[T: Copy](move p: (T, U32)) {}
+
+pub rt fn rt_two_copy_in_tuple[T: Copy, U: Num](move p: (T, U)) {}
+
+pub rt fn rt_copy_in_array[T: Copy](move xs: [T; 2]) {}
+
+pub rt fn rt_copy_in_array_of_length_n[T: Copy, const N: U32](move xs: [T; N]) {}
+
+pub rt fn rt_copy_in_struct[T: Copy](move h: Holder[T]) {}
+
+pub rt fn rt_copy_in_enum[T: Copy](move s: Slot[T]) {}
+
+pub rt fn rt_copy_in_nested[T: Copy](move o: Option[Holder[(T, U32)]]) {}
+
+impl[T: Copy] Holder[T] {
+  pub rt fn eat(move self) {}
+
+  pub rt fn eat_with(move self, n: U32) -> U32 { n }
+}
+
+// ------------------------------------------------------------------ a `T` that is borrowed
+
+pub rt fn borrowed[T](t: T) {}
+
+pub rt fn borrowed_maybe[T: ?Dup](t: T) {}
+
+pub rt fn borrowed_option[T](o: Option[T]) {}
+
+pub rt fn borrowed_struct[T: ?Dup](h: HolderM[T]) {}
+
+pub rt fn borrowed_copy_back[T](t: T) -> T { t }
+
+pub rt fn borrowed_element[T](xs: [T; 2]) -> T { xs[0] }
+
+pub rt fn borrowed_field[T](h: Holder[T]) -> T { h.v }
+
+pub rt fn borrowed_tuple_field[T](p: (T, U32)) -> T { p.0 }
+
+pub rt fn borrowed_heading[T](o: Option[T], d: T) -> T { match o { Some(x) => x, None => d } }
+
+pub rt fn borrowed_binding[T](t: T) -> U32 {
+  let c = t
+  peek(c)
+}
+
+pub rt fn borrowed_binding_maybe[T: ?Dup](h: HolderM[T]) -> U32 {
+  let g = h
+  peek_holder(g)
+}
+
+impl[T] Holder[T] {
+  pub rt fn borrowed_self(self) -> U32 { 0 }
+
+  pub rt fn borrowed_self_field(self) -> T { self.v }
+}
+
+impl[T: ?Dup] HolderM[T] {
+  pub rt fn borrowed_self(self) -> U32 { 0 }
+}
+
+// ------------------------------------------------------------------ the function has `uses {Alloc}`
+
+pub fn alloc_plain[T](move t: T) uses {Alloc} {}
+
+pub fn alloc_maybe[T: ?Dup](move t: T) uses {Alloc} {}
+
+pub fn alloc_bound[T: Eq](move t: T) uses {Alloc} {}
+
+pub fn alloc_option[T](move o: Option[T]) uses {Alloc} {}
+
+pub fn alloc_array[T, const N: U32](move xs: [T; N]) uses {Alloc} {}
+
+pub fn alloc_early_exit[T](move t: T, c: Bool) -> U32 uses {Alloc} { if c { return 0 } else { 1 } }
+
+pub fn alloc_arm[T](t: T) -> U32 uses {Alloc} { match keep(t) { x => peek(x) } }
+
+impl[T] Holder[T] {
+  pub fn eat_alloc(move self) uses {Alloc} {}
+}
+
+// ------------------------------------------------------------------ a path that panics drops nothing
+
+pub fn panics[T](move t: T) -> U32 { panic("x") }
+
+pub rt fn rt_panics[T](move t: T) -> U32 { panic("x") }
+
+pub rt fn rt_panics_maybe[T: ?Dup](move t: T) -> U32 { panic("x") }
+
+pub rt fn rt_panics_option[T](move o: Option[T]) -> U32 { panic("x") }
+
+pub rt fn rt_panic_or_return[T](move t: T, c: Bool) -> T { if c { panic("x") } else { t } }
+
+pub rt fn rt_return_or_panic[T: ?Dup](move t: T, c: Bool) -> T { if c { move t } else { panic("x") } }
+
+pub rt fn rt_panic_in_an_arm[T](move t: T, n: U32) -> T { match n { 0 => panic("x"), _ => t } }
+
+// ------------------------------------------------------------------ an anonymous function that drops nothing
+
+pub fn run_t[T](f: fn(move T) -> U32, t: T) -> U32 {
+  f.(t)
+}
+
+pub fn run_b[T](f: fn(T) -> U32, t: T) -> U32 {
+  f.(t)
+}
+
+pub fn closure_copy[T: Copy](t: T) -> U32 { run_t(fn(move x: T) -> U32 { 0 }, t) }
+
+pub fn closure_number(n: U32) -> U32 { run_t(fn(move x: U32) -> U32 { 0 }, n) }
+
+pub fn closure_borrowed[T](t: T) -> U32 { run_b(fn(x: T) -> U32 { 0 }, t) }

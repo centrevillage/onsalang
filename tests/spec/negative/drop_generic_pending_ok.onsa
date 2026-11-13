@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§6.3", "§8.1", "§9.1", "§10", "§12.2"]
+
+// W6-02 U4b/t, R-32, S-782 (§3.5, §5.2, §6.3, §12.2: "ジェネリックな `T` の値の破棄（`T: Copy` の制約が無い場合、§6.3）: 要る"): the contrasts of negative/drop_generic_pending.onsa. Every function is legal and stays
+// legal after the value of a type parameter that waits for the operands after it is dropped where a `?` returns: a waiting value of a `T` that is `Copy` (§4.6: a copy is dropped without anything), a `?`
+// that comes before the value is made (`first2(r?, t)` with a borrowed `t`, `(r?, T.default())`: the copy is made after the `?`, and the `?` leaves nothing alive), a callee that only borrows (`len_of(t, r?)`: a borrowed
+// argument consumes nothing, so nothing waits), a call or a literal with no `?` (nothing can leave), and a function with `uses {Alloc}` (the drop is allowed). This version already accepts all of these. The functions
+// are one-liners.
+
+pub struct Mixed[T] {
+  n: U32,
+  v: T,
+}
+
+pub rt fn first2[T](n: U32, move t: T) -> T { t }
+
+pub rt fn first_n[T](move t: T, n: U32) -> T { t }
+
+pub rt fn len_of[T](t: T, n: U32) -> U32 { n }
+
+// ------------------------------------------------------------------ the value that waits needs no drop
+
+pub fn copy_tuple[T: Copy](t: T, r: Option[U32]) -> Option[(T, U32)] { Some((t, r?)) }
+
+pub rt fn rt_copy_tuple[T: Copy](t: T, r: Option[U32]) -> Option[(T, U32)] { Some((t, r?)) }
+
+pub rt fn rt_num_tuple[T: Num](t: T, r: Option[U32]) -> Option[(T, U32)] { Some((t, r?)) }
+
+pub rt fn rt_copy_array[T: Copy](t: T, r: Option[T]) -> Option[[T; 2]] { Some([t, r?]) }
+
+pub rt fn rt_copy_struct[T: Copy](t: T, r: Option[U32]) -> Option[Mixed[T]] { Some(Mixed { v: t, n: r? }) }
+
+pub rt fn rt_copy_call[T: Copy](move t: T, r: Option[U32]) -> Option[T] { Some(first_n(t, r?)) }
+
+pub rt fn rt_copy_owned[T: Copy](move t: T, r: Option[U32]) -> Option[(T, U32)] { Some((t, r?)) }
+
+// ------------------------------------------------------------------ the `?` comes before the value is made, the callee borrows, nothing can leave
+
+pub fn try_before_borrowed[T](t: T, r: Option[U32]) -> Option[T] { Some(first2(r?, t)) }
+
+pub rt fn rt_try_before_borrowed[T](t: T, r: Option[U32]) -> Option[T] { Some(first2(r?, t)) }
+
+pub rt fn rt_try_before_new_value[T: Default](r: Option[U32]) -> Option[(U32, T)] { Some((r?, T.default())) }
+
+pub rt fn rt_callee_borrows[T](t: T, r: Option[U32]) -> Option[U32] { Some(len_of(t, r?)) }
+
+pub rt fn rt_callee_borrows_maybe[T: ?Dup](t: T, r: Option[U32]) -> Option[U32] { Some(len_of_maybe(t, r?)) }
+
+pub rt fn len_of_maybe[T: ?Dup](t: T, n: U32) -> U32 { n }
+
+pub rt fn rt_no_try_call[T](t: T) -> Option[T] { Some(first2(1, t)) }
+
+pub rt fn rt_no_try_tuple[T](t: T) -> Option[(T, U32)] { Some((t, 1)) }
+
+// ------------------------------------------------------------------ the function has `uses {Alloc}`
+
+pub fn alloc_tuple[T](t: T, r: Option[U32]) -> Option[(T, U32)] uses {Alloc} { Some((t, r?)) }
+
+pub fn alloc_maybe_tuple[T: ?Dup](move t: T, r: Option[U32]) -> Option[(T, U32)] uses {Alloc} { Some((move t, r?)) }
+
+pub fn alloc_call[T](t: T, r: Option[U32]) -> Option[T] uses {Alloc} { Some(first_n(t, r?)) }
+
+pub fn alloc_return_in_operand[T](t: T, c: Bool) -> T uses {Alloc} { first_n(t, if c { return t } else { 1 }) }

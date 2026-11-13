@@ -20,7 +20,7 @@ pub fn clear(inout s: Span[F32]) {
   s.fill!(0.0)
 }
 
-pub fn sink[T](move x: T) {}
+pub fn sink[T](move x: T) uses {Alloc} {}
 
 // ---------------------------------------------------------- origins that are not borrowed origins
 

@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§6.3", "§8.1", "§12.2"]
+
+// W6-02 U4b/t, R-32, S-782 (§8.1: "無名関数は、その型の効果行と `rt` に照らして本体を検査する ... 期待する型が純粋なら、本体で `Alloc` を使えない。効果行に無い使用は E0601"; §6.3: "ジェネリックな型パラメータ `T` の値の破棄は、
+// `T: Copy` の制約が無い限り `Alloc` を要する"): an anonymous function whose parameter is an owned value of a type parameter and that does not move it drops it at the end of its body, and the function type that is
+// expected (`fn(move T) -> U32`) is pure, so the drop is an E0601 (the line is the line of the function that writes the anonymous function, as for a `Str`). The parameter is a `T` without a bound, a `T: ?Dup` and a
+// value that holds a `T`. The anonymous functions that drop nothing (a `T: Copy`, a number, a borrowed parameter) are in negative/drop_generic_ok.onsa. The functions are one-liners (S-783). This version counts
+// no drop of a type parameter, so none of these is reported today. One error per function (P-01).
+
+pub fn run_t[T](f: fn(move T) -> U32, t: T) -> U32 {
+  f.(t)
+}
+
+pub fn run_m[T: ?Dup](f: fn(move T) -> U32, move t: T) -> U32 {
+  f.(move t)
+}
+
+pub fn run_o[T](f: fn(move Option[T]) -> U32, o: Option[T]) -> U32 {
+  f.(o)
+}
+
+pub fn closure_param[T](t: T) -> U32 { run_t(fn(move x: T) -> U32 { 0 }, t) }   //~ E0601
+
+pub fn closure_param_maybe[T: ?Dup](move t: T) -> U32 { run_m(fn(move x: T) -> U32 { 0 }, move t) }   //~ E0601
+
+pub fn closure_param_bound[T: Eq](t: T) -> U32 { run_t(fn(move x: T) -> U32 { 0 }, t) }   //~ E0601
+
+pub fn closure_param_option[T](o: Option[T]) -> U32 { run_o(fn(move x: Option[T]) -> U32 { 0 }, o) }   //~ E0601

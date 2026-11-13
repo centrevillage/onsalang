@@ -13,7 +13,7 @@ pub struct Holder {
   n: U32,
 }
 
-pub fn sink[T: ?Dup](move x: T) {}
+pub fn sink[T: ?Dup](move x: T) uses {Alloc} {}
 
 pub fn read_another_field_after(move h: Holder) -> Result[U32, U32] uses {Alloc} {
   let b = h.r?

@@ -1,0 +1,147 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§6.3", "§8.1", "§9.1", "§10", "§12.2"]
+// canonical = false
+
+// W6-02 U4b/t, R-32, R-255, S-1030, S-782 (§6.3: "捨てる操作を持たない関数（借用で受け取り、複製して返す、または移動する。境界の無い `T` の値は印なしで移る、§5.2）はこの規則に触れない";
+// §5.2: an owned binding that is a Dup value, "`Copy` の無い型パラメータの値" included, "それを消費する位置に置くとき ... そこに `move` を置けるなら、複製せずに移す"; §12.2: "所有する Dup の値（...
+// `Copy` の無い型パラメータの値）を、消費する位置（返り値、`move` の引数、...）で移すこと: 要らない"): the contrasts of negative/drop_generic_end.onsa for the value that is moved out. A `T` without a bound is
+// moved without a mark and a `T: ?Dup` with `move` (§5.2: "総称の `T: ?Dup` の値は Affine でありうるので `move` を書く"), as the value of the function (the tail of the body, `return`, the tail of a branch or
+// of an arm), as the argument of a `move` parameter, as the operand of `?` and as the receiver of a `move self` method, and a value that holds a `T` the same. A `T` with a bound of a trait that is not a
+// kind (`Eq`) is moved like a `T` without a bound. The value is moved on every path (each branch moves it), or it is read first and moved after. The only field of a `?Dup` struct that is taken out
+// leaves nothing to drop, and the rest that is a `Copy` field needs no drop (§5.2: "取り出したフィールド以外はその場で破棄される"). Every function is legal today (a type parameter is not counted) and stays
+// legal. The forms that are not moved are in negative/drop_generic_end.onsa and negative/drop_generic_release.onsa, the forms that put the value in a constructor, a literal or a binding
+// heading (a value position, U7) are not written here. The functions are one-liners.
+
+pub struct Holder[T] {
+  v: T,
+}
+
+pub struct HolderM[T: ?Dup] {
+  v: T,
+}
+
+pub struct MixedM[T: ?Dup] {
+  n: U32,
+  v: T,
+}
+
+pub rt fn peek[T](t: T) -> U32 { 0 }
+
+pub rt fn peek_maybe[T: ?Dup](t: T) -> U32 { 0 }
+
+// ------------------------------------------------------------------ the value of the function
+
+pub fn tail[T](move t: T) -> T { t }
+
+pub rt fn rt_tail[T](move t: T) -> T { t }
+
+pub fn tail_maybe[T: ?Dup](move t: T) -> T { t }
+
+pub rt fn rt_tail_maybe[T: ?Dup](move t: T) -> T { move t }
+
+pub rt fn rt_tail_bound[T: Eq](move t: T) -> T { t }
+
+pub rt fn rt_return[T](move t: T) -> T { return t }
+
+pub rt fn rt_return_maybe[T: ?Dup](move t: T) -> T { return move t }
+
+pub rt fn rt_option[T](move o: Option[T]) -> Option[T] { o }
+
+pub rt fn rt_tuple[T](move p: (T, U32)) -> (T, U32) { p }
+
+pub rt fn rt_array[T](move xs: [T; 2]) -> [T; 2] { xs }
+
+pub rt fn rt_array_of_length_n[T, const N: U32](move xs: [T; N]) -> [T; N] { xs }
+
+pub rt fn rt_struct[T](move h: Holder[T]) -> Holder[T] { h }
+
+pub rt fn rt_result[T, E](move r: Result[T, E]) -> Result[T, E] { r }
+
+pub rt fn rt_maybe_option[T: ?Dup](move o: Option[T]) -> Option[T] { o }
+
+pub rt fn rt_maybe_tuple[T: ?Dup](move p: (T, U32)) -> (T, U32) { p }
+
+pub rt fn rt_maybe_struct[T: ?Dup](move h: HolderM[T]) -> HolderM[T] { h }
+
+pub rt fn rt_both_branches[T](move t: T, c: Bool) -> T { if c { t } else { t } }
+
+pub rt fn rt_both_branches_maybe[T: ?Dup](move t: T, c: Bool) -> T { if c { move t } else { move t } }
+
+pub rt fn rt_return_in_a_branch[T](move t: T, c: Bool) -> T { if c { return t } else { t } }
+
+pub rt fn rt_all_arms[T](move t: T, n: U32) -> T { match n { 0 => t, 1 => { t }, _ => { return t } } }
+
+pub rt fn rt_all_arms_maybe[T: ?Dup](move t: T, n: U32) -> T { match n { 0 => move t, _ => move t } }
+
+pub rt fn rt_a_block[T](move t: T) -> T { { t } }
+
+pub rt fn rt_read_then_return[T](move t: T) -> T { if peek(t) > 0 { t } else { t } }
+
+pub rt fn rt_read_then_return_maybe[T: ?Dup](move t: T) -> T { if peek_maybe(t) > 0 { move t } else { move t } }
+
+// ------------------------------------------------------------------ the argument of a `move` parameter
+
+pub rt fn keep[T](move t: T) -> T { t }
+
+pub rt fn keep_maybe[T: ?Dup](move t: T) -> T { move t }
+
+pub rt fn keep_option[T](move o: Option[T]) -> Option[T] { o }
+
+pub rt fn pass_on[T](move t: T) -> T { keep(t) }
+
+pub rt fn pass_on_maybe[T: ?Dup](move t: T) -> T { keep_maybe(move t) }
+
+pub rt fn pass_on_twice[T](move t: T) -> T { keep(keep(t)) }
+
+pub rt fn pass_on_twice_maybe[T: ?Dup](move t: T) -> T { keep_maybe(keep_maybe(move t)) }
+
+pub rt fn pass_on_option[T](move o: Option[T]) -> Option[T] { keep_option(o) }
+
+pub rt fn pass_on_in_a_branch[T](move t: T, c: Bool) -> T { if c { keep(t) } else { t } }
+
+pub rt fn pass_on_in_an_arm[T](move t: T, n: U32) -> T { match n { 0 => keep(t), _ => keep(t) } }
+
+pub rt fn pass_on_bound[T: Eq](move t: T) -> T { keep(t) }
+
+// ------------------------------------------------------------------ the operand of `?` and the receiver of a `move self` method
+
+pub rt fn unwrap_owned[T](move o: Option[T]) -> T { o.unwrap() }
+
+pub rt fn unwrap_owned_maybe[T: ?Dup](move o: Option[T]) -> T { o.unwrap() }
+
+pub rt fn unwrap_owned_result[T, E](move r: Result[T, E]) -> T { r.unwrap() }
+
+pub rt fn unwrap_owned_result_maybe[T: ?Dup, E: ?Dup](move r: Result[T, E]) -> T { r.unwrap() }
+
+pub rt fn try_operand[T](move o: Option[T]) -> Option[T] { Some(keep(o?)) }
+
+pub rt fn try_operand_maybe[T: ?Dup](move o: Option[T]) -> Option[T] { Some(keep_maybe(o?)) }
+
+pub rt fn try_operand_result[T, E](move r: Result[T, E]) -> Result[T, E] { Ok(keep(r?)) }
+
+impl[T] Holder[T] {
+  pub rt fn same(move self) -> Holder[T] { self }
+
+  pub rt fn again(move self) -> Holder[T] { self.same() }
+
+  pub rt fn in_a_branch(move self, c: Bool) -> Holder[T] { if c { self.same() } else { self } }
+}
+
+impl[T: ?Dup] HolderM[T] {
+  pub rt fn same(move self) -> HolderM[T] { self }
+
+  pub rt fn into_v(move self) -> T { self.v }
+
+  pub rt fn into_v_marked(move self) -> T { move self.v }
+}
+
+// ------------------------------------------------------------------ the field that is taken out leaves nothing to drop
+
+pub rt fn only_field[T: ?Dup](move h: HolderM[T]) -> T { h.v }
+
+pub rt fn only_field_marked[T: ?Dup](move h: HolderM[T]) -> T { move h.v }
+
+pub rt fn the_rest_is_a_copy_field[T: ?Dup](move m: MixedM[T]) -> T { m.v }
+
+pub rt fn the_rest_is_a_copy_field_marked[T: ?Dup](move m: MixedM[T]) -> T { move m.v }

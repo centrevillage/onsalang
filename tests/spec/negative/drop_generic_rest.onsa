@@ -1,0 +1,104 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§6.3", "§7", "§8.1", "§10", "§12.2"]
+
+// W6-02 U4b/t, R-32, S-85, S-782 (§5.2: "所有する値の Affine のフィールドを消費する位置に置くと ... `s` 全体を消費する。取り出したフィールド以外はその場で破棄される"; §5.4: "まだ反復していない要素 ... が破棄される";
+// §6.3: "ジェネリックな型パラメータ `T` の値の破棄は、`T: Copy` の制約が無い限り `Alloc` を要する（`?Dup` の `T` も同じ）"; §12.2): the rest of a take-out and the rest of an owned `for` that hold a value of a type
+// parameter. The field of a struct of `T: ?Dup` that is taken out (the value of the function, `move p.a`, the argument of a `move` parameter) leaves the other field, which is a `T`, and it is dropped there: an E0601 in a
+// function without `uses {Alloc}` and an E0901 in an `rt fn` (negative/take_out_rest_alloc_generic.onsa is the first form, and negative/take_out_rest_alloc.onsa the same for a `Buf`). The other field is a
+// `T` without a bound too (the field of a struct that is a Dup value, which is read as a copy, so the whole is dropped: the same verdict), and the field of the struct that is taken out in a method (`self`). The owned `for` over an array
+// `[T; N]` of `T: ?Dup` drops the elements that are not iterated yet when the loop is left by a `break` or a `return` (§5.4: the container of a fixed-length array is no heap object, so only the elements
+// are dropped). Every element that is iterated is moved on all paths, so the drop of the rest is the only one. The helpers `sink` and `eat` and `eat_n` drop their argument, so their own E0901 is reported (the same as
+// negative/drop_iter_rest.onsa). The contrasts (the only field is taken out, the rest is a `Copy` field, the loop runs to its end) are in negative/drop_generic_hand_off.onsa and negative/drop_generic_rest_ok.onsa.
+// The functions are one-liners (S-783). This version counts no drop of a type parameter, so none of these is reported today. One error per function (P-01).
+
+pub struct Both[T: ?Dup] {
+  a: T,
+  b: T,
+}
+
+pub struct BothD[T] {
+  a: T,
+  b: T,
+}
+
+pub struct Outer[T: ?Dup] {
+  inner: Both[T],
+  k: U32,
+}
+
+pub rt fn sink[T: ?Dup](move t: T) {}   //~ E0901
+
+pub rt fn eat[T: ?Dup](move t: T) -> Bool { true }   //~ E0901
+
+pub rt fn eat_n[T: ?Dup](move t: T) -> U32 { 0 }   //~ E0901
+
+// ------------------------------------------------------------------ the rest of a take-out
+
+pub fn rest_returned[T: ?Dup](move p: Both[T]) -> T { p.a }   //~ E0601
+
+pub rt fn rt_rest_returned[T: ?Dup](move p: Both[T]) -> T { p.a }   //~ E0901
+
+pub fn rest_second[T: ?Dup](move p: Both[T]) -> T { p.b }   //~ E0601
+
+pub rt fn rt_rest_second[T: ?Dup](move p: Both[T]) -> T { p.b }   //~ E0901
+
+pub fn rest_marked[T: ?Dup](move p: Both[T]) -> T { move p.a }   //~ E0601
+
+pub rt fn rt_rest_marked[T: ?Dup](move p: Both[T]) -> T { move p.a }   //~ E0901
+
+pub fn rest_as_an_argument[T: ?Dup](move p: Both[T]) -> U32 { eat_n(move p.a) }   //~ E0601
+
+pub rt fn rt_rest_as_an_argument[T: ?Dup](move p: Both[T]) -> U32 { eat_n(move p.a) }   //~ E0901
+
+pub fn rest_nested[T: ?Dup](move p: Outer[T]) -> T { move p.inner.a }   //~ E0601
+
+pub rt fn rt_rest_nested[T: ?Dup](move p: Outer[T]) -> T { move p.inner.a }   //~ E0901
+
+pub fn rest_in_a_branch[T: ?Dup](c: Bool, move p: Both[T], move q: Both[T]) -> T { if c { p.a } else { q.b } }   //~ E0601
+
+pub rt fn rt_rest_in_a_branch[T: ?Dup](c: Bool, move p: Both[T], move q: Both[T]) -> T { if c { p.a } else { q.b } }   //~ E0901
+
+pub fn rest_of_a_dup_struct[T](move p: BothD[T]) -> T { p.a }   //~ E0601
+
+pub rt fn rt_rest_of_a_dup_struct[T](move p: BothD[T]) -> T { p.a }   //~ E0901
+
+pub fn rest_of_a_dup_struct_with_a_bound[T: Eq](move p: BothD[T]) -> T { p.a }   //~ E0601
+
+pub rt fn rt_rest_of_a_dup_struct_with_a_bound[T: Eq](move p: BothD[T]) -> T { p.a }   //~ E0901
+
+impl[T: ?Dup] Both[T] {
+  pub fn first(move self) -> T { self.a }   //~ E0601
+
+  pub rt fn rt_first(move self) -> T { self.a }   //~ E0901
+
+  pub fn first_marked(move self) -> T { move self.a }   //~ E0601
+
+  pub rt fn rt_first_marked(move self) -> T { move self.a }   //~ E0901
+}
+
+// ------------------------------------------------------------------ the rest of an owned `for`, left by a `break` or a `return`
+
+pub fn iter_rest_return[T: ?Dup](c: Bool, move xs: [T; 2]) { for s in move xs { if c { return sink(move s) } else { sink(move s) } } }   //~ E0601
+
+pub rt fn rt_iter_rest_return[T: ?Dup](c: Bool, move xs: [T; 2]) { for s in move xs { if c { return sink(move s) } else { sink(move s) } } }   //~ E0901
+
+pub fn iter_rest_break[T: ?Dup](move xs: [T; 2]) { for s in move xs { if eat(move s) { break } else {} } }   //~ E0601
+
+pub rt fn rt_iter_rest_break[T: ?Dup](move xs: [T; 2]) { for s in move xs { if eat(move s) { break } else {} } }   //~ E0901
+
+pub fn iter_rest_break_else[T: ?Dup](move xs: [T; 2]) { for s in move xs { if eat(move s) {} else { break } } }   //~ E0601
+
+pub rt fn rt_iter_rest_break_else[T: ?Dup](move xs: [T; 2]) { for s in move xs { if eat(move s) {} else { break } } }   //~ E0901
+
+pub fn iter_rest_of_length_n[T: ?Dup, const N: U32](move xs: [T; N]) { for s in move xs { if eat(move s) { break } else {} } }   //~ E0601
+
+pub rt fn rt_iter_rest_of_length_n[T: ?Dup, const N: U32](move xs: [T; N]) { for s in move xs { if eat(move s) { break } else {} } }   //~ E0901
+
+pub fn iter_rest_in_a_branch[T: ?Dup](c: Bool, move xs: [T; 2]) { if c { for s in move xs { if eat(move s) { break } else {} } } }   //~ E0601
+
+pub rt fn rt_iter_rest_in_a_branch[T: ?Dup](c: Bool, move xs: [T; 2]) { if c { for s in move xs { if eat(move s) { break } else {} } } }   //~ E0901
+
+pub fn iter_rest_of_options[T: ?Dup](move xs: [Option[T]; 2]) { for s in move xs { if eat(move s) { break } else {} } }   //~ E0601
+
+pub rt fn rt_iter_rest_of_options[T: ?Dup](move xs: [Option[T]; 2]) { for s in move xs { if eat(move s) { break } else {} } }   //~ E0901

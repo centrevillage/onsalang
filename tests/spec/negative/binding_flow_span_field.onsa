@@ -18,7 +18,7 @@ pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
   Stereo { l: l, r: r }
 }
 
-pub fn sink[T](move x: T) {}
+pub fn sink[T](move x: T) uses {Alloc} {}
 
 pub fn clear(inout s: Span[F32]) {
   s.fill!(0.0)

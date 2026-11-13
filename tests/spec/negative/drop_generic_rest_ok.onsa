@@ -1,0 +1,96 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§6.3", "§7", "§8.1", "§10", "§12.2"]
+
+// W6-02 U4b/t, R-32, S-85, S-782 (§5.2: "取り出したフィールド以外はその場で破棄される"; §5.4: "借用の `for`" has no drop and "`for s in move xs` ... まだ反復していない要素 ... が破棄される"; §6.3, §12.2: the drop
+// of a value of a type parameter needs `Alloc` "`T: Copy` の制約が無い場合"): the contrasts of negative/drop_generic_rest.onsa. Every function is legal and stays legal after the rest of a take-out and the rest of
+// an owned `for` that hold a `T` are dropped: a borrowed `for` over an array of `T` (nothing is owned), an owned `for` whose element is `Copy` (a `T: Copy` is dropped without anything, §4.6), the rest that is a `Copy` field,
+// and a function with `uses {Alloc}` (the take-out and the loop that is left early are dropped there). This version accepts all of them, and they stay accepted. The functions are on several lines (no error is
+// expected, so the line does not matter).
+
+pub struct Both[T: ?Dup] {
+  a: T,
+  b: T,
+}
+
+pub struct MixedM[T: ?Dup] {
+  n: U32,
+  v: T,
+}
+
+pub rt fn peek[T](t: T) -> U32 { 0 }
+
+pub rt fn peek_maybe[T: ?Dup](t: T) -> U32 { 0 }
+
+pub fn eat_alloc[T: ?Dup](move t: T) -> Bool uses {Alloc} { true }
+
+// ------------------------------------------------------------------ the loop owns nothing that is dropped
+
+pub rt fn borrowed_for[T](xs: [T; 2]) -> U32 {
+  for s in xs {
+    if peek(s) > 0 {
+      break
+    }
+  }
+  0
+}
+
+pub rt fn borrowed_for_maybe[T: ?Dup](xs: [T; 2]) -> U32 {
+  for s in xs {
+    if peek_maybe(s) > 0 {
+      return 1
+    }
+  }
+  0
+}
+
+pub rt fn copy_for[T: Copy](move xs: [T; 2]) -> U32 {
+  for s in move xs {
+    if peek(s) > 0 {
+      break
+    }
+  }
+  0
+}
+
+pub rt fn num_for_with_a_return[T: Num](move xs: [T; 2]) -> U32 {
+  for s in move xs {
+    if peek(s) > 0 {
+      return 1
+    }
+  }
+  0
+}
+
+// ------------------------------------------------------------------ the rest of a take-out is a `Copy` field, or the function has `uses {Alloc}`
+
+pub rt fn the_rest_is_a_copy_field[T: ?Dup](move m: MixedM[T]) -> T {
+  m.v
+}
+
+pub fn alloc_rest[T: ?Dup](move p: Both[T]) -> T uses {Alloc} {
+  p.a
+}
+
+pub fn alloc_rest_marked[T: ?Dup](move p: Both[T]) -> T uses {Alloc} {
+  move p.b
+}
+
+pub fn alloc_iter_rest[T: ?Dup](move xs: [T; 2]) uses {Alloc} {
+  for s in move xs {
+    if eat_alloc(move s) {
+      break
+    }
+  }
+}
+
+pub fn alloc_iter_rest_return[T: ?Dup](c: Bool, move xs: [T; 2]) uses {Alloc} {
+  for s in move xs {
+    if c {
+      return
+    }
+    if eat_alloc(move s) {
+      break
+    }
+  }
+}

@@ -34,7 +34,7 @@ pub fn in_a_tuple[U: ?Dup](move u: U) {
 }
 
 // A parameter with the implicit `Dup` is fine.
-pub fn dup_parameter[U](u: U) {
+pub fn dup_parameter[U](u: U) uses {Alloc} {
   let w = Wrap { x: u }
   let _ = need_dup(w)
   let _ = [w; 2]
