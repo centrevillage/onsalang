@@ -50,6 +50,13 @@ impl Pos {
         matches!(self, Pos::Own | Pos::Value | Pos::MoveArg | Pos::Return | Pos::Extract)
     }
 
+    /// It consumes, and the whole of an owned binding of a Dup value that
+    /// is not Copy may be released at it (moved, unless used after: §5.2,
+    /// R-255; `consume`). U7 (S-1030) adds `Own` and `Value`.
+    pub(super) fn releases(self) -> bool {
+        matches!(self, Pos::Return | Pos::MoveArg | Pos::Extract)
+    }
+
     /// It consumes, and an owned Affine place at it is moved with `move`
     /// written (§5.2, S-807): of the consuming positions, all but a return
     /// and the ones with no mark (`Extract`).
@@ -134,9 +141,7 @@ impl<'a> Walker<'a> {
         let base = r.items();
         for x in xs {
             self.expr(r, x, pos);
-            if pos.consumes() {
-                self.waits(r, x);
-            }
+            self.waits(r, x, pos);
         }
         r.forget(base);
     }

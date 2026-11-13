@@ -1,0 +1,111 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§5.4", "§7", "§8.1", "§10", "§12.2"]
+
+// W6-02 U4a/t, R-255, S-1030 (§5.2: "`move` 引数に渡す Dup 値（Copy、Shared、関数値の変数）には `move` を書かず（`tk(n)`、`ts(s)`、`ap(f)`）、その場で複製して渡す（所有する値を移せるときは移す、§5.2 の上の段落）",
+// S-609; §12.2: "所有する Dup の値を、消費する位置（返り値、`move` の引数、...）で移すこと: 要らない"): the `move` argument. An owned Dup value that is the argument of a `move` parameter, with no `move`
+// mark (S-609), is moved when nothing uses it afterwards, so the original is not dropped and the function needs no `Alloc`: no E0601 in a function without `uses {Alloc}`, no E0901 in an `rt fn`. The
+// callee returns the value (`id`), so it needs no `Alloc` either, once the return is moved (negative/dup_release_return.onsa); or it drops it (`eat`), and then its own E0901 is reported (the same as
+// negative/drop_for_one_path.onsa). The argument is the whole value (`Str`, a struct that holds a `Str`, `Option[Str]`, `Result[Str, U32]`, `(Str, U32)`), and the call is in the tail, in a `return`, in the branches
+// of an `if` and the arms of a `match` (the paths do not meet again), as the argument of another hand-off (`id(id(s))`), and with a read before the call. The `move` argument that is a field or an element
+// (`id_name(p.name)`) is a copy (S-1034) and is not written here. Every function is an error today (R-255: the original is dropped after the copy is handed over) and none is one after, except the
+// helpers `eat`. The functions with a statement list are on several lines (no error is expected, so the line does not matter, S-783).
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+pub rt fn eat(move s: Str) {}   //~ E0901
+
+pub rt fn id(move s: Str) -> Str { s }
+
+pub rt fn id_p(move p: Param) -> Param { p }
+
+pub rt fn id_o(move o: Option[Str]) -> Option[Str] { o }
+
+pub rt fn id_r(move r: Result[Str, U32]) -> Result[Str, U32] { r }
+
+pub rt fn id_t(move t: (Str, U32)) -> (Str, U32) { t }
+
+// ------------------------------------------------------------------ the tail, `return`, a nested hand-off
+
+pub fn pass_str(move s: Str) -> Str { id(s) }
+
+pub rt fn rt_pass_str(move s: Str) -> Str { id(s) }
+
+pub fn pass_struct(move p: Param) -> Param { id_p(p) }
+
+pub rt fn rt_pass_struct(move p: Param) -> Param { id_p(p) }
+
+pub fn pass_option(move o: Option[Str]) -> Option[Str] { id_o(o) }
+
+pub rt fn rt_pass_option(move o: Option[Str]) -> Option[Str] { id_o(o) }
+
+pub fn pass_result(move r: Result[Str, U32]) -> Result[Str, U32] { id_r(r) }
+
+pub rt fn rt_pass_result(move r: Result[Str, U32]) -> Result[Str, U32] { id_r(r) }
+
+pub fn pass_tuple(move t: (Str, U32)) -> (Str, U32) { id_t(t) }
+
+pub rt fn rt_pass_tuple(move t: (Str, U32)) -> (Str, U32) { id_t(t) }
+
+pub fn pass_return(move s: Str) -> Str { return id(s) }
+
+pub rt fn rt_pass_return(move s: Str) -> Str { return id(s) }
+
+pub fn pass_twice(move s: Str) -> Str { id(id(s)) }
+
+pub rt fn rt_pass_twice(move s: Str) -> Str { id(id(s)) }
+
+pub fn pass_to_a_consumer(move s: Str) { eat(s) }
+
+pub rt fn rt_pass_to_a_consumer(move s: Str) { eat(s) }
+
+// ------------------------------------------------------------------ paths that do not meet again
+
+pub fn pass_in_both_branches(move s: Str, c: Bool) -> Str { if c { id(s) } else { id(s) } }
+
+pub rt fn rt_pass_in_both_branches(move s: Str, c: Bool) -> Str { if c { id(s) } else { id(s) } }
+
+pub fn pass_in_both_returns(move s: Str, c: Bool) -> Str { if c { return id(s) } else { return id(s) } }
+
+pub rt fn rt_pass_in_both_returns(move s: Str, c: Bool) -> Str { if c { return id(s) } else { return id(s) } }
+
+pub fn pass_in_return_and_tail(move s: Str, c: Bool) -> Str { if c { return id(s) } else { id(s) } }
+
+pub rt fn rt_pass_in_return_and_tail(move s: Str, c: Bool) -> Str { if c { return id(s) } else { id(s) } }
+
+pub fn pass_in_arms(move s: Str, n: U32) -> Str { match n { 0 => id(s), 1 => id(s), _ => id(s) } }
+
+pub rt fn rt_pass_in_arms(move s: Str, n: U32) -> Str { match n { 0 => id(s), 1 => id(s), _ => id(s) } }
+
+pub fn pass_in_the_other_arm(move s: Str, n: U32) -> Str { match n { 0 => id(s), _ => s } }
+
+pub rt fn rt_pass_in_the_other_arm(move s: Str, n: U32) -> Str { match n { 0 => id(s), _ => s } }
+
+// ------------------------------------------------------------------ a read comes before the call
+
+pub fn read_statement_then_pass(move s: Str) -> Str {
+  let n = s.len()
+  if n > 0 { id(s) } else { id(s) }
+}
+
+pub rt fn rt_read_statement_then_pass(move s: Str) -> Str {
+  let n = s.len()
+  if n > 0 { id(s) } else { id(s) }
+}
+
+pub fn read_in_tuple_then_pass(move s: Str) -> (U32, Str) { (s.len(), id(s)) }
+
+pub rt fn rt_read_in_tuple_then_pass(move s: Str) -> (U32, Str) { (s.len(), id(s)) }
+
+pub fn return_then_pass(move s: Str, c: Bool) -> Str {
+  if c { return id(s) }
+  id(s)
+}
+
+pub rt fn rt_return_then_pass(move s: Str, c: Bool) -> Str {
+  if c { return id(s) }
+  id(s)
+}

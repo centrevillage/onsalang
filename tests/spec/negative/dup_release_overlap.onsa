@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§5.4", "§7", "§8.1", "§10", "§12.2"]
+
+// W6-02 U4a/t, R-255, S-1030 (§5.2: "同じ呼び出しの他の引数・受け手と重ならず（下の E0702 と同じ判定）"; the E0702 paragraphs: "入れ子の呼び出しの `move` の引数も同じ変更で、引数の順によらず E0702 である
+// （`fn2(x, take(move x))`）", "`move` の引数に印を書かずに渡す Dup の値の場所と、Dup の値の `move self` の受け手は、複製して渡し ... 重なりでは借用の引数と同じくその場所の読みとして数える。`inout` の場所と
+// 重なれば E0702 で"): the fourth condition, the hand-off does not overlap another argument or the receiver of the same call. A `move` parameter `s` that is handed to a `move` parameter in the
+// argument of a call that also takes `s` as a borrowed argument (before or after the hand-off, the order does not matter), as the receiver, or as an `inout` argument, is copied (Affine, `add(s,
+// take(move s))` is E0702), so the original is dropped at the end of its binding and the drop needs `Alloc`: an E0601 in a function without `uses {Alloc}` and an E0901 in an `rt fn`. The
+// overlapping place is a `Str`, an `Option[Str]` and a struct that holds a `Str` (the receiver of a method, and its `F32` field, which is a place too: "Copy の `var` を借用の引数に渡す `h(m, { m = 5 ... })` も"). The hand-off is the argument of a call whose result is a `U32`, so that no other value
+// is a Dup value to drop. The helpers drop their argument, so their own E0901 is reported (the same as negative/drop_for_one_path.onsa). The arguments that are read before the call or are
+// another place are in negative/dup_release_overlap_ok.onsa. Today every function here is an error, and it stays one. The functions are one-liners (S-783). One error per function (P-01).
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+impl Param {
+  pub rt fn plus(self, n: U32) -> U32 { n }
+}
+
+pub rt fn eat_n(move s: Str) -> U32 { s.len() }   //~ E0901
+
+pub rt fn eat_o(move o: Option[Str]) -> U32 { 0 }   //~ E0901
+
+pub rt fn eat_p(move p: Param) -> U32 { 0 }   //~ E0901
+
+pub rt fn add(a: Str, n: U32) -> U32 { n }
+
+pub rt fn add2(n: U32, a: Str) -> U32 { n }
+
+pub rt fn add_o(a: Option[Str], n: U32) -> U32 { n }
+
+pub rt fn plus_f(v: F32, n: U32) -> U32 { n }
+
+pub rt fn touch_n(inout s: Str, n: U32) -> U32 { n }
+
+pub fn borrowed_arg_before(move s: Str) -> U32 { add(s, eat_n(s)) }   //~ E0601
+
+pub rt fn rt_borrowed_arg_before(move s: Str) -> U32 { add(s, eat_n(s)) }   //~ E0901
+
+pub fn borrowed_arg_after(move s: Str) -> U32 { add2(eat_n(s), s) }   //~ E0601
+
+pub rt fn rt_borrowed_arg_after(move s: Str) -> U32 { add2(eat_n(s), s) }   //~ E0901
+
+pub fn inout_arg_before(move s: Str) -> U32 { touch_n(inout s, eat_n(s)) }   //~ E0601
+
+pub rt fn rt_inout_arg_before(move s: Str) -> U32 { touch_n(inout s, eat_n(s)) }   //~ E0901
+
+pub fn receiver_before(move p: Param) -> U32 { p.plus(eat_p(p)) }   //~ E0601
+
+pub rt fn rt_receiver_before(move p: Param) -> U32 { p.plus(eat_p(p)) }   //~ E0901
+
+pub fn option_borrowed_arg(move o: Option[Str]) -> U32 { add_o(o, eat_o(o)) }   //~ E0601
+
+pub rt fn rt_option_borrowed_arg(move o: Option[Str]) -> U32 { add_o(o, eat_o(o)) }   //~ E0901
+
+pub fn copy_field_arg_before(move p: Param) -> U32 { plus_f(p.value, eat_p(p)) }   //~ E0601
+
+pub rt fn rt_copy_field_arg_before(move p: Param) -> U32 { plus_f(p.value, eat_p(p)) }   //~ E0901
+
+pub fn in_a_branch(move s: Str, c: Bool) -> U32 { if c { add(s, eat_n(s)) } else { eat_n(s) } }   //~ E0601
+
+pub rt fn rt_in_a_branch(move s: Str, c: Bool) -> U32 { if c { add(s, eat_n(s)) } else { eat_n(s) } }   //~ E0901

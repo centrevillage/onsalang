@@ -1,0 +1,79 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§8.1", "§9.1", "§10", "§12.2"]
+
+// W6-02 U4a/t, R-32, R-255, S-1030 (§3.5, §5.2, §5.4, §9.1, §12.2): the contrasts of negative/dup_pending_new.onsa and negative/dup_pending_stays.onsa. Every function is legal and stays legal after the Dup
+// value that waits for the operands after it is dropped where a `?` returns: a waiting value that is a value that needs no drop (a string literal, a Copy value: §12.2 "静的な値と破棄の要らない
+// リテラル（§5.4）の複製と破棄（一時の値を含む）: 要らない"), a `?` that comes before the value is made (`first2(r?, s)` with a borrowed `s`, `(r?, mk(1))`: the copy is made after the `?`, and the `?` leaves
+// nothing alive), a callee that only borrows (`len_of(s, r?)`: a borrowed argument consumes nothing, so nothing waits), a call or a literal with no `?` (nothing can leave), and a function with `uses {Alloc}`
+// (the drop is allowed). This version already accepts all of these. The helpers `first_n` and `first2` drop their argument, so their own E0901 is reported (the same as negative/drop_for_one_path.onsa). The
+// functions are one-liners.
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+pub rt fn mk(n: U32) -> Str { "x" }
+
+pub rt fn first_n(move a: Str, n: U32) -> U32 { a.len() }   //~ E0901
+
+pub rt fn first2(n: U32, move a: Str) -> U32 { a.len() }   //~ E0901
+
+pub rt fn len_of(a: Str, n: U32) -> U32 { n }
+
+impl Param {
+  pub fn consume_alloc(move self, n: U32) -> U32 uses {Alloc} { n }
+}
+
+pub fn first_n_alloc(move a: Str, n: U32) -> U32 uses {Alloc} { a.len() }
+
+// ------------------------------------------------------------------ the value that waits needs no drop
+
+pub fn tuple_literal(r: Option[U32]) -> Option[(Str, U32)] { Some(("x", r?)) }
+
+pub rt fn rt_tuple_literal(r: Option[U32]) -> Option[(Str, U32)] { Some(("x", r?)) }
+
+pub fn tuple_copy(n: U32, r: Option[U32]) -> Option[(U32, U32)] { Some((n, r?)) }
+
+pub rt fn rt_tuple_copy(n: U32, r: Option[U32]) -> Option[(U32, U32)] { Some((n, r?)) }
+
+pub fn struct_copy_and_literal(v: F32, r: Option[F32]) -> Option[Param] { Some(Param { name: "gain", value: r? }) }
+
+pub rt fn rt_struct_copy_and_literal(v: F32, r: Option[F32]) -> Option[Param] { Some(Param { name: "gain", value: r? }) }
+
+// ------------------------------------------------------------------ the `?` comes before the value is made, the callee borrows, nothing can leave
+
+pub fn try_before_borrowed(s: Str, r: Option[U32]) -> Option[U32] { Some(first2(r?, s)) }
+
+pub rt fn rt_try_before_borrowed(s: Str, r: Option[U32]) -> Option[U32] { Some(first2(r?, s)) }
+
+pub fn try_before_new_value(r: Option[U32]) -> Option[(U32, Str)] { Some((r?, mk(1))) }
+
+pub rt fn rt_try_before_new_value(r: Option[U32]) -> Option[(U32, Str)] { Some((r?, mk(1))) }
+
+pub fn callee_borrows(s: Str, r: Option[U32]) -> Option[U32] { Some(len_of(s, r?)) }
+
+pub rt fn rt_callee_borrows(s: Str, r: Option[U32]) -> Option[U32] { Some(len_of(s, r?)) }
+
+pub fn no_try_call(s: Str) -> Option[U32] { Some(first_n(s, 1)) }
+
+pub rt fn rt_no_try_call(s: Str) -> Option[U32] { Some(first_n(s, 1)) }
+
+pub fn no_try_tuple(s: Str) -> Option[(Str, U32)] { Some((s, 1)) }
+
+pub rt fn rt_no_try_tuple(s: Str) -> Option[(Str, U32)] { Some((s, 1)) }
+
+pub fn no_try_new_value(r: Option[U32]) -> Option[(Str, U32)] { Some((mk(1), 2)) }
+
+pub rt fn rt_no_try_new_value(r: Option[U32]) -> Option[(Str, U32)] { Some((mk(1), 2)) }
+
+// ------------------------------------------------------------------ `uses {Alloc}`: the drop of the value that waits is allowed
+
+pub fn alloc_tuple(s: Str, r: Option[U32]) -> Option[(Str, U32)] uses {Alloc} { Some((s, r?)) }
+
+pub fn alloc_call(s: Str, r: Option[U32]) -> Option[U32] uses {Alloc} { Some(first_n_alloc(s, r?)) }
+
+pub fn alloc_new_value(r: Option[U32]) -> Option[(Str, U32)] uses {Alloc} { Some((mk(1), r?)) }
+
+pub fn alloc_receiver(p: Param, r: Option[U32]) -> Option[U32] uses {Alloc} { Some(p.consume_alloc(r?)) }

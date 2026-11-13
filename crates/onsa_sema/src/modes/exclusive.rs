@@ -7,7 +7,9 @@ use onsa_syntax::ast::{Arg, ExprId, Mode};
 
 use super::calls::Takes;
 use super::check::Walker;
+use super::flow::Run;
 use super::place::{Place, Proj, place_of};
+use super::state::Status;
 use crate::Kind;
 use crate::body::{LocalId, view_base};
 use crate::ty::TyId;
@@ -101,6 +103,21 @@ impl Walker<'_> {
         match view_base((self.ast, self.info, self.a), self.ast.without_parens(e), |t| t) {
             Some(base) => Some(self.view_place(base)?.then(&[Proj::Index])),
             None => place_of(self.ast, self.names, e),
+        }
+    }
+
+    /// After the arguments of a call, the places `passed` in them read
+    /// again (§5.2, S-1030: a release in one of its arguments that another
+    /// argument or the receiver overlaps, E0702's test, copies), but the
+    /// place released by the argument itself.
+    pub(super) fn reread(&mut self, r: &mut Run, passed: &[Passed]) {
+        for q in passed {
+            let at = self.ast.without_parens(q.at);
+            let own =
+                matches!(r.cur.state().status(q.place.root), Some(Status::Released { at: xs }) if xs.contains(&at));
+            if !own {
+                self.restore(r, q.place.root);
+            }
         }
     }
 

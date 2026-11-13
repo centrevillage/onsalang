@@ -1,0 +1,102 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§5.4", "§7", "§8.1", "§10", "§12.2"]
+
+// W6-02 U4a/t, R-255, S-1030 (§5.2, the paragraph that begins "所有する束縛（`move` の引数、`move self`、... の全体が Copy でない Dup の値で": "それを消費する位置に置くとき、
+// その値が Affine であったとして、そこに `move` を置けるなら、複製せずに移す。置けるのは、その後で使わず（ループの次の反復と、そこから派生した借用束縛の使用を含む、E0704）...ときである。
+// 置けなければ複製し、元の値はその束縛の終わりで破棄される"; §12.2: a drop of a Shared value needs `Alloc`, the move of an owned Dup value at a consuming position needs none): the first
+// condition, the value is not used afterwards. A `move` parameter `s` that is handed to a `move` parameter (S-609: no `move` mark) and is read, passed as a borrowed or an `inout` argument,
+// or handed over again after that, on the path that goes on, is copied (Affine, `take(move s)` followed by a use of `s` is E0704), so the original is dropped at the end of its binding and the
+// drop needs `Alloc`: an E0601 in a function without `uses {Alloc}` and an E0901 in an `rt fn`. The hand-off is the argument of a call whose result is a `U32`, so that no other value is a Dup
+// value to drop; the later use is in the next element of a tuple literal, which is evaluated after the call (§3.5), so that every function is a one-liner (S-783). The use can be in one
+// branch only (the other path does not use it, but the one that does is the error), in an arm, or after the branches merge (every branch hands the value off, so that the use after the merge is the only reason). The same holds for each kind of owned Dup value: `Str`, a struct that
+// holds a `Str`, `Option[Str]`, `Result[Str, U32]` and `(Str, U32)`. The last two forms are about the other path (not about the condition): a path that leaves `s` alive drops it
+// there, whether the hand-off is on another path (`if c { eat_n(s) } else { 0 }`) or a `return` leaves with `s` alive (`if c { return "a" } else { s }`, the same as the `return` of
+// negative/drop_exit_return.onsa). The helpers `eat`, `eat_n`, `eat_p`, `eat_o`, `eat_r` and `eat_t` drop their argument, so their own E0901 is reported (the same as negative/drop_for_one_path.onsa),
+// and they are the same before and after the hand-off is decided. The forms where the hand-off is the last use are in negative/dup_release_later_ok.onsa. Today every function here is an
+// error, and it stays one. One error per function (P-01).
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+pub rt fn eat_n(move s: Str) -> U32 { s.len() }   //~ E0901
+
+pub rt fn eat_p(move p: Param) -> U32 { 0 }   //~ E0901
+
+pub rt fn eat_o(move o: Option[Str]) -> U32 { 0 }   //~ E0901
+
+pub rt fn eat_r(move r: Result[Str, U32]) -> U32 { 0 }   //~ E0901
+
+pub rt fn eat_t(move t: (Str, U32)) -> U32 { 0 }   //~ E0901
+
+pub rt fn len_of(s: Str) -> U32 { s.len() }
+
+pub rt fn len_r(r: Result[Str, U32]) -> U32 { 0 }
+
+pub rt fn touch(inout s: Str) -> U32 { 0 }
+
+// ------------------------------------------------------------------ the value is read, borrowed or passed as `inout` after the hand-off
+
+pub fn later_read(move s: Str) -> (U32, U32) { (eat_n(s), s.len()) }   //~ E0601
+
+pub rt fn rt_later_read(move s: Str) -> (U32, U32) { (eat_n(s), s.len()) }   //~ E0901
+
+pub fn later_borrowed_arg(move s: Str) -> (U32, U32) { (eat_n(s), len_of(s)) }   //~ E0601
+
+pub rt fn rt_later_borrowed_arg(move s: Str) -> (U32, U32) { (eat_n(s), len_of(s)) }   //~ E0901
+
+pub fn later_inout_arg(move s: Str) -> (U32, U32) { (eat_n(s), touch(inout s)) }   //~ E0601
+
+pub rt fn rt_later_inout_arg(move s: Str) -> (U32, U32) { (eat_n(s), touch(inout s)) }   //~ E0901
+
+// ------------------------------------------------------------------ the later use is on one path, in an arm, or after the paths merge
+
+pub fn later_in_one_branch(move s: Str, c: Bool) -> (U32, U32) { (eat_n(s), if c { s.len() } else { 0 }) }   //~ E0601
+
+pub rt fn rt_later_in_one_branch(move s: Str, c: Bool) -> (U32, U32) { (eat_n(s), if c { s.len() } else { 0 }) }   //~ E0901
+
+pub fn later_in_arm(move s: Str, n: U32) -> (U32, U32) { (eat_n(s), match n { 0 => s.len(), _ => 0 }) }   //~ E0601
+
+pub rt fn rt_later_in_arm(move s: Str, n: U32) -> (U32, U32) { (eat_n(s), match n { 0 => s.len(), _ => 0 }) }   //~ E0901
+
+pub fn later_after_merge(move s: Str, c: Bool) -> (U32, U32) { (if c { eat_n(s) } else { eat_n(s) }, s.len()) }   //~ E0601
+
+pub rt fn rt_later_after_merge(move s: Str, c: Bool) -> (U32, U32) { (if c { eat_n(s) } else { eat_n(s) }, s.len()) }   //~ E0901
+
+pub fn later_hand_off_on_one_path(move s: Str, c: Bool) -> (U32, U32) { (if c { eat_n(s) } else { eat_n(s) }, len_of(s)) }   //~ E0601
+
+pub rt fn rt_later_hand_off_on_one_path(move s: Str, c: Bool) -> (U32, U32) { (if c { eat_n(s) } else { eat_n(s) }, len_of(s)) }   //~ E0901
+
+// ------------------------------------------------------------------ the other kinds of owned Dup value
+
+pub fn later_struct(move p: Param) -> (U32, F32) { (eat_p(p), p.value) }   //~ E0601
+
+pub rt fn rt_later_struct(move p: Param) -> (U32, F32) { (eat_p(p), p.value) }   //~ E0901
+
+pub fn later_option(move o: Option[Str]) -> (U32, U32) { (eat_o(o), match o { Some(b) => b.len(), None => 0 }) }   //~ E0601
+
+pub rt fn rt_later_option(move o: Option[Str]) -> (U32, U32) { (eat_o(o), match o { Some(b) => b.len(), None => 0 }) }   //~ E0901
+
+pub fn later_result(move r: Result[Str, U32]) -> (U32, U32) { (eat_r(r), len_r(r)) }   //~ E0601
+
+pub rt fn rt_later_result(move r: Result[Str, U32]) -> (U32, U32) { (eat_r(r), len_r(r)) }   //~ E0901
+
+pub fn later_tuple(move t: (Str, U32)) -> (U32, U32) { (eat_t(t), t.1) }   //~ E0601
+
+pub rt fn rt_later_tuple(move t: (Str, U32)) -> (U32, U32) { (eat_t(t), t.1) }   //~ E0901
+
+// ------------------------------------------------------------------ a path that leaves `s` alive drops it, with or without the hand-off
+
+pub fn other_path_alive(move s: Str, c: Bool) -> U32 { if c { eat_n(s) } else { 0 } }   //~ E0601
+
+pub rt fn rt_other_path_alive(move s: Str, c: Bool) -> U32 { if c { eat_n(s) } else { 0 } }   //~ E0901
+
+pub fn return_with_s_alive(move s: Str, c: Bool) -> Str { if c { return "a" } else { s } }   //~ E0601
+
+pub rt fn rt_return_with_s_alive(move s: Str, c: Bool) -> Str { if c { return "a" } else { s } }   //~ E0901
+
+pub fn return_with_struct_alive(move p: Param, c: Bool) -> Param { if c { return Param { name: "a", value: 0.0 } } else { p } }   //~ E0601
+
+pub rt fn rt_return_with_struct_alive(move p: Param, c: Bool) -> Param { if c { return Param { name: "a", value: 0.0 } } else { p } }   //~ E0901

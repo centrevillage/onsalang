@@ -1,7 +1,7 @@
 //! The entry of the modes stage: one walk of each body the stage reads,
 //! in source order, and its one diagnostic (§18.1).
 
-use onsa_diag::hash::HashMap;
+use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::internal::bug;
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast::{Ast, ExprId, StmtId};
@@ -44,7 +44,17 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
         found.extend(w.m.found.into_iter().min_by(|x, y| x.order_in_file().cmp(&y.order_in_file())));
         // Not of a flow's body (§12.4: its state drops freely; R-453 is W7-04).
         if !matches!(a.def(id).kind, DefKind::Flow(_)) {
-            drops.push((id, w.m.drops));
+            // A point of a binding released on every path is kept if one of its releases copied (S-1030).
+            let reverted = &w.m.reverted;
+            let gone = (w.m.unless.iter()).filter(|(_, at)| !at.iter().any(|x| reverted.contains(x)));
+            let (mut gone, mut points, mut k) = (gone.map(|p| p.0).peekable(), w.m.drops, 0);
+            if gone.peek().is_some() {
+                points.retain(|_| {
+                    k += 1;
+                    gone.next_if_eq(&(k - 1)).is_none()
+                });
+            }
+            drops.push((id, points));
         }
     }
     a.diagnostics.extend(found);
@@ -125,6 +135,11 @@ pub(super) struct Made {
     takes: HashMap<Span, Place>,
     /// The drop points the walk that reports met ([`BodyInfo::drops`]).
     pub(super) drops: Vec<DropPoint>,
+    /// Of a point of a binding released on every path to it, its number
+    /// and the releases: it is one only if one of them copies (S-1030).
+    pub(super) unless: Vec<(usize, Vec<ExprId>)>,
+    /// The releases used after, by every walk: copies (S-1030, [`Walker::restore`]).
+    reverted: HashSet<ExprId>,
     /// The expressions visited (at most twice each: by the walk that
     /// reports and by the one that makes a loop's summary).
     #[cfg(test)]
@@ -170,6 +185,7 @@ impl<'a> Walker<'a> {
     fn unusable(&self, r: &Run, p: &Place) -> Option<Why> {
         match r.cur.state().status(p.root)? {
             &Status::Moved { at, via_loop } => Some(Why::Moved(at, via_loop)),
+            Status::Released { .. } => None,
             Status::Stale { changes } => (changes.iter())
                 .filter_map(|(&k, &c)| Some(Why::Stale(c, self.m.places[k as usize].1.reaches(p)?, k as usize)))
                 .min_by_key(|why| match why {
@@ -180,9 +196,10 @@ impl<'a> Walker<'a> {
 
     /// The place `p` is used at `at` (read by the pattern element `by` of a
     /// head, S-803): an E0704 if it is not live.
-    pub(super) fn used(&mut self, r: &Run, p: &Place, at: Span, by: Option<Span>) -> bool {
+    pub(super) fn used(&mut self, r: &mut Run, p: &Place, at: Span, by: Option<Span>) -> bool {
         let l = p.root;
         self.read_captured(l, at);
+        self.restore(r, l);
         let Some(why) = self.unusable(r, p).filter(|_| self.reports) else { return true };
         let name = &self.info.locals[l.0 as usize].name;
         let d = match why {
@@ -235,6 +252,21 @@ impl<'a> Walker<'a> {
         false
     }
 
+    /// A place of `l` used (or passed in the call of a release, E0702's
+    /// test, `Walker::reread`): the releases of its root, and of the roots
+    /// it derives from, are copies, and the roots live (§5.2, S-1030: used
+    /// after, by the next iteration or a borrow binding derived from it).
+    /// The one place that decides it. A read before a release in the same
+    /// expression (`s == take(s)`) is not after: that release moves.
+    pub(super) fn restore(&mut self, r: &mut Run, l: LocalId) {
+        let roots = if self.deps.indexed(l) { self.deps.origins(l) } else { Default::default() };
+        for root in roots.into_iter().chain([l]) {
+            if let Some(at) = r.cur.restore(root) {
+                self.m.reverted.extend(at);
+            }
+        }
+    }
+
     /// The note at the binding `l` of the index (§5.4): the places it
     /// derives from directly, as written (a source and the steps of the
     /// pattern; E0704's and E0702's).
@@ -276,7 +308,7 @@ impl<'a> Walker<'a> {
             if p.proj.iter().any(|s| matches!(s, Proj::Index | Proj::Payload)) {
                 bug(Some(at), "a field taken out through an element or a payload")
             }
-            self.drop_point(r, at, Dropped::Rest(Taken { root: p.root, path: p.proj.clone() }), true);
+            self.drop_point(r, at, Dropped::Rest(Taken { root: p.root, path: p.proj.clone() }), (true, None));
         }
         self.move_local(r, p, at, of);
     }

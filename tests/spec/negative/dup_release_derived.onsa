@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§5.4", "§7", "§8.1", "§10", "§12.2"]
+
+// W6-02 U4a/t, R-255, S-1030 (§5.2: "（ループの次の反復と、そこから派生した借用束縛の使用を含む、E0704）"; §5.4: the binding of the arm of a borrowed `match x` is a borrowed binding derived
+// from `x`; §7: "腕の本体では `x` を変更できる ... 変更すると、Copy でない束縛（腕の束縛と、そこから `let` などで派生した借用束縛）とその経路のうち、場所が変更した場所と重なるものは以後使えない（E0704）。
+// ... 変更が呼び出しの引数（`inout`、`!` の受け手、`move`）によるときは、... 束縛が使えなくなるのは呼び出しの後である"): the third condition, the use of a borrowed binding derived from the value. The
+// arm of `match o` (a place, so that the heading is borrowed) binds `b`, a derived binding that is not Copy, and the hand-off of `o` is moved in Affine terms, which invalidates `b`, so a use of
+// `b` after the call is E0704. The value is copied instead, so the original is dropped at the end of its binding and the drop needs `Alloc`: an E0601 in a function without `uses {Alloc}` and
+// an E0901 in an `rt fn`. The other arms hand the value off too, so that the arm with the use is the only reason. The binding is the payload of `Option[Str]` and `Result[Str, U32]`, a field of a
+// struct (`Param { name: n, value: v }`) and an element of a tuple. The use is the next element of a tuple literal (evaluated after the call, §3.5), so that every function is a one-liner (S-783).
+// The helpers drop their argument, so their own E0901 is reported (the same as negative/drop_for_one_path.onsa). The Copy bindings and the uses before the hand-off are in
+// negative/dup_release_derived_ok.onsa. Today every function here is an error, and it stays one. One error per function (P-01).
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+pub rt fn eat_o(move o: Option[Str]) -> U32 { 0 }   //~ E0901
+
+pub rt fn eat_r(move r: Result[Str, U32]) -> U32 { 0 }   //~ E0901
+
+pub rt fn eat_p(move p: Param) -> U32 { 0 }   //~ E0901
+
+pub rt fn eat_t(move t: (Str, U32)) -> U32 { 0 }   //~ E0901
+
+pub fn payload_of_option(move o: Option[Str]) -> (U32, U32) { match o { Some(b) => (eat_o(o), b.len()), None => (eat_o(o), 0) } }   //~ E0601
+
+pub rt fn rt_payload_of_option(move o: Option[Str]) -> (U32, U32) { match o { Some(b) => (eat_o(o), b.len()), None => (eat_o(o), 0) } }   //~ E0901
+
+pub fn payload_of_result(move r: Result[Str, U32]) -> (U32, U32) { match r { Ok(a) => (eat_r(r), a.len()), Err(e) => (eat_r(r), e) } }   //~ E0601
+
+pub rt fn rt_payload_of_result(move r: Result[Str, U32]) -> (U32, U32) { match r { Ok(a) => (eat_r(r), a.len()), Err(e) => (eat_r(r), e) } }   //~ E0901
+
+pub fn field_of_struct(move p: Param) -> (U32, U32) { match p { Param { name: n, value: v } => (eat_p(p), n.len()) } }   //~ E0601
+
+pub rt fn rt_field_of_struct(move p: Param) -> (U32, U32) { match p { Param { name: n, value: v } => (eat_p(p), n.len()) } }   //~ E0901
+
+pub fn element_of_tuple(move t: (Str, U32)) -> (U32, U32) { match t { (a, k) => (eat_t(t), a.len()) } }   //~ E0601
+
+pub rt fn rt_element_of_tuple(move t: (Str, U32)) -> (U32, U32) { match t { (a, k) => (eat_t(t), a.len()) } }   //~ E0901
+
+pub fn in_a_branch(move o: Option[Str], c: Bool) -> (U32, U32) { match o { Some(b) => (eat_o(o), if c { b.len() } else { 0 }), None => (eat_o(o), 0) } }   //~ E0601
+
+pub rt fn rt_in_a_branch(move o: Option[Str], c: Bool) -> (U32, U32) { match o { Some(b) => (eat_o(o), if c { b.len() } else { 0 }), None => (eat_o(o), 0) } }   //~ E0901

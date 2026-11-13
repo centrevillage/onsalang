@@ -7,6 +7,7 @@
 use std::collections::BTreeMap;
 
 use onsa_diag::{FileId, Span};
+use onsa_syntax::ast::ExprId;
 
 use super::{Delta, Ends, LoopSum, Paths, Status, Trail, Undo};
 use crate::body::LocalId;
@@ -28,9 +29,20 @@ fn all() -> Vec<Ends> {
         stale(0, 4),
         stale(1, 5),
     ];
+    with_deads(&deads)
+}
+
+/// Of a binding of a Dup value (S-1030), which is only released: none, and
+/// released at one place, another, or both.
+fn released() -> Vec<Ends> {
+    let rel = |xs: &[u32]| Some(Status::Released { at: xs.iter().map(|&x| ExprId(x)).collect() });
+    with_deads(&[None, rel(&[1]), rel(&[2]), rel(&[1, 2])])
+}
+
+fn with_deads(deads: &[Option<Status>]) -> Vec<Ends> {
     let mut out = Vec::new();
     for through in [false, true] {
-        for dead in &deads {
+        for dead in deads {
             for live in [false, true] {
                 out.push(Ends { through, dead: dead.clone(), live });
             }
@@ -47,15 +59,16 @@ fn join(a: &Ends, b: &Ends) -> Ends {
 
 #[test]
 fn the_join_of_ends_is_a_semilattice_with_the_unit_of_none_of_the_paths() {
-    let all = all();
     let none = Ends { through: false, dead: None, live: false };
-    for a in &all {
-        assert_eq!(join(a, a), *a, "idempotent");
-        assert_eq!(join(a, &none), *a, "the unit");
-        for b in &all {
-            assert_eq!(join(a, b), join(b, a), "commutative");
-            for c in &all {
-                assert_eq!(join(&join(a, b), c), join(a, &join(b, c)), "associative");
+    for all in [all(), released()] {
+        for a in &all {
+            assert_eq!(join(a, a), *a, "idempotent");
+            assert_eq!(join(a, &none), *a, "the unit");
+            for b in &all {
+                assert_eq!(join(a, b), join(b, a), "commutative");
+                for c in &all {
+                    assert_eq!(join(&join(a, b), c), join(a, &join(b, c)), "associative");
+                }
             }
         }
     }
@@ -63,15 +76,16 @@ fn the_join_of_ends_is_a_semilattice_with_the_unit_of_none_of_the_paths() {
 
 #[test]
 fn then_of_ends_is_associative_with_the_identity_and_distributes_over_the_join() {
-    let all = all();
-    for a in &all {
-        assert_eq!(Ends::SAME.then(a), *a, "the identity before");
-        assert_eq!(a.then(&Ends::SAME), *a, "the identity after");
-        for b in &all {
-            for c in &all {
-                assert_eq!(a.then(b).then(c), a.then(&b.then(c)), "associative");
-                assert_eq!(join(a, b).then(c), join(&a.then(c), &b.then(c)), "from the right");
-                assert_eq!(a.then(&join(b, c)), join(&a.then(b), &a.then(c)), "from the left");
+    for all in [all(), released()] {
+        for a in &all {
+            assert_eq!(Ends::SAME.then(a), *a, "the identity before");
+            assert_eq!(a.then(&Ends::SAME), *a, "the identity after");
+            for b in &all {
+                for c in &all {
+                    assert_eq!(a.then(b).then(c), a.then(&b.then(c)), "associative");
+                    assert_eq!(join(a, b).then(c), join(&a.then(c), &b.then(c)), "from the right");
+                    assert_eq!(a.then(&join(b, c)), join(&a.then(b), &a.then(c)), "from the left");
+                }
             }
         }
     }

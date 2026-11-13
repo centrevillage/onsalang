@@ -65,7 +65,7 @@ impl Walker<'_> {
             Some((base, Mode::Move)) => {
                 self.inside.direct = place_of(self.ast, self.names, base).is_some();
                 self.expr(r, base, Pos::Extract);
-                self.waits(r, base);
+                self.waits(r, base, Pos::Extract);
             }
             Some((base, Mode::Inout)) => self.write_place(r, base, How::Bang),
             Some((base, m)) => self.expr(r, base, Pos::Arg(m)),
@@ -77,14 +77,13 @@ impl Walker<'_> {
             let at = self.ast.expr(a.expr).span;
             let excuse = later.iter().find(|(s, _)| at.start <= s.start && s.end <= at.end);
             let outer = replace(&mut self.inside.excuse, excuse.map(|&(_, l)| (l, span)));
-            self.arg(r, a, t);
+            let pos = self.arg(r, a, t);
             self.inside.excuse = outer;
             // Taken by value, it waits for the arguments after it (A-1).
-            if matches!(t, Takes::Param(Mode::Move, _) | Takes::Element) && a.mode != Mode::Inout {
-                self.waits(r, a.expr);
-            }
+            self.waits(r, a.expr, pos);
         }
         r.forget(values);
+        self.reread(r, &passed);
         self.inside.calls -= 1;
         self.changed_in_args(start, &passed);
         for (place, at) in replace(&mut self.inside.after_call, outer) {
@@ -134,22 +133,31 @@ impl Walker<'_> {
     }
 
     /// The argument `a` of a parameter that takes `t` (§5.2): its mark
-    /// checked, and its walk at the position the parameter gives.
-    fn arg(&mut self, r: &mut Run, a: &Arg, t: Takes) {
+    /// checked, and its walk at the position the parameter gives, which it
+    /// returns (where it consumes, it waits, `Walker::waits`).
+    fn arg(&mut self, r: &mut Run, a: &Arg, t: Takes) -> Pos {
         let (e, mark) = (a.expr, (a.mode != Mode::Borrow).then_some(a.span.start));
         match (t, a.mode) {
             // `inout` on an element of a constructor (`Some(inout x)`): taken by value, E0703 (§5.2, S-792).
             (Takes::Param(Mode::Move, _) | Takes::Element, Mode::Inout) => {
                 self.by_value(a, t);
-                self.expr(r, e, Pos::Read)
+                self.expr(r, e, Pos::Read);
+                Pos::Read
             }
             (Takes::Param(Mode::Move, _), _) => {
                 self.inside.direct = true;
-                self.consume(r, e, Pos::MoveArg, mark)
+                self.consume(r, e, Pos::MoveArg, mark);
+                Pos::MoveArg
             }
-            (Takes::Element, Mode::Borrow) => self.expr(r, e, Pos::Value),
+            (Takes::Element, Mode::Borrow) => {
+                self.expr(r, e, Pos::Value);
+                Pos::Value
+            }
             // An element, as of a literal (§5.2, S-793): a Dup value's `move` is E0703 (S-795).
-            (Takes::Element, _) => self.consume(r, e, Pos::Value, mark),
+            (Takes::Element, _) => {
+                self.consume(r, e, Pos::Value, mark);
+                Pos::Value
+            }
             (Takes::Param(m, ty), _) => {
                 // S-809: a mark on a second-class function value there is its E0710 only (removed, it stays: §18.1).
                 if a.mode != m && !(m == Mode::Borrow && self.marked_tail(e, self.borrowed_at(ty))) {
@@ -163,6 +171,7 @@ impl Walker<'_> {
                     },
                     _ => self.argument(r, e, ty),
                 }
+                Pos::Arg(m)
             }
         }
     }

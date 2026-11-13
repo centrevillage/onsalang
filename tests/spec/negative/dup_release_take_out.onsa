@@ -1,0 +1,82 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§8.1", "§9.1", "§10", "§12.2"]
+
+// W6-02 U4a/t, R-255, S-1030 (§5.2: "例外は関数の返り値 ... と、中身を取り出す形（`move self` のメソッドの受け手（下）と後置 `?` の被演算子、§9.1）"; §9.1: "`?` の被演算子は消費する位置で、`move self`
+// のメソッドの受け手と同じく印を書かない（§5.2）"; the `unwrap` of `Option` and `Result` is `pub rt fn unwrap(move self) -> T`, "どちらも受け手を消費し、受け手の扱いは `?` の被演算子と同じ（§5.2）"): the
+// forms that take the content out. An owned Dup value that is the receiver of a `move self` method (`r.unwrap()` of `Result[Str, U32]` and `Option[Str]`, a method of a struct) or the operand of a postfix `?`
+// is moved when nothing uses it afterwards, so the original is not dropped and the function needs no `Alloc`: no E0601 in a function without `uses {Alloc}`, no E0901 in an `rt fn`. The `Err` and `None`
+// path of `?` returns, and it leaves nothing alive (the operand was consumed where `?` is written, and the other value in the `Err` is a `U32`). The payload that comes out is a new value, handed to a
+// constructor, a call or a tuple (R-255: `Ok(r?)`). Every function is an error today (R-255: the original is dropped after the copy is taken) and none is one after. The `let s = r?` followed by
+// `Ok(s)` is a value position and is not written here (U7). The functions are one-liners.
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+impl Param {
+  pub rt fn rename(move self) -> Param { self }
+}
+
+pub rt fn id(move s: Str) -> Str { s }
+
+// ------------------------------------------------------------------ the receiver of `move self`
+
+pub fn unwrap_result(move r: Result[Str, U32]) -> Str { r.unwrap() }
+
+pub rt fn rt_unwrap_result(move r: Result[Str, U32]) -> Str { r.unwrap() }
+
+pub fn unwrap_option(move o: Option[Str]) -> Str { o.unwrap() }
+
+pub rt fn rt_unwrap_option(move o: Option[Str]) -> Str { o.unwrap() }
+
+pub fn unwrap_result_struct(move r: Result[Param, U32]) -> Param { r.unwrap() }
+
+pub rt fn rt_unwrap_result_struct(move r: Result[Param, U32]) -> Param { r.unwrap() }
+
+pub fn unwrap_in_a_call(move r: Result[Str, U32]) -> Str { id(r.unwrap()) }
+
+pub rt fn rt_unwrap_in_a_call(move r: Result[Str, U32]) -> Str { id(r.unwrap()) }
+
+pub fn unwrap_in_branches(move r: Result[Str, U32], c: Bool) -> Str { if c { r.unwrap() } else { r.unwrap() } }
+
+pub rt fn rt_unwrap_in_branches(move r: Result[Str, U32], c: Bool) -> Str { if c { r.unwrap() } else { r.unwrap() } }
+
+pub fn unwrap_after_read(move r: Result[Str, U32]) -> (U32, Str) { (match r { Ok(a) => a.len(), Err(e) => e }, r.unwrap()) }
+
+pub rt fn rt_unwrap_after_read(move r: Result[Str, U32]) -> (U32, Str) { (match r { Ok(a) => a.len(), Err(e) => e }, r.unwrap()) }
+
+pub fn method_of_struct(move p: Param) -> Param { p.rename() }
+
+pub rt fn rt_method_of_struct(move p: Param) -> Param { p.rename() }
+
+pub fn method_twice(move p: Param) -> Param { p.rename().rename() }
+
+pub rt fn rt_method_twice(move p: Param) -> Param { p.rename().rename() }
+
+// ------------------------------------------------------------------ the operand of `?`
+
+pub fn try_result(move r: Result[Str, U32]) -> Result[Str, U32] { Ok(r?) }
+
+pub rt fn rt_try_result(move r: Result[Str, U32]) -> Result[Str, U32] { Ok(r?) }
+
+pub fn try_option(move o: Option[Str]) -> Option[Str] { Some(o?) }
+
+pub rt fn rt_try_option(move o: Option[Str]) -> Option[Str] { Some(o?) }
+
+pub fn try_struct(move r: Result[Param, U32]) -> Result[Param, U32] { Ok(r?) }
+
+pub rt fn rt_try_struct(move r: Result[Param, U32]) -> Result[Param, U32] { Ok(r?) }
+
+pub fn try_in_a_call(move r: Result[Str, U32]) -> Result[Str, U32] { Ok(id(r?)) }
+
+pub rt fn rt_try_in_a_call(move r: Result[Str, U32]) -> Result[Str, U32] { Ok(id(r?)) }
+
+pub fn try_in_a_tuple(move r: Result[Str, U32]) -> Result[(Str, U32), U32] { Ok((r?, 1)) }
+
+pub rt fn rt_try_in_a_tuple(move r: Result[Str, U32]) -> Result[(Str, U32), U32] { Ok((r?, 1)) }
+
+pub fn try_in_branches(move r: Result[Str, U32], c: Bool) -> Result[Str, U32] { if c { Ok(r?) } else { Ok(r?) } }
+
+pub rt fn rt_try_in_branches(move r: Result[Str, U32], c: Bool) -> Result[Str, U32] { if c { Ok(r?) } else { Ok(r?) } }

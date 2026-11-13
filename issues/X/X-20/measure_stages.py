@@ -230,6 +230,23 @@ def w602_try_copy(n):
     body = [f"  let k{i}: U32 = r? + {i}\n  s = s + k{i}" for i in range(n)]
     return "pub fn t(r: Option[U32]) -> Option[U32] {\n  var s: U32 = 0\n" + "\n".join(body) + "\n  Some(s)\n}\n"
 
+def w602_releases(form, n):
+    """W6-02 U4a (D12): one owned `Str` released in n branches (S-1030, R-255): `ret`, each branch returns its
+    release (sets of one); `arms`, the n arms of a `match` release it and it is used after their join (one set
+    of n, restored once); `seq`, n `if`s each release it after the release before is used (each join meets
+    the set of the ifs before, n x n with the sets of the releases a join copies). The lowering of these forms is
+    n x n before U4a too (4000 `if`s: about 12 to 20 s, the check about 0.05 s), so the sizes stop at 4000."""
+    h = "pub fn eat(move s: Str) -> U32 uses {Alloc} { s.len() }\n"
+    if form == "ret":
+        body = "".join(f"  if k == {i} {{ return eat(s) }}\n" for i in range(n)) + "  0\n"
+    elif form == "arms":
+        arms = "".join(f"    {i} => eat(s),\n" for i in range(n))
+        body = f"  let a = match k {{\n{arms}    _ => 0,\n  }}\n  a + s.len()\n"
+    else:
+        body = "  var a: U32 = 0\n" + "".join(f"  if k == {i} {{ a = a + eat(s) }}\n" for i in range(n))
+        body += "  a + s.len()\n"
+    return h + "pub fn t(move s: Str, k: U32) -> U32 uses {Alloc} {\n" + body + "}\n"
+
 SCALE = [("voice", "decls x", voice_times, [(k,) for k in (1, 2, 4, 8, 16)])]
 
 QUAD = [
@@ -243,6 +260,9 @@ QUAD = [
     ("w602_guards", "guarded arms", w602_guards, [(n,) for n in (1000, 2000, 4000, 8000)]),
     ("w602_guard_moves", "guards moving outer locals", w602_guard_moves, [(n,) for n in (500, 1000, 2000, 4000)]),
     ("w602_try_copy", "Copy locals and ?", w602_try_copy, [(n,) for n in (1000, 2000, 4000, 8000)]),
+    ("w602_releases", "returned releases", w602_releases, [("ret", n) for n in (500, 1000, 2000, 4000)]),
+    ("w602_release_arms", "releases joined", w602_releases, [("arms", n) for n in (500, 1000, 2000, 4000)]),
+    ("w602_release_seq", "releases used after", w602_releases, [("seq", n) for n in (500, 1000, 2000, 4000)]),
     ("w409_held_w", "F=120, W", w409_held, [(120, w) for w in (1500, 3000, 6000, 12000)]),
     ("w409_held_f", "W=6000, F", w409_held, [(f, 6000) for f in (15, 30, 60, 120)]),
     ("w409_same_w", "S=100, W", w409_same, [(100, w) for w in (750, 1500, 3000, 6000)]),

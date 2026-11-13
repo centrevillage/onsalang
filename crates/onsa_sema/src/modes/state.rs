@@ -5,33 +5,47 @@
 //! [`Paths`], joined in the time of the changes, not of the table), and a
 //! loop's summary ([`LoopSum`]).
 
-use std::collections::BTreeMap;
+use std::borrow::Cow;
+use std::collections::{BTreeMap, BTreeSet};
 use std::mem::replace;
 
-use onsa_diag::hash::HashMap;
+use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::internal::bug;
 
 use onsa_diag::Span;
+use onsa_syntax::ast::ExprId;
 
 use crate::body::LocalId;
 
 /// What a binding is at a point, if not live: moved (`via_loop`: by the back
 /// edge of a loop, §5.2's E0704), or unusable where it overlaps a place
 /// changed at one of `changes` (§7, §5.4, S-803: the place's number in
-/// `Walker`'s `Made`, and where).
+/// `Walker`'s `Made`, and where), or its Dup value released at the
+/// consuming expressions `at` (§5.2, S-1030: moved unless used after,
+/// then each a copy and the binding live, `Walker::restore`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum Status {
     Moved { at: Span, via_loop: bool },
     Stale { changes: BTreeMap<u32, Span> },
+    Released { at: Releases },
 }
+
+/// The consuming expressions that released a binding (S-1030).
+pub(super) type Releases = BTreeSet<ExprId>;
 
 impl Status {
     /// A semilattice (so the order of a join does not matter): moved over
     /// stale; of two moved the earlier place, then not by the loop; of two
-    /// stale the changes of both, of one place the earlier. The first reason
-    /// stays: an E0704 names the first move (§5.2).
+    /// stale the changes of both, of one place the earlier; of two released
+    /// the releases of both. The first reason stays: an E0704 names the
+    /// first move (§5.2). A binding is Affine or Dup, owned or a borrow, so
+    /// a release meets no other.
     fn join(&mut self, other: &Status) {
         match (&mut *self, other) {
+            (Status::Released { at }, Status::Released { at: more }) => at.extend(more),
+            (Status::Released { .. }, _) | (_, Status::Released { .. }) => {
+                bug(None, "a release joined with a move or a change of the same binding")
+            }
             (Status::Moved { .. }, Status::Stale { .. }) => {}
             (Status::Stale { .. }, Status::Moved { .. }) => *self = other.clone(),
             (Status::Moved { at, via_loop }, &Status::Moved { at: b, via_loop: v }) => {
@@ -151,21 +165,45 @@ impl Delta {
         self.ends.get(&l)?.dead.as_ref()
     }
 
-    /// Whether `l` may be live here (a path that reaches here leaves it
-    /// untouched, declared or assigned), and whether surely (no path leaves
-    /// it dead); `None`: not live on any path, or no path reaches here.
-    pub(super) fn lives(&self, l: LocalId) -> Option<bool> {
+    /// Whether `l` may hold its value here, and whether surely: live (a
+    /// path that reaches here leaves it untouched, declared or assigned),
+    /// surely if no path leaves it dead; else, live on no path but by its
+    /// releases (`unless`, not empty), held unless each of them moves.
+    /// `None`: on no path, or no path reaches here.
+    pub(super) fn lives(&self, l: LocalId) -> Option<(bool, Option<&Releases>)> {
         let e = self.ends.get(&l).unwrap_or(&Ends::SAME);
-        (self.reach && (e.through || e.live)).then_some(e.dead.is_none())
+        match &e.dead {
+            _ if !self.reach => None,
+            _ if e.through || e.live => Some((e.dead.is_none(), None)),
+            Some(Status::Released { at }) => Some((false, Some(at))),
+            _ => None,
+        }
     }
 
     /// `l` moved here: no path goes through or ends live; the reason joins
     /// (a binding moved twice keeps the first, its E0704 the record only).
     pub(super) fn moved(&mut self, l: LocalId, at: Span) {
+        self.consumed(l, Status::Moved { at, via_loop: false });
+    }
+
+    /// The Dup value of `l` released by the expression `at`: as a move,
+    /// until a use after it ([`Delta::restored`]).
+    pub(super) fn released(&mut self, l: LocalId, at: ExprId) {
+        self.consumed(l, Status::Released { at: BTreeSet::from([at]) });
+    }
+
+    /// Its releases copied (each path that released `l` holds it): live.
+    pub(super) fn restored(&mut self, l: LocalId) {
+        if let Some(e) = self.ends.get_mut(&l).filter(|e| matches!(e.dead, Some(Status::Released { .. }))) {
+            (e.dead, e.live) = (None, true);
+        }
+    }
+
+    fn consumed(&mut self, l: LocalId, s: Status) {
         if self.reach {
             let e = self.ends.entry(l).or_insert(Ends::SAME);
             (e.through, e.live) = (false, false);
-            join_dead(&mut e.dead, Some(&Status::Moved { at, via_loop: false }));
+            join_dead(&mut e.dead, Some(&s));
         }
     }
 
@@ -259,24 +297,49 @@ enum Undo {
 /// innermost (a later change keeps the ends before the first), so a path
 /// from a mark finds one change of each binding for each mark open since.
 /// `last`: of each binding, the place + 1 of its last change in the record
-/// (none: 0, and not kept).
+/// (none: 0, and not kept). `copies`: the releases this walk found used
+/// after (S-1030, [`Trail::restore`]).
 pub(super) struct Trail {
     now: Delta,
     log: Vec<Undo>,
     marks: Vec<usize>,
     last: HashMap<LocalId, usize>,
+    copies: HashSet<ExprId>,
 }
 
 impl Trail {
     pub(super) fn new() -> Trail {
-        Trail { now: Delta::start(), log: Vec::new(), marks: Vec::new(), last: HashMap::default() }
+        let (log, marks, last, copies) = Default::default();
+        Trail { now: Delta::start(), log, marks, last, copies }
+    }
+
+    /// `l` used: its releases here copy, and it is live ([`Delta::restored`]); them.
+    pub(super) fn restore(&mut self, l: LocalId) -> Option<Releases> {
+        let Some(Status::Released { at }) = self.now.status(l) else { return None };
+        let at = at.clone();
+        self.copies.extend(&at);
+        self.change(l, |d| d.restored(l));
+        Some(at)
+    }
+
+    /// `e` as known now: a path that released at a place that copies holds
+    /// the binding (live), so a join meets only the releases that may move
+    /// (a set of them does not grow with the joins of the paths before).
+    fn known<'e>(&self, e: &'e Ends) -> Cow<'e, Ends> {
+        let Some(Status::Released { at }) = &e.dead else { return Cow::Borrowed(e) };
+        if !at.iter().any(|x| self.copies.contains(x)) {
+            return Cow::Borrowed(e);
+        }
+        let left: Releases = at.iter().filter(|x| !self.copies.contains(x)).copied().collect();
+        let dead = (!left.is_empty()).then_some(Status::Released { at: left });
+        Cow::Owned(Ends { through: e.through, dead, live: true })
     }
 
     pub(super) fn state(&self) -> &Delta {
         &self.now
     }
 
-    /// A change `f` of the binding `l` ([`Delta::moved`], `stale`, `revive`, `forget`), recorded.
+    /// A change `f` of the binding `l` ([`Delta::moved`], `released`, `restored`, `stale`, `revive`, `forget`), recorded.
     pub(super) fn change(&mut self, l: LocalId, f: impl FnOnce(&mut Delta)) {
         if self.now.reach {
             self.keep(l, false);
@@ -353,7 +416,7 @@ impl Trail {
         lone.retain(|&l| {
             let kept = self.last.get(&l).is_some_and(|&p| p > m);
             match ends.get_mut(&l) {
-                Some(e) if !kept => e.join(self.get(l)),
+                Some(e) if !kept => e.join(&self.known(self.get(l))),
                 Some(_) => {}
                 None => bug(None, "a binding every path changed and none kept"),
             }
@@ -365,15 +428,20 @@ impl Trail {
             if *prev > m {
                 continue;
             }
-            let (l, was) = (*l, was.as_ref().unwrap_or(&Ends::SAME));
-            let now = if leaving && (*declares || self.declared_since(l, m)) { &Ends::SAME } else { self.get(l) };
-            if let Some(e) = ends.get_mut(&l) {
-                e.join(now);
-            } else if now != was {
-                let mut e = now.clone();
+            let leaves = leaving && (*declares || self.declared_since(*l, m));
+            let now = if leaves { Cow::Borrowed(&Ends::SAME) } else { self.known(self.get(*l)) };
+            let (l, was) = match ends.get_mut(l) {
+                Some(e) => {
+                    e.join(&now);
+                    continue;
+                }
+                None => (*l, self.known(was.as_ref().unwrap_or(&Ends::SAME))),
+            };
+            if now != was {
+                let mut e = now.into_owned();
                 match first {
                     true => lone.push(l),
-                    false => e.join(was),
+                    false => e.join(&was),
                 }
                 ends.insert(l, e);
             }

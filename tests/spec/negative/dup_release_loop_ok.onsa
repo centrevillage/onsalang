@@ -1,0 +1,127 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§5.4", "§7", "§8.1", "§10", "§12.2"]
+
+// W6-02 U4a/t, R-255, S-1030 (§5.2, §7): the contrasts of negative/dup_release_loop.onsa. A hand-off inside a loop moves when no path goes on from it to the next iteration, and nothing uses
+// the value afterwards: a loop where every path leaves with a value (`while true { ... return ... }`), a `return` in the loop with the hand-off again after the loop (the paths that reach the
+// hand-off after the loop did not move it in the loop, "ループの後に `s` を使わない"), a `for` over a range with the same shape, a hand-off followed by `break` in a `while true` that only
+// the `break` leaves (S-1042: after the loop `s` is moved), a loop that only reads `s` with the hand-off after the loop, and the same for a struct that holds a `Str`. The helpers
+// drop their argument, so their own E0901 is reported (the same as negative/drop_for_one_path.onsa); the callers have no marker. Every function is an error today (the original is dropped after
+// the copy is handed over, R-255) and none is one after. The functions with a statement list are on several lines (no error is expected, so the line does not matter, S-783).
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+pub rt fn eat(move s: Str) {}   //~ E0901
+
+pub rt fn eat_n(move s: Str) -> U32 { s.len() }   //~ E0901
+
+pub rt fn eat_p(move p: Param) -> U32 { 0 }   //~ E0901
+
+// ------------------------------------------------------------------ every path of the loop leaves
+
+pub fn every_path_returns(move s: Str, d: Bool) -> U32 { while true { if d { return eat_n(s) } else { return eat_n(s) } } }
+
+pub rt fn rt_every_path_returns(move s: Str, d: Bool) -> U32 { while true { if d { return eat_n(s) } else { return eat_n(s) } } }
+
+pub fn every_path_returns_struct(move p: Param, d: Bool) -> U32 { while true { if d { return eat_p(p) } else { return eat_p(p) } } }
+
+pub rt fn rt_every_path_returns_struct(move p: Param, d: Bool) -> U32 { while true { if d { return eat_p(p) } else { return eat_p(p) } } }
+
+pub fn returns_in_the_body(move s: Str) -> U32 { while true { return eat_n(s) } }
+
+pub rt fn rt_returns_in_the_body(move s: Str) -> U32 { while true { return eat_n(s) } }
+
+// ------------------------------------------------------------------ a return in the loop, the hand-off again after the loop
+
+pub fn while_return_then_tail(move s: Str, c: Bool, d: Bool) -> U32 {
+  while c {
+    if d { return eat_n(s) }
+  }
+  eat_n(s)
+}
+
+pub rt fn rt_while_return_then_tail(move s: Str, c: Bool, d: Bool) -> U32 {
+  while c {
+    if d { return eat_n(s) }
+  }
+  eat_n(s)
+}
+
+pub fn for_return_then_tail(move s: Str, n: U32, d: Bool) -> U32 {
+  for _ in 0 ..< n {
+    if d { return eat_n(s) }
+  }
+  eat_n(s)
+}
+
+pub rt fn rt_for_return_then_tail(move s: Str, n: U32, d: Bool) -> U32 {
+  for _ in 0 ..< n {
+    if d { return eat_n(s) }
+  }
+  eat_n(s)
+}
+
+pub fn struct_while_return_then_tail(move p: Param, c: Bool, d: Bool) -> U32 {
+  while c {
+    if d { return eat_p(p) }
+  }
+  eat_p(p)
+}
+
+pub rt fn rt_struct_while_return_then_tail(move p: Param, c: Bool, d: Bool) -> U32 {
+  while c {
+    if d { return eat_p(p) }
+  }
+  eat_p(p)
+}
+
+// ------------------------------------------------------------------ `break` after the hand-off, the loop is left by the `break` only
+
+pub fn hand_off_then_break(move s: Str, d: Bool) {
+  while true {
+    if d {
+      eat(s)
+      break
+    }
+  }
+}
+
+pub rt fn rt_hand_off_then_break(move s: Str, d: Bool) {
+  while true {
+    if d {
+      eat(s)
+      break
+    }
+  }
+}
+
+pub fn break_then_hand_off(move s: Str, d: Bool) -> U32 {
+  while true {
+    if d { break }
+  }
+  eat_n(s)
+}
+
+pub rt fn rt_break_then_hand_off(move s: Str, d: Bool) -> U32 {
+  while true {
+    if d { break }
+  }
+  eat_n(s)
+}
+
+// ------------------------------------------------------------------ the loop only reads
+
+pub fn read_in_loop(move s: Str, n: U32) -> U32 {
+  var t: U32 = 0
+  for _ in 0 ..< n { t = t + s.len() }
+  t + eat_n(s)
+}
+
+pub rt fn rt_read_in_loop(move s: Str, n: U32) -> U32 {
+  var t: U32 = 0
+  for _ in 0 ..< n { t = t + s.len() }
+  t + eat_n(s)
+}

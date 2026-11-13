@@ -23,6 +23,7 @@ mod diagnostics_json;
 mod diff_ast_sets;
 mod doc_comment_targets;
 mod drop_path_model;
+mod dup_release_model;
 mod effect_names;
 mod empty_brackets;
 mod error_type_sweep;

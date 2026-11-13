@@ -12,10 +12,11 @@ use onsa_syntax::ast::{BinOp, ExprId, ExprKind, Mode, PatId, PatKind, StmtId, St
 use super::check::Walker;
 use super::consume::Movable;
 use super::place::place_of;
-use super::state::{LoopSum, Paths, Trail};
+use super::state::{LoopSum, Paths, Releases, Trail};
 use super::walk::Pos;
 use super::write::How;
 use crate::Kind;
+use crate::binding::LitClass;
 use crate::binding::{Head, HeadRow};
 use crate::body::{DropPoint, Dropped, LocalId, LocalKind};
 use crate::names::body::Origin;
@@ -187,7 +188,7 @@ impl Walker<'_> {
             StmtKind::Assign { target, value } => {
                 let base = r.items();
                 self.expr(r, *value, Pos::Value);
-                self.waits(r, *value);
+                self.waits(r, *value, Pos::Value);
                 self.write_place(r, *target, How::Assign);
                 r.forget(base);
             }
@@ -288,7 +289,7 @@ impl Walker<'_> {
         let outer = replace(&mut r.exits, exits);
         // The end of an owned `for` drops the container of its value (S-1037).
         if let Some(x) = rest {
-            self.drop_point(r, self.ast.expr(x).span, Dropped::IterRest { iter: x, early: false }, true);
+            self.drops(r, from, self.ast.expr(x).span, false);
         }
         if !cond.is_some_and(|c| literal_true(self.ast, c)) {
             r.cur.join_into(r.exits.at, &mut r.exits.brk, false);
@@ -325,38 +326,47 @@ impl Walker<'_> {
     /// The drop points of the items after the first `from`, which the end
     /// of their scope or an exit at `at` (`exit`: a `return`, a `?`, a
     /// `break`, a `continue`) leaves (R-32, §12.2): each owned binding that
-    /// may be live there, not Copy; a value that waits (A-1); the rest of an
-    /// owned `for` (S-1037); none where no path reaches (S-873). The one
-    /// place that decides them.
+    /// may hold its value there, not Copy (surely if live on every path; of
+    /// one released on every path, unless each release moves, S-1030); a
+    /// value that waits (A-1), surely: it is made on every path to the
+    /// exit; the rest of an owned `for` (S-1037), at its end (`iterate`)
+    /// or left early; none where no path reaches (S-873). The one place
+    /// that decides them.
     pub(super) fn drops(&mut self, r: &Run, from: usize, at: Span, exit: bool) {
         for i in from..r.declared.len() {
-            let (what, sure) = match r.declared[i] {
+            let (what, sure, unless) = match r.declared[i] {
                 Item::Local(l) => {
                     let local = &self.info.locals[l.0 as usize];
                     let lives = r.cur.state().lives(l).filter(|_| local.state.owned());
-                    let Some(sure) = lives.filter(|_| self.kind_of(local.ty) != Some(Kind::Copy)) else { continue };
-                    (if exit { Dropped::Exit(l) } else { Dropped::End(l) }, sure)
+                    let Some((sure, unless)) = lives.filter(|_| self.kind_of(local.ty) != Some(Kind::Copy)) else {
+                        continue;
+                    };
+                    (if exit { Dropped::Exit(l) } else { Dropped::End(l) }, sure, unless)
                 }
-                Item::Value(e) => (Dropped::Value(e), true),
-                Item::IterRest(e) => (Dropped::IterRest { iter: e, early: true }, true),
+                Item::Value(e) => (Dropped::Value(e), true, None),
+                Item::IterRest(e) => (Dropped::IterRest { iter: e, early: exit }, true, None),
             };
-            self.drop_point(r, at, what, sure);
+            self.drop_point(r, at, what, (sure, unless));
         }
     }
 
-    /// The operand `e`, walked at a consuming position of a call, a literal
-    /// or an assignment: its value, owned and Affine (a moved place, a new
-    /// value), waits there for the operands after it (A-1), until the
-    /// consumer runs (`Run::forget`). Of a Dup value, U4a.
-    pub(super) fn waits(&mut self, r: &mut Run, e: ExprId) {
+    /// The operand `e`, walked at `pos` (of a call, a receiver, a literal or
+    /// an assignment, whose consumer runs after the operands after it): its
+    /// value waits there for them (A-1), until the consumer runs
+    /// (`Run::forget`), if `pos` consumes and it is owned: an Affine place
+    /// moved, a Dup value not Copy (released or copied, §5.2) that is no
+    /// literal or static value with no drop (S-610, S-613), an Affine new
+    /// value. The one place that decides it.
+    pub(super) fn waits(&mut self, r: &mut Run, e: ExprId, pos: Pos) {
         let mut x = self.ast.without_parens(e);
         while let ExprKind::Move(y) = &self.ast.expr(x).kind {
             x = self.ast.without_parens(*y);
         }
-        let Some(&ty) = self.info.expr_types.get(&x) else { return };
-        let owned = match place_of(self.ast, self.names, x) {
-            Some(p) => self.movable(&p, ty) == Some(Movable::Owned),
-            None => self.kind_of(ty) == Some(Kind::Affine),
+        let Some(&ty) = self.info.expr_types.get(&x).filter(|_| pos.consumes()) else { return };
+        let owned = match (self.kind_of(ty), place_of(self.ast, self.names, x)) {
+            (Some(Kind::Shared), _) => !matches!(self.info.lits.get(&x), Some(LitClass::Static | LitClass::NoDrop)),
+            (_, Some(p)) => self.movable(&p, ty) == Some(Movable::Owned),
+            (kind, None) => kind == Some(Kind::Affine),
         };
         if owned {
             r.declared.push(Item::Value(x));
@@ -378,10 +388,14 @@ impl Walker<'_> {
         self.ends(r, 0, self.ast.expr(root).span);
     }
 
-    /// A drop point met by the walk that reports, where a path reaches.
-    pub(super) fn drop_point(&mut self, r: &Run, at: Span, what: Dropped, sure: bool) {
+    /// A drop point met by the walk that reports, where a path reaches;
+    /// `unless`: the releases it is one only if one of them copies.
+    pub(super) fn drop_point(&mut self, r: &Run, at: Span, what: Dropped, (sure, unless): (bool, Option<&Releases>)) {
         if self.reports && r.cur.state().reaches() {
             let closure = self.closure_in();
+            if let Some(xs) = unless {
+                self.m.unless.push((self.m.drops.len(), xs.iter().copied().collect()));
+            }
             self.m.drops.push(DropPoint { at, what, closure, sure });
         }
     }

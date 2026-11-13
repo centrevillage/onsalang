@@ -95,6 +95,7 @@ impl Walker<'_> {
         let d = match movable {
             // Copied; a `move` on a `move` argument (S-609) or where a value is put (S-795) is E0703.
             Movable::Copied(kind) => {
+                self.release(r, &place, x, (kind, pos));
                 let (how, Some(m)) = (pos, mark) else { return };
                 let how = match how {
                     Pos::MoveArg => "a `move` parameter takes it with no `move`",
@@ -134,6 +135,19 @@ impl Walker<'_> {
         };
         if live {
             self.report(d);
+        }
+    }
+
+    /// The place `p` of a Dup value of the kind `kind`, consumed by `x` at
+    /// `pos`: released (§5.2, R-255, S-1030: moved unless used after,
+    /// `Walker::restore`) if it is the whole of an owned binding, not Copy,
+    /// at a position that releases and not held by a borrowed `for` or a
+    /// guard (E0715's test); else copied.
+    fn release(&mut self, r: &mut Run, p: &Place, x: ExprId, (kind, pos): (Kind, Pos)) {
+        let l = p.root;
+        let owned = self.info.locals[l.0 as usize].state.owned() && p.proj.is_empty();
+        if kind != Kind::Copy && pos.releases() && owned && !self.holds(p) {
+            r.cur.change(l, |d| d.released(l, x));
         }
     }
 

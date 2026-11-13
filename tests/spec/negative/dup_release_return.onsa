@@ -1,0 +1,133 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§7", "§8.1", "§10", "§12.2"]
+// canonical = false
+
+// W6-02 U4a/t, R-255, S-1030 (§5.2: "所有する束縛（`move` の引数、`move self`、... の全体が Copy でない Dup の値で、それを消費する位置に置くとき、... 複製せずに移す"; "ブロックの末尾の式（`if` と
+// `match` の腕、ブロック式の末尾）は、そのブロックが置かれた位置を継ぐ"; §12.2: "所有する Dup の値を、消費する位置（返り値、`move` の引数、...）で移すこと: 要らない"): the return position. An owned Dup value
+// that is the value of a function (the tail of the body, `return e`, the tail of a block, of the arm of an `if` and of the arm of a `match` placed there) is moved, so that the original is not
+// dropped and the function needs no `Alloc`: no E0601 in a function without `uses {Alloc}`, no E0901 in an `rt fn` (R-255: "受け取った Shared 値を、そのまま返す ... 要らない"). The value is a
+// `move` parameter that is a `Str`, a struct that holds a `Str`, an `Option[Str]`, a `Result[Str, U32]` or a `(Str, U32)`. The paths where each ends with the value (both branches of an `if`, all arms of a `match`,
+// `return` in a branch with the tail after it, a block, a `while true` whose body returns) move it on every path. A read before the return does not count (`let n = s.len()` and then `s`). The
+// forms where the returned value is a Copy field or a new value, and the early `return` of another value while `s` is alive, are errors and are in negative/dup_release_later.onsa. Every function
+// here is an error today (R-255: the original is dropped after the copy is returned) and none is one after. The functions with a statement list are on several lines (no error is expected, so the line
+// does not matter, S-783). No marker is expected anywhere in this file.
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+// ------------------------------------------------------------------ the tail of the body
+
+pub fn tail_str(move s: Str) -> Str { s }
+
+pub rt fn rt_tail_str(move s: Str) -> Str { s }
+
+pub fn tail_struct(move p: Param) -> Param { p }
+
+pub rt fn rt_tail_struct(move p: Param) -> Param { p }
+
+pub fn tail_option(move o: Option[Str]) -> Option[Str] { o }
+
+pub rt fn rt_tail_option(move o: Option[Str]) -> Option[Str] { o }
+
+pub fn tail_result(move r: Result[Str, U32]) -> Result[Str, U32] { r }
+
+pub rt fn rt_tail_result(move r: Result[Str, U32]) -> Result[Str, U32] { r }
+
+pub fn tail_tuple(move t: (Str, U32)) -> (Str, U32) { t }
+
+pub rt fn rt_tail_tuple(move t: (Str, U32)) -> (Str, U32) { t }
+
+pub fn tail_block(move s: Str) -> Str { { s } }
+
+pub rt fn rt_tail_block(move s: Str) -> Str { { s } }
+
+pub fn tail_after_read(move s: Str) -> Str {
+  let n = s.len()
+  if n > 0 { s } else { s }
+}
+
+pub rt fn rt_tail_after_read(move s: Str) -> Str {
+  let n = s.len()
+  if n > 0 { s } else { s }
+}
+
+pub fn tail_after_loop_that_reads(move s: Str, n: U32) -> Str {
+  var t: U32 = 0
+  for _ in 0 ..< n { t = t + s.len() }
+  s
+}
+
+pub rt fn rt_tail_after_loop_that_reads(move s: Str, n: U32) -> Str {
+  var t: U32 = 0
+  for _ in 0 ..< n { t = t + s.len() }
+  s
+}
+
+// ------------------------------------------------------------------ `return`
+
+pub fn return_str(move s: Str) -> Str { return s }
+
+pub rt fn rt_return_str(move s: Str) -> Str { return s }
+
+pub fn return_struct(move p: Param) -> Param { return p }
+
+pub rt fn rt_return_struct(move p: Param) -> Param { return p }
+
+pub fn return_option(move o: Option[Str]) -> Option[Str] { return o }
+
+pub rt fn rt_return_option(move o: Option[Str]) -> Option[Str] { return o }
+
+pub fn return_both_branches(move s: Str, c: Bool) -> Str { if c { return s } else { return s } }
+
+pub rt fn rt_return_both_branches(move s: Str, c: Bool) -> Str { if c { return s } else { return s } }
+
+pub fn return_in_branch_then_tail(move s: Str, c: Bool) -> Str { if c { return s } else { s } }
+
+pub rt fn rt_return_in_branch_then_tail(move s: Str, c: Bool) -> Str { if c { return s } else { s } }
+
+pub fn return_then_tail(move s: Str, c: Bool) -> Str {
+  if c { return s }
+  s
+}
+
+pub rt fn rt_return_then_tail(move s: Str, c: Bool) -> Str {
+  if c { return s }
+  s
+}
+
+pub fn return_in_loop(move s: Str) -> Str { while true { return s } }
+
+pub rt fn rt_return_in_loop(move s: Str) -> Str { while true { return s } }
+
+// ------------------------------------------------------------------ the tail of a block, of an `if` and of a `match`
+
+pub fn branches(move s: Str, c: Bool) -> Str { if c { s } else { s } }
+
+pub rt fn rt_branches(move s: Str, c: Bool) -> Str { if c { s } else { s } }
+
+pub fn else_if_chain(move s: Str, c: Bool, d: Bool) -> Str { if c { s } else if d { s } else { s } }
+
+pub rt fn rt_else_if_chain(move s: Str, c: Bool, d: Bool) -> Str { if c { s } else if d { s } else { s } }
+
+pub fn arms(move s: Str, n: U32) -> Str { match n { 0 => s, _ => s } }
+
+pub rt fn rt_arms(move s: Str, n: U32) -> Str { match n { 0 => s, _ => s } }
+
+pub fn arms_with_blocks(move s: Str, n: U32) -> Str { match n { 0 => { s }, 1 => { return s }, _ => s } }
+
+pub rt fn rt_arms_with_blocks(move s: Str, n: U32) -> Str { match n { 0 => { s }, 1 => { return s }, _ => s } }
+
+pub fn nested(move s: Str, c: Bool, n: U32) -> Str { if c { match n { 0 => s, _ => s } } else { s } }
+
+pub rt fn rt_nested(move s: Str, c: Bool, n: U32) -> Str { if c { match n { 0 => s, _ => s } } else { s } }
+
+pub fn arms_struct(move p: Param, n: U32) -> Param { match n { 0 => p, _ => p } }
+
+pub rt fn rt_arms_struct(move p: Param, n: U32) -> Param { match n { 0 => p, _ => p } }
+
+pub fn arms_option(move o: Option[Str], n: U32) -> Option[Str] { match n { 0 => o, _ => o } }
+
+pub rt fn rt_arms_option(move o: Option[Str], n: U32) -> Option[Str] { match n { 0 => o, _ => o } }

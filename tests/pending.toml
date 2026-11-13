@@ -932,13 +932,6 @@ note = "@latency が無い属性の E0005（W10-08）"
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/types/drop_through_ptr_move_on.onsa"
-reasons = ["R-255"]
-until = "W6-02"
-note = "rt の関数で `move` の引数に受けた `Str` を持つ値をそのまま返すか `move` で渡す形の E0901（R-255。§12.2 では `Alloc` は要らない）。W4-16 U3 の `Ptr` の直しの前は、種の歩きが `Ptr` の輪で答えを出さず、たまたま通っていた"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/negative/binding_static_interp.onsa"
 reasons = ["R-87", "S-82"]
 until = "W6-03"
