@@ -10,30 +10,40 @@ use onsa_diag::{Code, Diagnostic, Stage};
 use onsa_syntax::ast::{BinOp, ExprId, ExprKind, Mode, PatId, PatKind, StmtId, StmtKind};
 
 use super::check::Walker;
-use super::state::{Delta, LoopSum};
+use super::state::{LoopSum, Paths, Trail};
 use super::walk::Pos;
 use super::write::How;
 use crate::binding::{Head, HeadRow};
 use crate::body::LocalId;
 use crate::names::body::Origin;
 
-/// A walk's state, the `break` and `continue` states of the innermost loop
-/// it is in, and the bindings declared in the blocks it is in (innermost
-/// last), which leave the table at the end of their block (no name reads
-/// them after it: the table stays small).
+/// A walk's state, the innermost loop it is in, and the bindings declared
+/// in the blocks it is in (innermost last), which leave the table at the
+/// end of their block (no name reads them after it: the table stays small).
 pub(super) struct Run {
-    pub(super) cur: Delta,
-    exits: (Delta, Delta),
+    pub(super) cur: Trail,
+    exits: Exits,
     declared: Vec<LocalId>,
+}
+
+/// The paths from the head of a loop (at the mark `at`, with `scope` bindings
+/// declared) to its exit (`brk`: the end of the condition, the `break`s)
+/// and to its back edge (`cont`: the end of the body, the `continue`s).
+struct Exits {
+    brk: Paths,
+    cont: Paths,
+    at: usize,
+    scope: usize,
 }
 
 impl Run {
     pub(super) fn new() -> Self {
-        Run { cur: Delta::start(), exits: (Delta::bottom(), Delta::bottom()), declared: Vec::new() }
+        let exits = Exits { brk: Paths::none(), cont: Paths::none(), at: 0, scope: 0 };
+        Run { cur: Trail::new(), exits, declared: Vec::new() }
     }
 
     fn declare(&mut self, l: LocalId) {
-        self.cur.revive(l);
+        self.cur.change(l, |d| d.revive(l));
         self.declared.push(l);
     }
 
@@ -41,8 +51,19 @@ impl Run {
     /// block or arm ended.
     fn forget(&mut self, outer: usize) {
         for l in self.declared.split_off(outer) {
-            self.cur.forget(l);
+            self.cur.change(l, |d| d.forget(l));
         }
+    }
+
+    /// A `break` (`back`: a `continue`): the bindings declared in the loop
+    /// leave, then the state joins the loop's exit (or its back edge).
+    fn leave(&mut self, back: bool) {
+        for &l in &self.declared[self.exits.scope..] {
+            self.cur.change(l, |d| d.forget(l));
+        }
+        let paths = if back { &mut self.exits.cont } else { &mut self.exits.brk };
+        self.cur.join_into(self.exits.at, paths);
+        self.cur.stop();
     }
 }
 
@@ -66,13 +87,15 @@ impl Walker<'_> {
             }
             ExprKind::If { cond, then, else_, .. } => {
                 self.expr(r, *cond, Pos::Read);
-                let before = r.cur.clone();
+                let (m, mut paths) = (r.cur.mark(), Paths::none());
                 self.expr(r, *then, pos);
-                let then = replace(&mut r.cur, before);
+                r.cur.join_into(m, &mut paths);
+                r.cur.back_to(m);
                 if let Some(x) = else_ {
                     self.expr(r, *x, pos);
                 }
-                r.cur.join(&then);
+                r.cur.join_into(m, &mut paths);
+                r.cur.settle(m, &paths);
             }
             ExprKind::Match { scrutinee, arms, .. } => {
                 let subject = Head::Match { scrutinee: *scrutinee };
@@ -81,31 +104,34 @@ impl Walker<'_> {
                     self.view_of_inout(*scrutinee, arms.iter().map(|a| a.pat));
                 }
                 self.head(r, *scrutinee, head, &arms.iter().map(|a| a.pat).collect::<Vec<_>>());
-                // The state an arm is tried at: no arm before matched, or
-                // one matched and its guard was false.
-                let (mut tried, mut out) = (r.cur.clone(), Delta::bottom());
+                // The paths an arm is tried at, from the head: no arm before
+                // matched, or one matched and its guard was false.
+                let (m, mut tried, mut out) = (r.cur.mark(), Paths::none(), Paths::none());
+                r.cur.join_into(m, &mut tried);
                 // A guard changes no place of the head (§7: E0715, `frozen.rs`).
                 let mut held = self.frame(subject);
                 for arm in arms {
-                    r.cur = tried.clone();
+                    r.cur.settle(m, &tried);
                     let outer = r.declared.len();
                     self.declare(r, arm.pat);
                     if let Some(g) = arm.guard {
                         self.holding(&mut held, |w| w.expr(r, g, Pos::Read));
-                        tried.join(&r.cur);
+                        r.cur.join_into(m, &mut tried);
                     }
                     self.expr(r, arm.body, pos);
                     r.forget(outer);
-                    out.join(&r.cur);
+                    r.cur.join_into(m, &mut out);
                 }
-                r.cur = out;
+                r.cur.settle(m, &out);
             }
             ExprKind::Binary { op: BinOp::And | BinOp::Or, lhs, rhs, .. } => {
                 self.expr(r, *lhs, Pos::Read);
                 // The paths through the right and the paths that skip it, joined.
-                let skip = r.cur.clone();
+                let (m, mut paths) = (r.cur.mark(), Paths::none());
+                r.cur.join_into(m, &mut paths);
                 self.expr(r, *rhs, Pos::Read);
-                r.cur.join(&skip);
+                r.cur.join_into(m, &mut paths);
+                r.cur.settle(m, &paths);
             }
             // A new frame (`capture.rs`); it changes no state outside.
             ExprKind::Closure { body, .. } => {
@@ -162,16 +188,16 @@ impl Walker<'_> {
             StmtKind::While { cond, body } => {
                 self.run_loop(r, s, (Some(*cond), None, *body));
                 if self.info.diverging.forever(s) {
-                    r.cur = Delta::bottom();
+                    r.cur.stop();
                 }
             }
-            StmtKind::Break => r.exits.0.join(&replace(&mut r.cur, Delta::bottom())),
-            StmtKind::Continue => r.exits.1.join(&replace(&mut r.cur, Delta::bottom())),
+            StmtKind::Break => r.leave(false),
+            StmtKind::Continue => r.leave(true),
             StmtKind::Return(x) => {
                 if let Some(x) = x {
                     self.expr(r, *x, Pos::Return);
                 }
-                r.cur = Delta::bottom();
+                r.cur.stop();
             }
             StmtKind::Assert(x) | StmtKind::Expr(x) => self.expr(r, *x, Pos::Read),
         }
@@ -195,40 +221,45 @@ impl Walker<'_> {
             Some(sum) => sum.clone(),
             None => {
                 let reports = replace(&mut self.reports, false);
-                let (exit, back) = self.iterate(&mut Run::new(), parts);
+                let mut run = Run::new();
+                let back = self.iterate(&mut run, parts);
                 self.reports = reports;
+                let exit = run.cur.state().clone();
+                run.cur.settle(0, &back);
+                let back = run.cur.state().clone();
                 let sum = LoopSum { exit: LoopSum::head(&back).then(&exit), back };
                 self.m.loops.insert(s, sum.clone());
                 sum
             }
         };
         if self.reports {
-            r.cur = r.cur.then(&LoopSum::head(&sum.back));
-            r.cur = self.iterate(r, parts).0;
+            r.cur.then(&LoopSum::head(&sum.back));
+            self.iterate(r, parts);
         } else {
-            r.cur = r.cur.then(&sum.exit);
+            r.cur.then(&sum.exit);
         }
     }
 
-    /// One iteration of a loop from its head in `r`: the exit (at the end of
-    /// the condition of a `while`, at the head of a `for`, or at a `break`)
-    /// and the back edge (at the end of the body or a `continue`). A `for`
-    /// declares its pattern at each iteration (R-29).
-    fn iterate(&mut self, r: &mut Run, (cond, pat, body): Loop) -> (Delta, Delta) {
-        let outer = replace(&mut r.exits, (Delta::bottom(), Delta::bottom()));
+    /// One iteration of a loop from its head in `r`, which it leaves at the
+    /// exit (the end of the condition of a `while`, the head of a `for`, a
+    /// `break`); the paths from the head to the back edge (the end of the
+    /// body, a `continue`). A `for` declares its pattern at each iteration
+    /// (R-29).
+    fn iterate(&mut self, r: &mut Run, (cond, pat, body): Loop) -> Paths {
+        let exits = Exits { brk: Paths::none(), cont: Paths::none(), at: r.cur.mark(), scope: r.declared.len() };
+        let outer = replace(&mut r.exits, exits);
         if let Some(c) = cond {
             self.expr(r, c, Pos::Read);
         }
-        let mut exit = r.cur.clone();
+        r.cur.join_into(r.exits.at, &mut r.exits.brk);
         if let Some(p) = pat {
             self.declare(r, p);
         }
         self.expr(r, body, Pos::Read);
-        let (brk, cont) = replace(&mut r.exits, outer);
-        exit.join(&brk);
-        let mut back = replace(&mut r.cur, Delta::bottom());
-        back.join(&cont);
-        (exit, back)
+        let Exits { brk, mut cont, at, .. } = replace(&mut r.exits, outer);
+        r.cur.join_into(at, &mut cont);
+        r.cur.settle(at, &brk);
+        cont
     }
 
     /// Declare the bindings of the pattern `p`: live.

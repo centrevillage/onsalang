@@ -170,7 +170,7 @@ impl<'a> Walker<'a> {
     /// it overlaps, the first, and whether `p` ends before it (§7, S-803: a
     /// path of a binding is the place it derives from, the steps composed).
     fn unusable(&self, r: &Run, p: &Place) -> Option<Why> {
-        match r.cur.status(p.root)? {
+        match r.cur.state().status(p.root)? {
             &Status::Moved { at, via_loop } => Some(Why::Moved(at, via_loop)),
             Status::Stale { changes } => (changes.iter())
                 .filter_map(|(&k, &c)| Some(Why::Stale(c, self.m.places[k as usize].1.reaches(p)?, k as usize)))
@@ -294,7 +294,7 @@ impl<'a> Walker<'a> {
         if self.held(&whole, at, (!p.proj.is_empty()).then_some(p)) {
             return self.record(&whole, at, of);
         }
-        r.cur.set(l, Status::Moved { at, via_loop: false });
+        r.cur.change(l, |d| d.set(l, Status::Moved { at, via_loop: false }));
         self.change(r, whole, at, of);
         if self.reports {
             self.m.moved.insert(l);

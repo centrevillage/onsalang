@@ -90,7 +90,7 @@ impl Walker<'_> {
             return self.record(&place, at, of);
         }
         if whole {
-            r.cur.revive(l);
+            r.cur.change(l, |d| d.revive(l));
         } else if !live {
             // Its E0704 above; overlapping another argument, the E0702 at it, first (S-799).
             return self.record(&place, at, of);
@@ -127,7 +127,7 @@ impl Walker<'_> {
             places.len() as u32 - 1
         });
         for &l in places[k as usize].1.along.keys().filter(|&&l| deps.in_scope(l, at)) {
-            r.cur.set(l, Status::Stale { changes: BTreeMap::from([(k, at)]) });
+            r.cur.change(l, |d| d.set(l, Status::Stale { changes: BTreeMap::from([(k, at)]) }));
         }
     }
 

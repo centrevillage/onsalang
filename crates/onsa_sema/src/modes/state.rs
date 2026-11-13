@@ -1,9 +1,14 @@
 //! The states of the walk (§5.2, §7): how the paths through a region leave
 //! each binding ([`Ends`]), the effect of a region on any state (one type,
-//! [`Delta`], for a state, an effect and a loop's summary), and a loop's
-//! summary ([`LoopSum`]).
+//! [`Delta`], for a state, an effect and a loop's summary), the state of a
+//! walk with the record of its changes ([`Trail`]: the paths from a mark,
+//! [`Paths`], joined in the time of the changes, not of the table), and a
+//! loop's summary ([`LoopSum`]).
 
 use std::collections::BTreeMap;
+use std::mem::replace;
+
+use onsa_diag::internal::bug;
 
 use onsa_diag::Span;
 
@@ -101,7 +106,8 @@ impl Ends {
 /// grow); `reach == false`: no path falls through. It is the state at a
 /// point too, as the effect of the body up to it on the state where all is
 /// live: the bindings with `dead` may not be live there. Both walks carry
-/// it, the one that reports and the one that makes a loop's summary, so
+/// it (in a [`Trail`]), the one that reports and the one that makes a
+/// loop's summary, so
 /// their states differ only where the second does not know the state before
 /// the loop (the text of an E0704 at a loop's head, not whether it is one).
 /// Every operation keeps an unreachable state unreachable.
@@ -159,6 +165,8 @@ impl Delta {
     }
 
     /// The paths of both (`self ⊔ other`): an unreachable side is the unit.
+    /// What the joins of a [`Trail`] equal (the walks join on it only).
+    #[cfg(test)]
     pub(super) fn join(&mut self, other: &Delta) {
         if !other.reach {
             return;
@@ -202,6 +210,167 @@ impl Delta {
         } else {
             self.ends.insert(l, e);
         }
+    }
+}
+
+/// A change of a walk's state, to undo: a binding's [`Ends`] before it
+/// (`None`: not in the table), or the whole state before it stopped.
+#[derive(Clone, Debug)]
+enum Undo {
+    Ends(LocalId, Option<Ends>),
+    Stop(Delta),
+}
+
+/// The state of a walk and the record of its changes (X-20 A): a mark is
+/// the length of the record. Each path from a mark (a branch, an arm, to a
+/// `break`) joins its changes into [`Paths`] and is undone, the next walks
+/// from the same state, and the state after is that of the paths: the work
+/// is of the bindings changed, not of the table. A state that stopped (no
+/// path falls through) is that of [`Delta::bottom`]; a path goes on from a
+/// mark only if it has not stopped since.
+pub(super) struct Trail {
+    now: Delta,
+    log: Vec<Undo>,
+}
+
+impl Trail {
+    pub(super) fn new() -> Trail {
+        Trail { now: Delta::start(), log: Vec::new() }
+    }
+
+    pub(super) fn state(&self) -> &Delta {
+        &self.now
+    }
+
+    /// A change `f` of the binding `l` ([`Delta::set`], `revive`, `forget`), recorded.
+    pub(super) fn change(&mut self, l: LocalId, f: impl FnOnce(&mut Delta)) {
+        self.keep(l);
+        f(&mut self.now);
+    }
+
+    /// No path falls through (`return`, `break`, a call that does not come
+    /// back): the state of [`Delta::bottom`], the one before kept.
+    pub(super) fn stop(&mut self) {
+        let before = replace(&mut self.now, Delta::bottom());
+        self.log.push(Undo::Stop(before));
+    }
+
+    /// This state, then the region `next` (each binding `next` touches).
+    pub(super) fn then(&mut self, next: &Delta) {
+        if !(self.now.reach && next.reach) {
+            return self.stop();
+        }
+        for (&l, e) in &next.ends {
+            let ends = self.get(l).then(e);
+            self.put(l, ends);
+        }
+    }
+
+    pub(super) fn mark(&self) -> usize {
+        self.log.len()
+    }
+
+    /// The state at the mark `m`, the changes since undone.
+    pub(super) fn back_to(&mut self, m: usize) {
+        let Trail { now, log } = self;
+        for u in log.drain(m..).rev() {
+            match u {
+                Undo::Ends(l, Some(e)) => drop(now.ends.insert(l, e)),
+                Undo::Ends(l, None) => drop(now.ends.remove(&l)),
+                Undo::Stop(before) => *now = before,
+            }
+        }
+    }
+
+    /// `paths ⊔=` this state, a path from the mark `m` (of `paths` too).
+    pub(super) fn join_into(&self, m: usize, paths: &mut Paths) {
+        if !self.now.reach {
+            return;
+        }
+        let at = self.since(m);
+        let Paths { ends: Delta { reach, ends }, lone } = paths;
+        let first = !replace(reach, true);
+        // Changed on every path before, not on this one: as at the mark here.
+        lone.retain(|l| {
+            let kept = at.contains_key(l);
+            match ends.get_mut(l) {
+                Some(e) if !kept => e.join(self.get(*l)),
+                Some(_) => {}
+                None => bug(None, "a binding every path changed and none kept"),
+            }
+            kept
+        });
+        for (l, was) in at {
+            let now = self.get(l);
+            if let Some(e) = ends.get_mut(&l) {
+                e.join(now);
+            } else if *now != was {
+                let mut e = now.clone();
+                match first {
+                    true => lone.push(l),
+                    false => e.join(&was),
+                }
+                ends.insert(l, e);
+            }
+        }
+    }
+
+    /// Back to the mark `m`, then the state of `paths` from it (stopped if
+    /// none falls through).
+    pub(super) fn settle(&mut self, m: usize, paths: &Paths) {
+        self.back_to(m);
+        if !paths.ends.reach {
+            return self.stop();
+        }
+        for (&l, e) in &paths.ends.ends {
+            self.put(l, e.clone());
+        }
+    }
+
+    /// The bindings changed since the mark `m`, each as it was at `m`.
+    fn since(&self, m: usize) -> BTreeMap<LocalId, Ends> {
+        let mut at = BTreeMap::new();
+        for u in self.log[m..].iter().rev() {
+            match u {
+                Undo::Ends(l, e) => drop(at.insert(*l, e.clone().unwrap_or(Ends::SAME))),
+                Undo::Stop(_) => bug(None, "a path that stopped and goes on"),
+            }
+        }
+        at
+    }
+
+    fn get(&self, l: LocalId) -> &Ends {
+        self.now.ends.get(&l).unwrap_or(&Ends::SAME)
+    }
+
+    /// The change of `l`, recorded.
+    fn keep(&mut self, l: LocalId) {
+        self.log.push(Undo::Ends(l, self.now.ends.get(&l).cloned()));
+    }
+
+    fn put(&mut self, l: LocalId, e: Ends) {
+        if *self.get(l) != e {
+            self.keep(l);
+            self.now.put(l, e);
+        }
+    }
+}
+
+/// The join of paths from a mark of a [`Trail`] (two branches, the arms of
+/// a `match`, a loop's `break`s): the [`Ends`] of each binding a path
+/// changed, as a state's are (a binding not here is as at the mark on
+/// every path; unlike a state's table, [`Ends::SAME`] stays, of a binding
+/// forgotten). `lone`: those every path changed, which do not hold the
+/// ends at the mark (each other path joins it in, `Trail::join_into`).
+pub(super) struct Paths {
+    ends: Delta,
+    lone: Vec<LocalId>,
+}
+
+impl Paths {
+    /// No path.
+    pub(super) fn none() -> Paths {
+        Paths { ends: Delta::bottom(), lone: Vec::new() }
     }
 }
 

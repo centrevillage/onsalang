@@ -102,6 +102,16 @@ def w407_manylocals(m, n):
     return h + "pub fn t(c: Bool) uses {Alloc} {\n" + "\n".join(body) + "\n}\n"
 
 
+def w602_breaks(n):
+    """W6-02 U1b (memo 1.6): in a loop, n locals declared, then each moved and followed by a `break` under
+    an `if` (each `break` joins the changes since the loop's head, n x n)."""
+    h = ("pub fn mk() -> Buf[F32] uses {Alloc} { Buf.zeroed(1) }\n"
+         "pub fn take(move b: Buf[F32]) uses {Alloc} {}\n")
+    body = [f"    let b{i} = mk()" for i in range(n)]
+    body += [x for i in range(n) for x in (f"    take(move b{i})", "    if c { break }")]
+    return h + "pub fn t(c: Bool) uses {Alloc} {\n  while c {\n" + "\n".join(body) + "\n  }\n}\n"
+
+
 def w409_held(f, w):
     """W4-09 (perf/distinct_F_W): F nested borrowing `for`s over distinct arrays, W writes inside."""
     s = "fn t() -> U32 {\n"
@@ -184,6 +194,7 @@ QUAD = [
     ("w407_manylocals", "M=N=n", w407_manylocals, [(n, n) for n in (1000, 2000, 4000, 8000, 16000)]),
     ("w407_manylocals_n", "M=1000, N", w407_manylocals, [(1000, n) for n in (1000, 2000, 4000, 8000)]),
     ("w407_manylocals_m", "N=1000, M", w407_manylocals, [(m, 1000) for m in (1000, 2000, 4000, 8000)]),
+    ("w602_breaks", "moves and breaks", w602_breaks, [(n,) for n in (1000, 2000, 4000, 8000)]),
     ("w409_held_w", "F=120, W", w409_held, [(120, w) for w in (1500, 3000, 6000, 12000)]),
     ("w409_held_f", "W=6000, F", w409_held, [(f, 6000) for f in (15, 30, 60, 120)]),
     ("w409_same_w", "S=100, W", w409_same, [(100, w) for w in (750, 1500, 3000, 6000)]),

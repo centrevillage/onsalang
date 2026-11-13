@@ -8,7 +8,6 @@ use onsa_syntax::ast::{ExprId, ExprKind, Lit, Mode, PatId, StrSeg};
 use super::check::Walker;
 use super::flow::Run;
 use super::place::{Place, hole_place, pattern_places, place_of};
-use super::state::Delta;
 use crate::ty::{Ty, TyId};
 
 /// Where a value stands (§5.2, §5.3): what the walk checks at it. Passed down
@@ -118,7 +117,7 @@ impl<'a> Walker<'a> {
                 self.call(r, e, *callee, args, *kind);
                 // `panic`, which does not come back (§7).
                 if self.info.diverging.expr(e) {
-                    r.cur = Delta::bottom();
+                    r.cur.stop();
                 }
             }
             _ => ast.sub_exprs(e).into_iter().for_each(|x| self.expr(r, x, Pos::Read)),

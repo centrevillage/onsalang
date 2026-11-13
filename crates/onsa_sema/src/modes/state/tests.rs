@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 
 use onsa_diag::{FileId, Span};
 
-use super::{Delta, Ends, LoopSum, Status};
+use super::{Delta, Ends, LoopSum, Paths, Status, Trail};
 use crate::body::LocalId;
 
 fn at(n: u32) -> Span {
@@ -184,6 +184,184 @@ fn the_join_of_deltas_is_the_join_of_each_binding() {
                     assert_eq!(get(&t, l), get(&x, l).then(&get(&y, l)), "then {l}: {a:?} {b:?}");
                 }
             }
+        }
+    }
+}
+
+/// A change a walk makes of its state, on two bindings.
+#[derive(Clone, Copy, Debug)]
+enum Op {
+    Move(u32, u32),
+    Stale(u32, u32),
+    Revive(u32),
+    Forget(u32),
+    Stop,
+    Then(u32),
+}
+
+const OPS: [Op; 10] = [
+    Op::Move(0, 1),
+    Op::Move(1, 2),
+    Op::Move(0, 3),
+    Op::Stale(0, 4),
+    Op::Stale(1, 5),
+    Op::Revive(0),
+    Op::Forget(1),
+    Op::Stop,
+    Op::Then(0),
+    Op::Then(1),
+];
+
+/// The regions an [`Op::Then`] applies: a loop's head that moved `0` by
+/// the loop, and one that declared `1` on some paths and left it stale.
+fn region(i: u32) -> Delta {
+    let mut d = Delta::start();
+    let moved = Some(Status::Moved { at: at(6), via_loop: true });
+    let stale = Some(Status::Stale { changes: BTreeMap::from([(2, at(7))]) });
+    match i {
+        0 => d.put(LocalId(0), Ends { through: true, dead: moved, live: false }),
+        _ => d.put(LocalId(1), Ends { through: true, dead: stale, live: true }),
+    }
+    d
+}
+
+fn status(op: Op) -> Option<(u32, Status)> {
+    match op {
+        Op::Move(l, n) => Some((l, Status::Moved { at: at(n), via_loop: false })),
+        Op::Stale(l, n) => Some((l, Status::Stale { changes: BTreeMap::from([(n, at(n))]) })),
+        _ => None,
+    }
+}
+
+/// The walk before the trail: a whole state, copied at a branch.
+fn on_delta(d: &mut Delta, ops: &[Op]) {
+    for &op in ops {
+        match op {
+            Op::Move(..) | Op::Stale(..) => {
+                let (l, s) = status(op).unwrap();
+                d.set(LocalId(l), s)
+            }
+            Op::Revive(l) => d.revive(LocalId(l)),
+            Op::Forget(l) => d.forget(LocalId(l)),
+            Op::Stop => *d = Delta::bottom(),
+            Op::Then(i) => *d = d.then(&region(i)),
+        }
+    }
+}
+
+fn on_trail(t: &mut Trail, ops: &[Op]) {
+    for &op in ops {
+        match op {
+            Op::Move(..) | Op::Stale(..) => {
+                let (l, s) = status(op).unwrap();
+                t.change(LocalId(l), |d| d.set(LocalId(l), s))
+            }
+            Op::Revive(l) => t.change(LocalId(l), |d| d.revive(LocalId(l))),
+            Op::Forget(l) => t.change(LocalId(l), |d| d.forget(LocalId(l))),
+            Op::Stop => t.stop(),
+            Op::Then(i) => t.then(&region(i)),
+        }
+    }
+}
+
+/// The sequences of at most `n` changes (`n` ≤ 2).
+fn seqs(n: usize) -> Vec<Vec<Op>> {
+    let mut out = vec![vec![]];
+    out.extend(OPS.iter().map(|&a| vec![a]));
+    if n > 1 {
+        out.extend(OPS.iter().flat_map(|&a| OPS.iter().map(move |&b| vec![a, b])));
+    }
+    out
+}
+
+/// The states before a branch: all live, some moved or stale, stopped.
+fn prefixes() -> Vec<Vec<Op>> {
+    vec![vec![], vec![Op::Move(0, 1)], vec![Op::Revive(1), Op::Stale(1, 4)], vec![Op::Stop, Op::Move(1, 2)]]
+}
+
+fn check(t: &Trail, want: &Delta, what: &str) {
+    assert!(same(&t.now, want), "{what}: {:?} != {want:?}", t.now);
+    assert!(t.now.ends.values().all(|e| *e != Ends::SAME), "{what}: an identity kept");
+}
+
+/// An `if`: the trail's join of the two branches from a mark is the join of
+/// the two whole states (`else ⊔ then`, as the walk before it), and the
+/// mark gives back the state before the branch as it was.
+#[test]
+fn the_trail_joins_two_branches_as_the_whole_states() {
+    let (pre, seqs) = (prefixes(), seqs(2));
+    for p in &pre {
+        let mut before = Delta::start();
+        on_delta(&mut before, p);
+        for a in &seqs {
+            let mut then = before.clone();
+            on_delta(&mut then, a);
+            for b in &seqs {
+                let mut want = before.clone();
+                on_delta(&mut want, b);
+                want.join(&then);
+                let mut t = Trail::new();
+                on_trail(&mut t, p);
+                let (m, mut paths) = (t.mark(), Paths::none());
+                on_trail(&mut t, a);
+                t.join_into(m, &mut paths);
+                t.back_to(m);
+                assert!(t.now.reach == before.reach && t.now.ends == before.ends, "back: {p:?} {a:?}");
+                on_trail(&mut t, b);
+                t.join_into(m, &mut paths);
+                t.settle(m, &paths);
+                check(&t, &want, &format!("{p:?} {a:?} {b:?}"));
+            }
+        }
+    }
+}
+
+/// A `match` (and a loop's `break`s): the arms from the paths they are tried
+/// at (the head, and each guard that was false), three or more paths joined
+/// (a binding every path before changed, which this one does not).
+#[test]
+fn the_trail_joins_the_arms_of_a_match_as_the_whole_states() {
+    let (pre, seqs) = (prefixes(), seqs(1));
+    let guards: Vec<Option<&Vec<Op>>> = std::iter::once(None).chain(seqs.iter().map(Some)).collect();
+    let mut arms = Vec::new();
+    for g0 in &guards {
+        for g1 in &guards {
+            for (i, b0) in seqs.iter().enumerate() {
+                for b1 in &seqs {
+                    arms.push([(*g0, b0), (*g1, b1), (None, &seqs[(i + 3) % seqs.len()])]);
+                }
+            }
+        }
+    }
+    for p in &pre {
+        let mut before = Delta::start();
+        on_delta(&mut before, p);
+        for arms in &arms {
+            let (mut tried, mut out) = (before.clone(), Delta::bottom());
+            for &(g, body) in arms {
+                let mut cur = tried.clone();
+                if let Some(g) = g {
+                    on_delta(&mut cur, g);
+                    tried.join(&cur);
+                }
+                on_delta(&mut cur, body);
+                out.join(&cur);
+            }
+            let mut t = Trail::new();
+            on_trail(&mut t, p);
+            let (m, mut tried, mut paths) = (t.mark(), Paths::none(), Paths::none());
+            t.join_into(m, &mut tried);
+            for &(g, body) in arms {
+                t.settle(m, &tried);
+                if let Some(g) = g {
+                    on_trail(&mut t, g);
+                    t.join_into(m, &mut tried);
+                }
+                on_trail(&mut t, body);
+                t.join_into(m, &mut paths);
+            }
+            t.settle(m, &paths);
+            check(&t, &out, &format!("{p:?} {arms:?}"));
         }
     }
 }
