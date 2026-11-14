@@ -1,30 +1,32 @@
 //! `rt` rules (T2-9; spec §10): an `rt` body calls only `rt` functions and
 //! never needs `Alloc` (E0901), and `rt` functions do not recurse (E0903).
+//! Both read the record of the uses of a body (`crate::uses`, D-15).
 //! E0902 (`Alloc` in the effect row) is checked with the signature; E0904 /
 //! E0905 need effects other than `Alloc` and are phase 2.
 
 use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::{Code, Diagnostic, Span, Stage};
-use onsa_syntax::ast::{ExprKind, Lit, StrSeg};
 
-use crate::body::Target;
 use crate::def::DefKind;
-use crate::drop_alloc::{Drop, alloc_drops};
-use crate::ty::Ty;
+use crate::drop_alloc::Drop;
+use crate::effects::dropped;
+use crate::uses::{Record, What};
 use crate::{Analysis, DefId, Package, module_of_def};
 
-pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
+/// The E0901 and E0903 of the `rt` bodies of `records` ([`crate::uses::records`]).
+pub(crate) fn check_all(pkg: &Package, a: &Analysis, records: &[Record]) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
-    let rt_fns: Vec<DefId> = a.new_defs().filter(|&id| a.rt_checked(id)).collect();
-    // Calls of each rt body, in source order: (span, callee) for rt callees.
+    let mut rt_fns: Vec<DefId> = Vec::new();
+    // Calls of each rt body, by their place: (span, callee) for rt callees.
     let mut edges: HashMap<DefId, Vec<(Span, DefId)>> = HashMap::default();
-    for &id in &rt_fns {
-        let _scope = onsa_diag::internal::item_scope(a.def(id).span);
-        if let Some(d) = body_rules(pkg, a, id) {
+    for r in records.iter().filter(|r| a.rt_checked(r.id)) {
+        let _scope = onsa_diag::internal::item_scope(a.def(r.id).span);
+        rt_fns.push(r.id);
+        if let Some(d) = body_rules(pkg, a, r) {
             diags.push(d);
             continue;
         }
-        edges.insert(id, rt_calls(pkg, a, id));
+        edges.insert(r.id, rt_calls(a, r));
     }
     // E0903: cycles in the rt call graph (§10 rule 5), each reported once at
     // the call that closes it.
@@ -96,30 +98,20 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
             }
         }
     }
-    a.diagnostics.extend(diags);
+    diags
 }
 
 fn src_of(pkg: &Package, a: &Analysis, def: DefId, span: Span) -> String {
     module_of_def(pkg, a, def).map(|m| m.text[span.start as usize..span.end as usize].to_string()).unwrap_or_default()
 }
 
-/// Calls to other rt functions from the body of `id`, in source order.
-fn rt_calls(pkg: &Package, a: &Analysis, id: DefId) -> Vec<(Span, DefId)> {
-    let Some(module) = module_of_def(pkg, a, id) else { return Vec::new() };
-    let ast = &module.parsed.ast;
-    let body = &a.bodies[&id];
-    let mut out: Vec<(Span, DefId)> = body
-        .targets
-        .iter()
-        .filter(|(e, _)| matches!(ast.expr(**e).kind, ExprKind::Call { .. }))
-        .filter_map(|(e, t)| match t {
-            Target::Fn { def, .. } | Target::Method { def, .. } => Some((ast.expr(*e).span, *def)),
-            _ => None,
-        })
-        .filter(|(_, d)| a.rt_with_body(*d))
-        .collect();
-    out.sort_by_key(|(s, _)| s.start);
-    out
+/// The calls of other rt functions in the record `r`, by their place.
+fn rt_calls(a: &Analysis, r: &Record) -> Vec<(Span, DefId)> {
+    let edge = |u: &crate::uses::Use| match u.what {
+        What::Call { callee } if u.rt == Some(true) && a.rt_with_body(callee) => Some((u.at, callee)),
+        _ => None,
+    };
+    r.uses.iter().filter_map(edge).collect()
 }
 
 impl Analysis {
@@ -137,130 +129,42 @@ impl Analysis {
     }
 }
 
-/// E0901 for one rt body: the earliest violation in source order.
-fn body_rules(pkg: &Package, a: &Analysis, id: DefId) -> Option<Diagnostic> {
-    let module = module_of_def(pkg, a, id)?;
-    let ast = &module.parsed.ast;
-    let text = &module.text;
-    let body = &a.bodies[&id];
+/// E0901 for one rt body: the first use of its record (by the place,
+/// R-459) that calls what is not `rt` (§10 rule 4) or needs `Alloc` (rule 1).
+fn body_rules(pkg: &Package, a: &Analysis, r: &Record) -> Option<Diagnostic> {
+    let module = module_of_def(pkg, a, r.id)?;
+    let (ast, text) = (&module.parsed.ast, &module.text);
     let src = |span: Span| text[span.start as usize..span.end as usize].to_string();
-    let mut found: Vec<Diagnostic> = Vec::new();
-
-    // Calls.
-    for (&e, t) in &body.targets {
-        let expr = ast.expr(e);
-        let ExprKind::Call { callee, .. } = &expr.kind else { continue };
-        let span = expr.span;
-        match t {
-            Target::Fn { def, .. } | Target::Method { def, .. } => {
-                let callee_def = a.def(*def);
-                let DefKind::Fn(f) = &callee_def.kind else { continue };
-                if !f.rt {
-                    let why = if a.uses_alloc(&f.effects) { " (it needs `Alloc`)" } else { "" };
-                    found.push(
-                        Diagnostic::new(
-                            Stage::Effects,
-                            Code::E0901,
-                            span,
-                            format!("`rt` function calls `{}`, which is not `rt`{why} (§10 rule 4)", callee_def.name),
-                        )
-                        .with_found(src(span))
-                        .with_note(callee_def.name_span, "declared here without `rt`"),
-                    );
-                }
+    let rt = "`rt` functions cannot allocate (§10, §12.2)";
+    r.uses.iter().find_map(|u| {
+        let d = |message: String| Diagnostic::new(Stage::Effects, Code::E0901, u.at, message).with_found(src(u.at));
+        match &u.what {
+            What::Call { callee } if u.rt == Some(false) => {
+                let callee = a.def(*callee);
+                let why = if u.needs_alloc(a) { " (it needs `Alloc`)" } else { "" };
+                let message = format!("`rt` function calls `{}`, which is not `rt`{why} (§10 rule 4)", callee.name);
+                Some(d(message).with_note(callee.name_span, "declared here without `rt`"))
             }
-            Target::Value => {
-                if let Some(t) = body.expr_types.get(callee)
-                    && let Ty::Fn(f) = a.types.get(*t)
-                    && !f.rt
-                {
-                    found.push(
-                        Diagnostic::new(
-                            Stage::Effects,
-                            Code::E0901,
-                            span,
-                            "`rt` function calls a function value whose type is not `rt fn` (§10 rule 4)",
-                        )
-                        .with_found(src(span)),
-                    );
-                }
+            What::ValueCall if u.rt == Some(false) => {
+                Some(d("`rt` function calls a function value whose type is not `rt fn` (§10 rule 4)".into()))
             }
-            _ => {}
+            What::Interp => Some(d(
+                "string interpolation creates a `Str` and needs `Alloc`; `rt` functions cannot allocate (§10 rule 1)"
+                    .into(),
+            )),
+            What::Drop { drop, .. } => {
+                let (tail, left) = match drop {
+                    Drop::Local(_) => ("an `rt` function can only borrow it or move it on (§10, §12.2)", None),
+                    Drop::Value { exit, .. } => (rt, Some(*exit)),
+                    Drop::IterRest { exit, early, .. } => (rt, early.then_some(*exit)),
+                    _ => (rt, None),
+                };
+                let here = if matches!(drop, Drop::Rest { .. }) { " here" } else { "" };
+                let what = dropped(a, ast, &src, drop, u.at);
+                let d = d(format!("{what}{here}, whose destruction needs `Alloc`; {tail}"));
+                Some(left.into_iter().fold(d, |d, x| d.with_note(x, "left here")))
+            }
+            _ => None,
         }
-    }
-    // String interpolation builds a new `Str` (§2.4).
-    for &e in body.expr_types.keys() {
-        let expr = ast.expr(e);
-        if let ExprKind::Lit(Lit::Str(s)) = &expr.kind
-            && s.segments.iter().any(|seg| matches!(seg, StrSeg::Interp(_)))
-        {
-            found.push(
-                Diagnostic::new(Stage::Effects, Code::E0901, expr.span, "string interpolation creates a `Str` and needs `Alloc`; `rt` functions cannot allocate (§10 rule 1)")
-                    .with_found(src(expr.span)),
-            );
-        }
-    }
-    // Drops (§12.2) whose destruction needs `Alloc`.
-    for (d, _) in alloc_drops(a, id) {
-        let rt = "`rt` functions cannot allocate (§10, §12.2)";
-        let (at, message, left) = match d {
-            Drop::Local(l) => (
-                l.span,
-                format!(
-                    "`{}` owns a `{}`, whose destruction needs `Alloc`; an `rt` function can only borrow it or move it on (§10, §12.2)",
-                    l.name,
-                    a.display_type(l.ty)
-                ),
-                None,
-            ),
-            Drop::Rest { at, root, .. } => {
-                let of = root.name(ast, src);
-                let message = format!(
-                    "taking `{}` out of `{of}` drops the rest of it here, whose destruction needs `Alloc`; {rt}",
-                    src(at)
-                );
-                (at, message, None)
-            }
-            Drop::Temp { value, .. } => {
-                let at = ast.expr(value).span;
-                let message =
-                    format!("`{}` is dropped after it is used, whose destruction needs `Alloc`; {rt}", src(at));
-                (at, message, None)
-            }
-            Drop::Value { value, exit, .. } => {
-                let at = ast.expr(value).span;
-                let message = format!(
-                    "`{}` is dropped by an exit before it is consumed, whose destruction needs `Alloc`; {rt}",
-                    src(at)
-                );
-                (at, message, Some(exit))
-            }
-            Drop::Overwrite { target, .. } => {
-                let at = ast.expr(target).span;
-                let message =
-                    format!("assigning `{}` drops the value it held, whose destruction needs `Alloc`; {rt}", src(at));
-                (at, message, None)
-            }
-            Drop::IterRest { iter, exit, early, .. } => {
-                let (at, what) = (
-                    ast.expr(iter).span,
-                    if early { "what it has not iterated and its container" } else { "its container" },
-                );
-                let message = format!(
-                    "the `for` that consumes `{}` drops {what} when it is left, whose destruction needs `Alloc`; {rt}",
-                    src(at)
-                );
-                (at, message, early.then_some(exit))
-            }
-            Drop::Discard { at, .. } => {
-                let message =
-                    format!("what `{}` binds to no name is dropped, whose destruction needs `Alloc`; {rt}", src(at));
-                (at, message, None)
-            }
-        };
-        let d = Diagnostic::new(Stage::Effects, Code::E0901, at, message).with_found(src(at));
-        found.push(left.into_iter().fold(d, |d, x| d.with_note(x, "left here")));
-    }
-    found.sort_by_key(|d| d.span.start);
-    found.into_iter().next()
+    })
 }

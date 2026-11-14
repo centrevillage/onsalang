@@ -5,7 +5,7 @@
 //! from the runner (D-08), and `const` initializers from the compiler (§6.6).
 
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
-use onsa_syntax::ast::ItemKind;
+use onsa_syntax::ast::{Ast, ItemKind};
 
 use crate::def::DefKind;
 use crate::drop_alloc::Drop;
@@ -18,7 +18,7 @@ pub(crate) fn check_all(pkg: &Package, a: &Analysis, records: &[Record]) -> Vec<
     for r in records {
         let def = a.def(r.id);
         let DefKind::Fn(f) = &def.kind else { continue };
-        if a.uses_alloc(&f.effects) {
+        if f.rt || a.uses_alloc(&f.effects) {
             continue;
         }
         let _scope = onsa_diag::internal::item_scope(def.span);
@@ -69,27 +69,32 @@ fn first_use(pkg: &Package, a: &Analysis, r: &Record) -> Option<Diagnostic> {
 }
 
 /// What the use `u` does that needs `Alloc`, as the note says it.
-fn describe(a: &Analysis, ast: &onsa_syntax::ast::Ast, src: &dyn Fn(Span) -> String, u: &Use) -> String {
-    let at = src(u.at);
+fn describe(a: &Analysis, ast: &Ast, src: &dyn Fn(Span) -> String, u: &Use) -> String {
     match &u.what {
         What::Call { callee } => format!("calls `{}`, which has `uses {{Alloc}}`", a.def(*callee).name),
         What::ValueCall => "calls a function value whose type has `uses {Alloc}`".into(),
         What::Interp => "string interpolation creates a `Str`".into(),
-        What::Drop { drop, .. } => match drop {
-            Drop::Local(l) => {
-                format!("`{}` owns a `{}`, whose destruction needs `Alloc`", l.name, a.display_type(l.ty))
-            }
-            Drop::Rest { root, .. } => {
-                format!("taking `{at}` out of `{}` drops the rest of it, which needs `Alloc`", root.name(ast, src))
-            }
-            Drop::Temp { .. } => format!("`{at}` is dropped after it is used, which needs `Alloc`"),
-            Drop::Value { .. } => format!("`{at}` is dropped by an exit before it is consumed, which needs `Alloc`"),
-            Drop::Overwrite { .. } => format!("assigning `{at}` drops the value it held, which needs `Alloc`"),
-            Drop::IterRest { early, .. } => {
-                let what = if *early { "what it has not iterated and its container" } else { "its container" };
-                format!("the `for` that consumes `{at}` drops {what} when it is left, which needs `Alloc`")
-            }
-            Drop::Discard { .. } => format!("what `{at}` binds to no name is dropped, which needs `Alloc`"),
-        },
+        What::Drop { drop: d @ Drop::Local(_), .. } => {
+            format!("{}, whose destruction needs `Alloc`", dropped(a, ast, src, d, u.at))
+        }
+        What::Drop { drop, .. } => format!("{}, which needs `Alloc`", dropped(a, ast, src, drop, u.at)),
+    }
+}
+
+/// What the drop `d` of the value written at `at` drops, as E0601 and
+/// E0901 say it before why it needs `Alloc` (§12.2).
+pub(crate) fn dropped(a: &Analysis, ast: &Ast, src: &dyn Fn(Span) -> String, d: &Drop, at: Span) -> String {
+    let at = src(at);
+    match d {
+        Drop::Local(l) => format!("`{}` owns a `{}`", l.name, a.display_type(l.ty)),
+        Drop::Rest { root, .. } => format!("taking `{at}` out of `{}` drops the rest of it", root.name(ast, src)),
+        Drop::Temp { .. } => format!("`{at}` is dropped after it is used"),
+        Drop::Value { .. } => format!("`{at}` is dropped by an exit before it is consumed"),
+        Drop::Overwrite { .. } => format!("assigning `{at}` drops the value it held"),
+        Drop::IterRest { early, .. } => {
+            let what = if *early { "what it has not iterated and its container" } else { "its container" };
+            format!("the `for` that consumes `{at}` drops {what} when it is left")
+        }
+        Drop::Discard { .. } => format!("what `{at}` binds to no name is dropped"),
     }
 }

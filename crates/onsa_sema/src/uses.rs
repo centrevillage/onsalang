@@ -1,6 +1,7 @@
 //! The record of the uses of a body (§8.1, §10, R-83, D-15): every use of
 //! an effect, with its place, in a fixed order. The effects stage (E0601)
-//! reads it, not the tables of the body. The one list of what needs what
+//! and the rt stage (E0901, the edges of E0903) read it, not the tables of
+//! the body. The one list of what needs what
 //! (M12): a call needs the row of the function or the function value it
 //! calls ([`call_use`]), an interpolation ([`interp_use`]) and a drop
 //! ([`alloc_drops`]) need `Alloc`. No stage after reads it, so it is not
@@ -30,7 +31,6 @@ pub(crate) struct Use<'a> {
     pub needs: Needs<'a>,
     /// Whether what it calls is `rt` (§10 rule 4); none where it calls
     /// nothing (a drop, until a `Drop` is called by one in phase 2).
-    #[expect(dead_code, reason = "the rt stage reads it when it reads the record")]
     pub rt: Option<bool>,
     pub what: What<'a>,
 }
@@ -68,10 +68,10 @@ impl Use<'_> {
     }
 }
 
-/// The records of the bodies of the functions that are not `rt`, that the
+/// The records of the bodies of the functions, `rt` or not, that the
 /// effects stage reads (`Analysis::body_checked`), in the order of the defs.
 pub(crate) fn records<'a>(pkg: &Package, a: &'a Analysis) -> Vec<Record<'a>> {
-    let read = |id| matches!(&a.def(id).kind, DefKind::Fn(f) if !f.rt && f.body.is_some());
+    let read = |id| matches!(&a.def(id).kind, DefKind::Fn(f) if f.body.is_some());
     a.new_defs()
         .filter(|&id| read(id) && a.body_checked(id, Stage::Effects))
         .filter_map(|id| record(pkg, a, id))

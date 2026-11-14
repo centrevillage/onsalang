@@ -31,11 +31,12 @@ pub(crate) fn check_bodies(pkg: &Package, a: &mut Analysis) {
     timed(Phase::Bindings, || binding::settle_all(pkg, a));
     timed(Phase::Modes, || modes::check_all(pkg, a));
     a.failures = Failures::of(pkg, a);
-    timed(Phase::Rt, || rt::check_all(pkg, a));
-    timed(Phase::Effects, || {
-        let found = effects::check_all(pkg, a, &uses::records(pkg, a));
-        a.diagnostics.extend(found);
-    });
+    let found = {
+        let records = timed(Phase::Effects, || uses::records(pkg, a));
+        let rt = timed(Phase::Rt, || rt::check_all(pkg, a, &records));
+        [rt, timed(Phase::Effects, || effects::check_all(pkg, a, &records))]
+    };
+    a.diagnostics.extend(found.into_iter().flatten());
 }
 
 /// `f` in the phase `p` of the measurements (`onsa_diag::timing`).

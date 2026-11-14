@@ -106,3 +106,37 @@ fn the_drops_are_at_the_values_as_written() {
     let want = [("call", "wrap(pass(move b), r?)", 0), ("call", "pass(move b)", 0), ("waits", "pass(move b)", 1)];
     assert_eq!(got, owned(&want));
 }
+
+/// An `rt` body has its record too (the rt stage reads it, E0901 and the
+/// edges of E0903): each call with whether what it calls is `rt` (§10 rule 4).
+#[test]
+fn an_rt_body_records_whether_its_calls_are_rt() {
+    let src = format!("{STD}pub rt fn h(n: U32) -> U32 {{ n }}\npub rt fn k(n: U32) -> U32 {{ h(pure(n)) + h(n) }}\n");
+    let p = pkg(&[("main", &src)]);
+    let a = analyze(&p);
+    let id = def(&a, "k");
+    let all = records(&p, &a);
+    let r = all.iter().find(|r| r.id == id).expect("a record of the rt function k");
+    let got: Vec<_> = r.uses.iter().map(|u| (&src[u.at.start as usize..u.at.end as usize], u.rt)).collect();
+    assert_eq!(got, [("h(pure(n))", Some(true)), ("pure(n)", Some(false)), ("h(n)", Some(true))]);
+}
+
+/// R-459: of the violations of an `rt` body that start at one place
+/// (`p.a().b()`), E0901 reports the first by the key of the record, the
+/// inner call, whatever the order of the tables.
+#[test]
+fn the_e0901_of_one_start_is_the_first_by_the_key() {
+    let src = "pub struct P { n: U32 }
+impl P {
+  pub fn a(self) -> P { P { n: self.n } }
+  pub fn b(self) -> U32 { self.n }
+}
+pub rt fn k(p: P) -> U32 { p.a().b() }
+";
+    let a = analyze(&pkg(&[("main", src)]));
+    let got: Vec<_> = (a.diagnostics.iter())
+        .filter(|d| d.code == onsa_diag::Code::E0901)
+        .map(|d| (&src[d.span.start as usize..d.span.end as usize], d.message.as_str()))
+        .collect();
+    assert_eq!(got, [("p.a()", "`rt` function calls `a`, which is not `rt` (§10 rule 4)")]);
+}

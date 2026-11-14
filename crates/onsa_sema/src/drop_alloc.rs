@@ -1,9 +1,9 @@
 //! Which drops of a body need `Alloc` (§12.2, R-83): the one test of a drop
 //! ([`needs_alloc`]) and the list of a body ([`alloc_drops`]), from the drop
 //! points the modes stage met (`BodyInfo::drops`, R-32). The record of the
-//! uses (`crate::uses`) and the rt stage (E0901) read the same list. Phase
-//! 2's drops that free nothing (`tasks/phase2.md`) are conditions of
-//! [`needs_alloc`].
+//! uses (`crate::uses`) reads the list, and the effects and rt stages read
+//! the record. Phase 2's drops that free nothing (`tasks/phase2.md`) are
+//! conditions of [`needs_alloc`].
 
 use onsa_diag::Span;
 use onsa_diag::hash::HashMap;
