@@ -1,0 +1,18 @@
+// The types and functions of negative/drop_over_pkg_ok/main.onsa (W6-02 U5b/t, S-1038, spec §12.2, §15.1): the functions that overwrite a value and have `uses {Alloc}`, and the ones that overwrite a Copy value.
+
+pub struct P {
+  s: Str,
+  n: U32,
+}
+
+pub struct Holder[T] {
+  v: T,
+}
+
+pub fn lib_set_alloc(inout p: P, t: Str) uses {Alloc} { p.s = t }
+
+pub fn lib_put_alloc[T](inout h: Holder[T], v: T) uses {Alloc} { h.v = v }
+
+pub rt fn lib_set_n(inout p: P, k: U32) { p.n = k }
+
+pub rt fn lib_put_copy[T: Copy](inout h: Holder[T], v: T) { h.v = v }

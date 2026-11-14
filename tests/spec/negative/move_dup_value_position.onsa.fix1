@@ -295,7 +295,7 @@ pub fn an_affine_value_with_the_mark(move b: Buf[F32]) -> (Option[Buf[F32]], U32
   (Some(move b), 1)
 }
 
-pub fn an_affine_value_assigned(move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] {
+pub fn an_affine_value_assigned(move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] uses {Alloc} {
   var x = move a
   x = move b
   x

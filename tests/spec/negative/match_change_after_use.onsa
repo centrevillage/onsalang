@@ -20,7 +20,7 @@ pub struct W {
 }
 
 impl W {
-  pub fn clear(inout self) {
+  pub fn clear(inout self) uses {Alloc} {
     self.a = None
   }
 
@@ -55,7 +55,7 @@ pub fn len_of(b: Buf[F32]) -> U32 uses {Alloc} {
 
 pub fn take_opt(move o: Option[Buf[F32]]) uses {Alloc} {}
 
-pub fn reset(inout o: Option[Buf[F32]]) {
+pub fn reset(inout o: Option[Buf[F32]]) uses {Alloc} {
   o = None
 }
 

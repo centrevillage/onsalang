@@ -1,0 +1,99 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§10", "§12.2"]
+
+// W6-02 U5b/t, R-32, S-1038, S-610, S-613 (§12.2: "所有する Shared 値・`Buf` と、それらを含む値の破棄 … 代入で上書きされる前の値の破棄を含む（代入先が `var`・`move` の引数・`inout` の引数のどの場所でも、
+// フィールドと要素への代入はその場所の型で決まる）: 要る"; §5.4: "`inout` の引数と `inout self` … 破棄 起きない" is the end of the binding's scope and stays): an assignment drops the value that the place
+// held before it, so the whole of an `inout` argument that is assigned, whose type needs `Alloc` to drop (a `Str`, a `Buf`, an array, a tuple, a struct or an `Option` that holds one), is an E0601 in a function
+// without `uses {Alloc}` and an E0901 in an `rt fn` (§10 rule 1), wherever the new value comes from: a borrowed value (a copy), a `move`, a call result, a static value (`s = "b"`: only the new value is
+// static, the old one is dropped) and `None`. The new value is consumed by the assignment, so only the old one is dropped. This version counts no drop by an assignment (R-32), so none of these is reported today.
+// The parts of an `inout` argument are in negative/drop_over_parts.onsa, a type parameter in negative/drop_over_generic.onsa, the loops and branches in negative/drop_over_flow.onsa, and the legal forms in
+// negative/drop_over_ok.onsa. The functions are one-liners (S-783). One error per function (P-01).
+
+pub struct G {
+  s: Str,
+  n: U32,
+}
+
+pub struct H {
+  b: Buf[F32],
+  n: U32,
+}
+
+pub rt fn mk(n: U32) -> Str { "x" }
+
+pub rt fn mk_buf(move b: Buf[F32]) -> Buf[F32] { b }
+
+pub rt fn mk_o(move b: Buf[F32]) -> Option[Buf[F32]] { Some(move b) }
+
+// ------------------------------------------------------------------ a `Str`: the new value is a borrowed value, a call result or a static value
+
+pub fn str_borrowed(inout s: Str, t: Str) { s = t }   //~ E0601
+
+pub rt fn rt_str_borrowed(inout s: Str, t: Str) { s = t }   //~ E0901
+
+pub fn str_call(inout s: Str, n: U32) { s = mk(n) }   //~ E0601
+
+pub rt fn rt_str_call(inout s: Str, n: U32) { s = mk(n) }   //~ E0901
+
+pub fn str_static(inout s: Str) { s = "b" }   //~ E0601
+
+pub rt fn rt_str_static(inout s: Str) { s = "b" }   //~ E0901
+
+// ------------------------------------------------------------------ a `Buf`: the new value is a `move` or a call result
+
+pub fn buf_move(inout b: Buf[F32], move c: Buf[F32]) { b = move c }   //~ E0601
+
+pub rt fn rt_buf_move(inout b: Buf[F32], move c: Buf[F32]) { b = move c }   //~ E0901
+
+pub fn buf_call(inout b: Buf[F32], move c: Buf[F32]) { b = mk_buf(move c) }   //~ E0601
+
+pub rt fn rt_buf_call(inout b: Buf[F32], move c: Buf[F32]) { b = mk_buf(move c) }   //~ E0901
+
+// ------------------------------------------------------------------ an `Option`: `None` and a constructor, of a `Buf` and of a `Str`
+
+pub fn option_buf_none(inout o: Option[Buf[F32]]) { o = None }   //~ E0601
+
+pub rt fn rt_option_buf_none(inout o: Option[Buf[F32]]) { o = None }   //~ E0901
+
+pub fn option_buf_some(inout o: Option[Buf[F32]], move c: Buf[F32]) { o = Some(move c) }   //~ E0601
+
+pub rt fn rt_option_buf_some(inout o: Option[Buf[F32]], move c: Buf[F32]) { o = Some(move c) }   //~ E0901
+
+pub fn option_buf_call(inout o: Option[Buf[F32]], move c: Buf[F32]) { o = mk_o(move c) }   //~ E0601
+
+pub rt fn rt_option_buf_call(inout o: Option[Buf[F32]], move c: Buf[F32]) { o = mk_o(move c) }   //~ E0901
+
+pub fn option_str_none(inout o: Option[Str]) { o = None }   //~ E0601
+
+pub rt fn rt_option_str_none(inout o: Option[Str]) { o = None }   //~ E0901
+
+pub fn option_option_none(inout o: Option[Option[Buf[F32]]]) { o = None }   //~ E0601
+
+pub rt fn rt_option_option_none(inout o: Option[Option[Buf[F32]]]) { o = None }   //~ E0901
+
+// ------------------------------------------------------------------ a tuple, an array and a struct that hold one
+
+pub fn tuple_whole(inout p: (Str, U32), t: Str) { p = (t, 1) }   //~ E0601
+
+pub rt fn rt_tuple_whole(inout p: (Str, U32), t: Str) { p = (t, 1) }   //~ E0901
+
+pub fn array_whole(inout xs: [Str; 2], ys: [Str; 2]) { xs = ys }   //~ E0601
+
+pub rt fn rt_array_whole(inout xs: [Str; 2], ys: [Str; 2]) { xs = ys }   //~ E0901
+
+pub fn array_of_options(inout xs: [Option[Str]; 2]) { xs = [None, None] }   //~ E0601
+
+pub rt fn rt_array_of_options(inout xs: [Option[Str]; 2]) { xs = [None, None] }   //~ E0901
+
+pub fn struct_str(inout g: G, h: G) { g = h }   //~ E0601
+
+pub rt fn rt_struct_str(inout g: G, h: G) { g = h }   //~ E0901
+
+pub fn struct_str_literal(inout g: G, t: Str) { g = G { s: t, n: 1 } }   //~ E0601
+
+pub rt fn rt_struct_str_literal(inout g: G, t: Str) { g = G { s: t, n: 1 } }   //~ E0901
+
+pub fn struct_buf(inout h: H, move k: H) { h = move k }   //~ E0601
+
+pub rt fn rt_struct_buf(inout h: H, move k: H) { h = move k }   //~ E0901

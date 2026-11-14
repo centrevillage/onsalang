@@ -54,7 +54,8 @@ impl How {
 
 impl Walker<'_> {
     /// The write `how` of `target`, walked after what is evaluated before
-    /// it (§3.5). A whole local assigned is live again, and not read; any
+    /// it (§3.5). An assignment drops the value its place held (R-32,
+    /// `Walker::overwrite`). A whole local assigned is live again, and not read; any
     /// other write reads its place first (an E0704 of a moved or stale root,
     /// S-789). A value captured is not written (R-25). An `inout` argument
     /// and a receiver change their place after the call (§7, S-796). A place
@@ -89,11 +90,15 @@ impl Walker<'_> {
         if self.held(&place, at, None) {
             return self.record(&place, at, of);
         }
-        if whole {
-            r.cur.change(l, |d| d.revive(l));
-        } else if !live {
+        if !whole && !live {
             // Its E0704 above; overlapping another argument, the E0702 at it, first (S-799).
             return self.record(&place, at, of);
+        }
+        if how == How::Assign {
+            self.overwrite(r, l, target);
+        }
+        if whole {
+            r.cur.change(l, |d| d.revive(l));
         }
         self.change(r, place, at, of);
     }

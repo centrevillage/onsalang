@@ -294,6 +294,9 @@ pub enum Dropped {
     /// of it (S-85, R-32). Boxed, so that `Rest` alone holds a `Vec` and the
     /// drop points of a body stay as small as before (`DropPoint`, 56 bytes).
     TempRest(Box<Taken<ExprId>>),
+    /// The value the place `target` held before it is assigned (R-32,
+    /// S-1038: of a `var`, a `move` or an `inout` parameter alike).
+    Overwrite(ExprId),
 }
 
 /// A path of fields taken out of the owned local `root` (S-85), or of a value.

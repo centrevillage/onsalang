@@ -235,6 +235,12 @@ fn body_rules(pkg: &Package, a: &Analysis, id: DefId) -> Option<Diagnostic> {
                 );
                 (at, message, Some(exit))
             }
+            Drop::Overwrite { target, .. } => {
+                let at = ast.expr(target).span;
+                let message =
+                    format!("assigning `{}` drops the value it held, whose destruction needs `Alloc`; {rt}", src(at));
+                (at, message, None)
+            }
             Drop::IterRest { iter, exit, early, .. } => {
                 let (at, what) = (
                     ast.expr(iter).span,

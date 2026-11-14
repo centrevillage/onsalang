@@ -21,6 +21,7 @@ use crate::binding::{Head, HeadRow};
 use crate::body::{DropPoint, Dropped, LocalId, LocalKind};
 use crate::names::body::Origin;
 use crate::tails::{Tail, literal_true};
+use crate::ty::TyId;
 
 /// A walk's state, the innermost loop it is in, and the items of the
 /// scopes it is in (innermost last): the bindings declared in its blocks,
@@ -340,10 +341,8 @@ impl Walker<'_> {
             let (what, sure, unless) = match r.declared[i] {
                 Item::Local(l) => {
                     let local = &self.info.locals[l.0 as usize];
-                    let lives = r.cur.state().lives(l).filter(|_| local.state.owned());
-                    let Some((sure, unless)) = lives.filter(|_| self.kind_of(local.ty) != Some(Kind::Copy)) else {
-                        continue;
-                    };
+                    let held = if local.state.owned() { self.has_value(r, l, local.ty) } else { None };
+                    let Some((sure, unless)) = held else { continue };
                     (if exit { Dropped::Exit(l) } else { Dropped::End(l) }, sure, unless)
                 }
                 Item::Value(e) if exit => (Dropped::Value(e), true, None),
@@ -352,6 +351,28 @@ impl Walker<'_> {
                 Item::IterRest(e) => (Dropped::IterRest { iter: e, early: exit }, true, None),
             };
             self.drop_point(r, at, what, (sure, unless));
+        }
+    }
+
+    /// Whether `l` may hold there a value of the type `ty` (a place of it)
+    /// that is not Copy, and surely; of one released on every path, its
+    /// releases (`Delta::lives`). The one test of
+    /// [`Walker::drops`] and of an overwrite.
+    fn has_value<'r>(&mut self, r: &'r Run, l: LocalId, ty: TyId) -> Option<(bool, Option<&'r Releases>)> {
+        r.cur.state().lives(l).filter(|_| self.kind_of(ty) != Some(Kind::Copy))
+    }
+
+    /// The assignment to `target`, a place of `l`: the value the place held
+    /// is dropped there (R-32, S-1038: of a `var`, a `move` or an `inout`
+    /// parameter alike, by the type of the place), if it may hold one (not
+    /// after the whole was moved on every path). The one place that decides it.
+    pub(super) fn overwrite(&mut self, r: &Run, l: LocalId, target: ExprId) {
+        let at = self.ast.expr(target).span;
+        let Some(&ty) = self.info.expr_types.get(&target) else {
+            bug(Some(at), "an assignment to a place with no type")
+        };
+        if let Some(held) = self.has_value(r, l, ty) {
+            self.drop_point(r, at, Dropped::Overwrite(target), held);
         }
     }
 
@@ -385,7 +406,7 @@ impl Walker<'_> {
         crate::tails::tails(self.ast, e, &self.info.diverging, &mut tails);
         for t in tails {
             let Tail::Value(v) = t else { continue };
-            let root = self.root_of_path(v);
+            let root = self.root_of_path(v, None);
             if self.made(v, false) {
                 r.declared.push(Item::Temp(v));
             } else if root != v {

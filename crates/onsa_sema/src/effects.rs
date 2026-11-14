@@ -89,6 +89,10 @@ fn first_use(pkg: &Package, a: &Analysis, id: DefId) -> Option<Diagnostic> {
                 let at = ast.expr(value).span;
                 (at, format!("`{}` is dropped by an exit before it is consumed, which needs `Alloc`", src(at)))
             }
+            Drop::Overwrite { target, .. } => {
+                let at = ast.expr(target).span;
+                (at, format!("assigning `{}` drops the value it held, which needs `Alloc`", src(at)))
+            }
             Drop::IterRest { iter, early, .. } => {
                 let (at, what) = (
                     ast.expr(iter).span,

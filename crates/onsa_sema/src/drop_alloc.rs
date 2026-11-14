@@ -36,6 +36,9 @@ pub(crate) enum Drop<'b> {
     /// The value of `value`, of the type `ty`, made where nothing consumes
     /// it (R-32).
     Temp { value: ExprId, ty: TyId },
+    /// The value the place `target`, of the type `ty`, held before it is
+    /// assigned (R-32, S-1038).
+    Overwrite { target: ExprId, ty: TyId },
 }
 
 /// What a path is taken out of (S-85): an owned local, or a value no
@@ -63,7 +66,7 @@ fn needs_alloc(a: &Analysis, frame: &Frame, d: &Drop) -> bool {
     match d {
         Drop::Local(l) => drops(l.ty),
         Drop::Rest { at, path, ty, .. } => rest_drops_alloc(&Walk::new(a), (*ty, frame, 0), path, *at).unwrap_or(false),
-        Drop::Value { ty, .. } | Drop::Temp { ty, .. } => drops(*ty),
+        Drop::Value { ty, .. } | Drop::Temp { ty, .. } | Drop::Overwrite { ty, .. } => drops(*ty),
         // At its end, its container: a fixed-length array has none (S-1037).
         Drop::IterRest { ty, early, .. } => (*early || !matches!(a.types.get(*ty), Ty::Array(..))) && drops(*ty),
     }
@@ -95,6 +98,7 @@ pub(crate) fn alloc_drops(a: &Analysis, id: DefId) -> impl Iterator<Item = Drop<
             Some(Drop::Rest { at: d.at, path: &t.path, root: Root::Value(t.root), ty: ty(&t.root, d.at) })
         }
         Dropped::Temp(e) => Some(Drop::Temp { value: *e, ty: ty(e, d.at) }),
+        Dropped::Overwrite(e) => Some(Drop::Overwrite { target: *e, ty: ty(e, d.at) }),
         Dropped::Value(e) => Some(Drop::Value { value: *e, ty: ty(e, d.at), exit: d.at }),
         &Dropped::IterRest { iter, early } => Some(Drop::IterRest { iter, ty: ty(&iter, d.at), exit: d.at, early }),
         Dropped::End(_) | Dropped::Exit(_) => None,

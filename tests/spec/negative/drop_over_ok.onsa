@@ -1,0 +1,136 @@
+// onsa.toml
+// [test]
+// spec = ["§4.6", "§5.2", "§5.4", "§6.3", "§10", "§12.2"]
+
+// W6-02 U5b/t, R-32, S-1038 (§12.2: "代入で上書きされる前の値の破棄を含む（… フィールドと要素への代入はその場所の型で決まる）: 要る"; "Copy 値・flow の状態の生成と破棄: 要らない"; §4.6: Copy "破棄: 何もしない"): the
+// contrasts of negative/drop_over_whole.onsa, drop_over_parts.onsa and drop_over_generic.onsa. An assignment drops only the value that the place held, and the type of the place decides, so these are legal and stay
+// legal: a place of a Copy type (a number, a tuple or an array of them, an `Option` of one, a struct of them), a Copy field or element of an argument that holds a `Str` or a `Buf` elsewhere (the
+// other parts are not touched), a `T: Copy` (and the number traits: `Num`), and a function with `uses {Alloc}`, whose body may drop whatever it assigns over (and a function that fills an array of `Str` with
+// `xs = [v; N]`, S-1040). This version counts no drop by an assignment (R-32), so all of them are accepted today, and they stay accepted. The functions are one-liners.
+
+pub struct P {
+  s: Str,
+  n: U32,
+}
+
+pub struct Q {
+  p: P,
+  k: U32,
+}
+
+pub struct B {
+  b: Buf[F32],
+  n: U32,
+}
+
+pub struct C {
+  xs: [F32; 4],
+  name: Str,
+}
+
+pub struct Pt {
+  x: F32,
+  y: F32,
+}
+
+pub struct Holder[T] {
+  v: T,
+}
+
+// ------------------------------------------------------------------ a place of a Copy type
+
+pub rt fn copy_whole(inout n: U32, k: U32) { n = k }
+
+pub rt fn copy_element(inout xs: [F32; 4], v: F32) { xs[0] = v }
+
+pub rt fn copy_nested_element(inout xs: [[F32; 2]; 2], v: F32) { xs[1][0] = v }
+
+pub rt fn copy_row(inout xs: [[F32; 2]; 2], row: [F32; 2]) { xs[1] = row }
+
+pub rt fn copy_tuple(inout p: (U32, F32), k: U32) { p = (k, 1.0) }
+
+pub rt fn copy_tuple_element(inout p: (U32, F32), v: F32) { p.1 = v }
+
+pub rt fn copy_option(inout o: Option[U32]) { o = None }
+
+pub rt fn copy_struct(inout p: Pt, q: Pt) { p = q }
+
+pub rt fn copy_element_struct(inout ps: [Pt; 2], q: Pt) { ps[0] = q }
+
+pub rt fn copy_element_field(inout ps: [Pt; 2], v: F32) { ps[1].x = v }
+
+// ------------------------------------------------------------------ a Copy part of an argument that holds a `Str` or a `Buf` elsewhere
+
+pub rt fn part_in_str_struct(inout p: P, k: U32) { p.n = k }
+
+pub rt fn part_in_buf_struct(inout b: B, k: U32) { b.n = k }
+
+pub rt fn part_outer(inout q: Q, k: U32) { q.k = k }
+
+pub rt fn part_nested(inout q: Q, k: U32) { q.p.n = k }
+
+pub rt fn part_element_field(inout ps: [P; 2], k: U32) { ps[0].n = k }
+
+pub rt fn part_array_field(inout c: C, v: F32) { c.xs[0] = v }
+
+pub rt fn part_array_field_row(inout c: C, v: F32, i: U32) { c.xs[i] = v }
+
+impl P {
+  pub rt fn set_n(inout self, k: U32) { self.n = k }
+}
+
+impl Q {
+  pub rt fn set_inner_n(inout self, k: U32) { self.p.n = k }
+}
+
+// ------------------------------------------------------------------ a `T: Copy` and the number traits
+
+pub rt fn put_copy[T: Copy](inout a: T, b: T) { a = b }
+
+pub rt fn put_copy_and_a_bound[T: Copy + Eq](inout a: T, b: T) { a = b }
+
+pub rt fn put_num[T: Num](inout a: T, b: T) { a = b }
+
+pub rt fn put_option[T: Copy](inout o: Option[T], b: T) { o = Some(b) }
+
+pub rt fn put_element[T: Copy](inout xs: [T; 2], b: T) { xs[0] = b }
+
+pub rt fn put_field[T: Copy](inout h: Holder[T], b: T) { h.v = b }
+
+impl[T: Copy] Holder[T] {
+  pub rt fn set(inout self, v: T) { self.v = v }
+}
+
+// ------------------------------------------------------------------ a function with `uses {Alloc}` may drop what it assigns over
+
+pub fn alloc_str(inout s: Str, t: Str) uses {Alloc} { s = t }
+
+pub fn alloc_buf(inout b: Buf[F32], move c: Buf[F32]) uses {Alloc} { b = move c }
+
+pub fn alloc_option(inout o: Option[Buf[F32]]) uses {Alloc} { o = None }
+
+pub fn alloc_field(inout p: P, t: Str) uses {Alloc} { p.s = t }
+
+pub fn alloc_nested(inout q: Q, t: Str) uses {Alloc} { q.p.s = t }
+
+pub fn alloc_element(inout xs: [Str; 2], t: Str) uses {Alloc} { xs[0] = t }
+
+pub fn alloc_generic[T](inout a: T, b: T) uses {Alloc} { a = b }
+
+pub fn alloc_generic_maybe[T: ?Dup](inout a: T, move b: T) uses {Alloc} { a = move b }
+
+pub fn alloc_loop(inout x: Str, xs: [Str; 2]) uses {Alloc} { for s in xs { x = s } }
+
+pub fn alloc_branch(inout s: Str, t: Str, c: Bool) uses {Alloc} { if c { s = t } }
+
+impl P {
+  pub fn alloc_set(inout self, t: Str) uses {Alloc} { self.s = t }
+}
+
+// ------------------------------------------------------------------ filling an array of `Str` by an array literal (S-1040: the `fill!` of such an array is negative/fill_copy_elements.onsa)
+
+pub fn fill_by_literal(inout xs: [Str; 2], s: Str) uses {Alloc} { xs = [s; 2] }
+
+pub fn fill_by_literal_options(inout xs: [Option[Str]; 2]) uses {Alloc} { xs = [None; 2] }
+
+pub fn fill_by_literal_generic[T, const N: U32](inout xs: [T; N], v: T) uses {Alloc} { xs = [v; N] }

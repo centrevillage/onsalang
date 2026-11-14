@@ -21,11 +21,11 @@ pub struct W {
 
 pub fn take_opt(move o: Option[[Buf[F32]; 2]]) uses {Alloc} {}
 
-pub fn reset_opt(inout o: Option[[Buf[F32]; 2]]) {
+pub fn reset_opt(inout o: Option[[Buf[F32]; 2]]) uses {Alloc} {
   o = None
 }
 
-pub fn reset_buf(inout o: Option[Buf[F32]]) {
+pub fn reset_buf(inout o: Option[Buf[F32]]) uses {Alloc} {
   o = None
 }
 

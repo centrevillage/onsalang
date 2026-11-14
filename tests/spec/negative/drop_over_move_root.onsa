@@ -1,0 +1,42 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§10", "§12.2"]
+
+// W6-02 U5b/t, R-32, S-1038 (§12.2: "代入で上書きされる前の値の破棄を含む（代入先が `var`・`move` の引数・`inout` の引数のどの場所でも …）: 要る"; §5.4: "`move` の引数と `move self` … 所有 … 破棄 起きる"): an
+// assignment to a `move` argument (the whole, a field, an element, a part of `move self`) whose type needs `Alloc` to drop. The argument is owned, so the value that it holds when the body ends is dropped
+// anyway (§5.4), and a function without `uses {Alloc}` is an E0601 (an E0901 in an `rt fn`) with or without the assignment: these functions are errors under the drop at the end of the body already, and this
+// version reports them. They pin that the assignment does not make them legal. The forms where only the old value is dropped (the new value is returned or moved on after the assignment) need more
+// than one line (S-783) and are not here. The functions are one-liners. One error per function (P-01).
+
+pub struct P {
+  s: Str,
+  n: U32,
+}
+
+pub rt fn mk(n: U32) -> Str { "x" }
+
+pub fn whole_str(move s: Str, t: Str) { s = t }   //~ E0601
+
+pub rt fn rt_whole_str(move s: Str, t: Str) { s = t }   //~ E0901
+
+pub fn whole_buf(move b: Buf[F32], move c: Buf[F32]) { b = move c }   //~ E0601
+
+pub rt fn rt_whole_buf(move b: Buf[F32], move c: Buf[F32]) { b = move c }   //~ E0901
+
+pub fn whole_option(move o: Option[Buf[F32]]) { o = None }   //~ E0601
+
+pub rt fn rt_whole_option(move o: Option[Buf[F32]]) { o = None }   //~ E0901
+
+pub fn field(move p: P, t: Str) { p.s = t }   //~ E0601
+
+pub rt fn rt_field(move p: P, t: Str) { p.s = t }   //~ E0901
+
+pub fn element(move xs: [Str; 2], t: Str) { xs[0] = t }   //~ E0601
+
+pub rt fn rt_element(move xs: [Str; 2], t: Str) { xs[0] = t }   //~ E0901
+
+impl P {
+  pub fn replace(move self, t: Str) { self.s = t }   //~ E0601
+
+  pub rt fn rt_replace(move self, t: Str) { self.s = t }   //~ E0901
+}

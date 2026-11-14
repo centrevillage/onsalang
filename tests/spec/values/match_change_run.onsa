@@ -37,7 +37,7 @@ impl Env {
     self.level
   }
 
-  pub fn len_then_clear(inout self) -> U32 {
+  pub fn len_then_clear(inout self) -> U32 uses {Alloc} {
     match self.buf {
       Some(b) => {
         let n = b.len()

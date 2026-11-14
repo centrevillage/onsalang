@@ -17,7 +17,7 @@ fn some_m[T: ?Dup](move t: T) -> Option[T] {
   Some(move t)
 }
 
-fn assign_m[T: ?Dup](move t: T, move u: T) -> T {
+fn assign_m[T: ?Dup](move t: T, move u: T) -> T uses {Alloc} {
   var x = move t
   x = move u
   x
@@ -103,7 +103,7 @@ fn call_some(n: U32) -> U32 {
   some_m(n).unwrap() + n
 }
 
-fn call_assign(n: U32, m: U32) -> U32 {
+fn call_assign(n: U32, m: U32) -> U32 uses {Alloc} {
   assign_m(n, m) + n
 }
 

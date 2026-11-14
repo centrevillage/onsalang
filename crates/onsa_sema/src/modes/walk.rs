@@ -191,16 +191,8 @@ impl<'a> Walker<'a> {
     /// value dropped there (S-85, R-32); another is copied, and the whole
     /// value dropped. Else (a path of a place), read.
     fn take_out(&mut self, r: &mut Run, e: ExprId, pos: Pos) {
-        let (mut x, mut path) = (self.ast.without_parens(e), Vec::new());
-        loop {
-            x = match &self.ast.expr(x).kind {
-                ExprKind::Field { base, name } => (*base, path.push(Proj::Field(name.name.clone()))).0,
-                ExprKind::TupleIndex { base, index, .. } => (*base, path.push(Proj::Elem(*index))).0,
-                _ => break,
-            };
-            x = self.ast.without_parens(x);
-        }
-        let root = x;
+        let mut path = Vec::new();
+        let root = self.root_of_path(e, Some(&mut path));
         path.reverse();
         if !self.made(root, true) {
             return self.expr(r, root, Pos::Read);
@@ -216,13 +208,21 @@ impl<'a> Walker<'a> {
         self.drop_point(r, at, what, (true, None));
     }
 
-    /// The root of `e` through its fields and tuple elements (and parentheses).
-    pub(super) fn root_of_path(&self, e: ExprId) -> ExprId {
+    /// The root of `e` through its fields and tuple elements (and
+    /// parentheses); its steps pushed on `path`, if given, the last first.
+    pub(super) fn root_of_path(&self, e: ExprId, mut path: Option<&mut Vec<Proj>>) -> ExprId {
         let mut x = self.ast.without_parens(e);
-        while let ExprKind::Field { base, .. } | ExprKind::TupleIndex { base, .. } = &self.ast.expr(x).kind {
-            x = self.ast.without_parens(*base);
+        loop {
+            let (base, step) = match &self.ast.expr(x).kind {
+                ExprKind::Field { base, name } => (*base, path.is_some().then(|| Proj::Field(name.name.clone()))),
+                ExprKind::TupleIndex { base, index, .. } => (*base, Some(Proj::Elem(*index))),
+                _ => return x,
+            };
+            if let (Some(p), Some(s)) = (path.as_deref_mut(), step) {
+                p.push(s);
+            }
+            x = self.ast.without_parens(base);
         }
-        x
     }
 
     /// The elements `xs` of a literal at `pos`, in the order written (§3.5):

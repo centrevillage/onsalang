@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§8.1", "§10", "§12.2", "§15.1"]
+
+// W6-02 U5b/t, R-32, S-1038 (§12.2; §8.1: "効果行に無い使用は E0601"; §10 rule 1; §15.1): the contrasts of negative/drop_over_pkg. A function of `lib` that overwrites a value that needs `Alloc` to drop has `uses {Alloc}`
+// in its signature, so the effect reaches this module: a caller without the row is an E0601 at the call (an E0901 for an `rt` caller, the callee is not `rt`), and a caller with the row is legal. An assignment to a
+// Copy field of a `lib.P`, and a call of a function of `lib` that overwrites only a Copy part, are legal in an `rt fn`. This version accepts the legal forms and reports the callers without the row (the effect
+// is written in the signature), and it keeps doing so. The functions are one-liners (S-783). One error per function (P-01).
+
+use lib.{P, Holder, lib_set_alloc, lib_put_alloc, lib_set_n, lib_put_copy}
+
+pub fn call_lib(inout p: P, t: Str) { lib_set_alloc(inout p, t) }   //~ E0601
+
+pub rt fn rt_call_lib(inout p: P, t: Str) { lib_set_alloc(inout p, t) }   //~ E0901
+
+pub fn call_lib_generic(inout h: Holder[Str], t: Str) { lib_put_alloc(inout h, t) }   //~ E0601
+
+pub rt fn rt_call_lib_generic(inout h: Holder[Str], t: Str) { lib_put_alloc(inout h, t) }   //~ E0901
+
+pub fn call_lib_with_the_row(inout p: P, t: Str) uses {Alloc} { lib_set_alloc(inout p, t) }
+
+pub fn set_with_the_row(inout p: P, t: Str) uses {Alloc} { p.s = t }
+
+pub rt fn set_copy_field(inout p: P, k: U32) { p.n = k }
+
+pub rt fn call_lib_copy(inout p: P, k: U32) { lib_set_n(inout p, k) }
+
+pub rt fn call_lib_copy_generic(inout h: Holder[U32], k: U32) { lib_put_copy(inout h, k) }

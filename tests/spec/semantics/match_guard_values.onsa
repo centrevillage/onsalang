@@ -25,7 +25,7 @@ fn mko() -> Option[Buf[F32]] uses {Alloc} {
   Some(Buf.zeroed(2))
 }
 
-fn reset(inout o: Option[Buf[F32]]) -> Bool {
+fn reset(inout o: Option[Buf[F32]]) -> Bool uses {Alloc} {
   o = None
   true
 }

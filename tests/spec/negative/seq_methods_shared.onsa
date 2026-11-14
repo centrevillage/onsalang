@@ -3,10 +3,12 @@
 // spec = ["§5.3", "§4.5", "§4.6", "§18.1"]
 // fixes = 0
 
-// S-847, S-853 (C): a Shared element (`Str`) is Dup and not Copy, so `get` and `fill!` of the array are there
+// S-847, S-853 (C), S-1040: a Shared element (`Str`) is Dup and not Copy, so `get` of the array is there
 // (values/seq_get_shared.onsa) and `slice`, `copy_from!` and `add_from!` are the E0416 of the call: a view of
 // a Shared element would be a `Span[Str]` (§4.5: the element of a `Span` is Copy), and `add_from!` is for
-// numbers. No candidate (`fixes = 0`). One error per function (P-01).
+// numbers. `fill!` is not there either (S-1040): it overwrites the elements, which drops the previous ones,
+// so the array is filled with `xs = [v; N]` (the function at the end). No candidate (`fixes = 0`). One error
+// per function (P-01).
 
 pub fn slice_of_a_borrowed_array(xs: [Str; 3]) -> U32 {
   xs.slice(0, 2).len() //~ E0416
@@ -33,7 +35,7 @@ pub fn add_from_of_str_arrays(inout xs: [Str; 3], ys: [Str; 3]) {
 }
 
 pub fn fine_len_get_and_fill(inout xs: [Str; 3], s: Str) -> U32 uses {Alloc} {
-  xs.fill!(s)
+  xs = [s; 3]
   match xs.get(0) {
     Some(t) => t.len(),
     None => 0,

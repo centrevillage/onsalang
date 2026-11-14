@@ -3654,6 +3654,51 @@ pub fn of_t[T: ?Dup](move g: G[T]) -> Buf[F32] uses {Alloc} { g.a }
     }
 }
 
+/// R-32, S-1038 (§12.2): an assignment drops the value its place held, at
+/// the target, of a `var`, a `move` or an `inout` parameter alike, by the
+/// type of the place: `sure` when no path moved it; none where every path
+/// moved it, of a Copy place, nor of `y = pass(move y)` (the value first,
+/// §3.5). Of a binding released on every path (S-1030), kept only if a
+/// release copies (`n`, used after on the path that does not assign).
+#[test]
+fn the_drop_points_of_an_overwrite() {
+    let (src, a, def) = clean(
+        "pub fn pass(move b: Buf[F32]) -> Buf[F32] uses {Alloc} { b }
+pub fn rel(move s: Str) -> Str uses {Alloc} { s }
+pub fn over(c: Bool, move a: Buf[F32], move b: Buf[F32], inout h: Holder, inout s: Str, t: Str) uses {Alloc} {
+  var x = mk()
+  take(move x)
+  x = mk()
+  var y = mk()
+  if c { take(move y) }
+  y = move a
+  y = pass(move y)
+  h.n = 1
+  h.buf = move b
+  s = t
+  take(move x)
+  take(move y)
+}
+pub fn released(c: Bool, move m: Str, move n: Str, t: Str) -> U32 uses {Alloc} {
+  let k = rel(m)
+  if c { m = t }
+  let j = rel(n)
+  if c { n = t }
+  k.len() + j.len() + n.len()
+}
+",
+    );
+    let at_of = |n: &str| {
+        let info = &a.bodies[&def(&a, n)];
+        (info.drops.iter())
+            .filter(|d| matches!(d.what, crate::body::Dropped::Overwrite(_)))
+            .map(|d| (&src[d.at.start as usize..d.at.end as usize], d.sure))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(at_of("over"), [("y", false), ("h.buf", true), ("s", true)]);
+    assert_eq!(at_of("released"), [("n", false)]);
+}
+
 /// A body keeps a drop point for each binding at each exit, so their number
 /// grows with the square of the input (`w602_breaks`): a new kind of drop
 /// keeps one `Vec` in `Dropped` (`TempRest` boxes its path), or the size grows.

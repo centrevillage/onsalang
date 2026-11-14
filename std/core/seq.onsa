@@ -1,9 +1,10 @@
 //! The methods of the sequences (spec §5.3): `[T; N]`, `Buf[T]` and
 //! `Span[T]`. An array and a `Buf` take from `Span[T]` the methods their own
 //! `impl`s have not, with the receiver as a `Span` of it (§5.3). The bounds
-//! are the conditions of the elements (S-853): `get` and `fill` of an array
-//! need a Dup element (the implicit `Dup` of `T`), the others a Copy one
-//! (`Span[T]`), `add_from` a number (`AnyNum`, S-855). `len` of an array is
+//! are the conditions of the elements (S-853): `get` of an array needs a
+//! Dup element (the implicit `Dup` of `T`); `fill`, which drops the elements
+//! it overwrites (S-1040), and the others a Copy one (`Span[T]`); `add_from`
+//! a number (`AnyNum`, S-855). `len` of an array is
 //! of any element, `Span`s too (S-862).
 //!
 //! An `impl` of an array, of `Span[T]` and a `target fn` that returns a
@@ -17,6 +18,9 @@ impl[T: ?Dup + ?Escape, const N: U32] [T; N] {
 impl[T, const N: U32] [T; N] {
   /// `Some` of the element at `i`, `None` past the end.
   pub rt fn get(self, i: U32) -> Option[T] { if i < N { Some(self[i]) } else { None } }
+}
+
+impl[T: Copy, const N: U32] [T; N] {
   /// Every element set to `v`.
   pub rt fn fill(inout self, v: T) {
     for i in 0 ..< N {

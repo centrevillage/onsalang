@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§10", "§12.2", "§15.1"]
+
+// W6-02 U5b/t, R-32, S-1038 (§12.2: "代入で上書きされる前の値の破棄を含む … : 要る"; §15.1): the assignments to the parts of the types of another module (`lib.onsa`: its own are marked there). The drop of the
+// old value is decided from the type of the place, whatever module declares the type: a field of a `lib.P` that is a `Str` is an E0601 here (an E0901 in an `rt fn`), the field of a `lib.Holder[T]` whose
+// `T` is a type parameter that is not `Copy` too, and so is the whole of a `lib.P`. This version counts no drop by an assignment (R-32), so none of these is reported today. The legal forms and the callers of
+// a function of `lib` with `uses {Alloc}` are in negative/drop_over_pkg_ok. The functions are one-liners (S-783). One error per function (P-01).
+
+use lib.{P, Holder}
+
+pub fn set_field(inout p: P, t: Str) { p.s = t }   //~ E0601
+
+pub rt fn rt_set_field(inout p: P, t: Str) { p.s = t }   //~ E0901
+
+pub fn set_holder(inout h: Holder[Str], t: Str) { h.v = t }   //~ E0601
+
+pub rt fn rt_set_holder(inout h: Holder[Str], t: Str) { h.v = t }   //~ E0901
+
+pub fn set_whole(inout p: P, q: P) { p = q }   //~ E0601
+
+pub rt fn rt_set_whole(inout p: P, q: P) { p = q }   //~ E0901
+
+pub fn put_generic[T](inout h: Holder[T], v: T) { h.v = v }   //~ E0601
+
+pub rt fn rt_put_generic[T](inout h: Holder[T], v: T) { h.v = v }   //~ E0901

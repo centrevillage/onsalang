@@ -28,17 +28,17 @@ pub fn mkoo() -> Option[Option[Buf[F32]]] uses {Alloc} {
   Some(Some(Buf.zeroed(2)))
 }
 
-pub fn reset(inout o: Option[Buf[F32]]) -> Bool {
+pub fn reset(inout o: Option[Buf[F32]]) -> Bool uses {Alloc} {
   o = None
   true
 }
 
-pub fn reset_oo(inout o: Option[Option[Buf[F32]]]) -> Bool {
+pub fn reset_oo(inout o: Option[Option[Buf[F32]]]) -> Bool uses {Alloc} {
   o = None
   true
 }
 
-pub fn clear_o(inout o: Option[Buf[F32]]) {
+pub fn clear_o(inout o: Option[Buf[F32]]) uses {Alloc} {
   o = None
 }
 

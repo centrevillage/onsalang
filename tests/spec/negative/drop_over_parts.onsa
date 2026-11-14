@@ -1,0 +1,135 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§10", "§12.2"]
+
+// W6-02 U5b/t, R-32, S-1038 (§12.2: "代入で上書きされる前の値の破棄を含む（代入先が `var`・`move` の引数・`inout` の引数のどの場所でも、フィールドと要素への代入はその場所の型で決まる）: 要る"): an assignment to
+// a part of an `inout` argument (a field, a field of a field, an element, an element of an element, the element of a field, the field of an element, an element of a tuple) drops the old value of that
+// place, and its type decides: a `Str`, a `Buf`, a struct or an array that holds one needs `Alloc`, so a function without `uses {Alloc}` is an E0601 and an `rt fn` an E0901. The other fields and elements
+// are not dropped. A part of a Copy type is no drop (negative/drop_over_ok.onsa), also when the rest of the argument holds a `Str` or a `Buf`. The methods assign a part of `self`. The new value is a borrowed
+// value (a copy), a `move`, a static value or `None`. This version counts no drop by an assignment (R-32), so none of these is reported today. The whole of an argument is in negative/drop_over_whole.onsa. The
+// functions are one-liners (S-783). One error per function (P-01).
+
+pub struct P {
+  s: Str,
+  n: U32,
+}
+
+pub struct Q {
+  p: P,
+  k: U32,
+}
+
+pub struct B {
+  b: Buf[F32],
+  n: U32,
+}
+
+pub struct R {
+  o: Option[Buf[F32]],
+  n: U32,
+}
+
+pub struct A {
+  xs: [Str; 2],
+  n: U32,
+}
+
+// ------------------------------------------------------------------ a field, a field of a field
+
+pub fn field_str(inout p: P, t: Str) { p.s = t }   //~ E0601
+
+pub rt fn rt_field_str(inout p: P, t: Str) { p.s = t }   //~ E0901
+
+pub fn field_static(inout p: P) { p.s = "b" }   //~ E0601
+
+pub rt fn rt_field_static(inout p: P) { p.s = "b" }   //~ E0901
+
+pub fn field_buf(inout b: B, move c: Buf[F32]) { b.b = move c }   //~ E0601
+
+pub rt fn rt_field_buf(inout b: B, move c: Buf[F32]) { b.b = move c }   //~ E0901
+
+pub fn field_option_buf(inout r: R) { r.o = None }   //~ E0601
+
+pub rt fn rt_field_option_buf(inout r: R) { r.o = None }   //~ E0901
+
+pub fn field_nested(inout q: Q, t: Str) { q.p.s = t }   //~ E0601
+
+pub rt fn rt_field_nested(inout q: Q, t: Str) { q.p.s = t }   //~ E0901
+
+pub fn field_struct(inout q: Q, p: P) { q.p = p }   //~ E0601
+
+pub rt fn rt_field_struct(inout q: Q, p: P) { q.p = p }   //~ E0901
+
+// ------------------------------------------------------------------ an element, an element of an element, an element of a tuple
+
+pub fn element_str(inout xs: [Str; 2], t: Str) { xs[0] = t }   //~ E0601
+
+pub rt fn rt_element_str(inout xs: [Str; 2], t: Str) { xs[0] = t }   //~ E0901
+
+pub fn element_index(inout xs: [Str; 2], i: U32, t: Str) { xs[i] = t }   //~ E0601
+
+pub rt fn rt_element_index(inout xs: [Str; 2], i: U32, t: Str) { xs[i] = t }   //~ E0901
+
+pub fn element_buf(inout xs: [Buf[F32]; 2], move c: Buf[F32]) { xs[1] = move c }   //~ E0601
+
+pub rt fn rt_element_buf(inout xs: [Buf[F32]; 2], move c: Buf[F32]) { xs[1] = move c }   //~ E0901
+
+pub fn element_option(inout xs: [Option[Str]; 2]) { xs[0] = None }   //~ E0601
+
+pub rt fn rt_element_option(inout xs: [Option[Str]; 2]) { xs[0] = None }   //~ E0901
+
+pub fn element_nested(inout xs: [[Str; 2]; 2], t: Str) { xs[0][1] = t }   //~ E0601
+
+pub rt fn rt_element_nested(inout xs: [[Str; 2]; 2], t: Str) { xs[0][1] = t }   //~ E0901
+
+pub fn element_row(inout xs: [[Str; 2]; 2], row: [Str; 2]) { xs[1] = row }   //~ E0601
+
+pub rt fn rt_element_row(inout xs: [[Str; 2]; 2], row: [Str; 2]) { xs[1] = row }   //~ E0901
+
+pub fn tuple_element(inout p: (Str, U32), t: Str) { p.0 = t }   //~ E0601
+
+pub rt fn rt_tuple_element(inout p: (Str, U32), t: Str) { p.0 = t }   //~ E0901
+
+// ------------------------------------------------------------------ the element of a field, the field of an element
+
+pub fn field_element(inout a: A, t: Str) { a.xs[0] = t }   //~ E0601
+
+pub rt fn rt_field_element(inout a: A, t: Str) { a.xs[0] = t }   //~ E0901
+
+pub fn element_field(inout ps: [P; 2], t: Str) { ps[0].s = t }   //~ E0601
+
+pub rt fn rt_element_field(inout ps: [P; 2], t: Str) { ps[0].s = t }   //~ E0901
+
+pub fn element_field_buf(inout bs: [B; 2], move c: Buf[F32]) { bs[1].b = move c }   //~ E0601
+
+pub rt fn rt_element_field_buf(inout bs: [B; 2], move c: Buf[F32]) { bs[1].b = move c }   //~ E0901
+
+// ------------------------------------------------------------------ `self` and its parts
+
+impl P {
+  pub fn set_s(inout self, t: Str) { self.s = t }   //~ E0601
+
+  pub rt fn rt_set_s(inout self, t: Str) { self.s = t }   //~ E0901
+
+  pub fn reset(inout self, o: P) { self = o }   //~ E0601
+
+  pub rt fn rt_reset(inout self, o: P) { self = o }   //~ E0901
+}
+
+impl Q {
+  pub fn set_inner(inout self, t: Str) { self.p.s = t }   //~ E0601
+
+  pub rt fn rt_set_inner(inout self, t: Str) { self.p.s = t }   //~ E0901
+}
+
+impl R {
+  pub fn clear(inout self) { self.o = None }   //~ E0601
+
+  pub rt fn rt_clear(inout self) { self.o = None }   //~ E0901
+}
+
+impl A {
+  pub fn set_first(inout self, t: Str) { self.xs[0] = t }   //~ E0601
+
+  pub rt fn rt_set_first(inout self, t: Str) { self.xs[0] = t }   //~ E0901
+}

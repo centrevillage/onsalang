@@ -1,0 +1,94 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§4.5", "§4.6", "§12.2", "§18.1"]
+// fixes = 0
+
+// W6-02 U5b/t, S-1040, S-1038 (§5.3: "`[T; N]` は `len()` を要素によらず持ち、`get` は要素が Dup のとき …、`fill!`・`slice`・`copy_from!`・`add_from!` は要素が Copy のとき持つ（満たさなければ呼び出しの位置の
+// E0416 …）。要素を上書きするメソッドが Copy に限るのは、上書きが前の要素を破棄し（§12.2）、`rt` のメソッドに書けないからである。Copy でない要素の配列を一つの値で埋めるには `xs = [v; N]` を書く
+// （前の要素の破棄の `Alloc` が要る）"): `fill!` of an array whose element is not Copy is the E0416 of the call, whatever the receiver is and whatever the element is: a Shared value (a `Str`), an `Option` of
+// one, a tuple, an array or a struct that holds one, and the element of a type parameter that is not `Copy` (a `T` without a bound is Dup and not Copy, §4.5). The element is judged by what the type is known to
+// be in the body, so the same call in a function whose `T` is `Copy` is legal (negative/fill_copy_ok.onsa). Both the plain function and the `rt fn` have the error, because it is the type that is wrong (E0416, not
+// E0601 or E0901), and it is the only error of the function (P-01: the unit stops at the first error). There is no candidate (`fixes = 0`): the note shows `xs = [v; N]`. This version gives `fill!` to an array
+// of any Dup element (S-853), so none of these is reported today. The `[Buf[F32]; 2]` receiver (an Affine element) is in negative/seq_fill_affine.onsa and the `T: ?Dup` receiver is in negative/seq_generic_receivers.onsa.
+
+pub struct P {
+  s: Str,
+  n: U32,
+}
+
+pub struct Rack {
+  names: [Str; 2],
+}
+
+pub struct Holder[T] {
+  items: [T; 2],
+}
+
+// ------------------------------------------------------------------ the element is a Shared value, or holds one
+
+pub fn str_elements(inout xs: [Str; 2], s: Str) { xs.fill!(s) }   //~ E0416
+
+pub rt fn rt_str_elements(inout xs: [Str; 2], s: Str) { xs.fill!(s) }   //~ E0416
+
+pub fn str_literal(inout xs: [Str; 3]) { xs.fill!("z") }   //~ E0416
+
+pub rt fn rt_str_literal(inout xs: [Str; 3]) { xs.fill!("z") }   //~ E0416
+
+pub fn option_elements(inout xs: [Option[Str]; 2]) { xs.fill!(None) }   //~ E0416
+
+pub rt fn rt_option_elements(inout xs: [Option[Str]; 2]) { xs.fill!(None) }   //~ E0416
+
+pub fn tuple_elements(inout xs: [(Str, U32); 2], p: (Str, U32)) { xs.fill!(p) }   //~ E0416
+
+pub rt fn rt_tuple_elements(inout xs: [(Str, U32); 2], p: (Str, U32)) { xs.fill!(p) }   //~ E0416
+
+pub fn struct_elements(inout xs: [P; 2], p: P) { xs.fill!(p) }   //~ E0416
+
+pub rt fn rt_struct_elements(inout xs: [P; 2], p: P) { xs.fill!(p) }   //~ E0416
+
+pub fn array_elements(inout xs: [[Str; 2]; 2], row: [Str; 2]) { xs.fill!(row) }   //~ E0416
+
+pub rt fn rt_array_elements(inout xs: [[Str; 2]; 2], row: [Str; 2]) { xs.fill!(row) }   //~ E0416
+
+// ------------------------------------------------------------------ the receiver is a part of a value: an inner array, a field, `self`, a local
+
+pub fn inner_array(inout rows: [[Str; 2]; 2], s: Str) { rows[0].fill!(s) }   //~ E0416
+
+pub rt fn rt_inner_array(inout rows: [[Str; 2]; 2], s: Str) { rows[0].fill!(s) }   //~ E0416
+
+pub fn field(inout r: Rack, s: Str) { r.names.fill!(s) }   //~ E0416
+
+pub rt fn rt_field(inout r: Rack, s: Str) { r.names.fill!(s) }   //~ E0416
+
+impl Rack {
+  pub fn fill_names(inout self, s: Str) { self.names.fill!(s) }   //~ E0416
+
+  pub rt fn rt_fill_names(inout self, s: Str) { self.names.fill!(s) }   //~ E0416
+}
+
+pub fn local_var(s: Str) uses {Alloc} {
+  var xs: [Str; 2] = ["a", "bc"]
+  xs.fill!(s) //~ E0416
+}
+
+pub fn in_a_loop(inout xs: [Str; 2], ys: [Str; 2]) { for s in ys { xs.fill!(s) } }   //~ E0416
+
+pub fn in_a_branch(inout xs: [Str; 2], s: Str, c: Bool) { if c { xs.fill!(s) } }   //~ E0416
+
+pub fn with_alloc(inout xs: [Str; 2], s: Str) uses {Alloc} { xs.fill!(s) }   //~ E0416
+
+// ------------------------------------------------------------------ the element is a type parameter that is not `Copy`
+
+pub fn param_unbounded[T, const N: U32](inout xs: [T; N], v: T) { xs.fill!(v) }   //~ E0416
+
+pub rt fn rt_param_unbounded[T, const N: U32](inout xs: [T; N], v: T) { xs.fill!(v) }   //~ E0416
+
+pub fn param_with_a_trait_bound[T: Eq, const N: U32](inout xs: [T; N], v: T) { xs.fill!(v) }   //~ E0416
+
+pub fn param_in_an_option[T](inout xs: [Option[T]; 2]) { xs.fill!(None) }   //~ E0416
+
+pub fn param_in_a_field[T](inout h: Holder[T], v: T) { h.items.fill!(v) }   //~ E0416
+
+impl[T] Holder[T] {
+  pub fn fill_items(inout self, v: T) { self.items.fill!(v) }   //~ E0416
+}

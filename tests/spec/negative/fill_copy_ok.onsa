@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§4.5", "§4.6", "§10", "§12.2"]
+
+// W6-02 U5b/t, S-1040 (§5.3: "`fill!`・`slice`・`copy_from!`・`add_from!` は要素が Copy のとき持つ"; `Span[T]` と `Buf[T]` は要素が Copy): the contrasts of negative/fill_copy_elements.onsa. `fill!` of an
+// array whose element is Copy overwrites elements that need no drop, so it is legal in an `rt fn` too: numbers, `Bool`, an `Option` of a number, a tuple of numbers, an array of numbers (a row), a struct of
+// numbers, a field and a part of `self` that hold such an array, `Buf[F32]` and `Span[F32]` (always Copy elements), a `T: Copy` and a `T` with a number trait. This version accepts all of them, and
+// they stay accepted (the elements need no `Alloc`, so the new rule of S-1040 and the drop of an overwrite, S-1038, do not touch them). The array of `Str` is filled by `xs = [v; N]`, in a function with
+// `uses {Alloc}` (negative/drop_over_ok.onsa). The functions are one-liners.
+
+pub struct Pt {
+  x: F32,
+  y: F32,
+}
+
+pub struct C {
+  xs: [F32; 4],
+  name: Str,
+}
+
+pub rt fn fill_f32(inout xs: [F32; 4]) { xs.fill!(0.0) }
+
+pub rt fn fill_u32(inout xs: [U32; 3], v: U32) { xs.fill!(v) }
+
+pub rt fn fill_bool(inout xs: [Bool; 2]) { xs.fill!(true) }
+
+pub rt fn fill_rows(inout xs: [[F32; 2]; 2], row: [F32; 2]) { xs.fill!(row) }
+
+pub rt fn fill_a_row(inout xs: [[F32; 2]; 2], v: F32) { xs[0].fill!(v) }
+
+pub rt fn fill_tuples(inout xs: [(U32, F32); 2], p: (U32, F32)) { xs.fill!(p) }
+
+pub rt fn fill_options(inout xs: [Option[U32]; 2]) { xs.fill!(None) }
+
+pub rt fn fill_structs(inout ps: [Pt; 2], p: Pt) { ps.fill!(p) }
+
+pub rt fn fill_a_field(inout c: C, v: F32) { c.xs.fill!(v) }
+
+pub rt fn fill_buf(inout b: Buf[F32]) { b.fill!(0.0) }
+
+pub rt fn fill_span(inout s: Span[F32]) { s.fill!(1.0) }
+
+pub rt fn fill_copy[T: Copy, const N: U32](inout xs: [T; N], v: T) { xs.fill!(v) }
+
+pub rt fn fill_copy_and_a_bound[T: Copy + Eq, const N: U32](inout xs: [T; N], v: T) { xs.fill!(v) }
+
+pub rt fn fill_num[T: Num, const N: U32](inout xs: [T; N], v: T) { xs.fill!(v) }
+
+pub fn fill_in_a_plain_function(inout xs: [F32; 4]) { xs.fill!(0.0) }
+
+impl C {
+  pub rt fn fill_self(inout self, v: F32) { self.xs.fill!(v) }
+}
+
+pub fn fill_a_whole_array_of_str(inout xs: [Str; 2], s: Str) uses {Alloc} { xs = [s; 2] }

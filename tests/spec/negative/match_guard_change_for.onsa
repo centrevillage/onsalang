@@ -15,7 +15,7 @@ pub fn mko() -> Option[Buf[F32]] uses {Alloc} {
   Some(Buf.zeroed(2))
 }
 
-pub fn clear_o(inout o: Option[Buf[F32]]) {
+pub fn clear_o(inout o: Option[Buf[F32]]) uses {Alloc} {
   o = None
 }
 

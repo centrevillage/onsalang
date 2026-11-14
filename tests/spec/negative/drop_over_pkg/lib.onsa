@@ -1,0 +1,19 @@
+// The types and functions of negative/drop_over_pkg/main.onsa that overwrite a value (W6-02 U5b/t, S-1038, spec §12.2, §15.1).
+// The drop of the old value is reported where the assignment is written, wherever the function is called from: here, in the module that declares it. The functions are one-liners (S-783).
+
+pub struct P {
+  s: Str,
+  n: U32,
+}
+
+pub struct Holder[T] {
+  v: T,
+}
+
+pub fn lib_set(inout p: P, t: Str) { p.s = t }   //~ E0601
+
+pub rt fn rt_lib_set(inout p: P, t: Str) { p.s = t }   //~ E0901
+
+pub fn lib_put[T](inout h: Holder[T], v: T) { h.v = v }   //~ E0601
+
+pub rt fn rt_lib_put[T](inout h: Holder[T], v: T) { h.v = v }   //~ E0901
