@@ -269,8 +269,12 @@ pub(crate) fn read_effects(
                     _ => set.not_effects.push(n.name.clone()),
                 }
             }
-            Err(e) if a.unread_path(def, from, p, &e) => {}
+            Err(e) if a.unread_path(def, from, p, &e) => meant(a, &n.name, &mut set),
             Err(e) => {
+                // SPEC-GAP(S-1062): a name not found may mean an effect of its name too.
+                if matches!(e, crate::ResolveError::NotFound { .. }) {
+                    meant(a, &n.name, &mut set);
+                }
                 let fix = match (&e, p.segments.as_slice()) {
                     (crate::ResolveError::NotFound { .. }, [_]) => {
                         a.modules.std_effect_use(from, &n.name, (&a.prelude, &a.defs, &a.builtin_key))
@@ -297,6 +301,15 @@ pub(crate) fn read_effects(
         errors.insert(place, d.with_found(p.dotted()));
     }
     (set, errors)
+}
+
+/// What a name not read in an effect row, of the last name `name`, may have
+/// meant (§18.1, S-691): each effect declared with that name, added to `set`.
+/// O(D) for D declarations, of a name in error alone.
+fn meant(a: &Analysis, name: &str, set: &mut EffectSet) {
+    let effects =
+        (a.defs.iter().enumerate()).filter(|(_, d)| d.name == name && matches!(d.kind, DefKind::Effect { .. }));
+    effects.for_each(|(i, _)| set.insert_meant(DefId(i as u32)));
 }
 
 /// Whether the path `tr` of `impl[gs] tr for Ty` names a trait by the names

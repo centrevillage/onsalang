@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§8.1"]
+
+// W6-03 U7a, R-460, §18.1 ("読めなかった部分…を使う側には診断を出さない"): where the type expected for an anonymous function is not read
+// (a type not found, a failed name, as a parameter, an annotated `let` and a field), its row is not known, and its uses of `Alloc` are
+// no E0601.
+use kp.{F}   //~ E0302
+
+pub fn ap(g: Nosuch, n: U32) -> U32 { 0 }   //~ E0302
+
+pub fn ap_held(g: F, n: U32) -> U32 { 0 }
+
+pub struct W { h: F }
+
+pub fn not_found(n: U32) -> U32 {
+  ap(fn(x: U32) -> U32 {
+    let _ = "{x}"
+    x
+  }, n)
+}
+
+pub fn held(n: U32) -> U32 {
+  ap_held(fn(x: U32) -> U32 {
+    let _ = "{x}"
+    x
+  }, n)
+}
+
+pub fn annotated(n: U32) -> U32 {
+  let g: F = fn(x: U32) -> U32 {
+    let _ = "{x}"
+    x
+  }
+  let _ = g
+  n
+}
+
+pub fn field() -> W {
+  W { h: fn(x: U32) -> U32 {
+    let _ = "{x}"
+    x
+  } }
+}

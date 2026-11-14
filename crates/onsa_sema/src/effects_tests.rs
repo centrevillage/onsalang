@@ -135,3 +135,32 @@ fn effect_rows_are_ordered_sets() {
     // The union does not add the variables (they are not compared, R-27 (3)).
     assert!(u.vars.is_empty() && r.within(&u) && s.within(&u) && !u.within(&s) && s.is_open());
 }
+
+/// S-691, S-1062 (W6-03 U7a): a name not read in a row (an E0304, a name
+/// not found) keeps in the type the effects of its last name it may have
+/// meant, which the row admits where it is wanted but does not have nor show;
+/// a name of no effect (`Aloc`) keeps none.
+#[test]
+fn a_name_not_read_keeps_what_it_may_have_meant() {
+    let src = "pub enum Alloc { A }\npub fn r(g: fn() uses {Random}) -> U32 { 0 }\npub fn s(g: fn() uses {Aloc}) -> U32 { 0 }\npub fn t(g: fn() uses {Alloc}) -> U32 { 0 }\n";
+    let a = check(src);
+    assert_eq!(codes(&a), vec![Code::E0302, Code::E0302, Code::E0304]);
+    let row = |name: &str| {
+        let ty = a.def(crate::tests::def(&a, name)).as_fn().unwrap().params[0].ty;
+        let crate::ty::Ty::Fn(f) = a.types.get(ty) else { panic!("{name}: no function type") };
+        f.effects.clone()
+    };
+    let effect = |name: &str| {
+        let is = |d: &crate::def::Def| d.name == name && matches!(d.kind, crate::def::DefKind::Effect { .. });
+        crate::DefId(a.defs.iter().position(is).expect("std declares it") as u32)
+    };
+    let (random, alloc) = (effect("Random"), a.alloc.expect("std declares `Alloc`"));
+    let (rr, rs, rt) = (row("r"), row("s"), row("t"));
+    assert!(rr.admits(random) && !rr.has(random) && rr.is_empty(), "{rr:?}");
+    assert!(rt.admits(alloc) && !rt.has(alloc) && rt.is_empty(), "{rt:?}");
+    assert_eq!(rs, crate::ty::EffectSet::default());
+    let mut real = crate::ty::EffectSet::default();
+    real.insert(alloc);
+    // Of the row wanted only: an `Alloc` fits where `t`'s row is, not the other way.
+    assert!(real.within(&rt) && rt.within(&crate::ty::EffectSet::default()) && !real.within(&rr));
+}

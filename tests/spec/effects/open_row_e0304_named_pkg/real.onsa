@@ -1,0 +1,6 @@
+// The function whose row reads the effect `Alloc` (no item `Alloc` clashes in this module), for main.onsa.
+
+pub fn b(x: U32) -> U32 uses {Alloc} {
+  let _ = "{x}"
+  x
+}

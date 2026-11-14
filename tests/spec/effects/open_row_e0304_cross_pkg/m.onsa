@@ -1,0 +1,5 @@
+// The function type of another module, for main.onsa: the item `Alloc` here is an E0304, so the row of `ap`'s parameter may have meant `Alloc`.
+
+pub enum Alloc { A }   //~ E0304
+
+pub fn ap(g: fn(U32) -> U32 uses {Alloc}, n: U32) -> U32 { g.(n) }

@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§8.1", "§15.1"]
+
+// W6-03 U7a, S-691 (the note of 2026-11-15), S-675, §18.1: "効果行では、読めた効果…を残し、失敗した名前は未知の効果として、行を開いた行にする
+// （その名前が指しえた効果に頼る判定には診断を出さない）。指しえた効果は、その経路の最後の名前と同じ名前の効果である". The item `Alloc` is an
+// E0304 (it clashes with the prelude, §15.1), so the `Alloc` of each row below is a name not read that may have meant the effect `Alloc`:
+// the uses of `Alloc` in these bodies are no E0601. A caller counts the effects read alone, so `both` needs no `Alloc` of its own row.
+pub enum Alloc { A }   //~ E0304
+
+pub fn k() -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(2)
+}
+
+pub fn shown(x: U32) -> U32 uses {Alloc} {
+  let _ = "{x}"
+  x
+}
+
+pub fn both(x: U32) -> U32 uses {Alloc} { shown(x) + k().len() }

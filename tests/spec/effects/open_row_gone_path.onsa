@@ -1,0 +1,12 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§8.1"]
+
+// W6-03 U7a, S-691 (the note of 2026-11-15), §18.1: "指しえた効果は、その経路の最後の名前と同じ名前の効果である". The head `gone` of the
+// path is a failed name, so `gone.Alloc` may have meant the effect `Alloc`: the interpolation is no E0601.
+use kp.{gone}   //~ E0302
+
+pub fn shown(x: U32) -> U32 uses {gone.Alloc} {
+  let _ = "{x}"
+  x
+}

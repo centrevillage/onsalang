@@ -121,6 +121,8 @@ fn notes(
             Some(RowFrom::Joining) => format!(
                 "{fun} is a later branch of a merge, which takes no effect row from the one before, so its row is empty; {write} (§4.7, §8.1)"
             ),
+            // `Record::lacking` checks no use of it.
+            Some(RowFrom::Unread) => bug(Some(fn_at), "an E0601 of an anonymous function whose row is not known"),
             Some(RowFrom::NoneExpected) | None => {
                 format!("no function type is expected where {fun} is, so its effect row is empty; {write} (§8.1)")
             }

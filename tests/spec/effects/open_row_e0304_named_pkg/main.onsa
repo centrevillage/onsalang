@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§8.1", "§4.7"]
+
+// W6-03 U7a, S-691 (the note of 2026-11-15), S-1031, §18.1: "開いた行の関数型を期待する位置には、指しえた効果だけが足りない関数も置ける".
+// The item `Alloc` of this module is an E0304, so each `uses {Alloc}` here is a row that may have meant `Alloc`; `real.b` reads `Alloc`.
+// `b` fits where such a row is expected (§8.1 rule 2): a parameter (`named`), the later argument of `pick` checked against the type the first
+// decided (`first_decides`, S-1031), in a type argument (`in_option`), an assignment (`assigned`). A merge (§4.7) joins the rows, what the
+// names not read may have meant too: `joined` calls through a row that may have meant `Alloc`, and `joined_pure`, whose row is empty, calls
+// the `Alloc` that `b` reads (an E0601: the join keeps it, and a caller counts the effects read).
+use real.b
+
+pub enum Alloc { A }   //~ E0304
+
+pub fn ap(g: fn(U32) -> U32 uses {Alloc}, n: U32) -> U32 { g.(n) }
+
+pub fn pick[T](a: T, c: T) -> T { a }
+
+pub fn k(x: U32) -> U32 uses {Alloc} { x }
+
+pub fn pure(x: U32) -> U32 { x }
+
+pub fn named(n: U32) -> U32 { ap(b, n) }
+
+pub fn first_decides() {
+  let _ = pick(k, b)
+  let _ = pick(b, k)
+}
+
+pub fn in_option() -> Option[fn(U32) -> U32 uses {Alloc}] { Some(b) }
+
+pub fn assigned() -> U32 {
+  var f: fn(U32) -> U32 uses {Alloc} = pure
+  f = b
+  f.(1)
+}
+
+pub fn joined(c: Bool) -> U32 uses {Alloc} {
+  let f = if c { k } else { b }
+  f.(1)
+}
+
+pub fn joined_pure(c: Bool) -> U32 {
+  let f = if c { k } else { b }
+  f.(1)   //~ E0601
+}

@@ -352,11 +352,12 @@ impl Infer {
         let (sa, sb) = (self.shallow(types, a), self.shallow(types, b));
         match (types.get(sa).clone(), types.get(sb).clone()) {
             (Ty::Var(_), Ty::Fn(_)) => b,
-            (Ty::Fn(f), Ty::Fn(g)) if f.rt && !g.rt || !g.effects.within(&f.effects) => {
+            // What names not read may have meant joins too (S-691).
+            (Ty::Fn(f), Ty::Fn(g)) => {
                 let mut effects = f.effects.clone();
                 effects.union(&g.effects);
                 let rt = f.rt && g.rt;
-                types.intern(Ty::Fn(FnTy { rt, effects, ..f }))
+                if rt == f.rt && effects == f.effects { a } else { types.intern(Ty::Fn(FnTy { rt, effects, ..f })) }
             }
             _ => a,
         }

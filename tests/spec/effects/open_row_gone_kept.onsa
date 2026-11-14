@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§8.1"]
+
+// W6-03 U7a, S-691 (the note of 2026-11-15), §18.1: "指しえた効果は、その経路の最後の名前と同じ名前の効果である". `Gone` may have meant no
+// effect `Alloc`, so a function whose row reads `Alloc` does not fit where `uses {Gone}` is expected (E0401, §8.1 rule 2), an anonymous
+// function written there has a row without `Alloc` (E0601), and a body whose row is `uses {Gone}` cannot use `Alloc` (E0601).
+use kp.{Gone}   //~ E0302
+
+pub fn b(x: U32) -> U32 uses {Alloc} {
+  let _ = "{x}"
+  x
+}
+
+pub fn ap(g: fn(U32) -> U32 uses {Gone}, n: U32) -> U32 { 0 }
+
+pub fn named(n: U32) -> U32 { ap(b, n) }   //~ E0401
+
+pub fn closure(n: U32) -> U32 {
+  ap(fn(x: U32) -> U32 {
+    let _ = "{x}"   //~ E0601
+    x
+  }, n)
+}
+
+pub fn own() -> Buf[F32] uses {Gone} {
+  Buf.zeroed(2)   //~ E0601
+}

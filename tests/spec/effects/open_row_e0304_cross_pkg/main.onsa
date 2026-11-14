@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§8.1", "§15.1"]
+
+// W6-03 U7a, S-691 (the note of 2026-11-15), §18.1: the row of a function type that may have meant `Alloc` is so in every module that
+// expects it (`m.ap`, whose module has the item `Alloc` that is an E0304): the anonymous function here takes that row, and its use of
+// `Alloc` is no E0601.
+use m.ap
+
+pub fn t(n: U32) -> U32 {
+  ap(fn(x: U32) -> U32 {
+    let _ = "{x}"
+    x
+  }, n)
+}

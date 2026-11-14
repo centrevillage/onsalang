@@ -1,0 +1,11 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§10", "§8.1"]
+
+// W6-03 U7a, S-691 (the note of 2026-11-15), §18.1: what a name not read may have meant is not counted where the effects read are (§10 rule 1,
+// E0902): the `Alloc` of these `rt` rows is the item `Alloc`, an E0304, so neither row is an E0902.
+pub enum Alloc { A }   //~ E0304
+
+pub fn ap(g: rt fn(U32) -> U32 uses {Alloc}, n: U32) -> U32 { 0 }
+
+pub rt fn r(x: U32) -> U32 uses {Alloc} { x }

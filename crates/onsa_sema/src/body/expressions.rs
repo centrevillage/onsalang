@@ -643,6 +643,9 @@ impl<'a> Checker<'a> {
             None if self.joining => (RowFrom::Joining, crate::ty::EffectSet::default()),
             None => match (&exp_fn, expected) {
                 (Some(f), Some(t)) => (RowFrom::Expected(t), f.effects.clone()),
+                (None, Some(t)) if matches!(self.ty(self.shallow(t)), Ty::Error) => {
+                    (RowFrom::Unread, crate::ty::EffectSet::default())
+                }
                 _ => (RowFrom::NoneExpected, crate::ty::EffectSet::default()),
             },
         };

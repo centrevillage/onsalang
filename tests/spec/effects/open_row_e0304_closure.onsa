@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§8.1"]
+
+// W6-03 U7a, S-691 (the note of 2026-11-15), §18.1: "関数の行、無名関数に書いた行、関数型の行のどれでも同じ". The row written on an
+// anonymous function, and the row of the function type of an annotated `let`, may have meant `Alloc` (the item `Alloc` is an E0304), so the
+// bodies are no E0601. Calling the value counts the effects read alone (none), so `t` needs no row (§8.1).
+pub enum Alloc { A }   //~ E0304
+
+pub fn written(n: U32) -> U32 {
+  let g = fn(x: U32) -> U32 uses {Alloc} {
+    let _ = "{x}"
+    x
+  }
+  g.(n)
+}
+
+pub fn annotated(n: U32) -> U32 {
+  let g: fn(U32) -> U32 uses {Alloc} = fn(x: U32) -> U32 {
+    let _ = "{x}"
+    x
+  }
+  g.(n)
+}

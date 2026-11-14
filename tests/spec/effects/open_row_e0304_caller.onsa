@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§8.1"]
+
+// W6-03 U7a, S-691, §18.1: "呼ぶ側に数える効果は読めた効果だけ". The row of `k` may have meant `Alloc` (the item `Alloc` is an
+// E0304), so its body is no E0601; a caller counts none of it, so `calls`, which returns what `k` makes, is fine with no row, and `drops` is an E0601 for the `Buf` it drops,
+// a use of `Alloc` of its own (§8.1, §12.2).
+pub enum Alloc { A }   //~ E0304
+
+pub fn k() -> Buf[F32] uses {Alloc} { Buf.zeroed(2) }
+
+pub fn calls() -> Buf[F32] { k() }
+
+pub fn drops() -> U32 {
+  let _ = k()   //~ E0601
+  1
+}

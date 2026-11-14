@@ -276,6 +276,9 @@ pub enum RowFrom {
     NoneExpected,
     /// A later branch of a merge, which takes no row (S-1032 (ii-3)).
     Joining,
+    /// The type expected there is not read (an error type): the row is not
+    /// known, and its uses are not checked (§18.1, R-460).
+    Unread,
 }
 
 /// What binds a part of a value to no name (§5.4, S-1036).

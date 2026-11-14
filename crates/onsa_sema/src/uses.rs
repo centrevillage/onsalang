@@ -122,8 +122,12 @@ impl<'a> Record<'a> {
         // SPEC-GAP(S-1059): the row as written, `Alloc` too in an `rt` one (E0902).
         let (mut first, mut seen): (Vec<(u32, DefId, &Use<'a>)>, HashSet<_>) = (Vec::new(), HashSet::default());
         for u in &self.uses {
-            let row = &self.scopes[u.scope as usize].row;
-            for e in a.alloc.into_iter().filter(|&e| !row.has(e) && u.needs(a, e)) {
+            let scope = &self.scopes[u.scope as usize];
+            // An anonymous function where a type not read is expected has no known row (R-460).
+            if scope.from == Some(RowFrom::Unread) {
+                continue;
+            }
+            for e in a.alloc.into_iter().filter(|&e| !scope.row.admits(e) && u.needs(a, e)) {
                 if seen.insert((u.scope, e)) {
                     first.push((u.scope, e, u));
                 }

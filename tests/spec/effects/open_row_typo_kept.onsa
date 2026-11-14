@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§8.1"]
+
+// W6-03 U7a, S-1062 (the provisional reading: a name not found may have meant the effect of its name, as a failed name, S-691): `Aloc` is
+// the name of no effect, so it may have meant none. The anonymous function where `fn(U32) -> U32 uses {Aloc}` is expected has no `Alloc`
+// (E0601), and a function whose row reads `Alloc` does not fit there (E0401, §8.1 rule 2).
+pub fn b(x: U32) -> U32 uses {Alloc} {
+  let _ = "{x}"
+  x
+}
+
+pub fn ap(g: fn(U32) -> U32 uses {Aloc}, n: U32) -> U32 { 0 }   //~ E0302
+
+pub fn ap2(g: fn(U32) -> U32 uses {Aloc}, n: U32) -> U32 { 0 }   //~ E0302
+
+pub fn closure(n: U32) -> U32 {
+  ap(fn(x: U32) -> U32 {
+    let _ = "{x}"   //~ E0601
+    x
+  }, n)
+}
+
+pub fn named(n: U32) -> U32 { ap2(b, n) }   //~ E0401

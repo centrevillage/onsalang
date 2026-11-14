@@ -1,0 +1,63 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§8.1"]
+
+// W6-03 U7a, S-691 (the note of 2026-11-15), S-1032, §18.1: "開いた行の関数型を期待する位置には、指しえた効果だけが足りない関数も置ける".
+// The item `Alloc` is an E0304, so the row `uses {Alloc}` of each function type below may have meant `Alloc`; an anonymous function written
+// where it is expected (a parameter, a result, a field, a constant, a type alias, a method's parameter, §8.1) has that row, and its use of
+// `Alloc` is no E0601.
+pub enum Alloc { A }   //~ E0304
+
+type F = fn(U32) -> U32 uses {Alloc}
+
+pub struct W { h: fn(U32) -> U32 uses {Alloc} }
+
+pub struct S { a: U32 }
+
+impl S {
+  pub fn run(self, f: fn(U32) -> U32 uses {Alloc}) -> U32 { f.(self.a) }
+}
+
+const C: fn(U32) -> U32 uses {Alloc} = fn(x: U32) -> U32 {
+  let _ = "{x}"
+  x
+}
+
+pub fn ap(g: fn(U32) -> U32 uses {Alloc}, n: U32) -> U32 { g.(n) }
+
+pub fn ap_alias(g: F, n: U32) -> U32 { g.(n) }
+
+pub fn param(n: U32) -> U32 {
+  ap(fn(x: U32) -> U32 {
+    let _ = "{x}"
+    x
+  }, n)
+}
+
+pub fn alias(n: U32) -> U32 {
+  ap_alias(fn(x: U32) -> U32 {
+    let _ = "{x}"
+    x
+  }, n)
+}
+
+pub fn result() -> (fn(U32) -> U32 uses {Alloc}) {
+  fn(x: U32) -> U32 {
+    let _ = "{x}"
+    x
+  }
+}
+
+pub fn field() -> W {
+  W { h: fn(x: U32) -> U32 {
+    let _ = "{x}"
+    x
+  } }
+}
+
+pub fn method(s: S) -> U32 {
+  s.run(fn(x: U32) -> U32 {
+    let _ = "{x}"
+    x
+  })
+}

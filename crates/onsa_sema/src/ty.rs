@@ -220,6 +220,11 @@ pub struct EffectSet {
     pub not_effects: Vec<String>,
     /// Effect-row variables (`e`), as generic parameter indices.
     pub vars: Vec<u32>,
+    /// What the names not read (§18.1, S-691) may have meant, as a set of
+    /// declarations: the effects of the last name of each. Only where the
+    /// row is wanted ([`EffectSet::admits`]); not shown nor counted for a
+    /// caller.
+    meant: Vec<DefId>,
 }
 
 impl EffectSet {
@@ -240,10 +245,25 @@ impl EffectSet {
         }
     }
 
+    /// Add `d` to what a name not read may have meant (S-691).
+    pub fn insert_meant(&mut self, d: DefId) {
+        if let Err(i) = self.meant.binary_search(&d) {
+            self.meant.insert(i, d);
+        }
+    }
+
+    /// Whether the row, as wanted, admits the effect declared by `d`: it has
+    /// it or a name not read may have meant it (§18.1, S-691). The one test
+    /// of [`EffectSet::meant`].
+    pub fn admits(&self, d: DefId) -> bool {
+        self.has(d) || self.meant.binary_search(&d).is_ok()
+    }
+
     /// Add what `other` has and the row has not, its variables not counted
     /// (the join of two branches, §4.7).
     pub fn union(&mut self, other: &EffectSet) {
         other.effects.iter().for_each(|&d| self.insert(d));
+        other.meant.iter().for_each(|&d| self.insert_meant(d));
         let new: Vec<String> = other.not_effects.iter().filter(|x| !self.not_effects.contains(x)).cloned().collect();
         self.not_effects.extend(new);
     }
@@ -264,9 +284,10 @@ impl EffectSet {
     }
 
     /// Whether each effect of the row is in `wider` (§8.1 rule 2), its
-    /// variables not counted ([`EffectSet::is_open`]).
+    /// variables not counted ([`EffectSet::is_open`]): of `wider`, what a
+    /// name not read may have meant too, not of the row (S-691).
     pub fn within(&self, wider: &EffectSet) -> bool {
-        self.effects.iter().all(|&d| wider.has(d)) && self.not_effects.iter().all(|e| wider.not_effects.contains(e))
+        self.effects.iter().all(|&d| wider.admits(d)) && self.not_effects.iter().all(|e| wider.not_effects.contains(e))
     }
 
     /// The names of the row, as shown (§8.1): the effects by `name_of`, in

@@ -1,0 +1,14 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§8.1"]
+
+// W6-03 U7a, R-460, §18.1: the row of the parameter's function type is cut by a syntax error, so the type is not read, and the anonymous
+// function written where it is expected has no known row: its use of `Alloc` is no E0601.
+pub fn ap(g: fn(U32) -> U32 uses {Alloc, +}, n: U32) -> U32 { 0 }   //~ E0002
+
+pub fn t(n: U32) -> U32 {
+  ap(fn(x: U32) -> U32 {
+    let _ = "{x}"
+    x
+  }, n)
+}
