@@ -1,0 +1,72 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§8.1", "§10", "§12.2"]
+
+// W6-03 U4c/t (the forms of W6-02 U7/t held back until S-783 was decided; template target/notes/149/w602/u7/t/after_s783/multiline.onsa).
+// §5.2: an owned binding whose whole is a Dup value (a `Str`) is moved when it is consumed and nothing after it uses it, and copied otherwise, and the
+// original is then dropped at the end of its binding (the difference is whether the drop needs `Alloc`, §12.2); §8.1: the position of the E0601 of a drop
+// is the name of the owned binding that holds the value (S-783), and the first of several drops of a function is decided by the order of §18.1, so
+// the parameter `s` that is copied and so dropped comes before any local of the body. Every function in the "copy" groups is an E0601 for `fn` and
+// `rt fn` alike (S-77), and its position is the parameter on the signature line, where `s` is read again after it was consumed, in a later statement
+// or in the next run of a loop, or where the same value is passed twice to one call (`g.(s, pass_s(s))`, the overlap of §5.2). One error per function.
+// The function with one hand-off (`function_value_one_hand_off`) moves `s` and is legal. The one-liners are in negative/dup_release_value_later.onsa and
+// dup_release_head_later.onsa. `eat_o` and `eat_n` drop their own parameter.
+
+pub enum E {
+  A(Str),
+  B(Str, U32),
+  C(Str, Str),
+  N,
+}
+
+pub rt fn eat_o(move o: Option[Str]) -> U32 { 0 }   //~ E0601
+
+pub rt fn eat_n(move s: Str) -> U32 { s.len() }   //~ E0601
+
+pub rt fn pass_s(move s: Str) -> Str { s }
+
+// the value is read in a later statement: the literal is a copy
+pub rt fn later_statement(move s: Str) -> U32 {   //~ E0601
+  let n = eat_o(Some(s))
+  n + s.len()
+}
+
+pub fn later_statement_fn(move s: Str) -> U32 {   //~ E0601
+  let n = eat_o(Some(s))
+  n + s.len()
+}
+
+// the value of a literal element is read in a later statement of the same block (`o` is dropped too, but it comes after the parameter)
+pub rt fn later_after_the_let(move s: Str) -> U32 {   //~ E0601
+  let o = Some(s)
+  let n = s.len()
+  n
+}
+
+// the heading `let t = move s` and a read of `s` after it: copy (t is moved into `eat_n`)
+pub rt fn heading_then_read(move s: Str) -> U32 {   //~ E0601
+  let t = move s
+  eat_n(t) + s.len()
+}
+
+// the heading `let t = s` in a loop that goes round again
+pub rt fn heading_in_a_loop(move s: Str, c: Bool) -> U32 {   //~ E0601
+  var n: U32 = 0
+  while c {
+    let t = s
+    n = n + eat_n(t)
+  }
+  n
+}
+
+// a function value of a constructor: the call has the overlap that the direct form has not
+pub rt fn function_value_overlap(move s: Str) -> E {   //~ E0601
+  let g = E.C
+  g.(s, pass_s(s))
+}
+
+// legal: the function value of a constructor with one hand-off
+pub rt fn function_value_one_hand_off(move s: Str) -> E {
+  let g = E.B
+  g.(s, 1)
+}

@@ -1,0 +1,139 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§7", "§8.1", "§9.1", "§10", "§12.2"]
+
+// W6-03 U4c/t (the forms of W6-02 U5b/t held back until S-783 was decided; template target/notes/148/w602/u5b/after_s783/multiline.onsa).
+// §12.2: an assignment drops the value that its place held, and the type of the place decides whether the drop needs `Alloc` (also when the value was set
+// from a static value, S-610); §8.1: the position of the E0601 of an overwrite is the target of the assignment (S-783, S-1038). A function without
+// `uses {Alloc}` is an E0601 and an `rt fn` too (S-77, §10 rule 1). The `fn` and the `rt fn` of each form are both here. One error per function (S-1053).
+// The functions without a marker are legal: the place was moved out on every path before the assignment (`reassign_after_move`), or the function
+// has `uses {Alloc}` (`loop_after_move`, `bare_loop_after_move` is the same form without it). `exit_before_assignment` leaves by `?` before the
+// assignment on one path and overwrites on the other, and nothing else is alive at the `?` (an `inout` argument is not owned).
+
+pub rt fn mk(n: U32) -> Str { "x" }
+
+pub rt fn pass(move b: Buf[F32]) -> Buf[F32] { b }
+
+pub fn sink(move b: Buf[F32]) uses {Alloc} {}
+
+pub rt fn sink_rt(move b: Buf[F32]) {}   //~ E0601
+
+// ---- overwrite only (the old value is the only drop)
+
+// (1) a `move` parameter that is returned after the assignment
+pub fn move_root_returned(move s: Str, t: Str) -> Str {
+  s = t   //~ E0601
+  s
+}
+
+pub rt fn rt_move_root_returned(move s: Str, t: Str) -> Str {
+  s = t   //~ E0601
+  s
+}
+
+// (2) a `var` that was set from a static value: only the type decides the drop of the old value
+pub fn var_static_returned(t: Str) -> Str {
+  var x = "a"
+  x = t   //~ E0601
+  x
+}
+
+pub rt fn rt_var_static_returned(t: Str) -> Str {
+  var x = "a"
+  x = t   //~ E0601
+  x
+}
+
+// (3) a `var` that holds a call result
+pub fn var_call_returned(n: U32, t: Str) -> Str {
+  var x = mk(n)
+  x = t   //~ E0601
+  x
+}
+
+pub rt fn rt_var_call_returned(n: U32, t: Str) -> Str {
+  var x = mk(n)
+  x = t   //~ E0601
+  x
+}
+
+// (4) a `var` Buf that is moved in and assigned (the old value is the one that `a` moved in)
+pub fn var_buf_returned(move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] {
+  var x = move a
+  x = move b   //~ E0601
+  x
+}
+
+pub rt fn rt_var_buf_returned(move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] {
+  var x = move a
+  x = move b   //~ E0601
+  x
+}
+
+// (5) an `inout` argument in a function that has more statements
+pub fn inout_then_value(inout s: Str, t: Str) -> U32 {
+  s = t   //~ E0601
+  0
+}
+
+pub rt fn rt_inout_then_value(inout s: Str, t: Str) -> U32 {
+  s = t   //~ E0601
+  0
+}
+
+// (6) the part of a `var` tuple: the old part is dropped, the whole is returned
+pub fn var_part_returned(t: Str) -> (Str, U32) {
+  var p = ("a", 1)
+  p.0 = t   //~ E0601
+  p
+}
+
+// ---- the old value is dropped on some runs only
+
+// (7) the second run of the loop drops the value that the first run wrote (the `fn` has `uses {Alloc}`, so it is legal; the next one has no row)
+pub fn loop_after_move(move q: [Buf[F32]; 2], move a: Buf[F32], move z: Buf[F32]) -> Buf[F32] uses {Alloc} {
+  var x = move a
+  sink(move x)
+  x = move z
+  for s in move q {
+    x = move s
+  }
+  x
+}
+
+pub fn bare_loop_after_move(move q: [Buf[F32]; 2], move a: Buf[F32], move z: Buf[F32]) -> Buf[F32] {
+  var x = move a
+  sink_rt(move x)
+  x = move z
+  for s in move q {
+    x = move s   //~ E0601
+  }
+  x
+}
+
+// (8) the early exit leaves before the assignment: the other path overwrites
+pub fn exit_before_assignment(inout x: Str, r: Option[U32]) -> Option[U32] {
+  x = mk(r?)   //~ E0601
+  Some(0)
+}
+
+pub rt fn rt_exit_before_assignment(inout x: Str, r: Option[U32]) -> Option[U32] {
+  x = mk(r?)   //~ E0601
+  Some(0)
+}
+
+// ---- no drop at the assignment: the place was moved out on every path before it
+
+pub fn reassign_after_move(move a: Buf[F32], move b: Buf[F32]) -> (Buf[F32], Buf[F32]) {
+  var x = move a
+  let t = pass(move x)
+  x = pass(move b)
+  (move t, move x)
+}
+
+pub rt fn rt_reassign_after_move(move a: Buf[F32], move b: Buf[F32]) -> (Buf[F32], Buf[F32]) {
+  var x = move a
+  let t = pass(move x)
+  x = pass(move b)
+  (move t, move x)
+}

@@ -1,0 +1,135 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§7", "§8.1", "§9.1", "§9.2", "§10", "§12.2"]
+
+// W6-03 U4c/t (the forms that W6-02 U3/t held back until S-783 was decided; template target/notes/147/w602/u3/after_s783/multiline.onsa).
+// §8.1: the position of the E0601 of an implicit drop is the place where the dropped value is written: the name of an owned binding, the expression
+// of a value that has no binding (the value that waits for a `?`, §12.2), and for an owned `for` the rest of the source is the expression after `move`
+// (S-1058, no column is written here). The drop point (the early exit) is shown by a note and is not the position. §5.4 and §12.2: a `return`, `break`,
+// `continue` or `?` drops the owned locals that are alive there, the rest of an owned `for` (the elements that were not iterated and the container of an
+// `Array` or a `Buf`, also when the loop ends), and the value that an operand evaluated and a later `?` leaves. A function without `uses {Alloc}` is an
+// E0601 and an `rt fn` too (S-77). One error per function (S-1053).
+// A `while c`, `while ALWAYS` and `while 1 == 1` can end by the condition (§7: only the literal `true` is the loop that nothing but a `break` leaves), so
+// the parameter that the body moved before its `break` is alive when the loop runs zero times, and the parameter is the drop.
+// The one-liners of the same exits are in negative/drop_exit_return.onsa, drop_exit_try.onsa, drop_exit_loop.onsa and drop_pending.onsa.
+
+pub rt fn sink(move b: Buf[F32]) {}   //~ E0601
+
+pub rt fn pass(move b: Buf[F32]) -> Buf[F32] { b }
+
+pub rt fn wrap(move b: Buf[F32], n: U32) -> Option[Buf[F32]] { Some(move b) }
+
+pub rt fn mk(i: U32) -> Option[Buf[F32]] { None }
+
+const ALWAYS: Bool = true
+
+// ---- a `let` local that is alive at the exit: the name of the `let`
+
+pub rt fn let_return(c: Bool, move a: Buf[F32]) -> Option[Buf[F32]] {
+  let t = pass(move a)   //~ E0601
+  if c { return None }
+  Some(move t)
+}
+
+pub fn let_return_fn(c: Bool, move a: Buf[F32]) -> Option[Buf[F32]] {
+  let t = pass(move a)   //~ E0601
+  if c { return None }
+  Some(move t)
+}
+
+pub rt fn let_try(r: Option[U32], move a: Buf[F32]) -> Option[Buf[F32]] {
+  let t = pass(move a)   //~ E0601
+  let n = r?
+  if n > 0 { Some(move t) } else { Some(move t) }
+}
+
+pub rt fn let_continue(c: Bool, move xs: [Buf[F32]; 2]) {
+  for s in move xs {
+    let t = pass(move s)   //~ E0601
+    if c { continue }
+    sink(move t)
+  }
+}
+
+pub rt fn let_break_while_true(c: Bool, move a: Buf[F32]) -> Option[Buf[F32]] {
+  while true {
+    let t = pass(move a)   //~ E0601
+    if c { break }
+    return Some(move t)
+  }
+  None
+}
+
+// ---- the rest of an owned `for` and a `?` (a result after the loop): the source after `move`
+
+pub rt fn rest_try(r: Option[U32], move xs: [Buf[F32]; 2]) -> Option[()] {
+  for s in move xs {   //~ E0601
+    sink(move s)
+    if r? > 0 {}
+  }
+  Some(())
+}
+
+pub fn rest_try_fn(r: Option[U32], move xs: [Buf[F32]; 2]) -> Option[()] {
+  for s in move xs {   //~ E0601
+    sink(move s)
+    if r? > 0 {}
+  }
+  Some(())
+}
+
+// the container of a `Buf` is dropped when the loop ends too, with or without the `?`
+pub rt fn buf_try(r: Option[U32], move xs: Buf[F32]) -> Option[()] {
+  for s in move xs {   //~ E0601
+    if s > 0.0 {
+      if r? > 0 {}
+    }
+  }
+  Some(())
+}
+
+// ---- the value of an assignment that waits for a `?`: `move b` was evaluated and nothing consumed it, and the old value of `x` is dropped by the
+// assignment too; both are on the line of the assignment (the value that waits has no binding, so it is not the parameter)
+
+pub rt fn assign_pending(r: Option[U32], inout x: Option[Buf[F32]], move b: Buf[F32]) -> Option[()] {
+  x = wrap(move b, r?)   //~ E0601
+  Some(())
+}
+
+// ---- a loop that keeps the path of its condition: the parameter that the body moved is alive when the loop runs zero times
+
+pub rt fn while_c_move_break(c: Bool, move a: Buf[F32]) {   //~ E0601
+  while c {
+    sink(move a)
+    break
+  }
+}
+
+pub rt fn while_const_move_break(move a: Buf[F32]) {   //~ E0601
+  while ALWAYS {
+    sink(move a)
+    break
+  }
+}
+
+pub rt fn while_expr_move_break(move a: Buf[F32]) {   //~ E0601
+  while 1 == 1 {
+    sink(move a)
+    break
+  }
+}
+
+// ---- the arm binding of a call result, a `let` local of the arm
+
+pub rt fn arm_let_break(c: Bool, n: U32) {
+  for i in 0 ..< n {
+    match mk(i) {
+      Some(v) => {
+        let t = pass(move v)   //~ E0601
+        if c { break }
+        sink(move t)
+      },
+      None => {}
+    }
+  }
+}

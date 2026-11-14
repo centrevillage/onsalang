@@ -1,0 +1,137 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§7", "§8.1", "§10", "§12.2"]
+
+// W6-03 U4c/t (the forms that W6-02 U2a/t held back until S-783 was decided; template target/notes/147/w602/u2a/after_s783/multiline.onsa).
+// §8.1: the position of the E0601 of an implicit drop is the place where the dropped value is written, and for an owned binding (a parameter, a `let` or
+// a `var`, the binding of an arm or of a `for`) it is the name; the first of several is decided by the order of §18.1 (the start of the position), so a
+// parameter that is dropped comes before a `let` in the body. §12.2: the drop of an owned `Buf` needs `Alloc`; §5.4: the drop is at the end of the binding's
+// scope, on the paths where the value is still alive. A function without `uses {Alloc}` is an E0601 and an `rt fn` too (S-77, §10 rule 1).
+// Each function drops on one path only (the other path moves the value), and each has one error (S-1053). The functions need a newline between
+// statements (a `let`, a `var`, an inner block, a `while` body), so the line is the point of these cases: the name of the `let` that holds the dropped value
+// when every path moves the parameter (`let_one_path`, `inner_block`, `while_body`), and the name of the parameter when a path leaves it alive to the end
+// of the function (`let_in_branch`, `rt_let_in_arm`, `zero_iter`). The `_both` forms move the parameter on every path, so the `let` is the only drop.
+// The one-liners of the same drops are in negative/drop_end_one_path.onsa.
+
+pub rt fn sink(move b: Buf[F32]) {}   //~ E0601
+
+pub rt fn pass_g1(move b: Buf[F32]) -> Buf[F32] { b }
+
+// ---- a `let` that holds the value that one path drops: the parameter is moved on every path
+
+pub fn let_one_path(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] {
+  let t = move b   //~ E0601
+  if c { Some(move t) } else { None }
+}
+
+pub rt fn rt_let_one_path(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] {
+  let t = move b   //~ E0601
+  if c { Some(move t) } else { None }
+}
+
+pub fn let_in_branch_both(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] {
+  if c {
+    let t = move b   //~ E0601
+    if d { Some(move t) } else { None }
+  } else {
+    Some(move b)
+  }
+}
+
+pub rt fn rt_let_in_arm_both(n: U32, c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] {
+  match n {
+    0 => {
+      let t = move b   //~ E0601
+      if c { Some(move t) } else { None }
+    },
+    _ => Some(move b),
+  }
+}
+
+// ---- the parameter is left alive on the other path, so the parameter is the first drop (the `let` is dropped on a path too)
+
+pub fn let_in_branch(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] {   //~ E0601
+  if c {
+    let t = move b
+    if d { Some(move t) } else { None }
+  } else {
+    None
+  }
+}
+
+pub rt fn rt_let_in_arm(n: U32, c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] {   //~ E0601
+  match n {
+    0 => {
+      let t = move b
+      if c { Some(move t) } else { None }
+    },
+    _ => None,
+  }
+}
+
+// ---- an inner block with a local
+
+pub fn inner_block(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] {
+  let o = {
+    let t = move b   //~ E0601
+    if c { Some(move t) } else { None }
+  }
+  o
+}
+
+pub rt fn rt_inner_block(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] {
+  let o = {
+    let t = move b   //~ E0601
+    if c { Some(move t) } else { None }
+  }
+  o
+}
+
+pub fn inner_block_statement(c: Bool, move b: Buf[F32]) {
+  {
+    let t = move b   //~ E0601
+    if c { sink(move t) }
+  }
+}
+
+// ---- a `while` body with a local: the `var` is assigned again after the move, so the assignment drops nothing; the local is the drop
+
+pub fn while_body(c: Bool, n: U32, move b: Buf[F32]) -> Option[Buf[F32]] {
+  var cur = Some(move b)
+  var i = 0
+  while i < n {
+    let t = move cur   //~ E0601
+    cur = if c { move t } else { None }
+    i = i + 1
+  }
+  cur
+}
+
+pub rt fn rt_while_body(c: Bool, n: U32, move b: Buf[F32]) -> Option[Buf[F32]] {
+  var cur = Some(move b)
+  var i = 0
+  while i < n {
+    let t = move cur   //~ E0601
+    cur = if c { move t } else { None }
+    i = i + 1
+  }
+  cur
+}
+
+// ---- a loop that may not run: the parameter is alive when it runs zero times; the local on the panic path is no drop (§9.2)
+
+pub fn zero_iter(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] {   //~ E0601
+  while c {
+    let t = pass_g1(move b)
+    panic("x")
+  }
+  None
+}
+
+pub rt fn rt_zero_iter(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] {   //~ E0601
+  while c {
+    let t = pass_g1(move b)
+    panic("x")
+  }
+  None
+}

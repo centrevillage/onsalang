@@ -1,0 +1,206 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§8.1", "§10", "§12.2"]
+
+// W6-03 U4c/t (the forms of W6-02 U5b/t held back until S-783 was decided; template target/notes/148/w602/u5b/after_s783/b1.onsa).
+// §12.2: an assignment drops the value that its place held (a `var`, a `move` parameter or an `inout` parameter, the field or the element by the type of
+// the place), and the drop needs `Alloc` when the type needs it; §8.1: the position of the E0601 of an overwrite is the target of the assignment
+// (S-783, S-1038), the position of the rest that `move p.b` leaves is the extraction (S-1058), and the first of several drops of a function is decided by
+// the order of §18.1 (a `var` that is dropped at the end of its scope, on a path where it holds a value, comes before an assignment that follows it).
+// A function without `uses {Alloc}` is an E0601 and an `rt fn` too (S-77). One error per function (S-1053). The one-liners of the whole `inout` argument
+// are in negative/drop_over_whole.onsa; the functions here that need more than one line are the ones where the line of the error is the point
+// (`put_move`, `a11`, `a12b`, `a13b`, `a14`, `a14b`, `a15`, `a16b`, `a17`). The `a14b` copies `xs` in `sink_as(xs)` because the assignment of the
+// element after it uses `xs` (§5.2: a value can be moved only when nothing after it uses it), so `xs` itself is dropped at the end of its scope (the
+// `var` line) before the element is overwritten. The functions without a marker are legal: a `Copy` place, a place that was moved out before the assignment
+// on every path, and a `T: Copy` place.
+
+pub struct PS {
+  s: Str,
+  n: U32,
+}
+
+pub struct PB {
+  b: Buf[F32],
+  n: U32,
+}
+
+pub struct PSB {
+  s: Str,
+  b: Buf[F32],
+}
+
+pub struct W[T] {
+  v: T,
+  n: U32,
+}
+
+impl[T] W[T] {
+  pub fn set_v(inout self, v: T) { self.v = v }   //~ E0601
+  pub rt fn rt_set_v(inout self, v: T) { self.v = v }   //~ E0601
+  pub fn set_n(inout self, n: U32) { self.n = n }
+  pub fn put_move(move self, v: T) -> W[T] {
+    self.v = v   //~ E0601
+    self
+  }
+}
+
+impl[T: Copy] W[T] {
+  pub rt fn set_c(inout self, v: T) { self.v = v }
+  pub rt fn put_c(move self, v: T) -> W[T] {
+    self.v = v
+    self
+  }
+}
+
+pub struct WA[T: ?Dup] {
+  v: T,
+  n: U32,
+}
+
+impl[T: ?Dup] WA[T] {
+  pub fn set_a(inout self, move v: T) { self.v = move v }   //~ E0601
+  pub fn set_an(inout self, n: U32) { self.n = n }
+}
+
+impl PS {
+  pub fn set(inout self, t: Str) { self.s = t }   //~ E0601
+  pub rt fn rt_set(inout self, t: Str) { self.s = t }   //~ E0601
+  pub rt fn bump(inout self) { self.n = self.n + 1 }
+}
+
+pub rt fn nb() -> Buf[F32] { panic("x") }
+pub rt fn mk(n: U32) -> Str { "x" }
+pub rt fn id_s(a: Str) -> Str { a }
+pub rt fn pass_b(move a: Buf[F32]) -> Buf[F32] { a }
+pub rt fn pass_s(move a: Str) -> Str { a }
+pub rt fn peek_s(a: Str) {}
+pub rt fn sink_s(move a: Str) {}   //~ E0601
+pub rt fn sink_b(move a: Buf[F32]) {}   //~ E0601
+pub rt fn sink_as(move a: [Str; 2]) {}   //~ E0601
+
+// ---- the value that is assigned is read from the place itself
+pub fn a1(inout x: Str) { x = id_s(x) }   //~ E0601
+pub rt fn a1r(inout x: Str) { x = id_s(x) }   //~ E0601
+pub fn a2(inout s: Str) { s = s }   //~ E0601
+pub rt fn a2r(inout s: Str) { s = s }   //~ E0601
+pub fn a3(inout p: PS) { p.s = p.s }   //~ E0601
+pub fn a4(inout xs: [Str; 2]) { xs[0] = xs[1] }   //~ E0601
+pub rt fn a4r(inout xs: [Str; 2]) { xs[0] = xs[1] }   //~ E0601
+
+// ---- a `Copy` place: the old value needs no drop
+pub rt fn a5(inout n: U32) { n = n + 1 }
+pub rt fn a5b(inout p: PS) { p.n = p.n + 1 }
+pub rt fn a6(inout xs: [U32; 2]) { xs[0] = xs[1] }
+pub rt fn a7(inout n: U32) { n = n + 1 }
+pub rt fn a7b(inout p: PS) { p.n = p.n + 1 }
+
+// ---- the place was moved out before the assignment on every path: no drop
+pub rt fn a8(move a: Buf[F32]) -> Buf[F32] {
+  var x = move a
+  x = pass_b(move x)
+  x
+}
+pub rt fn a9(move x: Buf[F32]) -> Buf[F32] {
+  x = pass_b(move x)
+  x
+}
+pub rt fn a10(move a: PB) -> PB {
+  var p = move a
+  p = PB { b: move p.b, n: 1 }
+  p
+}
+pub rt fn a10b(move p: PB) -> PB {
+  p = PB { b: move p.b, n: 1 }
+  p
+}
+
+// ---- `move p.b` takes the field and drops the rest (the `Str`): the extraction is the position, the whole `p` was consumed, so the assignment drops nothing
+pub fn a11(move p: PSB, t: Str) -> PSB {
+  p = PSB { s: t, b: move p.b }   //~ E0601
+  p
+}
+
+// ---- a loop and a branch
+pub rt fn a12(move a: Buf[F32], c: Bool) -> Buf[F32] {
+  var x = move a
+  while c {
+    sink_b(move x)
+    x = nb()
+  }
+  x
+}
+// `x` holds a value at the end of the function when the loop ran, so the end of its scope drops it (the `var` line) before the assignment in the loop
+pub rt fn a12b(move a: Buf[F32], c: Bool) {
+  var x = move a   //~ E0601
+  sink_b(move x)
+  while c {
+    x = nb()
+  }
+}
+pub rt fn a13(move a: Buf[F32], c: Bool) -> Buf[F32] {
+  var x = move a
+  if c {
+    sink_b(move x)
+    x = nb()
+  } else {
+    sink_b(move x)
+    x = nb()
+  }
+  x
+}
+pub rt fn a13b(move a: Buf[F32], c: Bool) -> Buf[F32] {
+  var x = move a
+  if c {
+    sink_b(move x)
+  }
+  x = nb()   //~ E0601
+  x
+}
+
+// ---- an array element, a `var` that is read after a copy, a path that panics after the assignment
+pub fn a14(t: Str) {
+  var xs = [t, t]
+  xs[0] = t   //~ E0601
+  sink_as(xs)
+}
+pub fn a14b(t: Str) {
+  var xs = [t, t]   //~ E0601
+  sink_as(xs)
+  xs[0] = t
+}
+pub fn a15(inout x: Str, t: Str) {
+  x = t   //~ E0601
+  panic("x")
+}
+pub fn a16(t: Str) {
+  var x = t
+  sink_s(x)
+  x = t
+  sink_s(x)
+}
+pub fn a16b(t: Str) {
+  var x = t
+  sink_s(x)
+  peek_s(x)
+  x = t   //~ E0601
+  sink_s(x)
+}
+// the value is moved only on the path where nothing reads it afterwards: the assignment drops it on the other path
+pub fn a17(t: Str, c: Bool) {
+  var x = t
+  if c {
+    sink_s(x)
+  }
+  x = t   //~ E0601
+  sink_s(x)
+}
+pub fn a18(t: Str, c: Bool) {
+  var x = t
+  if c {
+    sink_s(x)
+  } else {
+    sink_s(x)
+  }
+  x = t
+  sink_s(x)
+}

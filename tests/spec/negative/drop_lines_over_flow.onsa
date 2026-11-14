@@ -1,0 +1,185 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§5.4", "§7", "§8.1", "§9.1", "§10", "§12.2"]
+
+// W6-03 U4c/t (the forms of W6-02 U5b/t held back until S-783 was decided; templates target/notes/148/w602/u5b/after_s783/b6.onsa, b11.onsa and b13.onsa,
+// whose helpers are shared here). §12.2: an assignment drops the value that its place held; §8.1: the position of an overwrite is the target of the
+// assignment (S-783, S-1038), the value that waits for a `?` (an operand that was evaluated before it, §3.5) has no binding and the position is its
+// expression, and a local that is alive at a `?` is dropped there, so its name is the position (before the assignment that follows it, §18.1). Every
+// function is an `rt fn` except `r7`, so the E0601 here is the one of S-77 and §10 rule 1. One error per function (S-1053). The functions without a
+// marker are legal: the place is moved out on every path before the assignment (also when the move is in the other operand of `&&`, in a loop or in
+// a branch that the assignment follows on every path).
+// The right operand of `&&` and `||` is not always evaluated (§3.5), so a move in it is on one path only: `z1` moves `x` when `c` is true and the assignment
+// after it drops `x` when `c` is false, `z2` is the same with `||`, `z3` assigns inside the right operand, and `z5` assigns an `inout` argument there.
+
+pub struct PB {
+  b: Buf[F32],
+  n: U32,
+}
+
+pub rt fn nb() -> Buf[F32] { panic("x") }
+pub rt fn pass_b(move a: Buf[F32]) -> Buf[F32] { a }
+pub rt fn pass_bn(move a: Buf[F32], n: U32) -> Buf[F32] { a }
+pub rt fn pass_o(move a: Option[Buf[F32]]) -> Option[Buf[F32]] { a }
+pub rt fn sink_b(move a: Buf[F32]) {}   //~ E0601
+
+// ---- (b6) the branches of an `if` and a `match`, a `?` between the assignments, the field of a `move` parameter
+
+pub rt fn r1(move a: Buf[F32], c: Bool) -> Buf[F32] {
+  var x = move a
+  x = if c { pass_b(move x) } else { nb() }   //~ E0601
+  x
+}
+pub rt fn r2(move a: Buf[F32], c: Bool) -> Buf[F32] {
+  var x = move a
+  x = if c { pass_b(move x) } else { pass_b(move x) }
+  x
+}
+// `move x` was evaluated and waits for `r?`: the value that waits is dropped when `r?` returns
+pub rt fn r3(move a: Buf[F32], r: Option[U32]) -> Option[Buf[F32]] {
+  var x = move a
+  x = pass_bn(move x, r?)   //~ E0601
+  Some(move x)
+}
+// `x` is alive at `r?` (the `var` line), and `nb()` waits for it too
+pub rt fn r4(move a: Buf[F32], r: Option[U32]) -> Option[Buf[F32]] {
+  var x = move a   //~ E0601
+  x = pass_bn(nb(), r?)
+  Some(move x)
+}
+// `x` holds the result of `pass_b` when `r?` returns
+pub rt fn r5(move a: Buf[F32], r: Option[U32]) -> Option[Buf[F32]] {
+  var x = move a   //~ E0601
+  x = pass_b(move x)
+  let k = r?
+  x = nb()
+  Some(move x)
+}
+pub rt fn r6(move p: PB) -> PB {
+  p.b = nb()   //~ E0601
+  p
+}
+pub fn r7(move p: PB) -> PB {
+  p.b = nb()   //~ E0601
+  p
+}
+pub rt fn r8(move a: Buf[F32], c: Bool) -> Buf[F32] {
+  var x = move a
+  match c {
+    true => { x = pass_b(move x) },
+    false => { x = pass_b(move x) },
+  }
+  x
+}
+pub rt fn r9(move o: Option[Buf[F32]]) -> Option[Buf[F32]] {
+  var x = move o
+  x = pass_o(move x)
+  x
+}
+
+// ---- (b11) loops and a nested block
+
+pub rt fn v1() {
+  for _ in 0 ..< 2 {
+    var x = nb()
+    x = nb()   //~ E0601
+    sink_b(move x)
+  }
+}
+pub rt fn v2() {
+  for _ in 0 ..< 2 {
+    var x = nb()
+    sink_b(move x)
+    x = nb()
+    sink_b(move x)
+  }
+}
+pub rt fn v3(c: Bool) {
+  var x = nb()
+  for _ in 0 ..< 2 {
+    if c {
+      sink_b(move x)
+    }
+    x = nb()   //~ E0601
+  }
+  sink_b(move x)
+}
+pub rt fn v4(c: Bool) {
+  var x = nb()
+  for _ in 0 ..< 2 {
+    sink_b(move x)
+    x = nb()
+  }
+  sink_b(move x)
+}
+pub rt fn v5(c: Bool) {
+  var x = nb()
+  if c {
+    var y = nb()
+    y = nb()   //~ E0601
+    sink_b(move y)
+  }
+  sink_b(move x)
+}
+pub rt fn v6(c: Bool) {
+  var x = nb()
+  while c {
+    sink_b(move x)
+    x = nb()
+    if c {
+      break
+    }
+  }
+  sink_b(move x)
+}
+
+// ---- (b13) the right operand of `&&` and `||`, which is evaluated on one path only
+
+pub rt fn z1(move a: Buf[F32], c: Bool) {
+  var x = move a
+  let b = c && ({
+    sink_b(move x)
+    true
+  })
+  x = nb()   //~ E0601
+  sink_b(move x)
+  let _ = b
+}
+pub rt fn z2(move a: Buf[F32], c: Bool) {
+  var x = move a
+  let b = c || ({
+    sink_b(move x)
+    true
+  })
+  x = nb()   //~ E0601
+  sink_b(move x)
+  let _ = b
+}
+pub rt fn z3(move a: Buf[F32], c: Bool) {
+  var x = move a
+  let b = c && ({
+    x = nb()   //~ E0601
+    true
+  })
+  sink_b(move x)
+  let _ = b
+}
+pub rt fn z4(move a: Buf[F32], c: Bool) {
+  var x = move a
+  sink_b(move x)
+  let b = c && ({
+    x = nb()
+    sink_b(move x)
+    true
+  })
+  x = nb()
+  sink_b(move x)
+  let _ = b
+}
+pub rt fn z5(inout x: Buf[F32], c: Bool) {
+  let b = c && ({
+    x = nb()   //~ E0601
+    true
+  })
+  let _ = b
+}
