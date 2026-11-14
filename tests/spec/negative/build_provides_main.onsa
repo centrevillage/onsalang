@@ -16,10 +16,13 @@
 // [test]
 // spec = ["§8.5", "§12.3", "§15.3"]
 
-// E0610: `main` is held to the same rule as an exported function (§8.5,
-// §15.3): each effect in its row must be provided by the build target, and
-// a target with no heap does not provide `Alloc` (§12.3).
+// E0610 holds the row of each entry of the build target to what the target
+// provides (§15.3, §8.5, S-1056). The entries of a target whose kind is not
+// `exe` are its `@export` flows and functions (`version` here); a `main` there
+// is a function like any other, not an entry, so its `uses {Alloc}` is no
+// error even on a target with no heap (§12.3). The `main` of an `exe` is held
+// to it when `exe` opens (phase 2, `tasks/phase2.md`; R-134).
 @export
 pub fn version() -> U32 { 1 }
 
-pub fn main() uses {Alloc} {}   //~ E0610 [bare]
+pub fn main() uses {Alloc} {}

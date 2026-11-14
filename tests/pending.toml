@@ -211,13 +211,6 @@ reasons = ["S-102", "R-135"]
 until = "W7-03"
 note = "E0710 の否定例 2 件。構造体のフィールドの pan.Out の E0710 は W4-05 U4a で通る。swap.In のフィールドは生成項目 In が無い（E0302。生成項目 In の Onsa の側は W7-03）"
 
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/build_provides_main.onsa"
-reasons = ["R-134"]
-until = "W6-03"
-note = "main の効果行を provides と照合しない（仕様 §15.3、E0610）。今は診断なし"
-
 # --- W1-04（2026-10-07）
 
 [[pending]]
