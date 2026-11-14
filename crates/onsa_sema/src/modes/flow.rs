@@ -486,6 +486,8 @@ impl Walker<'_> {
     /// literal and a constant, the part it matches; of a struct pattern's
     /// last `_`, the fields it leaves; none of a variant with no payload;
     /// in a choice, maybe (`sure`). The one place that decides them.
+    // SPEC-GAP(S-1044): a variant with no payload leaves nothing, nested too; a constant
+    // drops the part it matches, as a literal does (provisional).
     fn discards(&mut self, r: &mut Run, p: PatId, sure: bool) {
         let ast = self.ast;
         self.discard(r, Unbound::Pat(p), sure);

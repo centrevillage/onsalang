@@ -6,7 +6,8 @@
 // が残すフィールド、束縛の無い腕の対象）は、`let` … では文の終わりに、`match` の腕と `for` の本体ではその腕・反復の終わり … に破棄される。腕が panic で抜ければ、その破棄は起きない"): the contrasts of negative/drop_wild_arm.onsa,
 // drop_wild_rest.onsa, drop_wild_nobind.onsa, drop_wild_or.onsa, drop_wild_let.onsa, drop_wild_for.onsa, drop_wild_param.onsa, drop_wild_generic.onsa, drop_wild_exit.onsa,
 // drop_wild_guard.onsa and drop_wild_closure.onsa. Every function is legal and stays legal after the drop of what a pattern leaves unbound is counted: the `_` of a head
-// that is borrowed (a borrowed argument, an `inout` argument or a field of one: `match o`, `let _ = x`, `let _: T = x`; the shape of `is_none[T]`), a static value and a
+// that is borrowed (`match o` of a borrowed argument, an `inout` argument or a field of one; `let _ = x` and `let _: T = x` of a borrowed argument, §5.4: an `inout` one is no
+// origin of a borrow, E0711; the shape of `is_none[T]`), a static value and a
 // literal that needs no drop as the head, a `_` that leaves a Copy part (also next to a part that is moved on), the arm of a unit variant (`None =>`), a `for` that moves
 // every element or is borrowed, a `T: Copy`, the arm that moves the value on every path when the guard is false, the anonymous function of a borrowed argument, and a
 // function with `uses {Alloc}`. The helper `sink` is an `rt` function that drops its argument, so its own E0901 is reported (as negative/drop_for_contrast.onsa). This
