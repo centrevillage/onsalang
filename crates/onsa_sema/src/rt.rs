@@ -139,7 +139,7 @@ fn first_calls(pkg: &Package, a: &Analysis, r: &Record) -> Vec<Diagnostic> {
     let diag = |u: &Use| {
         let message = format!(
             "{}, which is not `rt`; an `rt` function calls only `rt` ones (§10 rule 4)",
-            u.describe(a, ast, &src)
+            u.describe(a, (ast, r.id), &src)
         );
         let d = Diagnostic::new(Stage::Effects, Code::E0901, u.at, message).with_found(src(u.at));
         match u.what {

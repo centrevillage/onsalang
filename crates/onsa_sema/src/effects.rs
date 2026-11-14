@@ -5,11 +5,15 @@
 //! the runner (D-08), and `const` initializers from the compiler (§6.6).
 
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
-use onsa_syntax::ast::{ItemKind, TypeKind};
+use onsa_syntax::ast::{Ast, ExprId, ItemKind, StmtKind, TypeKind};
 
-use crate::def::DefKind;
+use crate::binding::{Head, LitClass};
+use crate::body::generics_of;
+use crate::def::{DefKind, GenericKind};
+use crate::drop_alloc::{Drop, copy_would_free};
+use crate::names::body::Origin;
 use crate::resolve::Entity;
-use crate::uses::{Record, Scope, Use};
+use crate::uses::{Record, Scope, Use, What, holds};
 use crate::{Analysis, DefId, Package, module_of_def};
 
 /// The E0601 of the bodies of `records` ([`crate::uses::records`]): for
@@ -24,11 +28,10 @@ pub(crate) fn check_all(pkg: &Package, a: &Analysis, records: &[Record]) -> Vec<
 }
 
 /// The E0601 of `u`, the first use in `scope` of the body of `r` of
-/// `effect`, which its row lacks: at the use (S-82, S-783). Where the
-/// function is not `rt`, the fix inserts the effect into the signature; an
-/// `rt` one cannot have `Alloc` (§10 rule 1), which a note says, with no fix.
-/// An anonymous function has no fix, and a note says how its row is decided
-/// (§8.1, S-1041).
+/// `effect`, which its row lacks: at the use (S-82, S-783), with the notes
+/// of [`notes`]. Where the function is not `rt`, the fix inserts the effect
+/// into the signature; an `rt` one cannot have `Alloc` (§10 rule 1), and an
+/// anonymous function, a `test` and an initializer have no fix (§8.1, S-1041).
 fn first_use(pkg: &Package, a: &Analysis, r: &Record, scope: &Scope, effect: DefId, u: &Use) -> Option<Diagnostic> {
     let module = module_of_def(pkg, a, r.id)?;
     let (ast, text) = (&module.parsed.ast, &module.text);
@@ -36,20 +39,14 @@ fn first_use(pkg: &Package, a: &Analysis, r: &Record, scope: &Scope, effect: Def
     let src = |span: Span| text[span.start as usize..span.end as usize].to_string();
     let name = &a.def(effect).name;
     let of = scope.closure.map_or_else(|| format!("`{}`", def.name), |_| "the anonymous function".into());
-    let message =
-        format!("{}: that needs `{name}`, which is not in the effect row of {of} (§8.1)", u.describe(a, ast, &src));
+    let message = format!(
+        "{}: that needs `{name}`, which is not in the effect row of {of} (§8.1)",
+        u.describe(a, (ast, r.id), &src)
+    );
     let d = Diagnostic::new(Stage::Effects, Code::E0601, u.at, message).with_found(src(u.at));
-    let d = u.left_at().into_iter().fold(d, |d, x| d.with_note(x, "left here"));
-    if let Some(c) = scope.closure {
-        // SPEC-GAP(S-1041): no fix; one note of how its row is decided (W6-03 U6).
-        let head = ast.expr(c).span;
-        let why = "an anonymous function has the effect row it writes, else that of the function type expected where it is, else none (§8.1)";
-        return Some(d.with_note(Span::new(head.file, head.start, head.start + 2), why));
-    }
-    let DefKind::Fn(_) = &def.kind else { return Some(d) };
-    if scope.rt {
-        let why = format!("`{}` is `rt`, which cannot have `{name}` in its effect row (§10 rule 1)", def.name);
-        return Some(d.with_note(def.name_span, why));
+    let d = notes(a, (ast, &src), r, (scope, effect), u).into_iter().fold(d, |d, (at, why)| d.with_note(at, why));
+    if scope.closure.is_some() || scope.rt || !matches!(def.kind, DefKind::Fn(_)) {
+        return Some(d);
     }
     // SPEC-GAP(S-1060): no fix where the name does not name the effect in the
     // module (an item of it, an E0304): the row would read that (§18.1).
@@ -85,4 +82,94 @@ fn first_use(pkg: &Package, a: &Analysis, r: &Record, scope: &Scope, effect: Def
         sig_end -= 1;
     }
     Some(d.with_fix(Fix::insert(title, file, sig_end as u32, row)))
+}
+
+/// The notes of the E0601 of `u` in `scope` of the body of `r` for `effect`,
+/// all built here (§8.1 fixes what they show, not their text or order): (1)
+/// of the scope and the effect; (2) the drop points away from where the value
+/// is written (S-783 C1); (3) of the use: the first element that made a
+/// literal owned (S-613), the type parameters `Copy` would free (S-1052);
+/// (4) the other uses of the effect in the scope (R-83 (3)). No bound on
+/// them: a use is in the notes of one report at most, so all the notes are
+/// linear in the body. O(P + U + G) for P points, U uses, G type parameters.
+fn notes(
+    a: &Analysis,
+    (ast, src): (&Ast, &dyn Fn(Span) -> String),
+    r: &Record,
+    (scope, effect): (&Scope, DefId),
+    u: &Use,
+) -> Vec<(Span, String)> {
+    let mut notes = Vec::new();
+    if let Some(c) = scope.closure {
+        // SPEC-GAP(S-1041): no fix; one note of how its row is decided (W6-03 U6b).
+        let head = ast.expr(c).span;
+        let why = "an anonymous function has the effect row it writes, else that of the function type expected where it is, else none (§8.1)";
+        notes.push((Span::new(head.file, head.start, head.start + 2), why.to_string()));
+    } else if scope.rt {
+        let (def, name) = (a.def(r.id), &a.def(effect).name);
+        notes.push((
+            def.name_span,
+            format!("`{}` is `rt`, which cannot have `{name}` in its effect row (§10 rule 1)", def.name),
+        ));
+    }
+    if let What::Drop { drop, points } = &u.what {
+        // Not where it is written: in or around its place (a temporary's,
+        // a rest's), the end of the `let` that binds it to no name (S-1036).
+        let lets: Vec<u32> = match drop {
+            Drop::Discard { .. } => (a.bodies[&r.id].heads.keys())
+                .filter_map(|h| if let Head::Let(s) = h { Some(ast.stmt(*s).span) } else { None })
+                .filter(|&s| holds(s, u.at))
+                .map(|s| s.end)
+                .collect(),
+            _ => Vec::new(),
+        };
+        let away =
+            |p: &&Span| (p.end <= u.at.start || u.at.end <= p.start) && !(p.is_empty() && lets.contains(&p.start));
+        notes.extend(points.iter().filter(away).map(|&p| (p, "dropped here".to_string())));
+        if let Some(e) = first_owned(a, ast, r.id, drop) {
+            let why = format!("`{}` is the first element that makes the literal owned (§5.4)", src(ast.expr(e).span));
+            notes.push((ast.expr(e).span, why));
+        }
+        // SPEC-GAP(S-1052): a note, and the fix `uses {Alloc}` alone.
+        let generics = generics_of(a, r.id);
+        for g in copy_would_free(a, r.id, drop).into_iter().map(|i| &generics[i]) {
+            let dup = if matches!(g.kind, GenericKind::Type { dup: false, .. }) { " in place of `?Dup`" } else { "" };
+            notes.push((
+                g.span,
+                format!("with the bound `Copy` on `{}`{dup}, its drop needs no `Alloc` (§12.2)", g.name),
+            ));
+        }
+        // S-1035 (W6-04): the note of why a Dup value is copied and not moved goes here.
+    }
+    // SPEC-GAP(S-1050): in an `rt` function and an anonymous function too, of the scope alone.
+    let others = r.uses.iter().filter(|o| o.scope == u.scope && o.at != u.at && o.needs(a, effect));
+    let name = &a.def(effect).name;
+    notes.extend(others.map(|o| (o.at, format!("{}: it needs `{name}` too", o.describe(a, (ast, r.id), src)))));
+    notes
+}
+
+/// The first element that made the aggregate literal the drop `d` drops
+/// owned (S-613, §5.4: `BodyInfo::lits`), through the literals in it it
+/// made owned: of a value, a `let`, a `for` or a `match` head. None where the
+/// value is no such literal, or its own type makes it owned.
+fn first_owned(a: &Analysis, ast: &Ast, id: DefId, d: &Drop) -> Option<ExprId> {
+    let mut e = match d {
+        Drop::Local(l, _) => match a.names.get(&id)?.bindings[l.0 as usize].origin {
+            Origin::Let(s) | Origin::For(s) => match &ast.stmt(s).kind {
+                StmtKind::Let { init: e, .. } | StmtKind::For { iter: e, .. } => *e,
+                _ => return None,
+            },
+            Origin::Arm { scrutinee, .. } => scrutinee,
+            _ => return None,
+        },
+        Drop::Value { value, .. } | Drop::Temp { value, .. } | Drop::IterRest { iter: value, .. } => *value,
+        _ => return None,
+    };
+    let (lits, start) = (&a.bodies[&id].lits, e);
+    while let Some(&LitClass::Owned { first }) = lits.get(&e)
+        && first != e
+    {
+        e = first;
+    }
+    (e != start).then_some(e)
 }

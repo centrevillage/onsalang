@@ -11,7 +11,7 @@ use onsa_diag::internal::bug;
 use onsa_syntax::ast::{Ast, ExprId};
 
 use crate::body::{Dropped, LocalId, LocalInfo, Unbound, generics_of};
-use crate::kind::params_in_body;
+use crate::kind::{Kind, params_in_body};
 use crate::modes::Proj;
 use crate::summary::{Facts, Read, any};
 use crate::ty::{Ty, TyId};
@@ -22,16 +22,16 @@ use crate::{Analysis, DefId};
 pub(crate) enum Drop<'b> {
     /// An owned local, at the drop points of it (one for all, W6-02: at its
     /// declaration, which the readers name).
-    Local(&'b LocalInfo),
+    Local(LocalId, &'b LocalInfo),
     /// What is left of `root`, of the type `ty`, where the path `path` is
     /// taken out at `at` (S-85).
     Rest { at: Span, path: &'b [Proj], root: Root<'b>, ty: TyId },
-    /// The value of `value`, of the type `ty`, the exit at `exit` leaves before
-    /// its consumer runs (A-1).
-    Value { value: ExprId, ty: TyId, exit: Span },
+    /// The value of `value`, of the type `ty`, an exit (its point) leaves
+    /// before its consumer runs (A-1).
+    Value { value: ExprId, ty: TyId },
     /// The rest of the value `iter` of the type `ty` an owned `for` iterates,
-    /// where the loop is left at `exit` (`early`) or ends (S-1037).
-    IterRest { iter: ExprId, ty: TyId, exit: Span, early: bool },
+    /// where the loop is left (`early`, as its first point tells) or ends (S-1037).
+    IterRest { iter: ExprId, ty: TyId, early: bool },
     /// The value of `value`, of the type `ty`, made where nothing consumes
     /// it (R-32).
     Temp { value: ExprId, ty: TyId },
@@ -56,7 +56,7 @@ impl Drop<'_> {
     /// expression of the value or of the place.
     pub(crate) fn at(&self, ast: &Ast) -> Span {
         match self {
-            Drop::Local(l) => l.span,
+            Drop::Local(_, l) => l.span,
             Drop::Rest { at, .. } | Drop::Discard { at, .. } => *at,
             Drop::Value { value: e, .. }
             | Drop::Temp { value: e, .. }
@@ -93,7 +93,7 @@ impl Root<'_> {
 pub(crate) fn needs_alloc(a: &Analysis, frame: &Frame, d: &Drop) -> bool {
     let drops = |t| frame.read.of(t).drops.unwrap_or(false);
     match d {
-        Drop::Local(l) => drops(l.ty),
+        Drop::Local(_, l) => drops(l.ty),
         Drop::Rest { at, path, ty, .. } => rest_drops_alloc(&Walk::new(a), (*ty, frame, 0), path, *at).unwrap_or(false),
         Drop::Value { ty, .. } | Drop::Temp { ty, .. } | Drop::Overwrite { ty, .. } => drops(*ty),
         // At its end, its container: a fixed-length array has none (S-1037).
@@ -118,7 +118,7 @@ pub(crate) fn alloc_drops(a: &Analysis, id: DefId) -> Vec<(Drop<'_>, Vec<Span>)>
     let (mut values, mut index) = (Vec::new(), HashMap::default());
     for d in &body.drops {
         let (of, drop) = match &d.what {
-            Dropped::End(l) | Dropped::Exit(l) => (Of::Local(*l), Drop::Local(local(l))),
+            Dropped::End(l) | Dropped::Exit(l) => (Of::Local(*l), Drop::Local(*l, local(l))),
             Dropped::Rest(t) => {
                 let root = local(&t.root);
                 (Of::Taken(d.at), Drop::Rest { at: d.at, path: &t.path, root: Root::Local(root), ty: root.ty })
@@ -129,10 +129,8 @@ pub(crate) fn alloc_drops(a: &Analysis, id: DefId) -> Vec<(Drop<'_>, Vec<Span>)>
             }
             Dropped::Temp(e) => (Of::Expr(*e), Drop::Temp { value: *e, ty: ty(e, d.at) }),
             Dropped::Overwrite(e) => (Of::Expr(*e), Drop::Overwrite { target: *e, ty: ty(e, d.at) }),
-            Dropped::Value(e) => (Of::Expr(*e), Drop::Value { value: *e, ty: ty(e, d.at), exit: d.at }),
-            &Dropped::IterRest { iter, early } => {
-                (Of::Expr(iter), Drop::IterRest { iter, ty: ty(&iter, d.at), exit: d.at, early })
-            }
+            Dropped::Value(e) => (Of::Expr(*e), Drop::Value { value: *e, ty: ty(e, d.at) }),
+            &Dropped::IterRest { iter, early } => (Of::Expr(iter), Drop::IterRest { iter, ty: ty(&iter, d.at), early }),
             Dropped::Discard(u) => {
                 let x = body.discards.get(u).unwrap_or_else(|| bug(Some(d.at), "a drop of a part with no type"));
                 (Of::Unbound(*u), Drop::Discard { at: x.at, tys: &x.tys })
@@ -150,6 +148,26 @@ pub(crate) fn alloc_drops(a: &Analysis, id: DefId) -> Vec<(Drop<'_>, Vec<Span>)>
     }
     values.sort_by_key(|(l, ..)| l.map_or((true, 0), |l| (false, l.0)));
     values.into_iter().map(|(_, d, at)| (d, at)).collect()
+}
+
+/// The type parameters of the body of `id` that, `Copy`, would free the drop
+/// `d` from `Alloc` (S-1052): of those not `Copy`, each without which it
+/// needs it still, the others `Copy` (`(A, B)` names both). None where it
+/// needs `Alloc` whatever they are (`(T, Str)`). O(G) questions of G of them.
+pub(crate) fn copy_would_free(a: &Analysis, id: DefId, d: &Drop) -> Vec<usize> {
+    let params = params_in_body(a, &generics_of(a, id));
+    let open: Vec<usize> = (0..params.len()).filter(|&i| params[i].drops == Some(true)).collect();
+    let needs = |kept: Option<usize>| {
+        let copy = |(i, f): (usize, &Facts)| match open.contains(&i) && Some(i) != kept {
+            true => Facts::param(Some(Kind::Copy)),
+            false => f.clone(),
+        };
+        needs_alloc(a, &Frame::body(a, params.iter().enumerate().map(copy).collect()), d)
+    };
+    if open.is_empty() || needs(None) {
+        return Vec::new();
+    }
+    open.iter().copied().filter(|&i| needs(Some(i))).collect()
 }
 
 /// A declaration a path goes through ([`rest_drops_alloc`]): the arguments

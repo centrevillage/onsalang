@@ -448,6 +448,14 @@ impl Analysis {
         self.types.display(ty, &|d| self.def(d).name.clone(), &|i| format!("<{i}>"))
     }
 
+    /// `ty` of the body of `def`, its type parameters by the names it (or the
+    /// `impl` of a method) writes (R-256), else as [`Analysis::display_type`].
+    pub(crate) fn display_in(&self, ty: TyId, def: DefId) -> String {
+        let generics = body::generics_of(self, def);
+        let param = |i: u32| generics.get(i as usize).map_or_else(|| format!("<{i}>"), |g| g.name.clone());
+        self.types.display(ty, &|d| self.def(d).name.clone(), &param)
+    }
+
     /// The def is of an item whose heading a syntax error cut
     /// ([`onsa_syntax::ast::Failed::Heading`]): a function of it is an error
     /// to its users (a call of it is not checked against it).

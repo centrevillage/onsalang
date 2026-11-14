@@ -30,7 +30,7 @@ fn uses_of(src: &str, name: &str) -> Vec<(&'static str, String, usize)> {
 
 fn drop_kind(d: &Drop) -> &'static str {
     match d {
-        Drop::Local(_) => "local",
+        Drop::Local(..) => "local",
         Drop::Rest { .. } => "rest",
         Drop::Value { .. } => "waits",
         Drop::IterRest { .. } => "for rest",
@@ -275,4 +275,44 @@ pub rt fn k(n: U32) -> U32 { h(n) + ap(fn(y: U32) -> U32 { h(y) }, n) + ap(h, n)
         .collect();
     let want = [("h(n)", "h"), ("ap(fn(y: U32) -> U32 { h(y) }, n)", "ap"), ("ap(h, n)", "ap")];
     assert_eq!(got, want);
+}
+
+/// The type parameters that, `Copy`, free a drop from `Alloc` (S-1052,
+/// `crate::drop_alloc::copy_would_free`): asked again with them `Copy`, each
+/// one it needs (both of `(A, B)`, not the `Copy` one); none where a part
+/// needs `Alloc` whatever they are (`(T, Str)`, `(T, Buf[F32])`).
+#[test]
+fn the_type_parameters_copy_frees_a_drop_of() {
+    let src = "pub fn plain[T](move x: T) {}
+pub fn dup[T: ?Dup](move x: T) {}
+pub fn inside[T](move x: (T, U32)) {}
+pub fn option[T](move x: Option[T]) {}
+pub fn two[A, B](move x: (A, B)) {}
+pub fn one_of_two[A: Copy, B](move x: (A, B)) {}
+pub fn pair[T](move x: (T, Str)) {}
+pub fn buf[T](move x: (T, Buf[F32])) {}
+";
+    let p = crate::tests::pkg(&[("main", src)]);
+    let a = analyze(&p);
+    let all = records(&p, &a);
+    let freed = |name: &str| {
+        let id = def(&a, name);
+        let r = all.iter().find(|r| r.id == id).unwrap_or_else(|| panic!("no record of {name}"));
+        let [crate::uses::Use { what: What::Drop { drop, .. }, .. }] = &r.uses[..] else { panic!("{name}: one drop") };
+        let generics = crate::body::generics_of(&a, id);
+        let names = crate::drop_alloc::copy_would_free(&a, id, drop).into_iter().map(|i| generics[i].name.clone());
+        names.collect::<Vec<_>>()
+    };
+    for (name, want) in [
+        ("plain", &["T"][..]),
+        ("dup", &["T"]),
+        ("inside", &["T"]),
+        ("option", &["T"]),
+        ("two", &["A", "B"]),
+        ("one_of_two", &["B"]),
+        ("pair", &[]),
+        ("buf", &[]),
+    ] {
+        assert_eq!(freed(name), want, "{name}");
+    }
 }

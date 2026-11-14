@@ -69,11 +69,7 @@ pub(crate) enum What<'a> {
     Interp,
     /// A value dropped (§12.2), as its first drop point tells it, with all
     /// those of its points that need `Alloc` (S-783).
-    Drop {
-        drop: Drop<'a>,
-        #[cfg_attr(not(test), expect(dead_code, reason = "the note of the drop points (S-783 C1) reads them"))]
-        points: Vec<Span>,
-    },
+    Drop { drop: Drop<'a>, points: Vec<Span> },
 }
 
 impl Use<'_> {
@@ -87,21 +83,21 @@ impl Use<'_> {
     }
 
     /// What the use does, as a clause the diagnostics of it (E0601, E0901)
-    /// go on from (M12): what it calls, makes or drops. `src` is the text of
-    /// a span of its file.
-    pub(crate) fn describe(&self, a: &Analysis, ast: &Ast, src: &dyn Fn(Span) -> String) -> String {
+    /// go on from (M12): what it calls, makes or drops, a type as the body
+    /// of `def` writes it (R-256). `src` is the text of a span of its file.
+    pub(crate) fn describe(&self, a: &Analysis, (ast, def): (&Ast, DefId), src: &dyn Fn(Span) -> String) -> String {
         let at = src(self.at);
         match &self.what {
             What::Call { callee } => format!("this calls `{}`", a.def(*callee).name),
             What::ValueCall => "this calls a function value".into(),
             What::Interp => "this string interpolation creates a `Str`".into(),
             What::Drop { drop, .. } => match drop {
-                Drop::Local(l) => format!("`{}`, which owns a `{}`, is dropped", l.name, a.display_type(l.ty)),
+                Drop::Local(_, l) => format!("`{}`, which owns a `{}`, is dropped", l.name, a.display_in(l.ty, def)),
                 Drop::Rest { root, .. } => {
                     format!("taking `{at}` out of `{}` drops the rest of it", root.name(ast, src))
                 }
                 Drop::Temp { .. } => format!("`{at}` is dropped after it is used"),
-                Drop::Value { .. } => format!("`{at}` is dropped by an exit before it is consumed"),
+                Drop::Value { .. } => format!("`{at}` is dropped by an exit before it is used"),
                 Drop::Overwrite { .. } => format!("assigning `{at}` drops the value it held"),
                 Drop::IterRest { early, .. } => {
                     let what = if *early { "what it has not iterated and its container" } else { "its container" };
@@ -109,15 +105,6 @@ impl Use<'_> {
                 }
                 Drop::Discard { .. } => format!("what `{at}` binds to no name is dropped"),
             },
-        }
-    }
-
-    /// The exit that leaves the value this use drops, where it is not where
-    /// the value is written.
-    pub(crate) fn left_at(&self) -> Option<Span> {
-        match &self.what {
-            What::Drop { drop: Drop::Value { exit, .. } | Drop::IterRest { exit, early: true, .. }, .. } => Some(*exit),
-            _ => None,
         }
     }
 }
@@ -239,7 +226,7 @@ impl Closures {
     }
 }
 
-fn holds(outer: Span, inner: Span) -> bool {
+pub(crate) fn holds(outer: Span, inner: Span) -> bool {
     outer.start <= inner.start && inner.end <= outer.end
 }
 

@@ -25,6 +25,7 @@ mod doc_comment_targets;
 mod drop_path_model;
 mod dup_release_model;
 mod effect_names;
+mod effect_notes;
 mod empty_brackets;
 mod error_type_sweep;
 mod excluded_readings_notes;
