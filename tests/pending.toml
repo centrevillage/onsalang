@@ -1314,3 +1314,10 @@ target = "tests/spec/fixes/e0703_dup_unbounded_type_parameter.onsa:15:13 E0703 f
 reasons = ["S-1030"]
 until = "W6-02"
 note = "U4b から U7 まで: 境界の無い `T` を値の位置に置く形は U7 まで複製。候補を当てた後の `Some(t)` の `t` が複製され、元の `t` の破棄が `Alloc` を要して（§6.3）E0601 になり、`clean = true` が落ちる"
+
+[[pending]]
+kind = "fuzz-input"
+target = "tests/fuzz/96131508.onsa"
+reasons = ["R-456"]
+until = "W6-02"
+note = "check: internal|crates/onsa_sema/src/names/typed.rs|an alias read before the order lowered it"
