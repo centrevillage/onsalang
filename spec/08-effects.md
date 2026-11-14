@@ -54,7 +54,7 @@ pub fn map[T, U, e](xs: Array[T], f: fn(T) -> U uses {e}) -> Array[U] uses {Allo
 - `Block` は操作を持たない `blocking` の効果（`std.core` の `pub blocking effect Block {}`）で、prelude にある（§15.1）。extern 関数がブロックすることを主張するのに使う（§14.1）。`Block` の handler を書くには `unsafe` が要る（`Alloc` と同じ、§8.4）。処理すると、待つことが効果行から消えるためである。
 - `rt fn` の効果行には rt 効果しか書けない（§10）。`Alloc` と `blocking` の効果は rt 効果ではない。
 
-標準ライブラリの主な効果（ネットワークの `Net` は延期、§19.1）:
+標準ライブラリの効果は、次の表で全てである（ネットワークの `Net` は延期、§19.1）:
 
 | 効果 | モジュール | `blocking` | rt 効果 | 内容 |
 |---|---|---|---|---|
