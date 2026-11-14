@@ -1,0 +1,71 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§7", "§8.1", "§10", "§12.2"]
+
+// W6-02 U7/t, S-1030 (§5.2: "その後で使わず（ループの次の反復と ... を含む、E0704）"; §7: "ループの本体で移した変数を次の反復（条件の再評価と `continue` の道を含む）で使うと、反復の回数によらず E0704"): the
+// second condition for a literal, the next iteration. A `move` parameter `s` that is an element of a literal inside a loop body that can go round again is copied (Affine, the next iteration would
+// use `s` after it was moved, E0704), so the original is dropped at the end of its binding and the drop needs `Alloc`: an E0601 in a function without `uses {Alloc}` and an E0901 in an `rt fn`. The literal is the
+// argument of a `move` parameter that gives back a `Bool`, the condition of an `if` that leaves the loop (as in negative/dup_release_loop.onsa: the loop is `while true`, left by the `break` or the `return`
+// only, so that the loop alone makes the difference), or the argument of a `move` parameter in a `while` with a condition (it may run zero times: an error whatever the hand-off is). A literal that
+// leaves the loop at once is a move: negative/dup_release_value_ok.onsa (`return_in_a_loop`). The helpers drop their argument, so their own E0901 is reported (the same as negative/drop_for_one_path.onsa).
+// Today every function here is an error, and it stays one. The functions are one-liners (S-783). One error per function (P-01).
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+pub enum E {
+  A(Str),
+  B(Str, U32),
+  C(Str, Str),
+  N,
+}
+
+pub rt fn eat_bo(move o: Option[Str]) -> Bool { true }   //~ E0901
+
+pub rt fn eat_bt(move t: (Str, U32)) -> Bool { true }   //~ E0901
+
+pub rt fn eat_bp(move p: Param) -> Bool { true }   //~ E0901
+
+pub rt fn eat_be(move e: E) -> Bool { true }   //~ E0901
+
+pub rt fn eat_bg[T](move o: Option[T]) -> Bool { true }   //~ E0901
+
+pub rt fn eat_uo(move o: Option[Str]) {}   //~ E0901
+
+// ------------------------------------------------------------------ the loop is left after the literal, and goes round again when it is not
+
+pub fn break_some(move s: Str) { while true { if eat_bo(Some(s)) { break } } }   //~ E0601
+
+pub rt fn rt_break_some(move s: Str) { while true { if eat_bo(Some(s)) { break } } }   //~ E0901
+
+pub fn break_tuple(move s: Str) { while true { if eat_bt((s, 1)) { break } } }   //~ E0601
+
+pub rt fn rt_break_tuple(move s: Str) { while true { if eat_bt((s, 1)) { break } } }   //~ E0901
+
+pub fn break_struct(move s: Str) { while true { if eat_bp(Param { name: s, value: 0.0 }) { break } } }   //~ E0601
+
+pub rt fn rt_break_struct(move s: Str) { while true { if eat_bp(Param { name: s, value: 0.0 }) { break } } }   //~ E0901
+
+pub fn break_ctor(move s: Str) { while true { if eat_be(E.A(s)) { break } } }   //~ E0601
+
+pub rt fn rt_break_ctor(move s: Str) { while true { if eat_be(E.A(s)) { break } } }   //~ E0901
+
+pub fn return_some(move s: Str) { while true { if eat_bo(Some(s)) { return } } }   //~ E0601
+
+pub rt fn rt_return_some(move s: Str) { while true { if eat_bo(Some(s)) { return } } }   //~ E0901
+
+pub fn generic_break[T](move t: T) { while true { if eat_bg(Some(t)) { break } } }   //~ E0601
+
+pub rt fn rt_generic_break[T](move t: T) { while true { if eat_bg(Some(t)) { break } } }   //~ E0901
+
+// ------------------------------------------------------------------ a loop that may run zero times
+
+pub fn while_with_a_condition(move s: Str, c: Bool) { while c { eat_uo(Some(s)) } }   //~ E0601
+
+pub rt fn rt_while_with_a_condition(move s: Str, c: Bool) { while c { eat_uo(Some(s)) } }   //~ E0901
+
+pub fn for_over_a_range(move s: Str, n: U32) { for i in 0 ..< n { eat_uo(Some(s)) } }   //~ E0601
+
+pub rt fn rt_for_over_a_range(move s: Str, n: U32) { for i in 0 ..< n { eat_uo(Some(s)) } }   //~ E0901

@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§5.2", "§5.4", "§8.1", "§10", "§12.2"]
+
+// W6-02 U7 (the parent), S-1030, S-1038 (§5.2, the paragraph that begins "所有する束縛（`move` の引数、`move self`、... の全体が Copy でない Dup の値で"; §5.2: "移した `var` は全体に代入すると
+// 再び使え"; §4.4: "関数値の引数は `move` で、`f.(x)` は直接の呼び出し `Shape.Circle(x)` と同じく要素を値で受ける"): the forms of negative/dup_release_value_ok.onsa that need a statement list.
+// An owned `Str` that is handed off whole to a `move` parameter leaves its binding with no value, so an assignment of a new value to it drops nothing (S-1038 drops the value the target may
+// hold), and the new value is moved by the return. A constructor called as a function value with the value once (`g.(s, 1)`) takes it as a `move` argument and moves it (R-255, a move today
+// already), as the direct `E.B(s, 1)` of negative/dup_release_value_ok.onsa does after U7 (S-872). No function here needs `Alloc` after U7: no E0601 in a function without `uses {Alloc}`, no
+// E0901 in an `rt fn`. Today the assignments are errors (the element `Some(s)` is a copy and `s` is dropped). The helper drops its argument, so its own E0901 is reported (the same as
+// negative/dup_release_value_ok.onsa). No error is expected in the callers, so the line does not matter (S-783).
+
+pub enum E {
+  B(Str, U32),
+}
+
+pub rt fn eat_o(move o: Option[Str]) -> U32 { 0 }   //~ E0901
+
+pub fn assign_after_the_whole_move(move s: Str, move o: Option[Str]) -> (Option[Str], U32) {
+  let n = eat_o(o)
+  o = Some(s)
+  (o, n)
+}
+
+pub rt fn rt_assign_after_the_whole_move(move s: Str, move o: Option[Str]) -> (Option[Str], U32) {
+  let n = eat_o(o)
+  o = Some(s)
+  (o, n)
+}
+
+pub fn function_value_one_hand_off(move s: Str) -> E {
+  let g = E.B
+  g.(s, 1)
+}
+
+pub rt fn rt_function_value_one_hand_off(move s: Str) -> E {
+  let g = E.B
+  g.(s, 1)
+}

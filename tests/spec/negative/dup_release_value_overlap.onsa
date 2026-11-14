@@ -1,0 +1,79 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§8.1", "§10", "§12.2"]
+
+// W6-02 U7/t, S-1030 (§5.2: "同じ呼び出しの他の引数・受け手と重ならず（下の E0702 と同じ判定）"; the E0702 paragraphs: "`move` の引数に渡す場所が、同じ呼び出しの他の引数（`inout`、借用、`move`）の場所と重なる
+// ときも E0702 である"; "入れ子の呼び出しの `move` の引数も同じ変更で、引数の順によらず E0702 である（`fn2(x, take(move x))`）"; §3.5: "兄弟の要素の中の変更は重なりに数えない" for a literal, "ただし、平面の引数に置いた配列
+// リテラルの要素は引数の場所"): the fourth condition for a literal that is in the argument of a call. The literal itself overlaps nothing in its own elements, but its element `s` is a place of the argument of the
+// call, so that another argument of the call that is `s` as a borrowed argument (before or after, the order does not matter), the receiver, or a `move` argument that hands `s` off (`two(s, pass_s(s))`), overlaps
+// it, in Affine terms E0702 (`addb(b, Some(move b))`, `addb2(Some(move b), b)`, `two(move s, take(move s))`, `g.(move s, take(move s))` with the function value of a constructor). Then the value is copied
+// and the original is dropped at the end of its binding, and the drop needs `Alloc`: an E0601 in a function without `uses {Alloc}` and an E0901 in an `rt fn`. The constructor itself (`E.C(s,
+// pass_s(s))`, `W{ a: move s, b: take(move s) }` is E0704 in Affine terms, no overlap) is a move: negative/dup_release_value_ok_now.onsa. The function value `(E.C).(s, pass_s(s))` is a call, and `(E.C)` is the
+// same constructor (S-872: "`g.(x)` と `W.A(x)` は `Alloc` も同じ" is about the same argument, and here the call has the overlap that the direct form has not). The helpers drop their argument, so their own E0901 is reported (the same as
+// negative/drop_for_one_path.onsa). Today every function here is an error, and it stays one. The functions are one-liners (S-783). One error per function (P-01).
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+impl Param {
+  pub rt fn plus_o(self, o: Option[Param]) -> U32 { 0 }
+}
+
+pub enum E {
+  A(Str),
+  B(Str, U32),
+  C(Str, Str),
+  N,
+}
+
+pub rt fn two(move a: Str, move b: Str) -> U32 { 0 }   //~ E0901
+
+pub rt fn pass_s(move s: Str) -> Str { s }
+
+pub rt fn len_so(a: Str, o: Option[Str]) -> U32 { 0 }
+
+pub rt fn len_os(o: Option[Str], a: Str) -> U32 { 0 }
+
+pub rt fn len_ts(a: Str, t: (Str, U32)) -> U32 { 0 }
+
+pub rt fn len_sp(a: Str, p: Param) -> U32 { 0 }
+
+pub rt fn ign_o[T](a: T, o: Option[T]) -> U32 { 0 }
+
+// ------------------------------------------------------------------ a literal in the argument of a call that also reads the value
+
+pub fn borrowed_arg_before(move s: Str) -> U32 { len_so(s, Some(s)) }   //~ E0601
+
+pub rt fn rt_borrowed_arg_before(move s: Str) -> U32 { len_so(s, Some(s)) }   //~ E0901
+
+pub fn borrowed_arg_after(move s: Str) -> U32 { len_os(Some(s), s) }   //~ E0601
+
+pub rt fn rt_borrowed_arg_after(move s: Str) -> U32 { len_os(Some(s), s) }   //~ E0901
+
+pub fn tuple_in_borrowed(move s: Str) -> U32 { len_ts(s, (s, 1)) }   //~ E0601
+
+pub rt fn rt_tuple_in_borrowed(move s: Str) -> U32 { len_ts(s, (s, 1)) }   //~ E0901
+
+pub fn struct_in_borrowed(move s: Str) -> U32 { len_sp(s, Param { name: s, value: 0.0 }) }   //~ E0601
+
+pub rt fn rt_struct_in_borrowed(move s: Str) -> U32 { len_sp(s, Param { name: s, value: 0.0 }) }   //~ E0901
+
+pub fn receiver(move p: Param) -> U32 { p.plus_o(Some(p)) }   //~ E0601
+
+pub rt fn rt_receiver(move p: Param) -> U32 { p.plus_o(Some(p)) }   //~ E0901
+
+pub fn generic_borrowed[T](move t: T) -> U32 { ign_o(t, Some(t)) }   //~ E0601
+
+pub rt fn rt_generic_borrowed[T](move t: T) -> U32 { ign_o(t, Some(t)) }   //~ E0901
+
+// ------------------------------------------------------------------ two hand-offs in the arguments of one call
+
+pub fn move_args_pair(move s: Str) -> U32 { two(s, pass_s(s)) }   //~ E0601
+
+pub rt fn rt_move_args_pair(move s: Str) -> U32 { two(s, pass_s(s)) }   //~ E0901
+
+pub fn function_value_of_a_constructor(move s: Str) -> E { (E.C).(s, pass_s(s)) }   //~ E0601
+
+pub rt fn rt_function_value_of_a_constructor(move s: Str) -> E { (E.C).(s, pass_s(s)) }   //~ E0901

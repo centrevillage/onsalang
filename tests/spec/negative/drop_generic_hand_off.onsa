@@ -11,7 +11,7 @@
 // kind (`Eq`) is moved like a `T` without a bound. The value is moved on every path (each branch moves it), or it is read first and moved after. The only field of a `?Dup` struct that is taken out
 // leaves nothing to drop, and the rest that is a `Copy` field needs no drop (§5.2: "取り出したフィールド以外はその場で破棄される"). Every function is legal today (a type parameter is not counted) and stays
 // legal. The forms that are not moved are in negative/drop_generic_end.onsa and negative/drop_generic_release.onsa, the forms that put the value in a constructor, a literal or a binding
-// heading (a value position, U7) are not written here. The functions are one-liners.
+// heading (a value position) are in negative/dup_release_value_ok.onsa and negative/dup_release_head_ok.onsa (W6-02 U7/t). The functions are one-liners.
 
 pub struct Holder[T] {
   v: T,

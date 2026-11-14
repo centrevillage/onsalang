@@ -1,0 +1,42 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§8.1", "§10", "§12.2"]
+
+// W6-02 U7/t, S-1030 (§5.2: "置けるのは、その後で使わず ... 置けなければ複製し"; §3.5: "兄弟の要素の中の変更は重なりに数えない"): the contrast of negative/dup_release_value_ok.onsa that is a
+// move already today. When the last use of the value is the argument of a `move` parameter (U4a, R-255), that hand-off moves the value, and an element of the same literal before it is a copy
+// (the call after it uses `s`, so a `move` there would be E0704 in Affine terms): `W2 { a: s, b: pass_s(s) }`, `E.C(s, pass_s(s))`, `(s, pass_s(s))`, `(Some(s), pass_s(s))`. The copy is a reference
+// count (§12.2: "Shared 値を含む値の型を組むこと ... 要らない"), and the original is moved by the last use, so the function needs no `Alloc`: no E0601 in a function without `uses {Alloc}`, no E0901 in an
+// `rt fn`. The helper `pass_s` hands its argument back, so it is no error (R-255). No marker is expected anywhere in this file, today and after. The order the other way round (the call
+// first, the element last) is a move only after U7, in negative/dup_release_value_ok.onsa.
+
+pub struct W2 {
+  a: Str,
+  b: Str,
+}
+
+pub enum E {
+  A(Str),
+  B(Str, U32),
+  C(Str, Str),
+  N,
+}
+
+pub rt fn pass_s(move s: Str) -> Str { s }
+
+// ------------------------------------------------------------------ the last use is the argument of a `move` parameter
+
+pub fn call_last_struct(move s: Str) -> W2 { W2 { a: s, b: pass_s(s) } }
+
+pub rt fn rt_call_last_struct(move s: Str) -> W2 { W2 { a: s, b: pass_s(s) } }
+
+pub fn call_last_ctor(move s: Str) -> E { E.C(s, pass_s(s)) }
+
+pub rt fn rt_call_last_ctor(move s: Str) -> E { E.C(s, pass_s(s)) }
+
+pub fn call_last_tuple(move s: Str) -> (Str, Str) { (s, pass_s(s)) }
+
+pub rt fn rt_call_last_tuple(move s: Str) -> (Str, Str) { (s, pass_s(s)) }
+
+pub fn call_last_option(move s: Str) -> (Option[Str], Str) { (Some(s), pass_s(s)) }
+
+pub rt fn rt_call_last_option(move s: Str) -> (Option[Str], Str) { (Some(s), pass_s(s)) }

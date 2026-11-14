@@ -78,10 +78,12 @@ pub rt fn the_staying_tail_is_a_call(c: Bool, x: Str) -> U32 {
   t.len()
 }
 
-// The owned binding is not turned into a borrowed one by deriving from it.
+// The owned binding is not turned into a borrowed one by deriving from it: `let q = t` is the heading of an owned binding, `t` is
+// moved into it (an owned Dup value that nothing uses afterwards, §5.2, S-1030), and the one error is at `q` (before that hand-off was
+// decided, `t` was copied and the error was at `t`).
 pub rt fn derived_from_the_owned_binding(c: Bool, x: Str) -> U32 {
-  let t = if c { x } else { make(x) }       //~ E0901
-  let q = t
+  let t = if c { x } else { make(x) }
+  let q = t       //~ E0901
   name_len(q)
 }
 

@@ -47,7 +47,9 @@ pub(super) enum Pos {
 }
 
 impl Pos {
-    /// A value at it is consumed (§5.2): moved, copied or an error.
+    /// A value at it is consumed (§5.2): moved, copied or an error; the
+    /// whole of an owned binding of a Dup value that is not Copy is
+    /// released at it (S-1030, `Walker::release`).
     pub(super) fn consumes(self) -> bool {
         matches!(self, Pos::Own | Pos::Value | Pos::MoveArg | Pos::Return | Pos::Extract)
     }
@@ -57,13 +59,6 @@ impl Pos {
     /// not consume, it is dropped where it is.
     pub(super) fn waits(self) -> bool {
         matches!(self, Pos::Arg(Mode::Borrow) | Pos::Kept)
-    }
-
-    /// It consumes, and the whole of an owned binding of a Dup value that
-    /// is not Copy may be released at it (moved, unless used after: §5.2,
-    /// R-255; `consume`). U7 (S-1030) adds `Own` and `Value`.
-    pub(super) fn releases(self) -> bool {
-        matches!(self, Pos::Return | Pos::MoveArg | Pos::Extract)
     }
 
     /// It consumes, and an owned Affine place at it is moved with `move`
@@ -126,6 +121,8 @@ impl<'a> Walker<'a> {
                 self.drops(r, 0, ast.expr(e).span, true);
             }
             ExprKind::Repeat { elem, len } => {
+                // SPEC-GAP(S-1045): the value is put once (released, as a value made is put), its drop
+                // when `N` is 0 not counted (provisional).
                 self.expr(r, *elem, element);
                 self.expr(r, *len, Pos::Read);
             }

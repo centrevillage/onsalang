@@ -1,0 +1,251 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§7", "§8.1", "§10", "§12.2"]
+
+// W6-02 U7/t, S-1030, S-609, S-795 (§5.2: "束縛の見出し（`let` / `var` の初期化、`match` の対象、`for` の反復元）の Dup の値の `move` は所有の束縛を選ぶ印として受け付ける"; "所有する束縛 ... の全体が Copy でない Dup の値で、
+// それを消費する位置に置くとき、... 複製せずに移す"; §5.4: "`let y = move x`" and "`match move x`" and "`for s in move xs`" and the destructuring of a `move` heading are owned, and "分解したパターンの各束縛は、その行の種類を受け継ぐ"; §12.2): the
+// heading of an owned binding. An owned Dup value (a `move` parameter that is a `Str`, an `Option[Str]`, a struct, a tuple, an enum or a type parameter `T` with no bound) that is the heading of
+// `let t = move s`, `let t = s` (the name is an owned binding, not a borrowed origin, so the new binding is owned: §5.4 "借用の起点は、借用引数 ... である" and the other forms of the table), `var t = s`,
+// `match move o`, `for x in move xs` or the destructuring `let (a, b) = move p` is moved into the new binding when nothing uses it afterwards, so that the original is not dropped. The new bindings (`t`, the arm bindings `x`,
+// the iterated `x`, `a` and `b`) are owned and are moved on, or returned, so no drop is left and the function needs no `Alloc`: no E0601 in a function without `uses {Alloc}`, no E0901 in an `rt fn`. The parts that are
+// not bound are Copy (`_` over a `U32` or an `F32` has nothing to drop), a static literal (`"n"`) or no value (`None`). The array `[Str; 2]` has no heap box to drop, so its `for` over `move xs` leaves nothing
+// but the elements (S-1037). Every function here is an error today (the heading is a copy and the original is dropped) and none is one after. The helpers drop their argument, so their own E0901 is reported (the same
+// as negative/drop_for_one_path.onsa); the callers have no marker. The functions with a statement list are on several lines (no error is expected, S-783). The forms that stay copies, or drop
+// what the pattern does not bind, are in negative/dup_release_head_later.onsa and negative/dup_release_head_wild.onsa.
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+pub struct W2 {
+  a: Str,
+  b: Str,
+}
+
+pub enum Q {
+  A(Str),
+  B(Str, U32),
+}
+
+pub rt fn eat(move s: Str) {}   //~ E0901
+
+pub rt fn eat_n(move s: Str) -> U32 { s.len() }   //~ E0901
+
+pub rt fn eat_g[T](move t: T) -> U32 { 0 }   //~ E0901
+
+// ------------------------------------------------------------------ `let` and `var`
+
+pub fn let_move(move s: Str) -> Str {
+  let t = move s
+  t
+}
+
+pub rt fn rt_let_move(move s: Str) -> Str {
+  let t = move s
+  t
+}
+
+pub fn let_plain(move s: Str) -> Str {
+  let t = s
+  t
+}
+
+pub rt fn rt_let_plain(move s: Str) -> Str {
+  let t = s
+  t
+}
+
+pub fn var_plain(move s: Str) -> Str {
+  var t = s
+  t
+}
+
+pub rt fn rt_var_plain(move s: Str) -> Str {
+  var t = s
+  t
+}
+
+pub fn let_chain(move s: Str) -> Str {
+  let t = move s
+  let u = move t
+  u
+}
+
+pub rt fn rt_let_chain(move s: Str) -> Str {
+  let t = move s
+  let u = move t
+  u
+}
+
+pub fn let_option(move o: Option[Str]) -> Option[Str] {
+  let t = move o
+  t
+}
+
+pub rt fn rt_let_option(move o: Option[Str]) -> Option[Str] {
+  let t = move o
+  t
+}
+
+pub fn let_then_hand_off(move s: Str) -> U32 {
+  let t = s
+  eat_n(t)
+}
+
+pub rt fn rt_let_then_hand_off(move s: Str) -> U32 {
+  let t = s
+  eat_n(t)
+}
+
+pub fn let_then_literal(move s: Str) -> Param {
+  let t = move s
+  Param { name: t, value: 0.0 }
+}
+
+pub rt fn rt_let_then_literal(move s: Str) -> Param {
+  let t = move s
+  Param { name: t, value: 0.0 }
+}
+
+pub fn let_in_branches(move s: Str, c: Bool) -> Str {
+  let t = move s
+  if c { t } else { t }
+}
+
+pub rt fn rt_let_in_branches(move s: Str, c: Bool) -> Str {
+  let t = move s
+  if c { t } else { t }
+}
+
+pub fn generic_let[T](move t: T) -> T {
+  let u = move t
+  u
+}
+
+pub rt fn rt_generic_let[T](move t: T) -> T {
+  let u = move t
+  u
+}
+
+// ------------------------------------------------------------------ the content that was taken out and is put in a value position (R-255)
+
+pub fn question_then_ok(move r: Result[Str, U32]) -> Result[Str, U32] {
+  let s = r?
+  Ok(s)
+}
+
+pub rt fn rt_question_then_ok(move r: Result[Str, U32]) -> Result[Str, U32] {
+  let s = r?
+  Ok(s)
+}
+
+pub fn question_then_tuple(move r: Result[Str, U32]) -> Result[(Str, U32), U32] {
+  let s = r?
+  Ok((s, 1))
+}
+
+pub rt fn rt_question_then_tuple(move r: Result[Str, U32]) -> Result[(Str, U32), U32] {
+  let s = r?
+  Ok((s, 1))
+}
+
+pub fn unwrap_then_some(move r: Result[Str, U32]) -> Option[Str] {
+  let s = r.unwrap()
+  Some(s)
+}
+
+pub rt fn rt_unwrap_then_some(move r: Result[Str, U32]) -> Option[Str] {
+  let s = r.unwrap()
+  Some(s)
+}
+
+pub fn generic_question_then_ok[T](move r: Result[T, U32]) -> Result[T, U32] {
+  let t = r?
+  Ok(t)
+}
+
+pub rt fn rt_generic_question_then_ok[T](move r: Result[T, U32]) -> Result[T, U32] {
+  let t = r?
+  Ok(t)
+}
+
+// ------------------------------------------------------------------ `match move`
+
+pub fn match_option(move o: Option[Str]) -> Str { match move o { Some(x) => x, None => "n" } }
+
+pub rt fn rt_match_option(move o: Option[Str]) -> Str { match move o { Some(x) => x, None => "n" } }
+
+pub fn match_result(move r: Result[Str, U32]) -> Str { match move r { Ok(x) => x, Err(_) => "e" } }
+
+pub rt fn rt_match_result(move r: Result[Str, U32]) -> Str { match move r { Ok(x) => x, Err(_) => "e" } }
+
+pub fn match_arm_hands_off(move o: Option[Str]) -> U32 { match move o { Some(x) => eat_n(x), None => 0 } }
+
+pub rt fn rt_match_arm_hands_off(move o: Option[Str]) -> U32 { match move o { Some(x) => eat_n(x), None => 0 } }
+
+pub fn match_struct(move p: Param) -> Str { match move p { Param { name: n, value: _ } => n } }
+
+pub rt fn rt_match_struct(move p: Param) -> Str { match move p { Param { name: n, value: _ } => n } }
+
+pub fn match_tuple(move t: (Str, U32)) -> Str { match move t { (a, _) => a } }
+
+pub rt fn rt_match_tuple(move t: (Str, U32)) -> Str { match move t { (a, _) => a } }
+
+pub fn match_enum(move q: Q) -> Str { match move q { Q.A(x) => x, Q.B(x, _) => x } }
+
+pub rt fn rt_match_enum(move q: Q) -> Str { match move q { Q.A(x) => x, Q.B(x, _) => x } }
+
+pub fn match_in_both_branches(move o: Option[Str], c: Bool) -> Str { if c { match move o { Some(x) => x, None => "a" } } else { match move o { Some(x) => x, None => "b" } } }
+
+pub rt fn rt_match_in_both_branches(move o: Option[Str], c: Bool) -> Str { if c { match move o { Some(x) => x, None => "a" } } else { match move o { Some(x) => x, None => "b" } } }
+
+pub fn match_in_a_loop_that_returns(move o: Option[Str]) -> Str { while true { return match move o { Some(x) => x, None => "n" } } }
+
+pub rt fn rt_match_in_a_loop_that_returns(move o: Option[Str]) -> Str { while true { return match move o { Some(x) => x, None => "n" } } }
+
+pub fn generic_match[T](move o: Option[T]) -> Option[T] { match move o { Some(x) => Some(x), None => None } }
+
+pub rt fn rt_generic_match[T](move o: Option[T]) -> Option[T] { match move o { Some(x) => Some(x), None => None } }
+
+pub fn generic_match_hands_off[T](move o: Option[T]) -> U32 { match move o { Some(x) => eat_g(x), None => 0 } }
+
+pub rt fn rt_generic_match_hands_off[T](move o: Option[T]) -> U32 { match move o { Some(x) => eat_g(x), None => 0 } }
+
+// ------------------------------------------------------------------ `for x in move xs`
+
+pub fn for_array(move xs: [Str; 2]) { for x in move xs { eat(x) } }
+
+pub rt fn rt_for_array(move xs: [Str; 2]) { for x in move xs { eat(x) } }
+
+// ------------------------------------------------------------------ destructuring a `move` heading
+
+pub fn destructure_tuple(move p: (Str, Str)) -> W2 {
+  let (a, b) = move p
+  W2 { a: a, b: b }
+}
+
+pub rt fn rt_destructure_tuple(move p: (Str, Str)) -> W2 {
+  let (a, b) = move p
+  W2 { a: a, b: b }
+}
+
+pub fn destructure_struct(move p: Param) -> Str {
+  let Param { name: n, value: _ } = move p
+  n
+}
+
+pub rt fn rt_destructure_struct(move p: Param) -> Str {
+  let Param { name: n, value: _ } = move p
+  n
+}
+
+pub fn destructure_then_hand_off(move t: (Str, U32)) -> U32 {
+  let (a, _) = move t
+  eat_n(a)
+}
+
+pub rt fn rt_destructure_then_hand_off(move t: (Str, U32)) -> U32 {
+  let (a, _) = move t
+  eat_n(a)
+}

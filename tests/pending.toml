@@ -1307,10 +1307,3 @@ target = "tests/spec/control/fixed_str_match_value.onsa"
 reasons = ["S-614"]
 until = "W8-06"
 note = "値の形の `match`（腕が値を返す）は、整数のリテラルと同じく Core で E0200（ValueMatch）。W8-06 で降ろす。"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/fixes/e0703_dup_unbounded_type_parameter.onsa:15:13 E0703 fix1"
-reasons = ["S-1030"]
-until = "W6-02"
-note = "U4b から U7 まで: 境界の無い `T` を値の位置に置く形は U7 まで複製。候補を当てた後の `Some(t)` の `t` が複製され、元の `t` の破棄が `Alloc` を要して（§6.3）E0601 になり、`clean = true` が落ちる"

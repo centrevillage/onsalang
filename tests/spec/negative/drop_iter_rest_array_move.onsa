@@ -6,8 +6,8 @@
 // 破棄される（§12.2）"; §12.2: "所有する Shared 値 ... の破棄: 要る"): the container of the `move` parameter `xs: Array[F32]` is a heap object, so the loop `for s in move xs` over it
 // drops it when it is left, at its end and at every exit, and the drop needs `Alloc`: an E0601 without `uses {Alloc}`, an E0901 in an `rt fn`. The elements are `F32`,
 // so there is no other drop. This version already reports exactly these (it iterates a copy and drops the original `xs` at the end of the function, S-1037), and
-// the verdict stays after the drop of the container is counted by the loop (and after the last use of a Dup value is read as a move, U4a, S-1030: the container is
-// still dropped, by the loop). The borrowed parameter, which this version does not report, is in negative/drop_iter_rest_array.onsa. The callers are one-liners
+// the verdict stays after the drop of the container is counted by the loop (and after the last use of a Dup value is read as a move, U4a, S-1030, and the
+// heading `for s in move xs` moves the Dup value into the loop, W6-02 U7: the container is still dropped, by the loop). The borrowed parameter, which this version does not report, is in negative/drop_iter_rest_array.onsa. The callers are one-liners
 // (S-783). One error per function (P-01).
 
 // ------------------------------------------------------------------ a `move` parameter

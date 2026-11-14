@@ -1,0 +1,203 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§5.4", "§7", "§8.1", "§10", "§12.2"]
+
+// W6-02 U7/t, S-1030 (§5.2, the paragraph that begins "所有する束縛（`move` の引数、`move self`、... の全体が Copy でない Dup の値で": "それを消費する位置に置くとき、その値が Affine であったとして、
+// そこに `move` を置けるなら、複製せずに移す"; "消費する位置" are "束縛の見出し、値を置く位置、`move` の引数、返り値、取り出す形" and the places that hold a value are "代入の右辺、struct / 配列 /
+// タプルのリテラルと構築子の要素", §5.2 above; §12.2: "所有する Dup の値 ... を、消費する位置（返り値、`move` の引数、構築子とリテラルの要素、束縛の見出しなど）で移すこと: 要らない"): the places
+// that hold a value. An owned Dup value (a `move` parameter that is a `Str`, a type parameter `T` with no bound) that is an element of a constructor, a struct, a tuple or an array literal, nested or
+// not, is moved when nothing uses it afterwards, so that the original is not dropped and the function needs no `Alloc`: no E0601 in a function without `uses {Alloc}`, no E0901 in an `rt fn`. The
+// literal is the value of the function, or the argument of a `move` parameter (`eat_o(Some(s))`), so that nothing else is a Dup value to drop. The same variable twice in one literal (`(s, s)`,
+// `[s, s]`) is a copy in the first element and a move in the last ("リテラルと構築子の要素は左から評価され", the later element uses it, and the copy is a reference count: §12.2 "Shared 値を含む値の型を
+// 組むこと ... 要らない"), so no drop is left; the condition "同じ呼び出しの他の引数・受け手と重ならず" is about a call, and a literal is not one (§3.5: "構築子、struct・配列・タプルのリテラル ... の
+// 兄弟の要素の中の変更は重なりに数えない"). A call before the last element that hands the value off (`W2 { a: pass_s(s), b: s }`) is a copy for the call (the element after uses it) and the last element
+// moves. The literal in the return position of a loop that leaves at once, and the forms that use a binding derived from the value only before the hand-off (or a Copy binding), are moves too. Every
+// function here is an error today (the hand-off at a value position is a copy: R-255 only moved the return, the `move` argument and the extracted forms), and none is one after. The helpers drop
+// their argument, so their own E0901 is reported (the same as negative/drop_for_one_path.onsa); the callers have no marker. The functions with a statement list are on several lines (no error is
+// expected, so the line does not matter, S-783). The forms that stay copies are in negative/dup_release_value_later.onsa, _overlap, _loop, _derived and _borrowed, the forms that are moves today
+// already in negative/dup_release_value_ok_now.onsa.
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+pub struct W2 {
+  a: Str,
+  b: Str,
+}
+
+pub enum E {
+  A(Str),
+  B(Str, U32),
+  C(Str, Str),
+  N,
+}
+
+pub rt fn eat_o(move o: Option[Str]) -> U32 { 0 }   //~ E0901
+
+pub rt fn eat_t(move t: (Str, U32)) -> U32 { 0 }   //~ E0901
+
+pub rt fn eat_p(move p: Param) -> U32 { 0 }   //~ E0901
+
+pub rt fn eat_e(move e: E) -> U32 { 0 }   //~ E0901
+
+pub rt fn eat_og[T](move o: Option[T]) -> U32 { 0 }   //~ E0901
+
+pub rt fn pass_s(move s: Str) -> Str { s }
+
+// ------------------------------------------------------------------ a constructor, a struct, a tuple and an array literal that is the value of the function
+
+pub fn some_s(move s: Str) -> Option[Str] { Some(s) }
+
+pub rt fn rt_some_s(move s: Str) -> Option[Str] { Some(s) }
+
+pub fn ok_s(move s: Str) -> Result[Str, U32] { Ok(s) }
+
+pub rt fn rt_ok_s(move s: Str) -> Result[Str, U32] { Ok(s) }
+
+pub fn err_s(move s: Str) -> Result[U32, Str] { Err(s) }
+
+pub rt fn rt_err_s(move s: Str) -> Result[U32, Str] { Err(s) }
+
+pub fn ctor_a(move s: Str) -> E { E.A(s) }
+
+pub rt fn rt_ctor_a(move s: Str) -> E { E.A(s) }
+
+pub fn ctor_b(move s: Str) -> E { E.B(s, 1) }
+
+pub rt fn rt_ctor_b(move s: Str) -> E { E.B(s, 1) }
+
+pub fn struct_lit(move s: Str) -> Param { Param { name: s, value: 0.0 } }
+
+pub rt fn rt_struct_lit(move s: Str) -> Param { Param { name: s, value: 0.0 } }
+
+pub fn tuple_lit(move s: Str) -> (Str, U32) { (s, 1) }
+
+pub rt fn rt_tuple_lit(move s: Str) -> (Str, U32) { (s, 1) }
+
+pub fn array_lit(move s: Str, move t: Str) -> [Str; 2] { [s, t] }
+
+pub rt fn rt_array_lit(move s: Str, move t: Str) -> [Str; 2] { [s, t] }
+
+pub fn array_with_a_static(move s: Str) -> [Str; 2] { [s, "x"] }
+
+pub rt fn rt_array_with_a_static(move s: Str) -> [Str; 2] { [s, "x"] }
+
+pub fn two_elements(move s: Str, move t: Str) -> W2 { W2 { a: s, b: t } }
+
+pub rt fn rt_two_elements(move s: Str, move t: Str) -> W2 { W2 { a: s, b: t } }
+
+pub fn nested_some_tuple(move s: Str) -> Option[(Str, U32)] { Some((s, 1)) }
+
+pub rt fn rt_nested_some_tuple(move s: Str) -> Option[(Str, U32)] { Some((s, 1)) }
+
+pub fn nested_ok_some(move s: Str) -> Result[Option[Str], U32] { Ok(Some(s)) }
+
+pub rt fn rt_nested_ok_some(move s: Str) -> Result[Option[Str], U32] { Ok(Some(s)) }
+
+// ------------------------------------------------------------------ the same variable twice in one literal: a copy, then the move
+
+pub fn twice_tuple(move s: Str) -> (Str, Str) { (s, s) }
+
+pub rt fn rt_twice_tuple(move s: Str) -> (Str, Str) { (s, s) }
+
+pub fn twice_array(move s: Str) -> [Str; 2] { [s, s] }
+
+pub rt fn rt_twice_array(move s: Str) -> [Str; 2] { [s, s] }
+
+pub fn twice_struct(move s: Str) -> W2 { W2 { a: s, b: s } }
+
+pub rt fn rt_twice_struct(move s: Str) -> W2 { W2 { a: s, b: s } }
+
+pub fn thrice_tuple(move s: Str) -> (Str, Str, Str) { (s, s, s) }
+
+pub rt fn rt_thrice_tuple(move s: Str) -> (Str, Str, Str) { (s, s, s) }
+
+pub fn twice_in_options(move s: Str) -> (Option[Str], Option[Str]) { (Some(s), Some(s)) }
+
+pub rt fn rt_twice_in_options(move s: Str) -> (Option[Str], Option[Str]) { (Some(s), Some(s)) }
+
+// ------------------------------------------------------------------ every path ends with the value in a literal
+
+pub fn both_branches(move s: Str, c: Bool) -> (Str, U32) { if c { (s, 1) } else { (s, 2) } }
+
+pub rt fn rt_both_branches(move s: Str, c: Bool) -> (Str, U32) { if c { (s, 1) } else { (s, 2) } }
+
+pub fn both_arms(move s: Str, n: U32) -> Option[Str] { match n { 0 => Some(s), _ => Some(s) } }
+
+pub rt fn rt_both_arms(move s: Str, n: U32) -> Option[Str] { match n { 0 => Some(s), _ => Some(s) } }
+
+// ------------------------------------------------------------------ the literal is the argument of a `move` parameter
+
+pub fn move_arg_option(move s: Str) -> U32 { eat_o(Some(s)) }
+
+pub rt fn rt_move_arg_option(move s: Str) -> U32 { eat_o(Some(s)) }
+
+pub fn move_arg_tuple(move s: Str) -> U32 { eat_t((s, 1)) }
+
+pub rt fn rt_move_arg_tuple(move s: Str) -> U32 { eat_t((s, 1)) }
+
+pub fn move_arg_struct(move s: Str) -> U32 { eat_p(Param { name: s, value: 0.0 }) }
+
+pub rt fn rt_move_arg_struct(move s: Str) -> U32 { eat_p(Param { name: s, value: 0.0 }) }
+
+pub fn move_arg_ctor(move s: Str) -> U32 { eat_e(E.A(s)) }
+
+pub rt fn rt_move_arg_ctor(move s: Str) -> U32 { eat_e(E.A(s)) }
+
+// ------------------------------------------------------------------ a call that hands the value off before the last element
+
+pub fn call_then_element_struct(move s: Str) -> W2 { W2 { a: pass_s(s), b: s } }
+
+pub rt fn rt_call_then_element_struct(move s: Str) -> W2 { W2 { a: pass_s(s), b: s } }
+
+pub fn call_then_element_ctor(move s: Str) -> E { E.C(pass_s(s), s) }
+
+pub rt fn rt_call_then_element_ctor(move s: Str) -> E { E.C(pass_s(s), s) }
+
+pub fn call_then_element_tuple(move s: Str) -> (Str, Str) { (pass_s(s), s) }
+
+pub rt fn rt_call_then_element_tuple(move s: Str) -> (Str, Str) { (pass_s(s), s) }
+
+// ------------------------------------------------------------------ a type parameter with no bound
+
+pub fn generic_some[T](move t: T) -> Option[T] { Some(t) }
+
+pub rt fn rt_generic_some[T](move t: T) -> Option[T] { Some(t) }
+
+pub fn generic_tuple[T](move t: T) -> (T, U32) { (t, 1) }
+
+pub rt fn rt_generic_tuple[T](move t: T) -> (T, U32) { (t, 1) }
+
+pub fn generic_ok[T](move t: T) -> Result[T, U32] { Ok(t) }
+
+pub rt fn rt_generic_ok[T](move t: T) -> Result[T, U32] { Ok(t) }
+
+pub fn generic_twice[T](move t: T) -> (Option[T], Option[T]) { (Some(t), Some(t)) }
+
+pub rt fn rt_generic_twice[T](move t: T) -> (Option[T], Option[T]) { (Some(t), Some(t)) }
+
+pub fn generic_move_arg[T](move t: T) -> U32 { eat_og(Some(t)) }
+
+pub rt fn rt_generic_move_arg[T](move t: T) -> U32 { eat_og(Some(t)) }
+
+// ------------------------------------------------------------------ a loop that leaves at once with the literal
+
+pub fn return_in_a_loop(move s: Str) -> Option[Str] { while true { return Some(s) } }
+
+pub rt fn rt_return_in_a_loop(move s: Str) -> Option[Str] { while true { return Some(s) } }
+
+pub fn return_in_a_loop_branches(move s: Str, c: Bool) -> Option[Str] { while true { if c { return Some(s) } else { return Some(s) } } }
+
+pub rt fn rt_return_in_a_loop_branches(move s: Str, c: Bool) -> Option[Str] { while true { if c { return Some(s) } else { return Some(s) } } }
+
+// ------------------------------------------------------------------ a binding derived from the value is used only before the hand-off, or is a Copy value
+
+pub fn derived_read_before(move o: Option[Str]) -> (U32, Option[Option[Str]]) { match o { Some(b) => (b.len(), Some(o)), None => (0, Some(o)) } }
+
+pub rt fn rt_derived_read_before(move o: Option[Str]) -> (U32, Option[Option[Str]]) { match o { Some(b) => (b.len(), Some(o)), None => (0, Some(o)) } }
+
+pub fn derived_copy_binding(move t: (Str, U32)) -> (U32, Option[(Str, U32)]) { match t { (_, k) => (k, Some(t)) } }
+
+pub rt fn rt_derived_copy_binding(move t: (Str, U32)) -> (U32, Option[(Str, U32)]) { match t { (_, k) => (k, Some(t)) } }

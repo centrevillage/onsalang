@@ -5,7 +5,7 @@
 // R-255 (W6-02 U4a/t), the inputs of issues/R/R-255 that change in U4a (§12.2: "受け取った Shared 値を、そのまま返す・`move` の引数に渡す: 要らない"; §5.2, S-609, S-1030): an `rt` function that takes a value
 // with a `Str` in it by `move` and returns it, passes it on to a `move` parameter or takes it out with `unwrap` needs no `Alloc`; the same for the owned `let` that holds the result of a call and the owned
 // `var` that is returned (S-1030: the owned binding is returned whole, the paths that end with it move it). The local is a `let` or a `var`, and `p.value = v` assigns a field before the value is returned. Now each is an E0901 (R-255: the
-// drops of an `rt fn` count a value that is passed on). The forms of issues/R/R-255 that stay errors are not written here: `Ok(s)` after `let s = r?` (a value position, U7), and the `Buf` that
+// drops of an `rt fn` count a value that is passed on). `Ok(s)` after `let s = r?` of issues/R/R-255 (a value position) is in negative/dup_release_head_ok.onsa (`question_then_ok`, W6-02 U7/t). The form of issues/R/R-255 that stays an error is not written here: the `Buf` that
 // is created in `rt` (`Buf.zeroed(4)` needs `Alloc` for another reason). `g` of issues/R/R-255/v10_let_call_return.onsa is a literal with a static `Str` and a Copy field, which is a borrowed binding
 // (§5.4) and passes today. No marker is expected anywhere in this file.
 

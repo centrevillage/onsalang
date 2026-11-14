@@ -8,7 +8,7 @@
 // is moved when nothing uses it afterwards, so the original is not dropped and the function needs no `Alloc`: no E0601 in a function without `uses {Alloc}`, no E0901 in an `rt fn`. The `Err` and `None`
 // path of `?` returns, and it leaves nothing alive (the operand was consumed where `?` is written, and the other value in the `Err` is a `U32`). The payload that comes out is a new value, handed to a
 // constructor, a call or a tuple (R-255: `Ok(r?)`). Every function is an error today (R-255: the original is dropped after the copy is taken) and none is one after. The `let s = r?` followed by
-// `Ok(s)` is a value position and is not written here (U7). The functions are one-liners.
+// `Ok(s)` is a value position and is in negative/dup_release_head_ok.onsa (`question_then_ok`, W6-02 U7/t). The functions are one-liners.
 
 pub struct Param {
   name: Str,

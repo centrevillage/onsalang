@@ -24,8 +24,19 @@
 //! none otherwise. The model has no later use of the value that is handed off before the `eat_n` helper itself
 //! (its own E0901 is reported at the head and left out).
 //!
-//! The test fails until the hand-off moves (U4a): today every hand-off is a copy, so a function that the model says is
-//! clean (every path ends with `s` moved) gets a drop. The bodies come from a fixed seed (`Rng`), kept in memory
+//! The same bodies are written again with the hand-off at a position that holds a value (W6-02 U7/t, S-1030): each `Hand` is
+//! chosen, by a second generator of a fixed seed that the bodies do not use, among `eat_n(s)`, `eat_o(Some(s))` (an element of a
+//! constructor), `eat_t((s, 1))` (an element of a tuple literal) and `eat_p(Param { name: s, value: 0.0 })` (an element of a struct
+//! literal), every one the argument of a `move` parameter that gives back a `U32` (so that the one drop is still the value of `s`).
+//! The literal holds `s` alone, so the call has no other argument and the literal no other element: no other condition of §5.2
+//! can fail, the model is the same (§5.2: a literal's elements are evaluated from the left, and a value that nothing uses after it
+//! is moved). A `RetHand` leaves with the literal in the same way. The second pair of tests (`..._at_a_value_position`) checks
+//! that the hand-off at a value position moves as one at a `move` argument does (U7). No `let` heading is in
+//! the model (it would add a binding whose own drop the model would have to follow: `let t = move s` is in
+//! negative/dup_release_head_ok.onsa).
+//!
+//! A hand-off that is a copy where the model moves it (before U4a every one, before U7 the ones at a value position) gives a
+//! function that the model says is clean (every path ends with `s` moved) a drop, and the test fails. The bodies come from a fixed seed (`Rng`), kept in memory
 //! (`check_input_out`, no file written: `rules/common.md` 3.7). A function that gets a diagnostic other than E0601, E0901
 //! and E0309 (a binding that is never read, which says nothing of a drop) is a fault of the generator.
 
@@ -40,7 +51,14 @@ const CHUNKS: usize = 14;
 const TREES: usize = 36;
 /// What the compared functions must show, so that a sweep that checks nothing does not pass.
 const MIN_FUNCTIONS: usize = 800;
-const HEAD: &str = "pub rt fn eat_n(move s: Str) -> U32 { s.len() }\n";
+/// The helpers each drop their argument (their own E0901 is at the head and left out) and give back a `U32`.
+const HEAD: &str = "pub struct Param {\n  name: Str,\n  value: F32,\n}\n\n\
+pub rt fn eat_n(move s: Str) -> U32 { s.len() }\n\
+pub rt fn eat_o(move o: Option[Str]) -> U32 { 0 }\n\
+pub rt fn eat_t(move t: (Str, U32)) -> U32 { 0 }\n\
+pub rt fn eat_p(move p: Param) -> U32 { 0 }\n";
+/// The seed of the choice of the form of each hand-off (the bodies come from `SEED`).
+const FORMS_SEED: u64 = 0x2a07_0602;
 
 #[derive(Clone)]
 enum St {
@@ -274,40 +292,59 @@ fn hands_of(b: &[St]) -> usize {
     b.iter().map(hands).sum()
 }
 
-fn write_block(b: &[St], pad: usize, out: &mut String) {
+/// The text of the hand-off: `eat_n(s)` alone, or one of the forms that put `s` in a literal, chosen at random.
+struct Forms {
+    rng: Option<Rng>,
+    /// `"move "` in the Affine twin, which marks every hand-off.
+    mv: &'static str,
+}
+
+impl Forms {
+    fn hand(&mut self) -> String {
+        let mv = self.mv;
+        match self.rng.as_mut().map_or(0, |r| r.below(4)) {
+            0 => format!("eat_n({mv}s)"),
+            1 => format!("eat_o(Some({mv}s))"),
+            2 => format!("eat_t(({mv}s, 1))"),
+            _ => format!("eat_p(Param {{ name: {mv}s, value: 0.0 }})"),
+        }
+    }
+}
+
+fn write_block(b: &[St], pad: usize, out: &mut String, forms: &mut Forms) {
     let sp = " ".repeat(pad);
     for s in b {
         match s {
             St::Read => *out += &format!("{sp}acc = acc + s.len()\n"),
-            St::Hand => *out += &format!("{sp}acc = acc + eat_n(s)\n"),
+            St::Hand => *out += &format!("{sp}acc = acc + {}\n", forms.hand()),
             St::Ret => *out += &format!("{sp}return acc\n"),
-            St::RetHand => *out += &format!("{sp}return acc + eat_n(s)\n"),
+            St::RetHand => *out += &format!("{sp}return acc + {}\n", forms.hand()),
             St::Break => *out += &format!("{sp}break\n"),
             St::Continue => *out += &format!("{sp}continue\n"),
             St::If(a, e) => {
                 *out += &format!("{sp}if c {{\n");
-                write_block(a, pad + 2, out);
+                write_block(a, pad + 2, out, forms);
                 if e.is_empty() {
                     *out += &format!("{sp}}}\n");
                 } else {
                     *out += &format!("{sp}}} else {{\n");
-                    write_block(e, pad + 2, out);
+                    write_block(e, pad + 2, out, forms);
                     *out += &format!("{sp}}}\n");
                 }
             }
             St::While(body) => {
                 *out += &format!("{sp}while d {{\n");
-                write_block(body, pad + 2, out);
+                write_block(body, pad + 2, out, forms);
                 *out += &format!("{sp}}}\n");
             }
             St::For(body) => {
                 *out += &format!("{sp}for _ in 0 ..< n {{\n");
-                write_block(body, pad + 2, out);
+                write_block(body, pad + 2, out, forms);
                 *out += &format!("{sp}}}\n");
             }
             St::Spin(body) => {
                 *out += &format!("{sp}while true {{\n");
-                write_block(body, pad + 2, out);
+                write_block(body, pad + 2, out, forms);
                 *out += &format!("{sp}}}\n");
             }
         }
@@ -321,10 +358,12 @@ struct Case {
     drops: bool,
     /// True where the model moves every `Hand`.
     all_move: bool,
+    /// True where some `Hand` is written with a literal (a value position).
+    literal: bool,
     body: String,
 }
 
-fn build(rng: &mut Rng) -> (String, Vec<Case>) {
+fn build(rng: &mut Rng, mut forms: Forms) -> (String, Vec<Case>) {
     let mut text = HEAD.to_string();
     let mut cases = Vec::new();
     for k in 0..TREES {
@@ -343,7 +382,7 @@ fn build(rng: &mut Rng) -> (String, Vec<Case>) {
         let drops = m.drops || (!diverges(&b) && end.alive);
         let mut body = String::new();
         body += "  var acc: U32 = 0\n";
-        write_block(&b, 2, &mut body);
+        write_block(&b, 2, &mut body, &mut forms);
         if !diverges(&b) {
             body += "  acc\n";
         }
@@ -355,7 +394,16 @@ fn build(rng: &mut Rng) -> (String, Vec<Case>) {
                 "pub {}fn {name}(move s: Str, c: Bool, d: Bool, n: U32) -> U32 {{\n{body}}}\n",
                 if rt { "rt " } else { "" }
             );
-            cases.push(Case { name, line, rt, drops, all_move: m.moves.iter().all(|&x| x), body: body.clone() });
+            let literal = body.contains("Some(") || body.contains(", 1)") || body.contains("Param {");
+            cases.push(Case {
+                name,
+                line,
+                rt,
+                drops,
+                all_move: m.moves.iter().all(|&x| x),
+                literal,
+                body: body.clone(),
+            });
         }
     }
     (text, cases)
@@ -366,78 +414,93 @@ fn build(rng: &mut Rng) -> (String, Vec<Case>) {
 /// model copies a hand-off, and where it moves every one the drop is the model's. It passes today, and guards the model.
 #[test]
 fn the_model_moves_a_hand_off_where_the_affine_program_has_no_use_after_a_move() {
-    onsa_diag::stack::run(|| {
-        let (mut compared, mut with_use, mut without_use) = (0, 0, 0);
-        let mut failed: Vec<String> = Vec::new();
-        for chunk in 0..CHUNKS {
-            let seed = SEED + chunk as u64;
-            let (text, cases) = build(&mut Rng::new(seed));
-            let text = text.replace("Str", "Buf[F32]").replace("eat_n(s)", "eat_n(move s)");
-            let out = check_input_out(&PackageInput::single_file("m.onsa", text));
-            assert!(out.code == 0 || out.code == 1, "seed {seed:#x}: exit {}: {}", out.code, out.stderr);
-            let doc = doc_of(&out);
-            let mut got: Vec<(bool, Vec<String>)> = vec![(false, Vec::new()); cases.len()];
-            for d in doc["diagnostics"].as_array().expect("diagnostics") {
-                let code = d["code"].as_str().expect("a code");
-                let line = d["span"]["line"].as_u64().expect("a line") as usize;
-                let message = d["message"].as_str().expect("a message");
-                let i = if code == "E0601" {
-                    let name = message.split('`').nth(1).unwrap_or("");
-                    cases.iter().position(|c| c.name == name)
-                } else {
-                    cases.iter().enumerate().filter(|(_, c)| c.line <= line).max_by_key(|(_, c)| c.line).map(|(i, _)| i)
-                };
-                let Some(i) = i else { continue };
-                match code {
-                    "E0704" => got[i].0 = true,
-                    "E0601" | "E0901" => got[i].1.push(code.to_string()),
-                    _ => {}
-                }
-            }
-            for (c, (use_after, drops)) in cases.iter().zip(&got) {
-                compared += 1;
-                if c.all_move {
-                    without_use += 1;
-                } else {
-                    with_use += 1;
-                }
-                let want = if c.rt { "E0901" } else { "E0601" };
-                // Where the Affine program has a use after a move, the drop is not compared (the check stops at the E0704).
-                let ok = *use_after != c.all_move
-                    && (*use_after || (drops.len() == usize::from(c.drops) && drops.iter().all(|d| d == want)));
-                if !ok {
-                    failed.push(format!(
-                        "seed {seed:#x}, `{}`: the model moves {} (drop {}); the Affine program has a use after a move: {use_after}, drops {drops:?}\n{}",
-                        c.name,
-                        if c.all_move { "every hand-off" } else { "not every hand-off" },
-                        c.drops,
-                        c.body
-                    ));
-                }
+    onsa_diag::stack::run(|| twin(false));
+}
+
+/// The same, with the hand-off in a literal that is the argument of a `move` parameter (an Affine `s` in a literal element is marked with
+/// `move` too, which this version checks).
+#[test]
+fn the_model_moves_a_hand_off_at_a_value_position_where_the_affine_program_has_no_use_after_a_move() {
+    onsa_diag::stack::run(|| twin(true));
+}
+
+fn twin(literals: bool) {
+    let (mut compared, mut with_use, mut without_use) = (0, 0, 0);
+    let mut failed: Vec<String> = Vec::new();
+    for chunk in 0..CHUNKS {
+        let seed = SEED + chunk as u64;
+        let forms = Forms { rng: literals.then(|| Rng::new(FORMS_SEED + chunk as u64)), mv: "move " };
+        let (text, cases) = build(&mut Rng::new(seed), forms);
+        let text = text.replace("Str", "Buf[F32]");
+        let out = check_input_out(&PackageInput::single_file("m.onsa", text));
+        assert!(out.code == 0 || out.code == 1, "seed {seed:#x}: exit {}: {}", out.code, out.stderr);
+        let doc = doc_of(&out);
+        let mut got: Vec<(bool, Vec<String>)> = vec![(false, Vec::new()); cases.len()];
+        for d in doc["diagnostics"].as_array().expect("diagnostics") {
+            let code = d["code"].as_str().expect("a code");
+            let line = d["span"]["line"].as_u64().expect("a line") as usize;
+            let message = d["message"].as_str().expect("a message");
+            let i = if code == "E0601" {
+                let name = message.split('`').nth(1).unwrap_or("");
+                cases.iter().position(|c| c.name == name)
+            } else {
+                cases.iter().enumerate().filter(|(_, c)| c.line <= line).max_by_key(|(_, c)| c.line).map(|(i, _)| i)
+            };
+            let Some(i) = i else { continue };
+            match code {
+                "E0704" => got[i].0 = true,
+                "E0601" | "E0901" => got[i].1.push(code.to_string()),
+                _ => {}
             }
         }
-        let shown = failed.iter().take(3).cloned().collect::<Vec<_>>().join("\n\n");
-        assert!(failed.is_empty(), "{} of {compared} functions differ (the first 3):\n{shown}", failed.len());
-        assert!(
-            with_use * 6 >= compared && without_use * 6 >= compared,
-            "not mixed: copy {with_use}, move {without_use}"
-        );
-    });
+        for (c, (use_after, drops)) in cases.iter().zip(&got) {
+            compared += 1;
+            if c.all_move {
+                without_use += 1;
+            } else {
+                with_use += 1;
+            }
+            let want = if c.rt { "E0901" } else { "E0601" };
+            // Where the Affine program has a use after a move, the drop is not compared (the check stops at the E0704).
+            let ok = *use_after != c.all_move
+                && (*use_after || (drops.len() == usize::from(c.drops) && drops.iter().all(|d| d == want)));
+            if !ok {
+                failed.push(format!(
+                    "seed {seed:#x}, `{}`: the model moves {} (drop {}); the Affine program has a use after a move: {use_after}, drops {drops:?}\n{}",
+                    c.name,
+                    if c.all_move { "every hand-off" } else { "not every hand-off" },
+                    c.drops,
+                    c.body
+                ));
+            }
+        }
+    }
+    let shown = failed.iter().take(3).cloned().collect::<Vec<_>>().join("\n\n");
+    assert!(failed.is_empty(), "{} of {compared} functions differ (the first 3):\n{shown}", failed.len());
+    assert!(with_use * 6 >= compared && without_use * 6 >= compared, "not mixed: copy {with_use}, move {without_use}");
 }
 
 #[test]
 fn the_hand_off_of_an_owned_str_follows_the_paths_the_model_counts() {
-    onsa_diag::stack::run(run_sweep);
+    onsa_diag::stack::run(|| run_sweep(false));
 }
 
-fn run_sweep() {
-    let (mut functions, mut drops, mut clean, mut failed_clean, mut failed_drop) = (0, 0, 0, 0, 0);
+/// The hand-offs written as an element of a constructor, a tuple or a struct literal: a value position
+/// moves the value as a `move` argument does (S-1030).
+#[test]
+fn the_hand_off_of_an_owned_str_at_a_value_position_follows_the_paths_the_model_counts() {
+    onsa_diag::stack::run(|| run_sweep(true));
+}
+
+fn run_sweep(literals: bool) {
+    let (mut functions, mut drops, mut clean, mut failed_clean, mut failed_drop, mut failed_plain) = (0, 0, 0, 0, 0, 0);
     let mut failed: Vec<String> = Vec::new();
     let mut strays: Vec<String> = Vec::new();
     for chunk in 0..CHUNKS {
         let seed = SEED + chunk as u64;
         let mut rng = Rng::new(seed);
-        let (text, cases) = build(&mut rng);
+        let forms = Forms { rng: literals.then(|| Rng::new(FORMS_SEED + chunk as u64)), mv: "" };
+        let (text, cases) = build(&mut rng, forms);
         let out = check_input_out(&PackageInput::single_file("m.onsa", text.clone()));
         assert!(out.code == 0 || out.code == 1, "seed {seed:#x}: exit {}: {}", out.code, out.stderr);
         let doc = doc_of(&out);
@@ -459,7 +522,7 @@ fn run_sweep() {
                 Some(i) if code == "E0601" || code == "E0901" => got[i].push(code),
                 Some(i) => strays.push(format!("seed {seed:#x}, `{}`: {code} {message}", cases[i].name)),
                 // The helper at the head drops its own argument (an E0901 before the first function).
-                None if code == "E0901" && line == 1 => {}
+                None if code == "E0901" && line <= HEAD.lines().count() => {}
                 None => strays.push(format!("seed {seed:#x}: {code} at line {line}: {message}")),
             }
         }
@@ -473,6 +536,9 @@ fn run_sweep() {
             let want = if c.rt { "E0901" } else { "E0601" };
             let ok = if c.drops { g.len() == 1 && g[0] == want } else { g.is_empty() };
             if !ok {
+                if !c.literal {
+                    failed_plain += 1;
+                }
                 if c.drops {
                     failed_drop += 1;
                 } else {
@@ -490,14 +556,14 @@ fn run_sweep() {
     }
     eprintln!(
         "dup_release_model: {functions} functions compared; the model says drop in {drops}, none in {clean}; \
-         {failed_clean} differ where it says none, {failed_drop} where it says drop"
+         {failed_clean} differ where it says none, {failed_drop} where it says drop; {failed_plain} of the differences have no literal hand-off"
     );
     assert!(strays.is_empty(), "the generator made functions with another diagnostic:\n{}", strays.join("\n"));
     let shown = failed.iter().take(3).cloned().collect::<Vec<_>>().join("\n\n");
     assert!(
         failed.is_empty(),
         "{} of {functions} functions differ from the model: {failed_clean} where the model says every path ends with `s` moved \
-         (the hand-off is a copy today, R-255, S-1030), {failed_drop} where it says drop (the first 3; the seed makes the package \
+         (the hand-off was copied: R-255 for the argument of a `move` parameter, S-1030 for an element of a literal), {failed_drop} where it says drop (the first 3; the seed makes the package \
          again):\n{shown}",
         failed.len()
     );

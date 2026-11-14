@@ -3699,6 +3699,36 @@ pub fn released(c: Bool, move m: Str, move n: Str, t: Str) -> U32 uses {Alloc} {
     assert_eq!(at_of("released"), [("n", false)]);
 }
 
+/// S-1030, S-1036 (§5.2, §5.4): an owned head releases the Dup value it
+/// consumes; what its pattern binds to no name is dropped by the arm. Moved,
+/// the `_` alone drops (the binding's point goes); used after, the head is a
+/// copy: the binding drops its value (live again, surely), and the `_` the
+/// part of the copy. One point for each value.
+#[test]
+fn the_drop_points_of_a_released_head_with_a_wild() {
+    let (_, a, def) = clean(
+        "pub fn moved(move o: Option[Str]) -> U32 uses {Alloc} {
+  match move o { Some(_) => 1, None => 0 }
+}
+pub fn copied(move o: Option[Str]) -> U32 uses {Alloc} {
+  let n = match move o { Some(_) => 1, None => 0 }
+  match o { Some(_) => n, None => 0 }
+}
+",
+    );
+    let points = |n: &str| {
+        let info = &a.bodies[&def(&a, n)];
+        let name = |d: &crate::body::DropPoint| match d.what {
+            crate::body::Dropped::End(l) => info.locals[l.0 as usize].name.clone(),
+            crate::body::Dropped::Discard(_) => "_".to_string(),
+            _ => panic!("no exit, no value made"),
+        };
+        (info.drops.iter()).map(|d| (name(d), d.sure)).collect::<Vec<_>>()
+    };
+    assert_eq!(points("moved"), [("_".to_string(), true)]);
+    assert_eq!(points("copied"), [("_".to_string(), true), ("o".to_string(), true)]);
+}
+
 /// A body keeps a drop point for each binding at each exit, so their number
 /// grows with the square of the input (`w602_breaks`): a new kind of drop
 /// keeps one `Vec` in `Dropped` (`TempRest` boxes its path), or the size grows.

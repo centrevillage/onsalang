@@ -1,0 +1,83 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§5.4", "§7", "§8.1", "§10", "§12.2"]
+
+// W6-02 U7/t, S-1030, S-1037 (§5.2: "置けるのは、その後で使わず（ループの次の反復と ... を含む、E0704）... 置けなければ複製し、元の値はその束縛の終わりで破棄される"; §5.4: "`for s in move xs` ... 要素ごとに起きる。ループを出るとき
+// （終わり、`break`、`return`、`?`）に、まだ反復していない要素とヒープの容れ物（`Array`・`Buf`）が破棄される"): the heading of an owned binding, the forms that stay errors. (1) The value is used after the heading (a borrowed read in the next
+// element of a tuple literal), or the heading is in a loop that goes round again (`while true`, left by the `break` only): it is copied, so the original is dropped at the end of its binding. (2) The heading is moved, but a binding that the
+// new binding owns is dropped: an arm binding or a `for` binding that is only read (`x.len()`, `show(x)`) is dropped at the end of its arm or iteration. (3) The `for` over a `move` array leaves the elements that
+// were not iterated when it leaves by `return` (`if eat_b(x) { return }`), and the box of an `Array[Str]` is dropped at the end (S-1037). Each is an E0601 in a function without `uses {Alloc}` and an E0901 in an `rt fn`.
+// Today every function here is an error (the heading is a copy, or the same drop is there), and it stays one; the cause changes where the heading was the original. A heading in a statement list (`let t = move s`
+// and a later use of `s`) has no decided line (S-783), so it is not written. The helpers drop their argument, so their own E0901 is reported (the same as negative/drop_for_one_path.onsa). The functions are one-liners (S-783).
+// One error per function (P-01).
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+pub rt fn eat(move s: Str) {}   //~ E0901
+
+pub rt fn eat_n(move s: Str) -> U32 { s.len() }   //~ E0901
+
+pub rt fn eat_b(move s: Str) -> Bool { true }   //~ E0901
+
+pub rt fn eat_g[T](move t: T) -> U32 { 0 }   //~ E0901
+
+pub rt fn len_o(o: Option[Str]) -> U32 { 0 }
+
+pub rt fn ign_ot[T](o: Option[T]) -> U32 { 0 }
+
+pub rt fn show(s: Str) {}
+
+// ------------------------------------------------------------------ the value is used after the heading, or the heading goes round again
+
+pub fn later_option(move o: Option[Str]) -> (U32, U32) { (match move o { Some(x) => eat_n(x), None => 0 }, len_o(o)) }   //~ E0601
+
+pub rt fn rt_later_option(move o: Option[Str]) -> (U32, U32) { (match move o { Some(x) => eat_n(x), None => 0 }, len_o(o)) }   //~ E0901
+
+pub fn later_struct_field(move p: Param) -> (U32, F32) { (match move p { Param { name: n, value: _ } => eat_n(n) }, p.value) }   //~ E0601
+
+pub rt fn rt_later_struct_field(move p: Param) -> (U32, F32) { (match move p { Param { name: n, value: _ } => eat_n(n) }, p.value) }   //~ E0901
+
+pub fn later_generic[T](move o: Option[T]) -> (U32, U32) { (match move o { Some(x) => eat_g(x), None => 0 }, ign_ot(o)) }   //~ E0601
+
+pub rt fn rt_later_generic[T](move o: Option[T]) -> (U32, U32) { (match move o { Some(x) => eat_g(x), None => 0 }, ign_ot(o)) }   //~ E0901
+
+pub fn in_a_loop(move o: Option[Str]) { while true { if eat_b(match move o { Some(x) => x, None => "n" }) { break } } }   //~ E0601
+
+pub rt fn rt_in_a_loop(move o: Option[Str]) { while true { if eat_b(match move o { Some(x) => x, None => "n" }) { break } } }   //~ E0901
+
+// ------------------------------------------------------------------ a binding derived from the value is used after the heading, or a borrowed `for` holds the place
+
+pub fn derived_use_after(move o: Option[Str]) -> (U32, U32) { match o { Some(b) => (match move o { Some(x) => eat_n(x), None => 0 }, b.len()), None => (0, 0) } }   //~ E0601
+
+pub rt fn rt_derived_use_after(move o: Option[Str]) -> (U32, U32) { match o { Some(b) => (match move o { Some(x) => eat_n(x), None => 0 }, b.len()), None => (0, 0) } }   //~ E0901
+
+pub fn borrowed_for_holds_it(move xs: [Str; 2]) { for c in xs { for x in move xs { eat(x) } } }   //~ E0601
+
+pub rt fn rt_borrowed_for_holds_it(move xs: [Str; 2]) { for c in xs { for x in move xs { eat(x) } } }   //~ E0901
+
+// ------------------------------------------------------------------ a binding that the heading made is dropped
+
+pub fn arm_binding_read(move o: Option[Str]) -> U32 { match move o { Some(x) => x.len(), None => 0 } }   //~ E0601
+
+pub rt fn rt_arm_binding_read(move o: Option[Str]) -> U32 { match move o { Some(x) => x.len(), None => 0 } }   //~ E0901
+
+pub fn arm_binding_struct(move p: Param) -> U32 { match move p { Param { name: n, value: _ } => n.len() } }   //~ E0601
+
+pub rt fn rt_arm_binding_struct(move p: Param) -> U32 { match move p { Param { name: n, value: _ } => n.len() } }   //~ E0901
+
+pub fn for_binding_read(move xs: [Str; 2]) { for x in move xs { show(x) } }   //~ E0601
+
+pub rt fn rt_for_binding_read(move xs: [Str; 2]) { for x in move xs { show(x) } }   //~ E0901
+
+// ------------------------------------------------------------------ the elements that were not iterated, and the box
+
+pub fn for_leaves_by_return(move xs: [Str; 2]) { for x in move xs { if eat_b(x) { return } } }   //~ E0601
+
+pub rt fn rt_for_leaves_by_return(move xs: [Str; 2]) { for x in move xs { if eat_b(x) { return } } }   //~ E0901
+
+pub fn for_over_an_array_box(move xs: Array[Str]) { for x in move xs { eat(x) } }   //~ E0601
+
+pub rt fn rt_for_over_an_array_box(move xs: Array[Str]) { for x in move xs { eat(x) } }   //~ E0901

@@ -7,8 +7,8 @@
 // have, and that stay reported when the drop of a part that a pattern leaves unbound is counted. The first section is the control: a part that a name binds and nothing uses
 // is an owned binding that is dropped (this version reports it), and `_` leaves the same part. The other sections are the forms of the other negative/drop_wild_*.onsa whose
 // owned head is held by a `move` argument of a Dup type (a `Str`, a tuple or an `Option` that holds one, a `T` without a bound: §4.6): the head `move o` of a Dup value
-// copies it until the hand-off of a Dup value in a heading (W6-02 U7, S-1030), so the argument keeps its value and its drop is reported at the argument (the same line).
-// After U7 the `_` is the drop of the same value, and the code and the line are the same. A function without `uses {Alloc}` is an E0601 and an `rt fn` an E0901 (§10 rule
+// is moved into the match by the hand-off of a Dup value in a heading (W6-02 U7, S-1030) when nothing uses it afterwards; before it, the head was a copy and the argument kept its value, so its drop was reported at the argument (the same line).
+// After U7 the argument is moved and the drop that is reported is the `_` (the part that no name binds, §5.4), at the same line and with the same code. A function without `uses {Alloc}` is an E0601 and an `rt fn` an E0901 (§10 rule
 // 1). The functions are one-liners, so that the line does not depend on where the drop is reported (S-783). One error per function (P-01).
 
 pub struct H {

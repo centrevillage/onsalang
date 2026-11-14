@@ -9,7 +9,7 @@
 // without `uses {Alloc}` and an E0901 in an `rt fn`. This is the Dup side of the waiting values of negative/drop_pending.onsa (R-32, the `Buf` side); the original of `s` is not dropped (it was moved), so
 // the waiting value is the only drop. The owned `s` that is read by a `?` before the hand-off is alive at the `?` and is dropped there (`first2(r?, s)`, the same as `wrap(r?, move b)` of
 // negative/drop_exit_try.onsa). The owned `s` as an element of a tuple, an array or a struct literal waits in the same way (a value position, S-1030: the final form moves it, and the waiting value is dropped at
-// the `?`; before U7 the original is copied and dropped instead, the verdict is the same). The same for the receiver of a `move self` method that waits for a `?` in its arguments. The helpers `first_n`, `first2`
+// the `?`; before W6-02 U7 the original is copied and dropped instead, the verdict is the same). The same for the receiver of a `move self` method that waits for a `?` in its arguments. The helpers `first_n`, `first2`
 // and `consume` drop their argument, so their own E0901 is reported (the same as negative/drop_for_one_path.onsa). Today every function here is an error (the original is dropped after the copy is handed over),
 // and it stays one. The functions are one-liners (S-783). One error per function (P-01).
 

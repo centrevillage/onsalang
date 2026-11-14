@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§8.1", "§10", "§12.2"]
+
+// W6-02 U7/t, S-1030, S-1036 (§5.4: "所有の見出し ... が消費した値のうち、パターンが束縛しなかった部分（`_`、最後の `_` が残すフィールド、束縛の無い腕の対象）は、`let` では文の終わりに、`match` の腕と `for` の本体ではその腕・反復の終わり
+// に破棄される"; §5.2: the heading `match move x` is a place that holds a value, and is moved when nothing uses it afterwards): the heading that is moved and the part that its pattern does not bind. A `move` heading is moved into
+// the match (no drop of the original), but a part that no name binds is a `Str` and is dropped at the end of its arm: `_` of a tuple or a struct, and the payload of an arm with a `_` inside (`Some(_)`). The drop needs
+// `Alloc`: an E0601 in a function without `uses {Alloc}` and an E0901 in an `rt fn`. The same heading with the parts that the pattern does not bind Copy (`_` over a `U32`) is a move (negative/dup_release_head_ok.onsa, `match_tuple`). Today every
+// function here is an error (the heading is a copy and the original is dropped), and it stays one; the cause is the `_` after U7 (negative/drop_wild_now.onsa has the forms of S-1036). The helpers drop their argument, so
+// their own E0901 is reported (the same as negative/drop_for_one_path.onsa). The functions are one-liners (S-783). One error per function (P-01).
+
+pub struct W2 {
+  a: Str,
+  b: Str,
+}
+
+pub rt fn eat_n(move s: Str) -> U32 { s.len() }   //~ E0901
+
+// ------------------------------------------------------------------ a part that the pattern leaves
+
+pub fn wild_of_a_tuple(move p: (Str, Str)) -> U32 { match move p { (a, _) => eat_n(a) } }   //~ E0601
+
+pub rt fn rt_wild_of_a_tuple(move p: (Str, Str)) -> U32 { match move p { (a, _) => eat_n(a) } }   //~ E0901
+
+pub fn wild_of_a_struct(move p: W2) -> U32 { match move p { W2 { a: x, b: _ } => eat_n(x) } }   //~ E0601
+
+pub rt fn rt_wild_of_a_struct(move p: W2) -> U32 { match move p { W2 { a: x, b: _ } => eat_n(x) } }   //~ E0901
+
+pub fn wild_in_the_payload(move o: Option[Str]) -> U32 { match move o { Some(_) => 1, None => 0 } }   //~ E0601
+
+pub rt fn rt_wild_in_the_payload(move o: Option[Str]) -> U32 { match move o { Some(_) => 1, None => 0 } }   //~ E0901
+
+pub fn wild_of_a_tuple_first(move p: (Str, Str)) -> U32 { match move p { (_, b) => eat_n(b) } }   //~ E0601
+
+pub rt fn rt_wild_of_a_tuple_first(move p: (Str, Str)) -> U32 { match move p { (_, b) => eat_n(b) } }   //~ E0901

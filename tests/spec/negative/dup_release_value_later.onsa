@@ -1,0 +1,101 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§8.1", "§10", "§12.2"]
+
+// W6-02 U7/t, S-1030 (§5.2: "置けるのは、その後で使わず（ループの次の反復と、そこから派生した借用束縛の使用を含む、E0704）... 置けなければ複製し、元の値はその束縛の終わりで破棄される"; §3.5: "struct /
+// 配列 / タプルのリテラルは書いた順に評価する"; §12.2): the first condition for a literal. An element that holds a `move` parameter `s` is copied when `s` is used after it (the next element of the
+// literal, which is evaluated after it, or a branch or an arm in it; Affine, `(Some(move s), s.len())` would be E0704), so the original is dropped at the end of its binding and the drop needs `Alloc`:
+// an E0601 in a function without `uses {Alloc}` and an E0901 in an `rt fn`. The use is a read (`s.len()`), a borrowed argument (`len_s(s)`) or a Copy field of the value, and the element is a
+// constructor, a struct, a tuple or an array literal, or the argument of a `move` parameter (`eat_o(Some(s))`); the same for a type parameter `T` (the use is a borrowed argument). The literal of the
+// same variable twice is a move in the last element (negative/dup_release_value_ok.onsa), so the later use here is what makes the difference. A later use in a later statement needs a statement
+// list, whose error has no decided line (S-783), so it is not written. The helpers drop their argument, so their own E0901 is reported (the same as negative/drop_for_one_path.onsa). Today every function
+// here is an error (the element is a copy), and it stays one. The functions are one-liners (S-783). One error per function (P-01).
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+pub struct Tagged {
+  s: Str,
+  n: U32,
+}
+
+pub enum E {
+  A(Str),
+  B(Str, U32),
+  C(Str, Str),
+  N,
+}
+
+pub rt fn eat_o(move o: Option[Str]) -> U32 { 0 }   //~ E0901
+
+pub rt fn pass_s(move s: Str) -> Str { s }
+
+pub rt fn len_s(s: Str) -> U32 { s.len() }
+
+pub rt fn len_o(o: Option[Str]) -> U32 { 0 }
+
+pub rt fn ign[T](t: T) -> U32 { 0 }
+
+// ------------------------------------------------------------------ the next element reads the value
+
+pub fn tuple_option(move s: Str) -> (Option[Str], U32) { (Some(s), s.len()) }   //~ E0601
+
+pub rt fn rt_tuple_option(move s: Str) -> (Option[Str], U32) { (Some(s), s.len()) }   //~ E0901
+
+pub fn tuple_plain(move s: Str) -> (Str, U32) { (s, s.len()) }   //~ E0601
+
+pub rt fn rt_tuple_plain(move s: Str) -> (Str, U32) { (s, s.len()) }   //~ E0901
+
+pub fn tuple_nested(move s: Str) -> (Option[(Str, U32)], U32) { (Some((s, 1)), s.len()) }   //~ E0601
+
+pub rt fn rt_tuple_nested(move s: Str) -> (Option[(Str, U32)], U32) { (Some((s, 1)), s.len()) }   //~ E0901
+
+pub fn tuple_array_of_one(move s: Str) -> ([Str; 1], U32) { ([s], s.len()) }   //~ E0601
+
+pub rt fn rt_tuple_array_of_one(move s: Str) -> ([Str; 1], U32) { ([s], s.len()) }   //~ E0901
+
+pub fn struct_field(move s: Str) -> Tagged { Tagged { s: s, n: s.len() } }   //~ E0601
+
+pub rt fn rt_struct_field(move s: Str) -> Tagged { Tagged { s: s, n: s.len() } }   //~ E0901
+
+pub fn ctor_element(move s: Str) -> E { E.B(s, s.len()) }   //~ E0601
+
+pub rt fn rt_ctor_element(move s: Str) -> E { E.B(s, s.len()) }   //~ E0901
+
+pub fn tuple_borrowed_arg(move s: Str) -> (Result[Str, U32], U32) { (Ok(s), len_s(s)) }   //~ E0601
+
+pub rt fn rt_tuple_borrowed_arg(move s: Str) -> (Result[Str, U32], U32) { (Ok(s), len_s(s)) }   //~ E0901
+
+pub fn tuple_in_a_move_arg(move s: Str) -> (U32, U32) { (eat_o(Some(s)), s.len()) }   //~ E0601
+
+pub rt fn rt_tuple_in_a_move_arg(move s: Str) -> (U32, U32) { (eat_o(Some(s)), s.len()) }   //~ E0901
+
+pub fn hand_off_in_a_borrowed_arg(move s: Str) -> U32 { len_s(pass_s(s)) + len_s(s) }   //~ E0601
+
+pub rt fn rt_hand_off_in_a_borrowed_arg(move s: Str) -> U32 { len_s(pass_s(s)) + len_s(s) }   //~ E0901
+
+// ------------------------------------------------------------------ the use is in a branch or an arm of the next element
+
+pub fn in_one_branch(move s: Str, c: Bool) -> (Option[Str], U32) { (Some(s), if c { s.len() } else { 0 }) }   //~ E0601
+
+pub rt fn rt_in_one_branch(move s: Str, c: Bool) -> (Option[Str], U32) { (Some(s), if c { s.len() } else { 0 }) }   //~ E0901
+
+pub fn in_an_arm(move s: Str, n: U32) -> (Option[Str], U32) { (Some(s), match n { 0 => s.len(), _ => 0 }) }   //~ E0601
+
+pub rt fn rt_in_an_arm(move s: Str, n: U32) -> (Option[Str], U32) { (Some(s), match n { 0 => s.len(), _ => 0 }) }   //~ E0901
+
+// ------------------------------------------------------------------ the other kinds of value
+
+pub fn option_param(move o: Option[Str]) -> (Option[Option[Str]], U32) { (Some(o), len_o(o)) }   //~ E0601
+
+pub rt fn rt_option_param(move o: Option[Str]) -> (Option[Option[Str]], U32) { (Some(o), len_o(o)) }   //~ E0901
+
+pub fn struct_param_field(move p: Param) -> (Option[Param], F32) { (Some(p), p.value) }   //~ E0601
+
+pub rt fn rt_struct_param_field(move p: Param) -> (Option[Param], F32) { (Some(p), p.value) }   //~ E0901
+
+pub fn generic_param[T](move t: T) -> (Option[T], U32) { (Some(t), ign(t)) }   //~ E0601
+
+pub rt fn rt_generic_param[T](move t: T) -> (Option[T], U32) { (Some(t), ign(t)) }   //~ E0901
