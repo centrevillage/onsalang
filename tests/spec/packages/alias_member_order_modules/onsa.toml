@@ -1,0 +1,3 @@
+[package]
+name = "fx"
+edition = "2026"

@@ -1,0 +1,14 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§15.1", "§18.1"]
+// fixes = 0
+
+// R-456: a member named through an alias of another module (`defs.Al.N`, an alias of `U32`, which has no member `N`) is the E0302 of a name
+// not found whichever of the two modules is read first (§15.1: "他のモジュールの項目を引く結果も、モジュールを読む順によらない"): a comes before the
+// module `defs` that declares the alias, z after it. The member is written as the right side of an alias and inside the type of a `const`.
+// One error in each unit (§18.1).
+use defs
+
+type FromA = defs.Al.N   //~ E0302
+
+const KA: Option[defs.Al.N] = None   //~ E0302

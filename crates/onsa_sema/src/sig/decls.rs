@@ -131,7 +131,8 @@ impl Graph<'_> {
         }
         let a = self.a;
         let mut held: Option<(DefId, &[GenericDef])> = None;
-        match self.resolve(w, path) {
+        let reached = self.reached(w, path);
+        match reached.get(path.segments.len() - 1).copied() {
             Some(Entity::Def(d) | Entity::Member(d)) => match &a.def(d).kind {
                 DefKind::Struct(_) | DefKind::Enum(_) => {
                     if !w.anywhere {
@@ -145,6 +146,10 @@ impl Graph<'_> {
             },
             Some(Entity::Builtin(Builtin::Generic(_))) => {
                 return args.iter().for_each(|&x| self.ty(w, x, false, under));
+            }
+            // `Al.N`: no type, whose error the names stage finds reading `Al` (R-456).
+            None => {
+                self.last_alias(w, &reached, under);
             }
             _ => {}
         }
@@ -219,8 +224,7 @@ impl Graph<'_> {
 
     /// The constant the path `p` of a constant expression reads (a const
     /// argument `B[K]` too), and anywhere the alias it reaches last from its
-    /// head (`A`, `Al.N`, `m.Al.N.x`), whose type the names stage reads
-    /// there (`Analysis::typed_members`, R-440).
+    /// head (`A`, `Al.N`, `m.Al.N.x`, [`Self::last_alias`]).
     fn read(&mut self, w: &From, p: &Path, under: Under) {
         if let [seg] = &p.segments[..]
             && w.generics.contains(&seg.name.as_str())
@@ -229,12 +233,7 @@ impl Graph<'_> {
         }
         let reached = self.reached(w, p);
         let mut read = reached.get(p.segments.len() - 1).copied();
-        if let Some((k, &Entity::Def(al))) = reached.iter().enumerate().next_back()
-            && matches!(self.a.def(al).kind, DefKind::Alias(_))
-        {
-            if w.anywhere {
-                self.edge(w, (al, true), under);
-            }
+        if let Some((k, al)) = self.last_alias(w, &reached, under) {
             // `Al.N`: of the type the alias stands for (R-299).
             let names = (&self.a.prelude, &self.a.defs[..], &self.a.builtin_key);
             let ty = self.a.decls.heads.get(&al).copied().flatten();
@@ -246,6 +245,21 @@ impl Graph<'_> {
         {
             self.edge(w, (c, true), under);
         }
+    }
+
+    /// The alias `reached` ([`Self::reached`]) ends at and its index: the
+    /// last a path reaches from its head, whose type the names stage reads
+    /// there for the names after it (`Analysis::typed_members`); anywhere an
+    /// edge to it, written before or after (R-440, R-456).
+    fn last_alias(&mut self, w: &From, reached: &[Entity], under: Under) -> Option<(usize, DefId)> {
+        let (k, &Entity::Def(al)) = reached.iter().enumerate().next_back()? else { return None };
+        if !matches!(self.a.def(al).kind, DefKind::Alias(_)) {
+            return None;
+        }
+        if w.anywhere {
+            self.edge(w, (al, true), under);
+        }
+        Some((k, al))
     }
 
     /// What `p` names from its head, one for each name up to the last that

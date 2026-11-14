@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§18.1"]
+// fixes = 0
+
+// R-456, S-1015: an alias whose right side names a member through itself (`type A = A.N`), or through another alias that names it back
+// (`C1.N` and `C2.N`), is a cycle of aliases: an alias is replaced by its right side, so the expansion does not end (§4.4), and the cycle is
+// an E0311 alone, not the E0302 of the member `N` (S-1015: "循環に入った別名の `.N` の誤りも循環の E0311 だけ"). The member is written as a
+// type alone, inside a type argument and as the element of an array, and the alias named back is declared after the one that names it. One
+// E0311 for each cycle, at the name of its first declaration (§18.1).
+
+type A = A.N   //~ E0311
+
+type O = Option[O.N]   //~ E0311
+
+type C1 = C2.N   //~ E0311
+
+type C2 = C1.N
+
+type D1 = [D2.N; 1]   //~ E0311
+
+type D2 = D1

@@ -1,0 +1,101 @@
+// onsa.toml
+// [test]
+// spec = ["§4.4", "§15.1", "§18.1"]
+// fixes = 0
+
+// R-456: an item is looked for wherever it is declared (§15.1: "項目と `impl` のメンバの名前は、書いた順によらずに引く"), so a member named
+// through an alias (`Late.N`, an alias of `U32`, which has no member `N`) is the E0302 of a name not found whether the alias is declared after
+// the use (`Late`, at the end of the file) or before it (`Early`, at the head). The places are a type written as a path in the right side of
+// an alias, alone and inside a type argument, an array, a tuple and a function type, in the type of a `const` and of an associated `const`,
+// in a function's parameter and result, in a field and in the heading of an `impl`; and an alias of an alias declared after both
+// (`Mid = Deep`). The same program is rejected in either order, and none is an internal error. One error in each unit (§18.1).
+
+type Early = U32
+
+pub struct Rg[X] {
+  x: X,
+}
+
+pub struct S {
+  x: U32,
+}
+
+pub struct T {
+  x: U32,
+}
+
+// ---- the alias declared after the use ----
+
+type L1 = Late.N   //~ E0302
+
+type L2 = Option[Late.N]   //~ E0302
+
+type L3 = [Late.N; 2]   //~ E0302
+
+type L4 = (Late.N, U32)   //~ E0302
+
+type L5 = fn(Late.N) -> U32   //~ E0302
+
+type L6 = Rg[Late.N]   //~ E0302
+
+const LK: Late.N = 1   //~ E0302
+
+impl S {
+  pub const LN: Late.N = 1   //~ E0302
+}
+
+fn l_param(x: Late.N) {}   //~ E0302
+
+fn l_result() -> Late.N {   //~ E0302
+  0
+}
+
+struct LField {
+  x: Late.N,   //~ E0302
+}
+
+impl Late.N {   //~ E0302
+}
+
+type LMid = Mid.N   //~ E0302
+
+type Mid = Deep
+
+// ---- the alias declared before the use ----
+
+type E1 = Early.N   //~ E0302
+
+type E2 = Option[Early.N]   //~ E0302
+
+type E3 = [Early.N; 2]   //~ E0302
+
+type E4 = (Early.N, U32)   //~ E0302
+
+type E5 = fn(Early.N) -> U32   //~ E0302
+
+type E6 = Rg[Early.N]   //~ E0302
+
+const EK: Early.N = 1   //~ E0302
+
+impl T {
+  pub const EN: Early.N = 1   //~ E0302
+}
+
+fn e_param(x: Early.N) {}   //~ E0302
+
+fn e_result() -> Early.N {   //~ E0302
+  0
+}
+
+struct EField {
+  x: Early.N,   //~ E0302
+}
+
+impl Early.N {   //~ E0302
+}
+
+type EMid = Mid.N   //~ E0302
+
+type Deep = U32
+
+type Late = U32

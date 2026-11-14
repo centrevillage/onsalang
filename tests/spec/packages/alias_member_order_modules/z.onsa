@@ -1,0 +1,5 @@
+use defs
+
+type FromZ = defs.Al.N   //~ E0302
+
+const KZ: Option[defs.Al.N] = None   //~ E0302
