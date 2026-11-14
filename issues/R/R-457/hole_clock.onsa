@@ -1,0 +1,20 @@
+pub fn len_of(s: Str) -> F32 { 1.0 }
+pub fn lf(x: F32) -> F32 { x }
+pub rt fn mk(n: U32) -> Str { "x" }
+
+pub flow interp_flow(x: F32 at sample) -> F32 at sample {
+  x * F32.round_from("a{x}".len())
+}
+
+pub flow hole_let(x: F32 at sample) -> F32 at sample {
+  let n = len_of("{x}")
+  x + n
+}
+
+pub flow direct(x: F32 at sample) -> F32 at sample {
+  x + lf(x)
+}
+
+pub flow temp(x: F32 at sample) -> F32 at sample {
+  x * F32.round_from(mk(1).len())
+}
