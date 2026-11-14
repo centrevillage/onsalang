@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "19:11"
+// code = "E0601"
+// candidate = 1
+// clean = true
+
+// §8.1, S-364 and R-455: as `e0601_fix_place_ret_fn`, the result an `rt` function type:
+// `-> (rt fn(I32) -> I32) uses {Alloc}`.
+
+pub fn bump(y: I32) -> I32 uses {Alloc} { y }
+
+pub rt fn kk(y: I32) -> I32 { y }
+
+pub fn mk() -> rt fn(I32) -> I32 {
+  let _ = bump(1)                                   //~ E0601 @11
+  kk
+}

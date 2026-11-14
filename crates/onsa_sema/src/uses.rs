@@ -113,6 +113,7 @@ impl<'a> Record<'a> {
         let DefKind::Fn(f) = &a.def(self.id).kind else { return Vec::new() };
         // SPEC-GAP(S-1053): one E0601 for each scope and effect.
         // `Alloc` alone until every effect is checked (W6-03 U7).
+        // SPEC-GAP(S-1059): the row as written, `Alloc` too in an `rt` one (E0902).
         let effects = a.alloc.into_iter().filter(|&e| !f.effects.has(e));
         effects.filter_map(|e| self.uses.iter().find(|u| u.needs(a, e)).map(|u| (e, u))).collect()
     }

@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "19:5"
+// code = "E0601"
+// candidate = 1
+// clean = true
+
+// §8.1: a method, the row after its result type: `pub fn m(self) -> U32 uses {Alloc}`.
+
+pub struct S { x: U32 }
+
+pub fn mk(n: U32) -> U32 uses {Alloc} { n }
+
+impl S {
+  pub fn m(self) -> U32 {
+    mk(self.x)                                      //~ E0601 @5
+  }
+}

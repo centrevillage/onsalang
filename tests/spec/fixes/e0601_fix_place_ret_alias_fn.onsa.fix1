@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§4.4", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "22:11"
+// code = "E0601"
+// candidate = 1
+// clean = true
+
+// §8.1 and §4.4 (an alias stands for its type): the result names an alias of a function type, and a `uses` after a
+// name is the row of the function, so the candidate inserts the row after the result with no parentheses:
+// `-> F uses {Alloc}`. The parentheses of `e0601_fix_place_ret_fn` are for a function type as written (R-455).
+
+type F = fn(I32) -> I32
+
+pub fn bump(y: I32) -> I32 uses {Alloc} { y }
+
+pub fn kk(y: I32) -> I32 { y }
+
+pub fn mk() -> F uses {Alloc} {
+  let _ = bump(1)                                   //~ E0601 @11
+  kk
+}

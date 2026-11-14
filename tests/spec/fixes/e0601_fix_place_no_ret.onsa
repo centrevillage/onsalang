@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "16:11"
+// code = "E0601"
+// candidate = 1
+// clean = true
+
+// §8.1: no result type, so the candidate inserts the row after the parameters: `fn k(n: U32) uses {Alloc}`.
+
+pub fn mk(n: U32) -> U32 uses {Alloc} { n }
+
+pub fn k(n: U32) {
+  let _ = mk(n)                                     //~ E0601 @11
+}

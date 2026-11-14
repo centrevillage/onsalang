@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "17:3"
+// code = "E0601"
+// candidate = 1
+// clean = true
+
+// §8.1 (`uses {}` is accepted and fmt removes it): the function has a row, empty, so the candidate adds
+// `Alloc` into it (`uses {Alloc}`), not a second row after it (W3-02/b).
+
+pub fn mk(n: U32) -> U32 uses {Alloc} { n }
+
+pub fn k(n: U32) -> U32 uses {Alloc} {
+  mk(n)                                             //~ E0601 @3
+}

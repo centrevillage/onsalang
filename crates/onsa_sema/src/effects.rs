@@ -4,10 +4,11 @@
 //! other effects are E0200 at the signature. `test` bodies get `Alloc` from
 //! the runner (D-08), and `const` initializers from the compiler (§6.6).
 
-use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
-use onsa_syntax::ast::ItemKind;
+use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
+use onsa_syntax::ast::{ItemKind, TypeKind};
 
 use crate::def::DefKind;
+use crate::resolve::Entity;
 use crate::uses::{Record, Use};
 use crate::{Analysis, DefId, Package, module_of_def};
 
@@ -44,21 +45,38 @@ fn first_use(pkg: &Package, a: &Analysis, r: &Record, effect: DefId, u: &Use) ->
         let why = format!("`{}` is `rt`, which cannot have `{name}` in its effect row (§10 rule 1)", def.name);
         return Some(d.with_note(def.name_span, why));
     }
+    // SPEC-GAP(S-1060): no fix where the name does not name the effect in the
+    // module (an item of it, an E0304): the row would read that (§18.1).
+    if a.modules.lookup(def.module, name, &a.prelude) != Some(Entity::Def(effect)) {
+        return Some(d);
+    }
 
-    // The fix: the effect row after the signature, from the name to just
-    // before the body (§18.1).
-    let body_start = def
-        .item
-        .and_then(|it| match &ast.item(it).kind {
-            ItemKind::Fn(f) => f.body,
-            _ => None,
-        })
-        .map(|b| ast.expr(b).span.start)
-        .unwrap_or(def.span.end);
+    // The fix (§18.1): into the row of the function where it has one (after
+    // its last effect or its `{`, W3-02/b); else a row after the signature,
+    // where a result that is a function type with no parentheses goes in
+    // them, or the row would be its own (`-> (fn(I32) -> I32) uses {Alloc}`,
+    // R-455, the rule of S-364 on the type as written).
+    let decl = def.item.and_then(|it| match &ast.item(it).kind {
+        ItemKind::Fn(f) => Some(f),
+        _ => None,
+    });
+    let (title, file) = (format!("add `uses {{{name}}}`"), def.name_span.file);
+    if let Some(row) = decl.and_then(|f| f.effects.as_ref()) {
+        let (at, sep) = row.effects.last().map_or((row.span.start + 1, ""), |p| (p.span.end, ", "));
+        return Some(d.with_fix(Fix::insert(title, file, at, format!("{sep}{name}"))));
+    }
+    let row = format!(" uses {{{name}}}");
+    if let Some(t) = decl.and_then(|f| f.ret).map(|t| ast.ty(t))
+        && t.parens == 0
+        && matches!(t.kind, TypeKind::Fn { .. })
+    {
+        let edits = vec![Edit::insert(file, t.span.start, "("), Edit::insert(file, t.span.end, format!("){row}"))];
+        return Some(d.with_fix(Fix::new(title, edits)));
+    }
+    let body_start = decl.and_then(|f| f.body).map_or(def.span.end, |b| ast.expr(b).span.start);
     let mut sig_end = body_start as usize;
     while sig_end > def.name_span.start as usize && text.as_bytes()[sig_end - 1].is_ascii_whitespace() {
         sig_end -= 1;
     }
-    let row = format!(" uses {{{name}}}");
-    Some(d.with_fix(Fix::insert(format!("add `uses {{{name}}}`"), def.name_span.file, sig_end as u32, row)))
+    Some(d.with_fix(Fix::insert(title, file, sig_end as u32, row)))
 }

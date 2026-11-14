@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "16:11"
+// code = "E0601"
+// candidate = 1
+// clean = true
+
+// §8.1: a generic function, the row after its result type: `pub fn g[T](x: T, n: U32) -> T uses {Alloc}`.
+
+pub fn mk(n: U32) -> U32 uses {Alloc} { n }
+
+pub fn g[T](x: T, n: U32) -> T {
+  let _ = mk(n)                                     //~ E0601 @11
+  x
+}

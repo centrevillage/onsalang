@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "20:11"
+// code = "E0601"
+// candidate = 1
+// clean = true
+
+// §8.1 and S-364 (a `uses` after a function type is the row of that type): the result is a function type, so the
+// candidate puts it in parentheses and the row after them (`-> (fn(I32) -> I32) uses {Alloc}`), one candidate of two
+// edits (§18.1); a row after `fn(I32) -> I32` would be the result's and leave the E0601 (R-455).
+
+pub fn bump(y: I32) -> I32 uses {Alloc} { y }
+
+pub fn kk(y: I32) -> I32 { y }
+
+pub fn mk() -> fn(I32) -> I32 {
+  let _ = bump(1)                                   //~ E0601 @11
+  kk
+}

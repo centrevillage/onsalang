@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "19:11"
+// code = "E0601"
+// candidate = 1
+// clean = true
+
+// §8.1 and S-364: the function-type result is in parentheses already, so the candidate inserts the row after
+// them, as for any result: `-> (fn(I32) -> I32) uses {Alloc}`.
+
+pub fn bump(y: I32) -> I32 uses {Alloc} { y }
+
+pub fn kk(y: I32) -> I32 { y }
+
+pub fn mk() -> (fn(I32) -> I32) uses {Alloc} {
+  let _ = bump(1)                                   //~ E0601 @11
+  kk
+}
