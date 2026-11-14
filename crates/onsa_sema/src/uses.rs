@@ -12,7 +12,7 @@ use onsa_diag::internal::bug;
 use onsa_diag::{Span, Stage};
 use onsa_syntax::ast::{Ast, ExprId, ExprKind, Lit, StrSeg};
 
-use crate::body::{BodyInfo, Target, root_of};
+use crate::body::{BodyInfo, RowFrom, Target, root_of};
 use crate::def::DefKind;
 use crate::drop_alloc::{Drop, alloc_drops};
 use crate::ty::{EffectSet, Ty};
@@ -37,6 +37,8 @@ pub(crate) struct Scope {
     /// initializer (§6.6), or of the type of the anonymous function (S-1032).
     pub row: EffectSet,
     pub rt: bool,
+    /// Where the row of the anonymous function comes from; none for the body.
+    pub from: Option<RowFrom>,
 }
 
 /// A use of an effect (§8.1).
@@ -63,8 +65,8 @@ pub(crate) enum Needs<'a> {
 pub(crate) enum What<'a> {
     /// A call of a function or a method.
     Call { callee: DefId },
-    /// A call through a value of a function type.
-    ValueCall,
+    /// A call through a value of a function type, the expression it calls.
+    ValueCall { callee: ExprId },
     /// A string literal with a hole (§2.4).
     Interp,
     /// A value dropped (§12.2), as its first drop point tells it, with all
@@ -89,7 +91,7 @@ impl Use<'_> {
         let at = src(self.at);
         match &self.what {
             What::Call { callee } => format!("this calls `{}`", a.def(*callee).name),
-            What::ValueCall => "this calls a function value".into(),
+            What::ValueCall { .. } => "this calls a function value".into(),
             What::Interp => "this string interpolation creates a `Str`".into(),
             What::Drop { drop, .. } => match drop {
                 Drop::Local(_, l) => format!("`{}`, which owns a `{}`, is dropped", l.name, a.display_in(l.ty, def)),
@@ -165,12 +167,14 @@ fn record<'a>(pkg: &Package, a: &'a Analysis, id: DefId) -> Option<Record<'a>> {
     let body = &a.bodies[&id];
     let closures = Closures::of(ast, body);
     let (row, rt) = body_row(a, id);
-    let mut scopes = vec![Scope { closure: None, row, rt }];
+    let mut scopes = vec![Scope { closure: None, row, rt, from: None }];
     for &(at, e, _) in &closures.0 {
-        let Some(Ty::Fn(f)) = body.expr_types.get(&e).map(|&t| a.types.get(t)) else {
-            bug(Some(at), "an anonymous function with no function type in a body checked to its end")
+        let (Some(Ty::Fn(f)), Some(&from)) =
+            (body.expr_types.get(&e).map(|&t| a.types.get(t)), body.closure_rows.get(&e))
+        else {
+            bug(Some(at), "an anonymous function with no function type or row in a body checked to its end")
         };
-        scopes.push(Scope { closure: Some(e), row: f.effects.clone(), rt: f.rt });
+        scopes.push(Scope { closure: Some(e), row: f.effects.clone(), rt: f.rt, from: Some(from) });
     }
     let mut keyed = Vec::new();
     let made = body.targets.keys().filter_map(|&e| call_use(a, ast, body, e).map(|u| (e, u)));
@@ -260,7 +264,7 @@ pub(crate) fn call_use<'a>(a: &'a Analysis, ast: &Ast, body: &BodyInfo, e: ExprI
         }
         Target::Value => {
             let Ty::Fn(f) = a.types.get(*body.expr_types.get(callee)?) else { return None };
-            (&f.effects, f.rt, What::ValueCall)
+            (&f.effects, f.rt, What::ValueCall { callee: *callee })
         }
         _ => return None,
     };

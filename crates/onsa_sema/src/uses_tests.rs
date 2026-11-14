@@ -1,5 +1,6 @@
 //! Unit tests of the record of the uses (`crate::uses`, R-83, D-15, S-783).
 
+use crate::body::RowFrom;
 use crate::drop_alloc::Drop;
 use crate::tests::{analyze, def, pkg};
 use crate::uses::{What, records};
@@ -19,7 +20,7 @@ fn uses_of(src: &str, name: &str) -> Vec<(&'static str, String, usize)> {
         .map(|u| {
             let (kind, points) = match &u.what {
                 What::Call { .. } => ("call", 0),
-                What::ValueCall => ("value call", 0),
+                What::ValueCall { .. } => ("value call", 0),
                 What::Interp => ("interp", 0),
                 What::Drop { drop, points } => (drop_kind(drop), points.len()),
             };
@@ -315,4 +316,38 @@ pub fn buf[T](move x: (T, Buf[F32])) {}
     ] {
         assert_eq!(freed(name), want, "{name}");
     }
+}
+
+/// Where the row of each anonymous function comes from, as the types stage
+/// decided it (`BodyInfo::closure_rows`, S-1041 (2), D-15): written (`uses
+/// {}` too), the function type expected (its type, resolved), none expected
+/// (an unannotated `let`), and a later branch of a merge (S-1032 (ii-3),
+/// S-1061: of an `else if` too). The body's scope has none (W6-03 U6b).
+#[test]
+fn the_scope_of_an_anonymous_function_has_where_its_row_comes_from() {
+    let src = format!(
+        "{STD}pub fn ap(g: fn(U32) -> U32, n: U32) -> U32 {{ g.(n) }}
+pub fn f(a: Bool, b: Bool, n: U32) -> U32 uses {{Alloc}} {{
+  let w = fn(y: U32) -> U32 uses {{}} {{ y }}
+  let x = fn(y: U32) -> U32 {{ y }}
+  let j = if a {{ pure }} else {{ fn(y: U32) -> U32 {{ y }} }}
+  let k = if a {{ pure }} else if b {{ pure }} else {{ fn(y: U32) -> U32 {{ y }} }}
+  ap(fn(y) {{ y }}, n) + w.(n) + x.(n) + j.(n) + k.(n)
+}}
+"
+    );
+    let p = pkg(&[("main", &src)]);
+    let a = analyze(&p);
+    let id = def(&a, "f");
+    let all = records(&p, &a);
+    let r = all.iter().find(|r| r.id == id).unwrap_or_else(|| panic!("no record of f: {:?}", a.diagnostics));
+    let got: Vec<String> = (r.scopes.iter())
+        .map(|s| match s.from {
+            None => "body".to_string(),
+            Some(RowFrom::Expected(t)) => format!("expected {}", a.display_type(t)),
+            Some(from) => format!("{from:?}"),
+        })
+        .collect();
+    assert_eq!(got, ["body", "Written", "NoneExpected", "Joining", "Joining", "expected fn(U32) -> U32"]);
+    assert!(r.scopes[0].closure.is_none() && r.scopes[1..].iter().all(|s| s.closure.is_some()));
 }

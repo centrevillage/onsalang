@@ -1,6 +1,8 @@
 //! The notes of an E0601 (spec §8.1, §5.4, §12.2, §18.1; decisions S-783 (C1), S-613, R-83 (3), R-256, and the
-//! details S-1050 and S-1052; W6-03 U6a/t). The case files cannot pin them (the runner of the cases compares the
-//! code and the line, and no note), and the spec fixes the places of the notes but not their text or order.
+//! details S-1050 and S-1052; W6-03 U6a/t), and of an anonymous function (§8.1, §10 rule 1; the detail S-1041 (2)
+//! and (3), with the E0901 of an `rt` function; W6-03 U6b/i). The case files cannot pin them (the runner of the
+//! cases compares the code and the line, and no note), and the spec fixes the places of the notes but not their
+//! text or order.
 //!
 //! One package of two files is checked once (`check --json` as the command runs it, in this process, no file
 //! written), and each function of it is one unit that gets one report. The Onsa text carries the expected
@@ -14,8 +16,9 @@
 //! - `//@ note`: a note points at this line (the lines the spec decides: the drop points away from the place the
 //!   value is written, the other uses of the effect, the first element of a literal). A marker is a lower bound:
 //!   other notes may be there. `//@ note~`: the same for a note of a detail that is decided provisionally
-//!   (S-1050: an `rt` function and an anonymous function notes the other uses too). `//@ nonote`: no note points
-//!   at this line (the line is no drop point of the value, or the use is of another scope or element).
+//!   (S-1050: an `rt` function and an anonymous function notes the other uses too; S-1041: where the row of an
+//!   anonymous function comes from, at its line, and the type to write at the `let` of one). `//@ nonote`: no
+//!   note points at this line (the line is no drop point of the value, or the use is of another scope or element).
 //! - Markers on one line are separated by `;`.
 //!
 //! What the test compares (§18.1: the text and the order of a note are not fixed): the code, the place (line and
@@ -317,6 +320,70 @@ impl[Item] W[Item] {
   fn names_method(move self, n: U32) -> U32 {   //@ main move |self
     n
   }
+}
+//@ case s1041_helpers none
+fn alloc_len(n: U32) -> U32 uses {Alloc} { mk(n).len() }
+
+fn ap_plain(f: fn(U32) -> U32, x: U32) -> U32 { f.(x) }
+
+fn ap_rt(f: rt fn(U32) -> U32, x: U32) -> U32 { f.(x) }
+
+//@ case row_written fixes=0 g=s1041
+fn row_written(n: U32) -> U32 uses {Alloc} {
+  let l = fn(y: U32) -> U32 uses {} {   //@ note~
+    let b = mk(y)                       //@ main let |b
+    b.len()
+  }
+  l.(n)
+}
+
+//@ case row_expected fixes=0 g=s1041
+fn row_expected(n: U32) -> U32 {
+  ap_plain(fn(y: U32) -> U32 {          //@ note~
+    let b = mk(y)                       //@ main let |b
+    b.len()
+  }, n)
+}
+
+//@ case row_none_expected fixes=0 g=s1041
+fn row_none_expected(n: U32) -> U32 uses {Alloc} {
+  let l = fn(y: U32) -> U32 {           //@ note~
+    let b = mk(y)                       //@ main let |b
+    b.len()
+  }
+  l.(n)
+}
+
+//@ case row_joining fixes=0 g=s1041
+fn row_joining(c: Bool, n: U32) -> U32 uses {Alloc} {
+  let j = if c { alloc_len } else {
+    fn(x: U32) -> U32 {                 //@ note~
+      alloc_len(x)                      //@ main |alloc_len(
+    }
+  }
+  j.(n)
+}
+
+//@ case rt_calls_closure code=E0901 fixes=0 g=s1041_rt
+rt fn rt_calls_closure(n: U32) -> U32 {
+  let l = fn(y: U32) -> U32 { y }       //@ note~
+  l.(n)                                 //@ main |l.(
+}
+
+//@ case rt_closure_rule1 fixes=0
+fn rt_closure_rule1(n: U32) -> U32 {
+  ap_rt(fn(y: U32) -> U32 {
+    let b: Buf[F32] = Buf.zeroed(y)     //@ main let |b
+    b.len()
+  }, n)
+}
+
+//@ case rt_closure_control fixes=0
+fn rt_closure_control(n: U32) -> U32 {
+  ap_plain(fn(y: U32) -> U32 {
+    let b: Buf[F32] = Buf.zeroed(y)     //@ main let |b
+    b.len()
+  }, n)
 }
 "####;
 
@@ -690,4 +757,42 @@ fn a_type_parameter_is_shown_by_the_name_it_is_written_with() {
         }
     }
     none_of(faults);
+}
+
+#[test]
+fn an_anonymous_function_notes_where_its_row_comes_from() {
+    // §8.1 ("修正候補は無く、note で効果行の決まり方を示す") and S-1041 (2) (provisional: no candidate, the text is
+    // not fixed): the row an anonymous function writes (`uses {}` too), that of the function type expected where
+    // it is, none where none is expected (an unannotated `let`), and none in a later branch of a merge (§4.7).
+    // Each has a note at the line of the anonymous function.
+    let r = run();
+    let mut faults = Vec::new();
+    for c in group(r, "s1041", 4) {
+        faults.extend(lines_noted(c, the_diag(r, c), &c.detail, &c.nonote));
+    }
+    none_of(faults);
+}
+
+#[test]
+fn an_rt_function_that_calls_an_anonymous_function_with_no_type_notes_the_type_to_write() {
+    // §10 ("`rt` の関数の中で `rt` でない無名関数を呼ぶと E0901 で、`rt fn` の型の注釈を書く") and S-1041 (3): the
+    // E0901 of the call of a local that an unannotated `let` binds to an anonymous function has a note at the
+    // `let`.
+    let r = run();
+    let mut faults = Vec::new();
+    for c in group(r, "s1041_rt", 1) {
+        faults.extend(lines_noted(c, the_diag(r, c), &c.detail, &c.nonote));
+    }
+    none_of(faults);
+}
+
+#[test]
+fn an_rt_anonymous_function_notes_the_rule_1_of_rt() {
+    // §10 rule 1, as of an `rt` function: an anonymous function that is `rt` by the type expected cannot have
+    // `Alloc`. The control differs in the type expected alone (`fn` for `rt fn`), so its other notes (where the
+    // row comes from, the drop point, the other use) are the same, and the `rt` one has one note more.
+    let r = run();
+    let notes = |name: &str| notes_of(the_diag(r, case(r, name))).len();
+    let (n, c) = (notes("rt_closure_rule1"), notes("rt_closure_control"));
+    assert_eq!(n, c + 1, "one note more than the control\n{}", describe(the_diag(r, case(r, "rt_closure_rule1"))));
 }

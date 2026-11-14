@@ -343,8 +343,8 @@ impl<'a> Checker<'a> {
                 let d = unmet_error(item.span, what, &shown, *bound, &mut |t| self.display(t));
                 let d = self.decided_note(d.with_found(self.src(item.span)), item.ty, &shown, true);
                 let mut d = unmet_rules(self.a, r, &shown, *bound).fold(d, Diagnostic::with_rule);
-                if let Required::SeqElement { .. } = what {
-                    d = self.seq_element_notes(d, r, &shown, *bound);
+                if let Required::SeqElement { of_array, .. } = what {
+                    d = self.seq_element_notes(d, r, &shown, *bound, *of_array);
                 }
                 Look::Fail(d)
             }

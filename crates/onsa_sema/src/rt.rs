@@ -8,8 +8,11 @@
 
 use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::{Code, Diagnostic, Span, Stage};
+use onsa_syntax::ast::{Ast, ExprId, StmtKind};
 
+use crate::body::{RowFrom, Target};
 use crate::def::DefKind;
+use crate::names::body::Origin;
 use crate::uses::{Record, Use, What, rt_edges};
 use crate::{Analysis, DefId, Package, module_of_def};
 
@@ -144,8 +147,38 @@ fn first_calls(pkg: &Package, a: &Analysis, r: &Record) -> Vec<Diagnostic> {
         let d = Diagnostic::new(Stage::Effects, Code::E0901, u.at, message).with_found(src(u.at));
         match u.what {
             What::Call { callee } => d.with_note(a.def(callee).name_span, "declared here without `rt`"),
+            What::ValueCall { callee } => match written_with_no_type(a, ast, r.id, callee) {
+                Some((at, why)) => d.with_note(at, why),
+                None => d,
+            },
             _ => d,
         }
     };
     firsts.map(diag).collect()
+}
+
+/// The note of the E0901 of a call of the local `callee` names (S-1041 (3),
+/// §10): where a `let` or a `var` binds it to an anonymous function no
+/// function type is expected for (§8.1, `RowFrom::NoneExpected`), the `rt`
+/// type to write. None of another value.
+// SPEC-GAP(S-1041): the text and whether there is a note are not fixed.
+fn written_with_no_type(a: &Analysis, ast: &Ast, id: DefId, callee: ExprId) -> Option<(Span, String)> {
+    let body = &a.bodies[&id];
+    let Some(Target::Local(l)) = body.targets.get(&callee) else { return None };
+    let (kw, s) = match a.names.get(&id)?.bindings[l.0 as usize].origin {
+        Origin::Let(s) => ("let", s),
+        Origin::Var(s) => ("var", s),
+        _ => return None,
+    };
+    let (StmtKind::Let { init, .. } | StmtKind::Var { init, .. }) = &ast.stmt(s).kind else { return None };
+    if body.closure_rows.get(init) != Some(&RowFrom::NoneExpected) {
+        return None;
+    }
+    let local = &body.locals[l.0 as usize];
+    let ty = a.display_in(local.ty, id);
+    let why = format!(
+        "no function type is expected where `{0}` is bound to an anonymous function, so it is not `rt`; write the type: `{kw} {0}: rt {ty} = …` (§10, §8.1)",
+        local.name
+    );
+    Some((ast.stmt(s).span, why))
 }

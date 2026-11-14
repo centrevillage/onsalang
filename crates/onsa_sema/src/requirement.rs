@@ -40,6 +40,8 @@ pub(crate) fn requirements(g: &GenericDef, of_seq: bool) -> Option<impl Iterator
         (false, true) => VIEW_OF_ARRAY,
         (false, false) => GENERIC_VIEW,
     };
+    // Of a sequence, a `Copy` bound is judged and not first its `Dup` (S-1040).
+    let dup = *dup && !(of_seq && bounds.contains(&Bound::Copy));
     let wants = dup.then_some(Bound::Dup).into_iter().chain(bounds.iter().copied());
     Some(std::iter::once(Requirement::Escape { rule, lifted }).chain(wants.map(Requirement::Bound)))
 }
@@ -144,8 +146,9 @@ pub(crate) enum Required {
     /// (`Dup`, §4.5, S-767).
     SharedElement,
     /// The element of the receiver of the type `recv` of the method `method`
-    /// of std's `impl` of a sequence: its bounds (§5.3, S-853).
-    SeqElement { recv: TyId, method: String },
+    /// of std's `impl` of a sequence: its bounds (§5.3, S-853). `of_array`:
+    /// of the `impl` of an array, not taken from `Span[T]` (S-1040).
+    SeqElement { recv: TyId, method: String, of_array: bool },
     /// The value of a hole of a string (`Show`, §2.4, R-292).
     HoleValue,
 }
@@ -200,7 +203,7 @@ impl Required {
             Required::Param { param, owner, .. } => {
                 format!("`{shown}` does not satisfy the bound `{param}: {}` of {owner} (§4.5)", bound.name())
             }
-            Required::SeqElement { recv, method } => {
+            Required::SeqElement { recv, method, .. } => {
                 let need = match bound {
                     Bound::Dup => "a Copy or Shared (`Dup`) element".to_string(),
                     Bound::Copy => "a Copy element".to_string(),

@@ -249,7 +249,8 @@ impl<'a> Checker<'a> {
                 let mut element = None;
                 if let Some(st) = self.a.self_ty_of(md).filter(|_| of.is_none()) {
                     if matches!(self.ty(st), Ty::Array(..) | Ty::Builtin(BuiltinTy::Span, _)) {
-                        element = Some(Required::SeqElement { recv, method: name.name.clone() });
+                        let of_array = matches!(self.ty(st), Ty::Array(..));
+                        element = Some(Required::SeqElement { recv, method: name.name.clone(), of_array });
                     }
                     let st2 = self.a.types.subst(st, &targs);
                     self.unify_at(name.span, this, st2)?;

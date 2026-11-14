@@ -115,7 +115,7 @@ impl<'a> Checker<'a> {
             let owner = if k < impl_count { impl_name.clone() } else { name.clone() };
             let what = match (&g.kind, &element) {
                 (GenericKind::Const(_), _) => ArgumentName::Text(parameter(g, &owner)),
-                (_, Some(Required::SeqElement { recv, method })) if k < impl_count => {
+                (_, Some(Required::SeqElement { recv, method, .. })) if k < impl_count => {
                     ArgumentName::SeqElement { recv: *recv, method: method.clone() }
                 }
                 _ => ArgumentName::Text(parameter(g, &owner)),

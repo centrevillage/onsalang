@@ -634,14 +634,19 @@ impl<'a> Checker<'a> {
             Ty::Fn(f) => Some(f),
             _ => None,
         });
-        let effects = match effects {
+        // Where the row comes from is kept for the notes of an E0601 (S-1041).
+        let (from, effects) = match effects {
             // As the names stage read it (S-738).
-            Some(_) => self.names.effects.get(&e).cloned().ok_or_else(|| self.held_stop())?,
+            Some(_) => (RowFrom::Written, self.names.effects.get(&e).cloned().ok_or_else(|| self.held_stop())?),
             // A later branch of a merge takes no effects (§4.7, S-1032 (ii-3)).
             // SPEC-GAP(S-1061): a branch of a branch (`else if`, `{ … }` of an arm) too.
-            None if self.joining => crate::ty::EffectSet::default(),
-            None => exp_fn.as_ref().map(|f| f.effects.clone()).unwrap_or_default(),
+            None if self.joining => (RowFrom::Joining, crate::ty::EffectSet::default()),
+            None => match (&exp_fn, expected) {
+                (Some(f), Some(t)) => (RowFrom::Expected(t), f.effects.clone()),
+                _ => (RowFrom::NoneExpected, crate::ty::EffectSet::default()),
+            },
         };
+        self.info.closure_rows.insert(e, from);
         if let (Some(f), Some(exp)) = (&exp_fn, expected)
             && f.params.len() != params.len()
         {

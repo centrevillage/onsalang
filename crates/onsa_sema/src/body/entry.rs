@@ -250,6 +250,11 @@ impl<'a> Checker<'a> {
             let r = self.infer.resolve(&mut self.a.types, t);
             self.info.expr_types.insert(e, r);
         }
+        for from in self.info.closure_rows.values_mut() {
+            if let RowFrom::Expected(t) = from {
+                *t = self.infer.resolve(&mut self.a.types, *t);
+            }
+        }
         for d in self.info.discards.values_mut() {
             d.tys.iter_mut().for_each(|t| *t = self.infer.resolve(&mut self.a.types, *t));
         }

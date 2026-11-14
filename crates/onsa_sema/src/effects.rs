@@ -4,11 +4,12 @@
 //! other effects are E0200 at the signature. `test` bodies get `Alloc` from
 //! the runner (D-08), and `const` initializers from the compiler (§6.6).
 
+use onsa_diag::internal::bug;
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
-use onsa_syntax::ast::{Ast, ExprId, ItemKind, StmtKind, TypeKind};
+use onsa_syntax::ast::{Ast, ExprId, ExprKind, ItemKind, StmtKind, TypeKind};
 
 use crate::binding::{Head, LitClass};
-use crate::body::generics_of;
+use crate::body::{RowFrom, generics_of};
 use crate::def::{DefKind, GenericKind};
 use crate::drop_alloc::{Drop, copy_would_free};
 use crate::names::body::Origin;
@@ -100,13 +101,39 @@ fn notes(
     u: &Use,
 ) -> Vec<(Span, String)> {
     let mut notes = Vec::new();
+    let name = &a.def(effect).name;
     if let Some(c) = scope.closure {
-        // SPEC-GAP(S-1041): no fix; one note of how its row is decided (W6-03 U6b).
-        let head = ast.expr(c).span;
-        let why = "an anonymous function has the effect row it writes, else that of the function type expected where it is, else none (§8.1)";
-        notes.push((Span::new(head.file, head.start, head.start + 2), why.to_string()));
+        // SPEC-GAP(S-1041): no fix; a note of where its row comes from, of an
+        // expected type the type alone (not where it was expected).
+        let (e, fun) = (ast.expr(c), "the anonymous function");
+        let fn_at = Span::new(e.span.file, e.span.start, e.span.start + 2);
+        let ExprKind::Closure { body, .. } = &e.kind else { bug(Some(e.span), "a scope of no anonymous function") };
+        let head = src(Span::new(e.span.file, e.span.start, ast.expr(*body).span.start));
+        let write = format!("write its row: `{} uses {{{name}}} {{ … }}`", head.trim_end());
+        let why = match scope.from {
+            Some(RowFrom::Written) => format!("{fun} has the effect row it writes (§8.1)"),
+            Some(RowFrom::Expected(t)) => {
+                format!(
+                    "{fun} has the effect row of the function type expected where it is, `{}` (§8.1)",
+                    a.display_in(t, r.id)
+                )
+            }
+            Some(RowFrom::Joining) => format!(
+                "{fun} is a later branch of a merge, which takes no effect row from the one before, so its row is empty; {write} (§4.7, §8.1)"
+            ),
+            Some(RowFrom::NoneExpected) | None => {
+                format!("no function type is expected where {fun} is, so its effect row is empty; {write} (§8.1)")
+            }
+        };
+        notes.push((fn_at, why));
+        if scope.rt {
+            let why = format!(
+                "{fun} is `rt` by the type expected, which cannot have `{name}` in its effect row (§10 rule 1)"
+            );
+            notes.push((fn_at, why));
+        }
     } else if scope.rt {
-        let (def, name) = (a.def(r.id), &a.def(effect).name);
+        let def = a.def(r.id);
         notes.push((
             def.name_span,
             format!("`{}` is `rt`, which cannot have `{name}` in its effect row (§10 rule 1)", def.name),
@@ -143,7 +170,6 @@ fn notes(
     }
     // SPEC-GAP(S-1050): in an `rt` function and an anonymous function too, of the scope alone.
     let others = r.uses.iter().filter(|o| o.scope == u.scope && o.at != u.at && o.needs(a, effect));
-    let name = &a.def(effect).name;
     notes.extend(others.map(|o| (o.at, format!("{}: it needs `{name}` too", o.describe(a, (ast, r.id), src)))));
     notes
 }

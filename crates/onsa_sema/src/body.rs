@@ -259,6 +259,23 @@ pub struct BodyInfo {
     /// to no name (§5.4, S-1036, S-1044), with their types: the modes stage
     /// drops those of an owned head.
     pub discards: HashMap<Unbound, Discard>,
+    /// How the effect row of each anonymous function was decided (§8.1): the
+    /// notes of its E0601 read it (`crate::uses::Scope`, S-1041). Only the
+    /// bodies of a package are recorded, so not in the base of std.
+    #[serde(skip)]
+    pub closure_rows: HashMap<ExprId, RowFrom>,
+}
+
+/// Where the effect row of an anonymous function comes from (§8.1, §4.7).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RowFrom {
+    Written,
+    /// The function type expected where it is written.
+    Expected(TyId),
+    /// No function type is expected there: the row is empty.
+    NoneExpected,
+    /// A later branch of a merge, which takes no row (S-1032 (ii-3)).
+    Joining,
 }
 
 /// What binds a part of a value to no name (§5.4, S-1036).

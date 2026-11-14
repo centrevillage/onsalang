@@ -8,15 +8,25 @@ use super::*;
 const IN_PLACE: &str = "to use the elements as they are, borrow one by its index (`xs[i]`), take them out with `for x in move xs`, set each in a `for` loop, make the array with `array.from_fn`, or copy each element with its own `copy_from!` (§5.3, §5.2)";
 
 /// The form that sets every element of an array of a Dup element that is
-/// not Copy (S-1040): an assignment, which drops the elements before.
+/// not Copy (S-1040): an assignment, which drops the elements before. Of
+/// the `impl`s of an array, `fill!` is the one whose bound such an element
+/// does not meet (`get` needs `Dup`).
 const REFILL: &str = "to set every element to one Dup value, assign a new array: `xs = [v; N]` (the old elements are dropped, §5.3, §12.2)";
 
 impl<'a> Checker<'a> {
     /// The E0416 `d` of the element `elem`, shown as `shown`, that does not
     /// meet `bound`: of `Dup` and `Copy` its kind and the forms that need
-    /// neither (of a Dup one, [`REFILL`] too); of a number trait, that it
-    /// meets none (§6.3). No candidate.
-    pub(crate) fn seq_element_notes(&self, d: Diagnostic, elem: TyId, shown: &str, bound: Bound) -> Diagnostic {
+    /// neither (of a Dup one of a method of the `impl` of an array,
+    /// `of_array`, [`REFILL`] too); of a number trait, that it meets none
+    /// (§6.3). No candidate.
+    pub(crate) fn seq_element_notes(
+        &self,
+        d: Diagnostic,
+        elem: TyId,
+        shown: &str,
+        bound: Bound,
+        of_array: bool,
+    ) -> Diagnostic {
         if !bound.is_kind_constraint() {
             return d.with_rule(format!(
                 "`{shown}` meets no number trait (`{}`, §6.3); the numbers are the integer and float types",
@@ -33,11 +43,11 @@ impl<'a> Checker<'a> {
                 "declared `?Dup`, so it may be Affine"
             };
             let d = d.with_rule(format!("the type parameter `{shown}` is {known} (§4.5)")).with_rule(IN_PLACE);
-            return if b.meets(elem, Bound::Dup) { d.with_rule(REFILL) } else { d };
+            return if of_array && b.meets(elem, Bound::Dup) { d.with_rule(REFILL) } else { d };
         }
         let kind = [(Bound::Copy, Kind::Copy), (Bound::Dup, Kind::Shared)].into_iter().find(|&(x, _)| b.meets(elem, x));
         let kind = kind.map_or(Kind::Affine, |(_, k)| k);
         let d = d.with_rule(format!("`{shown}` is {} (§4.6)", kind.name())).with_rule(IN_PLACE);
-        if kind == Kind::Shared { d.with_rule(REFILL) } else { d }
+        if of_array && kind == Kind::Shared { d.with_rule(REFILL) } else { d }
     }
 }
