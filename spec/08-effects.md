@@ -122,7 +122,7 @@ pub fn harmonics_in(inout scratch: Span[U8]) -> [F32; N] {
 pub fn main() -> Result[(), AppError] uses {Fs, Stdout, Alloc} { ... }
 ```
 
-`main` の効果行の各効果について、ビルドターゲットが handler を提供しなければならない（E0610、§15）。ヒープの無いターゲットは `Alloc` を提供しないので、その `main` は `Alloc` を効果行に持てない。
+`main` は `kind = "exe"` のターゲットのエントリである（§15.3）。その `main` の効果行の各効果について、ビルドターゲットが handler を提供しなければならない（E0610）。ヒープの無いターゲットは `Alloc` を提供しないので、その `main` は `Alloc` を効果行に持てない。
 
 時刻と乱数も効果（`Clock`, `Random`。どちらもブロックしない）。テストでは handler を差し替えるだけで決定的になる。`test` の本体では、テストランナーが `Alloc` と、テスト名から決めた種の `Random` を提供する。
 
