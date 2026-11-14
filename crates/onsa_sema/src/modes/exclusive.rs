@@ -9,7 +9,6 @@ use super::calls::Takes;
 use super::check::Walker;
 use super::flow::Run;
 use super::place::{Place, Proj, place_of};
-use super::state::Status;
 use crate::Kind;
 use crate::body::{LocalId, view_base};
 use crate::ty::TyId;
@@ -106,21 +105,6 @@ impl Walker<'_> {
         }
     }
 
-    /// After the arguments of a call, the places `passed` in them read
-    /// again (§5.2, S-1030: a release in one of its arguments that another
-    /// argument or the receiver overlaps, E0702's test, copies), but the
-    /// place released by the argument itself.
-    pub(super) fn reread(&mut self, r: &mut Run, passed: &[Passed]) {
-        for q in passed {
-            let at = self.ast.without_parens(q.at);
-            let own =
-                matches!(r.cur.state().status(q.place.root), Some(Status::Released { at: xs }) if xs.contains(&at));
-            if !own {
-                self.restore(r, q.place.root);
-            }
-        }
-    }
-
     /// The place passed as `mode` by `x` (S-787: the `move` of an Affine
     /// field's path consumes its root whole; S-801: a Dup value at a `move`
     /// parameter or receiver is copied, and counts as a read of its place, as
@@ -213,14 +197,21 @@ impl Walker<'_> {
     /// of the index stands for its places). The change of a direct argument
     /// (marked with the depth of this call, the one after `calls`) is
     /// `exclusive`'s, and changes are not compared with one another
-    /// (`h(next(inout k), next(inout k))`). Out of the arguments of every
-    /// call, the record is emptied.
-    pub(super) fn changed_in_args(&mut self, start: usize, passed: &[Passed]) {
-        let this = Some(self.inside.calls + 1);
-        for (w, at, _) in self.inside.changes[start..].iter().filter(|c| self.reports && c.2 != this) {
+    /// (`h(next(inout k), next(inout k))`). A release of a Dup value that
+    /// such a place overlaps (a direct argument's too: `mm(s, s)`), by every
+    /// walk, copies (§5.2, S-1030: E0702's test, no error). Out of the
+    /// arguments of every call, the record is emptied.
+    pub(super) fn changed_in_args(&mut self, r: &mut Run, start: usize, passed: &[Passed]) {
+        let (this, mut copies) = (Some(self.inside.calls + 1), Vec::new());
+        let window = self.inside.changes[start..].iter().filter(|c| c.3 || (self.reports && c.2 != this));
+        for (w, at, _, release) in window {
             let span = |p: &Passed| self.ast.expr(p.at).span;
             let holds = |p: &Passed| span(p).start <= at.start && at.end <= span(p).end;
             let Some(q) = passed.iter().find(|q| !holds(q) && self.deps.meets(w, &q.place)) else { continue };
+            if *release {
+                copies.push(w.root);
+                continue;
+            }
             let (changed, arg) = (self.place_text(*at, &[], w), self.passed_text(q));
             let message = format!(
                 "`{changed}` is changed in another argument while `{arg}` is passed {} in the same call; the places may overlap (§3.5, §5.2)",
@@ -230,6 +221,7 @@ impl Walker<'_> {
             let d = self.at_later(message, (span(q), mode), (*at, "changed here".to_string()), &[q]);
             self.m.found.push(d);
         }
+        copies.into_iter().for_each(|l| self.restore(r, l));
         if self.inside.calls == 0 {
             self.inside.changes.clear();
         }

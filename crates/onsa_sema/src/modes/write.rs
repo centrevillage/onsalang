@@ -118,7 +118,7 @@ impl Walker<'_> {
     /// argument, marked with the call's depth.
     pub(super) fn record(&mut self, w: &Place, at: Span, of: Of) {
         if self.reports && self.inside.calls > 0 {
-            self.inside.changes.push((w.clone(), at, (of == Of::Arg).then_some(self.inside.calls)));
+            self.inside.changes.push((w.clone(), at, (of == Of::Arg).then_some(self.inside.calls), false));
         }
     }
 

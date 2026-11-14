@@ -90,9 +90,8 @@ impl Walker<'_> {
             false => self.ran(r, values, span),
             true => r.forget(values),
         }
-        self.reread(r, &passed);
         self.inside.calls -= 1;
-        self.changed_in_args(start, &passed);
+        self.changed_in_args(r, start, &passed);
         for (place, at) in replace(&mut self.inside.after_call, outer) {
             self.changed(r, &place, at);
         }

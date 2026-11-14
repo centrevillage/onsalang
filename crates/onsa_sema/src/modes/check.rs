@@ -114,9 +114,10 @@ pub(super) struct Inside {
     /// the call: its root is not reported as used after a move in the call.
     pub(super) excuse: Option<(LocalId, Span)>,
     /// The changes made in the arguments of the calls the walk is in (of a
-    /// direct argument, the depth of its call), and how many those calls
-    /// are (S-193, S-799: `exclusive.rs`).
-    pub(super) changes: Vec<(Place, Span, Option<u32>)>,
+    /// direct argument, the depth of its call; whether it is the release of
+    /// a Dup value, S-1030), and how many those calls are (S-193, S-799:
+    /// `exclusive.rs`).
+    pub(super) changes: Vec<(Place, Span, Option<u32>, bool)>,
     pub(super) calls: u32,
 }
 
@@ -259,10 +260,11 @@ impl<'a> Walker<'a> {
         false
     }
 
-    /// A place of `l` used (or passed in the call of a release, E0702's
-    /// test, `Walker::reread`): the releases of its root, and of the roots
-    /// it derives from, are copies, and the roots live (§5.2, S-1030: used
-    /// after, by the next iteration or a borrow binding derived from it).
+    /// A place of `l` used (or released in an argument of a call that
+    /// another of its places overlaps, E0702's test,
+    /// `Walker::changed_in_args`): the releases of its root, and of the
+    /// roots it derives from, are copies, and the roots live (§5.2, S-1030:
+    /// used after, by the next iteration or a borrow binding derived from it).
     /// The one place that decides it. A read before a release in the same
     /// expression (`s == take(s)`) is not after: that release moves.
     pub(super) fn restore(&mut self, r: &mut Run, l: LocalId) {

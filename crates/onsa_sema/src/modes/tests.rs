@@ -3138,7 +3138,8 @@ fn the_body_of_an_anonymous_function_is_not_in_the_window() {
     let mut w = Walker::new(&a, (ast, &src), (&a.names[&id], &a.bodies[&id], root), Vec::new());
     w.inside.calls = 1;
     w.expr(&mut Run::new(), root, Pos::Return);
-    let changed: Vec<_> = w.inside.changes.iter().map(|(_, at, _)| &src[at.start as usize..at.end as usize]).collect();
+    let changed: Vec<_> =
+        w.inside.changes.iter().map(|(_, at, _, _)| &src[at.start as usize..at.end as usize]).collect();
     assert_eq!(changed, ["k"]);
     assert!(w.m.found.is_empty(), "{:?}", w.m.found);
 }
