@@ -1,0 +1,28 @@
+// The helpers of negative/drop_wild_pkg/main.onsa and the functions of another module that drop what a pattern leaves unbound (W6-02 U6/t, spec §12.2, §15.1).
+// The drop is reported where it is written, wherever the function is called from: here, in the module that declares it. The functions are one-liners (S-783).
+
+pub struct K {
+  b: Buf[F32],
+  n: U32,
+}
+
+pub enum E {
+  A(Buf[F32], U32),
+  B,
+}
+
+pub rt fn mk_k(move b: Buf[F32]) -> K { K { b: move b, n: 1 } }
+
+pub rt fn mk_o(move b: Buf[F32]) -> Option[Buf[F32]] { Some(move b) }
+
+pub fn lib_arm(move o: Option[Buf[F32]]) -> U32 { match move o { Some(_) => 1, None => 0 } }   //~ E0601
+
+pub rt fn rt_lib_arm(move o: Option[Buf[F32]]) -> U32 { match move o { Some(_) => 1, None => 0 } }   //~ E0901
+
+pub fn lib_rest(move k: K) -> U32 { match move k { K { n: q, _ } => q } }   //~ E0601
+
+pub rt fn rt_lib_rest(move k: K) -> U32 { match move k { K { n: q, _ } => q } }   //~ E0901
+
+pub fn lib_param(move _: K) {}   //~ E0601
+
+pub rt fn rt_lib_param(move _: K) {}   //~ E0901

@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§5.4", "§8.1", "§10", "§12.2"]
+
+// W6-02 U6/t, R-32, S-1036 (§8.1: "無名関数は、その型の効果行と `rt` に照らして本体を検査する … 期待する型が純粋なら、本体で `Alloc` を使えない。効果行に無い使用は E0601"; §5.4: "所有の見出し … が消費した値のうち、パターンが束縛しなかった部分（`_`、最後の `_`
+// が残すフィールド、束縛の無い腕の対象）は、`let` … では文の終わりに、`match` の腕と `for` の本体ではその腕・反復の終わり … に破棄される。腕が panic で抜ければ、その破棄は起きない"; §12.2: "所有する Shared 値・`Buf` と、それらを含む値の破棄: 要る"): the body of an
+// anonymous function is checked as a function of the type that is expected (`fn(move Option[Buf[F32]]) -> U32` is pure, `rt fn(…)` is `rt`), so the drop of what a pattern
+// of its body leaves unbound (the `_` of an arm, an arm that binds nothing, the last `_` of a struct pattern) and of an argument of `move _` is an E0601 and, in an `rt`
+// function type, an E0901 (the line is the line of the function that writes the anonymous function, as in negative/drop_generic_closure.onsa). This version counts no drop
+// of what a pattern leaves unbound (R-32), so none of these is reported today. The anonymous function of a borrowed argument is in negative/drop_wild_contrast.onsa. The
+// functions are one-liners, so that the line does not depend on where the drop is reported (S-783). One error per function (P-01).
+
+pub struct K {
+  b: Buf[F32],
+  n: U32,
+}
+
+pub fn run_buf(f: fn(move Option[Buf[F32]]) -> U32, move o: Option[Buf[F32]]) -> U32 { f.(move o) }
+
+pub rt fn rt_run_buf(f: rt fn(move Option[Buf[F32]]) -> U32, move o: Option[Buf[F32]]) -> U32 { f.(move o) }
+
+pub fn run_k(f: fn(move K) -> U32, move k: K) -> U32 { f.(move k) }
+
+pub rt fn rt_run_k(f: rt fn(move K) -> U32, move k: K) -> U32 { f.(move k) }
+
+// ------------------------------------------------------------------ the body of the anonymous function drops what it leaves unbound
+
+pub fn closure_arm(move o: Option[Buf[F32]]) -> U32 { run_buf(fn(move x: Option[Buf[F32]]) -> U32 { match move x { Some(_) => 1, None => 0 } }, move o) }   //~ E0601
+
+pub rt fn rt_closure_arm(move o: Option[Buf[F32]]) -> U32 { rt_run_buf(fn(move x: Option[Buf[F32]]) -> U32 { match move x { Some(_) => 1, None => 0 } }, move o) }   //~ E0901
+
+pub fn closure_nobind(move o: Option[Buf[F32]]) -> U32 { run_buf(fn(move x: Option[Buf[F32]]) -> U32 { match move x { _ => 0 } }, move o) }   //~ E0601
+
+pub rt fn rt_closure_nobind(move o: Option[Buf[F32]]) -> U32 { rt_run_buf(fn(move x: Option[Buf[F32]]) -> U32 { match move x { _ => 0 } }, move o) }   //~ E0901
+
+pub fn closure_or(move o: Option[Buf[F32]]) -> U32 { run_buf(fn(move x: Option[Buf[F32]]) -> U32 { match move x { Some(_) | None => 1 } }, move o) }   //~ E0601
+
+pub rt fn rt_closure_or(move o: Option[Buf[F32]]) -> U32 { rt_run_buf(fn(move x: Option[Buf[F32]]) -> U32 { match move x { Some(_) | None => 1 } }, move o) }   //~ E0901
+
+pub fn closure_rest(move k: K) -> U32 { run_k(fn(move x: K) -> U32 { match move x { K { n: q, _ } => q } }, move k) }   //~ E0601
+
+pub rt fn rt_closure_rest(move k: K) -> U32 { rt_run_k(fn(move x: K) -> U32 { match move x { K { n: q, _ } => q } }, move k) }   //~ E0901
+
+pub fn closure_param(move o: Option[Buf[F32]]) -> U32 { run_buf(fn(move _: Option[Buf[F32]]) -> U32 { 0 }, move o) }   //~ E0601
+
+pub rt fn rt_closure_param(move o: Option[Buf[F32]]) -> U32 { rt_run_buf(fn(move _: Option[Buf[F32]]) -> U32 { 0 }, move o) }   //~ E0901

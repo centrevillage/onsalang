@@ -1,0 +1,96 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§9.2", "§10", "§12.2"]
+
+// W6-02 U6/t, R-390, R-32, S-1036, and the carry-over of W5-03 U1 (`let _ = to_w(move b)`) (§5.4: "所有の見出し … が消費した値のうち、パターンが束縛しなかった部分（`_`、最後の `_` が残すフィールド、束縛の無い腕の対象）は、`let`
+// … では文の終わりに、`match` の腕と `for` の本体ではその腕・反復の終わり … に破棄される。腕が panic で抜ければ、その破棄は起きない"; §9.2: "panic で抜ける道では、生きている値の破棄は起きない"): the first four functions are the boundary of
+// S-1036: a `let` drops what its pattern leaves unbound at the end of the statement, so a function whose every path goes on to a `panic` after the `let` is an error (the
+// drop was done before the `panic`), where the arm of a `match` that only panics drops nothing (negative/drop_wild_panic.onsa). The other functions bind a Copy part with a
+// name that the second line uses (`let K { n: q, _ } = move k`, the probe of R-32): a one-liner cannot use the name, because a statement needs its own line. A function
+// without `uses {Alloc}` is an E0601 and an `rt fn` an E0901 (§10 rule 1). The head of the function and the `let` are on the first line, and the second line holds only the
+// last expression, so the line of the drop is the first line wherever it is reported (the owned binding, the end of the statement or the head of the function: S-783). This
+// version counts no drop of what `let _` and the `_` of a destructuring `let` leave (R-32), so none of these is reported today. One error per function (P-01).
+
+pub struct H {
+  buf: Buf[F32],
+  s: Str,
+  n: U32,
+}
+
+pub struct G {
+  s: Str,
+  n: U32,
+}
+
+pub struct K {
+  b: Buf[F32],
+  n: U32,
+}
+
+pub rt fn pass(move b: Buf[F32]) -> Buf[F32] { b }
+
+pub rt fn mk_pair(move b: Buf[F32]) -> (Buf[F32], U32) { (move b, 1) }
+
+// ------------------------------------------------------------------ a `panic` after the `let`: the drop is at the end of the statement (S-1036)
+
+pub fn let_lines_then_panic_wild(move b: Buf[F32]) -> U32 { let _ = move b   //~ E0601
+panic("x") }
+
+pub rt fn rt_let_lines_then_panic_wild(move b: Buf[F32]) -> U32 { let _ = move b   //~ E0901
+panic("x") }
+
+pub fn let_lines_then_panic_destr(move p: (Buf[F32], U32)) -> U32 { let (_, _) = move p   //~ E0601
+panic("x") }
+
+pub rt fn rt_let_lines_then_panic_destr(move p: (Buf[F32], U32)) -> U32 { let (_, _) = move p   //~ E0901
+panic("x") }
+
+pub fn let_lines_then_panic_rest(move k: K) -> U32 { let K { _ } = move k   //~ E0601
+panic("x") }
+
+pub rt fn rt_let_lines_then_panic_rest(move k: K) -> U32 { let K { _ } = move k   //~ E0901
+panic("x") }
+
+pub fn let_lines_then_panic_call(move b: Buf[F32]) -> U32 { let _ = pass(move b)   //~ E0601
+panic("x") }
+
+pub rt fn rt_let_lines_then_panic_call(move b: Buf[F32]) -> U32 { let _ = pass(move b)   //~ E0901
+panic("x") }
+
+// ------------------------------------------------------------------ a name that the next line uses
+
+pub fn let_lines_value_call(move b: Buf[F32]) -> U32 { let _ = pass(move b)   //~ E0601
+0 }
+
+pub rt fn rt_let_lines_value_call(move b: Buf[F32]) -> U32 { let _ = pass(move b)   //~ E0901
+0 }
+
+pub fn let_lines_destr_tuple(move p: (Buf[F32], U32)) -> U32 { let (_, k) = move p   //~ E0601
+k }
+
+pub rt fn rt_let_lines_destr_tuple(move p: (Buf[F32], U32)) -> U32 { let (_, k) = move p   //~ E0901
+k }
+
+pub fn let_lines_destr_struct(move h: H) -> U32 { let H { n: q, buf: _, s: _ } = move h   //~ E0601
+q }
+
+pub rt fn rt_let_lines_destr_struct(move h: H) -> U32 { let H { n: q, buf: _, s: _ } = move h   //~ E0901
+q }
+
+pub fn let_lines_destr_call(move b: Buf[F32]) -> U32 { let (_, k) = mk_pair(move b)   //~ E0601
+k }
+
+pub rt fn rt_let_lines_destr_call(move b: Buf[F32]) -> U32 { let (_, k) = mk_pair(move b)   //~ E0901
+k }
+
+pub fn let_lines_rest_buf(move k: K) -> U32 { let K { n: q, _ } = move k   //~ E0601
+q }
+
+pub rt fn rt_let_lines_rest_buf(move k: K) -> U32 { let K { n: q, _ } = move k   //~ E0901
+q }
+
+pub fn let_lines_rest_two_fields(move h: H) -> U32 { let H { n: q, _ } = move h   //~ E0601
+q }
+
+pub rt fn rt_let_lines_rest_two_fields(move h: H) -> U32 { let H { n: q, _ } = move h   //~ E0901
+q }

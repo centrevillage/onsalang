@@ -29,7 +29,7 @@ pub struct W[T] {
   x: T,
 }
 
-impl[T: Default] Default for W[T] {
+impl[T: Default + Copy] Default for W[T] {
   rt fn default() -> W[T] {
     let _: W[W[T]] = mk()  //~ E0422
     W { x: T.default() }

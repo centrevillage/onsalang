@@ -39,6 +39,9 @@ pub(crate) enum Drop<'b> {
     /// The value the place `target`, of the type `ty`, held before it is
     /// assigned (R-32, S-1038).
     Overwrite { target: ExprId, ty: TyId },
+    /// The parts of the types `tys` what is written at `at` binds to no
+    /// name (§5.4, S-1036).
+    Discard { at: Span, tys: &'b [TyId] },
 }
 
 /// What a path is taken out of (S-85): an owned local, or a value no
@@ -69,6 +72,7 @@ fn needs_alloc(a: &Analysis, frame: &Frame, d: &Drop) -> bool {
         Drop::Value { ty, .. } | Drop::Temp { ty, .. } | Drop::Overwrite { ty, .. } => drops(*ty),
         // At its end, its container: a fixed-length array has none (S-1037).
         Drop::IterRest { ty, early, .. } => (*early || !matches!(a.types.get(*ty), Ty::Array(..))) && drops(*ty),
+        Drop::Discard { tys, .. } => tys.iter().any(|&t| drops(t)),
     }
 }
 
@@ -101,6 +105,10 @@ pub(crate) fn alloc_drops(a: &Analysis, id: DefId) -> impl Iterator<Item = Drop<
         Dropped::Overwrite(e) => Some(Drop::Overwrite { target: *e, ty: ty(e, d.at) }),
         Dropped::Value(e) => Some(Drop::Value { value: *e, ty: ty(e, d.at), exit: d.at }),
         &Dropped::IterRest { iter, early } => Some(Drop::IterRest { iter, ty: ty(&iter, d.at), exit: d.at, early }),
+        Dropped::Discard(u) => {
+            let x = body.discards.get(u).unwrap_or_else(|| bug(Some(d.at), "a drop of a part with no type"));
+            Some(Drop::Discard { at: x.at, tys: &x.tys })
+        }
         Dropped::End(_) | Dropped::Exit(_) => None,
     });
     let locals = locals.into_iter().map(move |l| Drop::Local(local(&l)));

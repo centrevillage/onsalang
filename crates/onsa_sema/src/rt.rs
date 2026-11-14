@@ -252,6 +252,11 @@ fn body_rules(pkg: &Package, a: &Analysis, id: DefId) -> Option<Diagnostic> {
                 );
                 (at, message, early.then_some(exit))
             }
+            Drop::Discard { at, .. } => {
+                let message =
+                    format!("what `{}` binds to no name is dropped, whose destruction needs `Alloc`; {rt}", src(at));
+                (at, message, None)
+            }
         };
         let d = Diagnostic::new(Stage::Effects, Code::E0901, at, message).with_found(src(at));
         found.push(left.into_iter().fold(d, |d, x| d.with_note(x, "left here")));

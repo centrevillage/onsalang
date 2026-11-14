@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§7", "§10", "§12.2"]
+
+// W6-02 U6/t, R-32, S-1037, S-1036 (§5.4: `for s in move xs` and `for s in f(...)`: "所有 … 要素ごとに起きる"; §5.4: "所有の見出し … が消費した値のうち、パターンが束縛しなかった部分（`_`、最後の `_`
+// が残すフィールド、束縛の無い腕の対象）は、`let` … では文の終わりに、`match` の腕と `for` の本体ではその腕・反復の終わり … に破棄される。腕が panic で抜ければ、その破棄は起きない"): the pattern of an owned `for` (`for s in move xs`, `for s in
+// f(...)`) binds each element, and what the pattern does not bind (`for _ in move xs`, `for (_, k) in move ps`) is dropped at the end of the iteration. The drop of a `Buf`,
+// a `Str` or a value that holds one needs `Alloc`. A function without `uses {Alloc}` is an E0601 and an `rt fn` an E0901 (§10 rule 1). The sequences are arrays of a fixed
+// length, so that the drop of the container is none and the `_` is the only drop. This version counts no drop of what the pattern of a `for` leaves (R-32), so none of these
+// is reported today. The `for` that moves every element, a borrowed `for` and a `for` of Copy elements are in negative/drop_wild_contrast.onsa; the body that panics is in
+// negative/drop_wild_panic.onsa. The functions are one-liners, so that the line does not depend on where the drop is reported (S-783). One error per function (P-01).
+
+pub struct K {
+  b: Buf[F32],
+  n: U32,
+}
+
+pub rt fn mk_arr(n: U32) -> [Str; 2] { ["a", "b"] }
+
+pub rt fn mk_pair_arr(n: U32) -> [(Str, U32); 2] { [("a", 1), ("b", 2)] }
+
+pub rt fn use_u(n: U32) {}
+
+// ------------------------------------------------------------------ `_` and a tuple pattern of an array that is moved
+
+pub fn for_wild_buf(move xs: [Buf[F32]; 2]) { for _ in move xs {} }   //~ E0601
+
+pub rt fn rt_for_wild_buf(move xs: [Buf[F32]; 2]) { for _ in move xs {} }   //~ E0901
+
+pub fn for_wild_option(move xs: [Option[Buf[F32]]; 2]) { for _ in move xs {} }   //~ E0601
+
+pub rt fn rt_for_wild_option(move xs: [Option[Buf[F32]]; 2]) { for _ in move xs {} }   //~ E0901
+
+pub fn for_tuple_second(move ps: [(U32, Buf[F32]); 2]) { for (k, _) in move ps { use_u(k) } }   //~ E0601
+
+pub rt fn rt_for_tuple_second(move ps: [(U32, Buf[F32]); 2]) { for (k, _) in move ps { use_u(k) } }   //~ E0901
+
+pub fn for_struct_rest(move ks: [K; 2]) { for K { n: q, _ } in move ks { use_u(q) } }   //~ E0601
+
+pub rt fn rt_for_struct_rest(move ks: [K; 2]) { for K { n: q, _ } in move ks { use_u(q) } }   //~ E0901
+
+// ------------------------------------------------------------------ the sequence is the result of a call
+
+pub fn for_wild_call(n: U32) { for _ in mk_arr(n) {} }   //~ E0601
+
+pub rt fn rt_for_wild_call(n: U32) { for _ in mk_arr(n) {} }   //~ E0901
+
+pub fn for_tuple_call(n: U32) { for (_, k) in mk_pair_arr(n) { use_u(k) } }   //~ E0601
+
+pub rt fn rt_for_tuple_call(n: U32) { for (_, k) in mk_pair_arr(n) { use_u(k) } }   //~ E0901

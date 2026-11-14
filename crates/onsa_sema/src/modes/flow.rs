@@ -18,7 +18,7 @@ use super::write::How;
 use crate::Kind;
 use crate::binding::LitClass;
 use crate::binding::{Head, HeadRow};
-use crate::body::{DropPoint, Dropped, LocalId, LocalKind};
+use crate::body::{DropPoint, Dropped, LocalId, LocalKind, Unbound};
 use crate::names::body::Origin;
 use crate::tails::{Tail, literal_true};
 use crate::ty::TyId;
@@ -36,13 +36,15 @@ pub(super) struct Run {
 /// What a scope or an exit leaves (R-32, §12.2): a binding; a value
 /// evaluated at a consuming position that waits for the operands after it
 /// (A-1); the rest of the iterated value of an owned `for` (S-1037); a value
-/// made where a call or an index borrows it, which waits for it to run.
+/// made where a call or an index borrows it, which waits for it to run;
+/// what an owned head binds to no name (S-1036: maybe, `false`, in a choice).
 #[derive(Clone, Copy)]
 enum Item {
     Local(LocalId),
     Value(ExprId),
     IterRest(ExprId),
     Temp(ExprId),
+    Discard(Unbound, bool),
 }
 
 /// The paths from the head of a loop (at the mark `at`) to its exit (`brk`:
@@ -63,7 +65,7 @@ impl Run {
 
     /// The walk of a body from its start, its parameters `params` in its
     /// outermost scope (which a `return` and a `?` leave).
-    pub(super) fn with(params: Vec<LocalId>) -> Self {
+    fn with(params: Vec<LocalId>) -> Self {
         let exits = Exits { brk: Paths::none(), cont: Paths::none(), at: 0, from: (0, 0) };
         Run { cur: Trail::new(), exits, declared: params.into_iter().map(Item::Local).collect() }
     }
@@ -137,7 +139,7 @@ impl Walker<'_> {
                 for arm in arms {
                     r.cur.reset(m, &tried);
                     let outer = r.declared.len();
-                    self.declare(r, arm.pat);
+                    self.declare(r, arm.pat, head == Pos::Own);
                     if let Some(g) = arm.guard {
                         let mut arm_held = (head == Pos::Own).then(|| self.arm_frame(subject, arm.pat));
                         let frame = if arm_held.is_some() { &mut arm_held } else { &mut held };
@@ -178,7 +180,14 @@ impl Walker<'_> {
             StmtKind::Let { pat, init, .. } => {
                 let pos = self.head_pos(Head::Let(s), Pos::Bind);
                 self.head(r, *init, pos, &[*pat]);
-                self.declare(r, *pat);
+                // What it binds to no name is dropped at the end of the statement (S-1036).
+                let base = r.items();
+                if pos == Pos::Own {
+                    self.discards(r, *pat, true);
+                }
+                self.ends(r, base, ast.stmt(s).span);
+                r.forget(base);
+                self.declare(r, *pat, false);
             }
             StmtKind::Var { init, .. } => {
                 self.expr(r, *init, Pos::Own);
@@ -298,7 +307,7 @@ impl Walker<'_> {
             r.cur.join_into(r.exits.at, &mut r.exits.brk, false);
         }
         if let Some(p) = pat {
-            self.declare(r, p);
+            self.declare(r, p, rest.is_some());
         }
         self.expr(r, body, Pos::Read);
         self.ends(r, scope, self.ast.expr(body).span);
@@ -349,6 +358,7 @@ impl Walker<'_> {
                 Item::Temp(e) => (if exit { Dropped::Value(e) } else { Dropped::Temp(e) }, true, None),
                 Item::Value(_) => continue,
                 Item::IterRest(e) => (Dropped::IterRest { iter: e, early: exit }, true, None),
+                Item::Discard(u, sure) => (Dropped::Discard(u), sure, None),
             };
             self.drop_point(r, at, what, (sure, unless));
         }
@@ -462,9 +472,50 @@ impl Walker<'_> {
         }
     }
 
-    /// Declare the bindings of the pattern `p`: live.
-    fn declare(&mut self, r: &mut Run, p: PatId) {
+    /// Declare the bindings of the pattern `p`: live; of an `owned` head,
+    /// what it binds to no name too ([`Walker::discards`]).
+    fn declare(&mut self, r: &mut Run, p: PatId, owned: bool) {
         self.each_local(p, &mut |l| r.declare(l));
+        if owned {
+            self.discards(r, p, true);
+        }
+    }
+
+    /// The parts of a value an owned head consumes that the pattern `p`
+    /// binds to no name (§5.4, S-1036, S-1044), in the scope: of a `_`, a
+    /// literal and a constant, the part it matches; of a struct pattern's
+    /// last `_`, the fields it leaves; none of a variant with no payload;
+    /// in a choice, maybe (`sure`). The one place that decides them.
+    fn discards(&mut self, r: &mut Run, p: PatId, sure: bool) {
+        let ast = self.ast;
+        self.discard(r, Unbound::Pat(p), sure);
+        match &ast.pat(p).kind {
+            PatKind::TupleStruct { elems: ps, .. } | PatKind::Tuple(ps) => {
+                ps.iter().for_each(|&q| self.discards(r, q, sure))
+            }
+            PatKind::Or(ps) => ps.iter().for_each(|&q| self.discards(r, q, false)),
+            PatKind::Struct { fields, .. } => fields.iter().for_each(|&(_, q)| self.discards(r, q, sure)),
+            PatKind::Bind(_) | PatKind::Wild | PatKind::Lit(_) | PatKind::Neg(_) | PatKind::Path(_) => {}
+        }
+    }
+
+    /// `u` in the scope, if it binds a part that is not Copy to no name
+    /// (`BodyInfo::discards`).
+    fn discard(&mut self, r: &mut Run, u: Unbound, sure: bool) {
+        let info = self.info;
+        let tys = info.discards.get(&u).map_or(&[][..], |d| &d.tys);
+        if tys.iter().any(|&t| self.kind_of(t) != Some(Kind::Copy)) {
+            r.declared.push(Item::Discard(u, sure));
+        }
+    }
+
+    /// The walk of a body, or of the anonymous function `closure`, from its
+    /// start: its parameters in its outermost scope ([`Run::with`]), the
+    /// locals `params` and the values of the `move _` ones of the `n` (S-1036).
+    pub(super) fn start(&mut self, params: Vec<LocalId>, closure: Option<ExprId>, n: u32) -> Run {
+        let mut r = Run::with(params);
+        (0..n).for_each(|index| self.discard(&mut r, Unbound::Param { closure, index }, true));
+        r
     }
 
     /// Each local the pattern `p` binds.

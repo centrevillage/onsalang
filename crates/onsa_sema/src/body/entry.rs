@@ -46,8 +46,12 @@ impl<'a> Checker<'a> {
                     let id = self.local_of(Origin::Param(k))?;
                     self.bind_local(id, sig.ty, name.span)?;
                 }
+                // A `move _` owns its value with no name (§5.4).
                 ParamName::Wild(_) => {
-                    sig_params.next();
+                    let Some((index, sig)) = sig_params.next() else { continue };
+                    if p.mode == Mode::Move {
+                        self.unbound(Unbound::Param { closure: None, index }, p.span, vec![sig.ty]);
+                    }
                 }
             }
         }
@@ -245,6 +249,9 @@ impl<'a> Checker<'a> {
             let t = self.info.expr_types[&e];
             let r = self.infer.resolve(&mut self.a.types, t);
             self.info.expr_types.insert(e, r);
+        }
+        for d in self.info.discards.values_mut() {
+            d.tys.iter_mut().for_each(|t| *t = self.infer.resolve(&mut self.a.types, *t));
         }
         for l in 0..self.info.locals.len() {
             let t = self.info.locals[l].ty;

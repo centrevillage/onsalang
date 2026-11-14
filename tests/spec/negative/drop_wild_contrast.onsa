@@ -1,0 +1,271 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§6.3", "§7", "§10", "§12.2"]
+
+// W6-02 U6/t, R-251, R-390, R-32, S-1036, S-1039 (§12.2: "Shared 値・`Buf` の借用、読み取り: 要らない"; "Copy 値 … の生成と破棄: 要らない"; §5.4: "所有の見出し … が消費した値のうち、パターンが束縛しなかった部分（`_`、最後の `_`
+// が残すフィールド、束縛の無い腕の対象）は、`let` … では文の終わりに、`match` の腕と `for` の本体ではその腕・反復の終わり … に破棄される。腕が panic で抜ければ、その破棄は起きない"): the contrasts of negative/drop_wild_arm.onsa,
+// drop_wild_rest.onsa, drop_wild_nobind.onsa, drop_wild_or.onsa, drop_wild_let.onsa, drop_wild_for.onsa, drop_wild_param.onsa, drop_wild_generic.onsa, drop_wild_exit.onsa,
+// drop_wild_guard.onsa and drop_wild_closure.onsa. Every function is legal and stays legal after the drop of what a pattern leaves unbound is counted: the `_` of a head
+// that is borrowed (a borrowed argument, an `inout` argument or a field of one: `match o`, `let _ = x`, `let _: T = x`; the shape of `is_none[T]`), a static value and a
+// literal that needs no drop as the head, a `_` that leaves a Copy part (also next to a part that is moved on), the arm of a unit variant (`None =>`), a `for` that moves
+// every element or is borrowed, a `T: Copy`, the arm that moves the value on every path when the guard is false, the anonymous function of a borrowed argument, and a
+// function with `uses {Alloc}`. The helper `sink` is an `rt` function that drops its argument, so its own E0901 is reported (as negative/drop_for_contrast.onsa). This
+// version reports none of the others. The functions are one-liners, so that the line does not depend on where the drop is reported (S-783). One error per function (P-01).
+
+pub struct H {
+  buf: Buf[F32],
+  s: Str,
+  n: U32,
+}
+
+pub struct K {
+  b: Buf[F32],
+  n: U32,
+}
+
+pub struct Pt {
+  x: F32,
+  y: F32,
+}
+
+pub rt fn mk(n: U32) -> Str { "x" }
+
+pub fn run_ob(f: fn(Option[Buf[F32]]) -> U32, o: Option[Buf[F32]]) -> U32 { f.(o) }
+
+pub rt fn rt_run_ob(f: rt fn(Option[Buf[F32]]) -> U32, o: Option[Buf[F32]]) -> U32 { f.(o) }
+
+pub rt fn sink(move b: Buf[F32]) {}   //~ E0901
+
+// ------------------------------------------------------------------ a borrowed head: `_` drops nothing
+
+pub fn contrast_is_none_buf(o: Option[Buf[F32]]) -> Bool { match o { Some(_) => false, None => true } }
+
+pub rt fn rt_contrast_is_none_buf(o: Option[Buf[F32]]) -> Bool { match o { Some(_) => false, None => true } }
+
+pub fn contrast_is_none_str(o: Option[Str]) -> Bool { match o { Some(_) => false, None => true } }
+
+pub rt fn rt_contrast_is_none_str(o: Option[Str]) -> Bool { match o { Some(_) => false, None => true } }
+
+pub fn contrast_is_none[T](o: Option[T]) -> Bool { match o { Some(_) => false, None => true } }
+
+pub rt fn rt_contrast_is_none[T](o: Option[T]) -> Bool { match o { Some(_) => false, None => true } }
+
+pub fn contrast_is_ok_buf(r: Result[Buf[F32], Str]) -> Bool { match r { Ok(_) => true, Err(_) => false } }
+
+pub rt fn rt_contrast_is_ok_buf(r: Result[Buf[F32], Str]) -> Bool { match r { Ok(_) => true, Err(_) => false } }
+
+pub fn contrast_tuple_first_borrowed(p: (Str, U32)) -> U32 { match p { (_, k) => k } }
+
+pub rt fn rt_contrast_tuple_first_borrowed(p: (Str, U32)) -> U32 { match p { (_, k) => k } }
+
+pub fn contrast_struct_rest_borrowed(h: H) -> U32 { match h { H { n: q, _ } => q } }
+
+pub rt fn rt_contrast_struct_rest_borrowed(h: H) -> U32 { match h { H { n: q, _ } => q } }
+
+pub fn contrast_wild_borrowed(b: Buf[F32]) -> U32 { match b { _ => 0 } }
+
+pub rt fn rt_contrast_wild_borrowed(b: Buf[F32]) -> U32 { match b { _ => 0 } }
+
+pub fn contrast_str_literal_borrowed(s: Str) -> U32 { match s { "a" => 1, _ => 0 } }
+
+pub rt fn rt_contrast_str_literal_borrowed(s: Str) -> U32 { match s { "a" => 1, _ => 0 } }
+
+pub fn contrast_or_borrowed(o: Option[Buf[F32]]) -> U32 { match o { Some(_) | None => 1 } }
+
+pub rt fn rt_contrast_or_borrowed(o: Option[Buf[F32]]) -> U32 { match o { Some(_) | None => 1 } }
+
+pub fn contrast_nested_borrowed(o: Option[Option[Buf[F32]]]) -> U32 { match o { Some(Some(_)) => 1, Some(None) => 2, None => 3 } }
+
+pub rt fn rt_contrast_nested_borrowed(o: Option[Option[Buf[F32]]]) -> U32 { match o { Some(Some(_)) => 1, Some(None) => 2, None => 3 } }
+
+pub fn contrast_inout_head(inout o: Option[Buf[F32]]) -> U32 { match o { Some(_) => 1, None => 0 } }
+
+pub rt fn rt_contrast_inout_head(inout o: Option[Buf[F32]]) -> U32 { match o { Some(_) => 1, None => 0 } }
+
+pub fn contrast_field_head(h: H) -> U32 { match h.s { "a" => 1, _ => 0 } }
+
+pub rt fn rt_contrast_field_head(h: H) -> U32 { match h.s { "a" => 1, _ => 0 } }
+
+// ------------------------------------------------------------------ a borrowed `let _` and a borrowed `for`
+
+pub fn contrast_let_wild_borrowed(b: Buf[F32]) { let _ = b }
+
+pub rt fn rt_contrast_let_wild_borrowed(b: Buf[F32]) { let _ = b }
+
+pub fn contrast_let_wild_typed_borrowed(b: Buf[F32]) { let _: Buf[F32] = b }
+
+pub rt fn rt_contrast_let_wild_typed_borrowed(b: Buf[F32]) { let _: Buf[F32] = b }
+
+pub fn contrast_let_wild_field_borrowed(h: H) { let _ = h.buf }
+
+pub rt fn rt_contrast_let_wild_field_borrowed(h: H) { let _ = h.buf }
+
+pub fn contrast_let_destr_borrowed(p: (Str, U32)) { let (_, _) = p }
+
+pub rt fn rt_contrast_let_destr_borrowed(p: (Str, U32)) { let (_, _) = p }
+
+pub fn contrast_let_rest_borrowed(h: H) { let H { _ } = h }
+
+pub rt fn rt_contrast_let_rest_borrowed(h: H) { let H { _ } = h }
+
+pub fn contrast_for_borrowed(xs: [Str; 2]) { for _ in xs {} }
+
+pub rt fn rt_contrast_for_borrowed(xs: [Str; 2]) { for _ in xs {} }
+
+// ------------------------------------------------------------------ a static value and a literal that needs no drop
+
+pub fn contrast_let_static() { let _ = ("a", 1) }
+
+pub rt fn rt_contrast_let_static() { let _ = ("a", 1) }
+
+pub fn contrast_let_static_str() { let _ = "abc" }
+
+pub rt fn rt_contrast_let_static_str() { let _ = "abc" }
+
+pub fn contrast_let_static_some() { let _ = Some("a") }
+
+pub rt fn rt_contrast_let_static_some() { let _ = Some("a") }
+
+pub fn contrast_let_no_drop_literal(v: F32) { let _ = ("a", v) }
+
+pub rt fn rt_contrast_let_no_drop_literal(v: F32) { let _ = ("a", v) }
+
+pub fn contrast_match_static_str() -> U32 { match "abc" { "a" => 1, _ => 0 } }
+
+pub rt fn rt_contrast_match_static_str() -> U32 { match "abc" { "a" => 1, _ => 0 } }
+
+pub fn contrast_match_static_tuple() -> U32 { match ("a", 1) { (_, k) => k } }
+
+pub rt fn rt_contrast_match_static_tuple() -> U32 { match ("a", 1) { (_, k) => k } }
+
+pub fn contrast_match_no_drop_literal(v: F32) -> U32 { match ("a", v) { (_, _) => 0 } }
+
+pub rt fn rt_contrast_match_no_drop_literal(v: F32) -> U32 { match ("a", v) { (_, _) => 0 } }
+
+pub fn contrast_for_static() { for _ in ["a", "b"] {} }
+
+pub rt fn rt_contrast_for_static() { for _ in ["a", "b"] {} }
+
+// ------------------------------------------------------------------ a `_` that leaves a Copy part
+
+pub fn contrast_copy_some(move o: Option[U32]) -> U32 { match move o { Some(_) => 1, None => 0 } }
+
+pub rt fn rt_contrast_copy_some(move o: Option[U32]) -> U32 { match move o { Some(_) => 1, None => 0 } }
+
+pub fn contrast_copy_ok(move r: Result[U32, U32]) -> U32 { match move r { Ok(_) => 1, Err(_) => 0 } }
+
+pub rt fn rt_contrast_copy_ok(move r: Result[U32, U32]) -> U32 { match move r { Ok(_) => 1, Err(_) => 0 } }
+
+pub fn contrast_copy_tuple(move p: (U32, F32)) -> U32 { match move p { (_, _) => 0 } }
+
+pub rt fn rt_contrast_copy_tuple(move p: (U32, F32)) -> U32 { match move p { (_, _) => 0 } }
+
+pub fn contrast_copy_struct_rest(move pt: Pt) -> F32 { match move pt { Pt { x: a, _ } => a } }
+
+pub rt fn rt_contrast_copy_struct_rest(move pt: Pt) -> F32 { match move pt { Pt { x: a, _ } => a } }
+
+pub fn contrast_copy_let(n: U32) { let _ = n }
+
+pub rt fn rt_contrast_copy_let(n: U32) { let _ = n }
+
+pub fn contrast_copy_destr(move p: (U32, F32)) { let (_, _) = move p }
+
+pub rt fn rt_contrast_copy_destr(move p: (U32, F32)) { let (_, _) = move p }
+
+pub fn contrast_copy_for(move ns: [U32; 2]) { for _ in move ns {} }
+
+pub rt fn rt_contrast_copy_for(move ns: [U32; 2]) { for _ in move ns {} }
+
+pub fn contrast_copy_param(move _: U32) {}
+
+pub rt fn rt_contrast_copy_param(move _: U32) {}
+
+pub fn contrast_copy_part_moved_on(move k: K) -> Buf[F32] { match move k { K { b: bb, n: _ } => bb } }
+
+pub rt fn rt_contrast_copy_part_moved_on(move k: K) -> Buf[F32] { match move k { K { b: bb, n: _ } => bb } }
+
+pub fn contrast_copy_part_tuple(move p: (Buf[F32], U32)) -> Buf[F32] { match move p { (b, _) => b } }
+
+pub rt fn rt_contrast_copy_part_tuple(move p: (Buf[F32], U32)) -> Buf[F32] { match move p { (b, _) => b } }
+
+// ------------------------------------------------------------------ the arm of a unit variant and an arm that moves the value on
+
+pub fn contrast_unit_arm(move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { None => None, Some(b) => Some(move b) } }
+
+pub rt fn rt_contrast_unit_arm(move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { None => None, Some(b) => Some(move b) } }
+
+pub fn contrast_unit_arm_rest(move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { None => None, rest => rest } }
+
+pub rt fn rt_contrast_unit_arm_rest(move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { None => None, rest => rest } }
+
+pub fn contrast_for_moves_all(move xs: [Buf[F32]; 2]) { for s in move xs { sink(move s) } }
+
+pub rt fn rt_contrast_for_moves_all(move xs: [Buf[F32]; 2]) { for s in move xs { sink(move s) } }
+
+pub fn contrast_arm_moves_sink(move o: Option[Buf[F32]]) -> U32 { match move o { Some(b) => { sink(move b)
+1 }, None => 0 } }
+
+pub rt fn rt_contrast_arm_moves_sink(move o: Option[Buf[F32]]) -> U32 { match move o { Some(b) => { sink(move b)
+1 }, None => 0 } }
+
+// ------------------------------------------------------------------ the guard is false: every arm moves the value on
+
+pub fn contrast_guard_all_move(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(b) if c => Some(move b), rest => rest } }
+
+pub rt fn rt_contrast_guard_all_move(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(b) if c => Some(move b), rest => rest } }
+
+pub fn contrast_guard_borrowed_head(c: Bool, o: Option[Buf[F32]]) -> U32 { match o { Some(_) if c => 1, _ => 0 } }
+
+pub rt fn rt_contrast_guard_borrowed_head(c: Bool, o: Option[Buf[F32]]) -> U32 { match o { Some(_) if c => 1, _ => 0 } }
+
+// ------------------------------------------------------------------ a type parameter with `Copy`
+
+pub fn contrast_arm_copy_t[T: Copy](move o: Option[T]) -> U32 { match move o { Some(_) => 1, None => 0 } }
+
+pub rt fn rt_contrast_arm_copy_t[T: Copy](move o: Option[T]) -> U32 { match move o { Some(_) => 1, None => 0 } }
+
+pub fn contrast_let_copy_t[T: Copy](move x: T) { let _ = move x }
+
+pub rt fn rt_contrast_let_copy_t[T: Copy](move x: T) { let _ = move x }
+
+pub fn contrast_param_copy_t[T: Copy](move _: T) {}
+
+pub rt fn rt_contrast_param_copy_t[T: Copy](move _: T) {}
+
+// ------------------------------------------------------------------ a borrowed `_` argument
+
+pub fn contrast_param_borrowed(_: Buf[F32]) -> U32 { 0 }
+
+pub rt fn rt_contrast_param_borrowed(_: Buf[F32]) -> U32 { 0 }
+
+pub fn contrast_param_borrowed_str(_: Str) -> U32 { 0 }
+
+pub rt fn rt_contrast_param_borrowed_str(_: Str) -> U32 { 0 }
+
+pub fn contrast_closure_borrowed(o: Option[Buf[F32]]) -> U32 { run_ob(fn(x: Option[Buf[F32]]) -> U32 { match x { Some(_) => 1, None => 0 } }, o) }
+
+pub rt fn rt_contrast_closure_borrowed(o: Option[Buf[F32]]) -> U32 { rt_run_ob(fn(x: Option[Buf[F32]]) -> U32 { match x { Some(_) => 1, None => 0 } }, o) }
+
+// ------------------------------------------------------------------ a function with `uses {Alloc}`
+
+pub fn contrast_alloc_arm(move o: Option[Buf[F32]]) -> U32 uses {Alloc} { match move o { Some(_) => 1, None => 0 } }
+
+pub fn contrast_alloc_rest(move k: K) -> U32 uses {Alloc} { match move k { K { n: q, _ } => q } }
+
+pub fn contrast_alloc_nobind(n: U32) -> U32 uses {Alloc} { match mk(n) { "a" => 1, _ => 0 } }
+
+pub fn contrast_alloc_or(move o: Option[Buf[F32]]) -> U32 uses {Alloc} { match move o { Some(_) | None => 1 } }
+
+pub fn contrast_alloc_let(move b: Buf[F32]) uses {Alloc} { let _ = move b }
+
+pub fn contrast_alloc_destr(move p: (Str, U32)) uses {Alloc} { let (_, _) = move p }
+
+pub fn contrast_alloc_for(move xs: [Str; 2]) uses {Alloc} { for _ in move xs {} }
+
+pub fn contrast_alloc_param(move _: Buf[F32]) uses {Alloc} {}
+
+pub fn contrast_alloc_return(move o: Option[Buf[F32]]) -> U32 uses {Alloc} { match move o { Some(_) => { return 1 }, None => 0 } }
+
+pub fn contrast_alloc_generic[T](move o: Option[T]) -> U32 uses {Alloc} { match move o { Some(_) => 1, None => 0 } }
+
+pub fn contrast_alloc_guard(c: Bool, move o: Option[Buf[F32]]) -> U32 uses {Alloc} { match move o { Some(_) if c => 1, _ => 0 } }

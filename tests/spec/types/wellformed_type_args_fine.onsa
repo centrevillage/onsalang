@@ -77,7 +77,7 @@ pub fn function_type_fine(f: fn(N[F32]) -> W[F32]) -> U32 {
   0
 }
 
-pub fn annotations_fine[T: Float](x: Option[T]) -> U32 {
+pub fn annotations_fine[T: Float](x: Option[T]) -> U32 uses {Alloc} {
   let _: Option[N[F32]] = None
   let _: Option[N[T]] = None
   let _: Option[D[Buf[F32]]] = None

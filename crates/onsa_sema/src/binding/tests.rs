@@ -198,7 +198,7 @@ fn the_marks_of_the_literals() {
         let _ = [mk(), \"a\"]\n\
         0\n\
         }\n\
-        pub fn g[T: Copy, U, V: ?Dup](t: T, u: U, move w: V) -> U32 {\n\
+        pub fn g[T: Copy, U, V: ?Dup](t: T, u: U, move w: V) -> U32 uses {Alloc} {\n\
         let _ = (\"a\", t)\n\
         let _ = (\"a\", u)\n\
         let _ = [move w]\n\

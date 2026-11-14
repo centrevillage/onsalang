@@ -1,0 +1,15 @@
+// The helpers of negative/drop_wild_pkg_ok/main.onsa (W6-02 U6/t, spec §12.2, §15.1). None of the functions drops a value that a pattern leaves unbound.
+
+pub struct K {
+  b: Buf[F32],
+  n: U32,
+}
+
+pub enum E {
+  A(Buf[F32], U32),
+  B,
+}
+
+pub rt fn pass(move b: Buf[F32]) -> Buf[F32] { b }
+
+pub rt fn mk_k(move b: Buf[F32]) -> K { K { b: move b, n: 1 } }

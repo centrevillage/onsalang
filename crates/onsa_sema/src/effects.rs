@@ -100,6 +100,9 @@ fn first_use(pkg: &Package, a: &Analysis, id: DefId) -> Option<Diagnostic> {
                 );
                 (at, format!("the `for` that consumes `{}` drops {what} when it is left, which needs `Alloc`", src(at)))
             }
+            Drop::Discard { at, .. } => {
+                (at, format!("what `{}` binds to no name is dropped, which needs `Alloc`", src(at)))
+            }
         });
     }
     uses.sort_by_key(|(s, _)| s.start);

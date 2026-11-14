@@ -693,6 +693,9 @@ impl<'a> Checker<'a> {
                     ParamName::SelfParam(s) => {
                         return Err(self.err(Code::E0002, *s, "an anonymous function has no `self`"));
                     }
+                    ParamName::Wild(_) if p.mode == Mode::Move => {
+                        self.unbound(Unbound::Param { closure: Some(e), index: k }, p.span, vec![*t]);
+                    }
                     ParamName::Wild(_) => {}
                 }
             }

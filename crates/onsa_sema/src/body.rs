@@ -255,6 +255,29 @@ pub struct BodyInfo {
     /// note of an owned aggregate literal names its first element from
     /// [`BodyInfo::lits`] (`LitClass::Owned`, S-613, W6-03).
     pub drops: Vec<DropPoint>,
+    /// The parts of the values the patterns and the `move _` parameters bind
+    /// to no name (§5.4, S-1036, S-1044), with their types: the modes stage
+    /// drops those of an owned head.
+    pub discards: HashMap<Unbound, Discard>,
+}
+
+/// What binds a part of a value to no name (§5.4, S-1036).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Unbound {
+    /// A `_`, a literal or a constant (the part it matches), a struct
+    /// pattern that ends in `_` (the fields the `_` leaves); not a variant
+    /// with no payload (S-1044).
+    Pat(PatId),
+    /// The `move _` parameter `index` of the function, or of the anonymous
+    /// function `closure`.
+    Param { closure: Option<ExprId>, index: u32 },
+}
+
+/// Where it is written, and the types of the parts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Discard {
+    pub at: Span,
+    pub tys: Vec<TyId>,
 }
 
 /// A drop point of a body: where (`at`, by what it drops: of an `End` the
@@ -297,6 +320,8 @@ pub enum Dropped {
     /// The value the place `target` held before it is assigned (R-32,
     /// S-1038: of a `var`, a `move` or an `inout` parameter alike).
     Overwrite(ExprId),
+    /// What an owned head binds to no name (§5.4, S-1036).
+    Discard(Unbound),
 }
 
 /// A path of fields taken out of the owned local `root` (S-85), or of a value.

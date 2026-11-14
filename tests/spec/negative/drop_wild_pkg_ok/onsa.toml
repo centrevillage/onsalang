@@ -1,0 +1,3 @@
+[package]
+name = "drop_wild_pkg_ok"
+edition = "2026"

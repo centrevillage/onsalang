@@ -1,0 +1,250 @@
+// onsa.toml
+// [test]
+// spec = ["§4.6", "§5.2", "§5.4", "§7", "§10", "§12.2"]
+
+// W6-02 U6/t, R-390, R-32, S-1036, S-1030 (§5.4: "所有の見出し … が消費した値のうち、パターンが束縛しなかった部分（`_`、最後の `_` が残すフィールド、束縛の無い腕の対象）は、`let` … では文の終わりに、`match` の腕と `for` の本体ではその腕・反復の終わり …
+// に破棄される。腕が panic で抜ければ、その破棄は起きない"; §12.2: "所有する Shared 値・`Buf` と、それらを含む値の破棄: 要る"): the functions that this version already reports with the code and the line that they
+// have, and that stay reported when the drop of a part that a pattern leaves unbound is counted. The first section is the control: a part that a name binds and nothing uses
+// is an owned binding that is dropped (this version reports it), and `_` leaves the same part. The other sections are the forms of the other negative/drop_wild_*.onsa whose
+// owned head is held by a `move` argument of a Dup type (a `Str`, a tuple or an `Option` that holds one, a `T` without a bound: §4.6): the head `move o` of a Dup value
+// copies it until the hand-off of a Dup value in a heading (W6-02 U7, S-1030), so the argument keeps its value and its drop is reported at the argument (the same line).
+// After U7 the `_` is the drop of the same value, and the code and the line are the same. A function without `uses {Alloc}` is an E0601 and an `rt fn` an E0901 (§10 rule
+// 1). The functions are one-liners, so that the line does not depend on where the drop is reported (S-783). One error per function (P-01).
+
+pub struct H {
+  buf: Buf[F32],
+  s: Str,
+  n: U32,
+}
+
+pub struct G {
+  s: Str,
+  n: U32,
+}
+
+pub struct K {
+  b: Buf[F32],
+  n: U32,
+}
+
+pub struct W {
+  h: H,
+  n: U32,
+}
+
+pub struct HT[T] {
+  v: T,
+  n: U32,
+}
+
+pub enum E {
+  A(Buf[F32], U32),
+  B(Str),
+  C,
+}
+
+pub rt fn mk(n: U32) -> Str { "x" }
+
+pub rt fn pass(move b: Buf[F32]) -> Buf[F32] { b }
+
+pub rt fn mk_o(move b: Buf[F32]) -> Option[Buf[F32]] { Some(move b) }
+
+pub rt fn mk_ob(n: U32) -> Option[Buf[F32]] { None }
+
+pub rt fn mk_h(move b: Buf[F32]) -> H { H { buf: move b, s: "a", n: 1 } }
+
+pub rt fn mk_k(move b: Buf[F32]) -> K { K { b: move b, n: 1 } }
+
+pub rt fn mk_pair(move b: Buf[F32]) -> (Buf[F32], U32) { (move b, 1) }
+
+pub rt fn mk_arr(n: U32) -> [Str; 2] { ["a", "b"] }
+
+pub rt fn mk_pair_arr(n: U32) -> [(Str, U32); 2] { [("a", 1), ("b", 2)] }
+
+pub rt fn mk_os(n: U32) -> Option[Str] { Some("x") }
+
+pub rt fn mk_t(n: U32) -> (Str, U32) { ("x", n) }
+
+pub rt fn mk_g(n: U32) -> G { G { s: "a", n: n } }
+
+pub rt fn use_u(n: U32) {}
+
+pub rt fn id_t[T](move x: T) -> T { x }
+
+// ------------------------------------------------------------------ a name that nothing uses: the same part bound by a name that nothing uses
+
+pub fn named_arm(move o: Option[Buf[F32]]) -> U32 { match move o { Some(b) => 1, None => 0 } }   //~ E0601
+
+pub rt fn rt_named_arm(move o: Option[Buf[F32]]) -> U32 { match move o { Some(b) => 1, None => 0 } }   //~ E0901
+
+pub fn named_rest(move k: K) -> U32 { match move k { K { n: q, b: bb } => q } }   //~ E0601
+
+pub rt fn rt_named_rest(move k: K) -> U32 { match move k { K { n: q, b: bb } => q } }   //~ E0901
+
+pub fn named_let(move b: Buf[F32]) { let x = pass(move b) }   //~ E0601
+
+pub rt fn rt_named_let(move b: Buf[F32]) { let x = pass(move b) }   //~ E0901
+
+pub fn named_for(move xs: [Str; 2]) { for s in move xs {} }   //~ E0601
+
+pub rt fn rt_named_for(move xs: [Str; 2]) { for s in move xs {} }   //~ E0901
+
+pub fn named_param(move x: Buf[F32]) {}   //~ E0601
+
+pub rt fn rt_named_param(move x: Buf[F32]) {}   //~ E0901
+
+
+// ------------------------------------------------------------------ the `_` of a pattern of an arm: the payload of `Option`
+
+pub fn arm_option_str(move o: Option[Str]) -> U32 { match move o { Some(_) => 1, None => 0 } }   //~ E0601
+
+pub rt fn rt_arm_option_str(move o: Option[Str]) -> U32 { match move o { Some(_) => 1, None => 0 } }   //~ E0901
+
+pub fn arm_option_str_last(move o: Option[Str]) -> U32 { match move o { None => 0, Some(_) => 1 } }   //~ E0601
+
+pub rt fn rt_arm_option_str_last(move o: Option[Str]) -> U32 { match move o { None => 0, Some(_) => 1 } }   //~ E0901
+
+
+// ------------------------------------------------------------------ the `_` of a pattern of an arm: the payloads of `Result`
+
+pub fn arm_result_err_str(move r: Result[U32, Str]) -> U32 { match move r { Ok(_) => 1, Err(_) => 0 } }   //~ E0601
+
+pub rt fn rt_arm_result_err_str(move r: Result[U32, Str]) -> U32 { match move r { Ok(_) => 1, Err(_) => 0 } }   //~ E0901
+
+
+// ------------------------------------------------------------------ the `_` of a pattern of an arm: an element of a tuple and a field of a struct
+
+pub fn arm_tuple_first(move p: (Str, U32)) -> U32 { match move p { (_, k) => k } }   //~ E0601
+
+pub rt fn rt_arm_tuple_first(move p: (Str, U32)) -> U32 { match move p { (_, k) => k } }   //~ E0901
+
+
+// ------------------------------------------------------------------ the `_` of a pattern of an arm: nested
+
+pub fn arm_nested_option_tuple(move o: Option[(Str, U32)]) -> U32 { match move o { Some((_, k)) => k, None => 0 } }   //~ E0601
+
+pub rt fn rt_arm_nested_option_tuple(move o: Option[(Str, U32)]) -> U32 { match move o { Some((_, k)) => k, None => 0 } }   //~ E0901
+
+pub fn arm_nested_tuple_tuple(move p: ((Str, U32), U32)) -> U32 { match move p { ((_, k), j) => k + j } }   //~ E0601
+
+pub rt fn rt_arm_nested_tuple_tuple(move p: ((Str, U32), U32)) -> U32 { match move p { ((_, k), j) => k + j } }   //~ E0901
+
+pub fn arm_nested_result_option(move r: Result[Option[Str], U32]) -> U32 { match move r { Ok(Some(_)) => 1, Ok(None) => 2, Err(_) => 3 } }   //~ E0601
+
+pub rt fn rt_arm_nested_result_option(move r: Result[Option[Str], U32]) -> U32 { match move r { Ok(Some(_)) => 1, Ok(None) => 2, Err(_) => 3 } }   //~ E0901
+
+
+// ------------------------------------------------------------------ the last `_` of a struct pattern: the rest of a `match` arm
+
+pub fn rest_match_str(move g: G) -> U32 { match move g { G { n: q, _ } => q } }   //~ E0601
+
+pub rt fn rt_rest_match_str(move g: G) -> U32 { match move g { G { n: q, _ } => q } }   //~ E0901
+
+
+// ------------------------------------------------------------------ the last `_` of a struct pattern: the rest of a `let` that destructures
+
+pub fn rest_let_str(move g: G) { let G { n: _, _ } = move g }   //~ E0601
+
+pub rt fn rt_rest_let_str(move g: G) { let G { n: _, _ } = move g }   //~ E0901
+
+
+// ------------------------------------------------------------------ an arm that binds nothing: `_ =>` of `match move x`
+
+pub fn nobind_move_str(move s: Str) -> U32 { match move s { _ => 0 } }   //~ E0601
+
+pub rt fn rt_nobind_move_str(move s: Str) -> U32 { match move s { _ => 0 } }   //~ E0901
+
+
+// ------------------------------------------------------------------ an arm that binds nothing: a literal pattern, which binds nothing
+
+pub fn nobind_str_literal_move(move s: Str) -> U32 { match move s { "a" => 1, _ => 0 } }   //~ E0601
+
+pub rt fn rt_nobind_str_literal_move(move s: Str) -> U32 { match move s { "a" => 1, _ => 0 } }   //~ E0901
+
+pub fn nobind_tuple_literal(move p: (Str, U32)) -> U32 { match move p { (_, 0) => 1, (_, _) => 2 } }   //~ E0601
+
+pub rt fn rt_nobind_tuple_literal(move p: (Str, U32)) -> U32 { match move p { (_, 0) => 1, (_, _) => 2 } }   //~ E0901
+
+
+// ------------------------------------------------------------------ an or-pattern: `_` in a branch
+
+pub fn or_some_or_none_str(move o: Option[Str]) -> U32 { match move o { Some(_) | None => 1 } }   //~ E0601
+
+pub rt fn rt_or_some_or_none_str(move o: Option[Str]) -> U32 { match move o { Some(_) | None => 1 } }   //~ E0901
+
+pub fn or_tuple_branches(move p: (Str, U32)) -> U32 { match move p { (_, 0) | (_, 1) => 1, (_, _) => 2 } }   //~ E0601
+
+pub rt fn rt_or_tuple_branches(move p: (Str, U32)) -> U32 { match move p { (_, 0) | (_, 1) => 1, (_, _) => 2 } }   //~ E0901
+
+
+// ------------------------------------------------------------------ an or-pattern: literals of a `Str` in the branches
+
+pub fn or_str_literals_move(move s: Str) -> U32 { match move s { "a" | "b" | "c" => 1, _ => 0 } }   //~ E0601
+
+pub rt fn rt_or_str_literals_move(move s: Str) -> U32 { match move s { "a" | "b" | "c" => 1, _ => 0 } }   //~ E0901
+
+
+// ------------------------------------------------------------------ `let`: `let _ = e` of an owned value
+
+pub fn let_move_str(move s: Str) { let _ = move s }   //~ E0601
+
+pub rt fn rt_let_move_str(move s: Str) { let _ = move s }   //~ E0901
+
+pub fn let_move_field(move h: H) { let _ = move h.buf }   //~ E0601
+
+pub rt fn rt_let_move_field(move h: H) { let _ = move h.buf }   //~ E0901
+
+
+// ------------------------------------------------------------------ `let`: the `_` of a `let` that destructures
+
+pub fn let_destr_tuple(move p: (Str, U32)) { let (_, _) = move p }   //~ E0601
+
+pub rt fn rt_let_destr_tuple(move p: (Str, U32)) { let (_, _) = move p }   //~ E0901
+
+pub fn let_destr_nested(move p: ((Str, U32), U32)) { let ((_, _), _) = move p }   //~ E0601
+
+pub rt fn rt_let_destr_nested(move p: ((Str, U32), U32)) { let ((_, _), _) = move p }   //~ E0901
+
+
+// ------------------------------------------------------------------ `for`: `_` and a tuple pattern of an array that is moved
+
+pub fn for_wild_str(move xs: [Str; 2]) { for _ in move xs {} }   //~ E0601
+
+pub rt fn rt_for_wild_str(move xs: [Str; 2]) { for _ in move xs {} }   //~ E0901
+
+pub fn for_tuple_first(move ps: [(Str, U32); 2]) { for (_, k) in move ps { use_u(k) } }   //~ E0601
+
+pub rt fn rt_for_tuple_first(move ps: [(Str, U32); 2]) { for (_, k) in move ps { use_u(k) } }   //~ E0901
+
+
+// ------------------------------------------------------------------ a type parameter without `Copy`: `_` in an arm, in a `let`, in an argument, in the rest of a struct
+
+pub fn generic_arm_some[T](move o: Option[T]) -> U32 { match move o { Some(_) => 1, None => 0 } }   //~ E0601
+
+pub rt fn rt_generic_arm_some[T](move o: Option[T]) -> U32 { match move o { Some(_) => 1, None => 0 } }   //~ E0901
+
+pub fn generic_let_wild[T](move x: T) { let _ = move x }   //~ E0601
+
+pub rt fn rt_generic_let_wild[T](move x: T) { let _ = move x }   //~ E0901
+
+pub fn generic_rest_of_struct[T](move h: HT[T]) -> U32 { match move h { HT { n: q, _ } => q } }   //~ E0601
+
+pub rt fn rt_generic_rest_of_struct[T](move h: HT[T]) -> U32 { match move h { HT { n: q, _ } => q } }   //~ E0901
+
+pub fn generic_tuple_part[T](move p: (T, U32)) -> U32 { match move p { (_, k) => k } }   //~ E0601
+
+pub rt fn rt_generic_tuple_part[T](move p: (T, U32)) -> U32 { match move p { (_, k) => k } }   //~ E0901
+
+
+// ------------------------------------------------------------------ an early exit in the arm: an arm that leaves with `return`
+
+pub fn exit_return_some_str(move o: Option[Str]) -> U32 { match move o { Some(_) => { return 1 }, None => 0 } }   //~ E0601
+
+pub rt fn rt_exit_return_some_str(move o: Option[Str]) -> U32 { match move o { Some(_) => { return 1 }, None => 0 } }   //~ E0901
+
+
+// ------------------------------------------------------------------ a guard: the arm that a guard lets in
+
+pub fn guard_true_some_str(c: Bool, move o: Option[Str]) -> Option[Str] { match move o { Some(_) if c => None, rest => rest } }   //~ E0601
+
+pub rt fn rt_guard_true_some_str(c: Bool, move o: Option[Str]) -> Option[Str] { match move o { Some(_) if c => None, rest => rest } }   //~ E0901

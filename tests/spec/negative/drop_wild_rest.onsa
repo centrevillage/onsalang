@@ -1,0 +1,100 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§7", "§10", "§12.2"]
+
+// W6-02 U6/t, R-390, R-32, S-1036 (§7: "並びの最後の `_` … は残りのフィールドを無視する"; §5.4: "所有の見出し … が消費した値のうち、パターンが束縛しなかった部分（`_`、最後の `_` が残すフィールド、束縛の無い腕の対象）は、`let` … では文の終わりに、`match` の腕と
+// `for` の本体ではその腕・反復の終わり … に破棄される。腕が panic で抜ければ、その破棄は起きない"; §12.2: "所有する Shared 値・`Buf` と、それらを含む値の破棄: 要る"): the last `_` of a struct pattern (`K { n: q, _ }`, also written
+// alone as `H { _ }`) leaves the other fields where they are, and an owned head consumed the whole value, so the fields that the pattern does not name are dropped: at the
+// end of the arm of a `match`, and at the end of the statement of a `let` that destructures. The drop of a `Buf`, a `Str` or a struct that holds one needs `Alloc`. A
+// function without `uses {Alloc}` is an E0601 and an `rt fn` an E0901 (§10 rule 1). The head is `move x`, a call result or a field of a struct pattern that is itself a
+// struct pattern (nested); the fields that the pattern names may be moved on (`H { buf: b, _ } => b`), so the drop of the rest is the only one in the function. This version
+// counts no drop of the fields that a last `_` leaves (R-32, R-390), so none of these is reported today. The rest of a struct that holds only Copy fields and the rest of a
+// borrowed head are in negative/drop_wild_contrast.onsa. The functions are one-liners, so that the line does not depend on where the drop is reported (S-783). One error per
+// function (P-01).
+
+pub struct H {
+  buf: Buf[F32],
+  s: Str,
+  n: U32,
+}
+
+pub struct G {
+  s: Str,
+  n: U32,
+}
+
+pub struct K {
+  b: Buf[F32],
+  n: U32,
+}
+
+pub struct W {
+  h: H,
+  n: U32,
+}
+
+pub rt fn mk_k(move b: Buf[F32]) -> K { K { b: move b, n: 1 } }
+
+pub rt fn mk_g(n: U32) -> G { G { s: "a", n: n } }
+
+// ------------------------------------------------------------------ the rest of a `match` arm
+
+pub fn rest_match_buf(move k: K) -> U32 { match move k { K { n: q, _ } => q } }   //~ E0601
+
+pub rt fn rt_rest_match_buf(move k: K) -> U32 { match move k { K { n: q, _ } => q } }   //~ E0901
+
+pub fn rest_match_two_fields(move h: H) -> U32 { match move h { H { n: q, _ } => q } }   //~ E0601
+
+pub rt fn rt_rest_match_two_fields(move h: H) -> U32 { match move h { H { n: q, _ } => q } }   //~ E0901
+
+pub fn rest_match_moves_one(move h: H) -> Buf[F32] { match move h { H { buf: b, _ } => b } }   //~ E0601
+
+pub rt fn rt_rest_match_moves_one(move h: H) -> Buf[F32] { match move h { H { buf: b, _ } => b } }   //~ E0901
+
+pub fn rest_match_nothing_named(move h: H) -> U32 { match move h { H { _ } => 0 } }   //~ E0601
+
+pub rt fn rt_rest_match_nothing_named(move h: H) -> U32 { match move h { H { _ } => 0 } }   //~ E0901
+
+pub fn rest_match_call(move b: Buf[F32]) -> U32 { match mk_k(move b) { K { n: q, _ } => q } }   //~ E0601
+
+pub rt fn rt_rest_match_call(move b: Buf[F32]) -> U32 { match mk_k(move b) { K { n: q, _ } => q } }   //~ E0901
+
+pub fn rest_call_str(n: U32) -> U32 { match mk_g(n) { G { n: q, _ } => q } }   //~ E0601
+
+pub rt fn rt_rest_call_str(n: U32) -> U32 { match mk_g(n) { G { n: q, _ } => q } }   //~ E0901
+
+// ------------------------------------------------------------------ the rest of a `let` that destructures
+
+pub fn rest_let_buf(move k: K) { let K { _ } = move k }   //~ E0601
+
+pub rt fn rt_rest_let_buf(move k: K) { let K { _ } = move k }   //~ E0901
+
+pub fn rest_let_nothing_named(move h: H) { let H { _ } = move h }   //~ E0601
+
+pub rt fn rt_rest_let_nothing_named(move h: H) { let H { _ } = move h }   //~ E0901
+
+pub fn rest_let_call(move b: Buf[F32]) { let K { _ } = mk_k(move b) }   //~ E0601
+
+pub rt fn rt_rest_let_call(move b: Buf[F32]) { let K { _ } = mk_k(move b) }   //~ E0901
+
+pub fn rest_let_call_str(n: U32) { let G { _ } = mk_g(n) }   //~ E0601
+
+pub rt fn rt_rest_let_call_str(n: U32) { let G { _ } = mk_g(n) }   //~ E0901
+
+// ------------------------------------------------------------------ nested, in a constructor and in a tuple
+
+pub fn rest_nested_struct(move w: W) -> U32 { match move w { W { h: H { n: q, _ }, n: _ } => q } }   //~ E0601
+
+pub rt fn rt_rest_nested_struct(move w: W) -> U32 { match move w { W { h: H { n: q, _ }, n: _ } => q } }   //~ E0901
+
+pub fn rest_nested_outer_rest(move w: W) -> Buf[F32] { match move w { W { h: H { buf: b, s: _, n: _ }, _ } => b } }   //~ E0601
+
+pub rt fn rt_rest_nested_outer_rest(move w: W) -> Buf[F32] { match move w { W { h: H { buf: b, s: _, n: _ }, _ } => b } }   //~ E0901
+
+pub fn rest_nested_in_option(move o: Option[K]) -> U32 { match move o { Some(K { n: q, _ }) => q, None => 0 } }   //~ E0601
+
+pub rt fn rt_rest_nested_in_option(move o: Option[K]) -> U32 { match move o { Some(K { n: q, _ }) => q, None => 0 } }   //~ E0901
+
+pub fn rest_nested_in_tuple(move p: (K, U32)) -> U32 { match move p { (K { n: q, _ }, j) => q + j } }   //~ E0601
+
+pub rt fn rt_rest_nested_in_tuple(move p: (K, U32)) -> U32 { match move p { (K { n: q, _ }, j) => q + j } }   //~ E0901

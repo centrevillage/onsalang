@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§7", "§10", "§12.2"]
+
+// W6-02 U6/t, R-32, S-1036, S-1039 (§7: "所有の `match` … のガードでは、その腕の束縛を消費できない。… 腕が選ばれるまで対象の値は一つのままで、ガードが偽なら後の腕が同じ値で判定される"; §5.4: "所有の見出し … が消費した値のうち、パターンが束縛しなかった部分（`_`、最後の
+// `_` が残すフィールド、束縛の無い腕の対象）は、`let` … では文の終わりに、`match` の腕と `for` の本体ではその腕・反復の終わり … に破棄される。腕が panic で抜ければ、その破棄は起きない"): the part that the pattern of an arm leaves unbound is
+// dropped when the arm is taken, so an arm that has a guard drops it when the guard is true (`Some(_) if c => None`), and the arm that is tried after a guard that is false
+// sees the value as it was. The drop of a `Buf`, a `Str` or a value that holds one needs `Alloc`. A function without `uses {Alloc}` is an E0601 and an `rt fn` an E0901 (§10
+// rule 1). The guard is never the drop: the functions below are errors for the arm that the guard lets in, whether the arm after it moves the value, binds it or drops it as
+// well. This version counts no drop of what an arm leaves unbound (R-32), so none of these is reported today. The guard that is false and the arm that panics, where nothing
+// is dropped, are in negative/drop_wild_panic.onsa, and the arms that move the value on every path in negative/drop_wild_contrast.onsa. The functions are one-liners, so
+// that the line does not depend on where the drop is reported (S-783). One error per function (P-01).
+
+pub struct K {
+  b: Buf[F32],
+  n: U32,
+}
+
+pub rt fn mk_os(n: U32) -> Option[Str] { Some("x") }
+
+// ------------------------------------------------------------------ the arm that a guard lets in
+
+pub fn guard_true_some(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(_) if c => None, rest => rest } }   //~ E0601
+
+pub rt fn rt_guard_true_some(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(_) if c => None, rest => rest } }   //~ E0901
+
+pub fn guard_true_call_str(c: Bool, n: U32) -> U32 { match mk_os(n) { Some(_) if c => 1, _ => 0 } }   //~ E0601
+
+pub rt fn rt_guard_true_call_str(c: Bool, n: U32) -> U32 { match mk_os(n) { Some(_) if c => 1, _ => 0 } }   //~ E0901
+
+pub fn guard_true_wild(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { _ if c => None, rest => rest } }   //~ E0601
+
+pub rt fn rt_guard_true_wild(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { _ if c => None, rest => rest } }   //~ E0901
+
+pub fn guard_true_rest(c: Bool, move k: K) -> U32 { match move k { K { n: q, _ } if c => q, _ => 0 } }   //~ E0601
+
+pub rt fn rt_guard_true_rest(c: Bool, move k: K) -> U32 { match move k { K { n: q, _ } if c => q, _ => 0 } }   //~ E0901
+
+// ------------------------------------------------------------------ the arm after a guard that is false
+
+pub fn guard_false_next_drops(c: Bool, move o: Option[Buf[F32]]) -> U32 { match move o { Some(_) if c => 1, Some(_) => 2, None => 3 } }   //~ E0601
+
+pub rt fn rt_guard_false_next_drops(c: Bool, move o: Option[Buf[F32]]) -> U32 { match move o { Some(_) if c => 1, Some(_) => 2, None => 3 } }   //~ E0901
+
+pub fn guard_false_next_moves(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(_) if c => None, Some(b) => Some(move b), None => None } }   //~ E0601
+
+pub rt fn rt_guard_false_next_moves(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(_) if c => None, Some(b) => Some(move b), None => None } }   //~ E0901
+
+pub fn guard_false_next_binds(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(_) if c => None, other => other } }   //~ E0601
+
+pub rt fn rt_guard_false_next_binds(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(_) if c => None, other => other } }   //~ E0901

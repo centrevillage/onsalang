@@ -78,7 +78,7 @@ pub fn use_nested(x: Option[M[Buf[F32]]]) -> U32 {
   0
 }
 
-pub fn use_annotation() -> U32 {
+pub fn use_annotation() -> U32 uses {Alloc} {
   let _: Option[En[Buf[F32]]] = None
   0
 }

@@ -17,7 +17,7 @@ use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 use onsa_syntax::ast::{Ident, PatId, Path, RestMark, StructRest};
 use onsa_syntax::foreign::{self, RowId};
 
-use crate::body::{Checker, R, Stop};
+use crate::body::{Checker, R, Stop, Unbound};
 use crate::def::{DefId, DefKind, FieldDef, Fields};
 use crate::resolve::{Entity, Owner};
 use crate::ty::{Ty, TyId};
@@ -110,8 +110,12 @@ impl<'a> Checker<'a> {
         }
         let missing: Vec<&FieldDef> = defs.iter().filter(|f| !seen.contains(&f.name.as_str())).collect();
         match rest {
-            // The last `_` ignores what is left (§7, S-903).
-            Some(StructRest { mark: RestMark::Underscore, .. }) if !missing.is_empty() => Ok(defs.len()),
+            // The last `_` ignores what is left (§7, S-903): binds it to no name (§5.4).
+            Some(rest @ StructRest { mark: RestMark::Underscore, .. }) if !missing.is_empty() => {
+                let tys = missing.iter().map(|f| self.a.types.subst(f.ty, &args)).collect();
+                self.unbound(Unbound::Pat(pat), rest.span, tys);
+                Ok(defs.len())
+            }
             Some(rest @ StructRest { mark: RestMark::Underscore, .. }) => {
                 let msg = format!("every field of `{name}` is written: the `_` ignores nothing");
                 let diag = Diagnostic::new(stage, Code::E0410, rest.span, msg)

@@ -13,7 +13,10 @@ impl<'a> Checker<'a> {
         let p = self.ast.pat(pat);
         let span = p.span;
         match &p.kind {
-            PatKind::Wild => Ok(P::Wild),
+            PatKind::Wild => {
+                self.unbound(Unbound::Pat(pat), span, vec![ty]);
+                Ok(P::Wild)
+            }
             PatKind::Bind(id) => {
                 let lid = self.local_of_pat(pat)?;
                 self.bind_local(lid, ty, id.span)?;
@@ -28,6 +31,7 @@ impl<'a> Checker<'a> {
                         "a literal pattern can fail to match; `let` takes only tuple and struct patterns (§7)",
                     ));
                 }
+                self.unbound(Unbound::Pat(pat), span, vec![ty]);
                 match lit {
                     Lit::Int { value, .. } => {
                         // Unified with the subject's type argument like an operand of `==`,
@@ -118,6 +122,12 @@ impl<'a> Checker<'a> {
                 Ok(P::Or(lowered))
             }
         }
+    }
+
+    /// `u`, written at `at`, binds parts of the types `tys` to no name
+    /// (`BodyInfo::discards`).
+    pub(crate) fn unbound(&mut self, u: Unbound, at: Span, tys: Vec<TyId>) {
+        self.info.discards.insert(u, Discard { at, tys });
     }
 
     /// The element types of a tuple pattern of `n` elements against `ty`, for
@@ -224,6 +234,7 @@ impl<'a> Checker<'a> {
         }
         let (t, target) = self.const_value(d, owner, span)?;
         self.unify_at(span, t, ty)?;
+        self.unbound(Unbound::Pat(pat), span, vec![ty]);
         let t = self.known(t, span, "constant of a pattern")?;
         match self.ty(t) {
             Ty::Int(_) | Ty::Char | Ty::Bool | Ty::Builtin(BuiltinTy::Str, _) => {

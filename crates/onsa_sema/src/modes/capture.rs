@@ -38,10 +38,11 @@ impl Walker<'_> {
         self.uncapturable(e);
         // Its parameters, its outermost scope: their drop points at the end of its body (R-32).
         let ExprKind::Closure { params, .. } = &self.ast.expr(e).kind else { bug(None, "a closure that is not one") };
-        let params: Vec<_> = (0..params.len() as u32)
-            .filter_map(|param| self.origins.get(&Origin::Closure { closure: e, param }).copied())
-            .collect();
-        let (outer, changes) = (replace(r, Run::with(params)), self.inside.changes.len());
+        let n = params.len() as u32;
+        let params: Vec<_> =
+            (0..n).filter_map(|param| self.origins.get(&Origin::Closure { closure: e, param }).copied()).collect();
+        let run = self.start(params, Some(e), n);
+        let (outer, changes) = (replace(r, run), self.inside.changes.len());
         self.inside.frames.push(Frame { closure: e, read: Vec::new() });
         self.expr(r, body, Pos::Return);
         self.ends(r, 0, self.ast.expr(body).span);

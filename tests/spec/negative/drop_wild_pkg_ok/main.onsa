@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§7", "§10", "§12.2", "§15.1"]
+
+// W6-02 U6/t, R-390, R-32, S-1036 (§12.2; §15.1): the contrasts of negative/drop_wild_pkg. The functions of this module that use the types of `lib.onsa` where no part is left to drop are legal and stay
+// legal: the `_` of a head that is borrowed (`match k`, `match e`), a `_` that leaves a Copy part (also next to the `Buf` that the arm moves on), the arm of a unit variant, and a function with `uses {Alloc}`.
+// This version accepts all of them. The functions are one-liners.
+
+use lib.{E, K, mk_k, pass}
+
+pub fn borrowed_rest(k: K) -> U32 { match k { K { n: q, _ } => q } }
+
+pub rt fn rt_borrowed_rest(k: K) -> U32 { match k { K { n: q, _ } => q } }
+
+pub fn borrowed_enum(e: E) -> U32 { match e { E.A(_, k) => k, E.B => 0 } }
+
+pub rt fn rt_borrowed_enum(e: E) -> U32 { match e { E.A(_, k) => k, E.B => 0 } }
+
+pub fn copy_part_moved_on(move k: K) -> Buf[F32] { match move k { K { b: bb, n: _ } => bb } }
+
+pub rt fn rt_copy_part_moved_on(move k: K) -> Buf[F32] { match move k { K { b: bb, n: _ } => bb } }
+
+pub fn unit_arm(move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { None => None, rest => rest } }
+
+pub rt fn rt_unit_arm(move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { None => None, rest => rest } }
+
+pub fn borrowed_let(k: K) { let _ = k }
+
+pub rt fn rt_borrowed_let(k: K) { let _ = k }
+
+pub fn alloc_rest(move k: K) -> U32 uses {Alloc} { match move k { K { n: q, _ } => q } }
+
+pub fn alloc_let(move b: Buf[F32]) uses {Alloc} { let _ = mk_k(move b) }
+
+pub fn alloc_param(move _: K) uses {Alloc} {}
+
+pub fn passes_on(move b: Buf[F32]) -> Buf[F32] { pass(move b) }

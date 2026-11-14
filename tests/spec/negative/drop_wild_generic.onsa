@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§6.3", "§7", "§10", "§12.2"]
+
+// W6-02 U6/t, R-32, S-1036 (§6.3 and §12.2: "ジェネリックな `T` の値の破棄（`T: Copy` の制約が無い場合）: 要る"; §5.4: "所有の見出し … が消費した値のうち、パターンが束縛しなかった部分（`_`、最後の `_` が残すフィールド、束縛の無い腕の対象）は、`let` …
+// では文の終わりに、`match` の腕と `for` の本体ではその腕・反復の終わり … に破棄される。腕が panic で抜ければ、その破棄は起きない"): the part that a pattern leaves unbound, the `_` of `let _ = e` and a `move _` argument are
+// dropped by the rule above, and the drop of a value of a type parameter without `Copy` needs `Alloc` (`T` has no bound, `T: ?Dup`). A function without `uses {Alloc}` is an
+// E0601 and an `rt fn` an E0901 (§10 rule 1). This version counts no drop of what a `_` leaves (R-32), so none of these is reported today. The same functions with `T: Copy`
+// and the borrowed `Option[T]` are in negative/drop_wild_contrast.onsa. The functions are one-liners, so that the line does not depend on where the drop is reported
+// (S-783). One error per function (P-01).
+
+pub struct HT[T] {
+  v: T,
+  n: U32,
+}
+
+pub rt fn id_t[T](move x: T) -> T { x }
+
+// ------------------------------------------------------------------ `_` in an arm, in a `let`, in an argument, in the rest of a struct
+
+pub fn generic_arm_some_maybe[T: ?Dup](move o: Option[T]) -> U32 { match move o { Some(_) => 1, None => 0 } }   //~ E0601
+
+pub rt fn rt_generic_arm_some_maybe[T: ?Dup](move o: Option[T]) -> U32 { match move o { Some(_) => 1, None => 0 } }   //~ E0901
+
+pub fn generic_let_wild_maybe[T: ?Dup](move x: T) { let _ = move x }   //~ E0601
+
+pub rt fn rt_generic_let_wild_maybe[T: ?Dup](move x: T) { let _ = move x }   //~ E0901
+
+pub fn generic_param_wild[T](move _: T) {}   //~ E0601
+
+pub rt fn rt_generic_param_wild[T](move _: T) {}   //~ E0901
+
+pub fn generic_param_wild_maybe[T: ?Dup](move _: T) {}   //~ E0601
+
+pub rt fn rt_generic_param_wild_maybe[T: ?Dup](move _: T) {}   //~ E0901
+
+pub fn generic_call_head[T](move x: T) -> U32 { match id_t(x) { _ => 0 } }   //~ E0601
+
+pub rt fn rt_generic_call_head[T](move x: T) -> U32 { match id_t(x) { _ => 0 } }   //~ E0901
