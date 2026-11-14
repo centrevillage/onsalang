@@ -1,16 +1,18 @@
-//! The record of the uses of a body (§8.1, §10, R-83, D-15): every use of
-//! an effect, with its place, in a fixed order. The effects stage (E0601)
-//! and the rt stage (E0901, the edges of E0903) read it, not the tables of
-//! the body. The one list of what needs what
-//! (M12): a call needs the row of the function or the function value it
+//! The record of the uses of a body (§8.1, §10, R-83, D-15): its scopes (the
+//! body, each anonymous function in it) and every use of an effect, with its
+//! place and its scope, in a fixed order. The effects stage (E0601) and the
+//! rt stage (E0901) read it, not the tables of the body. The one list of
+//! what needs what (M12): a call needs the row of the function or the function value it
 //! calls ([`call_use`]), an interpolation ([`interp_use`]) and a drop
 //! ([`alloc_drops`]) need `Alloc`. No stage after reads it, so it is not
 //! kept in the analysis.
 
+use onsa_diag::hash::HashSet;
+use onsa_diag::internal::bug;
 use onsa_diag::{Span, Stage};
 use onsa_syntax::ast::{Ast, ExprId, ExprKind, Lit, StrSeg};
 
-use crate::body::{BodyInfo, Target};
+use crate::body::{BodyInfo, Target, root_of};
 use crate::def::DefKind;
 use crate::drop_alloc::{Drop, alloc_drops};
 use crate::ty::{EffectSet, Ty};
@@ -21,13 +23,29 @@ use crate::{Analysis, DefId, Package, module_of_def};
 /// the order of the drops (R-459: not by the order of a table).
 pub(crate) struct Record<'a> {
     pub id: DefId,
+    /// The body (`[0]`), then each anonymous function in it by its start.
+    pub scopes: Vec<Scope>,
     pub uses: Vec<Use<'a>>,
+}
+
+/// What the uses in it are checked against (§8.1, §10): the body, or an
+/// anonymous function, whose uses are its own and not of one around it.
+pub(crate) struct Scope {
+    /// The anonymous function; none for the body.
+    pub closure: Option<ExprId>,
+    /// The row of the function, the one given to a `test` (§8.5) and to an
+    /// initializer (§6.6), or of the type of the anonymous function (S-1032).
+    pub row: EffectSet,
+    pub rt: bool,
 }
 
 /// A use of an effect (§8.1).
 pub(crate) struct Use<'a> {
     /// The expression, or where the value dropped is written (S-783).
     pub at: Span,
+    /// Its scope in [`Record::scopes`]: the innermost whose span holds `at`
+    /// ([`Closures::around`]).
+    pub scope: u32,
     pub needs: Needs<'a>,
     /// Whether what it calls is `rt` (§10 rule 4); none where it calls
     /// nothing (a drop, until a `Drop` is called by one in phase 2).
@@ -105,36 +123,68 @@ impl Use<'_> {
 }
 
 impl<'a> Record<'a> {
-    /// For each effect the row of the body lacks, its first use by the order
-    /// of the record (§8.1, E0601): the one test of whether a use is out of
-    /// the row, which the rt stage reads too (it adds no edge of a body with
-    /// one, §10 rule 5).
-    pub(crate) fn lacking(&self, a: &Analysis) -> Vec<(DefId, &Use<'a>)> {
-        let DefKind::Fn(f) = &a.def(self.id).kind else { return Vec::new() };
+    /// For each scope and each effect its row lacks, the first use of it in
+    /// the scope by the order of the record (§8.1, E0601), by the scope: the
+    /// one test of whether a use is out of the row, which the rt stage reads
+    /// too (it adds no edge of a body with one, §10 rule 5). O(U) for U uses.
+    pub(crate) fn lacking(&self, a: &Analysis) -> Vec<(&Scope, DefId, &Use<'a>)> {
         // SPEC-GAP(S-1053): one E0601 for each scope and effect.
         // `Alloc` alone until every effect is checked (W6-03 U7).
         // SPEC-GAP(S-1059): the row as written, `Alloc` too in an `rt` one (E0902).
-        let effects = a.alloc.into_iter().filter(|&e| !f.effects.has(e));
-        effects.filter_map(|e| self.uses.iter().find(|u| u.needs(a, e)).map(|u| (e, u))).collect()
+        let (mut first, mut seen): (Vec<(u32, DefId, &Use<'a>)>, HashSet<_>) = (Vec::new(), HashSet::default());
+        for u in &self.uses {
+            let row = &self.scopes[u.scope as usize].row;
+            for e in a.alloc.into_iter().filter(|&e| !row.has(e) && u.needs(a, e)) {
+                if seen.insert((u.scope, e)) {
+                    first.push((u.scope, e, u));
+                }
+            }
+        }
+        first.sort_by_key(|&(s, ..)| s);
+        first.into_iter().map(|(s, e, u)| (&self.scopes[s as usize], e, u)).collect()
     }
 }
 
-/// The records of the bodies of the functions, `rt` or not, that the
-/// effects stage reads (`Analysis::body_checked`), in the order of the defs.
+/// The records of the bodies of the functions, `rt` or not, of the `test`s
+/// and of the initializers that the effects stage reads
+/// (`Analysis::body_checked`; not of a flow, S-1043), in the order of the defs.
 pub(crate) fn records<'a>(pkg: &Package, a: &'a Analysis) -> Vec<Record<'a>> {
-    let read = |id| matches!(&a.def(id).kind, DefKind::Fn(f) if f.body.is_some());
     a.new_defs()
-        .filter(|&id| read(id) && a.body_checked(id, Stage::Effects))
+        .filter(|&id| root_of(a, id).is_some() && a.body_checked(id, Stage::Effects))
         .filter_map(|id| record(pkg, a, id))
         .collect()
 }
 
-/// The record of the body of `id`. O(T + E + D + U log U) for T targets, E
-/// typed expressions, D drop points and U uses.
+/// The row and `rt` of the body of `id`: of a function, and the `Alloc` the
+/// runner gives a `test` (§8.5; `Random` in W6-03 U7) and the compiler an
+/// initializer (§6.6).
+fn body_row(a: &Analysis, id: DefId) -> (EffectSet, bool) {
+    match &a.def(id).kind {
+        DefKind::Fn(f) => (f.effects.clone(), f.rt),
+        _ => {
+            let mut row = EffectSet::default();
+            a.alloc.into_iter().for_each(|e| row.insert(e));
+            (row, false)
+        }
+    }
+}
+
+/// The record of the body of `id`. O(T + E + D + C log C + U (log C + d +
+/// log U)) for T targets, E typed expressions, D drop points, C anonymous
+/// functions nested d deep and U uses.
 fn record<'a>(pkg: &Package, a: &'a Analysis, id: DefId) -> Option<Record<'a>> {
     let _scope = onsa_diag::internal::item_scope(a.def(id).span);
     let ast = &module_of_def(pkg, a, id)?.parsed.ast;
     let body = &a.bodies[&id];
+    let closures = Closures::of(ast, body);
+    let (row, rt) = body_row(a, id);
+    let mut scopes = vec![Scope { closure: None, row, rt }];
+    for &(at, e, _) in &closures.0 {
+        let Some(Ty::Fn(f)) = body.expr_types.get(&e).map(|&t| a.types.get(t)) else {
+            bug(Some(at), "an anonymous function with no function type in a body checked to its end")
+        };
+        scopes.push(Scope { closure: Some(e), row: f.effects.clone(), rt: f.rt });
+    }
     let mut keyed = Vec::new();
     let made = body.targets.keys().filter_map(|&e| call_use(a, ast, body, e).map(|u| (e, u)));
     for (e, u) in made.chain(body.expr_types.keys().filter_map(|&e| interp_use(ast, e).map(|u| (e, u)))) {
@@ -142,13 +192,72 @@ fn record<'a>(pkg: &Package, a: &'a Analysis, id: DefId) -> Option<Record<'a>> {
     }
     for (n, (drop, points)) in alloc_drops(a, id).into_iter().enumerate() {
         let at = drop.at(ast);
-        keyed.push((
-            (at.start, at.end, 1, n as u32),
-            Use { at, needs: Needs::Alloc, rt: None, what: What::Drop { drop, points } },
-        ));
+        let u = Use { at, scope: 0, needs: Needs::Alloc, rt: None, what: What::Drop { drop, points } };
+        keyed.push(((at.start, at.end, 1, n as u32), u));
     }
     keyed.sort_unstable_by_key(|(k, _)| *k);
-    Some(Record { id, uses: keyed.into_iter().map(|(_, u)| u).collect() })
+    let mut uses: Vec<Use> = keyed.into_iter().map(|(_, u)| u).collect();
+    for u in &mut uses {
+        u.scope = closures.around(u.at).map_or(0, |i| i as u32 + 1);
+    }
+    Some(Record { id, scopes, uses })
+}
+
+/// The anonymous functions of a body (the names stage makes an entry of
+/// `captures` for each), by their start, each with its span and the index of
+/// the innermost one around it: the one place that tells the scope of a
+/// place (§8.1, §10 rule 5).
+pub(crate) struct Closures(Vec<(Span, ExprId, Around)>);
+
+/// The index of the innermost anonymous function around one, in [`Closures`].
+type Around = Option<usize>;
+
+impl Closures {
+    pub(crate) fn of(ast: &Ast, body: &BodyInfo) -> Closures {
+        let mut by_start: Vec<(Span, ExprId)> = body.captures.keys().map(|&e| (ast.expr(e).span, e)).collect();
+        by_start.sort_unstable_by_key(|(s, e)| (s.start, std::cmp::Reverse(s.end), e.0));
+        let (mut list, mut open): (Vec<(Span, ExprId, Around)>, Vec<usize>) = (Vec::new(), Vec::new());
+        for (at, e) in by_start {
+            while open.last().is_some_and(|&p| !holds(list[p].0, at)) {
+                open.pop();
+            }
+            list.push((at, e, open.last().copied()));
+            open.push(list.len() - 1);
+        }
+        Closures(list)
+    }
+
+    /// The innermost anonymous function whose span holds `at` (its index),
+    /// none where it is the body's: the last one that starts at or before
+    /// it, or the first around that one that holds it.
+    pub(crate) fn around(&self, at: Span) -> Option<usize> {
+        let mut i = self.0.partition_point(|(s, ..)| s.start <= at.start).checked_sub(1)?;
+        while !holds(self.0[i].0, at) {
+            i = self.0[i].2?;
+        }
+        Some(i)
+    }
+}
+
+fn holds(outer: Span, inner: Span) -> bool {
+    outer.start <= inner.start && inner.end <= outer.end
+}
+
+/// The calls the body itself makes by name of the `rt` functions with a body,
+/// by their place: the edges of the rt recursion (§10 rule 5). A call in an
+/// anonymous function, `rt` or not, is its own (S-1057). The one collection of
+/// them (`crate::rt`, `Analysis::rt_held`).
+pub(crate) fn rt_edges(a: &Analysis, ast: &Ast, body: &BodyInfo) -> Vec<(Span, DefId)> {
+    let closures = Closures::of(ast, body);
+    let edge = |e: ExprId| match call_use(a, ast, body, e)? {
+        Use { at, what: What::Call { callee }, .. } if a.rt_with_body(callee) && closures.around(at).is_none() => {
+            Some(((at.start, at.end, e.0), (at, callee)))
+        }
+        _ => None,
+    };
+    let mut keyed: Vec<_> = body.targets.keys().filter_map(|&e| edge(e)).collect();
+    keyed.sort_unstable_by_key(|(k, _)| *k);
+    keyed.into_iter().map(|(_, x)| x).collect()
 }
 
 /// The use of the expression `e` of `body` when it calls a function, a
@@ -168,7 +277,7 @@ pub(crate) fn call_use<'a>(a: &'a Analysis, ast: &Ast, body: &BodyInfo, e: ExprI
         }
         _ => return None,
     };
-    Some(Use { at: expr.span, needs: Needs::Row(row), rt: Some(rt), what })
+    Some(Use { at: expr.span, scope: 0, needs: Needs::Row(row), rt: Some(rt), what })
 }
 
 /// The use of the expression `e` when it is a string literal with a hole,
@@ -177,5 +286,5 @@ pub(crate) fn interp_use<'a>(ast: &Ast, e: ExprId) -> Option<Use<'a>> {
     let expr = ast.expr(e);
     let ExprKind::Lit(Lit::Str(s)) = &expr.kind else { return None };
     let holes = s.segments.iter().any(|seg| matches!(seg, StrSeg::Interp(_)));
-    holes.then_some(Use { at: expr.span, needs: Needs::Alloc, rt: None, what: What::Interp })
+    holes.then_some(Use { at: expr.span, scope: 0, needs: Needs::Alloc, rt: None, what: What::Interp })
 }

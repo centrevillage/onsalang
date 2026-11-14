@@ -2,14 +2,31 @@
 
 use onsa_diag::FileId;
 
-use crate::Analysis;
-use crate::tests::check;
+use crate::tests::{analyze, pkg};
+use crate::{Analysis, Package};
+
+/// The analysis of a package, with the package (`unread_users` reads its
+/// syntax).
+struct Checked(Package, Analysis);
+
+impl std::ops::Deref for Checked {
+    type Target = Analysis;
+    fn deref(&self) -> &Analysis {
+        &self.1
+    }
+}
+
+fn check(src: &str) -> Checked {
+    let p = pkg(&[("main", src)]);
+    let a = analyze(&p);
+    Checked(p, a)
+}
 
 /// The names of the defs of the file whose spans `unread_users` gives, in
 /// the order of the defs.
-fn users(a: &Analysis) -> Vec<&str> {
-    let spans = a.unread_users(&[FileId(0)]);
-    a.defs.iter().filter(|d| spans.contains(&d.span)).map(|d| d.name.as_str()).collect()
+fn users(c: &Checked) -> Vec<&str> {
+    let spans = c.1.unread_users(&c.0, &[FileId(0)]);
+    c.defs.iter().filter(|d| spans.contains(&d.span)).map(|d| d.name.as_str()).collect()
 }
 
 #[test]
@@ -84,7 +101,7 @@ fn a_check_with_nothing_unread_has_no_users() {
     assert!(users(&a).is_empty());
     // Another file's defs are not given.
     let a = check("#[derive(PartialEq)]\npub struct Pt {\n  x: I32,\n}\n");
-    assert!(a.unread_users(&[FileId(1)]).is_empty());
+    assert!(a.1.unread_users(&a.0, &[FileId(1)]).is_empty());
 }
 
 #[test]

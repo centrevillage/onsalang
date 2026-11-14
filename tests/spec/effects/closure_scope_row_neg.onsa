@@ -1,0 +1,140 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§12.2", "§18.1"]
+// fixes = 0
+
+// W6-03 U5/t, S-1032, R-27 (1), R-359, S-783 (C3) (§8.1: "無名関数の型の効果行は、書いた効果行（`uses {}` を含む）で、書かなければ期待する関数型の効果行、期待する関数型も無ければ空である ...
+// 無名関数は、その型の効果行と `rt` に照らして本体を検査する。本体の使用は外側の関数と外側の無名関数の効果行に数えず ... 効果行に無い使用は E0601 で、位置はその無名関数の最初の使用（引数の破棄は引数の名前）、
+// 修正候補は無く"): an anonymous function is checked against the row of its own type, so a use in its body that the row does not hold is an E0601 of the anonymous function, whatever the row of the
+// function that writes it is (a function with `uses {Alloc}` does not cover it, R-359). The row comes from the row that is written (`uses {}` is a row), or the row of the function type that is expected
+// (a parameter of a pure function type), or it is empty when nothing is expected (a `let` or `var` without a type, the callee that is called on the spot, a type variable that is not decided: `id(fn …)`,
+// `Some(fn …)`). The uses are a call of a function that has `Alloc`, a creation of a `Buf`, an interpolation, the drop of an owned local and the drop of an owned parameter (its position is the name of the
+// parameter, and it comes before the uses of the body). The error is the first use of the anonymous function; there is no candidate (`fixes = 0`): a candidate `uses {Alloc}` of the outer function
+// would not help, and one of the anonymous function changes its type. When the outer function has a use of its own that comes before the anonymous function, that is the one that is reported (the
+// candidate of that one is in closure_scope_outer_and_closure_fix.onsa); when the anonymous function comes first it is reported (`closure_then_outer`). One error per function (P-01).
+// The joins are in closure_scope_join_neg.onsa, the nested anonymous functions in closure_scope_nested_neg.onsa, and the rt forms in closure_scope_rt_neg.onsa.
+
+pub fn mk(n: U32) -> U32 uses {Alloc} { n }
+
+pub fn ap(f: fn(U32) -> U32, x: U32) -> U32 { f.(x) }
+
+pub fn ap_a(f: fn(U32) -> U32 uses {Alloc}, x: U32) -> U32 uses {Alloc} { f.(x) }
+
+pub fn ap_b(f: fn(move Buf[F32]) -> U32, move x: Buf[F32]) -> U32 { f.(move x) }
+
+pub fn ap_g[A: Copy](f: fn(A) -> A, x: A) -> A { f.(x) }
+
+pub fn id[A](move x: A) -> A { x }
+
+// ---- the row of the function type that is expected is pure: the outer function does not matter
+
+pub fn pure_position_plain(n: U32) -> U32 {
+  ap(fn(y: U32) -> U32 { mk(y) }, n)   //~ E0601 @26
+}
+
+pub fn pure_position_alloc_outer(n: U32) -> U32 uses {Alloc} {
+  ap(fn(y: U32) -> U32 { mk(y) }, n)   //~ E0601 @26
+}
+
+pub fn pure_position_generic_callee(n: U32) -> U32 uses {Alloc} {
+  ap_g(fn(y: U32) -> U32 { mk(y) }, n)   //~ E0601 @28
+}
+
+pub fn pure_position_generic_outer[A](x: A, n: U32) -> U32 {
+  ap(fn(y: U32) -> U32 { mk(y) }, n)   //~ E0601 @26
+}
+
+pub fn pure_position_creates_a_buffer(n: U32) -> U32 uses {Alloc} {
+  ap(fn(y: U32) -> U32 {
+    let b: Buf[F32] = Buf.zeroed(y)   //~ E0601
+    b.len()
+  }, n)
+}
+
+pub fn pure_position_interpolates(n: U32) -> U32 uses {Alloc} {
+  ap(fn(y: U32) -> U32 {
+    let s = "{y}"   //~ E0601
+    s.len()
+  }, n)
+}
+
+pub fn pure_position_in_a_loop(n: U32) -> U32 uses {Alloc} {
+  var total = 0
+  for i in 0 ..< n {
+    total = total + ap(fn(y: U32) -> U32 { mk(y) }, i)   //~ E0601 @44
+  }
+  total
+}
+
+pub fn pure_position_in_an_arm(c: Bool, n: U32) -> U32 uses {Alloc} {
+  match c {
+    true => ap(fn(y: U32) -> U32 { mk(y) }, n),   //~ E0601 @36
+    false => 0,
+  }
+}
+
+// ---- the row that is written is the row of the anonymous function, even when the expected row is larger
+
+pub fn written_empty_row_where_alloc_is_expected(n: U32) -> U32 uses {Alloc} {
+  ap_a(fn(y: U32) -> U32 uses {} { mk(y) }, n)   //~ E0601 @36
+}
+
+pub fn written_empty_row_in_a_let(n: U32) -> U32 uses {Alloc} {
+  let l: fn(U32) -> U32 uses {Alloc} = fn(y: U32) -> U32 uses {} { mk(y) }   //~ E0601 @68
+  l.(n)
+}
+
+// ---- nothing is expected: the row is empty (a function that has no `uses`)
+
+pub fn let_without_a_type(n: U32) -> U32 uses {Alloc} {
+  let l = fn(y: U32) -> U32 { mk(y) }   //~ E0601 @31
+  l.(n)
+}
+
+pub fn let_without_a_type_plain(n: U32) -> U32 {
+  let l = fn(y: U32) -> U32 { mk(y) }   //~ E0601 @31
+  l.(n)
+}
+
+pub fn var_without_a_type(n: U32) -> U32 uses {Alloc} {
+  var l = fn(y: U32) -> U32 { mk(y) }   //~ E0601 @31
+  l.(n)
+}
+
+pub fn called_on_the_spot(n: U32) -> U32 uses {Alloc} {
+  (fn(y: U32) -> U32 { mk(y) }).(n)   //~ E0601 @24
+}
+
+pub fn type_variable_id(n: U32) -> U32 uses {Alloc} {
+  id(fn(y: U32) -> U32 { mk(y) }).(n)   //~ E0601 @26
+}
+
+pub fn type_variable_some(n: U32) -> U32 uses {Alloc} {
+  let o = Some(fn(y: U32) -> U32 { mk(y) })   //~ E0601 @36
+  match o {
+    Some(f) => f.(n),
+    None => 0,
+  }
+}
+
+// ---- the first use is the one that is reported, and the position of an owned parameter is its name
+
+pub fn param_drop_is_the_name(move t: Buf[F32]) -> U32 {
+  ap_b(fn(move s: Buf[F32]) -> U32 { 1 }, move t)   //~ E0601 @16
+}
+
+pub fn param_drop_comes_before_the_body(move t: Buf[F32]) -> U32 {
+  ap_b(fn(move s: Buf[F32]) -> U32 { mk(1) }, move t)   //~ E0601 @16
+}
+
+pub fn first_of_two_uses(n: U32) -> U32 {
+  ap(fn(y: U32) -> U32 {
+    let a = mk(y)   //~ E0601 @13
+    mk(a)
+  }, n)
+}
+
+pub fn closure_then_outer(n: U32) -> U32 {
+  let k = ap(fn(y: U32) -> U32 { mk(y) }, n)   //~ E0601 @34
+  mk(k)
+}

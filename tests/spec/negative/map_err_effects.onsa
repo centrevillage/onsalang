@@ -5,9 +5,9 @@
 // E0401 and E0601 (W5-02 U6/t): "`f` の効果行は空" (§9.1), so the conversion given to `map_err` is a function with no
 // effect. A function whose row has an effect does not fit the type (§8.1: the row of the function must be in the row of
 // the expected type, and "逆は E0401"): E0401 at the argument, whether it is a named function or an anonymous function
-// whose row is written. An anonymous function whose row is not written is checked against the expected type: "期待する型が
-// 純粋なら、本体で `Alloc` を使えない（外側の関数の効果行には数えない）" (§8.1), so a creation of a `Buf` in its body is
-// the E0601 of the use (the case where the row of the outer function has `Alloc` is in map_err_effects_outer_row.onsa).
+// whose row is written. An anonymous function whose row is not written is checked against the expected type: "本体の使用は外側の関数と外側の無名関数の効果行に数えず ... 期待する型が
+// 純粋なら、本体で `Alloc` を使えない" (§8.1), so a creation of a `Buf` in its body is the E0601 of the anonymous function itself, with no candidate (S-1032)
+// (the case where the row of the outer function has `Alloc` is in map_err_effects_outer_row.onsa).
 // Each function is on one line so that the line of the use and the line of the function are one. One error per function
 // (P-01). The functions at the end are fine.
 

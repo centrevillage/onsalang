@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§10", "§8.1", "§12.5"]
+// fixes = 0
+
+// W6-03 U5/t, S-1057 (§10 rule 5: "数えるのは、`rt` の関数の本体そのものに書いた呼び出しである。無名関数の本体に書いた呼び出しは、その無名関数のもので、それを書いた関数の呼び出しに数えない（§8.1）。無名関数は関数値
+// としてだけ呼ばれるので、無名関数を通る循環は、`rt` の無名関数でも関数値を経る循環である。関数値を経る呼び出しは数えない（§12.5）"): this file has no error. A call by a name that is written in the body of an anonymous function,
+// an `rt` one too, is not an edge of the recursion of the `rt` function that writes it, so a cycle that closes only through such calls is no E0903: a function that makes an `rt` anonymous function that calls it
+// (`direct`), two functions that call each other with one of the calls in an `rt` anonymous function (`first` and `second`), an `rt` anonymous function that is given to an `rt` function as an argument (`walk`), and
+// the anonymous function that is not `rt` and is returned (`one` and `two`, where the call of the value that is returned is made inside the anonymous function, which is not `rt`, and so is not checked by rule 4 either).
+// A cycle through the body of an `rt` function is still an E0903 (closure_scope_cycle_neg.onsa, closure_scope_cycle_kept.onsa). Today the call in the body of the anonymous function is an edge, and each of the
+// cycles is an E0903 (`two` is an E0901 for the call of a value that is not `rt`, which is in the body of an anonymous function that is not `rt`: R-451).
+
+pub rt fn ap_r(f: rt fn(U32) -> U32, x: U32) -> U32 { f.(x) }
+
+pub rt fn direct(n: U32) -> U32 {
+  let l: rt fn(U32) -> U32 = fn(y: U32) -> U32 { direct(y) }
+  l.(n)
+}
+
+pub rt fn first(n: U32) -> U32 {
+  second(n)
+}
+
+pub rt fn second(n: U32) -> U32 {
+  let l: rt fn(U32) -> U32 = fn(y: U32) -> U32 { first(y) }
+  l.(n)
+}
+
+pub rt fn walk(n: U32) -> U32 {
+  ap_r(fn(y: U32) -> U32 { walk(y) }, n)
+}
+
+pub rt fn one(n: U32) -> fn(U32) -> U32 {
+  two(n)
+}
+
+pub rt fn two(n: U32) -> fn(U32) -> U32 {
+  fn(y: U32) -> U32 { one(y).(y) }
+}

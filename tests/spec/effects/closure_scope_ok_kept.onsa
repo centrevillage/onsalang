@@ -1,0 +1,128 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§8.5", "§6.6", "§4.7", "§10", "§12.2"]
+// fixes = 0
+
+// W6-03 U5/t, S-1032, R-27 (1) (§8.1: "無名関数は、その型の効果行と `rt` に照らして本体を検査する"; §8.5: "`test` の本体では、テストランナーが `Alloc` ... を提供する"; §6.6: "`Alloc` はコンパイラが提供する"): this file has
+// no error, today and after the work: the controls of closure_scope_*_neg.onsa. An anonymous function whose row holds what its body uses (the row that is written, the row of the expected type that has `Alloc`), an
+// anonymous function that uses nothing in a function that has `Alloc` (the row of the outer function is not a reason for an error), a use that the outer function makes outside of the anonymous function, an `rt`
+// anonymous function that calls only `rt` functions, a join in which every branch has its row (a `uses {Alloc}` function, or a written row, or a tuple whose element has the expected type), the body of a `test`, the initializer of a
+// `const`, the default of a field and an associated constant that use `Alloc` themselves, and an anonymous function in them whose type has the row. Each binding is read (E0309).
+
+pub struct Holder {
+  f: fn(U32) -> U32 uses {Alloc} = fn(x: U32) -> U32 { mk(x) },
+  g: fn(U32) -> U32 = fn(x: U32) -> U32 { x + 1 },
+}
+
+pub struct Pt {
+  n: U32,
+}
+
+impl Pt {
+  const F: fn(U32) -> U32 uses {Alloc} = fn(x: U32) -> U32 { mk(x) }
+  const G: fn(U32) -> U32 = fn(x: U32) -> U32 { x * 2 }
+}
+
+pub fn mk(n: U32) -> U32 uses {Alloc} { n }
+
+pub fn ap(f: fn(U32) -> U32, x: U32) -> U32 { f.(x) }
+
+pub fn ap_a(f: fn(U32) -> U32 uses {Alloc}, x: U32) -> U32 uses {Alloc} { f.(x) }
+
+pub rt fn ap_r(f: rt fn(U32) -> U32, x: U32) -> U32 { f.(x) }
+
+pub rt fn fast(n: U32) -> U32 { n }
+
+pub rt fn take_f(f: fn(U32) -> U32) -> U32 { 1 }
+
+const K_CALL: U32 = mk(1)
+
+const K_BLOCK: U32 = {
+  let b: Buf[F32] = Buf.zeroed(4)
+  b.len()
+}
+
+const F_ROW: fn(U32) -> U32 uses {Alloc} = fn(x: U32) -> U32 { mk(x) }
+
+const F_PURE: fn(U32) -> U32 = fn(x: U32) -> U32 { x + 1 }
+
+const FAST: rt fn(U32) -> U32 = fast
+
+pub fn written_row_in_alloc_position(n: U32) -> U32 uses {Alloc} {
+  ap_a(fn(y: U32) -> U32 uses {Alloc} { mk(y) }, n)
+}
+
+pub fn expected_row_in_alloc_position(n: U32) -> U32 uses {Alloc} {
+  ap_a(fn(y: U32) -> U32 { mk(y) }, n)
+}
+
+pub fn written_empty_row_fits_a_pure_position(n: U32) -> U32 {
+  ap(fn(y: U32) -> U32 uses {} { y + 1 }, n)
+}
+
+pub fn let_with_a_written_row_then_call(n: U32) -> U32 uses {Alloc} {
+  let l = fn(y: U32) -> U32 uses {Alloc} { mk(y) }
+  l.(n)
+}
+
+pub fn pure_closure_in_an_alloc_function(n: U32) -> U32 uses {Alloc} {
+  ap(fn(y: U32) -> U32 { y + 1 }, mk(n))
+}
+
+pub fn the_use_is_outside_of_the_closure(n: U32) -> U32 uses {Alloc} {
+  let a = mk(n)
+  ap(fn(y: U32) -> U32 { y + a }, 1)
+}
+
+pub fn generic_outer[A](x: A, n: U32) -> U32 uses {Alloc} {
+  ap_a(fn(y: U32) -> U32 { mk(y) }, n)
+}
+
+pub fn nested_outer_uses_inner_is_pure(n: U32) -> U32 uses {Alloc} {
+  ap_a(fn(y: U32) -> U32 { ap(fn(z: U32) -> U32 { z + 1 }, mk(y)) }, n)
+}
+
+pub fn rt_position_calls_an_rt_function(n: U32) -> U32 {
+  ap_r(fn(y: U32) -> U32 { fast(y) }, n)
+}
+
+pub fn rt_position_calls_an_rt_value(n: U32) -> U32 {
+  ap_r(fn(y: U32) -> U32 { FAST.(y) }, n)
+}
+
+pub rt fn rt_outer_pure_closure(n: U32) -> U32 {
+  take_f(fn(y: U32) -> U32 { y + 1 })
+}
+
+pub fn join_of_pure_closures(c: Bool, n: U32) -> U32 {
+  let f = if c { fn(x: U32) -> U32 { x } } else { fn(x: U32) -> U32 { x + 1 } }
+  f.(n)
+}
+
+pub fn join_with_a_written_row(c: Bool, n: U32) -> U32 uses {Alloc} {
+  let f = if c { mk } else { fn(x: U32) -> U32 uses {Alloc} { mk(x) } }
+  f.(n)
+}
+
+pub fn join_tuple_element_has_the_expected_type(c: Bool, n: U32) -> U32 uses {Alloc} {
+  let p = if c { (mk, 1) } else { (fn(x: U32) -> U32 { mk(x) }, 2) }
+  p.0.(n)
+}
+
+test "a body that allocates itself" {
+  let b: Buf[F32] = Buf.zeroed(4)
+  assert (b.len() == 4)
+}
+
+test "a pure closure in a body" {
+  assert (ap(fn(y: U32) -> U32 { y + 1 }, 1) == 2)
+}
+
+test "a closure with a written row in a body" {
+  let l = fn(y: U32) -> U32 uses {Alloc} { mk(y) }
+  assert (l.(3) == 3)
+}
+
+test "an expected row that has Alloc in a body" {
+  assert (ap_a(fn(y: U32) -> U32 { mk(y) }, 3) == 3)
+}

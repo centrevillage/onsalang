@@ -2,9 +2,9 @@
 // [test]
 // spec = ["§9.1", "§8.1", "§12.2"]
 
-// E0601 (W5-02 U6/t): "無名関数は、期待する関数型の効果行 … に照らして本体を検査する。期待する型が純粋なら、本体で `Alloc` を使えない
-// （外側の関数の効果行には数えない）" (§8.1). The conversion given to `map_err` is expected to be pure (§9.1: "`f` の効果行は空"), so
-// the effect used in the body of an anonymous function is the E0601 of the use even when the row of the outer function has
+// E0601 (W5-02 U6/t): "無名関数は、その型の効果行と `rt` に照らして本体を検査する。本体の使用は外側の関数と外側の無名関数の効果行に数えず ... 期待する型が純粋なら、本体で `Alloc` を使えない
+// ... 効果行に無い使用は E0601 で、位置はその無名関数の最初の使用、修正候補は無く" (§8.1). The conversion given to `map_err` is expected to be pure (§9.1: "`f` の効果行は空"), so
+// the effect used in the body of an anonymous function is the E0601 of the anonymous function itself (S-1032; no candidate) even when the row of the outer function has
 // that effect: the row of the outer function does not cover it. Each function is on one line so that the line of the use and
 // the line of the function are one. One error per function (P-01). The last function is fine: the effect is used outside
 // the body of the anonymous function.

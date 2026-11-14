@@ -1,0 +1,29 @@
+// The functions of another module (W6-03 U5/t, S-1032, R-27 (1), spec §8.1, §15.1), for main.onsa: the row of the type that a function declares is read where the anonymous function is written, whatever the module.
+// The anonymous functions that are written here are checked here, against the rows of the parameters of the functions of this module.
+
+pub struct Task {
+  f: fn(U32) -> U32 uses {Alloc},
+}
+
+pub fn mk(n: U32) -> U32 uses {Alloc} { n }
+
+pub fn heavy(n: U32) -> U32 { n }
+
+pub fn ap(f: fn(U32) -> U32, x: U32) -> U32 { f.(x) }
+
+pub rt fn ap_r(f: rt fn(U32) -> U32, x: U32) -> U32 { f.(x) }
+
+pub fn hold(f: fn(U32) -> U32 uses {Alloc}) -> U32 { 1 }
+
+pub fn lib_pure_position(n: U32) -> U32 uses {Alloc} {
+  ap(fn(y: U32) -> U32 { mk(y) }, n)   //~ E0601 @26
+}
+
+pub fn lib_expected_row_is_fine(n: U32) -> U32 {
+  hold(fn(y: U32) -> U32 { mk(y) })
+}
+
+pub fn lib_outer_and_closure(n: U32) -> U32 {
+  let a = mk(n)   //~ E0601 @11
+  ap(fn(y: U32) -> U32 { mk(y) }, a)
+}

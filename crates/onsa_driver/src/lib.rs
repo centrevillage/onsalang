@@ -144,7 +144,7 @@ impl Analyzed {
     /// fix candidates ask; no command does).
     pub fn unread_units(&self) -> std::collections::BTreeSet<usize> {
         let files: Vec<FileId> = self.pkg.modules.iter().map(|m| m.file).collect();
-        let spans = self.analysis.unread_users(&files);
+        let spans = self.analysis.unread_users(&self.pkg, &files);
         reduce::units_of(self.pkg.modules.iter().map(|m| (m.file, &m.parsed.units)), &spans)
     }
 }

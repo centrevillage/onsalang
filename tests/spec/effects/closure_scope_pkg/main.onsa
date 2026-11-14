@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§10", "§15.1", "§18.1"]
+//
+// [[test.fix]]
+// at = "lib.onsa:27:11"
+// code = "E0601"
+// candidate = 1
+// leaves = ["lib.onsa:28:26 E0601", "main.onsa:37:3 E0601"]
+
+// W6-03 U5/t, S-1032, R-27 (1), R-26 (the second half) (§8.1: "無名関数は、その型の効果行と `rt` に照らして本体を検査する"; §15.1): the rows of the types of the functions of `lib` (the `ap` that is pure, the `ap_r`
+// that is `rt`, the `hold` that has `uses {Alloc}`, the field of `lib.Task`) are the rows that the anonymous function of this module is checked against, so the use of `Alloc` is an E0601 in `closure_of_a_pure_parameter`
+// (the function has `uses {Alloc}` and does not cover it), a call that is not `rt` is an E0901 in `closure_of_an_rt_parameter`, and the parameter and the field that have `uses {Alloc}` hold the use (no
+// error, in a function that has no `uses`). In `lib.onsa` the function `lib_outer_and_closure` has a use of its own before the anonymous function: the candidate inserts ` uses {Alloc}` into its signature, and
+// after it the anonymous function in `lib` is still an E0601, and so is the call of `lib_outer_and_closure` in this module (`calls_the_lib_function`, which had no error): `leaves`. There is no candidate
+// for the anonymous functions. One error per function (P-01).
+
+use lib.{Task, mk, heavy, ap, ap_r, hold, lib_outer_and_closure}
+
+pub fn closure_of_a_pure_parameter(n: U32) -> U32 uses {Alloc} {
+  ap(fn(y: U32) -> U32 { mk(y) }, n)   //~ E0601 @26
+}
+
+pub fn closure_of_an_rt_parameter(n: U32) -> U32 {
+  ap_r(fn(y: U32) -> U32 { heavy(y) }, n)   //~ E0901 @28
+}
+
+pub fn closure_of_a_parameter_with_the_row(n: U32) -> U32 {
+  hold(fn(y: U32) -> U32 { mk(y) })
+}
+
+pub fn closure_of_a_field_with_the_row(n: U32) -> Task {
+  Task { f: fn(y: U32) -> U32 { mk(y) } }
+}
+
+pub fn calls_the_lib_function(n: U32) -> U32 {
+  lib_outer_and_closure(n)
+}

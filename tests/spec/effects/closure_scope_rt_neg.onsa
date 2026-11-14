@@ -1,0 +1,91 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§10", "§18.1"]
+// fixes = 0
+
+// W6-03 U5/t, R-26 (the second half), S-1032 (§8.1: "期待する型が `rt` なら、本体を `rt fn` の規則で検査する"; §10: "`rt` でない関数を呼ばない（E0901）"; "`rt fn` の型の位置には ... 無名関数は、`rt fn` の型を
+// 期待する位置に書いたものだけが `rt` である"): an anonymous function is `rt` where an `rt fn` type is expected (a parameter, an annotated `let`, the return type, the default of a field), and it is checked by the
+// rules of an `rt fn`, whatever the function that writes it is (a plain function, a function that has `uses {Alloc}`, an `rt` function). A call of a function that is not `rt` and has no `Alloc` (`heavy`) and a
+// call of a function value that is not `rt` are an E0901 at the call; a use of `Alloc` (a call of `mk`, an interpolation) is an E0601 (§10 rule 1; the call of `mk` is a use of `Alloc` and a call that
+// is not `rt`, and the E0601 is reported, S-783 B3). There is no candidate (`fixes = 0`). Today the body of such an anonymous function is counted in the function that writes it, which is not `rt`
+// and so does not look at it (R-26). An anonymous function that is not `rt` in an `rt` function is not checked by those rules: closure_scope_rt_ok_flips.onsa, and what it uses is
+// its `Alloc` (`ret_nonrt_alloc`, an E0601 and no E0901), and the E0901 of a call of such a value is at the call (`nonrt_closure_called_in_rt`), not at the call in its body (R-451). One error per function (P-01).
+
+pub fn heavy(n: U32) -> U32 { n }
+
+pub fn mk(n: U32) -> U32 uses {Alloc} { n }
+
+const SLOW: fn(U32) -> U32 = heavy
+
+pub rt fn ap_r(f: rt fn(U32) -> U32, x: U32) -> U32 { f.(x) }
+
+// ---- a parameter of an `rt fn` type
+
+pub fn rt_position_plain_outer(n: U32) -> U32 {
+  ap_r(fn(y: U32) -> U32 { heavy(y) }, n)   //~ E0901 @28
+}
+
+pub fn rt_position_alloc_outer(n: U32) -> U32 uses {Alloc} {
+  ap_r(fn(y: U32) -> U32 { heavy(y) }, n)   //~ E0901 @28
+}
+
+pub rt fn rt_position_rt_outer(n: U32) -> U32 {
+  ap_r(fn(y: U32) -> U32 { heavy(y) }, n)   //~ E0901 @28
+}
+
+pub fn rt_position_value_call(n: U32) -> U32 {
+  ap_r(fn(y: U32) -> U32 { SLOW.(y) }, n)   //~ E0901 @28
+}
+
+pub fn rt_position_calls_alloc_fn(n: U32) -> U32 {
+  ap_r(fn(y: U32) -> U32 { mk(y) }, n)   //~ E0601 @28
+}
+
+pub fn rt_position_alloc_outer_calls_alloc_fn(n: U32) -> U32 uses {Alloc} {
+  ap_r(fn(y: U32) -> U32 { mk(y) }, n)   //~ E0601 @28
+}
+
+pub fn rt_position_interpolates(n: U32) -> U32 uses {Alloc} {
+  ap_r(fn(y: U32) -> U32 {
+    let s = "{y}"   //~ E0601
+    s.len()
+  }, n)
+}
+
+// ---- an annotated `let`, the return type and the default of a field
+
+pub fn annotated_let_plain_outer(n: U32) -> U32 {
+  let l: rt fn(U32) -> U32 = fn(y: U32) -> U32 { heavy(y) }   //~ E0901 @50
+  l.(n)
+}
+
+pub rt fn annotated_let_rt_outer(n: U32) -> U32 {
+  let l: rt fn(U32) -> U32 = fn(y: U32) -> U32 { heavy(y) }   //~ E0901 @50
+  l.(n)
+}
+
+pub fn returns_an_rt_closure() -> rt fn(U32) -> U32 {
+  fn(y: U32) -> U32 { heavy(y) }   //~ E0901 @23
+}
+
+pub rt fn returns_an_rt_closure_in_rt_outer() -> rt fn(U32) -> U32 {
+  fn(y: U32) -> U32 { heavy(y) }   //~ E0901 @23
+}
+
+pub struct Slot {
+  f: rt fn(U32) -> U32 = fn(x: U32) -> U32 { heavy(x) },   //~ E0901 @46
+  n: U32 = 1,
+}
+
+// ---- an `rt` function returns a closure that is not `rt`: its row is empty, and the use of `Alloc` is an E0601 (no E0901: the rules of `rt` are not for it)
+
+pub rt fn ret_nonrt_alloc() -> fn(U32) -> U32 {
+  fn(y: U32) -> U32 { mk(y) }   //~ E0601 @23
+}
+
+// ---- the body of an anonymous function that is not `rt` is not checked by those rules, so the E0901 is at the call of the value, which comes after it
+
+pub rt fn nonrt_closure_called_in_rt(n: U32) -> U32 {
+  let l = fn(y: U32) -> U32 { heavy(y) }
+  l.(n)   //~ E0901 @3
+}

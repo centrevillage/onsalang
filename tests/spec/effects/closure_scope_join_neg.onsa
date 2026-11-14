@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§8.1", "§18.1"]
+// fixes = 0
+
+// W6-03 U5/t, S-1032 ((ii-3)), S-1031 (§4.7: "合流の枝に書いた無名関数は、前の枝の型から引数の型と返り値の型だけを受け、効果行と `rt` は受けない（§8.1 の期待する関数型の無い無名関数）"; §8.1: "期待する関数型が無いのは
+// ... 期待型の無い合流の枝"): an anonymous function that is written as a branch of an `if`, an arm of a `match` or an element of an array that has no expected type has an empty row, whatever the branch
+// before it is (a function that has `uses {Alloc}`), and whatever the order is (the closure comes after that function or before it). So the `Alloc` that its body uses is an E0601 of the anonymous
+// function, and the outer function that has `uses {Alloc}` does not cover it. The row of the join is the sum of the rows, so the call of the joined value needs `Alloc`, and the outer function has
+// it. There is no candidate (`fixes = 0`). The position is the first use of the anonymous function. When two branches are anonymous functions, the first one is reported. A position that has an expected
+// type (an annotation, the return type) gives the whole type to the branches: those are in closure_scope_ok_flips.onsa. One error per function (P-01).
+
+pub fn mk(n: U32) -> U32 uses {Alloc} { n }
+
+pub fn if_closure_second(c: Bool, n: U32) -> U32 uses {Alloc} {
+  let f = if c { mk } else { fn(x: U32) -> U32 { mk(x) } }   //~ E0601 @50
+  f.(n)
+}
+
+pub fn if_closure_first(c: Bool, n: U32) -> U32 uses {Alloc} {
+  let f = if c { fn(x: U32) -> U32 { mk(x) } } else { mk }   //~ E0601 @38
+  f.(n)
+}
+
+pub fn match_closure_second(c: Bool, n: U32) -> U32 uses {Alloc} {
+  let f = match c {
+    true => mk,
+    false => fn(x: U32) -> U32 { mk(x) },   //~ E0601 @34
+  }
+  f.(n)
+}
+
+pub fn match_closure_first(c: Bool, n: U32) -> U32 uses {Alloc} {
+  let f = match c {
+    true => fn(x: U32) -> U32 { mk(x) },   //~ E0601 @33
+    false => mk,
+  }
+  f.(n)
+}
+
+pub fn array_closure_second(n: U32) -> U32 uses {Alloc} {
+  let fs = [mk, fn(x: U32) -> U32 { mk(x) }]   //~ E0601 @37
+  fs[1].(n)
+}
+
+pub fn array_closure_first(n: U32) -> U32 uses {Alloc} {
+  let fs = [fn(x: U32) -> U32 { mk(x) }, mk]   //~ E0601 @33
+  fs[0].(n)
+}
+
+pub fn interpolation_in_the_branch(c: Bool, n: U32) -> U32 uses {Alloc} {
+  let f = if c {
+    mk
+  } else {
+    fn(x: U32) -> U32 {
+      let s = "{x}"   //~ E0601
+      s.len()
+    }
+  }
+  f.(n)
+}
+
+pub fn both_branches_are_closures(c: Bool, n: U32) -> U32 uses {Alloc} {
+  let f = if c { fn(x: U32) -> U32 { mk(x) } } else { fn(x: U32) -> U32 { mk(x + 1) } }   //~ E0601 @38
+  f.(n)
+}

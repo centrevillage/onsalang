@@ -14,7 +14,8 @@ use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::{FileId, Span};
 
 use crate::def::{DefKind, Fields};
-use crate::{Analysis, BodyInfo, DefId, Target, Ty, TyId};
+use crate::uses::rt_edges;
+use crate::{Analysis, BodyInfo, DefId, Package, Target, Ty, TyId, module_of_def};
 
 impl Analysis {
     /// The spans of the defs declared in `files` whose check depends on what
@@ -24,9 +25,9 @@ impl Analysis {
     /// its end (`complete == false`) or read what the check does not read
     /// ([`BodyInfo::read_unread`]), and an rt function an E0903 held back
     /// may be reported in ([`Self::rt_held`]).
-    pub fn unread_users(&self, files: &[FileId]) -> Vec<Span> {
+    pub fn unread_users(&self, pkg: &Package, files: &[FileId]) -> Vec<Span> {
         let reached = self.reached();
-        let rt_held = self.rt_held();
+        let rt_held = self.rt_held(pkg);
         let mut memo = self.held_alias_types();
         let mut out = Vec::new();
         for (i, def) in self.defs.iter().enumerate().filter(|(_, d)| files.contains(&d.span.file)) {
@@ -91,18 +92,16 @@ impl Analysis {
     /// The rt functions that reach one of [`Self::rt_unread`] by the calls of
     /// the rt bodies (§10 rule 5): the E0903 held back is reported at the
     /// first call of its cycle, which may be in any of them, not only in a
-    /// caller of it. A search back from those functions over the calls,
-    /// each function and call once: O(V + E) for V functions and E calls,
-    /// and it ends, as each function is pushed at most once.
-    fn rt_held(&self) -> HashSet<DefId> {
+    /// caller of it. The calls are the edges of the rt stage
+    /// ([`crate::uses::rt_edges`]). A search back from those functions over
+    /// the calls, each function and call once: O(V + E) for V functions and
+    /// E calls, and it ends, as each function is pushed at most once.
+    fn rt_held(&self, pkg: &Package) -> HashSet<DefId> {
         let mut callers: HashMap<DefId, Vec<DefId>> = HashMap::default();
         for (&id, b) in self.bodies.iter().filter(|(id, _)| self.rt_with_body(**id)) {
-            for t in b.targets.values() {
-                if let Target::Fn { def, .. } | Target::Method { def, .. } = t
-                    && self.rt_with_body(*def)
-                {
-                    callers.entry(*def).or_default().push(id);
-                }
+            let Some(m) = module_of_def(pkg, self, id) else { continue };
+            for (_, callee) in rt_edges(self, &m.parsed.ast, b) {
+                callers.entry(callee).or_default().push(id);
             }
         }
         let mut todo: Vec<DefId> = (0..self.defs.len() as u32).map(DefId).filter(|&id| self.rt_unread(id)).collect();

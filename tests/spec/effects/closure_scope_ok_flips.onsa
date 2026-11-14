@@ -1,0 +1,96 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§4.7", "§12.2"]
+// fixes = 0
+
+// W6-03 U5/t, S-1032, R-27 (1), S-1031 (§8.1: "本体の使用は外側の関数と外側の無名関数の効果行に数えず ... 外側が数えるのは、その関数値の呼び出しである"; §4.7 / §8.1: the position that has an expected type gives the whole
+// type, the row and `rt`, to an anonymous function): this file has no error. A function that has no `uses {Alloc}` writes an anonymous function that uses `Alloc`, and the row of the type of the anonymous function holds
+// it (the row that is written, the row of the function type that is expected: a parameter, an annotated `let` and the branches and elements under it, the place of an assignment, the return type, a field, a nested anonymous function, an
+// `Some(…)` or a tuple that is in the later branch of a join, whose element has the expected type, S-1032), while the outer function only passes the value on (`hold` takes it and calls nothing). The outer function
+// does not count the use in the body, so none of them is an error. Today the use in the body is counted in the outer function, and each of them is an E0601 at the use. The forms that are not fine are in
+// closure_scope_row_neg.onsa, closure_scope_join_neg.onsa and closure_scope_nested_neg.onsa. Each binding is read (E0309).
+
+pub struct Task {
+  f: fn(U32) -> U32 uses {Alloc},
+}
+
+pub fn mk(n: U32) -> U32 uses {Alloc} { n }
+
+pub fn ap(f: fn(U32) -> U32, x: U32) -> U32 { f.(x) }
+
+pub fn hold(f: fn(U32) -> U32 uses {Alloc}) -> U32 { 1 }
+
+pub fn hold_g[A: Copy](f: fn(A) -> A uses {Alloc}, x: A) -> A { x }
+
+pub rt fn hold_r(f: fn(U32) -> U32 uses {Alloc}) -> U32 { 1 }
+
+pub fn expected_row_in_a_plain_function(n: U32) -> U32 {
+  hold(fn(y: U32) -> U32 { mk(y) })
+}
+
+pub fn expected_row_generic_callee(n: U32) -> U32 {
+  hold_g(fn(y: U32) -> U32 { mk(y) }, n)
+}
+
+pub fn expected_row_in_a_loop(n: U32) -> U32 {
+  var total = 0
+  for _ in 0 ..< n {
+    total = total + hold(fn(y: U32) -> U32 { mk(y) })
+  }
+  total
+}
+
+pub rt fn expected_row_in_an_rt_function(n: U32) -> U32 {
+  hold_r(fn(y: U32) -> U32 { mk(y) })
+}
+
+pub fn written_row_in_a_let(n: U32) -> U32 {
+  let l = fn(y: U32) -> U32 uses {Alloc} { mk(y) }
+  hold(l)
+}
+
+pub fn annotated_let_gives_the_row_to_the_branches(c: Bool) -> U32 {
+  let f: fn(U32) -> U32 uses {Alloc} = if c { mk } else { fn(x: U32) -> U32 { mk(x) } }
+  hold(f)
+}
+
+pub fn annotated_array_gives_the_row_to_the_elements() -> U32 {
+  let fs: [fn(U32) -> U32 uses {Alloc}; 2] = [mk, fn(x: U32) -> U32 { mk(x) }]
+  hold(fs[1])
+}
+
+pub fn assignment_gives_the_row_of_the_place(n: U32) -> U32 {
+  var f: fn(U32) -> U32 uses {Alloc} = mk
+  f = fn(x: U32) -> U32 { mk(x) }
+  hold(f)
+}
+
+pub fn returns_a_closure_with_the_row_of_the_return_type() -> fn(U32) -> U32 uses {Alloc} {
+  fn(x: U32) -> U32 { mk(x) }
+}
+
+pub fn field_of_a_literal_gives_the_row(n: U32) -> Task {
+  Task { f: fn(x: U32) -> U32 { mk(x) } }
+}
+
+pub fn written_row_in_a_branch(c: Bool) -> U32 {
+  let f = if c { mk } else { fn(x: U32) -> U32 uses {Alloc} { mk(x) } }
+  hold(f)
+}
+
+pub fn tuple_element_in_the_later_branch(c: Bool) -> U32 {
+  let p = if c { (mk, 1) } else { (fn(x: U32) -> U32 { mk(x) }, 2) }
+  hold(p.0)
+}
+
+pub fn some_argument_in_the_later_branch(c: Bool) -> U32 {
+  let o = if c { Some(mk) } else { Some(fn(x: U32) -> U32 { mk(x) }) }
+  match o {
+    Some(f) => hold(f),
+    None => 0,
+  }
+}
+
+pub fn inner_closure_has_its_own_row(n: U32) -> U32 {
+  ap(fn(y: U32) -> U32 { hold(fn(z: U32) -> U32 { mk(z) }) }, n)
+}

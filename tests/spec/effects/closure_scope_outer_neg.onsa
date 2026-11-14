@@ -1,0 +1,81 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§8.5", "§6.6", "§4.4", "§11.8", "§12.2"]
+// fixes = 0
+
+// W6-03 U5/t, S-1032, R-27 (1), R-359 (§8.1: "無名関数は、その型の効果行と `rt` に照らして本体を検査する。本体の使用は外側の関数と外側の無名関数の効果行に数えず"; §8.5: "`test` の本体では、テストランナーが `Alloc` ...
+// を提供する"; §6.6: "`Alloc` はコンパイラが提供する"): the body of a `test`, the initializer of a `const` (and of an associated constant), the default value of a field and a function that is `rt`
+// all have `Alloc`, or may have it, for their own uses (closure_scope_ok_kept.onsa), but the anonymous function that is written in them is checked against the row of its own type. So an anonymous function
+// that is a pure parameter (`ap`, the property `p: fn(T) -> Bool` of `check`, §11.8), the value of a `const` of a pure function type, the default of a field or a constant whose type is pure, or a local that
+// has no expected type, and that uses `Alloc`, is an E0601 of the anonymous function. The position is its first use (the name of an owned parameter for its drop), there is no candidate (`fixes = 0`),
+// and a unit that is a field default or an associated constant is a unit of its own. A `Random` that `check` uses is not checked in this version (`std.test.check` is in a `test`, where the runner
+// gives it), so the property forms below do not depend on it. One error per unit (P-01).
+
+use std.test.{check, gen}
+
+pub fn mk(n: U32) -> U32 uses {Alloc} { n }
+
+pub fn ap(f: fn(U32) -> U32, x: U32) -> U32 { f.(x) }
+
+pub fn ap_b(f: fn(move Buf[F32]) -> U32, move x: Buf[F32]) -> U32 { f.(move x) }
+
+pub rt fn take_f(f: fn(U32) -> U32) -> U32 { 1 }
+
+// ---- a `test` body
+
+test "a closure that calls a function with Alloc" {
+  assert (ap(fn(y: U32) -> U32 { mk(y) }, 1) == 1)   //~ E0601 @34
+}
+
+test "a property that creates a buffer" {
+  check(10, gen.u32(0, 9), fn(x: U32) -> Bool {
+    let b: Buf[F32] = Buf.zeroed(x)   //~ E0601
+    b.len() == x
+  })
+}
+
+test "a property that interpolates" {
+  check(10, gen.u32(0, 9), fn(x: U32) -> Bool {
+    let s = "{x}"   //~ E0601
+    s.len() > 0
+  })
+}
+
+test "a closure that drops its owned parameter" {
+  assert (ap_b(fn(move s: Buf[F32]) -> U32 { 1 }, Buf.zeroed(2)) == 1)   //~ E0601 @24
+}
+
+// ---- the initializer of a `const`
+
+const PURE_FN: fn(U32) -> U32 = fn(x: U32) -> U32 { mk(x) }   //~ E0601 @53
+
+const LOCAL_FN: fn(U32) -> U32 = {
+  let l = fn(y: U32) -> U32 { mk(y) }   //~ E0601 @31
+  l
+}
+
+// ---- the default value of a field and an associated constant
+
+pub struct Holder {
+  f: fn(U32) -> U32 = fn(x: U32) -> U32 { mk(x) },   //~ E0601 @43
+  n: U32 = 1,
+}
+
+pub struct Pt {
+  n: U32,
+}
+
+impl Pt {
+  const F: fn(U32) -> U32 = fn(x: U32) -> U32 { mk(x) }   //~ E0601 @49
+}
+
+// ---- a function that is `rt`: the anonymous function is not `rt` here, so what it uses is `Alloc`, not a call that is not `rt`
+
+pub rt fn rt_outer_pure_position(n: U32) -> U32 {
+  take_f(fn(y: U32) -> U32 { mk(y) })   //~ E0601 @30
+}
+
+pub rt fn rt_outer_local_closure(n: U32) -> U32 {
+  let l = fn(y: U32) -> U32 { mk(y) }   //~ E0601 @31
+  l.(n)
+}

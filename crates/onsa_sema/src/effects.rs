@@ -9,7 +9,7 @@ use onsa_syntax::ast::{ItemKind, TypeKind};
 
 use crate::def::DefKind;
 use crate::resolve::Entity;
-use crate::uses::{Record, Use};
+use crate::uses::{Record, Scope, Use};
 use crate::{Analysis, DefId, Package, module_of_def};
 
 /// The E0601 of the bodies of `records` ([`crate::uses::records`]): for
@@ -18,30 +18,36 @@ pub(crate) fn check_all(pkg: &Package, a: &Analysis, records: &[Record]) -> Vec<
     let mut diags = Vec::new();
     for r in records {
         let _scope = onsa_diag::internal::item_scope(a.def(r.id).span);
-        diags.extend(r.lacking(a).into_iter().filter_map(|(effect, u)| first_use(pkg, a, r, effect, u)));
+        diags.extend(r.lacking(a).into_iter().filter_map(|(scope, effect, u)| first_use(pkg, a, r, scope, effect, u)));
     }
     diags
 }
 
-/// The E0601 of `u`, the first use in the body of `r` of `effect`, which its
-/// row lacks: at the use (S-82, S-783). Where the function is not `rt`, the
-/// fix inserts the effect into the signature; an `rt` one cannot have
-/// `Alloc` (§10 rule 1), which a note says, with no fix.
-fn first_use(pkg: &Package, a: &Analysis, r: &Record, effect: DefId, u: &Use) -> Option<Diagnostic> {
+/// The E0601 of `u`, the first use in `scope` of the body of `r` of
+/// `effect`, which its row lacks: at the use (S-82, S-783). Where the
+/// function is not `rt`, the fix inserts the effect into the signature; an
+/// `rt` one cannot have `Alloc` (§10 rule 1), which a note says, with no fix.
+/// An anonymous function has no fix, and a note says how its row is decided
+/// (§8.1, S-1041).
+fn first_use(pkg: &Package, a: &Analysis, r: &Record, scope: &Scope, effect: DefId, u: &Use) -> Option<Diagnostic> {
     let module = module_of_def(pkg, a, r.id)?;
     let (ast, text) = (&module.parsed.ast, &module.text);
     let def = a.def(r.id);
-    let DefKind::Fn(f) = &def.kind else { return None };
     let src = |span: Span| text[span.start as usize..span.end as usize].to_string();
     let name = &a.def(effect).name;
-    let message = format!(
-        "{}: that needs `{name}`, which is not in the effect row of `{}` (§8.1)",
-        u.describe(a, ast, &src),
-        def.name
-    );
+    let of = scope.closure.map_or_else(|| format!("`{}`", def.name), |_| "the anonymous function".into());
+    let message =
+        format!("{}: that needs `{name}`, which is not in the effect row of {of} (§8.1)", u.describe(a, ast, &src));
     let d = Diagnostic::new(Stage::Effects, Code::E0601, u.at, message).with_found(src(u.at));
     let d = u.left_at().into_iter().fold(d, |d, x| d.with_note(x, "left here"));
-    if f.rt {
+    if let Some(c) = scope.closure {
+        // SPEC-GAP(S-1041): no fix; one note of how its row is decided (W6-03 U6).
+        let head = ast.expr(c).span;
+        let why = "an anonymous function has the effect row it writes, else that of the function type expected where it is, else none (§8.1)";
+        return Some(d.with_note(Span::new(head.file, head.start, head.start + 2), why));
+    }
+    let DefKind::Fn(_) = &def.kind else { return Some(d) };
+    if scope.rt {
         let why = format!("`{}` is `rt`, which cannot have `{name}` in its effect row (§10 rule 1)", def.name);
         return Some(d.with_note(def.name_span, why));
     }

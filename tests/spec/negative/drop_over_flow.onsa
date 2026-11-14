@@ -6,7 +6,7 @@
 // to an `inout` argument whose old value needs `Alloc` to drop is an E0601 (an `rt fn` too, S-77) wherever it is written in the body: in a loop (the first run drops the value that the call received,
 // the later runs the value that the run before wrote), in a loop over a borrowed array, over a `move` array and over a range (the element of the target), in an inner loop, in a branch of an `if` (one branch is
 // enough: the effect row does not depend on the path; the other branch that panics drops nothing, §9.2, but the branch that assigns does), in both branches, in an arm of a `match`, in a branch inside a loop, and in an anonymous function that assigns its own `inout` parameter (its body is
-// checked against the effect row of the type that is expected, §8.1: pure for `fn(inout Str)`, `rt` for `rt fn(inout Str)`). This version counts no drop by an assignment (R-32), so none of these is reported
+// checked against the effect row of the type that is expected, §8.1: pure for `fn(inout Str)`, `rt` for `rt fn(inout Str)`; the error is the anonymous function's own, with no candidate, S-1032). This version counts no drop by an assignment (R-32), so none of these is reported
 // today. The forms with a `?` that leaves before the assignment, and the ones that need more than one line, are not here (S-783). The functions are one-liners. One error per function (P-01).
 
 pub rt fn mk(n: U32) -> Str { "x" }

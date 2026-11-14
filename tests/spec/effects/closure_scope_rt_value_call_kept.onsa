@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§10", "§8.1", "§4.7"]
+// fixes = 0
+
+// W6-03 U5/t, R-451 (§10: "`rt` の関数の中で `rt` でない無名関数を呼ぶと E0901 で、`rt fn` の型の注釈を書く（`let l: rt fn(U32) -> U32 = fn(y) { y }`）"; "期待型の無い合流の型は全ての枝が `rt` のときだけ `rt` である"): a call of a function value
+// that is not `rt`, in an `rt` function, is an E0901 at the call: the value of an anonymous function that has no expected type (a `let` without a type, the callee on the spot), a parameter that is not `rt`, and a join
+// of an `rt` function and an anonymous function (the anonymous function is not `rt`, so the join is not). A value that has the annotation `rt fn` is fine, and so is a value of an `rt` function. These are the same today and
+// after the work: the call is the use that the `rt` function makes. One error per function (P-01).
+
+pub rt fn fast(n: U32) -> U32 { n }
+
+pub rt fn call_a_local_closure(n: U32) -> U32 {
+  let l = fn(y: U32) -> U32 { y }
+  l.(n)   //~ E0901 @3
+}
+
+pub rt fn call_a_closure_on_the_spot(n: U32) -> U32 {
+  (fn(y: U32) -> U32 { y }).(n)   //~ E0901 @3
+}
+
+pub rt fn call_a_parameter(f: fn(U32) -> U32, n: U32) -> U32 {
+  f.(n)   //~ E0901 @3
+}
+
+pub rt fn call_a_join(c: Bool, n: U32) -> U32 {
+  let f = if c { fast } else { fn(y: U32) -> U32 { y } }
+  f.(n)   //~ E0901 @3
+}
+
+pub rt fn call_an_annotated_closure_is_fine(n: U32) -> U32 {
+  let l: rt fn(U32) -> U32 = fn(y: U32) -> U32 { y + 1 }
+  l.(n)
+}
+
+pub rt fn call_an_rt_parameter_is_fine(f: rt fn(U32) -> U32, n: U32) -> U32 {
+  f.(n)
+}
+
+pub rt fn call_a_join_of_rt_functions_is_fine(c: Bool, n: U32) -> U32 {
+  let f = if c { fast } else { fast }
+  f.(n)
+}

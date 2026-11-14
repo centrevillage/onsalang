@@ -1030,13 +1030,6 @@ note = "BITS を含む演算の長さと計算した定数の長さが E0200（e
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/negative/map_err_effects_outer_row.onsa"
-reasons = ["R-359"]
-until = "W6-03"
-note = "外側の関数が uses {Alloc} だと、純粋な関数型の引数に渡した無名関数の本体の確保が E0601 にならない（§8.1、前から）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/semantics/panic_arms_scalar.onsa"
 reasons = ["S-40", "R-52"]
 until = "W8-06"

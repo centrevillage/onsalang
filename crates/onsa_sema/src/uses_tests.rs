@@ -180,3 +180,99 @@ pub rt fn rid(move h: Hold) -> Hold { move h }
     ];
     assert_eq!(got, want);
 }
+
+/// The scope of each use (§8.1): the innermost anonymous function whose span
+/// holds its place, or the body; the call of an anonymous function written
+/// where it is called is the body's (W6-03 U5).
+#[test]
+fn a_use_is_of_the_innermost_scope_that_holds_it() {
+    let src = format!(
+        "{STD}pub fn ap(g: fn(U32) -> U32, n: U32) -> U32 {{ g.(n) }}
+pub fn f(n: U32) -> U32 uses {{Alloc}} {{
+  let s = \"{{n}}\"
+  ap(fn(y: U32) -> U32 {{ ap(fn(z: U32) -> U32 {{ mk(z).len() }}, pure(y)) }}, n) + (fn(x: U32) -> U32 {{ x }}).(n)
+}}
+"
+    );
+    let p = pkg(&[("main", &src)]);
+    let a = analyze(&p);
+    let id = def(&a, "f");
+    let all = records(&p, &a);
+    let r = all.iter().find(|r| r.id == id).expect("a record of f");
+    let text = |s: onsa_diag::Span| &src[s.start as usize..s.end as usize];
+    let ast = &crate::module_of_def(&p, &a, id).expect("its module").parsed.ast;
+    let head = |i: u32| r.scopes[i as usize].closure.map(|c| &text(ast.expr(c).span)[..8]);
+    let got: Vec<_> = r.uses.iter().map(|u| (text(u.at), head(u.scope))).collect();
+    let want = [
+        ("s", None),
+        ("\"{n}\"", None),
+        ("ap(fn(y: U32) -> U32 { ap(fn(z: U32) -> U32 { mk(z).len() }, pure(y)) }, n)", None),
+        ("ap(fn(z: U32) -> U32 { mk(z).len() }, pure(y))", Some("fn(y: U3")),
+        ("mk(z)", Some("fn(z: U3")),
+        ("mk(z)", Some("fn(z: U3")),
+        ("mk(z).len()", Some("fn(z: U3")),
+        ("pure(y)", Some("fn(y: U3")),
+        ("(fn(x: U32) -> U32 { x }).(n)", None),
+    ];
+    assert_eq!(got, want);
+    assert!(r.scopes.iter().skip(1).all(|s| !s.rt && s.row.effects().is_empty()));
+}
+
+/// The scope of a use is decided by its place alone; a drop's agrees with
+/// the innermost anonymous function the modes stage gives each of its drop
+/// points (`DropPoint::closure`, D-15): the value as written and every point
+/// of it are in one scope (W6-03 U5).
+#[test]
+fn the_scope_of_a_drop_is_the_one_of_its_points() {
+    let bodies = [
+        "pub fn f(n: U32) -> U32 uses {Alloc} { ap(fn(move b: Buf[F32]) -> U32 { b.len() }, mk(n)) }",
+        "pub fn f(n: U32) -> U32 uses {Alloc} { ap(fn(move _: Buf[F32]) -> U32 { 0 }, mk(n)) }",
+        "pub fn f(n: U32) -> U32 uses {Alloc} { ap(fn(move b: Buf[F32]) -> U32 { let c = mk(b.len())\n if c.len() > 2 { return 0 }\n mk(c.len()).len() }, mk(n)) }",
+        "pub fn f(n: U32) -> U32 uses {Alloc} { let g = fn(y: U32) -> U32 { let h = fn(move xs: [Buf[F32]; 2]) -> U32 { for s in move xs { if s.len() > 0 { break } }\n 0 }\n h.([mk(y), mk(y)]) }\n g.(n) }",
+        "pub fn f(move t: (Buf[F32], Str), n: U32) -> U32 uses {Alloc} { let g = fn(move u: (Buf[F32], Str)) -> U32 { u.0.len() }\n g.(move t) + n }",
+        "pub fn f(n: U32) -> Option[U32] uses {Alloc} { let g = fn(r: Option[U32]) -> Option[Option[Buf[F32]]] { Some(wrap(mk(1), r?)) }\n Some(match g.(Some(n))? { Some(b) => b.len(), None => 0 }) }",
+    ];
+    let mut points = 0;
+    for body in bodies {
+        let src =
+            format!("{STD}pub fn ap(g: fn(move Buf[F32]) -> U32, move b: Buf[F32]) -> U32 {{ g.(move b) }}\n{body}\n");
+        let p = pkg(&[("main", &src)]);
+        let a = analyze(&p);
+        let id = def(&a, "f");
+        let all = records(&p, &a);
+        let r = all.iter().find(|r| r.id == id).unwrap_or_else(|| panic!("no record of f: {:?}", a.diagnostics));
+        let ast = &crate::module_of_def(&p, &a, id).expect("its module").parsed.ast;
+        let closures = crate::uses::Closures::of(ast, &a.bodies[&id]);
+        let scope_of = |at| closures.around(at).and_then(|i| r.scopes[i + 1].closure);
+        for d in &a.bodies[&id].drops {
+            assert_eq!(scope_of(d.at), d.closure, "{body}: the point at {:?}", d.at);
+            points += usize::from(d.closure.is_some());
+        }
+        for u in &r.uses {
+            if let What::Drop { points, .. } = &u.what {
+                assert!(points.iter().all(|&p| scope_of(p) == r.scopes[u.scope as usize].closure), "{body}");
+            }
+        }
+    }
+    assert!(points >= 8, "{points} drop points in anonymous functions");
+}
+
+/// The edges of the rt recursion are the calls by name of the body itself
+/// (§10 rule 5, S-1057): not those of an anonymous function in it, `rt` or
+/// not, and not a function used as a value.
+#[test]
+fn the_rt_edges_are_the_calls_of_the_body_itself() {
+    let src = "pub rt fn ap(g: rt fn(U32) -> U32, n: U32) -> U32 { g.(n) }
+pub rt fn h(n: U32) -> U32 { n }
+pub rt fn k(n: U32) -> U32 { h(n) + ap(fn(y: U32) -> U32 { h(y) }, n) + ap(h, n) }
+";
+    let p = pkg(&[("main", src)]);
+    let a = analyze(&p);
+    let id = def(&a, "k");
+    let ast = &crate::module_of_def(&p, &a, id).expect("its module").parsed.ast;
+    let got: Vec<_> = (crate::uses::rt_edges(&a, ast, &a.bodies[&id]).into_iter())
+        .map(|(at, c)| (&src[at.start as usize..at.end as usize], a.def(c).name.as_str()))
+        .collect();
+    let want = [("h(n)", "h"), ("ap(fn(y: U32) -> U32 { h(y) }, n)", "ap"), ("ap(h, n)", "ap")];
+    assert_eq!(got, want);
+}

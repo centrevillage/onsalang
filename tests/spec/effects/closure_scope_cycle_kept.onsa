@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§10", "§18.1"]
+// fixes = 0
+
+// W6-03 U5/t, S-1057 (§10 rule 5: "呼び先が名前で決まる呼び出しの循環は検査で報告し（循環ごとに一つ ...）... 数えるのは、`rt` の関数の本体そのものに書いた呼び出しである"; §18.1: the position is the first of
+// the calls of the functions of the cycle in the order of the source): a cycle that closes through calls that are written in the bodies of the `rt` functions themselves is an E0903, and an anonymous function in the
+// body that calls the function does not remove it (`mixed_a` and `mixed_b`: the call of the body is the edge, and the call in the anonymous function, which comes later in the source, is no edge). One error for
+// a cycle, at the first of its calls (the functions of the cycle that come after have no error). These are errors today and stay errors; the forms that are no error after S-1057 are in closure_scope_cycle_ok.onsa and the
+// forms in which the place moves are in closure_scope_cycle_neg.onsa.
+
+pub rt fn self_call(n: U32) -> U32 {
+  self_call(n)   //~ E0903 @3
+}
+
+pub rt fn ping(n: U32) -> U32 {
+  pong(n)   //~ E0903 @3
+}
+
+pub rt fn pong(n: U32) -> U32 {
+  ping(n)
+}
+
+pub rt fn ring_a(n: U32) -> U32 {
+  ring_b(n)   //~ E0903 @3
+}
+
+pub rt fn ring_b(n: U32) -> U32 {
+  ring_c(n)
+}
+
+pub rt fn ring_c(n: U32) -> U32 {
+  ring_a(n)
+}
+
+pub rt fn mixed_a(n: U32) -> U32 {
+  mixed_b(n)   //~ E0903 @3
+}
+
+pub rt fn mixed_b(n: U32) -> U32 {
+  let l: rt fn(U32) -> U32 = fn(y: U32) -> U32 { mixed_a(y) }
+  mixed_a(l.(n))
+}

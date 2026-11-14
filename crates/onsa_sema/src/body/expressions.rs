@@ -637,6 +637,9 @@ impl<'a> Checker<'a> {
         let effects = match effects {
             // As the names stage read it (S-738).
             Some(_) => self.names.effects.get(&e).cloned().ok_or_else(|| self.held_stop())?,
+            // A later branch of a merge takes no effects (§4.7, S-1032 (ii-3)).
+            // SPEC-GAP(S-1061): a branch of a branch (`else if`, `{ … }` of an arm) too.
+            None if self.joining => crate::ty::EffectSet::default(),
             None => exp_fn.as_ref().map(|f| f.effects.clone()).unwrap_or_default(),
         };
         if let (Some(f), Some(exp)) = (&exp_fn, expected)
@@ -678,7 +681,7 @@ impl<'a> Checker<'a> {
                 None => self.fresh(),
             },
         };
-        // A later branch of a merge takes no `rt` (§4.7; its effects, S-1032).
+        // A later branch of a merge takes no `rt` (§4.7).
         let rt = !self.joining && exp_fn.as_ref().is_some_and(|f| f.rt);
         // The body runs in its own frame: `return` targets the closure (its
         // captures are the record's, §5.3).

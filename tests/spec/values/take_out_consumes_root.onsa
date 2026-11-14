@@ -13,7 +13,7 @@
 // フィールドは複製されるので、`s` を消費しない"), so the root can be used after them. A `var` that was taken from is usable
 // again after an assignment of the whole ("移した `var` は全体に代入すると再び使え", S-789), and the control flow
 // is counted as for any move: the arms of a branch, a loop that gives the whole back before the next iteration, the owned
-// binding of a `match move`, the body of an anonymous function, a generic type. The rest of the root is dropped on
+// binding of a `match move`, the body of an anonymous function (its type has `uses {Alloc}`: it is checked against that row, W6-03 U5), a generic type. The rest of the root is dropped on
 // the spot, which needs `Alloc` when it holds a `Buf` or a Shared value (§12.2), so every function here has `uses {Alloc}`;
 // the case where it holds only Copy values is values/take_out_rest_copy.onsa, and the effects are in
 // negative/take_out_rest_alloc.onsa. The uses after the take-out are the E0704 of negative/take_out_use_after.onsa.
@@ -82,7 +82,7 @@ pub fn keep(move n: Str) uses {Alloc} {}
 
 pub fn take_all(move xs: [Buf[F32]; 2]) uses {Alloc} {}
 
-pub fn apply(f: fn(U32) -> U32) -> U32 {
+pub fn apply(f: fn(U32) -> U32 uses {Alloc}) -> U32 uses {Alloc} {
   f.(1)
 }
 

@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§10", "§18.1"]
+// fixes = 0
+
+// W6-03 U5/t, S-1057 (§10 rule 5: "数えるのは、`rt` の関数の本体そのものに書いた呼び出しである。無名関数の本体に書いた呼び出しは、その無名関数のもので、それを書いた関数の呼び出しに数えない"; §18.1: the
+// position of an E0903 is the first of the calls of the functions of the cycle in the order of the source): the cycle is still an E0903 when the body of the `rt` function has the call that closes it, and the position
+// is that call, not the call in the anonymous function that comes before it in the source (an `rt` one, or one that is not `rt`): the call in the anonymous function is no edge, so it is not one of the calls of the
+// cycle. Today the call in the anonymous function is one of them and it is the first, so the error is reported on the line of the anonymous function. One error for a cycle (P-01).
+
+pub rt fn take_g(f: fn(U32) -> U32) -> U32 { 1 }
+
+pub rt fn late_self(n: U32) -> U32 {
+  let l: rt fn(U32) -> U32 = fn(y: U32) -> U32 { late_self(y) }
+  late_self(l.(n))   //~ E0903 @3
+}
+
+pub rt fn late_a(n: U32) -> U32 {
+  let l: rt fn(U32) -> U32 = fn(y: U32) -> U32 { late_b(y) }
+  late_b(l.(n))   //~ E0903 @3
+}
+
+pub rt fn late_b(n: U32) -> U32 {
+  late_a(n)
+}
+
+pub rt fn late_nonrt(n: U32) -> U32 {
+  let l = fn(y: U32) -> U32 { late_nonrt(y) }
+  late_nonrt(take_g(l))   //~ E0903 @3
+}

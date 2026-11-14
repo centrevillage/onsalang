@@ -1,0 +1,3 @@
+[package]
+name = "closure_scope_pkg"
+edition = "2026"

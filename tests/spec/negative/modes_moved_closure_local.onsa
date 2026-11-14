@@ -7,7 +7,7 @@
 // after the move, or a move in a loop of the closure) is the E0704 of §5.2 ("移した変数はその後で使えない").
 // The review's `m6` is the double move in a closure passed to `array.from_fn`. The value that is declared in
 // the closure is not a captured value (an Affine value of the outside cannot be captured, E0712 in
-// negative/closure_capture_inout_affine.onsa). The error is at the second use. One error per function (P-01).
+// negative/closure_capture_inout_affine.onsa). The error is at the second use. One error per function (P-01). `apply` takes a function type that has `uses {Alloc}`, so the closures that create and take a `Buf` are checked against that row (the control `move_once_in_a_closure` has no error, W6-03 U5, S-1032).
 
 use std.array.from_fn
 
@@ -19,7 +19,7 @@ pub fn peek(b: Buf[F32]) -> I32 {
   1
 }
 
-pub fn apply(f: fn(U32) -> I32) -> I32 {
+pub fn apply(f: fn(U32) -> I32 uses {Alloc}) -> I32 uses {Alloc} {
   f.(1)
 }
 
