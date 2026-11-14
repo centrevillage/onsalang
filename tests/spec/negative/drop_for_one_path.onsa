@@ -5,57 +5,57 @@
 // W6-02 U2b/t, R-32 (§5.4: "`for s in move xs`: 所有。`xs` を消費する / 要素ごとに起きる"; §12.2: "所有する Shared 値・`Buf` と、
 // それらを含む値の破棄: 要る"; §8.1: 暗黙の `Alloc` に所有する値の破棄を含む; §10 rule 1): the binding of `for s in move xs` is an owned
 // value of each iteration, so a binding that is moved on one path of the body and not on another is live at the end of the iteration on
-// the other path, and the drop there needs `Alloc`. A function without `uses {Alloc}` is an E0601 and an `rt fn` an E0901 (the code of a
-// drop in an `rt fn` of this version, the same as negative/drop_end_one_path.onsa). The iterated value is a fixed-length array
+// the other path, and the drop there needs `Alloc`. A function without `uses {Alloc}` is an E0601 and an `rt fn` too (S-77,
+// the same as negative/drop_end_one_path.onsa). The iterated value is a fixed-length array
 // `[Buf[F32]; 2]` consumed by `move` (§12.2: its container needs no drop, so the error is from the binding alone). This version counts a
 // binding moved anywhere in the body as moved on every path, so none of these is reported today (R-32). The shapes of the body are those of
 // negative/drop_end_one_path_unit.onsa (the statements that have no value to carry the moved binding out: an `if` without `else`, a
 // `match` whose arms are `()`, the right operand of `&&` and `||`, §3.5) and of the `if`/`match` that moves in some arms; the nested
 // loops, the patterns of the binding and the other element types are in negative/drop_for_one_path_nested.onsa. The moves on every path
 // that stay legal are in negative/drop_for_contrast.onsa. The helpers `sink` and `eat` are `rt` functions that drop their argument, so
-// their own E0901 is reported today and after (an `rt` function cannot consume a `Buf` without a drop of its own, the same as in
+// their own E0601 is reported today and after (an `rt` function cannot consume a `Buf` without a drop of its own, the same as in
 // negative/drop_end_one_path_unit.onsa). The callers are one-liners, so that the line does not depend on where the drop is reported
 // (S-783). One error per function (P-01).
 
-pub rt fn sink(move b: Buf[F32]) {}   //~ E0901
+pub rt fn sink(move b: Buf[F32]) {}   //~ E0601
 
-pub rt fn eat(move b: Buf[F32]) -> Bool { true }   //~ E0901
+pub rt fn eat(move b: Buf[F32]) -> Bool { true }   //~ E0601
 
 // ------------------------------------------------------------------ `if` without `else`
 
 pub fn no_else(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c { sink(move s) } } }   //~ E0601
 
-pub rt fn rt_no_else(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c { sink(move s) } } }   //~ E0901
+pub rt fn rt_no_else(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c { sink(move s) } } }   //~ E0601
 
 pub fn no_else_nested(c: Bool, d: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c { if d { sink(move s) } } } }   //~ E0601
 
-pub rt fn rt_no_else_nested(c: Bool, d: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c { if d { sink(move s) } } } }   //~ E0901
+pub rt fn rt_no_else_nested(c: Bool, d: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c { if d { sink(move s) } } } }   //~ E0601
 
 pub fn no_else_outer_else(c: Bool, d: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c { if d { sink(move s) } } else { sink(move s) } } }   //~ E0601
 
 pub fn empty_else(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c { sink(move s) } else {} } }   //~ E0601
 
-pub rt fn rt_empty_then(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c {} else { sink(move s) } } }   //~ E0901
+pub rt fn rt_empty_then(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c {} else { sink(move s) } } }   //~ E0601
 
-pub rt fn rt_chain_without_last_else(c: Bool, d: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c { sink(move s) } else if d { sink(move s) } } }   //~ E0901
+pub rt fn rt_chain_without_last_else(c: Bool, d: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c { sink(move s) } else if d { sink(move s) } } }   //~ E0601
 
 pub fn chain_unit_middle(c: Bool, d: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c {} else if d { sink(move s) } else {} } }   //~ E0601
 
-pub rt fn rt_chain_empty_last(c: Bool, d: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c { sink(move s) } else if d { sink(move s) } else {} } }   //~ E0901
+pub rt fn rt_chain_empty_last(c: Bool, d: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c { sink(move s) } else if d { sink(move s) } else {} } }   //~ E0601
 
 pub fn read_on_the_other_path(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c { sink(move s) } else if s.len() > 0 {} } }   //~ E0601
 
-pub rt fn rt_read_on_the_other_path(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c { sink(move s) } else if s.len() > 0 {} } }   //~ E0901
+pub rt fn rt_read_on_the_other_path(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c { sink(move s) } else if s.len() > 0 {} } }   //~ E0601
 
 // ------------------------------------------------------------------ `match` with `()` arms
 
 pub fn unit_arm(n: U32, move xs: [Buf[F32]; 2]) { for s in move xs { match n { 0 => sink(move s), _ => {} } } }   //~ E0601
 
-pub rt fn rt_unit_arm(n: U32, move xs: [Buf[F32]; 2]) { for s in move xs { match n { 0 => {}, _ => sink(move s) } } }   //~ E0901
+pub rt fn rt_unit_arm(n: U32, move xs: [Buf[F32]; 2]) { for s in move xs { match n { 0 => {}, _ => sink(move s) } } }   //~ E0601
 
 pub fn unit_arm_three(n: U32, move xs: [Buf[F32]; 2]) { for s in move xs { match n { 0 => sink(move s), 1 => {}, _ => sink(move s) } } }   //~ E0601
 
-pub rt fn rt_unit_arm_if(n: U32, c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { match n { 0 => if c { sink(move s) }, _ => sink(move s) } } }   //~ E0901
+pub rt fn rt_unit_arm_if(n: U32, c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { match n { 0 => if c { sink(move s) }, _ => sink(move s) } } }   //~ E0601
 
 pub fn arm_bool(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { match c { true => sink(move s), false => {} } } }   //~ E0601
 
@@ -63,12 +63,12 @@ pub fn arm_bool(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { match c { 
 
 pub fn and_right(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c && eat(move s) {} } }   //~ E0601
 
-pub rt fn rt_and_right(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c && eat(move s) {} } }   //~ E0901
+pub rt fn rt_and_right(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c && eat(move s) {} } }   //~ E0601
 
 pub fn or_right(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c || eat(move s) {} } }   //~ E0601
 
-pub rt fn rt_or_right(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c || eat(move s) {} } }   //~ E0901
+pub rt fn rt_or_right(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c || eat(move s) {} } }   //~ E0601
 
 pub fn and_chain(c: Bool, d: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c && d && eat(move s) {} } }   //~ E0601
 
-pub rt fn rt_or_and(c: Bool, d: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c || (d && eat(move s)) {} } }   //~ E0901
+pub rt fn rt_or_and(c: Bool, d: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { if c || (d && eat(move s)) {} } }   //~ E0601

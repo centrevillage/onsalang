@@ -6,7 +6,7 @@
 // a function uses only the effects of its row (§8.1). `Samples.zeroed(n)` is `Buf.zeroed` with the element type fixed
 // by the alias (§4.4), so a function without `uses {Alloc}` that calls it through the alias is E0601 as it is with
 // `Buf.zeroed`. Each function is on one line so that the line of the use and the line of the function are one (the
-// place of the E0601 inside the body is the work W6-03: "診断は最初の使用の位置に置く"). One error per function (P-01).
+// E0601 is at the first use in the body, §8.1: "診断は最初の使用の位置に置く"). One error per function (P-01).
 // The functions with `Alloc` in the row are fine.
 
 type Samples = Buf[F32]

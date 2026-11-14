@@ -17,7 +17,7 @@
 // anywhere in this file. The owned boundary (`("gain", s)` with a borrowed `Str`, `var`) is in
 // negative/binding_literal_owned.onsa, the names as elements are in values/binding_literal_names.onsa.
 //
-// These are E0901 at the binding in this version (the work W4-16 U1b made the initializer that is not a
+// These are E0601 at the binding (S-77, S-783) in this version (the work W4-16 U1b made the initializer that is not a
 // place owned; the work W4-16 U2 puts the literal of this kind in the borrowed rows).
 
 pub struct Param {

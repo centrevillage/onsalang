@@ -448,13 +448,6 @@ note = "range_header_one_sided.onsa の正しい形（W3-21 で移した）。fo
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/fixes/e0601_alloc_row.onsa"
-reasons = ["S-82", "R-87"]
-until = "W6-03"
-note = "E0601 を最初の使用の位置に置き、候補は署名への挿入（R-87 (6)、S-82）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/fixes/e0813_promote.onsa"
 reasons = ["S-102"]
 until = "W7-02"
@@ -932,34 +925,6 @@ note = "@latency が無い属性の E0005（W10-08）"
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/negative/binding_static_interp.onsa"
-reasons = ["R-87", "S-82"]
-until = "W6-03"
-note = "E0601 を最初の使用の行に出す（`fixes/e0601_alloc_row.onsa` と同じ理由）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/binding_literal_owned_plain.onsa"
-reasons = ["R-87", "S-82"]
-until = "W6-03"
-note = "所有の集成体の破棄の E0601 を束縛の行に出す（今は関数名の行。`binding_static_interp.onsa` と同じ理由、W4-16 U2/t）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/binding_literal_generic_owned_plain.onsa"
-reasons = ["R-87", "S-82"]
-until = "W6-03"
-note = "所有の集成体の破棄の E0601 を束縛の行に出す（今は関数名の行。`binding_static_interp.onsa` と同じ理由、W4-16 U2/t）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/binding_static_affine_type_plain.onsa"
-reasons = ["R-87", "S-82"]
-until = "W6-03"
-note = "所有の集成体の破棄の E0601 を束縛の行に出す（今は関数名の行。`binding_static_interp.onsa` と同じ理由、W4-16 U2/t）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/negative/binding_flow_span_field.onsa"
 reasons = ["S-788"]
 until = "W7-03"
@@ -980,20 +945,6 @@ target = "tests/spec/semantics/take_out_run.onsa"
 reasons = ["S-85"]
 until = "W8-04"
 note = "取り出し（S-85）の降下（取り出さなかった残りの破棄）は W8-04。それまで Core が取り出しのある本体を E0200 で止める（X-8、W4-09 U2）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/take_out_rest_alloc_position.onsa"
-reasons = ["S-85", "R-87", "S-82"]
-until = "W6-03"
-note = "取り出しの残りの破棄の E0601 を最初の使用（取り出しの式）の行に出す。今は全ての E0601 が署名に出る（`fixes/e0601_alloc_row.onsa` と同じ理由）。W4-09 U2 の `take_out_rest_alloc.onsa` から親が分けた"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/types/drop_chain_a_rest_let.onsa"
-reasons = ["S-85", "R-87", "S-82"]
-until = "W6-03"
-note = "取り出しの残りの破棄の診断を最初の使用の行に出す（`take_out_rest_alloc_position` と同じ待ち）"
 
 # --- W4-20: `par~`（S-745）の事例のうち、後の作業を待つもの
 [[pending]]

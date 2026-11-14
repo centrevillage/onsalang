@@ -1,0 +1,16 @@
+// The functions of another module whose first use of `Alloc` is marked here (W6-03 U4a/t, S-783, S-82, spec §8.1, §15.1), for main.onsa.
+// The diagnostic is at the first use, in the module that declares the function, wherever the function is called from.
+
+pub rt fn mk(n: U32) -> Str { "x" }
+
+pub fn lib_let(n: U32) -> U32 {
+  let x = n + 1
+  let s = mk(x)   //~ E0601 @7
+  s.len()
+}
+
+pub rt fn rt_lib_let(n: U32) -> U32 {
+  let x = n + 1
+  let s = mk(x)   //~ E0601 @7
+  s.len()
+}

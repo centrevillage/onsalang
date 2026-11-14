@@ -4,7 +4,7 @@
 
 // W6-02 U3/t, S-1037, R-32 (§5.4: "`for s in move xs` ... ループを出るとき（終わり、`break`、`return`、`?`）に、まだ反復していない要素とヒープの容れ物（`Array`・`Buf`）が
 // 破棄される（§12.2）"; §12.2: "所有する Shared 値 ... の破棄: 要る"): the container of the `move` parameter `xs: Array[F32]` is a heap object, so the loop `for s in move xs` over it
-// drops it when it is left, at its end and at every exit, and the drop needs `Alloc`: an E0601 without `uses {Alloc}`, an E0901 in an `rt fn`. The elements are `F32`,
+// drops it when it is left, at its end and at every exit, and the drop needs `Alloc`: an E0601 without `uses {Alloc}`, and in an `rt fn` too (S-77). The elements are `F32`,
 // so there is no other drop. This version already reports exactly these (it iterates a copy and drops the original `xs` at the end of the function, S-1037), and
 // the verdict stays after the drop of the container is counted by the loop (and after the last use of a Dup value is read as a move, U4a, S-1030, and the
 // heading `for s in move xs` moves the Dup value into the loop, W6-02 U7: the container is still dropped, by the loop). The borrowed parameter, which this version does not report, is in negative/drop_iter_rest_array.onsa. The callers are one-liners
@@ -14,12 +14,12 @@
 
 pub fn move_end(move xs: Array[F32]) { for s in move xs { if s > 0.0 {} } }   //~ E0601
 
-pub rt fn rt_move_end(move xs: Array[F32]) { for s in move xs { if s > 0.0 {} } }   //~ E0901
+pub rt fn rt_move_end(move xs: Array[F32]) { for s in move xs { if s > 0.0 {} } }   //~ E0601
 
 pub fn move_break(move xs: Array[F32]) { for s in move xs { if s > 0.0 { break } } }   //~ E0601
 
-pub rt fn rt_move_break(move xs: Array[F32]) { for s in move xs { if s > 0.0 { break } } }   //~ E0901
+pub rt fn rt_move_break(move xs: Array[F32]) { for s in move xs { if s > 0.0 { break } } }   //~ E0601
 
 pub fn move_return(move xs: Array[F32]) { for s in move xs { if s > 0.0 { return } } }   //~ E0601
 
-pub rt fn rt_move_return(move xs: Array[F32]) { for s in move xs { if s > 0.0 { return } } }   //~ E0901
+pub rt fn rt_move_return(move xs: Array[F32]) { for s in move xs { if s > 0.0 { return } } }   //~ E0601

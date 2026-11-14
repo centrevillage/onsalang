@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§10", "§8.1", "§18.1"]
+// fixes = 0
+
+// W6-03 U4a/t, S-77, S-783 (B3: "`Alloc` を持たない `rt` でない関数の呼び出しは E0901 のまま"), S-82 (§10 rule 4: "`rt` でない関数を呼ばない（E0901）"; §8.1: "E0901 は、`rt` の関数の中での `rt` でない関数と関数値の呼び出しだけに使う"): what stays an
+// E0901 in an `rt fn` when the effects are reported as E0601. A call of a function that is not `rt` and has no `Alloc` in its row, whose result needs no destruction (a `U32`, so there is no drop that is a use of `Alloc`), a call of a
+// method that is not `rt`, a call of a function value that is not `rt`: each is an E0901 at the call, and has no candidate (`fixes = 0`). When a use of `Alloc` and the call start at the same place the E0601 is reported (first_use_order_rt.onsa);
+// here the call starts first (`earlier_e0901`: the `heavy_u(n)` is on a line before the `s` that is dropped at the end of the body), so it is the E0901 that is reported for the function (§18.1, the start of the position
+// first), and a later `Alloc` is not reported. These are errors today and stay errors. One error per function (P-01).
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+impl Holder {
+  pub fn size(self) -> U32 { 1 }
+}
+
+pub rt fn mk(n: U32) -> Str { "x" }
+
+pub fn heavy_u(n: U32) -> U32 { n }
+
+pub rt fn copy_result(n: U32) -> U32 {
+  heavy_u(n)   //~ E0901
+}
+
+pub rt fn method_call(h: Holder) -> U32 {
+  h.size()   //~ E0901
+}
+
+pub rt fn value_call(f: fn(U32) -> U32, n: U32) -> U32 {
+  f.(n)   //~ E0901
+}
+
+pub rt fn earlier_e0901(n: U32) -> U32 {
+  let a = heavy_u(n)   //~ E0901
+  let s = mk(n)
+  a + s.len()
+}
+
+// A function that is not `rt` may call all of them, and may use `Alloc` when it has it in its row.
+pub fn not_rt_caller(n: U32) -> U32 uses {Alloc} {
+  mk(n).len() + heavy_u(n)
+}

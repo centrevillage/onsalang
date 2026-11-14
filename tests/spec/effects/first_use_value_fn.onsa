@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§12.2", "§18.1"]
+// fixes = 1
+
+// W6-03 U4a/t, S-783, S-82, R-87 (6) (§8.1: "束縛の無い値（一時の値、早い出口が残す値、所有の `for` が残す反復元）はその式"; §12.2: the temporary value that is not consumed is dropped when the call or the operation that
+// uses it ends, or when an early exit leaves before): a value that has no binding and needs `Alloc` for its drop is a use of `Alloc` at the expression that makes it (the call whose result is the temporary value),
+// whatever the place that uses it is (a receiver, a borrowed argument, an operand, the base of an index or of a field that is read). The call itself (`mk`, `pass`, `mk_h`) is a call of an `rt fn` that has no
+// `Alloc`, so it is no use; only the drop of the result is, and it is at the start of the call (not at the signature). The `?` of `temp_waits_at_exit` may leave while the `mk(n)` waits (§12.2), and the value is one
+// use for all its points (S-783 C1). The leftover of an owned `for` is at the expression that is iterated; the file does not write its column (`move xs` is an expression of its own or `xs`, S-783 is silent
+// about the `move` in front). One error per function (P-01).
+// The candidate of each function inserts ` uses {Alloc}` into its signature. The same forms in an `rt fn` are in first_use_value_rt.onsa.
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub rt fn mk(n: U32) -> Str { "x" }
+
+pub rt fn pick(s: Str, k: U32) -> Str { s }
+
+pub rt fn pass(move b: Buf[F32]) -> Buf[F32] { b }
+
+pub rt fn len_of(b: Buf[F32]) -> U32 { 0 }
+
+pub rt fn mk_h(move b: Buf[F32]) -> Holder { Holder { buf: move b, gain: 1.0 } }
+
+pub fn temp_receiver(n: U32) -> U32 {
+  mk(n).len()   //~ E0601 @3
+}
+
+pub fn temp_argument(move b: Buf[F32]) -> U32 {
+  len_of(pass(move b))   //~ E0601 @10
+}
+
+pub fn temp_operand(s: Str, n: U32) -> Bool {
+  mk(n) == s   //~ E0601 @3
+}
+
+pub fn temp_index(move b: Buf[F32]) -> F32 {
+  pass(move b)[0]   //~ E0601 @3
+}
+
+pub fn temp_copy_field(move b: Buf[F32]) -> F32 {
+  mk_h(move b).gain   //~ E0601 @3
+}
+
+pub fn temp_waits_at_exit(n: U32, r: Option[U32], s: Str) -> Option[Bool] {
+  Some(mk(n) == pick(s, r?))   //~ E0601 @8
+}
+
+pub fn for_source_leftover(move xs: Buf[F32]) -> F32 {
+  var total = 0.0
+  for s in move xs {   //~ E0601
+    total = total + s
+  }
+  total
+}

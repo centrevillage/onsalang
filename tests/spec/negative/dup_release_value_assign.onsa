@@ -5,7 +5,7 @@
 // W6-02 U7/t, S-1030, S-1038 (§5.2: the right side of an assignment holds a value; §12.2: "代入で上書きされる前の値の破棄を含む（代入先が `var`・`move` の引数・`inout` の引数のどの場所でも、フィールドと要素への代入は
 // その場所の型で決まる）"): the right side of an assignment. A `move` parameter `s` that is the right side of an assignment (alone or in a literal) is moved into the target when nothing uses it afterwards
 // (the position is §5.2's "代入の右辺"), but the target holds a value of a type that has a `Str`, and the assignment drops that value before it is overwritten, and the drop needs `Alloc`: an E0601 in a function
-// without `uses {Alloc}` and an E0901 in an `rt fn`, whether `s` is a copy or a move. So every function here is an error before and after U7 (today the copy of `s` leaves the original to drop, after U7 the
+// without `uses {Alloc}` and an E0601 in an `rt fn`, whether `s` is a copy or a move. So every function here is an error before and after U7 (today the copy of `s` leaves the original to drop, after U7 the
 // overwrite is the drop), and the contrast, an assignment with no value to drop, has no form (an assignment after the target was moved whole is a reading that the spec does not decide for a Dup `var`,
 // so it is not written). The target is an `inout` parameter, whole (`o = Some(s)`, `t = s`, `p = (s, 1)`) or a field (`p.name = s`). The functions are one-liners (S-783). One error per function (P-01).
 
@@ -18,20 +18,20 @@ pub struct Param {
 
 pub fn option(move s: Str, inout o: Option[Str]) { o = Some(s) }   //~ E0601
 
-pub rt fn rt_option(move s: Str, inout o: Option[Str]) { o = Some(s) }   //~ E0901
+pub rt fn rt_option(move s: Str, inout o: Option[Str]) { o = Some(s) }   //~ E0601
 
 pub fn plain(move s: Str, inout t: Str) { t = s }   //~ E0601
 
-pub rt fn rt_plain(move s: Str, inout t: Str) { t = s }   //~ E0901
+pub rt fn rt_plain(move s: Str, inout t: Str) { t = s }   //~ E0601
 
 pub fn tuple(move s: Str, inout p: (Str, U32)) { p = (s, 1) }   //~ E0601
 
-pub rt fn rt_tuple(move s: Str, inout p: (Str, U32)) { p = (s, 1) }   //~ E0901
+pub rt fn rt_tuple(move s: Str, inout p: (Str, U32)) { p = (s, 1) }   //~ E0601
 
 pub fn struct_lit(move s: Str, inout p: Param) { p = Param { name: s, value: 0.0 } }   //~ E0601
 
-pub rt fn rt_struct_lit(move s: Str, inout p: Param) { p = Param { name: s, value: 0.0 } }   //~ E0901
+pub rt fn rt_struct_lit(move s: Str, inout p: Param) { p = Param { name: s, value: 0.0 } }   //~ E0601
 
 pub fn field(move s: Str, inout p: Param) { p.name = s }   //~ E0601
 
-pub rt fn rt_field(move s: Str, inout p: Param) { p.name = s }   //~ E0901
+pub rt fn rt_field(move s: Str, inout p: Param) { p.name = s }   //~ E0601

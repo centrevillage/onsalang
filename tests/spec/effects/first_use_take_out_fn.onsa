@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§5.2", "§12.2", "§18.1"]
+// fixes = 1
+
+// W6-03 U4a/t, S-783, S-85, S-82 (§8.1: "取り出しの残りは取り出す式"; §5.2: "取り出したフィールド以外はその場で破棄され"): a field of an owned value is taken out where the path is written (here the tail, "返り値の `s.buf`", which
+// needs no `move`), and the rest of the value (`p.b`, the `Buf` that is not taken) is dropped on the spot, which needs `Alloc`. The use is at the expression that takes out (`p.a`, or the call `mk_pair(…).a`
+// whose result is the temporary value), not at the signature. The take-out with a `move` in front (`let b = move p.a`) is in negative/take_out_rest_alloc_position.onsa, whose column is not written (whether the
+// range of the take-out starts at the `move` is not written in S-783). One error per function (P-01).
+// The candidate of each function inserts ` uses {Alloc}` into its signature. The same forms in an `rt fn` are in first_use_take_out_rt.onsa.
+
+pub struct Pair {
+  a: Buf[F32],
+  b: Buf[F32],
+}
+
+pub rt fn mk_pair(move x: Buf[F32], move y: Buf[F32]) -> Pair { Pair { a: move x, b: move y } }
+
+pub fn take_from_param(move p: Pair, n: U32) -> Buf[F32] {
+  p.a   //~ E0601 @3
+}
+
+pub fn take_from_temp(move x: Buf[F32], move y: Buf[F32]) -> Buf[F32] {
+  mk_pair(move x, move y).a   //~ E0601 @3
+}

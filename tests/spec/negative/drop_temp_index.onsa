@@ -4,7 +4,7 @@
 
 // W6-02 U5a/t, R-32 (§12.2: "所有する Shared 値・`Buf` と、それらを含む値の破棄: 要る"): a temporary `Buf[F32]` (or a struct that holds one) that is the base of an index, or a temporary `Str` that is
 // read for the index. The element is a `F32` (Copy), so the element is read and nothing consumes the base: the `Buf` is dropped, and its drop needs `Alloc`: a function without `uses {Alloc}` is an
-// E0601 and an `rt fn` an E0901. A function with the base and the index both temporary is one error (P-01). The functions are one-liners (S-783). Each mark is reported (W6-02 U5a counts
+// E0601 and an `rt fn` too (S-77). A function with the base and the index both temporary is one error (P-01). The functions are one-liners (S-783). Each mark is reported (W6-02 U5a counts
 // the drop of a temporary value). The values that are static or Copy are in negative/drop_temp_contrast.onsa.
 
 pub struct G {
@@ -87,41 +87,41 @@ pub rt fn h_len(h: H) -> U32 { 0 }
 
 pub fn index_buf(move b: Buf[F32]) -> F32 { pass(move b)[0] }   //~ E0601
 
-pub rt fn rt_index_buf(move b: Buf[F32]) -> F32 { pass(move b)[0] }   //~ E0901
+pub rt fn rt_index_buf(move b: Buf[F32]) -> F32 { pass(move b)[0] }   //~ E0601
 
 pub fn index_buf_var(move b: Buf[F32], i: U32) -> F32 { pass(move b)[i] }   //~ E0601
 
-pub rt fn rt_index_buf_var(move b: Buf[F32], i: U32) -> F32 { pass(move b)[i] }   //~ E0901
+pub rt fn rt_index_buf_var(move b: Buf[F32], i: U32) -> F32 { pass(move b)[i] }   //~ E0601
 
 pub fn index_nested(move b: Buf[F32]) -> F32 { pass(pass(move b))[0] }   //~ E0601
 
-pub rt fn rt_index_nested(move b: Buf[F32]) -> F32 { pass(pass(move b))[0] }   //~ E0901
+pub rt fn rt_index_nested(move b: Buf[F32]) -> F32 { pass(pass(move b))[0] }   //~ E0601
 
 pub fn index_in_expression(move b: Buf[F32]) -> F32 { pass(move b)[0] + 1.0 }   //~ E0601
 
-pub rt fn rt_index_in_expression(move b: Buf[F32]) -> F32 { pass(move b)[0] + 1.0 }   //~ E0901
+pub rt fn rt_index_in_expression(move b: Buf[F32]) -> F32 { pass(move b)[0] + 1.0 }   //~ E0601
 
 pub fn index_field_buf(move b: Buf[F32]) -> F32 { mk_h(move b).b[0] }   //~ E0601
 
-pub rt fn rt_index_field_buf(move b: Buf[F32]) -> F32 { mk_h(move b).b[0] }   //~ E0901
+pub rt fn rt_index_field_buf(move b: Buf[F32]) -> F32 { mk_h(move b).b[0] }   //~ E0601
 
 // ------------------------------------------------------------------ the index is read from a temporary value, or both the base and the index are
 
 pub fn index_operand(xs: Buf[F32], n: U32) -> F32 { xs[mk(n).len()] }   //~ E0601
 
-pub rt fn rt_index_operand(xs: Buf[F32], n: U32) -> F32 { xs[mk(n).len()] }   //~ E0901
+pub rt fn rt_index_operand(xs: Buf[F32], n: U32) -> F32 { xs[mk(n).len()] }   //~ E0601
 
 pub fn index_both(move b: Buf[F32], n: U32) -> F32 { pass(move b)[mk(n).len()] }   //~ E0601
 
-pub rt fn rt_index_both(move b: Buf[F32], n: U32) -> F32 { pass(move b)[mk(n).len()] }   //~ E0901
+pub rt fn rt_index_both(move b: Buf[F32], n: U32) -> F32 { pass(move b)[mk(n).len()] }   //~ E0601
 
 // ------------------------------------------------------------------ in a branch and a loop
 
 pub fn index_in_branches(c: Bool, move b: Buf[F32]) -> F32 { if c { pass(move b)[0] } else { pass(move b)[1] } }   //~ E0601
 
-pub rt fn rt_index_in_branches(c: Bool, move b: Buf[F32]) -> F32 { if c { pass(move b)[0] } else { pass(move b)[1] } }   //~ E0901
+pub rt fn rt_index_in_branches(c: Bool, move b: Buf[F32]) -> F32 { if c { pass(move b)[0] } else { pass(move b)[1] } }   //~ E0601
 
 pub fn index_in_loop(move b: Buf[F32]) -> F32 { while true { return pass(move b)[0] } }   //~ E0601
 
-pub rt fn rt_index_in_loop(move b: Buf[F32]) -> F32 { while true { return pass(move b)[0] } }   //~ E0901
+pub rt fn rt_index_in_loop(move b: Buf[F32]) -> F32 { while true { return pass(move b)[0] } }   //~ E0601
 

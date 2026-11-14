@@ -4,8 +4,8 @@
 
 // W6-02 U6/t, R-32, S-1036 (§7: "選択: `p | q` … 選択の全ての枝は、同じ名前の集合を束縛する"; §5.4: "所有の見出し … が消費した値のうち、パターンが束縛しなかった部分（`_`、最後の `_` が残すフィールド、束縛の無い腕の対象）は、`let` … では文の終わりに、`match`
 // の腕と `for` の本体ではその腕・反復の終わり … に破棄される。腕が panic で抜ければ、その破棄は起きない"; §12.2: "所有する Shared 値・`Buf` と、それらを含む値の破棄: 要る"): a `_` in a branch of an or-pattern (`Some(_) | None`) binds
-// nothing, so the value that the branch matched is dropped at the end of the arm, whichever branch matched. A function without `uses {Alloc}` is an E0601 and an `rt fn` an
-// E0901 (§10 rule 1). The branches are the payload of a constructor, an element of a tuple, a literal of a `Str` and nested or-patterns. This version counts no drop of a
+// nothing, so the value that the branch matched is dropped at the end of the arm, whichever branch matched. A function without `uses {Alloc}` is an E0601 and an `rt fn`
+// too (S-77, §10 rule 1). The branches are the payload of a constructor, an element of a tuple, a literal of a `Str` and nested or-patterns. This version counts no drop of a
 // part that a branch leaves unbound (R-32), so none of these is reported today. The or-pattern of a borrowed head is in negative/drop_wild_contrast.onsa. The functions are
 // one-liners, so that the line does not depend on where the drop is reported (S-783). One error per function (P-01).
 
@@ -17,30 +17,30 @@ pub rt fn mk_os(n: U32) -> Option[Str] { Some("x") }
 
 pub fn or_some_or_none(move o: Option[Buf[F32]]) -> U32 { match move o { Some(_) | None => 1 } }   //~ E0601
 
-pub rt fn rt_or_some_or_none(move o: Option[Buf[F32]]) -> U32 { match move o { Some(_) | None => 1 } }   //~ E0901
+pub rt fn rt_or_some_or_none(move o: Option[Buf[F32]]) -> U32 { match move o { Some(_) | None => 1 } }   //~ E0601
 
 pub fn or_none_or_some(move o: Option[Buf[F32]]) -> U32 { match move o { None | Some(_) => 1 } }   //~ E0601
 
-pub rt fn rt_or_none_or_some(move o: Option[Buf[F32]]) -> U32 { match move o { None | Some(_) => 1 } }   //~ E0901
+pub rt fn rt_or_none_or_some(move o: Option[Buf[F32]]) -> U32 { match move o { None | Some(_) => 1 } }   //~ E0601
 
 pub fn or_ok_or_err(move r: Result[Buf[F32], Str]) -> U32 { match move r { Ok(_) | Err(_) => 1 } }   //~ E0601
 
-pub rt fn rt_or_ok_or_err(move r: Result[Buf[F32], Str]) -> U32 { match move r { Ok(_) | Err(_) => 1 } }   //~ E0901
+pub rt fn rt_or_ok_or_err(move r: Result[Buf[F32], Str]) -> U32 { match move r { Ok(_) | Err(_) => 1 } }   //~ E0601
 
 pub fn or_nested_or(move o: Option[Option[Buf[F32]]]) -> U32 { match move o { Some(Some(_) | None) | None => 1 } }   //~ E0601
 
-pub rt fn rt_or_nested_or(move o: Option[Option[Buf[F32]]]) -> U32 { match move o { Some(Some(_) | None) | None => 1 } }   //~ E0901
+pub rt fn rt_or_nested_or(move o: Option[Option[Buf[F32]]]) -> U32 { match move o { Some(Some(_) | None) | None => 1 } }   //~ E0601
 
 pub fn or_guarded_or(c: Bool, move o: Option[Buf[F32]]) -> U32 { match move o { Some(_) | None if c => 1, _ => 2 } }   //~ E0601
 
-pub rt fn rt_or_guarded_or(c: Bool, move o: Option[Buf[F32]]) -> U32 { match move o { Some(_) | None if c => 1, _ => 2 } }   //~ E0901
+pub rt fn rt_or_guarded_or(c: Bool, move o: Option[Buf[F32]]) -> U32 { match move o { Some(_) | None if c => 1, _ => 2 } }   //~ E0601
 
 pub fn or_some_or_none_call_str(n: U32) -> U32 { match mk_os(n) { Some(_) | None => 1 } }   //~ E0601
 
-pub rt fn rt_or_some_or_none_call_str(n: U32) -> U32 { match mk_os(n) { Some(_) | None => 1 } }   //~ E0901
+pub rt fn rt_or_some_or_none_call_str(n: U32) -> U32 { match mk_os(n) { Some(_) | None => 1 } }   //~ E0601
 
 // ------------------------------------------------------------------ literals of a `Str` in the branches
 
 pub fn or_str_literals(n: U32) -> U32 { match mk(n) { "a" | "b" => 1, _ => 0 } }   //~ E0601
 
-pub rt fn rt_or_str_literals(n: U32) -> U32 { match mk(n) { "a" | "b" => 1, _ => 0 } }   //~ E0901
+pub rt fn rt_or_str_literals(n: U32) -> U32 { match mk(n) { "a" | "b" => 1, _ => 0 } }   //~ E0601

@@ -3,7 +3,7 @@
 //! U2a/t2, U3/t).
 //!
 //! §12.2: the destruction of an owned `Buf` and of a value that holds one needs `Alloc` (a function with no
-//! `uses {Alloc}` gets E0601, §8.1; an `rt fn` gets E0901, §10 rule 1), and the destruction on the way out by
+//! `uses {Alloc}` gets E0601, §8.1, and so does an `rt fn`, §10 rule 1, S-77), and the destruction on the way out by
 //! a `panic` does not (§9.2: there is no unwinding). So an owned local that is alive where a path reaches
 //! the end of its block is dropped there, once for each block that ends. A local that is moved on every path
 //! that reaches the end is not dropped, and nor is one that is alive only on a path a `panic` ends, or in
@@ -32,7 +32,7 @@
 //! A local that is alive on some path that reaches the end of its block or an early exit is dropped there, and
 //! the function needs `Alloc` for the first one of them in the order of the declarations (the parameters in
 //! the order written, then the locals in the order of the text). The test writes the same body as a `fn`
-//! (E0601), as an `rt fn` with the parameters in the other order (E0901), and as a method with `move self`,
+//! (E0601), as an `rt fn` with the parameters in the other order (E0601), and as a method with `move self`,
 //! and compares the code and the local the diagnostic names with the model's. The spec does not say which
 //! local a diagnostic names where several are dropped, so the name is compared for a function with no early exit
 //! and no `break` (as in U2a/t2) and for one where the model drops one local only (the diagnostic has to name it;
@@ -1144,7 +1144,7 @@ struct Case {
     name: String,
     /// The line of the header (1-based).
     line: usize,
-    /// True for an `rt fn` (E0901), false for a `fn` and a method (E0601).
+    /// True for an `rt fn`, false for a `fn` and a method (E0601 for all, S-77).
     rt: bool,
     /// The local the diagnostic names, if the model says there is one.
     expect: Option<String>,
@@ -1259,12 +1259,9 @@ fn diagnostics_of(p: &Package, got: &mut [Got], strays: &mut Vec<String>) -> Res
         let code = d["code"].as_str().expect("a code").to_string();
         let line = d["span"]["line"].as_u64().expect("a line") as usize;
         let message = d["message"].as_str().expect("a message").to_string();
-        let idx = if code == "E0601" {
-            let f = first_quoted(&message);
-            p.cases.iter().position(|c| c.name == f)
-        } else {
-            p.cases.iter().enumerate().filter(|(_, c)| c.line <= line).max_by_key(|(_, c)| c.line).map(|(i, _)| i)
-        };
+        // The E0601 is at the value dropped (S-82, S-783), in its function.
+        let idx =
+            p.cases.iter().enumerate().filter(|(_, c)| c.line <= line).max_by_key(|(_, c)| c.line).map(|(i, _)| i);
         let Some(i) = idx else {
             strays.push(format!("{code} at line {line}: {message}"));
             continue;
@@ -1276,8 +1273,7 @@ fn diagnostics_of(p: &Package, got: &mut [Got], strays: &mut Vec<String>) -> Res
             continue;
         }
         let named = match code.as_str() {
-            "E0601" => Some(first_quoted(d["notes"][0]["message"].as_str().unwrap_or(""))),
-            "E0901" => Some(first_quoted(&message)),
+            "E0601" | "E0901" => Some(first_quoted(&message)),
             _ => None,
         };
         match named {
@@ -1346,7 +1342,7 @@ fn run_sweep(cfg: Cfg) {
             } else {
                 expect_clean += 1;
             }
-            let want_code = if c.rt { "E0901" } else { "E0601" };
+            let want_code = "E0601";
             let ok = match &c.expect {
                 Some(n) => {
                     got[i].own.len() == 1 && got[i].own[0].0 == want_code && (!c.strict || &got[i].own[0].1 == n)

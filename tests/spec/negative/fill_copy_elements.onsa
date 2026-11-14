@@ -8,7 +8,7 @@
 // （前の要素の破棄の `Alloc` が要る）"): `fill!` of an array whose element is not Copy is the E0416 of the call, whatever the receiver is and whatever the element is: a Shared value (a `Str`), an `Option` of
 // one, a tuple, an array or a struct that holds one, and the element of a type parameter that is not `Copy` (a `T` without a bound is Dup and not Copy, §4.5). The element is judged by what the type is known to
 // be in the body, so the same call in a function whose `T` is `Copy` is legal (negative/fill_copy_ok.onsa). Both the plain function and the `rt fn` have the error, because it is the type that is wrong (E0416, not
-// E0601 or E0901), and it is the only error of the function (P-01: the unit stops at the first error). There is no candidate (`fixes = 0`): the note shows `xs = [v; N]`. This version gives `fill!` to an array
+// E0601), and it is the only error of the function (P-01: the unit stops at the first error). There is no candidate (`fixes = 0`): the note shows `xs = [v; N]`. This version gives `fill!` to an array
 // of any Dup element (S-853), so none of these is reported today. The `[Buf[F32]; 2]` receiver (an Affine element) is in negative/seq_fill_affine.onsa and the `T: ?Dup` receiver is in negative/seq_generic_receivers.onsa.
 
 pub struct P {

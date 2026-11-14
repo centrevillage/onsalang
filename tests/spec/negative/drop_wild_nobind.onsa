@@ -6,7 +6,7 @@
 // に破棄される。腕が panic で抜ければ、その破棄は起きない"; §5.4: "`match move x` と、場所でも静的な値でも破棄の要らないリテラルでもなく、それらの経路でもない対象（`match f(...)`）の腕の束縛: 所有 / 起きる"; §12.2: "所有する Shared 値・`Buf`
 // と、それらを含む値の破棄: 要る"): an arm whose pattern binds nothing (`_ =>`, a literal such as `"a" =>`, a constructor or a tuple of `_`) takes the value of an owned head (`match move
 // x`, a call result: `match f(...)`) and drops it at the end of the arm. The drop of a `Buf`, a `Str` or a value that holds one needs `Alloc`. A function without `uses
-// {Alloc}` is an E0601 and an `rt fn` an E0901 (§10 rule 1). Another arm may bind the value and move it on, so that the arm that binds nothing is the only drop in the
+// {Alloc}` is an E0601 and an `rt fn` too (S-77, §10 rule 1). Another arm may bind the value and move it on, so that the arm that binds nothing is the only drop in the
 // function. This version counts no drop of a value that an arm leaves unbound (R-251, R-32), so none of these is reported today. The head that is a place that is not moved
 // or a static value (`match o`, `match "abc"`), the arm of a unit variant (`None =>`) and the arms that panic are in negative/drop_wild_contrast.onsa and
 // negative/drop_wild_panic.onsa. The functions are one-liners, so that the line does not depend on where the drop is reported (S-783). One error per function (P-01).
@@ -29,62 +29,62 @@ pub rt fn mk_h(move b: Buf[F32]) -> H { H { buf: move b, s: "a", n: 1 } }
 
 pub fn nobind_move_buf(move b: Buf[F32]) -> U32 { match move b { _ => 0 } }   //~ E0601
 
-pub rt fn rt_nobind_move_buf(move b: Buf[F32]) -> U32 { match move b { _ => 0 } }   //~ E0901
+pub rt fn rt_nobind_move_buf(move b: Buf[F32]) -> U32 { match move b { _ => 0 } }   //~ E0601
 
 pub fn nobind_move_option(move o: Option[Buf[F32]]) -> U32 { match move o { _ => 0 } }   //~ E0601
 
-pub rt fn rt_nobind_move_option(move o: Option[Buf[F32]]) -> U32 { match move o { _ => 0 } }   //~ E0901
+pub rt fn rt_nobind_move_option(move o: Option[Buf[F32]]) -> U32 { match move o { _ => 0 } }   //~ E0601
 
 pub fn nobind_move_struct(move h: H) -> U32 { match move h { _ => 0 } }   //~ E0601
 
-pub rt fn rt_nobind_move_struct(move h: H) -> U32 { match move h { _ => 0 } }   //~ E0901
+pub rt fn rt_nobind_move_struct(move h: H) -> U32 { match move h { _ => 0 } }   //~ E0601
 
 pub fn nobind_move_after_unit_arm(move o: Option[Buf[F32]]) -> U32 { match move o { None => 0, _ => 1 } }   //~ E0601
 
-pub rt fn rt_nobind_move_after_unit_arm(move o: Option[Buf[F32]]) -> U32 { match move o { None => 0, _ => 1 } }   //~ E0901
+pub rt fn rt_nobind_move_after_unit_arm(move o: Option[Buf[F32]]) -> U32 { match move o { None => 0, _ => 1 } }   //~ E0601
 
 // ------------------------------------------------------------------ `_ =>` of `match f(...)`
 
 pub fn nobind_call_buf(move b: Buf[F32]) -> U32 { match pass(move b) { _ => 0 } }   //~ E0601
 
-pub rt fn rt_nobind_call_buf(move b: Buf[F32]) -> U32 { match pass(move b) { _ => 0 } }   //~ E0901
+pub rt fn rt_nobind_call_buf(move b: Buf[F32]) -> U32 { match pass(move b) { _ => 0 } }   //~ E0601
 
 pub fn nobind_call_str(n: U32) -> U32 { match mk(n) { _ => 0 } }   //~ E0601
 
-pub rt fn rt_nobind_call_str(n: U32) -> U32 { match mk(n) { _ => 0 } }   //~ E0901
+pub rt fn rt_nobind_call_str(n: U32) -> U32 { match mk(n) { _ => 0 } }   //~ E0601
 
 pub fn nobind_call_option(move b: Buf[F32]) -> U32 { match mk_o(move b) { _ => 0 } }   //~ E0601
 
-pub rt fn rt_nobind_call_option(move b: Buf[F32]) -> U32 { match mk_o(move b) { _ => 0 } }   //~ E0901
+pub rt fn rt_nobind_call_option(move b: Buf[F32]) -> U32 { match mk_o(move b) { _ => 0 } }   //~ E0601
 
 pub fn nobind_call_struct(move b: Buf[F32]) -> U32 { match mk_h(move b) { _ => 0 } }   //~ E0601
 
-pub rt fn rt_nobind_call_struct(move b: Buf[F32]) -> U32 { match mk_h(move b) { _ => 0 } }   //~ E0901
+pub rt fn rt_nobind_call_struct(move b: Buf[F32]) -> U32 { match mk_h(move b) { _ => 0 } }   //~ E0601
 
 // ------------------------------------------------------------------ a literal pattern, which binds nothing
 
 pub fn nobind_str_literal(n: U32) -> U32 { match mk(n) { "a" => 1, _ => 0 } }   //~ E0601
 
-pub rt fn rt_nobind_str_literal(n: U32) -> U32 { match mk(n) { "a" => 1, _ => 0 } }   //~ E0901
+pub rt fn rt_nobind_str_literal(n: U32) -> U32 { match mk(n) { "a" => 1, _ => 0 } }   //~ E0601
 
 pub fn nobind_str_literal_two(n: U32) -> U32 { match mk(n) { "a" => 1, "b" => 2, _ => 0 } }   //~ E0601
 
-pub rt fn rt_nobind_str_literal_two(n: U32) -> U32 { match mk(n) { "a" => 1, "b" => 2, _ => 0 } }   //~ E0901
+pub rt fn rt_nobind_str_literal_two(n: U32) -> U32 { match mk(n) { "a" => 1, "b" => 2, _ => 0 } }   //~ E0601
 
 pub fn nobind_str_literal_binds_other(n: U32) -> Str { match mk(n) { "a" => "b", s => s } }   //~ E0601
 
-pub rt fn rt_nobind_str_literal_binds_other(n: U32) -> Str { match mk(n) { "a" => "b", s => s } }   //~ E0901
+pub rt fn rt_nobind_str_literal_binds_other(n: U32) -> Str { match mk(n) { "a" => "b", s => s } }   //~ E0601
 
 pub fn nobind_struct_literal(move h: H) -> U32 { match move h { H { n: 0, _ } => 1, _ => 2 } }   //~ E0601
 
-pub rt fn rt_nobind_struct_literal(move h: H) -> U32 { match move h { H { n: 0, _ } => 1, _ => 2 } }   //~ E0901
+pub rt fn rt_nobind_struct_literal(move h: H) -> U32 { match move h { H { n: 0, _ } => 1, _ => 2 } }   //~ E0601
 
 // ------------------------------------------------------------------ a pattern of `_` that binds nothing
 
 pub fn nobind_tuple_of_wild(move p: (Str, Buf[F32])) -> U32 { match move p { (_, _) => 0 } }   //~ E0601
 
-pub rt fn rt_nobind_tuple_of_wild(move p: (Str, Buf[F32])) -> U32 { match move p { (_, _) => 0 } }   //~ E0901
+pub rt fn rt_nobind_tuple_of_wild(move p: (Str, Buf[F32])) -> U32 { match move p { (_, _) => 0 } }   //~ E0601
 
 pub fn nobind_some_of_wild_call(move b: Buf[F32]) -> U32 { match mk_o(move b) { Some(_) => 1, None => 0 } }   //~ E0601
 
-pub rt fn rt_nobind_some_of_wild_call(move b: Buf[F32]) -> U32 { match mk_o(move b) { Some(_) => 1, None => 0 } }   //~ E0901
+pub rt fn rt_nobind_some_of_wild_call(move b: Buf[F32]) -> U32 { match mk_o(move b) { Some(_) => 1, None => 0 } }   //~ E0601

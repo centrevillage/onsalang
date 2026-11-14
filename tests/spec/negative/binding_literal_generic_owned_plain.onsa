@@ -7,9 +7,9 @@
 // literal that has a name of the unbounded type `T` as an element is owned, destroyed, and the destruction
 // of a value that may be Shared is a use of `Alloc` (§12.2) that the function must have in its row: an
 // E0601 (§8.1), "診断は最初の使用の位置に置く", the binding of the value. One error per item (P-01).
-// The place of the first use of a destruction is not written in §8.1, so the file waits with
-// negative/binding_literal_owned_plain.onsa for the work W6-03 (R-87 (6)): in this version the E0601 is at
-// the name of the function.
+// The use of a destruction is at the value that is written (§8.1, S-783, as in
+// negative/binding_literal_owned_plain.onsa): the name of the binding, and `s` of the arm in the last
+// function, which is written before the `_` that leaves the `T`.
 
 pub struct Pair[T] {
   name: Str,
@@ -17,21 +17,21 @@ pub struct Pair[T] {
 }
 
 pub fn tuple_of_an_unbounded_t[T](x: T) -> U32 {
-  let p = ("a", x) //~ E0601
+  let p = ("a", x) //~ E0601 @7
   p.0.len()
 }
 
 pub fn struct_of_an_unbounded_t[T](x: T) -> U32 {
-  let p = Pair { name: "a", value: x } //~ E0601
+  let p = Pair { name: "a", value: x } //~ E0601 @7
   p.name.len()
 }
 
 pub fn for_over_an_unbounded_t[T](x: T, y: T) -> U32 {
   var n: U32 = 0
-  for p in [("a", x), ("bc", y)] { n = n + p.0.len() } //~ E0601
+  for p in [("a", x), ("bc", y)] { n = n + p.0.len() } //~ E0601 @7
   n
 }
 
 pub fn match_on_an_unbounded_t[T](x: T) -> U32 {
-  match ("a", x) { (s, _) => s.len() } //~ E0601
+  match ("a", x) { (s, _) => s.len() } //~ E0601 @21
 }

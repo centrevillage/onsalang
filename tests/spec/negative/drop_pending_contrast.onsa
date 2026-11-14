@@ -6,7 +6,7 @@
 // for the operands after it is dropped where a `?` returns: a waiting value that is Copy (`Some((n, r?))`) or that is only borrowed (a borrowed argument consumes
 // nothing, so nothing waits), a call or a literal with no `?` (nothing can leave), a `?` after the owned value is consumed by a statement before (`sink(move b)`),
 // and a function with `uses {Alloc}` (the drop is allowed). This version already accepts all of these. The helper `sink` is an `rt` function that drops its argument,
-// so its own E0901 is reported (the same as negative/drop_for_one_path.onsa). The functions with two statements are on several lines (no error is expected, so
+// so its own E0601 is reported (the same as negative/drop_for_one_path.onsa). The functions with two statements are on several lines (no error is expected, so
 // the line does not matter, S-783).
 
 pub struct Holder {
@@ -14,7 +14,7 @@ pub struct Holder {
   gain: F32,
 }
 
-pub rt fn sink(move b: Buf[F32]) {}   //~ E0901
+pub rt fn sink(move b: Buf[F32]) {}   //~ E0601
 
 pub rt fn wrap(move b: Buf[F32], n: U32) -> Option[Buf[F32]] { Some(move b) }
 

@@ -6,9 +6,9 @@
 // 時点の状態から決まる（ループの中で移してから `break` した値は、ループの後では移した後である）"): after a `while true` whose body moves a local and then leaves by a `break`, the
 // local is moved, so the function drops nothing at its end and a moved `var` that the body gives a new value before the `break` is alive after the loop (no E0704). The
 // loops are on several lines (a `break` after a statement), and no error is expected there, so the line of a drop does not matter (S-783). This version counts the path on
-// which the condition is false after such a loop, so it reports an E0601 or an E0901 for the local that the body moved (the local looks alive there) and an E0704 for the `var`
+// which the condition is false after such a loop, so it reports an E0601 for the local that the body moved (the local looks alive there) and an E0704 for the `var`
 // that the body gave a new value (the `var` looks moved there). The loops that stay the same (a condition that is not the literal `true`, the read after the move) are in
-// negative/while_true_break_contrast.onsa. The helper `sink` is an `rt` function that drops its argument, so its own E0901 is reported (the same as
+// negative/while_true_break_contrast.onsa. The helper `sink` is an `rt` function that drops its argument, so its own E0601 is reported (the same as
 // negative/drop_for_one_path.onsa).
 
 pub struct Holder {
@@ -16,7 +16,7 @@ pub struct Holder {
   gain: F32,
 }
 
-pub rt fn sink(move b: Buf[F32]) {}   //~ E0901
+pub rt fn sink(move b: Buf[F32]) {}   //~ E0601
 
 // ------------------------------------------------------------------ the body moves the local and breaks
 

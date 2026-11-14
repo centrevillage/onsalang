@@ -7,7 +7,7 @@
 // 発散しない全ての末尾で決め、全ての末尾が借用の行なら借用（`let t = if c { x } else { y }` は、`x`・`y`
 // が借用の起点なら借用で、rt の関数でも破棄が起きない）". A borrowed binding ends without a drop
 // (§12.2: "借用束縛の終了: `Alloc` は要らない"), so an `rt fn` can bind a `Str` this way, where an
-// owned `Str` is an E0901 (negative/rt.onsa, negative/binding_tail_owned_rt.onsa). A tail that leaves
+// owned `Str` is an E0601 (negative/rt.onsa, negative/binding_tail_owned_rt.onsa). A tail that leaves
 // the function (`return`, §7: "発散する") does not count. The tails here are borrowed origins (an
 // argument in the default mode, a part of one, the binding of a `match` arm, a binding derived from
 // them) and static values (a string literal without interpolation, §5.4). Every binding is read

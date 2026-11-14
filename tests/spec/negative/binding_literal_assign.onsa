@@ -12,7 +12,7 @@
 // (P-01). The functions are `rt fn`s for the literal forms (the borrowed row has no destruction, so there
 // is no other error) and plain functions for two of them.
 //
-// This version does not report an E0901 beside the E0701 of the same function, so the file passes in this
+// This version does not report an E0601 beside the E0701 of the same function, so the file passes in this
 // version as well; it keeps the code of the assignment to the bindings that the work W4-16 U2 makes
 // borrowed rows.
 

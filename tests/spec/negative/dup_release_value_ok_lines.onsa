@@ -7,14 +7,14 @@
 // An owned `Str` that is handed off whole to a `move` parameter leaves its binding with no value, so an assignment of a new value to it drops nothing (S-1038 drops the value the target may
 // hold), and the new value is moved by the return. A constructor called as a function value with the value once (`g.(s, 1)`) takes it as a `move` argument and moves it (R-255, a move today
 // already), as the direct `E.B(s, 1)` of negative/dup_release_value_ok.onsa does after U7 (S-872). No function here needs `Alloc` after U7: no E0601 in a function without `uses {Alloc}`, no
-// E0901 in an `rt fn`. Today the assignments are errors (the element `Some(s)` is a copy and `s` is dropped). The helper drops its argument, so its own E0901 is reported (the same as
+// E0601 in an `rt fn`. Today the assignments are errors (the element `Some(s)` is a copy and `s` is dropped). The helper drops its argument, so its own E0601 is reported (the same as
 // negative/dup_release_value_ok.onsa). No error is expected in the callers, so the line does not matter (S-783).
 
 pub enum E {
   B(Str, U32),
 }
 
-pub rt fn eat_o(move o: Option[Str]) -> U32 { 0 }   //~ E0901
+pub rt fn eat_o(move o: Option[Str]) -> U32 { 0 }   //~ E0601
 
 pub fn assign_after_the_whole_move(move s: Str, move o: Option[Str]) -> (Option[Str], U32) {
   let n = eat_o(o)

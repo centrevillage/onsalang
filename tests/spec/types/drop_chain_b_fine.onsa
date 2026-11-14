@@ -4,9 +4,9 @@
 // mode = "check"
 
 // S-782 (§12.2: "所有する Shared 値・`Buf` と、それらを含む値の破棄: 要る", "Copy 値…の生成と破棄: 要らない"; §10: a drop in an `rt fn` is an
-// E0901 in this version, §8.1: a drop in a function without `uses {Alloc}` is an E0601): whether a value needs `Alloc` to be
+// E0601 (S-77), as is a drop in a function without `uses {Alloc}`, §8.1): whether a value needs `Alloc` to be
 // dropped is found from its structure and does not change with the number of declarations on the way. The chain is
-// `G_k[T] { x: G_(k-1)[(T, T)], y: G_(k-1)[Option[T]] }` (declared `[T: ?Dup]`), at the depth 14. Types that hold only Copy values (and borrowed parameters of any kind, which are not dropped) need nothing to be dropped: no E0901 and no E0601 at any depth. `mode = "check"` only.
+// `G_k[T] { x: G_(k-1)[(T, T)], y: G_(k-1)[Option[T]] }` (declared `[T: ?Dup]`), at the depth 14. Types that hold only Copy values (and borrowed parameters of any kind, which are not dropped) need nothing to be dropped: no E0601 at any depth. `mode = "check"` only.
 
 pub struct M0[T: ?Dup] {
   v: T,

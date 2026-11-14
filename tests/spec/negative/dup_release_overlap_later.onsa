@@ -6,8 +6,8 @@
 // E0702 である（`fn2(x, take(move x))`）"): the place passed to a `move` parameter comes after another argument (or the receiver) of the same call that hands off the same `move` parameter `s`
 // (in a nested call's `move` argument, an element of a literal, a constructor or a struct, the tail of a block, an `if` or a `match`). The order of the arguments does not count, so each is
 // the form of negative/dup_release_overlap.onsa with the place last: if `s` were Affine, each would be E0702 (`nn(take(move s), move s)`, `W { s: move s }.put(move s)`), so neither hand-off
-// can move. Both copy, and the original is dropped at the end of its binding, whose drop needs `Alloc`: an E0601 in a function without `uses {Alloc}` and an E0901 in an `rt fn`. The
-// helpers take every argument and drop it, so their own E0901 is reported (as in negative/dup_release_overlap.onsa). The contrasts at the end hand off two different places (`nn(eat_n(t), s)`,
+// can move. Both copy, and the original is dropped at the end of its binding, whose drop needs `Alloc`: an E0601 in a function without `uses {Alloc}` and in an `rt fn` (S-77). The
+// helpers take every argument and drop it, so their own E0601 is reported (as in negative/dup_release_overlap.onsa). The contrasts at the end hand off two different places (`nn(eat_n(t), s)`,
 // `nn(eat_n(s), t)`): each moves, and they have no error. Before W6-02 U7b the place written last moved and no error was reported. The functions are one-liners (S-783). One error per function (P-01).
 
 pub struct Param {
@@ -20,50 +20,50 @@ pub struct W {
 }
 
 impl W {
-  pub rt fn put(move self, move s: Str) -> U32 { 0 }   //~ E0901
+  pub rt fn put(move self, move s: Str) -> U32 { 0 }   //~ E0601
 }
 
-pub rt fn eat_n(move s: Str) -> U32 { s.len() }   //~ E0901
+pub rt fn eat_n(move s: Str) -> U32 { s.len() }   //~ E0601
 
-pub rt fn nn(move a: U32, move b: Str) -> U32 { 0 }   //~ E0901
+pub rt fn nn(move a: U32, move b: Str) -> U32 { 0 }   //~ E0601
 
-pub rt fn oo(move a: Option[Str], move b: Str) -> U32 { 0 }   //~ E0901
+pub rt fn oo(move a: Option[Str], move b: Str) -> U32 { 0 }   //~ E0601
 
-pub rt fn pp(move a: (Str, U32), move b: Str) -> U32 { 0 }   //~ E0901
+pub rt fn pp(move a: (Str, U32), move b: Str) -> U32 { 0 }   //~ E0601
 
-pub rt fn qq(move a: Param, move b: Str) -> U32 { 0 }   //~ E0901
+pub rt fn qq(move a: Param, move b: Str) -> U32 { 0 }   //~ E0601
 
 pub fn nested_call_then_place(move s: Str) -> U32 { nn(eat_n(s), s) }   //~ E0601
 
-pub rt fn rt_nested_call_then_place(move s: Str) -> U32 { nn(eat_n(s), s) }   //~ E0901
+pub rt fn rt_nested_call_then_place(move s: Str) -> U32 { nn(eat_n(s), s) }   //~ E0601
 
 pub fn constructor_then_place(move s: Str) -> U32 { oo(Some(s), s) }   //~ E0601
 
-pub rt fn rt_constructor_then_place(move s: Str) -> U32 { oo(Some(s), s) }   //~ E0901
+pub rt fn rt_constructor_then_place(move s: Str) -> U32 { oo(Some(s), s) }   //~ E0601
 
 pub fn block_then_place(move s: Str) -> U32 { nn({ eat_n(s) }, s) }   //~ E0601
 
-pub rt fn rt_block_then_place(move s: Str) -> U32 { nn({ eat_n(s) }, s) }   //~ E0901
+pub rt fn rt_block_then_place(move s: Str) -> U32 { nn({ eat_n(s) }, s) }   //~ E0601
 
 pub fn if_then_place(move s: Str, c: Bool) -> U32 { nn(if c { eat_n(s) } else { 0 }, s) }   //~ E0601
 
-pub rt fn rt_if_then_place(move s: Str, c: Bool) -> U32 { nn(if c { eat_n(s) } else { 0 }, s) }   //~ E0901
+pub rt fn rt_if_then_place(move s: Str, c: Bool) -> U32 { nn(if c { eat_n(s) } else { 0 }, s) }   //~ E0601
 
 pub fn match_then_place(move s: Str, k: U32) -> U32 { nn(match k { 1 => eat_n(s), _ => 0 }, s) }   //~ E0601
 
-pub rt fn rt_match_then_place(move s: Str, k: U32) -> U32 { nn(match k { 1 => eat_n(s), _ => 0 }, s) }   //~ E0901
+pub rt fn rt_match_then_place(move s: Str, k: U32) -> U32 { nn(match k { 1 => eat_n(s), _ => 0 }, s) }   //~ E0601
 
 pub fn tuple_then_place(move s: Str) -> U32 { pp((s, 1), s) }   //~ E0601
 
-pub rt fn rt_tuple_then_place(move s: Str) -> U32 { pp((s, 1), s) }   //~ E0901
+pub rt fn rt_tuple_then_place(move s: Str) -> U32 { pp((s, 1), s) }   //~ E0601
 
 pub fn struct_then_place(move s: Str) -> U32 { qq(Param { name: s, value: 0.0 }, s) }   //~ E0601
 
-pub rt fn rt_struct_then_place(move s: Str) -> U32 { qq(Param { name: s, value: 0.0 }, s) }   //~ E0901
+pub rt fn rt_struct_then_place(move s: Str) -> U32 { qq(Param { name: s, value: 0.0 }, s) }   //~ E0601
 
 pub fn receiver_then_place(move s: Str) -> U32 { W { s: s }.put(s) }   //~ E0601
 
-pub rt fn rt_receiver_then_place(move s: Str) -> U32 { W { s: s }.put(s) }   //~ E0901
+pub rt fn rt_receiver_then_place(move s: Str) -> U32 { W { s: s }.put(s) }   //~ E0601
 
 pub rt fn other_place_nested(move s: Str, move t: Str) -> U32 { nn(eat_n(t), s) }
 

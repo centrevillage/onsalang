@@ -31,7 +31,7 @@ pub fn via_let(move s: Holder) -> Buf[F32] {
 }
 
 // A second `move` of an argument (E0704): the calls to `consume` need `Alloc` and are not `rt`,
-// which the effects and rt stages would report if they ran (E0601, E0901).
+// which the effects and rt stages would report if they ran (E0601 in both, S-783 B3).
 pub fn consume(move b: Buf[F32]) uses {Alloc} {}
 
 pub fn twice(move b: Buf[F32]) {
@@ -45,14 +45,14 @@ pub rt fn twice_rt(move b: Buf[F32]) {
 }
 
 // Contrast: the same shapes without a modes error get the effects and rt errors of the later
-// stages (one-line functions, so that the line of the mark does not depend on where the use is).
+// stages (one-line functions; the `rt fn` calling `consume` is an E0601, as the `fn` is, S-783 B3, and the call of the `rt fn` `calls_slow` that is not `rt` is an E0901).
 pub fn once(move b: Buf[F32]) { consume(move b) }   //~ E0601
 
-pub rt fn once_rt(move b: Buf[F32]) { consume(move b) }   //~ E0901
+pub rt fn once_rt(move b: Buf[F32]) { consume(move b) }   //~ E0601
 
 pub fn whole_dropped(move s: Holder) -> F32 { 1.0 }   //~ E0601
 
-pub rt fn whole_dropped_rt(move s: Holder) -> F32 { 1.0 }   //~ E0901
+pub rt fn whole_dropped_rt(move s: Holder) -> F32 { 1.0 }   //~ E0601
 
 pub fn slow(x: F32) -> F32 { x }
 

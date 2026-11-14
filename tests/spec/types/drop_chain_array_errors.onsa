@@ -3,7 +3,7 @@
 // spec = ["§4.1", "§4.5", "§4.6", "§12.2"]
 // mode = "check"
 
-// S-782 (§4.6, §12.2): An `Array[T]` is Shared whatever its argument (§4.1), so a chain that ends in `S_0[T] { a: Array[T], n: U32 }` is Shared. Dropping it needs `Alloc` (an E0901 in an `rt fn`, an E0601 otherwise), and it is not an element of a `Buf` (E0416, §4.5). The depth is 11, in a chain `G_k[T] { x: G_(k-1)[(T, T)], y: G_(k-1)[(T, U8)] }`; `mode = "check"` only. One error per item (P-01).
+// S-782 (§4.6, §12.2): An `Array[T]` is Shared whatever its argument (§4.1), so a chain that ends in `S_0[T] { a: Array[T], n: U32 }` is Shared. Dropping it needs `Alloc` (an E0601, in an `rt fn` too), and it is not an element of a `Buf` (E0416, §4.5). The depth is 11, in a chain `G_k[T] { x: G_(k-1)[(T, T)], y: G_(k-1)[(T, U8)] }`; `mode = "check"` only. One error per item (P-01).
 
 pub struct S0[T] {
   a: Array[T],
@@ -65,7 +65,7 @@ pub struct S11[T] {
   y: S10[(T, U8)],
 }
 
-pub rt fn drop_it_rt(move g: S11[F32]) -> U32 { 0 }   //~ E0901
+pub rt fn drop_it_rt(move g: S11[F32]) -> U32 { 0 }   //~ E0601
 
 pub fn drop_it(move g: S11[F32]) -> U32 { 0 }   //~ E0601
 

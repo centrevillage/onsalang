@@ -9,7 +9,7 @@
 // arm over a place (an argument) is borrowed and cannot (negative/binding_heading_borrow_move.onsa).
 // This is the form of the repro issues/R/R-251/match_call_affine.onsa. Every binding is read or moved
 // (a binding never read is an E0309). No diagnostic is expected anywhere in this file. The same
-// headings in an `rt fn` are an E0901 for the drop of the owned binding
+// headings in an `rt fn` are an E0601 for the drop of the owned binding
 // (negative/binding_heading_owned_rt.onsa); here every arm moves the binding on, so nothing is dropped
 // and the form is legal in an `rt fn` too (the last cases). The element of a `for` over a call moved on in
 // the body is in values/binding_heading_owned_move_loop.onsa.

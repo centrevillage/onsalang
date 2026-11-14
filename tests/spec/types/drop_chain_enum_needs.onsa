@@ -3,7 +3,7 @@
 // spec = ["§4.4", "§4.6", "§5.2", "§10", "§12.2"]
 // mode = "check"
 
-// S-782 (§4.6: the kind of an `enum` is found from its payloads like a struct's; §12.2: the drop of what holds a `Str` or a `Buf` needs `Alloc`): a struct that holds the chain and a `Str` or a `Buf` needs `Alloc` to be dropped: an E0901 in an `rt fn`, an E0601 otherwise.
+// S-782 (§4.6: the kind of an `enum` is found from its payloads like a struct's; §12.2: the drop of what holds a `Str` or a `Buf` needs `Alloc`): a struct that holds the chain and a `Str` or a `Buf` needs `Alloc` to be dropped: an E0601, in an `rt fn` too.
 // The chain is `E_k[T] { A(E_(k-1)[(T, T)]), B(E_(k-1)[(T, U8)]) }` with `E_0[T] { V(T) }` (all declared `[T: ?Dup]`), at the depth 11. `mode = "check"` only.
 
 pub enum E0[T: ?Dup] {
@@ -75,10 +75,10 @@ pub struct HBuf {
   b: Buf[F32],
 }
 
-pub rt fn drop_str_rt(move h: HStr) -> U32 { 0 }   //~ E0901
+pub rt fn drop_str_rt(move h: HStr) -> U32 { 0 }   //~ E0601
 
 pub fn drop_str(move h: HStr) -> U32 { 0 }   //~ E0601
 
-pub rt fn drop_buf_rt(move h: HBuf) -> U32 { 0 }   //~ E0901
+pub rt fn drop_buf_rt(move h: HBuf) -> U32 { 0 }   //~ E0601
 
 pub fn drop_buf(move h: HBuf) -> U32 { 0 }   //~ E0601

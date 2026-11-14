@@ -1,0 +1,78 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§10", "§12.2", "§18.1"]
+// fixes = 0
+
+// W6-03 U4a/t, S-783 (C1, C2, B3 and its 2026-11-14 addition), S-77, S-82 (§8.1: "診断は最初の使用の位置に置く"; "最初は診断の並べ方（§18.1）で決め、同じ範囲の作る使用（呼び出し、補間）と破棄は、作る使用を先とする"; §18.1: the
+// diagnostics are ordered by the start of the position, then the end, then the code): which of several uses of `Alloc` in one function is the first. A body of several lines: the use that starts first is the
+// one, whichever statement it is in and wherever the value is dropped (`drop_before_call`: the name `s` is written before the call that comes later in the text, and the drop of `s` is at the end of the body). A
+// call of a function that has `Alloc` is a use at the call (`call_in_body`), and an interpolation is a use at the literal; the name of a binding comes before the literal that it binds. The call
+// `mk_s(n)` and the drop of its result in `mk_s(n).len()` have the same range, so the creation comes first (C2, no difference in the position). One error per function (P-01).
+// An `rt fn` has no candidate (`fixes = 0`; §10 rule 1), and the same uses are E0601 in it (S-77). A call of a function that has `Alloc` in its row is also a call of a function that is not `rt` (E0901, §10
+// rule 4) at the same range, and the order of §18.1 reports the E0601 (S-783 B3: `b3_alloc_call`). The call of a function that is not `rt` and has no `Alloc` is E0901 for the call, and its result that is dropped as
+// a temporary value is an E0601 at the same range, so it is an E0601 as well when the result needs `Alloc` for its drop (the 2026-11-14 addition of S-783: `nonrt_call_temp`). A call that is a use of
+// no `Alloc` stays an E0901 (first_use_rt_e0901.onsa). The same forms in a `fn` are in first_use_order_fn.onsa.
+
+pub rt fn mk(n: U32) -> Str { "x" }
+
+pub fn mk_u(n: U32) -> U32 uses {Alloc} { n }
+
+pub fn mk_s(n: U32) -> Str uses {Alloc} { "x" }
+
+pub fn heavy_s(n: U32) -> Str { "a" }
+
+pub fn heavy_u(n: U32) -> U32 { n }
+
+pub rt fn call_in_body(n: U32) -> U32 {
+  let a = 1
+  mk_u(n) + a   //~ E0601 @3
+}
+
+pub rt fn drop_before_call(n: U32) -> U32 {
+  let s = mk(n)   //~ E0601 @7
+  mk_u(n) + s.len()
+}
+
+pub rt fn interp_then_call(n: U32) -> U32 {
+  let s = "gain {n}"   //~ E0601 @7
+  mk_u(n) + s.len()
+}
+
+pub rt fn call_then_interp(n: U32) -> U32 {
+  let a = mk_u(n)   //~ E0601 @11
+  let s = "gain {a}"
+  s.len()
+}
+
+pub rt fn in_branches(c: Bool, n: U32) -> U32 {
+  if c {
+    mk_u(n)   //~ E0601 @5
+  } else {
+    mk_u(n + 1)
+  }
+}
+
+pub rt fn in_loop_body(n: U32) -> U32 {
+  var t = 0
+  for i in 0 ..< n {
+    t = t + mk_u(i)   //~ E0601 @13
+  }
+  t
+}
+
+pub rt fn create_and_drop_same_range(n: U32) -> U32 {
+  mk_s(n).len()   //~ E0601 @3
+}
+
+pub rt fn nonrt_call_temp(n: U32) -> U32 {
+  heavy_s(n).len()   //~ E0601 @3
+}
+
+pub rt fn b3_alloc_call(n: U32) -> U32 {
+  mk_u(n)   //~ E0601 @3
+}
+
+pub rt fn e0601_before_e0901(n: U32) -> U32 {
+  let s = mk(n)   //~ E0601 @7
+  heavy_u(n) + s.len()
+}

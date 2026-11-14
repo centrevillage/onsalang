@@ -7,23 +7,23 @@
 // owned binding ("静的な値でも破棄の要らないリテラルでもない… 演算の結果"), and the creation needs
 // `Alloc` in the row of the function (E0601 at the first use, §8.1: "診断は最初の使用の位置に置く").
 // The literal without interpolation beside it needs none (values/binding_static_leaf.onsa).
-// Today the E0601 is placed at the name of the function and not at the first use, so this file waits
-// for the work W6-03 (R-87 (6), the same reason as fixes/e0601_alloc_row.onsa). One error per item
-// (P-01).
+// The E0601 is at the first use (R-87 (6), S-783): the name of the binding when it is dropped (`s`, which
+// is written before the literal), and the literal in `interpolated_derived`, where `s` is moved on and
+// only the creation is a use of `Alloc`. One error per item (P-01).
 
 pub fn interpolated(v: U32) -> U32 {
-  let s = "gain {v}"           //~ E0601
+  let s = "gain {v}"           //~ E0601 @7
   s.len()
 }
 
 pub fn interpolated_derived(v: U32) -> U32 {
-  let s = "gain {v}"           //~ E0601
+  let s = "gain {v}"           //~ E0601 @11
   let t = s
   t.len()
 }
 
 pub fn interpolated_var(v: U32) -> U32 {
-  var s = "gain {v}"           //~ E0601
+  var s = "gain {v}"           //~ E0601 @7
   s.len()
 }
 

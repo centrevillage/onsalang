@@ -6,14 +6,14 @@
 // そこに `move` を置けるなら、複製せずに移す"; "消費する位置" are "束縛の見出し、値を置く位置、`move` の引数、返り値、取り出す形" and the places that hold a value are "代入の右辺、struct / 配列 /
 // タプルのリテラルと構築子の要素", §5.2 above; §12.2: "所有する Dup の値 ... を、消費する位置（返り値、`move` の引数、構築子とリテラルの要素、束縛の見出しなど）で移すこと: 要らない"): the places
 // that hold a value. An owned Dup value (a `move` parameter that is a `Str`, a type parameter `T` with no bound) that is an element of a constructor, a struct, a tuple or an array literal, nested or
-// not, is moved when nothing uses it afterwards, so that the original is not dropped and the function needs no `Alloc`: no E0601 in a function without `uses {Alloc}`, no E0901 in an `rt fn`. The
+// not, is moved when nothing uses it afterwards, so that the original is not dropped and the function needs no `Alloc`: no E0601 in a function without `uses {Alloc}`, no E0601 in an `rt fn`. The
 // literal is the value of the function, or the argument of a `move` parameter (`eat_o(Some(s))`), so that nothing else is a Dup value to drop. The same variable twice in one literal (`(s, s)`,
 // `[s, s]`) is a copy in the first element and a move in the last ("リテラルと構築子の要素は左から評価され", the later element uses it, and the copy is a reference count: §12.2 "Shared 値を含む値の型を
 // 組むこと ... 要らない"), so no drop is left; the condition "同じ呼び出しの他の引数・受け手と重ならず" is about a call, and a literal is not one (§3.5: "構築子、struct・配列・タプルのリテラル ... の
 // 兄弟の要素の中の変更は重なりに数えない"). A call before the last element that hands the value off (`W2 { a: pass_s(s), b: s }`) is a copy for the call (the element after uses it) and the last element
 // moves. The literal in the return position of a loop that leaves at once, and the forms that use a binding derived from the value only before the hand-off (or a Copy binding), are moves too. Every
 // function here is an error today (the hand-off at a value position is a copy: R-255 only moved the return, the `move` argument and the extracted forms), and none is one after. The helpers drop
-// their argument, so their own E0901 is reported (the same as negative/drop_for_one_path.onsa); the callers have no marker. The functions with a statement list are on several lines (no error is
+// their argument, so their own E0601 is reported (the same as negative/drop_for_one_path.onsa); the callers have no marker. The functions with a statement list are on several lines (no error is
 // expected, so the line does not matter, S-783). The forms that stay copies are in negative/dup_release_value_later.onsa, _overlap, _loop, _derived and _borrowed, the forms that are moves today
 // already in negative/dup_release_value_ok_now.onsa.
 
@@ -34,15 +34,15 @@ pub enum E {
   N,
 }
 
-pub rt fn eat_o(move o: Option[Str]) -> U32 { 0 }   //~ E0901
+pub rt fn eat_o(move o: Option[Str]) -> U32 { 0 }   //~ E0601
 
-pub rt fn eat_t(move t: (Str, U32)) -> U32 { 0 }   //~ E0901
+pub rt fn eat_t(move t: (Str, U32)) -> U32 { 0 }   //~ E0601
 
-pub rt fn eat_p(move p: Param) -> U32 { 0 }   //~ E0901
+pub rt fn eat_p(move p: Param) -> U32 { 0 }   //~ E0601
 
-pub rt fn eat_e(move e: E) -> U32 { 0 }   //~ E0901
+pub rt fn eat_e(move e: E) -> U32 { 0 }   //~ E0601
 
-pub rt fn eat_og[T](move o: Option[T]) -> U32 { 0 }   //~ E0901
+pub rt fn eat_og[T](move o: Option[T]) -> U32 { 0 }   //~ E0601
 
 pub rt fn pass_s(move s: Str) -> Str { s }
 

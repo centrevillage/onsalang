@@ -3,14 +3,14 @@
 // spec = ["§5.2", "§5.4", "§7", "§10", "§12.2", "§15.1"]
 //
 // [[test.fix]]
-// at = "lib.onsa:18:8"
+// at = "lib.onsa:18:71"
 // code = "E0601"
 // candidate = 1
-// leaves = ["main.onsa:43:8 E0601"]
+// leaves = ["main.onsa:43:55 E0601"]
 
 // W6-02 U6/t, R-390, R-32, S-1036 (§12.2: "所有する Shared 値・`Buf` と、それらを含む値の破棄: 要る"; §5.4: what the pattern of an owned head leaves unbound is dropped; §15.1): the types and the functions of another module
 // (`lib.onsa`: its own drops are marked there). The drop of what a pattern leaves unbound is decided from its type, whatever module declares it, so a function of this module whose pattern leaves a `lib.K`, a
-// `Buf` of a `lib.E` or the `Buf` that a call of `lib` returns (the `_` of an arm, the last `_` of a struct pattern, an arm that binds nothing, a `let _`, a `move _` argument) is an E0601 (an E0901 in an `rt fn`). A call of
+// `Buf` of a `lib.E` or the `Buf` that a call of `lib` returns (the `_` of an arm, the last `_` of a struct pattern, an arm that binds nothing, a `let _`, a `move _` argument) is an E0601 (an `rt fn` too, S-77). A call of
 // a function of `lib` that drops (`lib_arm`) is no error of this module. The legal forms are in negative/drop_wild_pkg_ok. This version counts no drop of what a pattern leaves unbound (R-32), so none of these is reported today. The
 // functions are one-liners (S-783). One error per function (P-01).
 
@@ -18,27 +18,27 @@ use lib.{E, K, mk_k, mk_o, lib_arm, rt_lib_arm}
 
 pub fn arm_enum(move e: E) -> U32 { match move e { E.A(_, k) => k, E.B => 0 } }   //~ E0601
 
-pub rt fn rt_arm_enum(move e: E) -> U32 { match move e { E.A(_, k) => k, E.B => 0 } }   //~ E0901
+pub rt fn rt_arm_enum(move e: E) -> U32 { match move e { E.A(_, k) => k, E.B => 0 } }   //~ E0601
 
 pub fn rest_struct(move k: K) -> U32 { match move k { K { n: q, _ } => q } }   //~ E0601
 
-pub rt fn rt_rest_struct(move k: K) -> U32 { match move k { K { n: q, _ } => q } }   //~ E0901
+pub rt fn rt_rest_struct(move k: K) -> U32 { match move k { K { n: q, _ } => q } }   //~ E0601
 
 pub fn nobind_call(move b: Buf[F32]) -> U32 { match mk_k(move b) { _ => 0 } }   //~ E0601
 
-pub rt fn rt_nobind_call(move b: Buf[F32]) -> U32 { match mk_k(move b) { _ => 0 } }   //~ E0901
+pub rt fn rt_nobind_call(move b: Buf[F32]) -> U32 { match mk_k(move b) { _ => 0 } }   //~ E0601
 
 pub fn arm_call(move b: Buf[F32]) -> U32 { match mk_o(move b) { Some(_) => 1, None => 0 } }   //~ E0601
 
-pub rt fn rt_arm_call(move b: Buf[F32]) -> U32 { match mk_o(move b) { Some(_) => 1, None => 0 } }   //~ E0901
+pub rt fn rt_arm_call(move b: Buf[F32]) -> U32 { match mk_o(move b) { Some(_) => 1, None => 0 } }   //~ E0601
 
 pub fn let_call(move b: Buf[F32]) { let _ = mk_k(move b) }   //~ E0601
 
-pub rt fn rt_let_call(move b: Buf[F32]) { let _ = mk_k(move b) }   //~ E0901
+pub rt fn rt_let_call(move b: Buf[F32]) { let _ = mk_k(move b) }   //~ E0601
 
 pub fn param_lib(move _: K) {}   //~ E0601
 
-pub rt fn rt_param_lib(move _: K) {}   //~ E0901
+pub rt fn rt_param_lib(move _: K) {}   //~ E0601
 
 pub fn call_of_lib(move o: Option[Buf[F32]]) -> U32 { lib_arm(move o) }
 

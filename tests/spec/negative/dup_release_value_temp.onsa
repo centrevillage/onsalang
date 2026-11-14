@@ -5,12 +5,12 @@
 // W6-02 U7/t, S-1030 (§12.2: "一時の値 ... を消費しない位置（借用の引数、受け手、演算子の被演算子、条件、添字とフィールドを読む基）に置くと、... 破棄される。その前に早い出口（`?`、`return`、`break`、`continue`）で抜けるときは、
 // 抜けるときに破棄される"; R-32): the literals that a position that does not consume holds, and the value that a literal waits with when `?` leaves. The element `s` of the literal is moved (nothing uses it
 // afterwards), but the literal is a temporary value that is dropped when the call or the operation is finished (a borrowed argument, the receiver, the base of a field), so the drop of the literal needs `Alloc`:
-// an E0601 in a function without `uses {Alloc}` and an E0901 in an `rt fn`, and the value is dropped as the temporary and not as `s`. The literal that waits for a `?` (`Some((s, r?))`, `Ok((r?, s))`,
+// an E0601 in a function without `uses {Alloc}` and in an `rt fn` (S-77), and the value is dropped as the temporary and not as `s`. The literal that waits for a `?` (`Some((s, r?))`, `Ok((r?, s))`,
 // `Ok(eat_t((s, r?)))`) holds `s` (or leaves with `s` alive when `r?` is first) at the early exit, where it is dropped (§12.2, R-32: "早い出口の時点で待っている被演算子"). The contrast, a literal that is moved on to the argument of a `move`
-// parameter, is a move: negative/dup_release_value_ok.onsa (`move_arg_tuple`). The helper drops its argument, so its own E0901 is reported (the same as negative/drop_for_one_path.onsa). Every function here is an error
+// parameter, is a move: negative/dup_release_value_ok.onsa (`move_arg_tuple`). The helper drops its argument, so its own E0601 is reported (the same as negative/drop_for_one_path.onsa). Every function here is an error
 // before and after U7 and the cause changes (before: the original of the copy; after: the temporary or the waiting value). The functions are one-liners (S-783). One error per function (P-01).
 
-pub rt fn eat_t(move t: (Str, U32)) -> U32 { 0 }   //~ E0901
+pub rt fn eat_t(move t: (Str, U32)) -> U32 { 0 }   //~ E0601
 
 pub rt fn len_o(o: Option[Str]) -> U32 { 0 }
 
@@ -20,34 +20,34 @@ pub rt fn len_t(t: (Str, U32)) -> U32 { 0 }
 
 pub fn array_receiver(move s: Str) -> U32 { [s, s].len() }   //~ E0601
 
-pub rt fn rt_array_receiver(move s: Str) -> U32 { [s, s].len() }   //~ E0901
+pub rt fn rt_array_receiver(move s: Str) -> U32 { [s, s].len() }   //~ E0601
 
 pub fn array_of_one_receiver(move s: Str) -> U32 { [s].len() }   //~ E0601
 
-pub rt fn rt_array_of_one_receiver(move s: Str) -> U32 { [s].len() }   //~ E0901
+pub rt fn rt_array_of_one_receiver(move s: Str) -> U32 { [s].len() }   //~ E0601
 
 pub fn tuple_borrowed_arg(move s: Str) -> U32 { len_t((s, 1)) }   //~ E0601
 
-pub rt fn rt_tuple_borrowed_arg(move s: Str) -> U32 { len_t((s, 1)) }   //~ E0901
+pub rt fn rt_tuple_borrowed_arg(move s: Str) -> U32 { len_t((s, 1)) }   //~ E0601
 
 pub fn option_borrowed_arg(move s: Str) -> U32 { len_o(Some(s)) }   //~ E0601
 
-pub rt fn rt_option_borrowed_arg(move s: Str) -> U32 { len_o(Some(s)) }   //~ E0901
+pub rt fn rt_option_borrowed_arg(move s: Str) -> U32 { len_o(Some(s)) }   //~ E0601
 
 pub fn field_of_a_tuple(move s: Str) -> U32 { (s, 1).1 }   //~ E0601
 
-pub rt fn rt_field_of_a_tuple(move s: Str) -> U32 { (s, 1).1 }   //~ E0901
+pub rt fn rt_field_of_a_tuple(move s: Str) -> U32 { (s, 1).1 }   //~ E0601
 
 // ------------------------------------------------------------------ a literal that waits for a `?`
 
 pub fn wait_before(move s: Str, r: Result[U32, U32]) -> Result[Option[(Str, U32)], U32] { Ok(Some((s, r?))) }   //~ E0601
 
-pub rt fn rt_wait_before(move s: Str, r: Result[U32, U32]) -> Result[Option[(Str, U32)], U32] { Ok(Some((s, r?))) }   //~ E0901
+pub rt fn rt_wait_before(move s: Str, r: Result[U32, U32]) -> Result[Option[(Str, U32)], U32] { Ok(Some((s, r?))) }   //~ E0601
 
 pub fn wait_after(move s: Str, r: Result[U32, U32]) -> Result[(U32, Str), U32] { Ok((r?, s)) }   //~ E0601
 
-pub rt fn rt_wait_after(move s: Str, r: Result[U32, U32]) -> Result[(U32, Str), U32] { Ok((r?, s)) }   //~ E0901
+pub rt fn rt_wait_after(move s: Str, r: Result[U32, U32]) -> Result[(U32, Str), U32] { Ok((r?, s)) }   //~ E0601
 
 pub fn wait_in_a_move_arg(move s: Str, r: Result[U32, U32]) -> Result[U32, U32] { Ok(eat_t((s, r?))) }   //~ E0601
 
-pub rt fn rt_wait_in_a_move_arg(move s: Str, r: Result[U32, U32]) -> Result[U32, U32] { Ok(eat_t((s, r?))) }   //~ E0901
+pub rt fn rt_wait_in_a_move_arg(move s: Str, r: Result[U32, U32]) -> Result[U32, U32] { Ok(eat_t((s, r?))) }   //~ E0601

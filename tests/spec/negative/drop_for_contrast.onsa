@@ -8,7 +8,7 @@
 // is always evaluated, a nested loop, the names of a tuple or struct pattern, a struct or an `Option` element), a borrowed `for`
 // (`for s in xs`, §5.4: no drop), a Copy element, a function with `uses {Alloc}` (the drop is allowed), and a path that is left by a panic
 // (§9.2, §12.2: "panic で抜ける道の、生きている値の破棄: 要らない"). The helpers `sink`, `eat`, `sink_h` and `sink_o` are `rt` functions that
-// drop their argument, so their own E0901 is reported (an `rt` function cannot consume a `Buf` without a drop of its own; a caller of a
+// drop their argument, so their own E0601 is reported (an `rt` function cannot consume a `Buf` without a drop of its own; a caller of a
 // function that needs `Alloc` needs it too, so the moves on every path cannot be written with a helper that is legal). This version
 // already reports exactly these. The last four functions are the forms that this version already reports and that stay reported: the
 // owned binding of the arm of a `match move` in the body (`t`, `b`), which is a binding of the arm and not of the loop
@@ -19,13 +19,13 @@ pub struct Holder {
   gain: F32,
 }
 
-pub rt fn sink(move b: Buf[F32]) {}   //~ E0901
+pub rt fn sink(move b: Buf[F32]) {}   //~ E0601
 
-pub rt fn eat(move b: Buf[F32]) -> Bool { true }   //~ E0901
+pub rt fn eat(move b: Buf[F32]) -> Bool { true }   //~ E0601
 
-pub rt fn sink_h(move h: Holder) {}   //~ E0901
+pub rt fn sink_h(move h: Holder) {}   //~ E0601
 
-pub rt fn sink_o(move o: Option[Buf[F32]]) {}   //~ E0901
+pub rt fn sink_o(move o: Option[Buf[F32]]) {}   //~ E0601
 
 pub fn alloc_sink(move b: Buf[F32]) uses {Alloc} {}
 
@@ -119,8 +119,8 @@ pub fn panic_nested(c: Bool, d: Bool, move xs: [Buf[F32]; 2]) { for s in move xs
 
 pub fn arm_heading_binding(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { match move s { t => if c { sink(move t) } } } }   //~ E0601
 
-pub rt fn rt_arm_heading_binding(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { match move s { t => if c { sink(move t) } } } }   //~ E0901
+pub rt fn rt_arm_heading_binding(c: Bool, move xs: [Buf[F32]; 2]) { for s in move xs { match move s { t => if c { sink(move t) } } } }   //~ E0601
 
 pub fn option_element_arm(c: Bool, move os: [Option[Buf[F32]]; 2]) { for o in move os { match move o { Some(b) => if c { sink(move b) }, None => {} } } }   //~ E0601
 
-pub rt fn rt_option_element_arm(c: Bool, move os: [Option[Buf[F32]]; 2]) { for o in move os { match move o { Some(b) => if c { sink(move b) }, None => {} } } }   //~ E0901
+pub rt fn rt_option_element_arm(c: Bool, move os: [Option[Buf[F32]]; 2]) { for o in move os { match move o { Some(b) => if c { sink(move b) }, None => {} } } }   //~ E0601

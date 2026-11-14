@@ -2,9 +2,9 @@
 // [test]
 // spec = ["§5.2", "§8.1", "§10", "§12.2", "§15.1"]
 
-// W6-02 U5b/t, R-32, S-1038 (§12.2: "代入で上書きされる前の値の破棄を含む … : 要る"; §8.1: "効果行に無い使用は E0601"; §10 rule 1: an `rt fn` does not call a function that is not `rt`, E0901): a function that
+// W6-02 U5b/t, R-32, S-1038 (§12.2: "代入で上書きされる前の値の破棄を含む … : 要る"; §8.1: "効果行に無い使用は E0601"; §10 rules 1 and 4: an `rt fn` has no `Alloc` row, and does not call a function that is not `rt`): a function that
 // overwrites a value that needs `Alloc` to drop has `uses {Alloc}` in its signature (negative/drop_over_ok.onsa), so the effect reaches the callers: a caller without `uses {Alloc}` is an E0601 at the call, and an
-// `rt fn` caller is an E0901 (the callee is not `rt`). The callers are the function of the same module, a method, a generic function and a function that is passed on to an `inout` parameter. These are
+// `rt fn` caller is an E0601 too (the call is the use of `Alloc` and a call of a function that is not `rt`, E0901, at the same range: §18.1 reports the E0601, S-783 B3). The callers are the function of the same module, a method, a generic function and a function that is passed on to an `inout` parameter. These are
 // errors today and stay errors: they check that the effect of the callee is written in its signature, so they keep the callers of the rewritten helpers of the other cases (`reset`, `clear`) honest. The
 // functions are one-liners (S-783). One error per function (P-01).
 
@@ -25,23 +25,23 @@ impl P {
 
 pub fn call_function(inout s: Str, t: Str) { set_str(inout s, t) }   //~ E0601
 
-pub rt fn rt_call_function(inout s: Str, t: Str) { set_str(inout s, t) }   //~ E0901
+pub rt fn rt_call_function(inout s: Str, t: Str) { set_str(inout s, t) }   //~ E0601
 
 pub fn call_buf(inout b: Buf[F32], move c: Buf[F32]) { set_buf(inout b, move c) }   //~ E0601
 
-pub rt fn rt_call_buf(inout b: Buf[F32], move c: Buf[F32]) { set_buf(inout b, move c) }   //~ E0901
+pub rt fn rt_call_buf(inout b: Buf[F32], move c: Buf[F32]) { set_buf(inout b, move c) }   //~ E0601
 
 pub fn call_generic(inout s: Str, t: Str) { put(inout s, t) }   //~ E0601
 
-pub rt fn rt_call_generic(inout s: Str, t: Str) { put(inout s, t) }   //~ E0901
+pub rt fn rt_call_generic(inout s: Str, t: Str) { put(inout s, t) }   //~ E0601
 
 pub fn call_method(inout p: P, t: Str) { p.set_s!(t) }   //~ E0601
 
-pub rt fn rt_call_method(inout p: P, t: Str) { p.set_s!(t) }   //~ E0901
+pub rt fn rt_call_method(inout p: P, t: Str) { p.set_s!(t) }   //~ E0601
 
 pub fn call_in_a_loop(inout s: Str, xs: [Str; 2]) { for t in xs { set_str(inout s, t) } }   //~ E0601
 
-pub rt fn rt_call_in_a_loop(inout s: Str, xs: [Str; 2]) { for t in xs { set_str(inout s, t) } }   //~ E0901
+pub rt fn rt_call_in_a_loop(inout s: Str, xs: [Str; 2]) { for t in xs { set_str(inout s, t) } }   //~ E0601
 
 pub fn call_with_the_row(inout s: Str, t: Str) uses {Alloc} { set_str(inout s, t) }
 

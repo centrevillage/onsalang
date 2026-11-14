@@ -7,7 +7,7 @@
 // (`x` and `y` are arguments in the default mode, of the type `Buf[F32]`), the binding is a borrowed
 // binding of an Affine value: "借用束縛は消費しない" (§5.2), it can be read and passed on in the default
 // mode, and a binding derived from it (`let q = t`) is borrowed too (§5.4: "派生"). A borrowed binding
-// ends without a drop (§12.2), so an `rt fn` binds a `Buf` this way, where an owned `Buf` is an E0901.
+// ends without a drop (§12.2), so an `rt fn` binds a `Buf` this way, where an owned `Buf` is an E0601.
 // Every binding is read (a binding never read is an E0309). No diagnostic is expected anywhere in this
 // file. The uses that stay an error (moving the binding on, returning it) are in
 // negative/binding_tail_affine_move.onsa, the run is in values/binding_tail_run.onsa.
@@ -113,7 +113,7 @@ pub fn in_a_loop(c: Bool, x: Buf[F32], y: Buf[F32], n: U32) -> U32 {
   total
 }
 
-// --------------------------------------------------------------- in an rt fn: no drop, no E0901
+// --------------------------------------------------------------- in an rt fn: no drop, no E0601
 
 pub rt fn rt_if_tails(c: Bool, x: Buf[F32], y: Buf[F32]) -> U32 {
   let t = if c { x } else { y }

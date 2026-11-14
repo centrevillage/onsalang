@@ -59,12 +59,62 @@ pub(crate) enum What<'a> {
 }
 
 impl Use<'_> {
-    /// Whether the use needs `Alloc`.
-    pub(crate) fn needs_alloc(&self, a: &Analysis) -> bool {
+    /// Whether the use needs the effect declared at `effect`: the one test
+    /// of what a use needs (M12).
+    pub(crate) fn needs(&self, a: &Analysis, effect: DefId) -> bool {
         match self.needs {
-            Needs::Row(row) => a.uses_alloc(row),
-            Needs::Alloc => true,
+            Needs::Row(row) => row.has(effect),
+            Needs::Alloc => a.alloc == Some(effect),
         }
+    }
+
+    /// What the use does, as a clause the diagnostics of it (E0601, E0901)
+    /// go on from (M12): what it calls, makes or drops. `src` is the text of
+    /// a span of its file.
+    pub(crate) fn describe(&self, a: &Analysis, ast: &Ast, src: &dyn Fn(Span) -> String) -> String {
+        let at = src(self.at);
+        match &self.what {
+            What::Call { callee } => format!("this calls `{}`", a.def(*callee).name),
+            What::ValueCall => "this calls a function value".into(),
+            What::Interp => "this string interpolation creates a `Str`".into(),
+            What::Drop { drop, .. } => match drop {
+                Drop::Local(l) => format!("`{}`, which owns a `{}`, is dropped", l.name, a.display_type(l.ty)),
+                Drop::Rest { root, .. } => {
+                    format!("taking `{at}` out of `{}` drops the rest of it", root.name(ast, src))
+                }
+                Drop::Temp { .. } => format!("`{at}` is dropped after it is used"),
+                Drop::Value { .. } => format!("`{at}` is dropped by an exit before it is consumed"),
+                Drop::Overwrite { .. } => format!("assigning `{at}` drops the value it held"),
+                Drop::IterRest { early, .. } => {
+                    let what = if *early { "what it has not iterated and its container" } else { "its container" };
+                    format!("the `for` that consumes `{at}` drops {what} when it is left")
+                }
+                Drop::Discard { .. } => format!("what `{at}` binds to no name is dropped"),
+            },
+        }
+    }
+
+    /// The exit that leaves the value this use drops, where it is not where
+    /// the value is written.
+    pub(crate) fn left_at(&self) -> Option<Span> {
+        match &self.what {
+            What::Drop { drop: Drop::Value { exit, .. } | Drop::IterRest { exit, early: true, .. }, .. } => Some(*exit),
+            _ => None,
+        }
+    }
+}
+
+impl<'a> Record<'a> {
+    /// For each effect the row of the body lacks, its first use by the order
+    /// of the record (§8.1, E0601): the one test of whether a use is out of
+    /// the row, which the rt stage reads too (it adds no edge of a body with
+    /// one, §10 rule 5).
+    pub(crate) fn lacking(&self, a: &Analysis) -> Vec<(DefId, &Use<'a>)> {
+        let DefKind::Fn(f) = &a.def(self.id).kind else { return Vec::new() };
+        // SPEC-GAP(S-1053): one E0601 for each scope and effect.
+        // `Alloc` alone until every effect is checked (W6-03 U7).
+        let effects = a.alloc.into_iter().filter(|&e| !f.effects.has(e));
+        effects.filter_map(|e| self.uses.iter().find(|u| u.needs(a, e)).map(|u| (e, u))).collect()
     }
 }
 
@@ -108,6 +158,7 @@ pub(crate) fn call_use<'a>(a: &'a Analysis, ast: &Ast, body: &BodyInfo, e: ExprI
     let (row, rt, what) = match body.targets.get(&e)? {
         Target::Fn { def, .. } | Target::Method { def, .. } => {
             let DefKind::Fn(f) = &a.def(*def).kind else { return None };
+            // SPEC-GAP(S-1059): the row as written, `Alloc` too where an `rt` callee has it (E0902).
             (&f.effects, f.rt, What::Call { callee: *def })
         }
         Target::Value => {

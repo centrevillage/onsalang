@@ -12,10 +12,10 @@
 // (the `for` and the `match` are on one line with their binding). `s` is a borrowed `Str` argument. One error
 // per item (P-01).
 //
-// The place of the first use of a destruction is not written in §8.1 (the use of a creation is the
-// expression that creates, as in negative/binding_static_interp.onsa); this file puts it at the binding of
-// the value, as the creation of an interpolated string, and waits with it for the work W6-03 (R-87 (6)),
-// where the E0601 is placed at the first use. In this version it is at the name of the function.
+// The use of a destruction is at the value that is written (§8.1: "破棄される値を書いた所", S-783): the
+// name of the binding (`t`, `p`, `x` of the `for`, `x` of the `match`: they start before the expression of
+// the head, so the order of §18.1 puts them first), and not at the name of the function
+// (R-87 (6), as negative/binding_static_interp.onsa).
 
 pub struct Param {
   name: Str,
@@ -23,45 +23,45 @@ pub struct Param {
 }
 
 pub fn array_with_an_argument(s: Str) -> U32 {
-  let t = ["a", s] //~ E0601
+  let t = ["a", s] //~ E0601 @7
   t[0].len()
 }
 
 pub fn tuple_with_an_argument(s: Str, v: F32) -> U32 {
-  let p = ("gain", s, v) //~ E0601
+  let p = ("gain", s, v) //~ E0601 @7
   p.0.len()
 }
 
 pub fn struct_with_an_argument(s: Str, v: F32) -> U32 {
-  let p = Param { name: s, value: v } //~ E0601
+  let p = Param { name: s, value: v } //~ E0601 @7
   p.name.len()
 }
 
 pub fn for_over_an_array_with_an_argument(s: Str) -> U32 {
   var n: U32 = 0
-  for x in ["a", s] { n = n + x.len() } //~ E0601
+  for x in ["a", s] { n = n + x.len() } //~ E0601 @7
   n
 }
 
 pub fn match_on_a_pair_of_arguments(a: Str, b: Str) -> U32 {
-  match (a, b) { (x, y) => x.len() + y.len() } //~ E0601
+  match (a, b) { (x, y) => x.len() + y.len() } //~ E0601 @19
 }
 
 pub fn var_of_a_literal(v: F32) -> U32 {
-  var p = Param { name: "gain", value: v } //~ E0601
+  var p = Param { name: "gain", value: v } //~ E0601 @7
   p.value = 2.0
   p.name.len()
 }
 
 pub fn a_name_that_comes_from_an_argument(s: Str, v: F32) -> U32 {
   let q = s
-  let t = (q, v) //~ E0601
+  let t = (q, v) //~ E0601 @7
   t.0.len()
 }
 
 pub fn the_name_of_an_if_with_an_argument(c: Bool, s: Str, v: F32) -> U32 {
   let p = "gain"
   let q = if c { p } else { s }
-  let t = (q, v) //~ E0601
+  let t = (q, v) //~ E0601 @7
   t.0.len()
 }

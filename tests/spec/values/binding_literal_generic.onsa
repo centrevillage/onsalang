@@ -10,7 +10,7 @@
 // struct `Pair[T]` has the `Copy` field `T` the same way. Every binding is read (an unread one is an E0309).
 // No diagnostic is expected anywhere in this file. The unbounded `T` is owned: negative/binding_literal_generic_owned.onsa.
 //
-// These are E0901 (E0601 in a function without `Alloc`) at the binding in this version, as the literal
+// These are E0601 (in an `rt fn` too, S-77) at the binding (S-783) in this version, as the literal
 // itself is (values/binding_literal_noalloc.onsa); the work W4-16 U2 closes them.
 
 pub struct Pair[T] {

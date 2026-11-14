@@ -5,12 +5,12 @@
 // W6-02 U4a/t, R-255, S-1030 (§5.2, the paragraph that begins "所有する束縛（`move` の引数、`move self`、... の全体が Copy でない Dup の値で": "置けるのは、その後で使わず（ループの次の反復と、
 // そこから派生した借用束縛の使用を含む、E0704）..."; §7: "ループの本体で移した変数を次の反復（条件の再評価と `continue` の道を含む）で使うと、反復の回数によらず E0704"): the second
 // condition, the next iteration. A `move` parameter `s` that is handed to a `move` parameter inside a loop body that can go round again is copied (Affine, the next iteration would use
-// `s` after it was moved, E0704), so the original is dropped at the end of its binding and the drop needs `Alloc`: an E0601 in a function without `uses {Alloc}` and an E0901 in an `rt fn`. The
+// `s` after it was moved, E0704), so the original is dropped at the end of its binding and the drop needs `Alloc`: an E0601 in a function without `uses {Alloc}` and in an `rt fn` (S-77). The
 // hand-off is the condition of an `if` that leaves the loop (`if eat_b(s) { break }`), so that the path that leaves the loop is after the hand-off, and the loop is `while true` (S-1042: the loop is
 // left by the `break` or the `return` only, and no path reaches the end of the function without passing the hand-off): if the hand-off moved the value, every path that leaves would have it moved and
 // the function would be no error, so these functions show the condition alone. The `while` with a condition, the `for` over a range and the loop that goes on by `continue` may run zero times or leave
 // by another path with the value alive, so each is an error whatever the hand-off is (`may_run_zero_times`, `may_leave_alive`); they stay errors and keep the shapes. The value is a `Str`, a struct that holds
-// a `Str`, or an `Option[Str]`. The helpers drop their argument, so their own E0901 is reported (the same as negative/drop_for_one_path.onsa). The hand-off that leaves the loop at once (`return`,
+// a `Str`, or an `Option[Str]`. The helpers drop their argument, so their own E0601 is reported (the same as negative/drop_for_one_path.onsa). The hand-off that leaves the loop at once (`return`,
 // or `break` and then the end of the function) is in negative/dup_release_loop_ok.onsa. Today every function here is an error, and it stays one. The functions are one-liners (S-783). One error per
 // function (P-01).
 
@@ -19,64 +19,64 @@ pub struct Param {
   value: F32,
 }
 
-pub rt fn eat(move s: Str) {}   //~ E0901
+pub rt fn eat(move s: Str) {}   //~ E0601
 
-pub rt fn eat_b(move s: Str) -> Bool { true }   //~ E0901
+pub rt fn eat_b(move s: Str) -> Bool { true }   //~ E0601
 
-pub rt fn eat_p(move p: Param) {}   //~ E0901
+pub rt fn eat_p(move p: Param) {}   //~ E0601
 
-pub rt fn eat_bp(move p: Param) -> Bool { true }   //~ E0901
+pub rt fn eat_bp(move p: Param) -> Bool { true }   //~ E0601
 
-pub rt fn eat_bo(move o: Option[Str]) -> Bool { true }   //~ E0901
+pub rt fn eat_bo(move o: Option[Str]) -> Bool { true }   //~ E0601
 
 // ------------------------------------------------------------------ the loop is left after the hand-off, and goes round again when it is not
 
 pub fn break_after_hand_off(move s: Str) { while true { if eat_b(s) { break } } }   //~ E0601
 
-pub rt fn rt_break_after_hand_off(move s: Str) { while true { if eat_b(s) { break } } }   //~ E0901
+pub rt fn rt_break_after_hand_off(move s: Str) { while true { if eat_b(s) { break } } }   //~ E0601
 
 pub fn return_after_hand_off(move s: Str) { while true { if eat_b(s) { return } } }   //~ E0601
 
-pub rt fn rt_return_after_hand_off(move s: Str) { while true { if eat_b(s) { return } } }   //~ E0901
+pub rt fn rt_return_after_hand_off(move s: Str) { while true { if eat_b(s) { return } } }   //~ E0601
 
 pub fn break_or_continue(move s: Str) { while true { if eat_b(s) { break } else { continue } } }   //~ E0601
 
-pub rt fn rt_break_or_continue(move s: Str) { while true { if eat_b(s) { break } else { continue } } }   //~ E0901
+pub rt fn rt_break_or_continue(move s: Str) { while true { if eat_b(s) { break } else { continue } } }   //~ E0601
 
 pub fn return_a_value(move s: Str) -> Bool { while true { if eat_b(s) { return true } } }   //~ E0601
 
-pub rt fn rt_return_a_value(move s: Str) -> Bool { while true { if eat_b(s) { return true } } }   //~ E0901
+pub rt fn rt_return_a_value(move s: Str) -> Bool { while true { if eat_b(s) { return true } } }   //~ E0601
 
 pub fn struct_break(move p: Param) { while true { if eat_bp(p) { break } } }   //~ E0601
 
-pub rt fn rt_struct_break(move p: Param) { while true { if eat_bp(p) { break } } }   //~ E0901
+pub rt fn rt_struct_break(move p: Param) { while true { if eat_bp(p) { break } } }   //~ E0601
 
 pub fn option_break(move o: Option[Str]) { while true { if eat_bo(o) { break } } }   //~ E0601
 
-pub rt fn rt_option_break(move o: Option[Str]) { while true { if eat_bo(o) { break } } }   //~ E0901
+pub rt fn rt_option_break(move o: Option[Str]) { while true { if eat_bo(o) { break } } }   //~ E0601
 
 // ------------------------------------------------------------------ a loop that may run zero times, or leave with the value alive
 
 pub fn may_run_zero_times(move s: Str, c: Bool) { while c { eat(s) } }   //~ E0601
 
-pub rt fn rt_may_run_zero_times(move s: Str, c: Bool) { while c { eat(s) } }   //~ E0901
+pub rt fn rt_may_run_zero_times(move s: Str, c: Bool) { while c { eat(s) } }   //~ E0601
 
 pub fn may_run_zero_times_for(move s: Str, n: U32) { for i in 0 ..< n { eat(s) } }   //~ E0601
 
-pub rt fn rt_may_run_zero_times_for(move s: Str, n: U32) { for i in 0 ..< n { eat(s) } }   //~ E0901
+pub rt fn rt_may_run_zero_times_for(move s: Str, n: U32) { for i in 0 ..< n { eat(s) } }   //~ E0601
 
 pub fn may_leave_alive(move s: Str, d: Bool) { while true { if d { eat(s) } else { break } } }   //~ E0601
 
-pub rt fn rt_may_leave_alive(move s: Str, d: Bool) { while true { if d { eat(s) } else { break } } }   //~ E0901
+pub rt fn rt_may_leave_alive(move s: Str, d: Bool) { while true { if d { eat(s) } else { break } } }   //~ E0601
 
 pub fn may_leave_alive_by_return(move s: Str, d: Bool) { while true { if d { eat(s) } else { return } } }   //~ E0601
 
-pub rt fn rt_may_leave_alive_by_return(move s: Str, d: Bool) { while true { if d { eat(s) } else { return } } }   //~ E0901
+pub rt fn rt_may_leave_alive_by_return(move s: Str, d: Bool) { while true { if d { eat(s) } else { return } } }   //~ E0601
 
 pub fn nested_loops(move s: Str, c: Bool, d: Bool) { while c { while d { eat(s) } } }   //~ E0601
 
-pub rt fn rt_nested_loops(move s: Str, c: Bool, d: Bool) { while c { while d { eat(s) } } }   //~ E0901
+pub rt fn rt_nested_loops(move s: Str, c: Bool, d: Bool) { while c { while d { eat(s) } } }   //~ E0601
 
 pub fn struct_in_while(move p: Param, c: Bool) { while c { eat_p(p) } }   //~ E0601
 
-pub rt fn rt_struct_in_while(move p: Param, c: Bool) { while c { eat_p(p) } }   //~ E0901
+pub rt fn rt_struct_in_while(move p: Param, c: Bool) { while c { eat_p(p) } }   //~ E0601

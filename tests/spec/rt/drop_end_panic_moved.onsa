@@ -4,7 +4,7 @@
 
 // W6-02 U2a/t, S-873 (§9.2, §12.2: the drop on the path that panics is no `Alloc`; §7: `while true` without a `break` never ends):
 // an owned local that is moved on one path and live on another path that panics or never ends has no drop, so the function needs no
-// `Alloc` and an `rt fn` is no E0901. Every function here is legal. This version accepts them because it counts a local moved
+// `Alloc` and an `rt fn` is no E0601. Every function here is legal. This version accepts them because it counts a local moved
 // anywhere in the body as moved on every path (R-32); when the drop is counted on each path (W6-02 U2a), the path that panics must
 // stay out of it, so these keep the form legal (rt/drop_end_panic_path.onsa is the local that is never moved, legal only after U2a).
 

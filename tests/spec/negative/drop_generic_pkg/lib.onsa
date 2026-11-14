@@ -11,11 +11,11 @@ pub struct HolderM[T: ?Dup] {
 
 pub fn eat[T](move t: T) {}   //~ E0601
 
-pub rt fn rt_eat[T](move t: T) {}   //~ E0901
+pub rt fn rt_eat[T](move t: T) {}   //~ E0601
 
 pub fn eat_maybe[T: ?Dup](move t: T) {}   //~ E0601
 
-pub rt fn rt_eat_maybe[T: ?Dup](move t: T) {}   //~ E0901
+pub rt fn rt_eat_maybe[T: ?Dup](move t: T) {}   //~ E0601
 
 pub fn eat_holder[T](move h: Holder[T]) {}   //~ E0601
 
@@ -24,5 +24,5 @@ impl[T] Holder[T] {
 }
 
 impl[T: ?Dup] HolderM[T] {
-  pub rt fn rt_eat(move self) {}   //~ E0901
+  pub rt fn rt_eat(move self) {}   //~ E0601
 }

@@ -5,7 +5,7 @@
 // W6-02 U6/t, R-390, R-32, S-1036 (§5.4: "所有の見出し … が消費した値のうち、パターンが束縛しなかった部分（`_`、最後の `_` が残すフィールド、束縛の無い腕の対象）は、`let` … では文の終わりに、`match` の腕と `for` の本体ではその腕・反復の終わり … に破棄される。腕が
 // panic で抜ければ、その破棄は起きない"; §12.2: "所有する Shared 値・`Buf` と、それらを含む値の破棄: 要る"): the `_` of a pattern in the arm of a `match` whose head is owned (`match move x`, §5.4) is not
 // bound, so what it matched is dropped at the end of the arm, and the drop of a `Buf`, a `Str` or a value that holds one needs `Alloc`. A function without `uses {Alloc}` is
-// an E0601 and an `rt fn` an E0901 (§10 rule 1). The `_` is the payload of a constructor (`Some(_)`, `Ok(_)`, `Err(_)`, a variant of an enum of the file), an element of a
+// an E0601 and an `rt fn` too (S-77, §10 rule 1). The `_` is the payload of a constructor (`Some(_)`, `Ok(_)`, `Err(_)`, a variant of an enum of the file), an element of a
 // tuple, a field of a struct pattern, or any of them nested; the other arms and the other parts of the pattern may move what they bind (`Ok(b) => Some(move b)`), so the
 // drop of the `_` is the only one in the function. This version counts no drop of a part that a pattern leaves unbound (R-32, R-390), so none of these is reported today.
 // The `_` of a head that is borrowed (`match o`) and of a Copy part are in negative/drop_wild_contrast.onsa, the forms of the last `_` of a struct pattern in
@@ -32,70 +32,70 @@ pub rt fn mk_t(n: U32) -> (Str, U32) { ("x", n) }
 
 pub fn arm_option_buf(move o: Option[Buf[F32]]) -> U32 { match move o { Some(_) => 1, None => 0 } }   //~ E0601
 
-pub rt fn rt_arm_option_buf(move o: Option[Buf[F32]]) -> U32 { match move o { Some(_) => 1, None => 0 } }   //~ E0901
+pub rt fn rt_arm_option_buf(move o: Option[Buf[F32]]) -> U32 { match move o { Some(_) => 1, None => 0 } }   //~ E0601
 
 // ------------------------------------------------------------------ the payloads of `Result`
 
 pub fn arm_result_ok_buf(move r: Result[Buf[F32], U32]) -> U32 { match move r { Ok(_) => 1, Err(_) => 0 } }   //~ E0601
 
-pub rt fn rt_arm_result_ok_buf(move r: Result[Buf[F32], U32]) -> U32 { match move r { Ok(_) => 1, Err(_) => 0 } }   //~ E0901
+pub rt fn rt_arm_result_ok_buf(move r: Result[Buf[F32], U32]) -> U32 { match move r { Ok(_) => 1, Err(_) => 0 } }   //~ E0601
 
 pub fn arm_result_both(move r: Result[Buf[F32], Str]) -> U32 { match move r { Ok(_) => 1, Err(_) => 0 } }   //~ E0601
 
-pub rt fn rt_arm_result_both(move r: Result[Buf[F32], Str]) -> U32 { match move r { Ok(_) => 1, Err(_) => 0 } }   //~ E0901
+pub rt fn rt_arm_result_both(move r: Result[Buf[F32], Str]) -> U32 { match move r { Ok(_) => 1, Err(_) => 0 } }   //~ E0601
 
 pub fn arm_result_moves_ok(move r: Result[Buf[F32], Str]) -> Option[Buf[F32]] { match move r { Ok(b) => Some(move b), Err(_) => None } }   //~ E0601
 
-pub rt fn rt_arm_result_moves_ok(move r: Result[Buf[F32], Str]) -> Option[Buf[F32]] { match move r { Ok(b) => Some(move b), Err(_) => None } }   //~ E0901
+pub rt fn rt_arm_result_moves_ok(move r: Result[Buf[F32], Str]) -> Option[Buf[F32]] { match move r { Ok(b) => Some(move b), Err(_) => None } }   //~ E0601
 
 pub fn arm_result_moves_err(move r: Result[Str, Buf[F32]]) -> Option[Buf[F32]] { match move r { Ok(_) => None, Err(b) => Some(move b) } }   //~ E0601
 
-pub rt fn rt_arm_result_moves_err(move r: Result[Str, Buf[F32]]) -> Option[Buf[F32]] { match move r { Ok(_) => None, Err(b) => Some(move b) } }   //~ E0901
+pub rt fn rt_arm_result_moves_err(move r: Result[Str, Buf[F32]]) -> Option[Buf[F32]] { match move r { Ok(_) => None, Err(b) => Some(move b) } }   //~ E0601
 
 // ------------------------------------------------------------------ an element of a tuple and a field of a struct
 
 pub fn arm_tuple_second(move p: (U32, Buf[F32])) -> U32 { match move p { (k, _) => k } }   //~ E0601
 
-pub rt fn rt_arm_tuple_second(move p: (U32, Buf[F32])) -> U32 { match move p { (k, _) => k } }   //~ E0901
+pub rt fn rt_arm_tuple_second(move p: (U32, Buf[F32])) -> U32 { match move p { (k, _) => k } }   //~ E0601
 
 pub fn arm_tuple_moves_first(move p: (Buf[F32], Str)) -> Buf[F32] { match move p { (b, _) => b } }   //~ E0601
 
-pub rt fn rt_arm_tuple_moves_first(move p: (Buf[F32], Str)) -> Buf[F32] { match move p { (b, _) => b } }   //~ E0901
+pub rt fn rt_arm_tuple_moves_first(move p: (Buf[F32], Str)) -> Buf[F32] { match move p { (b, _) => b } }   //~ E0601
 
 pub fn arm_struct_str_field(move h: H) -> Buf[F32] { match move h { H { buf: b, s: _, n: _ } => b } }   //~ E0601
 
-pub rt fn rt_arm_struct_str_field(move h: H) -> Buf[F32] { match move h { H { buf: b, s: _, n: _ } => b } }   //~ E0901
+pub rt fn rt_arm_struct_str_field(move h: H) -> Buf[F32] { match move h { H { buf: b, s: _, n: _ } => b } }   //~ E0601
 
 pub fn arm_struct_buf_field(move h: H) -> Str { match move h { H { buf: _, s: t, n: _ } => t } }   //~ E0601
 
-pub rt fn rt_arm_struct_buf_field(move h: H) -> Str { match move h { H { buf: _, s: t, n: _ } => t } }   //~ E0901
+pub rt fn rt_arm_struct_buf_field(move h: H) -> Str { match move h { H { buf: _, s: t, n: _ } => t } }   //~ E0601
 
 // ------------------------------------------------------------------ an enum of the file
 
 pub fn arm_enum_buf(move e: E) -> U32 { match move e { E.A(_, k) => k, E.B(_) => 0, E.C => 0 } }   //~ E0601
 
-pub rt fn rt_arm_enum_buf(move e: E) -> U32 { match move e { E.A(_, k) => k, E.B(_) => 0, E.C => 0 } }   //~ E0901
+pub rt fn rt_arm_enum_buf(move e: E) -> U32 { match move e { E.A(_, k) => k, E.B(_) => 0, E.C => 0 } }   //~ E0601
 
 pub fn arm_enum_str(move e: E) -> Option[Buf[F32]] { match move e { E.A(b, _) => Some(move b), E.B(_) => None, E.C => None } }   //~ E0601
 
-pub rt fn rt_arm_enum_str(move e: E) -> Option[Buf[F32]] { match move e { E.A(b, _) => Some(move b), E.B(_) => None, E.C => None } }   //~ E0901
+pub rt fn rt_arm_enum_str(move e: E) -> Option[Buf[F32]] { match move e { E.A(b, _) => Some(move b), E.B(_) => None, E.C => None } }   //~ E0601
 
 // ------------------------------------------------------------------ a call result whose `Str` the pattern does not bind
 
 pub fn arm_call_option_str(n: U32) -> U32 { match mk_os(n) { Some(_) => 1, None => 0 } }   //~ E0601
 
-pub rt fn rt_arm_call_option_str(n: U32) -> U32 { match mk_os(n) { Some(_) => 1, None => 0 } }   //~ E0901
+pub rt fn rt_arm_call_option_str(n: U32) -> U32 { match mk_os(n) { Some(_) => 1, None => 0 } }   //~ E0601
 
 pub fn arm_call_tuple_str(n: U32) -> U32 { match mk_t(n) { (_, k) => k } }   //~ E0601
 
-pub rt fn rt_arm_call_tuple_str(n: U32) -> U32 { match mk_t(n) { (_, k) => k } }   //~ E0901
+pub rt fn rt_arm_call_tuple_str(n: U32) -> U32 { match mk_t(n) { (_, k) => k } }   //~ E0601
 
 // ------------------------------------------------------------------ nested
 
 pub fn arm_nested_option_option(move o: Option[Option[Buf[F32]]]) -> U32 { match move o { Some(Some(_)) => 1, Some(None) => 2, None => 3 } }   //~ E0601
 
-pub rt fn rt_arm_nested_option_option(move o: Option[Option[Buf[F32]]]) -> U32 { match move o { Some(Some(_)) => 1, Some(None) => 2, None => 3 } }   //~ E0901
+pub rt fn rt_arm_nested_option_option(move o: Option[Option[Buf[F32]]]) -> U32 { match move o { Some(Some(_)) => 1, Some(None) => 2, None => 3 } }   //~ E0601
 
 pub fn arm_nested_option_struct(move o: Option[H]) -> Option[Buf[F32]] { match move o { Some(H { buf: b, s: _, n: _ }) => Some(move b), None => None } }   //~ E0601
 
-pub rt fn rt_arm_nested_option_struct(move o: Option[H]) -> Option[Buf[F32]] { match move o { Some(H { buf: b, s: _, n: _ }) => Some(move b), None => None } }   //~ E0901
+pub rt fn rt_arm_nested_option_struct(move o: Option[H]) -> Option[Buf[F32]] { match move o { Some(H { buf: b, s: _, n: _ }) => Some(move b), None => None } }   //~ E0601

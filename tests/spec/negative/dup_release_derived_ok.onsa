@@ -4,7 +4,7 @@
 
 // W6-02 U4a/t, R-255, S-1030 (§5.2, §5.4, §7): the contrasts of negative/dup_release_derived.onsa. The hand-off of `o` moves when the derived binding of a borrowed `match o` is not used after
 // the call: the binding is used before the hand-off, or not at all, or it is Copy (§7: "Copy の束縛は束縛した時点の値なので、そのまま使える"; the `F32` field and the `U32` element), or it is
-// derived from another place (`match o2`, where `o2` is a borrowed parameter). The original is not dropped, so the function needs no `Alloc`. The helpers drop their argument, so their own E0901 is reported
+// derived from another place (`match o2`, where `o2` is a borrowed parameter). The original is not dropped, so the function needs no `Alloc`. The helpers drop their argument, so their own E0601 is reported
 // (the same as negative/drop_for_one_path.onsa); the callers have no marker. Every function is an error today (the original is dropped after the copy is handed over, R-255) and none is one after.
 // The functions are one-liners (S-783).
 
@@ -13,13 +13,13 @@ pub struct Param {
   value: F32,
 }
 
-pub rt fn eat_o(move o: Option[Str]) -> U32 { 0 }   //~ E0901
+pub rt fn eat_o(move o: Option[Str]) -> U32 { 0 }   //~ E0601
 
-pub rt fn eat_r(move r: Result[Str, U32]) -> U32 { 0 }   //~ E0901
+pub rt fn eat_r(move r: Result[Str, U32]) -> U32 { 0 }   //~ E0601
 
-pub rt fn eat_p(move p: Param) -> U32 { 0 }   //~ E0901
+pub rt fn eat_p(move p: Param) -> U32 { 0 }   //~ E0601
 
-pub rt fn eat_t(move t: (Str, U32)) -> U32 { 0 }   //~ E0901
+pub rt fn eat_t(move t: (Str, U32)) -> U32 { 0 }   //~ E0601
 
 // ------------------------------------------------------------------ the derived binding is used before the hand-off or not at all
 

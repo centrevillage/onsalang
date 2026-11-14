@@ -165,7 +165,7 @@ pub(crate) struct Frame<'f> {
 impl<'f> Frame<'f> {
     /// Of a type written where the type parameters have the facts `params`:
     /// in a body (a local, a value), or with none (an alias).
-    pub(crate) fn body(a: &'f Analysis, params: Vec<Facts>) -> Self {
+    fn body(a: &'f Analysis, params: Vec<Facts>) -> Self {
         Frame { read: Read::new(a, params), args: &[], outer: None }
     }
 }

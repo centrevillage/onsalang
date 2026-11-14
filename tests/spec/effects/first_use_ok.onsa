@@ -1,0 +1,95 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§5.4", "§10", "§12.2"]
+// fixes = 0
+
+// W6-03 U4a/t, S-783, S-77 (§8.1, §12.2, §5.4): the contrasts of first_use_*_fn.onsa and first_use_*_rt.onsa, which are no errors: the same shapes in a function that has `uses {Alloc}` (the use is
+// there, and the row has it), and the shapes in an `rt fn` that are no use of `Alloc` (a borrowed parameter, a binding that borrows, a static value, a value that is moved on and not dropped, a Copy value,
+// an `inout` of a Copy value, a method with a borrowed `self`). This file has no error, today and after the work.
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub struct Pair {
+  a: Buf[F32],
+  b: Buf[F32],
+}
+
+pub rt fn mk(n: U32) -> Str { "x" }
+
+pub rt fn pass(move b: Buf[F32]) -> Buf[F32] { b }
+
+pub rt fn len_of(b: Buf[F32]) -> U32 { 0 }
+
+impl Holder {
+  pub rt fn gain_of(self) -> F32 { self.gain }
+}
+
+pub fn param_move_alloc(move b: Buf[F32]) -> U32 uses {Alloc} {
+  let n = 1
+  n
+}
+
+pub fn let_buf_alloc(n: U32) -> U32 uses {Alloc} {
+  let x = n + 1
+  let b: Buf[F32] = Buf.zeroed(x)
+  b.len()
+}
+
+pub fn temp_receiver_alloc(n: U32) -> U32 uses {Alloc} {
+  mk(n).len()
+}
+
+pub fn interpolation_alloc(n: U32) -> U32 uses {Alloc} {
+  let s = "gain {n}"
+  s.len()
+}
+
+pub fn overwrite_alloc(inout s: Str, t: Str) uses {Alloc} {
+  s = t
+}
+
+pub fn wild_alloc(move o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match move o {
+    Some(_) => 1,
+    None => 0,
+  }
+}
+
+pub fn take_out_alloc(move p: Pair) -> Buf[F32] uses {Alloc} {
+  p.a
+}
+
+pub rt fn borrow_only(b: Buf[F32], s: Str) -> U32 {
+  len_of(b) + s.len()
+}
+
+pub rt fn borrow_derived(s: Str) -> U32 {
+  let t = s
+  t.len()
+}
+
+pub rt fn static_value() -> U32 {
+  let s = "gain"
+  s.len()
+}
+
+pub rt fn moved_on(move b: Buf[F32]) -> Buf[F32] {
+  let c = pass(move b)
+  c
+}
+
+pub rt fn copy_values(n: U32, f: F32) -> F32 {
+  let g = f * 2.0
+  g
+}
+
+pub rt fn overwrite_copy(inout n: U32, k: U32) {
+  n = k
+}
+
+pub rt fn borrowed_self(h: Holder) -> F32 {
+  h.gain_of()
+}

@@ -5,8 +5,8 @@
 // W6-02 U2a/t, S-873 (§9.2: "panic で抜ける道では、生きている値の破棄は起きない（巻き戻しは無い）。その破棄は `Alloc` に数えず"; §12.2:
 // "panic で抜ける道の、生きている値の破棄: 要らない"; §7: a statement that diverges, and `while true` without a `break`, never reach
 // the end of the block): an owned local that is never moved, and is live only where the function panics or never ends, has no drop,
-// so the function needs no `Alloc` and an `rt fn` is no E0901. Every function here is legal. This version counts a drop at the end of
-// a body where no path arrives (E0601 in a function without `uses {Alloc}`, E0901 in an `rt fn`), so all of them are reported today.
+// so the function needs no `Alloc` and an `rt fn` is no E0601. Every function here is legal. This version counts a drop at the end of
+// a body where no path arrives (E0601 in a function without `uses {Alloc}` and in an `rt fn`, S-77), so all of them are reported today.
 // The local that is moved on the other path is in rt/drop_end_panic_moved.onsa (legal today), and the contrasts, a path that
 // reaches the end unmoved while another panics, are in negative/drop_end_panic_other_path.onsa.
 

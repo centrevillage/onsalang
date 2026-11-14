@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "18:7"
+// code = "E0601"
+// candidate = 1
+// clean = true
+
+// W6-03 U4a/t, S-82, S-783 (§8.1: "`rt` でない関数では、効果行への追加（署名への挿入）を修正候補に示し"; §18.1: a candidate leaves no error of its stage or an earlier one): the error is at the first use (the
+// name `b`, on the line of the `let`), and the candidate that inserts ` uses {Alloc}` into the signature removes it: the file after the candidate has no error (`clean = true`; the check applies the candidate
+// and looks again). The file has one function that has a candidate, as `clean` needs. The place of the candidate's edit is the signature of `k`, though the diagnostic is in the body.
+
+pub fn k(n: U32) -> U32 {
+  let x = n + 1
+  let b: Buf[F32] = Buf.zeroed(x)   //~ E0601 @7
+  b.len()
+}

@@ -7,20 +7,20 @@
 // の制約が無い限り `Alloc` を要する"; §12.2): the second condition for a `T`. A `move` parameter `t: T` that is handed to a `move` parameter (no mark: the `T` has no `?Dup`) and is read, passed as a borrowed or an
 // `inout` argument, or handed over again after that, on the path that goes on, or in the next iteration of a loop, is copied (the value that is `Affine` is a `T: ?Dup`, which cannot be used after it, E0704, so the forms are
 // of a `T` without a bound or with a bound of a trait), so the original is dropped at the end of its binding, and the drop of a value of a type parameter needs `Alloc`: an E0601 in a function without `uses {Alloc}`
-// and an E0901 in an `rt fn`. The hand-off is the argument of a call whose result is a `U32`, so that no other value is dropped, and the later use is in the next element of a tuple literal, which is evaluated after the call
+// and an E0601 in an `rt fn`. The hand-off is the argument of a call whose result is a `U32`, so that no other value is dropped, and the later use is in the next element of a tuple literal, which is evaluated after the call
 // (§3.5). A path that leaves the value alive drops it there, whether the hand-off is on another path or a `return` leaves with it alive. The forms where the hand-off is the last use are in negative/drop_generic_hand_off.
-// The helpers `eat_n`, `eat_o` and `eat_h` drop their argument, so their own E0901 is reported (the same as negative/dup_release_later.onsa for a `Str`). The functions are one-liners (S-783). This
+// The helpers `eat_n`, `eat_o` and `eat_h` drop their argument, so their own E0601 is reported (the same as negative/dup_release_later.onsa for a `Str`). The functions are one-liners (S-783). This
 // version counts no drop of a type parameter, so none of these is reported today. One error per function (P-01).
 
 pub struct Holder[T] {
   v: T,
 }
 
-pub rt fn eat_n[T](move t: T, n: U32) -> U32 { n }   //~ E0901
+pub rt fn eat_n[T](move t: T, n: U32) -> U32 { n }   //~ E0601
 
-pub rt fn eat_o[T](move o: Option[T]) -> U32 { 0 }   //~ E0901
+pub rt fn eat_o[T](move o: Option[T]) -> U32 { 0 }   //~ E0601
 
-pub rt fn eat_h[T](move h: Holder[T]) -> U32 { 0 }   //~ E0901
+pub rt fn eat_h[T](move h: Holder[T]) -> U32 { 0 }   //~ E0601
 
 pub rt fn peek[T](t: T) -> U32 { 0 }
 
@@ -34,80 +34,80 @@ pub rt fn touch[T](inout t: T) -> U32 { 0 }
 
 pub fn later_read[T](move t: T) -> (U32, U32) { (eat_n(t, 1), peek(t)) }   //~ E0601
 
-pub rt fn rt_later_read[T](move t: T) -> (U32, U32) { (eat_n(t, 1), peek(t)) }   //~ E0901
+pub rt fn rt_later_read[T](move t: T) -> (U32, U32) { (eat_n(t, 1), peek(t)) }   //~ E0601
 
 pub fn later_inout[T](move t: T) -> (U32, U32) { (eat_n(t, 1), touch(inout t)) }   //~ E0601
 
-pub rt fn rt_later_inout[T](move t: T) -> (U32, U32) { (eat_n(t, 1), touch(inout t)) }   //~ E0901
+pub rt fn rt_later_inout[T](move t: T) -> (U32, U32) { (eat_n(t, 1), touch(inout t)) }   //~ E0601
 
 pub fn later_bound[T: Eq](move t: T) -> (U32, U32) { (eat_n(t, 1), peek(t)) }   //~ E0601
 
-pub rt fn rt_later_bound[T: Eq](move t: T) -> (U32, U32) { (eat_n(t, 1), peek(t)) }   //~ E0901
+pub rt fn rt_later_bound[T: Eq](move t: T) -> (U32, U32) { (eat_n(t, 1), peek(t)) }   //~ E0601
 
 // ------------------------------------------------------------------ the later use is on one path, in an arm, or after the paths merge
 
 pub fn later_in_one_branch[T](move t: T, c: Bool) -> (U32, U32) { (eat_n(t, 1), if c { peek(t) } else { 0 }) }   //~ E0601
 
-pub rt fn rt_later_in_one_branch[T](move t: T, c: Bool) -> (U32, U32) { (eat_n(t, 1), if c { peek(t) } else { 0 }) }   //~ E0901
+pub rt fn rt_later_in_one_branch[T](move t: T, c: Bool) -> (U32, U32) { (eat_n(t, 1), if c { peek(t) } else { 0 }) }   //~ E0601
 
 pub fn later_in_arm[T](move t: T, n: U32) -> (U32, U32) { (eat_n(t, 1), match n { 0 => peek(t), _ => 0 }) }   //~ E0601
 
-pub rt fn rt_later_in_arm[T](move t: T, n: U32) -> (U32, U32) { (eat_n(t, 1), match n { 0 => peek(t), _ => 0 }) }   //~ E0901
+pub rt fn rt_later_in_arm[T](move t: T, n: U32) -> (U32, U32) { (eat_n(t, 1), match n { 0 => peek(t), _ => 0 }) }   //~ E0601
 
 pub fn later_after_merge[T](move t: T, c: Bool) -> (U32, U32) { (if c { eat_n(t, 1) } else { eat_n(t, 2) }, peek(t)) }   //~ E0601
 
-pub rt fn rt_later_after_merge[T](move t: T, c: Bool) -> (U32, U32) { (if c { eat_n(t, 1) } else { eat_n(t, 2) }, peek(t)) }   //~ E0901
+pub rt fn rt_later_after_merge[T](move t: T, c: Bool) -> (U32, U32) { (if c { eat_n(t, 1) } else { eat_n(t, 2) }, peek(t)) }   //~ E0601
 
 // ------------------------------------------------------------------ the value holds a `T`
 
 pub fn later_option[T](move o: Option[T]) -> (U32, U32) { (eat_o(o), peek_o(o)) }   //~ E0601
 
-pub rt fn rt_later_option[T](move o: Option[T]) -> (U32, U32) { (eat_o(o), peek_o(o)) }   //~ E0901
+pub rt fn rt_later_option[T](move o: Option[T]) -> (U32, U32) { (eat_o(o), peek_o(o)) }   //~ E0601
 
 pub fn later_struct[T](move h: Holder[T]) -> (U32, U32) { (eat_h(h), peek_h(h)) }   //~ E0601
 
-pub rt fn rt_later_struct[T](move h: Holder[T]) -> (U32, U32) { (eat_h(h), peek_h(h)) }   //~ E0901
+pub rt fn rt_later_struct[T](move h: Holder[T]) -> (U32, U32) { (eat_h(h), peek_h(h)) }   //~ E0601
 
 pub fn later_field_of_a_struct[T](move h: Holder[T]) -> (U32, U32) { (eat_h(h), peek(h.v)) }   //~ E0601
 
-pub rt fn rt_later_field_of_a_struct[T](move h: Holder[T]) -> (U32, U32) { (eat_h(h), peek(h.v)) }   //~ E0901
+pub rt fn rt_later_field_of_a_struct[T](move h: Holder[T]) -> (U32, U32) { (eat_h(h), peek(h.v)) }   //~ E0601
 
 // ------------------------------------------------------------------ the next iteration of a loop
 
 pub fn in_for[T](move t: T, n: U32) { for _ in 0 ..< n { if eat_n(t, 1) > 0 {} } }   //~ E0601
 
-pub rt fn rt_in_for[T](move t: T, n: U32) { for _ in 0 ..< n { if eat_n(t, 1) > 0 {} } }   //~ E0901
+pub rt fn rt_in_for[T](move t: T, n: U32) { for _ in 0 ..< n { if eat_n(t, 1) > 0 {} } }   //~ E0601
 
 pub fn in_while[T](move t: T, c: Bool) { while c { if eat_n(t, 1) > 0 {} } }   //~ E0601
 
-pub rt fn rt_in_while[T](move t: T, c: Bool) { while c { if eat_n(t, 1) > 0 {} } }   //~ E0901
+pub rt fn rt_in_while[T](move t: T, c: Bool) { while c { if eat_n(t, 1) > 0 {} } }   //~ E0601
 
 pub fn in_while_true_with_a_break[T](move t: T, c: Bool) { while true { if eat_n(t, 1) > 0 { if c { break } } } }   //~ E0601
 
-pub rt fn rt_in_while_true_with_a_break[T](move t: T, c: Bool) { while true { if eat_n(t, 1) > 0 { if c { break } } } }   //~ E0901
+pub rt fn rt_in_while_true_with_a_break[T](move t: T, c: Bool) { while true { if eat_n(t, 1) > 0 { if c { break } } } }   //~ E0601
 
 pub fn in_nested_for[T](move t: T, n: U32) { for _ in 0 ..< n { for _ in 0 ..< n { if eat_n(t, 1) > 0 {} } } }   //~ E0601
 
-pub rt fn rt_in_nested_for[T](move t: T, n: U32) { for _ in 0 ..< n { for _ in 0 ..< n { if eat_n(t, 1) > 0 {} } } }   //~ E0901
+pub rt fn rt_in_nested_for[T](move t: T, n: U32) { for _ in 0 ..< n { for _ in 0 ..< n { if eat_n(t, 1) > 0 {} } } }   //~ E0601
 
 // ------------------------------------------------------------------ a path that leaves the value alive drops it, with or without the hand-off
 
 pub fn other_path_alive[T](move t: T, c: Bool) -> U32 { if c { eat_n(t, 1) } else { 0 } }   //~ E0601
 
-pub rt fn rt_other_path_alive[T](move t: T, c: Bool) -> U32 { if c { eat_n(t, 1) } else { 0 } }   //~ E0901
+pub rt fn rt_other_path_alive[T](move t: T, c: Bool) -> U32 { if c { eat_n(t, 1) } else { 0 } }   //~ E0601
 
 pub fn other_arm_alive[T](move t: T, n: U32) -> U32 { match n { 0 => eat_n(t, 1), _ => 0 } }   //~ E0601
 
-pub rt fn rt_other_arm_alive[T](move t: T, n: U32) -> U32 { match n { 0 => eat_n(t, 1), _ => 0 } }   //~ E0901
+pub rt fn rt_other_arm_alive[T](move t: T, n: U32) -> U32 { match n { 0 => eat_n(t, 1), _ => 0 } }   //~ E0601
 
 pub fn return_with_t_alive[T](move t: T, u: T, c: Bool) -> T { if c { return u } else { t } }   //~ E0601
 
-pub rt fn rt_return_with_t_alive[T](move t: T, u: T, c: Bool) -> T { if c { return u } else { t } }   //~ E0901
+pub rt fn rt_return_with_t_alive[T](move t: T, u: T, c: Bool) -> T { if c { return u } else { t } }   //~ E0601
 
 pub fn return_with_option_alive[T](move o: Option[T], p: Option[T], c: Bool) -> Option[T] { if c { return p } else { o } }   //~ E0601
 
-pub rt fn rt_return_with_option_alive[T](move o: Option[T], p: Option[T], c: Bool) -> Option[T] { if c { return p } else { o } }   //~ E0901
+pub rt fn rt_return_with_option_alive[T](move o: Option[T], p: Option[T], c: Bool) -> Option[T] { if c { return p } else { o } }   //~ E0601
 
 pub fn return_with_bound_alive[T: Eq](move t: T, u: T, c: Bool) -> T { if c { return u } else { t } }   //~ E0601
 
-pub rt fn rt_return_with_bound_alive[T: Eq](move t: T, u: T, c: Bool) -> T { if c { return u } else { t } }   //~ E0901
+pub rt fn rt_return_with_bound_alive[T: Eq](move t: T, u: T, c: Bool) -> T { if c { return u } else { t } }   //~ E0601

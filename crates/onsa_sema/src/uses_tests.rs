@@ -138,5 +138,45 @@ pub rt fn k(p: P) -> U32 { p.a().b() }
         .filter(|d| d.code == onsa_diag::Code::E0901)
         .map(|d| (&src[d.span.start as usize..d.span.end as usize], d.message.as_str()))
         .collect();
-    assert_eq!(got, [("p.a()", "`rt` function calls `a`, which is not `rt` (§10 rule 4)")]);
+    assert_eq!(
+        got,
+        [("p.a()", "this calls `a`, which is not `rt`; an `rt` function calls only `rt` ones (§10 rule 4)")]
+    );
+}
+
+/// §18.1, S-783 C2: of the uses that start at one place, the one that ends
+/// first comes first, and a call before the drop of its value: the drop of
+/// the value `id(move x)` before the call of `grow` on it. So the E0601 of a
+/// function that is not `rt` is at that drop, and in an `rt` function the
+/// drop is the E0601 and the call of `grow` the E0901 (W6-03 U2 to U3b, the
+/// breaking side's low 1).
+#[test]
+fn the_uses_of_one_start_are_by_their_end() {
+    let hold = "pub struct Hold { buf: Buf[F32], g: F32 }
+impl Hold { pub fn grow(self) -> U32 uses {Alloc} { 1 } }
+pub fn id(move h: Hold) -> Hold { move h }
+pub rt fn rid(move h: Hold) -> Hold { move h }
+";
+    let src = format!(
+        "{hold}pub fn e601(move x: Hold) -> U32 {{ id(move x).grow() }}\npub rt fn e901(move x: Hold) -> U32 {{ rid(move x).grow() }}\n"
+    );
+    let want = |f: &str| {
+        owned(&[
+            ("call", &format!("{f}(move x)"), 0),
+            ("temp", &format!("{f}(move x)"), 1),
+            ("call", &format!("{f}(move x).grow()"), 0),
+        ])
+    };
+    assert_eq!(uses_of(&src, "e601"), want("id"));
+    assert_eq!(uses_of(&src, "e901"), want("rid"));
+    let a = analyze(&pkg(&[("main", &src)]));
+    let mut got: Vec<_> =
+        (a.diagnostics.iter()).map(|d| (d.code, &src[d.span.start as usize..d.span.end as usize])).collect();
+    got.sort();
+    let want = [
+        (onsa_diag::Code::E0601, "id(move x)"),
+        (onsa_diag::Code::E0601, "rid(move x)"),
+        (onsa_diag::Code::E0901, "rid(move x).grow()"),
+    ];
+    assert_eq!(got, want);
 }

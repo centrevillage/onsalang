@@ -4,16 +4,29 @@ use onsa_diag::Code;
 
 use crate::tests::{check, codes};
 
+/// The text of `src` after the fix `k` of `d`.
+fn fixed(src: &str, d: &onsa_diag::Diagnostic, k: usize) -> String {
+    let edits: Vec<&onsa_diag::Edit> = d.fixes[k].edits().iter().collect();
+    onsa_diag::apply_text(src, &edits).expect("the candidate applies")
+}
+
+/// S-82, S-783: the E0601 of a function that is not `rt` is at the first use
+/// of `Alloc`, and its fix inserts the row into the signature.
 #[test]
 fn calling_an_alloc_fn_needs_alloc_in_the_row() {
-    let src = "pub fn mk(n: U32) -> Buf[F32] uses {Alloc} { Buf.zeroed(n) }\npub fn bad() -> U32 { mk(4).len() }\n";
+    let src = "pub fn mk(n: U32) -> Buf[F32] uses {Alloc} { Buf.zeroed(n) }
+pub fn bad() -> U32 {
+  let n = 1
+  mk(4).len() + n
+}
+";
     let a = check(src);
     assert_eq!(codes(&a), vec![Code::E0601]);
     let d = &a.diagnostics[0];
-    assert_eq!(d.found.as_deref(), Some("bad() -> U32"));
+    assert_eq!(d.found.as_deref(), Some("mk(4)"));
+    assert!(d.message.contains("calls `mk`") && d.message.contains("`bad`"), "{}", d.message);
     assert_eq!(d.fixes.len(), 1);
-    assert_eq!(crate::fixed_region(src, d, 0), "bad() -> U32 uses {Alloc}");
-    assert!(d.notes[0].message.contains("calls `mk`"));
+    assert!(fixed(src, d, 0).contains("pub fn bad() -> U32 uses {Alloc} {\n  let n"), "{}", fixed(src, d, 0));
 }
 
 #[test]
@@ -27,10 +40,38 @@ fn alloc_row_test_body_and_rt_are_fine_or_other_codes() {
     let a =
         check("pub fn mk(n: U32) -> Buf[F32] uses {Alloc} { Buf.zeroed(n) }\ntest \"t\" { assert mk(4).len() == 4 }\n");
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
-    // An rt function reports E0901, not E0601.
-    let a =
-        check("pub fn mk(n: U32) -> Buf[F32] uses {Alloc} { Buf.zeroed(n) }\npub rt fn r() -> U32 { mk(4).len() }\n");
-    assert_eq!(codes(&a), vec![Code::E0901]);
+}
+
+/// S-77, §10 rule 1: in an `rt` function, what needs `Alloc` is an E0601 at
+/// the use, with no fix and a note of the rule: an owned local (before the
+/// E0901 of `Buf.zeroed`, which is not `rt`) and an interpolation.
+#[test]
+fn an_rt_function_that_allocates_is_an_e0601_with_no_fix() {
+    for (body, found) in
+        [("let b: Buf[F32] = Buf.zeroed(n)\n  b.len()", "b"), ("let s = 1\n  \"{n}\".len()", "\"{n}\"")]
+    {
+        let a = check(&format!("pub rt fn r(n: U32) -> U32 {{\n  {body}\n}}\n"));
+        let d = a.diagnostics.iter().min_by(|x, y| x.unit_order().cmp(&y.unit_order())).expect("a diagnostic");
+        assert_eq!(d.code, Code::E0601, "{body}");
+        assert_eq!((d.found.as_deref(), d.fixes.len()), (Some(found), 0), "{body}");
+        assert!(d.notes.iter().any(|n| n.message.contains("§10 rule 1")), "{:?}", d.notes);
+    }
+}
+
+/// B3 (S-783), and the call of a function that is not `rt` whose value is
+/// dropped (S-783, a supplement): one use is both an E0601 (§8.1) and an
+/// E0901 (§10 rule 4); both are made at one place, and the order of the
+/// diagnostics, which chooses the one of a unit (§18.1), puts the E0601 first.
+#[test]
+fn a_call_in_rt_that_needs_alloc_is_both_and_the_e0601_comes_first() {
+    for callee in ["pub fn mk(n: U32) -> Str uses {Alloc} { \"a\" }", "pub fn mk(n: U32) -> Str { \"a\" }"] {
+        let a = check(&format!("{callee}\npub rt fn r(n: U32) -> U32 {{\n  mk(n).len()\n}}\n"));
+        let mut ds: Vec<_> = a.diagnostics.iter().filter(|d| d.found.as_deref() == Some("mk(n)")).collect();
+        ds.sort_by(|x, y| x.unit_order().cmp(&y.unit_order()));
+        let got: Vec<_> = ds.iter().map(|d| d.code).collect();
+        assert_eq!(got, [Code::E0601, Code::E0901], "{callee}: {:?}", a.diagnostics);
+        assert_eq!(ds[0].span, ds[1].span);
+    }
 }
 
 #[test]

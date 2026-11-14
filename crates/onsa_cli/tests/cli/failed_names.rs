@@ -148,7 +148,8 @@ fn a_failed_name_is_silent_where_it_is_read_by_its_spelling() {
 
 /// §18.1, §8.1, §10: a failed name in an effect row is silent where it is written, and only there: the
 /// effects read next to it stay. `f` needs `Alloc` whatever the place of `Gone`, so the rt `g` that calls it
-/// is an E0901 that names `Alloc`, and `h`, whose row has no `Alloc`, is an E0601 (S-691 (1)).
+/// and `h`, whose row has no `Alloc`, are each an E0601 that names `Alloc` (S-691 (1); in `g` the call is an
+/// E0901 too, and the order of the diagnostics chooses the E0601, S-783 B3).
 #[test]
 fn the_effects_read_next_to_a_failed_name_stay() {
     for (tag, row) in [("before", "Alloc, Gone"), ("after", "Gone, Alloc")] {
@@ -159,7 +160,7 @@ fn the_effects_read_next_to_a_failed_name_stay() {
         let d = with_main(&format!("alloc_lost_{tag}"), &main);
         let (out, doc) = check_json(d.root(), &["."]);
         assert_eq!(out.code, 1, "{tag}: {}{}", out.stdout, out.stderr);
-        assert_eq!(codes(&doc), set(&["E0302", "E0901", "E0601"]), "{tag}: {doc}");
+        assert_eq!(codes(&doc), set(&["E0302", "E0601"]), "{tag}: {doc}");
         assert_eq!(diagnostics(&doc).len(), 3, "{tag}: {doc}");
         for d in diagnostics(&doc).iter().filter(|d| str_of(d, "code") != "E0302") {
             assert!(d.to_string().contains("Alloc"), "{tag}: the diagnostic names `Alloc`: {d}");

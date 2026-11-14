@@ -12,17 +12,17 @@ pub fn mk(n: U32) -> Buf[F32] uses {Alloc} {
 }
 
 pub fn calls_an_alloc_fn(n: U32) -> U32 {
-  let a = mk(n)                                     //~ E0601
+  let a = mk(n)                                     //~ E0601 @7
   a.len()
 }
 
 pub fn allocates_directly(n: U32) -> U32 {
-  let b: Buf[F32] = Buf.zeroed(n)                   //~ E0601
+  let b: Buf[F32] = Buf.zeroed(n)                   //~ E0601 @7
   b.len()
 }
 
 pub fn interpolates(n: U32) -> U32 {
-  let s = "n = {n}"                                 //~ E0601
+  let s = "n = {n}"                                 //~ E0601 @7
   s.len()
 }
 

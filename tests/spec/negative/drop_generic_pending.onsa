@@ -5,8 +5,8 @@
 // W6-02 U4b/t, R-32, S-782 (§3.5, §5.2, §6.3: "ジェネリックな型パラメータ `T` の値の破棄は、`T: Copy` の制約が無い限り `Alloc` を要する"; §9.1; §12.2: "ジェネリックな `T` の値の破棄（`T: Copy` の制約が無い場合、§6.3）: 要る"):
 // the value of a type parameter that waits for the operands after it. The element of a tuple, an array or a struct literal and the argument of a `move` parameter, which is a borrowed `t: T` (a copy is made at the place:
 // "その場で複製して渡す"), a `T: ?Dup` that is moved with `move`, or a value that is made for the place (`T.default()`), is evaluated and waits for the operands after it (§3.5: from the left). If a later operand is a
-// `?` that returns, or a branch with a `return`, the value that waits is dropped, and the drop of a value of a type parameter needs `Alloc`: an E0601 in a function without `uses {Alloc}` and an E0901 in an `rt fn`
-// (the same reading as negative/dup_pending_new.onsa for a `Str`, and negative/drop_pending.onsa for a `Buf`). The helpers `first_n` and `first_m` and the method `consume` drop their argument, so their own E0901 is reported
+// `?` that returns, or a branch with a `return`, the value that waits is dropped, and the drop of a value of a type parameter needs `Alloc`: an E0601 in a function without `uses {Alloc}` and in an `rt fn` (S-77)
+// (the same reading as negative/dup_pending_new.onsa for a `Str`, and negative/drop_pending.onsa for a `Buf`). The helpers `first_n` and `first_m` and the method `consume` drop their argument, so their own E0601 is reported
 // (the same as negative/drop_for_one_path.onsa). The forms where nothing waits are in negative/drop_generic_pending_ok.onsa. The functions are one-liners (S-783). This version counts no drop of a type
 // parameter, so none of these is reported today. One error per function (P-01), also where two values wait (`two_waiting`).
 
@@ -20,91 +20,91 @@ pub struct Mixed[T] {
 }
 
 impl[T] Holder[T] {
-  pub rt fn consume(move self, n: U32) -> U32 { n }   //~ E0901
+  pub rt fn consume(move self, n: U32) -> U32 { n }   //~ E0601
 }
 
-pub rt fn first_n[T](move t: T, n: U32) -> U32 { n }   //~ E0901
+pub rt fn first_n[T](move t: T, n: U32) -> U32 { n }   //~ E0601
 
-pub rt fn first_m[T: ?Dup](move t: T, n: U32) -> U32 { n }   //~ E0901
+pub rt fn first_m[T: ?Dup](move t: T, n: U32) -> U32 { n }   //~ E0601
 
 // ------------------------------------------------------------------ a borrowed `T`, copied at its place
 
 pub fn tuple_borrowed[T](t: T, r: Option[U32]) -> Option[(T, U32)] { Some((t, r?)) }   //~ E0601
 
-pub rt fn rt_tuple_borrowed[T](t: T, r: Option[U32]) -> Option[(T, U32)] { Some((t, r?)) }   //~ E0901
+pub rt fn rt_tuple_borrowed[T](t: T, r: Option[U32]) -> Option[(T, U32)] { Some((t, r?)) }   //~ E0601
 
 pub fn tuple_result[T](t: T, r: Result[U32, U32]) -> Result[(T, U32), U32] { Ok((t, r?)) }   //~ E0601
 
-pub rt fn rt_tuple_result[T](t: T, r: Result[U32, U32]) -> Result[(T, U32), U32] { Ok((t, r?)) }   //~ E0901
+pub rt fn rt_tuple_result[T](t: T, r: Result[U32, U32]) -> Result[(T, U32), U32] { Ok((t, r?)) }   //~ E0601
 
 pub fn array_borrowed[T](t: T, r: Option[T]) -> Option[[T; 2]] { Some([t, r?]) }   //~ E0601
 
-pub rt fn rt_array_borrowed[T](t: T, r: Option[T]) -> Option[[T; 2]] { Some([t, r?]) }   //~ E0901
+pub rt fn rt_array_borrowed[T](t: T, r: Option[T]) -> Option[[T; 2]] { Some([t, r?]) }   //~ E0601
 
 pub fn struct_borrowed[T](t: T, r: Option[U32]) -> Option[Mixed[T]] { Some(Mixed { v: t, n: r? }) }   //~ E0601
 
-pub rt fn rt_struct_borrowed[T](t: T, r: Option[U32]) -> Option[Mixed[T]] { Some(Mixed { v: t, n: r? }) }   //~ E0901
+pub rt fn rt_struct_borrowed[T](t: T, r: Option[U32]) -> Option[Mixed[T]] { Some(Mixed { v: t, n: r? }) }   //~ E0601
 
 pub fn call_borrowed[T](t: T, r: Option[U32]) -> Option[U32] { Some(first_n(t, r?)) }   //~ E0601
 
-pub rt fn rt_call_borrowed[T](t: T, r: Option[U32]) -> Option[U32] { Some(first_n(t, r?)) }   //~ E0901
+pub rt fn rt_call_borrowed[T](t: T, r: Option[U32]) -> Option[U32] { Some(first_n(t, r?)) }   //~ E0601
 
 pub fn receiver_borrowed[T](h: Holder[T], r: Option[U32]) -> Option[U32] { Some(h.consume(r?)) }   //~ E0601
 
-pub rt fn rt_receiver_borrowed[T](h: Holder[T], r: Option[U32]) -> Option[U32] { Some(h.consume(r?)) }   //~ E0901
+pub rt fn rt_receiver_borrowed[T](h: Holder[T], r: Option[U32]) -> Option[U32] { Some(h.consume(r?)) }   //~ E0601
 
 pub fn option_borrowed[T](o: Option[T], r: Option[U32]) -> Option[(Option[T], U32)] { Some((o, r?)) }   //~ E0601
 
-pub rt fn rt_option_borrowed[T](o: Option[T], r: Option[U32]) -> Option[(Option[T], U32)] { Some((o, r?)) }   //~ E0901
+pub rt fn rt_option_borrowed[T](o: Option[T], r: Option[U32]) -> Option[(Option[T], U32)] { Some((o, r?)) }   //~ E0601
 
 pub fn bound_borrowed[T: Eq](t: T, r: Option[U32]) -> Option[(T, U32)] { Some((t, r?)) }   //~ E0601
 
-pub rt fn rt_bound_borrowed[T: Eq](t: T, r: Option[U32]) -> Option[(T, U32)] { Some((t, r?)) }   //~ E0901
+pub rt fn rt_bound_borrowed[T: Eq](t: T, r: Option[U32]) -> Option[(T, U32)] { Some((t, r?)) }   //~ E0601
 
 pub fn element_borrowed[T](xs: [T; 2], r: Option[U32]) -> Option[(T, U32)] { Some((xs[0], r?)) }   //~ E0601
 
-pub rt fn rt_element_borrowed[T](xs: [T; 2], r: Option[U32]) -> Option[(T, U32)] { Some((xs[0], r?)) }   //~ E0901
+pub rt fn rt_element_borrowed[T](xs: [T; 2], r: Option[U32]) -> Option[(T, U32)] { Some((xs[0], r?)) }   //~ E0601
 
 // ------------------------------------------------------------------ an owned `T: ?Dup` that is moved into the place
 
 pub fn maybe_tuple[T: ?Dup](move t: T, r: Option[U32]) -> Option[(T, U32)] { Some((move t, r?)) }   //~ E0601
 
-pub rt fn rt_maybe_tuple[T: ?Dup](move t: T, r: Option[U32]) -> Option[(T, U32)] { Some((move t, r?)) }   //~ E0901
+pub rt fn rt_maybe_tuple[T: ?Dup](move t: T, r: Option[U32]) -> Option[(T, U32)] { Some((move t, r?)) }   //~ E0601
 
 pub fn maybe_array[T: ?Dup](move t: T, move r: Option[T]) -> Option[[T; 2]] { Some([move t, r?]) }   //~ E0601
 
-pub rt fn rt_maybe_array[T: ?Dup](move t: T, move r: Option[T]) -> Option[[T; 2]] { Some([move t, r?]) }   //~ E0901
+pub rt fn rt_maybe_array[T: ?Dup](move t: T, move r: Option[T]) -> Option[[T; 2]] { Some([move t, r?]) }   //~ E0601
 
 pub fn maybe_call[T: ?Dup](move t: T, r: Option[U32]) -> Option[U32] { Some(first_m(move t, r?)) }   //~ E0601
 
-pub rt fn rt_maybe_call[T: ?Dup](move t: T, r: Option[U32]) -> Option[U32] { Some(first_m(move t, r?)) }   //~ E0901
+pub rt fn rt_maybe_call[T: ?Dup](move t: T, r: Option[U32]) -> Option[U32] { Some(first_m(move t, r?)) }   //~ E0601
 
 pub fn maybe_result[T: ?Dup](move t: T, r: Result[U32, U32]) -> Result[(T, U32), U32] { Ok((move t, r?)) }   //~ E0601
 
-pub rt fn rt_maybe_result[T: ?Dup](move t: T, r: Result[U32, U32]) -> Result[(T, U32), U32] { Ok((move t, r?)) }   //~ E0901
+pub rt fn rt_maybe_result[T: ?Dup](move t: T, r: Result[U32, U32]) -> Result[(T, U32), U32] { Ok((move t, r?)) }   //~ E0601
 
 // ------------------------------------------------------------------ a value made for the place
 
 pub fn new_value[T: Default](r: Option[U32]) -> Option[(T, U32)] { Some((T.default(), r?)) }   //~ E0601
 
-pub rt fn rt_new_value[T: Default](r: Option[U32]) -> Option[(T, U32)] { Some((T.default(), r?)) }   //~ E0901
+pub rt fn rt_new_value[T: Default](r: Option[U32]) -> Option[(T, U32)] { Some((T.default(), r?)) }   //~ E0601
 
 pub fn new_value_in_a_call[T: Default](r: Option[U32]) -> Option[U32] { Some(first_n(T.default(), r?)) }   //~ E0601
 
-pub rt fn rt_new_value_in_a_call[T: Default](r: Option[U32]) -> Option[U32] { Some(first_n(T.default(), r?)) }   //~ E0901
+pub rt fn rt_new_value_in_a_call[T: Default](r: Option[U32]) -> Option[U32] { Some(first_n(T.default(), r?)) }   //~ E0601
 
 // ------------------------------------------------------------------ a branch with a `return` in a later operand
 
 pub fn return_in_operand[T](t: T, c: Bool) -> U32 { first_n(t, if c { return 0 } else { 1 }) }   //~ E0601
 
-pub rt fn rt_return_in_operand[T](t: T, c: Bool) -> U32 { first_n(t, if c { return 0 } else { 1 }) }   //~ E0901
+pub rt fn rt_return_in_operand[T](t: T, c: Bool) -> U32 { first_n(t, if c { return 0 } else { 1 }) }   //~ E0601
 
 pub fn maybe_return_in_operand[T: ?Dup](move t: T, c: Bool) -> U32 { first_m(move t, if c { return 0 } else { 1 }) }   //~ E0601
 
-pub rt fn rt_maybe_return_in_operand[T: ?Dup](move t: T, c: Bool) -> U32 { first_m(move t, if c { return 0 } else { 1 }) }   //~ E0901
+pub rt fn rt_maybe_return_in_operand[T: ?Dup](move t: T, c: Bool) -> U32 { first_m(move t, if c { return 0 } else { 1 }) }   //~ E0601
 
 // ------------------------------------------------------------------ two values wait
 
 pub fn two_waiting[T](t: T, u: T, r: Option[U32]) -> Option[(T, T, U32)] { Some((t, u, r?)) }   //~ E0601
 
-pub rt fn rt_two_waiting[T](t: T, u: T, r: Option[U32]) -> Option[(T, T, U32)] { Some((t, u, r?)) }   //~ E0901
+pub rt fn rt_two_waiting[T](t: T, u: T, r: Option[U32]) -> Option[(T, T, U32)] { Some((t, u, r?)) }   //~ E0601

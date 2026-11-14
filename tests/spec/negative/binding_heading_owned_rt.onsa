@@ -6,7 +6,7 @@
 // owned: "`for s in f(...)`（場所でも静的な値でも破棄の要らないリテラルでもない反復元）: 所有。一時の値を
 // 消費する" with a drop for each element, and "`match f(...)` … の腕の束縛: 所有". An owned `Buf` is
 // destroyed, and the destruction of an owned `Buf` needs `Alloc` (§12.2), which an `rt fn` cannot do:
-// an E0901 (the code of a drop in an `rt fn` of this version, the same as `owns_a_buf` of
+// an E0601 at the binding (S-77, S-783: the drop in an `rt fn` is an E0601, the same as `owns_a_buf` of
 // negative/rt.onsa). The heading is on one line with its binding and the end of the arm, so the line
 // does not depend on where in the arm the error is put. The argument of the call is a `move`
 // argument and an Affine `Buf`, so the form stays an error when the destruction of a temporary of a
@@ -42,42 +42,42 @@ impl Box {
 // ------------------------------------------------------------------ match on a call
 
 pub rt fn match_on_a_call(move b: Buf[F32]) -> U32 {
-  match wrap(move b) { Some(c) => c.len(), None => 0 }   //~ E0901
+  match wrap(move b) { Some(c) => c.len(), None => 0 }   //~ E0601
 }
 
 pub rt fn match_on_a_method_call(move h: Box) -> U32 {
-  match h.into_option() { Some(c) => c.len(), None => 0 }   //~ E0901
+  match h.into_option() { Some(c) => c.len(), None => 0 }   //~ E0601
 }
 
 pub rt fn match_on_an_if_of_calls(c: Bool, move b: Buf[F32]) -> U32 {
-  match if c { wrap(move b) } else { wrap(move b) } { Some(z) => z.len(), None => 0 }   //~ E0901
+  match if c { wrap(move b) } else { wrap(move b) } { Some(z) => z.len(), None => 0 }   //~ E0601
 }
 
 pub rt fn match_on_a_call_in_parentheses(move b: Buf[F32]) -> U32 {
-  match (wrap(move b)) { Some(c) => c.len(), None => 0 }   //~ E0901
+  match (wrap(move b)) { Some(c) => c.len(), None => 0 }   //~ E0601
 }
 
 pub rt fn match_on_a_block_with_a_call(move b: Buf[F32]) -> U32 {
-  match ({ wrap(move b) }) { Some(c) => c.len(), None => 0 }   //~ E0901
+  match ({ wrap(move b) }) { Some(c) => c.len(), None => 0 }   //~ E0601
 }
 
 // ------------------------------------------------------------------------- for over a call
 
 pub rt fn for_over_a_call(move a: Buf[F32], move b: Buf[F32]) -> U32 {
   var n: U32 = 0
-  for c in pair(move a, move b) { n = n + c.len() }   //~ E0901
+  for c in pair(move a, move b) { n = n + c.len() }   //~ E0601
   n
 }
 
 pub rt fn for_over_a_call_in_parentheses(move a: Buf[F32], move b: Buf[F32]) -> U32 {
   var n: U32 = 0
-  for c in (pair(move a, move b)) { n = n + c.len() }   //~ E0901
+  for c in (pair(move a, move b)) { n = n + c.len() }   //~ E0601
   n
 }
 
 pub rt fn for_over_an_if_of_calls(f: Bool, move a: Buf[F32], move b: Buf[F32]) -> U32 {
   var n: U32 = 0
-  for c in if f { pair(move a, move b) } else { pair(move b, move a) } { n = n + c.len() }   //~ E0901
+  for c in if f { pair(move a, move b) } else { pair(move b, move a) } { n = n + c.len() }   //~ E0601
   n
 }
 

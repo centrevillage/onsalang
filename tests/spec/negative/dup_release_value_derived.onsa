@@ -5,8 +5,8 @@
 // W6-02 U7/t, S-1030 (§5.2: "そこから派生した借用束縛の使用を含む、E0704"; §5.4: the binding of the arm of a borrowed `match x` is a borrowed binding derived from `x`; §7: a change of `x` makes
 // the derived binding unusable afterwards, "変更が呼び出しの引数 ... によるときは、... 束縛が使えなくなるのは呼び出しの後である"): the third condition for a literal. The arm of `match o` (a place, so
 // that the heading is borrowed) binds `b`, a derived binding that is not Copy, and the element `Some(o)` of a literal that is evaluated before the use of `b` in the next element would be a move that
-// invalidates `b` (Affine, E0704), so the value is copied and the original is dropped at the end of its binding, and the drop needs `Alloc`: an E0601 in a function without `uses {Alloc}` and an E0901 in an
-// `rt fn`. The other arms hand the value off too, so that the arm with the use is the only reason. The binding is the payload of `Option[Str]` and `Result[Str, U32]`, a field of a struct and an
+// invalidates `b` (Affine, E0704), so the value is copied and the original is dropped at the end of its binding, and the drop needs `Alloc`: an E0601 in a function without `uses {Alloc}` and in an
+// `rt fn` (S-77). The other arms hand the value off too, so that the arm with the use is the only reason. The binding is the payload of `Option[Str]` and `Result[Str, U32]`, a field of a struct and an
 // element of a tuple. The forms where the use of `b` is before the hand-off, or the binding is a Copy value, are in negative/dup_release_value_ok.onsa (`derived_read_before`, `derived_copy_binding`).
 // The helpers are not needed. Today every function here is an error, and it stays one. The functions are one-liners (S-783). One error per function (P-01).
 
@@ -19,20 +19,20 @@ pub struct Param {
 
 pub fn payload_of_option(move o: Option[Str]) -> (Option[Option[Str]], U32) { match o { Some(b) => (Some(o), b.len()), None => (Some(o), 0) } }   //~ E0601
 
-pub rt fn rt_payload_of_option(move o: Option[Str]) -> (Option[Option[Str]], U32) { match o { Some(b) => (Some(o), b.len()), None => (Some(o), 0) } }   //~ E0901
+pub rt fn rt_payload_of_option(move o: Option[Str]) -> (Option[Option[Str]], U32) { match o { Some(b) => (Some(o), b.len()), None => (Some(o), 0) } }   //~ E0601
 
 pub fn payload_of_result(move r: Result[Str, U32]) -> (Option[Result[Str, U32]], U32) { match r { Ok(a) => (Some(r), a.len()), Err(e) => (Some(r), e) } }   //~ E0601
 
-pub rt fn rt_payload_of_result(move r: Result[Str, U32]) -> (Option[Result[Str, U32]], U32) { match r { Ok(a) => (Some(r), a.len()), Err(e) => (Some(r), e) } }   //~ E0901
+pub rt fn rt_payload_of_result(move r: Result[Str, U32]) -> (Option[Result[Str, U32]], U32) { match r { Ok(a) => (Some(r), a.len()), Err(e) => (Some(r), e) } }   //~ E0601
 
 pub fn field_of_struct(move p: Param) -> (Option[Param], U32) { match p { Param { name: n, value: v } => (Some(p), n.len()) } }   //~ E0601
 
-pub rt fn rt_field_of_struct(move p: Param) -> (Option[Param], U32) { match p { Param { name: n, value: v } => (Some(p), n.len()) } }   //~ E0901
+pub rt fn rt_field_of_struct(move p: Param) -> (Option[Param], U32) { match p { Param { name: n, value: v } => (Some(p), n.len()) } }   //~ E0601
 
 pub fn element_of_tuple(move t: (Str, U32)) -> (Option[(Str, U32)], U32) { match t { (a, k) => (Some(t), a.len()) } }   //~ E0601
 
-pub rt fn rt_element_of_tuple(move t: (Str, U32)) -> (Option[(Str, U32)], U32) { match t { (a, k) => (Some(t), a.len()) } }   //~ E0901
+pub rt fn rt_element_of_tuple(move t: (Str, U32)) -> (Option[(Str, U32)], U32) { match t { (a, k) => (Some(t), a.len()) } }   //~ E0601
 
 pub fn in_a_branch(move o: Option[Str], c: Bool) -> (Option[Option[Str]], U32) { match o { Some(b) => (Some(o), if c { b.len() } else { 0 }), None => (Some(o), 0) } }   //~ E0601
 
-pub rt fn rt_in_a_branch(move o: Option[Str], c: Bool) -> (Option[Option[Str]], U32) { match o { Some(b) => (Some(o), if c { b.len() } else { 0 }), None => (Some(o), 0) } }   //~ E0901
+pub rt fn rt_in_a_branch(move o: Option[Str], c: Bool) -> (Option[Option[Str]], U32) { match o { Some(b) => (Some(o), if c { b.len() } else { 0 }), None => (Some(o), 0) } }   //~ E0601

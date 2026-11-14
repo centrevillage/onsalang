@@ -244,8 +244,9 @@ fn a_hole_of_a_string_is_resolved_and_reported_as_a_chain_of_an_expression() {
                pub fn k(t: (I32, I32)) -> Str {\n  \"{K} {t.1}\"\n}\n";
     let (a, module) = analysis(src);
     use onsa_diag::Code::{E0302, E0304, E0308, E0601};
-    // `k`, checked to its end, makes a `Str` with no `uses {Alloc}` (§12).
-    assert_eq!(reported(&a, &module), [(E0304, 2), (E0302, 4), (E0308, 7), (E0601, 14)]);
+    // `k`, checked to its end, makes a `Str` with no `uses {Alloc}` (§12),
+    // an E0601 at the string (S-82).
+    assert_eq!(reported(&a, &module), [(E0304, 2), (E0302, 4), (E0308, 7), (E0601, 15)]);
     let h = names(&a, "h");
     assert!(!h.complete && !h.reported && h.interp.is_empty());
     let k = names(&a, "k");

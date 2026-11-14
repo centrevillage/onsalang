@@ -86,11 +86,11 @@ pub struct HoldsBufToo {
 
 pub fn dup_struct_with_buf(h: HoldsBufToo) -> (HoldsBufToo, HoldsBufToo) { (h, h) }   //~ E0711
 
-pub rt fn drop_str_leaf_rt(move g: E10[Str]) -> U32 { 0 }   //~ E0901
+pub rt fn drop_str_leaf_rt(move g: E10[Str]) -> U32 { 0 }   //~ E0601
 
 pub fn drop_str_leaf(move g: E10[Str]) -> U32 { 0 }   //~ E0601
 
-pub rt fn drop_buf_leaf_rt(move g: E10[Buf[F32]]) -> U32 { 0 }   //~ E0901
+pub rt fn drop_buf_leaf_rt(move g: E10[Buf[F32]]) -> U32 { 0 }   //~ E0601
 
 pub fn drop_buf_leaf(move g: E10[Buf[F32]]) -> U32 { 0 }   //~ E0601
 

@@ -5,7 +5,7 @@
 // W6-02 U2a/t, R-32 (§12.2: "所有する Shared 値・`Buf` と、それらを含む値の破棄: 要る"; §8.1: 暗黙の `Alloc` に所有する値の破棄を含む;
 // §10 rule 1: an `rt` function cannot drop an owned `Buf`): an owned local that is moved on one path and not on another is live at the
 // end of its block on the other path, and the drop there needs `Alloc`. A function without `uses {Alloc}` is an E0601 and an `rt fn`
-// an E0901 (the code of a drop in an `rt fn` of this version, the same as negative/drop_on_the_other_path.onsa). The block is the
+// too (S-77, the same as negative/drop_on_the_other_path.onsa). The block is the
 // body of the function, the branch of an `if`, the arm of a `match`. This version counts a local moved anywhere in the body as moved
 // on every path, so none of these is reported today (R-32). The forms of negative/drop_on_the_other_path.onsa (one `if`/`else`, the
 // field taken out) are not repeated; here are the nested `if`, the `else if` chain, the `match` arms (the heading is a Copy value or a
@@ -22,18 +22,18 @@ pub struct Holder {
 
 impl Holder {
   pub fn keep_if(move self, c: Bool) -> Option[Holder] { if c { Some(move self) } else { None } }   //~ E0601
-  pub rt fn rt_keep_if(move self, c: Bool) -> Option[Holder] { if c { Some(move self) } else { None } }   //~ E0901
+  pub rt fn rt_keep_if(move self, c: Bool) -> Option[Holder] { if c { Some(move self) } else { None } }   //~ E0601
 }
 
 // ------------------------------------------------------------------ nested `if`
 
 pub fn nested_if(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { if d { Some(move b) } else { None } } else { None } }   //~ E0601
 
-pub rt fn rt_nested_if(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { if d { Some(move b) } else { None } } else { None } }   //~ E0901
+pub rt fn rt_nested_if(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { if d { Some(move b) } else { None } } else { None } }   //~ E0601
 
 pub fn nested_if_in_else(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { None } else { if d { Some(move b) } else { None } } }   //~ E0601
 
-pub rt fn rt_nested_if_in_else(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { None } else { if d { None } else { Some(move b) } } }   //~ E0901
+pub rt fn rt_nested_if_in_else(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { None } else { if d { None } else { Some(move b) } } }   //~ E0601
 
 pub fn nested_if_two_of_three(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { if d { None } else { Some(move b) } } else { Some(move b) } }   //~ E0601
 
@@ -41,11 +41,11 @@ pub fn nested_if_two_of_three(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[
 
 pub fn chain_first(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { Some(move b) } else if d { None } else { None } }   //~ E0601
 
-pub rt fn rt_chain_first(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { Some(move b) } else if d { None } else { None } }   //~ E0901
+pub rt fn rt_chain_first(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { Some(move b) } else if d { None } else { None } }   //~ E0601
 
 pub fn chain_middle(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { None } else if d { Some(move b) } else { None } }   //~ E0601
 
-pub rt fn rt_chain_last(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { None } else if d { None } else { Some(move b) } }   //~ E0901
+pub rt fn rt_chain_last(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { None } else if d { None } else { Some(move b) } }   //~ E0601
 
 pub fn chain_two_of_three(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { Some(move b) } else if d { Some(move b) } else { None } }   //~ E0601
 
@@ -55,25 +55,25 @@ pub fn chain_of_four(c: Bool, d: Bool, e: Bool, move b: Buf[F32]) -> Option[Buf[
 
 pub fn arm_literal(n: U32, move b: Buf[F32]) -> Option[Buf[F32]] { match n { 0 => Some(move b), _ => None } }   //~ E0601
 
-pub rt fn rt_arm_literal(n: U32, move b: Buf[F32]) -> Option[Buf[F32]] { match n { 0 => Some(move b), _ => None } }   //~ E0901
+pub rt fn rt_arm_literal(n: U32, move b: Buf[F32]) -> Option[Buf[F32]] { match n { 0 => Some(move b), _ => None } }   //~ E0601
 
 pub fn arm_wild(n: U32, move b: Buf[F32]) -> Option[Buf[F32]] { match n { 0 => None, _ => Some(move b) } }   //~ E0601
 
-pub rt fn rt_arm_three(n: U32, move b: Buf[F32]) -> Option[Buf[F32]] { match n { 0 => Some(move b), 1 => None, _ => None } }   //~ E0901
+pub rt fn rt_arm_three(n: U32, move b: Buf[F32]) -> Option[Buf[F32]] { match n { 0 => Some(move b), 1 => None, _ => None } }   //~ E0601
 
 pub fn arm_bool(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { match c { true => Some(move b), false => None } }   //~ E0601
 
-pub rt fn rt_arm_copy_payload(o: Option[U32], move b: Buf[F32]) -> Option[Buf[F32]] { match o { Some(_) => Some(move b), None => None } }   //~ E0901
+pub rt fn rt_arm_copy_payload(o: Option[U32], move b: Buf[F32]) -> Option[Buf[F32]] { match o { Some(_) => Some(move b), None => None } }   //~ E0601
 
 pub fn arm_borrowed_heading(q: Option[Buf[F32]], move b: Buf[F32]) -> Option[Buf[F32]] { match q { Some(_) => Some(move b), None => None } }   //~ E0601
 
-pub rt fn rt_arm_borrowed_heading(q: Option[Buf[F32]], move b: Buf[F32]) -> Option[Buf[F32]] { match q { Some(_) => None, None => Some(move b) } }   //~ E0901
+pub rt fn rt_arm_borrowed_heading(q: Option[Buf[F32]], move b: Buf[F32]) -> Option[Buf[F32]] { match q { Some(_) => None, None => Some(move b) } }   //~ E0601
 
 pub fn arm_two_of_three(n: U32, move b: Buf[F32]) -> Option[Buf[F32]] { match n { 0 => Some(move b), 1 => Some(move b), _ => None } }   //~ E0601
 
 pub fn arm_nested_match(n: U32, m: U32, move b: Buf[F32]) -> Option[Buf[F32]] { match n { 0 => match m { 0 => Some(move b), _ => None }, _ => None } }   //~ E0601
 
-pub rt fn rt_arm_if_in_arm(n: U32, c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { match n { 0 => if c { Some(move b) } else { None }, _ => None } }   //~ E0901
+pub rt fn rt_arm_if_in_arm(n: U32, c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { match n { 0 => if c { Some(move b) } else { None }, _ => None } }   //~ E0601
 
 pub fn arm_in_branch(c: Bool, n: U32, move b: Buf[F32]) -> Option[Buf[F32]] { if c { match n { 0 => Some(move b), _ => Some(move b) } } else { None } }   //~ E0601
 
@@ -81,43 +81,43 @@ pub fn arm_in_branch(c: Bool, n: U32, move b: Buf[F32]) -> Option[Buf[F32]] { if
 
 pub fn struct_one_path(c: Bool, move h: Holder) -> Option[Holder] { if c { Some(move h) } else { None } }   //~ E0601
 
-pub rt fn rt_struct_one_path(c: Bool, move h: Holder) -> Option[Holder] { if c { Some(move h) } else { None } }   //~ E0901
+pub rt fn rt_struct_one_path(c: Bool, move h: Holder) -> Option[Holder] { if c { Some(move h) } else { None } }   //~ E0601
 
 pub fn struct_arm(n: U32, move h: Holder) -> Option[Holder] { match n { 0 => Some(move h), _ => None } }   //~ E0601
 
-pub rt fn rt_struct_chain(c: Bool, d: Bool, move h: Holder) -> Option[Holder] { if c { None } else if d { Some(move h) } else { None } }   //~ E0901
+pub rt fn rt_struct_chain(c: Bool, d: Bool, move h: Holder) -> Option[Holder] { if c { None } else if d { Some(move h) } else { None } }   //~ E0601
 
 // ------------------------------------------------------------------ a binding of an owned heading (`match move o`)
 
 pub fn heading_arm(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) => if c { Some(move v) } else { None }, None => None } }   //~ E0601
 
-pub rt fn rt_heading_arm(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) => if c { Some(move v) } else { None }, None => None } }   //~ E0901
+pub rt fn rt_heading_arm(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) => if c { Some(move v) } else { None }, None => None } }   //~ E0601
 
 pub fn heading_arm_else_moved(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) => if c { None } else { Some(move v) }, None => None } }   //~ E0601
 
-pub rt fn rt_heading_arm_nested(c: Bool, d: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) => if c { if d { Some(move v) } else { None } } else { None }, None => None } }   //~ E0901
+pub rt fn rt_heading_arm_nested(c: Bool, d: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) => if c { if d { Some(move v) } else { None } } else { None }, None => None } }   //~ E0601
 
 pub fn heading_arm_match(n: U32, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) => match n { 0 => Some(move v), _ => None }, None => None } }   //~ E0601
 
-pub rt fn rt_heading_arm_chain(c: Bool, d: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) => if c { Some(move v) } else if d { None } else { None }, None => None } }   //~ E0901
+pub rt fn rt_heading_arm_chain(c: Bool, d: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) => if c { Some(move v) } else if d { None } else { None }, None => None } }   //~ E0601
 
 pub fn heading_struct_arm(c: Bool, move o: Option[Holder]) -> Option[Holder] { match move o { Some(h) => if c { Some(move h) } else { None }, None => None } }   //~ E0601
 
 pub fn heading_binding(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { match move b { t => if c { Some(move t) } else { None } } }   //~ E0601
 
-pub rt fn rt_heading_binding(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { match move b { t => if c { None } else { Some(move t) } } }   //~ E0901
+pub rt fn rt_heading_binding(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { match move b { t => if c { None } else { Some(move t) } } }   //~ E0601
 
 // ------------------------------------------------------------------ a path that panics in between (the path that reaches the end unmoved is the error)
 
 pub fn moved_panic_unmoved(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { Some(move b) } else if d { panic("x") } else { None } }   //~ E0601
 
-pub rt fn rt_moved_panic_unmoved(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { Some(move b) } else if d { panic("x") } else { None } }   //~ E0901
+pub rt fn rt_moved_panic_unmoved(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { Some(move b) } else if d { panic("x") } else { None } }   //~ E0601
 
 pub fn arm_moved_panic_unmoved(n: U32, move b: Buf[F32]) -> Option[Buf[F32]] { match n { 0 => Some(move b), 1 => panic("x"), _ => None } }   //~ E0601
 
-pub rt fn rt_heading_arm_panic_unmoved(c: Bool, d: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) => if c { Some(move v) } else if d { panic("x") } else { None }, None => None } }   //~ E0901
+pub rt fn rt_heading_arm_panic_unmoved(c: Bool, d: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) => if c { Some(move v) } else if d { panic("x") } else { None }, None => None } }   //~ E0601
 
 // R-32 (the input `r4_branch_drop` of the review of phase 1, moved here): of two owned values, each branch returns one, and the other is dropped at the end.
 pub fn one_of_two(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] { if c { a } else { b } }   //~ E0601
 
-pub rt fn rt_one_of_two(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] { if c { a } else { b } }   //~ E0901
+pub rt fn rt_one_of_two(c: Bool, move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] { if c { a } else { b } }   //~ E0601

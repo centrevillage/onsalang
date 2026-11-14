@@ -4,7 +4,7 @@
 
 // W6-02 U6/t, R-32 (§5.4: "`move` の引数と `move self`: 所有（書き換えられる） / 起きる"; §12.2: "所有する Shared 値・`Buf` と、それらを含む値の破棄: 要る"): an argument of `move _: T` is owned by the function
 // and has no name, so it is dropped at the end of the function, and the drop of a `Buf`, a `Str` or a value that holds one needs `Alloc`. A function without `uses {Alloc}`
-// is an E0601 and an `rt fn` an E0901 (§10 rule 1). The argument is the only drop of the function, wherever it is in the list. This version counts no drop of a `move _`
+// is an E0601 and an `rt fn` too (S-77, §10 rule 1). The argument is the only drop of the function, wherever it is in the list. This version counts no drop of a `move _`
 // argument (R-32), so none of these is reported today. The argument of a Copy type, the borrowed `_: T` and the function with `uses {Alloc}` are in
 // negative/drop_wild_contrast.onsa. The functions are one-liners, so that the line does not depend on where the drop is reported (S-783). One error per function (P-01).
 
@@ -18,38 +18,38 @@ pub struct H {
 
 pub fn param_buf(move _: Buf[F32]) {}   //~ E0601
 
-pub rt fn rt_param_buf(move _: Buf[F32]) {}   //~ E0901
+pub rt fn rt_param_buf(move _: Buf[F32]) {}   //~ E0601
 
 pub fn param_str(move _: Str) {}   //~ E0601
 
-pub rt fn rt_param_str(move _: Str) {}   //~ E0901
+pub rt fn rt_param_str(move _: Str) {}   //~ E0601
 
 pub fn param_option(move _: Option[Buf[F32]]) -> U32 { 0 }   //~ E0601
 
-pub rt fn rt_param_option(move _: Option[Buf[F32]]) -> U32 { 0 }   //~ E0901
+pub rt fn rt_param_option(move _: Option[Buf[F32]]) -> U32 { 0 }   //~ E0601
 
 pub fn param_tuple(move _: (Str, U32)) -> U32 { 0 }   //~ E0601
 
-pub rt fn rt_param_tuple(move _: (Str, U32)) -> U32 { 0 }   //~ E0901
+pub rt fn rt_param_tuple(move _: (Str, U32)) -> U32 { 0 }   //~ E0601
 
 pub fn param_array(move _: [Str; 2]) -> U32 { 0 }   //~ E0601
 
-pub rt fn rt_param_array(move _: [Str; 2]) -> U32 { 0 }   //~ E0901
+pub rt fn rt_param_array(move _: [Str; 2]) -> U32 { 0 }   //~ E0601
 
 pub fn param_struct(move _: H) -> U32 { 0 }   //~ E0601
 
-pub rt fn rt_param_struct(move _: H) -> U32 { 0 }   //~ E0901
+pub rt fn rt_param_struct(move _: H) -> U32 { 0 }   //~ E0601
 
 // ------------------------------------------------------------------ among other arguments
 
 pub fn param_after_copy(n: U32, move _: Buf[F32]) -> U32 { n }   //~ E0601
 
-pub rt fn rt_param_after_copy(n: U32, move _: Buf[F32]) -> U32 { n }   //~ E0901
+pub rt fn rt_param_after_copy(n: U32, move _: Buf[F32]) -> U32 { n }   //~ E0601
 
 pub fn param_before_copy(move _: Buf[F32], n: U32) -> U32 { n }   //~ E0601
 
-pub rt fn rt_param_before_copy(move _: Buf[F32], n: U32) -> U32 { n }   //~ E0901
+pub rt fn rt_param_before_copy(move _: Buf[F32], n: U32) -> U32 { n }   //~ E0601
 
 pub fn param_two(move _: Buf[F32], move _: Str) {}   //~ E0601
 
-pub rt fn rt_param_two(move _: Buf[F32], move _: Str) {}   //~ E0901
+pub rt fn rt_param_two(move _: Buf[F32], move _: Str) {}   //~ E0601

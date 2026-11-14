@@ -4,7 +4,7 @@
 
 // W6-02 U2a/t, S-873, R-32 (§9.2: the drop on the panic path is no `Alloc`; §12.2: "所有する Shared 値・`Buf` と、それらを含む値の破棄:
 // 要る"): the contrast of rt/drop_end_panic_path.onsa. A path that panics is no drop, but an owned local that is live where another
-// path reaches the end of the block unmoved is dropped there: a function without `uses {Alloc}` is an E0601 and an `rt fn` an E0901.
+// path reaches the end of the block unmoved is dropped there: a function without `uses {Alloc}` is an E0601 and an `rt fn` too (S-77).
 // These are reported today and after; the local is never moved in the body, so that the form does not depend on R-32 (the forms that
 // move on a third path are in negative/drop_end_one_path.onsa). The functions are one-liners, so that the line does not depend on
 // where the drop is reported (S-783). One error per function (P-01).
@@ -16,24 +16,24 @@ pub struct Holder {
 
 pub fn panic_or_unmoved(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { panic("x") } else { None } }   //~ E0601
 
-pub rt fn rt_panic_or_unmoved(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { panic("x") } else { None } }   //~ E0901
+pub rt fn rt_panic_or_unmoved(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { panic("x") } else { None } }   //~ E0601
 
 pub fn unmoved_or_panic(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { None } else { panic("x") } }   //~ E0601
 
-pub rt fn rt_nested_panic_unmoved(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { if d { panic("x") } else { None } } else { panic("y") } }   //~ E0901
+pub rt fn rt_nested_panic_unmoved(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { if d { panic("x") } else { None } } else { panic("y") } }   //~ E0601
 
 pub fn chain_panic_unmoved(c: Bool, d: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { panic("x") } else if d { None } else { panic("y") } }   //~ E0601
 
-pub rt fn rt_arm_panic_unmoved(n: U32, move b: Buf[F32]) -> Option[Buf[F32]] { match n { 0 => panic("x"), _ => None } }   //~ E0901
+pub rt fn rt_arm_panic_unmoved(n: U32, move b: Buf[F32]) -> Option[Buf[F32]] { match n { 0 => panic("x"), _ => None } }   //~ E0601
 
 pub fn arm_panic_unmoved(n: U32, move b: Buf[F32]) -> Option[Buf[F32]] { match n { 0 => None, 1 => panic("x"), _ => None } }   //~ E0601
 
-pub rt fn rt_struct_panic_unmoved(c: Bool, move h: Holder) -> Option[Holder] { if c { panic("x") } else { None } }   //~ E0901
+pub rt fn rt_struct_panic_unmoved(c: Bool, move h: Holder) -> Option[Holder] { if c { panic("x") } else { None } }   //~ E0601
 
 pub fn heading_arm_panic_unmoved(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) => if c { panic("x") } else { None }, None => None } }   //~ E0601
 
-pub rt fn rt_heading_arm_panic_unmoved(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) => if c { None } else { panic("x") }, None => None } }   //~ E0901
+pub rt fn rt_heading_arm_panic_unmoved(c: Bool, move o: Option[Buf[F32]]) -> Option[Buf[F32]] { match move o { Some(v) => if c { None } else { panic("x") }, None => None } }   //~ E0601
 
 pub fn spin_or_unmoved(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { while true {} } else { None } }   //~ E0601
 
-pub rt fn rt_spin_or_unmoved(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { None } else { while true {} } }   //~ E0901
+pub rt fn rt_spin_or_unmoved(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { if c { None } else { while true {} } }   //~ E0601

@@ -6,7 +6,7 @@
 // W6-02 U4a/t, R-255, S-1030 (§5.2: "所有する束縛（`move` の引数、`move self`、... の全体が Copy でない Dup の値で、それを消費する位置に置くとき、... 複製せずに移す"; "ブロックの末尾の式（`if` と
 // `match` の腕、ブロック式の末尾）は、そのブロックが置かれた位置を継ぐ"; §12.2: "所有する Dup の値を、消費する位置（返り値、`move` の引数、...）で移すこと: 要らない"): the return position. An owned Dup value
 // that is the value of a function (the tail of the body, `return e`, the tail of a block, of the arm of an `if` and of the arm of a `match` placed there) is moved, so that the original is not
-// dropped and the function needs no `Alloc`: no E0601 in a function without `uses {Alloc}`, no E0901 in an `rt fn` (R-255: "受け取った Shared 値を、そのまま返す ... 要らない"). The value is a
+// dropped and the function needs no `Alloc`: no E0601 in a function without `uses {Alloc}`, no E0601 in an `rt fn` (R-255: "受け取った Shared 値を、そのまま返す ... 要らない"). The value is a
 // `move` parameter that is a `Str`, a struct that holds a `Str`, an `Option[Str]`, a `Result[Str, U32]` or a `(Str, U32)`. The paths where each ends with the value (both branches of an `if`, all arms of a `match`,
 // `return` in a branch with the tail after it, a block, a `while true` whose body returns) move it on every path. A read before the return does not count (`let n = s.len()` and then `s`). The
 // forms where the returned value is a Copy field or a new value, and the early `return` of another value while `s` is alive, are errors and are in negative/dup_release_later.onsa. Every function

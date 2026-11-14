@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§12.2", "§18.1"]
+// fixes = 0
+
+// W6-03 U4a/t, S-783, S-82, R-87 (6) (§8.1: "上書きは代入先"; §12.2: "代入で上書きされる前の値の破棄を含む … : 要る"): the old value that an assignment overwrites is dropped at the assignment, and the drop
+// of a `Str` needs `Alloc`, so the use is at the target of the assignment (`s = t` is at `s`, `p.s = t` at `p.s`, `xs[0] = t` at `xs[0]`; the start of the target is the start of the place), and not at the
+// signature. A `move` parameter is dropped at the end of the body whatever the assignment does (the value that it holds then), so its name is the first use: it is written before the target (`assign_after_param`).
+// One error per function (P-01).
+// An `rt fn` has no candidate (`fixes = 0`; §10 rule 1). The same forms in a `fn` are in first_use_overwrite_fn.onsa.
+
+pub struct P {
+  s: Str,
+  n: U32,
+}
+
+pub rt fn assign_inout(inout s: Str, t: Str) {
+  s = t   //~ E0601 @3
+}
+
+pub rt fn assign_field(inout p: P, t: Str) {
+  p.s = t   //~ E0601 @3
+}
+
+pub rt fn assign_element(inout xs: [Str; 2], t: Str) {
+  xs[0] = t   //~ E0601 @3
+}
+
+pub rt fn assign_in_branch(inout s: Str, t: Str, c: Bool) {
+  if c {
+    s = t   //~ E0601 @5
+  }
+}
+
+pub rt fn assign_after_param(move s: Str, t: Str) {   //~ E0601 @35
+  s = t
+}
+
+impl P {
+  pub rt fn replace(inout self, t: Str) {
+    self.s = t   //~ E0601 @5
+  }
+}

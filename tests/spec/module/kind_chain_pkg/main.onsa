@@ -20,6 +20,6 @@ pub fn dup_holder(h: Holder) -> (Holder, Holder) { (h, h) }
 
 pub fn borrow_twice(h: Holder) -> U32 { borrow_it(h) + borrow_it(h) }
 
-pub rt fn drop_holder_rt(move h: Holder) -> U32 { 0 }   //~ E0901
+pub rt fn drop_holder_rt(move h: Holder) -> U32 { 0 }   //~ E0601
 
 pub fn drop_holder(move h: Holder) -> U32 { 0 }   //~ E0601

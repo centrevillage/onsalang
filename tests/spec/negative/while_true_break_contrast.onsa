@@ -9,11 +9,11 @@
 // of a drop would depend on S-783, so the read stands for the path: the moved local that looks alive after such a loop is dropped there, which is in the model
 // test `drop_path_model`). A `while true` is left by the `break` only, so a local that the body moved before the `break` is moved after the loop and a read of it is an
 // E0704, and a local that the loop did not move is alive after it and may be read. This version already reports exactly these. The helper `sink` is an `rt` function that
-// drops its argument, so its own E0901 is reported (the same as negative/drop_for_one_path.onsa).
+// drops its argument, so its own E0601 is reported (the same as negative/drop_for_one_path.onsa).
 
 const ALWAYS: Bool = true
 
-pub rt fn sink(move b: Buf[F32]) {}   //~ E0901
+pub rt fn sink(move b: Buf[F32]) {}   //~ E0601
 
 // ------------------------------------------------------------------ a condition that is not the literal `true` keeps the path on which it is false
 

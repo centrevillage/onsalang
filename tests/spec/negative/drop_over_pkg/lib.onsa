@@ -12,8 +12,8 @@ pub struct Holder[T] {
 
 pub fn lib_set(inout p: P, t: Str) { p.s = t }   //~ E0601
 
-pub rt fn rt_lib_set(inout p: P, t: Str) { p.s = t }   //~ E0901
+pub rt fn rt_lib_set(inout p: P, t: Str) { p.s = t }   //~ E0601
 
 pub fn lib_put[T](inout h: Holder[T], v: T) { h.v = v }   //~ E0601
 
-pub rt fn rt_lib_put[T](inout h: Holder[T], v: T) { h.v = v }   //~ E0901
+pub rt fn rt_lib_put[T](inout h: Holder[T], v: T) { h.v = v }   //~ E0601

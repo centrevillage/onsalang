@@ -4,7 +4,7 @@
 // mode = "check"
 
 // S-782 (§12.2: "所有する Shared 値・`Buf` と、それらを含む値の破棄: 要る", "Copy 値…の生成と破棄: 要らない"; §10: a drop in an `rt fn` is an
-// E0901 in this version, §8.1: a drop in a function without `uses {Alloc}` is an E0601): whether a value needs `Alloc` to be
+// E0601 (S-77), as is a drop in a function without `uses {Alloc}`, §8.1): whether a value needs `Alloc` to be
 // dropped is found from its structure and does not change with the number of declarations on the way. The chain is
 // `G_k[T] { x: G_(k-1)[Option[T]], y: G_(k-1)[(T, U8)] }` (declared `[T: ?Dup]`), at the depth 15. One below the depth 16, where the first implementation answered "not needed" for a type whose answer it did not find (the drop of an `rt fn` then went unchecked); the same forms at the depth 16 are `drop_chain_c_needs.onsa` (the errors), `drop_chain_c_fine.onsa` (the drops that need nothing) and `drop_chain_c_rest.onsa` (the rest of a destructuring).
 
@@ -97,25 +97,25 @@ pub struct HBuf {
   b: Buf[F32],
 }
 
-pub rt fn drop_str_rt(move h: HStr) -> U32 { 0 }   //~ E0901
+pub rt fn drop_str_rt(move h: HStr) -> U32 { 0 }   //~ E0601
 
 pub fn drop_str(move h: HStr) -> U32 { 0 }   //~ E0601
 
-pub rt fn drop_buf_rt(move h: HBuf) -> U32 { 0 }   //~ E0901
+pub rt fn drop_buf_rt(move h: HBuf) -> U32 { 0 }   //~ E0601
 
 pub fn drop_buf(move h: HBuf) -> U32 { 0 }   //~ E0601
 
-pub rt fn drop_str_leaf_rt(move g: M15[Str]) -> U32 { 0 }   //~ E0901
+pub rt fn drop_str_leaf_rt(move g: M15[Str]) -> U32 { 0 }   //~ E0601
 
 pub fn drop_str_leaf(move g: M15[Str]) -> U32 { 0 }   //~ E0601
 
-pub rt fn drop_buf_leaf_rt(move g: M15[Buf[F32]]) -> U32 { 0 }   //~ E0901
+pub rt fn drop_buf_leaf_rt(move g: M15[Buf[F32]]) -> U32 { 0 }   //~ E0601
 
 pub fn drop_buf_leaf(move g: M15[Buf[F32]]) -> U32 { 0 }   //~ E0601
 
-pub rt fn drop_in_a_tuple_rt(move p: (M15[F32], Str)) -> U32 { 0 }   //~ E0901
+pub rt fn drop_in_a_tuple_rt(move p: (M15[F32], Str)) -> U32 { 0 }   //~ E0601
 
-pub rt fn take_out_rest_rt(move h: HStr) -> M15[F32] { h.g }   //~ E0901
+pub rt fn take_out_rest_rt(move h: HStr) -> M15[F32] { h.g }   //~ E0601
 
 pub fn take_out_rest(move h: HBuf) -> M15[F32] { h.g }   //~ E0601
 
@@ -146,6 +146,6 @@ pub fn drop_buf_alloc(move h: HBuf) -> U32 uses {Alloc} { 0 }
 
 pub rt fn use_it(g: M15[F32]) -> U32 { 0 }
 
-pub rt fn rest_is_dropped_rt(move h: HStr) -> U32 { match move h { HStr { g: gg, s: _ } => use_it(gg) } }   //~ E0901
+pub rt fn rest_is_dropped_rt(move h: HStr) -> U32 { match move h { HStr { g: gg, s: _ } => use_it(gg) } }   //~ E0601
 
 pub fn rest_is_dropped(move h: HStr) -> U32 { match move h { HStr { g: gg, s: _ } => use_it(gg) } }   //~ E0601

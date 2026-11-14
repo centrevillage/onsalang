@@ -5,7 +5,7 @@
 // W6-02 U5a/t, R-32 (§12.2: "所有する Shared 値・`Buf` と、それらを含む値の破棄: 要る"; §8.1: the body of an anonymous function is checked with the effect row of the expected type and counts in no outer function): the
 // temporary value that no position consumes, in the combinations of a nesting (a temporary value inside another, a value that a `move` argument returns, a field that is taken out in a borrowed argument), a
 // method of a struct, a closure, a function of a generic signature (the temporary value is a `Str` or a `Buf`, not of the type parameter; the drop of a value of the type parameter itself is negative/drop_generic_*.onsa),
-// a block, an arm, a guard and a `return`. A function without `uses {Alloc}` is an E0601 and an `rt fn` an E0901; the closure's own body is the error (the `fn` that holds it is none). One error per function (P-01).
+// a block, an arm, a guard and a `return`. A function without `uses {Alloc}` is an E0601 and an `rt fn` too (S-77); the closure's own body is the error (the `fn` that holds it is none). One error per function (P-01).
 // The functions are one-liners (S-783). Each mark is reported (W6-02 U5a counts the drop of a temporary value).
 
 pub struct G {
@@ -91,87 +91,87 @@ pub rt fn apply_rt(f: rt fn(U32) -> U32, n: U32) -> U32 { f.(n) }
 
 impl G {
   pub fn temp_in_method(self) -> U32 { mk(self.n).len() }   //~ E0601
-  pub rt fn rt_temp_in_method(self) -> U32 { mk(self.n).len() }   //~ E0901
+  pub rt fn rt_temp_in_method(self) -> U32 { mk(self.n).len() }   //~ E0601
   pub fn temp_arg_in_method(self, o: G) -> Bool { o.same(mk_g(self.n)) }   //~ E0601
-  pub rt fn rt_temp_arg_in_method(self, o: G) -> Bool { o.same(mk_g(self.n)) }   //~ E0901
+  pub rt fn rt_temp_arg_in_method(self, o: G) -> Bool { o.same(mk_g(self.n)) }   //~ E0601
 }
 
 impl H {
   pub fn temp_in_method(self) -> U32 { mk(self.n).len() }   //~ E0601
-  pub rt fn rt_temp_in_method(self) -> U32 { mk(self.n).len() }   //~ E0901
+  pub rt fn rt_temp_in_method(self) -> U32 { mk(self.n).len() }   //~ E0601
 }
 
 // ------------------------------------------------------------------ a closure: the body is checked with the effect row of the type that the position expects (§8.1), and the function that holds it is no error
 
 pub fn closure_pure(n: U32) -> U32 { apply(fn(x: U32) -> U32 { mk(x).len() }, n) }   //~ E0601
 
-pub rt fn rt_closure(n: U32) -> U32 { apply_rt(fn(x: U32) -> U32 { mk(x).len() }, n) }   //~ E0901
+pub rt fn rt_closure(n: U32) -> U32 { apply_rt(fn(x: U32) -> U32 { mk(x).len() }, n) }   //~ E0601
 
 pub fn closure_argument(n: U32) -> U32 { apply(fn(x: U32) -> U32 { str_len(mk(x)) }, n) }   //~ E0601
 
-pub rt fn rt_closure_argument(n: U32) -> U32 { apply_rt(fn(x: U32) -> U32 { str_len(mk(x)) }, n) }   //~ E0901
+pub rt fn rt_closure_argument(n: U32) -> U32 { apply_rt(fn(x: U32) -> U32 { str_len(mk(x)) }, n) }   //~ E0601
 
 // ------------------------------------------------------------------ a function of a generic signature: the temporary value is not of the type parameter
 
 pub fn generic_copy[T: Copy](x: T) -> U32 { mk(1).len() }   //~ E0601
 
-pub rt fn rt_generic_copy[T: Copy](x: T) -> U32 { mk(1).len() }   //~ E0901
+pub rt fn rt_generic_copy[T: Copy](x: T) -> U32 { mk(1).len() }   //~ E0601
 
 pub fn generic_bound[T: Eq](a: T, b: T) -> U32 { str_len(mk(1)) }   //~ E0601
 
-pub rt fn rt_generic_bound[T: Eq](a: T, b: T) -> U32 { str_len(mk(1)) }   //~ E0901
+pub rt fn rt_generic_bound[T: Eq](a: T, b: T) -> U32 { str_len(mk(1)) }   //~ E0601
 
 pub fn generic_const[const N: U32](n: U32) -> U32 { mk(N).len() }   //~ E0601
 
-pub rt fn rt_generic_const[const N: U32](n: U32) -> U32 { mk(N).len() }   //~ E0901
+pub rt fn rt_generic_const[const N: U32](n: U32) -> U32 { mk(N).len() }   //~ E0601
 
 pub fn generic_buf[T: Copy](x: T, move b: Buf[F32]) -> U32 { len_of(pass(move b)) }   //~ E0601
 
-pub rt fn rt_generic_buf[T: Copy](x: T, move b: Buf[F32]) -> U32 { len_of(pass(move b)) }   //~ E0901
+pub rt fn rt_generic_buf[T: Copy](x: T, move b: Buf[F32]) -> U32 { len_of(pass(move b)) }   //~ E0601
 
 // ------------------------------------------------------------------ a temporary value inside another, a block, an arm, a guard and a `return` after the condition
 
 pub fn nested_take_in_arg(move b: Buf[F32]) -> U32 { len_of(pass(mk_h(move b).b)) }   //~ E0601
 
-pub rt fn rt_nested_take_in_arg(move b: Buf[F32]) -> U32 { len_of(pass(mk_h(move b).b)) }   //~ E0901
+pub rt fn rt_nested_take_in_arg(move b: Buf[F32]) -> U32 { len_of(pass(mk_h(move b).b)) }   //~ E0601
 
 pub fn nested_through_move_arg(n: U32) -> U32 { str_len(pass_s(mk(n))) }   //~ E0601
 
-pub rt fn rt_nested_through_move_arg(n: U32) -> U32 { str_len(pass_s(mk(n))) }   //~ E0901
+pub rt fn rt_nested_through_move_arg(n: U32) -> U32 { str_len(pass_s(mk(n))) }   //~ E0601
 
 pub fn moved_then_temp(move b: Buf[F32], n: U32) -> U32 { len_of(pass(move b)) + mk(n).len() }   //~ E0601
 
-pub rt fn rt_moved_then_temp(move b: Buf[F32], n: U32) -> U32 { len_of(pass(move b)) + mk(n).len() }   //~ E0901
+pub rt fn rt_moved_then_temp(move b: Buf[F32], n: U32) -> U32 { len_of(pass(move b)) + mk(n).len() }   //~ E0601
 
 pub fn two_branches(c: Bool, n: U32) -> U32 { if c { mk(n).len() } else { str_len(mk(n)) } }   //~ E0601
 
-pub rt fn rt_two_branches(c: Bool, n: U32) -> U32 { if c { mk(n).len() } else { str_len(mk(n)) } }   //~ E0901
+pub rt fn rt_two_branches(c: Bool, n: U32) -> U32 { if c { mk(n).len() } else { str_len(mk(n)) } }   //~ E0601
 
 pub fn deep(n: U32) -> Option[(U32, U32)] { Some((mk(n).len() + str_len(mk_o(n).unwrap()), 1)) }   //~ E0601
 
-pub rt fn rt_deep(n: U32) -> Option[(U32, U32)] { Some((mk(n).len() + str_len(mk_o(n).unwrap()), 1)) }   //~ E0901
+pub rt fn rt_deep(n: U32) -> Option[(U32, U32)] { Some((mk(n).len() + str_len(mk_o(n).unwrap()), 1)) }   //~ E0601
 
 pub fn chain(n: U32) -> U32 { mk_o(n).unwrap().len() + mk_t(n).0.len() }   //~ E0601
 
-pub rt fn rt_chain(n: U32) -> U32 { mk_o(n).unwrap().len() + mk_t(n).0.len() }   //~ E0901
+pub rt fn rt_chain(n: U32) -> U32 { mk_o(n).unwrap().len() + mk_t(n).0.len() }   //~ E0601
 
 pub fn block_tail(n: U32) -> U32 { { mk(n).len() } }   //~ E0601
 
-pub rt fn rt_block_tail(n: U32) -> U32 { { mk(n).len() } }   //~ E0901
+pub rt fn rt_block_tail(n: U32) -> U32 { { mk(n).len() } }   //~ E0601
 
 pub fn arm_block(n: U32) -> U32 { match n { 0 => { mk(n).len() }, _ => 0 } }   //~ E0601
 
-pub rt fn rt_arm_block(n: U32) -> U32 { match n { 0 => { mk(n).len() }, _ => 0 } }   //~ E0901
+pub rt fn rt_arm_block(n: U32) -> U32 { match n { 0 => { mk(n).len() }, _ => 0 } }   //~ E0601
 
 pub fn guard(n: U32) -> U32 { match n { 0 if mk(n).len() > 0 => 1, _ => 2 } }   //~ E0601
 
-pub rt fn rt_guard(n: U32) -> U32 { match n { 0 if mk(n).len() > 0 => 1, _ => 2 } }   //~ E0901
+pub rt fn rt_guard(n: U32) -> U32 { match n { 0 if mk(n).len() > 0 => 1, _ => 2 } }   //~ E0601
 
 pub fn return_after_condition(n: U32) -> U32 { if mk(n).len() > 0 { return 1 } else { 2 } }   //~ E0601
 
-pub rt fn rt_return_after_condition(n: U32) -> U32 { if mk(n).len() > 0 { return 1 } else { 2 } }   //~ E0901
+pub rt fn rt_return_after_condition(n: U32) -> U32 { if mk(n).len() > 0 { return 1 } else { 2 } }   //~ E0601
 
 pub fn return_value(n: U32) -> U32 { return mk(n).len() }   //~ E0601
 
-pub rt fn rt_return_value(n: U32) -> U32 { return mk(n).len() }   //~ E0901
+pub rt fn rt_return_value(n: U32) -> U32 { return mk(n).len() }   //~ E0601
 

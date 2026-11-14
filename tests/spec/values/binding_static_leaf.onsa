@@ -5,7 +5,7 @@
 // S-80, R-85 (§5.4, §12.2): a string literal without interpolation and a `const` are static values:
 // "`let y = CONST`、`let s = "abc"`" is a borrowed binding (the row of the table of §5.4), so it is not
 // destroyed, and "rt の関数でも、定数の表や文字列…を `let` で受けられる". No `Alloc` is needed to bind
-// it: not in an `rt fn` (an owned `Str` there is an E0901, §10 and §12.2) and not in a function
+// it: not in an `rt fn` (an owned `Str` there is an E0601, S-77, §12.2) and not in a function
 // without `Alloc` in its row (an E0601 there, §8.1). A binding derived from it is a borrowed binding
 // too. No diagnostic is expected anywhere in this file. The `var` and the interpolated forms (owned)
 // are in negative/binding_static_leaf.onsa.

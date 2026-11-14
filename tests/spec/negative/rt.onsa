@@ -14,11 +14,11 @@ pub rt fn calls_non_rt_value(g: fn(F32) -> F32) -> F32 {
 }
 
 pub rt fn allocates() -> U32 {
-  let b: Buf[F32] = Buf.zeroed(4)    //~ E0901
+  let b: Buf[F32] = Buf.zeroed(4)    //~ E0601
   b.len()
 }
 
-pub rt fn owns_a_buf(move b: Buf[F32]) -> U32 {   //~ E0901
+pub rt fn owns_a_buf(move b: Buf[F32]) -> U32 {   //~ E0601
   b.len()
 }
 

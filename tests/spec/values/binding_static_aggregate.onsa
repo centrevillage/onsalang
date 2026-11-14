@@ -10,13 +10,13 @@
 // "`match x` の腕の束縛（`x` は…静的な値…）": 借用（起点）), and "rt の関数でも、…静的な値と Copy の値だけでできた
 // リテラル（`["a", "bc"]`、…）を `let` で受けられる". No destruction happens, so no `Alloc` is needed (§12.2:
 // "静的な値と破棄の要らないリテラルの複製と破棄（一時の値を含む）: 要らない"), while an owned `Str` cannot be
-// destroyed in an `rt fn` (an E0901, §10; negative/binding_static_aggregate_owned.onsa). A binding derived
+// destroyed in an `rt fn` (an E0601, S-77; negative/binding_static_aggregate_owned.onsa). A binding derived
 // from a static value is a borrowed origin too ("そこから `let`、`for`、`match` の腕で作った借用束縛も起点").
 // The forms with a `Str` in them are only checked: this version does not run the Shared type `Str`
 // (values/binding_static_leaf_run.onsa). Every binding is read (an unread one is an E0309). No
 // diagnostic is expected anywhere in this file.
 //
-// These forms are E0901 at the binding in this version, since the work W4-16 U1b made the heading and the
+// These forms are E0601 at the binding (S-77, S-783) in this version, since the work W4-16 U1b made the heading and the
 // initializer that is not a place owned; the work W4-16 U2 closes them. The first three functions are the
 // forms that passed before U1b and stopped (`for s in ["a", "bc"]`, `match ["a", "bc"][i]`,
 // `match ("a", 1)`), the back-step that U2 closes.

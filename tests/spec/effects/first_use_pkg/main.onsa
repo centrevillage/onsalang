@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§10", "§15.1", "§18.1"]
+//
+// [[test.fix]]
+// at = "lib.onsa:8:7"
+// code = "E0601"
+// candidate = 1
+// leaves = ["main.onsa:19:3 E0601"]
+
+// W6-03 U4a/t, S-82, S-783, S-77 (§8.1: "診断は最初の使用の位置に置く"; "`rt` でない関数では、効果行への追加（署名への挿入）を修正候補に示し"; §15.1): the E0601 of a function of `lib` is at its first use, in `lib.onsa`
+// (the name `s`), and not at its signature. The candidate inserts ` uses {Alloc}` into the signature in `lib.onsa`, and then the call of `lib_let` in this module is an E0601 at the call (`calls_lib`: a
+// function of this module that had no error): the check says so with `leaves`. The `rt fn` of `lib` (`rt_lib_let`) has the E0601 at the same place and no candidate, so the function of this module that calls it has no
+// error. One error per function (P-01).
+
+use lib.{lib_let, rt_lib_let}
+
+pub fn calls_lib(n: U32) -> U32 {
+  lib_let(n)
+}
+
+pub rt fn rt_calls_rt_lib(n: U32) -> U32 {
+  rt_lib_let(n)
+}
+
+pub fn calls_rt_lib(n: U32) -> U32 {
+  rt_lib_let(n)
+}

@@ -5,8 +5,8 @@
 // S-691 (1), S-692 (c): a failed name in an effect row is a name that is not known, and the row is open; the
 // effects read next to it stay. The callers of such a function, and the `rt` rules, are judged on the
 // effects that were read: an `Alloc` that was read in the row of a function is an `Alloc` of its callers.
-// (The functions that have an E0601 are written on one line, so that the mark does not depend on whether the
-// diagnostic is at the heading or at the use, `tests/spec/fixes/e0601_alloc_row.onsa`.)
+// (An `rt fn` that calls such a function is an E0601 at the call, S-783 B3: the call is the use of `Alloc` and a call of a
+// function that is not `rt`, E0901, at the same range. The E0601 is at the first use, `tests/spec/fixes/e0601_alloc_row.onsa`.)
 use std.math.Gone                                 //~ E0302
 
 pub fn f() -> I32 uses {Alloc, Gone} {
@@ -18,12 +18,12 @@ pub fn f_after() -> I32 uses {Gone, Alloc} {
 }
 
 pub rt fn calls_from_rt() -> I32 {
-  let a = f()                                       //~ E0901
+  let a = f()                                       //~ E0601
   a
 }
 
 pub rt fn calls_after_from_rt() -> I32 {
-  let a = f_after()                                 //~ E0901
+  let a = f_after()                                 //~ E0601
   a
 }
 

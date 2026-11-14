@@ -6,12 +6,12 @@
 // owned `for` drops the elements it has not iterated and the heap container when it is left: a fixed-length array that is iterated to its end (S-1037: "固定長の配列を終わりまで
 // 回せば残りは無い"; its container is no heap object), a `continue` (not an exit from the iterated value, S-1037), a `panic` that leaves the loop (§9.2, §12.2: "panic で抜ける道の、
 // 生きている値の破棄: 要らない"), a `break` or a `return` over elements that need no drop (a Copy element), a borrowed `for` (§5.4: no drop), a loop over a range, and a function
-// with `uses {Alloc}` (the drop is allowed). The helpers `sink` and `eat` are `rt` functions that drop their argument, so their own E0901 is reported (the same as
+// with `uses {Alloc}` (the drop is allowed). The helpers `sink` and `eat` are `rt` functions that drop their argument, so their own E0601 is reported (the same as
 // negative/drop_for_one_path.onsa). This version already accepts all of these. The callers are one-liners (S-783).
 
-pub rt fn sink(move b: Buf[F32]) {}   //~ E0901
+pub rt fn sink(move b: Buf[F32]) {}   //~ E0601
 
-pub rt fn eat(move b: Buf[F32]) -> Bool { true }   //~ E0901
+pub rt fn eat(move b: Buf[F32]) -> Bool { true }   //~ E0601
 
 // ------------------------------------------------------------------ a fixed-length array iterated to its end
 

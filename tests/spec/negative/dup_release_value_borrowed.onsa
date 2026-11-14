@@ -5,35 +5,35 @@
 // W6-02 U7/t, S-1030 (§5.2: "借用の `for` とガードが持つ場所でない（E0715 と同じ判定、§5.4・§7）"; §5.4: "借用の `for`（`for s in xs`）の本体では、反復元 `xs` とその一部を変更できない。代入、`inout` への受け渡し、
 // `!` のメソッドの呼び出し、`move` は E0715"; §7: "借用の `match x` のガードでは、`x` とその一部を変更できない"): the fifth condition for a literal. The element of a literal that holds the iterated value `xs`
 // in the body of `for c in xs` (borrowed), or the heading `o` in the guard of the borrowed `match o`, is a move in Affine terms and an E0715, so the value is copied and the original is dropped at the end of its
-// binding, and the drop needs `Alloc`: an E0601 in a function without `uses {Alloc}` and an E0901 in an `rt fn`. A one-liner cannot show this condition alone (the loop goes round again, and the `_` arm leaves the
+// binding, and the drop needs `Alloc`: an E0601 in a function without `uses {Alloc}` and in an `rt fn` (S-77). A one-liner cannot show this condition alone (the loop goes round again, and the `_` arm leaves the
 // value alive: the same as in negative/dup_release_borrowed_for.onsa), so each function here is an error for the other reason too; the condition alone is decided in a function with no error, where the hand-offs of
-// the arms are copies and a hand-off in the guard that moved the value would turn them into an error (negative/dup_release_borrowed_for_ok.onsa). The helpers drop their argument, so their own E0901 is reported (the same as
+// the arms are copies and a hand-off in the guard that moved the value would turn them into an error (negative/dup_release_borrowed_for_ok.onsa). The helpers drop their argument, so their own E0601 is reported (the same as
 // negative/drop_for_one_path.onsa). Today every function here is an error, and it stays one. The functions are one-liners (S-783). One error per function (P-01).
 
-pub rt fn eat_ux(move o: Option[[Str; 2]]) {}   //~ E0901
+pub rt fn eat_ux(move o: Option[[Str; 2]]) {}   //~ E0601
 
-pub rt fn eat_uy(move t: ([Str; 2], U32)) {}   //~ E0901
+pub rt fn eat_uy(move t: ([Str; 2], U32)) {}   //~ E0601
 
-pub rt fn eat_go(move o: Option[Option[Str]]) -> Bool { true }   //~ E0901
+pub rt fn eat_go(move o: Option[Option[Str]]) -> Bool { true }   //~ E0601
 
-pub rt fn eat_gt(move o: Option[(Str, U32)]) -> Bool { true }   //~ E0901
+pub rt fn eat_gt(move o: Option[(Str, U32)]) -> Bool { true }   //~ E0601
 
 // ------------------------------------------------------------------ the body of a borrowed `for`
 
 pub fn for_body_ctor(move xs: [Str; 2]) { for c in xs { eat_ux(Some(xs)) } }   //~ E0601
 
-pub rt fn rt_for_body_ctor(move xs: [Str; 2]) { for c in xs { eat_ux(Some(xs)) } }   //~ E0901
+pub rt fn rt_for_body_ctor(move xs: [Str; 2]) { for c in xs { eat_ux(Some(xs)) } }   //~ E0601
 
 pub fn for_body_tuple(move xs: [Str; 2]) { for c in xs { eat_uy((xs, 1)) } }   //~ E0601
 
-pub rt fn rt_for_body_tuple(move xs: [Str; 2]) { for c in xs { eat_uy((xs, 1)) } }   //~ E0901
+pub rt fn rt_for_body_tuple(move xs: [Str; 2]) { for c in xs { eat_uy((xs, 1)) } }   //~ E0601
 
 // ------------------------------------------------------------------ the guard of a borrowed `match`
 
 pub fn guard_option(move o: Option[Str]) -> U32 { match o { Some(b) if eat_go(Some(o)) => 1, _ => 0 } }   //~ E0601
 
-pub rt fn rt_guard_option(move o: Option[Str]) -> U32 { match o { Some(b) if eat_go(Some(o)) => 1, _ => 0 } }   //~ E0901
+pub rt fn rt_guard_option(move o: Option[Str]) -> U32 { match o { Some(b) if eat_go(Some(o)) => 1, _ => 0 } }   //~ E0601
 
 pub fn guard_tuple(move t: (Str, U32)) -> U32 { match t { (a, k) if eat_gt(Some(t)) => 1, _ => 0 } }   //~ E0601
 
-pub rt fn rt_guard_tuple(move t: (Str, U32)) -> U32 { match t { (a, k) if eat_gt(Some(t)) => 1, _ => 0 } }   //~ E0901
+pub rt fn rt_guard_tuple(move t: (Str, U32)) -> U32 { match t { (a, k) if eat_gt(Some(t)) => 1, _ => 0 } }   //~ E0601

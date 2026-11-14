@@ -9,7 +9,7 @@
 // every arm, so that nothing is left to drop, which an `rt fn` needs: an arm `_` would drop the value that it leaves, §5.4), a heading that is a call or a
 // binding, the binding of a struct or a tuple, the guard of a borrowed `match` that reads, the consumption in the body of the arm (the way that §7 gives to write
 // it), a Dup value (`Str`) that the guard copies (§5.2, `uses {Alloc}` for its drop), and an outer local that the guard moves in a function with `uses {Alloc}` (the
-// drop on the path where the guard is not evaluated is allowed; without it the function is an E0601 or an E0901 already in this version, which is in
+// drop on the path where the guard is not evaluated is allowed; without it the function is an E0601 (in an `rt fn` too) already in this version, which is in
 // negative/guard_owned_outer_local.onsa). This version already accepts all of them.
 
 pub struct Holder {

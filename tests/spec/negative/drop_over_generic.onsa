@@ -4,7 +4,7 @@
 
 // W6-02 U5b/t, R-32, S-1038, S-782 (§6.3: "ジェネリックな型パラメータ `T` の値の破棄は、`T: Copy` の制約が無い限り `Alloc` を要する（`?Dup` の `T` も同じ）"; §12.2: "代入で上書きされる前の値の破棄を含む
 // （… フィールドと要素への代入はその場所の型で決まる）: 要る"; "ジェネリックな `T` の値の破棄（`T: Copy` の制約が無い場合）: 要る"): an assignment to a place whose type is a type parameter without
-// `Copy` (a `T` without a bound, a `T: ?Dup`, a `T` with a bound that is not a kind: `Eq`, `Ord`), or holds one, drops the old value of the place, so a function without `uses {Alloc}` is an E0601 and an `rt fn` an E0901.
+// `Copy` (a `T` without a bound, a `T: ?Dup`, a `T` with a bound that is not a kind: `Eq`, `Ord`), or holds one, drops the old value of the place, so a function without `uses {Alloc}` is an E0601 and an `rt fn` too (S-77).
 // The place is the argument whole, a field, an element, the payload that an `Option` holds, or a part of `self` of an `impl` of a generic type. A `T: Copy` and the number traits drop nothing
 // (negative/drop_over_ok.onsa), and the function that is the same one with a concrete type is in negative/drop_over_whole.onsa. This version counts no drop by an assignment (R-32), so none of these is reported today. The
 // functions are one-liners (S-783). One error per function (P-01).
@@ -21,54 +21,54 @@ pub struct HolderM[T: ?Dup] {
 
 pub fn put[T](inout a: T, b: T) { a = b }   //~ E0601
 
-pub rt fn rt_put[T](inout a: T, b: T) { a = b }   //~ E0901
+pub rt fn rt_put[T](inout a: T, b: T) { a = b }   //~ E0601
 
 pub fn put_bound[T: Eq](inout a: T, b: T) { a = b }   //~ E0601
 
-pub rt fn rt_put_bound[T: Eq](inout a: T, b: T) { a = b }   //~ E0901
+pub rt fn rt_put_bound[T: Eq](inout a: T, b: T) { a = b }   //~ E0601
 
 pub fn put_maybe[T: ?Dup](inout a: T, move b: T) { a = move b }   //~ E0601
 
-pub rt fn rt_put_maybe[T: ?Dup](inout a: T, move b: T) { a = move b }   //~ E0901
+pub rt fn rt_put_maybe[T: ?Dup](inout a: T, move b: T) { a = move b }   //~ E0601
 
 pub fn put_option[T](inout o: Option[T]) { o = None }   //~ E0601
 
-pub rt fn rt_put_option[T](inout o: Option[T]) { o = None }   //~ E0901
+pub rt fn rt_put_option[T](inout o: Option[T]) { o = None }   //~ E0601
 
 pub fn put_pair[T](inout p: (T, U32), b: T) { p = (b, 1) }   //~ E0601
 
-pub rt fn rt_put_pair[T](inout p: (T, U32), b: T) { p = (b, 1) }   //~ E0901
+pub rt fn rt_put_pair[T](inout p: (T, U32), b: T) { p = (b, 1) }   //~ E0601
 
 // ------------------------------------------------------------------ a field, an element, a part of `self`
 
 pub fn put_field[T](inout h: Holder[T], b: T) { h.v = b }   //~ E0601
 
-pub rt fn rt_put_field[T](inout h: Holder[T], b: T) { h.v = b }   //~ E0901
+pub rt fn rt_put_field[T](inout h: Holder[T], b: T) { h.v = b }   //~ E0601
 
 pub fn put_field_maybe[T: ?Dup](inout h: HolderM[T], move b: T) { h.v = move b }   //~ E0601
 
-pub rt fn rt_put_field_maybe[T: ?Dup](inout h: HolderM[T], move b: T) { h.v = move b }   //~ E0901
+pub rt fn rt_put_field_maybe[T: ?Dup](inout h: HolderM[T], move b: T) { h.v = move b }   //~ E0601
 
 pub fn put_holder[T](inout h: Holder[T], k: Holder[T]) { h = k }   //~ E0601
 
-pub rt fn rt_put_holder[T](inout h: Holder[T], k: Holder[T]) { h = k }   //~ E0901
+pub rt fn rt_put_holder[T](inout h: Holder[T], k: Holder[T]) { h = k }   //~ E0601
 
 pub fn put_element[T](inout xs: [T; 2], b: T) { xs[0] = b }   //~ E0601
 
-pub rt fn rt_put_element[T](inout xs: [T; 2], b: T) { xs[0] = b }   //~ E0901
+pub rt fn rt_put_element[T](inout xs: [T; 2], b: T) { xs[0] = b }   //~ E0601
 
 pub fn put_element_const[T, const N: U32](inout xs: [T; N], i: U32, b: T) { xs[i] = b }   //~ E0601
 
-pub rt fn rt_put_element_const[T, const N: U32](inout xs: [T; N], i: U32, b: T) { xs[i] = b }   //~ E0901
+pub rt fn rt_put_element_const[T, const N: U32](inout xs: [T; N], i: U32, b: T) { xs[i] = b }   //~ E0601
 
 impl[T] Holder[T] {
   pub fn set(inout self, v: T) { self.v = v }   //~ E0601
 
-  pub rt fn rt_set(inout self, v: T) { self.v = v }   //~ E0901
+  pub rt fn rt_set(inout self, v: T) { self.v = v }   //~ E0601
 }
 
 impl[T: ?Dup] HolderM[T] {
   pub fn set_maybe(inout self, move v: T) { self.v = move v }   //~ E0601
 
-  pub rt fn rt_set_maybe(inout self, move v: T) { self.v = move v }   //~ E0901
+  pub rt fn rt_set_maybe(inout self, move v: T) { self.v = move v }   //~ E0601
 }

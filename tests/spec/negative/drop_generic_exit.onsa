@@ -6,126 +6,126 @@
 // §9.1: a `?` that returns leaves the function like a `return`; §7): the drop of a value of a type parameter at the other paths. A path that leaves the function (`return`, a `?` that returns) or the end of
 // a block with the value alive, or that leaves a loop with it alive (`break`), drops it, and the path that moves it does not. A value that is moved on one path only (an `if` without `else`, the right operand of
 // `&&`, an arm that is `()`) is live on the others. The value is a `T: ?Dup` (moved with `move`), a `T` without a bound (moved without a mark: the argument of a `move` parameter that is its last use, S-1030) or a `T`
-// with a bound of a trait (`Eq`); the function is an E0601 without `uses {Alloc}` and an E0901 if it is `rt`. The same forms for a `Buf` are in negative/drop_end_one_path_unit.onsa and negative/drop_exit_try.onsa
-// and they are the same for a `T` as `Buf` is today. The helpers `sink`, `sink_d`, `sink_e`, `eat` and `eat_n` drop their argument, so their own E0901 is reported (the same as negative/drop_for_one_path.onsa).
+// with a bound of a trait (`Eq`); the function is an E0601 without `uses {Alloc}` and too if it is `rt` (S-77). The same forms for a `Buf` are in negative/drop_end_one_path_unit.onsa and negative/drop_exit_try.onsa
+// and they are the same for a `T` as `Buf` is today. The helpers `sink`, `sink_d`, `sink_e`, `eat` and `eat_n` drop their argument, so their own E0601 is reported (the same as negative/drop_for_one_path.onsa).
 // The functions are one-liners (S-783). This version counts no drop of a type parameter, so none of these is reported today. One error per function (P-01).
 
-pub rt fn sink[T: ?Dup](move t: T) {}   //~ E0901
+pub rt fn sink[T: ?Dup](move t: T) {}   //~ E0601
 
-pub rt fn sink_d[T](move t: T) {}   //~ E0901
+pub rt fn sink_d[T](move t: T) {}   //~ E0601
 
-pub rt fn sink_e[T: Eq](move t: T) {}   //~ E0901
+pub rt fn sink_e[T: Eq](move t: T) {}   //~ E0601
 
-pub rt fn eat[T: ?Dup](move t: T) -> Bool { true }   //~ E0901
+pub rt fn eat[T: ?Dup](move t: T) -> Bool { true }   //~ E0601
 
-pub rt fn eat_n[T: ?Dup](move t: T) -> U32 { 0 }   //~ E0901
+pub rt fn eat_n[T: ?Dup](move t: T) -> U32 { 0 }   //~ E0601
 
-pub rt fn eat_d[T](move t: T) -> U32 { 0 }   //~ E0901
+pub rt fn eat_d[T](move t: T) -> U32 { 0 }   //~ E0601
 
 // ------------------------------------------------------------------ `T: ?Dup`, moved on one path only
 
 pub fn no_else[T: ?Dup](c: Bool, move t: T) { if c { sink(move t) } }   //~ E0601
 
-pub rt fn rt_no_else[T: ?Dup](c: Bool, move t: T) { if c { sink(move t) } }   //~ E0901
+pub rt fn rt_no_else[T: ?Dup](c: Bool, move t: T) { if c { sink(move t) } }   //~ E0601
 
 pub fn empty_else[T: ?Dup](c: Bool, move t: T) { if c { sink(move t) } else {} }   //~ E0601
 
-pub rt fn rt_chain_without_last_else[T: ?Dup](c: Bool, d: Bool, move t: T) { if c { sink(move t) } else if d { sink(move t) } }   //~ E0901
+pub rt fn rt_chain_without_last_else[T: ?Dup](c: Bool, d: Bool, move t: T) { if c { sink(move t) } else if d { sink(move t) } }   //~ E0601
 
 pub fn unit_arm[T: ?Dup](n: U32, move t: T) { match n { 0 => sink(move t), _ => {} } }   //~ E0601
 
-pub rt fn rt_unit_arm[T: ?Dup](n: U32, move t: T) { match n { 0 => {}, _ => sink(move t) } }   //~ E0901
+pub rt fn rt_unit_arm[T: ?Dup](n: U32, move t: T) { match n { 0 => {}, _ => sink(move t) } }   //~ E0601
 
 pub fn and_right[T: ?Dup](c: Bool, move t: T) -> Bool { c && eat(move t) }   //~ E0601
 
-pub rt fn rt_and_right[T: ?Dup](c: Bool, move t: T) -> Bool { c && eat(move t) }   //~ E0901
+pub rt fn rt_and_right[T: ?Dup](c: Bool, move t: T) -> Bool { c && eat(move t) }   //~ E0601
 
 pub fn or_right[T: ?Dup](c: Bool, move t: T) -> Bool { c || eat(move t) }   //~ E0601
 
-pub rt fn rt_or_right[T: ?Dup](c: Bool, move t: T) -> Bool { c || eat(move t) }   //~ E0901
+pub rt fn rt_or_right[T: ?Dup](c: Bool, move t: T) -> Bool { c || eat(move t) }   //~ E0601
 
 pub fn one_of_two_arms[T: ?Dup](c: Bool, move t: T, move u: T) -> T { if c { t } else { u } }   //~ E0601
 
-pub rt fn rt_one_of_two_arms[T: ?Dup](c: Bool, move t: T, move u: T) -> T { if c { t } else { u } }   //~ E0901
+pub rt fn rt_one_of_two_arms[T: ?Dup](c: Bool, move t: T, move u: T) -> T { if c { t } else { u } }   //~ E0601
 
 pub fn one_of_two_match[T: ?Dup](n: U32, move t: T, move u: T) -> T { match n { 0 => t, _ => u } }   //~ E0601
 
-pub rt fn rt_one_of_two_match[T: ?Dup](n: U32, move t: T, move u: T) -> T { match n { 0 => t, _ => u } }   //~ E0901
+pub rt fn rt_one_of_two_match[T: ?Dup](n: U32, move t: T, move u: T) -> T { match n { 0 => t, _ => u } }   //~ E0601
 
 // ------------------------------------------------------------------ `T: ?Dup`, a `return`, a `?` and a `break` with the value alive
 
 pub fn return_alive[T: ?Dup](c: Bool, move t: T) -> U32 { if c { return 0 } else { eat_n(move t) } }   //~ E0601
 
-pub rt fn rt_return_alive[T: ?Dup](c: Bool, move t: T) -> U32 { if c { return 0 } else { eat_n(move t) } }   //~ E0901
+pub rt fn rt_return_alive[T: ?Dup](c: Bool, move t: T) -> U32 { if c { return 0 } else { eat_n(move t) } }   //~ E0601
 
 pub fn return_alive_in_an_arm[T: ?Dup](n: U32, move t: T) -> U32 { match n { 0 => { return 1 }, _ => eat_n(move t) } }   //~ E0601
 
-pub rt fn rt_return_alive_in_an_arm[T: ?Dup](n: U32, move t: T) -> U32 { match n { 0 => { return 1 }, _ => eat_n(move t) } }   //~ E0901
+pub rt fn rt_return_alive_in_an_arm[T: ?Dup](n: U32, move t: T) -> U32 { match n { 0 => { return 1 }, _ => eat_n(move t) } }   //~ E0601
 
 pub fn try_option[T: ?Dup](move t: T, r: Option[U32]) -> Option[U32] { Some(r? + eat_n(move t)) }   //~ E0601
 
-pub rt fn rt_try_option[T: ?Dup](move t: T, r: Option[U32]) -> Option[U32] { Some(r? + eat_n(move t)) }   //~ E0901
+pub rt fn rt_try_option[T: ?Dup](move t: T, r: Option[U32]) -> Option[U32] { Some(r? + eat_n(move t)) }   //~ E0601
 
 pub fn try_result[T: ?Dup](move t: T, r: Result[U32, U32]) -> Result[U32, U32] { Ok(r? + eat_n(move t)) }   //~ E0601
 
-pub rt fn rt_try_result[T: ?Dup](move t: T, r: Result[U32, U32]) -> Result[U32, U32] { Ok(r? + eat_n(move t)) }   //~ E0901
+pub rt fn rt_try_result[T: ?Dup](move t: T, r: Result[U32, U32]) -> Result[U32, U32] { Ok(r? + eat_n(move t)) }   //~ E0601
 
 pub fn try_in_condition[T: ?Dup](move t: T, r: Option[U32]) -> Option[U32] { if r? > 0 { Some(eat_n(move t)) } else { Some(eat_n(move t)) } }   //~ E0601
 
-pub rt fn rt_try_in_condition[T: ?Dup](move t: T, r: Option[U32]) -> Option[U32] { if r? > 0 { Some(eat_n(move t)) } else { Some(eat_n(move t)) } }   //~ E0901
+pub rt fn rt_try_in_condition[T: ?Dup](move t: T, r: Option[U32]) -> Option[U32] { if r? > 0 { Some(eat_n(move t)) } else { Some(eat_n(move t)) } }   //~ E0601
 
 pub fn break_alive[T: ?Dup](c: Bool, move t: T) { while true { if c { break } else { return sink(move t) } } }   //~ E0601
 
-pub rt fn rt_break_alive[T: ?Dup](c: Bool, move t: T) { while true { if c { break } else { return sink(move t) } } }   //~ E0901
+pub rt fn rt_break_alive[T: ?Dup](c: Bool, move t: T) { while true { if c { break } else { return sink(move t) } } }   //~ E0601
 
 // ------------------------------------------------------------------ `T` without a bound
 
 pub fn dup_no_else[T](c: Bool, move t: T) { if c { sink_d(t) } }   //~ E0601
 
-pub rt fn rt_dup_no_else[T](c: Bool, move t: T) { if c { sink_d(t) } }   //~ E0901
+pub rt fn rt_dup_no_else[T](c: Bool, move t: T) { if c { sink_d(t) } }   //~ E0601
 
 pub fn dup_unit_arm[T](n: U32, move t: T) { match n { 0 => sink_d(t), _ => {} } }   //~ E0601
 
-pub rt fn rt_dup_unit_arm[T](n: U32, move t: T) { match n { 0 => {}, _ => sink_d(t) } }   //~ E0901
+pub rt fn rt_dup_unit_arm[T](n: U32, move t: T) { match n { 0 => {}, _ => sink_d(t) } }   //~ E0601
 
 pub fn dup_and_right[T](c: Bool, move t: T) -> Bool { c && eat_d(t) > 0 }   //~ E0601
 
-pub rt fn rt_dup_and_right[T](c: Bool, move t: T) -> Bool { c && eat_d(t) > 0 }   //~ E0901
+pub rt fn rt_dup_and_right[T](c: Bool, move t: T) -> Bool { c && eat_d(t) > 0 }   //~ E0601
 
 pub fn dup_one_of_two_arms[T](c: Bool, move t: T, move u: T) -> T { if c { t } else { u } }   //~ E0601
 
-pub rt fn rt_dup_one_of_two_arms[T](c: Bool, move t: T, move u: T) -> T { if c { t } else { u } }   //~ E0901
+pub rt fn rt_dup_one_of_two_arms[T](c: Bool, move t: T, move u: T) -> T { if c { t } else { u } }   //~ E0601
 
 pub fn dup_return_alive[T](c: Bool, move t: T) -> U32 { if c { return 0 } else { eat_d(t) } }   //~ E0601
 
-pub rt fn rt_dup_return_alive[T](c: Bool, move t: T) -> U32 { if c { return 0 } else { eat_d(t) } }   //~ E0901
+pub rt fn rt_dup_return_alive[T](c: Bool, move t: T) -> U32 { if c { return 0 } else { eat_d(t) } }   //~ E0601
 
 pub fn dup_try_option[T](move t: T, r: Option[U32]) -> Option[U32] { Some(r? + eat_d(t)) }   //~ E0601
 
-pub rt fn rt_dup_try_option[T](move t: T, r: Option[U32]) -> Option[U32] { Some(r? + eat_d(t)) }   //~ E0901
+pub rt fn rt_dup_try_option[T](move t: T, r: Option[U32]) -> Option[U32] { Some(r? + eat_d(t)) }   //~ E0601
 
 pub fn dup_try_result[T](move t: T, r: Result[U32, U32]) -> Result[U32, U32] { Ok(r? + eat_d(t)) }   //~ E0601
 
-pub rt fn rt_dup_try_result[T](move t: T, r: Result[U32, U32]) -> Result[U32, U32] { Ok(r? + eat_d(t)) }   //~ E0901
+pub rt fn rt_dup_try_result[T](move t: T, r: Result[U32, U32]) -> Result[U32, U32] { Ok(r? + eat_d(t)) }   //~ E0601
 
 pub fn dup_break_alive[T](c: Bool, move t: T) { while true { if c { break } else { return sink_d(t) } } }   //~ E0601
 
-pub rt fn rt_dup_break_alive[T](c: Bool, move t: T) { while true { if c { break } else { return sink_d(t) } } }   //~ E0901
+pub rt fn rt_dup_break_alive[T](c: Bool, move t: T) { while true { if c { break } else { return sink_d(t) } } }   //~ E0601
 
 // ------------------------------------------------------------------ `T` with a bound of a trait, and a value that holds a `T`
 
 pub fn bound_no_else[T: Eq](c: Bool, move t: T) { if c { sink_e(t) } }   //~ E0601
 
-pub rt fn rt_bound_no_else[T: Eq](c: Bool, move t: T) { if c { sink_e(t) } }   //~ E0901
+pub rt fn rt_bound_no_else[T: Eq](c: Bool, move t: T) { if c { sink_e(t) } }   //~ E0601
 
 pub fn option_one_of_two_arms[T](c: Bool, move o: Option[T], move p: Option[T]) -> Option[T] { if c { o } else { p } }   //~ E0601
 
-pub rt fn rt_option_one_of_two_arms[T](c: Bool, move o: Option[T], move p: Option[T]) -> Option[T] { if c { o } else { p } }   //~ E0901
+pub rt fn rt_option_one_of_two_arms[T](c: Bool, move o: Option[T], move p: Option[T]) -> Option[T] { if c { o } else { p } }   //~ E0601
 
 pub fn maybe_option_one_of_two_arms[T: ?Dup](c: Bool, move o: Option[T], move p: Option[T]) -> Option[T] { if c { o } else { p } }   //~ E0601
 
-pub rt fn rt_maybe_option_one_of_two_arms[T: ?Dup](c: Bool, move o: Option[T], move p: Option[T]) -> Option[T] { if c { o } else { p } }   //~ E0901
+pub rt fn rt_maybe_option_one_of_two_arms[T: ?Dup](c: Bool, move o: Option[T], move p: Option[T]) -> Option[T] { if c { o } else { p } }   //~ E0601
 
 pub fn maybe_array_return_alive[T: ?Dup](c: Bool, move xs: [T; 2], move ys: [T; 2]) -> [T; 2] { if c { return xs } else { ys } }   //~ E0601
 
-pub rt fn rt_maybe_array_return_alive[T: ?Dup](c: Bool, move xs: [T; 2], move ys: [T; 2]) -> [T; 2] { if c { return xs } else { ys } }   //~ E0901
+pub rt fn rt_maybe_array_return_alive[T: ?Dup](c: Bool, move xs: [T; 2], move ys: [T; 2]) -> [T; 2] { if c { return xs } else { ys } }   //~ E0601

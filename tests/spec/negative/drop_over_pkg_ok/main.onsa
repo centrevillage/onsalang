@@ -2,8 +2,8 @@
 // [test]
 // spec = ["§5.2", "§8.1", "§10", "§12.2", "§15.1"]
 
-// W6-02 U5b/t, R-32, S-1038 (§12.2; §8.1: "効果行に無い使用は E0601"; §10 rule 1; §15.1): the contrasts of negative/drop_over_pkg. A function of `lib` that overwrites a value that needs `Alloc` to drop has `uses {Alloc}`
-// in its signature, so the effect reaches this module: a caller without the row is an E0601 at the call (an E0901 for an `rt` caller, the callee is not `rt`), and a caller with the row is legal. An assignment to a
+// W6-02 U5b/t, R-32, S-1038 (§12.2; §8.1: "効果行に無い使用は E0601"; §10 rules 1 and 4; §15.1): the contrasts of negative/drop_over_pkg. A function of `lib` that overwrites a value that needs `Alloc` to drop has `uses {Alloc}`
+// in its signature, so the effect reaches this module: a caller without the row is an E0601 at the call (an `rt` caller is an E0601 too, not an E0901: a call of a function with `Alloc` in its row is also a call of a function that is not `rt`, and §18.1 reports the E0601, S-783 B3), and a caller with the row is legal. An assignment to a
 // Copy field of a `lib.P`, and a call of a function of `lib` that overwrites only a Copy part, are legal in an `rt fn`. This version accepts the legal forms and reports the callers without the row (the effect
 // is written in the signature), and it keeps doing so. The functions are one-liners (S-783). One error per function (P-01).
 
@@ -11,11 +11,11 @@ use lib.{P, Holder, lib_set_alloc, lib_put_alloc, lib_set_n, lib_put_copy}
 
 pub fn call_lib(inout p: P, t: Str) { lib_set_alloc(inout p, t) }   //~ E0601
 
-pub rt fn rt_call_lib(inout p: P, t: Str) { lib_set_alloc(inout p, t) }   //~ E0901
+pub rt fn rt_call_lib(inout p: P, t: Str) { lib_set_alloc(inout p, t) }   //~ E0601
 
 pub fn call_lib_generic(inout h: Holder[Str], t: Str) { lib_put_alloc(inout h, t) }   //~ E0601
 
-pub rt fn rt_call_lib_generic(inout h: Holder[Str], t: Str) { lib_put_alloc(inout h, t) }   //~ E0901
+pub rt fn rt_call_lib_generic(inout h: Holder[Str], t: Str) { lib_put_alloc(inout h, t) }   //~ E0601
 
 pub fn call_lib_with_the_row(inout p: P, t: Str) uses {Alloc} { lib_set_alloc(inout p, t) }
 

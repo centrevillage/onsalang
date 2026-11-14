@@ -6,11 +6,11 @@
 // §5.2: "その場で複製して渡す（所有する値を移せるときは移す）"; §9.1: a `?` that returns leaves like a `return`; §12.2: the drop of a Shared value needs `Alloc`, "要素の複製は参照カウントの増加" and the count is not looked at):
 // the Dup value that waits for the operands after it, where it stays an error. A `move` parameter `s` that is handed to a `move` parameter (moved: nothing uses it afterwards) is evaluated and then waits for the
 // arguments after it; if a later argument is a `?` that returns (or a branch with a `return`), the value that waits is dropped (no call, no literal consumes it), and the drop needs `Alloc`: an E0601 in a function
-// without `uses {Alloc}` and an E0901 in an `rt fn`. This is the Dup side of the waiting values of negative/drop_pending.onsa (R-32, the `Buf` side); the original of `s` is not dropped (it was moved), so
+// without `uses {Alloc}` and an E0601 in an `rt fn`. This is the Dup side of the waiting values of negative/drop_pending.onsa (R-32, the `Buf` side); the original of `s` is not dropped (it was moved), so
 // the waiting value is the only drop. The owned `s` that is read by a `?` before the hand-off is alive at the `?` and is dropped there (`first2(r?, s)`, the same as `wrap(r?, move b)` of
 // negative/drop_exit_try.onsa). The owned `s` as an element of a tuple, an array or a struct literal waits in the same way (a value position, S-1030: the final form moves it, and the waiting value is dropped at
 // the `?`; before W6-02 U7 the original is copied and dropped instead, the verdict is the same). The same for the receiver of a `move self` method that waits for a `?` in its arguments. The helpers `first_n`, `first2`
-// and `consume` drop their argument, so their own E0901 is reported (the same as negative/drop_for_one_path.onsa). Today every function here is an error (the original is dropped after the copy is handed over),
+// and `consume` drop their argument, so their own E0601 is reported (the same as negative/drop_for_one_path.onsa). Today every function here is an error (the original is dropped after the copy is handed over),
 // and it stays one. The functions are one-liners (S-783). One error per function (P-01).
 
 pub struct Param {
@@ -19,55 +19,55 @@ pub struct Param {
 }
 
 impl Param {
-  pub rt fn consume(move self, n: U32) -> U32 { n }   //~ E0901
+  pub rt fn consume(move self, n: U32) -> U32 { n }   //~ E0601
 }
 
-pub rt fn first_n(move a: Str, n: U32) -> U32 { a.len() }   //~ E0901
+pub rt fn first_n(move a: Str, n: U32) -> U32 { a.len() }   //~ E0601
 
-pub rt fn first2(n: U32, move a: Str) -> U32 { a.len() }   //~ E0901
+pub rt fn first2(n: U32, move a: Str) -> U32 { a.len() }   //~ E0601
 
 // ------------------------------------------------------------------ the value handed off waits for the argument after it
 
 pub fn call_option(move s: Str, r: Option[U32]) -> Option[U32] { Some(first_n(s, r?)) }   //~ E0601
 
-pub rt fn rt_call_option(move s: Str, r: Option[U32]) -> Option[U32] { Some(first_n(s, r?)) }   //~ E0901
+pub rt fn rt_call_option(move s: Str, r: Option[U32]) -> Option[U32] { Some(first_n(s, r?)) }   //~ E0601
 
 pub fn call_result(move s: Str, r: Result[U32, U32]) -> Result[U32, U32] { Ok(first_n(s, r?)) }   //~ E0601
 
-pub rt fn rt_call_result(move s: Str, r: Result[U32, U32]) -> Result[U32, U32] { Ok(first_n(s, r?)) }   //~ E0901
+pub rt fn rt_call_result(move s: Str, r: Result[U32, U32]) -> Result[U32, U32] { Ok(first_n(s, r?)) }   //~ E0601
 
 pub fn call_return_in_operand(move s: Str, c: Bool) -> U32 { first_n(s, if c { return 0 } else { 1 }) }   //~ E0601
 
-pub rt fn rt_call_return_in_operand(move s: Str, c: Bool) -> U32 { first_n(s, if c { return 0 } else { 1 }) }   //~ E0901
+pub rt fn rt_call_return_in_operand(move s: Str, c: Bool) -> U32 { first_n(s, if c { return 0 } else { 1 }) }   //~ E0601
 
 pub fn call_return_in_arm(move s: Str, n: U32) -> U32 { first_n(s, match n { 0 => { return 0 }, _ => 1 }) }   //~ E0601
 
-pub rt fn rt_call_return_in_arm(move s: Str, n: U32) -> U32 { first_n(s, match n { 0 => { return 0 }, _ => 1 }) }   //~ E0901
+pub rt fn rt_call_return_in_arm(move s: Str, n: U32) -> U32 { first_n(s, match n { 0 => { return 0 }, _ => 1 }) }   //~ E0601
 
 pub fn call_struct_param(move p: Param, r: Option[U32]) -> Option[U32] { Some(p.consume(r?)) }   //~ E0601
 
-pub rt fn rt_call_struct_param(move p: Param, r: Option[U32]) -> Option[U32] { Some(p.consume(r?)) }   //~ E0901
+pub rt fn rt_call_struct_param(move p: Param, r: Option[U32]) -> Option[U32] { Some(p.consume(r?)) }   //~ E0601
 
 // ------------------------------------------------------------------ the owned `s` is alive at the `?` before the hand-off
 
 pub fn try_before_option(move s: Str, r: Option[U32]) -> Option[U32] { Some(first2(r?, s)) }   //~ E0601
 
-pub rt fn rt_try_before_option(move s: Str, r: Option[U32]) -> Option[U32] { Some(first2(r?, s)) }   //~ E0901
+pub rt fn rt_try_before_option(move s: Str, r: Option[U32]) -> Option[U32] { Some(first2(r?, s)) }   //~ E0601
 
 pub fn try_before_result(move s: Str, r: Result[U32, U32]) -> Result[U32, U32] { Ok(first2(r?, s)) }   //~ E0601
 
-pub rt fn rt_try_before_result(move s: Str, r: Result[U32, U32]) -> Result[U32, U32] { Ok(first2(r?, s)) }   //~ E0901
+pub rt fn rt_try_before_result(move s: Str, r: Result[U32, U32]) -> Result[U32, U32] { Ok(first2(r?, s)) }   //~ E0601
 
 // ------------------------------------------------------------------ the owned `s` in a tuple, an array or a struct literal waits
 
 pub fn tuple_owned(move s: Str, r: Option[U32]) -> Option[(Str, U32)] { Some((s, r?)) }   //~ E0601
 
-pub rt fn rt_tuple_owned(move s: Str, r: Option[U32]) -> Option[(Str, U32)] { Some((s, r?)) }   //~ E0901
+pub rt fn rt_tuple_owned(move s: Str, r: Option[U32]) -> Option[(Str, U32)] { Some((s, r?)) }   //~ E0601
 
 pub fn array_owned(move s: Str, r: Option[Str]) -> Option[[Str; 2]] { Some([s, r?]) }   //~ E0601
 
-pub rt fn rt_array_owned(move s: Str, r: Option[Str]) -> Option[[Str; 2]] { Some([s, r?]) }   //~ E0901
+pub rt fn rt_array_owned(move s: Str, r: Option[Str]) -> Option[[Str; 2]] { Some([s, r?]) }   //~ E0601
 
 pub fn struct_owned(move s: Str, r: Option[F32]) -> Option[Param] { Some(Param { name: s, value: r? }) }   //~ E0601
 
-pub rt fn rt_struct_owned(move s: Str, r: Option[F32]) -> Option[Param] { Some(Param { name: s, value: r? }) }   //~ E0901
+pub rt fn rt_struct_owned(move s: Str, r: Option[F32]) -> Option[Param] { Some(Param { name: s, value: r? }) }   //~ E0601

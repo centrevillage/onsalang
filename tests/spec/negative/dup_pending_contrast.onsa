@@ -6,7 +6,7 @@
 // value that waits for the operands after it is dropped where a `?` returns: a waiting value that is a value that needs no drop (a string literal, a Copy value: §12.2 "静的な値と破棄の要らない
 // リテラル（§5.4）の複製と破棄（一時の値を含む）: 要らない"), a `?` that comes before the value is made (`first2(r?, s)` with a borrowed `s`, `(r?, mk(1))`: the copy is made after the `?`, and the `?` leaves
 // nothing alive), a callee that only borrows (`len_of(s, r?)`: a borrowed argument consumes nothing, so nothing waits), a call or a literal with no `?` (nothing can leave), and a function with `uses {Alloc}`
-// (the drop is allowed). This version already accepts all of these. The helpers `first_n` and `first2` drop their argument, so their own E0901 is reported (the same as negative/drop_for_one_path.onsa). The
+// (the drop is allowed). This version already accepts all of these. The helpers `first_n` and `first2` drop their argument, so their own E0601 is reported (the same as negative/drop_for_one_path.onsa). The
 // functions are one-liners.
 
 pub struct Param {
@@ -16,9 +16,9 @@ pub struct Param {
 
 pub rt fn mk(n: U32) -> Str { "x" }
 
-pub rt fn first_n(move a: Str, n: U32) -> U32 { a.len() }   //~ E0901
+pub rt fn first_n(move a: Str, n: U32) -> U32 { a.len() }   //~ E0601
 
-pub rt fn first2(n: U32, move a: Str) -> U32 { a.len() }   //~ E0901
+pub rt fn first2(n: U32, move a: Str) -> U32 { a.len() }   //~ E0601
 
 pub rt fn len_of(a: Str, n: U32) -> U32 { n }
 

@@ -6,7 +6,7 @@
 // is a pointer, a Copy value, and holds no `Str`; the drop of a value that has one does not go to what the `Ptr` points to
 // (the destruction of that `Str` is the owner's, not this value's). So a type with only `Ptr`s of Shared types and of `Buf`s
 // needs no `Alloc` to be dropped: an `rt fn` takes it, and so does a function without `Alloc`. Before the fix the drop walked
-// through the `Ptr` and asked for `Alloc` (an E0901 and an E0601 that are not in the spec). The `Str` next to a `Ptr` that
+// through the `Ptr` and asked for `Alloc` (an E0601, in an `rt fn` too, that is not in the spec). The `Str` next to a `Ptr` that
 // is held by value is what needs it (negative/rt_drop_with_flat_ptr.onsa).
 
 pub struct Named {

@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§5.4", "§12.2", "§18.1"]
+// fixes = 1
+
+// W6-03 U4a/t, S-783, S-82, R-87 (6) (§8.1: "束縛しなかった部分はそれを書いた所（`_`）"; §5.4: what the pattern of an owned head leaves unbound is dropped, at the end of the statement for a `let` and at the end of the arm for a
+// `match`): the part that a pattern does not bind needs `Alloc` for its drop (a `Buf`), and the use is at the `_` that leaves it: the `_` of a `let _ = e`, the `_` of a field in a `let` pattern, the `_` of an arm,
+// the last `_` of a struct pattern (it leaves the other fields), the `_` of an arm that binds nothing. The call that makes the value (`mk_k`) is a call of an `rt fn` without `Alloc`, so it is no use. The
+// parameter `move _: K` is on the heading line, and its column is not written: S-1051 (open) decides whether the range is `move _: K` or the `_`. One error per function (P-01).
+// The candidate of each function inserts ` uses {Alloc}` into its signature. The same forms in an `rt fn` are in first_use_wild_rt.onsa.
+
+pub struct K {
+  b: Buf[F32],
+  n: U32,
+}
+
+pub rt fn mk_k(move b: Buf[F32]) -> K { K { b: move b, n: 1 } }
+
+pub fn let_wild(move b: Buf[F32]) {
+  let _ = mk_k(move b)   //~ E0601 @7
+}
+
+pub fn let_field_wild(move b: Buf[F32]) -> U32 {
+  let K { b: _, n: q } = mk_k(move b)   //~ E0601 @14
+  q
+}
+
+pub fn arm_wild(move o: Option[Buf[F32]]) -> U32 {
+  match move o {
+    Some(_) => 1,   //~ E0601 @10
+    None => 0,
+  }
+}
+
+pub fn struct_rest(move k: K) -> U32 {
+  match move k {
+    K { n: q, _ } => q,   //~ E0601 @15
+  }
+}
+
+pub fn arm_binds_nothing(move b: Buf[F32]) -> U32 {
+  match mk_k(move b) {
+    _ => 0,   //~ E0601 @5
+  }
+}
+
+pub fn param_wild(move _: K) {}   //~ E0601

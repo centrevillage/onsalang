@@ -10,7 +10,7 @@
 // origin of a borrow, E0711; the shape of `is_none[T]`), a static value and a
 // literal that needs no drop as the head, a `_` that leaves a Copy part (also next to a part that is moved on), the arm of a unit variant (`None =>`), a `for` that moves
 // every element or is borrowed, a `T: Copy`, the arm that moves the value on every path when the guard is false, the anonymous function of a borrowed argument, and a
-// function with `uses {Alloc}`. The helper `sink` is an `rt` function that drops its argument, so its own E0901 is reported (as negative/drop_for_contrast.onsa). This
+// function with `uses {Alloc}`. The helper `sink` is an `rt` function that drops its argument, so its own E0601 is reported (as negative/drop_for_contrast.onsa). This
 // version reports none of the others. The functions are one-liners, so that the line does not depend on where the drop is reported (S-783). One error per function (P-01).
 
 pub struct H {
@@ -35,7 +35,7 @@ pub fn run_ob(f: fn(Option[Buf[F32]]) -> U32, o: Option[Buf[F32]]) -> U32 { f.(o
 
 pub rt fn rt_run_ob(f: rt fn(Option[Buf[F32]]) -> U32, o: Option[Buf[F32]]) -> U32 { f.(o) }
 
-pub rt fn sink(move b: Buf[F32]) {}   //~ E0901
+pub rt fn sink(move b: Buf[F32]) {}   //~ E0601
 
 // ------------------------------------------------------------------ a borrowed head: `_` drops nothing
 

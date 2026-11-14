@@ -7,9 +7,9 @@
 // heading of an owned binding. An owned Dup value (a `move` parameter that is a `Str`, an `Option[Str]`, a struct, a tuple, an enum or a type parameter `T` with no bound) that is the heading of
 // `let t = move s`, `let t = s` (the name is an owned binding, not a borrowed origin, so the new binding is owned: §5.4 "借用の起点は、借用引数 ... である" and the other forms of the table), `var t = s`,
 // `match move o`, `for x in move xs` or the destructuring `let (a, b) = move p` is moved into the new binding when nothing uses it afterwards, so that the original is not dropped. The new bindings (`t`, the arm bindings `x`,
-// the iterated `x`, `a` and `b`) are owned and are moved on, or returned, so no drop is left and the function needs no `Alloc`: no E0601 in a function without `uses {Alloc}`, no E0901 in an `rt fn`. The parts that are
+// the iterated `x`, `a` and `b`) are owned and are moved on, or returned, so no drop is left and the function needs no `Alloc`: no E0601 in a function without `uses {Alloc}`, no E0601 in an `rt fn`. The parts that are
 // not bound are Copy (`_` over a `U32` or an `F32` has nothing to drop), a static literal (`"n"`) or no value (`None`). The array `[Str; 2]` has no heap box to drop, so its `for` over `move xs` leaves nothing
-// but the elements (S-1037). Every function here is an error today (the heading is a copy and the original is dropped) and none is one after. The helpers drop their argument, so their own E0901 is reported (the same
+// but the elements (S-1037). Every function here is an error today (the heading is a copy and the original is dropped) and none is one after. The helpers drop their argument, so their own E0601 is reported (the same
 // as negative/drop_for_one_path.onsa); the callers have no marker. The functions with a statement list are on several lines (no error is expected, S-783). The forms that stay copies, or drop
 // what the pattern does not bind, are in negative/dup_release_head_later.onsa and negative/dup_release_head_wild.onsa.
 
@@ -28,11 +28,11 @@ pub enum Q {
   B(Str, U32),
 }
 
-pub rt fn eat(move s: Str) {}   //~ E0901
+pub rt fn eat(move s: Str) {}   //~ E0601
 
-pub rt fn eat_n(move s: Str) -> U32 { s.len() }   //~ E0901
+pub rt fn eat_n(move s: Str) -> U32 { s.len() }   //~ E0601
 
-pub rt fn eat_g[T](move t: T) -> U32 { 0 }   //~ E0901
+pub rt fn eat_g[T](move t: T) -> U32 { 0 }   //~ E0601
 
 // ------------------------------------------------------------------ `let` and `var`
 

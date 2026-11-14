@@ -7,7 +7,7 @@
 // (`addn(eat_n(s), 1)`, `p.plus(eat_n(s))` with the receiver `p` another variable, `addn(eat_n(s), eat_n(t))` with two `move` parameters), and a Copy field of the receiver is read in a nested call that is finished before the other argument
 // (`addn(plus_f(p.value, 0), eat_p(p))`; the field passed as a place to the same call is an overlap, `plus_f(p.value, eat_p(p))` of the other file). Two hand-offs of `s` in
 // nested calls of two arguments (`addn(eat_n(s), eat_n(s))`): the first is used after (E0704 if it were Affine), so it copies, and the copy is read only to make the value of the
-// argument, which does not overlap the second (§5.2: "引数の中で同じ変数を読んで値を作るだけなら重ならない"; `addn(len_b(b), eat_b(move b))` has no E0702), so the second moves. The original is not dropped, so the function needs no `Alloc`. The helpers drop their argument, so their own E0901 is reported
+// argument, which does not overlap the second (§5.2: "引数の中で同じ変数を読んで値を作るだけなら重ならない"; `addn(len_b(b), eat_b(move b))` has no E0702), so the second moves. The original is not dropped, so the function needs no `Alloc`. The helpers drop their argument, so their own E0601 is reported
 // (the same as negative/drop_for_one_path.onsa); the callers have no marker. Every function is an error today (the original is dropped after the copy is handed over, R-255) and none is one after.
 // The functions are one-liners (S-783).
 
@@ -20,9 +20,9 @@ impl Param {
   pub rt fn plus(self, n: U32) -> U32 { n }
 }
 
-pub rt fn eat_n(move s: Str) -> U32 { s.len() }   //~ E0901
+pub rt fn eat_n(move s: Str) -> U32 { s.len() }   //~ E0601
 
-pub rt fn eat_p(move p: Param) -> U32 { 0 }   //~ E0901
+pub rt fn eat_p(move p: Param) -> U32 { 0 }   //~ E0601
 
 pub rt fn addn(n: U32, m: U32) -> U32 { n }
 

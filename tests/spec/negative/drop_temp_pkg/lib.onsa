@@ -34,12 +34,12 @@ pub rt fn len_of(b: Buf[F32]) -> U32 { 0 }
 
 pub fn lib_receiver(n: U32) -> U32 { mk(n).len() }   //~ E0601
 
-pub rt fn rt_lib_receiver(n: U32) -> U32 { mk(n).len() }   //~ E0901
+pub rt fn rt_lib_receiver(n: U32) -> U32 { mk(n).len() }   //~ E0601
 
 pub fn lib_argument(move b: Buf[F32]) -> U32 { len_of(pass(move b)) }   //~ E0601
 
-pub rt fn rt_lib_argument(move b: Buf[F32]) -> U32 { len_of(pass(move b)) }   //~ E0901
+pub rt fn rt_lib_argument(move b: Buf[F32]) -> U32 { len_of(pass(move b)) }   //~ E0601
 
 pub fn lib_take_out(move b: Buf[F32]) -> Buf[F32] { mk_h(move b).b }   //~ E0601
 
-pub rt fn rt_lib_take_out(move b: Buf[F32]) -> Buf[F32] { mk_h(move b).b }   //~ E0901
+pub rt fn rt_lib_take_out(move b: Buf[F32]) -> Buf[F32] { mk_h(move b).b }   //~ E0601

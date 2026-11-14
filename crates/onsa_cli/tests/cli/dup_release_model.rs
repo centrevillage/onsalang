@@ -5,8 +5,8 @@
 //! when it could carry a `move` as an Affine value would: nothing uses it afterwards (on any path that goes on, and
 //! in the next iteration of a loop), no other argument of the call overlaps it, and the place is not held by a borrowed
 //! `for` or a guard. Where it can not, a copy is handed over and the original is dropped at the end of its binding
-//! (and at an early exit), and that drop needs `Alloc` (§12.2: a function with no `uses {Alloc}` gets E0601, §8.1; an `rt fn`
-//! E0901, §10 rule 1); a value that is moved is not dropped ("所有する Dup の値を、消費する位置で移すこと: 要らない").
+//! (and at an early exit), and that drop needs `Alloc` (§12.2: a function with no `uses {Alloc}` gets E0601, §8.1, and so
+//! does an `rt fn`, §10 rule 1, S-77); a value that is moved is not dropped ("所有する Dup の値を、消費する位置で移すこと: 要らない").
 //!
 //! The function has one parameter `move s: Str` and writes its bodies from a few statements, each on a line of its own,
 //! with `acc` for the `U32` that every hand-off and read leaves: `Read` (`acc = acc + s.len()`), `Hand` (`acc = acc +
@@ -20,9 +20,9 @@
 //! (the next iteration of the loop it is in, and a `continue`, count), and then no path that has it moved drops `s`; it is
 //! copied otherwise, and `s` stays alive. It runs the body over the set of states `{alive, moved}` of `s` (the loops to a
 //! fixed point; the `while true` leaves by the `break`s only), and the function needs `Alloc` when `s` may be alive where
-//! a `Ret` or the end of the body is reached. One diagnostic is expected there (E0601 in a `fn`, E0901 in an `rt fn`),
-//! none otherwise. The model has no later use of the value that is handed off before the `eat_n` helper itself
-//! (its own E0901 is reported at the head and left out).
+//! a `Ret` or the end of the body is reached. One diagnostic is expected there (an E0601, in a `fn` and
+//! in an `rt fn`), none otherwise. The model has no later use of the value that is handed off before the `eat_n` helper itself
+//! (its own E0601 is reported at the head and left out).
 //!
 //! The same bodies are written again with the hand-off at a position that holds a value (W6-02 U7/t, S-1030): each `Hand` is
 //! chosen, by a second generator of a fixed seed that the bodies do not use, among `eat_n(s)`, `eat_o(Some(s))` (an element of a
@@ -51,7 +51,7 @@ const CHUNKS: usize = 14;
 const TREES: usize = 36;
 /// What the compared functions must show, so that a sweep that checks nothing does not pass.
 const MIN_FUNCTIONS: usize = 800;
-/// The helpers each drop their argument (their own E0901 is at the head and left out) and give back a `U32`.
+/// The helpers each drop their argument (their own E0601 is at the head and left out) and give back a `U32`.
 const HEAD: &str = "pub struct Param {\n  name: Str,\n  value: F32,\n}\n\n\
 pub rt fn eat_n(move s: Str) -> U32 { s.len() }\n\
 pub rt fn eat_o(move o: Option[Str]) -> U32 { 0 }\n\
@@ -439,13 +439,9 @@ fn twin(literals: bool) {
         for d in doc["diagnostics"].as_array().expect("diagnostics") {
             let code = d["code"].as_str().expect("a code");
             let line = d["span"]["line"].as_u64().expect("a line") as usize;
-            let message = d["message"].as_str().expect("a message");
-            let i = if code == "E0601" {
-                let name = message.split('`').nth(1).unwrap_or("");
-                cases.iter().position(|c| c.name == name)
-            } else {
-                cases.iter().enumerate().filter(|(_, c)| c.line <= line).max_by_key(|(_, c)| c.line).map(|(i, _)| i)
-            };
+            // The E0601 is at the value dropped (S-82, S-783), in its function.
+            let i =
+                cases.iter().enumerate().filter(|(_, c)| c.line <= line).max_by_key(|(_, c)| c.line).map(|(i, _)| i);
             let Some(i) = i else { continue };
             match code {
                 "E0704" => got[i].0 = true,
@@ -460,7 +456,7 @@ fn twin(literals: bool) {
             } else {
                 with_use += 1;
             }
-            let want = if c.rt { "E0901" } else { "E0601" };
+            let want = "E0601";
             // Where the Affine program has a use after a move, the drop is not compared (the check stops at the E0704).
             let ok = *use_after != c.all_move
                 && (*use_after || (drops.len() == usize::from(c.drops) && drops.iter().all(|d| d == want)));
@@ -512,17 +508,14 @@ fn run_sweep(literals: bool) {
             if code == "E0309" {
                 continue;
             }
-            let idx = if code == "E0601" {
-                let name = message.split('`').nth(1).unwrap_or("");
-                cases.iter().position(|c| c.name == name)
-            } else {
-                cases.iter().enumerate().filter(|(_, c)| c.line <= line).max_by_key(|(_, c)| c.line).map(|(i, _)| i)
-            };
+            // The E0601 is at the value dropped (S-82, S-783), in its function.
+            let idx =
+                cases.iter().enumerate().filter(|(_, c)| c.line <= line).max_by_key(|(_, c)| c.line).map(|(i, _)| i);
             match idx {
                 Some(i) if code == "E0601" || code == "E0901" => got[i].push(code),
                 Some(i) => strays.push(format!("seed {seed:#x}, `{}`: {code} {message}", cases[i].name)),
-                // The helper at the head drops its own argument (an E0901 before the first function).
-                None if code == "E0901" && line <= HEAD.lines().count() => {}
+                // The helper at the head drops its own argument (an E0601 before the first function).
+                None if code == "E0601" && line <= HEAD.lines().count() => {}
                 None => strays.push(format!("seed {seed:#x}: {code} at line {line}: {message}")),
             }
         }
@@ -533,7 +526,7 @@ fn run_sweep(literals: bool) {
             } else {
                 clean += 1;
             }
-            let want = if c.rt { "E0901" } else { "E0601" };
+            let want = "E0601";
             let ok = if c.drops { g.len() == 1 && g[0] == want } else { g.is_empty() };
             if !ok {
                 if !c.literal {

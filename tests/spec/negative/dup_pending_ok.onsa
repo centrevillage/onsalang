@@ -4,8 +4,8 @@
 
 // W6-02 U4a/t, R-32, R-255, S-1030 (§3.5, §5.2, §9.1, §12.2): the contrasts of negative/dup_pending_stays.onsa. A hand-off of the owned `s` does not leave a Dup value that waits when the call returns a Copy
 // value (`first_n(s, 1)` returns a `U32`, and the tuple that waits for `r?` holds it), when nothing comes after it that can leave (`Some(first_n(s, 1))`), and when `s` was moved by a statement before the `?`
-// (`eat(s)` and then `Some(len_n(r?))`: nothing is alive at the `?`). The original is not dropped, so the function needs no `Alloc`: no E0601 in a function without `uses {Alloc}`, no E0901 in an `rt fn`.
-// The helpers drop their argument, so their own E0901 is reported (the same as negative/drop_for_one_path.onsa); the callers have no marker. Every function is an error today (the original is dropped after the
+// (`eat(s)` and then `Some(len_n(r?))`: nothing is alive at the `?`). The original is not dropped, so the function needs no `Alloc`: no E0601 in a function without `uses {Alloc}`, no E0601 in an `rt fn`.
+// The helpers drop their argument, so their own E0601 is reported (the same as negative/drop_for_one_path.onsa); the callers have no marker. Every function is an error today (the original is dropped after the
 // copy is handed over, R-255) and none is one after. The functions with a statement list are on several lines (no error is expected, so the line does not matter, S-783).
 
 pub struct Param {
@@ -13,9 +13,9 @@ pub struct Param {
   value: F32,
 }
 
-pub rt fn eat(move s: Str) {}   //~ E0901
+pub rt fn eat(move s: Str) {}   //~ E0601
 
-pub rt fn first_n(move a: Str, n: U32) -> U32 { a.len() }   //~ E0901
+pub rt fn first_n(move a: Str, n: U32) -> U32 { a.len() }   //~ E0601
 
 pub rt fn len_n(n: U32) -> U32 { n }
 

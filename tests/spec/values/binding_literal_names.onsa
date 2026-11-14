@@ -13,7 +13,7 @@
 // No diagnostic is expected anywhere in this file. The name that is not such a binding (a borrowed `Str`
 // argument, a `var`) makes the literal owned: negative/binding_literal_names_owned.onsa.
 //
-// These are E0901 (E0601 in a function without `Alloc`) at the binding in this version, as the literal
+// These are E0601 (in an `rt fn` too, S-77) at the binding (S-783) in this version, as the literal
 // itself is (values/binding_literal_noalloc.onsa); the work W4-16 U2 closes them.
 
 pub struct Param {

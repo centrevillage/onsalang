@@ -4,7 +4,7 @@
 // mode = "check"
 
 // S-782 (§12.2, §10, §8.1): whether a value needs `Alloc` to be dropped is found from its structure and does not change with the number of
-// declarations on the way. The chain is `G_k[T] { x: G_(k-1)[(T, T)], y: G_(k-1)[(T, U8)] }` (declared `[T: ?Dup]`) at the depth 11. The rest of a value taken apart by `let S { a: x, b: _ } = move h` is dropped where it is taken apart (§5.2: "取り出したフィールド以外はその場で破棄され"), and needs `Alloc` if it holds a `Str` or a `Buf`: an E0901 in an `rt fn` and an E0601 in a function without `uses {Alloc}`, on the `let` line (§8.1: "診断は最初の使用の位置に置く"). The depth is the one where the first implementation lost the answer. This file waits for two works: the depth (S-782) and the line of the first use (the same wait as negative/take_out_rest_alloc_position.onsa). `mode = "check"` only.
+// declarations on the way. The chain is `G_k[T] { x: G_(k-1)[(T, T)], y: G_(k-1)[(T, U8)] }` (declared `[T: ?Dup]`) at the depth 11. The rest of a value taken apart by `let S { a: x, b: _ } = move h` is dropped where it is taken apart (§5.2: "取り出したフィールド以外はその場で破棄され"), and needs `Alloc` if it holds a `Str` or a `Buf`: an E0601 in an `rt fn` (S-77) and in a function without `uses {Alloc}`, at the `_` that leaves the rest, on the `let` line (§8.1: "束縛しなかった部分はそれを書いた所（`_`）", S-783). The depth is the one where the first implementation lost the answer. This file waits for two works: the depth (S-782) and the place of the first use (the same wait as negative/take_out_rest_alloc_position.onsa). `mode = "check"` only.
 
 pub struct M0[T: ?Dup] {
   v: T,
@@ -78,11 +78,11 @@ pub struct HBuf {
 pub rt fn use_it(g: M11[F32]) -> U32 { 0 }
 
 pub rt fn rest_is_dropped_rt(move h: HStr) -> U32 {
-  let HStr { g: gg, s: _ } = move h   //~ E0901
+  let HStr { g: gg, s: _ } = move h   //~ E0601 @24
   use_it(gg)
 }
 
 pub fn rest_is_dropped(move h: HStr) -> U32 {
-  let HStr { g: gg, s: _ } = move h   //~ E0601
+  let HStr { g: gg, s: _ } = move h   //~ E0601 @24
   use_it(gg)
 }

@@ -1,0 +1,75 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§5.4", "§12.2", "§18.1"]
+// fixes = 1
+
+// W6-03 U4a/t, S-783, S-82, R-87 (6) (§8.1: "診断は最初の使用の位置に置く"; "破棄の使用の位置は、破棄される値を書いた所である。所有の束縛（引数と `self`、`let`・`var`、腕と
+// `for` のパターンの束縛）はその名前"; §18.1: the order of the diagnostics is by the start of the position): a value that is dropped and needs `Alloc` for its drop (a `Buf`, a `Str` that a call returns,
+// §12.2) is a use of `Alloc` at the name of its binding: a parameter (and `move self`), a `let` or a `var`, the binding of an arm and the binding of an owned `for`. The use is not at the signature of
+// the function, and it is not at the point where the value is dropped (the end of the body, the end of the arm). The name of a binding is written before the expression that makes the value, so it comes first by the
+// order of §18.1 (`let b: Buf[F32] = Buf.zeroed(x)` is at `b`). A binding that is moved on is no drop, and only the creation is a use (`moved_on_creation_only`). One error per function (P-01).
+// In a function that is not `rt` the candidate inserts ` uses {Alloc}` into the signature (the check applies it and looks for the error again). The same forms in an `rt fn` are in first_use_binding_rt.onsa.
+
+pub struct Holder {
+  buf: Buf[F32],
+  gain: F32,
+}
+
+pub rt fn mk(n: U32) -> Str { "x" }
+
+pub fn param_move(move b: Buf[F32]) -> U32 uses {Alloc} {   //~ E0601 @24
+  let n = 1
+  n
+}
+
+pub fn param_generic[T](move x: T, n: U32) -> U32 uses {Alloc} {   //~ E0601 @30
+  n
+}
+
+impl Holder {
+  pub fn self_move(move self) -> U32 uses {Alloc} {   //~ E0601 @25
+    1
+  }
+}
+
+pub fn let_buf(n: U32) -> U32 uses {Alloc} {
+  let x = n + 1
+  let b: Buf[F32] = Buf.zeroed(x)   //~ E0601 @7
+  b.len()
+}
+
+pub fn let_str(n: U32) -> U32 uses {Alloc} {
+  let s = mk(n)   //~ E0601 @7
+  s.len()
+}
+
+pub fn var_str(n: U32) -> U32 uses {Alloc} {
+  var s = mk(n)   //~ E0601 @7
+  s.len()
+}
+
+pub fn arm_binding(move o: Option[Str]) -> U32 uses {Alloc} {
+  match move o {
+    Some(s) => s.len(),   //~ E0601 @10
+    None => 0,
+  }
+}
+
+pub fn for_binding(move xs: [Str; 2]) -> U32 uses {Alloc} {
+  var total: U32 = 0
+  for x in move xs {   //~ E0601 @7
+    total = total + x.len()
+  }
+  total
+}
+
+pub fn interpolation_name_first(n: U32) -> U32 uses {Alloc} {
+  let s = "gain {n}"   //~ E0601 @7
+  s.len()
+}
+
+pub fn moved_on_creation_only(n: U32) -> U32 uses {Alloc} {
+  let s = "gain {n}"   //~ E0601 @11
+  let t = s
+  t.len()
+}

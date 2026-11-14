@@ -4,8 +4,8 @@
 
 // W6-02 U4a/t, R-255, S-1030 (§5.2: "`move` 引数に渡す Dup 値（Copy、Shared、関数値の変数）には `move` を書かず（`tk(n)`、`ts(s)`、`ap(f)`）、その場で複製して渡す（所有する値を移せるときは移す、§5.2 の上の段落）",
 // S-609; §12.2: "所有する Dup の値を、消費する位置（返り値、`move` の引数、...）で移すこと: 要らない"): the `move` argument. An owned Dup value that is the argument of a `move` parameter, with no `move`
-// mark (S-609), is moved when nothing uses it afterwards, so the original is not dropped and the function needs no `Alloc`: no E0601 in a function without `uses {Alloc}`, no E0901 in an `rt fn`. The
-// callee returns the value (`id`), so it needs no `Alloc` either, once the return is moved (negative/dup_release_return.onsa); or it drops it (`eat`), and then its own E0901 is reported (the same as
+// mark (S-609), is moved when nothing uses it afterwards, so the original is not dropped and the function needs no `Alloc`: no E0601 in a function without `uses {Alloc}`, no E0601 in an `rt fn`. The
+// callee returns the value (`id`), so it needs no `Alloc` either, once the return is moved (negative/dup_release_return.onsa); or it drops it (`eat`), and then its own E0601 is reported (the same as
 // negative/drop_for_one_path.onsa). The argument is the whole value (`Str`, a struct that holds a `Str`, `Option[Str]`, `Result[Str, U32]`, `(Str, U32)`), and the call is in the tail, in a `return`, in the branches
 // of an `if` and the arms of a `match` (the paths do not meet again), as the argument of another hand-off (`id(id(s))`), and with a read before the call. The `move` argument that is a field or an element
 // (`id_name(p.name)`) is a copy (S-1034) and is not written here. Every function is an error today (R-255: the original is dropped after the copy is handed over) and none is one after, except the
@@ -16,7 +16,7 @@ pub struct Param {
   value: F32,
 }
 
-pub rt fn eat(move s: Str) {}   //~ E0901
+pub rt fn eat(move s: Str) {}   //~ E0601
 
 pub rt fn id(move s: Str) -> Str { s }
 

@@ -13,7 +13,7 @@
 // another form and not here). Every binding is read (an unread one is an E0309). No diagnostic is expected
 // anywhere in this file.
 //
-// These are E0901 (E0601 in a function without `Alloc`) at the binding in this version; the work W4-16
+// These are E0601 (in an `rt fn` too, S-77) at the binding (S-783) in this version; the work W4-16
 // U2 closes them. The `const` table (`NAMES[i]`) is not here: a `const` of a type with a Shared part is an
 // E0200 in this version (§6.6).
 
