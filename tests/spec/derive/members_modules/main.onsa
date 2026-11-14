@@ -24,11 +24,11 @@ pub fn hidden_as_a_let() -> Hidden uses {Alloc} {
   h
 }
 
-pub fn hidden_through_the_accessors() -> F32 {
+pub fn hidden_through_the_accessors() -> F32 uses {Alloc} {
   Hidden.default().gain() + F32.default()
 }
 
-pub fn the_visible_field() -> Str {
+pub fn the_visible_field() -> Str uses {Alloc} {
   Hidden.default().name
 }
 

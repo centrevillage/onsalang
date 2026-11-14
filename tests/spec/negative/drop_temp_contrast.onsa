@@ -1,0 +1,441 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§5.4", "§9.2", "§10", "§12.2"]
+
+// W6-02 U5a/t, R-32, S-610, S-613 (§12.2: "静的な値と破棄の要らないリテラル（§5.4）の複製と破棄（一時の値を含む）: 要らない"; "Copy 値 … の生成と破棄: 要らない"; "所有する Dup の値を、消費する位置 … で移すこと: 要らない";
+// "panic で抜ける道の、生きている値の破棄: 要らない"): the contrasts of negative/drop_temp_receiver.onsa, negative/drop_temp_argument.onsa, negative/drop_temp_operand.onsa, negative/drop_temp_index.onsa,
+// negative/drop_temp_field.onsa and negative/drop_temp_take_out.onsa. Every function is legal and stays legal after the drop of a temporary value that nothing consumes is counted: a static value and a
+// literal that needs no drop (§5.4) as a receiver, an argument, an operand, a condition, a Copy temporary value, a temporary value in a position that consumes it (the return value, a `move` argument, an element,
+// a `?`, `let`, the right side of an assignment; it is moved on, so that it is not dropped), the rest of a field that is taken out of a temporary value that is Copy, a path that panics after the value is evaluated, and
+// a function with `uses {Alloc}`. This version already accepts all of these. The helpers are `rt` functions that return a literal or move their argument on (no error). The functions are one-liners where the
+// line of a drop would matter (S-783); the ones with a statement list are on several lines (no error is expected).
+
+pub struct G {
+  s: Str,
+  n: U32,
+}
+
+pub struct H {
+  b: Buf[F32],
+  s: Str,
+  n: U32,
+}
+
+pub struct W {
+  h: H,
+  n: U32,
+}
+
+pub struct HH {
+  a: Buf[F32],
+  b: Buf[F32],
+}
+
+pub struct K {
+  b: Buf[F32],
+  n: U32,
+}
+
+impl G {
+  pub rt fn size(self) -> U32 { 0 }
+  pub rt fn same(self, o: G) -> Bool { true }
+}
+
+impl H {
+  pub rt fn size(self) -> U32 { 0 }
+  pub rt fn absorb(move self) -> H { self }
+}
+
+pub rt fn mk(n: U32) -> Str { "x" }
+
+pub rt fn mk_o(n: U32) -> Option[Str] { Some("x") }
+
+pub rt fn mk_t(n: U32) -> (Str, U32) { ("x", n) }
+
+pub rt fn mk_g(n: U32) -> G { G { s: "a", n: n } }
+
+pub rt fn mk_h(move b: Buf[F32]) -> H { H { b: move b, s: "a", n: 1 } }
+
+pub rt fn mk_w(move b: Buf[F32]) -> W { W { h: H { b: move b, s: "a", n: 1 }, n: 2 } }
+
+pub rt fn mk_hh(move a: Buf[F32], move b: Buf[F32]) -> HH { HH { a: move a, b: move b } }
+
+pub rt fn mk_k(move b: Buf[F32]) -> K { K { b: move b, n: 1 } }
+
+pub rt fn mk_bt(move b: Buf[F32]) -> (Buf[F32], Str) { (move b, "a") }
+
+pub rt fn pass(move b: Buf[F32]) -> Buf[F32] { b }
+
+pub rt fn pass_s(move s: Str) -> Str { s }
+
+pub rt fn str_len(s: Str) -> U32 { 0 }
+
+pub rt fn str_len2(s: Str, n: U32) -> U32 { n }
+
+pub rt fn len_of(b: Buf[F32]) -> U32 { 0 }
+
+pub rt fn len2(b: Buf[F32], n: U32) -> U32 { n }
+
+pub rt fn len2b(a: Buf[F32], b: Buf[F32]) -> U32 { 0 }
+
+pub rt fn opt_len(o: Option[Str]) -> U32 { 0 }
+
+pub rt fn tup_len(t: (Str, U32)) -> U32 { 0 }
+
+pub rt fn g_len(g: G) -> U32 { 0 }
+
+pub rt fn h_len(h: H) -> U32 { 0 }
+
+pub struct P {
+  x: F32,
+}
+
+pub rt fn mk_ou(n: U32) -> Option[U32] { Some(n) }
+
+pub rt fn mk_c(n: U32) -> (U32, U32) { (n, n) }
+
+pub rt fn mk_p(n: U32) -> P { P { x: 1.0 } }
+
+pub rt fn fnum(n: U32) -> U32 { n }
+
+pub rt fn mk_ob(n: U32) -> Option[Buf[F32]] { None }
+
+pub rt fn mk_bc(move b: Buf[F32]) -> (Buf[F32], U32) { (move b, 1) }
+
+pub rt fn wrap(move b: Buf[F32], n: U32) -> Option[Buf[F32]] { Some(move b) }
+
+pub rt fn tup_fl(t: (Str, F32)) -> U32 { 0 }
+
+// ------------------------------------------------------------------ a static value (§5.4: a literal string, an array of static values, a tuple or a struct literal of static values): the copy and the drop need nothing, a temporary value too
+
+pub fn static_str(n: U32) -> U32 { "abc".len() }
+
+pub rt fn rt_static_str(n: U32) -> U32 { "abc".len() }
+
+pub fn static_array(n: U32) -> U32 { ["a", "bc"].len() }
+
+pub rt fn rt_static_array(n: U32) -> U32 { ["a", "bc"].len() }
+
+pub fn static_tuple_field(n: U32) -> U32 { ("a", 1).1 }
+
+pub rt fn rt_static_tuple_field(n: U32) -> U32 { ("a", 1).1 }
+
+pub fn static_struct_field(n: U32) -> U32 { G { s: "a", n: 1 }.n }
+
+pub rt fn rt_static_struct_field(n: U32) -> U32 { G { s: "a", n: 1 }.n }
+
+pub fn static_arg_tuple(n: U32) -> U32 { tup_len(("gain", n)) }
+
+pub rt fn rt_static_arg_tuple(n: U32) -> U32 { tup_len(("gain", n)) }
+
+pub fn static_arg_tuple_expr(n: U32) -> U32 { tup_len(("gain", n + 1)) }
+
+pub rt fn rt_static_arg_tuple_expr(n: U32) -> U32 { tup_len(("gain", n + 1)) }
+
+pub fn static_arg_struct(n: U32) -> U32 { g_len(G { s: "gain", n: n }) }
+
+pub rt fn rt_static_arg_struct(n: U32) -> U32 { g_len(G { s: "gain", n: n }) }
+
+pub fn static_arg_option(n: U32) -> U32 { opt_len(Some("a")) }
+
+pub rt fn rt_static_arg_option(n: U32) -> U32 { opt_len(Some("a")) }
+
+pub fn static_arg_none(n: U32) -> U32 { opt_len(None) }
+
+pub rt fn rt_static_arg_none(n: U32) -> U32 { opt_len(None) }
+
+pub fn static_arg_str(n: U32) -> U32 { str_len("abc") }
+
+pub rt fn rt_static_arg_str(n: U32) -> U32 { str_len("abc") }
+
+pub fn static_operand(s: Str) -> Bool { "a" == s }
+
+pub rt fn rt_static_operand(s: Str) -> Bool { "a" == s }
+
+pub fn static_condition(n: U32) -> U32 { if "a".len() > 0 { 1 } else { 2 } }
+
+pub rt fn rt_static_condition(n: U32) -> U32 { if "a".len() > 0 { 1 } else { 2 } }
+
+// ------------------------------------------------------------------ a literal that needs no drop (§5.4): the elements are static or Copy (S-613)
+
+pub fn nodrop_arg(v: F32) -> U32 { tup_fl(("gain", v)) }
+
+pub rt fn rt_nodrop_arg(v: F32) -> U32 { tup_fl(("gain", v)) }
+
+pub fn nodrop_arg_expr(v: F32) -> U32 { tup_fl(("gain", v * 2.0)) }
+
+pub rt fn rt_nodrop_arg_expr(v: F32) -> U32 { tup_fl(("gain", v * 2.0)) }
+
+pub fn nodrop_struct(n: U32) -> U32 { g_len(G { s: "gain", n: n * 2 }) }
+
+pub rt fn rt_nodrop_struct(n: U32) -> U32 { g_len(G { s: "gain", n: n * 2 }) }
+
+pub fn nodrop_field(n: U32) -> U32 { ("gain", n + 1).1 }
+
+pub rt fn rt_nodrop_field(n: U32) -> U32 { ("gain", n + 1).1 }
+
+// ------------------------------------------------------------------ a Copy temporary value: a number, an `Option[U32]`, a tuple of numbers, a struct of numbers
+
+pub fn copy_arith(n: U32) -> U32 { fnum(n) + fnum(n) }
+
+pub rt fn rt_copy_arith(n: U32) -> U32 { fnum(n) + fnum(n) }
+
+pub fn copy_compare(n: U32) -> Bool { mk_ou(n) == mk_ou(n) }
+
+pub rt fn rt_copy_compare(n: U32) -> Bool { mk_ou(n) == mk_ou(n) }
+
+pub fn copy_unwrap(n: U32) -> U32 { mk_ou(n).unwrap() + 1 }
+
+pub rt fn rt_copy_unwrap(n: U32) -> U32 { mk_ou(n).unwrap() + 1 }
+
+pub fn copy_try(n: U32) -> Option[U32] { Some(mk_ou(n)? + 1) }
+
+pub rt fn rt_copy_try(n: U32) -> Option[U32] { Some(mk_ou(n)? + 1) }
+
+pub fn copy_tuple_field(n: U32) -> U32 { mk_c(n).1 }
+
+pub rt fn rt_copy_tuple_field(n: U32) -> U32 { mk_c(n).1 }
+
+pub fn copy_struct_field(n: U32) -> F32 { mk_p(n).x }
+
+pub rt fn rt_copy_struct_field(n: U32) -> F32 { mk_p(n).x }
+
+pub fn copy_condition(n: U32) -> U32 { if fnum(n) > 0 { 1 } else { 2 } }
+
+pub rt fn rt_copy_condition(n: U32) -> U32 { if fnum(n) > 0 { 1 } else { 2 } }
+
+pub fn copy_arg(n: U32) -> Option[Bool] { Some(mk_ou(n) == mk_ou(fnum(n))) }
+
+pub rt fn rt_copy_arg(n: U32) -> Option[Bool] { Some(mk_ou(n) == mk_ou(fnum(n))) }
+
+// ------------------------------------------------------------------ a temporary value in a position that consumes it: the return value, a `move` argument, an element, a `?`
+
+pub fn consumed_tail(move b: Buf[F32]) -> Buf[F32] { pass(move b) }
+
+pub rt fn rt_consumed_tail(move b: Buf[F32]) -> Buf[F32] { pass(move b) }
+
+pub fn consumed_nested(move b: Buf[F32]) -> Buf[F32] { pass(pass(move b)) }
+
+pub rt fn rt_consumed_nested(move b: Buf[F32]) -> Buf[F32] { pass(pass(move b)) }
+
+pub fn consumed_move_arg(move b: Buf[F32]) -> Option[Buf[F32]] { wrap(pass(move b), 1) }
+
+pub rt fn rt_consumed_move_arg(move b: Buf[F32]) -> Option[Buf[F32]] { wrap(pass(move b), 1) }
+
+pub fn consumed_constructor(move b: Buf[F32]) -> Option[Buf[F32]] { Some(pass(move b)) }
+
+pub rt fn rt_consumed_constructor(move b: Buf[F32]) -> Option[Buf[F32]] { Some(pass(move b)) }
+
+pub fn consumed_tuple(move b: Buf[F32]) -> (Buf[F32], U32) { (pass(move b), 1) }
+
+pub rt fn rt_consumed_tuple(move b: Buf[F32]) -> (Buf[F32], U32) { (pass(move b), 1) }
+
+pub fn consumed_array(move a: Buf[F32], move b: Buf[F32]) -> [Buf[F32]; 2] { [pass(move a), pass(move b)] }
+
+pub rt fn rt_consumed_array(move a: Buf[F32], move b: Buf[F32]) -> [Buf[F32]; 2] { [pass(move a), pass(move b)] }
+
+pub fn consumed_struct_literal(move b: Buf[F32]) -> K { K { b: pass(move b), n: 1 } }
+
+pub rt fn rt_consumed_struct_literal(move b: Buf[F32]) -> K { K { b: pass(move b), n: 1 } }
+
+pub fn consumed_branches(c: Bool, move b: Buf[F32]) -> Buf[F32] { if c { pass(move b) } else { pass(move b) } }
+
+pub rt fn rt_consumed_branches(c: Bool, move b: Buf[F32]) -> Buf[F32] { if c { pass(move b) } else { pass(move b) } }
+
+pub fn consumed_arms(n: U32, move b: Buf[F32]) -> Buf[F32] { match n { 0 => pass(move b), _ => pass(move b) } }
+
+pub rt fn rt_consumed_arms(n: U32, move b: Buf[F32]) -> Buf[F32] { match n { 0 => pass(move b), _ => pass(move b) } }
+
+pub fn consumed_loop(move b: Buf[F32]) -> Buf[F32] { while true { return pass(move b) } }
+
+pub rt fn rt_consumed_loop(move b: Buf[F32]) -> Buf[F32] { while true { return pass(move b) } }
+
+pub fn consumed_tried(n: U32) -> Option[Option[Buf[F32]]] { Some(wrap(mk_ob(n)?, 1)) }
+
+pub rt fn rt_consumed_tried(n: U32) -> Option[Option[Buf[F32]]] { Some(wrap(mk_ob(n)?, 1)) }
+
+pub fn consumed_move_self(move b: Buf[F32]) -> H { mk_h(move b).absorb() }
+
+pub rt fn rt_consumed_move_self(move b: Buf[F32]) -> H { mk_h(move b).absorb() }
+
+pub fn consumed_str_tail(n: U32) -> Str { mk(n) }
+
+pub rt fn rt_consumed_str_tail(n: U32) -> Str { mk(n) }
+
+pub fn consumed_str_arg(n: U32) -> Str { pass_s(mk(n)) }
+
+pub rt fn rt_consumed_str_arg(n: U32) -> Str { pass_s(mk(n)) }
+
+pub fn consumed_str_constructor(n: U32) -> Option[Str] { Some(mk(n)) }
+
+pub rt fn rt_consumed_str_constructor(n: U32) -> Option[Str] { Some(mk(n)) }
+
+pub fn consumed_str_tuple(n: U32) -> (Str, U32) { (mk(n), n) }
+
+pub rt fn rt_consumed_str_tuple(n: U32) -> (Str, U32) { (mk(n), n) }
+
+pub fn consumed_struct(n: U32) -> G { mk_g(n) }
+
+pub rt fn rt_consumed_struct(n: U32) -> G { mk_g(n) }
+
+// ------------------------------------------------------------------ the field that is taken out leaves a rest that is Copy (a `U32`): nothing is left to drop
+
+pub fn rest_copy_return(move b: Buf[F32]) -> Buf[F32] { mk_k(move b).b }
+
+pub rt fn rt_rest_copy_return(move b: Buf[F32]) -> Buf[F32] { mk_k(move b).b }
+
+pub fn rest_copy_move_arg(move b: Buf[F32]) -> Buf[F32] { pass(mk_k(move b).b) }
+
+pub rt fn rt_rest_copy_move_arg(move b: Buf[F32]) -> Buf[F32] { pass(mk_k(move b).b) }
+
+pub fn rest_copy_constructor(move b: Buf[F32]) -> Option[Buf[F32]] { Some(mk_k(move b).b) }
+
+pub rt fn rt_rest_copy_constructor(move b: Buf[F32]) -> Option[Buf[F32]] { Some(mk_k(move b).b) }
+
+pub fn rest_copy_tuple(move b: Buf[F32]) -> (Buf[F32], U32) { (mk_k(move b).b, 1) }
+
+pub rt fn rt_rest_copy_tuple(move b: Buf[F32]) -> (Buf[F32], U32) { (mk_k(move b).b, 1) }
+
+pub fn rest_copy_tuple_field(move b: Buf[F32]) -> Buf[F32] { mk_bc(move b).0 }
+
+pub rt fn rt_rest_copy_tuple_field(move b: Buf[F32]) -> Buf[F32] { mk_bc(move b).0 }
+
+pub fn rest_copy_branches(c: Bool, move b: Buf[F32]) -> Buf[F32] { if c { mk_k(move b).b } else { mk_k(move b).b } }
+
+pub rt fn rt_rest_copy_branches(c: Bool, move b: Buf[F32]) -> Buf[F32] { if c { mk_k(move b).b } else { mk_k(move b).b } }
+
+// ------------------------------------------------------------------ the field is taken out of the value of a block, an `if` or a `match` (§5.2: its tails move into the value, as `let y = <tail>`); the rest is Copy
+
+pub rt fn rt_rest_copy_of_a_block(move b: Buf[F32]) -> Buf[F32] { ({ mk_k(move b) }).b }
+
+pub rt fn rt_rest_copy_of_an_if(c: Bool, move b: Buf[F32]) -> Buf[F32] { (if c { mk_k(move b) } else { mk_k(move b) }).b }
+
+pub rt fn rt_rest_copy_of_a_match(n: U32, move b: Buf[F32]) -> Buf[F32] { (match n { 0 => mk_k(move b), _ => mk_k(move b) }).b }
+
+// ------------------------------------------------------------------ a panic after the value is evaluated: the path that panics drops nothing (§9.2, §12.2), and the path that goes on moves the value
+
+pub fn panic_after_move_arg(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { wrap(pass(move b), if c { panic("x") } else { 1 }) }
+
+pub rt fn rt_panic_after_move_arg(c: Bool, move b: Buf[F32]) -> Option[Buf[F32]] { wrap(pass(move b), if c { panic("x") } else { 1 }) }
+
+pub fn panic_after_tuple(c: Bool, move b: Buf[F32]) -> Option[(Buf[F32], U32)] { Some((pass(move b), if c { panic("x") } else { 1 })) }
+
+pub rt fn rt_panic_after_tuple(c: Bool, move b: Buf[F32]) -> Option[(Buf[F32], U32)] { Some((pass(move b), if c { panic("x") } else { 1 })) }
+
+pub fn panic_after_str(c: Bool, n: U32) -> Option[(Str, U32)] { Some((mk(n), if c { panic("x") } else { 1 })) }
+
+pub rt fn rt_panic_after_str(c: Bool, n: U32) -> Option[(Str, U32)] { Some((mk(n), if c { panic("x") } else { 1 })) }
+
+pub fn panic_after_take(c: Bool, move b: Buf[F32]) -> Option[(Buf[F32], U32)] { Some((mk_k(move b).b, if c { panic("x") } else { 1 })) }
+
+pub rt fn rt_panic_after_take(c: Bool, move b: Buf[F32]) -> Option[(Buf[F32], U32)] { Some((mk_k(move b).b, if c { panic("x") } else { 1 })) }
+
+// ------------------------------------------------------------------ a value that a `let` or an assignment consumes (statement lists, no error expected, so the line does not matter, S-783)
+
+pub fn consumed_let(move b: Buf[F32]) -> Buf[F32] {
+  let x = pass(move b)
+  x
+}
+
+pub rt fn rt_consumed_let(move b: Buf[F32]) -> Buf[F32] {
+  let x = pass(move b)
+  x
+}
+
+pub fn consumed_return(c: Bool, move b: Buf[F32]) -> Buf[F32] {
+  if c { return pass(move b) }
+  pass(move b)
+}
+
+pub rt fn rt_consumed_return(c: Bool, move b: Buf[F32]) -> Buf[F32] {
+  if c { return pass(move b) }
+  pass(move b)
+}
+
+pub fn consumed_assign(move a: Buf[F32], move b: Buf[F32]) -> (Buf[F32], Buf[F32]) {
+  var x = move a
+  let t = pass(move x)
+  x = pass(move b)
+  (move t, move x)
+}
+
+pub rt fn rt_consumed_assign(move a: Buf[F32], move b: Buf[F32]) -> (Buf[F32], Buf[F32]) {
+  var x = move a
+  let t = pass(move x)
+  x = pass(move b)
+  (move t, move x)
+}
+
+pub fn consumed_let_str(n: U32) -> Str {
+  let s = mk(n)
+  s
+}
+
+pub rt fn rt_consumed_let_str(n: U32) -> Str {
+  let s = mk(n)
+  s
+}
+
+pub fn consumed_let_rest_copy(move b: Buf[F32]) -> Buf[F32] {
+  let x = mk_k(move b).b
+  x
+}
+
+pub rt fn rt_consumed_let_rest_copy(move b: Buf[F32]) -> Buf[F32] {
+  let x = mk_k(move b).b
+  x
+}
+
+// ------------------------------------------------------------------ a literal of a binding that needs no drop
+
+pub fn nodrop_binding(n: U32, v: F32) -> U32 {
+  let nm = "gain"
+  tup_fl((nm, v))
+}
+
+pub rt fn rt_nodrop_binding(n: U32, v: F32) -> U32 {
+  let nm = "gain"
+  tup_fl((nm, v))
+}
+
+pub fn nodrop_binding_struct(n: U32) -> U32 {
+  let p = G { s: "gain", n: n }
+  g_len(p) + p.n
+}
+
+pub rt fn rt_nodrop_binding_struct(n: U32) -> U32 {
+  let p = G { s: "gain", n: n }
+  g_len(p) + p.n
+}
+
+// ------------------------------------------------------------------ `uses {Alloc}`: the drop of a temporary value is allowed (a form of each of negative/drop_temp_*.onsa)
+
+pub fn alloc_receiver(n: U32) -> U32 uses {Alloc} { mk(n).len() }
+
+pub fn alloc_receiver_buf(move b: Buf[F32]) -> U32 uses {Alloc} { pass(move b).len() }
+
+pub fn alloc_receiver_struct(n: U32) -> U32 uses {Alloc} { mk_g(n).size() }
+
+pub fn alloc_argument(move b: Buf[F32]) -> U32 uses {Alloc} { len_of(pass(move b)) }
+
+pub fn alloc_argument_option(n: U32) -> U32 uses {Alloc} { opt_len(mk_o(n)) }
+
+pub fn alloc_argument_literal(s: Str) -> U32 uses {Alloc} { tup_len((s, 1)) }
+
+pub fn alloc_operand(s: Str, n: U32) -> Bool uses {Alloc} { mk(n) == s }
+
+pub fn alloc_condition(n: U32) -> U32 uses {Alloc} { if mk(n).len() > 0 { 1 } else { 2 } }
+
+pub fn alloc_index(move b: Buf[F32]) -> F32 uses {Alloc} { pass(move b)[0] }
+
+pub fn alloc_field(move b: Buf[F32]) -> U32 uses {Alloc} { mk_h(move b).n }
+
+pub fn alloc_take_out(move b: Buf[F32]) -> Buf[F32] uses {Alloc} { mk_h(move b).b }
+
+pub fn alloc_unwrapped(n: U32) -> U32 uses {Alloc} { str_len(mk_o(n).unwrap()) }
+
+pub fn alloc_waits(move b: Buf[F32], r: Option[U32]) -> Option[U32] uses {Alloc} { Some(len2(pass(move b), r?)) }
+
+pub fn apply_a(f: fn(U32) -> U32 uses {Alloc}, n: U32) -> U32 uses {Alloc} { f.(n) }
+
+pub fn alloc_closure(n: U32) -> U32 uses {Alloc} { apply_a(fn(x: U32) -> U32 uses {Alloc} { mk(x).len() }, n) }

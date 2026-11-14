@@ -22,7 +22,7 @@
 // calls is a root too, and the growth that it starts is E0422 as the one that an exported function
 // starts. The call of `g` in `unused` is a root; the recursive call in `g` is the position.
 
-fn g[T](x: T, n: U32) -> U32 {
+fn g[T: Copy](x: T, n: U32) -> U32 {
   if n == 0 {
     return 0
   }

@@ -1,0 +1,82 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§5.4", "§10", "§12.2", "§15.1"]
+//
+// [[test.fix]]
+// at = "lib.onsa:35:8"
+// code = "E0601"
+// candidate = 1
+// leaves = ["main.onsa:72:8 E0601"]
+//
+// [[test.fix]]
+// at = "lib.onsa:39:8"
+// code = "E0601"
+// candidate = 1
+// leaves = ["main.onsa:76:8 E0601"]
+//
+// [[test.fix]]
+// at = "lib.onsa:43:8"
+// code = "E0601"
+// candidate = 1
+// leaves = ["main.onsa:80:8 E0601"]
+
+// W6-02 U5a/t, R-32 (§12.2: "所有する Shared 値・`Buf` と、それらを含む値の破棄: 要る"; §15.1): the temporary values of types and functions of another module (`lib.onsa`: its own drops are marked there). The
+// drop of a temporary value is decided from its type, whatever module declares it, so a function of this module that reads a `lib.G` or a `lib.H` that a call returns (a receiver, a borrowed argument, an operand, a
+// Copy field, an index base, the field that is taken out) is an E0601 (an E0901 in an `rt fn`). A call of a function of `lib` that drops (`lib_receiver`) is no error of this module. The legal forms are in
+// negative/drop_temp_pkg_ok. The functions are one-liners (S-783). Each mark is reported (W6-02 U5a counts the drop of a temporary value). One error per function (P-01).
+
+use lib.{G, H, mk, mk_g, mk_h, mk_o, pass, pass_s, str_len, len_of, lib_receiver, lib_argument, lib_take_out, rt_lib_receiver, rt_lib_argument, rt_lib_take_out}
+
+pub fn receiver(n: U32) -> U32 { mk(n).len() }   //~ E0601
+
+pub rt fn rt_receiver(n: U32) -> U32 { mk(n).len() }   //~ E0901
+
+pub fn receiver_struct(n: U32) -> U32 { mk_g(n).size() }   //~ E0601
+
+pub rt fn rt_receiver_struct(n: U32) -> U32 { mk_g(n).size() }   //~ E0901
+
+pub fn receiver_buf(move b: Buf[F32]) -> U32 { pass(move b).len() }   //~ E0601
+
+pub rt fn rt_receiver_buf(move b: Buf[F32]) -> U32 { pass(move b).len() }   //~ E0901
+
+pub fn argument(move b: Buf[F32]) -> U32 { len_of(pass(move b)) }   //~ E0601
+
+pub rt fn rt_argument(move b: Buf[F32]) -> U32 { len_of(pass(move b)) }   //~ E0901
+
+pub fn argument_unwrapped(n: U32) -> U32 { str_len(mk_o(n).unwrap()) }   //~ E0601
+
+pub rt fn rt_argument_unwrapped(n: U32) -> U32 { str_len(mk_o(n).unwrap()) }   //~ E0901
+
+pub fn operand(s: Str, n: U32) -> Bool { mk(n) == s }   //~ E0601
+
+pub rt fn rt_operand(s: Str, n: U32) -> Bool { mk(n) == s }   //~ E0901
+
+pub fn field(n: U32) -> U32 { mk_g(n).n }   //~ E0601
+
+pub rt fn rt_field(n: U32) -> U32 { mk_g(n).n }   //~ E0901
+
+pub fn field_buf(move b: Buf[F32]) -> U32 { mk_h(move b).n }   //~ E0601
+
+pub rt fn rt_field_buf(move b: Buf[F32]) -> U32 { mk_h(move b).n }   //~ E0901
+
+pub fn index(move b: Buf[F32]) -> F32 { pass(move b)[0] }   //~ E0601
+
+pub rt fn rt_index(move b: Buf[F32]) -> F32 { pass(move b)[0] }   //~ E0901
+
+pub fn take_out(move b: Buf[F32]) -> Buf[F32] { mk_h(move b).b }   //~ E0601
+
+pub rt fn rt_take_out(move b: Buf[F32]) -> Buf[F32] { mk_h(move b).b }   //~ E0901
+
+// ------------------------------------------------------------------ a call of a function of `lib` that drops is no error of this module
+
+pub fn calls_lib(n: U32) -> U32 { lib_receiver(n) }
+
+pub rt fn rt_calls_lib(n: U32) -> U32 { rt_lib_receiver(n) }
+
+pub fn calls_lib_argument(move b: Buf[F32]) -> U32 { lib_argument(move b) }
+
+pub rt fn rt_calls_lib_argument(move b: Buf[F32]) -> U32 { rt_lib_argument(move b) }
+
+pub fn calls_lib_take_out(move b: Buf[F32]) -> Buf[F32] { lib_take_out(move b) }
+
+pub rt fn rt_calls_lib_take_out(move b: Buf[F32]) -> Buf[F32] { rt_lib_take_out(move b) }

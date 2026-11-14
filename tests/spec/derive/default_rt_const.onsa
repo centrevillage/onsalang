@@ -39,7 +39,7 @@ pub rt fn parameter_in_an_rt_fn[T: Default]() -> T {
 }
 
 pub rt fn field_of_the_default() -> F32 {
-  Level.default().gain
+  Gain.default().amount
 }
 
 pub rt fn generic_struct_in_an_rt_fn() -> Pair[U8] {

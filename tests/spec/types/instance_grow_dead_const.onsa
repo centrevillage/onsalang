@@ -22,7 +22,7 @@
 
 const DEBUG: Bool = false
 
-fn g[T](x: T, n: U32) -> U32 {
+fn g[T: Copy](x: T, n: U32) -> U32 {
   if DEBUG {
     return g(Some(x), n)  //~ E0422
   }

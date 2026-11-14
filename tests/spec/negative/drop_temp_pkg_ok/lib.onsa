@@ -1,0 +1,43 @@
+// The helpers of negative/drop_temp_pkg_ok/main.onsa (W6-02 U5a/t, spec §12.2, §15.1). None of the functions drops a value that is not consumed.
+
+pub struct G {
+  s: Str,
+  n: U32,
+}
+
+pub struct H {
+  b: Buf[F32],
+  s: Str,
+  n: U32,
+}
+
+impl G {
+  pub rt fn size(self) -> U32 { 0 }
+}
+
+pub rt fn mk(n: U32) -> Str { "x" }
+
+pub rt fn mk_o(n: U32) -> Option[Str] { Some("x") }
+
+pub rt fn mk_g(n: U32) -> G { G { s: "a", n: n } }
+
+pub rt fn mk_h(move b: Buf[F32]) -> H { H { b: move b, s: "a", n: 1 } }
+
+pub rt fn pass(move b: Buf[F32]) -> Buf[F32] { b }
+
+pub rt fn pass_s(move s: Str) -> Str { s }
+
+pub rt fn str_len(s: Str) -> U32 { 0 }
+
+pub rt fn len_of(b: Buf[F32]) -> U32 { 0 }
+
+pub struct K {
+  b: Buf[F32],
+  n: U32,
+}
+
+pub rt fn mk_k(move b: Buf[F32]) -> K { K { b: move b, n: 1 } }
+
+pub rt fn fnum(n: U32) -> U32 { n }
+
+pub rt fn tup_len(t: (Str, U32)) -> U32 { 0 }

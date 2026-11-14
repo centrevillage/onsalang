@@ -1,0 +1,110 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§9.1", "§10", "§12.2"]
+
+// W6-02 U5a/t, R-32 (§3.5: "左から右に評価する"; §9.1: a `?` that returns leaves like a `return`; §12.2: "所有する Shared 値・`Buf` と、それらを含む値の破棄: 要る"): a temporary value (a call result)
+// that stands in a position that consumes it (a `move` argument, an element of a tuple or an array) and waits for a later operand that is a `?`. If the `?` returns, the value that waits is dropped, and
+// a function without `uses {Alloc}` is an E0601 and an `rt fn` an E0901. The rule is the one of negative/drop_pending.onsa (U3), which has the places (`move b`); the values here are call results,
+// that no place holds. U3 reports these already ("`pass(move b)` is dropped by an exit before it is consumed"), and the file keeps them now that the temporary values that are not
+// consumed are counted (W6-02 U5a; negative/drop_temp_argument.onsa, the `waits` functions). One error per function (P-01). The functions are one-liners (S-783).
+
+pub struct G {
+  s: Str,
+  n: U32,
+}
+
+pub struct H {
+  b: Buf[F32],
+  s: Str,
+  n: U32,
+}
+
+pub struct W {
+  h: H,
+  n: U32,
+}
+
+pub struct HH {
+  a: Buf[F32],
+  b: Buf[F32],
+}
+
+pub struct K {
+  b: Buf[F32],
+  n: U32,
+}
+
+impl G {
+  pub rt fn size(self) -> U32 { 0 }
+  pub rt fn same(self, o: G) -> Bool { true }
+}
+
+impl H {
+  pub rt fn size(self) -> U32 { 0 }
+  pub rt fn absorb(move self) -> H { self }
+}
+
+pub rt fn mk(n: U32) -> Str { "x" }
+
+pub rt fn mk_o(n: U32) -> Option[Str] { Some("x") }
+
+pub rt fn mk_t(n: U32) -> (Str, U32) { ("x", n) }
+
+pub rt fn mk_g(n: U32) -> G { G { s: "a", n: n } }
+
+pub rt fn mk_h(move b: Buf[F32]) -> H { H { b: move b, s: "a", n: 1 } }
+
+pub rt fn mk_w(move b: Buf[F32]) -> W { W { h: H { b: move b, s: "a", n: 1 }, n: 2 } }
+
+pub rt fn mk_hh(move a: Buf[F32], move b: Buf[F32]) -> HH { HH { a: move a, b: move b } }
+
+pub rt fn mk_k(move b: Buf[F32]) -> K { K { b: move b, n: 1 } }
+
+pub rt fn mk_bt(move b: Buf[F32]) -> (Buf[F32], Str) { (move b, "a") }
+
+pub rt fn pass(move b: Buf[F32]) -> Buf[F32] { b }
+
+pub rt fn pass_s(move s: Str) -> Str { s }
+
+pub rt fn str_len(s: Str) -> U32 { 0 }
+
+pub rt fn str_len2(s: Str, n: U32) -> U32 { n }
+
+pub rt fn len_of(b: Buf[F32]) -> U32 { 0 }
+
+pub rt fn len2(b: Buf[F32], n: U32) -> U32 { n }
+
+pub rt fn len2b(a: Buf[F32], b: Buf[F32]) -> U32 { 0 }
+
+pub rt fn opt_len(o: Option[Str]) -> U32 { 0 }
+
+pub rt fn tup_len(t: (Str, U32)) -> U32 { 0 }
+
+pub rt fn g_len(g: G) -> U32 { 0 }
+
+pub rt fn h_len(h: H) -> U32 { 0 }
+
+pub rt fn wrap(move b: Buf[F32], n: U32) -> Option[Buf[F32]] { Some(move b) }
+
+// ------------------------------------------------------------------ a temporary value in a position that consumes it, and a `?` after it that leaves: the value that waits is dropped where the `?` leaves
+
+pub fn wait_move_arg(move b: Buf[F32], r: Option[U32]) -> Option[Option[Buf[F32]]] { Some(wrap(pass(move b), r?)) }   //~ E0601
+
+pub rt fn rt_wait_move_arg(move b: Buf[F32], r: Option[U32]) -> Option[Option[Buf[F32]]] { Some(wrap(pass(move b), r?)) }   //~ E0901
+
+pub fn wait_tuple(move b: Buf[F32], r: Option[U32]) -> Option[(Buf[F32], U32)] { Some((pass(move b), r?)) }   //~ E0601
+
+pub rt fn rt_wait_tuple(move b: Buf[F32], r: Option[U32]) -> Option[(Buf[F32], U32)] { Some((pass(move b), r?)) }   //~ E0901
+
+pub fn wait_str_tuple(n: U32, r: Option[U32]) -> Option[(Str, U32)] { Some((mk(n), r?)) }   //~ E0601
+
+pub rt fn rt_wait_str_tuple(n: U32, r: Option[U32]) -> Option[(Str, U32)] { Some((mk(n), r?)) }   //~ E0901
+
+pub fn wait_array(move b: Buf[F32], move r: Option[Buf[F32]]) -> Option[[Buf[F32]; 2]] { Some([pass(move b), r?]) }   //~ E0601
+
+pub rt fn rt_wait_array(move b: Buf[F32], move r: Option[Buf[F32]]) -> Option[[Buf[F32]; 2]] { Some([pass(move b), r?]) }   //~ E0901
+
+pub fn wait_take_out(move b: Buf[F32], r: Option[U32]) -> Option[(Buf[F32], U32)] { Some((mk_k(move b).b, r?)) }   //~ E0601
+
+pub rt fn rt_wait_take_out(move b: Buf[F32], r: Option[U32]) -> Option[(Buf[F32], U32)] { Some((mk_k(move b).b, r?)) }   //~ E0901
+

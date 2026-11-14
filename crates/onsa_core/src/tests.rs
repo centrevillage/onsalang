@@ -912,7 +912,7 @@ fn e0423_is_alone_and_names_the_item_with_the_most_instances() {
     assert_eq!(the_one_limit(&format!("{unsupported}{ID}"), 1).code, onsa_diag::Code::E0423);
 }
 
-const GROW: &str = "fn g[T](x: T, n: U32) -> U32 {\n  if n == 0 {\n    return 0\n  }\n  g(Some(x), n - 1)\n}\n";
+const GROW: &str = "fn g[T: Copy](x: T, n: U32) -> U32 {\n  if n == 0 {\n    return 0\n  }\n  g(Some(x), n - 1)\n}\n";
 
 #[test]
 fn e0422_of_an_instance_is_short_and_shows_at_most_three_places_of_the_path() {
@@ -922,7 +922,7 @@ fn e0422_of_an_instance_is_short_and_shows_at_most_three_places_of_the_path() {
     assert_eq!(d.message, "the type is deeper than 256 levels (§4.4)");
     assert_eq!(d.notes.iter().filter(|n| n.span.is_some()).count(), 1, "the root's: the call that recurs is the place");
     let hops: String = (0..6)
-        .map(|k| format!("fn a{k}[T](x: T, n: U32) -> U32 {{\n  a{}(Some(x), n - 1)\n}}\n", (k + 1) % 6))
+        .map(|k| format!("fn a{k}[T: Copy](x: T, n: U32) -> U32 {{\n  a{}(Some(x), n - 1)\n}}\n", (k + 1) % 6))
         .collect();
     let d = the_one_limit(&format!("{hops}pub fn go() -> U32 {{\n  a0(1, 3)\n}}\n"), u32::MAX);
     assert_eq!(d.notes.iter().filter(|n| n.span.is_some()).count(), 3, "{:?}", d.notes);

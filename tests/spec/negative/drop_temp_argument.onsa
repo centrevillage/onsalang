@@ -1,0 +1,198 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§5.4", "§9.1", "§10", "§12.2"]
+
+// W6-02 U5a/t, R-32, S-610, S-613 (§12.2: "所有する Shared 値・`Buf` と、それらを含む値の破棄: 要る"; "静的な値と破棄の要らないリテラル（§5.4）の複製と破棄（一時の値を含む）: 要らない";
+// §5.2: "借用の引数" reads the value and consumes nothing; §3.5: "引数を全て評価してから呼び出す"): a temporary value (the result of a call, a new value, a literal that is not static and
+// not a literal that needs no drop) that is passed to a borrowed parameter. A borrowed argument consumes nothing, so the value is dropped after the call, and the drop of a value that holds a
+// `Str` or a `Buf` needs `Alloc`: a function without `uses {Alloc}` is an E0601 and an `rt fn` an E0901. The `waits` functions put a `?` after the temporary value: it is dropped where the call
+// ends and where the `?` leaves, so that the count of drops is one more on one path, and the function is an error either way (one error, P-01). The functions are one-liners (S-783). The values that
+// are consumed (a `move` argument, an element, a return value) are in negative/drop_temp_contrast.onsa and the ones that are moved on and wait for a `?` in negative/drop_temp_wait_consumed.onsa.
+// Each mark is reported (W6-02 U5a counts the drop of a temporary value that is not consumed).
+
+pub struct G {
+  s: Str,
+  n: U32,
+}
+
+pub struct H {
+  b: Buf[F32],
+  s: Str,
+  n: U32,
+}
+
+pub struct W {
+  h: H,
+  n: U32,
+}
+
+pub struct HH {
+  a: Buf[F32],
+  b: Buf[F32],
+}
+
+pub struct K {
+  b: Buf[F32],
+  n: U32,
+}
+
+impl G {
+  pub rt fn size(self) -> U32 { 0 }
+  pub rt fn same(self, o: G) -> Bool { true }
+}
+
+impl H {
+  pub rt fn size(self) -> U32 { 0 }
+  pub rt fn absorb(move self) -> H { self }
+}
+
+pub rt fn mk(n: U32) -> Str { "x" }
+
+pub rt fn mk_o(n: U32) -> Option[Str] { Some("x") }
+
+pub rt fn mk_t(n: U32) -> (Str, U32) { ("x", n) }
+
+pub rt fn mk_g(n: U32) -> G { G { s: "a", n: n } }
+
+pub rt fn mk_h(move b: Buf[F32]) -> H { H { b: move b, s: "a", n: 1 } }
+
+pub rt fn mk_w(move b: Buf[F32]) -> W { W { h: H { b: move b, s: "a", n: 1 }, n: 2 } }
+
+pub rt fn mk_hh(move a: Buf[F32], move b: Buf[F32]) -> HH { HH { a: move a, b: move b } }
+
+pub rt fn mk_k(move b: Buf[F32]) -> K { K { b: move b, n: 1 } }
+
+pub rt fn mk_bt(move b: Buf[F32]) -> (Buf[F32], Str) { (move b, "a") }
+
+pub rt fn pass(move b: Buf[F32]) -> Buf[F32] { b }
+
+pub rt fn pass_s(move s: Str) -> Str { s }
+
+pub rt fn str_len(s: Str) -> U32 { 0 }
+
+pub rt fn str_len2(s: Str, n: U32) -> U32 { n }
+
+pub rt fn len_of(b: Buf[F32]) -> U32 { 0 }
+
+pub rt fn len2(b: Buf[F32], n: U32) -> U32 { n }
+
+pub rt fn len2b(a: Buf[F32], b: Buf[F32]) -> U32 { 0 }
+
+pub rt fn opt_len(o: Option[Str]) -> U32 { 0 }
+
+pub rt fn tup_len(t: (Str, U32)) -> U32 { 0 }
+
+pub rt fn g_len(g: G) -> U32 { 0 }
+
+pub rt fn h_len(h: H) -> U32 { 0 }
+
+// ------------------------------------------------------------------ a borrowed argument: a `Buf`, a `Str`, an `Option[Str]`, a `(Str, U32)`, a struct that holds a `Str` and a struct that holds a `Buf`
+
+pub fn arg_buf(move b: Buf[F32]) -> U32 { len_of(pass(move b)) }   //~ E0601
+
+pub rt fn rt_arg_buf(move b: Buf[F32]) -> U32 { len_of(pass(move b)) }   //~ E0901
+
+pub fn arg_str(n: U32) -> U32 { str_len(mk(n)) }   //~ E0601
+
+pub rt fn rt_arg_str(n: U32) -> U32 { str_len(mk(n)) }   //~ E0901
+
+pub fn arg_option(n: U32) -> U32 { opt_len(mk_o(n)) }   //~ E0601
+
+pub rt fn rt_arg_option(n: U32) -> U32 { opt_len(mk_o(n)) }   //~ E0901
+
+pub fn arg_tuple(n: U32) -> U32 { tup_len(mk_t(n)) }   //~ E0601
+
+pub rt fn rt_arg_tuple(n: U32) -> U32 { tup_len(mk_t(n)) }   //~ E0901
+
+pub fn arg_struct(n: U32) -> U32 { g_len(mk_g(n)) }   //~ E0601
+
+pub rt fn rt_arg_struct(n: U32) -> U32 { g_len(mk_g(n)) }   //~ E0901
+
+pub fn arg_struct_buf(move b: Buf[F32]) -> U32 { h_len(mk_h(move b)) }   //~ E0601
+
+pub rt fn rt_arg_struct_buf(move b: Buf[F32]) -> U32 { h_len(mk_h(move b)) }   //~ E0901
+
+pub fn arg_nested(move b: Buf[F32]) -> U32 { len_of(pass(pass(move b))) }   //~ E0601
+
+pub rt fn rt_arg_nested(move b: Buf[F32]) -> U32 { len_of(pass(pass(move b))) }   //~ E0901
+
+pub fn arg_second_of_two(n: U32, move b: Buf[F32]) -> U32 { len2(pass(move b), n) }   //~ E0601
+
+pub rt fn rt_arg_second_of_two(n: U32, move b: Buf[F32]) -> U32 { len2(pass(move b), n) }   //~ E0901
+
+pub fn arg_both(move a: Buf[F32], move b: Buf[F32]) -> U32 { len2b(pass(move a), pass(move b)) }   //~ E0601
+
+pub rt fn rt_arg_both(move a: Buf[F32], move b: Buf[F32]) -> U32 { len2b(pass(move a), pass(move b)) }   //~ E0901
+
+pub fn arg_of_method(g: G, n: U32) -> Bool { g.same(mk_g(n)) }   //~ E0601
+
+pub rt fn rt_arg_of_method(g: G, n: U32) -> Bool { g.same(mk_g(n)) }   //~ E0901
+
+// ------------------------------------------------------------------ the argument is a new value that comes out of `unwrap` or `?`, or a field of a temporary value that is read
+
+pub fn arg_unwrapped(n: U32) -> U32 { str_len(mk_o(n).unwrap()) }   //~ E0601
+
+pub rt fn rt_arg_unwrapped(n: U32) -> U32 { str_len(mk_o(n).unwrap()) }   //~ E0901
+
+pub fn arg_tried(n: U32) -> Option[U32] { Some(str_len(mk_o(n)?)) }   //~ E0601
+
+pub rt fn rt_arg_tried(n: U32) -> Option[U32] { Some(str_len(mk_o(n)?)) }   //~ E0901
+
+pub fn arg_field_buf(move b: Buf[F32]) -> U32 { len_of(mk_h(move b).b) }   //~ E0601
+
+pub rt fn rt_arg_field_buf(move b: Buf[F32]) -> U32 { len_of(mk_h(move b).b) }   //~ E0901
+
+// ------------------------------------------------------------------ a literal that is not static and not a literal that needs no drop (§5.4): an element that is a call result or a borrowed `Str` is an owned value
+
+pub fn arg_literal_call(n: U32) -> U32 { tup_len((mk(n), 1)) }   //~ E0601
+
+pub rt fn rt_arg_literal_call(n: U32) -> U32 { tup_len((mk(n), 1)) }   //~ E0901
+
+pub fn arg_literal_borrowed(s: Str) -> U32 { tup_len((s, 1)) }   //~ E0601
+
+pub rt fn rt_arg_literal_borrowed(s: Str) -> U32 { tup_len((s, 1)) }   //~ E0901
+
+pub fn arg_struct_literal_borrowed(s: Str) -> U32 { g_len(G { s: s, n: 1 }) }   //~ E0601
+
+pub rt fn rt_arg_struct_literal_borrowed(s: Str) -> U32 { g_len(G { s: s, n: 1 }) }   //~ E0901
+
+// ------------------------------------------------------------------ in a value position, a branch, an arm or a loop
+
+pub fn arg_in_constructor(move b: Buf[F32]) -> Option[U32] { Some(len_of(pass(move b))) }   //~ E0601
+
+pub rt fn rt_arg_in_constructor(move b: Buf[F32]) -> Option[U32] { Some(len_of(pass(move b))) }   //~ E0901
+
+pub fn arg_in_branch(c: Bool, n: U32) -> U32 { if c { str_len(mk(n)) } else { 0 } }   //~ E0601
+
+pub rt fn rt_arg_in_branch(c: Bool, n: U32) -> U32 { if c { str_len(mk(n)) } else { 0 } }   //~ E0901
+
+pub fn arg_in_branches(c: Bool, move b: Buf[F32]) -> U32 { if c { len_of(pass(move b)) } else { len_of(pass(move b)) } }   //~ E0601
+
+pub rt fn rt_arg_in_branches(c: Bool, move b: Buf[F32]) -> U32 { if c { len_of(pass(move b)) } else { len_of(pass(move b)) } }   //~ E0901
+
+pub fn arg_in_arm(n: U32) -> U32 { match n { 0 => str_len(mk(n)), _ => 0 } }   //~ E0601
+
+pub rt fn rt_arg_in_arm(n: U32) -> U32 { match n { 0 => str_len(mk(n)), _ => 0 } }   //~ E0901
+
+pub fn arg_in_loop(move b: Buf[F32]) -> U32 { while true { return len_of(pass(move b)) } }   //~ E0601
+
+pub rt fn rt_arg_in_loop(move b: Buf[F32]) -> U32 { while true { return len_of(pass(move b)) } }   //~ E0901
+
+// ------------------------------------------------------------------ a temporary value that waits for a later operand that leaves with `?` (the value is borrowed, so that it is dropped on both paths: one drop where the call ends and one where the `?` leaves)
+
+pub fn arg_waits_option(move b: Buf[F32], r: Option[U32]) -> Option[U32] { Some(len2(pass(move b), r?)) }   //~ E0601
+
+pub rt fn rt_arg_waits_option(move b: Buf[F32], r: Option[U32]) -> Option[U32] { Some(len2(pass(move b), r?)) }   //~ E0901
+
+pub fn arg_waits_str(n: U32, r: Option[U32]) -> Option[U32] { Some(str_len2(mk(n), r?)) }   //~ E0601
+
+pub rt fn rt_arg_waits_str(n: U32, r: Option[U32]) -> Option[U32] { Some(str_len2(mk(n), r?)) }   //~ E0901
+
+pub fn arg_waits_result(move b: Buf[F32], r: Result[U32, U32]) -> Result[U32, U32] { Ok(len2(pass(move b), r?)) }   //~ E0601
+
+pub rt fn rt_arg_waits_result(move b: Buf[F32], r: Result[U32, U32]) -> Result[U32, U32] { Ok(len2(pass(move b), r?)) }   //~ E0901
+
+pub fn arg_waits_tuple(n: U32, r: Option[U32]) -> Option[U32] { Some(tup_len(mk_t(r?)) + mk(n).len()) }   //~ E0601
+
+pub rt fn rt_arg_waits_tuple(n: U32, r: Option[U32]) -> Option[U32] { Some(tup_len(mk_t(r?)) + mk(n).len()) }   //~ E0901
+

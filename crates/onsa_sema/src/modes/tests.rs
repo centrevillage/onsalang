@@ -3632,7 +3632,7 @@ pub fn of_t[T: ?Dup](move g: G[T]) -> Buf[F32] uses {Alloc} { g.a }
     let rest = |n: &str| {
         use crate::drop_alloc::{Drop, alloc_drops};
         let rests = alloc_drops(&a, def(&a, n)).filter_map(|d| match d {
-            Drop::Rest { at, root, .. } => Some((at, root.name.clone())),
+            Drop::Rest { at, root: crate::drop_alloc::Root::Local(l), .. } => Some((at, l.name.clone())),
             _ => None,
         });
         let found: Vec<_> = rests.collect();
@@ -3652,4 +3652,14 @@ pub fn of_t[T: ?Dup](move g: G[T]) -> Buf[F32] uses {Alloc} { g.a }
     ] {
         assert_eq!(rest(n), roots, "{n}");
     }
+}
+
+/// A body keeps a drop point for each binding at each exit, so their number
+/// grows with the square of the input (`w602_breaks`): a new kind of drop
+/// keeps one `Vec` in `Dropped` (`TempRest` boxes its path), or the size grows.
+#[cfg(target_pointer_width = "64")]
+#[test]
+fn a_drop_point_stays_small() {
+    use crate::body::{DropPoint, Dropped};
+    assert_eq!((std::mem::size_of::<Dropped>(), std::mem::size_of::<DropPoint>()), (32, 56));
 }

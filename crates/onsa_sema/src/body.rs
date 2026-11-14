@@ -287,12 +287,19 @@ pub enum Dropped {
     /// end its container; left `early` (a `break`, a `return`, a `?`), the
     /// elements not iterated too.
     IterRest { iter: ExprId, early: bool },
+    /// A value made where nothing consumes it (R-32), dropped after what
+    /// reads or borrows it (a call, an index, an operator) runs.
+    Temp(ExprId),
+    /// What is left of a value no binding owns where a path is taken out
+    /// of it (S-85, R-32). Boxed, so that `Rest` alone holds a `Vec` and the
+    /// drop points of a body stay as small as before (`DropPoint`, 56 bytes).
+    TempRest(Box<Taken<ExprId>>),
 }
 
-/// A path of fields taken out of the owned local `root` (S-85).
+/// A path of fields taken out of the owned local `root` (S-85), or of a value.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Taken {
-    pub root: LocalId,
+pub struct Taken<R = LocalId> {
+    pub root: R,
     /// Its steps: fields and tuple elements only.
     pub(crate) path: Vec<Proj>,
 }

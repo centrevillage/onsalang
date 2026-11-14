@@ -47,7 +47,7 @@ pub struct S[T] {
   v: T,
 }
 
-impl[T] S[T] {
+impl[T: Copy] S[T] {
   fn m(self, n: U32) -> U32 {
     if n == 0 {
       return 0

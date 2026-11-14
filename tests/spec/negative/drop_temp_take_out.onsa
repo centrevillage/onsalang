@@ -1,0 +1,156 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§10", "§12.2"]
+
+// W6-02 U5a/t, R-32, S-85 (§5.2: "所有する値の Affine のフィールドを消費する位置に置くと（`let b = move s.buf`、`f(move s.buf)`、返り値の `s.buf`）、`s` 全体を消費する。取り出したフィールド以外はその場で
+// 破棄され"; §12.2: "所有する Shared 値・`Buf` と、それらを含む値の破棄: 要る"; the 2026-11-13 note of R-32, "一時の値のフィールドの消費"): the Affine field of a temporary value (a call result,
+// no binding owns it) that is put where a value is consumed (the return value, a `move` argument, an element of a constructor, a tuple, an array and a struct literal). The field is taken
+// out, and the rest of the temporary value is dropped on the spot: here the rest holds a `Str` or a `Buf`, so the drop needs `Alloc` and a function without `uses {Alloc}` is an E0601 and an `rt fn` an
+// E0901. The field is a `Buf` that is `Affine`, so the field is not copied and the whole value is not dropped twice. A rest that is Copy needs no drop (negative/drop_temp_contrast.onsa).
+// A field that is a `Str` (Shared, Dup) is in no case here: the text does not say whether the Dup field of a temporary value is copied (and the whole value dropped) or moved (and the rest dropped). The `let` form (`let x = mk_h(move b).b`) needs a statement list and is not a one-liner (S-783). The functions
+// are one-liners (S-783). Each mark is reported (W6-02 U5a counts the drop of the rest of a temporary value).
+
+pub struct G {
+  s: Str,
+  n: U32,
+}
+
+pub struct H {
+  b: Buf[F32],
+  s: Str,
+  n: U32,
+}
+
+pub struct W {
+  h: H,
+  n: U32,
+}
+
+pub struct HH {
+  a: Buf[F32],
+  b: Buf[F32],
+}
+
+pub struct K {
+  b: Buf[F32],
+  n: U32,
+}
+
+impl G {
+  pub rt fn size(self) -> U32 { 0 }
+  pub rt fn same(self, o: G) -> Bool { true }
+}
+
+impl H {
+  pub rt fn size(self) -> U32 { 0 }
+  pub rt fn absorb(move self) -> H { self }
+}
+
+pub rt fn mk(n: U32) -> Str { "x" }
+
+pub rt fn mk_o(n: U32) -> Option[Str] { Some("x") }
+
+pub rt fn mk_t(n: U32) -> (Str, U32) { ("x", n) }
+
+pub rt fn mk_g(n: U32) -> G { G { s: "a", n: n } }
+
+pub rt fn mk_h(move b: Buf[F32]) -> H { H { b: move b, s: "a", n: 1 } }
+
+pub rt fn mk_w(move b: Buf[F32]) -> W { W { h: H { b: move b, s: "a", n: 1 }, n: 2 } }
+
+pub rt fn mk_hh(move a: Buf[F32], move b: Buf[F32]) -> HH { HH { a: move a, b: move b } }
+
+pub rt fn mk_k(move b: Buf[F32]) -> K { K { b: move b, n: 1 } }
+
+pub rt fn mk_bt(move b: Buf[F32]) -> (Buf[F32], Str) { (move b, "a") }
+
+pub rt fn pass(move b: Buf[F32]) -> Buf[F32] { b }
+
+pub rt fn pass_s(move s: Str) -> Str { s }
+
+pub rt fn str_len(s: Str) -> U32 { 0 }
+
+pub rt fn str_len2(s: Str, n: U32) -> U32 { n }
+
+pub rt fn len_of(b: Buf[F32]) -> U32 { 0 }
+
+pub rt fn len2(b: Buf[F32], n: U32) -> U32 { n }
+
+pub rt fn len2b(a: Buf[F32], b: Buf[F32]) -> U32 { 0 }
+
+pub rt fn opt_len(o: Option[Str]) -> U32 { 0 }
+
+pub rt fn tup_len(t: (Str, U32)) -> U32 { 0 }
+
+pub rt fn g_len(g: G) -> U32 { 0 }
+
+pub rt fn h_len(h: H) -> U32 { 0 }
+
+// ------------------------------------------------------------------ the Affine field of a temporary value is taken out where a value is consumed; the rest (`s: Str`) is dropped on the spot
+
+pub fn take_return(move b: Buf[F32]) -> Buf[F32] { mk_h(move b).b }   //~ E0601
+
+pub rt fn rt_take_return(move b: Buf[F32]) -> Buf[F32] { mk_h(move b).b }   //~ E0901
+
+pub fn take_move_arg(move b: Buf[F32]) -> Buf[F32] { pass(mk_h(move b).b) }   //~ E0601
+
+pub rt fn rt_take_move_arg(move b: Buf[F32]) -> Buf[F32] { pass(mk_h(move b).b) }   //~ E0901
+
+pub fn take_constructor(move b: Buf[F32]) -> Option[Buf[F32]] { Some(mk_h(move b).b) }   //~ E0601
+
+pub rt fn rt_take_constructor(move b: Buf[F32]) -> Option[Buf[F32]] { Some(mk_h(move b).b) }   //~ E0901
+
+pub fn take_tuple(move b: Buf[F32]) -> (Buf[F32], U32) { (mk_h(move b).b, 1) }   //~ E0601
+
+pub rt fn rt_take_tuple(move b: Buf[F32]) -> (Buf[F32], U32) { (mk_h(move b).b, 1) }   //~ E0901
+
+pub fn take_array(move a: Buf[F32], move b: Buf[F32]) -> [Buf[F32]; 2] { [mk_h(move a).b, pass(move b)] }   //~ E0601
+
+pub rt fn rt_take_array(move a: Buf[F32], move b: Buf[F32]) -> [Buf[F32]; 2] { [mk_h(move a).b, pass(move b)] }   //~ E0901
+
+pub fn take_struct_literal(move b: Buf[F32]) -> K { K { b: mk_h(move b).b, n: 1 } }   //~ E0601
+
+pub rt fn rt_take_struct_literal(move b: Buf[F32]) -> K { K { b: mk_h(move b).b, n: 1 } }   //~ E0901
+
+// ------------------------------------------------------------------ the rest is another `Buf`, a nested value, or a tuple that holds a `Str`
+
+pub fn take_rest_buf(move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] { mk_hh(move a, move b).a }   //~ E0601
+
+pub rt fn rt_take_rest_buf(move a: Buf[F32], move b: Buf[F32]) -> Buf[F32] { mk_hh(move a, move b).a }   //~ E0901
+
+pub fn take_nested_path(move b: Buf[F32]) -> Buf[F32] { mk_w(move b).h.b }   //~ E0601
+
+pub rt fn rt_take_nested_path(move b: Buf[F32]) -> Buf[F32] { mk_w(move b).h.b }   //~ E0901
+
+pub fn take_tuple_field(move b: Buf[F32]) -> Buf[F32] { mk_bt(move b).0 }   //~ E0601
+
+pub rt fn rt_take_tuple_field(move b: Buf[F32]) -> Buf[F32] { mk_bt(move b).0 }   //~ E0901
+
+// ------------------------------------------------------------------ the field is taken out of the value of a block, an `if` or a `match` (§5.2: its tails move into the value, as `let y = <tail>`); the rest holds a `Str`
+
+pub fn take_of_a_block(move b: Buf[F32]) -> Buf[F32] { ({ mk_h(move b) }).b }   //~ E0601
+
+pub rt fn rt_take_of_a_block(move b: Buf[F32]) -> Buf[F32] { ({ mk_h(move b) }).b }   //~ E0901
+
+pub fn take_of_an_if(c: Bool, move b: Buf[F32]) -> Buf[F32] { (if c { mk_h(move b) } else { mk_h(move b) }).b }   //~ E0601
+
+pub rt fn rt_take_of_an_if(c: Bool, move b: Buf[F32]) -> Buf[F32] { (if c { mk_h(move b) } else { mk_h(move b) }).b }   //~ E0901
+
+pub fn take_of_a_match(n: U32, move b: Buf[F32]) -> Buf[F32] { (match n { 0 => mk_h(move b), _ => mk_h(move b) }).b }   //~ E0601
+
+pub rt fn rt_take_of_a_match(n: U32, move b: Buf[F32]) -> Buf[F32] { (match n { 0 => mk_h(move b), _ => mk_h(move b) }).b }   //~ E0901
+
+// ------------------------------------------------------------------ in a branch, an arm and a loop
+
+pub fn take_in_branches(c: Bool, move b: Buf[F32]) -> Buf[F32] { if c { mk_h(move b).b } else { mk_h(move b).b } }   //~ E0601
+
+pub rt fn rt_take_in_branches(c: Bool, move b: Buf[F32]) -> Buf[F32] { if c { mk_h(move b).b } else { mk_h(move b).b } }   //~ E0901
+
+pub fn take_in_arms(n: U32, move b: Buf[F32]) -> Buf[F32] { match n { 0 => mk_h(move b).b, _ => mk_h(move b).b } }   //~ E0601
+
+pub rt fn rt_take_in_arms(n: U32, move b: Buf[F32]) -> Buf[F32] { match n { 0 => mk_h(move b).b, _ => mk_h(move b).b } }   //~ E0901
+
+pub fn take_in_loop(move b: Buf[F32]) -> Buf[F32] { while true { return mk_h(move b).b } }   //~ E0601
+
+pub rt fn rt_take_in_loop(move b: Buf[F32]) -> Buf[F32] { while true { return mk_h(move b).b } }   //~ E0901
+

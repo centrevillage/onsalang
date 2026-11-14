@@ -22,7 +22,7 @@ pub fn through_the_method(l: Label) -> U32 {
   l.width() + 1
 }
 
-pub fn of_a_label_made_here(s: Str) -> U32 {
+pub fn of_a_label_made_here(s: Str) -> U32 uses {Alloc} {
   label(s).width() + s.len()
 }
 

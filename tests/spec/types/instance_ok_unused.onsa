@@ -22,18 +22,18 @@
 // The roots are the items that are not generic, and none of them reaches these. No diagnostic, and the
 // build of the target passes.
 
-pub fn g[T](x: T, n: U32) -> U32 {
+pub fn g[T: Copy](x: T, n: U32) -> U32 {
   if n == 0 {
     return 0
   }
   g(Some(x), n - 1)
 }
 
-fn a[T](x: T, n: U32) -> U32 {
+fn a[T: Copy](x: T, n: U32) -> U32 {
   b(Some(x), n)
 }
 
-fn b[T](x: T, n: U32) -> U32 {
+fn b[T: Copy](x: T, n: U32) -> U32 {
   a(x, n)
 }
 

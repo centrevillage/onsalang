@@ -1,0 +1,163 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§3.5", "§5.2", "§7", "§9.1", "§10", "§12.2"]
+
+// W6-02 U5a/t, R-32, S-610, S-613 (§12.2: "所有する Shared 値・`Buf` と、それらを含む値の破棄: 要る"; §3.5: the operands are evaluated from the left to the right): a temporary value
+// that stands as an operand of a binary operator, in a condition (`if`, `else if`, `while`), as the heading of a `match` whose value is a `U32`, or in the end of a range. None of these consumes
+// the value (a comparison reads its operands; the condition and the heading are evaluated to a `Bool` or a number), so it is dropped, and the drop of a value that holds a `Str` or a `Buf`
+// needs `Alloc`: a function without `uses {Alloc}` is an E0601 and an `rt fn` an E0901. The `while` and `for` functions return the unit. The function with two temporary values (`op_both`) is
+// one error (P-01). The functions are one-liners (S-783). Each mark is reported (W6-02 U5a counts the drop of a temporary value). The values that are static or Copy are in
+// negative/drop_temp_contrast.onsa.
+
+pub struct G {
+  s: Str,
+  n: U32,
+}
+
+pub struct H {
+  b: Buf[F32],
+  s: Str,
+  n: U32,
+}
+
+pub struct W {
+  h: H,
+  n: U32,
+}
+
+pub struct HH {
+  a: Buf[F32],
+  b: Buf[F32],
+}
+
+pub struct K {
+  b: Buf[F32],
+  n: U32,
+}
+
+impl G {
+  pub rt fn size(self) -> U32 { 0 }
+  pub rt fn same(self, o: G) -> Bool { true }
+}
+
+impl H {
+  pub rt fn size(self) -> U32 { 0 }
+  pub rt fn absorb(move self) -> H { self }
+}
+
+pub rt fn mk(n: U32) -> Str { "x" }
+
+pub rt fn mk_o(n: U32) -> Option[Str] { Some("x") }
+
+pub rt fn mk_t(n: U32) -> (Str, U32) { ("x", n) }
+
+pub rt fn mk_g(n: U32) -> G { G { s: "a", n: n } }
+
+pub rt fn mk_h(move b: Buf[F32]) -> H { H { b: move b, s: "a", n: 1 } }
+
+pub rt fn mk_w(move b: Buf[F32]) -> W { W { h: H { b: move b, s: "a", n: 1 }, n: 2 } }
+
+pub rt fn mk_hh(move a: Buf[F32], move b: Buf[F32]) -> HH { HH { a: move a, b: move b } }
+
+pub rt fn mk_k(move b: Buf[F32]) -> K { K { b: move b, n: 1 } }
+
+pub rt fn mk_bt(move b: Buf[F32]) -> (Buf[F32], Str) { (move b, "a") }
+
+pub rt fn pass(move b: Buf[F32]) -> Buf[F32] { b }
+
+pub rt fn pass_s(move s: Str) -> Str { s }
+
+pub rt fn str_len(s: Str) -> U32 { 0 }
+
+pub rt fn str_len2(s: Str, n: U32) -> U32 { n }
+
+pub rt fn len_of(b: Buf[F32]) -> U32 { 0 }
+
+pub rt fn len2(b: Buf[F32], n: U32) -> U32 { n }
+
+pub rt fn len2b(a: Buf[F32], b: Buf[F32]) -> U32 { 0 }
+
+pub rt fn opt_len(o: Option[Str]) -> U32 { 0 }
+
+pub rt fn tup_len(t: (Str, U32)) -> U32 { 0 }
+
+pub rt fn g_len(g: G) -> U32 { 0 }
+
+pub rt fn h_len(h: H) -> U32 { 0 }
+
+// ------------------------------------------------------------------ an operand of `==` and `!=` (a `Str`, an `Option[Str]`, a `(Str, U32)`)
+
+pub fn op_eq(s: Str, n: U32) -> Bool { mk(n) == s }   //~ E0601
+
+pub rt fn rt_op_eq(s: Str, n: U32) -> Bool { mk(n) == s }   //~ E0901
+
+pub fn op_eq_right(s: Str, n: U32) -> Bool { s == mk(n) }   //~ E0601
+
+pub rt fn rt_op_eq_right(s: Str, n: U32) -> Bool { s == mk(n) }   //~ E0901
+
+pub fn op_ne(s: Str, n: U32) -> Bool { mk(n) != s }   //~ E0601
+
+pub rt fn rt_op_ne(s: Str, n: U32) -> Bool { mk(n) != s }   //~ E0901
+
+pub fn op_both(n: U32) -> Bool { mk(n) == mk(n) }   //~ E0601
+
+pub rt fn rt_op_both(n: U32) -> Bool { mk(n) == mk(n) }   //~ E0901
+
+pub fn op_option(o: Option[Str], n: U32) -> Bool { mk_o(n) == o }   //~ E0601
+
+pub rt fn rt_op_option(o: Option[Str], n: U32) -> Bool { mk_o(n) == o }   //~ E0901
+
+pub fn op_tuple(t: (Str, U32), n: U32) -> Bool { mk_t(n) == t }   //~ E0601
+
+pub rt fn rt_op_tuple(t: (Str, U32), n: U32) -> Bool { mk_t(n) == t }   //~ E0901
+
+// ------------------------------------------------------------------ an operand of an arithmetic or a logical operator that reads a temporary value
+
+pub fn op_plus(n: U32) -> U32 { 1 + mk(n).len() }   //~ E0601
+
+pub rt fn rt_op_plus(n: U32) -> U32 { 1 + mk(n).len() }   //~ E0901
+
+pub fn op_and_right(c: Bool, n: U32) -> Bool { c && mk(n).len() > 0 }   //~ E0601
+
+pub rt fn rt_op_and_right(c: Bool, n: U32) -> Bool { c && mk(n).len() > 0 }   //~ E0901
+
+pub fn op_or_left(c: Bool, n: U32) -> Bool { mk(n).len() > 0 || c }   //~ E0601
+
+pub rt fn rt_op_or_left(c: Bool, n: U32) -> Bool { mk(n).len() > 0 || c }   //~ E0901
+
+pub fn op_compare_buf(move b: Buf[F32]) -> Bool { pass(move b).len() > 0 }   //~ E0601
+
+pub rt fn rt_op_compare_buf(move b: Buf[F32]) -> Bool { pass(move b).len() > 0 }   //~ E0901
+
+// ------------------------------------------------------------------ a condition: `if`, `else if`, `while`, the heading of a `match` and the end of a range
+
+pub fn cond_if(n: U32) -> U32 { if mk(n).len() > 0 { 1 } else { 2 } }   //~ E0601
+
+pub rt fn rt_cond_if(n: U32) -> U32 { if mk(n).len() > 0 { 1 } else { 2 } }   //~ E0901
+
+pub fn cond_if_buf(move b: Buf[F32]) -> U32 { if len_of(pass(move b)) > 0 { 1 } else { 2 } }   //~ E0601
+
+pub rt fn rt_cond_if_buf(move b: Buf[F32]) -> U32 { if len_of(pass(move b)) > 0 { 1 } else { 2 } }   //~ E0901
+
+pub fn cond_else_if(c: Bool, n: U32) -> U32 { if c { 1 } else if mk(n).len() > 0 { 2 } else { 3 } }   //~ E0601
+
+pub rt fn rt_cond_else_if(c: Bool, n: U32) -> U32 { if c { 1 } else if mk(n).len() > 0 { 2 } else { 3 } }   //~ E0901
+
+pub fn cond_while(n: U32) { while mk(n).len() > 9 { break } }   //~ E0601
+
+pub rt fn rt_cond_while(n: U32) { while mk(n).len() > 9 { break } }   //~ E0901
+
+pub fn cond_match(n: U32) -> U32 { match mk(n).len() { 0 => 1, _ => 2 } }   //~ E0601
+
+pub rt fn rt_cond_match(n: U32) -> U32 { match mk(n).len() { 0 => 1, _ => 2 } }   //~ E0901
+
+pub fn cond_range_end(n: U32) { for _ in 0 ..< mk(n).len() { break } }   //~ E0601
+
+pub rt fn rt_cond_range_end(n: U32) { for _ in 0 ..< mk(n).len() { break } }   //~ E0901
+
+// ------------------------------------------------------------------ a temporary value that waits for a later operand that leaves with `?`
+
+pub fn op_waits(n: U32, r: Option[U32]) -> Option[Bool] { Some(mk(n) == mk(r?)) }   //~ E0601
+
+pub rt fn rt_op_waits(n: U32, r: Option[U32]) -> Option[Bool] { Some(mk(n) == mk(r?)) }   //~ E0901
+

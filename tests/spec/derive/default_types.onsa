@@ -83,7 +83,7 @@ pub fn nested_struct() -> Line {
   Line.default()
 }
 
-pub fn the_field_of_a_nested_struct() -> Point {
+pub fn the_field_of_a_nested_struct() -> Point uses {Alloc} {
   Line.default().b
 }
 
@@ -95,11 +95,11 @@ pub fn wide_struct() -> Wide {
   Wide.default()
 }
 
-pub fn a_field_of_a_wide_struct() -> Bool {
+pub fn a_field_of_a_wide_struct() -> Bool uses {Alloc} {
   Wide.default().flag
 }
 
-pub fn in_a_branch(flag: Bool) -> Point {
+pub fn in_a_branch(flag: Bool) -> Point uses {Alloc} {
   if flag {
     Point.default()
   } else {
@@ -229,7 +229,7 @@ pub fn default_in_a_comparison(x: U8) -> Bool {
   x == U8.default()
 }
 
-pub fn default_as_a_method_receiver() -> U32 {
+pub fn default_as_a_method_receiver() -> U32 uses {Alloc} {
   Str.default().len()
 }
 

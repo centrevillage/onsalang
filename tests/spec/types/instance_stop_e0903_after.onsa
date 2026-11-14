@@ -19,7 +19,7 @@
 
 // S-290 (W5-23 U2), §18.1: the same as `instance_stop_e0903_before.onsa` with the cycle below the growth.
 
-fn g[T](x: T, n: U32) -> U32 {
+fn g[T: Copy](x: T, n: U32) -> U32 {
   if n == 0 {
     return 0
   }

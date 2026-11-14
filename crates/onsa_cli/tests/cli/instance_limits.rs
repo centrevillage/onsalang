@@ -7,7 +7,7 @@ use crate::test_support::{Dir, onsa};
 const MANIFEST: &str = "[package]\nname = \"demo\"\nedition = \"2026\"\n\n[export]\nprefix = \"d_\"\n\n\
     [targets.host]\nkind = \"source\"\nlang = \"c\"\nplatform = \"host\"\npanic = \"trap\"\nprovides = []\n";
 
-const MAIN: &str = "fn g[T](x: T, n: U32) -> U32 {\n  if n == 0 {\n    return 0\n  }\n  g(Some(x), n - 1)\n}\n\n\
+const MAIN: &str = "fn g[T: Copy](x: T, n: U32) -> U32 {\n  if n == 0 {\n    return 0\n  }\n  g(Some(x), n - 1)\n}\n\n\
     pub fn grows() -> U32 {\n  g(1, 3)\n}\n\n@export\npub fn anchor() -> U32 {\n  1\n}\n\n\
     test \"plain\" {\n  assert(anchor() == 1)\n}\n";
 

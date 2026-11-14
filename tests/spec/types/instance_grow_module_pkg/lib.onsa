@@ -1,4 +1,4 @@
-pub fn grow[T](x: T, n: U32) -> U32 {
+pub fn grow[T: Copy](x: T, n: U32) -> U32 {
   if n == 0 {
     return 0
   }

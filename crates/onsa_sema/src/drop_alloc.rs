@@ -9,7 +9,7 @@ use std::collections::BTreeSet;
 
 use onsa_diag::Span;
 use onsa_diag::internal::bug;
-use onsa_syntax::ast::ExprId;
+use onsa_syntax::ast::{Ast, ExprId};
 
 use crate::body::{Dropped, LocalId, LocalInfo, generics_of};
 use crate::kind::params_in_body;
@@ -24,27 +24,46 @@ pub(crate) enum Drop<'b> {
     /// An owned local, at the drop points of it (one for all, W6-02: at its
     /// declaration, which the readers name).
     Local(&'b LocalInfo),
-    /// What is left of `root` where the path `path` is taken out at `at` (S-85).
-    Rest { at: Span, path: &'b [Proj], root: &'b LocalInfo },
+    /// What is left of `root`, of the type `ty`, where the path `path` is
+    /// taken out at `at` (S-85).
+    Rest { at: Span, path: &'b [Proj], root: Root<'b>, ty: TyId },
     /// The value of `value`, of the type `ty`, the exit at `exit` leaves before
     /// its consumer runs (A-1).
     Value { value: ExprId, ty: TyId, exit: Span },
     /// The rest of the value `iter` of the type `ty` an owned `for` iterates,
     /// where the loop is left at `exit` (`early`) or ends (S-1037).
     IterRest { iter: ExprId, ty: TyId, exit: Span, early: bool },
+    /// The value of `value`, of the type `ty`, made where nothing consumes
+    /// it (R-32).
+    Temp { value: ExprId, ty: TyId },
+}
+
+/// What a path is taken out of (S-85): an owned local, or a value no
+/// binding owns (R-32).
+pub(crate) enum Root<'b> {
+    Local(&'b LocalInfo),
+    Value(ExprId),
+}
+
+impl Root<'_> {
+    /// Its name, or the value as written (`src` of its span).
+    pub(crate) fn name(&self, ast: &Ast, src: impl Fn(Span) -> String) -> String {
+        match self {
+            Root::Local(l) => l.name.clone(),
+            Root::Value(e) => src(ast.expr(*e).span),
+        }
+    }
 }
 
 /// Whether the drop `d` needs `Alloc` (§12.2): the one test of a drop, by
-/// the facts of the body's type parameters in `body` ([`Frame::body`]). A
+/// the facts of the body's type parameters in `frame` ([`Frame::body`]). A
 /// type that holds itself has no answer ([`crate::summary::Facts`]), so no use.
-fn needs_alloc(a: &Analysis, body: &Frame, d: &Drop) -> bool {
-    let drops = |t| body.read.of(t).drops.unwrap_or(false);
+fn needs_alloc(a: &Analysis, frame: &Frame, d: &Drop) -> bool {
+    let drops = |t| frame.read.of(t).drops.unwrap_or(false);
     match d {
         Drop::Local(l) => drops(l.ty),
-        Drop::Rest { at, path, root } => {
-            rest_drops_alloc(&Walk::new(a), (root.ty, body, 0), path, *at).unwrap_or(false)
-        }
-        Drop::Value { ty, .. } => drops(*ty),
+        Drop::Rest { at, path, ty, .. } => rest_drops_alloc(&Walk::new(a), (*ty, frame, 0), path, *at).unwrap_or(false),
+        Drop::Value { ty, .. } | Drop::Temp { ty, .. } => drops(*ty),
         // At its end, its container: a fixed-length array has none (S-1037).
         Drop::IterRest { ty, early, .. } => (*early || !matches!(a.types.get(*ty), Ty::Array(..))) && drops(*ty),
     }
@@ -68,7 +87,14 @@ pub(crate) fn alloc_drops(a: &Analysis, id: DefId) -> impl Iterator<Item = Drop<
     let ty =
         |e: &ExprId, at| *body.expr_types.get(e).unwrap_or_else(|| bug(Some(at), "a drop of a value with no type"));
     let others = body.drops.iter().filter_map(move |d| match &d.what {
-        Dropped::Rest(t) => Some(Drop::Rest { at: d.at, path: &t.path, root: local(&t.root) }),
+        Dropped::Rest(t) => {
+            let root = local(&t.root);
+            Some(Drop::Rest { at: d.at, path: &t.path, root: Root::Local(root), ty: root.ty })
+        }
+        Dropped::TempRest(t) => {
+            Some(Drop::Rest { at: d.at, path: &t.path, root: Root::Value(t.root), ty: ty(&t.root, d.at) })
+        }
+        Dropped::Temp(e) => Some(Drop::Temp { value: *e, ty: ty(e, d.at) }),
         Dropped::Value(e) => Some(Drop::Value { value: *e, ty: ty(e, d.at), exit: d.at }),
         &Dropped::IterRest { iter, early } => Some(Drop::IterRest { iter, ty: ty(&iter, d.at), exit: d.at, early }),
         Dropped::End(_) | Dropped::Exit(_) => None,

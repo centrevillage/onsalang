@@ -1,0 +1,185 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§5.4", "§10", "§12.2"]
+
+// W6-02 U5a/t, R-32, S-610, S-613 (§12.2: "所有する Shared 値・`Buf` と、それらを含む値の破棄: 要る"; "静的な値と破棄の要らないリテラル（§5.4）の複製と破棄（一時の値を含む）: 要らない";
+// §5.2: a value that is consumed is moved on, and a value that no position consumes is dropped where it is left): the receiver of a method call. The receiver is a value that no binding owns (the
+// result of a call), and the methods here borrow it (`len`, `size`), so nothing consumes it and it is dropped after the call. The drop of a value that holds a `Str` or a `Buf` needs `Alloc`: a function
+// without `uses {Alloc}` is an E0601 and an `rt fn` an E0901. The value is a `Str`, a `Buf[F32]`, a struct that holds a `Str` (`G`) or a `Buf` and a `Str` (`H`), a field of such a value that is read or
+// borrowed (the whole value is dropped), a `Str` that comes out of `unwrap` or `?` (a new value) and the result of a `move self` method. The temporary value stands in a value position, a branch, an arm
+// or a loop. Where the same function has two of them there is one error (P-01). The helpers are `rt` functions that return a literal or move their argument on, so that they have no error themselves.
+// The functions are one-liners (S-783). Each mark is reported (W6-02 U5a counts the drop of a temporary value). The values that are static, Copy or consumed are in
+// negative/drop_temp_contrast.onsa.
+
+pub struct G {
+  s: Str,
+  n: U32,
+}
+
+pub struct H {
+  b: Buf[F32],
+  s: Str,
+  n: U32,
+}
+
+pub struct W {
+  h: H,
+  n: U32,
+}
+
+pub struct HH {
+  a: Buf[F32],
+  b: Buf[F32],
+}
+
+pub struct K {
+  b: Buf[F32],
+  n: U32,
+}
+
+impl G {
+  pub rt fn size(self) -> U32 { 0 }
+  pub rt fn same(self, o: G) -> Bool { true }
+}
+
+impl H {
+  pub rt fn size(self) -> U32 { 0 }
+  pub rt fn absorb(move self) -> H { self }
+}
+
+pub rt fn mk(n: U32) -> Str { "x" }
+
+pub rt fn mk_o(n: U32) -> Option[Str] { Some("x") }
+
+pub rt fn mk_t(n: U32) -> (Str, U32) { ("x", n) }
+
+pub rt fn mk_g(n: U32) -> G { G { s: "a", n: n } }
+
+pub rt fn mk_h(move b: Buf[F32]) -> H { H { b: move b, s: "a", n: 1 } }
+
+pub rt fn mk_w(move b: Buf[F32]) -> W { W { h: H { b: move b, s: "a", n: 1 }, n: 2 } }
+
+pub rt fn mk_hh(move a: Buf[F32], move b: Buf[F32]) -> HH { HH { a: move a, b: move b } }
+
+pub rt fn mk_k(move b: Buf[F32]) -> K { K { b: move b, n: 1 } }
+
+pub rt fn mk_bt(move b: Buf[F32]) -> (Buf[F32], Str) { (move b, "a") }
+
+pub rt fn pass(move b: Buf[F32]) -> Buf[F32] { b }
+
+pub rt fn pass_s(move s: Str) -> Str { s }
+
+pub rt fn str_len(s: Str) -> U32 { 0 }
+
+pub rt fn str_len2(s: Str, n: U32) -> U32 { n }
+
+pub rt fn len_of(b: Buf[F32]) -> U32 { 0 }
+
+pub rt fn len2(b: Buf[F32], n: U32) -> U32 { n }
+
+pub rt fn len2b(a: Buf[F32], b: Buf[F32]) -> U32 { 0 }
+
+pub rt fn opt_len(o: Option[Str]) -> U32 { 0 }
+
+pub rt fn tup_len(t: (Str, U32)) -> U32 { 0 }
+
+pub rt fn g_len(g: G) -> U32 { 0 }
+
+pub rt fn h_len(h: H) -> U32 { 0 }
+
+// ------------------------------------------------------------------ the receiver of a method of a `Str`, a `Buf`, a struct (a borrowed `self`)
+
+pub fn recv_str(n: U32) -> U32 { mk(n).len() }   //~ E0601
+
+pub rt fn rt_recv_str(n: U32) -> U32 { mk(n).len() }   //~ E0901
+
+pub fn recv_buf(move b: Buf[F32]) -> U32 { pass(move b).len() }   //~ E0601
+
+pub rt fn rt_recv_buf(move b: Buf[F32]) -> U32 { pass(move b).len() }   //~ E0901
+
+pub fn recv_struct(n: U32) -> U32 { mk_g(n).size() }   //~ E0601
+
+pub rt fn rt_recv_struct(n: U32) -> U32 { mk_g(n).size() }   //~ E0901
+
+pub fn recv_struct_buf(move b: Buf[F32]) -> U32 { mk_h(move b).size() }   //~ E0601
+
+pub rt fn rt_recv_struct_buf(move b: Buf[F32]) -> U32 { mk_h(move b).size() }   //~ E0901
+
+pub fn recv_nested(move b: Buf[F32]) -> U32 { pass(pass(move b)).len() }   //~ E0601
+
+pub rt fn rt_recv_nested(move b: Buf[F32]) -> U32 { pass(pass(move b)).len() }   //~ E0901
+
+// ------------------------------------------------------------------ the receiver is a field of a temporary value, or the result of a call that takes a temporary value
+
+pub fn recv_field_of_tuple(n: U32) -> U32 { mk_t(n).0.len() }   //~ E0601
+
+pub rt fn rt_recv_field_of_tuple(n: U32) -> U32 { mk_t(n).0.len() }   //~ E0901
+
+pub fn recv_field_of_struct(n: U32) -> U32 { mk_g(n).s.len() }   //~ E0601
+
+pub rt fn rt_recv_field_of_struct(n: U32) -> U32 { mk_g(n).s.len() }   //~ E0901
+
+pub fn recv_field_buf(move b: Buf[F32]) -> U32 { mk_h(move b).b.len() }   //~ E0601
+
+pub rt fn rt_recv_field_buf(move b: Buf[F32]) -> U32 { mk_h(move b).b.len() }   //~ E0901
+
+pub fn recv_nested_field(move b: Buf[F32]) -> U32 { mk_w(move b).h.b.len() }   //~ E0601
+
+pub rt fn rt_recv_nested_field(move b: Buf[F32]) -> U32 { mk_w(move b).h.b.len() }   //~ E0901
+
+pub fn recv_unwrapped(n: U32) -> U32 { mk_o(n).unwrap().len() }   //~ E0601
+
+pub rt fn rt_recv_unwrapped(n: U32) -> U32 { mk_o(n).unwrap().len() }   //~ E0901
+
+pub fn recv_tried(n: U32) -> Option[U32] { Some(mk_o(n)?.len()) }   //~ E0601
+
+pub rt fn rt_recv_tried(n: U32) -> Option[U32] { Some(mk_o(n)?.len()) }   //~ E0901
+
+pub fn recv_after_move_self(move b: Buf[F32]) -> U32 { mk_h(move b).absorb().size() }   //~ E0601
+
+pub rt fn rt_recv_after_move_self(move b: Buf[F32]) -> U32 { mk_h(move b).absorb().size() }   //~ E0901
+
+// ------------------------------------------------------------------ the receiver sits in a value position, a branch or a loop
+
+pub fn recv_in_constructor(n: U32) -> Option[U32] { Some(mk(n).len()) }   //~ E0601
+
+pub rt fn rt_recv_in_constructor(n: U32) -> Option[U32] { Some(mk(n).len()) }   //~ E0901
+
+pub fn recv_in_tuple(n: U32) -> (U32, U32) { (mk(n).len(), 1) }   //~ E0601
+
+pub rt fn rt_recv_in_tuple(n: U32) -> (U32, U32) { (mk(n).len(), 1) }   //~ E0901
+
+pub fn recv_in_array(n: U32) -> [U32; 2] { [mk(n).len(), 2] }   //~ E0601
+
+pub rt fn rt_recv_in_array(n: U32) -> [U32; 2] { [mk(n).len(), 2] }   //~ E0901
+
+pub fn recv_in_struct_literal(n: U32) -> G { G { s: "a", n: mk(n).len() } }   //~ E0601
+
+pub rt fn rt_recv_in_struct_literal(n: U32) -> G { G { s: "a", n: mk(n).len() } }   //~ E0901
+
+pub fn recv_in_branch(c: Bool, n: U32) -> U32 { if c { mk(n).len() } else { 0 } }   //~ E0601
+
+pub rt fn rt_recv_in_branch(c: Bool, n: U32) -> U32 { if c { mk(n).len() } else { 0 } }   //~ E0901
+
+pub fn recv_in_else(c: Bool, n: U32) -> U32 { if c { 0 } else { mk(n).len() } }   //~ E0601
+
+pub rt fn rt_recv_in_else(c: Bool, n: U32) -> U32 { if c { 0 } else { mk(n).len() } }   //~ E0901
+
+pub fn recv_in_arm(n: U32) -> U32 { match n { 0 => mk(n).len(), _ => 0 } }   //~ E0601
+
+pub rt fn rt_recv_in_arm(n: U32) -> U32 { match n { 0 => mk(n).len(), _ => 0 } }   //~ E0901
+
+pub fn recv_in_loop(n: U32) -> U32 { while true { return mk(n).len() } }   //~ E0601
+
+pub rt fn rt_recv_in_loop(n: U32) -> U32 { while true { return mk(n).len() } }   //~ E0901
+
+pub fn recv_in_move_arg(n: U32) -> U32 { pass_s(mk(n)).len() }   //~ E0601
+
+pub rt fn rt_recv_in_move_arg(n: U32) -> U32 { pass_s(mk(n)).len() }   //~ E0901
+
+// ------------------------------------------------------------------ two temporary values in one function (one error)
+
+pub fn recv_twice(n: U32) -> U32 { mk(n).len() + mk(n).len() }   //~ E0601
+
+pub rt fn rt_recv_twice(n: U32) -> U32 { mk(n).len() + mk(n).len() }   //~ E0901
+

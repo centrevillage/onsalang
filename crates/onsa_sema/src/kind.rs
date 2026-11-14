@@ -37,7 +37,8 @@ pub fn kind_of(a: &Analysis, ty: TyId) -> Option<Kind> {
 
 /// The kind a value of `ty` in a body with the type parameters `generics` is
 /// taken for by the questions of the modes (R-30) and by the kind constraints
-/// of the types stage (R-176, [`Bounds::meets`]), of [`params_in_body`].
+/// of the types stage (R-176, [`Bounds::meets`]), by the facts of
+/// [`params_in_body`].
 pub(crate) fn kind_in_body(a: &Analysis, ty: TyId, generics: &[GenericDef]) -> Option<Kind> {
     Read::new(a, params_in_body(a, generics)).of(ty).kind
 }

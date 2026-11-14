@@ -32,6 +32,6 @@ pub fn under_a_conjunction(c: Bool) -> Bool {
   c && make().name.len() == 0                       //~ E0413
 }
 
-pub fn fine(e: Entry) -> Bool {
+pub fn fine(e: Entry) -> Bool uses {Alloc} {
   entries.blank(e) && (entry_name(e).len() == 0)
 }

@@ -7,7 +7,9 @@ use onsa_syntax::ast::{ExprId, ExprKind, Lit, Mode, PatId, StrSeg};
 
 use super::check::Walker;
 use super::flow::Run;
-use super::place::{Place, hole_place, pattern_places, place_of};
+use super::place::{Place, Proj, hole_place, pattern_places, place_of};
+use crate::Kind;
+use crate::body::{Dropped, Taken};
 use crate::ty::{Ty, TyId};
 
 /// Where a value stands (§5.2, §5.3): what the walk checks at it. Passed down
@@ -48,6 +50,13 @@ impl Pos {
     /// A value at it is consumed (§5.2): moved, copied or an error.
     pub(super) fn consumes(self) -> bool {
         matches!(self, Pos::Own | Pos::Value | Pos::MoveArg | Pos::Return | Pos::Extract)
+    }
+
+    /// A value made at it is borrowed by a call or an index, and waits for
+    /// it to run (R-32, D3: `Walker::waits`); at another position that does
+    /// not consume, it is dropped where it is.
+    pub(super) fn waits(self) -> bool {
+        matches!(self, Pos::Arg(Mode::Borrow) | Pos::Kept)
     }
 
     /// It consumes, and the whole of an owned binding of a Dup value that
@@ -120,10 +129,19 @@ impl<'a> Walker<'a> {
                 self.expr(r, *elem, element);
                 self.expr(r, *len, Pos::Read);
             }
+            // The base waits for the index (§3.5), then is read.
             ExprKind::Index { base, index } => {
+                let values = r.items();
                 self.expr(r, *base, Pos::Arg(Mode::Borrow));
+                self.waits(r, *base, Pos::Arg(Mode::Borrow));
                 self.expr(r, *index, Pos::Read);
+                self.ran(r, values, ast.expr(e).span);
             }
+            // A path of a value made here (D2): consumed, the rest of it is dropped there; else the whole, after.
+            ExprKind::Field { base, .. } | ExprKind::TupleIndex { base, .. } => match pos.consumes() {
+                true => self.take_out(r, e, pos),
+                false => self.expr(r, *base, if pos.waits() { pos } else { Pos::Read }),
+            },
             ExprKind::Call { callee, args, kind } => {
                 self.call(r, e, *callee, args, *kind);
                 // `panic`, which does not come back (§7).
@@ -133,6 +151,69 @@ impl<'a> Walker<'a> {
             }
             _ => ast.sub_exprs(e).into_iter().for_each(|x| self.expr(r, x, Pos::Read)),
         }
+        // A value made where nothing consumes it is dropped there (R-32), or waits for its call or index (D3).
+        if !pos.consumes() && !pos.waits() && pos != Pos::Unknown && self.made(e, false) {
+            self.drop_point(r, ast.expr(e).span, Dropped::Temp(e), (true, None));
+        }
+    }
+
+    /// Whether `e` makes a new value that needs a drop where nothing
+    /// consumes it (R-32, §12.2): a call, a `?`, a literal, owned
+    /// ([`Walker::owned`]: not one that is static or needs no drop, S-610,
+    /// S-613, nor Copy); with `joins` (the root of a path taken out), a
+    /// block, an `if` or a `match` too, whose tails move into it (§5.2).
+    pub(super) fn made(&mut self, e: ExprId, joins: bool) -> bool {
+        let new = match self.ast.expr(e).kind {
+            ExprKind::Call { .. }
+            | ExprKind::Try(_)
+            | ExprKind::Lit(_)
+            | ExprKind::Tuple(_)
+            | ExprKind::Array(_)
+            | ExprKind::Struct { .. }
+            | ExprKind::Repeat { .. } => true,
+            ExprKind::Block(_) | ExprKind::If { .. } | ExprKind::Match { .. } => joins,
+            _ => false,
+        };
+        new && !self.info.diverging.expr(e) && self.owned(e)
+    }
+
+    /// The value `e`, a path of fields at `pos`, which consumes it: of a
+    /// value made here (D2), an Affine one is taken out and the rest of the
+    /// value dropped there (S-85, R-32); another is copied, and the whole
+    /// value dropped. Else (a path of a place), read.
+    fn take_out(&mut self, r: &mut Run, e: ExprId, pos: Pos) {
+        let (mut x, mut path) = (self.ast.without_parens(e), Vec::new());
+        loop {
+            x = match &self.ast.expr(x).kind {
+                ExprKind::Field { base, name } => (*base, path.push(Proj::Field(name.name.clone()))).0,
+                ExprKind::TupleIndex { base, index, .. } => (*base, path.push(Proj::Elem(*index))).0,
+                _ => break,
+            };
+            x = self.ast.without_parens(x);
+        }
+        let root = x;
+        path.reverse();
+        if !self.made(root, true) {
+            return self.expr(r, root, Pos::Read);
+        }
+        self.expr(r, root, pos);
+        let ty = self.info.expr_types.get(&e).copied();
+        let at = self.ast.expr(e).span;
+        let what = match ty.and_then(|t| self.kind_of(t)) {
+            Some(Kind::Affine) => Dropped::TempRest(Box::new(Taken { root, path })),
+            // SPEC-GAP(S-1034): a Shared field is copied (§5.2), and the whole value dropped.
+            _ => Dropped::Temp(root),
+        };
+        self.drop_point(r, at, what, (true, None));
+    }
+
+    /// The root of `e` through its fields and tuple elements (and parentheses).
+    pub(super) fn root_of_path(&self, e: ExprId) -> ExprId {
+        let mut x = self.ast.without_parens(e);
+        while let ExprKind::Field { base, .. } | ExprKind::TupleIndex { base, .. } = &self.ast.expr(x).kind {
+            x = self.ast.without_parens(*base);
+        }
+        x
     }
 
     /// The elements `xs` of a literal at `pos`, in the order written (§3.5):

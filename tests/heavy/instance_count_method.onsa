@@ -31,7 +31,7 @@ pub struct P[A, B, C, D, E, F, G, H, I] {
   a: A, b: B, c: C, d: D, e: E, f: F, g: G, h: H, i: I,
 }
 
-impl[A, B, C, D, E, F, G, H, I] P[A, B, C, D, E, F, G, H, I] {
+impl[A: Copy, B: Copy, C: Copy, D: Copy, E: Copy, F: Copy, G: Copy, H: Copy, I: Copy] P[A, B, C, D, E, F, G, H, I] {
   fn m(self) -> U32 {
     P { a: self.b, b: self.c, c: self.d, d: self.e, e: self.f, f: self.g, g: self.h, h: self.i, i: self.a }.m() + P { a: self.b, b: self.a, c: self.c, d: self.d, e: self.e, f: self.f, g: self.g, h: self.h, i: self.i }.m()  //~ E0423
   }

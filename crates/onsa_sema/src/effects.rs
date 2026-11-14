@@ -78,7 +78,12 @@ fn first_use(pkg: &Package, a: &Analysis, id: DefId) -> Option<Diagnostic> {
                 (l.span, format!("`{}` owns a `{}`, whose destruction needs `Alloc`", l.name, a.display_type(l.ty)))
             }
             Drop::Rest { at, root, .. } => {
-                (at, format!("taking `{}` out of `{}` drops the rest of it, which needs `Alloc`", src(at), root.name))
+                let of = root.name(ast, src);
+                (at, format!("taking `{}` out of `{of}` drops the rest of it, which needs `Alloc`", src(at)))
+            }
+            Drop::Temp { value, .. } => {
+                let at = ast.expr(value).span;
+                (at, format!("`{}` is dropped after it is used, which needs `Alloc`", src(at)))
             }
             Drop::Value { value, .. } => {
                 let at = ast.expr(value).span;

@@ -68,7 +68,10 @@ impl Walker<'_> {
                 self.waits(r, base, Pos::Extract);
             }
             Some((base, Mode::Inout)) => self.write_place(r, base, How::Bang),
-            Some((base, m)) => self.expr(r, base, Pos::Arg(m)),
+            Some((base, m)) => {
+                self.expr(r, base, Pos::Arg(m));
+                self.waits(r, base, Pos::Arg(m));
+            }
             None => {}
         }
         let span = self.ast.expr(e).span;
@@ -82,7 +85,11 @@ impl Walker<'_> {
             // Taken by value, it waits for the arguments after it (A-1).
             self.waits(r, a.expr, pos);
         }
-        r.forget(values);
+        // What it borrows is dropped when it comes back (R-32), not when it does not (§7).
+        match self.info.diverging.expr(e) {
+            false => self.ran(r, values, span),
+            true => r.forget(values),
+        }
         self.reread(r, &passed);
         self.inside.calls -= 1;
         self.changed_in_args(start, &passed);

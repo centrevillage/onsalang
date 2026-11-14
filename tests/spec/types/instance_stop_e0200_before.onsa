@@ -40,7 +40,7 @@ pub fn q_option() -> Option[U32] {
   Some(7)
 }
 
-fn g[T](x: T, n: U32) -> U32 {
+fn g[T: Copy](x: T, n: U32) -> U32 {
   if n == 0 {
     return 0
   }

@@ -20,7 +20,7 @@ use crate::binding::LitClass;
 use crate::binding::{Head, HeadRow};
 use crate::body::{DropPoint, Dropped, LocalId, LocalKind};
 use crate::names::body::Origin;
-use crate::tails::literal_true;
+use crate::tails::{Tail, literal_true};
 
 /// A walk's state, the innermost loop it is in, and the items of the
 /// scopes it is in (innermost last): the bindings declared in its blocks,
@@ -34,12 +34,14 @@ pub(super) struct Run {
 
 /// What a scope or an exit leaves (R-32, §12.2): a binding; a value
 /// evaluated at a consuming position that waits for the operands after it
-/// (A-1); the rest of the iterated value of an owned `for` (S-1037).
+/// (A-1); the rest of the iterated value of an owned `for` (S-1037); a value
+/// made where a call or an index borrows it, which waits for it to run.
 #[derive(Clone, Copy)]
 enum Item {
     Local(LocalId),
     Value(ExprId),
     IterRest(ExprId),
+    Temp(ExprId),
 }
 
 /// The paths from the head of a loop (at the mark `at`) to its exit (`brk`:
@@ -324,14 +326,15 @@ impl Walker<'_> {
     }
 
     /// The drop points of the items after the first `from`, which the end
-    /// of their scope or an exit at `at` (`exit`: a `return`, a `?`, a
+    /// of their scope, of the call or the index that waits for them
+    /// ([`Walker::ran`]), or an exit at `at` (`exit`: a `return`, a `?`, a
     /// `break`, a `continue`) leaves (R-32, §12.2): each owned binding that
     /// may hold its value there, not Copy (surely if live on every path; of
     /// one released on every path, unless each release moves, S-1030); a
     /// value that waits (A-1), surely: it is made on every path to the
-    /// exit; the rest of an owned `for` (S-1037), at its end (`iterate`)
-    /// or left early; none where no path reaches (S-873). The one place
-    /// that decides them.
+    /// exit, and consumed at the end of its consumer; one borrowed, there too;
+    /// the rest of an owned `for` (S-1037), at its end (`iterate`) or left
+    /// early; none where no path reaches (S-873). The one place that decides them.
     pub(super) fn drops(&mut self, r: &Run, from: usize, at: Span, exit: bool) {
         for i in from..r.declared.len() {
             let (what, sure, unless) = match r.declared[i] {
@@ -343,34 +346,62 @@ impl Walker<'_> {
                     };
                     (if exit { Dropped::Exit(l) } else { Dropped::End(l) }, sure, unless)
                 }
-                Item::Value(e) => (Dropped::Value(e), true, None),
+                Item::Value(e) if exit => (Dropped::Value(e), true, None),
+                Item::Temp(e) => (if exit { Dropped::Value(e) } else { Dropped::Temp(e) }, true, None),
+                Item::Value(_) => continue,
                 Item::IterRest(e) => (Dropped::IterRest { iter: e, early: exit }, true, None),
             };
             self.drop_point(r, at, what, (sure, unless));
         }
     }
 
-    /// The operand `e`, walked at `pos` (of a call, a receiver, a literal or
-    /// an assignment, whose consumer runs after the operands after it): its
-    /// value waits there for them (A-1), until the consumer runs
-    /// (`Run::forget`), if `pos` consumes and it is owned: an Affine place
-    /// moved, a Dup value not Copy (released or copied, §5.2) that is no
-    /// literal or static value with no drop (S-610, S-613), an Affine new
-    /// value. The one place that decides it.
+    /// The operand `e`, walked at `pos` (of a call, a receiver, a literal,
+    /// an assignment or an index, whose consumer runs after the operands
+    /// after it): its value waits there for them (A-1), until the consumer
+    /// runs ([`Walker::ran`]), if it is owned ([`Walker::owned`]) and `pos`
+    /// consumes; a value made in its tails (of the root of a path of one,
+    /// D2) where a call or an index borrows it, too (D3). The one place
+    /// that decides it.
     pub(super) fn waits(&mut self, r: &mut Run, e: ExprId, pos: Pos) {
         let mut x = self.ast.without_parens(e);
         while let ExprKind::Move(y) = &self.ast.expr(x).kind {
             x = self.ast.without_parens(*y);
         }
-        let Some(&ty) = self.info.expr_types.get(&x).filter(|_| pos.consumes()) else { return };
-        let owned = match (self.kind_of(ty), place_of(self.ast, self.names, x)) {
+        if pos.consumes() {
+            if self.owned(x) {
+                r.declared.push(Item::Value(x));
+            }
+        } else if pos.waits() {
+            let mut tails = Vec::new();
+            crate::tails::tails(self.ast, x, &self.info.diverging, &mut tails);
+            for t in tails {
+                let Tail::Value(v) = t else { continue };
+                let root = self.root_of_path(v);
+                if self.made(root, false) {
+                    r.declared.push(Item::Temp(root));
+                }
+            }
+        }
+    }
+
+    /// Whether the value of `x` is owned where it is consumed or dropped:
+    /// an Affine place moved, a Dup value not Copy (released or copied,
+    /// §5.2) that is no literal or static value with no drop (S-610,
+    /// S-613), an Affine new value. The one place that decides it.
+    pub(super) fn owned(&mut self, x: ExprId) -> bool {
+        let Some(&ty) = self.info.expr_types.get(&x) else { return false };
+        match (self.kind_of(ty), place_of(self.ast, self.names, x)) {
             (Some(Kind::Shared), _) => !matches!(self.info.lits.get(&x), Some(LitClass::Static | LitClass::NoDrop)),
             (_, Some(p)) => self.movable(&p, ty) == Some(Movable::Owned),
             (kind, None) => kind == Some(Kind::Affine),
-        };
-        if owned {
-            r.declared.push(Item::Value(x));
         }
+    }
+
+    /// The consumer of the items after the first `from` (a call, an index)
+    /// ran: the values it borrows are dropped (R-32), the others it took.
+    pub(super) fn ran(&mut self, r: &mut Run, from: usize, at: Span) {
+        self.drops(r, from, at, false);
+        r.forget(from);
     }
 
     /// The parameters of the body: its outermost scope ([`Run::with`]).

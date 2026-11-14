@@ -298,7 +298,7 @@ fn call_with_borrow_and_inout(f: fn(I32, inout I32), a: I32, inout b: I32) {
 
 // ------------------------------------------------ in other kinds of functions
 
-fn generic_twice[T](f: fn(T) -> T, x: T) -> T {
+fn generic_twice[T: Copy](f: fn(T) -> T, x: T) -> T {
   f.(f.(x))
 }
 

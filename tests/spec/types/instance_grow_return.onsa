@@ -29,7 +29,7 @@ fn wrap[T](x: T) -> S[T] {
   S { v: x }
 }
 
-fn g[T](x: T, n: U32) -> U32 {
+fn g[T: Copy](x: T, n: U32) -> U32 {
   if n == 0 {
     return 0
   }

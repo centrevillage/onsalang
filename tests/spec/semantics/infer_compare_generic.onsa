@@ -19,11 +19,11 @@ fn same[T: PartialEq](a: T, b: T) -> Bool {
   a == b
 }
 
-fn is_zero_pair[T: PartialEq](p: (T, T), z: T) -> Bool {
+fn is_zero_pair[T: PartialEq + Copy](p: (T, T), z: T) -> Bool {
   p == (z, z)
 }
 
-fn first_is[T: PartialEq](xs: [T; 2], x: T) -> Bool {
+fn first_is[T: PartialEq + Copy](xs: [T; 2], x: T) -> Bool {
   xs == [x, xs[1]]
 }
 

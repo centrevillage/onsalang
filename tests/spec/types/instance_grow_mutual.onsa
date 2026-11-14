@@ -26,13 +26,13 @@ pub fn root() -> U32 {
   a(1, 3)
 }
 
-fn a[T](x: T, n: U32) -> U32 {
+fn a[T: Copy](x: T, n: U32) -> U32 {
   if n == 0 {
     return 0
   }
   b(x, n - 1)
 }
 
-fn b[T](x: T, n: U32) -> U32 {
+fn b[T: Copy](x: T, n: U32) -> U32 {
   a(Some(x), n)  //~ E0422
 }

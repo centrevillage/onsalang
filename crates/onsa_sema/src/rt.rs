@@ -213,15 +213,20 @@ fn body_rules(pkg: &Package, a: &Analysis, id: DefId) -> Option<Diagnostic> {
                 ),
                 None,
             ),
-            Drop::Rest { at, root, .. } => (
-                at,
-                format!(
-                    "taking `{}` out of `{}` drops the rest of it here, whose destruction needs `Alloc`; {rt}",
-                    src(at),
-                    root.name
-                ),
-                None,
-            ),
+            Drop::Rest { at, root, .. } => {
+                let of = root.name(ast, src);
+                let message = format!(
+                    "taking `{}` out of `{of}` drops the rest of it here, whose destruction needs `Alloc`; {rt}",
+                    src(at)
+                );
+                (at, message, None)
+            }
+            Drop::Temp { value, .. } => {
+                let at = ast.expr(value).span;
+                let message =
+                    format!("`{}` is dropped after it is used, whose destruction needs `Alloc`; {rt}", src(at));
+                (at, message, None)
+            }
             Drop::Value { value, exit, .. } => {
                 let at = ast.expr(value).span;
                 let message = format!(

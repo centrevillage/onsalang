@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§5.4", "§10", "§12.2", "§15.1"]
+
+// W6-02 U5a/t, R-32, S-610, S-613 (§12.2; §15.1): the contrasts of negative/drop_temp_pkg. The functions of this module that use the types and functions of `lib.onsa` where no temporary value is
+// left to drop are legal and stay legal: a value that a call returns and a position consumes (the return value, a `move` argument, a constructor), a static value and a literal that needs no drop as a
+// receiver and a borrowed argument, a Copy value, the field that is taken out of a value whose rest is Copy (`lib.K`), and a function with `uses {Alloc}`. This version accepts all of them. The functions are one-liners.
+
+use lib.{G, H, K, mk, mk_g, mk_h, mk_k, pass, pass_s, str_len, len_of, fnum, tup_len}
+
+pub fn consumed(move b: Buf[F32]) -> Buf[F32] { pass(move b) }
+
+pub rt fn rt_consumed(move b: Buf[F32]) -> Buf[F32] { pass(move b) }
+
+pub fn consumed_str(n: U32) -> Option[Str] { Some(pass_s(mk(n))) }
+
+pub rt fn rt_consumed_str(n: U32) -> Option[Str] { Some(pass_s(mk(n))) }
+
+pub fn consumed_struct(n: U32) -> G { mk_g(n) }
+
+pub rt fn rt_consumed_struct(n: U32) -> G { mk_g(n) }
+
+pub fn static_receiver(n: U32) -> U32 { "abc".len() }
+
+pub rt fn rt_static_receiver(n: U32) -> U32 { "abc".len() }
+
+pub fn static_argument(n: U32) -> U32 { tup_len(("gain", n)) }
+
+pub rt fn rt_static_argument(n: U32) -> U32 { tup_len(("gain", n)) }
+
+pub fn copy_arith(n: U32) -> U32 { fnum(n) + fnum(n) }
+
+pub rt fn rt_copy_arith(n: U32) -> U32 { fnum(n) + fnum(n) }
+
+pub fn rest_copy(move b: Buf[F32]) -> Buf[F32] { mk_k(move b).b }
+
+pub rt fn rt_rest_copy(move b: Buf[F32]) -> Buf[F32] { mk_k(move b).b }
+
+pub fn alloc_receiver(n: U32) -> U32 uses {Alloc} { mk(n).len() }
+
+pub fn alloc_take_out(move b: Buf[F32]) -> Buf[F32] uses {Alloc} { mk_h(move b).b }

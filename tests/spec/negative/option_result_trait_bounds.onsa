@@ -172,7 +172,7 @@ pub fn all_of_nested(o: Option[Option[Bool]]) -> Option[Option[Bool]] {
   needs_show(b)
 }
 
-pub fn eq_of_a_parameter_with_the_bound[A: Eq](a: Option[A], b: Option[A]) -> Bool {
+pub fn eq_of_a_parameter_with_the_bound[A: Eq](a: Option[A], b: Option[A]) -> Bool uses {Alloc} {
   needs_eq(a) == b
 }
 

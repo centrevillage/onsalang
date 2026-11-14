@@ -22,7 +22,7 @@
 // reports the growth that only a `test` starts. The `test` is not run (the mode of this case is
 // `check`).
 
-fn g[T](x: T, n: U32) -> U32 {
+fn g[T: Copy](x: T, n: U32) -> U32 {
   if n == 0 {
     return 0
   }
