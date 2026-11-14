@@ -1,0 +1,23 @@
+// onsa.toml
+// [package]
+// name = "provides_escaped_name_repeated"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// provides = [
+//   "\u0041lloc",
+//   "Alloc",                                   #~ E1103
+// ]
+//
+// [test]
+// spec = ["§15.3", "§8.2", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1103: the element is compared by its value as a TOML string: the escaped first is `Alloc` (no E1103), and the
+// second repeats it (§15.3 `provides`; S-831 A1, A3).
+
+pub fn f() -> I32 { 1 }

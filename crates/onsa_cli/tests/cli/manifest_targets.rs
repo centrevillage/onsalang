@@ -14,6 +14,8 @@
 //! - the report together: `check` stops on the error that every command reports (here an E1103) and
 //!   `build --target t` adds the E0200 of the target `t` to it, in one run (S-827, §18.1 "`--target` を取る
 //!   コマンドは…まとめて報告する"); both end with exit code 2;
+//! - an element of `provides` outside the table of §8.2 or repeated is an E1103 of every command, and
+//!   the build adds the E0200 of the elements of the table only (S-831);
 //! - the E0200 of another target is not reported by the build of `t`, and the default values build;
 //! - `onsa explain E0200` names the values of the manifest this version does not support (§15.3 "診断の
 //!   文面と `onsa explain E0200` で示す").
@@ -209,6 +211,44 @@ platform = \"host\"
         out.stdout,
         out.stderr
     );
+}
+
+/// §15.3 (`provides`), §18.1, S-831 A3 and A4, S-827: an element of `provides` outside the table of
+/// §8.2 (`"Allc"`) and a repeated name of the table (the second `"Fs"`) are E1103 of `check`, `test`
+/// and `build` alike (exit code 2). The build of `t` adds the E0200 of each `"Fs"`, the repeated one
+/// too, and none at `"Allc"`.
+#[test]
+fn an_element_of_provides_outside_the_table_or_repeated_is_an_e1103_of_every_command() {
+    let manifest = "[package]
+name = \"demo\"
+edition = \"2026\"
+
+[targets.t]
+kind = \"source\"
+lang = \"c\"
+platform = \"host\"
+provides = [
+  \"Allc\",
+  \"Fs\",
+  \"Alloc\",
+  \"Fs\",
+]
+";
+    let d = package("targets_provides_names", manifest);
+    let (allc, fs) = (line_of(manifest, "Allc"), line_of(manifest, "\"Fs\""));
+    let repeated = line_of(manifest, "\"Alloc\"") + 1;
+    let e1103 = vec![at("E1103", allc), at("E1103", repeated)];
+    for command in ["check", "test"] {
+        let out = run(d.root(), &[command, &d.arg()]);
+        assert_eq!(out.code, 2, "{command}: {}{}", out.stdout, out.stderr);
+        assert_eq!(text_diagnostics(&out), e1103, "{command}: {}{}", out.stdout, out.stderr);
+    }
+    let out = run(d.root(), &["build", "--target", "t", &d.arg()]);
+    assert_eq!(out.code, 2, "{}{}", out.stdout, out.stderr);
+    let mut want = vec![at("E0200", fs), at("E0200", repeated)];
+    want.extend(e1103);
+    want.sort();
+    assert_eq!(text_diagnostics(&out), want, "build: {}{}", out.stdout, out.stderr);
 }
 
 /// The lines of the text of `explain` that start a list item and hold `word`.

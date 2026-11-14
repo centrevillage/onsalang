@@ -1,0 +1,21 @@
+// onsa.toml
+// [package]
+// name = "provides_not_effect_type_name"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// provides = ["I32"]                           #~ E1103
+//
+// [test]
+// spec = ["§15.3", "§8.2", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1103: `I32` is the name of a type, so it is not a name of the table of §8.2: an E1103 of every command at the element, the list of
+// the table in a note and no candidate, and no E0200 of the build beside it (§15.3 `provides`, §18.1; S-831 A1, A4,
+// S-608).
+
+pub fn f() -> I32 { 1 }

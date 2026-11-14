@@ -1,0 +1,23 @@
+// onsa.toml
+// [package]
+// name = "provides_user_effect_named"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// provides = ["Allc"]                          #~ E1103
+//
+// [test]
+// spec = ["§15.3", "§8.2", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1103: the package declares an effect `Allc`, but `provides` names the effects of the table of §8.2 only, not one
+// a package declares; the manifest stops every command before the sources are read (§15.3 `provides`, §18.1;
+// S-831 A1, S-608).
+
+pub effect Allc {}
+
+pub fn f() -> I32 { 1 }

@@ -347,11 +347,9 @@ impl<'s> Reader<'s> {
         let path = &got.path;
         let (message, notes) = match (rule, &got.value) {
             (Rule::OneOf(values, also), Typed::Str(v)) if !values.contains(&v.as_str()) => {
-                let list: Vec<String> = values.iter().map(|v| format!("`\"{v}\"`")).collect();
-                let mut notes = vec![format!("the values of `{path}` are {}", list.join(", "))];
-                notes.extend(also.map(str::to_string));
-                (format!("`\"{v}\"` is not a value of `{path}`"), notes)
+                not_one_of(v, path, values, also)
             }
+            (Rule::OneOf(values, also), Typed::Strs(es)) => return self.each_one_of(es, path, values, also),
             (Rule::PackageName, Typed::Str(v)) if v == STD_PACKAGE => (
                 format!("the package name cannot be `{STD_PACKAGE}`"),
                 vec![format!("`{STD_PACKAGE}` is the name of the embedded standard library (§15.3)")],
@@ -383,6 +381,27 @@ impl<'s> Reader<'s> {
         self.e1103(got.span.clone(), message, &notes);
     }
 
+    /// Each element of an array whose rule is a closed list (§15.3, S-831):
+    /// one outside the list is an E1103 as a string's; one of the list equal
+    /// to an earlier element is an E1103 at the later, with the place of the
+    /// first in a note (§4.5, S-830). One outside the list is not counted.
+    fn each_one_of(&self, es: &[Spanned<String>], path: &str, values: &[&str], also: Option<&str>) {
+        let mut first: BTreeMap<&str, &Range<usize>> = BTreeMap::new();
+        for e in es {
+            let v = e.value.as_str();
+            if !values.contains(&v) {
+                let (message, notes) = not_one_of(v, path, values, also);
+                self.e1103(e.span.clone(), message, &notes);
+            } else if let Some(&at) = first.get(v) {
+                let message = format!("`\"{v}\"` is already an element of `{path}`");
+                let d = Diagnostic::new(Stage::Manifest, Code::E1103, self.span(e.span.clone()), message);
+                self.push(d.with_note(self.span(at.clone()), format!("the first `\"{v}\"`")));
+            } else {
+                first.insert(v, &e.span);
+            }
+        }
+    }
+
     /// The E0200 of each value of `got` its row does not support, for the
     /// build of its target (S-154, S-824): at the value, an element, or the
     /// key of a table.
@@ -391,16 +410,13 @@ impl<'s> Reader<'s> {
         let at = |span: &Range<usize>, details: &[&str]| {
             self.report(true, feature.diagnostic(Stage::Manifest, self.span(span.clone()), details))
         };
+        // A value outside the closed list of the rule is an E1103 alone (S-827, S-831).
+        let unsupported =
+            |vs: &[&str], v: &str| !vs.contains(&v) && !matches!(row.rule, Rule::OneOf(all, _) if !all.contains(&v));
         match (values, &got.value) {
-            // A value outside the closed list of the rule is an E1103 alone (S-827).
-            (Unsupported::Except(vs), Typed::Str(v))
-                if !vs.contains(&v.as_str())
-                    && !matches!(row.rule, Rule::OneOf(all, _) if !all.contains(&v.as_str())) =>
-            {
-                at(&got.span, &[v])
-            }
+            (Unsupported::Except(vs), Typed::Str(v)) if unsupported(vs, v) => at(&got.span, &[v]),
             (Unsupported::Except(vs), Typed::Strs(es)) => {
-                es.iter().filter(|e| !vs.contains(&e.value.as_str())).for_each(|e| at(&e.span, &[&e.value]))
+                es.iter().filter(|e| unsupported(vs, &e.value)).for_each(|e| at(&e.span, &[&e.value]))
             }
             (Unsupported::True, Typed::Bool(true)) | (Unsupported::Any, Typed::Int(_)) => at(&got.span, &[]),
             (Unsupported::Any, Typed::Table(t, ..)) if !t.is_empty() => at(&got.key, &[]),
@@ -621,6 +637,15 @@ impl<'s> Reader<'s> {
     }
 }
 
+/// The E1103 of `v`, a value of `path` outside the closed list `values`:
+/// its message and its notes, the list and `also` (S-597).
+fn not_one_of(v: &str, path: &str, values: &[&str], also: Option<&str>) -> (String, Vec<String>) {
+    let list: Vec<String> = values.iter().map(|v| format!("`\"{v}\"`")).collect();
+    let mut notes = vec![format!("the values of `{path}` are {}", list.join(", "))];
+    notes.extend(also.map(str::to_string));
+    (format!("`\"{v}\"` is not a value of `{path}`"), notes)
+}
+
 /// `major.minor.patch` (§14.3): three numbers of ASCII digits joined by `.`.
 // SPEC-GAP(S-842): §14.3 does not say whether a number may have a leading `0`
 // or how many digits it may have: any digits are a number here.
@@ -816,6 +841,7 @@ mod tests {
                 last = Some(h);
             }
             let value = match (r.shape, r.rule) {
+                (Shape::Strs, Rule::OneOf(values, _)) => format!("[\"{}\"]", values.join("\", \"")),
                 (_, Rule::OneOf(values, _)) => format!("\"{}\"", values[values.len() - 1]),
                 (_, Rule::Prefix) => "\"x_\"".into(),
                 (_, Rule::Version) => "\"1.0.0\"".into(),
@@ -1122,16 +1148,65 @@ mod tests {
                     main_frame = \"stack\"\n[targets.d.memory]\nbulk = false\n[targets.d.bind]\n\
                     [targets.e]\nkind = \"dll\"\nplatform = \"host\"\nfp = \"ftz\"\nprovides = [1]\nmain_frame = 2\n\
                     memory = { bulk = \"y\", fast_budget = \"z\" }\n";
-        let t = ["\"exe\"", "\"js\"", "\"strict-ftz\"", "\"Fs\"", "\"Io\"", "\"static\"", "true", "0", "-1", "bind"];
+        // `"Io"` is not an effect of §8.2: an E1103 only (S-831 A4).
+        let t = ["\"exe\"", "\"js\"", "\"strict-ftz\"", "\"Fs\"", "\"static\"", "true", "0", "-1", "bind"];
         assert_eq!(built(text, "t"), t.map(|v| (Code::E0200, v)));
         assert_eq!(built(text, "u"), [(Code::E0200, "\"clap\""), (Code::E0200, "bind")]);
         assert_eq!(built(text, "d"), []);
         assert_eq!(built(text, "e"), []);
-        let check = ["-1", "\"dll\"", "\"ftz\"", "1", "2", "\"y\"", "\"z\""];
+        let check = ["\"Io\"", "-1", "\"dll\"", "\"ftz\"", "1", "2", "\"y\"", "\"z\""];
         assert_eq!(diagnostics(text, ManifestForm::File), check.map(|v| (Code::E1103, v)));
         let r = read_as(text, ManifestForm::File);
         let fs = r.manifest.targets["t"].value.build_diagnostics.iter().find(|d| d.message.contains("Fs"));
         assert_eq!(fs.unwrap().message, "this version does not support `provides` other than `Alloc` (`Fs`)");
+    }
+
+    /// S-831, S-608, S-830: an element of `provides` is a name of the table
+    /// of §8.2, compared as the TOML string (case, blanks, no path); another
+    /// is an E1103 of the check at the element, with the list in a note, no
+    /// candidate and no E0200. A name of the table equal to an earlier one is
+    /// an E1103 at the later with the first in a note; a name outside the
+    /// table and an element not a string are not counted. The build gives
+    /// each element of the table it does not support its E0200, a repeated
+    /// one too (A3).
+    #[test]
+    fn an_element_of_provides_is_an_effect_of_the_table_once() {
+        let text = "[package]\nname = \"a\"\nedition = \"2026\"\n\
+                    [targets.t]\nkind = \"source\"\nlang = \"c\"\nplatform = \"host\"\nprovides = [\"Allc\", \"alloc\", \
+                    \"Net\", \"I32\", \"std.core.Alloc\", \" Alloc\", \"Alloc\", 1, \"Alloc\", \"Fs\", \"Allc\", \"Fs\"]\n\
+                    [targets.u]\nkind = \"source\"\nlang = \"c\"\nplatform = \"host\"\n\
+                    provides = [\"Fs\", \"Stdout\", \"Stdin\", \"Clock\", \"Random\", \"Log\", \"Alloc\", \"Block\"]\n";
+        let check = [
+            "\"Allc\"",
+            "\"alloc\"",
+            "\"Net\"",
+            "\"I32\"",
+            "\"std.core.Alloc\"",
+            "\" Alloc\"",
+            "1",
+            "\"Alloc\"",
+            "\"Allc\"",
+            "\"Fs\"",
+        ];
+        assert_eq!(diagnostics(text, ManifestForm::File), check.map(|v| (Code::E1103, v)));
+        assert_eq!(built(text, "t"), [(Code::E0200, "\"Fs\""), (Code::E0200, "\"Fs\"")]);
+        let u = ["\"Fs\"", "\"Stdout\"", "\"Stdin\"", "\"Clock\"", "\"Random\"", "\"Log\"", "\"Block\""];
+        assert_eq!(built(text, "u"), u.map(|v| (Code::E0200, v)));
+        let r = read_as(text, ManifestForm::File);
+        assert!(r.diagnostics.iter().all(|d| d.fixes.is_empty()));
+        let at = |d: &Diagnostic| &text[d.span.start as usize..d.span.end as usize];
+        let outside = r.diagnostics.iter().find(|d| at(d) == "\"Net\"").unwrap();
+        assert_eq!(outside.message, "`\"Net\"` is not a value of `targets.t.provides`");
+        let list = "the values of `targets.t.provides` are `\"Fs\"`, `\"Stdout\"`, `\"Stdin\"`, `\"Clock\"`, \
+                    `\"Random\"`, `\"Log\"`, `\"Alloc\"`, `\"Block\"`";
+        assert_eq!(outside.notes[0].message, list);
+        // The later of each repeated name, with the place of the first in its note.
+        let repeated: Vec<_> = r.diagnostics.iter().filter(|d| d.message.contains("already")).collect();
+        let notes: Vec<(&str, usize)> =
+            repeated.iter().map(|d| (at(d), d.notes[0].span.unwrap().start as usize)).collect();
+        let firsts = [text.find("\"Alloc\", 1").unwrap(), text.find("\"Fs\", \"Allc\"").unwrap()];
+        assert_eq!(notes, [("\"Alloc\"", firsts[0]), ("\"Fs\"", firsts[1])]);
+        assert_eq!(repeated[0].message, "`\"Alloc\"` is already an element of `targets.t.provides`");
     }
 
     /// R-47, §15.3, §18.1: `platform` is required in the build of a target

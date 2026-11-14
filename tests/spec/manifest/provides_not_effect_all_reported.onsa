@@ -1,0 +1,27 @@
+// onsa.toml
+// [package]
+// name = "provides_not_effect_all_reported"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// provides = [
+//   "Alloc",
+//   "Allc",                                    #~ E1103
+//   "Heap",                                    #~ E1103
+//   "Alloc ",                                  #~ E1103
+//   "Fs",
+//   "FS",                                      #~ E1103
+// ]
+//
+// [test]
+// spec = ["§15.3", "§8.2", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1103: the manifest is one unit and every element outside the table of §8.2 is reported, each at its line; the
+// names of the table beside them are not (§15.3 `provides`, §18.1 "全ての誤りを報告する"; S-831, S-608).
+
+pub fn f() -> I32 { 1 }

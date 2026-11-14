@@ -1,0 +1,24 @@
+// onsa.toml
+// [package]
+// name = "provides_repeated_three_times"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// provides = [
+//   "Clock",
+//   "Clock",                                   #~ E1103
+//   "Clock",                                   #~ E1103
+// ]
+//
+// [test]
+// spec = ["§15.3", "§8.2", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1103: each element after the first of the same name is one E1103, the first in its note (§15.3 `provides`;
+// S-830, S-831 A3 "二つ目以降の各要素").
+
+pub fn f() -> I32 { 1 }

@@ -1,0 +1,24 @@
+// onsa.toml
+// [package]
+// name = "provides_repeated_after_other"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// provides = [
+//   "Fs",
+//   "Alloc",
+//   "Fs",                                      #~ E1103
+// ]
+//
+// [test]
+// spec = ["§15.3", "§8.2", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1103: `"Fs"` repeats an element that is not the one before it: an E1103 at the later only (§15.3 `provides`;
+// S-830, S-831 A3).
+
+pub fn f() -> I32 { 1 }

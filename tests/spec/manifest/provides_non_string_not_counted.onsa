@@ -1,0 +1,24 @@
+// onsa.toml
+// [package]
+// name = "provides_non_string_not_counted"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// provides = [
+//   "Alloc",
+//   1,                                         #~ E1103
+//   "Alloc",                                   #~ E1103
+// ]
+//
+// [test]
+// spec = ["§15.3", "§8.2", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1103: `1` is not a string (the E1103 of the type of an element), and is not counted for a repetition; the
+// second `"Alloc"` repeats the first across it (§15.3 `provides`, §18.1; S-99, S-830, S-831 A3).
+
+pub fn f() -> I32 { 1 }

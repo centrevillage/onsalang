@@ -1,0 +1,26 @@
+// onsa.toml
+// [package]
+// name = "provides_same_name_two_targets_ok"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// provides = ["Alloc"]
+//
+// [targets.u]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// provides = ["Alloc"]
+//
+// [test]
+// spec = ["§15.3", "§8.2", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// No diagnostic: a repetition is counted in one array; `"Alloc"` of `t` and of `u` are not one (§15.3
+// `provides`; S-831 A3 "同じ配列の中で").
+
+pub fn f() -> I32 { 1 }

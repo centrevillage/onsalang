@@ -1,0 +1,23 @@
+// onsa.toml
+// [package]
+// name = "provides_repeated"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// provides = [
+//   "Alloc",
+//   "Alloc",                                   #~ E1103
+// ]
+//
+// [test]
+// spec = ["§15.3", "§8.2", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// E1103: the second `"Alloc"` repeats the first: an E1103 at the later element, the first in a note, no candidate
+// (§15.3 `provides`, §4.5 the form of a repetition; S-830, S-831 A3).
+
+pub fn f() -> I32 { 1 }

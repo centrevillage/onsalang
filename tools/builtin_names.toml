@@ -64,6 +64,13 @@
 
 [allow."crates/onsa_driver/src/manifest/table.rs"]
 "Alloc" = 1
+"Block" = 1
+"Clock" = 1
+"Fs" = 1
+"Log" = 1
+"Random" = 1
+"Stdin" = 1
+"Stdout" = 1
 
 [allow."crates/onsa_sema/src/body/removed.rs"]
 "len" = 1

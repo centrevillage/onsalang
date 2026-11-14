@@ -1,0 +1,29 @@
+// onsa.toml
+// [package]
+// name = "provides_every_effect_ok"
+// edition = "2026"
+//
+// [targets.t]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// provides = [
+//   "Fs",                                      #~ E0200 [t]
+//   "Stdout",                                  #~ E0200 [t]
+//   "Stdin",                                   #~ E0200 [t]
+//   "Clock",                                   #~ E0200 [t]
+//   "Random",                                  #~ E0200 [t]
+//   "Log",                                     #~ E0200 [t]
+//   "Alloc",
+//   "Block",                                   #~ E0200 [t]
+// ]
+//
+// [test]
+// spec = ["§15.3", "§8.2", "§18.1"]
+// mode = "check"
+// fixes = 0
+
+// The eight names of the table of §8.2, each once: no E1103, and `check` is not stopped; the build of `t` gives each
+// one this version does not provide its E0200 (§15.3 `provides`; S-831 A2, S-824).
+
+pub fn f() -> I32 { 1 }

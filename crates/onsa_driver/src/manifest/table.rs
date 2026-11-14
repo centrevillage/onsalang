@@ -92,7 +92,9 @@ pub enum Read {
 pub enum Rule {
     Any,
     /// One of a closed list (the list is the note, S-597), with a note for
-    /// every value outside it.
+    /// every value outside it. In an array of strings, each element, and an
+    /// element of the list equal to an earlier one is an E1103 at the later
+    /// (§15.3, S-830); one outside the list is not counted.
     OneOf(&'static [&'static str], Option<&'static str>),
     /// A `snake_case` identifier other than `std` (§15.3, S-628).
     PackageName,
@@ -192,6 +194,12 @@ use Unsupported::{Any, Except};
 /// The effect of `provides` that gives the heap (§15.3).
 pub const ALLOC: &str = "Alloc";
 
+/// The values of `provides`: the standard effects, every effect std declares,
+/// in the order of the table of §8.2 (S-831 A5: the one list, which a test
+/// checks against the declarations of std).
+pub const EFFECTS: &[&str] = &["Fs", "Stdout", "Stdin", "Clock", "Random", "Log", ALLOC, "Block"];
+const EFFECTS_NOTE: &str = "`provides` names the standard effects (§8.2), not an effect a package declares";
+
 /// The values of `panic` (§9.2), those of the modes of the C backend.
 pub const PANIC: &[&str] = &onsa_backend_c::PanicMode::NAMES;
 
@@ -231,7 +239,9 @@ pub static ROWS: &[Row] = &[
     row(Table::Target, "fp", Field::Fp, Str, Yes)
         .with(OneOf(&["strict", "strict-ftz"], Some(FP_NOTE)))
         .unsupported(Except(&["strict"]), Feature::ManifestFp),
-    row(Table::Target, "provides", Field::Provides, Strs, Yes).unsupported(Except(&[ALLOC]), Feature::ManifestProvides),
+    row(Table::Target, "provides", Field::Provides, Strs, Yes)
+        .with(OneOf(EFFECTS, Some(EFFECTS_NOTE)))
+        .unsupported(Except(&[ALLOC]), Feature::ManifestProvides),
     row(Table::Target, "panic", Field::Panic, Str, Yes).with(OneOf(PANIC, None)),
     row(Table::Target, "panic_messages", Field::PanicMessages, Bool, Yes),
     row(Table::Target, "main_frame", Field::MainFrame, Str, Yes)
@@ -324,5 +334,38 @@ pub fn keys_note(table: Table, path: &str) -> String {
     match table {
         Table::Root => format!("the tables of the manifest are {}", keys.join(", ")),
         _ => format!("the keys of `{path}` are {}", keys.join(", ")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use onsa_diag::SourceMap;
+    use onsa_sema::DefKind;
+    use onsa_sema::def::Declared;
+    use onsa_syntax::ast::Vis;
+
+    use super::{ALLOC, EFFECTS};
+
+    /// S-831 A5: the names of `provides` are those of the effects std
+    /// declares, each `pub`, and the list names each once.
+    #[test]
+    fn the_effects_of_provides_are_the_effects_std_declares() {
+        let mut sources = SourceMap::default();
+        let std = crate::std_package(&mut sources);
+        let analysis = onsa_sema::analyze(&onsa_sema::Package::new("user", Vec::new(), vec![std]));
+        let effect = |k: &DefKind| matches!(k, DefKind::Effect { .. } | DefKind::Unsupported(Declared::Effect));
+        let declared = analysis.defs.iter().filter(|d| analysis.modules.pkg_of(d.module) == 0 && effect(&d.kind));
+        let mut names: Vec<&str> = Vec::new();
+        for d in declared {
+            assert_eq!(d.vis, Vis::Pub, "std's effect `{}`", d.name);
+            names.push(&d.name);
+        }
+        let mut listed = EFFECTS.to_vec();
+        listed.sort_unstable();
+        listed.dedup();
+        assert_eq!(listed.len(), EFFECTS.len(), "a name twice in {EFFECTS:?}");
+        names.sort_unstable();
+        assert_eq!(names, listed);
+        assert!(EFFECTS.contains(&ALLOC));
     }
 }
