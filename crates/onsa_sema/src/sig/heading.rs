@@ -160,7 +160,7 @@ impl<'p> Sema<'p> {
         for d in errors {
             self.report(cx.def, d);
         }
-        if let Some(row) = row.filter(|_| rt && set.alloc) {
+        if let Some(row) = row.filter(|_| rt && self.a.uses_alloc(&set)) {
             let msg = "`rt fn` cannot have `Alloc` in its effect row (§10)";
             self.report(cx.def, Diagnostic::new(Stage::Effects, Code::E0902, row.span, msg));
         }
@@ -250,21 +250,24 @@ pub(crate) fn read_effects(
             read.push((Err(d), p));
         }
         match named {
-            Ok((_, Some(Entity::Def(d)))) if Some(d) == a.alloc => set.alloc = true,
             Ok((_, Some(Entity::Def(d))))
-                if matches!(a.def(d).kind, DefKind::Effect { .. }) && a.modules.is_std(from) =>
+                if Some(d) == a.alloc || matches!(a.def(d).kind, DefKind::Effect { .. }) && a.modules.is_std(from) =>
             {
-                set.other.push(n.name.clone());
+                set.insert(d);
             }
-            // Another effect (of a user's `effect`, S-719, E0200); or a name
-            // that is no effect (`uses {I32}`, `uses {T}`). With both in a
-            // unit, the first by its place is reported (§18.1, S-731).
-            Ok((kind, _)) => {
+            // Another effect (of a user's `effect`, S-719, E0200), kept by
+            // its declaration; or a name that is no effect (`uses {I32}`,
+            // `uses {T}`), kept by name. With both in a unit, the first by its
+            // place is reported (§18.1, S-731).
+            Ok((kind, entity)) => {
                 errors.push(match kind {
                     NameKind::Effect => Feature::Effects.diagnostic(Stage::Names, n.span, &[&n.name]),
                     kind => kind_error(p, kind, "an effect", p.span),
                 });
-                set.other.push(n.name.clone());
+                match (kind, entity) {
+                    (NameKind::Effect, Some(Entity::Def(d))) => set.insert(d),
+                    _ => set.not_effects.push(n.name.clone()),
+                }
             }
             Err(e) if a.unread_path(def, from, p, &e) => {}
             Err(e) => {

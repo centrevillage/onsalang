@@ -388,10 +388,13 @@ fn check_exports(analyzed: &Analyzed, settings: &TargetSettings) -> Vec<Diagnost
             );
             Diagnostic::new(Stage::Build, Code::E0610, a.def(d).name_span, msg)
         };
-        if f.effects.alloc && !settings.provides_alloc {
-            out.push(error("`Alloc`"));
+        // Each effect of the row the target does not provide, in its order.
+        for &e in f.effects.effects() {
+            if a.alloc != Some(e) || !settings.provides_alloc {
+                out.push(error(&format!("`{}`", a.def(e).name)));
+            }
         }
-        out.extend(f.effects.other.iter().map(|e| error(&format!("`{e}`"))));
+        out.extend(f.effects.not_effects.iter().map(|e| error(&format!("`{e}`"))));
     }
     out
 }

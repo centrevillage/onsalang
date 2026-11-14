@@ -273,7 +273,7 @@ fn the_members_of_the_lists_are_declared() {
         let d = member(&a, &[Bound::Ordinal], name).expect(name);
         let f = a.def(d).as_fn().expect(name);
         assert_eq!(f.derived, Some(row(name).made), "{name}");
-        assert_eq!((f.self_mode, f.rt, f.effects.alloc), (row(name).recv, true, false), "{name}");
+        assert_eq!((f.self_mode, f.rt, a.uses_alloc(&f.effects)), (row(name).recv, true, false), "{name}");
     }
     for &i in &TRAIT_ITEMS {
         assert_eq!(i.made.item(), &i, "the rows are in the order of `DerivedFn`");

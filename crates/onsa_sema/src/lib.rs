@@ -305,6 +305,11 @@ impl Analysis {
         &self.defs[id.0 as usize]
     }
 
+    /// Whether the effect row `row` has `Alloc`, the lang item (D-08).
+    pub fn uses_alloc(&self, row: &ty::EffectSet) -> bool {
+        self.alloc.is_some_and(|d| row.has(d))
+    }
+
     /// The field `name` of the struct `d`, with its index, when `d` is a
     /// struct of named fields that declares it (§6.1): the first of that
     /// name, as every use of a field reads it (a pattern's reach asks for the

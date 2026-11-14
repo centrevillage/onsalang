@@ -534,13 +534,18 @@ impl<'p> Sema<'p> {
 
     #[allow(clippy::too_many_arguments)]
     fn fill_fn(&mut self, flow: DefId, params: Vec<ParamSig>, ret: TyId, rt: bool, alloc: bool, which: FlowFn) {
+        // With no std (unit tests), there is no `Alloc` to have.
+        let mut effects = EffectSet::default();
+        if let (true, Some(d)) = (alloc, self.a.alloc) {
+            effects.insert(d);
+        }
         let f = FnDef {
             generics: Vec::new(),
             self_mode: None,
             params,
             ret,
             rt,
-            effects: EffectSet { alloc, ..Default::default() },
+            effects,
             body: None,
             target: false,
             flow_fn: Some(which),

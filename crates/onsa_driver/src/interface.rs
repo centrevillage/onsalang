@@ -334,14 +334,9 @@ impl Builder<'_> {
             ty: self.ty(p.ty, generics),
         }));
         let ret = self.ty(f.ret, generics);
-        let mut effects = Vec::new();
-        if f.effects.alloc {
-            effects.push("Alloc".to_string());
-        }
-        effects.extend(f.effects.other.iter().cloned());
-        effects.extend(
-            f.effects.vars.iter().map(|&v| generics.get(v as usize).map(|g| g.name.clone()).unwrap_or_default()),
-        );
+        let effects = f.effects.names(&|d| self.display_name(d), &|v| {
+            generics.get(v as usize).map(|g| g.name.clone()).unwrap_or_default()
+        });
         let own_generics = self.generics(&generics[of_impl.min(generics.len())..]);
         // A member of a trait's `impl` has no word (§15.1).
         let of_trait = def.owner.and_then(|o| self.a.def(o).as_impl()).is_some_and(|i| i.of.is_some());

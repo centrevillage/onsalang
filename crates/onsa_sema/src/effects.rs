@@ -18,7 +18,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
     for id in a.new_defs() {
         let def = a.def(id);
         let DefKind::Fn(f) = &def.kind else { continue };
-        if f.rt || f.effects.alloc || f.body.is_none() || !a.body_checked(id, Stage::Effects) {
+        if f.rt || a.uses_alloc(&f.effects) || f.body.is_none() || !a.body_checked(id, Stage::Effects) {
             continue;
         }
         let _scope = onsa_diag::internal::item_scope(def.span);
@@ -46,7 +46,7 @@ fn first_use(pkg: &Package, a: &Analysis, id: DefId) -> Option<Diagnostic> {
         match t {
             Target::Fn { def: callee_def, .. } | Target::Method { def: callee_def, .. } => {
                 if let DefKind::Fn(cf) = &a.def(*callee_def).kind
-                    && cf.effects.alloc
+                    && a.uses_alloc(&cf.effects)
                 {
                     uses.push((expr.span, format!("calls `{}`, which has `uses {{Alloc}}`", a.def(*callee_def).name)));
                 }
@@ -54,7 +54,7 @@ fn first_use(pkg: &Package, a: &Analysis, id: DefId) -> Option<Diagnostic> {
             Target::Value => {
                 if let Some(t) = body.expr_types.get(callee)
                     && let Ty::Fn(f) = a.types.get(*t)
-                    && f.effects.alloc
+                    && a.uses_alloc(&f.effects)
                 {
                     uses.push((expr.span, "calls a function value whose type has `uses {Alloc}`".into()));
                 }

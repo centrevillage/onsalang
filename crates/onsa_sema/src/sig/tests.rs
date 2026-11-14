@@ -100,7 +100,7 @@ fn flow_namespace_items() {
     let names: Vec<&str> = echo.members.iter().map(|(n, _)| n.as_str()).collect();
     assert!(names.contains(&"process_inplace") && !names.contains(&"params_default"));
     let render = echo.members.iter().find(|(n, _)| n == "render").map(|(_, d)| a.def(*d).as_fn().unwrap()).unwrap();
-    assert!(render.effects.alloc);
+    assert!(a.uses_alloc(&render.effects));
     assert_eq!(
         render.params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(),
         vec!["cfg", "params", "x", "sample_rate"]

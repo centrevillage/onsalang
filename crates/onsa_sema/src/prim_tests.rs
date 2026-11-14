@@ -179,7 +179,7 @@ fn zeroed_and_the_len_of_a_str_instantiate_at_their_declarations() {
         let (def, f) = &decls[key];
         assert_eq!(a.prims[def].instantiate(&Scalar::of_use(&a, *def, &args).expect("closed")), Some(prim));
         // `zeroed` allocates (§12), `len` reads (§10).
-        assert_eq!((f.effects.alloc, f.rt), (key == "Buf.zeroed", key == "Str.len"), "`{key}`");
+        assert_eq!((a.uses_alloc(&f.effects), f.rt), (key == "Buf.zeroed", key == "Str.len"), "`{key}`");
     }
 }
 

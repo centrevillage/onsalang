@@ -205,20 +205,51 @@ pub struct FnTy {
     pub effects: EffectSet,
 }
 
-/// Effect row (§8). Phase 1 recognizes `Alloc`; other names are kept so that
-/// `std` can declare them (D-08) and user code gets E0200 when it names them.
+/// Effect row (§8): the effects by the ids of their declarations (R-83 (2),
+/// D-08), which tell what each is (the lang item `Alloc` is
+/// `Analysis::alloc`, `Analysis::uses_alloc`; whether one is `blocking` is
+/// its declaration's, `Analysis::def`), and its effect row variables.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EffectSet {
-    pub alloc: bool,
-    /// Effects other than `Alloc`, by name (unsupported in phase 1).
-    pub other: Vec<String>,
+    /// A set, in the order of the declarations (of their ids), which is the
+    /// order a row is shown in.
+    effects: Vec<DefId>,
+    /// The names written that name no effect (`uses {I32}`, an E0308), as
+    /// written: the row keeps them, shown and compared by name, as no effect
+    /// of an open row (a name not found is left out, S-691).
+    pub not_effects: Vec<String>,
     /// Effect-row variables (`e`), as generic parameter indices.
     pub vars: Vec<u32>,
 }
 
 impl EffectSet {
+    /// The effects of the row, in the order of their declarations.
+    pub fn effects(&self) -> &[DefId] {
+        &self.effects
+    }
+
+    /// Whether the row has the effect declared by `d`.
+    pub fn has(&self, d: DefId) -> bool {
+        self.effects.binary_search(&d).is_ok()
+    }
+
+    /// Add the effect declared by `d` (once: a set).
+    pub fn insert(&mut self, d: DefId) {
+        if let Err(i) = self.effects.binary_search(&d) {
+            self.effects.insert(i, d);
+        }
+    }
+
+    /// Add what `other` has and the row has not, its variables not counted
+    /// (the join of two branches, §4.7).
+    pub fn union(&mut self, other: &EffectSet) {
+        other.effects.iter().for_each(|&d| self.insert(d));
+        let new: Vec<String> = other.not_effects.iter().filter(|x| !self.not_effects.contains(x)).cloned().collect();
+        self.not_effects.extend(new);
+    }
+
     pub fn is_empty(&self) -> bool {
-        !self.alloc && self.other.is_empty() && self.vars.is_empty()
+        !self.has_effects() && self.vars.is_empty()
     }
 
     /// Whether the row has an effect row variable: no judgement of a use
@@ -229,13 +260,23 @@ impl EffectSet {
 
     /// Whether the row has an effect, its variables not counted (§8.1).
     pub fn has_effects(&self) -> bool {
-        self.alloc || !self.other.is_empty()
+        !self.effects.is_empty() || !self.not_effects.is_empty()
     }
 
     /// Whether each effect of the row is in `wider` (§8.1 rule 2), its
     /// variables not counted ([`EffectSet::is_open`]).
     pub fn within(&self, wider: &EffectSet) -> bool {
-        (!self.alloc || wider.alloc) && self.other.iter().all(|e| wider.other.contains(e))
+        self.effects.iter().all(|&d| wider.has(d)) && self.not_effects.iter().all(|e| wider.not_effects.contains(e))
+    }
+
+    /// The names of the row, as shown (§8.1): the effects by `name_of`, in
+    /// the order of their declarations, then the names that name no effect,
+    /// then the variables by `var_name`.
+    pub fn names(&self, name_of: &dyn Fn(DefId) -> String, var_name: &dyn Fn(u32) -> String) -> Vec<String> {
+        let mut names: Vec<String> = self.effects.iter().map(|&d| name_of(d)).collect();
+        names.extend(self.not_effects.iter().cloned());
+        names.extend(self.vars.iter().map(|&v| var_name(v)));
+        names
     }
 }
 
@@ -698,13 +739,7 @@ impl Types {
                 let eff = if f.effects.is_empty() {
                     String::new()
                 } else {
-                    let mut names = Vec::new();
-                    if f.effects.alloc {
-                        names.push("Alloc".to_string());
-                    }
-                    names.extend(f.effects.other.iter().cloned());
-                    names.extend(f.effects.vars.iter().map(|&v| generic_name(v)));
-                    format!(" uses {{{}}}", names.join(", "))
+                    format!(" uses {{{}}}", f.effects.names(name_of, generic_name).join(", "))
                 };
                 format!("{rt}fn({ps}){ret}{eff}")
             }

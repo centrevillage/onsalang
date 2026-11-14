@@ -59,7 +59,6 @@
 
 [allow."crates/onsa_driver/src/interface.rs"]
 "ALIGN" = 1
-"Alloc" = 1
 "BULK_SIZE" = 1
 "SIZE" = 1
 
@@ -195,7 +194,6 @@
 "rem_euclid" = 1
 
 [allow."crates/onsa_sema/src/ty.rs"]
-"Alloc" = 1
 "Array" = 2
 "Bool" = 2
 "Buf" = 2

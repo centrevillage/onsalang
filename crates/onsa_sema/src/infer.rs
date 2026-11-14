@@ -354,8 +354,7 @@ impl Infer {
             (Ty::Var(_), Ty::Fn(_)) => b,
             (Ty::Fn(f), Ty::Fn(g)) if f.rt && !g.rt || !g.effects.within(&f.effects) => {
                 let mut effects = f.effects.clone();
-                effects.alloc |= g.effects.alloc;
-                effects.other.extend(g.effects.other.iter().filter(|x| !f.effects.other.contains(x)).cloned());
+                effects.union(&g.effects);
                 let rt = f.rt && g.rt;
                 types.intern(Ty::Fn(FnTy { rt, effects, ..f }))
             }

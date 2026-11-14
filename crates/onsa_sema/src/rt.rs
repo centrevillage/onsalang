@@ -156,7 +156,7 @@ fn body_rules(pkg: &Package, a: &Analysis, id: DefId) -> Option<Diagnostic> {
                 let callee_def = a.def(*def);
                 let DefKind::Fn(f) = &callee_def.kind else { continue };
                 if !f.rt {
-                    let why = if f.effects.alloc { " (it needs `Alloc`)" } else { "" };
+                    let why = if a.uses_alloc(&f.effects) { " (it needs `Alloc`)" } else { "" };
                     found.push(
                         Diagnostic::new(
                             Stage::Effects,
