@@ -201,7 +201,7 @@ fn body_rules(pkg: &Package, a: &Analysis, id: DefId) -> Option<Diagnostic> {
         }
     }
     // Drops (§12.2) whose destruction needs `Alloc`.
-    for d in alloc_drops(a, id) {
+    for (d, _) in alloc_drops(a, id) {
         let rt = "`rt` functions cannot allocate (§10, §12.2)";
         let (at, message, left) = match d {
             Drop::Local(l) => (

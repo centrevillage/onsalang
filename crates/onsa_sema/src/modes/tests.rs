@@ -3632,7 +3632,7 @@ pub fn of_t[T: ?Dup](move g: G[T]) -> Buf[F32] uses {Alloc} { g.a }
     );
     let rest = |n: &str| {
         use crate::drop_alloc::{Drop, alloc_drops};
-        let rests = alloc_drops(&a, def(&a, n)).filter_map(|d| match d {
+        let rests = alloc_drops(&a, def(&a, n)).into_iter().filter_map(|(d, _)| match d {
             Drop::Rest { at, root: crate::drop_alloc::Root::Local(l), .. } => Some((at, l.name.clone())),
             _ => None,
         });

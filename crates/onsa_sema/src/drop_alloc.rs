@@ -1,17 +1,16 @@
 //! Which drops of a body need `Alloc` (§12.2, R-83): the one test of a drop
 //! ([`needs_alloc`]) and the list of a body ([`alloc_drops`]), from the drop
-//! points the modes stage met (`BodyInfo::drops`, R-32). The rt stage
-//! (E0901) and the effects stage (the note of E0601) read the same list and
-//! only word it. Phase 2's drops that free nothing (`tasks/phase2.md`) are
-//! conditions of [`needs_alloc`].
-
-use std::collections::BTreeSet;
+//! points the modes stage met (`BodyInfo::drops`, R-32). The record of the
+//! uses (`crate::uses`) and the rt stage (E0901) read the same list. Phase
+//! 2's drops that free nothing (`tasks/phase2.md`) are conditions of
+//! [`needs_alloc`].
 
 use onsa_diag::Span;
+use onsa_diag::hash::HashMap;
 use onsa_diag::internal::bug;
 use onsa_syntax::ast::{Ast, ExprId};
 
-use crate::body::{Dropped, LocalId, LocalInfo, generics_of};
+use crate::body::{Dropped, LocalId, LocalInfo, Unbound, generics_of};
 use crate::kind::params_in_body;
 use crate::modes::Proj;
 use crate::summary::{Facts, Read, any};
@@ -51,6 +50,33 @@ pub(crate) enum Root<'b> {
     Value(ExprId),
 }
 
+impl Drop<'_> {
+    /// Where the value is written (S-783): the declaration of a local, the
+    /// expression that takes out, the pattern that binds to no name, the
+    /// expression of the value or of the place.
+    pub(crate) fn at(&self, ast: &Ast) -> Span {
+        match self {
+            Drop::Local(l) => l.span,
+            Drop::Rest { at, .. } | Drop::Discard { at, .. } => *at,
+            Drop::Value { value: e, .. }
+            | Drop::Temp { value: e, .. }
+            | Drop::Overwrite { target: e, .. }
+            | Drop::IterRest { iter: e, .. } => ast.expr(*e).span,
+        }
+    }
+}
+
+/// The value a drop point drops (S-783: one value, one use): an owned
+/// local, the value of an expression, what is left where a path is taken
+/// out (by where), what binds to no name.
+#[derive(PartialEq, Eq, Hash)]
+enum Of {
+    Local(LocalId),
+    Expr(ExprId),
+    Taken(Span),
+    Unbound(Unbound),
+}
+
 impl Root<'_> {
     /// Its name, or the value as written (`src` of its span).
     pub(crate) fn name(&self, ast: &Ast, src: impl Fn(Span) -> String) -> String {
@@ -64,7 +90,7 @@ impl Root<'_> {
 /// Whether the drop `d` needs `Alloc` (§12.2): the one test of a drop, by
 /// the facts of the body's type parameters in `frame` ([`Frame::body`]). A
 /// type that holds itself has no answer ([`crate::summary::Facts`]), so no use.
-fn needs_alloc(a: &Analysis, frame: &Frame, d: &Drop) -> bool {
+pub(crate) fn needs_alloc(a: &Analysis, frame: &Frame, d: &Drop) -> bool {
     let drops = |t| frame.read.of(t).drops.unwrap_or(false);
     match d {
         Drop::Local(l) => drops(l.ty),
@@ -76,50 +102,61 @@ fn needs_alloc(a: &Analysis, frame: &Frame, d: &Drop) -> bool {
     }
 }
 
-/// The drops of the body of `id` that need `Alloc`: the locals of its drop
-/// points (at the end of a scope and at an exit alike), each once in the
-/// order of the locals, then the others in the order the modes stage met
-/// them. A reader takes the earliest in the source by a stable sort, so this
-/// order breaks the ties.
-pub(crate) fn alloc_drops(a: &Analysis, id: DefId) -> impl Iterator<Item = Drop<'_>> {
+/// The values the body of `id` drops where it needs `Alloc`, each once with
+/// those of its drop points (`DropPoint::at`, in the order the modes stage
+/// met them; each tested, as the rest of a `for` needs it on an early exit
+/// alone), as the first of them tells it: the locals in the order of their
+/// ids, then the others in the order of their first points. A reader that
+/// takes the earliest in the source by a stable sort breaks the ties by
+/// this order.
+pub(crate) fn alloc_drops(a: &Analysis, id: DefId) -> Vec<(Drop<'_>, Vec<Span>)> {
     let body = &a.bodies[&id];
     let frame = Frame::body(a, params_in_body(a, &generics_of(a, id)));
     let local = |l: &LocalId| &body.locals[l.0 as usize];
-    let locals: BTreeSet<LocalId> = (body.drops.iter())
-        .filter_map(|d| match d.what {
-            Dropped::End(l) | Dropped::Exit(l) => Some(l),
-            _ => None,
-        })
-        .collect();
     let ty =
         |e: &ExprId, at| *body.expr_types.get(e).unwrap_or_else(|| bug(Some(at), "a drop of a value with no type"));
-    let others = body.drops.iter().filter_map(move |d| match &d.what {
-        Dropped::Rest(t) => {
-            let root = local(&t.root);
-            Some(Drop::Rest { at: d.at, path: &t.path, root: Root::Local(root), ty: root.ty })
+    let (mut values, mut index) = (Vec::new(), HashMap::default());
+    for d in &body.drops {
+        let (of, drop) = match &d.what {
+            Dropped::End(l) | Dropped::Exit(l) => (Of::Local(*l), Drop::Local(local(l))),
+            Dropped::Rest(t) => {
+                let root = local(&t.root);
+                (Of::Taken(d.at), Drop::Rest { at: d.at, path: &t.path, root: Root::Local(root), ty: root.ty })
+            }
+            Dropped::TempRest(t) => {
+                let rest = Drop::Rest { at: d.at, path: &t.path, root: Root::Value(t.root), ty: ty(&t.root, d.at) };
+                (Of::Taken(d.at), rest)
+            }
+            Dropped::Temp(e) => (Of::Expr(*e), Drop::Temp { value: *e, ty: ty(e, d.at) }),
+            Dropped::Overwrite(e) => (Of::Expr(*e), Drop::Overwrite { target: *e, ty: ty(e, d.at) }),
+            Dropped::Value(e) => (Of::Expr(*e), Drop::Value { value: *e, ty: ty(e, d.at), exit: d.at }),
+            &Dropped::IterRest { iter, early } => {
+                (Of::Expr(iter), Drop::IterRest { iter, ty: ty(&iter, d.at), exit: d.at, early })
+            }
+            Dropped::Discard(u) => {
+                let x = body.discards.get(u).unwrap_or_else(|| bug(Some(d.at), "a drop of a part with no type"));
+                (Of::Unbound(*u), Drop::Discard { at: x.at, tys: &x.tys })
+            }
+        };
+        if !needs_alloc(a, &frame, &drop) {
+            continue;
         }
-        Dropped::TempRest(t) => {
-            Some(Drop::Rest { at: d.at, path: &t.path, root: Root::Value(t.root), ty: ty(&t.root, d.at) })
-        }
-        Dropped::Temp(e) => Some(Drop::Temp { value: *e, ty: ty(e, d.at) }),
-        Dropped::Overwrite(e) => Some(Drop::Overwrite { target: *e, ty: ty(e, d.at) }),
-        Dropped::Value(e) => Some(Drop::Value { value: *e, ty: ty(e, d.at), exit: d.at }),
-        &Dropped::IterRest { iter, early } => Some(Drop::IterRest { iter, ty: ty(&iter, d.at), exit: d.at, early }),
-        Dropped::Discard(u) => {
-            let x = body.discards.get(u).unwrap_or_else(|| bug(Some(d.at), "a drop of a part with no type"));
-            Some(Drop::Discard { at: x.at, tys: &x.tys })
-        }
-        Dropped::End(_) | Dropped::Exit(_) => None,
-    });
-    let locals = locals.into_iter().map(move |l| Drop::Local(local(&l)));
-    locals.chain(others).filter(move |d| needs_alloc(a, &frame, d))
+        let local = if let Of::Local(l) = of { Some(l) } else { None };
+        let i = *index.entry(of).or_insert_with(|| {
+            values.push((local, drop, Vec::new()));
+            values.len() - 1
+        });
+        values[i].2.push(d.at);
+    }
+    values.sort_by_key(|(l, ..)| l.map_or((true, 0), |l| (false, l.0)));
+    values.into_iter().map(|(_, d, at)| (d, at)).collect()
 }
 
 /// A declaration a path goes through ([`rest_drops_alloc`]): the arguments
 /// of its use, written in the frame `outer`, and their facts in `read`.
 /// Each is found once, so a long path through arguments that grow reads no
 /// more than the types it writes (S-782).
-struct Frame<'f> {
+pub(crate) struct Frame<'f> {
     read: Read<'f>,
     args: &'f [TyId],
     outer: Option<&'f Frame<'f>>,
@@ -128,7 +165,7 @@ struct Frame<'f> {
 impl<'f> Frame<'f> {
     /// Of a type written where the type parameters have the facts `params`:
     /// in a body (a local, a value), or with none (an alias).
-    fn body(a: &'f Analysis, params: Vec<Facts>) -> Self {
+    pub(crate) fn body(a: &'f Analysis, params: Vec<Facts>) -> Self {
         Frame { read: Read::new(a, params), args: &[], outer: None }
     }
 }

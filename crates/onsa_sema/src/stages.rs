@@ -12,7 +12,7 @@ use onsa_diag::{Diagnostic, FileId, Stage};
 use onsa_syntax::ast::ItemId;
 use serde::{Deserialize, Serialize};
 
-use crate::{Analysis, DefId, Package, binding, body, effects, flatten, modes, names, rt};
+use crate::{Analysis, DefId, Package, binding, body, effects, flatten, modes, names, rt, uses};
 
 /// Check the bodies: names, types (a flow body's types and flow checks in
 /// one walk), the states of the bindings (no diagnostic), argument modes and moves, `rt` and effects (§18.1). Each stage
@@ -32,7 +32,10 @@ pub(crate) fn check_bodies(pkg: &Package, a: &mut Analysis) {
     timed(Phase::Modes, || modes::check_all(pkg, a));
     a.failures = Failures::of(pkg, a);
     timed(Phase::Rt, || rt::check_all(pkg, a));
-    timed(Phase::Effects, || effects::check_all(pkg, a));
+    timed(Phase::Effects, || {
+        let found = effects::check_all(pkg, a, &uses::records(pkg, a));
+        a.diagnostics.extend(found);
+    });
 }
 
 /// `f` in the phase `p` of the measurements (`onsa_diag::timing`).

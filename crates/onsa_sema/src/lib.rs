@@ -64,6 +64,9 @@ mod tests;
 mod unread;
 #[cfg(test)]
 mod unread_tests;
+mod uses;
+#[cfg(test)]
+mod uses_tests;
 mod walk;
 #[cfg(test)]
 mod walk_tests;

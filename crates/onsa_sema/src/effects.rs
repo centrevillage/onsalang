@@ -5,108 +5,40 @@
 //! from the runner (D-08), and `const` initializers from the compiler (§6.6).
 
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
-use onsa_syntax::ast::{ExprKind, ItemKind, Lit, StrSeg};
+use onsa_syntax::ast::ItemKind;
 
-use crate::body::Target;
 use crate::def::DefKind;
-use crate::drop_alloc::{Drop, alloc_drops};
-use crate::ty::Ty;
-use crate::{Analysis, DefId, Package, module_of_def};
+use crate::drop_alloc::Drop;
+use crate::uses::{Record, Use, What};
+use crate::{Analysis, Package, module_of_def};
 
-pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
+/// The E0601 of the bodies of `records` ([`crate::uses::records`]).
+pub(crate) fn check_all(pkg: &Package, a: &Analysis, records: &[Record]) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
-    for id in a.new_defs() {
-        let def = a.def(id);
+    for r in records {
+        let def = a.def(r.id);
         let DefKind::Fn(f) = &def.kind else { continue };
-        if f.rt || a.uses_alloc(&f.effects) || f.body.is_none() || !a.body_checked(id, Stage::Effects) {
+        if a.uses_alloc(&f.effects) {
             continue;
         }
         let _scope = onsa_diag::internal::item_scope(def.span);
-        if let Some(d) = first_use(pkg, a, id) {
+        if let Some(d) = first_use(pkg, a, r) {
             diags.push(d);
         }
     }
-    a.diagnostics.extend(diags);
+    diags
 }
 
-/// The earliest use of `Alloc` in the body of `id`, as an E0601 anchored at
+/// The earliest use of `Alloc` in the body of `r`, as an E0601 anchored at
 /// the signature (so the fix can insert the effect row) with a note at the use.
-fn first_use(pkg: &Package, a: &Analysis, id: DefId) -> Option<Diagnostic> {
-    let module = module_of_def(pkg, a, id)?;
+fn first_use(pkg: &Package, a: &Analysis, r: &Record) -> Option<Diagnostic> {
+    let module = module_of_def(pkg, a, r.id)?;
     let ast = &module.parsed.ast;
     let text = &module.text;
-    let body = &a.bodies[&id];
-    let def = a.def(id);
+    let def = a.def(r.id);
     let src = |span: Span| text[span.start as usize..span.end as usize].to_string();
-    let mut uses: Vec<(Span, String)> = Vec::new();
-
-    for (&e, t) in &body.targets {
-        let expr = ast.expr(e);
-        let ExprKind::Call { callee, .. } = &expr.kind else { continue };
-        match t {
-            Target::Fn { def: callee_def, .. } | Target::Method { def: callee_def, .. } => {
-                if let DefKind::Fn(cf) = &a.def(*callee_def).kind
-                    && a.uses_alloc(&cf.effects)
-                {
-                    uses.push((expr.span, format!("calls `{}`, which has `uses {{Alloc}}`", a.def(*callee_def).name)));
-                }
-            }
-            Target::Value => {
-                if let Some(t) = body.expr_types.get(callee)
-                    && let Ty::Fn(f) = a.types.get(*t)
-                    && a.uses_alloc(&f.effects)
-                {
-                    uses.push((expr.span, "calls a function value whose type has `uses {Alloc}`".into()));
-                }
-            }
-            _ => {}
-        }
-    }
-    // String interpolation builds a new `Str` (§2.4).
-    for &e in body.expr_types.keys() {
-        let expr = ast.expr(e);
-        if let ExprKind::Lit(Lit::Str(s)) = &expr.kind
-            && s.segments.iter().any(|seg| matches!(seg, StrSeg::Interp(_)))
-        {
-            uses.push((expr.span, "string interpolation creates a `Str`".into()));
-        }
-    }
-    // Drops (§12.2) whose destruction needs `Alloc`.
-    for d in alloc_drops(a, id) {
-        uses.push(match d {
-            Drop::Local(l) => {
-                (l.span, format!("`{}` owns a `{}`, whose destruction needs `Alloc`", l.name, a.display_type(l.ty)))
-            }
-            Drop::Rest { at, root, .. } => {
-                let of = root.name(ast, src);
-                (at, format!("taking `{}` out of `{of}` drops the rest of it, which needs `Alloc`", src(at)))
-            }
-            Drop::Temp { value, .. } => {
-                let at = ast.expr(value).span;
-                (at, format!("`{}` is dropped after it is used, which needs `Alloc`", src(at)))
-            }
-            Drop::Value { value, .. } => {
-                let at = ast.expr(value).span;
-                (at, format!("`{}` is dropped by an exit before it is consumed, which needs `Alloc`", src(at)))
-            }
-            Drop::Overwrite { target, .. } => {
-                let at = ast.expr(target).span;
-                (at, format!("assigning `{}` drops the value it held, which needs `Alloc`", src(at)))
-            }
-            Drop::IterRest { iter, early, .. } => {
-                let (at, what) = (
-                    ast.expr(iter).span,
-                    if early { "what it has not iterated and its container" } else { "its container" },
-                );
-                (at, format!("the `for` that consumes `{}` drops {what} when it is left, which needs `Alloc`", src(at)))
-            }
-            Drop::Discard { at, .. } => {
-                (at, format!("what `{}` binds to no name is dropped, which needs `Alloc`", src(at)))
-            }
-        });
-    }
-    uses.sort_by_key(|(s, _)| s.start);
-    let (at, why) = uses.into_iter().next()?;
+    let u = r.uses.iter().find(|u| u.needs_alloc(a))?;
+    let (at, why) = (u.at, describe(a, ast, &src, u));
 
     // Anchor: the signature, from the name to just before the body, so that
     // `fixes` can append the effect row (§18.1).
@@ -134,4 +66,30 @@ fn first_use(pkg: &Package, a: &Analysis, id: DefId) -> Option<Diagnostic> {
         .with_fix(Fix::insert("add `uses {Alloc}`", sig.file, sig.end, " uses {Alloc}"))
         .with_note(at, why),
     )
+}
+
+/// What the use `u` does that needs `Alloc`, as the note says it.
+fn describe(a: &Analysis, ast: &onsa_syntax::ast::Ast, src: &dyn Fn(Span) -> String, u: &Use) -> String {
+    let at = src(u.at);
+    match &u.what {
+        What::Call { callee } => format!("calls `{}`, which has `uses {{Alloc}}`", a.def(*callee).name),
+        What::ValueCall => "calls a function value whose type has `uses {Alloc}`".into(),
+        What::Interp => "string interpolation creates a `Str`".into(),
+        What::Drop { drop, .. } => match drop {
+            Drop::Local(l) => {
+                format!("`{}` owns a `{}`, whose destruction needs `Alloc`", l.name, a.display_type(l.ty))
+            }
+            Drop::Rest { root, .. } => {
+                format!("taking `{at}` out of `{}` drops the rest of it, which needs `Alloc`", root.name(ast, src))
+            }
+            Drop::Temp { .. } => format!("`{at}` is dropped after it is used, which needs `Alloc`"),
+            Drop::Value { .. } => format!("`{at}` is dropped by an exit before it is consumed, which needs `Alloc`"),
+            Drop::Overwrite { .. } => format!("assigning `{at}` drops the value it held, which needs `Alloc`"),
+            Drop::IterRest { early, .. } => {
+                let what = if *early { "what it has not iterated and its container" } else { "its container" };
+                format!("the `for` that consumes `{at}` drops {what} when it is left, which needs `Alloc`")
+            }
+            Drop::Discard { .. } => format!("what `{at}` binds to no name is dropped, which needs `Alloc`"),
+        },
+    }
 }
