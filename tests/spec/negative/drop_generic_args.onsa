@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§6.3", "§12.2"]
+
+// W6-02 U4b/b (the break side; rules/leader.md 4.9, a form the gate did not have), R-32, S-782 (§6.3: "ジェネリックな型パラメータ `T` の値の破棄は、`T: Copy` の制約が無い限り `Alloc` を要する"; §12.2):
+// the drop of a value of a generic type reads each type parameter by its place in the arguments of the type, so a parameter that is swapped (`Sw[X, Y]` holds a `Y` in `a`), shifted, not held
+// (`Ptr[T]`, a function type), phantom, or nested two levels is decided by the parameter that the value holds; the type parameters of an `impl` and of a method are taken in order.
+// A `T` without `Copy` that is held is an E0601; one held only by `Ptr` or a function type, or bound by `Copy`, drops nothing. The functions are one-liners (S-783).
+
+pub struct Sw[A: ?Dup, B: ?Dup] { a: B, b: A }
+pub struct Fst[A: ?Dup, B: ?Dup] { a: A }
+pub struct Pp[U: ?Dup] { p: Ptr[U], x: U32 }
+pub struct Fp[U: ?Dup] { g: fn(U) -> U }
+pub struct Bb[U: ?Dup, V: ?Dup] { p: Ptr[U], x: V }
+pub struct Aa[T: ?Dup] { b: Bb[U32, T] }
+pub struct In[X: ?Dup, Y: ?Dup] { x: X, y: Y }
+pub struct Out[A: ?Dup, B: ?Dup] { i: In[B, A], z: U32 }
+pub struct P[A: ?Dup, B: ?Dup] { a: A, b: B }
+
+pub fn swap_one_plain[X: Copy, Y](move s: Sw[X, Y]) {}   //~ E0601
+pub fn swap_both_copy[X: Copy, Y: Copy](move s: Sw[X, Y]) {}
+pub fn swap_the_other[X, Y: Copy](move s: Sw[X, Y]) {}   //~ E0601
+pub fn phantom_argument[X: Copy, Y](move s: Fst[X, Y]) {}
+pub fn phantom_held[X, Y: Copy](move s: Fst[X, Y]) {}   //~ E0601
+pub fn pointer_not_held[T](move s: Pp[T]) {}
+pub fn function_not_held[T](move s: Fp[T]) {}
+pub fn shifted_second[T](move a: Aa[T]) {}   //~ E0601
+pub fn shifted_second_copy[T: Copy](move a: Aa[T]) {}
+pub fn nested_swap[A: Copy, B](move o: Out[A, B]) {}   //~ E0601
+pub fn nested_swap_copy[A: Copy, B: Copy](move o: Out[A, B]) {}
+pub fn take_out_nested_rest_drops[A: ?Dup, B: Copy](move o: Out[A, B]) -> B { o.i.x }   //~ E0601
+pub fn take_out_nested_rest_copy[A: ?Dup, B: Copy](move o: Out[A, B]) -> A { move o.i.y }
+pub fn take_out_swapped_rest_drops[T: Copy, U: ?Dup](move p: P[U, T]) -> T { p.b }   //~ E0601
+pub fn take_out_swapped_rest_copy[T: Copy, U: ?Dup](move p: P[U, T]) -> U { move p.a }
+
+impl[A: Copy, B] P[A, B] {
+  pub fn second_is_plain(move self) {}   //~ E0601
+}
+
+impl[X: Copy, Y: Copy] P[Y, X] {
+  pub fn swapped_copy(move self) {}
+}
+
+impl[X, Y: Copy] P[Y, X] {
+  pub fn swapped_plain(move self) {}   //~ E0601
+}
+
+impl[A: Copy, B: Copy] Fst[A, B] {
+  pub fn method_param_plain[C](self, move c: C) {}   //~ E0601
+  pub fn method_param_copy[C: Copy](self, move c: C) {}
+}

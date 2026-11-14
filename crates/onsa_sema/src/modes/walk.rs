@@ -9,7 +9,7 @@ use super::check::Walker;
 use super::flow::Run;
 use super::place::{Place, Proj, hole_place, pattern_places, place_of};
 use crate::Kind;
-use crate::body::{Dropped, Taken};
+use crate::body::{Dropped, Taken, Target};
 use crate::ty::{Ty, TyId};
 
 /// Where a value stands (§5.2, §5.3): what the walk checks at it. Passed down
@@ -158,10 +158,11 @@ impl<'a> Walker<'a> {
     }
 
     /// Whether `e` makes a new value that needs a drop where nothing
-    /// consumes it (R-32, §12.2): a call, a `?`, a literal, owned
-    /// ([`Walker::owned`]: not one that is static or needs no drop, S-610,
-    /// S-613, nor Copy); with `joins` (the root of a path taken out), a
-    /// block, an `if` or a `match` too, whose tails move into it (§5.2).
+    /// consumes it (R-32, §12.2): a call, a `?`, a literal, the name of a
+    /// variant (§5.4: `None`, no place), owned ([`Walker::owned`]: not one
+    /// that is static or needs no drop, S-610, S-613, nor Copy); with
+    /// `joins` (the root of a path taken out), a block, an `if` or a
+    /// `match` too, whose tails move into it (§5.2).
     pub(super) fn made(&mut self, e: ExprId, joins: bool) -> bool {
         let new = match self.ast.expr(e).kind {
             ExprKind::Call { .. }
@@ -172,6 +173,14 @@ impl<'a> Walker<'a> {
             | ExprKind::Struct { .. }
             | ExprKind::Repeat { .. } => true,
             ExprKind::Block(_) | ExprKind::If { .. } | ExprKind::Match { .. } => joins,
+            // The name before the type arguments (`None::[Buf[F32]]`, §4.5).
+            ExprKind::Path(_) | ExprKind::Field { .. } | ExprKind::TypeArgs { .. } => {
+                let name = match self.ast.expr(e).kind {
+                    ExprKind::TypeArgs { base, .. } => base,
+                    _ => e,
+                };
+                matches!(self.info.targets.get(&name), Some(Target::Variant { .. }))
+            }
             _ => false,
         };
         new && !self.info.diverging.expr(e) && self.owned(e)

@@ -9,6 +9,8 @@
 // a `?`, `let`, the right side of an assignment; it is moved on, so that it is not dropped), the rest of a field that is taken out of a temporary value that is Copy, a path that panics after the value is evaluated, and
 // a function with `uses {Alloc}`. This version already accepts all of these. The helpers are `rt` functions that return a literal or move their argument on (no error). The functions are one-liners where the
 // line of a drop would matter (S-783); the ones with a statement list are on several lines (no error is expected).
+// W6-02 U5a2: a unit variant of a Dup type (`None` of an `Option[U32]`, a variant of an enum with no payload, `E.B` of an enum that holds a `Str`) is static (§5.4), and the name of a
+// constant or a function is no new value; a block, an `if` or a `match` whose tails are places, that a receiver reads, is borrowed; and the contrasts the break side wrote by hand.
 
 pub struct G {
   s: Str,
@@ -439,3 +441,72 @@ pub fn alloc_waits(move b: Buf[F32], r: Option[U32]) -> Option[U32] uses {Alloc}
 pub fn apply_a(f: fn(U32) -> U32 uses {Alloc}, n: U32) -> U32 uses {Alloc} { f.(n) }
 
 pub fn alloc_closure(n: U32) -> U32 uses {Alloc} { apply_a(fn(x: U32) -> U32 uses {Alloc} { mk(x).len() }, n) }
+
+// ------------------------------------------------------------------ W6-02 U5a2: a unit variant of a Dup type, the name of a constant or a function, tails that are places, and the hand-written contrasts
+
+pub enum E {
+  A(Str),
+  B,
+  C(U32),
+}
+
+pub enum D {
+  X,
+  Y,
+}
+
+pub const LIMIT: U32 = 3
+
+pub rt fn e_len(e: E) -> U32 { 0 }
+
+pub rt fn d_len(d: D) -> U32 { 0 }
+
+pub rt fn ou_len(o: Option[U32]) -> U32 { 0 }
+
+pub rt fn arr_len(a: [Str; 2]) -> U32 { 0 }
+
+pub rt fn inc(x: U32) -> U32 { x + 1 }
+
+pub rt fn apply(f: rt fn(U32) -> U32, n: U32) -> U32 { f.(n) }
+
+pub rt fn sink_s(move a: Str, k: U32) -> Str { a }
+
+pub fn unit_dup(n: U32) -> U32 { ou_len(None) + ou_len(None::[U32]) + d_len(D.X) + e_len(E.B) }
+
+pub rt fn rt_unit_dup(n: U32) -> U32 { ou_len(None) + ou_len(None::[U32]) + d_len(D.X) + e_len(E.B) }
+
+pub fn enum_unit(n: U32) -> U32 { e_len(E.B) + e_len(E.C(n)) + e_len(E.A("a")) }
+
+pub rt fn rt_enum_unit(n: U32) -> U32 { e_len(E.B) + e_len(E.C(n)) + e_len(E.A("a")) }
+
+pub fn names_of_const_and_fn(n: U32) -> U32 { apply(inc, LIMIT) + ou_len(Some(LIMIT)) }
+
+pub rt fn rt_names_of_const_and_fn(n: U32) -> U32 { apply(inc, LIMIT) + ou_len(Some(LIMIT)) }
+
+pub fn if_recv_places(s: Str, t: Str, c: Bool) -> U32 { (if c { s } else { t }).len() }
+
+pub rt fn rt_if_recv_places(s: Str, t: Str, c: Bool) -> U32 { (if c { s } else { t }).len() }
+
+pub fn takeout_nested_k(move b: Buf[F32]) -> Buf[F32] { ({ ({ mk_k(move b) }).b }) }
+
+pub rt fn rt_takeout_nested_k(move b: Buf[F32]) -> Buf[F32] { ({ ({ mk_k(move b) }).b }) }
+
+pub fn static_lits(c: Bool) -> U32 { str_len("a") + tup_len(("a", 1)) + arr_len(["a", "bc"]) + opt_len(Some("a")) + opt_len(None) }
+
+pub rt fn rt_static_lits(c: Bool) -> U32 { str_len("a") + tup_len(("a", 1)) + arr_len(["a", "bc"]) + opt_len(Some("a")) + opt_len(None) }
+
+pub fn wait_panic_ok(n: U32, d: Bool) -> Str { sink_s(pass_s(mk(n)), if d { panic("x") } else { 1 }) }
+
+pub rt fn rt_wait_panic_ok(n: U32, d: Bool) -> Str { sink_s(pass_s(mk(n)), if d { panic("x") } else { 1 }) }
+
+pub fn nodrop_binding_tuple(v: U32) -> U32 {
+  let nm = "gain"
+  let p = ("gain", v)
+  tup_len((nm, 1)) + tup_len(p) + tup_len((nm, v))
+}
+
+pub rt fn rt_nodrop_binding_tuple(v: U32) -> U32 {
+  let nm = "gain"
+  let p = ("gain", v)
+  tup_len((nm, 1)) + tup_len(p) + tup_len((nm, v))
+}

@@ -7,6 +7,8 @@
 // drop needs `Alloc`: a function without `uses {Alloc}` is an E0601 and an `rt fn` an E0901. A literal that holds a borrowed `Str` or a call result is an owned value and not a literal that needs
 // no drop (§5.4), so it is dropped the same. The Affine field that is taken out of a temporary value in a position that consumes it is in negative/drop_temp_take_out.onsa. The functions are
 // one-liners (S-783). Each mark is reported (W6-02 U5a counts the drop of a temporary value). The literals that are static (`G { s: "a", n: 1 }.n`) are in negative/drop_temp_contrast.onsa.
+// W6-02 U5a2 (§5.2: "ブロックの末尾の式は、そのブロックが置かれた位置を継ぐ"; §12.2: "受け手、…添字とフィールドを読む基"): a field of the value of a block, an `if` or a `match` that a receiver,
+// a borrowed argument or an index reads. Each tail that makes a value puts it there, so it is dropped after the call or the index; a tail that is a place (`k`) is borrowed, and not dropped.
 
 pub struct G {
   s: Str,
@@ -153,3 +155,67 @@ pub rt fn rt_field_in_loop(n: U32) -> U32 { while true { return mk_g(n).n } }   
 pub fn field_of_the_default() -> F32 { Level.default().gain }   //~ E0601
 
 pub rt fn rt_field_of_the_default() -> F32 { Level.default().gain }   //~ E0901
+
+// ------------------------------------------------------------------ a field of the value of a block, an `if` or a `match` that a receiver, a borrowed argument or an index reads: the value each tail makes is dropped after it
+
+pub fn recv_field_of_if(c: Bool, n: U32) -> U32 { (if c { mk_g(n) } else { mk_g(2) }).s.len() }   //~ E0601
+
+pub rt fn rt_recv_field_of_if(c: Bool, n: U32) -> U32 { (if c { mk_g(n) } else { mk_g(2) }).s.len() }   //~ E0901
+
+pub fn recv_field_of_block(n: U32) -> U32 { ({ mk_g(n) }).s.len() }   //~ E0601
+
+pub rt fn rt_recv_field_of_block(n: U32) -> U32 { ({ mk_g(n) }).s.len() }   //~ E0901
+
+pub fn recv_field_of_match(n: U32) -> U32 { (match n { 0 => mk_g(n), _ => mk_g(2) }).s.len() }   //~ E0601
+
+pub rt fn rt_recv_field_of_match(n: U32) -> U32 { (match n { 0 => mk_g(n), _ => mk_g(2) }).s.len() }   //~ E0901
+
+pub fn arg_field_of_if(c: Bool, n: U32) -> U32 { str_len((if c { mk_g(n) } else { mk_g(2) }).s) }   //~ E0601
+
+pub rt fn rt_arg_field_of_if(c: Bool, n: U32) -> U32 { str_len((if c { mk_g(n) } else { mk_g(2) }).s) }   //~ E0901
+
+pub fn arg_field_of_block(n: U32) -> U32 { str_len(({ mk_g(n) }).s) }   //~ E0601
+
+pub rt fn rt_arg_field_of_block(n: U32) -> U32 { str_len(({ mk_g(n) }).s) }   //~ E0901
+
+pub fn arg_field_of_match(n: U32) -> U32 { str_len((match n { 0 => mk_g(n), _ => mk_g(2) }).s) }   //~ E0601
+
+pub rt fn rt_arg_field_of_match(n: U32) -> U32 { str_len((match n { 0 => mk_g(n), _ => mk_g(2) }).s) }   //~ E0901
+
+pub fn arg_buf_field_of_if(c: Bool, move b: Buf[F32]) -> U32 { len_of((if c { mk_h(move b) } else { mk_h(move b) }).b) }   //~ E0601
+
+pub rt fn rt_arg_buf_field_of_if(c: Bool, move b: Buf[F32]) -> U32 { len_of((if c { mk_h(move b) } else { mk_h(move b) }).b) }   //~ E0901
+
+pub fn index_field_of_if(c: Bool, move b: Buf[F32]) -> F32 { (if c { mk_h(move b) } else { mk_h(move b) }).b[0] }   //~ E0601
+
+pub rt fn rt_index_field_of_if(c: Bool, move b: Buf[F32]) -> F32 { (if c { mk_h(move b) } else { mk_h(move b) }).b[0] }   //~ E0901
+
+pub fn recv_nested_path(c: Bool, move b: Buf[F32]) -> U32 { (if c { ({ mk_w(move b) }).h } else { mk_w(move b).h }).s.len() }   //~ E0601
+
+pub rt fn rt_recv_nested_path(c: Bool, move b: Buf[F32]) -> U32 { (if c { ({ mk_w(move b) }).h } else { mk_w(move b).h }).s.len() }   //~ E0901
+
+pub fn recv_field_of_nested_if(c: Bool, d: Bool, n: U32) -> U32 { (if c { if d { mk_g(n) } else { mk_g(1) } } else { mk_g(2) }).s.len() }   //~ E0601
+
+pub rt fn rt_recv_field_of_nested_if(c: Bool, d: Bool, n: U32) -> U32 { (if c { if d { mk_g(n) } else { mk_g(1) } } else { mk_g(2) }).s.len() }   //~ E0901
+
+pub fn recv_field_mixed_place(c: Bool, k: G, n: U32) -> U32 { (if c { k } else { mk_g(n) }).s.len() }   //~ E0601
+
+pub rt fn rt_recv_field_mixed_place(c: Bool, k: G, n: U32) -> U32 { (if c { k } else { mk_g(n) }).s.len() }   //~ E0901
+
+pub fn arg_field_mixed_place(c: Bool, k: G, n: U32) -> U32 { str_len((if c { k } else { mk_g(n) }).s) }   //~ E0601
+
+pub rt fn rt_arg_field_mixed_place(c: Bool, k: G, n: U32) -> U32 { str_len((if c { k } else { mk_g(n) }).s) }   //~ E0901
+
+// ------------------------------------------------------------------ every tail is a place: it is borrowed, and nothing is dropped
+
+pub fn recv_field_places(c: Bool, k: G, j: G) -> U32 { (if c { k } else { j }).s.len() }
+
+pub rt fn rt_recv_field_places(c: Bool, k: G, j: G) -> U32 { (if c { k } else { j }).s.len() }
+
+pub fn arg_field_places(c: Bool, k: G, j: G) -> U32 { str_len((match c { true => k, false => j }).s) }
+
+pub rt fn rt_arg_field_places(c: Bool, k: G, j: G) -> U32 { str_len((match c { true => k, false => j }).s) }
+
+pub fn index_field_places(c: Bool, k: H, j: H) -> F32 { ({ if c { k } else { j } }).b[0] }
+
+pub rt fn rt_index_field_places(c: Bool, k: H, j: H) -> F32 { ({ if c { k } else { j } }).b[0] }

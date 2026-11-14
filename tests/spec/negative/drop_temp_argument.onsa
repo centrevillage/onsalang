@@ -9,6 +9,8 @@
 // ends and where the `?` leaves, so that the count of drops is one more on one path, and the function is an error either way (one error, P-01). The functions are one-liners (S-783). The values that
 // are consumed (a `move` argument, an element, a return value) are in negative/drop_temp_contrast.onsa and the ones that are moved on and wait for a `?` in negative/drop_temp_wait_consumed.onsa.
 // Each mark is reported (W6-02 U5a counts the drop of a temporary value that is not consumed).
+// W6-02 U5a2 (§5.4: "自分の型が Dup でない…リテラルと列挙子は、…所有の行である（`let o: Option[Buf[F32]] = None`、…）"): a unit variant of an Affine type (`None` of an `Option[Buf[F32]]`,
+// `F.B`) is a new value that is not static, so that the temporary one is dropped as the binding `o` is. A unit variant of a Dup type is in negative/drop_temp_contrast.onsa.
 
 pub struct G {
   s: Str,
@@ -196,3 +198,29 @@ pub fn arg_waits_tuple(n: U32, r: Option[U32]) -> Option[U32] { Some(tup_len(mk_
 
 pub rt fn rt_arg_waits_tuple(n: U32, r: Option[U32]) -> Option[U32] { Some(tup_len(mk_t(r?)) + mk(n).len()) }   //~ E0901
 
+// ------------------------------------------------------------------ a unit variant of an Affine type (§5.4: an owned row) that is passed to a borrowed parameter
+
+pub enum F {
+  A(Buf[F32]),
+  B,
+}
+
+pub rt fn opt_buf_len(o: Option[Buf[F32]]) -> U32 { 0 }
+
+pub rt fn f_len(f: F) -> U32 { 0 }
+
+pub fn arg_unit_none(n: U32) -> U32 { opt_buf_len(None) }   //~ E0601
+
+pub rt fn rt_arg_unit_none(n: U32) -> U32 { opt_buf_len(None) }   //~ E0901
+
+pub fn arg_unit_none_type_args(n: U32) -> U32 { opt_buf_len(None::[Buf[F32]]) }   //~ E0601
+
+pub rt fn rt_arg_unit_none_type_args(n: U32) -> U32 { opt_buf_len(None::[Buf[F32]]) }   //~ E0901
+
+pub fn arg_unit_variant(n: U32) -> U32 { f_len(F.B) }   //~ E0601
+
+pub rt fn rt_arg_unit_variant(n: U32) -> U32 { f_len(F.B) }   //~ E0901
+
+pub fn arg_unit_variant_in_if(c: Bool, f: F) -> U32 { f_len(if c { f } else { F.B }) }   //~ E0601
+
+pub rt fn rt_arg_unit_variant_in_if(c: Bool, f: F) -> U32 { f_len(if c { f } else { F.B }) }   //~ E0901

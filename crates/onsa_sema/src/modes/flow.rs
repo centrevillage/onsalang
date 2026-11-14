@@ -360,8 +360,8 @@ impl Walker<'_> {
     /// after it): its value waits there for them (A-1), until the consumer
     /// runs ([`Walker::ran`]), if it is owned ([`Walker::owned`]) and `pos`
     /// consumes; a value made in its tails (of the root of a path of one,
-    /// D2) where a call or an index borrows it, too (D3). The one place
-    /// that decides it.
+    /// D2) where a call or an index borrows it, too (D3, [`Walker::temps`]).
+    /// The one place that decides it.
     pub(super) fn waits(&mut self, r: &mut Run, e: ExprId, pos: Pos) {
         let mut x = self.ast.without_parens(e);
         while let ExprKind::Move(y) = &self.ast.expr(x).kind {
@@ -372,14 +372,24 @@ impl Walker<'_> {
                 r.declared.push(Item::Value(x));
             }
         } else if pos.waits() {
-            let mut tails = Vec::new();
-            crate::tails::tails(self.ast, x, &self.info.diverging, &mut tails);
-            for t in tails {
-                let Tail::Value(v) = t else { continue };
-                let root = self.root_of_path(v);
-                if self.made(root, false) {
-                    r.declared.push(Item::Temp(root));
-                }
+            self.temps(r, x);
+        }
+    }
+
+    /// The values made in the tails of `e` where a call or an index borrows
+    /// them (D3): of a path, those in the tails of its root, again (§5.2: a
+    /// block, an `if`, a `match` puts its tails where it is); a place in
+    /// them is borrowed, not dropped. Linear in `e`.
+    fn temps(&mut self, r: &mut Run, e: ExprId) {
+        let mut tails = Vec::new();
+        crate::tails::tails(self.ast, e, &self.info.diverging, &mut tails);
+        for t in tails {
+            let Tail::Value(v) = t else { continue };
+            let root = self.root_of_path(v);
+            if self.made(v, false) {
+                r.declared.push(Item::Temp(v));
+            } else if root != v {
+                self.temps(r, root);
             }
         }
     }
