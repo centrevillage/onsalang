@@ -12,7 +12,7 @@
 | 依存の図 | driver が一度だけ作る。std は役割の印で見分ける | R-88 |
 | std のモジュールの一覧 | build.rs で生成する | R-80 (4) |
 | 破棄の点 | modes が経路を見て列挙する | R-32 |
-| Dup の値を消費する位置で移すか複製するか（手放し） | modes が消費の式ごとに一度だけ決める（`consume.rs::release`。同じ呼び出しの他の引数との重なりは E0702 と同じ `exclusive.rs::changed_in_args`、後の使用で複製に戻すのは `check.rs::restore`）。破棄の点の後決めに使い、効果と `rt`（W6-03）と Core（W8-04）が読む | S-1030、R-255 |
+| Dup の値を消費する位置で移すか複製するか（手放し） | modes が消費の式ごとに一度だけ決める（`release.rs::release`。同じ呼び出しの他の引数との重なりは E0702 と同じ `exclusive.rs::changed_in_args`、後の使用で複製に戻すのは `release.rs::restore`）。破棄の点の後決めに使い、効果と `rt`（W6-03）と Core（W8-04）が読む | S-1030、R-255 |
 | 効果の使用の記録 | 型付けと modes の後の一つの段。効果行は効果の宣言の ID の集合 | R-83、S-74 |
 | 組込み | std の `impl` / `target` 宣言。Rust に残すのは `Prim`、§6.3 の暫定の表、`as`、lang item（`onsa_sema/src/lang.rs`）、`from_fn` の展開だけ | R-79、S-71 |
 | `Prim` の表（std の `target` 宣言ごとの行と、後端が実装する演算の分類） | `onsa_sema::prim`。署名の段の後に一度、宣言ごとの行を `Analysis.prims` に記録し、降下はそれを具体化する（後端は `onsa_core::prim` の再輸出で読む）。シグネチャ、rt と効果は std の宣言が正で、行の引数の数と rt は単体テストで突き合わせる写し。後端が与えるかは後端ごとの `supports` | R-79、R-81、S-69 |
