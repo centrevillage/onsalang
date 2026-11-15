@@ -60,8 +60,9 @@ pub struct Infer {
     /// The variables in the order they were bound ([`Infer::bound_since`]).
     bound: Vec<u32>,
     /// The variables whose literal kind a binding of two variables changed,
-    /// in that order: the bound one or the open one.
-    kinded: Vec<u32>,
+    /// in that order, each with the place of that binding in `bound`: the
+    /// bound one or the open one.
+    kinded: Vec<(u32, u32)>,
     /// The type parameters of the body whose bounds hold `Float`.
     float_params: Vec<u32>,
 }
@@ -242,8 +243,10 @@ impl Infer {
                 };
                 self.vars[j as usize] = VarState::Unbound(merged);
                 // What waits on either sees another kind ([`Infer::kinded_since`]).
-                self.kinded
-                    .extend([(lit != merged, var), (other != merged, j)].into_iter().filter(|p| p.0).map(|p| p.1));
+                let at = self.bound.len() as u32;
+                self.kinded.extend(
+                    [(lit != merged, var), (other != merged, j)].into_iter().filter(|p| p.0).map(|p| (at, p.1)),
+                );
             }
             (Some(LitKind::Int), Ty::Int(_)) | (None, _) => {}
             (Some(LitKind::Float), t) if self.float_fits(t) => {}
@@ -614,8 +617,9 @@ impl Infer {
         &self.bound[from as usize..]
     }
 
-    /// The variables whose literal kind changed after the first `from` such changes.
-    pub fn kinded_since(&self, from: usize) -> &[u32] {
+    /// The variables whose literal kind changed after the first `from` such
+    /// changes, each with the binding that changed it ([`Infer::bound_since`]).
+    pub fn kinded_since(&self, from: usize) -> &[(u32, u32)] {
         &self.kinded[from..]
     }
 

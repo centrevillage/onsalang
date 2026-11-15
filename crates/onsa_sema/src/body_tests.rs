@@ -1186,6 +1186,30 @@ fn literals_unified_again_and_again_are_looked_at_again_linearly() {
     }
 }
 
+/// R-467 (§4.7): a literal variable passed to a generic function is bound to
+/// the new variable of the type parameter, whose kind becomes the literal's;
+/// the items moved from the literal variable saw that kind, so they are not
+/// looked at again at each call, only at the binding of `a`: about `n` times
+/// for each kind of item, not `n * n`.
+#[test]
+fn a_literal_variable_passed_again_and_again_is_looked_at_again_linearly() {
+    let pre =
+        "fn same[T](x: T, y: T) -> U32 { 1 }\nfn need[T: Num](x: T) -> T { x }\nfn need_dup[T](x: T) -> T { x }\n";
+    let n = 1000;
+    for call in ["need(a)", "need_dup(a)", "same(a, 1)", "same(1, a)", "same(a, a)"] {
+        let mut src = format!("{pre}pub fn f() -> I32 {{\n  let a = 1\n");
+        for _ in 0..n {
+            src += &format!("  let _ = {call}\n");
+        }
+        src += "  let r: I32 = a\n  r\n}\n";
+        crate::deferred::LOOKED.with(|c| c.set(0));
+        let a = check(&src);
+        assert!(a.diagnostics.is_empty(), "{call}: {:?}", a.diagnostics);
+        let looked = crate::deferred::LOOKED.with(|c| c.get());
+        assert!((n..=4 * n).contains(&looked), "{call}: looked at again {looked} times for {n} calls");
+    }
+}
+
 /// R-448 (§4.7, §3.2): a variable unified with a literal one takes its kind,
 /// which decides an operator that waited on it, at that statement: `!v` with
 /// `v` unified with a float literal is the E0401 of `!`, before the error of

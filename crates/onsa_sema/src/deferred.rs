@@ -139,6 +139,10 @@ impl<'a> Checker<'a> {
     pub(crate) fn wait(&mut self, item: Deferred) {
         let mut vars = Vec::new();
         self.infer.open_vars(&self.a.types, item.ty, &mut vars);
+        // No binding would wake it: it would wait silently until the end.
+        if vars.is_empty() {
+            onsa_diag::internal::bug(Some(item.span), "a deferred item that waits on no open variable");
+        }
         self.wait_on(self.waits.items.len(), &vars);
         self.waits.items.push(Some(item));
     }
@@ -149,29 +153,35 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// The bindings since the last wake. The items that wait on a bound
-    /// variable then wait on the open variables its type reaches. Of a
-    /// variable bound to an open one (two variables unified) whose literal
-    /// kind did not change, they wait on that one and are not looked at:
-    /// nothing they are judged by changed. A literal kind, by which an
-    /// operator is judged ([`Checker::operator_verdict`]), wakes the items
-    /// of each variable whose kind changed. The woken limits are measured
-    /// now, the first made of those over the limits failing with its order
-    /// (S-849); the others wait to be looked at after the statement.
+    /// The bindings since the last wake, in their order. The items that wait
+    /// on a bound variable then wait on the open variables its type reaches.
+    /// Of a variable bound to another one (two variables unified) whose
+    /// literal kind that binding did not change, they wait on that one and
+    /// are not looked at: nothing they are judged by changed. A literal kind,
+    /// by which an operator is judged ([`Checker::operator_verdict`]), wakes
+    /// the items of each variable whose kind a binding changed, of the other
+    /// one those that wait on it before the bound one's join them (R-467).
+    /// The woken limits are measured now, the first made of those over the
+    /// limits failing with its order (S-849); the others wait to be looked
+    /// at after the statement.
     pub(crate) fn wake(&mut self) -> Option<(u32, Diagnostic)> {
-        let bound = self.infer.bound_since(self.waits.seen).to_vec();
+        let from = self.waits.seen;
+        let bound = self.infer.bound_since(from).to_vec();
         self.waits.seen = self.infer.generation();
-        let kinded: HashSet<u32> = self.infer.kinded_since(self.waits.kinds_seen).iter().copied().collect();
+        let kinded: HashSet<(u32, u32)> = self.infer.kinded_since(self.waits.kinds_seen).iter().copied().collect();
         self.waits.kinds_seen = self.infer.kinded_since(0).len();
         let mut woken = Vec::new();
-        for v in bound {
+        for (at, v) in (from..).zip(bound) {
             let mut items = self.waits.on.remove(&v).unwrap_or_default();
             let Some(to) = self.infer.binding(v) else {
                 onsa_diag::internal::bug(None, "a variable bound since the last wake that is not bound")
             };
-            let to = self.infer.shallow(&self.a.types, to);
+            // A variable open at the binding, bound later in this loop if at all.
             if let Ty::Var(u) = self.ty(to) {
-                if !kinded.contains(&v) {
+                if kinded.contains(&(at, u)) {
+                    woken.extend(self.waits.on.get(&u).into_iter().flatten().copied());
+                }
+                if !kinded.contains(&(at, v)) {
                     if !items.is_empty() {
                         // The longer list stays, so that each item moves O(log n) times.
                         let on = self.waits.on.entry(u).or_default();
@@ -190,15 +200,6 @@ impl<'a> Checker<'a> {
             self.infer.open_vars(&self.a.types, to, &mut vars);
             for &i in &items {
                 self.wait_on(i, &vars);
-            }
-            woken.extend(items);
-        }
-        // An open variable whose kind changed: its items, with those moved onto it above.
-        let open: Vec<u32> = kinded.into_iter().filter(|&j| self.infer.binding(j).is_none()).collect();
-        for j in open {
-            let items = self.waits.on.remove(&j).unwrap_or_default();
-            for &i in &items {
-                self.wait_on(i, &[j]);
             }
             woken.extend(items);
         }

@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§4.5"]
+
+// E0416: the order of the deferred checks when a statement inside an expression decides a type
+// (spec §4.7: a requirement is checked in the statement in which the type has no type variable
+// left; of the items that fail at the same point, the one the checking made first is reported).
+// The statements of a block in an expression are statements too: the items made before the
+// block by the outer expression are checked after the inner statement that decides their type,
+// before the items the outer expression makes after the block. One error per function (P-01).
+
+fn make[T]() -> T {
+  make()
+}
+
+fn need[T: Num](x: T) -> T {
+  x
+}
+
+fn needf[T: Float](x: T) -> T {
+  x
+}
+
+// The inner `let _: I32 = v` decides `v`: `needf(v)` of the outer tuple, made before the
+// block, fails there, before the `needf(w)` after the block is made.
+pub fn outer_item_decided_by_an_inner_statement() -> I32 {
+  let v = make()
+  let w = make()
+  let _ = (needf(v), {          //~ E0416
+    let _ = need(w)
+    let _: I32 = v
+    1
+  }, needf(w))
+  0
+}
+
+// The inner `let _: U8 = w` decides `w` before `v`: only `need(w)` fails at that point
+// (`Num` holds no unsigned type, §6.3), so it is reported, not the outer `needf(v)`.
+pub fn inner_item_decided_first() -> I32 {
+  let v = make()
+  let w = make()
+  let _ = (needf(v), {
+    let _ = need(w)             //~ E0416
+    let _: U8 = w
+    let _: I32 = v
+    1
+  }, needf(w))
+  0
+}
+
+// The statement in the `if` decides `w`: `needf(w)` fails there, before the later statement
+// that decides `v` (which would make `-v` on `U32` an E0401).
+pub fn item_in_a_branch_decided_in_the_branch(c: Bool) -> I32 {
+  let v = make()
+  let w = make()
+  let _ = -v
+  let _ = -w
+  let _ = needf(v)
+  if c {
+    let _ = needf(w)            //~ E0416
+    let _: I32 = w
+  }
+  let _: U32 = v
+  0
+}
