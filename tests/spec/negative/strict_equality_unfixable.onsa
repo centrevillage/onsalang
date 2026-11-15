@@ -40,3 +40,52 @@ pub fn struct_literal_after(a: I32, c: I32) -> Bool {
 pub fn struct_literal_after_ne(a: I32, c: I32) -> Bool {
   a !== P { x: 1 }.x as I32                         //~ E0002
 }
+
+// W6-04 U10c: the chain is read as the tree of §3.1, so an error of its own in the operand after it (`%` and `-` have no
+// strength between them, E0010) is one the `==` in its place would leave: no candidate.
+pub fn no_strength_after(a: I32, b: I32, c: I32, d: I32) -> Bool {
+  a === b % c - d                                   //~ E0002
+}
+
+// W6-04 U10c/i-fix1: the operand after it is broken (two operands in a row, an operator where an operand is wanted, an
+// operand missing before a `)`, the end of the line or the body of a head, a range outside the head of a `for`): the
+// `==` in its place would leave that error of the syntax stage, so no candidate.
+pub fn takes(v: Bool) -> Bool {
+  v
+}
+
+pub fn two_operands_after(a: I32, c: I32, d: I32) -> Bool {
+  a === d c                                         //~ E0002
+}
+
+pub fn ampersand_after(a: I32, c: I32) -> Bool {
+  a === &c                                          //~ E0002
+}
+
+pub fn range_after(a: I32, b: I32, c: I32) -> Bool {
+  a === b ..< c                                     //~ E0002
+}
+
+pub fn star_after(a: I32, b: I32) -> Bool {
+  a === * b                                         //~ E0002
+}
+
+pub fn missing_before_paren(a: I32) -> Bool {
+  takes(a === )                                     //~ E0002
+}
+
+pub fn plus_at_end(a: I32) -> Bool {
+  a !== +                                           //~ E0002
+}
+
+pub fn two_operands_then_and(a: I32, b: I32, c: I32, p: Bool) -> Bool {
+  a === b c && p                                    //~ E0002
+}
+
+pub fn missing_before_body(a: I32) -> I32 {
+  if a === { 1 } {                                  //~ E0002
+    1
+  } else {
+    2
+  }
+}

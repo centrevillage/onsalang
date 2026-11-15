@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "16:5"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// E0020 for `===` (S-450) in a chain of `&&` with another comparison (W6-04 U10c): the chain is read as the tree of §3.1,
+// where the `&&` is between the two comparisons, so `==` in its place reads (`a == b && c == d && q`). The one candidate
+// is `==`, and the file has no diagnostic after it.
+
+pub fn both(a: I32, b: I32, c: I32, d: I32, q: Bool) -> Bool {
+  a == b && c == d && q                            //~ E0020
+}

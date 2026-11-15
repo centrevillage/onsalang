@@ -146,10 +146,20 @@ pub(super) fn joined(c: &Cursor, prev: usize, s: usize) -> Option<Fix> {
 /// Another symbol joins as it is.
 fn joins_cleanly(c: &Cursor, prev: usize, s: usize) -> bool {
     let Some(op) = c.kind(s).binop() else { return true };
-    let Some((operands, ops)) = chain_start(c, prev).and_then(|from| read_chain(c, from, s, op)) else {
-        return false;
-    };
-    let mut fits = true;
+    chain_start(c, prev).is_some_and(|from| chain_reads(c, from, s, op, true))
+}
+
+/// Whether the chain from token `from` with `op` in place of the token `s`
+/// ([`read_chain`]) reads as the tree of §3.1 ([`Chain`]), each edge judged
+/// by [`BinOp::bare`] (E0010, and E0011 for an operand with `as` or `at`):
+/// the one reading of a chain around a symbol, for the symbols joined to
+/// the line before ([`joins_cleanly`]) and the comparisons of other
+/// languages (`super::operators`). `braces`: whether a `{` may open at its
+/// depth (a block-like operand, a struct literal); the comparisons take
+/// none (their candidate writes no parentheses, E0013, S-450).
+pub(super) fn chain_reads(c: &Cursor, from: usize, s: usize, op: BinOp, braces: bool) -> bool {
+    let Some((operands, ops, braced)) = read_chain(c, from, s, op) else { return false };
+    let mut fits = braces || !braced;
     let mut join = |l, o: BinOp, r| {
         fits &= o.bare(Side::Left, l) && o.bare(Side::Right, r);
         Operand::Binary(o)
@@ -191,7 +201,7 @@ fn chain_start(c: &Cursor, prev: usize) -> Option<usize> {
                 braced |= depth == 0 && k == LBrace;
             }
             _ if depth > 0 || in_chain(c, i) => {}
-            KwIf | KwMatch if !braced || after_operand(c, i) => break i + 1,
+            KwIf | KwMatch if !braced || after_operand(c, i) => break i + 1 + usize::from(c.kind(i + 1) == Tilde),
             KwElse | Arrow if braced => {}
             DotDotLt | DotDotEq | KwIn if braced => ranged = true,
             KwIf | KwMatch | KwFn | KwUnsafe | KwHandle | KwPar if braced => {
@@ -213,48 +223,77 @@ fn chain_start(c: &Cursor, prev: usize) -> Option<usize> {
 /// (from its keyword or `else` to its `{` on its lines) too. It ends at a bracket that
 /// closes none, the end of the file, a token that ends a chain
 /// ([`ends_chain`]; the line break that ends the line of `s`), and the `{`
-/// of the body of the head the failure is in ([`super::operators::in_head`]).
-/// None at another token, which the scan does not know (R-445).
-fn read_chain(c: &Cursor, from: usize, s: usize, op: BinOp) -> Option<(Vec<Operand>, Vec<BinOp>)> {
+/// of the body of the head the failure is in ([`super::operators::in_head`]);
+/// a range only in a `for` or `par~` head (§7). None at another token (R-445),
+/// a bracket its kind does not close ([`closing`]), and operands and operators
+/// that do not alternate ([`alternation`], to an operand at the end). With them,
+/// whether a `{` opened at the depth of `from`.
+fn read_chain(c: &Cursor, from: usize, s: usize, op: BinOp) -> Option<(Vec<Operand>, Vec<BinOp>, bool)> {
     use TokenKind::*;
     let (mut operands, mut ops, mut depth, mut head) = (vec![Operand::Plain], Vec::new(), 0u32, false);
+    let (mut braced, mut expect) = (false, true);
+    let ranges = matches!(c.context(), Some((_, NodeKind::ForStmt | NodeKind::ParExpr)));
     let mut i = from;
     loop {
         if i == s {
-            if depth > 0 || head {
+            if depth > 0 || head || expect {
                 return None;
             }
             ops.push(op);
             operands.push(Operand::Plain);
-            i = c.sig_after(s);
+            (i, expect) = (c.sig_after(s), true);
             continue;
         }
         let k = c.kind(i);
         match k {
             Eof => break,
             LBrace if depth == 0 && !head && i > s && super::operators::in_head(c) => break,
+            LParen | LBracket | LBrace if depth == 0 && closing(c, i).is_none() => return None,
             LParen | LBracket | LBrace => {
                 head &= depth > 0 || k != LBrace;
+                braced |= depth == 0 && k == LBrace;
                 depth += 1;
             }
             RParen | RBracket | RBrace if depth == 0 => break,
-            RParen | RBracket | RBrace => depth -= 1,
+            RParen | RBracket | RBrace => (depth, expect) = (depth - 1, expect && depth > 1),
             _ if depth > 0 || (k == Newline && i < s) || (head && (k != Newline || c.lines.goes_on(i))) => {}
             Newline if head => return None,
-            KwIf | KwMatch | KwFn | KwUnsafe | KwHandle | KwPar if !after_operand(c, i) => head = true,
-            KwElse => head = true,
-            KwAs | KwAt => operands.iter_mut().last().into_iter().for_each(|o| *o = Operand::AsAt),
-            _ if k.binop().is_some() && after_operand(c, i) => {
+            KwIf if !expect && in_pattern(c) => break,
+            KwIf | KwMatch | KwFn | KwUnsafe | KwHandle | KwPar => head = expect.then_some(true)?,
+            KwElse if !expect => head = true,
+            KwAs | KwAt if !expect => {
+                operands.iter_mut().last().into_iter().for_each(|o| *o = Operand::AsAt);
+                expect = true;
+            }
+            _ if k.binop().is_some() && !expect => {
                 ops.extend(k.binop());
                 operands.push(Operand::Plain);
+                expect = true;
             }
-            _ if in_chain(c, i) => {}
+            _ if in_chain(c, i) => expect = alternation(c, i, expect)?,
+            DotDotLt | DotDotEq if !ranges => return None,
             _ if ends_chain(k, false) => break,
             _ => return None,
         }
         i += 1;
     }
-    Some((operands, ops)).filter(|_| i > s)
+    Some((operands, ops, braced)).filter(|_| i > s && !expect && !head)
+}
+
+/// Whether an operand is wanted after the token `i` of a chain ([`in_chain`]),
+/// `expect` whether one was before it (§3.1): a prefix `-`, `!` or `^` against
+/// one wants it, an operand or `?` none, another operator, `as`, `at`, `.`,
+/// `::`, `~`, `!` or `with` the next. None where they do not alternate.
+fn alternation(c: &Cursor, i: usize, expect: bool) -> Option<bool> {
+    use TokenKind::*;
+    let prefix = |k| matches!(k, Minus | Bang | Caret);
+    match c.kind(i) {
+        _ if c.comment(i) || c.kind(i) == Newline => Some(expect),
+        k if prefix(k) && expect => (c.gap_after(i) == Gap::None && !prefix(c.kind(i + 1))).then_some(true),
+        Question => (!expect).then_some(false),
+        k if ends_operand(k) || k == Underscore => expect.then_some(false),
+        _ => (!expect).then_some(true),
+    }
 }
 
 /// Whether the token `i` goes on a chain at its depth (§3.1): a comment, a

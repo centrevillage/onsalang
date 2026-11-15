@@ -79,8 +79,14 @@ pub(super) fn path_separator(c: &Cursor) -> Option<Hit> {
     let title = if seps.len() > 1 { "write each `::` as `.`" } else { "write `.`" };
     // After a blank or a line break, a keyword may start what follows the
     // path (`use std::` and `pub fn f()` on the next line), which the `.`
-    // would take in: no candidate (§18.1, R-447). A name goes on the path.
-    let keyword = |s: usize| c.gap_after(s).is_some() && partner(c, s).is_some_and(|n| c.kind(n).is_keyword());
+    // would take in: no candidate (§18.1, R-447). A name goes on the path,
+    // and so does a keyword with a `.` or `::` right after it (a module
+    // `test`: `util::` and `test.X` on the next line, §2.3).
+    // SPEC-GAP(S-1069): which keywords after the gap keep the candidate.
+    let goes_on =
+        |n: usize| c.gap_after(n) == Gap::None && matches!(c.kind(n + 1), TokenKind::Dot | TokenKind::ColonColon);
+    let keyword =
+        |s: usize| c.gap_after(s).is_some() && partner(c, s).is_some_and(|n| c.kind(n).is_keyword() && !goes_on(n));
     let fixes = if seps.iter().any(|&s| keyword(s)) { Vec::new() } else { vec![Fix::new(title, edits)] };
     // The range of the form (S-316): from its first `::` to its last.
     let last = *seps.last().unwrap_or(&c.at);
@@ -362,7 +368,7 @@ pub(super) fn type_args_call(c: &Cursor) -> Option<(RowId, Hit)> {
     }
     let span = c.file_span(c.span(c.at).start, c.span(close).end);
     if Link::of(callee.0).is_value() {
-        return found(RowId::TypeArgsOnExpression, span, value_call(c, callee, c.at, close).into_iter().collect());
+        return Some((RowId::TypeArgsOnExpression, value_call(c, callee, c.at, close, span)));
     }
     if !Link::of(callee.0).names_a_path() {
         return None;

@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§2.5", "§15.1", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "main.onsa:20:7"
+// code = "E0020"
+// candidate = 1
+// clean = true
+
+// S-1069 (its provisional reading (3), §2.3, §18.1): a keyword after the line break of a path's `::` with a `.` or a `::`
+// right after it goes on the path (the module `test` of `util/test.onsa`: §2.3, the name of a keyword is a module of a
+// path), so the candidate of S-963 stays: `util` and then `.test.X`, which reads (`clean`). Another keyword after the gap
+// has no candidate (R-447): e0002_path_separator_keyword_after.onsa.
+
+use util
+
+pub fn f() -> I32 {
+  util::   //~ E0020
+  test.X
+}

@@ -167,6 +167,30 @@ fn a_candidate_over_the_limit_after_the_failure_is_dropped_with_the_note() {
     assert_eq!((reads.dropped, reads.deep), (1, 1));
 }
 
+#[test]
+fn a_candidate_the_window_drops_over_the_limit_has_the_same_note() {
+    // W6-04 U10c: the `.(` of a callee in parentheses 254 deep (with type
+    // arguments, and alone) takes it a level down, over the limit (§2.5).
+    // The row drops it before the reading of `crate::operands`, with the
+    // note of a candidate dropped there (§18.1); one less deep keeps it.
+    for (depth, call, fixes) in [(254, "[I32, U8](x)", 0), (254, "(x)", 0), (253, "[I32, U8](x)", 1), (253, "(x)", 1)] {
+        let src = format!(
+            "fn mk() -> [I32; 2] {{ [1, 2] }}\n\npub fn f(x: I32) -> I32 {{\n  {}mk(){}{call}\n}}\n",
+            "(".repeat(depth),
+            ")".repeat(depth)
+        );
+        let found = onsa_diag::stack::run(move || {
+            let p = crate::parse(FileId(0), &src);
+            p.diagnostics.iter().map(|d| (d.fixes.len(), d.notes.last().map(|n| n.message.clone()))).collect::<Vec<_>>()
+        });
+        let note = (fixes == 0).then(|| crate::nesting::WRITTEN_TOO_DEEP.to_string());
+        assert!(
+            found.len() == 1 && found[0].0 == fixes && (fixes == 1 || found[0].1 == note),
+            "{depth} {call}: {found:?}"
+        );
+    }
+}
+
 /// A function whose body is 256 levels deep, the limit (§2.5: its block,
 /// 253 groups, the binary operator and the blocks of its operands), with an
 /// E0013 at the bottom: its parentheses would add a level.

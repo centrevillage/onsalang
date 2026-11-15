@@ -39,3 +39,30 @@ fn edits_that_join_of_their_own_are_each_kept_apart() {
     // An insertion that joins of its own has no way apart: no candidate.
     assert_eq!(kept_apart("a b()c", vec![Edit::insert(F, 1, "x"), delete(3, 5)]), None);
 }
+
+/// The span [`crate::edits::whole_line`] gives for the token that starts
+/// at `at` in `src` alone (the blanks after it taken with it), or `None`.
+fn line_of(src: &str, at: u32) -> Option<(u32, u32)> {
+    let tokens = crate::lex(F, src).tokens;
+    let k = tokens.iter().position(|t| t.span.start == at).unwrap();
+    let stop = k + 1 + usize::from(tokens.get(k + 1).is_some_and(|t| t.kind == crate::token::TokenKind::Whitespace));
+    crate::edits::whole_line(F, &tokens, (k, stop, tokens[k].span.end)).map(|s| (s.start, s.end))
+}
+
+#[test]
+fn a_symbol_alone_on_its_line_takes_the_whole_line_at_the_end_of_the_file_too() {
+    // The one judgment of the candidates that move a symbol up and down
+    // (W6-04 U10c): the indentation, the symbol, the blanks after it and the
+    // newline; on the last line with no newline, the blanks to the end.
+    assert_eq!(line_of("const A: I32 = 1\n  +  \n", 19), Some((17, 23)));
+    assert_eq!(line_of("const A: I32 = 1\n  +  ", 19), Some((17, 22)));
+    assert_eq!(line_of("const A: I32 = 1\n+", 17), Some((17, 18)));
+    // Code or a comment after it on its line: not the whole line.
+    assert_eq!(line_of("const A: I32 = 1\n  + 2", 19), None);
+    assert_eq!(line_of("const A: I32 = 1\n  + // c", 19), None);
+    // The candidate that moves it up takes that line out (`2:1-2:6`).
+    let tokens = crate::lex(F, "const A: I32 = 1\n  +  ").tokens;
+    let at = tokens.iter().position(|t| t.span.start == 19).unwrap();
+    let fix = crate::edits::move_token_up(F, &tokens, "t", 16, at, " +");
+    assert_eq!(fix.edits()[1].span, Span::new(F, 17, 22));
+}

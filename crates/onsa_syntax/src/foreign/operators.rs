@@ -4,7 +4,7 @@
 //! its line.
 
 use super::*;
-use crate::ast::OpGroup;
+use crate::ast::BinOp;
 
 /// The expression that closed right before the token at the failure, on
 /// its line: the token is in the place of a binary operator of an
@@ -38,50 +38,15 @@ pub(super) fn power_operator(c: &Cursor) -> Option<Hit> {
 }
 
 /// Whether a comparison in place of the token at the failure reads in the
-/// chain around it (§3.1; S-236): from `first` (the operand that closed
-/// before it) to the end of the operand after it, every other operator
-/// has a strength against the comparisons (no other comparison and no
-/// bitwise operator, E0010), and there is no `as` / `at` (E0011) and no
-/// operand that is a block or a keyword's form (E0013). Read once forward,
-/// the brackets passed over ([`closing`]); the operand after it ends at a
-/// line break, a closer, a `,`, a `;`, a `=>` or the body of a head, and
-/// any other token (a struct literal, S-450) is `false`, where it cannot tell.
+/// chain around it (§3.1; S-236), from `first` (the operand that closed
+/// before it) to the end of the operand after it, as a symbol joined to the
+/// line before does ([`super::lines::chain_reads`]): operands alternate, every other operator
+/// has a strength against it (E0010), no operand has `as` or `at` (E0011),
+/// and no operand is a block, a keyword's form (E0013) or a struct literal
+/// (S-450).
 fn compares(c: &Cursor, first: usize) -> bool {
-    use TokenKind::*;
-    let (mut i, mut expect) = (first, true);
-    loop {
-        let k = c.kind(i);
-        if i == c.at {
-            (i, expect) = (c.sig_after(i), true);
-            continue;
-        }
-        let ahead = i > c.at;
-        match k {
-            _ if c.comment(i) => {}
-            Newline if !ahead || c.lines.goes_on(i) => {}
-            Newline => return true,
-            LParen | LBracket => {
-                let Some(close) = closing(c, i) else { return false };
-                (i, expect) = (close, false);
-            }
-            Minus | Bang | Caret if expect => {}
-            Ident | Int | Float | Char | Str | KwTrue | KwFalse | KwSelf | KwSelfType if expect => expect = false,
-            _ if expect => return false,
-            _ if k.binop().is_some() => {
-                let g = k.binop().map(|op| op.group());
-                if !g.is_some_and(|g| g.stronger(OpGroup::Comparison) || OpGroup::Comparison.stronger(g)) {
-                    return false;
-                }
-                expect = true;
-            }
-            Dot | ColonColon | Bang | Tilde => expect = true,
-            Question => {}
-            Comma | Semi | RParen | RBracket | RBrace | FatArrow | Eof => return ahead,
-            LBrace => return ahead && in_head(c),
-            _ => return false,
-        }
-        i += 1;
-    }
+    let op = if c.kind(c.at) == TokenKind::EqEqEq { BinOp::Eq } else { BinOp::Ne };
+    super::lines::chain_reads(c, first, c.at, op, false)
 }
 
 /// Whether a `{` after the operand after the failure opens the body of the

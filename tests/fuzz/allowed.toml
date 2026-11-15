@@ -31,13 +31,6 @@ reasons = ["S-438", "S-388"]
 note = "two closed string literals side by side, the later with an error of its own (`\\q`): the two made one keep that E0001, now in the first literal, which the candidate replaces (S-438: the merge is offered also then); the first candidate where no `,` starts an element (a struct literal's field)"
 
 [[allowed]]
-class = "fix|E0020|move it to the end of the line before|E0002"
-left = "expected an expression, found `…`"
-input = "tests/fuzz/08cb8f13.onsa"
-reasons = ["S-124"]
-note = "an input with two errors: a binary operator at the start of a line, and no operand after it before the `}`"
-
-[[allowed]]
 class = "fix|E0012|parenthesize the inner operator|E0020"
 left = "a prefix symbol is written on the line of its operand"
 input = "tests/fuzz/2695c80d.onsa"

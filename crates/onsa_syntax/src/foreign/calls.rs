@@ -4,30 +4,35 @@
 
 use super::*;
 
-/// The candidate that calls the value `callee` with `.(` in place of the
-/// type arguments in `first..=last` (the call's `(` follows `last`): the
-/// list and the blanks before it become `.`, and the parentheses around a
-/// postfix expression go (`(s.f)` is `s.f.(x)`, §4.5).
-pub(super) fn value_call(c: &Cursor, callee: (NodeKind, u32), first: usize, last: usize) -> Option<Fix> {
-    if c.kind(last + 1) != TokenKind::LParen || c.gap(last + 1) != Gap::None {
-        return None;
-    }
-    let before = first.checked_sub(1)?;
+/// The form at `span` of a value `callee` called with type arguments in
+/// `first..=last` (the call's `(` follows `last`), with the candidate that
+/// calls it with `.(`: the list and the blanks before it become `.`, and the
+/// parentheses around a postfix expression go (`(s.f)` is `s.f.(x)`, §4.5).
+pub(super) fn value_call(c: &Cursor, callee: (NodeKind, u32), first: usize, last: usize, span: Span) -> Hit {
+    let Some(before) =
+        first.checked_sub(1).filter(|_| c.kind(last + 1) == TokenKind::LParen && c.gap(last + 1) == Gap::None)
+    else {
+        return Hit::new(span, Vec::new());
+    };
     let mut edits = vec![Edit::replace(c.file_span(c.span(before).end, c.span(last).end), ".")];
     if let Some(open) = removable_parens(c, callee, before) {
         edits.push(Edit::delete(c.span(open)));
         edits.push(Edit::delete(c.span(before)));
     }
-    let span = c.file_span(callee.1, c.span(last + 1).end);
-    (!too_deep(c, span, &edits)).then(|| Fix::new(CALL_WITH_DOT, edits))
+    called_with_dot(c, span, c.file_span(callee.1, c.span(last + 1).end), edits)
 }
 
-/// Whether the candidate `edits` of `.(` for the call at `span` (from the
-/// callee to its `(`) take the unit over the nesting limit (§2.5): the call
-/// takes the callee one level down unless parentheses go, and the check
-/// after it would report the E0006 of the same stage (S-236, R-200).
-fn too_deep(c: &Cursor, span: Span, edits: &[Edit]) -> bool {
-    c.nests_too_deep(span, edits, u32::from(edits.len() == 1))
+/// The form at `span` with the candidate `edits` of `.(` for the call at
+/// `call` (from the callee to its `(`), or with none when they take the unit
+/// over the nesting limit (§2.5): the call takes the callee one level down
+/// unless parentheses go, and the check after it would report the E0006 of
+/// the same stage (S-236, R-200). Then the note is the one of a candidate
+/// that `crate::operands` drops for the limit ([`crate::nesting::WRITTEN_TOO_DEEP`]).
+fn called_with_dot(c: &Cursor, span: Span, call: Span, edits: Vec<Edit>) -> Hit {
+    if c.nests_too_deep(call, &edits, u32::from(edits.len() == 1)) {
+        return Hit::new(span, Vec::new()).with_note(Some(crate::nesting::WRITTEN_TOO_DEEP));
+    }
+    Hit::new(span, vec![Fix::new(CALL_WITH_DOT, edits)])
 }
 
 /// The `(` of the callee `callee` that closes at `close`, when the
@@ -100,8 +105,5 @@ pub(super) fn callee_expression(c: &Cursor) -> Option<Hit> {
     // From the callee to its `(`: the arguments, not read yet, may hold
     // errors of their own.
     let span = c.file_span(start, c.span(paren).end);
-    if too_deep(c, span, &edits) {
-        return hit(span, Vec::new());
-    }
-    hit(span, vec![Fix::new(CALL_WITH_DOT, edits)])
+    Some(called_with_dot(c, span, span, edits))
 }

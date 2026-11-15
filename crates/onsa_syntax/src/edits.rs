@@ -70,18 +70,27 @@ fn lifted(
     (end, written): (u32, String),
     (at, stop, code_end): (usize, usize, u32),
 ) -> Fix {
-    let after = all.get(stop).copied();
-    let removed = match after.map(|t| t.kind) {
-        Some(TokenKind::Newline) | Some(TokenKind::Eof) | None => {
-            let line_start = match all[at.saturating_sub(1)] {
-                t if at > 0 && t.kind == TokenKind::Whitespace => t.span.start,
-                _ => all[at].span.start,
-            };
-            Span::new(file, line_start, after.map_or(code_end, |t| t.span.end))
-        }
-        Some(_) => Span::new(file, all[at].span.start, after.map_or(code_end, |t| t.span.start)),
-    };
+    let removed = whole_line(file, all, (at, stop, code_end))
+        .unwrap_or_else(|| Span::new(file, all[at].span.start, all.get(stop).map_or(code_end, |t| t.span.start)));
     Fix::new(title, vec![Edit::insert(file, end, written), Edit::delete(removed)])
+}
+
+/// The line of the code `all[at..stop]` at the head of its line (to
+/// `code_end`, the blanks after it to `stop`) when nothing else is on it:
+/// its indentation, the code, the blanks and its newline (at the end of the
+/// file, to the end). The one judgment of a line a symbol leaves empty, for
+/// the candidates that move code up ([`lifted`]) and down
+/// (`foreign::edits::taken_down`).
+pub(crate) fn whole_line(file: FileId, all: &[Token], (at, stop, code_end): (usize, usize, u32)) -> Option<Span> {
+    let after = all.get(stop).copied();
+    if after.is_some_and(|t| !matches!(t.kind, TokenKind::Newline | TokenKind::Eof)) {
+        return None;
+    }
+    let line_start = match at.checked_sub(1).map(|p| all[p]) {
+        Some(t) if t.kind == TokenKind::Whitespace => t.span.start,
+        _ => all[at].span.start,
+    };
+    Some(Span::new(file, line_start, after.map_or(code_end, |t| t.span.end)))
 }
 
 /// The candidate that takes out the blanks `blanks` on the line of a postfix

@@ -7,23 +7,12 @@ use onsa_diag::{Edit, Fix, Span};
 use super::Cursor;
 use crate::token::TokenKind;
 
-/// The full-list index of the parser's token `i`, and the line of it: its
-/// line holds nothing but it (blanks aside).
+/// The line of the parser's token `i` when it holds nothing but it (blanks
+/// aside, [`crate::edits::whole_line`]).
 fn alone_on_its_line(c: &Cursor, i: usize) -> Option<Span> {
     let k = c.full[i] as usize;
-    let mut a = k;
-    if a > 0 && c.all[a - 1].kind == TokenKind::Whitespace {
-        a -= 1;
-    }
-    let starts = c.at_line_head(i);
-    let mut b = k + 1;
-    if c.all.get(b).is_some_and(|t| t.kind == TokenKind::Whitespace) {
-        b += 1;
-    }
-    let ends = c.all.get(b).is_none_or(|t| matches!(t.kind, TokenKind::Newline | TokenKind::Eof));
-    // The line and its newline (the line of the end of the file has none).
-    let end = c.all.get(b).filter(|t| t.kind == TokenKind::Newline).map_or(c.span(i).end, |t| t.span.end);
-    (starts && ends).then(|| Span::new(c.file, c.all[a].span.start, end))
+    let stop = k + 1 + usize::from(c.all.get(k + 1).is_some_and(|t| t.kind == TokenKind::Whitespace));
+    c.at_line_head(i).then(|| crate::edits::whole_line(c.file, c.all, (k, stop, c.span(i).end))).flatten()
 }
 
 /// The candidate that moves the symbol `i` (`?`, the `~` of `if~`) up to the
