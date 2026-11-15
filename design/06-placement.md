@@ -12,7 +12,7 @@
 | 依存の図 | driver が一度だけ作る。std は役割の印で見分ける | R-88 |
 | std のモジュールの一覧 | build.rs で生成する | R-80 (4) |
 | 破棄の点 | modes が経路を見て列挙する | R-32 |
-| Dup の値を消費する位置で移すか複製するか（手放し） | modes が消費の式ごとに一度だけ決める（`release.rs::release`。同じ呼び出しの他の引数との重なりは E0702 と同じ `exclusive.rs::changed_in_args`、後の使用で複製に戻すのは `release.rs::restore`）。複製になった消費の式とその理由（後の使用・ループの次の反復・同じ呼び出しの借用・借用の見出し）は `BodyInfo::copied`（S-1035、W6-04 U3）に出し、破棄の点の後決めと効果の note（`effects.rs`）と Core（W8-04）が読む | S-1030、R-255 |
+| Dup の値を消費する位置で移すか複製するか（手放し） | modes が消費の式ごとに一度だけ決める（`release.rs::release`。同じ呼び出しの他の引数との重なりは E0702 と同じ `exclusive.rs::changed_in_args`、後の使用で複製に戻すのは `release.rs::restore`）。複製になった消費は、理由とともに `BodyInfo::copied` に出す（S-1035、R-466、W6-04 U3・U12）。理由は §5.2 の移せる条件と経路に一つずつ対応する: 経路（`Part`）、借用の見出しの束縛（`Head`。鎖の先の所有の根）、借用の `for`・ガードが持つ場所（`Held`、E0715 と同じ判定）、同じ呼び出しの借用（`InCall`、E0702）、後の使用（`After`・`Loop`。`Loop` は戻りの辺だけを通って届いたとき）。行を書くのは本体の所有の束縛から来る値の消費だけ。破棄の点の後決めと効果の note（`effects.rs`。表だけを読む）が読み、Core（W8-04）は、Copy でない Dup の値を持つ所有の束縛の全体の消費を、行があれば複製、無ければ移動と読む | S-1030、R-255、R-466 |
 | 効果の使用の記録 | 型付けと modes の後の一つの段。効果行は効果の宣言の ID の集合 | R-83、S-74 |
 | 組込み | std の `impl` / `target` 宣言。Rust に残すのは `Prim`、§6.3 の暫定の表、`as`、lang item（`onsa_sema/src/lang.rs`）、`from_fn` の展開だけ | R-79、S-71 |
 | `Prim` の表（std の `target` 宣言ごとの行と、後端が実装する演算の分類） | `onsa_sema::prim`。署名の段の後に一度、宣言ごとの行を `Analysis.prims` に記録し、降下はそれを具体化する（後端は `onsa_core::prim` の再輸出で読む）。シグネチャ、rt と効果は std の宣言が正で、行の引数の数と rt は単体テストで突き合わせる写し。後端が与えるかは後端ごとの `supports` | R-79、R-81、S-69 |
