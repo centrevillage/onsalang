@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§8.1"]
+
+// W6-04 U15, S-1064 (decided (2)), S-1063 (decided (2)), §8.1, §18.1: in the argument of a type, both rows open
+// (`uses {gone.Alloc}`, whose head `gone` is a failed name, E0302, may have meant `Alloc`; `uses {Gone}` may have meant
+// nothing) differ only by the effect a failed name may have meant, so they are not compared (S-1064: "指しえた名前が何も
+// 指さなければ両側は等しいと読み、比べない"): no E0401 (`path_to_gone`), as `{gone.Alloc}` against a pure row
+// (`path_to_pure`). The closed row `{Alloc}` against `{Gone}` is the difference no failed name fills (S-1063:
+// "`uses {Gone}` と `uses {Alloc}` の違いは E0401", `alloc_val`). The functions are one-liners.
+use kp.{Gone, gone}   //~ E0302
+
+pub fn path_to_gone(o: Option[fn(U32) -> U32 uses {gone.Alloc}]) -> Option[fn(U32) -> U32 uses {Gone}] { o }
+
+pub fn path_to_pure(o: Option[fn(U32) -> U32 uses {gone.Alloc}]) -> Option[fn(U32) -> U32] { o }
+
+pub fn alloc_val(o: Option[fn(U32) -> U32 uses {Alloc}]) -> Option[fn(U32) -> U32 uses {Gone}] { o }   //~ E0401

@@ -15,6 +15,8 @@ pub(crate) struct Brackets {
     contents: Vec<Option<(usize, bool, bool)>>,
     /// [`Brackets::closing`], by the position of the opener.
     closing: Vec<Option<usize>>,
+    /// [`Brackets::around`], by the position of the token.
+    around: Vec<Option<usize>>,
     /// The openers no closer closes, whatever the kinds, in order: those
     /// left open at the end of the file ([`Brackets::scan_end`]).
     unclosed: Vec<usize>,
@@ -32,12 +34,14 @@ impl Brackets {
     pub(crate) fn new(tokens: &[Token]) -> Brackets {
         #[cfg(test)]
         MADE.set(MADE.get() + 1);
+        let none = vec![None; tokens.len()];
         let mut b =
-            Brackets { contents: vec![None; tokens.len()], closing: vec![None; tokens.len()], unclosed: Vec::new() };
+            Brackets { contents: vec![None; tokens.len()], closing: none.clone(), around: none, unclosed: Vec::new() };
         let (mut any, mut kinds) = (Vec::<(usize, bool, bool)>::new(), OpenBrackets::default());
         for (i, t) in tokens.iter().enumerate() {
             #[cfg(test)]
             WALKED.set(WALKED.get() + 1);
+            b.around[i] = any.last().map(|o| o.0);
             match t.kind {
                 TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace => {
                     any.push((i, false, false));
@@ -92,6 +96,12 @@ impl Brackets {
     /// of the forms of other languages ([`closing_on_line`] on a line).
     pub(crate) fn closing(&self, open: usize) -> Option<usize> {
         self.closing.get(open).copied().flatten()
+    }
+
+    /// The innermost bracket open before the token `i`, whatever the kinds
+    /// (the one [`Brackets::contents`] reads); none outside every bracket.
+    pub(crate) fn around(&self, i: usize) -> Option<usize> {
+        self.around.get(i).copied().flatten()
     }
 }
 

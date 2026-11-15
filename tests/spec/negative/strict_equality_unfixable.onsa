@@ -89,3 +89,30 @@ pub fn missing_before_body(a: I32) -> I32 {
     2
   }
 }
+
+// W6-04 U15, R-469: the chain ends at a closer that closes no bracket around it (`)` or `]` with no opener): the `==`
+// in its place would leave that error of the syntax stage, so the chain does not read, as `a === )` above
+// (spec/foreign-forms.toml: "読めなければ E0002").
+pub fn closer_after(a: I32, b: I32) -> Bool {
+  a === b )                                         //~ E0002
+}
+
+pub fn closer_after_ne(a: I32, b: I32) -> Bool {
+  a !== b )                                         //~ E0002
+}
+
+pub fn closer_after_hole(a: I32) -> Bool {
+  a === _ )                                         //~ E0002
+}
+
+pub fn closer_after_hole_ne(a: I32) -> Bool {
+  a !== _ )                                         //~ E0002
+}
+
+pub fn bracket_after(a: I32, b: I32) -> Bool {
+  a === b ]                                         //~ E0002
+}
+
+pub fn bracket_after_ne(a: I32, b: I32) -> Bool {
+  a !== b ]                                         //~ E0002
+}

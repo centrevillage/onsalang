@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§3.1", "§18.1"]
+// fixes = 1
+
+// W6-04 U15, R-469: a chain in a bracket that its own closer closes reads to that closer (a parenthesis, an argument
+// list, the elements of an array, after a `,`, a line break before the closer), so `===` and `!==` there keep the
+// candidate `==` / `!=` (the forms with a closer that closes no bracket around the chain are in
+// negative/strict_equality_unfixable.onsa). Each function holds one form (one error per unit).
+
+pub fn takes(v: Bool) -> Bool {
+  v
+}
+
+pub fn takes_two(n: I32, v: Bool) -> Bool {
+  v
+}
+
+pub fn in_parenthesis(a: I32, b: I32) -> Bool {
+  (a == b)                                         //~ E0020
+}
+
+pub fn in_argument(a: I32, b: I32) -> Bool {
+  takes(a != b)                                    //~ E0020
+}
+
+pub fn in_array(a: I32, b: I32) -> [Bool; 1] {
+  [a == b]                                         //~ E0020
+}
+
+pub fn after_comma(a: I32, b: I32) -> Bool {
+  takes_two(a, a != b)                             //~ E0020
+}
+
+pub fn in_array_after_comma(a: I32, b: I32) -> [Bool; 2] {
+  [true, a != b]                                   //~ E0020
+}
+
+pub fn line_break_before_closer(a: I32, b: I32) -> Bool {
+  takes(
+    a == b                                         //~ E0020
+  )
+}

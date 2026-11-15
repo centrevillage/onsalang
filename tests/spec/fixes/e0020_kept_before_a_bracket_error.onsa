@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§3.1", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "26:13"
+// code = "E0020"
+// candidate = 1
+// leaves = ["27:3 E0002"]
+//
+// [[test.fix]]
+// at = "33:5"
+// code = "E0020"
+// candidate = 1
+// leaves = ["34:3 E0002"]
+
+// W6-04 U15, R-469: a bracket error the chain does not end at leaves the candidate of the chain as it is. The `===`
+// whose chain ends at the line break keeps `compare with ==` though a `)` with no opener follows on the next line (the
+// chain ends at a closer only where it closes the bracket around the chain); a line that starts with a binary operator
+// in a `(` that nothing closes keeps the candidate that moves it to the end of the line before (§2.5, the same in a
+// bracket as outside). The error of the bracket is left after the candidates (`leaves`, two errors in the unit, outside
+// the contract of §18.1). The `(` left open goes last.
+
+pub fn stray_closer_after(a: I32, b: I32) -> Bool {
+  let x = a === b                                   //~ E0020
+  )
+  x
+}
+
+pub fn leading_operator_in_an_open_bracket(a: I32, b: I32) -> I32 {
+  let x = (a
+    + b                                             //~ E0020
+  x
+}

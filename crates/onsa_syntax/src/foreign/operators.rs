@@ -46,7 +46,7 @@ pub(super) fn power_operator(c: &Cursor) -> Option<Hit> {
 /// (S-450).
 fn compares(c: &Cursor, first: usize) -> bool {
     let op = if c.kind(c.at) == TokenKind::EqEqEq { BinOp::Eq } else { BinOp::Ne };
-    super::lines::chain_reads(c, first, c.at, op, false)
+    super::lines::chain_reads(c, first, c.at, op, false, true)
 }
 
 /// Whether a `{` after the operand after the failure opens the body of the

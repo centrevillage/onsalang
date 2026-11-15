@@ -146,7 +146,7 @@ pub(super) fn joined(c: &Cursor, prev: usize, s: usize) -> Option<Fix> {
 /// Another symbol joins as it is.
 fn joins_cleanly(c: &Cursor, prev: usize, s: usize) -> bool {
     let Some(op) = c.kind(s).binop() else { return true };
-    chain_start(c, prev).is_some_and(|from| chain_reads(c, from, s, op, true))
+    chain_start(c, prev).is_some_and(|from| chain_reads(c, from, s, op, true, false))
 }
 
 /// Whether the chain from token `from` with `op` in place of the token `s`
@@ -156,9 +156,10 @@ fn joins_cleanly(c: &Cursor, prev: usize, s: usize) -> bool {
 /// the line before ([`joins_cleanly`]) and the comparisons of other
 /// languages (`super::operators`). `braces`: whether a `{` may open at its
 /// depth (a block-like operand, a struct literal); the comparisons take
-/// none (their candidate writes no parentheses, E0013, S-450).
-pub(super) fn chain_reads(c: &Cursor, from: usize, s: usize, op: BinOp, braces: bool) -> bool {
-    let Some((operands, ops, braced)) = read_chain(c, from, s, op) else { return false };
+/// none (their candidate writes no parentheses, E0013, S-450). `closer`: whether
+/// a closer at its depth must close the bracket it is in (the comparisons, R-469).
+pub(super) fn chain_reads(c: &Cursor, from: usize, s: usize, op: BinOp, braces: bool, closer: bool) -> bool {
+    let Some((operands, ops, braced)) = read_chain(c, from, s, op, closer) else { return false };
     let mut fits = braces || !braced;
     let mut join = |l, o: BinOp, r| {
         fits &= o.bare(Side::Left, l) && o.bare(Side::Right, r);
@@ -221,14 +222,15 @@ fn chain_start(c: &Cursor, prev: usize) -> Option<usize> {
 /// `s`, to the end of the operand after it: at the depth of `from`, the
 /// brackets an operand holds passed, and the head of a block-like operand
 /// (from its keyword or `else` to its `{` on its lines) too. It ends at a bracket that
-/// closes none, the end of the file, a token that ends a chain
+/// closes none (with `closer`, only at the one that closes the bracket `from` is in,
+/// R-469), the end of the file, a token that ends a chain
 /// ([`ends_chain`]; the line break that ends the line of `s`), and the `{`
 /// of the body of the head the failure is in ([`super::operators::in_head`]);
 /// a range only in a `for` or `par~` head (§7). None at another token (R-445),
-/// a bracket its kind does not close ([`closing`]), and operands and operators
-/// that do not alternate ([`alternation`], to an operand at the end). With them,
-/// whether a `{` opened at the depth of `from`.
-fn read_chain(c: &Cursor, from: usize, s: usize, op: BinOp) -> Option<(Vec<Operand>, Vec<BinOp>, bool)> {
+/// a bracket its kind does not close ([`closing`]), another closer with `closer`,
+/// and operands and operators that do not alternate ([`alternation`], to an
+/// operand at the end). With them, whether a `{` opened at the depth of `from`.
+fn read_chain(c: &Cursor, from: usize, s: usize, op: BinOp, closer: bool) -> Option<(Vec<Operand>, Vec<BinOp>, bool)> {
     use TokenKind::*;
     let (mut operands, mut ops, mut depth, mut head) = (vec![Operand::Plain], Vec::new(), 0u32, false);
     let (mut braced, mut expect) = (false, true);
@@ -254,7 +256,11 @@ fn read_chain(c: &Cursor, from: usize, s: usize, op: BinOp) -> Option<(Vec<Opera
                 braced |= depth == 0 && k == LBrace;
                 depth += 1;
             }
-            RParen | RBracket | RBrace if depth == 0 => break,
+            RParen | RBracket | RBrace if depth == 0 => {
+                let around = c.brackets().around(from);
+                (!closer || around.and_then(|o| closing(c, o)) == Some(i)).then_some(())?;
+                break;
+            }
             RParen | RBracket | RBrace => (depth, expect) = (depth - 1, expect && depth > 1),
             _ if depth > 0 || (k == Newline && i < s) || (head && (k != Newline || c.lines.goes_on(i))) => {}
             Newline if head => return None,
