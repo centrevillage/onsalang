@@ -55,6 +55,7 @@ mod interface_const_floats;
 mod interface_fn_return;
 mod interface_generic_kinds;
 mod interface_visibility;
+mod kind_heading_notes;
 mod lexical_syntax;
 mod manifest_diagnostics;
 mod manifest_host;

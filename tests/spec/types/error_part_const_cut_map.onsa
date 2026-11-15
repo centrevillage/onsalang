@@ -1,0 +1,9 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.6"]
+
+// S-1067 (W6-04 U16, D-c), §18.1, §6.6: a struct cut by a syntax error has parts that were not read, and the type of a
+// `const` that holds it is judged by the parts that were read: a `Map` that was read: E0407.
+
+pub const K: Option[S] = None   //~ E0407
+pub struct S { m: Map[I32, I32], x:   //~ E0002

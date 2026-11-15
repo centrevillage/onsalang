@@ -1,0 +1,12 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§11.6"]
+
+// S-1068 (W6-04 U16), §18.1: the type of an argument, of a result and of a `const` is not an error type when it fails
+// (E0416), so the use of it is judged by that type: the result type `Option[OC[E1]]` fails (E0416: `E1` has a `Str` that
+// was read, so it is not `Copy`), and `q` returns it as an `I32`: the E0401 stays.
+
+pub struct E1 { s: Str, e: Buf[Str] }   //~ E0416
+pub struct OC[T: Copy] { v: T }
+pub fn r1() -> Option[OC[E1]] { None }   //~ E0416
+pub fn q() -> I32 { r1() }   //~ E0401

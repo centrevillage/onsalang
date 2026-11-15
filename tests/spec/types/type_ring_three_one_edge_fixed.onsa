@@ -1,0 +1,10 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§4.5"]
+
+// S-1066 (W6-04 U16), §18.1, §4.5: what the decision does not change. The ring of three with `R0` that is `Copy`: `R2.f`
+// is fine, and `R1.f` (`R2` owns a `Buf`) is the only E0416.
+
+pub struct R0 { f: I32 }
+pub struct R1 { f: Buf[R2] }   //~ E0416
+pub struct R2 { f: Buf[R0] }

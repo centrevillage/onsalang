@@ -1,0 +1,11 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§4.6"]
+
+// S-1067 (W6-04 U16), §18.1, §4.6: a type with a part that was not read (here the field `e: Buf[Str]`, an E0416) judges
+// what the parts that were read decide. A struct cut by a syntax error keeps the part that was read (`s: Str`): the
+// element of a `Buf` is an E0416 and the drop in an `rt` function is an E0601 (unchanged).
+
+pub struct U { u: Buf[K] }   //~ E0416
+pub rt fn dk(move x: K) -> I32 { 0 }   //~ E0601
+pub struct K { s: Str, x: }   //~ E0002

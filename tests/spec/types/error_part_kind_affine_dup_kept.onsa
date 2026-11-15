@@ -1,0 +1,14 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§4.6"]
+
+// S-1067 (W6-04 U16), §18.1, §4.6: a type with a part that was not read (here the field `e: Buf[Str]`, an E0416) judges
+// what the parts that were read decide. `E2` has a `Buf` (Affine), so it is not `Dup` and not `Copy`: an `Array`
+// element, a type parameter that is `Dup` by default and a `Buf` element are E0416 (unchanged: these are reported
+// today).
+
+pub struct E2 { b: Buf[F32], e: Buf[Str] }   //~ E0416
+pub struct U { u: Array[E2] }   //~ E0416
+pub struct W[T] { v: T }
+pub struct U2 { u: W[E2] }   //~ E0416
+pub struct U3 { u: Buf[E2] }   //~ E0416

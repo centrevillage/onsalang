@@ -1,0 +1,11 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§11.6"]
+
+// S-1066 and S-1068 (W6-04 U16), §18.1, §11.6: the type that a flow generates (`fl.Params`) has the inputs of the flow
+// as its fields, and takes part in a set of declarations that name each other like a struct does. The input `p: Buf[SF]`
+// fails (`SF` owns a `Buf`) and the field `q: Buf[fl.Params]` fails (`Params` owns the `Buf` of the input): two E0416
+// whichever is written first, and no E0810.
+
+pub flow fl(x: F32 at sample, p: Buf[SF] at block) -> F32 at sample { x }   //~ E0416
+pub struct SF { q: Buf[fl.Params] }   //~ E0416

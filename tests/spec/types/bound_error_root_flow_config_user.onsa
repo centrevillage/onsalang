@@ -1,0 +1,12 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§11.6"]
+
+// S-1068 (W6-04 U16), §18.1, §11.6: an E0416 of a boundary makes an error type of the field of a struct, the payload of
+// a variant and the input of a flow (a field of the type that the flow generates). The input `k` of `fa` is an `init`
+// input that fails, so `fa.Config` has an error type as its field, and the struct that asks it to be `Copy` gives
+// nothing.
+
+pub struct OC[T: Copy] { t: T }
+pub flow fa(x: F32 at sample, k: Array[Buf[F32]] at init) -> F32 at sample { x }   //~ E0416
+pub struct HQ { p: OC[fa.Config] }

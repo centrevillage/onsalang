@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§4.5"]
+
+// S-1073 (W6-04 U16) (2), S-1066, §18.1: the first error of `RA` is `x: Buf[Str]`, the diagnostic of its
+// unit; only the field reported is an error type, so `RA.b: Buf[RB]` is read and `RA` is Affine to its users: `RU` is an
+// E0416. `RB.a` is reported, an error type to `RV`, which gives nothing.
+
+pub struct RA { x: Buf[Str], b: Buf[RB] }   //~ E0416
+pub struct RB { a: Buf[RA] }   //~ E0416
+pub struct OC[T: Copy] { v: T }
+pub struct RU { u: OC[RA] }   //~ E0416
+pub struct RV { u: OC[RB] }

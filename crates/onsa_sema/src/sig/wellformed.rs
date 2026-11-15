@@ -176,6 +176,8 @@ pub(super) enum Slot {
 impl<'p> Sema<'p> {
     /// The stage (`collect_and_lower`): the declarations of types first
     /// ([`Self::types_first`]), then the roots of every other def.
+    /// The roots of a component are read otherwise ([`Self::unread`]) after
+    /// all its declarations are judged, as written (§18.1, S-1066).
     /// What is known of the types is kept throughout: what was kept before
     /// a component holds none of its declarations (they come after those it
     /// names), and what one not of a cycle reads holds none of it (else it
@@ -185,8 +187,10 @@ impl<'p> Sema<'p> {
     /// change no kind.
     pub(super) fn wellformed(&mut self) {
         let first = self.types_first();
+        let mut held = Vec::new();
         for (k, &(d, comp, cycle)) in first.iter().enumerate() {
             if k == 0 || first[k - 1].1 != comp {
+                self.read_as(std::mem::take(&mut held));
                 let decls =
                     first[k..].iter().take_while(|f| f.1 == comp && cycle).flat_map(|f| match &self.a.def(f.0).kind {
                         DefKind::Flow(flow) => flow.members.iter().map(|m| m.1).chain([f.0]).collect(),
@@ -196,15 +200,24 @@ impl<'p> Sema<'p> {
                 self.a.known.summaries.get_mut().begin(decls);
             }
             match self.a.def(d).kind {
+                // An alias of a cycle is read otherwise at once, and the others of
+                // the cycle read its right side as written in their fields: S-1072 (2).
                 DefKind::Alias(_) => self.wellformed_alias(d),
-                _ => self.wellformed_def(d),
+                _ => held.extend(self.wellformed_def(d)),
             }
         }
+        self.read_as(held);
         let first: HashSet<DefId> = first.into_iter().map(|f| f.0).collect();
         self.a.known.summaries.get_mut().begin(HashSet::default());
         for d in self.a.new_defs().filter(|d| !first.contains(d)) {
-            self.wellformed_def(d);
+            let read = self.wellformed_def(d);
+            self.read_as(read);
         }
+    }
+
+    /// The roots `read` of [`Self::wellformed_def`], read otherwise.
+    fn read_as(&mut self, read: Vec<(DefId, Slot, TyId)>) {
+        read.into_iter().for_each(|(id, slot, t)| self.unread(id, slot, t));
     }
 
     /// The aliases, structs, enums and flows (whose inputs are the fields of
@@ -212,11 +225,9 @@ impl<'p> Sema<'p> {
     /// field or an alias with an error is the error type to every type that
     /// names it, whatever the order they are written in (§18.1, R-464). Those
     /// of a cycle through no value (`A { b: Buf[B] }`, `B { a: Buf[A] }`) go
-    /// in the order the aliases are lowered in, then as written. Each with
+    /// in the order the aliases are lowered in, then as written, and read
+    /// each other's fields as written: each has its E0416 (S-1066). Each with
     /// its strongly connected component and whether it is a cycle.
-    // SPEC-GAP(S-1066): of a cycle through no value, those judged first have
-    // the E0416 and the others read them as the error type (`A` of the two
-    // above as written).
     fn types_first(&mut self) -> Vec<(DefId, usize, bool)> {
         let aliases = std::mem::take(&mut self.a.decls.aliases).into_iter();
         let types = self.a.new_defs().filter(|&d| {
@@ -322,25 +333,28 @@ impl<'p> Sema<'p> {
     }
 
     /// The roots of the def `id`, under the generics in scope; the first
-    /// with an error is the diagnostic of its unit.
-    fn wellformed_def(&mut self, id: DefId) {
+    /// with an error is the diagnostic of its unit. The roots to read
+    /// otherwise ([`Self::unread`]).
+    fn wellformed_def(&mut self, id: DefId) -> Vec<(DefId, Slot, TyId)> {
         let generics = crate::body::generics_of(self.a, id);
-        let Some(cx) = self.cx_for(id, generics, None) else { return };
+        let Some(cx) = self.cx_for(id, generics, None) else { return Vec::new() };
+        let mut read = Vec::new();
         for (t, ty, pos, slot) in self.roots(&cx, id) {
             match self.judge(&cx, t, ty, pos) {
                 None => {
-                    // A field or a payload with an error is not read: the error type
-                    // to its users (§18.1).
-                    if matches!(slot, Slot::Field(_) | Slot::Variant(..)) {
-                        let error = self.a.types.error();
-                        self.unread(id, slot, error);
+                    // A field, a payload or an input of a flow with an error is not
+                    // read: the error type to its users (§18.1, S-1068).
+                    if matches!(slot, Slot::Field(_) | Slot::Variant(..) | Slot::Input(_)) {
+                        read.push((id, slot, self.a.types.error()));
                     }
-                    return;
+                    // A later root with an error, not judged, is read as written: S-1073 (2).
+                    break;
                 }
-                Some(read) if read != ty => self.unread(id, slot, read),
+                Some(r) if r != ty => read.push((id, slot, r)),
                 Some(_) => {}
             }
         }
+        read
     }
 
     /// The root `slot` of `id` names an alias with an error: it is read as
@@ -402,6 +416,7 @@ impl<'p> Sema<'p> {
     /// nearest part written is. The type as read ([`Self::judge`]).
     fn part(&mut self, cx: &Cx<'p>, w: Written, ty: TyId, at: (Pos, u8), span: Span) -> Result<TyId, Diagnostic> {
         // A type of a cycle is read as the error type, its arguments judged (R-327).
+        // So too where it is named through no value in a cycle: S-1074 (1).
         let cyclic = match w {
             Written::Here(t) => self.a.decls.cyclic_at.get(&(cx.m, t)).copied(),
             _ => None,

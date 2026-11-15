@@ -1,0 +1,10 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§4.6"]
+
+// S-1067 (W6-04 U16), §18.1, §4.6: a type with a part that was not read (here the field `e: Buf[Str]`, an E0416) judges
+// what the parts that were read decide. The part that was not read is a field whose type is not found (E0302); the `Str`
+// that was read needs `Alloc` to drop (unchanged, §12.2).
+
+pub struct E5 { s: Str, e: Gone }   //~ E0302
+pub rt fn d5(move x: E5) -> I32 { 0 }   //~ E0601

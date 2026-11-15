@@ -1,0 +1,11 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§4.5"]
+
+// S-1066 (W6-04 U16), §18.1, §4.5: the declarations that name each other where they do not contain each other as a value
+// (the elements of `Buf` and `Array`, type arguments) are each judged by the fields of the others as they are written,
+// so each field that fails is an E0416 whatever the order of the declarations is; the field that failed is an error type
+// only for the declarations outside the set. The set is two enums (the payload of a variant is the field).
+
+pub enum EB { W(Buf[EA]), M }   //~ E0416
+pub enum EA { V(Buf[EB]), N }   //~ E0416

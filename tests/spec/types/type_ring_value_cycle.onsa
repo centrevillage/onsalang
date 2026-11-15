@@ -1,0 +1,11 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§4.4"]
+
+// S-1074 (W6-04 U16) (1), S-1066, §18.1, §4.4: `VA` and `VB` hold each other as values, one E0311 for the
+// set; a type of that cycle is the error type to what names it, so `VC.c: Buf[VA]` gives nothing, though `VC` and `VA`
+// name each other through no value.
+
+pub struct VA { v: VB, b: Buf[VC] }   //~ E0311
+pub struct VB { v: VA }
+pub struct VC { c: Buf[VA] }

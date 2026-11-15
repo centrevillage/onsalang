@@ -1,0 +1,12 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§4.6"]
+
+// S-1067 (W6-04 U16), §18.1, §4.6: a type with a part that was not read (here the field `e: Buf[Str]`, an E0416) judges
+// what the parts that were read decide. `[e; N]` needs `e` to be `Dup`, and `E2` (Affine) is not: E0416 (unchanged).
+
+pub struct E2 { b: Buf[F32], e: Buf[Str] }   //~ E0416
+pub fn c2(x: E2) -> I32 {
+  let ys = [x; 2]   //~ E0416
+  0
+}

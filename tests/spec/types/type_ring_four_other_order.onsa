@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§4.5"]
+
+// S-1066 (W6-04 U16), §18.1, §4.5: the declarations that name each other where they do not contain each other as a value
+// (the elements of `Buf` and `Array`, type arguments) are each judged by the fields of the others as they are written,
+// so each field that fails is an E0416 whatever the order of the declarations is; the field that failed is an error type
+// only for the declarations outside the set. Four declarations written in an order that is not the ring's: four E0416.
+
+pub struct R0 { f: Buf[R1] }   //~ E0416
+pub struct R2 { f: Buf[R3] }   //~ E0416
+pub struct R1 { f: Buf[R2] }   //~ E0416
+pub struct R3 { f: Buf[R0] }   //~ E0416

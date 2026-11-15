@@ -21,30 +21,37 @@
 //! the E0810 of a nested array or of a generated `Out` at the boundary, §11.6), so that a sweep of programs
 //! that all end with the same internal error does not pass.
 //!
-//! The same is asked of a program that has errors (W6-04 U5, U6; R-464, R-462): which diagnostics there are
-//! does not depend on the order either, because an error type that a failed declaration leaves is not judged
-//! again where it is used (§18.1, "読めなかった部分は誤りの型として扱い、それを使う側には診断を出さない"),
-//! and a recursion of `rt` functions is one E0903 for each set of functions that reach each other (§18.1,
-//! "互いに辿り合う宣言の集まりごとに一つ"). Two kinds of program are checked apart:
-//! - the E0416 of a field and the uses of the type before and after it (`FIELD_ERRORS`), and three programs of
-//!   the break side of W5-23 U1 (`m4`, `m5`, `m19`, in `FIELD_ERRORS_OPEN`) whose number of E0416 and whose
-//!   E0601 and E0901 changed with the order. For these the whole document is compared (the positions left
-//!   out). For `m4`, `m5` and `m19` the spec does not fix which diagnostics stay (whether a use of a type whose
-//!   field failed is judged by the other fields, §18.1), so the codes of the written order are not asked, only
-//!   that the order changes nothing;
+//! The same is asked of a program that has errors (W6-04 U5, U6, U16; R-464, R-462, S-1066, S-1067): which diagnostics
+//! there are does not depend on the order either, because an error type that a failed declaration leaves is not judged
+//! again where it is used (§18.1, "読めなかった部分は誤りの型として扱い、それを使う側には診断を出さない"), because the
+//! declarations that name each other where they do not contain each other as a value are each judged by the fields of
+//! the others as they are written (§18.1, S-1066), because a type with a part that was not read is judged by the
+//! parts that were read (§18.1, S-1067), and because a recursion of `rt` functions is one E0903 for each set of
+//! functions that reach each other (§18.1, "互いに辿り合う宣言の集まりごとに一つ"). Four kinds of program are checked
+//! apart:
+//! - the E0416 of a field and the uses of the type before and after it (`FIELD_ERRORS`), and the program `m19` of the
+//!   break side of W5-23 U1 (the E0416 of one type and what moves or drops it). For these the whole document is
+//!   compared (the positions left out);
+//! - the set of declarations that name each other in a `Buf` or a type argument, with the uses of it (`RING_ERRORS`:
+//!   two, three and four structs, a flow input and a struct, aliases of tuples that hold them, and the `Str` that the
+//!   users see). Every declaration of the set is an E0416, in the written order too, and the uses give none (S-1066);
+//! - the programs `m4` and `m5` of the break side of W5-23 U1 (`READ_PARTS`), in which a type that has a field that
+//!   failed is asked to be `Copy` by a signature, an enum and an alias: what the parts that were read decide is
+//!   reported (S-1067), so the E0416 of the signature stays and its E0601 does not come;
 //! - the E0903 of `rt` functions that call each other (`RT_CYCLES`). Where the E0903 is reported is the first call
 //!   of the set in the order of the source (§18.1), so the place, and with it the cycle the message names
 //!   (§18.1 does not fix the wording), moves with the order. Only the codes are compared, and the codes of the
 //!   written order are asked: one for each set.
 //!
-//! The two kinds are tests of their own (`field_errors_…`, `rt_cycles_…`), apart from the clean programs and from
-//! the errors that share nothing (`INDEPENDENT`: the contrast of the two kinds), so that a form that is not through
-//! yet does not hide a regression of the others (`tests/README.md`).
+//! The kinds are tests of their own (`field_errors_…`, `rings_…`, `types_with_a_part_not_read_…`, `rt_cycles_…`), apart from the
+//! clean programs and from the errors that share nothing (`INDEPENDENT`: the contrast), so that a form that is not
+//! through yet does not hide a regression of the others (`tests/README.md`).
 //!
 //! Seeds: the orders of each program are drawn from `Rng::new(seed)`; the written order and five other
 //! orders each (the program with fewer blocks takes fewer). The modules are all six orders. About 110 runs
 //! of `onsa`, under a second in a debug build. The programs with errors take the written order and seven
-//! other orders (all of them when there are fewer), from the seeds `0xE0 + i` and `0xF0 + i`.
+//! other orders (all of them when there are fewer), from the seeds `0xE0 + i`, `0xF0 + i` and, for the sets, `0xC0 + i`
+//! (`RING_ERRORS`) and `0xC8 + i` (`READ_PARTS`).
 
 use crate::test_support;
 
@@ -324,7 +331,7 @@ struct Failing {
 /// `S3[T1: ?Dup] { w: Array[T1] }` (the elements of `Array` are `Dup`) or `B[T1] { w: Buf[T1] }` (the elements
 /// of `Buf` are `Copy`), and the users ask `Copy` of it (`OC[T: Copy]`) in a field, in a variant and in a
 /// signature.
-const FIELD_ERRORS: [Failing; 9] = [
+const FIELD_ERRORS: [Failing; 10] = [
     Failing {
         name: "R-464 a: a struct, a signature and a struct that use the type of the failed field",
         blocks: &[
@@ -425,6 +432,20 @@ const FIELD_ERRORS: [Failing; 9] = [
         codes: Some(&["E0416"]),
         text: true,
     },
+    Failing {
+        name: "W5-23 U1 m19: a struct, signatures, two rt signatures and a move twice of the failed type",
+        blocks: &[
+            "pub struct OC[T: Copy] { t: T }",
+            "pub struct S3[T1: ?Dup] { a: I32, w: Array[T1] }",
+            "pub struct H { h: OC[S3[F32]] }",
+            "pub fn g(x: OC[S3[F32]]) -> I32 { 0 }",
+            "pub fn k(move x: S3[Buf[F32]]) -> (S3[Buf[F32]], S3[Buf[F32]]) { (move x, move x) }",
+            "pub rt fn r(move x: S3[F32]) -> I32 { 0 }",
+            "pub rt fn r2(move x: S3[F32]) -> S3[F32] { x }",
+        ],
+        codes: Some(&["E0416"]),
+        text: true,
+    },
 ];
 
 /// What does not depend on the order today, as the contrast of the two above (a form that fails is not mixed with
@@ -456,10 +477,98 @@ const INDEPENDENT: [Failing; 3] = [
     },
 ];
 
-/// The programs `m4`, `m5` and `m19` of the break side of W5-23 U1 (the number of E0416, and the E0601 and
-/// E0901, changed with the order): which diagnostics stay is not fixed by the spec (whether the use of a type
-/// whose field failed is judged by the other fields, §18.1), so only the sameness is asked.
-const FIELD_ERRORS_OPEN: [Failing; 3] = [
+/// S-1066 (W6-04 U16), §18.1, §4.5: the declarations that name each other where they do not contain each other as a
+/// value (the elements of `Buf`, the type arguments, the inputs of a flow) are each judged by the fields of the others as
+/// they are written, so each of them has its own E0416 in the written order and in every other, and the declarations
+/// outside the set, which see an error type in the fields that failed, give none. `RA` and `RB` own a `Buf`, so each
+/// `Buf[RB]` and `Buf[RA]` is an E0416; the users ask `Copy`, `Dup`, move, drop and hold the types in tuples and aliases.
+const RING_ERRORS: [Failing; 7] = [
+    Failing {
+        name: "S-1066 a: two structs that name each other in a Buf",
+        blocks: &["pub struct RA { b: Buf[RB] }", "pub struct RB { a: Buf[RA] }"],
+        codes: Some(&["E0416", "E0416"]),
+        text: true,
+    },
+    Failing {
+        name: "S-1066 b: the same set and the uses of both in signatures, tuples, a drop and a move twice",
+        blocks: &[
+            "pub struct RA { b: Buf[RB] }",
+            "pub struct RB { a: Buf[RA] }",
+            "pub struct OC[T: Copy] { v: T }",
+            "pub struct W[T] { v: T }",
+            "pub fn fa(x: OC[RA]) -> I32 { 0 }",
+            "pub fn fb(x: OC[RB]) -> I32 { 0 }",
+            "pub fn fc(x: W[RA]) -> I32 { 0 }",
+            "pub fn fd(x: W[RB]) -> I32 { 0 }",
+            "pub fn fe() -> Option[OC[(RA, I32)]] { None }",
+            "pub fn ff() -> Option[OC[(RB, I32)]] { None }",
+            "pub rt fn ga(move x: RA) -> I32 { 0 }",
+            "pub rt fn gb(move x: RB) -> I32 { 0 }",
+            "pub fn ha(move x: RA) -> (RA, RA) { (move x, move x) }",
+            "pub fn hb(move x: RB) -> (RB, RB) { (move x, move x) }",
+        ],
+        codes: Some(&["E0416", "E0416"]),
+        text: true,
+    },
+    Failing {
+        name: "S-1066 c: three structs in a ring",
+        blocks: &["pub struct R0 { f: Buf[R1] }", "pub struct R1 { f: Buf[R2] }", "pub struct R2 { f: Buf[R0] }"],
+        codes: Some(&["E0416", "E0416", "E0416"]),
+        text: true,
+    },
+    Failing {
+        name: "S-1066 d: four structs in a ring",
+        blocks: &[
+            "pub struct R0 { f: Buf[R1] }",
+            "pub struct R1 { f: Buf[R2] }",
+            "pub struct R2 { f: Buf[R3] }",
+            "pub struct R3 { f: Buf[R0] }",
+        ],
+        codes: Some(&["E0416", "E0416", "E0416", "E0416"]),
+        text: true,
+    },
+    Failing {
+        name: "S-1066 e: a flow whose block input names a struct, and the struct that holds the Params of the flow",
+        blocks: &[
+            "pub flow fl(x: F32 at sample, p: Buf[SF] at block) -> F32 at sample { x }",
+            "pub struct SF { q: Buf[fl.Params] }",
+        ],
+        codes: Some(&["E0416", "E0416"]),
+        text: true,
+    },
+    Failing {
+        name: "S-1066 f: the set and the aliases of tuples that hold its types, and the structs that use the aliases",
+        blocks: &[
+            "pub struct RA { b: Buf[RB] }",
+            "pub struct RB { a: Buf[RA] }",
+            "pub type RT = (RA, I32)",
+            "pub type RS = (RB, I32)",
+            "pub struct OC[T: Copy] { v: T }",
+            "pub struct RU { u: OC[RT] }",
+            "pub struct RV { u: OC[RS] }",
+        ],
+        codes: Some(&["E0416", "E0416"]),
+        text: true,
+    },
+    Failing {
+        name: "S-1066 and S-1067 g: the set whose types have a Str, and the two structs that ask them to be Copy",
+        blocks: &[
+            "pub struct RA { b: Buf[RB], name: Str }",
+            "pub struct RB { a: Buf[RA], name: Str }",
+            "pub struct OC[T: Copy] { v: T }",
+            "pub struct RU { u: OC[RA] }",
+            "pub struct RV { u: OC[RB] }",
+        ],
+        codes: Some(&["E0416", "E0416", "E0416", "E0416"]),
+        text: true,
+    },
+];
+
+/// S-1067 (W6-04 U16), §18.1, §4.6: the programs `m4` and `m5` of the break side of W5-23 U1. `S1[T0: Copy]` has
+/// `f0: (T0, Str)` that is read and `f2` that fails (an E0416), so `S1[I32]` is not `Copy` by its `Str`: the
+/// signature that asks `S1[S1[I32]]` (here an `rt` function) is an E0416 and, as a unit that failed in the types
+/// stage, has no E0601. The enum `S2` (`S1[Bytes]`) and the alias `S4` (`S1[Str]`) are E0416 of their own.
+const READ_PARTS: [Failing; 2] = [
     Failing {
         name: "W5-23 U1 m4: a failed type argument, an enum and an rt signature that use the type",
         blocks: &[
@@ -468,7 +577,7 @@ const FIELD_ERRORS_OPEN: [Failing; 3] = [
             "pub enum S2 { V0(S1[Bytes]) }",
             "pub rt fn p0_0(move x: S1[S1[I32]]) -> I32 { 0 }",
         ],
-        codes: None,
+        codes: Some(&["E0416", "E0416", "E0416"]),
         text: true,
     },
     Failing {
@@ -479,21 +588,7 @@ const FIELD_ERRORS_OPEN: [Failing; 3] = [
             "pub type S4 = S0[S1[Str], F32]",
             "pub rt fn p0_0(move x: S1[S1[I32]]) -> I32 { 0 }",
         ],
-        codes: None,
-        text: true,
-    },
-    Failing {
-        name: "W5-23 U1 m19: a struct, signatures, two rt signatures and a move twice of the failed type",
-        blocks: &[
-            "pub struct OC[T: Copy] { t: T }",
-            "pub struct S3[T1: ?Dup] { a: I32, w: Array[T1] }",
-            "pub struct H { h: OC[S3[F32]] }",
-            "pub fn g(x: OC[S3[F32]]) -> I32 { 0 }",
-            "pub fn k(move x: S3[Buf[F32]]) -> (S3[Buf[F32]], S3[Buf[F32]]) { (move x, move x) }",
-            "pub rt fn r(move x: S3[F32]) -> I32 { 0 }",
-            "pub rt fn r2(move x: S3[F32]) -> S3[F32] { x }",
-        ],
-        codes: None,
+        codes: Some(&["E0416", "E0416", "E0416"]),
         text: true,
     },
 ];
@@ -585,9 +680,30 @@ fn errors_that_are_not_shared_give_the_same_codes_in_every_order() {
 /// every order of the declarations, and in the written order they are the one E0416 of the field.
 #[test]
 fn field_errors_give_the_same_diagnostics_in_every_order() {
-    let programs: Vec<&Failing> = FIELD_ERRORS.iter().chain(FIELD_ERRORS_OPEN.iter()).collect();
+    let programs: Vec<&Failing> = FIELD_ERRORS.iter().collect();
     let (runs, problems) = sweep_failing(&programs, 0xE0);
     assert!(runs >= 40, "{runs} runs");
+    assert!(problems.is_empty(), "{} problems:\n{}", problems.len(), problems.join("\n"));
+}
+
+/// S-1066 (W6-04 U16), §18.1: the declarations that name each other in a `Buf` or a type argument have each their own
+/// E0416 and the uses of them none, in every order of the declarations, and in the written order the codes are those
+/// of the spec.
+#[test]
+fn rings_give_an_e0416_for_each_declaration_in_every_order() {
+    let programs: Vec<&Failing> = RING_ERRORS.iter().collect();
+    let (runs, problems) = sweep_failing(&programs, 0xC0);
+    assert!(runs >= 40, "{runs} runs");
+    assert!(problems.is_empty(), "{} problems:\n{}", problems.len(), problems.join("\n"));
+}
+
+/// S-1067 (W6-04 U16), §18.1: a type with a part that was not read is judged by the parts that were read: the
+/// signature that asks it to be `Copy` is an E0416 in every order, and has no E0601.
+#[test]
+fn types_with_a_part_not_read_are_judged_by_the_parts_read_in_every_order() {
+    let programs: Vec<&Failing> = READ_PARTS.iter().collect();
+    let (runs, problems) = sweep_failing(&programs, 0xC8);
+    assert!(runs >= 12, "{runs} runs");
     assert!(problems.is_empty(), "{} problems:\n{}", problems.len(), problems.join("\n"));
 }
 

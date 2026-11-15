@@ -160,14 +160,13 @@ impl<'a> Rater<'a> {
             // §11.3: the value type of a signal must be Copy.
             let ty = self.body.expr_types.get(&p.init).copied().unwrap_or_else(|| self.a.types.error());
             if self.final_pass
-                && let Some(k) = self.a.kind_of(ty)
-                && k != Kind::Copy
+                && let Some(k) = crate::kind::facts_of(self.a, ty, &[]).not_copy()
             {
                 let shown = self.display(ty);
                 return Err(self.err(
                     Code::E0810,
                     p.span,
-                    format!("the value type of a signal must be Copy; `{shown}` is {} (§11.3)", k.name()),
+                    format!("the value type of a signal must be Copy; `{shown}` is {k} (§11.3)"),
                 ));
             }
             for &l in &p.locals {

@@ -1,0 +1,11 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§4.6"]
+
+// S-1067 (W6-04 U16), §18.1, §4.6: a type with a part that was not read (here the field `e: Buf[Str]`, an E0416) judges
+// what the parts that were read decide. `E1` has a `Str` (Shared), so it is not `Copy`: a tuple that holds it is not
+// `Copy` either, in a signature.
+
+pub struct E1 { s: Str, e: Buf[Str] }   //~ E0416
+pub struct OC[T: Copy] { v: T }
+pub fn f(x: OC[(E1, I32)]) -> I32 { 0 }   //~ E0416

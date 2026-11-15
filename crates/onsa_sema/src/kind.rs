@@ -32,7 +32,13 @@ impl Kind {
 /// Kind of a type; `None` when it depends on a generic parameter, or for
 /// second-class types (`Span`), and for a type that holds itself ([`Facts`]).
 pub fn kind_of(a: &Analysis, ty: TyId) -> Option<Kind> {
-    Read::new(a, Vec::new()).of(ty).kind
+    facts_of(a, ty, &[]).kind
+}
+
+/// What is known of `ty` in a body with the type parameters `generics`
+/// ([`kind_in_body`]).
+pub(crate) fn facts_of(a: &Analysis, ty: TyId, generics: &[GenericDef]) -> Facts {
+    Read::new(a, params_in_body(a, generics)).of(ty)
 }
 
 /// The kind a value of `ty` in a body with the type parameters `generics` is
@@ -40,7 +46,7 @@ pub fn kind_of(a: &Analysis, ty: TyId) -> Option<Kind> {
 /// of the types stage (R-176, [`Bounds::meets`]), by the facts of
 /// [`params_in_body`].
 pub(crate) fn kind_in_body(a: &Analysis, ty: TyId, generics: &[GenericDef]) -> Option<Kind> {
-    Read::new(a, params_in_body(a, generics)).of(ty).kind
+    facts_of(a, ty, generics).kind
 }
 
 /// The facts of the type parameters `generics` of a body, the one reading
@@ -72,21 +78,24 @@ pub fn kind_of_named(a: &Analysis, d: DefId, args: &[TyId]) -> Option<Kind> {
 /// the order of the worst part: in the static area (`Static`: Copy), there
 /// from the second phase (`Later`: a Shared `Str`, `Bytes` or `Array` of
 /// such parts, and a type parameter not `Copy`, W4-05 table 5), or never
-/// (`Never`: `Map`, `Set`, Affine).
+/// (`Never`: `Map`, `Set`, Affine). `Unread`: the error type, which a part
+/// not `Static` outweighs (§18.1, S-1067).
 // S-773: a type with a Shared part and one never placed (`(Str, Buf[F32])`) is
 // `Never`, the E0407: the error of every version before the E0200 of this one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum Placed {
     Static,
+    Unread,
     Later,
     Never,
 }
 
 /// Where a `const` of `ty` can be placed; `copy[i]`: whether the type
 /// parameter `i` in scope is `Copy`. `None` when a part has no kind (a
-/// second-class type, S-771; the error type, a field with an error too, and
-/// a declaration a syntax error cut, §18.1): its own diagnostic is that
-/// part's.
+/// second-class type, S-771), and `Unread` when the parts read are all
+/// `Static` beside a part not read (the error type, a field with an error
+/// too, what a declaration a syntax error cut does not hold, §18.1): its own
+/// diagnostic is that part's.
 pub(crate) fn placed(a: &Analysis, ty: TyId, copy: &[bool]) -> Option<Placed> {
     let params: Vec<_> = copy.iter().map(|&c| Some(if c { Placed::Static } else { Placed::Later })).collect();
     let p = Place { w: Walk::new(a), seen: RefCell::default(), found: RefCell::default(), grew: Cell::new(true) };
@@ -108,8 +117,8 @@ type Key = (DefId, Vec<Option<Placed>>);
 /// placements of its arguments, a finite key, once a round (`seen`); one
 /// reached again is what it was found (`found`, at first `Static`). The
 /// rounds go on while one grows, so each comes to the worst it reaches,
-/// whichever is asked first (a key grows twice at most, so the rounds are at
-/// most twice the keys and one).
+/// whichever is asked first (a key grows three times at most, so the rounds
+/// are at most three times the keys and one).
 struct Place<'a> {
     w: Walk<'a>,
     seen: RefCell<HashSet<Key>>,
@@ -128,8 +137,7 @@ impl Place<'_> {
             Ty::Array(e, _) => self.of(*e, params, depth),
             Ty::Tuple(ts) => all(ts),
             Ty::Param(i) => params.get(*i as usize).copied().flatten(),
-            // A declaration a syntax error cut: what it holds is not all read (§18.1).
-            Ty::Named(d, _) if self.w.a.failed.contains_key(d) => None,
+            Ty::Error => Some(Placed::Unread),
             Ty::Named(d, args) => {
                 let key = (*d, args.iter().map(|&t| self.of(t, params, depth)).collect::<Vec<_>>());
                 let was = self.found.borrow().get(&key).copied().unwrap_or(Placed::Static);
@@ -141,6 +149,10 @@ impl Place<'_> {
                     _ if holds.is_state() => Placed::Never,
                     Holds::Opaque(_) => Placed::Static,
                     Holds::Nothing => return None,
+                    // A declaration a syntax error cut: what it holds is not all read (§18.1).
+                    _ if self.w.a.failed.contains_key(d) => {
+                        self.all(&holds.parts(), &key.1, depth)?.max(Placed::Unread)
+                    }
                     _ => self.all(&holds.parts(), &key.1, depth)?,
                 };
                 if now != was {

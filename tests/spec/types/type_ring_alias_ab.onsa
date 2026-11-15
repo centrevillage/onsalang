@@ -1,0 +1,11 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§4.4"]
+
+// S-1072 (W6-04 U16) (2), S-1066, §18.1, §4.4: an alias in a ring through no value is read as the error type
+// at once (S-757), but the declarations of the ring read each other's fields as written: `RA.b` is `Buf[RB]` to `RB`, so
+// `RB.a` fails too. Two E0416, the alias `AB` and `RB.a`, in either order.
+
+pub struct RA { b: AB }
+pub type AB = Buf[RB]   //~ E0416
+pub struct RB { a: Buf[RA] }   //~ E0416

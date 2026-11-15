@@ -1,0 +1,12 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§11.6"]
+
+// S-1068 (W6-04 U16), §18.1, §11.6: an E0416 of a boundary makes an error type of the field of a struct, the payload of
+// a variant and the input of a flow (a field of the type that the flow generates). An input whose type is an alias that
+// is an error type (`AE`, the E0416 is of the alias): the same, unchanged.
+
+pub struct OC[T: Copy] { t: T }
+pub type AE = Array[Buf[F32]]   //~ E0416
+pub flow fa(x: F32 at sample, k: AE at init) -> F32 at sample { x }
+pub struct HQ { p: OC[fa.Config] }

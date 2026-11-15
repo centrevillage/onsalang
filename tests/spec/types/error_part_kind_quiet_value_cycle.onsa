@@ -1,0 +1,14 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§4.4"]
+
+// S-1067 (W6-04 U16), §18.1, §4.6: a type with a part that was not read (here the field `e: Buf[Str]`, an E0416) judges
+// what the parts that were read decide. What depends on the part that was not read is not judged: a type that is an
+// E0311 (it holds itself as a value, and a `Str`) is an error type for what uses it: a `Buf` element, an alias of a
+// tuple that holds it, and the drop in an `rt` function give nothing.
+
+pub struct N { s: Str, next: N }   //~ E0311
+pub struct U { u: Buf[N] }
+pub type TN = (N, I32)
+pub struct U2 { u: Buf[TN] }
+pub rt fn dn(move x: N) -> I32 { 0 }

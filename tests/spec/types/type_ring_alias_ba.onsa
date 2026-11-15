@@ -1,0 +1,10 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§4.4"]
+
+// S-1072 (W6-04 U16) (2), S-1066, §18.1, §4.4: as `type_ring_alias_ab` in the other order: the alias `AB`
+// and `RB.a` are both an E0416.
+
+pub struct RB { a: Buf[RA] }   //~ E0416
+pub type AB = Buf[RB]   //~ E0416
+pub struct RA { b: AB }

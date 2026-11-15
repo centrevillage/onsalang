@@ -64,7 +64,7 @@ use crate::body::{BodyInfo, Checker, Frame, LocalId, R, Target};
 use crate::consteval::{self, ConstValue};
 use crate::def::FlowInput;
 use crate::ty::{FloatKind, Len, Rate, Ty, TyId};
-use crate::{Analysis, DefId, Kind, Module};
+use crate::{Analysis, DefId, Module};
 
 #[path = "flow_map.rs"]
 pub(crate) mod map;

@@ -118,7 +118,7 @@ impl<'a> Checker<'a> {
             Placed::Static if field.is_some() && self.a.types.mentions_param(ty) => {
                 Feature::ParamFieldDefaults.diagnostic(Stage::Types, span, &[&shown])
             }
-            Placed::Static => return None,
+            Placed::Static | Placed::Unread => return None,
             Placed::Later => Feature::SharedConsts.diagnostic(Stage::Types, span, &[&shown]),
             Placed::Never => {
                 let msg = format!(

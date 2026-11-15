@@ -1,0 +1,14 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§4.6"]
+
+// S-1067 (W6-04 U16), §18.1, §4.6: a type with a part that was not read (here the field `e: Buf[Str]`, an E0416) judges
+// what the parts that were read decide. The part that was not read is an alias that is an error type (`BadA`, an E0416
+// of the alias), in a struct and in a tuple that an alias names: the `Str` that was read is not `Copy`, so the two
+// elements of a `Buf` are E0416.
+
+pub type BadA = Buf[Str]   //~ E0416
+pub struct E6 { s: Str, e: BadA }
+pub struct U { u: Buf[E6] }   //~ E0416
+pub type T6 = (Str, BadA)
+pub struct U2 { u: Buf[T6] }   //~ E0416

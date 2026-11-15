@@ -1,0 +1,9 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§4.5"]
+
+// S-1066 (W6-04 U16), §18.1, §4.5: what the decision does not change. `Array` is Shared, so `Dir` is Shared and
+// `Array[Dir]` is fine, and `File` owns a `Buf`, so `Array[File]` fails: one E0416 in either order.
+
+pub struct File { parent: Array[Dir], data: Buf[U8] }
+pub struct Dir { files: Array[File] }   //~ E0416

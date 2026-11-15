@@ -39,10 +39,14 @@ impl Bounds<'_> {
     /// Whether a decided type meets a requirement (the bounds of §6.3 and the
     /// kind constraints of §4.6). A type with no kind keeps a kind constraint
     /// quiet (§18.1: what it holds was not read, whose own error is reported;
-    /// a second-class type has no kind, §4.6).
+    /// a second-class type has no kind, §4.6), but `Copy` of one with a part
+    /// read not Copy (S-1067).
     pub(crate) fn meets(&self, t: TyId, b: Bound) -> bool {
+        let quiet = |f: crate::summary::Facts| f.kind.is_none() && (b != Bound::Copy || f.not_copy().is_none());
         self.satisfies(t, b)
-            || (b.is_kind_constraint() && !matches!(self.ty(t), Ty::Param(_)) && self.kind(t).is_none())
+            || (b.is_kind_constraint()
+                && !matches!(self.ty(t), Ty::Param(_))
+                && quiet(crate::kind::facts_of(self.a, t, self.generics)))
     }
 
     /// Whether the traits a (resolved) type meets are not known: of what is

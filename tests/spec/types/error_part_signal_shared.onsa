@@ -1,0 +1,9 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§11.3"]
+
+// S-1067 (W6-04 U16), §18.1, §11.3: the value type of a signal is `Copy` (E0810). Only the code and the line are asked:
+// the text of the message is not fixed. `E1` has a `Str` that was read (Shared), so it is not `Copy`.
+
+pub struct E1 { s: Str, e: Buf[Str] }   //~ E0416
+pub flow f1(x: E1 at sample) -> F32 at sample { 0.0 }   //~ E0810

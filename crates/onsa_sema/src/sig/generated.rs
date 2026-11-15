@@ -133,16 +133,14 @@ impl<'p> Sema<'p> {
     /// (`sample` inputs and the output) only scalars, `[scalar; N]`, and structs
     /// of those.
     fn check_rate_value_type(&mut self, _cx: &Cx<'p>, id: DefId, ty: TyId, span: Span, boundary: bool) {
-        if let Some(k) = self.a.kind_of(ty)
-            && k != crate::Kind::Copy
-        {
+        if let Some(k) = crate::kind::facts_of(self.a, ty, &[]).not_copy() {
             self.report(
                 id,
                 Diagnostic::new(
                     Stage::Flow,
                     Code::E0810,
                     span,
-                    format!("the value type of a signal must be Copy; `{}` is {}", self.a.display_type(ty), k.name()),
+                    format!("the value type of a signal must be Copy; `{}` is {k} (§11.3)", self.a.display_type(ty)),
                 ),
             );
             return;

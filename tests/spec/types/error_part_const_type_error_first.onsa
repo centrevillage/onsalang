@@ -1,0 +1,9 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.6"]
+
+// S-1075 (W6-04 U16) (2), §18.1, §6.6: the type of a `const` fails (`Buf[F32]` is not an element of
+// `Array`, E0416) and is never placed (an Affine `Buf` in it): the placement is judged first, the E0407 is the error of
+// the unit.
+
+pub const K: Array[Buf[F32]] = []   //~ E0407

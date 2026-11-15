@@ -86,6 +86,9 @@ pub(crate) struct Facts {
     /// (a second-class type, the error type, a type parameter with no
     /// answer), which an Affine part outweighs.
     pub(crate) kind: Option<Kind>,
+    /// The greatest kind of the parts read, one with no answer as Copy:
+    /// with no kind, a part read that is not Copy is (§18.1, S-1067).
+    read: Kind,
     /// Whether dropping it needs `Alloc`: Shared values, `Buf` and a type
     /// parameter not Copy, not flow state, Affine as it is. `None` only of a
     /// type that holds itself.
@@ -98,7 +101,7 @@ pub(crate) struct Facts {
 
 impl Facts {
     fn leaf(kind: Option<Kind>, drops: bool) -> Facts {
-        Facts { kind, drops: Some(drops), held: Vec::new() }
+        Facts { kind, read: kind.unwrap_or(Kind::Copy), drops: Some(drops), held: Vec::new() }
     }
 
     /// Of a part that is Copy: nothing to drop.
@@ -121,7 +124,7 @@ impl Facts {
     /// Of a declaration read again as it is read: it holds itself (E0311),
     /// and what it holds has no answer.
     fn cycle() -> Facts {
-        Facts { kind: None, drops: None, held: Vec::new() }
+        Facts { kind: None, read: Kind::Copy, drops: None, held: Vec::new() }
     }
 
     fn builtin(b: BuiltinTy) -> Facts {
@@ -139,6 +142,7 @@ impl Facts {
     /// Of an aggregate of two parts (§4.6: the greatest).
     fn join(mut self, other: Facts) -> Facts {
         self.kind = greatest(self.kind, other.kind, Kind::Affine);
+        self.read = self.read.max(other.read);
         self.drops = greatest(self.drops, other.drops, true);
         for i in other.held {
             if !self.held.contains(&i) {
@@ -146,6 +150,16 @@ impl Facts {
             }
         }
         self
+    }
+
+    /// What a type known not to be Copy is (§4.6): its kind, or "not Copy"
+    /// of one with no kind with a part read not Copy (§18.1, S-1067).
+    pub(crate) fn not_copy(&self) -> Option<&'static str> {
+        match self.kind {
+            Some(Kind::Copy) => None,
+            Some(k) => Some(k.name()),
+            None => (self.read != Kind::Copy).then_some("not Copy"),
+        }
     }
 }
 
@@ -252,7 +266,7 @@ impl<'a> Read<'a> {
             Holds::Nothing => None,
             _ => parts.kind,
         };
-        let found = Facts { kind, ..parts };
+        let found = Facts { kind, read: kind.unwrap_or(parts.read), ..parts };
         let mut kept = a.known.summaries.borrow_mut();
         kept.decls.insert(d, Some(found.clone()));
         kept.held(before).map(|h| h.0.insert(d));

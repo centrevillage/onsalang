@@ -1,0 +1,10 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§11.6"]
+
+// S-1068 (W6-04 U16), §18.1, §11.6: an E0416 of a boundary makes an error type of the field of a struct, the payload of
+// a variant and the input of a flow (a field of the type that the flow generates). The field `w` fails, so `s.w` is an
+// error type and the function that returns it as an `I32` gives nothing (unchanged).
+
+pub struct S3[T1: ?Dup] { a: I32, w: Array[T1] }   //~ E0416
+pub fn h(s: S3[F32]) -> I32 { s.w }

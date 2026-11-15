@@ -1,0 +1,10 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§4.5"]
+
+// S-1066 (W6-04 U16), §18.1, §4.5: what the decision does not change. A chain without a ring: `CB.a` fails (`CC` owns a
+// `Buf`), `CA` uses `CB`, whose field is an error type, and gives nothing.
+
+pub struct CC { x: Buf[F32] }
+pub struct CB { a: Buf[CC] }   //~ E0416
+pub struct CA { b: Buf[CB] }

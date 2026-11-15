@@ -250,7 +250,7 @@ impl<'p> Sema<'p> {
     /// (or element of a variant) whose kind is not Copy (§4.6): the kinds are
     /// known once every signature and the items flows generate are lowered.
     /// A field whose kind is not known (a type parameter, an error) is not
-    /// named.
+    /// named, unless a part read of it is not Copy (S-1067).
     fn name_non_copy_fields(&mut self) {
         for (at, def, dup) in std::mem::take(&mut self.kind_heads) {
             let fields: Vec<(String, TyId, Span)> = match &self.a.def(def).kind {
@@ -265,10 +265,13 @@ impl<'p> Sema<'p> {
                     .collect(),
                 _ => Vec::new(),
             };
-            use crate::kind::Kind;
-            // `Dup` is Copy or Shared: an Affine field does not meet it.
-            let fails = |k: Kind| if dup { k == Kind::Affine } else { k != Kind::Copy };
-            let shown = fields.into_iter().find(|(_, t, _)| crate::kind::kind_of(self.a, *t).is_some_and(fails));
+            // `Dup` is Copy or Shared: an Affine field does not meet it. A field not
+            // Copy by the parts read is not Copy (§18.1, S-1067).
+            let fails = |t: TyId| match dup {
+                true => crate::kind::kind_of(self.a, t) == Some(crate::kind::Kind::Affine),
+                false => crate::kind::facts_of(self.a, t, &[]).not_copy().is_some(),
+            };
+            let shown = fields.into_iter().find(|(_, t, _)| fails(*t));
             if let Some((what, _, span)) = shown {
                 let (kind, name) =
                     if dup { ("Affine", onsa_syntax::kinds::DUP) } else { ("not Copy", onsa_syntax::kinds::COPY) };

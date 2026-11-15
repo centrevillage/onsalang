@@ -1,0 +1,10 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§11.6"]
+
+// S-1068 (W6-04 U16), §18.1: the type of an argument, of a result and of a `const` is not an error type when it fails
+// (E0416), so the use of it is judged by that type: `g` takes an `Array[Buf[F32]]` (E0416) and `h` passes an `F32`: the
+// E0401 of the call stays.
+
+pub fn g(x: Array[Buf[F32]]) -> I32 { 0 }   //~ E0416
+pub fn h(y: F32) -> I32 { g(y) }   //~ E0401

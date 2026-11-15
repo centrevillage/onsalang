@@ -1,0 +1,13 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§4.6"]
+
+// S-1066 and S-1067 (W6-04 U16), §18.1, §4.6: each of `RA` and `RB` fails on the field that names the other (set judged
+// as written), and what the others see is a type with a `Str` (Shared) and an error type, which is not `Copy` by its
+// `Str`: the two users that ask `Copy` are E0416 too.
+
+pub struct RB { a: Buf[RA], name: Str }   //~ E0416
+pub struct RA { b: Buf[RB], name: Str }   //~ E0416
+pub struct OC[T: Copy] { v: T }
+pub struct RU { u: OC[RA] }   //~ E0416
+pub struct RV { u: OC[RB] }   //~ E0416

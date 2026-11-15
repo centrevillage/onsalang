@@ -1,0 +1,10 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§6.6"]
+
+// S-1067 (W6-04 U16, D-c), §18.1, §6.6: the type of a `const` that has a part that was not read is judged by the parts
+// that were read: a part that cannot be placed (`Map`, `Set`, Affine) is an E0407, a Shared part is the E0200 of this
+// version, and parts that can all be placed give nothing. `E2` has a `Buf` that was read (Affine): E0407.
+
+pub struct E2 { b: Buf[F32], e: Buf[Str] }   //~ E0416
+pub const K2: Option[E2] = None   //~ E0407

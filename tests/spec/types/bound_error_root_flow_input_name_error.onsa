@@ -1,0 +1,10 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§11.6"]
+
+// S-1068 (W6-04 U16), §18.1, §11.6: an E0416 of a boundary makes an error type of the field of a struct, the payload of
+// a variant and the input of a flow (a field of the type that the flow generates). An input whose type is not found
+// (E0302) gives the same: the types that hold `fl.Params` give nothing.
+
+pub flow fl(x: F32 at sample, p: Gone at block) -> F32 at sample { x }   //~ E0302
+pub struct H { ps: Buf[fl.Params] }
