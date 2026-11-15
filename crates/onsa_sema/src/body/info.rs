@@ -208,10 +208,11 @@ pub struct BodyInfo {
     /// [`BodyInfo::lits`] (`LitClass::Owned`, S-613, W6-03).
     pub drops: Vec<DropPoint>,
     /// The consumptions of a Dup value that copy it and do not move it, with
-    /// why (§5.2, §5.4, S-1030, S-1035): a row for each binding dropped after
-    /// it and each, by the binding ([`BodyInfo::copied_of`]). The modes stage
-    /// writes them, and thins its drop points by them; the notes of the
-    /// E0601 of a drop and Core (W8-04) read them. Not of a flow's body.
+    /// why ([`CopiedWhy`]; §5.2, §5.4, S-1030, S-1035, R-466): a row for each
+    /// owned binding that keeps its value and each, by the binding
+    /// ([`BodyInfo::copied_of`]). The modes stage writes them, and thins its
+    /// drop points by them; the notes of the E0601 of a drop and Core
+    /// (W8-04) read them alone. Not of a flow's body.
     pub copied: Vec<Copied>,
     /// The parts of the values the patterns and the `move _` parameters bind
     /// to no name (§5.4, S-1036, S-1044), with their types: the modes stage
@@ -243,20 +244,35 @@ pub struct Copied {
     pub why: CopiedWhy,
 }
 
-/// Why a consumption of a Dup value copies it (S-1035).
+/// Why a consumption of a Dup value copies it (S-1035, R-466): one of the
+/// conditions of §5.2 under which it could not move, the first of path,
+/// head, held, then used (`Walker::release`). The rows are of the
+/// consumptions of the values of the owned bindings of the body alone
+/// (`root`): a copy of a borrowed argument or of a path of a temporary
+/// value has none. A consumption of the whole of an owned binding whose
+/// value is Dup and not Copy is released (moved unless used after, S-1030)
+/// or has a row: Core reads a row as a copy, its absence as a move (W8-04).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CopiedWhy {
-    /// `root`, released (S-1030), is used after, at the place.
-    After(Span),
-    /// The next iteration of a loop uses it, at the place (written at or
-    /// before the consumption).
-    Loop(Span),
+    /// `root`, released (S-1030), is used after, at the place, by the
+    /// binding (`root` or a borrow binding derived from it, §5.4).
+    After(Span, LocalId),
+    /// The next iteration of a loop uses it, at the place, by the binding:
+    /// the release reached the use by the back edge of a loop alone.
+    Loop(Span, LocalId),
     /// Another argument of the same call borrows a place it overlaps, at the
-    /// place (E0702's test, §5.2).
-    InCall(Span),
-    /// The value is a borrow binding of the head, derived from the whole
-    /// of `root` (§5.4: `match o`, `for s in xs`).
-    Head(Head),
+    /// place, of the binding (E0702's test, §5.2).
+    InCall(Span, LocalId),
+    /// The value is a borrow binding derived from `root` (§5.4: `match o`,
+    /// `for s in xs`, through other borrow bindings), the head that reads
+    /// `root`, and whether its value is `root` itself (through parentheses:
+    /// a `match move`, a `for … in move` moves it).
+    Head(Head, bool),
+    /// A borrowed `for` or a guard of the head holds the place (E0715's
+    /// test, §5.2).
+    Held(Head),
+    /// A path of a field or an element of `root` (§5.2).
+    Part,
 }
 
 /// Where the effect row of an anonymous function comes from (§8.1, §4.7).
@@ -321,8 +337,8 @@ pub enum Dropped {
     Value(ExprId),
     /// The rest of the value `iter` an owned `for` iterates (S-1037): at its
     /// end its container; left `early` (a `break`, a `return`, a `?`), the
-    /// elements not iterated too.
-    IterRest { iter: ExprId, early: bool },
+    /// elements not iterated too. `root`: the binding it is, if a whole one.
+    IterRest { iter: ExprId, early: bool, root: Option<LocalId> },
     /// A value made where nothing consumes it (R-32), dropped after what
     /// reads or borrows it (a call, an index, an operator) runs.
     Temp(ExprId),
@@ -331,8 +347,9 @@ pub enum Dropped {
     /// drop points of a body stay as small as before (`DropPoint`, 48 bytes).
     TempRest(Box<Taken<ExprId>>),
     /// The value the place `target` held before it is assigned (R-32,
-    /// S-1038: of a `var`, a `move` or an `inout` parameter alike).
-    Overwrite(ExprId),
+    /// S-1038: of a `var`, a `move` or an `inout` parameter alike), and the
+    /// binding if it is the whole of one.
+    Overwrite(ExprId, Option<LocalId>),
     /// What an owned head binds to no name (§5.4, S-1036).
     Discard(Unbound),
     /// The value of `e` in `[e; N]` whose length may be 0 (S-1045): put in no

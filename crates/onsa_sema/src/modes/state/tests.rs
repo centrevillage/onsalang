@@ -13,6 +13,9 @@ use onsa_syntax::ast::ExprId;
 use super::{Delta, Ends, Joins, LoopSum, Paths, Status, Trail, Undo};
 use crate::body::LocalId;
 
+/// The text of the loop of the summaries (one: a release by the loop is by it).
+const LOOP: Span = Span { file: FileId(0), start: 0, end: 1 };
+
 impl Delta {
     /// The paths of both (`self ⊔ other`): an unreachable side is the unit.
     /// What the joins of a [`Trail`] equal (the walks join on it only).
@@ -74,10 +77,13 @@ fn all() -> Vec<Ends> {
 }
 
 /// Of a binding of a Dup value (S-1030), which is only released: none, and
-/// released at one place, another, or both.
+/// released at one place, another, or both, by the back edge of a loop or not.
 fn released() -> Vec<Ends> {
-    let rel = |xs: &[u32]| Some(Status::Released { at: Rc::new(xs.iter().map(|&x| ExprId(x)).collect()) });
-    with_deads(&[None, rel(&[1]), rel(&[2]), rel(&[1, 2])])
+    let rel = |xs: &[u32], via_loop: bool| {
+        let via_loop = via_loop.then_some(LOOP);
+        Some(Status::Released { at: Rc::new(xs.iter().map(|&x| ExprId(x)).collect()), via_loop })
+    };
+    with_deads(&[None, rel(&[1], false), rel(&[2], false), rel(&[1, 2], false), rel(&[1], true), rel(&[1, 2], true)])
 }
 
 fn with_deads(deads: &[Option<Status>]) -> Vec<Ends> {
@@ -198,7 +204,7 @@ fn the_head_of_a_loop_is_the_fixpoint_of_the_iteration() {
     let all = deltas();
     for x in &all {
         for back in &all {
-            let head = x.then(&LoopSum::head(back));
+            let head = x.then(&LoopSum::head(back, LOOP));
             let mut again = x.clone();
             again.join(&head.then(back));
             assert!(same(&plain(&head), &plain(&again)), "a solution: {x:?} {back:?}");
@@ -542,13 +548,13 @@ fn a_set_of_releases_used_again_is_copied_once() {
     let (mut t, l) = (Trail::new(), LocalId(0));
     t.change(l, |d| d.released(l, ExprId(1)));
     t.change(l, |d| d.released(l, ExprId(2)));
-    let Some(Status::Released { at: head }) = t.now.status(l).cloned() else { panic!("not released") };
+    let Some(Status::Released { at: head, .. }) = t.now.status(l).cloned() else { panic!("not released") };
     let m = t.mark();
     for arm in 0..3 {
         t.back_to(m);
-        assert!(matches!(t.now.status(l), Some(Status::Released { at }) if Rc::ptr_eq(at, &head)), "arm {arm}");
-        let got = t.restore(l);
-        assert_eq!(got.as_deref().cloned(), (arm == 0).then(|| (*head).clone()), "arm {arm}");
+        assert!(matches!(t.now.status(l), Some(Status::Released { at, .. }) if Rc::ptr_eq(at, &head)), "arm {arm}");
+        let got = t.restore(l).map(|(at, via_loop)| ((*at).clone(), via_loop));
+        assert_eq!(got, (arm == 0).then(|| ((*head).clone(), None)), "arm {arm}");
         assert!(t.now.status(l).is_none(), "arm {arm}: live");
     }
     assert_eq!(t.copies.len(), 2);

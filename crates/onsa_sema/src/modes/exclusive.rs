@@ -211,7 +211,7 @@ impl Walker<'_> {
             let mut shared = index.sharing(&self.deps, w.root).map(|k| &passed[k]);
             let Some(q) = shared.find(|q| !holds(q) && self.deps.meets(w, &q.place)) else { continue };
             if *release {
-                copies.push((w.root, span(q)));
+                copies.push((w.root, span(q), q.place.root));
                 continue;
             }
             let (changed, arg) = (self.place_text(*at, &[], w), self.passed_text(q));
@@ -223,7 +223,7 @@ impl Walker<'_> {
             let d = self.at_later(message, (span(q), mode), (*at, "changed here".to_string()), &[q]);
             self.m.found.push(d);
         }
-        copies.into_iter().for_each(|(l, by)| self.restore(r, l, (by, true)));
+        copies.into_iter().for_each(|(l, by, b)| self.restore(r, l, (by, Some(b))));
         if self.inside.calls == 0 {
             self.inside.changes.clear();
         }

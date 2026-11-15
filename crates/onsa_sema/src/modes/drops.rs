@@ -58,7 +58,9 @@ impl Walker<'_> {
                     (if exit { Dropped::Value(e) } else { Dropped::Temp(e) }, true, None)
                 }
                 Item::Nameless(Nameless::Value(_)) => continue,
-                Item::Nameless(Nameless::IterRest(e)) => (Dropped::IterRest { iter: e, early: exit }, true, None),
+                Item::Nameless(Nameless::IterRest(e, root)) => {
+                    (Dropped::IterRest { iter: e, early: exit, root }, true, None)
+                }
                 Item::Nameless(Nameless::Discard(u, sure)) => (Dropped::Discard(u), sure, None),
             };
             self.drop_point(r, at, what, (sure, unless));
@@ -77,13 +79,13 @@ impl Walker<'_> {
     /// is dropped there (R-32, S-1038: of a `var`, a `move` or an `inout`
     /// parameter alike, by the type of the place), if it may hold one (not
     /// after the whole was moved on every path). The one place that decides it.
-    pub(super) fn overwrite(&mut self, r: &Run, l: LocalId, target: ExprId) {
+    pub(super) fn overwrite(&mut self, r: &Run, (l, whole): (LocalId, bool), target: ExprId) {
         let at = self.ast.expr(target).span;
         let Some(&ty) = self.info.expr_types.get(&target) else {
             bug(Some(at), "an assignment to a place with no type")
         };
         if let Some(held) = self.has_value(r, l, ty) {
-            self.drop_point(r, at, Dropped::Overwrite(target), held);
+            self.drop_point(r, at, Dropped::Overwrite(target, whole.then_some(l)), held);
         }
     }
 

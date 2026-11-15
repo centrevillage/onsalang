@@ -17,7 +17,7 @@
 
 use onsa_diag::Stage;
 use onsa_diag::hash::HashMap;
-use onsa_syntax::ast::{Ast, ExprId, ExprKind, Mode, StmtId, StmtKind};
+use onsa_syntax::ast::{Ast, ExprId, ExprKind, Mode, PatId, StmtId, StmtKind};
 use serde::{Deserialize, Serialize};
 
 use crate::body::{BodyInfo, LocalId, view_base};
@@ -67,6 +67,21 @@ pub enum Head {
     Let(StmtId),
     For(StmtId),
     Match { scrutinee: ExprId },
+}
+
+impl Head {
+    /// The value it reads, and the pattern of a `for`.
+    pub(crate) fn value(self, ast: &Ast) -> (ExprId, Option<PatId>) {
+        let s = match self {
+            Head::Match { scrutinee } => return (scrutinee, None),
+            Head::For(s) | Head::Let(s) => s,
+        };
+        match &ast.stmt(s).kind {
+            StmtKind::For { pat, iter, .. } => (*iter, Some(*pat)),
+            StmtKind::Let { init, .. } => (*init, None),
+            _ => onsa_diag::internal::bug(Some(ast.stmt(s).span), "a head of a binding that is no `for` or `let`"),
+        }
+    }
 }
 
 /// The row of a head (§5.4).

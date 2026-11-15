@@ -95,7 +95,7 @@ impl Walker<'_> {
             return self.record(&place, at, of);
         }
         if how == How::Assign {
-            self.overwrite(r, l, target);
+            self.overwrite(r, (l, whole), target);
         }
         if whole {
             r.cur.change(l, |d| d.revive(l));

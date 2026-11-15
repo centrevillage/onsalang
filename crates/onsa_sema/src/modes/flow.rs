@@ -11,7 +11,7 @@ use onsa_syntax::ast::{BinOp, ExprId, ExprKind, Mode, PatId, PatKind, StmtId, St
 
 use super::check::Walker;
 use super::drops::Leave;
-use super::place::{Borrowed, head_places};
+use super::place::{Borrowed, head_places, place_of};
 use super::state::{Joins, LoopSum, Paths, Trail};
 use super::walk::Pos;
 use super::write::How;
@@ -50,7 +50,7 @@ pub(super) enum Item {
 #[derive(Clone, Copy)]
 pub(super) enum Nameless {
     Value(ExprId),
-    IterRest(ExprId),
+    IterRest(ExprId, Option<LocalId>),
     Temp(ExprId),
     Discard(Unbound, bool),
 }
@@ -166,7 +166,7 @@ impl Walker<'_> {
                     let outer = r.items();
                     self.declare(r, arm.pat, owned);
                     if let Some(g) = arm.guard {
-                        let mut arm_held = owned.then(|| self.arm_frame(arm.pat));
+                        let mut arm_held = owned.then(|| self.arm_frame(subject, arm.pat));
                         let frame = if owned { &mut arm_held } else { &mut held };
                         self.holding(frame, |w| w.expr(r, g, Pos::Read));
                         // False: back to the head, the arm's bindings out with no drop (S-1039).
@@ -251,7 +251,8 @@ impl Walker<'_> {
                 }
                 // The value an owned `for` iterates (S-1037), not Copy.
                 let ty = self.info.expr_types.get(iter).copied().filter(|_| owned && !range);
-                let rest = ty.is_some_and(|t| self.kind_of(t) != Some(Kind::Copy)).then_some(*iter);
+                let whole = place_of(ast, self.names, *iter).filter(|p| p.proj.is_empty()).map(|p| p.root);
+                let rest = ty.is_some_and(|t| self.kind_of(t) != Some(Kind::Copy)).then_some((*iter, whole));
                 let mut held = borrows.and_then(|places| self.frame(Head::For(s), places));
                 self.holding(&mut held, |w| w.run_loop(r, s, (None, Some(*pat), rest, *body)));
             }
@@ -289,6 +290,7 @@ impl Walker<'_> {
     /// the summary, made once for each loop by a walk that does not go into
     /// the loops inside (their summaries are made first and kept).
     fn run_loop(&mut self, r: &mut Run, s: StmtId, parts: Loop) {
+        let of = self.ast.stmt(s).span;
         let sum = match self.m.loops.get(&s) {
             Some(sum) => sum.clone(),
             None => {
@@ -299,14 +301,14 @@ impl Walker<'_> {
                 let exit = run.cur.state().clone();
                 run.cur.reset(0, &back);
                 let (back, leaves) = (run.cur.state().clone(), run.exits.brk.reaches() || run.exits.cont.reaches());
-                let sum = LoopSum { exit: LoopSum::head(&back).then(&exit), back, leaves };
+                let sum = LoopSum { exit: LoopSum::head(&back, of).then(&exit), back, leaves };
                 self.m.loops.insert(s, sum.clone());
                 sum
             }
         };
         // One whose condition leaves the loop around is walked, its paths to that loop's exits too.
         if self.reports || sum.leaves {
-            r.cur.then(&LoopSum::head(&sum.back));
+            r.cur.then(&LoopSum::head(&sum.back, of));
             self.iterate(r, parts);
         } else {
             r.cur.then(&sum.exit);
@@ -322,7 +324,7 @@ impl Walker<'_> {
     /// iterates `rest` in the scope a `break` leaves (S-1037).
     fn iterate(&mut self, r: &mut Run, (cond, pat, rest, body): Loop) -> Paths {
         let from = r.items();
-        rest.into_iter().for_each(|x| r.push(Nameless::IterRest(x)));
+        rest.into_iter().for_each(|(x, l)| r.push(Nameless::IterRest(x, l)));
         let (scope, at) = (r.items(), r.cur.mark());
         // Out of the body: a `break` or a `continue` in it is the outer loop's (§7).
         if let Some(c) = cond {
@@ -331,7 +333,7 @@ impl Walker<'_> {
         let exits = Exits { brk: Paths::none(), cont: Paths::none(), at, from: (from, scope) };
         let outer = replace(&mut r.exits, exits);
         // The end of an owned `for` drops the container of its value (S-1037).
-        if let Some(x) = rest {
+        if let Some((x, _)) = rest {
             self.drops(r, from, self.ast.expr(x).span, Leave::End);
         }
         if !cond.is_some_and(|c| literal_true(self.ast, c)) {
@@ -418,4 +420,4 @@ impl Walker<'_> {
 
 /// The parts of a loop: the condition of a `while`, the pattern of a `for`
 /// and the value an owned one iterates, the body.
-type Loop = (Option<ExprId>, Option<PatId>, Option<ExprId>, ExprId);
+type Loop = (Option<ExprId>, Option<PatId>, Option<(ExprId, Option<LocalId>)>, ExprId);

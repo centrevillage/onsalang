@@ -5,14 +5,15 @@
 //! initializers `Alloc` from the compiler (§6.6). A row can have `Alloc` alone
 //! in this version (D-08), so the E0601 of another effect has no fix.
 
+use onsa_diag::hash::HashSet;
 use onsa_diag::internal::bug;
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 use onsa_syntax::ast::{Ast, ExprId, ExprKind, ItemKind, StmtKind, TypeKind};
 
 use crate::binding::{Head, LitClass};
-use crate::body::{Copied, CopiedWhy, LocalId, RowFrom, generics_of};
+use crate::body::{BodyInfo, Copied, CopiedWhy, LocalId, RowFrom, generics_of};
 use crate::def::{BodyKind, GenericKind};
-use crate::drop_alloc::{Drop, copy_would_free};
+use crate::drop_alloc::{Drop, Root, copy_would_free};
 use crate::names::body::Origin;
 use crate::resolve::Entity;
 use crate::uses::{Record, Scope, Use, What, holds};
@@ -120,10 +121,11 @@ fn first_use(
 /// of the scope and the effect; (2) the drop points away from where the value
 /// is written (S-783 C1); (3) of the use: the first element that made a
 /// literal owned (S-613), the type parameters `Copy` would free (S-1052);
-/// of a binding dropped, each consumption that copied its value and why
-/// (S-1035); (4) the other uses of the effect in the scope (R-83 (3)). No
-/// bound on them: a use is in the notes of one report at most, so all the
-/// notes are linear in the body. O(P log L + U + G + C) for P points, L
+/// of a binding dropped (or assigned as a whole), each consumption that
+/// copied its value and why (S-1035); (4) the other uses of the effect in
+/// the scope (R-83 (3)), and of a binding they drop, its copies (R-466 F3).
+/// No bound on them: a use is in the notes of one report at most, and the
+/// copies of a binding once in it, so all the notes are linear in the body. O(P log L + U + G + C) for P points, L
 /// `let`s that are heads (`lets`, [`lets_of`]), U uses of the scope
 /// ([`Record::of_scope`]), G type parameters, C copies (R-465).
 fn notes(
@@ -133,7 +135,7 @@ fn notes(
     (scope, effect): (&Scope, DefId),
     u: &Use,
 ) -> Vec<(Span, String)> {
-    let mut notes = Vec::new();
+    let (mut notes, mut noted) = (Vec::new(), HashSet::default());
     let name = &a.def(effect).name;
     let alloc = a.alloc() == Some(effect);
     if let Some(c) = scope.closure {
@@ -211,69 +213,115 @@ fn notes(
                 format!("with the bound `Copy` on `{}`{dup}, its drop needs no `Alloc` (§12.2)", g.name),
             ));
         }
-        if let Drop::Local(l, local) = drop {
-            notes.extend(copies(a, (ast, src), r.id, (*l, &local.name)));
-        }
+        notes.extend(copies(a, (ast, src), r.id, (drop, &mut noted)));
     }
     // In an `rt` function and an anonymous function too, of the scope alone (S-1050).
     for o in r.of_scope(u.scope).filter(|o| o.at != u.at && o.needs(a, effect)) {
         notes.push((o.at, format!("{}: it needs `{name}` too", o.describe(a, (ast, r.id), src))));
+        if let What::Drop { drop, .. } = &o.what {
+            notes.extend(copies(a, (ast, src), r.id, (drop, &mut noted)));
+        }
     }
     notes
 }
 
 /// The notes of each consumption in the body of `id` that copied the value
-/// of the binding `root`, named `name`, and did not move it (S-1035).
+/// of the binding `drop` drops (S-1035, R-466: a local; the old value of a
+/// binding assigned as a whole, the rest of one, of a `for` too, as the modes
+/// stage records it) and did not move it, unless that binding is in `noted`
+/// (each once in a report, S-783), each note once: linear in the copies.
 fn copies(
     a: &Analysis,
     (ast, src): (&Ast, &dyn Fn(Span) -> String),
     id: DefId,
-    (root, name): (LocalId, &str),
+    (drop, noted): (&Drop, &mut HashSet<LocalId>),
 ) -> Vec<(Span, String)> {
-    a.bodies[&id].copied_of(root).iter().flat_map(|c| copied(ast, src, name, c)).collect()
+    // A path assigned is S-1034's.
+    let (Drop::Local(root, _)
+    | Drop::Rest { root: Root::Local(root, _), .. }
+    | Drop::Overwrite { root: Some(root), .. }
+    | Drop::IterRest { root: Some(root), .. }) = *drop
+    else {
+        return Vec::new();
+    };
+    if !noted.insert(root) {
+        return Vec::new();
+    }
+    let (info, mut seen) = (&a.bodies[&id], HashSet::default());
+    (info.copied_of(root).iter()).flat_map(|c| copied((ast, src), info, c)).filter(|n| seen.insert(n.clone())).collect()
 }
 
 /// The notes of the consumption `c` that copied the value of the binding
-/// `name` and did not move it (S-1035, §5.2, §5.4): why, and where it is used
-/// or borrowed; of a borrow head (`match o`, `for s in xs`), the head that
-/// moves it where its value is the binding as written. No fix: which way
-/// to go is the writer's.
-fn copied(ast: &Ast, src: &dyn Fn(Span) -> String, name: &str, c: &Copied) -> Vec<(Span, String)> {
+/// `c.root` and did not move it (S-1035, R-466, §5.2, §5.4): why, by the
+/// binding written (F4: and how it is of the root), and where it is used,
+/// borrowed or held; of a borrow head whose value is the binding (through
+/// parentheses), the head that moves it. No fix: which way to go is the
+/// writer's.
+fn copied((ast, src): (&Ast, &dyn Fn(Span) -> String), info: &BodyInfo, c: &Copied) -> Vec<(Span, String)> {
     let at = ast.expr(c.at).span;
     let copied = format!("`{}` is copied here and not moved", src(at));
+    let name = &info.locals[c.root.0 as usize].name;
+    let who = |b: LocalId| match b == c.root {
+        true => format!("`{name}`"),
+        false => format!("`{}` (a borrow of `{name}`)", info.locals[b.0 as usize].name),
+    };
     let (why, by) = match c.why {
-        CopiedWhy::After(u) => (format!("{copied}, as `{name}` is used after (§5.2)"), Some((u, "used after here"))),
-        CopiedWhy::Loop(u) => (
-            format!("{copied}, as the next iteration of the loop uses `{name}` (§5.2)"),
-            Some((u, "used here by the next iteration")),
-        ),
-        CopiedWhy::InCall(u) => {
-            (format!("{copied}, as another argument of the call borrows `{name}` (§5.2)"), Some((u, "borrowed here")))
+        CopiedWhy::After(u, b) => {
+            (format!("{copied}, as {} is used after (§5.2)", who(b)), Some((u, "used after here".to_string())))
         }
-        CopiedWhy::Head(h) => {
-            let (head, value, moved) = match h {
-                Head::Match { scrutinee } => (format!("`match {}`", src(ast.expr(scrutinee).span)), scrutinee, None),
-                Head::For(s) | Head::Let(s) => match &ast.stmt(s).kind {
-                    StmtKind::For { pat, iter, .. } => {
-                        let pat = src(ast.pat(*pat).span);
-                        (format!("`for {pat} in {}`", src(ast.expr(*iter).span)), *iter, Some(pat))
-                    }
-                    StmtKind::Let { init, .. } => ("its `let`".to_string(), *init, None),
-                    _ => bug(Some(at), "a head of a binding that is no `for` or `let`"),
-                },
-            };
-            let fix = match (h, moved) {
-                _ if src(ast.expr(value).span) != name => String::new(),
-                (Head::Match { .. }, _) => format!("; `match move {name}` moves `{name}`"),
-                (_, Some(pat)) => format!("; `for {pat} in move {name}` moves the elements of `{name}`"),
+        CopiedWhy::Loop(u, b) => (
+            format!("{copied}, as the next iteration of the loop uses {} (§5.2)", who(b)),
+            Some((u, "used here by the next iteration".to_string())),
+        ),
+        CopiedWhy::InCall(u, b) => (
+            format!("{copied}, as another argument of the call borrows {} (§5.2)", who(b)),
+            Some((u, "borrowed here".to_string())),
+        ),
+        CopiedWhy::Part => (
+            format!(
+                "{copied}: a path of a field or an element is copied, and the drop of the whole `{name}` stays (§5.2)"
+            ),
+            None,
+        ),
+        CopiedWhy::Held(h) => {
+            let (head, value) = (heading(h), ast.expr(h.value(ast).0).span);
+            let head =
+                if let Head::Match { .. } = h { format!("a guard of the {head}") } else { format!("the {head}") };
+            let why = format!(
+                "{copied}: {head} holds `{name}`, and a place a borrowed `for` or a guard holds is not moved from (§5.2)"
+            );
+            (why, Some((value, "held here".to_string())))
+        }
+        // The head by its kind and a note at its value (its text may be long, and a report has
+        // the notes of many roots); how to move, of the binding itself, there.
+        CopiedWhy::Head(h, own) => {
+            let ((value, pat), head) = (h.value(ast), heading(h));
+            let fix = match (own, h, pat) {
+                (true, Head::Match { .. }, _) => format!("; `match move {name}` moves `{name}`"),
+                (true, _, Some(p)) => {
+                    format!("; `for {} in move {name}` moves the elements of `{name}`", src(ast.pat(p).span))
+                }
                 _ => String::new(),
             };
-            (format!("{copied}: {head} binds it as a borrow of `{name}` (§5.4){fix}"), None)
+            let note = format!("the {head} borrows `{name}` here{fix}");
+            (
+                format!("{copied}: it is a borrow of `{name}`, from the {head} (§5.4)"),
+                Some((ast.expr(value).span, note)),
+            )
         }
     };
     // A use by the next iteration may be the consumption itself.
-    let by = by.filter(|&(u, _)| u != at).map(|(u, s)| (u, s.to_string()));
+    let by = by.filter(|&(u, _)| u != at);
     std::iter::once((at, why)).chain(by).collect()
+}
+
+/// The word of the head `h`.
+fn heading(h: Head) -> &'static str {
+    match h {
+        Head::Match { .. } => "`match`",
+        Head::For(_) => "`for`",
+        Head::Let(_) => "`let`",
+    }
 }
 
 /// The notes with no place of the E0601 of `effect` in `scope` of the body

@@ -29,9 +29,10 @@ enum Holds {
 
 /// The places a frame holds, and the text of each (S-604: of each tail; a
 /// view's base, S-217; of an arm, where each binding is), with the roots of
-/// each ([`super::place::Deps::origins`]).
+/// each ([`super::place::Deps::origins`]); the head of the frame.
 pub(super) struct Frozen {
     holds: Holds,
+    head: Head,
     places: Vec<(Place, Span, BTreeSet<LocalId>)>,
 }
 
@@ -46,26 +47,26 @@ impl Walker<'_> {
             Head::Match { .. } => Holds::Match,
             Head::Let(s) => bug(Some(self.ast.stmt(s).span), "the frame of a `let`"),
         };
-        self.deps.holds(head).then(|| self.frozen(holds, places))
+        self.deps.holds(head).then(|| self.frozen((holds, head), places))
     }
 
-    fn frozen(&self, holds: Holds, places: Vec<(Place, Span)>) -> Frozen {
+    fn frozen(&self, (holds, head): (Holds, Head), places: Vec<(Place, Span)>) -> Frozen {
         let places = places.into_iter().map(|(p, at)| {
             let roots = self.deps.origins(p.root).collect();
             (p, at, roots)
         });
-        Frozen { holds, places: places.collect() }
+        Frozen { holds, head, places: places.collect() }
     }
 
-    /// The frame of a guard of the arm `pat` of an owned `match` (§7,
+    /// The frame of a guard of the arm `pat` of an owned `match` `head` (§7,
     /// S-1039): its bindings, which own the value only once the arm is
     /// chosen (a Dup one is copied where it is consumed: no change).
-    pub(super) fn arm_frame(&self, pat: PatId) -> Frozen {
+    pub(super) fn arm_frame(&self, head: Head, pat: PatId) -> Frozen {
         let mut places = Vec::new();
         self.each_local(pat, &mut |l| {
             places.push((Place { root: l, proj: Vec::new() }, self.info.locals[l.0 as usize].span))
         });
-        self.frozen(Holds::Arm, places)
+        self.frozen((Holds::Arm, head), places)
     }
 
     /// Walk `f` in the frame `held` (pushed, then popped and kept for the
@@ -84,7 +85,7 @@ impl Walker<'_> {
     /// derives from. The caller changes no state then (S-798).
     pub(super) fn held(&mut self, w: &Place, at: Span, taken: Option<&Place>) -> bool {
         let hits = self.hits(w);
-        let Some(&(holds, ref p, first)) = hits.first() else { return false };
+        let Some(&(holds, ref p, first, _)) = hits.first() else { return false };
         let what = match taken {
             Some(t) => {
                 let whole = path_text(&self.info.locals[w.root.0 as usize].name, &w.proj);
@@ -101,7 +102,7 @@ impl Walker<'_> {
         };
         let mut d = Diagnostic::new(Stage::Modes, Code::E0715, at, message).with_rule(rule);
         let mut bound = Vec::new();
-        for &(holds, ref p, span) in &hits {
+        for &(holds, ref p, span, _) in &hits {
             d = d.with_note(span, words(holds).2);
             if self.deps.indexed(p.root) && !bound.contains(&p.root) {
                 bound.push(p.root);
@@ -113,21 +114,22 @@ impl Walker<'_> {
         true
     }
 
-    /// Whether a change of `w` is of a place a frame holds (an E0715 if it
-    /// were made): a candidate that makes one is none (§18.1).
-    pub(super) fn holds(&self, w: &Place) -> bool {
-        !self.hits(w).is_empty()
+    /// The head of the outermost frame that holds a place a change of `w`
+    /// is of (an E0715 if it were made): a candidate that makes one is none
+    /// (§18.1), a Dup value there is copied (§5.2).
+    pub(super) fn holder(&self, w: &Place) -> Option<Head> {
+        self.hits(w).first().map(|h| h.3)
     }
 
     /// The places the frames hold that `w` overlaps, outermost first, with
-    /// what each frame holds.
-    fn hits(&self, w: &Place) -> Vec<(Holds, Place, Span)> {
+    /// what each frame holds and its head.
+    fn hits(&self, w: &Place) -> Vec<(Holds, Place, Span, Head)> {
         // A place of no root in common is passed over before `meets` (its ways are long).
         let mine: BTreeSet<_> = self.deps.origins(w.root).collect();
         (self.inside.frozen.iter())
-            .flat_map(|f| f.places.iter().map(move |p| (f.holds, p)))
+            .flat_map(|f| f.places.iter().map(move |p| (f, p)))
             .filter(|(_, (p, _, o))| !mine.is_disjoint(o) && self.deps.meets(w, p))
-            .map(|(holds, (p, at, _))| (holds, p.clone(), *at))
+            .map(|(f, (p, at, _))| (f.holds, p.clone(), *at, f.head))
             .collect()
     }
 }

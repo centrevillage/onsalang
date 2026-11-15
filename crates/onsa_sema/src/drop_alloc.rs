@@ -31,13 +31,13 @@ pub(crate) enum Drop<'b> {
     Value { value: ExprId, ty: TyId },
     /// The rest of the value `iter` of the type `ty` an owned `for` iterates,
     /// where the loop is left (`early`, as its first point tells) or ends (S-1037).
-    IterRest { iter: ExprId, ty: TyId, early: bool },
+    IterRest { iter: ExprId, ty: TyId, early: bool, root: Option<LocalId> },
     /// The value of `value`, of the type `ty`, made where nothing consumes
     /// it (R-32).
     Temp { value: ExprId, ty: TyId },
     /// The value the place `target`, of the type `ty`, held before it is
     /// assigned (R-32, S-1038).
-    Overwrite { target: ExprId, ty: TyId },
+    Overwrite { target: ExprId, ty: TyId, root: Option<LocalId> },
     /// The parts of the types `tys` what is written at `at` binds to no
     /// name (§5.4, S-1036).
     Discard { at: Span, tys: &'b [TyId] },
@@ -49,7 +49,7 @@ pub(crate) enum Drop<'b> {
 /// What a path is taken out of (S-85): an owned local, or a value no
 /// binding owns (R-32).
 pub(crate) enum Root<'b> {
-    Local(&'b LocalInfo),
+    Local(LocalId, &'b LocalInfo),
     Value(ExprId),
 }
 
@@ -85,7 +85,7 @@ impl Root<'_> {
     /// Its name, or the value as written (`src` of its span).
     pub(crate) fn name(&self, ast: &Ast, src: impl Fn(Span) -> String) -> String {
         match self {
-            Root::Local(l) => l.name.clone(),
+            Root::Local(_, l) => l.name.clone(),
             Root::Value(e) => src(ast.expr(*e).span),
         }
     }
@@ -126,20 +126,22 @@ pub(crate) fn alloc_drops(a: &Analysis, id: DefId) -> Vec<(Drop<'_>, Vec<Span>)>
         let (of, drop) = match &d.what {
             Dropped::End(l) | Dropped::Exit(l) => (Of::Local(*l), Drop::Local(*l, local(l))),
             Dropped::Rest(t) => {
-                let root = local(&t.root);
-                (Of::Taken(d.at), Drop::Rest { at: d.at, path: &t.path, root: Root::Local(root), ty: root.ty })
+                let (l, root) = (t.root, local(&t.root));
+                (Of::Taken(d.at), Drop::Rest { at: d.at, path: &t.path, root: Root::Local(l, root), ty: root.ty })
             }
             Dropped::TempRest(t) => {
                 let rest = Drop::Rest { at: d.at, path: &t.path, root: Root::Value(t.root), ty: ty(&t.root, d.at) };
                 (Of::Taken(d.at), rest)
             }
             Dropped::Temp(e) => (Of::Expr(*e), Drop::Temp { value: *e, ty: ty(e, d.at) }),
-            Dropped::Overwrite(e) => (Of::Expr(*e), Drop::Overwrite { target: *e, ty: ty(e, d.at) }),
+            &Dropped::Overwrite(e, root) => (Of::Expr(e), Drop::Overwrite { target: e, ty: ty(&e, d.at), root }),
             Dropped::Value(e) => (Of::Expr(*e), Drop::Value { value: *e, ty: ty(e, d.at) }),
             &Dropped::Unplaced { value, zero } => {
                 (Of::Expr(value), Drop::Unplaced { value, ty: ty(&value, d.at), zero })
             }
-            &Dropped::IterRest { iter, early } => (Of::Expr(iter), Drop::IterRest { iter, ty: ty(&iter, d.at), early }),
+            &Dropped::IterRest { iter, early, root } => {
+                (Of::Expr(iter), Drop::IterRest { iter, ty: ty(&iter, d.at), early, root })
+            }
             Dropped::Discard(u) => {
                 let x = body.discards.get(u).unwrap_or_else(|| bug(Some(d.at), "a drop of a part with no type"));
                 (Of::Unbound(*u), Drop::Discard { at: x.at, tys: &x.tys })

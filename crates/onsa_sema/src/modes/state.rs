@@ -23,12 +23,16 @@ use crate::body::LocalId;
 /// changed at one of `changes` (§7, §5.4, S-803: the place's number in
 /// `Walker`'s `Made`, and where), or its Dup value released at the
 /// consuming expressions `at` (§5.2, S-1030: moved unless used after,
-/// then each a copy and the binding live, `Walker::restore`).
+/// then each a copy and the binding live, `Walker::restore`; `via_loop`:
+/// by the back edge of a loop alone, the text of the loop a use in which is
+/// by its next iteration, S-1035's reason, R-466; one for the set, so a
+/// release before a loop joined at its head with one in it makes both
+/// `After`, true in the order of evaluation).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum Status {
     Moved { at: Span, via_loop: bool },
     Stale { changes: BTreeMap<u32, Span> },
-    Released { at: Releases },
+    Released { at: Releases, via_loop: Option<Span> },
 }
 
 /// The consuming expressions that released a binding (S-1030), shared by
@@ -39,15 +43,17 @@ impl Status {
     /// A semilattice (so the order of a join does not matter): moved over
     /// stale; of two moved the earlier place, then not by the loop; of two
     /// stale the changes of both, of one place the earlier; of two released
-    /// the releases of both. The first reason stays: an E0704 names the
-    /// first move (§5.2). A binding is Affine or Dup, owned or a borrow, so
+    /// the releases of both, by the loop if both are (in both texts). The first reason
+    /// stays: an E0704 names the first move (§5.2). A binding is Affine or Dup, owned or a borrow, so
     /// a release meets no other.
     fn join(&mut self, other: &Status) {
         match (&mut *self, other) {
-            (Status::Released { at }, Status::Released { at: more }) => {
+            (Status::Released { at, via_loop }, Status::Released { at: more, via_loop: v }) => {
                 if !Rc::ptr_eq(at, more) {
                     Rc::make_mut(at).extend(more.iter())
                 }
+                *via_loop =
+                    via_loop.zip(*v).and_then(|(a, b)| [a, b].into_iter().find(|&x| within(x, a) && within(x, b)));
             }
             (Status::Released { .. }, _) | (_, Status::Released { .. }) => {
                 bug(None, "a release joined with a move or a change of the same binding")
@@ -67,10 +73,14 @@ impl Status {
         }
     }
 
-    /// The same, by the back edge of a loop.
-    fn by_loop(&self) -> Status {
+    /// The same, by the back edge of the loop of the text `of`: of a release,
+    /// its text unless one around it is.
+    fn by_loop(&self, of: Span) -> Status {
         match self {
             &Status::Moved { at, .. } => Status::Moved { at, via_loop: true },
+            Status::Released { at, via_loop } => {
+                Status::Released { at: at.clone(), via_loop: Some(via_loop.filter(|&v| within(of, v)).unwrap_or(of)) }
+            }
             s => s.clone(),
         }
     }
@@ -181,7 +191,7 @@ impl Delta {
         match &e.dead {
             _ if !self.reach => None,
             _ if e.through || e.live => Some((e.dead.is_none(), None)),
-            Some(Status::Released { at }) => Some((false, Some(at))),
+            Some(Status::Released { at, .. }) => Some((false, Some(at))),
             _ => None,
         }
     }
@@ -195,7 +205,7 @@ impl Delta {
     /// The Dup value of `l` released by the expression `at`: as a move,
     /// until a use after it ([`Delta::restored`]).
     pub(super) fn released(&mut self, l: LocalId, at: ExprId) {
-        self.consumed(l, Status::Released { at: Rc::new(BTreeSet::from([at])) });
+        self.consumed(l, Status::Released { at: Rc::new(BTreeSet::from([at])), via_loop: None });
     }
 
     /// Its releases copied (each path that released `l` holds it): live.
@@ -283,29 +293,30 @@ impl Trail {
     }
 
     /// `l` used: its releases here copy, and it is live ([`Delta::restored`]);
-    /// them, unless this walk found the same set used before (a loop's
-    /// head, met by each arm: the work of a use is not of the set).
-    pub(super) fn restore(&mut self, l: LocalId) -> Option<Releases> {
-        let Some(Status::Released { at }) = self.now.status(l) else { return None };
+    /// them, and whether by the loop alone, unless this walk found the same
+    /// set used before (a loop's head, met by each arm: the work of a use is
+    /// not of the set).
+    pub(super) fn restore(&mut self, l: LocalId) -> Option<(Releases, Option<Span>)> {
+        let Some(&Status::Released { ref at, via_loop }) = self.now.status(l) else { return None };
         let at = at.clone();
         self.change(l, |d| d.restored(l));
         if self.copied.insert(Rc::as_ptr(&at), at.clone()).is_some() {
             return None;
         }
         self.copies.extend(at.iter());
-        Some(at)
+        Some((at, via_loop))
     }
 
     /// `e` as known now: a path that released at a place that copies holds
     /// the binding (live), so a join meets only the releases that may move
     /// (a set of them does not grow with the joins of the paths before).
     fn known<'e>(&self, e: &'e Ends) -> Cow<'e, Ends> {
-        let Some(Status::Released { at }) = &e.dead else { return Cow::Borrowed(e) };
+        let Some(&Status::Released { ref at, via_loop }) = e.dead.as_ref() else { return Cow::Borrowed(e) };
         if !at.iter().any(|x| self.copies.contains(x)) {
             return Cow::Borrowed(e);
         }
         let left: BTreeSet<ExprId> = at.iter().filter(|x| !self.copies.contains(x)).copied().collect();
-        let dead = (!left.is_empty()).then(|| Status::Released { at: Rc::new(left) });
+        let dead = (!left.is_empty()).then(|| Status::Released { at: Rc::new(left), via_loop });
         Cow::Owned(Ends { through: e.through, dead, live: true })
     }
 
@@ -528,17 +539,22 @@ impl LoopSum {
     /// `h.dead = x.dead ⊔ back.dead ⊔ (back.through ? h.dead)` is least at
     /// `x.dead ⊔ back.dead`, and `live` the same, so the head's effect is
     /// `{through: true, dead: back.dead (by the loop), live: back.live}`:
-    /// no iteration. A back edge no path reaches leaves `x`.
-    pub(super) fn head(back: &Delta) -> Delta {
+    /// no iteration. `of`: the text of the loop. A back edge no path reaches leaves `x`.
+    pub(super) fn head(back: &Delta, of: Span) -> Delta {
         let mut head = Delta::start();
         if back.reach {
             for (&l, e) in &back.ends {
-                let ends = Ends { through: true, dead: e.dead.as_ref().map(Status::by_loop), live: e.live };
+                let ends = Ends { through: true, dead: e.dead.as_ref().map(|d| d.by_loop(of)), live: e.live };
                 head.put(l, ends);
             }
         }
         head
     }
+}
+
+/// Whether the text `a` is within `b`.
+pub(super) fn within(a: Span, b: Span) -> bool {
+    b.start <= a.start && a.end <= b.end
 }
 
 #[cfg(test)]

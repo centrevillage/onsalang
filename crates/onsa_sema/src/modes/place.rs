@@ -132,12 +132,13 @@ pub(super) fn path_text(base: &str, proj: &[Proj]) -> String {
 }
 
 /// A place a binding of the index derives from directly: that of a source
-/// of its head with the steps of its pattern, and the source.
+/// of its head with the steps of its pattern, the source, and the head.
 #[derive(Debug)]
 pub(super) struct Source {
     pub(super) place: Place,
     pub(super) at: Span,
     pub(super) pat: Vec<Proj>,
+    head: Head,
 }
 
 /// The places a head borrows, each with its text ([`head_places`]).
@@ -232,8 +233,9 @@ pub(super) struct Deps {
     /// Of each root (no binding of the index), the bindings that derive
     /// from it, in the order of the ids (a change visits each once).
     by_root: HashMap<LocalId, Vec<LocalId>>,
-    /// Of each binding, the roots it derives from ([`Deps::origins`]).
-    roots: HashMap<LocalId, BTreeSet<LocalId>>,
+    /// Of each binding, the roots it derives from ([`Deps::origins`]), each
+    /// with the first head that reads it.
+    roots: HashMap<LocalId, BTreeMap<LocalId, Head>>,
     /// The text where each binding is in scope: its block from its `let`,
     /// its arm (a change elsewhere leaves it as it is where it is used:
     /// declared again before, or never).
@@ -304,24 +306,24 @@ impl Deps {
                 let Some(l) = l.filter(|l| !copy(info.locals[l.0 as usize].ty)) else { return };
                 deps.scope.insert(l, scope);
                 for (p, at) in &places {
-                    let source = Source { place: p.then(proj), at: *at, pat: proj.to_vec() };
+                    let source = Source { place: p.then(proj), at: *at, pat: proj.to_vec(), head };
                     deps.of.entry(l).or_default().push(source);
                 }
             });
         }
         for (&l, sources) in &deps.of {
-            let mut mine = BTreeSet::new();
+            let mut mine = BTreeMap::new();
             for s in sources {
                 if deps.of.contains_key(&s.place.root) && s.place.root >= l {
                     bug(Some(s.at), "a binding derived from a later one");
                 }
                 deps.read.insert(s.place.root);
                 match deps.roots.get(&s.place.root) {
-                    Some(r) => mine.extend(r),
-                    None => drop(mine.insert(s.place.root)),
+                    Some(r) => r.iter().for_each(|(&r, &h)| _ = mine.entry(r).or_insert(h)),
+                    None => _ = mine.entry(s.place.root).or_insert(s.head),
                 }
             }
-            mine.iter().for_each(|&r| deps.by_root.entry(r).or_default().push(l));
+            mine.keys().for_each(|&r| deps.by_root.entry(r).or_default().push(l));
             deps.roots.insert(l, mine);
         }
         deps
@@ -334,7 +336,13 @@ impl Deps {
     /// another judgment of the overlap.
     pub(super) fn origins(&self, l: LocalId) -> impl Iterator<Item = LocalId> + '_ {
         let roots = self.roots.get(&l);
-        roots.into_iter().flatten().copied().chain(roots.is_none().then_some(l))
+        roots.into_iter().flat_map(|r| r.keys().copied()).chain(roots.is_none().then_some(l))
+    }
+
+    /// The roots of `l` ([`Deps::origins`]) of a binding of the index, each
+    /// with the first head that reads it.
+    pub(super) fn heads_of(&self, l: LocalId) -> impl Iterator<Item = (LocalId, Head)> + '_ {
+        self.roots.get(&l).into_iter().flatten().map(|(&r, &h)| (r, h))
     }
 
     /// Whether `head` holds the places of its value (E0715, `frozen.rs`).

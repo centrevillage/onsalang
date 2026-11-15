@@ -150,8 +150,9 @@ pub(super) struct Made {
     /// (S-1030, S-1035: [`Walker::restore`], [`Walker::release`]).
     pub(super) copied: HashMap<(LocalId, ExprId), CopiedWhy>,
     /// Of each borrow binding consumed, the owned bindings whose whole it
-    /// derives from and the heads that derive them ([`Walker::release`]).
-    pub(super) heads: HashMap<LocalId, Vec<(LocalId, crate::binding::Head)>>,
+    /// derives from, the heads that derive them and whether their value is
+    /// it ([`Walker::release`]).
+    pub(super) heads: HashMap<LocalId, Vec<(LocalId, crate::binding::Head, bool)>>,
     /// The expressions visited (at most twice each: by the walk that
     /// reports and by the one that makes a loop's summary).
     #[cfg(test)]
@@ -211,7 +212,7 @@ impl<'a> Walker<'a> {
     pub(super) fn used(&mut self, r: &mut Run, p: &Place, at: Span, by: Option<Span>) -> bool {
         let l = p.root;
         self.read_captured(l, at);
-        self.restore(r, l, (at, false));
+        self.restore(r, l, (at, None));
         let Some(why) = self.unusable(r, p).filter(|_| self.reports) else { return true };
         let name = &self.info.locals[l.0 as usize].name;
         let d = match why {

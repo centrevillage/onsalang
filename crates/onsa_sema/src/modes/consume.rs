@@ -207,7 +207,7 @@ impl Walker<'_> {
     /// (a field taken out too, S-85): it would leave an E0715 of this stage
     /// (§18.1).
     fn add_move(&self, e: ExprId, p: &Place) -> Option<Fix> {
-        if self.holds(&Place { root: p.root, proj: Vec::new() }) {
+        if self.holder(&Place { root: p.root, proj: Vec::new() }).is_some() {
             return None;
         }
         let span = self.ast.expr(e).span;

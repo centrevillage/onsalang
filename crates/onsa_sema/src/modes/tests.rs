@@ -7,13 +7,14 @@
 use std::collections::BTreeSet;
 
 use onsa_diag::{Code, FileId, Span, Stage};
-use onsa_syntax::ast::ExprId;
+use onsa_syntax::ast::{ExprId, ExprKind};
 
 use super::check::{Walker, check_all};
 use super::flow::Run;
 use super::state::{Delta, LoopSum, Status};
 use super::walk::Pos;
 use crate::body::LocalId;
+use crate::names::body::PathRes;
 
 const PRELUDE: &str = "pub fn mk() -> Buf[F32] uses {Alloc} { Buf.zeroed(1) }
 pub fn take(move b: Buf[F32]) uses {Alloc} {}
@@ -421,7 +422,7 @@ fn the_head_of_a_loop_is_its_least_fixpoint() {
             })
             .collect::<Vec<_>>()
     };
-    let head = entry.then(&LoopSum::head(&back));
+    let head = entry.then(&LoopSum::head(&back, onsa_diag::Span::new(onsa_diag::FileId(0), 0, 1)));
     let mut again = entry.clone();
     again.join(&head.then(&back));
     assert_eq!(plain(&head), plain(&again), "a solution");
@@ -3637,7 +3638,7 @@ pub fn of_t[T: ?Dup](move g: G[T]) -> Buf[F32] uses {Alloc} { g.a }
     let rest = |n: &str| {
         use crate::drop_alloc::{Drop, alloc_drops};
         let rests = alloc_drops(&a, def(&a, n)).into_iter().filter_map(|(d, _)| match d {
-            Drop::Rest { at, root: crate::drop_alloc::Root::Local(l), .. } => Some((at, l.name.clone())),
+            Drop::Rest { at, root: crate::drop_alloc::Root::Local(_, l), .. } => Some((at, l.name.clone())),
             _ => None,
         });
         let found: Vec<_> = rests.collect();
@@ -3696,7 +3697,7 @@ pub fn released(c: Bool, move m: Str, move n: Str, t: Str) -> U32 uses {Alloc} {
     let at_of = |n: &str| {
         let info = &a.bodies[&def(&a, n)];
         (info.drops.iter())
-            .filter(|d| matches!(d.what, crate::body::Dropped::Overwrite(_)))
+            .filter(|d| matches!(d.what, crate::body::Dropped::Overwrite(..)))
             .map(|d| (&src[d.at.start as usize..d.at.end as usize], d.sure))
             .collect::<Vec<_>>()
     };
@@ -3742,4 +3743,188 @@ pub fn copied(move o: Option[Str]) -> U32 uses {Alloc} {
 fn a_drop_point_stays_small() {
     use crate::body::{DropPoint, Dropped};
     assert_eq!((std::mem::size_of::<Dropped>(), std::mem::size_of::<DropPoint>()), (32, 48));
+}
+
+/// The rows of `BodyInfo::copied` of the function `name` in `body` (after
+/// [`PRELUDE`], with no diagnostic): the line of each copy in `body` and
+/// why, of a use with its line and the binding written (S-1035, R-466).
+fn copies_of(body: &str, name: &str) -> Vec<(usize, String)> {
+    use crate::body::CopiedWhy;
+    let src = format!("{PRELUDE}{body}");
+    let (pkg, a) = analyzed(&src);
+    let said: Vec<_> = a.diagnostics.iter().filter(|d| d.span.file == FileId(0)).collect();
+    assert!(said.is_empty(), "{said:?}");
+    let id = (0..a.defs.len() as u32).map(crate::DefId).find(|&d| a.def(d).name == name).expect("the function");
+    let (ast, info) = (&crate::module_of_def(&pkg, &a, id).expect("its module").parsed.ast, &a.bodies[&id]);
+    let line = |s: Span| src[PRELUDE.len()..s.start as usize].matches('\n').count() + 1;
+    let by = |kind: &str, u: Span, b: LocalId| format!("{kind} {} by {}", line(u), info.locals[b.0 as usize].name);
+    let why = |w: CopiedWhy| match w {
+        CopiedWhy::After(u, b) => by("After", u, b),
+        CopiedWhy::Loop(u, b) => by("Loop", u, b),
+        CopiedWhy::InCall(u, b) => by("InCall", u, b),
+        CopiedWhy::Head(..) => "Head".into(),
+        CopiedWhy::Held(_) => "Held".into(),
+        CopiedWhy::Part => "Part".into(),
+    };
+    (info.copied.iter()).map(|c| (line(ast.expr(c.at).span), why(c.why))).collect()
+}
+
+const COPIES: &str = "pub fn eat_s(move s: Str) -> U32 uses {Alloc} { s.len() }
+pub fn look(s: Str) -> U32 { s.len() }
+";
+
+/// R-466 F1 (§3.5, §5.2): the reason is by the back edge of a loop alone,
+/// not by where the use is written. The index of an assignment is read
+/// after its right side (`After`), in a loop too when a `break` follows;
+/// a use before the release in a loop is by the next iteration. A release
+/// before the loop joined at its head with one in it makes both `After`
+/// (one mark for the set, true in the order of evaluation). A use after an
+/// inner loop in the same iteration of the outer one is `After`, one before
+/// it in the next iteration of the outer one `Loop` (W6-04 U12/b's `l4`).
+#[test]
+fn a_copy_is_by_the_loop_only_through_its_back_edge() {
+    let fns = [
+        (
+            "idx",
+            "(move s: Str) -> U32 uses {Alloc} {\n  var ys: [U32; 4] = [0, 0, 0, 0]\n  ys[look(s)] = eat_s(s)\n  ys[0]\n}",
+        ),
+        (
+            "brk",
+            "(move s: Str, n: U32) -> U32 uses {Alloc} {\n  var ys: [U32; 4] = [0, 0, 0, 0]\n  var i: U32 = 0\n  while i < n {\n    ys[look(s)] = eat_s(s)\n    break\n  }\n  ys[0]\n}",
+        ),
+        (
+            "lp",
+            "(move s: Str, n: U32) uses {Alloc} {\n  var i: U32 = 0\n  while i < n {\n    i = i + look(s) + eat_s(s)\n  }\n}",
+        ),
+        (
+            "mixed",
+            "(move s: Str, n: U32) uses {Alloc} {\n  var i: U32 = eat_s(s)\n  while i < n {\n    i = i + look(s) + eat_s(s)\n  }\n}",
+        ),
+        (
+            "nest",
+            "(move s: Str, n: U32) uses {Alloc} {\n  var i: U32 = 0\n  while i < n {\n    var j: U32 = 0\n    while j < n {\n      j = j + eat_s(s)\n    }\n    i = i + look(s)\n  }\n}",
+        ),
+        (
+            "nest_back",
+            "(move s: Str, n: U32) uses {Alloc} {\n  var i: U32 = 0\n  while i < n {\n    i = i + look(s)\n    var j: U32 = 0\n    while j < n {\n      j = j + eat_s(s)\n    }\n  }\n}",
+        ),
+    ];
+    let rows = |name: &str| {
+        let (_, f) = fns.iter().find(|f| f.0 == name).expect("a function");
+        copies_of(&format!("{COPIES}pub fn {name}{f}\n"), name)
+    };
+    assert_eq!(rows("idx"), [(5, "After 5 by s".to_string())]);
+    assert_eq!(rows("brk"), [(7, "After 7 by s".to_string())]);
+    assert_eq!(rows("lp"), [(6, "Loop 6 by s".to_string())]);
+    assert_eq!(rows("mixed"), [(4, "After 6 by s".to_string()), (6, "After 6 by s".to_string())]);
+    assert_eq!(rows("nest"), [(8, "After 10 by s".to_string())]);
+    assert_eq!(rows("nest_back"), [(9, "Loop 6 by s".to_string())]);
+}
+
+/// R-466 (1)-(3), F4: the first of path, head and held; a use by a borrow
+/// binding names it; a chain of heads reaches the owned root, once.
+#[test]
+fn the_reasons_of_the_copies_of_an_owned_binding() {
+    let body = format!(
+        "{COPIES}pub struct P {{ name: Str, n: U32 }}
+pub fn sink_o(move o: Option[Str]) -> U32 uses {{Alloc}} {{ 0 }}
+pub fn sink_xs(move xs: [Str; 2]) -> U32 uses {{Alloc}} {{ 0 }}
+pub fn path(move p: P, move o: Option[P]) -> U32 uses {{Alloc}} {{
+  let a = eat_s(p.name)
+  match o {{ Some(q) => a + eat_s(q.name), None => a }}
+}}
+pub fn held(move xs: [Str; 2], move o: Option[Str]) -> U32 uses {{Alloc}} {{
+  var n: U32 = 0
+  for x in xs {{ n = n + look(x) + sink_xs(xs) }}
+  match o {{ Some(s) if sink_o(o) > 0 => n + eat_s(s), _ => n }}
+}}
+pub fn chain(move o: Option[Option[Str]]) -> U32 uses {{Alloc}} {{
+  match o {{ Some(i) => match i {{ Some(s) => {{ let t = s
+ eat_s(t) }}, None => 0 }}, None => 0 }}
+}}
+pub fn derived(move o: Option[Str]) -> U32 uses {{Alloc}} {{
+  match o {{ Some(s) => sink_o(o) + look(s), None => 0 }}
+}}
+"
+    );
+    assert_eq!(copies_of(&body, "path"), [(7, "Part".to_string()), (8, "Part".to_string())]);
+    let held = copies_of(&body, "held");
+    assert_eq!(held, [(12, "Held".to_string()), (13, "Held".to_string()), (13, "Head".to_string())]);
+    assert_eq!(copies_of(&body, "chain"), [(17, "Head".to_string())]);
+    assert_eq!(copies_of(&body, "derived"), [(20, "After 20 by s".to_string())]);
+}
+
+/// R-466 (2), W8-04's premise: each consumption of the whole of an owned
+/// binding of a Dup value that is not Copy is released (and then moves
+/// unless a row says it copied) or has a row (`BodyInfo::copied`), in
+/// bodies made of the forms of a fixed seed (a borrowed `for` and a guard
+/// that hold it, paths, heads, loops, calls). The consumptions are counted
+/// from the typed tree, not by the walk: a binding passed bare to a `move`
+/// parameter; released: in the state the walk of the body leaves.
+#[test]
+fn a_whole_owned_consumption_is_released_or_has_a_row() {
+    const FORMS: &[&str] = &[
+        "n = n + eat_s(s)",
+        "n = n + look(s)",
+        "for x in xs { n = n + look(x) + sink_xs(xs) }",
+        "for x in xs { n = n + eat_s(x) }",
+        "match o { Some(v) if sink_o(o) > 0 => { n = n + eat_s(v) }, _ => {} }",
+        "match o { Some(v) => { n = n + sink_o(o) + look(v) }, None => {} }",
+        "while n < 3 { n = n + look(s) + eat_s(s) }",
+        "n = n + two(s, look(s))",
+        "n = n + eat_s(p.name)",
+    ];
+    let mut seed: u64 = 0x9e37_79b9;
+    let mut next = |k: usize| {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        (seed % k as u64) as usize
+    };
+    let mut body = format!(
+        "{COPIES}pub struct P {{ name: Str, n: U32 }}
+pub fn sink_o(move o: Option[Str]) -> U32 uses {{Alloc}} {{ 0 }}
+pub fn sink_xs(move xs: [Str; 2]) -> U32 uses {{Alloc}} {{ 0 }}
+pub fn two(move s: Str, n: U32) -> U32 uses {{Alloc}} {{ n }}
+"
+    );
+    let names: Vec<String> = (0..24).map(|i| format!("g{i}")).collect();
+    for name in &names {
+        let forms: Vec<&str> = (0..2 + next(3)).map(|_| FORMS[next(FORMS.len())]).collect();
+        body += &format!(
+            "pub fn {name}(move s: Str, move xs: [Str; 2], move o: Option[Str], move p: P) -> U32 uses {{Alloc}} {{\n  var n: U32 = 0\n  {}\n  n\n}}\n",
+            forms.join("\n  ")
+        );
+    }
+    let src = format!("{PRELUDE}{body}");
+    let (pkg, a) = analyzed(&src);
+    let (mut released, mut held) = (0, 0);
+    for name in &names {
+        let id = (0..a.defs.len() as u32).map(crate::DefId).find(|&d| &a.def(d).name == name).expect("it");
+        let root = crate::body::root_of(&a, id).expect("a body");
+        let ast = &crate::module_of_def(&pkg, &a, id).expect("its module").parsed.ast;
+        let (info, mut run) = (&a.bodies[&id], Run::new());
+        let mut w = Walker::new(&a, (ast, &src), (&a.names[&id], info, root), Vec::new());
+        w.expr(&mut run, root, Pos::Return);
+        let mut todo = vec![root];
+        while let Some(e) = todo.pop() {
+            todo.extend(ast.sub_exprs(e));
+            let ExprKind::Call { callee, args, .. } = &ast.expr(e).kind else { continue };
+            let s = ast.expr(*callee).span;
+            let x = args[0].expr;
+            let Some(&PathRes::Local(b)) = a.names[&id].paths.get(&x) else { continue };
+            let l = LocalId(b.0);
+            if !["eat_s", "sink_xs", "sink_o", "two"].contains(&&src[s.start as usize..s.end as usize])
+                || !info.locals[l.0 as usize].state.owned()
+            {
+                continue;
+            }
+            let row = info.copied.iter().any(|c| c.root == l && c.at == x);
+            let gone = matches!(run.cur.state().status(l), Some(Status::Released { at, .. }) if at.contains(&x));
+            assert!(gone || row, "{name}: `{}` neither released nor a row", &src[ast.expr(x).span.start as usize..]);
+            (released, held) = (released + !row as usize, held + row as usize);
+        }
+    }
+    // Both kinds are met (a place held is the one with a row alone), so the test reads something.
+    assert!(released > 0 && held > 0, "{released} released, {held} held");
 }

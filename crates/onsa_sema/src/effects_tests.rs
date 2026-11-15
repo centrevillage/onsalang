@@ -164,3 +164,42 @@ fn a_name_not_read_keeps_what_it_may_have_meant() {
     // Of the row wanted only: an `Alloc` fits where `t`'s row is, not the other way.
     assert!(real.within(&rt) && rt.within(&crate::ty::EffectSet::default()) && !real.within(&rr));
 }
+
+/// The notes of the one E0601 of the function `f` (after helpers that have
+/// `Alloc`), joined by lines.
+fn copy_notes(f: &str) -> String {
+    let src = format!(
+        "pub fn sink(move s: Str) -> U32 uses {{Alloc}} {{ s.len() }}
+pub fn sink_o(move o: Option[Str]) -> U32 uses {{Alloc}} {{ 0 }}
+pub fn look(s: Str) -> U32 {{ s.len() }}
+pub fn both(s: Str, move o: Option[Str]) -> U32 uses {{Alloc}} {{ 0 }}
+{f}
+"
+    );
+    let a = check(&src);
+    assert_eq!(codes(&a), vec![Code::E0601], "{f}");
+    a.diagnostics[0].notes.iter().map(|n| n.message.as_str()).collect::<Vec<_>>().join("\n")
+}
+
+/// R-466 F5, F4 (S-1035): the head that moves the value is shown where the
+/// head's value is the binding through parentheses, not of an `if`; a use
+/// by a borrow binding derived from the binding names it, in a call too.
+#[test]
+fn the_notes_of_a_copy_name_the_head_and_the_binding_written() {
+    let notes = copy_notes("pub fn f(move o: Option[Str]) -> U32 {\n  match (o) { Some(s) => sink(s), None => 0 }\n}");
+    assert!(notes.contains("`match move o` moves `o`"), "{notes}");
+    let notes = copy_notes(
+        "pub fn f(move xs: [Str; 2]) -> U32 {\n  var t: U32 = 0\n  for s in (xs) { t = t + sink(s) }\n  t\n}",
+    );
+    assert!(notes.contains("`for s in move xs` moves the elements of `xs`"), "{notes}");
+    let notes = copy_notes(
+        "pub fn f(move a: Option[Str], move b: Option[Str], c: Bool) -> U32 {\n  match if c { a } else { b } { Some(s) => sink(s), None => 0 }\n}",
+    );
+    assert!(notes.contains("it is a borrow of `a`") && !notes.contains("move a"), "{notes}");
+    let notes = copy_notes(
+        "pub fn f(move o: Option[Str]) -> U32 {\n  match o { Some(s) => sink_o(o) + look(s), None => 0 }\n}",
+    );
+    assert!(notes.contains("as `s` (a borrow of `o`) is used after"), "{notes}");
+    let notes = copy_notes("pub fn f(move o: Option[Str]) -> U32 {\n  match o { Some(s) => both(s, o), None => 0 }\n}");
+    assert!(notes.contains("another argument of the call borrows `s` (a borrow of `o`)"), "{notes}");
+}
