@@ -26,9 +26,9 @@
 //!
 //! The unit U12 (R-466, W6-04 U12/t) adds the package `N` and the tests `u12_*` at the end of the file: the
 //! copies of a path, of a place a `for` or a guard holds, of a chain of borrowed headings, of the drop of an
-//! assignment, and of the second binding that one report joins, which have no note yet. The tests of them carry
-//! `#[ignore]` of W6-04 U12 (the unit's implementation takes it off); the other `u12_*` tests pass today and keep
-//! what does not change. The markers are those above, with `//@ more`, `//@ once` and `same=<case>` (see `N`).
+//! assignment, and of the second binding that one report joins, which had no note before the unit; the other
+//! `u12_*` tests keep what it does not change. The markers are those above, with `//@ more`, `//@ once` and
+//! `same=<case>` (see `N`).
 //!
 //! What it does not compare: the line of the note that shows `match move o` (`for s in move xs`) (S-1035 does
 //! not fix whether it points at the heading or at the copy), the line of the later use that is the reason, and
