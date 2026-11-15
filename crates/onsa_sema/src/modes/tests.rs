@@ -3138,8 +3138,7 @@ fn the_body_of_an_anonymous_function_is_not_in_the_window() {
     let mut w = Walker::new(&a, (ast, &src), (&a.names[&id], &a.bodies[&id], root), Vec::new());
     w.inside.calls = 1;
     w.expr(&mut Run::new(), root, Pos::Return);
-    let changed: Vec<_> =
-        w.inside.changes.iter().map(|(_, at, _, _)| &src[at.start as usize..at.end as usize]).collect();
+    let changed: Vec<_> = w.inside.changes.iter().map(|c| &src[c.at.start as usize..c.at.end as usize]).collect();
     assert_eq!(changed, ["k"]);
     assert!(w.m.found.is_empty(), "{:?}", w.m.found);
 }
@@ -3444,11 +3443,12 @@ fn clean(body: &str) -> (String, crate::Analysis, impl Fn(&crate::Analysis, &str
 /// order it met them: at the end of a scope (a block, the body of an
 /// anonymous function and its parameters, the body and its parameters), of
 /// each owned local that is not Copy and may be live there, `sure` when no
-/// path moved it, in the anonymous function it is in; none where no path
-/// reaches (the arm that moves `v` or panics), nor of a local moved on every path.
+/// path moved it, in the anonymous function it is in (as `Closures::around`
+/// tells it); none where no path reaches (the arm that moves `v` or panics),
+/// nor of a local moved on every path.
 #[test]
 fn the_drop_points_of_a_body() {
-    let (_, a, def) = clean(
+    let (src, a, def) = clean(
         "pub fn run(f: fn(move Buf[F32]) -> U32 uses {Alloc}) -> U32 uses {Alloc} { f.(mk()) }
 pub fn points(c: Bool, move a: Buf[F32], move b: Buf[F32], n: U32) -> U32 uses {Alloc} {
   if c { take(move a) }
@@ -3467,9 +3467,13 @@ pub fn points(c: Bool, move a: Buf[F32], move b: Buf[F32], n: U32) -> U32 uses {
 ",
     );
     let info = &a.bodies[&def(&a, "points")];
+    let ast = onsa_syntax::parse(FileId(0), &src).ast;
+    let closures = crate::uses::Closures::of(&ast, info);
     let points: Vec<_> = (info.drops.iter())
         .map(|d| match d.what {
-            crate::body::Dropped::End(l) => (info.locals[l.0 as usize].name.as_str(), d.sure, d.closure.is_some()),
+            crate::body::Dropped::End(l) => {
+                (info.locals[l.0 as usize].name.as_str(), d.sure, closures.around(d.at).is_some())
+            }
             _ => panic!("no field is taken out, no exit"),
         })
         .collect();
@@ -3737,5 +3741,5 @@ pub fn copied(move o: Option[Str]) -> U32 uses {Alloc} {
 #[test]
 fn a_drop_point_stays_small() {
     use crate::body::{DropPoint, Dropped};
-    assert_eq!((std::mem::size_of::<Dropped>(), std::mem::size_of::<DropPoint>()), (32, 56));
+    assert_eq!((std::mem::size_of::<Dropped>(), std::mem::size_of::<DropPoint>()), (32, 48));
 }

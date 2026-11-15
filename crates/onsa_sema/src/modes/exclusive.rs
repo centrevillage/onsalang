@@ -6,7 +6,7 @@ use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast::{Arg, ExprId, Mode};
 
 use super::calls::Takes;
-use super::check::Walker;
+use super::check::{Changed, Walker};
 use super::flow::Run;
 use super::place::{Place, Proj, place_of};
 use crate::Kind;
@@ -203,13 +203,13 @@ impl Walker<'_> {
     /// arguments of every call, the record is emptied.
     pub(super) fn changed_in_args(&mut self, r: &mut Run, start: usize, passed: &[Passed]) {
         let (this, mut copies) = (Some(self.inside.calls + 1), Vec::new());
-        let window = self.inside.changes[start..].iter().filter(|c| c.3 || (self.reports && c.2 != this));
-        for (w, at, _, release) in window {
+        let window = self.inside.changes[start..].iter().filter(|c| c.release || (self.reports && c.direct != this));
+        for Changed { place: w, at, release, .. } in window {
             let span = |p: &Passed| self.ast.expr(p.at).span;
             let holds = |p: &Passed| span(p).start <= at.start && at.end <= span(p).end;
             let Some(q) = passed.iter().find(|q| !holds(q) && self.deps.meets(w, &q.place)) else { continue };
             if *release {
-                copies.push(w.root);
+                copies.push((w.root, span(q)));
                 continue;
             }
             let (changed, arg) = (self.place_text(*at, &[], w), self.passed_text(q));
@@ -221,7 +221,7 @@ impl Walker<'_> {
             let d = self.at_later(message, (span(q), mode), (*at, "changed here".to_string()), &[q]);
             self.m.found.push(d);
         }
-        copies.into_iter().for_each(|l| self.restore(r, l));
+        copies.into_iter().for_each(|(l, by)| self.restore(r, l, (by, true)));
         if self.inside.calls == 0 {
             self.inside.changes.clear();
         }

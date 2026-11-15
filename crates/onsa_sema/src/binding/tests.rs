@@ -233,3 +233,67 @@ fn the_marks_of_the_literals() {
     let want: Vec<(String, String)> = want.iter().map(|&(v, r)| (v.to_string(), r.to_string())).collect();
     assert_eq!(marks_of(src), want);
 }
+
+/// Whether the value of each head of `f` in `src` (the module `main`, with
+/// the module `cfg` of a constant `LIMIT`) needs no drop, by [`super::no_drop`]
+/// and [`super::no_drop_binding`] (R-461): `drop`, `no drop` or `no drop
+/// (binding)`. `src` has no diagnostic.
+fn no_drops_of(src: &str) -> Vec<(String, &'static str)> {
+    let p = crate::tests::pkg(&[("main", src), ("cfg", "pub const LIMIT: U32 = 3\n")]);
+    let a = crate::tests::analyze(&p);
+    assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
+    let id = (0..a.defs.len() as u32).map(crate::DefId).find(|&d| a.def(d).name == "f").expect("the function");
+    let (ast, info, names) = (&p.modules[0].parsed.ast, &a.bodies[&id], &a.names[&id]);
+    let mut rows: Vec<(u32, String, &str)> = (info.heads.keys())
+        .map(|&head| {
+            let (v, span) = (value_of(ast, head), ast.expr(value_of(ast, head)).span);
+            let row = match (super::no_drop_binding(ast, names, info, v), super::no_drop(ast, names, info, v)) {
+                (true, true) => "no drop (binding)",
+                (false, true) => "no drop",
+                (false, false) => "drop",
+                (true, false) => panic!("a binding that needs no drop whose value needs one"),
+            };
+            (span.start, src[span.start as usize..span.end as usize].to_string(), row)
+        })
+        .collect();
+    rows.sort();
+    rows.into_iter().map(|(_, v, r)| (v, r)).collect()
+}
+
+/// The one test of whether a value needs no drop (R-461, §5.4, §12.2):
+/// a static value and its paths (S-615), a binding that needs no drop and
+/// its paths (S-613 L4), the end of a chain of names (`cfg.LIMIT`, not read
+/// through `cfg`); an owned binding and a borrowed one need a drop.
+#[test]
+fn the_values_that_need_no_drop() {
+    let src = "use cfg\n\
+        pub fn f(v: F32, s: Str, i: U32, move t: Str) -> U32 uses {Alloc} {\n\
+        let _ = \"a\"\n\
+        let _ = [\"a\", \"bc\"][i]\n\
+        let _ = (\"gain\", v).0\n\
+        let nm = \"gain\"\n\
+        let _ = nm\n\
+        let p = (nm, v)\n\
+        let _ = (p.0)\n\
+        let _ = cfg.LIMIT\n\
+        let _ = s\n\
+        let _ = t\n\
+        let _ = (s, v).0\n\
+        0\n\
+        }\n";
+    let want = [
+        ("\"a\"", "no drop"),
+        ("[\"a\", \"bc\"][i]", "no drop"),
+        ("(\"gain\", v).0", "no drop"),
+        ("\"gain\"", "no drop"),
+        ("nm", "no drop (binding)"),
+        ("(nm, v)", "no drop"),
+        ("(p.0)", "no drop (binding)"),
+        ("cfg.LIMIT", "no drop"),
+        ("s", "drop"),
+        ("t", "drop"),
+        ("(s, v).0", "drop"),
+    ];
+    let want: Vec<(String, &str)> = want.iter().map(|&(v, r)| (v.to_string(), r)).collect();
+    assert_eq!(no_drops_of(src), want);
+}

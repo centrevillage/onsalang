@@ -10,7 +10,7 @@ use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 use onsa_syntax::ast::{Ast, ExprId, ExprKind, ItemKind, StmtKind, TypeKind};
 
 use crate::binding::{Head, LitClass};
-use crate::body::{RowFrom, generics_of};
+use crate::body::{Copied, CopiedWhy, RowFrom, generics_of};
 use crate::def::{DefKind, GenericKind};
 use crate::drop_alloc::{Drop, copy_would_free};
 use crate::names::body::Origin;
@@ -97,9 +97,11 @@ fn first_use(pkg: &Package, a: &Analysis, r: &Record, scope: &Scope, effect: Def
 /// of the scope and the effect; (2) the drop points away from where the value
 /// is written (S-783 C1); (3) of the use: the first element that made a
 /// literal owned (S-613), the type parameters `Copy` would free (S-1052);
-/// (4) the other uses of the effect in the scope (R-83 (3)). No bound on
-/// them: a use is in the notes of one report at most, so all the notes are
-/// linear in the body. O(P + U + G) for P points, U uses, G type parameters.
+/// of a binding dropped, each consumption that copied its value and why
+/// (S-1035); (4) the other uses of the effect in the scope (R-83 (3)). No
+/// bound on them: a use is in the notes of one report at most, so all the
+/// notes are linear in the body. O(P + U + G + C) for P points, U uses, G
+/// type parameters, C copies.
 fn notes(
     a: &Analysis,
     (ast, src): (&Ast, &dyn Fn(Span) -> String),
@@ -185,12 +187,60 @@ fn notes(
                 format!("with the bound `Copy` on `{}`{dup}, its drop needs no `Alloc` (§12.2)", g.name),
             ));
         }
-        // S-1035 (W6-04): the note of why a Dup value is copied and not moved goes here.
+        // Each consumption that copied the value of a binding (S-1035).
+        if let Drop::Local(l, local) = drop {
+            for c in a.bodies[&r.id].copied_of(*l) {
+                notes.extend(copied(ast, src, &local.name, c));
+            }
+        }
     }
     // In an `rt` function and an anonymous function too, of the scope alone (S-1050).
     let others = r.uses.iter().filter(|o| o.scope == u.scope && o.at != u.at && o.needs(a, effect));
     notes.extend(others.map(|o| (o.at, format!("{}: it needs `{name}` too", o.describe(a, (ast, r.id), src)))));
     notes
+}
+
+/// The notes of the consumption `c` that copied the value of the binding
+/// `name` and did not move it (S-1035, §5.2, §5.4): why, and where it is used
+/// or borrowed; of a borrow head (`match o`, `for s in xs`), the head that
+/// moves it where its value is the binding as written. No fix: which way
+/// to go is the writer's.
+fn copied(ast: &Ast, src: &dyn Fn(Span) -> String, name: &str, c: &Copied) -> Vec<(Span, String)> {
+    let at = ast.expr(c.at).span;
+    let copied = format!("`{}` is copied here and not moved", src(at));
+    let (why, by) = match c.why {
+        CopiedWhy::After(u) => (format!("{copied}, as `{name}` is used after (§5.2)"), Some((u, "used after here"))),
+        CopiedWhy::Loop(u) => (
+            format!("{copied}, as the next iteration of the loop uses `{name}` (§5.2)"),
+            Some((u, "used here by the next iteration")),
+        ),
+        CopiedWhy::InCall(u) => {
+            (format!("{copied}, as another argument of the call borrows `{name}` (§5.2)"), Some((u, "borrowed here")))
+        }
+        CopiedWhy::Head(h) => {
+            let (head, value, moved) = match h {
+                Head::Match { scrutinee } => (format!("`match {}`", src(ast.expr(scrutinee).span)), scrutinee, None),
+                Head::For(s) | Head::Let(s) => match &ast.stmt(s).kind {
+                    StmtKind::For { pat, iter, .. } => {
+                        let pat = src(ast.pat(*pat).span);
+                        (format!("`for {pat} in {}`", src(ast.expr(*iter).span)), *iter, Some(pat))
+                    }
+                    StmtKind::Let { init, .. } => ("its `let`".to_string(), *init, None),
+                    _ => bug(Some(at), "a head of a binding that is no `for` or `let`"),
+                },
+            };
+            let fix = match (h, moved) {
+                _ if src(ast.expr(value).span) != name => String::new(),
+                (Head::Match { .. }, _) => format!("; `match move {name}` moves `{name}`"),
+                (_, Some(pat)) => format!("; `for {pat} in move {name}` moves the elements of `{name}`"),
+                _ => String::new(),
+            };
+            (format!("{copied}: {head} binds it as a borrow of `{name}` (§5.4){fix}"), None)
+        }
+    };
+    // A use by the next iteration may be the consumption itself.
+    let by = by.filter(|&(u, _)| u != at).map(|(u, s)| (u, s.to_string()));
+    std::iter::once((at, why)).chain(by).collect()
 }
 
 /// The notes with no place of the E0601 of `effect` in `scope` of the body

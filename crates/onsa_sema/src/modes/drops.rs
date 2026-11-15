@@ -100,9 +100,14 @@ impl Walker<'_> {
     /// dropped there (S-1045, §2.4, §12.2). The one place that decides it.
     pub(super) fn repeated(&mut self, r: &Run, e: ExprId, elem: ExprId, pos: Pos) {
         let x = self.value_of(elem);
-        let ty = self.info.expr_types.get(&e).map(|&t| self.a.types.get(t));
-        if pos.consumes() && matches!(ty, Some(Ty::Array(_, Len::Const(0) | Len::Param(_)))) && self.owned(x) {
-            self.drop_point(r, self.ast.expr(x).span, Dropped::Unplaced(x), (true, None));
+        let Some(&ty) = self.info.expr_types.get(&e) else { bug(Some(self.ast.expr(e).span), "an array with no type") };
+        let zero = match self.a.types.get(ty) {
+            Ty::Array(_, Len::Const(0)) => true,
+            Ty::Array(_, Len::Param(_)) => false,
+            _ => return,
+        };
+        if pos.consumes() && self.owned(x) {
+            self.drop_point(r, self.ast.expr(x).span, Dropped::Unplaced { value: x, zero }, (true, None));
         }
     }
 
@@ -165,11 +170,10 @@ impl Walker<'_> {
     /// `unless`: the releases it is one only if one of them copies.
     pub(super) fn drop_point(&mut self, r: &Run, at: Span, what: Dropped, (sure, unless): (bool, Option<&Releases>)) {
         if self.reports && r.cur.state().reaches() {
-            let closure = self.closure_in();
             if let Some(xs) = unless {
                 self.m.unless.push((self.m.drops.len(), xs.clone()));
             }
-            self.m.drops.push(DropPoint { at, what, closure, sure });
+            self.m.drops.push(DropPoint { at, what, sure });
         }
     }
 

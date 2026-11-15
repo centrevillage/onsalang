@@ -68,8 +68,8 @@ pub(crate) use operator_fix::UNSIGNED_NEGATION;
 // ---------------------------------------------------------------- tables
 
 pub use info::{
-    BodyInfo, Discard, DropPoint, Dropped, InstId, Instance, LocalId, LocalInfo, LocalKind, RowFrom, Taken, Target,
-    TryArms, Unbound,
+    BodyInfo, Copied, CopiedWhy, Discard, DropPoint, Dropped, InstId, Instance, LocalId, LocalInfo, LocalKind, RowFrom,
+    Taken, Target, TryArms, Unbound,
 };
 
 // ---------------------------------------------------------------- checker

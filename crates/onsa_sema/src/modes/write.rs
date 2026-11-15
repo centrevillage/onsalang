@@ -11,7 +11,7 @@ use onsa_diag::internal::bug;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
 use onsa_syntax::ast::{ExprId, PatKind, StmtKind};
 
-use super::check::Walker;
+use super::check::{Changed, Walker};
 use super::flow::Run;
 use super::place::Place;
 use super::state::Status;
@@ -118,7 +118,8 @@ impl Walker<'_> {
     /// argument, marked with the call's depth.
     pub(super) fn record(&mut self, w: &Place, at: Span, of: Of) {
         if self.reports && self.inside.calls > 0 {
-            self.inside.changes.push((w.clone(), at, (of == Of::Arg).then_some(self.inside.calls), false));
+            let direct = (of == Of::Arg).then_some(self.inside.calls);
+            self.inside.changes.push(Changed { place: w.clone(), at, direct, release: false });
         }
     }
 

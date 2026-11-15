@@ -111,7 +111,10 @@ impl Use<'_> {
                     format!("the `for` that consumes `{at}` drops {what} when it is left")
                 }
                 Drop::Discard { .. } => format!("what `{at}` binds to no name is dropped"),
-                Drop::Unplaced { .. } => format!("`{at}` is dropped where the array that repeats it has length 0"),
+                Drop::Unplaced { zero, .. } => {
+                    let has = if *zero { "has" } else { "may have" };
+                    format!("`{at}` is dropped where the array that repeats it {has} length 0")
+                }
             },
         }
     }

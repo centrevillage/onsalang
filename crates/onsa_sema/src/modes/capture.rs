@@ -52,11 +52,6 @@ impl Walker<'_> {
         *r = outer;
     }
 
-    /// The innermost anonymous function the walk is in.
-    pub(super) fn closure_in(&self) -> Option<ExprId> {
-        self.inside.frames.last().map(|f| f.closure)
-    }
-
     fn captures(&self, e: ExprId) -> &[LocalId] {
         self.info.captures.get(&e).map_or(&[], |c| c.as_slice())
     }

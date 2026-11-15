@@ -3,7 +3,7 @@
 //! makes, and the E0704 of a place used after its root moved or a change
 //! it overlaps (`Walker::used`).
 
-use onsa_diag::hash::{HashMap, HashSet};
+use onsa_diag::hash::HashMap;
 use onsa_diag::internal::bug;
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast::{Ast, ExprId, StmtId};
@@ -15,7 +15,7 @@ use super::place::{Change, Deps, Place, Proj, path_text};
 use super::release::kept;
 use super::state::{LoopSum, Releases, Status};
 use super::walk::Pos;
-use crate::body::{BodyInfo, DropPoint, LocalId, generics_of, root_of};
+use crate::body::{BodyInfo, Copied, CopiedWhy, DropPoint, LocalId, generics_of, root_of};
 use crate::def::{DefKind, GenericDef};
 use crate::names::body::{BodyNames, Origin};
 use crate::ty::TyId;
@@ -47,14 +47,19 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
         found.extend(w.m.found.into_iter().min_by(|x, y| x.order_in_file().cmp(&y.order_in_file())));
         // Not of a flow's body (§12.4: its state drops freely; R-453 is W7-04).
         if !matches!(a.def(id).kind, DefKind::Flow(_)) {
-            drops.push((id, kept(w.m.drops, &w.m.unless, &w.m.reverted)));
+            let ast = w.ast;
+            let mut copied: Vec<Copied> =
+                (w.m.copied.into_iter()).map(|((root, at), why)| Copied { root, at, why }).collect();
+            copied.sort_unstable_by_key(|c| (c.root, ast.expr(c.at).span.start, c.at.0));
+            drops.push((id, kept(w.m.drops, &w.m.unless, &copied), copied));
         }
     }
     a.diagnostics.extend(found);
-    // The stages after read the drop points (R-32, R-83; D-15: decided here only).
-    for (id, d) in drops {
+    // The stages after read the drop points and the copies (R-32, R-83,
+    // S-1035; D-15: decided here only).
+    for (id, d, copied) in drops {
         let Some(info) = a.bodies.get_mut(&id) else { bug(Some(a.def(id).span), "a body walked and gone") };
-        info.drops = d;
+        (info.drops, info.copied) = (d, copied);
     }
 }
 
@@ -99,12 +104,20 @@ pub(super) struct Inside {
     /// An argument that overlaps an earlier one of its call (E0702), and
     /// the call: its root is not reported as used after a move in the call.
     pub(super) excuse: Option<(LocalId, Span)>,
-    /// The changes made in the arguments of the calls the walk is in (of a
-    /// direct argument, the depth of its call; whether it is the release of
-    /// a Dup value, S-1030), and how many those calls are (S-193, S-799:
-    /// `exclusive.rs`).
-    pub(super) changes: Vec<(Place, Span, Option<u32>, bool)>,
+    /// The changes made in the arguments of the calls the walk is in, and
+    /// how many those calls are (S-193, S-799: `exclusive.rs`).
+    pub(super) changes: Vec<Changed>,
     pub(super) calls: u32,
+}
+
+/// A change of the place `place` at `at` in an argument of a call
+/// ([`Inside::changes`]): of a direct argument, the depth of its call
+/// (`direct`); `release`: the release of a Dup value (S-1030).
+pub(super) struct Changed {
+    pub(super) place: Place,
+    pub(super) at: Span,
+    pub(super) direct: Option<u32>,
+    pub(super) release: bool,
 }
 
 /// Why a place cannot be used: its root moved (at, by the loop), or it
@@ -132,8 +145,13 @@ pub(super) struct Made {
     /// Of a point of a binding released on every path to it, its number
     /// and the releases: it is one only if one of them copies (S-1030).
     pub(super) unless: Vec<(usize, Releases)>,
-    /// The releases used after, by every walk: copies (S-1030, [`Walker::restore`]).
-    pub(super) reverted: HashSet<ExprId>,
+    /// The consumptions that copy a Dup value, by the binding that keeps
+    /// it and the expression, and the first reason found, by every walk
+    /// (S-1030, S-1035: [`Walker::restore`], [`Walker::release`]).
+    pub(super) copied: HashMap<(LocalId, ExprId), CopiedWhy>,
+    /// Of each borrow binding consumed, the owned bindings whose whole it
+    /// derives from and the heads that derive them ([`Walker::release`]).
+    pub(super) heads: HashMap<LocalId, Vec<(LocalId, crate::binding::Head)>>,
     /// The expressions visited (at most twice each: by the walk that
     /// reports and by the one that makes a loop's summary).
     #[cfg(test)]
@@ -193,7 +211,7 @@ impl<'a> Walker<'a> {
     pub(super) fn used(&mut self, r: &mut Run, p: &Place, at: Span, by: Option<Span>) -> bool {
         let l = p.root;
         self.read_captured(l, at);
-        self.restore(r, l);
+        self.restore(r, l, (at, false));
         let Some(why) = self.unusable(r, p).filter(|_| self.reports) else { return true };
         let name = &self.info.locals[l.0 as usize].name;
         let d = match why {

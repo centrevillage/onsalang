@@ -202,6 +202,12 @@ pub struct BodyInfo {
     /// note of an owned aggregate literal names its first element from
     /// [`BodyInfo::lits`] (`LitClass::Owned`, S-613, W6-03).
     pub drops: Vec<DropPoint>,
+    /// The consumptions of a Dup value that copy it and do not move it, with
+    /// why (§5.2, §5.4, S-1030, S-1035): a row for each binding dropped after
+    /// it and each, by the binding ([`BodyInfo::copied_of`]). The modes stage
+    /// writes them, and thins its drop points by them; the notes of the
+    /// E0601 of a drop and Core (W8-04) read them. Not of a flow's body.
+    pub copied: Vec<Copied>,
     /// The parts of the values the patterns and the `move _` parameters bind
     /// to no name (§5.4, S-1036, S-1044), with their types: the modes stage
     /// drops those of an owned head.
@@ -211,6 +217,41 @@ pub struct BodyInfo {
     /// bodies of a package are recorded, so not in the base of std.
     #[serde(skip)]
     pub closure_rows: HashMap<ExprId, RowFrom>,
+}
+
+impl BodyInfo {
+    /// The consumptions that copy the value of the binding `l` (its rows
+    /// of [`BodyInfo::copied`]), in the order they are written.
+    pub fn copied_of(&self, l: LocalId) -> &[Copied] {
+        let start = self.copied.partition_point(|c| c.root < l);
+        let end = start + self.copied[start..].partition_point(|c| c.root == l);
+        &self.copied[start..end]
+    }
+}
+
+/// A consumption `at` of a Dup value that copies it and does not move it,
+/// so the binding `root` keeps its value (§5.2, §5.4, S-1035), and why.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Copied {
+    pub root: LocalId,
+    pub at: ExprId,
+    pub why: CopiedWhy,
+}
+
+/// Why a consumption of a Dup value copies it (S-1035).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CopiedWhy {
+    /// `root`, released (S-1030), is used after, at the place.
+    After(Span),
+    /// The next iteration of a loop uses it, at the place (written at or
+    /// before the consumption).
+    Loop(Span),
+    /// Another argument of the same call borrows a place it overlaps, at the
+    /// place (E0702's test, §5.2).
+    InCall(Span),
+    /// The value is a borrow binding of the head, derived from the whole
+    /// of `root` (§5.4: `match o`, `for s in xs`).
+    Head(Head),
 }
 
 /// Where the effect row of an anonymous function comes from (§8.1, §4.7).
@@ -249,14 +290,14 @@ pub struct Discard {
 
 /// A drop point of a body: where (`at`, by what it drops: of an `End` the
 /// empty span at the end of the scope, of a `Rest` the expression that takes
-/// out, of the others the exit, the end of a `for` its value), of what, in the innermost anonymous function (`closure`; the
-/// readers count it as the function's, W6-02), and whether the value is
-/// live on every path that reaches it (`sure`).
+/// out, of the others the exit, the end of a `for` its value), of what, and
+/// whether the value is live on every path that reaches it (`sure`). Its
+/// scope is the anonymous function around where its value is written
+/// (`crate::uses::Closures::around`, the one place that decides it).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DropPoint {
     pub at: Span,
     pub what: Dropped,
-    pub closure: Option<ExprId>,
     pub sure: bool,
 }
 
@@ -282,7 +323,7 @@ pub enum Dropped {
     Temp(ExprId),
     /// What is left of a value no binding owns where a path is taken out
     /// of it (S-85, R-32). Boxed, so that `Rest` alone holds a `Vec` and the
-    /// drop points of a body stay as small as before (`DropPoint`, 56 bytes).
+    /// drop points of a body stay as small as before (`DropPoint`, 48 bytes).
     TempRest(Box<Taken<ExprId>>),
     /// The value the place `target` held before it is assigned (R-32,
     /// S-1038: of a `var`, a `move` or an `inout` parameter alike).
@@ -290,8 +331,9 @@ pub enum Dropped {
     /// What an owned head binds to no name (§5.4, S-1036).
     Discard(Unbound),
     /// The value of `e` in `[e; N]` whose length may be 0 (S-1045): put in no
-    /// element, it is dropped there.
-    Unplaced(ExprId),
+    /// element, it is dropped there. `zero`: the length is 0 (not a const
+    /// parameter).
+    Unplaced { value: ExprId, zero: bool },
 }
 
 /// A path of fields taken out of the owned local `root` (S-85), or of a value.

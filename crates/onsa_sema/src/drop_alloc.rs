@@ -42,8 +42,8 @@ pub(crate) enum Drop<'b> {
     /// name (§5.4, S-1036).
     Discard { at: Span, tys: &'b [TyId] },
     /// The value of `value`, of the type `ty`, of `[value; N]` whose length
-    /// may be 0 (S-1045).
-    Unplaced { value: ExprId, ty: TyId },
+    /// may be 0 (S-1045), and is (`zero`).
+    Unplaced { value: ExprId, ty: TyId, zero: bool },
 }
 
 /// What a path is taken out of (S-85): an owned local, or a value no
@@ -136,7 +136,9 @@ pub(crate) fn alloc_drops(a: &Analysis, id: DefId) -> Vec<(Drop<'_>, Vec<Span>)>
             Dropped::Temp(e) => (Of::Expr(*e), Drop::Temp { value: *e, ty: ty(e, d.at) }),
             Dropped::Overwrite(e) => (Of::Expr(*e), Drop::Overwrite { target: *e, ty: ty(e, d.at) }),
             Dropped::Value(e) => (Of::Expr(*e), Drop::Value { value: *e, ty: ty(e, d.at) }),
-            Dropped::Unplaced(e) => (Of::Expr(*e), Drop::Unplaced { value: *e, ty: ty(e, d.at) }),
+            &Dropped::Unplaced { value, zero } => {
+                (Of::Expr(value), Drop::Unplaced { value, ty: ty(&value, d.at), zero })
+            }
             &Dropped::IterRest { iter, early } => (Of::Expr(iter), Drop::IterRest { iter, ty: ty(&iter, d.at), early }),
             Dropped::Discard(u) => {
                 let x = body.discards.get(u).unwrap_or_else(|| bug(Some(d.at), "a drop of a part with no type"));

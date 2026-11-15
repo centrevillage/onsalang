@@ -220,10 +220,9 @@ pub fn f(n: U32) -> U32 uses {{Alloc}} {{
     assert!(r.scopes.iter().skip(1).all(|s| !s.rt && s.row.effects().is_empty()));
 }
 
-/// The scope of a use is decided by its place alone; a drop's agrees with
-/// the innermost anonymous function the modes stage gives each of its drop
-/// points (`DropPoint::closure`, D-15): the value as written and every point
-/// of it are in one scope (W6-03 U5).
+/// The scope of a use is decided by its place alone (`Closures::around`, the
+/// one place, D-15): the value of a drop as written and every point of it
+/// are in one scope (W6-03 U5), points in anonymous functions too.
 #[test]
 fn the_scope_of_a_drop_is_the_one_of_its_points() {
     let bodies = [
@@ -246,10 +245,7 @@ fn the_scope_of_a_drop_is_the_one_of_its_points() {
         let ast = &crate::module_of_def(&p, &a, id).expect("its module").parsed.ast;
         let closures = crate::uses::Closures::of(ast, &a.bodies[&id]);
         let scope_of = |at| closures.around(at).and_then(|i| r.scopes[i + 1].closure);
-        for d in &a.bodies[&id].drops {
-            assert_eq!(scope_of(d.at), d.closure, "{body}: the point at {:?}", d.at);
-            points += usize::from(d.closure.is_some());
-        }
+        points += a.bodies[&id].drops.iter().filter(|d| scope_of(d.at).is_some()).count();
         for u in &r.uses {
             if let What::Drop { points, .. } = &u.what {
                 assert!(points.iter().all(|&p| scope_of(p) == r.scopes[u.scope as usize].closure), "{body}");

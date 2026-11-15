@@ -560,7 +560,6 @@ fn each_function_gets_one_report_at_the_place_its_rule_gives() {
 }
 
 #[test]
-#[ignore = "W6-04 U3: the E0601 of a copied consumption has no note at the place of the copy (S-1035 (2))"]
 fn a_consumption_that_was_copied_is_noted_at_its_line() {
     // S-1035 (2), S-1030: the drop of an owned `Dup` value that the report is about needs `Alloc` because a
     // consumption of it was copied, and the report notes where: the argument that is read later (`sink(s)` and
@@ -582,7 +581,6 @@ fn a_consumption_that_was_copied_is_noted_at_its_line() {
 }
 
 #[test]
-#[ignore = "W6-04 U3: the E0601 of a copied consumption has no note more than the same drop without a copy (S-1035 (2))"]
 fn a_copy_adds_a_note_to_the_report_of_the_same_drop_without_it() {
     // The control of each case drops the same kind of owner without any consumption of `s`, so its notes are the
     // drop point (and, in an `rt` function, the rule 1 of §10). A copy has at least one note more (the place of
