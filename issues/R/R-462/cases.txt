@@ -1,0 +1,21 @@
+=== two_cycles_share
+pub rt fn c() { a() }
+pub rt fn b() { a() }
+pub rt fn a() {
+  b()
+  c()
+}
+=== two_cycles_share_a_first
+pub rt fn a() {
+  b()
+  c()
+}
+pub rt fn b() { a() }
+pub rt fn c() { a() }
+=== figure8_mid
+pub rt fn b() { a() }
+pub rt fn a() {
+  b()
+  c()
+}
+pub rt fn c() { a() }

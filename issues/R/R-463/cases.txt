@@ -1,0 +1,16 @@
+=== user_effect_meant
+--- main.onsa
+use kp.{Tick}
+use m.{g}
+pub fn f() uses {Tick} { g() }
+--- m.onsa
+pub effect Tick {}
+pub fn g() uses {Tick} {}
+=== std_effect_meant
+--- main.onsa
+use kp.{Random}
+use m.{g}
+pub fn f() uses {Random} { g() }
+--- m.onsa
+use std.random.Random
+pub fn g() uses {Random} {}

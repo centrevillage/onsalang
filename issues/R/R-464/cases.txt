@@ -1,0 +1,22 @@
+=== s3_first
+pub struct OC[T: Copy] { t: T }
+pub struct S3[T1: ?Dup] { a: I32, w: Array[T1] }
+pub struct H { h: OC[S3[F32]] }
+=== h_first
+pub struct OC[T: Copy] { t: T }
+pub struct H { h: OC[S3[F32]] }
+pub struct S3[T1: ?Dup] { a: I32, w: Array[T1] }
+=== g_first_then_s3_then_h
+pub struct OC[T: Copy] { t: T }
+pub fn g(x: OC[S3[F32]]) -> I32 { 0 }
+pub struct S3[T1: ?Dup] { a: I32, w: Array[T1] }
+pub struct H { h: OC[S3[F32]] }
+=== s3_then_other_asks_then_h
+pub struct OC[T: Copy] { t: T }
+pub struct S3[T1: ?Dup] { w: Array[T1], a: I32 }
+pub struct H { h: OC[S3[F32]] }
+=== user_asks_before_s3_field_judged
+pub struct OC[T: Copy] { t: T }
+pub struct K { k: S3[F32] }
+pub struct S3[T1: ?Dup] { a: I32, w: Array[T1] }
+pub struct H { h: OC[S3[F32]] }
