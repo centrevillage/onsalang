@@ -110,6 +110,7 @@ pub use names::body::{named, receiver};
 pub use names::rename::rename_fixes;
 pub use names::{cyclic, file_key};
 pub use resolve::{Builtin, Entity, ModInfo, Modules, ResolveError};
+pub use rt::{Call, CycleCall, cycle_calls};
 pub use ty::{Ty, TyId, Types};
 
 /// One parsed source file (spec §15.1: one file = one module).

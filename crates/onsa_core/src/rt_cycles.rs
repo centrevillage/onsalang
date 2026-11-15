@@ -11,47 +11,21 @@
 //! on a recursive type (`__eq`, S-914). O(F + C) for F functions and C calls,
 //! no recursion over the functions.
 
-use std::collections::{BTreeMap, HashMap, VecDeque};
-
-use onsa_diag::{Code, Diagnostic, Span, Stage};
+use onsa_diag::{Code, Diagnostic, Stage};
 use onsa_sema::def::DefKind;
-use onsa_sema::{Analysis, DefId, Package, cyclic, file_key};
+use onsa_sema::{Analysis, Call, CycleCall, DefId, Package, cycle_calls, file_key};
 
 use crate::ir::{ExprKind, FnDef, Module};
 use crate::walk::walk_block;
 
-/// A call in a body: the index of the function it calls, and where it is.
-type Call = (usize, Span);
-
-/// The first call of a cycle that a function written in the source makes.
-struct First {
-    /// Its place in the order of the diagnostics: the file by its path in
-    /// the package (S-313), and the place in the file.
-    order: (String, u32, u32),
-    caller: usize,
-    callee: usize,
-    at: Span,
-}
-
 /// The E0903 of each cycle of `rt` functions of `m` that has a function
 /// written in the source. A cycle is a strongly connected component: what
-/// shares a function is one cycle (§18.1).
+/// shares a function is one cycle (§18.1). The call it is at is the one of
+/// `onsa_sema::rt` ([`cycle_calls`]), of the written functions.
 pub(crate) fn rt_cycles(m: &Module, a: &Analysis, flat: &[&Package]) -> Vec<Diagnostic> {
     let calls: Vec<Vec<Call>> = m.fns.iter().map(|f| rt_calls(m, f)).collect();
-    let edges: Vec<Vec<usize>> = calls.iter().map(|c| c.iter().map(|&(to, _)| to).collect()).collect();
-    let (comp, cycled) = cyclic(&edges);
-    let mut firsts: BTreeMap<usize, First> = BTreeMap::new();
-    for (caller, def) in m.fns.iter().enumerate().filter(|&(f, _)| cycled[f]) {
-        let Some(decl) = written(a, def) else { continue };
-        let file = file_key(flat, &a.modules, a.def(decl).module);
-        for &(callee, at) in calls[caller].iter().filter(|&&(to, _)| comp[to] == comp[caller]) {
-            let order = (file.clone(), at.start, at.end);
-            if firsts.get(&comp[caller]).is_none_or(|first| order < first.order) {
-                firsts.insert(comp[caller], First { order, caller, callee, at });
-            }
-        }
-    }
-    firsts.into_values().map(|first| diagnostic(m, a, &calls, &comp, &first)).collect()
+    let file = |f: usize| written(a, &m.fns[f]).map(|decl| file_key(flat, &a.modules, a.def(decl).module));
+    cycle_calls(&calls, file).iter().map(|first| diagnostic(m, a, first)).collect()
 }
 
 /// The calls of the `rt` function `f` of `rt` functions, in evaluation order.
@@ -78,38 +52,12 @@ fn written(a: &Analysis, f: &FnDef) -> Option<DefId> {
 /// The E0903 at the call `first`. Its text has the two ends of that call, and
 /// not the instances: the same call of two instances is one diagnostic
 /// (§18.1). The note is the way back to the caller, by the declarations.
-fn diagnostic(m: &Module, a: &Analysis, calls: &[Vec<Call>], comp: &[usize], first: &First) -> Diagnostic {
-    let way = way_back(calls, comp, first);
-    let decls: Vec<_> = way.iter().filter_map(|&f| m.fns[f].decl).collect();
+fn diagnostic(m: &Module, a: &Analysis, first: &CycleCall) -> Diagnostic {
+    let decls: Vec<_> = first.way.iter().filter_map(|&f| m.fns[f].decl).collect();
     let path: Vec<String> = decls.iter().map(|&d| a.shown_name(d)).collect();
     // The caller is written, so it is at both ends of `decls`.
     let target = decls[1];
     let message = format!("`{}` recurses through `{}`: `rt` functions cannot recurse (§10)", path[0], path[1]);
     Diagnostic::new(Stage::Build, Code::E0903, first.at, message)
         .with_note(a.def(target).name_span, format!("recursion target declared here; cycle: {}", path.join(" -> ")))
-}
-
-/// The shortest way of calls in the cycle of `first`: the caller, the callee,
-/// and on to the caller again.
-fn way_back(calls: &[Vec<Call>], comp: &[usize], first: &First) -> Vec<usize> {
-    let mut before = HashMap::new();
-    let mut queue = VecDeque::from([first.callee]);
-    while let Some(f) = queue.pop_front() {
-        if f == first.caller {
-            break;
-        }
-        for &(to, _) in calls[f].iter().filter(|&&(to, _)| comp[to] == comp[f]) {
-            if to != first.callee && !before.contains_key(&to) {
-                before.insert(to, f);
-                queue.push_back(to);
-            }
-        }
-    }
-    let mut way = vec![first.caller];
-    while let Some(&f) = way.last().and_then(|f| before.get(f)) {
-        way.push(f);
-    }
-    way.push(first.caller);
-    way.reverse();
-    way
 }

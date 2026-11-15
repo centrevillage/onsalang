@@ -539,7 +539,6 @@ fn field_errors_give_the_same_diagnostics_in_every_order() {
 /// R-462 (W6-04 U6), §10 rule 5, §18.1: the E0903 of `rt` functions that call each other is one for each set of
 /// functions that reach each other, in every order of the declarations.
 #[test]
-#[ignore = "W6-04 U6: an E0903 for each cycle and not for each set of functions that reach each other, so the count changes with the order (R-462)"]
 fn rt_cycles_give_one_e0903_for_each_set_in_every_order() {
     let programs: Vec<&Failing> = RT_CYCLES.iter().collect();
     let (runs, problems) = sweep_failing(&programs, 0xF0);
