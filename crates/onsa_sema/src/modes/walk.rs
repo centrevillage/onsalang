@@ -121,10 +121,9 @@ impl<'a> Walker<'a> {
                 self.drops(r, 0, ast.expr(e).span, true);
             }
             ExprKind::Repeat { elem, len } => {
-                // SPEC-GAP(S-1045): the value is put once (released, as a value made is put), its drop
-                // when `N` is 0 not counted (provisional).
                 self.expr(r, *elem, element);
                 self.expr(r, *len, Pos::Read);
+                self.repeated(r, e, *elem, element);
             }
             // The base waits for the index (§3.5), then is read.
             ExprKind::Index { base, index } => {

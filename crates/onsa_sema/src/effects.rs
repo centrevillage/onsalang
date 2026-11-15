@@ -56,8 +56,8 @@ fn first_use(pkg: &Package, a: &Analysis, r: &Record, scope: &Scope, effect: Def
     {
         return Some(d);
     }
-    // SPEC-GAP(S-1060): no fix where the name does not name the effect in the
-    // module (an item of it, an E0304): the row would read that (§18.1).
+    // No fix where the name does not name the effect in the module (an item
+    // of it, an E0304): the row would read that (§18.1, S-1060).
     if a.modules.lookup(def.module, name, &a.prelude) != Some(Entity::Def(effect)) {
         return Some(d);
     }
@@ -111,8 +111,8 @@ fn notes(
     let name = &a.def(effect).name;
     let alloc = a.alloc == Some(effect);
     if let Some(c) = scope.closure {
-        // SPEC-GAP(S-1041): no fix; a note of where its row comes from, of an
-        // expected type the type alone (not where it was expected).
+        // No fix; a note of where its row comes from, of an expected type the
+        // type alone (not where it was expected) (S-1041).
         let (e, fun) = (ast.expr(c), "the anonymous function");
         let fn_at = Span::new(e.span.file, e.span.start, e.span.start + 2);
         let ExprKind::Closure { body, .. } = &e.kind else { bug(Some(e.span), "a scope of no anonymous function") };
@@ -161,7 +161,13 @@ fn notes(
                 .filter(|&s| holds(s, u.at))
                 .map(|s| s.end)
                 .collect(),
-            _ => Vec::new(),
+            Drop::Local(..)
+            | Drop::Rest { .. }
+            | Drop::Value { .. }
+            | Drop::IterRest { .. }
+            | Drop::Temp { .. }
+            | Drop::Overwrite { .. }
+            | Drop::Unplaced { .. } => Vec::new(),
         };
         let away =
             |p: &&Span| (p.end <= u.at.start || u.at.end <= p.start) && !(p.is_empty() && lets.contains(&p.start));
@@ -170,7 +176,7 @@ fn notes(
             let why = format!("`{}` is the first element that makes the literal owned (§5.4)", src(ast.expr(e).span));
             notes.push((ast.expr(e).span, why));
         }
-        // SPEC-GAP(S-1052): a note, and the fix `uses {Alloc}` alone.
+        // A note, and the fix `uses {Alloc}` alone (S-1052).
         let generics = generics_of(a, r.id);
         for g in copy_would_free(a, r.id, drop).into_iter().map(|i| &generics[i]) {
             let dup = if matches!(g.kind, GenericKind::Type { dup: false, .. }) { " in place of `?Dup`" } else { "" };
@@ -181,7 +187,7 @@ fn notes(
         }
         // S-1035 (W6-04): the note of why a Dup value is copied and not moved goes here.
     }
-    // SPEC-GAP(S-1050): in an `rt` function and an anonymous function too, of the scope alone.
+    // In an `rt` function and an anonymous function too, of the scope alone (S-1050).
     let others = r.uses.iter().filter(|o| o.scope == u.scope && o.at != u.at && o.needs(a, effect));
     notes.extend(others.map(|o| (o.at, format!("{}: it needs `{name}` too", o.describe(a, (ast, r.id), src)))));
     notes
@@ -219,8 +225,11 @@ fn first_owned(a: &Analysis, ast: &Ast, id: DefId, d: &Drop) -> Option<ExprId> {
             Origin::Arm { scrutinee, .. } => scrutinee,
             _ => return None,
         },
-        Drop::Value { value, .. } | Drop::Temp { value, .. } | Drop::IterRest { iter: value, .. } => *value,
-        _ => return None,
+        Drop::Value { value, .. }
+        | Drop::Temp { value, .. }
+        | Drop::IterRest { iter: value, .. }
+        | Drop::Unplaced { value, .. } => *value,
+        Drop::Rest { .. } | Drop::Overwrite { .. } | Drop::Discard { .. } => return None,
     };
     let (lits, start) = (&a.bodies[&id].lits, e);
     while let Some(&LitClass::Owned { first }) = lits.get(&e)

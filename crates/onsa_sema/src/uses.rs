@@ -111,6 +111,7 @@ impl Use<'_> {
                     format!("the `for` that consumes `{at}` drops {what} when it is left")
                 }
                 Drop::Discard { .. } => format!("what `{at}` binds to no name is dropped"),
+                Drop::Unplaced { .. } => format!("`{at}` is dropped where the array that repeats it has length 0"),
             },
         }
     }
@@ -122,8 +123,8 @@ impl<'a> Record<'a> {
     /// one test of whether a use is out of the row, which the rt stage reads
     /// too (it adds no edge of a body with one, §10 rule 5). O(U) for U uses.
     pub(crate) fn lacking(&self, a: &Analysis) -> Vec<(&Scope, DefId, &Use<'a>)> {
-        // SPEC-GAP(S-1053): one E0601 for each scope and effect.
-        // SPEC-GAP(S-1059): the row as written, `Alloc` too in an `rt` one (E0902).
+        // One E0601 for each scope and effect (S-1053); the row as written,
+        // `Alloc` too in an `rt` one (E0902, S-1059).
         let (mut first, mut seen): (Vec<(u32, DefId, &Use<'a>)>, HashSet<_>) = (Vec::new(), HashSet::default());
         for u in &self.uses {
             let scope = &self.scopes[u.scope as usize];
@@ -131,7 +132,7 @@ impl<'a> Record<'a> {
             if scope.from == Some(RowFrom::Unread) {
                 continue;
             }
-            // SPEC-GAP(S-1054): an effect no row can have in this version (E0200) counts too.
+            // An effect no row can have in this version (E0200) counts too (S-1054).
             for &e in u.effects(a).iter().filter(|&&e| !scope.row.admits(e)) {
                 if seen.insert((u.scope, e)) {
                     first.push((u.scope, e, u));
@@ -160,7 +161,7 @@ fn body_row(a: &Analysis, id: DefId) -> (EffectSet, bool) {
     let given = match &a.def(id).kind {
         DefKind::Fn(f) => return (f.effects.clone(), f.rt),
         DefKind::Test { .. } => [a.alloc, a.modules.lang.random()],
-        // SPEC-GAP(S-1055): an E0601 of the row `{Alloc}` where it uses another.
+        // An E0601 of the row `{Alloc}` where it uses another (S-1055).
         _ => [a.alloc, None],
     };
     let mut row = EffectSet::default();
@@ -269,7 +270,7 @@ pub(crate) fn call_use<'a>(a: &'a Analysis, ast: &Ast, body: &BodyInfo, e: ExprI
     let (row, rt, what) = match body.targets.get(&e)? {
         Target::Fn { def, .. } | Target::Method { def, .. } => {
             let DefKind::Fn(f) = &a.def(*def).kind else { return None };
-            // SPEC-GAP(S-1059): the row as written, `Alloc` too where an `rt` callee has it (E0902).
+            // The row as written, `Alloc` too where an `rt` callee has it (E0902, S-1059).
             (&f.effects, f.rt, What::Call { callee: *def })
         }
         Target::Value => {

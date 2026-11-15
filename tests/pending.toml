@@ -1247,41 +1247,6 @@ note = "値の形の `match`（腕が値を返す）は、整数のリテラル�
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/negative/drop_nodrop_wait_ok.onsa"
-reasons = ["R-461"]
-until = "W6-04"
-note = "破棄の要らない値が早い出口の前に待つ形 59 関数（W6-04 U2/t）。今は R-461 の誤検出で各 E0601、U2/i で直す"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/drop_nodrop_wait_pkg"
-reasons = ["R-461"]
-until = "W6-04"
-note = "別の module の struct の破棄の要らない束縛が待つ形 12 関数（W6-04 U2/t）。今は R-461 の誤検出で E0601"
-
-[[pending]]
-kind = "fix-contract"
-target = "tests/spec/negative/drop_nodrop_wait_pkg/lib.onsa:17:7 E0601 fix1"
-reasons = ["R-461"]
-until = "W6-04"
-note = "R-461 の誤検出の E0601 の候補（uses {Alloc} を足す）が呼び手を壊す。誤検出が消えれば消える"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/repeat_zero_neg.onsa"
-reasons = ["S-1045"]
-until = "W6-04"
-note = "長さが 0 でありうる [e; N] の破棄の E0601 36 関数（W6-04 U2/t）。U2/i で入れる"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/repeat_zero_pkg"
-reasons = ["S-1045"]
-until = "W6-04"
-note = "総称の長さの [s; N] の本体の E0601（lib 2・main 3 関数、W6-04 U2/t）。U2/i で入れる"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/types/order_field_error_use_before.onsa"
 reasons = ["R-464"]
 until = "W6-04"

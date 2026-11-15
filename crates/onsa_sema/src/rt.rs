@@ -160,8 +160,7 @@ fn first_calls(pkg: &Package, a: &Analysis, r: &Record) -> Vec<Diagnostic> {
 /// The note of the E0901 of a call of the local `callee` names (S-1041 (3),
 /// §10): where a `let` or a `var` binds it to an anonymous function no
 /// function type is expected for (§8.1, `RowFrom::NoneExpected`), the `rt`
-/// type to write. None of another value.
-// SPEC-GAP(S-1041): the text and whether there is a note are not fixed.
+/// type to write. None of another value. The text is no promise.
 fn written_with_no_type(a: &Analysis, ast: &Ast, id: DefId, callee: ExprId) -> Option<(Span, String)> {
     let body = &a.bodies[&id];
     let Some(Target::Local(l)) = body.targets.get(&callee) else { return None };

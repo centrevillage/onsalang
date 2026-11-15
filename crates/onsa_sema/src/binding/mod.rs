@@ -254,35 +254,17 @@ impl<'a> Settle<'a> {
 
     /// Whether a tail `e` (without parentheses) is borrowed (§5.4), with the
     /// place it derives from (none for a static value) and whether it needs
-    /// no drop: a place whose root is a borrow, or any place (`any_place`);
-    /// a partial view of such a place ([`view_base`]); a static value or a
-    /// literal that needs no drop, or a path of one (`["a", "bc"][i]`,
-    /// `("gain", v).0`, S-615), stopping at the end of a chain
-    /// of names (`m.LIMIT`).
+    /// no drop ([`no_drop`]): a place whose root is a borrow, or any place
+    /// (`any_place`); a partial view of such a place ([`view_base`]); a
+    /// static value or a literal that needs no drop, or a path of one.
     fn borrowed(&self, e: ExprId, any_place: bool) -> Option<(Option<ExprId>, bool)> {
         if let Some(base) = view_base((self.ast, self.info, self.a), e, |t| t) {
             return self.borrowed(self.ast.without_parens(base), any_place);
         }
-        if let Some(root) = self.ast.place_root_node(e)
-            && let Some(PathRes::Local(b)) = self.names.paths.get(&root)
-        {
-            return match self.info.locals[b.0 as usize].state {
-                Bind::Borrow { no_drop } => Some((Some(e), no_drop)),
-                _ if any_place => Some((Some(e), false)),
-                _ => None,
-            };
-        }
-        let mut x = e;
-        loop {
-            if let Some(LitClass::Static | LitClass::NoDrop) = self.info.lits.get(&x) {
-                return Some((None, true));
-            }
-            match &self.ast.expr(x).kind {
-                _ if self.info.targets.contains_key(&x) => return None,
-                ExprKind::Field { base: b, .. } | ExprKind::TupleIndex { base: b, .. } => x = *b,
-                ExprKind::Index { base: b, .. } | ExprKind::Paren(b) => x = *b,
-                _ => return None,
-            }
+        let nd = no_drop(self.ast, self.names, self.info, e);
+        match root_local(self.ast, self.names, e) {
+            Some(b) => (any_place || matches!(self.info.locals[b].state, Bind::Borrow { .. })).then_some((Some(e), nd)),
+            None => nd.then_some((None, true)),
         }
     }
 
@@ -293,5 +275,44 @@ impl<'a> Settle<'a> {
             self.info.locals[id.0 as usize].set_state(row(kind, Some(&head_row)));
         }
         self.info.heads.insert(head, head_row);
+    }
+}
+
+/// Whether the value of `e` needs no drop, so that its copy and its drop do
+/// nothing (§5.4, §12.2): a binding that needs no drop or a path of one
+/// ([`no_drop_binding`]); a static value or a literal that needs no drop, or
+/// a path of one (`["a", "bc"][i]`, `("gain", v).0`, S-615), stopping at the
+/// end of a chain of names (`m.LIMIT`). The one test of the heads and the
+/// modes (R-461), from the marks of the bindings settled before.
+pub(crate) fn no_drop(ast: &Ast, names: &BodyNames, info: &BodyInfo, e: ExprId) -> bool {
+    if no_drop_binding(ast, names, info, e) {
+        return true;
+    }
+    let mut x = e;
+    loop {
+        if let Some(LitClass::Static | LitClass::NoDrop) = info.lits.get(&x) {
+            return true;
+        }
+        x = match &ast.expr(x).kind {
+            _ if info.targets.contains_key(&x) => return false,
+            ExprKind::Field { base, .. } | ExprKind::TupleIndex { base, .. } => *base,
+            ExprKind::Index { base, .. } | ExprKind::Paren(base) => *base,
+            _ => return false,
+        };
+    }
+}
+
+/// Whether `e` is the name of a binding that needs no drop or a path of one
+/// (S-613 L4): its fields, elements and tuple elements, through
+/// parentheses. A binding not settled yet is owned.
+pub(crate) fn no_drop_binding(ast: &Ast, names: &BodyNames, info: &BodyInfo, e: ExprId) -> bool {
+    root_local(ast, names, e).is_some_and(|b| info.locals[b].state == Bind::Borrow { no_drop: true })
+}
+
+/// The index of the binding at the root of the place `e`, if a local.
+fn root_local(ast: &Ast, names: &BodyNames, e: ExprId) -> Option<usize> {
+    match names.paths.get(&ast.place_root_node(e)?) {
+        Some(PathRes::Local(b)) => Some(b.0 as usize),
+        _ => None,
     }
 }

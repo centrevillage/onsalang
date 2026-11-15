@@ -132,7 +132,6 @@ fn build(wrap: Wrap, wname: &str) -> (String, Vec<Case>) {
 }
 
 #[test]
-#[ignore = "W6-04 U2: a [e; N] of a value that needs a drop is not counted where the length is 0 or may be 0 (S-1045 (1))"]
 fn a_repeat_of_a_value_that_needs_a_drop_is_dropped_where_the_length_is_or_may_be_0() {
     onsa_diag::stack::run(|| {
         let (mut functions, mut drops, mut clean) = (0, 0, 0);

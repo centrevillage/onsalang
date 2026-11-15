@@ -38,6 +38,7 @@ fn drop_kind(d: &Drop) -> &'static str {
         Drop::Temp { .. } => "temp",
         Drop::Overwrite { .. } => "overwrite",
         Drop::Discard { .. } => "discard",
+        Drop::Unplaced { .. } => "unplaced",
     }
 }
 

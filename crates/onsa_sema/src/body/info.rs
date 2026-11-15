@@ -289,6 +289,9 @@ pub enum Dropped {
     Overwrite(ExprId),
     /// What an owned head binds to no name (§5.4, S-1036).
     Discard(Unbound),
+    /// The value of `e` in `[e; N]` whose length may be 0 (S-1045): put in no
+    /// element, it is dropped there.
+    Unplaced(ExprId),
 }
 
 /// A path of fields taken out of the owned local `root` (S-85), or of a value.

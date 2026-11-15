@@ -13,10 +13,10 @@ use super::place::place_of;
 use super::state::Releases;
 use super::walk::Pos;
 use crate::Kind;
-use crate::binding::LitClass;
+use crate::binding::no_drop;
 use crate::body::{DropPoint, Dropped, LocalId, Unbound};
 use crate::tails::Tail;
-use crate::ty::TyId;
+use crate::ty::{Len, Ty, TyId};
 
 impl Walker<'_> {
     /// The drop points at the end of `scope`, of the items after the first
@@ -84,10 +84,7 @@ impl Walker<'_> {
     /// D2) where a call or an index borrows it, too (D3, [`Walker::temps`]).
     /// The one place that decides it.
     pub(super) fn waits(&mut self, r: &mut Run, e: ExprId, pos: Pos) {
-        let mut x = self.ast.without_parens(e);
-        while let ExprKind::Move(y) = &self.ast.expr(x).kind {
-            x = self.ast.without_parens(*y);
-        }
+        let x = self.value_of(e);
         if pos.consumes() {
             if self.owned(x) {
                 r.declared.push(Item::Value(x));
@@ -95,6 +92,27 @@ impl Walker<'_> {
         } else if pos.waits() {
             self.temps(r, x);
         }
+    }
+
+    /// The element `elem` of `[elem; N]`, the literal `e`, at `pos`: where
+    /// the length may be 0 (0, or a const parameter), the value it puts, if
+    /// owned ([`Walker::owned`]) and `pos` consumes, is put in no element and
+    /// dropped there (S-1045, §2.4, §12.2). The one place that decides it.
+    pub(super) fn repeated(&mut self, r: &Run, e: ExprId, elem: ExprId, pos: Pos) {
+        let x = self.value_of(elem);
+        let ty = self.info.expr_types.get(&e).map(|&t| self.a.types.get(t));
+        if pos.consumes() && matches!(ty, Some(Ty::Array(_, Len::Const(0) | Len::Param(_)))) && self.owned(x) {
+            self.drop_point(r, self.ast.expr(x).span, Dropped::Unplaced(x), (true, None));
+        }
+    }
+
+    /// The value `e` puts: without parentheses and `move`.
+    fn value_of(&self, e: ExprId) -> ExprId {
+        let mut x = self.ast.without_parens(e);
+        while let ExprKind::Move(y) = &self.ast.expr(x).kind {
+            x = self.ast.without_parens(*y);
+        }
+        x
     }
 
     /// The values made in the tails of `e` where a call or an index borrows
@@ -117,12 +135,14 @@ impl Walker<'_> {
 
     /// Whether the value of `x` is owned where it is consumed or dropped:
     /// an Affine place moved, a Dup value not Copy (released or copied,
-    /// §5.2) that is no literal or static value with no drop (S-610,
-    /// S-613), an Affine new value. The one place that decides it.
+    /// §5.2) that needs a drop (not a static value, a literal or a binding
+    /// that needs no drop or a path of one, S-610, S-613, R-461: the
+    /// binding stage's [`no_drop`]), an Affine new value. The one place that
+    /// decides it.
     pub(super) fn owned(&mut self, x: ExprId) -> bool {
         let Some(&ty) = self.info.expr_types.get(&x) else { return false };
         match (self.kind_of(ty), place_of(self.ast, self.names, x)) {
-            (Some(Kind::Shared), _) => !matches!(self.info.lits.get(&x), Some(LitClass::Static | LitClass::NoDrop)),
+            (Some(Kind::Shared), _) => !no_drop(self.ast, self.names, self.info, x),
             (_, Some(p)) => self.movable(&p, ty) == Some(Movable::Owned),
             (kind, None) => kind == Some(Kind::Affine),
         }
@@ -158,8 +178,8 @@ impl Walker<'_> {
     /// literal and a constant, the part it matches; of a struct pattern's
     /// last `_`, the fields it leaves; none of a variant with no payload;
     /// in a choice, maybe (`sure`). The one place that decides them.
-    // SPEC-GAP(S-1044): a variant with no payload leaves nothing, nested too; a constant
-    // drops the part it matches, as a literal does (provisional).
+    // A variant with no payload leaves nothing, nested too; a constant drops
+    // the part it matches, as a literal does (S-1044).
     pub(super) fn discards(&mut self, r: &mut Run, p: PatId, sure: bool) {
         let ast = self.ast;
         self.discard(r, Unbound::Pat(p), sure);

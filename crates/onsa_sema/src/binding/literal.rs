@@ -25,10 +25,9 @@
 
 use onsa_syntax::ast::{Ast, ExprId, ExprKind, Lit, Mode};
 
-use super::{Bind, LitClass, Settle};
+use super::{LitClass, Settle, no_drop_binding};
 use crate::body::{BodyInfo, Target};
 use crate::kind::{Kind, kind_in_body};
-use crate::names::body::PathRes;
 use crate::ty::Ty;
 
 impl Settle<'_> {
@@ -46,10 +45,11 @@ impl Settle<'_> {
         }
         let mut class = LitClass::Static;
         for (x, whole) in parts {
+            let path = whole && no_drop_binding(ast, self.names, self.info, x);
             match self.info.lits.get(&x).copied().filter(|_| whole) {
                 Some(LitClass::Static) => {}
                 Some(LitClass::NoDrop) => class = LitClass::NoDrop,
-                _ if (whole && self.no_drop_path(x)) || self.kind(x) == Some(Kind::Copy) => class = LitClass::NoDrop,
+                _ if path || self.kind(x) == Some(Kind::Copy) => class = LitClass::NoDrop,
                 _ => return Some(LitClass::Owned { first: x }),
             }
         }
@@ -74,15 +74,6 @@ impl Settle<'_> {
             ExprKind::TypeArgs { base, .. } => self.leaf(*base),
             _ => false,
         }
-    }
-
-    /// Whether `e` is the name of a binding that needs no drop or a path of
-    /// one (S-613 L4): its fields, elements and tuple elements, through
-    /// parentheses. A binding not settled yet is owned.
-    fn no_drop_path(&self, e: ExprId) -> bool {
-        let root = self.ast.place_root_node(e).and_then(|r| self.names.paths.get(&r));
-        let Some(PathRes::Local(b)) = root else { return false };
-        self.info.locals[b.0 as usize].state == Bind::Borrow { no_drop: true }
     }
 
     /// Whether the value of `e` is Dup (S-780).

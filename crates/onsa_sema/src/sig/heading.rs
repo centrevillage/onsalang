@@ -267,7 +267,7 @@ pub(crate) fn read_effects(
             }
             Err(e) if a.unread_path(def, from, p, &e) => meant(a, &n.name, &mut set),
             Err(e) => {
-                // SPEC-GAP(S-1062): a name not found may mean an effect of its name too.
+                // A name not found may mean an effect of its name too (S-1062).
                 if matches!(e, crate::ResolveError::NotFound { .. }) {
                     meant(a, &n.name, &mut set);
                 }

@@ -120,13 +120,13 @@ pub rt fn rt_literal_in_literal(v: F32, r: Result[U32, U32]) -> Result[(((Str, F
 
 pub fn literal_destructured(v: F32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
   let p = ("g", v)
-  let (a, b) = p
+  let (a, _) = p
   Ok((a, r?))
 }
 
 pub rt fn rt_literal_destructured(v: F32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
   let p = ("g", v)
-  let (a, b) = p
+  let (a, _) = p
   Ok((a, r?))
 }
 
