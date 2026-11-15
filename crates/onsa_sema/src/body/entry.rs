@@ -242,7 +242,7 @@ impl<'a> Checker<'a> {
         self.no_trial_goes_on();
         self.end_checks();
         #[cfg(test)]
-        crate::limits::MEASURED.with(|c| c.set(c.get() + self.limits.measured));
+        crate::deferred::LOOKED.with(|c| c.set(c.get() + self.waits.looked));
         // Resolve the tables.
         let keys: Vec<ExprId> = self.info.expr_types.keys().copied().collect();
         for e in keys {

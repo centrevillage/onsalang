@@ -4,38 +4,17 @@
 //! the bound variables followed ([`Infer::measure`]): over the limits, it is E0422 at
 //! the expression, which made it. A type within them that holds an open variable may
 //! grow when a later binding decides it, so it waits as a [`DeferredKind::Limit`] item.
-//! Such an item is measured again only when a variable it reaches is bound, so that a
-//! body with many open types and many unrelated bindings stays linear (W2-06/b).
+//! Such an item is measured again only when a variable it reaches is bound
+//! ([`Checker::wake`], as every deferred item), so that a body with many open types
+//! and many unrelated bindings stays linear (W2-06/b).
 
-use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast::ExprId;
 
 use crate::body::{Checker, R};
 use crate::deferred::{Deferred, DeferredKind, Look, decided_at};
 use crate::infer::{Measured, Walk};
-use crate::ty::{LIMIT_RULE, Ty, TyId};
-
-/// The [`DeferredKind::Limit`] items of a body.
-#[derive(Debug, Default)]
-pub(crate) struct Limits {
-    /// The items in the order they were made; `None` once done.
-    pub(crate) items: Vec<Option<Deferred>>,
-    /// The types that have an item: one item a type.
-    types: HashSet<TyId>,
-    /// For each open variable, the items whose type reaches it.
-    waiting: HashMap<u32, Vec<usize>>,
-    /// The bindings looked at ([`crate::infer::Infer::generation`]).
-    seen: u32,
-    /// The items measured again so far, which stays linear in the body (a test counts them).
-    pub(crate) measured: u32,
-}
-
-#[cfg(test)]
-thread_local! {
-    /// The items measured again by the bodies checked on this thread ([`Limits::measured`]).
-    pub(crate) static MEASURED: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
-}
+use crate::ty::{LIMIT_RULE, TyId};
 
 impl<'a> Checker<'a> {
     /// Record `t` as the type of `e`, which made it, within the limits of §4.4
@@ -44,13 +23,11 @@ impl<'a> Checker<'a> {
     /// made an earlier type over them first (S-849). A type with the error
     /// type in it is not judged (§18.1).
     pub(crate) fn record_within(&mut self, e: ExprId, t: TyId) -> R<TyId> {
-        let mut walk = Walk::default();
-        let m = self.infer.measure(&self.a.types, t, &mut walk);
+        let m = self.infer.measure(&self.a.types, t, &mut Walk::default());
         if !m.measure.over_limit() {
-            if m.waits && self.limits.types.insert(t) {
+            if m.waits && self.waits.limit_types.insert(t) {
                 let item = self.deferred_item(self.expr(e).span, t, DeferredKind::Limit);
-                self.wait_on(self.limits.items.len(), &walk.vars);
-                self.limits.items.push(Some(item));
+                self.wait(item);
             }
             return Ok(self.record(e, t));
         }
@@ -59,17 +36,11 @@ impl<'a> Checker<'a> {
         if m.error {
             return Ok(err);
         }
-        let d = match self.wake_limits() {
+        let d = match self.wake() {
             Some((_, d)) => d,
             None => self.limit_error(self.expr(e).span, m),
         };
         Err(self.diag(d))
-    }
-
-    fn wait_on(&mut self, item: usize, vars: &[u32]) {
-        for &v in vars {
-            self.limits.waiting.entry(v).or_default().push(item);
-        }
     }
 
     fn limit_error(&self, span: Span, m: Measured) -> Diagnostic {
@@ -93,38 +64,19 @@ impl<'a> Checker<'a> {
         if m.measure.over_limit() && !m.error { Look::Fail(self.limit_fail(item, m)) } else { Look::Done }
     }
 
-    /// The items that reach a variable bound since the last look, measured again:
-    /// the first made of those over the limits fails, with its order. Each item
-    /// then waits on the open variables the bound ones reach.
-    pub(crate) fn wake_limits(&mut self) -> Option<(u32, Diagnostic)> {
-        let bound = self.infer.bound_since(self.limits.seen).to_vec();
-        self.limits.seen = self.infer.generation();
-        let mut woken = Vec::new();
-        for v in bound {
-            let Some(items) = self.limits.waiting.remove(&v) else { continue };
-            let mut walk = Walk::default();
-            if let Some(t) = self.a.types.find(&Ty::Var(v)) {
-                self.infer.measure(&self.a.types, t, &mut walk);
-            }
-            for &i in &items {
-                self.wait_on(i, &walk.vars);
-            }
-            woken.extend(items);
+    /// The item `i`, a limit that a binding woke, measured again in `walk`
+    /// (the bindings do not change while the woken ones are measured): over
+    /// the limits, it fails with its order; it waits on while an open
+    /// variable is left in it.
+    pub(crate) fn measure_again(&mut self, i: usize, walk: &mut Walk) -> Option<(u32, Diagnostic)> {
+        let item = self.waits.items[i].take()?;
+        self.waits.looked = self.waits.looked.saturating_add(1);
+        let m = self.infer.measure(&self.a.types, item.ty, walk);
+        if m.measure.over_limit() && !m.error {
+            return Some((item.seq, self.limit_fail(&item, m)));
         }
-        woken.sort_unstable();
-        woken.dedup();
-        // One walk for all: the bindings do not change while they are measured.
-        let mut walk = Walk::default();
-        for i in woken {
-            let Some(item) = self.limits.items[i].take() else { continue };
-            self.limits.measured = self.limits.measured.saturating_add(1);
-            let m = self.infer.measure(&self.a.types, item.ty, &mut walk);
-            if m.measure.over_limit() && !m.error {
-                return Some((item.seq, self.limit_fail(&item, m)));
-            }
-            if m.waits && !m.measure.over_limit() {
-                self.limits.items[i] = Some(item);
-            }
+        if m.waits && !m.measure.over_limit() {
+            self.waits.items[i] = Some(item);
         }
         None
     }

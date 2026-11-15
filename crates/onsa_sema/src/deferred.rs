@@ -14,14 +14,20 @@
 //!
 //! The first item that fails is the one diagnostic of the body (P-01). The
 //! order is in the mark of [`Checker::check_deferred_now`].
+//!
+//! An item that waits after a statement is looked at again only when a
+//! variable its type reaches is bound ([`Waits`], [`Checker::wake`]), so that
+//! a body of many waiting items and many unrelated bindings stays linear
+//! (W2-06/b, R-448).
 
+use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::FloatRange;
 use onsa_syntax::ast::{ExprId, ExprKind, Lit};
 
 use crate::body::{Checker, LocalId, R};
 use crate::def::Bound;
-use crate::infer::Cause;
+use crate::infer::{Cause, Walk};
 use crate::requirement::{ArgumentName, Required, Requirement, escape_error, met, unmet_error, unmet_rules};
 use crate::traits::OpNeed;
 use crate::ty::{FloatKind, IntKind, Ty, TyId};
@@ -101,7 +107,110 @@ pub(crate) enum Look {
     Fail(Diagnostic),
 }
 
+/// The items that wait (a [`DeferredKind::Limit`] from when it is made, the
+/// others from the statement after which they wait), each on the open
+/// variables its type reaches.
+#[derive(Debug, Default, Clone)]
+pub(crate) struct Waits {
+    /// The items in the order they began to wait; `None` once done.
+    pub(crate) items: Vec<Option<Deferred>>,
+    /// For each open variable, the items whose type reaches it.
+    on: HashMap<u32, Vec<usize>>,
+    /// The bindings looked at ([`crate::infer::Infer::generation`]).
+    seen: u32,
+    /// The changes of a literal kind looked at ([`crate::infer::Infer::kinded_since`]).
+    kinds_seen: usize,
+    /// The items a binding woke that are no limit: looked at after the statement.
+    woken: Vec<usize>,
+    /// The types that have a limit item: one item a type (`limits.rs`).
+    pub(crate) limit_types: HashSet<TyId>,
+    /// The items woken and looked at again so far, which stays linear in the body (a test counts them).
+    pub(crate) looked: u32,
+}
+
+#[cfg(test)]
+thread_local! {
+    /// The items looked at again by the bodies checked on this thread ([`Waits::looked`]).
+    pub(crate) static LOOKED: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
 impl<'a> Checker<'a> {
+    /// `item` waits: it is looked at again when a variable it reaches is bound.
+    pub(crate) fn wait(&mut self, item: Deferred) {
+        let mut vars = Vec::new();
+        self.infer.open_vars(&self.a.types, item.ty, &mut vars);
+        self.wait_on(self.waits.items.len(), &vars);
+        self.waits.items.push(Some(item));
+    }
+
+    fn wait_on(&mut self, item: usize, vars: &[u32]) {
+        for &v in vars {
+            self.waits.on.entry(v).or_default().push(item);
+        }
+    }
+
+    /// The bindings since the last wake. The items that wait on a bound
+    /// variable then wait on the open variables its type reaches. Of a
+    /// variable bound to an open one (two variables unified) whose literal
+    /// kind did not change, they wait on that one and are not looked at:
+    /// nothing they are judged by changed. A literal kind, by which an
+    /// operator is judged ([`Checker::operator_verdict`]), wakes the items
+    /// of each variable whose kind changed. The woken limits are measured
+    /// now, the first made of those over the limits failing with its order
+    /// (S-849); the others wait to be looked at after the statement.
+    pub(crate) fn wake(&mut self) -> Option<(u32, Diagnostic)> {
+        let bound = self.infer.bound_since(self.waits.seen).to_vec();
+        self.waits.seen = self.infer.generation();
+        let kinded: HashSet<u32> = self.infer.kinded_since(self.waits.kinds_seen).iter().copied().collect();
+        self.waits.kinds_seen = self.infer.kinded_since(0).len();
+        let mut woken = Vec::new();
+        for v in bound {
+            let mut items = self.waits.on.remove(&v).unwrap_or_default();
+            let Some(to) = self.infer.binding(v) else {
+                onsa_diag::internal::bug(None, "a variable bound since the last wake that is not bound")
+            };
+            let to = self.infer.shallow(&self.a.types, to);
+            if let Ty::Var(u) = self.ty(to) {
+                if !kinded.contains(&v) {
+                    if !items.is_empty() {
+                        // The longer list stays, so that each item moves O(log n) times.
+                        let on = self.waits.on.entry(u).or_default();
+                        if on.len() < items.len() {
+                            std::mem::swap(on, &mut items);
+                        }
+                        on.extend(items);
+                    }
+                    continue;
+                }
+            }
+            if items.is_empty() {
+                continue;
+            }
+            let mut vars = Vec::new();
+            self.infer.open_vars(&self.a.types, to, &mut vars);
+            for &i in &items {
+                self.wait_on(i, &vars);
+            }
+            woken.extend(items);
+        }
+        // An open variable whose kind changed: its items, with those moved onto it above.
+        let open: Vec<u32> = kinded.into_iter().filter(|&j| self.infer.binding(j).is_none()).collect();
+        for j in open {
+            let items = self.waits.on.remove(&j).unwrap_or_default();
+            for &i in &items {
+                self.wait_on(i, &[j]);
+            }
+            woken.extend(items);
+        }
+        woken.sort_unstable();
+        woken.dedup();
+        let is_limit = |w: &Waits, i: usize| matches!(&w.items[i], Some(d) if matches!(d.kind, DeferredKind::Limit));
+        let (limits, others): (Vec<usize>, Vec<usize>) = woken.into_iter().partition(|&i| is_limit(&self.waits, i));
+        self.waits.woken.extend(others);
+        let mut walk = Walk::default();
+        limits.into_iter().find_map(|i| self.measure_again(i, &mut walk))
+    }
+
     pub(crate) fn defer(&mut self, span: Span, ty: TyId, kind: DeferredKind) {
         let item = self.deferred_item(span, ty, kind);
         // The items only the end decides (E0406, E0421) wait in their own list, so
@@ -125,30 +234,38 @@ impl<'a> Checker<'a> {
     // the body) are reported in the order they were made; the same order puts the inner
     // literal of `-(-1)` before the outer negation also when a later statement decides the type.
     pub(crate) fn check_deferred_now(&mut self) -> R<()> {
-        // Only a binding decides a waiting item: when no variable was bound since the last
-        // look, the items seen then still wait and only the new ones are looked at (a body
-        // of many open literals stays linear, W2-06/b).
-        let limit = self.wake_limits();
-        let generation = self.infer.generation();
-        let start =
-            if generation == self.deferred_generation { self.deferred_seen.min(self.deferred.len()) } else { 0 };
-        let mut keep = std::mem::take(&mut self.deferred);
-        let items = keep.split_off(start);
+        // Only a binding decides a waiting item: the items woken by one ([`Checker::wake`]),
+        // made before the new ones of `deferred`, are looked at in the order they were made
+        // (they began to wait in it), then the new ones.
+        let limit = self.wake();
+        let mut woken = std::mem::take(&mut self.waits.woken);
+        woken.sort_unstable();
+        woken.dedup();
         let mut fail = None;
-        for item in items {
+        for i in woken {
             if fail.is_some() {
-                keep.push(item);
+                self.waits.woken.push(i);
                 continue;
             }
+            let Some(item) = self.waits.items[i].take() else { continue };
+            self.waits.looked = self.waits.looked.saturating_add(1);
             match self.look(&item, false) {
-                Look::Wait => keep.push(item),
+                Look::Wait => self.waits.items[i] = Some(item),
                 Look::Done => {}
                 Look::Fail(d) => fail = Some((item.seq, d)),
             }
         }
-        self.deferred = keep;
-        self.deferred_seen = self.deferred.len();
-        self.deferred_generation = self.infer.generation();
+        for item in std::mem::take(&mut self.deferred) {
+            if fail.is_some() {
+                self.deferred.push(item);
+                continue;
+            }
+            match self.look(&item, false) {
+                Look::Wait => self.wait(item),
+                Look::Done => {}
+                Look::Fail(d) => fail = Some((item.seq, d)),
+            }
+        }
         match fail.into_iter().chain(limit).min_by_key(|f| f.0) {
             Some((_, d)) => Err(self.diag(d)),
             None => Ok(()),
@@ -161,7 +278,7 @@ impl<'a> Checker<'a> {
         self.infer.default_int_literals(i32_);
         let mut items = std::mem::take(&mut self.deferred);
         items.append(&mut self.deferred_end);
-        items.extend(self.limits.items.drain(..).flatten());
+        items.extend(self.waits.items.drain(..).flatten());
         items.sort_by_key(|d| d.seq);
         // A requirement whose type is still open is not checked; the open variable
         // is reported (E0406 / E0405). When nothing reports it, the requirement is

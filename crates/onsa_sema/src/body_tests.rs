@@ -1126,7 +1126,8 @@ fn a_type_over_the_limit_later_notes_where_it_was_decided() {
 /// S-264, S-849 (§4.4): a type that waits on an open variable is measured
 /// again only when a variable it reaches is bound, so that `n` such types
 /// among `n` unrelated bindings are measured again about `n` times, not
-/// `n * n` (the break side's F2 of W5-16 U2: `check` was quadratic).
+/// `n * n` (the break side's F2 of W5-16 U2: `check` was quadratic). The
+/// count holds the other items woken too (`a`'s own, R-448).
 #[test]
 fn types_waiting_on_a_variable_are_measured_again_linearly() {
     let n = 1000;
@@ -1135,9 +1136,69 @@ fn types_waiting_on_a_variable_are_measured_again_linearly() {
         src += &format!("  let y{i} = (a, 1)\n  let q{i}: Option[I32] = None\n  let _ = q{i}\n  let _ = y{i}\n");
     }
     src += "  let z: Option[I32] = a\n  let _ = z\n  0\n}\n";
-    crate::limits::MEASURED.with(|c| c.set(0));
+    crate::deferred::LOOKED.with(|c| c.set(0));
     let a = check(&src);
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
-    let measured = crate::limits::MEASURED.with(|c| c.get());
-    assert!((n..=2 * n).contains(&measured), "measured again {measured} times for {n} types");
+    let measured = crate::deferred::LOOKED.with(|c| c.get());
+    assert!((n..=3 * n).contains(&measured), "measured again {measured} times for {n} types");
+}
+
+/// R-448 (§4.7): an item that waits is looked at again only when a variable
+/// its type reaches is bound, not at every binding, also when that variable
+/// is unified with another one (each `need(v)`): `n` requirements on `v`
+/// among `n` unrelated bindings are looked at again a few times each (the
+/// requirements and the `Escape` of `T`, the limits of the result),
+/// at the binding of `v`, not `n * n`.
+#[test]
+fn items_waiting_on_a_variable_are_looked_at_again_linearly() {
+    let n = 1000;
+    let mut src = String::from(
+        "fn make[T]() -> T { make() }\nfn need[T: Num](x: T) -> T { x }\npub fn f() -> I32 {\n  let v = make()\n",
+    );
+    for _ in 0..n {
+        src += "  let _ = need(v)\n  let _: I32 = 1\n";
+    }
+    src += "  let r: I32 = v\n  r\n}\n";
+    crate::deferred::LOOKED.with(|c| c.set(0));
+    let a = check(&src);
+    assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
+    let looked = crate::deferred::LOOKED.with(|c| c.get());
+    assert!((n..=5 * n).contains(&looked), "looked at again {looked} times for {n} requirements");
+}
+
+/// R-448 (§4.7): two literal variables of one kind unified give no kind, so
+/// the literals that wait on `a` are not looked at again at each `a == 1`
+/// (`[a, 1]`), only at the binding of `a`: about `n` times, not `n * n`.
+#[test]
+fn literals_unified_again_and_again_are_looked_at_again_linearly() {
+    let n = 1000;
+    for unify in ["a == 1", "[a, 1]"] {
+        let mut src = String::from("pub fn f() -> I32 {\n  let a = 1\n");
+        for _ in 0..n {
+            src += &format!("  let _ = {unify}\n");
+        }
+        src += "  let b: I64 = a\n  let _ = b\n  0\n}\n";
+        crate::deferred::LOOKED.with(|c| c.set(0));
+        let a = check(&src);
+        assert!(a.diagnostics.is_empty(), "{unify}: {:?}", a.diagnostics);
+        let looked = crate::deferred::LOOKED.with(|c| c.get());
+        assert!((n..=2 * n).contains(&looked), "{unify}: looked at again {looked} times for {n} statements");
+    }
+}
+
+/// R-448 (§4.7, §3.2): a variable unified with a literal one takes its kind,
+/// which decides an operator that waited on it, at that statement: `!v` with
+/// `v` unified with a float literal is the E0401 of `!`, before the error of
+/// the next statement.
+#[test]
+fn an_operator_waiting_on_a_variable_is_judged_when_it_becomes_a_literal() {
+    for unify in ["[v, 1.5]", "[1.5, v]"] {
+        let src = format!(
+            "fn make[T]() -> T {{ make() }}\npub fn f() -> I32 {{\n  let v = make()\n  let _ = !v\n  let _ = {unify}\n  let _: Bool = 0\n  0\n}}\n"
+        );
+        let a = check(&src);
+        let at = src.find("!v").unwrap() as u32;
+        let got: Vec<_> = a.diagnostics.iter().map(|d| (d.code, d.span.start)).collect();
+        assert_eq!(got, [(Code::E0401, at)], "{unify}: {:?}", a.diagnostics);
+    }
 }

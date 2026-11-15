@@ -59,16 +59,18 @@ pub struct Infer {
     seq: u32,
     /// The variables in the order they were bound ([`Infer::bound_since`]).
     bound: Vec<u32>,
+    /// The variables whose literal kind a binding of two variables changed,
+    /// in that order: the bound one or the open one.
+    kinded: Vec<u32>,
     /// The type parameters of the body whose bounds hold `Float`.
     float_params: Vec<u32>,
 }
 
 /// One or more walks of [`Infer::measure`] with the same bindings: the parts
-/// measured whole, and the open variables met that are not a literal's.
+/// measured whole.
 #[derive(Debug, Default)]
 pub struct Walk {
     memo: HashMap<TyId, Measured>,
-    pub vars: Vec<u32>,
     /// The last walk stopped below the depth limit.
     cut: bool,
 }
@@ -239,6 +241,9 @@ impl Infer {
                     (a, b) => a.or(b),
                 };
                 self.vars[j as usize] = VarState::Unbound(merged);
+                // What waits on either sees another kind ([`Infer::kinded_since`]).
+                self.kinded
+                    .extend([(lit != merged, var), (other != merged, j)].into_iter().filter(|p| p.0).map(|p| p.1));
             }
             (Some(LitKind::Int), Ty::Int(_)) | (None, _) => {}
             (Some(LitKind::Float), t) if self.float_fits(t) => {}
@@ -535,9 +540,6 @@ impl Infer {
         }
         if let Ty::Var(i) = types.get(ty) {
             m.waits = self.var_lit(*i).is_none();
-            if m.waits {
-                walk.vars.push(*i);
-            }
         } else if let Some((own, parts)) = crate::ty::form_of(types.get(ty)) {
             m.measure = Measure::form(own);
             for p in parts {
@@ -574,9 +576,47 @@ impl Infer {
         false
     }
 
+    /// The open variables `ty` reaches with the bound ones followed, a
+    /// literal's and a length's too, each part visited once: what a deferred
+    /// item waits on (`deferred.rs`).
+    pub fn open_vars(&self, types: &Types, ty: TyId, out: &mut Vec<u32>) {
+        let (mut seen, mut todo) = (HashSet::default(), vec![ty]);
+        while let Some(t) = todo.pop() {
+            let t = self.shallow(types, t);
+            if !types.holds_infer_var(t) || !seen.insert(t) {
+                continue;
+            }
+            match types.get(t) {
+                Ty::Var(i) => out.push(*i),
+                Ty::Array(_, l) => {
+                    if let Len::Var(i) = self.shallow_len(types, *l)
+                        && self.binding(i).is_none()
+                    {
+                        out.push(i);
+                    }
+                }
+                _ => {}
+            }
+            todo.extend(crate::ty::form_of(types.get(t)).map(|(_, parts)| parts).unwrap_or_default());
+        }
+    }
+
+    /// The type the variable `var` is bound to, if it is.
+    pub fn binding(&self, var: u32) -> Option<TyId> {
+        match self.vars.get(var as usize) {
+            Some(VarState::Bound(t)) => Some(*t),
+            _ => None,
+        }
+    }
+
     /// The variables bound after the first `from` bindings ([`Infer::generation`]).
     pub fn bound_since(&self, from: u32) -> &[u32] {
         &self.bound[from as usize..]
+    }
+
+    /// The variables whose literal kind changed after the first `from` such changes.
+    pub fn kinded_since(&self, from: usize) -> &[u32] {
+        &self.kinded[from..]
     }
 
     /// The default of the integer literals (spec §2.4, §4.7): every integer literal

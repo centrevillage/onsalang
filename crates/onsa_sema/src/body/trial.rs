@@ -71,7 +71,7 @@ impl<'a> Checker<'a> {
         if self.failed {
             return false;
         }
-        let kept = (self.infer.clone(), self.deferred.clone(), self.deferred_end.clone());
+        let kept = (self.infer.clone(), self.deferred.clone(), self.deferred_end.clone(), self.waits.clone());
         let mark = self.a.diagnostics.len();
         let clean = self.quietly(|ck| {
             ck.failed = false;
@@ -79,7 +79,7 @@ impl<'a> Checker<'a> {
             if ck.failed { Err(Stop) } else { Ok(()) }
         });
         self.a.diagnostics.truncate(mark);
-        (self.infer, self.deferred, self.deferred_end) = kept;
+        (self.infer, self.deferred, self.deferred_end, self.waits) = kept;
         clean.is_some()
     }
 

@@ -113,18 +113,15 @@ pub(crate) struct Checker<'a> {
     tries: Option<reread::Tries>,
     /// Flow mode (T3-1, `flow.rs`): set while checking a flow body.
     pub(crate) flow: Option<crate::flow::FlowCx>,
-    /// Checks that wait for a type a later statement decides (`deferred.rs`).
+    /// Checks that wait for a type a later statement decides (`deferred.rs`):
+    /// those made since the last statement was checked.
     pub(crate) deferred: Vec<Deferred>,
-    /// The items of `deferred` looked at by the last statement, and the binding
-    /// generation then (`check_deferred_now` skips them while nothing was bound).
-    pub(crate) deferred_seen: usize,
-    pub(crate) deferred_generation: u32,
     /// The items only the end of the body decides (E0405, E0406, E0421), and the
-    /// number of items made so far (their order across both lists).
+    /// number of items made so far (their order across all lists).
     pub(crate) deferred_end: Vec<Deferred>,
     pub(crate) deferred_count: u32,
-    /// The items of the limits of §4.4 (`limits.rs`).
-    pub(crate) limits: crate::limits::Limits,
+    /// The items that wait on a variable, and the limits of §4.4 (`limits.rs`).
+    pub(crate) waits: crate::deferred::Waits,
     /// Where an expected type comes from (`an argument of `f``), for the note of
     /// E0416 (§4.5): it names a binding only when that very expected type is the
     /// one unified (an argument, an annotation, the result, a field); every other
@@ -231,11 +228,9 @@ fn read_body<'c>(
         how,
         tries: None,
         deferred: Vec::new(),
-        deferred_seen: 0,
-        deferred_generation: 0,
         deferred_end: Vec::new(),
         deferred_count: 0,
-        limits: Default::default(),
+        waits: Default::default(),
         why: None,
         arg_closure: None,
         joining: false,
