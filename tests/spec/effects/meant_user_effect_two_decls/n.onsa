@@ -1,0 +1,4 @@
+// A user's `effect` (an E0200 in this version) and a function whose row has it, for main.onsa.
+
+pub effect Tick {}          //~ E0200
+pub fn h() uses {Tick} {}   //~ E0200

@@ -390,7 +390,7 @@ fn check_exports(analyzed: &Analyzed, settings: &TargetSettings) -> Vec<Diagnost
         };
         // Each effect of the row the target does not provide, in its order.
         for &e in f.effects.effects() {
-            if a.alloc != Some(e) || !settings.provides_alloc {
+            if a.alloc() != Some(e) || !settings.provides_alloc {
                 out.push(error(&format!("`{}`", a.def(e).name)));
             }
         }

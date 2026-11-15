@@ -1,6 +1,6 @@
-//! The lang items of std (S-71, R-79): the enums of `std.core`, the struct
-//! of `std.text` and the effect of `std.random` the compiler knows, its one
-//! table of them. The variants of the enums are in the prelude by their names
+//! The lang items of std (S-71, R-79): the enums and the effect `Alloc` of
+//! `std.core` (D-08), the struct of `std.text` and the effect of `std.random`
+//! the compiler knows, its one table of them. The variants of the enums are in the prelude by their names
 //! alone and not members of their types (§4.1, S-607), and `?` reads them
 //! (§9.1). The sema stages read [`LangItems`]; lowering and the backends read
 //! what the stages recorded.
@@ -18,6 +18,10 @@ const ENUMS: [(&str, &str, &str); 2] = [("Option", "Some", "None"), ("Result", "
 /// The rows of [`ENUMS`], for what is said of one of them.
 pub(crate) const OPTION: usize = 0;
 pub(crate) const RESULT: usize = 1;
+
+/// Of `std.core`: the effect of the heap (D-08), the one effect of a row
+/// phase 1 gives a meaning (`crate::sig::read_effects`).
+const ALLOC: &str = "Alloc";
 
 /// The representative of the type parameters with `Ordinal` (`traits::Rep`):
 /// of `std.core`, with no `pub`, so that no program names it.
@@ -48,7 +52,7 @@ pub struct LangFixedStr {
     pub len: u32,
 }
 
-/// The rows of [`ENUMS`], [`FIXED_STR`] and [`RANDOM`]: none with no
+/// The rows of [`ENUMS`], [`ALLOC`], [`FIXED_STR`] and [`RANDOM`]: none with no
 /// `std.core` (unit tests of a package with no std). Of std alone, which
 /// [`crate::analyze_on`] does not read again.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -57,6 +61,7 @@ pub struct LangItems {
     any_ordinal: Option<DefId>,
     fixed_str: Option<LangFixedStr>,
     random: Option<DefId>,
+    alloc: Option<DefId>,
 }
 
 impl LangItems {
@@ -89,6 +94,11 @@ impl LangItems {
     pub(crate) fn random(&self) -> Option<DefId> {
         self.random
     }
+
+    /// [`ALLOC`] (read through [`crate::Analysis::alloc`]).
+    pub(crate) fn alloc(&self) -> Option<DefId> {
+        self.alloc
+    }
 }
 
 /// The variant of `Option` that holds a value, which a `narrow_from` of a
@@ -106,6 +116,10 @@ pub(crate) fn some(a: &Analysis) -> String {
 /// the variants of each enum there, by their names as written. The embedded
 /// std has them all, so one missing is a bug.
 pub(crate) fn declared(s: &mut Sema<'_>) {
+    match s.a.prelude.get(ALLOC) {
+        Some(&Entity::Def(d)) => s.a.modules.lang.alloc = Some(d),
+        _ => onsa_diag::internal::bug(None, format!("`std.core` declares no `{ALLOC}`")),
+    }
     for (row, (ty, keep, exit)) in ENUMS.into_iter().enumerate() {
         let Some(&Entity::Def(def)) = s.a.prelude.get(ty) else {
             onsa_diag::internal::bug(None, format!("`std.core` declares no `{ty}`"))

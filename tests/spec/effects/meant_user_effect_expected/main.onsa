@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§8.1"]
+
+// W6-04 U7 (the break side), R-463, §18.1: an anonymous function where a function type is expected whose row
+// has the name `Tick` of a failed `use` takes that open row, which admits the user's `m.Tick` that `g` needs: no
+// E0601 (the unit of `ap` fails by the name alone).
+use kp.{Tick}   //~ E0302
+use m.{g}
+
+pub fn ap(cb: fn() uses {Tick}) { cb.() }
+
+pub fn f() {
+  ap(fn() { g() })
+}

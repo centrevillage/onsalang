@@ -265,23 +265,29 @@ pub(crate) fn read_effects(
                     _ => set.not_effects.push(n.name.clone()),
                 }
             }
-            Err(e) if a.unread_path(def, from, p, &e) => meant(a, &n.name, &mut set),
             Err(e) => {
-                // A name not found may mean an effect of its name too (S-1062).
-                if matches!(e, crate::ResolveError::NotFound { .. }) {
+                let held = a.unread_path(def, from, p, &e);
+                let d = (!held).then(|| {
+                    let fix = match (&e, p.segments.as_slice()) {
+                        (crate::ResolveError::NotFound { .. }, [_]) => {
+                            let named = a.effects_named(&n.name);
+                            a.modules.std_effect_use(from, named, (&a.prelude, &a.defs, &a.builtin_key))
+                        }
+                        _ => None,
+                    };
+                    let d = e.into_diagnostic();
+                    match fix {
+                        Some(fix) => d.with_fix(fix),
+                        None => d,
+                    }
+                });
+                // A name held as an error, and one not found (E0302, in every
+                // form, R-468), may have meant an effect of its name (§18.1,
+                // S-691, S-1062): the one test of a name the row does not read.
+                if d.as_ref().is_none_or(|d| d.code == onsa_diag::Code::E0302) {
                     meant(a, &n.name, &mut set);
                 }
-                let fix = match (&e, p.segments.as_slice()) {
-                    (crate::ResolveError::NotFound { .. }, [_]) => {
-                        a.modules.std_effect_use(from, &n.name, (&a.prelude, &a.defs, &a.builtin_key))
-                    }
-                    _ => None,
-                };
-                let d = e.into_diagnostic();
-                errors.push(match fix {
-                    Some(fix) => d.with_fix(fix),
-                    None => d,
-                });
+                errors.extend(d);
             }
         }
     }
@@ -300,12 +306,11 @@ pub(crate) fn read_effects(
 }
 
 /// What a name not read in an effect row, of the last name `name`, may have
-/// meant (§18.1, S-691): each effect declared with that name, added to `set`.
-/// O(D) for D declarations, of a name in error alone.
+/// meant (§18.1, S-691): each effect declared with that name, of std or a
+/// user's (R-463), added to `set`. O(log M + E) for M effects in `set` and E
+/// declared with the name ([`Analysis::effects_named`]).
 fn meant(a: &Analysis, name: &str, set: &mut EffectSet) {
-    let effects =
-        (a.defs.iter().enumerate()).filter(|(_, d)| d.name == name && matches!(d.kind, DefKind::Effect { .. }));
-    effects.for_each(|(i, _)| set.insert_meant(DefId(i as u32)));
+    a.effects_named(name).iter().for_each(|&d| set.insert_meant(d));
 }
 
 /// Whether the path `tr` of `impl[gs] tr for Ty` names a trait by the names

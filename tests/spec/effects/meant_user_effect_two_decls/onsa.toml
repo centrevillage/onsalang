@@ -1,0 +1,3 @@
+[package]
+name = "meant_user_effect_two_decls"
+edition = "2026"

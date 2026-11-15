@@ -1,0 +1,14 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§8.1", "§4.7"]
+
+// W6-04 U7 (the break side), R-463, §18.1: a function whose row has the user's `m.Tick` goes where a function
+// type whose row has the failed name `Tick` is expected (it may have meant that effect): no E0401.
+use kp.{Tick}   //~ E0302
+use m.{g}
+
+pub fn ap(cb: fn() uses {Tick}) { cb.() }
+
+pub fn f() {
+  ap(g)
+}

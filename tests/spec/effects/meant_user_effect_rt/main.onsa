@@ -1,0 +1,10 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§8.1", "§10"]
+
+// W6-04 U7 (the break side), R-463, §18.1, §10 rule 4: the row of `f` admits the `Tick` that `g` needs (no E0601),
+// and the call of `g`, which is no `rt` function, from the `rt` function `f` is an E0901 still.
+use kp.{Tick}   //~ E0302
+use m.{g}
+
+pub rt fn f() uses {Tick} { g() }   //~ E0901

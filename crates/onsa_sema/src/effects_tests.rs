@@ -98,7 +98,7 @@ fn an_effect_row_is_a_set_of_declarations() {
     let src = "pub effect Tick {}\npub fn a() -> U32 uses {Alloc} { 1 }\npub fn t() -> U32 uses {I32, Tick, Alloc, Tick} { 1 }\npub fn n() -> U32 uses {Nope} { 1 }\npub fn e() -> U32 { 1 }\n";
     let a = check(src);
     let row = |name: &str| a.def(crate::tests::def(&a, name)).as_fn().unwrap().effects.clone();
-    let alloc = a.alloc.expect("std declares `Alloc`");
+    let alloc = a.alloc().expect("std declares `Alloc`");
     let tick = crate::tests::def(&a, "Tick");
     let (ra, rt, rn, re) = (row("a"), row("t"), row("n"), row("e"));
     assert_eq!((ra.effects(), ra.not_effects.as_slice()), (&[alloc][..], &[][..]));
@@ -154,7 +154,7 @@ fn a_name_not_read_keeps_what_it_may_have_meant() {
         let is = |d: &crate::def::Def| d.name == name && matches!(d.kind, crate::def::DefKind::Effect { .. });
         crate::DefId(a.defs.iter().position(is).expect("std declares it") as u32)
     };
-    let (random, alloc) = (effect("Random"), a.alloc.expect("std declares `Alloc`"));
+    let (random, alloc) = (effect("Random"), a.alloc().expect("std declares `Alloc`"));
     let (rr, rs, rt) = (row("r"), row("s"), row("t"));
     assert!(rr.admits(random) && !rr.has(random) && rr.is_empty(), "{rr:?}");
     assert!(rt.admits(alloc) && !rt.has(alloc) && rt.is_empty(), "{rt:?}");

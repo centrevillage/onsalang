@@ -389,6 +389,17 @@ pub enum DefKind {
     Unsupported(Declared),
 }
 
+/// The body of a def, by what it is ([`crate::Analysis::body_kind`], D-15):
+/// each place that tells them apart reads it by a match of all of them.
+#[derive(Clone, Copy)]
+pub(crate) enum BodyKind<'a> {
+    Fn(&'a FnDef),
+    Test(ExprId),
+    /// Of a `const` and of a default of a field (§6.6).
+    Initializer(&'a ConstDef),
+    Flow(&'a FlowDef),
+}
+
 /// The kind of the name of a declaration this version does not support, as
 /// its keyword tells (§18.1): what is not read of it (the members of a
 /// trait or an effect, the signature of an `extern` function) is an error
@@ -472,6 +483,12 @@ impl Def {
             DefKind::Flow(f) => Some(f),
             _ => None,
         }
+    }
+
+    /// Whether it declares an effect, of std or a user's (an E0200, §8.1):
+    /// the one test of it, by the kind of its name (R-463).
+    pub fn declares_effect(&self) -> bool {
+        crate::resolve::NameKind::of_def(&self.kind) == Some(crate::resolve::NameKind::Effect)
     }
 
     /// Generic parameters of the def itself (not of its owner).

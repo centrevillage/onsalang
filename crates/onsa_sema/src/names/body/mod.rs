@@ -44,7 +44,7 @@ use onsa_syntax::ast::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::def::{DefKind, FlowInput, GenericDef, ModId};
+use crate::def::{BodyKind, DefKind, FlowInput, GenericDef, ModId};
 use crate::flow_names::FlowBuiltin;
 use crate::resolve::Entity;
 use crate::sig::Pos;
@@ -451,31 +451,30 @@ pub(crate) fn walk_bodies(pkg: &Package, a: &mut Analysis) {
         }
         let Some(module) = a.modules.source(&flat, def.module) else { continue };
         let ast = &module.parsed.ast;
-        // The type and const parameters a body sees: of the function, or of
-        // the `impl` of an associated `const` or the struct of a default of a
-        // field (S-918); `Self` of an `impl`.
-        let owner_generics = || def.owner.map_or(&[][..], |o| a.def(o).generics());
+        // The type and const parameters a body sees (`crate::body::generics_of`,
+        // S-918); `Self` of an `impl`. The inputs of a flow.
         let self_ty = a.self_ty_of(id);
-        let (body, params, generics): (ExprId, &[Param], &[GenericDef]) = match &def.kind {
-            DefKind::Fn(f) => match f.body {
-                Some(b) => (b, fn_params(ast, item), &f.generics),
+        let (body, params, inputs): (ExprId, &[Param], Option<&[FlowInput]>) = match a.body_kind(id) {
+            Some(BodyKind::Fn(f)) => match f.body {
+                Some(b) => (b, fn_params(ast, item), None),
                 None => continue,
             },
-            DefKind::Test { body, .. } => (*body, &[], &[]),
-            DefKind::Const(c) => match c.value {
-                Some(v) => (v, &[], owner_generics()),
+            Some(BodyKind::Test(body)) => (body, &[], None),
+            Some(BodyKind::Initializer(c)) => match c.value {
+                Some(v) => (v, &[], None),
                 None => continue,
             },
-            DefKind::Flow(f) => (f.body, &[], &[]),
-            _ => continue,
+            Some(BodyKind::Flow(f)) => (f.body, &[], Some(&f.inputs)),
+            None => continue,
         };
+        let generics = crate::body::generics_of(a, id);
         // A panic names this declaration (S-67).
         let _scope = onsa_diag::internal::item_scope(def.span);
-        let mut w = Walker::new(a, def.module, ast, &module.text, (generics, self_ty, body));
-        let flow = matches!(def.kind, DefKind::Flow(_));
-        let done = match &def.kind {
-            DefKind::Flow(f) => w.walk_flow(&f.inputs, body),
-            _ => {
+        let mut w = Walker::new(a, def.module, ast, &module.text, (&generics, self_ty, body));
+        let flow = inputs.is_some();
+        let done = match inputs {
+            Some(inputs) => w.walk_flow(inputs, body),
+            None => {
                 // `self` is a binding of a method of an `impl`.
                 let has_self = def.owner.is_some_and(|o| matches!(a.def(o).kind, DefKind::Impl(_)));
                 w.walk_fn(params, has_self, body)
@@ -483,7 +482,6 @@ pub(crate) fn walk_bodies(pkg: &Package, a: &mut Analysis) {
         };
         let (mut out, fail, sites) = (w.out, w.failure, (w.type_sites, w.flow_types));
         out.complete = done.is_ok();
-        let generics = generics.to_vec();
         let fail = lower_types(a, id, (ast, &module.text), (&generics, self_ty), sites, &mut out).or(fail);
         match fail {
             Some(Fail::Report(d)) => {

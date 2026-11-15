@@ -340,8 +340,6 @@ pub fn keys_note(table: Table, path: &str) -> String {
 #[cfg(test)]
 mod tests {
     use onsa_diag::SourceMap;
-    use onsa_sema::DefKind;
-    use onsa_sema::def::Declared;
     use onsa_syntax::ast::Vis;
 
     use super::{ALLOC, EFFECTS};
@@ -353,8 +351,7 @@ mod tests {
         let mut sources = SourceMap::default();
         let std = crate::std_package(&mut sources);
         let analysis = onsa_sema::analyze(&onsa_sema::Package::new("user", Vec::new(), vec![std]));
-        let effect = |k: &DefKind| matches!(k, DefKind::Effect { .. } | DefKind::Unsupported(Declared::Effect));
-        let declared = analysis.defs.iter().filter(|d| analysis.modules.pkg_of(d.module) == 0 && effect(&d.kind));
+        let declared = analysis.defs.iter().filter(|d| analysis.modules.pkg_of(d.module) == 0 && d.declares_effect());
         let mut names: Vec<&str> = Vec::new();
         for d in declared {
             assert_eq!(d.vis, Vis::Pub, "std's effect `{}`", d.name);

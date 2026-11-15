@@ -1,0 +1,4 @@
+// A function whose row has `Random` of std, for main.onsa.
+
+use std.random.Random
+pub fn g() uses {Random} {}   //~ E0200

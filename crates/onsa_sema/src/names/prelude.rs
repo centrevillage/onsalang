@@ -30,9 +30,6 @@ const PANIC: &str = "panic";
 /// The module of std whose `pub` items are in the prelude (§15.1, S-659).
 const CORE: &str = "core";
 
-/// The lang item of the effect of the heap (D-08), an item of `std.core`.
-const ALLOC: &str = "Alloc";
-
 /// Fills `a.prelude` with the compiler's names, and `a.builtin_key` with the
 /// key of each generic builtin (the type with no arguments) its associated
 /// items are under, and `a.array_key`. Before the items are collected.
@@ -62,9 +59,9 @@ pub(super) fn build(a: &mut Analysis) {
 
 /// The items of `std.core` in the prelude, once the items are collected and
 /// before their clashes (§15.1): its `pub` items, of which `Alloc` is a lang
-/// item, and the variants of its lang enums. The embedded std has them, so
-/// a `std.core` with no `Alloc` is a bug; a package analyzed with no std or
-/// an empty one (unit tests of this crate) has neither.
+/// item, and the variants of its lang enums ([`crate::lang`]). A package
+/// analyzed with no std or an empty one (unit tests of this crate) has
+/// neither.
 pub(super) fn declared(s: &mut Sema<'_>) {
     let a = &mut *s.a;
     let std = a.modules.roots.iter().copied().find(|&r| a.modules.is_std(r));
@@ -77,10 +74,6 @@ pub(super) fn declared(s: &mut Sema<'_>) {
         if a.def(d).vis == onsa_syntax::ast::Vis::Pub {
             a.prelude.insert(name, Entity::Def(d));
         }
-    }
-    match a.prelude.get(ALLOC) {
-        Some(&Entity::Def(d)) => a.alloc = Some(d),
-        _ => onsa_diag::internal::bug(None, "`std.core` declares no `Alloc`"),
     }
     crate::lang::declared(s);
 }

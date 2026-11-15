@@ -208,8 +208,11 @@ impl<'p> Sema<'p> {
     pub(crate) fn add_def(&mut self, def: Def) -> DefId {
         let item = def.item.and_then(|i| self.module(def.module).map(|m| m.parsed.ast.item(i)));
         let failed = item.and_then(|i| i.failed);
+        let id = DefId(self.a.defs.len() as u32);
+        if def.declares_effect() {
+            self.a.effect_decls.entry(def.name.clone()).or_default().push(id);
+        }
         self.a.defs.push(def);
-        let id = DefId(self.a.defs.len() as u32 - 1);
         if let Some(f) = failed {
             self.a.failed.insert(id, f);
         }

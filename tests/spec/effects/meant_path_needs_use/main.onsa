@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§8.1", "§15.1"]
+
+// W6-04 U7 fix1, R-468, §18.1 (a name not found in an effect row, E0302, is as a failed name): the path of a
+// module that no `use` takes (`m.Random`, `u.Tick`) is an E0302, and the row is open with what the last name may
+// have meant, of std (`Random`) or a user's (`u.Tick`): the anonymous functions are no E0601.
+use m.{g}
+use u.{k}
+
+pub fn ap(h: fn() uses {m.Random}) { h.() }   //~ E0302
+pub fn aq(h: fn() uses {u.Tick}) { h.() }     //~ E0302
+
+pub fn f() { ap(fn() { g() }) }
+pub fn f2() { aq(fn() { k() }) }

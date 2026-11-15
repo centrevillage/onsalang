@@ -324,11 +324,7 @@ impl<'p> Sema<'p> {
     /// The roots of the def `id`, under the generics in scope; the first
     /// with an error is the diagnostic of its unit.
     fn wellformed_def(&mut self, id: DefId) {
-        let def = self.a.def(id);
-        let generics = match (&def.kind, def.owner) {
-            (DefKind::Const(_), Some(o)) => self.a.def(o).generics().to_vec(),
-            _ => def.generics().to_vec(),
-        };
+        let generics = crate::body::generics_of(self.a, id);
         let Some(cx) = self.cx_for(id, generics, None) else { return };
         for (t, ty, pos, slot) in self.roots(&cx, id) {
             match self.judge(&cx, t, ty, pos) {

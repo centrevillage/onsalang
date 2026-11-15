@@ -248,17 +248,17 @@ impl Modules {
         })
     }
 
-    /// The candidate of the effect `name` not found in an effect row of
-    /// `from` (§8.1, S-659 (3)): the `use` of the `pub` effect of std of that
-    /// very name, when std declares one alone, the name is free in the body
-    /// of `from` and the `use` closes no cycle (§18.1).
-    pub(crate) fn std_effect_use(&self, from: ModId, name: &str, names: Names<'_>) -> Option<Fix> {
+    /// The candidate of an effect not found in an effect row of `from` (§8.1,
+    /// S-659 (3)), of the effects `named` declared with its name
+    /// (`Analysis::effects_named`): the `use` of the `pub` effect of std of
+    /// that very name, when std declares one alone, the name is free in the
+    /// body of `from` and the `use` closes no cycle (§18.1).
+    pub(crate) fn std_effect_use(&self, from: ModId, named: &[crate::DefId], names: Names<'_>) -> Option<Fix> {
         let (prelude, defs, _) = names;
-        let mut found = (defs.iter().enumerate()).filter(|(_, d)| {
-            d.name == name && d.vis == Vis::Pub && matches!(d.kind, DefKind::Effect { .. }) && self.is_std(d.module)
-        });
-        let (Some((d, def)), None) = (found.next(), found.next()) else { return None };
-        let (added, edit) = self.std_use(from, (crate::DefId(d as u32), def), prelude)?;
+        let of = |&d: &crate::DefId| (d, &defs[d.0 as usize]);
+        let mut found = named.iter().map(of).filter(|(_, d)| d.vis == Vis::Pub && self.is_std(d.module));
+        let (Some(d), None) = (found.next(), found.next()) else { return None };
+        let (added, edit) = self.std_use(from, d, prelude)?;
         Some(Fix::new(format!("add `use {added}`"), vec![edit]))
     }
 

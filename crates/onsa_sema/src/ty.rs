@@ -268,19 +268,18 @@ impl EffectSet {
         self.not_effects.extend(new);
     }
 
+    /// Whether the row has no name at all, shown as no row (§8.1): no
+    /// effect, no name that names no effect, no variable. Of the effects
+    /// alone, [`EffectSet::effects`]; of the variables alone,
+    /// [`EffectSet::is_open`].
     pub fn is_empty(&self) -> bool {
-        !self.has_effects() && self.vars.is_empty()
+        self.effects.is_empty() && self.not_effects.is_empty() && self.vars.is_empty()
     }
 
     /// Whether the row has an effect row variable: no judgement of a use
     /// leans on its variables (an E0200 of the declaration, R-27 (3), §8.1).
     pub fn is_open(&self) -> bool {
         !self.vars.is_empty()
-    }
-
-    /// Whether the row has an effect, its variables not counted (§8.1).
-    pub fn has_effects(&self) -> bool {
-        !self.effects.is_empty() || !self.not_effects.is_empty()
     }
 
     /// Whether each effect of the row is in `wider` (§8.1 rule 2), its

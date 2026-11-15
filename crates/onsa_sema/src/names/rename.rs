@@ -184,9 +184,9 @@ fn clashes(a: &Analysis, spaces: &Spaces, target: &Target, at: Span, to: &str) -
             };
             let mut all = names.bindings.iter().enumerate();
             let local = all.find(|(i, x)| x.name == to && sees((*i, x.scope))).map(|(_, x)| x.span);
-            let owner = def.owner.map_or(&[][..], |o| a.def(o).generics());
-            let heading = def.generics().iter().chain(owner).find(|g| g.name == to).map(|g| g.span);
-            let flow = matches!(def.kind, DefKind::Flow(_));
+            let generics = crate::body::generics_of(a, d);
+            let heading = generics.iter().find(|g| g.name == to).map(|g| g.span);
+            let flow = matches!(a.body_kind(d), Some(crate::def::BodyKind::Flow(_)));
             hides(a, def.module, &name, local.or(heading), flow).is_some()
         }
     }

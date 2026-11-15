@@ -125,6 +125,7 @@
 "Copy" = 1
 
 [allow."crates/onsa_sema/src/lang.rs"]
+"Alloc" = 1
 "AnyOrdinal" = 1
 "Err" = 1
 "FixedStr" = 1
@@ -143,7 +144,6 @@
 "std" = 1
 
 [allow."crates/onsa_sema/src/names/prelude.rs"]
-"Alloc" = 1
 "Bool" = 1
 "Char" = 1
 "F32" = 1

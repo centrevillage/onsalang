@@ -536,7 +536,7 @@ impl<'p> Sema<'p> {
     fn fill_fn(&mut self, flow: DefId, params: Vec<ParamSig>, ret: TyId, rt: bool, alloc: bool, which: FlowFn) {
         // With no std (unit tests), there is no `Alloc` to have.
         let mut effects = EffectSet::default();
-        if let (true, Some(d)) = (alloc, self.a.alloc) {
+        if let (true, Some(d)) = (alloc, self.a.alloc()) {
             effects.insert(d);
         }
         let f = FnDef {

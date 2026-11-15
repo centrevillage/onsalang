@@ -28,7 +28,7 @@ use onsa_syntax::ast::{
 use crate::binding::Bind;
 use crate::bounds::Bounds;
 use crate::builtin;
-use crate::def::{Bound, DefKind, Fields, FnDef, GenericDef, GenericKind};
+use crate::def::{BodyKind, Bound, DefKind, Fields, FnDef, GenericDef, GenericKind};
 use crate::deferred::{Deferred, DeferredKind, Verdict};
 use crate::exhaust::{Missing, P, Seen};
 use crate::infer::{Cause, Fit, Infer, LitKind, Mismatch};
@@ -158,17 +158,14 @@ pub(crate) struct Checker<'a> {
 /// body.
 fn body_of(a: &mut Analysis, id: DefId) -> Option<(Option<TyId>, ExprId, TyId)> {
     let self_ty = a.self_ty_of(id);
-    Some(match &a.def(id).kind {
-        DefKind::Fn(f) => (self_ty, f.body?, f.ret),
-        DefKind::Test { body, .. } => {
-            let body = *body;
-            (None, body, a.types.unit())
-        }
-        DefKind::Const(c) => (self_ty, c.value?, c.ty),
+    let (self_ty, body, ret) = match a.body_kind(id)? {
+        BodyKind::Fn(f) => (self_ty, f.body?, Some(f.ret)),
+        BodyKind::Test(body) => (None, body, None),
+        BodyKind::Initializer(c) => (self_ty, c.value?, Some(c.ty)),
         // Flow bodies (T3-1): the same inference, in flow mode (`flow.rs`).
-        DefKind::Flow(f) => (None, f.body, f.out),
-        _ => return None,
-    })
+        BodyKind::Flow(f) => (None, f.body, Some(f.out)),
+    };
+    Some((self_ty, body, ret.unwrap_or_else(|| a.types.unit())))
 }
 
 /// A body to read, as often as its candidates ask.
@@ -242,11 +239,13 @@ fn read_body<'c>(
         root: job.body,
         bound,
     };
-    match ck.a.def(job.id).kind {
-        DefKind::Const(_) => ck.check_const(job.body, job.ret),
-        DefKind::Flow(_) => ck.check_flow_body(job.body, job.ret),
-        _ => ck.check_fn_body(job.body, job.ret),
-    }
+    let check = match ck.a.body_kind(job.id) {
+        Some(BodyKind::Fn(_) | BodyKind::Test(_)) => Checker::check_fn_body,
+        Some(BodyKind::Initializer(_)) => Checker::check_const,
+        Some(BodyKind::Flow(_)) => Checker::check_flow_body,
+        None => onsa_diag::internal::bug(Some(ck.a.def(job.id).span), "a body read of a def with no body"),
+    };
+    check(&mut ck, job.body, job.ret);
     ck
 }
 
@@ -276,9 +275,13 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
         let mut names = a.names.remove(&id).unwrap_or_default();
         if names.reported || a.failures.skips(id, Stage::Types) {
             let body = BodyInfo::default();
-            match a.def(id).kind {
-                DefKind::Flow(_) => drop(a.flows.insert(id, crate::flow::FlowInfo { body, ..Default::default() })),
-                _ => drop(a.bodies.insert(id, body)),
+            match a.body_kind(id) {
+                Some(BodyKind::Flow(_)) => {
+                    drop(a.flows.insert(id, crate::flow::FlowInfo { body, ..Default::default() }))
+                }
+                Some(BodyKind::Fn(_) | BodyKind::Test(_) | BodyKind::Initializer(_)) | None => {
+                    drop(a.bodies.insert(id, body))
+                }
             }
             a.names.insert(id, names);
             continue;
@@ -314,26 +317,26 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
     }
 }
 
-/// The generic parameters a body sees: a function's own, those of the owner
-/// of an associated `const` or of a default of a field; a test and a flow have
-/// none.
+/// The generic parameters the body and the signature of `def` see: those of
+/// the owner of an initializer (an associated `const`, a default of a
+/// field), else its own (a test and a flow have none). The one place of the
+/// generics of an initializer.
 pub(crate) fn generics_of(a: &Analysis, def: DefId) -> Vec<GenericDef> {
     let d = a.def(def);
-    match &d.kind {
-        DefKind::Fn(f) => f.generics.clone(),
-        DefKind::Const(_) => d.owner.map(|o| a.def(o).generics().to_vec()).unwrap_or_default(),
-        _ => Vec::new(),
+    match a.body_kind(def) {
+        Some(BodyKind::Initializer(_)) => d.owner.map(|o| a.def(o).generics().to_vec()).unwrap_or_default(),
+        Some(BodyKind::Fn(_) | BodyKind::Test(_) | BodyKind::Flow(_)) | None => d.generics().to_vec(),
     }
 }
 
 /// The expression of the body of a function, a test or a `const` (the bodies
 /// the modes stage reads; not a flow's).
 pub(crate) fn root_of(a: &Analysis, def: DefId) -> Option<ExprId> {
-    match &a.def(def).kind {
-        DefKind::Fn(f) => f.body,
-        DefKind::Test { body, .. } => Some(*body),
-        DefKind::Const(c) => c.value,
-        _ => None,
+    match a.body_kind(def)? {
+        BodyKind::Fn(f) => f.body,
+        BodyKind::Test(body) => Some(body),
+        BodyKind::Initializer(c) => c.value,
+        BodyKind::Flow(_) => None,
     }
 }
 

@@ -15,13 +15,16 @@ use onsa_diag::Code;
 use onsa_diag::hash::HashMap;
 
 use super::{PatRes, PathRes};
-use crate::def::{DefKind, ModId};
+use crate::def::{BodyKind, ModId};
 use crate::resolve::Entity;
 use crate::{Analysis, DefId, Package};
 
 pub(super) fn report(flat: &[&Package], a: &mut Analysis) {
-    let mut points: Vec<DefId> =
-        a.names.keys().copied().filter(|&d| matches!(a.def(d).kind, DefKind::Const(_) | DefKind::Flow(_))).collect();
+    let point = |d: &DefId| match a.body_kind(*d) {
+        Some(BodyKind::Initializer(_) | BodyKind::Flow(_)) => true,
+        Some(BodyKind::Fn(_) | BodyKind::Test(_)) | None => false,
+    };
+    let mut points: Vec<DefId> = a.names.keys().copied().filter(point).collect();
     points.sort();
     let at: HashMap<DefId, usize> = points.iter().enumerate().map(|(p, &d)| (d, p)).collect();
     // A name after the stop of a walk (at an error of the names stage) is
@@ -46,7 +49,7 @@ pub(super) fn report(flat: &[&Package], a: &mut Analysis) {
         if a.modules.across_one_cycle(&mods) {
             continue;
         }
-        let flow = matches!(a.def(decls[0]).kind, DefKind::Flow(_));
+        let flow = matches!(a.body_kind(decls[0]), Some(BodyKind::Flow(_)));
         let what =
             if flow { (Code::E0817, "cyclic flow instances, §11.5") } else { (Code::E0312, "cyclic constant, §6.6") };
         let in_cycle = |t: &DefId| at.get(t).is_some_and(|&q| comp[q] == c);
@@ -67,7 +70,7 @@ pub(super) fn report(flat: &[&Package], a: &mut Analysis) {
 /// what its `...` fills.
 fn edges(a: &Analysis, d: DefId) -> Vec<DefId> {
     let n = &a.names[&d];
-    if matches!(a.def(d).kind, DefKind::Flow(_)) {
+    if matches!(a.body_kind(d), Some(BodyKind::Flow(_))) {
         return n.instances.iter().map(|&(_, f, _)| f).collect();
     }
     let names = n.paths.values().chain(n.interp.values().flatten().map(|(_, r)| r));

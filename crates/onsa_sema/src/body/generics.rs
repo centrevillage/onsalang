@@ -43,10 +43,7 @@ impl<'a> Checker<'a> {
     /// first (a method's generics include them, sig.rs lowers them that way;
     /// an associated constant has only those).
     fn all_generics(&self, def: DefId) -> Vec<GenericDef> {
-        match self.a.def(def).kind {
-            DefKind::Const(_) => crate::body::generics_of(self.a, def),
-            _ => self.a.def(def).generics().to_vec(),
-        }
+        crate::body::generics_of(self.a, def)
     }
 
     /// The name of the type `t` with no type argument (`W` of `W[T]`, `Buf`

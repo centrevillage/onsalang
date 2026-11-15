@@ -10,8 +10,8 @@ use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 use onsa_syntax::ast::{Ast, ExprId, ExprKind, ItemKind, StmtKind, TypeKind};
 
 use crate::binding::{Head, LitClass};
-use crate::body::{Copied, CopiedWhy, RowFrom, generics_of};
-use crate::def::{DefKind, GenericKind};
+use crate::body::{Copied, CopiedWhy, LocalId, RowFrom, generics_of};
+use crate::def::{BodyKind, GenericKind};
 use crate::drop_alloc::{Drop, copy_would_free};
 use crate::names::body::Origin;
 use crate::resolve::Entity;
@@ -24,9 +24,24 @@ pub(crate) fn check_all(pkg: &Package, a: &Analysis, records: &[Record]) -> Vec<
     let mut diags = Vec::new();
     for r in records {
         let _scope = onsa_diag::internal::item_scope(a.def(r.id).span);
-        diags.extend(r.lacking(a).into_iter().filter_map(|(scope, effect, u)| first_use(pkg, a, r, scope, effect, u)));
+        let lacking = r.lacking(a);
+        let Some(module) = module_of_def(pkg, a, r.id).filter(|_| !lacking.is_empty()) else { continue };
+        let lets = lets_of(a, &module.parsed.ast, r.id);
+        diags.extend(
+            lacking.into_iter().filter_map(|(scope, effect, u)| first_use(a, (module, r, &lets), scope, effect, u)),
+        );
     }
     diags
+}
+
+/// The spans of the `let`s that are heads of the body of `id`, by their end
+/// then their start: made once for its E0601 (R-465).
+fn lets_of(a: &Analysis, ast: &Ast, id: DefId) -> Vec<Span> {
+    let heads = a.bodies[&id].heads.keys();
+    let mut lets: Vec<Span> =
+        heads.filter_map(|h| if let Head::Let(s) = h { Some(ast.stmt(*s).span) } else { None }).collect();
+    lets.sort_unstable_by_key(|s| (s.end, s.start));
+    lets
 }
 
 /// The E0601 of `u`, the first use in `scope` of the body of `r` of
@@ -35,8 +50,13 @@ pub(crate) fn check_all(pkg: &Package, a: &Analysis, records: &[Record]) -> Vec<
 /// into the signature; an `rt` one cannot have `Alloc` (§10 rule 1), an
 /// anonymous function, a `test` and an initializer have no fix (§8.1, S-1041),
 /// nor an effect no row of the module can have (S-97, S-1054).
-fn first_use(pkg: &Package, a: &Analysis, r: &Record, scope: &Scope, effect: DefId, u: &Use) -> Option<Diagnostic> {
-    let module = module_of_def(pkg, a, r.id)?;
+fn first_use(
+    a: &Analysis,
+    (module, r, lets): (&crate::Module, &Record, &[Span]),
+    scope: &Scope,
+    effect: DefId,
+    u: &Use,
+) -> Option<Diagnostic> {
     let (ast, text) = (&module.parsed.ast, &module.text);
     let def = a.def(r.id);
     let src = |span: Span| text[span.start as usize..span.end as usize].to_string();
@@ -47,13 +67,16 @@ fn first_use(pkg: &Package, a: &Analysis, r: &Record, scope: &Scope, effect: Def
         u.describe(a, (ast, r.id), &src)
     );
     let d = Diagnostic::new(Stage::Effects, Code::E0601, u.at, message).with_found(src(u.at));
-    let d = notes(a, (ast, &src), r, (scope, effect), u).into_iter().fold(d, |d, (at, why)| d.with_note(at, why));
+    let d =
+        notes(a, (ast, &src), (r, lets), (scope, effect), u).into_iter().fold(d, |d, (at, why)| d.with_note(at, why));
     let d = rules(a, r, scope, effect).into_iter().fold(d, |d, why| d.with_rule(why));
-    if scope.closure.is_some()
-        || scope.rt
-        || !matches!(def.kind, DefKind::Fn(_))
-        || !a.effect_written(effect, def.module)
-    {
+    let fixed = match a.body_kind(r.id) {
+        Some(BodyKind::Fn(_)) => scope.closure.is_none() && !scope.rt && a.effect_written(effect, def.module),
+        Some(BodyKind::Test(_) | BodyKind::Initializer(_)) => false,
+        // `records` reads no other (`root_of`).
+        Some(BodyKind::Flow(_)) | None => bug(Some(def.span), "an E0601 of no body the effects stage reads"),
+    };
+    if !fixed {
         return Some(d);
     }
     // No fix where the name does not name the effect in the module (an item
@@ -100,18 +123,19 @@ fn first_use(pkg: &Package, a: &Analysis, r: &Record, scope: &Scope, effect: Def
 /// of a binding dropped, each consumption that copied its value and why
 /// (S-1035); (4) the other uses of the effect in the scope (R-83 (3)). No
 /// bound on them: a use is in the notes of one report at most, so all the
-/// notes are linear in the body. O(P + U + G + C) for P points, U uses, G
-/// type parameters, C copies.
+/// notes are linear in the body. O(P log L + U + G + C) for P points, L
+/// `let`s that are heads (`lets`, [`lets_of`]), U uses of the scope
+/// ([`Record::of_scope`]), G type parameters, C copies (R-465).
 fn notes(
     a: &Analysis,
     (ast, src): (&Ast, &dyn Fn(Span) -> String),
-    r: &Record,
+    (r, lets): (&Record, &[Span]),
     (scope, effect): (&Scope, DefId),
     u: &Use,
 ) -> Vec<(Span, String)> {
     let mut notes = Vec::new();
     let name = &a.def(effect).name;
-    let alloc = a.alloc == Some(effect);
+    let alloc = a.alloc() == Some(effect);
     if let Some(c) = scope.closure {
         // No fix; a note of where its row comes from, of an expected type the
         // type alone (not where it was expected) (S-1041).
@@ -157,22 +181,22 @@ fn notes(
     if let What::Drop { drop, points } = &u.what {
         // Not where it is written: in or around its place (a temporary's,
         // a rest's), the end of the `let` that binds it to no name (S-1036).
-        let lets: Vec<u32> = match drop {
-            Drop::Discard { .. } => (a.bodies[&r.id].heads.keys())
-                .filter_map(|h| if let Head::Let(s) = h { Some(ast.stmt(*s).span) } else { None })
-                .filter(|&s| holds(s, u.at))
-                .map(|s| s.end)
-                .collect(),
+        let discard = match drop {
+            Drop::Discard { .. } => true,
             Drop::Local(..)
             | Drop::Rest { .. }
             | Drop::Value { .. }
             | Drop::IterRest { .. }
             | Drop::Temp { .. }
             | Drop::Overwrite { .. }
-            | Drop::Unplaced { .. } => Vec::new(),
+            | Drop::Unplaced { .. } => false,
+        };
+        let ends_let = |p: &Span| {
+            let at = lets.partition_point(|s| s.end < p.start);
+            lets[at..].iter().take_while(|s| s.end == p.start).any(|&s| holds(s, u.at))
         };
         let away =
-            |p: &&Span| (p.end <= u.at.start || u.at.end <= p.start) && !(p.is_empty() && lets.contains(&p.start));
+            |p: &&Span| (p.end <= u.at.start || u.at.end <= p.start) && !(discard && p.is_empty() && ends_let(p));
         notes.extend(points.iter().filter(away).map(|&p| (p, "dropped here".to_string())));
         if let Some(e) = first_owned(a, ast, r.id, drop) {
             let why = format!("`{}` is the first element that makes the literal owned (§5.4)", src(ast.expr(e).span));
@@ -187,17 +211,26 @@ fn notes(
                 format!("with the bound `Copy` on `{}`{dup}, its drop needs no `Alloc` (§12.2)", g.name),
             ));
         }
-        // Each consumption that copied the value of a binding (S-1035).
         if let Drop::Local(l, local) = drop {
-            for c in a.bodies[&r.id].copied_of(*l) {
-                notes.extend(copied(ast, src, &local.name, c));
-            }
+            notes.extend(copies(a, (ast, src), r.id, (*l, &local.name)));
         }
     }
     // In an `rt` function and an anonymous function too, of the scope alone (S-1050).
-    let others = r.uses.iter().filter(|o| o.scope == u.scope && o.at != u.at && o.needs(a, effect));
-    notes.extend(others.map(|o| (o.at, format!("{}: it needs `{name}` too", o.describe(a, (ast, r.id), src)))));
+    for o in r.of_scope(u.scope).filter(|o| o.at != u.at && o.needs(a, effect)) {
+        notes.push((o.at, format!("{}: it needs `{name}` too", o.describe(a, (ast, r.id), src))));
+    }
     notes
+}
+
+/// The notes of each consumption in the body of `id` that copied the value
+/// of the binding `root`, named `name`, and did not move it (S-1035).
+fn copies(
+    a: &Analysis,
+    (ast, src): (&Ast, &dyn Fn(Span) -> String),
+    id: DefId,
+    (root, name): (LocalId, &str),
+) -> Vec<(Span, String)> {
+    a.bodies[&id].copied_of(root).iter().flat_map(|c| copied(ast, src, name, c)).collect()
 }
 
 /// The notes of the consumption `c` that copied the value of the binding
@@ -249,8 +282,12 @@ fn copied(ast: &Ast, src: &dyn Fn(Span) -> String, name: &str, c: &Copied) -> Ve
 fn rules(a: &Analysis, r: &Record, scope: &Scope, effect: DefId) -> Vec<String> {
     let def = a.def(r.id);
     let mut rules = Vec::new();
-    if scope.closure.is_none() && matches!(def.kind, DefKind::Const(_)) {
-        rules.push("an initializer has the effect row `{Alloc}` alone, which the compiler gives (§6.6)".into());
+    match a.body_kind(r.id) {
+        Some(BodyKind::Initializer(_)) if scope.closure.is_none() => {
+            rules.push("an initializer has the effect row `{Alloc}` alone, which the compiler gives (§6.6)".into());
+        }
+        Some(BodyKind::Fn(_) | BodyKind::Test(_) | BodyKind::Initializer(_)) => {}
+        Some(BodyKind::Flow(_)) | None => bug(Some(def.span), "an E0601 of no body the effects stage reads"),
     }
     if !a.effect_written(effect, def.module) {
         rules.push(match a.modules.lang.random() == Some(effect) {

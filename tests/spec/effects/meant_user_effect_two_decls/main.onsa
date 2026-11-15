@@ -1,0 +1,14 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§8.1"]
+
+// W6-04 U7 (the break side), R-463, §18.1: the failed name `Tick` may have meant each effect of that name, the one
+// of `m` and the one of `n`: the calls of `g` and `h` are no E0601.
+use kp.{Tick}   //~ E0302
+use m.{g}
+use n.{h}
+
+pub fn f() uses {Tick} {
+  g()
+  h()
+}

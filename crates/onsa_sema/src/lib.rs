@@ -240,13 +240,14 @@ pub fn flatten(pkg: &Package) -> Vec<&Package> {
 pub struct Analysis {
     pub modules: Modules,
     pub defs: Vec<Def>,
+    /// The declarations of effects ([`Def::declares_effect`]) of each name,
+    /// in the order of the defs (`Sema::add_def`): what a name not read may
+    /// have meant (S-691) and the candidate of an effect not found read them.
+    pub(crate) effect_decls: HashMap<String, Vec<DefId>>,
     pub types: Types,
     /// Prelude and builtin type names (§15.1): the compiler's, and the
     /// items of `std.core` (S-659).
     pub prelude: HashMap<String, Entity>,
-    /// The effect `Alloc` of `std.core`, a lang item (D-08): the one effect
-    /// of an effect row phase 1 gives a meaning (`crate::sig::read_effects`).
-    pub alloc: Option<DefId>,
     /// `TyId` keys of generic builtins in `Modules::assoc_builtin`.
     pub builtin_key: HashMap<ty::BuiltinTy, TyId>,
     /// The key of the members of `[T; N]` there, of std's `impl` of the
@@ -309,9 +310,19 @@ impl Analysis {
         &self.defs[id.0 as usize]
     }
 
+    /// The declarations of effects of the name `name`, in the order of the defs.
+    pub(crate) fn effects_named(&self, name: &str) -> &[DefId] {
+        self.effect_decls.get(name).map_or(&[], Vec::as_slice)
+    }
+
+    /// The effect `Alloc` of `std.core`, a lang item (D-08, [`lang::LangItems`]).
+    pub fn alloc(&self) -> Option<DefId> {
+        self.modules.lang.alloc()
+    }
+
     /// Whether the effect row `row` has `Alloc`, the lang item (D-08).
     pub fn uses_alloc(&self, row: &ty::EffectSet) -> bool {
-        self.alloc.is_some_and(|d| row.has(d))
+        self.alloc().is_some_and(|d| row.has(d))
     }
 
     /// Whether a row of the module `from` can have the effect declared by
@@ -319,7 +330,7 @@ impl Analysis {
     /// S-74). The one test of it: the names stage reads a row by it
     /// (`crate::sig::read_effects`), and an E0601 has a fix by it (S-97).
     pub(crate) fn effect_written(&self, d: DefId, from: ModId) -> bool {
-        Some(d) == self.alloc || matches!(self.def(d).kind, DefKind::Effect { .. }) && self.modules.is_std(from)
+        Some(d) == self.alloc() || self.def(d).declares_effect() && self.modules.is_std(from)
     }
 
     /// The field `name` of the struct `d`, with its index, when `d` is a
@@ -463,6 +474,25 @@ impl Analysis {
         let generics = body::generics_of(self, def);
         let param = |i: u32| generics.get(i as usize).map_or_else(|| format!("<{i}>"), |g| g.name.clone());
         self.types.display(ty, &|d| self.def(d).name.clone(), &param)
+    }
+
+    /// The body of `id`, by what it is: of a function, a `test`, an
+    /// initializer and a flow, which may have no expression (a declaration of
+    /// a `trait`, §6.3); none of another def. The one table of them (D-15).
+    pub(crate) fn body_kind(&self, id: DefId) -> Option<def::BodyKind<'_>> {
+        use def::BodyKind;
+        Some(match &self.def(id).kind {
+            DefKind::Fn(f) => BodyKind::Fn(f),
+            DefKind::Test { body, .. } => BodyKind::Test(*body),
+            DefKind::Const(c) => BodyKind::Initializer(c),
+            DefKind::Flow(f) => BodyKind::Flow(f),
+            DefKind::Struct(_)
+            | DefKind::Enum(_)
+            | DefKind::Alias(_)
+            | DefKind::Impl(_)
+            | DefKind::Effect { .. }
+            | DefKind::Unsupported(_) => return None,
+        })
     }
 
     /// The def is of an item whose heading a syntax error cut

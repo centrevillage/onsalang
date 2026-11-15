@@ -13,7 +13,7 @@ use onsa_diag::{Span, Stage};
 use onsa_syntax::ast::{Ast, ExprId, ExprKind, Lit, StrSeg};
 
 use crate::body::{BodyInfo, RowFrom, Target, root_of};
-use crate::def::DefKind;
+use crate::def::{BodyKind, DefKind};
 use crate::drop_alloc::{Drop, alloc_drops};
 use crate::ty::{EffectSet, Ty};
 use crate::{Analysis, DefId, Package, module_of_def};
@@ -26,6 +26,8 @@ pub(crate) struct Record<'a> {
     /// The body (`[0]`), then each anonymous function in it by its start.
     pub scopes: Vec<Scope>,
     pub uses: Vec<Use<'a>>,
+    /// The uses of each scope, by their indices in `uses` ([`Record::of_scope`]).
+    in_scope: Vec<Vec<u32>>,
 }
 
 /// What the uses in it are checked against (§8.1, §10): the body, or an
@@ -77,16 +79,17 @@ pub(crate) enum What<'a> {
 impl Use<'_> {
     /// The effects the use needs, by their declarations: the one test of
     /// what a use needs (M12).
-    pub(crate) fn effects<'b>(&'b self, a: &'b Analysis) -> &'b [DefId] {
-        match self.needs {
-            Needs::Row(row) => row.effects(),
-            Needs::Alloc => a.alloc.as_slice(),
-        }
+    pub(crate) fn effects(&self, a: &Analysis) -> impl Iterator<Item = DefId> + '_ {
+        let (row, alloc) = match self.needs {
+            Needs::Row(row) => (row.effects(), None),
+            Needs::Alloc => (&[][..], a.alloc()),
+        };
+        row.iter().copied().chain(alloc)
     }
 
     /// Whether the use needs the effect declared at `effect`.
     pub(crate) fn needs(&self, a: &Analysis, effect: DefId) -> bool {
-        self.effects(a).contains(&effect)
+        self.effects(a).any(|e| e == effect)
     }
 
     /// What the use does, as a clause the diagnostics of it (E0601, E0901)
@@ -121,6 +124,13 @@ impl Use<'_> {
 }
 
 impl<'a> Record<'a> {
+    /// The uses of the scope `scope` (its index in [`Record::scopes`]), in
+    /// the order of the record: of it alone, so the notes of the E0601 of
+    /// each scope read the record once in all (R-465).
+    pub(crate) fn of_scope(&self, scope: u32) -> impl Iterator<Item = &Use<'a>> {
+        self.in_scope[scope as usize].iter().map(|&i| &self.uses[i as usize])
+    }
+
     /// For each scope and each effect its row lacks, the first use of it in
     /// the scope by the order of the record (§8.1, E0601), by the scope: the
     /// one test of whether a use is out of the row, which the rt stage reads
@@ -136,7 +146,7 @@ impl<'a> Record<'a> {
                 continue;
             }
             // An effect no row can have in this version (E0200) counts too (S-1054).
-            for &e in u.effects(a).iter().filter(|&&e| !scope.row.admits(e)) {
+            for e in u.effects(a).filter(|&e| !scope.row.admits(e)) {
                 if seen.insert((u.scope, e)) {
                     first.push((u.scope, e, u));
                 }
@@ -161,11 +171,12 @@ pub(crate) fn records<'a>(pkg: &Package, a: &'a Analysis) -> Vec<Record<'a>> {
 /// `Random` the runner gives a `test` (§8.5), and the `Alloc` the compiler
 /// gives an initializer (§6.6).
 fn body_row(a: &Analysis, id: DefId) -> (EffectSet, bool) {
-    let given = match &a.def(id).kind {
-        DefKind::Fn(f) => return (f.effects.clone(), f.rt),
-        DefKind::Test { .. } => [a.alloc, a.modules.lang.random()],
+    let given = match a.body_kind(id) {
+        Some(BodyKind::Fn(f)) => return (f.effects.clone(), f.rt),
+        Some(BodyKind::Test(_)) => [a.alloc(), a.modules.lang.random()],
         // An E0601 of the row `{Alloc}` where it uses another (S-1055).
-        _ => [a.alloc, None],
+        Some(BodyKind::Initializer(_)) => [a.alloc(), None],
+        Some(BodyKind::Flow(_)) | None => bug(Some(a.def(id).span), "a record of no body the effects stage reads"),
     };
     let mut row = EffectSet::default();
     given.into_iter().flatten().for_each(|e| row.insert(e));
@@ -202,10 +213,12 @@ fn record<'a>(pkg: &Package, a: &'a Analysis, id: DefId) -> Option<Record<'a>> {
     }
     keyed.sort_unstable_by_key(|(k, _)| *k);
     let mut uses: Vec<Use> = keyed.into_iter().map(|(_, u)| u).collect();
-    for u in &mut uses {
+    let mut in_scope = vec![Vec::new(); scopes.len()];
+    for (i, u) in uses.iter_mut().enumerate() {
         u.scope = closures.around(u.at).map_or(0, |i| i as u32 + 1);
+        in_scope[u.scope as usize].push(i as u32);
     }
-    Some(Record { id, scopes, uses })
+    Some(Record { id, scopes, uses, in_scope })
 }
 
 /// The anonymous functions of a body (the names stage makes an entry of

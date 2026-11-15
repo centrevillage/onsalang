@@ -1,0 +1,14 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§8.1"]
+
+// W6-04 U7 (the break side), the contrast of meant_user_effect_expected, §18.1: the failed name `Tik` may have
+// meant an effect `Tik` alone, which no module declares, so the `Tick` that `g` needs is out of the row: an E0601.
+use kp.{Tik}   //~ E0302
+use m.{g}
+
+pub fn ap(cb: fn() uses {Tik}) { cb.() }
+
+pub fn f() {
+  ap(fn() { g() })   //~ E0601
+}
