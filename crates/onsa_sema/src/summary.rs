@@ -158,11 +158,6 @@ fn greatest<T: Ord + Copy>(a: Option<T>, b: Option<T>, top: T) -> Option<T> {
     a.zip(b).map(|(a, b)| a.max(b))
 }
 
-/// Whether what is made of two parts needs `Alloc` to drop ([`greatest`]).
-pub(crate) fn any(a: Option<bool>, b: Option<bool>) -> Option<bool> {
-    greatest(a, b, true)
-}
-
 /// One question, over types whose parameters have the facts `params`.
 pub(crate) struct Read<'a> {
     w: Walk<'a>,

@@ -604,7 +604,6 @@ impl<'p> Sema<'p> {
 
     /// `ty` as the diagnostics show it, its parameters by their names.
     pub(super) fn shown(&self, cx: &Cx<'p>, ty: TyId) -> String {
-        let param = |i: u32| cx.generics.get(i as usize).map_or_else(|| format!("<{i}>"), |g| g.name.clone());
-        self.a.types.display(ty, &|d| self.a.shown_name(d), &param)
+        self.a.types.display(ty, &|d| self.a.shown_name(d), &Analysis::param_names(&cx.generics))
     }
 }

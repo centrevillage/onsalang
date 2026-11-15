@@ -346,10 +346,8 @@ impl<'s> Reader<'s> {
     fn check(&self, rule: Rule, got: &Got) {
         let path = &got.path;
         let (message, notes) = match (rule, &got.value) {
-            (Rule::OneOf(values, also), Typed::Str(v)) if !values.contains(&v.as_str()) => {
-                not_one_of(v, path, values, also)
-            }
-            (Rule::OneOf(values, also), Typed::Strs(es)) => return self.each_one_of(es, path, values, also),
+            (Rule::OneOf(values, also), Typed::Str(v)) if !rule.accepts(v) => not_one_of(v, path, values, also),
+            (Rule::OneOf(..), Typed::Strs(es)) => return self.each_one_of(es, path, rule),
             (Rule::PackageName, Typed::Str(v)) if v == STD_PACKAGE => (
                 format!("the package name cannot be `{STD_PACKAGE}`"),
                 vec![format!("`{STD_PACKAGE}` is the name of the embedded standard library (§15.3)")],
@@ -385,11 +383,12 @@ impl<'s> Reader<'s> {
     /// one outside the list is an E1103 as a string's; one of the list equal
     /// to an earlier element is an E1103 at the later, with the place of the
     /// first in a note (§4.5, S-830). One outside the list is not counted.
-    fn each_one_of(&self, es: &[Spanned<String>], path: &str, values: &[&str], also: Option<&str>) {
+    fn each_one_of(&self, es: &[Spanned<String>], path: &str, rule: Rule) {
+        let Rule::OneOf(values, also) = rule else { return };
         let mut first: BTreeMap<&str, &Range<usize>> = BTreeMap::new();
         for e in es {
             let v = e.value.as_str();
-            if !values.contains(&v) {
+            if !rule.accepts(v) {
                 let (message, notes) = not_one_of(v, path, values, also);
                 self.e1103(e.span.clone(), message, &notes);
             } else if let Some(&at) = first.get(v) {
@@ -411,8 +410,7 @@ impl<'s> Reader<'s> {
             self.report(true, feature.diagnostic(Stage::Manifest, self.span(span.clone()), details))
         };
         // A value outside the closed list of the rule is an E1103 alone (S-827, S-831).
-        let unsupported =
-            |vs: &[&str], v: &str| !vs.contains(&v) && !matches!(row.rule, Rule::OneOf(all, _) if !all.contains(&v));
+        let unsupported = |vs: &[&str], v: &str| !vs.contains(&v) && row.rule.accepts(v);
         match (values, &got.value) {
             (Unsupported::Except(vs), Typed::Str(v)) if unsupported(vs, v) => at(&got.span, &[v]),
             (Unsupported::Except(vs), Typed::Strs(es)) => {

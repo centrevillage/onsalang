@@ -8,6 +8,15 @@ use onsa_diag::Edit;
 
 use super::*;
 
+/// What decided the type a branch of a merge is joined with (§4.7,
+/// S-1031), which the note names: an earlier branch, or an earlier element
+/// of an array.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Merge {
+    Branches,
+    Elements,
+}
+
 /// The form of what was found where a function type is expected, which
 /// chooses the help of [`Mismatch::Modes`] (§8.1).
 #[derive(Debug, Clone, Copy)]
@@ -25,8 +34,9 @@ pub(crate) enum Found<'p> {
 }
 
 impl Checker<'_> {
-    /// `d`, the E0401 of `actual` where `expected` is expected, which differ
-    /// in the modes of the parameters `ps` alone, with its help: the
+    /// `d`, the E0401 of `actual` where `expected` is expected (the type of
+    /// an earlier part of the `merge` it joins), which differ in the modes
+    /// of the parameters `ps` alone, with its help: the
     /// candidate that adds `move` when an anonymous function written as an
     /// argument has the default where each of them expects `move` (S-872:
     /// the fix leaves no parameter that differs, so the candidates end);
@@ -39,7 +49,7 @@ impl Checker<'_> {
     pub(crate) fn modes_help(
         &mut self,
         d: Diagnostic,
-        found: Found,
+        (found, merge): (Found, Option<Merge>),
         ps: &[usize],
         (actual, expected): (TyId, TyId),
     ) -> Diagnostic {
@@ -81,7 +91,12 @@ impl Checker<'_> {
             Found::Closure(_) => "; write each in the mode expected (`move x` takes the value, `x` borrows it)".into(),
             _ => String::new(),
         };
-        d.with_rule(format!("only {which} from the expected type, the default or `move` (§4.1){mend}"))
+        let from = match merge {
+            None => "the expected type",
+            Some(Merge::Branches) => "the earlier branches",
+            Some(Merge::Elements) => "the earlier elements",
+        };
+        d.with_rule(format!("only {which} from {from}, the default or `move` (§4.1){mend}"))
     }
 
     /// What is written of the path `e`: with the type arguments after it

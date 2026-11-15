@@ -394,7 +394,7 @@ fn value_of(
             && let ItemKind::Const(cd) = &ast.item(item).kind
         {
             let tspan = ast.ty(cd.ty).span;
-            let want = a.types.display(u32_, &|d| a.def(d).name.clone(), &|i| format!("<{i}>"));
+            let want = a.display_type(u32_);
             d = d.with_fix(Fix::replace(format!("make `{}` a `{want}`", def.name), tspan, want));
         }
         return Err(d.into());
@@ -488,7 +488,9 @@ fn judge_args(a: &Analysis, d: DefId, args: &[Option<TyId>], (found, span): (&st
     let Some(DefKind::Impl(i)) = a.def(d).owner.map(|o| &a.def(o).kind) else { return Ok(()) };
     let owner = format!("the `impl` of `{}`", head_of(a, i.self_ty).unwrap_or_default());
     let (under, std) = (crate::bounds::Bounds { a, generics: &[] }, a.modules.is_std(a.def(d).module));
-    let show = |t: TyId| a.types.display(t, &|d| a.def(d).name.clone(), &|i| format!("<{i}>"));
+    // The arguments are of the use, which may name the user's own type
+    // parameters: not by the names of the `impl`'s.
+    let show = |t: TyId| a.display_type(t);
     for (g, &arg) in i.generics.iter().zip(args) {
         let Some(arg) = arg else { continue };
         let out = crate::sig::no_kind_argument(&under, arg, g.lifts_escape());

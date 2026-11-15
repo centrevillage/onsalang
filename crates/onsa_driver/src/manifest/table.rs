@@ -110,6 +110,15 @@ pub enum Rule {
     Version,
 }
 
+impl Rule {
+    /// Whether the string `v` is in the closed list of the rule, as every
+    /// value of a rule with none is: the one test of the list, for the E1103
+    /// of a value outside it and the E0200 of a value in it (S-827, S-831).
+    pub fn accepts(self, v: &str) -> bool {
+        !matches!(self, Rule::OneOf(values, _) if !values.contains(&v))
+    }
+}
+
 /// Where a key is required (§15.3): one lacking is an E1104 at the key of
 /// its table ([`super::read`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -274,9 +274,7 @@ impl Builder<'_> {
     }
 
     fn ty(&self, t: onsa_sema::TyId, generics: &[onsa_sema::def::GenericDef]) -> String {
-        self.a.types.display(t, &|d| self.display_name(d), &|i| {
-            generics.get(i as usize).map(|g| g.name.clone()).unwrap_or_else(|| format!("<{i}>"))
-        })
+        self.a.types.display(t, &|d| self.display_name(d), &Analysis::param_names(generics))
     }
 
     /// Flow members print as `voice.State` (§11.6); everything else by its name.

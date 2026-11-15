@@ -13,8 +13,8 @@ use onsa_syntax::ast::{Ast, ExprId};
 use crate::body::{Dropped, LocalId, LocalInfo, Unbound, generics_of};
 use crate::kind::{Kind, params_in_body};
 use crate::modes::Proj;
-use crate::summary::{Facts, Read, any};
-use crate::ty::{Ty, TyId};
+use crate::summary::{Facts, Read};
+use crate::ty::{Env, Ty, TyId};
 use crate::walk::{Holds, Walk};
 use crate::{Analysis, DefId};
 
@@ -92,13 +92,12 @@ impl Root<'_> {
 }
 
 /// Whether the drop `d` needs `Alloc` (§12.2): the one test of a drop, by
-/// the facts of the body's type parameters in `frame` ([`Frame::body`]). A
-/// type that holds itself has no answer ([`crate::summary::Facts`]), so no use.
+/// the facts of the body's type parameters in `frame` ([`Frame::body`]).
 pub(crate) fn needs_alloc(a: &Analysis, frame: &Frame, d: &Drop) -> bool {
-    let drops = |t| frame.read.of(t).drops.unwrap_or(false);
+    let drops = |t| frame.drops(t);
     match d {
         Drop::Local(_, l) => drops(l.ty),
-        Drop::Rest { at, path, ty, .. } => rest_drops_alloc(&Walk::new(a), (*ty, frame, 0), path, *at).unwrap_or(false),
+        Drop::Rest { at, path, ty, .. } => rest_drops_alloc(&Walk::new(a), (*ty, frame, 0), path, *at),
         Drop::Value { ty, .. } | Drop::Temp { ty, .. } | Drop::Overwrite { ty, .. } | Drop::Unplaced { ty, .. } => {
             drops(*ty)
         }
@@ -182,69 +181,93 @@ pub(crate) fn copy_would_free(a: &Analysis, id: DefId, d: &Drop) -> Vec<usize> {
 }
 
 /// A declaration a path goes through ([`rest_drops_alloc`]): the arguments
-/// of its use, written in the frame `outer`, and their facts in `read`.
-/// Each is found once, so a long path through arguments that grow reads no
-/// more than the types it writes (S-782).
+/// of its use (`env`), written in the frame `outer` (under its `env`), and
+/// their facts in `read`. Each is found once, so a long path through
+/// arguments that grow reads no more than the types it writes (S-782).
 pub(crate) struct Frame<'f> {
     read: Read<'f>,
-    args: &'f [TyId],
+    env: Env<'f>,
     outer: Option<&'f Frame<'f>>,
 }
 
 impl<'f> Frame<'f> {
     /// Of a type written where the type parameters have the facts `params`:
-    /// in a body (a local, a value), or with none (an alias).
-    fn body(a: &'f Analysis, params: Vec<Facts>) -> Self {
-        Frame { read: Read::new(a, params), args: &[], outer: None }
+    /// in a body (a local, a value), or with none (an alias, a flow, which
+    /// has no type parameters). The root of a chain of frames.
+    pub(crate) fn body(a: &'f Analysis, params: Vec<Facts>) -> Self {
+        Frame { read: Read::new(a, params), env: Env { args: &[], outer: None, key: None }, outer: None }
     }
-}
 
-/// `t` written in `frame`: a parameter is followed to its argument, written
-/// in the frame around.
-fn follow<'f>(a: &'f Analysis, mut t: TyId, mut frame: &'f Frame<'f>) -> (&'f Ty, &'f Frame<'f>) {
-    loop {
-        match (a.types.get(t), frame.outer) {
-            (Ty::Param(i), Some(outer)) if (*i as usize) < frame.args.len() => {
-                (t, frame) = (frame.args[*i as usize], outer);
-            }
-            (ty, _) => return (ty, frame),
+    /// The frame of a declaration used here with the arguments `args`: the
+    /// one place that makes an inner frame, so its `env` and its `outer`
+    /// are of the same frame around.
+    fn enter(&'f self, a: &'f Analysis, args: &'f [TyId]) -> Frame<'f> {
+        let read = Read::new(a, args.iter().map(|&t| self.read.of(t)).collect());
+        Frame { read, env: Env { args, outer: Some(&self.env), key: None }, outer: Some(self) }
+    }
+
+    /// Whether dropping a value of the type `ty` written here needs `Alloc`
+    /// (§12.2): the one test of a type. One that holds itself has no answer
+    /// ([`Facts`]): it is an E0311 of its declaration (R-02), and its drop
+    /// is no use.
+    pub(crate) fn drops(&self, ty: TyId) -> bool {
+        self.read.of(ty).drops.unwrap_or(false)
+    }
+
+    /// `t` written here, read under the environment ([`crate::ty::Types::resolve`]):
+    /// a parameter is followed to its argument, written in a frame around
+    /// (the one of the environment it reaches). Only [`Frame::enter`] makes
+    /// an inner frame, so the `Env` that `resolve` returns is of a frame of
+    /// the chain.
+    fn follow(&'f self, a: &'f Analysis, t: TyId) -> (&'f Ty, &'f Frame<'f>) {
+        let (t, env) = a.types.resolve(t, Some(&self.env));
+        let mut frame = self;
+        while let Some(outer) = frame.outer
+            && !env.is_some_and(|e| std::ptr::eq(e, &frame.env))
+        {
+            frame = outer;
         }
+        debug_assert!(env.is_some_and(|e| std::ptr::eq(e, &frame.env)), "an environment of no frame of the chain");
+        (a.types.get(t), frame)
     }
 }
 
 /// Whether dropping what is left of a value of the type `t` (written in
 /// `frame`, `depth` named types in) when `path` is taken out of it at `at`
-/// needs `Alloc`: the parts beside each step ([`Read`]).
-fn rest_drops_alloc(w: &Walk, (t, frame, depth): (TyId, &Frame, u32), path: &[Proj], at: Span) -> Option<bool> {
-    let Some((step, more)) = path.split_first() else { return Some(false) };
-    let (ty, frame) = follow(w.a, t, frame);
+/// needs `Alloc`: the parts beside each step ([`Frame::drops`]; past a type
+/// that holds itself, none).
+fn rest_drops_alloc(w: &Walk, (t, frame, depth): (TyId, &Frame, u32), path: &[Proj], at: Span) -> bool {
+    let Some((step, more)) = path.split_first() else { return false };
+    let (ty, frame) = frame.follow(w.a, t);
     let taken = |name: &str| matches!(step, Proj::Field(n) if n == name);
     let inner;
     let (parts, frame, depth): (Vec<_>, _, _) = match (ty, step) {
         (Ty::Tuple(ts), Proj::Elem(i)) => {
             (ts.iter().enumerate().map(|(k, &t)| (t, k as u32 == *i)).collect(), frame, depth)
         }
-        (Ty::Named(d, args), _) => match w.enter(*d, args, None, (depth, None))? {
-            (Holds::Alias(t), _, depth) => return rest_drops_alloc(w, (t, &Frame::body(w.a, vec![]), depth), path, at),
-            (Holds::Fields(fs, _), _, depth) => {
-                let params = args.iter().map(|&t| frame.read.of(t)).collect();
-                inner = Frame { read: Read::new(w.a, params), args, outer: Some(frame) };
+        (Ty::Named(d, args), _) => match w.enter(*d, args, None, (depth, None)) {
+            None => return false,
+            Some((Holds::Alias(t), _, depth)) => {
+                return rest_drops_alloc(w, (t, &Frame::body(w.a, vec![]), depth), path, at);
+            }
+            Some((Holds::Fields(fs, _), _, depth)) => {
+                inner = frame.enter(w.a, args);
                 (fs.iter().map(|f| (f.ty, taken(&f.name))).collect(), &inner, depth)
             }
             _ => (Vec::new(), frame, depth),
         },
         _ => (Vec::new(), frame, depth),
     };
-    let (mut rest, mut on) = (Some(false), None);
+    let (mut rest, mut on) = (false, None);
     for (t, taken) in parts {
         match taken {
             true => on = Some(t),
-            false => rest = any(rest, frame.read.of(t).drops),
+            false => rest |= frame.drops(t),
         }
     }
-    if rest == Some(true) {
-        return rest;
+    if rest {
+        return true;
     }
-    let Some(t) = on else { onsa_diag::internal::bug(Some(at), "a field taken out that its type does not have") };
-    any(rest, rest_drops_alloc(w, (t, frame, depth), more, at))
+    let Some(t) = on else { bug(Some(at), "a field taken out that its type does not have") };
+    rest_drops_alloc(w, (t, frame, depth), more, at)
 }

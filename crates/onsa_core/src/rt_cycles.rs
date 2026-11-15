@@ -13,7 +13,7 @@
 
 use onsa_diag::{Code, Diagnostic, Stage};
 use onsa_sema::def::DefKind;
-use onsa_sema::{Analysis, Call, CycleCall, DefId, Package, cycle_calls, file_key};
+use onsa_sema::{Analysis, CycleCall, DefId, Package, RtCall, cycle_calls, file_key};
 
 use crate::ir::{ExprKind, FnDef, Module};
 use crate::walk::walk_block;
@@ -23,13 +23,13 @@ use crate::walk::walk_block;
 /// shares a function is one cycle (§18.1). The call it is at is the one of
 /// `onsa_sema::rt` ([`cycle_calls`]), of the written functions.
 pub(crate) fn rt_cycles(m: &Module, a: &Analysis, flat: &[&Package]) -> Vec<Diagnostic> {
-    let calls: Vec<Vec<Call>> = m.fns.iter().map(|f| rt_calls(m, f)).collect();
+    let calls: Vec<Vec<RtCall>> = m.fns.iter().map(|f| rt_calls(m, f)).collect();
     let file = |f: usize| written(a, &m.fns[f]).map(|decl| file_key(flat, &a.modules, a.def(decl).module));
     cycle_calls(&calls, file).iter().map(|first| diagnostic(m, a, first)).collect()
 }
 
 /// The calls of the `rt` function `f` of `rt` functions, in evaluation order.
-fn rt_calls(m: &Module, f: &FnDef) -> Vec<Call> {
+fn rt_calls(m: &Module, f: &FnDef) -> Vec<RtCall> {
     let mut calls = Vec::new();
     if let (true, Some(body)) = (f.rt, &f.body) {
         walk_block(body, &mut |e| {

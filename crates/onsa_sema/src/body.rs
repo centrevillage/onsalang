@@ -62,7 +62,7 @@ mod reread;
 mod statements;
 mod trial;
 
-pub(crate) use mode_note::Found;
+pub(crate) use mode_note::{Found, Merge};
 pub(crate) use operator_fix::UNSIGNED_NEGATION;
 
 // ---------------------------------------------------------------- tables
@@ -131,9 +131,9 @@ pub(crate) struct Checker<'a> {
     /// (the one whose E0401 has a candidate, §8.1; not one in parentheses).
     pub(crate) arg_closure: Option<ExprId>,
     /// The expected type of the expression being checked is the type of an
-    /// earlier branch of a merge that joins function types (§4.7, S-1031):
+    /// earlier part of a merge that joins function types (§4.7, S-1031):
     /// a function found there is joined, not fit ([`Self::check_expr_as`]).
-    pub(crate) joining: bool,
+    pub(crate) joining: Option<Merge>,
     /// A path checked as the base of type arguments written after it, with
     /// the span of both (the text of a wrapping function, S-874).
     pub(crate) written: Option<(ExprId, Span)>,
@@ -230,7 +230,7 @@ fn read_body<'c>(
         waits: Default::default(),
         why: None,
         arg_closure: None,
-        joining: false,
+        joining: None,
         written: None,
         flow: None,
         names,
@@ -487,15 +487,10 @@ impl<'a> Checker<'a> {
 
     pub(crate) fn display(&mut self, t: TyId) -> String {
         let r = self.infer.resolve(&mut self.a.types, t);
-        let names: Vec<String> = self.generics.iter().map(|g| g.name.clone()).collect();
         // A variable left open: its literal kind, else a hole (R-353; no internal `?N`).
         let var_name = |i: u32| self.infer.var_lit(i).map_or("_", LitKind::braced).to_string();
-        self.a.types.display_vars(
-            r,
-            &|d| self.a.def(d).name.clone(),
-            &|i| names.get(i as usize).cloned().unwrap_or_else(|| format!("<{i}>")),
-            &var_name,
-        )
+        let param = Analysis::param_names(&self.generics);
+        self.a.types.display_vars(r, &|d| self.a.def(d).name.clone(), &param, &var_name)
     }
 
     pub(crate) fn unit(&mut self) -> TyId {
@@ -551,7 +546,7 @@ impl<'a> Checker<'a> {
     ) -> Result<bool, Diagnostic> {
         let cause = self.cause(span, Some(expected));
         let types = &mut self.a.types;
-        let how = if self.joining { Fit::Join } else { Fit::Directed };
+        let how = if self.joining.is_some() { Fit::Join } else { Fit::Directed };
         let r = match fit {
             Some(_) => self.infer.fits(types, (actual, expected), how, &cause),
             None => self.infer.unify(types, actual, expected, &cause).map(|()| false),
@@ -573,7 +568,7 @@ impl<'a> Checker<'a> {
             && !self.mentions_error(actual)
             && !self.mentions_error(expected)
         {
-            return Err(self.modes_help(d, fit, ps, (actual, expected)));
+            return Err(self.modes_help(d, (fit, self.joining), ps, (actual, expected)));
         }
         // The other side of a float literal (§6.6, S-881).
         let other = match (found, wanted) {

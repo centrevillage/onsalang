@@ -16,7 +16,7 @@ use super::release::kept;
 use super::state::{LoopSum, Releases, Status};
 use super::walk::Pos;
 use crate::body::{BodyInfo, Copied, CopiedWhy, DropPoint, LocalId, generics_of, root_of};
-use crate::def::{DefKind, GenericDef};
+use crate::def::{BodyKind, GenericDef};
 use crate::names::body::{BodyNames, Origin};
 use crate::ty::TyId;
 use crate::{Analysis, DefId, Kind, Package, module_of_def};
@@ -40,13 +40,19 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
         };
         let _scope = onsa_diag::internal::item_scope(a.def(id).span);
         let mut w = Walker::new(a, (&module.parsed.ast, &module.text), (names, info, root), generics_of(a, id));
-        let n = if let DefKind::Fn(f) = &a.def(id).kind { f.params.len() as u32 } else { 0 };
+        // The parameters of a function; a flow's body drops its state
+        // freely (§12.4; R-453 is W7-04), and makes no table of drops.
+        let (n, drops_made) = match a.body_kind(id) {
+            Some(BodyKind::Fn(f)) => (f.params.len() as u32, true),
+            Some(BodyKind::Test(_) | BodyKind::Initializer(_)) => (0, true),
+            Some(BodyKind::Flow(_)) => (0, false),
+            None => bug(Some(a.def(id).span), "a body the modes stage reads of no body kind"),
+        };
         let mut run = w.start(w.params(), None, n);
         w.expr(&mut run, root, Pos::Return);
         w.body_end(&run, root);
         found.extend(w.m.found.into_iter().min_by(|x, y| x.order_in_file().cmp(&y.order_in_file())));
-        // Not of a flow's body (§12.4: its state drops freely; R-453 is W7-04).
-        if !matches!(a.def(id).kind, DefKind::Flow(_)) {
+        if drops_made {
             let ast = w.ast;
             let mut copied: Vec<Copied> =
                 (w.m.copied.into_iter()).map(|((root, at), why)| Copied { root, at, why }).collect();

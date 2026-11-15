@@ -110,7 +110,7 @@ pub use names::body::{named, receiver};
 pub use names::rename::rename_fixes;
 pub use names::{cyclic, file_key};
 pub use resolve::{Builtin, Entity, ModInfo, Modules, ResolveError};
-pub use rt::{Call, CycleCall, cycle_calls};
+pub use rt::{CycleCall, RtCall, cycle_calls};
 pub use ty::{Ty, TyId, Types};
 
 /// One parsed source file (spec §15.1: one file = one module).
@@ -352,8 +352,7 @@ impl Analysis {
             return self.def(*d).name.clone();
         }
         // `[T; N]`, `Span[T]` of std (§5.3): by the names of the parameters.
-        let param = |k: u32| i.generics.get(k as usize).map_or_else(|| format!("<{k}>"), |g| g.name.clone());
-        self.types.display(i.self_ty, &|d| self.def(d).name.clone(), &param)
+        self.display_under(i.self_ty, &i.generics)
     }
 
     pub fn defs_of_module(&self, m: ModId) -> impl Iterator<Item = (DefId, &Def)> {
@@ -450,30 +449,37 @@ impl Analysis {
     /// struct (`S.x`); of a member of an `impl`, with its type (`P.K`).
     pub fn shown_name(&self, id: DefId) -> String {
         let def = self.def(id);
-        match def.owner.map(|o| &self.def(o).kind) {
-            Some(DefKind::Flow(_) | DefKind::Struct(_)) => {
-                format!("{}.{}", self.def(def.owner.unwrap()).name, def.name)
-            }
-            Some(DefKind::Impl(i)) => match self.types.get(i.self_ty) {
-                Ty::Named(d, _) => format!("{}.{}", self.def(*d).name, def.name),
-                Ty::Error => def.name.clone(),
-                _ => format!("{}.{}", self.display_type(i.self_ty), def.name),
-            },
+        let Some(o) = def.owner else { return def.name.clone() };
+        match &self.def(o).kind {
+            DefKind::Impl(i) if matches!(self.types.get(i.self_ty), Ty::Error) => def.name.clone(),
+            DefKind::Flow(_) | DefKind::Struct(_) | DefKind::Impl(_) => format!("{}.{}", self.owner_name(o), def.name),
             _ => def.name.clone(),
         }
     }
 
-    /// Render a type with user types by their short names.
+    /// Render a type with user types by their short names, where the list of
+    /// its type parameters is not known (`<i>`, [`Analysis::param_names`]).
     pub fn display_type(&self, ty: TyId) -> String {
-        self.types.display(ty, &|d| self.def(d).name.clone(), &|i| format!("<{i}>"))
+        self.display_under(ty, &[])
     }
 
     /// `ty` of the body of `def`, its type parameters by the names it (or the
     /// `impl` of a method) writes (R-256), else as [`Analysis::display_type`].
     pub(crate) fn display_in(&self, ty: TyId, def: DefId) -> String {
-        let generics = body::generics_of(self, def);
-        let param = |i: u32| generics.get(i as usize).map_or_else(|| format!("<{i}>"), |g| g.name.clone());
-        self.types.display(ty, &|d| self.def(d).name.clone(), &param)
+        self.display_under(ty, &body::generics_of(self, def))
+    }
+
+    /// `ty` with user types by their short names and its type parameters by
+    /// the names of `generics` ([`Analysis::param_names`]).
+    pub fn display_under(&self, ty: TyId, generics: &[def::GenericDef]) -> String {
+        self.types.display(ty, &|d| self.def(d).name.clone(), &Self::param_names(generics))
+    }
+
+    /// The type parameter `i` by its name in `generics`, the list it is of
+    /// (R-256), else `<i>` (a list not known where it is shown). The one
+    /// naming of the type parameters a diagnostic and the interface show.
+    pub fn param_names(generics: &[def::GenericDef]) -> impl Fn(u32) -> String + '_ {
+        |i| generics.get(i as usize).map_or_else(|| format!("<{i}>"), |g| g.name.clone())
     }
 
     /// The body of `id`, by what it is: of a function, a `test`, an

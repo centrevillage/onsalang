@@ -44,7 +44,7 @@ pub(crate) fn check_all(pkg: &Package, a: &Analysis, records: &[Record]) -> Vec<
     }
     // E0903: one for each set of rt functions that reach each other (§10 rule 5, §18.1).
     let index: HashMap<DefId, usize> = fns.iter().enumerate().map(|(i, &f)| (f, i)).collect();
-    let calls: Vec<Vec<Call>> =
+    let calls: Vec<Vec<RtCall>> =
         edges.iter().map(|e| e.iter().filter_map(|&(at, to)| Some((*index.get(&to)?, at))).collect()).collect();
     let flat = flatten(pkg);
     let file = |f: usize| Some(file_key(&flat, &a.modules, a.def(fns[f]).module));
@@ -61,9 +61,9 @@ pub(crate) fn check_all(pkg: &Package, a: &Analysis, records: &[Record]) -> Vec<
     diags
 }
 
-/// A call in a graph of calls: the index of the function it calls, and
-/// where it is.
-pub type Call = (usize, Span);
+/// A call in the graph of the calls of `rt` functions ([`cycle_calls`]):
+/// the index of the function it calls, and where it is.
+pub type RtCall = (usize, Span);
 
 /// The call an E0903 is at: `caller` calls `callee` at `at`; `way` is the
 /// shortest way of calls in their set from `caller` through `callee` back
@@ -83,7 +83,7 @@ pub struct CycleCall {
 /// (of Core, what lowering alone makes, S-914). This stage and the E0903 of
 /// Core (`onsa_core::rt_cycles`) read it; in the order of the sets. O(F + C)
 /// for F functions and C calls, and a file key for each function in a set.
-pub fn cycle_calls(calls: &[Vec<Call>], file: impl Fn(usize) -> Option<String>) -> Vec<CycleCall> {
+pub fn cycle_calls(calls: &[Vec<RtCall>], file: impl Fn(usize) -> Option<String>) -> Vec<CycleCall> {
     let edges: Vec<Vec<usize>> = calls.iter().map(|c| c.iter().map(|&(to, _)| to).collect()).collect();
     let (comp, cycled) = cyclic(&edges);
     let mut firsts: BTreeMap<usize, ((String, u32, u32), CycleCall)> = BTreeMap::new();

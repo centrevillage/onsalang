@@ -18,7 +18,7 @@ pub(super) struct Arms<'x> {
     pub(super) st: TyId,
     pub(super) expected: Option<TyId>,
     /// The arms are joined (§4.7).
-    pub(super) join: bool,
+    pub(super) join: Option<Merge>,
 }
 
 impl<'a> Checker<'a> {

@@ -10,15 +10,15 @@ impl<'a> Checker<'a> {
     // ------------------------------------------------------------ expressions
 
     pub(crate) fn check_expr(&mut self, e: ExprId, expected: Option<TyId>) -> R<TyId> {
-        self.check_expr_as(e, expected, false)
+        self.check_expr_as(e, expected, None)
     }
 
-    /// `e`, with `expected` the type of an earlier branch of a merge that
+    /// `e`, with `expected` the type of an earlier part of a merge that
     /// joins function types when `join` (§4.7, S-1031): a function found in
     /// `e` is joined with it, and `e` has its own type. What gives `e`'s
     /// expected type on (a block to its end, parentheses, a merge) gives
     /// `join` too.
-    pub(crate) fn check_expr_as(&mut self, e: ExprId, expected: Option<TyId>, join: bool) -> R<TyId> {
+    pub(crate) fn check_expr_as(&mut self, e: ExprId, expected: Option<TyId>, join: Option<Merge>) -> R<TyId> {
         let outer = std::mem::replace(&mut self.joining, join);
         let t = self.check_expr_fit(e, expected);
         self.joining = outer;
@@ -42,7 +42,7 @@ impl<'a> Checker<'a> {
         // what is made of it (a tuple, an arm) has it; one joined has its
         // own, and `e` keeps its own (§8.1, §4.7).
         let found = self.record_within(e, t)?;
-        Ok(if fns && !self.joining { exp } else { found })
+        Ok(if fns && self.joining.is_none() { exp } else { found })
     }
 
     /// Whether a merge (`if`, `match`, an array) with the expected type
@@ -188,12 +188,12 @@ impl<'a> Checker<'a> {
                     };
                     return Ok(self.a.types.intern(Ty::Array(el, Len::Const(0))));
                 }
-                let join = self.undecided(exp_elem);
+                let join = self.undecided(exp_elem).then_some(Merge::Elements);
                 let mut ts = vec![self.check_expr_as(elems[0], exp_elem, join)?];
                 for &el in &elems[1..] {
                     ts.push(self.check_expr_as(el, self.join_hint(&ts, exp_elem), join)?);
                 }
-                let el = if join { self.join_arms(span, &ts)? } else { ts[0] };
+                let el = if join.is_some() { self.join_arms(span, &ts)? } else { ts[0] };
                 Ok(self.a.types.intern(Ty::Array(el, Len::Const(elems.len() as u32))))
             }
             ExprKind::Repeat { elem, len } => {
@@ -255,11 +255,12 @@ impl<'a> Checker<'a> {
                 self.check_expr(*cond, Some(bool_))?;
                 match else_ {
                     Some(el) => {
-                        let join = self.joining || self.undecided(expected);
+                        let join = self.joining.or(self.undecided(expected).then_some(Merge::Branches));
                         let t = self.check_expr_as(*then, expected, join)?;
                         // Merged with the other branch: not the reason of the outer expectation.
-                        let u = self.without_why(|ck| ck.check_expr_as(*el, Some(t), join))?;
-                        if join { self.join_arms(span, &[t, u]) } else { Ok(t) }
+                        let u =
+                            self.without_why(|ck| ck.check_expr_as(*el, Some(t), join.and(Some(Merge::Branches))))?;
+                        if join.is_some() { self.join_arms(span, &[t, u]) } else { Ok(t) }
                     }
                     None => {
                         let unit = self.unit();
@@ -544,7 +545,7 @@ impl<'a> Checker<'a> {
         let span = self.expr(e).span;
         let st = self.check_expr(scrutinee, None)?;
         let st = self.known(st, self.expr(scrutinee).span, "`match` operand")?;
-        let join = self.joining || self.undecided(expected);
+        let join = self.joining.or(self.undecided(expected).then_some(Merge::Branches));
         let (mut seen, mut types) = (Seen::default(), Vec::new());
         self.read_arms(&Arms { expr: e, arms, st, expected, join }, &mut seen, &mut types)?;
         if self.judges_arms(st)
@@ -562,7 +563,7 @@ impl<'a> Checker<'a> {
             }));
         }
         match expected {
-            _ if join && !types.is_empty() => self.join_arms(span, &types),
+            _ if join.is_some() && !types.is_empty() => self.join_arms(span, &types),
             Some(t) => Ok(t),
             None => Ok(self.unit()),
         }
@@ -607,11 +608,12 @@ impl<'a> Checker<'a> {
                 seen.add(p, self.ast.pat(arm.pat).span);
             }
             // The arms after the first are merged with it (not the outer reason).
-            let hint = if m.join { self.join_hint(types, expected) } else { expected };
+            let join = if types.is_empty() { m.join } else { m.join.and(Some(Merge::Branches)) };
+            let hint = if join.is_some() { self.join_hint(types, expected) } else { expected };
             let t = if hint == expected {
-                self.check_expr_as(arm.body, hint, m.join)?
+                self.check_expr_as(arm.body, hint, join)?
             } else {
-                self.without_why(|ck| ck.check_expr_as(arm.body, hint, m.join))?
+                self.without_why(|ck| ck.check_expr_as(arm.body, hint, join))?
             };
             types.push(t);
         }
@@ -634,22 +636,7 @@ impl<'a> Checker<'a> {
             Ty::Fn(f) => Some(f),
             _ => None,
         });
-        // Where the row comes from is kept for the notes of an E0601 (S-1041).
-        let (from, effects) = match effects {
-            // As the names stage read it (S-738).
-            Some(_) => (RowFrom::Written, self.names.effects.get(&e).cloned().ok_or_else(|| self.held_stop())?),
-            // A later branch of a merge takes no effects (§4.7, S-1032 (ii-3)),
-            // in a branch of it too (an `else if`, an `if` or a `match` in a
-            // branch, S-1061); the first has no type before it (none expected).
-            None if self.joining && !self.undecided(expected) => (RowFrom::Joining, crate::ty::EffectSet::default()),
-            None => match (&exp_fn, expected) {
-                (Some(f), Some(t)) => (RowFrom::Expected(t), f.effects.clone()),
-                (None, Some(t)) if matches!(self.ty(self.shallow(t)), Ty::Error) => {
-                    (RowFrom::Unread, crate::ty::EffectSet::default())
-                }
-                _ => (RowFrom::NoneExpected, crate::ty::EffectSet::default()),
-            },
-        };
+        let (from, effects, rt) = self.closure_row(e, effects.is_some(), exp_fn.as_ref(), expected)?;
         self.info.closure_rows.insert(e, from);
         if let (Some(f), Some(exp)) = (&exp_fn, expected)
             && f.params.len() != params.len()
@@ -690,8 +677,6 @@ impl<'a> Checker<'a> {
                 None => self.fresh(),
             },
         };
-        // A later branch of a merge takes no `rt` (§4.7).
-        let rt = !self.joining && exp_fn.as_ref().is_some_and(|f| f.rt);
         // The body runs in its own frame: `return` targets the closure (its
         // captures are the record's, §5.3).
         self.frames.push(Frame { ret: ret_ty, loop_depth: 0 });
@@ -725,6 +710,32 @@ impl<'a> Checker<'a> {
             self.fit_at(span, t, exp, Found::Closure(Some(params)))?;
         }
         Ok(t)
+    }
+
+    /// The row of the anonymous function `e` (`written` or not) with the
+    /// type `expected` (`exp_fn` when a function type), and where it comes
+    /// from, kept for the notes of an E0601 (S-1041); and whether it is
+    /// `rt`. A later branch of a merge takes neither (§4.7, S-1032 (ii-3)),
+    /// in a branch of it too (an `else if`, an `if` or a `match` in a
+    /// branch, S-1061); the first has no type before it (none expected).
+    fn closure_row(
+        &mut self,
+        e: ExprId,
+        written: bool,
+        exp_fn: Option<&FnTy>,
+        expected: Option<TyId>,
+    ) -> R<(RowFrom, crate::ty::EffectSet, bool)> {
+        let later = self.joining.is_some() && !self.undecided(expected);
+        let none = crate::ty::EffectSet::default();
+        let (from, row) = match (exp_fn, expected) {
+            // As the names stage read it (S-738).
+            _ if written => (RowFrom::Written, self.names.effects.get(&e).cloned().ok_or_else(|| self.held_stop())?),
+            _ if later => (RowFrom::Joining, none),
+            (Some(f), Some(t)) => (RowFrom::Expected(t), f.effects.clone()),
+            (None, Some(t)) if matches!(self.ty(self.shallow(t)), Ty::Error) => (RowFrom::Unread, none),
+            _ => (RowFrom::NoneExpected, none),
+        };
+        Ok((from, row, !later && exp_fn.is_some_and(|f| f.rt)))
     }
 
     /// The E0401 of an anonymous function with another number of parameters

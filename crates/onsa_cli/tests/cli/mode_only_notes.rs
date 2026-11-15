@@ -31,6 +31,9 @@
 //! - `note`: a note;
 //! - `none`: no note and no candidate;
 //! - `cand`: one candidate and no note.
+//! - `branch`, `element`, `expected`: as `fix`, and a note names what the type it differs from is of: an
+//!   earlier branch of a merge (`if`, `match`) or an earlier element of an array with no type expected
+//!   (§4.7), or the type expected; the others it does not name.
 //!
 //! Then the positions (from 1) of the parameters that differ, that a note names (by the number or the
 //! ordinal; the programs that name positions write no digit in the types).
@@ -118,6 +121,13 @@ fn judge(d: &Value, w: &Want) -> Vec<String> {
             want(!notes.iter().any(|n| n.contains('{')), "a note shows a body in braces (a wrapping function)");
         }
         "note" => want(!notes.is_empty(), "no note"),
+        "branch" | "element" | "expected" => {
+            want(notes.iter().any(|n| shows_wrap(n) && speaks_of_the_declaration(n)), "no note shows the mending");
+            for other in ["branch", "element", "expected"] {
+                let named = notes.iter().any(|n| n.contains(other));
+                want(named == (other == w.tag), &format!("a note names the {other} or not, against the tag"));
+            }
+        }
         "none" => {
             want(notes.is_empty(), "a note");
             want(fixes == 0, "a candidate");
@@ -925,6 +935,70 @@ fn the_candidate_of_an_empty_row_adds_move_and_the_program_is_clean() {
     assert!(edits.iter().any(|e| e.replace.contains("move")), "the candidate adds `move`");
 }
 
+// ---- 5. a merge with no type expected: what the type is of (W6-04 U9) -----------------------------------------
+
+const MERGES: &str = r#"pub fn k(x: U32) -> U32 { x }
+pub fn km(move x: U32) -> U32 { x }
+
+pub fn in_an_if(c: Bool) -> U32 {
+  let f = if c { k } else { km }                                 //~ E0401 branch 1
+  f.(1)
+}
+
+pub fn in_an_else_if(c: Bool, d: Bool) -> U32 {
+  let f = if c { k } else if d { k } else { km }                 //~ E0401 branch 1
+  f.(1)
+}
+
+pub fn in_an_arm(n: U32) -> U32 {
+  let f = match n {
+    0 => k,
+    1 => k,
+    _ => (km),                                                   //~ E0401 branch 1
+  }
+  f.(1)
+}
+
+pub fn in_an_array() -> U32 {
+  let fs = [k, k, km]                                            //~ E0401 element 1
+  fs[0].(1)
+}
+
+pub fn in_a_later_branch_of_an_element(c: Bool) -> U32 {
+  let fs = [k, if c { k } else { km }]                           //~ E0401 branch 1
+  fs[0].(1)
+}
+
+pub fn in_the_first_branch_of_an_element(c: Bool) -> U32 {
+  let fs = [k, if c { km } else { k }]                           //~ E0401 element 1
+  fs[0].(1)
+}
+
+pub fn in_the_first_arm_of_a_branch(c: Bool, n: U32) -> U32 {
+  let f = if c { k } else { match n { 0 => km, _ => k } }        //~ E0401 branch 1
+  f.(1)
+}
+
+pub fn in_a_branch_with_the_type_expected(c: Bool) -> U32 {
+  let f: fn(U32) -> U32 = if c { k } else { km }                 //~ E0401 expected 1
+  f.(1)
+}
+
+pub fn in_an_array_with_the_type_expected() -> U32 {
+  let fs: [fn(U32) -> U32; 2] = [k, km]                          //~ E0401 expected 1
+  fs[0].(1)
+}
+"#;
+
+#[test]
+fn a_merge_with_no_type_expected_notes_the_earlier_branch_or_element() {
+    // §4.7: with no type expected, a merge joins the function types of its branches (S-1031), so the type an
+    // item differs from is of an earlier branch, or an earlier element of an array; a branch in an element is
+    // compared with the element before it when it is the first branch, else with the branch before it. With
+    // a type expected, it is that type. The mending of the item is the same (§8.1, S-874).
+    check_program(MERGES);
+}
+
 // ---- the checks themselves ----------------------------------------------------------------------------------
 
 fn diag_with(notes: &[&str], fixes: usize) -> Value {
@@ -963,4 +1037,13 @@ fn the_checks_take_the_notes_of_the_shapes_the_spec_shows_and_refuse_the_others(
     assert!(judge(&diag_with(&[], 1), &want("cand", &[])).is_empty());
     assert!(!judge(&diag_with(&["a note"], 1), &want("cand", &[])).is_empty(), "no note beside a candidate");
     assert!(!judge(&diag_with(&[], 1), &want("none", &[])).is_empty(), "`none` has no candidate");
+    let branch =
+        diag_with(&["differs from the earlier branch; mend the declaration, or wrap it: `fn(x) { km(x) }`"], 0);
+    assert!(judge(&branch, &want("branch", &[])).is_empty());
+    assert!(!judge(&branch, &want("element", &[])).is_empty(), "a branch is no element");
+    assert!(!judge(&branch, &want("expected", &[])).is_empty(), "a branch is no type expected");
+    let expected = diag_with(&["differs from the expected type; mend the declaration, or wrap: `fn(x) { km(x) }`"], 0);
+    assert!(!judge(&expected, &want("branch", &[])).is_empty());
+    assert!(judge(&expected, &want("expected", &[])).is_empty());
+    assert!(!judge(&diag_with(&["differs from the earlier branch"], 0), &want("branch", &[])).is_empty());
 }

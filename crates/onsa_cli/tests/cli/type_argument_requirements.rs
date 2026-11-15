@@ -8,8 +8,9 @@
 //! value use is `mk(x)` for a `fn mk[T…](x: T)`. The two must give the same code (E0416, or E0710 for the
 //! implicit `Escape`) and name the same requirement (`T: Dup`, `T: Eq`, … in the message; E0710 is `Escape`).
 //!
-//! The grid: six type parameters (`T`, `T: Eq`, `T: Copy`, `T: Num`, `T: ?Dup + Eq`, `T: ?Escape + Eq`) against
-//! seven arguments (`Buf[F32]`, an Affine struct, `Option[Buf[F32]]`, `Span[F32]`, `I32`, `Bool`, `Str`) in the
+//! The grid: nine type parameters (`T`, `T: Eq`, `T: Copy`, `T: Num`, `T: ?Dup + Eq`, `T: ?Escape + Eq`, and the
+//! two bounds `T: Show + Copy`, `T: Copy + Show`, `T: Eq + Num`, whose bounds are judged in the order written)
+//! against seven arguments (`Buf[F32]`, an Affine struct, `Option[Buf[F32]]`, `Span[F32]`, `I32`, `Bool`, `Str`) in the
 //! seven places above, and against the three type parameters `U`, `U: ?Dup`, `U: ?Dup + Eq` as the argument of an
 //! `impl` heading, of a signature and of a value use (the arguments of an `impl` heading are the parameters of
 //! the `impl` only, §6.2).
@@ -23,9 +24,9 @@
 //! The cells split into three kinds of tests, so that a decision that moves one kind does not hide the others:
 //! - settled by the spec: the code and the requirement of every cell whose first unmet requirement is not a
 //!   `Dup` that the bound also asks for;
-//! - S-1021 (decided as (1)): a bound that itself needs `Dup` (`T: Copy`, `T: Num`) and an argument
-//!   that is not `Dup`: the first requirement reported is the implicit `Dup`, as the value use does. The
-//!   same in both places (the reading (3), the bound reported instead, was not taken);
+//! - S-1021 (decided as (3)): a bound that itself needs `Dup` (`T: Copy`, `T: Num`) and an argument
+//!   that is not `Dup`: the implicit `Dup` is not a requirement of its own and the bound written is reported
+//!   (§4.5). The same in both places;
 //! - S-1020 (decided as (2)): two type arguments of one type that each fail a requirement.
 //!
 //! Every input is checked in this process (`check_file`), nothing is written to the disk.
@@ -36,10 +37,10 @@ use crate::test_support::sweep::{Checked, check_file, ended_well, quoted};
 
 #[derive(Clone, Copy, PartialEq)]
 enum Bound {
-    None,
     Eq,
     Copy,
     Num,
+    Show,
 }
 
 /// A type parameter of `N` and `mk`: what is written in `[ ]`, and what it asks.
@@ -49,16 +50,20 @@ struct Param {
     escape: bool,
     /// The implicit `Dup` is asked (no `?Dup`).
     dup: bool,
-    bound: Bound,
+    /// The bounds written, in their order.
+    bounds: &'static [Bound],
 }
 
 const PARAMS: &[Param] = &[
-    Param { decl: "T", escape: true, dup: true, bound: Bound::None },
-    Param { decl: "T: Eq", escape: true, dup: true, bound: Bound::Eq },
-    Param { decl: "T: Copy", escape: true, dup: true, bound: Bound::Copy },
-    Param { decl: "T: Num", escape: true, dup: true, bound: Bound::Num },
-    Param { decl: "T: ?Dup + Eq", escape: true, dup: false, bound: Bound::Eq },
-    Param { decl: "T: ?Escape + Eq", escape: false, dup: true, bound: Bound::Eq },
+    Param { decl: "T", escape: true, dup: true, bounds: &[] },
+    Param { decl: "T: Eq", escape: true, dup: true, bounds: &[Bound::Eq] },
+    Param { decl: "T: Copy", escape: true, dup: true, bounds: &[Bound::Copy] },
+    Param { decl: "T: Num", escape: true, dup: true, bounds: &[Bound::Num] },
+    Param { decl: "T: ?Dup + Eq", escape: true, dup: false, bounds: &[Bound::Eq] },
+    Param { decl: "T: ?Escape + Eq", escape: false, dup: true, bounds: &[Bound::Eq] },
+    Param { decl: "T: Show + Copy", escape: true, dup: true, bounds: &[Bound::Show, Bound::Copy] },
+    Param { decl: "T: Copy + Show", escape: true, dup: true, bounds: &[Bound::Copy, Bound::Show] },
+    Param { decl: "T: Eq + Num", escape: true, dup: true, bounds: &[Bound::Eq, Bound::Num] },
 ];
 
 /// A type argument: how it is written, and what it is (§4.1 the kinds, §4.6, §6.3 the table of traits).
@@ -71,44 +76,36 @@ struct Arg {
     /// Not second-class (`Span` is).
     first_class: bool,
     dup: bool,
-    copy: bool,
-    eq: bool,
-    num: bool,
+    /// The traits of the grid it has.
+    has: &'static [Bound],
 }
 
-const fn arg(
-    label: &'static str,
-    ty: &'static str,
-    first_class: bool,
-    dup: bool,
-    copy: bool,
-    eq: bool,
-    num: bool,
-) -> Arg {
-    Arg { label, ty, declares: "", first_class, dup, copy, eq, num }
+const fn arg(label: &'static str, ty: &'static str, first_class: bool, dup: bool, has: &'static [Bound]) -> Arg {
+    Arg { label, ty, declares: "", first_class, dup, has }
 }
 
-const fn type_param(label: &'static str, declares: &'static str, dup: bool, eq: bool) -> Arg {
-    Arg { label, ty: "U", declares, first_class: true, dup, copy: false, eq, num: false }
+const fn type_param(label: &'static str, declares: &'static str, dup: bool, has: &'static [Bound]) -> Arg {
+    Arg { label, ty: "U", declares, first_class: true, dup, has }
 }
 
 /// `Buf` is Affine and has no `Eq`; `B` (declared below) is an Affine struct with no derive; `Option[Buf[F32]]` is
-/// Affine and has `Eq` only when its content has it; `Span` is second-class and has no trait; `Str` is Shared.
+/// Affine and has `Eq` and `Show` only when its content has them; `Span` is second-class and has no trait; `Str` is
+/// Shared. `Show` as §6.3: the numbers, `Bool` and `Str` have it, `Buf`, `Span` and a struct with no derive do not.
 const ARGS: &[Arg] = &[
-    arg("Buf[F32]", "Buf[F32]", true, false, false, false, false),
-    arg("Affine struct", "B", true, false, false, false, false),
-    arg("Option[Buf[F32]]", "Option[Buf[F32]]", true, false, false, false, false),
-    arg("Span[F32]", "Span[F32]", false, false, false, false, false),
-    arg("I32", "I32", true, true, true, true, true),
-    arg("Bool", "Bool", true, true, true, true, false),
-    arg("Str", "Str", true, true, false, true, false),
+    arg("Buf[F32]", "Buf[F32]", true, false, &[]),
+    arg("Affine struct", "B", true, false, &[]),
+    arg("Option[Buf[F32]]", "Option[Buf[F32]]", true, false, &[]),
+    arg("Span[F32]", "Span[F32]", false, false, &[]),
+    arg("I32", "I32", true, true, &[Bound::Copy, Bound::Eq, Bound::Num, Bound::Show]),
+    arg("Bool", "Bool", true, true, &[Bound::Copy, Bound::Eq, Bound::Show]),
+    arg("Str", "Str", true, true, &[Bound::Eq, Bound::Show]),
 ];
 
 /// A type parameter has the implicit `Dup` unless `?Dup`, `Eq` only when it says so, and no `Copy` or `Num`.
 const PARAM_ARGS: &[Arg] = &[
-    type_param("U", "U", true, false),
-    type_param("U: ?Dup", "U: ?Dup", false, false),
-    type_param("U: ?Dup + Eq", "U: ?Dup + Eq", false, true),
+    type_param("U", "U", true, &[]),
+    type_param("U: ?Dup", "U: ?Dup", false, &[]),
+    type_param("U: ?Dup + Eq", "U: ?Dup + Eq", false, &[Bound::Eq]),
 ];
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -148,24 +145,25 @@ const PARAM_PLACES: [Place; 3] = [Place::Heading, Place::SignatureParam, Place::
 
 /// The first requirement the argument does not meet, in the order of §4.5: the implicit `Escape`, the implicit
 /// `Dup`, the bound. The second-class argument given to `?Escape` is taken to meet the kind requirements (§4.5).
+/// A bound that needs `Dup` is reported in the place of the implicit `Dup` (§4.5, S-1021 (3)).
 fn unmet(p: &Param, a: &Arg) -> Option<&'static str> {
     if p.escape && !a.first_class {
         return Some("Escape");
     }
-    if p.dup && a.first_class && !a.dup {
+    if p.dup && a.first_class && !a.dup && !depends_on_s1021(p, a) {
         return Some("Dup");
     }
     bound_unmet(p, a)
 }
 
-/// The bound written, alone.
+/// The bounds written, alone: the first one unmet in the order written.
 fn bound_unmet(p: &Param, a: &Arg) -> Option<&'static str> {
-    match p.bound {
-        Bound::Eq if !a.eq => Some("Eq"),
-        Bound::Copy if !a.copy => Some("Copy"),
-        Bound::Num if !a.num => Some("Num"),
-        _ => None,
-    }
+    p.bounds.iter().find(|b| !a.has.contains(b)).map(|b| match b {
+        Bound::Eq => "Eq",
+        Bound::Copy => "Copy",
+        Bound::Num => "Num",
+        Bound::Show => "Show",
+    })
 }
 
 /// The argument fails the implicit `Dup` and the bound written together: the cell that §4.5 (S-1013 (i)) moves
@@ -174,9 +172,9 @@ fn dup_and_bound_unmet(p: &Param, a: &Arg) -> bool {
     unmet(p, a) == Some("Dup") && bound_unmet(p, a).is_some()
 }
 
-/// S-1021: the first requirement is the implicit `Dup` although the bound written asks for `Dup` itself.
+/// S-1021: the argument fails the implicit `Dup`, and a bound written asks for `Dup` itself (`Copy`, `Num`).
 fn depends_on_s1021(p: &Param, a: &Arg) -> bool {
-    unmet(p, a) == Some("Dup") && matches!(p.bound, Bound::Copy | Bound::Num)
+    p.dup && a.first_class && !a.dup && p.bounds.iter().any(|b| matches!(b, Bound::Copy | Bound::Num))
 }
 
 fn expected(p: &Param, a: &Arg) -> String {
@@ -288,7 +286,7 @@ fn the_grid_has_every_kind_of_answer() {
     let cells = grid().len();
     let per_param = ARGS.len() * PLACES.len() + PARAM_ARGS.len() * PARAM_PLACES.len();
     assert_eq!(cells, PARAMS.len() * per_param, "the number of cells");
-    for kind in ["no diagnostic", "E0710 Escape", "E0416 Dup", "E0416 Eq", "E0416 Copy", "E0416 Num"] {
+    for kind in ["no diagnostic", "E0710 Escape", "E0416 Dup", "E0416 Eq", "E0416 Copy", "E0416 Num", "E0416 Show"] {
         let n = grid().iter().filter(|s| s.want == kind).count();
         assert!(n >= 10, "the grid has {n} cells that want `{kind}`");
     }
@@ -304,13 +302,13 @@ fn a_value_use_names_the_first_unmet_requirement() {
 }
 
 #[test]
-fn s1021_a_value_use_names_the_implicit_dup_first_for_a_bound_that_needs_dup() {
-    // S-1021 (decided as (1)): `T: Copy` and `T: Num` with an argument that is not `Dup` (`Buf[F32]`,
-    // an Affine struct, `Option[Buf[F32]]`, and `U: ?Dup`, `U: ?Dup + Eq`) report `T: Dup` as §4.5 lists the
-    // requirements: the implicit `Dup` before the bound written. The value use does so (the reading (3),
-    // the bound reported here and in the type written, was not taken).
+fn s1021_a_value_use_names_the_bound_that_needs_dup() {
+    // S-1021 (decided as (3)): `T: Copy`, `T: Num` and the three with two bounds, with an argument that is not
+    // `Dup` (`Buf[F32]`, an Affine struct, `Option[Buf[F32]]`, and `U: ?Dup`, `U: ?Dup + Eq`) report the first
+    // bound written that it does not meet (`T: Copy`, `T: Num`; `T: Show` of `T: Show + Copy`, `T: Eq` of
+    // `T: Eq + Num`): a bound that needs `Dup` makes the implicit `Dup` no requirement of its own (§4.5).
     let cells: Vec<&Seen> = grid().iter().filter(|s| s.place.is_value() && depends_on_s1021(s.param, s.arg)).collect();
-    assert_eq!(cells.len(), 2 * (3 + 2), "the number of S-1021 value uses");
+    assert_eq!(cells.len(), 5 * (3 + 2), "the number of S-1021 value uses");
     let failed: Vec<&Seen> = cells.into_iter().filter(|s| s.want != s.got).collect();
     assert!(failed.is_empty(), "{}", report("the S-1021 value uses", &failed));
 }
@@ -318,8 +316,10 @@ fn s1021_a_value_use_names_the_implicit_dup_first_for_a_bound_that_needs_dup() {
 #[test]
 fn a_type_written_names_the_first_unmet_requirement_where_the_bound_is_not_also_unmet() {
     // Settled (§4.5) and right today: the six places and the three of a type parameter as the argument, for every
-    // cell but those that fail the implicit `Dup` and the bound written together (the next test).
-    let failed = differing(|s| !s.place.is_value() && !dup_and_bound_unmet(s.param, s.arg));
+    // cell but those that fail the implicit `Dup` and the bound written together (the next test) and those of
+    // S-1021 (the test after it).
+    let failed =
+        differing(|s| !s.place.is_value() && !dup_and_bound_unmet(s.param, s.arg) && !depends_on_s1021(s.param, s.arg));
     assert!(failed.is_empty(), "{}", report("a type written", &failed));
 }
 
@@ -327,21 +327,20 @@ fn a_type_written_names_the_first_unmet_requirement_where_the_bound_is_not_also_
 fn a_type_written_names_the_implicit_dup_before_a_bound_written() {
     // S-1013 (i): the cells that fail the implicit `Dup` and the bound written together (`T: Eq` and a `Buf[F32]`,
     // `T: ?Escape + Eq` and an Affine struct, `T: Eq` and `U: ?Dup`) have to name `Dup`, as a value use does; a type
-    // written names the bound today. Without the cells that S-1021 moves (the next test).
+    // written names the bound today. The cells of S-1021 (the next test) report the bound and are not of these.
     let cells: Vec<&Seen> =
         grid().iter().filter(|s| !s.place.is_value() && dup_and_bound_unmet(s.param, s.arg)).collect();
     assert!(!cells.is_empty(), "no cell");
-    let failed =
-        differing(|s| !s.place.is_value() && dup_and_bound_unmet(s.param, s.arg) && !depends_on_s1021(s.param, s.arg));
+    let failed = differing(|s| !s.place.is_value() && dup_and_bound_unmet(s.param, s.arg));
     assert!(failed.is_empty(), "{}", report("a type written", &failed));
 }
 
 #[test]
-fn s1021_a_type_written_names_the_implicit_dup_first_for_a_bound_that_needs_dup() {
-    // S-1021 (decided as (1)): as the value use above, in the six places and the two of a type
+fn s1021_a_type_written_names_the_bound_that_needs_dup() {
+    // S-1021 (decided as (3)): as the value use above, in the six places and the two of a type
     // parameter as the argument (`impl` heading and signature).
     let cells: Vec<&Seen> = grid().iter().filter(|s| !s.place.is_value() && depends_on_s1021(s.param, s.arg)).collect();
-    assert_eq!(cells.len(), 2 * (3 * 6 + 2 * 2), "the number of S-1021 cells of a type written");
+    assert_eq!(cells.len(), 5 * (3 * 6 + 2 * 2), "the number of S-1021 cells of a type written");
     let failed: Vec<&Seen> = cells.into_iter().filter(|s| s.want != s.got).collect();
     assert!(failed.is_empty(), "{}", report("the S-1021 cells", &failed));
 }

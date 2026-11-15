@@ -40,8 +40,9 @@ pub(crate) fn requirements(g: &GenericDef, of_seq: bool) -> Option<impl Iterator
         (false, true) => VIEW_OF_ARRAY,
         (false, false) => GENERIC_VIEW,
     };
-    // Of a sequence, a `Copy` bound is judged and not first its `Dup` (S-1040).
-    let dup = *dup && !(of_seq && bounds.contains(&Bound::Copy));
+    // A bound that needs `Dup` (`Copy`, a number trait) is judged and not
+    // first the implicit `Dup` (S-1021).
+    let dup = *dup && !bounds.iter().any(|&b| crate::traits::implies(b, Bound::Dup));
     let wants = dup.then_some(Bound::Dup).into_iter().chain(bounds.iter().copied());
     Some(std::iter::once(Requirement::Escape { rule, lifted }).chain(wants.map(Requirement::Bound)))
 }
