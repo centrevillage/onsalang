@@ -82,7 +82,7 @@ pub(super) fn path_separator(c: &Cursor) -> Option<Hit> {
     // would take in: no candidate (§18.1, R-447). A name goes on the path,
     // and so does a keyword with a `.` or `::` right after it (a module
     // `test`: `util::` and `test.X` on the next line, §2.3).
-    // SPEC-GAP(S-1069): which keywords after the gap keep the candidate.
+    // Which keywords after the gap keep the candidate: S-1069 (3).
     let goes_on =
         |n: usize| c.gap_after(n) == Gap::None && matches!(c.kind(n + 1), TokenKind::Dot | TokenKind::ColonColon);
     let keyword =
