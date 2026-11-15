@@ -101,11 +101,7 @@ pub(super) fn leading_symbol(c: &Cursor) -> Option<(RowId, Hit)> {
     let sign = matches!(c.kind(s), Minus | Caret);
     let fixes = match c.gap_after(s) {
         Gap::Newline if sign => return None,
-        Gap::Space if sign => {
-            let title = "join it to the line before";
-            let joined = move_up(c.file, c.text, c.all, title, c.span(prev).end, c.tokens[s], " ");
-            joined.filter(|_| joins_cleanly(c, prev, s)).into_iter().collect()
-        }
+        Gap::Space if sign => joined(c, prev, s).into_iter().collect(),
         gap => moved_to_the_line_before(c, s, prev, gap),
     };
     found(if sign { RowId::LeadingMinus } else { RowId::LeadingOperator }, c.span(s), fixes)
@@ -129,6 +125,16 @@ fn moved_to_the_line_before(c: &Cursor, s: usize, prev: usize, gap: Gap) -> Vec<
     fixes
 }
 
+/// The candidate that joins the line of the symbol `s` at its head to the
+/// line before, after its last token `prev`, when the chain reads
+/// ([`joins_cleanly`]): of a `- b` or `^ b` with a blank (S-123, S-124). The
+/// one place of it, for [`leading_symbol`] and the blank after a prefix
+/// (`super::spaces`).
+pub(super) fn joined(c: &Cursor, prev: usize, s: usize) -> Option<Fix> {
+    let title = "join it to the line before";
+    move_up(c.file, c.text, c.all, title, c.span(prev).end, c.tokens[s], " ").filter(|_| joins_cleanly(c, prev, s))
+}
+
 /// Whether the binary operator `s` at the head of a line, joined to the line
 /// before after its last token `prev`, leaves a chain that reads (§3.1,
 /// §18.1, R-443): the operands and operators from the start of the chain
@@ -138,7 +144,7 @@ fn moved_to_the_line_before(c: &Cursor, s: usize, prev: usize, gap: Gap) -> Vec<
 /// Where a scan stops at a token it does not know, the chain does not read
 /// (R-445: no candidate, as the comparisons of [`super::operators`]).
 /// Another symbol joins as it is.
-pub(super) fn joins_cleanly(c: &Cursor, prev: usize, s: usize) -> bool {
+fn joins_cleanly(c: &Cursor, prev: usize, s: usize) -> bool {
     let Some(op) = c.kind(s).binop() else { return true };
     let Some((operands, ops)) = chain_start(c, prev).and_then(|from| read_chain(c, from, s, op)) else {
         return false;

@@ -540,3 +540,31 @@ fn run(pkg: &Package, a: Analysis) -> Result<Analysis, base::Fallback> {
 pub(crate) fn module_of_def<'p>(pkg: &'p Package, a: &Analysis, id: DefId) -> Option<&'p Module> {
     a.ast(pkg, a.def(id).module)
 }
+
+/// The noun of the form `kind` of a value that is no integer, as a message
+/// names it (§7, §4.5): a float, string, character or `Bool` literal
+/// ([`literal_noun`]), a tuple, an array. The one table of
+/// `body::Checker::non_integer_form` and of a constant expression
+/// (`constarg`).
+pub(crate) fn non_integer_noun(kind: &onsa_syntax::ast::ExprKind) -> Option<&'static str> {
+    use onsa_syntax::ast::{ExprKind, Lit};
+    match kind {
+        ExprKind::Lit(Lit::Int { .. }) => None,
+        ExprKind::Lit(lit) => Some(literal_noun(lit)),
+        ExprKind::Tuple(_) => Some("a tuple"),
+        ExprKind::Array(_) | ExprKind::Repeat { .. } => Some("an array"),
+        _ => None,
+    }
+}
+
+/// The noun of the literal `lit`, as a message names it.
+pub(crate) fn literal_noun(lit: &onsa_syntax::ast::Lit) -> &'static str {
+    use onsa_syntax::ast::Lit;
+    match lit {
+        Lit::Int { .. } => "an integer literal",
+        Lit::Float { .. } => "a float literal",
+        Lit::Bool(_) => "a `Bool` literal",
+        Lit::Str(_) => "a string literal",
+        Lit::Char(_) => "a character literal",
+    }
+}

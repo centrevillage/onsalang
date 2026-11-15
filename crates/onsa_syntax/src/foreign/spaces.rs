@@ -193,9 +193,7 @@ pub(super) fn space_after_prefix(c: &Cursor) -> Option<(RowId, Hit)> {
     if kind != TokenKind::Bang
         && let Some((s, prev)) = c.head_symbol_after_operand().filter(|&(s, _)| s == c.at)
     {
-        let title = "join it to the line before";
-        let joined = crate::edits::move_up(c.file, c.text, c.all, title, c.span(prev).end, c.tokens[s], " ");
-        fixes.extend(joined.filter(|_| super::lines::joins_cleanly(c, prev, s)));
+        fixes.extend(super::lines::joined(c, prev, s));
         if kind == TokenKind::Minus {
             row = RowId::LeadingMinus;
         }

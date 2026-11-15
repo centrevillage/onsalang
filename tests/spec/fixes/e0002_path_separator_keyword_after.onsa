@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§2.5", "§15.1", "§18.1"]
+// fixes = 0
+
+// R-447 (§2.5, §15.1, §18.1, the row `path_separator` of spec/foreign-forms.toml): a `::` of a path with a line break or a
+// blank after it, and a keyword after that (`use std::` and then `pub fn f()` on the next line), has no candidate: the
+// keyword may start what follows the path, and the `.` written at the head of its line would take it in (`use std` and then
+// `.pub fn f()`, an error the candidate leaves). With no candidate, the form of the syntax stage is the general E0002, at the
+// `::`, with the message and the note of the row (§18.1). A name after the line break keeps the candidate:
+// gap_path_newline.onsa. One error per declaration unit (P-01).
+
+use std::   //~ E0002
+pub fn a_pub_fn() -> I32 { 1 }
+
+use std::   //~ E0002
+fn a_fn() -> I32 { 1 }
+
+use std::   //~ E0002
+pub struct AStruct { a: I32 }
+
+use std::   //~ E0002
+pub enum AnEnum { A }
+
+use std::   //~ E0002
+pub const A_CONST: I32 = 1
+
+use std::math::   //~ E0002
+pub fn the_last_of_two() -> I32 { 1 }
+
+use std:: pub fn a_blank() -> I32 { 1 }   //~ E0002
+
+pub fn in_a_body(x: I32) -> I32 {
+  let y = I32::   //~ E0002
+  return x
+}

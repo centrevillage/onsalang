@@ -27,9 +27,7 @@ pub(super) fn value_call(c: &Cursor, callee: (NodeKind, u32), first: usize, last
 /// takes the callee one level down unless parentheses go, and the check
 /// after it would report the E0006 of the same stage (S-236, R-200).
 fn too_deep(c: &Cursor, span: Span, edits: &[Edit]) -> bool {
-    let added = u32::from(edits.len() == 1);
-    let within = crate::units::Within::file(c.file, c.text, c.reach);
-    crate::nesting::nests_too_deep(c.text, within, span, edits, added)
+    c.nests_too_deep(span, edits, u32::from(edits.len() == 1))
 }
 
 /// The `(` of the callee `callee` that closes at `close`, when the

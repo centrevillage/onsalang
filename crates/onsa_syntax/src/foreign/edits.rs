@@ -35,16 +35,11 @@ pub(super) fn move_token_up(c: &Cursor, title: &str, i: usize) -> Option<Fix> {
     move_token_up_as(c, title, i, &c.text[s.start as usize..s.end as usize])
 }
 
-/// [`move_token_up`], the symbol written as `symbol` where it goes (` +`
-/// after a blank for a binary operator, ` ..<` for `..`, S-124, S-335).
+/// [`move_token_up`], the symbol written as `symbol` where it goes
+/// ([`crate::edits::move_token_up`]).
 pub(super) fn move_token_up_as(c: &Cursor, title: &str, i: usize, symbol: &str) -> Option<Fix> {
     let prev = c.sig_before(i)?;
-    let removed = alone_on_its_line(c, i).unwrap_or_else(|| {
-        let k = c.full[i] as usize + 1;
-        let end = c.all.get(k).filter(|t| t.kind == TokenKind::Whitespace).map_or(c.span(i).end, |t| t.span.end);
-        Span::new(c.file, c.span(i).start, end)
-    });
-    Some(Fix::new(title, vec![Edit::insert(c.file, c.span(prev).end, symbol), Edit::delete(removed)]))
+    Some(crate::edits::move_token_up(c.file, c.all, title, c.span(prev).end, c.full[i] as usize, symbol))
 }
 
 /// The candidate that moves the symbol `i` at the end of its line (a member

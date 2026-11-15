@@ -43,32 +43,47 @@ fn declared_default(lw: &mut Lowerer, d: DefId, ty: Ty, args: &[GenericArg], spa
     Ok(Expr::new(ty, span, ExprKind::Const(lw.const_id(d, args.to_vec(), span)?)))
 }
 
-/// The value of the field `name`, of the type `ty`, of the struct `id` that a
-/// struct literal leaves to its last `...`: the default it declares at the
-/// arguments of the type of the literal (§4.4, S-918), with no `default()`
-/// (a hand-written `impl Default` is not called). The checks left no other.
-pub(super) fn filled_field(lw: &mut Lowerer, id: TypeId, name: &str, ty: Ty, span: Span) -> R<Expr> {
-    let (d, args) = lw.type_decl(id, span)?;
-    let fields = lw.a.def(d).as_struct().map(|s| &s.fields);
-    let Some(Fields::Named(fields)) = fields else { return Err(internal(span, "a literal of no named fields")) };
-    let Some(default) = fields.iter().find(|f| f.name == name).and_then(|f| f.default) else {
-        return Err(internal(span, "missing field"));
-    };
-    declared_default(lw, default, ty, &args, span)
+/// The value of the field `name` of the struct `id` that a struct literal
+/// leaves to its last `...` ([`Unwritten::Literal`]).
+pub(super) fn filled_field(lw: &mut Lowerer, id: TypeId, name: &str, span: Span) -> R<Expr> {
+    let (fields, args) = named_fields(lw, id, span)?;
+    let Some(f) = fields.iter().find(|f| f.name == name) else { return Err(internal(span, "missing field")) };
+    field_default(lw, f, &args, span, Unwritten::Literal)
 }
 
-/// The value of the field `f` in a `default()`: the default it declares, else
-/// the default of its type (§6.4).
+/// The named fields of the struct `id` and the generic arguments of its declaration.
+fn named_fields<'a>(lw: &Lowerer<'a>, id: TypeId, span: Span) -> R<(&'a [FieldDef], Vec<GenericArg>)> {
+    let (d, args) = lw.type_decl(id, span)?;
+    match lw.a.def(d).as_struct().map(|s| &s.fields) {
+        Some(Fields::Named(fields)) => Ok((fields, args)),
+        _ => Err(internal(span, "a struct of no named fields")),
+    }
+}
+
+/// What gives the value of a field the source does not write.
+enum Unwritten {
+    /// A struct literal's last `...`: the default the field declares at the
+    /// arguments of the type of the literal (§4.4, S-918), with no
+    /// `default()` (a hand-written `impl Default` is not called). The checks
+    /// left no other.
+    Literal,
+    /// A derived `default()`: the default the field declares, else the
+    /// default of its type (§6.4).
+    Derived,
+}
+
+/// The value of the field `f` the source does not write, given by `by`.
 // SPEC-GAP(S-173): the default of a field that reads a constant made by this
 // `default()` (`struct P: Default { x: U32 = A.x }`, `const A: P = P.default()`)
 // is no E0312: `const_id` follows no call, so it stops, and the evaluation
 // panics at the cycle (`const_cycle`), as for `const A: U32 = f()` through a
 // function.
-fn field_default(lw: &mut Lowerer, f: &FieldDef, args: &[GenericArg], span: Span) -> R<Expr> {
+fn field_default(lw: &mut Lowerer, f: &FieldDef, args: &[GenericArg], span: Span, by: Unwritten) -> R<Expr> {
     let ty = lw.core_ty(f.ty, args, span)?;
-    match f.default {
-        Some(d) => declared_default(lw, d, ty, args, span),
-        None => default_value(lw, &ty, span),
+    match (f.default, by) {
+        (Some(d), _) => declared_default(lw, d, ty, args, span),
+        (None, Unwritten::Derived) => default_value(lw, &ty, span),
+        (None, Unwritten::Literal) => Err(internal(span, "missing field")),
     }
 }
 
@@ -79,12 +94,8 @@ fn valued(e: Expr) -> Block {
 
 /// The body of `default()` of the struct `id`.
 fn default_body(lw: &mut Lowerer, id: TypeId, span: Span) -> R<Block> {
-    let (d, args) = lw.type_decl(id, span)?;
-    let a = lw.a;
-    let Some(Fields::Named(fields)) = a.def(d).as_struct().map(|s| &s.fields) else {
-        return Err(internal(span, "a derived `default` of a type of no fields"));
-    };
-    let fields = fields.iter().map(|f| field_default(lw, f, &args, span)).collect::<R<_>>()?;
+    let (fields, args) = named_fields(lw, id, span)?;
+    let fields = fields.iter().map(|f| field_default(lw, f, &args, span, Unwritten::Derived)).collect::<R<_>>()?;
     Ok(valued(Expr::new(Ty::Struct(id), span, ExprKind::Struct { ty: id, fields })))
 }
 

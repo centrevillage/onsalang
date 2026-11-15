@@ -847,6 +847,15 @@ impl Cursor<'_> {
         self.open.iter().enumerate().rev().find(|(_, o)| o.0 == NodeKind::SourceFile || o.1 < at).map(|(k, o)| (k, o.0))
     }
 
+    /// Whether the candidate `edits` of the form at `span`, which add `added`
+    /// levels, take the unit of the failure over the nesting limit (§2.5,
+    /// §18.1), counted from the level the parser read to ([`Cursor::reach`]):
+    /// the one test of the candidates of the rows that add levels.
+    pub(crate) fn nests_too_deep(&self, span: Span, edits: &[Edit], added: u32) -> bool {
+        let within = crate::units::Within::file(self.file, self.text, self.reach);
+        crate::nesting::nests_too_deep(self.text, within, span, edits, added)
+    }
+
     /// What separates `tokens[i]` from the token after it ([`crate::layout::Lines::after`]).
     pub(crate) fn gap_after(&self, i: usize) -> Gap {
         self.lines.after(self.clamp(i))

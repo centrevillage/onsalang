@@ -77,9 +77,14 @@ pub(super) fn path_separator(c: &Cursor) -> Option<Hit> {
     }
     let edits = seps.iter().map(|&s| dot_for(c, s)).collect::<Option<Vec<_>>>()?.concat();
     let title = if seps.len() > 1 { "write each `::` as `.`" } else { "write `.`" };
+    // After a blank or a line break, a keyword may start what follows the
+    // path (`use std::` and `pub fn f()` on the next line), which the `.`
+    // would take in: no candidate (§18.1, R-447). A name goes on the path.
+    let keyword = |s: usize| c.gap_after(s).is_some() && partner(c, s).is_some_and(|n| c.kind(n).is_keyword());
+    let fixes = if seps.iter().any(|&s| keyword(s)) { Vec::new() } else { vec![Fix::new(title, edits)] };
     // The range of the form (S-316): from its first `::` to its last.
     let last = *seps.last().unwrap_or(&c.at);
-    hit(c.file_span(c.span(c.at).start, c.span(last).end), vec![Fix::new(title, edits)])
+    hit(c.file_span(c.span(c.at).start, c.span(last).end), fixes)
 }
 
 /// Whether the `::` at the cursor goes on a path ([`path_separator`], and

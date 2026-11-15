@@ -135,12 +135,9 @@ fn targets(a: &Analysis, ds: &[Diagnostic]) -> HashMap<usize, (Target, Span)> {
             DefKind::Enum(e) => e.variants.iter().map(|v| (v.span, v.name.as_str())).collect(),
             _ => Vec::new(),
         };
-        // A variant is in one space with the members of its enum (§6.2, S-737).
-        let members = a.modules.assoc.get(&d).filter(|_| matches!(def.kind, DefKind::Enum(_))).into_iter().flatten();
-        let members: Vec<&String> = members.map(|(n, _)| n).collect();
+        let space: Vec<&str> = enum_space(a, d).collect();
         for (i, key) in list.iter().flat_map(|&(s, n)| hits(s, n).into_iter().map(move |i| (i, s))) {
-            let names =
-                || list.iter().map(|(_, n)| n.to_string()).chain(members.iter().map(|n| n.to_string())).collect();
+            let names = || list.iter().map(|(_, n)| *n).chain(space.iter().copied()).map(str::to_string).collect();
             found.entry(i).or_insert_with(|| (Target::Member(names()), key));
         }
         for i in def.generics().iter().flat_map(|g| hits(g.span, &g.name)) {
@@ -201,8 +198,7 @@ fn clashes(a: &Analysis, spaces: &Spaces, target: &Target, at: Span, to: &str) -
 fn item_clashes(a: &Analysis, spaces: &Spaces, d: DefId, to: &str) -> bool {
     let def = a.def(d);
     if def.owner.is_some() {
-        let variant = |ty: DefId| a.def(ty).as_enum().is_some_and(|e| e.variants.iter().any(|v| v.name == to));
-        let clashes = |(t, ty): &Table| t.contains_key(to) || ty.is_some_and(variant);
+        let clashes = |(t, ty): &Table| t.contains_key(to) || ty.is_some_and(|ty| enum_space(a, ty).any(|n| n == to));
         return spaces.assoc.get(&d).is_some_and(|ts| ts.iter().any(clashes));
     }
     let used = |m: ModId| a.modules.get(m).uses.get(&def.name).and_then(|u| u.entity()) == Some(Entity::Def(d));
@@ -213,6 +209,16 @@ fn item_clashes(a: &Analysis, spaces: &Spaces, d: DefId, to: &str) -> bool {
         || seen.any(|m| {
             a.modules.declared_in_body(m, to, names).is_some() || spaces.bound.get(&m).is_some_and(|b| b.contains(to))
         })
+}
+
+/// The names of the one space of the variants and the associated items of
+/// the enum `ty` (§6.2, S-737), none for another type: what a variant or a
+/// member of it renamed would clash with. The one reading of the rule, for
+/// [`targets`] and [`item_clashes`].
+fn enum_space(a: &Analysis, ty: DefId) -> impl Iterator<Item = &str> {
+    let e = a.def(ty).as_enum();
+    let variants = e.into_iter().flat_map(|e| e.variants.iter().map(|v| v.name.as_str()));
+    variants.chain(e.and(a.modules.assoc.get(&ty)).into_iter().flat_map(|t| t.keys().map(String::as_str)))
 }
 
 /// A table of associated items, and the user type it is of.

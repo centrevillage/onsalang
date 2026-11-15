@@ -214,7 +214,7 @@ fn node(a: &mut Analysis, cx: &ConstCx, e: ExprId) -> Result<Got, ConstErr> {
             if let Lit::Int { value, .. } = lit {
                 return Ok(int_literal(*value, shown(), expr.span)?);
             }
-            let form = crate::body::literal_noun(lit);
+            let form = crate::literal_noun(lit);
             let msg = format!("a constant expression has the type `U32`; found {form} (§4.5)");
             Err(Diagnostic::new(Stage::Types, Code::E0401, expr.span, msg).with_found(shown()).into())
         }
@@ -230,7 +230,7 @@ fn node(a: &mut Analysis, cx: &ConstCx, e: ExprId) -> Result<Got, ConstErr> {
                 }
                 // A tuple, an array (a literal is `ConstForm::Lit`). A hole
                 // `_` (§18.1, E0421 at an expression) is E0417 here (§4.5, S-971).
-                kind => crate::body::non_integer_noun(kind).unwrap_or("an expression of another form"),
+                kind => crate::non_integer_noun(kind).unwrap_or("an expression of another form"),
             };
             Err(value_not_constant(shown(), noun, expr.span).into())
         }

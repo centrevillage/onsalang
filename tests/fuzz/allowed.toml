@@ -122,13 +122,6 @@ reasons = ["S-389", "S-380"]
 note = "a `||` at the head of a line in a pattern: one `|`, then the `|` at the head of the line (S-380), two steps as S-389 decided"
 
 [[allowed]]
-class = "fix|E0020|write `…`|E0002"
-left = "expected a declaration, found `…`"
-input = "tests/fuzz/784aa3c5.onsa"
-reasons = ["R-419"]
-note = "the `::` after the keyword `pub` and a line break (`pub::` and `fn` on the next line) gets the candidate of a path's `::`, which moves the `.` to the head of the next line and leaves an E0002 there; no target language writes `pub::`"
-
-[[allowed]]
 class = "fix|E0020|write the type arguments as `…`|E0401"
 left = "expected `…`, found `…`"
 input = "tests/fuzz/596f9321.onsa"

@@ -99,8 +99,7 @@ fn choice_and_tuple(c: &Cursor, row: RowId, first: usize, seps: &[usize], last: 
     let mut fixes = vec![Fix::new("write the patterns as a choice with `|`", seps.iter().map(|&s| bar(s)).collect())];
     if row == RowId::ArmCommaPatterns {
         let edits = vec![Edit::insert(c.file, c.span(first).start, "("), Edit::insert(c.file, c.span(last).end, ")")];
-        let within = crate::units::Within::file(c.file, c.text, c.reach);
-        if !crate::nesting::nests_too_deep(c.text, within, span, &edits, 1) {
+        if !c.nests_too_deep(span, &edits, 1) {
             fixes.push(Fix::new("write the patterns as one tuple pattern", edits));
         }
     }

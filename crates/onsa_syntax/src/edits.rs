@@ -45,20 +45,43 @@ pub(crate) fn move_up(
     if crate::lex(file, moved).literals.unclosed_in(0, moved.len() as u32) {
         return None;
     }
-    let after = rest[code_len..].first().copied();
+    Some(lifted(file, all, title, (end, format!("{sep}{moved}")), (at, at + code_len, code_end)))
+}
+
+/// The candidate that moves the token `all[at]` at the head of its line up
+/// to `end`, written there as `written` (a symbol, which holds no literal:
+/// ` +` after a blank for a binary operator, ` ..<` for `..`, S-124, S-335),
+/// as [`move_up`] moves code: what follows it on its line stays there.
+pub(crate) fn move_token_up(file: FileId, all: &[Token], title: &str, end: u32, at: usize, written: &str) -> Fix {
+    let stop = at + 1 + usize::from(all.get(at + 1).is_some_and(|t| t.kind == TokenKind::Whitespace));
+    lifted(file, all, title, (end, written.to_string()), (at, stop, all[at].span.end))
+}
+
+/// The candidate that writes `written` at `end` and takes out the code
+/// `all[at..stop]` (to `code_end`, the blanks after it to `stop`) from the
+/// head of its line: the line, its indentation and its newline when nothing
+/// else is on it, else the code and the blanks (a comment or code after it
+/// stays, after the indentation). The one removal of [`move_up`] and
+/// [`move_token_up`].
+fn lifted(
+    file: FileId,
+    all: &[Token],
+    title: &str,
+    (end, written): (u32, String),
+    (at, stop, code_end): (usize, usize, u32),
+) -> Fix {
+    let after = all.get(stop).copied();
     let removed = match after.map(|t| t.kind) {
-        // Nothing else on the line: remove the line, its indentation and its newline.
         Some(TokenKind::Newline) | Some(TokenKind::Eof) | None => {
             let line_start = match all[at.saturating_sub(1)] {
                 t if at > 0 && t.kind == TokenKind::Whitespace => t.span.start,
-                _ => next.span.start,
+                _ => all[at].span.start,
             };
             Span::new(file, line_start, after.map_or(code_end, |t| t.span.end))
         }
-        // A comment stays on the line, after the indentation.
-        Some(_) => Span::new(file, next.span.start, after.map_or(code_end, |t| t.span.start)),
+        Some(_) => Span::new(file, all[at].span.start, after.map_or(code_end, |t| t.span.start)),
     };
-    Some(Fix::new(title, vec![Edit::insert(file, end, format!("{sep}{moved}")), Edit::delete(removed)]))
+    Fix::new(title, vec![Edit::insert(file, end, written), Edit::delete(removed)])
 }
 
 /// The candidate that takes out the blanks `blanks` on the line of a postfix
@@ -110,7 +133,9 @@ pub(crate) fn insert_apart(file: FileId, offset: u32, s: &str, marks: &mut Inser
 /// stand, is read again as it was: one whose tokens join only through
 /// another edit stays as it was (`@ export()pub`: the removal of the
 /// arguments joins `export` and `pub`, not the removal of the blank after
-/// `@`, R-413). The cost is the edits that join times their lines.
+/// `@`, R-413). The last form is read once more, and a candidate in which
+/// an edit still joins is none. The cost is the edits that join times their
+/// lines.
 ///
 /// The one place of it.
 pub(crate) fn apart(file: FileId, text: &str, tokens: &[Token], fix: Fix, marks: &Insertions) -> Option<Fix> {
@@ -147,7 +172,8 @@ pub(crate) fn apart(file: FileId, text: &str, tokens: &[Token], fix: Fix, marks:
             edits[k] = apart_edit(&original[k], j)?;
         }
     }
-    Some(Fix::new(fix.title(), edits))
+    // The last form read once more: no edit joins in it.
+    joining(file, text, tokens, &edits).iter().all(|j| !j.any()).then(|| Fix::new(fix.title(), edits))
 }
 
 /// Which of the tokens right at an edit a candidate joins to the text round

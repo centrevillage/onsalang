@@ -139,20 +139,25 @@ impl Diverging {
     }
 
     fn read_expr(&mut self, ast: &Ast, e: ExprId, panic: bool, patch: Option<&Patch>) {
-        let diverges = panic
-            || match &ast.expr(e).kind {
-                ExprKind::Paren(x) => self.expr(*x),
-                ExprKind::Block(b) => self.block(ast, Patch::block(patch, e, b)),
-                ExprKind::If { then, else_: Some(other), .. } => self.expr(*then) && self.expr(*other),
-                ExprKind::Match { arms, .. } => {
-                    let arms = Patch::arms(patch, e, arms);
-                    !arms.is_empty() && arms.iter().all(|a| self.expr(a.body))
-                }
-                _ => false,
-            };
-        if diverges {
+        if panic || self.by_form(ast, e, patch) == Some(true) {
             self.exprs.insert(e);
         }
+    }
+
+    /// Whether `e` diverges by its form, of the form `patch` has of it, when
+    /// its form decides it (parentheses, a block, an `if`, a `match`): the
+    /// one list of those nodes, which [`Diverging::patched`] reads again.
+    fn by_form(&self, ast: &Ast, e: ExprId, patch: Option<&Patch>) -> Option<bool> {
+        Some(match &ast.expr(e).kind {
+            ExprKind::Paren(x) => self.expr(*x),
+            ExprKind::Block(b) => self.block(ast, Patch::block(patch, e, b)),
+            ExprKind::If { then, else_, .. } => else_.is_some_and(|other| self.expr(*then) && self.expr(other)),
+            ExprKind::Match { arms, .. } => {
+                let arms = Patch::arms(patch, e, arms);
+                !arms.is_empty() && arms.iter().all(|a| self.expr(a.body))
+            }
+            _ => return None,
+        })
     }
 
     /// Record the statement `s`, a `while`. The search for a `break` stops
@@ -191,9 +196,11 @@ impl Diverging {
                 self.read_while(ast, s, Some(patch));
             }
         }
-        if matches!(kind, ExprKind::Paren(_) | ExprKind::Block(_) | ExprKind::If { .. } | ExprKind::Match { .. }) {
+        if let Some(diverges) = self.by_form(ast, e, Some(patch)) {
             self.exprs.remove(&e);
-            self.read_expr(ast, e, false, Some(patch));
+            if diverges {
+                self.exprs.insert(e);
+            }
         }
     }
 }
