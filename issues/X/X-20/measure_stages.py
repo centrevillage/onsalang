@@ -4,6 +4,10 @@
   measure_stages.py scale BIN OUT.jsonl    a usual file (tests/spec/examples/voice.onsa) times 1 to 16
   measure_stages.py quad BIN OUT.jsonl [NAME...]  the quadratic forms left to X-20 by W4-05 to W4-10, and R-386
   measure_stages.py report OUT.jsonl...    the sums, the slowest inputs, the growth by family
+  measure_stages.py corpus|scale|quad BIN OUT.jsonl --vs BIN2 OUT2.jsonl [NAME...]  two binaries in turn
+      (W6-04 U17): each input is timed by BIN and BIN2 one after the other, the first of the two turned round
+      from input to input and from round to round, into OUT and OUT2 (the same inputs in the same order; a
+      family stops at the same size in both when either passes 10 s or fails); read them with `compare`
   measure_stages.py compare A.jsonl B.jsonl... [--phases P,Q]  versions side by side (W6-04 U11): per set and
       size (a corpus: the sum of the inputs every version timed, then its 20 slowest), each version's ms of the
       total and of the phases (P,Q, else those over 5 % somewhere; nan where a version has not the phase),
@@ -16,6 +20,7 @@ the process and its largest resident memory. Run it on a quiet machine, one at a
 parallel runs: the memory is measured too). A generated family stops growing past 10 s
 (rules/common.md 3). Generated inputs go to OUT's directory, under gen/.
 """
+import contextlib
 import itertools
 import json
 import os
@@ -52,8 +57,17 @@ def run_once(binary, path, lower=True):
     return rec
 
 
-def measure(binary, path, rounds, extra=None):
-    recs = [run_once(binary, path) for _ in range(rounds)]
+def measure(binaries, path, rounds, extra=None, turn=0):
+    """A line of each of `binaries`, the least of ROUNDS runs; in each round they run one after the other, in
+    their order when `turn` + the round is even, else the other way round (as `compare.py speed`'s `turn`)."""
+    recs = [[] for _ in binaries]
+    for r in range(rounds):
+        for i in (range(len(binaries)) if (turn + r) % 2 == 0 else reversed(range(len(binaries)))):
+            recs[i].append(run_once(binaries[i], path))
+    return [least(rs, rounds, extra) for rs in recs]
+
+
+def least(recs, rounds, extra):
     best = dict(recs[0])
     for r in recs[1:]:
         for k in ("wall", "cpu", "total_us"):
@@ -306,32 +320,36 @@ QUAD = [
 ]
 
 
-def run_families(binary, out, families, rounds, names):
+def run_families(binaries, outs, families, rounds, names):
     families = [f for f in families if not names or f[0] in names]
     def axis_of(sizes):
         return next((i for i in range(len(sizes[0])) if len({s[i] for s in sizes}) > 1), 0)
-    gen = os.path.join(os.path.dirname(os.path.abspath(out)), "gen")
+    gen = os.path.join(os.path.dirname(os.path.abspath(outs[0])), "gen")
     os.makedirs(gen, exist_ok=True)
-    with open(out, "w") as f:
+    with contextlib.ExitStack() as stack:
+        fs = [stack.enter_context(open(out, "w")) for out in outs]
         for name, axis, make, sizes in families:
             at = axis_of(sizes)
-            for args in sizes:
+            for k, args in enumerate(sizes):
                 path = os.path.join(gen, f"{name}_{'_'.join(map(str, args))}.onsa")
                 with open(path, "w") as g:
                     g.write(make(*args))
-                rec = measure(binary, path, rounds, {"set": name, "axis": axis, "size": args[at]})
+                recs = measure(binaries, path, rounds, {"set": name, "axis": axis, "size": args[at]}, k)
+                for f, rec, tag in zip(fs, recs, ["", " (--vs)"] if len(recs) > 1 else [""]):
+                    f.write(json.dumps(rec) + "\n")
+                    f.flush()
+                    print(f"{name} {args}{tag}: {rec.get('total_us', 0) / 1e6:.2f} s "
+                          f"{rec.get('outcome', rec.get('error'))}", flush=True)
+                if any(rec.get("total_us", 0) / 1e6 > GROW_LIMIT or "error" in rec for rec in recs):
+                    break  # both stop at this size
+
+
+def run_corpus(binaries, outs, rounds):
+    with contextlib.ExitStack() as stack:
+        fs = [stack.enter_context(open(out, "w")) for out in outs]
+        for k, (path, extra) in enumerate(corpus_inputs(binaries[0])):
+            for f, rec in zip(fs, measure(binaries, path, rounds, extra, k)):
                 f.write(json.dumps(rec) + "\n")
-                f.flush()
-                print(f"{name} {args}: {rec.get('total_us', 0) / 1e6:.2f} s {rec.get('outcome', rec.get('error'))}",
-                      flush=True)
-                if rec.get("total_us", 0) / 1e6 > GROW_LIMIT or "error" in rec:
-                    break
-
-
-def run_corpus(binary, out, rounds):
-    with open(out, "w") as f:
-        for path, extra in corpus_inputs(binary):
-            f.write(json.dumps(measure(binary, path, rounds, extra)) + "\n")
 
 
 # ---------------------------------------------------------------- report
@@ -435,6 +453,13 @@ def main():
         i = argv.index("--phases")
         phases = argv[i + 1].split(",")
         del argv[i:i + 2]
+    vs = []
+    if "--vs" in argv:
+        i = argv.index("--vs")
+        vs = argv[i + 1:i + 3]
+        del argv[i:i + 3]
+        if len(vs) < 2:
+            sys.exit("--vs BIN2 OUT2.jsonl: a second binary and its output")
     if not argv:
         sys.exit(__doc__)
     cmd, rest = argv[0], argv[1:]
@@ -443,11 +468,13 @@ def main():
     elif cmd == "compare" and rest:
         compare(rest, phases)
     elif cmd in ("corpus", "scale", "quad") and len(rest) >= 2:
-        binary = os.path.abspath(rest[0])
+        binaries, outs = [os.path.abspath(rest[0]), *map(os.path.abspath, vs[:1])], [rest[1], *vs[1:]]
+        if len({os.path.abspath(o) for o in outs}) < len(outs):
+            sys.exit("--vs: OUT2.jsonl is OUT.jsonl")
         if cmd == "corpus":
-            run_corpus(binary, rest[1], rounds)
+            run_corpus(binaries, outs, rounds)
         else:
-            run_families(binary, rest[1], SCALE if cmd == "scale" else QUAD, rounds, rest[2:])
+            run_families(binaries, outs, SCALE if cmd == "scale" else QUAD, rounds, rest[2:])
     else:
         sys.exit(__doc__)
 

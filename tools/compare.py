@@ -2,13 +2,14 @@
 """Before and after: the diagnostics, the formatting, the Core and the time of `onsa` binaries (rules/refactoring.md 8;
 X-9 X9-18, X9-19; X-6 B1).
 
-Its commands are `diags`, `fmt`, `cst`, `core`, `c`, `speed` and `probe` (COMMANDS, rules/tools.md 9.1); `compare.py help`
-shows them.
+Its commands are `diags`, `fmt`, `cst`, `core`, `c`, `fixes`, `speed` and `probe` (COMMANDS, rules/tools.md 9.1);
+`compare.py help` shows them.
 `diags` runs `check --json` of both binaries on every case of tests/: the seed files of the gate's fuzz
 (`fuzz.seeds`), a file in a package (a directory below tests/ with an `onsa.toml`, the outermost, as the case
 harness `onsa_tests::case::collect`) giving way to its directory. It lists the cases whose diagnostics differ in
 the code, the place, the message, the titles or the edits of the fix candidates, or the notes (their messages and
-places), and every case where a binary fell (exited other than 0, 1 and 2, ran out of time, or printed no JSON).
+places; the notes of one side only are listed below the pair, a line each), and every case where a binary fell
+(exited other than 0, 1 and 2, ran out of time, or printed no JSON).
 It exits 1 when a case differs (a case where both fell the same way is listed, but does not differ) or when no
 case gave JSON on both sides.
 `fmt` runs `onsa fmt` of both binaries on the fuzz's seed files, a file at a time, each run on its own copy in a
@@ -21,6 +22,10 @@ a file with a manifest in its `// onsa.toml` fragment as a package of its own wh
 its `[test]` table (the `manifest` of the list of `onsa_cases`: every file it builds is a case), and lists the builds whose exit code, output (the diagnostics) or files written (the C, the
 headers, `onsa_build.json`; of an object or an archive, the name) differ, the out directory named `<out>` and the
 package `<pkg>`. All four list the falls and exit 1 as `diags` does, and when no case ran to exit 0 in both binaries.
+`fixes` runs `--fix-contract` of two `onsa_cases` on each input given, a process an input (W6-04 U17: the
+inputs of a unit that changes the candidates), and sorts the inputs by the candidates before and after and by
+whether each kept the contract of §18.1; it lists those broken after, those with fewer candidates after whose
+candidates before all kept it, and the falls. Only a fall, or no candidate at all, makes it exit 1.
 `speed` measures as the removed `tools/speed.py` did (X9-19), the order of the binaries turned round every other round;
 the long inputs get `check` and `fmt --check`, shown apart, and in `all` the inputs of `core` that every binary checks
 to exit 0 and the first then lowers (exit 0) get `dump --core`: a binary before a fix may fall lowering an input that
@@ -61,6 +66,7 @@ CASE_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")  # a case of `probe`: a d
 DIAG_LINE = re.compile(r"^(.+?):(\d+):(\d+): \w+\[(\w+)\]", re.M)  # the text form: `file:line:col: error[E…]`
 BINARY = (".o", ".a")  # files of `build` compared by the name alone
 CASES = repo.CASES_CMD  # the list of the cases of `c` (the self-test gives its own)
+FIX_COUNTS = re.compile(r"fix-contract: \d+ file\(s\), (\d+) candidate\(s\), \d+ problem\(s\)")  # its last line
 
 
 def packaged(root, rels) -> list:
@@ -114,9 +120,19 @@ def check(binary, case, root):
         return f"not JSON (exit {r.returncode}){head}"
 
 
+def note_lines(before: str, after: str) -> list:
+    """The notes of a pair (`diagnostic`'s, its message and span) on one side only, counted as a multiset, a line
+    each with its place `file:line:col`: `-` before, `+` after (W6-04 U17)."""
+    b, a = (Counter(json.dumps(n, sort_keys=True) for n in json.loads(x)) for x in (before, after))
+    place = lambda s: f"{s.get('file')}:{s.get('line')}:{s.get('col')}" if s else "(no place)"  # noqa: E731
+    return [f"    {sign} {m} {place(s)}" for sign, d in (("-", b - a), ("+", a - b))
+            for m, s in map(json.loads, d.elements())]  # fmt: skip
+
+
 def changes(before, after) -> list:
     """The lines of a case listed: how a binary fell, or the diagnostics of one side only (`-` before, `+`
-    after), a pair at the same code and place in one line (`~`) naming the parts that differ."""
+    after), a pair at the same code and place in one line (`~`) naming the parts that differ, the notes on one side
+    only below it (`note_lines`)."""
     if isinstance(before, str) or isinstance(after, str):
         show = lambda x: x if isinstance(x, str) else f"{len(x)} diagnostic(s)"  # noqa: E731
         return [f"  before: {show(before)}", f"  after:  {show(after)}"]
@@ -129,7 +145,7 @@ def changes(before, after) -> list:
             continue
         new.remove(n)
         parts = [f"{name} {g[i]!r} -> {n[i]!r}" if i < 4 else name for i, name in PARTS if g[i] != n[i]]
-        out.append(f"  ~ {g[0]} {g[1]}: " + "; ".join(parts))
+        out += [f"  ~ {g[0]} {g[1]}: " + "; ".join(parts), *note_lines(g[5], n[5])]
     return out + [f"  + {n[0]} {n[1]} {n[2]}" for n in new] or ["  the same diagnostics in another order"]
 
 
@@ -338,6 +354,56 @@ def c(args) -> int:
         return compared(args, builds, run, build_lines, ok, f"the HEAD of tests (but {REVIEW}) and examples")
 
 
+def contract(binary, path):
+    """(the candidates, the problem lines) of `binary --fix-contract <path>` (an `onsa_cases`), or (a str) how it
+    fell: an exit other than 0 and 1, out of time, no line of the counts last, or a line of the file with no place
+    (the file cannot be read, or its check ends in an internal error)."""
+    r = outcome([binary, "--fix-contract", path], None)
+    if isinstance(r, str):
+        return r
+    *lines, last = r[1].decode("utf-8", "replace").rstrip("\n").split("\n")
+    counts, whole = FIX_COUNTS.match(last), next((x for x in lines if x.startswith(f"{path}: ")), None)
+    if r[0] == 2 or not counts or whole:
+        return f"exit {r[0]}: {(whole or last)[:100]}"
+    return int(counts[1]), lines
+
+
+def fixes(args) -> int:
+    before, after = (executable(args.parser_, b) for b in (args.before, args.after))
+    for x in args.inputs:
+        if not os.path.exists(x):
+            args.parser_.error(f"{x}: no such file or directory")
+    units = [str(f) for x in map(Path, args.inputs) for f in (sorted(x.rglob("*.onsa")) if x.is_dir() else [x])]
+    if not units:
+        print(f"fixes: no .onsa in {' '.join(args.inputs)}")
+        return 1
+    with ThreadPoolExecutor(args.jobs) as ex:
+        results = list(ex.map(lambda u: (contract(before, u), contract(after, u)), units))
+    groups, broke, lost, fell = {}, [], [], []
+    held = lambda r: "broke" if r[1] else "held"  # noqa: E731
+    for u, (b, a) in zip(units, results):
+        if isinstance(b, str) or isinstance(a, str):
+            fell += [(u, b, a)]
+            continue
+        groups.setdefault((b[0], a[0], held(b), held(a)), []).append(u)
+        broke += [(f"{u} (before {held(b)}, {b[0]} -> {a[0]})", a[1])] if a[1] else []
+        lost += [f"{u} {b[0]} -> {a[0]}"] if a[0] < b[0] and not b[1] else []
+    ran = [r for r in results if not any(isinstance(x, str) for x in r)]
+    sums = [sum(f(r[i]) for r in ran) for f in (lambda x: x[0], lambda x: len(x[1])) for i in (0, 1)]
+    print(f"{len(units)} inputs, {len(fell)} fell; candidates {sums[0]} -> {sums[1]}, problems {sums[2]} -> {sums[3]}")
+    print("candidates before -> after, before, after: inputs, the first")
+    for (cb, ca, hb, ha), us in sorted(groups.items()):
+        print(f"  {cb} -> {ca}, {hb}, {ha}: {len(us)}  {us[0]}")
+    print(f"broke after: {len(broke)}", *[x for u, lines in broke for x in (u, *(f"  {n}" for n in lines))], sep="\n")
+    print(f"fewer candidates after, before held (a candidate that held lost?): {len(lost)}", *lost, sep="\n")
+    show = lambda r: r if isinstance(r, str) else f"{r[0]} candidate(s), {len(r[1])} problem(s)"  # noqa: E731
+    print(f"fell: {len(fell)}", *[x for u, b, a in fell for x in (u, f"  before: {show(b)}", f"  after:  {show(a)}")],
+          sep="\n")  # fmt: skip
+    if not sums[0] + sums[1]:
+        print(f"fixes: no candidate in {' '.join(args.inputs)}")
+    return 1 if fell or not sums[0] + sums[1] else 0  # a difference is no failure; none judged is no pass
+
+
 def ok_run(argv) -> bool:
     """`argv` run in ROOT exits 0."""
     r = outcome(argv, ROOT)
@@ -524,6 +590,18 @@ def diags_args(p):
     p.set_defaults(parser_=p)
 
 
+def fixes_args(p):
+    p.add_argument("before", help="前の onsa_cases")
+    p.add_argument("after", help="後の onsa_cases")
+    p.add_argument("inputs", nargs="+", metavar="input", help="入力のファイルかディレクトリ（その下の全ての .onsa）")
+    p.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) // 2), help="同時に回す入力の数（既定: コアの数の半分）")
+    p.epilog = ("出力: 一行目に入力・落ちた数と、候補と問題の数の合計（前 -> 後）。次に（候補の数 前 -> 後、前、後）の組ごとの入力の数と最初の入力"
+                "（held は問題の行が無い、broke はある）。その後に、後で破った入力（前の状態と後の問題の行）、"
+                "候補が減り前は守っていた入力（守った候補が消えたかを見る）、落ちた入力（0・1 の外の終了、時間切れ、数の行が無い、"
+                "ファイルの位置の無い行: 読めないか内部エラー）。落ちた入力があるか、候補が前後とも 0 なら終了コード 1。違いは失敗にしない")
+    p.set_defaults(parser_=p)
+
+
 def speed_args(p):
     p.add_argument("mode", choices=["all", "long"],
                    help="all: check と fmt --check を tests・std・examples の全ての .onsa に、"
@@ -553,7 +631,7 @@ def probe_args(p):
 C = repo.Command  # (add_arguments, run, roles, purpose, when, example); the help is `help` (repo.parse_command)
 COMMANDS = {
     "diags": C(diags_args, diags, ("parent", "i", "b"),
-               "二つのバイナリの check --json を tests/ の事例（fuzz の種。パッケージはディレクトリで）に回し、診断（コード・位置・メッセージ・候補の題と編集・note）が違う事例と落ちた事例を並べる",
+               "二つのバイナリの check --json を tests/ の事例（fuzz の種。パッケージはディレクトリで）に回し、診断（コード・位置・メッセージ・候補の題と編集・note）が違う事例と落ちた事例を並べる。note が違う組は ~ の行の下に、前だけの note（-）と後だけの note（+）を文と位置で一行ずつ（同じ note の数の違いも）",
                "リファクタリングや診断の文面の直しの前後で、診断と候補が変わっていないか（変わった所が意図どおりか）を見るとき。前のバイナリは主のツリーの target/base/<基>/ にある（基は作業ツリーの git merge-base dev HEAD の短い SHA）",
                "compare.py diags <主のツリー>/target/base/<基>/onsa target/debug/onsa"),
     "fmt": C(diags_args, fmt, ("parent", "i", "b"),
@@ -576,6 +654,10 @@ COMMANDS = {
            "後端・降下の変更の前後で、生成する C とビルドの診断が変わっていないか（変わった所が意図どおりか）を見るとき。前のバイナリは diags と同じ。"
            "入力は HEAD のものなので、作業ツリーで書き換えた事例は前のまま比べる",
            "compare.py c <主のツリー>/target/base/<基>/onsa target/debug/onsa"),
+    "fixes": C(fixes_args, fixes, ("parent", "i", "b"),
+               "二つの onsa_cases の --fix-contract を入力ごとに一つずつ回し、候補の数（前 -> 後）と約束を守ったか破ったかの組に分け、後で破った入力と、候補が減り前は守っていた入力と、落ちた入力を並べる",
+               "修正候補を変える単位で、生成した入力の格子の前後の違いを、前の候補が約束（§18.1）を守っていたかで仕分けるとき（正しい候補が消えていないか）。前のバイナリは主のツリーの target/base/<基>/onsa_cases",
+               "compare.py fixes <主のツリー>/target/base/<基>/onsa_cases target/debug/onsa_cases <scratchpad>/grid"),
     "speed": C(speed_args, speed, ("parent", "i", "b"),
                "バイナリの時間を、回ごとに順を入れ替えて交互に測り、回ごとの最小（壁時計と cpu）を、引数の順の番号と経路の違う部分の名前で並べる",
                "リファクタリングの前後で性能が落ちていないかを測り、報告に並べるとき（rules/refactoring.md 8.2）。前のバイナリは diags と同じ",

@@ -155,7 +155,7 @@ class Compare(unittest.TestCase):
             "tests/b.onsa", "  ~ E0001 f:1:2-1:3: message 'm' -> 'n'",
             "tests/c.onsa", "  ~ E0001 f:1:2-1:3: fix edits",
             "tests/d.onsa", "  before: 1 diagnostic(s)", "  after:  signal 9",
-            "tests/p", "  ~ E0001 f:1:2-1:3: notes",
+            "tests/p", "  ~ E0001 f:1:2-1:3: notes", "    - opened here f:1:2", "    + opened here (no place)",
             "5 cases, 4 differ, 1 fell in one binary only, 0 fell in both"]))  # fmt: skip
         # A fall on both sides is listed; when every case fell, nothing was compared, which is no pass.
         broken = {"*": [2, "no manifest"]}
@@ -163,6 +163,80 @@ class Compare(unittest.TestCase):
         self.assertEqual((code, lines[:3], lines[-1]), (1, [
             "tests/a.onsa", "  before: not JSON (exit 2): no manifest", "  after:  not JSON (exit 2): no manifest"],
             "5 cases, 0 differ, 0 fell in one binary only, 5 fell in both"))  # fmt: skip
+
+    def test_diags_notes(self):
+        # W6-04 U17: below a pair whose notes differ, the notes of one side only (message and place, as `diagnostic`
+        # compares them), counted as a multiset: (a) one added, (b) one removed, (c) one of two the same removed,
+        # (d) the message and the notes differ.
+        span, at2 = {"file": "f", "line": 1, "col": 2, "end_line": 1, "end_col": 3}, {"file": "f", "line": 2, "col": 1}
+        n1, n2 = {"message": "opened here", "span": span}, {"message": "used after here", "span": at2}
+
+        def out(*notes, message="m"):
+            return [1, {"diagnostics": [{"code": "E0001", "message": message, "span": span, "notes": list(notes)}]}]
+
+        before = {"tests/a.onsa": out(n1), "tests/b.onsa": out(n1), "tests/c.onsa": out(n1, n1), "tests/d.onsa": out(n1),
+                  "tests/p": out(n1)}  # fmt: skip
+        after = {**before, "tests/a.onsa": out(n1, n2), "tests/b.onsa": out(), "tests/c.onsa": out(n1),
+                 "tests/d.onsa": out(n2, message="n")}  # fmt: skip
+        self.assertEqual(self.diags({"before": before, "after": after}), (1, [
+            "tests/a.onsa", "  ~ E0001 f:1:2-1:3: notes", "    + used after here f:2:1",
+            "tests/b.onsa", "  ~ E0001 f:1:2-1:3: notes", "    - opened here f:1:2",
+            "tests/c.onsa", "  ~ E0001 f:1:2-1:3: notes", "    - opened here f:1:2",
+            "tests/d.onsa", "  ~ E0001 f:1:2-1:3: message 'm' -> 'n'; notes", "    - opened here f:1:2",
+            "    + used after here f:2:1",
+            "5 cases, 4 differ, 0 fell in one binary only, 0 fell in both"]))  # fmt: skip
+
+    def test_fixes(self):
+        # W6-04 U17: `--fix-contract` of each binary on each input, a process an input (a directory: its .onsa
+        # files); the inputs sorted by the candidates and the contract before and after, those broken after, those
+        # with fewer candidates whose candidates before held, and the falls.
+        grid = self.root / "grid"
+        (grid / "sub").mkdir(parents=True)
+        for n in ("a", "b", "c", "d", "e", "sub/f"):
+            (grid / f"{n}.onsa").write_text("")
+        (grid / "note.txt").write_text("")
+        path = lambda n: str(grid / f"{n}.onsa")  # noqa: E731
+
+        def fc(n, k, *problems):  # what `--fix-contract <n>` prints: a line a problem, then the counts
+            lines = [f"{path(n)}:1:2 E0020 fix1 `t`: {p}" for p in problems]
+            last = f"fix-contract: 1 file(s), {k} candidate(s), {len(problems)} problem(s)"
+            return [0 if k and not problems else 1, "\n".join([*lines, last]) + "\n"]
+
+        none = {"*": [1, "fix-contract: 1 file(s), 0 candidate(s), 0 problem(s)\n"]}
+        before, after = self.fakes({
+            "before": {**none, path("a"): fc("a", 1, "x"), path("b"): fc("b", 1), path("c"): fc("c", 1),
+                       path("d"): fc("d", 1, "y"), path("e"): fc("e", 2)},
+            "after": {**none, path("a"): fc("a", 1), path("b"): fc("b", 1, "z"), path("e"): ["kill", ""]}},
+            "before", "after")  # fmt: skip
+        run = lambda *xs: quiet_out(compare.main, ["fixes", before, after, *xs, "--jobs", "2"])  # noqa: E731
+        self.assertEqual(run(str(grid)), (1, [
+            "6 inputs, 1 fell; candidates 4 -> 2, problems 2 -> 1",
+            "candidates before -> after, before, after: inputs, the first",
+            f"  0 -> 0, held, held: 1  {path('sub/f')}", f"  1 -> 0, broke, held: 1  {path('d')}",
+            f"  1 -> 0, held, held: 1  {path('c')}", f"  1 -> 1, broke, held: 1  {path('a')}",
+            f"  1 -> 1, held, broke: 1  {path('b')}",
+            "broke after: 1", f"{path('b')} (before held, 1 -> 1)", f"  {path('b')}:1:2 E0020 fix1 `t`: z",
+            "fewer candidates after, before held (a candidate that held lost?): 1", f"{path('c')} 1 -> 0",
+            "fell: 1", path("e"), "  before: 2 candidate(s), 0 problem(s)", "  after:  signal 9"]))  # fmt: skip
+        calls = sorted((self.bin / "calls").read_text().splitlines())
+        self.assertEqual(calls, sorted(f"{b} --fix-contract {path(n)}" for b in ("before", "after")
+                                       for n in ("a", "b", "c", "d", "e", "sub/f")))  # fmt: skip
+        # No fall: a difference is no failure. No candidate on either side is no pass; nor is an internal error (a line
+        # of the file with no place), an exit 2, or no line of the counts.
+        self.assertEqual(run(path("a"), path("b"))[0], 0)
+        (self.root / "none").mkdir()
+        self.assertEqual(run(str(self.root / "none")), (1, [f"fixes: no .onsa in {self.root / 'none'}"]))
+        self.assertEqual(run(path("sub/f")), (1, [
+            "1 inputs, 0 fell; candidates 0 -> 0, problems 0 -> 0",
+            "candidates before -> after, before, after: inputs, the first", f"  0 -> 0, held, held: 1  {path('sub/f')}",
+            "broke after: 0", "fewer candidates after, before held (a candidate that held lost?): 0", "fell: 0",
+            f"fixes: no candidate in {path('sub/f')}"]))  # fmt: skip
+        before, after = self.fakes({"before": {"*": [1, f"{path('a')}: internal error: boom\nfix-contract: 1 file(s), "
+                                                       "0 candidate(s), 1 problem(s)\n"]},
+                                    "after": {"*": [2, "usage"]}}, "before", "after")  # fmt: skip
+        self.assertEqual(run(path("a"))[1][-3:], [
+            f"  before: exit 1: {path('a')}: internal error: boom", "  after:  exit 2: usage",
+            f"fixes: no candidate in {path('a')}"])  # fmt: skip
 
     def test_fmt(self):
         # A file at a time (a package's files too), each run in its own directory; the tree is not written. The exit
@@ -425,7 +499,7 @@ class Compare(unittest.TestCase):
                 want = [n for n, c in compare.COMMANDS.items() if role in c.roles]
                 self.assertEqual((code, [x.split()[0] for x in lines if not x.startswith(" ")]), (0, want or ["（役割"]))
         names = list(compare.COMMANDS)
-        self.assertEqual(names, ["diags", "fmt", "cst", "core", "c", "speed", "probe"])
+        self.assertEqual(names, ["diags", "fmt", "cst", "core", "c", "fixes", "speed", "probe"])
         self.assertEqual([x.split()[0] for x in quiet_out(compare.main, ["help"])[1][: len(names)]], names)
         for argv, code in (([], 2), (["--help"], 0)):  # no command is a usage error; `--help` lists the commands
             buf = io.StringIO()
