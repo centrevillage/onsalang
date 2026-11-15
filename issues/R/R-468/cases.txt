@@ -1,0 +1,16 @@
+=== stdmod_unimported
+use m.{g}
+pub fn ap(h: fn() uses {m.Random}) { h.() }
+pub fn f() { ap(fn() { g() }) }
+--- m.onsa
+use std.random.Random
+pub fn g() uses {Random} {}
+=== std_pathnomod
+use m.{g}
+pub fn ap(h: fn() uses {kp.Random}) { h.() }
+pub fn f() { ap(fn() { g() }) }
+--- m.onsa
+use std.random.Random
+pub fn g() uses {Random} {}
+=== std_unimported_pkgpath
+use m.{g}
