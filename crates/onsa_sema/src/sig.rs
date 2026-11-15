@@ -134,10 +134,10 @@ pub(crate) fn collect_and_lower(pkg: &Package, mut a: Analysis) -> Result<Analys
     let pairs = s.lower_generated(&flows);
     s.a.known.ready = true;
     s.a.known.summaries.get_mut().clear();
+    // Each type is judged after those it names, and what is known of the
+    // types goes as one is read otherwise (`unread`): the kinds it reads are
+    // of the fields with an error as the error type (§18.1, R-464).
     s.wellformed();
-    // `wellformed` reads kinds, and turns the fields in error to the error type
-    // after: what it read is of the fields before that (§18.1).
-    s.a.known.summaries.get_mut().clear();
     s.check_trait_impls();
     let failures = crate::stages::Failures::of(pkg, s.a);
     for (def, owners, e) in std::mem::take(&mut s.held_consts) {

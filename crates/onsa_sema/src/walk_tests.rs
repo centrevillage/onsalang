@@ -139,7 +139,7 @@ fn what_is_kept_does_not_grow_with_the_roots() {
     }
     let a = check(&src);
     assert_eq!(codes(&a), []);
-    let kept = a.known.summaries.borrow().keys().filter(|&&d| a.is_new(d)).count();
+    let kept = a.known.summaries.borrow().decls.keys().filter(|&&d| a.is_new(d)).count();
     assert!(kept <= 7, "{kept} summaries kept");
     for n in 0..20 {
         let DefKind::Alias(ty) = a.def(def(&a, &format!("L{n}"))).kind else { panic!("L{n}") };
@@ -180,4 +180,61 @@ fn a_type_made_from_one_type_twice_is_read_once() {
         t = a.types.intern(Ty::Tuple(vec![t, t]));
     }
     assert_eq!((a.kind_of(t), needs_alloc_drop(&a, t)), (Some(Kind::Copy), false));
+}
+
+/// The facts of a type with no parameter in it are kept for every question
+/// (R-449): the judgment of `W[W[…[I32]]]`, which asks the kind of each
+/// part, reads the declarations in proportion to the depth, not its square.
+#[test]
+fn the_questions_of_a_nested_closed_type_grow_with_its_depth() {
+    let asked = |d: usize| {
+        let ty = format!("{}I32{}", "W[".repeat(d), "]".repeat(d));
+        let src = format!("pub struct W[T] {{ v: T }}\npub struct S {{ f: {ty} }}\n");
+        // Of this check alone (std is read before, once).
+        let run = move || {
+            check("");
+            let before = crate::summary::NAMED.with(|n| n.get());
+            let a = check(&src);
+            assert_eq!(codes(&a), []);
+            crate::summary::NAMED.with(|n| n.get()) - before
+        };
+        onsa_diag::stack::spawn("t", run).unwrap().join().unwrap()
+    };
+    let (d8, d16, d32) = (asked(8), asked(16), asked(32));
+    assert!(d16 > d8, "{d8} {d16}");
+    // Linear: the step from 16 to 32 is twice that from 8 to 16 (four times if square).
+    assert!((d32 - d16) * 2 <= (d16 - d8) * 5, "{d8} {d16} {d32}");
+}
+
+/// As a field of a cycle through no value turns to the error type (R-464),
+/// what is kept goes only if it holds a declaration of the cycle: the type a
+/// flow of it generates goes (its users after have no E0416 of the alias in
+/// error), and the summaries of a chain the cycles ask are read once for
+/// all of them, not again for each.
+#[test]
+fn a_cycle_forgets_only_what_holds_its_declarations() {
+    let src = "pub struct OC[T: Copy] { t: T }\npub type AE = Array[Buf[F32]]\n\
+        pub struct H { p: Ptr[OC[fa.Config]] }\n\
+        pub flow fa(x: F32 at sample, k: Ptr[H] at init, e: AE at init) -> F32 at sample { x }\n\
+        pub struct U { q: OC[fa.Config] }\npub fn f(x: OC[fa.Config]) -> I32 { 0 }\n";
+    let a = check(src);
+    let users = src.find("pub struct U").unwrap() as u32;
+    assert!(!a.diagnostics.is_empty() && a.diagnostics.iter().all(|d| d.span.start < users), "{:?}", a.diagnostics);
+    let asked = |n: usize| {
+        let chain: String = (0..n).map(|i| format!("pub struct C{i} {{ f: C{}, g: I32 }}\n", i + 1)).collect();
+        let ring = |i| format!("pub struct R{i}a {{ h: OC[C0], b: Ptr[R{i}b], w: Array[Buf[F32]] }}\n");
+        let rings: String = (0..n).map(|i| ring(i) + &format!("pub struct R{i}b {{ p: Ptr[R{i}a] }}\n")).collect();
+        let src = format!("pub struct OC[T: Copy] {{ t: T }}\n{rings}{chain}pub struct C{n} {{ g: I32 }}\n");
+        let run = move || {
+            check("");
+            let before = crate::summary::NAMED.with(|n| n.get());
+            assert_eq!(codes(&check(&src)).len(), n);
+            crate::summary::NAMED.with(|n| n.get()) - before
+        };
+        onsa_diag::stack::spawn("t", run).unwrap().join().unwrap()
+    };
+    let (n8, n16, n32) = (asked(8), asked(16), asked(32));
+    assert!(n16 > n8, "{n8} {n16}");
+    // Linear: the step from 16 to 32 is twice that from 8 to 16 (four times if square).
+    assert!((n32 - n16) * 2 <= (n16 - n8) * 5, "{n8} {n16} {n32}");
 }

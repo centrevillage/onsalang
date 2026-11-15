@@ -174,29 +174,150 @@ pub(super) enum Slot {
 }
 
 impl<'p> Sema<'p> {
-    /// The stage (`collect_and_lower`): the aliases first, each after those
-    /// its right side names, then the roots of every def.
+    /// The stage (`collect_and_lower`): the declarations of types first
+    /// ([`Self::types_first`]), then the roots of every other def.
+    /// What is known of the types is kept throughout: what was kept before
+    /// a component holds none of its declarations (they come after those it
+    /// names), and what one not of a cycle reads holds none of it (else it
+    /// would name itself). So as one of a cycle is read otherwise, only what
+    /// was kept since the cycle began that holds it (its flows' types too) goes
+    /// ([`crate::summary::Summaries::begin`]); the defs after the types
+    /// change no kind.
     pub(super) fn wellformed(&mut self) {
-        for d in std::mem::take(&mut self.a.decls.aliases) {
-            self.wellformed_alias(d);
+        let first = self.types_first();
+        for (k, &(d, comp, cycle)) in first.iter().enumerate() {
+            if k == 0 || first[k - 1].1 != comp {
+                let decls =
+                    first[k..].iter().take_while(|f| f.1 == comp && cycle).flat_map(|f| match &self.a.def(f.0).kind {
+                        DefKind::Flow(flow) => flow.members.iter().map(|m| m.1).chain([f.0]).collect(),
+                        _ => vec![f.0],
+                    });
+                let decls = decls.collect();
+                self.a.known.summaries.get_mut().begin(decls);
+            }
+            match self.a.def(d).kind {
+                DefKind::Alias(_) => self.wellformed_alias(d),
+                _ => self.wellformed_def(d),
+            }
         }
-        for d in self.a.new_defs() {
+        let first: HashSet<DefId> = first.into_iter().map(|f| f.0).collect();
+        self.a.known.summaries.get_mut().begin(HashSet::default());
+        for d in self.a.new_defs().filter(|d| !first.contains(d)) {
             self.wellformed_def(d);
         }
+    }
+
+    /// The aliases, structs, enums and flows (whose inputs are the fields of
+    /// the types they generate, §11.6), each after those its types name: a
+    /// field or an alias with an error is the error type to every type that
+    /// names it, whatever the order they are written in (§18.1, R-464). Those
+    /// of a cycle through no value (`A { b: Buf[B] }`, `B { a: Buf[A] }`) go
+    /// in the order the aliases are lowered in, then as written. Each with
+    /// its strongly connected component and whether it is a cycle.
+    // SPEC-GAP(S-1066): of a cycle through no value, those judged first have
+    // the E0416 and the others read them as the error type (`A` of the two
+    // above as written).
+    fn types_first(&mut self) -> Vec<(DefId, usize, bool)> {
+        let aliases = std::mem::take(&mut self.a.decls.aliases).into_iter();
+        let types = self.a.new_defs().filter(|&d| {
+            let def = self.a.def(d);
+            def.item.is_some() && matches!(def.kind, DefKind::Struct(_) | DefKind::Enum(_) | DefKind::Flow(_))
+        });
+        let nodes: Vec<DefId> = aliases.chain(types).collect();
+        let at: HashMap<DefId, usize> = nodes.iter().enumerate().map(|(k, &d)| (d, k)).collect();
+        let adj: Vec<Vec<usize>> =
+            nodes.iter().map(|&d| self.named_by(d).iter().filter_map(|n| at.get(n).copied()).collect()).collect();
+        let (comp, cycle) = crate::names::cyclic(&adj);
+        let mut order: Vec<usize> = (0..nodes.len()).collect();
+        order.sort_by_key(|&k| comp[k]);
+        order.into_iter().map(|k| (nodes[k], comp[k], cycle[k])).collect()
+    }
+
+    /// What the roots of `d` name: the aliases as written ([`Self::written`]),
+    /// the declarations as lowered (a type a flow generates, as its flow).
+    fn named_by(&self, d: DefId) -> Vec<DefId> {
+        let (Some(cx), Some(item)) = (self.cx_for(d, Vec::new(), None), self.a.def(d).item) else { return Vec::new() };
+        let roots: Vec<(TypeId, TyId)> = match (decls::item_kind(&cx.ast.item(item).kind), &self.a.def(d).kind) {
+            (ItemKind::TypeAlias { ty, .. }, DefKind::Alias(lowered)) => vec![(*ty, *lowered)],
+            _ => self.roots(&cx, d).into_iter().map(|r| (r.0, r.1)).collect(),
+        };
+        let (mut named, mut seen) = (Vec::new(), HashSet::default());
+        let (mut written, mut types): (Vec<TypeId>, Vec<TyId>) = roots.into_iter().unzip();
+        while let Some(t) = written.pop() {
+            named.extend(self.alias_at.get(&(cx.m, t)));
+            match &cx.ast.ty(t).kind {
+                TypeKind::Path { args: ts, .. } | TypeKind::Tuple(ts) => written.extend(ts),
+                TypeKind::Array { elem, .. } => written.push(*elem),
+                TypeKind::Fn { params, ret, .. } => written.extend(params.iter().map(|p| p.1).chain(*ret)),
+                _ => {}
+            }
+        }
+        while let Some(t) = types.pop() {
+            if let Ty::Named(n, _) = self.a.types.get(t) {
+                let def = self.a.def(*n);
+                named.push(def.owner.filter(|_| def.item.is_none()).unwrap_or(*n));
+            }
+            let parts = crate::ty::form_of(self.a.types.get(t)).map(|f| f.1);
+            types.extend(parts.into_iter().flatten().filter(|&p| seen.insert(p)));
+        }
+        named
     }
 
     /// The right side of the alias `d`: with an error, the alias is the
     /// error type to the types that name it after (S-757).
     fn wellformed_alias(&mut self, d: DefId) {
         let (Some(cx), Some(item)) = (self.cx_for(d, Vec::new(), None), self.a.def(d).item) else { return };
-        let (ItemKind::TypeAlias { ty, .. }, DefKind::Alias(lowered)) =
+        let (ItemKind::TypeAlias { ty, .. }, &DefKind::Alias(lowered)) =
             (decls::item_kind(&cx.ast.item(item).kind), &self.a.def(d).kind)
         else {
             return;
         };
-        let read = self.judge(&cx, *ty, *lowered, Pos::Alias).unwrap_or_else(|| self.a.types.error());
+        let read = self.judge(&cx, *ty, lowered, Pos::Alias).unwrap_or_else(|| self.a.types.error());
+        if read != lowered {
+            self.a.known.summaries.get_mut().forget_new();
+        }
         if let DefKind::Alias(t) = &mut self.a.defs[d.0 as usize].kind {
             *t = read;
+        }
+    }
+
+    /// The roots of the def `id` written in `cx`: each as written, as
+    /// lowered, its place and its slot.
+    fn roots(&self, cx: &Cx<'p>, id: DefId) -> Vec<(TypeId, TyId, Pos, Slot)> {
+        let Some(item) = self.a.def(id).item else { return Vec::new() };
+        // S-861: std alone writes an `impl` of `Span[T]` and a `target fn`
+        // that returns a `Span` (`slice`, §15.2): there a `Span` stands as
+        // at an argument.
+        let view = Pos::Arg(Mode::Borrow);
+        let std = self.a.modules.is_std(self.a.def(id).module);
+        match (decls::item_kind(&cx.ast.item(item).kind), &self.a.def(id).kind) {
+            (kind @ (ItemKind::Struct(_) | ItemKind::Enum(_)), def) => {
+                payloads(kind, def).into_iter().map(|(t, l, slot)| (t, l, Pos::Other, slot)).collect()
+            }
+            // `self` is not lowered with the parameters (`lower_params`).
+            (ItemKind::Fn(f), DefKind::Fn(fd)) => {
+                let params = f.params.iter().filter(|p| !matches!(p.name, ParamName::SelfParam(_)));
+                let roots = params.zip(&fd.params).enumerate();
+                let roots = roots.filter_map(|(k, (p, l))| Some((p.ty?, l.ty, Pos::Arg(p.mode), Slot::Param(k))));
+                let ret = if std && fd.target { view } else { Pos::Other };
+                roots.chain(f.ret.map(|t| (t, fd.ret, ret, Slot::Ret))).collect()
+            }
+            (ItemKind::Const(c), DefKind::Const(cd)) => vec![(c.ty, cd.ty, Pos::Other, Slot::Const)],
+            // S-772: the types of the inputs and the output of a flow
+            // are of its signature, none an argument (`Span[F32] at block` is an E0710).
+            (ItemKind::Flow(f), DefKind::Flow(fd)) => {
+                let params = f.params.iter().filter(|p| !matches!(p.name, ParamName::SelfParam(_)));
+                let inputs = params.filter_map(|p| p.ty).zip(&fd.inputs).enumerate();
+                let inputs = inputs.map(|(k, (t, i))| (t, i.ty, Pos::Other, Slot::Input(k)));
+                inputs.chain([(f.ret, fd.out, Pos::Other, Slot::Out)]).collect()
+            }
+            // The target of an `impl` whose members are read (S-756): an error of it is of
+            // the heading, the whole `impl` one unit (§18.1).
+            // S-769: it is a place of a type, not an argument: `impl voice.Out` is an E0710.
+            (ItemKind::Impl(i), DefKind::Impl(imp)) if crate::names::collect::reads_members(i) => {
+                vec![(i.self_ty, imp.self_ty, if std { view } else { Pos::Other }, Slot::Target)]
+            }
+            _ => Vec::new(),
         }
     }
 
@@ -204,48 +325,12 @@ impl<'p> Sema<'p> {
     /// with an error is the diagnostic of its unit.
     fn wellformed_def(&mut self, id: DefId) {
         let def = self.a.def(id);
-        let Some(item) = def.item else { return };
         let generics = match (&def.kind, def.owner) {
             (DefKind::Const(_), Some(o)) => self.a.def(o).generics().to_vec(),
             _ => def.generics().to_vec(),
         };
         let Some(cx) = self.cx_for(id, generics, None) else { return };
-        // S-861: std alone writes an `impl` of `Span[T]` and a `target fn`
-        // that returns a `Span` (`slice`, §15.2): there a `Span` stands as
-        // at an argument.
-        let view = Pos::Arg(Mode::Borrow);
-        let std = self.a.modules.is_std(self.a.def(id).module);
-        let roots: Vec<(TypeId, TyId, Pos, Slot)> =
-            match (decls::item_kind(&cx.ast.item(item).kind), &self.a.def(id).kind) {
-                (kind @ (ItemKind::Struct(_) | ItemKind::Enum(_)), def) => {
-                    payloads(kind, def).into_iter().map(|(t, l, slot)| (t, l, Pos::Other, slot)).collect()
-                }
-                // `self` is not lowered with the parameters (`lower_params`).
-                (ItemKind::Fn(f), DefKind::Fn(fd)) => {
-                    let params = f.params.iter().filter(|p| !matches!(p.name, ParamName::SelfParam(_)));
-                    let roots = params.zip(&fd.params).enumerate();
-                    let roots = roots.filter_map(|(k, (p, l))| Some((p.ty?, l.ty, Pos::Arg(p.mode), Slot::Param(k))));
-                    let ret = if std && fd.target { view } else { Pos::Other };
-                    roots.chain(f.ret.map(|t| (t, fd.ret, ret, Slot::Ret))).collect()
-                }
-                (ItemKind::Const(c), DefKind::Const(cd)) => vec![(c.ty, cd.ty, Pos::Other, Slot::Const)],
-                // S-772: the types of the inputs and the output of a flow
-                // are of its signature, none an argument (`Span[F32] at block` is an E0710).
-                (ItemKind::Flow(f), DefKind::Flow(fd)) => {
-                    let params = f.params.iter().filter(|p| !matches!(p.name, ParamName::SelfParam(_)));
-                    let inputs = params.filter_map(|p| p.ty).zip(&fd.inputs).enumerate();
-                    let inputs = inputs.map(|(k, (t, i))| (t, i.ty, Pos::Other, Slot::Input(k)));
-                    inputs.chain([(f.ret, fd.out, Pos::Other, Slot::Out)]).collect()
-                }
-                // The target of an `impl` whose members are read (S-756): an error of it is of
-                // the heading, the whole `impl` one unit (§18.1).
-                // S-769: it is a place of a type, not an argument: `impl voice.Out` is an E0710.
-                (ItemKind::Impl(i), DefKind::Impl(imp)) if crate::names::collect::reads_members(i) => {
-                    vec![(i.self_ty, imp.self_ty, if std { view } else { Pos::Other }, Slot::Target)]
-                }
-                _ => Vec::new(),
-            };
-        for (t, ty, pos, slot) in roots {
+        for (t, ty, pos, slot) in self.roots(&cx, id) {
             match self.judge(&cx, t, ty, pos) {
                 None => {
                     // A field or a payload with an error is not read: the error type
@@ -264,8 +349,10 @@ impl<'p> Sema<'p> {
 
     /// The root `slot` of `id` names an alias with an error: it is read as
     /// `error`, that alias the error type in it, by the later stages (its
-    /// body, S-757).
+    /// body, S-757). What is known of the types that may hold it goes
+    /// ([`Self::wellformed`]).
     fn unread(&mut self, id: DefId, slot: Slot, error: TyId) {
+        self.a.known.summaries.get_mut().forget_new();
         // The fields an input of a flow gives its items (`Params`, `Config`,
         // made before, §11.6) are read as the input is.
         if let (DefKind::Flow(f), Slot::Input(k)) = (&self.a.def(id).kind, slot) {

@@ -324,7 +324,7 @@ struct Failing {
 /// `S3[T1: ?Dup] { w: Array[T1] }` (the elements of `Array` are `Dup`) or `B[T1] { w: Buf[T1] }` (the elements
 /// of `Buf` are `Copy`), and the users ask `Copy` of it (`OC[T: Copy]`) in a field, in a variant and in a
 /// signature.
-const FIELD_ERRORS: [Failing; 4] = [
+const FIELD_ERRORS: [Failing; 9] = [
     Failing {
         name: "R-464 a: a struct, a signature and a struct that use the type of the failed field",
         blocks: &[
@@ -365,6 +365,62 @@ const FIELD_ERRORS: [Failing; 4] = [
             "pub struct K { k: S3[F32] }",
             "pub struct S3[T1: ?Dup] { w: Array[T1], a: I32 }",
             "pub struct H { h: OC[S3[F32]] }",
+        ],
+        codes: Some(&["E0416"]),
+        text: true,
+    },
+    Failing {
+        name: "R-464 e: an alias of the type of the failed field, and its user",
+        blocks: &[
+            "pub struct OC[T: Copy] { t: T }",
+            "pub struct S3[T1: ?Dup] { a: I32, w: Array[T1] }",
+            "pub type AS = S3[F32]",
+            "pub struct HS { h: OC[AS] }",
+        ],
+        codes: Some(&["E0416"]),
+        text: true,
+    },
+    Failing {
+        name: "R-464 f: the `Config` of a flow whose input is the type of the failed field",
+        blocks: &[
+            "pub struct OC[T: Copy] { t: T }",
+            "pub struct S3[T1: ?Dup] { a: I32, w: Array[T1] }",
+            "pub flow fa(x: F32 at sample, k: S3[F32] at init) -> F32 at sample { x }",
+            "pub struct HQ { p: OC[fa.Config] }",
+        ],
+        codes: Some(&["E0416"]),
+        text: true,
+    },
+    Failing {
+        name: "R-464 g: the `Config` of a flow whose input is an alias in error",
+        blocks: &[
+            "pub struct OC[T: Copy] { t: T }",
+            "pub type AE = Array[Buf[F32]]",
+            "pub flow fa(x: F32 at sample, k: AE at init) -> F32 at sample { x }",
+            "pub struct HQ { p: OC[fa.Config] }",
+        ],
+        codes: Some(&["E0416"]),
+        text: true,
+    },
+    Failing {
+        name: "R-464 h: a flow whose input is the `Config` of such a flow",
+        blocks: &[
+            "pub struct OC[T: Copy] { t: T }",
+            "pub struct S3[T1: ?Dup] { a: I32, w: Array[T1] }",
+            "pub flow fb(x: F32 at sample, k: fa.Config at init) -> F32 at sample { x }",
+            "pub flow fa(x: F32 at sample, k: S3[F32] at init) -> F32 at sample { x }",
+            "pub struct HQ { p: OC[fb.Config] }",
+        ],
+        codes: Some(&["E0416"]),
+        text: true,
+    },
+    Failing {
+        name: "R-464 i: an `impl` of a user of the type of the failed field",
+        blocks: &[
+            "pub struct OC[T: Copy] { t: T }",
+            "pub struct S3[T1: ?Dup] { a: I32, w: Array[T1] }",
+            "pub struct H1 { h: OC[S3[F32]] }",
+            "impl H1 {\n  fn m2(self) -> I32 { 0 }\n}",
         ],
         codes: Some(&["E0416"]),
         text: true,
@@ -528,7 +584,6 @@ fn errors_that_are_not_shared_give_the_same_codes_in_every_order() {
 /// R-464 (W6-04 U5), §18.1, §4.5: the diagnostics of a type with a failed field and of its uses are the same in
 /// every order of the declarations, and in the written order they are the one E0416 of the field.
 #[test]
-#[ignore = "W6-04 U5: a field in error is turned to the error type in the order of the declarations, so its users get a chained E0416 or not by the order (R-464)"]
 fn field_errors_give_the_same_diagnostics_in_every_order() {
     let programs: Vec<&Failing> = FIELD_ERRORS.iter().chain(FIELD_ERRORS_OPEN.iter()).collect();
     let (runs, problems) = sweep_failing(&programs, 0xE0);

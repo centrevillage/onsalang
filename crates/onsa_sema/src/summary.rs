@@ -12,15 +12,72 @@
 
 use std::cell::RefCell;
 
-use onsa_diag::hash::HashMap;
+use onsa_diag::hash::{HashMap, HashSet};
 
 use crate::kind::Kind;
 use crate::ty::{BuiltinTy, Ty, TyId};
 use crate::walk::{Holds, Walk};
 use crate::{Analysis, DefId};
 
-/// The summaries, each being read as `None` ([`crate::walk::Known`]).
-pub(crate) type Summaries = HashMap<DefId, Option<Facts>>;
+/// What is known of the types as they are lowered ([`crate::walk::Known`]):
+/// the summary of each declaration asked, `None` as it is read, and the
+/// facts of each type asked with no parameter in it (R-449: `W[W[…[I32]]]`
+/// read once for all the questions of its parts, not again for each). Both
+/// go together ([`Summaries::clear`]), or those of a cycle ([`Summaries::forget_new`]).
+#[derive(Debug, Default, Clone)]
+pub(crate) struct Summaries {
+    pub(crate) decls: HashMap<DefId, Option<Facts>>,
+    closed: HashMap<TyId, Facts>,
+    cycle: Option<Cycle>,
+}
+
+/// The declarations of a cycle, and what is kept that holds them: read with
+/// a read of one of them or of these, as `reads` counts ([`Summaries::held`]).
+#[derive(Debug, Default, Clone)]
+struct Cycle {
+    decls: HashSet<DefId>,
+    holds: (HashSet<DefId>, HashSet<TyId>),
+    reads: usize,
+}
+
+#[cfg(test)]
+thread_local! {
+    /// The questions of a declaration with its arguments ([`Read::named`]) of this thread.
+    pub(crate) static NAMED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+impl Summaries {
+    pub(crate) fn clear(&mut self) {
+        self.decls.clear();
+        self.closed.clear();
+        self.cycle = None;
+    }
+
+    /// What is kept from here that holds the declarations `cycle` is what
+    /// [`Self::forget_new`] forgets: none before does (`Sema::wellformed`).
+    pub(crate) fn begin(&mut self, cycle: HashSet<DefId>) {
+        self.cycle = (!cycle.is_empty()).then(|| Cycle { decls: cycle, ..Cycle::default() });
+    }
+
+    pub(crate) fn forget_new(&mut self) {
+        let Some(Cycle { holds: (decls, types), .. }) = &mut self.cycle else { return };
+        decls.drain().for_each(|d| _ = self.decls.remove(&d));
+        types.drain().for_each(|t| _ = self.closed.remove(&t));
+    }
+
+    /// The count of the reads of what holds the cycle before this, one if `holds`.
+    fn reads(&mut self, holds: impl FnOnce(&Cycle) -> bool) -> usize {
+        let Some(c) = &mut self.cycle else { return 0 };
+        let before = c.reads;
+        c.reads += usize::from(holds(c));
+        before
+    }
+
+    /// What holds the cycle, if one was read since `before`: so does what was read.
+    fn held(&mut self, before: usize) -> Option<&mut (HashSet<DefId>, HashSet<TyId>)> {
+        self.cycle.as_mut().filter(|c| c.reads != before).map(|c| &mut c.holds)
+    }
+}
 
 /// What is known of a type, or of a declaration before its arguments.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -132,6 +189,11 @@ impl<'a> Read<'a> {
     }
 
     pub(crate) fn of(&self, ty: TyId) -> Facts {
+        // Of no parameter, its facts are the same whatever those of the
+        // parameters are, kept for every question ([`Summaries`]); a summary
+        // has none, and reads each declaration once.
+        let (kept, closed) = (&self.w.a.known.summaries, self.params.is_some() && !self.w.a.types.open(ty));
+        let before = kept.borrow_mut().reads(|c| c.holds.1.contains(&ty));
         let found = match self.w.a.types.get(ty) {
             Ty::Param(i) => {
                 return match &self.params {
@@ -146,10 +208,18 @@ impl<'a> Read<'a> {
             Ty::Builtin(b, _) => return Facts::builtin(*b),
             Ty::Var(_) | Ty::Error => return Facts::none(),
             _ if self.seen.borrow().contains_key(&ty) => return self.seen.borrow()[&ty].clone(),
+            _ if closed && kept.borrow().closed.contains_key(&ty) => return kept.borrow().closed[&ty].clone(),
             Ty::Tuple(ts) => self.all(ts),
             Ty::Named(d, args) => self.named(*d, args),
         };
-        self.seen.borrow_mut().insert(ty, found.clone());
+        match closed {
+            true => {
+                let mut kept = kept.borrow_mut();
+                kept.closed.insert(ty, found.clone());
+                kept.held(before).map(|h| h.1.insert(ty));
+            }
+            false => _ = self.seen.borrow_mut().insert(ty, found.clone()),
+        }
         found
     }
 
@@ -157,6 +227,8 @@ impl<'a> Read<'a> {
     /// the arguments of the parameters it holds. An argument it does not
     /// have is of a declaration a syntax error cut (§18.1): nothing known.
     pub(crate) fn named(&self, d: DefId, args: &[TyId]) -> Facts {
+        #[cfg(test)]
+        NAMED.with(|n| n.set(n.get() + 1));
         let mut own = self.summary(d);
         let held = std::mem::take(&mut own.held);
         let of_arg = |i| args.get(i as usize).map_or_else(Facts::none, |&t| self.of(t));
@@ -170,10 +242,13 @@ impl<'a> Read<'a> {
     /// The summary of `d`, read when it is first asked ([`crate::walk::Known`]).
     fn summary(&self, d: DefId) -> Facts {
         let a = self.w.a;
-        if let Some(found) = a.known.summaries.borrow().get(&d) {
+        let mut kept = a.known.summaries.borrow_mut();
+        let before = kept.reads(|c| c.decls.contains(&d) || c.holds.0.contains(&d));
+        if let Some(found) = kept.decls.get(&d) {
             return found.clone().unwrap_or_else(Facts::cycle);
         }
-        a.known.summaries.borrow_mut().insert(d, None);
+        kept.decls.insert(d, None);
+        drop(kept);
         let Some((holds, ..)) = self.w.enter(d, &[], None, (0, None)) else { return Facts::cycle() };
         let parts = Read::of_params(a, None).all(&holds.parts());
         let kind = match holds {
@@ -183,7 +258,9 @@ impl<'a> Read<'a> {
             _ => parts.kind,
         };
         let found = Facts { kind, ..parts };
-        a.known.summaries.borrow_mut().insert(d, Some(found.clone()));
+        let mut kept = a.known.summaries.borrow_mut();
+        kept.decls.insert(d, Some(found.clone()));
+        kept.held(before).map(|h| h.0.insert(d));
         found
     }
 }

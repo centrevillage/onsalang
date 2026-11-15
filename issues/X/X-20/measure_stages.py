@@ -189,6 +189,15 @@ def w405_nested(fields, depth):
             + "".join(f"  f{i}: {ty},\n" for i in range(fields)) + "}\n")
 
 
+def r464_fail_readers(n):
+    """R-464 fix (W6-04 U5/b M-1): n structs with a field in error, each before a user that asks the kind of a
+    chain of n structs (the answers kept while the fields in error are read as the error type)."""
+    chain = "".join(f"pub struct C{i} {{ f: C{i + 1}, g: I32 }}\n" for i in range(n)) + f"pub struct C{n} {{ g: I32 }}\n"
+    pairs = "".join(f"pub struct F{i}[T1: ?Dup] {{ a: I32, w: Array[T1] }}\npub struct U{i} {{ h: OC[C0] }}\n"
+                    for i in range(n))
+    return "pub struct OC[T: Copy] { t: T }\n" + pairs + chain
+
+
 def r386_arms(form, n):
     """R-386 (W5-13 U6b): a match of n arms and a `_`: `Some(i)`, the first n of the 5 columns of an enum of
     8 variants (rows of one head, which an arm passes by), or `(i, _)` and `(_, i)` in turn (rows a `_` of
@@ -289,6 +298,7 @@ QUAD = [
     ("w410_chain", "writes=100, chain", w410_chain, [(c, 100) for c in (125, 250, 500, 1000)]),
     ("w405_nested_f", "depth=250, fields", w405_nested, [(f, 250) for f in (250, 500, 1000, 2000)]),
     ("w405_nested_d", "fields=1000, depth", w405_nested, [(1000, d) for d in (30, 60, 120, 240)]),
+    ("r464_fail_readers", "fields in error and chain", r464_fail_readers, [(n,) for n in (250, 500, 1000, 2000)]),
     ("r386_some", "arms", r386_arms, [("some", n) for n in (5000, 10000, 20000, 40000)]),
     ("r386_table", "arms", r386_arms, [("table", n) for n in (4000, 8000, 16000, 32000)]),
     ("r386_cross", "arms", r386_arms, [("cross", n) for n in (2500, 5000, 10000, 20000)]),
