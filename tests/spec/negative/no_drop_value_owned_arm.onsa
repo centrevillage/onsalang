@@ -1,0 +1,101 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§5.2", "§7", "§10", "§12.2", "§8.1"]
+
+// S-1065 (§5.4, §5.2, §7, §10, §12.2, §8.1, S-783), the part that keeps the rule sound: "破棄の要らない値は不滅の静的オブジェクトと Copy の値
+// だけでできた値で、…派生元は無いので、§7 の重なる束縛の無効化と E0715 は当たらない". The binding of the arm of a `match` on a
+// place (`Some(s) => …` on `o`) is a borrowed binding that is derived from `o` ("`match x` の腕の束縛（`x` は任意の場所か、…）:
+// 借用（起点）"), not a value that needs no drop: a literal that has it as the element of a tail (`(if c { s } else { "a" }, 1)`)
+// is not a literal that needs no drop ("`if c { p } else { s }` は…当たらない", "これらのどれでもない要素を持つリテラルは所有の行である"),
+// so the binding `q` of it is an owned value (a copy of `s`, "借用の Dup の値は複製", §5.4), whatever the tails of the `if` are, and it
+// is dropped where `q` goes out of scope. The drop of an owned `Str` needs `Alloc` (§12.2) and in an `rt fn` that is an E0601 at
+// the binding `q` (S-783, §10 rule 1). The reason is soundness (the note of S-1065): if `q` were counted as a binding that needs no drop
+// it would be a reference without an origin, and the change `o = None` in the arm would free the `Str` that it reads (§7 invalidates
+// the bindings that overlap with `o`, and a binding that needs no drop has no origin to invalidate). As an owned copy it is safe: the
+// functions that have `uses {Alloc}` and change `o` after the copy have no diagnostic. One error
+// per function (P-01). The argument `c` is a `Bool`, `o` is an `Option[Str]` (`move` where it is returned after the `match`
+// or changed), `v` is an `F32`.
+
+pub fn mk(n: U32) -> Option[Str] uses {Alloc} {
+  if n == 0 {
+    None
+  } else {
+    Some("a{n}")
+  }
+}
+
+pub rt fn arm_binding_in_a_tail_of_a_literal(c: Bool, move o: Option[Str]) -> (Option[Str], U32) {
+  let n = match o {
+    Some(s) => {
+      let q = (if c { s } else { "a" }, 1) //~ E0601
+      q.0.len()
+    },
+    None => 0,
+  }
+  (o, n)
+}
+
+pub rt fn arm_binding_in_a_tail_of_a_match(i: U32, move o: Option[Str]) -> (Option[Str], U32) {
+  let n = match o {
+    Some(s) => {
+      let q = (match i { 0 => s, _ => "a" }, 1) //~ E0601
+      q.0.len()
+    },
+    None => 0,
+  }
+  (o, n)
+}
+
+pub rt fn arm_binding_as_the_tail_of_an_if(c: Bool, move o: Option[Str]) -> (Option[Str], U32) {
+  let n = match o {
+    Some(s) => {
+      let q = (if c { "a" } else { s }, 1) //~ E0601
+      q.0.len()
+    },
+    None => 0,
+  }
+  (o, n)
+}
+
+pub rt fn arm_binding_as_an_element_of_a_literal(move o: Option[Str], v: F32) -> (Option[Str], U32) {
+  let n = match o {
+    Some(s) => {
+      let q = (s, v) //~ E0601
+      q.0.len()
+    },
+    None => 0,
+  }
+  (o, n)
+}
+
+pub rt fn arm_binding_in_a_tail_of_a_literal_that_waits(c: Bool, move o: Option[Str], r: Result[U32, U32]) -> Result[(Option[Str], U32), U32] {
+  let n = match o {
+    Some(s) => {
+      let q = (if c { s } else { "a" }, 1) //~ E0601
+      q.0.len()
+    },
+    None => 0,
+  }
+  Ok((o, r?))
+}
+
+// ----------------------------------------------------------------- the change after the copy
+
+pub fn pass_a_change_after_the_owned_copy(c: Bool) -> U32 uses {Alloc} {
+  var o = mk(1)
+  match o {
+    Some(s) => {
+      let q = (if c { s } else { "a" }, 1)
+      o = None
+      q.0.len()
+    },
+    None => 0,
+  }
+}
+
+pub fn pass_a_change_after_the_owned_copy_of_a_literal(c: Bool) -> U32 uses {Alloc} {
+  var o = mk(1)
+  let p = (match o { Some(s) => s, None => "x" }, 1)
+  o = None
+  p.0.len()
+}

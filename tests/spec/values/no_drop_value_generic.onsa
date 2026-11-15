@@ -1,0 +1,101 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§2.4", "§4.6", "§5.3", "§10", "§12.2", "§8.1"]
+
+// S-1065, S-1045 (§5.4, §2.4, §4.6, §5.3, §10, §12.2, §8.1): the value that needs no drop is the same in a generic function, in an
+// anonymous function and in the repeated element of an array. "長さが 0 でありうる `[e; N]`（§2.4）の `e` の値の破棄。総称の
+// 長さは、1 以上でしか呼ばれなくても数える（本体は長さの値によらず一度検査する）" needs `Alloc` for a value that needs a drop (S-1045),
+// and S-1065 makes the path of a static value, an `if`, a `match` and a block of such tails values that need no drop wherever
+// they stand, so `[if c { "a" } else { "b" }; N]` with the length `N` of a `const` parameter has no drop (no E0601 in
+// an `rt fn`, §10 rule 1). The element that is a `T: Copy` value ("`T: Copy` の値は Copy で", §5.4) is a first-class Copy
+// value: `(("a", x), r?)` and `(if c { "a" } else { "b" }, x)` need no drop. The body of an anonymous function is checked as
+// the body of a function ("無名関数は、その型の効果行と `rt` に照らして本体を検査する", §8.1): a literal with the path of a
+// static value or an `if` as an element has no drop in its body, with the type of its parameter pure and with `rt`. The same
+// functions without `rt` are in values/no_drop_value_generic_plain.onsa. Before S-1065 each of these was an E0601. The
+// `T` without a bound and `T: ?Dup` are in negative/no_drop_value_owned_generic.onsa. One form in one function (P-01). The
+// argument `v` is an `F32`. No diagnostic is expected anywhere in this file.
+
+pub rt fn tlen(p: (Str, F32), n: U32) -> U32 {
+  p.0.len() + n
+}
+
+pub fn ap(g: fn(U32) -> U32, x: U32) -> U32 {
+  g.(x)
+}
+
+pub rt fn ap_rt(g: rt fn(U32) -> U32, x: U32) -> U32 {
+  g.(x)
+}
+
+// ---------------------------------------------------------------------- a generic length
+
+pub rt fn generic_length_with_an_if[const N: U32](c: Bool) -> [Str; N] {
+  [if c { "a" } else { "b" }; N]
+}
+
+pub rt fn generic_length_with_a_path[const N: U32](i: U32) -> [Str; N] {
+  [["a", "bc"][i]; N]
+}
+
+pub rt fn generic_length_with_a_block[const N: U32]() -> [Str; N] {
+  [{ "a" }; N]
+}
+
+pub rt fn generic_length_with_a_match[const N: U32](i: U32) -> [Str; N] {
+  [match i { 0 => "a", _ => "b" }; N]
+}
+
+pub rt fn generic_length_with_a_literal_with_a_path[const N: U32](i: U32, v: F32) -> [(Str, F32); N] {
+  [(["a", "bc"][i], v); N]
+}
+
+pub rt fn generic_length_with_a_literal_with_an_if[const N: U32](c: Bool, v: F32) -> [(Str, F32); N] {
+  [(if c { "a" } else { "b" }, v); N]
+}
+
+// ---------------------------------------------------------------- an element of type `T: Copy`
+
+pub rt fn copy_element_with_a_static_value[T: Copy](x: T, r: Result[U32, U32]) -> Result[((Str, T), U32), U32] {
+  Ok((("a", x), r?))
+}
+
+pub rt fn copy_element_with_an_if[T: Copy](c: Bool, x: T, r: Result[U32, U32]) -> Result[((Str, T), U32), U32] {
+  Ok(((if c { "a" } else { "b" }, x), r?))
+}
+
+pub rt fn copy_element_with_a_path[T: Copy](i: U32, x: T, r: Result[U32, U32]) -> Result[((Str, T), U32), U32] {
+  Ok(((["a", "bc"][i], x), r?))
+}
+
+pub rt fn copy_element_let_with_an_if[T: Copy](c: Bool, x: T) -> U32 {
+  let p = (if c { "a" } else { "b" }, x)
+  p.0.len()
+}
+
+// ------------------------------------------------------------------- an anonymous function
+
+pub fn closure_body_with_a_path(v: F32) -> U32 {
+  ap(fn(x: U32) -> U32 { tlen((["a", "bc"][x], v), 1) }, 1)
+}
+
+pub fn closure_body_with_an_if(v: F32) -> U32 {
+  ap(fn(x: U32) -> U32 { tlen((if x == 0 { "a" } else { "b" }, v), 1) }, 1)
+}
+
+pub fn closure_body_with_a_let(v: F32) -> U32 {
+  ap(fn(x: U32) -> U32 {
+    let p = (if x == 0 { "a" } else { "b" }, v)
+    p.0.len()
+  }, 1)
+}
+
+pub rt fn closure_rt_body_with_a_path(v: F32) -> U32 {
+  ap_rt(fn(x: U32) -> U32 { tlen((["a", "bc"][x], v), 1) }, 1)
+}
+
+pub rt fn closure_rt_body_with_a_let(v: F32) -> U32 {
+  ap_rt(fn(x: U32) -> U32 {
+    let p = (["a", "bc"][x], v)
+    p.0.len()
+  }, 1)
+}

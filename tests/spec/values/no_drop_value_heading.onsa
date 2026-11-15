@@ -1,0 +1,128 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§5.2", "§10", "§12.2", "§8.1"]
+
+// S-1065 (§5.4, §10, §12.2, §8.1): the heading of a `for` and of a `match` is "場所か、破棄の要らない値" ("`for s in xs`（`xs` は任意の場所か、
+// 破棄の要らない値）", "`match x` の腕の束縛（`x` は任意の場所か、破棄の要らない値）", "見出しの借用の行は場所か、破棄の要らない値
+// （`match ["a", "bc"][i]`、`for c in TABLE.cols`）"). A heading that is a literal with a path of a static value or an `if` as
+// an element (`for s in [["a", "bc"][i], "c"]`, `match (if c { "a" } else { "b" }, v) { … }`), a constructor with such a payload
+// (`match Some(["a", "bc"][i])`) and the path of a literal (`for s in [["a", "b"], ["c", "d"]][i]`) is a value that needs no
+// drop (S-1065: "破棄の要らない値は…リテラルの要素…"), so the binding of its arms and iterations borrows from it and nothing
+// is dropped: no E0601 in an `rt fn` (§10 rule 1). The same functions without `rt` are in values/no_drop_value_heading_plain.onsa.
+// Before S-1065 the literals here made the heading owned (an E0601 in an `rt fn`). The headings that have a binding, a call or
+// `move` are in values/binding_heading_rt.onsa and the owned ones in negative/binding_heading_owned_rt.onsa. One form in one
+// function (P-01). The argument `v` is an `F32`. No diagnostic is expected anywhere in this file.
+
+pub rt fn tlen(p: (Str, F32), n: U32) -> U32 {
+  p.0.len() + n
+}
+
+// ------------------------------------------------------------------------------------------ for
+
+pub rt fn for_over_an_array_with_a_path(i: U32) -> U32 {
+  var n: U32 = 0
+  for s in [["a", "bc"][i], "c"] {
+    n = n + s.len()
+  }
+  n
+}
+
+pub rt fn for_over_an_array_with_an_if(c: Bool) -> U32 {
+  var n: U32 = 0
+  for s in [if c { "a" } else { "b" }, "c"] {
+    n = n + s.len()
+  }
+  n
+}
+
+pub rt fn for_over_an_array_of_tuples_with_a_path(i: U32, v: F32) -> U32 {
+  var n: U32 = 0
+  for p in [(["a", "bc"][i], v), ("z", v)] {
+    n = n + p.0.len()
+  }
+  n
+}
+
+pub rt fn for_over_the_path_of_an_array_of_arrays(i: U32) -> U32 {
+  var n: U32 = 0
+  for s in [["a", "b"], ["c", "d"]][i] {
+    n = n + s.len()
+  }
+  n
+}
+
+pub rt fn for_over_an_if_with_array_tails(c: Bool) -> U32 {
+  var n: U32 = 0
+  for s in if c { ["a", "b"] } else { ["c", "d"] } {
+    n = n + s.len()
+  }
+  n
+}
+
+pub rt fn for_over_an_array_with_a_path_and_wait(i: U32, r: Result[U32, U32]) -> Result[U32, U32] {
+  var n: U32 = 0
+  for s in [["a", "bc"][i], "c"] {
+    n = n + tlen((s, 1.0), r?)
+  }
+  Ok(n)
+}
+
+// ---------------------------------------------------------------------------------------- match
+
+pub rt fn match_a_tuple_with_a_path(i: U32, v: F32) -> U32 {
+  match (["a", "bc"][i], v) {
+    (s, _) => s.len(),
+  }
+}
+
+pub rt fn match_a_tuple_with_an_if(c: Bool, v: F32) -> U32 {
+  match (if c { "a" } else { "b" }, v) {
+    (s, _) => s.len(),
+  }
+}
+
+pub rt fn match_a_constructor_with_a_path(i: U32) -> U32 {
+  match Some(["a", "bc"][i]) {
+    Some(s) => s.len(),
+    None => 0,
+  }
+}
+
+pub rt fn match_a_constructor_with_an_if(c: Bool) -> U32 {
+  match Some(if c { "a" } else { "b" }) {
+    Some(s) => s.len(),
+    None => 0,
+  }
+}
+
+pub rt fn match_an_if(c: Bool) -> U32 {
+  match if c { "a" } else { "b" } {
+    s => s.len(),
+  }
+}
+
+pub rt fn match_a_path_of_an_if(c: Bool) -> U32 {
+  match (if c { ("a", 1) } else { ("b", 2) }).0 {
+    s => s.len(),
+  }
+}
+
+// -------------------------------------------------- a binding that is derived from the heading
+
+pub rt fn let_a_binding_of_an_arm_of_a_match_on_a_path(i: U32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  let o = Some(["a", "bc"][i])
+  let t = match o {
+    Some(s) => s,
+    None => "x",
+  }
+  Ok((t, r?))
+}
+
+pub rt fn let_a_literal_with_a_binding_of_a_for(i: U32, v: F32) -> U32 {
+  var n: U32 = 0
+  for s in [["a", "bc"][i], "c"] {
+    let p = (s, v)
+    n = n + p.0.len()
+  }
+  n
+}

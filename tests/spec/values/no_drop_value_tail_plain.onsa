@@ -1,0 +1,175 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§5.2", "§10", "§12.2", "§8.1"]
+
+// S-1065 (§5.4, §5.2, §10, §12.2, §8.1): the functions of values/no_drop_value_tail.onsa without `rt` (a function that has no `Alloc` in its effect row, so that an
+// owned value that is dropped is an E0601 with the candidate `uses {Alloc}`, §8.1). Each of them is the same form as the one of that
+// file, with the same expectation: the value that needs no drop (§5.4, S-1065) has no drop, so there is no E0601 and no candidate.
+// No diagnostic is expected anywhere in this file.
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+pub fn take2(move s: Str, n: U32) -> Str {
+  s
+}
+
+pub fn show(p: Param) -> U32 {
+  p.name.len()
+}
+
+pub fn tlen(p: (Str, F32), n: U32) -> U32 {
+  p.0.len() + n
+}
+
+// --------------------------------------------------- a value that waits for a `?`, an element of a literal
+
+pub fn wait_an_if(c: Bool, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  Ok((if c { "a" } else { "b" }, r?))
+}
+
+pub fn wait_an_else_if_chain(i: U32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  Ok((if i == 0 { "a" } else if i == 1 { "b" } else { "c" }, r?))
+}
+
+pub fn wait_a_match(i: U32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  Ok((match i { 0 => "a", _ => "b" }, r?))
+}
+
+pub fn wait_an_if_with_a_diverging_arm(c: Bool, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  Ok((if c { "a" } else { return Err(1) }, r?))
+}
+
+pub fn wait_an_if_with_a_panicking_arm(c: Bool, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  Ok((if c { "a" } else { panic("x") }, r?))
+}
+
+pub fn wait_a_block_with_a_let_before_the_tail(r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  Ok(({
+    let t = "a"
+    t
+  }, r?))
+}
+
+pub fn wait_a_block_with_a_literal_tail(r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  Ok(({ "a" }, r?))
+}
+
+pub fn wait_a_block_in_parentheses(r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  Ok((({ ("a") }), r?))
+}
+
+pub fn wait_an_if_with_a_path_in_a_tail(c: Bool, i: U32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  Ok((if c { ["a", "bc"][i] } else { "z" }, r?))
+}
+
+pub fn wait_an_if_with_literal_tails(c: Bool, v: F32, r: Result[U32, U32]) -> Result[((Str, F32), U32), U32] {
+  Ok((if c { ("a", v) } else { ("b", v) }, r?))
+}
+
+pub fn wait_a_match_with_literal_tails(o: Option[F32], w: F32, r: Result[U32, U32]) -> Result[((Str, F32), U32), U32] {
+  Ok((match o { Some(k) => ("a", k), None => ("bc", w) }, r?))
+}
+
+pub fn wait_a_block_with_a_literal_tail_after_a_let(v: F32, r: Result[U32, U32]) -> Result[((Str, F32), U32), U32] {
+  Ok(({
+    let k = v * 2.0
+    ("a", k)
+  }, r?))
+}
+
+pub fn wait_an_if_with_the_name_of_a_binding(c: Bool, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  let nm = "a"
+  Ok((if c { nm } else { "b" }, r?))
+}
+
+pub fn wait_an_if_in_a_nested_literal(c: Bool, v: F32, r: Result[U32, U32]) -> Result[(((Str, F32), U32), U32), U32] {
+  Ok((((if c { "a" } else { "b" }, v), 1), r?))
+}
+
+pub fn wait_an_if_as_the_payload_of_a_constructor(c: Bool, r: Result[U32, U32]) -> Result[(Option[Str], U32), U32] {
+  Ok((Some(if c { "a" } else { "b" }), r?))
+}
+
+pub fn wait_an_if_as_a_field_of_a_struct(c: Bool, v: F32, r: Result[U32, U32]) -> Result[(Param, U32), U32] {
+  Ok((Param { name: if c { "a" } else { "b" }, value: v }, r?))
+}
+
+// ---------------------------------------------------------------- a value that is bound by `let`
+
+pub fn let_a_tuple_with_an_if(c: Bool, v: F32) -> U32 {
+  let p = (if c { "a" } else { "b" }, v)
+  p.0.len()
+}
+
+pub fn let_a_tuple_with_a_match(i: U32, v: F32) -> U32 {
+  let p = (match i { 0 => "a", _ => "b" }, v)
+  p.0.len()
+}
+
+pub fn let_a_tuple_with_a_block(v: F32) -> U32 {
+  let p = ({ "a" }, v)
+  p.0.len()
+}
+
+pub fn let_a_tuple_with_a_block_in_parentheses(v: F32) -> U32 {
+  let p = (("a"), v)
+  p.0.len()
+}
+
+pub fn let_a_struct_with_an_if(c: Bool, v: F32) -> U32 {
+  let p = Param { name: if c { "a" } else { "b" }, value: v }
+  show(p)
+}
+
+// ------------------------------------------------------------------ the element of `[e; N]`
+
+pub fn repeat_an_if_zero_times(c: Bool) -> [Str; 0] {
+  [if c { "a" } else { "b" }; 0]
+}
+
+pub fn repeat_a_block_zero_times() -> [Str; 0] {
+  [{ "a" }; 0]
+}
+
+pub fn repeat_an_if_twice(c: Bool) -> [Str; 2] {
+  [if c { "a" } else { "b" }; 2]
+}
+
+pub fn repeat_a_match_zero_times(i: U32) -> [Str; 0] {
+  [match i { 0 => "a", _ => "b" }; 0]
+}
+
+// -------------------------------------------------------- the argument of a call, a field of a struct
+
+pub fn call_with_a_struct_with_a_match(i: U32, v: F32) -> U32 {
+  show(Param { name: match i { 0 => "sine", _ => "saw" }, value: v })
+}
+
+pub fn call_a_move_parameter_with_an_if(c: Bool, r: Result[U32, U32]) -> Result[Str, U32] {
+  Ok(take2(if c { "a" } else { "b" }, r?))
+}
+
+pub fn call_a_move_parameter_with_an_if_and_no_wait(c: Bool) -> Str {
+  take2(if c { "a" } else { "b" }, 1)
+}
+
+pub fn call_a_move_parameter_with_a_match(i: U32, r: Result[U32, U32]) -> Result[Str, U32] {
+  Ok(take2(match i { 0 => "a", _ => "b" }, r?))
+}
+
+pub fn call_a_borrow_with_a_tuple_with_an_if(c: Bool, v: F32, r: Result[U32, U32]) -> Result[U32, U32] {
+  Ok(tlen((if c { "a" } else { "b" }, v), r?))
+}
+
+// ---------------------------------------------------------------- a value that is returned
+
+pub fn return_a_tuple_with_an_if(c: Bool, v: F32) -> (Str, F32) {
+  (if c { "a" } else { "b" }, v)
+}
+
+pub fn return_an_if(c: Bool) -> Str {
+  if c { "a" } else { "b" }
+}

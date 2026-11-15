@@ -1,0 +1,97 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§5.2", "§10", "§12.2", "§8.1"]
+
+// S-1065 (§5.4, §5.2, §10, §12.2, §8.1): the functions of values/no_drop_value_path.onsa without `rt` (a function that has no `Alloc` in its effect row, so that an
+// owned value that is dropped is an E0601 with the candidate `uses {Alloc}`, §8.1). Each of them is the same form as the one of that
+// file, with the same expectation: the value that needs no drop (§5.4, S-1065) has no drop, so there is no E0601 and no candidate.
+// No diagnostic is expected anywhere in this file.
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+pub struct Wrap {
+  p: Param,
+  k: U32,
+}
+
+pub fn take2(move s: Str, n: U32) -> Str {
+  s
+}
+
+pub fn tlen(p: (Str, F32), n: U32) -> U32 {
+  p.0.len() + n
+}
+
+pub fn wlen(w: Wrap) -> U32 {
+  w.p.name.len() + w.k
+}
+
+// ------------------------------------------------------------------------ a literal bound by `let`
+
+pub fn let_a_tuple_with_a_path(i: U32, v: F32) -> U32 {
+  let p = (["a", "bc"][i], v)
+  p.0.len()
+}
+
+pub fn let_a_tuple_with_a_nested_index(i: U32, j: U32, v: F32) -> U32 {
+  let p = ([["a", "b"], ["c", "d"]][i][j], v)
+  p.0.len()
+}
+
+pub fn let_a_tuple_with_a_try_in_the_index(v: F32, r: Result[U32, U32]) -> Result[U32, U32] {
+  let p = (["a", "bc"][r?], v)
+  Ok(p.0.len())
+}
+
+pub fn let_a_tuple_with_the_path_of_a_struct_literal(v: F32) -> U32 {
+  let p = (Param { name: "a", value: v }.name, v)
+  p.0.len()
+}
+
+pub fn let_a_struct_with_a_path(i: U32, v: F32) -> U32 {
+  let w = Wrap { p: Param { name: ["a", "bc"][i], value: v }, k: 1 }
+  wlen(w)
+}
+
+// ------------------------------------------------------------- a value that waits for a `?`
+
+pub fn wait_a_tuple_with_a_path(i: U32, v: F32, r: Result[U32, U32]) -> Result[((Str, F32), U32), U32] {
+  Ok(((["a", "bc"][i], v), r?))
+}
+
+pub fn wait_a_tuple_with_a_nested_index(i: U32, j: U32, v: F32, r: Result[U32, U32]) -> Result[((Str, F32), U32), U32] {
+  Ok((([["a", "b"], ["c", "d"]][i][j], v), r?))
+}
+
+pub fn wait_a_constructor_with_a_path(i: U32, r: Result[U32, U32]) -> Result[(Option[Str], U32), U32] {
+  Ok((Some(["a", "bc"][i]), r?))
+}
+
+pub fn wait_a_struct_with_a_path(i: U32, v: F32, r: Result[U32, U32]) -> Result[(Param, U32), U32] {
+  Ok((Param { name: ["a", "bc"][i], value: v }, r?))
+}
+
+pub fn wait_a_nested_struct_with_a_path(i: U32, v: F32, r: Result[U32, U32]) -> Result[(Wrap, U32), U32] {
+  Ok((Wrap { p: Param { name: ["a", "bc"][i], value: v }, k: 1 }, r?))
+}
+
+pub fn wait_an_array_with_a_path(i: U32, r: Result[U32, U32]) -> Result[([Str; 2], U32), U32] {
+  Ok((["z", ["a", "bc"][i]], r?))
+}
+
+// ------------------------------------------------ a literal or a path as the argument of a call
+
+pub fn call_a_borrow_with_a_nested_struct(i: U32, v: F32) -> U32 {
+  wlen(Wrap { p: Param { name: ["a", "bc"][i], value: v }, k: 1 })
+}
+
+pub fn call_a_move_parameter_with_a_path(i: U32, r: Result[U32, U32]) -> Result[Str, U32] {
+  Ok(take2(["a", "bc"][i], r?))
+}
+
+pub fn call_a_move_parameter_with_a_path_and_no_wait(i: U32) -> Str {
+  take2(["a", "bc"][i], 1)
+}

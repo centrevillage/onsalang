@@ -1,0 +1,98 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§5.2", "§10", "§12.2", "§8.1"]
+
+// S-1065 (§5.4, §5.2, §10, §12.2, §8.1, S-783): the owned side of values/no_drop_value_tail.onsa. "発散しない全ての末尾が破棄の要らない
+// 値である `if`・`match`・ブロック式" needs no drop, and "`if c { p } else { s }` は、`s` が借用の `Str` の引数なら当たらない": an
+// `if`, a `match` or a block that has a tail which is a borrowed `Str` argument (or the name of a `move` parameter, an owned
+// value) among static values is not a value that needs no drop, wherever it stands: "`if`・`match`・ブロック式は、発散しない全ての
+// 末尾で決め、全ての末尾が借用の行なら借用、一つでも所有の行なら所有である". As an element of a literal that waits for a `?`
+// (§9.1) the copy of the value is dropped by the exit before it is used, and the drop of an owned `Str` needs `Alloc` (§12.2), which
+// an `rt fn` cannot have (§10 rule 1): an E0601 at the value that waits (S-783: "束縛の無い値（一時の値、早い出口が残す値、…）は
+// その式"; a `let` that is read by the element is the binding that waits at the element, as in negative/drop_nodrop_wait_neg.onsa
+// `n_if_let`). The binding of such an `if` is owned and its drop is an E0601 at the binding (a `let` of a literal with a tail
+// of this kind). A `move` argument that is such an `if` waits as well. The functions with a `move` parameter `t` as a tail have
+// the error at the name `t` (S-783: an owned parameter is dropped when a path does not move it, and its name is the first use). One error per function (P-01); a function that
+// has no marker has no error. The helper `take2` returns its `move` parameter, so it has no drop. The arguments `s` and `t` are a
+// borrowed `Str` and an owned `Str`, `v` is an `F32`.
+
+pub rt fn take2(move s: Str, n: U32) -> Str {
+  s
+}
+
+pub rt fn tlen(p: (Str, F32), n: U32) -> U32 {
+  p.0.len() + n
+}
+
+// ---------------------------------------------------------------- a value that waits for a `?`
+
+pub rt fn wait_an_if_with_a_borrowed_tail(c: Bool, s: Str, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  Ok((if c { "a" } else { s }, r?)) //~ E0601
+}
+
+pub rt fn wait_a_match_with_a_borrowed_tail(i: U32, s: Str, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  Ok((match i { 0 => "a", _ => s }, r?)) //~ E0601
+}
+
+pub rt fn wait_an_else_if_chain_with_a_borrowed_tail(i: U32, s: Str, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  Ok((if i == 0 { "a" } else if i == 1 { s } else { "c" }, r?)) //~ E0601
+}
+
+pub rt fn wait_a_block_with_a_borrowed_tail(s: Str, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  Ok(({ s }, r?)) //~ E0601
+}
+
+pub rt fn wait_an_if_with_an_owned_tail(c: Bool, move t: Str, r: Result[U32, U32]) -> Result[(Str, U32), U32] { //~ E0601
+  Ok((if c { "a" } else { t }, r?))
+}
+
+pub rt fn wait_an_if_with_a_borrowed_tail_and_a_static_path(c: Bool, i: U32, s: Str, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  Ok((if c { ["a", "bc"][i] } else { s }, r?)) //~ E0601
+}
+
+pub rt fn wait_an_if_with_a_borrowed_tail_in_a_literal(c: Bool, s: Str, v: F32, r: Result[U32, U32]) -> Result[((Str, F32), U32), U32] {
+  Ok(((if c { "a" } else { s }, v), r?)) //~ E0601
+}
+
+// ----------------------------------------------------- the binding of such an `if` that waits
+
+pub rt fn wait_the_binding_of_an_if_with_a_borrowed_tail(c: Bool, s: Str, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  let t = if c { "a" } else { s }
+  Ok((t, r?)) //~ E0601
+}
+
+pub rt fn wait_the_binding_of_a_match_with_a_borrowed_tail(i: U32, s: Str, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  let t = match i {
+    0 => "a",
+    _ => s,
+  }
+  Ok((t, r?)) //~ E0601
+}
+
+// ------------------------------------------------------------------ a literal bound by `let`
+
+pub rt fn let_a_tuple_with_an_if_with_a_borrowed_tail(c: Bool, s: Str, v: F32) -> U32 {
+  let p = (if c { "a" } else { s }, v) //~ E0601
+  p.0.len()
+}
+
+pub rt fn let_a_tuple_with_a_match_with_a_borrowed_tail(i: U32, s: Str, v: F32) -> U32 {
+  let p = (match i { 0 => "a", _ => s }, v) //~ E0601
+  p.0.len()
+}
+
+pub rt fn let_a_tuple_with_a_name_of_an_if_with_a_borrowed_tail(c: Bool, s: Str, v: F32) -> U32 {
+  let q = if c { "a" } else { s }
+  let p = (q, v) //~ E0601
+  p.0.len()
+}
+
+// --------------------------------------------------------------------------- a call
+
+pub rt fn call_a_move_parameter_with_an_if_with_a_borrowed_tail(c: Bool, s: Str, r: Result[U32, U32]) -> Result[Str, U32] {
+  Ok(take2(if c { "a" } else { s }, r?)) //~ E0601
+}
+
+pub rt fn call_a_borrow_with_a_tuple_with_an_if_with_a_borrowed_tail(c: Bool, s: Str, v: F32) -> U32 {
+  tlen((if c { "a" } else { s }, v), 1) //~ E0601
+}

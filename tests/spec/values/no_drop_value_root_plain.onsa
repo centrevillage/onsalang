@@ -1,0 +1,90 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§5.2", "§10", "§12.2", "§8.1"]
+
+// S-1065 (§5.4, §5.2, §10, §12.2, §8.1): the functions of values/no_drop_value_root.onsa without `rt` (a function that has no `Alloc` in its effect row, so that an
+// owned value that is dropped is an E0601 with the candidate `uses {Alloc}`, §8.1). Each of them is the same form as the one of that
+// file, with the same expectation: the value that needs no drop (§5.4, S-1065) has no drop, so there is no E0601 and no candidate.
+// No diagnostic is expected anywhere in this file.
+
+pub fn tlen(p: (Str, F32), n: U32) -> U32 {
+  p.0.len() + n
+}
+
+// ----------------------------------------------- the path of a literal as an element (S-1065)
+
+pub fn let_a_tuple_with_the_path_of_a_literal(v: F32, w: F32) -> U32 {
+  let p = (("gain", v).0, w)
+  p.0.len()
+}
+
+pub fn wait_a_tuple_with_the_path_of_a_literal(v: F32, w: F32, r: Result[U32, U32]) -> Result[((Str, F32), U32), U32] {
+  Ok(((("gain", v).0, w), r?))
+}
+
+pub fn borrow_a_tuple_with_the_path_of_a_literal(v: F32, w: F32) -> U32 {
+  tlen((("gain", v).0, w), 1)
+}
+
+pub fn let_a_tuple_with_the_path_of_a_nested_literal(v: F32, w: F32) -> U32 {
+  let p = ((("gain", v), w).0.0, w)
+  p.0.len()
+}
+
+// ----------------------------------------------- the root is an `if`, a `match` or a block (D1)
+
+pub fn let_the_path_of_an_if(c: Bool) -> U32 {
+  let t = (if c { ("a", 1) } else { ("b", 2) }).0
+  t.len()
+}
+
+pub fn let_the_path_of_a_match(i: U32) -> U32 {
+  let t = (match i { 0 => ("a", 1), _ => ("b", 2) }).0
+  t.len()
+}
+
+pub fn let_the_path_of_a_block(v: F32) -> U32 {
+  let t = ({ ("a", v) }).0
+  t.len()
+}
+
+pub fn let_the_path_of_an_if_then_a_binding(c: Bool) -> U32 {
+  let q = if c { ("a", 1) } else { ("b", 2) }
+  let t = q.0
+  t.len()
+}
+
+pub fn receive_the_path_of_an_if(c: Bool) -> U32 {
+  (if c { ("a", 1) } else { ("b", 2) }).0.len()
+}
+
+pub fn wait_the_path_of_an_if(c: Bool, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  Ok(((if c { ("a", 1) } else { ("b", 2) }).0, r?))
+}
+
+pub fn wait_a_tuple_with_the_path_of_an_if(c: Bool, v: F32, r: Result[U32, U32]) -> Result[((Str, F32), U32), U32] {
+  Ok((((if c { ("a", 1) } else { ("b", 2) }).0, v), r?))
+}
+
+pub fn let_a_tuple_with_the_path_of_an_if(c: Bool, v: F32) -> U32 {
+  let p = ((if c { ("a", 1) } else { ("b", 2) }).0, v)
+  p.0.len()
+}
+
+pub fn match_the_path_of_an_if(c: Bool) -> U32 {
+  match (if c { ("a", 1) } else { ("b", 2) }).0 {
+    s => s.len(),
+  }
+}
+
+pub fn for_over_the_path_of_an_if(c: Bool) -> U32 {
+  var n: U32 = 0
+  for s in (if c { (["a", "b"], 1) } else { (["c", "d"], 2) }).0 {
+    n = n + s.len()
+  }
+  n
+}
+
+pub fn wait_the_path_of_a_match_with_a_diverging_arm(i: U32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  Ok(((match i { 0 => ("a", 1), 1 => ("b", 2), _ => { return Err(1) } }).0, r?))
+}

@@ -153,10 +153,9 @@ impl Walker<'_> {
 
     /// Whether the value of `x` is owned where it is consumed or dropped:
     /// an Affine place moved, a Dup value not Copy (released or copied,
-    /// §5.2) that needs a drop (not a static value, a literal or a binding
-    /// that needs no drop or a path of one, S-610, S-613, R-461: the
-    /// binding stage's [`no_drop`]), an Affine new value. The one place that
-    /// decides it.
+    /// §5.2) that needs a drop (not a value that needs no drop, S-610,
+    /// S-613, R-461, S-1065: the binding stage's [`no_drop`]), an Affine new
+    /// value. The one place that decides it.
     pub(super) fn owned(&mut self, x: ExprId) -> bool {
         let Some(&ty) = self.info.expr_types.get(&x) else { return false };
         match (self.kind_of(ty), place_of(self.ast, self.names, x)) {

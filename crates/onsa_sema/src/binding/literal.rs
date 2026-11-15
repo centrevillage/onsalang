@@ -12,9 +12,10 @@
 //! - An aggregate ([`parts`]: an array, `[e; N]`, a tuple, a struct literal,
 //!   a call of a variant with a payload) is static when all its elements
 //!   are, and needs no drop when each element is static, needs no drop, is
-//!   of a first-class Copy type, or is a binding that needs no drop or a
-//!   path of one (L4); else it is owned, with the first element that is none
-//!   of these. Parentheses are what they hold.
+//!   of a first-class Copy type, or is a value that needs no drop (L4,
+//!   S-1065: [`no_drop`], through paths and tails); else it
+//!   is owned, with the first element that is none of these. Parentheses are
+//!   what they hold.
 //! - A leaf or an aggregate whose own type is not Dup (Affine, or `T: ?Dup`)
 //!   is none of these whatever its elements (S-780, F7): a leaf has no mark,
 //!   an aggregate is owned with itself as the first.
@@ -25,7 +26,7 @@
 
 use onsa_syntax::ast::{Ast, ExprId, ExprKind, Lit, Mode};
 
-use super::{LitClass, Settle, no_drop_binding};
+use super::{LitClass, Settle, no_drop};
 use crate::body::{BodyInfo, Target};
 use crate::kind::{Kind, kind_in_body};
 use crate::ty::Ty;
@@ -45,7 +46,7 @@ impl Settle<'_> {
         }
         let mut class = LitClass::Static;
         for (x, whole) in parts {
-            let path = whole && no_drop_binding(ast, self.names, self.info, x);
+            let path = whole && no_drop(ast, self.names, self.info, x);
             match self.info.lits.get(&x).copied().filter(|_| whole) {
                 Some(LitClass::Static) => {}
                 Some(LitClass::NoDrop) => class = LitClass::NoDrop,

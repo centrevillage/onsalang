@@ -1,0 +1,104 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§5.2", "§10", "§12.2", "§8.1"]
+
+// S-1065 (§5.4, §5.2, §10, §12.2, §8.1, S-783, S-780, S-1038): the forms that stay owned although their value is made of static
+// values, as the owned side of values/no_drop_value_tail.onsa and values/no_drop_value_path.onsa. The rule of S-1065 counts the
+// value that needs no drop "wherever it stands", it does not change the kind of the binding or the type:
+//   - "自分の型が Dup でない…リテラルと列挙子は、要素によらず静的な値にも破棄の要らないリテラルにもならず、所有の行である" (S-780): a
+//     `None` of `Option[Buf[F32]]`, alone, as a tail of an `if` and bound by `let`, is owned and its drop needs `Alloc`;
+//   - `let y = move x` is an owned binding even when `x` is a static value (the table of §5.4: "`let y = f(...)`、`let y = move x`…: 所有");
+//   - "`var y = ...`: 所有（書き換えられる）" whatever the initializer is, also an `if` and a path of static values;
+//   - an assignment drops the previous value of the place, whatever the right-hand side is (S-1038, §12.2: "代入で上書きされる前の値の
+//     破棄を含む"), so `p.name = ["a", "bc"][i]` of an `inout` parameter is an E0601 in an `rt fn` at the target (S-783: "上書きは代入先").
+// The drop of an owned value of a Shared type (`Str`) or of `Buf` needs `Alloc` (§12.2), which an `rt fn` cannot have (§10 rule 1):
+// an E0601 at the binding (S-783) or at the target of the assignment. One error per function (P-01). The argument `v` is an `F32`.
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+// ------------------------------------------------------ a type that is not Dup (S-780)
+
+pub rt fn wait_a_none_of_a_buffer(r: Result[U32, U32]) -> Result[(Option[Buf[F32]], U32), U32] {
+  Ok((None, r?)) //~ E0601
+}
+
+pub rt fn wait_an_if_of_none_of_a_buffer(c: Bool, r: Result[U32, U32]) -> Result[(Option[Buf[F32]], U32), U32] {
+  Ok((if c { None } else { None }, r?)) //~ E0601
+}
+
+pub rt fn let_a_none_of_a_buffer() -> U32 {
+  let o: Option[Buf[F32]] = None //~ E0601
+  match o {
+    Some(_) => 1,
+    None => 0,
+  }
+}
+
+// -------------------------------------------------------------------------------- `move`
+
+pub rt fn let_a_move_of_a_static_binding() -> U32 {
+  let nm = "gain"
+  let q = move nm //~ E0601
+  q.len()
+}
+
+pub rt fn let_a_move_of_a_binding_of_an_if(c: Bool) -> U32 {
+  let nm = if c { "a" } else { "b" }
+  let q = move nm //~ E0601
+  q.len()
+}
+
+pub rt fn let_a_move_of_a_binding_of_a_path(i: U32) -> U32 {
+  let nm = ["a", "bc"][i]
+  let q = move nm //~ E0601
+  q.len()
+}
+
+// -------------------------------------------------------------------------------- `var`
+
+pub rt fn var_of_an_if(c: Bool) -> U32 {
+  var s = if c { "a" } else { "b" } //~ E0601
+  s.len()
+}
+
+pub rt fn var_of_a_path(i: U32) -> U32 {
+  var s = ["a", "bc"][i] //~ E0601
+  s.len()
+}
+
+pub rt fn var_of_a_match(i: U32) -> U32 {
+  var s = match i { 0 => "a", _ => "b" } //~ E0601
+  s.len()
+}
+
+pub rt fn var_of_a_literal_with_a_path(i: U32, v: F32) -> U32 {
+  var p = (["a", "bc"][i], v) //~ E0601
+  p.1 = 2.0
+  p.0.len()
+}
+
+// ---------------------------------------------------------------------------- assignment
+
+pub rt fn assign_a_path_to_a_field_of_an_inout_parameter(inout p: Param, i: U32) {
+  p.name = ["a", "bc"][i] //~ E0601
+}
+
+pub rt fn assign_an_if_to_a_field_of_an_inout_parameter(inout p: Param, c: Bool) {
+  p.name = if c { "a" } else { "b" } //~ E0601
+}
+
+pub rt fn assign_a_static_value_to_a_field_of_an_inout_parameter(inout p: Param) {
+  p.name = "a" //~ E0601
+}
+
+pub rt fn assign_an_if_to_a_var(c: Bool, d: Bool) -> U32 {
+  var s = "z" //~ E0601
+  s = if c { "a" } else { "b" }
+  if d {
+    s = ["a", "bc"][0]
+  }
+  s.len()
+}

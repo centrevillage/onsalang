@@ -297,8 +297,13 @@ impl<'a> Settle<'a> {
 /// nothing (§5.4, §12.2): a binding that needs no drop or a path of one
 /// ([`no_drop_binding`]); a static value or a literal that needs no drop, or
 /// a path of one (`["a", "bc"][i]`, `("gain", v).0`, S-615), stopping at the
-/// end of a chain of names (`m.LIMIT`). The one test of the heads and the
-/// modes (R-461), from the marks of the bindings settled before.
+/// end of a chain of names (`m.LIMIT`); an `if`, a `match` or a block with a
+/// tail that does not diverge, all such tails needing no drop, or a path of
+/// one (`(if c { ("a", 1) } else { ("b", 2) }).0`, S-1065). Only values with
+/// no place they derive from: not the borrowed places of [`Settle::borrowed`]
+/// (L3). The one test of the heads, the elements of the literals and the
+/// modes (R-461), from the marks of the bindings and literals settled before;
+/// a walk of the paths and tails of `e`, linear in their size.
 pub(crate) fn no_drop(ast: &Ast, names: &BodyNames, info: &BodyInfo, e: ExprId) -> bool {
     if no_drop_binding(ast, names, info, e) {
         return true;
@@ -312,6 +317,16 @@ pub(crate) fn no_drop(ast: &Ast, names: &BodyNames, info: &BodyInfo, e: ExprId) 
             _ if info.targets.contains_key(&x) => return false,
             ExprKind::Field { base, .. } | ExprKind::TupleIndex { base, .. } => *base,
             ExprKind::Index { base, .. } | ExprKind::Paren(base) => *base,
+            ExprKind::If { .. } | ExprKind::Match { .. } | ExprKind::Block(_) => {
+                let mut tails = Vec::new();
+                crate::tails::tails(ast, x, &info.diverging, &mut tails);
+                return tails.iter().any(|t| matches!(t, Tail::Value(_)))
+                    && tails.iter().all(|&t| match t {
+                        Tail::Exits => true,
+                        Tail::Value(v) => no_drop(ast, names, info, v),
+                        Tail::Unit(_) => false,
+                    });
+            }
             _ => return false,
         };
     }

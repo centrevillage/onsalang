@@ -1,0 +1,88 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§5.2", "§10", "§12.2", "§8.1"]
+
+// S-1065 (§5.4, §5.2, §10, §12.2, §8.1, S-783): the owned side of values/no_drop_value_path.onsa and values/no_drop_value_root.onsa. "これらの
+// どれでもない要素を持つリテラルは所有の行である（`["a", s]`・`("a", s)`・`(if c { "a" } else { s }, v)`、`s` は借用の `Str` の引数。
+// 所有のリテラルの経路 `["a", s][0]` も破棄の要らない値でない。…）": the path of a literal that has an element that is not a value
+// that needs no drop (`["a", s][0]`, `(s, "a").1`, `(if c { (s, 1) } else { ("b", 2) }).0`, `s` is a borrowed `Str`
+// argument) is a part of an owned value, so it is an owned element: its copy is dropped (an owned `Str`, which needs `Alloc`,
+// §12.2) and in an `rt fn` that is an E0601 (§10 rule 1) at the value that waits for a `?` (S-783: "束縛の無い値は…その式") or at the
+// binding of a literal that holds it (at the name of a `move` parameter `t`, which a path leaves unmoved and drops, S-783). The root of the path is an `if` or a literal, so the rule of D1 ("経路の根が `if`・
+// `match`・ブロックの形") holds only when the tails need no drop.
+//
+// The two last functions are the D2 form of S-1065: a path of an `if` whose tails are borrowed arguments (`(if c { x } else { y }).0`,
+// `x` and `y` are borrowed tuple arguments) is not done in this version, because it needs a borrow that derives from several places
+// (L3 of tasks/phase2.md); it stays an owned copy of the `Str`, an E0601 at the binding `t`. Both are E0601 as before S-1065; the work that
+// does L3 (the second period) makes them borrowed bindings and takes their markers away.
+// One error per function (P-01). The arguments `s` and `t` are a borrowed `Str` and an owned `Str`, `v` is an `F32`.
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+// ------------------------------------------------------- a path of an owned literal that waits for a `?`
+
+pub rt fn wait_the_path_of_an_array_with_a_borrowed_element(s: Str, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  Ok((["a", s][0], r?)) //~ E0601
+}
+
+pub rt fn wait_the_path_of_a_tuple_with_a_borrowed_element(s: Str, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  Ok(((s, "a").1, r?)) //~ E0601
+}
+
+pub rt fn wait_the_path_of_an_array_with_an_owned_element(move t: Str, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  Ok((["a", t][0], r?)) //~ E0601
+}
+
+pub rt fn wait_the_path_of_a_struct_with_a_borrowed_element(s: Str, v: F32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  Ok((Param { name: s, value: v }.name, r?)) //~ E0601
+}
+
+pub rt fn wait_the_path_of_an_if_with_a_borrowed_element(c: Bool, s: Str, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  Ok(((if c { (s, 1) } else { ("b", 2) }).0, r?)) //~ E0601
+}
+
+pub rt fn wait_the_path_of_an_if_with_an_owned_element(c: Bool, move t: Str, r: Result[U32, U32]) -> Result[(Str, U32), U32] { //~ E0601
+  Ok(((if c { (t, 1) } else { ("b", 2) }).0, r?))
+}
+
+// ---------------------------------------------------------- a literal that holds such a path, bound by `let`
+
+pub rt fn let_a_tuple_with_the_path_of_an_array_with_a_borrowed_element(s: Str, v: F32) -> U32 {
+  let p = (["a", s][0], v) //~ E0601
+  p.0.len()
+}
+
+pub rt fn let_a_tuple_with_the_path_of_a_tuple_with_a_borrowed_element(s: Str, v: F32) -> U32 {
+  let p = ((s, "a").1, v) //~ E0601
+  p.0.len()
+}
+
+pub rt fn let_a_tuple_with_the_path_of_an_if_with_a_borrowed_element(c: Bool, s: Str, v: F32) -> U32 {
+  let p = ((if c { (s, 1) } else { ("b", 2) }).0, v) //~ E0601
+  p.0.len()
+}
+
+pub rt fn let_the_path_of_an_array_with_a_borrowed_element(s: Str) -> U32 {
+  let t = ["a", s][0] //~ E0601
+  t.len()
+}
+
+pub rt fn let_the_path_of_an_if_with_a_borrowed_element(c: Bool, s: Str) -> U32 {
+  let t = (if c { (s, 1) } else { ("b", 2) }).0 //~ E0601
+  t.len()
+}
+
+// ------------------------------------------------------- D2: the path of an `if` of borrowed arguments
+
+pub rt fn d2_let_the_path_of_an_if_of_borrowed_arguments(c: Bool, x: (Str, U32), y: (Str, U32)) -> U32 {
+  let t = (if c { x } else { y }).0 //~ E0601
+  t.len()
+}
+
+pub rt fn d2_let_the_path_of_a_match_of_borrowed_arguments(i: U32, x: (Str, U32), y: (Str, U32)) -> U32 {
+  let t = (match i { 0 => x, _ => y }).0 //~ E0601
+  t.len()
+}

@@ -1,0 +1,105 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§5.2", "§10", "§12.2", "§8.1"]
+
+// S-1065 (§5.4, §5.2, §10, §12.2, §8.1): "破棄の要らない値は、静的な値、破棄の要らないリテラル、破棄の要らない束縛の名前と、
+// それらの経路（フィールドと添字。`["a", "bc"][i]`、`("gain", v).0`、`p.name`、`t[i]`）、…である。`let` の初期値、
+// リテラルの要素、引数、早い出口で待つ値、`[e; N]` の要素のどこに置いても同じである". So a path of a static value
+// (`["a", "bc"][i]`, `[["a", "b"], ["c", "d"]][i][j]`) has no drop wherever it stands: as the element of a literal that is bound by
+// `let`, of a literal that waits for a `?` (§9.1: a `?` that returns leaves like a `return`, and the value that waits is
+// dropped: "抜けるときに破棄される"), of a constructor, of a nested struct, and as the argument of a `move` parameter. Its
+// copy and its drop need no `Alloc` (§12.2: "破棄の要らない値（…）の複製と破棄（一時の値を含む）: 要らない"), so there is
+// no E0601 in an `rt fn` (§10 rule 1). The same functions without `rt` are in values/no_drop_value_path_plain.onsa (a
+// function without `Alloc` in its row). Before S-1065 the literals in this file were owned (the literal classified an element by the names of
+// bindings and their paths only), so each of them was an E0601. One form in one function (P-01). The forms that stay owned
+// are in negative/no_drop_value_owned_elem.onsa. The argument `v` is an `F32`. No diagnostic is expected anywhere in this
+// file.
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+pub struct Wrap {
+  p: Param,
+  k: U32,
+}
+
+pub rt fn take2(move s: Str, n: U32) -> Str {
+  s
+}
+
+pub rt fn tlen(p: (Str, F32), n: U32) -> U32 {
+  p.0.len() + n
+}
+
+pub rt fn wlen(w: Wrap) -> U32 {
+  w.p.name.len() + w.k
+}
+
+// ------------------------------------------------------------------------ a literal bound by `let`
+
+pub rt fn let_a_tuple_with_a_path(i: U32, v: F32) -> U32 {
+  let p = (["a", "bc"][i], v)
+  p.0.len()
+}
+
+pub rt fn let_a_tuple_with_a_nested_index(i: U32, j: U32, v: F32) -> U32 {
+  let p = ([["a", "b"], ["c", "d"]][i][j], v)
+  p.0.len()
+}
+
+pub rt fn let_a_tuple_with_a_try_in_the_index(v: F32, r: Result[U32, U32]) -> Result[U32, U32] {
+  let p = (["a", "bc"][r?], v)
+  Ok(p.0.len())
+}
+
+pub rt fn let_a_tuple_with_the_path_of_a_struct_literal(v: F32) -> U32 {
+  let p = (Param { name: "a", value: v }.name, v)
+  p.0.len()
+}
+
+pub rt fn let_a_struct_with_a_path(i: U32, v: F32) -> U32 {
+  let w = Wrap { p: Param { name: ["a", "bc"][i], value: v }, k: 1 }
+  wlen(w)
+}
+
+// ------------------------------------------------------------- a value that waits for a `?`
+
+pub rt fn wait_a_tuple_with_a_path(i: U32, v: F32, r: Result[U32, U32]) -> Result[((Str, F32), U32), U32] {
+  Ok(((["a", "bc"][i], v), r?))
+}
+
+pub rt fn wait_a_tuple_with_a_nested_index(i: U32, j: U32, v: F32, r: Result[U32, U32]) -> Result[((Str, F32), U32), U32] {
+  Ok((([["a", "b"], ["c", "d"]][i][j], v), r?))
+}
+
+pub rt fn wait_a_constructor_with_a_path(i: U32, r: Result[U32, U32]) -> Result[(Option[Str], U32), U32] {
+  Ok((Some(["a", "bc"][i]), r?))
+}
+
+pub rt fn wait_a_struct_with_a_path(i: U32, v: F32, r: Result[U32, U32]) -> Result[(Param, U32), U32] {
+  Ok((Param { name: ["a", "bc"][i], value: v }, r?))
+}
+
+pub rt fn wait_a_nested_struct_with_a_path(i: U32, v: F32, r: Result[U32, U32]) -> Result[(Wrap, U32), U32] {
+  Ok((Wrap { p: Param { name: ["a", "bc"][i], value: v }, k: 1 }, r?))
+}
+
+pub rt fn wait_an_array_with_a_path(i: U32, r: Result[U32, U32]) -> Result[([Str; 2], U32), U32] {
+  Ok((["z", ["a", "bc"][i]], r?))
+}
+
+// ------------------------------------------------ a literal or a path as the argument of a call
+
+pub rt fn call_a_borrow_with_a_nested_struct(i: U32, v: F32) -> U32 {
+  wlen(Wrap { p: Param { name: ["a", "bc"][i], value: v }, k: 1 })
+}
+
+pub rt fn call_a_move_parameter_with_a_path(i: U32, r: Result[U32, U32]) -> Result[Str, U32] {
+  Ok(take2(["a", "bc"][i], r?))
+}
+
+pub rt fn call_a_move_parameter_with_a_path_and_no_wait(i: U32) -> Str {
+  take2(["a", "bc"][i], 1)
+}

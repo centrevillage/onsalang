@@ -1,0 +1,122 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§5.2", "§10", "§12.2", "§8.1"]
+
+// S-1065 (§5.4, §10, §12.2, §8.1): the functions of values/no_drop_value_heading.onsa without `rt` (a function that has no `Alloc` in its effect row, so that an
+// owned value that is dropped is an E0601 with the candidate `uses {Alloc}`, §8.1). Each of them is the same form as the one of that
+// file, with the same expectation: the value that needs no drop (§5.4, S-1065) has no drop, so there is no E0601 and no candidate.
+// No diagnostic is expected anywhere in this file.
+
+pub fn tlen(p: (Str, F32), n: U32) -> U32 {
+  p.0.len() + n
+}
+
+// ------------------------------------------------------------------------------------------ for
+
+pub fn for_over_an_array_with_a_path(i: U32) -> U32 {
+  var n: U32 = 0
+  for s in [["a", "bc"][i], "c"] {
+    n = n + s.len()
+  }
+  n
+}
+
+pub fn for_over_an_array_with_an_if(c: Bool) -> U32 {
+  var n: U32 = 0
+  for s in [if c { "a" } else { "b" }, "c"] {
+    n = n + s.len()
+  }
+  n
+}
+
+pub fn for_over_an_array_of_tuples_with_a_path(i: U32, v: F32) -> U32 {
+  var n: U32 = 0
+  for p in [(["a", "bc"][i], v), ("z", v)] {
+    n = n + p.0.len()
+  }
+  n
+}
+
+pub fn for_over_the_path_of_an_array_of_arrays(i: U32) -> U32 {
+  var n: U32 = 0
+  for s in [["a", "b"], ["c", "d"]][i] {
+    n = n + s.len()
+  }
+  n
+}
+
+pub fn for_over_an_if_with_array_tails(c: Bool) -> U32 {
+  var n: U32 = 0
+  for s in if c { ["a", "b"] } else { ["c", "d"] } {
+    n = n + s.len()
+  }
+  n
+}
+
+pub fn for_over_an_array_with_a_path_and_wait(i: U32, r: Result[U32, U32]) -> Result[U32, U32] {
+  var n: U32 = 0
+  for s in [["a", "bc"][i], "c"] {
+    n = n + tlen((s, 1.0), r?)
+  }
+  Ok(n)
+}
+
+// ---------------------------------------------------------------------------------------- match
+
+pub fn match_a_tuple_with_a_path(i: U32, v: F32) -> U32 {
+  match (["a", "bc"][i], v) {
+    (s, _) => s.len(),
+  }
+}
+
+pub fn match_a_tuple_with_an_if(c: Bool, v: F32) -> U32 {
+  match (if c { "a" } else { "b" }, v) {
+    (s, _) => s.len(),
+  }
+}
+
+pub fn match_a_constructor_with_a_path(i: U32) -> U32 {
+  match Some(["a", "bc"][i]) {
+    Some(s) => s.len(),
+    None => 0,
+  }
+}
+
+pub fn match_a_constructor_with_an_if(c: Bool) -> U32 {
+  match Some(if c { "a" } else { "b" }) {
+    Some(s) => s.len(),
+    None => 0,
+  }
+}
+
+pub fn match_an_if(c: Bool) -> U32 {
+  match if c { "a" } else { "b" } {
+    s => s.len(),
+  }
+}
+
+pub fn match_a_path_of_an_if(c: Bool) -> U32 {
+  match (if c { ("a", 1) } else { ("b", 2) }).0 {
+    s => s.len(),
+  }
+}
+
+// -------------------------------------------------- a binding that is derived from the heading
+
+pub fn let_a_binding_of_an_arm_of_a_match_on_a_path(i: U32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  let o = Some(["a", "bc"][i])
+  let t = match o {
+    Some(s) => s,
+    None => "x",
+  }
+  Ok((t, r?))
+}
+
+pub fn let_a_literal_with_a_binding_of_a_for(i: U32, v: F32) -> U32 {
+  var n: U32 = 0
+  for s in [["a", "bc"][i], "c"] {
+    let p = (s, v)
+    n = n + p.0.len()
+  }
+  n
+}

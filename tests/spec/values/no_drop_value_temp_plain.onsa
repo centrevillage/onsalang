@@ -1,0 +1,138 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§5.2", "§10", "§12.2", "§8.1"]
+
+// S-1065 (§5.4, §5.2, §10, §12.2, §8.1): the functions of values/no_drop_value_temp.onsa without `rt` (a function that has no `Alloc` in its effect row, so that an
+// owned value that is dropped is an E0601 with the candidate `uses {Alloc}`, §8.1). Each of them is the same form as the one of that
+// file, with the same expectation: the value that needs no drop (§5.4, S-1065) has no drop, so there is no E0601 and no candidate.
+// No diagnostic is expected anywhere in this file.
+
+pub fn tlen(p: (Str, F32), n: U32) -> U32 {
+  p.0.len() + n
+}
+
+pub fn len2(s: Str, n: U32) -> U32 {
+  s.len() + n
+}
+
+// ---------------------------------------------------------------------- the argument that is borrowed
+
+pub fn borrow_a_tuple_with_a_path(i: U32, v: F32) -> U32 {
+  tlen((["a", "bc"][i], v), 1)
+}
+
+pub fn borrow_a_tuple_with_an_if(c: Bool, v: F32) -> U32 {
+  tlen((if c { "a" } else { "b" }, v), 1)
+}
+
+pub fn borrow_a_tuple_with_a_path_and_wait(i: U32, v: F32, r: Result[U32, U32]) -> Result[U32, U32] {
+  Ok(tlen((["a", "bc"][i], v), r?))
+}
+
+pub fn borrow_a_tuple_with_an_if_and_wait(c: Bool, v: F32, r: Result[U32, U32]) -> Result[U32, U32] {
+  Ok(tlen((if c { "a" } else { "b" }, v), r?))
+}
+
+pub fn borrow_an_if(c: Bool, r: Result[U32, U32]) -> Result[U32, U32] {
+  Ok(len2(if c { "a" } else { "b" }, r?))
+}
+
+pub fn borrow_a_path(i: U32, r: Result[U32, U32]) -> Result[U32, U32] {
+  Ok(len2(["a", "bc"][i], r?))
+}
+
+pub fn borrow_and_discard_the_result(i: U32, v: F32) -> U32 {
+  let _ = tlen((["a", "bc"][i], v), 1)
+  1
+}
+
+// ------------------------------------------------------------ a value that `let _` drops at the end of the statement
+
+pub fn discard_a_tuple_with_a_path(i: U32, v: F32) -> U32 {
+  let _ = (["a", "bc"][i], v)
+  1
+}
+
+pub fn discard_a_tuple_with_an_if(c: Bool, v: F32) -> U32 {
+  let _ = (if c { "a" } else { "b" }, v)
+  1
+}
+
+pub fn discard_an_if(c: Bool) -> U32 {
+  let _ = if c { "a" } else { "b" }
+  1
+}
+
+pub fn discard_a_path(i: U32) -> U32 {
+  let _ = ["a", "bc"][i]
+  1
+}
+
+// ---------------------------------------------------------------------------------- a comparison
+
+pub fn compare_a_tuple_with_a_path(i: U32) -> Bool {
+  (["a", "bc"][i], 1) == ("a", 1)
+}
+
+pub fn compare_a_tuple_with_an_if(c: Bool) -> Bool {
+  (if c { "a" } else { "b" }, 1) == ("a", 1)
+}
+
+pub fn compare_an_if(c: Bool) -> Bool {
+  (if c { "a" } else { "b" }) == "a"
+}
+
+pub fn compare_a_path(i: U32) -> Bool {
+  ["a", "bc"][i] == "a"
+}
+
+// ------------------------------------------------------ a receiver, a condition and a guard
+
+pub fn receive_a_tuple_with_a_path(i: U32, v: F32) -> U32 {
+  (["a", "bc"][i], v).0.len()
+}
+
+pub fn receive_a_tuple_with_an_if(c: Bool, v: F32) -> U32 {
+  (if c { "a" } else { "b" }, v).0.len()
+}
+
+pub fn receive_an_if(c: Bool) -> U32 {
+  (if c { "a" } else { "b" }).len()
+}
+
+pub fn condition_of_an_if(i: U32) -> U32 {
+  if (["a", "bc"][i], 1) == ("a", 1) {
+    1
+  } else {
+    0
+  }
+}
+
+pub fn condition_of_a_while(c: Bool) -> U32 {
+  var n: U32 = 0
+  while (if c { "a" } else { "b" }, n) == ("a", 3) {
+    n = n + 1
+  }
+  n
+}
+
+pub fn guard_with_a_path(i: U32, o: Option[Str]) -> U32 {
+  match i {
+    k if o == Some(["a", "bc"][k]) => 1,
+    _ => 0,
+  }
+}
+
+pub fn guard_with_an_if(c: Bool, i: U32, o: Option[Str]) -> U32 {
+  match i {
+    _ if o == Some(if c { "a" } else { "b" }) => 1,
+    _ => 0,
+  }
+}
+
+// ------------------------------------------------------------- the operand of a `?`
+
+pub fn try_a_result_with_an_if(c: Bool) -> Result[Str, U32] {
+  let t = Ok(if c { "a" } else { "b" })?
+  Ok(t)
+}

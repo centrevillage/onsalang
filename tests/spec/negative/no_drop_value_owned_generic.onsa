@@ -1,0 +1,39 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§4.5", "§4.6", "§6.3", "§10", "§12.2", "§8.1"]
+
+// S-1065 (§5.4, §4.5, §4.6, §6.3, §10, §12.2, §8.1, S-783): the owned side of values/no_drop_value_generic.onsa. "要素が Copy かは、本体の型の
+// 推論の後の型で決める。`T: Copy` の値は Copy で、境界の無い `T` と `T: ?Dup` の値は Copy でない": a literal that has a value of type
+// `T` as an element is a literal that needs no drop only when `T: Copy`, and S-1065 does not change that: with `("a", x)` and
+// `(if c { "a" } else { "b" }, x)`, `x: T`, the element `x` is not a Copy value and not a value that needs no drop, so the literal is an
+// owned value and its drop ("ジェネリックな `T` の値の破棄（`T: Copy` の制約が無い場合、§6.3）: 要る", §12.2) needs `Alloc`: an
+// E0601 in an `rt fn` (§10 rule 1) at the value that waits for a `?` or at the binding of the literal (S-783). `T: ?Dup` is not
+// even Dup, so a literal of it is owned whatever its elements are (S-780, "自分の型が Dup でない…リテラルと列挙子は…所有の行である").
+// One error per function (P-01).
+
+pub rt fn wait_a_tuple_with_a_value_of_an_unbounded_type[T](x: T, r: Result[U32, U32]) -> Result[((Str, T), U32), U32] {
+  Ok((("a", x), r?)) //~ E0601
+}
+
+pub rt fn wait_a_tuple_with_an_if_and_a_value_of_an_unbounded_type[T](c: Bool, x: T, r: Result[U32, U32]) -> Result[((Str, T), U32), U32] {
+  Ok(((if c { "a" } else { "b" }, x), r?)) //~ E0601
+}
+
+pub rt fn wait_a_tuple_with_a_path_and_a_value_of_an_unbounded_type[T](i: U32, x: T, r: Result[U32, U32]) -> Result[((Str, T), U32), U32] {
+  Ok(((["a", "bc"][i], x), r?)) //~ E0601
+}
+
+pub rt fn let_a_tuple_with_a_value_of_an_unbounded_type[T](x: T) -> U32 {
+  let p = ("a", x) //~ E0601
+  p.0.len()
+}
+
+pub rt fn let_a_tuple_with_an_if_and_a_value_of_an_unbounded_type[T](c: Bool, x: T) -> U32 {
+  let p = (if c { "a" } else { "b" }, x) //~ E0601
+  p.0.len()
+}
+
+pub rt fn let_a_tuple_with_a_path_and_a_value_of_a_type_that_is_not_dup[T: ?Dup](i: U32, move x: T) -> U32 {
+  let p = (["a", "bc"][i], move x) //~ E0601
+  p.0.len()
+}

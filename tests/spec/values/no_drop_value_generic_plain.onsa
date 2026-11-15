@@ -1,0 +1,93 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§2.4", "§4.6", "§5.3", "§10", "§12.2", "§8.1"]
+
+// S-1065, S-1045 (§5.4, §2.4, §4.6, §5.3, §10, §12.2, §8.1): the functions of values/no_drop_value_generic.onsa without `rt` (a function that has no `Alloc` in its effect row, so that an
+// owned value that is dropped is an E0601 with the candidate `uses {Alloc}`, §8.1). Each of them is the same form as the one of that
+// file, with the same expectation: the value that needs no drop (§5.4, S-1065) has no drop, so there is no E0601 and no candidate.
+// No diagnostic is expected anywhere in this file.
+
+pub fn tlen(p: (Str, F32), n: U32) -> U32 {
+  p.0.len() + n
+}
+
+pub fn ap(g: fn(U32) -> U32, x: U32) -> U32 {
+  g.(x)
+}
+
+pub fn ap_rt(g: fn(U32) -> U32, x: U32) -> U32 {
+  g.(x)
+}
+
+// ---------------------------------------------------------------------- a generic length
+
+pub fn generic_length_with_an_if[const N: U32](c: Bool) -> [Str; N] {
+  [if c { "a" } else { "b" }; N]
+}
+
+pub fn generic_length_with_a_path[const N: U32](i: U32) -> [Str; N] {
+  [["a", "bc"][i]; N]
+}
+
+pub fn generic_length_with_a_block[const N: U32]() -> [Str; N] {
+  [{ "a" }; N]
+}
+
+pub fn generic_length_with_a_match[const N: U32](i: U32) -> [Str; N] {
+  [match i { 0 => "a", _ => "b" }; N]
+}
+
+pub fn generic_length_with_a_literal_with_a_path[const N: U32](i: U32, v: F32) -> [(Str, F32); N] {
+  [(["a", "bc"][i], v); N]
+}
+
+pub fn generic_length_with_a_literal_with_an_if[const N: U32](c: Bool, v: F32) -> [(Str, F32); N] {
+  [(if c { "a" } else { "b" }, v); N]
+}
+
+// ---------------------------------------------------------------- an element of type `T: Copy`
+
+pub fn copy_element_with_a_static_value[T: Copy](x: T, r: Result[U32, U32]) -> Result[((Str, T), U32), U32] {
+  Ok((("a", x), r?))
+}
+
+pub fn copy_element_with_an_if[T: Copy](c: Bool, x: T, r: Result[U32, U32]) -> Result[((Str, T), U32), U32] {
+  Ok(((if c { "a" } else { "b" }, x), r?))
+}
+
+pub fn copy_element_with_a_path[T: Copy](i: U32, x: T, r: Result[U32, U32]) -> Result[((Str, T), U32), U32] {
+  Ok(((["a", "bc"][i], x), r?))
+}
+
+pub fn copy_element_let_with_an_if[T: Copy](c: Bool, x: T) -> U32 {
+  let p = (if c { "a" } else { "b" }, x)
+  p.0.len()
+}
+
+// ------------------------------------------------------------------- an anonymous function
+
+pub fn closure_body_with_a_path(v: F32) -> U32 {
+  ap(fn(x: U32) -> U32 { tlen((["a", "bc"][x], v), 1) }, 1)
+}
+
+pub fn closure_body_with_an_if(v: F32) -> U32 {
+  ap(fn(x: U32) -> U32 { tlen((if x == 0 { "a" } else { "b" }, v), 1) }, 1)
+}
+
+pub fn closure_body_with_a_let(v: F32) -> U32 {
+  ap(fn(x: U32) -> U32 {
+    let p = (if x == 0 { "a" } else { "b" }, v)
+    p.0.len()
+  }, 1)
+}
+
+pub fn closure_rt_body_with_a_path(v: F32) -> U32 {
+  ap_rt(fn(x: U32) -> U32 { tlen((["a", "bc"][x], v), 1) }, 1)
+}
+
+pub fn closure_rt_body_with_a_let(v: F32) -> U32 {
+  ap_rt(fn(x: U32) -> U32 {
+    let p = (["a", "bc"][x], v)
+    p.0.len()
+  }, 1)
+}

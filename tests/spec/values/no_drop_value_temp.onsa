@@ -1,0 +1,144 @@
+// onsa.toml
+// [test]
+// spec = ["§5.4", "§5.2", "§10", "§12.2", "§8.1"]
+
+// S-1065 (§5.4, §5.2, §10, §12.2, §8.1): the value that needs no drop is the same wherever it stands ("`let` の初期値、リテラルの要素、
+// 引数、早い出口で待つ値、`[e; N]` の要素のどこに置いても同じである"), also as a temporary value: the literal that has a path of
+// a static value or an `if` as an element, passed to a parameter that borrows (`tlen((["a", "bc"][i], v), 1)`), compared
+// (`(["a", "bc"][i], 1) == ("a", 1)`), the receiver of a method or of a field (`(["a", "bc"][i], v).0.len()`,
+// `(if c { "a" } else { "b" }).len()`), the condition of an `if` or a `while`, and the guard of an arm (`k if o == Some(["a", "bc"][k])`) and the value that `let _ =` drops at the end of its statement (§5.4).
+// A temporary value of this kind is dropped at the end of its statement and its drop needs no `Alloc` (§12.2: "破棄の要らない値…の
+// 複製と破棄（一時の値を含む）: 要らない"), so there is no E0601 in an `rt fn` (§10 rule 1). The same functions without `rt` are in
+// values/no_drop_value_temp_plain.onsa. Before S-1065 each of the literals here was an E0601, and the `if` and the path that stand
+// alone as the operand of a comparison or the receiver were accepted already. One form in one function (P-01). The
+// argument `v` is an `F32`. No diagnostic is expected anywhere in this file.
+
+pub rt fn tlen(p: (Str, F32), n: U32) -> U32 {
+  p.0.len() + n
+}
+
+pub rt fn len2(s: Str, n: U32) -> U32 {
+  s.len() + n
+}
+
+// ---------------------------------------------------------------------- the argument that is borrowed
+
+pub rt fn borrow_a_tuple_with_a_path(i: U32, v: F32) -> U32 {
+  tlen((["a", "bc"][i], v), 1)
+}
+
+pub rt fn borrow_a_tuple_with_an_if(c: Bool, v: F32) -> U32 {
+  tlen((if c { "a" } else { "b" }, v), 1)
+}
+
+pub rt fn borrow_a_tuple_with_a_path_and_wait(i: U32, v: F32, r: Result[U32, U32]) -> Result[U32, U32] {
+  Ok(tlen((["a", "bc"][i], v), r?))
+}
+
+pub rt fn borrow_a_tuple_with_an_if_and_wait(c: Bool, v: F32, r: Result[U32, U32]) -> Result[U32, U32] {
+  Ok(tlen((if c { "a" } else { "b" }, v), r?))
+}
+
+pub rt fn borrow_an_if(c: Bool, r: Result[U32, U32]) -> Result[U32, U32] {
+  Ok(len2(if c { "a" } else { "b" }, r?))
+}
+
+pub rt fn borrow_a_path(i: U32, r: Result[U32, U32]) -> Result[U32, U32] {
+  Ok(len2(["a", "bc"][i], r?))
+}
+
+pub rt fn borrow_and_discard_the_result(i: U32, v: F32) -> U32 {
+  let _ = tlen((["a", "bc"][i], v), 1)
+  1
+}
+
+// ------------------------------------------------------------ a value that `let _` drops at the end of the statement
+
+pub rt fn discard_a_tuple_with_a_path(i: U32, v: F32) -> U32 {
+  let _ = (["a", "bc"][i], v)
+  1
+}
+
+pub rt fn discard_a_tuple_with_an_if(c: Bool, v: F32) -> U32 {
+  let _ = (if c { "a" } else { "b" }, v)
+  1
+}
+
+pub rt fn discard_an_if(c: Bool) -> U32 {
+  let _ = if c { "a" } else { "b" }
+  1
+}
+
+pub rt fn discard_a_path(i: U32) -> U32 {
+  let _ = ["a", "bc"][i]
+  1
+}
+
+// ---------------------------------------------------------------------------------- a comparison
+
+pub rt fn compare_a_tuple_with_a_path(i: U32) -> Bool {
+  (["a", "bc"][i], 1) == ("a", 1)
+}
+
+pub rt fn compare_a_tuple_with_an_if(c: Bool) -> Bool {
+  (if c { "a" } else { "b" }, 1) == ("a", 1)
+}
+
+pub rt fn compare_an_if(c: Bool) -> Bool {
+  (if c { "a" } else { "b" }) == "a"
+}
+
+pub rt fn compare_a_path(i: U32) -> Bool {
+  ["a", "bc"][i] == "a"
+}
+
+// ------------------------------------------------------ a receiver, a condition and a guard
+
+pub rt fn receive_a_tuple_with_a_path(i: U32, v: F32) -> U32 {
+  (["a", "bc"][i], v).0.len()
+}
+
+pub rt fn receive_a_tuple_with_an_if(c: Bool, v: F32) -> U32 {
+  (if c { "a" } else { "b" }, v).0.len()
+}
+
+pub rt fn receive_an_if(c: Bool) -> U32 {
+  (if c { "a" } else { "b" }).len()
+}
+
+pub rt fn condition_of_an_if(i: U32) -> U32 {
+  if (["a", "bc"][i], 1) == ("a", 1) {
+    1
+  } else {
+    0
+  }
+}
+
+pub rt fn condition_of_a_while(c: Bool) -> U32 {
+  var n: U32 = 0
+  while (if c { "a" } else { "b" }, n) == ("a", 3) {
+    n = n + 1
+  }
+  n
+}
+
+pub rt fn guard_with_a_path(i: U32, o: Option[Str]) -> U32 {
+  match i {
+    k if o == Some(["a", "bc"][k]) => 1,
+    _ => 0,
+  }
+}
+
+pub rt fn guard_with_an_if(c: Bool, i: U32, o: Option[Str]) -> U32 {
+  match i {
+    _ if o == Some(if c { "a" } else { "b" }) => 1,
+    _ => 0,
+  }
+}
+
+// ------------------------------------------------------------- the operand of a `?`
+
+pub rt fn try_a_result_with_an_if(c: Bool) -> Result[Str, U32] {
+  let t = Ok(if c { "a" } else { "b" })?
+  Ok(t)
+}

@@ -8,7 +8,7 @@
 // from it by `let q = p` or by a pattern, a path of it, a literal or a path that has no binding) can wait for an operand after it that leaves the function (a `?`, a `return`) or the loop
 // (a `break`, a `continue`), and its drop needs no `Alloc`: a function without `uses {Alloc}` has no E0601, and an `rt fn` has none either (§10 rule 1). The value that waits is the element of a
 // tuple, a struct literal, an array or a constructor, the argument of a call (a `move` parameter, which a Dup value that needs no drop can be given as it is) or the receiver of a `move self`.
-// Today each function is an E0601 ("dropped by an exit before it is used"): the drop of the waiting value is counted though it needs none. The forms that are already accepted are in
+// Before R-461 each function was an E0601 ("dropped by an exit before it is used"), the drop of the waiting value counted though it needs none (S-1065: values/no_drop_value_*). Forms accepted before it are in
 // negative/drop_nodrop_wait_kept.onsa, the forms where the value does need a drop (and are an E0601) in negative/drop_nodrop_wait_neg.onsa. The `fn` and the `rt fn` of each form are both here.
 // There is no error to place, so the functions with a statement list are on several lines and no line is written (S-783).
 
