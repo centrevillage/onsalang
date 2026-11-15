@@ -6,7 +6,7 @@
 // W6-03 U4a/t, S-783, S-82, R-87 (6) (§8.1: "束縛しなかった部分はそれを書いた所（`_`）"; §5.4: what the pattern of an owned head leaves unbound is dropped, at the end of the statement for a `let` and at the end of the arm for a
 // `match`): the part that a pattern does not bind needs `Alloc` for its drop (a `Buf`), and the use is at the `_` that leaves it: the `_` of a `let _ = e`, the `_` of a field in a `let` pattern, the `_` of an arm,
 // the last `_` of a struct pattern (it leaves the other fields), the `_` of an arm that binds nothing. The call that makes the value (`mk_k`) is a call of an `rt fn` without `Alloc`, so it is no use. The
-// parameter `move _: K` is on the heading line, and its column is not written: S-1051 (open) decides whether the range is `move _: K` or the `_`. One error per function (P-01).
+// parameter `move _: K` is on the heading line, and the position is the whole parameter (S-1051, decided (1); §8.1: "`move _` の引数は引数の全体"), so the column is that of `move` (@19). One error per function (P-01).
 // The candidate of each function inserts ` uses {Alloc}` into its signature. The same forms in an `rt fn` are in first_use_wild_rt.onsa.
 
 pub struct K {
@@ -44,4 +44,4 @@ pub fn arm_binds_nothing(move b: Buf[F32]) -> U32 uses {Alloc} {
   }
 }
 
-pub fn param_wild(move _: K) uses {Alloc} {}   //~ E0601
+pub fn param_wild(move _: K) uses {Alloc} {}   //~ E0601 @19

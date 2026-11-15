@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§8.1"]
+
+// W6-04 U2/t, S-1063 (decided (2)), S-691, S-1031, §8.1, §18.1: "型引数の中の等しさでも、指しえた効果で埋まる違いは比べない". The difference that no effect a failed name may have meant fills is
+// an E0401 in the argument of a type as it is elsewhere (effects/open_row_gone_kept.onsa): `uses {Gone}` (a failed name, E0302, that is no effect `Alloc`) and `uses {Alloc}` differ in either direction,
+// in an `Option`, a `Result`, a tuple and an array (the decision: "`uses {Gone}` と `uses {Alloc}` の違いは E0401"); two closed rows that differ are an E0401 (`closed_mismatch`, no failed name); and the
+// `rt` of a function type is part of the type of the argument (§8.1, S-1031: "`rt` と効果行を含めて完全に一致") that an open row does not relax (`rt_mismatch`). The forms that are not an error
+// are in effects/open_row_type_arg_kept.onsa. The functions are one-liners.
+use kp.{Gone}   //~ E0302
+
+pub fn alloc_pos(o: Option[fn(U32) -> U32 uses {Gone}]) -> Option[fn(U32) -> U32 uses {Alloc}] { o }   //~ E0401
+
+pub fn alloc_val(o: Option[fn(U32) -> U32 uses {Alloc}]) -> Option[fn(U32) -> U32 uses {Gone}] { o }   //~ E0401
+
+pub fn result_alloc(o: Result[fn(U32) -> U32 uses {Gone}, U32]) -> Result[fn(U32) -> U32 uses {Alloc}, U32] { o }   //~ E0401
+
+pub fn tuple_alloc(o: (fn(U32) -> U32 uses {Gone}, U32)) -> (fn(U32) -> U32 uses {Alloc}, U32) { o }   //~ E0401
+
+pub fn array_alloc(o: [fn(U32) -> U32 uses {Gone}; 2]) -> [fn(U32) -> U32 uses {Alloc}; 2] { o }   //~ E0401
+
+pub fn closed_mismatch(o: Option[fn(U32) -> U32 uses {Alloc}]) -> Option[fn(U32) -> U32] { o }   //~ E0401
+
+pub fn rt_mismatch(o: Option[rt fn(U32) -> U32 uses {Gone}]) -> Option[fn(U32) -> U32 uses {Gone}] { o }   //~ E0401

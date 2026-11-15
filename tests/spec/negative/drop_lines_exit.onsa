@@ -5,7 +5,7 @@
 // W6-03 U4c/t (the forms that W6-02 U3/t held back until S-783 was decided; template target/notes/147/w602/u3/after_s783/multiline.onsa).
 // §8.1: the position of the E0601 of an implicit drop is the place where the dropped value is written: the name of an owned binding, the expression
 // of a value that has no binding (the value that waits for a `?`, §12.2), and for an owned `for` the rest of the source is the expression after `move`
-// (S-1058, no column is written here). The drop point (the early exit) is shown by a note and is not the position. §5.4 and §12.2: a `return`, `break`,
+// (S-1058, decided (2): the expression after `move`; no column is written here). The drop point (the early exit) is shown by a note and is not the position. §5.4 and §12.2: a `return`, `break`,
 // `continue` or `?` drops the owned locals that are alive there, the rest of an owned `for` (the elements that were not iterated and the container of an
 // `Array` or a `Buf`, also when the loop ends), and the value that an operand evaluated and a later `?` leaves. A function without `uses {Alloc}` is an
 // E0601 and an `rt fn` too (S-77). One error per function (S-1053).

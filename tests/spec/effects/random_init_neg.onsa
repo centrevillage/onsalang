@@ -3,7 +3,7 @@
 // spec = ["§6.6", "§8.1", "§11.8", "§18.1"]
 // fixes = 0
 
-// W6-03 U7b/t, S-1055 (the provisional reading), S-97 (§6.6: "`Alloc` はコンパイラが提供する" and the initializer of a `const` and the default value of a field call only functions whose row is empty or `{Alloc}`;
+// W6-03 U7b/t, S-1055 (decided (1)), S-97 (§6.6: "`Alloc` はコンパイラが提供する" and the initializer of a `const` and the default value of a field call only functions whose row is empty or `{Alloc}`;
 // §8.1: "本体で使う効果は、効果行に含まれなければならない（E0601）"; §11.8: "それ以外では、呼ぶ関数の効果行に `Random` が要る（E0601）"): the initializer of a `const`, of an associated constant and the default value of a
 // field is given the row `{Alloc}`, so a call of `check` (which has `uses {Random}`) in it is an E0601 at the call, the first use. There is no candidate (`fixes = 0`: these have no row to
 // write). Each is a unit of its own (§18.1: a field default is a unit per field). The `Alloc` that the same places are given is in closure_scope_ok_kept.onsa.

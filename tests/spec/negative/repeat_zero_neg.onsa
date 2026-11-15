@@ -1,0 +1,135 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§5.2", "§5.4", "§8.1", "§10", "§12.2"]
+
+// W6-04 U2/t, S-1045 (1) (§2.4: "`[e; N]` ... `e` は値を置く位置で（§5.2）、長さが 0 でありうる（長さが 0 か、総称の定数のパラメータ）とき、置いた値はどの要素にもならず、その場で破棄される、§12.2";
+// §12.2: "長さが 0 でありうる `[e; N]`（§2.4）の `e` の値の破棄。総称の長さは、1 以上でしか呼ばれなくても数える（本体は長さの値によらず一度検査する）: 要る"; §8.1; §10 rule 1): the value of `e` of a
+// `[e; N]` that is a Dup value that is not Copy and needs a drop (a `Str`, an `Option[Str]`, a tuple that holds one) is put at no element when the length is 0 or may be 0, and is dropped
+// there, so the function needs `Alloc`: a function without `uses {Alloc}` is an E0601, and an `rt fn` too (§10 rule 1). It holds for every `e`: an owned parameter that is handed over (`[s; 0]`), a
+// borrowed one (the copy of a Shared value, "借用の場所の `e`（複製）も分けずに数える"), a value that a call makes, a path of a borrowed value, a `let` binding of an owned value, a nested array
+// at the place of the element, and the length that is a constant of the value 0 (`const Z: U32 = 0`) or the constant parameter of a generic function (`N`, which the body does not know: it is counted
+// even where every caller gives 1 or more, `call3`). The position is the expression of `e` (S-783: "束縛の無い値はその式"), so the functions with a `let` put the marker on the line of the array.
+// The lengths of 1 and more that are known (`[s; 2]`), the elements that are Copy or need no drop, and the functions with `uses {Alloc}` are in negative/repeat_zero_ok.onsa.
+// Today none of these is reported (a value that is put at "an element" is counted as put, whatever the length). The functions are one-liners where they can be (S-783). One error per function (S-1053).
+
+pub rt fn mk(n: U32) -> Str { "x" }
+
+const Z: U32 = 0
+
+const W: U32 = 3
+
+pub struct Holder {
+  name: Str,
+  n: U32,
+}
+
+pub fn run_z(f: fn(move Str) -> [Str; 0], move s: Str) -> [Str; 0] { f.(s) }
+
+pub rt fn run_z_rt(f: rt fn(move Str) -> [Str; 0], move s: Str) -> [Str; 0] { f.(s) }
+
+// ------------------------------------------------------------------ the value `e` is an owned parameter that is handed over, the copy of a borrowed `Str`, or a `Str` that a call makes (length 0)
+
+pub fn owned0(move s: Str) -> [Str; 0] { [s; 0] }   //~ E0601
+
+pub rt fn rt_owned0(move s: Str) -> [Str; 0] { [s; 0] }   //~ E0601
+
+pub fn borrowed0(s: Str) -> [Str; 0] { [s; 0] }   //~ E0601
+
+pub rt fn rt_borrowed0(s: Str) -> [Str; 0] { [s; 0] }   //~ E0601
+
+pub fn made0(n: U32) -> [Str; 0] { [mk(n); 0] }   //~ E0601
+
+pub rt fn rt_made0(n: U32) -> [Str; 0] { [mk(n); 0] }   //~ E0601
+
+// ------------------------------------------------------------------ a path of a borrowed value, a literal that holds a borrowed `Str`, an `Option[Str]`
+
+pub fn borrowed_path0(t: (Str, F32)) -> [Str; 0] { [t.0; 0] }   //~ E0601
+
+pub rt fn rt_borrowed_path0(t: (Str, F32)) -> [Str; 0] { [t.0; 0] }   //~ E0601
+
+pub fn borrowed_index0(xs: [Str; 2]) -> [Str; 0] { [xs[1]; 0] }   //~ E0601
+
+pub rt fn rt_borrowed_index0(xs: [Str; 2]) -> [Str; 0] { [xs[1]; 0] }   //~ E0601
+
+pub fn borrowed_field0(h: Holder) -> [Str; 0] { [h.name; 0] }   //~ E0601
+
+pub rt fn rt_borrowed_field0(h: Holder) -> [Str; 0] { [h.name; 0] }   //~ E0601
+
+pub fn literal0(s: Str) -> [(Str, Str); 0] { [("gain", s); 0] }   //~ E0601
+
+pub rt fn rt_literal0(s: Str) -> [(Str, Str); 0] { [("gain", s); 0] }   //~ E0601
+
+pub fn option0(move o: Option[Str]) -> [Option[Str]; 0] { [o; 0] }   //~ E0601
+
+pub rt fn rt_option0(move o: Option[Str]) -> [Option[Str]; 0] { [o; 0] }   //~ E0601
+
+// ------------------------------------------------------------------ the length is the constant parameter of a generic function: the body does not know it, so it is counted (a caller that gives 1 or more is `call3`)
+
+pub fn generic_owned[const N: U32](move s: Str) -> [Str; N] { [s; N] }   //~ E0601
+
+pub rt fn rt_generic_owned[const N: U32](move s: Str) -> [Str; N] { [s; N] }   //~ E0601
+
+pub fn generic_borrowed[const N: U32](s: Str) -> [Str; N] { [s; N] }   //~ E0601
+
+pub rt fn rt_generic_borrowed[const N: U32](s: Str) -> [Str; N] { [s; N] }   //~ E0601
+
+pub fn generic_made[const N: U32](n: U32) -> [Str; N] { [mk(n); N] }   //~ E0601
+
+pub rt fn rt_generic_made[const N: U32](n: U32) -> [Str; N] { [mk(n); N] }   //~ E0601
+
+// ------------------------------------------------------------------ the length is a constant of the value 0, and the array of the element is the value that is put at no element
+
+pub fn const_zero(move s: Str) -> [Str; Z] { [s; Z] }   //~ E0601
+
+pub rt fn rt_const_zero(move s: Str) -> [Str; Z] { [s; Z] }   //~ E0601
+
+pub fn nested_inner0(move s: Str) -> [[Str; 0]; 2] { [[s; 0]; 2] }   //~ E0601
+
+pub rt fn rt_nested_inner0(move s: Str) -> [[Str; 0]; 2] { [[s; 0]; 2] }   //~ E0601
+
+pub fn nested_outer0(move s: Str) -> [[Str; 2]; 0] { [[s; 2]; 0] }   //~ E0601
+
+pub rt fn rt_nested_outer0(move s: Str) -> [[Str; 2]; 0] { [[s; 2]; 0] }   //~ E0601
+
+pub fn nested_generic_outer[const N: U32](move s: Str) -> [[Str; 2]; N] { [[s; 2]; N] }   //~ E0601
+
+pub rt fn rt_nested_generic_outer[const N: U32](move s: Str) -> [[Str; 2]; N] { [[s; 2]; N] }   //~ E0601
+
+// ------------------------------------------------------------------ two places that count in one function are one report
+
+pub fn both_branches(c: Bool, move s: Str) -> [Str; 0] { if c { [s; 0] } else { [s; 0] } }   //~ E0601
+
+// ------------------------------------------------------------------ a `let` binding that is owned: the marker is on the line of the array
+
+pub fn let_made0(n: U32) -> [Str; 0] {
+  let t = mk(n)
+  [t; 0]   //~ E0601
+}
+
+pub rt fn rt_let_made0(n: U32) -> [Str; 0] {
+  let t = mk(n)
+  [t; 0]   //~ E0601
+}
+
+pub fn let_generic[const N: U32](n: U32) -> [Str; N] {
+  let t = mk(n)
+  [t; N]   //~ E0601
+}
+
+// ------------------------------------------------------------------ the callers of a generic function with a length of 1 or more (with `uses {Alloc}`, so that a candidate that adds the row to the callee makes no error in them): the error is in the body of the generic function above
+
+pub fn call3(move s: Str) -> [Str; 3] uses {Alloc} { generic_owned(s) }
+
+pub fn call3_explicit(move s: Str) -> [Str; 3] uses {Alloc} { generic_owned::[3](s) }
+
+pub rt fn rt_call3(move s: Str) -> [Str; 3] { rt_generic_owned(s) }
+
+// ------------------------------------------------------------------ an anonymous function: its own body is the scope of the drop (§8.1)
+
+pub fn closure_zero(move s: Str) -> [Str; 0] {
+  run_z(fn(move x: Str) -> [Str; 0] { [x; 0] }, s)   //~ E0601
+}
+
+pub rt fn rt_closure_zero(move s: Str) -> [Str; 0] {
+  run_z_rt(fn(move x: Str) -> [Str; 0] { [x; 0] }, s)   //~ E0601
+}

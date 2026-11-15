@@ -2,7 +2,7 @@
 // [test]
 // spec = ["§18.1", "§8.1"]
 
-// W6-03 U7a, S-1062 (the provisional reading: a name not found may have meant the effect of its name, as a failed name, S-691): `Aloc` is
+// W6-03 U7a, S-1062 (decided (1): a name not found may have meant the effect of its name, as a failed name, S-691): `Aloc` is
 // the name of no effect, so it may have meant none. The anonymous function where `fn(U32) -> U32 uses {Aloc}` is expected has no `Alloc`
 // (E0601), and a function whose row reads `Alloc` does not fit there (E0401, §8.1 rule 2).
 pub fn b(x: U32) -> U32 uses {Alloc} {

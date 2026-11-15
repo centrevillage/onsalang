@@ -1,0 +1,3 @@
+[package]
+name = "drop_nodrop_wait_pkg_neg"
+edition = "2026"

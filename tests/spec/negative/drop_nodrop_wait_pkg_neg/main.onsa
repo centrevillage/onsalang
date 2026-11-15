@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§5.4", "§8.1", "§9.1", "§10", "§12.2", "§15.1"]
+
+// W6-04 U2/t, R-461 (§5.4, §12.2, §15.1): the contrasts of negative/drop_nodrop_wait_pkg. The literal of the imported type that holds a borrowed `Str` is not a literal that needs no drop, so a value that
+// waits for a `?` is dropped (an E0601, in a `fn` and in an `rt fn`), and so are a `Str` that an imported function makes and the copy of a borrowed `Str`; the call of the `rt` function of `lib.onsa`,
+// whose error is reported there, is legal here (the effect row of a function that is an error in its own module is empty, so a caller needs nothing; a caller of the `fn` is not written: a candidate that adds `uses {Alloc}` to it would make an error in the caller). One error per function (S-1053). The functions
+// with a `let` are on several lines, and the marker is on the line of the value that waits.
+
+use lib.{Param, mk, rt_lib_wait_made}
+
+pub fn imported_made(n: U32, r: Result[U32, U32]) -> Result[(Str, U32), U32] { Ok((mk(n), r?)) }   //~ E0601
+
+pub rt fn rt_imported_made(n: U32, r: Result[U32, U32]) -> Result[(Str, U32), U32] { Ok((mk(n), r?)) }   //~ E0601
+
+pub fn imported_borrowed(s: Str, v: F32, r: Result[U32, U32]) -> Result[(Param, U32), U32] { Ok((Param { name: s, value: v }, r?)) }   //~ E0601
+
+pub rt fn rt_imported_borrowed(s: Str, v: F32, r: Result[U32, U32]) -> Result[(Param, U32), U32] { Ok((Param { name: s, value: v }, r?)) }   //~ E0601
+
+pub fn imported_let(s: Str, v: F32, r: Result[U32, U32]) -> Result[(Param, U32), U32] {
+  let p = Param { name: s, value: v }
+  Ok((p, r?))   //~ E0601
+}
+
+pub rt fn rt_imported_let(s: Str, v: F32, r: Result[U32, U32]) -> Result[(Param, U32), U32] {
+  let p = Param { name: s, value: v }
+  Ok((p, r?))   //~ E0601
+}
+
+pub rt fn rt_calls_lib_made(n: U32, r: Result[U32, U32]) -> Result[(Str, U32), U32] { rt_lib_wait_made(n, r) }

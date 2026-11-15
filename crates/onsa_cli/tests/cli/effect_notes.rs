@@ -15,9 +15,9 @@
 //!   first place the text (without the bar) is found in the line.
 //! - `//@ note`: a note points at this line (the lines the spec decides: the drop points away from the place the
 //!   value is written, the other uses of the effect, the first element of a literal). A marker is a lower bound:
-//!   other notes may be there. `//@ note~`: the same for a note of a detail that is decided provisionally
-//!   (S-1050: an `rt` function and an anonymous function notes the other uses too; S-1041: where the row of an
-//!   anonymous function comes from, at its line, and the type to write at the `let` of one). `//@ nonote`: no
+//!   other notes may be there. `//@ note~`: the same for a note of a detail that has a test of its own
+//!   (S-1050, decided (2): an `rt` function and an anonymous function notes the other uses too; S-1041, decided:
+//!   where the row of an anonymous function comes from, at its line, and the type to write at the `let` of one). `//@ nonote`: no
 //!   note points at this line (the line is no drop point of the value, or the use is of another scope or element).
 //! - Markers on one line are separated by `;`.
 //!
@@ -25,8 +25,8 @@
 //! column) and the number of candidates of the report; the lines of the notes that point at a place (not their
 //! columns: the place of the end of a scope is an empty range that the spec does not give a column); the number
 //! of notes for S-1052; for R-256 that the message holds no `<digit>` and holds the names written. The
-//! expectations are those of the test work (W6-03 U6a/t); where the spec leaves the reading open, the marker is
-//! `note~` and the test has a name of its own, so that a decision that goes the other way removes one test.
+//! expectations are those of the test work (W6-03 U6a/t); the details that were open then (S-1050, S-1041) are
+//! decided (2026-11-15), and the marker of such a detail is `note~`, with a test of its own.
 
 use std::collections::BTreeSet;
 use std::sync::OnceLock;
@@ -710,7 +710,7 @@ fn a_function_without_rt_notes_the_other_uses_of_the_effect() {
 
 #[test]
 fn an_rt_function_notes_the_other_uses_of_the_effect_too() {
-    // S-1050 (provisional reading (2)): the same other uses as for a function without `rt`, besides the note of
+    // S-1050 (decided (2)): the same other uses as for a function without `rt`, besides the note of
     // the rule 1 of §10 (which points at the name of the function, not at one of these lines).
     let r = run();
     let mut faults = Vec::new();
@@ -725,8 +725,8 @@ fn an_anonymous_function_notes_the_other_uses_of_its_own_scope_alone() {
     // R-83 (3) for the scopes of the bodies and the anonymous functions (§8.1: the uses of the body of an
     // anonymous function are not counted in the function around it): the uses of the anonymous function
     // (and of an `rt` one) are noted, and the use of the function around (`z`, which its row `Alloc` gives)
-    // is not. The spec says it of the function without `rt` (R-83 (3)) and of the `rt` function (S-1050
-    // provisionally), and not in so many words of an anonymous function: the same reading is used.
+    // is not. The spec says it of the function without `rt` (R-83 (3)) and of the `rt` function (S-1050,
+    // decided (2): the `rt` function and the anonymous function note them too), so the same reading is used.
     let r = run();
     let mut faults = Vec::new();
     for c in group(r, "other_closure", 2) {
@@ -752,7 +752,7 @@ fn the_first_element_that_makes_a_literal_owned_is_named() {
 
 #[test]
 fn a_type_parameter_that_copy_would_free_from_allocating_is_noted() {
-    // S-1052 (provisional reading (2)), §12.2: the drop of a `T` (no bound, or `?Dup`), of a `(T, U32)` and of
+    // S-1052 (decided (2)), §12.2: the drop of a `T` (no bound, or `?Dup`), of a `(T, U32)` and of
     // an `Option[T]` needs `Alloc` only because `T` may need it, so a note shows that `[T: Copy]` fixes it. A
     // `(T, Str)` needs `Alloc` for the `Str` whatever `T` is, so it has no such note. Each form differs from the
     // control of its kind (`gen_pair` for a function, `gen_pair_rt` for an `rt` one) in the type of `x` alone,
@@ -808,7 +808,7 @@ fn a_type_parameter_is_shown_by_the_name_it_is_written_with() {
 
 #[test]
 fn an_anonymous_function_notes_where_its_row_comes_from() {
-    // §8.1 ("修正候補は無く、note で効果行の決まり方を示す") and S-1041 (2) (provisional: no candidate, the text is
+    // §8.1 ("修正候補は無く、note で効果行の決まり方を示す") and S-1041 (2) (decided: no candidate, the text is
     // not fixed): the row an anonymous function writes (`uses {}` too), that of the function type expected where
     // it is, none where none is expected (an unannotated `let`), and none in a later branch of a merge (§4.7).
     // Each has a note at the line of the anonymous function.

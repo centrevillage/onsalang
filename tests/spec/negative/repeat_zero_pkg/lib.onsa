@@ -1,0 +1,10 @@
+// The generic functions of negative/repeat_zero_pkg/main.onsa (W6-04 U2/t, S-1045 (1), spec §2.4, §12.2, §15.1). The drop of the value of `e` where the length may be 0 is reported where the `[e; N]` is
+// written, in the module that declares the generic function, whatever length a caller gives: the body is checked once, whatever the length (§12.2).
+
+pub fn zeros[const N: U32](move s: Str) -> [Str; N] { [s; N] }   //~ E0601
+
+pub rt fn rt_zeros[const N: U32](move s: Str) -> [Str; N] { [s; N] }   //~ E0601
+
+pub fn twos(move s: Str) -> [Str; 2] { [s; 2] }
+
+pub fn alloc_zeros[const N: U32](move s: Str) -> [Str; N] uses {Alloc} { [s; N] }

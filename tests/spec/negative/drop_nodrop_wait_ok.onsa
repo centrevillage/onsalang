@@ -1,0 +1,376 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§5.4", "§8.1", "§9.1", "§10", "§12.2"]
+
+// W6-04 U2/t, R-461 (§5.4: "破棄の要らない束縛は、静的な値か破棄の要らないリテラルで初期化した借用束縛と、そこから派生した借用束縛" and "静的な値と同じく、複製も破棄も何もしない";
+// §12.2: "静的な値と破棄の要らないリテラル（§5.4）の複製と破棄（一時の値を含む）: 要らない" and the value that waits for an early exit is "抜けるときに破棄される"; §9.1: a `?` that returns leaves like
+// a `return`; §3.5: the operands are evaluated from the left): a value that needs no drop (a static string, a literal of static values and Copy values and a binding of it, a binding derived
+// from it by `let q = p` or by a pattern, a path of it, a literal or a path that has no binding) can wait for an operand after it that leaves the function (a `?`, a `return`) or the loop
+// (a `break`, a `continue`), and its drop needs no `Alloc`: a function without `uses {Alloc}` has no E0601, and an `rt fn` has none either (§10 rule 1). The value that waits is the element of a
+// tuple, a struct literal, an array or a constructor, the argument of a call (a `move` parameter, which a Dup value that needs no drop can be given as it is) or the receiver of a `move self`.
+// Today each function is an E0601 ("dropped by an exit before it is used"): the drop of the waiting value is counted though it needs none. The forms that are already accepted are in
+// negative/drop_nodrop_wait_kept.onsa, the forms where the value does need a drop (and are an E0601) in negative/drop_nodrop_wait_neg.onsa. The `fn` and the `rt fn` of each form are both here.
+// There is no error to place, so the functions with a statement list are on several lines and no line is written (S-783).
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+pub struct Wrap {
+  p: (Str, F32),
+  n: U32,
+}
+
+impl Param {
+  pub rt fn eat(move self, n: U32) -> (Param, U32) { (self, n) }
+}
+
+pub rt fn eat_p(move p: (Str, F32), n: U32) -> ((Str, F32), U32) { (p, n) }
+
+pub rt fn eat_s(move s: Str, n: U32) -> (Str, U32) { (s, n) }
+
+// ------------------------------------------------------------------ a static value bound by `let` (a string, a constructor with a static payload, an array of strings) and its index (`t[i]`)
+
+pub fn static_let(r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  let s = "g"
+  Ok((s, r?))
+}
+
+pub rt fn rt_static_let(r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  let s = "g"
+  Ok((s, r?))
+}
+
+pub fn static_option_let(r: Result[U32, U32]) -> Result[(Option[Str], U32), U32] {
+  let o = Some("g")
+  Ok((o, r?))
+}
+
+pub rt fn rt_static_option_let(r: Result[U32, U32]) -> Result[(Option[Str], U32), U32] {
+  let o = Some("g")
+  Ok((o, r?))
+}
+
+pub fn static_array_let(r: Result[U32, U32]) -> Result[([Str; 2], U32), U32] {
+  let t = ["a", "bc"]
+  Ok((t, r?))
+}
+
+pub rt fn rt_static_array_let(r: Result[U32, U32]) -> Result[([Str; 2], U32), U32] {
+  let t = ["a", "bc"]
+  Ok((t, r?))
+}
+
+pub fn static_index_let(i: U32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  let t = ["a", "bc"]
+  Ok((t[i], r?))
+}
+
+pub rt fn rt_static_index_let(i: U32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  let t = ["a", "bc"]
+  Ok((t[i], r?))
+}
+
+// ------------------------------------------------------------------ a literal of static values and Copy values (`v` is an `F32`) bound by `let`, a binding derived from it, and the paths of them
+
+pub fn literal_let(v: F32, r: Result[U32, U32]) -> Result[((Str, F32), U32), U32] {
+  let p = ("g", v)
+  Ok((p, r?))
+}
+
+pub rt fn rt_literal_let(v: F32, r: Result[U32, U32]) -> Result[((Str, F32), U32), U32] {
+  let p = ("g", v)
+  Ok((p, r?))
+}
+
+pub fn literal_path(v: F32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  let p = ("g", v)
+  Ok((p.0, r?))
+}
+
+pub rt fn rt_literal_path(v: F32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  let p = ("g", v)
+  Ok((p.0, r?))
+}
+
+pub fn literal_derived(v: F32, r: Result[U32, U32]) -> Result[((Str, F32), U32), U32] {
+  let p = ("g", v)
+  let q = p
+  Ok((q, r?))
+}
+
+pub rt fn rt_literal_derived(v: F32, r: Result[U32, U32]) -> Result[((Str, F32), U32), U32] {
+  let p = ("g", v)
+  let q = p
+  Ok((q, r?))
+}
+
+pub fn literal_in_literal(v: F32, r: Result[U32, U32]) -> Result[(((Str, F32), F32), U32), U32] {
+  let p = ("g", v)
+  let q = (p, v)
+  Ok((q, r?))
+}
+
+pub rt fn rt_literal_in_literal(v: F32, r: Result[U32, U32]) -> Result[(((Str, F32), F32), U32), U32] {
+  let p = ("g", v)
+  let q = (p, v)
+  Ok((q, r?))
+}
+
+pub fn literal_destructured(v: F32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  let p = ("g", v)
+  let (a, b) = p
+  Ok((a, r?))
+}
+
+pub rt fn rt_literal_destructured(v: F32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  let p = ("g", v)
+  let (a, b) = p
+  Ok((a, r?))
+}
+
+pub fn struct_let(v: F32, r: Result[U32, U32]) -> Result[(Param, U32), U32] {
+  let p = Param { name: "g", value: v }
+  Ok((p, r?))
+}
+
+pub rt fn rt_struct_let(v: F32, r: Result[U32, U32]) -> Result[(Param, U32), U32] {
+  let p = Param { name: "g", value: v }
+  Ok((p, r?))
+}
+
+pub fn struct_path(v: F32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  let p = Param { name: "g", value: v }
+  Ok((p.name, r?))
+}
+
+pub rt fn rt_struct_path(v: F32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  let p = Param { name: "g", value: v }
+  Ok((p.name, r?))
+}
+
+// ------------------------------------------------------------------ a path of a literal that has no binding
+
+pub fn nobinding_tuple_path(v: F32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  Ok((("g", v).0, r?))
+}
+
+pub rt fn rt_nobinding_tuple_path(v: F32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  Ok((("g", v).0, r?))
+}
+
+pub fn nobinding_index(i: U32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  Ok((["a", "bc"][i], r?))
+}
+
+pub rt fn rt_nobinding_index(i: U32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  Ok((["a", "bc"][i], r?))
+}
+
+pub fn nobinding_struct_path(v: F32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  Ok((Param { name: "g", value: v }.name, r?))
+}
+
+pub rt fn rt_nobinding_struct_path(v: F32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  Ok((Param { name: "g", value: v }.name, r?))
+}
+
+// ------------------------------------------------------------------ the argument of a `move` parameter and the receiver of a `move self` (a copy of a Dup value that needs no drop: nothing to drop)
+
+pub fn move_arg_binding(v: F32, r: Result[U32, U32]) -> Result[((Str, F32), U32), U32] {
+  let p = ("g", v)
+  Ok(eat_p(p, r?))
+}
+
+pub rt fn rt_move_arg_binding(v: F32, r: Result[U32, U32]) -> Result[((Str, F32), U32), U32] {
+  let p = ("g", v)
+  Ok(eat_p(p, r?))
+}
+
+pub fn move_arg_static(r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  let s = "g"
+  Ok(eat_s(s, r?))
+}
+
+pub rt fn rt_move_arg_static(r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  let s = "g"
+  Ok(eat_s(s, r?))
+}
+
+pub fn move_arg_path(v: F32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  let p = ("g", v)
+  Ok(eat_s(p.0, r?))
+}
+
+pub rt fn rt_move_arg_path(v: F32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  let p = ("g", v)
+  Ok(eat_s(p.0, r?))
+}
+
+pub fn receiver(v: F32, r: Result[U32, U32]) -> Result[(Param, U32), U32] {
+  let p = Param { name: "g", value: v }
+  Ok(p.eat(r?))
+}
+
+pub rt fn rt_receiver(v: F32, r: Result[U32, U32]) -> Result[(Param, U32), U32] {
+  let p = Param { name: "g", value: v }
+  Ok(p.eat(r?))
+}
+
+// ------------------------------------------------------------------ an element of a struct literal, the branches of an `if` and of a `match`, an `Option` operand
+
+pub fn in_struct(v: F32, r: Result[U32, U32]) -> Result[Wrap, U32] {
+  let p = ("g", v)
+  Ok(Wrap { p: p, n: r? })
+}
+
+pub rt fn rt_in_struct(v: F32, r: Result[U32, U32]) -> Result[Wrap, U32] {
+  let p = ("g", v)
+  Ok(Wrap { p: p, n: r? })
+}
+
+pub fn branch_if(v: F32, c: Bool, r: Result[U32, U32]) -> Result[((Str, F32), U32), U32] {
+  let p = ("g", v)
+  if c { Ok((p, r?)) } else { Ok((p, 0)) }
+}
+
+pub rt fn rt_branch_if(v: F32, c: Bool, r: Result[U32, U32]) -> Result[((Str, F32), U32), U32] {
+  let p = ("g", v)
+  if c { Ok((p, r?)) } else { Ok((p, 0)) }
+}
+
+pub fn branch_match(v: F32, n: U32, r: Result[U32, U32]) -> Result[((Str, F32), U32), U32] {
+  let p = ("g", v)
+  match n { 0 => Ok((p, r?)), _ => Ok((p, 1)) }
+}
+
+pub rt fn rt_branch_match(v: F32, n: U32, r: Result[U32, U32]) -> Result[((Str, F32), U32), U32] {
+  let p = ("g", v)
+  match n { 0 => Ok((p, r?)), _ => Ok((p, 1)) }
+}
+
+pub fn option_try(v: F32, r: Option[U32]) -> Option[((Str, F32), U32)] {
+  let p = ("g", v)
+  Some((p, r?))
+}
+
+pub rt fn rt_option_try(v: F32, r: Option[U32]) -> Option[((Str, F32), U32)] {
+  let p = ("g", v)
+  Some((p, r?))
+}
+
+// ------------------------------------------------------------------ a `return`, a `break` and a `continue` that come after the value that waits (the operand of the call or the tuple)
+
+pub fn return_waits(v: F32, c: Bool) -> Option[((Str, F32), U32)] {
+  let p = ("g", v)
+  Some((p, if c { return None } else { 1 }))
+}
+
+pub rt fn rt_return_waits(v: F32, c: Bool) -> Option[((Str, F32), U32)] {
+  let p = ("g", v)
+  Some((p, if c { return None } else { 1 }))
+}
+
+pub fn return_waits_call(v: F32, c: Bool) -> Option[((Str, F32), U32)] {
+  let p = ("g", v)
+  Some(eat_p(p, if c { return None } else { 1 }))
+}
+
+pub rt fn rt_return_waits_call(v: F32, c: Bool) -> Option[((Str, F32), U32)] {
+  let p = ("g", v)
+  Some(eat_p(p, if c { return None } else { 1 }))
+}
+
+pub fn break_waits(v: F32, xs: [U32; 2]) -> U32 {
+  var total = 0
+  for x in xs {
+    let p = ("g", v)
+    let t = (p, if x > 1 { break } else { x })
+    total = total + t.1
+  }
+  total
+}
+
+pub rt fn rt_break_waits(v: F32, xs: [U32; 2]) -> U32 {
+  var total = 0
+  for x in xs {
+    let p = ("g", v)
+    let t = (p, if x > 1 { break } else { x })
+    total = total + t.1
+  }
+  total
+}
+
+pub fn continue_waits(v: F32, xs: [U32; 2]) -> U32 {
+  var total = 0
+  for x in xs {
+    let p = ("g", v)
+    let t = (p, if x > 1 { continue } else { x })
+    total = total + t.1
+  }
+  total
+}
+
+pub rt fn rt_continue_waits(v: F32, xs: [U32; 2]) -> U32 {
+  var total = 0
+  for x in xs {
+    let p = ("g", v)
+    let t = (p, if x > 1 { continue } else { x })
+    total = total + t.1
+  }
+  total
+}
+
+// ------------------------------------------------------------------ a generic function: the literal holds a `T: Copy`, which is a Copy type of the literal (§5.4: "第一級の Copy の型の式")
+
+pub fn copy_generic[T: Copy](t: T, r: Option[U32]) -> Option[((Str, T), U32)] {
+  let p = ("g", t)
+  Some((p, r?))
+}
+
+pub rt fn rt_copy_generic[T: Copy](t: T, r: Option[U32]) -> Option[((Str, T), U32)] {
+  let p = ("g", t)
+  Some((p, r?))
+}
+
+// ------------------------------------------------------------------ an anonymous function: its own body is the scope of the `?` (§8.1: a body of an anonymous function is checked on its own)
+
+pub fn run_try(f: fn(Result[U32, U32]) -> Result[(Str, U32), U32], r: Result[U32, U32]) -> Result[(Str, U32), U32] { f.(r) }
+
+pub rt fn run_try_rt(f: rt fn(Result[U32, U32]) -> Result[(Str, U32), U32], r: Result[U32, U32]) -> Result[(Str, U32), U32] { f.(r) }
+
+pub fn closure_static(r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  run_try(fn(x: Result[U32, U32]) -> Result[(Str, U32), U32] {
+    let s = "g"
+    Ok((s, x?))
+  }, r)
+}
+
+pub rt fn rt_closure_static(r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  run_try_rt(fn(x: Result[U32, U32]) -> Result[(Str, U32), U32] {
+    let s = "g"
+    Ok((s, x?))
+  }, r)
+}
+
+pub fn closure_literal(v: F32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  run_try(fn(x: Result[U32, U32]) -> Result[(Str, U32), U32] {
+    let p = ("g", v)
+    Ok((p.0, x?))
+  }, r)
+}
+
+pub rt fn rt_closure_literal(v: F32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  run_try_rt(fn(x: Result[U32, U32]) -> Result[(Str, U32), U32] {
+    let p = ("g", v)
+    Ok((p.0, x?))
+  }, r)
+}
+
+// the value that waits is in the function around, and the `?` is in the call that the closure is called in
+pub fn outer_waits_closure(v: F32, r: Result[U32, U32]) -> Result[((Str, F32), U32), U32] {
+  let p = ("g", v)
+  let f = fn(x: U32) -> U32 { x }
+  Ok((p, f.(r?)))
+}

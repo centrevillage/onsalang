@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§5.4", "§8.1", "§9.1", "§10", "§12.2", "§15.1"]
+
+// W6-04 U2/t, R-461 (§5.4: a binding of a literal of static values and Copy values is a binding that needs no drop, "複製も破棄も何もしない"; §12.2: "静的な値と破棄の要らないリテラル（§5.4）の複製と破棄
+// （一時の値を含む）: 要らない"; §15.1): the type of the literal is declared in another module (`lib.Param`), and the binding of its literal, a path of it, its use as the argument of a `move` parameter
+// and as the receiver of a `move self` wait for a `?` with no `Alloc`, in a `fn` and in an `rt fn`, and the call of the functions of `lib.onsa` (which have the same forms) is legal as well.
+// Today each function of this module and of `lib.onsa` is an E0601 (R-461). The functions with a `let` are on several lines (no error is expected, so the line does not matter, S-783).
+
+use lib.{Param, eat_p, lib_wait, rt_lib_wait}
+
+pub fn imported_binding(v: F32, r: Result[U32, U32]) -> Result[(Param, U32), U32] {
+  let p = Param { name: "g", value: v }
+  Ok((p, r?))
+}
+
+pub rt fn rt_imported_binding(v: F32, r: Result[U32, U32]) -> Result[(Param, U32), U32] {
+  let p = Param { name: "g", value: v }
+  Ok((p, r?))
+}
+
+pub fn imported_path(v: F32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  let p = Param { name: "g", value: v }
+  Ok((p.name, r?))
+}
+
+pub rt fn rt_imported_path(v: F32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  let p = Param { name: "g", value: v }
+  Ok((p.name, r?))
+}
+
+pub fn imported_move_arg(v: F32, r: Result[U32, U32]) -> Result[(Param, U32), U32] {
+  let p = Param { name: "g", value: v }
+  Ok(eat_p(p, r?))
+}
+
+pub rt fn rt_imported_move_arg(v: F32, r: Result[U32, U32]) -> Result[(Param, U32), U32] {
+  let p = Param { name: "g", value: v }
+  Ok(eat_p(p, r?))
+}
+
+pub fn imported_receiver(v: F32, r: Result[U32, U32]) -> Result[(Param, U32), U32] {
+  let p = Param { name: "g", value: v }
+  Ok(p.eat(r?))
+}
+
+pub rt fn rt_imported_receiver(v: F32, r: Result[U32, U32]) -> Result[(Param, U32), U32] {
+  let p = Param { name: "g", value: v }
+  Ok(p.eat(r?))
+}
+
+pub fn imported_return(v: F32, c: Bool) -> Option[(Param, U32)] {
+  let p = Param { name: "g", value: v }
+  Some((p, if c { return None } else { 1 }))
+}
+
+pub rt fn rt_imported_return(v: F32, c: Bool) -> Option[(Param, U32)] {
+  let p = Param { name: "g", value: v }
+  Some((p, if c { return None } else { 1 }))
+}
+
+pub fn calls_lib(v: F32, r: Result[U32, U32]) -> Result[(Param, U32), U32] { lib_wait(v, r) }
+
+pub rt fn rt_calls_lib(v: F32, r: Result[U32, U32]) -> Result[(Param, U32), U32] { rt_lib_wait(v, r) }

@@ -1,0 +1,23 @@
+// The type and the helpers of negative/drop_nodrop_wait_pkg/main.onsa, and the forms in the module that declares them (W6-04 U2/t, R-461, spec §5.4, §12.2, §15.1).
+// A value that needs no drop and waits for an operand that leaves needs no `Alloc` in the module that declares its type either. No error is expected, so the functions with a `let` are on several lines.
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+impl Param {
+  pub rt fn eat(move self, n: U32) -> (Param, U32) { (self, n) }
+}
+
+pub rt fn eat_p(move p: Param, n: U32) -> (Param, U32) { (p, n) }
+
+pub fn lib_wait(v: F32, r: Result[U32, U32]) -> Result[(Param, U32), U32] {
+  let p = Param { name: "g", value: v }
+  Ok((p, r?))
+}
+
+pub rt fn rt_lib_wait(v: F32, r: Result[U32, U32]) -> Result[(Param, U32), U32] {
+  let p = Param { name: "g", value: v }
+  Ok((p, r?))
+}

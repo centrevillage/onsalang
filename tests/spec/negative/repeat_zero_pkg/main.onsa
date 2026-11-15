@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§5.2", "§8.1", "§10", "§12.2", "§15.1"]
+
+// W6-04 U2/t, S-1045 (1) (§2.4, §12.2: "総称の長さは、1 以上でしか呼ばれなくても数える（本体は長さの値によらず一度検査する）"; §15.1): the generic functions of `lib.onsa` have the error in their own module, so a caller
+// that gives a length of 3 (`three`, `rt_three`) or of 0 (`zero`) has no error of its own (the `fn`s have `uses {Alloc}`, so that a candidate that adds the row to the generic function makes no error in them), the function with a known length of 2 is legal, and the function that has `uses {Alloc}` is legal for a caller with
+// `Alloc` too. The `[s; 0]` written in this module is an E0601 here, in a `fn` and in an `rt fn`. One error per function (S-1053). The functions are one-liners (S-783).
+
+use lib.{zeros, rt_zeros, twos, alloc_zeros}
+
+pub fn three(move s: Str) -> [Str; 3] uses {Alloc} { zeros(s) }
+
+pub rt fn rt_three(move s: Str) -> [Str; 3] { rt_zeros(s) }
+
+pub fn zero(move s: Str) -> [Str; 0] uses {Alloc} { zeros(s) }
+
+pub fn two(move s: Str) -> [Str; 2] { twos(s) }
+
+pub fn alloc_three(move s: Str) -> [Str; 3] uses {Alloc} { alloc_zeros(s) }
+
+pub fn main_zero(move s: Str) -> [Str; 0] { [s; 0] }   //~ E0601
+
+pub rt fn rt_main_zero(move s: Str) -> [Str; 0] { [s; 0] }   //~ E0601
+
+pub fn main_generic[const N: U32](move s: Str) -> [Str; N] { [s; N] }   //~ E0601

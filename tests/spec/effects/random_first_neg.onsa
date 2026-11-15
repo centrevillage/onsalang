@@ -3,7 +3,7 @@
 // spec = ["§8.1", "§11.8", "§18.1"]
 // fixes = 0
 
-// W6-03 U7b/t, S-1053 (the provisional reading (2)), S-97 (§8.1: "診断は最初の使用の位置に置く"; §18.1: one report per unit, the first by the order of the diagnostics): a function that has no row and uses both `Alloc` (`mk(1)`)
+// W6-03 U7b/t, S-1053 (decided (2): one report per range and effect), S-97 (§8.1: "診断は最初の使用の位置に置く"; §18.1: one report per unit, the first by the order of the diagnostics): a function that has no row and uses both `Alloc` (`mk(1)`)
 // and `Random` (`check(…)`) lacks two effects. The use of each effect is an E0601 of its own, and the unit reports the first by position. When the use of `Random` comes first, the report is
 // it, and it has no candidate (`fixes = 0`: a row `uses {Random}` is an E0200). The use of `Alloc` comes after it and is not reported. One error per function (P-01). The order the other way
 // round, where the report has a candidate, is random_alloc_first_fix.onsa.

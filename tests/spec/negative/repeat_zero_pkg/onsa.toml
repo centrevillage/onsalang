@@ -1,0 +1,3 @@
+[package]
+name = "repeat_zero_pkg"
+edition = "2026"

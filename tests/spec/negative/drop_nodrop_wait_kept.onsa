@@ -1,0 +1,190 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§5.4", "§8.1", "§9.1", "§10", "§12.2"]
+
+// W6-04 U2/t, R-461 (§5.4, §12.2: "静的な値と破棄の要らないリテラル（§5.4）の複製と破棄（一時の値を含む）: 要らない"; §8.1; §10 rule 1): the forms of negative/drop_nodrop_wait_ok.onsa that are already
+// accepted, and the forms that stay legal for another reason: a literal that has no binding and is a literal of static values and Copy values (`(("g", v), r?)`, `Param { name: "g", value: v }`, a
+// literal in a tuple, an array or a constructor), a `?` that is read before the value is written (`let k = r?`, so that nothing waits), a binding that no operand leaves after it, the value of
+// a borrowed call argument (`two(p, r?)`: nothing is consumed, so nothing waits), a literal whose element is a `U32` that is read from a borrowed `Str` (`s.len()` is Copy), and a function with `uses {Alloc}`
+// (the drop of an owned `Str` that waits, of a made `Str` and of a copy of a borrowed `Str` is allowed there, §12.2). The `fn` and the `rt fn` of each form are both here where the form fits an `rt fn`.
+// The functions with `uses {Alloc}` here are the other side of negative/drop_nodrop_wait_neg.onsa: the value that needs a drop is legal where the row is written, and an E0601 where it is not.
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+pub struct Wrap {
+  p: (Str, F32),
+  n: U32,
+}
+
+impl Param {
+  pub rt fn eat(move self, n: U32) -> (Param, U32) { (self, n) }
+}
+
+pub rt fn eat_p(move p: (Str, F32), n: U32) -> ((Str, F32), U32) { (p, n) }
+
+pub rt fn eat_s(move s: Str, n: U32) -> (Str, U32) { (s, n) }
+
+// ------------------------------------------------------------------ a literal that has no binding is accepted already (a literal of static values and Copy values is not a value whose drop is counted)
+
+pub fn nobinding_literal(v: F32, r: Result[U32, U32]) -> Result[((Str, F32), U32), U32] {
+  Ok((("g", v), r?))
+}
+
+pub rt fn rt_nobinding_literal(v: F32, r: Result[U32, U32]) -> Result[((Str, F32), U32), U32] {
+  Ok((("g", v), r?))
+}
+
+pub fn nobinding_struct(v: F32, r: Result[U32, U32]) -> Result[(Param, U32), U32] {
+  Ok((Param { name: "g", value: v }, r?))
+}
+
+pub rt fn rt_nobinding_struct(v: F32, r: Result[U32, U32]) -> Result[(Param, U32), U32] {
+  Ok((Param { name: "g", value: v }, r?))
+}
+
+pub fn move_arg_literal(v: F32, r: Result[U32, U32]) -> Result[((Str, F32), U32), U32] {
+  Ok(eat_p(("g", v), r?))
+}
+
+pub rt fn rt_move_arg_literal(v: F32, r: Result[U32, U32]) -> Result[((Str, F32), U32), U32] {
+  Ok(eat_p(("g", v), r?))
+}
+
+pub fn move_arg_static_direct(r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  Ok(eat_s("g", r?))
+}
+
+pub rt fn rt_move_arg_static_direct(r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  Ok(eat_s("g", r?))
+}
+
+pub fn nested_tuple(v: F32, r: Result[U32, U32]) -> Result[(((Str, F32), F32), U32), U32] {
+  let p = ("g", v)
+  Ok(((p, v), r?))
+}
+
+pub rt fn rt_nested_tuple(v: F32, r: Result[U32, U32]) -> Result[(((Str, F32), F32), U32), U32] {
+  let p = ("g", v)
+  Ok(((p, v), r?))
+}
+
+pub fn nested_option(v: F32, r: Result[U32, U32]) -> Result[(Option[(Str, F32)], U32), U32] {
+  let p = ("g", v)
+  Ok((Some(p), r?))
+}
+
+pub rt fn rt_nested_option(v: F32, r: Result[U32, U32]) -> Result[(Option[(Str, F32)], U32), U32] {
+  let p = ("g", v)
+  Ok((Some(p), r?))
+}
+
+pub fn in_array(v: F32, r: Result[U32, U32]) -> Result[([(Str, F32); 2], U32), U32] {
+  let p = ("g", v)
+  Ok(([p, p], r?))
+}
+
+pub rt fn rt_in_array(v: F32, r: Result[U32, U32]) -> Result[([(Str, F32); 2], U32), U32] {
+  let p = ("g", v)
+  Ok(([p, p], r?))
+}
+
+pub fn two_waiting(v: F32, r: Result[U32, U32]) -> Result[(((Str, F32), Str), U32), U32] {
+  let p = ("g", v)
+  let s = "h"
+  Ok(((p, s), r?))
+}
+
+pub rt fn rt_two_waiting(v: F32, r: Result[U32, U32]) -> Result[(((Str, F32), Str), U32), U32] {
+  let p = ("g", v)
+  let s = "h"
+  Ok(((p, s), r?))
+}
+
+pub fn return_waits_static(c: Bool) -> Option[(Str, U32)] {
+  Some(("g", if c { return None } else { 1 }))
+}
+
+pub rt fn rt_return_waits_static(c: Bool) -> Option[(Str, U32)] {
+  Some(("g", if c { return None } else { 1 }))
+}
+
+// ------------------------------------------------------------------ nothing waits: the operand that leaves is read first, or there is no operand that leaves
+
+pub fn split_try(v: F32, r: Result[U32, U32]) -> Result[((Str, F32), U32), U32] {
+  let p = ("g", v)
+  let k = r?
+  Ok((p, k))
+}
+
+pub rt fn rt_split_try(v: F32, r: Result[U32, U32]) -> Result[((Str, F32), U32), U32] {
+  let p = ("g", v)
+  let k = r?
+  Ok((p, k))
+}
+
+pub fn no_exit(v: F32) -> ((Str, F32), U32) {
+  let p = ("g", v)
+  (p, 1)
+}
+
+pub rt fn rt_no_exit(v: F32) -> ((Str, F32), U32) {
+  let p = ("g", v)
+  (p, 1)
+}
+
+pub fn return_binding(v: F32, c: Bool) -> (Str, F32) {
+  let p = ("g", v)
+  if c { return p }
+  p
+}
+
+pub rt fn rt_return_binding(v: F32, c: Bool) -> (Str, F32) {
+  let p = ("g", v)
+  if c { return p }
+  p
+}
+
+// ------------------------------------------------------------------ a borrowed argument consumes nothing
+
+pub rt fn two(p: (Str, F32), k: U32) -> U32 { k }
+
+pub fn borrowed_call(v: F32, r: Result[U32, U32]) -> Result[U32, U32] {
+  let p = ("g", v)
+  Ok(two(p, r?))
+}
+
+pub rt fn rt_borrowed_call(v: F32, r: Result[U32, U32]) -> Result[U32, U32] {
+  let p = ("g", v)
+  Ok(two(p, r?))
+}
+
+pub fn borrowed_length(s: Str, r: Result[U32, U32]) -> Result[((Str, U32), U32), U32] { Ok((("gain", s.len()), r?)) }
+
+pub rt fn rt_borrowed_length(s: Str, r: Result[U32, U32]) -> Result[((Str, U32), U32), U32] { Ok((("gain", s.len()), r?)) }
+
+pub rt fn mk(n: U32) -> Str { "x" }
+
+// ------------------------------------------------------------------ `uses {Alloc}`: the drop of a value that needs one is allowed
+
+pub fn alloc_borrowed(s: Str, r: Result[U32, U32]) -> Result[(Str, U32), U32] uses {Alloc} { Ok((s, r?)) }
+
+pub fn alloc_owned_param(move s: Str, r: Result[U32, U32]) -> Result[(Str, U32), U32] uses {Alloc} { Ok((s, r?)) }
+
+pub fn alloc_made(n: U32, r: Result[U32, U32]) -> Result[(Str, U32), U32] uses {Alloc} { Ok((mk(n), r?)) }
+
+pub fn alloc_literal_str(s: Str, r: Result[U32, U32]) -> Result[((Str, Str), U32), U32] uses {Alloc} { Ok((("gain", s), r?)) }
+
+pub fn alloc_return(n: U32, c: Bool) -> Option[(Str, U32)] uses {Alloc} { Some((mk(n), if c { return None } else { 1 })) }
+
+pub fn alloc_owned_let(s: Str, r: Result[U32, U32]) -> Result[((Str, Str), U32), U32] uses {Alloc} {
+  let q = ("gain", s)
+  Ok((q, r?))
+}
+
+pub fn alloc_nodrop_let(v: F32, r: Result[U32, U32]) -> Result[((Str, F32), U32), U32] uses {Alloc} {
+  let p = ("g", v)
+  Ok((p, r?))
+}

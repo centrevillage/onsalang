@@ -2,7 +2,7 @@
 // [test]
 // spec = ["§18.1", "§8.1", "§8.5"]
 
-// W6-03 U7a, S-1062 (the provisional reading): `Random` with no `use` is not found (E0302, with the `use` as the candidate, §8.1), and may have
+// W6-03 U7a, S-1062 (decided (1): a name not found is a failed name): `Random` with no `use` is not found (E0302, with the `use` as the candidate, §8.1), and may have
 // meant the effect `Random` of std. The anonymous function of the `test` body uses `Random` (`gen.u32`), which phase 1 checks in W6-03 U7b;
 // with that check, the row that may have meant `Random` keeps it from an E0601.
 use std.test.{check, gen}

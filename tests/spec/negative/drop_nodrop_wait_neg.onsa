@@ -1,0 +1,146 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§5.4", "§8.1", "§9.1", "§10", "§12.2"]
+
+// W6-04 U2/t, R-461 (§5.4: "`let q = ("gain", s)`" and an operand that is a borrowed `Str` are "所有 / 起きる"; §12.2: "所有する Shared 値・`Buf` と、それらを含む値の破棄: 要る"; the value that
+// waits for an early exit is "抜けるときに破棄される"; §8.1: an E0601 for the use of `Alloc` that the row lacks, and for an `rt fn` too, §10 rule 1): the contrasts of negative/drop_nodrop_wait_ok.onsa. A value
+// that needs a drop and waits for a `?`, a `return`, a `break` or a `continue` is dropped there, so the function needs `Alloc`: the copy of a borrowed `Str` (a Shared value, not a static one), an
+// owned `Str` parameter, a `Str` that a call makes, a literal that holds a borrowed `Str` (a literal of static values and Copy values only is the one that needs no drop, §5.4), a path of a borrowed
+// value, a binding of such a value (`let q = ("gain", s)`, `let t = mk(n)`, and the `if` whose tail is a borrowed `Str`: "発散しない全ての末尾が静的な値 ... のときだけ"), and a value of the
+// argument of a `move` parameter. The position is where the value that waits is written (S-783: the expression of a value that has no binding, the value that an early exit leaves); a function that
+// waits with a `let` is on several lines and the marker is on the line of the value that waits. The helper `sink_s` drops its argument, so its own E0601 is reported (the same as the helpers of
+// negative/drop_pending_contrast.onsa). One error per function (S-1053). The fixes (a `uses {Alloc}` for the `fn`) are not pinned here (`fixes` is not written).
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+pub rt fn mk(n: U32) -> Str { "x" }
+
+pub rt fn sink_s(move s: Str, k: U32) -> U32 { k }   //~ E0601
+
+// ------------------------------------------------------------------ the copy of a borrowed `Str` and an owned `Str` parameter that wait for a `?`
+
+pub fn n_borrowed(s: Str, r: Result[U32, U32]) -> Result[(Str, U32), U32] { Ok((s, r?)) }   //~ E0601
+
+pub rt fn rt_n_borrowed(s: Str, r: Result[U32, U32]) -> Result[(Str, U32), U32] { Ok((s, r?)) }   //~ E0601
+
+pub fn n_owned_param(move s: Str, r: Result[U32, U32]) -> Result[(Str, U32), U32] { Ok((s, r?)) }   //~ E0601
+
+pub rt fn rt_n_owned_param(move s: Str, r: Result[U32, U32]) -> Result[(Str, U32), U32] { Ok((s, r?)) }   //~ E0601
+
+pub fn n_made(n: U32, r: Result[U32, U32]) -> Result[(Str, U32), U32] { Ok((mk(n), r?)) }   //~ E0601
+
+pub rt fn rt_n_made(n: U32, r: Result[U32, U32]) -> Result[(Str, U32), U32] { Ok((mk(n), r?)) }   //~ E0601
+
+// ------------------------------------------------------------------ a literal or a path of a value that needs a drop
+
+pub fn n_literal_str(s: Str, r: Result[U32, U32]) -> Result[((Str, Str), U32), U32] { Ok((("gain", s), r?)) }   //~ E0601
+
+pub rt fn rt_n_literal_str(s: Str, r: Result[U32, U32]) -> Result[((Str, Str), U32), U32] { Ok((("gain", s), r?)) }   //~ E0601
+
+pub fn n_struct_str(s: Str, v: F32, r: Result[U32, U32]) -> Result[(Param, U32), U32] { Ok((Param { name: s, value: v }, r?)) }   //~ E0601
+
+pub rt fn rt_n_struct_str(s: Str, v: F32, r: Result[U32, U32]) -> Result[(Param, U32), U32] { Ok((Param { name: s, value: v }, r?)) }   //~ E0601
+
+pub fn n_borrowed_path(t: (Str, F32), r: Result[U32, U32]) -> Result[(Str, U32), U32] { Ok((t.0, r?)) }   //~ E0601
+
+pub rt fn rt_n_borrowed_path(t: (Str, F32), r: Result[U32, U32]) -> Result[(Str, U32), U32] { Ok((t.0, r?)) }   //~ E0601
+
+pub fn n_borrowed_index(xs: [Str; 2], i: U32, r: Result[U32, U32]) -> Result[(Str, U32), U32] { Ok((xs[i], r?)) }   //~ E0601
+
+// ------------------------------------------------------------------ the argument of a `move` parameter
+
+pub fn n_move_arg_made(n: U32, r: Result[U32, U32]) -> Result[U32, U32] { Ok(sink_s(mk(n), r?)) }   //~ E0601
+
+pub rt fn rt_n_move_arg_made(n: U32, r: Result[U32, U32]) -> Result[U32, U32] { Ok(sink_s(mk(n), r?)) }   //~ E0601
+
+// ------------------------------------------------------------------ a `return` that comes after the value that waits
+
+pub fn n_return_made(n: U32, c: Bool) -> Option[(Str, U32)] { Some((mk(n), if c { return None } else { 1 })) }   //~ E0601
+
+pub rt fn rt_n_return_made(n: U32, c: Bool) -> Option[(Str, U32)] { Some((mk(n), if c { return None } else { 1 })) }   //~ E0601
+
+pub fn n_return_borrowed(s: Str, c: Bool) -> Option[(Str, U32)] { Some((s, if c { return None } else { 1 })) }   //~ E0601
+
+// ------------------------------------------------------------------ the binding of a value that needs a drop waits (the marker is on the line of the value that waits)
+
+pub fn n_owned_let(s: Str, r: Result[U32, U32]) -> Result[((Str, Str), U32), U32] {
+  let q = ("gain", s)
+  Ok((q, r?))   //~ E0601
+}
+
+pub rt fn rt_n_owned_let(s: Str, r: Result[U32, U32]) -> Result[((Str, Str), U32), U32] {
+  let q = ("gain", s)
+  Ok((q, r?))   //~ E0601
+}
+
+pub fn n_made_let(n: U32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  let t = mk(n)
+  Ok((t, r?))   //~ E0601
+}
+
+pub rt fn rt_n_made_let(n: U32, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  let t = mk(n)
+  Ok((t, r?))   //~ E0601
+}
+
+// the tail `s` is a borrowed `Str`, so the binding is an owned one (§5.4: "`if c { p } else { s }` は、`s` が借用の `Str` の引数なら当たらない")
+pub fn n_if_let(s: Str, c: Bool, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  let t = if c { "g" } else { s }
+  Ok((t, r?))   //~ E0601
+}
+
+pub rt fn rt_n_if_let(s: Str, c: Bool, r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  let t = if c { "g" } else { s }
+  Ok((t, r?))   //~ E0601
+}
+
+// ------------------------------------------------------------------ a `break` and a `continue` that come after the value that waits
+
+pub fn n_break_made(n: U32, xs: [U32; 2]) -> U32 {
+  var total = 0
+  for x in xs {
+    total = total + sink_s(mk(n), if x > 1 { break } else { x })   //~ E0601
+  }
+  total
+}
+
+pub rt fn rt_n_break_made(n: U32, xs: [U32; 2]) -> U32 {
+  var total = 0
+  for x in xs {
+    total = total + sink_s(mk(n), if x > 1 { break } else { x })   //~ E0601
+  }
+  total
+}
+
+pub fn n_continue_made(n: U32, xs: [U32; 2]) -> U32 {
+  var total = 0
+  for x in xs {
+    total = total + sink_s(mk(n), if x > 1 { continue } else { x })   //~ E0601
+  }
+  total
+}
+
+pub rt fn rt_n_continue_made(n: U32, xs: [U32; 2]) -> U32 {
+  var total = 0
+  for x in xs {
+    total = total + sink_s(mk(n), if x > 1 { continue } else { x })   //~ E0601
+  }
+  total
+}
+
+// ------------------------------------------------------------------ an anonymous function: the value that waits in its own body
+
+pub fn run_try(f: fn(Result[U32, U32]) -> Result[(Str, U32), U32], r: Result[U32, U32]) -> Result[(Str, U32), U32] { f.(r) }
+
+pub rt fn run_try_rt(f: rt fn(Result[U32, U32]) -> Result[(Str, U32), U32], r: Result[U32, U32]) -> Result[(Str, U32), U32] { f.(r) }
+
+pub fn closure_made(r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  run_try(fn(x: Result[U32, U32]) -> Result[(Str, U32), U32] { Ok((mk(1), x?)) }, r)   //~ E0601
+}
+
+pub rt fn rt_closure_made(r: Result[U32, U32]) -> Result[(Str, U32), U32] {
+  run_try_rt(fn(x: Result[U32, U32]) -> Result[(Str, U32), U32] { Ok((mk(1), x?)) }, r)   //~ E0601
+}

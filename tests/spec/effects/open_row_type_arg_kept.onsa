@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§8.1"]
+
+// W6-04 U2/t, S-1063 (decided (2)), S-691, S-1031, §18.1: "型引数の中の等しさでも、指しえた効果で埋まる違いは比べない". The row `uses {Gone}` is a row that has a failed name (`Gone`, E0302),
+// so it is an open row, and a difference that the effect a failed name may have meant fills is no E0401, in the argument of a type too (`Option[...]`: the type must be the same, §8.1 and S-1031).
+// An open row against a pure function type is not compared (`pure_pos`, as `Option[fn(U32) -> U32 uses {Gone}]` of a value that may be a pure one). The effect that a failed name may have meant is
+// "その経路の最後の名前と同じ名前の効果" (§18.1), so the path `gone.Alloc` (the head `gone` is a failed name) may have meant `Alloc`, and the row `{gone.Alloc}` and the row `{Alloc}` do not differ where
+// one stands for the other (`path_to_alloc`, `alloc_to_path`, `path_to_pure`); the same row against itself is no error. The differences that no failed name fills are in
+// effects/open_row_type_arg_neg.onsa. The functions are one-liners.
+use kp.{Gone, gone}   //~ E0302
+
+pub fn pure_pos(o: Option[fn(U32) -> U32 uses {Gone}]) -> Option[fn(U32) -> U32] { o }
+
+pub fn same_gone(o: Option[fn(U32) -> U32 uses {Gone}]) -> Option[fn(U32) -> U32 uses {Gone}] { o }
+
+pub fn path_to_alloc(o: Option[fn(U32) -> U32 uses {gone.Alloc}]) -> Option[fn(U32) -> U32 uses {Alloc}] { o }
+
+pub fn alloc_to_path(o: Option[fn(U32) -> U32 uses {Alloc}]) -> Option[fn(U32) -> U32 uses {gone.Alloc}] { o }
+
+pub fn path_to_pure(o: Option[fn(U32) -> U32 uses {gone.Alloc}]) -> Option[fn(U32) -> U32] { o }
+
+pub fn result_pure(o: Result[fn(U32) -> U32 uses {Gone}, U32]) -> Result[fn(U32) -> U32, U32] { o }
+
+pub fn tuple_pure(o: (fn(U32) -> U32 uses {Gone}, U32)) -> (fn(U32) -> U32, U32) { o }
+
+pub fn array_pure(o: [fn(U32) -> U32 uses {Gone}; 2]) -> [fn(U32) -> U32; 2] { o }
+
+pub fn result_path(o: Result[fn(U32) -> U32 uses {gone.Alloc}, U32]) -> Result[fn(U32) -> U32 uses {Alloc}, U32] { o }

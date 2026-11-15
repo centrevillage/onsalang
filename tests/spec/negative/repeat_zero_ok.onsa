@@ -1,0 +1,131 @@
+// onsa.toml
+// [test]
+// spec = ["§2.4", "§5.2", "§5.4", "§8.1", "§10", "§12.2"]
+
+// W6-04 U2/t, S-1045 (1) (§2.4, §12.2: "長さが 0 でありうる `[e; N]`（§2.4）の `e` の値の破棄 ... 要る"; "長さが 1 以上と分かれば数えない"; §5.4: "静的な値と同じく、複製も破棄も何もしない"): the contrasts of
+// negative/repeat_zero_neg.onsa. A `[e; N]` is legal without `Alloc` where the value of `e` is not dropped or needs no drop: the length is 1 or more and known (`[s; 1]`, `[s; 2]`, a constant
+// `W` of the value 3: the value is put at an element, and the others are copies of it, which a Shared value needs no `Alloc` for), the element is Copy (`[1.0; 0]`, a tuple of numbers, `[x; N]`
+// with an `F32` `x`), the value is a static one (`["a"; N]`), or a literal that needs no drop (the binding `p = ("g", v)` of a literal of static values and Copy values: `[p; 0]`, `[p; N]`, "破棄の要らない束縛").
+// A function with `uses {Alloc}` is legal with any length (the drop is allowed), and so is its caller that has `Alloc` too. This version accepts all of these, and the new reading of a length of 0
+// must keep them legal. The `fn` and the `rt fn` of each form are both here where it fits an `rt fn`. The functions are one-liners where they can be (S-783).
+
+pub rt fn mk(n: U32) -> Str { "x" }
+
+const W: U32 = 3
+
+pub struct Holder {
+  name: Str,
+  n: U32,
+}
+
+// ------------------------------------------------------------------ the length is 1 or more and known
+
+pub fn owned1(move s: Str) -> [Str; 1] { [s; 1] }
+
+pub rt fn rt_owned1(move s: Str) -> [Str; 1] { [s; 1] }
+
+pub fn owned2(move s: Str) -> [Str; 2] { [s; 2] }
+
+pub rt fn rt_owned2(move s: Str) -> [Str; 2] { [s; 2] }
+
+pub fn borrowed2(s: Str) -> [Str; 2] { [s; 2] }
+
+pub rt fn rt_borrowed2(s: Str) -> [Str; 2] { [s; 2] }
+
+pub fn made2(n: U32) -> [Str; 2] { [mk(n); 2] }
+
+pub rt fn rt_made2(n: U32) -> [Str; 2] { [mk(n); 2] }
+
+pub fn const_three(move s: Str) -> [Str; W] { [s; W] }
+
+pub rt fn rt_const_three(move s: Str) -> [Str; W] { [s; W] }
+
+pub fn nested_ok(move s: Str) -> [[Str; 2]; 3] { [[s; 2]; 3] }
+
+pub rt fn rt_nested_ok(move s: Str) -> [[Str; 2]; 3] { [[s; 2]; 3] }
+
+pub fn literal2(s: Str) -> [(Str, Str); 2] { [("gain", s); 2] }
+
+pub rt fn rt_literal2(s: Str) -> [(Str, Str); 2] { [("gain", s); 2] }
+
+pub fn borrowed_path2(t: (Str, F32)) -> [Str; 2] { [t.0; 2] }
+
+pub rt fn rt_borrowed_path2(t: (Str, F32)) -> [Str; 2] { [t.0; 2] }
+
+// ------------------------------------------------------------------ the element is Copy, static, or needs no drop
+
+pub fn copy0(x: F32) -> [F32; 0] { [x; 0] }
+
+pub rt fn rt_copy0(x: F32) -> [F32; 0] { [x; 0] }
+
+pub fn copy_literal0() -> [F32; 0] { [1.0; 0] }
+
+pub rt fn rt_copy_literal0() -> [F32; 0] { [1.0; 0] }
+
+pub fn tuple_copy0() -> [(U32, F32); 0] { [(1, 2.0); 0] }
+
+pub rt fn rt_tuple_copy0() -> [(U32, F32); 0] { [(1, 2.0); 0] }
+
+pub fn copy_generic[const N: U32](x: F32) -> [F32; N] { [x; N] }
+
+pub rt fn rt_copy_generic[const N: U32](x: F32) -> [F32; N] { [x; N] }
+
+pub fn static0() -> [Str; 0] { ["a"; 0] }
+
+pub rt fn rt_static0() -> [Str; 0] { ["a"; 0] }
+
+pub fn static_generic[const N: U32]() -> [Str; N] { ["a"; N] }
+
+pub rt fn rt_static_generic[const N: U32]() -> [Str; N] { ["a"; N] }
+
+pub fn literal_nodrop0(s: Str) -> [(Str, U32); 0] { [("gain", s.len()); 0] }
+
+pub rt fn rt_literal_nodrop0(s: Str) -> [(Str, U32); 0] { [("gain", s.len()); 0] }
+
+// ------------------------------------------------------------------ a binding that needs no drop is the element (§5.4)
+
+pub fn nodrop_let0(v: F32) -> [(Str, F32); 0] {
+  let p = ("g", v)
+  [p; 0]
+}
+
+pub rt fn rt_nodrop_let0(v: F32) -> [(Str, F32); 0] {
+  let p = ("g", v)
+  [p; 0]
+}
+
+pub fn nodrop_let_generic[const N: U32](v: F32) -> [(Str, F32); N] {
+  let p = ("g", v)
+  [p; N]
+}
+
+pub rt fn rt_nodrop_let_generic[const N: U32](v: F32) -> [(Str, F32); N] {
+  let p = ("g", v)
+  [p; N]
+}
+
+pub fn static_let_generic[const N: U32]() -> [Str; N] {
+  let s = "g"
+  [s; N]
+}
+
+// ------------------------------------------------------------------ `uses {Alloc}`: the drop is allowed, for any length
+
+pub fn alloc_owned0(move s: Str) -> [Str; 0] uses {Alloc} { [s; 0] }
+
+pub fn alloc_borrowed0(s: Str) -> [Str; 0] uses {Alloc} { [s; 0] }
+
+pub fn alloc_made0(n: U32) -> [Str; 0] uses {Alloc} { [mk(n); 0] }
+
+pub fn alloc_generic[const N: U32](move s: Str) -> [Str; N] uses {Alloc} { [s; N] }
+
+pub fn alloc_made_generic[const N: U32](n: U32) -> [Str; N] uses {Alloc} { [mk(n); N] }
+
+pub fn alloc_nested_outer0(move s: Str) -> [[Str; 2]; 0] uses {Alloc} { [[s; 2]; 0] }
+
+pub fn alloc_let0(n: U32) -> [Str; 0] uses {Alloc} {
+  let t = mk(n)
+  [t; 0]
+}
+
+pub fn alloc_caller(move s: Str) -> [Str; 3] uses {Alloc} { alloc_generic(s) }

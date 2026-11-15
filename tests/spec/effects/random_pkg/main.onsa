@@ -3,7 +3,7 @@
 // spec = ["§8.1", "§8.5", "§11.8", "§15.1", "§18.1"]
 // fixes = 0
 
-// W6-03 U7b/t, S-97, S-1054 (the provisional reading (1)), D-08 (§8.1: "本体で使う効果は、効果行に含まれなければならない（E0601）"; §11.8; §15.1): the effect that a function has is the same wherever it is called
+// W6-03 U7b/t, S-97, S-1054 (decided (1)), D-08 (§8.1: "本体で使う効果は、効果行に含まれなければならない（E0601）"; §11.8; §15.1): the effect that a function has is the same wherever it is called
 // from. `lib_check` has an E0601 in `lib.onsa` for its own call of `check`, and its row is empty, so a caller of it has no error (`calls_lib_check`: the use of `Random` is the error of `lib_check`, not of the
 // caller). `lib_user_row` writes `uses {Random}` (an E0200 in `lib.onsa`), and a function of this module that has no `Random` and calls it is an E0601 (there is no candidate: `fixes = 0`). A call of `check` in a
 // function of this module is an E0601, in the body of a `test` it is fine, and a call of a function of another module in the body of a `test` is fine. One error per function (P-01).

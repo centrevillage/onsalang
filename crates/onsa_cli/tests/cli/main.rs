@@ -81,6 +81,7 @@ mod pattern_guard_candidates;
 mod pattern_rows;
 mod prelude_names;
 mod range_syntax;
+mod repeat_zero_model;
 mod std_privilege;
 mod syntax_units;
 mod test_failure_positions;

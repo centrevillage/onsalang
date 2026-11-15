@@ -1,0 +1,15 @@
+// The type and the helpers of negative/drop_nodrop_wait_pkg_neg/main.onsa, and the forms that need a drop in the module that declares them (W6-04 U2/t, R-461, spec §5.4, §12.2, §15.1).
+// The drop of a value that needs one is reported where the value that waits is written, wherever the function is called from: here, in the module that declares it.
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+pub rt fn mk(n: U32) -> Str { "x" }
+
+pub fn lib_wait_made(n: U32, r: Result[U32, U32]) -> Result[(Str, U32), U32] { Ok((mk(n), r?)) }   //~ E0601
+
+pub rt fn rt_lib_wait_made(n: U32, r: Result[U32, U32]) -> Result[(Str, U32), U32] { Ok((mk(n), r?)) }   //~ E0601
+
+pub fn lib_wait_borrowed(s: Str, v: F32, r: Result[U32, U32]) -> Result[(Param, U32), U32] { Ok((Param { name: s, value: v }, r?)) }   //~ E0601
