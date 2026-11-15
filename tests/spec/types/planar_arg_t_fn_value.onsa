@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.3"]
+
+// S-1070 (1) (W6-04, §5.3 の表の「`Span` の配列」の行: "引数の型は、その引数を読む時点で型引数を当てた後の型で見る"; §4.5: "`T` が `Span` か平面の配列に決まっている引数
+// （`x: T`、`xs: [T; N]`）は、… 引数の位置の配列リテラル"): a function value has the type of the function after the type arguments are applied, so the planar array literal
+// is an argument of it, whether the value comes from a generic function with the written type arguments (`let f = c::[Span[F32], 2]`), from a generic function whose
+// `T` an argument before the literal decides at the call (`let f = c`, then `f.(a, [a, b])`), from a parameter of the type `fn([Span[F32]; 2]) -> U32`, or from a field
+// of a struct. The same function called directly with the literal is the E0710 of types/planar_arg_t_order.onsa when `T` is not decided.
+// No diagnostic is expected anywhere in this file.
+
+pub fn c[T: ?Escape, const N: U32](xs: [T; N]) -> U32 {
+  N
+}
+
+pub fn c2[T: ?Escape, const N: U32](x: T, xs: [T; N]) -> U32 {
+  N
+}
+
+pub struct K {
+  f: fn([Span[F32]; 2]) -> U32,
+}
+
+pub fn a_value_of_the_written_type_arguments(a: Span[F32], b: Span[F32]) -> U32 {
+  let f = c::[Span[F32], 2]
+  f.([a, b])
+}
+
+pub fn a_value_decided_by_the_argument_before(a: Span[F32], b: Span[F32]) -> U32 {
+  let f = c2
+  f.(a, [a, b])
+}
+
+pub fn a_parameter(f: fn([Span[F32]; 2]) -> U32, a: Span[F32], b: Span[F32]) -> U32 {
+  f.([a, b])
+}
+
+pub fn a_field(k: K, a: Span[F32], b: Span[F32]) -> U32 {
+  k.f.([a, b])
+}

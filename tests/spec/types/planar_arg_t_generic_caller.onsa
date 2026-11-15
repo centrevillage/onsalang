@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.3", "§4.7"]
+
+// S-1070 (1) (W6-04, §4.5: "呼ぶ側の `?Escape` の型パラメータ `U` に決まった `[U; N]` は `Span` の配列でなく、`[x, y]`（`x: U`）は E0710 である"; "`T` の値を `?Escape` の
+// 無い型パラメータへ渡す形も … E0710"): inside a generic function whose type parameter `U` has `?Escape`, a `T` of a call that is decided to `U` is not a `Span` (the values
+// of `U` are second-class values of an unknown type), so `[x, y]` (`x: U`) at `xs: [T; N]` is an ordinary array literal that stores second-class elements, the E0710 of a
+// storage (§4.5), in each form of the call: with the argument before, with the written type arguments, as a function value. An array that is a value of the type `[U; 2]`
+// is passed on as it is. One error per function (P-01).
+
+pub fn c[T: ?Escape, const N: U32](x: T, xs: [T; N]) -> U32 {
+  N
+}
+
+pub fn g[T: ?Escape, const N: U32](xs: [T; N]) -> U32 {
+  N
+}
+
+// -------------------------------------------------------------------------------- what is right
+
+pub fn an_array_passed_on[U: ?Escape](xs: [U; 2]) -> U32 {
+  g(xs)
+}
+
+pub fn an_array_passed_on_with_the_written_type[U: ?Escape](xs: [U; 2]) -> U32 {
+  g::[U, 2](xs)
+}
+
+pub fn a_value_passed_on_with_an_array[U: ?Escape](x: U, xs: [U; 2]) -> U32 {
+  c(x, xs)
+}
+
+// ------------------------------------------------------------------------------ the literal of U
+
+pub fn the_argument_before[U: ?Escape](x: U, y: U) -> U32 {
+  c(x, [x, y]) //~ E0710
+}
+
+pub fn the_literal_alone[U: ?Escape](x: U, y: U) -> U32 {
+  g([x, y]) //~ E0710
+}
+
+pub fn the_written_type_arguments[U: ?Escape](x: U, y: U) -> U32 {
+  g::[U, 2]([x, y]) //~ E0710
+}
+
+pub fn the_function_value[U: ?Escape](f: fn([U; 2]) -> U32, x: U, y: U) -> U32 {
+  f.([x, y]) //~ E0710
+}

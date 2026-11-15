@@ -1,0 +1,79 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.3", "§4.7"]
+
+// S-1070 (1) (W6-04, §4.5: "決まっているかは、その引数を読む時点で見る（§4.7。書いた型引数、受け手の型、期待型、先の引数）"; §4.7: "呼び出しの全体の型が外から決まっていれば
+// （返り値の位置、`let` の注釈）、それが先に入る"): the planar array literal at the argument `xs: [T; N]` of a type parameter with `?Escape` is planar when `T` is decided
+// by the type of the receiver (`w: W[Span[F32]]` for the method of `impl[T: ?Escape] W[T]`, or the owner written as `W::[Span[F32]]`), by the written type arguments of the
+// method itself, or by the expected type of the call (the annotation of the `let`, the type of the return), and it is the E0710 of an ordinary literal of second-class
+// elements when none of them decides `T`. One error per function (P-01).
+
+pub struct W[T: ?Escape] {
+  n: U32,
+}
+
+impl[T: ?Escape] W[T] {
+  pub fn m(self, xs: [T; 2]) -> U32 {
+    2
+  }
+
+  pub fn s(xs: [T; 2]) -> U32 {
+    2
+  }
+}
+
+pub struct Plain {
+  n: U32,
+}
+
+impl Plain {
+  pub fn m[T: ?Escape, const N: U32](self, xs: [T; N]) -> U32 {
+    N
+  }
+}
+
+pub struct H[T: ?Escape] {
+  f: fn(T) -> U32,
+}
+
+pub fn mk[T: ?Escape, const N: U32](xs: [T; N], move f: fn(T) -> U32) -> H[T] {
+  H { f: f }
+}
+
+pub fn take_view(s: Span[F32]) -> U32 {
+  s.len()
+}
+
+// -------------------------------------------------------------------------------- what is right
+
+pub fn the_receiver_decides(w: W[Span[F32]], a: Span[F32], b: Span[F32]) -> U32 {
+  w.m([a, b])
+}
+
+pub fn the_owner_decides(a: Span[F32], b: Span[F32]) -> U32 {
+  W::[Span[F32]].s([a, b])
+}
+
+pub fn the_written_type_of_the_method(p: Plain, a: Span[F32], b: Span[F32]) -> U32 {
+  p.m::[Span[F32], 2]([a, b])
+}
+
+pub fn the_annotation_decides(a: Span[F32], b: Span[F32]) -> U32 {
+  let _: H[Span[F32]] = mk([a, b], take_view)
+  0
+}
+
+pub fn the_return_type_decides(a: Span[F32], b: Span[F32]) -> H[Span[F32]] {
+  mk([a, b], take_view)
+}
+
+// ------------------------------------------------------------------- nothing decides T before the literal
+
+pub fn the_method_with_its_own_type(p: Plain, a: Span[F32], b: Span[F32]) -> U32 {
+  p.m([a, b]) //~ E0710
+}
+
+pub fn no_annotation(a: Span[F32], b: Span[F32]) -> U32 {
+  let _ = mk([a, b], take_view) //~ E0710
+  0
+}

@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.3", "§4.7"]
+
+// S-1070 (1) (W6-04, §4.5: "`T` が `Span` か平面の配列に決まっている引数（`x: T`、`xs: [T; N]`）は、`Span`・`Span` の配列の引数である"): a `T` that is a planar array itself
+// (`[Span[F32]; 2]`, by a written type argument or by an argument before) makes the argument `x: T` an argument of a planar array, so the literal `[a, b]` is right
+// there, and it is the E0710 of an ordinary literal when `T` is not decided before it (§4.7, the order of the arguments). One error per function (P-01).
+
+pub fn p[T: ?Escape](x: T) -> U32 {
+  0
+}
+
+pub fn q[T: ?Escape](x: T, y: T) -> U32 {
+  0
+}
+
+// -------------------------------------------------------------------------------- what is right
+
+pub fn the_written_type_is_planar(a: Span[F32], b: Span[F32]) -> U32 {
+  p::[[Span[F32]; 2]]([a, b])
+}
+
+pub fn the_value_before_decides(ps: [Span[F32]; 2], a: Span[F32], b: Span[F32]) -> U32 {
+  q(ps, [a, b])
+}
+
+pub fn the_value_before_decides_in_a_branch(ps: [Span[F32]; 2], a: Span[F32], b: Span[F32], k: Bool) -> U32 {
+  if k {
+    q(ps, [a, b])
+  } else {
+    q(ps, [b, a])
+  }
+}
+
+// ---------------------------------------------------------------------------- T is not decided before
+
+pub fn the_literal_alone(a: Span[F32], b: Span[F32]) -> U32 {
+  p([a, b]) //~ E0710
+}
+
+pub fn the_literal_before_the_value(ps: [Span[F32]; 2], a: Span[F32], b: Span[F32]) -> U32 {
+  q([a, b], ps) //~ E0710
+}
+
+pub fn the_literal_before_the_value_in_a_loop(ps: [Span[F32]; 2], a: Span[F32], b: Span[F32]) -> U32 {
+  var n = 0
+  for _ in 0..<2 {
+    n = n + q([b, a], ps) //~ E0710
+  }
+  n
+}

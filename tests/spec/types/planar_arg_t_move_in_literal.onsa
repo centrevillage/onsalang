@@ -1,0 +1,84 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.2", "§5.3"]
+
+// S-1070 (1) (W6-04, §4.5: "`T` が `Span` か平面の配列に決まっている引数（`x: T`、`xs: [T; N]`）は、`Span`・`Span` の配列の引数である（§5.3 の表の変換と、引数の位置の配列リテラル）";
+// §5.3: the elements of the planar literal are borrowed (a `Buf` as an element is a view of it); §5.2: the mark `move` at a borrowed position is the mismatch of the mode, E0703):
+// when `T` is a `Span` the elements of the literal are views, so `move` on an element is E0703 and a `Buf` element without it is borrowed (the buffer is still the caller's after the
+// call). When `T` is not decided the literal is an ordinary array literal, which consumes its elements: a `Buf` element needs the `move` (E0711 without it, §5.2), and the
+// `move` is right. The same text `[b2, b3]` is then a view of the buffers or the buffers moved into an array, by the type of `T` that is read before it.
+// One error per function (P-01).
+
+pub fn c[T: ?Dup + ?Escape, const N: U32](x: T, xs: [T; N]) -> U32 {
+  N
+}
+
+pub fn g[T: ?Dup + ?Escape, const N: U32](xs: [T; N]) -> U32 {
+  N
+}
+
+// -------------------------------------------------------------------------------- what is right
+
+pub fn views_of_the_buffers(s: Span[F32]) -> U32 uses {Alloc} {
+  let b2: Buf[F32] = Buf.zeroed(4)
+  let b3: Buf[F32] = Buf.zeroed(4)
+  let n = c(s, [b2, b3])
+  n + b2.len() + b3.len()
+}
+
+pub fn views_by_the_written_type() -> U32 uses {Alloc} {
+  let b2: Buf[F32] = Buf.zeroed(4)
+  let b3: Buf[F32] = Buf.zeroed(4)
+  let n = g::[Span[F32], 2]([b2, b3])
+  n + b2.len()
+}
+
+pub fn the_buffers_moved_into_an_array() -> U32 uses {Alloc} {
+  let b2: Buf[F32] = Buf.zeroed(4)
+  let b3: Buf[F32] = Buf.zeroed(4)
+  g([move b2, move b3])
+}
+
+pub fn the_buffers_moved_by_the_written_type() -> U32 uses {Alloc} {
+  let b2: Buf[F32] = Buf.zeroed(4)
+  let b3: Buf[F32] = Buf.zeroed(4)
+  g::[Buf[F32], 2]([move b2, move b3])
+}
+
+// ---------------------------------------------------------------------- `move` at the elements of a view
+
+pub fn move_on_the_first_element(s: Span[F32]) -> U32 uses {Alloc} {
+  let b2: Buf[F32] = Buf.zeroed(4)
+  let b3: Buf[F32] = Buf.zeroed(4)
+  c(s, [move b2, b3]) //~ E0703
+}
+
+pub fn move_on_the_last_element(s: Span[F32]) -> U32 uses {Alloc} {
+  let b2: Buf[F32] = Buf.zeroed(4)
+  let b3: Buf[F32] = Buf.zeroed(4)
+  c(s, [b2, move b3]) //~ E0703
+}
+
+pub fn move_by_the_written_type() -> U32 uses {Alloc} {
+  let b2: Buf[F32] = Buf.zeroed(4)
+  let b3: Buf[F32] = Buf.zeroed(4)
+  g::[Span[F32], 2]([move b2, b3]) //~ E0703
+}
+
+// --------------------------------------------------------------- no `move` at the elements of an array
+
+pub fn no_move_when_t_is_not_decided() -> U32 uses {Alloc} {
+  let b2: Buf[F32] = Buf.zeroed(4)
+  g([b2]) //~ E0711
+}
+
+pub fn no_move_on_the_last_when_t_is_not_decided() -> U32 uses {Alloc} {
+  let b2: Buf[F32] = Buf.zeroed(4)
+  let b3: Buf[F32] = Buf.zeroed(4)
+  g([move b2, b3]) //~ E0711
+}
+
+pub fn no_move_by_the_written_type() -> U32 uses {Alloc} {
+  let b2: Buf[F32] = Buf.zeroed(4)
+  g::[Buf[F32], 1]([b2]) //~ E0711
+}

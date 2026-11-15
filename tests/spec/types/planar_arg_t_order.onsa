@@ -1,0 +1,107 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.3", "§4.7"]
+
+// S-1070 (1) (W6-04, §4.5: "`T` が `Span` か平面の配列に決まっている引数（`x: T`、`xs: [T; N]`）は、`Span`・`Span` の配列の引数である（§5.3 の表の変換と、
+// 引数の位置の配列リテラル）。決まっているかは、その引数を読む時点で見る（§4.7。書いた型引数、受け手の型、期待型、先の引数）"; "`T` が未決の引数に書いた
+// 配列リテラルは普通の配列リテラルで、要素が第二級なら E0710 である（… 型引数を書いて先に決める、§4.7）"; §5.3 の表の「`Span` の配列」の行: "引数の型は、その引数を
+// 読む時点で型引数を当てた後の型で見る"): the planar array literal `[a, b]` (`a`, `b` are `Span`s) at the argument `xs: [T; N]` of a type parameter with
+// `?Escape` is planar when `T` is already a `Span` when the argument is read, by an argument before it or by the written type arguments, and it is an
+// ordinary array literal (the E0710 of a second-class element) when `T` is not decided yet, so the order of the arguments decides (§4.7: `pick(r, k)` and
+// `pick(k, r)`). One error per function (P-01).
+
+pub fn c[T: ?Escape, const N: U32](x: T, xs: [T; N]) -> U32 {
+  N
+}
+
+pub fn c2[T: ?Escape, const N: U32](xs: [T; N], y: T) -> U32 {
+  N
+}
+
+pub fn g[T: ?Escape, const N: U32](xs: [T; N]) -> U32 {
+  N
+}
+
+// -------------------------------------------------------------------------------- what is right
+
+pub fn the_argument_before_decides(a: Span[F32], b: Span[F32]) -> U32 {
+  c(a, [a, b])
+}
+
+pub fn the_same_view_twice(a: Span[F32]) -> U32 {
+  c(a, [a, a])
+}
+
+pub fn the_elements_of_other_kinds(s: Span[F32], m: [F32; 4], k: [F32; 8]) -> U32 {
+  c(s, [m, k])
+}
+
+pub fn the_subviews_as_elements(a: Span[F32], m: [F32; 8]) -> U32 {
+  c(a, [m.slice(0, 4), m.slice(4, 8)])
+}
+
+pub fn the_elements_of_a_planar_value(ps: [Span[F32]; 2]) -> U32 {
+  c(ps[0], [ps[1], ps[0]])
+}
+
+pub fn the_buf_as_a_view(s: Span[F32]) -> U32 uses {Alloc} {
+  let b: Buf[F32] = Buf.zeroed(4)
+  let n = c(s, [b, s])
+  n + b.len()
+}
+
+pub fn the_written_type_arguments(a: Span[F32], b: Span[F32]) -> U32 {
+  c::[Span[F32], 2](a, [a, b]) + g::[Span[F32], 2]([a, b]) + c2::[Span[F32], 2]([a, b], a)
+}
+
+pub fn in_a_branch(a: Span[F32], b: Span[F32], k: Bool) -> U32 {
+  if k {
+    c(a, [a, b])
+  } else {
+    c(b, [b, a])
+  }
+}
+
+pub fn in_a_loop(a: Span[F32], b: Span[F32]) -> U32 {
+  var n = 0
+  for _ in 0..<3 {
+    n = n + c(a, [b, a])
+  }
+  n
+}
+
+// ----------------------------------------------------------------- the order of the arguments decides
+
+pub fn the_literal_before_the_argument(a: Span[F32], b: Span[F32]) -> U32 {
+  c2([a, b], a) //~ E0710
+}
+
+pub fn the_literal_alone(a: Span[F32], b: Span[F32]) -> U32 {
+  g([a, b]) //~ E0710
+}
+
+pub fn the_literal_alone_in_a_branch(a: Span[F32], b: Span[F32], k: Bool) -> U32 {
+  if k {
+    g([a, b]) //~ E0710
+  } else {
+    0
+  }
+}
+
+pub fn the_literal_in_a_loop(a: Span[F32], b: Span[F32]) -> U32 {
+  var n = 0
+  for _ in 0..<3 {
+    n = n + c2([b, a], a) //~ E0710
+  }
+  n
+}
+
+// ----------------------------------- a type parameter without `?Escape` is not this (§4.5: the planar array is E0710)
+
+pub fn d[T, const N: U32](xs: [T; N]) -> U32 {
+  N
+}
+
+pub fn without_maybe_escape(a: Span[F32], b: Span[F32]) -> U32 {
+  d::[Span[F32], 2]([a, b]) //~ E0710
+}

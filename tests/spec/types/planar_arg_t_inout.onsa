@@ -1,0 +1,85 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.1", "§5.3", "§7"]
+
+// S-1070 (1) (W6-04, §4.5: "`T` が `Span` か平面の配列に決まっている引数（`x: T`、`xs: [T; N]`）は、`Span`・`Span` の配列の引数である（… 引数の位置の配列リテラル）";
+// §5.3: "別々の変数にあるときは `[a, b]` / `inout [a, b]` と配列リテラルを引数の位置にだけ書け、排他性は要素の場所ごとに検査する"; §5.1: "`inout` に場所でないもの … を渡すのも E0415"):
+// at `inout xs: [T; N]` of a type parameter with `?Escape`, `inout [a, b]` is the planar literal of places when `T` is a `Span` at that argument (by the written
+// type arguments or by an argument before it), and the elements are checked one by one for the exclusivity of §7 (E0702 for the same place twice, and for a place that
+// another argument writes), and it is an ordinary array literal, which is not a place (E0415), when `T` is not decided. One error per function (P-01).
+
+pub fn g[T: ?Escape, const N: U32](inout xs: [T; N]) -> U32 {
+  N
+}
+
+pub fn g2[T: ?Escape, const N: U32](x: T, inout xs: [T; N]) -> U32 {
+  N
+}
+
+pub fn g3[T: ?Escape, const N: U32](inout xs: [T; N], x: T) -> U32 {
+  N
+}
+
+pub fn c[T: ?Escape, const N: U32](x: T, xs: [T; N], inout y: [F32; 4]) -> U32 {
+  N
+}
+
+pub struct Plain {
+  n: U32,
+}
+
+impl Plain {
+  pub fn m[T: ?Escape, const N: U32](self, inout xs: [T; N]) -> U32 {
+    N
+  }
+}
+
+// -------------------------------------------------------------------------------- what is right
+
+pub fn the_written_type_arguments(inout a: [F32; 4], inout b: [F32; 4]) -> U32 {
+  g::[Span[F32], 2](inout [a, b])
+}
+
+pub fn the_argument_before(s: Span[F32], inout a: [F32; 4], inout b: [F32; 4]) -> U32 {
+  g2(s, inout [a, b])
+}
+
+pub fn the_method_with_the_written_type_arguments(p: Plain, inout a: [F32; 4], inout b: [F32; 4]) -> U32 {
+  p.m::[Span[F32], 2](inout [a, b])
+}
+
+pub fn a_read_twice_and_a_place_apart(s: Span[F32], a: [F32; 4], inout b: [F32; 4]) -> U32 {
+  c(s, [a, a], inout b)
+}
+
+// ------------------------------------------------------------------------- the same place twice (§7)
+
+pub fn the_same_place_in_the_literal(inout a: [F32; 4]) -> U32 {
+  g::[Span[F32], 2](inout [a, a]) //~ E0702
+}
+
+pub fn the_same_place_after_an_argument(s: Span[F32], inout a: [F32; 4]) -> U32 {
+  g2(s, inout [a, a]) //~ E0702
+}
+
+pub fn the_same_place_written_by_another_argument(s: Span[F32], inout a: [F32; 4]) -> U32 {
+  c(s, [a, a], inout a) //~ E0702
+}
+
+pub fn a_place_read_in_the_literal_and_written(s: Span[F32], inout a: [F32; 4], b: [F32; 4]) -> U32 {
+  c(s, [b, a], inout a) //~ E0702
+}
+
+// ------------------------------------------------------------------------------- T is not decided
+
+pub fn the_literal_alone(inout a: [F32; 4], inout b: [F32; 4]) -> U32 {
+  g(inout [a, b]) //~ E0415
+}
+
+pub fn the_literal_before_the_argument(s: Span[F32], inout a: [F32; 4], inout b: [F32; 4]) -> U32 {
+  g3(inout [a, b], s) //~ E0415
+}
+
+pub fn the_method_with_its_own_type(p: Plain, inout a: [F32; 4], inout b: [F32; 4]) -> U32 {
+  p.m(inout [a, b]) //~ E0415
+}

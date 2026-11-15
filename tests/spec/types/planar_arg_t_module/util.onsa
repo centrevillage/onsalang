@@ -1,0 +1,17 @@
+pub fn c[T: ?Escape, const N: U32](x: T, xs: [T; N]) -> U32 {
+  N
+}
+
+pub fn g[T: ?Escape, const N: U32](xs: [T; N]) -> U32 {
+  N
+}
+
+pub struct W[T: ?Escape] {
+  n: U32,
+}
+
+impl[T: ?Escape] W[T] {
+  pub fn m(self, xs: [T; 2]) -> U32 {
+    2
+  }
+}

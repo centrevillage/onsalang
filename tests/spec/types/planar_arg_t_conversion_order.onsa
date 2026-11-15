@@ -1,0 +1,103 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.3", "§4.7"]
+
+// S-1070 (1) (W6-04, §4.5: "決まっているかは、その引数を読む時点で見る（§4.7。書いた型引数、受け手の型、期待型、先の引数）"; §4.7: "先に決まった型は後の式の期待型として
+// 比べる。… `pick(r, k)` は E0401、`pick(k, r)` は通る"): the conversions of the values of §5.3 (a `Buf` or an array to a `Span`, an array of arrays to a planar array)
+// at the argument `x: T` and `xs: [T; N]` of a type parameter with `?Escape` follow the same order as the literal: a `T` that is a `Span` before the argument converts
+// it, and an argument that decides `T` first (an array) makes the `Span` after it the E0401 of the types that differ. A written type argument or the type of
+// the receiver decides `T` before every argument. One error per function (P-01).
+
+pub fn two[T: ?Dup + ?Escape](x: T, y: T) -> U32 {
+  0
+}
+
+pub fn then_planar[T: ?Escape, const N: U32](x: T, xs: [T; N]) -> U32 {
+  N
+}
+
+pub fn planar_then[T: ?Escape, const N: U32](xs: [T; N], x: T) -> U32 {
+  N
+}
+
+pub fn each_then[T: ?Escape, const N: U32](f: fn(T) -> U32, xs: [T; N]) -> U32 {
+  N
+}
+
+pub fn then_each[T: ?Escape, const N: U32](xs: [T; N], f: fn(T) -> U32) -> U32 {
+  N
+}
+
+pub fn one[T: ?Escape](x: T) -> U32 {
+  0
+}
+
+pub struct W[T: ?Escape] {
+  n: U32,
+}
+
+impl[T: ?Escape] W[T] {
+  pub fn m(self, x: T) -> U32 {
+    0
+  }
+
+  pub fn m2(self, xs: [T; 2]) -> U32 {
+    2
+  }
+}
+
+pub fn take_view(s: Span[F32]) -> U32 {
+  s.len()
+}
+
+// -------------------------------------------------------------------------------- what is right
+
+pub fn a_buf_after_a_span(s: Span[F32], b: Buf[F32]) -> U32 {
+  two(s, b)
+}
+
+pub fn an_array_after_a_span(s: Span[F32], m: [F32; 4]) -> U32 {
+  two(s, m)
+}
+
+pub fn arrays_of_arrays_after_a_span(s: Span[F32], m: [[F32; 4]; 2]) -> U32 {
+  then_planar(s, m)
+}
+
+pub fn an_array_of_arrays_after_a_function(m: [[F32; 4]; 2]) -> U32 {
+  each_then(take_view, m)
+}
+
+pub fn a_buf_for_a_written_type(b: Buf[F32]) -> U32 {
+  one::[Span[F32]](b)
+}
+
+pub fn buffers_for_a_written_type(b: Buf[F32], c: Buf[F32]) -> U32 {
+  planar_then::[Span[F32], 2]([b, c], b)
+}
+
+pub fn a_buf_for_a_receiver(w: W[Span[F32]], b: Buf[F32]) -> U32 {
+  w.m(b)
+}
+
+pub fn the_literal_for_a_receiver(w: W[Span[F32]], a: Span[F32], b: Span[F32]) -> U32 {
+  w.m2([a, b])
+}
+
+// ----------------------------------------------------------------- the span after the value is the types that differ
+
+pub fn a_span_after_a_buf(s: Span[F32], b: Buf[F32]) -> U32 {
+  two(b, s) //~ E0401
+}
+
+pub fn a_span_after_an_array_of_arrays(s: Span[F32], m: [[F32; 4]; 2]) -> U32 {
+  planar_then(m, s) //~ E0401
+}
+
+pub fn a_span_after_an_array(s: Span[F32], m: [F32; 4]) -> U32 {
+  two(m, s) //~ E0401
+}
+
+pub fn a_function_after_an_array_of_arrays(m: [[F32; 4]; 2]) -> U32 {
+  then_each(m, take_view) //~ E0401
+}
