@@ -13,46 +13,59 @@ use std::collections::BTreeSet;
 use onsa_syntax::ast::PatId;
 
 use super::check::Walker;
-use super::place::{Place, head_places, path_text};
+use super::place::{Place, path_text};
 use crate::binding::Head;
 use crate::body::LocalId;
 
-/// The places of a head the walk is in (`Head::For` or `Head::Match`), and
-/// the text of each (S-604: of each tail; a view's base, S-217); none at an
-/// owned row. With the roots of each ([`super::place::Deps::origins`]).
-/// `arm`: the bindings of an arm of an owned `match` instead, and where each is.
+/// What a frame holds: the places a borrowed `for` reads while its loop is
+/// walked, or a borrowed `match` while a guard of it is; or the bindings of
+/// an arm of an owned `match` while its guard is.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Holds {
+    For,
+    Match,
+    Arm,
+}
+
+/// The places a frame holds, and the text of each (S-604: of each tail; a
+/// view's base, S-217; of an arm, where each binding is), with the roots of
+/// each ([`super::place::Deps::origins`]).
 pub(super) struct Frozen {
-    head: Head,
+    holds: Holds,
     places: Vec<(Place, Span, BTreeSet<LocalId>)>,
-    arm: bool,
 }
 
 impl Walker<'_> {
-    /// The frame of `head`, if it makes one ([`super::place::Deps::holds`]):
-    /// of a `for` while its loop is walked, of a `match` while a guard of it
-    /// is ([`Walker::holding`]).
-    pub(super) fn frame(&self, head: Head) -> Option<Frozen> {
-        if !self.deps.holds(head) {
-            return None;
-        }
-        let places = head_places((self.ast, self.names, self.info), head).unwrap_or_default();
-        let places = places.into_iter().map(|(p, at)| {
-            let roots = self.deps.origins(p.root);
-            (p, at, roots)
-        });
-        Some(Frozen { head, places: places.collect(), arm: false })
+    /// The frame of `head`, borrowed from `places`, if it makes one
+    /// ([`super::place::Deps::holds`]: a `for` and a `match` with a guard,
+    /// never a `let`): of a `for` while its loop is walked, of a `match`
+    /// while a guard of it is ([`Walker::holding`]).
+    pub(super) fn frame(&self, head: Head, places: Vec<(Place, Span)>) -> Option<Frozen> {
+        let holds = match head {
+            Head::For(_) => Holds::For,
+            Head::Match { .. } => Holds::Match,
+            Head::Let(s) => bug(Some(self.ast.stmt(s).span), "the frame of a `let`"),
+        };
+        self.deps.holds(head).then(|| self.frozen(holds, places))
     }
 
-    /// The frame of a guard of the arm `pat` of the owned `match` `head`
-    /// (§7, S-1039): its bindings, which own the value only once the arm is
+    fn frozen(&self, holds: Holds, places: Vec<(Place, Span)>) -> Frozen {
+        let places = places.into_iter().map(|(p, at)| {
+            let roots = self.deps.origins(p.root).collect();
+            (p, at, roots)
+        });
+        Frozen { holds, places: places.collect() }
+    }
+
+    /// The frame of a guard of the arm `pat` of an owned `match` (§7,
+    /// S-1039): its bindings, which own the value only once the arm is
     /// chosen (a Dup one is copied where it is consumed: no change).
-    pub(super) fn arm_frame(&self, head: Head, pat: PatId) -> Frozen {
+    pub(super) fn arm_frame(&self, pat: PatId) -> Frozen {
         let mut places = Vec::new();
         self.each_local(pat, &mut |l| {
-            let whole = Place { root: l, proj: Vec::new() };
-            places.push((whole, self.info.locals[l.0 as usize].span, BTreeSet::from([l])));
+            places.push((Place { root: l, proj: Vec::new() }, self.info.locals[l.0 as usize].span))
         });
-        Frozen { head, places, arm: true }
+        self.frozen(Holds::Arm, places)
     }
 
     /// Walk `f` in the frame `held` (pushed, then popped and kept for the
@@ -71,7 +84,7 @@ impl Walker<'_> {
     /// derives from. The caller changes no state then (S-798).
     pub(super) fn held(&mut self, w: &Place, at: Span, taken: Option<&Place>) -> bool {
         let hits = self.hits(w);
-        let Some(&(head, ref p, first, arm)) = hits.first() else { return false };
+        let Some(&(holds, ref p, first)) = hits.first() else { return false };
         let what = match taken {
             Some(t) => {
                 let whole = path_text(&self.info.locals[w.root.0 as usize].name, &w.proj);
@@ -79,17 +92,17 @@ impl Walker<'_> {
             }
             None => format!("`{}`", self.place_text(at, &[], w)),
         };
-        let ((place, section, _, rule), over) = (words(head, arm, first), self.place_text(first, &[], p));
-        let message = match arm {
-            false => format!("cannot change {what} in {place} `{over}`, which it overlaps ({section})"),
-            true => format!(
+        let ((place, section, _, rule), over) = (words(holds), self.place_text(first, &[], p));
+        let message = match holds {
+            Holds::Arm => format!(
                 "cannot consume {what} in {place}: `{over}` owns its value only once the arm is chosen ({section})"
             ),
+            _ => format!("cannot change {what} in {place} `{over}`, which it overlaps ({section})"),
         };
         let mut d = Diagnostic::new(Stage::Modes, Code::E0715, at, message).with_rule(rule);
         let mut bound = Vec::new();
-        for &(head, ref p, span, arm) in &hits {
-            d = d.with_note(span, words(head, arm, span).2);
+        for &(holds, ref p, span) in &hits {
+            d = d.with_note(span, words(holds).2);
             if self.deps.indexed(p.root) && !bound.contains(&p.root) {
                 bound.push(p.root);
                 let (b, note) = self.bound_note(p.root);
@@ -107,42 +120,39 @@ impl Walker<'_> {
     }
 
     /// The places the frames hold that `w` overlaps, outermost first, with
-    /// the head of each frame and whether it is of an arm.
-    fn hits(&self, w: &Place) -> Vec<(Head, Place, Span, bool)> {
+    /// what each frame holds.
+    fn hits(&self, w: &Place) -> Vec<(Holds, Place, Span)> {
         // A place of no root in common is passed over before `meets` (its ways are long).
-        let mine = self.deps.origins(w.root);
+        let mine: BTreeSet<_> = self.deps.origins(w.root).collect();
         (self.inside.frozen.iter())
-            .flat_map(|f| f.places.iter().map(move |p| (f.head, p, f.arm)))
-            .filter(|(_, (p, _, o), _)| !mine.is_disjoint(o) && self.deps.meets(w, p))
-            .map(|(head, (p, at, _), arm)| (head, p.clone(), *at, arm))
+            .flat_map(|f| f.places.iter().map(move |p| (f.holds, p)))
+            .filter(|(_, (p, _, o))| !mine.is_disjoint(o) && self.deps.meets(w, p))
+            .map(|(holds, (p, at, _))| (holds, p.clone(), *at))
             .collect()
     }
 }
 
-/// The words of an E0715 of a frame of `head` (holding a place at `at`;
-/// `arm`: a binding of an arm of an owned `match`): where the change is,
-/// the section of the rule, the note at a place it holds, and the rule.
-/// Only a `for` and a `match` make frames.
-fn words(head: Head, arm: bool, at: Span) -> (&'static str, &'static str, &'static str, &'static str) {
-    match head {
-        Head::Match { .. } if arm => (
+/// The words of an E0715 of a frame that `holds`: where the change is, the
+/// section of the rule, the note at a place it holds, and the rule.
+fn words(holds: Holds) -> (&'static str, &'static str, &'static str, &'static str) {
+    match holds {
+        Holds::Arm => (
             "a guard of a `match`",
             "§7",
             "bound by this arm",
             "if the guard is false, the later arms are tried on the same value; consume it in the arm's body (§7)",
         ),
-        Head::Match { .. } => (
+        Holds::Match => (
             "a guard of a `match` on",
             "§7",
             "matched by this `match`",
             "the arms are tried on the value as it was matched; change it in the arm's body (§7)",
         ),
-        Head::For(_) => (
+        Holds::For => (
             "the body of a `for` over",
             "§5.4",
             "iterated by this `for`",
             "to change the elements while iterating, loop over the indexes (§5.4)",
         ),
-        Head::Let(_) => bug(Some(at), "a frame of the head of a `let`"),
     }
 }

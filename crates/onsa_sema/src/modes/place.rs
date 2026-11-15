@@ -1,7 +1,8 @@
 //! Places (§5.1, §5.2): a local and the projections
 //! that reach a part of it. It reads the syntax tree and the names only, not
-//! the walk (W8-05 makes it public): the projections of a pattern and the
-//! index of §7 too. W4-08 adds the views.
+//! the walk (W8-05 makes it public): the projections of a pattern, the
+//! sources of a head and the index of §7 too (a partial view's place is the
+//! walk's, `exclusive.rs`).
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -13,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::binding::{Head, HeadRow};
 use crate::body::{BodyInfo, LocalId};
-use crate::names::body::{BodyNames, PathRes};
+use crate::names::body::{BodyNames, Origin, PathRes};
 use crate::ty::TyId;
 
 /// A place (§5.1): a local and its projections, outermost last.
@@ -139,15 +140,74 @@ pub(super) struct Source {
     pub(super) pat: Vec<Proj>,
 }
 
+/// The places a head borrows, each with its text ([`head_places`]).
+pub(super) type Borrowed = Vec<(Place, Span)>;
+
 /// The places of the sources of `head` at a borrow row (S-604: of each
 /// tail; a view's base, S-217), with their text; `None` at an owned row.
-pub(super) fn head_places((ast, names, info): (&Ast, &BodyNames, &BodyInfo), head: Head) -> Option<Vec<(Place, Span)>> {
+pub(super) fn head_places((ast, names, info): (&Ast, &BodyNames, &BodyInfo), head: Head) -> Option<Borrowed> {
     let Some(HeadRow::Borrow { sources, .. }) = info.heads.get(&head) else { return None };
     let place = |&s: &ExprId| match place_of(ast, names, s) {
         Some(p) => (p, ast.expr(s).span),
         None => bug(Some(ast.expr(s).span), "a source no place"),
     };
     Some(sources.iter().map(place).collect())
+}
+
+/// The head that binds `l` (§5.4: a `let`, a `for`, an arm of a `match`)
+/// and the places it borrows directly ([`head_places`], a `for`'s too;
+/// `None` at an owned row); `None` of a binding no head binds (a parameter,
+/// a `var`). A chain of borrow bindings goes on from the roots of those places.
+pub(super) fn bound_by(cx: (&Ast, &BodyNames, &BodyInfo), l: LocalId) -> Option<(Head, Option<Borrowed>)> {
+    let head = match cx.1.bindings[l.0 as usize].origin {
+        Origin::Let(s) => Head::Let(s),
+        Origin::For(s) => Head::For(s),
+        Origin::Arm { scrutinee, .. } => Head::Match { scrutinee },
+        _ => return None,
+    };
+    Some((head, head_places(cx, head)))
+}
+
+/// The numbers of some places by their roots ([`Deps::origins`]): a place
+/// meets only those of a root in common, which are asked before
+/// [`Deps::meets`] (its ways are long): each root and number, in order.
+/// Made in `O(n log n)` of the places and their roots, asked by a binary search.
+pub(super) struct ByRoot(Vec<(LocalId, usize)>);
+
+impl ByRoot {
+    /// Of the places `places`, by their order.
+    pub(super) fn new<'p>(deps: &Deps, places: impl IntoIterator<Item = &'p Place>) -> ByRoot {
+        let mut of = Vec::new();
+        for (k, p) in places.into_iter().enumerate() {
+            of.extend(deps.origins(p.root).map(|r| (r, k)));
+        }
+        of.sort_unstable();
+        ByRoot(of)
+    }
+
+    /// The numbers of the places of the root `r`, in order.
+    fn of(&self, r: LocalId) -> impl Iterator<Item = usize> + '_ {
+        let start = self.0.partition_point(|&(x, _)| x < r);
+        self.0[start..].iter().take_while(move |&&(x, _)| x == r).map(|&(_, k)| k)
+    }
+
+    /// The numbers of the places with a root of `l` in common, in order,
+    /// once each: of one root, as kept (a search that stops at the first
+    /// goes no further).
+    pub(super) fn sharing<'s>(&'s self, deps: &Deps, l: LocalId) -> impl Iterator<Item = usize> + use<'s> {
+        let mut roots = deps.origins(l).peekable();
+        let first = roots.next();
+        let (one, more) = match roots.peek() {
+            Some(_) => {
+                let mut all: Vec<usize> = first.into_iter().chain(roots).flat_map(|r| self.of(r)).collect();
+                all.sort_unstable();
+                all.dedup();
+                (None, all)
+            }
+            None => (first, Vec::new()),
+        };
+        one.into_iter().flat_map(|r| self.of(r)).chain(more)
+    }
 }
 
 /// The index of §7 (§5.4): the bindings of the heads of `let` and
@@ -267,12 +327,14 @@ impl Deps {
         deps
     }
 
-    /// The roots the places of `l` start from: of a binding of the index,
-    /// those it derives from; else `l`. Two places of no common root share
-    /// no part, so it is a condition [`Deps::meets`] needs (`frozen.rs`
-    /// asks it first), not another judgment of the overlap.
-    pub(super) fn origins(&self, l: LocalId) -> BTreeSet<LocalId> {
-        self.roots.get(&l).cloned().unwrap_or_else(|| BTreeSet::from([l]))
+    /// The roots the places of `l` start from, in order: of a binding of
+    /// the index, those it derives from; else `l` (the one reading of it).
+    /// Two places of no common root share no part, so it is a condition
+    /// [`Deps::meets`] needs (`frozen.rs` and [`ByRoot`] ask it first), not
+    /// another judgment of the overlap.
+    pub(super) fn origins(&self, l: LocalId) -> impl Iterator<Item = LocalId> + '_ {
+        let roots = self.roots.get(&l);
+        roots.into_iter().flatten().copied().chain(roots.is_none().then_some(l))
     }
 
     /// Whether `head` holds the places of its value (E0715, `frozen.rs`).
@@ -358,8 +420,9 @@ impl Deps {
         out
     }
 
-    /// Some head reads a place of `l`.
-    pub(super) fn derives_from(&self, l: LocalId) -> bool {
+    /// Whether a head reads a place of `l` (it is a source of a binding of
+    /// the index), or a borrowed `for` or a guard holds one (R-161's condition 5).
+    pub(super) fn read_or_held(&self, l: LocalId) -> bool {
         self.read.contains(&l)
     }
 }

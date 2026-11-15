@@ -8,7 +8,7 @@ use onsa_syntax::ast::{ExprId, ExprKind, PatId, PatKind};
 
 use super::check::Walker;
 use super::consume::Movable;
-use super::flow::{Item, Run};
+use super::flow::{Item, Nameless, Run};
 use super::place::place_of;
 use super::state::Releases;
 use super::walk::Pos;
@@ -18,37 +18,48 @@ use crate::body::{DropPoint, Dropped, LocalId, Unbound};
 use crate::tails::Tail;
 use crate::ty::{Len, Ty, TyId};
 
+/// What leaves the items of a scope ([`Walker::drops`]): its end (of a
+/// block, an arm, a consumer that ran, the iteration of an owned `for`), or
+/// an exit (a `return`, a `?`, a `break`, a `continue`).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Leave {
+    End,
+    Exit,
+}
+
 impl Walker<'_> {
     /// The drop points at the end of `scope`, of the items after the first
     /// `outer`: its bindings.
     pub(super) fn ends(&mut self, r: &Run, outer: usize, scope: Span) {
-        self.drops(r, outer, Span::empty(scope.file, scope.end), false);
+        self.drops(r, outer, Span::empty(scope.file, scope.end), Leave::End);
     }
 
     /// The drop points of the items after the first `from`, which the end
     /// of their scope, of the call or the index that waits for them
-    /// ([`Walker::ran`]), or an exit at `at` (`exit`: a `return`, a `?`, a
-    /// `break`, a `continue`) leaves (R-32, §12.2): each owned binding that
+    /// ([`Walker::ran`]), or an exit at `at` leaves (`leave`, R-32, §12.2;
+    /// those that may be dropped, [`Run::droppable`]): each owned binding that
     /// may hold its value there, not Copy (surely if live on every path; of
     /// one released on every path, unless each release moves, S-1030); a
     /// value that waits (A-1), surely: it is made on every path to the
     /// exit, and consumed at the end of its consumer; one borrowed, there too;
     /// the rest of an owned `for` (S-1037), at its end (`iterate`) or left
     /// early; none where no path reaches (S-873). The one place that decides them.
-    pub(super) fn drops(&mut self, r: &Run, from: usize, at: Span, exit: bool) {
-        for i in from..r.declared.len() {
-            let (what, sure, unless) = match r.declared[i] {
+    pub(super) fn drops(&mut self, r: &Run, from: usize, at: Span, leave: Leave) {
+        let exit = leave == Leave::Exit;
+        for item in r.droppable(from) {
+            let (what, sure, unless) = match item {
                 Item::Local(l) => {
-                    let local = &self.info.locals[l.0 as usize];
-                    let held = if local.state.owned() { self.has_value(r, l, local.ty) } else { None };
-                    let Some((sure, unless)) = held else { continue };
+                    let ty = self.info.locals[l.0 as usize].ty;
+                    let Some((sure, unless)) = self.has_value(r, l, ty) else { continue };
                     (if exit { Dropped::Exit(l) } else { Dropped::End(l) }, sure, unless)
                 }
-                Item::Value(e) if exit => (Dropped::Value(e), true, None),
-                Item::Temp(e) => (if exit { Dropped::Value(e) } else { Dropped::Temp(e) }, true, None),
-                Item::Value(_) => continue,
-                Item::IterRest(e) => (Dropped::IterRest { iter: e, early: exit }, true, None),
-                Item::Discard(u, sure) => (Dropped::Discard(u), sure, None),
+                Item::Nameless(Nameless::Value(e)) if exit => (Dropped::Value(e), true, None),
+                Item::Nameless(Nameless::Temp(e)) => {
+                    (if exit { Dropped::Value(e) } else { Dropped::Temp(e) }, true, None)
+                }
+                Item::Nameless(Nameless::Value(_)) => continue,
+                Item::Nameless(Nameless::IterRest(e)) => (Dropped::IterRest { iter: e, early: exit }, true, None),
+                Item::Nameless(Nameless::Discard(u, sure)) => (Dropped::Discard(u), sure, None),
             };
             self.drop_point(r, at, what, (sure, unless));
         }
@@ -87,7 +98,7 @@ impl Walker<'_> {
         let x = self.value_of(e);
         if pos.consumes() {
             if self.owned(x) {
-                r.declared.push(Item::Value(x));
+                r.push(Nameless::Value(x));
             }
         } else if pos.waits() {
             self.temps(r, x);
@@ -131,7 +142,7 @@ impl Walker<'_> {
             let Tail::Value(v) = t else { continue };
             let root = self.root_of_path(v, None);
             if self.made(v, false) {
-                r.declared.push(Item::Temp(v));
+                r.push(Nameless::Temp(v));
             } else if root != v {
                 self.temps(r, root);
             }
@@ -156,7 +167,7 @@ impl Walker<'_> {
     /// The consumer of the items after the first `from` (a call, an index)
     /// ran: the values it borrows are dropped (R-32), the others it took.
     pub(super) fn ran(&mut self, r: &mut Run, from: usize, at: Span) {
-        self.drops(r, from, at, false);
+        self.drops(r, from, at, Leave::End);
         r.forget(from);
     }
 
@@ -203,7 +214,7 @@ impl Walker<'_> {
         let info = self.info;
         let tys = info.discards.get(&u).map_or(&[][..], |d| &d.tys);
         if tys.iter().any(|&t| self.kind_of(t) != Some(Kind::Copy)) {
-            r.declared.push(Item::Discard(u, sure));
+            r.push(Nameless::Discard(u, sure));
         }
     }
 }

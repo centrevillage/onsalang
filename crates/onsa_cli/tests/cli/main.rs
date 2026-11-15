@@ -80,6 +80,7 @@ mod package_tree;
 mod panic_insertions;
 mod pattern_guard_candidates;
 mod pattern_rows;
+mod planar_caller_generics;
 mod prelude_names;
 mod range_syntax;
 mod repeat_zero_model;

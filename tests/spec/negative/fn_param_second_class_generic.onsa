@@ -8,7 +8,7 @@
 // からである"): the second-class function values, the default-mode parameter of a function type and an anonymous function that
 // captures, go only to a parameter whose declared type is a function type. A parameter of a type parameter `x: T` does not take
 // them, whatever the bounds of `T` are (`T`, `T: Copy`, `T: ?Dup`; the body of a generic function copies the value out, and the
-// function value is Copy, §4.1), and the parameter of a method of a builtin type does not either (`fs.fill!(f)` of an array;
+// function value is Copy, §4.1), and the parameter of a method of the std does not either (`fs.fill!(f)` of an array;
 // the std declares it `v: T`, a parameter of a type parameter as above, not of a function type). The error is at the value
 // that is passed (the tail of an `if`, a `match` and a block and a parenthesis keep the
 // position of the tail). The function item and the anonymous function without a capture are first class and pass
@@ -109,7 +109,7 @@ pub fn closure_as_the_tail_of_an_if(k: I32, c: Bool) -> I32 {
   }).(1)
 }
 
-// ------------------------------------------------------------- a builtin method
+// ------------------------------------------------------------- a method of the std
 
 pub fn parameter_to_fill(f: fn(I32) -> I32) -> I32 {
   var fs = [inc, inc]

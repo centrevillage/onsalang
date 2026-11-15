@@ -172,6 +172,11 @@ pub struct BodyInfo {
     /// the `-` is a part of the literal's value (§4.7, S-184, S-227). The lowering
     /// folds exactly these (R-03); every other `-` negates a value.
     pub neg_literals: HashSet<ExprId>,
+    /// The array literals passed as planar arguments (§5.3, S-196: `[a, b]`
+    /// at `[Span[T]; N]`), without their parentheses: each element is an
+    /// argument of its own. The types stage decides them, the modes stage
+    /// reads them (D-15).
+    pub planar: HashSet<ExprId>,
     /// The `?` expressions that passed the check → their constructors: the
     /// lowering reads them (S-71, D-15).
     pub tries: HashMap<ExprId, TryArms>,

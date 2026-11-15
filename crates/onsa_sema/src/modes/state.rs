@@ -233,45 +233,6 @@ impl Delta {
         self.ends.remove(&l);
     }
 
-    /// The paths of both (`self ⊔ other`): an unreachable side is the unit.
-    /// What the joins of a [`Trail`] equal (the walks join on it only).
-    #[cfg(test)]
-    pub(super) fn join(&mut self, other: &Delta) {
-        if !other.reach {
-            return;
-        }
-        if !self.reach {
-            return *self = other.clone();
-        }
-        // The two tables in the order of their bindings, side by side; a
-        // binding one side does not touch is `SAME` there. Of two in the
-        // tables (neither `SAME`) the join is not `SAME`.
-        let mut theirs = other.ends.iter().peekable();
-        let (mut new, mut gone) = (Vec::new(), Vec::new());
-        let same = |o: &Ends| {
-            let mut e = Ends::SAME;
-            e.join(o);
-            e
-        };
-        for (&l, e) in self.ends.iter_mut() {
-            while let Some((&k, o)) = theirs.next_if(|&(&k, _)| k < l) {
-                new.push((k, same(o)));
-            }
-            match theirs.next_if(|&(&k, _)| k == l) {
-                Some((_, o)) => e.join(o),
-                None => e.through = true,
-            }
-            if *e == Ends::SAME {
-                gone.push(l);
-            }
-        }
-        new.extend(theirs.map(|(&k, o)| (k, same(o))));
-        for l in gone {
-            self.ends.remove(&l);
-        }
-        self.ends.extend(new.into_iter().filter(|(_, e)| *e != Ends::SAME));
-    }
-
     /// `l` leaves the region as `e`; [`Ends::SAME`] is not kept.
     fn put(&mut self, l: LocalId, e: Ends) {
         if e == Ends::SAME {
@@ -414,12 +375,10 @@ impl Trail {
         }
     }
 
-    /// `paths ⊔=` this state, a path from the mark `m` (of `paths` too).
-    /// `leaving` (a `break`, a `continue`, a guard that is false, back to
-    /// the head of its `match`): the bindings declared since the mark leave
-    /// first, as if forgotten, with no drop point (the work is of those
+    /// `paths ⊔=` this state, a path from the mark `m` (of `paths` too),
+    /// which joins them as `how` ([`Joins`]; the work is of the bindings
     /// changed). The one place that decides what a path leaves.
-    pub(super) fn join_into(&self, m: usize, paths: &mut Paths, leaving: bool) {
+    pub(super) fn join_into(&self, m: usize, paths: &mut Paths, how: Joins) {
         if !self.now.reach {
             return;
         }
@@ -441,7 +400,7 @@ impl Trail {
             if *prev > m {
                 continue;
             }
-            let leaves = leaving && (*declares || self.declared_since(*l, m));
+            let leaves = how == Joins::Jumps && (*declares || self.declared_since(*l, m));
             let now = if leaves { Cow::Borrowed(&Ends::SAME) } else { self.known(self.get(*l)) };
             let (l, was) = match ends.get_mut(l) {
                 Some(e) => {
@@ -516,6 +475,17 @@ impl Trail {
             self.now.put(l, e);
         }
     }
+}
+
+/// How a path joins the paths from a mark ([`Trail::join_into`]): it falls
+/// through the end of its region, or jumps out of it to the join (a `break`, a
+/// `continue`, a guard that is false, back to the head of its `match`),
+/// the bindings declared since the mark first, as if forgotten, with no
+/// drop point.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Joins {
+    Falls,
+    Jumps,
 }
 
 /// The join of paths from a mark of a [`Trail`] (two branches, the arms of

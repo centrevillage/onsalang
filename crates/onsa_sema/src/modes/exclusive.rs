@@ -8,10 +8,9 @@ use onsa_syntax::ast::{Arg, ExprId, Mode};
 use super::calls::Takes;
 use super::check::{Changed, Walker};
 use super::flow::Run;
-use super::place::{Place, Proj, place_of};
+use super::place::{ByRoot, Place, Proj, place_of};
 use crate::Kind;
 use crate::body::{LocalId, view_base};
-use crate::ty::TyId;
 
 /// An argument of a call that is a place, or an element of a planar
 /// literal that is one (E0702, [`Walker::arg_places`]): its expression, how
@@ -55,41 +54,41 @@ impl Walker<'_> {
     /// Each argument is evaluated before the call, so the order is not what
     /// counts, and a value made of a place (`xs.fill!(xs.len())`) is no
     /// place. A borrow binding that is not Copy stands for the places it
-    /// derives from (S-796). And the places passed, for the changes made
-    /// in the other arguments ([`Walker::changed_in_args`]).
+    /// derives from (S-796). And the places passed, by their roots too
+    /// (looked up there: linear in the places of no root in common), for
+    /// the changes made in the other arguments ([`Walker::changed_in_args`]).
     pub(super) fn exclusive(
         &mut self,
         receiver: Option<(ExprId, Mode)>,
         args: &[Arg],
         takes: &[Takes],
-    ) -> (Vec<(Span, LocalId)>, Vec<Passed>) {
+    ) -> (Vec<(Span, LocalId)>, Vec<Passed>, ByRoot) {
         let params = args.iter().zip(takes).filter_map(|(a, t)| match t {
-            Takes::Param(m, ty) => Some((a.expr, *m, Some(*ty))),
+            Takes::Param(m, _) => Some((a.expr, *m)),
             Takes::Element => None,
         });
-        let all = receiver.map(|(x, m)| (x, m, None)).into_iter().chain(params);
-        let places: Vec<_> =
-            all.flat_map(|(x, m, ty)| self.arg_places(x, ty).into_iter().map(move |p| (p, m))).collect();
+        let all = receiver.into_iter().chain(params);
+        let places: Vec<_> = all.flat_map(|(x, m)| self.arg_places(x).into_iter().map(move |p| (p, m))).collect();
         let passed: Vec<Passed> = places.into_iter().map(|((x, place), m)| self.passed(x, m, place)).collect();
-        let mut later = Vec::new();
+        let (mut later, index) = (Vec::new(), ByRoot::new(&self.deps, passed.iter().map(|q| &q.place)));
         for (j, b) in passed.iter().enumerate() {
             let excl = |p: &Passed| p.mode != Mode::Borrow && p.read != Some(Read::Unknown);
-            let mut earlier = passed[..j].iter().filter(|a| excl(b) || excl(a));
+            let earlier = index.sharing(&self.deps, b.place.root).take_while(|&k| k < j).map(|k| &passed[k]);
+            let mut earlier = earlier.filter(|a| excl(b) || excl(a));
             if let Some(a) = earlier.find(|a| self.deps.meets(&a.place, &b.place)) {
                 later.push((self.ast.expr(b.at).span, b.place.root));
                 let d = self.overlapping(a, b);
                 self.report(d);
             }
         }
-        (later, passed)
+        (later, passed, index)
     }
 
-    /// The places the argument `e` of a parameter of the type `param`
-    /// passes (§5.3): of a planar literal, each of its elements'
-    /// (S-196: the exclusivity is of each), else its own; each with the
-    /// expression that passes it. The writes read the same places.
-    pub(super) fn arg_places(&self, e: ExprId, param: Option<TyId>) -> Vec<(ExprId, Place)> {
-        match self.planar_literal(e, param) {
+    /// The places the argument `e` passes (§5.3): of a planar literal, each
+    /// of its elements' (S-196: the exclusivity is of each), else its own;
+    /// each with the expression that passes it. The writes read the same places.
+    pub(super) fn arg_places(&self, e: ExprId) -> Vec<(ExprId, Place)> {
+        match self.planar_literal(e) {
             Some(parts) => parts.iter().filter_map(|&x| Some((x, self.view_place(x)?))).collect(),
             None => self.view_place(e).map(|p| (e, p)).into_iter().collect(),
         }
@@ -200,14 +199,17 @@ impl Walker<'_> {
     /// (`h(next(inout k), next(inout k))`). A release of a Dup value that
     /// such a place overlaps (a direct argument's too: `mm(s, s)`), by every
     /// walk, copies (§5.2, S-1030: E0702's test, no error). Out of the
-    /// arguments of every call, the record is emptied.
-    pub(super) fn changed_in_args(&mut self, r: &mut Run, start: usize, passed: &[Passed]) {
+    /// arguments of every call, the record is emptied. The places passed are
+    /// looked up by their roots (`index`): linear in the changes and the
+    /// places of no root in common.
+    pub(super) fn changed_in_args(&mut self, r: &mut Run, start: usize, (passed, index): (&[Passed], &ByRoot)) {
         let (this, mut copies) = (Some(self.inside.calls + 1), Vec::new());
         let window = self.inside.changes[start..].iter().filter(|c| c.release || (self.reports && c.direct != this));
         for Changed { place: w, at, release, .. } in window {
             let span = |p: &Passed| self.ast.expr(p.at).span;
             let holds = |p: &Passed| span(p).start <= at.start && at.end <= span(p).end;
-            let Some(q) = passed.iter().find(|q| !holds(q) && self.deps.meets(w, &q.place)) else { continue };
+            let mut shared = index.sharing(&self.deps, w.root).map(|k| &passed[k]);
+            let Some(q) = shared.find(|q| !holds(q) && self.deps.meets(w, &q.place)) else { continue };
             if *release {
                 copies.push((w.root, span(q)));
                 continue;

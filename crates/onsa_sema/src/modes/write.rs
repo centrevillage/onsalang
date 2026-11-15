@@ -17,7 +17,7 @@ use super::place::Place;
 use super::state::Status;
 use super::walk::Pos;
 use crate::Kind;
-use crate::binding::{Bind, Head, HeadRow};
+use crate::binding::{Bind, Head};
 use crate::body::{LocalId, LocalKind};
 use crate::names::body::{BindingKind, Origin};
 
@@ -178,10 +178,10 @@ impl Walker<'_> {
             bug(Some(self.ast.stmt(s).span), "the head of a `let` binding is no `let`")
         };
         let alone = b.sites == [*pat] && matches!(self.ast.pat(*pat).kind, PatKind::Bind(_));
-        if !alone || !attrs.is_empty() || self.deps.derives_from(l) {
+        if !alone || !attrs.is_empty() || self.deps.read_or_held(l) {
             return None;
         }
-        let owned = matches!(self.info.heads.get(&Head::Let(s)), Some(HeadRow::Owned));
+        let owned = self.borrows(Head::Let(s)).is_none();
         match self.kind_of(self.info.locals[l.0 as usize].ty) {
             Some(Kind::Copy | Kind::Shared) => {}
             Some(_) if owned => {}

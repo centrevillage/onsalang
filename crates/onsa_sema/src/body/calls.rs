@@ -556,9 +556,12 @@ impl<'a> Checker<'a> {
     /// The type of the planar literal `e` (`[a, b]` at `[Span[elem]; N]`,
     /// S-196, §5.3): each element is passed as a `Span` of its own, of any
     /// kind and length, so `[Span[elem]; k]` (`k` checked against `N` by the
-    /// caller), recorded through the parentheses. The lowering converts each
-    /// element (`coerce`).
+    /// caller), recorded through the parentheses, and the literal as one
+    /// ([`crate::body::BodyInfo::planar`]: the one test). The lowering
+    /// converts each element (`coerce`). W7-03 adds a struct literal of a
+    /// generated `Out` here.
     fn planar_literal(&mut self, e: ExprId, parts: &[ExprId], elem: TyId, mode: Mode) -> R<TyId> {
+        self.info.planar.insert(self.ast.without_parens(e));
         let view = self.a.types.intern(Ty::Builtin(BuiltinTy::Span, vec![elem]));
         for &x in parts {
             let (t, at) = (self.check_expr(x, None)?, self.expr(x).span);

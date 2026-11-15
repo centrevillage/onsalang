@@ -10,8 +10,48 @@ use std::rc::Rc;
 use onsa_diag::{FileId, Span};
 use onsa_syntax::ast::ExprId;
 
-use super::{Delta, Ends, LoopSum, Paths, Status, Trail, Undo};
+use super::{Delta, Ends, Joins, LoopSum, Paths, Status, Trail, Undo};
 use crate::body::LocalId;
+
+impl Delta {
+    /// The paths of both (`self ⊔ other`): an unreachable side is the unit.
+    /// What the joins of a [`Trail`] equal (the walks join on it only).
+    pub(in crate::modes) fn join(&mut self, other: &Delta) {
+        if !other.reach {
+            return;
+        }
+        if !self.reach {
+            return *self = other.clone();
+        }
+        // The two tables in the order of their bindings, side by side; a
+        // binding one side does not touch is `SAME` there. Of two in the
+        // tables (neither `SAME`) the join is not `SAME`.
+        let mut theirs = other.ends.iter().peekable();
+        let (mut new, mut gone) = (Vec::new(), Vec::new());
+        let same = |o: &Ends| {
+            let mut e = Ends::SAME;
+            e.join(o);
+            e
+        };
+        for (&l, e) in self.ends.iter_mut() {
+            while let Some((&k, o)) = theirs.next_if(|&(&k, _)| k < l) {
+                new.push((k, same(o)));
+            }
+            match theirs.next_if(|&(&k, _)| k == l) {
+                Some((_, o)) => e.join(o),
+                None => e.through = true,
+            }
+            if *e == Ends::SAME {
+                gone.push(l);
+            }
+        }
+        new.extend(theirs.map(|(&k, o)| (k, same(o))));
+        for l in gone {
+            self.ends.remove(&l);
+        }
+        self.ends.extend(new.into_iter().filter(|(_, e)| *e != Ends::SAME));
+    }
+}
 
 fn at(n: u32) -> Span {
     Span::new(FileId(0), n, n + 1)
@@ -323,11 +363,11 @@ fn the_trail_joins_two_branches_as_the_whole_states() {
                 on_trail(&mut t, p);
                 let (m, mut paths) = (t.mark(), Paths::none());
                 on_trail(&mut t, a);
-                t.join_into(m, &mut paths, false);
+                t.join_into(m, &mut paths, Joins::Falls);
                 t.back_to(m);
                 assert!(t.now.reach == before.reach && t.now.ends == before.ends, "back: {p:?} {a:?}");
                 on_trail(&mut t, b);
-                t.join_into(m, &mut paths, false);
+                t.join_into(m, &mut paths, Joins::Falls);
                 t.settle(m, &paths);
                 check(&t, &want, &format!("{p:?} {a:?} {b:?}"));
             }
@@ -369,15 +409,15 @@ fn the_trail_joins_the_arms_of_a_match_as_the_whole_states() {
             let mut t = Trail::new();
             on_trail(&mut t, p);
             let (m, mut tried, mut paths) = (t.mark(), Paths::none(), Paths::none());
-            t.join_into(m, &mut tried, false);
+            t.join_into(m, &mut tried, Joins::Falls);
             for &(g, body) in arms {
                 t.reset(m, &tried);
                 if let Some(g) = g {
                     on_trail(&mut t, g);
-                    t.join_into(m, &mut tried, false);
+                    t.join_into(m, &mut tried, Joins::Falls);
                 }
                 on_trail(&mut t, body);
-                t.join_into(m, &mut paths, false);
+                t.join_into(m, &mut paths, Joins::Falls);
             }
             t.settle(m, &paths);
             check(&t, &out, &format!("{p:?} {arms:?}"));
@@ -417,7 +457,7 @@ fn a_break_joins_as_if_the_bindings_declared_since_the_mark_were_forgotten() {
                     let (m, mut paths) = (t.mark(), Paths::none());
                     for leaving in [leaves_first, !leaves_first] {
                         on_trail(&mut t, if leaving { a } else { b });
-                        t.join_into(m, &mut paths, leaving);
+                        t.join_into(m, &mut paths, if leaving { Joins::Jumps } else { Joins::Falls });
                         t.back_to(m);
                         assert!(t.now.reach == before.reach && t.now.ends == before.ends, "back: {p:?} {a:?}");
                     }
@@ -472,18 +512,18 @@ fn a_mark_inside_a_mark_records_each_binding_once_and_joins_as_the_whole_states(
                     on_trail(&mut t, &x);
                     recorded_once_per_mark(&t, n, 1);
                     recorded_once_per_mark(&t, m, 2);
-                    t.join_into(n, &mut branches, false);
+                    t.join_into(n, &mut branches, Joins::Falls);
                     t.back_to(n);
                     on_trail(&mut t, y);
-                    t.join_into(n, &mut branches, false);
+                    t.join_into(n, &mut branches, Joins::Falls);
                     t.settle(n, &branches);
                     on_trail(&mut t, c);
                     recorded_once_per_mark(&t, m, 1);
-                    t.join_into(m, &mut paths, false);
+                    t.join_into(m, &mut paths, Joins::Falls);
                     t.back_to(m);
                     assert!(t.now.reach == before.reach && t.now.ends == before.ends, "back: {p:?} {a:?}");
                     on_trail(&mut t, other);
-                    t.join_into(m, &mut paths, false);
+                    t.join_into(m, &mut paths, Joins::Falls);
                     t.settle(m, &paths);
                     check(&t, &want, &format!("{p:?} {a:?} {x:?} {y:?} {c:?}"));
                 }

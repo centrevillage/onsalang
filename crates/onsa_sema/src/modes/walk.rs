@@ -6,6 +6,7 @@
 use onsa_syntax::ast::{ExprId, ExprKind, Lit, Mode, PatId, StrSeg};
 
 use super::check::Walker;
+use super::drops::Leave;
 use super::flow::Run;
 use super::place::{Place, Proj, hole_place, pattern_places, place_of};
 use crate::Kind;
@@ -118,7 +119,7 @@ impl<'a> Walker<'a> {
             // The path of an error leaves the function (§9.1).
             ExprKind::Try(x) => {
                 self.expr(r, *x, Pos::Extract);
-                self.drops(r, 0, ast.expr(e).span, true);
+                self.drops(r, 0, ast.expr(e).span, Leave::Exit);
             }
             ExprKind::Repeat { elem, len } => {
                 self.expr(r, *elem, element);
@@ -281,7 +282,7 @@ impl<'a> Walker<'a> {
     /// read: a planar literal passes its elements on as arguments (§5.3:
     /// `planes([a, b])`). An `inout` one is a write (`write.rs`).
     pub(super) fn argument(&mut self, r: &mut Run, e: ExprId, param: TyId) {
-        match self.planar_literal(e, Some(param)) {
+        match self.planar_literal(e) {
             Some(parts) => parts.iter().for_each(|&y| self.expr(r, y, Pos::Arg(Mode::Borrow))),
             None => self.expr(r, e, self.borrowed_at(param)),
         }
@@ -297,15 +298,16 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// The elements of `e`, an array literal at a planar parameter of the
-    /// type `param` (`[a, b]` at `[Span[T]; N]`, §5.3, S-196): each is an
-    /// argument of its own, whose place is checked for exclusivity. The one
-    /// test of the walk, the writes and the places passed (D-15).
-    /// W7-03 adds a struct literal of a generated `Out` here.
-    pub(super) fn planar_literal(&self, e: ExprId, param: Option<TyId>) -> Option<&'a [ExprId]> {
-        let ast = self.ast;
-        let ExprKind::Array(parts) = &ast.expr(ast.without_parens(e)).kind else { return None };
-        let ty = param?;
-        (matches!(self.a.types.get(ty), Ty::Array(..)) && self.class_of(ty).is_some()).then_some(parts.as_slice())
+    /// The elements of `e`, an array literal passed as a planar argument
+    /// (`[a, b]` at `[Span[T]; N]`, §5.3, S-196; the types stage's
+    /// [`crate::body::BodyInfo::planar`]): each is an argument of its own,
+    /// whose place is checked for exclusivity. Read by the walk, the writes
+    /// and the places passed.
+    pub(super) fn planar_literal(&self, e: ExprId) -> Option<&'a [ExprId]> {
+        let x = self.ast.without_parens(e);
+        match &self.ast.expr(x).kind {
+            ExprKind::Array(parts) if self.info.planar.contains(&x) => Some(parts),
+            _ => None,
+        }
     }
 }

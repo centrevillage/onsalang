@@ -12,12 +12,11 @@ use onsa_syntax::ast::ExprId;
 
 use super::check::{Changed, Walker};
 use super::flow::Run;
-use super::place::{Place, head_places};
+use super::place::{Place, bound_by};
 use super::state::Releases;
 use crate::Kind;
 use crate::binding::{Bind, Head};
 use crate::body::{Copied, CopiedWhy, DropPoint, LocalId};
-use crate::names::body::Origin;
 
 /// The drop points `points` of a body that stay: a point of a binding
 /// released on every path (`unless`) is kept if one of its releases copied
@@ -64,21 +63,16 @@ impl Walker<'_> {
     }
 
     /// The owned bindings whose whole the head of the borrow binding `l`
-    /// reads (§5.4: `match o`, `for s in xs`), with the head; once for each
-    /// binding. Not through another borrow binding (`let t = s` of a `match`'s
-    /// `s`): a note of S-1035 is not made there.
+    /// reads (§5.4: `match o`, `for s in xs`; [`bound_by`]), with the head;
+    /// once for each binding. Not through another borrow binding (`let t = s`
+    /// of a `match`'s `s`): a note of S-1035 is not made there.
     fn owned_sources(&mut self, l: LocalId) -> Vec<(LocalId, Head)> {
         if let Some(found) = self.m.heads.get(&l) {
             return found.clone();
         }
-        let head = match self.names.bindings[l.0 as usize].origin {
-            Origin::Let(s) => Head::Let(s),
-            Origin::For(s) => Head::For(s),
-            Origin::Arm { scrutinee, .. } => Head::Match { scrutinee },
-            // A parameter: no head.
-            _ => return Vec::new(),
-        };
-        let Some(places) = head_places((self.ast, self.names, self.info), head) else {
+        // A parameter: no head.
+        let Some((head, places)) = bound_by((self.ast, self.names, self.info), l) else { return Vec::new() };
+        let Some(places) = places else {
             bug(Some(self.info.locals[l.0 as usize].span), "a borrow binding of a head with no borrow row")
         };
         let owned = |p: &Place| p.proj.is_empty() && self.info.locals[p.root.0 as usize].state.owned();
@@ -97,7 +91,7 @@ impl Walker<'_> {
     /// before a release in the same expression (`s == take(s)`) is not
     /// after: that release moves.
     pub(super) fn restore(&mut self, r: &mut Run, l: LocalId, (by, in_call): (Span, bool)) {
-        let roots = if self.deps.indexed(l) { self.deps.origins(l) } else { Default::default() };
+        let roots: Vec<_> = if self.deps.indexed(l) { self.deps.origins(l).collect() } else { Vec::new() };
         for root in roots.into_iter().chain([l]) {
             for &x in r.cur.restore(root).iter().flat_map(|at| at.iter()) {
                 let why = match in_call {

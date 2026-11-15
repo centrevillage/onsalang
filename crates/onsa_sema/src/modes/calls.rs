@@ -53,7 +53,7 @@ impl Walker<'_> {
             (Some(_), None) => bug(Some(self.ast.expr(callee).span), "a method call with no receiver"),
             (None, _) => None,
         };
-        let (later, passed) = self.exclusive(receiver, args, &takes);
+        let (later, passed, index) = self.exclusive(receiver, args, &takes);
         let outer = std::mem::take(&mut self.inside.after_call);
         // The callee is evaluated before the arguments, out of the window of the call (§3.5, S-799).
         if receiver.is_none() {
@@ -91,7 +91,7 @@ impl Walker<'_> {
             true => r.forget(values),
         }
         self.inside.calls -= 1;
-        self.changed_in_args(r, start, &passed);
+        self.changed_in_args(r, start, (&passed, &index));
         for (place, at) in replace(&mut self.inside.after_call, outer) {
             self.changed(r, &place, at);
         }
@@ -171,7 +171,7 @@ impl Walker<'_> {
                 }
                 match m {
                     // A binding derived from its place, passed in the call, is `exclusive`'s E0702 (S-796).
-                    Mode::Inout => match self.planar_literal(e, Some(ty)) {
+                    Mode::Inout => match self.planar_literal(e) {
                         Some(parts) => parts.iter().for_each(|&x| self.write_place(r, x, How::Inout)),
                         None => self.write_place(r, e, How::Inout),
                     },
