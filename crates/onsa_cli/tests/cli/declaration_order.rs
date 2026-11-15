@@ -21,9 +21,30 @@
 //! the E0810 of a nested array or of a generated `Out` at the boundary, §11.6), so that a sweep of programs
 //! that all end with the same internal error does not pass.
 //!
+//! The same is asked of a program that has errors (W6-04 U5, U6; R-464, R-462): which diagnostics there are
+//! does not depend on the order either, because an error type that a failed declaration leaves is not judged
+//! again where it is used (§18.1, "読めなかった部分は誤りの型として扱い、それを使う側には診断を出さない"),
+//! and a recursion of `rt` functions is one E0903 for each set of functions that reach each other (§18.1,
+//! "互いに辿り合う宣言の集まりごとに一つ"). Two kinds of program are checked apart:
+//! - the E0416 of a field and the uses of the type before and after it (`FIELD_ERRORS`), and three programs of
+//!   the break side of W5-23 U1 (`m4`, `m5`, `m19`, in `FIELD_ERRORS_OPEN`) whose number of E0416 and whose
+//!   E0601 and E0901 changed with the order. For these the whole document is compared (the positions left
+//!   out). For `m4`, `m5` and `m19` the spec does not fix which diagnostics stay (whether a use of a type whose
+//!   field failed is judged by the other fields, §18.1), so the codes of the written order are not asked, only
+//!   that the order changes nothing;
+//! - the E0903 of `rt` functions that call each other (`RT_CYCLES`). Where the E0903 is reported is the first call
+//!   of the set in the order of the source (§18.1), so the place, and with it the cycle the message names
+//!   (§18.1 does not fix the wording), moves with the order. Only the codes are compared, and the codes of the
+//!   written order are asked: one for each set.
+//!
+//! The two kinds are tests of their own (`field_errors_…`, `rt_cycles_…`), apart from the clean programs and from
+//! the errors that share nothing (`INDEPENDENT`: the contrast of the two kinds), so that a form that is not through
+//! yet does not hide a regression of the others (`tests/README.md`).
+//!
 //! Seeds: the orders of each program are drawn from `Rng::new(seed)`; the written order and five other
 //! orders each (the program with fewer blocks takes fewer). The modules are all six orders. About 110 runs
-//! of `onsa`, under a second in a debug build.
+//! of `onsa`, under a second in a debug build. The programs with errors take the written order and seven
+//! other orders (all of them when there are fewer), from the seeds `0xE0 + i` and `0xF0 + i`.
 
 use crate::test_support;
 
@@ -228,6 +249,54 @@ fn orders(n: usize, seed: u64, want: usize) -> Vec<Vec<usize>> {
     all
 }
 
+/// The written order of the blocks, and then `want` other orders drawn from the seed (all of them when the
+/// program has so few blocks that there are no more), each given to `onsa` as one module. `codes` are the codes
+/// the written order must give (`None` when only the sameness is asked), and `text` says that the whole document
+/// is asked to be the same in every order (and not the codes only). Returns the number of orders run.
+#[allow(clippy::too_many_arguments)]
+fn sweep_orders(
+    name: &str,
+    blocks: &[&str],
+    tests: &str,
+    codes: Option<&[&str]>,
+    text: bool,
+    seed: u64,
+    want: usize,
+    problems: &mut Vec<String>,
+) -> usize {
+    let all = orders(blocks.len(), seed, want);
+    let few = (1..=blocks.len()).product::<usize>().min(want + 1);
+    assert!(all.len() >= few, "{name}: only {} orders of {few}", all.len());
+    let mut written: Option<(Vec<String>, String)> = None;
+    for order in &all {
+        let joined: Vec<&str> = order.iter().map(|&k| blocks[k]).collect();
+        let texts = Texts::from([("m.onsa".to_string(), format!("{}\n{}\n", joined.join("\n"), tests))]);
+        let d = package("decl_order", "demo", &texts);
+        let (got_codes, got) = outcome(d.root(), &[]);
+        match &written {
+            None => {
+                if let Some(want_codes) = codes
+                    && got_codes != want_codes
+                {
+                    problems.push(format!("{name}: the written order gives {got_codes:?}, want {want_codes:?}"));
+                }
+                written = Some((got_codes, got));
+            }
+            Some((first_codes, first)) => {
+                let same = if text { *first == got } else { *first_codes == got_codes };
+                if !same {
+                    let heads: Vec<&str> = joined.iter().map(|b| b.lines().next().unwrap_or("")).collect();
+                    problems.push(format!(
+                        "{name}: the order {order:?} gives {got_codes:?}, the written order {first_codes:?} ({})",
+                        heads.join(" | ")
+                    ));
+                }
+            }
+        }
+    }
+    all.len()
+}
+
 /// §11.6, §15.1: each program, with its declarations in the written order and in five other orders, gives the
 /// same check and the same interface.
 #[test]
@@ -235,30 +304,246 @@ fn programs_that_depended_on_the_order_give_the_same_check_and_interface_in_ever
     let mut problems = Vec::new();
     let mut runs = 0;
     for (i, p) in PROGRAMS.iter().enumerate() {
-        let all = orders(p.blocks.len(), 0xD0 + i as u64, 5);
-        assert!(all.len() >= 5, "{}: only {} orders", p.name, all.len());
-        let mut written: Option<String> = None;
-        for order in &all {
-            let text: Vec<&str> = order.iter().map(|&k| p.blocks[k]).collect();
-            let texts = Texts::from([("m.onsa".to_string(), format!("{}\n{}\n", text.join("\n"), p.tests))]);
-            let d = package("decl_order", "demo", &texts);
-            let (codes, got) = outcome(d.root(), &[]);
-            runs += 1;
-            match &written {
-                None => {
-                    if codes != p.codes {
-                        problems.push(format!("{}: the written order gives {codes:?}, want {:?}", p.name, p.codes));
-                    }
-                    written = Some(got);
-                }
-                Some(first) if *first != got => {
-                    problems.push(format!("{}: the order {order:?} differs from the written order", p.name));
-                }
-                Some(_) => {}
-            }
-        }
+        runs += sweep_orders(p.name, p.blocks, p.tests, Some(p.codes), true, 0xD0 + i as u64, 5, &mut problems);
     }
     assert!(runs >= 40, "{runs} runs");
+    assert!(problems.is_empty(), "{} problems:\n{}", problems.len(), problems.join("\n"));
+}
+
+/// A program with errors: the blocks that are put in every order, the codes the written order gives (`None`
+/// when the spec does not fix them) and whether the whole document is asked to be the same.
+struct Failing {
+    name: &'static str,
+    blocks: &'static [&'static str],
+    codes: Option<&'static [&'static str]>,
+    text: bool,
+}
+
+/// R-464 (W6-04 U5), §18.1, §4.5: a field that is an E0416 makes the field an error type, and the uses of the
+/// type, written before or after it, give no diagnostic of their own. The type with the failed field is
+/// `S3[T1: ?Dup] { w: Array[T1] }` (the elements of `Array` are `Dup`) or `B[T1] { w: Buf[T1] }` (the elements
+/// of `Buf` are `Copy`), and the users ask `Copy` of it (`OC[T: Copy]`) in a field, in a variant and in a
+/// signature.
+const FIELD_ERRORS: [Failing; 4] = [
+    Failing {
+        name: "R-464 a: a struct, a signature and a struct that use the type of the failed field",
+        blocks: &[
+            "pub struct OC[T: Copy] { t: T }",
+            "pub fn g(x: OC[S3[F32]]) -> I32 { 0 }",
+            "pub struct S3[T1: ?Dup] { a: I32, w: Array[T1] }",
+            "pub struct H { h: OC[S3[F32]] }",
+        ],
+        codes: Some(&["E0416"]),
+        text: true,
+    },
+    Failing {
+        name: "R-464 b: two structs and an enum that use the type of the failed field",
+        blocks: &[
+            "pub struct OC[T: Copy] { t: T }",
+            "pub struct H1 { h: OC[S3[F32]] }",
+            "pub enum E { V(OC[S3[F32]]) }",
+            "pub struct S3[T1: ?Dup] { a: I32, w: Array[T1] }",
+            "pub struct H2 { h: OC[S3[F32]] }",
+        ],
+        codes: Some(&["E0416"]),
+        text: true,
+    },
+    Failing {
+        name: "R-464 c: a struct with a Buf of a type that is not Copy, and its user",
+        blocks: &[
+            "pub struct OC[T: Copy] { t: T }",
+            "pub struct B[T1] { w: Buf[T1] }",
+            "pub struct H { h: OC[B[F32]] }",
+        ],
+        codes: Some(&["E0416"]),
+        text: true,
+    },
+    Failing {
+        name: "R-464 d: a user that asks nothing of the type, and one that asks Copy",
+        blocks: &[
+            "pub struct OC[T: Copy] { t: T }",
+            "pub struct K { k: S3[F32] }",
+            "pub struct S3[T1: ?Dup] { w: Array[T1], a: I32 }",
+            "pub struct H { h: OC[S3[F32]] }",
+        ],
+        codes: Some(&["E0416"]),
+        text: true,
+    },
+];
+
+/// What does not depend on the order today, as the contrast of the two above (a form that fails is not mixed with
+/// these, so that a regression of them shows): `H` is an E0416 of its own where the type has no error (`S3[T1]`
+/// with `T1: Dup`, so `S3[F32]` is not `Copy`), and each cycle of `rt` functions that is a set of its own is one
+/// E0903 (the codes only, as in `RT_CYCLES`).
+const INDEPENDENT: [Failing; 3] = [
+    Failing {
+        name: "R-464 contrast: a type without an error is judged where it is used",
+        blocks: &[
+            "pub struct OC[T: Copy] { t: T }",
+            "pub struct S3[T1] { a: I32, w: Array[T1] }",
+            "pub struct H { h: OC[S3[F32]] }",
+        ],
+        codes: Some(&["E0416"]),
+        text: true,
+    },
+    Failing {
+        name: "R-462 contrast: two cycles that are sets of their own",
+        blocks: &["pub rt fn a() { b() }", "pub rt fn b() { a() }", "pub rt fn x() { y() }", "pub rt fn y() { x() }"],
+        codes: Some(&["E0903", "E0903"]),
+        text: false,
+    },
+    Failing {
+        name: "R-462 contrast: two functions that call themselves and a caller of both",
+        blocks: &["pub rt fn a() { a() }", "pub rt fn b() { b() }", "pub rt fn c() {\n  a()\n  b()\n}"],
+        codes: Some(&["E0903", "E0903"]),
+        text: false,
+    },
+];
+
+/// The programs `m4`, `m5` and `m19` of the break side of W5-23 U1 (the number of E0416, and the E0601 and
+/// E0901, changed with the order): which diagnostics stay is not fixed by the spec (whether the use of a type
+/// whose field failed is judged by the other fields, §18.1), so only the sameness is asked.
+const FIELD_ERRORS_OPEN: [Failing; 3] = [
+    Failing {
+        name: "W5-23 U1 m4: a failed type argument, an enum and an rt signature that use the type",
+        blocks: &[
+            "pub struct S0[T0: ?Dup, T1: Copy] { f0: Array[F32] }",
+            "pub struct S1[T0: Copy] { f0: (T0, Str), f2: S0[F32, S0[F32, F32]] }",
+            "pub enum S2 { V0(S1[Bytes]) }",
+            "pub rt fn p0_0(move x: S1[S1[I32]]) -> I32 { 0 }",
+        ],
+        codes: None,
+        text: true,
+    },
+    Failing {
+        name: "W5-23 U1 m5: the same with an alias of a failed type in the place of the enum",
+        blocks: &[
+            "pub struct S0[T0: ?Dup, T1: Copy] { f0: Array[F32] }",
+            "pub struct S1[T0: Copy] { f0: (T0, Str), f2: S0[F32, S0[F32, F32]] }",
+            "pub type S4 = S0[S1[Str], F32]",
+            "pub rt fn p0_0(move x: S1[S1[I32]]) -> I32 { 0 }",
+        ],
+        codes: None,
+        text: true,
+    },
+    Failing {
+        name: "W5-23 U1 m19: a struct, signatures, two rt signatures and a move twice of the failed type",
+        blocks: &[
+            "pub struct OC[T: Copy] { t: T }",
+            "pub struct S3[T1: ?Dup] { a: I32, w: Array[T1] }",
+            "pub struct H { h: OC[S3[F32]] }",
+            "pub fn g(x: OC[S3[F32]]) -> I32 { 0 }",
+            "pub fn k(move x: S3[Buf[F32]]) -> (S3[Buf[F32]], S3[Buf[F32]]) { (move x, move x) }",
+            "pub rt fn r(move x: S3[F32]) -> I32 { 0 }",
+            "pub rt fn r2(move x: S3[F32]) -> S3[F32] { x }",
+        ],
+        codes: None,
+        text: true,
+    },
+];
+
+/// R-462 (W6-04 U6), §10 rule 5, §18.1: `rt` functions that call each other by name are one E0903 for each set of
+/// functions that reach each other, whatever the order of the declarations.
+const RT_CYCLES: [Failing; 6] = [
+    Failing {
+        name: "R-462 a: two cycles that share a function",
+        blocks: &["pub rt fn a() {\n  b()\n  c()\n}", "pub rt fn b() { a() }", "pub rt fn c() { a() }"],
+        codes: Some(&["E0903"]),
+        text: false,
+    },
+    Failing {
+        name: "R-462 b: three cycles that share a function",
+        blocks: &[
+            "pub rt fn a() {\n  b()\n  c()\n  d()\n}",
+            "pub rt fn b() { a() }",
+            "pub rt fn c() { a() }",
+            "pub rt fn d() { a() }",
+        ],
+        codes: Some(&["E0903"]),
+        text: false,
+    },
+    Failing {
+        name: "R-462 c: a function that calls itself and one that it makes a cycle with",
+        blocks: &["pub rt fn a() {\n  a()\n  b()\n}", "pub rt fn b() { a() }"],
+        codes: Some(&["E0903"]),
+        text: false,
+    },
+    Failing {
+        name: "R-462 d: two sets that do not reach each other, two cycles in each",
+        blocks: &[
+            "pub rt fn a() {\n  b()\n  c()\n}",
+            "pub rt fn b() { a() }",
+            "pub rt fn c() { a() }",
+            "pub rt fn x() {\n  y()\n  z()\n}",
+            "pub rt fn y() { x() }",
+            "pub rt fn z() { x() }",
+        ],
+        codes: Some(&["E0903", "E0903"]),
+        text: false,
+    },
+    Failing {
+        name: "R-462 e: a cycle with a chord",
+        blocks: &[
+            "pub rt fn a() { b() }",
+            "pub rt fn b() { c() }",
+            "pub rt fn c() {\n  d()\n  a()\n}",
+            "pub rt fn d() { a() }",
+        ],
+        codes: Some(&["E0903"]),
+        text: false,
+    },
+    Failing {
+        name: "R-462 f: a function outside the set that calls into it",
+        blocks: &[
+            "pub rt fn outer() { a() }",
+            "pub rt fn a() {\n  b()\n  c()\n}",
+            "pub rt fn b() { a() }",
+            "pub rt fn c() { a() }",
+        ],
+        codes: Some(&["E0903"]),
+        text: false,
+    },
+];
+
+/// Every program of `programs` in the written order and in seven other orders, from the seeds `seed + i`.
+fn sweep_failing(programs: &[&Failing], seed: u64) -> (usize, Vec<String>) {
+    let mut problems = Vec::new();
+    let mut runs = 0;
+    for (i, p) in programs.iter().enumerate() {
+        runs += sweep_orders(p.name, p.blocks, "", p.codes, p.text, seed + i as u64, 7, &mut problems);
+    }
+    (runs, problems)
+}
+
+/// R-464, R-462, §18.1: the errors that do not share a declaration with another error are the same in every
+/// order (`INDEPENDENT`).
+#[test]
+fn errors_that_are_not_shared_give_the_same_codes_in_every_order() {
+    let programs: Vec<&Failing> = INDEPENDENT.iter().collect();
+    let (runs, problems) = sweep_failing(&programs, 0xE8);
+    assert!(runs >= 15, "{runs} runs");
+    assert!(problems.is_empty(), "{} problems:\n{}", problems.len(), problems.join("\n"));
+}
+
+/// R-464 (W6-04 U5), §18.1, §4.5: the diagnostics of a type with a failed field and of its uses are the same in
+/// every order of the declarations, and in the written order they are the one E0416 of the field.
+#[test]
+#[ignore = "W6-04 U5: a field in error is turned to the error type in the order of the declarations, so its users get a chained E0416 or not by the order (R-464)"]
+fn field_errors_give_the_same_diagnostics_in_every_order() {
+    let programs: Vec<&Failing> = FIELD_ERRORS.iter().chain(FIELD_ERRORS_OPEN.iter()).collect();
+    let (runs, problems) = sweep_failing(&programs, 0xE0);
+    assert!(runs >= 40, "{runs} runs");
+    assert!(problems.is_empty(), "{} problems:\n{}", problems.len(), problems.join("\n"));
+}
+
+/// R-462 (W6-04 U6), §10 rule 5, §18.1: the E0903 of `rt` functions that call each other is one for each set of
+/// functions that reach each other, in every order of the declarations.
+#[test]
+#[ignore = "W6-04 U6: an E0903 for each cycle and not for each set of functions that reach each other, so the count changes with the order (R-462)"]
+fn rt_cycles_give_one_e0903_for_each_set_in_every_order() {
+    let programs: Vec<&Failing> = RT_CYCLES.iter().collect();
+    let (runs, problems) = sweep_failing(&programs, 0xF0);
+    assert!(runs >= 30, "{runs} runs");
     assert!(problems.is_empty(), "{} problems:\n{}", problems.len(), problems.join("\n"));
 }
 

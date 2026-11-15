@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§4.5"]
+
+// R-464 (W6-04 U5), §18.1: "読めなかった部分(引数の型、フィールドなど)は誤りの型として扱い、それを使う側には
+// 診断を出さない". The field `w: Array[T1]` of `S3` is an E0416 (the elements of `Array` are `Dup`, and `T1: ?Dup` is
+// not, §4.5), so the field is an error type and the uses of `S3` give no diagnostic of their own: the E0416 at `S3`
+// is the only one, in whatever order the declarations are written. One user is written before `S3`
+// and one after it: neither has a diagnostic (the later one is not judged by what the earlier one asked either).
+// One error per item (P-01).
+
+pub struct OC[T: Copy] {
+  t: T,
+}
+
+pub struct H1 { h: OC[S3[F32]] }
+
+pub struct S3[T1: ?Dup] { a: I32, w: Array[T1] }   //~ E0416
+
+pub struct H2 { h: OC[S3[F32]] }

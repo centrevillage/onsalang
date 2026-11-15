@@ -1279,3 +1279,101 @@ target = "tests/spec/negative/repeat_zero_pkg"
 reasons = ["S-1045"]
 until = "W6-04"
 note = "総称の長さの [s; N] の本体の E0601（lib 2・main 3 関数、W6-04 U2/t）。U2/i で入れる"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/order_field_error_use_before.onsa"
+reasons = ["R-464"]
+until = "W6-04"
+note = "誤りのフィールドの型を使う側の連鎖の E0416 が宣言の順で出る（W6-04 U5/t）。U5 で直す"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/order_field_error_ask_first.onsa"
+reasons = ["R-464"]
+until = "W6-04"
+note = "誤りのフィールドの型を使う側の連鎖の E0416 が宣言の順で出る（W6-04 U5/t）。U5 で直す"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/order_field_error_fn_use_before.onsa"
+reasons = ["R-464"]
+until = "W6-04"
+note = "誤りのフィールドの型を使う側の連鎖の E0416 が宣言の順で出る（W6-04 U5/t）。U5 で直す"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/order_field_error_enum_use_before.onsa"
+reasons = ["R-464"]
+until = "W6-04"
+note = "誤りのフィールドの型を使う側の連鎖の E0416 が宣言の順で出る（W6-04 U5/t）。U5 で直す"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/order_field_error_two_users.onsa"
+reasons = ["R-464"]
+until = "W6-04"
+note = "誤りのフィールドの型を使う側の連鎖の E0416 が宣言の順で出る（W6-04 U5/t）。U5 で直す"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/types/order_field_error_buf_use_before.onsa"
+reasons = ["R-464"]
+until = "W6-04"
+note = "誤りのフィールドの型を使う側の連鎖の E0416 が宣言の順で出る（W6-04 U5/t）。U5 で直す"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/rt/order_cycles_share_last.onsa"
+reasons = ["R-462"]
+until = "W6-04"
+note = "E0903 が集まりごとでなく閉路ごとに出る（W6-04 U6/t）。U6 で直す"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/rt/order_cycles_figure8_mid.onsa"
+reasons = ["R-462"]
+until = "W6-04"
+note = "E0903 が集まりごとでなく閉路ごとに出る（W6-04 U6/t）。U6 で直す"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/rt/order_cycles_three_last.onsa"
+reasons = ["R-462"]
+until = "W6-04"
+note = "E0903 が集まりごとでなく閉路ごとに出る（W6-04 U6/t）。U6 で直す"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/rt/order_cycles_three_mixed.onsa"
+reasons = ["R-462"]
+until = "W6-04"
+note = "E0903 が集まりごとでなく閉路ごとに出る（W6-04 U6/t）。U6 で直す"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/rt/order_cycles_self_and_pair_last.onsa"
+reasons = ["R-462"]
+until = "W6-04"
+note = "E0903 が集まりごとでなく閉路ごとに出る（W6-04 U6/t）。U6 で直す"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/rt/order_cycles_chord_last.onsa"
+reasons = ["R-462"]
+until = "W6-04"
+note = "E0903 が集まりごとでなく閉路ごとに出る（W6-04 U6/t）。U6 で直す"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/rt/order_cycles_outside_caller.onsa"
+reasons = ["R-462"]
+until = "W6-04"
+note = "E0903 が集まりごとでなく閉路ごとに出る（W6-04 U6/t）。U6 で直す"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/rt/order_clusters_interleaved.onsa"
+reasons = ["R-462"]
+until = "W6-04"
+note = "E0903 が集まりごとでなく閉路ごとに出る（W6-04 U6/t）。U6 で直す"

@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§4.5"]
+
+// R-464 (W6-04 U5), §18.1 and §4.5 ("`Buf[T]` と `Span[T]` の要素型は `T: Copy` に限る(E0416)"): the field of
+// `B[T1]` is `Buf[T1]`, and `T1` is not `Copy`, so the field is an E0416 and an error type. `H` written before `B`
+// has `OC[B[F32]]` and no diagnostic. The E0416 at `B` is the only one. One error per item (P-01).
+
+pub struct OC[T: Copy] {
+  t: T,
+}
+
+pub struct H { h: OC[B[F32]] }
+
+pub struct B[T1] { w: Buf[T1] }   //~ E0416

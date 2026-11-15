@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§10", "§18.1"]
+
+// R-462 (W6-04 U6), §10 rule 5 and §18.1: a recursion of `rt` functions that call each other by name is one E0903
+// for each set of functions that reach each other ("互いに辿り合う宣言の集まりごとに一つ"), and its place is the first
+// call, in the order of the source, of a function of the set (a call written in a function of the set: a use from
+// outside the set gets no diagnostic). The count and the place do not depend on the order of the declarations. The same functions, with `a` in the
+// middle: the first call of the set is `a()` in `b`, and it is the only E0903.
+
+pub rt fn b() { a() }   //~ E0903
+
+pub rt fn a() {
+  b()
+  c()
+}
+
+pub rt fn c() { a() }

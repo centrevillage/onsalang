@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§4.5"]
+
+// R-464 (W6-04 U5), §4.5, §18.1: the contrast of the files `order_field_error_*`. `S3[T1]` has no error (`T1` is
+// `Dup`, so `Array[T1]` is fine), so `S3[F32]` is a real type that is not `Copy` (its field is an `Array`), and `H`,
+// which writes it where `OC[T: Copy]` wants a `Copy` type, is an E0416 of its own, in whatever order the declarations
+// are written. A suppression that depended on the order, or that was made for every use, would show here. `H` is written after `S3`.
+// One error per item (P-01).
+
+pub struct OC[T: Copy] {
+  t: T,
+}
+
+pub struct S3[T1] { a: I32, w: Array[T1] }
+
+pub struct H { h: OC[S3[F32]] }   //~ E0416
