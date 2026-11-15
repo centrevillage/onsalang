@@ -322,7 +322,9 @@ pub fn buf[T](move x: (T, Buf[F32])) {}
 /// decided it (`BodyInfo::closure_rows`, S-1041 (2), D-15): written (`uses
 /// {}` too), the function type expected (its type, resolved), none expected
 /// (an unannotated `let`), and a later branch of a merge (S-1032 (ii-3),
-/// S-1061: of an `else if` too). The body's scope has none (W6-03 U6b).
+/// S-1061: of an `else if` too, the middle one too), not the first, which
+/// has no type before it (none expected). The body's scope has none (W6-03
+/// U6b).
 #[test]
 fn the_scope_of_an_anonymous_function_has_where_its_row_comes_from() {
     let src = format!(
@@ -332,7 +334,10 @@ pub fn f(a: Bool, b: Bool, n: U32) -> U32 uses {{Alloc}} {{
   let x = fn(y: U32) -> U32 {{ y }}
   let j = if a {{ pure }} else {{ fn(y: U32) -> U32 {{ y }} }}
   let k = if a {{ pure }} else if b {{ pure }} else {{ fn(y: U32) -> U32 {{ y }} }}
-  ap(fn(y) {{ y }}, n) + w.(n) + x.(n) + j.(n) + k.(n)
+  let l = if a {{ fn(y: U32) -> U32 {{ y }} }} else {{ pure }}
+  let m = if a {{ fn(y: U32) -> U32 {{ y }} }} else if b {{ pure }} else {{ pure }}
+  let o = if a {{ pure }} else if b {{ fn(y: U32) -> U32 {{ y }} }} else {{ pure }}
+  ap(fn(y) {{ y }}, n) + w.(n) + x.(n) + j.(n) + k.(n) + l.(n) + m.(n) + o.(n)
 }}
 "
     );
@@ -348,6 +353,48 @@ pub fn f(a: Bool, b: Bool, n: U32) -> U32 uses {{Alloc}} {{
             Some(from) => format!("{from:?}"),
         })
         .collect();
-    assert_eq!(got, ["body", "Written", "NoneExpected", "Joining", "Joining", "expected fn(U32) -> U32"]);
+    let want = ["body", "Written", "NoneExpected", "Joining", "Joining", "NoneExpected", "NoneExpected", "Joining"];
+    assert_eq!(got, [&want[..], &["expected fn(U32) -> U32"]].concat());
     assert!(r.scopes[0].closure.is_none() && r.scopes[1..].iter().all(|s| s.closure.is_some()));
+}
+
+/// The row given to a body with none of its own (W6-03 U7b): `Alloc` and
+/// `Random` to a `test` (§8.5), `Alloc` to an initializer (§6.6, S-1055);
+/// and each effect a scope lacks is one, at its first use (S-1053): a body
+/// with no row that calls `check` and `mk` lacks both, in the order of the
+/// record.
+#[test]
+fn a_body_with_no_row_is_given_one_and_lacks_each_effect() {
+    let src = format!(
+        "{STD}use std.test.{{check, gen}}
+const K: U32 = {{
+  check(1, gen.u32(0, 9), fn(x: U32) -> Bool {{ x < 10 }})
+  1
+}}
+pub fn f(n: U32) -> U32 {{
+  check(1, gen.u32(0, 9), fn(x: U32) -> Bool {{ x < 10 }})
+  mk(n).len() + K
+}}
+test \"t\" {{ check(1, gen.u32(0, 9), fn(x: U32) -> Bool {{ x < 10 }}) }}
+"
+    );
+    let p = pkg(&[("main", &src)]);
+    let a = analyze(&p);
+    let all = records(&p, &a);
+    let name = |d: crate::DefId| a.def(d).name.clone();
+    let row = |r: &crate::uses::Record| r.scopes[0].row.effects().iter().map(|&d| name(d)).collect::<Vec<_>>();
+    let of = |pred: &dyn Fn(&crate::def::DefKind) -> bool| {
+        all.iter().find(|r| pred(&a.def(r.id).kind)).unwrap_or_else(|| panic!("no record: {:?}", a.diagnostics))
+    };
+    let (test, konst) =
+        (of(&|k| matches!(k, crate::def::DefKind::Test { .. })), of(&|k| matches!(k, crate::def::DefKind::Const(_))));
+    assert_eq!((row(test), row(konst)), (vec!["Alloc".to_string(), "Random".into()], vec!["Alloc".to_string()]));
+    let text = |u: &crate::uses::Use| src[u.at.start as usize..u.at.end as usize].to_string();
+    let lacks = |r: &crate::uses::Record| -> Vec<(String, String)> {
+        r.lacking(&a).into_iter().map(|(_, e, u)| (name(e), text(u))).collect()
+    };
+    let f = all.iter().find(|r| r.id == def(&a, "f")).expect("a record of f");
+    let check = "check(1, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })";
+    assert_eq!(lacks(f), [("Random".to_string(), check.to_string()), ("Alloc".into(), "mk(n)".into())]);
+    assert_eq!((lacks(konst), lacks(test)), (vec![("Random".to_string(), check.to_string())], vec![]));
 }

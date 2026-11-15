@@ -371,7 +371,8 @@ impl<'a> Rater<'a> {
                 let f = self.a.def(def).as_fn().cloned();
                 let name = self.a.def(def).name.clone();
                 if let Some(f) = f {
-                    if self.final_pass && f.effects.has_effects() {
+                    // A name of no effect (`uses {I32}`, E0308) is no effect (§8.1, §18.1).
+                    if self.final_pass && !f.effects.effects().is_empty() {
                         return Err(self.err(
                             Code::E0805,
                             span,

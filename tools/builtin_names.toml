@@ -131,10 +131,12 @@
 "None" = 1
 "Ok" = 1
 "Option" = 1
+"Random" = 1
 "Result" = 1
 "Some" = 1
 "bytes" = 1
 "len" = 1
+"random" = 1
 "text" = 1
 
 [allow."crates/onsa_sema/src/lib.rs"]

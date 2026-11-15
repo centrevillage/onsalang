@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§11.5", "§15.1", "§18.1"]
+// fixes = 0
+
+// W6-03 U7b/t, R-27 (3), S-691 (§11.5: "効果を持つ fn（`Alloc` を含む）| 呼べない（E0805）"; §8.1: a name that is not an effect is an E0308 where it is written): the controls of
+// names_not_effects_flow_caller.onsa, in which a flow keeps its E0805. A function whose row has `Alloc` is called by a flow with an E0805, and a row that has a name that is not an effect next to
+// `Alloc` still has the `Alloc` that is read (the E0308 is where the name is written), so the flow that calls it is an E0805 too. This file has the same errors today and after the work.
+
+pub fn with_alloc() -> F32 uses {Alloc} { 1.0 }
+
+pub fn alloc_and_type() -> F32 uses {I32, Alloc} { 1.0 }   //~ E0308
+
+pub fn type_and_alloc() -> F32 uses {Alloc, I32} { 1.0 }   //~ E0308
+
+pub flow calls_alloc(x: F32 at sample) -> F32 at sample {
+  x * with_alloc()   //~ E0805
+}
+
+pub flow calls_alloc_and_type(x: F32 at sample) -> F32 at sample {
+  x * alloc_and_type()   //~ E0805
+}
+
+pub flow calls_type_and_alloc(x: F32 at sample) -> F32 at sample {
+  x * type_and_alloc()   //~ E0805
+}

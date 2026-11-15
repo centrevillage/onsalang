@@ -37,6 +37,8 @@ use crate::test_support::sweep::{Texts, check_input_out, input_of};
 use crate::test_support::{Span, code_of, diagnostics, doc_of, fixes_of, notes_of, span_of, str_of};
 
 const M: &str = r####"//@ case helpers none
+use std.test.{check, gen}
+
 fn helper(x: I32) -> I32 { x }
 
 fn mk(n: U32) -> Buf[F32] uses {Alloc} { Buf.zeroed(n) }
@@ -384,6 +386,51 @@ fn rt_closure_control(n: U32) -> U32 {
     let b: Buf[F32] = Buf.zeroed(y)     //@ main let |b
     b.len()
   }, n)
+}
+
+//@ case random_plain fixes=0 g=random
+fn random_plain() {
+  check(10, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })   //@ main |check(
+}
+
+//@ case random_alloc_row fixes=0 g=random
+fn random_alloc_row() uses {Alloc} {
+  check(10, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })   //@ main |check(
+}
+
+//@ case random_closure fixes=0 g=random
+fn random_closure() -> U32 uses {Alloc} {
+  let l = fn(n: U32) -> U32 {
+    check(n, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })   //@ main |check(
+    n
+  }
+  l.(1)
+}
+
+//@ case random_test_closure fixes=0 g=random
+test "random in a closure of a test body" {
+  let l = fn(n: U32) -> U32 {
+    check(n, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })   //@ main |check(
+    n
+  }
+  let _ = l.(1)
+}
+
+//@ case random_rt fixes=0 g=random,random_rt
+rt fn random_rt() {
+  check(10, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })   //@ main |check(
+}
+
+//@ case rule1_alloc_rt fixes=0 g=rule1
+rt fn rule1_alloc_rt(n: U32) -> U32 {
+  let b: Buf[F32] = Buf.zeroed(n)   //@ main let |b
+  b.len()
+}
+
+//@ case rule1_alloc_plain fixes=1 g=rule1
+fn rule1_alloc_plain(n: U32) -> U32 {
+  let b: Buf[F32] = Buf.zeroed(n)   //@ main let |b
+  b.len()
 }
 "####;
 
@@ -795,4 +842,53 @@ fn an_rt_anonymous_function_notes_the_rule_1_of_rt() {
     let notes = |name: &str| notes_of(the_diag(r, case(r, name))).len();
     let (n, c) = (notes("rt_closure_rule1"), notes("rt_closure_control"));
     assert_eq!(n, c + 1, "one note more than the control\n{}", describe(the_diag(r, case(r, "rt_closure_rule1"))));
+}
+
+#[test]
+fn a_random_report_has_a_note_and_no_candidate() {
+    // S-97, D-08, §8.1 and §11.8: `check` uses `Random`, which only the body of a `test` is given in this version
+    // (`uses {Random}` is an E0200, S-74), so the E0601 of a use of `Random` has no candidate (an insert would
+    // be an E0200 in the function) and has a note that says where `Random` is given. The text is not fixed
+    // (§18.1), so: a note at least (one that has no place counts), and no candidate. The functions: a function
+    // with no row, with a row of `Alloc`, an anonymous function in a function and in a `test` body, and an
+    // `rt` function.
+    let r = run();
+    let mut faults = Vec::new();
+    for c in group(r, "random", 5) {
+        let d = the_diag(r, c);
+        if notes_of(d).is_empty() {
+            faults.push(format!("{}: no note: {}", c.name, describe(d)));
+        }
+        if !fixes_of(d).is_empty() {
+            faults.push(format!("{}: a candidate for a use of `Random`: {}", c.name, describe(d)));
+        }
+    }
+    none_of(faults);
+}
+
+#[test]
+fn the_random_report_of_an_rt_function_has_no_note_of_rule_1_of_rt() {
+    // §10 rule 1 is about `Alloc` ("効果行に `Alloc` を含まない（E0902）。したがって ... 効果行に無い効果の使用として
+    // E0601 になる"), so the E0601 of an `rt` function that uses `Alloc` has a note of the rule more than the same
+    // function without `rt` (`rule1_alloc_rt` and `rule1_alloc_plain`, which differ in `rt` alone). The
+    // E0601 of a use of `Random` is not about `Alloc`: the `rt` function and the function without `rt` have the same
+    // notes (`random_rt` and `random_plain`). The text is not fixed (§18.1), so the notes are counted, as the test of
+    // an `rt` anonymous function does.
+    let r = run();
+    let notes = |name: &str| notes_of(the_diag(r, case(r, name))).len();
+    let (rt_alloc, plain_alloc) = (notes("rule1_alloc_rt"), notes("rule1_alloc_plain"));
+    assert_eq!(
+        rt_alloc,
+        plain_alloc + 1,
+        "the control: the note of the rule 1 of `rt`\n{}",
+        describe(the_diag(r, case(r, "rule1_alloc_rt")))
+    );
+    group(r, "random_rt", 1);
+    let (rt_random, plain_random) = (notes("random_rt"), notes("random_plain"));
+    assert_eq!(
+        rt_random,
+        plain_random,
+        "the `Random` of an `rt` function has no note of the rule 1\n{}",
+        describe(the_diag(r, case(r, "random_rt")))
+    );
 }

@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§8.2", "§18.1"]
+// fixes = 0
+
+// W6-03 U7b/t, S-1054 (the provisional reading (1)), S-97, S-74 (§8.1: "本体で使う効果は、効果行に含まれなければならない（E0601）... 効果を持つ関数と関数値の呼び出し"; this version has no effect row but
+// `Alloc`, so `uses {Random}` that the user writes is an E0200 at the declaration, S-74): a function that has `uses {Random}` is an E0200 at its row, and it still has that effect for a caller, so a function whose
+// row has no `Random` (no row, or `uses {Alloc}`) and calls it is an E0601 at the call. There is no candidate (`fixes = 0`): `uses {Random}` that would be inserted is an E0200 in the caller too. The call
+// is the first use. One error per function (P-01); the declarations are the units that have the E0200.
+
+use std.random.Random
+
+pub fn lib() uses {Random} {}   //~ E0200
+
+pub fn lib_n(n: U32) -> U32 uses {Random} { n }   //~ E0200
+
+pub fn calls_lib() {
+  lib()   //~ E0601
+}
+
+pub fn calls_lib_n() -> U32 {
+  lib_n(1)   //~ E0601
+}
+
+pub fn calls_lib_with_alloc() uses {Alloc} {
+  lib()   //~ E0601
+}
+
+pub fn calls_lib_in_a_closure() -> U32 {
+  let f = fn(n: U32) -> U32 { lib_n(n) }   //~ E0601
+  f.(1)
+}

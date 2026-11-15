@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§8.5", "§11.8", "§18.1"]
+// fixes = 0
+
+// W6-03 U7b/t, S-23, S-97, R-125, D-08 (§11.8: "`check` は `Random` を要し、`test` の本体ではテストランナーが種を決めた `Random` を与える（§8.5）。それ以外では、呼ぶ関数の効果行に `Random` が
+// 要る（E0601）"; §8.1: "本体で使う効果は、効果行に含まれなければならない（E0601）... 診断は最初の使用の位置に置く"): a function that is not a `test` body calls `check`, which has `uses {Random}`,
+// and its effect row has no `Random`, so the call is an E0601 at the call (the first use). The row `uses {Alloc}` is no help (`alloc_row_only`). There is no candidate (`fixes = 0`): `uses {Random}` is not
+// a row that this version accepts (E0200, S-74), so `Random` is given in the body of a `test` alone. The call is a use whatever surrounds it (a branch, a loop, a method, a generic function), and a call of
+// `check` through a function value is a use of the value (`through_a_value`). The error is the only one of its function (P-01). The body of a `test` and its closures are in random_ok.onsa and
+// random_closure_neg.onsa, an `rt` function is in random_rt_neg.onsa.
+
+use std.test.{check, gen}
+
+pub fn no_row() {
+  check(10, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })   //~ E0601
+}
+
+pub fn alloc_row_only() uses {Alloc} {
+  check(10, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })   //~ E0601
+}
+
+pub fn empty_row_written() uses {} {
+  check(10, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })   //~ E0601
+}
+
+pub fn in_a_branch(c: Bool) {
+  if c {
+    check(10, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })   //~ E0601
+  }
+}
+
+pub fn in_a_loop(n: U32) {
+  for i in 0 ..< n {
+    check(i, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })   //~ E0601
+  }
+}
+
+pub struct Rig {
+  cases: U32,
+}
+
+impl Rig {
+  pub fn run(self) {
+    check(self.cases, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })   //~ E0601
+  }
+}
+
+pub fn generic_caller[T: Copy](x: T) -> T {
+  check(10, gen.u32(0, 9), fn(y: U32) -> Bool { y < 10 })   //~ E0601
+  x
+}
+
+pub fn through_a_value() {
+  let c = check::[U32]
+  c.(10, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })   //~ E0601
+}

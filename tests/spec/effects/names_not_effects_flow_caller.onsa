@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§11.5", "§15.1", "§18.1"]
+// fixes = 0
+
+// W6-03 U7b/t, R-27 (3), S-691 (§8.1: "効果でも効果行変数でもない名前（`uses {I32}`、`uses {Show}`、... ）は E0308 である（§15.1）"; §11.5: "効果を持つ fn（`Alloc` を含む）| 呼べない（E0805）"; §18.1:
+// a failed name in a row is reported where it is written, and nothing else is made of it): a name that is found and is not an effect (a built-in type, a trait, a type of the program) is an E0308 at the row
+// where it is written, and it is not an effect that the function has. So a flow that calls such a function has no E0805: the call is of a function whose row has no effect. The error of the flow
+// would be a second report for one mistake (§18.1). The flows below are fine; the E0308 is the declaration. A row that has an effect too is in names_not_effects_flow_caller_kept.onsa.
+// The functions are `rt`, which a flow calls at the clock `sample` (a function that is not `rt` there is an E0200 of this version).
+
+pub struct Point {
+  x: F32,
+}
+
+pub rt fn builtin_type() -> F32 uses {I32} { 1.0 }   //~ E0308
+
+pub rt fn prelude_trait() -> F32 uses {Show} { 1.0 }   //~ E0308
+
+pub rt fn user_type() -> F32 uses {Point} { 1.0 }   //~ E0308
+
+pub flow calls_builtin_type(x: F32 at sample) -> F32 at sample {
+  x * builtin_type()
+}
+
+pub flow calls_prelude_trait(x: F32 at sample) -> F32 at sample {
+  x * prelude_trait()
+}
+
+pub flow calls_user_type(x: F32 at sample) -> F32 at sample {
+  x * user_type()
+}

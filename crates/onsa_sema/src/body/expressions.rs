@@ -638,9 +638,10 @@ impl<'a> Checker<'a> {
         let (from, effects) = match effects {
             // As the names stage read it (S-738).
             Some(_) => (RowFrom::Written, self.names.effects.get(&e).cloned().ok_or_else(|| self.held_stop())?),
-            // A later branch of a merge takes no effects (§4.7, S-1032 (ii-3)).
-            // SPEC-GAP(S-1061): a branch of a branch (`else if`, `{ … }` of an arm) too.
-            None if self.joining => (RowFrom::Joining, crate::ty::EffectSet::default()),
+            // A later branch of a merge takes no effects (§4.7, S-1032 (ii-3)),
+            // in a branch of it too (an `else if`, an `if` or a `match` in a
+            // branch, S-1061); the first has no type before it (none expected).
+            None if self.joining && !self.undecided(expected) => (RowFrom::Joining, crate::ty::EffectSet::default()),
             None => match (&exp_fn, expected) {
                 (Some(f), Some(t)) => (RowFrom::Expected(t), f.effects.clone()),
                 (None, Some(t)) if matches!(self.ty(self.shallow(t)), Ty::Error) => {

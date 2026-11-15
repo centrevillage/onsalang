@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§11.8", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "22:11"
+// code = "E0601"
+// candidate = 1
+// leaves = ["23:3 E0601"]
+
+// W6-03 U7b/t, S-1053 (the provisional reading (2)), S-97 (§8.1: "診断は最初の使用の位置に置く。`rt` でない関数では、効果行への追加（署名への挿入）を修正候補に示し"; §18.1: one report per unit): a function that
+// has no row and uses `Alloc` (`mk(1)`) first and `Random` (`check(…)`) after it has two uses that its row lacks. The unit reports the first, the use of `Alloc`, with the candidate that inserts
+// ` uses {Alloc}`. The use of `Random` is an E0601 of its own that no candidate covers (a row `uses {Random}` is an E0200), so it is left after the candidate (`leaves`, at the place it has after the
+// insert, which is the place it had: the signature line is not its line). The order the other way round is in random_first_neg.onsa.
+
+use std.test.{check, gen}
+
+pub fn mk(n: U32) -> U32 uses {Alloc} { n }
+
+pub fn alloc_then_random() -> U32 uses {Alloc} {
+  let a = mk(1)   //~ E0601
+  check(10, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })
+  a
+}

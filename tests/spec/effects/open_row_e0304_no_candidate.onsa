@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§15.1", "§18.1"]
+// fixes = 0
+
+// W6-03 U7/t, S-1060 (the provisional reading (1): no candidate), S-675, S-691 (§8.1: "`rt` でない関数では、効果行への追加（署名への挿入）を修正候補に示し"; §15.1: an item that has the name of the prelude is an E0304 and
+// the name is read as nothing; §18.1: a candidate makes the error go and makes no new one): the item `Alloc` of this module is an E0304, so the name `Alloc` is no effect here, and a candidate
+// that inserts ` uses {Alloc}` would be a row of a name that is not read, which leaves the E0601 (the next candidate would stack another one, an E0002). So a function that has no row and uses `Alloc`
+// is an E0601 at its first use and has no candidate (`fixes = 0`). The same module with a row that names `Alloc` is open_row_e0304_own.onsa. One error per function (P-01).
+
+pub enum Alloc { A }   //~ E0304
+
+pub fn creates_a_buffer() -> U32 {
+  let b: Buf[F32] = Buf.zeroed(2)   //~ E0601
+  b.len()
+}
+
+pub fn interpolates(x: U32) -> U32 {
+  let s = "{x}"   //~ E0601
+  s.len()
+}
+
+pub fn drops_a_parameter(move s: Str) -> U32 {   //~ E0601
+  1
+}

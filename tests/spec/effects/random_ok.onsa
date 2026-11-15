@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§8.5", "§11.8", "§12.2"]
+// fixes = 0
+
+// W6-03 U7b/t, S-97, D-08 (§8.5: "`test` の本体では、テストランナーが `Alloc` と、テスト名から決めた種の `Random` を提供する"; §11.8: "`check` は `Random` を要し、`test` の本体ではテストランナーが種を決めた
+// `Random` を与える"; §8.2: `Random` is an effect of `std.random`; the generators `gen.*` have no effect): this file has no error, today and after the work. The body of a `test` has `Random` and `Alloc`,
+// whatever surrounds the call (a branch, a loop, a function value that is bound in the body), and it may use `Alloc` next to `Random`. A function that has `uses {Alloc}` or no row and uses
+// the generators alone (`gen.u32`, `gen.pair`: no effect) is no E0601 (the E0601 of a use of `Random` is only for `check`). `mode` is `check`: the interpreter does not run `check` in this version (§15.2).
+
+use std.test.{check, gen, Gen}
+
+pub fn mk(n: U32) -> U32 uses {Alloc} { n }
+
+pub fn digits(n: U32) -> Gen[U32] uses {Alloc} { gen.u32(0, n) }
+
+pub fn plain_digits(n: U32) -> Gen[U32] { gen.u32(0, n) }
+
+pub fn pairs() -> Gen[(U32, F32)] { gen.pair(gen.u32(0, 9), gen.f32(0.0, 1.0)) }
+
+pub fn gen_after_alloc(n: U32) -> Gen[U32] uses {Alloc} {
+  let s = "{n}"
+  gen.u32(0, s.len())
+}
+
+test "a property in the body" {
+  check(10, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })
+}
+
+test "Alloc and Random in one body" {
+  let a = mk(1)
+  let b: Buf[F32] = Buf.zeroed(a)
+  check(10, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })
+  assert b.len() == 1
+}
+
+test "a call in a branch and a loop" {
+  if mk(1) == 1 {
+    check(10, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })
+  }
+  for i in 0 ..< 3 {
+    check(i, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })
+  }
+}
+
+test "a call through a function value" {
+  let c = check::[U32]
+  c.(10, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })
+}
+
+test "generators from functions" {
+  check(10, digits(9), fn(x: U32) -> Bool { x < 10 })
+  check(10, plain_digits(9), fn(x: U32) -> Bool { x < 10 })
+  check(10, gen_after_alloc(3), fn(x: U32) -> Bool { x < 10 })
+}

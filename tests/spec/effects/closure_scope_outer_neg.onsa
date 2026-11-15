@@ -8,8 +8,8 @@
 // all have `Alloc`, or may have it, for their own uses (closure_scope_ok_kept.onsa), but the anonymous function that is written in them is checked against the row of its own type. So an anonymous function
 // that is a pure parameter (`ap`, the property `p: fn(T) -> Bool` of `check`, §11.8), the value of a `const` of a pure function type, the default of a field or a constant whose type is pure, or a local that
 // has no expected type, and that uses `Alloc`, is an E0601 of the anonymous function. The position is its first use (the name of an owned parameter for its drop), there is no candidate (`fixes = 0`),
-// and a unit that is a field default or an associated constant is a unit of its own. A `Random` that `check` uses is not checked in this version (`std.test.check` is in a `test`, where the runner
-// gives it), so the property forms below do not depend on it. One error per unit (P-01).
+// and a unit that is a field default or an associated constant is a unit of its own. Each `check` is called in the body of a `test` itself, where the runner
+// gives `Random` (§8.5), so the property forms below do not depend on it. One error per unit (P-01).
 
 use std.test.{check, gen}
 

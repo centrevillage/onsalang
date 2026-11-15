@@ -9,6 +9,9 @@ use std.dsp.test.{assert_near}
 // 期待（S-97）: E0601（効果行に無い `Random` の使用）。修正候補は出さず、note で「この版では `Random` はテストの本体でだけ与えられる」。
 // 今（2026-10-05）: `onsa check` は何も出さない（第 1 期の効果行の検査は `Alloc` だけ、S-23）。
 //   `uses {Random}` と書くと E0200「this version does not support effects other than `Alloc`」（S-74 のとおり）。
+// 移した先（W6-03 U7b/t）: 期待値付きの事例 `tests/spec/effects/random_plain_neg.onsa`（この形は `no_row`、ほかの置き場所の形も）、`random_rt_neg.onsa`（`rt` の関数）、
+//   `random_user_row_neg.onsa`（`uses {Random}` を書いた関数の呼び手）、`random_closure_neg.onsa`（無名関数）、`random_init_neg.onsa`（定数の初期化式とフィールドの既定値）。
+//   候補の無いことと note は `crates/onsa_cli/tests/cli/effect_notes.rs`。W6-03 U7b の後は事例のとおりに E0601 になる。
 fn helper_no_effect() {
   check(10, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })
 }

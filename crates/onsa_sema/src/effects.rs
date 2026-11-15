@@ -1,8 +1,9 @@
 //! Effect-row consistency (T3-13, S-23, S-77, S-82; spec §8.1, §10, §12.2):
 //! a body cannot use an effect its row lacks (E0601), at the first use of it
-//! (S-783), `rt` or not. Phase 1 tracks `Alloc` only (`Record::lacking`);
-//! other effects are E0200 at the signature. `test` bodies get `Alloc` from
-//! the runner (D-08), and `const` initializers from the compiler (§6.6).
+//! (S-783), `rt` or not, of every effect (S-97, `Record::lacking`). `test`
+//! bodies get `Alloc` and `Random` from the runner (§8.5), and `const`
+//! initializers `Alloc` from the compiler (§6.6). A row can have `Alloc` alone
+//! in this version (D-08), so the E0601 of another effect has no fix.
 
 use onsa_diag::internal::bug;
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
@@ -31,8 +32,9 @@ pub(crate) fn check_all(pkg: &Package, a: &Analysis, records: &[Record]) -> Vec<
 /// The E0601 of `u`, the first use in `scope` of the body of `r` of
 /// `effect`, which its row lacks: at the use (S-82, S-783), with the notes
 /// of [`notes`]. Where the function is not `rt`, the fix inserts the effect
-/// into the signature; an `rt` one cannot have `Alloc` (§10 rule 1), and an
-/// anonymous function, a `test` and an initializer have no fix (§8.1, S-1041).
+/// into the signature; an `rt` one cannot have `Alloc` (§10 rule 1), an
+/// anonymous function, a `test` and an initializer have no fix (§8.1, S-1041),
+/// nor an effect no row of the module can have (S-97, S-1054).
 fn first_use(pkg: &Package, a: &Analysis, r: &Record, scope: &Scope, effect: DefId, u: &Use) -> Option<Diagnostic> {
     let module = module_of_def(pkg, a, r.id)?;
     let (ast, text) = (&module.parsed.ast, &module.text);
@@ -46,7 +48,12 @@ fn first_use(pkg: &Package, a: &Analysis, r: &Record, scope: &Scope, effect: Def
     );
     let d = Diagnostic::new(Stage::Effects, Code::E0601, u.at, message).with_found(src(u.at));
     let d = notes(a, (ast, &src), r, (scope, effect), u).into_iter().fold(d, |d, (at, why)| d.with_note(at, why));
-    if scope.closure.is_some() || scope.rt || !matches!(def.kind, DefKind::Fn(_)) {
+    let d = rules(a, r, scope, effect).into_iter().fold(d, |d, why| d.with_rule(why));
+    if scope.closure.is_some()
+        || scope.rt
+        || !matches!(def.kind, DefKind::Fn(_))
+        || !a.effect_written(effect, def.module)
+    {
         return Some(d);
     }
     // SPEC-GAP(S-1060): no fix where the name does not name the effect in the
@@ -102,6 +109,7 @@ fn notes(
 ) -> Vec<(Span, String)> {
     let mut notes = Vec::new();
     let name = &a.def(effect).name;
+    let alloc = a.alloc == Some(effect);
     if let Some(c) = scope.closure {
         // SPEC-GAP(S-1041): no fix; a note of where its row comes from, of an
         // expected type the type alone (not where it was expected).
@@ -109,7 +117,10 @@ fn notes(
         let fn_at = Span::new(e.span.file, e.span.start, e.span.start + 2);
         let ExprKind::Closure { body, .. } = &e.kind else { bug(Some(e.span), "a scope of no anonymous function") };
         let head = src(Span::new(e.span.file, e.span.start, ast.expr(*body).span.start));
-        let write = format!("write its row: `{} uses {{{name}}} {{ … }}`", head.trim_end());
+        let write = match a.effect_written(effect, a.def(r.id).module) {
+            true => format!("; write its row: `{} uses {{{name}}} {{ … }}`", head.trim_end()),
+            false => String::new(),
+        };
         let why = match scope.from {
             Some(RowFrom::Written) => format!("{fun} has the effect row it writes (§8.1)"),
             Some(RowFrom::Expected(t)) => {
@@ -119,22 +130,22 @@ fn notes(
                 )
             }
             Some(RowFrom::Joining) => format!(
-                "{fun} is a later branch of a merge, which takes no effect row from the one before, so its row is empty; {write} (§4.7, §8.1)"
+                "{fun} is a later branch of a merge, which takes no effect row from the one before, so its row is empty{write} (§4.7, §8.1)"
             ),
             // `Record::lacking` checks no use of it.
             Some(RowFrom::Unread) => bug(Some(fn_at), "an E0601 of an anonymous function whose row is not known"),
             Some(RowFrom::NoneExpected) | None => {
-                format!("no function type is expected where {fun} is, so its effect row is empty; {write} (§8.1)")
+                format!("no function type is expected where {fun} is, so its effect row is empty{write} (§8.1)")
             }
         };
         notes.push((fn_at, why));
-        if scope.rt {
+        if scope.rt && alloc {
             let why = format!(
                 "{fun} is `rt` by the type expected, which cannot have `{name}` in its effect row (§10 rule 1)"
             );
             notes.push((fn_at, why));
         }
-    } else if scope.rt {
+    } else if scope.rt && alloc {
         let def = a.def(r.id);
         notes.push((
             def.name_span,
@@ -174,6 +185,24 @@ fn notes(
     let others = r.uses.iter().filter(|o| o.scope == u.scope && o.at != u.at && o.needs(a, effect));
     notes.extend(others.map(|o| (o.at, format!("{}: it needs `{name}` too", o.describe(a, (ast, r.id), src)))));
     notes
+}
+
+/// The notes with no place of the E0601 of `effect` in `scope` of the body
+/// of `r`: of the row the compiler gives an initializer (§6.6, S-1055), and
+/// of an effect no row of the module can have in this version (S-97, S-1054).
+fn rules(a: &Analysis, r: &Record, scope: &Scope, effect: DefId) -> Vec<String> {
+    let def = a.def(r.id);
+    let mut rules = Vec::new();
+    if scope.closure.is_none() && matches!(def.kind, DefKind::Const(_)) {
+        rules.push("an initializer has the effect row `{Alloc}` alone, which the compiler gives (§6.6)".into());
+    }
+    if !a.effect_written(effect, def.module) {
+        rules.push(match a.modules.lang.random() == Some(effect) {
+            true => "`Random` is given in the body of a `test` alone in this version (§8.5, §11.8)".into(),
+            false => "an effect row can have `Alloc` alone in this version (§8.1)".into(),
+        });
+    }
+    rules
 }
 
 /// The first element that made the aggregate literal the drop `d` drops

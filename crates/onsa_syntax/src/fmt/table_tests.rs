@@ -73,6 +73,7 @@ const EXPRESSION_BLOCK_HOLDERS: &[NodeKind] = &[
     NodeKind::Const,
     NodeKind::ConstArg,
     NodeKind::ExprStmt,
+    NodeKind::FieldDefault,
     NodeKind::IndexExpr,
     NodeKind::LetStmt,
     NodeKind::MatchArm,

@@ -75,13 +75,18 @@ pub(crate) enum What<'a> {
 }
 
 impl Use<'_> {
-    /// Whether the use needs the effect declared at `effect`: the one test
-    /// of what a use needs (M12).
-    pub(crate) fn needs(&self, a: &Analysis, effect: DefId) -> bool {
+    /// The effects the use needs, by their declarations: the one test of
+    /// what a use needs (M12).
+    pub(crate) fn effects<'b>(&'b self, a: &'b Analysis) -> &'b [DefId] {
         match self.needs {
-            Needs::Row(row) => row.has(effect),
-            Needs::Alloc => a.alloc == Some(effect),
+            Needs::Row(row) => row.effects(),
+            Needs::Alloc => a.alloc.as_slice(),
         }
+    }
+
+    /// Whether the use needs the effect declared at `effect`.
+    pub(crate) fn needs(&self, a: &Analysis, effect: DefId) -> bool {
+        self.effects(a).contains(&effect)
     }
 
     /// What the use does, as a clause the diagnostics of it (E0601, E0901)
@@ -118,7 +123,6 @@ impl<'a> Record<'a> {
     /// too (it adds no edge of a body with one, §10 rule 5). O(U) for U uses.
     pub(crate) fn lacking(&self, a: &Analysis) -> Vec<(&Scope, DefId, &Use<'a>)> {
         // SPEC-GAP(S-1053): one E0601 for each scope and effect.
-        // `Alloc` alone until every effect is checked (W6-03 U7).
         // SPEC-GAP(S-1059): the row as written, `Alloc` too in an `rt` one (E0902).
         let (mut first, mut seen): (Vec<(u32, DefId, &Use<'a>)>, HashSet<_>) = (Vec::new(), HashSet::default());
         for u in &self.uses {
@@ -127,7 +131,8 @@ impl<'a> Record<'a> {
             if scope.from == Some(RowFrom::Unread) {
                 continue;
             }
-            for e in a.alloc.into_iter().filter(|&e| !scope.row.admits(e) && u.needs(a, e)) {
+            // SPEC-GAP(S-1054): an effect no row can have in this version (E0200) counts too.
+            for &e in u.effects(a).iter().filter(|&&e| !scope.row.admits(e)) {
                 if seen.insert((u.scope, e)) {
                     first.push((u.scope, e, u));
                 }
@@ -148,18 +153,19 @@ pub(crate) fn records<'a>(pkg: &Package, a: &'a Analysis) -> Vec<Record<'a>> {
         .collect()
 }
 
-/// The row and `rt` of the body of `id`: of a function, and the `Alloc` the
-/// runner gives a `test` (§8.5; `Random` in W6-03 U7) and the compiler an
-/// initializer (§6.6).
+/// The row and `rt` of the body of `id`: of a function, the `Alloc` and
+/// `Random` the runner gives a `test` (§8.5), and the `Alloc` the compiler
+/// gives an initializer (§6.6).
 fn body_row(a: &Analysis, id: DefId) -> (EffectSet, bool) {
-    match &a.def(id).kind {
-        DefKind::Fn(f) => (f.effects.clone(), f.rt),
-        _ => {
-            let mut row = EffectSet::default();
-            a.alloc.into_iter().for_each(|e| row.insert(e));
-            (row, false)
-        }
-    }
+    let given = match &a.def(id).kind {
+        DefKind::Fn(f) => return (f.effects.clone(), f.rt),
+        DefKind::Test { .. } => [a.alloc, a.modules.lang.random()],
+        // SPEC-GAP(S-1055): an E0601 of the row `{Alloc}` where it uses another.
+        _ => [a.alloc, None],
+    };
+    let mut row = EffectSet::default();
+    given.into_iter().flatten().for_each(|e| row.insert(e));
+    (row, false)
 }
 
 /// The record of the body of `id`. O(T + E + D + C log C + U (log C + d +

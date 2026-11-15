@@ -1,8 +1,9 @@
-//! The lang items of std (S-71, R-79): the enums of `std.core` and the struct
-//! of `std.text` the compiler knows, its one table of them. The variants of
-//! the enums are in the prelude by their names alone and not members of their
-//! types (§4.1, S-607), and `?` reads them (§9.1). The sema stages read [`LangItems`]; lowering and the backends
-//! read what the stages recorded.
+//! The lang items of std (S-71, R-79): the enums of `std.core`, the struct
+//! of `std.text` and the effect of `std.random` the compiler knows, its one
+//! table of them. The variants of the enums are in the prelude by their names
+//! alone and not members of their types (§4.1, S-607), and `?` reads them
+//! (§9.1). The sema stages read [`LangItems`]; lowering and the backends read
+//! what the stages recorded.
 
 use serde::{Deserialize, Serialize};
 
@@ -27,6 +28,10 @@ const ANY_ORDINAL: &str = "AnyOrdinal";
 /// length used.
 const FIXED_STR: (&str, &str, [&str; 2]) = ("text", "FixedStr", ["bytes", "len"]);
 
+/// Of `std`: the module and the effect a `test` is given with `Alloc` (§8.5),
+/// which no row of a program can have in this version (S-97, D-08).
+const RANDOM: (&str, &str) = ("random", "Random");
+
 /// A row of [`ENUMS`] in the analysis: the enum and the indices of its variants.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LangEnum {
@@ -43,13 +48,15 @@ pub struct LangFixedStr {
     pub len: u32,
 }
 
-/// The rows of [`ENUMS`] and [`FIXED_STR`]: none with no `std.core` (unit
-/// tests of a package with no std). Of std alone, which [`crate::analyze_on`] does not read again.
+/// The rows of [`ENUMS`], [`FIXED_STR`] and [`RANDOM`]: none with no
+/// `std.core` (unit tests of a package with no std). Of std alone, which
+/// [`crate::analyze_on`] does not read again.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct LangItems {
     enums: [Option<LangEnum>; ENUMS.len()],
     any_ordinal: Option<DefId>,
     fixed_str: Option<LangFixedStr>,
+    random: Option<DefId>,
 }
 
 impl LangItems {
@@ -76,6 +83,11 @@ impl LangItems {
     /// [`FIXED_STR`], if `d` is it.
     pub fn fixed_str(&self, d: DefId) -> Option<LangFixedStr> {
         self.fixed_str.filter(|l| l.def == d)
+    }
+
+    /// [`RANDOM`].
+    pub(crate) fn random(&self) -> Option<DefId> {
+        self.random
     }
 }
 
@@ -110,14 +122,21 @@ pub(crate) fn declared(s: &mut Sema<'_>) {
     };
     s.a.modules.lang.any_ordinal = Some(any);
     let (module, ty, [bytes, len]) = FIXED_STR;
-    let std = s.a.modules.core.and_then(|m| s.a.modules.get(m).parent);
-    let text = std.and_then(|r| s.a.modules.get(r).children.get(module).copied());
-    let Some(&def) = text.and_then(|m| s.a.modules.get(m).items.get(ty)) else {
-        onsa_diag::internal::bug(None, format!("`std.{module}` declares no `{ty}`"))
-    };
+    let def = item_of_std(s, module, ty);
     let names = s.field_names(def);
     let (bytes, len) = (position(&names, ty, bytes), position(&names, ty, len));
     s.a.modules.lang.fixed_str = Some(LangFixedStr { def, bytes, len });
+    s.a.modules.lang.random = Some(item_of_std(s, RANDOM.0, RANDOM.1));
+}
+
+/// The item `name` of the module `module` of std, which the embedded std declares.
+fn item_of_std(s: &Sema<'_>, module: &str, name: &str) -> DefId {
+    let std = s.a.modules.core.and_then(|m| s.a.modules.get(m).parent);
+    let m = std.and_then(|r| s.a.modules.get(r).children.get(module).copied());
+    match m.and_then(|m| s.a.modules.get(m).items.get(name)) {
+        Some(&def) => def,
+        None => onsa_diag::internal::bug(None, format!("`std.{module}` declares no `{name}`")),
+    }
 }
 
 /// The index of `name` in `names`, the members std declares of `ty`.

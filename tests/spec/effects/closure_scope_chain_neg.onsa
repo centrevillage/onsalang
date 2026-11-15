@@ -1,0 +1,61 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§8.1", "§18.1"]
+// fixes = 0
+
+// W6-03 U7/t, S-1061, S-1031, S-1032 (§4.7: "合流の枝に書いた無名関数は、前の枝の型から引数の型と返り値の型だけを受け、効果行と `rt` は受けない ... 合流の枝の中の `if`・`match`（`else if` の連鎖を含む）は
+// 同じ合流に数え、その枝も合流の枝である"): an `else if` chain, and an `if` or a `match` that is written in a branch or an arm of a join that has no expected type, is the same join. So an anonymous function in any
+// of its branches (the last branch of the chain, a middle one, the first one, an arm of a `match` that is in a branch, an `if` in a branch) takes no row from the branch before it, and the `Alloc` that its
+// body uses is an E0601 of the anonymous function, which the outer function that has `uses {Alloc}` does not cover. There is no candidate (`fixes = 0`). One error per function (P-01). The forms of one `if` and one
+// `match` are in closure_scope_join_neg.onsa, and the forms that are fine in closure_scope_chain_ok.onsa.
+
+pub fn mk(n: U32) -> U32 uses {Alloc} { n }
+
+pub fn chain_last(a: Bool, b: Bool, n: U32) -> U32 uses {Alloc} {
+  let f = if a { mk } else if b { mk } else { fn(x: U32) -> U32 { mk(x) } }   //~ E0601
+  f.(n)
+}
+
+pub fn chain_middle(a: Bool, b: Bool, n: U32) -> U32 uses {Alloc} {
+  let f = if a { mk } else if b { fn(x: U32) -> U32 { mk(x) } } else { mk }   //~ E0601
+  f.(n)
+}
+
+pub fn chain_first(a: Bool, b: Bool, n: U32) -> U32 uses {Alloc} {
+  let f = if a { fn(x: U32) -> U32 { mk(x) } } else if b { mk } else { mk }   //~ E0601
+  f.(n)
+}
+
+pub fn if_in_a_branch(a: Bool, b: Bool, n: U32) -> U32 uses {Alloc} {
+  let f = if a { mk } else {
+    if b { mk } else { fn(x: U32) -> U32 { mk(x) } }   //~ E0601
+  }
+  f.(n)
+}
+
+pub fn match_in_a_branch(a: Bool, b: Bool, n: U32) -> U32 uses {Alloc} {
+  let f = if a { mk } else {
+    match b {
+      true => mk,
+      false => fn(x: U32) -> U32 { mk(x) },   //~ E0601
+    }
+  }
+  f.(n)
+}
+
+pub fn match_arm_chain(k: U32, n: U32) -> U32 uses {Alloc} {
+  let f = match k {
+    0 => mk,
+    1 => mk,
+    _ => fn(x: U32) -> U32 { mk(x) },   //~ E0601
+  }
+  f.(n)
+}
+
+pub fn chain_in_a_match_arm(k: U32, b: Bool, n: U32) -> U32 uses {Alloc} {
+  let f = match k {
+    0 => mk,
+    _ => if b { mk } else { fn(x: U32) -> U32 { mk(x) } },   //~ E0601
+  }
+  f.(n)
+}

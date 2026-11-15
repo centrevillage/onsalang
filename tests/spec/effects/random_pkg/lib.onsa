@@ -1,0 +1,13 @@
+// The functions of another module (W6-03 U7b/t, S-97, S-1054, spec §8.1, §11.8, §15.1), for main.onsa: a function that calls `check` and has no `Random` in its row is an E0601 here, whatever the module,
+// and a function that writes `uses {Random}` (an E0200 in this version) is the callee that main.onsa calls.
+
+use std.random.Random
+use std.test.{check, gen}
+
+pub fn lib_check() {
+  check(10, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })   //~ E0601
+}
+
+pub fn lib_user_row() uses {Random} {}   //~ E0200
+
+pub fn lib_pure(n: U32) -> U32 { n + 1 }

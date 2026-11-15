@@ -1,5 +1,5 @@
-//! Property-based checks (spec §11.8). Phase 1: available inside `test`
-//! bodies only, with `Random` seeded from the test name by the runner (M5).
+//! Property-based checks (spec §11.8). `Random` is given in the body of a `test`
+//! alone in this version, seeded from the test name by the runner (§8.5, S-97).
 
 use random.Random
 

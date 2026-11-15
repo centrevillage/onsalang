@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§11.8", "§18.1"]
+// fixes = 0
+
+// W6-03 U7b/t, S-1053 (the provisional reading (2)), S-97 (§8.1: "診断は最初の使用の位置に置く"; §18.1: one report per unit, the first by the order of the diagnostics): a function that has no row and uses both `Alloc` (`mk(1)`)
+// and `Random` (`check(…)`) lacks two effects. The use of each effect is an E0601 of its own, and the unit reports the first by position. When the use of `Random` comes first, the report is
+// it, and it has no candidate (`fixes = 0`: a row `uses {Random}` is an E0200). The use of `Alloc` comes after it and is not reported. One error per function (P-01). The order the other way
+// round, where the report has a candidate, is random_alloc_first_fix.onsa.
+
+use std.test.{check, gen}
+
+pub fn mk(n: U32) -> U32 uses {Alloc} { n }
+
+pub fn random_then_alloc() -> U32 {
+  check(10, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })   //~ E0601
+  let a = mk(1)
+  a
+}
+
+pub fn random_then_interpolation(n: U32) -> U32 {
+  check(10, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })   //~ E0601
+  let s = "{n}"
+  s.len()
+}

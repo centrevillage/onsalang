@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§10", "§11.8", "§18.1"]
+// fixes = 0
+
+// W6-03 U7b/t, S-97, S-783 (B3), R-125 (§8.1: "`rt` の関数の中の、`Alloc` を持つ関数の呼び出しは、`rt` でない関数の呼び出し（E0901、§10 の規則 4）でもあり、同じ範囲なので並べ方で E0601 を
+// 報告する"; §18.1: the diagnostics of one unit are ordered by the start, the end, the code, the text): `check` is not `rt` and has `uses {Random}`, so a call of it in an `rt` function is
+// an E0601 (the row of the function has no `Random`) and an E0901 (§10 rule 4) at the same place. The two are in the same range, so the order picks the E0601, as for a call of a
+// function that has `Alloc` (the reading is the order of §18.1, which does not depend on the effect; the sentence of §8.1 names `Alloc`). There is no candidate (`fixes = 0`): an `rt` function cannot
+// have `uses {Random}` in this version (E0200), and `check` is given in a `test` body alone. One error per function (P-01).
+
+use std.test.{check, gen}
+
+pub rt fn rt_direct() {
+  check(10, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })   //~ E0601
+}
+
+pub rt fn rt_in_a_branch(c: Bool) {
+  if c {
+    check(10, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })   //~ E0601
+  }
+}
+
+pub rt fn rt_in_a_loop(n: U32) {
+  for i in 0 ..< n {
+    check(i, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })   //~ E0601
+  }
+}

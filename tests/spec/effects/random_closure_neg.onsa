@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// spec = ["§8.1", "§8.5", "§11.8", "§18.1"]
+// fixes = 0
+
+// W6-03 U7b/t, S-97, S-1032, S-1041, D-08 (§8.1: "無名関数は、その型の効果行と `rt` に照らして本体を検査する。本体の使用は外側の関数と外側の無名関数の効果行に数えず ... 効果行に無い使用は E0601 で、
+// 位置はその無名関数の最初の使用、修正候補は無く"; §8.5: "`test` の本体では、テストランナーが `Alloc` と ... `Random` を提供する"): the runner gives `Random` to the body of a `test`, and an anonymous function
+// that is written in it is checked against the row of its own type (no expected type: the row is empty; a pure parameter; a written row of `Alloc`; the property `p` of `check`, which is pure). So a call
+// of `check` in the body of such an anonymous function is an E0601 at the call in the anonymous function, and the `test` body that writes it does not cover it. The same holds in a function (`closure_in_fn`).
+// There is no candidate (`fixes = 0`). One error per unit (P-01): each form is a `test` or a function of its own.
+
+use std.test.{check, gen}
+
+pub fn ap(f: fn(U32) -> U32, x: U32) -> U32 { f.(x) }
+
+test "a closure with no expected type" {
+  let f = fn(n: U32) -> U32 {
+    check(n, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })   //~ E0601
+    n
+  }
+  let _ = f.(1)
+}
+
+test "a closure in a pure parameter" {
+  let r = ap(fn(n: U32) -> U32 {
+    check(n, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })   //~ E0601
+    n
+  }, 1)
+  assert r == 1
+}
+
+test "a closure with a written row of Alloc" {
+  let f = fn(n: U32) -> U32 uses {Alloc} {
+    check(n, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })   //~ E0601
+    n
+  }
+  let _ = f.(1)
+}
+
+test "a property that calls check" {
+  check(2, gen.u32(0, 9), fn(x: U32) -> Bool {
+    check(x, gen.u32(0, 9), fn(y: U32) -> Bool { y < 10 })   //~ E0601
+    true
+  })
+}
+
+test "an inner closure of a closure" {
+  let f = fn(n: U32) -> U32 {
+    let g = fn(m: U32) -> U32 {
+      check(m, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })   //~ E0601
+      m
+    }
+    g.(n)
+  }
+  let _ = f.(1)
+}
+
+pub fn closure_in_fn(n: U32) -> U32 uses {Alloc} {
+  let f = fn(m: U32) -> U32 {
+    check(m, gen.u32(0, 9), fn(x: U32) -> Bool { x < 10 })   //~ E0601
+    m
+  }
+  f.(n)
+}

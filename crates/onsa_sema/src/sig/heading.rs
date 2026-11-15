@@ -250,11 +250,7 @@ pub(crate) fn read_effects(
             read.push((Err(d), p));
         }
         match named {
-            Ok((_, Some(Entity::Def(d))))
-                if Some(d) == a.alloc || matches!(a.def(d).kind, DefKind::Effect { .. }) && a.modules.is_std(from) =>
-            {
-                set.insert(d);
-            }
+            Ok((_, Some(Entity::Def(d)))) if a.effect_written(d, from) => set.insert(d),
             // Another effect (of a user's `effect`, S-719, E0200), kept by
             // its declaration; or a name that is no effect (`uses {I32}`,
             // `uses {T}`), kept by name. With both in a unit, the first by its

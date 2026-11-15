@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§8.1", "§18.1"]
+// fixes = 0
+
+// W6-03 U7/t, S-1061, S-1031, S-1032 (§4.7: "合流の枝の中の `if`・`match`（`else if` の連鎖を含む）は同じ合流に数え ... 枝の中のタプルや配列の要素、`Some(…)` の引数は合流の枝でなく、期待型（後の枝では前の枝の型から
+// 決まる）を全て受ける"; §8.1): the controls of closure_scope_chain_neg.onsa, with no error. A chain of function values with no anonymous function, a chain whose anonymous function writes the row it needs, a chain
+// whose anonymous function uses nothing, a join that has an expected type (an annotated `let`, which gives the whole type to every branch under it), and the elements of a tuple or an array that
+// is a branch (the element is not a branch of the join, so it takes the whole type of the branch before it, the row too). Each binding is read (E0309).
+
+pub fn mk(n: U32) -> U32 uses {Alloc} { n }
+
+pub fn pure(n: U32) -> U32 { n }
+
+pub fn function_values_only(a: Bool, b: Bool, n: U32) -> U32 uses {Alloc} {
+  let f = if a { pure } else if b { mk } else { pure }
+  f.(n)
+}
+
+pub fn written_row_in_the_chain(a: Bool, b: Bool, n: U32) -> U32 uses {Alloc} {
+  let f = if a { mk } else if b { mk } else { fn(x: U32) -> U32 uses {Alloc} { mk(x) } }
+  f.(n)
+}
+
+pub fn closure_uses_nothing(a: Bool, b: Bool, n: U32) -> U32 uses {Alloc} {
+  let f = if a { mk } else if b { mk } else { fn(x: U32) -> U32 { x } }
+  f.(n)
+}
+
+pub fn annotated_let(a: Bool, b: Bool, n: U32) -> U32 uses {Alloc} {
+  let f: fn(U32) -> U32 uses {Alloc} = if a { mk } else if b { mk } else { fn(x: U32) -> U32 { mk(x) } }
+  f.(n)
+}
+
+pub fn array_element_in_a_branch(a: Bool, n: U32) -> U32 uses {Alloc} {
+  let fs = if a { [mk, mk] } else { [mk, fn(x: U32) -> U32 { mk(x) }] }
+  fs[0].(n)
+}
+
+pub fn tuple_element_in_a_branch(a: Bool, n: U32) -> U32 uses {Alloc} {
+  let p = if a { (mk, 1) } else { (fn(x: U32) -> U32 { mk(x) }, 2) }
+  p.0.(n)
+}

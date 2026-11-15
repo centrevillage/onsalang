@@ -313,6 +313,14 @@ impl Analysis {
         self.alloc.is_some_and(|d| row.has(d))
     }
 
+    /// Whether a row of the module `from` can have the effect declared by
+    /// `d` in this version: `Alloc`, and of std every effect of it (D-08,
+    /// S-74). The one test of it: the names stage reads a row by it
+    /// (`crate::sig::read_effects`), and an E0601 has a fix by it (S-97).
+    pub(crate) fn effect_written(&self, d: DefId, from: ModId) -> bool {
+        Some(d) == self.alloc || matches!(self.def(d).kind, DefKind::Effect { .. }) && self.modules.is_std(from)
+    }
+
     /// The field `name` of the struct `d`, with its index, when `d` is a
     /// struct of named fields that declares it (§6.1): the first of that
     /// name, as every use of a field reads it (a pattern's reach asks for the
