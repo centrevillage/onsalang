@@ -1,7 +1,7 @@
 //! The entry of the modes stage: one walk of each body the stage reads,
-//! in source order, and its one diagnostic (§18.1).
-
-use std::rc::Rc;
+//! in source order, and its one diagnostic (§18.1). The walker and what it
+//! makes, and the E0704 of a place used after its root moved or a change
+//! it overlaps (`Walker::used`).
 
 use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::internal::bug;
@@ -12,10 +12,10 @@ use super::capture::Frame;
 use super::flow::Run;
 use super::frozen::Frozen;
 use super::place::{Change, Deps, Place, Proj, path_text};
+use super::release::kept;
 use super::state::{LoopSum, Releases, Status};
 use super::walk::Pos;
-use super::write::Of;
-use crate::body::{BodyInfo, DropPoint, Dropped, LocalId, Taken, generics_of, root_of};
+use crate::body::{BodyInfo, DropPoint, LocalId, generics_of, root_of};
 use crate::def::{DefKind, GenericDef};
 use crate::names::body::{BodyNames, Origin};
 use crate::ty::TyId;
@@ -47,21 +47,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
         found.extend(w.m.found.into_iter().min_by(|x, y| x.order_in_file().cmp(&y.order_in_file())));
         // Not of a flow's body (§12.4: its state drops freely; R-453 is W7-04).
         if !matches!(a.def(id).kind, DefKind::Flow(_)) {
-            // A point of a binding released on every path is kept if one of its releases copied (S-1030);
-            // a set the points share is read once.
-            let (reverted, mut moves) = (&w.m.reverted, HashMap::default());
-            debug_assert!(w.m.unless.windows(2).all(|p| p[0].0 < p[1].0), "the points of `unless` in order, once");
-            let gone = (w.m.unless.iter()).filter(|(_, at)| {
-                *moves.entry(Rc::as_ptr(at)).or_insert_with(|| !at.iter().any(|x| reverted.contains(x)))
-            });
-            let (mut gone, mut points, mut k) = (gone.map(|p| p.0).peekable(), w.m.drops, 0);
-            if gone.peek().is_some() {
-                points.retain(|_| {
-                    k += 1;
-                    gone.next_if_eq(&(k - 1)).is_none()
-                });
-            }
-            drops.push((id, points));
+            drops.push((id, kept(w.m.drops, &w.m.unless, &w.m.reverted)));
         }
     }
     a.diagnostics.extend(found);
@@ -140,14 +126,14 @@ pub(super) struct Made {
     pub(super) loops: HashMap<StmtId, LoopSum>,
     pub(super) found: Vec<Diagnostic>,
     /// The paths of fields taken out (S-85), by every walk: the E0704 after.
-    takes: HashMap<Span, Place>,
+    pub(super) takes: HashMap<Span, Place>,
     /// The drop points the walk that reports met ([`BodyInfo::drops`]).
     pub(super) drops: Vec<DropPoint>,
     /// Of a point of a binding released on every path to it, its number
     /// and the releases: it is one only if one of them copies (S-1030).
     pub(super) unless: Vec<(usize, Releases)>,
     /// The releases used after, by every walk: copies (S-1030, [`Walker::restore`]).
-    reverted: HashSet<ExprId>,
+    pub(super) reverted: HashSet<ExprId>,
     /// The expressions visited (at most twice each: by the walk that
     /// reports and by the one that makes a loop's summary).
     #[cfg(test)]
@@ -260,22 +246,6 @@ impl<'a> Walker<'a> {
         false
     }
 
-    /// A place of `l` used (or released in an argument of a call that
-    /// another of its places overlaps, E0702's test,
-    /// `Walker::changed_in_args`): the releases of its root, and of the
-    /// roots it derives from, are copies, and the roots live (§5.2, S-1030:
-    /// used after, by the next iteration or a borrow binding derived from it).
-    /// The one place that decides it. A read before a release in the same
-    /// expression (`s == take(s)`) is not after: that release moves.
-    pub(super) fn restore(&mut self, r: &mut Run, l: LocalId) {
-        let roots = if self.deps.indexed(l) { self.deps.origins(l) } else { Default::default() };
-        for root in roots.into_iter().chain([l]) {
-            if let Some(at) = r.cur.restore(root) {
-                self.m.reverted.extend(at.iter());
-            }
-        }
-    }
-
     /// The note at the binding `l` of the index (§5.4): the places it
     /// derives from directly, as written (a source and the steps of the
     /// pattern; E0704's and E0702's).
@@ -307,31 +277,5 @@ impl<'a> Walker<'a> {
         if self.reports {
             self.m.found.push(d);
         }
-    }
-
-    /// The owned Affine place `p` is moved at `at` (§5.2): its root, also
-    /// when `p` is a path of fields, which it takes out (S-85).
-    pub(super) fn move_place(&mut self, r: &mut Run, p: &Place, at: Span, of: Of) {
-        if !p.proj.is_empty() {
-            self.m.takes.insert(at, p.clone());
-            if p.proj.iter().any(|s| matches!(s, Proj::Index | Proj::Payload)) {
-                bug(Some(at), "a field taken out through an element or a payload")
-            }
-            self.drop_point(r, at, Dropped::Rest(Taken { root: p.root, path: p.proj.clone() }), (true, None));
-        }
-        self.move_local(r, p, at, of);
-    }
-
-    /// The owned Affine local of `p` is moved at `at` (§5.2), the whole (a
-    /// field taken out of it too, S-85): a change (§7) of `of`, after the
-    /// call of an argument. Of a place a `for` or a guard holds, the E0715
-    /// only (S-798).
-    fn move_local(&mut self, r: &mut Run, p: &Place, at: Span, of: Of) {
-        let (l, whole) = (p.root, Place { root: p.root, proj: Vec::new() });
-        if self.held(&whole, at, (!p.proj.is_empty()).then_some(p)) {
-            return self.record(&whole, at, of);
-        }
-        r.cur.change(l, |d| d.moved(l, at));
-        self.change(r, whole, at, of);
     }
 }

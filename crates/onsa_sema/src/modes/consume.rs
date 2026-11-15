@@ -3,6 +3,7 @@
 //! `move` mark. An erroneous consumption moves nothing (§18.1: a later
 //! diagnostic is then no symptom of it).
 
+use onsa_diag::internal::bug;
 use onsa_diag::{Code, Diagnostic, FileId, Fix, Span, Stage};
 use onsa_syntax::ast::ExprId;
 
@@ -13,6 +14,7 @@ use super::walk::Pos;
 use super::write::Of;
 use crate::Kind;
 use crate::binding::Bind;
+use crate::body::{Dropped, Taken};
 use crate::ty::TyId;
 
 /// S-784, S-785: at `?` and a `move self` receiver, how to read the value
@@ -138,21 +140,30 @@ impl Walker<'_> {
         }
     }
 
-    /// The place `p` of a Dup value of the kind `kind`, consumed by `x` (at
-    /// any consuming position): released (§5.2, R-255, S-1030: moved unless
-    /// used after, `Walker::restore`) if it is the whole of an owned
-    /// binding, not Copy, and not held by a borrowed `for` or a guard
-    /// (E0715's test); else copied. In the arguments of a call, recorded
-    /// (by every walk) for [`Walker::changed_in_args`].
-    fn release(&mut self, r: &mut Run, p: &Place, (x, at): (ExprId, Span), kind: Kind) {
-        let l = p.root;
-        let owned = self.info.locals[l.0 as usize].state.owned() && p.proj.is_empty();
-        if kind != Kind::Copy && owned && !self.holds(p) {
-            r.cur.change(l, |d| d.released(l, x));
-            if self.inside.calls > 0 {
-                self.inside.changes.push((p.clone(), at, None, true));
+    /// The owned Affine place `p` is moved at `at` (§5.2): its root, also
+    /// when `p` is a path of fields, which it takes out (S-85).
+    pub(super) fn move_place(&mut self, r: &mut Run, p: &Place, at: Span, of: Of) {
+        if !p.proj.is_empty() {
+            self.m.takes.insert(at, p.clone());
+            if p.proj.iter().any(|s| matches!(s, Proj::Index | Proj::Payload)) {
+                bug(Some(at), "a field taken out through an element or a payload")
             }
+            self.drop_point(r, at, Dropped::Rest(Taken { root: p.root, path: p.proj.clone() }), (true, None));
         }
+        self.move_local(r, p, at, of);
+    }
+
+    /// The owned Affine local of `p` is moved at `at` (§5.2), the whole (a
+    /// field taken out of it too, S-85): a change (§7) of `of`, after the
+    /// call of an argument. Of a place a `for` or a guard holds, the E0715
+    /// only (S-798).
+    fn move_local(&mut self, r: &mut Run, p: &Place, at: Span, of: Of) {
+        let (l, whole) = (p.root, Place { root: p.root, proj: Vec::new() });
+        if self.held(&whole, at, (!p.proj.is_empty()).then_some(p)) {
+            return self.record(&whole, at, of);
+        }
+        r.cur.change(l, |d| d.moved(l, at));
+        self.change(r, whole, at, of);
     }
 
     /// `move e` at `pos` (`e` its operand, a tail where it is not the

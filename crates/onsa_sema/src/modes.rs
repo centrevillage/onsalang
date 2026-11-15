@@ -8,11 +8,13 @@ mod calls;
 mod capture;
 mod check;
 mod consume;
+mod drops;
 mod exclusive;
 mod flow;
 mod frozen;
 mod marks;
 mod place;
+mod release;
 mod second;
 mod state;
 #[cfg(test)]
