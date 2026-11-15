@@ -17,9 +17,12 @@ many passed, and one that fails or does not run is a problem of the case (withou
 --work  a scratch directory of the caller, emptied first: an absolute path outside the tree and this repository
         (and its main tree, run from a work tree), neither in them nor holding them; any other is refused with
         exit 1, nothing removed
+The golden files a case declares (`golden`, `golden_graph`, read from the runner's list of the cases copied) are
+copied to the same places under the work directory, so they are compared as in the test.
 The runner does not read tests/pending.toml, so a case listed there fails here as it fails without the list.
-It writes no copy either (the `.fixK` of a case): they are made by
+It writes no copy either (the `.fixK` of a case, a golden file): they are made by
 `UPDATE_GOLDEN=1 cargo test -p onsa_tests --test cases`, which runs every case (about 5 s).
+A problem is printed whole, its lines indented.
 Exit 0 when every case passes, 1 otherwise (without the runner too: a line says which path is not there).
 """
 import argparse
@@ -61,6 +64,15 @@ def host_note(case, ran) -> str:
     return f" ({passed} of {len(names)} host sequence(s) passed)"
 
 
+def declared(case):
+    """The golden files under tests/golden/ that `case` (of the runner's list) declares, as `golden::declared` of
+    crates/onsa_tests/src/golden.rs names them."""
+    n, kinds = case["name"], case.get("golden", [])
+    out = [{"core": f"core/{n}.core", "interface": f"interface/{n}.txt"}[k] for k in kinds if k != "c"]
+    out += [f"c/{n}.{t}.{e}" for t in case.get("targets", []) if "c" in kinds for e in "ch"]
+    return out + [f"graph/{n}.{f}.dot" for f in case.get("golden_graph", [])]
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--tree", default=str(Path(__file__).resolve().parent.parent))
@@ -91,6 +103,16 @@ def main(argv=None) -> int:
             dst = os.path.join(a.work, "tests", os.path.relpath(f, tests))
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             shutil.copy(f, dst)
+    listed = subprocess.run([runner, a.work], capture_output=True, text=True, timeout=600)
+    try:
+        golden = sorted({g for c in json.loads(listed.stdout) for g in declared(c)})
+    except json.JSONDecodeError:
+        print("the runner did not list the cases:", listed.stdout[:2000], listed.stderr[:2000])
+        return 1
+    for g in golden:
+        if os.path.isfile(src := os.path.join(tests, "golden", g)):  # one missing is the run's problem
+            os.makedirs(os.path.dirname(dst := os.path.join(a.work, "tests", "golden", g)), exist_ok=True)
+            shutil.copy(src, dst)
     r = subprocess.run([runner, "--run", *(["--hosts"] if a.hosts else []), a.work],
                        capture_output=True, text=True, timeout=600)  # fmt: skip
     try:
@@ -108,7 +130,7 @@ def main(argv=None) -> int:
         failed += bool(problems)
         print(("FAIL " if problems else "ok   ") + c.get("path", c.get("name", "?")) + host_note(c, a.hosts))
         for p in problems:
-            print("     ", str(p)[:400])
+            print("      " + str(p).replace("\n", "\n      "))
     return 1 if failed else 0
 
 

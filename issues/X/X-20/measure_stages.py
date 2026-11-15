@@ -4,6 +4,10 @@
   measure_stages.py scale BIN OUT.jsonl    a usual file (tests/spec/examples/voice.onsa) times 1 to 16
   measure_stages.py quad BIN OUT.jsonl [NAME...]  the quadratic forms left to X-20 by W4-05 to W4-10, and R-386
   measure_stages.py report OUT.jsonl...    the sums, the slowest inputs, the growth by family
+  measure_stages.py compare A.jsonl B.jsonl... [--phases P,Q]  versions side by side (W6-04 U11): per set and
+      size (a corpus: the sum of the inputs every version timed, then its 20 slowest), each version's ms of the
+      total and of the phases (P,Q, else those over 5 % somewhere; nan where a version has not the phase),
+      rss MB and wall ms; with two, B/A
 
 BIN is an `onsa_cases` (debug or release). Each input is checked (and lowered to Core when the
 check reports nothing, `--lower`) in its own process, ROUNDS times (default 1, `--rounds`); a line
@@ -25,6 +29,7 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 TIMEOUT = 120
 GROW_LIMIT = 10.0
+NAN = float("nan")  # `compare`: a phase a version does not have (shown as nan, not 0)
 
 
 def run_once(binary, path, lower=True):
@@ -383,6 +388,31 @@ def family_report(name, rs):
               + " ".join(f"{slope(a['phases_us'][p], b['phases_us'][p]):>8}" for p in phases))
 
 
+def compare(files, chosen):
+    vs = [[json.loads(l) for l in open(f)] for f in files]
+    names = [chr(ord("A") + i) for i in range(len(files))]
+    print("versions: " + ", ".join(f"{n} {f} ({sum(not r.get('phases_us') for r in v)} without a line)"
+                                   for n, f, v in zip(names, files, vs)))
+    for s in sorted({r.get("set") for v in vs for r in v}, key=str):
+        by = [{r.get("size", r["path"]): r for r in v if r.get("set") == s and r.get("phases_us")} for v in vs]
+        rs = [r for b in by for r in b.values()]
+        phases = chosen or sorted({p for r in rs for p, us in r["phases_us"].items() if us > r["total_us"] / 20})
+        cols = lambda r: [r["total_us"] / 1e3] + [r["phases_us"].get(p, NAN) / 1e3 for p in phases] + [
+            r["rss_mb"], r["wall"] * 1e3]  # noqa: E731
+        keys = sorted({k for b in by for k in b}, key=lambda k: (str(type(k)), k))
+        rows = [(k, [cols(b[k]) if k in b else None for b in by]) for k in keys]
+        if s == "corpus":
+            both = [k for k in keys if all(k in b for b in by)]
+            total = [[(max if i == len(phases) + 1 else sum)(x) for i, x in enumerate(zip(*map(cols, map(b.get, both))))] for b in by]
+            rows = [(f"(sum of {len(both)}; rss: max)", total)] + sorted(rows, key=lambda kr: -max(c[0] for c in kr[1] if c))[:20]
+        print(f"\n{s} (ms, rss MB)\n  {'':>48} " + " ".join(f"{h[:9]:>9}" for h in ["total", *phases, "rss MB", "wall"]))
+        for k, vals in rows:
+            for n, v in zip(names, vals):
+                print(f"  {str(k)[-44:]:>44} {n:>3} " + (" ".join(f"{x:9.1f}" for x in v) if v else "  -"))
+            if len(vals) == 2 and all(vals):
+                print(f"  {'':>44} B/A " + " ".join(f"{y / x:9.2f}" if x else "        -" for x, y in zip(*vals)))
+
+
 def main():
     argv = sys.argv[1:]
     rounds = 1  # the user, 2026-11-02: once is enough; the noise is the machine's load, which more rounds do not take away
@@ -390,11 +420,18 @@ def main():
         i = argv.index("--rounds")
         rounds = int(argv[i + 1])
         del argv[i:i + 2]
+    phases = []
+    if "--phases" in argv:
+        i = argv.index("--phases")
+        phases = argv[i + 1].split(",")
+        del argv[i:i + 2]
     if not argv:
         sys.exit(__doc__)
     cmd, rest = argv[0], argv[1:]
     if cmd == "report":
         report(rest)
+    elif cmd == "compare" and rest:
+        compare(rest, phases)
     elif cmd in ("corpus", "scale", "quad") and len(rest) >= 2:
         binary = os.path.abspath(rest[0])
         if cmd == "corpus":
