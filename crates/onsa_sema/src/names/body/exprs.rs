@@ -47,6 +47,11 @@ impl Walker<'_> {
         let ast = self.ast;
         match &ast.expr(e).kind {
             ExprKind::Lit(Lit::Str(s)) => self.interp(e, s),
+            ExprKind::Path(_) | ExprKind::Field { .. } | ExprKind::TypeArgs { .. } if self.flow => {
+                let sites = self.type_sites.len();
+                self.name_at(e, Place::Value)?;
+                self.function_value(e, sites)
+            }
             ExprKind::Path(_) | ExprKind::Field { .. } | ExprKind::TypeArgs { .. } => self.name_at(e, Place::Value),
             ExprKind::Call { callee, kind, args } => self.call(e, *callee, *kind, args),
             ExprKind::Index { .. } => self.index(e, super::calls::Square::Value),
@@ -94,14 +99,24 @@ impl Walker<'_> {
                 self.struct_lit(e, path, type_args, rest.is_some())?;
                 self.exprs(ast.sub_exprs(e))
             }
-            // A block with statements in a flow body is the flow stage's
-            // E0806 (`Self::stmt`).
-            ExprKind::Block(b) if self.flow && !b.stmts.is_empty() => self.later(),
+            // What a flow body cannot contain (§11.2, `flow_forms.rs`): a
+            // block with statements, an anonymous function, `?`, `move`,
+            // `handle`, `unsafe`.
+            ExprKind::Closure { .. }
+            | ExprKind::Try(_)
+            | ExprKind::Move(_)
+            | ExprKind::Handle { .. }
+            | ExprKind::Unsafe(_)
+                if self.flow =>
+            {
+                self.flow_expr(e)
+            }
+            ExprKind::Block(b) if self.flow => {
+                self.flow_expr(e)?;
+                self.block(b)
+            }
             ExprKind::Block(b) => self.block(b),
             ExprKind::Match { scrutinee, arms, .. } => self.match_arms(*scrutinee, arms),
-            // What a flow body cannot contain (§11.2) and the flow stage
-            // reports as its E0806 until W7-04 reports it here (S-267).
-            ExprKind::Closure { .. } | ExprKind::Try(_) | ExprKind::Move(_) if self.flow => self.later(),
             ExprKind::Closure { params, ret, ret_clock, body, effects } => {
                 self.closure(e, params, (*ret, ret_clock.as_ref()), effects.is_some(), *body)
             }
@@ -229,10 +244,9 @@ impl Walker<'_> {
 
     pub(super) fn stmt(&mut self, s: StmtId) -> W {
         // A flow body holds `let`s at its top level only, which `walk_flow`
-        // walks itself; any other statement is the flow stage's E0806 until
-        // W7-04 reports it here (§11.2, S-267).
+        // walks itself; any other statement is its E0806 (§11.2).
         if self.flow {
-            return Err(self.fail(Fail::Later));
+            return Err(self.flow_stmt(s, false));
         }
         let ast = self.ast;
         match &ast.stmt(s).kind {

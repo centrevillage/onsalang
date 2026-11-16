@@ -1,0 +1,284 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§5.2", "§18.1"]
+
+// W7-04 U1a/t, R-342, S-125, S-267: an `inout` or `move` argument is a form a flow body cannot contain (E0806, §11.2: "`inout` / `move` の引数").
+// First the arguments of an instance and a delay (`lp~(inout x)`, `prev~(move x)`, `delay~(move x, 2)`), and the name errors before
+// a call with such an argument, where the name error is reported (the first by position of the names stage, §18.1). The arguments of a call of a
+// function and a method (R-342) are at the end of the file. One error per unit.
+
+pub struct Acc {
+  v: F32,
+}
+
+impl Acc {
+  pub rt fn add(self, inout t: F32) -> F32 {
+    t
+  }
+
+  pub rt fn take(self, move t: F32) -> F32 {
+    t
+  }
+}
+
+pub rt fn h(inout v: F32) -> F32 {
+  v
+}
+
+pub rt fn m(move v: F32) -> F32 {
+  v
+}
+
+pub rt fn both(a: F32, inout b: F32, move c: F32) -> F32 {
+  a
+}
+
+pub rt fn g(v: F32) -> F32 {
+  v
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow inout_argument_of_an_instance(x: F32 at sample) -> F32 at sample {
+  let a = lp~(inout x)                              //~ E0806
+  a
+}
+
+pub flow move_argument_of_an_instance(x: F32 at sample) -> F32 at sample {
+  let a = lp~(move x)                               //~ E0806
+  a
+}
+
+pub flow inout_argument_of_a_delay(x: F32 at sample) -> F32 at sample {
+  let a = prev~(inout x)                            //~ E0806
+  a
+}
+
+pub flow move_argument_of_a_delay(x: F32 at sample) -> F32 at sample {
+  let a = delay~(move x, 2)                         //~ E0806
+  a
+}
+
+pub flow instance_inout_then_name(x: F32 at sample) -> F32 at sample {
+  let a = lp~(inout x)                              //~ E0806
+  let z = nope
+  a + z
+}
+
+pub flow delay_move_then_name(x: F32 at sample) -> F32 at sample {
+  let a = prev~(move x)                             //~ E0806
+  let z = nope
+  a + z
+}
+
+pub flow inout_with_a_name_error_before_it_in_the_call(x: F32 at sample) -> F32 at sample {
+  let a = both(nope, inout x, move x)              //~ E0302
+  a
+}
+
+pub flow name_then_inout(x: F32 at sample) -> F32 at sample {
+  let z = nope                                      //~ E0302
+  let a = h(inout x)
+  a + z
+}
+
+pub flow name_then_move(x: F32 at sample) -> F32 at sample {
+  let z = nope                                      //~ E0302
+  let a = m(move x)
+  a + z
+}
+
+pub flow name_then_method_inout(x: F32 at sample) -> F32 at sample {
+  let z = nope                                      //~ E0302
+  let c = Acc { v: x }
+  let a = c.add(inout x)
+  a + z
+}
+
+pub flow duplicate_then_inout(x: F32 at sample) -> F32 at sample {
+  let a = x
+  let a = x                                         //~ E0304
+  let b = h(inout x)
+  a + b
+}
+
+pub flow var_then_inout(x: F32 at sample) -> F32 at sample {
+  var b = x                                         //~ E0806
+  let a = h(inout x)
+  a + b
+}
+
+pub flow function_value_then_inout(x: F32 at sample) -> F32 at sample {
+  let k = g                                         //~ E0806
+  let a = h(inout x)
+  a
+}
+
+pub flow inout_argument_of_a_function(x: F32 at sample) -> F32 at sample {
+  let a = h(inout x)                                //~ E0806
+  a
+}
+
+pub flow move_argument_of_a_function(x: F32 at sample) -> F32 at sample {
+  let a = m(move x)                                 //~ E0806
+  a
+}
+
+pub flow inout_and_move_arguments_of_a_function(x: F32 at sample) -> F32 at sample {
+  let a = both(x, inout x, move x)                  //~ E0806
+  a
+}
+
+pub flow inout_argument_as_the_output(x: F32 at sample) -> F32 at sample {
+  h(inout x)                                        //~ E0806
+}
+
+pub flow move_argument_as_the_output(x: F32 at sample) -> F32 at sample {
+  m(move x)                                         //~ E0806
+}
+
+pub flow inout_argument_of_a_method(x: F32 at sample) -> F32 at sample {
+  let c = Acc { v: x }
+  let a = c.add(inout x)                            //~ E0806
+  a
+}
+
+pub flow move_argument_of_a_method(x: F32 at sample) -> F32 at sample {
+  let c = Acc { v: x }
+  let a = c.take(move x)                            //~ E0806
+  a
+}
+
+pub flow inout_argument_inside_an_argument(x: F32 at sample) -> F32 at sample {
+  let a = g(h(inout x))                             //~ E0806
+  a
+}
+
+pub flow inout_argument_inside_an_instance_argument(x: F32 at sample) -> F32 at sample {
+  let a = lp~(h(inout x))                           //~ E0806
+  a
+}
+
+pub flow move_argument_inside_a_delay_argument(x: F32 at sample) -> F32 at sample {
+  let a = prev~(m(move x))                          //~ E0806
+  a
+}
+
+pub flow inout_argument_in_an_operand(x: F32 at sample) -> F32 at sample {
+  let a = 1.0 + h(inout x) * 2.0                    //~ E0806
+  a
+}
+
+pub flow inout_argument_in_an_if_arm(x: F32 at sample) -> F32 at sample {
+  let a = if x > 0.0 { h(inout x) } else { x }      //~ E0806
+  a
+}
+
+pub flow move_argument_in_a_match_arm(x: F32 at sample) -> F32 at sample {
+  let a = match x > 0.0 {
+    true => m(move x),                              //~ E0806
+    false => x,
+  }
+  a
+}
+
+pub flow inout_argument_in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { h(inout x) }         //~ E0806
+  ys[0]
+}
+
+pub flow inout_argument_in_a_condition(x: F32 at sample) -> F32 at sample {
+  let a = if h(inout x) > 0.0 { x } else { 0.0 }    //~ E0806
+  a
+}
+
+pub flow inout_argument_in_a_tuple(x: F32 at sample) -> F32 at sample {
+  let (a, b) = (x, h(inout x))                      //~ E0806
+  a
+}
+
+pub flow inout_argument_in_a_field(x: F32 at sample) -> F32 at sample {
+  let c = Acc { v: h(inout x) }                     //~ E0806
+  c.v
+}
+
+pub flow inout_then_name(x: F32 at sample) -> F32 at sample {
+  let a = h(inout x)                                //~ E0806
+  let z = nope
+  a + z
+}
+
+pub flow move_then_name(x: F32 at sample) -> F32 at sample {
+  let a = m(move x)                                 //~ E0806
+  let z = nope
+  a + z
+}
+
+pub flow method_inout_then_name(x: F32 at sample) -> F32 at sample {
+  let c = Acc { v: x }
+  let a = c.add(inout x)                            //~ E0806
+  let z = nope
+  a + z
+}
+
+pub flow nested_inout_then_name(x: F32 at sample) -> F32 at sample {
+  let a = g(h(inout x))                             //~ E0806
+  let z = nope
+  a + z
+}
+
+pub flow inout_then_duplicate(x: F32 at sample) -> F32 at sample {
+  let a = h(inout x)                                //~ E0806
+  let a = x
+  a
+}
+
+pub flow type_then_inout(x: F32 at sample) -> F32 at sample {
+  let t: Bool = x
+  let a = h(inout x)                                //~ E0806
+  a
+}
+
+pub flow type_then_move(x: F32 at sample) -> F32 at sample {
+  let t: Bool = x
+  let a = m(move x)                                 //~ E0806
+  a
+}
+
+pub flow type_then_method_move(x: F32 at sample) -> F32 at sample {
+  let t: Bool = x
+  let c = Acc { v: x }
+  let a = c.take(move x)                            //~ E0806
+  a
+}
+
+pub flow inout_then_type(x: F32 at sample) -> F32 at sample {
+  let a = h(inout x)                                //~ E0806
+  let t: Bool = x
+  a
+}
+
+pub flow move_then_type(x: F32 at sample) -> F32 at sample {
+  let a = m(move x)                                 //~ E0806
+  let t: Bool = x
+  a
+}
+
+pub flow inout_with_a_wrong_annotation(x: F32 at sample) -> F32 at sample {
+  let a: Bool = h(inout x)                          //~ E0806
+  x
+}
+
+pub flow inout_then_var(x: F32 at sample) -> F32 at sample {
+  let a = h(inout x)                                //~ E0806
+  var b = x
+  a + b
+}
+
+pub flow inout_then_function_value(x: F32 at sample) -> F32 at sample {
+  let a = h(inout x)                                //~ E0806
+  let k = g
+  a
+}

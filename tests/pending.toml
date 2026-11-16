@@ -394,13 +394,6 @@ note = "at と、struct の出力の flow に process_inplace が無い（4 引�
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/negative/flow_enum_values.onsa"
-reasons = ["S-102", "S-195"]
-until = "W7-04"
-note = "列挙子を関数値として使う形の E0806 が出ない"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/negative/flow_inplace_absent.onsa"
 reasons = ["S-102", "S-197", "R-147"]
 until = "W7-12"
@@ -1195,3 +1188,10 @@ target = "tests/spec/control/fixed_str_match_value.onsa"
 reasons = ["S-614"]
 until = "W8-06"
 note = "値の形の `match`（腕が値を返す）は、整数のリテラルと同じく Core で E0200（ValueMatch）。W8-06 で降ろす。"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/flow_e0806_names_after_e0801.onsa"
+reasons = ["S-267", "S-116"]
+until = "W7-04"
+note = "E0801 が U2 まで flow の段に残り、後ろの E0806（名前の段）が先に出る（U1a の一時の形、U2 が外す）"

@@ -1,0 +1,190 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§18.1"]
+
+// W7-04 U1a/t, S-125, S-267: the forms a flow body cannot contain (E0806, §11.2) when two are in a unit, when one is inside another and when
+// one is in a nested position (the arm of an `if` and a `match`, a `par~` body, a tuple, an array, an index, the argument of a call, a condition).
+// The first by position is reported, and a form inside another form is reported at the outer one: the position of E0806 is the start of the
+// form. One error per unit (§18.1). The function values (`x + g`, `lp~(id::[F32])`, one before `?`) are at the end of the file.
+
+pub rt fn g(v: F32) -> F32 {
+  v
+}
+
+pub rt fn pick(v: F32) -> Option[F32] {
+  Some(v)
+}
+
+pub rt fn id[T](v: T) -> T {
+  v
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow var_then_for(x: F32 at sample) -> F32 at sample {
+  var a = x                                         //~ E0806
+  for i in 0 ..< 2 { }
+  a
+}
+
+pub flow for_then_var(x: F32 at sample) -> F32 at sample {
+  for i in 0 ..< 2 { }                              //~ E0806
+  var a = x
+  a
+}
+
+pub flow closure_then_assign(x: F32 at sample) -> F32 at sample {
+  let a = x
+  let k = fn(v: F32) -> F32 { v }                   //~ E0806
+  a = x
+  a
+}
+
+pub flow assign_then_closure(x: F32 at sample) -> F32 at sample {
+  let a = x
+  a = x                                             //~ E0806
+  let k = fn(v: F32) -> F32 { v }
+  a
+}
+
+pub flow nested_let_then_var(x: F32 at sample) -> F32 at sample {
+  let y = if x > 0.0 {
+    let q = x                                       //~ E0806
+    q
+  } else {
+    x
+  }
+  var a = y
+  a
+}
+
+pub flow var_then_nested_let(x: F32 at sample) -> F32 at sample {
+  var a = x                                         //~ E0806
+  let y = if x > 0.0 {
+    let q = x
+    q
+  } else {
+    x
+  }
+  y
+}
+
+pub flow try_then_function_value(x: F32 at sample) -> F32 at sample {
+  let a = pick(x)?                                  //~ E0806
+  let k = g
+  x
+}
+
+pub flow two_forms_in_one_let(x: F32 at sample) -> F32 at sample {
+  let a = g + pick(x)?                              //~ E0806
+  x
+}
+
+pub flow two_forms_in_one_expression_statement(x: F32 at sample) -> F32 at sample {
+  pick(x)? + g                                      //~ E0806
+  x
+}
+
+pub flow var_inside_a_closure(x: F32 at sample) -> F32 at sample {
+  let k = fn(v: F32) -> F32 {                       //~ E0806
+    var w = v
+    w
+  }
+  x
+}
+
+pub flow for_inside_a_closure(x: F32 at sample) -> F32 at sample {
+  let k = fn(v: F32) -> F32 {                       //~ E0806
+    for i in 0 ..< 2 { }
+    v
+  }
+  x
+}
+
+pub flow closure_inside_a_closure(x: F32 at sample) -> F32 at sample {
+  let k = fn(v: F32) -> F32 { fn(w: F32) -> F32 { w } }   //~ E0806
+  x
+}
+
+pub flow assign_inside_a_for(x: F32 at sample) -> F32 at sample {
+  var a = x                                         //~ E0806
+  for i in 0 ..< 2 { a = x }
+  a
+}
+
+pub flow for_with_a_closure_in_its_range(x: F32 at sample) -> F32 at sample {
+  for i in 0 ..< id(fn(v: F32) -> F32 { v }) { }    //~ E0806
+  x
+}
+
+pub flow try_inside_a_closure(x: F32 at sample) -> F32 at sample {
+  let k = fn(v: F32) -> Option[F32] { pick(v)? }    //~ E0806
+  x
+}
+
+pub flow function_value_in_an_if_arm(x: F32 at sample) -> F32 at sample {
+  let k = if x > 0.0 { g } else { g }               //~ E0806
+  x
+}
+
+pub flow function_value_in_a_match_arm(x: F32 at sample) -> F32 at sample {
+  let k = match x > 0.0 {
+    true => g,                                      //~ E0806
+    false => g,
+  }
+  x
+}
+
+pub flow function_value_in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ks = par~ i in 0 ..< 2 { g }                  //~ E0806
+  x
+}
+
+pub flow closure_in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ks = par~ i in 0 ..< 2 { fn(v: F32) -> F32 { v } }   //~ E0806
+  x
+}
+
+pub flow closure_in_a_condition(x: F32 at sample) -> F32 at sample {
+  let a = if lp~(fn(v: F32) -> F32 { v }) > 0.0 { x } else { x }   //~ E0806
+  x
+}
+
+pub flow function_value_in_a_tuple(x: F32 at sample) -> F32 at sample {
+  let (a, b) = (x, g)                               //~ E0806
+  a
+}
+
+pub flow function_value_in_an_array(x: F32 at sample) -> F32 at sample {
+  let ks = [g, g]                                   //~ E0806
+  x
+}
+
+pub flow function_value_as_an_argument_of_a_generic_call(x: F32 at sample) -> F32 at sample {
+  let a = id(g)                                     //~ E0806
+  x
+}
+
+pub flow closure_in_an_index(x: F32 at sample) -> F32 at sample {
+  let ys = [x, x]
+  let a = ys[id(fn(v: U32) -> U32 { v })]           //~ E0806
+  a
+}
+
+pub flow function_value_then_try(x: F32 at sample) -> F32 at sample {
+  let k = g                                         //~ E0806
+  let a = pick(x)?
+  x
+}
+
+pub flow function_value_in_an_operand(x: F32 at sample) -> F32 at sample {
+  let a = x + g                                     //~ E0806
+  a
+}
+
+pub flow generic_function_value_as_an_argument(x: F32 at sample) -> F32 at sample {
+  let a = lp~(id::[F32])                            //~ E0806
+  x
+}

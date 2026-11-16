@@ -1,0 +1,172 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§18.1"]
+
+// W7-04 U1a/t, S-125, S-267, R-286: a name that is not found (E0302) or defined twice (E0304) before a form a flow body cannot contain
+// (E0806, §11.2). All of them are errors of the names stage (§18.1), so the first by position is reported, the name error, and
+// the form after it is not. The name error is in an earlier `let` or earlier in the same `let` (`nope + g`). The same forms with the
+// E0806 first are in flow_e0806_names_later_name_error.onsa. One error per unit.
+
+pub enum Mode {
+  Off,
+  Gain(F32),
+}
+
+pub rt fn g(v: F32) -> F32 {
+  v
+}
+
+pub rt fn pick(v: F32) -> Option[F32] {
+  Some(v)
+}
+
+pub rt fn id[T](v: T) -> T {
+  v
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow name_then_var(x: F32 at sample) -> F32 at sample {
+  let z = nope                                      //~ E0302
+  var a = x
+  a + z
+}
+
+pub flow name_then_assign(x: F32 at sample) -> F32 at sample {
+  let a = x
+  let z = nope                                      //~ E0302
+  a = x
+  a + z
+}
+
+pub flow name_then_for(x: F32 at sample) -> F32 at sample {
+  let z = nope                                      //~ E0302
+  for i in 0 ..< 2 { }
+  x + z
+}
+
+pub flow name_then_while(x: F32 at sample) -> F32 at sample {
+  let z = nope                                      //~ E0302
+  while x > 0.0 { }
+  x + z
+}
+
+pub flow name_then_return(x: F32 at sample) -> F32 at sample {
+  let z = nope                                      //~ E0302
+  return x
+  x + z
+}
+
+pub flow name_then_try(x: F32 at sample) -> F32 at sample {
+  let z = nope                                      //~ E0302
+  let a = pick(x)?
+  x + z
+}
+
+pub flow name_then_assert(x: F32 at sample) -> F32 at sample {
+  let z = nope                                      //~ E0302
+  assert x > 0.0
+  x + z
+}
+
+pub flow name_then_function_value(x: F32 at sample) -> F32 at sample {
+  let z = nope                                      //~ E0302
+  let k = g
+  x + z
+}
+
+pub flow name_then_variant_as_a_value(x: F32 at sample) -> F32 at sample {
+  let z = nope                                      //~ E0302
+  let k = Mode.Gain
+  x + z
+}
+
+pub flow name_then_closure(x: F32 at sample) -> F32 at sample {
+  let z = nope                                      //~ E0302
+  let k = fn(v: F32) -> F32 { v }
+  x + z
+}
+
+pub flow name_then_handle(x: F32 at sample) -> F32 at sample {
+  let z = nope                                      //~ E0302
+  let k = handle { x } with quiet
+  x + z
+}
+
+pub flow name_then_unsafe(x: F32 at sample) -> F32 at sample {
+  let z = nope                                      //~ E0302
+  let k = unsafe { x }
+  x + z
+}
+
+pub flow name_then_move(x: F32 at sample) -> F32 at sample {
+  let z = nope                                      //~ E0302
+  let a = move x
+  a + z
+}
+
+pub flow name_then_nested_let(x: F32 at sample) -> F32 at sample {
+  let z = nope                                      //~ E0302
+  let y = if x > 0.0 {
+    let q = x
+    q
+  } else {
+    x
+  }
+  y + z
+}
+
+pub flow name_then_nested_let_in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let z = nope                                      //~ E0302
+  let ys = par~ i in 0 ..< 2 {
+    let q = x
+    q
+  }
+  ys[0] + z
+}
+
+pub flow name_before_the_form_in_the_same_let(x: F32 at sample) -> F32 at sample {
+  let z = nope + g                                  //~ E0302
+  x + z
+}
+
+pub flow name_before_the_closure_in_the_same_let(x: F32 at sample) -> F32 at sample {
+  let z = nope + (fn(v: F32) -> F32 { v })          //~ E0302
+  x
+}
+
+pub flow duplicate_then_for(x: F32 at sample) -> F32 at sample {
+  let a = x
+  let a = x                                         //~ E0304
+  for i in 0 ..< 2 { }
+  a
+}
+
+pub flow duplicate_then_closure(x: F32 at sample) -> F32 at sample {
+  let a = x
+  let a = x                                         //~ E0304
+  let k = fn(v: F32) -> F32 { v }
+  a
+}
+
+pub flow duplicate_then_function_value(x: F32 at sample) -> F32 at sample {
+  let a = x
+  let a = x                                         //~ E0304
+  let k = g
+  a
+}
+
+pub flow duplicate_then_assign(x: F32 at sample) -> F32 at sample {
+  let a = x
+  let a = x                                         //~ E0304
+  a = x
+  a
+}
+
+pub flow name_in_the_closure_row_then_closure(x: F32 at sample) -> F32 at sample {
+  let z = nope                                      //~ E0302
+  let k = fn(y: F32) -> F32 uses {Nope} { y }
+  x + z
+}

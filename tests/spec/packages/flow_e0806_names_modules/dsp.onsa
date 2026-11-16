@@ -1,0 +1,52 @@
+pub enum Mode {
+  Off,
+  Gain(F32),
+}
+
+pub rt fn gain(v: F32) -> F32 {
+  v
+}
+
+pub rt fn smooth(inout v: F32) -> F32 {
+  v
+}
+
+pub rt fn hold(move v: F32) -> F32 {
+  v
+}
+
+pub rt fn amount(m: Mode, x: F32) -> F32 {
+  match m {
+    Mode.Off => 0.0,
+    Mode.Gain(k) => x * k,
+  }
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow var_then_name_in_a_module(x: F32 at sample) -> F32 at sample {
+  var a = x                                         //~ E0806
+  let z = nope
+  a + z
+}
+
+pub flow assign_then_name_in_a_module(x: F32 at sample) -> F32 at sample {
+  let a = x
+  a = x                                             //~ E0806
+  let z = nope
+  a + z
+}
+
+pub flow closure_then_name_in_a_module(x: F32 at sample) -> F32 at sample {
+  let k = fn(v: F32) -> F32 { v }                   //~ E0806
+  let z = nope
+  x + z
+}
+
+pub flow function_value_then_name_in_a_module(x: F32 at sample) -> F32 at sample {
+  let k = gain                                      //~ E0806
+  let z = nope
+  x + z
+}

@@ -220,13 +220,9 @@ impl<'a> Rater<'a> {
             Target::Local(id) => self.rate_of_local(*id),
             Target::Const { .. } | Target::ConstParam(_) | Target::Variant { .. } => FlowRate::Const,
             Target::Panic => FlowRate::Const,
+            // The names stage reported a function value (E0806, S-195).
             Target::Fn { .. } | Target::Method { .. } | Target::Value => {
-                let span = self.expr(e).span;
-                return Err(self.err(
-                    Code::E0806,
-                    span,
-                    "a flow body cannot contain function values; call the function directly (§11.2)",
-                ));
+                onsa_diag::internal::bug(Some(self.expr(e).span), "a function value the names stage passed")
             }
         }))
     }

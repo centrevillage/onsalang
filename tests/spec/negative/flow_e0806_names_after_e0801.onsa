@@ -1,0 +1,102 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§18.1"]
+
+// W7-04 U1a/t, S-116, S-267: an E0801 (a name used before its `let`, §11.2; also a `^` outside a delay) before a form a flow body cannot contain (E0806,
+// §11.2). The E0801 is reported: it is the first by position, and an error of the names stage ("flow の本体の名前の順（E0801 …）", §18.1).
+// While the E0801 is still found by the flow stage (until W7-04 U2) and the E0806 is found by the names stage (from W7-04 U1a), the unit reports the
+// E0806: these cases pass before U1a and fail between U1a and U2, so the implementation of U1a lists this file as pending until W7-04, and U2
+// takes it out. The cases with the E0806 first are in flow_e0806_names_other_codes.onsa. One error per unit.
+
+pub rt fn g(v: F32) -> F32 {
+  v
+}
+
+pub rt fn pick(v: F32) -> Option[F32] {
+  Some(v)
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow forward_then_var(x: F32 at sample) -> F32 at sample {
+  let a = b                                         //~ E0801
+  let b = x
+  var c = x
+  a
+}
+
+pub flow forward_then_for(x: F32 at sample) -> F32 at sample {
+  let a = b                                         //~ E0801
+  let b = x
+  for i in 0 ..< 2 { }
+  a
+}
+
+pub flow forward_then_closure(x: F32 at sample) -> F32 at sample {
+  let a = b                                         //~ E0801
+  let b = x
+  let k = fn(v: F32) -> F32 { v }
+  a
+}
+
+pub flow forward_then_function_value(x: F32 at sample) -> F32 at sample {
+  let a = b                                         //~ E0801
+  let b = x
+  let k = g
+  a
+}
+
+pub flow forward_then_assign(x: F32 at sample) -> F32 at sample {
+  let a = b                                         //~ E0801
+  let b = x
+  b = x
+  a
+}
+
+pub flow forward_then_try(x: F32 at sample) -> F32 at sample {
+  let a = b                                         //~ E0801
+  let b = x
+  let c = pick(x)?
+  a
+}
+
+pub flow forward_then_nested_let(x: F32 at sample) -> F32 at sample {
+  let a = b                                         //~ E0801
+  let b = x
+  let y = if x > 0.0 {
+    let q = x
+    q
+  } else {
+    x
+  }
+  a
+}
+
+pub flow self_reference_then_var(x: F32 at sample) -> F32 at sample {
+  let y = x + y                                     //~ E0801
+  var a = x
+  y
+}
+
+pub flow caret_outside_a_delay_then_var(x: F32 at sample) -> F32 at sample {
+  let a = ^b                                        //~ E0801
+  let b = x
+  var c = x
+  a
+}
+
+pub flow caret_in_a_user_flow_then_for(x: F32 at sample) -> F32 at sample {
+  let a = lp~(^b)                                   //~ E0801
+  let b = x
+  for i in 0 ..< 2 { }
+  a
+}
+
+pub flow forward_in_the_closure_then_closure(x: F32 at sample) -> F32 at sample {
+  let a = b                                         //~ E0801
+  let k = fn(v: F32) -> F32 { v }
+  let b = x
+  a
+}

@@ -166,36 +166,20 @@ impl<'a> Checker<'a> {
         Ok(())
     }
 
-    /// Statements in flow mode (§11.2, E0806).
+    /// Statements in flow mode (§11.2): the `let`s of the top level; the
+    /// names stage reported any other (its E0806, `names/body/flow_forms.rs`).
     pub(crate) fn check_flow_stmt(&mut self, s: StmtId) -> R<()> {
-        let ast = self.ast;
-        let stmt = ast.stmt(s);
-        let span = stmt.span;
-        let what = match &stmt.kind {
-            StmtKind::Let { pat, init, .. } => return self.check_flow_let(s, *pat, *init),
-            StmtKind::Var { .. } => "`var`; a flow has no mutable variables, state lives in `prev~` / `delay~`",
-            StmtKind::Assign { .. } => "assignment; every signal is defined once by `let`",
-            StmtKind::For { .. } => "`for`; a flow body has no loops (use `par~` to replicate structure)",
-            StmtKind::While { .. } => "`while`; a flow body has no loops",
-            StmtKind::Break | StmtKind::Continue => "loop control; a flow body has no loops",
-            StmtKind::Return(_) => "`return`; the output is the final expression",
-            StmtKind::Assert(_) => "`assert`; checks are written as tests on `render` (§11.8)",
-            StmtKind::Expr(_) => "an expression statement; a flow body is `let`s followed by one output expression",
-        };
-        Err(self.flow_err(Code::E0806, span, format!("a flow body cannot contain {what} (§11.2)")))
+        let stmt = self.ast.stmt(s);
+        match &stmt.kind {
+            StmtKind::Let { pat, init, .. } if self.fcx().depth == 1 => self.check_flow_let(s, *pat, *init),
+            _ => Err(self.flow_syntax(stmt.span)),
+        }
     }
 
     fn check_flow_let(&mut self, s: StmtId, pat: PatId, init: ExprId) -> R<()> {
         let span = self.ast.stmt(s).span;
-        if self.fcx().depth != 1 {
-            return Err(self.flow_err(
-                Code::E0806,
-                span,
-                "`let` is written at the top level of a flow body only; nested blocks hold one expression (§11.2)",
-            ));
-        }
         let Some(k) = self.fcx().pending.iter().position(|p| p.stmt == s) else {
-            return Err(self.flow_err(Code::E0806, span, "unexpected `let` in a flow body"));
+            onsa_diag::internal::bug(Some(span), "a `let` of a flow body not declared ahead")
         };
         // The annotation is a value type (§11.2), lowered when the `let` was
         // pre-declared; the clock is written on the value (`let ps = p at
@@ -257,32 +241,31 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// Expression forms that flow mode handles itself or forbids (E0806).
+    /// Expression forms that flow mode handles itself; what the names stage
+    /// reported as the E0806 of a form a flow body cannot contain stops it.
     /// `None` hands the expression back to the ordinary checker.
     pub(crate) fn check_flow_expr(&mut self, e: ExprId, expected: Option<TyId>) -> R<Option<TyId>> {
         let expr = self.expr(e);
-        let span = expr.span;
-        let what = match &expr.kind {
-            ExprKind::Closure { .. } => "an anonymous function; flows call named `rt` functions only",
-            ExprKind::Handle { .. } => "`handle`; flows have no effects",
-            ExprKind::Unsafe(_) => "`unsafe`",
-            ExprKind::Try(_) => "`?`; a flow has no error path",
-            ExprKind::Move(_) => "`move`; signals are values and are never moved",
+        match &expr.kind {
+            ExprKind::Closure { .. }
+            | ExprKind::Handle { .. }
+            | ExprKind::Unsafe(_)
+            | ExprKind::Try(_)
+            | ExprKind::Move(_) => Err(self.flow_syntax(expr.span)),
             ExprKind::Par { var, range, body, .. } => {
                 let (var, range, body) = (var.clone(), *range, *body);
-                return self.check_par(e, &var, &range, body, expected).map(Some);
+                self.check_par(e, &var, &range, body, expected).map(Some)
             }
             ExprKind::At { expr: inner, clock } => {
                 let (inner, clock) = (*inner, clock.clone());
-                return self.check_at(e, inner, &clock, expected).map(Some);
+                self.check_at(e, inner, &clock, expected).map(Some)
             }
             ExprKind::Feedback(name) => {
                 let name = name.clone();
-                return self.check_feedback(e, &name).map(Some);
+                self.check_feedback(e, &name).map(Some)
             }
-            _ => return Ok(None),
-        };
-        Err(self.flow_err(Code::E0806, span, format!("a flow body cannot contain {what} (§11.2)")))
+            _ => Ok(None),
+        }
     }
 
     /// `par~ i in a..<b { e }` (§11.5): `i` is an `Init`-rate `U32`, the result is `[T; b - a]`.
@@ -404,26 +387,12 @@ impl<'a> Checker<'a> {
         )
     }
 
-    fn plain_args(&mut self, args: &[Arg]) -> R<()> {
-        for a in args {
-            if a.mode != Mode::Borrow {
-                return Err(self.flow_err(
-                    Code::E0806,
-                    a.span,
-                    "a flow body cannot contain `inout` / `move` arguments; signals are read-only values (§11.2)",
-                ));
-            }
-        }
-        Ok(())
-    }
-
     /// `f~(args)` (§11.5): one argument per input, typed by the input's value type.
     fn check_instance(&mut self, e: ExprId, d: DefId, args: &[Arg], expected: Option<TyId>) -> R<TyId> {
         let span = self.expr(e).span;
         if self.a.heading_failed(d) {
             // A flow whose heading a syntax error cut (S-59): its inputs are
             // not known, and the instance is not checked against them.
-            self.plain_args(args)?;
             return self.args_of_unknown_callee(args);
         }
         let f = self.a.def(d).as_flow().unwrap().clone();
@@ -435,7 +404,6 @@ impl<'a> Checker<'a> {
                 format!("flow `{name}` takes {} input(s) but {} were given", f.inputs.len(), args.len()),
             ));
         }
-        self.plain_args(args)?;
         if let Some(exp) = expected {
             self.unify_at(span, f.out, exp)?;
         }
@@ -495,7 +463,6 @@ impl<'a> Checker<'a> {
                 ),
             ));
         }
-        self.plain_args(args)?;
         // The first argument may look back to a later `let` with `^` (§11.2).
         self.fcx().lookback += 1;
         self.fcx().delay_arg += 1;

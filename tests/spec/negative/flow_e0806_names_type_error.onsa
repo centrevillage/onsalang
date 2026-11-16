@@ -1,0 +1,273 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§18.1"]
+
+// W7-04 U1a/t, S-125, S-267: a form a flow body cannot contain (E0806, §11.2) and an error of the types stage (E0401: a `let` with a wrong
+// annotation, a wrong argument) in the same unit, where the type error is after the form, in the same `let`, or the form is the
+// output. The names stage is before the types stage (§18.1: "構文 → 名前 → 型 → flow の検査 → …"), and E0806 is an error of the names stage, so the
+// unit reports the E0806 and not the type error, whatever the position of the type error is. One error per unit.
+// The cases where the type error is before the form, and the function values, are at the end of the file.
+
+pub enum Mode {
+  Off,
+  Gain(F32),
+}
+
+pub rt fn g(v: F32) -> F32 {
+  v
+}
+
+pub rt fn id[T](v: T) -> T {
+  v
+}
+
+pub rt fn pick(v: F32) -> Option[F32] {
+  Some(v)
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow assign_then_type(x: F32 at sample) -> F32 at sample {
+  let b = x
+  b = x                                             //~ E0806
+  let a: Bool = x
+  b
+}
+
+pub flow closure_then_type(x: F32 at sample) -> F32 at sample {
+  let k = fn(v: F32) -> F32 { v }                   //~ E0806
+  let a: Bool = x
+  x
+}
+
+pub flow for_then_type(x: F32 at sample) -> F32 at sample {
+  for i in 0 ..< 2 { }                              //~ E0806
+  let a: Bool = x
+  x
+}
+
+pub flow try_then_type(x: F32 at sample) -> F32 at sample {
+  let b = pick(x)?                                  //~ E0806
+  let a: Bool = x
+  x
+}
+
+pub flow var_then_type(x: F32 at sample) -> F32 at sample {
+  var b = x                                         //~ E0806
+  let a: Bool = x
+  b
+}
+
+pub flow nested_let_then_type(x: F32 at sample) -> F32 at sample {
+  let y = if x > 0.0 {
+    let q = x                                       //~ E0806
+    q
+  } else {
+    x
+  }
+  let a: Bool = x
+  y
+}
+
+pub flow closure_then_type_in_a_call(x: F32 at sample) -> F32 at sample {
+  let k = fn(v: F32) -> F32 { v }                   //~ E0806
+  let a = g(true)
+  a
+}
+
+pub flow while_then_type(x: F32 at sample) -> F32 at sample {
+  while x > 0.0 { }                                 //~ E0806
+  let a: Bool = x
+  x
+}
+
+pub flow return_then_type(x: F32 at sample) -> F32 at sample {
+  return x                                          //~ E0806
+  let a: Bool = x
+  x
+}
+
+pub flow assert_then_type(x: F32 at sample) -> F32 at sample {
+  assert x > 0.0                                    //~ E0806
+  let a: Bool = x
+  x
+}
+
+pub flow expression_statement_then_type(x: F32 at sample) -> F32 at sample {
+  x + 1.0                                           //~ E0806
+  let a: Bool = x
+  x
+}
+
+pub flow handle_then_type(x: F32 at sample) -> F32 at sample {
+  let k = handle { x } with quiet                   //~ E0806
+  let a: Bool = x
+  x
+}
+
+pub flow unsafe_then_type(x: F32 at sample) -> F32 at sample {
+  let k = unsafe { x }                              //~ E0806
+  let a: Bool = x
+  x
+}
+
+pub flow move_then_type(x: F32 at sample) -> F32 at sample {
+  let k = move x                                    //~ E0806
+  let a: Bool = x
+  x
+}
+
+pub flow closure_with_a_wrong_annotation(x: F32 at sample) -> F32 at sample {
+  let k: Bool = fn(v: F32) -> F32 { v }             //~ E0806
+  x
+}
+
+pub flow try_with_a_wrong_annotation(x: F32 at sample) -> F32 at sample {
+  let b: Bool = pick(x)?                            //~ E0806
+  x
+}
+
+pub flow try_as_the_output(x: F32 at sample) -> F32 at sample {
+  pick(x)?                                          //~ E0806
+}
+
+pub flow closure_as_the_output(x: F32 at sample) -> F32 at sample {
+  fn(v: F32) -> F32 { v }                           //~ E0806
+}
+
+pub flow type_then_assign(x: F32 at sample) -> F32 at sample {
+  let a: Bool = x
+  let b = x
+  b = x                                             //~ E0806
+  b
+}
+
+pub flow type_then_closure(x: F32 at sample) -> F32 at sample {
+  let a: Bool = x
+  let k = fn(v: F32) -> F32 { v }                   //~ E0806
+  x
+}
+
+pub flow type_then_for(x: F32 at sample) -> F32 at sample {
+  let a: Bool = x
+  for i in 0 ..< 2 { }                              //~ E0806
+  x
+}
+
+pub flow type_then_function_value(x: F32 at sample) -> F32 at sample {
+  let a: Bool = x
+  let k = g                                         //~ E0806
+  x
+}
+
+pub flow type_then_try(x: F32 at sample) -> F32 at sample {
+  let a: Bool = x
+  let b = pick(x)?                                  //~ E0806
+  x
+}
+
+pub flow type_then_var(x: F32 at sample) -> F32 at sample {
+  let a: Bool = x
+  var b = x                                         //~ E0806
+  b
+}
+
+pub flow type_then_nested_let(x: F32 at sample) -> F32 at sample {
+  let a: Bool = x
+  let y = if x > 0.0 {
+    let q = x                                       //~ E0806
+    q
+  } else {
+    x
+  }
+  y
+}
+
+pub flow type_in_a_call_then_closure(x: F32 at sample) -> F32 at sample {
+  let a = g(true)
+  let k = fn(v: F32) -> F32 { v }                   //~ E0806
+  a
+}
+
+pub flow type_then_variant_as_a_value(x: F32 at sample) -> F32 at sample {
+  let a: Bool = x
+  let k = Mode.Gain                                 //~ E0806
+  x
+}
+
+pub flow type_then_some_as_a_value(x: F32 at sample) -> F32 at sample {
+  let a: Bool = x
+  let k = Some                                      //~ E0806
+  x
+}
+
+pub flow type_then_while(x: F32 at sample) -> F32 at sample {
+  let a: Bool = x
+  while x > 0.0 { }                                 //~ E0806
+  x
+}
+
+pub flow type_then_return(x: F32 at sample) -> F32 at sample {
+  let a: Bool = x
+  return x                                          //~ E0806
+  x
+}
+
+pub flow type_then_assert(x: F32 at sample) -> F32 at sample {
+  let a: Bool = x
+  assert x > 0.0                                    //~ E0806
+  x
+}
+
+pub flow type_then_expression_statement(x: F32 at sample) -> F32 at sample {
+  let a: Bool = x
+  x + 1.0                                           //~ E0806
+  x
+}
+
+pub flow type_then_handle(x: F32 at sample) -> F32 at sample {
+  let a: Bool = x
+  let k = handle { x } with quiet                   //~ E0806
+  x
+}
+
+pub flow type_then_unsafe(x: F32 at sample) -> F32 at sample {
+  let a: Bool = x
+  let k = unsafe { x }                              //~ E0806
+  x
+}
+
+pub flow type_then_move(x: F32 at sample) -> F32 at sample {
+  let a: Bool = x
+  let k = move x                                    //~ E0806
+  x
+}
+
+pub flow type_then_generic_function_value(x: F32 at sample) -> F32 at sample {
+  let a: Bool = x
+  let k = id::[F32]                                 //~ E0806
+  x
+}
+
+pub flow function_value_then_type(x: F32 at sample) -> F32 at sample {
+  let k = g                                         //~ E0806
+  let a: Bool = x
+  x
+}
+
+pub flow generic_function_value_then_type(x: F32 at sample) -> F32 at sample {
+  let k = id::[F32]                                 //~ E0806
+  let a: Bool = x
+  x
+}
+
+pub flow function_value_with_a_wrong_annotation(x: F32 at sample) -> F32 at sample {
+  let k: Bool = g                                   //~ E0806
+  x
+}
+
+pub flow function_value_as_the_output(x: F32 at sample) -> F32 at sample {
+  g                                                 //~ E0806
+}

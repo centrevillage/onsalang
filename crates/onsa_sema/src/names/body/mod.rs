@@ -7,7 +7,8 @@
 //! `scope` (the tree of the scopes, the bindings and the lookup of a local),
 //! `exprs` (the walk of the statements, expressions and patterns, and of
 //! a flow body), `calls` (the form of a call its callee decides), `flow`
-//! (the `~` of a call of a flow body and its instances), `paths` (the names
+//! (the `~` of a call of a flow body and its instances), `flow_forms` (what
+//! a flow body cannot contain), `paths` (the names
 //! whose head is no local) and `cycles` (the cycles of the constants and of
 //! the flow instances, from the records).
 //!
@@ -22,6 +23,7 @@ mod consts;
 mod cycles;
 mod exprs;
 mod flow;
+mod flow_forms;
 mod kinds;
 mod paths;
 pub(crate) use consts::{ConstScope, const_names, const_path_names};
@@ -430,8 +432,8 @@ enum Fail {
     /// read ([`Analysis::unread`]): no diagnostic.
     Held,
     /// A form whose error is of a later stage, and which the walk does not
-    /// read into: what a flow body cannot contain (E0806 until W7-04), `unsafe`
-    /// and `handle` (E0200, whose names this version does not read, S-713).
+    /// read into: `unsafe` and `handle` outside a flow body (E0200, whose
+    /// names this version does not read, S-713).
     Later,
 }
 
@@ -707,9 +709,8 @@ impl<'a> Walker<'a> {
     /// inputs, the names of every `let` of the body, then the body. An error
     /// of the pattern of a `let` stops the walk at it, after the errors of
     /// the statements before it ([`Self::fail_at_let`]), and its type is read
-    /// there; a type sees every `let` of the body (S-740). The walk stops at
-    /// the first form the body cannot contain (`exprs.rs`): its error is the
-    /// flow stage's (E0806) until W7-04 reports it in the names stage.
+    /// there; a type sees every `let` of the body (S-740). A form the body
+    /// cannot contain is its E0806 (`flow_forms.rs`).
     fn walk_flow(&mut self, inputs: &[FlowInput], body: ExprId) -> W {
         self.flow = true;
         self.open_scope();

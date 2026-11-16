@@ -78,7 +78,7 @@ impl Walker<'_> {
         }
         // The `~` after the names of the callee, before its arguments (R-286).
         match self.flow {
-            true => self.flow_mark(e, callee, kind, args)?,
+            true => self.flow_mark(e, callee, kind)?,
             false => self.call_outside(e, callee, kind, true)?,
         }
         // The constant of a delay (`delay~(x, N)`, §11.4).
@@ -86,9 +86,15 @@ impl Walker<'_> {
             Some(PathRes::FlowBuiltin(FlowBuiltin::Delay(d))) => d.const_index(),
             _ => None,
         };
-        (0..).zip(args).try_for_each(|(k, a)| match Some(k) == constant {
-            true => self.const_expr(a.expr),
-            false => self.expr(a.expr),
+        // In a flow body, an `inout` or `move` argument is E0806 (R-342).
+        (0..).zip(args).try_for_each(|(k, a)| {
+            if self.flow {
+                self.flow_arg(a)?;
+            }
+            match Some(k) == constant {
+                true => self.const_expr(a.expr),
+                false => self.expr(a.expr),
+            }
         })
     }
 

@@ -1,0 +1,256 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§18.1"]
+
+// W7-04 U1a/t, S-125, S-267, R-286: a form a flow body cannot contain (E0806, §11.2: "一覧に無いもの（`var`、代入、`for`、`while`、
+// `return`、`?`、`assert`、関数値、クロージャ、`handle`、`unsafe` など）は書けない"; a `let` of a nested block, an expression statement and
+// `move` too) and, at a later position of the same unit, a name that is not found (E0302) or defined twice (E0304). The restrictions
+// of a flow body and the names of the locals and the paths are errors of the names stage (§18.1: "本体の制限（E0806。代入の形を含む）"),
+// so the first by position is the one reported ("残った診断のうち … 最初のものを報告する"): the E0806, at the start of the form (at the
+// `let` for a `let` of a nested block), and not the name error, which may be inside the form itself (a closure with a name error in its
+// body, its parameter type or its effect row; an assignment with a name error on its right). One error per unit.
+// The function values and the variants used as values (`let k = g`, `lp~(g)`, `id::[F32]`, `Some`, `Mode.Gain`, S-195) are at the end of the file.
+
+pub enum Mode {
+  Off,
+  Gain(F32),
+}
+
+pub rt fn g(v: F32) -> F32 {
+  v
+}
+
+pub rt fn pick(v: F32) -> Option[F32] {
+  Some(v)
+}
+
+pub rt fn id[T](v: T) -> T {
+  v
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow var_then_name(x: F32 at sample) -> F32 at sample {
+  var a = x                                         //~ E0806
+  let z = nope
+  a + z
+}
+
+pub flow assign_then_name(x: F32 at sample) -> F32 at sample {
+  let a = x
+  a = x * 2.0                                       //~ E0806
+  let z = nope
+  a + z
+}
+
+pub flow assign_with_a_name_error_on_the_right(x: F32 at sample) -> F32 at sample {
+  let a = x
+  a = nope                                          //~ E0806
+  a
+}
+
+pub flow for_then_name(x: F32 at sample) -> F32 at sample {
+  for i in 0 ..< 2 { }                              //~ E0806
+  let z = nope
+  x + z
+}
+
+pub flow for_with_a_name_error_in_its_body(x: F32 at sample) -> F32 at sample {
+  for i in 0 ..< 2 { nope }                         //~ E0806
+  x
+}
+
+pub flow while_then_name(x: F32 at sample) -> F32 at sample {
+  while x > 0.0 { }                                 //~ E0806
+  let z = nope
+  x + z
+}
+
+pub flow while_with_a_name_error_in_its_condition(x: F32 at sample) -> F32 at sample {
+  while nope { }                                    //~ E0806
+  x
+}
+
+pub flow return_then_name(x: F32 at sample) -> F32 at sample {
+  return x                                          //~ E0806
+  let z = nope
+  x + z
+}
+
+pub flow try_then_name(x: F32 at sample) -> F32 at sample {
+  let a = pick(x)?                                  //~ E0806
+  let z = nope
+  x + z
+}
+
+pub flow assert_then_name(x: F32 at sample) -> F32 at sample {
+  assert x > 0.0                                    //~ E0806
+  let z = nope
+  x + z
+}
+
+pub flow expression_statement_then_name(x: F32 at sample) -> F32 at sample {
+  x + 1.0                                           //~ E0806
+  let z = nope
+  x + z
+}
+
+pub flow closure_then_name(x: F32 at sample) -> F32 at sample {
+  let k = fn(v: F32) -> F32 { v }                   //~ E0806
+  let z = nope
+  x + z
+}
+
+pub flow closure_with_a_name_error_in_its_body(x: F32 at sample) -> F32 at sample {
+  let c = fn(q: I32) { nope }                       //~ E0806
+  x
+}
+
+pub flow closure_with_a_name_error_in_its_parameter_type(x: F32 at sample) -> F32 at sample {
+  let k = fn(y: Nope) -> F32 { y }                  //~ E0806
+  x
+}
+
+pub flow closure_with_a_name_error_in_its_row(x: F32 at sample) -> F32 at sample {
+  let k = fn(y: F32) -> F32 uses {Nope} { y }       //~ E0806
+  x
+}
+
+pub flow closure_with_a_local_in_its_row(x: F32 at sample) -> F32 at sample {
+  let k = fn(y: F32) -> F32 uses {x} { y }          //~ E0806
+  x
+}
+
+pub flow closure_as_an_argument_then_name(x: F32 at sample) -> F32 at sample {
+  let a = lp~(fn(v: F32) -> F32 { v })              //~ E0806
+  let z = nope
+  a + z
+}
+
+pub flow handle_then_name(x: F32 at sample) -> F32 at sample {
+  let k = handle { x } with quiet                   //~ E0806
+  let z = nope
+  x + z
+}
+
+pub flow unsafe_then_name(x: F32 at sample) -> F32 at sample {
+  let k = unsafe { x }                              //~ E0806
+  let z = nope
+  x + z
+}
+
+pub flow move_then_name(x: F32 at sample) -> F32 at sample {
+  let a = move x                                    //~ E0806
+  let z = nope
+  a + z
+}
+
+pub flow nested_let_in_an_if_arm_then_name(x: F32 at sample) -> F32 at sample {
+  let y = if x > 0.0 {
+    let q = x                                       //~ E0806
+    q
+  } else {
+    x
+  }
+  let z = nope
+  y + z
+}
+
+pub flow nested_let_in_an_else_arm_with_a_name_error(x: F32 at sample) -> F32 at sample {
+  let y = if x > 0.0 {
+    x
+  } else {
+    let q = nope                                    //~ E0806
+    q
+  }
+  y
+}
+
+pub flow nested_let_in_a_match_arm_then_name(x: F32 at sample) -> F32 at sample {
+  let y = match x > 0.0 {
+    true => {
+      let q = x                                     //~ E0806
+      q
+    },
+    false => x,
+  }
+  let z = nope
+  y + z
+}
+
+pub flow nested_let_in_a_par_body_then_name(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 {
+    let q = x                                       //~ E0806
+    q
+  }
+  let z = nope
+  ys[0] + z
+}
+
+pub flow nested_let_in_a_par_body_with_a_name_error(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 {
+    let q = nope                                    //~ E0806
+    q
+  }
+  ys[0]
+}
+
+pub flow var_then_duplicate(x: F32 at sample) -> F32 at sample {
+  let a = x
+  var b = x                                         //~ E0806
+  let a = x
+  a + b
+}
+
+pub flow for_then_duplicate(x: F32 at sample) -> F32 at sample {
+  let a = x
+  for i in 0 ..< 2 { }                              //~ E0806
+  let a = x
+  a
+}
+
+pub flow closure_then_duplicate(x: F32 at sample) -> F32 at sample {
+  let a = x
+  let k = fn(v: F32) -> F32 { v }                   //~ E0806
+  let a = x
+  a
+}
+
+pub flow assign_then_duplicate(x: F32 at sample) -> F32 at sample {
+  let a = x
+  a = x                                             //~ E0806
+  let a = x
+  a
+}
+
+pub flow function_value_then_name(x: F32 at sample) -> F32 at sample {
+  let k = g                                         //~ E0806
+  let z = nope
+  x + z
+}
+
+pub flow function_value_as_an_argument_then_name(x: F32 at sample) -> F32 at sample {
+  let a = lp~(g)                                    //~ E0806
+  let z = nope
+  a + z
+}
+
+pub flow generic_function_value_then_name(x: F32 at sample) -> F32 at sample {
+  let k = id::[F32]                                 //~ E0806
+  let z = nope
+  x + z
+}
+
+pub flow some_as_a_value_then_name(x: F32 at sample) -> F32 at sample {
+  let k = Some                                      //~ E0806
+  let z = nope
+  x + z
+}
+
+pub flow variant_as_a_value_then_name(x: F32 at sample) -> F32 at sample {
+  let k = Mode.Gain                                 //~ E0806
+  let z = nope
+  x + z
+}

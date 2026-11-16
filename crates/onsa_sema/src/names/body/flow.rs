@@ -14,7 +14,7 @@
 //! their constant expressions).
 
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
-use onsa_syntax::ast::{Arg, Ast, CallKind, Clock, ExprId, ExprKind, Ident, Mode, TypeId};
+use onsa_syntax::ast::{Ast, CallKind, Clock, ExprId, ExprKind, Ident, TypeId};
 
 use super::calls::Called;
 use super::paths::path_of;
@@ -147,7 +147,7 @@ impl Walker<'_> {
     /// The mark of the call `e` of a flow body, whose callee's names are
     /// found: a flow called with `~` is an instance, recorded; a mark that
     /// does not fit the callee stops the walk (S-811).
-    pub(super) fn flow_mark(&mut self, e: ExprId, callee: ExprId, kind: CallKind, args: &[Arg]) -> W {
+    pub(super) fn flow_mark(&mut self, e: ExprId, callee: ExprId, kind: CallKind) -> W {
         let mark = match self.out.paths.get(&super::named(self.ast, callee)) {
             Some(&PathRes::FlowBuiltin(FlowBuiltin::Delay(d))) => Mark::Stateful(Stateful::Delay(d.name())),
             Some(PathRes::FlowBuiltin(_)) => Mark::Plain,
@@ -170,9 +170,9 @@ impl Walker<'_> {
             (Mark::Stateful(Stateful::Flow(d)), CallKind::Flow) => {
                 self.out.instance_of.insert(e, self.out.instances.len());
                 self.out.instances.push((e, d, self.ast.expr(callee).span));
-                return self.plain_args(args);
+                return Ok(());
             }
-            (Mark::Stateful(Stateful::Delay(_)), CallKind::Flow) => return self.plain_args(args),
+            (Mark::Stateful(Stateful::Delay(_)), CallKind::Flow) => return Ok(()),
             (Mark::Stateful(what), CallKind::Plain) => {
                 let msg = self.stateful(what);
                 let fix = Fix::insert("add `~`", span.file, end, "~");
@@ -191,16 +191,6 @@ impl Walker<'_> {
             _ => return Ok(()),
         };
         Err(self.fail(Fail::Report(d.with_found(self.src(span)))))
-    }
-
-    /// An `inout` or `move` argument of an instance or a delay is the flow
-    /// stage's E0806 (`plain_args`, §11.2) until W7-04 reports it here
-    /// (S-267): the walk stops at the call ([`Self::later`]).
-    fn plain_args(&mut self, args: &[Arg]) -> W {
-        match args.iter().any(|a| a.mode != Mode::Borrow) {
-            true => self.later(),
-            false => Ok(()),
-        }
     }
 
     /// That a flow or a builtin delay is called with `~`.

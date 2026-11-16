@@ -1,0 +1,78 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§15.1", "§18.1"]
+//
+// [[test.fix]]
+// at = "main.onsa:27:11"
+// code = "E0811"
+// candidate = 1
+// leaves = ["main.onsa:28:3 E0806"]
+
+// W7-04 U1a/t, S-125, S-267, R-286, §15.1: the restrictions of a flow body (E0806, §11.2) in a package of two modules: a flow of a module with a
+// form after which a name is not found (a `var`, an assignment, a closure; in dsp.onsa), a closure and the instance of a flow of another module in
+// main.onsa, a flow of another module called without `~` (E0811) before a form, a name not found in another module (E0302) before a form, and the calls
+// of a variant of another module, which are fine. The first by position of the names stage (§18.1) is reported, one error per unit. The function
+// values and the arguments with a mode of the functions of a module are at the end of main.onsa and dsp.onsa.
+
+use dsp
+use dsp.{gain, smooth}
+
+pub flow module_flow_instance_then_closure(x: F32 at sample) -> F32 at sample {
+  let a = dsp.lp~(x)
+  let k = fn(v: F32) -> F32 { v }                   //~ E0806
+  a
+}
+
+pub flow module_flow_without_tilde_before_var(x: F32 at sample) -> F32 at sample {
+  let a = dsp.lp(x)                                 //~ E0811
+  var b = x
+  a
+}
+
+pub flow name_in_a_module_before_the_form(x: F32 at sample) -> F32 at sample {
+  let a = dsp.nope(x)                               //~ E0302
+  var b = x
+  a
+}
+
+pub flow module_variant_call_is_fine(x: F32 at sample) -> F32 at sample {
+  let m = dsp.Mode.Gain(x)
+  let n = dsp.Mode.Off
+  dsp.amount(m, x) + dsp.amount(n, x)
+}
+
+pub flow module_function_value_then_name(x: F32 at sample) -> F32 at sample {
+  let k = dsp.gain                                  //~ E0806
+  let z = nope
+  x + z
+}
+
+pub flow taken_function_value_then_name(x: F32 at sample) -> F32 at sample {
+  let k = gain                                      //~ E0806
+  let z = nope
+  x + z
+}
+
+pub flow module_inout_argument_then_name(x: F32 at sample) -> F32 at sample {
+  let a = dsp.smooth(inout x)                       //~ E0806
+  let z = nope
+  a + z
+}
+
+pub flow taken_inout_argument_then_name(x: F32 at sample) -> F32 at sample {
+  let a = smooth(inout x)                           //~ E0806
+  let z = nope
+  a + z
+}
+
+pub flow taken_move_argument_with_a_type_error_before(x: F32 at sample) -> F32 at sample {
+  let t: Bool = x
+  let a = dsp.hold(move x)                          //~ E0806
+  a
+}
+
+pub flow module_variant_as_a_value_then_name(x: F32 at sample) -> F32 at sample {
+  let k = dsp.Mode.Gain                             //~ E0806
+  let z = nope
+  x + z
+}

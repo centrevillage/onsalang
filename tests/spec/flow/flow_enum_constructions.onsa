@@ -1,0 +1,111 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§4.4", "§18.1"]
+
+// W7-04 U1a/t, S-195: the construction of a variant is on the list of the expressions of a flow body (§11.2: "列挙子の構築（`Some(x)`、
+// `None`、`Mode.Gain(g)`。列挙子を関数値として使う形は、関数値なので書けない）"). A call of a variant with its payload, a variant without one and
+// `None` are fine in a `let`, as an argument, in the branch of an `if`, in the arm of a `match`, in a `par~` body, in a struct, in a tuple,
+// and as the output expression. The forms that use a variant as a function value are E0806 (negative/flow_enum_values.onsa). No diagnostic here.
+
+pub enum Mode {
+  Off,
+  Gain(F32),
+  Pair(F32, F32),
+}
+
+pub struct Config {
+  mode: Mode,
+}
+
+pub rt fn amount(m: Mode, x: F32) -> F32 {
+  match m {
+    Mode.Off => 0.0,
+    Mode.Gain(k) => x * k,
+    Mode.Pair(a, b) => (a * x) + b,
+  }
+}
+
+pub rt fn or_zero(o: Option[F32]) -> F32 {
+  match o {
+    Some(v) => v,
+    None => 0.0,
+  }
+}
+
+pub flow some_in_a_let(x: F32 at sample) -> F32 at sample {
+  let o = Some(x)
+  or_zero(o)
+}
+
+pub flow none_in_a_let(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = None
+  or_zero(o) + x
+}
+
+pub flow some_as_an_argument(x: F32 at sample) -> F32 at sample {
+  or_zero(Some(x))
+}
+
+pub flow none_as_an_argument(x: F32 at sample) -> F32 at sample {
+  or_zero(None) + x
+}
+
+pub flow some_in_a_match(x: F32 at sample) -> F32 at sample {
+  let o = Some(x)
+  match o {
+    Some(v) => v,
+    None => 0.0,
+  }
+}
+
+pub flow variant_with_a_payload_in_a_let(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let m = Mode.Gain(g)
+  amount(m, x)
+}
+
+pub flow variant_with_two_payloads_in_a_let(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let m = Mode.Pair(x, g)
+  amount(m, x)
+}
+
+pub flow variant_without_a_payload_in_a_let(x: F32 at sample) -> F32 at sample {
+  let m = Mode.Off
+  amount(m, x)
+}
+
+pub flow variants_as_arguments(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  amount(Mode.Gain(g), x) + amount(Mode.Off, x) + amount(Mode.Pair(g, g), x)
+}
+
+pub flow variant_in_a_branch(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let m = if x > 0.0 { Mode.Gain(g) } else { Mode.Off }
+  amount(m, x)
+}
+
+pub flow variant_in_an_arm(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let m = match x > 0.0 {
+    true => Mode.Gain(g),
+    false => Mode.Off,
+  }
+  amount(m, x)
+}
+
+pub flow variant_in_a_par_body(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let ms = par~ i in 0 ..< 2 { Mode.Gain(g) }
+  amount(ms[0], x)
+}
+
+pub flow variant_in_a_struct(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let c = Config { mode: Mode.Gain(g) }
+  amount(c.mode, x)
+}
+
+pub flow variant_in_a_tuple(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let (a, b) = (Mode.Gain(g), Mode.Off)
+  amount(a, x) + amount(b, x)
+}
+
+pub flow variant_of_a_payload_from_an_instance(x: F32 at sample) -> F32 at sample {
+  let m = Mode.Gain(prev~(x))
+  amount(m, x)
+}

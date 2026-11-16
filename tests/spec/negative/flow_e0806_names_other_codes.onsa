@@ -1,0 +1,240 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§2.6", "§18.1"]
+//
+// [[test.fix]]
+// at = "71:11"
+// code = "E0811"
+// candidate = 1
+// leaves = ["72:3 E0806"]
+//
+// [[test.fix]]
+// at = "77:11"
+// code = "E0811"
+// candidate = 1
+// leaves = ["78:11 E0806"]
+//
+// [[test.fix]]
+// at = "83:11"
+// code = "E0811"
+// candidate = 1
+// leaves = ["84:11 E0806"]
+//
+// [[test.fix]]
+// at = "89:11"
+// code = "E0812"
+// candidate = 1
+// leaves = ["90:3 E0806"]
+//
+// [[test.fix]]
+// at = "95:11"
+// code = "E0812"
+// candidate = 1
+// leaves = ["96:11 E0806"]
+//
+// [[test.fix]]
+// at = "101:12"
+// code = "E0811"
+// candidate = 1
+// leaves = ["102:3 E0806"]
+//
+// [[test.fix]]
+// at = "107:12"
+// code = "E0811"
+// candidate = 1
+// leaves = ["108:11 E0806"]
+
+// W7-04 U1a/t, S-267, R-286: the restrictions of a flow body (E0806, §11.2) with the other errors of the names stage of a flow (§18.1): the `~` of a call
+// (E0811 of a flow without it, E0812 of a function with it, E0811 of a `par` without it, §2.6, §11.5), the clock of the heading (E0810, §11.3), the
+// mode of an input (E0806, §11.2) and E0801 (§11.2). The first by position is reported. The errors of the flow stage (E0815 of an `at` to a slower
+// clock, E0813 of a `block` value in a delay, §11.3, §11.4) are not reported with an E0806 of the same unit, whatever the position: the names stage is
+// before the flow stage. A call without `~` inside a closure is after the start of the closure, so the E0806 of the closure is reported.
+// One error per unit. The function values (before an E0811, an E0812 and an E0801, after an E0807 and an E0815) are at the end of the file.
+
+pub rt fn g(v: F32) -> F32 {
+  v
+}
+
+pub rt fn pick(v: F32) -> Option[F32] {
+  Some(v)
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow gate(x: F32 at sample, c: F32 at block) -> F32 at sample {
+  x * c
+}
+
+pub flow call_without_tilde_then_var(x: F32 at sample) -> F32 at sample {
+  let b = lp(x)                                     //~ E0811
+  var a = x
+  a + b
+}
+
+pub flow call_without_tilde_then_closure(x: F32 at sample) -> F32 at sample {
+  let b = lp(x)                                     //~ E0811
+  let k = fn(v: F32) -> F32 { v }
+  b
+}
+
+pub flow call_without_tilde_then_function_value(x: F32 at sample) -> F32 at sample {
+  let b = lp(x)                                     //~ E0811
+  let k = g
+  b
+}
+
+pub flow tilde_on_a_function_then_for(x: F32 at sample) -> F32 at sample {
+  let b = g~(x)                                     //~ E0812
+  for i in 0 ..< 2 { }
+  b
+}
+
+pub flow tilde_on_a_function_then_function_value(x: F32 at sample) -> F32 at sample {
+  let b = g~(x)                                     //~ E0812
+  let k = g
+  b
+}
+
+pub flow par_without_tilde_then_var(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 2 { x }                   //~ E0811
+  var a = x
+  a
+}
+
+pub flow par_without_tilde_then_function_value(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 2 { x }                   //~ E0811
+  let k = g
+  x
+}
+
+pub flow var_then_par_without_tilde(x: F32 at sample) -> F32 at sample {
+  var a = x                                         //~ E0806
+  let ys = par i in 0 ..< 2 { x }
+  a
+}
+
+pub flow try_then_call_without_tilde(x: F32 at sample) -> F32 at sample {
+  let a = pick(x)?                                  //~ E0806
+  let b = lp(x)
+  b
+}
+
+pub flow nested_let_then_call_without_tilde(x: F32 at sample) -> F32 at sample {
+  let y = if x > 0.0 {
+    let q = x                                       //~ E0806
+    q
+  } else {
+    x
+  }
+  let b = lp(y)
+  b
+}
+
+pub flow call_without_tilde_in_a_closure_after_the_closure_start(x: F32 at sample) -> F32 at sample {
+  let k = fn(v: F32) -> F32 { lp(v) }               //~ E0806
+  x
+}
+
+pub flow closure_with_a_clock_in_its_parameter(x: F32 at sample) -> F32 at sample {
+  let k = fn(v: F32 at sample) -> F32 { v }         //~ E0806
+  x
+}
+
+pub flow input_without_a_clock_then_var(x: F32) -> F32 at sample {   //~ E0810
+  var a = x
+  a
+}
+
+pub flow input_without_a_clock_then_function_value(x: F32) -> F32 at sample {   //~ E0810
+  let k = g
+  x
+}
+
+pub flow output_without_a_clock_then_closure(x: F32 at sample) -> F32 {   //~ E0810
+  let k = fn(v: F32) -> F32 { v }
+  x
+}
+
+pub flow input_mode_then_var(inout x: F32 at sample) -> F32 at sample {   //~ E0806
+  var a = x
+  a
+}
+
+pub flow input_mode_then_function_value(move x: F32 at sample) -> F32 at sample {   //~ E0806
+  let k = g
+  x
+}
+
+// ---- the errors of the flow stage, which is after the names stage
+
+pub flow clock_error_then_var(x: F32 at sample) -> F32 at sample {
+  let c = x at block
+  var a = x                                         //~ E0806
+  a
+}
+
+pub flow block_input_into_a_delay_then_for(p: F32 at block) -> F32 at sample {
+  let d = prev~(p)
+  for i in 0 ..< 2 { }                              //~ E0806
+  d
+}
+
+pub flow var_then_forward(x: F32 at sample) -> F32 at sample {
+  var c = x                                         //~ E0806
+  let a = b
+  let b = x
+  a
+}
+
+pub flow closure_then_forward(x: F32 at sample) -> F32 at sample {
+  let k = fn(v: F32) -> F32 { v }                   //~ E0806
+  let a = b
+  let b = x
+  a
+}
+
+pub flow for_then_caret_outside_a_delay(x: F32 at sample) -> F32 at sample {
+  for i in 0 ..< 2 { }                              //~ E0806
+  let a = ^b
+  let b = x
+  a
+}
+
+pub flow function_value_then_call_without_tilde(x: F32 at sample) -> F32 at sample {
+  let k = g                                         //~ E0806
+  let b = lp(x)
+  b
+}
+
+pub flow function_value_then_tilde_on_a_function(x: F32 at sample) -> F32 at sample {
+  let k = g                                         //~ E0806
+  let b = g~(x)
+  b
+}
+
+pub flow function_value_then_par_without_tilde(x: F32 at sample) -> F32 at sample {
+  let k = g                                         //~ E0806
+  let ys = par i in 0 ..< 2 { x }
+  x
+}
+
+pub flow delay_length_error_then_closure(x: F32 at sample) -> F32 at sample {
+  let d = delay~(x, 1)
+  let k = fn(v: F32) -> F32 { v }                   //~ E0806
+  d
+}
+
+pub flow rate_error_then_function_value(x: F32 at sample) -> F32 at sample {
+  let c = x at block
+  let k = g                                         //~ E0806
+  x
+}
+
+pub flow function_value_then_forward(x: F32 at sample) -> F32 at sample {
+  let k = g                                         //~ E0806
+  let a = b
+  let b = x
+  a
+}

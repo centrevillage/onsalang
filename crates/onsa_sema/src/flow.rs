@@ -55,9 +55,7 @@
 use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
-use onsa_syntax::ast::{
-    Arg, CallKind, ExprId, ExprKind, Ident, Mode, PatId, PatKind, RangeEnd, RangeHead, StmtId, StmtKind,
-};
+use onsa_syntax::ast::{Arg, CallKind, ExprId, ExprKind, Ident, PatId, PatKind, RangeEnd, RangeHead, StmtId, StmtKind};
 use serde::{Deserialize, Serialize};
 
 use crate::body::{BodyInfo, Checker, Frame, LocalId, R, Target};

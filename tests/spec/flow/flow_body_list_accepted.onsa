@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§11.5", "§18.1"]
+
+// W7-04 U1a/t, S-125, S-195: each form of the closed list of the expressions of a flow body (§11.2: "使える式は次の閉じた一覧である") in a
+// flow, with no diagnostic: `let` with the destructuring of a tuple and a struct, a name, a literal, a parenthesis, an operator, `as`, `at`,
+// `^name`, a call of an `rt fn` (and of a method), a call of a non-`rt` fn with the arguments of the clock `init` or less, a call of a flow, a field,
+// an index, a struct (with `...`), a tuple and an array literal, the construction of a variant, `if`, `match`, `par~`. The same forms inside the
+// nested positions of the list (an arm, a `par~` body, an argument) are fine too: the closed list does not reject what it contains, so the
+// E0806 of the other forms of the unit (negative/flow_e0806_names_*.onsa) is the only difference. A call with an `inout` or `move` argument is not
+// in the list (E0806, negative/flow_e0806_names_call_arguments.onsa).
+
+pub struct Pt {
+  x: F32,
+  y: F32 = 0.5,
+}
+
+pub enum Mode {
+  Off,
+  Gain(F32),
+}
+
+impl Pt {
+  pub rt fn sum(self) -> F32 {
+    self.x + self.y
+  }
+}
+
+pub rt fn g(v: F32) -> F32 {
+  v
+}
+
+pub rt fn mix(a: F32, b: F32) -> F32 {
+  a + b
+}
+
+pub fn make(n: U32) -> U32 {
+  n + 1
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow every_form(x: F32 at sample, n: U32 at init) -> F32 at sample {
+  let (a, b) = (x, 1.0)
+  let Pt { x: px, y: py } = Pt { x: a, y: b }
+  let p = Pt { x: a, ... }
+  let c = (a + b) * 2.0 - 1.0
+  let i = n as U64
+  let s = c at sample
+  let r = g(mix(s, px))
+  let m = p.sum()
+  let w = make(n)
+  let arr = [a, b, c]
+  let f = arr[1] + p.y
+  let l = lp~(r)
+  let d = prev~(^e)
+  let e = l + d + py + m + f
+  let q = if e > 0.0 { g(e) } else { mix(e, F32.round_from(w)) }
+  let k = match i {
+    0 => Mode.Off,
+    _ => Mode.Gain(q),
+  }
+  let ys = par~ j in 0 ..< 2 { g(x) + lp~(e) }
+  q + ys[0] + ys[1] + lp~(match k { Mode.Off => 0.0, Mode.Gain(v) => v })
+}
