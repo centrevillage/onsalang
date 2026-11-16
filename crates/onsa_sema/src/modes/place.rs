@@ -1,8 +1,8 @@
 //! Places (§5.1, §5.2): a local and the projections
 //! that reach a part of it. It reads the syntax tree and the names only, not
 //! the walk (W8-05 makes it public): the projections of a pattern, the
-//! sources of a head and the index of §7 too (a partial view's place is the
-//! walk's, `exclusive.rs`).
+//! sources of a head and the index of §7 too (what a partial view, a tail or
+//! an element of a literal stands for is `crate::sources`').
 
 use std::collections::{BTreeMap, BTreeSet};
 

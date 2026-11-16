@@ -1,0 +1,181 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§11.6"]
+// fixes = 0
+
+// S-1114 (§5.2): "部分ビュー・フィールド・添字の基に置いたときも、各末尾の場所にその経路を足した場所を数え、基の型によらない
+// （… `h((if c { o } else { p }).l, inout o.l)` は E0702）". The base of a field that is an `if`, a `match` or a block gives
+// the places of its tails with the field path added (one path or two, and a view of the field), so a borrowed argument
+// that is the field of a tail overlaps an `inout` of the same place, of the whole variable or of a part of the field, in
+// either order of the arguments and in the arm that is not run. The type of the field does not matter: a `Buf`, a Copy
+// value, an array, the `Span` field of the generated `Out` (§11.6). A path that is another field of the same variable
+// does not overlap ("同じ値の異なるフィールドは重ならない"), see values/overlap_args_base_ok.onsa. The error is at the later
+// written of the two places, no repair candidate (`fixes = 0`). One error per function (P-01). The functions are one-liners
+// where the call is one line.
+
+pub struct Holder {
+  buf: Buf[F32],
+  n: U32,
+}
+
+pub struct Point {
+  x: F32,
+  y: F32,
+}
+
+pub struct Wave {
+  a: [F32; 4],
+  b: [F32; 4],
+}
+
+pub struct Outer {
+  w: Wave,
+  k: U32,
+}
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}
+
+pub fn hs(a: Buf[F32], inout b: Buf[F32]) {}
+
+pub fn hs_rev(inout b: Buf[F32], a: Buf[F32]) {}
+
+pub fn hs_whole(a: Buf[F32], inout h: Holder) {}
+
+pub fn hb(a: F32, inout b: F32) {}
+
+pub fn hb_whole(a: F32, inout p: Point) {}
+
+pub fn two_s(s: Span[F32], inout t: Span[F32]) {}
+
+pub fn two_w(s: Span[F32], inout w: Wave) {}
+
+pub fn two_o(s: Span[F32], inout o: Outer) {}
+
+// ------------------------------------------------------------------------------- a `Buf` field
+
+pub fn buffer_field_of_an_if(c: Bool, inout h: Holder, g: Holder) {
+  hs((if c { h } else { g }).buf, inout h.buf) //~ E0702
+}
+
+pub fn buffer_field_in_the_other_arm(c: Bool, inout h: Holder, g: Holder) {
+  hs((if c { g } else { h }).buf, inout h.buf) //~ E0702
+}
+
+pub fn buffer_field_of_a_match(k: U32, inout h: Holder, g: Holder) {
+  hs((match k { 0 => h, _ => g }).buf, inout h.buf) //~ E0702
+}
+
+pub fn buffer_field_of_a_block(inout h: Holder) {
+  hs(({ h }).buf, inout h.buf) //~ E0702
+}
+
+pub fn buffer_field_inout_first(c: Bool, inout h: Holder, g: Holder) {
+  hs_rev(inout h.buf, (if c { h } else { g }).buf) //~ E0702
+}
+
+pub fn buffer_field_against_the_whole(c: Bool, inout h: Holder, g: Holder) {
+  hs_whole((if c { h } else { g }).buf, inout h) //~ E0702
+}
+
+pub fn buffer_field_of_locals(c: Bool, n: U32) uses {Alloc} {
+  var h = Holder { buf: Buf.zeroed(n), n: n }
+  var g = Holder { buf: Buf.zeroed(n), n: n }
+  hs((if c { g } else { h }).buf, inout h.buf) //~ E0702
+}
+
+// ---------------------------------------------------------------------------- a Copy field
+
+pub fn copy_field_of_an_if(c: Bool, inout p: Point, q: Point) {
+  hb((if c { p } else { q }).x, inout p.x) //~ E0702
+}
+
+pub fn copy_field_in_the_other_arm(c: Bool, inout p: Point, q: Point) {
+  hb((if c { q } else { p }).x, inout p.x) //~ E0702
+}
+
+pub fn copy_field_of_a_match(k: U32, inout p: Point, q: Point) {
+  hb((match k { 0 => q, _ => p }).y, inout p.y) //~ E0702
+}
+
+pub fn copy_field_against_the_whole(c: Bool, inout p: Point, q: Point) {
+  hb_whole((if c { p } else { q }).x, inout p) //~ E0702
+}
+
+// -------------------------------------------------------------------- an array field, a view of it
+
+pub fn array_field_of_an_if(c: Bool, inout w: Wave, u: Wave) {
+  two_s((if c { w } else { u }).a, inout w.a) //~ E0702
+}
+
+pub fn array_field_against_the_whole(c: Bool, inout w: Wave, u: Wave) {
+  two_w((if c { w } else { u }).a, inout w) //~ E0702
+}
+
+pub fn array_field_against_a_view_of_it(c: Bool, inout w: Wave, u: Wave) {
+  two_s((if c { w } else { u }).a, inout w.a.slice(0, 2)) //~ E0702
+}
+
+pub fn view_of_the_array_field(c: Bool, inout w: Wave, u: Wave) {
+  two_s((if c { w } else { u }).a.slice(0, 2), inout w.a) //~ E0702
+}
+
+pub fn view_of_the_array_field_in_the_other_range(c: Bool, inout w: Wave, u: Wave) {
+  two_s((if c { u } else { w }).a.slice(0, 2), inout w.a.slice(2, 4)) //~ E0702
+}
+
+// --------------------------------------------------------------------- two fields of the path
+
+pub fn two_fields_deep(c: Bool, inout o: Outer, p: Outer) {
+  two_s((if c { o } else { p }).w.a, inout o.w.a) //~ E0702
+}
+
+pub fn two_fields_deep_against_the_outer_struct(c: Bool, inout o: Outer, p: Outer) {
+  two_o((if c { o } else { p }).w.a, inout o) //~ E0702
+}
+
+pub fn the_inner_struct_of_a_tail(c: Bool, inout o: Outer, p: Outer) {
+  two_s((if c { o.w } else { p.w }).a, inout o.w.a) //~ E0702
+}
+
+pub fn the_inner_struct_of_a_tail_against_the_outer(c: Bool, inout o: Outer, p: Outer) {
+  two_o((if c { o.w } else { p.w }).a, inout o) //~ E0702
+}
+
+// ------------------------------------------------------------------ the `Span` field of an `Out`
+
+pub fn out_field_of_an_if(c: Bool, inout o: pair.Out, p: pair.Out) {
+  two_s((if c { o } else { p }).l, inout o.l) //~ E0702
+}
+
+pub fn out_field_in_the_other_arm(c: Bool, inout o: pair.Out, p: pair.Out) {
+  two_s((if c { p } else { o }).l, inout o.l) //~ E0702
+}
+
+pub fn out_field_of_a_match(k: U32, inout o: pair.Out, p: pair.Out) {
+  two_s((match k { 0 => o, _ => p }).r, inout o.r) //~ E0702
+}
+
+pub fn out_field_of_a_block(inout o: pair.Out) {
+  two_s(({ o }).l, inout o.l) //~ E0702
+}
+
+pub fn out_field_against_a_view_of_it(c: Bool, inout o: pair.Out, p: pair.Out) {
+  two_s((if c { o } else { p }).l, inout o.l.slice(0, 1)) //~ E0702
+}
+
+pub fn view_of_the_out_field(c: Bool, inout o: pair.Out, p: pair.Out) {
+  two_s((if c { o } else { p }).l.slice(0, 1), inout o.l) //~ E0702
+}
+
+// ------------------------------------------------------------------------ a path of a path
+
+pub fn the_tails_are_fields_and_the_path_goes_on(c: Bool, inout o: Outer, p: Outer) {
+  two_s((if c { o.w } else { p.w }).a.slice(0, 2), inout o.w.a.slice(2, 4)) //~ E0702
+}

@@ -1,0 +1,182 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2"]
+// fixes = 0
+
+// S-1113 (§5.2): "借用の引数に置いた `if`・`match`・ブロック式は、各末尾の場所（実行されない腕も）をその引数の場所として
+// 重なりを見る" and "Copy の `var` を借用の引数に渡す `h(m, { m = 5 … })` も" E0702, and "`move` の引数に印を書かずに渡す
+// Dup の値の場所 … 重なりでは借用の引数と同じくその場所の読みとして数える。`inout` の場所と重なれば E0702 で
+// （`io_move(inout n, n)`）". A Copy value is a place of its variable, field or element at the tail of an `if`, a
+// `match` or a block too, so it overlaps an `inout` of the same place in the same call whether the callee
+// declares the argument as borrowed or as `move` (the Dup value is copied there, and counted as a read).
+// The places that hold each other overlap (the whole value and its field, the elements of one array). The error
+// is at the later written of the two places, no repair candidate (`fixes = 0`). One error per function (P-01).
+// The forms that do not overlap are in values/overlap_args_tail_ok.onsa.
+
+pub struct P {
+  x: F32,
+  y: F32,
+}
+
+pub fn hb(a: F32, inout b: F32) {}
+
+pub fn hb_rev(inout b: F32, a: F32) {}
+
+pub fn hb_whole(inout p: P, a: F32) {}
+
+pub fn hb_mid(a: F32, inout b: F32, c: F32) {}
+
+pub fn mm_io(move a: F32, inout b: F32) {}
+
+pub fn io_mm(inout b: F32, move a: F32) {}
+
+pub fn gen_b[T](a: T, inout b: T) {}
+
+pub fn gen_mm[T: Copy](move a: T, inout b: T) {}
+
+// ------------------------------------------------------------------- a borrowed Copy argument
+
+pub fn if_then_arm(c: Bool) {
+  var n: F32 = 1.0
+  var m: F32 = 2.0
+  hb(if c { n } else { m }, inout n) //~ E0702
+}
+
+pub fn if_else_arm(c: Bool) {
+  var n: F32 = 1.0
+  var m: F32 = 2.0
+  hb(if c { m } else { n }, inout n) //~ E0702
+}
+
+pub fn match_arm(c: Bool) {
+  var n: F32 = 1.0
+  var m: F32 = 2.0
+  hb(match c { true => n, false => m }, inout n) //~ E0702
+}
+
+pub fn block_tail() {
+  var n: F32 = 1.0
+  hb({ n }, inout n) //~ E0702
+}
+
+pub fn inout_first(c: Bool) {
+  var n: F32 = 1.0
+  var m: F32 = 2.0
+  hb_rev(inout n, if c { n } else { m }) //~ E0702
+}
+
+pub fn inout_between(c: Bool) {
+  var n: F32 = 1.0
+  var m: F32 = 2.0
+  hb_mid(m, inout n, if c { m } else { n }) //~ E0702
+}
+
+pub fn an_inout_parameter(c: Bool, inout n: F32, m: F32) {
+  hb(if c { m } else { n }, inout n) //~ E0702
+}
+
+pub fn a_tail_in_a_tail(c: Bool, d: Bool) {
+  var n: F32 = 1.0
+  var m: F32 = 2.0
+  hb(if c { if d { m } else { n } } else { m }, inout n) //~ E0702
+}
+
+pub fn an_arm_that_is_never_run() {
+  var n: F32 = 1.0
+  var m: F32 = 2.0
+  hb(if false { n } else { m }, inout n) //~ E0702
+}
+
+pub fn an_arm_after_a_diverging_arm(c: Bool) {
+  var n: F32 = 1.0
+  hb(if c { n } else { panic("unreachable") }, inout n) //~ E0702
+}
+
+pub fn a_parenthesis_in_a_tail(c: Bool) {
+  var n: F32 = 1.0
+  var m: F32 = 2.0
+  hb(if c { (n) } else { m }, inout n) //~ E0702
+}
+
+pub fn the_binding_of_a_loop(c: Bool, n: U32) {
+  var a: F32 = 1.0
+  var b: F32 = 2.0
+  for _ in 0 ..< n {
+    hb(if c { a } else { b }, inout a) //~ E0702
+  }
+}
+
+// ------------------------------------------------- a field, an element, the whole and its field
+
+pub fn the_same_field(c: Bool) {
+  var p = P { x: 1.0, y: 2.0 }
+  hb(if c { p.x } else { 0.0 }, inout p.x) //~ E0702
+}
+
+pub fn the_field_in_the_other_arm(c: Bool) {
+  var p = P { x: 1.0, y: 2.0 }
+  hb(if c { p.y } else { p.x }, inout p.x) //~ E0702
+}
+
+pub fn the_whole_inout_and_a_field(c: Bool) {
+  var p = P { x: 1.0, y: 2.0 }
+  hb_whole(inout p, if c { p.x } else { 0.0 }) //~ E0702
+}
+
+pub fn the_elements_of_one_array(c: Bool) {
+  var xs: [F32; 4] = [0.0; 4]
+  hb(if c { xs[0] } else { 1.0 }, inout xs[1]) //~ E0702
+}
+
+pub fn an_element_with_a_variable_index(c: Bool, i: U32, j: U32) {
+  var xs: [F32; 4] = [0.0; 4]
+  hb(match c { true => xs[i], false => 1.0 }, inout xs[j]) //~ E0702
+}
+
+// -------------------------------------------------- an argument that the callee takes with `move`
+
+pub fn move_param_if(c: Bool) {
+  var n: F32 = 1.0
+  var m: F32 = 2.0
+  mm_io(if c { n } else { m }, inout n) //~ E0702
+}
+
+pub fn move_param_match(c: Bool) {
+  var n: F32 = 1.0
+  var m: F32 = 2.0
+  mm_io(match c { true => m, false => n }, inout n) //~ E0702
+}
+
+pub fn move_param_block() {
+  var n: F32 = 1.0
+  mm_io({ n }, inout n) //~ E0702
+}
+
+pub fn move_param_inout_first(c: Bool) {
+  var n: F32 = 1.0
+  var m: F32 = 2.0
+  io_mm(inout n, if c { n } else { m }) //~ E0702
+}
+
+pub fn move_param_a_field(c: Bool) {
+  var p = P { x: 1.0, y: 2.0 }
+  mm_io(if c { p.x } else { p.y }, inout p.x) //~ E0702
+}
+
+// ---------------------------------------------------------------------------------- generic
+
+pub fn generic_borrowed(c: Bool) {
+  var n: F32 = 1.0
+  var m: F32 = 2.0
+  gen_b(if c { n } else { m }, inout n) //~ E0702
+}
+
+pub fn generic_move(c: Bool) {
+  var n: F32 = 1.0
+  var m: F32 = 2.0
+  gen_mm(if c { n } else { m }, inout n) //~ E0702
+}
+
+pub fn generic_caller[T](c: Bool, inout n: T, m: T) {
+  gen_b(if c { m } else { n }, inout n) //~ E0702
+}

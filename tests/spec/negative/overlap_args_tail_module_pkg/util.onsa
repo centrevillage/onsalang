@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§11.6", "§15.1"]
+// fixes = 0
+
+// S-1113 (§5.2) across modules: the callees and the flow of this module are used from app.onsa. The overlap
+// of the tails of a borrowed argument and an `inout` is found at the call, where both places are written, whatever
+// module declares the callee, a type or the generated `In`/`Out` (§11.6, §15.1).
+
+pub fn two_s(s: Span[F32], inout t: Span[F32]) {}
+
+pub fn hb(a: F32, inout b: F32) {}
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}
+
+pub fn put_in(i: pair.In, inout o: pair.Out) {}
+
+pub struct Holder {
+  buf: Buf[F32],
+}
+
+pub fn hh(a: Holder, inout b: Holder) {}

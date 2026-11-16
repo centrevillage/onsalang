@@ -1,0 +1,187 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§5.4"]
+
+// R-482 (§5.2, §5.3, §5.4): the forms with a part view of a part view that are not an overlap, next to the errors of negative/overlap_views_nested_args.
+// onsa and overlap_views_nested_frame.onsa. A view of a view is a view of the variable it comes from, so it overlaps only the places of that variable: another variable,
+// another field of one struct ("同じ値の異なるフィールドは重ならない"), a view of another variable and a read of the same variable ("読みどうしは重ならない") do not. The `inout` that
+// is in another statement is another call, and the body of a `for` or the arm of a `match` that changes only another variable, or only reads the heading, changes nothing of
+// the heading.
+
+pub struct Rack {
+  a: [(F32, F32); 4],
+  b: [(F32, F32); 4],
+}
+
+pub fn f(s: Span[(F32, F32)], inout t: F32) {}
+
+pub fn f_rev(inout t: F32, s: Span[(F32, F32)]) {}
+
+pub fn two_io(inout s: Span[(F32, F32)], inout t: F32) {}
+
+pub fn two_views(inout s: Span[(F32, F32)], inout t: Span[(F32, F32)]) {}
+
+pub fn bm(s: Span[(F32, F32)], t: Span[(F32, F32)]) {}
+
+pub fn bm_f(s: Span[(F32, F32)], t: F32) {}
+
+pub fn sum(s: Span[(F32, F32)]) -> F32 {
+  s[0].0
+}
+
+// ------------------------------------------------------------------------------- the arguments
+
+pub fn another_variable() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  var b: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  f(a.slice(0, 2).slice(0, 1), inout b[0].0)
+}
+
+pub fn another_variable_inout_first() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  var b: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  f_rev(inout b[0].0, a.slice(0, 2).slice(0, 1))
+}
+
+pub fn another_variable_of_three_levels() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  var b: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  f(a.slice(0, 4).slice(0, 2).slice(0, 1), inout b[0].0)
+}
+
+pub fn another_variable_two_inout() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  var b: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  two_io(inout a.slice(0, 2).slice(0, 1), inout b[0].0)
+}
+
+pub fn another_variable_two_views() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  var b: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  two_views(inout a.slice(0, 2).slice(0, 1), inout b.slice(0, 2).slice(0, 1))
+}
+
+pub fn another_field_of_one_struct(inout r: Rack) {
+  f(r.a.slice(0, 2).slice(0, 1), inout r.b[0].0)
+}
+
+pub fn another_field_of_one_struct_two_inout(inout r: Rack) {
+  two_io(inout r.a.slice(0, 2).slice(0, 1), inout r.b[0].0)
+}
+
+pub fn another_parameter(inout a: Span[(F32, F32)], inout b: Span[(F32, F32)]) {
+  f(a.slice(0, 2).slice(0, 1), inout b[0].0)
+}
+
+pub fn two_reads_of_views_of_the_same_variable() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  bm(a.slice(0, 2).slice(0, 1), a.slice(2, 4))
+}
+
+pub fn two_reads_of_views_of_views_of_the_same_variable() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  bm(a.slice(0, 2).slice(0, 1), a.slice(2, 4).slice(0, 1))
+}
+
+pub fn a_read_of_the_view_and_a_read_of_a_copy_element() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  bm_f(a.slice(0, 2).slice(0, 1), a[0].0)
+}
+
+pub fn the_inout_is_in_another_statement() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  var z: F32 = 0.0
+  f(a.slice(0, 2).slice(0, 1), inout z)
+  z = a[0].0
+  f(a.slice(0, 2), inout z)
+}
+
+// ------------------------------------------------------------------------ the receiver of a method
+
+pub fn receiver_a_view_of_a_view_and_another_variable() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  var b: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  a.slice(0, 2).slice(0, 1).copy_from!(b.slice(2, 3))
+}
+
+pub fn receiver_a_view_of_a_view_then_the_field() -> F32 {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  var b: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  a.slice(0, 2).slice(0, 1).copy_from!(b.slice(0, 1))
+  a[0].0 = 1.0
+  a[0].0
+}
+
+pub fn receiver_a_view_of_a_view_fill() -> F32 {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  a.slice(0, 4).slice(1, 3).fill!((2.0, 3.0))
+  a[1].1
+}
+
+// ---------------------------------------------------------------- the body of a `for`, the arm of a `match`
+
+pub fn frame_the_change_of_another_variable() -> F32 {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  var b: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  for v in a.slice(0, 2).slice(0, 1) {
+    b[0].0 = v.1
+  }
+  b[0].0
+}
+
+pub fn frame_the_view_of_a_view_of_another_variable_is_changed() -> F32 {
+  var a: [([F32; 2], F32); 4] = [([0.0; 2], 0.0); 4]
+  var b: [([F32; 2], F32); 4] = [([0.0; 2], 0.0); 4]
+  for v in a[0].0 {
+    b.slice(0, 2).slice(0, 1).fill!(([v; 2], 0.0))
+  }
+  b[0].1
+}
+
+pub fn frame_the_heading_is_read_in_the_body() -> F32 {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  var s: F32 = 0.0
+  for v in a.slice(0, 2).slice(0, 1) {
+    s = s + a[0].0 + v.1
+  }
+  s
+}
+
+pub fn frame_the_view_of_a_view_is_read_in_the_body() -> F32 {
+  var a: [([F32; 2], F32); 4] = [([0.0; 2], 0.0); 4]
+  var s: F32 = 0.0
+  for v in a[0].0 {
+    s = s + v + sum_el(a.slice(0, 2).slice(0, 1))
+  }
+  s
+}
+
+pub fn sum_el(s: Span[([F32; 2], F32)]) -> F32 {
+  s[0].1
+}
+
+pub fn frame_the_change_after_the_loop() -> F32 {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  var s: F32 = 0.0
+  for v in a.slice(0, 2).slice(0, 1) {
+    s = s + v.0
+  }
+  a[0].0 = s
+  a[0].0
+}
+
+pub fn match_the_arm_changes_another_variable() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  var b: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  match a.slice(0, 2).slice(0, 1) {
+    s => f(s, inout b[0].0),
+  }
+}
+
+pub fn match_the_arm_reads_the_field() -> F32 {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  match a.slice(0, 2).slice(0, 1) {
+    s => bm_f(s, a[0].0),
+  }
+  a[0].0
+}

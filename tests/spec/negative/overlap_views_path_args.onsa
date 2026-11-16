@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3"]
+// fixes = 0
+
+// §5.2: "部分ビュー（`xs.slice(from, to)`、§5.3）も範囲によらず、元の場所、その添字、同じ元のほかの部分ビューと重なる
+// （`f(inout a.slice(0, 4), a.slice(4, 8))` は E0702）". An element of a partial view, and a field of one, is a path over the
+// view, so its place is that of the base of the view with the path added (an element of `a`), as the element written
+// directly (`hb(a[0], inout a[1])`) is: borrowed, it overlaps an `inout` of the whole base and of another element of it
+// in the same call (the parent's reading G4 of W7-12 U2c). The error is at the later written of the two places, no
+// repair candidate (`fixes = 0`). One error per function (P-01). The forms that do not overlap (the `inout` of another
+// variable) are at the end of values/overlap_args_base_ok.onsa.
+
+pub struct P {
+  x: F32,
+  y: F32,
+}
+
+pub fn hw(x: F32, inout y: [F32; 4]) {}
+
+pub fn he(x: F32, inout y: F32) {}
+
+pub fn hp(x: F32, inout y: P) {}
+
+pub fn element_of_a_view_and_the_whole_base() {
+  var a: [F32; 4] = [0.0; 4]
+  hw(a.slice(0, 2)[0], inout a) //~ E0702
+}
+
+pub fn element_of_a_view_and_another_element() {
+  var a: [F32; 4] = [0.0; 4]
+  he(a.slice(0, 2)[0], inout a[1]) //~ E0702
+}
+
+pub fn field_of_an_element_of_a_view_and_another_element() {
+  var a: [P; 4] = [P { x: 0.0, y: 0.0 }; 4]
+  hp(a.slice(0, 2)[0].x, inout a[1]) //~ E0702
+}

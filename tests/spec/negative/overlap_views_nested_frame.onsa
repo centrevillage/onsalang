@@ -1,0 +1,148 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§5.4"]
+// fixes = 0
+
+// R-482 (§5.2, §5.3, §5.4): the body of a borrowed `for` ("借用の `for`（`for s in xs`）の本体では、反復元 `xs` とその一部を変更できない。代入、`inout` への受け渡し、`!`
+// のメソッドの呼び出し、`move` は E0715"; "部分ビューの `for s in xs.slice(a, b)` は、範囲によらず `xs` の場所を反復元とする") and the arm of a borrowed `match`
+// ("派生した借用束縛は派生元の場所") see a part view of a part view as a view of the variable, as the part view of one level is. A change of the heading in the body
+// is E0715 whatever the number of levels of the view that changes it (`a.slice(0, 2).slice(0, 1).fill!(…)` against the heading `a[0].0`, a call that takes
+// `inout` of such a view), and the name that is bound to a view of a view is the place of the variable, so it overlaps an `inout` of the field of an element in the
+// arm (E0702, §5.2). The error is at the change (E0715) or at the later written of the two places (E0702), no repair candidate (`fixes = 0`). One error per function
+// (P-01). The controls (the heading that is a view of one or two levels, and the change of one level, that were errors before) are at the end. The forms that do
+// not overlap are in values/overlap_views_nested_ok.onsa, the arguments in negative/overlap_views_nested_args.onsa.
+
+pub fn reset(inout t: F32) {}
+
+pub fn two_io(inout s: Span[([F32; 2], F32)], inout t: F32) {}
+
+pub fn f(s: Span[(F32, F32)], inout t: F32) {}
+
+// ------------------------------------------------------------ the change is a view of a view
+
+pub fn frame_field_and_a_view_of_a_view_fill() {
+  var a: [([F32; 2], F32); 4] = [([0.0; 2], 0.0); 4]
+  for v in a[0].0 {
+    a.slice(0, 2).slice(0, 1).fill!(([v; 2], 0.0)) //~ E0715
+  }
+}
+
+pub fn frame_field_and_a_view_of_a_view_in_another_range() {
+  var a: [([F32; 2], F32); 4] = [([0.0; 2], 0.0); 4]
+  for v in a[0].0 {
+    a.slice(2, 4).slice(0, 1).fill!(([v; 2], 0.0)) //~ E0715
+  }
+}
+
+pub fn frame_field_and_a_view_of_three_levels() {
+  var a: [([F32; 2], F32); 4] = [([0.0; 2], 0.0); 4]
+  for v in a[0].0 {
+    a.slice(0, 4).slice(1, 4).slice(0, 1).fill!(([v; 2], 0.0)) //~ E0715
+  }
+}
+
+pub fn frame_field_and_an_inout_view_of_a_view() {
+  var a: [([F32; 2], F32); 4] = [([0.0; 2], 0.0); 4]
+  var z: F32 = 0.0
+  for _ in a[0].0 {
+    two_io(inout a.slice(0, 2).slice(0, 1), inout z) //~ E0715
+  }
+}
+
+pub fn frame_field_and_a_view_of_a_view_of_a_span_parameter(inout a: Span[([F32; 2], F32)]) {
+  for v in a[0].0 {
+    a.slice(0, 2).slice(0, 1).fill!(([v; 2], 0.0)) //~ E0715
+  }
+}
+
+pub fn frame_field_and_a_view_of_a_view_of_a_buffer(n: U32) uses {Alloc} {
+  var b: Buf[([F32; 2], F32)] = Buf.zeroed(n)
+  for v in b[0].0 {
+    b.slice(0, 2).slice(0, 1).fill!(([v; 2], 0.0)) //~ E0715
+  }
+}
+
+pub fn frame_field_and_a_view_of_a_view_in_an_inner_block(c: Bool) {
+  var a: [([F32; 2], F32); 4] = [([0.0; 2], 0.0); 4]
+  for v in a[0].0 {
+    if c {
+      a.slice(0, 2).slice(0, 1).fill!(([v; 2], 0.0)) //~ E0715
+    }
+  }
+}
+
+// -------------------------------------------------------- the heading is a view of a view
+
+pub fn heading_a_view_of_a_view_and_the_field_assigned() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  for v in a.slice(0, 2).slice(0, 1) {
+    a[0].0 = v.1 //~ E0715
+  }
+}
+
+pub fn heading_a_view_of_a_view_and_a_call_with_inout() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  for _ in a.slice(0, 2).slice(0, 1) {
+    reset(inout a[1].0) //~ E0715
+  }
+}
+
+pub fn heading_a_view_of_a_view_and_a_view_of_a_view_fill() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  for v in a.slice(0, 4).slice(0, 2) {
+    a.slice(0, 2).slice(0, 1).fill!(v) //~ E0715
+  }
+}
+
+pub fn heading_a_view_of_three_levels_and_the_field_assigned() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  for v in a.slice(0, 4).slice(0, 2).slice(0, 1) {
+    a[3].1 = v.0 //~ E0715
+  }
+}
+
+// ----------------------------------------------------------- the arm of a `match` on a view of a view
+
+pub fn match_a_view_of_a_view_and_an_inout_field() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  match a.slice(0, 2).slice(0, 1) {
+    s => f(s, inout a[0].0), //~ E0702
+  }
+}
+
+pub fn match_a_view_of_three_levels_and_an_inout_field() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  match a.slice(0, 4).slice(0, 2).slice(0, 1) {
+    s => f(s, inout a[3].1), //~ E0702
+  }
+}
+
+// ------------------------------------------------ controls: the change of one level (an error before)
+
+pub fn control_frame_field_and_a_view_fill() {
+  var a: [([F32; 2], F32); 4] = [([0.0; 2], 0.0); 4]
+  for v in a[0].0 {
+    a.slice(0, 2).fill!(([v; 2], 0.0)) //~ E0715
+  }
+}
+
+pub fn control_frame_field_and_an_element_assigned() {
+  var a: [([F32; 2], F32); 4] = [([0.0; 2], 0.0); 4]
+  for v in a[0].0 {
+    a[1] = ([v; 2], 0.0) //~ E0715
+  }
+}
+
+pub fn control_heading_a_view_and_the_field_assigned() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  for v in a.slice(0, 2) {
+    a[0].0 = v.1 //~ E0715
+  }
+}
+
+pub fn control_heading_a_view_of_a_view_and_a_variable_index(i: U32) {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  for v in a.slice(0, 2).slice(0, 1) {
+    a[i].0 = v.1 //~ E0715
+  }
+}

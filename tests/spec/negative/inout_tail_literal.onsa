@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§11.6"]
+// fixes = 0
+
+// §5.1, §11.6: an `inout` argument is a place, and a literal of a generated `Out` (or of planar channels, `inout [a, b]`)
+// is made at the argument itself ("引数の位置に struct リテラルを書いて作り、排他性はフィールドの場所ごとに検査する"), its fields
+// each an argument of its own. Put at the tail of a block or of an `if`, or with a field taken of it, the literal is a
+// temporary of the block, the arm or the path, no place: the E0415 of the types stage, as of any other value
+// (`inout mk()`). The literal written at the argument, in parentheses too, passes
+// (flow/flow_gen_types_literal_args.onsa, values/planar_literal_kinds.onsa). No repair candidate (`fixes = 0`). One error
+// per function (P-01).
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}
+
+pub fn io_o(inout t: pair.Out) {}
+
+pub fn io_s(inout t: Span[F32]) {}
+
+pub fn io_pl(inout xs: [Span[F32]; 2]) {}
+
+pub fn generated_literal_at_a_block_tail(inout a2: [F32; 2], inout b2: [F32; 2]) {
+  io_o(inout { pair.Out { l: a2, r: b2 } }) //~ E0415
+}
+
+pub fn generated_literal_at_the_tails_of_an_if(c: Bool, inout a2: [F32; 2], inout b2: [F32; 2]) {
+  io_o(inout if c { pair.Out { l: a2, r: b2 } } else { pair.Out { l: b2, r: a2 } }) //~ E0415
+}
+
+pub fn planar_literal_at_a_block_tail(inout a2: [F32; 2], inout b2: [F32; 2]) {
+  io_pl(inout { [a2, b2] }) //~ E0415
+}
+
+pub fn field_of_a_generated_literal(inout a2: [F32; 2], inout b2: [F32; 2]) {
+  io_s(inout pair.Out { l: a2, r: b2 }.l) //~ E0415
+}

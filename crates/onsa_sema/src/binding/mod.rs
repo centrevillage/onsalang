@@ -20,10 +20,11 @@ use onsa_diag::hash::HashMap;
 use onsa_syntax::ast::{Ast, ExprId, ExprKind, Mode, PatId, StmtId, StmtKind};
 use serde::{Deserialize, Serialize};
 
-use crate::body::{BodyInfo, LocalId, view_base};
+use crate::body::{BodyInfo, LocalId};
 use crate::def::GenericDef;
 use crate::kind::Kind;
 use crate::names::body::{BindingKind, BodyNames, Origin, PathRes};
+use crate::sources::{Cx, Open, What, bare, leaves};
 use crate::tails::Tail;
 use crate::ty::TyId;
 use crate::{Analysis, DefId, Package, module_of_def};
@@ -241,45 +242,47 @@ impl<'a> Settle<'a> {
         }
     }
 
-    /// The row of a head on the value `e` (§5.4, S-604, S-589): a borrow
-    /// when every tail that does not exit is one ([`Settle::borrowed`]),
-    /// derived from the places of all; else owned, and owned when every tail
-    /// exits (the E0503 of §7 does not ask the row). `any_place`: the head of
-    /// a `for` or a `match`, which borrows any place; a `let` borrows a place
-    /// only from a borrow (S-41).
+    /// The row of a head on the value `e` (§5.4, S-604, S-589), from what it
+    /// stands for ([`leaves`]): a borrow when every tail that does not exit
+    /// is one, derived from the places of all; else owned, and owned when
+    /// every tail exits (the E0503 of §7 does not ask the row). A tail is
+    /// borrowed when it is a place whose root is a borrow, or any place
+    /// (`any_place`: the head of a `for` or a `match`; a `let` borrows a
+    /// place only from a borrow, S-41), or a partial view of one; or a value
+    /// that needs no drop ([`no_drop`]: a static value, a literal that needs
+    /// none, a path of one). A tail over a base that is no place stays owned
+    /// unless it needs no drop (S-1117, S-1065), asked once of each tail.
     fn head(&self, e: ExprId, any_place: bool) -> HeadRow {
-        let mut tails = Vec::new();
-        crate::tails::tails(self.ast, e, &self.info.diverging, &mut tails);
-        let (mut sources, mut no_drop, mut borrows) = (Vec::new(), true, false);
-        for tail in tails {
-            match tail {
-                Tail::Exits => {}
-                Tail::Unit(_) => return HeadRow::Owned { by: None },
-                Tail::Value(v) => {
-                    let Some((place, nd)) = self.borrowed(v, any_place) else { return HeadRow::Owned { by: Some(v) } };
-                    sources.extend(place);
-                    no_drop &= nd;
-                    borrows = true;
+        let cx = Cx::after_types(self.ast, self.names, self.info, self.a);
+        let nd = |x: ExprId| no_drop(self.ast, self.names, self.info, x);
+        let (mut sources, mut no_drops, mut borrows, mut last) = (Vec::new(), true, false, None);
+        for leaf in leaves(cx, e, Open::No) {
+            let by = Some(self.ast.without_parens(leaf.tail));
+            match leaf.what {
+                What::Exits(_) => continue,
+                What::Unit(_) => return HeadRow::Owned { by: None },
+                _ if leaf.through() => {
+                    if last == Some(leaf.tail) {
+                        continue;
+                    }
+                    last = Some(leaf.tail);
+                    if !nd(bare(cx, leaf.tail)) {
+                        return HeadRow::Owned { by };
+                    }
                 }
+                What::Place(b) => match root_local(self.ast, self.names, b) {
+                    Some(l) if any_place || matches!(self.info.locals[l].state, Bind::Borrow { .. }) => {
+                        no_drops &= nd(b);
+                        sources.push(b);
+                    }
+                    _ => return HeadRow::Owned { by },
+                },
+                What::Value(x) if !nd(x) => return HeadRow::Owned { by },
+                What::Value(_) => {}
             }
+            borrows = true;
         }
-        if borrows { HeadRow::Borrow { sources, no_drop } } else { HeadRow::Owned { by: None } }
-    }
-
-    /// Whether a tail `e` (without parentheses) is borrowed (§5.4), with the
-    /// place it derives from (none for a static value) and whether it needs
-    /// no drop ([`no_drop`]): a place whose root is a borrow, or any place
-    /// (`any_place`); a partial view of such a place ([`view_base`]); a
-    /// static value or a literal that needs no drop, or a path of one.
-    fn borrowed(&self, e: ExprId, any_place: bool) -> Option<(Option<ExprId>, bool)> {
-        if let Some(base) = view_base((self.ast, self.info, self.a), e, |t| t) {
-            return self.borrowed(self.ast.without_parens(base), any_place);
-        }
-        let nd = no_drop(self.ast, self.names, self.info, e);
-        match root_local(self.ast, self.names, e) {
-            Some(b) => (any_place || matches!(self.info.locals[b].state, Bind::Borrow { .. })).then_some((Some(e), nd)),
-            None => nd.then_some((None, true)),
-        }
+        if borrows { HeadRow::Borrow { sources, no_drop: no_drops } } else { HeadRow::Owned { by: None } }
     }
 
     /// Give the bindings of `head` the state of `row` and record it.
@@ -299,7 +302,7 @@ impl<'a> Settle<'a> {
 /// end of a chain of names (`m.LIMIT`); an `if`, a `match` or a block with a
 /// tail that does not diverge, all such tails needing no drop, or a path of
 /// one (`(if c { ("a", 1) } else { ("b", 2) }).0`, S-1065). Only values with
-/// no place they derive from: not the borrowed places of [`Settle::borrowed`]
+/// no place they derive from: not the borrowed places of [`Settle::head`]
 /// (L3). The one test of the heads, the elements of the literals and the
 /// modes (R-461), from the marks of the bindings and literals settled before;
 /// a walk of the paths and tails of `e`, linear in their size.

@@ -4,6 +4,7 @@ use super::conversions::ConversionCall;
 use super::named::Use;
 use super::*;
 use crate::names::body::PathRes;
+use crate::sources::{Cx, written};
 
 impl<'a> Checker<'a> {
     // ------------------------------------------------------------ calls
@@ -489,8 +490,7 @@ impl<'a> Checker<'a> {
                 }
                 Some(v) => self.view_arg(arg.expr, pt, v, mode)?,
             }
-            let planar = matches!(view, Some((_, Some(_))));
-            if mode == Mode::Inout && !self.inout_place(arg.expr, planar) {
+            if mode == Mode::Inout && !self.inout_place(arg.expr) {
                 return Err(self.no_inout_place(arg.expr, "an `inout` argument", "§5.1"));
             }
         }
@@ -605,30 +605,19 @@ impl<'a> Checker<'a> {
     }
 
     /// Whether `e` can be passed as `inout` (§5.1, §5.3, S-178): a place, a
-    /// partial view of one ([`view_base`]), in a planar argument an array
-    /// literal of those (`inout [a, b]`), and a literal of a generated `Out`
-    /// of those, each field as an argument of its own (a planar literal is
-    /// recorded, [`crate::body::BodyInfo::planar`]). The modes take the
-    /// views and the literals from W4-08.
-    fn inout_place(&self, e: ExprId, planar: bool) -> bool {
-        let e = self.ast.without_parens(e);
-        if let Some(base) = view_base((self.ast, &self.info, self.a), e, |t| self.shallow(t)) {
-            return self.inout_place(base, false);
-        }
-        match &self.expr(e).kind {
-            ExprKind::Array(parts) if planar => parts.iter().all(|&p| self.inout_place(p, false)),
-            ExprKind::Struct { fields, .. } if self.info.planar.contains(&e) => {
-                fields.iter().all(|&(_, f)| self.inout_place(f, self.info.planar.contains(&self.ast.without_parens(f))))
-            }
-            _ => self.is_place(e),
-        }
+    /// partial view of one, a literal of a generated `Out` or a planar array
+    /// literal (`inout [a, b]`) of those, each element an argument of its
+    /// own ([`written`], the one test the modes read too).
+    fn inout_place(&self, e: ExprId) -> bool {
+        let ty = |t| self.shallow(t);
+        written(Cx { ast: self.ast, names: &self.names, info: &self.info, a: self.a, ty: &ty }, e).is_some()
     }
 
     /// The receiver of an `inout self` method, written with `!` or not, is
     /// an `inout` argument (§5.2, S-178).
     fn inout_receiver(&mut self, callee: ExprId) -> R<()> {
         match crate::names::body::receiver(self.ast, callee) {
-            Some(base) if !self.inout_place(base, false) => {
+            Some(base) if !self.inout_place(base) => {
                 Err(self.no_inout_place(base, "the receiver of an `inout self` method", "§5.2"))
             }
             _ => Ok(()),

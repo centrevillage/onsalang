@@ -1,0 +1,156 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2"]
+// fixes = 0
+
+// S-1113 (§5.2): "借用の引数に置いた `if`・`match`・ブロック式は、各末尾の場所（実行されない腕も）をその引数の場所として
+// 重なりを見る". An Affine value (a `Buf`, a struct that holds one) passed as a borrowed argument is a place at the
+// tails of an `if`, a `match` or a block, so it overlaps an `inout` of the same place in the same call, as the
+// tail of a `Span` or a Copy value does. A tail that is a `move` argument of an Affine value is an E0702 that was
+// there before ("`h(x, move x)`", the move in the arm), and stays one error and not two. The error is at the
+// later written of the two places, no repair candidate (`fixes = 0`). One error per function (P-01). The forms
+// that do not overlap are in values/overlap_args_tail_ok.onsa.
+
+pub struct Holder {
+  buf: Buf[F32],
+  n: U32,
+}
+
+pub struct Two {
+  a: Buf[F32],
+  b: Buf[F32],
+}
+
+pub fn hs(a: Buf[F32], inout b: Buf[F32]) {}
+
+pub fn hs_rev(inout b: Buf[F32], a: Buf[F32]) {}
+
+pub fn hh(a: Holder, inout b: Holder) {}
+
+pub fn hh_rev(inout b: Holder, a: Holder) {}
+
+pub fn ht_field(a: Buf[F32], inout t: Two) {}
+
+pub fn hbh(a: Buf[F32], inout h: Holder) {}
+
+pub fn hbh_rev(inout h: Holder, a: Buf[F32]) {}
+
+pub fn hso(a: Buf[F32], inout o: Option[Buf[F32]]) {}
+
+pub fn hm(inout a: Buf[F32], move b: Buf[F32]) uses {Alloc} {}
+
+pub fn hm_rev(move b: Buf[F32], inout a: Buf[F32]) uses {Alloc} {}
+
+pub fn hm_borrow(a: Buf[F32], move b: Buf[F32]) uses {Alloc} {}
+
+pub fn hs_gen[T: ?Dup](a: T, inout b: T) {}
+
+// ------------------------------------------------------------------ a `Buf` as a borrowed argument
+
+pub fn buf_if_then_arm(c: Bool, inout a: Buf[F32], inout b: Buf[F32]) {
+  hs(if c { a } else { b }, inout a) //~ E0702
+}
+
+pub fn buf_if_else_arm(c: Bool, inout a: Buf[F32], inout b: Buf[F32]) {
+  hs(if c { b } else { a }, inout a) //~ E0702
+}
+
+pub fn buf_match_arm(c: Bool, inout a: Buf[F32], inout b: Buf[F32]) {
+  hs(match c { true => a, false => b }, inout a) //~ E0702
+}
+
+pub fn buf_block_tail(inout a: Buf[F32]) {
+  hs({ a }, inout a) //~ E0702
+}
+
+pub fn buf_inout_first(c: Bool, inout a: Buf[F32], inout b: Buf[F32]) {
+  hs_rev(inout a, if c { a } else { b }) //~ E0702
+}
+
+pub fn buf_a_tail_in_a_tail(c: Bool, d: Bool, inout a: Buf[F32], inout b: Buf[F32]) {
+  hs(if c { if d { b } else { a } } else { b }, inout a) //~ E0702
+}
+
+pub fn buf_an_arm_that_is_never_run(inout a: Buf[F32], inout b: Buf[F32]) {
+  hs(if false { a } else { b }, inout a) //~ E0702
+}
+
+pub fn buf_a_local_variable(c: Bool) uses {Alloc} {
+  var a: Buf[F32] = Buf.zeroed(2)
+  var b: Buf[F32] = Buf.zeroed(2)
+  hs(if c { a } else { b }, inout a) //~ E0702
+}
+
+pub fn buf_a_borrowed_parameter_and_an_inout(c: Bool, a: Buf[F32], inout b: Buf[F32]) {
+  hs(if c { a } else { b }, inout b) //~ E0702
+}
+
+pub fn buf_a_field_of_a_struct(c: Bool, inout t: Two, inout u: Two) {
+  ht_field(if c { t.a } else { u.a }, inout t) //~ E0702
+}
+
+// ------------------------------------------------------- a struct that holds a `Buf`, its fields
+
+pub fn holder_if(c: Bool, inout a: Holder, inout b: Holder) {
+  hh(if c { a } else { b }, inout a) //~ E0702
+}
+
+pub fn holder_match(c: Bool, inout a: Holder, inout b: Holder) {
+  hh(match c { true => b, false => a }, inout a) //~ E0702
+}
+
+pub fn holder_block(inout a: Holder) {
+  hh({ a }, inout a) //~ E0702
+}
+
+pub fn holder_inout_first(c: Bool, inout a: Holder, inout b: Holder) {
+  hh_rev(inout a, if c { b } else { a }) //~ E0702
+}
+
+pub fn holder_the_same_field(c: Bool, inout a: Holder, inout b: Holder) {
+  hs(if c { a.buf } else { b.buf }, inout a.buf) //~ E0702
+}
+
+pub fn holder_a_field_and_the_whole_inout(c: Bool, inout a: Holder, inout b: Holder) {
+  hbh(if c { a.buf } else { b.buf }, inout a) //~ E0702
+}
+
+pub fn holder_the_whole_inout_first_and_a_field(c: Bool, inout a: Holder, inout b: Holder) {
+  hbh_rev(inout a, if c { b.buf } else { a.buf }) //~ E0702
+}
+
+pub fn generic_affine(c: Bool, inout a: Holder, inout b: Holder) {
+  hs_gen(if c { a } else { b }, inout a) //~ E0702
+}
+
+// ---------------------------- a borrowed binding of the arm, derived from the variable of the `inout`
+
+pub fn derived_binding_at_a_tail(inout o: Option[Buf[F32]], z: Buf[F32]) {
+  hso(match o { Some(b) => b, None => z }, inout o) //~ E0702
+}
+
+pub fn derived_binding_at_a_tail_of_an_if(c: Bool, inout o: Option[Buf[F32]], z: Buf[F32]) {
+  hso(match o { Some(b) => if c { z } else { b }, None => z }, inout o) //~ E0702
+}
+
+// ------------------------------------------------- a `move` argument in a tail stays one error
+
+pub fn a_move_tail_and_an_inout(c: Bool, move a: Buf[F32], move b: Buf[F32]) uses {Alloc} {
+  hm(inout a, if c { move a } else { move b }) //~ E0702
+}
+
+pub fn a_move_tail_in_the_other_arm(c: Bool, move a: Buf[F32], move b: Buf[F32]) uses {Alloc} {
+  hm(inout a, if c { move b } else { move a }) //~ E0702
+}
+
+pub fn a_move_tail_and_an_inout_after(c: Bool, move a: Buf[F32], move b: Buf[F32]) uses {Alloc} {
+  hm_rev(if c { move a } else { move b }, inout a) //~ E0702
+}
+
+pub fn a_move_tail_and_a_borrow(c: Bool, move a: Buf[F32], move b: Buf[F32]) uses {Alloc} {
+  hm_borrow(a, if c { move a } else { move b }) //~ E0702
+}
+
+pub fn the_field_of_a_struct_at_the_arm_not_taken(c: Bool, inout a: Holder, inout b: Holder) {
+  hs(if c { a.buf } else { b.buf }, inout b.buf) //~ E0702
+}

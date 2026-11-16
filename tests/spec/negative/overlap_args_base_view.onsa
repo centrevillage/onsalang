@@ -1,0 +1,261 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3"]
+// fixes = 0
+
+// S-1114 (§5.2, §5.3): "部分ビュー・フィールド・添字の基に置いたときも、各末尾の場所にその経路を足した場所を数え、基の型によらない
+// （`h((if c { a } else { b }).slice(0, 2), inout a)` … は E0702）". The base of a part view that is an `if`, a `match` or a
+// block (a parenthesis too) is not a place, but the places of its tails are the places of the view ("部分ビューも範囲によらず、元の場所、その添字、
+// 同じ元のほかの部分ビューと重なる"), whatever the type of the base is (an array, a `Span`, a `Buf`, a struct that holds one), so a view whose
+// base picks the variable in a tail, in the arm that is not run too, overlaps an `inout` of that variable (the whole, a part
+// view or an element of it) in the same call, in either order of the arguments. The error is at the later written of the
+// two places (the argument of the same line), no repair candidate (`fixes = 0`: which of the two arguments to change is
+// the writer's design). The controls (the view of a plain variable, that was E0702 before) are at the end. The forms
+// that do not overlap are in values/overlap_args_base_ok.onsa, the field and the element at the base in
+// negative/overlap_args_base_path.onsa and negative/overlap_args_base_index.onsa, the receiver in
+// negative/overlap_args_base_receiver.onsa. One error per function (P-01). The functions are one-liners where the
+// call is one line.
+
+pub struct Holder {
+  buf: Buf[F32],
+  n: U32,
+}
+
+pub fn two_s(s: Span[F32], inout t: Span[F32]) {}
+
+pub fn two_s_rev(inout t: Span[F32], s: Span[F32]) {}
+
+pub fn three_s(a: Span[F32], inout t: Span[F32], b: Span[F32]) {}
+
+pub fn two_b(s: Span[F32], inout t: Buf[F32]) {}
+
+pub fn two_h(s: Span[F32], inout t: Holder) {}
+
+pub fn gen_two[T: Copy](s: Span[T], inout t: Span[T]) {}
+
+pub fn apply(op: fn(U32) -> U32) -> U32 {
+  op.(1)
+}
+
+// ------------------------------------------------- the three forms of a base, the type of the base
+
+pub fn array_if_then_arm(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_s((if c { x } else { y }).slice(0, 2), inout x) //~ E0702
+}
+
+pub fn array_if_else_arm(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_s((if c { y } else { x }).slice(0, 2), inout x) //~ E0702
+}
+
+pub fn array_match(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_s((match c { true => x, false => y }).slice(0, 2), inout x) //~ E0702
+}
+
+pub fn array_match_last_arm(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_s((match c { true => y, false => x }).slice(0, 2), inout x) //~ E0702
+}
+
+pub fn array_block() {
+  var x: [F32; 4] = [0.0; 4]
+  two_s(({ x }).slice(0, 2), inout x) //~ E0702
+}
+
+pub fn array_block_with_a_statement_before_the_tail() {
+  var x: [F32; 4] = [0.0; 4]
+  two_s(({
+    let _: U32 = 1
+    x }).slice(0, 2), inout x) //~ E0702
+}
+
+pub fn span_parameters(c: Bool, inout a: Span[F32], b: Span[F32]) {
+  two_s((if c { a } else { b }).slice(0, 2), inout a) //~ E0702
+}
+
+pub fn span_parameter_in_the_other_arm(c: Bool, inout a: Span[F32], b: Span[F32]) {
+  two_s((if c { b } else { a }).slice(0, 2), inout a) //~ E0702
+}
+
+pub fn buffers(c: Bool, n: U32) uses {Alloc} {
+  var a: Buf[F32] = Buf.zeroed(n)
+  var b: Buf[F32] = Buf.zeroed(n)
+  two_b((if c { a } else { b }).slice(0, 2), inout a) //~ E0702
+}
+
+pub fn the_buffer_field_of_a_struct(c: Bool, n: U32) uses {Alloc} {
+  var h = Holder { buf: Buf.zeroed(n), n: n }
+  var g = Holder { buf: Buf.zeroed(n), n: n }
+  two_h((if c { h.buf } else { g.buf }).slice(0, 2), inout h) //~ E0702
+}
+
+pub fn an_inout_parameter_array(c: Bool, inout x: [F32; 4], y: [F32; 4]) {
+  two_s((if c { y } else { x }).slice(0, 2), inout x) //~ E0702
+}
+
+// ----------------------------------------------------------- the order of the arguments, the places
+
+pub fn inout_first(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_s_rev(inout x, (if c { x } else { y }).slice(0, 2)) //~ E0702
+}
+
+pub fn inout_between(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  var z: [F32; 4] = [0.0; 4]
+  three_s(y, inout x, (if c { z } else { x }).slice(0, 2)) //~ E0702
+}
+
+pub fn a_part_of_the_variable_of_the_inout(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_s((if c { x } else { y }).slice(2, 4), inout x.slice(0, 2)) //~ E0702
+}
+
+pub fn a_part_of_the_other_arm_in_the_other_range(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_s((if c { y } else { x }).slice(0, 2), inout x.slice(2, 4)) //~ E0702
+}
+
+pub fn bounds_known_only_at_run_time(c: Bool, i: U32, j: U32) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_s((if c { x } else { y }).slice(i, j), inout x.slice(j, 4)) //~ E0702
+}
+
+pub fn the_view_of_a_view(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_s((if c { x } else { y }).slice(0, 2).slice(0, 1), inout x) //~ E0702
+}
+
+pub fn the_view_of_a_view_and_a_part_of_the_inout(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_s((if c { x } else { y }).slice(0, 2).slice(0, 1), inout x.slice(2, 4)) //~ E0702
+}
+
+pub fn the_inout_is_a_view_of_a_view(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_s((if c { y } else { x }).slice(0, 2), inout x.slice(0, 3).slice(1, 2)) //~ E0702
+}
+
+// ------------------------------------------------------- a base inside a base, a path not run
+
+pub fn a_tail_in_a_tail(c: Bool, d: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_s((if c { if d { y } else { x } } else { y }).slice(0, 2), inout x) //~ E0702
+}
+
+pub fn a_match_in_an_if(c: Bool, d: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_s((if c { y } else { match d { true => y, false => x } }).slice(0, 2), inout x) //~ E0702
+}
+
+pub fn a_block_in_a_match(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_s((match c { true => y, false => { x } }).slice(0, 2), inout x) //~ E0702
+}
+
+pub fn an_else_if_chain(c: Bool, d: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_s((if c { y } else if d { x } else { y }).slice(0, 2), inout x) //~ E0702
+}
+
+pub fn a_parenthesis_in_a_tail(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_s((if c { (x) } else { y }).slice(0, 2), inout x) //~ E0702
+}
+
+pub fn two_parentheses_around_the_if(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_s(((if c { y } else { x })).slice(0, 2), inout x) //~ E0702
+}
+
+pub fn the_view_in_a_tail_of_the_base(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_s((if c { y.slice(0, 3) } else { x.slice(0, 3) }).slice(0, 2), inout x) //~ E0702
+}
+
+pub fn an_arm_that_is_never_run() {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_s((if false { x } else { y }).slice(0, 2), inout x) //~ E0702
+}
+
+pub fn an_arm_after_a_diverging_arm(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  two_s((if c { x } else { panic("unreachable") }).slice(0, 2), inout x) //~ E0702
+}
+
+pub fn the_arm_before_a_diverging_arm(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  two_s((if c { panic("unreachable") } else { x }).slice(0, 2), inout x) //~ E0702
+}
+
+// -------------------------------------------------------------------- where the call stands
+
+pub fn in_a_loop(c: Bool, n: U32) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  for _ in 0 ..< n {
+    two_s((if c { x } else { y }).slice(0, 2), inout x) //~ E0702
+  }
+}
+
+pub fn in_an_arm_of_a_match(c: Bool, o: Option[U32]) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  match o {
+    Some(_) => two_s((if c { x } else { y }).slice(0, 2), inout x), //~ E0702
+    None => {},
+  }
+}
+
+pub fn in_an_anonymous_function() {
+  let _ = apply(fn(k: U32) -> U32 {
+    var x: [F32; 4] = [0.0; 4]
+    var y: [F32; 4] = [0.0; 4]
+    two_s((if k > 0 { x } else { y }).slice(0, 2), inout x) //~ E0702
+    k
+  })
+}
+
+pub fn a_generic_callee(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  gen_two((if c { x } else { y }).slice(0, 2), inout x) //~ E0702
+}
+
+pub fn a_generic_caller[T: Copy](c: Bool, inout x: [T; 4], y: [T; 4]) {
+  gen_two((if c { x } else { y }).slice(0, 2), inout x) //~ E0702
+}
+
+// ------------------------------------------------ controls: the view of a plain variable (E0702 before)
+
+pub fn control_view_of_a_variable() {
+  var x: [F32; 4] = [0.0; 4]
+  two_s(x.slice(0, 2), inout x) //~ E0702
+}
+
+pub fn control_view_of_a_parenthesis() {
+  var x: [F32; 4] = [0.0; 4]
+  two_s((x).slice(0, 2), inout x) //~ E0702
+}

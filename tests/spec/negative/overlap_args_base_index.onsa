@@ -1,0 +1,178 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3"]
+// fixes = 0
+
+// S-1114 (§5.2): "部分ビュー・フィールド・添字の基に置いたときも、各末尾の場所にその経路を足した場所を数え、基の型によらない". The base of an
+// index that is an `if`, a `match` or a block gives the places of its tails with the index added ("同じ配列の添字どうしは、添字が等しいかを静的に判定しない
+// ので、重なるものとして扱う"), so an element of a tail (a `Span` of a planar array, an array of arrays, a Copy element read as a value) overlaps an `inout`
+// of the same array, of another element of it or of a part view of it in the same call, in either order, in the arm that is not run. The index of the
+// two places need not be the same ("同じ配列の添字どうしは … 重なる"), and a view of the element goes on with the same place. The error is at the later written
+// of the two places, no repair candidate (`fixes = 0`). One error per function (P-01). The forms that do not overlap are in
+// values/overlap_args_base_ok.onsa, the part views and the fields at the base in negative/overlap_args_base_view.onsa and
+// negative/overlap_args_base_path.onsa.
+
+pub fn two_s(s: Span[F32], inout t: Span[F32]) {}
+
+pub fn two_s_rev(inout t: Span[F32], s: Span[F32]) {}
+
+pub fn hb(a: F32, inout t: [F32; 4]) {}
+
+pub fn hb_rev(inout t: [F32; 4], a: F32) {}
+
+pub fn hs(a: F32, inout t: Span[F32]) {}
+
+pub fn hbuf(a: F32, inout t: Buf[F32]) {}
+
+pub fn hel(a: F32, inout e: F32) {}
+
+// ------------------------------------------------------------- the `Span` of a planar array
+
+pub fn planar_if(c: Bool, inout xs: [Span[F32]; 2], ys: [Span[F32]; 2]) {
+  two_s((if c { xs } else { ys })[0], inout xs[0]) //~ E0702
+}
+
+pub fn planar_if_in_the_other_arm(c: Bool, inout xs: [Span[F32]; 2], ys: [Span[F32]; 2]) {
+  two_s((if c { ys } else { xs })[0], inout xs[0]) //~ E0702
+}
+
+pub fn planar_match_and_another_index(k: U32, inout xs: [Span[F32]; 2], ys: [Span[F32]; 2]) {
+  two_s((match k { 0 => xs, _ => ys })[1], inout xs[0]) //~ E0702
+}
+
+pub fn planar_block(inout xs: [Span[F32]; 2]) {
+  two_s(({ xs })[0], inout xs[1]) //~ E0702
+}
+
+pub fn planar_inout_first(c: Bool, inout xs: [Span[F32]; 2], ys: [Span[F32]; 2]) {
+  two_s_rev(inout xs[0], (if c { xs } else { ys })[1]) //~ E0702
+}
+
+pub fn planar_a_variable_index(c: Bool, i: U32, j: U32, inout xs: [Span[F32]; 2], ys: [Span[F32]; 2]) {
+  two_s((if c { xs } else { ys })[i], inout xs[j]) //~ E0702
+}
+
+pub fn planar_a_view_of_the_element(c: Bool, inout xs: [Span[F32]; 2], ys: [Span[F32]; 2]) {
+  two_s((if c { xs } else { ys })[0].slice(0, 2), inout xs[0]) //~ E0702
+}
+
+pub fn planar_a_view_of_the_element_and_a_view(c: Bool, inout xs: [Span[F32]; 2], ys: [Span[F32]; 2]) {
+  two_s((if c { xs } else { ys })[0].slice(0, 2), inout xs[1].slice(2, 4)) //~ E0702
+}
+
+pub fn planar_the_element_of_a_tail_and_the_whole_inout(c: Bool, inout xs: [Span[F32]; 2], ys: [Span[F32]; 2]) {
+  hs_planar((if c { xs } else { ys })[0], inout xs) //~ E0702
+}
+
+pub fn hs_planar(a: Span[F32], inout t: [Span[F32]; 2]) {}
+
+// ---------------------------------------------------------------------------- an array of arrays
+
+pub fn nested_arrays_if(c: Bool) {
+  var x: [[F32; 4]; 2] = [[0.0; 4]; 2]
+  var y: [[F32; 4]; 2] = [[0.0; 4]; 2]
+  two_s((if c { x } else { y })[0], inout x[1]) //~ E0702
+}
+
+pub fn nested_arrays_if_in_the_other_arm(c: Bool) {
+  var x: [[F32; 4]; 2] = [[0.0; 4]; 2]
+  var y: [[F32; 4]; 2] = [[0.0; 4]; 2]
+  two_s((if c { y } else { x })[0], inout x[0]) //~ E0702
+}
+
+pub fn nested_arrays_match(c: Bool) {
+  var x: [[F32; 4]; 2] = [[0.0; 4]; 2]
+  var y: [[F32; 4]; 2] = [[0.0; 4]; 2]
+  two_s((match c { true => x, false => y })[1], inout x[1].slice(0, 2)) //~ E0702
+}
+
+pub fn nested_arrays_the_two_indices(c: Bool) {
+  var x: [[F32; 4]; 2] = [[0.0; 4]; 2]
+  var y: [[F32; 4]; 2] = [[0.0; 4]; 2]
+  two_s((if c { x } else { y })[0], inout x[1].slice(0, 2)) //~ E0702
+}
+
+// -------------------------------------------------------------------------- a Copy element read
+
+pub fn copy_element_against_the_whole(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  hb((if c { x } else { y })[0], inout x) //~ E0702
+}
+
+pub fn copy_element_in_the_other_arm(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  hb((if c { y } else { x })[0], inout x) //~ E0702
+}
+
+pub fn copy_element_against_another_element(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  hel((if c { x } else { y })[0], inout x[1]) //~ E0702
+}
+
+pub fn copy_element_inout_first(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  hb_rev(inout x, (if c { x } else { y })[0]) //~ E0702
+}
+
+pub fn copy_element_of_a_match(k: U32) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  hb((match k { 0 => x, _ => y })[2], inout x) //~ E0702
+}
+
+pub fn copy_element_of_a_block() {
+  var x: [F32; 4] = [0.0; 4]
+  hb(({ x })[0], inout x) //~ E0702
+}
+
+pub fn copy_element_of_an_element_of_a_tail(c: Bool) {
+  var x: [[F32; 4]; 2] = [[0.0; 4]; 2]
+  var y: [[F32; 4]; 2] = [[0.0; 4]; 2]
+  hel((if c { x } else { y })[0][1], inout x[1][2]) //~ E0702
+}
+
+pub fn copy_element_of_an_inout_parameter(c: Bool, inout x: [F32; 4], y: [F32; 4]) {
+  hb((if c { y } else { x })[0], inout x) //~ E0702
+}
+
+pub fn copy_element_of_a_span_parameter(c: Bool, inout a: Span[F32], b: Span[F32]) {
+  hs((if c { a } else { b })[0], inout a) //~ E0702
+}
+
+pub fn copy_element_of_a_buffer(c: Bool, n: U32) uses {Alloc} {
+  var a: Buf[F32] = Buf.zeroed(n)
+  var b: Buf[F32] = Buf.zeroed(n)
+  hbuf((if c { a } else { b })[0], inout a) //~ E0702
+}
+
+pub fn copy_element_against_a_part_view(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  hs((if c { x } else { y })[0], inout x.slice(2, 4)) //~ E0702
+}
+
+pub fn the_receiver_and_a_copy_element(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  x.fill!((if c { x } else { y })[0]) //~ E0702
+}
+
+// ------------------------------------------------ controls: an element of a plain variable (E0702 before)
+
+pub fn control_element_of_a_variable() {
+  var x: [F32; 4] = [0.0; 4]
+  hb(x[0], inout x) //~ E0702
+}
+
+pub fn control_element_of_a_parenthesis() {
+  var x: [F32; 4] = [0.0; 4]
+  hb((x)[0], inout x) //~ E0702
+}
+
+pub fn control_planar_element_of_a_variable(inout xs: [Span[F32]; 2]) {
+  two_s(xs[0], inout xs[1]) //~ E0702
+}

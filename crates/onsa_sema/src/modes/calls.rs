@@ -18,6 +18,7 @@ use super::write::How;
 use crate::Kind;
 use crate::body::{BANG_ON_NO_INOUT_SELF, Target};
 use crate::def::{DefKind, FnDef};
+use crate::sources::planar_parts;
 use crate::ty::{Ty, TyId};
 
 /// What a parameter takes (§5.2).
@@ -177,7 +178,7 @@ impl Walker<'_> {
                 }
                 match m {
                     // A binding derived from its place, passed in the call, is `exclusive`'s E0702 (S-796).
-                    Mode::Inout => match self.planar_literal(e) {
+                    Mode::Inout => match planar_parts(self.ast, self.info, e) {
                         Some(parts) => parts.into_iter().for_each(|x| self.write_place(r, x, How::Inout)),
                         None => self.write_place(r, e, How::Inout),
                     },

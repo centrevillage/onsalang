@@ -366,6 +366,13 @@ note = "at と、struct の出力の flow に process_inplace が無い（4 引�
 
 [[pending]]
 kind = "test-case"
+target = "tests/spec/negative/overlap_args_tail_planar_literal.onsa"
+reasons = ["S-1113"]
+until = "W7-12"
+note = "末尾の平面の配列リテラル（W7-12 U2c2）"
+
+[[pending]]
+kind = "test-case"
 target = "tests/spec/negative/flow_inplace_absent.onsa"
 reasons = ["S-102", "S-197", "R-147"]
 until = "W7-12"

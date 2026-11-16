@@ -2,21 +2,25 @@
 //! its arguments that are places, which overlap one another
 //! or a change made in another argument (E0702).
 
+use onsa_diag::internal::bug;
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast::{Arg, ExprId, Mode};
 
 use super::calls::Takes;
 use super::check::{Changed, Walker};
 use super::flow::Run;
-use super::place::{ByRoot, Place, Proj, place_of};
+use super::place::{ByRoot, Place, place_of};
 use crate::Kind;
-use crate::body::{LocalId, view_base};
+use crate::body::LocalId;
+use crate::sources::{Cx, Leaf, Open, What, leaves};
 
-/// An argument of a call that is a place, or an element of a planar
-/// literal that is one (E0702, [`Walker::arg_places`]): its expression, how
-/// it is passed, its place, its root if a binding of the index (S-796), and
-/// why it is read at a `move` parameter or receiver ([`Read`]).
+/// A place an argument of a call passes (E0702, [`crate::sources::leaves`]):
+/// the argument or the element of a literal opened at it (`arg`), the
+/// expression that gives the place (`at`: the argument, an element, a tail),
+/// how it is passed, its place, its root if a binding of the index (S-796),
+/// and why it is read at a `move` parameter or receiver ([`Read`]).
 pub(super) struct Passed {
+    arg: ExprId,
     at: ExprId,
     mode: Mode,
     place: Place,
@@ -49,8 +53,10 @@ fn how(m: Mode) -> &'static str {
 impl Walker<'_> {
     /// E0702 (§5.2, S-787, S-796): an argument (the receiver
     /// first) that is a place overlapping the place of an earlier one, one
-    /// of them `inout` or `move`, at the later one; the places found so (a
-    /// view, an element of a planar literal too), by where and their root.
+    /// of them `inout` or `move`, at the later one; the places of what each
+    /// stands for ([`leaves`]: its tails, the bases of its paths and partial
+    /// views, the elements of a literal opened at it, S-1113, S-1114, R-482),
+    /// by where and their root, the tails of one argument not with one another.
     /// Each argument is evaluated before the call, so the order is not what
     /// counts, and a value made of a place (`xs.fill!(xs.len())`) is no
     /// place. A borrow binding that is not Copy stands for the places it
@@ -67,14 +73,22 @@ impl Walker<'_> {
             Takes::Param(m, _) => Some((a.expr, *m)),
             Takes::Element => None,
         });
-        let all = receiver.into_iter().chain(params);
-        let places: Vec<_> = all.flat_map(|(x, m)| self.arg_places(x).into_iter().map(move |p| (p, m))).collect();
-        let passed: Vec<Passed> = places.into_iter().map(|((x, place), m)| self.passed(x, m, place)).collect();
+        let mut passed = Vec::new();
+        for (x, m) in receiver.into_iter().chain(params) {
+            for leaf in leaves(self.cx(), x, Open::Arg) {
+                let What::Place(b) = leaf.what else { continue };
+                let Some(place) = place_of(self.ast, self.names, b) else {
+                    bug(Some(self.ast.expr(b).span), "a place leaf with no place")
+                };
+                passed.push(self.passed(&leaf, m, place.then(&leaf.over)));
+            }
+        }
         let (mut later, index) = (Vec::new(), ByRoot::new(&self.deps, passed.iter().map(|q| &q.place)));
         for (j, b) in passed.iter().enumerate() {
             let excl = |p: &Passed| p.mode != Mode::Borrow && p.read != Some(Read::Unknown);
             let earlier = index.sharing(&self.deps, b.place.root).take_while(|&k| k < j).map(|k| &passed[k]);
-            let mut earlier = earlier.filter(|a| excl(b) || excl(a));
+            // The tails of one argument are not passed at once (S-1113).
+            let mut earlier = earlier.filter(|a| a.arg != b.arg && (excl(b) || excl(a)));
             if let Some(a) = earlier.find(|a| self.deps.meets(&a.place, &b.place)) {
                 later.push((self.ast.expr(b.at).span, b.place.root));
                 let d = self.overlapping(a, b);
@@ -84,32 +98,18 @@ impl Walker<'_> {
         (later, passed, index)
     }
 
-    /// The places the argument `e` passes (§5.3): of a planar literal, each
-    /// of its elements' (S-196: the exclusivity is of each), else its own;
-    /// each with the expression that passes it. The writes read the same places.
-    pub(super) fn arg_places(&self, e: ExprId) -> Vec<(ExprId, Place)> {
-        match self.planar_literal(e) {
-            Some(parts) => parts.into_iter().filter_map(|x| Some((x, self.view_place(x)?))).collect(),
-            None => self.view_place(e).map(|p| (e, p)).into_iter().collect(),
-        }
+    /// What the stages after the types read of the body ([`crate::sources`]).
+    pub(super) fn cx(&self) -> Cx<'_> {
+        Cx::after_types(self.ast, self.names, self.info, self.a)
     }
 
-    /// The place `e` is, through its partial views (S-805, §5.2: of
-    /// `xs.slice(a, b)`, that of `xs` with one index more, whatever the
-    /// range, as an element of `xs` overlaps the others).
-    pub(super) fn view_place(&self, e: ExprId) -> Option<Place> {
-        match view_base((self.ast, self.info, self.a), self.ast.without_parens(e), |t| t) {
-            Some(base) => Some(self.view_place(base)?.then(&[Proj::Index])),
-            None => place_of(self.ast, self.names, e),
-        }
-    }
-
-    /// The place passed as `mode` by `x` (S-787: the `move` of an Affine
-    /// field's path consumes its root whole; S-801: a Dup value at a `move`
-    /// parameter or receiver is copied, and counts as a read of its place, as
-    /// at a borrowed one; a value with no kind too).
-    fn passed(&mut self, x: ExprId, mut mode: Mode, mut place: Place) -> Passed {
-        let ty = self.info.expr_types.get(&self.ast.without_parens(x)).copied();
+    /// The place passed as `mode` by the leaf `leaf` of an argument
+    /// (S-787: the `move` of an Affine field's path consumes its root whole;
+    /// S-801: a Dup value at a `move` parameter or receiver is copied, and
+    /// counts as a read of its place, as at a borrowed one; a value with no
+    /// kind too), of the kind of the argument (or element) as passed.
+    fn passed(&mut self, leaf: &Leaf, mut mode: Mode, mut place: Place) -> Passed {
+        let ty = self.info.expr_types.get(&self.ast.without_parens(leaf.arg)).copied();
         let kind = ty.and_then(|t| self.kind_of(t));
         // A value with no kind (§18.1: an unknown bound, the error type) may move or not: a read too.
         let read = match (mode, kind) {
@@ -123,7 +123,7 @@ impl Walker<'_> {
             _ => {}
         }
         let via = self.deps.indexed(place.root).then_some(place.root);
-        Passed { at: x, mode, place, via, read }
+        Passed { arg: leaf.arg, at: leaf.at, mode, place, via, read }
     }
 
     /// The E0702 of `b`, which overlaps the earlier `a`: "twice" of two of
@@ -207,7 +207,8 @@ impl Walker<'_> {
         let window = self.inside.changes[start..].iter().filter(|c| c.release || (self.reports && c.direct != this));
         for Changed { place: w, at, release, .. } in window {
             let span = |p: &Passed| self.ast.expr(p.at).span;
-            let holds = |p: &Passed| span(p).start <= at.start && at.end <= span(p).end;
+            let arg = |p: &Passed| self.ast.expr(p.arg).span;
+            let holds = |p: &Passed| arg(p).start <= at.start && at.end <= arg(p).end;
             let mut shared = index.sharing(&self.deps, w.root).map(|k| &passed[k]);
             let Some(q) = shared.find(|q| !holds(q) && self.deps.meets(w, &q.place)) else { continue };
             if *release {

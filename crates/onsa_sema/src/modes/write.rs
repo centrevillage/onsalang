@@ -13,13 +13,14 @@ use onsa_syntax::ast::{ExprId, PatKind, StmtKind};
 
 use super::check::{Changed, Walker};
 use super::flow::Run;
-use super::place::Place;
+use super::place::{Place, place_of};
 use super::state::Status;
 use super::walk::Pos;
 use crate::Kind;
 use crate::binding::{Bind, Head};
 use crate::body::{LocalId, LocalKind};
 use crate::names::body::{BindingKind, Origin};
+use crate::sources::written;
 
 /// What writes a place.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,7 +65,7 @@ impl Walker<'_> {
     /// can, by its root), walked as the call of `slice` it is.
     pub(super) fn write_place(&mut self, r: &mut Run, target: ExprId, how: How) {
         let at = self.ast.expr(target).span;
-        let Some(place) = self.view_place(target) else {
+        let Some(place) = self.written_place(target) else {
             let message = match how {
                 How::Assign => bug(Some(at), "an assignment to no place (the types stage's E0415)"),
                 How::Inout => {
@@ -101,6 +102,15 @@ impl Walker<'_> {
             r.cur.change(l, |d| d.revive(l));
         }
         self.change(r, place, at, of);
+    }
+
+    /// The one place `target` writes ([`written`]: through its partial
+    /// views, which add no step, R-482); none of a value that is no place.
+    fn written_place(&self, target: ExprId) -> Option<Place> {
+        match written(self.cx(), target)?.as_slice() {
+            &[b] => place_of(self.ast, self.names, b),
+            _ => None,
+        }
     }
 
     /// The place `w` changes at `at`, now or (of an argument, `of`) after

@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.1"]
+// fixes = 0
+
+// S-1113 (§5.2) leaves the place of an `inout` as it was: the operand of `inout` is a place (a variable, a field,
+// an element, a view of them, §5.1), and an `if`, a `match` or a block is not one, so it is E0415 and not an
+// E0702 (the tails of such an expression are places of a borrowed argument only, not of an `inout`). One error
+// per function (P-01), no repair candidate (`fixes = 0`). The tails of a borrowed argument are in
+// negative/overlap_args_tail_span.onsa.
+
+pub fn hi(inout s: Span[F32]) {}
+
+pub fn hn(inout n: F32) {}
+
+pub fn hp(inout xs: [Span[F32]; 2]) {}
+
+pub fn the_if_of_spans(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  hi(inout if c { x } else { y }) //~ E0415
+}
+
+pub fn the_match_of_spans(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  hi(inout match c { true => x, false => y }) //~ E0415
+}
+
+pub fn the_block_of_a_span() {
+  var x: [F32; 4] = [0.0; 4]
+  hi(inout { x }) //~ E0415
+}
+
+pub fn the_if_of_copy_values(c: Bool) {
+  var n: F32 = 1.0
+  var m: F32 = 2.0
+  hn(inout if c { n } else { m }) //~ E0415
+}
+
+pub fn the_if_of_channels(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  hp(inout if c { [x, y] } else { [y, x] }) //~ E0415
+}

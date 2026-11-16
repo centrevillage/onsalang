@@ -1,0 +1,24 @@
+use util.{two_s, hb, pair, put_in, Holder, hh}
+
+pub fn a_span(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_s(if c { x } else { y }, inout x) //~ E0702
+}
+
+pub fn a_copy_value(c: Bool) {
+  var n: F32 = 1.0
+  var m: F32 = 2.0
+  hb(match c { true => n, false => m }, inout n) //~ E0702
+}
+
+pub fn an_affine_value(c: Bool, inout a: Holder, inout b: Holder) {
+  hh(if c { a } else { b }, inout a) //~ E0702
+}
+
+pub fn a_generated_in(c: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 2] = [0.0; 2]
+  put_in(if c { pair.In { l: x, r: y } } else { pair.In { l: y, r: y } }, inout pair.Out { l: z, r: x }) //~ E0702
+}

@@ -1,0 +1,121 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3"]
+// fixes = 0
+
+// S-1113 (§5.2, §5.3): "借用の引数に置いた `if`・`match`・ブロック式は、各末尾の場所をその引数の場所として重なりを見る"
+// and, for the `Span` array, "別々の変数にあるときは `[a, b]` / `inout [a, b]` と配列リテラルを引数の位置にだけ書け
+// （…）、排他性は要素の場所ごとに検査する". A tail that is a literal of planar channels (`[x, y]`) is the places
+// of its elements, so a borrowed `[Span[F32]; 2]` argument whose tail names `x` overlaps an `inout` of `x` in the
+// same call, in the arm that is not run too. The error is at the later written of the two places, no repair
+// candidate (`fixes = 0`). One error per function (P-01). Split from overlap_args_tail_planar.onsa: the tail that
+// is a planar array literal waits for W7-12 U2c2 (tests/pending.toml). The forms that do not overlap are in
+// values/overlap_args_tail_ok.onsa.
+
+pub fn two_pl(xs: [Span[F32]; 2], inout t: Span[F32]) {}
+
+pub fn two_pl_rev(inout t: Span[F32], xs: [Span[F32]; 2]) {}
+
+pub fn pl_pl(xs: [Span[F32]; 2], inout ys: [Span[F32]; 2]) {}
+
+pub fn pl_pl_rev(inout ys: [Span[F32]; 2], xs: [Span[F32]; 2]) {}
+
+pub fn gen_pl[T: Copy](xs: [Span[T]; 2], inout t: Span[T]) {}
+
+// ------------------------------------------------------ a planar literal at the tail of an `if`
+
+pub fn literal_if_then_arm(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_pl(if c { [x, y] } else { [y, y] }, inout x) //~ E0702
+}
+
+pub fn literal_if_else_arm(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_pl(if c { [y, y] } else { [x, y] }, inout x) //~ E0702
+}
+
+pub fn literal_second_element(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_pl(if c { [y, x] } else { [y, y] }, inout x) //~ E0702
+}
+
+pub fn literal_match(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_pl(match c { true => [x, y], false => [y, y] }, inout x) //~ E0702
+}
+
+pub fn literal_block() {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_pl({ [x, y] }, inout x) //~ E0702
+}
+
+pub fn literal_inout_first(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_pl_rev(inout x, if c { [x, y] } else { [y, y] }) //~ E0702
+}
+
+pub fn literal_a_tail_in_a_tail(c: Bool, d: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_pl(if c { if d { [y, y] } else { [x, y] } } else { [y, y] }, inout x) //~ E0702
+}
+
+pub fn literal_an_arm_that_is_never_run() {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_pl(if false { [x, y] } else { [y, y] }, inout x) //~ E0702
+}
+
+pub fn literal_an_arm_after_a_diverging_arm(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_pl(if c { [x, y] } else { panic("unreachable") }, inout x) //~ E0702
+}
+
+pub fn literal_a_parenthesis(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_pl(if c { ([x, y]) } else { [y, y] }, inout x) //~ E0702
+}
+
+pub fn literal_a_part_of_the_inout(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_pl(if c { [x, y] } else { [y, y] }, inout x.slice(1, 3)) //~ E0702
+}
+
+pub fn literal_generic(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  gen_pl(if c { [x, y] } else { [y, y] }, inout x) //~ E0702
+}
+
+pub fn literal_in_a_loop(c: Bool, n: U32) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  for _ in 0 ..< n {
+    two_pl(if c { [x, y] } else { [y, y] }, inout x) //~ E0702
+  }
+}
+
+// ------------------------------------------ the literal of an `inout` against a borrowed planar tail
+
+pub fn inout_literal_and_a_literal_tail(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  var z: [F32; 4] = [0.0; 4]
+  pl_pl(if c { [x, y] } else { [y, y] }, inout [z, x]) //~ E0702
+}
+
+pub fn inout_literal_first_and_a_literal_tail(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  var z: [F32; 4] = [0.0; 4]
+  pl_pl_rev(inout [z, x], if c { [y, y] } else { [x, y] }) //~ E0702
+}

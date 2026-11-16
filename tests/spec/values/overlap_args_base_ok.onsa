@@ -1,0 +1,437 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§11.6"]
+
+// S-1114 (§5.2): the calls whose base of a part view, of a field or of an index that is an `if`, a `match` or a block is not an overlap, next to the
+// errors of negative/overlap_args_base_view.onsa, overlap_args_base_path.onsa, overlap_args_base_index.onsa, overlap_args_base_literal.onsa and
+// overlap_args_base_receiver.onsa. The places of the tails with the path added overlap the `inout` of the same call only if the place
+// holds, or is held by, the place of the `inout`: another variable, another field of one value ("同じ値の異なるフィールドは重ならない"), an element
+// or a view of another variable, a field of a generated literal that the argument does not pick, a base that is not a place (the result of a
+// call, a literal of an array), and a base whose `inout` is in another call (a later statement) do not. Two reads do not overlap ("読みどうしは
+// 重ならない"), whatever the base is, and the `inout` that is read in an argument of the call but only to make a value ("引数の中で同じ変数を読んで
+// 値を作るだけなら重ならない", `xs.fill!(xs.len())`) does not either.
+
+pub struct Point {
+  x: F32,
+  y: F32,
+}
+
+pub struct Wave {
+  a: [F32; 4],
+  b: [F32; 4],
+}
+
+pub struct Outer {
+  w: Wave,
+  k: U32,
+}
+
+pub struct Holder {
+  buf: Buf[F32],
+  n: U32,
+}
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}
+
+pub struct Wide {
+  a: F32,
+  b: F32,
+}
+
+pub flow spread(x: [F32; 2] at sample, m: F32 at sample) -> Wide at sample {
+  Wide { a: x[0] + m, b: x[1] + m }
+}
+
+impl Wave {
+  pub fn put(self, inout o: Outer) {}
+
+  pub fn put_ro(self, o: Outer) {}
+}
+
+pub fn mk() -> [F32; 4] {
+  [1.0; 4]
+}
+
+pub fn two_s(s: Span[F32], inout t: Span[F32]) {}
+
+pub fn two_s_rev(inout t: Span[F32], s: Span[F32]) {}
+
+pub fn bm(a: Span[F32], b: Span[F32]) {}
+
+pub fn pl_s(xs: [Span[F32]; 2], inout t: Span[F32]) {}
+
+pub fn hb(a: F32, inout b: F32) {}
+
+pub fn hel(a: F32, inout t: [F32; 4]) {}
+
+pub fn bm_f(a: F32, b: F32) {}
+
+pub fn hs(a: Buf[F32], inout b: Buf[F32]) {}
+
+pub fn hs_bm(a: Buf[F32], b: Buf[F32]) {}
+
+pub fn hs_view(s: Span[F32], inout b: Buf[F32]) {}
+
+// ------------------------------------------------------------------------------ a part view
+
+pub fn view_of_another_variable(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  var z: [F32; 4] = [0.0; 4]
+  two_s((if c { y } else { z }).slice(0, 2), inout x)
+}
+
+pub fn view_of_another_variable_in_a_match(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  var z: [F32; 4] = [0.0; 4]
+  two_s((match c { true => y, false => z }).slice(0, 2), inout x)
+}
+
+pub fn view_of_another_variable_in_a_block() {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_s(({ y }).slice(0, 2), inout x)
+}
+
+pub fn view_of_another_variable_inout_first(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  var z: [F32; 4] = [0.0; 4]
+  two_s_rev(inout x, (if c { y } else { z }).slice(0, 2))
+}
+
+pub fn view_of_a_view_of_another_variable(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  var z: [F32; 4] = [0.0; 4]
+  two_s((if c { y } else { z }).slice(0, 3).slice(1, 2), inout x.slice(0, 2))
+}
+
+pub fn view_of_a_tail_in_a_tail(c: Bool, d: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  var z: [F32; 4] = [0.0; 4]
+  two_s((if c { if d { y } else { z } } else { y }).slice(0, 2), inout x)
+}
+
+pub fn view_of_span_parameters(c: Bool, a: Span[F32], b: Span[F32], inout t: Span[F32]) {
+  two_s((if c { a } else { b }).slice(0, 2), inout t)
+}
+
+pub fn view_of_buffers(c: Bool, n: U32) uses {Alloc} {
+  var a: Buf[F32] = Buf.zeroed(n)
+  var b: Buf[F32] = Buf.zeroed(n)
+  var d: Buf[F32] = Buf.zeroed(n)
+  hs_view((if c { b } else { d }).slice(0, 2), inout a)
+}
+
+pub fn view_of_a_base_that_is_not_a_place(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  two_s((if c { mk() } else { mk() }).slice(0, 2), inout x)
+}
+
+pub fn view_of_the_result_of_a_call() {
+  var x: [F32; 4] = [0.0; 4]
+  two_s(mk().slice(0, 2), inout x)
+}
+
+pub fn view_of_an_array_literal(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  two_s((if c { [1.0; 4] } else { [2.0; 4] }).slice(0, 2), inout x)
+}
+
+pub fn two_reads_of_views_of_the_same_variable(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  bm((if c { x } else { y }).slice(0, 2), x)
+}
+
+pub fn two_reads_of_views_of_the_same_tails(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  bm((if c { x } else { y }).slice(0, 2), (match c { true => x, false => y }).slice(2, 4))
+}
+
+pub fn the_inout_in_a_later_call(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  bm((if c { x } else { y }).slice(0, 2), y)
+  two_s(y, inout x)
+}
+
+pub fn the_view_of_a_diverging_arm_of_another_variable(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_s((if c { y } else { panic("unreachable") }).slice(0, 2), inout x)
+}
+
+pub fn the_inout_variable_is_read_to_make_a_value(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  x.fill!(hb_sum((if c { y } else { y }).slice(0, 2), x.len()))
+}
+
+pub fn hb_sum(s: Span[F32], n: U32) -> F32 {
+  s[0]
+}
+
+// ---------------------------------------------------------------------------------- a field
+
+pub fn field_another_field(c: Bool, inout w: Wave, u: Wave) {
+  two_s((if c { w } else { u }).a, inout w.b)
+}
+
+pub fn field_another_field_in_a_match(k: U32, inout w: Wave, u: Wave) {
+  two_s((match k { 0 => u, _ => w }).b, inout w.a)
+}
+
+pub fn field_a_part_of_another_field(c: Bool, inout w: Wave, u: Wave) {
+  two_s((if c { w } else { u }).a.slice(0, 2), inout w.b.slice(0, 2))
+}
+
+pub fn field_another_variable(c: Bool, inout w: Wave, u: Wave, v: Wave) {
+  two_s((if c { u } else { v }).a, inout w.a)
+}
+
+pub fn field_two_fields_deep(c: Bool, inout o: Outer, p: Outer) {
+  two_s((if c { o } else { p }).w.a, inout o.w.b)
+}
+
+pub fn field_the_inner_struct_of_a_tail(c: Bool, inout o: Outer, p: Outer) {
+  two_s((if c { o.w } else { p.w }).a, inout o.w.b)
+}
+
+pub fn field_copy_another_field(c: Bool, inout p: Point, q: Point) {
+  hb((if c { p } else { q }).x, inout p.y)
+}
+
+pub fn field_copy_another_field_in_a_match(k: U32, inout p: Point, q: Point) {
+  hb((match k { 0 => q, _ => p }).y, inout p.x)
+}
+
+pub fn field_a_tuple_element(c: Bool, inout t: (F32, F32), u: (F32, F32)) {
+  hb((if c { t } else { u }).0, inout t.1)
+}
+
+pub fn field_buffer_another_variable(c: Bool, inout h: Holder, g: Holder, i: Holder) {
+  hs((if c { g } else { i }).buf, inout h.buf)
+}
+
+pub fn field_buffers_of_the_tails_are_reads(c: Bool, h: Holder, g: Holder) {
+  hs_bm((if c { h } else { g }).buf, h.buf)
+}
+
+pub fn field_a_read_of_the_whole(c: Bool, w: Wave, u: Wave) {
+  bm((if c { w } else { u }).a, w.a)
+}
+
+pub fn field_of_a_base_that_is_not_a_place(c: Bool, inout w: Wave) {
+  two_s((if c { Wave { a: [0.0; 4], b: [1.0; 4] } } else { Wave { a: [2.0; 4], b: [3.0; 4] } }).a, inout w.a)
+}
+
+pub fn field_out_another_field(c: Bool, inout o: pair.Out, p: pair.Out) {
+  two_s((if c { o } else { p }).l, inout o.r)
+}
+
+pub fn field_out_another_field_in_a_match(k: U32, inout o: pair.Out, p: pair.Out) {
+  two_s((match k { 0 => p, _ => o }).r, inout o.l)
+}
+
+pub fn field_out_of_another_variable(c: Bool, inout o: pair.Out, p: pair.Out, q: pair.Out) {
+  two_s((if c { p } else { q }).l, inout o.l)
+}
+
+// ------------------------------------------------------------------------------- an index
+
+pub fn index_another_variable(c: Bool) {
+  var x: [[F32; 4]; 2] = [[0.0; 4]; 2]
+  var y: [[F32; 4]; 2] = [[0.0; 4]; 2]
+  var z: [[F32; 4]; 2] = [[0.0; 4]; 2]
+  two_s((if c { y } else { z })[0], inout x[0])
+}
+
+pub fn index_planar_another_variable(c: Bool, inout xs: [Span[F32]; 2], ys: [Span[F32]; 2], zs: [Span[F32]; 2]) {
+  two_s((if c { ys } else { zs })[0], inout xs[0])
+}
+
+pub fn index_planar_the_tails_are_reads(c: Bool, xs: [Span[F32]; 2], ys: [Span[F32]; 2]) {
+  bm((if c { xs } else { ys })[0], xs[1])
+}
+
+pub fn index_copy_element_another_variable(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  var z: [F32; 4] = [0.0; 4]
+  hel((if c { y } else { z })[0], inout x)
+}
+
+pub fn index_copy_elements_are_reads(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  bm_f((if c { x } else { y })[0], x[1])
+}
+
+pub fn index_copy_element_of_a_base_that_is_not_a_place(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  hel((if c { mk() } else { [2.0; 4] })[0], inout x)
+}
+
+pub fn index_copy_element_in_a_call_with_the_inout_in_another_statement(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  bm_f((if c { x } else { y })[0], 1.0)
+  hel(0.0, inout x)
+}
+
+pub fn index_the_receiver_is_another_variable(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  var z: [F32; 4] = [0.0; 4]
+  x.fill!((if c { y } else { z })[0])
+}
+
+// ------------------------------------------------------------------ the field of a generated literal
+
+pub fn literal_the_other_field_of_the_variable() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  two_s(pair.In { l: x, r: y }.l, inout y)
+}
+
+pub fn literal_the_other_field_of_the_variable_right() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  two_s(pair.In { l: x, r: y }.r, inout x)
+}
+
+pub fn literal_another_variable() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 2] = [0.0; 2]
+  two_s(pair.In { l: x, r: y }.l, inout z)
+}
+
+pub fn literal_a_view_of_the_field_and_another_part() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  two_s(pair.In { l: x, r: y }.l.slice(0, 1), inout y)
+}
+
+pub fn literal_out_the_other_field() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  two_s(pair.Out { l: x, r: y }.l, inout y)
+}
+
+pub fn literal_the_tails_of_the_base_pick_the_other_field(c: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  two_s((if c { pair.In { l: x, r: y } } else { pair.In { l: y, r: y } }).r, inout x)
+}
+
+pub fn literal_the_tails_of_the_base_in_a_match(c: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  two_s((match c { true => pair.In { l: y, r: x }, false => pair.In { l: y, r: y } }).l, inout x)
+}
+
+pub fn literal_the_two_reads_of_the_same_variable() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  bm(pair.In { l: x, r: y }.l, x)
+}
+
+pub fn literal_spread_the_scalar_against_a_channel() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 2] = [0.0; 2]
+  two_s(spread.In { m: x, x: [y, z] }.m, inout y)
+}
+
+pub fn literal_spread_the_channels_against_the_scalar() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 2] = [0.0; 2]
+  pl_s(spread.In { m: x, x: [y, z] }.x, inout x)
+}
+
+pub fn literal_spread_the_channels_against_another_variable() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 2] = [0.0; 2]
+  var w: [F32; 2] = [0.0; 2]
+  pl_s(spread.In { m: x, x: [y, z] }.x, inout w)
+}
+
+// ---------------------------------------------------------------------------------- a receiver
+
+pub fn receiver_view_of_tails_of_other_variables(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  var z: [F32; 4] = [0.0; 4]
+  x.copy_from!((if c { y } else { z }).slice(0, 2))
+}
+
+pub fn receiver_view_of_tails_of_span_parameters(c: Bool, inout a: Span[F32], b: Span[F32], d: Span[F32]) {
+  a.copy_from!((if c { b } else { d }).slice(0, 2))
+}
+
+pub fn receiver_a_part_and_the_view_of_a_tail_of_another_variable(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  var z: [F32; 4] = [0.0; 4]
+  x.slice(2, 4).copy_from!((if c { y } else { z }).slice(0, 2))
+}
+
+pub fn receiver_a_field_of_a_tail_and_another_variable(c: Bool, inout o: Outer, w: Outer, u: Outer) {
+  (if c { w } else { u }).w.put(inout o)
+}
+
+pub fn receiver_a_field_of_a_tail_is_a_read(c: Bool, w: Outer, u: Outer) {
+  (if c { w } else { u }).w.put_ro(w)
+}
+
+pub fn receiver_a_view_of_a_tail_and_the_receiver_changed_in_another_statement(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  bm((if c { x } else { y }).slice(0, 2), y)
+  x.fill!(1.0)
+}
+
+// ---------------------------------------- a path over a partial view and another variable
+
+// The element of a partial view (and a field of one) is a place of its base (negative/overlap_views_path_args.onsa):
+// the `inout` of another variable, whole or an element of it, does not overlap it, nor does a read of the base.
+
+pub fn hp_ok(a: F32, inout p: Point) {}
+
+pub fn element_of_a_view_and_another_variable() {
+  var a: [F32; 4] = [0.0; 4]
+  var b: [F32; 4] = [0.0; 4]
+  hb(a.slice(0, 2)[0], inout b[1])
+}
+
+pub fn element_of_a_view_and_another_whole_variable() {
+  var a: [F32; 4] = [0.0; 4]
+  var b: [F32; 4] = [0.0; 4]
+  hel(a.slice(0, 2)[0], inout b)
+}
+
+pub fn field_of_an_element_of_a_view_and_another_variable() {
+  var a: [Point; 4] = [Point { x: 0.0, y: 0.0 }; 4]
+  var b: [Point; 4] = [Point { x: 0.0, y: 0.0 }; 4]
+  hp_ok(a.slice(0, 2)[0].x, inout b[1])
+}
+
+pub fn element_of_a_view_and_a_read_of_its_base() {
+  var a: [F32; 4] = [0.0; 4]
+  bm_f(a.slice(0, 2)[0], a[1])
+}

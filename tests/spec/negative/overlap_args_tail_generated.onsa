@@ -1,0 +1,194 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§11.6"]
+// fixes = 0
+
+// S-1113 (§5.2, §11.6): "借用の引数に置いた `if`・`match`・ブロック式は、各末尾の場所をその引数の場所として重なりを見る"
+// and "`In` と `Out` は第二級のビューで、引数の位置と、`Span` と同じ借用束縛にだけ現れる。引数の位置に struct
+// リテラルを書いて作り、排他性はフィールドの場所ごとに検査する（`inout [a, b]` と同じ）". A tail that is a struct
+// literal of the generated `In` or `Out` is the places of its fields (an array field takes a literal of channels
+// too), so a borrowed `pair.In` or `pair.Out` argument whose tail names `x` in a field overlaps an `inout`
+// of `x` in the same call, in the arm that is not run too. The error is at the later written of the two
+// places, no repair candidate (`fixes = 0`). One error per function (P-01). The forms that do not overlap
+// are in values/overlap_args_tail_generated_ok.onsa.
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}
+
+pub struct Wide {
+  a: F32,
+  b: F32,
+}
+
+pub flow spread(x: [F32; 2] at sample, m: F32 at sample) -> Wide at sample {
+  Wide { a: x[0] + m, b: x[1] + m }
+}
+
+pub fn put_in(i: pair.In, inout o: pair.Out) {}
+
+pub fn put_in_rev(inout o: pair.Out, i: pair.In) {}
+
+pub fn put_out(o: pair.Out, inout s: Span[F32]) {}
+
+pub fn in_sp(i: pair.In, inout s: Span[F32]) {}
+
+pub fn spread_in(i: spread.In, inout s: Span[F32]) {}
+
+pub fn spread_out(i: spread.In, inout o: spread.Out) {}
+
+// -------------------------------------------------------------- a borrowed `In` against an `Out`
+
+pub fn in_if_then_arm(c: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 2] = [0.0; 2]
+  put_in(if c { pair.In { l: x, r: y } } else { pair.In { l: y, r: y } }, inout pair.Out { l: z, r: x }) //~ E0702
+}
+
+pub fn in_if_else_arm(c: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 2] = [0.0; 2]
+  put_in(if c { pair.In { l: y, r: y } } else { pair.In { l: y, r: x } }, inout pair.Out { l: z, r: x }) //~ E0702
+}
+
+pub fn in_match(c: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 2] = [0.0; 2]
+  put_in(match c { true => pair.In { l: x, r: y }, false => pair.In { l: y, r: y } }, inout pair.Out { l: z, r: x }) //~ E0702
+}
+
+pub fn in_block() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 2] = [0.0; 2]
+  put_in({ pair.In { l: x, r: y } }, inout pair.Out { l: z, r: x }) //~ E0702
+}
+
+pub fn in_inout_first(c: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 2] = [0.0; 2]
+  put_in_rev(inout pair.Out { l: z, r: x }, if c { pair.In { l: x, r: y } } else { pair.In { l: y, r: y } }) //~ E0702
+}
+
+pub fn in_the_same_field(c: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 2] = [0.0; 2]
+  put_in(if c { pair.In { l: x, r: y } } else { pair.In { l: y, r: y } }, inout pair.Out { l: x, r: z }) //~ E0702
+}
+
+pub fn in_a_tail_in_a_tail(c: Bool, d: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 2] = [0.0; 2]
+  put_in(if c { if d { pair.In { l: y, r: y } } else { pair.In { l: x, r: y } } } else { pair.In { l: y, r: y } }, inout pair.Out { l: z, r: x }) //~ E0702
+}
+
+pub fn in_an_arm_that_is_never_run() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 2] = [0.0; 2]
+  put_in(if false { pair.In { l: x, r: y } } else { pair.In { l: y, r: y } }, inout pair.Out { l: z, r: x }) //~ E0702
+}
+
+pub fn in_an_arm_after_a_diverging_arm(c: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 2] = [0.0; 2]
+  put_in(if c { pair.In { l: x, r: y } } else { panic("unreachable") }, inout pair.Out { l: z, r: x }) //~ E0702
+}
+
+pub fn in_a_literal_in_a_parenthesis(c: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 2] = [0.0; 2]
+  put_in(if c { (pair.In { l: x, r: y }) } else { pair.In { l: y, r: y } }, inout pair.Out { l: z, r: x }) //~ E0702
+}
+
+pub fn in_a_loop(c: Bool, n: U32) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 2] = [0.0; 2]
+  for _ in 0 ..< n {
+    put_in(if c { pair.In { l: x, r: y } } else { pair.In { l: y, r: y } }, inout pair.Out { l: z, r: x }) //~ E0702
+  }
+}
+
+// -------------------------------------------------------------- a borrowed `In` against a `Span`
+
+pub fn in_against_a_span(c: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  in_sp(if c { pair.In { l: x, r: y } } else { pair.In { l: y, r: y } }, inout x) //~ E0702
+}
+
+pub fn in_against_a_span_in_the_else_arm(c: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  in_sp(if c { pair.In { l: y, r: y } } else { pair.In { l: y, r: x } }, inout x) //~ E0702
+}
+
+pub fn in_against_a_part_of_a_span(c: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  in_sp(if c { pair.In { l: x, r: y } } else { pair.In { l: y, r: y } }, inout x.slice(0, 1)) //~ E0702
+}
+
+// ---------------------------------------------------------------------- a borrowed `Out` at the tail
+
+pub fn out_if_against_a_span(c: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  put_out(if c { pair.Out { l: x, r: y } } else { pair.Out { l: y, r: y } }, inout x) //~ E0702
+}
+
+pub fn out_match_against_a_span(c: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  put_out(match c { true => pair.Out { l: y, r: y }, false => pair.Out { l: y, r: x } }, inout x) //~ E0702
+}
+
+pub fn out_block_against_a_span() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  put_out({ pair.Out { l: x, r: y } }, inout x) //~ E0702
+}
+
+// --------------------------------------------- an array field of the literal takes channels too
+
+pub fn spread_in_array_field_against_a_span(c: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 2] = [0.0; 2]
+  spread_in(if c { spread.In { m: x, x: [y, z] } } else { spread.In { m: y, x: [y, y] } }, inout z) //~ E0702
+}
+
+pub fn spread_in_scalar_field_against_a_span(c: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 2] = [0.0; 2]
+  spread_in(if c { spread.In { m: x, x: [y, z] } } else { spread.In { m: y, x: [y, y] } }, inout x) //~ E0702
+}
+
+pub fn spread_in_array_field_in_the_else_arm(c: Bool) {
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 2] = [0.0; 2]
+  spread_in(if c { spread.In { m: y, x: [y, y] } } else { spread.In { m: y, x: [y, z] } }, inout z) //~ E0702
+}
+
+pub fn spread_in_array_field_against_an_out_literal(c: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 2] = [0.0; 2]
+  var w: [F32; 2] = [0.0; 2]
+  spread_out(if c { spread.In { m: x, x: [y, z] } } else { spread.In { m: y, x: [y, y] } }, inout spread.Out { a: x, b: w }) //~ E0702
+}

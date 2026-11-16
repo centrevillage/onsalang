@@ -1,0 +1,331 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§5.4"]
+
+// S-1113 (§5.2): the calls whose tails of an `if`, a `match` or a block at a borrowed argument are not an
+// overlap, next to the errors of negative/overlap_args_tail_span.onsa, overlap_args_tail_copy.onsa,
+// overlap_args_tail_affine.onsa and overlap_args_tail_planar.onsa. A tail overlaps the `inout` of the same call
+// only if it is a place that holds, or is held by, the place of the `inout`: another variable, another field
+// of one value, a Copy binding of an arm ("Copy の束縛は束縛した時点の値で、重ならない", §5.4), a value that is not a
+// place (a literal, the result of a call or of an operation), and a variable declared in the block of the
+// argument ("引数の中のブロックで宣言した変数への代入は、どの引数とも重ならない") do not. Two reads do not overlap
+// ("読みどうしは重ならない": a borrowed argument and another borrowed or `move` argument of the same place), the
+// arm that diverges has no tail, and a tail that is read in an argument but has the `inout` only in another
+// call (a later statement) is a different call.
+
+pub struct W {
+  a: [F32; 4],
+  b: [F32; 4],
+  c: [F32; 4],
+}
+
+pub struct P {
+  x: F32,
+  y: F32,
+}
+
+pub struct Holder {
+  buf: Buf[F32],
+  n: U32,
+}
+
+pub struct Two {
+  a: Buf[F32],
+  b: Buf[F32],
+}
+
+pub fn two_s(s: Span[F32], inout t: Span[F32]) {}
+
+pub fn bm(a: Span[F32], b: Span[F32]) {}
+
+pub fn hb(a: F32, inout b: F32) {}
+
+pub fn hb_rev(inout b: F32, a: F32) {}
+
+pub fn ho(a: F32, inout o: Option[F32]) {}
+
+pub fn bm_f(a: F32, b: F32) {}
+
+pub fn mm(move a: F32, b: F32) {}
+
+pub fn mm_io(move a: F32, inout b: F32) {}
+
+pub fn f(k: F32) -> F32 {
+  k
+}
+
+pub fn hs(a: Buf[F32], inout b: Buf[F32]) {}
+
+pub fn hs_rev(inout b: Buf[F32], a: Buf[F32]) {}
+
+pub fn hh(a: Holder, inout b: Holder) {}
+
+pub fn hbo(a: Buf[F32], inout o: Option[Buf[F32]]) {}
+
+pub fn hm(inout a: Buf[F32], move b: Buf[F32]) uses {Alloc} {}
+
+pub fn hm_borrow(a: Buf[F32], move b: Buf[F32]) uses {Alloc} {}
+
+pub fn two_pl(xs: [Span[F32]; 2], inout t: Span[F32]) {}
+
+pub fn pl_pl(xs: [Span[F32]; 2], inout ys: [Span[F32]; 2]) {}
+
+// ------------------------------------------------------------------------------ `Span` tails
+
+pub fn span_another_variable(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  var z: [F32; 4] = [0.0; 4]
+  two_s(if c { y } else { z }, inout x)
+}
+
+pub fn span_another_variable_in_a_match(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  var z: [F32; 4] = [0.0; 4]
+  two_s(match c { true => y, false => z }, inout x)
+}
+
+pub fn span_another_variable_in_a_block() {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_s({ y }, inout x)
+}
+
+pub fn span_another_variable_in_the_tails_of_a_tail(c: Bool, d: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  var z: [F32; 4] = [0.0; 4]
+  two_s(if c { if d { y } else { z } } else { y }, inout x)
+}
+
+pub fn span_another_field(c: Bool, inout w: W) {
+  two_s(if c { w.a } else { w.b }, inout w.c)
+}
+
+pub fn span_another_field_in_a_match(c: Bool, inout w: W) {
+  two_s(match c { true => w.b, false => w.c }, inout w.a)
+}
+
+pub fn span_a_part_of_another_variable(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  var z: [F32; 4] = [0.0; 4]
+  two_s(if c { y.slice(0, 2) } else { z.slice(0, 2) }, inout x.slice(0, 2))
+}
+
+pub fn span_the_tails_are_reads(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  bm(if c { x } else { y }, x)
+}
+
+pub fn span_the_tails_are_reads_in_the_other_order(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  bm(x, if c { x } else { y })
+}
+
+pub fn span_two_reads_of_the_same_tails(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  bm(if c { x } else { y }, match c { true => x, false => y })
+}
+
+pub fn span_the_inout_in_a_later_call(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  bm(if c { x } else { y }, y)
+  two_s(y, inout x)
+}
+
+pub fn span_a_diverging_arm_of_another_variable(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_s(if c { y } else { panic("unreachable") }, inout x)
+}
+
+pub fn span_an_arm_that_is_a_parameter_view(c: Bool, s: Span[F32], inout t: Span[F32]) {
+  two_s(if c { s } else { s.slice(0, 1) }, inout t)
+}
+
+// ----------------------------------------------------------------------------- Copy tails
+
+pub fn copy_another_variable(c: Bool) {
+  var n: F32 = 1.0
+  var m: F32 = 2.0
+  var k: F32 = 3.0
+  hb(if c { m } else { k }, inout n)
+}
+
+pub fn copy_another_variable_inout_first(c: Bool) {
+  var n: F32 = 1.0
+  var m: F32 = 2.0
+  var k: F32 = 3.0
+  hb_rev(inout n, if c { m } else { k })
+}
+
+pub fn copy_another_field(c: Bool) {
+  var p = P { x: 1.0, y: 2.0 }
+  hb(if c { p.y } else { 0.0 }, inout p.x)
+}
+
+pub fn copy_a_binding_of_an_arm(inout o: Option[F32]) {
+  ho(match o { Some(k) => k, None => 0.0 }, inout o)
+}
+
+pub fn copy_a_binding_of_an_arm_in_an_if(c: Bool, inout o: Option[F32]) {
+  ho(match o { Some(k) => if c { k } else { 0.0 }, None => 0.0 }, inout o)
+}
+
+pub fn copy_the_value_of_a_call(c: Bool, inout n: F32) {
+  hb(if c { f(n) } else { n + 1.0 }, inout n)
+}
+
+pub fn copy_a_literal(c: Bool, inout n: F32) {
+  hb(if c { 1.0 } else { 2.0 }, inout n)
+}
+
+pub fn copy_a_value_read_in_a_block(inout n: F32) {
+  hb({
+    let t: F32 = n
+    t
+  }, inout n)
+}
+
+pub fn copy_a_diverging_arm(c: Bool, inout n: F32) {
+  hb(if c { 1.0 } else { panic("unreachable") }, inout n)
+}
+
+pub fn copy_the_tails_are_reads(c: Bool) {
+  var n: F32 = 1.0
+  var m: F32 = 2.0
+  bm_f(if c { n } else { m }, n)
+}
+
+pub fn copy_the_tails_are_reads_of_a_move_param(c: Bool) {
+  var n: F32 = 1.0
+  var m: F32 = 2.0
+  mm(if c { n } else { m }, n)
+}
+
+pub fn copy_a_move_param_and_another_variable(c: Bool) {
+  var n: F32 = 1.0
+  var m: F32 = 2.0
+  var k: F32 = 3.0
+  mm_io(if c { m } else { k }, inout n)
+}
+
+// ---------------------------------------------- a variable declared in the block of the argument
+
+pub fn block_a_variable_assigned_and_the_tail() {
+  var n: F32 = 1.0
+  hb({
+    var t: F32 = 1.0
+    t = 5.0
+    t
+  }, inout n)
+}
+
+pub fn block_a_variable_declared_and_the_tail_of_the_other_argument(inout n: F32) {
+  hb_rev(inout n, {
+    var t: F32 = 1.0
+    t = 5.0
+    t
+  })
+}
+
+pub fn block_the_variable_in_the_arm_of_an_if(c: Bool, inout n: F32) {
+  hb(if c {
+    var t: F32 = 1.0
+    t = 5.0
+    t
+  } else {
+    2.0
+  }, inout n)
+}
+
+pub fn block_the_variable_in_the_arm_of_a_match(c: Bool, inout n: F32) {
+  hb(match c {
+    true => {
+      var t: F32 = 1.0
+      t = 5.0
+      t
+    },
+    false => 2.0,
+  }, inout n)
+}
+
+// -------------------------------------------------------------------------- Affine tails
+
+pub fn affine_another_variable(c: Bool, inout a: Buf[F32], inout b: Buf[F32], inout d: Buf[F32]) {
+  hs(if c { b } else { d }, inout a)
+}
+
+pub fn affine_another_variable_inout_first(c: Bool, inout a: Buf[F32], inout b: Buf[F32], inout d: Buf[F32]) {
+  hs_rev(inout a, match c { true => b, false => d })
+}
+
+pub fn affine_the_tails_are_reads(c: Bool, a: Buf[F32], b: Buf[F32]) {
+  hs_two(if c { a } else { b }, a)
+}
+
+pub fn hs_two(a: Buf[F32], b: Buf[F32]) {}
+
+pub fn affine_another_field(c: Bool, inout t: Two, u: Two) {
+  hs(if c { t.a } else { u.a }, inout t.b)
+}
+
+pub fn affine_another_struct(c: Bool, inout a: Holder, inout b: Holder, inout d: Holder) {
+  hh(if c { b } else { d }, inout a)
+}
+
+pub fn affine_a_binding_of_another_variable(inout o: Option[Buf[F32]], inout q: Option[Buf[F32]], z: Buf[F32]) {
+  hbo(match q { Some(b) => b, None => z }, inout o)
+}
+
+pub fn affine_a_move_tail_of_another_variable(c: Bool, move a: Buf[F32], move b: Buf[F32], move d: Buf[F32]) uses {Alloc} {
+  hm(inout a, if c { move b } else { move d })
+}
+
+pub fn affine_a_move_tail_and_a_borrow_of_another_variable(c: Bool, move a: Buf[F32], move b: Buf[F32], move d: Buf[F32]) uses {Alloc} {
+  hm_borrow(a, if c { move b } else { move d })
+}
+
+// ------------------------------------------------------------------ a literal of planar channels
+
+pub fn channels_another_variable(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  var z: [F32; 4] = [0.0; 4]
+  two_pl(if c { [x, y] } else { [y, y] }, inout z)
+}
+
+pub fn channels_in_a_match_and_a_block(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  var z: [F32; 4] = [0.0; 4]
+  two_pl(match c { true => [x, y], false => [y, y] }, inout z)
+  two_pl({ [x, y] }, inout z)
+}
+
+pub fn channels_two_literals(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  var z: [F32; 4] = [0.0; 4]
+  var w: [F32; 4] = [0.0; 4]
+  pl_pl(if c { [x, y] } else { [y, y] }, inout [z, w])
+}
+
+pub fn channels_the_tails_are_reads_of_a_span(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  bm(x, if c { x } else { y })
+}
+
+pub fn channels_the_variable_of_channels_and_another(c: Bool) {
+  var ps: [[F32; 4]; 2] = [[0.0; 4]; 2]
+  var qs: [[F32; 4]; 2] = [[0.0; 4]; 2]
+  var z: [F32; 4] = [0.0; 4]
+  two_pl(if c { ps } else { qs }, inout z)
+}

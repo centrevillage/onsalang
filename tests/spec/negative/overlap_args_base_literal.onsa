@@ -1,0 +1,188 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§11.6"]
+// fixes = 0
+
+// S-1114 (§5.2, §11.6): "基が引数の位置の生成型の struct リテラルなら、選んだフィールドの要素の場所" and "`In` と `Out` は第二級のビューで、引数の位置に
+// struct リテラルを書いて作り、排他性はフィールドの場所ごとに検査する". The base of a field or of a view that is a struct literal of the generated
+// `In` or `Out` is not a place, but the elements of the field it picks are (`x` in `pair.In { l: x, r: y }.l`), so the borrowed argument overlaps
+// an `inout` of that element (the whole variable, a part view of it) in the same call, in either order, and a field that the argument does not pick is
+// no place of it (`.l` with an `inout` of `y` is the control in values/overlap_args_base_ok.onsa). The literal is the tail of an `if`, a `match` or a
+// block too, with the field added to each tail, and a field that is an array of channels takes the places of the channels it names. The error is at the
+// later written of the two places, no repair candidate (`fixes = 0`). One error per function (P-01). The functions are one-liners where the call is one
+// line.
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}
+
+pub struct Wide {
+  a: F32,
+  b: F32,
+}
+
+pub flow spread(x: [F32; 2] at sample, m: F32 at sample) -> Wide at sample {
+  Wide { a: x[0] + m, b: x[1] + m }
+}
+
+pub fn two_s(s: Span[F32], inout t: Span[F32]) {}
+
+pub fn two_s_rev(inout t: Span[F32], s: Span[F32]) {}
+
+pub fn pl_s(xs: [Span[F32]; 2], inout t: Span[F32]) {}
+
+// ------------------------------------------------------------------------- a literal of `In`
+
+pub fn in_left_field_against_its_variable() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  two_s(pair.In { l: x, r: y }.l, inout x) //~ E0702
+}
+
+pub fn in_right_field_against_its_variable() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  two_s(pair.In { l: x, r: y }.r, inout y) //~ E0702
+}
+
+pub fn in_field_inout_first() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  two_s_rev(inout x, pair.In { l: x, r: y }.l) //~ E0702
+}
+
+pub fn in_field_against_a_part_of_the_variable() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  two_s(pair.In { l: x, r: y }.l, inout x.slice(0, 1)) //~ E0702
+}
+
+pub fn in_a_view_of_the_field() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  two_s(pair.In { l: x, r: y }.l.slice(0, 1), inout x) //~ E0702
+}
+
+pub fn in_a_view_of_the_field_and_a_part_of_the_variable() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  two_s(pair.In { l: x, r: y }.l.slice(0, 1), inout x.slice(1, 2)) //~ E0702
+}
+
+pub fn in_a_parenthesis_around_the_literal() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  two_s((pair.In { l: x, r: y }).l, inout x) //~ E0702
+}
+
+pub fn in_span_parameters(inout a: Span[F32], b: Span[F32]) {
+  two_s(pair.In { l: a, r: b }.l, inout a) //~ E0702
+}
+
+pub fn in_the_same_variable_in_both_fields() {
+  var x: [F32; 2] = [0.0; 2]
+  two_s(pair.In { l: x, r: x }.r, inout x) //~ E0702
+}
+
+// ------------------------------------------------------------------------ a literal of `Out`
+
+pub fn out_left_field_against_its_variable() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  two_s(pair.Out { l: x, r: y }.l, inout x) //~ E0702
+}
+
+pub fn out_right_field_against_its_variable() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  two_s(pair.Out { l: x, r: y }.r, inout y) //~ E0702
+}
+
+// ---------------------------------------------------- the literal is the tail of the base of a field
+
+pub fn tails_if_then_arm(c: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  two_s((if c { pair.In { l: x, r: y } } else { pair.In { l: y, r: y } }).l, inout x) //~ E0702
+}
+
+pub fn tails_if_else_arm(c: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  two_s((if c { pair.In { l: y, r: y } } else { pair.In { l: x, r: y } }).l, inout x) //~ E0702
+}
+
+pub fn tails_match(c: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  two_s((match c { true => pair.In { l: y, r: y }, false => pair.In { l: x, r: y } }).l, inout x) //~ E0702
+}
+
+pub fn tails_block() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  two_s(({ pair.In { l: x, r: y } }).l, inout x) //~ E0702
+}
+
+pub fn tails_the_right_field(c: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  two_s((if c { pair.In { l: x, r: x } } else { pair.In { l: x, r: y } }).r, inout y) //~ E0702
+}
+
+pub fn tails_an_arm_that_is_never_run() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  two_s((if false { pair.In { l: x, r: y } } else { pair.In { l: y, r: y } }).l, inout x) //~ E0702
+}
+
+pub fn tails_a_view_of_the_field(c: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  two_s((if c { pair.In { l: x, r: y } } else { pair.In { l: y, r: y } }).l.slice(0, 1), inout x) //~ E0702
+}
+
+pub fn tails_in_an_inout_first_call(c: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  two_s_rev(inout x, (if c { pair.In { l: x, r: y } } else { pair.In { l: y, r: y } }).l) //~ E0702
+}
+
+pub fn tails_span_parameters(c: Bool, inout a: Span[F32], b: Span[F32]) {
+  two_s((if c { pair.In { l: a, r: b } } else { pair.In { l: b, r: b } }).l, inout a) //~ E0702
+}
+
+// ---------------------------------------------------------- a field that is an array of channels
+
+pub fn spread_the_scalar_field_against_its_variable() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 2] = [0.0; 2]
+  two_s(spread.In { m: x, x: [y, z] }.m, inout x) //~ E0702
+}
+
+pub fn spread_the_channels_against_a_channel() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 2] = [0.0; 2]
+  pl_s(spread.In { m: x, x: [y, z] }.x, inout z) //~ E0702
+}
+
+pub fn spread_the_channels_against_the_first_channel() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 2] = [0.0; 2]
+  pl_s(spread.In { m: x, x: [y, z] }.x, inout y) //~ E0702
+}
+
+pub fn spread_the_channels_of_the_tails(c: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 2] = [0.0; 2]
+  pl_s((if c { spread.In { m: x, x: [y, z] } } else { spread.In { m: x, x: [x, x] } }).x, inout z) //~ E0702
+}

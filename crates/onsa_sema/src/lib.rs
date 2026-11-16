@@ -54,6 +54,9 @@ pub mod resolve;
 mod rt;
 mod sig;
 mod slot;
+mod sources;
+#[cfg(test)]
+mod sources_tests;
 mod stages;
 #[cfg(test)]
 mod stages_tests;

@@ -1,0 +1,192 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3"]
+// fixes = 0
+
+// R-482 (§5.2, §5.3): "部分ビュー（`xs.slice(from, to)`、§5.3）も範囲によらず、元の場所、その添字、同じ元のほかの部分ビューと重なる". A part
+// view of a part view (`a.slice(0, 2).slice(0, 1)`) is a view of the variable `a` whatever the ranges are, as the part view of one level is, so it
+// overlaps an `inout` of the same call that is `a`, an element of `a`, a field of an element of `a` (`a[0].0`) or a view of `a`, in either order of the arguments and
+// whatever the number of levels. The place of the nested view is the place of the base and the element, not one more index for each level. The
+// error is at the later written of the two places, no repair candidate (`fixes = 0`). One error per function (P-01). The functions are one-liners
+// where the call is one line. The controls (the view of one level, that was E0702 before) are at the end. The forms that do not overlap are in
+// values/overlap_views_nested_ok.onsa, the body of a `for` in negative/overlap_views_nested_frame.onsa.
+
+pub struct Rack {
+  a: [(F32, F32); 4],
+  b: [(F32, F32); 4],
+}
+
+pub fn f(s: Span[(F32, F32)], inout t: F32) {}
+
+pub fn f_rev(inout t: F32, s: Span[(F32, F32)]) {}
+
+pub fn f_el(s: Span[(F32, F32)], inout t: (F32, F32)) {}
+
+pub fn f_whole(s: Span[(F32, F32)], inout t: [(F32, F32); 4]) {}
+
+pub fn f_buf(s: Span[(F32, F32)], inout t: Buf[(F32, F32)]) {}
+
+pub fn f_nested(s: Span[[F32; 4]], inout t: F32) {}
+
+pub fn f_span(s: Span[(F32, F32)], inout t: Span[(F32, F32)]) {}
+
+pub fn two_io(inout s: Span[(F32, F32)], inout t: F32) {}
+
+pub fn two_io_rev(inout t: F32, inout s: Span[(F32, F32)]) {}
+
+pub fn two_views(inout s: Span[(F32, F32)], inout t: Span[(F32, F32)]) {}
+
+// ---------------------------------------------------- a view of a view against the field of an element
+
+pub fn array_local() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  f(a.slice(0, 2).slice(0, 1), inout a[0].0) //~ E0702
+}
+
+pub fn array_local_the_second_field() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  f(a.slice(0, 2).slice(0, 1), inout a[0].1) //~ E0702
+}
+
+pub fn array_local_another_element() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  f(a.slice(0, 2).slice(0, 1), inout a[3].1) //~ E0702
+}
+
+pub fn array_local_a_variable_index(i: U32) {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  f(a.slice(0, 2).slice(0, 1), inout a[i].0) //~ E0702
+}
+
+pub fn array_local_inout_first() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  f_rev(inout a[0].0, a.slice(0, 2).slice(0, 1)) //~ E0702
+}
+
+pub fn array_local_three_levels() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  f(a.slice(0, 4).slice(0, 2).slice(0, 1), inout a[0].0) //~ E0702
+}
+
+pub fn array_local_four_levels() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  f(a.slice(0, 4).slice(1, 4).slice(0, 2).slice(0, 1), inout a[0].0) //~ E0702
+}
+
+pub fn array_local_ranges_known_at_run_time(i: U32, j: U32) {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  f(a.slice(i, j).slice(i, j), inout a[0].0) //~ E0702
+}
+
+pub fn array_local_the_whole_element() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  f_el(a.slice(0, 2).slice(0, 1), inout a[0]) //~ E0702
+}
+
+pub fn array_local_the_whole_variable() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  f_whole(a.slice(0, 2).slice(0, 1), inout a) //~ E0702
+}
+
+pub fn array_local_the_field_of_a_part_view() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  f_span(a.slice(0, 2).slice(0, 1), inout a.slice(2, 4)) //~ E0702
+}
+
+// ---------------------------------------------------------------- the type of the variable, the base
+
+pub fn span_parameter(inout a: Span[(F32, F32)]) {
+  f(a.slice(0, 2).slice(0, 1), inout a[0].0) //~ E0702
+}
+
+pub fn buffer(n: U32) uses {Alloc} {
+  var b: Buf[(F32, F32)] = Buf.zeroed(n)
+  f(b.slice(0, 2).slice(0, 1), inout b[0].0) //~ E0702
+}
+
+pub fn buffer_the_whole(n: U32) uses {Alloc} {
+  var b: Buf[(F32, F32)] = Buf.zeroed(n)
+  f_buf(b.slice(0, 2).slice(0, 1), inout b) //~ E0702
+}
+
+pub fn inout_parameter_array(inout a: [(F32, F32); 4]) {
+  f(a.slice(0, 2).slice(0, 1), inout a[0].0) //~ E0702
+}
+
+pub fn field_of_a_struct(inout r: Rack) {
+  f(r.a.slice(0, 2).slice(0, 1), inout r.a[0].0) //~ E0702
+}
+
+pub fn field_of_a_struct_against_the_whole(inout r: Rack) {
+  f_whole(r.a.slice(0, 2).slice(0, 1), inout r.a) //~ E0702
+}
+
+pub fn array_of_arrays() {
+  var a: [[F32; 4]; 4] = [[0.0; 4]; 4]
+  f_nested(a.slice(0, 2).slice(0, 1), inout a[0][1]) //~ E0702
+}
+
+// ---------------------------------------------------------------------------- two `inout` places
+
+pub fn two_inout_a_nested_view_and_a_field() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  two_io(inout a.slice(0, 2).slice(0, 1), inout a[0].0) //~ E0702
+}
+
+pub fn two_inout_a_field_and_a_nested_view() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  two_io_rev(inout a[0].0, inout a.slice(0, 2).slice(0, 1)) //~ E0702
+}
+
+pub fn two_inout_a_nested_view_and_another_field() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  two_io(inout a.slice(0, 2).slice(0, 1), inout a[3].1) //~ E0702
+}
+
+pub fn two_inout_nested_views_of_other_ranges() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  two_views(inout a.slice(0, 2).slice(0, 1), inout a.slice(2, 4).slice(0, 1)) //~ E0702
+}
+
+pub fn two_inout_a_nested_view_of_a_span() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  two_io(inout a.slice(0, 4).slice(0, 2).slice(0, 1), inout a[2].1) //~ E0702
+}
+
+// ------------------------------------------------------------------------ the receiver of a method
+
+pub fn receiver_a_nested_view_and_a_view() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  a.slice(0, 2).slice(0, 1).copy_from!(a.slice(2, 3)) //~ E0702
+}
+
+pub fn receiver_a_nested_view_and_a_nested_view() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  a.slice(0, 4).slice(0, 1).copy_from!(a.slice(2, 4).slice(0, 1)) //~ E0702
+}
+
+// ------------------------------------------------ controls: a view of one level (E0702 before)
+
+pub fn control_one_level() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  f(a.slice(0, 2), inout a[0].0) //~ E0702
+}
+
+pub fn control_one_level_the_second_field() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  f(a.slice(0, 2), inout a[0].1) //~ E0702
+}
+
+pub fn control_one_level_inout_first() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  f_rev(inout a[0].0, a.slice(0, 2)) //~ E0702
+}
+
+pub fn control_one_level_two_inout() {
+  var a: [(F32, F32); 4] = [(0.0, 0.0); 4]
+  two_io(inout a.slice(0, 2), inout a[0].0) //~ E0702
+}
+
+pub fn control_one_level_of_a_span_parameter(inout a: Span[(F32, F32)]) {
+  f(a.slice(0, 2), inout a[0].0) //~ E0702
+}

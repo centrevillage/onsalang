@@ -1,0 +1,341 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§5.4"]
+
+// S-1115 (§5.2, §5.4): the tails of a borrowed argument and of the heading of a `for` and a `match` that are not an E0716, next to the errors of negative/tail_binding_scope_view.onsa,
+// tail_binding_scope_arm.onsa, tail_binding_scope_affine.onsa and tail_binding_scope_heading.onsa. "Copy の束縛そのもの … は値を写して渡すので置ける（ビューの位置に置いた Copy の配列の束縛も、値を
+// 呼び出しの一時へ写す）", and a binding that is derived from a place outside ("派生した借用束縛は派生元を根とする": `{ let s = x.slice(0, 2) … s }`, the binding of a `match` on a place) is that place, which
+// the arm does not end. A binding that is declared before the call, a tail that is not a place (a literal, the result of an operation), and a variable of the function at the tail with the
+// declarations of the arm before it are in order. The tails of the heading of a `for` and a `match` that are places outside are the same.
+
+pub struct P {
+  x: F32,
+  y: F32,
+}
+
+pub struct Holder {
+  buf: Buf[F32],
+  n: U32,
+}
+
+pub fn take(s: Span[F32]) -> F32 {
+  s[0]
+}
+
+pub fn take2(s: Span[F32], t: Span[F32]) -> F32 {
+  s[0] + t[0]
+}
+
+pub fn hb(a: F32, inout b: F32) {}
+
+pub fn hp(a: P, inout b: F32) {}
+
+pub fn ht(a: (F32, F32), inout b: F32) {}
+
+pub fn hbuf(b: Buf[F32]) -> U32 {
+  b.len()
+}
+
+pub fn mkb(n: U32) -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(n)
+}
+
+// ------------------------------------------------------------- a Copy binding itself, copied to the call
+
+pub fn copy_scalar_in_a_block(inout n: F32) {
+  hb({
+    var t: F32 = 1.0
+    t = 5.0
+    t
+  }, inout n)
+}
+
+pub fn copy_scalar_in_an_if(c: Bool, inout n: F32) {
+  hb(if c {
+    var t: F32 = 1.0
+    t = 5.0
+    t
+  } else {
+    2.0
+  }, inout n)
+}
+
+pub fn copy_scalar_in_a_match(k: U32, inout n: F32) {
+  hb(match k {
+    0 => {
+      let t: F32 = 1.0
+      t
+    },
+    _ => 2.0,
+  }, inout n)
+}
+
+pub fn copy_struct_in_a_block(inout n: F32) {
+  hp({
+    var q = P { x: 1.0, y: 2.0 }
+    q.x = 3.0
+    q
+  }, inout n)
+}
+
+pub fn copy_tuple_in_an_if(c: Bool, inout n: F32) {
+  ht(if c {
+    let t = (1.0, 2.0)
+    t
+  } else {
+    (3.0, 4.0)
+  }, inout n)
+}
+
+pub fn copy_array_at_a_view_in_a_block() -> F32 {
+  take({
+    var t: [F32; 4] = [1.0; 4]
+    t[0] = 2.0
+    t
+  })
+}
+
+pub fn copy_array_at_a_view_in_an_if(c: Bool, y: [F32; 4]) -> F32 {
+  take(if c {
+    var t: [F32; 4] = [1.0; 4]
+    t[0] = 2.0
+    t
+  } else {
+    y
+  })
+}
+
+pub fn copy_array_at_a_view_in_a_match(k: U32, y: [F32; 4]) -> F32 {
+  take(match k {
+    0 => {
+      let t: [F32; 4] = [1.0; 4]
+      t
+    },
+    _ => y,
+  })
+}
+
+pub fn copy_array_at_a_view_in_a_block_of_a_block(y: [F32; 4]) -> F32 {
+  take({
+    {
+      var t: [F32; 4] = [1.0; 4]
+      t[1] = y[1]
+      t
+    }
+  })
+}
+
+pub fn copy_array_at_the_second_argument(x: [F32; 4]) -> F32 {
+  take2(x, {
+    var t: [F32; 4] = [1.0; 4]
+    t[0] = 2.0
+    t
+  })
+}
+
+// ------------------------------------------------------------- a binding derived from a place outside
+
+pub fn derived_view_of_a_parameter(x: [F32; 4]) -> F32 {
+  take({
+    let s = x.slice(0, 2)
+    s
+  })
+}
+
+pub fn derived_view_of_a_parameter_in_an_if(c: Bool, x: [F32; 4], y: [F32; 4]) -> F32 {
+  take(if c {
+    let s = x.slice(0, 2)
+    s
+  } else {
+    y.slice(0, 2)
+  })
+}
+
+pub fn derived_binding_of_a_view_of_a_view(x: [F32; 4]) -> F32 {
+  take({
+    let s = x.slice(0, 3)
+    let u = s.slice(0, 2)
+    u
+  })
+}
+
+pub fn derived_binding_of_an_array_parameter(x: [F32; 4]) -> F32 {
+  take({
+    let s = x
+    s
+  })
+}
+
+pub fn derived_binding_chosen_by_an_if(c: Bool, x: [F32; 4]) -> F32 {
+  take({
+    let s = if c { x.slice(0, 2) } else { x.slice(1, 3) }
+    s
+  })
+}
+
+pub fn derived_binding_of_a_span_parameter(x: Span[F32]) -> F32 {
+  take({
+    let s = x.slice(1, 3)
+    s
+  })
+}
+
+pub fn derived_binding_of_a_buffer_parameter(b: Buf[F32]) -> U32 {
+  hbuf({
+    let s = b
+    s
+  })
+}
+
+pub fn derived_arm_binding_of_a_borrowed_option(o: Option[Buf[F32]], y: Buf[F32]) -> U32 {
+  hbuf(match o { Some(b) => b, None => y })
+}
+
+pub fn derived_arm_binding_view_of_a_borrowed_option(o: Option[Buf[F32]], y: Buf[F32]) -> F32 {
+  take(match o { Some(b) => b.slice(0, 1), None => y.slice(0, 1) })
+}
+
+pub fn derived_arm_binding_of_a_variable_option(n: U32, y: Buf[F32]) -> U32 uses {Alloc} {
+  var o: Option[Buf[F32]] = Some(mkb(n))
+  hbuf(match o { Some(b) => b, None => y })
+}
+
+pub fn derived_arm_binding_view_of_a_variable_option(n: U32, y: Buf[F32]) -> F32 uses {Alloc} {
+  var o: Option[Buf[F32]] = Some(mkb(n))
+  take(match o { Some(b) => b.slice(0, 1), None => y.slice(0, 1) })
+}
+
+pub fn derived_arm_binding_in_a_block_of_the_arm(o: Option[Buf[F32]], y: Buf[F32]) -> F32 {
+  take(match o {
+    Some(b) => {
+      let s = b.slice(0, 1)
+      s
+    },
+    None => y.slice(0, 1),
+  })
+}
+
+// ----------------------------------------------------------------- written before the call, or not a place
+
+pub fn the_binding_before_the_call(c: Bool, y: [F32; 4]) -> F32 {
+  var t: [F32; 4] = [1.0; 4]
+  t[0] = 2.0
+  take(if c { t.slice(0, 2) } else { y.slice(0, 2) })
+}
+
+pub fn the_buffer_before_the_call(c: Bool, y: Buf[F32]) -> U32 uses {Alloc} {
+  var t: Buf[F32] = mkb(4)
+  hbuf(if c { t } else { y })
+}
+
+pub fn the_moved_buffer_before_the_call(move a: Buf[F32]) -> U32 uses {Alloc} {
+  let t = move a
+  hbuf(t)
+}
+
+pub fn a_variable_of_the_function_after_the_declarations(c: Bool, y: [F32; 4]) -> F32 {
+  take(if c {
+    let t: [F32; 4] = [1.0; 4]
+    let _ = t[0]
+    y.slice(0, 2)
+  } else {
+    y.slice(1, 3)
+  })
+}
+
+pub fn a_parameter_after_a_buffer_of_the_arm(c: Bool, y: Buf[F32]) -> U32 uses {Alloc} {
+  hbuf(if c {
+    let t: Buf[F32] = mkb(4)
+    let _ = t[0]
+    y
+  } else {
+    y
+  })
+}
+
+pub fn a_value_that_is_not_a_place_after_the_declarations(inout n: F32) {
+  hb({
+    var t: F32 = 1.0
+    t + 2.0
+  }, inout n)
+}
+
+// ------------------------------------------------------------------ the heading of a `for` and a `match`
+
+pub fn for_derived_view_of_a_parameter(x: [F32; 4]) -> F32 {
+  var s: F32 = 0.0
+  for v in ({
+    let w = x.slice(0, 2)
+    w
+  }) {
+    s = s + v
+  }
+  s
+}
+
+pub fn for_view_of_a_parameter_in_an_if(c: Bool, x: [F32; 4], y: [F32; 4]) -> F32 {
+  var s: F32 = 0.0
+  for v in if c {
+    let t: [F32; 4] = [1.0; 4]
+    let _ = t[0]
+    x.slice(0, 2)
+  } else {
+    y.slice(0, 2)
+  } {
+    s = s + v
+  }
+  s
+}
+
+pub fn for_arm_binding_of_a_borrowed_option(o: Option[Buf[F32]], y: Buf[F32]) -> F32 {
+  var s: F32 = 0.0
+  for v in (match o { Some(b) => b, None => y }) {
+    s = s + v
+  }
+  s
+}
+
+pub fn for_arm_binding_view_of_a_borrowed_option(o: Option[Buf[F32]], y: Buf[F32]) -> F32 {
+  var s: F32 = 0.0
+  for v in (match o { Some(b) => b.slice(0, 1), None => y.slice(0, 1) }) {
+    s = s + v
+  }
+  s
+}
+
+pub fn for_the_binding_before_the_heading(c: Bool, y: [F32; 4]) -> F32 {
+  var s: F32 = 0.0
+  var t: [F32; 4] = [1.0; 4]
+  for v in if c { t.slice(0, 2) } else { y.slice(0, 2) } {
+    s = s + v
+  }
+  s
+}
+
+pub fn match_derived_view_of_a_parameter(x: [F32; 4]) -> F32 {
+  match ({
+    let w = x.slice(0, 2)
+    w
+  }) {
+    s => take(s),
+  }
+}
+
+pub fn match_option_of_a_parameter(c: Bool, x: Option[Buf[F32]], y: Option[Buf[F32]]) -> U32 {
+  match if c {
+    let t = x
+    t
+  } else {
+    y
+  } {
+    Some(b) => b.len(),
+    None => 0,
+  }
+}
+
+pub fn match_the_binding_before_the_heading(c: Bool, y: [F32; 4]) -> F32 {
+  var t: [F32; 4] = [1.0; 4]
+  match if c { t.slice(0, 2) } else { y.slice(0, 2) } {
+    s => take(s),
+  }
+}

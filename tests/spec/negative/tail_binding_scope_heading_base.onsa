@@ -1,0 +1,48 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§5.4"]
+// fixes = 0
+
+// S-1117 (§5.4, the detail, provisional reading (i) and still open): the heading of a binding that has the tails of an `if`, a `match` or a block at the base of a part view or a
+// field (`for v in (if c { a } else { b }).slice(0, 2)`, `let l = (if c { o } else { p }).l`, `let s = (if c { a } else { b }).slice(0, 2)`, `match (if c { a } else { b }).slice(0, 2) { … }`)
+// is the owned row as it is today: "§5.4 の表は閉じている" (the table of §5.4 names the part view of "`x` は借用の起点、または起点から派生した借用束縛" and the places, and a base that is an
+// `if`, a `match` or a block is neither), so the view is an owned `Span` that cannot be stored and the error is E0710 at the heading (the line of the head). S-1114 changed the argument side only
+// (the tails of the base are places of a borrowed argument, §5.2, negative/overlap_args_base_view.onsa). If S-1117 is decided as (ii), the four forms become borrowed rows and this file is
+// replaced by the case of E0715 and E0702 of the places. No repair candidate (`fixes = 0`). One error per function (P-01).
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}
+
+pub fn take(s: Span[F32]) -> F32 {
+  s[0]
+}
+
+pub fn for_the_view_of_the_tails(c: Bool, a: [F32; 4], b: [F32; 4]) -> F32 {
+  var s: F32 = 0.0
+  for v in (if c { a } else { b }).slice(0, 2) { //~ E0710
+    s = s + v
+  }
+  s
+}
+
+pub fn let_the_field_of_the_tails(c: Bool, o: pair.Out, p: pair.Out) -> F32 {
+  let l = (if c { o } else { p }).l //~ E0710
+  take(l)
+}
+
+pub fn let_the_view_of_the_tails(c: Bool, a: [F32; 4], b: [F32; 4]) -> F32 {
+  let s = (if c { a } else { b }).slice(0, 2) //~ E0710
+  take(s)
+}
+
+pub fn match_the_view_of_the_tails(c: Bool, a: [F32; 4], b: [F32; 4]) -> F32 {
+  match (if c { a } else { b }).slice(0, 2) { //~ E0710
+    s => take(s),
+  }
+}

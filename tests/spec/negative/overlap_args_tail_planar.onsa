@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3"]
+// fixes = 0
+
+// S-1113 (§5.2, §5.3): "借用の引数に置いた `if`・`match`・ブロック式は、各末尾の場所をその引数の場所として重なりを見る"
+// and, for the `Span` array, "別々の変数にあるときは `[a, b]` / `inout [a, b]` と配列リテラルを引数の位置にだけ書け
+// （…）、排他性は要素の場所ごとに検査する". A tail that is a literal of planar channels (`[x, y]`) is the places
+// of its elements, so a borrowed `[Span[F32]; 2]` argument whose tail names `x` overlaps an `inout` of `x` in the
+// same call, in the arm that is not run too, and a tail that is a variable of channels (`[[F32; 4]; 2]`) or an
+// element of one is the place of it. The error is at the later written of the two places, no repair candidate
+// (`fixes = 0`). One error per function (P-01). The tails that are planar array literals are in
+// overlap_args_tail_planar_literal.onsa. The forms that do not overlap are in values/overlap_args_tail_ok.onsa.
+
+pub fn two_s(s: Span[F32], inout t: Span[F32]) {}
+
+pub fn two_pl(xs: [Span[F32]; 2], inout t: Span[F32]) {}
+
+pub fn pl_pl(xs: [Span[F32]; 2], inout ys: [Span[F32]; 2]) {}
+
+// ---------------------------------- a variable of channels and an element of it at the tail
+
+pub fn channels_variable_and_an_element_inout(c: Bool) {
+  var ps: [[F32; 4]; 2] = [[0.0; 4]; 2]
+  var qs: [[F32; 4]; 2] = [[0.0; 4]; 2]
+  two_pl(if c { ps } else { qs }, inout ps[0]) //~ E0702
+}
+
+pub fn channels_variable_in_the_else_arm(c: Bool) {
+  var ps: [[F32; 4]; 2] = [[0.0; 4]; 2]
+  var qs: [[F32; 4]; 2] = [[0.0; 4]; 2]
+  two_pl(match c { true => qs, false => ps }, inout ps[1]) //~ E0702
+}
+
+pub fn channels_parameter(c: Bool, inout xs: [Span[F32]; 2], ys: [Span[F32]; 2]) {
+  two_pl(if c { ys } else { xs }, inout xs[0]) //~ E0702
+}
+
+pub fn an_element_of_channels_as_a_span(c: Bool, inout xs: [Span[F32]; 2], ys: [Span[F32]; 2]) {
+  two_s(if c { xs[0] } else { ys[0] }, inout xs[0]) //~ E0702
+}
+
+pub fn channels_variable_against_the_variable(c: Bool, inout xs: [Span[F32]; 2], ys: [Span[F32]; 2]) {
+  pl_pl(if c { xs } else { ys }, inout xs) //~ E0702
+}

@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§5.4"]
+// fixes = 0
+
+// S-1115 (§5.4): "§5.4 の所有の行の `let s = { … t.slice(0, 2) }` は今のまま E0710". The initializer of a `let` or a `var` that has a part view of a variable of its own arm or block at the tail
+// (and the pattern binding of a `match` that owns its value) is an owned row: "`Span` … と、所有の行の `Span` … は束縛できず、束縛の場所に置いた値の位置で E0710 である" and "所有のとき、各末尾は所有の束縛の
+// 初期化として検査する", so the error is E0710 at the tail that is the part view, not the E0716 of an argument (that is read by a call after the arm): the name would hold a `Span` that cannot be stored (§5.3).
+// The choice of E0710 for a `let` is unchanged by the E0716 of the borrowed arguments and headings (negative/tail_binding_scope_view.onsa, tail_binding_scope_arm.onsa, tail_binding_scope_heading.onsa).
+// No repair candidate (`fixes = 0`). One error per function (P-01).
+
+pub fn take(s: Span[F32]) -> F32 {
+  s[0]
+}
+
+pub fn mk(v: F32) -> Option[[F32; 4]] {
+  Some([v; 4])
+}
+
+pub fn let_the_binding_of_an_arm(v: F32, y: [F32; 4]) -> F32 {
+  let s = match mk(v) { Some(b) => b.slice(0, 2), None => y.slice(0, 2) } //~ E0710
+  take(s)
+}
+
+pub fn var_the_binding_of_an_arm(v: F32, y: [F32; 4]) -> F32 {
+  var s = match mk(v) { Some(b) => b.slice(0, 2), None => y.slice(0, 2) } //~ E0710
+  take(s)
+}
+
+pub fn let_the_view_of_a_variable_of_an_if(c: Bool, y: [F32; 4]) -> F32 {
+  let s = if c {
+    var t: [F32; 4] = [1.0; 4]
+    t.slice(0, 2) //~ E0710
+  } else {
+    y.slice(0, 2)
+  }
+  take(s)
+}
+
+pub fn let_the_view_of_a_variable_of_a_block() -> F32 {
+  let s = {
+    var t: [F32; 4] = [1.0; 4]
+    t.slice(0, 2) //~ E0710
+  }
+  take(s)
+}

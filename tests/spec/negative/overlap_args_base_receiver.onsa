@@ -1,0 +1,123 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3"]
+// fixes = 0
+
+// S-1114 (§5.2, §5.3): "部分ビュー・フィールド・添字の基に置いたときも、各末尾の場所にその経路を足した場所を数え、基の型によらない" (§5.2) and "受け手は `self` の引数である" (§5.3); the decision of S-1114
+// names the receiver in the same rule (`a.copy_from!((if c { a } else { b }).slice(0, 2))`, `(if c { w } else { u }).a.m(inout w)`). The receiver of a method is the `self` argument, so the base of a view or of
+// a field in an argument of a method that changes its receiver, and the receiver itself with a path over the tails of an `if`, a `match` or a block, give the places of their tails with the path, and overlap the
+// other arguments or the receiver of the same call: a method with `!` against the view of a tail of the same variable, a method of a struct that is the field of a tail against an `inout` argument of the whole. The
+// error is at the later written of the two places, no repair candidate (`fixes = 0`). One error per function (P-01). The functions are one-liners where the call is one line. The forms that do not
+// overlap are in values/overlap_args_base_ok.onsa.
+
+pub struct Inner {
+  v: [F32; 4],
+}
+
+pub struct Outer {
+  a: Inner,
+  b: Inner,
+}
+
+impl Inner {
+  pub fn m(self, inout o: Outer) {}
+
+  pub fn put(self, inout t: [F32; 4]) {}
+
+  pub fn put_s(self, inout t: Span[F32]) {}
+}
+
+pub struct Holder {
+  buf: Buf[F32],
+}
+
+impl Holder {
+  pub fn link(self, inout o: Holder) {}
+}
+
+// ------------------------------------------------- the receiver changes, the argument is a view of a tail
+
+pub fn view_of_a_span_tail(c: Bool, inout a: Span[F32], b: Span[F32]) {
+  a.copy_from!((if c { a } else { b }).slice(0, 2)) //~ E0702
+}
+
+pub fn view_of_a_span_tail_in_the_other_arm(c: Bool, inout a: Span[F32], b: Span[F32]) {
+  a.copy_from!((if c { b } else { a }).slice(0, 2)) //~ E0702
+}
+
+pub fn view_of_an_array_tail(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  x.copy_from!((if c { x } else { y }).slice(0, 4)) //~ E0702
+}
+
+pub fn view_of_an_array_tail_added(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  y.add_from!((if c { x } else { y }).slice(0, 2)) //~ E0702
+}
+
+pub fn view_of_a_match(k: U32) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  x.copy_from!((match k { 0 => y, _ => x }).slice(0, 2)) //~ E0702
+}
+
+pub fn view_of_a_block() {
+  var x: [F32; 4] = [0.0; 4]
+  x.copy_from!(({ x }).slice(0, 2)) //~ E0702
+}
+
+pub fn view_of_a_buffer_tail(c: Bool, n: U32) uses {Alloc} {
+  var a: Buf[F32] = Buf.zeroed(n)
+  var b: Buf[F32] = Buf.zeroed(n)
+  a.copy_from!((if c { a } else { b }).slice(0, 2)) //~ E0702
+}
+
+pub fn a_part_of_the_receiver_and_the_view_of_a_tail(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  x.slice(2, 4).copy_from!((if c { x } else { y }).slice(0, 2)) //~ E0702
+}
+
+pub fn the_receiver_is_a_view_of_a_view(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  x.slice(0, 3).slice(0, 1).copy_from!((if c { y } else { x }).slice(3, 4)) //~ E0702
+}
+
+pub fn an_element_of_a_tail(c: Bool) {
+  var x: [[F32; 4]; 2] = [[0.0; 4]; 2]
+  var y: [[F32; 4]; 2] = [[0.0; 4]; 2]
+  x[0].copy_from!((if c { x } else { y })[1]) //~ E0702
+}
+
+// ------------------------------------------------ the receiver is a field of the tails of an `if`
+
+pub fn field_of_a_tail_and_the_whole(c: Bool, inout w: Outer, u: Outer) {
+  (if c { w } else { u }).a.m(inout w) //~ E0702
+}
+
+pub fn field_of_a_tail_in_the_other_arm(c: Bool, inout w: Outer, u: Outer) {
+  (if c { u } else { w }).a.m(inout w) //~ E0702
+}
+
+pub fn field_of_a_tail_of_a_match(k: U32, inout w: Outer, u: Outer) {
+  (match k { 0 => u, _ => w }).b.m(inout w) //~ E0702
+}
+
+pub fn field_of_a_tail_of_a_block(inout w: Outer) {
+  ({ w }).a.m(inout w) //~ E0702
+}
+
+pub fn field_of_a_tail_and_the_same_field(c: Bool, inout w: Outer, u: Outer) {
+  (if c { w } else { u }).a.put(inout w.a.v) //~ E0702
+}
+
+pub fn field_of_a_tail_and_a_part_of_the_field(c: Bool, inout w: Outer, u: Outer) {
+  (if c { w } else { u }).a.put_s(inout w.a.v.slice(0, 2)) //~ E0702
+}
+
+pub fn field_of_a_buffer_holder(c: Bool, inout h: Holder, g: Holder) {
+  (if c { h } else { g }).link(inout h) //~ E0702
+}

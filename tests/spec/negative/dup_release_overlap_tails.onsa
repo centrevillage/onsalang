@@ -1,0 +1,113 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§12.2"]
+
+// S-1113, S-1030 (§5.2: "`move` の引数に印を書かずに渡す Dup の値の場所 … は、複製して渡し（重なるときは移さない）、重なりでは借用の引数と同じくその場所の読みとして数える"; "借用の引数に置いた `if`・`match`・ブロック式は、
+// 各末尾の場所（実行されない腕も）をその引数の場所として重なりを見る"; §12.2: the original of a copy is dropped at the end of its binding): the tails of an `if`, a `match` or a block that is an argument are places of that argument, so a
+// `move` parameter `s` that is handed to a `move` parameter (no mark: a Dup value) of a call whose other argument has `s` in a tail (borrowed or `move`, before or after the hand-off, in the arm that is not run
+// too) is not moved but copied, as `bm(s, s)` of a plain place is. The original is dropped at the end of its binding and the drop needs `Alloc`: an E0601 in a function without `uses {Alloc}` and in an `rt fn` (S-77), at the
+// line of the value that is dropped (one-liners, S-783). The helpers return the value that is handed to them, so no helper drops it. The tails of one argument are not compared with each other, and a tail
+// that is another variable overlaps nothing (negative/dup_release_overlap_tails_ok.onsa). The argument that reads `s` before the hand-off in a tail is accepted today and an error after (the drop of the
+// original is counted from the places of the tails); the hand-off that comes first and the tail after it is a later use of `s` (§5.2: "`move` の引数で移した変数は、その引数を評価した時点で使えなくなる"), an
+// error before and after, as the plain place is (the controls and the second group). One error per function (P-01).
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+pub rt fn bm_s(a: Str, move b: Str) -> Str { b }
+
+pub rt fn mb_s(move b: Str, a: Str) -> Str { b }
+
+pub rt fn mm_s(move a: Str, move b: Str) -> (Str, Str) { (a, b) }
+
+pub rt fn bm_p(a: Param, move b: Param) -> Param { b }
+
+pub rt fn bm_o(a: Option[Str], move b: Option[Str]) -> Option[Str] { b }
+
+pub rt fn bm[T](a: T, move b: T) -> T { b }
+
+pub rt fn mb[T](move b: T, a: T) -> T { b }
+
+pub rt fn mm[T](move a: T, move b: T) -> (T, T) { (a, b) }
+
+// ------------------------------------------------------------------------ controls: a plain place
+
+pub fn control_direct(move s: Str) -> Str { bm_s(s, s) }   //~ E0601
+
+pub rt fn control_rt_direct(move s: Str) -> Str { bm_s(s, s) }   //~ E0601
+
+pub fn control_parenthesis(move s: Str) -> Str { bm_s((s), s) }   //~ E0601
+
+pub rt fn control_rt_parenthesis(move s: Str) -> Str { bm_s((s), s) }   //~ E0601
+
+// ------------------------------------------------------------ a borrowed argument with `s` in a tail
+
+pub fn tail_then_move(c: Bool, move s: Str, u: Str) -> Str { bm_s(if c { s } else { u }, s) }   //~ E0601
+
+pub rt fn rt_tail_then_move(c: Bool, move s: Str, u: Str) -> Str { bm_s(if c { s } else { u }, s) }   //~ E0601
+
+pub fn tail_in_the_other_arm_then_move(c: Bool, move s: Str, u: Str) -> Str { bm_s(if c { u } else { s }, s) }   //~ E0601
+
+pub rt fn rt_tail_in_the_other_arm_then_move(c: Bool, move s: Str, u: Str) -> Str { bm_s(if c { u } else { s }, s) }   //~ E0601
+
+pub fn tail_of_a_match_then_move(c: Bool, move s: Str, u: Str) -> Str { bm_s(match c { true => s, false => u }, s) }   //~ E0601
+
+pub rt fn rt_tail_of_a_match_then_move(c: Bool, move s: Str, u: Str) -> Str { bm_s(match c { true => u, false => s }, s) }   //~ E0601
+
+pub fn tail_of_a_block_then_move(move s: Str) -> Str { bm_s({ s }, s) }   //~ E0601
+
+pub rt fn rt_tail_of_a_block_then_move(move s: Str) -> Str { bm_s({ s }, s) }   //~ E0601
+
+pub fn tail_in_a_tail_then_move(c: Bool, d: Bool, move s: Str, u: Str) -> Str { bm_s(if c { if d { s } else { u } } else { u }, s) }   //~ E0601
+
+pub rt fn rt_tail_in_a_parenthesis_then_move(c: Bool, move s: Str, u: Str) -> Str { bm_s(if c { (s) } else { u }, s) }   //~ E0601
+
+pub fn the_arm_that_is_never_run(move s: Str, u: Str) -> Str { bm_s(if false { s } else { u }, s) }   //~ E0601
+
+pub rt fn rt_the_arm_that_is_never_run(move s: Str, u: Str) -> Str { bm_s(if false { s } else { u }, s) }   //~ E0601
+
+// -------------------------------------------------------------------- the hand-off first, then the tail (errors before)
+
+pub fn move_then_tail(c: Bool, move s: Str, u: Str) -> Str { mb_s(s, if c { s } else { u }) }   //~ E0601
+
+pub rt fn rt_move_then_tail(c: Bool, move s: Str, u: Str) -> Str { mb_s(s, if c { s } else { u }) }   //~ E0601
+
+pub fn move_then_the_tail_of_a_match(c: Bool, move s: Str, u: Str) -> Str { mb_s(s, match c { true => u, false => s }) }   //~ E0601
+
+pub rt fn rt_move_then_the_tail_of_a_block(move s: Str) -> Str { mb_s(s, { s }) }   //~ E0601
+
+// ------------------------------------------------------------------ both arguments are `move` parameters (the hand-off first: errors before)
+
+pub fn both_move_with_the_tails_of_one(c: Bool, move s: Str) -> (Str, Str) { mm_s(if c { s } else { s }, s) }   //~ E0601
+
+pub rt fn rt_both_move_with_the_tails_of_one(c: Bool, move s: Str) -> (Str, Str) { mm_s(if c { s } else { s }, s) }   //~ E0601
+
+pub fn both_move_with_the_tail_and_a_place(c: Bool, move s: Str, u: Str) -> (Str, Str) { mm_s(s, if c { s } else { u }) }   //~ E0601
+
+pub rt fn rt_both_move_with_the_tails_of_both(c: Bool, move s: Str) -> (Str, Str) { mm_s(if c { s } else { s }, if c { s } else { s }) }   //~ E0601
+
+// ---------------------------------------------------------------------------- a struct, an `Option`
+
+pub fn a_struct_that_holds_a_string(c: Bool, move p: Param, q: Param) -> Param { bm_p(if c { p } else { q }, p) }   //~ E0601
+
+pub rt fn rt_a_struct_that_holds_a_string(c: Bool, move p: Param, q: Param) -> Param { bm_p(if c { p } else { q }, p) }   //~ E0601
+
+pub fn an_option_of_a_string(c: Bool, move o: Option[Str], q: Option[Str]) -> Option[Str] { bm_o(if c { o } else { q }, o) }   //~ E0601
+
+pub rt fn rt_an_option_of_a_string(c: Bool, move o: Option[Str], q: Option[Str]) -> Option[Str] { bm_o(if c { o } else { q }, o) }   //~ E0601
+
+// ----------------------------------------------------------------------------- a type parameter
+
+pub rt fn generic_tail_then_move[T](c: Bool, move s: T, u: T) -> T { bm(if c { s } else { u }, s) }   //~ E0601
+
+pub rt fn generic_move_then_tail[T](c: Bool, move s: T, u: T) -> T { mb(s, if c { s } else { u }) }   //~ E0601
+
+pub rt fn generic_both_move[T](c: Bool, move s: T) -> (T, T) { mm(if c { s } else { s }, s) }   //~ E0601
+
+pub rt fn generic_a_match[T](c: Bool, move s: T, u: T) -> T { bm(match c { true => u, false => s }, s) }   //~ E0601
+
+pub rt fn generic_a_block[T](move s: T) -> T { bm({ s }, s) }   //~ E0601
+
+pub fn generic_tail_then_move_without_alloc[T](c: Bool, move s: T, u: T) -> T { bm(if c { s } else { u }, s) }   //~ E0601

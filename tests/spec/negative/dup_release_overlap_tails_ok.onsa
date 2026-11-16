@@ -1,0 +1,57 @@
+// onsa.toml
+// [test]
+// spec = ["§3.5", "§5.2", "§12.2"]
+
+// S-1113, S-1030 (§5.2: "借用の引数に置いた `if`・`match`・ブロック式は、各末尾の場所をその引数の場所として重なりを見る"; "`move` の引数に印を書かずに渡す Dup の値の場所 … 重なりでは借用の引数と同じくその場所の読みとして数える"): the
+// contrasts of negative/dup_release_overlap_tails.onsa. The hand-off moves (no copy, no drop, no `Alloc`: no E0601 in a function without `uses {Alloc}` and in an `rt fn`) when no other argument of the same call has
+// the place in a tail: the tails of one argument are not compared with each other (`take1(if c { s } else { s })`, a `match` with the same variable in each arm), the other argument is another variable
+// (`bm(if c { u } else { u }, s)`, `mm(if c { s } else { s }, u)`: the two tails are one argument, and a second `move` parameter is another variable). The helpers return the value that is handed to
+// them, so no helper drops it. Every function is legal today and stays legal (the places of the tails do not overlap, so the original is not dropped). The functions are one-liners (S-783).
+
+pub rt fn take1[T](move a: T) -> T { a }
+
+pub rt fn bm[T](a: T, move b: T) -> T { b }
+
+pub rt fn mb[T](move b: T, a: T) -> T { b }
+
+pub rt fn mm[T](move a: T, move b: T) -> (T, T) { (a, b) }
+
+pub rt fn take1_s(move a: Str) -> Str { a }
+
+pub rt fn bm_s(a: Str, move b: Str) -> Str { b }
+
+pub rt fn mm_s(move a: Str, move b: Str) -> (Str, Str) { (a, b) }
+
+// -------------------------------------------------------------- the tails of one argument, not compared
+
+pub fn same_variable_in_both_arms[T](c: Bool, move s: T) -> T { take1(if c { s } else { s }) }
+
+pub rt fn rt_same_variable_in_both_arms[T](c: Bool, move s: T) -> T { take1(if c { s } else { s }) }
+
+pub fn same_variable_in_a_match[T](k: U32, move s: T) -> T { take1(match k { 0 => s, _ => s }) }
+
+pub rt fn rt_same_variable_in_three_arms[T](k: U32, move s: T) -> T { take1(match k { 0 => s, 1 => s, _ => s }) }
+
+pub rt fn rt_same_variable_in_a_tail_of_a_tail[T](c: Bool, d: Bool, move s: T) -> T { take1(if c { if d { s } else { s } } else { s }) }
+
+pub fn same_string_in_both_arms(c: Bool, move s: Str) -> Str { take1_s(if c { s } else { s }) }
+
+pub rt fn rt_same_string_in_both_arms(c: Bool, move s: Str) -> Str { take1_s(if c { s } else { s }) }
+
+// ----------------------------------------------------------------------------- another variable
+
+pub fn tails_and_another_move_parameter[T](c: Bool, move s: T, move u: T) -> (T, T) { mm(if c { s } else { s }, u) }
+
+pub rt fn rt_tails_and_another_move_parameter[T](c: Bool, move s: T, move u: T) -> (T, T) { mm(if c { s } else { s }, u) }
+
+pub rt fn rt_tails_of_a_borrowed_parameter_and_the_hand_off[T](c: Bool, move s: T, u: T) -> T { bm(if c { u } else { u }, s) }
+
+pub rt fn rt_hand_off_first_and_the_tails_of_a_borrowed_parameter[T](c: Bool, move s: T, u: T) -> T { mb(s, if c { u } else { u }) }
+
+pub rt fn rt_the_tails_of_two_other_variables[T](c: Bool, move s: T, u: T, v: T) -> T { bm(if c { u } else { v }, s) }
+
+pub fn tails_of_other_strings(c: Bool, move s: Str, u: Str, v: Str) -> Str { bm_s(if c { u } else { v }, s) }
+
+pub rt fn rt_tails_of_other_strings(c: Bool, move s: Str, u: Str, v: Str) -> Str { bm_s(if c { u } else { v }, s) }
+
+pub rt fn rt_strings_the_tails_of_one_argument_and_another_move_parameter(c: Bool, move s: Str, move u: Str) -> (Str, Str) { mm_s(if c { s } else { s }, u) }
