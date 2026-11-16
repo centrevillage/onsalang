@@ -9,7 +9,7 @@ voice.Config       // init の入力をフィールドに持つ struct（Copy）
 voice.Params       // block の入力をフィールドに持つ struct（Copy）。block の入力のある flow だけ
 voice.Event        // イベントの入力の値と位置を持つ、中身を見せない Copy の型。イベントの入力のある flow だけ
 voice.In           // sample の入力が 2 つ以上のときだけ。sample の入力ごとの Span をフィールドに持つ
-voice.Out          // 出力が struct のときだけ。出力のフィールドごとの Span を持つ
+voice.Out          // sample の出力が struct のときだけ（イベントの出力には無い）。出力のフィールドごとの Span を持つ
 voice.Rendered     // render の結果。出力チャンネルごとの Buf（イベントの出力は位置と値の Buf）
 
 // 関数
