@@ -1,8 +1,9 @@
 //! The `~` of the calls of a flow body (§2.6, §11.2, §11.5; S-267, S-811),
 //! which the walk decides by the name of the callee, after the errors of
 //! its names and before its arguments (§18.1, R-286). A flow and a builtin
-//! delay are called with `~(` (E0811 without it, the E0806 of §11.2 with
-//! `!(`, S-813); a `~` on anything else is the E0812 of §2.6, whose candidate
+//! delay are called with `~(` (E0811 without it); `!(` and `.(` are the
+//! E0806 of §11.2 whatever the callee (S-811, S-813); a `~` on anything
+//! else is the E0812 of §2.6, whose candidate
 //! takes the `~` off only when the callee is called so (S-590, S-817). An
 //! instance of a flow is recorded here, the one place that decides it
 //! ([`super::BodyNames::instances`], D-15). A `par` without `~` is E0811
@@ -146,7 +147,8 @@ impl Walker<'_> {
 
     /// The mark of the call `e` of a flow body, whose callee's names are
     /// found: a flow called with `~` is an instance, recorded; a mark that
-    /// does not fit the callee stops the walk (S-811).
+    /// does not fit the callee, or that a flow body cannot contain, stops the
+    /// walk (S-811).
     pub(super) fn flow_mark(&mut self, e: ExprId, callee: ExprId, kind: CallKind) -> W {
         let mark = match self.out.paths.get(&super::named(self.ast, callee)) {
             Some(&PathRes::FlowBuiltin(FlowBuiltin::Delay(d))) => Mark::Stateful(Stateful::Delay(d.name())),
@@ -178,10 +180,26 @@ impl Walker<'_> {
                 let fix = Fix::insert("add `~`", span.file, end, "~");
                 Diagnostic::new(Stage::Names, Code::E0811, span, msg).with_fix(fix)
             }
+            // `!(` and `.(`, which a flow body cannot contain (§11.2, S-811,
+            // S-813): the candidate writes the mark of the callee, of a flow
+            // or a delay `~`, of an item called as `f(x)` none; a value has none.
             (Mark::Stateful(what), CallKind::Bang) => {
                 let msg = format!("a flow body cannot contain a call with `!` (§11.2): {}", self.stateful(what));
                 let fix = Fix::new("write `~` in place of `!`", vec![Edit::replace(mark_span, "~")]);
                 Diagnostic::new(Stage::Names, Code::E0806, span, msg).with_fix(fix)
+            }
+            // A flow called with `.(` is no value there, the E0308 of its names (S-816).
+            (Mark::Stateful(_), CallKind::Value { .. }) => return Ok(()),
+            (Mark::Plain, CallKind::Bang) => self.bang_in_flow(e).with_fix(Fix::delete("remove `!`", mark_span)),
+            (_, CallKind::Bang) => self.bang_in_flow(e),
+            (_, CallKind::Value { dot }) => {
+                let msg = "a flow body cannot contain function values; `.(` calls one (§11.2, §6.1)";
+                let d = Diagnostic::new(Stage::Names, Code::E0806, span, msg);
+                match mark {
+                    // Up to the end of the `.`, which may start the next line (§2.5).
+                    Mark::Plain => d.with_fix(Fix::delete("call the item without `.`", Span { start: end, ..dot })),
+                    _ => d,
+                }
             }
             (Mark::Plain, CallKind::Flow) => self.no_flow(e, callee).with_fix(Fix::delete("remove `~`", mark_span)),
             (Mark::Value, CallKind::Flow) => self.no_flow(e, callee).with_rule(
@@ -191,6 +209,13 @@ impl Walker<'_> {
             _ => return Ok(()),
         };
         Err(self.fail(Fail::Report(d.with_found(self.src(span)))))
+    }
+
+    /// E0806 at the call `e` with `!(` of a flow body (§11.2), with no
+    /// candidate.
+    pub(super) fn bang_in_flow(&self, e: ExprId) -> Diagnostic {
+        let msg = "a flow body cannot contain a call with `!`, which calls an `inout self` method (§11.2, §5.2)";
+        Diagnostic::new(Stage::Names, Code::E0806, self.ast.expr(e).span, msg)
     }
 
     /// That a flow or a builtin delay is called with `~`.

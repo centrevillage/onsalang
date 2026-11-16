@@ -12,7 +12,7 @@ use onsa_syntax::constexpr::ConstForm;
 
 use super::flow::{Outside, par_head};
 use super::kinds::Want;
-use super::paths::{PANIC, Place};
+use super::paths::{PANIC, Place, span_of};
 use super::{BindingId, BindingKind, Fail, Origin, PatRes, PathRes, Typed, W, Walker};
 use crate::sig::Pos;
 
@@ -45,6 +45,10 @@ impl Walker<'_> {
     /// [`onsa_syntax::ast::Ast::sub_exprs`] (R-91 (1)).
     fn expr_inner(&mut self, e: ExprId) -> W {
         let ast = self.ast;
+        // What a flow body cannot contain (§11.2, `flow_forms.rs`), before its names.
+        if self.flow {
+            self.flow_expr(e)?;
+        }
         match &ast.expr(e).kind {
             ExprKind::Lit(Lit::Str(s)) => self.interp(e, s),
             ExprKind::Path(_) | ExprKind::Field { .. } | ExprKind::TypeArgs { .. } if self.flow => {
@@ -98,22 +102,6 @@ impl Walker<'_> {
             ExprKind::Struct { path, rest, type_args, .. } => {
                 self.struct_lit(e, path, type_args, rest.is_some())?;
                 self.exprs(ast.sub_exprs(e))
-            }
-            // What a flow body cannot contain (§11.2, `flow_forms.rs`): a
-            // block with statements, an anonymous function, `?`, `move`,
-            // `handle`, `unsafe`.
-            ExprKind::Closure { .. }
-            | ExprKind::Try(_)
-            | ExprKind::Move(_)
-            | ExprKind::Handle { .. }
-            | ExprKind::Unsafe(_)
-                if self.flow =>
-            {
-                self.flow_expr(e)
-            }
-            ExprKind::Block(b) if self.flow => {
-                self.flow_expr(e)?;
-                self.block(b)
             }
             ExprKind::Block(b) => self.block(b),
             ExprKind::Match { scrutinee, arms, .. } => self.match_arms(*scrutinee, arms),
@@ -214,9 +202,11 @@ impl Walker<'_> {
     fn interp(&mut self, e: ExprId, s: &StrLit) -> W {
         for (k, seg) in (0..).zip(&s.segments) {
             if let StrSeg::Interp(p) = seg {
-                let (records, fail) =
-                    self.resolve(&p.segments.iter().map(|s| &s.0).collect::<Vec<_>>(), &[], Place::Value);
-                match fail {
+                let segs: Vec<&Ident> = p.segments.iter().map(|s| &s.0).collect();
+                let (records, fail) = self.resolve(&segs, &[], Place::Value);
+                // A function value is the E0806 of a flow body (§11.2).
+                let found = |r| self.function_in_hole(r, span_of(&segs[..records.len()]));
+                match fail.or_else(|| records.last().and_then(found).map(Fail::Report)) {
                     Some(Fail::Report(d)) => {
                         let d = onsa_syntax::in_literal(d, self.ast.expr(e).span, self.text);
                         return Err(self.fail(Fail::Report(d)));

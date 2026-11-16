@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§5.2", "§11.2", "§18.1"]
+//
+// [[test.fix]]
+// at = "29:11"
+// code = "E0806"
+// candidate = 1
+// clean = true
+
+// W7-04 U1b/t, S-811: the candidate of `P.new!(x)`, a call with `!` of an associated function, removes the `!` (`P.new(x)`), and the file has no
+// error after it (`clean`). `P.new` is called as `f(x)` (§6.1), and `!` is the mark of a method that takes `inout self` (§5.2).
+
+pub struct P {
+  n: F32,
+}
+
+impl P {
+  pub rt fn new(v: F32) -> P {
+    P { n: v }
+  }
+
+  pub rt fn get(self) -> F32 {
+    self.n
+  }
+}
+
+pub flow call(x: F32 at sample) -> F32 at sample {
+  let p = P.new!(x)                                 //~ E0806
+  p.get()
+}

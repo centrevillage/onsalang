@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§6.1", "§11.2", "§11.4", "§15.1", "§18.1"]
+// fixes = 0
+
+// W7-04 U1b/t, S-811, S-816: a flow called through `.(` in a flow body is the E0308 of a name of the wrong kind in the position of a value
+// (§15.1: a flow is no value, so `lp.(x)` is not a function value). It is not the E0806 of the `.(` of a flow body: §11.2 gives E0806 to the
+// item called as `f(x)` and to a value, and says "flow を `.(` で呼ぶ `lp.(x)` は §15.1 の E0308". The built-in names of a flow (`prev`,
+// `delay`, `vdelay`, `sample_rate`) in the same place are the E0308 of §11.4 ("関数値の呼び先 `prev.(x)` … に書くと E0308"). There is no
+// candidate (`fixes = 0`; S-816: the note shows `lp~(…)` in a flow body, and the edit is not offered). The place is the output, a `let`, an operand, a branch, the
+// body of a `par~` and the argument of an instance. One error per flow (P-01). The same call in a function is in
+// negative/flow_called_with_dot.onsa.
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow in_a_let(x: F32 at sample) -> F32 at sample {
+  let a = lp.(x)                                    //~ E0308
+  a
+}
+
+pub flow as_the_output(x: F32 at sample) -> F32 at sample {
+  lp.(x)                                            //~ E0308
+}
+
+pub flow in_an_operand(x: F32 at sample) -> F32 at sample {
+  x - 0.5 * lp.(x)                                  //~ E0308
+}
+
+pub flow in_the_arm_of_an_if(x: F32 at sample) -> F32 at sample {
+  if x > 0.0 {
+    lp.(x)                                          //~ E0308
+  } else {
+    0.0
+  }
+}
+
+pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 {
+    lp.(x) * F32.round_from(i)                      //~ E0308
+  }
+  ys[0] + ys[1]
+}
+
+pub flow in_the_argument_of_an_instance(x: F32 at sample) -> F32 at sample {
+  lp~(lp.(x))                                       //~ E0308
+}
+
+pub flow with_no_argument(x: F32 at sample) -> F32 at sample {
+  let a = lp.()                                     //~ E0308
+  x
+}
+
+pub flow prev_called_through_a_dot(x: F32 at sample) -> F32 at sample {
+  prev.(x, 0.0)                                     //~ E0308
+}
+
+pub flow delay_called_through_a_dot(x: F32 at sample) -> F32 at sample {
+  let a = delay.(x, 4)                              //~ E0308
+  a
+}
+
+pub flow vdelay_called_through_a_dot(x: F32 at sample, d: F32 at block) -> F32 at sample {
+  vdelay.(x, d, 64)                                 //~ E0308
+}
+
+pub flow sample_rate_called_through_a_dot(x: F32 at sample) -> F32 at sample {
+  sample_rate.() * x                                //~ E0308
+}
+
+// ---- Not errors ----
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  lp~(x) + prev~(x, 0.0) + sample_rate() * x
+}

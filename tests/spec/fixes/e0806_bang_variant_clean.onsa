@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§5.2", "§11.2", "§18.1"]
+//
+// [[test.fix]]
+// at = "16:11"
+// code = "E0806"
+// candidate = 1
+// clean = true
+
+// W7-04 U1b/t, S-811, R-340: the candidate of `Some!(x)`, the construction of a variant (an item called as `f(x)`, §6.1), removes the `!`
+// (§11.2), and the file has no error after it (`clean`). It is not the replacement with `.` that the E0714 of a function body gives to a function
+// value (§5.2).
+
+pub flow call(x: F32 at sample) -> F32 at sample {
+  let o = Some!(x)                                  //~ E0806
+  match o {
+    Some(v) => v,
+    None => 0.0,
+  }
+}

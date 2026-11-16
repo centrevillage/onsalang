@@ -1,0 +1,115 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§6.1", "§15.1", "§18.1"]
+// fixes = 0
+
+// W7-04 U1b/t, S-125, S-267: a function value is a form a flow body cannot contain (E0806, §11.2), and the names stage reports it where it
+// finds it, as it does for the function value alone (`let k = g`, in negative/flow_e0806_names_forms.onsa). Three forms of a function value were
+// found by the type stage, and they are E0806 too: a field after the type arguments of a function (`id::[F32].y`, as `g.y`; a function has no
+// fields, §6.1), a function value in the hole of an interpolated string (`"{g}"`), and a function value as the receiver of a method (`g.foo(x)`;
+// a function has no methods). The form starts at the function, so the position is the `id` or the `g`. A name that is not found inside the
+// type arguments (`id::[Nope].y`) is not read (S-1100). No candidate (`fixes = 0`). One error per flow (P-01).
+
+pub rt fn g(v: F32) -> F32 {
+  v
+}
+
+pub rt fn id[T](v: T) -> T {
+  v
+}
+
+pub rt fn len_of(s: Str) -> F32 {
+  0.0
+}
+
+pub flow field_of_a_function_value_with_type_arguments(x: F32 at sample) -> F32 at sample {
+  let k = id::[F32].y                               //~ E0806 @11
+  x
+}
+
+pub flow field_of_a_function_value_with_unknown_type_arguments(x: F32 at sample) -> F32 at sample {
+  let k = id::[Nope].y                              //~ E0806 @11
+  x
+}
+
+pub flow field_of_a_field_of_a_function_value(x: F32 at sample) -> F32 at sample {
+  let k = id::[F32].y.z                             //~ E0806 @11
+  x
+}
+
+pub flow field_of_a_function_value_in_an_operand(x: F32 at sample) -> F32 at sample {
+  x + id::[F32].y                                   //~ E0806 @7
+}
+
+pub flow field_of_a_function_value_in_the_arm_of_an_if(x: F32 at sample) -> F32 at sample {
+  if x > 0.0 {
+    id::[F32].y                                     //~ E0806 @5
+  } else {
+    0.0
+  }
+}
+
+pub flow field_of_a_function_value_in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 {
+    id::[F32].y                                     //~ E0806 @5
+  }
+  ys[0]
+}
+
+pub flow field_of_a_function_without_type_arguments(x: F32 at sample) -> F32 at sample {
+  let k = g.y                                       //~ E0806 @11
+  x
+}
+
+pub flow function_value_in_a_hole(x: F32 at sample) -> F32 at sample {
+  let n = len_of("{g}")                            //~ E0806
+  x + n
+}
+
+pub flow function_value_in_a_hole_between_text(x: F32 at sample) -> F32 at sample {
+  let n = len_of("gain: {g} dB")                    //~ E0806
+  x + n
+}
+
+pub flow function_value_in_the_second_hole(x: F32 at sample) -> F32 at sample {
+  let n = len_of("{x} and {g}")                     //~ E0806
+  x + n
+}
+
+pub flow function_value_in_a_hole_as_the_output(x: F32 at sample) -> F32 at sample {
+  len_of("{g}")                                     //~ E0806
+}
+
+pub flow function_value_in_a_hole_in_an_operand(x: F32 at sample) -> F32 at sample {
+  x - len_of("{g}")                                 //~ E0806
+}
+
+pub flow method_of_a_function_value(x: F32 at sample) -> F32 at sample {
+  let a = g.foo(x)                                  //~ E0806 @11
+  x
+}
+
+pub flow method_of_a_function_value_without_arguments(x: F32 at sample) -> F32 at sample {
+  let a = g.foo()                                   //~ E0806 @11
+  x
+}
+
+pub flow method_of_a_generic_function_value(x: F32 at sample) -> F32 at sample {
+  let a = id::[F32].foo(x)                          //~ E0806 @11
+  x
+}
+
+pub flow method_of_a_function_value_in_an_operand(x: F32 at sample) -> F32 at sample {
+  x + g.foo(x)                                      //~ E0806 @7
+}
+
+pub flow method_of_a_function_value_as_the_output(x: F32 at sample) -> F32 at sample {
+  g.foo(x)                                          //~ E0806 @3
+}
+
+// ---- Not errors ----
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let n = len_of("{x}")
+  g(x) + id::[F32](x) + n
+}

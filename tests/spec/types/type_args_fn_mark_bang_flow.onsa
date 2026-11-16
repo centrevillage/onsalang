@@ -1,11 +1,12 @@
 // onsa.toml
 // [test]
 // spec = ["§2.6", "§4.5", "§11.2", "§18.1"]
+// fixes = 1
 
-// S-239, S-811 (W5-10 U2a): the `!` written after the list of a function in the body of a flow is E0806 (S-811: "その文脈で書けない印（… flow の本体の
-// `!(`・`.(` の E0806）" is before the rule of the mark that does not fit the callee, E0714; §11.2). The list is right. Today it is the E0714 of the
-// plain `id!(x)` (W7-04 waits: the check of the body of a flow); the case waits with it. The number of the candidates is not written. One error per
-// item (P-01).
+// S-239, S-811 (W5-10 U2a, W7-04 U1b/t): the `!` written after the list of a function in the body of a flow is E0806 (S-811: "その文脈で書けない印（…
+// flow の本体の `!(`・`.(` の E0806）" is before the rule of the mark that does not fit the callee, E0714; §11.2). The list is right. The callee is an
+// item called as `f(x)`, so the one candidate removes the `!` and keeps the list (`ident::[F32](x)`, §11.2: "`f(x)` で呼ぶ項目なら `!` を消す候補").
+// Today it is the E0714 of the plain `id!(x)` (W7-04 waits: the check of the body of a flow); the case waits with it. One error per item (P-01).
 
 rt fn ident[T: Copy](x: T) -> T {
   x

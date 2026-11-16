@@ -547,16 +547,18 @@ fn the_values_of_a_call_are_one_table_for_the_head_of_an_index() {
 }
 
 /// `!(` on a value is no E0020 of the names stage (S-812, R-341), and an
-/// item called with `.(` in a flow body is the flow stage's E0806 (S-811).
+/// item called with `.(` in a flow body is the E0806 of its `.(` there,
+/// whose candidate takes the `.` off (§11.2, S-811).
 #[test]
-fn a_bang_on_a_value_and_a_dot_call_in_a_flow_body_are_left_to_a_later_stage() {
+fn a_bang_on_a_value_is_left_to_a_later_stage_and_a_dot_call_in_a_flow_body_is_not() {
     let pre = "pub const K: F32 = 1.0\npub rt fn g(x: F32) -> F32 {\n  x\n}\n";
     for body in ["K!(x)", "F32.PI!()", "h!(x)"] {
         let (a, _) = analysis_with_std(&format!("{pre}pub fn u(x: F32, h: fn(F32) -> F32) -> F32 {{\n  {body}\n}}\n"));
         assert!(stages(&a).iter().all(|&(_, s)| s == onsa_diag::Stage::Types), "{body}: {:?}", a.diagnostics);
     }
     let (a, _) = analysis(&format!("{pre}pub flow u(x: F32 at sample) -> F32 at sample {{\n  g.(x)\n}}\n"));
-    assert_eq!(stages(&a), [(onsa_diag::Code::E0806, onsa_diag::Stage::Flow)], "{:?}", a.diagnostics);
+    assert_eq!(stages(&a), [(onsa_diag::Code::E0806, onsa_diag::Stage::Names)], "{:?}", a.diagnostics);
+    assert_eq!(a.diagnostics[0].fixes.len(), 1, "{:?}", a.diagnostics);
 }
 
 /// In a flow body the E0020 of a value called as `f(x)` has no candidate,
@@ -746,5 +748,35 @@ fn a_par_without_its_tilde_is_e0811_in_a_flow_and_e0821_outside() {
         assert_eq!(stages(&a), [(E0821, onsa_diag::Stage::Names)], "{par}");
         let d = &a.diagnostics[0];
         assert_eq!((&src[d.span.start as usize..d.span.end as usize], d.fixes.len()), (shown, 0), "{par}");
+    }
+}
+
+/// The assignment of a flow body (E0806, §18.1, R-59, S-1105): the
+/// candidate `let` only to a name not found that `let` binds as written (no
+/// E0320, no E0002 after it), and the note of the accumulation only to a
+/// name a `let` defined, of the one resolution of the head of a chain.
+#[test]
+fn an_assignment_of_a_flow_body_has_the_let_and_the_note_by_what_its_target_names() {
+    let pre = "pub const K: F32 = 1.0\npub struct Pt {\n  x: F32,\n}\npub rt fn g(x: F32) -> F32 {\n  x\n}\n";
+    let rows = [
+        ("y = x", 1, false),
+        ("outGain = x * 0.5", 0, false),
+        ("_y = x", 0, false),
+        ("self = x", 0, false),
+        ("let y = 0.0\n  y = y + x", 0, true),
+        ("let (y, z) = (x, x)\n  z = y + x", 0, true),
+        ("x = 2.0", 0, false),
+        ("g = x", 0, false),
+        ("Pt = x", 0, false),
+        ("K = x", 0, false),
+        ("prev = x", 0, false),
+        ("sample_rate = x", 0, false),
+    ];
+    for (body, fixes, note) in rows {
+        let src = format!("{pre}pub flow u(x: F32 at sample) -> F32 at sample {{\n  {body}\n  x\n}}\n");
+        let (a, _) = analysis(&src);
+        assert_eq!(stages(&a), [(onsa_diag::Code::E0806, onsa_diag::Stage::Names)], "{body}: {:?}", a.diagnostics);
+        let d = &a.diagnostics[0];
+        assert_eq!((d.fixes.len(), !d.notes.is_empty()), (fixes, note), "{body}: {d:?}");
     }
 }

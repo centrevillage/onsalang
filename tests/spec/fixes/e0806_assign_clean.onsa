@@ -1,0 +1,17 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§18.1"]
+//
+// [[test.fix]]
+// at = "15:3"
+// code = "E0806"
+// candidate = 1
+// clean = true
+
+// W7-04 U1b/t, R-59: the candidate of an assignment to a name that is not defined (`let` before it) leaves no error at all (`clean`): the one
+// error of the file is the assignment, and the file has no other error after the candidate.
+
+pub flow assign(x: F32 at sample) -> F32 at sample {
+  y = x * 2.0                                       //~ E0806
+  y
+}

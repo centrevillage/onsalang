@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "63:3"
+// code = "E0806"
+// candidate = 1
+// leaves = ["64:3 E0806"]
+
+// W7-04 U1b/t, R-59, S-125: an assignment in a flow body (E0806, §11.2) to a name that is not defined yet has one candidate, which writes `let`
+// before it (§18.1: "代入先がまだ定義されていなければ `let` を付ける修正候補を示す"); the unit is clean after it. The target is a name that no `let`
+// above defines. The assignments to a defined name (an accumulation, no candidate, a note shows `prev~(^y)`) are in
+// negative/flow_e0806_assign_no_candidate.onsa, and the same forms in a function body are not errors. The place is a statement of the body,
+// after another `let`, before an instance, with a delay or a branch on the right side. The right side has no error of its own here. One error per
+// flow (P-01): of two assignments to the same name the first one is reported, and its candidate leaves the second, which is then an assignment to a
+// defined name (`leaves`, §18.1).
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow assign_then_use(x: F32 at sample) -> F32 at sample {
+  y = x * 2.0                                       //~ E0806
+  y
+}
+
+pub flow assign_after_a_let(x: F32 at sample) -> F32 at sample {
+  let a = lp~(x)
+  b = a * 0.5                                       //~ E0806
+  a + b
+}
+
+pub flow assign_with_a_delay_on_the_right(x: F32 at sample) -> F32 at sample {
+  acc = prev~(x, 0.0) + x                           //~ E0806
+  acc
+}
+
+pub flow assign_with_a_branch_on_the_right(x: F32 at sample) -> F32 at sample {
+  y = if x > 0.0 { x } else { 0.0 }                 //~ E0806
+  y
+}
+
+pub flow assign_before_an_instance(x: F32 at sample) -> F32 at sample {
+  y = x * 0.5                                       //~ E0806
+  lp~(y)
+}
+
+pub flow assign_between_lets(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0
+  b = a + 1.0                                       //~ E0806
+  let c = b * 0.5
+  c
+}
+
+pub flow assign_an_instance_output(x: F32 at sample) -> F32 at sample {
+  lp_out = lp~(x)                                   //~ E0806
+  lp_out
+}
+
+pub flow assign_twice(x: F32 at sample) -> F32 at sample {
+  b = x                                             //~ E0806
+  b = x * 2.0
+  b
+}
+
+// ---- Not errors ----
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let y = x * 2.0
+  let acc = prev~(^acc) + y
+  acc
+}

@@ -19,7 +19,7 @@ pub fn codes() -> serde_json::Value {
                 "code": c.as_str(),
                 "category": format!("{:?}", c.category()).to_lowercase(),
                 "stages": c.stages().iter().map(|s| s.name()).collect::<Vec<_>>(),
-                "fix": match c.fix_rule() { onsa_diag::FixRule::Required => "required", onsa_diag::FixRule::Syntax => "syntax", onsa_diag::FixRule::Optional => "optional" },
+                "fix": match c.fix_rule() { onsa_diag::FixRule::Required => "required", onsa_diag::FixRule::Syntax => "syntax", onsa_diag::FixRule::OutsideFlow => "outside-flow", onsa_diag::FixRule::Optional => "optional" },
                 "note": match c.note_rule() { onsa_diag::NoteRule::Rule => "rule", onsa_diag::NoteRule::Optional => "optional" },
                 "title": c.title(),
             })

@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§6.1", "§11.2", "§18.1"]
+//
+// [[test.fix]]
+// at = "19:11"
+// code = "E0806"
+// candidate = 1
+// clean = true
+
+// W7-04 U1b/t, S-811: the candidate of `g.(x)`, a call through `.(` of an item called as `f(x)`, removes the `.` (§11.2: "`g.(x)` は `g(x)`"),
+// and the file has no error after it (`clean`).
+
+pub rt fn g(v: F32) -> F32 {
+  v
+}
+
+pub flow call(x: F32 at sample) -> F32 at sample {
+  let a = g.(x)                                     //~ E0806
+  a + x
+}

@@ -32,6 +32,7 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
         let_rates: vec![FlowRate::Const; fcx.pending.len()],
         lets: Vec::new(),
         diag: None,
+        inout_call: None,
         node_lists: Vec::new(),
         node_of_expr: HashMap::default(),
         counters: HashMap::default(),
@@ -68,7 +69,8 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
     if r.diag.is_none() {
         r.mark_all();
     }
-    let diag = r.diag.take();
+    // The stage of the modes comes after the flow checks (§18.1).
+    let diag = r.diag.take().or(r.inout_call.take());
     info.complete = diag.is_none();
     info.expr_rates = r.rates;
     info.local_rates = r.local_rates;
@@ -101,6 +103,10 @@ pub(super) struct Rater<'a> {
     pub(super) let_rates: Vec<FlowRate>,
     pub(super) lets: Vec<FlowLet>,
     pub(super) diag: Option<Diagnostic>,
+    /// The first call of an `inout self` method (E0713, §5.2), reported
+    /// when the flow checks find no error: the modes stage, which reads no
+    /// flow body, would come after them (§18.1).
+    pub(super) inout_call: Option<Diagnostic>,
     pub(super) node_lists: Vec<Vec<Node>>,
     pub(super) node_of_expr: HashMap<ExprId, usize>,
     pub(super) counters: HashMap<String, u32>,
@@ -366,6 +372,13 @@ impl<'a> Rater<'a> {
                 let f = self.a.def(def).as_fn().cloned();
                 let name = self.a.def(def).name.clone();
                 if let Some(f) = f {
+                    // The E0713 of §5.2, with no candidate: the `!` it writes is
+                    // an E0806 (§11.2, S-811).
+                    if self.final_pass && f.takes_inout_self() && self.inout_call.is_none() {
+                        let msg = format!("`{name}` takes `inout self`, and a flow body cannot call it (§5.2, §11.2)");
+                        let d = Diagnostic::new(Stage::Flow, Code::E0713, span, msg).with_found(self.src(span));
+                        self.inout_call = Some(d);
+                    }
                     // A name of no effect (`uses {I32}`, E0308) is no effect (§8.1, §18.1).
                     if self.final_pass && !f.effects.effects().is_empty() {
                         return Err(self.err(
@@ -387,11 +400,8 @@ impl<'a> Rater<'a> {
                 Ok(r.max(FlowRate::Init))
             }
             Some(Target::Variant { .. }) | Some(Target::Panic) => Ok(r),
-            Some(Target::Value) => Err(self.err(
-                Code::E0806,
-                span,
-                "a flow body cannot contain function values; call the function directly (§11.2)",
-            )),
+            // `.(` is the names stage's E0806 (§11.2, S-811).
+            Some(Target::Value) => onsa_diag::internal::bug(Some(span), "a call of a value the names stage passed"),
             _ => Ok(r.max(FlowRate::Init)),
         }
     }

@@ -1,0 +1,84 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.2", "§15.1", "§18.1"]
+// fixes = 1
+
+// W7-04 U1b/t, S-811, S-813, R-340, R-59: the `!(` and `.(` of a flow body (E0806, §11.2) and the candidates of their callees in a package of two
+// modules: a flow of another module (`dsp.lp!(x)`, one that is taken with `use`), the items of another module (a function, a variant, an
+// associated function, a generic function with its type arguments), and the same forms inside the module of the callee (dsp.onsa), with the
+// assignment to a name that is not defined. The callee is the same item whatever the path is, so the candidate is the same: a flow or a built-in
+// delay gets a `~` in place of the `!` (the path stays), and an item called as `f(x)` loses the `!` (or the `.`). One error per flow (P-01).
+
+use dsp
+use dsp.{gain, lp}
+
+pub flow module_flow_with_a_bang(x: F32 at sample) -> F32 at sample {
+  let a = dsp.lp~(x)                                //~ E0806 @11
+  a
+}
+
+pub flow taken_flow_with_a_bang(x: F32 at sample) -> F32 at sample {
+  let a = lp~(x)                                    //~ E0806 @11
+  a
+}
+
+pub flow module_flow_with_a_bang_in_an_operand(x: F32 at sample) -> F32 at sample {
+  x - 0.5 * dsp.lp~(x)                              //~ E0806 @13
+}
+
+pub flow module_function_with_a_bang(x: F32 at sample) -> F32 at sample {
+  let a = dsp.gain(x)                              //~ E0806
+  a
+}
+
+pub flow taken_function_with_a_bang(x: F32 at sample) -> F32 at sample {
+  let a = gain(x)                                  //~ E0806
+  a
+}
+
+pub flow module_variant_with_a_bang(x: F32 at sample) -> F32 at sample {
+  let m = dsp.Mode.Gain(x)                         //~ E0806
+  match m {
+    dsp.Mode.Off => 0.0,
+    dsp.Mode.Gain(k) => k,
+  }
+}
+
+pub flow module_associated_function_with_a_bang(x: F32 at sample) -> F32 at sample {
+  let p = dsp.P.new(x)                             //~ E0806
+  p.get()
+}
+
+pub flow module_generic_function_with_a_bang(x: F32 at sample) -> F32 at sample {
+  dsp.id::[F32](x)                                 //~ E0806
+}
+
+pub flow module_function_with_a_dot(x: F32 at sample) -> F32 at sample {
+  let a = dsp.gain(x)                              //~ E0806
+  a
+}
+
+pub flow taken_function_with_a_dot(x: F32 at sample) -> F32 at sample {
+  let a = gain(x)                                  //~ E0806
+  a
+}
+
+pub flow module_variant_with_a_dot(x: F32 at sample) -> F32 at sample {
+  let m = dsp.Mode.Gain(x)                         //~ E0806
+  match m {
+    dsp.Mode.Off => 0.0,
+    dsp.Mode.Gain(k) => k,
+  }
+}
+
+pub flow module_generic_function_with_a_dot(x: F32 at sample) -> F32 at sample {
+  dsp.id::[F32](x)                                 //~ E0806
+}
+
+// ---- Not errors ----
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let a = dsp.lp~(x) + lp~(x)
+  let p = dsp.P.new(a)
+  dsp.gain(x) + gain(x) + dsp.id::[F32](x) + p.get()
+}

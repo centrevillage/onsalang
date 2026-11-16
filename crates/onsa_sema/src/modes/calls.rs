@@ -17,7 +17,7 @@ use super::walk::Pos;
 use super::write::How;
 use crate::Kind;
 use crate::body::{BANG_ON_NO_INOUT_SELF, Target};
-use crate::def::DefKind;
+use crate::def::{DefKind, FnDef};
 use crate::ty::{Ty, TyId};
 
 /// What a parameter takes (§5.2).
@@ -47,7 +47,7 @@ impl Walker<'_> {
         if takes.len() != args.len() {
             bug(Some(self.ast.expr(e).span), "a call whose arguments are not those of its callee")
         }
-        self.bang(e, callee, kind, recv);
+        self.bang(e, callee, kind);
         let receiver = match (recv, crate::names::body::receiver(self.ast, callee)) {
             (Some(m), Some(base)) => Some((base, m)),
             (Some(_), None) => bug(Some(self.ast.expr(callee).span), "a method call with no receiver"),
@@ -120,9 +120,15 @@ impl Walker<'_> {
 
     /// The `!` of the call `e` (§5.2): an `inout self` method is called with
     /// it (E0713), no other call (E0714); the candidate is the one fix.
-    fn bang(&mut self, e: ExprId, callee: ExprId, kind: CallKind, recv: Option<Mode>) {
+    fn bang(&mut self, e: ExprId, callee: ExprId, kind: CallKind) {
         let (span, at) = (self.ast.expr(e).span, self.ast.expr(callee).span.end);
-        let d = match (kind == CallKind::Bang, recv == Some(Mode::Inout)) {
+        let inout = match self.info.targets.get(&e) {
+            Some(Target::Fn { def, .. } | Target::Method { def, .. }) => {
+                self.a.def(*def).as_fn().is_some_and(FnDef::takes_inout_self)
+            }
+            _ => false,
+        };
+        let d = match (kind == CallKind::Bang, inout) {
             (false, true) => {
                 let message = "this method takes `inout self`: write `!` after its name (§5.2)";
                 Diagnostic::new(Stage::Modes, Code::E0713, span, message)

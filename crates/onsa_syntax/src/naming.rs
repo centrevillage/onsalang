@@ -46,6 +46,12 @@ pub(crate) enum Declared {
 }
 
 impl Declared {
+    /// Whether `name` is of the shape a name of this kind takes, or `_`
+    /// alone (§2.3): the one test of the E0320 of a declaration ([`check`]).
+    fn takes(self, name: &str) -> bool {
+        name == "_" || self.shape().matches(name)
+    }
+
     fn shape(self) -> Shape {
         use Declared::*;
         match self {
@@ -79,6 +85,13 @@ impl Declared {
 /// A word with a `_` at its end: the name that avoids a keyword (§2.3, S-243).
 fn tailed(word: &str) -> String {
     format!("{word}_")
+}
+
+/// Whether `let name = …` binds `name` as written (§2.3, §5.1): it is no
+/// keyword, which the parser takes for no name (E0002), and has the shape
+/// of a variable's ([`check`], E0320).
+pub fn binds_as_written(name: &str) -> bool {
+    crate::token::TokenKind::keyword(name).is_none() && Declared::Variable.takes(name)
 }
 
 /// The candidate of the E0002 of the keyword `word` written as a name
@@ -287,7 +300,7 @@ pub(crate) fn check(ast: &Ast, diagnostics: &mut Vec<Diagnostic>) {
     // this one (§2.3, §5.1, S-726).
     let mut check = |ident: &Ident, kind: Declared, binding: bool| {
         let (shape, what) = (kind.shape(), kind.what());
-        if ident.name == "_" || shape.matches(&ident.name) {
+        if kind.takes(&ident.name) {
             return;
         }
         let mut d = Diagnostic::new(

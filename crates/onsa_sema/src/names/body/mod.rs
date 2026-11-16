@@ -29,6 +29,7 @@ mod paths;
 pub(crate) use consts::{ConstScope, const_names, const_path_names};
 pub(crate) use exprs::heads;
 pub(crate) use flow::clock_after;
+pub(crate) use flow_forms::{NoFlowForm, no_flow_form};
 pub(crate) use kinds::METHOD_IS_CALLED;
 pub(crate) use paths::{is_value, not_a_struct};
 pub(crate) use type_args::{Form, names_only, own_count_error, own_kinds, own_params};
@@ -753,8 +754,9 @@ impl<'a> Walker<'a> {
                 _ => self.stmt(s)?,
             }
         }
-        if let Some(t) = b.tail {
-            self.expr(t)?;
+        match b.tail {
+            Some(t) => self.expr(t)?,
+            None => return Err(self.no_output(body)),
         }
         self.close_scope();
         self.close_scope();

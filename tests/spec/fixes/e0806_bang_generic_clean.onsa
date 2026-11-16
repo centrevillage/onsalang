@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§4.5", "§11.2", "§18.1"]
+//
+// [[test.fix]]
+// at = "19:3"
+// code = "E0806"
+// candidate = 1
+// clean = true
+
+// W7-04 U1b/t, S-811: the candidate of `id::[F32]!(x)`, a call with `!` of a generic function with its type arguments, removes the `!` and keeps
+// the type arguments (`id::[F32](x)`, §4.5), and the file has no error after it (`clean`).
+
+pub rt fn id[T](v: T) -> T {
+  v
+}
+
+pub flow call(x: F32 at sample) -> F32 at sample {
+  id::[F32]!(x)                                     //~ E0806
+}

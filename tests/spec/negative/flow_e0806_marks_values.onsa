@@ -1,0 +1,233 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§5.2", "§6.1", "§11.2", "§15.1", "§18.1"]
+// fixes = 0
+
+// W7-04 U1b/t, S-811, R-340: the `!(` and `.(` of a flow body (E0806, §11.2) whose receiver or callee is a value have no candidate (§11.2:
+// "受け手か呼び先が値なら候補を出さない"; `fixes = 0` checks it): a candidate would have to guess a mark that does not exist (`q.put!(x)` has no
+// form in a flow body at all, because a flow body cannot call a method that takes `inout self`). The values are the method of a `let` binding
+// (`p.get!()`, `q.bump!(x)`), the method of the output of an instance (`mk~(x).get!()`), an input and the function field of one, a `let`, a constant, the field of a constant,
+// of a `let` and of the result of a function, and the element of an array of function values. The mark is E0806 whatever the callee is (§2.6:
+// before the E0714 of `!` and the E0401 of a value called, S-811). A method that takes `inout self` called without the `!` is the E0713 of
+// §5.2, and it has no candidate either: the candidate "write the `!`" would make the E0806 of an earlier stage (§11.2). One error per flow (P-01).
+// The values called as `x(...)` (E0020) are in negative/value_call_in_flow_body.onsa.
+
+pub struct P {
+  n: F32,
+}
+
+impl P {
+  pub rt fn new(v: F32) -> P {
+    P { n: v }
+  }
+
+  pub rt fn get(self) -> F32 {
+    self.n
+  }
+
+  pub rt fn bump(inout self, v: F32) -> F32 {
+    self.n = v
+    v
+  }
+}
+
+pub struct S {
+  f: fn(F32) -> F32,
+}
+
+pub struct Pt {
+  cb: fn(F32) -> F32,
+}
+
+pub rt fn g(v: F32) -> F32 {
+  v
+}
+
+pub rt fn make(v: F32) -> S {
+  S { f: g }
+}
+
+pub const K: S = S { f: g }
+
+pub const C: F32 = 2.0
+
+pub const OPS: [fn(F32) -> F32; 1] = [g]
+
+pub flow mk(x: F32 at sample) -> P at sample {
+  P { n: x }
+}
+
+pub flow field_of_a_constant_with_a_bang(x: F32 at sample) -> F32 at sample {
+  K.f!(x)                                           //~ E0806
+}
+
+pub flow field_of_a_constant_with_a_bang_in_a_let(x: F32 at sample) -> F32 at sample {
+  let a = K.f!(x)                                   //~ E0806
+  a
+}
+
+pub flow field_of_a_let_with_a_bang(x: F32 at sample) -> F32 at sample {
+  let r = make(0.5)
+  r.f!(x)                                           //~ E0806
+}
+
+pub flow field_of_a_call_with_a_bang(x: F32 at sample) -> F32 at sample {
+  make(0.5).f!(x)                                   //~ E0806
+}
+
+pub flow method_of_a_let_with_a_bang(x: F32 at sample) -> F32 at sample {
+  let p = P.new(x)
+  let a = p.get!()                                  //~ E0806
+  a
+}
+
+pub flow method_of_a_let_with_a_bang_as_the_output(x: F32 at sample) -> F32 at sample {
+  let p = P.new(x)
+  p.get!()                                          //~ E0806
+}
+
+pub flow method_that_takes_inout_self_with_a_bang(x: F32 at sample) -> F32 at sample {
+  let q = P.new(x)
+  let a = q.bump!(x)                                //~ E0806
+  a
+}
+
+pub flow method_that_takes_inout_self_with_a_bang_as_the_output(x: F32 at sample) -> F32 at sample {
+  let q = P.new(x)
+  q.bump!(x)                                        //~ E0806
+}
+
+pub flow method_of_an_instance_output_with_a_bang(x: F32 at sample) -> F32 at sample {
+  mk~(x).get!()                                     //~ E0806
+}
+
+pub flow input_called_with_a_bang(x: F32 at sample) -> F32 at sample {
+  x!(x)                                             //~ E0806
+}
+
+pub flow constant_called_with_a_bang(x: F32 at sample) -> F32 at sample {
+  C!(x)                                             //~ E0806
+}
+
+pub flow value_with_a_bang_in_an_operand(x: F32 at sample) -> F32 at sample {
+  let p = P.new(x)
+  x - 0.5 * p.get!()                                //~ E0806
+}
+
+pub flow value_with_a_bang_in_the_arm_of_an_if(x: F32 at sample) -> F32 at sample {
+  let p = P.new(x)
+  if x > 0.0 {
+    p.get!()                                        //~ E0806
+  } else {
+    0.0
+  }
+}
+
+pub flow value_with_a_bang_in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 {
+    K.f!(x) * F32.round_from(i)                     //~ E0806
+  }
+  ys[0] + ys[1]
+}
+
+pub flow input_called_with_a_dot(x: F32 at sample) -> F32 at sample {
+  x.(x)                                             //~ E0806
+}
+
+pub flow constant_called_with_a_dot(x: F32 at sample) -> F32 at sample {
+  C.(x)                                             //~ E0806
+}
+
+pub flow let_called_with_a_dot(x: F32 at sample) -> F32 at sample {
+  let y = x * 2.0
+  y.(x)                                             //~ E0806
+}
+
+pub flow field_of_a_constant_called_with_a_dot(x: F32 at sample) -> F32 at sample {
+  K.f.(x)                                           //~ E0806
+}
+
+pub flow field_of_a_let_called_with_a_dot(x: F32 at sample) -> F32 at sample {
+  let r = make(0.5)
+  let a = r.f.(x)                                   //~ E0806
+  a
+}
+
+pub flow field_of_a_call_called_with_a_dot(x: F32 at sample) -> F32 at sample {
+  make(0.5).f.(x)                                   //~ E0806
+}
+
+pub flow element_of_an_array_called_with_a_dot(x: F32 at sample) -> F32 at sample {
+  OPS[0].(x)                                        //~ E0806
+}
+
+pub flow value_called_with_a_dot_in_an_operand(x: F32 at sample) -> F32 at sample {
+  x - 0.5 * C.(x)                                   //~ E0806
+}
+
+pub flow value_called_with_a_dot_in_the_arm_of_a_match(x: F32 at sample) -> F32 at sample {
+  match x > 0.0 {
+    true => K.f.(x),                                //~ E0806
+    false => 0.0,
+  }
+}
+
+pub flow value_called_with_a_dot_in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 {
+    x.(x) * F32.round_from(i)                       //~ E0806
+  }
+  ys[0] + ys[1]
+}
+
+pub flow field_of_an_input_called_with_a_bang(p: Pt at init, x: F32 at sample) -> F32 at sample {
+  p.cb!(x)                                          //~ E0806
+}
+
+pub flow field_of_an_input_called_with_a_dot(p: Pt at init, x: F32 at sample) -> F32 at sample {
+  p.cb.(x)                                          //~ E0806
+}
+
+pub flow field_of_an_input_called_with_a_dot_in_a_let(p: Pt at init, x: F32 at sample) -> F32 at sample {
+  let a = p.cb.(x)                                  //~ E0806
+  a
+}
+
+pub flow inout_self_method_without_a_bang(x: F32 at sample) -> F32 at sample {
+  let q = P.new(x)
+  let a = q.bump(x)                                 //~ E0713
+  a
+}
+
+pub flow inout_self_method_without_a_bang_as_the_output(x: F32 at sample) -> F32 at sample {
+  let q = P.new(x)
+  q.bump(x)                                         //~ E0713
+}
+
+pub flow inout_self_method_without_a_bang_in_an_operand(x: F32 at sample) -> F32 at sample {
+  let q = P.new(x)
+  x - 0.5 * q.bump(x)                               //~ E0713
+}
+
+pub flow inout_self_method_without_a_bang_in_the_arm_of_an_if(x: F32 at sample) -> F32 at sample {
+  let q = P.new(x)
+  if x > 0.0 {
+    q.bump(x)                                       //~ E0713
+  } else {
+    0.0
+  }
+}
+
+pub flow inout_self_method_without_a_bang_in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let q = P.new(x)
+  let ys = par~ i in 0 ..< 2 {
+    q.bump(x) * F32.round_from(i)                   //~ E0713
+  }
+  ys[0] + ys[1]
+}
+
+// ---- Not errors ----
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let p = P.new(x)
+  p.get() + x * C
+}

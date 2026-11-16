@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§18.1"]
+// fixes = 0
+
+// W7-04 U1b/t, S-125, S-267: a flow body that ends with a `let` and has no output expression ("本体は `let` 文の並びと、最後の式（出力）",
+// §11.2) is reported as E0806 by this version, in the flow stage, and the task moves it to the names stage with the other forms of a body that
+// the list of §11.2 does not allow. The spec does not give the code and the position of this form (a gap of the spec, in the report of the
+// task); the markers keep the code E0806 and put the position on the closing brace of the body, where this version reports it. What this file
+// pins is the order: it is reported with the other errors of the names stage in the order of the positions (an E0302, a `var` before it are
+// reported instead), and an error of the types stage anywhere in the unit (E0401) is not (the types stage does not run in a unit with an
+// error of the names stage, §18.1). No candidate (`fixes = 0`). One error per flow (P-01).
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow ends_with_a_let(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0
+}                                                   //~ E0806
+
+pub flow ends_with_two_lets(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0
+  let b = a + 1.0
+}                                                   //~ E0806
+
+pub flow ends_with_a_destructuring_let(x: F32 at sample) -> F32 at sample {
+  let (a, b) = (x, x)
+}                                                   //~ E0806
+
+pub flow ends_with_an_instance(x: F32 at sample) -> F32 at sample {
+  let a = lp~(x)
+}                                                   //~ E0806
+
+pub flow has_no_statement(x: F32 at sample) -> F32 at sample {
+}                                                   //~ E0806
+
+pub flow no_output_after_a_type_error(x: F32 at sample) -> F32 at sample {
+  let t: Bool = x
+  let a = x
+}                                                   //~ E0806
+
+pub flow no_output_before_a_type_error_of_a_later_let(x: F32 at sample) -> F32 at sample {
+  let a: Bool = x
+}                                                   //~ E0806
+
+pub flow name_error_before_the_missing_output(x: F32 at sample) -> F32 at sample {
+  let a = nope                                      //~ E0302
+  let b = a
+}
+
+pub flow var_before_the_missing_output(x: F32 at sample) -> F32 at sample {
+  var a = x                                         //~ E0806
+  let b = a
+}
+
+// ---- Not errors ----
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0
+  a
+}

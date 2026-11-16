@@ -1,0 +1,119 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§18.1"]
+// fixes = 0
+
+// W7-04 U1b/t, S-125, S-267, R-286: the three forms that the type stage found (a field after the type arguments of a function, a function
+// value in the hole of a string, a method of a function value) are E0806 of the names stage, so they take part in the order of the names stage
+// (§18.1): the first by position is reported, a name error before the form (E0302) wins, a name error after it does not, and a type error
+// of another `let` (E0401), before or after the form, is not reported: the types stage does not run in a unit with an error of the names stage.
+// The same four places as negative/flow_e0806_names_later_name_error.onsa and negative/flow_e0806_names_type_error.onsa for the other forms.
+// One error per flow (P-01).
+
+pub rt fn g(v: F32) -> F32 {
+  v
+}
+
+pub rt fn id[T](v: T) -> T {
+  v
+}
+
+pub rt fn len_of(s: Str) -> F32 {
+  0.0
+}
+
+pub flow field_of_a_function_value_then_a_name_error(x: F32 at sample) -> F32 at sample {
+  let k = id::[F32].y                               //~ E0806
+  let z = nope
+  x + z
+}
+
+pub flow field_of_a_function_value_after_a_name_error(x: F32 at sample) -> F32 at sample {
+  let z = nope                                      //~ E0302
+  let k = id::[F32].y
+  x + z
+}
+
+pub flow field_of_a_function_value_after_a_type_error(x: F32 at sample) -> F32 at sample {
+  let t: Bool = x
+  let k = id::[F32].y                               //~ E0806
+  x
+}
+
+pub flow field_of_a_function_value_then_a_type_error(x: F32 at sample) -> F32 at sample {
+  let k = id::[F32].y                               //~ E0806
+  let t: Bool = x
+  x
+}
+
+pub flow field_of_unknown_type_arguments_then_a_name_error(x: F32 at sample) -> F32 at sample {
+  let k = id::[Nope].y                              //~ E0806
+  let z = nope
+  x + z
+}
+
+pub flow field_of_unknown_type_arguments_after_a_name_error(x: F32 at sample) -> F32 at sample {
+  let z = nope                                      //~ E0302
+  let k = id::[Nope].y
+  x + z
+}
+
+pub flow field_of_unknown_type_arguments_after_a_type_error(x: F32 at sample) -> F32 at sample {
+  let t: Bool = x
+  let k = id::[Nope].y                              //~ E0806
+  x
+}
+
+pub flow field_of_unknown_type_arguments_then_a_type_error(x: F32 at sample) -> F32 at sample {
+  let k = id::[Nope].y                              //~ E0806
+  let t: Bool = x
+  x
+}
+
+pub flow function_value_in_a_hole_then_a_name_error(x: F32 at sample) -> F32 at sample {
+  let n = len_of("{g}")                             //~ E0806
+  let z = nope
+  x + z
+}
+
+pub flow function_value_in_a_hole_after_a_name_error(x: F32 at sample) -> F32 at sample {
+  let z = nope                                      //~ E0302
+  let n = len_of("{g}")
+  x + z
+}
+
+pub flow function_value_in_a_hole_after_a_type_error(x: F32 at sample) -> F32 at sample {
+  let t: Bool = x
+  let n = len_of("{g}")                             //~ E0806
+  x
+}
+
+pub flow function_value_in_a_hole_then_a_type_error(x: F32 at sample) -> F32 at sample {
+  let n = len_of("{g}")                             //~ E0806
+  let t: Bool = x
+  x
+}
+
+pub flow method_of_a_function_value_then_a_name_error(x: F32 at sample) -> F32 at sample {
+  let a = g.foo(x)                                  //~ E0806
+  let z = nope
+  x + z
+}
+
+pub flow method_of_a_function_value_after_a_name_error(x: F32 at sample) -> F32 at sample {
+  let z = nope                                      //~ E0302
+  let a = g.foo(x)
+  x + z
+}
+
+pub flow method_of_a_function_value_after_a_type_error(x: F32 at sample) -> F32 at sample {
+  let t: Bool = x
+  let a = g.foo(x)                                  //~ E0806
+  x
+}
+
+pub flow method_of_a_function_value_then_a_type_error(x: F32 at sample) -> F32 at sample {
+  let a = g.foo(x)                                  //~ E0806
+  let t: Bool = x
+  x
+}

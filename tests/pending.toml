@@ -441,13 +441,6 @@ note = "E0801 の候補"
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/fixes/e0806_assign.onsa"
-reasons = ["S-125"]
-until = "W7-04"
-note = "E0806 の候補"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/fixes/e0401_param_values.onsa"
 reasons = ["S-116"]
 until = "W7-13"
@@ -1132,13 +1125,6 @@ note = "型引数を書いた prelude の列挙子を値に置いて呼ぶ形を
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/types/type_args_fn_mark_bang_flow.onsa"
-reasons = ["S-811"]
-until = "W7-04"
-note = "flow の本体の `id::[F32]!(x)` は E0806（§11.2）。今は `id!(x)` と同じ道で E0714（W5-10 の単位の行）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/types/type_args_method_const_arith.onsa"
 reasons = ["S-713", "S-239"]
 until = "W9-03"
@@ -1150,13 +1136,6 @@ target = "tests/spec/types/type_args_method_const_arith_neg.onsa"
 reasons = ["S-713", "S-239"]
 until = "W9-03"
 note = "メソッド自身の型引数の const 引数の演算の誤り（E0417、E0419）。演算を含む const 引数は今 E0200"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/types/type_args_method_mark_bang_flow.onsa"
-reasons = ["S-811"]
-until = "W7-04"
-note = "flow の本体の `v.m::[F32]!(x)` は E0806（§11.2）。flow の本体の `!` はメソッドでは今は報告されない（W5-10 の単位の行）"
 
 # --- W5-24 U6a: const 引数と型の引数の中の `X::[…]`・`X[a, b]`、入れ子、他言語の数の形の事例と、W5-16 U1d の控えの事例（2026-11-11）
 [[pending]]

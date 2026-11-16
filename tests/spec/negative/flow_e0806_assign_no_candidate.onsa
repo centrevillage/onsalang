@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§18.1"]
+// fixes = 0
+
+// W7-04 U1b/t, R-59, S-125: an assignment in a flow body (E0806, §11.2) has no candidate when the target is defined (§18.1: "定義済み
+// （`let y = 0.0` の後の `y = y + x`）なら、累積の意図なので、修正候補は付けず、`let y = prev~(^y) + x` と書く形を note で示す"; the note is
+// not compared, and `fixes = 0` checks that there is no candidate). A target is defined by an input, a `let` above and a constant, and the field and
+// the element of a defined name are defined too. A target that no `let` above defines but a `let` below does (`y = x` before `let y = 1.0`)
+// has no candidate either: `let y = x` would make the E0304 of two `let` of one name, an error of the same stage that the candidate of an
+// error must not leave (§18.1). One error per flow (P-01).
+
+pub struct S {
+  a: F32,
+}
+
+pub const K: F32 = 1.0
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow accumulate_into_a_let(x: F32 at sample) -> F32 at sample {
+  let y = 0.0
+  y = y + x                                         //~ E0806
+  y
+}
+
+pub flow assign_to_an_input(x: F32 at sample) -> F32 at sample {
+  x = x * 2.0                                       //~ E0806
+  x
+}
+
+pub flow assign_to_a_let_of_an_instance(x: F32 at sample) -> F32 at sample {
+  let a = lp~(x)
+  a = a * 0.5                                       //~ E0806
+  a
+}
+
+pub flow assign_to_a_constant(x: F32 at sample) -> F32 at sample {
+  K = x                                             //~ E0806
+  x
+}
+
+pub flow assign_to_a_field_of_a_let(x: F32 at sample) -> F32 at sample {
+  let s = S { a: x }
+  s.a = x * 2.0                                     //~ E0806
+  s.a
+}
+
+pub flow assign_to_an_element_of_a_let(x: F32 at sample) -> F32 at sample {
+  let ys = [x, x]
+  ys[0] = x * 2.0                                   //~ E0806
+  ys[0]
+}
+
+pub flow assign_to_a_name_that_a_later_let_defines(x: F32 at sample) -> F32 at sample {
+  y = x                                             //~ E0806
+  let y = 1.0
+  y
+}
+
+pub flow assign_to_a_name_that_a_later_let_of_an_instance_defines(x: F32 at sample) -> F32 at sample {
+  a = x                                             //~ E0806
+  let a = lp~(x)
+  a
+}
+
+// ---- Not errors ----
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let y = prev~(^y) + x
+  y
+}

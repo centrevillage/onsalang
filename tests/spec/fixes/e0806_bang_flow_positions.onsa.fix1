@@ -1,0 +1,124 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.2", "§11.4", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "105:3"
+// code = "E0806"
+// candidate = 1
+// leaves = ["105:7 E0806"]
+//
+// [[test.fix]]
+// at = "109:3"
+// code = "E0806"
+// candidate = 1
+// leaves = ["109:10 E0806"]
+
+// W7-04 U1b/t, S-813, S-811, R-340: a flow or a built-in delay called with `!` (`lp!(x)`, `prev!(x, 0.0)`) is E0806 in a flow body, and the one
+// candidate replaces the `!` with `~` (§11.2: "呼び先が flow か組込みの遅延なら `!` を `~` に置き換える修正候補"). The call is the whole range
+// of the diagnostic (S-813), so `@` is the column where the call starts. The positions of fixes/e0806_bang_on_flow.onsa (the output, a `let`,
+// an operand, a `par~` body, the argument of an instance) are not repeated; here are the places of the branches, the delays and the nesting. The
+// candidate is `~` and not the removal of the `!`: `lp(x)` would be the E0811 of a flow called without `~`, an error of the same stage that the
+// candidate of an error must not leave (§18.1; the default of `[[test.fix]]` checks it for each candidate below). One error per flow (P-01):
+// of two calls with a `!`, one inside the argument of the other, the outer one is reported (it starts first) and its candidate leaves the inner.
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow gate(x: F32 at sample, c: F32 at block) -> F32 at sample {
+  x * c
+}
+
+pub flow mix(a: F32 at sample, b: F32 at sample) -> F32 at sample {
+  a + b
+}
+
+pub flow in_the_arm_of_an_if(x: F32 at sample) -> F32 at sample {
+  if x > 0.0 {
+    lp~(x)                                          //~ E0806 @5
+  } else {
+    0.0
+  }
+}
+
+pub flow in_the_condition_of_an_if(x: F32 at sample) -> F32 at sample {
+  if lp~(x) > 0.0 {                                 //~ E0806 @6
+    x
+  } else {
+    0.0
+  }
+}
+
+pub flow in_the_arm_of_a_match(x: F32 at sample) -> F32 at sample {
+  match x > 0.0 {
+    true => lp~(x),                                 //~ E0806 @13
+    false => 0.0,
+  }
+}
+
+pub flow in_the_guard_of_a_match(x: F32 at sample) -> F32 at sample {
+  match x {
+    v if lp~(v) > 0.0 => v,                         //~ E0806 @10
+    _ => 0.0,
+  }
+}
+
+pub flow in_a_delay_in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 {
+    prev~(x, 0.0) * F32.round_from(i)               //~ E0806 @5
+  }
+  ys[0] + ys[1]
+}
+
+pub flow in_the_first_argument_of_a_delay(x: F32 at sample) -> F32 at sample {
+  prev~(lp~(x), 0.0)                                //~ E0806 @9
+}
+
+pub flow in_the_first_argument_of_a_delay_with_a_length(x: F32 at sample) -> F32 at sample {
+  delay~(lp~(x), 4)                                 //~ E0806 @10
+}
+
+pub flow in_the_second_argument_of_an_instance(x: F32 at sample) -> F32 at sample {
+  let a = mix~(x, prev~(x, 0.0))                    //~ E0806 @19
+  a
+}
+
+pub flow in_the_argument_of_a_vdelay(x: F32 at sample, d: F32 at block) -> F32 at sample {
+  vdelay~(lp~(x), d, 64)                            //~ E0806 @11
+}
+
+pub flow in_a_tuple(x: F32 at sample) -> F32 at sample {
+  let (a, b) = (lp~(x), x)                          //~ E0806 @17
+  a + b
+}
+
+pub flow in_the_condition_of_a_match(x: F32 at sample) -> F32 at sample {
+  match lp~(x) > 0.0 {                              //~ E0806 @9
+    true => x,
+    false => 0.0,
+  }
+}
+
+pub flow a_flow_in_the_argument_of_a_flow(x: F32 at sample) -> F32 at sample {
+  lp~(lp!(x))                                       //~ E0806 @3
+}
+
+pub flow a_flow_in_the_argument_of_a_delay(x: F32 at sample) -> F32 at sample {
+  delay~(lp!(x), 4)                                 //~ E0806 @3
+}
+
+pub flow a_delay_in_a_branch_of_a_flow(x: F32 at sample) -> F32 at sample {
+  let a = lp~(if x > 0.0 { prev~(x, 0.0) } else { x })   //~ E0806 @28
+  a
+}
+
+// ---- Not errors ----
+
+pub flow fine(x: F32 at sample, c: F32 at block, d: F32 at block) -> F32 at sample {
+  let a = lp~(lp~(x)) + delay~(lp~(x), 4) + prev~(lp~(x), 0.0) + vdelay~(x, d, 64)
+  let b = gate~(a, c)
+  let e = prev~(x, 0.0)
+  if a > 0.0 { b } else { e }
+}

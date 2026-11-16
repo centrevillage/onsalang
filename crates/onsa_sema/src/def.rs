@@ -176,6 +176,15 @@ pub struct FnDef {
     pub fp_relaxed: bool,
 }
 
+impl FnDef {
+    /// Whether it is a method that takes `inout self`, called with `!`
+    /// (§5.2): the one test of the E0713 of the modes stage and of a flow
+    /// body (which the modes stage does not read).
+    pub(crate) fn takes_inout_self(&self) -> bool {
+        self.self_mode == Some(Mode::Inout)
+    }
+}
+
 /// The functions a derive makes (§6.4), in the order of the rows of
 /// `crate::traits::TRAIT_ITEMS`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

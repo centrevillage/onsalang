@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.2", "§11.4", "§18.1"]
+//
+// [[test.fix]]
+// at = "17:11"
+// code = "E0806"
+// candidate = 1
+// clean = true
+
+// W7-04 U1b/t, S-813: the candidate of `prev!(x, 0.0)`, a built-in delay, replaces the `!` with `~` (§11.2), and the file has no error after it
+// (`clean`). A built-in delay is a flow that keeps a state (§11.4), so `prev(x, 0.0)` would be the E0811 of §2.6, and the `!` is not just removed.
+
+
+
+pub flow call(x: F32 at sample) -> F32 at sample {
+  let a = prev!(x, 0.0)                             //~ E0806 @11
+  a + x
+}

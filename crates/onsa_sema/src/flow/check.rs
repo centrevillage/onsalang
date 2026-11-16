@@ -3,9 +3,8 @@
 //! calls of instances, delays and `sample_rate()`.
 
 use super::*;
-use crate::body::BANG_ON_NO_INOUT_SELF;
 use crate::flow_names::FlowBuiltin;
-use crate::names::body::{Origin, PathRes};
+use crate::names::body::{NoFlowForm, Origin, PathRes, no_flow_form};
 use crate::resolve::{Callee, NameKind};
 
 impl<'a> Checker<'a> {
@@ -43,13 +42,8 @@ impl<'a> Checker<'a> {
     /// argument of `prev` / `delay` / `vdelay` can refer to a later one.
     fn prescan_lets(&mut self, body: ExprId) -> R<()> {
         let span = self.expr(body).span;
-        let ExprKind::Block(b) = &self.expr(body).kind else {
-            return Err(self.flow_err(
-                Code::E0806,
-                span,
-                "a flow body is a block of `let`s and an output expression (§11.2)",
-            ));
-        };
+        // A body with no output is the names stage's E0806 (`names/body/flow_forms.rs`).
+        let ExprKind::Block(b) = &self.expr(body).kind else { return Err(self.flow_syntax(span)) };
         let stmts = b.stmts.clone();
         let tail = b.tail;
         let ast = self.ast;
@@ -92,10 +86,7 @@ impl<'a> Checker<'a> {
                 self.fcx().output = Some(t);
                 Ok(())
             }
-            None => {
-                let end = Span::new(span.file, span.end.saturating_sub(1), span.end);
-                Err(self.flow_err(Code::E0806, end, "a flow body ends with its output expression (§11.2)"))
-            }
+            None => Err(self.flow_syntax(span)),
         }
     }
 
@@ -246,12 +237,13 @@ impl<'a> Checker<'a> {
     /// `None` hands the expression back to the ordinary checker.
     pub(crate) fn check_flow_expr(&mut self, e: ExprId, expected: Option<TyId>) -> R<Option<TyId>> {
         let expr = self.expr(e);
+        // The statements of a block are `check_flow_stmt`'s.
+        if let Some(form) = no_flow_form(self.ast, e)
+            && !matches!(form, NoFlowForm::Stmts(_))
+        {
+            return Err(self.flow_syntax(expr.span));
+        }
         match &expr.kind {
-            ExprKind::Closure { .. }
-            | ExprKind::Handle { .. }
-            | ExprKind::Unsafe(_)
-            | ExprKind::Try(_)
-            | ExprKind::Move(_) => Err(self.flow_syntax(expr.span)),
             ExprKind::Par { var, range, body, .. } => {
                 let (var, range, body) = (var.clone(), *range, *body);
                 self.check_par(e, &var, &range, body, expected).map(Some)
@@ -318,7 +310,7 @@ impl<'a> Checker<'a> {
 
     /// Calls in flow mode (§11.5): flow instances `f~(...)`, the delays
     /// `prev~` / `delay~` / `vdelay~`, `sample_rate()`, as the names stage
-    /// decided them (its `~`: E0811, E0812, the E0806 of `lp!(x)`, R-286;
+    /// decided them (its marks: E0811, E0812, the E0806 of `!(`, R-286;
     /// `names/body/flow.rs`). `None` hands the call back to the ordinary
     /// checker (functions, methods, constructors).
     pub(crate) fn check_flow_call(
@@ -346,10 +338,6 @@ impl<'a> Checker<'a> {
             (Some(FlowBuiltin::SampleTick), CallKind::Plain) => {
                 Err(self.unsupported_in(Stage::Flow, span, Feature::SampleTick, &[]))
             }
-            // `sample_rate!()`, `sample_tick!()` (W7-04).
-            (Some(FlowBuiltin::SampleRate | FlowBuiltin::SampleTick), CallKind::Bang) => {
-                Err(self.bang_on_builtin(span))
-            }
             // The names stage stopped in the callee of an instance with no
             // diagnostic (a name held as an error, §18.1, S-675), where the
             // check stops too.
@@ -357,8 +345,8 @@ impl<'a> Checker<'a> {
                 self.check_expr(callee, None)?;
                 onsa_diag::internal::bug(Some(span), "an instance the names stage did not record")
             }
-            // Any other `~`, a delay without it, and a flow or a delay with
-            // `!` are the names stage's (`names/body/flow.rs`).
+            // Any other `~`, a delay without it, and `!(` and `.(` are the
+            // names stage's (`names/body/flow.rs`).
             (Some(_), _) | (None, CallKind::Flow) => {
                 onsa_diag::internal::bug(Some(span), "a mark of a call of a flow body the names stage passed")
             }
@@ -374,17 +362,6 @@ impl<'a> Checker<'a> {
     fn names_a_flow(&self, callee: ExprId) -> bool {
         matches!(self.names.paths.get(&crate::names::body::named(self.ast, callee)), Some(&PathRes::Item { entity, .. })
             if NameKind::of(entity, &self.a.defs).is_some_and(|k| k.at_callee(false) == Callee::Flow))
-    }
-
-    /// E0714 for `!` on a builtin name of a flow (`sample_rate!()`, §5.2;
-    /// its E0806 is W7-04's).
-    fn bang_on_builtin(&mut self, span: Span) -> crate::body::Stop {
-        let fix = self.src(span).replacen("!(", "(", 1);
-        self.diag(
-            Diagnostic::new(Stage::Flow, Code::E0714, span, BANG_ON_NO_INOUT_SELF)
-                .with_found(self.src(span))
-                .with_fix(Fix::replace("remove `!`", span, fix)),
-        )
     }
 
     /// `f~(args)` (§11.5): one argument per input, typed by the input's value type.

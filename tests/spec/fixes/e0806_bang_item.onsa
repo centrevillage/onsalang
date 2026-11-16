@@ -1,0 +1,181 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§5.2", "§11.2", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "171:3"
+// code = "E0806"
+// candidate = 1
+// leaves = ["171:5 E0806"]
+
+// W7-04 U1b/t, S-811, S-813, R-340: `!(` is the mark of a method that takes `inout self` (§5.2) and a flow body may not call such a
+// method (§11.2). When the callee is an item that is called as `f(x)` (a function of either kind, an associated function, the construction
+// of a variant, a generic function with its type arguments), the `!` is a mark that does not belong and the one candidate removes it
+// (§11.2: "`f(x)` で呼ぶ項目なら `!` を消す候補を示し"). The callee is an item, so none of these is the E0714 of a function called with `!`
+// (§5.2) that a function body reports: in a flow body the mark is E0806 whatever the callee is (§2.6). The place is the output, a `let`,
+// an operand, the condition and the arm of a branch, the body of a `par~`, the first argument of a delay and the argument of an instance.
+// The flows (`lp!(x)`) and the values (`q.put!(x)`) are in other files. One error per flow (P-01): a call inside the argument of another
+// call is reported at the outer one, and its candidate leaves the inner one (`leaves`, §18.1).
+
+pub enum Mode {
+  Off,
+  Gain(F32),
+}
+
+pub struct P {
+  n: F32,
+}
+
+impl P {
+  pub rt fn new(v: F32) -> P {
+    P { n: v }
+  }
+
+  pub rt fn get(self) -> F32 {
+    self.n
+  }
+}
+
+pub rt fn g(v: F32) -> F32 {
+  v
+}
+
+pub rt fn two(a: F32, b: F32) -> F32 {
+  a
+}
+
+pub fn scale(v: F32) -> F32 {
+  v
+}
+
+pub rt fn id[T](v: T) -> T {
+  v
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow rt_fn_in_a_let(x: F32 at sample) -> F32 at sample {
+  let a = g!(x)                                     //~ E0806
+  a
+}
+
+pub flow rt_fn_as_the_output(x: F32 at sample) -> F32 at sample {
+  g!(x)                                             //~ E0806
+}
+
+pub flow rt_fn_in_an_operand(x: F32 at sample) -> F32 at sample {
+  x - 0.5 * g!(x)                                   //~ E0806
+}
+
+pub flow rt_fn_with_two_arguments(x: F32 at sample) -> F32 at sample {
+  two!(x, 0.5)                                      //~ E0806
+}
+
+pub flow plain_fn_with_a_constant(x: F32 at sample) -> F32 at sample {
+  let a = scale!(2.0)                               //~ E0806
+  a + x
+}
+
+pub flow associated_function(x: F32 at sample) -> F32 at sample {
+  let p = P.new!(x)                                 //~ E0806
+  p.get()
+}
+
+pub flow associated_function_of_a_builtin(x: F32 at sample) -> F32 at sample {
+  let a = F32.round_from!(1)                        //~ E0806
+  a + x
+}
+
+pub flow variant_with_a_payload(x: F32 at sample) -> F32 at sample {
+  let o = Some!(x)                                  //~ E0806
+  match o {
+    Some(v) => v,
+    None => 0.0,
+  }
+}
+
+pub flow variant_of_a_user_enum(x: F32 at sample) -> F32 at sample {
+  let m = Mode.Gain!(x)                             //~ E0806
+  match m {
+    Mode.Off => 0.0,
+    Mode.Gain(k) => k,
+  }
+}
+
+pub flow generic_function_with_its_type_arguments(x: F32 at sample) -> F32 at sample {
+  id::[F32]!(x)                                     //~ E0806
+}
+
+pub flow in_the_arm_of_an_if(x: F32 at sample) -> F32 at sample {
+  if x > 0.0 {
+    g!(x)                                           //~ E0806
+  } else {
+    0.0
+  }
+}
+
+pub flow in_the_condition_of_an_if(x: F32 at sample) -> F32 at sample {
+  if g!(x) > 0.0 {                                  //~ E0806
+    x
+  } else {
+    0.0
+  }
+}
+
+pub flow in_the_arm_of_a_match(x: F32 at sample) -> F32 at sample {
+  match x > 0.0 {
+    true => g!(x),                                  //~ E0806
+    false => 0.0,
+  }
+}
+
+pub flow in_the_guard_of_a_match(x: F32 at sample) -> F32 at sample {
+  match x {
+    v if g!(v) > 0.0 => v,                           //~ E0806
+    _ => 0.0,
+  }
+}
+
+pub flow in_the_right_operand_of_a_logical_and(x: F32 at sample) -> F32 at sample {
+  if x > 0.0 && g!(x) > 0.0 {                      //~ E0806
+    x
+  } else {
+    0.0
+  }
+}
+
+pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 {
+    g!(x) * F32.round_from(i)                       //~ E0806
+  }
+  ys[0] + ys[1]
+}
+
+pub flow in_the_first_argument_of_a_delay(x: F32 at sample) -> F32 at sample {
+  prev~(g!(x), 0.0)                                 //~ E0806
+}
+
+pub flow in_the_argument_of_an_instance(x: F32 at sample) -> F32 at sample {
+  lp~(g!(x))                                        //~ E0806
+}
+
+pub flow in_a_tuple(x: F32 at sample) -> F32 at sample {
+  let (a, b) = (g!(x), x)                           //~ E0806
+  a + b
+}
+
+pub flow in_an_argument_of_the_item(x: F32 at sample) -> F32 at sample {
+  g!(g!(x))                                         //~ E0806
+}
+
+// ---- Not errors ----
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let k = scale(2.0)
+  let a = g(x) + two(x, 0.5) + k
+  let p = P.new(a)
+  p.get() + id::[F32](x)
+}

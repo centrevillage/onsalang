@@ -1,0 +1,68 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§5.2", "§11.2", "§15.1", "§18.1"]
+// fixes = 0
+
+// W7-04 U1b/t, S-811, R-340: the `!(` and `.(` of a flow body whose receiver or callee is a value have no candidate (§11.2), whatever module the
+// value comes from: a constant of another module (called with `!` or `.(`), a field of it, a method of a type of another module called with a `!`
+// (`p.get!()`, `q.bump!(x)`), and a method that takes `inout self` called without the `!` (E0713, §5.2). `fixes = 0` checks that there is no
+// candidate. The same forms inside the module are in dsp.onsa. One error per flow (P-01).
+
+use dsp
+use dsp.{K, C, P}
+
+pub flow constant_of_a_module_called_with_a_bang(x: F32 at sample) -> F32 at sample {
+  C!(x)                                             //~ E0806
+}
+
+pub flow field_of_a_constant_of_a_module_called_with_a_bang(x: F32 at sample) -> F32 at sample {
+  dsp.K.f!(x)                                       //~ E0806
+}
+
+pub flow field_of_a_taken_constant_called_with_a_bang(x: F32 at sample) -> F32 at sample {
+  let a = K.f!(x)                                   //~ E0806
+  a
+}
+
+pub flow constant_of_a_module_called_with_a_dot(x: F32 at sample) -> F32 at sample {
+  dsp.C.(x)                                         //~ E0806
+}
+
+pub flow field_of_a_constant_of_a_module_called_with_a_dot(x: F32 at sample) -> F32 at sample {
+  dsp.K.f.(x)                                       //~ E0806
+}
+
+pub flow field_of_a_taken_constant_called_with_a_dot(x: F32 at sample) -> F32 at sample {
+  let a = K.f.(x)                                   //~ E0806
+  a
+}
+
+pub flow method_of_a_module_type_with_a_bang(x: F32 at sample) -> F32 at sample {
+  let p = dsp.P.new(x)
+  let a = p.get!()                                  //~ E0806
+  a
+}
+
+pub flow method_that_takes_inout_self_with_a_bang(x: F32 at sample) -> F32 at sample {
+  let q = P.new(x)
+  let a = q.bump!(x)                                //~ E0806
+  a
+}
+
+pub flow method_that_takes_inout_self_without_a_bang(x: F32 at sample) -> F32 at sample {
+  let q = dsp.P.new(x)
+  let a = q.bump(x)                                 //~ E0713
+  a
+}
+
+pub flow method_that_takes_inout_self_without_a_bang_as_the_output(x: F32 at sample) -> F32 at sample {
+  let q = P.new(x)
+  q.bump(x)                                         //~ E0713
+}
+
+// ---- Not errors ----
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let p = P.new(x)
+  p.get() + x * C
+}

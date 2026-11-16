@@ -1,0 +1,22 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§6.1", "§11.2", "§18.1"]
+//
+// [[test.fix]]
+// at = "17:11"
+// code = "E0806"
+// candidate = 1
+// clean = true
+
+// W7-04 U1b/t, S-811: the candidate of `Some.(x)`, the construction of a variant called through `.(`, removes the `.` (§11.2), and the file has
+// no error after it (`clean`).
+
+
+
+pub flow call(x: F32 at sample) -> F32 at sample {
+  let o = Some.(x)                                  //~ E0806
+  match o {
+    Some(v) => v,
+    None => 0.0,
+  }
+}

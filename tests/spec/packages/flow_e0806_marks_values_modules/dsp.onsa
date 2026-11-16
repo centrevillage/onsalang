@@ -1,0 +1,44 @@
+pub struct P {
+  n: F32,
+}
+
+impl P {
+  pub rt fn new(v: F32) -> P {
+    P { n: v }
+  }
+
+  pub rt fn get(self) -> F32 {
+    self.n
+  }
+
+  pub rt fn bump(inout self, v: F32) -> F32 {
+    self.n = v
+    v
+  }
+}
+
+pub struct S {
+  f: fn(F32) -> F32,
+}
+
+pub rt fn g(v: F32) -> F32 {
+  v
+}
+
+pub const K: S = S { f: g }
+
+pub const C: F32 = 2.0
+
+pub flow value_of_the_module_with_a_bang(x: F32 at sample) -> F32 at sample {
+  K.f!(x)                                           //~ E0806
+}
+
+pub flow value_of_the_module_with_a_dot(x: F32 at sample) -> F32 at sample {
+  C.(x)                                             //~ E0806
+}
+
+pub flow method_of_the_module_without_a_bang(x: F32 at sample) -> F32 at sample {
+  let q = P.new(x)
+  let a = q.bump(x)                                 //~ E0713
+  a
+}

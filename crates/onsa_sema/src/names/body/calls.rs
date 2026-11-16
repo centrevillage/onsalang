@@ -69,12 +69,18 @@ impl Walker<'_> {
             CallKind::Flow => Place::Instance(e),
             _ => Place::Callee(e),
         };
+        let sites = self.type_sites.len();
         match self.ast.indexed(callee) {
             Some((head, indices)) if place != Place::DotCallee => self.indexed_callee(callee, kind, head, &indices)?,
             _ => {
                 self.name_at(callee, place)?;
                 self.form(callee, kind)?;
             }
+        }
+        // The receiver of a method of a flow body, a function value (§11.2);
+        // a `~` there is an E0812 of its callee (§2.6, S-811).
+        if self.flow && kind != CallKind::Flow {
+            self.function_receiver(callee, sites)?;
         }
         // The `~` after the names of the callee, before its arguments (R-286).
         match self.flow {
@@ -129,7 +135,8 @@ impl Walker<'_> {
     /// found as the chain resolves, `kinds.rs`; a unit variant is the E0412
     /// of the types stage, S-514), and an item called with `.(` the E0020 of
     /// the row `item_dot_call` (a flow is no value there, E0308, S-816). A
-    /// value called with `!(` is the types stage's (E0714, E0401, S-812).
+    /// value called with `!(` is the types stage's (E0714, E0401, S-812),
+    /// the E0806 of a flow body (`flow.rs`).
     fn form(&mut self, callee: ExprId, kind: CallKind) -> W {
         let Some(r) = self.out.paths.get(&super::named(self.ast, callee)) else { return Ok(()) };
         let span = self.ast.expr(callee).span;
@@ -148,8 +155,8 @@ impl Walker<'_> {
     /// The E0020 of the row `row` of a call at `span`, with the candidate
     /// `fix`. In a flow body the form a candidate writes is an E0806 (§11.2,
     /// S-811): a value called as `f(x)` has no candidate there, and an item
-    /// called with `.(` is the E0806 of the flow stage (its candidate is
-    /// W7-04's). The one place of that judgment for the rows of a call.
+    /// called with `.(` is the E0806 of its `.(` (`flow.rs`). The one place of
+    /// that judgment for the rows of a call.
     pub(super) fn call_form(&self, row: RowId, span: Span, fix: Fix) -> Option<Diagnostic> {
         match (self.flow, row) {
             (false, _) => Some(foreign::report(row, self.text, span, vec![fix])),

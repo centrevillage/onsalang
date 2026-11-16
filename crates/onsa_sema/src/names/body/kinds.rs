@@ -125,6 +125,13 @@ impl Walker<'_> {
     /// instance (in a flow body), the E0812 of `flow.rs` (S-814).
     fn method_at(&self, place: Place, segs: &[&Ident], bang: bool) -> Diagnostic {
         match place {
+            // SPEC-GAP(S-1103): `P.get!(p)` in a flow body is the E0806 of its
+            // `!` (S-811: before the E0308 of §15.1), with no candidate: the
+            // one that takes the `!` off leaves the E0308.
+            Place::Callee(call) if self.flow && self.bang(call) => {
+                let span = self.ast.expr(call).span;
+                self.bang_in_flow(call).with_found(self.src(span))
+            }
             Place::Callee(call) => self.method_call(Some(call), segs, bang),
             Place::Instance(call) => self.tilde_on_method(call, segs),
             Place::Value | Place::DotCallee | Place::TypeOrValue => self.method_call(None, segs, bang),

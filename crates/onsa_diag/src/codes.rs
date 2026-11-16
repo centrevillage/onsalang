@@ -99,7 +99,7 @@ impl Stage {
 /// Whether every diagnostic of a code carries a fix candidate (D-04).
 ///
 /// `Required` only where the spec text says the code always shows a candidate:
-/// E0003, E0713, E0714, E0811 (W3-02, D5; E0004 is
+/// E0003, E0714, E0811 (W3-02, D5; E0004 is
 /// not, S-430; E0320 is not: a file or directory name has none, §2.3, S-300;
 /// E0812 is not: a `~` on a value has none, §2.6, S-590).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -108,6 +108,9 @@ pub enum FixRule {
     /// Required of a diagnostic of the syntax stage only: E0020, whose form
     /// found by a later stage keeps its code with no candidate (§18.1, R-301).
     Syntax,
+    /// Required of a diagnostic of any stage but the flow stage: E0713, whose
+    /// `!` a flow body cannot contain (§11.2, S-811).
+    OutsideFlow,
     Optional,
 }
 
@@ -118,6 +121,7 @@ impl Code {
         match self.fix_rule() {
             FixRule::Required => true,
             FixRule::Syntax => stage == Stage::Syntax,
+            FixRule::OutsideFlow => stage != Stage::Flow,
             FixRule::Optional => false,
         }
     }
@@ -384,7 +388,7 @@ codes! {
         "borrowed Affine value passed as `move`";
     E0712 = 712, Modes, [Modes], Optional, Optional,
         "closure cannot capture this value";
-    E0713 = 713, Modes, [Types, Modes], Required, Optional,
+    E0713 = 713, Modes, [Types, Flow, Modes], OutsideFlow, Optional,
         "calling an `inout self` method needs `!` after the name";
     E0714 = 714, Modes, [Types, Flow, Modes], Required, Optional,
         "`!` on a method that does not take `inout self`";
@@ -493,7 +497,11 @@ mod tests {
         // W3-02 D5: the spec text says these always show a candidate.
         let required: Vec<&str> =
             Code::ALL.iter().filter(|c| c.fix_rule() == FixRule::Required).map(|c| c.as_str()).collect();
-        assert_eq!(required, ["E0003", "E0713", "E0714", "E0811"]);
+        assert_eq!(required, ["E0003", "E0714", "E0811"]);
+        // §11.2: the E0713 of a flow body has none.
+        let outside: Vec<&str> =
+            Code::ALL.iter().filter(|c| c.fix_rule() == FixRule::OutsideFlow).map(|c| c.as_str()).collect();
+        assert_eq!(outside, ["E0713"]);
         // R-301: a form of E0020 a later stage finds keeps its code with no candidate.
         let syntax: Vec<&str> =
             Code::ALL.iter().filter(|c| c.fix_rule() == FixRule::Syntax).map(|c| c.as_str()).collect();

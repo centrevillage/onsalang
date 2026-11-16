@@ -1,0 +1,78 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§11.2", "§18.1"]
+//
+// [[test.fix]]
+// at = "46:3"
+// code = "E0806"
+// candidate = 1
+// leaves = ["46:5 E0806"]
+//
+// [[test.fix]]
+// at = "50:11"
+// code = "E0806"
+// candidate = 1
+// leaves = ["50:13 E0806"]
+//
+// [[test.fix]]
+// at = "55:7"
+// code = "E0806"
+// candidate = 1
+// leaves = ["55:9 E0806"]
+//
+// [[test.fix]]
+// at = "77:3"
+// code = "E0806"
+// candidate = 1
+// leaves = ["77:5 E0806"]
+
+// W7-04 U1b/t, S-811, S-125: the E0806 of a call through `.(` is at the call as a whole, where the call starts (§18.1: the position of
+// a form of the body is where the form starts), and not at a function value inside the call: in `g.(g)` the first by position is the call at the
+// `g` of the callee, and the `g` of the argument (a function value, also E0806) comes after it. The callee is an item called as `f(x)` or a value;
+// the argument is a function value in each flow. One error per flow (P-01). The candidate of an item callee removes the `.` and leaves the
+// error of the argument (`leaves`; a candidate does not remove the second error of a unit, §18.1); a value callee has no candidate.
+
+pub const C: F32 = 2.0
+
+pub rt fn g(v: F32) -> F32 {
+  v
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow item_with_a_function_value_argument(x: F32 at sample) -> F32 at sample {
+  g.(g)                                             //~ E0806 @3
+}
+
+pub flow item_with_a_function_value_argument_in_a_let(x: F32 at sample) -> F32 at sample {
+  let a = g.(g)                                     //~ E0806 @11
+  x
+}
+
+pub flow item_with_a_function_value_argument_in_an_instance(x: F32 at sample) -> F32 at sample {
+  lp~(g.(g))                                        //~ E0806 @7
+}
+
+pub flow constant_with_a_function_value_argument(x: F32 at sample) -> F32 at sample {
+  C.(g)                                             //~ E0806 @3
+}
+
+pub flow input_with_a_function_value_argument(x: F32 at sample) -> F32 at sample {
+  x.(g)                                             //~ E0806 @3
+}
+
+pub flow let_with_a_function_value_argument(x: F32 at sample) -> F32 at sample {
+  let y = x * 2.0
+  let a = y.(g)                                     //~ E0806 @11
+  a
+}
+
+pub flow value_with_a_function_value_argument_in_an_operand(x: F32 at sample) -> F32 at sample {
+  x - C.(g)                                         //~ E0806 @7
+}
+
+pub flow item_with_a_closure_argument(x: F32 at sample) -> F32 at sample {
+  g.(fn(v: F32) -> F32 { v })                       //~ E0806 @3
+}

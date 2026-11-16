@@ -53,6 +53,18 @@ pub(super) enum Place {
     TypeOrValue,
 }
 
+/// Where the head of a chain ends ([`Walker::head`]).
+pub(super) enum Head {
+    /// At what the walk does not look up further: a local, a parameter of
+    /// the heading, a builtin name of a flow, or an error at the head.
+    Done((Vec<PathRes>, Option<Fail>)),
+    /// At an item of the module's names, and the type an alias or `Self`
+    /// stands for (`Analysis::path_head`).
+    Item(Entity, Option<TyId>),
+    /// Found nowhere: the E0302 of [`Walker::not_found`].
+    NotFound,
+}
+
 /// The function `panic` of the prelude (§9.2).
 pub(super) const PANIC: Entity = Entity::Builtin(Builtin::Panic);
 
@@ -114,37 +126,48 @@ impl<'a> Walker<'a> {
         fail.map_or(Ok(()), |f| Err(self.fail(f)))
     }
 
+    /// The head of the chain `segs` (§4.5), in the one order of the names
+    /// of a body: a local, a parameter of the heading, a builtin name of a
+    /// flow, and a name of the module's names.
+    pub(super) fn head(&mut self, segs: &[&Ident], nodes: &[ExprId], place: Place) -> Head {
+        let head = segs[0];
+        if let Some(b) = self.lookup(head).or_else(|| self.outer.get(&head.name).copied()) {
+            return Head::Done((vec![PathRes::Local(b)], None));
+        }
+        if head.name == crate::names::SELF_VALUE {
+            let d = Diagnostic::new(Stage::Names, Code::E0302, head.span, "`self` is only available inside a method");
+            return Head::Done((Vec::new(), Some(Fail::Report(d.with_found(crate::names::SELF_VALUE)))));
+        }
+        match self.heading(head) {
+            Some(PathRes::TypeParam(i)) => return Head::Done(self.type_param(i, segs, nodes, place)),
+            Some(r) => return Head::Done((vec![r], None)),
+            None => {}
+        }
+        if let Some(f) = self.effect_var(segs, Some(place)) {
+            return Head::Done((Vec::new(), Some(f)));
+        }
+        if let Some(b) = self.flow_name(&head.name) {
+            return Head::Done(self.flow_builtin(b, segs, place));
+        }
+        match self.a.path_head(self.m, &path_of(segs), self.self_ty) {
+            Ok((first, owner)) => Head::Item(first, owner),
+            Err(ResolveError::Failed) => Head::Done((Vec::new(), Some(Fail::Held))),
+            Err(ResolveError::NotFound { .. }) => Head::NotFound,
+            Err(err) => Head::Done((Vec::new(), Some(Fail::Report(err.into_diagnostic())))),
+        }
+    }
+
     /// The records of the names of a chain, one for each element from its
     /// head to the last one the names stage resolves, and the error that
     /// stopped it. `nodes`: the expression of each element, none in a hole
     /// of a string (where a candidate writes no other form).
     pub(super) fn resolve(&mut self, segs: &[&Ident], nodes: &[ExprId], place: Place) -> (Vec<PathRes>, Option<Fail>) {
-        let head = segs[0];
-        if let Some(b) = self.lookup(head).or_else(|| self.outer.get(&head.name).copied()) {
-            return (vec![PathRes::Local(b)], None);
-        }
-        if head.name == crate::names::SELF_VALUE {
-            let d = Diagnostic::new(Stage::Names, Code::E0302, head.span, "`self` is only available inside a method");
-            return (Vec::new(), Some(Fail::Report(d.with_found(crate::names::SELF_VALUE))));
-        }
-        match self.heading(head) {
-            Some(PathRes::TypeParam(i)) => return self.type_param(i, segs, nodes, place),
-            Some(r) => return (vec![r], None),
-            None => {}
-        }
-        if let Some(f) = self.effect_var(segs, Some(place)) {
-            return (Vec::new(), Some(f));
-        }
-        let a = self.a;
-        if let Some(b) = self.flow_name(&head.name) {
-            return self.flow_builtin(b, segs, place);
-        }
-        let (first, owner) = match a.path_head(self.m, &path_of(segs), self.self_ty) {
-            Ok(found) => found,
-            Err(ResolveError::Failed) => return (Vec::new(), Some(Fail::Held)),
-            Err(ResolveError::NotFound { .. }) => return (Vec::new(), Some(self.not_found(head))),
-            Err(err) => return (Vec::new(), Some(Fail::Report(err.into_diagnostic()))),
+        let (first, owner) = match self.head(segs, nodes, place) {
+            Head::Done(resolved) => return resolved,
+            Head::Item(first, owner) => (first, owner),
+            Head::NotFound => return (Vec::new(), Some(self.not_found(segs[0]))),
         };
+        let a = self.a;
         // `panic` is called, and is no value (§6.1, S-887).
         if first == PANIC
             && !(segs.len() == 1 && matches!(place, Place::Callee(_) | Place::DotCallee | Place::Instance(_)))
