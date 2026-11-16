@@ -14,6 +14,7 @@
 //!   (kind `test-case` for a case).
 //! - `[[test.host]]` runs in [`host`] (K-14), `[[test.fix]]` and the contract
 //!   of the fix candidates (§18.1) in [`fix_contract`] (W3-17).
+//! - The reference evaluator of a flow (Q-02 (b), W7-01) is in [`flow_ref`].
 
 pub mod c;
 pub mod capi;
@@ -25,6 +26,7 @@ pub mod default_inits;
 pub mod fix_contract;
 pub mod fix_loop;
 pub mod fixes;
+pub mod flow_ref;
 pub mod foreign_forms;
 pub mod fragment;
 pub mod golden;
