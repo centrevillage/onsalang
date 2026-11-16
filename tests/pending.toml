@@ -38,7 +38,7 @@ note = "型の大きさと状態の領域が U32 を超える（ターゲット�
 kind = "diag-code"
 target = "E0808"
 reasons = ["S-88", "R-100", "S-151", "S-132"]
-until = "W7-04"
+until = "W7-14"
 note = "遅延の長さの範囲、vdelay の MAX、空の par の範囲"
 
 [[pending]]
@@ -194,21 +194,21 @@ note = "E0807 の否定例 7 件。W3-10 の後、TWO - 1 の長さが定数式�
 kind = "test-case"
 target = "tests/spec/negative/modes_flow_spans.onsa"
 reasons = ["S-30"]
-until = "W7-03"
+until = "W7-12"
 note = "E0710 の否定例 2 件。at は W3-10 で通るが、生成項目 swap.In が無い（E0302。生成項目 In / Out の Onsa の側は W7-03）"
 
 [[pending]]
 kind = "test-case"
 target = "tests/spec/types/infer_second_class_generated_field.onsa"
 reasons = ["R-334"]
-until = "W7-03"
+until = "W7-12"
 note = "推論した型引数の E0710（S-862）の 1 件。生成型 Out のフィールドが Buf[T] で生成されるので、id(o.l) は暗黙の Dup の E0416 になる（W5-02 U5a で事例を分けた）"
 
 [[pending]]
 kind = "test-case"
 target = "tests/spec/negative/modes_flow_span_fields.onsa"
 reasons = ["S-102", "R-135"]
-until = "W7-03"
+until = "W7-12"
 note = "E0710 の否定例 2 件。構造体のフィールドの pan.Out の E0710 は W4-05 U4a で通る。swap.In のフィールドは生成項目 In が無い（E0302。生成項目 In の Onsa の側は W7-03）"
 
 # --- W1-04（2026-10-07）
@@ -319,14 +319,14 @@ note = "遅延の入れ子（prev~(prev~(x)) は x[n-2]）。保存の二相化�
 kind = "test-case"
 target = "tests/spec/flow_semantics/vdelay_varying_d.onsa"
 reasons = ["S-30", "S-102"]
-until = "W7-03"
+until = "W7-12"
 note = "sample の入力が 2 つの flow の In 構造体（vd_var.In { x, d }）。生成項目 In の Onsa の側は W7-03（S-30）。今の実装の render は 5 引数の旧い形（E0412）"
 
 [[pending]]
 kind = "test-case"
 target = "tests/spec/ops/convert_from_flow_values.onsa"
 reasons = ["S-231", "S-30"]
-until = "W7-03"
+until = "W7-12"
 note = "変換の関連関数を使う flow の値。render の形が仕様の形（init の入力が無ければ Config を取らず、block の入力が無ければ Params を取らない）で、今の render は常に 4 引数（E0412）。vdelay_varying_d.onsa の項目と同じ W7-03"
 
 [[pending]]
@@ -347,7 +347,7 @@ note = "if~ / match~ は全ての枝を評価して状態を進める。取ら�
 kind = "test-case"
 target = "tests/spec/flow_semantics/par_lookback.onsa"
 reasons = ["R-03"]
-until = "W7-04"
+until = "W7-07"
 note = "par の中の ^y（look-back）。今の実装は local y read before definition の内部エラー（R-03）"
 
 [[pending]]
@@ -361,14 +361,14 @@ note = "par の中の if~。W3-10 の写しでは E0200（K-08）"
 kind = "test-case"
 target = "tests/spec/flow_semantics/planar_structs.onsa"
 reasons = ["S-30"]
-until = "W7-03"
+until = "W7-12"
 note = "名前付きの入力 In と struct 出力 Out（render の o.l / o.r、process の inout Out）。生成項目の Onsa の側は W7-03（S-30）"
 
 [[pending]]
 kind = "test-case"
 target = "tests/spec/flow_semantics/rules_negative.onsa"
 reasons = ["S-110", "S-101", "S-116", "S-29", "S-44"]
-until = "W7-07"
+until = "W7-06"
 note = "状態を持つものの置き場所（E0811 / E0812 / E0806）、Default の無い遅延の値型（E0816）、^ の位置（E0801 / E0020）、遅延と par の範囲（E0808 / E0417 / E0416 / E0813）、自分自身のインスタンス（E0817）。最後に仕上がるのは E0816（W7-07）"
 
 [[pending]]
@@ -382,21 +382,21 @@ note = "at の後も、入れ子の列挙子のパターンとガードの値の
 kind = "test-case"
 target = "tests/spec/flow_semantics/in_out_field_receiver.onsa"
 reasons = ["S-102", "S-181", "S-218"]
-until = "W7-03"
+until = "W7-12"
 note = "at と、生成型 In / Out を fn の引数の型に書けない（E0302。S-218 は W7-03 の前に決める）"
 
 [[pending]]
 kind = "test-case"
 target = "tests/spec/types/orphan_flow_in_second_class.onsa"
 reasons = ["S-70", "S-218"]
-until = "W7-03"
+until = "W7-12"
 note = "生成項目 In が無く E0302（期待は §11.6 の E0710）。W5-04 U1/t の事例"
 
 [[pending]]
 kind = "test-case"
 target = "tests/spec/flow_semantics/inplace_struct_output.onsa"
 reasons = ["S-102", "S-197"]
-until = "W7-03"
+until = "W7-12"
 note = "at と、struct の出力の flow に process_inplace が無い（4 引数を要求する）"
 
 [[pending]]
@@ -410,7 +410,7 @@ note = "列挙子を関数値として使う形の E0806 が出ない"
 kind = "test-case"
 target = "tests/spec/negative/flow_inplace_absent.onsa"
 reasons = ["S-102", "S-197", "R-147"]
-until = "W7-03"
+until = "W7-12"
 note = "process_inplace の生成の条件と、flow の名前空間に無い項目の E0302（今は E0401）"
 
 [[pending]]
@@ -464,7 +464,7 @@ note = "E0806 の候補"
 kind = "test-case"
 target = "tests/spec/fixes/e0401_param_values.onsa"
 reasons = ["S-116"]
-until = "W7-04"
+until = "W7-13"
 note = "@param の値の E0401 の候補"
 
 [[pending]]
@@ -799,28 +799,28 @@ note = "クロージャと .( の呼び出しが E0200。W3-05 の値の規則�
 kind = "spec-example"
 target = "§16.1 6f7b22db: use std.audio.device"
 reasons = ["S-112", "S-570", "S-609", "S-625"]
-until = "W7-03"
+until = "W7-12"
 note = "52 回目の S-112 の改め（init の入力の無い flow は Config と cfg を持たない）。仕様の例は voice.Config {} などを外した。58 回目の S-609 で、関数の項目の move on_audio・move on_control を外した。61 回目の S-625 で、voice.params_default() を Params のリテラルに書き直した（Onsa の生成する API から外した）。写しは今の実装に合わせて残し、生成する API の Onsa の側（W7-03）で写しを直して外す"
 
 [[pending]]
 kind = "spec-example"
 target = "§17.3 4902dd54: use std.math.{exp, cos}"
 reasons = ["S-112", "S-570"]
-until = "W7-03"
+until = "W7-12"
 note = "52 回目の S-112 の改め（init の入力の無い flow は Config と cfg を持たない）。仕様の例は voice.Config {} などを外した。写しは今の実装に合わせて残し、生成する API の Onsa の側（W7-03）で写しを直して外す"
 
 [[pending]]
 kind = "spec-example"
 target = "§17.4 a4e5bc9e: use std.fs.{Fs, Path, IoError}"
 reasons = ["S-112", "S-570", "S-625"]
-until = "W7-03"
+until = "W7-12"
 note = "52 回目の S-112 の改め（init の入力の無い flow は Config と cfg を持たない）。仕様の例は voice.Config {} などを外した。61 回目の S-625 で、voice.params_default() を Params のリテラルに書き直した（Onsa の生成する API から外した）。写しは今の実装に合わせて残し、生成する API の Onsa の側（W7-03）で写しを直して外す"
 
 [[pending]]
 kind = "spec-example"
 target = "§17.6 9d3a61e2: use std.array"
 reasons = ["S-112", "S-570", "S-625"]
-until = "W7-03"
+until = "W7-12"
 note = "52 回目の S-112 の改め（init の入力の無い flow は Config と cfg を持たない）。仕様の例は voice.Config {} などを外した。61 回目の S-625 で、voice.params_default() を Params のリテラルに書き直した（Onsa の生成する API から外した）。写しは今の実装に合わせて残し、生成する API の Onsa の側（W7-03）で写しを直して外す"
 
 # --- W4-03 U2a/t: 木と収集と use の規則（tests/spec/packages/use_*、module_*、tests/spec/module/use_binding_*。2026-10-24）。
@@ -829,21 +829,21 @@ note = "52 回目の S-112 の改め（init の入力の無い flow は Config �
 kind = "test-case"
 target = "tests/spec/packages/use_flow_rendered"
 reasons = ["R-264"]
-until = "W7-03"
+until = "W7-12"
 note = "flow の名前空間に Rendered を作らない（R-264）。use と使う所が E0302"
 
 [[pending]]
 kind = "test-case"
 target = "tests/spec/packages/use_flow_params_default"
 reasons = ["S-625", "R-147"]
-until = "W7-03"
+until = "W7-12"
 note = "params_default は Onsa の名前空間から外れる（S-625）。今は名前空間にあり、use が通る"
 
 [[pending]]
 kind = "test-case"
 target = "tests/spec/negative/flow_namespace_params_default.onsa"
 reasons = ["S-625", "R-147"]
-until = "W7-03"
+until = "W7-12"
 note = "本体の経路の amp.params_default() と let f = amp.params_default は E0302（S-625）。今は呼び出しが通り、関数値も W4-04 U8a から通る（flow の名前空間の関数を値にする形。E0309 だけが出る）"
 
 [[pending]]
@@ -920,14 +920,14 @@ note = "@latency が無い属性の E0005（W10-08）"
 kind = "test-case"
 target = "tests/spec/negative/binding_flow_span_field.onsa"
 reasons = ["S-788"]
-until = "W7-03"
+until = "W7-12"
 note = "生成項目 `In` が無く E0302（W7-03）。期待値は仕様から手で導いた（W4-07 U4 の t1）"
 
 [[pending]]
 kind = "test-case"
 target = "tests/spec/values/binding_flow_span_field.onsa"
 reasons = ["S-788"]
-until = "W7-03"
+until = "W7-12"
 note = "生成項目 `In` が無く E0302（W7-03）。期待値は仕様から手で導いた（W4-07 U4 の t1）"
 
 
@@ -944,7 +944,7 @@ note = "取り出し（S-85）の降下（取り出さなかった残りの破�
 kind = "test-case"
 target = "tests/spec/flow_semantics/par_tilde_closed_range.onsa"
 reasons = ["S-745", "S-257"]
-until = "W7-04"
+until = "W7-14"
 note = "par~ の見出しの ..= は今 E0200（Feature::InclusiveRangePar、W7-04）"
 
 [[pending]]
