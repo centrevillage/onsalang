@@ -149,7 +149,7 @@ int vc_version(uint32_t* out);   /* 0: ok, 1: panic。結果は out に書く */
 | | `<p>_params`、`<p>_config` | `block` の入力と `init` の入力。その入力のある flow だけ（§11.6） |
 | | `<p>_event` | イベントの入力のある flow だけ |
 | | `<p>_out_event`、`<p>_events_out` | イベントの出力のある flow だけ |
-| | `<p>_in`、`<p>_out` | `sample` の入力・出力が 2 つ以上のとき（§11.6） |
+| | `<p>_in`、`<p>_out` | `<p>_in` は `sample` の入力が 2 つ以上のとき、`<p>_out` は `sample` の出力が struct のとき（§11.6） |
 | 関数 | `<p>_init`、`<p>_reset`、`<p>_process`、`<p>_param_index`、`<p>_latency` | 常に生成する |
 | | `<p>_params_default` | `block` の入力のある flow だけ |
 | | `<p>_new`、`<p>_free` | `Alloc` を `provides` するターゲットだけ |
