@@ -11,23 +11,18 @@ use std::collections::BTreeMap;
 use super::scalar::{Bin, Fault, PanicKind, Un, binary, cast, unary};
 use super::value::{IntKind, Scalar, Shape, Value};
 use crate::case::repo_root;
+use crate::scalar::Scalar as Boundary;
 use crate::vectors::data::{Data, Expect};
 
-fn scalar_of(ty: &str) -> Option<Scalar> {
-    Some(match ty {
-        "I8" => Scalar::Int(IntKind::I8),
-        "I16" => Scalar::Int(IntKind::I16),
-        "I32" => Scalar::Int(IntKind::I32),
-        "I64" => Scalar::Int(IntKind::I64),
-        "U8" => Scalar::Int(IntKind::U8),
-        "U16" => Scalar::Int(IntKind::U16),
-        "U32" => Scalar::Int(IntKind::U32),
-        "U64" => Scalar::Int(IntKind::U64),
-        "F32" => Scalar::F32,
-        "F64" => Scalar::F64,
-        "Bool" => Scalar::Bool,
-        _ => return None,
-    })
+/// The evaluator's scalar of a scalar type of the boundary, the type `vectors::data` gives each operation.
+fn eval_scalar(s: Boundary) -> Scalar {
+    match s {
+        Boundary::F32 => Scalar::F32,
+        Boundary::F64 => Scalar::F64,
+        Boundary::Int(k) => Scalar::Int(k),
+        Boundary::Bool => Scalar::Bool,
+        Boundary::Char => Scalar::Char,
+    }
 }
 
 /// A value as `tests/vectors/FORMAT.md` writes it: decimal, the hex bits of a float, `true`.
@@ -38,7 +33,7 @@ fn parse(ty: Scalar, text: &str) -> Value {
         u64::from_str_radix(h, 16).unwrap_or_else(|e| panic!("`{text}`: {e}"))
     };
     match ty {
-        Scalar::Int(k) => Value::Int(k, text.parse().unwrap_or_else(|e| panic!("`{text}`: {e}"))),
+        Scalar::Int(k) => Value::int(k, text.parse().unwrap_or_else(|e| panic!("`{text}`: {e}"))),
         Scalar::F32 => Value::F32(f32::from_bits(hex(8) as u32)),
         Scalar::F64 => Value::F64(f64::from_bits(hex(16))),
         Scalar::Bool => Value::Bool(text == "true"),
@@ -53,7 +48,8 @@ enum Plan {
     As(Scalar),
 }
 
-fn plan(name: &str) -> Option<Plan> {
+/// `ret` is the type the row gives the result: the target of `as_i64`.
+fn plan(name: &str, ret: Scalar) -> Option<Plan> {
     // A checked method is the operator with its panic turned into `None` (§3.4).
     let operator = name.strip_prefix("checked_").unwrap_or(name);
     Some(Plan::Bin(match operator {
@@ -83,7 +79,8 @@ fn plan(name: &str) -> Option<Plan> {
         "ge" => Bin::Ge,
         "neg" => return Some(Plan::Un(Un::Neg)),
         "not" => return Some(Plan::Un(Un::Not)),
-        _ => return Some(Plan::As(scalar_of(&name.strip_prefix("as_")?.to_uppercase())?)),
+        _ if name.starts_with("as_") => return Some(Plan::As(ret)),
+        _ => return None,
     }))
 }
 
@@ -132,26 +129,24 @@ fn judge(expect: &Expect, ret: Scalar, got: &Result<Value, Fault>) -> Result<(),
     }
 }
 
-/// The type of the operation, from its name `i32.add`, as the evaluator's scalar.
-fn type_of(op_id: &str) -> Scalar {
-    scalar_of(&op_id.split_once('.').expect("an operation is `<type>.<name>`").0.to_uppercase()).expect("a scalar type")
-}
-
 #[test]
 fn the_edge_rows_of_the_vectors() {
     let data = Data::load(&repo_root()).unwrap_or_else(|e| panic!("the vectors do not load: {e:?}"));
     let mut failures = Vec::new();
     let mut checked: BTreeMap<String, usize> = BTreeMap::new();
     let mut skipped: BTreeMap<String, usize> = BTreeMap::new();
+    let own_of: BTreeMap<&str, Scalar> = (0..data.ops.len())
+        .filter_map(|i| Some((data.ops[i].id.strip_suffix(".ZERO")?, eval_scalar(data.types_of(i).ret))))
+        .collect();
     for row in data.rows.iter().filter(|r| r.stage == "edge") {
         let op = &data.ops[row.op];
         let (ty, name) = op.id.split_once('.').expect("an operation is `<type>.<name>`");
-        let own = type_of(&op.id);
-        let ret = scalar_of(op.ret.trim_start_matches("Option[").trim_end_matches(']'))
-            .unwrap_or_else(|| panic!("{}: result `{}`", op.id, op.ret));
-        let args: Vec<Value> =
-            op.args.iter().zip(&row.args).filter_map(|(t, a)| Some(parse(scalar_of(t)?, a))).collect();
-        let got = match (plan(name), name) {
+        // The type of `i32.MIN` is the one of its operation id: the result of the registry's `i32.ZERO`.
+        let own = *own_of.get(ty).expect("every type of an operation id has its `ZERO`");
+        let types = data.types_of(row.op);
+        let ret = eval_scalar(types.ret);
+        let args: Vec<Value> = types.args.iter().zip(&row.args).map(|(t, a)| parse(eval_scalar(*t), a)).collect();
+        let got = match (plan(name, ret), name) {
             (Some(Plan::Bin(b)), _) => binary(b, &args[0], &args[1]),
             (Some(Plan::Un(u)), _) => unary(u, &args[0]),
             (Some(Plan::As(to)), _) => cast(to, &args[0]),
@@ -159,9 +154,9 @@ fn the_edge_rows_of_the_vectors() {
             (None, "MIN" | "MAX" | "BITS" | "ZERO") if matches!(own, Scalar::Int(_)) => {
                 let Scalar::Int(k) = own else { unreachable!() };
                 Ok(match name {
-                    "MIN" => Value::Int(k, k.min()),
-                    "MAX" => Value::Int(k, k.max()),
-                    "BITS" => Value::Int(IntKind::U32, i128::from(k.bits())),
+                    "MIN" => Value::int(k, k.range().0),
+                    "MAX" => Value::int(k, k.range().1),
+                    "BITS" => Value::int(IntKind::U32, i128::from(k.bits())),
                     _ => own.default_value().expect("an integer has a default"),
                 })
             }
@@ -207,7 +202,7 @@ fn the_edge_rows_of_the_vectors() {
 // What `edge` leaves out or says less sharply, by hand from the spec.
 
 fn int(k: IntKind, v: i128) -> Value {
-    Value::Int(k, v)
+    Value::int(k, v)
 }
 
 fn f32b(bits: u32) -> Value {
@@ -528,7 +523,7 @@ fn the_ranges_of_the_integer_kinds() {
         (U32, 32, 0, 4294967295),
         (U64, 64, 0, u64::MAX.into()),
     ] {
-        assert_eq!((k.bits(), k.min(), k.max()), (bits, min, max), "{k:?}");
+        assert_eq!((k.bits(), k.range().0, k.range().1), (bits, min, max), "{k:?}");
     }
 }
 
@@ -545,7 +540,7 @@ fn defaults_of_the_scalars_and_the_aggregates() {
     assert!(Scalar::Char.default_value().is_none(), "Char has no Default (the table of §6.3)");
     // Tuples and arrays: elementwise.
     let tuple = Shape::Tuple(vec![sc(i32t), sc(f32t), sc(Scalar::Bool)]);
-    let want = Value::Tuple(vec![int(IntKind::I32, 0), Value::F32(0.0), Value::Bool(false)]);
+    let want = Value::tuple(vec![int(IntKind::I32, 0), Value::F32(0.0), Value::Bool(false)]);
     assert!(tuple.default_value().unwrap().same(&want));
     let array = Shape::Array(Box::new(sc(f32t)), 3);
     assert!(array.default_value().unwrap().same(&Value::Array(vec![Value::F32(0.0); 3])));
@@ -563,7 +558,7 @@ fn defaults_of_the_scalars_and_the_aggregates() {
     assert!(Shape::Struct(vec![(None, sc(Scalar::Char))]).default_value().is_none());
     // Nested: a tuple of an array and a struct.
     let nested = Shape::Tuple(vec![Shape::Array(Box::new(sc(i32t)), 2), Shape::Struct(vec![(None, sc(Scalar::Bool))])]);
-    let want = Value::Tuple(vec![Value::Array(vec![int(IntKind::I32, 0); 2]), Value::Struct(vec![Value::Bool(false)])]);
+    let want = Value::tuple(vec![Value::Array(vec![int(IntKind::I32, 0); 2]), Value::Struct(vec![Value::Bool(false)])]);
     assert!(nested.default_value().unwrap().same(&want));
 }
 
@@ -577,12 +572,60 @@ fn sameness_is_by_bits_with_any_nan_alike() {
     assert!(!Value::F32(f32::NAN).same(&Value::F32(1.0)));
     assert!(!int(IntKind::I32, 1).same(&int(IntKind::I64, 1)), "the kind is part of the value");
     assert!(!int(IntKind::U8, 1).same(&Value::Bool(true)));
-    let pair = |x| Value::Tuple(vec![int(IntKind::I8, 1), x]);
+    let pair = |x| Value::tuple(vec![int(IntKind::I8, 1), x]);
     assert!(pair(Value::F32(0.0)).same(&pair(Value::F32(0.0))));
     assert!(!pair(Value::F32(0.0)).same(&pair(f32b(NEG0))), "the difference is seen inside a tuple");
-    assert!(!Value::Tuple(vec![]).same(&Value::Array(vec![])), "a tuple is not an array");
+    assert!(!Value::tuple(vec![Value::Unit]).same(&Value::Array(vec![Value::Unit])), "a tuple is not an array");
     let variant = |tag, v| Value::Enum { tag, fields: vec![v] };
     assert!(variant(1, Value::F32(f32::NAN)).same(&variant(1, f32b(0x7fc0_0001))));
     assert!(!variant(1, Value::Unit).same(&variant(2, Value::Unit)), "the variant is part of the value");
     assert!(!Value::Struct(vec![Value::Unit]).same(&Value::Struct(vec![])));
+}
+
+#[test]
+fn chars_are_the_same_only_when_equal() {
+    // §13.4: a `Char` is its code point.
+    assert!(Value::Char('a').same(&Value::Char('a')));
+    assert!(!Value::Char('a').same(&Value::Char('b')));
+    assert!(!Value::Char('a').same(&int(IntKind::U32, 97)), "a `Char` is not a `U32`");
+}
+
+#[test]
+fn an_array_of_no_element_has_a_default_with_no_element() {
+    // §6.4: the default of an array is elementwise, and `[F32; 0]` has no element to give a default to.
+    let none = Shape::Array(Box::new(Shape::Scalar(Scalar::F32)), 0);
+    assert!(none.default_value().unwrap().same(&Value::Array(vec![])));
+    let one = Value::Array(vec![Value::F32(0.0)]);
+    assert!(!none.default_value().unwrap().same(&one), "a length of 1 is another value");
+}
+
+#[test]
+fn the_unit_has_one_form() {
+    // §4: `()` is one type. The tuple of none is `Value::Unit`, so two `()` are the same wherever they came from.
+    let from_the_type = Shape::Tuple(vec![]).default_value().unwrap();
+    assert!(from_the_type.same(&Value::Unit) && from_the_type.same(&Scalar::Unit.default_value().unwrap()));
+    assert!(Value::tuple(vec![]).same(&Value::Unit));
+    assert!(matches!(Value::tuple(vec![Value::Unit]), Value::Tuple(v, _) if v.len() == 1), "(()) is not ()");
+    assert!(matches!(Value::tuple(vec![int(IntKind::I8, 1), Value::Unit]), Value::Tuple(v, _) if v.len() == 2));
+}
+
+#[test]
+#[should_panic(expected = "128 is not a value of I8")]
+fn an_integer_out_of_its_range_is_a_mistake_of_the_evaluator() {
+    // §4.1: `I8` is -128..=127. The values the evaluator makes come from the checked sources, so this is a bug.
+    Value::int(IntKind::I8, 128);
+}
+
+#[test]
+fn the_values_made_by_the_operations_are_in_range() {
+    // `Value::int` checks every result of the arithmetic: the wrap and the saturation stay inside the kinds.
+    use IntKind::*;
+    for k in [I8, I16, I32, I64, U8, U16, U32, U64] {
+        let (lo, hi) = k.range();
+        for op in [Bin::WAdd, Bin::WSub, Bin::WMul, Bin::SAdd, Bin::SSub, Bin::SMul] {
+            for (a, b) in [(lo, hi), (hi, hi), (lo, lo), (hi, lo), (0, hi)] {
+                assert!(binary(op, &Value::int(k, a), &Value::int(k, b)).is_ok(), "{k:?} {op:?} {a} {b}");
+            }
+        }
+    }
 }

@@ -26,6 +26,8 @@ pub enum Fault {
     Panic(PanicKind),
     /// The operands do not agree: the check of types rules the program out.
     Internal(&'static str),
+    /// A form that this version of the evaluator does not take, or a table of the checker that is not whole.
+    Unavailable(&'static str),
 }
 
 fn fail(kind: PanicKind) -> Result<Value, Fault> {
@@ -91,8 +93,10 @@ macro_rules! float_binary {
 
 pub fn binary(op: Bin, a: &Value, b: &Value) -> Result<Value, Fault> {
     match (a, b) {
-        (Value::Int(k, x), Value::Int(IntKind::U32, n)) if matches!(op, Bin::Shl | Bin::Shr) => shift(op, *k, *x, *n),
-        (Value::Int(k, x), Value::Int(l, y)) if k == l => int_binary(op, *k, *x, *y),
+        (Value::Int(k, x, _), Value::Int(IntKind::U32, n, _)) if matches!(op, Bin::Shl | Bin::Shr) => {
+            shift(op, *k, *x, *n)
+        }
+        (Value::Int(k, x, _), Value::Int(l, y, _)) if k == l => int_binary(op, *k, *x, *y),
         (Value::F32(x), Value::F32(y)) => float_binary!(op, x, y, F32),
         (Value::F64(x), Value::F64(y)) => float_binary!(op, x, y, F64),
         // `Bool` and `()` have `==` and `!=` only (§6.3).
@@ -121,12 +125,13 @@ fn compare<T: PartialOrd>(op: Bin, x: &T, y: &T) -> Result<Value, Fault> {
 fn wrap(k: IntKind, v: i128) -> i128 {
     let m = 1i128 << k.bits();
     let r = v.rem_euclid(m);
-    if r > k.max() { r - m } else { r }
+    if r > k.range().1 { r - m } else { r }
 }
 
 fn int_binary(op: Bin, k: IntKind, x: i128, y: i128) -> Result<Value, Fault> {
-    let int = |v: i128| Ok(Value::Int(k, v));
-    let fit = |v: i128| if (k.min()..=k.max()).contains(&v) { int(v) } else { fail(PanicKind::Overflow) };
+    let int = |v: i128| Ok(Value::int(k, v));
+    let (lo, hi) = k.range();
+    let fit = |v: i128| if (lo..=hi).contains(&v) { int(v) } else { fail(PanicKind::Overflow) };
     // The product of two 64-bit values can leave the `i128`: then it is out of every range.
     let product = x.checked_mul(y);
     match op {
@@ -141,11 +146,10 @@ fn int_binary(op: Bin, k: IntKind, x: i128, y: i128) -> Result<Value, Fault> {
         Bin::WAdd => int(wrap(k, x + y)),
         Bin::WSub => int(wrap(k, x - y)),
         Bin::WMul => int(wrap(k, x.wrapping_mul(y))),
-        Bin::SAdd => int((x + y).clamp(k.min(), k.max())),
-        Bin::SSub => int((x - y).clamp(k.min(), k.max())),
-        Bin::SMul => {
-            int(product.map_or(if (x < 0) == (y < 0) { k.max() } else { k.min() }, |p| p.clamp(k.min(), k.max())))
-        }
+        Bin::SAdd => int((x + y).clamp(lo, hi)),
+        Bin::SSub => int((x - y).clamp(lo, hi)),
+        // The product leaves the `i128` only for two `U64`, whose product is positive: it saturates upward.
+        Bin::SMul => int(product.map_or(hi, |p| p.clamp(lo, hi))),
         Bin::And => int(x & y),
         Bin::Or => int(x | y),
         Bin::Xor => int(x ^ y),
@@ -160,18 +164,18 @@ fn shift(op: Bin, k: IntKind, x: i128, n: i128) -> Result<Value, Fault> {
     if n >= i128::from(k.bits()) {
         return fail(PanicKind::Shift);
     }
-    Ok(Value::Int(k, if op == Bin::Shl { wrap(k, x << n) } else { x >> n }))
+    Ok(Value::int(k, if op == Bin::Shl { wrap(k, x << n) } else { x >> n }))
 }
 
 pub fn unary(op: Un, a: &Value) -> Result<Value, Fault> {
     match (op, a) {
         (Un::Neg, Value::F32(x)) => Ok(Value::F32(-x)),
         (Un::Neg, Value::F64(x)) => Ok(Value::F64(-x)),
-        (Un::Neg, Value::Int(k, _)) if !k.signed() => internal("`-` of an unsigned integer is E0401"),
-        (Un::Neg, Value::Int(k, x)) if *x == k.min() => fail(PanicKind::Overflow),
-        (Un::Neg, Value::Int(k, x)) => Ok(Value::Int(*k, -x)),
+        (Un::Neg, Value::Int(k, _, _)) if !k.signed() => internal("`-` of an unsigned integer is E0401"),
+        (Un::Neg, Value::Int(k, x, _)) if *x == k.range().0 => fail(PanicKind::Overflow),
+        (Un::Neg, Value::Int(k, x, _)) => Ok(Value::int(*k, -x)),
         // `!x` is `-x - 1`: the same bits flipped in the type, signed or not.
-        (Un::Not, Value::Int(k, x)) => Ok(Value::Int(*k, wrap(*k, !x))),
+        (Un::Not, Value::Int(k, x, _)) => Ok(Value::int(*k, wrap(*k, !x))),
         (Un::Not, Value::Bool(b)) => Ok(Value::Bool(!b)),
         _ => internal("an operator that the type does not have"),
     }
@@ -181,9 +185,9 @@ pub fn unary(op: Un, a: &Value) -> Result<Value, Fault> {
 /// does not change.
 pub fn cast(to: Scalar, v: &Value) -> Result<Value, Fault> {
     match (to, v) {
-        (Scalar::Int(t), Value::Int(k, x)) if lossless_int(*k, t) => Ok(Value::Int(t, *x)),
-        (Scalar::F32, Value::Int(k, x)) if k.bits() <= 16 => Ok(Value::F32(*x as f32)),
-        (Scalar::F64, Value::Int(k, x)) if k.bits() <= 32 => Ok(Value::F64(*x as f64)),
+        (Scalar::Int(t), Value::Int(k, x, _)) if lossless_int(*k, t) => Ok(Value::int(t, *x)),
+        (Scalar::F32, Value::Int(k, x, _)) if k.bits() <= 16 => Ok(Value::F32(*x as f32)),
+        (Scalar::F64, Value::Int(k, x, _)) if k.bits() <= 32 => Ok(Value::F64(*x as f64)),
         (Scalar::F64, Value::F32(x)) => Ok(Value::F64(f64::from(*x))),
         (Scalar::F32, Value::F32(_)) | (Scalar::F64, Value::F64(_)) => Ok(v.clone()),
         _ => internal("`as` of a conversion that loses information is E0411"),

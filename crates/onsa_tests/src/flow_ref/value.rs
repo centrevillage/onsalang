@@ -7,41 +7,11 @@
 //! are not specified, §3.4). The comparison of the language (`==`, IEEE) is
 //! [`super::scalar::binary`].
 
-/// The integer types (§4.1).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum IntKind {
-    I8,
-    I16,
-    I32,
-    I64,
-    U8,
-    U16,
-    U32,
-    U64,
-}
-
-impl IntKind {
-    pub fn bits(self) -> u32 {
-        match self {
-            IntKind::I8 | IntKind::U8 => 8,
-            IntKind::I16 | IntKind::U16 => 16,
-            IntKind::I32 | IntKind::U32 => 32,
-            IntKind::I64 | IntKind::U64 => 64,
-        }
-    }
-
-    pub fn signed(self) -> bool {
-        matches!(self, IntKind::I8 | IntKind::I16 | IntKind::I32 | IntKind::I64)
-    }
-
-    pub fn min(self) -> i128 {
-        if self.signed() { -(1i128 << (self.bits() - 1)) } else { 0 }
-    }
-
-    pub fn max(self) -> i128 {
-        if self.signed() { (1i128 << (self.bits() - 1)) - 1 } else { (1i128 << self.bits()) - 1 }
-    }
-}
+use onsa_sema::Ty;
+use onsa_sema::ty::FloatKind;
+/// The integer types (§4.1) are the table of the checker, not a second one: what the
+/// evaluator has of its own is the arithmetic ([`super::scalar`]), not the kinds.
+pub use onsa_sema::ty::IntKind;
 
 /// The scalar types, the ones `as` converts between and `Default` is given for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -55,10 +25,23 @@ pub enum Scalar {
 }
 
 impl Scalar {
+    /// The scalar of a type of the checker; `None` for the types that are not scalars.
+    pub fn of(ty: &Ty) -> Option<Scalar> {
+        Some(match ty {
+            Ty::Int(k) => Scalar::Int(*k),
+            Ty::Float(FloatKind::F32) => Scalar::F32,
+            Ty::Float(FloatKind::F64) => Scalar::F64,
+            Ty::Bool => Scalar::Bool,
+            Ty::Char => Scalar::Char,
+            Ty::Unit => Scalar::Unit,
+            _ => return None,
+        })
+    }
+
     /// `T.default()` (§6.3): 0, `+0.0`, `false`, `()`. `Char` has no `Default`.
     pub fn default_value(self) -> Option<Value> {
         Some(match self {
-            Scalar::Int(k) => Value::Int(k, 0),
+            Scalar::Int(k) => Value::int(k, 0),
             Scalar::F32 => Value::F32(0.0),
             Scalar::F64 => Value::F64(0.0),
             Scalar::Bool => Value::Bool(false),
@@ -85,7 +68,7 @@ impl Shape {
     pub fn default_value(&self) -> Option<Value> {
         match self {
             Shape::Scalar(s) => s.default_value(),
-            Shape::Tuple(fs) => fs.iter().map(Shape::default_value).collect::<Option<_>>().map(Value::Tuple),
+            Shape::Tuple(fs) => fs.iter().map(Shape::default_value).collect::<Option<_>>().map(Value::tuple),
             Shape::Array(e, n) => Some(Value::Array(vec![e.default_value()?; *n])),
             Shape::Struct(fs) => fs
                 .iter()
@@ -96,16 +79,20 @@ impl Shape {
     }
 }
 
+/// Only this file makes one: `Value::int` and `Value::tuple` are the only doors to an integer and a tuple.
+#[derive(Clone, Copy, Debug)]
+pub struct Seal(());
+
 /// A value of the evaluator. Not `PartialEq`: use [`Value::same`].
 #[derive(Clone, Debug)]
 pub enum Value {
-    Int(IntKind, i128),
+    Int(IntKind, i128, Seal),
     F32(f32),
     F64(f64),
     Bool(bool),
     Char(char),
     Unit,
-    Tuple(Vec<Value>),
+    Tuple(Vec<Value>, Seal),
     Array(Vec<Value>),
     /// The fields in the order of the declaration.
     Struct(Vec<Value>),
@@ -117,19 +104,47 @@ pub enum Value {
 }
 
 impl Value {
+    /// An integer of the kind `k`, which holds the value: the checker gives every integer its type, so a value
+    /// out of the range is a mistake of the evaluator (a literal, `as`, the host): it stops in release too.
+    pub fn int(k: IntKind, v: i128) -> Value {
+        assert!((k.range().0..=k.range().1).contains(&v), "{v} is not a value of {}", k.name());
+        Value::Int(k, v, Seal(()))
+    }
+
+    /// A float of the kind `k` (`x` is already rounded to it when it is an `F32`).
+    pub fn float(k: FloatKind, x: f64) -> Value {
+        if k == FloatKind::F32 { Value::F32(x as f32) } else { Value::F64(x) }
+    }
+
+    /// The tuple of the values. `()` has one form: the tuple of none is `Value::Unit`.
+    pub fn tuple(vs: Vec<Value>) -> Value {
+        if vs.is_empty() { Value::Unit } else { Value::Tuple(vs, Seal(())) }
+    }
+
+    /// Does the value have the type? A scalar value has a scalar type only (the others are U4's).
+    pub fn agrees(&self, ty: &Ty) -> bool {
+        let Some(s) = Scalar::of(ty) else { return false };
+        match (self, s) {
+            (Value::Int(k, ..), Scalar::Int(t)) => *k == t,
+            (Value::F32(_), Scalar::F32) | (Value::F64(_), Scalar::F64) | (Value::Bool(_), Scalar::Bool) => true,
+            (Value::Char(_), Scalar::Char) | (Value::Unit, Scalar::Unit) => true,
+            _ => false,
+        }
+    }
+
     /// Same bits (§13.4); any NaN is the same as any NaN.
     pub fn same(&self, other: &Value) -> bool {
         fn all(x: &[Value], y: &[Value]) -> bool {
             x.len() == y.len() && x.iter().zip(y).all(|(p, q)| p.same(q))
         }
         match (self, other) {
-            (Value::Int(k, x), Value::Int(l, y)) => k == l && x == y,
+            (Value::Int(k, x, _), Value::Int(l, y, _)) => k == l && x == y,
             (Value::F32(x), Value::F32(y)) => x.to_bits() == y.to_bits() || (x.is_nan() && y.is_nan()),
             (Value::F64(x), Value::F64(y)) => x.to_bits() == y.to_bits() || (x.is_nan() && y.is_nan()),
             (Value::Bool(x), Value::Bool(y)) => x == y,
             (Value::Char(x), Value::Char(y)) => x == y,
             (Value::Unit, Value::Unit) => true,
-            (Value::Tuple(x), Value::Tuple(y))
+            (Value::Tuple(x, _), Value::Tuple(y, _))
             | (Value::Array(x), Value::Array(y))
             | (Value::Struct(x), Value::Struct(y)) => all(x, y),
             (Value::Enum { tag: s, fields: x }, Value::Enum { tag: t, fields: y }) => s == t && all(x, y),

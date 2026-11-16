@@ -7,6 +7,8 @@
 //! The expectations are of the tables of this version (W7-02 to W7-07 change
 //! where the E0200 comes from): they fail when a work moves the tables, so that
 //! the list of the cases the evaluator can take is read again.
+//! When the person of W7-04 (or W7-06, W7-07) moves the tables and these numbers
+//! fail, they are to be changed to the new tables.
 
 use onsa_driver::{Loaded, PackageInput, analyze_loaded};
 use onsa_sema::{DefKind, Ty};
