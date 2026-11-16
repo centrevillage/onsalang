@@ -5,7 +5,7 @@
 // R-50, §11.6: `Rendered`, the result of `render`, is one of the types generated for a flow, and it is taken
 // from the namespace with a `use` like `State` and `Params`; it is used by the name it has there, and for
 // a flow with one scalar output its field `out` is a `Buf[F32]`. No diagnostic. The case is kept apart from
-// `use_flow_items_taken` because the namespace does not have `Rendered` yet (R-264, W7-03).
+// `use_flow_items_taken`, which was written before the namespace had `Rendered` (R-264, made in W7-12 U2a).
 use dsp.synth.gain
 use dsp.synth.gain.Rendered
 

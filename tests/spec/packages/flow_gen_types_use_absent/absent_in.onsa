@@ -1,0 +1,7 @@
+// `In` of a flow with one `sample` input, and `Event` of a flow with no input at `event`: not in the namespace, so the names stage
+// fails the `use` (E0302). One `use` with two names that fail is one diagnostic (§18.1).
+use dsp.synth.mono.{In, Event}   //~ E0302
+
+pub fn the_failed_names_are_silent(i: In, e: Event) -> U32 {
+  0
+}

@@ -1,0 +1,9 @@
+use c.helper
+
+pub flow plain(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub fn from_d() -> I32 {
+  helper()
+}

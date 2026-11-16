@@ -62,7 +62,8 @@ fn spec_flow_examples_check_clean() {
 /// Each generated type of a flow is named by [`crate::def::FlowTy::name`]
 /// (K8 of W4-18): the later stages select it by its `FlowTy`, and show that
 /// name; the types are there, each once (`resonator` has no input of
-/// `init`, so no `Config`, §11.6, S-112).
+/// `init`, so no `Config`, §11.6, S-112; one input of `sample`, so no `In`,
+/// and a scalar output, so no `Out`, S-30, S-1087).
 #[test]
 fn the_generated_types_are_named_by_their_role() {
     use crate::def::{DefKind, FlowTy};
@@ -77,7 +78,7 @@ fn the_generated_types_are_named_by_their_role() {
             tys.push(t);
         }
     }
-    assert_eq!(tys, [FlowTy::State, FlowTy::Params, FlowTy::Out]);
+    assert_eq!(tys, [FlowTy::State, FlowTy::Params, FlowTy::Rendered]);
 }
 
 #[test]
@@ -347,9 +348,10 @@ fn e0807_e0808_delay_lengths() {
         vec![Code::E0417]
     );
     assert_eq!(codes("pub flow f(x: F32 at sample) -> F32 at sample {\n  vdelay~(x, 2.0, 0)\n}\n"), vec![Code::E0808]);
+    // The `[F32; 0]` output is its own E0810 at the heading (S-1110, S-407).
     assert_eq!(
         codes("pub flow f(x: F32 at sample) -> [F32; 0] at sample {\n  par~ i in 2..<2 { x }\n}\n"),
-        vec![Code::E0808]
+        vec![Code::E0808, Code::E0810]
     );
     // An `init` written as the default value is accepted too (S-539 (c3a)).
     ok(
@@ -367,7 +369,8 @@ fn par_ranges() {
     // The bounds: integer constants (§7 E0401, §11.5 E0417), not empty (E0808).
     assert_eq!(par("[F32; 2]", "0.0..<2.0"), vec![Code::E0401]);
     assert_eq!(par("[F32; 2]", "0..<n"), vec![Code::E0417]);
-    assert_eq!(par("[F32; 0]", "3..=2"), vec![Code::E0808]);
+    // The `[F32; 0]` output is its own E0810 at the heading (S-1110, S-407).
+    assert_eq!(par("[F32; 0]", "3..=2"), vec![Code::E0808, Code::E0810]);
     // `..=` is E0200 until W7-04 (S-224), also for one instance (`2..=2`).
     assert_eq!(par("[F32; 1]", "2..=2"), vec![Code::E0200]);
     assert_eq!(par("[F32; 3]", "0..=2"), vec![Code::E0200]);

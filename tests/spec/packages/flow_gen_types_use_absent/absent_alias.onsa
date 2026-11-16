@@ -1,0 +1,6 @@
+// `Out` of the flow whose output is an alias, of another module, of a scalar: the types stage takes the alias off and finds a scalar.
+use dsp.synth.leveled.Out   //~ E0302
+
+pub fn the_failed_name_is_silent(o: Out) -> U32 {
+  0
+}

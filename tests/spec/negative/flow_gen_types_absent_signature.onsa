@@ -1,0 +1,155 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1", "§18.1", "§5.3"]
+// fixes = 0
+
+// S-30, S-1087, §11.6, §15.1, §18.1: `In` is in the namespace of a flow when the flow has two or more `sample` inputs, and `Out` when
+// the output at `sample` is a struct (an alias taken off); the type that is not there is a name that is not found, E0302,
+// in every place of a type of a signature: an argument (also `inout` and `move`), a return type, a field, a type argument, an
+// array, a function type, an alias and the target of an `impl`. A `Out` that is not there is E0302 of the types stage and is read as a
+// wrong type, so the E0710 of the second-class place (`-> mono.Out`, a field `mono.Out`, `move`, `[mono.Out; 2]`,
+// `impl mono.Out`) is not given (§18.1: "第二級の位置の E0710 より先"). `In` is the same for the flows that have one input, none, or an array input
+// (an array is one input). The flows that have the items are the contrast (`pair.Out` returned is E0710). One error per unit (§18.1).
+
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+pub type Level = F32
+
+pub flow pair(a: F32 at sample, b: F32 at sample) -> Pair at sample {
+  Pair { l: a, r: b }
+}
+
+pub flow mono(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow channels(x: [F32; 2] at sample) -> [F32; 2] at sample {
+  x
+}
+
+pub flow source() -> F32 at sample {
+  1.0
+}
+
+pub flow leveled(x: F32 at sample) -> Level at sample {
+  x
+}
+
+pub flow solo(x: F32 at sample) -> Pair at sample {
+  Pair { l: x, r: x }
+}
+
+// ---------------------------------------------------------------- Out is not there: the output is not a struct
+
+pub fn the_scalar_out(o: mono.Out) -> U32 {   //~ E0302
+  0
+}
+
+pub fn the_array_out(inout o: channels.Out) -> U32 {   //~ E0302
+  0
+}
+
+pub fn the_out_of_a_flow_with_no_input(o: source.Out) -> U32 {   //~ E0302
+  0
+}
+
+pub fn the_out_of_an_alias_of_a_scalar(o: leveled.Out) -> U32 {   //~ E0302
+  0
+}
+
+// ---------------------------------------------------------------- In is not there: not two inputs
+
+pub fn the_in_of_one_input(i: mono.In) -> U32 {   //~ E0302
+  0
+}
+
+pub fn the_in_of_an_array_input(i: channels.In) -> U32 {   //~ E0302
+  0
+}
+
+pub fn the_in_of_no_input(i: source.In) -> U32 {   //~ E0302
+  0
+}
+
+pub fn the_in_of_one_input_and_a_struct(i: solo.In) -> U32 {   //~ E0302
+  0
+}
+
+// ---------------------------------------------------------------- the places of a type, the E0302 and not the E0710
+
+pub fn returned() -> mono.Out {   //~ E0302
+  panic("never")
+}
+
+pub fn returned_by_a_function_that_has_a_field(inout o: pair.Out) -> mono.Out {   //~ E0302
+  panic("never")
+}
+
+pub fn moved(move o: mono.Out) -> U32 {   //~ E0302
+  0
+}
+
+pub fn in_an_array(o: [mono.Out; 2]) -> U32 {   //~ E0302
+  0
+}
+
+pub fn in_an_option(o: Option[mono.Out]) -> U32 {   //~ E0302
+  0
+}
+
+pub fn in_a_function_type(f: fn(mono.Out) -> U32) -> U32 {   //~ E0302
+  0
+}
+
+pub fn the_in_in_an_option(i: Option[mono.In]) -> U32 {   //~ E0302
+  0
+}
+
+pub struct HoldsOut {
+  o: mono.Out,   //~ E0302
+}
+
+pub struct HoldsIn {
+  i: mono.In,   //~ E0302
+}
+
+type Slot = mono.Out   //~ E0302
+
+type SlotIn = mono.In   //~ E0302
+
+impl mono.Out {   //~ E0302
+  pub fn h(self) -> U32 {
+    1
+  }
+}
+
+impl mono.In {   //~ E0302
+  pub fn h(self) -> U32 {
+    1
+  }
+}
+
+// ---------------------------------------------------------------- the contrast: the items that are there
+
+pub fn the_out_that_is_there(o: pair.Out) -> U32 {
+  0
+}
+
+pub fn the_in_that_is_there(i: pair.In) -> U32 {
+  0
+}
+
+pub fn the_out_of_one_input(o: solo.Out) -> U32 {
+  0
+}
+
+pub fn the_second_class_out_returned(inout o: pair.Out) -> pair.Out {   //~ E0710
+  o
+}
+
+pub struct HoldsTheOutThatIsThere {
+  o: pair.Out,   //~ E0710
+}

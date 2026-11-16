@@ -207,6 +207,12 @@ impl<'a> Walker<'a> {
         let fail = match err {
             // An alias of the error type stands for a failed name (§18.1, S-728).
             None if a.alias_type(cur).is_err() => Some(Fail::Held),
+            // An item its flow does not generate (`Out`) is not found, whatever
+            // its kind: the E0302 of the types stage (§11.6, S-1087).
+            None if matches!(cur, Entity::Member(d) if a.not_generated(d).is_some()) => {
+                out.push(PathRes::Item { entity: cur, owner });
+                None
+            }
             None => {
                 out.push(PathRes::Item { entity: cur, owner });
                 let kind = NameKind::of(cur, &a.defs);
@@ -530,7 +536,10 @@ impl<'a> Walker<'a> {
                     // An alias of no struct: the types stage reads the alias.
                     None => (end, typed.owner),
                 };
-                match NameKind::of(entity, &a.defs).and_then(|k| self.want(k, &segs, want)) {
+                // An item its flow does not generate (`Out`) is not found, whatever
+                // its kind: the E0302 of the types stage (§11.6, S-1087).
+                let absent = matches!(entity, Entity::Member(d) if a.not_generated(d).is_some());
+                match NameKind::of(entity, &a.defs).filter(|_| !absent).and_then(|k| self.want(k, &segs, want)) {
                     Some(f) => Err(f),
                     None => Ok((entity, owner, end)),
                 }

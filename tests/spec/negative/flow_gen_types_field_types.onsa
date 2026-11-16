@@ -1,0 +1,94 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§5.3"]
+// fixes = 0
+
+// R-334, S-30, §11.6: the fields of `In` and `Out` are `Span[T]` (or `[Span[T]; N]` for an array), and the fields of `Rendered` are `Buf[T]`
+// (or `[Buf[T]; N]`). A field of `In` or `Out` is not taken by a `Buf[T]` parameter, as the same `Span[T]` value is not (E0401:
+// "expected `Buf[F32]`, found `Span[F32]`"), and a `Buf` field of `Rendered` is not the `Buf` of a whole array: an array field is
+// `[Buf[F32]; 2]`, not `Buf[F32]`, and a scalar is not an array. The right forms are in `flow/flow_gen_types_present.onsa`. One error per
+// unit (§18.1).
+
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+pub struct Bus {
+  main: F32,
+  aux: [F32; 2],
+}
+
+pub flow pair(a: F32 at sample, b: F32 at sample) -> Pair at sample {
+  Pair { l: a, r: b }
+}
+
+pub flow bus(x: [F32; 2] at sample, m: F32 at sample) -> Bus at sample {
+  Bus { main: m, aux: x }
+}
+
+fn span_len(s: Span[F32]) -> U32 {
+  s.len()
+}
+
+fn buf_len(b: Buf[F32]) -> U32 {
+  b.len()
+}
+
+fn planes(p: [Span[F32]; 2]) -> U32 {
+  0
+}
+
+fn bufs(p: [Buf[F32]; 2]) -> U32 {
+  0
+}
+
+// ---------------------------------------------------------------- the fields of Out and In are not `Buf`
+
+pub fn an_out_field_to_a_buf(o: pair.Out) -> U32 {
+  buf_len(o.l)   //~ E0401
+}
+
+pub fn an_in_field_to_a_buf(i: pair.In) -> U32 {
+  buf_len(i.a)   //~ E0401
+}
+
+pub fn an_array_field_of_out_to_bufs(o: bus.Out) -> U32 {
+  bufs(o.aux)   //~ E0401
+}
+
+pub fn an_array_field_of_in_to_bufs(i: bus.In) -> U32 {
+  bufs(i.x)   //~ E0401
+}
+
+pub fn an_inout_out_field_to_a_buf(inout o: pair.Out) -> U32 {
+  buf_len(o.r)   //~ E0401
+}
+
+// ---------------------------------------------------------------- the shape of the fields
+
+pub fn a_span_field_to_the_planes(o: bus.Out) -> U32 {
+  planes(o.main)   //~ E0401
+}
+
+pub fn an_array_field_to_a_span(o: bus.Out) -> U32 {
+  span_len(o.aux)   //~ E0401
+}
+
+pub fn a_rendered_array_field_to_a_buf(r: bus.Rendered) -> U32 {
+  buf_len(r.aux)   //~ E0401
+}
+
+pub fn a_rendered_field_to_the_bufs(r: bus.Rendered) -> U32 {
+  bufs(r.main)   //~ E0401
+}
+
+// ---------------------------------------------------------------- the contrast: the fields taken by the type that they have
+
+pub fn the_span_fields(o: bus.Out, i: bus.In) -> U32 {
+  span_len(o.main) + planes(o.aux) + planes(i.x) + span_len(i.m)
+}
+
+pub fn the_buf_fields(r: bus.Rendered) -> U32 {
+  buf_len(r.main) + bufs(r.aux) + span_len(r.main)
+}

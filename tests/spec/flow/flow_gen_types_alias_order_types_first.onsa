@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1", "§18.1"]
+// fixes = 0
+
+// R-273, S-694, S-1087, §11.6: whether the namespace of a flow has `Out` is decided by the type of the output of the flow, taken
+// through the aliases (a struct: it has it; anything else: it has not), and not by the order of the declarations of the flow and
+// of the types. `lvl` (an alias of `F32`) has not `Out` (E0302 in the types stage, where the alias is taken off), `framed` (an
+// alias of a struct), `framed_twice` (an alias of an alias of a struct) and `by_pair` (the struct itself) have it. `Rendered` is
+// there for all. Here the flows are declared below the types.
+// The two files (`flow_gen_types_alias_order_flow_first`, `flow_gen_types_alias_order_types_first`) differ only in the order of the
+// declarations.
+
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+pub type Level = F32
+
+pub type Frame = Pair
+
+pub type FrameTwice = Frame
+
+pub flow lvl(x: F32 at sample) -> Level at sample {
+  x
+}
+
+pub flow framed(x: F32 at sample) -> Frame at sample {
+  Pair { l: x, r: x }
+}
+
+pub flow framed_twice(x: F32 at sample) -> FrameTwice at sample {
+  Pair { l: x, r: x }
+}
+
+pub flow by_pair(x: F32 at sample) -> Pair at sample {
+  Pair { l: x, r: x }
+}
+
+pub fn the_scalar_alias_has_no_out(o: lvl.Out) -> U32 {   //~ E0302
+  0
+}
+
+pub fn the_struct_alias_has_out(o: framed.Out) -> U32 {
+  o.l.len()
+}
+
+pub fn the_alias_of_an_alias_has_out(o: framed_twice.Out) -> U32 {
+  o.r.len()
+}
+
+pub fn the_struct_has_out(o: by_pair.Out) -> U32 {
+  o.l.len()
+}
+
+pub fn rendered_is_always_there(a: lvl.Rendered, b: framed.Rendered) -> U32 {
+  a.out.len() + b.l.len()
+}

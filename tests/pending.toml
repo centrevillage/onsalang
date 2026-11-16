@@ -190,27 +190,6 @@ reasons = ["R-195", "S-110"]
 until = "W7-06"
 note = "E0807 の否定例 7 件。W3-10 の後、TWO - 1 の長さが定数式の値の E0200（R-195、W7-02）、if~ の中の E0807 の候補を当てた後に if~ の E0200（K-02、W7-06）が残る"
 
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/modes_flow_spans.onsa"
-reasons = ["S-30"]
-until = "W7-12"
-note = "E0710 の否定例 2 件。at は W3-10 で通るが、生成項目 swap.In が無い（E0302。生成項目 In / Out の Onsa の側は W7-03）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/types/infer_second_class_generated_field.onsa"
-reasons = ["R-334"]
-until = "W7-12"
-note = "推論した型引数の E0710（S-862）の 1 件。生成型 Out のフィールドが Buf[T] で生成されるので、id(o.l) は暗黙の Dup の E0416 になる（W5-02 U5a で事例を分けた）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/modes_flow_span_fields.onsa"
-reasons = ["S-102", "R-135"]
-until = "W7-12"
-note = "E0710 の否定例 2 件。構造体のフィールドの pan.Out の E0710 は W4-05 U4a で通る。swap.In のフィールドは生成項目 In が無い（E0302。生成項目 In の Onsa の側は W7-03）"
-
 # --- W1-04（2026-10-07）
 
 [[pending]]
@@ -376,14 +355,7 @@ kind = "test-case"
 target = "tests/spec/flow_semantics/in_out_field_receiver.onsa"
 reasons = ["S-102", "S-181", "S-218"]
 until = "W7-12"
-note = "at と、生成型 In / Out を fn の引数の型に書けない（E0302。S-218 は W7-03 の前に決める）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/types/orphan_flow_in_second_class.onsa"
-reasons = ["S-70", "S-218"]
-until = "W7-12"
-note = "生成項目 In が無く E0302（期待は §11.6 の E0710）。W5-04 U1/t の事例"
+note = "生成型 In・Out の struct リテラルを引数に置く形（pair.In { l: l, r: r }）で、フィールドに配列を渡すと E0401。リテラルのフィールドを引数と同じく Span に渡す型の段と modes と降下が無い（W4-07 U2b の持ち越しの後半、W7-12 U2b）。In・Out は U2a で作った"
 
 [[pending]]
 kind = "test-case"
@@ -757,13 +729,6 @@ note = "クロージャと .( の呼び出しが E0200。W3-05 の値の規則�
 # --- W4-03 U3b2: 名前の段の E0200 と生成項目の事例のうち、後の単位・作業の機能で通るもの（2026-10-25）。
 [[pending]]
 kind = "test-case"
-target = "tests/spec/packages/use_flow_rendered"
-reasons = ["R-264"]
-until = "W7-12"
-note = "flow の名前空間に Rendered を作らない（R-264）。use と使う所が E0302"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/flow/heading_names_event.onsa"
 reasons = ["S-664", "S-665"]
 until = "W7-11"
@@ -831,20 +796,6 @@ note = "@latency が無い属性の E0005（W10-08）"
 # --- W4-05 U4b/t: `impl Drop` の型の `const`（S-755）。W5-04 で外す（2026-10-29）。
 
 # --- W4-16 U1a/t: 束縛の状態の土台と `let`（2026-10-29、84 回目）。
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/binding_flow_span_field.onsa"
-reasons = ["S-788"]
-until = "W7-12"
-note = "生成項目 `In` が無く E0302（W7-03）。期待値は仕様から手で導いた（W4-07 U4 の t1）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/values/binding_flow_span_field.onsa"
-reasons = ["S-788"]
-until = "W7-12"
-note = "生成項目 `In` が無く E0302（W7-03）。期待値は仕様から手で導いた（W4-07 U4 の t1）"
 
 
 
@@ -1146,3 +1097,10 @@ target = "tests/spec/control/fixed_str_match_value.onsa"
 reasons = ["S-614"]
 until = "W8-06"
 note = "値の形の `match`（腕が値を返す）は、整数のリテラルと同じく Core で E0200（ValueMatch）。W8-06 で降ろす。"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow/flow_gen_types_literal_args.onsa"
+reasons = ["S-30", "S-218"]
+until = "W7-12"
+note = "生成型 In・Out の struct リテラルを引数に置く形。フィールドを引数と同じく Span に渡す型の段（配列・Buf の E0401）と、フィールドを引数の位置に数える modes（E0710）が無い（W4-07 U2b の持ち越しの後半、W7-12 U2b）。U2a/i で In・Out・Span のフィールドはできた"

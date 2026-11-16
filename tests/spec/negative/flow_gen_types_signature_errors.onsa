@@ -1,0 +1,130 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§18.1", "§5.3", "§11.3"]
+// fixes = 0
+
+// S-1087, S-772, §11.6, §18.1: whether `Out` (and `process_inplace`) is there is decided by the type of the output, so when the output is
+// the E0810 of the flow (a nested array, a struct with a nested array field, a clock of the output that is not `sample`) it is not known whether the
+// flow has them, and the use of them has no E0302 ("署名に誤りのある flow で有無が分からないとき（出力の型が境界に出せない E0810 を含む）は、E0302 も出さない"). `Rendered` is always
+// there and `In` is decided by the inputs, so they are as in the other flows. The name of the flow that is a type position
+// of the list (`bad_nested.process_inplace`) is E0308 whether the flow has it or not (the kind of the item is decided by the list). Where a flow
+// writes its own `Out`, or the `Out` of each other, for the output (the flow `self_out` and the flows `mutual_a` and `mutual_b`), the `Out` is a second-class type
+// at the place of the output of the heading: E0710 (S-772), at the heading of each flow, whichever of the two is declared first. One error per unit
+// (§18.1).
+
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+pub struct Nest {
+  a: [[F32; 2]; 2],
+}
+
+pub flow bad_nested(x: F32 at sample) -> [[F32; 2]; 2] at sample {   //~ E0810
+  [[x, x], [x, x]]
+}
+
+pub flow bad_struct(x: F32 at sample) -> Nest at sample {   //~ E0810
+  Nest { a: [[x, x], [x, x]] }
+}
+
+pub flow bad_clock(x: F32 at sample) -> F32 at block {   //~ E0810
+  x
+}
+
+pub flow unread_clock(x: F32 at sample, y: F32 at sample, c: F32 at foo) -> Pair at sample {   //~ E0302
+  Pair { l: x, r: y }
+}
+
+pub flow self_out(x: F32 at sample) -> self_out.Out at sample {   //~ E0710
+  panic("never")
+}
+
+pub flow mutual_a(x: F32 at sample) -> mutual_b.Out at sample {   //~ E0710
+  panic("never")
+}
+
+pub flow mutual_b(x: F32 at sample) -> mutual_a.Out at sample {   //~ E0710
+  panic("never")
+}
+
+// ---------------------------------------------------------------- the uses of the item that is not known: no E0302
+
+pub fn the_out_of_a_nested_array(o: bad_nested.Out) -> U32 {
+  0
+}
+
+pub fn the_out_of_a_struct_with_a_nested_array(o: bad_struct.Out) -> U32 {
+  0
+}
+
+pub fn the_out_of_a_wrong_clock(o: bad_clock.Out) -> U32 {
+  0
+}
+
+pub fn the_process_inplace_of_a_nested_array(inout s: bad_nested.State, inout xs: [F32; 4]) -> U32 {
+  bad_nested.process_inplace(inout s, inout xs)
+  0
+}
+
+pub fn the_process_inplace_of_a_wrong_clock(inout s: bad_clock.State, inout xs: [F32; 4]) -> U32 {
+  bad_clock.process_inplace(inout s, inout xs)
+  0
+}
+
+// ---------------------------------------------------------------- the `Out` that is not known at a second-class place: E0710
+
+// §18.1 ("署名に誤りのある flow で有無が分からないとき ... は、E0302 も出さない") keeps only the E0302 from the uses of an `Out` whose
+// flow may have it or not. The item is kept, and at a second-class place it is the E0710 of any `Out` (§5.3, S-772): a field, a
+// return type and a `move` argument.
+
+pub struct HoldsTheOutOfANestedArray {
+  o: bad_nested.Out,   //~ E0710
+}
+
+pub fn returns_the_out_of_a_struct_with_a_nested_array() -> bad_struct.Out {   //~ E0710
+  0
+}
+
+pub fn moves_the_out_of_a_wrong_clock(move o: bad_clock.Out) -> U32 {   //~ E0710
+  0
+}
+
+// ---------------------------------------------------------------- the items that are known
+
+pub fn the_rendered_is_there(r: bad_nested.Rendered) -> U32 {
+  0
+}
+
+pub fn the_in_of_a_flow_with_one_input_is_not(i: bad_nested.In) -> U32 {   //~ E0302
+  0
+}
+
+pub fn the_in_is_there_when_a_clock_is_not_read(i: unread_clock.In) -> U32 {
+  0
+}
+
+pub fn the_out_is_there_when_an_input_clock_is_not_read(o: unread_clock.Out) -> U32 {
+  0
+}
+
+pub fn the_name_of_the_list_in_a_type_position(x: bad_nested.process_inplace) -> U32 {   //~ E0308
+  0
+}
+
+// ---------------------------------------------------------------- one `sample` input read and a clock not read (R-471, S-1087)
+
+// The clock `foo` is not read, so the input `c` may be at `sample`, and `In` is made as `Config` and `Params` are (the
+// names stage, R-471). `Out` is decided by the type of the output alone, which is read: `F32` is no struct, so it is E0302.
+pub flow unread_clock_one(x: F32 at sample, c: F32 at foo) -> F32 at sample {   //~ E0302
+  x
+}
+
+pub fn the_in_when_one_input_is_read_and_a_clock_is_not(i: unread_clock_one.In) -> U32 {
+  0
+}
+
+pub fn the_scalar_out_when_a_clock_is_not_read(o: unread_clock_one.Out) -> U32 {   //~ E0302
+  0
+}

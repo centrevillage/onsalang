@@ -1,0 +1,11 @@
+// A struct of this module that has a field that only this module sees, and a constructor, as another module cannot make it (§15.1).
+pub struct Q {
+  x: F32,
+  priv tag: F32,
+}
+
+impl Q {
+  pub rt fn make(x: F32) -> Q {
+    Q { x: x, tag: x + 1.0 }
+  }
+}

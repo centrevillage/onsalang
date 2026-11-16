@@ -124,6 +124,8 @@ impl<'a> Checker<'a> {
                     if matches!(def.kind, DefKind::Unsupported(_)) {
                         return Ok(self.a.types.error());
                     }
+                    // An item its flow does not generate (`Out`) is not found (S-1087).
+                    self.generated_at(d, self.expr(callee).span)?;
                     return Err(self.err(Code::E0401, name.span, format!("`{}` is not a function", def.name)));
                 };
                 if f.self_mode.is_some() {

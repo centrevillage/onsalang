@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§5.3", "§5.2"]
+// fixes = 0
+
+// §11.6, §5.3, R-334: `In` and `Out` are made as arguments with a struct literal (`swap.In { l: a, r: b }`,
+// `inout swap.Out { l: x, r: y }`: "引数の位置に struct リテラルを書いて作り、排他性はフィールドの場所ごとに検査する"), and the fields of
+// the literal are `Span`s, so a `Span` parameter, an array and the part of a `Span` take the place of a field. No diagnostic is expected here.
+// The literal is no binding (`let o = pair.Out { … }` is E0710, the work of the borrowed bindings), so each literal is the argument of a call.
+// The type of the fields (E0401) is in `negative/flow_gen_types_field_types.onsa`.
+
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+pub flow pair(a: F32 at sample, b: F32 at sample) -> Pair at sample {
+  Pair { l: a, r: b }
+}
+
+fn take_in(i: pair.In) -> U32 {
+  i.a.len() + i.b.len()
+}
+
+fn take_out(o: pair.Out) -> U32 {
+  o.l.len() + o.r.len()
+}
+
+fn fill_out(inout o: pair.Out) {
+  o.l.fill!(1.0)
+  o.r.fill!(2.0)
+}
+
+pub fn spans_as_the_fields(a: Span[F32], b: Span[F32]) -> U32 {
+  take_in(pair.In { a: a, b: b }) + take_out(pair.Out { l: a, r: b })
+}
+
+pub fn arrays_as_the_fields() -> U32 {
+  let a: [F32; 3] = [1.0, 2.0, 3.0]
+  let b: [F32; 3] = [4.0, 5.0, 6.0]
+  take_in(pair.In { a: a, b: b })
+}
+
+pub fn parts_of_a_span_as_the_fields(xs: Span[F32]) -> U32 {
+  take_in(pair.In { a: xs.slice(0, 2), b: xs.slice(2, 4) })
+}
+
+pub fn the_inout_literal() -> F32 {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  fill_out(inout pair.Out { l: x, r: y })
+  x[0] + y[1]
+}

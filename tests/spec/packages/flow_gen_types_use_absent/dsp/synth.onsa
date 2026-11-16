@@ -1,0 +1,23 @@
+use dsp.types.{Pair, Level, Frame, FrameTwice}
+
+pub flow pair(a: F32 at sample, b: F32 at sample) -> Pair at sample {
+  Pair { l: a, r: b }
+}
+
+pub flow mono(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+// The output is the alias of a scalar of another module: no `Out`.
+pub flow leveled(x: F32 at sample) -> Level at sample {
+  x
+}
+
+// The output is the alias of a struct of another module, and an alias of that alias: `Out`.
+pub flow framed(x: F32 at sample) -> Frame at sample {
+  Pair { l: x, r: x }
+}
+
+pub flow framed_twice(x: F32 at sample) -> FrameTwice at sample {
+  Pair { l: x, r: x }
+}

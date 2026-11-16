@@ -1,0 +1,14 @@
+// onsa.toml
+// [test]
+// spec = ["§15.1", "§18.1", "§11.6"]
+// fixes = 0
+
+// S-1087, S-709, §18.1: whether a flow has `Out` is decided by the types stage (§11.6), so the `use` of the `Out` of a flow that has not
+// is a resolved binding of the names stage, and counts in the E0304 of two `use` (or a `use` and a declaration) of one name, as the `use` of `process_inplace`
+// does (`use_flow_absent_clash`). Here the flow that has not (`mono`) comes first: its `use` is E0302 (types stage), and the
+// `use` of the struct `Out` of another module after it is E0304 on the later `use` (§15.1). Neither of the names is used. The other orders are in the
+// other modules of this package: `later_absent.onsa`, `has_then_absent.onsa`, `absent_then_has.onsa`, `absent_twice.onsa`,
+// `declared_after.onsa`. The E0304 is of the names stage, so the `use` that has it has no E0302 of the types stage (a unit with an error of an
+// earlier stage is not checked by the later one, §18.1).
+use dsp.synth.mono.Out                            //~ E0302
+use dsp.other.Out                                 //~ E0304

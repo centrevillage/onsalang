@@ -61,9 +61,9 @@ impl Walker<'_> {
 
     /// The second-class values of the type `ty` (an array of them too), by
     /// the head of [`second_class`]: a `Span`, or a `?Escape` type parameter
-    /// (§4.5), which may be one. A generated `Out` is not one here until
-    /// W7-03 makes `Rendered` apart from it (R-334): `render` returns the
-    /// type `Out` now, and its result binds (§11.6).
+    /// (§4.5), which may be one. A generated `In` or `Out` is not one here
+    /// until W7-12 U2b (S-218, R-325): `render` returns `Rendered`, apart from
+    /// them, since U2a (R-334).
     pub(super) fn class_of(&self, mut ty: TyId) -> Option<SecondClass> {
         while let Ty::Array(t, _) = self.a.types.get(ty) {
             ty = *t;

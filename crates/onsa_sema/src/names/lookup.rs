@@ -390,7 +390,7 @@ impl Modules {
                         let named = |(n, m): &&(String, crate::DefId)| {
                             n == &name.name && !matches!(defs[m.0 as usize].kind, DefKind::Const(_))
                         };
-                        if let Some((_, m)) = f.members.iter().find(named) {
+                        if let Some((_, m)) = f.members.iter().chain(&f.absent).find(named) {
                             return Ok(Entity::Member(*m));
                         }
                     }

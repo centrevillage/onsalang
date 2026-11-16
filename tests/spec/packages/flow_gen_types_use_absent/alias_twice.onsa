@@ -1,0 +1,7 @@
+// An alias of an alias of a struct, the aliases being of another module: `Out` is there, taken by the name and by the path of the namespace.
+use dsp.synth.framed_twice
+use dsp.synth.framed_twice.Out
+
+pub fn the_fields(o: Out, p: framed_twice.Out) -> U32 {
+  o.l.len() + p.r.len()
+}

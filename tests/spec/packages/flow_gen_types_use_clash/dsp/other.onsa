@@ -1,0 +1,3 @@
+pub struct Out {
+  v: F32,
+}

@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§5.3"]
+
+// §11.6, R-334, S-30: the result of `render` of a flow whose output is a scalar or an array is a `Rendered` with the one field `out`: `o.out: Buf[T]` for a
+// scalar, `o.out: [Buf[T]; N]` for `[T; N]` (the channels are the buffers). The values read are the ones that `render` wrote. The flows have one input at
+// `sample` (the input is taken as it is; two inputs are a `In`, which is made in the call: W7-12 U3).
+
+pub flow mono(x: F32 at sample) -> F32 at sample {
+  x * 0.5
+}
+
+pub flow channels(x: [F32; 2] at sample) -> [F32; 2] at sample {
+  x
+}
+
+test "the scalar output is the field out of the result" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = mono.render(xs, 8.0)
+  assert o.out.len() == 3
+  assert o.out[0] == 0.5
+  assert o.out[1] == 1.0
+  assert o.out[2] == 1.5
+}
+
+test "the array output is an array of buffers" {
+  let c0: [F32; 3] = [1.0, 2.0, 3.0]
+  let c1: [F32; 3] = [4.0, 5.0, 6.0]
+  let ins: [[F32; 3]; 2] = [c0, c1]
+  let o = channels.render(ins, 8.0)
+  assert o.out[0].len() == 3
+  assert o.out[0][2] == 3.0
+  assert o.out[1][0] == 4.0
+  assert o.out[1][2] == 6.0
+}

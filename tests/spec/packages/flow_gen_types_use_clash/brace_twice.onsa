@@ -1,0 +1,4 @@
+// S-1087, §18.1: the same name taken twice in the `{}` of one `use` from a flow that does not have it. The `use` is one unit; the
+// second name is E0304 of the names stage (the first was a resolved binding when the names were collected, as with two `use` in
+// `absent_twice.onsa`), and the E0302 of the first is of the types stage, a later stage of the same unit, so it is not the one reported.
+use dsp.synth.mono.{Out, Out}                     //~ E0304

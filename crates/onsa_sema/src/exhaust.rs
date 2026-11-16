@@ -360,7 +360,7 @@ impl Checker<'_> {
                 DefKind::Struct(s) => match s.fields {
                     Fields::Named(fs) => {
                         let tys: Vec<TyId> = fs.iter().map(|f| self.a.types.subst(f.ty, &args)).collect();
-                        Some(Ctors { items: vec![(self.a.def(d).name.clone(), tys)] })
+                        Some(Ctors { items: vec![(self.a.shown_name(d), tys)] })
                     }
                     Fields::Opaque => None,
                 },

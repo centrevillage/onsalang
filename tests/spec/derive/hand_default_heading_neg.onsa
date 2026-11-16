@@ -161,7 +161,9 @@ impl Default for Show {                             //~ E0308
 impl Default for voice.Out {                        //~ E0710
 }
 
-impl Default for wave.Out {                         //~ E0710
+// The output of `wave` is a scalar, so `wave` has no `Out` (§11.6, S-1087): the name is not found, E0302 of the types stage, and the
+// E0710 of the second-class type is not reached.
+impl Default for wave.Out {                         //~ E0302
 }
 
 impl Default for tone.Out {                         //~ E0710

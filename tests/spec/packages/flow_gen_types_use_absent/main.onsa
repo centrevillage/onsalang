@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1", "§18.1"]
+// fixes = 0
+
+// S-1087, S-30, §11.6, §15.1, §18.1: the `use` of `In`, `Out` and `Rendered` of a flow. `Rendered` is always there, `In` when there are two or more
+// `sample` inputs, and `Out` when the output is a struct once the aliases are taken off (the alias is of another module here,
+// `dsp/types.onsa`, and the flow is of a third). Here the three that the flows have (`pair`: `In`, `Out` and `Rendered`) are taken, and used by the
+// name they have. The `use` that fails are in the other modules of this package (one name is bound once in a module):
+// `absent_out.onsa` (`Out` of an output that is a scalar and of an alias of a scalar), `absent_in.onsa`, and `alias_*` for the aliases that have it.
+use dsp.synth.pair
+use dsp.synth.pair.{In, Out, Rendered}
+
+pub fn the_in(i: In) -> U32 {
+  i.a.len() + i.b.len()
+}
+
+pub fn the_out(o: Out) -> U32 {
+  o.l.len() + o.r.len()
+}
+
+pub fn the_rendered(r: Rendered) -> U32 {
+  r.l.len()
+}
+
+pub fn through_the_namespace(o: pair.Out, i: pair.In, r: pair.Rendered) -> U32 {
+  o.l.len() + i.a.len() + r.r.len()
+}

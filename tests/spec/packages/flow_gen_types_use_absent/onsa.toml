@@ -1,0 +1,3 @@
+[package]
+name = "flow_gen_types_use_absent"
+edition = "2026"

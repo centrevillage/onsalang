@@ -82,7 +82,7 @@ fn flow_namespace_items() {
     let names: Vec<&str> = voice.members.iter().map(|(n, _)| n.as_str()).collect();
     assert_eq!(
         names,
-        vec!["State", "Config", "Params", "Out", "SIZE", "BULK_SIZE", "init", "reset", "process", "render",]
+        vec!["State", "Config", "Params", "Rendered", "SIZE", "BULK_SIZE", "init", "reset", "process", "render",]
     );
     // `params_default` is no item (S-625); `Config` is of a flow with an input of `init` alone (S-112).
     let echo = a.def(def(&a, "echo")).as_flow().unwrap();

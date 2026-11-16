@@ -1,0 +1,73 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§5.3"]
+
+// §11.6, R-334, S-30: the result of `render` of a flow whose output is a struct is a `Rendered` with the fields of the struct by name (`o.l`, `o.r`), each a
+// `Buf[T]`, and `[Buf[T]; N]` for a field that is an array. The values read are the ones that `render` wrote, and the result can be passed to a function that names the
+// type `Rendered` (it is not an `Out`). The flows have no input or one at `sample` (a flow with no input takes `frames`; two inputs are a `In`, which is
+// made in the call: W7-12 U3).
+
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+pub struct Bus {
+  main: F32,
+  aux: [F32; 2],
+}
+
+pub flow one_input(x: F32 at sample) -> Pair at sample {
+  Pair { l: x, r: x * 2.0 }
+}
+
+pub flow no_input() -> Pair at sample {
+  Pair { l: 1.0, r: 2.0 }
+}
+
+pub flow bus(m: F32 at sample) -> Bus at sample {
+  Bus { main: m, aux: [m + 1.0, m + 2.0] }
+}
+
+fn first_right(r: one_input.Rendered) -> F32 {
+  r.r[0]
+}
+
+fn frames_of(r: no_input.Rendered) -> U32 {
+  r.l.len() + r.r.len()
+}
+
+test "the struct output is the fields of the struct, each a buffer" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = one_input.render(xs, 8.0)
+  assert o.l.len() == 3
+  assert o.r.len() == 3
+  assert o.l[1] == 2.0
+  assert o.r[1] == 4.0
+  assert o.r[2] == 6.0
+}
+
+test "the result is passed to a function that names Rendered" {
+  let xs: [F32; 2] = [1.5, 2.5]
+  let o = one_input.render(xs, 8.0)
+  assert first_right(o) == 3.0
+}
+
+test "a flow with no input takes the number of frames" {
+  let o = no_input.render(4, 8.0)
+  assert frames_of(o) == 8
+  assert o.l[3] == 1.0
+  assert o.r[0] == 2.0
+}
+
+test "a field of the struct that is an array is an array of buffers" {
+  let xs: [F32; 2] = [10.0, 20.0]
+  let o = bus.render(xs, 8.0)
+  assert o.main.len() == 2
+  assert o.main[1] == 20.0
+  assert o.aux[0][0] == 11.0
+  assert o.aux[0][1] == 21.0
+  assert o.aux[1][0] == 12.0
+  assert o.aux[1][1] == 22.0
+}

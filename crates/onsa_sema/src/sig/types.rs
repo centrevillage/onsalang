@@ -252,7 +252,7 @@ impl<'p> Sema<'p> {
         let before = self.a.diagnostics.len();
         let read: Vec<TyId> = args.iter().zip(kinds).map(|(&x, &k)| self.lower_type_arg(cx, x, Some(k))).collect();
         for (&x, &t) in args.iter().zip(&read) {
-            if self.a.diagnostics.len() > before || self.judge(cx, x, t, Pos::Bind).is_none() {
+            if self.a.diagnostics.len() > before || self.judge(cx, x, t, Pos::Bind).is_err() {
                 break;
             }
         }
@@ -673,7 +673,8 @@ pub(crate) fn lower_type_in_body<'p>(
     // Its well-formedness at its place `pos` (§4.5, §5.3, R-37), with no
     // error of its lowering.
     if s.a.diagnostics.len() == before {
-        s.judge(&cx, t, ty, pos);
+        // Its error is reported there; the type of a body is read as lowered.
+        let _ = s.judge(&cx, t, ty, pos);
     }
     let diags = s.a.diagnostics.drain(before..).collect();
     (ty, diags)

@@ -529,7 +529,7 @@ fn resonator_lowers_to_the_five_functions() {
     assert!(d.contains("rt fn t.resonator.reset(inout s: t.resonator.State) -> () {\n  s.4 = 0.0:F32\n  s.5 = 0.0:F32\n  s.6 = false\n}"), "{d}");
     assert!(d.contains("rt fn t.resonator.process_inplace("), "{d}");
     assert!(d.contains("t.resonator.process(inout s, params, out, inout out)"), "{d}");
-    assert!(d.contains("-> t.resonator.Out sret {"), "{d}");
+    assert!(d.contains("-> t.resonator.Rendered sret {"), "{d}");
     // Layout (T3-6): 6 × F32 + Bool, padded to the F32 alignment.
     let f = &m.flows[0];
     assert_eq!((f.layout.size, f.layout.bulk_size, f.layout.align), (28, 0, 4));
@@ -661,7 +661,7 @@ fn sub_instances_are_wired_per_phase() {
     );
     // No Sig inputs: `process_inplace` is not generated, `render` takes `frames`.
     assert!(!d.contains("t.voice.process_inplace"), "{d}");
-    assert!(d.contains("frames: U32, sample_rate: F32) -> t.voice.Out sret"), "{d}");
+    assert!(d.contains("frames: U32, sample_rate: F32) -> t.voice.Rendered sret"), "{d}");
 }
 
 #[test]
@@ -699,7 +699,7 @@ fn planar_and_struct_outputs() {
     assert!(d.contains("[0:U32][i], x"), "{d}");
     assert!(d.contains("[1:U32][i]]\n"), "{d}");
     assert!(d.contains("out[0:U32][i] = v[0:U32]\n    out[1:U32][i] = v[1:U32]"), "{d}");
-    assert!(d.contains("t.pan.Out { l: l, r: r }"), "{d}");
+    assert!(d.contains("t.pan.Rendered { l: l, r: r }"), "{d}");
 }
 
 #[test]

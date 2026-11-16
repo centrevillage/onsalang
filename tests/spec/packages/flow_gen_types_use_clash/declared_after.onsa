@@ -1,0 +1,7 @@
+// S-1087: the `use` of the `Out` of a flow that does not have it, then a struct `Out` declared in the module. The `use` is a binding of the names stage,
+// so the E0304 is on the `use` (a `use` and an item of one name: the `use` is reported, whichever is first, S-675), and it has no E0302.
+use dsp.synth.mono.Out                            //~ E0304
+
+pub struct Out {
+  v: F32,
+}

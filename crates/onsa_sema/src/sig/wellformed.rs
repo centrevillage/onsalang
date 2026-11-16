@@ -3,7 +3,7 @@
 //! Once every signature and the items flows generate are lowered, and the
 //! kinds are known, each type written is judged from its root, its place, by
 //! the place and the head of each part: a second-class type (`Span`, a
-//! generated `Out`) stands at an argument only (E0710), and a type argument
+//! generated `In` or `Out`) stands at an argument only (E0710), and a type argument
 //! meets the requirements of its parameter (E0416: the element of `Buf` /
 //! `Span`, the bounds and the implicit `Dup` of a declared type). The roots
 //! are the fields, the parameters and the return types, the types of the
@@ -85,14 +85,16 @@ pub(super) fn payloads(item: &ItemKind, def: &DefKind) -> Vec<(TypeId, TyId, Slo
     }
 }
 
-/// Whether the head of `t` is second-class (§5.3): `Span`, a generated `Out`
-/// (§11.6; `In` from W7-03), a `?Escape` type parameter in scope (§4.5). The
-/// one place of the question.
+/// Whether the head of `t` is second-class (§5.3): `Span`, a generated `In`
+/// or `Out` (§11.6), a `?Escape` type parameter in scope (§4.5). The one
+/// place of the question.
 pub(crate) fn second_class(under: &Bounds, t: TyId) -> bool {
     match under.a.types.get(t) {
         Ty::Builtin(BuiltinTy::Span, _) => true,
         Ty::Param(i) => under.generics.get(*i as usize).is_some_and(GenericDef::lifts_escape),
-        Ty::Named(d, _) => matches!(&under.a.def(*d).kind, DefKind::Struct(s) if s.flow_ty == Some(FlowTy::Out)),
+        Ty::Named(d, _) => {
+            matches!(&under.a.def(*d).kind, DefKind::Struct(s) if matches!(s.flow_ty, Some(FlowTy::In | FlowTy::Out)))
+        }
         _ => false,
     }
 }
@@ -158,6 +160,25 @@ enum Written {
     Here(TypeId),
     Alias(DefId),
     Elsewhere,
+}
+
+/// Why a type written is not read ([`Sema::part`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Why {
+    /// A type its flow does not generate (`Out`, S-1087): not found, read
+    /// as the error type at every root (§18.1).
+    Absent,
+    /// Another error: out of its place, a requirement not met.
+    Wrong,
+}
+
+/// The error of a part written ([`Sema::part`]): why, and its diagnostic.
+struct Unread(Why, Diagnostic);
+
+impl From<Diagnostic> for Unread {
+    fn from(d: Diagnostic) -> Self {
+        Unread(Why::Wrong, d)
+    }
 }
 
 /// Where the type lowered of a root is kept ([`Sema::unread`]).
@@ -283,7 +304,7 @@ impl<'p> Sema<'p> {
         else {
             return;
         };
-        let read = self.judge(&cx, *ty, lowered, Pos::Alias).unwrap_or_else(|| self.a.types.error());
+        let read = self.judge(&cx, *ty, lowered, Pos::Alias).unwrap_or_else(|_| self.a.types.error());
         if read != lowered {
             self.a.known.summaries.get_mut().forget_new();
         }
@@ -338,20 +359,30 @@ impl<'p> Sema<'p> {
     fn wellformed_def(&mut self, id: DefId) -> Vec<(DefId, Slot, TyId)> {
         let generics = crate::body::generics_of(self.a, id);
         let Some(cx) = self.cx_for(id, generics, None) else { return Vec::new() };
-        let mut read = Vec::new();
+        let (mut read, mut failed) = (Vec::new(), false);
         for (t, ty, pos, slot) in self.roots(&cx, id) {
+            // A later root with an error, not judged, is read as written: S-1073 (2);
+            // but one with a type its flow does not generate, as the error type
+            // (S-1087), its error not reported (one per unit).
+            if failed {
+                if matches!(self.root(&cx, t, ty, pos), Err(Unread(Why::Absent, _))) {
+                    read.push((id, slot, self.a.types.error()));
+                }
+                continue;
+            }
             match self.judge(&cx, t, ty, pos) {
-                None => {
+                Err(why) => {
                     // A field, a payload or an input of a flow with an error is not
-                    // read: the error type to its users (§18.1, S-1068).
-                    if matches!(slot, Slot::Field(_) | Slot::Variant(..) | Slot::Input(_)) {
+                    // read: the error type to its users (§18.1, S-1068). So is every
+                    // root with a type its flow does not generate, as a name not
+                    // found (S-1087).
+                    if matches!(slot, Slot::Field(_) | Slot::Variant(..) | Slot::Input(_)) || why == Why::Absent {
                         read.push((id, slot, self.a.types.error()));
                     }
-                    // A later root with an error, not judged, is read as written: S-1073 (2).
-                    break;
+                    failed = true;
                 }
-                Some(r) if r != ty => read.push((id, slot, r)),
-                Some(_) => {}
+                Ok(r) if r != ty => read.push((id, slot, r)),
+                Ok(_) => {}
             }
         }
         read
@@ -397,11 +428,19 @@ impl<'p> Sema<'p> {
 
     /// The type `t` written at a root of the place `pos`, lowered as `ty`:
     /// its first part out of its place or not meeting a requirement is a
-    /// diagnostic of the unit `cx.def` (`None`). Else the type as read, with
-    /// a part named by an alias with an error as the error type (S-757).
-    pub(super) fn judge(&mut self, cx: &Cx<'p>, t: TypeId, ty: TyId, pos: Pos) -> Option<TyId> {
+    /// diagnostic of the unit `cx.def` (what it is). Else the type as read,
+    /// with a part named by an alias with an error as the error type (S-757).
+    pub(super) fn judge(&mut self, cx: &Cx<'p>, t: TypeId, ty: TyId, pos: Pos) -> Result<TyId, Why> {
+        self.root(cx, t, ty, pos).map_err(|Unread(why, d)| {
+            self.report(cx.def, d);
+            why
+        })
+    }
+
+    /// The root `t` at `pos`, lowered as `ty`, read ([`Self::part`]).
+    fn root(&mut self, cx: &Cx<'p>, t: TypeId, ty: TyId, pos: Pos) -> Result<TyId, Unread> {
         let w = self.written(cx, t);
-        self.part(cx, w, ty, (pos, ROOT), cx.ast.ty(t).span).map_err(|d| self.report(cx.def, d)).ok()
+        self.part(cx, w, ty, (pos, ROOT), cx.ast.ty(t).span)
     }
 
     /// What the part written at `t` is ([`Written`]).
@@ -414,7 +453,7 @@ impl<'p> Sema<'p> {
 
     /// The part `ty`, written as `w`, at the place `at`; `span`, where its
     /// nearest part written is. The type as read ([`Self::judge`]).
-    fn part(&mut self, cx: &Cx<'p>, w: Written, ty: TyId, at: (Pos, u8), span: Span) -> Result<TyId, Diagnostic> {
+    fn part(&mut self, cx: &Cx<'p>, w: Written, ty: TyId, at: (Pos, u8), span: Span) -> Result<TyId, Unread> {
         // A type of a cycle is read as the error type, its arguments judged (R-327).
         // So too where it is named through no value in a cycle: S-1074 (1).
         let cyclic = match w {
@@ -431,6 +470,21 @@ impl<'p> Sema<'p> {
             },
             Written::Elsewhere => (None, span, ty),
         };
+        // A type its flow does not generate (`Out`, S-1087) is not found,
+        // before its place is judged: of the types stage, as it is decided
+        // there. Through a `use` of it (failed, `fail_ungenerated`), or not
+        // written here, the error type with no diagnostic (§18.1).
+        if let &Ty::Named(d, _) = self.a.types.get(ty)
+            && let Some(err) = self.a.not_generated_error(d, span)
+        {
+            let failed = |path: &Path| self.a.resolve_path(cx.m, path) == Err(crate::ResolveError::Failed);
+            return match here.map(|t| &cx.ast.ty(t).kind) {
+                Some(TypeKind::Path { path, .. }) if !failed(path) => {
+                    Err(Unread(Why::Absent, err.with_found(src(cx, span))))
+                }
+                _ => Ok(self.a.types.error()),
+            };
+        }
         // Where it is not written, only its second-class parts are judged.
         if here.is_none() && !self.holds(cx, ty, at) {
             return Ok(ty);
@@ -445,7 +499,7 @@ impl<'p> Sema<'p> {
     pub(super) fn judge_args(&mut self, cx: &Cx<'p>, args: &[TypeId], ty: TyId, span: Span) -> Option<TyId> {
         let kids = args.iter().map(|&t| self.written(cx, t)).collect();
         let r = self.parts(cx, (ty, ARGUMENT, span), (true, kids), None);
-        r.map_err(|d| self.report(cx.def, d)).ok()
+        r.map_err(|e| self.report(cx.def, e.1)).ok()
     }
 
     /// The part `ty` at `at` and `span` of [`Self::part`], with its parts as
@@ -456,9 +510,9 @@ impl<'p> Sema<'p> {
         (ty, at, span): (TyId, (Pos, u8), Span),
         (here, kids): (bool, Vec<Written>),
         cyclic: Option<TyId>,
-    ) -> Result<TyId, Diagnostic> {
+    ) -> Result<TyId, Unread> {
         if second_class(&Bounds { a: self.a, generics: &cx.generics }, ty) && !fits(self.a, ty, at) {
-            return Err(self.misplaced(cx, ty, at, span));
+            return Err(self.misplaced(cx, ty, at, span).into());
         }
         let shape = self.a.types.get(ty).clone();
         let parts = places(self.a, &shape, at);

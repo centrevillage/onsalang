@@ -1,0 +1,12 @@
+// `Out` of the flow whose output is not a struct: the name is found by the names stage, and the types stage finds that the flow
+// has not got it (§11.6, S-1087), so the `use` is E0302 there. The name that the failed `use` would have bound is silent where it is
+// used (§18.1), and `Rendered` of the same flow, taken in the same `use`, is bound.
+use dsp.synth.mono.{Out, Rendered}   //~ E0302
+
+pub fn the_failed_name_is_silent(o: Out) -> U32 {
+  0
+}
+
+pub fn the_other_name_is_taken(r: Rendered) -> U32 {
+  r.out.len()
+}

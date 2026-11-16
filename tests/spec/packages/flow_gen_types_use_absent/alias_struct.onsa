@@ -1,0 +1,6 @@
+// The output is an alias of a struct of another module (`Frame` of `dsp/types.onsa`): `Out` is there, and its fields are the fields of the struct.
+use dsp.synth.framed.Out
+
+pub fn the_fields(o: Out) -> U32 {
+  o.l.len() + o.r.len()
+}

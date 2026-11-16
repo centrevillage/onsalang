@@ -52,12 +52,8 @@ pub(super) fn gen_process<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b
         lens.extend(channel_lens(sp, span)?);
     }
     let mut lens = lens.into_iter();
-    let first = match lens.next() {
-        Some(l) => l,
-        // SPEC-GAP(S-407): no channel at all (no `sample` input, a `[T; 0]` output) gives no
-        // length; channel 0 is read, which panics as an index out of range, as before R-22.
-        None => span_len(spans.first().ok_or_else(|| internal(span, "flow without spans"))?, span)?,
-    };
+    // A flow with no channel is an E0810 (§11.6, S-1110, S-407): the length is of a channel.
+    let first = lens.next().ok_or_else(|| internal(span, "flow without channels"))?;
     let len = g.let_("len", first);
     let msg = lw.msg("span lengths differ");
     for other in lens {

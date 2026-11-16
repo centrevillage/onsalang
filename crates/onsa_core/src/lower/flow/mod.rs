@@ -9,7 +9,7 @@
 //! | `tick(inout s, <Sig inputs>) -> out` | `Sig`-rate `let`s in order, the output, then the stores of §11.4 in node order |
 //! | `process(inout s, p, <Span inputs>, inout <Span outputs>)` | length check, `ctl` once, per sample: read all inputs, `tick`, write all outputs |
 //! | `process_inplace` | `process` with the same spans for the paired inputs and outputs |
-//! | `render` | `init`, `Buf.zeroed` outputs, one `process`, `Out` (interpreter only, D-08) |
+//! | `render` | `init`, `Buf.zeroed` outputs, one `process`, `Rendered` (interpreter only, D-08) |
 //! | `params_default() -> Params` | the `@param` defaults, of the C API alone (§11.6, S-625) |
 //!
 //! The functions keep `cfg` and `params` of a flow with no `Config` or
@@ -287,11 +287,11 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     let state_ty = lw.flow_ty(flow, FlowTy::State, span)?;
     let config_ty = lw.flow_ty(flow, FlowTy::Config, span)?;
     let params_ty = lw.flow_ty(flow, FlowTy::Params, span)?;
-    let out_ty = lw.flow_ty(flow, FlowTy::Out, span)?;
-    let out_def = generated_type(a, &fd, FlowTy::Out).ok_or_else(|| internal(span, "flow without `Out`"))?;
+    let out_ty = lw.flow_ty(flow, FlowTy::Rendered, span)?;
+    let out_def = generated_type(a, &fd, FlowTy::Rendered).ok_or_else(|| internal(span, "flow without `Rendered`"))?;
     let out_val = lw.core_ty(fd.out, &[], span)?;
 
-    // Boundary outputs from the `Out` struct (`Buf[T]` / `[Buf[T]; N]` fields, §11.6).
+    // Boundary outputs from the `Rendered` struct (`Buf[T]` / `[Buf[T]; N]` fields, §11.6).
     let mut outputs = Vec::new();
     if let DefKind::Struct(s) = &a.def(out_def).kind
         && let Fields::Named(fs) = &s.fields
@@ -301,9 +301,9 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
                 STy::Builtin(BuiltinTy::Buf, args) => (args[0], None),
                 STy::Array(buf, Len::Const(n)) => match a.types.get(buf).clone() {
                     STy::Builtin(BuiltinTy::Buf, args) => (args[0], Some(n)),
-                    _ => return Err(internal(span, "Out field shape")),
+                    _ => return Err(internal(span, "Rendered field shape")),
                 },
-                _ => return Err(internal(span, "Out field shape")),
+                _ => return Err(internal(span, "Rendered field shape")),
             };
             outputs.push((f.name.clone(), lw.core_ty(elem, &[], span)?, n));
         }

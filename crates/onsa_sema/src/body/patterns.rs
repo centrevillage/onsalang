@@ -172,6 +172,11 @@ impl<'a> Checker<'a> {
             Entity::Def(d) | Entity::Member(d) if matches!(self.a.def(d).kind, DefKind::Const(_)) => {
                 return self.bind_const_pat(pat, path, (d, owner), ty, irrefutable);
             }
+            // An item its flow does not generate (`Out`) is not found (S-1087).
+            Entity::Member(d) => {
+                self.generated_at(d, path.span)?;
+                return Err(self.not_a_pattern(path));
+            }
             _ => return Err(self.not_a_pattern(path)),
         };
         self.info.pat_ctors.insert(pat, ctor);

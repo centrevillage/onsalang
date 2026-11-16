@@ -1,0 +1,11 @@
+// The types that the flows of `synth.onsa` take for their outputs: a struct, an alias of a scalar, an alias of the struct and an alias of the alias.
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+pub type Level = F32
+
+pub type Frame = Pair
+
+pub type FrameTwice = Frame

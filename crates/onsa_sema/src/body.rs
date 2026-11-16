@@ -379,6 +379,15 @@ impl<'a> Checker<'a> {
         self.diag(Diagnostic::new(Stage::Types, code, span, msg).with_found(self.src(span)))
     }
 
+    /// The E0302 of the path at `span` in the body to `d`, an item its flow
+    /// does not generate (`Out`, S-1087): of the types stage, as in a type.
+    pub(crate) fn generated_at(&mut self, d: DefId, span: Span) -> R<()> {
+        match self.a.not_generated_error(d, span) {
+            Some(err) => Err(self.diag(err.with_found(self.src(span)))),
+            None => Ok(()),
+        }
+    }
+
     /// Whether the error type is in `t` (§18.1).
     fn mentions_error(&mut self, t: TyId) -> bool {
         let t = self.infer.resolve(&mut self.a.types, t);

@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§5.3"]
+// fixes = 0
+
+// §11.6, R-334: `Rendered`, the result of `render`, is an ordinary struct that holds `Buf`s, and `Out` is the second-class view that
+// holds `Span`s (§5.3). `Rendered` is no second-class type, so it can be returned, be the field of a struct, be in a type argument,
+// be a `move` argument, be named by an alias and be the target of an `impl` (§11.6: the generated types are defined by the module of the
+// flow); the result of `render` is of this type (it is not `Out`). No diagnostic is expected here. (A `Out` in those places is
+// E0710, in `types/wellformed_move_span_flow.onsa`.)
+
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+pub flow one_input(x: F32 at sample) -> Pair at sample {
+  Pair { l: x, r: x }
+}
+
+pub flow mono(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub type Kept = one_input.Rendered
+
+pub struct Holder {
+  r: one_input.Rendered,
+  n: U32,
+}
+
+impl one_input.Rendered {
+  pub fn frames(self) -> U32 {
+    self.l.len()
+  }
+}
+
+pub fn the_result_of_render(xs: Span[F32]) -> one_input.Rendered uses {Alloc} {
+  one_input.render(xs, 48000.0)
+}
+
+pub fn the_result_of_a_scalar_render(xs: Span[F32]) -> mono.Rendered uses {Alloc} {
+  mono.render(xs, 48000.0)
+}
+
+pub fn kept_by_an_alias(xs: Span[F32]) -> Kept uses {Alloc} {
+  one_input.render(xs, 48000.0)
+}
+
+pub fn held_in_a_struct(xs: Span[F32]) -> Holder uses {Alloc} {
+  Holder { r: one_input.render(xs, 48000.0), n: 1 }
+}
+
+pub fn in_an_option(xs: Span[F32]) -> Option[one_input.Rendered] uses {Alloc} {
+  Some(one_input.render(xs, 48000.0))
+}
+
+pub fn taken_by_move(move r: one_input.Rendered) -> U32 uses {Alloc} {
+  r.frames()
+}
+
+pub fn the_method_of_the_impl(r: one_input.Rendered) -> U32 {
+  r.frames()
+}

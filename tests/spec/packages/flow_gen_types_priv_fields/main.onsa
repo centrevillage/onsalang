@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1"]
+// fixes = 0
+
+// S-667, S-35, §11.6, §15.1: the fields of `Out` and `Rendered` of a flow are seen as far as the flow is, and they do not look at the `priv` of
+// the field of the struct that is the output ("境界では出力の値がフィールドごとのバッファに分かれ、外から struct の値を作る・書き換える道は無い"). Another
+// module reads the `priv` field `tag` and the value of the newtype `Hz` in `Out`, in the result of `render` (typed `Rendered`), through an alias
+// of the struct and for a struct of a third module (`dsp/shapes.onsa`): no diagnostic. The output of the flow that is a child (`synth.g~(x)`) is a
+// value of the struct `P`, from which a field that is `priv` is not read in another module (E0303, §15.1), whether it is read with
+// a `let` or directly. The `pub flow` of the structs with a `priv` field has no E0303 where it is declared (`dsp/synth.onsa`). One error
+// per unit (§18.1).
+use dsp.synth
+
+pub fn the_priv_field_of_out(o: synth.g.Out) -> U32 {
+  o.x.len() + o.tag.len()
+}
+
+pub fn the_priv_field_of_rendered(r: synth.g.Rendered) -> U32 {
+  r.x.len() + r.tag.len()
+}
+
+pub fn the_value_of_a_newtype(o: synth.hz.Out, r: synth.hz.Rendered) -> U32 {
+  o.value.len() + r.value.len()
+}
+
+pub fn through_an_alias(o: synth.tagged.Out, r: synth.tagged.Rendered) -> U32 {
+  o.tag.len() + r.tag.len()
+}
+
+pub fn a_struct_of_a_third_module(o: synth.from_other.Out, r: synth.from_other.Rendered) -> U32 {
+  o.tag.len() + r.tag.len()
+}
+
+pub fn the_result_of_render(xs: Span[F32]) -> U32 uses {Alloc} {
+  let r = synth.g.render(xs, 48000.0)
+  r.tag.len() + r.x.len()
+}
+
+pub fn the_result_of_render_of_the_newtype(xs: Span[F32]) -> U32 uses {Alloc} {
+  let r = synth.hz.render(xs, 48000.0)
+  r.value.len()
+}
+
+pub fn the_result_of_render_of_a_third_module(xs: Span[F32]) -> U32 uses {Alloc} {
+  let r = synth.from_other.render(xs, 48000.0)
+  r.tag.len()
+}
+
+// ---------------------------------------------------------------- the child flow: the struct value, its `priv` field is not read here
+
+flow reads_a_field_that_is_seen(x: F32 at sample) -> F32 at sample {
+  let p = synth.g~(x)
+  p.x
+}
+
+flow reads_the_priv_field(x: F32 at sample) -> F32 at sample {
+  let p = synth.g~(x)
+  p.tag   //~ E0303
+}
+
+flow reads_the_priv_field_directly(x: F32 at sample) -> F32 at sample {
+  synth.g~(x).tag   //~ E0303
+}
+
+flow reads_the_value_of_the_newtype(x: F32 at sample) -> F32 at sample {
+  synth.hz~(x).value   //~ E0303
+}
+
+flow reads_the_priv_field_of_the_alias(x: F32 at sample) -> F32 at sample {
+  synth.tagged~(x).tag   //~ E0303
+}
+
+flow reads_the_priv_field_of_a_third_module(x: F32 at sample) -> F32 at sample {
+  synth.from_other~(x).tag   //~ E0303
+}

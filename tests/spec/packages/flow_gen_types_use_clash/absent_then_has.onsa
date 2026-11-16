@@ -1,0 +1,4 @@
+// S-1087: the `use` of the `Out` of a flow that does not have it (`mono`) first, then the one of a flow that has it (`pair`). The first is E0302
+// of the types stage; the second is E0304 of the names stage (the first was a resolved binding when the names were collected).
+use dsp.synth.mono.Out                            //~ E0302
+use dsp.synth.pair.Out                            //~ E0304

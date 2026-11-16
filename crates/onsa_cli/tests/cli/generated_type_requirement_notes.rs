@@ -165,11 +165,39 @@ fn a_generated_type_is_shown_with_its_flow() {
         ),
     ];
     for (code, shown, tail) in uses {
-        let diags = diagnostics_of(&format!("{flows}{tail}"));
-        let found: Vec<(&str, &str)> = diags.iter().map(|d| (code_of(d), str_of(d, "message"))).collect();
-        assert!(
-            matches!(found.as_slice(), [(c, m)] if *c == code && m.contains(shown)),
-            "want one {code} that shows {shown}: {found:?}"
-        );
+        assert_one_shows(&format!("{flows}{tail}"), code, shown);
     }
+}
+
+/// R-437 (W7-12 U2a): the field a struct literal does not have (E0410) and the pattern a `match` does not cover
+/// (E0501) show the type of the flow by the name of its flow too: `Params`, `Config` and `Out`.
+#[test]
+fn the_literal_and_the_match_show_a_generated_type_with_its_flow() {
+    let flow = "pub struct Pair {\n  l: F32,\n  r: F32,\n}\n\n\
+                pub flow a(x: F32 at sample, c: I32 at init, k: Bool at block) -> Pair at sample {\n  Pair { l: x, r: x }\n}\n\n\
+                fn take(o: a.Out) -> U32 {\n  0\n}\n\n";
+    let uses = [
+        ("E0410", "`a.Params`", "fn f() -> a.Params {\n  a.Params { zz: true }\n}\n"),
+        ("E0410", "`a.Config`", "fn f() -> a.Config {\n  a.Config { zz: 1 }\n}\n"),
+        ("E0410", "`a.Out`", "fn f(s: Span[F32]) -> U32 {\n  take(a.Out { zz: s })\n}\n"),
+        (
+            "E0501",
+            "`a.Params(false)`",
+            "fn f(p: a.Params) -> U32 {\n  match p {\n    a.Params { k: true } => 1,\n  }\n}\n",
+        ),
+        ("E0501", "`a.Config(_)`", "fn f(p: a.Config) -> U32 {\n  match p {\n    a.Config { c: 1 } => 1,\n  }\n}\n"),
+    ];
+    for (code, shown, tail) in uses {
+        assert_one_shows(&format!("{flow}{tail}"), code, shown);
+    }
+}
+
+/// The program has one diagnostic, of `code`, whose message shows `shown`.
+fn assert_one_shows(text: &str, code: &str, shown: &str) {
+    let diags = diagnostics_of(text);
+    let found: Vec<(&str, &str)> = diags.iter().map(|d| (code_of(d), str_of(d, "message"))).collect();
+    assert!(
+        matches!(found.as_slice(), [(c, m)] if *c == code && m.contains(shown)),
+        "want one {code} that shows {shown}: {found:?}"
+    );
 }

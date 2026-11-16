@@ -67,6 +67,7 @@ impl<'a> Checker<'a> {
             Entity::Def(d) | Entity::Member(d) if matches!(self.a.def(d).kind, DefKind::Struct(_)) => d,
             _ => return Err(self.pattern_err(stage, Code::E0401, path.span, "a struct pattern needs a struct")),
         };
+        self.generated_at(d, path.span)?;
         let Some(sd) = self.a.def(d).as_struct() else {
             return Err(self.pattern_err(stage, Code::E0401, path.span, "a struct pattern needs a struct"));
         };

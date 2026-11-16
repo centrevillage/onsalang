@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§18.1", "§5.3", "§4.4"]
+// fixes = 0
+
+// S-772, S-1087, §11.6, §18.1: the output of a flow that reaches its own `Out` or `Rendered` through an alias, an alias of an alias,
+// a field of a struct, or a field of a struct through an alias. Whether the flow has `Out` is then not known (§18.1: no E0302 of its
+// uses), but the `Out` is an item that is kept, so where it stands at a second-class place it is the E0710 as any `Out` (§5.3):
+// at the place the alias is named (§4.4: "第二級の型を書ける位置かは、別名を使う位置で決まる"), and at the field of the struct.
+// `Rendered` is no second-class type; the value of the body does not fit the output (E0401 of the types stage), which comes
+// before the boundary of the output (the flow stage, §18.1: "依存する段の間では、位置によらず先の段の誤りを報告する"). Each is a
+// unit with an error, so none passes the check. One error per unit (§18.1).
+
+pub type OwnOut = own_alias.Out
+
+pub flow own_alias(y: F32 at sample) -> OwnOut at sample {   //~ E0710
+  y
+}
+
+pub type OwnOutFirst = own_alias2.Out
+pub type OwnOutSecond = OwnOutFirst
+
+pub flow own_alias2(y: F32 at sample, z: F32 at sample) -> OwnOutSecond at sample {   //~ E0710
+  y
+}
+
+pub struct HoldsOwnOut {
+  r: own_struct.Out,   //~ E0710
+}
+
+pub flow own_struct(y: F32 at sample) -> HoldsOwnOut at sample {
+  HoldsOwnOut { r: y }
+}
+
+pub type OwnOutThrough = own_struct_alias.Out
+
+pub struct HoldsOwnOutThrough {
+  r: OwnOutThrough,   //~ E0710
+}
+
+pub flow own_struct_alias(y: F32 at sample, z: F32 at sample) -> HoldsOwnOutThrough at sample {
+  HoldsOwnOutThrough { r: y }
+}
+
+pub type OwnRendered = own_rendered.Rendered
+
+pub flow own_rendered(y: F32 at sample) -> OwnRendered at sample {
+  y   //~ E0401
+}
+
+pub type OwnRenderedFirst = own_rendered2.Rendered
+pub type OwnRenderedSecond = OwnRenderedFirst
+
+pub flow own_rendered2(y: F32 at sample, z: F32 at sample) -> OwnRenderedSecond at sample {
+  y   //~ E0401
+}
+
+pub struct HoldsOwnRendered {
+  r: own_rendered_struct.Rendered,
+}
+
+pub flow own_rendered_struct(y: F32 at sample, z: F32 at sample) -> HoldsOwnRendered at sample {
+  HoldsOwnRendered { r: y }   //~ E0401
+}
+
+pub type OwnRenderedThrough = own_rendered_struct_alias.Rendered
+
+pub struct HoldsOwnRenderedThrough {
+  r: OwnRenderedThrough,
+}
+
+pub flow own_rendered_struct_alias(y: F32 at sample) -> HoldsOwnRenderedThrough at sample {
+  HoldsOwnRenderedThrough { r: y }   //~ E0401
+}

@@ -5,8 +5,8 @@
 
 // S-862 (1') (W5-02 U5a, §11.6: each field of the generated type `Out` is `Span[T]` or `[Span[T]; N]`; §4.5: a type "第二級の型か、それを含む型"
 // that a type parameter is decided to is the E0710 of the expression that made the type argument): a `Span` field of a generated value
-// passed to a generic function (`id(o.l)`) is the same as a `Span`, the E0710 of the call. It waits for R-334 (W7-03): this version
-// generates the field as `Buf[T]`, so the call is an E0416 of the implicit `Dup`. Moved from `infer_second_class_generated.onsa` (the
+// passed to a generic function (`id(o.l)`) is the same as a `Span`, the E0710 of the call (R-334, W7-12 U2a: before it the field was
+// `Buf[T]`, and the call an E0416 of the implicit `Dup`). Moved from `infer_second_class_generated.onsa` (the
 // parent, W5-02 U5a). The error has no candidate (`fixes = 0`). One error per function (P-01).
 
 pub struct St {

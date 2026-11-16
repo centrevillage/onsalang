@@ -532,6 +532,23 @@ impl Analysis {
         false
     }
 
+    /// The flow of `d` when `d` is an item it made but did not generate: not
+    /// in its members once its signature is lowered (§11.6, S-1087).
+    pub(crate) fn not_generated(&self, d: DefId) -> Option<DefId> {
+        let flow = self.def(d).owner?;
+        let members = &self.def(flow).as_flow()?.members;
+        (!members.iter().any(|&(_, x)| x == d)).then_some(flow)
+    }
+
+    /// The E0302 at `span` of `d` when its flow does not generate it
+    /// ([`Self::not_generated`]): of the types stage, which decides it, at a
+    /// `use`, a type and a path of a body alike (§11.6, §18.1, S-1087).
+    pub(crate) fn not_generated_error(&self, d: DefId, span: Span) -> Option<Diagnostic> {
+        self.not_generated(d)?;
+        let msg = format!("cannot find `{}`", self.shown_name(d));
+        Some(Diagnostic::new(onsa_diag::Stage::Types, onsa_diag::Code::E0302, span, msg))
+    }
+
     /// The def is an alias of the error type (§18.1, R-271): a struct, a
     /// variant or a member written through it is not known.
     pub fn error_alias(&self, id: DefId) -> bool {

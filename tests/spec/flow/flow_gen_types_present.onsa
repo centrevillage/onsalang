@@ -1,0 +1,150 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§5.3"]
+// fixes = 0
+
+// §11.6, S-30, S-1087, R-334: which of the types `In`, `Out` and `Rendered` a flow has, and the types of their fields.
+//   - `In` is there when the flow has two or more inputs at `sample` (an input of an array type `[T; N]` is one input), and it has a field for
+//     each, of the name of the input: `Span[T]`, or `[Span[T]; N]` for an array input.
+//   - `Out` is there when the output at `sample` is, once an alias is taken off, a struct, and it has a field for each field of the struct
+//     (the same name): `Span[T]`, or `[Span[T]; N]` for an array field. `Rendered` is always there; its fields are the same with `Buf`
+//     (`o.out: Buf[T]` for a scalar output, `o.out: [Buf[T]; N]` for an array, the names of the fields for a struct).
+// No diagnostic is expected here. The `Span` fields are taken by a parameter `Span[F32]` or `[Span[F32]; 2]`, the `Buf` fields of
+// `Rendered` by `Buf[F32]` or `[Buf[F32]; 2]` (a `Buf` is also taken by `Span[F32]`, and an array of `Buf`s by `[Span[F32]; 2]`, §5.3). The flows that lack an item are in
+// `negative/flow_gen_types_absent_signature.onsa`, the types that do not agree in `negative/flow_gen_types_field_types.onsa`.
+
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+pub struct Bus {
+  main: F32,
+  aux: [F32; 2],
+}
+
+pub type PairAlias = Pair
+
+pub type PairAlias2 = PairAlias
+
+// Two inputs and a struct: `In`, `Out`, `Rendered`.
+pub flow pair(a: F32 at sample, b: F32 at sample) -> Pair at sample {
+  Pair { l: a, r: b }
+}
+
+// An array input and one beside it, and a struct with an array field.
+pub flow bus(x: [F32; 2] at sample, m: F32 at sample) -> Bus at sample {
+  Bus { main: m, aux: x }
+}
+
+// The output is an alias of a struct, and an alias of an alias: `Out` is there.
+pub flow aliased(a: F32 at sample, b: F32 at sample) -> PairAlias at sample {
+  Pair { l: a, r: b }
+}
+
+pub flow aliased_twice(a: F32 at sample, b: F32 at sample) -> PairAlias2 at sample {
+  Pair { l: a, r: b }
+}
+
+// No input, and one input: `Out` is there, `In` is not.
+pub flow no_input() -> Pair at sample {
+  Pair { l: 1.0, r: 2.0 }
+}
+
+pub flow one_input(x: F32 at sample) -> Pair at sample {
+  Pair { l: x, r: x }
+}
+
+pub flow mono(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow channels(x: [F32; 2] at sample) -> [F32; 2] at sample {
+  x
+}
+
+fn span_len(s: Span[F32]) -> U32 {
+  s.len()
+}
+
+fn buf_len(b: Buf[F32]) -> U32 {
+  b.len()
+}
+
+fn planes(p: [Span[F32]; 2]) -> U32 {
+  0
+}
+
+fn bufs(p: [Buf[F32]; 2]) -> U32 {
+  0
+}
+
+// ---------------------------------------------------------------- In: a field of `Span[T]` or `[Span[T]; N]`
+
+fn pair_in(i: pair.In) -> U32 {
+  span_len(i.a) + span_len(i.b)
+}
+
+fn bus_in(i: bus.In) -> U32 {
+  planes(i.x) + span_len(i.m)
+}
+
+// ---------------------------------------------------------------- Out: the fields of the struct, as `Span[T]` or `[Span[T]; N]`
+
+fn pair_out(inout o: pair.Out) -> U32 {
+  span_len(o.l) + span_len(o.r)
+}
+
+fn bus_out(o: bus.Out) -> U32 {
+  span_len(o.main) + planes(o.aux)
+}
+
+fn aliased_out(o: aliased.Out) -> U32 {
+  span_len(o.l) + span_len(o.r)
+}
+
+fn aliased_twice_out(o: aliased_twice.Out) -> U32 {
+  span_len(o.l)
+}
+
+fn no_input_out(o: no_input.Out) -> U32 {
+  span_len(o.r)
+}
+
+fn one_input_out(o: one_input.Out) -> U32 {
+  span_len(o.l)
+}
+
+// ---------------------------------------------------------------- Rendered: always there, with `Buf` fields
+
+fn pair_rendered(r: pair.Rendered) -> U32 {
+  buf_len(r.l) + buf_len(r.r) + span_len(r.l)
+}
+
+fn bus_rendered(r: bus.Rendered) -> U32 {
+  buf_len(r.main) + bufs(r.aux)
+}
+
+fn bus_rendered_as_planes(r: bus.Rendered) -> U32 {
+  planes(r.aux)
+}
+
+fn aliased_rendered(r: aliased.Rendered) -> U32 {
+  buf_len(r.l)
+}
+
+fn no_input_rendered(r: no_input.Rendered) -> U32 {
+  buf_len(r.r)
+}
+
+fn one_input_rendered(r: one_input.Rendered) -> U32 {
+  buf_len(r.l)
+}
+
+fn mono_rendered(r: mono.Rendered) -> U32 {
+  buf_len(r.out)
+}
+
+fn channels_rendered(r: channels.Rendered) -> U32 {
+  bufs(r.out)
+}

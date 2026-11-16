@@ -1,0 +1,3 @@
+// S-1087, §18.1: as `brace_twice.onsa`, with `process_inplace`, which the flow `split` does not have (its one input does not pair up with
+// its two output fields): E0304 on the second name, and no E0302 of the types stage in the same unit.
+use dsp.synth.split.{process_inplace, process_inplace}   //~ E0304

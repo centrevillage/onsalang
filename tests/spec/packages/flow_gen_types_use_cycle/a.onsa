@@ -1,0 +1,15 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1", "§18.1"]
+// fixes = 0
+
+// S-1087, §11.6, §15.1, §18.1: the `use` of the `Out` of a flow that has not got it (`b.mono` has a scalar output) is a binding of the names stage
+// that was resolved, so it is a dependency of `a` on `b` (E0310, §11.6: "名前の段では解決しているので、E0310 の依存にも数える"), and `b` takes `a`
+// back (`use a.helper`), so the two modules are a cycle. One E0310 per cycle, on the first `use` of the cycle in the order of the diagnostics
+// (`a.onsa`), and the `use` has no E0302 of the types stage (an error of an earlier stage). The modules `c.onsa` and `d.onsa` are the control: the failed
+// `use` of `Config` (the flow `d.plain` has no input of `init`) is a name that failed in the names stage, no dependency, so `d` taking `c` back is no cycle.
+use b.mono.Out                    //~ E0310
+
+pub fn helper() -> I32 {
+  1
+}

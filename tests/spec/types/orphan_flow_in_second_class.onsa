@@ -7,8 +7,7 @@
 // 2 つ以上のときだけ"): the generated type `voice.In` of a flow with two inputs at `sample` holds a `Span` for each
 // input, so it is second-class, and an `impl` of it, in the module of the flow where the orphan rule lets the generated
 // types be written (§6.3), is E0710 at the heading (not E0307, and not E0302). The `impl` of `voice.State` is right.
-// (Today the generated `In` is not made, and the name is E0302; it waits for the work of the generated types of the
-// flow, as flow_semantics/in_out_field_receiver.onsa does.) One error per unit (P-01).
+// One error per unit (P-01).
 
 pub struct Stereo {
   l: F32,

@@ -1,0 +1,19 @@
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+// The output is a struct: `Out` is there.
+pub flow pair(a: F32 at sample, b: F32 at sample) -> Pair at sample {
+  Pair { l: a, r: b }
+}
+
+// The output is a scalar: `Out` is not there.
+pub flow mono(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+// One input and two output fields do not pair up: `process_inplace` is not there.
+pub flow split(x: F32 at sample) -> Pair at sample {
+  Pair { l: x, r: x }
+}

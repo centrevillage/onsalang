@@ -450,6 +450,7 @@ impl<'a> Checker<'a> {
             Entity::Def(d) | Entity::Member(d) if matches!(self.a.def(d).kind, DefKind::Struct(_)) => d,
             _ => return Err(self.diag(crate::names::body::not_a_struct(self.src(path.span), path.span))),
         };
+        self.generated_at(d, path.span)?;
         let s = self.a.def(d).as_struct().unwrap().clone();
         let Fields::Named(defs) = &s.fields else {
             let name = self.src(path.span);
@@ -492,7 +493,7 @@ impl<'a> Checker<'a> {
                     self.check_expr(*value, Some(error))?;
                     continue;
                 }
-                let shown = self.a.def(d).name.clone();
+                let shown = self.a.shown_name(d);
                 return Err(self.err(Code::E0410, name.span, format!("`{shown}` has no field `{}`", name.name)));
             };
             let f = &defs[k];

@@ -132,6 +132,9 @@ pub(crate) fn collect_and_lower(pkg: &Package, mut a: Analysis) -> Result<Analys
     crate::prim::record(s.a);
     s.fill_derived();
     let pairs = s.lower_generated(&flows);
+    // A `use` of an `Out` not generated fails before the types that name
+    // it are judged (S-1087); of `process_inplace`, after `check_generated`.
+    s.fail_ungenerated();
     s.a.known.ready = true;
     s.a.known.summaries.get_mut().clear();
     // Each type is judged after those it names, and what is known of the

@@ -217,7 +217,13 @@ impl<'p> Sema<'p> {
             ItemKind::Fn(f) => (&f.name, DefKind::Fn(at.fn_def(f)), None),
             ItemKind::Flow(f) => (
                 &f.name,
-                DefKind::Flow(FlowDef { inputs: Vec::new(), out: at.error, body: f.body, members: Vec::new() }),
+                DefKind::Flow(FlowDef {
+                    inputs: Vec::new(),
+                    out: at.error,
+                    body: f.body,
+                    members: Vec::new(),
+                    absent: Vec::new(),
+                }),
                 None,
             ),
             ItemKind::Struct(s) => {

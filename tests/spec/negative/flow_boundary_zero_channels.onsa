@@ -1,0 +1,88 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§18.1"]
+
+// E0810: a `sample` input or output with no channel (S-1110, S-407). An array at the boundary has
+// N at least 1 and a struct output has at least one field (§11.6): the length of `process` comes
+// from the spans of the inputs and the outputs, so an input or an output without a span is not made.
+
+pub struct Empty {}
+
+pub struct ZeroField {
+  a: [F32; 0],
+}
+
+pub struct PartZero {
+  l: F32,
+  e: [F32; 0],
+}
+
+pub type EmptyAlias = Empty
+
+const NONE: U32 = 0
+
+pub flow empty_out(x: F32 at sample) -> Empty at sample {   //~ E0810
+  Empty {}
+}
+
+// No `sample` input and no channel in the output: the length is nowhere (S-407).
+pub flow empty_out_no_input() -> Empty at sample {   //~ E0810
+  Empty {}
+}
+
+pub flow empty_out_block_input(g: F32 at block) -> Empty at sample {   //~ E0810
+  Empty {}
+}
+
+pub flow zero_array_out(x: F32 at sample) -> [F32; 0] at sample {   //~ E0810
+  []
+}
+
+pub flow zero_array_out_no_input() -> [F32; 0] at sample {   //~ E0810
+  []
+}
+
+pub flow zero_array_in(x: [F32; 0] at sample) -> F32 at sample {   //~ E0810
+  1.0
+}
+
+pub flow zero_field_out(x: F32 at sample) -> ZeroField at sample {   //~ E0810
+  ZeroField { a: [] }
+}
+
+// A struct that has channels is still E0810 when one of its fields has none (one rule: N >= 1).
+pub flow part_zero_out(x: F32 at sample) -> PartZero at sample {   //~ E0810
+  PartZero { l: x, e: [] }
+}
+
+// The length is the value of the constant.
+pub flow const_zero_out(x: F32 at sample) -> [F32; NONE] at sample {   //~ E0810
+  []
+}
+
+pub flow alias_empty_out(x: F32 at sample) -> EmptyAlias at sample {   //~ E0810
+  Empty {}
+}
+
+// An item whose presence the type decides gets no E0302 when the output is an E0810 (S-1087):
+// `zero_array_out.Out` is not reported again.
+pub fn out_of_an_e0810_flow(o: zero_array_out.Out) -> U32 {
+  1
+}
+
+// Controls: one channel or more, and a `block` input, which is not a `sample` input or output.
+pub struct One {
+  m: F32,
+}
+
+pub flow one_field_out(x: F32 at sample) -> One at sample {
+  One { m: x }
+}
+
+pub flow one_channel_out(x: [F32; 1] at sample) -> [F32; 1] at sample {
+  x
+}
+
+pub flow block_input_of_an_empty_struct(x: F32 at sample, g: Empty at block) -> F32 at sample {
+  x
+}

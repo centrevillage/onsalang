@@ -162,8 +162,10 @@
 [allow."crates/onsa_sema/src/sig/generated.rs"]
 "BULK_SIZE" = 1
 "Config" = 1
+"In" = 1
 "Out" = 1
 "Params" = 1
+"Rendered" = 1
 "SIZE" = 1
 "State" = 1
 "cfg" = 1

@@ -1,0 +1,117 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§18.1"]
+// fixes = 0
+
+// S-1087, §18.1: the `Out` that a flow has not, written in a signature, is E0302 of the types stage, and "その型は誤りの型として読む".
+// "読めなかった部分（引数の型、フィールドなど）は誤りの型として扱い、それを使う側には診断を出さない": the argument and the return type
+// that name it are wrong types, so the calls of the function (`f(1) + f(2.0)`) and the uses of its value have no diagnostic, in every
+// place of a type of a signature (an argument, `inout`, a return type, a method of an `impl`, a function type). The same as the name that
+// is not found (`Nope`) and the `use` that failed. One error per unit (§18.1).
+
+pub flow mono(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub fn takes_the_absent_out(o: mono.Out) -> U32 {   //~ E0302
+  0
+}
+
+pub fn calls_with_an_integer_and_a_float() -> U32 {
+  takes_the_absent_out(1) + takes_the_absent_out(2.0)
+}
+
+pub fn returns_the_absent_out() -> mono.Out {   //~ E0302
+  0
+}
+
+pub fn uses_the_value_returned() -> U32 {
+  let a: U32 = returns_the_absent_out()
+  let b: Bool = returns_the_absent_out()
+  if b { a } else { 0 }
+}
+
+pub fn takes_the_absent_out_inout(inout o: mono.Out) -> U32 {   //~ E0302
+  0
+}
+
+pub fn calls_with_inout_of_a_bool(inout b: Bool) -> U32 {
+  takes_the_absent_out_inout(inout b)
+}
+
+pub struct Holder {
+  v: U32,
+}
+
+impl Holder {
+  pub fn method_of_the_absent_out(self, o: mono.Out) -> U32 {   //~ E0302
+    self.v
+  }
+}
+
+pub fn calls_the_method(h: Holder) -> U32 {
+  h.method_of_the_absent_out(true)
+}
+
+pub fn takes_a_function_of_the_absent_out(g: fn(mono.Out) -> U32) -> U32 {   //~ E0302
+  0
+}
+
+pub fn calls_with_a_number() -> U32 {
+  takes_a_function_of_the_absent_out(3)
+}
+
+// ---------------------------------------------------------------- more than one root of a signature
+
+// Each root that names the `Out` that is not there is read as a wrong type, also after the first error of the unit (one diagnostic
+// per unit): the second argument, the return type after an argument, both in a method, and a field after an E0710 of another field.
+
+pub flow stereo(l: F32 at sample, r: F32 at sample) -> F32 at sample {
+  l
+}
+
+pub fn takes_two_absent_outs(o: mono.Out, p: stereo.Out) -> U32 {   //~ E0302
+  0
+}
+
+pub fn calls_with_two_wrong_values() -> U32 {
+  takes_two_absent_outs(1, 2.0)
+}
+
+pub fn takes_and_returns_absent_outs(o: mono.Out) -> stereo.Out {   //~ E0302
+  0
+}
+
+pub fn uses_both() -> U32 {
+  takes_and_returns_absent_outs(1) + 1
+}
+
+impl Holder {
+  pub fn method_of_two_absent_outs(self, o: mono.Out, q: stereo.Out) -> U32 {   //~ E0302
+    self.v
+  }
+}
+
+pub fn calls_the_method_of_two(h: Holder) -> U32 {
+  h.method_of_two_absent_outs(true, 1.5)
+}
+
+pub struct SpanThenAbsentOut {
+  r: Span[F32],   //~ E0710
+  o: mono.Out,
+}
+
+pub fn reads_the_absent_out_field(s: SpanThenAbsentOut) -> U32 {
+  let x: U32 = s.o
+  x
+}
+
+// ---------------------------------------------------------------- the contrast: a name not found
+
+pub fn takes_nope(o: Nope) -> U32 {   //~ E0302
+  0
+}
+
+pub fn calls_nope_with_an_integer_and_a_float() -> U32 {
+  takes_nope(1) + takes_nope(2.0)
+}

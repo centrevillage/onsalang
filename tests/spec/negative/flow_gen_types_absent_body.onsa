@@ -1,0 +1,143 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1", "§18.1"]
+// fixes = 0
+
+// S-1087, §11.6, §18.1: the `Out` that a flow has not (its output at `sample` is not a struct) is E0302 of the types stage also where
+// the name is written in the body of a function: the annotation of a `let`, a struct literal and a pattern (the head of a
+// path of the literal and of the pattern is the type), and a type argument of a call. The type is read as a wrong type, so the
+// wrong value that is bound to it (`let o: mono.Out = 0`) has no E0401, and the places that use the name are not checked
+// again. `In` that is not there is the same (the names stage). The units of the names stage are checked before the types
+// stage, so a unit that has a name error of the names stage (E0308, a name that is no type) and an absent `Out` has the error of the names
+// stage only (§18.1: "名前の誤りがある単位では型検査をしない"). One error per unit (§18.1).
+
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+pub flow mono(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow pair(a: F32 at sample, b: F32 at sample) -> Pair at sample {
+  Pair { l: a, r: b }
+}
+
+fn helper() -> U32 {
+  1
+}
+
+fn id[T](x: T) -> T {
+  x
+}
+
+pub fn an_annotation() -> U32 {
+  let o: mono.Out = 0   //~ E0302
+  0
+}
+
+pub fn an_annotation_in_an_option() -> U32 {
+  let o: Option[mono.Out] = None   //~ E0302
+  0
+}
+
+pub fn an_annotation_of_the_in() -> U32 {
+  let i: mono.In = 0   //~ E0302
+  0
+}
+
+pub fn a_literal(a: Span[F32]) -> U32 {
+  take_any(mono.Out { v: a })   //~ E0302
+}
+
+pub fn a_literal_of_the_in(a: Span[F32]) -> U32 {
+  take_any(mono.In { x: a })   //~ E0302
+}
+
+pub fn a_pattern(p: U32) -> U32 {
+  match p {
+    mono.Out { v: v } => 1,   //~ E0302
+  }
+}
+
+pub fn a_pattern_of_the_in(p: U32) -> U32 {
+  match p {
+    mono.In { x: x } => 1,   //~ E0302
+  }
+}
+
+pub fn a_type_argument(x: U32) -> U32 {
+  id::[mono.Out](x)   //~ E0302
+}
+
+pub fn the_names_stage_first(o: mono.Out, h: helper) -> U32 {   //~ E0308
+  0
+}
+
+pub fn the_names_stage_first_in_the_body() -> U32 {
+  let h: helper = 0   //~ E0308
+  let o: mono.Out = 0
+  0
+}
+
+fn take_any(x: U32) -> U32 {
+  x
+}
+
+// ---------------------------------------------------------------- the name at the place of a value
+
+// §11.6: "生成されていない型の名前（`Params` など）と、値の位置の生成されていない関数の名前は E0302". The `Out` that is not there is
+// a type name that is not generated, so at the place of a value (alone, an argument, a callee, a pattern) it is E0302 as the `Params` that is not
+// there, not the E0308 of a type name at the place of a value (S-1087: of the types stage).
+
+pub fn the_absent_out_as_a_value() -> U32 {
+  let a = mono.Out   //~ E0302
+  0
+}
+
+pub fn the_absent_out_as_an_argument() -> U32 {
+  take_any(mono.Out)   //~ E0302
+}
+
+pub fn the_absent_out_called() -> U32 {
+  let a = mono.Out(1)   //~ E0302
+  0
+}
+
+pub fn the_absent_params_as_a_value() -> U32 {
+  let a = mono.Params   //~ E0302
+  0
+}
+
+pub fn the_absent_out_as_a_pattern(a: U32) -> U32 {
+  match a {
+    mono.Out => 0,   //~ E0302
+    _ => 1,
+  }
+}
+
+pub fn the_absent_out_as_a_pattern_with_fields(a: U32) -> U32 {
+  match a {
+    mono.Out(z) => 0,   //~ E0302
+    _ => 1,
+  }
+}
+
+pub fn the_absent_params_as_a_pattern(a: U32) -> U32 {
+  match a {
+    mono.Params => 0,   //~ E0302
+    _ => 1,
+  }
+}
+
+pub fn the_out_that_is_there_as_a_value() -> U32 {
+  let a = pair.Out   //~ E0308
+  0
+}
+
+// ---------------------------------------------------------------- the contrast: the items that are there
+
+pub fn the_field_that_is_there(o: pair.Out) -> U32 {
+  o.l.len()
+}

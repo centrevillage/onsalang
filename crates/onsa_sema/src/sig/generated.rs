@@ -3,6 +3,16 @@
 
 use super::*;
 
+/// Why the type of a `sample` input or output does not cross the boundary
+/// (§11.6): its E0810.
+enum Unfit {
+    /// A nested array, or a type of none of the forms.
+    Form,
+    /// No channel (S-1110, S-407): a struct with no field (`None`), or an
+    /// array of length 0, with the name of its field in the struct.
+    NoChannel(Option<(Option<String>, TyId)>),
+}
+
 /// An item a flow generates (§11.6).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Generated {
@@ -19,7 +29,9 @@ const GENERATED: &[(&str, Generated)] = &[
     ("State", Generated::Type(FlowTy::State)),
     ("Config", Generated::Type(FlowTy::Config)),
     ("Params", Generated::Type(FlowTy::Params)),
+    ("In", Generated::Type(FlowTy::In)),
     ("Out", Generated::Type(FlowTy::Out)),
+    ("Rendered", Generated::Type(FlowTy::Rendered)),
     ("SIZE", Generated::Size),
     ("BULK_SIZE", Generated::BulkSize),
     ("init", Generated::Fn(FlowFn::Init)),
@@ -43,7 +55,7 @@ impl FlowTy {
         match self {
             FlowTy::Config => Some("cfg"),
             FlowTy::Params => Some("params"),
-            FlowTy::State | FlowTy::Out => None,
+            FlowTy::State | FlowTy::In | FlowTy::Out | FlowTy::Rendered => None,
         }
     }
 }
@@ -60,17 +72,23 @@ impl<'p> Sema<'p> {
     /// find them (§11.6, §15.1, R-50): of their kinds, with no types until
     /// [`Sema::lower_generated`] fills them. Of a flow whose heading was cut, they
     /// are cut too (their uses are errors, R-71). `Config` and `Params` are
-    /// of a flow with an input of their rate alone (§11.6, S-112, R-264), by
-    /// the clocks of `rates` (of the inputs, `None` of a clock not read); of a
-    /// clock not read or a cut heading, both, as what the flow has is not
-    /// known (§18.1). Whether it has `process_inplace` its types decide
-    /// ([`Sema::trim_members`]).
+    /// of a flow with an input of their rate alone (§11.6, S-112, R-264), and
+    /// `In` of one with two `sample` inputs or more (S-30), by the clocks of
+    /// `rates` (of the inputs, `None` of a clock not read); of a clock not
+    /// read or a cut heading, all, as what the flow has is not known (§18.1,
+    /// R-471). Whether it has `Out` and `process_inplace` its types decide
+    /// (S-1087: [`Sema::fill_by_output`], [`Sema::trim_members`]).
     pub(crate) fn generated_defs(&mut self, flow: DefId, rates: &[Option<Rate>]) {
         let d = self.a.def(flow);
         let (module, vis, span, name_span) = (d.module, d.vis, d.span, d.name_span);
         let (u32, unit) = (self.a.types.int(IntKind::U32), self.a.types.unit());
         let known = !self.a.heading_failed(flow) && rates.iter().all(Option::is_some);
-        let has = |t: FlowTy| !known || t.input_rate().is_none_or(|r| rates.contains(&Some(r)));
+        let sig = rates.iter().filter(|&&r| r == Some(Rate::Sig)).count();
+        let has = |t: FlowTy| match t {
+            _ if !known => true,
+            FlowTy::In => sig >= 2,
+            _ => t.input_rate().is_none_or(|r| rates.contains(&Some(r))),
+        };
         let mut members = Vec::new();
         for &(name, g) in GENERATED {
             let kind = match g {
@@ -112,14 +130,27 @@ impl<'p> Sema<'p> {
     }
 
     /// Whether the items `flow` generates by the types of its signature are
-    /// not known: an input or the output has the error type in it (a type not
-    /// found, a clock not read, a cut heading; also as an element, a field or
-    /// a type argument), and a `use` of one is failed with no diagnostic
-    /// (§18.1, R-50).
-    pub(crate) fn members_unknown(&self, flow: DefId) -> bool {
-        let Some(f) = self.a.def(flow).as_flow() else { return false };
+    /// not known (§18.1, R-50, S-1087): the output, and when `inputs` an
+    /// input too (`process_inplace`; `Out` is of the output alone), has the
+    /// error type in it (a type not found, a clock not read, a cut heading;
+    /// also as an element, a field or a type argument), or is a `sample`
+    /// type that does not cross the boundary (its E0810). Such an item is
+    /// kept, as of a cut heading: its uses get no diagnostic.
+    fn members_unknown(&self, flow: DefId, inputs: bool) -> bool {
+        let f = self.flow_def(flow);
+        let ins = f.inputs.iter().filter(|_| inputs).map(|i| (i.ty, i.rate == Rate::Sig));
         let mut seen = HashSet::default();
-        std::iter::once(f.out).chain(f.inputs.iter().map(|i| i.ty)).any(|t| self.has_error(t, &mut seen))
+        std::iter::once((f.out, true))
+            .chain(ins)
+            .any(|(t, sig)| self.has_error(t, &mut seen) || sig && self.boundary_outputs(t).is_err())
+    }
+
+    /// The item `g` of `flow`, not known ([`Self::members_unknown`]): its
+    /// uses get no diagnostic, as of a cut heading.
+    fn unknown_member(&mut self, flow: DefId, g: Generated) {
+        if let Some(d) = self.generated(flow, g) {
+            self.a.failed.insert(d, onsa_syntax::ast::Failed::Heading);
+        }
     }
 
     /// Whether `ty` has the error type in it; of a struct, in its fields
@@ -168,39 +199,51 @@ impl<'p> Sema<'p> {
             );
             return;
         }
-        if boundary && self.boundary_outputs(ty).is_none() {
-            self.report(
-                id,
-                Diagnostic::new(
-                    Stage::Flow, Code::E0810,
-                    span,
-                    "`sample` inputs and outputs are scalars, `[scalar; N]`, or structs of those; nested arrays cannot cross the boundary (§11.6)",
-                ),
-            );
+        if !boundary {
+            return;
         }
+        let shown = |t: TyId| self.a.display_type(t);
+        let msg = match self.boundary_outputs(ty) {
+            Ok(_) => return,
+            Err(Unfit::Form) => "`sample` inputs and outputs are scalars, `[scalar; N]`, or structs of those; nested arrays cannot cross the boundary (§11.6)".to_string(),
+            Err(Unfit::NoChannel(None)) => format!("a `sample` input or output needs at least one channel; the struct `{}` has no field (§11.6)", shown(ty)),
+            Err(Unfit::NoChannel(Some((f, t)))) => {
+                let of = f.map_or_else(|| format!("`{}`", shown(t)), |f| format!("the field `{f}`, `{}`,", shown(t)));
+                format!("a `sample` input or output needs at least one channel; {of} is an array of length 0 (§11.6)")
+            }
+        };
+        self.report(id, Diagnostic::new(Stage::Flow, Code::E0810, span, msg));
     }
 
     /// The `process` outputs for an output value type (§11.6): `(name, elem, array len)`.
-    /// An element of the error type may be a scalar (§18.1, R-271).
-    fn boundary_outputs(&self, ty: TyId) -> Option<Vec<(String, TyId, Option<Len>)>> {
+    /// An element of the error type may be a scalar (§18.1, R-271); the error type, none.
+    fn boundary_outputs(&self, ty: TyId) -> Result<Vec<(String, TyId, Option<Len>)>, Unfit> {
         let is_scalar =
             |t: TyId| matches!(self.a.types.get(t), Ty::Int(_) | Ty::Float(_) | Ty::Bool | Ty::Char | Ty::Error);
-        let one = |name: &str, t: TyId| -> Option<(String, TyId, Option<Len>)> {
+        let one = |field: Option<&str>, t: TyId| -> Result<(String, TyId, Option<Len>), Unfit> {
+            let name = field.unwrap_or("out").to_string();
             match self.a.types.get(t) {
-                Ty::Array(e, len) if is_scalar(*e) => Some((name.to_string(), *e, Some(*len))),
-                _ if is_scalar(t) => Some((name.to_string(), t, None)),
-                _ => None,
+                // S-1110, S-407: N is 1 at least.
+                Ty::Array(e, Len::Const(0)) if is_scalar(*e) => {
+                    Err(Unfit::NoChannel(Some((field.map(str::to_string), t))))
+                }
+                Ty::Array(e, len) if is_scalar(*e) => Ok((name, *e, Some(*len))),
+                _ if is_scalar(t) => Ok((name, t, None)),
+                _ => Err(Unfit::Form),
             }
         };
         match self.a.types.get(ty) {
             Ty::Named(d, args) if args.is_empty() => match &self.a.defs[d.0 as usize].kind {
-                DefKind::Struct(StructDef { fields: Fields::Named(fs), .. }) => {
-                    fs.iter().map(|f| one(&f.name, f.ty)).collect()
+                DefKind::Struct(StructDef { fields: Fields::Named(fs), .. }) if fs.is_empty() => {
+                    Err(Unfit::NoChannel(None))
                 }
-                _ => None,
+                DefKind::Struct(StructDef { fields: Fields::Named(fs), .. }) => {
+                    fs.iter().map(|f| one(Some(&f.name), f.ty)).collect()
+                }
+                _ => Err(Unfit::Form),
             },
-            Ty::Error => Some(Vec::new()),
-            _ => one("out", ty).map(|o| vec![o]),
+            Ty::Error => Ok(Vec::new()),
+            _ => one(None, ty).map(|o| vec![o]),
         }
     }
 
@@ -415,8 +458,37 @@ impl<'p> Sema<'p> {
         Some(self.a.types.intern(Ty::Named(d, Vec::new())))
     }
 
+    /// The type of the channels of `elem` (§11.6): `b[elem]`, or `[b[elem]; N]`
+    /// of an array of length `N` (`b` is `Span` of `In`, `Out` and the
+    /// parameters, `Buf` of `Rendered`).
+    fn channels(&mut self, b: BuiltinTy, (elem, len): (TyId, Option<Len>)) -> TyId {
+        let one = self.a.types.builtin(b, vec![elem]);
+        match len {
+            Some(l) => self.a.types.intern(Ty::Array(one, l)),
+            None => one,
+        }
+    }
+
+    /// The fields of `channels` (name, element, length) as channels of `b`
+    /// ([`Self::channels`]).
+    fn channel_fields(&mut self, flow: DefId, b: BuiltinTy, channels: &[(String, TyId, Option<Len>)]) -> Vec<FieldDef> {
+        let typed: Vec<(&String, TyId)> = channels.iter().map(|(n, e, l)| (n, self.channels(b, (*e, *l)))).collect();
+        typed.into_iter().map(|(n, t)| self.generated_field(flow, n, t)).collect()
+    }
+
+    /// The `sample` inputs of `flow`: name, element and length of an array.
+    fn sig_inputs(&self, flow: DefId) -> Vec<(String, TyId, Option<Len>)> {
+        let inputs = self.flow_def(flow).inputs.iter().filter(|i| i.rate == Rate::Sig);
+        inputs
+            .map(|i| match self.a.types.get(i.ty) {
+                Ty::Array(e, l) => (i.name.clone(), *e, Some(*l)),
+                _ => (i.name.clone(), i.ty, None),
+            })
+            .collect()
+    }
+
     /// The items the inputs of `flow` give (§11.6): `State`, `Config`,
-    /// `Params`, `SIZE` and `BULK_SIZE`, the kinds of the defs
+    /// `Params`, `In`, `SIZE` and `BULK_SIZE`, the kinds of the defs
     /// [`Sema::generated_defs`] made.
     fn fill_by_inputs(&mut self, flow: DefId) {
         let inputs = self.flow_def(flow).inputs.clone();
@@ -430,6 +502,10 @@ impl<'p> Sema<'p> {
                 self.fill_struct(flow, t, fs);
             }
         }
+        if self.generated(flow, Generated::Type(FlowTy::In)).is_some() {
+            let fs = self.channel_fields(flow, BuiltinTy::Span, &self.sig_inputs(flow));
+            self.fill_struct(flow, FlowTy::In, fs);
+        }
         let u32 = self.a.types.int(IntKind::U32);
         let size = ConstDef { ty: u32, value: None, int_value: None, param: None };
         for g in [Generated::Size, Generated::BulkSize] {
@@ -437,33 +513,34 @@ impl<'p> Sema<'p> {
         }
     }
 
-    /// The items the output of `flow` gives (§11.6): `Out` and the functions,
-    /// whose `cfg` and `params` are of a flow with `Config` and `Params`
-    /// alone (S-112). Whether `process_inplace` is generated (its inputs and
-    /// outputs pair up).
+    /// The items the output of `flow` gives (§11.6): `Out`, `Rendered` and
+    /// the functions, whose `cfg` and `params` are of a flow with `Config`
+    /// and `Params` alone (S-112). `Out` is of an output that is a struct
+    /// (S-1087); of an output not known, it and `Rendered` are not known.
+    /// Whether `process_inplace` is generated (its inputs and outputs pair up).
     fn fill_by_output(&mut self, flow: DefId) -> bool {
-        let (inputs, out) = (self.flow_def(flow).inputs.clone(), self.flow_def(flow).out);
+        let out = self.flow_def(flow).out;
         let name_span = self.a.def(flow).name_span;
+        // The E0810 of an output that does not cross is of `check_generated`.
         let outputs = self.boundary_outputs(out).unwrap_or_default();
-        let out_fields = outputs
-            .iter()
-            .map(|(n, e, len)| {
-                let buf = self.a.types.builtin(BuiltinTy::Buf, vec![*e]);
-                let t = match len {
-                    Some(l) => self.a.types.intern(Ty::Array(buf, *l)),
-                    None => buf,
-                };
-                self.generated_field(flow, n, t)
-            })
-            .collect();
-        self.fill_struct(flow, FlowTy::Out, out_fields);
+        let views = self.channel_fields(flow, BuiltinTy::Span, &outputs);
+        self.fill_struct(flow, FlowTy::Out, views);
+        let bufs = self.channel_fields(flow, BuiltinTy::Buf, &outputs);
+        self.fill_struct(flow, FlowTy::Rendered, bufs);
+        if self.members_unknown(flow, false) {
+            self.unknown_member(flow, Generated::Type(FlowTy::Out));
+            self.unknown_member(flow, Generated::Type(FlowTy::Rendered));
+        } else if !matches!(self.a.types.get(out), Ty::Named(..)) {
+            self.absent_member(flow, Generated::Type(FlowTy::Out));
+        }
 
         let u32 = self.a.types.int(IntKind::U32);
         let f32 = self.a.types.float(FloatKind::F32);
         let unit = self.a.types.unit();
-        let (state_ty, out_ty) = match (self.generated_ty(flow, FlowTy::State), self.generated_ty(flow, FlowTy::Out)) {
-            (Some(s), Some(o)) => (s, o),
-            _ => onsa_diag::internal::bug(Some(name_span), "a flow with no `State` or `Out`"),
+        let generated = (self.generated_ty(flow, FlowTy::State), self.generated_ty(flow, FlowTy::Rendered));
+        let (state_ty, rendered_ty) = match generated {
+            (Some(s), Some(r)) => (s, r),
+            _ => onsa_diag::internal::bug(Some(name_span), "a flow with no `State` or `Rendered`"),
         };
         let sp = |_s: &mut Self, name: &str, mode: Mode, ty: TyId| ParamSig {
             name: name.to_string(),
@@ -476,71 +553,67 @@ impl<'p> Sema<'p> {
             named.map(|(ty, name)| sp(self, name, Mode::Borrow, ty))
         };
         let (cfg, params) = (by_input(FlowTy::Config), by_input(FlowTy::Params));
-        let span_of = |s: &mut Self, elem: TyId, len: Option<Len>| -> TyId {
-            let span = s.a.types.builtin(BuiltinTy::Span, vec![elem]);
-            match len {
-                Some(l) => s.a.types.intern(Ty::Array(span, l)),
-                None => span,
-            }
-        };
-
         // Sig inputs become `name: Span[T]` (or `[Span[T]; N]` for planar channels, §5.3).
-        let sig_inputs: Vec<(String, TyId, Option<Len>)> = inputs
-            .iter()
-            .filter(|i| i.rate == Rate::Sig)
-            .map(|i| match self.a.types.get(i.ty).clone() {
-                Ty::Array(e, l) => (i.name.clone(), e, Some(l)),
-                _ => (i.name.clone(), i.ty, None),
-            })
-            .collect();
+        let sig_inputs = self.sig_inputs(flow);
+        let views = |s: &mut Self, chans: &[(String, TyId, Option<Len>)], mode: Mode| -> Vec<ParamSig> {
+            chans
+                .iter()
+                .map(|(n, e, l)| (n, s.channels(BuiltinTy::Span, (*e, *l))))
+                .collect::<Vec<_>>()
+                .into_iter()
+                .map(|(n, t)| sp(s, n, mode, t))
+                .collect()
+        };
 
         let ps = cfg.iter().cloned().chain([sp(self, "sample_rate", Mode::Borrow, f32)]).collect();
         self.fill_fn(flow, ps, state_ty, false, false, FlowFn::Init);
         let ps = vec![sp(self, "s", Mode::Inout, state_ty)];
         self.fill_fn(flow, ps, unit, true, false, FlowFn::Reset);
-        let mut ps: Vec<ParamSig> = [sp(self, "s", Mode::Inout, state_ty)].into_iter().chain(params.clone()).collect();
-        for (n, e, l) in &sig_inputs {
-            let t = span_of(self, *e, *l);
-            ps.push(sp(self, n, Mode::Borrow, t));
-        }
-        for (n, e, l) in &outputs {
-            let t = span_of(self, *e, *l);
-            ps.push(sp(self, n, Mode::Inout, t));
-        }
+        let head: Vec<ParamSig> = [sp(self, "s", Mode::Inout, state_ty)].into_iter().chain(params.clone()).collect();
+        let ps = [head.clone(), views(self, &sig_inputs, Mode::Borrow), views(self, &outputs, Mode::Inout)].concat();
         self.fill_fn(flow, ps, unit, true, false, FlowFn::Process);
         // `process_inplace` only when inputs and outputs pair up by type (§11.6).
         let pairs = sig_inputs.len() == outputs.len()
             && !outputs.is_empty()
             && sig_inputs.iter().zip(&outputs).all(|(i, o)| i.1 == o.1 && i.2 == o.2);
         if pairs {
-            let mut ps: Vec<ParamSig> =
-                [sp(self, "s", Mode::Inout, state_ty)].into_iter().chain(params.clone()).collect();
-            for (n, e, l) in &outputs {
-                let t = span_of(self, *e, *l);
-                ps.push(sp(self, n, Mode::Inout, t));
-            }
+            let ps = [head, views(self, &outputs, Mode::Inout)].concat();
             self.fill_fn(flow, ps, unit, true, false, FlowFn::ProcessInplace);
         }
         let mut ps: Vec<ParamSig> = cfg.into_iter().chain(params).collect();
-        for (n, e, l) in &sig_inputs {
-            let t = span_of(self, *e, *l);
-            ps.push(sp(self, n, Mode::Borrow, t));
-        }
+        ps.extend(views(self, &sig_inputs, Mode::Borrow));
         if sig_inputs.is_empty() {
             ps.push(sp(self, "frames", Mode::Borrow, u32));
         }
         ps.push(sp(self, "sample_rate", Mode::Borrow, f32));
-        self.fill_fn(flow, ps, out_ty, false, true, FlowFn::Render);
+        self.fill_fn(flow, ps, rendered_ty, false, true, FlowFn::Render);
         pairs
     }
 
     /// The members of `flow`: the items its types give. `process_inplace`,
     /// when its inputs and outputs do not pair up, is not in its namespace,
-    /// and a `use` of it fails ([`Sema::fail_ungenerated`]).
+    /// and a `use` of it fails ([`Sema::fail_ungenerated`]); when that is not
+    /// known, it is kept ([`Self::members_unknown`]).
     fn trim_members(&mut self, flow: DefId, pairs: bool) {
-        let inplace = self.generated(flow, Generated::Fn(FlowFn::ProcessInplace));
+        let inplace = Generated::Fn(FlowFn::ProcessInplace);
+        if self.members_unknown(flow, true) {
+            return self.unknown_member(flow, inplace);
+        }
+        let inplace = self.generated(flow, inplace);
         if let (false, DefKind::Flow(fd)) = (pairs, &mut self.a.defs[flow.0 as usize].kind) {
             fd.members.retain(|&(_, d)| Some(d) != inplace);
+        }
+    }
+
+    /// The item `g` of `flow`, which its types decide it has not (`Out`,
+    /// S-1087): out of its namespace, and kept apart so that its name still
+    /// finds it in the types stage, which reports it
+    /// ([`crate::Analysis::not_generated`]).
+    fn absent_member(&mut self, flow: DefId, g: Generated) {
+        let d = self.generated(flow, g);
+        if let DefKind::Flow(fd) = &mut self.a.defs[flow.0 as usize].kind {
+            let (absent, kept) = fd.members.drain(..).partition(|&(_, m)| Some(m) == d);
+            (fd.absent, fd.members) = (absent, kept);
         }
     }
 

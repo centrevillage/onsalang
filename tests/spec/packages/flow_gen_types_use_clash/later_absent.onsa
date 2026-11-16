@@ -1,0 +1,4 @@
+// S-1087: the struct `Out` of another module first, then the `use` of the `Out` of the flow that does not have it. The E0304 is on the later `use`;
+// that `use` has an error of the names stage, so the types stage does not report it again as E0302.
+use dsp.other.Out
+use dsp.synth.mono.Out                            //~ E0304

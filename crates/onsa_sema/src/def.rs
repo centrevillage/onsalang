@@ -256,7 +256,9 @@ pub enum FlowTy {
     State,
     Config,
     Params,
+    In,
     Out,
+    Rendered,
 }
 
 impl FlowTy {
@@ -265,7 +267,7 @@ impl FlowTy {
         match self {
             FlowTy::Config => Some(Rate::Init),
             FlowTy::Params => Some(Rate::Ctl),
-            FlowTy::State | FlowTy::Out => None,
+            FlowTy::State | FlowTy::In | FlowTy::Out | FlowTy::Rendered => None,
         }
     }
 }
@@ -368,6 +370,11 @@ pub struct FlowDef {
     pub body: ExprId,
     /// Generated namespace items (§11.6): `State`, `Config`, ..., `process`, ...
     pub members: Vec<(String, DefId)>,
+    /// The items of the list its types decide it has not (`Out` of an output
+    /// that is no struct, S-1087): not in its namespace, but a path in a body
+    /// finds them, so that the types stage reports them
+    /// ([`crate::Analysis::not_generated`]).
+    pub absent: Vec<(String, DefId)>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

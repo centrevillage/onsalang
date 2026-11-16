@@ -1,0 +1,37 @@
+use dsp.shapes.Q
+
+// A struct with a field that is `priv`, a newtype with its value `priv` (§4.1), and an alias of the first.
+pub struct P {
+  x: F32,
+  priv tag: F32,
+}
+
+pub struct Hz {
+  priv value: F32,
+}
+
+pub type Tagged = P
+
+// The output of a `pub flow` is a struct with a `priv` field: the flow is no error (S-667), and the fields of `Out` and `Rendered` are the fields of the
+// struct, seen as far as the flow is seen, whatever the `priv` of the field of the struct.
+pub flow g(a: F32 at sample) -> P at sample {
+  P { x: a, tag: a * 2.0 }
+}
+
+pub flow hz(a: F32 at sample) -> Hz at sample {
+  Hz { value: a }
+}
+
+pub flow tagged(a: F32 at sample) -> Tagged at sample {
+  P { x: a, tag: a }
+}
+
+// The struct is of another module (`Q` of `dsp/shapes.onsa`).
+pub flow from_other(a: F32 at sample) -> Q at sample {
+  Q.make(a)
+}
+
+// The module of the struct reads the field of the `Out` of its own flow.
+pub fn tag_of_the_out(o: g.Out) -> U32 {
+  o.tag.len()
+}

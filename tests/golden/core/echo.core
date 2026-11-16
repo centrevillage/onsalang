@@ -1,7 +1,7 @@
 type echo.echo.State = struct { sample_rate: F32, feedback: F32, d: F32, vdelay_0.buf: [F32; 96001], vdelay_0.w: U32, poisoned: Bool, initialized: Bool }
 type echo.echo.Config = struct {}
 type echo.echo.Params = struct { time: F32, feedback: F32 }
-type echo.echo.Out = struct { out: Buf[F32] }
+type echo.echo.Rendered = struct { out: Buf[F32] }
 const echo.MAX_ECHO: U32 = 96000:U32
 const echo.echo.SIZE: U32 = 384024:U32
 const echo.echo.BULK_SIZE: U32 = 0:U32
@@ -65,12 +65,12 @@ rt fn echo.echo.process(inout s: echo.echo.State, params: echo.echo.Params, x@7:
 rt fn echo.echo.process_inplace(inout s: echo.echo.State, params: echo.echo.Params, inout out: Span[F32]) -> () {
   echo.echo.process(inout s, params, out, inout out)
 }
-fn echo.echo.render(cfg: echo.echo.Config, params: echo.echo.Params, x@7: Span[F32], sample_rate: F32) -> echo.echo.Out sret {
+fn echo.echo.render(cfg: echo.echo.Config, params: echo.echo.Params, x@7: Span[F32], sample_rate: F32) -> echo.echo.Rendered sret {
   let s: echo.echo.State = echo.echo.init(cfg, sample_rate)
   let n: U32 = len(x@7)
   let out: Buf[F32] = buf.zeroed(n)
   echo.echo.process(inout s, params, x@7, inout span(out))
-  echo.echo.Out { out: out }
+  echo.echo.Rendered { out: out }
 }
 fn echo.echo.params_default() -> echo.echo.Params sret {
   echo.echo.Params { time: 0.3:F32, feedback: 0.5:F32 }

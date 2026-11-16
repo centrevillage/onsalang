@@ -1,0 +1,88 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§18.1", "§4.4", "§7"]
+// fixes = 0
+
+// R-437, §11.6, §18.1: the diagnostics that name a generated type name it as the types of the other flows are named (`g.Params`,
+// the name of the namespace first, so that the types of two flows are told apart); here the two remaining paths of R-437:
+// the struct literal with a field that the type has not (E0410, "has no field") and the `match` that does not cover (E0501),
+// and the field read that the type has not (E0413) as a control. The text of a diagnostic is not what the marks compare, so the case
+// puts each of the forms on the generated types that the flow has (`Config`, `Params`, `Out`, `In`, `Rendered`), and the text
+// of them is in the test of the CLI. One error per unit (§18.1).
+
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+pub flow g(x: F32 at sample, y: F32 at sample, k: F32 at block, on: Bool at block, hold: Bool at init) -> Pair at sample {
+  Pair { l: if on { x * k } else { if hold { x } else { y } }, r: y }
+}
+
+fn take_out(o: g.Out) -> U32 {
+  0
+}
+
+fn take_in(i: g.In) -> U32 {
+  0
+}
+
+// ---------------------------------------------------------------- E0410: the literal with a field that is not there
+
+pub fn the_config_literal() -> g.Config {
+  g.Config { hold: true, zz: 2.0 }   //~ E0410
+}
+
+pub fn the_params_literal() -> g.Params {
+  g.Params { k: 1.0, on: true, zz: 2.0 }   //~ E0410
+}
+
+pub fn the_out_literal(a: Span[F32]) -> U32 {
+  take_out(g.Out { l: a, r: a, zz: a })   //~ E0410
+}
+
+pub fn the_in_literal(a: Span[F32]) -> U32 {
+  take_in(g.In { x: a, y: a, zz: a })   //~ E0410
+}
+
+pub fn the_rendered_literal(b: Buf[F32]) -> U32 {
+  take_rendered(g.Rendered { l: b, r: b, zz: b })   //~ E0410
+}
+
+fn take_rendered(r: g.Rendered) -> U32 {
+  0
+}
+
+// ---------------------------------------------------------------- E0501: the `match` that does not cover (the field is a `Bool`)
+
+pub fn the_params_match(p: g.Params) -> U32 {
+  match p {   //~ E0501
+    g.Params { k: _, on: true } => 1,
+  }
+}
+
+pub fn the_params_match_of_the_other_arm(p: g.Params) -> U32 {
+  match p {   //~ E0501
+    g.Params { k: _, on: false } => 1,
+  }
+}
+
+pub fn the_config_match(c: g.Config) -> U32 {
+  match c {   //~ E0501
+    g.Config { hold: true } => 1,
+  }
+}
+
+// ---------------------------------------------------------------- E0413: the field that is not there, read (the control)
+
+pub fn the_params_field(p: g.Params) -> F32 {
+  p.zz   //~ E0413
+}
+
+pub fn the_out_field(o: g.Out) -> U32 {
+  o.zz.len()   //~ E0413
+}
+
+pub fn the_rendered_field(r: g.Rendered) -> U32 {
+  r.zz.len()   //~ E0413
+}

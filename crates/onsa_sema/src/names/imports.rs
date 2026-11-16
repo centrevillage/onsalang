@@ -11,7 +11,7 @@ use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 use onsa_syntax::ast::Ident;
 
 use crate::Analysis;
-use crate::def::{DefId, DefKind, ModId};
+use crate::def::{DefKind, ModId};
 use crate::resolve::{Builtin, Dep, DepTarget, Entity, Import, ResolveError, TypeRule, UseBinding};
 
 use super::clash::{Unbindable, unbindable};
@@ -152,35 +152,29 @@ impl<'p> Sema<'p> {
     /// The names the `use` of each module bound to an item a flow generates
     /// by the types of its signature and does not (§11.6, R-50, S-694), once
     /// every signature is lowered and before the bodies: the E0302 of the
-    /// `use`, and the name is failed (§18.1). When an error in the signature
-    /// leaves it unknown, no diagnostic. The names stage resolved the `use`,
-    /// so its E0304 and its dependency (E0310) stand.
+    /// `use`, of the types stage (after an error of the names stage in its
+    /// unit, the E0304 of `{Out, Out}`, it is not the one reported, §18.1),
+    /// and the name is failed. When an error in the signature leaves it
+    /// unknown, it is kept, and no diagnostic. The names stage resolved the
+    /// `use`, so its E0304 and its dependency (E0310) stand.
     pub(crate) fn fail_ungenerated(&mut self) {
         for m in self.a.new_mods() {
-            let mut absent: Vec<(String, Span, DefId)> = (self.a.modules.get(m).uses.iter())
+            let mut absent: Vec<(String, Span, Diagnostic)> = (self.a.modules.get(m).uses.iter())
                 .filter_map(|(name, u)| match *u {
                     UseBinding::Bound { entity: Entity::Member(d), span } => Some((name.clone(), span, d)),
                     _ => None,
                 })
-                .filter_map(|(name, span, d)| self.not_generated(d).map(|flow| (name, span, flow)))
+                .filter_map(|(name, span, d)| {
+                    let shown = self.a.shown_name(d);
+                    Some((name, span, self.a.not_generated_error(d, span)?.with_found(shown)))
+                })
                 .collect();
             absent.sort_by_key(|&(_, span, _)| span.start);
-            for (name, span, flow) in absent {
-                if !self.members_unknown(flow) {
-                    let shown = format!("{}.{name}", self.a.def(flow).name);
-                    self.report_mod(ResolveError::NotFound { name: shown, span }.into_diagnostic());
-                }
+            for (name, span, d) in absent {
+                self.report_mod(d);
                 self.a.modules.get_mut(m).uses.insert(name, UseBinding::Failed { span });
             }
         }
-    }
-
-    /// The flow of `d` when `d` is an item it made but did not generate: not
-    /// in its members once its signature is lowered.
-    fn not_generated(&self, d: DefId) -> Option<DefId> {
-        let flow = self.a.def(d).owner?;
-        let members = &self.a.def(flow).as_flow()?.members;
-        (!members.iter().any(|&(_, x)| x == d)).then_some(flow)
     }
 
     /// `name` of a `use` of `m` that failed (S-462): no binding, and held

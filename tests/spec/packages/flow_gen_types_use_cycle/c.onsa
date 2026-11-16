@@ -1,0 +1,5 @@
+use d.plain.Config                //~ E0302
+
+pub fn helper() -> I32 {
+  1
+}

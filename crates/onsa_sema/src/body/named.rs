@@ -58,6 +58,10 @@ impl<'a> Checker<'a> {
             PathRes::Item { entity, owner } => match self.value_of_entity((entity, owner), e, name, span, expected)? {
                 Some(t) => Ok(t),
                 None => {
+                    // An item its flow does not generate (`Out`) is not found (S-1087).
+                    if let Entity::Member(d) = entity {
+                        self.generated_at(d, span)?;
+                    }
                     let shown = self.src(span);
                     Err(self.err(Code::E0401, span, format!("`{shown}` is not a value")))
                 }
