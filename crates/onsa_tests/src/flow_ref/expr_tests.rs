@@ -349,10 +349,10 @@ flow call(x: F32 at sample) -> F32 at sample { prev~(x) }
 rt fn twice(x: F32) -> F32 { x * 2.0 }
 flow plain(x: F32 at sample) -> F32 at sample { twice(x) }
 ";
-    for name in ["call", "plain"] {
-        let r = flow(src, name, vec![("x", Value::F32(1.0))]);
-        assert!(matches!(r, Err(Stop { fault: Fault::Unavailable(_), .. })), "{name}: {r:?}");
-    }
+    // The call of a flow (an instance, a delay) is W7-18's; the call of a function is U5's (`call_tests.rs`): 1.0 * 2.0.
+    let r = flow(src, "call", vec![("x", Value::F32(1.0))]);
+    assert!(matches!(r, Err(Stop { fault: Fault::Unavailable(_), .. })), "call: {r:?}");
+    assert!(is(&flow(src, "plain", vec![("x", Value::F32(1.0))]), &Value::F32(2.0)));
 }
 
 #[test]

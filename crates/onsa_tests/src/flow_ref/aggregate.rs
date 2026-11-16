@@ -1,5 +1,5 @@
 //! The aggregates of the evaluator (§4.4, §11.2): the literals of tuples, arrays and structs (`[e; N]` and `...`
-//! included), the fields, the elements and the indexes of them, and the construction of a variant (a call). The elements are
+//! included), the fields, the elements and the indexes of them. The elements are
 //! evaluated from the left as written (§3.5), and an index out of the array is a panic at the index expression (§9.2).
 //! Each arm is a function of its own (`#[inline(never)]`) so that the frame of `Frame::form` stays small.
 
@@ -7,7 +7,7 @@ use onsa_diag::Span;
 use onsa_sema::Ty;
 use onsa_sema::def::FieldDef;
 use onsa_sema::ty::Len;
-use onsa_syntax::ast::{Arg, ExprId, ExprKind, Ident};
+use onsa_syntax::ast::{ExprId, ExprKind, Ident};
 
 use super::expr::{Eval, Frame, Stop};
 use super::scalar::{Fault, PanicKind};
@@ -126,20 +126,6 @@ impl Frame<'_> {
                 _ => Err(Stop { fault: Fault::Panic(PanicKind::Bounds), at }),
             },
             _ => Err(Stop { fault: Fault::Internal("an index of what is not an array"), at }),
-        }
-    }
-
-    /// A call: `Some(x)`, `Mode.Gain(g)` build the variant the table names, with its elements from the left. The
-    /// other calls are U5's.
-    #[inline(never)]
-    pub(super) fn call(&mut self, e: ExprId, args: &[Arg], at: Span) -> Eval {
-        let here = |fault| Stop { fault, at };
-        match self.body.target(e).map_err(here)? {
-            onsa_sema::Target::Variant { index, .. } => {
-                let fields = args.iter().map(|a| self.eval(a.expr)).collect::<Result<_, _>>()?;
-                Ok(Value::Enum { tag: *index, fields })
-            }
-            _ => Err(here(Fault::Unavailable("a call"))),
         }
     }
 }

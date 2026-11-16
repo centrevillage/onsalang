@@ -7,7 +7,8 @@
 //! Call it in a thread of a large stack (`onsa_diag::stack::run`), not in a default 2 MiB one. A level of nesting takes
 //! in a debug build (2026-11-16, the least stack that lets an input through): 2.4 KB for a `match` arm, 3.5 KB for
 //! `Some(..)` in a value and in a pattern, 4.0 KB for a struct pattern, 6.1 KB for an array literal and its index, 6.9 KB
-//! for a struct literal and its field, 8.0 KB for a chain of defaults of structs; a body may nest 256 levels (§2.5), so
+//! for a struct literal and its field, 8.0 KB for a chain of defaults of structs, 12.7 KB for a level of calls of
+//! `if n == 0 { 0 } else { 1 + rec(n - 1) }` (the 128 of §12.5 are 1.6 MB); a body may nest 256 levels (§2.5), so
 //! 0.6 to 2 MB. The chain of constants that read constants, with an initializer 256 levels deep each, is more than the
 //! stack of the thread: [`expr::Limits`] keeps 4 MiB of it back, and an `eval` that finds less left stops with
 //! `Unavailable`, whatever the input (a thread that is not one of `onsa_diag::stack` has no such guard).
@@ -19,12 +20,17 @@
 //! - [`expr`]: the expressions: names, literals, operators, `as`, `at`, `if`, blocks and `let`, and the limits.
 //! - [`aggregate`]: the literals of tuples, arrays and structs, the fields, the elements and the indexes, and the
 //!   variants an enum is built with.
+//! - [`call`]: the calls of functions and methods, the ones with a body of expressions only evaluated here, the others
+//!   handed to the [`host`] (§6.1, §11.5), and the limit of 128 nested calls (§12.5).
+//! - [`host`]: the door of the functions the evaluator does not evaluate, and the two hosts it has of its own.
 //! - [`pattern`]: `match` and the `let` that takes a value apart, and the patterns they use (a guard is tried for
 //!   each way a `|` lets a pattern match).
 //! - [`sema_view`]: the tables of the checker the evaluator reads, in one file.
 
 pub mod aggregate;
+pub mod call;
 pub mod expr;
+pub mod host;
 pub mod pattern;
 pub mod scalar;
 pub mod sema_view;
@@ -32,6 +38,8 @@ pub mod value;
 
 #[cfg(test)]
 mod aggregate_tests;
+#[cfg(test)]
+mod call_tests;
 #[cfg(test)]
 mod expr_tests;
 #[cfg(test)]

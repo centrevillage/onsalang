@@ -10,7 +10,7 @@ use super::value::Value;
 
 /// The stack left to the thread now less `margin`: what a test keeps back, so that a few levels of nesting pass and
 /// a few hundred stop.
-fn keep_back(margin: usize) -> Limits {
+pub(super) fn keep_back(margin: usize) -> Limits {
     let left = onsa_diag::stack::remaining().expect("a thread of `onsa_diag::stack`");
     Limits { reserve: left - margin, most: super::expr::LIMITS.most }
 }

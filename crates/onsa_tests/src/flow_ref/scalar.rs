@@ -21,6 +21,10 @@ pub enum PanicKind {
     Shift,
     /// An index out of the array (§9.2).
     Bounds,
+    /// A call nested deeper than the limit of §12.5 (128).
+    Depth,
+    /// `panic(msg)` (§9.2).
+    Explicit,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

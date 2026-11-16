@@ -6,9 +6,9 @@
 //! stopped, or a work has not written it yet) is [`Fault::Unavailable`], never a guess.
 
 use onsa_driver::Analyzed;
-use onsa_sema::def::{FieldDef, Fields, FlowInput, StructDef, VariantDef};
+use onsa_sema::def::{FieldDef, Fields, FlowInput, FnDef, StructDef, VariantDef};
 use onsa_sema::ty::Rate;
-use onsa_sema::{Analysis, BodyInfo, ConstValue, DefId, DefKind, LocalId, LocalKind, Package};
+use onsa_sema::{Analysis, BodyInfo, ConstValue, DefId, DefKind, LocalId, LocalInfo, LocalKind, Package};
 use onsa_sema::{Target, Ty, TyId};
 use onsa_syntax::ast::{Ast, ExprId, PatId};
 
@@ -68,6 +68,14 @@ impl<'a> View<'a> {
         }
     }
 
+    /// The module and the name a module writes for a declaration (`t.wrap01`; `t.P.lp` for `lp` of `impl P`, `t.Q.lp`
+    /// for that of `impl Q`): a name a test's host tells functions apart by. A host that is not a table of names
+    /// (W7-19) asks the `DefId`, which is one for each declaration.
+    pub fn qualified_name(self, def: DefId) -> String {
+        let (a, module) = (self.analysis, &self.analysis.modules.get(self.analysis.def(def).module).path);
+        [module.clone(), a.shown_name(def)].into_iter().filter(|s| !s.is_empty()).collect::<Vec<_>>().join(".")
+    }
+
     /// The fields of a struct in the order of the declaration, with the declared default of each.
     pub fn struct_fields(self, def: DefId) -> Result<&'a [FieldDef], Fault> {
         match &self.analysis.def(def).kind {
@@ -112,10 +120,66 @@ impl<'a> Body<'a> {
     pub fn pat_const(&self, p: PatId) -> Result<&'a Target, Fault> {
         need(self.info.pat_consts.get(&p), "a pattern with no constant")
     }
-    /// The local of an input of the flow, by its name.
+    /// What a call names (`f(x)`, `T.f(x)`, `x.m(y)`), with the type arguments of its instance.
+    pub fn callee(&self, call: ExprId) -> Result<Callee<'a>, Fault> {
+        let (def, of, inst, method) = match self.target(call)? {
+            Target::Fn { def, of, inst } => (*def, of, inst, false),
+            Target::Method { def, of, inst } => (*def, of, inst, true),
+            _ => return need(None, "a call that is not of a function"),
+        };
+        // The `def` of a member of the bound of a type parameter is that of a representative type, not the callee.
+        need(of.is_none().then_some(()), "a member of the bound of a type parameter")?;
+        let func = need(self.view.analysis.def(def).as_fn(), "a callee that is not a function")?;
+        let type_args = match inst {
+            Some(i) => &need(self.info.instances.get(i.0 as usize), "an instance not in the table")?.args[..],
+            None => &[],
+        };
+        Ok(Callee { def, func, method, type_args })
+    }
+
+    /// The local each argument of a call of `f` is bound to, in the order of the arguments (the receiver first): the
+    /// locals of the parameters are in the order of the heading, each within the span of its parameter of the signature,
+    /// and a `_` has none.
+    pub fn params(&self, f: &FnDef) -> Result<Vec<Option<LocalId>>, Fault> {
+        let params = self.info.locals.iter().enumerate();
+        let mut locals =
+            params.filter(|(_, l)| matches!(l.kind, LocalKind::Param(_) | LocalKind::SelfParam(_))).peekable();
+        let mut out = Vec::new();
+        if f.self_mode.is_some() {
+            out.push(Some(LocalId(need(locals.next(), "a method with no `self` local")?.0 as u32)));
+        }
+        for p in &f.params {
+            let within = |l: &LocalInfo| p.span.start <= l.span.start && l.span.end <= p.span.end;
+            out.push(locals.next_if(|(_, l)| within(l)).map(|(at, _)| LocalId(at as u32)));
+        }
+        need(locals.peek().is_none().then_some(out), "a local of a parameter that the signature has not")
+    }
+
+    /// The local of an input of a flow or of a parameter of a function (`self` included), by its name.
     pub fn input(&self, name: &str) -> Option<LocalId> {
-        let at = self.info.locals.iter().position(|l| l.name == name && matches!(l.kind, LocalKind::Param(_)))?;
+        let at = self
+            .info
+            .locals
+            .iter()
+            .position(|l| l.name == name && matches!(l.kind, LocalKind::Param(_) | LocalKind::SelfParam(_)))?;
         Some(LocalId(at as u32))
+    }
+}
+
+/// The function a call names: a method has its receiver for the first argument. Its type arguments are those of the
+/// instance the call made of it (none for a function that is not generic).
+pub struct Callee<'a> {
+    pub def: DefId,
+    pub func: &'a FnDef,
+    pub method: bool,
+    pub type_args: &'a [TyId],
+}
+
+impl Callee<'_> {
+    /// A `target` function is a primitive of the backend: its call is not one of §12.5, and its body (`abs` has one)
+    /// is not run by the evaluator, so the host gives its value.
+    pub fn primitive(&self) -> bool {
+        self.func.target
     }
 }
 

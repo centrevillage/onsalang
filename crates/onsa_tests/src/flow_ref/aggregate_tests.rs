@@ -595,11 +595,13 @@ flow variant(x: F32 at sample) -> F32 at sample {
   match Some(x) { Some(y) => y, None => 0.0 }
 }
 ";
-    for name in ["call", "inside", "plain"] {
+    for name in ["call", "inside"] {
         let r = flow(src, name, vec![("x", f(1.0))]);
         assert!(matches!(r, Err(Stop { fault: Fault::Unavailable(_), .. })), "{name}: {r:?}");
     }
-    // The constructor of a variant is a call to the table, and is not one of the calls of U5.
+    // A call of a function inside a tuple is U5's: (1.0 * 2.0, 1.0).0.
+    assert!(is(&flow(src, "plain", vec![("x", f(1.0))]), &f(2.0)));
+    // The constructor of a variant is a call to the table, and not one of a function.
     assert!(is(&flow(src, "variant", vec![("x", f(1.5))]), &f(1.5)));
 }
 

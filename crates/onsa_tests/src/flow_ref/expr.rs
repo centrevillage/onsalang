@@ -4,8 +4,8 @@
 //! blocks that hold them. The operands are evaluated from the left (§3.5), and a panic is
 //! a [`Stop`] at the span of the expression it comes from. Each value is checked against
 //! the type of the table (the memo's way (1)): a disagreement is an internal error, not a guess.
-//! The aggregates are in [`super::aggregate`], the patterns in [`super::pattern`]. The other forms (calls, the
-//! forms of a flow) are [`Fault::Unavailable`] until the units that have them.
+//! The aggregates are in [`super::aggregate`], the patterns in [`super::pattern`], the calls in [`super::call`]. The
+//! other forms (the forms of a flow) are [`Fault::Unavailable`] until the units that have them.
 
 use std::collections::HashMap;
 
@@ -15,6 +15,7 @@ use onsa_sema::{ConstValue, DefId, LocalId, Target, Ty};
 use onsa_syntax::ast::{BinOp, Block, CallKind, ExprId, ExprKind, Lit, StmtKind, UnOp};
 use onsa_syntax::{FloatWidth, float_value};
 
+use super::host::FnHost;
 use super::scalar::{Bin, Fault, Un, binary, cast, unary};
 use super::sema_view::{Body, View};
 use super::value::{Scalar, Value};
@@ -52,7 +53,36 @@ pub struct Frame<'a> {
     pub body: Body<'a>,
     pub locals: HashMap<LocalId, Value>,
     pub limits: Limits,
+    /// Where the calls the evaluator does not evaluate go; none is [`super::host::NoHost`].
+    pub host: Option<&'a mut dyn FnHost>,
     chain: u32,
+    /// The calls this evaluation is inside of (§12.5): 0 at its entry, and a `const` starts at its own entry.
+    depth: u32,
+}
+
+/// The one list of the forms the evaluator evaluates: `Frame::form` has an arm for each of them, and `call::plain` asks
+/// it of every expression a function evaluates, which has any other go to the host. There is no `_`: a form added to
+/// the syntax is put on one side here. `At` is on the list for a flow; a function body cannot write it (E0821).
+pub(super) fn evaluates(body: &Body, e: ExprId) -> bool {
+    use ExprKind as K;
+    let ast = body.ast;
+    // A name that is a value: a local, a constant or a variant (a function is not, nor a `panic`).
+    let value = || matches!(body.target(e), Ok(Target::Local(_) | Target::Const { .. } | Target::Variant { .. }));
+    match &ast.expr(e).kind {
+        K::Block(b) => b.stmts.iter().all(|s| matches!(ast.stmt(*s).kind, StmtKind::Let { .. })),
+        K::Lit(l) => !matches!(l, Lit::Str(_)),
+        K::Path(_) => value(),
+        K::Field { .. } => !body.names(e) || value(),
+        K::Call { kind: CallKind::Plain, .. } => matches!(
+            body.target(e),
+            Ok(Target::Variant { .. } | Target::Fn { .. } | Target::Method { .. } | Target::Panic)
+        ),
+        K::If { tilde, .. } | K::Match { tilde, .. } => tilde.is_none(),
+        K::Paren(_) | K::At { .. } | K::Binary { .. } | K::Unary { .. } | K::Cast { .. } | K::Index { .. } => true,
+        K::TupleIndex { .. } | K::Struct { .. } | K::Tuple(_) | K::Array(_) | K::Repeat { .. } => true,
+        K::Call { .. } | K::Hole | K::Error | K::Closure { .. } | K::Handle { .. } | K::Unsafe(_) => false,
+        K::Par { .. } | K::Feedback(_) | K::TypeArgs { .. } | K::Try(_) | K::Move(_) | K::Range(_) => false,
+    }
 }
 
 /// `+%` is the evaluator's `WAdd` and so on; `&&` and `||` are not operators of the evaluator.
@@ -86,7 +116,22 @@ fn bin(op: BinOp) -> Result<Bin, Fault> {
 
 impl<'a> Frame<'a> {
     pub fn new(body: Body<'a>) -> Frame<'a> {
-        Frame { body, locals: HashMap::new(), limits: LIMITS, chain: 0 }
+        Frame { body, locals: HashMap::new(), limits: LIMITS, host: None, chain: 0, depth: 0 }
+    }
+
+    /// `expr` of the body of a function called from this frame, with `locals` its parameters: the same limits and
+    /// host (taken for the call and given back), one call deeper.
+    pub(super) fn run_callee(&mut self, body: Body<'a>, locals: HashMap<LocalId, Value>, expr: ExprId) -> Eval {
+        let host = self.host.take();
+        let mut inner = Frame { body, locals, limits: self.limits, host, chain: self.chain, depth: self.depth + 1 };
+        let value = inner.eval(expr);
+        self.host = inner.host.take();
+        value
+    }
+
+    /// The number of calls this evaluation is inside of.
+    pub(super) fn depth(&self) -> u32 {
+        self.depth
     }
 
     /// The value of `e`, which has the type the table gives it. Call it on a large stack (`mod.rs`): it recurses.
@@ -104,9 +149,11 @@ impl<'a> Frame<'a> {
     }
 
     /// The form of `e`: each one with work to do is its own function, so that the frame of a deep recursion is small.
+    /// The forms with an arm are the ones [`evaluates`] lists, and the others are not met here.
     fn form(&mut self, e: ExprId, at: Span) -> Eval {
         let here = |fault| Stop { fault, at };
         Ok(match &self.body.ast.expr(e).kind {
+            _ if !evaluates(&self.body, e) => return Err(here(Fault::Unavailable("a form of a later unit"))),
             ExprKind::Paren(x) | ExprKind::At { expr: x, .. } => return self.eval(*x),
             ExprKind::Lit(l) => self.literal(e, l, false).map_err(here)?,
             ExprKind::Path(_) => return self.name(e, at),
@@ -117,7 +164,7 @@ impl<'a> Frame<'a> {
             | ExprKind::Array(_)
             | ExprKind::Repeat { .. }
             | ExprKind::Struct { .. } => return self.aggregate(e, at),
-            ExprKind::Call { args, kind: CallKind::Plain, .. } => return self.call(e, args, at),
+            ExprKind::Call { callee, args, kind: CallKind::Plain } => return self.call(e, *callee, args, at),
             ExprKind::Match { tilde: None, .. } => return self.select(e, at),
             ExprKind::Unary { op: UnOp::Neg, .. } if self.body.ast.negated_literal(e).is_some() => {
                 return self.negated(e, at);
@@ -130,7 +177,7 @@ impl<'a> Frame<'a> {
             ExprKind::Cast { expr: x, .. } => return self.cast(e, *x, at),
             ExprKind::If { cond, then, else_, tilde: None } => return self.branch(*cond, *then, *else_, at),
             ExprKind::Block(b) => return self.block(b, at),
-            _ => return Err(here(Fault::Unavailable("a form of a later unit"))),
+            _ => return Err(here(Fault::Internal("a form of the list with no arm"))),
         })
     }
 
@@ -188,7 +235,7 @@ impl<'a> Frame<'a> {
         let ast = self.body.ast;
         for s in &b.stmts {
             let StmtKind::Let { pat, init, .. } = &ast.stmt(*s).kind else {
-                return Err(here(Fault::Unavailable("a statement")));
+                return Err(here(Fault::Internal("a statement that is not a `let`")));
             };
             let v = self.eval(*init)?;
             self.destructure(*pat, &v, self.body.ty(*init).map_err(here)?)?;
@@ -208,7 +255,6 @@ impl<'a> Frame<'a> {
             }
             (Lit::Bool(b), Ty::Bool) => Value::Bool(*b),
             (Lit::Char(c), Ty::Char) => Value::Char(*c),
-            (Lit::Str(_), _) => return Err(Fault::Unavailable("a string")),
             _ => return Err(Fault::Internal("a literal that is not of the type of the table")),
         })
     }
@@ -220,7 +266,7 @@ impl<'a> Frame<'a> {
             Target::Local(l) => self.locals.get(l).cloned().ok_or(here(Fault::Internal("a local with no value"))),
             Target::Const { def, .. } => self.constant(e, *def, at),
             Target::Variant { index, .. } => Ok(Value::Enum { tag: *index, fields: vec![] }),
-            _ => Err(here(Fault::Unavailable("a name of a later unit"))),
+            _ => Err(here(Fault::Internal("a name that is not a value"))),
         }
     }
 
@@ -244,7 +290,11 @@ impl<'a> Frame<'a> {
             return Err(here(Fault::Unavailable("constants that read constants too deep")));
         }
         let (body, init) = self.body.view.const_init(def).map_err(here)?;
-        Frame { chain: self.chain + 1, limits: self.limits, ..Frame::new(body) }.eval(init)
+        let host = self.host.take();
+        let mut inner = Frame { chain: self.chain + 1, limits: self.limits, host, ..Frame::new(body) };
+        let value = inner.eval(init);
+        self.host = inner.host.take();
+        value
     }
 }
 
