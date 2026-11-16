@@ -394,6 +394,8 @@ codes! {
         "`!` on a method that does not take `inout self`";
     E0715 = 715, Modes, [Modes], Optional, Optional,
         "the place being iterated or matched is modified, or a binding of an arm is consumed in its guard";
+    E0716 = 716, Modes, [Modes], Optional, Optional,
+        "a tail at a borrowed position is a view or a non-Copy place of a binding its arm or block declares";
     E0801 = 801, Flow, [Names], Optional, Optional,
         "name used before its definition in a flow (a later `let` is read as `^name` in the first argument of a delay)";
     E0805 = 805, Flow, [Flow], Optional, Optional,
