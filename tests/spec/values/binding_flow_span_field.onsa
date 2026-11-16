@@ -8,8 +8,8 @@
 // は、`Span` の引数と同じく借用の行で `let`・`for`・`match` の腕に束縛でき、束縛した名前は第二級のまま". The bound
 // name is read, passed on in the default mode and used as a receiver (the uses that stay an E0710 are in
 // negative/binding_flow_span_field.onsa). Every binding is read. No diagnostic is expected anywhere in
-// this file. The binding from an `inout` argument is not here (the work W7-03), nor is the generated
-// type itself as a binding (`let k = o`, R-325, W7-03).
+// this file. The binding from an `inout` argument is an E0710 (S-788, negative/flow_gen_bind_inout_origin.onsa), and the
+// generated type itself as a binding (`let k = o`, S-218 (b), R-325) is in flow/flow_gen_bind_borrowed_whole.onsa.
 
 pub struct Stereo {
   l: F32,

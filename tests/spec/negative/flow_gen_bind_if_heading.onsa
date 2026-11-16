@@ -1,0 +1,95 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§5.4", "§11.6"]
+
+// R-475, S-217, S-218 (b) (§5.4, §11.6): "`inout` の引数からの `Span` ... は束縛できず、束縛の場所に置いた値の位置で E0710". A heading of a
+// `match` or a `for` that picks among the places with an `if` ("`if`・`match`・ブロック式は、発散しない全ての末尾で決め、全ての
+// 末尾が借用の行なら借用、一つでも所有の行なら所有", "`for` と `match` の見出しも同じ規則で決め") is bound by the arm or the loop,
+// so it is an E0710 when a tail is an `inout` argument, as `match xs { s => … }` and `let k = if c { xs } else { ys }`
+// are (negative/binding_span_heading.onsa). The `match` over the `Span`, over the planar argument of `Span`s and over the
+// generated `Out` and its field are here, and the `let` that picks. The same headings over borrowed arguments are
+// legal (flow/flow_gen_bind_borrowed_whole.onsa). The `for` over the numbers of an `inout` `Span` binds no `Span`,
+// so it is legal with an `if` too (the contrast at the end). The error is at the heading. One error per function (P-01).
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}
+
+// ----------------------------------------------------------------------------- the match heading
+
+pub fn match_picks_an_inout_span(inout xs: Span[F32], inout ys: Span[F32], c: Bool) -> U32 {
+  match if c { xs } else { ys } { //~ E0710
+    k => k.len(),
+  }
+}
+
+pub fn match_picks_an_inout_span_and_a_borrowed_one(inout xs: Span[F32], ys: Span[F32], c: Bool) -> U32 {
+  match if c { xs } else { ys } { //~ E0710
+    k => k.len(),
+  }
+}
+
+pub fn match_picks_an_inout_out(inout o: pair.Out, inout p: pair.Out, c: Bool) -> U32 {
+  match if c { o } else { p } { //~ E0710
+    k => k.l.len(),
+  }
+}
+
+pub fn match_picks_the_fields_of_an_inout_out(inout o: pair.Out, inout p: pair.Out, c: Bool) -> U32 {
+  match if c { o.l } else { p.l } { //~ E0710
+    s => s.len(),
+  }
+}
+
+// ------------------------------------------------------------------------------ the for heading
+
+pub fn for_picks_an_inout_planar_argument(inout xs: [Span[F32]; 2], inout ys: [Span[F32]; 2], c: Bool) -> U32 {
+  var n: U32 = 0
+  for ch in if c { xs } else { ys } { //~ E0710
+    n = n + ch.len()
+  }
+  n
+}
+
+pub fn for_picks_an_inout_planar_argument_and_a_borrowed_one(inout xs: [Span[F32]; 2], ys: [Span[F32]; 2], c: Bool) -> U32 {
+  var n: U32 = 0
+  for ch in if c { xs } else { ys } { //~ E0710
+    n = n + ch.len()
+  }
+  n
+}
+
+// ----------------------------------------------------------------------------- the let initializer
+
+pub fn let_picks_an_inout_span(inout xs: Span[F32], inout ys: Span[F32], c: Bool) -> U32 {
+  let k = if c { xs } else { ys } //~ E0710
+  k.len()
+}
+
+pub fn let_picks_an_inout_out(inout o: pair.Out, inout p: pair.Out, c: Bool) -> U32 {
+  let k = if c { o } else { p } //~ E0710
+  k.l.len()
+}
+
+// ------------------------------------------------------------------------------ the contrasts
+
+pub fn for_picks_the_numbers_of_inout_spans(inout xs: Span[F32], inout ys: Span[F32], c: Bool) -> F32 {
+  var total: F32 = 0.0
+  for v in if c { xs } else { ys } {
+    total = total + v
+  }
+  total
+}
+
+pub fn index_instead_of_a_binding(inout xs: Span[F32], inout ys: Span[F32], c: Bool) -> F32 {
+  if c {
+    xs[0]
+  } else {
+    ys[0]
+  }
+}

@@ -1,0 +1,98 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.2", "§5.3", "§5.4", "§11.6", "§15.1"]
+
+// S-218 (b), R-325, S-927 (§4.5, §5.2, §5.3, §5.4, §11.6, §15.1): the errors of the generated types of a flow of another module, the
+// forms of negative/flow_gen_bind_second_class_names.onsa, flow_gen_bind_inout_origin.onsa, flow_gen_bind_escape_forms.onsa and
+// flow_gen_bind_literal_args.onsa with the types of `dsp.synth`: the bound name that is moved on or put in a constructor, the
+// `inout` argument that is bound or whose field is bound, the `?Escape` type argument, the owned row, a write through a
+// borrowed binding and the places of an `inout` literal. The legal forms are in packages/flow_gen_bind_modules. One error
+// per function (P-01).
+use dsp.synth.{pair, twin}
+use dsp.synth.twin.Out
+
+pub fn sink[T](move x: T) uses {Alloc} {}
+
+pub fn e[T: ?Escape](x: T) -> U32 {
+  1
+}
+
+fn put(inout o: Out) {
+  o.l[0] = 1.0
+}
+
+pub fn moved_on(o: Out) {
+  let k = o
+  sink(move k) //~ E0710
+}
+
+pub fn in_moved_on(i: pair.In) {
+  let k = i
+  sink(move k) //~ E0710
+}
+
+pub fn put_in_a_constructor(o: twin.Out) -> U32 {
+  let k = o
+  let s = Some(k) //~ E0710
+  match s {
+    Some(v) => v.l.len(),
+    None => 0,
+  }
+}
+
+pub fn whole_of_an_inout_argument(inout o: Out) -> U32 {
+  let k = o //~ E0710
+  k.l.len()
+}
+
+pub fn field_of_an_inout_argument(inout o: twin.Out) -> U32 {
+  let l = o.l //~ E0710
+  l.len()
+}
+
+pub fn match_over_an_inout_argument(inout o: Out) -> U32 {
+  match o { //~ E0710
+    k => k.l.len(),
+  }
+}
+
+pub fn escape_type_argument(o: Out) -> U32 {
+  e::[twin.Out](o) //~ E0710
+}
+
+pub fn escape_inferred(i: pair.In) -> U32 {
+  e(i) //~ E0710
+}
+
+pub fn literal_in_a_let() -> U32 {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  let k = Out { l: x, r: y } //~ E0710
+  k.l.len()
+}
+
+pub fn write_through_a_binding(o: Out) {
+  let k = o
+  k.l[0] = 1.0 //~ E0701
+}
+
+pub fn the_same_place_twice() {
+  var x: [F32; 2] = [0.0; 2]
+  put(inout Out { l: x, r: x }) //~ E0702
+}
+
+pub fn a_part_and_its_place() {
+  var x: [F32; 2] = [0.0; 2]
+  put(inout twin.Out { l: x, r: x.slice(0, 1) }) //~ E0702
+}
+
+pub fn two_elements_of_one_array() {
+  var m: [[F32; 2]; 2] = [[0.0; 2]; 2]
+  put(inout Out { l: m[0], r: m[1] }) //~ E0702
+}
+
+pub fn a_let_in_an_inout_literal() {
+  let x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  put(inout Out { l: x, r: y }) //~ E0701
+}

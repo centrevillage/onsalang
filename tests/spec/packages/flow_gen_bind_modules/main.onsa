@@ -1,0 +1,63 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.3", "§5.4", "§11.6", "§15.1"]
+
+// S-218 (b), R-325, S-1087 (§5.3, §5.4, §11.6, §15.1): the generated types of a flow of another module are bound like the ones of
+// the module of the flow: the `Out` of `twin` (the name `twin.Out` through the namespace, `Out` taken with `use`) and the `In`
+// of `pair` are bound by a `let` and a `let` with the type of a borrowed argument (the arm of a `match` is in
+// flow/flow_gen_bind_run_match_arms.onsa, as its value does not lower until W8-06), the field of the
+// `Out` is bound, and the `inout` literal writes the places of its fields. The `use` of the type does not change the rules
+// of the binding: the name that `use` takes is the same type. The errors of the same forms are in
+// packages/flow_gen_bind_modules_negative.
+use dsp.synth.{pair, twin}
+use dsp.synth.twin.Out
+
+fn left_of(o: Out) -> F32 {
+  let k = o
+  k.l[0]
+}
+
+fn typed(o: Out) -> F32 {
+  let k: Out = o
+  k.l[1]
+}
+
+fn field_of(o: twin.Out) -> F32 {
+  let l = o.l
+  l[0] + l[1]
+}
+
+fn difference(i: pair.In) -> F32 {
+  let k = i
+  k.a[0] - k.b[0]
+}
+
+fn write_it(inout o: Out) {
+  o.l[0] = 5.0
+  o.r[0] = 6.0
+}
+
+test "a view of the types of a flow of another module is bound by name and by the namespace" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let rd = twin.render(xs, 8.0)
+  assert left_of(Out { l: rd.l.slice(0, 2), r: rd.r.slice(0, 2) }) == 1.0
+  assert typed(Out { l: rd.l.slice(0, 2), r: rd.r.slice(0, 2) }) == 2.0
+  assert field_of(twin.Out { l: rd.l.slice(0, 2), r: rd.r.slice(0, 2) }) == 3.0
+}
+
+test "the In of a flow of another module is bound" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let rd = twin.render(xs, 8.0)
+  assert difference(pair.In { a: rd.r.slice(0, 2), b: rd.l.slice(0, 2) }) == 1.0
+}
+
+test "the inout literal of the types of another module writes the places of its fields" {
+  var x: [F32; 2] = [1.0, 2.0]
+  var y: [F32; 2] = [3.0, 4.0]
+  write_it(inout Out { l: x, r: y })
+  assert x[0] == 5.0
+  assert x[1] == 2.0
+  assert y[0] == 6.0
+  assert y[1] == 4.0
+}

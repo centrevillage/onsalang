@@ -27,9 +27,13 @@ pub(crate) enum Pos {
     /// anonymous function.
     Arg(Mode),
     /// A type of a body (`let`, `var`, `as`): a borrow binding takes a
-    /// `Span` (§5.4); the other second-class places of a body are the check
-    /// of the modes'.
+    /// `Span` and a generated `In` or `Out` (§5.4, S-218); the other
+    /// second-class places of a body are the check of the modes'.
     Bind,
+    /// A type argument of a `?Escape` parameter (§4.5, S-927), and one
+    /// written after a name in a body (`e::[T]`): a `Span` and a planar
+    /// array, no generated type (an array of `Out`s would be one, S-770).
+    Lifted,
     /// A field, a return type (of an anonymous function too), a constant,
     /// the target of an `impl`.
     Other,
@@ -44,9 +48,8 @@ const ROOT: u8 = 0;
 const PLANAR: u8 = 1;
 const INSIDE: u8 = 2;
 
-/// The place of a type argument of a `?Escape` parameter (§4.5, S-927): a
-/// `Span` or a planar array stands there, as at a borrow binding.
-const LIFTED: (Pos, u8) = (Pos::Bind, ROOT);
+/// The place of a type argument of a `?Escape` parameter (§4.5, S-927).
+const LIFTED: (Pos, u8) = (Pos::Lifted, ROOT);
 
 /// The parts of the type `shape` at `at`, each at its place: the element of
 /// an array at the root is planar, the parameters of a function type are
@@ -93,7 +96,7 @@ pub(crate) fn second_class(under: &Bounds, t: TyId) -> bool {
         Ty::Builtin(BuiltinTy::Span, _) => true,
         Ty::Param(i) => under.generics.get(*i as usize).is_some_and(GenericDef::lifts_escape),
         Ty::Named(d, _) => {
-            matches!(&under.a.def(*d).kind, DefKind::Struct(s) if matches!(s.flow_ty, Some(FlowTy::In | FlowTy::Out)))
+            matches!(&under.a.def(*d).kind, DefKind::Struct(s) if s.flow_ty.is_some_and(FlowTy::views))
         }
         _ => false,
     }
@@ -101,17 +104,18 @@ pub(crate) fn second_class(under: &Bounds, t: TyId) -> bool {
 
 /// Whether the second-class `ty` stands in its place `at` (§5.3, §5.4):
 /// an argument not `move` (S-758), the element of a planar one, a borrow
-/// binding of a body. A `?Escape` type parameter stands where a `Span` does
-/// (S-928).
+/// binding of a body (a generated `In` or `Out` too, S-218). A `?Escape`
+/// type parameter stands where a `Span` does (S-928).
 fn fits(a: &Analysis, ty: TyId, at: (Pos, u8)) -> bool {
     let span = matches!(a.types.get(ty), Ty::Builtin(BuiltinTy::Span, _) | Ty::Param(_));
     match at {
         (Pos::Alias, _) => true,
         (Pos::Arg(m), ROOT) => m != Mode::Move,
+        (Pos::Bind, ROOT) => true,
         // S-770: a planar array is of `Span` elements only, as
         // §5.3 lists it (`[voice.Out; 2]` is an E0710).
         (Pos::Arg(m), PLANAR) => m != Mode::Move && span,
-        (Pos::Bind, ROOT | PLANAR) => span,
+        (Pos::Bind, PLANAR) | (Pos::Lifted, ROOT | PLANAR) => span,
         _ => false,
     }
 }
@@ -588,7 +592,9 @@ impl<'p> Sema<'p> {
         }
     }
 
-    /// The E0710 of the second-class `ty` out of its place `at`.
+    /// The E0710 of the second-class `ty` out of its place `at`: a generated
+    /// type at a type argument of a `?Escape` parameter has the rule of the
+    /// one inferred (R-477).
     fn misplaced(&self, cx: &Cx<'p>, ty: TyId, at: (Pos, u8), span: Span) -> Diagnostic {
         let shown = self.shown(cx, ty);
         let moved = matches!(at.0, Pos::Arg(Mode::Move)) && fits(self.a, ty, (Pos::Arg(Mode::Borrow), at.1));
@@ -604,7 +610,9 @@ impl<'p> Sema<'p> {
             );
             Diagnostic::new(Stage::Types, Code::E0710, span, msg)
         };
-        d.with_found(src(cx, span))
+        let rule = crate::requirement::generated_rule(self.a, ty).filter(|_| at.0 == Pos::Lifted);
+        let d = d.with_found(src(cx, span));
+        if let Some(r) = rule { d.with_rule(r) } else { d }
     }
 
     /// The E0416 of the first argument of `shape`, written here, that does

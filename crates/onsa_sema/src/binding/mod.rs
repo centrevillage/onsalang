@@ -87,14 +87,13 @@ impl Head {
 /// The row of a head (§5.4).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum HeadRow {
-    Owned,
+    /// `by`: the tail that is not borrowed, which made it owned (R-476);
+    /// none of a `move`, a unit tail.
+    Owned { by: Option<ExprId> },
     /// `sources`: the places of the value the bindings derive from (S-604:
     /// the invalidation of §7 and E0715 apply to each); a static value adds
     /// none. `no_drop` as of [`Bind::Borrow`].
-    Borrow {
-        sources: Vec<ExprId>,
-        no_drop: bool,
-    },
+    Borrow { sources: Vec<ExprId>, no_drop: bool },
 }
 
 /// What a literal is (§5.4): a static value (S-610), one that needs no drop
@@ -112,7 +111,7 @@ pub enum LitClass {
 pub(crate) fn row(kind: BindingKind, head: Option<&HeadRow>) -> Bind {
     let of_head = match head {
         Some(HeadRow::Borrow { no_drop, .. }) => Bind::Borrow { no_drop: *no_drop },
-        Some(HeadRow::Owned) | None => Bind::Owned,
+        Some(HeadRow::Owned { .. }) | None => Bind::Owned,
     };
     match kind {
         BindingKind::Param(m) | BindingKind::SelfParam(m) | BindingKind::ClosureParam(m) => match m {
@@ -223,7 +222,7 @@ impl<'a> Settle<'a> {
             }
             StmtKind::For { moved, iter, body, .. } => {
                 self.expr(*iter);
-                let row = if moved.is_some() { HeadRow::Owned } else { self.head(*iter, true) };
+                let row = if moved.is_some() { HeadRow::Owned { by: None } } else { self.head(*iter, true) };
                 self.settle(Head::For(s), row);
                 self.expr(*body);
             }
@@ -255,16 +254,16 @@ impl<'a> Settle<'a> {
         for tail in tails {
             match tail {
                 Tail::Exits => {}
-                Tail::Unit(_) => return HeadRow::Owned,
+                Tail::Unit(_) => return HeadRow::Owned { by: None },
                 Tail::Value(v) => {
-                    let Some((place, nd)) = self.borrowed(v, any_place) else { return HeadRow::Owned };
+                    let Some((place, nd)) = self.borrowed(v, any_place) else { return HeadRow::Owned { by: Some(v) } };
                     sources.extend(place);
                     no_drop &= nd;
                     borrows = true;
                 }
             }
         }
-        if borrows { HeadRow::Borrow { sources, no_drop } } else { HeadRow::Owned }
+        if borrows { HeadRow::Borrow { sources, no_drop } } else { HeadRow::Owned { by: None } }
     }
 
     /// Whether a tail `e` (without parentheses) is borrowed (§5.4), with the

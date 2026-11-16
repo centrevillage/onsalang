@@ -28,7 +28,9 @@ use onsa_syntax::ast::{ExprId, ExprKind, Lit};
 use crate::body::{Checker, LocalId, R};
 use crate::def::Bound;
 use crate::infer::{Cause, Walk};
-use crate::requirement::{ArgumentName, Required, Requirement, escape_error, met, unmet_error, unmet_rules};
+use crate::requirement::{
+    ArgumentName, Required, Requirement, escape_error, escape_rule, met, unmet_error, unmet_rules,
+};
 use crate::traits::OpNeed;
 use crate::ty::{FloatKind, IntKind, Ty, TyId};
 
@@ -448,7 +450,7 @@ impl<'a> Checker<'a> {
                 }
                 let (shown, what) = (self.display(r), what.text(|t| self.display(t)));
                 let d = escape_error(item.span, &shown, &what).with_found(self.src(item.span));
-                Look::Fail(self.decided_note(d, item.ty, &shown, false).with_rule(*rule))
+                Look::Fail(self.decided_note(d, item.ty, &shown, false).with_rule(escape_rule(self.a, rule, r)))
             }
             DeferredKind::Require { bound, what } => {
                 if self.infer.has_vars(&self.a.types, r) {

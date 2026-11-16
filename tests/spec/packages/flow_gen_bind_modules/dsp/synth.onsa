@@ -1,0 +1,12 @@
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+pub flow twin(x: F32 at sample) -> Pair at sample {
+  Pair { l: x, r: x * 2.0 }
+}
+
+pub flow pair(a: F32 at sample, b: F32 at sample) -> F32 at sample {
+  a + b
+}

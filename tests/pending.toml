@@ -299,7 +299,7 @@ kind = "test-case"
 target = "tests/spec/flow_semantics/vdelay_varying_d.onsa"
 reasons = ["S-30", "S-102"]
 until = "W7-12"
-note = "sample の入力が 2 つの flow の In 構造体（vd_var.In { x, d }）。生成項目 In の Onsa の側は W7-03（S-30）。今の実装の render は 5 引数の旧い形（E0412）"
+note = "sample の入力が 2 つの flow の In 構造体（vd_var.In { x, d }）を render に渡す形（S-30）。render の引数を In にするのは W7-12 U3。今は個々の入力を取る形で E0412"
 
 [[pending]]
 kind = "test-case"
@@ -334,7 +334,7 @@ kind = "test-case"
 target = "tests/spec/flow_semantics/planar_structs.onsa"
 reasons = ["S-30"]
 until = "W7-12"
-note = "名前付きの入力 In と struct 出力 Out（render の o.l / o.r、process の inout Out）。生成項目の Onsa の側は W7-03（S-30）"
+note = "名前付きの入力 In と struct 出力 Out を render と process の引数に渡す形（S-30）。引数を In・Out にするのは W7-12 U3。今は E0412"
 
 [[pending]]
 kind = "test-case"
@@ -349,13 +349,6 @@ target = "tests/spec/flow_semantics/enum_construct_match.onsa"
 reasons = ["S-102", "R-06"]
 until = "W8-06"
 note = "at の後も、入れ子の列挙子のパターンとガードの値の match が W2-07 の E0200 で止まる（正式な実装は W8-06）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/flow_semantics/in_out_field_receiver.onsa"
-reasons = ["S-102", "S-181", "S-218"]
-until = "W7-12"
-note = "生成型 In・Out の struct リテラルを引数に置く形（pair.In { l: l, r: r }）で、フィールドに配列を渡すと E0401。リテラルのフィールドを引数と同じく Span に渡す型の段と modes と降下が無い（W4-07 U2b の持ち越しの後半、W7-12 U2b）。In・Out は U2a で作った"
 
 [[pending]]
 kind = "test-case"
@@ -1100,7 +1093,7 @@ note = "値の形の `match`（腕が値を返す）は、整数のリテラル�
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/flow/flow_gen_types_literal_args.onsa"
-reasons = ["S-30", "S-218"]
-until = "W7-12"
-note = "生成型 In・Out の struct リテラルを引数に置く形。フィールドを引数と同じく Span に渡す型の段（配列・Buf の E0401）と、フィールドを引数の位置に数える modes（E0710）が無い（W4-07 U2b の持ち越しの後半、W7-12 U2b）。U2a/i で In・Out・Span のフィールドはできた"
+target = "tests/spec/flow/flow_gen_bind_run_match_arms.onsa"
+reasons = ["R-06", "S-218"]
+until = "W8-06"
+note = "借用の生成型 Out・In を match の腕に束縛して読む形（S-218 (b)）。腕に束縛だけを書く値の match も降下で E0200（W8-06）なので、flow_gen_bind_run.onsa と packages/flow_gen_bind_modules から分けた（W7-12 U2b）。束縛の検査は flow_gen_bind_borrowed_whole.onsa が持つ"

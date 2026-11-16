@@ -262,6 +262,12 @@ pub enum FlowTy {
 }
 
 impl FlowTy {
+    /// A generated `In` or `Out`: a struct of views, second-class (§5.3,
+    /// §11.6).
+    pub fn views(self) -> bool {
+        matches!(self, FlowTy::In | FlowTy::Out)
+    }
+
     /// The rate of the inputs whose fields it holds (§11.6).
     pub fn input_rate(self) -> Option<Rate> {
         match self {

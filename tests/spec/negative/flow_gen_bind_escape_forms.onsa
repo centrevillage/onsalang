@@ -1,0 +1,107 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§5.3", "§11.6"]
+
+// S-927, S-218 (b), S-770 (§4.5, §5.3, §11.6): "`?Escape` の型パラメータの型引数には `Span` と平面の配列を書ける（flow の生成型 `In` /
+// `Out`、§11.6 は E0710。`T` が `[T; N]` の要素になると `Out` の配列ができ、§5.3 が `[voice.Out; 2]` を E0710 にするのと食い違うため）"
+// (§4.5). The decision that the generated type is bound like a `Span` (S-218 (b)) does not change this: the type argument
+// `pair.Out` of a type parameter with `?Escape` is an E0710 in the three forms of S-927, the type argument written in a
+// call (`e::[pair.Out](o)`), the one that is inferred (`e(o)`, `each([o], g)`) and the one written in a type (the argument
+// type `Handler[pair.Out]`, the annotation of a `let`), and so is a name bound from the argument (`e(k)`). The bound
+// name and the argument are the same here. The same forms with a `Span` are legal (the contrasts: a `Span` is a legal type
+// argument of `?Escape`, §4.5, and a `T` that is not decided when the array literal is read is an E0710 for `[a, b]`, so the
+// type is written there). One error per function (P-01).
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}
+
+pub struct Handler[T: ?Escape] {
+  f: fn(T) -> F32,
+}
+
+pub fn e[T: ?Escape](x: T) -> U32 {
+  1
+}
+
+pub fn each[T: ?Escape, const N: U32](xs: [T; N], f: fn(T)) {}
+
+fn weigh_out(q: pair.Out) -> F32 {
+  1.0
+}
+
+fn weigh_span(q: Span[F32]) -> F32 {
+  1.0
+}
+
+fn skip_out(q: pair.Out) {}
+
+fn skip_span(q: Span[F32]) {}
+
+// ---------------------------------------------------------------- the three forms of S-927
+
+pub fn type_argument_written(o: pair.Out) -> U32 {
+  e::[pair.Out](o) //~ E0710
+}
+
+pub fn type_argument_inferred(o: pair.Out) -> U32 {
+  e(o) //~ E0710
+}
+
+pub fn input_type_argument_inferred(i: pair.In) -> U32 {
+  e(i) //~ E0710
+}
+
+pub fn bound_name_inferred(o: pair.Out) -> U32 {
+  let k = o
+  e(k) //~ E0710
+}
+
+pub fn type_argument_in_a_signature(h: Handler[pair.Out]) -> U32 { //~ E0710
+  1
+}
+
+pub fn type_argument_in_an_annotation() -> U32 {
+  let h: Handler[pair.Out] = Handler { f: weigh_out } //~ E0710
+  1
+}
+
+// ------------------------------------------------------------- the array of the generated type
+
+pub fn array_with_the_type_written(o: pair.Out) -> U32 {
+  each::[pair.Out, 1]([o], skip_out) //~ E0710
+  1
+}
+
+pub fn array_inferred(o: pair.Out) -> U32 {
+  each([o], skip_out) //~ E0710
+  1
+}
+
+// ------------------------------------------------------------------------------ the contrasts
+
+pub fn span_type_argument_written(xs: Span[F32]) -> U32 {
+  e::[Span[F32]](xs)
+}
+
+pub fn span_type_argument_inferred(xs: Span[F32]) -> U32 {
+  e(xs)
+}
+
+pub fn span_type_argument_in_a_signature(h: Handler[Span[F32]]) -> U32 {
+  1
+}
+
+pub fn span_handler_is_returned() -> Handler[Span[F32]] {
+  Handler { f: weigh_span }
+}
+
+pub fn span_array_with_the_type_written(a: Span[F32], b: Span[F32]) -> U32 {
+  each::[Span[F32], 2]([a, b], skip_span)
+  1
+}

@@ -1,0 +1,133 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§11.6"]
+
+// S-218 (b), R-325 (§5.2, §5.3, §11.6): "引数の位置に struct リテラルを書いて作り、排他性はフィールドの場所ごとに検査する（`inout [a, b]` と
+// 同じ）" (§11.6). The fields of `inout swap.Out { l: x, r: y }` are the places `x` and `y`, so a place that is
+// twice in the literal, a part of a place with the place ("部分ビューも範囲によらず、元の場所…と重なる"), two elements of
+// the same array ("同じ配列の添字どうしは、添字が等しいかを静的に判定しないので、重なるものとして扱う") and a place that the
+// other arguments of the call borrow or pass as `inout` are E0702 (§5.2). The field of an `inout` literal is written
+// by the callee, so it must be a place that can be changed: a `let` and a borrowed argument are E0701 (§5.1), as the
+// elements of `inout [a, b]` are. The literal of the borrowed arguments `swap.In { l: x, r: y }` reads its places, and the
+// reads of one place do not overlap. The legal forms, with the values the call writes, are in
+// flow/flow_gen_bind_run.onsa. One error per function (P-01).
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow swap(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}
+
+pub struct Pack {
+  a: [F32; 2],
+  b: [F32; 2],
+}
+
+fn put(inout o: swap.Out) {
+  o.l[0] = 1.0
+}
+
+fn put_from(i: swap.In, inout o: swap.Out) {
+  o.l[0] = i.l[0]
+}
+
+fn put_two(inout o: swap.Out, inout p: swap.Out) {
+  o.l[0] = p.r[0]
+}
+
+fn put_with(inout o: swap.Out, s: Span[F32]) {
+  o.l[0] = s[0]
+}
+
+fn read_both(i: swap.In, j: swap.In) -> F32 {
+  i.l[0] + j.r[0]
+}
+
+// ---------------------------------------------------------------------- the places of one literal
+
+pub fn the_same_place_twice() {
+  var x: [F32; 2] = [0.0; 2]
+  put(inout swap.Out { l: x, r: x }) //~ E0702
+}
+
+pub fn a_part_and_its_place() {
+  var x: [F32; 2] = [0.0; 2]
+  put(inout swap.Out { l: x, r: x.slice(0, 1) }) //~ E0702
+}
+
+pub fn two_parts_of_one_place() {
+  var x: [F32; 4] = [0.0; 4]
+  put(inout swap.Out { l: x.slice(0, 2), r: x.slice(2, 4) }) //~ E0702
+}
+
+pub fn two_elements_of_one_array() {
+  var m: [[F32; 2]; 2] = [[0.0; 2]; 2]
+  put(inout swap.Out { l: m[0], r: m[1] }) //~ E0702
+}
+
+pub fn the_same_field_of_a_struct() {
+  var p = Pack { a: [0.0; 2], b: [0.0; 2] }
+  put(inout swap.Out { l: p.a, r: p.a }) //~ E0702
+}
+
+// ---------------------------------------------------------------- the places of other arguments
+
+pub fn a_borrowed_literal_reads_the_place() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 2] = [0.0; 2]
+  put_from(swap.In { l: x, r: y }, inout swap.Out { l: z, r: x }) //~ E0702
+}
+
+pub fn two_inout_literals() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 2] = [0.0; 2]
+  put_two(inout swap.Out { l: x, r: y }, inout swap.Out { l: z, r: x }) //~ E0702
+}
+
+pub fn a_borrowed_argument_reads_the_place() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  put_with(inout swap.Out { l: x, r: y }, x) //~ E0702
+}
+
+// --------------------------------------------------------------- a place that cannot be changed
+
+pub fn a_let_in_an_inout_literal() {
+  let x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  put(inout swap.Out { l: x, r: y }) //~ E0701
+}
+
+pub fn a_borrowed_argument_in_an_inout_literal(a: Span[F32], b: Span[F32]) {
+  put(inout swap.Out { l: a, r: b }) //~ E0701
+}
+
+// ------------------------------------------------------------------------------ the contrasts
+
+pub fn reads_of_one_place_do_not_overlap() -> F32 {
+  let x: [F32; 2] = [1.0, 2.0]
+  read_both(swap.In { l: x, r: x }, swap.In { l: x, r: x })
+}
+
+pub fn different_places() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  put(inout swap.Out { l: x, r: y })
+}
+
+pub fn different_fields_of_a_struct() {
+  var p = Pack { a: [0.0; 2], b: [0.0; 2] }
+  put(inout swap.Out { l: p.a, r: p.b })
+}
+
+pub fn the_borrowed_literal_and_the_inout_literal_on_other_places() {
+  let x: [F32; 2] = [1.0, 2.0]
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 2] = [0.0; 2]
+  put_from(swap.In { l: x, r: x }, inout swap.Out { l: y, r: z })
+}

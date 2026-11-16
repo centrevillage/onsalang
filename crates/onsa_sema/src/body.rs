@@ -130,6 +130,10 @@ pub(crate) struct Checker<'a> {
     /// The anonymous function written directly as the argument being checked
     /// (the one whose E0401 has a candidate, §8.1; not one in parentheses).
     pub(crate) arg_closure: Option<ExprId>,
+    /// The argument being checked (without its parentheses) and its mode:
+    /// a literal of a generated `In` or `Out` there passes its fields as
+    /// views by that mode (§11.6).
+    pub(crate) arg_literal: Option<(ExprId, Mode)>,
     /// The expected type of the expression being checked is the type of an
     /// earlier part of a merge that joins function types (§4.7, S-1031):
     /// a function found there is joined, not fit ([`Self::check_expr_as`]).
@@ -230,6 +234,7 @@ fn read_body<'c>(
         waits: Default::default(),
         why: None,
         arg_closure: None,
+        arg_literal: None,
         joining: None,
         written: None,
         flow: None,

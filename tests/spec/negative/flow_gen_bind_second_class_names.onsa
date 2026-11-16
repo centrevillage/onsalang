@@ -1,0 +1,200 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§5.4", "§4.5", "§11.6"]
+
+// S-218 (b), R-325 (§5.3, §5.4, §4.5, §11.6): the bound name of a generated `In` / `Out` "名前は第二級のまま" (the decision), as
+// the bound name of a `Span` is: "束縛した名前も第二級のままで、返す・保存する・捕捉する・`move` の引数へ渡すと E0710"
+// (§5.4), and a borrowed binding is read-only, so a write through it, an `inout` of it and an assignment to the
+// name are E0701 (§5.1, §5.4). The legal bindings are in flow/flow_gen_bind_borrowed_whole.onsa. The error is at the
+// use. The cases of a name that is not bound (`var v = o`, the capture of the argument itself, `id::[pair.Out](o)`) are the
+// same rules with the argument as the origin. A name cannot be returned: the only function that can return one has a
+// generated type in its result type, which is an E0710 of the signature already (negative/modes_flow_spans.onsa), so
+// the body is not a separate item. A constructor, a tuple and an array literal are not argument positions: a value put in
+// one is a second-class value in a literal (§5.4: "第二級の値（§5.3）を要素に持つ形は E0710"). One error per function (P-01).
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}
+
+pub struct Wrap[T] {
+  x: T,
+}
+
+pub fn sink[T](move x: T) uses {Alloc} {}
+
+pub fn id[T](x: T) -> U32 {
+  1
+}
+
+pub fn apply(f: fn(U32) -> U32) -> U32 {
+  f.(1)
+}
+
+pub fn clear(inout o: pair.Out) {
+  o.l.fill!(0.0)
+}
+
+// ----------------------------------------------------------- the name is not moved on or stored
+
+pub fn moved_on(o: pair.Out) {
+  let k = o
+  sink(move k) //~ E0710
+}
+
+pub fn moved_on_in(i: pair.In) {
+  let k = i
+  sink(move k) //~ E0710
+}
+
+pub fn moved_on_from_an_arm(o: pair.Out) {
+  match o {
+    k => sink(move k), //~ E0710
+  }
+}
+
+pub fn put_in_a_tuple(o: pair.Out) -> U32 {
+  let k = o
+  let t = (k, 1) //~ E0710
+  t.1
+}
+
+pub fn put_in_a_constructor(o: pair.Out) -> U32 {
+  let k = o
+  let s = Some(k) //~ E0710
+  match s {
+    Some(v) => v.l.len(),
+    None => 0,
+  }
+}
+
+pub fn put_in_an_array(o: pair.Out) -> U32 {
+  let k = o
+  let a = [k, k] //~ E0710
+  1
+}
+
+pub fn put_in_a_generic_struct(o: pair.Out) -> U32 {
+  let k = o
+  let w = Wrap { x: k } //~ E0710
+  1
+}
+
+pub fn the_argument_put_in_a_constructor(o: pair.Out) -> U32 {
+  let s = Some(o) //~ E0710
+  match s {
+    Some(v) => v.l.len(),
+    None => 0,
+  }
+}
+
+pub fn stored_in_a_var(o: pair.Out) -> U32 {
+  let k = o
+  var v = k //~ E0710
+  v.l.len()
+}
+
+pub fn the_argument_stored_in_a_var(o: pair.Out) -> U32 {
+  var v = o //~ E0710
+  v.l.len()
+}
+
+pub fn the_argument_stored_in_a_typed_var(i: pair.In) -> U32 {
+  var v: pair.In = i //~ E0710
+  v.r.len()
+}
+
+// ------------------------------------------------------------------- the name is not captured
+
+pub fn captured(o: pair.Out) -> U32 {
+  let k = o
+  apply(fn(n) { k.l.len() + n }) //~ E0710
+}
+
+pub fn captured_from_an_arm(o: pair.Out) -> U32 {
+  match o {
+    k => apply(fn(n) { k.r.len() + n }), //~ E0710
+  }
+}
+
+pub fn the_argument_captured(i: pair.In) -> U32 {
+  apply(fn(n) { i.l.len() + n }) //~ E0710
+}
+
+// ------------------------------------------------------- the name is not given to a generic one
+
+pub fn given_to_a_type_parameter(o: pair.Out) -> U32 {
+  let k = o
+  id(k) //~ E0710
+}
+
+pub fn the_argument_given_to_a_type_parameter(i: pair.In) -> U32 {
+  id(i) //~ E0710
+}
+
+pub fn given_with_the_type_written(o: pair.Out) -> U32 {
+  id::[pair.Out](o) //~ E0710
+}
+
+// ------------------------------------------------------------- the name is read-only (§5.1, §5.4)
+
+pub fn element_assigned(o: pair.Out) {
+  let k = o
+  k.l[0] = 1.0 //~ E0701
+}
+
+pub fn filled(o: pair.Out) {
+  let k = o
+  k.r.fill!(0.0) //~ E0701
+}
+
+pub fn passed_as_inout(o: pair.Out) {
+  let k = o
+  clear(inout k) //~ E0701
+}
+
+pub fn the_argument_passed_as_inout(o: pair.Out) {
+  clear(inout o) //~ E0701
+}
+
+pub fn the_argument_element_assigned(o: pair.Out) {
+  o.l[0] = 1.0 //~ E0701
+}
+
+pub fn the_input_element_assigned(i: pair.In) {
+  i.l[0] = 1.0 //~ E0701
+}
+
+pub fn the_input_filled(i: pair.In) {
+  let k = i
+  k.l.fill!(0.0) //~ E0701
+}
+
+pub fn the_name_assigned(o: pair.Out, p: pair.Out) -> U32 {
+  let k = o
+  k = p //~ E0701
+  k.l.len()
+}
+
+// ------------------------------------------------------------------------------ the contrasts
+
+pub fn read_and_passed_on(o: pair.Out) -> U32 {
+  let k = o
+  let n = k.l.len()
+  n + id(n)
+}
+
+pub fn the_length_is_captured(o: pair.Out) -> U32 {
+  let k = o
+  let n = k.l.len()
+  apply(fn(m) { n + m })
+}
+
+pub fn the_inout_argument_is_written(inout o: pair.Out) {
+  o.l[0] = 1.0
+  clear(inout o)
+}

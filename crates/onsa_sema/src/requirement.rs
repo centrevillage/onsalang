@@ -129,6 +129,27 @@ pub(crate) const GENERIC_VIEW: &str = "to take a view generically, declare the p
 pub(crate) const LIFTED_VIEW: &str =
     "a `?Escape` type parameter takes a `Span` and a planar array, no other second-class type (§4.5)";
 
+/// The rule of that E0710 of a generated type (S-927, R-477), for which
+/// the other rules show no way out.
+const GENERATED_VIEW: &str = "a generated type (`In`, `Out`) is passed as an argument or bound by a borrow only: no type parameter takes it, `?Escape` or not (§4.5, §5.3)";
+
+/// The rule of the E0710 of the type argument `arg` of a requirement whose
+/// rule is `rule` ([`Requirement::Escape`]): of a generated `In` or `Out`
+/// (or an array of them) its own.
+pub(crate) fn escape_rule(a: &Analysis, rule: &'static str, arg: TyId) -> &'static str {
+    generated_rule(a, arg).unwrap_or(rule)
+}
+
+/// The rule of the E0710 of a generated `In` or `Out` (or an array of them) `arg`.
+pub(crate) fn generated_rule(a: &Analysis, mut arg: TyId) -> Option<&'static str> {
+    while let Ty::Array(t, _) = a.types.get(arg) {
+        arg = *t;
+    }
+    let views =
+        |d: &crate::DefId| a.def(*d).as_struct().is_some_and(|s| s.flow_ty.is_some_and(crate::def::FlowTy::views));
+    matches!(a.types.get(arg), Ty::Named(d, _) if views(d)).then_some(GENERATED_VIEW)
+}
+
 /// The rule of that E0710 of the element of a method of an array.
 pub(crate) const VIEW_OF_ARRAY: &str = "call the method on one view of the array (`xs[k].get(i)`, §5.3)";
 

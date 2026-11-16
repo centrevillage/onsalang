@@ -1,0 +1,279 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§5.4", "§11.6"]
+
+// S-218 (b), R-325 (§5.3, §5.4, §11.6): the generated type `In` / `Out` is a view like `Span`, and "元が借用の起点
+// （既定のモードの引数）か派生した借用束縛なら、`Span` と同じく §5.4 の借用束縛にできる（`let k = o`、`let k:
+// voice.Out = o`、`match o { k => … }`。フィールドの `Span` も同じ）". So the whole `Out` or `In` of a borrowed argument is bound
+// by a `let`, by a `let` with the type, and by the arm of a `match` (with a guard too), a name derived from the binding is a
+// borrowed binding, and every name is read, passed on in the default mode and used for its fields. The origin is a borrowed
+// argument of a function, of a `rt fn` (a borrowed binding drops nothing, §5.4) and of an anonymous function (§5.4: "無名関数"
+// is a borrowed origin). A heading or an initializer that picks among the borrowed origins with `if` is a borrowed row when
+// every tail is (§5.4: "全ての末尾が借用の行なら借用"). The `Span` field `o.l` of a borrowed `Out` is in
+// values/binding_flow_span_field.onsa. The bound name stays second-class (negative/flow_gen_bind_second_class_names.onsa),
+// and the origins that are not borrowed ones are in negative/flow_gen_bind_inout_origin.onsa and
+// negative/flow_gen_bind_owned_rows.onsa. No diagnostic is expected anywhere in this file.
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}
+
+pub struct Wide {
+  a: F32,
+  b: F32,
+}
+
+pub flow spread(x: [F32; 2] at sample, m: F32 at sample) -> Wide at sample {
+  Wide { a: x[0] + m, b: x[1] + m }
+}
+
+pub struct Bus {
+  main: F32,
+  aux: [F32; 2],
+}
+
+pub flow bus(m: F32 at sample) -> Bus at sample {
+  Bus { main: m, aux: [m + 1.0, m + 2.0] }
+}
+
+fn total(s: Span[F32]) -> F32 {
+  var t: F32 = 0.0
+  for v in s {
+    t = t + v
+  }
+  t
+}
+
+fn out_lens(o: pair.Out) -> U32 {
+  o.l.len() + o.r.len()
+}
+
+fn in_lens(i: pair.In) -> U32 {
+  i.l.len() + i.r.len()
+}
+
+fn two_outs(a: pair.Out, b: pair.Out) -> U32 {
+  a.l.len() + b.r.len()
+}
+
+// ------------------------------------------------------------------------------ let and match
+
+pub fn out_in_a_let(o: pair.Out) -> U32 {
+  let k = o
+  out_lens(k)
+}
+
+pub fn out_in_a_typed_let(o: pair.Out) -> U32 {
+  let k: pair.Out = o
+  k.l.len()
+}
+
+pub fn out_in_an_arm(o: pair.Out) -> U32 {
+  match o {
+    k => out_lens(k),
+  }
+}
+
+pub fn out_in_an_arm_with_a_guard(o: pair.Out) -> U32 {
+  match o {
+    k if k.l.len() > 0 => k.r.len(),
+    _ => 0,
+  }
+}
+
+pub fn in_in_a_let(i: pair.In) -> U32 {
+  let k = i
+  in_lens(k)
+}
+
+pub fn in_in_a_typed_let(i: pair.In) -> U32 {
+  let k: pair.In = i
+  k.r.len()
+}
+
+pub fn in_in_an_arm(i: pair.In) -> U32 {
+  match i {
+    k => in_lens(k),
+  }
+}
+
+pub fn bus_out_in_a_let(o: bus.Out) -> U32 {
+  let k = o
+  k.main.len() + k.aux[1].len()
+}
+
+pub fn spread_in_in_a_let(i: spread.In) -> F32 {
+  let k = i
+  k.x[1][0] + total(k.m)
+}
+
+// ---------------------------------------------------------------- derived names and their uses
+
+pub fn derived_from_a_binding(o: pair.Out) -> U32 {
+  let k = o
+  let j = k
+  out_lens(j)
+}
+
+pub fn derived_in_an_arm(o: pair.Out) -> U32 {
+  match o {
+    k => {
+      let j = k
+      out_lens(j)
+    },
+  }
+}
+
+pub fn the_binding_and_its_origin(o: pair.Out) -> U32 {
+  let k = o
+  out_lens(k) + out_lens(o)
+}
+
+pub fn two_arguments(o: pair.Out, i: pair.In) -> U32 {
+  let a = o
+  let b = i
+  a.l.len() + b.r.len()
+}
+
+pub fn field_of_the_binding(o: pair.Out) -> F32 {
+  let k = o
+  let l = k.l
+  total(l) + total(k.r)
+}
+
+pub fn element_of_the_binding(i: spread.In) -> F32 {
+  let k = i
+  let ch = k.x[0]
+  ch[0]
+}
+
+pub fn read_through_the_binding(o: pair.Out) -> F32 {
+  let k = o
+  k.l[0] + k.r[0]
+}
+
+pub fn numbers_of_a_field_of_the_binding(o: pair.Out) -> F32 {
+  let k = o
+  var t: F32 = 0.0
+  for v in k.l {
+    t = t + v
+  }
+  t
+}
+
+pub fn the_binding_and_its_origin_as_two_arguments(o: pair.Out) -> U32 {
+  let k = o
+  two_outs(k, o)
+}
+
+pub fn the_literal_of_the_fields_of_the_binding(o: pair.Out) -> U32 {
+  let k = o
+  out_lens(pair.Out { l: k.l, r: k.r })
+}
+
+pub fn the_binding_is_the_tail_of_a_block(o: pair.Out) -> U32 {
+  let k = {
+    o
+  }
+  out_lens(k)
+}
+
+// ---------------------------------------------------------------- places where a binding is made
+
+pub fn in_a_loop(o: pair.Out) -> U32 {
+  var n: U32 = 0
+  for i in 0 ..< 3 {
+    let k = o
+    n = n + k.l.len() + i
+  }
+  n
+}
+
+pub fn in_a_branch(o: pair.Out, c: Bool) -> U32 {
+  var n: U32 = 0
+  if c {
+    let k = o
+    n = k.l.len()
+  }
+  n
+}
+
+pub fn in_a_while(o: pair.Out) -> U32 {
+  var n: U32 = 0
+  while n < 2 {
+    let k = o
+    n = n + k.l.len() + 1
+  }
+  n
+}
+
+pub rt fn in_a_rt_fn(o: pair.Out) -> U32 {
+  let k = o
+  k.l.len()
+}
+
+pub rt fn in_in_a_rt_fn(i: pair.In) -> U32 {
+  match i {
+    k => k.r.len(),
+  }
+}
+
+pub fn in_an_anonymous_function(o: pair.Out) -> U32 {
+  let f = fn(q: pair.Out) -> U32 {
+    let k = q
+    k.l.len()
+  }
+  f.(o)
+}
+
+// ------------------------------------------------------ choosing among borrowed origins with `if`
+
+pub fn picked_by_a_let(o: pair.Out, p: pair.Out, c: Bool) -> U32 {
+  let k = if c { o } else { p }
+  out_lens(k)
+}
+
+pub fn picked_by_a_heading(o: pair.Out, p: pair.Out, c: Bool) -> U32 {
+  match if c { o } else { p } {
+    k => out_lens(k),
+  }
+}
+
+pub fn picked_fields_by_a_heading(o: pair.Out, p: pair.Out, c: Bool) -> U32 {
+  match if c { o.l } else { p.l } {
+    s => s.len(),
+  }
+}
+
+pub fn picked_spans_by_a_heading(xs: Span[F32], ys: Span[F32], c: Bool) -> U32 {
+  match if c { xs } else { ys } {
+    s => s.len(),
+  }
+}
+
+pub fn picked_channels_by_a_for(i: spread.In, j: spread.In, c: Bool) -> U32 {
+  var n: U32 = 0
+  for ch in if c { i.x } else { j.x } {
+    n = n + ch.len()
+  }
+  n
+}
+
+pub fn picked_planar_spans_by_a_for(xs: [Span[F32]; 2], ys: [Span[F32]; 2], c: Bool) -> U32 {
+  var n: U32 = 0
+  for ch in if c { xs } else { ys } {
+    n = n + ch.len()
+  }
+  n
+}
+
+// ----------------------------------------------------------- the argument position is as before
+
+pub fn passed_on_in_the_default_mode(o: pair.Out, p: pair.Out, c: Bool) -> U32 {
+  out_lens(if c { o } else { p })
+}

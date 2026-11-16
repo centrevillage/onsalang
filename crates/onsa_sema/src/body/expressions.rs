@@ -452,6 +452,14 @@ impl<'a> Checker<'a> {
         };
         self.generated_at(d, path.span)?;
         let s = self.a.def(d).as_struct().unwrap().clone();
+        // A literal of a generated `In` or `Out` passes its fields as views,
+        // by the mode of the argument it is (§11.6); out of one, it is an
+        // owned row, the modes' E0710 (§5.4).
+        let mode = self.arg_literal.take().filter(|&(x, _)| x == e).map_or(Mode::Borrow, |(_, m)| m);
+        let views = s.flow_ty.is_some_and(crate::def::FlowTy::views);
+        if views {
+            self.info.planar.insert(e);
+        }
         let Fields::Named(defs) = &s.fields else {
             let name = self.src(path.span);
             return Err(self.err(
@@ -499,7 +507,11 @@ impl<'a> Checker<'a> {
             let f = &defs[k];
             self.a.note_use(f.span, name.span);
             let ft = self.a.types.subst(f.ty, &args);
-            self.with_why(format!("the field `{}`", name.name), ft, |ck| ck.check_expr(*value, Some(ft)))?;
+            let why = format!("the field `{}`", name.name);
+            match self.view_param(ft).filter(|_| views) {
+                Some(v) => self.with_why(why, ft, |ck| ck.view_arg(*value, ft, v, mode))?,
+                None => _ = self.with_why(why, ft, |ck| ck.check_expr(*value, Some(ft)))?,
+            }
         }
         if !failed {
             self.literal_rest(d, (defs, &seen), rest.copied(), path.span)?;

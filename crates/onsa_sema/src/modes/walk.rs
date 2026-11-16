@@ -115,7 +115,11 @@ impl<'a> Walker<'a> {
                 }
             }
             ExprKind::Tuple(xs) | ExprKind::Array(xs) => self.elements(r, xs.iter().copied(), element),
-            ExprKind::Struct { fields, .. } => self.elements(r, fields.iter().map(|&(_, x)| x), element),
+            // The fields of a generated `In` or `Out` stand at arguments (§11.6).
+            ExprKind::Struct { fields, .. } => match self.planar_literal(e) {
+                Some(parts) => self.elements(r, parts.into_iter(), Pos::Arg(Mode::Borrow)),
+                None => self.elements(r, fields.iter().map(|&(_, x)| x), element),
+            },
             // The path of an error leaves the function (§9.1).
             ExprKind::Try(x) => {
                 self.expr(r, *x, Pos::Extract);
@@ -283,7 +287,7 @@ impl<'a> Walker<'a> {
     /// `planes([a, b])`). An `inout` one is a write (`write.rs`).
     pub(super) fn argument(&mut self, r: &mut Run, e: ExprId, param: TyId) {
         match self.planar_literal(e) {
-            Some(parts) => parts.iter().for_each(|&y| self.expr(r, y, Pos::Arg(Mode::Borrow))),
+            Some(parts) => parts.into_iter().for_each(|y| self.expr(r, y, Pos::Arg(Mode::Borrow))),
             None => self.expr(r, e, self.borrowed_at(param)),
         }
     }
@@ -299,15 +303,19 @@ impl<'a> Walker<'a> {
     }
 
     /// The elements of `e`, an array literal passed as a planar argument
-    /// (`[a, b]` at `[Span[T]; N]`, §5.3, S-196; the types stage's
-    /// [`crate::body::BodyInfo::planar`]): each is an argument of its own,
-    /// whose place is checked for exclusivity. Read by the walk, the writes
-    /// and the places passed.
-    pub(super) fn planar_literal(&self, e: ExprId) -> Option<&'a [ExprId]> {
+    /// (`[a, b]` at `[Span[T]; N]`, §5.3, S-196) or a literal of a generated
+    /// `In` or `Out` (§11.6), through the planar literals of its fields (the
+    /// types stage's [`crate::body::BodyInfo::planar`]): each is an argument
+    /// of its own, whose place is checked for exclusivity. Read by the walk,
+    /// the writes and the places passed.
+    pub(super) fn planar_literal(&self, e: ExprId) -> Option<Vec<ExprId>> {
         let x = self.ast.without_parens(e);
-        match &self.ast.expr(x).kind {
-            ExprKind::Array(parts) if self.info.planar.contains(&x) => Some(parts),
-            _ => None,
-        }
+        let parts: Vec<ExprId> = match &self.ast.expr(x).kind {
+            _ if !self.info.planar.contains(&x) => return None,
+            ExprKind::Array(parts) => parts.clone(),
+            ExprKind::Struct { fields, .. } => fields.iter().map(|&(_, f)| f).collect(),
+            _ => return None,
+        };
+        Some(parts.into_iter().flat_map(|p| self.planar_literal(p).unwrap_or_else(|| vec![p])).collect())
     }
 }

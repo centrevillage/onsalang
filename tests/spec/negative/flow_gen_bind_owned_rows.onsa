@@ -1,0 +1,98 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§5.4", "§11.6"]
+
+// S-218 (b), S-770 (§5.3, §5.4, §11.6): "所有の行（`let o = voice.Out { … }`）は束縛できず E0710 である（`Span` と同じ）" (§5.3). The
+// literal `pair.Out { l: x, r: y }` of a body is a value that holds `Span`s of local arrays, so it is an owned row when a
+// `let`, a `var`, a tuple or a `test` binds it ("第二級の値（§5.3）を要素に持つ形は E0710", §5.4); it is only the
+// value of an argument (values/flow_gen_bind_literal_args.onsa). The same for the `Out` and `In` that are put in a tuple, an
+// array (the type `[voice.Out; 2]`: "引数に書ける平面の配列は `Span` の要素に限り", S-770, so the type of the
+// array of the `let` is an error as well as the literal), and for an `if` that has a literal as a tail: "一つでも所有の行なら
+// 所有" (§5.4), so the other tail (a borrowed argument) is checked as the initializer of an owned binding, and the
+// error stays one (the position is one of the tails; R-476 is in the Rust test of the notes). One error per function
+// (P-01).
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}
+
+// ------------------------------------------------------------------------- a literal that is bound
+
+pub fn out_literal_in_a_let() -> U32 {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  let k = pair.Out { l: x, r: y } //~ E0710
+  k.l.len()
+}
+
+pub fn out_literal_in_a_var() -> U32 {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var k = pair.Out { l: x, r: y } //~ E0710
+  k.l.len()
+}
+
+pub fn in_literal_in_a_let() -> U32 {
+  let a: [F32; 2] = [1.0, 2.0]
+  let b: [F32; 2] = [3.0, 4.0]
+  let k = pair.In { l: a, r: b } //~ E0710
+  k.l.len()
+}
+
+pub fn out_literal_of_the_argument_spans(a: Span[F32], b: Span[F32]) -> U32 {
+  let k = pair.Out { l: a, r: b } //~ E0710
+  k.l.len()
+}
+
+test "a literal bound in a test" {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  let k = pair.Out { l: x, r: y } //~ E0710
+  assert k.l.len() == 2
+}
+
+// --------------------------------------------------------------------- the arguments put in a row
+
+pub fn tuple_of_the_arguments(o: pair.Out, p: pair.Out) -> U32 {
+  let (a, b) = (o, p) //~ E0710
+  a.l.len() + b.l.len()
+}
+
+pub fn array_of_the_arguments(o: pair.Out, p: pair.Out) -> U32 {
+  let ks = [o, p] //~ E0710
+  1
+}
+
+pub fn array_with_the_flat_type(o: pair.Out, p: pair.Out) -> U32 {
+  let ks: [pair.Out; 2] = [o, p] //~ E0710
+  1
+}
+
+pub fn array_of_the_inputs(i: pair.In, j: pair.In) -> U32 {
+  let ks = [i, j] //~ E0710
+  1
+}
+
+pub fn one_tail_is_a_literal(o: pair.Out, c: Bool) -> U32 {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  let k = if c { o } else { pair.Out { l: x, r: y } } //~ E0710
+  k.l.len()
+}
+
+// ------------------------------------------------------------------------------ the contrasts
+
+fn out_lens(o: pair.Out) -> U32 {
+  o.l.len() + o.r.len()
+}
+
+pub fn literal_as_an_argument() -> U32 {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  out_lens(pair.Out { l: x, r: y })
+}

@@ -173,7 +173,8 @@ pub struct BodyInfo {
     /// folds exactly these (R-03); every other `-` negates a value.
     pub neg_literals: HashSet<ExprId>,
     /// The array literals passed as planar arguments (§5.3, S-196: `[a, b]`
-    /// at `[Span[T]; N]`), without their parentheses: each element is an
+    /// at `[Span[T]; N]`) and the literals of a generated `In` or `Out`
+    /// (§11.6), without their parentheses: each element (field) is an
     /// argument of its own. The types stage decides them, the modes stage
     /// reads them (D-15).
     pub planar: HashSet<ExprId>,

@@ -918,14 +918,13 @@ pub fn returned() {
     assert_eq!(fixes(src), bare(Code::E0710, &[9, 12, 15, 18, 21, 24, 27]));
 }
 
-/// R-334: a generated `Out` is not counted second-class until W7-03 makes
-/// `Rendered` apart from it (`render` returns the type `Out`, and its result
-/// binds, §11.6): it is an Affine value of the table of §5.2 (R-325's
-/// `let k = o` of an `inout` one is E0711 with no candidate, R-117). A
-/// borrow binds the `Span` field of a borrowed one (S-788).
+/// S-218 (b), R-325: a generated `Out` is second-class, a view, apart from
+/// `Rendered` (R-334): a borrow binds a borrowed one and the `Span` field of
+/// one (S-788); an `inout` one is no source of a binding, and a value stored
+/// or returned is out of its place (E0710). The result of `render` is an
+/// ordinary Affine value.
 #[test]
-#[ignore = "W7-12 U2b: U2a で Out のフィールドが Span になり、Out の値は Copy の種で第二級でもない（modes の class_of は U2b）。let k = o（inout）と var p = (o, 1) と fn(o) { o } の E0711 が出ない。U2b で第二級の E0710 の形に改める"]
-fn a_generated_value_is_affine_until_w7_03() {
+fn a_generated_value_is_a_view() {
     let src = "pub fn bound(o: pair.Out) {
   let k = o
 }
@@ -950,8 +949,7 @@ pub fn rendered() -> F32 uses {Alloc} {
   p.out[0]
 }
 ";
-    // `keep(move o)` of the generic `keep` is the types stage's E0710 (S-862).
-    assert_eq!(fixes(src), bare(Code::E0711, &[5, 12, 15]));
+    assert_eq!(fixes(src), bare(Code::E0710, &[5, 12, 15]));
 }
 
 /// §5.3: an anonymous function that captures stands at an argument only;

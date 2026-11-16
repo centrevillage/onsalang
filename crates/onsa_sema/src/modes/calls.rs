@@ -178,7 +178,7 @@ impl Walker<'_> {
                 match m {
                     // A binding derived from its place, passed in the call, is `exclusive`'s E0702 (S-796).
                     Mode::Inout => match self.planar_literal(e) {
-                        Some(parts) => parts.iter().for_each(|&x| self.write_place(r, x, How::Inout)),
+                        Some(parts) => parts.into_iter().for_each(|x| self.write_place(r, x, How::Inout)),
                         None => self.write_place(r, e, How::Inout),
                     },
                     _ => self.argument(r, e, ty),

@@ -1,0 +1,83 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§5.3", "§11.6"]
+
+// S-218 (b) (§5.1, §5.3, §11.6): the field of an `inout` literal of a generated `Out` is an argument of its own (§11.6:
+// "引数の位置に struct リテラルを書いて作り、排他性はフィールドの場所ごとに検査する（`inout [a, b]` と 同じ）"), so it is
+// passed as `inout` as the parameter of its type is: a field `l: Span[F32]` given the array literal `[a, b]` is no place
+// (§5.1), the E0415 of `chan_io(inout [a, b])`, as only a planar field `[Span[F32]; 2]` takes an array literal of places
+// (§5.3, the last function, with no error). An element of a planar field that is itself an array literal is no place
+// either. One error per function (P-01).
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}
+
+pub struct Bus {
+  main: F32,
+  aux: [F32; 2],
+}
+
+pub flow bus(m: F32 at sample, n: F32 at sample) -> Bus at sample {
+  Bus { main: m, aux: [n + 1.0, m + 2.0] }
+}
+
+fn put(inout o: pair.Out) {
+  o.l[0] = 1.0
+}
+
+fn busio(inout o: bus.Out) {
+  o.main[0] = 1.0
+}
+
+fn chan_io(inout s: Span[F32]) {
+  s[0] = 1.0
+}
+
+pub fn the_direct_form() {
+  var a: F32 = 0.0
+  var b: F32 = 0.0
+  chan_io(inout [a, b]) //~ E0415
+}
+
+pub fn a_span_field_of_pair() {
+  var a: F32 = 0.0
+  var b: F32 = 0.0
+  var y: [F32; 2] = [0.0; 2]
+  put(inout pair.Out { l: [a, b], r: y }) //~ E0415
+}
+
+pub fn a_span_field_of_bus() {
+  var a: F32 = 0.0
+  var b: F32 = 0.0
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 2] = [0.0; 2]
+  busio(inout bus.Out { main: [a, b], aux: [y, z] }) //~ E0415
+}
+
+pub fn a_span_field_in_parentheses() {
+  var a: F32 = 0.0
+  var b: F32 = 0.0
+  var y: [F32; 2] = [0.0; 2]
+  put(inout (pair.Out { l: ([a, b]), r: y })) //~ E0415
+}
+
+pub fn an_element_of_a_planar_field() {
+  var a: F32 = 0.0
+  var b: F32 = 0.0
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 2] = [0.0; 2]
+  busio(inout bus.Out { main: y, aux: [[a, b], z] }) //~ E0415
+}
+
+pub fn a_planar_field_takes_an_array_literal_of_places() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 2] = [0.0; 2]
+  busio(inout bus.Out { main: x, aux: [y, z] })
+}

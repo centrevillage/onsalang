@@ -1,0 +1,138 @@
+// onsa.toml
+// [test]
+// spec = ["§5.3", "§5.4", "§11.6"]
+
+// S-218 (b), R-325, S-788 (§5.3, §5.4, §11.6): "`inout` の引数からと所有の行（`let o = voice.Out { … }`）は束縛できず E0710 である（`Span`
+// と同じ）" (§5.3), and the `Span` of a field of the `Out` of an `inout` argument cannot be bound either (S-788: "`inout` 引数からは
+// §5.4 のとおり E0710", today a partial move, E0711). The error is at the value that is put at the place of the binding: the
+// initializer of a `let`, the heading of a `match` or a `for`. The whole `Out` and its field, in a `let` (with a type, in
+// a constructor and a tuple, bound to `_`), a `match` heading and a `for` heading; the same forms of a borrowed
+// argument are legal (flow/flow_gen_bind_borrowed_whole.onsa, values/binding_flow_span_field.onsa). What an
+// `inout` argument may do stays legal: a write through it, an `inout` and a borrowed argument of a call, and a read of
+// a number out of a field (the contrasts at the end). The `Out` of a literal of the body is in
+// negative/flow_gen_bind_owned_rows.onsa. One error per function (P-01).
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}
+
+pub struct Bus {
+  main: F32,
+  aux: [F32; 2],
+}
+
+pub flow bus(m: F32 at sample) -> Bus at sample {
+  Bus { main: m, aux: [m + 1.0, m + 2.0] }
+}
+
+fn out_lens(o: pair.Out) -> U32 {
+  o.l.len() + o.r.len()
+}
+
+// ------------------------------------------------------------------------------ the whole Out
+
+pub fn whole_in_a_let(inout o: pair.Out) -> U32 {
+  let k = o //~ E0710
+  k.l.len()
+}
+
+pub fn whole_in_a_typed_let(inout o: pair.Out) -> U32 {
+  let k: pair.Out = o //~ E0710
+  k.l.len()
+}
+
+pub fn whole_in_a_constructor(inout o: pair.Out) -> U32 {
+  let k = Some(o) //~ E0710
+  match k {
+    Some(v) => v.l.len(),
+    None => 0,
+  }
+}
+
+pub fn whole_in_a_tuple(inout o: pair.Out) -> U32 {
+  let t = (o, 1) //~ E0710
+  t.1
+}
+
+pub fn whole_in_a_match(inout o: pair.Out) -> U32 {
+  match o { //~ E0710
+    k => k.l.len(),
+  }
+}
+
+pub fn whole_bound_to_a_wild_pattern(inout o: pair.Out) -> U32 {
+  let _ = o //~ E0710
+  1
+}
+
+pub fn whole_in_a_var(inout o: pair.Out) -> U32 {
+  var k = o //~ E0710
+  k.l.len()
+}
+
+// ------------------------------------------------------------------------------ a field and a part
+
+pub fn field_in_a_let(inout o: pair.Out) -> U32 {
+  let l = o.l //~ E0710
+  l.len()
+}
+
+pub fn field_in_a_match(inout o: pair.Out) -> U32 {
+  match o.l { //~ E0710
+    s => s.len(),
+  }
+}
+
+pub fn part_of_a_field_in_a_let(inout o: pair.Out) -> U32 {
+  let half = o.l.slice(0, 1) //~ E0710
+  half.len()
+}
+
+pub fn array_field_in_a_let(inout o: bus.Out) -> U32 {
+  let all = o.aux //~ E0710
+  all[0].len()
+}
+
+pub fn element_of_an_array_field_in_a_let(inout o: bus.Out) -> U32 {
+  let ch = o.aux[1] //~ E0710
+  ch.len()
+}
+
+pub fn array_field_in_a_for(inout o: bus.Out) -> U32 {
+  var n: U32 = 0
+  for ch in o.aux { //~ E0710
+    n = n + ch.len()
+  }
+  n
+}
+
+// ------------------------------------------------------------------------------ the contrasts
+
+pub fn write_through_the_argument(inout o: pair.Out) {
+  o.l[0] = 1.0
+  o.r.fill!(0.0)
+}
+
+pub fn pass_the_argument_on(inout o: pair.Out) -> U32 {
+  write_through_the_argument(inout o)
+  out_lens(o)
+}
+
+pub fn read_numbers_of_the_fields(inout o: pair.Out) -> F32 {
+  let first = o.l[0]
+  var total: F32 = 0.0
+  for v in o.r {
+    total = total + v
+  }
+  first + total
+}
+
+pub fn index_the_array_field(inout o: bus.Out) -> U32 {
+  o.aux[0].fill!(1.0)
+  o.aux[1].len()
+}

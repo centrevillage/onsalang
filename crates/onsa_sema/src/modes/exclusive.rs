@@ -89,7 +89,7 @@ impl Walker<'_> {
     /// each with the expression that passes it. The writes read the same places.
     pub(super) fn arg_places(&self, e: ExprId) -> Vec<(ExprId, Place)> {
         match self.planar_literal(e) {
-            Some(parts) => parts.iter().filter_map(|&x| Some((x, self.view_place(x)?))).collect(),
+            Some(parts) => parts.into_iter().filter_map(|x| Some((x, self.view_place(x)?))).collect(),
             None => self.view_place(e).map(|p| (e, p)).into_iter().collect(),
         }
     }

@@ -1,0 +1,52 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.3", "§11.6"]
+
+// R-478 (§5.3): "別々の変数にあるときは `[a, b]` / `inout [a, b]` と配列リテラルを引数の位置にだけ書け（要素の種類と長さは揃っていなくてよい。長さの約束は
+// `process` / `render` のもの、§11.6）". The sentence does not leave out the literal with no element: `[]` is the argument of an array of `Span`s
+// of the length 0 (`xs: [Span[T]; 0]`), in the default mode and as `inout []`, whatever the element type. The length 0 of an input or an output of a flow is
+// E0810 (§11.6, S-1110), so the parameter of a function of the user is the place where an array of `Span`s of length 0 is left. The
+// array has the length 0 (`xs.len()` is 0, §5.3: `len()` of `[T; N]` does not depend on the elements) and nothing is written
+// through it.
+
+fn count_default(xs: [Span[F32]; 0]) -> U32 {
+  xs.len()
+}
+
+fn count_inout(inout xs: [Span[F32]; 0]) -> U32 {
+  xs.len()
+}
+
+fn count_of_integers(xs: [Span[I32]; 0]) -> U32 {
+  xs.len()
+}
+
+fn forward(inout xs: [Span[F32]; 0]) -> U32 {
+  count_inout(inout xs)
+}
+
+fn count_one(xs: [Span[F32]; 1]) -> U32 {
+  xs[0].len()
+}
+
+test "an empty array literal is the argument of an array of Spans of length 0" {
+  assert count_default([]) == 0
+}
+
+test "an empty array literal as an inout argument" {
+  assert count_inout(inout []) == 0
+}
+
+test "the element type does not matter" {
+  assert count_of_integers([]) == 0
+}
+
+test "the empty inout argument is passed on" {
+  assert forward(inout []) == 0
+}
+
+test "the array literal of one element is as before" {
+  let a: [F32; 3] = [1.0, 2.0, 3.0]
+  assert count_one([a]) == 3
+}

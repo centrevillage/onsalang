@@ -1,0 +1,72 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.3", "§5.4", "§11.6"]
+
+// S-218 (b) (§5.3, §5.4, §11.6), run in the interpreter: the arm of a `match` of a borrowed generated `Out` / `In`
+// binds it like a `Span` and reads the buffers it was made of. Split from flow_gen_bind_run.onsa, as the value of a
+// `match` that is not a plain switch on the variants of one enum does not lower in this version (E0200, R-06,
+// W8-06); the binding itself is checked in flow_gen_bind_borrowed_whole.onsa.
+//
+// The input `[1.0, 2.0, 3.0]` of `twin` gives `l = [1, 2, 3]` and `r = [2, 4, 6]`, and `[10, 20, 30]` gives
+// `r = [20, 40, 60]`.
+
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+pub flow twin(x: F32 at sample) -> Pair at sample {
+  Pair { l: x, r: x * 2.0 }
+}
+
+pub flow mix(l: F32 at sample, r: F32 at sample) -> F32 at sample {
+  l + r
+}
+
+fn add_up(s: Span[F32]) -> F32 {
+  var t: F32 = 0.0
+  for v in s {
+    t = t + v
+  }
+  t
+}
+
+fn second_of_both_in_an_arm(o: twin.Out) -> F32 {
+  match o {
+    k => k.l[1] + k.r[1],
+  }
+}
+
+fn picked_by_a_heading(o: twin.Out, p: twin.Out, c: Bool) -> F32 {
+  match if c { o } else { p } {
+    k => k.r[0],
+  }
+}
+
+fn the_input_in_an_arm(i: mix.In) -> F32 {
+  match i {
+    k => add_up(k.l) + add_up(k.r),
+  }
+}
+
+test "the arm of a match binds a borrowed Out" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let rd = twin.render(xs, 8.0)
+  assert second_of_both_in_an_arm(twin.Out { l: rd.l.slice(0, 3), r: rd.r.slice(0, 3) }) == 6.0
+}
+
+test "the arm of a match whose heading picks one of two borrowed Outs" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let ys: [F32; 3] = [10.0, 20.0, 30.0]
+  let a = twin.render(xs, 8.0)
+  let b = twin.render(ys, 8.0)
+  assert picked_by_a_heading(twin.Out { l: a.l.slice(0, 3), r: a.r.slice(0, 3) }, twin.Out { l: b.l.slice(0, 3), r: b.r.slice(0, 3) }, true) == 2.0
+  assert picked_by_a_heading(twin.Out { l: a.l.slice(0, 3), r: a.r.slice(0, 3) }, twin.Out { l: b.l.slice(0, 3), r: b.r.slice(0, 3) }, false) == 20.0
+}
+
+test "the arm of a match binds a borrowed In" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let rd = twin.render(xs, 8.0)
+  assert the_input_in_an_arm(mix.In { l: rd.l.slice(0, 3), r: rd.r.slice(0, 3) }) == 18.0
+}

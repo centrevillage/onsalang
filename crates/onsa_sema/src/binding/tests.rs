@@ -21,7 +21,7 @@ fn the_rows_with_no_head() {
 
 #[test]
 fn the_rows_of_a_head() {
-    let owned = HeadRow::Owned;
+    let owned = HeadRow::Owned { by: None };
     let static_ = HeadRow::Borrow { sources: Vec::new(), no_drop: true };
     let place = HeadRow::Borrow { sources: Vec::new(), no_drop: false };
     let heads = [BindingKind::Let, BindingKind::FlowLet, BindingKind::MatchBind, BindingKind::For { moved: false }];
@@ -50,7 +50,7 @@ fn heads_of(src: &str) -> Vec<(String, String)> {
         .map(|(head, r)| {
             let value = value_of(&ast, *head);
             let row = match r {
-                HeadRow::Owned => "owned".to_string(),
+                HeadRow::Owned { .. } => "owned".to_string(),
                 HeadRow::Borrow { sources, no_drop } => {
                     let s: Vec<String> = sources.iter().map(|&e| text(ast.expr(e).span)).collect();
                     format!("borrow [{}]{}", s.join(", "), if *no_drop { "!" } else { "" })
@@ -151,7 +151,7 @@ fn marks_of(src: &str) -> Vec<(String, String)> {
                 None => "-".to_string(),
             };
             let row = match r {
-                HeadRow::Owned => "owned",
+                HeadRow::Owned { .. } => "owned",
                 HeadRow::Borrow { no_drop: true, .. } => "borrow!",
                 HeadRow::Borrow { no_drop: false, .. } => "borrow",
             };

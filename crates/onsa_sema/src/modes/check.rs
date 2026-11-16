@@ -114,6 +114,9 @@ pub(super) struct Inside {
     /// how many those calls are (S-193, S-799: `exclusive.rs`).
     pub(super) changes: Vec<Changed>,
     pub(super) calls: u32,
+    /// The value of the `let` walked and the tail that made its row owned
+    /// (R-476), which the E0710 of another tail notes.
+    pub(super) owned_by: Option<(ExprId, ExprId)>,
 }
 
 /// A change of the place `place` at `at` in an argument of a call

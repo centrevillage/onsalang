@@ -244,15 +244,16 @@ impl<'p> Sema<'p> {
 
     /// The type arguments `args`, each lowered as a constant expression or a
     /// type by `kinds` (`true` a constant), as [`Self::type_with_args`]
-    /// lowers those of a type, and judged as a type of a body at a binding
-    /// (a `Span` stands there; what the parameter requires of it is the
-    /// call's, §4.5): the tuple of them. Of the own parameters of a
+    /// lowers those of a type, and judged as a type argument of a `?Escape`
+    /// parameter (a `Span` and a planar array stand there, no generated
+    /// type, S-927; what the parameter requires of it is the call's, §4.5):
+    /// the tuple of them. Of the own parameters of a
     /// function, and after a member of a value by their forms (S-981).
     fn args_of_kinds(&mut self, cx: &Cx<'p>, args: &[TypeId], kinds: &[bool]) -> TyId {
         let before = self.a.diagnostics.len();
         let read: Vec<TyId> = args.iter().zip(kinds).map(|(&x, &k)| self.lower_type_arg(cx, x, Some(k))).collect();
         for (&x, &t) in args.iter().zip(&read) {
-            if self.a.diagnostics.len() > before || self.judge(cx, x, t, Pos::Bind).is_err() {
+            if self.a.diagnostics.len() > before || self.judge(cx, x, t, Pos::Lifted).is_err() {
                 break;
             }
         }

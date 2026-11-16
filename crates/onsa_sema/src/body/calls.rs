@@ -468,61 +468,72 @@ impl<'a> Checker<'a> {
         }
         let why = self.argument_why(e);
         for (arg, &(mode, pt)) in args.iter().zip(params) {
-            let ps = self.shallow(pt);
-            let coerce = match self.ty(ps) {
-                Ty::Builtin(BuiltinTy::Span, a) => Some((a[0], None)),
-                Ty::Array(inner, len) => match self.ty(self.shallow(inner)) {
-                    Ty::Builtin(BuiltinTy::Span, a) => Some((a[0], Some(len))),
-                    _ => None,
-                },
-                _ => None,
-            };
-            let planar = matches!(coerce, Some((_, Some(_))));
-            match coerce {
+            let view = self.view_param(pt);
+            match view {
                 None => {
+                    let x = self.ast.without_parens(arg.expr);
                     let kind = &self.expr(arg.expr).kind;
                     self.arg_closure = matches!(kind, ExprKind::Closure { .. }).then_some(arg.expr);
+                    self.arg_literal = Some((x, mode));
                     self.with_why(why.clone(), pt, |ck| ck.check_expr(arg.expr, Some(pt)))?;
                     // An `inout` argument has no direction: its place has
                     // the type of the parameter, which the callee writes
                     // back (§8.1).
                     if mode == Mode::Inout {
-                        let (place, span) = (self.ast.without_parens(arg.expr), self.expr(arg.expr).span);
-                        let Some(found) = self.body_type(place) else {
+                        let span = self.expr(arg.expr).span;
+                        let Some(found) = self.body_type(x) else {
                             onsa_diag::internal::bug(Some(span), "an argument checked has no type")
                         };
                         self.with_why(why.clone(), pt, |ck| ck.unify_at(span, found, pt))?;
                     }
                 }
-                Some((elem, planar)) => {
-                    let aspan = self.expr(arg.expr).span;
-                    let at = match (planar, &self.expr(self.ast.without_parens(arg.expr)).kind) {
-                        (Some(_), ExprKind::Array(parts)) if !parts.is_empty() => {
-                            self.planar_literal(arg.expr, parts, elem, mode)?
-                        }
-                        _ => self.check_expr(arg.expr, None)?,
-                    };
-                    // A literal variable is passed as no `Span` (S-860).
-                    let at_s = self.known_shape(at, aspan, "argument")?;
-                    let ok = match (planar, self.ty(at_s)) {
-                        // A length unified, as of any array (a const parameter `N`).
-                        (Some(n), Ty::Array(ch, m)) => {
-                            let cause = self.cause(aspan, None);
-                            self.infer.unify_len(&mut self.a.types, n, m, &cause).is_ok()
-                                && self.views(ch, elem, aspan, mode)?
-                        }
-                        (Some(_), Ty::Error) => true,
-                        (Some(_), _) => false,
-                        (None, _) => self.views(at_s, elem, aspan, mode)?,
-                    };
-                    if !ok {
-                        return Err(self.not_a_view(aspan, pt, at));
-                    }
-                }
+                Some(v) => self.view_arg(arg.expr, pt, v, mode)?,
             }
+            let planar = matches!(view, Some((_, Some(_))));
             if mode == Mode::Inout && !self.inout_place(arg.expr, planar) {
                 return Err(self.no_inout_place(arg.expr, "an `inout` argument", "§5.1"));
             }
+        }
+        Ok(())
+    }
+
+    /// How a value is passed at the parameter type `pt` (§5.3): as a
+    /// `Span[elem]`, `(elem, None)`, or a planar `[Span[elem]; n]`,
+    /// `(elem, Some(n))`; none of another type.
+    pub(super) fn view_param(&mut self, pt: TyId) -> Option<(TyId, Option<Len>)> {
+        match self.ty(self.shallow(pt)) {
+            Ty::Builtin(BuiltinTy::Span, a) => Some((a[0], None)),
+            Ty::Array(inner, len) => match self.ty(self.shallow(inner)) {
+                Ty::Builtin(BuiltinTy::Span, a) => Some((a[0], Some(len))),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// The value `x` passed as the view `(elem, planar)` of `pt`
+    /// ([`Self::view_param`]) by the mode `mode`: an argument, a field of a
+    /// literal of a generated `In` or `Out` (§11.6).
+    pub(super) fn view_arg(&mut self, x: ExprId, pt: TyId, (elem, planar): (TyId, Option<Len>), mode: Mode) -> R<()> {
+        let aspan = self.expr(x).span;
+        let at = match (planar, &self.expr(self.ast.without_parens(x)).kind) {
+            (Some(_), ExprKind::Array(parts)) => self.planar_literal(x, parts, elem, mode)?,
+            _ => self.check_expr(x, None)?,
+        };
+        // A literal variable is passed as no `Span` (S-860).
+        let at_s = self.known_shape(at, aspan, "argument")?;
+        let ok = match (planar, self.ty(at_s)) {
+            // A length unified, as of any array (a const parameter `N`).
+            (Some(n), Ty::Array(ch, m)) => {
+                let cause = self.cause(aspan, None);
+                self.infer.unify_len(&mut self.a.types, n, m, &cause).is_ok() && self.views(ch, elem, aspan, mode)?
+            }
+            (Some(_), Ty::Error) => true,
+            (Some(_), _) => false,
+            (None, _) => self.views(at_s, elem, aspan, mode)?,
+        };
+        if !ok {
+            return Err(self.not_a_view(aspan, pt, at));
         }
         Ok(())
     }
@@ -560,8 +571,7 @@ impl<'a> Checker<'a> {
     /// kind and length, so `[Span[elem]; k]` (`k` checked against `N` by the
     /// caller), recorded through the parentheses, and the literal as one
     /// ([`crate::body::BodyInfo::planar`]: the one test). The lowering
-    /// converts each element (`coerce`). W7-03 adds a struct literal of a
-    /// generated `Out` here.
+    /// converts each element (`coerce`).
     fn planar_literal(&mut self, e: ExprId, parts: &[ExprId], elem: TyId, mode: Mode) -> R<TyId> {
         self.info.planar.insert(self.ast.without_parens(e));
         let view = self.a.types.intern(Ty::Builtin(BuiltinTy::Span, vec![elem]));
@@ -595,9 +605,11 @@ impl<'a> Checker<'a> {
     }
 
     /// Whether `e` can be passed as `inout` (§5.1, §5.3, S-178): a place, a
-    /// partial view of one ([`view_base`]), and in a planar argument an array
-    /// literal of those (`inout [a, b]`). The modes take the views and the
-    /// literals from W4-08.
+    /// partial view of one ([`view_base`]), in a planar argument an array
+    /// literal of those (`inout [a, b]`), and a literal of a generated `Out`
+    /// of those, each field as an argument of its own (a planar literal is
+    /// recorded, [`crate::body::BodyInfo::planar`]). The modes take the
+    /// views and the literals from W4-08.
     fn inout_place(&self, e: ExprId, planar: bool) -> bool {
         let e = self.ast.without_parens(e);
         if let Some(base) = view_base((self.ast, &self.info, self.a), e, |t| self.shallow(t)) {
@@ -605,6 +617,9 @@ impl<'a> Checker<'a> {
         }
         match &self.expr(e).kind {
             ExprKind::Array(parts) if planar => parts.iter().all(|&p| self.inout_place(p, false)),
+            ExprKind::Struct { fields, .. } if self.info.planar.contains(&e) => {
+                fields.iter().all(|&(_, f)| self.inout_place(f, self.info.planar.contains(&self.ast.without_parens(f))))
+            }
             _ => self.is_place(e),
         }
     }

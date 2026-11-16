@@ -9,17 +9,27 @@ use super::*;
 fn lower_args(lw: &mut Lowerer, cx: &mut FnCx, args: &[ast::Arg], params: &[(Mode, Ty)]) -> R<Vec<Arg>> {
     let mut out = Vec::new();
     for (a, (pm, pt)) in args.iter().zip(params) {
-        let e = lower_expr(lw, cx, a.expr)?;
+        let e = super::expr::lower_value(lw, cx, a.expr, *pm)?;
         let e = coerce(lw, cx, e, pt, *pm)?;
         out.push(Arg { mode: *pm, expr: e });
     }
     Ok(out)
 }
 
+/// Whether a value at `t` is passed as a view (§5.3): a `Span` or a planar
+/// array, what [`coerce`] converts.
+pub(super) fn views(t: &Ty) -> bool {
+    matches!(t, Ty::Span(_)) || planar(t)
+}
+
+/// Whether `t` is a planar array `[Span[T]; N]` (§5.3).
+fn planar(t: &Ty) -> bool {
+    matches!(t, Ty::Array(el, _) if matches!(**el, Ty::Span(_)))
+}
+
 pub(crate) fn coerce(lw: &mut Lowerer, cx: &mut FnCx, e: Expr, want: &Ty, mode: Mode) -> R<Expr> {
     // A planar literal has the type of the parameter, its elements their own (S-196): each converted below.
-    let planar = matches!((want, &e.kind), (Ty::Array(el, _), ExprKind::Array(_)) if matches!(**el, Ty::Span(_)));
-    if e.ty == *want && !planar {
+    if e.ty == *want && !(planar(want) && matches!(e.kind, ExprKind::Array(_))) {
         return Ok(e);
     }
     let span = e.span;
@@ -27,7 +37,7 @@ pub(crate) fn coerce(lw: &mut Lowerer, cx: &mut FnCx, e: Expr, want: &Ty, mode: 
         (Ty::Span(_), Ty::Array(..) | Ty::Buf(_)) => span_of(cx, e, mode),
         // A `FixedStr[N]` at a `Span[U8]`: its used part (§4.2).
         (Ty::Span(_), Ty::Struct(_)) => crate::lower::fixed_str::view(lw, cx, e),
-        (Ty::Array(elem, n), Ty::Array(_, m)) if matches!(**elem, Ty::Span(_)) && n == m => {
+        (Ty::Array(elem, n), Ty::Array(_, m)) if planar(want) && n == m => {
             let n = *n;
             // Planar: `[a, b]` written in the argument, or an array of arrays / Bufs.
             if let ExprKind::Array(items) = e.kind {

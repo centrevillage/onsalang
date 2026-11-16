@@ -1,0 +1,222 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§5.3", "§5.4", "§5.2", "§11.6"]
+
+// S-218 (b), R-325, S-788 (§5.3, §5.4, §5.2, §11.6), run in the interpreter: a bound generated `In` / `Out` is a view of the
+// buffers it was made of, so the name reads the elements as they are (nothing is copied), and a name that is bound
+// from a borrowed argument, derived from another, chosen with an `if` or made in a loop reads the same buffers as the
+// argument does. The buffers are the `Buf`s that `render` returned (a `Span` of them is made with `slice`; the call of
+// `process` with an `Out` is the work W7-12 U3) and local arrays. The `inout` literal `inout twin.Out { l: x, r: y }`
+// writes the places of its fields (§11.6: "排他性はフィールドの場所ごとに検査する"), so the call changes `x` and `y`, and
+// the places that it does not name stay (different places, different fields of a struct). The reads of a place
+// that is twice in a borrowed literal do not overlap. The errors of the same forms are in
+// negative/flow_gen_bind_literal_args.onsa.
+//
+// The input `[1.0, 2.0, 3.0]` of `twin` gives `l = [1, 2, 3]` and `r = [2, 4, 6]`, and `[10, 20, 30]` gives `l = [10, 20, 30]` and
+// `r = [20, 40, 60]`.
+
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+pub flow twin(x: F32 at sample) -> Pair at sample {
+  Pair { l: x, r: x * 2.0 }
+}
+
+pub flow mix(l: F32 at sample, r: F32 at sample) -> F32 at sample {
+  l + r
+}
+
+pub struct Bus {
+  main: F32,
+  aux: [F32; 2],
+}
+
+pub flow bus(m: F32 at sample) -> Bus at sample {
+  Bus { main: m, aux: [m + 1.0, m + 2.0] }
+}
+
+pub struct Pack {
+  a: [F32; 2],
+  b: [F32; 2],
+}
+
+fn add_up(s: Span[F32]) -> F32 {
+  var t: F32 = 0.0
+  for v in s {
+    t = t + v
+  }
+  t
+}
+
+fn first_of_both(o: twin.Out) -> F32 {
+  let k = o
+  k.l[0] + k.r[0]
+}
+
+fn totals_with_the_type(o: twin.Out) -> F32 {
+  let k: twin.Out = o
+  add_up(k.l) + add_up(k.r)
+}
+
+fn field_of_the_origin(o: twin.Out) -> F32 {
+  let l = o.l
+  add_up(l)
+}
+
+fn derived_name(o: twin.Out) -> F32 {
+  let k = o
+  let j = k
+  j.r[2]
+}
+
+fn name_and_origin(o: twin.Out) -> F32 {
+  let k = o
+  first_of_both(k) + first_of_both(o)
+}
+
+fn made_in_a_loop(o: twin.Out) -> F32 {
+  var t: F32 = 0.0
+  for i in 0 ..< 3 {
+    let k = o
+    t = t + k.l[i]
+  }
+  t
+}
+
+fn picked_by_a_let(o: twin.Out, p: twin.Out, c: Bool) -> F32 {
+  let k = if c { o } else { p }
+  k.l[0]
+}
+
+fn the_input(i: mix.In) -> F32 {
+  let k = i
+  k.l[0] - k.r[0]
+}
+
+fn the_input_with_the_type(i: mix.In) -> F32 {
+  let k: mix.In = i
+  k.l[2] * k.r[0]
+}
+
+fn aux_through_the_binding(o: bus.Out) -> F32 {
+  let k = o
+  k.main[0] + k.aux[1][1]
+}
+
+fn write_out(inout o: twin.Out) {
+  o.l[0] = 7.0
+  o.r.fill!(9.0)
+}
+
+fn write_and_read(inout o: twin.Out) -> F32 {
+  write_out(inout o)
+  first_of_both(o)
+}
+
+fn write_aux(inout o: bus.Out) {
+  o.aux[1].fill!(5.0)
+}
+
+test "a bound Out reads the buffers that render wrote" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let rd = twin.render(xs, 8.0)
+  assert first_of_both(twin.Out { l: rd.l.slice(0, 3), r: rd.r.slice(0, 3) }) == 3.0
+  assert totals_with_the_type(twin.Out { l: rd.l.slice(0, 3), r: rd.r.slice(0, 3) }) == 18.0
+}
+
+test "the field of a borrowed Out is bound and read" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let rd = twin.render(xs, 8.0)
+  assert field_of_the_origin(twin.Out { l: rd.l.slice(0, 3), r: rd.r.slice(0, 3) }) == 6.0
+}
+
+test "a name derived from a binding, and the binding with its origin" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let rd = twin.render(xs, 8.0)
+  assert derived_name(twin.Out { l: rd.l.slice(0, 3), r: rd.r.slice(0, 3) }) == 6.0
+  assert name_and_origin(twin.Out { l: rd.l.slice(0, 3), r: rd.r.slice(0, 3) }) == 6.0
+}
+
+test "a binding made in a loop reads the same buffers each time" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let rd = twin.render(xs, 8.0)
+  assert made_in_a_loop(twin.Out { l: rd.l.slice(0, 3), r: rd.r.slice(0, 3) }) == 6.0
+}
+
+test "an if that picks between two borrowed Outs binds the one that is chosen" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let ys: [F32; 3] = [10.0, 20.0, 30.0]
+  let a = twin.render(xs, 8.0)
+  let b = twin.render(ys, 8.0)
+  assert picked_by_a_let(twin.Out { l: a.l.slice(0, 3), r: a.r.slice(0, 3) }, twin.Out { l: b.l.slice(0, 3), r: b.r.slice(0, 3) }, true) == 1.0
+  assert picked_by_a_let(twin.Out { l: a.l.slice(0, 3), r: a.r.slice(0, 3) }, twin.Out { l: b.l.slice(0, 3), r: b.r.slice(0, 3) }, false) == 10.0
+}
+
+test "a bound In reads its fields" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let rd = twin.render(xs, 8.0)
+  assert the_input(mix.In { l: rd.l.slice(0, 3), r: rd.r.slice(0, 3) }) == -1.0
+  assert the_input_with_the_type(mix.In { l: rd.l.slice(0, 3), r: rd.r.slice(0, 3) }) == 6.0
+}
+
+test "the reads of one place that is twice in an In do not overlap" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let rd = twin.render(xs, 8.0)
+  assert the_input(mix.In { l: rd.l.slice(0, 3), r: rd.l.slice(0, 3) }) == 0.0
+}
+
+test "an array field of an Out is read through the binding" {
+  let mn: [F32; 3] = [4.0, 5.0, 6.0]
+  let aux: [[F32; 3]; 2] = [[1.0, 2.0, 3.0], [7.0, 8.0, 9.0]]
+  assert aux_through_the_binding(bus.Out { main: mn, aux: aux }) == 12.0
+}
+
+test "the inout literal writes the places of its fields" {
+  var x: [F32; 2] = [1.0, 2.0]
+  var y: [F32; 2] = [3.0, 4.0]
+  write_out(inout twin.Out { l: x, r: y })
+  assert x[0] == 7.0
+  assert x[1] == 2.0
+  assert y[0] == 9.0
+  assert y[1] == 9.0
+}
+
+test "the inout literal of two Buf places leaves the other places of the Buf" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  var rd = twin.render(xs, 8.0)
+  write_out(inout twin.Out { l: rd.l.slice(0, 3), r: rd.r.slice(0, 3) })
+  assert rd.l[0] == 7.0
+  assert rd.l[1] == 2.0
+  assert rd.l[2] == 3.0
+  assert rd.r[0] == 9.0
+  assert rd.r[2] == 9.0
+}
+
+test "the inout literal of different fields of a struct" {
+  var pk = Pack { a: [1.0, 2.0], b: [3.0, 4.0] }
+  write_out(inout twin.Out { l: pk.a, r: pk.b })
+  assert pk.a[0] == 7.0
+  assert pk.a[1] == 2.0
+  assert pk.b[0] == 9.0
+  assert pk.b[1] == 9.0
+}
+
+test "an inout argument of a function is written, passed on and read" {
+  var x: [F32; 2] = [1.0, 2.0]
+  var y: [F32; 2] = [3.0, 4.0]
+  assert write_and_read(inout twin.Out { l: x, r: y }) == 16.0
+  assert x[0] == 7.0
+}
+
+test "an inout literal with an array field writes the element it names" {
+  var mn: [F32; 3] = [4.0, 5.0, 6.0]
+  var aux: [[F32; 3]; 2] = [[1.0, 2.0, 3.0], [7.0, 8.0, 9.0]]
+  write_aux(inout bus.Out { main: mn, aux: aux })
+  assert aux[1][0] == 5.0
+  assert aux[1][2] == 5.0
+  assert aux[0][0] == 1.0
+  assert mn[0] == 4.0
+}

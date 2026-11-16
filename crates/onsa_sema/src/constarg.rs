@@ -483,7 +483,9 @@ fn impl_args(
 /// bound is met, §18.1); then E0406 for the first one not decided, with no
 /// candidate (which arguments is the writer's).
 fn judge_args(a: &Analysis, d: DefId, args: &[Option<TyId>], (found, span): (&str, Span)) -> Result<(), ConstErr> {
-    use crate::requirement::{Required, Requirement, alias_way, escape_error, first_unmet, head_of, parameter};
+    use crate::requirement::{
+        Required, Requirement, alias_way, escape_error, escape_rule, first_unmet, head_of, parameter,
+    };
     use crate::requirement::{unmet_error, unmet_rules};
     let Some(DefKind::Impl(i)) = a.def(d).owner.map(|o| &a.def(o).kind) else { return Ok(()) };
     let owner = format!("the `impl` of `{}`", head_of(a, i.self_ty).unwrap_or_default());
@@ -497,7 +499,9 @@ fn judge_args(a: &Analysis, d: DefId, args: &[Option<TyId>], (found, span): (&st
         let Some(q) = first_unmet(&under, g, arg, out) else { continue };
         let shown = show(arg);
         let e = match q {
-            Requirement::Escape { rule, .. } => escape_error(span, &shown, &parameter(g, &owner)).with_rule(rule),
+            Requirement::Escape { rule, .. } => {
+                escape_error(span, &shown, &parameter(g, &owner)).with_rule(escape_rule(a, rule, arg))
+            }
             Requirement::Bound(b) => {
                 let what = Required::Param { param: g.name.clone(), owner: owner.clone(), std };
                 let e = unmet_error(span, &what, &shown, b, &mut |t| show(t));

@@ -49,6 +49,7 @@ mod foreign_candidates;
 mod gap_forms;
 mod generated_order;
 mod generated_type_requirement_notes;
+mod generated_view_notes;
 mod heading_names;
 mod heading_reach_grid;
 mod instance_limits;

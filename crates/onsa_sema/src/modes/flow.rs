@@ -16,7 +16,7 @@ use super::state::{Joins, LoopSum, Paths, Trail};
 use super::walk::Pos;
 use super::write::How;
 use crate::Kind;
-use crate::binding::Head;
+use crate::binding::{Head, HeadRow};
 use crate::body::{LocalId, LocalKind, Unbound};
 use crate::names::body::Origin;
 use crate::tails::literal_true;
@@ -149,8 +149,8 @@ impl Walker<'_> {
                 let subject = Head::Match { scrutinee: *scrutinee };
                 let borrows = self.borrows(subject);
                 let owned = borrows.is_none();
-                if !owned {
-                    self.view_of_inout(*scrutinee, arms.iter().map(|a| a.pat));
+                if let Some(sources) = &borrows {
+                    self.view_of_inout(sources, arms.iter().map(|a| a.pat));
                 }
                 let head = if owned { Pos::Own } else { Pos::Bind };
                 self.head(r, *scrutinee, head, &arms.iter().map(|a| a.pat).collect::<Vec<_>>());
@@ -204,7 +204,13 @@ impl Walker<'_> {
         match &ast.stmt(s).kind {
             StmtKind::Let { pat, init, .. } => {
                 let pos = if self.borrows(Head::Let(s)).is_some() { Pos::Bind } else { Pos::Own };
+                let by = match self.info.heads.get(&Head::Let(s)) {
+                    Some(&HeadRow::Owned { by: Some(by) }) => Some((*init, by)),
+                    _ => None,
+                };
+                let outer = replace(&mut self.inside.owned_by, by);
                 self.head(r, *init, pos, &[*pat]);
+                self.inside.owned_by = outer;
                 // What it binds to no name is dropped at the end of the statement (S-1036).
                 let base = r.items();
                 if pos == Pos::Own {
@@ -245,7 +251,7 @@ impl Walker<'_> {
                     Some(m) => self.consume(r, *iter, Pos::Own, Some(m.start)),
                     None if owned => self.expr(r, *iter, Pos::Own),
                     None => {
-                        self.view_of_inout(*iter, [*pat]);
+                        self.view_of_inout(borrows.as_deref().unwrap_or_default(), [*pat]);
                         self.expr(r, *iter, Pos::Arg(Mode::Borrow))
                     }
                 }
