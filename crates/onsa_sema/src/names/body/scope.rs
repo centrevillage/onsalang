@@ -58,11 +58,14 @@ impl Walker<'_> {
         origin: Origin,
         site: Option<PatId>,
     ) -> Result<BindingId, Stop> {
+        let id = BindingId(self.out.bindings.len() as u32);
         if let Some(d) = self.hidden(name, kind) {
+            // A use above it reads the name it hides (`flow_order.rs`).
+            let hidden = self.scopes.visible.get(&name.name).copied();
+            self.order.clashes.insert(id, hidden);
             self.fail_at_let(Fail::Report(d))?;
         }
         let (scope, hidden) = self.scopes.open.last_mut().expect("an open scope");
-        let id = BindingId(self.out.bindings.len() as u32);
         self.out.bindings.push(Binding {
             name: name.name.clone(),
             span: name.span,

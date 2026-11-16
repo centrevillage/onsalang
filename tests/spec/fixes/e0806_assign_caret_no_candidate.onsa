@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§18.1"]
+// fixes = 0
+
+// W7-04 U2/t, R-59, S-116, S-1102: an assignment in a flow body (E0806, §11.2) to a name that is not defined yet has the candidate `let` before it only when
+// the unit has no other error of the same stage after it (§18.1: "どの候補も … 当てた後に同じ段か前の段の診断を残さない … この約束を満たす候補を作れなければ、候補を出さない"). The
+// right side of the assignments below reads the target, by `^y` outside a delay or by `y` itself, and `let y = ^y + x` is an E0801 (a `^name` outside the first argument of a delay,
+// §11.2) and `let y = y + x` is an E0801 (a name in its own definition), both of the names stage, so the candidate would leave an error: there is no candidate (`fixes = 0`). The
+// assignment that reads the target in the first argument of a delay (`y = prev~(^y) + x`) has the candidate, in fixes/e0806_assign_caret_delay.onsa. One error per flow (P-01).
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow caret_on_the_left_of_a_sum(x: F32 at sample) -> F32 at sample {
+  y = ^y + x                                        //~ E0806
+  y
+}
+
+pub flow caret_on_the_right_of_a_sum(x: F32 at sample) -> F32 at sample {
+  y = x + ^y                                        //~ E0806
+  y
+}
+
+pub flow caret_in_an_instance(x: F32 at sample) -> F32 at sample {
+  y = lp~(^y)                                       //~ E0806
+  y
+}
+
+pub flow itself_in_a_sum(x: F32 at sample) -> F32 at sample {
+  y = y + x                                         //~ E0806
+  y
+}
+
+pub flow itself_in_a_product(x: F32 at sample) -> F32 at sample {
+  acc = acc * 0.5                                   //~ E0806
+  acc
+}
+
+pub flow itself_after_a_let(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0
+  y = a + y                                         //~ E0806
+  y
+}
+
+pub flow caret_after_a_let(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0
+  y = ^y * a                                        //~ E0806
+  y
+}

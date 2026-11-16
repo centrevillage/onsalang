@@ -52,7 +52,7 @@
 //! `consts` (the constant expressions), `rate` (the rate pass) and `reads`
 //! (the state marking). The tables are here.
 
-use onsa_diag::hash::{HashMap, HashSet};
+use onsa_diag::hash::HashMap;
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 use onsa_syntax::ast::{Arg, CallKind, ExprId, ExprKind, Ident, PatId, PatKind, RangeEnd, RangeHead, StmtId, StmtKind};
@@ -233,15 +233,9 @@ pub(crate) struct FlowCx {
     inputs: Vec<(LocalId, FlowRate)>,
     pending: Vec<PendingLet>,
     let_of_local: HashMap<LocalId, usize>,
-    defined: HashSet<LocalId>,
-    /// Nonzero while checking the first argument of a delay, where `^name` may
-    /// look back; 0 again in the arguments of an instance there (§11.2).
-    lookback: u32,
     /// Nonzero while checking the first argument of a delay, instances included
     /// (a delay there is E0200, K-08).
     delay_arg: u32,
-    /// Nonzero while checking the body of a `par` (a `^` there is E0200, R-03).
-    par_depth: u32,
     /// The clock of each `e at k` (§11.3), for the rate pass.
     ats: HashMap<ExprId, FlowRate>,
     calls: Vec<NodeCall>,

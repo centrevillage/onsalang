@@ -10,17 +10,16 @@
 //!
 //! What the representation cannot hold is E0200 here, never read in another
 //! meaning (plan §8.2): a computed expression made faster with `at`, `if~` /
-//! `match~`, the omitted `init` of a value type that is no number, a `^`
-//! inside a `par` (R-03), a call of a function that is not `rt` above `init`
-//! (R-17). So are the forms that the representation reads wrongly until W7
-//! (K-08): a delay inside the first argument of a delay (R-13, W7-07), a
+//! `match~`, the omitted `init` of a value type that is no number, a call of
+//! a function that is not `rt` above `init` (R-17); a `^` inside a `par`
+//! (R-03) is the names stage's (`names/body/flow_order.rs`). So are the
+//! forms that the representation reads wrongly until W7 (K-08): a delay inside the first argument of a delay (R-13, W7-07), a
 //! stateful node in a branch, a guard, the right side of `&&` / `||` or an
 //! argument a builtin evaluates on some paths only (S-110, W7-06).
 //!
 //! W7-02 also removes or rewrites, outside this file, what serves it:
-//! - `flow.rs`: the fields `delay_arg`, `par_depth` and `ats` of `FlowCx`.
-//!   `flow/check.rs`: their counting (`check_delay`, `check_par`), the save
-//!   of `lookback` around the arguments in `check_instance`, the arms of `At`
+//! - `flow.rs`: the fields `delay_arg` and `ats` of `FlowCx`.
+//!   `flow/check.rs`: their counting (`check_delay`), the arms of `At`
 //!   and `Feedback` in `check_flow_expr`. `flow/rate.rs`: those arms in
 //!   `rate`, the field `branch` of the rate pass and its counting in `rate`
 //!   (`If`, `Match`, `Binary`) and `rate_call`. `flow/reads.rs`: the arm
@@ -41,75 +40,49 @@
 //! the omitted one its value `T.default()`.
 
 use onsa_diag::unsupported::Feature;
-use onsa_diag::{Code, Diagnostic, Span, Stage};
-use onsa_syntax::ast::{BinOp, Clock, ExprId, ExprKind, Ident, Path};
+use onsa_diag::{Code, Span, Stage};
+use onsa_syntax::ast::{BinOp, ExprId, ExprKind};
 
 use super::{FlowRate, InitArg, Rater};
 use crate::body::{Checker, LocalId, R, Target};
 use crate::consteval::ConstValue;
-use crate::flow_names::clock_rate;
 use crate::names::body::PathRes;
 use crate::ty::{Ty, TyId};
 
 impl Checker<'_> {
     /// `e at k` in a flow body (§11.3): the type of `e`; the clock is the
-    /// rate pass's ([`Rater::rate_at`]).
-    pub(super) fn check_at(&mut self, e: ExprId, inner: ExprId, clock: &Clock, expected: Option<TyId>) -> R<TyId> {
-        let rate = clock_rate(clock).map_err(|d| self.diag(d))?;
+    /// names stage's record ([`crate::names::body::BodyNames::clocks`]), which
+    /// the rate pass reads ([`Rater::rate_at`]).
+    pub(super) fn check_at(&mut self, e: ExprId, inner: ExprId, expected: Option<TyId>) -> R<TyId> {
         let t = self.check_expr_as(inner, expected, self.joining)?;
+        let rate = self.names_record(e, self.names.clocks.get(&e).copied())?;
         self.fcx().ats.insert(e, FlowRate::from_rate(rate));
         Ok(t)
     }
 
     /// `^name` in a flow body (§11.2): a later `let` of the body, read in the
-    /// first argument of a delay (outside it E0801, inside a `par` E0200).
-    pub(super) fn check_feedback(&mut self, e: ExprId, name: &Ident) -> R<TyId> {
-        let span = self.expr(e).span;
-        let local = match self.names.paths.get(&e) {
-            Some(PathRes::Local(b)) => Some(LocalId(b.0)),
+    /// first argument of a delay, as the names stage recorded it (its E0801,
+    /// E0020 and the E0200 in a `par`, `names/body/flow_order.rs`).
+    pub(super) fn check_feedback(&mut self, e: ExprId) -> R<TyId> {
+        let record = match self.names.paths.get(&e) {
+            Some(&PathRes::Local(b)) => Some(LocalId(b.0)),
             _ => None,
         };
-        let later = local.and_then(|id| {
-            let f = self.fcx();
-            let k = *f.let_of_local.get(&id)?;
-            (!f.defined.contains(&id)).then_some((id, k))
-        });
-        match (local, later) {
-            (_, Some((id, k))) => {
-                if self.fcx().lookback == 0 {
-                    let def_span = self.fcx().pending[k].span;
-                    return Err(self.diag(
-                        Diagnostic::new(
-                            Stage::Flow,
-                            Code::E0801,
-                            span,
-                            format!(
-                                "`^{0}` reads the later `{0}`, which only the first argument of `prev~` / `delay~` / `vdelay~` may do (§11.2)",
-                                name.name
-                            ),
-                        )
-                        .with_found(self.src(span))
-                        .with_note(def_span, "defined here"),
-                    ));
-                }
-                // R-03: the replicas store before the later `let` (W7-04).
-                if self.fcx().par_depth > 0 {
-                    return Err(self.unsupported_in(Stage::Flow, span, Feature::FeedbackInPar, &[]));
-                }
-                self.info.targets.insert(e, Target::Local(id));
-                Ok(self.local_ty(id))
-            }
-            (Some(_), None) => Err(self.unsupported_in(Stage::Flow, span, Feature::CaretOnVisible, &[])),
-            // Not a local (nor a builtin name, the names stage's E0308, S-720):
-            // the one name this stage resolves again, until W7-04 reports the
-            // `^` of a visible name in the names stage (E0020, §11.2).
-            (None, None) => {
-                let path = Path { segments: vec![name.clone()], span: name.span };
-                match self.a.resolve_path(self.m, &path) {
-                    Ok(_) => Err(self.unsupported_in(Stage::Flow, span, Feature::CaretOnVisible, &[])),
-                    Err(err) => Err(self.resolve_error(&path, err)),
-                }
-            }
+        let id = self.names_record(e, record)?;
+        self.info.targets.insert(e, Target::Local(id));
+        Ok(self.local_ty(id))
+    }
+
+    /// The record `r` of the names stage at the node `e` of a flow body: none
+    /// where it stopped before it with no diagnostic (§18.1, S-692).
+    fn names_record<T>(&mut self, e: ExprId, r: Option<T>) -> R<T> {
+        match r {
+            Some(r) => Ok(r),
+            None if !self.names.complete => Err(self.held_stop()),
+            None => onsa_diag::internal::bug(
+                Some(self.expr(e).span),
+                "a node of a flow body the names stage did not record",
+            ),
         }
     }
 }

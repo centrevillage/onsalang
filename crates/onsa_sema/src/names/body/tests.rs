@@ -780,3 +780,23 @@ fn an_assignment_of_a_flow_body_has_the_let_and_the_note_by_what_its_target_name
         assert_eq!((d.fixes.len(), !d.notes.is_empty()), (fixes, note), "{body}: {d:?}");
     }
 }
+
+/// The notes of an E0801 of a flow body (§11.2): a use with no `^` out of a
+/// delay shows the `let` moved up and `prev~(^name)`, and a name in an
+/// argument of a flow in a delay, with `^` or not, the delay in the argument.
+#[test]
+fn the_notes_of_a_later_let_read_in_a_flow_body() {
+    let pre = "pub flow lp(x: F32 at sample) -> F32 at sample {\n  x\n}\n";
+    for (value, note) in [
+        ("y + x", "move the `let` of `y` above this use; a feedback reads its past value with `prev~(^y)`"),
+        ("prev~(lp~(y))", "the delay is written inside them: `lp~(prev~(^y))`"),
+        ("prev~(lp~(^y))", "the delay is written inside them: `lp~(prev~(^y))`"),
+    ] {
+        let flow =
+            format!("pub flow u(x: F32 at sample) -> F32 at sample {{\n  let a = {value}\n  let y = x\n  a\n}}\n");
+        let (a, _) = analysis(&format!("{pre}{flow}"));
+        assert_eq!(stages(&a), [(onsa_diag::Code::E0801, onsa_diag::Stage::Names)], "{value}");
+        let d = &a.diagnostics[0];
+        assert!(d.fixes.is_empty() && d.notes.iter().any(|n| n.message.contains(note)), "{value}: {d:?}");
+    }
+}

@@ -1,9 +1,10 @@
 //! The names of a body as a chain (§15.1, §4.5, §2.2): a chain of an
 //! expression (`a.b.c`), the path of a hole of a string (§2.4), of a pattern
 //! and of a struct literal. The head of a chain is a local, a parameter of
-//! the heading (§4.5), a name of the body of the module (`Modules::lookup`:
-//! the prelude and the builtin types, the items, the names of the `use`) or,
-//! in a flow body, a builtin name of the flow (§2.2, §11.4), in that order;
+//! the heading (§4.5), in a flow body a builtin name of the flow (§2.2,
+//! §11.4), or a name of the body of the module (`Modules::lookup`: the
+//! prelude and the builtin types, the items, the names of the `use`), in
+//! that order ([`Walker::head`]);
 //! the elements after it are members of what the one before names
 //! (`Modules::members`), up to a value, whose fields and methods are the
 //! types stage's; after a type parameter, the members its bounds give. The
@@ -163,7 +164,7 @@ impl<'a> Walker<'a> {
     /// of a string (where a candidate writes no other form).
     pub(super) fn resolve(&mut self, segs: &[&Ident], nodes: &[ExprId], place: Place) -> (Vec<PathRes>, Option<Fail>) {
         let (first, owner) = match self.head(segs, nodes, place) {
-            Head::Done(resolved) => return resolved,
+            Head::Done(resolved) => return self.in_order(resolved, segs, nodes),
             Head::Item(first, owner) => (first, owner),
             Head::NotFound => return (Vec::new(), Some(self.not_found(segs[0]))),
         };
@@ -352,7 +353,7 @@ impl<'a> Walker<'a> {
 
     /// E0302 for the head of a chain not found: one form wherever the chain
     /// is (a value, a callee, a hole, a constant expression).
-    fn not_found(&self, head: &Ident) -> Fail {
+    pub(super) fn not_found(&self, head: &Ident) -> Fail {
         Fail::Report(ResolveError::NotFound { name: head.name.clone(), span: head.span }.into_diagnostic())
     }
 

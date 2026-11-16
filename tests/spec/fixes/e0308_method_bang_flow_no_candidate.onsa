@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// spec = ["§2.6", "§6.2", "§11.2", "§15.1", "§18.1"]
+// fixes = 0
+
+// W7-04 U2/t, S-811: a method of an `inout self` called by the name of its type in a flow body (`P.bump(q, x)`) is E0308 (§15.1: a method called in the function form) and has no
+// candidate. The candidate for a method with `inout self` would write the call of the receiver with `!` (`q.bump!(x)`), and a `!` call in a flow body is E0806 (§11.2), an error of
+// the names stage that the candidate would leave (§2.6: "当てた後に同じ段か前の段の誤りが残らないときだけ示す"; §18.1), so there is no candidate (`fixes = 0`). One error per flow (P-01).
+// The method in a fn body, where the candidate is not left with an error, is not in the file (the form of the call is the business of §5.2).
+
+pub struct P {
+  n: F32,
+}
+
+impl P {
+  pub rt fn new(v: F32) -> P {
+    P { n: v }
+  }
+
+  pub rt fn bump(inout self, v: F32) -> F32 {
+    self.n = v
+    v
+  }
+}
+
+pub flow as_the_output(x: F32 at sample) -> F32 at sample {
+  let q = P.new(x)
+  P.bump(q, x)                                      //~ E0308
+}
+
+pub flow in_a_let(x: F32 at sample) -> F32 at sample {
+  let q = P.new(x)
+  let b = P.bump(q, x)                              //~ E0308
+  b
+}
+
+pub flow in_a_sum(x: F32 at sample) -> F32 at sample {
+  let q = P.new(x)
+  P.bump(q, x) + x                                  //~ E0308
+}
+
+pub flow in_a_delay(x: F32 at sample) -> F32 at sample {
+  let q = P.new(x)
+  prev~(P.bump(q, x))                               //~ E0308
+}
+
+pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let q = P.new(x)
+  let ys = par~ i in 0 ..< 2 { P.bump(q, x) }       //~ E0308
+  ys[0]
+}
+
+pub flow in_a_branch(x: F32 at sample) -> F32 at sample {
+  let q = P.new(x)
+  if x > 0.0 { P.bump(q, x) } else { 0.0 }          //~ E0308
+}

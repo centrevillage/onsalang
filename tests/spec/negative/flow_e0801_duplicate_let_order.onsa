@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§5.1", "§18.1"]
+//
+// [[test.fix]]
+// at = "23:17"
+// code = "E0801"
+// candidate = 1
+// leaves = ["25:7 E0304"]
+//
+// [[test.fix]]
+// at = "37:11"
+// code = "E0801"
+// candidate = 1
+// leaves = ["39:7 E0304"]
+
+// W7-04 U2 fix 1: a name read above two `let`s of it (the second is E0304, §5.1) reads the first, which is defined below: a use with no `^` is E0801 at the name (§11.2),
+// before the E0304 that comes after it in the text (§18.1: the same stage in the order of the text), and a `^name` in the first argument of a delay is a feedback reference
+// with no error of its own, so the E0304 is the error of the unit. Outside a delay `^name` is E0801 with the candidate `prev~(^name)`, which leaves the E0304: the unit has
+// two errors from the start (`leaves`). A `let` that hides an input is read as the input above it (tests/spec/module/overlap_local_order.onsa). One error per flow (P-01).
+
+pub flow plain_in_a_delay(x: F32 at sample) -> F32 at sample {
+  let a = prev~(c)                                  //~ E0801 @17
+  let c = x
+  let c = 2.0
+  a
+}
+
+pub flow plain_outside_a_delay(x: F32 at sample) -> F32 at sample {
+  let a = c                                         //~ E0801 @11
+  let c = x
+  let c = 2.0
+  a
+}
+
+pub flow caret_outside_a_delay(x: F32 at sample) -> F32 at sample {
+  let a = ^c + x                                    //~ E0801 @11
+  let c = x
+  let c = 2.0
+  a
+}
+
+pub flow caret_in_a_delay(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^c)
+  let c = x
+  let c = 2.0                                       //~ E0304 @7
+  a
+}
+
+pub flow plain_above_a_tuple_of_two(x: F32 at sample) -> F32 at sample {
+  let a = b + x                                     //~ E0801 @11
+  let (b, b) = (1.0, 2.0)
+  a
+}
+
+pub flow caret_above_a_tuple_of_two(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^b)
+  let (b, b) = (1.0, 2.0)                           //~ E0304 @11
+  a
+}
+
+pub flow plain_above_a_let_hiding_an_input(x: F32 at sample) -> F32 at sample {
+  let a = x + 1.0
+  let x = 2.0                                       //~ E0304 @7
+  a
+}

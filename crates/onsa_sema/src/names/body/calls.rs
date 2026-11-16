@@ -70,6 +70,9 @@ impl Walker<'_> {
             _ => Place::Callee(e),
         };
         let sites = self.type_sites.len();
+        let indexed = self.ast.indexed(callee).map(|(head, _)| head);
+        let whole = kind != CallKind::Plain || indexed.is_some();
+        let outer = self.order.callee.replace((super::named(self.ast, indexed.unwrap_or(callee)), whole));
         match self.ast.indexed(callee) {
             Some((head, indices)) if place != Place::DotCallee => self.indexed_callee(callee, kind, head, &indices)?,
             _ => {
@@ -77,6 +80,7 @@ impl Walker<'_> {
                 self.form(callee, kind)?;
             }
         }
+        self.order.callee = outer;
         // The receiver of a method of a flow body, a function value (§11.2);
         // a `~` there is an E0812 of its callee (§2.6, S-811).
         if self.flow && kind != CallKind::Flow {
@@ -93,15 +97,20 @@ impl Walker<'_> {
             _ => None,
         };
         // In a flow body, an `inout` or `move` argument is E0806 (R-342).
-        (0..).zip(args).try_for_each(|(k, a)| {
+        // The past values an argument reads (§11.2, `flow_order.rs`).
+        let reach = self.order.reach;
+        let walked = (0..).zip(args).try_for_each(|(k, a)| {
             if self.flow {
                 self.flow_arg(a)?;
+                self.order.reach = self.arg_reach((e, callee, k), reach);
             }
             match Some(k) == constant {
                 true => self.const_expr(a.expr),
                 false => self.expr(a.expr),
             }
-        })
+        });
+        self.order.reach = reach;
+        walked
     }
 
     /// What the record of a callee is ([`Called`]): of the kind of its name

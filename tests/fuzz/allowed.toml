@@ -52,6 +52,13 @@ reasons = ["S-236", "S-267"]
 note = "an input with two errors: the nested old delays `prev(prev(), )`, outer and inner without their `~`; the candidate of the outer E0811 adds its `~` and the inner E0811 shows (tests/spec/negative/flow_old_delays.onsa, `leaves`)"
 
 [[allowed]]
+class = "fix|E0811|add `…`|E0801"
+left = "`…` is defined below; names are defined from the top, and a later `…` is read as"
+input = "tests/fuzz/2965366c.onsa"
+reasons = ["S-236", "S-267"]
+note = "an input with two errors: the old delay `delay(y,0)` without its `~` reads the `let y` it defines with no `^`; the candidate of the E0811 adds the `~` and the E0801 of the same names stage shows (tests/spec/negative/flow_old_delays.onsa, `leaves`)"
+
+[[allowed]]
 class = "fix|E0302|add `…`|E0200"
 left = "this version does not support effects other than `…` (`…`)"
 input = "tests/fuzz/b28474c1.onsa"

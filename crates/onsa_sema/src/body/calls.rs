@@ -240,7 +240,7 @@ impl<'a> Checker<'a> {
                 if let Some(index) = written {
                     return Err(self.method_brackets(callee, md, index));
                 }
-                if f.self_mode == Some(Mode::Inout) {
+                if f.takes_inout_self() {
                     self.inout_receiver(callee)?;
                 }
                 let (targs, of) = self.generic_use(md, Use::Method { callee, recv }, span)?;

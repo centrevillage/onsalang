@@ -1,0 +1,218 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§11.3", "§15.1", "§18.1"]
+
+// W7-04 U2/t, S-125, S-267, R-472: a name that is not found (E0302) in a `^name` (`prev~(^zz)`, a `^` on a name that no `let` defines) or in the clock of an `at`
+// (`p at nope`, §11.3: "クロックの名前空間に無い名前は … E0302（名前の段。主の位置はその名前）") before a form a flow body cannot contain (E0806, §11.2). All of them
+// are errors of the names stage (§18.1), so the first by position is reported: the E0302, whatever the E0806 after it is (a `var`, a `for`, a
+// closure, a function value, an assignment, a `?`, a `let` of a nested block, a `while`, a `return`, an `assert`, `move`, `handle`, `unsafe`), and the E0806 when it comes first. One error per unit.
+// The E0801 before an E0806 is in flow_e0806_names_after_e0801.onsa.
+
+pub rt fn g(v: F32) -> F32 {
+  v
+}
+
+pub rt fn pick(v: F32) -> Option[F32] {
+  Some(v)
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+// ---- `^name` of an undefined name, then an E0806
+
+pub flow caret_not_found_then_var(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^zz)                                //~ E0302
+  var c = x
+  a
+}
+
+pub flow caret_not_found_then_for(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^zz)                                //~ E0302
+  for i in 0 ..< 2 { }
+  a
+}
+
+pub flow caret_not_found_then_closure(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^zz)                                //~ E0302
+  let k = fn(v: F32) -> F32 { v }
+  a
+}
+
+pub flow caret_not_found_then_function_value(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^zz)                                //~ E0302
+  let k = g
+  a
+}
+
+pub flow caret_not_found_then_assign(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^zz)                                //~ E0302
+  a = x
+  a
+}
+
+pub flow caret_not_found_then_try(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^zz)                                //~ E0302
+  let b = pick(x)?
+  a
+}
+
+pub flow caret_not_found_then_nested_let(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^zz)                                //~ E0302
+  let y = if x > 0.0 {
+    let q = x
+    q
+  } else {
+    x
+  }
+  a + y
+}
+
+pub flow caret_not_found_then_while(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^zz)                                //~ E0302
+  while x > 0.0 { }
+  a
+}
+
+pub flow caret_not_found_then_move(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^zz)                                //~ E0302
+  let b = move x
+  a + b
+}
+
+pub flow caret_not_found_in_the_same_let_before_a_closure(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^zz) + (fn(v: F32) -> F32 { v })    //~ E0302
+  a
+}
+
+pub flow caret_not_found_after_a_defined_caret_then_var(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^b) + prev~(^zz)                    //~ E0302
+  let b = x
+  var c = x
+  a + b
+}
+
+// ---- `at` with a clock that is not found, then an E0806
+
+pub flow at_not_found_then_var(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = p at nope                                 //~ E0302 @16
+  var c = x
+  a
+}
+
+pub flow at_not_found_then_for(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = p at nope                                 //~ E0302 @16
+  for i in 0 ..< 2 { }
+  a
+}
+
+pub flow at_not_found_then_closure(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = p at nope                                 //~ E0302 @16
+  let k = fn(v: F32) -> F32 { v }
+  a
+}
+
+pub flow at_not_found_then_function_value(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = p at nope                                 //~ E0302 @16
+  let k = g
+  a
+}
+
+pub flow at_not_found_then_assign(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = p at nope                                 //~ E0302 @16
+  a = x
+  a
+}
+
+pub flow at_not_found_then_try(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = p at nope                                 //~ E0302 @16
+  let b = pick(x)?
+  a
+}
+
+pub flow at_not_found_then_nested_let(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = p at nope                                 //~ E0302 @16
+  let y = if x > 0.0 {
+    let q = x
+    q
+  } else {
+    x
+  }
+  a + y
+}
+
+pub flow at_not_found_then_return(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = p at nope                                 //~ E0302 @16
+  return x
+  a
+}
+
+pub flow at_not_found_then_assert(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = p at nope                                 //~ E0302 @16
+  assert x > 0.0
+  a
+}
+
+pub flow at_not_found_then_handle(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = p at nope                                 //~ E0302 @16
+  let k = handle { x } with quiet
+  a
+}
+
+pub flow at_not_found_then_unsafe(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = p at nope                                 //~ E0302 @16
+  let k = unsafe { x }
+  a
+}
+
+pub flow at_not_found_in_the_same_let_before_a_closure(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = (p at nope) + (fn(v: F32) -> F32 { v })   //~ E0302 @17
+  a
+}
+
+pub flow at_not_found_as_the_output_before_a_var(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  var c = x                                         //~ E0806
+  p at nope
+}
+
+// ---- The E0806 first
+
+pub flow var_then_caret_not_found(x: F32 at sample) -> F32 at sample {
+  var c = x                                         //~ E0806
+  let a = prev~(^zz)
+  a
+}
+
+pub flow closure_then_caret_not_found(x: F32 at sample) -> F32 at sample {
+  let k = fn(v: F32) -> F32 { v }                   //~ E0806
+  let a = prev~(^zz)
+  a
+}
+
+pub flow for_then_at_not_found(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  for i in 0 ..< 2 { }                              //~ E0806
+  let a = p at nope
+  a
+}
+
+pub flow function_value_then_at_not_found(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let k = g                                         //~ E0806
+  let a = p at nope
+  a
+}
+
+pub flow assign_then_at_not_found(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = x
+  a = x                                             //~ E0806
+  let b = p at nope
+  a
+}
+
+// ---- Not errors
+
+pub flow fine(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = prev~(^b) + x
+  let b = p at sample
+  a + b
+}

@@ -177,13 +177,15 @@ impl Walker<'_> {
     /// callee of `call` or as a value (none). The candidate calls it on the
     /// first argument (`p.get()`, `b.m!(x)` for an `inout self` method, with
     /// the `!` added or taken off as the receiver is declared); none with no
-    /// argument, no call, or type arguments in the chain (`Pr::[U8].first`).
+    /// argument, no call, or type arguments in the chain (`Pr::[U8].first`),
+    /// and none of an `inout self` method in a flow body, whose `!` is its
+    /// E0806 (§11.2, S-811).
     fn method_call(&self, call: Option<ExprId>, segs: &[&Ident], bang: bool) -> Diagnostic {
         let span = span_of(segs);
         let name = &segs[segs.len() - 1].name;
         let d = method_named(path_of(segs).dotted(), name, span);
         let ast = self.ast;
-        let Some(call) = call.filter(|_| self.listed.is_empty()) else { return d };
+        let Some(call) = call.filter(|_| self.listed.is_empty() && !(self.flow && bang)) else { return d };
         let ExprKind::Call { args, kind, .. } = &ast.expr(call).kind else { return d };
         let Some((first, rest)) = args.split_first() else { return d };
         let recv = self.src(ast.expr(first.expr).span);

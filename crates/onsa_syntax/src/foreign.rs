@@ -608,6 +608,7 @@ pub enum RowId {
     StaticMutItem,
     CStaticItem,
     LinkAttribute,
+    CaretVisible,
 }
 }
 

@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§2.6", "§18.1"]
+// fixes = 0
+
+// W7-04 U2 fix 1, S-1108: a later `let` written as the callee of a call in the first argument of a delay is E0801 (§11.2, the tentative code of S-1108), with no candidate:
+// `^` before it would leave an error of the call of the syntax stage (`^b~(x)`, `^b!(x)`) or of the names stage (`^b(x)`, `^b.(x)`, `b.m!(x)`), which a candidate may not
+// do (§18.1). The head of an indexed callee (`b[0](x)`, parent's fix) is the callee too. A later `let` before a method called with no mark (`prev~(b.abs())`) is the receiver, and keeps the candidate (fixes/e0801_forward_in_a_delay_places.onsa).
+// One error per flow (P-01).
+
+pub flow plain_call(x: F32 at sample) -> F32 at sample {
+  let a = prev~(b(x))                               //~ E0801 @17
+  let b = x
+  a
+}
+
+pub flow instance(x: F32 at sample) -> F32 at sample {
+  let a = prev~(b~(x))                              //~ E0801 @17
+  let b = x
+  a
+}
+
+pub flow value_call(x: F32 at sample) -> F32 at sample {
+  let a = prev~(b.(x))                              //~ E0801 @17
+  let b = x
+  a
+}
+
+pub flow bang_call(x: F32 at sample) -> F32 at sample {
+  let a = prev~(b!(x))                              //~ E0801 @17
+  let b = x
+  a
+}
+
+pub flow itself(x: F32 at sample) -> F32 at sample {
+  let a = prev~(a(x))                               //~ E0801 @17
+  a
+}
+
+pub flow bang_method(x: F32 at sample) -> F32 at sample {
+  let a = prev~(b.m!(x))                            //~ E0801 @17
+  let b = x
+  a
+}
+
+pub flow indexed_call(x: F32 at sample) -> F32 at sample {
+  let a = prev~(b[0](x))                            //~ E0801 @17
+  let b = [x]
+  a
+}

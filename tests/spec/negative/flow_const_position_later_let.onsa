@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§15.1", "§11.2"]
+
+// W7-04 U2 fix 1: a `let` of a flow body written in a constant expression in a value (the length of an array, the length of a delay line, the end of a `par~`) is a form that
+// is no constant, E0417, wherever the `let` is (§4.5: "定数式でないもの（関数の呼び出し、ローカル変数など）を書くと、位置によらず（配列の長さ、const 引数、遅延線の長さ、`par~` の端）
+// E0417"; §15.1: the rule of the place of a constant expression comes first). A `let` below the use, its own included, is so no E0801 (§11.2), as one above it is not.
+
+pub flow array_length(x: F32 at sample) -> F32 at sample {
+  let a = [x; b]                                    //~ E0417 @15
+  let b = 2
+  x
+}
+
+pub flow array_length_of_itself(x: F32 at sample) -> F32 at sample {
+  let a = [x; a]                                    //~ E0417 @15
+  x
+}
+
+pub flow delay_length(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, b)                              //~ E0417 @21
+  let b = 2
+  a
+}
+
+pub flow variable_delay_length(x: F32 at sample) -> F32 at sample {
+  let a = vdelay~(x, 1.0, b)                        //~ E0417 @27
+  let b = 2
+  a
+}
+
+pub flow par_end(x: F32 at sample) -> F32 at sample {
+  let a = par~ i in 0..<b { x }                     //~ E0417 @25
+  let b = 2
+  x
+}

@@ -65,7 +65,7 @@ impl PathEnd {
     pub(crate) fn method(self, a: &Analysis) -> Option<bool> {
         match self {
             PathEnd::Entity(Entity::Member(d)) => match &a.def(d).kind {
-                DefKind::Fn(f) => Some(f.self_mode? == onsa_syntax::ast::Mode::Inout),
+                DefKind::Fn(f) => f.self_mode.map(|_| f.takes_inout_self()),
                 _ => None,
             },
             PathEnd::Builtin { member: BuiltinMember::Method { bang }, .. } => Some(bang),

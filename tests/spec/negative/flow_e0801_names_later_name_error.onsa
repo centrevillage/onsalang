@@ -1,0 +1,233 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§2.6", "§15.1", "§18.1"]
+//
+// [[test.fix]]
+// at = "112:11"
+// code = "E0801"
+// candidate = 1
+// leaves = ["114:11 E0302"]
+//
+// [[test.fix]]
+// at = "119:11"
+// code = "E0801"
+// candidate = 1
+// leaves = ["122:7 E0304"]
+//
+// [[test.fix]]
+// at = "127:11"
+// code = "E0801"
+// candidate = 1
+// leaves = ["129:11 E0811"]
+//
+// [[test.fix]]
+// at = "175:11"
+// code = "E0801"
+// candidate = 1
+// leaves = ["175:23 E0302"]
+//
+// [[test.fix]]
+// at = "221:17"
+// code = "E0801"
+// candidate = 1
+// leaves = ["223:11 E0308"]
+
+// W7-04 U2/t, S-116, S-267, R-286: E0801 (a name used before its `let` without `^`, a `^name` outside the first argument of a delay, a name in its own definition; §11.2)
+// before another error of the names stage at a later position of the same unit: a name that is not found (E0302), a name defined twice (E0304), a type used as a value (E0308), a
+// flow called without `~` (E0811), a `~` on a function (E0812), a `par` without `~` (E0811). The E0801 is an error of the names stage (§18.1: "flow の本体の名前の順（E0801 と、見えている名前への
+// `^` の E0020、§11.2）"), and of the remaining diagnostics the first by position is reported, so the E0801 is reported and not the later name error (R-286: the later error does not win). The name error
+// is also in the same `let`, after the E0801. One error per unit. The candidates that the E0801 has (`prev~(^name)` for a `^name` outside a delay, `^` for a use inside the first argument of
+// a delay, §11.2) leave the later error, which is said by `leaves` (the position of the E0801 on a `^name` is that of the `^`, the position of a use of a name is that of the name; S-392 keeps
+// both for now). The E0801 in the other arguments of a delay and with an error of a later stage are in flow_e0801_names_type_error.onsa; the forms with the name error first are in
+// flow_e0801_names_earlier_name_error.onsa, and the E0806 after an E0801 is in flow_e0806_names_after_e0801.onsa.
+
+pub struct P {
+  v: F32,
+}
+
+pub rt fn g(v: F32) -> F32 {
+  v
+}
+
+pub rt fn two(a: F32, b: F32) -> F32 {
+  a + b
+}
+
+pub rt fn id[T](v: T) -> T {
+  v
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+// ---- A use before the `let`, without `^`
+
+pub flow forward_then_name_not_found(x: F32 at sample) -> F32 at sample {
+  let a = b                                         //~ E0801
+  let b = x
+  let z = nope
+  a + z
+}
+
+pub flow forward_then_duplicate(x: F32 at sample) -> F32 at sample {
+  let a = b                                         //~ E0801
+  let b = x
+  let c = x
+  let c = x
+  a + c
+}
+
+pub flow forward_then_type_as_a_value(x: F32 at sample) -> F32 at sample {
+  let a = b                                         //~ E0801
+  let b = x
+  let z = P
+  a
+}
+
+pub flow forward_then_call_without_tilde(x: F32 at sample) -> F32 at sample {
+  let a = b                                         //~ E0801
+  let b = x
+  let z = lp(x)
+  a + z
+}
+
+pub flow forward_then_tilde_on_a_function(x: F32 at sample) -> F32 at sample {
+  let a = b                                         //~ E0801
+  let b = x
+  let z = g~(x)
+  a + z
+}
+
+pub flow forward_then_par_without_tilde(x: F32 at sample) -> F32 at sample {
+  let a = b                                         //~ E0801
+  let b = x
+  let ys = par i in 0 ..< 2 { x }
+  a
+}
+
+// ---- A `^name` outside the first argument of a delay
+
+pub flow caret_outside_a_delay_then_name_not_found(x: F32 at sample) -> F32 at sample {
+  let a = ^b                                        //~ E0801
+  let b = x
+  let z = nope
+  a + z
+}
+
+pub flow caret_outside_a_delay_then_duplicate(x: F32 at sample) -> F32 at sample {
+  let a = ^b + x                                    //~ E0801
+  let b = x
+  let c = x
+  let c = x
+  a + c
+}
+
+pub flow caret_outside_a_delay_then_call_without_tilde(x: F32 at sample) -> F32 at sample {
+  let a = ^b                                        //~ E0801
+  let b = x
+  let z = lp(x)
+  a + z
+}
+
+// ---- A name in its own definition
+
+pub flow itself_then_name_not_found(x: F32 at sample) -> F32 at sample {
+  let y = x + y                                     //~ E0801
+  let z = nope
+  y + z
+}
+
+pub flow itself_then_call_without_tilde(x: F32 at sample) -> F32 at sample {
+  let y = x + y                                     //~ E0801
+  let z = lp(x)
+  y + z
+}
+
+pub flow itself_in_the_init_then_duplicate(x: F32 at sample) -> F32 at sample {
+  let y = prev~(x, y)                               //~ E0801
+  let c = x
+  let c = x
+  y + c
+}
+
+// ---- The name error is in the same `let`, after the E0801
+
+pub flow forward_before_a_name_not_found_in_the_same_let(x: F32 at sample) -> F32 at sample {
+  let a = b + nope                                  //~ E0801
+  let b = x
+  a
+}
+
+pub flow forward_before_a_call_without_tilde_in_the_same_let(x: F32 at sample) -> F32 at sample {
+  let a = b + lp(x)                                 //~ E0801
+  let b = x
+  a
+}
+
+pub flow forward_before_a_tilde_on_a_function_in_the_same_let(x: F32 at sample) -> F32 at sample {
+  let a = two(b, g~(x))                             //~ E0801
+  let b = x
+  a
+}
+
+pub flow caret_before_a_name_not_found_in_the_same_let(x: F32 at sample) -> F32 at sample {
+  let a = ^b * nope                                 //~ E0801
+  let b = x
+  a
+}
+
+// ---- Places: a `par` body, a branch, a condition, a match arm, an argument of a generic function
+
+pub flow forward_in_a_par_body_then_name_not_found(x: F32 at sample) -> F32 at sample {
+  let xs = par~ i in 0 ..< 2 {
+    y * F32.round_from(i)                           //~ E0801
+  }
+  let y = x
+  let z = nope
+  xs[0] + z
+}
+
+pub flow forward_in_a_branch_then_call_without_tilde(x: F32 at sample) -> F32 at sample {
+  let a = if x > 0.0 { y } else { 0.0 }             //~ E0801
+  let y = x
+  let z = lp(x)
+  a + z
+}
+
+pub flow forward_in_a_condition_then_duplicate(x: F32 at sample) -> F32 at sample {
+  let a = if y > 0.0 { 1.0 } else { 0.0 }           //~ E0801
+  let y = x
+  let c = x
+  let c = x
+  a + c
+}
+
+pub flow forward_in_a_match_arm_then_name_not_found(k: U32 at sample, x: F32 at sample) -> F32 at sample {
+  let a = match k { 0 => y, _ => 0.0 }              //~ E0801
+  let y = x
+  let z = nope
+  a + z
+}
+
+pub flow forward_in_a_generic_call_then_tilde_on_a_function(x: F32 at sample) -> F32 at sample {
+  let a = id::[F32](y)                              //~ E0801
+  let y = x
+  let z = g~(x)
+  a + z
+}
+
+pub flow forward_in_a_delay_then_type_as_a_value(x: F32 at sample) -> F32 at sample {
+  let a = prev~(b) + x                              //~ E0801
+  let b = x * 0.5
+  let z = P
+  a
+}
+
+// ---- Not errors
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^b) + x
+  let b = x * 0.5
+  a + b
+}

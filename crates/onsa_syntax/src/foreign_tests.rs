@@ -65,7 +65,7 @@ fn the_rows_have_distinct_names_and_codes_of_their_kind() {
 /// a row moved into `ROWS` leaves `WAITING` (the module's documentation).
 #[test]
 fn no_row_is_both_made_and_waiting() {
-    assert!(!WAITING.is_empty() && !ROWS.is_empty());
+    assert!(!ROWS.is_empty());
     for w in WAITING {
         assert!(ROWS.iter().all(|r| r.name != w.name), "{} is in ROWS and WAITING", w.name);
     }

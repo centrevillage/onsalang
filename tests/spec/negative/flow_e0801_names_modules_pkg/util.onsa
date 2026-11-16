@@ -1,0 +1,26 @@
+// The module that main.onsa takes its flows from. Its own flows have errors of the names stage too: the units are independent, so each reports its own first error by
+// position (§18.1), and the flows of this module that are used by main.onsa are not checked again there.
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x * 0.5 + prev~(x) * 0.5
+}
+
+pub flow forward_then_name_not_found(x: F32 at sample) -> F32 at sample {
+  let a = b                                         //~ E0801
+  let b = x
+  let z = nope
+  a + z
+}
+
+pub flow name_not_found_then_caret_outside_a_delay(x: F32 at sample) -> F32 at sample {
+  let z = nope                                      //~ E0302
+  let a = ^b
+  let b = x
+  a + z
+}
+
+pub flow caret_on_an_input_then_at_not_found(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = prev~(^x)                                 //~ E0020
+  let b = p at nope
+  a + b
+}

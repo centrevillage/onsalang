@@ -1,12 +1,22 @@
 // onsa.toml
 // [test]
 // spec = ["§11.2", "§18.1"]
+//
+// [[test.fix]]
+// at = "94:11"
+// code = "E0801"
+// candidate = 1
+// leaves = ["96:3 E0806"]
+//
+// [[test.fix]]
+// at = "101:15"
+// code = "E0801"
+// candidate = 1
+// leaves = ["103:3 E0806"]
 
-// W7-04 U1a/t, S-116, S-267: an E0801 (a name used before its `let`, §11.2; also a `^` outside a delay) before a form a flow body cannot contain (E0806,
-// §11.2). The E0801 is reported: it is the first by position, and an error of the names stage ("flow の本体の名前の順（E0801 …）", §18.1).
-// While the E0801 is still found by the flow stage (until W7-04 U2) and the E0806 is found by the names stage (from W7-04 U1a), the unit reports the
-// E0806: these cases pass before U1a and fail between U1a and U2, so the implementation of U1a lists this file as pending until W7-04, and U2
-// takes it out. The cases with the E0806 first are in flow_e0806_names_other_codes.onsa. One error per unit.
+// W7-04 U1a/t, U2/t, S-267, S-116: an E0801 (a name used before its `let`, §11.2; also a `^` outside a delay) before a form a flow body cannot contain (E0806,
+// §11.2). The E0801 is reported: it is the first by position, and an error of the names stage ("flow の本体の名前の順（E0801 …）", §18.1), like the E0806 ("本体の制限（E0806 …）"), and of the
+// diagnostics of one stage the first by position is reported. The cases with the E0806 first are in flow_e0806_names_other_codes.onsa. One error per unit.
 
 pub rt fn g(v: F32) -> F32 {
   v

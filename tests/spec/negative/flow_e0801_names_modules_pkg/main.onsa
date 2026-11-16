@@ -1,0 +1,75 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§11.3", "§15.1", "§18.1"]
+//
+// [[test.fix]]
+// at = "main.onsa:56:11"
+// code = "E0801"
+// candidate = 1
+// leaves = ["main.onsa:58:11 E0302"]
+//
+// [[test.fix]]
+// at = "util.onsa:23:17"
+// code = "E0020"
+// candidate = 1
+// leaves = ["util.onsa:24:16 E0302"]
+
+// W7-04 U2/t, S-116, S-267, R-286, R-472: the order of the E0801 and the other errors of the names stage (E0302, E0020, the clock after `at`) in the flows that use the flows
+// of another module, by a name that a `use` takes in or by the qualified name (§15.1). A flow that uses a flow of another module in a delay (`prev~(lp~(^y))`) holds the same
+// E0801 as in one file (§11.2: the arguments of a user flow take no `^`). A name that the other module does not have (`util.nope~(x)`) is E0302, the first by position. The errors of
+// the module file util.onsa are in that file, one per unit, and the unit of a flow is checked in its own module. One error per flow (P-01).
+
+use util
+use util.{lp}
+
+pub flow forward_after_an_imported_call(x: F32 at sample) -> F32 at sample {
+  let a = lp~(b)                                    //~ E0801
+  let b = x
+  let z = nope
+  a + z
+}
+
+pub flow qualified_call_then_forward(x: F32 at sample) -> F32 at sample {
+  let a = util.lp~(x)
+  let c = d                                         //~ E0801
+  let d = a
+  let z = nope
+  c + z
+}
+
+pub flow name_of_the_module_not_found_then_forward(x: F32 at sample) -> F32 at sample {
+  let a = util.nope~(x)                             //~ E0302
+  let c = d
+  let d = x
+  a + c
+}
+
+pub flow caret_in_a_delay_over_an_imported_flow_then_name_not_found(x: F32 at sample) -> F32 at sample {
+  let a = prev~(lp~(^y))                            //~ E0801
+  let y = x
+  let z = nope
+  a + z
+}
+
+pub flow caret_outside_a_delay_after_a_qualified_call(x: F32 at sample) -> F32 at sample {
+  let a = util.lp~(x)
+  let b = ^c + a                                    //~ E0801
+  let c = x
+  let z = nope
+  b + z
+}
+
+pub flow at_not_found_after_an_imported_call_then_forward(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = lp~(x)
+  let b = p at nope                                 //~ E0302
+  let c = d
+  let d = x
+  a + b + c
+}
+
+pub flow type_error_then_forward_with_an_imported_call(x: F32 at sample) -> F32 at sample {
+  let t: Bool = lp~(x)
+  let c = d                                         //~ E0801
+  let d = x
+  c
+}

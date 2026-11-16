@@ -1,0 +1,364 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§2.6", "§15.1", "§18.1"]
+//
+// [[test.fix]]
+// at = "131:17"
+// code = "E0020"
+// candidate = 1
+// leaves = ["132:11 E0302"]
+//
+// [[test.fix]]
+// at = "138:17"
+// code = "E0020"
+// candidate = 1
+// leaves = ["140:7 E0304"]
+//
+// [[test.fix]]
+// at = "145:17"
+// code = "E0020"
+// candidate = 1
+// leaves = ["146:11 E0801"]
+//
+// [[test.fix]]
+// at = "152:11"
+// code = "E0020"
+// candidate = 1
+// leaves = ["153:11 E0801"]
+//
+// [[test.fix]]
+// at = "152:11"
+// code = "E0020"
+// candidate = 2
+// leaves = ["153:11 E0801"]
+//
+// [[test.fix]]
+// at = "159:17"
+// code = "E0020"
+// candidate = 1
+// leaves = ["160:3 E0806"]
+//
+// [[test.fix]]
+// at = "166:17"
+// code = "E0020"
+// candidate = 1
+// leaves = ["167:11 E0806"]
+//
+// [[test.fix]]
+// at = "172:17"
+// code = "E0020"
+// candidate = 1
+// leaves = ["173:11 E0811"]
+//
+// [[test.fix]]
+// at = "178:17"
+// code = "E0020"
+// candidate = 1
+// leaves = ["179:11 E0812"]
+//
+// [[test.fix]]
+// at = "206:11"
+// code = "E0801"
+// candidate = 1
+// leaves = ["208:17 E0020"]
+//
+// [[test.fix]]
+// at = "226:11"
+// code = "E0811"
+// candidate = 1
+// leaves = ["227:17 E0020"]
+//
+// [[test.fix]]
+// at = "232:11"
+// code = "E0812"
+// candidate = 1
+// leaves = ["233:17 E0020"]
+//
+// [[test.fix]]
+// at = "238:12"
+// code = "E0811"
+// candidate = 1
+// leaves = ["239:17 E0020"]
+//
+// [[test.fix]]
+// at = "271:17"
+// code = "E0020"
+// candidate = 1
+// leaves = ["272:17 E0020"]
+//
+// [[test.fix]]
+// at = "278:17"
+// code = "E0020"
+// candidate = 1
+// leaves = ["278:22 E0302"]
+//
+// [[test.fix]]
+// at = "348:24"
+// code = "E0020"
+// candidate = 1
+// leaves = ["349:11 E0302"]
+//
+// [[test.fix]]
+// at = "248:17"
+// code = "E0020"
+// candidate = 1
+// leaves = ["249:11 E0308"]
+
+// W7-04 U2/t, S-116, S-267, R-286: E0020 for a `^` on a name that is visible (an input, a `let` above, a constant; §11.2: "見えている名前（上で定義した
+// `let`、入力、定数）に `^` を付けると E0020") with the other errors of the same unit. The E0020 is an error of the names stage (§18.1: "flow の本体の名前の順
+// （E0801 と、見えている名前への `^` の E0020、§11.2）"), so with another error of the names stage (E0302, E0304, E0801, E0806, E0811, E0812) the first
+// by position is reported, and with an error of a later stage (E0401 type, E0805 effect, E0815 clock, E0813 clock parameter in a delay) the E0020 is
+// reported whatever the position is ("依存する段の間では、位置によらず先の段の誤りを報告する"). The candidates of the E0020 are in fixes/e0020_caret_visible.onsa.
+// One error per unit.
+
+const K: F32 = 1.0
+
+pub fn with_alloc(x: F32) -> F32 uses {Alloc} {
+  x
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub rt fn g(v: F32) -> F32 {
+  v
+}
+
+// ---- Another error of the names stage after the E0020
+
+pub flow caret_on_an_input_then_name_not_found(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^x)                                 //~ E0020
+  let z = nope
+  a + z
+}
+
+pub flow caret_on_a_let_then_duplicate(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0
+  let b = prev~(^a)                                 //~ E0020
+  let c = x
+  let c = x
+  b + c
+}
+
+pub flow caret_on_a_constant_then_forward(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^K) + x                             //~ E0020
+  let b = c
+  let c = x
+  a + b
+}
+
+pub flow caret_outside_a_delay_then_caret_outside_a_delay(x: F32 at sample) -> F32 at sample {
+  let a = ^x * 2.0                                  //~ E0020
+  let b = ^c
+  let c = x
+  a + b
+}
+
+pub flow caret_on_an_input_then_var(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^x)                                 //~ E0020
+  var c = x
+  a
+}
+
+pub flow caret_on_a_let_then_function_value(x: F32 at sample) -> F32 at sample {
+  let a = x
+  let b = prev~(^a)                                 //~ E0020
+  let k = g
+  b
+}
+
+pub flow caret_on_an_input_then_call_without_tilde(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^x)                                 //~ E0020
+  let z = lp(x)
+  a + z
+}
+
+pub flow caret_on_a_constant_then_tilde_on_a_function(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^K)                                 //~ E0020
+  let z = g~(x)
+  a + z
+}
+
+// ---- Another error of the names stage before the E0020
+
+pub flow name_not_found_then_caret_on_an_input(x: F32 at sample) -> F32 at sample {
+  let z = nope                                      //~ E0302
+  let a = prev~(^x)
+  a + z
+}
+
+pub flow duplicate_then_caret_on_a_let(x: F32 at sample) -> F32 at sample {
+  let c = x
+  let c = x                                         //~ E0304
+  let b = prev~(^c)
+  b
+}
+
+pub flow forward_then_caret_on_a_constant(x: F32 at sample) -> F32 at sample {
+  let b = c                                         //~ E0801
+  let c = x
+  let a = prev~(^K) + x
+  a + b
+}
+
+pub flow caret_outside_a_delay_below_then_caret_on_an_input(x: F32 at sample) -> F32 at sample {
+  let b = ^c                                        //~ E0801
+  let c = x
+  let a = prev~(^x)
+  a + b
+}
+
+pub flow var_then_caret_on_an_input(x: F32 at sample) -> F32 at sample {
+  var c = x                                         //~ E0806
+  let a = prev~(^x)
+  a
+}
+
+pub flow closure_then_caret_on_a_let(x: F32 at sample) -> F32 at sample {
+  let a = x
+  let k = fn(v: F32) -> F32 { v }                   //~ E0806
+  let b = prev~(^a)
+  b
+}
+
+pub flow call_without_tilde_then_caret_on_an_input(x: F32 at sample) -> F32 at sample {
+  let z = lp(x)                                     //~ E0811
+  let a = prev~(^x)
+  a + z
+}
+
+pub flow tilde_on_a_function_then_caret_on_a_constant(x: F32 at sample) -> F32 at sample {
+  let z = g~(x)                                     //~ E0812
+  let a = prev~(^K)
+  a + z
+}
+
+pub flow par_without_tilde_then_caret_on_an_input(x: F32 at sample) -> F32 at sample {
+  let ys = par i in 0 ..< 2 { x }                   //~ E0811
+  let a = prev~(^x)
+  a
+}
+
+pub struct P {
+  v: F32,
+}
+
+pub flow caret_on_an_input_then_type_as_a_value(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^x)                                 //~ E0020
+  let z = P
+  a
+}
+
+pub flow type_as_a_value_then_caret_on_a_let(x: F32 at sample) -> F32 at sample {
+  let a = x
+  let z = P                                         //~ E0308
+  let b = prev~(^a)
+  b
+}
+
+pub flow let_name_as_a_type_then_caret_on_an_input(x: F32 at sample) -> F32 at sample {
+  let t: u = x                                      //~ E0308
+  let u = x
+  let a = prev~(^x)
+  a
+}
+
+// ---- Two marks: the first by position
+
+pub flow two_carets_on_an_input_and_a_let(x: F32 at sample) -> F32 at sample {
+  let a = x
+  let b = prev~(^a)                                 //~ E0020
+  let c = prev~(^x)
+  b + c
+}
+
+pub flow caret_on_a_let_in_the_same_let_before_a_name_error(x: F32 at sample) -> F32 at sample {
+  let a = x
+  let b = prev~(^a) + nope                          //~ E0020
+  b
+}
+
+pub flow name_error_in_the_same_let_before_a_caret_on_a_let(x: F32 at sample) -> F32 at sample {
+  let a = x
+  let b = nope + prev~(^a)                          //~ E0302
+  b
+}
+
+// ---- An error of a later stage, before and after the E0020
+
+pub flow caret_on_an_input_then_type_error(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^x)                                 //~ E0020
+  let t: Bool = x
+  a
+}
+
+pub flow caret_on_a_let_then_effect(x: F32 at sample) -> F32 at sample {
+  let a = x
+  let b = prev~(^a)                                 //~ E0020
+  let e = with_alloc(x)
+  b + e
+}
+
+pub flow caret_on_a_constant_then_slow_clock(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^K)                                 //~ E0020
+  let c = x at block
+  a + c
+}
+
+pub flow caret_outside_a_delay_then_clock_parameter_in_a_delay(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = ^x * 2.0                                  //~ E0020
+  let d = prev~(p)
+  a + d
+}
+
+pub flow type_error_then_caret_on_an_input(x: F32 at sample) -> F32 at sample {
+  let t: Bool = x
+  let a = prev~(^x)                                 //~ E0020
+  a
+}
+
+pub flow effect_then_caret_on_a_let(x: F32 at sample) -> F32 at sample {
+  let e = with_alloc(x)
+  let a = x
+  let b = prev~(^a)                                 //~ E0020
+  b + e
+}
+
+pub flow slow_clock_then_caret_on_a_constant(x: F32 at sample) -> F32 at sample {
+  let c = x at block
+  let a = prev~(^K)                                 //~ E0020
+  a + c
+}
+
+pub flow clock_parameter_in_a_delay_then_caret_outside_a_delay(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let d = prev~(p)
+  let a = ^x * 2.0                                  //~ E0020
+  a + d
+}
+
+pub flow type_error_before_caret_in_the_same_let(x: F32 at sample) -> F32 at sample {
+  let a: Bool = prev~(^x)                           //~ E0020
+  x
+}
+
+// ---- Places: a `par` body, a branch
+
+pub flow caret_in_a_branch_then_name_not_found(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = prev~(if c { ^x } else { 0.0 })           //~ E0020
+  let z = nope
+  a + z
+}
+
+pub flow name_not_found_then_caret_in_a_match_arm(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  let z = nope                                      //~ E0302
+  let a = prev~(match k { 0 => ^x, _ => 0.5 })
+  a + z
+}
+
+// ---- Not errors
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let z = x + prev~(^z)
+  z
+}

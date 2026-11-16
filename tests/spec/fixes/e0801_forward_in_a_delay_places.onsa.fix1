@@ -1,0 +1,88 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§18.1"]
+// fixes = 1
+
+// W7-04 U2/t, S-117: the candidate of E0801 for a name used before its `let` is the insertion of `^`, and only when the use is inside the first argument of a delay (§11.2: "参照が遅延の
+// 第 1 引数の中にあるときだけ、`^` の挿入を修正候補にする"); the unit is clean after it (§18.1). The use is in the places a name may stand in the first argument: a branch, a match arm, a
+// call, an operand, the first argument of `delay~` and `vdelay~`. A forward use outside a delay has no candidate, and a `^name` outside the first argument of a delay has the candidate
+// `prev~(^name)` (the places are in fixes/e0801_forward.onsa). One error per flow (P-01).
+
+pub rt fn g(v: F32) -> F32 {
+  v
+}
+
+pub flow in_a_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = prev~(if c { ^b } else { 0.0 })            //~ E0801
+  let b = x * 0.5
+  a + b
+}
+
+pub flow in_a_match_arm(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  let a = prev~(match k { 0 => ^b, _ => 0.5 })       //~ E0801
+  let b = x * 0.5
+  a + b
+}
+
+pub flow in_a_call(x: F32 at sample) -> F32 at sample {
+  let a = prev~(g(^b))                               //~ E0801
+  let b = x * 0.5
+  a + b
+}
+
+pub flow in_an_operand(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^b * 2.0)                            //~ E0801
+  let b = x * 0.5
+  a + b
+}
+
+pub flow in_a_delay_line(x: F32 at sample) -> F32 at sample {
+  let a = delay~(^b, 3)                              //~ E0801
+  let b = x * 0.5
+  a + b
+}
+
+pub flow in_a_variable_delay(x: F32 at sample, d: F32 at block) -> F32 at sample {
+  let a = vdelay~(^b, d, 8)                          //~ E0801
+  let b = x * 0.5
+  a + b
+}
+
+pub flow in_its_own_definition(x: F32 at sample) -> F32 at sample {
+  let y = x + 0.5 * prev~(^y)                        //~ E0801
+  y
+}
+
+pub flow the_name_of_a_later_let_of_an_instance(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^s)                                  //~ E0801
+  let s = g(x)
+  a + s
+}
+
+// ---- No candidate: a use outside a delay
+
+pub flow outside_a_delay_in_a_sum(x: F32 at sample) -> F32 at sample {
+  let a = b + x                                     //~ E0801
+  let b = x * 0.5
+  a
+}
+
+pub flow outside_a_delay_in_a_branch(x: F32 at sample) -> F32 at sample {
+  let a = if x > 0.0 { b } else { 0.0 }             //~ E0801
+  let b = x * 0.5
+  a
+}
+
+pub flow in_the_init_of_a_delay(x: F32 at sample) -> F32 at sample {
+  let a = prev~(x, b)                               //~ E0801
+  let b = 0.5
+  a
+}
+
+// ---- Not errors
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^b) + x
+  let b = x * 0.5
+  a + b
+}

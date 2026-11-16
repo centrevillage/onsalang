@@ -83,16 +83,10 @@ impl Walker<'_> {
                 Err(self.outside(Outside::Par, par_head(ast.expr(e).span, *tilde)))
             }
             ExprKind::Par { tilde: None, .. } => Err(self.par_without_tilde(e)),
-            // `^y`: a local, or a builtin name of the flow (S-720); any other
-            // name is the flow stage's until W7-04.
-            ExprKind::Feedback(name) => {
-                if let Some(b) = self.lookup(name) {
-                    self.out.paths.insert(e, PathRes::Local(b));
-                } else if let Some(b) = self.flow_name(&name.name) {
-                    let d = b.misplaced([name.span].into_iter(), self.text).with_found(self.src(ast.expr(e).span));
-                    return Err(self.fail(Fail::Report(d)));
-                }
-                Ok(())
+            ExprKind::Feedback(name) => self.feedback(e, name),
+            ExprKind::At { expr, clock } => {
+                self.expr(*expr)?;
+                self.clock(e, clock)
             }
             ExprKind::Hole => {
                 let visible = self.visible();
@@ -118,7 +112,9 @@ impl Walker<'_> {
                 self.const_expr(range.hi)?;
                 self.open_scope();
                 declare(self)?;
+                self.order.par += 1;
                 self.expr(*body)?;
+                self.order.par -= 1;
                 self.close_scope();
                 Ok(())
             }

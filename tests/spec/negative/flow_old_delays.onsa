@@ -1,7 +1,7 @@
 // onsa.toml
 // [test]
 // spec = ["§2.6", "§11.1", "§11.4", "§18.1"]
-// fix = [{ at = "63:3", code = "E0811", candidate = 1, leaves = ["63:9 E0811"] }]
+// fix = [{ at = "37:21", code = "E0811", candidate = 1, leaves = ["37:27 E0801"] }, { at = "42:21", code = "E0811", candidate = 1, leaves = ["42:29 E0801"] }, { at = "63:3", code = "E0811", candidate = 1, leaves = ["63:9 E0811"] }]
 
 // The built-in delays are flows, so they are called with `~` (§2.6: "組込みの遅延 `prev` / `delay` /
 // `vdelay` も状態を持つ flow なので、`prev~(x)` と書く"). The old forms `prev(x, 0.0)`,

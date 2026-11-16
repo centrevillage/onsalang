@@ -129,12 +129,10 @@ features! {
     /// `{}`: the clock. R-17, S-33: hoisting computes it at `init` (W7-05).
     NonRtCallAtClock: Language, "a call of a function that is not `rt` in an expression at the clock `{}`",
         Some("bind the call with a `let` of its own, which is computed at `init`");
-    /// R-03: the look-back of a replica (W7-04).
+    /// R-03: the look-back of a replica, of the names stage (W7-07).
     FeedbackInPar: Language, "a feedback reference `^name` inside a `par~`", None;
     /// §11.4, S-565: the time since `reset` in ticks (W7-09, R-288).
     SampleTick: Language, "the builtin `sample_tick()` of a flow", None;
-    /// S-44, S-116: its E0020 is the names stage's (W7-04).
-    CaretOnVisible: Language, "`^` on a name that is defined above it (a redundant mark)", None;
     Iteration: Language, "iteration over types other than arrays, `Span`, `Buf` and `Array`", None;
     Equality: Language, "equality on this type", None;
     OrderingAggregates: Language, "ordering comparisons of aggregate values", None;

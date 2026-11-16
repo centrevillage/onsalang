@@ -1264,11 +1264,21 @@ pub static ROWS: &[Row] = &[
         rule: "the rate of an input or the output of a flow is the clock written after its type (`x: F32 at sample`), not a type; out of a flow no clock is written (§11.3)",
         detect: Detect::Reported,
     },
+    // Found by the names stage at `^` on a visible name of a flow body (§11.2, S-116).
+    Row {
+        id: RowId::CaretVisible,
+        name: "caret_visible",
+        phase: Phase::Names,
+        code: Code::E0020,
+        message: "`^` marks a later `let`; this name is visible here already",
+        rule: "`^name` reads a `let` defined below it, in the first argument of a delay; a name defined above, an input and a constant are read by their names, and their past value is `prev~(x)` (§11.2)",
+        detect: Detect::Reported,
+    },
 ];
 
 /// The rows of the data file that no work has made yet (the later works
 /// of W3 to W7; [`Waiting`]).
-pub static WAITING: &[Waiting] = &[Waiting { name: "caret_visible", phase: Phase::Names, code: Code::E0020 }];
+pub static WAITING: &[Waiting] = &[];
 
 /// The matchers of the syntax stage and the rows each may name: every one
 /// runs at every failure of the parser ([`super::at_failure`]), in no order

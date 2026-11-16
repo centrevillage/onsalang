@@ -1,0 +1,274 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.2", "§15.1", "§18.1"]
+//
+// [[test.fix]]
+// at = "137:11"
+// code = "E0811"
+// candidate = 1
+// leaves = ["138:16 E0302"]
+//
+// [[test.fix]]
+// at = "143:11"
+// code = "E0812"
+// candidate = 1
+// leaves = ["144:16 E0302"]
+//
+// [[test.fix]]
+// at = "125:17"
+// code = "E0020"
+// candidate = 1
+// leaves = ["126:16 E0302"]
+
+// W7-04 U2/t, R-472, S-267, R-286: the clock name after `at` in the body of a flow (`e at nope`) is looked up in the namespace of the clocks, and a
+// name that is not there is E0302 of the names stage, with the position on the name (§11.3: "クロックの名前空間に無い名前は、値や型に同じ名前があっても E0302
+// （名前の段。主の位置はその名前）"). It is one of the errors of the names stage of the unit, so the first by position is reported: before an error of the
+// names stage that comes after it (E0302 of another name, E0304, E0801, E0020 of a `^` on a visible name, E0806, E0811, E0812) it is the error of the
+// unit, and an error of the names stage that comes first is reported instead of it. An error of a later stage (E0401 type, E0805 effect, E0815 clock,
+// E0813 clock parameter in a delay) is not reported when the `at` has a clock that is not found, whatever the position (§18.1: "名前の誤りがある単位では型検査をせず
+// …依存する段の間では、位置によらず先の段の誤りを報告する"). The clocks that exist (`init`, `block`, `sample`) are not errors. One error per unit.
+
+pub fn with_alloc(x: F32) -> F32 uses {Alloc} {
+  x
+}
+
+pub rt fn g(v: F32) -> F32 {
+  v
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+// ---- A name error after the `at`
+
+pub flow at_then_name_not_found(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = p at nope                                 //~ E0302 @16
+  let b = zz
+  x + a
+}
+
+pub flow at_then_duplicate(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = p at nope                                 //~ E0302 @16
+  let c = x
+  let c = x
+  x + a
+}
+
+pub flow at_then_forward(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = p at nope                                 //~ E0302 @16
+  let b = c
+  let c = x
+  x + a
+}
+
+pub flow at_then_caret_outside_a_delay(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = p at nope                                 //~ E0302 @16
+  let b = ^c
+  let c = x
+  x + a
+}
+
+pub flow at_then_caret_on_an_input(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = p at nope                                 //~ E0302 @16
+  let b = prev~(^x)
+  a + b
+}
+
+pub flow at_then_var(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = p at nope                                 //~ E0302 @16
+  var c = x
+  a
+}
+
+pub flow at_then_function_value(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = p at nope                                 //~ E0302 @16
+  let k = g
+  a
+}
+
+pub flow at_then_call_without_tilde(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = p at nope                                 //~ E0302 @16
+  let z = lp(x)
+  a + z
+}
+
+pub flow at_then_tilde_on_a_function(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = p at nope                                 //~ E0302 @16
+  let z = g~(x)
+  a + z
+}
+
+// ---- A name error before the `at`
+
+pub flow name_not_found_then_at(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let z = zz                                        //~ E0302 @11
+  let a = p at nope
+  a + z
+}
+
+pub flow duplicate_then_at(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let c = x
+  let c = x                                         //~ E0304
+  let a = p at nope
+  a + c
+}
+
+pub flow forward_then_at(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let b = c                                         //~ E0801
+  let c = x
+  let a = p at nope
+  a + b
+}
+
+pub flow caret_on_an_input_then_at(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let b = prev~(^x)                                 //~ E0020
+  let a = p at nope
+  a + b
+}
+
+pub flow var_then_at(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  var c = x                                         //~ E0806
+  let a = p at nope
+  a
+}
+
+pub flow call_without_tilde_then_at(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let z = lp(x)                                     //~ E0811
+  let a = p at nope
+  a + z
+}
+
+pub flow tilde_on_a_function_then_at(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let z = g~(x)                                     //~ E0812
+  let a = p at nope
+  a + z
+}
+
+// ---- An error of a later stage, before and after the `at`
+
+pub flow at_then_type_error(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = p at nope                                 //~ E0302 @16
+  let t: Bool = x
+  x + a
+}
+
+pub flow type_error_then_at(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let t: Bool = x
+  let a = p at nope                                 //~ E0302 @16
+  x + a
+}
+
+pub flow at_then_effect(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = p at nope                                 //~ E0302 @16
+  let e = with_alloc(x)
+  a + e
+}
+
+pub flow effect_then_at(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let e = with_alloc(x)
+  let a = p at nope                                 //~ E0302 @16
+  a + e
+}
+
+pub flow slow_clock_then_at(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let c = x at block
+  let a = p at nope                                 //~ E0302 @16
+  a + c
+}
+
+pub flow at_then_slow_clock(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = p at nope                                 //~ E0302 @16
+  let c = x at block
+  a + c
+}
+
+pub flow clock_parameter_in_a_delay_then_at(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let d = prev~(p)
+  let a = p at nope                                 //~ E0302 @16
+  a + d
+}
+
+pub flow at_then_clock_parameter_in_a_delay(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = p at nope                                 //~ E0302 @16
+  let d = prev~(p)
+  a + d
+}
+
+// ---- The `at` has a type error in its own `let`: the annotation is checked after the names
+
+pub flow annotated_let_with_an_unknown_clock(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a: Bool = p at nope                           //~ E0302 @22
+  x
+}
+
+// ---- The same `let`
+
+pub flow name_not_found_before_the_at_in_the_same_let(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = (zz at nope) + x                          //~ E0302 @12
+  a
+}
+
+pub flow at_before_a_name_not_found_in_the_same_let(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = (p at nope) + zz                          //~ E0302 @17
+  a
+}
+
+pub flow at_before_a_forward_in_the_same_let(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = (p at nope) + b                           //~ E0302 @17
+  let b = x
+  a
+}
+
+// ---- Places: an argument of a delay, a branch, a match arm, a `par` body, an argument of a flow
+
+pub flow at_in_a_delay_then_name_not_found(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = prev~(p at nope)                          //~ E0302 @22
+  let b = zz
+  a
+}
+
+pub flow at_in_a_branch_then_name_not_found(x: F32 at sample, p: F32 at block, c: Bool at block) -> F32 at sample {
+  let a = if c { p at nope } else { p }             //~ E0302 @23
+  let b = zz
+  x + a
+}
+
+pub flow at_in_a_match_arm_then_name_not_found(x: F32 at sample, p: F32 at block, k: U32 at block) -> F32 at sample {
+  let a = match k { 0 => p at nope, _ => p }        //~ E0302 @31
+  let b = zz
+  x + a
+}
+
+pub flow at_in_a_par_body_then_forward(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let xs = par~ i in 0 ..< 2 {
+    p at nope                                       //~ E0302 @10
+  }
+  let b = c
+  let c = x
+  x + xs[0]
+}
+
+pub flow at_in_a_flow_argument_then_var(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = lp~(p at nope)                            //~ E0302 @20
+  var c = x
+  a
+}
+
+// ---- The clocks that exist are not errors (a later error is then the one reported)
+
+pub flow init_block_and_sample_then_name_not_found(x: F32 at sample, i: F32 at init, p: F32 at block) -> F32 at sample {
+  let a = i at init
+  let b = i at block
+  let c = p at sample
+  let d = x at sample
+  let z = zz                                        //~ E0302
+  a + b + c + d + z
+}
+
+pub flow init_block_and_sample_in_places(x: F32 at sample, i: F32 at init, p: F32 at block, c: Bool at block) -> F32 at sample {
+  let a = prev~(p at sample)
+  let b = if c { i at block } else { p at block }
+  let ys = par~ k in 0 ..< 2 { p at sample }
+  x + a + b + ys[0]
+}

@@ -1,0 +1,87 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§7", "§5.1"]
+
+// W7-04 U2/t, S-724: a `let` whose pattern holds a failed name (`Dd`, declared twice: E0304, so that `Dd` is not found in the value position, §18.1: "E0304・E0305 に
+// なった名前も … その名前を誤りとして扱う"; a name that is not found: E0302) is read the same way in a fn body and in a flow body. The use of a failed name in a value position
+// (a name as a path of an expression or a pattern) stops the checks that depend on it for the rest of the unit (§18.1: "その単位の以後を検査しない"), so a fn and a flow
+// with the same `let` report the same: the E0304 of the second `Dd` (in the declaration unit, once) and nothing in the units that use it, whatever the annotation
+// of the `let` or a later `let` says (an `E0401` of a `Bool` against a tuple, a `1` for a `Bool`). The decision (S-724 (a)) does not promise how far the check goes, only
+// that the fn and the flow agree; the cases pin the one error of each case. With a name that is not found in the pattern, the E0302 is the one error of the unit in both.
+
+pub struct Dd {
+  a: F32,
+}
+
+pub struct Dd {                                     //~ E0304
+  a: F32,
+}
+
+pub fn tuple_pattern_in_a_fn(x: F32) -> F32 {
+  let (q, Dd { a: r }): Bool = (x, x)
+  x
+}
+
+pub flow tuple_pattern_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let (q, Dd { a: r }): Bool = (x, x)
+  let ww: Bool = 1
+  x
+}
+
+pub fn tuple_pattern_in_a_fn_with_a_later_let(x: F32) -> F32 {
+  let (q, Dd { a: r }): Bool = (x, x)
+  let ww: Bool = 1
+  x
+}
+
+pub fn struct_pattern_in_a_fn(x: F32) -> F32 {
+  let Dd { a: r } = x
+  x
+}
+
+pub flow struct_pattern_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let Dd { a: r } = x
+  x
+}
+
+pub fn struct_pattern_with_an_annotation_in_a_fn(x: F32) -> F32 {
+  let Dd { a: r }: Bool = x
+  x
+}
+
+pub flow struct_pattern_with_an_annotation_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let Dd { a: r }: Bool = x
+  x
+}
+
+pub fn struct_literal_in_a_fn(x: F32) -> F32 {
+  let d: Bool = Dd { a: x }
+  x
+}
+
+pub flow struct_literal_in_a_flow(x: F32 at sample) -> F32 at sample {
+  let d: Bool = Dd { a: x }
+  x
+}
+
+// ---- A name that is not found in the pattern: the E0302 is the error of both
+
+pub fn name_not_found_in_the_pattern_of_a_fn(x: F32) -> F32 {
+  let (q, Nope { a: r }): Bool = (x, x)             //~ E0302
+  x
+}
+
+pub flow name_not_found_in_the_pattern_of_a_flow(x: F32 at sample) -> F32 at sample {
+  let (q, Nope { a: r }): Bool = (x, x)             //~ E0302
+  x
+}
+
+pub fn name_not_found_in_a_literal_of_a_fn(x: F32) -> F32 {
+  let d: Bool = Nope { a: x }                       //~ E0302
+  x
+}
+
+pub flow name_not_found_in_a_literal_of_a_flow(x: F32 at sample) -> F32 at sample {
+  let d: Bool = Nope { a: x }                       //~ E0302
+  x
+}

@@ -390,15 +390,15 @@ codes! {
         "closure cannot capture this value";
     E0713 = 713, Modes, [Types, Flow, Modes], OutsideFlow, Optional,
         "calling an `inout self` method needs `!` after the name";
-    E0714 = 714, Modes, [Types, Flow, Modes], Required, Optional,
+    E0714 = 714, Modes, [Types, Modes], Required, Optional,
         "`!` on a method that does not take `inout self`";
     E0715 = 715, Modes, [Modes], Optional, Optional,
         "the place being iterated or matched is modified, or a binding of an arm is consumed in its guard";
-    E0801 = 801, Flow, [Flow], Optional, Optional,
+    E0801 = 801, Flow, [Names], Optional, Optional,
         "name used before its definition in a flow (a later `let` is read as `^name` in the first argument of a delay)";
     E0805 = 805, Flow, [Flow], Optional, Optional,
         "a function with effects cannot be called from a flow";
-    E0806 = 806, Flow, [Names, Flow], Optional, Optional,
+    E0806 = 806, Flow, [Names], Optional, Optional,
         "this form is not allowed in a flow body";
     E0807 = 807, Flow, [Flow], Optional, Optional,
         "`delay~` with length 1; write `prev~` instead";

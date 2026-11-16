@@ -34,7 +34,7 @@ use crate::exhaust::{Missing, P, Seen};
 use crate::infer::{Cause, Fit, Infer, LitKind, Mismatch};
 use crate::names::body::{BodyNames, Origin, PatRes, PathRes, StructRes};
 use crate::requirement::{ArgumentName, Required};
-use crate::resolve::{Builtin, Entity, ResolveError};
+use crate::resolve::{Builtin, Entity};
 use crate::structpat::Written;
 use crate::tails::{Diverging, Patch};
 use crate::traits::OpNeed;
@@ -394,21 +394,6 @@ impl<'a> Checker<'a> {
             Ty::Array(e, _) => self.mentions_failed(e),
             _ => false,
         }
-    }
-
-    /// A path that does not resolve: its diagnostic, or none when the path
-    /// names what the check does not read (`Analysis::unread_path`: a member
-    /// of a struct or enum whose unit failed in the syntax stage, or a name
-    /// the names stage holds as an error, §18.1, S-462, S-675): in a value
-    /// place, the check of this body stops there without a diagnostic, and
-    /// the body is not complete (S-692).
-    // SPEC-GAP(S-260): the members of a failed struct or enum get no diagnostic.
-    pub(crate) fn resolve_error(&mut self, path: &onsa_syntax::ast::Path, err: ResolveError) -> Stop {
-        if self.a.unread_path(self.def, self.m, path, &err) {
-            self.failed = true;
-            return Stop;
-        }
-        self.diag(err.into_diagnostic())
     }
 
     /// A name that does not resolve in a body: a diagnostic of the names

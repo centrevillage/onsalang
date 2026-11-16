@@ -133,30 +133,6 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// E0801: a `let` name read before its definition (its own initializer
-    /// included); a later `let` is read only as `^name` (§11.2).
-    pub(crate) fn flow_use_local(&mut self, id: LocalId, span: Span) -> R<()> {
-        let f = self.fcx();
-        if let Some(&k) = f.let_of_local.get(&id)
-            && !f.defined.contains(&id)
-        {
-            let name = self.info.locals[id.0 as usize].name.clone();
-            let def_span = self.fcx().pending[k].span;
-            return Err(self.diag(
-                Diagnostic::new(
-                    Stage::Flow, Code::E0801,
-                    span,
-                    format!(
-                        "`{name}` is defined below; names are defined from the top, and a later `let` is read as `^{name}` in the first argument of `prev~` / `delay~` / `vdelay~` (§11.2)"
-                    ),
-                )
-                .with_found(name)
-                .with_note(def_span, "defined here"),
-            ));
-        }
-        Ok(())
-    }
-
     /// Statements in flow mode (§11.2): the `let`s of the top level; the
     /// names stage reported any other (its E0806, `names/body/flow_forms.rs`).
     pub(crate) fn check_flow_stmt(&mut self, s: StmtId) -> R<()> {
@@ -177,11 +153,7 @@ impl<'a> Checker<'a> {
         // sample`, §11.3).
         let expected = self.fcx().pending[k].annotation;
         let it = self.check_expr(init, expected)?;
-        self.flow_unify_pat(pat, it)?;
-        let f = self.fcx();
-        let locals = f.pending[k].locals.clone();
-        f.defined.extend(locals);
-        Ok(())
+        self.flow_unify_pat(pat, it)
     }
 
     /// Unify a `let` pattern with the pre-declared locals (irrefutable patterns only).
@@ -248,14 +220,11 @@ impl<'a> Checker<'a> {
                 let (var, range, body) = (var.clone(), *range, *body);
                 self.check_par(e, &var, &range, body, expected).map(Some)
             }
-            ExprKind::At { expr: inner, clock } => {
-                let (inner, clock) = (*inner, clock.clone());
-                self.check_at(e, inner, &clock, expected).map(Some)
+            ExprKind::At { expr: inner, .. } => {
+                let inner = *inner;
+                self.check_at(e, inner, expected).map(Some)
             }
-            ExprKind::Feedback(name) => {
-                let name = name.clone();
-                self.check_feedback(e, &name).map(Some)
-            }
+            ExprKind::Feedback(_) => self.check_feedback(e).map(Some),
             _ => Ok(None),
         }
     }
@@ -299,10 +268,7 @@ impl<'a> Checker<'a> {
             let lid = self.local_of(Origin::Par(e))?;
             self.bind_local(lid, u32, var.span)?;
             self.fcx().pars.insert(e, (lid, lo, hi));
-            self.fcx().par_depth += 1;
-            let r = self.check_expr(body, exp_elem);
-            self.fcx().par_depth -= 1;
-            r
+            self.check_expr(body, exp_elem)
         })();
         let t = r?;
         Ok(self.a.types.intern(Ty::Array(t, Len::Const(hi - lo))))
@@ -384,19 +350,11 @@ impl<'a> Checker<'a> {
         if let Some(exp) = expected {
             self.unify_at(span, f.out, exp)?;
         }
-        // An argument of an instance takes no `^` (§11.2), even in the first
-        // argument of a delay.
-        let lookback = std::mem::take(&mut self.fcx().lookback);
-        let r = (|| -> R<Vec<ExprId>> {
-            let mut arg_exprs = Vec::new();
-            for (arg, input) in args.iter().zip(&f.inputs) {
-                self.check_expr(arg.expr, Some(input.ty))?;
-                arg_exprs.push(arg.expr);
-            }
-            Ok(arg_exprs)
-        })();
-        self.fcx().lookback = lookback;
-        let arg_exprs = r?;
+        let mut arg_exprs = Vec::new();
+        for (arg, input) in args.iter().zip(&f.inputs) {
+            self.check_expr(arg.expr, Some(input.ty))?;
+            arg_exprs.push(arg.expr);
+        }
         self.fcx().calls.push(NodeCall {
             expr: e,
             kind: NodeKind::Instance(d),
@@ -440,11 +398,8 @@ impl<'a> Checker<'a> {
                 ),
             ));
         }
-        // The first argument may look back to a later `let` with `^` (§11.2).
-        self.fcx().lookback += 1;
         self.fcx().delay_arg += 1;
         let r = self.check_expr(args[0].expr, expected);
-        self.fcx().lookback -= 1;
         self.fcx().delay_arg -= 1;
         let t = r?;
         let init_expr = args.get(d.init_index()).map(|a| a.expr);

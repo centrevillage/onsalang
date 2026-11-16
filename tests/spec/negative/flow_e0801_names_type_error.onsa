@@ -1,0 +1,178 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§11.3", "§11.4", "§11.5", "§18.1"]
+
+// W7-04 U2/t, S-116, S-267, R-286: E0801 (a name used before its `let` without `^`, a `^name` outside the first argument of a delay, a `^name` in
+// the init of a delay, a name in its own definition; §11.2) and an error of a later stage in the same unit: a type error (E0401), an effect in a flow
+// body (E0805, §11.5), a clock too slow for an `at` (E0815, §11.3) and a clock parameter in a delay (E0813, §11.4). The E0801 is an error of the names
+// stage (§18.1: "flow の本体の名前の順（E0801 …）"), and the stages depend on each other in the order "構文 → 名前 → 型 → flow の検査 → …" ("依存する段の間では、位置によらず
+// 先の段の誤りを報告する"), so the E0801 is reported whatever the position of the later error is: before the use, after it, or in the same `let`.
+// One error per unit.
+
+pub fn with_alloc(x: F32) -> F32 uses {Alloc} {
+  x
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+// ---- The later stage is after the E0801
+
+pub flow forward_then_type_error(x: F32 at sample) -> F32 at sample {
+  let a = b                                         //~ E0801
+  let b = x
+  let t: Bool = x
+  a
+}
+
+pub flow forward_then_effect(x: F32 at sample) -> F32 at sample {
+  let a = b                                         //~ E0801
+  let b = x
+  let e = with_alloc(x)
+  a + e
+}
+
+pub flow forward_then_slow_clock(x: F32 at sample) -> F32 at sample {
+  let a = b                                         //~ E0801
+  let b = x
+  let c = x at block
+  a + c
+}
+
+pub flow forward_then_clock_parameter_in_a_delay(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = b                                         //~ E0801
+  let b = x
+  let d = prev~(p)
+  a + d
+}
+
+pub flow caret_outside_a_delay_then_type_error(x: F32 at sample) -> F32 at sample {
+  let a = ^b                                        //~ E0801
+  let b = x
+  let t: Bool = x
+  a
+}
+
+pub flow caret_in_the_init_then_effect(x: F32 at sample) -> F32 at sample {
+  let a = prev~(x, ^k)                              //~ E0801
+  let k = 0.5
+  let e = with_alloc(x)
+  a + e
+}
+
+pub flow itself_then_slow_clock(x: F32 at sample) -> F32 at sample {
+  let y = x + y                                     //~ E0801
+  let c = x at block
+  y + c
+}
+
+// ---- The later stage is before the E0801
+
+pub flow type_error_then_forward(x: F32 at sample) -> F32 at sample {
+  let t: Bool = x
+  let a = b                                         //~ E0801
+  let b = x
+  a
+}
+
+pub flow effect_then_forward(x: F32 at sample) -> F32 at sample {
+  let e = with_alloc(x)
+  let a = b                                         //~ E0801
+  let b = x
+  a + e
+}
+
+pub flow slow_clock_then_forward(x: F32 at sample) -> F32 at sample {
+  let c = x at block
+  let a = b                                         //~ E0801
+  let b = x
+  a + c
+}
+
+pub flow clock_parameter_in_a_delay_then_forward(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let d = prev~(p)
+  let a = b                                         //~ E0801
+  let b = x
+  a + d
+}
+
+pub flow type_error_then_caret_outside_a_delay(x: F32 at sample) -> F32 at sample {
+  let t: Bool = x
+  let a = ^b                                        //~ E0801
+  let b = x
+  a
+}
+
+pub flow slow_clock_then_caret_in_the_init(x: F32 at sample) -> F32 at sample {
+  let c = x at block
+  let a = delay~(x, 3, ^k)                          //~ E0801
+  let k = 0.5
+  a + c
+}
+
+pub flow effect_then_itself(x: F32 at sample) -> F32 at sample {
+  let e = with_alloc(x)
+  let y = x + y                                     //~ E0801
+  y + e
+}
+
+// ---- The later stage is in the same `let`
+
+pub flow type_error_before_forward_in_the_same_let(x: F32 at sample) -> F32 at sample {
+  let a: Bool = x + b                               //~ E0801
+  let b = x
+  x
+}
+
+pub flow slow_clock_before_forward_in_the_same_let(x: F32 at sample) -> F32 at sample {
+  let a = (x at block) + b                          //~ E0801
+  let b = x
+  a
+}
+
+pub flow forward_before_effect_in_the_same_let(x: F32 at sample) -> F32 at sample {
+  let a = b + with_alloc(x)                         //~ E0801
+  let b = x
+  a
+}
+
+// ---- Places: a `par` body, a branch, a delay
+
+pub flow forward_in_a_par_body_with_a_type_error_before(x: F32 at sample) -> F32 at sample {
+  let t: Bool = x
+  let xs = par~ i in 0 ..< 2 {
+    y * F32.round_from(i)                           //~ E0801
+  }
+  let y = x
+  xs[0]
+}
+
+pub flow forward_in_a_branch_with_a_slow_clock_after(x: F32 at sample) -> F32 at sample {
+  let a = if x > 0.0 { y } else { 0.0 }             //~ E0801
+  let y = x
+  let c = x at block
+  a + c
+}
+
+pub flow forward_in_a_delay_with_an_effect_after(x: F32 at sample) -> F32 at sample {
+  let a = prev~(b) + x                              //~ E0801
+  let b = x * 0.5
+  let e = with_alloc(x)
+  a + e
+}
+
+pub flow forward_in_a_user_flow_in_a_delay_with_a_type_error_before(x: F32 at sample) -> F32 at sample {
+  let t: Bool = x
+  let a = prev~(lp~(^y))                            //~ E0801
+  let y = x
+  a
+}
+
+// ---- Not errors
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^b) + x
+  let b = x * 0.5
+  a + b
+}

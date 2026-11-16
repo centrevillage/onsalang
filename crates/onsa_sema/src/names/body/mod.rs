@@ -8,7 +8,8 @@
 //! `exprs` (the walk of the statements, expressions and patterns, and of
 //! a flow body), `calls` (the form of a call its callee decides), `flow`
 //! (the `~` of a call of a flow body and its instances), `flow_forms` (what
-//! a flow body cannot contain), `paths` (the names
+//! a flow body cannot contain), `flow_order` (the order of its names and
+//! its clocks), `paths` (the names
 //! whose head is no local) and `cycles` (the cycles of the constants and of
 //! the flow instances, from the records).
 //!
@@ -24,6 +25,7 @@ mod cycles;
 mod exprs;
 mod flow;
 mod flow_forms;
+mod flow_order;
 mod kinds;
 mod paths;
 pub(crate) use consts::{ConstScope, const_names, const_path_names};
@@ -142,6 +144,9 @@ pub(crate) struct BodyNames {
     pub instances: Vec<(ExprId, DefId, onsa_diag::Span)>,
     /// A call of [`Self::instances`] to its index there.
     pub instance_of: HashMap<ExprId, usize>,
+    /// The clock of each `e at k` of a flow body, its name looked up (§11.3,
+    /// R-472): the one lookup that the types stage and the clocks read.
+    pub clocks: HashMap<ExprId, crate::ty::Rate>,
     /// What diverges (§7), which [`crate::body::BodyInfo::diverging`] takes.
     pub diverging: crate::tails::Diverging,
     /// `false` when the walk stopped before the end of the body: at an error
@@ -623,6 +628,8 @@ struct Walker<'a> {
     /// them: a candidate that rewrites its names is none (`kinds.rs`), or
     /// keeps them (`paths.rs::qualified_variant`).
     listed: Vec<(usize, ExprId)>,
+    /// The order of the names of a flow body (`flow_order.rs`).
+    order: flow_order::Order,
 }
 
 impl<'a> Walker<'a> {
@@ -655,6 +662,7 @@ impl<'a> Walker<'a> {
             heading: HashMap::default(),
             outer: HashMap::default(),
             listed: Vec::new(),
+            order: flow_order::Order::default(),
         }
     }
 
@@ -710,8 +718,9 @@ impl<'a> Walker<'a> {
     /// inputs, the names of every `let` of the body, then the body. An error
     /// of the pattern of a `let` stops the walk at it, after the errors of
     /// the statements before it ([`Self::fail_at_let`]), and its type is read
-    /// there; a type sees every `let` of the body (S-740). A form the body
-    /// cannot contain is its E0806 (`flow_forms.rs`).
+    /// there; a type sees every `let` of the body (S-740). A value reads the
+    /// `let`s above it (`flow_order.rs`). A form the body cannot contain is
+    /// its E0806 (`flow_forms.rs`).
     fn walk_flow(&mut self, inputs: &[FlowInput], body: ExprId) -> W {
         self.flow = true;
         self.open_scope();
@@ -722,11 +731,13 @@ impl<'a> Walker<'a> {
         let ast = self.ast;
         let ExprKind::Block(b) = &ast.expr(body).kind else { return self.expr(body) };
         let (mut typed, mut declared) = (Vec::new(), Ok(()));
+        self.declared_let(None);
         for &s in &b.stmts {
             if let StmtKind::Let { pat, ty, .. } = ast.stmt(s).kind {
                 self.prescan = Some(s);
                 typed.extend(ty.map(|t| (s, t)));
                 declared = self.pattern(pat, BindingKind::FlowLet, Origin::Let(s));
+                self.declared_let(Some(s));
                 if declared.is_err() {
                     break;
                 }
@@ -749,7 +760,8 @@ impl<'a> Walker<'a> {
                     if self.flow_types.front().is_some_and(|&(at, _)| at == s) {
                         self.type_sites.extend(self.flow_types.pop_front().map(|(_, t)| t));
                     }
-                    self.expr(*init)?
+                    self.expr(*init)?;
+                    self.defined_let(s);
                 }
                 _ => self.stmt(s)?,
             }

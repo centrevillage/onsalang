@@ -48,9 +48,6 @@ impl<'a> Checker<'a> {
         match self.item_record(r) {
             PathRes::Local(b) => {
                 let id = LocalId(b.0);
-                if self.flow.is_some() {
-                    self.flow_use_local(id, span)?;
-                }
                 self.info.targets.insert(e, Target::Local(id));
                 Ok(self.local_ty(id))
             }

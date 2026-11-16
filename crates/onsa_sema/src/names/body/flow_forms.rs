@@ -119,9 +119,10 @@ impl Walker<'_> {
     /// of a flow body (§11.2, §18.1, R-59). To a name not defined yet, the
     /// candidate writes `let` before it, only when it leaves no error of the
     /// names stage (§18.1): `let` binds the name as written (no E0002, no
-    /// E0320), the value walks clean (it does not read the name, which is
-    /// not found, and has no other error of its names; one that writes a
-    /// type is not read so and has none), and the body has its output after
+    /// E0320), the value walks clean with the name a `let` defined below
+    /// (read as `^name` in the first argument of a delay only, §11.2, and no
+    /// other error of its names; one that writes a type is not read so and
+    /// has none), and the body has its output after
     /// it. To a name a `let` defined, the note of the accumulation of §18.1
     /// and no candidate.
     // SPEC-GAP(S-1102): a tuple or a field as the target has no candidate.
@@ -142,7 +143,7 @@ impl Walker<'_> {
             _ => false,
         };
         let d = match head {
-            Head::NotFound if output && binds_as_written(&name.name) && self.walks_clean(value) => {
+            Head::NotFound if output && binds_as_written(&name.name) && self.walks_clean_as_let(name, s, value) => {
                 let at = d.span;
                 d.with_fix(Fix::insert("define it with `let`", at.file, at.start, "let "))
             }
@@ -158,7 +159,7 @@ impl Walker<'_> {
     /// Whether the walk of the value `e` stops nowhere and finds no type in
     /// it (whose names are read later, `lower_types`), with nothing reported
     /// (S-1100) and its instances taken back (no edges of E0817).
-    fn walks_clean(&mut self, e: ExprId) -> bool {
+    pub(super) fn walks_clean(&mut self, e: ExprId) -> bool {
         let (sites, instances) = (self.type_sites.len(), self.out.instances.len());
         let clean = self.expr(e).is_ok() && self.type_sites.len() == sites;
         self.type_sites.truncate(sites);
