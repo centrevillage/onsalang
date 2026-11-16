@@ -19,6 +19,8 @@ pub enum PanicKind {
     DivZero,
     /// The amount of a shift is the bit width or more.
     Shift,
+    /// An index out of the array (§9.2).
+    Bounds,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

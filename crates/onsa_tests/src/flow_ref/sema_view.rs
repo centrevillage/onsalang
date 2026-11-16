@@ -8,9 +8,9 @@
 use onsa_driver::Analyzed;
 use onsa_sema::def::{FieldDef, Fields, FlowInput, StructDef, VariantDef};
 use onsa_sema::ty::Rate;
-use onsa_sema::{Analysis, BodyInfo, ConstValue, DefId, DefKind, Entity, LocalId, LocalKind, ModId, Package};
+use onsa_sema::{Analysis, BodyInfo, ConstValue, DefId, DefKind, LocalId, LocalKind, Package};
 use onsa_sema::{Target, Ty, TyId};
-use onsa_syntax::ast::{Ast, ExprId, PatId, Path};
+use onsa_syntax::ast::{Ast, ExprId, PatId};
 
 use super::scalar::Fault;
 
@@ -31,7 +31,6 @@ pub struct Body<'a> {
     pub view: View<'a>,
     pub ast: &'a Ast,
     pub info: &'a BodyInfo,
-    pub module: ModId,
 }
 
 impl<'a> View<'a> {
@@ -53,7 +52,7 @@ impl<'a> View<'a> {
         let (info, module) =
             (need(info, "no tables for a body")?, need(self.analysis.ast(self.pkg, d.module), "no tree")?);
         need(info.complete.then_some(()), "a body whose tables are not whole")?;
-        Ok(Body { view: self, ast: &module.parsed.ast, info, module: d.module })
+        Ok(Body { view: self, ast: &module.parsed.ast, info })
     }
 
     /// The value the checker worked out for a `const`; none for the ones it does not evaluate (`F32.NAN`).
@@ -67,11 +66,6 @@ impl<'a> View<'a> {
             DefKind::Const(c) => Ok((self.body(def)?, need(c.value, "a const without an initializer")?)),
             _ => need(None, "a name that is not a const"),
         }
-    }
-
-    /// What a path written in `module` names (a local is not seen: ask the body's targets first).
-    pub fn resolve(self, module: ModId, path: &Path) -> Result<Entity, Fault> {
-        need(self.analysis.resolve_path(module, path).ok(), "a path that does not resolve")
     }
 
     /// The fields of a struct in the order of the declaration, with the declared default of each.
@@ -105,6 +99,18 @@ impl<'a> Body<'a> {
     /// The number of the variant a pattern names.
     pub fn pat_ctor(&self, p: PatId) -> Result<u32, Fault> {
         need(self.info.pat_ctors.get(&p).copied(), "a pattern with no variant")
+    }
+    /// Does the table give a target to `e`? (`F32.PI` and `Mode.Off` have one, the field `p.x` has not.)
+    pub fn names(&self, e: ExprId) -> bool {
+        self.info.targets.contains_key(&e)
+    }
+    /// Does a path pattern name a variant (else a constant)?
+    pub fn is_ctor(&self, p: PatId) -> bool {
+        self.info.pat_ctors.contains_key(&p)
+    }
+    /// The constant a path pattern names.
+    pub fn pat_const(&self, p: PatId) -> Result<&'a Target, Fault> {
+        need(self.info.pat_consts.get(&p), "a pattern with no constant")
     }
     /// The local of an input of the flow, by its name.
     pub fn input(&self, name: &str) -> Option<LocalId> {

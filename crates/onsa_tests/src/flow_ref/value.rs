@@ -7,8 +7,47 @@
 //! are not specified, §3.4). The comparison of the language (`==`, IEEE) is
 //! [`super::scalar::binary`].
 
-use onsa_sema::Ty;
-use onsa_sema::ty::FloatKind;
+use onsa_sema::ty::{FloatKind, Len};
+use onsa_sema::{Ty, TyId};
+
+use super::scalar::Fault;
+use super::sema_view::View;
+
+/// Each value against the type of its place, and as many places as values.
+fn all(vs: &[Value], ts: &[TyId], view: View, env: Option<&Env>) -> Result<bool, Fault> {
+    if ts.len() != vs.len() {
+        return Ok(false);
+    }
+    for (v, t) in vs.iter().zip(ts) {
+        if !v.agrees_in(view.ty(*t), view, env)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+/// The type arguments a type is written in: the `args` of a `Named(def, args)` for the types of the fields of `def`,
+/// each of them written in `outer`. The evaluator's own, as `onsa_sema`'s `Types::subst` takes `&mut self` (it interns
+/// the types it makes) and the evaluator reads the tables as they are.
+pub(super) struct Env<'e> {
+    pub args: &'e [TyId],
+    pub outer: Option<&'e Env<'e>>,
+}
+
+impl Env<'_> {
+    /// `ty` read under `env`: a parameter is followed to its argument, read under the environment around.
+    pub fn follow<'a, 'x>(
+        view: View<'a>,
+        mut ty: &'a Ty,
+        mut env: Option<&'x Env<'x>>,
+    ) -> (&'a Ty, Option<&'x Env<'x>>) {
+        while let (Ty::Param(i), Some(e)) = (ty, env) {
+            let Some(arg) = e.args.get(*i as usize) else { break };
+            (ty, env) = (view.ty(*arg), e.outer);
+        }
+        (ty, env)
+    }
+}
 /// The integer types (§4.1) are the table of the checker, not a second one: what the
 /// evaluator has of its own is the arithmetic ([`super::scalar`]), not the kinds.
 pub use onsa_sema::ty::IntKind;
@@ -121,14 +160,53 @@ impl Value {
         if vs.is_empty() { Value::Unit } else { Value::Tuple(vs, Seal(())) }
     }
 
-    /// Does the value have the type? A scalar value has a scalar type only (the others are U4's).
-    pub fn agrees(&self, ty: &Ty) -> bool {
-        let Some(s) = Scalar::of(ty) else { return false };
-        match (self, s) {
-            (Value::Int(k, ..), Scalar::Int(t)) => *k == t,
-            (Value::F32(_), Scalar::F32) | (Value::F64(_), Scalar::F64) | (Value::Bool(_), Scalar::Bool) => true,
-            (Value::Char(_), Scalar::Char) | (Value::Unit, Scalar::Unit) => true,
-            _ => false,
+    /// The places the value holds: a scalar is one, an aggregate the sum of its parts (one when it has none). What
+    /// `[e; N]` makes is bounded by it (`Limits::most`).
+    pub fn places(&self) -> usize {
+        match self {
+            Value::Tuple(vs, _) | Value::Array(vs) | Value::Struct(vs) | Value::Enum { fields: vs, .. } => {
+                vs.iter().map(Value::places).sum::<usize>().max(1)
+            }
+            _ => 1,
+        }
+    }
+
+    /// Does the value have the type? A scalar by its kind, an aggregate element by element: the length of an array, the
+    /// fields of a struct, the number of the variant of an enum and its elements. A table that is not there is
+    /// `Unavailable`, not a disagreement.
+    pub fn agrees(&self, ty: &Ty, view: View) -> Result<bool, Fault> {
+        self.agrees_in(ty, view, None)
+    }
+
+    /// `env` holds the type arguments `ty` is written in (the `T` of `Option[T]` is its first); a length that is a
+    /// parameter is not checked (a flow has no generic type).
+    fn agrees_in(&self, ty: &Ty, view: View, env: Option<&Env>) -> Result<bool, Fault> {
+        let (ty, env) = Env::follow(view, ty, env);
+        if let Some(s) = Scalar::of(ty) {
+            return Ok(match (self, s) {
+                (Value::Int(k, ..), Scalar::Int(t)) => *k == t,
+                (Value::F32(_), Scalar::F32) | (Value::F64(_), Scalar::F64) | (Value::Bool(_), Scalar::Bool) => true,
+                (Value::Char(_), Scalar::Char) | (Value::Unit, Scalar::Unit) => true,
+                _ => false,
+            });
+        }
+        match (self, ty) {
+            (Value::Tuple(vs, _), Ty::Tuple(ts)) => all(vs, ts, view, env),
+            (Value::Array(vs), Ty::Array(t, len)) => {
+                if matches!(len, Len::Const(n) if *n as usize != vs.len()) {
+                    return Ok(false);
+                }
+                all(vs, &vec![*t; vs.len()], view, env)
+            }
+            (Value::Struct(vs), Ty::Named(def, args)) => {
+                let fs = view.struct_fields(*def)?;
+                all(vs, &fs.iter().map(|f| f.ty).collect::<Vec<_>>(), view, Some(&Env { args, outer: env }))
+            }
+            (Value::Enum { tag, fields }, Ty::Named(def, args)) => {
+                let Some(v) = view.variants(*def)?.get(*tag as usize) else { return Ok(false) };
+                all(fields, &v.fields, view, Some(&Env { args, outer: env }))
+            }
+            _ => Ok(false),
         }
     }
 

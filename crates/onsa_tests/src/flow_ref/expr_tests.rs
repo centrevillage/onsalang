@@ -7,14 +7,18 @@ use onsa_driver::{Analyzed, Loaded, PackageInput, analyze_loaded};
 use onsa_sema::ty::FloatKind;
 use onsa_sema::{ConstValue, DefId, DefKind, Target, Ty};
 
-use super::expr::{Eval, Frame, Stop, from_const};
+use super::expr::{Eval, Frame, LIMITS, Limits, Stop, from_const};
 use super::scalar::{Fault, PanicKind};
 use super::sema_view::{Body, Stage, View, input_stage};
 use super::value::{IntKind, Value};
 
 /// Check `src` as one file in a thread with a large stack (`rules/common.md` 3.4) and run `f` on it.
 /// `clean`: the check has no diagnostic.
-fn with_checked<T: Send + 'static>(src: &str, clean: bool, f: impl FnOnce(&Analyzed) -> T + Send + 'static) -> T {
+pub(super) fn with_checked<T: Send + 'static>(
+    src: &str,
+    clean: bool,
+    f: impl FnOnce(&Analyzed) -> T + Send + 'static,
+) -> T {
     let src = src.to_string();
     onsa_diag::stack::run(move || {
         let mut loaded = Loaded::from_input(PackageInput::single_file("t.onsa", &src)).expect("the input loads");
@@ -27,7 +31,7 @@ fn with_checked<T: Send + 'static>(src: &str, clean: bool, f: impl FnOnce(&Analy
     })
 }
 
-fn def_named(a: &Analyzed, name: &str) -> DefId {
+pub(super) fn def_named(a: &Analyzed, name: &str) -> DefId {
     let module = a.analysis.module_of_file(a.pkg.modules[0].file).expect("the module of the file");
     a.analysis
         .defs_of_module(module)
@@ -37,26 +41,44 @@ fn def_named(a: &Analyzed, name: &str) -> DefId {
 }
 
 /// The values of the initializers of the constants `names`, evaluated by the evaluator (not read from the table).
-fn consts(src: &str, names: &'static [&'static str]) -> Vec<Eval> {
+pub(super) fn consts(src: &str, names: &'static [&'static str]) -> Vec<Eval> {
+    consts_with(src, names, || LIMITS)
+}
+
+/// [`consts`] under the limits `limits` gives, called on the thread of the evaluation (where the stack is measured).
+pub(super) fn consts_with(src: &str, names: &'static [&'static str], limits: fn() -> Limits) -> Vec<Eval> {
     with_checked(src, true, move |a| {
         let view = View::new(a);
         names
             .iter()
             .map(|n| {
                 let (body, init) = view.const_init(def_named(a, n)).expect("a const with its tables");
-                Frame::new(body).eval(init)
+                let mut frame = Frame::new(body);
+                frame.limits = limits();
+                frame.eval(init)
             })
             .collect()
     })
 }
 
 /// The body of the flow `name` with the inputs bound by name.
-fn flow(src: &str, name: &'static str, inputs: Vec<(&'static str, Value)>) -> Eval {
+pub(super) fn flow(src: &str, name: &'static str, inputs: Vec<(&'static str, Value)>) -> Eval {
+    flow_with(src, name, inputs, || LIMITS)
+}
+
+/// [`flow`] under the limits `limits` gives, called on the thread of the evaluation (where the stack is measured).
+pub(super) fn flow_with(
+    src: &str,
+    name: &'static str,
+    inputs: Vec<(&'static str, Value)>,
+    limits: fn() -> Limits,
+) -> Eval {
     with_checked(src, true, move |a| {
         let (view, def) = (View::new(a), def_named(a, name));
         let DefKind::Flow(decl) = &a.analysis.def(def).kind else { panic!("{name} is not a flow") };
         let body = view.body(def).expect("a flow with its tables");
         let mut frame = Frame::new(body);
+        frame.limits = limits();
         for (input, v) in inputs {
             frame.locals.insert(body.input(input).expect("an input of the flow"), v);
         }
@@ -64,19 +86,19 @@ fn flow(src: &str, name: &'static str, inputs: Vec<(&'static str, Value)>) -> Ev
     })
 }
 
-fn is(r: &Eval, want: &Value) -> bool {
+pub(super) fn is(r: &Eval, want: &Value) -> bool {
     matches!(r, Ok(v) if v.same(want))
 }
 
 /// The panic of `r`, with the text of the expression it is at.
-fn panic_at(r: &Eval, src: &str) -> (PanicKind, String) {
+pub(super) fn panic_at(r: &Eval, src: &str) -> (PanicKind, String) {
     match r {
         Err(Stop { fault: Fault::Panic(kind), at }) => (*kind, src[at.start as usize..at.end as usize].to_string()),
         other => panic!("not a panic: {other:?}"),
     }
 }
 
-fn i32v(v: i128) -> Value {
+pub(super) fn i32v(v: i128) -> Value {
     Value::int(IntKind::I32, v)
 }
 
@@ -323,10 +345,11 @@ fn a_value_that_is_not_of_the_type_of_the_table_is_an_internal_error() {
 #[test]
 fn the_forms_of_the_later_units_are_unavailable() {
     let src = "
-flow arr(x: F32 at sample) -> [F32; 2] at sample { [x, x] }
 flow call(x: F32 at sample) -> F32 at sample { prev~(x) }
+rt fn twice(x: F32) -> F32 { x * 2.0 }
+flow plain(x: F32 at sample) -> F32 at sample { twice(x) }
 ";
-    for name in ["arr", "call"] {
+    for name in ["call", "plain"] {
         let r = flow(src, name, vec![("x", Value::F32(1.0))]);
         assert!(matches!(r, Err(Stop { fault: Fault::Unavailable(_), .. })), "{name}: {r:?}");
     }
@@ -354,9 +377,9 @@ fn an_if_without_else_is_the_unit_when_it_is_not_taken() {
     let src = "flow f(c: Bool at sample, x: F32 at sample) -> F32 at sample {\n  let u = if c { () }\n  x\n}";
     let r = flow(src, "f", vec![("c", Value::Bool(false)), ("x", Value::F32(2.5))]);
     assert!(is(&r, &Value::F32(2.5)), "{r:?}");
-    // The `()` of the branch is a form of U4, so the taken branch is not available yet.
+    // Taken, its value is the `()` of the branch, and the flow goes on.
     let r = flow(src, "f", vec![("c", Value::Bool(true)), ("x", Value::F32(2.5))]);
-    assert!(matches!(r, Err(Stop { fault: Fault::Unavailable(_), .. })), "{r:?}");
+    assert!(is(&r, &Value::F32(2.5)), "{r:?}");
 }
 
 #[test]
@@ -436,32 +459,38 @@ fn a_value_agrees_with_its_own_type_and_no_other() {
     // Each scalar value agrees with the type of its kind and with none of the others: the kinds of the integers,
     // the two floats, `Char` and `()` are told apart (`Bool` is not a `Char`, `()` is not a `Bool`).
     let all = kinds();
-    for (i, (v, _)) in all.iter().enumerate() {
-        for (j, (_, ty)) in all.iter().enumerate() {
-            assert_eq!(v.agrees(ty), i == j, "{v:?} against {ty:?}");
+    with_checked("", true, move |a| {
+        for (i, (v, _)) in all.iter().enumerate() {
+            for (j, (_, ty)) in all.iter().enumerate() {
+                assert_eq!(v.agrees(ty, View::new(a)), Ok(i == j), "{v:?} against {ty:?}");
+            }
         }
-    }
+    });
 }
 
 #[test]
 fn a_scalar_value_does_not_agree_with_a_type_that_is_not_a_scalar() {
     // U4 brings the aggregates; until then a scalar value for a tuple, a struct or a type that is not resolved is a
     // mistake of the evaluator, not a pass.
-    let others = with_checked("struct P { a: I32 }", true, |a| {
-        vec![Ty::Tuple(vec![]), Ty::Named(def_named(a, "P"), vec![]), Ty::Param(0), Ty::Error]
-    });
-    for (v, _) in kinds() {
-        for ty in &others {
-            assert!(!v.agrees(ty), "{v:?} against {ty:?}");
+    with_checked("struct P { a: I32 }", true, |a| {
+        let others = [Ty::Tuple(vec![]), Ty::Named(def_named(a, "P"), vec![]), Ty::Param(0), Ty::Error];
+        for (v, _) in kinds() {
+            for ty in &others {
+                assert_eq!(v.agrees(ty, View::new(a)), Ok(false), "{v:?} against {ty:?}");
+            }
         }
-    }
+    });
 }
 
 #[test]
 fn a_constant_of_the_table_is_read_as_the_type_says() {
+    with_checked("", true, |a| scalar_rows(View::new(a)));
+}
+
+fn scalar_rows(view: View) {
     use IntKind::*;
     let f32t = Ty::Float(FloatKind::F32);
-    let read = |c: ConstValue, ty: &Ty| from_const(&c, ty).expect("a value of the table");
+    let read = |c: ConstValue, ty: &Ty| from_const(view, &c, ty).expect("a value of the table");
     assert!(read(ConstValue::Int(-5), &Ty::Int(I16)).same(&Value::int(I16, -5)));
     assert!(read(ConstValue::Int(255), &Ty::Int(U8)).same(&Value::int(U8, 255)));
     assert!(read(ConstValue::Bool(true), &Ty::Bool).same(&Value::Bool(true)));
@@ -480,7 +509,7 @@ fn a_constant_of_the_table_is_read_as_the_type_says() {
         (ConstValue::Unit, Ty::Char),
         (ConstValue::Float(1.0), Ty::Int(I32)),
     ] {
-        assert!(matches!(from_const(&c, &ty), Err(Fault::Unavailable(_))), "{c:?} as {ty:?}");
+        assert!(matches!(from_const(view, &c, &ty), Err(Fault::Unavailable(_))), "{c:?} as {ty:?}");
     }
 }
 

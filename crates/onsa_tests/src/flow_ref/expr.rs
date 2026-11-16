@@ -4,19 +4,19 @@
 //! blocks that hold them. The operands are evaluated from the left (§3.5), and a panic is
 //! a [`Stop`] at the span of the expression it comes from. Each value is checked against
 //! the type of the table (the memo's way (1)): a disagreement is an internal error, not a guess.
-//! The other forms (aggregates, patterns, calls, the forms of a flow) are
-//! [`Fault::Unavailable`] until the units that have them.
+//! The aggregates are in [`super::aggregate`], the patterns in [`super::pattern`]. The other forms (calls, the
+//! forms of a flow) are [`Fault::Unavailable`] until the units that have them.
 
 use std::collections::HashMap;
 
 use onsa_diag::Span;
-use onsa_sema::ty::FloatKind;
+use onsa_sema::ty::{FloatKind, Len};
 use onsa_sema::{ConstValue, DefId, LocalId, Target, Ty};
-use onsa_syntax::ast::{BinOp, Block, ExprId, ExprKind, Lit, PatKind, StmtKind, UnOp};
+use onsa_syntax::ast::{BinOp, Block, CallKind, ExprId, ExprKind, Lit, StmtKind, UnOp};
 use onsa_syntax::{FloatWidth, float_value};
 
 use super::scalar::{Bin, Fault, Un, binary, cast, unary};
-use super::sema_view::Body;
+use super::sema_view::{Body, View};
 use super::value::{Scalar, Value};
 
 /// A fault and where it came from.
@@ -28,14 +28,30 @@ pub struct Stop {
 
 pub type Eval = Result<Value, Stop>;
 
-/// A chain of constants that read constants is followed this far: the limit of the evaluator, which stops with
-/// `Unavailable` before the stack of its thread is used up (the spec has none).
+/// A chain of constants that read constants is followed this far: a limit of the evaluator (the spec has none) on the
+/// work and the length of a chain. It is not what keeps the stack: a chain times the depth of each initializer (§2.5
+/// allows 256) would use more than the stack, so [`Limits::reserve`] is read at each evaluation, whatever the chain.
 const CHAIN: u32 = 256;
+
+/// What the evaluator does not go past, and stops with `Unavailable` at (the spec has none of them): the stack kept
+/// back (`onsa_diag::stack::remaining`, read at each `eval`; a thread that is not a command thread has no guard) and
+/// the places a value that `[e; N]` makes or a row of a constant gives holds ([`Value::places`]). A test gives smaller
+/// ones, so that it does not have to build or to nest a lot.
+#[derive(Clone, Copy, Debug)]
+pub struct Limits {
+    pub reserve: usize,
+    pub most: usize,
+}
+
+/// 4 MiB of the 64 MiB of a command thread stay: the frames between two `eval`s (a pattern 256 levels deep) are well
+/// within it. 2^20 places are 40 MB or so.
+pub const LIMITS: Limits = Limits { reserve: 4 << 20, most: 1 << 20 };
 
 /// The evaluation of one body: the values its locals have so far.
 pub struct Frame<'a> {
     pub body: Body<'a>,
     pub locals: HashMap<LocalId, Value>,
+    pub limits: Limits,
     chain: u32,
 }
 
@@ -70,16 +86,19 @@ fn bin(op: BinOp) -> Result<Bin, Fault> {
 
 impl<'a> Frame<'a> {
     pub fn new(body: Body<'a>) -> Frame<'a> {
-        Frame { body, locals: HashMap::new(), chain: 0 }
+        Frame { body, locals: HashMap::new(), limits: LIMITS, chain: 0 }
     }
 
     /// The value of `e`, which has the type the table gives it. Call it on a large stack (`mod.rs`): it recurses.
     pub fn eval(&mut self, e: ExprId) -> Eval {
         let at = self.body.ast.expr(e).span;
+        if onsa_diag::stack::remaining().is_some_and(|left| left < self.limits.reserve) {
+            return Err(Stop { fault: Fault::Unavailable("the stack is nearly used up"), at });
+        }
         let v = self.form(e, at)?;
-        match self.body.ty(e) {
-            Ok(ty) if v.agrees(ty) => Ok(v),
-            Ok(_) => Err(Stop { fault: Fault::Internal("the value is not of the type of the table"), at }),
+        match self.body.ty(e).and_then(|ty| v.agrees(ty, self.body.view)) {
+            Ok(true) => Ok(v),
+            Ok(false) => Err(Stop { fault: Fault::Internal("the value is not of the type of the table"), at }),
             Err(fault) => Err(Stop { fault, at }),
         }
     }
@@ -90,8 +109,16 @@ impl<'a> Frame<'a> {
         Ok(match &self.body.ast.expr(e).kind {
             ExprKind::Paren(x) | ExprKind::At { expr: x, .. } => return self.eval(*x),
             ExprKind::Lit(l) => self.literal(e, l, false).map_err(here)?,
-            // `F32.PI` is a field of the name `F32` to the syntax; the table says it is a constant (a real field is U4).
-            ExprKind::Path(_) | ExprKind::Field { .. } => return self.name(e, at),
+            ExprKind::Path(_) => return self.name(e, at),
+            ExprKind::Field { .. }
+            | ExprKind::TupleIndex { .. }
+            | ExprKind::Index { .. }
+            | ExprKind::Tuple(_)
+            | ExprKind::Array(_)
+            | ExprKind::Repeat { .. }
+            | ExprKind::Struct { .. } => return self.aggregate(e, at),
+            ExprKind::Call { args, kind: CallKind::Plain, .. } => return self.call(e, args, at),
+            ExprKind::Match { tilde: None, .. } => return self.select(e, at),
             ExprKind::Unary { op: UnOp::Neg, .. } if self.body.ast.negated_literal(e).is_some() => {
                 return self.negated(e, at);
             }
@@ -107,7 +134,7 @@ impl<'a> Frame<'a> {
         })
     }
 
-    fn truth(&mut self, e: ExprId, at: Span) -> Result<bool, Stop> {
+    pub(super) fn truth(&mut self, e: ExprId, at: Span) -> Result<bool, Stop> {
         match self.eval(e)? {
             Value::Bool(b) => Ok(b),
             _ => Err(Stop { fault: Fault::Internal("a condition that is not a `Bool`"), at }),
@@ -163,11 +190,8 @@ impl<'a> Frame<'a> {
             let StmtKind::Let { pat, init, .. } = &ast.stmt(*s).kind else {
                 return Err(here(Fault::Unavailable("a statement")));
             };
-            let PatKind::Bind(_) = ast.pat(*pat).kind else {
-                return Err(here(Fault::Unavailable("a pattern")));
-            };
             let v = self.eval(*init)?;
-            self.locals.insert(self.body.pat_local(*pat).map_err(here)?, v);
+            self.destructure(*pat, &v, self.body.ty(*init).map_err(here)?)?;
         }
         b.tail.map_or(Ok(Value::Unit), |tail| self.eval(tail))
     }
@@ -190,38 +214,65 @@ impl<'a> Frame<'a> {
     }
 
     /// A name: a local (an input or a `let`), or a constant (an associated one, `F32.PI`, included).
-    fn name(&mut self, e: ExprId, at: Span) -> Eval {
+    pub(super) fn name(&mut self, e: ExprId, at: Span) -> Eval {
         let here = |fault| Stop { fault, at };
         match self.body.target(e).map_err(here)? {
             Target::Local(l) => self.locals.get(l).cloned().ok_or(here(Fault::Internal("a local with no value"))),
             Target::Const { def, .. } => self.constant(e, *def, at),
+            Target::Variant { index, .. } => Ok(Value::Enum { tag: *index, fields: vec![] }),
             _ => Err(here(Fault::Unavailable("a name of a later unit"))),
         }
     }
 
     /// The value the checker worked out, else the initializer evaluated here (`F32.INFINITY` is `1.0 / 0.0`).
     fn constant(&mut self, e: ExprId, def: DefId, at: Span) -> Eval {
+        let ty = self.body.ty(e).map_err(|fault| Stop { fault, at })?;
+        self.const_def(def, ty, at)
+    }
+
+    /// The constant `def` of the type `ty`: the row of the table when it reads as the type (an aggregate of a form
+    /// it cannot read falls to the initializer, which is evaluated here).
+    pub(super) fn const_def(&mut self, def: DefId, ty: &Ty, at: Span) -> Eval {
         let here = |fault| Stop { fault, at };
-        let ty = self.body.ty(e).map_err(here)?;
-        if let Some(c) = self.body.view.const_value(def) {
-            return from_const(c, ty).map_err(here);
+        if let Some(c) = self.body.view.const_value(def).filter(|c| places(c) <= self.limits.most) {
+            match from_const(self.body.view, c, ty) {
+                Err(Fault::Unavailable(_)) => {}
+                v => return v.map_err(here),
+            }
         }
         if self.chain >= CHAIN {
             return Err(here(Fault::Unavailable("constants that read constants too deep")));
         }
         let (body, init) = self.body.view.const_init(def).map_err(here)?;
-        Frame { chain: self.chain + 1, ..Frame::new(body) }.eval(init)
+        Frame { chain: self.chain + 1, limits: self.limits, ..Frame::new(body) }.eval(init)
     }
 }
 
-/// A value of the checker's table, as the type says (the aggregates are U4's).
-pub(super) fn from_const(c: &ConstValue, ty: &Ty) -> Result<Value, Fault> {
+/// The places a row holds, as [`Value::places`] counts them.
+fn places(c: &ConstValue) -> usize {
+    match c {
+        ConstValue::Array(cs) | ConstValue::Tuple(cs) | ConstValue::Struct(cs) => {
+            cs.iter().map(places).sum::<usize>().max(1)
+        }
+        _ => 1,
+    }
+}
+
+/// A value of the checker's table, as the type says. The rows of tuples and arrays are read; a struct (its field
+/// types may be arguments of the type) is not: `Unavailable`.
+pub(super) fn from_const(view: View, c: &ConstValue, ty: &Ty) -> Result<Value, Fault> {
     Ok(match (c, ty) {
+        (ConstValue::Tuple(cs), Ty::Tuple(ts)) if cs.len() == ts.len() => {
+            Value::tuple(cs.iter().zip(ts).map(|(c, t)| from_const(view, c, view.ty(*t))).collect::<Result<_, _>>()?)
+        }
+        (ConstValue::Array(cs), Ty::Array(t, Len::Const(n))) if cs.len() == *n as usize => {
+            Value::Array(cs.iter().map(|c| from_const(view, c, view.ty(*t))).collect::<Result<_, _>>()?)
+        }
         (ConstValue::Int(v), Ty::Int(k)) => Value::int(*k, *v),
         (ConstValue::Float(x), Ty::Float(k)) => Value::float(*k, *x),
         (ConstValue::Bool(b), Ty::Bool) => Value::Bool(*b),
         (ConstValue::Char(c), Ty::Char) => Value::Char(*c),
         (ConstValue::Unit, Ty::Unit) => Value::Unit,
-        _ => return Err(Fault::Unavailable("a constant of an aggregate or of a form the table does not give")),
+        _ => return Err(Fault::Unavailable("a constant of a form the table does not give as the type says")),
     })
 }
