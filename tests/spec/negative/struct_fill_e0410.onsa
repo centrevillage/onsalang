@@ -96,13 +96,13 @@ pub flow with_init(x: F32 at sample, s: F32 at init) -> F32 at sample {
 
 test "the Params of a flow" {
   let xs: [F32; 1] = [1.0]
-  let o = with_block.render(with_block.Config {}, with_block.Params { ... }, xs, 8.0)   //~ E0410
+  let o = with_block.render(with_block.Params { ... }, xs, 8.0)   //~ E0410
   assert o.out[0] == 1.0
 }
 
 test "the Config of a flow" {
   let xs: [F32; 1] = [1.0]
-  let o = with_init.render(with_init.Config { ... }, with_init.Params {}, xs, 8.0)      //~ E0410
+  let o = with_init.render(with_init.Config { ... }, xs, 8.0)      //~ E0410
   assert o.out[0] == 1.0
 }
 

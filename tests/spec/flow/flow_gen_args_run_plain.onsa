@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§5.3"]
+
+// §11.6, S-112 (the change of the 52nd round): the generated functions take only the inputs and the outputs that
+// the signature of the flow has. `plain` has no input of `init` and none of `block`, so `init` takes the sample
+// rate alone (no `cfg`) and `process`, `process_inplace` and `render` take no `params`. The arguments of `plain`
+// that remain are the state, the buffers and the sample rate. The forms that name `plain.Config` and
+// `plain.Params`, which `plain` has not, are the errors of `negative/flow_gen_args_config_absent.onsa` and
+// `negative/flow_gen_args_params_absent.onsa`; the calls with a number of arguments that is not the signature's
+// are in `negative/flow_gen_args_call_extra.onsa` and `negative/flow_gen_args_call_missing.onsa`.
+
+pub flow plain(x: F32 at sample) -> F32 at sample {
+  x * 2.0
+}
+
+// The output depends on the previous input, so a state that is kept between two calls shows in the values.
+pub flow lagged(x: F32 at sample) -> F32 at sample {
+  prev~(x) + x
+}
+
+test "init takes the sample rate alone and process takes the state and the buffers" {
+  var st = plain.init(8.0)
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  var ys: [F32; 3] = [0.0; 3]
+  plain.process(inout st, xs, inout ys)
+  assert ys[0] == 2.0
+  assert ys[1] == 4.0
+  assert ys[2] == 6.0
+}
+
+test "process_inplace takes the state and one buffer" {
+  var st = plain.init(8.0)
+  var buf: [F32; 3] = [1.0, 2.0, 3.0]
+  plain.process_inplace(inout st, inout buf)
+  assert buf[0] == 2.0
+  assert buf[1] == 4.0
+  assert buf[2] == 6.0
+}
+
+test "render takes the input and the sample rate" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = plain.render(xs, 8.0)
+  assert o.out[0] == 2.0
+  assert o.out[1] == 4.0
+  assert o.out[2] == 6.0
+}
+
+test "the state of a flow without inputs of init and block is kept between two calls" {
+  var st = lagged.init(8.0)
+  let first: [F32; 2] = [1.0, 2.0]
+  let second: [F32; 2] = [4.0, 8.0]
+  var a: [F32; 2] = [0.0; 2]
+  var b: [F32; 2] = [0.0; 2]
+  lagged.process(inout st, first, inout a)
+  lagged.process(inout st, second, inout b)
+  assert a[0] == 1.0
+  assert a[1] == 3.0
+  assert b[0] == 6.0
+  assert b[1] == 12.0
+}
+
+test "a reset state starts again" {
+  var st = lagged.init(8.0)
+  let xs: [F32; 2] = [1.0, 2.0]
+  var a: [F32; 2] = [0.0; 2]
+  var b: [F32; 2] = [0.0; 2]
+  lagged.process(inout st, xs, inout a)
+  lagged.reset(inout st)
+  lagged.process(inout st, xs, inout b)
+  assert b[0] == a[0]
+  assert b[1] == a[1]
+}

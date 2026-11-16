@@ -123,7 +123,9 @@ impl<'p> Sema<'p> {
                         let d = match self.rate_as_type(cx, t, &e) {
                             Some(Some(d)) => d,
                             Some(None) => return self.a.types.error(),
-                            None => self.flow_name_as_type(cx, path, &e).unwrap_or_else(|| e.into_diagnostic()),
+                            None => (self.flow_name_as_type(cx, path, &e))
+                                .or_else(|| self.absent_fn_as_type(cx, path, &e, te.span))
+                                .unwrap_or_else(|| e.into_diagnostic()),
                         };
                         self.report(cx.def, d);
                         return self.a.types.error();
@@ -158,6 +160,25 @@ impl<'p> Sema<'p> {
             return None;
         }
         Some(b.misplaced(path.segments.iter().map(|s| s.span), cx.text))
+    }
+
+    /// E0308 for the name of a function of the list (§11.6) that the flow
+    /// `path` names before it does not generate (`src.process_inplace` in a
+    /// body, after its namespace lost it, S-708): a name of no type whether
+    /// it is generated or not. One generated is found, and judged by its kind.
+    fn absent_fn_as_type(&self, cx: &Cx<'p>, path: &Path, err: &ResolveError, span: Span) -> Option<Diagnostic> {
+        let (last, head) = path.segments.split_last()?;
+        let at_last = matches!(err, ResolveError::NotFound { span, .. } if *span == last.span);
+        if head.is_empty() || !at_last || !super::generated::listed_fn(&last.name) {
+            return None;
+        }
+        let prefix = Path { segments: head.to_vec(), span: Span { end: head.last()?.span.end, ..path.span } };
+        match self.a.path_end(cx.m, &prefix, cx.self_ty) {
+            Ok(PathEnd::Entity(Entity::Def(d))) if self.a.def(d).as_flow().is_some() => {
+                Some(kind_error(path, NameKind::Function, "a type", span))
+            }
+            _ => None,
+        }
     }
 
     /// The type the name `path` at `span`, found as `entity`, makes with the

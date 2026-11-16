@@ -255,7 +255,8 @@ fn the_items_of_a_flow_have_the_word_of_the_flow() {
     for l in &shared {
         assert!(!l.starts_with("pub ") && !l.starts_with("priv "), "no word on an item of a flow with no word: {l}");
     }
-    for want in ["struct pkg_flow.State", "struct pkg_flow.Params", "fn pkg_flow.init(", "rt fn pkg_flow.process("] {
+    // `pkg_flow` has no input of `block`, so no `Params` (§11.6, S-112).
+    for want in ["struct pkg_flow.State", "struct pkg_flow.Out", "fn pkg_flow.init(", "rt fn pkg_flow.process("] {
         assert!(shared.iter().any(|l| l.starts_with(want)), "`{want}`:\n{text}");
     }
     let open = of("pub_flow");

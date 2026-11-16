@@ -43,8 +43,7 @@ pub flow resonator(x: F32 at sample, fc: F32 at block, bw: F32 at block) -> F32 
 }
 
 test "resonator decays" {
-  let o = resonator.render(resonator.Config {},
-                           resonator.Params { fc: 500.0, bw: 100.0 },
+  let o = resonator.render(resonator.Params { fc: 500.0, bw: 100.0 },
                            impulse(48000), 48000.0)
   assert energy(o.out, 47000, 48000) < 1.0e-12
 }
@@ -120,8 +119,8 @@ pub rt fn midi_to_hz(note: U8) -> F32 {
 impl Poly {
   pub fn new(sample_rate: F32) -> Poly {
     Poly {
-      voices: array.from_fn(fn(_) { voice.init(voice.Config {}, sample_rate) }),
-      params: [voice.params_default(); MAX_VOICES],
+      voices: array.from_fn(fn(_) { voice.init(sample_rate) }),
+      params: [voice.Params { f0: 110.0, vowel_f1: 700.0, vowel_f2: 1220.0, gain: 0.5 }; MAX_VOICES],
       notes: [None; MAX_VOICES],
       next: 0,
     }
@@ -157,7 +156,7 @@ impl Poly {
 
 // Not a spec example: renders the whole `voice` (M3 acceptance and timing).
 test "voice renders a second of sound" {
-  let o = voice.render(voice.Config {}, voice.params_default(), 48000, 48000.0)
+  let o = voice.render(voice.Params { f0: 110.0, vowel_f1: 700.0, vowel_f2: 1220.0, gain: 0.5 }, 48000, 48000.0)
   assert energy(o.out, 0, 48000) > 0.0
   assert energy(o.out, 0, 48000) < 48000.0
 }

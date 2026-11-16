@@ -21,7 +21,7 @@ pub flow slow_in_and(x: F32 at sample, p: I32 at block) -> F32 at sample {
 test "a block expression that can panic is not hoisted out of an untaken branch" {
   // p = 0 would divide by zero, but x <= 0 never takes the branch.
   let xs: [F32; 3] = [-1.0, 0.0, -2.0]
-  let o = slow_in_branch.render(slow_in_branch.Config {}, slow_in_branch.Params { p: 0 }, xs, 8.0)
+  let o = slow_in_branch.render(slow_in_branch.Params { p: 0 }, xs, 8.0)
   assert o.out[0] == 0.0
   assert o.out[1] == 0.0
   assert o.out[2] == 0.0
@@ -30,7 +30,7 @@ test "a block expression that can panic is not hoisted out of an untaken branch"
 test "the same block expression is evaluated when the branch is taken" {
   // 100 / 4 = 25.
   let xs: [F32; 3] = [-1.0, 2.0, 3.0]
-  let o = slow_in_branch.render(slow_in_branch.Config {}, slow_in_branch.Params { p: 4 }, xs, 8.0)
+  let o = slow_in_branch.render(slow_in_branch.Params { p: 4 }, xs, 8.0)
   assert o.out[0] == 0.0
   assert o.out[1] == 50.0
   assert o.out[2] == 75.0
@@ -38,13 +38,13 @@ test "the same block expression is evaluated when the branch is taken" {
 
 test "a division by zero in a taken branch panics" {   //~ TESTFAIL "a division by zero in a taken branch panics"
   let xs: [F32; 2] = [-1.0, 2.0]
-  let o = slow_in_branch.render(slow_in_branch.Config {}, slow_in_branch.Params { p: 0 }, xs, 8.0)
+  let o = slow_in_branch.render(slow_in_branch.Params { p: 0 }, xs, 8.0)
   assert o.out[0] == 0.0
 }
 
 test "a block expression that can panic is not hoisted out of the right side of &&" {
   let xs: [F32; 3] = [-1.0, 0.0, -2.0]
-  let o = slow_in_and.render(slow_in_and.Config {}, slow_in_and.Params { p: 0 }, xs, 8.0)
+  let o = slow_in_and.render(slow_in_and.Params { p: 0 }, xs, 8.0)
   assert o.out[0] == 0.0
   assert o.out[1] == 0.0
   assert o.out[2] == 0.0

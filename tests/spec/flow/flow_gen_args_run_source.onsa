@@ -1,0 +1,72 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6"]
+
+// §11.6, S-112: a flow with no input of `sample` takes no input buffer, and its `render` takes `frames` (the length
+// of the output; `process` takes the output buffer, whose length is the number of the frames). The `cfg` and the
+// `params` are by the signature of the flow in the same way: `source` has no input, `with_k` has an input of
+// `block`, `with_c` has an input of `init` and `both` has the two, and no `cfg` or `params` is taken or written
+// for the one that the flow has not.
+
+pub flow source() -> F32 at sample {
+  1.0
+}
+
+pub flow with_k(k: F32 at block) -> F32 at sample {
+  k
+}
+
+pub flow with_c(c: F32 at init) -> F32 at sample {
+  c * 2.0
+}
+
+pub flow both(c: F32 at init, k: F32 at block) -> F32 at sample {
+  c + k
+}
+
+test "render of a flow without inputs takes the frames and the sample rate" {
+  let o = source.render(3, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 1.0
+  assert o.out[2] == 1.0
+}
+
+test "process of a flow without inputs takes the state and the output" {
+  var st = source.init(8.0)
+  var ys: [F32; 4] = [0.0; 4]
+  source.process(inout st, inout ys)
+  assert ys[0] == 1.0
+  assert ys[3] == 1.0
+}
+
+test "render of a flow with an input of block and none of sample" {
+  let o = with_k.render(with_k.Params { k: 0.25 }, 2, 8.0)
+  assert o.out[0] == 0.25
+  assert o.out[1] == 0.25
+}
+
+test "render of a flow with an input of init and none of sample" {
+  let o = with_c.render(with_c.Config { c: 1.5 }, 2, 8.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == 3.0
+}
+
+test "process of a flow with an input of block and none of sample" {
+  var st = with_k.init(8.0)
+  var ys: [F32; 2] = [0.0; 2]
+  with_k.process(inout st, with_k.Params { k: 4.0 }, inout ys)
+  assert ys[0] == 4.0
+  assert ys[1] == 4.0
+}
+
+test "a flow with both takes the config, the params and the frames" {
+  var st = both.init(both.Config { c: 1.0 }, 8.0)
+  var ys: [F32; 2] = [0.0; 2]
+  both.process(inout st, both.Params { k: 2.0 }, inout ys)
+  assert ys[0] == 3.0
+  assert ys[1] == 3.0
+  let o = both.render(both.Config { c: 1.0 }, both.Params { k: 2.0 }, 2, 8.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == 3.0
+}

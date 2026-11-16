@@ -64,14 +64,14 @@ pub flow lonely_outer(x: F32 at sample) -> F32 at sample {
 }
 
 test "a flow rendered by a test" {
-  let o = tone.render(tone.Config {}, tone.Params { g: 2.0 }, impulse(4), 48000.0)
+  let o = tone.render(tone.Params { g: 2.0 }, impulse(4), 48000.0)
   let first: U32 = 0
   assert o.out[first] == 2.0
   assert false
 }
 
 test "a flow that a rendered flow instantiates" {
-  let o = outer.render(outer.Config {}, outer.Params {}, impulse(4), 48000.0)
+  let o = outer.render(impulse(4), 48000.0)
   let first: U32 = 0
   assert o.out[first] == 0.5
 }

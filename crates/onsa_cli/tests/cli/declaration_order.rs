@@ -80,7 +80,7 @@ const PROGRAMS: [Program; 8] = [
             "pub type B = A",
             "pub flow f(x: F32 at sample) -> B at sample { St { a: x, b: [x, x] } }",
         ],
-        tests: "test \"t\" {\n  let xs: [F32; 2] = [1.0, 2.0]\n  let o = f.render(f.Config {}, f.Params {}, xs, 8.0)\n  assert o.a[1] == 2.0\n  assert o.b[1][1] == 2.0\n}",
+        tests: "test \"t\" {\n  let xs: [F32; 2] = [1.0, 2.0]\n  let o = f.render(xs, 8.0)\n  assert o.a[1] == 2.0\n  assert o.b[1][1] == 2.0\n}",
         codes: &[],
     },
     Program {
@@ -90,7 +90,7 @@ const PROGRAMS: [Program; 8] = [
             "pub flow g(c: F32 at init, x: F32 at sample) -> f.Params at sample { f.Params { k: x } }",
             "pub flow h(x: F32 at sample) -> g.Config at sample { g.Config { c: x } }",
         ],
-        tests: "test \"t\" {\n  let xs: [F32; 2] = [1.0, 2.0]\n  let o = h.render(h.Config {}, h.Params {}, xs, 8.0)\n  assert o.c[1] == 2.0\n}",
+        tests: "test \"t\" {\n  let xs: [F32; 2] = [1.0, 2.0]\n  let o = h.render(xs, 8.0)\n  assert o.c[1] == 2.0\n}",
         codes: &[],
     },
     Program {
@@ -103,16 +103,16 @@ const PROGRAMS: [Program; 8] = [
             "pub flow a(x: Samp at sample) -> M at sample { M { y: x } }",
             "pub flow b(x: Samp at sample) -> S2 at sample { S2 { l: [x, x], r: [x, x] } }",
         ],
-        tests: "test \"t\" {\n  var st = a.init(a.Config {}, 8.0)\n  var buf: [F32; 2] = [1.0, 2.0]\n  a.process_inplace(inout st, a.Params {}, inout buf)\n  assert buf[0] == 1.0\n}",
+        tests: "test \"t\" {\n  var st = a.init(8.0)\n  var buf: [F32; 2] = [1.0, 2.0]\n  a.process_inplace(inout st, inout buf)\n  assert buf[0] == 1.0\n}",
         codes: &[],
     },
     Program {
         name: "D: a nested array at the boundary and a generated Out as an input",
         blocks: &[
             "pub struct St { a: F32, b: [[F32; 2]; 2] }",
-            "pub flow g(x: F32 at sample) -> St at sample { St { a: x, b: [[x, x], [x, x]] } }",
+            "pub flow g(x: F32 at sample, c: F32 at init) -> St at sample { St { a: x + c, b: [[x, x], [x, x]] } }",
             "pub flow h(x: g.Out at sample, y: Str at block) -> F32 at sample { 0.0 }",
-            "pub flow i(x: F32 at sample) -> g.Config at sample { g.Config {} }",
+            "pub flow i(x: F32 at sample) -> g.Config at sample { g.Config { c: x } }",
         ],
         tests: "",
         // `g.Out` as an input of `h` is the E0710 of the types stage (S-772).
@@ -165,7 +165,7 @@ const PROGRAMS: [Program; 8] = [
             "pub flow h(x: [F32; 4] at sample) -> Buf4 at sample { x }",
             "pub flow j(x: [F32; 3] at sample) -> Quad at sample { Quad { q: [x[0], x[1], x[2], 0.0] } }",
         ],
-        tests: "test \"t\" {\n  let _ = g.init(g.Config {}, 8.0)\n  let _: [[F32; 4]; 1] = [[0.0; 4]]\n}",
+        tests: "test \"t\" {\n  let _ = g.init(8.0)\n  let _: [[F32; 4]; 1] = [[0.0; 4]]\n}",
         codes: &[],
     },
 ];
@@ -183,7 +183,7 @@ const MODULES: [(&str, &str); 3] = [
         "pub const N: U32 = 2\n\npub struct Big { v: [F32; N] }\n\npub flow g(x: F32 at sample, k: F32 at block) -> F32 at sample { x * k }\n",
     ),
 ];
-const MAIN: &str = "use {lm1}.{h}\nuse {lm3}.{g}\n\ntest \"t\" {\n  let xs: [F32; 2] = [1.0, 2.0]\n  let o = h.render(h.Config {}, h.Params { x: g.Params { k: 1.0 } }, xs, 8.0)\n  assert o.v[0][1] == 2.0\n}\n";
+const MAIN: &str = "use {lm1}.{h}\nuse {lm3}.{g}\n\ntest \"t\" {\n  let xs: [F32; 2] = [1.0, 2.0]\n  let o = h.render(h.Params { x: g.Params { k: 1.0 } }, xs, 8.0)\n  assert o.v[0][1] == 2.0\n}\n";
 
 /// The file names the modules are given, one logical name to each; the order the files sort in is the
 /// order the modules are read in.

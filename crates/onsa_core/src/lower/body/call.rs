@@ -119,8 +119,13 @@ pub(super) fn lower_call(
             if f.target {
                 return lower_target_call(lw, cx, e, (def, f), &gargs, None, args, ty);
             }
+            let implicit = super::super::flow::implicit_params(lw, def, span)?;
             let params = sig_params(lw, f, &gargs, span)?;
-            let cargs = lower_args(lw, cx, args, &params)?;
+            let mut cargs = lower_args(lw, cx, args, &params)?;
+            for (at, _, id) in implicit {
+                let empty = Expr::new(Ty::Struct(id), span, ExprKind::Struct { ty: id, fields: Vec::new() });
+                cargs.insert(at, Arg { mode: Mode::Borrow, expr: empty });
+            }
             let fid = lw.fn_id(def, gargs, span)?;
             Ok(Expr::new(ty, span, ExprKind::Call { fn_: fid, args: cargs }))
         }

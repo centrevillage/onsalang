@@ -143,7 +143,7 @@ test "a range in the header of a par" {
   // 1 ..< 4 makes the replicas i = 1, 2, 3.
   let xs: [F32; 2] = [1.0, 2.0]
 
-  let o = in_a_par.render(in_a_par.Config {}, in_a_par.Params {}, xs, 8.0)
+  let o = in_a_par.render(xs, 8.0)
   assert o.out[0][0] == 1.0
   assert o.out[0][1] == 2.0
   assert o.out[1][0] == 2.0
@@ -156,7 +156,7 @@ test "a range in a par over a constant" {
   // 2 ..< N with N = 4 is 2 ..< 4: the replicas i = 2, 3.
   let xs: [F32; 2] = [1.0, 2.0]
 
-  let o = in_a_par_over_a_const.render(in_a_par_over_a_const.Config {}, in_a_par_over_a_const.Params {}, xs, 8.0)
+  let o = in_a_par_over_a_const.render(xs, 8.0)
   assert o.out[0][0] == 2.0
   assert o.out[0][1] == 4.0
   assert o.out[1][0] == 3.0

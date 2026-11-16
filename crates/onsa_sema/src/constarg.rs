@@ -377,7 +377,7 @@ fn value_of(
     let given: Vec<TyId> = (0..).zip(&args).map(|(k, t)| t.unwrap_or_else(|| a.types.intern(Ty::Param(k)))).collect();
     let ty = a.types.subst(c.ty, &given);
     if ty != u32_ && !matches!(a.types.get(ty), Ty::Error) {
-        let shown = a.types.display(ty, &|d| a.def(d).name.clone(), &|_| "_".to_string());
+        let shown = a.types.display(ty, &|d| a.shown_name(d), &|_| "_".to_string());
         let mut d = Diagnostic::new(
             Stage::Types,
             Code::E0401,

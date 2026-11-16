@@ -27,7 +27,6 @@ const GENERATED: &[(&str, Generated)] = &[
     ("process", Generated::Fn(FlowFn::Process)),
     ("process_inplace", Generated::Fn(FlowFn::ProcessInplace)),
     ("render", Generated::Fn(FlowFn::Render)),
-    ("params_default", Generated::Fn(FlowFn::ParamsDefault)),
 ];
 
 impl FlowTy {
@@ -37,6 +36,22 @@ impl FlowTy {
         let named = GENERATED.iter().find(|(_, g)| *g == Generated::Type(self));
         named.map_or_else(|| onsa_diag::internal::bug(None, format!("no name of {self:?}")), |(n, _)| n)
     }
+
+    /// The parameter of the functions of the flow that takes the type
+    /// (§11.6): `cfg` of `Config`, `params` of `Params`; none of the others.
+    pub fn param_name(self) -> Option<&'static str> {
+        match self {
+            FlowTy::Config => Some("cfg"),
+            FlowTy::Params => Some("params"),
+            FlowTy::State | FlowTy::Out => None,
+        }
+    }
+}
+
+/// Whether `name` is of a function of the list (§11.6): a name of no type,
+/// whether the flow generates it or not (S-708).
+pub(crate) fn listed_fn(name: &str) -> bool {
+    GENERATED.iter().any(|&(n, g)| n == name && matches!(g, Generated::Fn(_)))
 }
 
 impl<'p> Sema<'p> {
@@ -44,14 +59,22 @@ impl<'p> Sema<'p> {
     /// the names stage, so that a `use` and a type written before the flow
     /// find them (§11.6, §15.1, R-50): of their kinds, with no types until
     /// [`Sema::lower_generated`] fills them. Of a flow whose heading was cut, they
-    /// are cut too (their uses are errors, R-71).
-    pub(crate) fn generated_defs(&mut self, flow: DefId) {
+    /// are cut too (their uses are errors, R-71). `Config` and `Params` are
+    /// of a flow with an input of their rate alone (§11.6, S-112, R-264), by
+    /// the clocks of `rates` (of the inputs, `None` of a clock not read); of a
+    /// clock not read or a cut heading, both, as what the flow has is not
+    /// known (§18.1). Whether it has `process_inplace` its types decide
+    /// ([`Sema::trim_members`]).
+    pub(crate) fn generated_defs(&mut self, flow: DefId, rates: &[Option<Rate>]) {
         let d = self.a.def(flow);
         let (module, vis, span, name_span) = (d.module, d.vis, d.span, d.name_span);
         let (u32, unit) = (self.a.types.int(IntKind::U32), self.a.types.unit());
+        let known = !self.a.heading_failed(flow) && rates.iter().all(Option::is_some);
+        let has = |t: FlowTy| !known || t.input_rate().is_none_or(|r| rates.contains(&Some(r)));
         let mut members = Vec::new();
         for &(name, g) in GENERATED {
             let kind = match g {
+                Generated::Type(t) if !has(t) => continue,
                 Generated::Type(t) => {
                     let fields = if t == FlowTy::State { Fields::Opaque } else { Fields::Named(Vec::new()) };
                     let derives = Some(Vec::new());
@@ -330,7 +353,7 @@ impl<'p> Sema<'p> {
                 let out = self.flow_def(h.flow).out;
                 self.check_rate_value_type(cx, h.flow, out, span, true);
             }
-            self.fill_by_params(h.flow, pairs);
+            self.trim_members(h.flow, pairs);
         }
     }
 
@@ -357,28 +380,26 @@ impl<'p> Sema<'p> {
     }
 
     /// The def of `g` that [`Sema::generated_defs`] made for `flow`, read
-    /// before [`Sema::fill_by_params`] leaves out the ones not generated.
-    fn generated(&self, flow: DefId, g: Generated) -> DefId {
-        let at = GENERATED.iter().position(|&(_, x)| x == g);
-        let made = at.and_then(|at| self.flow_def(flow).members.get(at));
-        let Some(&(_, d)) = made else {
-            onsa_diag::internal::bug(Some(self.a.def(flow).name_span), "a generated item with no def")
-        };
-        d
+    /// before [`Sema::trim_members`] leaves out the ones not generated; none
+    /// of a `Config` or `Params` it did not make.
+    fn generated(&self, flow: DefId, g: Generated) -> Option<DefId> {
+        let (name, _) = GENERATED.iter().find(|&&(_, x)| x == g)?;
+        self.flow_def(flow).members.iter().find(|(n, _)| n == name).map(|&(_, d)| d)
     }
 
     /// The def of `g` that [`Sema::generated_defs`] made for `flow`, of the
     /// kind its signature gives.
-    fn fill_generated(&mut self, flow: DefId, g: Generated, kind: DefKind) -> DefId {
-        let d = self.generated(flow, g);
+    fn fill_generated(&mut self, flow: DefId, g: Generated, kind: DefKind) {
+        let Some(d) = self.generated(flow, g) else {
+            onsa_diag::internal::bug(Some(self.a.def(flow).name_span), "a generated item with no def")
+        };
         self.a.defs[d.0 as usize].kind = kind;
-        d
     }
 
-    fn fill_struct(&mut self, flow: DefId, flow_ty: FlowTy, fields: Vec<FieldDef>) -> DefId {
+    fn fill_struct(&mut self, flow: DefId, flow_ty: FlowTy, fields: Vec<FieldDef>) {
         let fields = if flow_ty == FlowTy::State { Fields::Opaque } else { Fields::Named(fields) };
         let def = StructDef { generics: Vec::new(), fields, derives: Some(Vec::new()), flow_ty: Some(flow_ty) };
-        self.fill_generated(flow, Generated::Type(flow_ty), DefKind::Struct(def))
+        self.fill_generated(flow, Generated::Type(flow_ty), DefKind::Struct(def));
     }
 
     /// A field of a struct `flow` generates: of the visibility of the flow
@@ -388,9 +409,10 @@ impl<'p> Sema<'p> {
         FieldDef { name: name.to_string(), ty, vis: d.vis, span: d.name_span, ty_span: d.name_span, default: None }
     }
 
-    fn generated_ty(&mut self, flow: DefId, t: FlowTy) -> TyId {
-        let d = self.generated(flow, Generated::Type(t));
-        self.a.types.intern(Ty::Named(d, Vec::new()))
+    /// The type `t` of `flow`; none of a `Config` or `Params` it has not.
+    fn generated_ty(&mut self, flow: DefId, t: FlowTy) -> Option<TyId> {
+        let d = self.generated(flow, Generated::Type(t))?;
+        Some(self.a.types.intern(Ty::Named(d, Vec::new())))
     }
 
     /// The items the inputs of `flow` give (§11.6): `State`, `Config`,
@@ -403,8 +425,10 @@ impl<'p> Sema<'p> {
         };
         self.fill_struct(flow, FlowTy::State, Vec::new());
         for t in [FlowTy::Config, FlowTy::Params] {
-            let fs = t.input_rate().map(|r| fields(self, r)).unwrap_or_default();
-            self.fill_struct(flow, t, fs);
+            if self.generated(flow, Generated::Type(t)).is_some() {
+                let fs = t.input_rate().map(|r| fields(self, r)).unwrap_or_default();
+                self.fill_struct(flow, t, fs);
+            }
         }
         let u32 = self.a.types.int(IntKind::U32);
         let size = ConstDef { ty: u32, value: None, int_value: None, param: None };
@@ -413,9 +437,10 @@ impl<'p> Sema<'p> {
         }
     }
 
-    /// The items the output of `flow` gives (§11.6): `Out` and the functions
-    /// but `params_default` ([`Sema::fill_by_params`]). Whether
-    /// `process_inplace` is generated (its inputs and outputs pair up).
+    /// The items the output of `flow` gives (§11.6): `Out` and the functions,
+    /// whose `cfg` and `params` are of a flow with `Config` and `Params`
+    /// alone (S-112). Whether `process_inplace` is generated (its inputs and
+    /// outputs pair up).
     fn fill_by_output(&mut self, flow: DefId) -> bool {
         let (inputs, out) = (self.flow_def(flow).inputs.clone(), self.flow_def(flow).out);
         let name_span = self.a.def(flow).name_span;
@@ -436,16 +461,21 @@ impl<'p> Sema<'p> {
         let u32 = self.a.types.int(IntKind::U32);
         let f32 = self.a.types.float(FloatKind::F32);
         let unit = self.a.types.unit();
-        let state_ty = self.generated_ty(flow, FlowTy::State);
-        let config_ty = self.generated_ty(flow, FlowTy::Config);
-        let params_ty = self.generated_ty(flow, FlowTy::Params);
-        let out_ty = self.generated_ty(flow, FlowTy::Out);
+        let (state_ty, out_ty) = match (self.generated_ty(flow, FlowTy::State), self.generated_ty(flow, FlowTy::Out)) {
+            (Some(s), Some(o)) => (s, o),
+            _ => onsa_diag::internal::bug(Some(name_span), "a flow with no `State` or `Out`"),
+        };
         let sp = |_s: &mut Self, name: &str, mode: Mode, ty: TyId| ParamSig {
             name: name.to_string(),
             mode,
             ty,
             span: name_span,
         };
+        let mut by_input = |t: FlowTy| {
+            let named = self.generated_ty(flow, t).zip(t.param_name());
+            named.map(|(ty, name)| sp(self, name, Mode::Borrow, ty))
+        };
+        let (cfg, params) = (by_input(FlowTy::Config), by_input(FlowTy::Params));
         let span_of = |s: &mut Self, elem: TyId, len: Option<Len>| -> TyId {
             let span = s.a.types.builtin(BuiltinTy::Span, vec![elem]);
             match len {
@@ -464,11 +494,11 @@ impl<'p> Sema<'p> {
             })
             .collect();
 
-        let ps = vec![sp(self, "cfg", Mode::Borrow, config_ty), sp(self, "sample_rate", Mode::Borrow, f32)];
+        let ps = cfg.iter().cloned().chain([sp(self, "sample_rate", Mode::Borrow, f32)]).collect();
         self.fill_fn(flow, ps, state_ty, false, false, FlowFn::Init);
         let ps = vec![sp(self, "s", Mode::Inout, state_ty)];
         self.fill_fn(flow, ps, unit, true, false, FlowFn::Reset);
-        let mut ps = vec![sp(self, "s", Mode::Inout, state_ty), sp(self, "params", Mode::Borrow, params_ty)];
+        let mut ps: Vec<ParamSig> = [sp(self, "s", Mode::Inout, state_ty)].into_iter().chain(params.clone()).collect();
         for (n, e, l) in &sig_inputs {
             let t = span_of(self, *e, *l);
             ps.push(sp(self, n, Mode::Borrow, t));
@@ -483,14 +513,15 @@ impl<'p> Sema<'p> {
             && !outputs.is_empty()
             && sig_inputs.iter().zip(&outputs).all(|(i, o)| i.1 == o.1 && i.2 == o.2);
         if pairs {
-            let mut ps = vec![sp(self, "s", Mode::Inout, state_ty), sp(self, "params", Mode::Borrow, params_ty)];
+            let mut ps: Vec<ParamSig> =
+                [sp(self, "s", Mode::Inout, state_ty)].into_iter().chain(params.clone()).collect();
             for (n, e, l) in &outputs {
                 let t = span_of(self, *e, *l);
                 ps.push(sp(self, n, Mode::Inout, t));
             }
             self.fill_fn(flow, ps, unit, true, false, FlowFn::ProcessInplace);
         }
-        let mut ps = vec![sp(self, "cfg", Mode::Borrow, config_ty), sp(self, "params", Mode::Borrow, params_ty)];
+        let mut ps: Vec<ParamSig> = cfg.into_iter().chain(params).collect();
         for (n, e, l) in &sig_inputs {
             let t = span_of(self, *e, *l);
             ps.push(sp(self, n, Mode::Borrow, t));
@@ -503,30 +534,13 @@ impl<'p> Sema<'p> {
         pairs
     }
 
-    /// `params_default` when every `block` input has a `default` (§11.7),
-    /// then the members of `flow`: the items its types give. The ones they
-    /// do not give (`process_inplace` when its inputs and outputs do not
-    /// pair up, `params_default`) are not in its namespace, and a `use` of
-    /// them fails ([`Sema::fail_ungenerated`]).
-    fn fill_by_params(&mut self, flow: DefId, pairs: bool) {
-        let inputs = &self.flow_def(flow).inputs;
-        let all_defaults = inputs
-            .iter()
-            .filter(|i| i.rate == Rate::Ctl)
-            .all(|i| i.param.as_ref().is_some_and(|p| p.default.is_some()));
-        if all_defaults {
-            let params_ty = self.generated_ty(flow, FlowTy::Params);
-            self.fill_fn(flow, Vec::new(), params_ty, false, false, FlowFn::ParamsDefault);
-        }
-        let absent = |g: Generated| match g {
-            Generated::Fn(FlowFn::ProcessInplace) => !pairs,
-            Generated::Fn(FlowFn::ParamsDefault) => !all_defaults,
-            _ => false,
-        };
-        let made = self.flow_def(flow).members.clone();
-        let members = made.into_iter().zip(GENERATED).filter(|(_, (_, g))| !absent(*g)).map(|(m, _)| m).collect();
-        if let DefKind::Flow(fd) = &mut self.a.defs[flow.0 as usize].kind {
-            fd.members = members;
+    /// The members of `flow`: the items its types give. `process_inplace`,
+    /// when its inputs and outputs do not pair up, is not in its namespace,
+    /// and a `use` of it fails ([`Sema::fail_ungenerated`]).
+    fn trim_members(&mut self, flow: DefId, pairs: bool) {
+        let inplace = self.generated(flow, Generated::Fn(FlowFn::ProcessInplace));
+        if let (false, DefKind::Flow(fd)) = (pairs, &mut self.a.defs[flow.0 as usize].kind) {
+            fd.members.retain(|&(_, d)| Some(d) != inplace);
         }
     }
 

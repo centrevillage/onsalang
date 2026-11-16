@@ -944,7 +944,7 @@ pub fn returned() {
 pub flow gain(x: F32 at sample) -> F32 at sample { x }
 pub fn rendered() -> F32 uses {Alloc} {
   let xs: [F32; 2] = [1.0, 2.0]
-  let o = gain.render(gain.Config {}, gain.Params {}, xs, 48000.0)
+  let o = gain.render(xs, 48000.0)
   let p = move o
   p.out[0]
 }

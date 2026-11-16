@@ -82,29 +82,15 @@ fn flow_namespace_items() {
     let names: Vec<&str> = voice.members.iter().map(|(n, _)| n.as_str()).collect();
     assert_eq!(
         names,
-        vec![
-            "State",
-            "Config",
-            "Params",
-            "Out",
-            "SIZE",
-            "BULK_SIZE",
-            "init",
-            "reset",
-            "process",
-            "render",
-            "params_default"
-        ]
+        vec!["State", "Config", "Params", "Out", "SIZE", "BULK_SIZE", "init", "reset", "process", "render",]
     );
+    // `params_default` is no item (S-625); `Config` is of a flow with an input of `init` alone (S-112).
     let echo = a.def(def(&a, "echo")).as_flow().unwrap();
     let names: Vec<&str> = echo.members.iter().map(|(n, _)| n.as_str()).collect();
-    assert!(names.contains(&"process_inplace") && !names.contains(&"params_default"));
+    assert!(names.contains(&"process_inplace") && !names.contains(&"Config"));
     let render = echo.members.iter().find(|(n, _)| n == "render").map(|(_, d)| a.def(*d).as_fn().unwrap()).unwrap();
     assert!(a.uses_alloc(&render.effects));
-    assert_eq!(
-        render.params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(),
-        vec!["cfg", "params", "x", "sample_rate"]
-    );
+    assert_eq!(render.params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), vec!["params", "x", "sample_rate"]);
     let process = voice.members.iter().find(|(n, _)| n == "process").map(|(_, d)| a.def(*d).as_fn().unwrap()).unwrap();
     assert_eq!(process.params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), vec!["s", "params", "out"]);
     assert!(process.rt);

@@ -96,20 +96,20 @@ pub flow trio(x: F32 at sample) -> [F32; 3] at sample {
 /// Runs `dup` over `src` into the views of 4 frames of channel 0 and `n` frames of channel 1.
 @export
 pub fn dup_at(src: Span[F32], n: U32) -> F32 {
-  var st = dup.init(dup.Config {}, 8.0)
+  var st = dup.init(8.0)
   var a: [F32; 6] = [0.0; 6]
   var b: [F32; 6] = [0.0; 6]
-  dup.process(inout st, dup.Params {}, src, inout [a.slice(0, 4), b.slice(0, n)])
+  dup.process(inout st, src, inout [a.slice(0, 4), b.slice(0, n)])
   a[3] + b[3]
 }
 
 /// Runs `trio` over `src` into the views of 4 frames of channel 0, `n1` of channel 1, `n2` of channel 2.
 @export
 pub fn trio_at(src: Span[F32], n1: U32, n2: U32) -> F32 {
-  var st = trio.init(trio.Config {}, 8.0)
+  var st = trio.init(8.0)
   var a: [F32; 6] = [0.0; 6]
   var b: [F32; 6] = [0.0; 6]
   var c: [F32; 6] = [0.0; 6]
-  trio.process(inout st, trio.Params {}, src, inout [a.slice(0, 4), b.slice(0, n1), c.slice(0, n2)])
+  trio.process(inout st, src, inout [a.slice(0, 4), b.slice(0, n1), c.slice(0, n2)])
   a[3] + b[3] + c[3]
 }

@@ -92,7 +92,7 @@ test "a function" {
 
 test "a flow" {
   let xs: [F32; 2] = [1.0, 2.5]
-  let o = in_a_flow.render(in_a_flow.Config {}, in_a_flow.Params {}, xs, 8.0)
+  let o = in_a_flow.render(xs, 8.0)
   assert o.out[0] == 2.0
   assert o.out[1] == 5.0
 }

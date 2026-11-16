@@ -193,7 +193,6 @@ pub enum FlowFn {
     Process,
     ProcessInplace,
     Render,
-    ParamsDefault,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -243,7 +242,7 @@ pub struct StructDef {
     pub flow_ty: Option<FlowTy>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum FlowTy {
     State,
     Config,

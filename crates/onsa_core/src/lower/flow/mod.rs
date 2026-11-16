@@ -10,7 +10,11 @@
 //! | `process(inout s, p, <Span inputs>, inout <Span outputs>)` | length check, `ctl` once, per sample: read all inputs, `tick`, write all outputs |
 //! | `process_inplace` | `process` with the same spans for the paired inputs and outputs |
 //! | `render` | `init`, `Buf.zeroed` outputs, one `process`, `Out` (interpreter only, D-08) |
-//! | `params_default() -> Params` | the `@param` defaults |
+//! | `params_default() -> Params` | the `@param` defaults, of the C API alone (§11.6, S-625) |
+//!
+//! The functions keep `cfg` and `params` of a flow with no `Config` or
+//! `Params` (§11.6, S-112), as empty structs ([`implicit_params`]), as the C
+//! API does (W10-02 changes it).
 //!
 //! # State fields (S-05, S-06)
 //!
@@ -54,7 +58,7 @@ use std::collections::{HashMap, HashSet};
 
 use onsa_diag::Span;
 use onsa_sema::DefId;
-use onsa_sema::def::{DefKind, Fields, FlowDef, FlowTy};
+use onsa_sema::def::{DefKind, Fields, FlowDef, FlowFn, FlowTy};
 use onsa_sema::flow::{FlowInfo, FlowRate, InitArg, Node};
 use onsa_sema::ty::{BuiltinTy, Len, Rate, Ty as STy};
 use onsa_syntax::ast::ExprId;
@@ -223,6 +227,56 @@ fn member(fd: &FlowDef, name: &str) -> Option<DefId> {
     fd.members.iter().find(|(n, _)| n == name).map(|(_, d)| *d)
 }
 
+/// The type `t` among the members of `fd`, by its role (§11.6), not its name.
+fn generated_type(a: &onsa_sema::Analysis, fd: &FlowDef, t: FlowTy) -> Option<DefId> {
+    let mut ds = fd.members.iter().map(|&(_, d)| d);
+    ds.find(|&d| matches!(&a.def(d).kind, DefKind::Struct(s) if s.flow_ty == Some(t)))
+}
+
+impl Lowerer<'_> {
+    /// The Core type of the type `t` of `flow` (§11.6): of its def, or of a
+    /// flow with no `Config` or `Params` (S-112), an empty struct of the
+    /// name, which its functions take ([`implicit_params`]).
+    pub(crate) fn flow_ty(&mut self, flow: DefId, t: FlowTy, span: Span) -> R<TypeId> {
+        let Some(fd) = self.a.def(flow).as_flow() else { return Err(internal(span, "not a flow")) };
+        if let Some(d) = generated_type(self.a, fd, t) {
+            return self.type_id(d, Vec::new(), span);
+        }
+        if t.input_rate().is_none() {
+            return Err(internal(span, format!("flow without `{}`", t.name())));
+        }
+        if let Some(&id) = self.implicit_tys.get(&(flow, t)) {
+            return Ok(id);
+        }
+        let id = TypeId(self.m.types.len() as u32);
+        let name = format!("{}.{}", self.qual_name(flow), t.name());
+        self.m.types.push(TypeDef { name, kind: TypeDefKind::Struct { fields: Vec::new() } });
+        self.implicit_tys.insert((flow, t), id);
+        Ok(id)
+    }
+}
+
+/// The parameters the function `member` a flow generates has in Core and not
+/// in Onsa (§11.6, S-112): `cfg` of `init` and `render` of a flow with no
+/// `Config`, `params` of `process`, `process_inplace` and `render` of one
+/// with no `Params`, of the empty types of [`Lowerer::flow_ty`]. Their places
+/// among the Core parameters, in order; none of another function.
+pub(crate) fn implicit_params(lw: &mut Lowerer, member: DefId, span: Span) -> R<Vec<(usize, &'static str, TypeId)>> {
+    let d = lw.a.def(member);
+    let DefKind::Fn(f) = &d.kind else { return Ok(Vec::new()) };
+    let slots: &[(usize, FlowTy)] = match f.flow_fn {
+        Some(FlowFn::Init) => &[(0, FlowTy::Config)],
+        Some(FlowFn::Process | FlowFn::ProcessInplace) => &[(1, FlowTy::Params)],
+        Some(FlowFn::Render) => &[(0, FlowTy::Config), (1, FlowTy::Params)],
+        Some(FlowFn::Reset) | None => return Ok(Vec::new()),
+    };
+    let flow = d.owner.ok_or_else(|| internal(span, "flow member without an owner"))?;
+    let Some(fd) = lw.a.def(flow).as_flow() else { return Err(internal(span, "flow member without its flow")) };
+    let lacking: Vec<_> = slots.iter().filter(|s| generated_type(lw.a, fd, s.1).is_none()).copied().collect();
+    let param = |t: FlowTy| t.param_name().ok_or_else(|| internal(span, "a type no parameter takes"));
+    lacking.into_iter().map(|(at, t)| Ok((at, param(t)?, lw.flow_ty(flow, t, span)?))).collect()
+}
+
 fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) -> R<FlowFns> {
     let a: &'b onsa_sema::Analysis = lw.a;
     let Some(info) = a.flows.get(&flow) else { return Err(internal(span, "flow body was not checked")) };
@@ -230,20 +284,11 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
         return Err(internal(span, "flow body has errors"));
     }
     let need = |name: &str| member(&fd, name).ok_or_else(|| internal(span, format!("flow without `{name}`")));
-    // A generated type by its role (§11.6), not its name.
-    let need_ty = |t: FlowTy| {
-        let mut ds = fd.members.iter().map(|&(_, d)| d);
-        let found = ds.find(|&d| matches!(&a.def(d).kind, DefKind::Struct(s) if s.flow_ty == Some(t)));
-        found.ok_or_else(|| internal(span, format!("flow without `{}`", t.name())))
-    };
-    let state_def = need_ty(FlowTy::State)?;
-    let config_def = need_ty(FlowTy::Config)?;
-    let params_def = need_ty(FlowTy::Params)?;
-    let out_def = need_ty(FlowTy::Out)?;
-    let state_ty = lw.type_id(state_def, Vec::new(), span)?;
-    let config_ty = lw.type_id(config_def, Vec::new(), span)?;
-    let params_ty = lw.type_id(params_def, Vec::new(), span)?;
-    let out_ty = lw.type_id(out_def, Vec::new(), span)?;
+    let state_ty = lw.flow_ty(flow, FlowTy::State, span)?;
+    let config_ty = lw.flow_ty(flow, FlowTy::Config, span)?;
+    let params_ty = lw.flow_ty(flow, FlowTy::Params, span)?;
+    let out_ty = lw.flow_ty(flow, FlowTy::Out, span)?;
+    let out_def = generated_type(a, &fd, FlowTy::Out).ok_or_else(|| internal(span, "flow without `Out`"))?;
     let out_val = lw.core_ty(fd.out, &[], span)?;
 
     // Boundary outputs from the `Out` struct (`Buf[T]` / `[Buf[T]; N]` fields, §11.6).
@@ -343,7 +388,10 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     let process = lw.fn_id(need("process")?, Vec::new(), span)?;
     let process_inplace = member(&fd, "process_inplace").map(|d| lw.fn_id(d, Vec::new(), span)).transpose()?;
     let render = lw.fn_id(need("render")?, Vec::new(), span)?;
-    let params_default = member(&fd, "params_default").map(|d| lw.fn_id(d, Vec::new(), span)).transpose()?;
+    // Of the C API alone, when every `block` input has a `default` (§11.7, §14.2, S-625).
+    let mut ctl_inputs = fd.inputs.iter().filter(|i| i.rate == Rate::Ctl);
+    let all_defaults = ctl_inputs.all(|i| i.param.as_ref().is_some_and(|p| p.default.is_some()));
+    let params_default = all_defaults.then(|| push_fn(lw, format!("{base}.params_default"), false, span));
     let fns = FlowFns {
         flow,
         state: state_ty,

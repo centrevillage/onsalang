@@ -166,10 +166,10 @@
 "Params" = 1
 "SIZE" = 1
 "State" = 1
-"cfg" = 2
+"cfg" = 1
 "frames" = 1
 "init" = 1
-"params" = 3
+"params" = 1
 "process" = 1
 "process_inplace" = 1
 "render" = 1

@@ -1,0 +1,101 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§11.7"]
+
+// §11.6, S-112: the `cfg` argument and the type `Config` are there for a flow that has an input of `init`, and the
+// `params` argument and the type `Params` for a flow that has an input of `block`, and for no other. The four flows
+// have one, the other, both and a `@param` with a default. `Config` and `Params` are structs of the inputs
+// (the fields have the names of the inputs). The defaults of `@param` are not read by Onsa code (§6.5), so the
+// literal writes the value (the last test: the same value as the `default`).
+
+pub flow with_cfg(x: F32 at sample, c: F32 at init) -> F32 at sample {
+  x + c
+}
+
+pub flow with_par(x: F32 at sample, k: F32 at block) -> F32 at sample {
+  x * k
+}
+
+pub flow with_both(x: F32 at sample, c: F32 at init, k: F32 at block) -> F32 at sample {
+  x * k + c
+}
+
+pub flow with_default(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  k: F32 at block,
+) -> F32 at sample {
+  x * k
+}
+
+pub fn make_config(c: F32) -> with_cfg.Config {
+  with_cfg.Config { c: c }
+}
+
+pub fn make_params(k: F32) -> with_par.Params {
+  with_par.Params { k: k }
+}
+
+test "an input of init is the field of Config and the first argument of init" {
+  var st = with_cfg.init(make_config(10.0), 8.0)
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  var ys: [F32; 3] = [0.0; 3]
+  with_cfg.process(inout st, xs, inout ys)
+  assert ys[0] == 11.0
+  assert ys[1] == 12.0
+  assert ys[2] == 13.0
+}
+
+test "render of a flow with an input of init and none of block" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = with_cfg.render(with_cfg.Config { c: 0.5 }, xs, 8.0)
+  assert o.out[0] == 1.5
+  assert o.out[1] == 2.5
+}
+
+test "an input of block is the field of Params and the argument after the state" {
+  var st = with_par.init(8.0)
+  let xs: [F32; 2] = [2.0, 4.0]
+  var ys: [F32; 2] = [0.0; 2]
+  with_par.process(inout st, make_params(0.5), xs, inout ys)
+  assert ys[0] == 1.0
+  assert ys[1] == 2.0
+  with_par.process(inout st, make_params(2.0), xs, inout ys)
+  assert ys[0] == 4.0
+  assert ys[1] == 8.0
+}
+
+test "process_inplace takes the params of a flow with an input of block" {
+  var st = with_par.init(8.0)
+  var buf: [F32; 2] = [2.0, 4.0]
+  with_par.process_inplace(inout st, with_par.Params { k: 0.25 }, inout buf)
+  assert buf[0] == 0.5
+  assert buf[1] == 1.0
+}
+
+test "render of a flow with an input of block and none of init" {
+  let xs: [F32; 2] = [2.0, 4.0]
+  let o = with_par.render(with_par.Params { k: 0.5 }, xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 2.0
+}
+
+test "a flow with both takes the config and then the params" {
+  var st = with_both.init(with_both.Config { c: 1.0 }, 8.0)
+  let xs: [F32; 2] = [1.0, 2.0]
+  var ys: [F32; 2] = [0.0; 2]
+  with_both.process(inout st, with_both.Params { k: 2.0 }, xs, inout ys)
+  assert ys[0] == 3.0
+  assert ys[1] == 5.0
+  let o = with_both.render(with_both.Config { c: 1.0 }, with_both.Params { k: 2.0 }, xs, 8.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == 5.0
+}
+
+test "the literal of Params writes the value of the default of a @param" {
+  let xs: [F32; 2] = [2.0, 4.0]
+  let o = with_default.render(with_default.Params { k: 0.5 }, xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 2.0
+}

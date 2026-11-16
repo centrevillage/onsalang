@@ -1,0 +1,6 @@
+// `Config` of a flow that has an input of `block` and none of `init`: not in the namespace, E0302 (see the main module).
+use dsp.synth.with_par.Config                       //~ E0302
+
+pub fn the_failed_name_is_silent(c: Config) -> I32 {
+  1
+}

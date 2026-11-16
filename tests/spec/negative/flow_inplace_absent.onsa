@@ -61,25 +61,25 @@ pub flow widen(x: F32 at sample) -> [F32; 2] at sample {
 }
 
 pub fn control_same(inout st: same.State, inout a: Span[F32], inout b: Span[F32]) {
-  same.process_inplace(inout st, same.Params {}, inout same.Out { l: a, r: b })
+  same.process_inplace(inout st, inout same.Out { l: a, r: b })
 }
 
 pub fn absent_more_fields(inout st: more_fields.State, inout x: Span[F32], inout y: Span[F32], inout z: Span[F32]) {
-  more_fields.process_inplace(inout st, more_fields.Params {}, inout more_fields.Out { a: x, b: y, c: z })   //~ E0302
+  more_fields.process_inplace(inout st, inout more_fields.Out { a: x, b: y, c: z })   //~ E0302
 }
 
 pub fn absent_more_inputs(inout st: more_inputs.State, inout x: Span[F32], inout y: Span[F32]) {
-  more_inputs.process_inplace(inout st, more_inputs.Params {}, inout more_inputs.Out { l: x, r: y })   //~ E0302
+  more_inputs.process_inplace(inout st, inout more_inputs.Out { l: x, r: y })   //~ E0302
 }
 
 pub fn absent_second_type(inout st: second_type.State, inout x: Span[F32], inout y: Span[F64]) {
-  second_type.process_inplace(inout st, second_type.Params {}, inout second_type.Out { l: x, r: y })   //~ E0302
+  second_type.process_inplace(inout st, inout second_type.Out { l: x, r: y })   //~ E0302
 }
 
 pub fn absent_other_order(inout st: other_order.State, inout x: Span[F64], inout y: Span[F32]) {
-  other_order.process_inplace(inout st, other_order.Params {}, inout other_order.Out { x: x, y: y })   //~ E0302
+  other_order.process_inplace(inout st, inout other_order.Out { x: x, y: y })   //~ E0302
 }
 
 pub fn absent_widen(inout st: widen.State, inout xs: [Span[F32]; 2]) {
-  widen.process_inplace(inout st, widen.Params {}, inout xs)   //~ E0302
+  widen.process_inplace(inout st, inout xs)   //~ E0302
 }

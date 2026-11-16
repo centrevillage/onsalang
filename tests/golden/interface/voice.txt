@@ -16,7 +16,6 @@ pub flow resonator(
     y2: 4 bytes, align 4, fast  // offset 20
     poisoned: 1 bytes, align 1, fast  // offset 24
     initialized: 1 bytes, align 1, fast  // offset 25
-  pub struct resonator.Config  // Copy; size 0, align 1
   pub struct resonator.Params  // Copy; size 8, align 4
     fc: F32  // offset 0
     bw: F32  // offset 4
@@ -24,11 +23,11 @@ pub flow resonator(
     out: Buf[F32]
   pub const resonator.SIZE: U32 = 28
   pub const resonator.BULK_SIZE: U32 = 0
-  pub fn resonator.init(cfg: resonator.Config, sample_rate: F32) -> resonator.State
+  pub fn resonator.init(sample_rate: F32) -> resonator.State
   pub rt fn resonator.reset(inout s: resonator.State)
   pub rt fn resonator.process(inout s: resonator.State, params: resonator.Params, x: Span[F32], inout out: Span[F32])
   pub rt fn resonator.process_inplace(inout s: resonator.State, params: resonator.Params, inout out: Span[F32])
-  pub fn resonator.render(cfg: resonator.Config, params: resonator.Params, x: Span[F32], sample_rate: F32) -> resonator.Out uses {Alloc}
+  pub fn resonator.render(params: resonator.Params, x: Span[F32], sample_rate: F32) -> resonator.Out uses {Alloc}
 
 pub flow saw(
   f0: F32 at block,
@@ -39,17 +38,16 @@ pub flow saw(
     prev_0: 4 bytes, align 4, fast  // offset 8
     poisoned: 1 bytes, align 1, fast  // offset 12
     initialized: 1 bytes, align 1, fast  // offset 13
-  pub struct saw.Config  // Copy; size 0, align 1
   pub struct saw.Params  // Copy; size 4, align 4
     f0: F32  // offset 0
   pub struct saw.Out  // Affine
     out: Buf[F32]
   pub const saw.SIZE: U32 = 16
   pub const saw.BULK_SIZE: U32 = 0
-  pub fn saw.init(cfg: saw.Config, sample_rate: F32) -> saw.State
+  pub fn saw.init(sample_rate: F32) -> saw.State
   pub rt fn saw.reset(inout s: saw.State)
   pub rt fn saw.process(inout s: saw.State, params: saw.Params, inout out: Span[F32])
-  pub fn saw.render(cfg: saw.Config, params: saw.Params, frames: U32, sample_rate: F32) -> saw.Out uses {Alloc}
+  pub fn saw.render(params: saw.Params, frames: U32, sample_rate: F32) -> saw.Out uses {Alloc}
 
 pub rt fn wrap01(x: F32) -> F32
 
@@ -93,7 +91,6 @@ pub flow voice(
     smooth_0: 16 bytes, align 4, fast  // offset 72
     poisoned: 1 bytes, align 1, fast  // offset 88
     initialized: 1 bytes, align 1, fast  // offset 89
-  pub struct voice.Config  // Copy; size 0, align 1
   pub struct voice.Params  // Copy; size 16, align 4
     f0: F32  // offset 0
     vowel_f1: F32  // offset 4
@@ -103,11 +100,10 @@ pub flow voice(
     out: Buf[F32]
   pub const voice.SIZE: U32 = 92
   pub const voice.BULK_SIZE: U32 = 0
-  pub fn voice.init(cfg: voice.Config, sample_rate: F32) -> voice.State
+  pub fn voice.init(sample_rate: F32) -> voice.State
   pub rt fn voice.reset(inout s: voice.State)
   pub rt fn voice.process(inout s: voice.State, params: voice.Params, inout out: Span[F32])
-  pub fn voice.render(cfg: voice.Config, params: voice.Params, frames: U32, sample_rate: F32) -> voice.Out uses {Alloc}
-  pub fn voice.params_default() -> voice.Params
+  pub fn voice.render(params: voice.Params, frames: U32, sample_rate: F32) -> voice.Out uses {Alloc}
 
 const MAX_ECHO: U32 = 96000
 
@@ -126,7 +122,6 @@ pub flow echo(
     vdelay_0.w: 4 bytes, align 4, fast  // offset 384016
     poisoned: 1 bytes, align 1, fast  // offset 384020
     initialized: 1 bytes, align 1, fast  // offset 384021
-  pub struct echo.Config  // Copy; size 0, align 1
   pub struct echo.Params  // Copy; size 8, align 4
     time: F32  // offset 0
     feedback: F32  // offset 4
@@ -134,12 +129,11 @@ pub flow echo(
     out: Buf[F32]
   pub const echo.SIZE: U32 = 384024
   pub const echo.BULK_SIZE: U32 = 0
-  pub fn echo.init(cfg: echo.Config, sample_rate: F32) -> echo.State
+  pub fn echo.init(sample_rate: F32) -> echo.State
   pub rt fn echo.reset(inout s: echo.State)
   pub rt fn echo.process(inout s: echo.State, params: echo.Params, x: Span[F32], inout out: Span[F32])
   pub rt fn echo.process_inplace(inout s: echo.State, params: echo.Params, inout out: Span[F32])
-  pub fn echo.render(cfg: echo.Config, params: echo.Params, x: Span[F32], sample_rate: F32) -> echo.Out uses {Alloc}
-  pub fn echo.params_default() -> echo.Params
+  pub fn echo.render(params: echo.Params, x: Span[F32], sample_rate: F32) -> echo.Out uses {Alloc}
 
 const MAX_VOICES: U32 = 8
 

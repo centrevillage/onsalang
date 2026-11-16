@@ -87,7 +87,7 @@ pub flow guarded_divides(d: I32 at sample) -> F32 at sample {
 test "if~ advances the counter on the samples it is not chosen" {
   // x > 2 is F T F T T; the counter runs 1 2 3 4 5.
   let xs: [F32; 5] = [1.0, 3.0, 1.0, 3.0, 3.0]
-  let o = count_if_big.render(count_if_big.Config {}, count_if_big.Params {}, xs, 8.0)
+  let o = count_if_big.render(xs, 8.0)
   assert o.out[0] == 0.0
   assert o.out[1] == 2.0
   assert o.out[2] == 0.0
@@ -98,7 +98,7 @@ test "if~ advances the counter on the samples it is not chosen" {
 test "if~ with an instance in each branch runs both" {
   // 1s: 1 2 3 4 5.  10s: 10 20 30 40 50.  chosen: else, then, else, then, then.
   let xs: [F32; 5] = [1.0, 3.0, 1.0, 3.0, 3.0]
-  let o = two_counters.render(two_counters.Config {}, two_counters.Params {}, xs, 8.0)
+  let o = two_counters.render(xs, 8.0)
   assert o.out[0] == 10.0
   assert o.out[1] == 2.0
   assert o.out[2] == 30.0
@@ -110,7 +110,7 @@ test "the tilde of an else-if chain covers every branch" {
   // 1s: 1 2 3 4.  100s: 100 200 300 400.  1000s: 1000 2000 3000 4000.
   // x = 1 2 3 2 picks the 1000s, the 100s, the 1s, the 100s.
   let xs: [F32; 4] = [1.0, 2.0, 3.0, 2.0]
-  let o = chain_of_three.render(chain_of_three.Config {}, chain_of_three.Params {}, xs, 8.0)
+  let o = chain_of_three.render(xs, 8.0)
   assert o.out[0] == 1000.0
   assert o.out[1] == 200.0
   assert o.out[2] == 3.0
@@ -121,7 +121,7 @@ test "a delay inside an untaken if~ branch still moves" {
   // late = F F T T.  The delay stores x every sample: its outputs are 0 1 2 3.
   // out = x, x, prev(x), prev(x) = 1, 2, 2, 3.
   let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
-  let o = select_delayed.render(select_delayed.Config {}, select_delayed.Params {}, xs, 8.0)
+  let o = select_delayed.render(xs, 8.0)
   assert o.out[0] == 1.0
   assert o.out[1] == 2.0
   assert o.out[2] == 2.0
@@ -131,7 +131,7 @@ test "a delay inside an untaken if~ branch still moves" {
 test "if~ inside if~ runs all three counters" {
   // a = F F T T, b = F F F T.  1s: 1 2 3 4.  10s: 10 20 30 40.  100s: 100 200 300 400.
   let xs: [I32; 4] = [0, 1, 2, 3]
-  let o = nested_if_tilde.render(nested_if_tilde.Config {}, nested_if_tilde.Params {}, xs, 8.0)
+  let o = nested_if_tilde.render(xs, 8.0)
   assert o.out[0] == 100.0
   assert o.out[1] == 200.0
   assert o.out[2] == 30.0
@@ -141,7 +141,7 @@ test "if~ inside if~ runs all three counters" {
 test "match~ runs every arm" {
   // 1s: 1 2 3 4 5.  10s: 10 20 30 40 50.  100s: 100 200 300 400 500.  k = 0 1 2 1 0.
   let ks: [U32; 5] = [0, 1, 2, 1, 0]
-  let o = pick_counter.render(pick_counter.Config {}, pick_counter.Params {}, ks, 8.0)
+  let o = pick_counter.render(ks, 8.0)
   assert o.out[0] == 1.0
   assert o.out[1] == 20.0
   assert o.out[2] == 300.0
@@ -154,7 +154,7 @@ test "match~ chooses by pattern and guard" {
   // n0: k 0 -> arm 2: 10.  n1: k 1 -> arm 3: 200.  n2: k 2 -> arm 1: 3.  n3: k 3 -> arm 1: 4.
   // n4: k 1 -> arm 3: 500.
   let ks: [U32; 5] = [0, 1, 2, 3, 1]
-  let o = pick_with_guard.render(pick_with_guard.Config {}, pick_with_guard.Params {}, ks, 8.0)
+  let o = pick_with_guard.render(ks, 8.0)
   assert o.out[0] == 10.0
   assert o.out[1] == 200.0
   assert o.out[2] == 3.0
@@ -166,7 +166,7 @@ test "an unmatched match~ arm binds the default value" {
   // x = 1 -1 2 -1 4.  The counter adds v + 1.0 every sample, with v = 1, 0, 2, 0, 4:
   // 2, 3, 6, 7, 12.  The Some arm is chosen on samples 0, 2, 4; None gives 0.0.
   let xs: [F32; 5] = [1.0, -1.0, 2.0, -1.0, 4.0]
-  let o = some_or_none.render(some_or_none.Config {}, some_or_none.Params {}, xs, 8.0)
+  let o = some_or_none.render(xs, 8.0)
   assert o.out[0] == 2.0
   assert o.out[1] == 0.0
   assert o.out[2] == 6.0
@@ -178,7 +178,7 @@ test "if~ evaluates the stateless part of the branch it does not take" {
   // d = 5 20 -4.  positive = T T F.  Then-branch: 100 / d = 20, 5, -25 (evaluated on every
   // sample, -25 is thrown away).  Else-branch: the counter 1 2 3.  Chosen: 20, 5, 3.
   let ds: [I32; 3] = [5, 20, -4]
-  let o = untaken_divides.render(untaken_divides.Config {}, untaken_divides.Params {}, ds, 8.0)
+  let o = untaken_divides.render(ds, 8.0)
   assert o.out[0] == 20.0
   assert o.out[1] == 5.0
   assert o.out[2] == 3.0
@@ -187,14 +187,14 @@ test "if~ evaluates the stateless part of the branch it does not take" {
 test "a division by zero in an untaken if~ branch panics" {   //~ TESTFAIL "a division by zero in an untaken if~ branch panics"
   // d = 0 makes `positive` false, so the then-branch is not taken, but it is evaluated: 100 / 0.
   let ds: [I32; 2] = [5, 0]
-  let o = untaken_divides.render(untaken_divides.Config {}, untaken_divides.Params {}, ds, 8.0)
+  let o = untaken_divides.render(ds, 8.0)
   assert o.out[0] == 20.0
 }
 
 test "a plain if inside an if~ branch keeps the division from running" {
   // d = 0 5 0 20.  positive = F T F T.  Counter: 1 2 3 4.  The else side divides only if d != 0.
   let ds: [I32; 4] = [0, 5, 0, 20]
-  let o = guarded_divides.render(guarded_divides.Config {}, guarded_divides.Params {}, ds, 8.0)
+  let o = guarded_divides.render(ds, 8.0)
   assert o.out[0] == 0.0
   assert o.out[1] == 2.0
   assert o.out[2] == 0.0

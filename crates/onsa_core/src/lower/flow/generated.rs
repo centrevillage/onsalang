@@ -10,7 +10,8 @@ pub(super) fn sfield(lw: &Lowerer, state: &Expr, name: &str, span: Span) -> R<Ex
     field_by_name(lw, state.clone(), name, span)
 }
 
-/// Parameters of a generated member as declared by sema (§11.6).
+/// Parameters of a generated member as declared by sema (§11.6), with
+/// those Core keeps ([`implicit_params`]).
 pub(super) fn member_params(lw: &mut Lowerer, fd: &FlowDef, name: &str, span: Span) -> R<Vec<(String, Mode, Ty)>> {
     let d = member(fd, name).ok_or_else(|| internal(span, format!("flow without `{name}`")))?;
     let def = lw.a.def(d).clone();
@@ -18,6 +19,9 @@ pub(super) fn member_params(lw: &mut Lowerer, fd: &FlowDef, name: &str, span: Sp
     let mut out = Vec::new();
     for p in &f.params {
         out.push((p.name.clone(), core_mode(p.mode), lw.core_ty(p.ty, &[], p.span)?));
+    }
+    for (at, name, ty) in implicit_params(lw, d, span)? {
+        out.insert(at, (name.to_string(), Mode::Borrow, Ty::Struct(ty)));
     }
     Ok(out)
 }

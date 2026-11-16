@@ -32,46 +32,46 @@ pub flow mean2(x: [F32; 2] at sample) -> F32 at sample {
 test "a longer channel 1 of the input panics" {   //~ TESTFAIL "a longer channel 1 of the input panics"
   let ins: [Buf[F32]; 2] = [Buf.zeroed(4), Buf.zeroed(5)]
   var outs: [Buf[F32]; 2] = [Buf.zeroed(4), Buf.zeroed(4)]
-  var st = flip.init(flip.Config {}, 8.0)
-  flip.process(inout st, flip.Params {}, ins, inout outs)
+  var st = flip.init(8.0)
+  flip.process(inout st, ins, inout outs)
   assert outs[0][0] == 0.0
 }
 
 test "a longer channel 1 of the output panics" {   //~ TESTFAIL "a longer channel 1 of the output panics"
   let ins: [Buf[F32]; 2] = [Buf.zeroed(4), Buf.zeroed(4)]
   var outs: [Buf[F32]; 2] = [Buf.zeroed(4), Buf.zeroed(6)]
-  var st = flip.init(flip.Config {}, 8.0)
-  flip.process(inout st, flip.Params {}, ins, inout outs)
+  var st = flip.init(8.0)
+  flip.process(inout st, ins, inout outs)
   assert outs[0][0] == 0.0
 }
 
 test "a mismatch in the last of three channels of the input panics" {   //~ TESTFAIL "a mismatch in the last of three channels of the input panics"
   let ins: [Buf[F32]; 3] = [Buf.zeroed(4), Buf.zeroed(4), Buf.zeroed(5)]
   var outs: [Buf[F32]; 3] = [Buf.zeroed(4), Buf.zeroed(4), Buf.zeroed(4)]
-  var st = rot3.init(rot3.Config {}, 8.0)
-  rot3.process(inout st, rot3.Params {}, ins, inout outs)
+  var st = rot3.init(8.0)
+  rot3.process(inout st, ins, inout outs)
   assert outs[0][0] == 0.0
 }
 
 test "a mismatch in the last of three channels of the output panics" {   //~ TESTFAIL "a mismatch in the last of three channels of the output panics"
   let ins: [Buf[F32]; 3] = [Buf.zeroed(4), Buf.zeroed(4), Buf.zeroed(4)]
   var outs: [Buf[F32]; 3] = [Buf.zeroed(4), Buf.zeroed(4), Buf.zeroed(7)]
-  var st = rot3.init(rot3.Config {}, 8.0)
-  rot3.process(inout st, rot3.Params {}, ins, inout outs)
+  var st = rot3.init(8.0)
+  rot3.process(inout st, ins, inout outs)
   assert outs[0][0] == 0.0
 }
 
 test "a mismatch in the planar input of a mono-output flow panics" {   //~ TESTFAIL "a mismatch in the planar input of a mono-output flow panics"
   let ins: [Buf[F32]; 2] = [Buf.zeroed(4), Buf.zeroed(6)]
   var out: Buf[F32] = Buf.zeroed(4)
-  var st = mean2.init(mean2.Config {}, 8.0)
-  mean2.process(inout st, mean2.Params {}, ins, inout out)
+  var st = mean2.init(8.0)
+  mean2.process(inout st, ins, inout out)
   assert out[0] == 0.0
 }
 
 test "process_inplace with channels of different lengths panics" {   //~ TESTFAIL "process_inplace with channels of different lengths panics"
   var bufs: [Buf[F32]; 2] = [Buf.zeroed(4), Buf.zeroed(5)]
-  var st = flip.init(flip.Config {}, 8.0)
-  flip.process_inplace(inout st, flip.Params {}, inout bufs)
+  var st = flip.init(8.0)
+  flip.process_inplace(inout st, inout bufs)
   assert bufs[0][0] == 0.0
 }

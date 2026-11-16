@@ -1,0 +1,75 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§6.5", "§15.1", "§18.1"]
+// fixes = 0
+
+// S-625, S-632, R-147, §11.6, §6.5: the `default` of `@param` is not in the namespace of a flow (the C header has
+// `<p>_params_default`, §14.2, and the Onsa code writes the defaults as a `Params` literal), so `params_default` is a name
+// that is not found: E0302 in a value position. `flow_namespace_params_default.onsa` and
+// `flow_namespace_params_default_no_param.onsa` have the call and the function value in a function; this case has the
+// places that those have not: the body of a flow (a call in a `let`, in an operand and in a branch), the argument of a
+// call, a `test`, a closure, and the argument that the old form of the call wrote for the `params` of `process` and `render`
+// (`amp.params_default()`). The name is not in the list either in a type position, so it is not found there too, E0302
+// (§15.1: a name that is not found is E0302 whatever the position; the names of the list that are written in a type position
+// are E0308, in `flow_gen_names_type_position.onsa`). No candidate (`fixes = 0`). One error in each unit (§18.1).
+
+pub flow g(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow amp(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow reads_it_in_a_let(x: F32 at sample) -> F32 at sample {
+  let _ = amp.params_default()                      //~ E0302
+  x
+}
+
+pub flow reads_it_in_an_operand(x: F32 at sample) -> F32 at sample {
+  x + g.params_default()                            //~ E0302
+}
+
+pub flow reads_it_in_a_branch(x: F32 at sample, on: Bool at block) -> F32 at sample {
+  let _ = if on { amp.params_default() } else { 0.0 }   //~ E0302
+  x
+}
+
+pub fn in_an_argument() -> F32 {
+  twice(amp.params_default())                       //~ E0302
+}
+
+pub fn twice(x: F32) -> F32 {
+  x + x
+}
+
+pub fn in_a_closure() -> F32 {
+  let h = fn(x: F32) -> F32 { amp.params_default() }   //~ E0302
+  h.(1.0)
+}
+
+pub fn as_the_params_of_process(inout st: amp.State, xs: Span[F32], inout ys: Span[F32]) {
+  amp.process(inout st, amp.params_default(), xs, inout ys)   //~ E0302
+}
+
+pub fn as_the_params_of_render(xs: Span[F32]) -> I32 {
+  let o = amp.render(amp.params_default(), xs, 8.0)   //~ E0302
+  1
+}
+
+pub fn in_a_parameter(x: amp.params_default) -> I32 {   //~ E0302
+  1
+}
+
+pub fn in_a_result() -> g.params_default {          //~ E0302
+  panic("never")
+}
+
+test "a test" {
+  let _ = amp.params_default()                      //~ E0302
+  assert true
+}

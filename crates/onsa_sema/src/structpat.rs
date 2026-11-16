@@ -73,7 +73,7 @@ impl<'a> Checker<'a> {
         let Fields::Named(defs) = sd.fields.clone() else {
             return Err(self.pattern_err(stage, Code::E0410, path.span, "this struct has no named fields"));
         };
-        let name = self.a.def(d).name.clone();
+        let name = self.a.shown_name(d);
         let args = self.fresh_args(d);
         self.of_owner(d, &args, owner, span)?;
         let named = self.a.types.intern(Ty::Named(d, args.clone()));
@@ -232,7 +232,7 @@ impl<'a> Checker<'a> {
         rest: Option<StructRest>,
         path: Span,
     ) -> R<()> {
-        let shown = &self.a.def(d).name;
+        let shown = &self.a.shown_name(d);
         let list = |left: &[&FieldDef]| left.iter().map(|f| format!("`{}`", f.name)).collect::<Vec<_>>().join(", ");
         let missing: Vec<&FieldDef> = defs.iter().filter(|f| !seen.contains(&f.name.as_str())).collect();
         let bare: Vec<&FieldDef> = missing.iter().copied().filter(|f| f.default.is_none()).collect();

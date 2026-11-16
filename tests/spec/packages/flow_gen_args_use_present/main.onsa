@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1"]
+
+// S-112, §11.6, §15.1: the control of `flow_gen_args_use_absent`: the `use` of `Config` of a flow that has an input of `init`
+// and of `Params` of a flow that has an input of `block` takes the type, in a list of names too, and the types are written in
+// the places of a signature, a literal and a result. No diagnostic.
+use dsp.synth.{with_cfg, with_par}
+use dsp.synth.with_cfg.Config
+use dsp.synth.with_par.{State, Params}
+
+pub fn make_config(c: F32) -> Config {
+  Config { c: c }
+}
+
+pub fn make_params(k: F32) -> Params {
+  Params { k: k }
+}
+
+pub fn init_it(c: Config, sr: F32) -> with_cfg.State {
+  with_cfg.init(c, sr)
+}
+
+pub fn step(inout s: State, p: Params, x: Span[F32], inout y: Span[F32]) {
+  with_par.process(inout s, p, x, inout y)
+}
+
+pub fn through_the_namespace(c: with_cfg.Config, p: with_par.Params) -> I32 {
+  1
+}

@@ -8,8 +8,9 @@ use std.audio.wav
 
 pub fn render_vowel(path: Path) -> Result[(), IoError] uses {Fs, Alloc} {
   let sr: F32 = 48000.0
-  var st = voice.init(voice.Config {}, sr)
+  var st = voice.init(sr)
   var out: Buf[F32] = Buf.zeroed(48000)
-  voice.process(inout st, voice.params_default(), inout out)
+  let p = voice.Params { f0: 110.0, vowel_f1: 700.0, vowel_f2: 1220.0, gain: 0.5 }
+  voice.process(inout st, p, inout out)
   wav.write(path, out, sr)
 }

@@ -113,7 +113,7 @@ pub flow init_boom(x: F32 at sample, n: I32 at init) -> F32 at sample {
 test "boom adds a counter to the truncated input" {
   // counter 1 2 3; I32.trunc_from of 1.5 2.5 3.5 is 1 2 3.
   let xs: [F32; 3] = [1.5, 2.5, 3.5]
-  let o = boom.render(boom.Config {}, boom.Params {}, xs, 8.0)
+  let o = boom.render(xs, 8.0)
   assert o.out[0] == 2.0
   assert o.out[1] == 4.0
   assert o.out[2] == 6.0
@@ -121,20 +121,20 @@ test "boom adds a counter to the truncated input" {
 
 test "a NaN input panics in process and fails the test" {   //~ TESTFAIL "a NaN input panics in process and fails the test"
   let xs: [F32; 3] = [1.0, F32.NAN, 3.0]
-  let o = boom.render(boom.Config {}, boom.Params {}, xs, 8.0)
+  let o = boom.render(xs, 8.0)
   assert o.out[0] == 2.0
 }
 
 test "an input outside I32 panics in process and fails the test" {   //~ TESTFAIL "an input outside I32 panics in process and fails the test"
   let xs: [F32; 2] = [1.0, 3.0e9]
-  let o = boom.render(boom.Config {}, boom.Params {}, xs, 8.0)
+  let o = boom.render(xs, 8.0)
   assert o.out[0] == 2.0
 }
 
 test "init_boom adds 100 / n to the input" {
   // 100 / 4 = 25.
   let xs: [F32; 3] = [1.0, 2.0, 3.0]
-  let o = init_boom.render(init_boom.Config { n: 4 }, init_boom.Params {}, xs, 8.0)
+  let o = init_boom.render(init_boom.Config { n: 4 }, xs, 8.0)
   assert o.out[0] == 26.0
   assert o.out[1] == 27.0
   assert o.out[2] == 28.0
@@ -148,7 +148,7 @@ test "a panic in init fails the test" {   //~ TESTFAIL "a panic in init fails th
 test "a panic in process through an explicit state fails the test" {   //~ TESTFAIL "a panic in process through an explicit state fails the test"
   let xs: [F32; 3] = [1.0, F32.NAN, 3.0]
   var out: [F32; 3] = [0.0; 3]
-  var st = boom.init(boom.Config {}, 8.0)
-  boom.process(inout st, boom.Params {}, xs, inout out)
+  var st = boom.init(8.0)
+  boom.process(inout st, xs, inout out)
   assert out[0] == 2.0
 }

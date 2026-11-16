@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§6.5", "§15.1", "§18.1"]
+// fixes = 0
+
+// S-625, S-632, R-147, §11.6, §6.5: the value of `@latency` (and of `@param`) is not in the namespace of a flow: it is read by
+// the C header (`<p>_latency`, §14.2) and the tools, and Onsa code has no way to read it. So `latency` is a name that is not
+// in the namespace, which is a closed list (§11.6): E0302 (the name is not found, §15.1) in a value position, for a flow with a
+// `block` input that has a `@param` (`amp`) and for a flow with no input but `sample` (`g`), called or taken as a function
+// value, in a function and in the body of a flow. (`params_default` is in `flow_gen_names_params_default_absent.onsa`. A flow
+// that has a `@latency` is not here: the attribute is not read yet by the code of this version.) No candidate (`fixes = 0`).
+// One error in each unit (§18.1).
+
+pub flow g(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow amp(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub fn a_call_for_a_flow_with_no_latency() -> I32 {
+  let _ = g.latency(48000.0)                        //~ E0302
+  1
+}
+
+pub fn a_call_for_a_flow_with_a_param() -> I32 {
+  let _ = amp.latency(48000.0)                      //~ E0302
+  1
+}
+
+pub fn a_call_with_no_argument() -> I32 {
+  let _ = amp.latency()                             //~ E0302
+  1
+}
+
+pub fn a_function_value_for_a_flow_with_a_param() -> I32 {
+  let f = amp.latency                               //~ E0302
+  1
+}
+
+pub fn a_function_value_for_a_flow_with_no_latency() -> I32 {
+  let f = g.latency                                 //~ E0302
+  1
+}
+
+pub fn a_call_in_an_argument() -> F32 {
+  twice(amp.latency(48000.0))                       //~ E0302
+}
+
+pub fn twice(x: F32) -> F32 {
+  x + x
+}
+
+pub flow reads_the_latency_in_an_operand(x: F32 at sample) -> F32 at sample {
+  x * amp.latency(48000.0)                          //~ E0302
+}
+
+pub flow reads_the_latency_in_a_let(x: F32 at sample) -> F32 at sample {
+  let d = g.latency(48000.0)                        //~ E0302
+  x
+}
+
+pub fn the_names_that_are_there(inout s: amp.State) {
+  amp.reset(inout s)
+}

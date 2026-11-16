@@ -1,0 +1,69 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§4.5", "§18.1"]
+
+// S-112, §11.6: "引数は flow のシグネチャにある入力と出力だけである ... シグネチャと違う呼び出しは型の誤りになる". A call that
+// has an argument more than the signature of the flow has is an error of the number of arguments, E0412 (§4.5: the code
+// of the number of type arguments is "関数の引数の数と同じコード"), at the call. The extra argument is written after the
+// arguments of the signature (a plain number), so that every argument that the signature has is in its place and the number is
+// the only difference: the call of `init` for a flow with no input of `init`, of `process`, `process_inplace` and `render` for a
+// flow with no input of `block`, of `render` for a flow with no input of `sample` (`render(frames, sample_rate)`) and for one
+// that has one (`frames` is not an argument). The call that has the extra argument in the place of `cfg` or `params` (the old
+// form) has also a type that is not the one of the place, and which of the two the call reports is not in the spec (the
+// report of the work). One error in each unit (§18.1). The calls that have the arguments of the
+// signature are in `flow/flow_gen_args_run_plain.onsa`, `flow/flow_gen_args_run_inputs.onsa` and `flow/flow_gen_args_run_source.onsa`.
+
+pub flow plain(x: F32 at sample) -> F32 at sample {
+  x * 2.0
+}
+
+pub flow with_cfg(x: F32 at sample, c: F32 at init) -> F32 at sample {
+  x + c
+}
+
+pub flow with_par(x: F32 at sample, k: F32 at block) -> F32 at sample {
+  x * k
+}
+
+pub flow source() -> F32 at sample {
+  1.0
+}
+
+pub fn init_of_a_flow_with_no_input_of_init(sr: F32) -> plain.State {
+  plain.init(sr, 1.0)                               //~ E0412
+}
+
+pub fn init_of_a_flow_with_no_input(sr: F32) -> source.State {
+  source.init(sr, 1.0)                              //~ E0412
+}
+
+pub fn init_of_a_flow_with_an_input_of_block(sr: F32) -> with_par.State {
+  with_par.init(sr, 1.0)                            //~ E0412
+}
+
+pub fn process_of_a_flow_with_no_input_of_block(inout st: plain.State, xs: Span[F32], inout ys: Span[F32]) {
+  plain.process(inout st, xs, inout ys, 1.0)        //~ E0412
+}
+
+pub fn process_of_a_flow_with_an_input_of_init(inout st: with_cfg.State, xs: Span[F32], inout ys: Span[F32]) {
+  with_cfg.process(inout st, xs, inout ys, 1.0)     //~ E0412
+}
+
+pub fn process_inplace_of_a_flow_with_no_input_of_block(inout st: plain.State, inout ys: Span[F32]) {
+  plain.process_inplace(inout st, inout ys, 1.0)    //~ E0412
+}
+
+pub fn render_of_a_flow_with_no_input_of_block(xs: Span[F32]) -> I32 uses {Alloc} {
+  let _ = plain.render(xs, 8.0, 1.0)                //~ E0412
+  1
+}
+
+pub fn render_of_a_flow_with_no_input_of_sample(sr: F32) -> I32 uses {Alloc} {
+  let _ = source.render(4, sr, 1.0)                 //~ E0412
+  1
+}
+
+pub fn render_of_a_flow_with_an_input_of_sample_with_frames(xs: Span[F32]) -> I32 uses {Alloc} {
+  let _ = plain.render(xs, 8.0, 4)                  //~ E0412
+  1
+}

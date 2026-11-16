@@ -47,7 +47,7 @@ pub rt fn block(x: F32) -> F32 {
 }
 
 pub fn make_state(sample_rate: F32) -> voice.State {
-  voice.init(voice.Config {}, sample_rate)
+  voice.init(sample_rate)
 }
 
 pub flow calls_block(x: F32 at block) -> F32 at sample {

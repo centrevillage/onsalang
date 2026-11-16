@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1", "§18.1"]
+// fixes = 0
+
+// S-112, S-625, R-264, §11.6, §15.1: what the namespace of a flow has is a closed list, and `Config` and `Params` are in it only
+// if the flow has an input of `init` and one of `block`. The `use` of a name that a flow has not is E0302 (the name is not found),
+// as `use dsp.synth.one.process_inplace` is in `use_flow_items_not_taken`: here `Config` and `Params` of `plain` (no input of
+// `init` or `block`), `latency` and `params_default` (names of the C header, §6.5; `amp` has a `@param` with a `default`), and the one name of a list that the flow has not
+// (`use dsp.synth.plain.{State, Params}`: `State` is taken, and `Params` is the error). The other flows are in the other files of
+// the package (a name is bound once in a module, so `Config` of two flows are in two modules): `second.onsa` (`Config` of
+// `with_par`) and `third.onsa` (`Params` of `with_cfg`). The names of the failed `use` lines are silent where they are used
+// (§18.1). The `use` of the names that the flows have is in `flow_gen_args_use_present`.
+use dsp.synth.plain
+use dsp.synth.plain.Config                          //~ E0302
+use dsp.synth.plain.latency                         //~ E0302
+use dsp.synth.amp.params_default                   //~ E0302
+use dsp.synth.plain.{State, Params}                 //~ E0302
+
+pub fn the_failed_names_are_silent_in_a_signature(c: Config, p: Params) -> I32 {
+  1
+}
+
+pub fn the_failed_names_are_silent_in_a_body() -> I32 {
+  let _ = Config {}
+  let _ = Params {}
+  latency(48000.0) + params_default()
+}
+
+pub fn the_name_that_is_found_is_taken(inout s: State) {
+  plain.reset(inout s)
+}

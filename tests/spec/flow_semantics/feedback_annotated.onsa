@@ -37,15 +37,15 @@ pub flow tuple(x: F32 at sample) -> F32 at sample {
 
 test "an annotated later let types the feedback reference" {
   let xs: [F32; 3] = [1.0, 2.0, 3.0]
-  let o = field.render(field.Config {}, field.Params {}, xs, 8.0)
+  let o = field.render(xs, 8.0)
   assert o.out[0] == 2.0
   assert o.out[1] == 5.0
-  let m = method.render(method.Config {}, method.Params {}, xs, 8.0)
+  let m = method.render(xs, 8.0)
   assert m.out[0] == 0.0
   assert m.out[1] == 1.0
   assert m.out[2] == 3.0
-  let i = index.render(index.Config {}, index.Params {}, xs, 8.0)
+  let i = index.render(xs, 8.0)
   assert i.out[1] == 5.0
-  let t = tuple.render(tuple.Config {}, tuple.Params {}, xs, 8.0)
+  let t = tuple.render(xs, 8.0)
   assert t.out[1] == 5.0
 }

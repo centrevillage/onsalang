@@ -1,0 +1,99 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1", "§18.1"]
+// fixes = 0
+
+// S-112, R-264, §11.6, §15.1: `Config` is a type that a flow has only if it has an input of `init`. For a flow with none
+// (`plain`, `with_par` that has an input of `block` alone, and `source` that has no input), the name is not in the
+// namespace, which is a closed list (§11.6), so it is a name that is not found: E0302 (not E0308: the name of a type that
+// the flow does not have is not the name of another kind). The places are the ones in which a type or a struct literal
+// is written: a signature, a result, a field, an alias, a type argument, an array, a function type, an annotation, the
+// literal (with no field and with a field), the heading of an `impl`, and the argument of `init` and `render` that the
+// old form of the call wrote (`plain.init(plain.Config {}, 8.0)`; the call that has the arguments of the signature is in
+// `flow/flow_gen_args_run_plain.onsa`). One error in each unit (§18.1) and no candidate (`fixes = 0`). The flows that
+// have the type are in `flow/flow_gen_args_run_inputs.onsa`.
+
+pub flow plain(x: F32 at sample) -> F32 at sample {
+  x * 2.0
+}
+
+pub flow with_par(x: F32 at sample, k: F32 at block) -> F32 at sample {
+  x * k
+}
+
+pub flow source() -> F32 at sample {
+  1.0
+}
+
+pub fn in_a_parameter(c: plain.Config) -> I32 {     //~ E0302
+  1
+}
+
+pub fn in_a_result() -> plain.Config {              //~ E0302
+  panic("never")
+}
+
+pub fn in_a_parameter_of_a_flow_with_a_block_input(c: with_par.Config) -> I32 {   //~ E0302
+  1
+}
+
+pub fn in_a_parameter_of_a_flow_with_no_input(c: source.Config) -> I32 {   //~ E0302
+  1
+}
+
+pub struct InAField {
+  c: plain.Config,                                  //~ E0302
+}
+
+type InAnAlias = plain.Config                       //~ E0302
+
+pub fn in_a_type_argument(o: Option[plain.Config]) -> I32 {   //~ E0302
+  1
+}
+
+pub fn in_an_array(a: [plain.Config; 2]) -> I32 {   //~ E0302
+  1
+}
+
+pub fn in_a_function_type(f: fn(plain.Config) -> I32) -> I32 {   //~ E0302
+  1
+}
+
+pub fn in_an_annotation() -> I32 {
+  let c: plain.Config = 1                           //~ E0302
+  1
+}
+
+pub fn in_a_literal() -> I32 {
+  let _ = plain.Config {}                           //~ E0302
+  1
+}
+
+pub fn in_a_literal_with_a_field() -> I32 {
+  let _ = plain.Config { c: 1.0 }                   //~ E0302
+  1
+}
+
+pub fn in_a_literal_of_a_flow_with_a_block_input() -> I32 uses {Alloc} {
+  let _ = with_par.Config {}                        //~ E0302
+  1
+}
+
+impl plain.Config {                                 //~ E0302
+  pub fn nothing(self) -> I32 {
+    1
+  }
+}
+
+pub fn init_with_the_old_form(sr: F32) -> plain.State {
+  plain.init(plain.Config {}, sr)                   //~ E0302
+}
+
+pub fn init_of_a_flow_with_no_input_with_the_old_form(sr: F32) -> source.State {
+  source.init(source.Config {}, sr)                 //~ E0302
+}
+
+pub fn render_with_the_old_form(xs: Span[F32]) -> I32 uses {Alloc} {
+  let _ = with_par.render(with_par.Config {}, with_par.Params { k: 1.0 }, xs, 8.0)   //~ E0302
+  1
+}

@@ -1,0 +1,78 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1", "§18.1"]
+
+// S-708, §11.6, §15.1: the names of the functions of the list of the namespace of a flow (`init`, `reset`, `process`,
+// `process_inplace`, `render`) are the names of functions, and a name of a function written where a type is read is E0308,
+// "生成されていなくても": for a flow that has `process_inplace` (`same`) and for one that has not (`source`, which has no input of
+// `sample`, and `widen`, whose output is of another number), and for the names that every flow has. The places are a
+// signature, a result, a field, an alias and a type argument (the annotation of a `let` and the names that are not in the list
+// are in `flow_gen_names_type_position_absent.onsa`). `latency` is not in the list (Onsa code has no way to read it, S-625), so it
+// is not found, E0302 (§15.1), in a signature and in an annotation. The `use` of the names is in `packages/use_flow_absent_type_position_kinds`. One error in each unit (§18.1).
+
+pub flow same(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow source() -> F32 at sample {
+  1.0
+}
+
+pub flow widen(x: F32 at sample) -> [F32; 2] at sample {
+  [x, x]
+}
+
+pub fn a_present_process_inplace_in_a_parameter(x: same.process_inplace) -> I32 {   //~ E0308
+  1
+}
+
+pub fn a_present_process_inplace_in_a_result() -> same.process_inplace {   //~ E0308
+  panic("never")
+}
+
+pub fn an_absent_process_inplace_in_a_parameter(x: source.process_inplace) -> I32 {   //~ E0308
+  1
+}
+
+pub fn an_absent_process_inplace_in_a_result() -> source.process_inplace {   //~ E0308
+  panic("never")
+}
+
+pub fn an_absent_process_inplace_of_another_number(x: widen.process_inplace) -> I32 {   //~ E0308
+  1
+}
+
+pub struct AnAbsentProcessInplaceInAField {
+  f: source.process_inplace,                        //~ E0308
+}
+
+type AnAbsentProcessInplaceInAnAlias = source.process_inplace   //~ E0308
+
+pub fn an_absent_process_inplace_in_a_type_argument(o: Option[source.process_inplace]) -> I32 {   //~ E0308
+  1
+}
+
+pub fn init_in_a_parameter(x: same.init) -> I32 {   //~ E0308
+  1
+}
+
+pub fn reset_in_a_parameter(x: source.reset) -> I32 {   //~ E0308
+  1
+}
+
+pub fn process_in_a_parameter(x: widen.process) -> I32 {   //~ E0308
+  1
+}
+
+pub fn render_in_a_parameter(x: same.render) -> I32 {   //~ E0308
+  1
+}
+
+pub fn latency_is_not_in_the_list_in_a_signature(x: source.latency) -> I32 {   //~ E0302
+  1
+}
+
+pub fn latency_is_not_in_the_list_in_an_annotation() -> I32 {
+  let x: same.latency = 1                           //~ E0302
+  1
+}

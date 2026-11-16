@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§15.1"]
+
+// §11.6, §15.1, S-112: the flows are in another module and are used through the namespace (`plain.render`) and through the
+// names taken with `use` (`State`, `Config`, `Params`, `init`, `process`). A flow has the types and the arguments of its
+// signature wherever they are written: `use` of the generated types and functions takes what the flow has, and the
+// call has the arguments of the signature, with no `cfg` for `plain` and `with_par`, no `params` for `plain` and `with_cfg`.
+use dsp.synth.{plain, with_cfg, with_par, source}
+use dsp.synth.plain.{State, init, process}
+use dsp.synth.with_cfg.Config
+use dsp.synth.with_par.Params
+
+pub fn plain_state(sr: F32) -> State {
+  init(sr)
+}
+
+pub fn make_config(c: F32) -> Config {
+  Config { c: c }
+}
+
+pub fn make_params(k: F32) -> Params {
+  Params { k: k }
+}
+
+test "init and process taken with use take the arguments of a flow with no inputs of init and block" {
+  var st = plain_state(8.0)
+  let xs: [F32; 2] = [1.0, 2.0]
+  var ys: [F32; 2] = [0.0; 2]
+  process(inout st, xs, inout ys)
+  assert ys[0] == 2.0
+  assert ys[1] == 4.0
+}
+
+test "Config and Params taken with use are the types of their flows" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let a = with_cfg.render(make_config(0.5), xs, 8.0)
+  assert a.out[0] == 1.5
+  assert a.out[1] == 2.5
+  let b = with_par.render(make_params(3.0), xs, 8.0)
+  assert b.out[0] == 3.0
+  assert b.out[1] == 6.0
+}
+
+test "render through the namespace of a flow in another module" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let a = plain.render(xs, 8.0)
+  assert a.out[1] == 4.0
+  let b = source.render(2, 8.0)
+  assert b.out[0] == 1.0
+  assert b.out[1] == 1.0
+}

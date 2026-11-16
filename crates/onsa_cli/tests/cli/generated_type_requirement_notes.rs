@@ -145,3 +145,31 @@ fn a_type_of_the_user_without_a_derive_has_no_note_of_a_generated_type() {
         );
     }
 }
+
+/// R-437 (§11.6, §18.1): a message shows a type a flow generates with the name of its flow (`a.Params`), in the
+/// three places alike (`==` of two of them, the E0401; a derive of a struct that holds one and a bound asked of
+/// one, the E0416), so that the types of two flows are told apart. The words of the messages are not promised;
+/// the test asks the name in backquotes alone.
+#[test]
+fn a_generated_type_is_shown_with_its_flow() {
+    let flows = "pub flow a(x: F32 at sample, c: F32 at init, k: F32 at block) -> F32 at sample {\n  x * k + c\n}\n\n\
+                 pub flow b(x: F32 at sample, c: F32 at init, k: F32 at block) -> F32 at sample {\n  x * k - c\n}\n\n";
+    let uses = [
+        ("E0401", "`a.Params`", "fn equal(p: a.Params, q: a.Params) -> Bool {\n  p == q\n}\n"),
+        ("E0401", "`b.Config`", "fn before(p: b.Config, q: b.Config) -> Bool {\n  p < q\n}\n"),
+        ("E0416", "`b.Params`", "struct Holds: PartialEq {\n  p: b.Params,\n}\n"),
+        (
+            "E0416",
+            "`a.Config`",
+            "fn need[T: Eq](x: T) -> T {\n  x\n}\n\nfn passed(p: a.Config) -> a.Config {\n  need(p)\n}\n",
+        ),
+    ];
+    for (code, shown, tail) in uses {
+        let diags = diagnostics_of(&format!("{flows}{tail}"));
+        let found: Vec<(&str, &str)> = diags.iter().map(|d| (code_of(d), str_of(d, "message"))).collect();
+        assert!(
+            matches!(found.as_slice(), [(c, m)] if *c == code && m.contains(shown)),
+            "want one {code} that shows {shown}: {found:?}"
+        );
+    }
+}

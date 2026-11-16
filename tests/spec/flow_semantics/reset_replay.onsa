@@ -146,11 +146,11 @@ test "the vdelay, par and instance state also come back after reset" {
   var junk_out: [F32; 3] = [0.0; 3]
   var first: [F32; 4] = [0.0; 4]
   var again: [F32; 4] = [0.0; 4]
-  var st = rs2.init(rs2.Config {}, 8.0)
-  rs2.process(inout st, rs2.Params {}, xs, inout first)
-  rs2.process(inout st, rs2.Params {}, junk, inout junk_out)
+  var st = rs2.init(8.0)
+  rs2.process(inout st, xs, inout first)
+  rs2.process(inout st, junk, inout junk_out)
   rs2.reset(inout st)
-  rs2.process(inout st, rs2.Params {}, xs, inout again)
+  rs2.process(inout st, xs, inout again)
   assert first[0] == 8.0
   assert first[1] == 9.0
   assert first[2] == 13.5
@@ -166,10 +166,10 @@ test "two states of the same flow are independent" {
   let ys: [F32; 4] = [10.0, 20.0, 30.0, 40.0]
   var a_out: [F32; 4] = [0.0; 4]
   var b_out: [F32; 4] = [0.0; 4]
-  var a = acc.init(acc.Config {}, 8.0)
-  var b = acc.init(acc.Config {}, 8.0)
-  acc.process(inout a, acc.Params {}, xs, inout a_out)
-  acc.process(inout b, acc.Params {}, ys, inout b_out)
+  var a = acc.init(8.0)
+  var b = acc.init(8.0)
+  acc.process(inout a, xs, inout a_out)
+  acc.process(inout b, ys, inout b_out)
   assert a_out[3] == 10.0
   assert b_out[3] == 100.0
 }

@@ -328,7 +328,7 @@ fn voice.Poly.new(sample_rate: F32) -> voice.Poly sret {
       __arr[__i] = voice.voice.init(voice.voice.Config {}, sample_rate)
     }
     __arr
-  }, params: [voice.voice.params_default(); 8], notes: [std.core.Option__U8.None; 8], next: 0:U32 }
+  }, params: [voice.voice.Params { f0: 110.0:F32, vowel_f1: 700.0:F32, vowel_f2: 1220.0:F32, gain: 0.5:F32 }; 8], notes: [std.core.Option__U8.None; 8], next: 0:U32 }
 }
 rt fn voice.Poly.note_on(inout self: voice.Poly, note: U8, velocity: F32) -> () {
   let i: U32 = self.3
@@ -354,7 +354,7 @@ rt fn voice.Poly.process(inout self: voice.Poly, inout out: Span[F32], inout scr
   }
 }
 fn test voice "voice renders a second of sound"() -> () {
-  let o: voice.voice.Out = voice.voice.render(voice.voice.Config {}, voice.voice.params_default(), 48000:U32, 48000.0:F32)
+  let o: voice.voice.Out = voice.voice.render(voice.voice.Config {}, voice.voice.Params { f0: 110.0:F32, vowel_f1: 700.0:F32, vowel_f2: 1220.0:F32, gain: 0.5:F32 }, 48000:U32, 48000.0:F32)
   if (!(std.dsp.test.energy(span(o.0), 0:U32, 48000:U32) > 0.0:F64)) {
     panic("assert energy(o.out, 0, 48000) > 0.0")
   }

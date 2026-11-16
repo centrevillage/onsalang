@@ -469,10 +469,11 @@ impl Analysis {
         self.display_under(ty, &body::generics_of(self, def))
     }
 
-    /// `ty` with user types by their short names and its type parameters by
-    /// the names of `generics` ([`Analysis::param_names`]).
+    /// `ty` with user types by their short names, a type a flow generates
+    /// with the flow (`g.Params`, R-437, [`Analysis::shown_name`]), and its
+    /// type parameters by the names of `generics` ([`Analysis::param_names`]).
     pub fn display_under(&self, ty: TyId, generics: &[def::GenericDef]) -> String {
-        self.types.display(ty, &|d| self.def(d).name.clone(), &Self::param_names(generics))
+        self.types.display(ty, &|d| self.shown_name(d), &Self::param_names(generics))
     }
 
     /// The type parameter `i` by its name in `generics`, the list it is of

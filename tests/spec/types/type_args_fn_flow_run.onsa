@@ -40,21 +40,21 @@ pub flow replicated(x: F32 at sample) -> F32 at sample {
 
 test "a pointwise call with the list" {
   let xs: [F32; 2] = [1.0, 2.0]
-  let o = shifted.render(shifted.Config {}, shifted.Params {}, xs, 8.0)
+  let o = shifted.render(xs, 8.0)
   assert o.out[0] == 1.5
   assert o.out[1] == 2.5
 }
 
 test "a call with constant arguments with the list" {
   let xs: [F32; 2] = [1.0, 2.0]
-  let o = offset.render(offset.Config {}, offset.Params {}, xs, 8.0)
+  let o = offset.render(xs, 8.0)
   assert o.out[0] == 1.25
   assert o.out[1] == 2.25
 }
 
 test "the same inside par" {
   let xs: [F32; 2] = [1.0, 2.0]
-  let o = replicated.render(replicated.Config {}, replicated.Params {}, xs, 8.0)
+  let o = replicated.render(xs, 8.0)
   assert o.out[0] == 2.5
   assert o.out[1] == 4.5
 }

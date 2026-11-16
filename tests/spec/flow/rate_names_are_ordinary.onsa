@@ -44,7 +44,7 @@ test "a program may declare types named Sig, Ctl and Init" {
 
 test "a flow may use them" {
   let xs: [F32; 3] = [1.0, 2.0, 3.0]
-  let o = shaped.render(shaped.Config {}, shaped.Params { g: 0.5 }, xs, 8.0)
+  let o = shaped.render(shaped.Params { g: 0.5 }, xs, 8.0)
   assert o.out[0] == 1.0
   assert o.out[1] == 2.0
   assert o.out[2] == 3.0

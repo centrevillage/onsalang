@@ -29,7 +29,7 @@ pub flow loop_through_instance(x: F32 at sample) -> F32 at sample {
 
 test "two delays read each other's old values" {
   // a: 1, 2, 1, 2, 1.  b: 2, 1, 2, 1, 2.  a * 10 + b: 12, 21, 12, 21, 12.
-  let o = swap_pair.render(swap_pair.Config {}, swap_pair.Params {}, 5, 8.0)
+  let o = swap_pair.render(5, 8.0)
   assert o.out[0] == 12.0
   assert o.out[1] == 21.0
   assert o.out[2] == 12.0
@@ -45,7 +45,7 @@ test "feedback through a flow instance with a prev~ outside it" {
   //   n3: in 0.1875,   lp 0.28125,    y 0.140625
   //   n4: in 0.140625, lp 0.2109375,  y 0.10546875
   let xs: [F32; 5] = [1.0, 0.0, 0.0, 0.0, 0.0]
-  let o = loop_through_instance.render(loop_through_instance.Config {}, loop_through_instance.Params {}, xs, 8.0)
+  let o = loop_through_instance.render(xs, 8.0)
   assert o.out[0] == 1.0
   assert o.out[1] == 0.25
   assert o.out[2] == 0.1875

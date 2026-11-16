@@ -1,0 +1,89 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§11.5", "§5.3"]
+
+// §11.6, S-112: the generated functions of the flows with no input of `init` or `block`, used in the places that
+// a program has for them: a function and an `rt fn`, a branch, a closure of `array.from_fn` that makes a state for
+// each of two voices, a flow that has instances of such a flow (`plain~`), `par~` with a generic function (`sum`),
+// and a flow that is called by its path through a module (`flow_gen_args_run_modules`).
+
+use std.array
+use std.math.sum
+
+pub flow plain(x: F32 at sample) -> F32 at sample {
+  x * 2.0
+}
+
+pub flow gain(x: F32 at sample, k: F32 at block) -> F32 at sample {
+  x * k
+}
+
+// Two instances of `plain` in a row: the instances are made by `~` and have no `cfg` or `params` to write.
+pub flow twice(x: F32 at sample) -> F32 at sample {
+  plain~(plain~(x))
+}
+
+pub flow fan(x: F32 at sample) -> F32 at sample {
+  let a = par~ i in 0 ..< 3 { prev~(x * F32.round_from(i + 1)) }
+  sum(a)
+}
+
+pub rt fn step(inout st: plain.State, xs: Span[F32], inout ys: Span[F32]) {
+  plain.process(inout st, xs, inout ys)
+}
+
+pub fn run(loud: Bool, inout st: gain.State, inout buf: Span[F32]) {
+  if loud {
+    gain.process_inplace(inout st, gain.Params { k: 2.0 }, inout buf)
+  } else {
+    gain.process_inplace(inout st, gain.Params { k: 0.5 }, inout buf)
+  }
+}
+
+test "an rt fn calls process of a flow with no params" {
+  var st = plain.init(8.0)
+  let xs: [F32; 2] = [1.0, 2.0]
+  var ys: [F32; 2] = [0.0; 2]
+  step(inout st, xs, inout ys)
+  assert ys[0] == 2.0
+  assert ys[1] == 4.0
+}
+
+test "the two branches call process_inplace with the params" {
+  var st = gain.init(8.0)
+  var a: [F32; 2] = [1.0, 2.0]
+  var b: [F32; 2] = [1.0, 2.0]
+  run(true, inout st, inout a)
+  run(false, inout st, inout b)
+  assert a[0] == 2.0
+  assert a[1] == 4.0
+  assert b[0] == 0.5
+  assert b[1] == 1.0
+}
+
+test "a closure makes the state of each voice with init that takes the sample rate alone" {
+  var voices: [plain.State; 2] = array.from_fn(fn(_) { plain.init(8.0) })
+  let xs: [F32; 2] = [1.0, 2.0]
+  var a: [F32; 2] = [0.0; 2]
+  var b: [F32; 2] = [0.0; 2]
+  plain.process(inout voices[0], xs, inout a)
+  plain.process(inout voices[1], xs, inout b)
+  assert a[1] == 4.0
+  assert b[1] == 4.0
+}
+
+test "a flow with two instances of a flow with no inputs of init and block" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = twice.render(xs, 8.0)
+  assert o.out[0] == 4.0
+  assert o.out[1] == 8.0
+}
+
+test "par and a generic function in a flow render with the sample rate alone" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = fan.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 6.0
+  assert o.out[2] == 12.0
+}

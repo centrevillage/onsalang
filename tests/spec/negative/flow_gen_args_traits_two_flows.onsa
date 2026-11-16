@@ -1,0 +1,54 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§6.4", "§18.1"]
+
+// S-908, R-437, §11.6, §6.4: the types that a flow generates (`Params`, `Config`) implement no trait, so `==` of two of them is
+// E0401, a derive of a struct that holds one is E0416, and a bound that asks a trait of one is E0416. Here two flows (`a`, `b`)
+// have each a `Params` and a `Config` of its own, in the three places, so that a message that shows the type with the name
+// of its flow (`a.Params`, the form R-437 asks for the three) tells the two apart. The text of a message is not promised
+// (§18.1), so this case checks the codes and the lines only; the text is for a test of the message (the report of the work).
+// One error in each unit (§18.1).
+
+pub flow a(x: F32 at sample, c: F32 at init, k: F32 at block) -> F32 at sample {
+  x * k + c
+}
+
+pub flow b(x: F32 at sample, c: F32 at init, k: F32 at block) -> F32 at sample {
+  x * k - c
+}
+
+fn equal_a(p: a.Params, q: a.Params) -> Bool {
+  p == q                                            //~ E0401
+}
+
+fn equal_b(p: b.Params, q: b.Params) -> Bool {
+  p == q                                            //~ E0401
+}
+
+fn before_a(p: a.Config, q: a.Config) -> Bool {
+  p < q                                             //~ E0401
+}
+
+struct HoldsA: PartialEq {
+  p: a.Params,                                      //~ E0416
+}
+
+struct HoldsB: PartialEq {
+  p: b.Params,                                      //~ E0416
+}
+
+struct HoldsConfigB: PartialEq {
+  c: b.Config,                                      //~ E0416
+}
+
+fn need[T: Eq](x: T) -> T {
+  x
+}
+
+fn passed_a(p: a.Params) -> a.Params {
+  need(p)                                           //~ E0416
+}
+
+fn passed_b(p: b.Params) -> b.Params {
+  need(p)                                           //~ E0416
+}

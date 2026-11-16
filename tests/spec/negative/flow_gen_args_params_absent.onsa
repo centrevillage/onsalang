@@ -1,0 +1,99 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1", "§18.1"]
+// fixes = 0
+
+// S-112, R-264, §11.6, §15.1: `Params` is a type that a flow has only if it has an input of `block`. For a flow with none
+// (`plain`, `with_cfg` that has an input of `init` alone, and `source` that has no input), the name is not in the
+// namespace, which is a closed list (§11.6), so it is a name that is not found: E0302 (the same as `Config`, in
+// `flow_gen_args_config_absent.onsa`). The places are the ones in which a type or a struct literal is written, and the
+// argument of `process`, `process_inplace` and `render` that the old form of the call wrote
+// (`plain.process(inout st, plain.Params {}, xs, inout ys)`; the calls that have the arguments of the signature are in
+// `flow/flow_gen_args_run_plain.onsa`). One error in each unit (§18.1) and no candidate (`fixes = 0`). The flows that have
+// the type are in `flow/flow_gen_args_run_inputs.onsa`.
+
+pub flow plain(x: F32 at sample) -> F32 at sample {
+  x * 2.0
+}
+
+pub flow with_cfg(x: F32 at sample, c: F32 at init) -> F32 at sample {
+  x + c
+}
+
+pub flow source() -> F32 at sample {
+  1.0
+}
+
+pub fn in_a_parameter(p: plain.Params) -> I32 {     //~ E0302
+  1
+}
+
+pub fn in_a_result() -> plain.Params {              //~ E0302
+  panic("never")
+}
+
+pub fn in_a_parameter_of_a_flow_with_an_init_input(p: with_cfg.Params) -> I32 {   //~ E0302
+  1
+}
+
+pub fn in_a_parameter_of_a_flow_with_no_input(p: source.Params) -> I32 {   //~ E0302
+  1
+}
+
+pub struct InAField {
+  p: plain.Params,                                  //~ E0302
+}
+
+type InAnAlias = plain.Params                       //~ E0302
+
+pub fn in_a_type_argument(o: Option[plain.Params]) -> I32 {   //~ E0302
+  1
+}
+
+pub fn in_an_array(a: [plain.Params; 2]) -> I32 {   //~ E0302
+  1
+}
+
+pub fn in_an_annotation() -> I32 {
+  let p: plain.Params = 1                           //~ E0302
+  1
+}
+
+pub fn in_a_literal() -> I32 {
+  let _ = plain.Params {}                           //~ E0302
+  1
+}
+
+pub fn in_a_literal_with_a_field() -> I32 {
+  let _ = plain.Params { k: 1.0 }                   //~ E0302
+  1
+}
+
+pub fn in_a_literal_of_a_flow_with_an_init_input() -> I32 uses {Alloc} {
+  let _ = with_cfg.Params {}                        //~ E0302
+  1
+}
+
+impl plain.Params {                                 //~ E0302
+  pub fn nothing(self) -> I32 {
+    1
+  }
+}
+
+pub fn process_with_the_old_form(inout st: plain.State, xs: Span[F32], inout ys: Span[F32]) {
+  plain.process(inout st, plain.Params {}, xs, inout ys)   //~ E0302
+}
+
+pub fn process_inplace_with_the_old_form(inout st: plain.State, inout ys: Span[F32]) {
+  plain.process_inplace(inout st, plain.Params {}, inout ys)   //~ E0302
+}
+
+pub fn render_with_the_old_form(xs: Span[F32]) -> I32 uses {Alloc} {
+  let _ = with_cfg.render(with_cfg.Config { c: 1.0 }, with_cfg.Params {}, xs, 8.0)   //~ E0302
+  1
+}
+
+pub fn render_of_a_flow_with_no_input_with_the_old_form() -> I32 uses {Alloc} {
+  let _ = source.render(source.Params {}, 4, 8.0)   //~ E0302
+  1
+}

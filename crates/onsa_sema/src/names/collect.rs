@@ -207,6 +207,7 @@ impl<'p> Sema<'p> {
     /// The def of an item with a name, in the items of its module.
     fn collect_named(&mut self, at: &Place<'_>, kind: &ItemKind) -> Option<DefId> {
         let item = at.item;
+        let flow = if let ItemKind::Flow(f) = kind { Some(f) } else { None };
         let list = match kind {
             ItemKind::Struct(s) => Some(&s.derives),
             ItemKind::Enum(e) => Some(&e.derives),
@@ -248,8 +249,9 @@ impl<'p> Sema<'p> {
             _ => return None,
         };
         let d = self.add_def(at.def(name.name.clone(), name.span, kind));
-        if self.a.def(d).as_flow().is_some() {
-            self.generated_defs(d);
+        if let Some(f) = flow {
+            let rates = f.params.iter().map(|p| p.clock.as_ref().and_then(|c| crate::flow_names::clock_rate(c).ok()));
+            self.generated_defs(d, &rates.collect::<Vec<_>>());
         }
         if let Some(list) = list {
             self.derived_defs(d, list);

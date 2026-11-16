@@ -4,21 +4,21 @@
 // fixes = 1
 //
 // [[test.fix]]
-// at = "22:39"
+// at = "22:47"
 // code = "E0410"
 // candidate = 1
 // clean = true
 
 // W5-22 U4/t, S-697 (spec §11.6: `voice.Config` has the inputs of `init` as its fields and `voice.Params` the inputs of `block`; §4.4: "全てのフィールドを書いた `...` は E0410(修正候補は `...` を外す形)"). The `Config` of a flow
-// that has no input of `init` has no field (it is written `f.Config {}` in the cases of flows), so the `...` of `f.Config { ... }` has nothing to fill: E0410 on the `...`, and the candidate removes it. The
-// generated structs with fields (which have no default) are in struct_fill_e0410.onsa.
+// with one input of `init`, its field written, leaves the `...` of `f.Config { c: 0.0, ... }` nothing to fill: E0410 on the `...`, and the candidate removes it (a flow with no input of `init` has no
+// `Config`, §11.6, S-112). The generated structs with fields left to fill (which have no default) are in struct_fill_e0410.onsa.
 
-pub flow gain2(x: F32 at sample) -> F32 at sample {
-  x * 2.0
+pub flow gain2(x: F32 at sample, c: F32 at init) -> F32 at sample {
+  x * 2.0 + c
 }
 
-test "the Config of a flow with no init input" {
+test "the Config of a flow with its init input written" {
   let xs: [F32; 1] = [1.0]
-  let o = gain2.render(gain2.Config { ... }, gain2.Params {}, xs, 8.0)   //~ E0410
+  let o = gain2.render(gain2.Config { c: 0.0, ... }, xs, 8.0)   //~ E0410
   assert o.out[0] == 2.0
 }

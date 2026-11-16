@@ -32,13 +32,13 @@ pub flow v(x: F32 at sample) -> F32 at sample {
 }
 
 pub fn pick(c: Bool) -> v.State {
-  let a = v.init(v.Config {}, 48000.0)
-  let b = v.init(v.Config {}, 48000.0)
+  let a = v.init(48000.0)
+  let b = v.init(48000.0)
   if c { a } else { b }
 }
 
 pub fn keep() -> v.State {
-  let a = v.init(v.Config {}, 48000.0)
+  let a = v.init(48000.0)
   a
 }
 "#

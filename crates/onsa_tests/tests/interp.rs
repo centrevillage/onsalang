@@ -193,20 +193,20 @@ pub flow resonator(x: F32 at sample, fc: F32 at block, bw: F32 at block) -> F32 
 }
 
 test "unison produces a signal in range" {
-  let o = unison.render(unison.Config {}, unison.Params { f0: 110.0, detune: 0.01 }, 4800, 48000.0)
+  let o = unison.render(unison.Params { f0: 110.0, detune: 0.01 }, 4800, 48000.0)
   let e = energy(o.out, 0, 4800)
   assert e > 0.0
   assert e < 4800.0
 }
 
 test "resonator rings then decays" {
-  let o = resonator.render(resonator.Config {}, resonator.Params { fc: 500.0, bw: 100.0 }, impulse(48000), 48000.0)
+  let o = resonator.render(resonator.Params { fc: 500.0, bw: 100.0 }, impulse(48000), 48000.0)
   assert energy(o.out, 0, 1000) > 0.0
   assert energy(o.out, 47000, 48000) < 1.0e-12
 }
 
 test "process runs block by block with reset" {
-  var st = resonator.init(resonator.Config {}, 48000.0)
+  var st = resonator.init(48000.0)
   var input: [F32; 8] = [0.0; 8]
   input[0] = 1.0
   var out: [F32; 8] = [0.0; 8]

@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1", "§18.1"]
+
+// S-708, S-625, S-715, §11.6, §15.1: the forms of `flow_gen_names_type_position.onsa` that the code of today does not give. A name of
+// the list that a flow has not (`process_inplace` of `source`) is E0308 in the annotation of a `let` of a body also (the code of
+// today gives E0302 for it, and E0308 in a signature, a field, an alias and a type argument). `params_default` is no name of
+// the list (S-625: Onsa code has no way to read an attribute value, §6.5), so it is not found in a type position, E0302
+// (§15.1: a name that is not found is E0302 whatever the position), also in the annotation of a body; `latency` is the same
+// (it is in `flow_gen_names_type_position.onsa`: the code of today does not make it). The code of today finds `params_default`,
+// which it still makes, and gives E0308. One error in
+// each unit (§18.1).
+
+pub flow same(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow source() -> F32 at sample {
+  1.0
+}
+
+pub fn an_absent_process_inplace_in_an_annotation() -> I32 {
+  let x: source.process_inplace = 1                 //~ E0308
+  1
+}
+
+pub fn params_default_is_not_in_the_list_in_a_signature(x: same.params_default) -> I32 {   //~ E0302
+  1
+}
+
+pub fn params_default_is_not_in_the_list_in_an_annotation() -> I32 {
+  let x: same.params_default = 1                    //~ E0302
+  1
+}
+
+pub fn params_default_is_not_in_the_list_in_a_result() -> source.params_default {   //~ E0302
+  panic("never")
+}

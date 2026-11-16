@@ -1,0 +1,19 @@
+pub flow plain(x: F32 at sample) -> F32 at sample {
+  x * 2.0
+}
+
+pub flow with_cfg(x: F32 at sample, c: F32 at init) -> F32 at sample {
+  x + c
+}
+
+pub flow with_par(x: F32 at sample, k: F32 at block) -> F32 at sample {
+  x * k
+}
+
+pub flow amp(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}

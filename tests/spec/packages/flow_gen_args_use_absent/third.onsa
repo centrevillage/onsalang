@@ -1,0 +1,6 @@
+// `Params` of a flow that has an input of `init` and none of `block`: not in the namespace, E0302 (see the main module).
+use dsp.synth.with_cfg.Params                       //~ E0302
+
+pub fn the_failed_name_is_silent(p: Params) -> I32 {
+  1
+}

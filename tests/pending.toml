@@ -324,13 +324,6 @@ note = "sample の入力が 2 つの flow の In 構造体（vd_var.In { x, d }�
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/ops/convert_from_flow_values.onsa"
-reasons = ["S-231", "S-30"]
-until = "W7-12"
-note = "変換の関連関数を使う flow の値。render の形が仕様の形（init の入力が無ければ Config を取らず、block の入力が無ければ Params を取らない）で、今の render は常に 4 引数（E0412）。vdelay_varying_d.onsa の項目と同じ W7-03"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/flow_semantics/branches_plain_match.onsa"
 reasons = ["R-06"]
 until = "W8-06"
@@ -795,34 +788,6 @@ note = "クロージャと .( の呼び出しが E0200。W3-05 の値の規則�
 
 # --- W4-04 U5 の gate のファズが見つけた修正候補の型（事例を足してコーパスが変わった。e741747 でも出る）
 
-[[pending]]
-kind = "spec-example"
-target = "§16.1 6f7b22db: use std.audio.device"
-reasons = ["S-112", "S-570", "S-609", "S-625"]
-until = "W7-12"
-note = "52 回目の S-112 の改め（init の入力の無い flow は Config と cfg を持たない）。仕様の例は voice.Config {} などを外した。58 回目の S-609 で、関数の項目の move on_audio・move on_control を外した。61 回目の S-625 で、voice.params_default() を Params のリテラルに書き直した（Onsa の生成する API から外した）。写しは今の実装に合わせて残し、生成する API の Onsa の側（W7-03）で写しを直して外す"
-
-[[pending]]
-kind = "spec-example"
-target = "§17.3 4902dd54: use std.math.{exp, cos}"
-reasons = ["S-112", "S-570"]
-until = "W7-12"
-note = "52 回目の S-112 の改め（init の入力の無い flow は Config と cfg を持たない）。仕様の例は voice.Config {} などを外した。写しは今の実装に合わせて残し、生成する API の Onsa の側（W7-03）で写しを直して外す"
-
-[[pending]]
-kind = "spec-example"
-target = "§17.4 a4e5bc9e: use std.fs.{Fs, Path, IoError}"
-reasons = ["S-112", "S-570", "S-625"]
-until = "W7-12"
-note = "52 回目の S-112 の改め（init の入力の無い flow は Config と cfg を持たない）。仕様の例は voice.Config {} などを外した。61 回目の S-625 で、voice.params_default() を Params のリテラルに書き直した（Onsa の生成する API から外した）。写しは今の実装に合わせて残し、生成する API の Onsa の側（W7-03）で写しを直して外す"
-
-[[pending]]
-kind = "spec-example"
-target = "§17.6 9d3a61e2: use std.array"
-reasons = ["S-112", "S-570", "S-625"]
-until = "W7-12"
-note = "52 回目の S-112 の改め（init の入力の無い flow は Config と cfg を持たない）。仕様の例は voice.Config {} などを外した。61 回目の S-625 で、voice.params_default() を Params のリテラルに書き直した（Onsa の生成する API から外した）。写しは今の実装に合わせて残し、生成する API の Onsa の側（W7-03）で写しを直して外す"
-
 # --- W4-03 U2a/t: 木と収集と use の規則（tests/spec/packages/use_*、module_*、tests/spec/module/use_binding_*。2026-10-24）。
 # --- W4-03 U3b2: 名前の段の E0200 と生成項目の事例のうち、後の単位・作業の機能で通るもの（2026-10-25）。
 [[pending]]
@@ -831,20 +796,6 @@ target = "tests/spec/packages/use_flow_rendered"
 reasons = ["R-264"]
 until = "W7-12"
 note = "flow の名前空間に Rendered を作らない（R-264）。use と使う所が E0302"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/packages/use_flow_params_default"
-reasons = ["S-625", "R-147"]
-until = "W7-12"
-note = "params_default は Onsa の名前空間から外れる（S-625）。今は名前空間にあり、use が通る"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/flow_namespace_params_default.onsa"
-reasons = ["S-625", "R-147"]
-until = "W7-12"
-note = "本体の経路の amp.params_default() と let f = amp.params_default は E0302（S-625）。今は呼び出しが通り、関数値も W4-04 U8a から通る（flow の名前空間の関数を値にする形。E0309 だけが出る）"
 
 [[pending]]
 kind = "test-case"

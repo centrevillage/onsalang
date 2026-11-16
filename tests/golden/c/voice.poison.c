@@ -255,7 +255,7 @@ ONSA_INLINE void voice__voice__process(voice__voice__State* s, const voice__voic
     float v;
     float onsa_t2 = voice__voice__tick(&(*s));
     v = onsa_t2;
-    out.ptr[onsa_idx(i, out.len, "voice.onsa", 72)] = v;
+    out.ptr[onsa_idx(i, out.len, "voice.onsa", 71)] = v;
   }
 }
 
@@ -283,18 +283,18 @@ ONSA_INLINE float voice__echo__tick(voice__echo__State* s, float x) {
   } else {
     vdelay_0_dc = 1.0f;
   }
-  uint32_t vdelay_0_k = onsa_trunc_u32_f32(vdelay_0_dc, "voice.onsa", 100);
+  uint32_t vdelay_0_k = onsa_trunc_u32_f32(vdelay_0_dc, "voice.onsa", 99);
   float vdelay_0_f = (float)(vdelay_0_dc - ((float)vdelay_0_k));
-  uint32_t vdelay_0_wlk = onsa_sub_u32(onsa_add_u32(s->vdelay_0_w, UINT32_C(96001), "voice.onsa", 91), vdelay_0_k, "voice.onsa", 91);
-  uint32_t onsa_t1 = onsa_rem_u32(vdelay_0_wlk, UINT32_C(96001), "voice.onsa", 100);
-  float vdelay_0_a = s->vdelay_0_buf.a[onsa_idx(onsa_t1, UINT32_C(96001), "voice.onsa", 91)];
-  uint32_t onsa_t2 = onsa_rem_u32(onsa_sub_u32(vdelay_0_wlk, UINT32_C(1), "voice.onsa", 100), UINT32_C(96001), "voice.onsa", 100);
-  float vdelay_0_b = s->vdelay_0_buf.a[onsa_idx(onsa_t2, UINT32_C(96001), "voice.onsa", 91)];
+  uint32_t vdelay_0_wlk = onsa_sub_u32(onsa_add_u32(s->vdelay_0_w, UINT32_C(96001), "voice.onsa", 90), vdelay_0_k, "voice.onsa", 90);
+  uint32_t onsa_t1 = onsa_rem_u32(vdelay_0_wlk, UINT32_C(96001), "voice.onsa", 99);
+  float vdelay_0_a = s->vdelay_0_buf.a[onsa_idx(onsa_t1, UINT32_C(96001), "voice.onsa", 90)];
+  uint32_t onsa_t2 = onsa_rem_u32(onsa_sub_u32(vdelay_0_wlk, UINT32_C(1), "voice.onsa", 99), UINT32_C(96001), "voice.onsa", 99);
+  float vdelay_0_b = s->vdelay_0_buf.a[onsa_idx(onsa_t2, UINT32_C(96001), "voice.onsa", 90)];
   float vdelay_0 = (float)((float)((float)(1.0f - vdelay_0_f) * vdelay_0_a) + (float)(vdelay_0_f * vdelay_0_b));
   float y = (float)(onsa_t4 + (float)(onsa_t3 * vdelay_0));
   float onsa__out = y;
-  s->vdelay_0_buf.a[onsa_idx(s->vdelay_0_w, UINT32_C(96001), "voice.onsa", 91)] = y;
-  s->vdelay_0_w = onsa_rem_u32(onsa_add_u32(s->vdelay_0_w, UINT32_C(1), "voice.onsa", 91), UINT32_C(96001), "voice.onsa", 91);
+  s->vdelay_0_buf.a[onsa_idx(s->vdelay_0_w, UINT32_C(96001), "voice.onsa", 90)] = y;
+  s->vdelay_0_w = onsa_rem_u32(onsa_add_u32(s->vdelay_0_w, UINT32_C(1), "voice.onsa", 90), UINT32_C(96001), "voice.onsa", 90);
   return onsa__out;
 }
 
@@ -325,16 +325,16 @@ ONSA_INLINE void voice__echo__reset(voice__echo__State* s) {
 ONSA_INLINE void voice__echo__process(voice__echo__State* s, const voice__echo__Params* params, onsa_span_f32 x, onsa_span_f32 out) {
   uint32_t len = x.len;
   if (out.len != len) {
-    onsa_panic("span lengths differ", "voice.onsa", 91);
+    onsa_panic("span lengths differ", "voice.onsa", 90);
   }
   voice__echo__ctl(&(*s), &(*params));
   uint32_t onsa_t1 = len;
   for (uint32_t i = UINT32_C(0); i < onsa_t1; i++) {
-    float x_11 = x.ptr[onsa_idx(i, x.len, "voice.onsa", 91)];
+    float x_11 = x.ptr[onsa_idx(i, x.len, "voice.onsa", 90)];
     float v;
     float onsa_t2 = voice__echo__tick(&(*s), x_11);
     v = onsa_t2;
-    out.ptr[onsa_idx(i, out.len, "voice.onsa", 91)] = v;
+    out.ptr[onsa_idx(i, out.len, "voice.onsa", 90)] = v;
   }
 }
 

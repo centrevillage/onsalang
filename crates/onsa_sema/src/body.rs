@@ -490,7 +490,7 @@ impl<'a> Checker<'a> {
         // A variable left open: its literal kind, else a hole (R-353; no internal `?N`).
         let var_name = |i: u32| self.infer.var_lit(i).map_or("_", LitKind::braced).to_string();
         let param = Analysis::param_names(&self.generics);
-        self.a.types.display_vars(r, &|d| self.a.def(d).name.clone(), &param, &var_name)
+        self.a.types.display_vars(r, &|d| self.a.shown_name(d), &param, &var_name)
     }
 
     pub(crate) fn unit(&mut self) -> TyId {

@@ -1,0 +1,3 @@
+[package]
+name = "flow_gen_args_use_present"
+edition = "2026"

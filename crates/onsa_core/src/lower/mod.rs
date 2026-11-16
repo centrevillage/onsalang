@@ -159,6 +159,8 @@ pub(crate) struct Lowerer<'a> {
     pub(crate) eq_fns: HashMap<Ty, FnId>,
     messages: HashMap<String, MsgId>,
     pub(crate) flow_fns: HashMap<DefId, flow::FlowFns>,
+    /// The empty `Config` and `Params` of the flows with none ([`Lowerer::flow_ty`]).
+    implicit_tys: HashMap<(DefId, onsa_sema::def::FlowTy), TypeId>,
     pub(crate) flows_in_progress: HashSet<DefId>,
     /// [`LowerOptions::bulk_threshold`]; `None`: everything fast.
     pub bulk_threshold: Option<u32>,
@@ -235,6 +237,7 @@ pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Mo
         eq_fns: HashMap::new(),
         messages: HashMap::new(),
         flow_fns: HashMap::new(),
+        implicit_tys: HashMap::new(),
         flows_in_progress: HashSet::new(),
         bulk_threshold: opts.bulk_threshold,
         ptr_size: opts.ptr_size,

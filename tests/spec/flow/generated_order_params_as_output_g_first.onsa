@@ -26,7 +26,7 @@ test "the generated Params of another flow is the output type" {
 }
 
 test "the flow whose Params it is works as before" {
-  var st = g.init(g.Config {}, 8.0)
+  var st = g.init(8.0)
   let xs: [F32; 2] = [1.0, 2.0]
   var ys: [F32; 2] = [0.0; 2]
   g.process(inout st, g.Params { k: 3.0 }, xs, inout ys)

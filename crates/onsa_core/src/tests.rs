@@ -247,7 +247,7 @@ fn span_coercions_and_bang_methods() {
 #[test]
 fn flow_members_are_lowered_when_referenced() {
     let d = text(
-        "pub flow one(x: F32 at sample) -> F32 at sample {\n  x\n}\n\npub fn mk(sr: F32) -> one.State {\n  one.init(one.Config {}, sr)\n}\n",
+        "pub flow one(x: F32 at sample) -> F32 at sample {\n  x\n}\n\npub fn mk(sr: F32) -> one.State {\n  one.init(sr)\n}\n",
     );
     assert!(d.contains("type t.one.State = struct { poisoned: Bool, initialized: Bool }"), "{d}");
     assert!(d.contains("fn t.one.init(cfg: t.one.Config, sample_rate: F32) -> t.one.State sret {"), "{d}");
@@ -892,7 +892,8 @@ fn what_is_generated_and_a_constant_of_a_module_are_not_counted() {
     for (more, what, added) in [
         ("const K: I32 = 1\n", "a constant of a module", 0),
         (eq, "the function, not its `__eq`", 1),
-        (flow, "the four structs of a flow, not its functions", 4),
+        // `one` has no `Config` and no `Params` (§11.6, S-112).
+        (flow, "the two structs of a flow, not its functions", 2),
         // `I32.default` is a function `std` writes by hand, which the derive calls.
         (derived, "`D`, `d`, `m` and `I32.default`, not the `default` of the derive", 4),
     ] {

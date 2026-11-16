@@ -27,14 +27,14 @@ pub flow gain(x: F32 at sample) -> F32 at sample {
 
 test "a flow render and then a deep recursion fails the test" {   //~ TESTFAIL "a flow render and then a deep recursion fails the test"
   let xs: [F32; 3] = [1.0, 2.0, 3.0]
-  let o = gain.render(gain.Config {}, gain.Params {}, xs, 8.0)
+  let o = gain.render(xs, 8.0)
   assert o.out[0] == 2.0
   assert dive(300) == 300
 }
 
 test "the flow runs in the next test" {
   let xs: [F32; 3] = [1.0, 2.0, 3.0]
-  let o = gain.render(gain.Config {}, gain.Params {}, xs, 8.0)
+  let o = gain.render(xs, 8.0)
   assert o.out[0] == 2.0
   assert o.out[1] == 4.0
   assert o.out[2] == 6.0
@@ -42,7 +42,7 @@ test "the flow runs in the next test" {
 
 test "a deep recursion on a value from the flow fails the test" {   //~ TESTFAIL "a deep recursion on a value from the flow fails the test"
   let xs: [F32; 2] = [1.0, 2.0]
-  let o = gain.render(gain.Config {}, gain.Params {}, xs, 8.0)
+  let o = gain.render(xs, 8.0)
   let k = dive(300)
   assert o.out[1] == 4.0
   assert k == 300
@@ -50,7 +50,7 @@ test "a deep recursion on a value from the flow fails the test" {   //~ TESTFAIL
 
 test "the flow runs again after the second failure" {
   let xs: [F32; 2] = [5.0, 6.0]
-  let o = gain.render(gain.Config {}, gain.Params {}, xs, 8.0)
+  let o = gain.render(xs, 8.0)
   assert o.out[0] == 10.0
   assert o.out[1] == 12.0
   assert dive(50) == 50

@@ -61,7 +61,8 @@ fn spec_flow_examples_check_clean() {
 
 /// Each generated type of a flow is named by [`crate::def::FlowTy::name`]
 /// (K8 of W4-18): the later stages select it by its `FlowTy`, and show that
-/// name; the four types are there, each once.
+/// name; the types are there, each once (`resonator` has no input of
+/// `init`, so no `Config`, §11.6, S-112).
 #[test]
 fn the_generated_types_are_named_by_their_role() {
     use crate::def::{DefKind, FlowTy};
@@ -76,7 +77,7 @@ fn the_generated_types_are_named_by_their_role() {
             tys.push(t);
         }
     }
-    assert_eq!(tys, [FlowTy::State, FlowTy::Config, FlowTy::Params, FlowTy::Out]);
+    assert_eq!(tys, [FlowTy::State, FlowTy::Params, FlowTy::Out]);
 }
 
 #[test]

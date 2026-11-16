@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§4.5", "§18.1"]
+
+// S-112, §11.6: "引数は flow のシグネチャにある入力と出力だけである ... シグネチャと違う呼び出しは型の誤りになる". A call that
+// has an argument less than the signature of the flow has is an error of the number of arguments, E0412 (§4.5), at the call.
+// The argument that is left out is the last one of the signature (the sample rate of `init` and `render`, the output buffer of
+// `process`, the buffer of `process_inplace`), so that every argument that is written is in its place and the number is the
+// only difference. The call that leaves out the `cfg` or the `params` that a flow has has also a type that is not the one of
+// the place of the argument, and which of the two the call reports is not in the spec (the report of the work). One error in
+// each unit (§18.1). The calls that have the arguments of the signature are in
+// `flow/flow_gen_args_run_inputs.onsa` and `flow/flow_gen_args_run_source.onsa`.
+
+pub flow with_cfg(x: F32 at sample, c: F32 at init) -> F32 at sample {
+  x + c
+}
+
+pub flow with_par(x: F32 at sample, k: F32 at block) -> F32 at sample {
+  x * k
+}
+
+pub flow both(x: F32 at sample, c: F32 at init, k: F32 at block) -> F32 at sample {
+  x * k + c
+}
+
+pub flow source() -> F32 at sample {
+  1.0
+}
+
+pub flow plain(x: F32 at sample) -> F32 at sample {
+  x * 2.0
+}
+
+pub fn init_without_the_sample_rate() -> with_cfg.State {
+  with_cfg.init(with_cfg.Config { c: 1.0 })         //~ E0412
+}
+
+pub fn init_of_a_flow_with_no_input_of_init_without_the_sample_rate() -> plain.State {
+  plain.init()                                      //~ E0412
+}
+
+pub fn process_without_the_output(inout st: with_par.State, xs: Span[F32]) {
+  with_par.process(inout st, with_par.Params { k: 1.0 }, xs)   //~ E0412
+}
+
+pub fn process_of_a_flow_with_no_input_of_block_without_the_output(inout st: plain.State, xs: Span[F32]) {
+  plain.process(inout st, xs)                       //~ E0412
+}
+
+pub fn process_inplace_without_the_buffer(inout st: with_par.State) {
+  with_par.process_inplace(inout st, with_par.Params { k: 1.0 })   //~ E0412
+}
+
+pub fn render_without_the_sample_rate(xs: Span[F32]) -> I32 uses {Alloc} {
+  let _ = both.render(both.Config { c: 1.0 }, both.Params { k: 1.0 }, xs)   //~ E0412
+  1
+}
+
+pub fn render_of_a_flow_with_no_input_of_block_without_the_sample_rate(xs: Span[F32]) -> I32 uses {Alloc} {
+  let _ = plain.render(xs)                          //~ E0412
+  1
+}
+
+pub fn render_of_a_flow_with_no_input_of_sample_without_the_sample_rate() -> I32 uses {Alloc} {
+  let _ = source.render(4)                          //~ E0412
+  1
+}
