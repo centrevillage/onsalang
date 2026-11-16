@@ -238,6 +238,53 @@ class Compare(unittest.TestCase):
             f"  before: exit 1: {path('a')}: internal error: boom", "  after:  exit 2: usage",
             f"fixes: no candidate in {path('a')}"])  # fmt: skip
 
+    def test_loops(self):
+        # W7-04 U1b: `--fix-loop --json --branches` of each binary on each input with each `--pick`, a process a run;
+        # the inputs sorted by the pick and the stops before and after, those that ended well before and not after
+        # (with the walks after), and the falls.
+        grid = self.root / "grid"
+        grid.mkdir()
+        for n in ("a", "b", "c"):
+            (grid / f"{n}.onsa").write_text("")
+        path = lambda n: str(grid / f"{n}.onsa")  # noqa: E731
+        step = {"code": "E0811", "line": 2, "col": 3, "candidate": 1, "of": 2, "title": "add `~`", "errors": None}
+
+        def fl(n, *walks, **more):  # what `--fix-loop --json --branches --pick … <n>` prints
+            stops = {s: [w["stop"] for w in walks].count(s) for s in {w["stop"] for w in walks}}
+            return [0, [{"file": path(n), "stops": stops, "walks": list(walks), "internal": None, **more}]]
+
+        nc, clean = {"stop": "no-candidate", "steps": []}, {"stop": "clean", "steps": [step]}
+        cycle = {"stop": "cycle", "how": "undo", "back_to": 1, "steps": [step, step]}
+        spec = {"before": {"*": fl("a", nc), f"--fix-loop --json --branches --pick last {path('b')}": fl("b", clean)},
+                "after": {"*": fl("a", nc), f"--fix-loop --json --branches --pick last {path('b')}": fl("b", clean, cycle),
+                          path("c"): fl("c", nc, internal="boom")}}  # fmt: skip
+        before, after = self.fakes(spec, "before", "after")
+        run = lambda *xs: quiet_out(compare.main, ["loops", before, after, *xs, "--jobs", "2"])  # noqa: E731
+        self.assertEqual(run(str(grid)), (1, [
+            "3 inputs, 1 fell; walks by stop, before -> after: clean 1 -> 1, cycle 0 -> 1, no-candidate 3 -> 3",
+            "--pick, stops before -> after: inputs, the first", f"  first, no-candidate -> no-candidate: 2  {path('a')}",
+            f"  last, clean -> clean+cycle: 1  {path('b')}", f"  last, no-candidate -> no-candidate: 1  {path('a')}",
+            "worse after (before all clean or no-candidate): 1", f"{path('b')} (--pick last, clean -> clean+cycle)",
+            "  cycle (undo 1) after 2 steps", *["    1. E0811 2:3 candidate 1/2 `add `~`` -> ? errors",
+                                                 "    2. E0811 2:3 candidate 1/2 `add `~`` -> ? errors"],
+            "fell: 1", path("c"), "  --pick first before: no-candidate", "  --pick first after:  internal: boom",
+            "  --pick last before: no-candidate", "  --pick last after:  internal: boom"]))  # fmt: skip
+        calls = sorted((self.bin / "calls").read_text().splitlines())
+        self.assertEqual(calls, sorted(f"{b} --fix-loop --json --branches --pick {p} {path(n)}" for b in ("before", "after")
+                                       for p in ("first", "last") for n in ("a", "b", "c")))  # fmt: skip
+        # A difference is no failure; no input is no pass; an exit 2, no report of one file, or a kill is a fall.
+        self.assertEqual(run(path("a"), path("b"))[0], 0)
+        (self.root / "none").mkdir()
+        self.assertEqual(run(str(self.root / "none")), (1, [f"loops: no .onsa in {self.root / 'none'}"]))
+        before, after = self.fakes({"before": {"*": [2, "usage"]}, "after": {"*": [0, []], path("b"): ["kill", ""]}},
+                                   "before", "after")  # fmt: skip
+        empty = "exit 0: no report in the JSON (ValueError: not enough values to unpack (expected 1, got 0))"
+        self.assertEqual(run(path("a"), path("b")), (1, [
+            "2 inputs, 2 fell; walks by stop, before -> after: none", "--pick, stops before -> after: inputs, the first",
+            "worse after (before all clean or no-candidate): 0", "fell: 2",
+            *[x for n, last in (("a", empty), ("b", "signal 9")) for x in (path(n), *(
+                f"  --pick {p} {s}" for p in ("first", "last") for s in ("before: exit 2: usage", f"after:  {last}")))]]))
+
     def test_fmt(self):
         # A file at a time (a package's files too), each run in its own directory; the tree is not written. The exit
         # code, the file written (gone is a fall), stdout and the names of the files left are compared.
@@ -499,7 +546,7 @@ class Compare(unittest.TestCase):
                 want = [n for n, c in compare.COMMANDS.items() if role in c.roles]
                 self.assertEqual((code, [x.split()[0] for x in lines if not x.startswith(" ")]), (0, want or ["（役割"]))
         names = list(compare.COMMANDS)
-        self.assertEqual(names, ["diags", "fmt", "cst", "core", "c", "fixes", "speed", "probe"])
+        self.assertEqual(names, ["diags", "fmt", "cst", "core", "c", "fixes", "loops", "speed", "probe"])
         self.assertEqual([x.split()[0] for x in quiet_out(compare.main, ["help"])[1][: len(names)]], names)
         for argv, code in (([], 2), (["--help"], 0)):  # no command is a usage error; `--help` lists the commands
             buf = io.StringIO()

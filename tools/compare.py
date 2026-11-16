@@ -2,7 +2,7 @@
 """Before and after: the diagnostics, the formatting, the Core and the time of `onsa` binaries (rules/refactoring.md 8;
 X-9 X9-18, X9-19; X-6 B1).
 
-Its commands are `diags`, `fmt`, `cst`, `core`, `c`, `fixes`, `speed` and `probe` (COMMANDS, rules/tools.md 9.1);
+Its commands are `diags`, `fmt`, `cst`, `core`, `c`, `fixes`, `loops`, `speed` and `probe` (COMMANDS, rules/tools.md 9.1);
 `compare.py help` shows them.
 `diags` runs `check --json` of both binaries on every case of tests/: the seed files of the gate's fuzz
 (`fuzz.seeds`), a file in a package (a directory below tests/ with an `onsa.toml`, the outermost, as the case
@@ -26,6 +26,10 @@ package `<pkg>`. All four list the falls and exit 1 as `diags` does, and when no
 inputs of a unit that changes the candidates), and sorts the inputs by the candidates before and after and by
 whether each kept the contract of §18.1; it lists those broken after, those with fewer candidates after whose
 candidates before all kept it, and the falls. Only a fall, or no candidate at all, makes it exit 1.
+`loops` runs `--fix-loop --json --branches` of two `onsa_cases` on each input given, with `--pick first` and with
+`--pick last`, a process a run (W7-04 U1b: the scripts of W5-24 and W7-04 U1a), and sorts the inputs by the stops of
+their walks before and after; it lists those whose walks all ended `clean` or `no-candidate` before and not after,
+with the walks after, and the falls. Only a fall, or no input, makes it exit 1.
 `speed` measures as the removed `tools/speed.py` did (X9-19), the order of the binaries turned round every other round;
 the long inputs get `check` and `fmt --check`, shown apart, and in `all` the inputs of `core` that every binary checks
 to exit 0 and the first then lowers (exit 0) get `dump --core`: a binary before a fix may fall lowering an input that
@@ -67,6 +71,8 @@ DIAG_LINE = re.compile(r"^(.+?):(\d+):(\d+): \w+\[(\w+)\]", re.M)  # the text fo
 BINARY = (".o", ".a")  # files of `build` compared by the name alone
 CASES = repo.CASES_CMD  # the list of the cases of `c` (the self-test gives its own)
 FIX_COUNTS = re.compile(r"fix-contract: \d+ file\(s\), (\d+) candidate\(s\), \d+ problem\(s\)")  # its last line
+PICKS = ("first", "last")  # the `--pick` of `loops`
+GOOD = {"clean", "no-candidate"}  # the stops of `--fix-loop` that `loops` takes as ending well
 
 
 def packaged(root, rels) -> list:
@@ -368,14 +374,21 @@ def contract(binary, path):
     return int(counts[1]), lines
 
 
-def fixes(args) -> int:
-    before, after = (executable(args.parser_, b) for b in (args.before, args.after))
+def onsa_inputs(args) -> list:
+    """The inputs of `fixes` and `loops`: each file given, every .onsa below a directory given (none: says so)."""
     for x in args.inputs:
         if not os.path.exists(x):
             args.parser_.error(f"{x}: no such file or directory")
     units = [str(f) for x in map(Path, args.inputs) for f in (sorted(x.rglob("*.onsa")) if x.is_dir() else [x])]
     if not units:
-        print(f"fixes: no .onsa in {' '.join(args.inputs)}")
+        print(f"{args.cmd}: no .onsa in {' '.join(args.inputs)}")
+    return units
+
+
+def fixes(args) -> int:
+    before, after = (executable(args.parser_, b) for b in (args.before, args.after))
+    units = onsa_inputs(args)
+    if not units:
         return 1
     with ThreadPoolExecutor(args.jobs) as ex:
         results = list(ex.map(lambda u: (contract(before, u), contract(after, u)), units))
@@ -402,6 +415,65 @@ def fixes(args) -> int:
     if not sums[0] + sums[1]:
         print(f"fixes: no candidate in {' '.join(args.inputs)}")
     return 1 if fell or not sums[0] + sums[1] else 0  # a difference is no failure; none judged is no pass
+
+
+def walked(binary, path, pick):
+    """The report of `binary --fix-loop --json --branches --pick <pick> <path>` (an `onsa_cases`), or (a str) how it
+    fell: an exit other than 0 and 1, out of time, no report of one file in the JSON, or the check of the file itself
+    ended in an internal error or could not read it."""
+    r = outcome([binary, "--fix-loop", "--json", "--branches", "--pick", pick, path], None)
+    if isinstance(r, str) or r[0] == 2:
+        return r if isinstance(r, str) else f"exit 2: {r[1].decode('utf-8', 'replace')[:100]}"
+    try:
+        (report,) = json.loads(r[1])
+        if not (isinstance(report["stops"], dict) and isinstance(report["walks"], list)):
+            raise TypeError("stops or walks")
+    except (ValueError, TypeError, KeyError) as e:
+        return f"exit {r[0]}: no report in the JSON ({type(e).__name__}: {e})"[:150]
+    bad = next((f"{k}: {report[k]}" for k in ("internal", "unreadable") if report.get(k)), None)
+    return bad[:150] if bad else report
+
+
+def ends(report) -> str:
+    """The stops of the walks of a report, as `clean+no-candidate`."""
+    return "+".join(sorted(report["stops"])) or "none"
+
+
+def walk_lines(w) -> list:
+    """A walk of a report, as the text form of `--fix-loop` prints it."""
+    how = f" ({w['how']} {w['back_to']})" if w.get("how") else ""
+    head = f"  {w['stop']}{how} after {len(w['steps'])} steps{': ' + w['message'][:100] if w.get('message') else ''}"
+    return [head, *(f"    {i}. {s['code']} {s['line']}:{s['col']} candidate {s['candidate']}/{s['of']} `{s['title']}`"
+                    f" -> {'?' if s['errors'] is None else s['errors']} errors" for i, s in enumerate(w["steps"], 1))]
+
+
+def loops(args) -> int:
+    before, after = (executable(args.parser_, b) for b in (args.before, args.after))
+    units = onsa_inputs(args)
+    if not units:
+        return 1
+    runs = [(u, p) for u in units for p in PICKS]
+    with ThreadPoolExecutor(args.jobs) as ex:
+        results = dict(zip(runs, ex.map(lambda r: (walked(before, *r), walked(after, *r)), runs)))
+    fell = [u for u in units if any(isinstance(x, str) for p in PICKS for x in results[u, p])]
+    ran = [(u, p, b, a) for (u, p), (b, a) in results.items() if u not in fell]
+    names = sorted({s for *_, b, a in ran for s in (*b["stops"], *a["stops"])})
+    sums = ", ".join(f"{s} {sum(b['stops'].get(s, 0) for *_, b, _ in ran)} -> "
+                     f"{sum(a['stops'].get(s, 0) for *_, a in ran)}" for s in names)  # fmt: skip
+    print(f"{len(units)} inputs, {len(fell)} fell; walks by stop, before -> after: {sums or 'none'}")
+    groups = {}
+    for u, p, b, a in ran:
+        groups.setdefault((p, ends(b), ends(a)), []).append(u)
+    print("--pick, stops before -> after: inputs, the first", *[f"  {p}, {eb} -> {ea}: {len(us)}  {us[0]}"
+          for (p, eb, ea), us in sorted(groups.items())], sep="\n")  # fmt: skip
+    worse = [(u, p, b, a) for u, p, b, a in ran if set(b["stops"]) <= GOOD and not set(a["stops"]) <= GOOD]
+    print(f"worse after (before all {' or '.join(sorted(GOOD))}): {len(worse)}", *[x for u, p, b, a in worse for x in (
+        f"{u} (--pick {p}, {ends(b)} -> {ends(a)})", *(y for w in a["walks"] if w["stop"] not in GOOD
+                                                       for y in walk_lines(w)))], sep="\n")  # fmt: skip
+    show = lambda r: r if isinstance(r, str) else ends(r)  # noqa: E731
+    print(f"fell: {len(fell)}", *[x for u in fell for x in (u, *(f"  --pick {p} {side} {show(r)}" for p in PICKS
+          for side, r in zip(("before:", "after: "), results[u, p])))], sep="\n")  # fmt: skip
+    return 1 if fell else 0  # a difference is no failure
 
 
 def ok_run(argv) -> bool:
@@ -602,6 +674,15 @@ def fixes_args(p):
     p.set_defaults(parser_=p)
 
 
+def loops_args(p):
+    fixes_args(p)
+    p.epilog = ("出力: 一行目に入力・落ちた数と、止まり方ごとの道筋の数の合計（--pick の両方、前 -> 後）。次に（--pick、前の止まり方 -> 後の止まり方）の組"
+                "ごとの入力の数と最初の入力（止まり方は報告の stops の名前を + でつないだもの）。その後に、後で悪くなった入力（前は全ての道筋が clean か "
+                "no-candidate で、後はそれ以外がある）と後のその道筋（段ごとに診断・位置・候補・後の誤りの数）、落ちた入力（どれかの回が 0・1 の外の終了、"
+                "時間切れ、一つのファイルの報告の JSON が無い、ファイルそのものの検査の内部エラーか読めない）。落ちた入力があるか、入力が無ければ終了コード 1。"
+                "違いは失敗にしない")  # fmt: skip
+
+
 def speed_args(p):
     p.add_argument("mode", choices=["all", "long"],
                    help="all: check と fmt --check を tests・std・examples の全ての .onsa に、"
@@ -658,6 +739,10 @@ COMMANDS = {
                "二つの onsa_cases の --fix-contract を入力ごとに一つずつ回し、候補の数（前 -> 後）と約束を守ったか破ったかの組に分け、後で破った入力と、候補が減り前は守っていた入力と、落ちた入力を並べる",
                "修正候補を変える単位で、生成した入力の格子の前後の違いを、前の候補が約束（§18.1）を守っていたかで仕分けるとき（正しい候補が消えていないか）。前のバイナリは主のツリーの target/base/<基>/onsa_cases",
                "compare.py fixes <主のツリー>/target/base/<基>/onsa_cases target/debug/onsa_cases <scratchpad>/grid"),
+    "loops": C(loops_args, loops, ("parent", "i", "b"),
+               "二つの onsa_cases の --fix-loop --json --branches を入力ごとに --pick first と last で一つずつ回し、--pick と止まり方（前 -> 後）の組に分け、後で悪くなった入力（前は clean か no-candidate だけ、後は cycle・limit・diverge など）と後の道筋と、落ちた入力を並べる",
+               "修正候補を変える単位で、生成した入力の格子の前後の止まり方を比べるとき（候補を当て続けて収束するか止まるか、§18.1、rules/criteria.md の fix-loop の行）。前のバイナリは fixes と同じ",
+               "compare.py loops <主のツリー>/target/base/<基>/onsa_cases target/debug/onsa_cases <scratchpad>/grid"),
     "speed": C(speed_args, speed, ("parent", "i", "b"),
                "バイナリの時間を、回ごとに順を入れ替えて交互に測り、回ごとの最小（壁時計と cpu）を、引数の順の番号と経路の違う部分の名前で並べる",
                "リファクタリングの前後で性能が落ちていないかを測り、報告に並べるとき（rules/refactoring.md 8.2）。前のバイナリは diags と同じ",
