@@ -37,6 +37,7 @@ pub mod flow;
 pub mod fold;
 mod limits;
 pub mod moves;
+mod storage;
 
 use std::collections::{HashMap, HashSet};
 
@@ -280,6 +281,10 @@ pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Mo
     // The comparisons the types decide and the assignments of a place to
     // itself (S-288), before the copies are counted.
     fold::fold_module(&mut module);
+    // After the fold, which may drop a loop that never runs with its `let`s.
+    for i in 0..module.fns.len() {
+        module.fns[i].hoisted = storage::hoisted(&module, &module.fns[i]);
+    }
     module.moves = moves::collect(&module);
     // The verifier runs at the stage boundary in the driver (R-82,
     // `onsa_driver::verify_core`), not here.
@@ -639,6 +644,7 @@ impl<'a> Lowerer<'a> {
             fp_relaxed,
             test: None,
             decl: Some(d),
+            hoisted: Vec::new(),
         });
         self.fn_ids.insert((d, args.clone()), id);
         self.made_by.insert(id, (call, self.lowering));

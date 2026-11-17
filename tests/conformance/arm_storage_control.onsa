@@ -1,0 +1,89 @@
+// onsa.toml
+// [package]
+// name = "arm_storage_control"
+// edition = "2026"
+//
+// [export]
+// prefix = "as156_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§5.2", "§5.3", "§13.4"]
+// conformance = true
+
+rt fn ramp(v: F32, s: F32) -> [F32; 16] {
+  var a: [F32; 16] = [v; 16]
+  for i in 0 ..< 16 {
+    a[i] = v + s * F32.round_from(i)
+  }
+  a
+}
+
+rt fn take(s: Span[F32], k: U32) -> F32 {
+  s[k % s.len()]
+}
+
+rt fn direct(v: F32, k: U32) -> F32 {
+  take(ramp(v, 1.0).slice(0, 8), k)
+}
+
+rt fn used_in_arm(c: Bool, v: F32, k: U32, y: [F32; 16]) -> F32 {
+  if c {
+    let a = ramp(v, 1.0)
+    take(a.slice(0, 8), k)
+  } else {
+    take(y.slice(0, 8), k)
+  }
+}
+
+rt fn outer_local(c: Bool, v: F32, k: U32, y: [F32; 16]) -> F32 {
+  let t = ramp(v, 1.0)
+  take(if c { t.slice(0, 8) } else { y.slice(0, 8) }, k)
+}
+
+rt fn outer_view(c: Bool, k: U32, y: [F32; 16]) -> F32 {
+  let s = if c { y.slice(0, 8) } else { y.slice(8, 16) }
+  s[k % s.len()]
+}
+
+rt fn arm_value(c: Bool, v: F32, k: U32, y: [F32; 16]) -> F32 {
+  let a = ramp(v, 1.0)
+  let b = if c { a[k % 16] } else { y[k % 16] }
+  b
+}
+
+@export
+pub flow arm_storage_control_direct(x: F32 at sample) -> F32 at sample {
+  let k = U32.trunc_sat_from((x * x) * 1000.0)
+  direct(x, k)
+}
+
+@export
+pub flow arm_storage_control_used(x: F32 at sample) -> F32 at sample {
+  let k = U32.trunc_sat_from((x * x) * 1000.0)
+  used_in_arm(x > 0.0, x, k, ramp(x, 0.5))
+}
+
+@export
+pub flow arm_storage_control_outer(x: F32 at sample) -> F32 at sample {
+  let k = U32.trunc_sat_from((x * x) * 1000.0)
+  outer_local(x > 0.0, x, k, ramp(x, 0.5))
+}
+
+@export
+pub flow arm_storage_control_outer_view(x: F32 at sample) -> F32 at sample {
+  let k = U32.trunc_sat_from((x * x) * 1000.0)
+  outer_view(x > 0.0, k, ramp(x, 0.5))
+}
+
+@export
+pub flow arm_storage_control_value(x: F32 at sample) -> F32 at sample {
+  let k = U32.trunc_sat_from((x * x) * 1000.0)
+  arm_value(x > 0.0, x, k, ramp(x, 0.5))
+}

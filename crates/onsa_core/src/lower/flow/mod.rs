@@ -461,6 +461,7 @@ fn push_fn(lw: &mut Lowerer, name: String, rt: bool, span: Span) -> FnId {
         fp_relaxed: false,
         test: None,
         decl: None,
+        hoisted: Vec::new(),
     });
     id
 }

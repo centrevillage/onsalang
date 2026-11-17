@@ -51,6 +51,7 @@ fn one_fn(ty: Ty, body: Expr, extra_types: Vec<TypeDef>) -> Module {
             fp_relaxed: false,
             test: None,
             decl: None,
+            hoisted: Vec::new(),
         }],
         messages: Vec::new(),
         flows: Vec::new(),
@@ -222,6 +223,7 @@ fn array_wrappers_are_shared_and_enums_switch() {
         fp_relaxed: false,
         test: None,
         decl: None,
+        hoisted: Vec::new(),
     });
     let opts = EmitOptions { prefix: Some("t_".into()), export_fns: vec!["m.g".into()], ..Default::default() };
     let c = emit(&m2, &opts).unwrap_or_else(|d| panic!("{d:?}")).source;
@@ -466,6 +468,7 @@ fn narrow_from_unsigned_compares_the_upper_bound_alone() {
                 fp_relaxed: false,
                 test: None,
                 decl: None,
+                hoisted: Vec::new(),
             }],
             messages: Vec::new(),
             flows: Vec::new(),
@@ -480,4 +483,113 @@ fn narrow_from_unsigned_compares_the_upper_bound_alone() {
     let h = crate::internal_header();
     let test = h.lines().find(|l| l.starts_with("#define ONSA_NARROW_TEST_01")).expect("the test of the pair");
     assert!(!test.contains("MIN") && !test.contains("MAX"), "{test}");
+}
+
+/// A hoisted local (R-481, `FnDef::hoisted`) is declared after the parameters
+/// with no value, and its `let` in the arm assigns it; the NRVO local of the
+/// same function is still built in `*out`.
+#[test]
+fn a_hoisted_local_is_declared_at_the_head_and_its_let_assigns_it() {
+    let f32t = Ty::Float(FloatKind::F32);
+    let arr = Ty::Array(Box::new(f32t.clone()), 4);
+    let st = |kind: StmtKind| Stmt { span: sp(), kind };
+    // g(c, y) -> [F32; 4] { let r = [y; 4]; if c { let t = y; r[0] = t }; r }
+    let first =
+        Place::Index(Box::new(Place::Local(LocalId(2))), Box::new(e(Ty::u32(), ExprKind::Lit(Lit::Int(0)))), sp());
+    let arm = Block {
+        stmts: vec![
+            st(StmtKind::Let(LocalId(3), local(1, f32t.clone()))),
+            st(StmtKind::Assign(first, local(3, f32t.clone()))),
+        ],
+        value: None,
+    };
+    let g = FnDef {
+        name: "m.g".into(),
+        params: vec![
+            Param { local: LocalId(0), mode: Mode::Borrow, ty: Ty::Bool },
+            Param { local: LocalId(1), mode: Mode::Borrow, ty: f32t.clone() },
+        ],
+        ret: arr.clone(),
+        sret: true,
+        rt: true,
+        locals: vec![
+            Local { name: "c".into(), ty: Ty::Bool },
+            Local { name: "y".into(), ty: f32t.clone() },
+            Local { name: "r".into(), ty: arr.clone() },
+            Local { name: "t".into(), ty: f32t.clone() },
+        ],
+        body: Some(Block {
+            stmts: vec![
+                st(StmtKind::Let(
+                    LocalId(2),
+                    e(arr.clone(), ExprKind::Repeat { elem: Box::new(local(1, f32t.clone())), n: 4 }),
+                )),
+                st(StmtKind::If(local(0, Ty::Bool), arm, Block::default())),
+            ],
+            value: Some(Box::new(local(2, arr.clone()))),
+        }),
+        span: sp(),
+        fp_relaxed: false,
+        test: None,
+        decl: None,
+        hoisted: vec![LocalId(3)],
+    };
+    // f(c, y) -> F32 { let a = g(c, y); a[0] }
+    let call = ExprKind::Call {
+        fn_: FnId(1),
+        args: vec![
+            Arg { mode: Mode::Borrow, expr: local(0, Ty::Bool) },
+            Arg { mode: Mode::Borrow, expr: local(1, f32t.clone()) },
+        ],
+    };
+    let index = ExprKind::Index {
+        base: Box::new(local(2, arr.clone())),
+        index: Box::new(e(Ty::u32(), ExprKind::Lit(Lit::Int(0)))),
+    };
+    let mut f = g.clone();
+    f.name = "m.f".into();
+    f.ret = f32t.clone();
+    f.sret = false;
+    f.locals.truncate(2);
+    f.locals.push(Local { name: "a".into(), ty: arr.clone() });
+    f.body = Some(Block {
+        stmts: vec![st(StmtKind::Let(LocalId(2), e(arr.clone(), call)))],
+        value: Some(Box::new(e(f32t, index))),
+    });
+    f.hoisted = Vec::new();
+    let m = Module { fns: vec![f, g], ..Module::default() };
+    let c = emit_fn(&m);
+    let head = c.lines().find(|l| l.contains("void m__g(") && l.ends_with('{')).expect("g");
+    let body = &c[c.find(head).unwrap() + head.len() - 1..];
+    let body = &body[..body.find("\n}\n").unwrap()];
+    assert!(body.starts_with("{\n  float t;\n"), "{body}");
+    assert!(body.contains("if (c) {\n    t = y;\n"), "{body}");
+    assert!(!body.contains("float t ="), "{body}");
+    assert!(body.contains("(*out).a[") && !body.contains("onsa_arr_f32_4 r"), "the NRVO local is `*out`: {body}");
+    // A hoisted `Buf` is not supported at the head either (D-08).
+    let mut m = m;
+    m.fns[1].locals[3].ty = Ty::Buf(Box::new(Ty::Float(FloatKind::F32)));
+    let opts = EmitOptions { prefix: Some("t_".into()), export_fns: vec!["m.f".into()], ..Default::default() };
+    let Err(d) = emit(&m, &opts) else { panic!("a hoisted Buf is unsupported") };
+    assert!(d.iter().any(|d| d.code == onsa_diag::Code::E0200), "{d:?}");
+}
+
+/// The C name of a local is not one already used, a parameter `t_3` too: the
+/// second hoisted `t` (local 3) is not `t_3`.
+#[test]
+fn a_renamed_local_does_not_take_the_name_of_a_parameter() {
+    let f32t = Ty::Float(FloatKind::F32);
+    let st = |kind: StmtKind| Stmt { span: sp(), kind };
+    let arm = |l: u32| Block { stmts: vec![st(StmtKind::Let(LocalId(l), local(0, f32t.clone())))], value: None };
+    let names = ["t_3", "c", "t", "t"];
+    let tys = [f32t.clone(), Ty::Bool, f32t.clone(), f32t.clone()];
+    let mut m = one_fn(f32t.clone(), local(0, f32t.clone()), Vec::new());
+    let f = &mut m.fns[0];
+    f.params[1] = Param { local: LocalId(1), mode: Mode::Borrow, ty: Ty::Bool };
+    f.locals = names.iter().zip(&tys).map(|(n, t)| Local { name: n.to_string(), ty: t.clone() }).collect();
+    f.body.as_mut().unwrap().stmts = vec![st(StmtKind::If(local(1, Ty::Bool), arm(2), arm(3)))];
+    f.hoisted = vec![LocalId(2), LocalId(3)];
+    let c = emit_fn(&m);
+    assert!(c.contains("(float t_3, bool c) {\n  float t;\n  float t_3_1;\n"), "{c}");
+    assert!(c.contains("t = t_3;") && c.contains("t_3_1 = t_3;"), "{c}");
 }

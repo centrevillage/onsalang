@@ -1,0 +1,63 @@
+// onsa.toml
+// [package]
+// name = "arm_storage_value_copy"
+// edition = "2026"
+//
+// [export]
+// prefix = "as272_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§5.2", "§5.4", "§4.5", "§13.4"]
+// conformance = true
+
+rt fn ramp(v: F32, s: F32) -> [F32; 16] {
+  var a: [F32; 16] = [v; 16]
+  for i in 0 ..< 16 {
+    a[i] = v + s * F32.round_from(i)
+  }
+  a
+}
+
+rt fn take(s: Span[F32], k: U32) -> F32 {
+  s[k % s.len()]
+}
+
+struct G[T] { xs: [F32; 16], t: T }
+
+rt fn pick_match[T](o: Option[G[T]], k: U32, y: [F32; 16]) -> F32 {
+  take(match o { Some(h) => h.xs.slice(0, 8), None => y.slice(0, 8) }, k)
+}
+
+rt fn pick_let[T](c: Bool, g: G[T], k: U32, y: [F32; 16]) -> F32 {
+  take(if c {
+    let h2 = g
+    h2.xs.slice(0, 8)
+  } else { y.slice(0, 8) }, k)
+}
+
+rt fn run_match(v: F32, c: Bool, k: U32, y: [F32; 16]) -> F32 {
+  pick_match(if c { Some(G { xs: ramp(v, 1.0), t: v }) } else { None }, k, y)
+}
+
+rt fn run_let(v: F32, c: Bool, k: U32, y: [F32; 16]) -> F32 {
+  pick_let(c, G { xs: ramp(v, 2.0), t: v }, k, y)
+}
+
+@export
+pub flow arm_storage_value_copy_match(x: F32 at sample) -> F32 at sample {
+  let k = U32.trunc_sat_from((x * x) * 1000.0)
+  run_match(x, x > 0.0, k, ramp(x, 0.5))
+}
+
+@export
+pub flow arm_storage_value_copy_let(x: F32 at sample) -> F32 at sample {
+  let k = U32.trunc_sat_from((x * x) * 1000.0)
+  run_let(x, x > 0.0, k, ramp(x, 0.5))
+}

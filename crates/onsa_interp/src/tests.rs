@@ -48,6 +48,7 @@ fn eval(e: Expr) -> Result<Value, Panic> {
             fp_relaxed: false,
             test: None,
             decl: None,
+            hoisted: Vec::new(),
         }],
         ..Default::default()
     };
@@ -329,6 +330,7 @@ fn recursive_fn(name: &str, zero: Expr, deeper: Expr, extra: Vec<Ty>) -> FnDef {
         fp_relaxed: false,
         test: None,
         decl: None,
+        hoisted: Vec::new(),
     }
 }
 
@@ -932,6 +934,7 @@ fn values_of_the_wrong_type_are_internal_errors() {
                 fp_relaxed: false,
                 test: None,
                 decl: None,
+                hoisted: Vec::new(),
             }],
             ..Default::default()
         };
@@ -961,6 +964,7 @@ fn an_internal_failure_is_not_a_panic() {
                 fp_relaxed: false,
                 test: None,
                 decl: None,
+                hoisted: Vec::new(),
             }],
             ..Default::default()
         };
@@ -988,6 +992,7 @@ fn a_call_of_a_function_without_a_body_is_an_internal_error() {
                 fp_relaxed: false,
                 test: None,
                 decl: None,
+                hoisted: Vec::new(),
             }],
             ..Default::default()
         };
@@ -1022,6 +1027,7 @@ fn an_unimplemented_std_function_is_unsupported() {
             fp_relaxed: false,
             test: None,
             decl: None,
+            hoisted: Vec::new(),
         };
         let m = Module {
             fns: vec![
@@ -1163,6 +1169,7 @@ fn a_panic_carries_its_origin() {
                 fp_relaxed: false,
                 test: None,
                 decl: None,
+                hoisted: Vec::new(),
             });
             let p = panic_of(Interp::new(&m).call(FnId(0), Vec::new()).unwrap_err());
             assert_eq!((p.message.as_str(), p.origin), ("boom", origin));

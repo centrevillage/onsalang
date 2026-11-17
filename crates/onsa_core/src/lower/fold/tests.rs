@@ -43,6 +43,7 @@ fn folded(locals: &[Ty], consts: Vec<ConstDef>, stmts: Vec<Stmt>, value: Expr) -
             fp_relaxed: false,
             test: None,
             decl: None,
+            hoisted: Vec::new(),
         }],
         ..Module::default()
     };

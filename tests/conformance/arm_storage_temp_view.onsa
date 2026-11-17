@@ -1,0 +1,72 @@
+// onsa.toml
+// [package]
+// name = "arm_storage_temp_view"
+// edition = "2026"
+//
+// [export]
+// prefix = "as245_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§5.2", "§5.3", "§13.4"]
+// conformance = true
+
+rt fn ramp(v: F32, s: F32) -> [F32; 16] {
+  var a: [F32; 16] = [v; 16]
+  for i in 0 ..< 16 {
+    a[i] = v + s * F32.round_from(i)
+  }
+  a
+}
+
+rt fn take(s: Span[F32], k: U32) -> F32 {
+  s[k % s.len()]
+}
+
+rt fn pick_if(c: Bool, v: F32, k: U32, y: [F32; 16]) -> F32 {
+  take(if c { ramp(v, 1.0).slice(0, 8) } else { y.slice(0, 8) }, k)
+}
+
+rt fn pick_else(c: Bool, v: F32, k: U32, y: [F32; 16]) -> F32 {
+  take(if c { y.slice(8, 16) } else { ramp(v, 3.0).slice(4, 12) }, k)
+}
+
+rt fn pick_match(o: Option[F32], k: U32, y: [F32; 16]) -> F32 {
+  take(match o { Some(v) => ramp(v, 2.0).slice(0, 8), None => y.slice(0, 8) }, k)
+}
+
+rt fn pick_nested(c: Bool, d: Bool, v: F32, k: U32, y: [F32; 16]) -> F32 {
+  take(if c {
+    if d { ramp(v, 1.0).slice(0, 8) } else { ramp(v, 2.0).slice(8, 16) }
+  } else { y.slice(0, 8) }, k)
+}
+
+@export
+pub flow arm_storage_temp_view_if(x: F32 at sample) -> F32 at sample {
+  let k = U32.trunc_sat_from((x * x) * 1000.0)
+  pick_if(x > 0.0, x, k, ramp(x, 0.5))
+}
+
+@export
+pub flow arm_storage_temp_view_else(x: F32 at sample) -> F32 at sample {
+  let k = U32.trunc_sat_from((x * x) * 1000.0)
+  pick_else(x > 0.0, x, k, ramp(x, 0.5))
+}
+
+@export
+pub flow arm_storage_temp_view_nested(x: F32 at sample) -> F32 at sample {
+  let k = U32.trunc_sat_from((x * x) * 1000.0)
+  pick_nested(x > 0.0, (x * 3.0) > 1.0, x, k, ramp(x, 0.5))
+}
+
+@export
+pub flow arm_storage_temp_view_match(x: F32 at sample) -> F32 at sample {
+  let k = U32.trunc_sat_from((x * x) * 1000.0)
+  pick_match(if x > 0.0 { Some(x) } else { None }, k, ramp(x, 0.5))
+}

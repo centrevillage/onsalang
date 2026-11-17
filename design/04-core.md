@@ -8,6 +8,7 @@ pub struct FnDef {
     ret: Ty, sret: bool,                  // 集成体を返すなら sret = true（§12.7）
     rt: bool, locals: Vec<Local>, body: Block,
     decl: Option<DefId>,                  // 元の宣言。`__eq` と flow の生成する関数は None（S-911）
+    hoisted: Vec<LocalId>,                // 記憶域を関数の高さに置く局所変数（R-481。下の注）
 }
 pub enum Stmt { Let(LocalId, Expr), Assign(Place, Expr), Expr(Expr),
                 If(Expr, Block, Block), While(Expr, Block), ForRange(LocalId, Expr, Expr, Block),
@@ -25,6 +26,8 @@ pub enum Place { Local(LocalId), Field(Box<Place>, u32), Index(Box<Place>, Expr)
 （略記。今の定義は `crates/onsa_core/src/ir.rs`）
 
 - 全ての式に型が付く。ジェネリクスは無い（単相化済み）。レートは無い（flow は降下済み）。
+- `hoisted` は局所変数の記憶域の高さ（R-481、R-484、S-1118 (2)）。スコープ（`IfExpr`・`Switch` の腕と、`If`・`While`・`ForRange` のブロック）の外へ出る値（腕の値と、外の場所への代入）が届くビューの根のうち、そのスコープが宣言した局所変数を、`LocalId` の昇順で並べる。
+  ブロック式は中の局所変数の寿命を閉じない。`Let` は腕の中のままで、バックエンドは記憶域を関数の頭に置き、`Let` を代入にする。判定は `lower/storage.rs` の一か所で、降下の `fold` の後に関数ごとに一度行う。
 - `Prim` は `std.math` の `target` 宣言と組込みのメンバ（`trunc_sat_from`、`to_bits`、`Span.len` など）。`Prim` の一覧は `onsa_sema::prim` に置き（`onsa_core::prim` が再輸出する）、各バックエンドはこの一覧に対して対応表（`supports`）を持つ（表の欠けはテストで検出、`design/06-placement.md` の「`Prim` の表」の行）。
 - `verify(Module)` は、常に（release も）段の境目ごとに走らせる（降下と正規化の後、ターゲットの pass の後）。失敗は内部エラー（終了コード 101、診断コード無し。S-67）で、破った規則の番号、関数名、Core の位置を報告し、その関数の Core のダンプを不具合の報告用に残す（レビュー R-82）。検証器は D-15 に従い、Core の構造から性質を確かめる。
   規則は次の一覧で全てである。規則ごとに、その規則だけを破った Core を手で作って検証器が拒むことを確かめる否定のテストを置く。Core の形を変えるときは、一覧・検証器・テストを一緒に直す。
@@ -48,6 +51,7 @@ pub enum Place { Local(LocalId), Field(Box<Place>, u32), Index(Box<Place>, Expr)
 | V-15 | ターゲットの pass の後: 記録した配置の性質（オフセットはアラインメントの倍数、フィールドは重ならない、大きさは最後のフィールドの終わり以上でアラインメントの倍数、bulk 領域には `@mem(bulk)` のフィールドだけ） | R-80、R-82 |
 | V-16 | ターゲットの pass の後: flow のメタデータ（入力、出力、パラメータ）が、`State` / `Params` の型と生成した関数のシグネチャと一致する | R-82 |
 | V-17 | flow の `init` は、状態の全てのフィールドを設定する。設定しないのは、flow の計画（§3.5）が「段の順で読む前に必ず書かれる」と記録したフィールドだけ | R-92 |
+| V-18 | `hoisted` の局所変数は、本体のどこかの `Let` で定義し、本体の一番上の `Let` では定義しない（引数と `ForRange` の変数は `Let` を持たず、NRVO の局所変数は一番上の `Let`） | R-481 |
 
 正規形の R3（評価順に並べる）と R4（条件の内側に出す）は、Core から元の順序が分からないので検証器では確かめない。評価順の再現の期待値付きテストと、インタプリタと C の差分テストで押さえる（R-81）。
 - テキスト形式 `onsa dump --core`（隠しコマンド）を持ち、golden テストにも使う。

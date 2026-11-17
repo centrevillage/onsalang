@@ -22,13 +22,20 @@ impl std::error::Error for VerifyError {}
 
 pub fn verify(m: &Module) -> Result<(), VerifyError> {
     for c in &m.consts {
-        let mut v = V { m, f: None, defined: Vec::new(), loops: 0, name: c.name.clone() };
+        let mut v = V { m, f: None, defined: Vec::new(), lets: Vec::new(), loops: 0, name: c.name.clone() };
         let t = v.expr(&c.init)?;
         v.same(&t, &c.ty, "const initializer")?;
     }
     for f in &m.fns {
         let Some(body) = &f.body else { continue };
-        let mut v = V { m, f: Some(f), defined: vec![false; f.locals.len()], loops: 0, name: f.name.clone() };
+        let mut v = V {
+            m,
+            f: Some(f),
+            defined: vec![false; f.locals.len()],
+            lets: vec![false; f.locals.len()],
+            loops: 0,
+            name: f.name.clone(),
+        };
         for p in &f.params {
             if p.local.0 as usize >= f.locals.len() {
                 return Err(v.err("parameter local out of range"));
@@ -44,6 +51,13 @@ pub fn verify(m: &Module) -> Result<(), VerifyError> {
             return Err(v.err("a test function with parameters or a value"));
         }
         let t = v.block(body)?;
+        // V-18 (R-481): stored at the function's level, a local with a `let` below the top of the body.
+        for &h in &f.hoisted {
+            let top = body.stmts.iter().any(|s| matches!(s.kind, StmtKind::Let(l, _) if l == h));
+            if top || !v.lets.get(h.0 as usize).is_some_and(|&b| b) {
+                return Err(v.err(format!("hoisted local {} has no `let` below the top of the body", h.0)));
+            }
+        }
         if !body.diverges() {
             match t {
                 Some(t) => v.same(&t, &f.ret, "body value")?,
@@ -58,6 +72,8 @@ struct V<'a> {
     m: &'a Module,
     f: Option<&'a FnDef>,
     defined: Vec<bool>,
+    /// The locals a `let` defines.
+    lets: Vec<bool>,
     loops: u32,
     name: String,
 }
@@ -130,7 +146,9 @@ impl<'a> V<'a> {
                 let t = self.expr(e)?;
                 let lt = self.local_ty(*l)?;
                 self.same(&t, &lt, "let")?;
-                self.define(*l)
+                self.define(*l)?;
+                self.lets[l.0 as usize] = true;
+                Ok(())
             }
             StmtKind::Assign(p, e) => {
                 let pt = self.place(p)?;

@@ -135,6 +135,19 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
         }
 
         self.out.push_str(&pre);
+        // A local whose storage a view out of its scope reads (R-481): declared
+        // here, and its `let` assigns it.
+        let nrvo = self.nrvo;
+        for &l in def.hoisted.iter().filter(|&&l| Some(l) != nrvo) {
+            let ty = self.local_ty(l);
+            if matches!(ty, Ty::Buf(_)) {
+                return Err(unsupported(def.span, Feature::Buf, &[]));
+            }
+            let name = self.fresh_local(l);
+            let tn = self.cx.names.name(&ty);
+            self.line(&format!("{tn} {name};"));
+            self.locals.insert(l, LocalC { lvalue: name });
+        }
         let first_stmt = self.out.len();
         for s in &body.stmts {
             self.stmt(s)?;
@@ -231,9 +244,11 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
 
     fn fresh_local(&mut self, l: LocalId) -> String {
         let base = ident(&self.def.locals[l.0 as usize].name);
-        let mut name = base.clone();
-        if self.used_names.contains(&name) {
-            name = format!("{base}_{}", l.0);
+        // A name already used, a parameter `t_5` too, is not taken again.
+        let (mut name, mut n) = (base.clone(), 0);
+        while self.used_names.contains(&name) {
+            name = if n == 0 { format!("{base}_{}", l.0) } else { format!("{base}_{}_{n}", l.0) };
+            n += 1;
         }
         self.used_names.insert(name.clone());
         name
@@ -382,6 +397,11 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                     return self.assign_into("(*out)", &ty, e);
                 }
                 let ty = self.local_ty(*l);
+                if self.def.hoisted.contains(l) {
+                    let name = self.locals[l].lvalue.clone();
+                    self.assign_into(&name, &ty, e)?;
+                    return Ok(());
+                }
                 let name = self.fresh_local(*l);
                 self.locals.insert(*l, LocalC { lvalue: name.clone() });
                 self.declare(&name, &ty, e)?;

@@ -169,6 +169,9 @@ pub struct FnDef {
     /// names (§18.1). `None`: only lowering makes it (`__eq`, what a flow
     /// generates). No later stage reads it.
     pub decl: Option<DefId>,
+    /// The locals declared in a scope whose storage a view out of it reads,
+    /// stored at the function's level (R-481, `lower::storage`), ascending.
+    pub hoisted: Vec<LocalId>,
 }
 
 /// The mark of the function of a `test` block (spec §11.8, S-55): a test is

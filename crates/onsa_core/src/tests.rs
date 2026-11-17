@@ -28,7 +28,7 @@ fn package(src: &str) -> (SourceMap, Package) {
 }
 
 /// Lower a one-module package; panics on check or lowering diagnostics.
-fn core(src: &str) -> Module {
+pub(crate) fn core(src: &str) -> Module {
     let (sources, pkg) = package(src);
     let a = onsa_sema::analyze(&pkg);
     assert!(a.diagnostics.is_empty(), "check diagnostics:\n{}", onsa_diag::to_text(&sources, &a.diagnostics));
@@ -410,6 +410,7 @@ fn a_cycle_of_what_lowering_makes_is_not_reported() {
         fp_relaxed: false,
         test: None,
         decl: None,
+        hoisted: Vec::new(),
     };
     let mut m = Module { fns: vec![generated], ..Module::default() };
     assert!(crate::rt_cycles::rt_cycles(&m, &a, &flat).is_empty());
@@ -439,6 +440,7 @@ fn verifier_rejects_bad_modules() {
         fp_relaxed: false,
         test: None,
         decl: None,
+        hoisted: Vec::new(),
     });
     let err = verify(&m).unwrap_err();
     assert!(err.message.contains("read before definition"), "{err}");
@@ -987,6 +989,7 @@ fn has_return_walks_a_deep_nesting_once() {
             fp_relaxed: false,
             test: None,
             decl: None,
+            hoisted: Vec::new(),
         }
     };
     let ret = || st(StmtKind::Return(Some(zero())));

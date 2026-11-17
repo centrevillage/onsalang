@@ -1,0 +1,47 @@
+// onsa.toml
+// [package]
+// name = "arm_storage_for_head"
+// edition = "2026"
+//
+// [export]
+// prefix = "as909_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§5.2", "§5.4", "§13.4"]
+// conformance = true
+
+rt fn ramp(v: F32, s: F32) -> [F32; 16] {
+  var a: [F32; 16] = [v; 16]
+  for i in 0 ..< 16 {
+    a[i] = v + s * F32.round_from(i)
+  }
+  a
+}
+
+rt fn take(s: Span[F32], k: U32) -> F32 {
+  s[k % s.len()]
+}
+
+rt fn nodrop(c: Bool, y: [F32; 16]) -> F32 {
+  var acc = 0.0
+  for w in if c {
+    let t = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0]
+    t.slice(0, 8)
+  } else { y.slice(0, 8) } {
+    acc = acc + w
+  }
+  acc
+}
+
+@export
+pub flow arm_storage_for_head_nodrop(x: F32 at sample) -> F32 at sample {
+  let k = U32.trunc_sat_from((x * x) * 1000.0)
+  nodrop(x > 0.0, ramp(x, 0.5))
+}

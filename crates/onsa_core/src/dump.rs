@@ -221,6 +221,14 @@ impl<'a> Dumper<'a> {
         };
         self.out.push_str(" {");
         self.indent += 1;
+        if !f.hoisted.is_empty() {
+            self.nl();
+            self.out.push_str("hoisted ");
+            for (i, l) in f.hoisted.iter().enumerate() {
+                self.out.push_str(if i > 0 { ", " } else { "" });
+                self.local(*l);
+            }
+        }
         self.block_body(body);
         self.indent -= 1;
         self.nl();
