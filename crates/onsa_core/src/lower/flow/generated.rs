@@ -40,7 +40,8 @@ fn sub_inputs(lw: &Lowerer, callee: DefId) -> Vec<onsa_sema::def::FlowInput> {
 }
 
 /// Arguments of an instance call for the callee inputs of `rate`, lowered
-/// in the current function and coerced to the input value types.
+/// in the current function: of the input value types, which are no views
+/// (§11.3), so with no conversion.
 pub(super) fn instance_args(
     lw: &mut Lowerer,
     cx: &mut FnCx,
@@ -56,7 +57,7 @@ pub(super) fn instance_args(
         }
         let want = lw.core_ty(input.ty, &[], input.span)?;
         let e = lower_expr(lw, cx, *arg)?;
-        out.push(coerce(lw, cx, e, &want, Mode::Borrow)?);
+        out.push(of_type(e, &want)?);
     }
     Ok(out)
 }
@@ -114,19 +115,11 @@ impl<'b> Gen<'b> {
         self.params.push(Param { local: l, mode, ty });
     }
 
-    /// Parameters as declared by sema for a member (§11.6), as expressions by name.
-    pub(super) fn member_params(
-        &mut self,
-        lw: &mut Lowerer,
-        shape: &FlowShape,
-        name: &str,
-    ) -> R<HashMap<String, Expr>> {
-        let mut out = HashMap::new();
-        for (n, mode, ty) in member_params(lw, &shape.flow, name, self.span)? {
-            let e = self.param(&n, mode, ty);
-            out.insert(n, e);
-        }
-        Ok(out)
+    /// Parameters as declared by sema for a member (§11.6), as expressions
+    /// in their order.
+    pub(super) fn member_params(&mut self, lw: &mut Lowerer, shape: &FlowShape, name: &str) -> R<Vec<Expr>> {
+        let ps = member_params(lw, &shape.flow, name, self.span)?;
+        Ok(ps.into_iter().map(|(n, mode, ty)| self.param(&n, mode, ty)).collect())
     }
 
     pub(super) fn temp(&mut self, name: &str, ty: Ty) -> Expr {

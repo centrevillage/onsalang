@@ -73,26 +73,26 @@ rt fn voice.resonator.reset(inout s: voice.resonator.State) -> () {
   s.5 = 0.0:F32
   s.6 = false
 }
-rt fn voice.resonator.process(inout s: voice.resonator.State, params: voice.resonator.Params, x@12: Span[F32], inout out: Span[F32]) -> () {
-  let len: U32 = len(x@12)
-  if (len(out) != len) {
+rt fn voice.resonator.process(inout s: voice.resonator.State, params: voice.resonator.Params, input: Span[F32], inout output: Span[F32]) -> () {
+  let len: U32 = len(input)
+  if (len(output) != len) {
     panic("span lengths differ")
   }
   voice.resonator.ctl(inout s, params)
   for i in 0:U32..len {
-    let x@16: F32 = x@12[i]
+    let x@16: F32 = input[i]
     let v: F32 = voice.resonator.tick(inout s, x@16)
-    out[i] = v
+    output[i] = v
   }
 }
-rt fn voice.resonator.process_inplace(inout s: voice.resonator.State, params: voice.resonator.Params, inout out: Span[F32]) -> () {
-  voice.resonator.process(inout s, params, out, inout out)
+rt fn voice.resonator.process_inplace(inout s: voice.resonator.State, params: voice.resonator.Params, inout output: Span[F32]) -> () {
+  voice.resonator.process(inout s, params, output, inout output)
 }
-fn voice.resonator.render(cfg: voice.resonator.Config, params: voice.resonator.Params, x@12: Span[F32], sample_rate: F32) -> voice.resonator.Rendered sret {
+fn voice.resonator.render(cfg: voice.resonator.Config, params: voice.resonator.Params, input: Span[F32], sample_rate: F32) -> voice.resonator.Rendered sret {
   let s: voice.resonator.State = voice.resonator.init(cfg, sample_rate)
-  let n: U32 = len(x@12)
+  let n: U32 = len(input)
   let out: Buf[F32] = buf.zeroed(n)
-  voice.resonator.process(inout s, params, x@12, inout span(out))
+  voice.resonator.process(inout s, params, input, inout span(out))
   voice.resonator.Rendered { out: out }
 }
 fn test voice "resonator decays"() -> () {
@@ -129,12 +129,12 @@ rt fn voice.saw.reset(inout s: voice.saw.State) -> () {
   s.2 = 0.0:F32
   s.3 = false
 }
-rt fn voice.saw.process(inout s: voice.saw.State, params: voice.saw.Params, inout out: Span[F32]) -> () {
-  let len: U32 = len(out)
+rt fn voice.saw.process(inout s: voice.saw.State, params: voice.saw.Params, inout output: Span[F32]) -> () {
+  let len: U32 = len(output)
   voice.saw.ctl(inout s, params)
   for i in 0:U32..len {
     let v: F32 = voice.saw.tick(inout s)
-    out[i] = v
+    output[i] = v
   }
 }
 fn voice.saw.render(cfg: voice.saw.Config, params: voice.saw.Params, frames: U32, sample_rate: F32) -> voice.saw.Rendered sret {
@@ -173,12 +173,12 @@ rt fn voice.smooth.reset(inout s: voice.smooth.State) -> () {
   s.2 = 0.0:F32
   s.3 = false
 }
-rt fn voice.smooth.process(inout s: voice.smooth.State, params: voice.smooth.Params, inout out: Span[F32]) -> () {
-  let len: U32 = len(out)
+rt fn voice.smooth.process(inout s: voice.smooth.State, params: voice.smooth.Params, inout output: Span[F32]) -> () {
+  let len: U32 = len(output)
   voice.smooth.ctl(inout s, params)
   for i in 0:U32..len {
     let v: F32 = voice.smooth.tick(inout s)
-    out[i] = v
+    output[i] = v
   }
 }
 fn voice.smooth.render(cfg: voice.smooth.Config, params: voice.smooth.Params, frames: U32, sample_rate: F32) -> voice.smooth.Rendered sret {
@@ -230,12 +230,12 @@ rt fn voice.voice.reset(inout s: voice.voice.State) -> () {
   voice.smooth.reset(inout s.3)
   s.4 = false
 }
-rt fn voice.voice.process(inout s: voice.voice.State, params: voice.voice.Params, inout out: Span[F32]) -> () {
-  let len: U32 = len(out)
+rt fn voice.voice.process(inout s: voice.voice.State, params: voice.voice.Params, inout output: Span[F32]) -> () {
+  let len: U32 = len(output)
   voice.voice.ctl(inout s, params)
   for i in 0:U32..len {
     let v: F32 = voice.voice.tick(inout s)
-    out[i] = v
+    output[i] = v
   }
 }
 fn voice.voice.render(cfg: voice.voice.Config, params: voice.voice.Params, frames: U32, sample_rate: F32) -> voice.voice.Rendered sret {
@@ -293,26 +293,26 @@ rt fn voice.echo.reset(inout s: voice.echo.State) -> () {
   s.4 = 0:U32
   s.5 = false
 }
-rt fn voice.echo.process(inout s: voice.echo.State, params: voice.echo.Params, x@7: Span[F32], inout out: Span[F32]) -> () {
-  let len: U32 = len(x@7)
-  if (len(out) != len) {
+rt fn voice.echo.process(inout s: voice.echo.State, params: voice.echo.Params, input: Span[F32], inout output: Span[F32]) -> () {
+  let len: U32 = len(input)
+  if (len(output) != len) {
     panic("span lengths differ")
   }
   voice.echo.ctl(inout s, params)
   for i in 0:U32..len {
-    let x@11: F32 = x@7[i]
+    let x@11: F32 = input[i]
     let v: F32 = voice.echo.tick(inout s, x@11)
-    out[i] = v
+    output[i] = v
   }
 }
-rt fn voice.echo.process_inplace(inout s: voice.echo.State, params: voice.echo.Params, inout out: Span[F32]) -> () {
-  voice.echo.process(inout s, params, out, inout out)
+rt fn voice.echo.process_inplace(inout s: voice.echo.State, params: voice.echo.Params, inout output: Span[F32]) -> () {
+  voice.echo.process(inout s, params, output, inout output)
 }
-fn voice.echo.render(cfg: voice.echo.Config, params: voice.echo.Params, x@7: Span[F32], sample_rate: F32) -> voice.echo.Rendered sret {
+fn voice.echo.render(cfg: voice.echo.Config, params: voice.echo.Params, input: Span[F32], sample_rate: F32) -> voice.echo.Rendered sret {
   let s: voice.echo.State = voice.echo.init(cfg, sample_rate)
-  let n: U32 = len(x@7)
+  let n: U32 = len(input)
   let out: Buf[F32] = buf.zeroed(n)
-  voice.echo.process(inout s, params, x@7, inout span(out))
+  voice.echo.process(inout s, params, input, inout span(out))
   voice.echo.Rendered { out: out }
 }
 fn voice.echo.params_default() -> voice.echo.Params sret {

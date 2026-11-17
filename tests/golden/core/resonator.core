@@ -45,25 +45,25 @@ rt fn resonator.resonator.reset(inout s: resonator.resonator.State) -> () {
   s.5 = 0.0:F32
   s.6 = false
 }
-rt fn resonator.resonator.process(inout s: resonator.resonator.State, params: resonator.resonator.Params, x@12: Span[F32], inout out: Span[F32]) -> () {
-  let len: U32 = len(x@12)
-  if (len(out) != len) {
+rt fn resonator.resonator.process(inout s: resonator.resonator.State, params: resonator.resonator.Params, input: Span[F32], inout output: Span[F32]) -> () {
+  let len: U32 = len(input)
+  if (len(output) != len) {
     panic("span lengths differ")
   }
   resonator.resonator.ctl(inout s, params)
   for i in 0:U32..len {
-    let x@16: F32 = x@12[i]
+    let x@16: F32 = input[i]
     let v: F32 = resonator.resonator.tick(inout s, x@16)
-    out[i] = v
+    output[i] = v
   }
 }
-rt fn resonator.resonator.process_inplace(inout s: resonator.resonator.State, params: resonator.resonator.Params, inout out: Span[F32]) -> () {
-  resonator.resonator.process(inout s, params, out, inout out)
+rt fn resonator.resonator.process_inplace(inout s: resonator.resonator.State, params: resonator.resonator.Params, inout output: Span[F32]) -> () {
+  resonator.resonator.process(inout s, params, output, inout output)
 }
-fn resonator.resonator.render(cfg: resonator.resonator.Config, params: resonator.resonator.Params, x@12: Span[F32], sample_rate: F32) -> resonator.resonator.Rendered sret {
+fn resonator.resonator.render(cfg: resonator.resonator.Config, params: resonator.resonator.Params, input: Span[F32], sample_rate: F32) -> resonator.resonator.Rendered sret {
   let s: resonator.resonator.State = resonator.resonator.init(cfg, sample_rate)
-  let n: U32 = len(x@12)
+  let n: U32 = len(input)
   let out: Buf[F32] = buf.zeroed(n)
-  resonator.resonator.process(inout s, params, x@12, inout span(out))
+  resonator.resonator.process(inout s, params, input, inout span(out))
   resonator.resonator.Rendered { out: out }
 }

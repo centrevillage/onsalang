@@ -90,9 +90,12 @@ fn flow_namespace_items() {
     assert!(names.contains(&"process_inplace") && !names.contains(&"Config"));
     let render = echo.members.iter().find(|(n, _)| n == "render").map(|(_, d)| a.def(*d).as_fn().unwrap()).unwrap();
     assert!(a.uses_alloc(&render.effects));
-    assert_eq!(render.params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), vec!["params", "x", "sample_rate"]);
+    assert_eq!(
+        render.params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(),
+        vec!["params", "input", "sample_rate"]
+    );
     let process = voice.members.iter().find(|(n, _)| n == "process").map(|(_, d)| a.def(*d).as_fn().unwrap()).unwrap();
-    assert_eq!(process.params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), vec!["s", "params", "out"]);
+    assert_eq!(process.params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), vec!["s", "params", "output"]);
     assert!(process.rt);
     assert_eq!(voice.inputs[0].param.as_ref().unwrap().default, Some(0.5));
 }

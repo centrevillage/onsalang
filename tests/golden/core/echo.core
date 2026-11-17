@@ -50,26 +50,26 @@ rt fn echo.echo.reset(inout s: echo.echo.State) -> () {
   s.4 = 0:U32
   s.5 = false
 }
-rt fn echo.echo.process(inout s: echo.echo.State, params: echo.echo.Params, x@7: Span[F32], inout out: Span[F32]) -> () {
-  let len: U32 = len(x@7)
-  if (len(out) != len) {
+rt fn echo.echo.process(inout s: echo.echo.State, params: echo.echo.Params, input: Span[F32], inout output: Span[F32]) -> () {
+  let len: U32 = len(input)
+  if (len(output) != len) {
     panic("span lengths differ")
   }
   echo.echo.ctl(inout s, params)
   for i in 0:U32..len {
-    let x@11: F32 = x@7[i]
+    let x@11: F32 = input[i]
     let v: F32 = echo.echo.tick(inout s, x@11)
-    out[i] = v
+    output[i] = v
   }
 }
-rt fn echo.echo.process_inplace(inout s: echo.echo.State, params: echo.echo.Params, inout out: Span[F32]) -> () {
-  echo.echo.process(inout s, params, out, inout out)
+rt fn echo.echo.process_inplace(inout s: echo.echo.State, params: echo.echo.Params, inout output: Span[F32]) -> () {
+  echo.echo.process(inout s, params, output, inout output)
 }
-fn echo.echo.render(cfg: echo.echo.Config, params: echo.echo.Params, x@7: Span[F32], sample_rate: F32) -> echo.echo.Rendered sret {
+fn echo.echo.render(cfg: echo.echo.Config, params: echo.echo.Params, input: Span[F32], sample_rate: F32) -> echo.echo.Rendered sret {
   let s: echo.echo.State = echo.echo.init(cfg, sample_rate)
-  let n: U32 = len(x@7)
+  let n: U32 = len(input)
   let out: Buf[F32] = buf.zeroed(n)
-  echo.echo.process(inout s, params, x@7, inout span(out))
+  echo.echo.process(inout s, params, input, inout span(out))
   echo.echo.Rendered { out: out }
 }
 fn echo.echo.params_default() -> echo.echo.Params sret {

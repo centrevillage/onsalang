@@ -1,0 +1,150 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§4.5", "§5.3", "§18.1"]
+
+// W7-12 U3a, S-30, R-15, S-197, §11.6: "引数は flow のシグネチャにある入力と出力だけである ... シグネチャと違う呼び出しは型の誤りになる". The shapes of the arguments of
+// the generated functions are fixed by the number of the inputs and of the outputs, and the calls of the forms that the old expansion took (one `Span` for each input
+// and each field of the output) are errors. This file has the calls that differ from the signature in one way only, so that the code is one: a call that has the
+// right number of arguments with a `Span` in the place of an `In`, an `Out` or an array of `Span`s is the type error E0401, and a call that has an argument
+// more or less than the signature at the end, the others being in their places, is the error of the number E0412 (§4.5, as in `negative/flow_gen_args_call_extra.onsa`).
+// The call of both kinds (the old form that spreads the names, with a wrong number and a wrong type) is in `generated_api_args_old_form_spread.onsa`.
+// `In` and `Out` are there only for the flows of the shapes that §11.6 says (`In` for two inputs or more, `Out` for a struct output), so the literal of the one
+// that the flow does not have is an unresolved name, E0302 (§15.1). One error in each unit (§18.1).
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub struct Mono {
+  v: F32,
+}
+
+pub flow one(x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow swap(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: r, r: l }
+}
+
+pub flow split(x: F32 at sample) -> Stereo at sample {
+  Stereo { l: x, r: x }
+}
+
+pub flow mono(x: F32 at sample) -> Mono at sample {
+  Mono { v: x }
+}
+
+pub flow up2(x: F32 at sample) -> [F32; 2] at sample {
+  [x, x]
+}
+
+pub flow side(x: [F32; 2] at sample) -> F32 at sample {
+  x[0] - x[1]
+}
+
+pub flow mix(a: [F32; 2] at sample, b: F32 at sample) -> F32 at sample {
+  a[0] + b
+}
+
+pub flow no_input() -> F32 at sample {
+  1.0
+}
+
+// ---------------------------------------------------------------- the right number of arguments, a Span where there is another type: E0401
+
+pub fn span_for_in(inout st: swap.State, l: Span[F32], inout o: swap.Out) {
+  swap.process(inout st, l, inout o)   //~ E0401
+}
+
+pub fn span_for_out(inout st: swap.State, i: swap.In, inout x: Span[F32]) {
+  swap.process(inout st, i, inout x)   //~ E0401
+}
+
+pub fn span_for_out_of_two_fields(inout st: split.State, xs: Span[F32], inout ys: Span[F32]) {
+  split.process(inout st, xs, inout ys)   //~ E0401
+}
+
+pub fn span_for_out_of_one_field(inout st: mono.State, xs: Span[F32], inout ys: Span[F32]) {
+  mono.process(inout st, xs, inout ys)   //~ E0401
+}
+
+pub fn span_for_out_in_place_of_one_field(inout st: mono.State, inout ys: Span[F32]) {
+  mono.process_inplace(inout st, inout ys)   //~ E0401
+}
+
+pub fn span_for_out_in_place_of_two_fields(inout st: swap.State, inout ys: Span[F32]) {
+  swap.process_inplace(inout st, inout ys)   //~ E0401
+}
+
+pub fn span_for_the_channels_of_the_output(inout st: up2.State, xs: Span[F32], inout ys: Span[F32]) {
+  up2.process(inout st, xs, inout ys)   //~ E0401
+}
+
+pub fn span_for_the_channels_of_the_input(inout st: side.State, xs: Span[F32], inout ys: Span[F32]) {
+  side.process(inout st, xs, inout ys)   //~ E0401
+}
+
+pub fn span_for_in_of_render(l: Span[F32]) -> I32 uses {Alloc} {
+  let _ = swap.render(l, 8.0)   //~ E0401
+  1
+}
+
+pub fn span_for_in_of_a_planar_field(inout st: mix.State, xs: Span[F32], inout ys: Span[F32]) {
+  mix.process(inout st, xs, inout ys)   //~ E0401
+}
+
+// ---------------------------------------------------------------- an argument more or less at the end: E0412
+
+pub fn an_argument_more_in_process(inout st: swap.State, i: swap.In, inout o: swap.Out, inout y: Span[F32]) {
+  swap.process(inout st, i, inout o, inout y)   //~ E0412
+}
+
+pub fn an_argument_more_in_render(i: swap.In) -> I32 uses {Alloc} {
+  let _ = swap.render(i, 8.0, 1.0)   //~ E0412
+  1
+}
+
+pub fn an_argument_more_in_place(inout st: swap.State, inout o: swap.Out, inout y: Span[F32]) {
+  swap.process_inplace(inout st, inout o, inout y)   //~ E0412
+}
+
+pub fn the_output_is_missing(inout st: one.State, xs: Span[F32]) {
+  one.process(inout st, xs)   //~ E0412
+}
+
+pub fn the_out_is_missing(inout st: split.State, xs: Span[F32]) {
+  split.process(inout st, xs)   //~ E0412
+}
+
+pub fn the_out_of_one_field_is_missing(inout st: mono.State, xs: Span[F32]) {
+  mono.process(inout st, xs)   //~ E0412
+}
+
+pub fn the_sample_rate_is_missing(i: swap.In) -> I32 uses {Alloc} {
+  let _ = swap.render(i)   //~ E0412
+  1
+}
+
+// ---------------------------------------------------------------- the In and the Out that the flow does not have: E0302
+
+pub fn in_for_one_input(inout st: one.State, xs: Span[F32], inout ys: Span[F32]) {
+  one.process(inout st, one.In { x: xs }, inout ys)   //~ E0302
+}
+
+pub fn out_for_a_single_value(inout st: one.State, xs: Span[F32], inout ys: Span[F32]) {
+  one.process(inout st, xs, inout one.Out { out: ys })   //~ E0302
+}
+
+pub fn out_for_an_array(inout st: up2.State, xs: Span[F32], inout ys: Span[F32]) {
+  up2.process(inout st, xs, inout up2.Out { out: ys })   //~ E0302
+}
+
+pub fn in_for_no_input(inout st: no_input.State, inout ys: Span[F32]) {
+  no_input.process(inout st, no_input.In {}, inout ys)   //~ E0302
+}
+
+pub fn in_for_a_planar_input(inout st: side.State, a: Span[F32], b: Span[F32], inout ys: Span[F32]) {
+  side.process(inout st, side.In { x: [a, b] }, inout ys)   //~ E0302
+}

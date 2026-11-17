@@ -1,0 +1,76 @@
+// onsa.toml
+// [package]
+// name = "generated_api_c_names_clash"
+// edition = "2026"
+//
+// [export]
+// prefix = "gacn_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§11.6", "§14.2", "§18.1"]
+
+// W7-12 U3a, S-30, R-15, §11.6, §14.2, §18.1: the generated functions of Onsa take `input` and `output` or `In` and `Out`, so the names of the signals and of the fields of the output are
+// not the names of the arguments (`generated_api_args_names.onsa`). The C that the compiler writes for an exported flow (§14.2: the function `<p>_process`, the pointer for each
+// input and for each field of the output) still names the pointers and the locals of its wrapper by the names of the signals, and a signal or an output field whose name is the name of one
+// of them makes a wrong C: the name of the state `s`, the locals `p` and `q`, the number of the frames `frames`, the pointer of a planar input `x` and the array of its channels `x_spans`,
+// the pointer `out`, and an input and a field of the output of one name (`swap(l, r) -> Stereo { l, r }`). The names of the C API of such a flow are decided in W10-03 (R-15). Until then the build
+// of the target stops with E0200 at the flow (the heading), one report for each flow, and the flows that have no such name build (the controls at the end of the file; they are also in
+// `conformance/generated_api_shapes.onsa`). The check has nothing to report: the E0200 is of the target, `[host]`. The interpreter has the same flows without the error (`flow/generated_api_args_names.onsa`).
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+@export
+pub flow swap(l: F32 at sample, r: F32 at sample) -> Stereo at sample {   //~ E0200 [host]
+  Stereo { l: r, r: l }
+}
+
+@export
+pub flow in_s(s: F32 at sample) -> F32 at sample {   //~ E0200 [host]
+  s * 2.0
+}
+
+@export
+pub flow in_p(p: F32 at sample) -> F32 at sample {   //~ E0200 [host]
+  p * 2.0
+}
+
+@export
+pub flow in_q(q: F32 at sample) -> F32 at sample {   //~ E0200 [host]
+  q * 2.0
+}
+
+@export
+pub flow in_frames(frames: F32 at sample) -> F32 at sample {   //~ E0200 [host]
+  frames * 2.0
+}
+
+@export
+pub flow in_out(out: F32 at sample) -> F32 at sample {   //~ E0200 [host]
+  out * 2.0
+}
+
+@export
+pub flow planar_x_and_x_spans(x: [F32; 2] at sample, x_spans: F32 at sample) -> F32 at sample {   //~ E0200 [host]
+  x[0] + x_spans
+}
+
+// Controls: the names are not the names of the C.
+@export
+pub flow ok_swap(a: F32 at sample, b: F32 at sample) -> Stereo at sample {
+  Stereo { l: b, r: a }
+}
+
+@export
+pub flow ok_one(x: F32 at sample) -> F32 at sample {
+  x * 2.0
+}

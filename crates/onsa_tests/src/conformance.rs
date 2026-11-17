@@ -340,6 +340,16 @@ fn interp_run(module: &Module, meta: &FlowMeta, shape: &Shape, stimuli: Vec<Vec<
         .iter()
         .map(|s| (0..s.channels()).map(|_| slot(Value::Array(zero_array(module, &s.scalar.ty(), FRAMES)))).collect())
         .collect();
+    // The number of the signals of each `In` or `Out` the Core `process` takes.
+    let groups: Vec<Option<usize>> = (module.fn_(fns.process).params.iter().skip(2))
+        .map(|p| match &p.ty {
+            Ty::Struct(id) => match &module.ty(*id).kind {
+                TypeDefKind::Struct { fields } => Some(fields.len()),
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect();
     for b in 0..FRAMES / BLOCK {
         let span = |s: &onsa_interp::Slot| {
             Value::Span(SpanRef { root: s.clone(), projs: Vec::<Proj>::new(), start: b * BLOCK, len: BLOCK })
@@ -348,9 +358,15 @@ fn interp_run(module: &Module, meta: &FlowMeta, shape: &Shape, stimuli: Vec<Vec<
             None => span(&slots[0]),
             Some(_) => Value::Array(ArrayData::Any(slots.iter().map(span).collect())),
         };
+        let mut signals = shape.inputs.iter().zip(&ins).chain(shape.outputs.iter().zip(&outs)).map(|(s, x)| arg(s, x));
         let mut args = vec![params.clone()];
-        args.extend(shape.inputs.iter().zip(&ins).map(|(s, x)| arg(s, x)));
-        args.extend(shape.outputs.iter().zip(&outs).map(|(s, x)| arg(s, x)));
+        // An `In` or `Out` of the Core `process` holds its signals (§11.6).
+        for of in &groups {
+            args.extend(match of {
+                Some(n) => Some(Value::Struct(signals.by_ref().take(*n).collect())),
+                None => signals.next(),
+            });
+        }
         match interp.call_inout(fns.process, &state, args) {
             Ok(_) => {}
             Err(onsa_interp::Failure::Panic(p)) => {

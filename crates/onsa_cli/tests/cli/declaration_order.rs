@@ -103,7 +103,7 @@ const PROGRAMS: [Program; 8] = [
             "pub flow a(x: Samp at sample) -> M at sample { M { y: x } }",
             "pub flow b(x: Samp at sample) -> S2 at sample { S2 { l: [x, x], r: [x, x] } }",
         ],
-        tests: "test \"t\" {\n  var st = a.init(8.0)\n  var buf: [F32; 2] = [1.0, 2.0]\n  a.process_inplace(inout st, inout buf)\n  assert buf[0] == 1.0\n}",
+        tests: "test \"t\" {\n  var st = a.init(8.0)\n  var buf: [F32; 2] = [1.0, 2.0]\n  a.process_inplace(inout st, inout a.Out { y: buf })\n  assert buf[0] == 1.0\n}",
         codes: &[],
     },
     Program {

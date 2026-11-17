@@ -1,0 +1,63 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§18.1", "§14.2"]
+
+// W7-12 U3a, R-471, §11.6, §18.1: an input that is a nested array (`x: [[F32; 2]; 2] at sample`) cannot cross the boundary: E0810 at the heading, and the inputs of the flow are not known (a
+// flow with such an input and one other at `sample` may have one `In` of two fields or not, §18.1: "読めなかった部分 ... は誤りの型として扱い、それを使う側には診断を出さない").
+// The calls of `process`, `process_inplace`, `render` and `init` report nothing, in the form of the shapes of §11.6 (`Span`s of the nested array, `In` as a
+// parameter or made at the call) and in the old forms, so the only diagnostic of a flow is the E0810 of its heading, with no number of arguments (E0412)
+// and no type (E0401). `nested_in` has the input only, and `nested_in_two` has one input beside it. One error in each unit (§18.1).
+
+pub flow nested_in(x: [[F32; 2]; 2] at sample) -> F32 at sample {   //~ E0810
+  x[0][0]
+}
+
+pub flow nested_in_two(x: [[F32; 2]; 2] at sample, y: F32 at sample) -> F32 at sample {   //~ E0810
+  y
+}
+
+pub fn nested_in_init() -> nested_in.State {
+  nested_in.init(8.0)
+}
+
+pub fn nested_in_process_span(inout st: nested_in.State, xs: Span[F32], inout ys: Span[F32]) {
+  nested_in.process(inout st, xs, inout ys)
+}
+
+pub fn nested_in_process_flat(inout st: nested_in.State, a: Span[F32], b: Span[F32], c: Span[F32], d: Span[F32], inout ys: Span[F32]) {
+  nested_in.process(inout st, a, b, c, d, inout ys)
+}
+
+pub fn nested_in_inplace(inout st: nested_in.State, inout ys: Span[F32]) {
+  nested_in.process_inplace(inout st, inout ys)
+}
+
+pub fn nested_in_render(xs: Span[F32]) -> I32 uses {Alloc} {
+  let _ = nested_in.render(xs, 8.0)
+  1
+}
+
+pub fn nested_in_two_init() -> nested_in_two.State {
+  nested_in_two.init(8.0)
+}
+
+pub fn nested_in_two_process_in(inout st: nested_in_two.State, i: nested_in_two.In, inout ys: Span[F32]) {
+  nested_in_two.process(inout st, i, inout ys)
+}
+
+pub fn nested_in_two_process_literal(inout st: nested_in_two.State, xs: [Span[F32]; 2], y: Span[F32], inout ys: Span[F32]) {
+  nested_in_two.process(inout st, nested_in_two.In { x: xs, y: y }, inout ys)
+}
+
+pub fn nested_in_two_process_spread(inout st: nested_in_two.State, xs: Span[F32], y: Span[F32], inout ys: Span[F32]) {
+  nested_in_two.process(inout st, xs, y, inout ys)
+}
+
+pub fn nested_in_two_inplace(inout st: nested_in_two.State, inout ys: Span[F32]) {
+  nested_in_two.process_inplace(inout st, inout ys)
+}
+
+pub fn nested_in_two_render(xs: Span[F32], y: Span[F32]) -> I32 uses {Alloc} {
+  let _ = nested_in_two.render(xs, y, 8.0)
+  1
+}

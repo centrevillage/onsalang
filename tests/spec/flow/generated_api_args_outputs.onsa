@@ -1,0 +1,202 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§5.3"]
+
+// W7-12 U3a, S-30, S-197, §11.6: "出力: 単一の値なら `inout output: Span[T]`、`[T; N]` なら `inout output: [Span[T]; N]`、struct なら
+// `inout output: voice.Out`。`Out` は出力の struct と同じフィールド名を持ち、各フィールドは `Span[T]` か `[Span[T]; N]`", and "`Rendered` ... スカラ出力は
+// `o.out: Buf[T]`、`[T; N]` は `o.out: [Buf[T]; N]`、struct 出力はフィールド名". A struct output is an `Out` also when the struct has one field (`mono.Out { v: ys }`,
+// not a plain `Span`), and a field of two types or a planar field is a field of `Out` with the type of the field. `Out` is made at the argument
+// (`inout swap.Out { ... }`) and a function takes it as a parameter and passes it on. The inputs by names are in `generated_api_args_names.onsa`
+// and the shapes of the inputs in `generated_api_args_inputs.onsa`.
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub struct Mono {
+  v: F32,
+}
+
+pub struct Bus {
+  main: F32,
+  aux: [F32; 2],
+}
+
+pub struct Wide {
+  l: F32,
+  r: F64,
+}
+
+pub flow one(x: F32 at sample) -> F32 at sample {
+  x * 2.0
+}
+
+pub flow up2(x: F32 at sample) -> [F32; 2] at sample {
+  [x, x * 2.0]
+}
+
+pub flow split(x: F32 at sample) -> Stereo at sample {
+  Stereo { l: x, r: x * 2.0 }
+}
+
+pub flow mono(x: F32 at sample) -> Mono at sample {
+  Mono { v: x * 3.0 }
+}
+
+pub flow bus(x: F32 at sample) -> Bus at sample {
+  Bus { main: x, aux: [x + 1.0, x + 2.0] }
+}
+
+pub flow wide(x: F32 at sample) -> Wide at sample {
+  Wide { l: x, r: (x as F64) * 2.0 }
+}
+
+// A planar input and a planar field of the output.
+pub flow through(a: [F32; 2] at sample, b: F32 at sample) -> Bus at sample {
+  Bus { main: b, aux: [a[1], a[0]] }
+}
+
+fn run_split(inout st: split.State, xs: Span[F32], inout o: split.Out) {
+  split.process(inout st, xs, inout o)
+}
+
+test "a single value is written to a Span" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  var ys: [F32; 4] = [0.0; 4]
+  var st = one.init(8.0)
+  one.process(inout st, xs.slice(0, 2), inout ys.slice(1, 3))
+  assert ys[0] == 0.0
+  assert ys[1] == 2.0
+  assert ys[2] == 4.0
+  assert ys[3] == 0.0
+}
+
+test "an output of an array is an array of Spans" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  var a: [F32; 2] = [0.0; 2]
+  var b: [F32; 2] = [0.0; 2]
+  var st = up2.init(8.0)
+  up2.process(inout st, xs, inout [a, b])
+  assert a[0] == 1.0
+  assert a[1] == 2.0
+  assert b[0] == 2.0
+  assert b[1] == 4.0
+  var ch: [[F32; 2]; 2] = [[0.0; 2]; 2]
+  up2.process(inout st, xs, inout ch)
+  assert ch[0][1] == 2.0
+  assert ch[1][1] == 4.0
+  let o = up2.render(xs, 8.0)
+  assert o.out[0][0] == 1.0
+  assert o.out[1][1] == 4.0
+}
+
+test "a struct output is an Out" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  var a: [F32; 2] = [0.0; 2]
+  var b: [F32; 2] = [0.0; 2]
+  var st = split.init(8.0)
+  split.process(inout st, xs, inout split.Out { l: a, r: b })
+  assert a[0] == 1.0
+  assert a[1] == 2.0
+  assert b[0] == 2.0
+  assert b[1] == 4.0
+  let o = split.render(xs, 8.0)
+  assert o.l[1] == 2.0
+  assert o.r[1] == 4.0
+}
+
+test "a struct output with one field is an Out of one field" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  var ys: [F32; 2] = [0.0; 2]
+  var st = mono.init(8.0)
+  mono.process(inout st, xs, inout mono.Out { v: ys })
+  assert ys[0] == 3.0
+  assert ys[1] == 6.0
+  let o = mono.render(xs, 8.0)
+  assert o.v[1] == 6.0
+}
+
+test "a struct output with a planar field has a planar field in Out" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  var m: [F32; 2] = [0.0; 2]
+  var p: [F32; 2] = [0.0; 2]
+  var q: [F32; 2] = [0.0; 2]
+  var st = bus.init(8.0)
+  bus.process(inout st, xs, inout bus.Out { main: m, aux: [p, q] })
+  assert m[1] == 2.0
+  assert p[0] == 2.0
+  assert p[1] == 3.0
+  assert q[0] == 3.0
+  assert q[1] == 4.0
+  var ch: [[F32; 2]; 2] = [[0.0; 2]; 2]
+  bus.process(inout st, xs, inout bus.Out { aux: ch, main: m })
+  assert ch[0][0] == 2.0
+  assert ch[1][1] == 4.0
+  let o = bus.render(xs, 8.0)
+  assert o.main[0] == 1.0
+  assert o.aux[0][1] == 3.0
+  assert o.aux[1][0] == 3.0
+}
+
+test "the fields of an output of two types have their types" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  var l: [F32; 2] = [0.0; 2]
+  var r: [F64; 2] = [0.0; 2]
+  var st = wide.init(8.0)
+  wide.process(inout st, xs, inout wide.Out { l: l, r: r })
+  assert l[1] == 2.0
+  assert r[0] == 2.0
+  assert r[1] == 4.0
+  let o = wide.render(xs, 8.0)
+  assert o.r[1] == 4.0
+}
+
+test "a planar input and a planar field of the output" {
+  let a0: [F32; 2] = [1.0, 2.0]
+  let a1: [F32; 2] = [10.0, 20.0]
+  let bb: [F32; 2] = [5.0, 6.0]
+  var m: [F32; 2] = [0.0; 2]
+  var x0: [F32; 2] = [0.0; 2]
+  var x1: [F32; 2] = [0.0; 2]
+  var st = through.init(8.0)
+  through.process(inout st, through.In { a: [a0, a1], b: bb }, inout through.Out { main: m, aux: [x0, x1] })
+  assert m[0] == 5.0
+  assert m[1] == 6.0
+  assert x0[0] == 10.0
+  assert x0[1] == 20.0
+  assert x1[0] == 1.0
+  assert x1[1] == 2.0
+}
+
+test "Out is passed as a parameter and made at the call of the function" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  var a: [F32; 2] = [0.0; 2]
+  var b: [F32; 2] = [0.0; 2]
+  var st = split.init(8.0)
+  run_split(inout st, xs, inout split.Out { l: a, r: b })
+  assert a[1] == 2.0
+  assert b[1] == 4.0
+}
+
+test "the output of the call is written to the whole of each field" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  var a: [F32; 3] = [9.0; 3]
+  var b: [F32; 3] = [9.0; 3]
+  var st = split.init(8.0)
+  split.process(inout st, xs, inout split.Out { l: a, r: b })
+  assert a[0] == 1.0
+  assert a[2] == 3.0
+  assert b[0] == 2.0
+  assert b[2] == 6.0
+}
+
+test "a field of Out with another length than the input is a panic" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  var a: [F32; 3] = [0.0; 3]
+  var b: [F32; 2] = [0.0; 2]
+  var st = split.init(8.0)
+  split.process(inout st, xs, inout split.Out { l: a, r: b })   //~ PANIC "a field of Out with another length than the input is a panic"
+  assert a[0] == 0.0
+}

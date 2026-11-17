@@ -1,0 +1,124 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§5.3", "§11.5", "§6.2"]
+
+// W7-12 U3a, S-30, §11.6: the shapes of the arguments of the generated functions (`In`, `Out`, an array of `Span`s) with the other parts of the language that they meet: a flow that calls
+// instances of other flows and branches (`if`) on a parameter of `block`, a flow that replicates a part of its body (`par~`), the inputs built by `array.from_fn` with a closure (the one place of this version where a closure is lowered), a generic function that reads the output of a call, and the
+// flows of two modules (`packages/generated_api_args_modules`). Each is called with `process`, and with `render` where there is a result to read.
+
+use std.array
+use std.math.sum
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow gain(x: F32 at sample, k: F32 at block) -> F32 at sample {
+  x * k
+}
+
+// Two instances of another flow, and a branch on a parameter of `block`: the struct output takes the sum or the first.
+pub flow wide(l: F32 at sample, r: F32 at sample, k: F32 at block) -> Stereo at sample {
+  let a = gain~(l, k)
+  let b = gain~(r, k)
+  let s = if k > 1.0 { a + b } else { a }
+  Stereo { l: s, r: b }
+}
+
+// Three replicas, each with its own delay, of two inputs.
+pub flow fan(l: F32 at sample, r: F32 at sample) -> F32 at sample {
+  let a = par~ i in 0 ..< 3 { prev~((l + r) * F32.round_from(i + 1)) }
+  sum(a)
+}
+
+pub flow swap(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: r, r: l }
+}
+
+fn first[T: Copy](xs: Span[T]) -> T {
+  xs[0]
+}
+
+test "instances and a branch in a flow with In and Out" {
+  let a: [F32; 2] = [1.0, 2.0]
+  let b: [F32; 2] = [10.0, 20.0]
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var st = wide.init(8.0)
+  // k = 2 takes the sum: l = 2 * 1 + 2 * 10 = 22, 44; r = 2 * b = 20, 40.
+  wide.process(inout st, wide.Params { k: 2.0 }, wide.In { l: a, r: b }, inout wide.Out { l: x, r: y })
+  assert x[0] == 22.0
+  assert x[1] == 44.0
+  assert y[0] == 20.0
+  assert y[1] == 40.0
+  // k = 0.5 takes the first: l = 0.5, 1; r = 5, 10.
+  var st2 = wide.init(8.0)
+  wide.process(inout st2, wide.Params { k: 0.5 }, wide.In { l: a, r: b }, inout wide.Out { l: x, r: y })
+  assert x[0] == 0.5
+  assert x[1] == 1.0
+  assert y[0] == 5.0
+  assert y[1] == 10.0
+  let o = wide.render(wide.Params { k: 2.0 }, wide.In { l: a, r: b }, 8.0)
+  assert o.l[1] == 44.0
+  assert o.r[1] == 40.0
+}
+
+test "a replicated part of a flow with two inputs" {
+  // The replicas multiply (l + r) by 1, 2 and 3: the sum is 6 * (l + r) one sample late.
+  let a: [F32; 3] = [1.0, 2.0, 3.0]
+  let b: [F32; 3] = [10.0, 20.0, 30.0]
+  var ys: [F32; 3] = [0.0; 3]
+  var st = fan.init(8.0)
+  fan.process(inout st, fan.In { l: a, r: b }, inout ys)
+  assert ys[0] == 0.0
+  assert ys[1] == 66.0
+  assert ys[2] == 132.0
+  let o = fan.render(fan.In { l: a, r: b }, 8.0)
+  assert o.out[2] == 132.0
+}
+
+test "a closure builds the inputs of In and a function value of the output is read after" {
+  // `array.from_fn` with a closure is the one place of this version where a closure is lowered (§6.2).
+  let a: [F32; 3] = array.from_fn(fn(i) { F32.round_from(i) })
+  let b: [F32; 3] = array.from_fn(fn(i) { F32.round_from(i) * 10.0 })
+  var x: [F32; 3] = [0.0; 3]
+  var y: [F32; 3] = [0.0; 3]
+  var st = swap.init(8.0)
+  swap.process(inout st, swap.In { l: a, r: b }, inout swap.Out { l: x, r: y })
+  assert x[0] == 0.0
+  assert x[2] == 20.0
+  assert y[1] == 1.0
+  assert y[2] == 2.0
+}
+
+test "a generic function reads the output of a call" {
+  let a: [F32; 2] = [1.0, 2.0]
+  let b: [F32; 2] = [10.0, 20.0]
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var st = swap.init(8.0)
+  swap.process(inout st, swap.In { l: a, r: b }, inout swap.Out { l: x, r: y })
+  assert first(x) == 10.0
+  assert first(y) == 1.0
+  let o = swap.render(swap.In { l: a, r: b }, 8.0)
+  assert first(o.l) == 10.0
+  assert first::[F32](o.r) == 1.0
+}
+
+test "many instances of a flow with In and Out each keep their own state" {
+  let a: [F32; 2] = [1.0, 2.0]
+  let b: [F32; 2] = [10.0, 20.0]
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var st1 = wide.init(8.0)
+  var st2 = wide.init(8.0)
+  wide.process(inout st1, wide.Params { k: 1.0 }, wide.In { l: a, r: b }, inout wide.Out { l: x, r: y })
+  assert x[0] == 1.0
+  var fst: [F32; 2] = [0.0; 2]
+  var snd: [F32; 2] = [0.0; 2]
+  wide.process(inout st2, wide.Params { k: 1.0 }, wide.In { l: b, r: a }, inout wide.Out { l: fst, r: snd })
+  assert fst[0] == 10.0
+  assert snd[0] == 1.0
+}

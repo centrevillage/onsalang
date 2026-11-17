@@ -22,14 +22,10 @@
 "Char" = 1
 
 [allow."crates/onsa_core/src/lower/flow/boundary.rs"]
-"cfg" = 1
-"frames" = 1
 "len" = 1
-"params" = 3
-"process" = 2
+"process" = 1
 "process_inplace" = 1
 "render" = 1
-"sample_rate" = 1
 
 [allow."crates/onsa_core/src/lower/flow/generated.rs"]
 "sample_rate" = 1
@@ -171,6 +167,8 @@
 "cfg" = 1
 "frames" = 1
 "init" = 1
+"input" = 1
+"output" = 1
 "params" = 1
 "process" = 1
 "process_inplace" = 1
@@ -271,6 +269,7 @@
 
 [same_spelling."crates/onsa_backend_c/src/export.rs"]
 "NAN" = { count = 5, note = "C の <math.h> のマクロ名（生成する C の字面）" }
+"frames" = { count = 1, note = "生成する C の process の引数の名前（W10-03 まで、§14.2。生成される render の引数 frames と同じ綴り）" }
 
 [same_spelling."crates/onsa_backend_c/src/lib.rs"]
 "panic" = { count = 1, note = "Debug の表示のフィールド名（マニフェストの panic の設定）" }

@@ -1,0 +1,140 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1", "§18.1"]
+
+// W7-12 U3a, S-197, S-220 (1), §11.6: "入力と出力の数と型を比べるとき、struct の出力はフィールドを順に展開して数える。配列は展開せず、`[T; N]` は長さを含めた
+// 一つの型として比べる（`widen(l: F32 at sample, r: F32 at sample) -> [F32; 2] at sample` には生成しない。入力を `x: [F32; 2] at sample` と書けば生成する）". The flows
+// below are the ones of the forms with an array that have no `process_inplace`: the array of the input is not the two scalars of the output and the reverse, an array is
+// not its element, the arrays of two lengths or of two element types are two types, and the array is a type with its place in the order of the fields. For a flow
+// that does not have it, `process_inplace` is the name of a function that the namespace does not have, the E0302 of the type stage (the name stage has resolved it,
+// §11.6, §15.1); the use is the call, on the line of the marker, and the flows that have it are the controls. The scalar flows are in `negative/flow_inplace_absent.onsa`.
+// One error in each unit (§18.1).
+
+pub struct P {
+  l: F32,
+  r: F32,
+}
+
+pub struct S {
+  x: [F32; 2],
+}
+
+pub struct R {
+  v: [F32; 2],
+  w: F32,
+}
+
+pub struct Q {
+  v: [F32; 2],
+}
+
+pub const N: U32 = 2
+
+pub type Pair = [F32; N]
+
+// Two scalars in, one array out.
+pub flow scalars_to_array(l: F32 at sample, r: F32 at sample) -> [F32; 2] at sample {
+  [l, r]
+}
+
+// One array in, two scalars out.
+pub flow array_to_scalars(x: [F32; 2] at sample) -> P at sample {
+  P { l: x[0], r: x[1] }
+}
+
+// Two scalars in, a struct of one field of an array out.
+pub flow scalars_to_array_field(l: F32 at sample, r: F32 at sample) -> S at sample {
+  S { x: [l, r] }
+}
+
+// A scalar and an array in, the array and a scalar out: the order is not the order of the inputs.
+pub flow array_after_scalar(a: F32 at sample, b: [F32; 2] at sample) -> R at sample {
+  R { v: b, w: a }
+}
+
+// One scalar in, an array of one element out.
+pub flow scalar_to_unit_array(x: F32 at sample) -> [F32; 1] at sample {
+  [x]
+}
+
+// An array of one element in, one scalar out.
+pub flow unit_array_to_scalar(x: [F32; 1] at sample) -> F32 at sample {
+  x[0]
+}
+
+// Arrays of two lengths.
+pub flow longer(x: [F32; 2] at sample) -> [F32; 3] at sample {
+  [x[0], x[1], 0.0]
+}
+
+// Arrays of two element types.
+pub flow wider(x: [F32; 2] at sample) -> [F64; 2] at sample {
+  [x[0] as F64, x[1] as F64]
+}
+
+// The array of the input has the length of the array of the field, as a number.
+pub flow array_field_longer(x: [F32; 3] at sample) -> Q at sample {
+  Q { v: [x[0], x[1]] }
+}
+
+// Controls: the array is one type on both sides.
+pub flow array_to_array_field(x: [F32; 2] at sample) -> Q at sample {
+  Q { v: [x[1], x[0]] }
+}
+
+pub flow array_and_scalar(x: [F32; 2] at sample, w: F32 at sample) -> R at sample {
+  R { v: [x[1], x[0]], w: w }
+}
+
+// The length is read through a constant and an alias, as it is when it is written in the array.
+pub flow array_through_alias(x: Pair at sample) -> [F32; 2] at sample {
+  [x[1], x[0]]
+}
+
+pub fn control_array_field(inout st: array_to_array_field.State, inout a: Span[F32], inout b: Span[F32]) {
+  array_to_array_field.process_inplace(inout st, inout array_to_array_field.Out { v: [a, b] })
+}
+
+pub fn control_array_and_scalar(inout st: array_and_scalar.State, inout a: Span[F32], inout b: Span[F32], inout c: Span[F32]) {
+  array_and_scalar.process_inplace(inout st, inout array_and_scalar.Out { v: [a, b], w: c })
+}
+
+pub fn control_alias(inout st: array_through_alias.State, inout a: Span[F32], inout b: Span[F32]) {
+  array_through_alias.process_inplace(inout st, inout [a, b])
+}
+
+pub fn absent_scalars_to_array(inout st: scalars_to_array.State, inout xs: [Span[F32]; 2]) {
+  scalars_to_array.process_inplace(inout st, inout xs)   //~ E0302
+}
+
+pub fn absent_array_to_scalars(inout st: array_to_scalars.State, inout x: Span[F32], inout y: Span[F32]) {
+  array_to_scalars.process_inplace(inout st, inout array_to_scalars.Out { l: x, r: y })   //~ E0302
+}
+
+pub fn absent_scalars_to_array_field(inout st: scalars_to_array_field.State, inout a: Span[F32], inout b: Span[F32]) {
+  scalars_to_array_field.process_inplace(inout st, inout scalars_to_array_field.Out { x: [a, b] })   //~ E0302
+}
+
+pub fn absent_array_after_scalar(inout st: array_after_scalar.State, inout a: Span[F32], inout b: Span[F32], inout c: Span[F32]) {
+  array_after_scalar.process_inplace(inout st, inout array_after_scalar.Out { v: [a, b], w: c })   //~ E0302
+}
+
+pub fn absent_scalar_to_unit_array(inout st: scalar_to_unit_array.State, inout xs: [Span[F32]; 1]) {
+  scalar_to_unit_array.process_inplace(inout st, inout xs)   //~ E0302
+}
+
+pub fn absent_unit_array_to_scalar(inout st: unit_array_to_scalar.State, inout xs: Span[F32]) {
+  unit_array_to_scalar.process_inplace(inout st, inout xs)   //~ E0302
+}
+
+pub fn absent_longer(inout st: longer.State, inout xs: [Span[F32]; 3]) {
+  longer.process_inplace(inout st, inout xs)   //~ E0302
+}
+
+pub fn absent_wider(inout st: wider.State, inout xs: [Span[F64]; 2]) {
+  wider.process_inplace(inout st, inout xs)   //~ E0302
+}
+
+pub fn absent_array_field_longer(inout st: array_field_longer.State, inout a: Span[F32], inout b: Span[F32]) {
+  array_field_longer.process_inplace(inout st, inout array_field_longer.Out { v: [a, b] })   //~ E0302
+}

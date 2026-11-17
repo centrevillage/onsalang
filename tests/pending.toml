@@ -296,13 +296,6 @@ note = "遅延の入れ子（prev~(prev~(x)) は x[n-2]）。保存の二相化�
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/flow_semantics/vdelay_varying_d.onsa"
-reasons = ["S-30", "S-102"]
-until = "W7-12"
-note = "sample の入力が 2 つの flow の In 構造体（vd_var.In { x, d }）を render に渡す形（S-30）。render の引数を In にするのは W7-12 U3。今は個々の入力を取る形で E0412"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/flow_semantics/branches_plain_match.onsa"
 reasons = ["R-06"]
 until = "W8-06"
@@ -331,13 +324,6 @@ note = "par の中の if~。W3-10 の写しでは E0200（K-08）"
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/flow_semantics/planar_structs.onsa"
-reasons = ["S-30"]
-until = "W7-12"
-note = "名前付きの入力 In と struct 出力 Out を render と process の引数に渡す形（S-30）。引数を In・Out にするのは W7-12 U3。今は E0412"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/flow_semantics/rules_negative.onsa"
 reasons = ["S-110", "S-101", "S-116", "S-29", "S-44"]
 until = "W7-06"
@@ -349,20 +335,6 @@ target = "tests/spec/flow_semantics/enum_construct_match.onsa"
 reasons = ["S-102", "R-06"]
 until = "W8-06"
 note = "at の後も、入れ子の列挙子のパターンとガードの値の match が W2-07 の E0200 で止まる（正式な実装は W8-06）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/flow_semantics/inplace_struct_output.onsa"
-reasons = ["S-102", "S-197"]
-until = "W7-12"
-note = "at と、struct の出力の flow に process_inplace が無い（4 引数を要求する）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/flow_inplace_absent.onsa"
-reasons = ["S-102", "S-197", "R-147"]
-until = "W7-12"
-note = "process_inplace の生成の条件と、flow の名前空間に無い項目の E0302（今は E0401）"
 
 [[pending]]
 kind = "test-case"

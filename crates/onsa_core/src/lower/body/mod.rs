@@ -28,8 +28,8 @@ mod expr;
 mod pat;
 
 use super::{derived, eq, flow};
-pub(super) use call::coerce;
 use call::lower_call;
+pub(super) use call::{of_type, span_of};
 pub(super) use expr::lower_expr;
 use expr::placeholder_ty;
 pub(super) use pat::bind_irrefutable;

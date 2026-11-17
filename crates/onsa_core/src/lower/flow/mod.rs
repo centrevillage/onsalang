@@ -7,8 +7,8 @@
 //! | `reset(inout s)` | `prev` / `delay` / `vdelay` back to their `init` values, `w = 0`, sub `reset`s, `poisoned = false` |
 //! | `ctl(inout s, p: Params)` | `Ctl`-rate `let`s in order (those read at `Sig` stored), sub `ctl`s with the sub's `Params` |
 //! | `tick(inout s, <Sig inputs>) -> out` | `Sig`-rate `let`s in order, the output, then the stores of §11.4 in node order |
-//! | `process(inout s, p, <Span inputs>, inout <Span outputs>)` | length check, `ctl` once, per sample: read all inputs, `tick`, write all outputs |
-//! | `process_inplace` | `process` with the same spans for the paired inputs and outputs |
+//! | `process(inout s, p, [input], inout output)` | `input` and `output` one `Span` (planar `[Span; N]`) or the `In` and `Out` of more (§11.6); length check, `ctl` once, per sample: read all inputs, `tick`, write all outputs |
+//! | `process_inplace(inout s, p, inout output)` | `process` with the input made of the signals of `output` (they pair up) |
 //! | `render` | `init`, `Buf.zeroed` outputs, one `process`, `Rendered` (interpreter only, D-08) |
 //! | `params_default() -> Params` | the `@param` defaults, of the C API alone (§11.6, S-625) |
 //!
@@ -63,10 +63,10 @@ use onsa_sema::flow::{FlowInfo, FlowRate, InitArg, Node};
 use onsa_sema::ty::{BuiltinTy, Len, Rate, Ty as STy};
 use onsa_syntax::ast::ExprId;
 
-use super::body::{FnCx, bind_irrefutable, coerce, lower_expr};
+use super::body::{FnCx, bind_irrefutable, lower_expr, of_type, span_of};
 use super::build::{
-    assign, borrow, call, checked_binary, cmp, expr_stmt, field_by_name, float_lit, index, inout, lit, local_expr,
-    materialize, stmt, u32_lit,
+    assign, borrow, call, checked_binary, cmp, expr_stmt, field, field_by_name, float_lit, index, inout, lit,
+    local_expr, materialize, stmt, u32_lit,
 };
 use super::{Lowerer, R, core_mode, internal};
 use crate::ir::*;
@@ -80,7 +80,7 @@ mod phases;
 mod state;
 
 use boundary::{gen_params_default, gen_process, gen_process_inplace, gen_render};
-use generated::{Gen, init_value, instance_args, member_params, replica_index, sfield};
+use generated::{Gen, init_value, instance_args, replica_index, sfield};
 pub(crate) use nodes::lower_flow_expr;
 use phases::{gen_ctl, gen_init, gen_reset, gen_tick, store_nodes};
 use state::{ast_span, flat_nodes, node_fields, node_has_state, nodes_in};
@@ -139,6 +139,8 @@ pub struct FlowMeta {
     pub sig_inputs: Vec<(String, Ty)>,
     /// Outputs: name, element type, planar channel count (§11.6).
     pub outputs: Vec<(String, Ty, Option<u32>)>,
+    /// The flow's name in its heading: where a diagnostic of its API goes.
+    pub name_span: Span,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -443,6 +445,7 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
         params,
         sig_inputs,
         outputs: shape.outputs.clone(),
+        name_span: a.def(flow).name_span,
     });
     Ok(fns)
 }

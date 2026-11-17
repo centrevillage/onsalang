@@ -29,13 +29,31 @@ fn channel_lens(e: &Expr, span: Span) -> R<Vec<Expr>> {
     (0..n).map(|k| Ok(len_of(channel(e, k, span)?.0, span))).collect()
 }
 
-/// `process(inout s, params, <inputs>, inout <outputs>)` (§11.6).
+/// The signals of a parameter of `process` (§11.6): the fields of an `In`
+/// or an `Out` in their order (that of the inputs and the outputs), or the
+/// one `Span` / planar `[Span; N]` itself.
+fn signals(lw: &Lowerer, group: &Expr) -> R<Vec<Expr>> {
+    match &group.ty {
+        Ty::Struct(id) => (0..lw.struct_fields(*id).len() as u32).map(|k| field(lw, group.clone(), k)).collect(),
+        _ => Ok(vec![group.clone()]),
+    }
+}
+
+/// The types of the parameters of `process`, made by [`gen_process`].
+fn process_types(lw: &Lowerer, fns: &FlowFns) -> Vec<Ty> {
+    lw.m.fn_(fns.process).params.iter().map(|p| p.ty.clone()).collect()
+}
+
+/// `process(inout s, params, [input], inout output)` (§11.6): `input` and
+/// `output` one `Span` (planar `[Span; N]`) or the `In` and `Out` of more.
 pub(super) fn gen_process<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b FlowInfo, fns: &FlowFns) -> R<()> {
     let mut g = Gen::new(lw, shape, info, Phase::Tick, Ty::Unit)?;
-    let ps = g.member_params(lw, shape, "process")?;
     let span = g.span;
-    let s = ps["s"].clone();
-    let params = ps["params"].clone();
+    let (s, params, input, output) = match g.member_params(lw, shape, "process")?.as_slice() {
+        [s, p, o] => (s.clone(), p.clone(), None, o.clone()),
+        [s, p, i, o] => (s.clone(), p.clone(), Some(i.clone()), o.clone()),
+        _ => return Err(internal(span, "`process` with another number of parameters")),
+    };
     let sig_inputs: Vec<(String, Ty)> = shape
         .flow
         .inputs
@@ -43,12 +61,21 @@ pub(super) fn gen_process<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b
         .filter(|i| i.rate == Rate::Sig)
         .map(|i| Ok((i.name.clone(), lw.core_ty(i.ty, &[], i.span)?)))
         .collect::<R<_>>()?;
+    let ins = input.as_ref().map(|i| signals(lw, i)).transpose()?.unwrap_or_default();
+    let outs = signals(lw, &output)?;
+    if ins.len() != sig_inputs.len() || outs.len() != shape.outputs.len() {
+        return Err(internal(span, "`process` with another number of signals than the flow"));
+    }
+    // The fields of an `In` are read once, before the loop, as a `Span`
+    // parameter is; those of an `Out` are written at their places.
+    let ins: Vec<Expr> = match input.as_ref().map(|i| &i.ty) {
+        Some(Ty::Struct(_)) => ins.into_iter().zip(&sig_inputs).map(|(e, (n, _))| g.let_(n, e)).collect(),
+        _ => ins,
+    };
     // All spans, every channel of the planar ones, must have the same length (§11.6, R-22):
     // compared once, before any state moves (S-196); panic otherwise (poisoned at the export).
-    let mut spans: Vec<Expr> = sig_inputs.iter().map(|(n, _)| ps[n].clone()).collect();
-    spans.extend(shape.outputs.iter().map(|(n, _, _)| ps[n].clone()));
     let mut lens = Vec::new();
-    for sp in &spans {
+    for sp in ins.iter().chain(&outs) {
         lens.extend(channel_lens(sp, span)?);
     }
     let mut lens = lens.into_iter();
@@ -73,15 +100,13 @@ pub(super) fn gen_process<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b
     let i_e = local_expr(&g.cx, i, span);
     let mut body = Vec::new();
     let mut tick_args = vec![inout(s.clone())];
-    for (name, ty) in &sig_inputs {
-        let sp = ps[name].clone();
+    for (sp, (name, ty)) in ins.into_iter().zip(&sig_inputs) {
         let v = match ty {
-            Ty::Array(elem, n) => {
+            Ty::Array(_, n) => {
                 let mut items = Vec::new();
                 for c in 0..*n {
                     items.push(index(index(sp.clone(), u32_lit(span, c))?, i_e.clone())?);
                 }
-                let _ = elem;
                 Expr::new(ty.clone(), span, ExprKind::Array(items))
             }
             _ => index(sp, i_e.clone())?,
@@ -94,9 +119,8 @@ pub(super) fn gen_process<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b
     let vl = g.cx.temp("v", shape.out_val.clone());
     body.push(stmt(span, StmtKind::Let(vl, v)));
     let v_e = local_expr(&g.cx, vl, span);
-    for (name, _elem, planar) in &shape.outputs {
-        let val = if shape.out_is_struct { field_by_name(lw, v_e.clone(), name, span)? } else { v_e.clone() };
-        let sp = ps[name].clone();
+    for (k, (sp, (_, _, planar))) in outs.into_iter().zip(&shape.outputs).enumerate() {
+        let val = if shape.out_is_struct { field(lw, v_e.clone(), k as u32)? } else { v_e.clone() };
         match planar {
             Some(n) => {
                 for c in 0..*n {
@@ -112,7 +136,9 @@ pub(super) fn gen_process<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b
     Ok(())
 }
 
-/// `process_inplace`: `process` with each paired span passed as input and output.
+/// `process_inplace(inout s, params, inout output)`: `process` with the
+/// input made of the signals of `output` in their order (§11.6: they pair
+/// up by type, S-197, S-220).
 pub(super) fn gen_process_inplace<'b>(
     lw: &mut Lowerer<'b>,
     shape: &FlowShape,
@@ -121,48 +147,54 @@ pub(super) fn gen_process_inplace<'b>(
 ) -> R<()> {
     let Some(fid) = fns.process_inplace else { return Ok(()) };
     let mut g = Gen::new(lw, shape, info, Phase::Tick, Ty::Unit)?;
-    let ps = g.member_params(lw, shape, "process_inplace")?;
     let span = g.span;
-    let mut args = vec![inout(ps["s"].clone()), borrow(ps["params"].clone())];
-    for (name, _, _) in &shape.outputs {
-        args.push(borrow(ps[name].clone()));
-    }
-    for (name, _, _) in &shape.outputs {
-        args.push(inout(ps[name].clone()));
-    }
+    let [s, params, output] = &g.member_params(lw, shape, "process_inplace")?[..] else {
+        return Err(internal(span, "`process_inplace` with another number of parameters"));
+    };
+    let outs = signals(lw, output)?;
+    let unpaired = || internal(span, "`process_inplace` whose output does not pair up with the input");
+    let input = match process_types(lw, fns).as_slice() {
+        [_, _, Ty::Struct(id), _] => {
+            let id = *id;
+            if lw.struct_fields(id).iter().map(|(_, t)| t).ne(outs.iter().map(|e| &e.ty)) {
+                return Err(unpaired());
+            }
+            Expr::new(Ty::Struct(id), span, ExprKind::Struct { ty: id, fields: outs })
+        }
+        [_, _, t, _] => match outs.as_slice() {
+            [one] if one.ty == *t => one.clone(),
+            _ => return Err(unpaired()),
+        },
+        _ => return Err(unpaired()),
+    };
+    let args = vec![inout(s.clone()), borrow(params.clone()), borrow(input), inout(output.clone())];
     expr_stmt(&mut g.stmts, call(fns.process, Ty::Unit, span, args));
     g.finish(lw, fid, Ty::Unit, true, None);
     Ok(())
 }
 
-/// `render(cfg, params, <inputs>, [frames], sample_rate) -> Out` (interpreter only).
+/// `render(cfg, params, [input], [frames], sample_rate) -> Rendered`
+/// (interpreter only): `process` on zeroed `Buf`s, whose views it makes.
 pub(super) fn gen_render<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b FlowInfo, fns: &FlowFns) -> R<()> {
     let out_ty = Ty::Struct(shape.out_ty);
     let mut g = Gen::new(lw, shape, info, Phase::Tick, out_ty.clone())?;
-    let ps = g.member_params(lw, shape, "render")?;
     let span = g.span;
-    let st = g.let_(
-        "s",
-        call(
-            fns.init,
-            Ty::Struct(shape.state_ty),
-            span,
-            vec![borrow(ps["cfg"].clone()), borrow(ps["sample_rate"].clone())],
-        ),
-    );
-    let sig_names: Vec<String> =
-        shape.flow.inputs.iter().filter(|i| i.rate == Rate::Sig).map(|i| i.name.clone()).collect();
-    let n = match sig_names.first() {
-        Some(first) => span_len(&ps[first], span)?,
-        None => ps["frames"].clone(),
+    // The third is `input`, or `frames` of a flow with no `sample` input.
+    let [cfg, params, third, sample_rate] = &g.member_params(lw, shape, "render")?[..] else {
+        return Err(internal(span, "`render` with another number of parameters"));
+    };
+    let init = vec![borrow(cfg.clone()), borrow(sample_rate.clone())];
+    let st = g.let_("s", call(fns.init, Ty::Struct(shape.state_ty), span, init));
+    let input = shape.flow.inputs.iter().any(|i| i.rate == Rate::Sig).then_some(third);
+    let n = match input {
+        Some(i) => span_len(signals(lw, i)?.first().ok_or_else(|| internal(span, "an `In` with no field"))?, span)?,
+        None => third.clone(),
     };
     let n = g.let_("n", n);
-    let process_params = member_params(lw, &shape.flow, "process", span)?;
-    let mut args = vec![inout(st), borrow(ps["params"].clone())];
-    for name in &sig_names {
-        args.push(borrow(ps[name].clone()));
-    }
+    let mut args = vec![inout(st), borrow(params.clone())];
+    args.extend(input.cloned().map(borrow));
     let mut out_fields = Vec::new();
+    let mut views = Vec::new();
     for (name, elem, planar) in &shape.outputs {
         let zeroed = |n: Expr| {
             Expr::new(
@@ -179,15 +211,24 @@ pub(super) fn gen_render<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b 
             None => zeroed(n.clone()),
         };
         let buf = g.let_(name, v);
-        let want = process_params
-            .iter()
-            .find(|(pn, _, _)| pn == name)
-            .map(|(_, _, t)| t.clone())
-            .ok_or_else(|| internal(span, "output without a process parameter"))?;
-        let as_span = coerce(lw, &mut g.cx, buf.clone(), &want, Mode::Inout)?;
-        args.push(inout(as_span));
+        // The views of the `Buf`s this function makes (of no expression of
+        // the source, so of no record of the types stage).
+        let view = match planar {
+            Some(c) => {
+                let one = |k: u32| span_of(&mut g.cx, index(buf.clone(), u32_lit(span, k))?, Mode::Inout);
+                let items = (0..*c).map(one).collect::<R<Vec<_>>>()?;
+                Expr::new(Ty::Array(Box::new(Ty::Span(Box::new(elem.clone()))), *c), span, ExprKind::Array(items))
+            }
+            None => span_of(&mut g.cx, buf.clone(), Mode::Inout)?,
+        };
+        views.push(view);
         out_fields.push(buf);
     }
+    let output = match process_types(lw, fns).last() {
+        Some(Ty::Struct(id)) => Expr::new(Ty::Struct(*id), span, ExprKind::Struct { ty: *id, fields: views }),
+        _ => views.pop().filter(|_| views.is_empty()).ok_or_else(|| internal(span, "outputs of no `Out`"))?,
+    };
+    args.push(inout(output));
     expr_stmt(&mut g.stmts, call(fns.process, Ty::Unit, span, args));
     let out = Expr::new(out_ty.clone(), span, ExprKind::Struct { ty: shape.out_ty, fields: out_fields });
     g.finish(lw, fns.render, out_ty, false, Some(out));

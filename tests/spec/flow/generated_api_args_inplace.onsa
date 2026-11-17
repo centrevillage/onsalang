@@ -1,0 +1,244 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§5.3", "§5.2"]
+
+// W7-12 U3a, S-30, S-197, S-220, §11.6: "`process_inplace` は、`sample` の入力と出力を位置で対にし、`inout output` 一つ（出力と同じ形）にまとめたもの。入力と出力の数と
+// 型を比べるとき、struct の出力はフィールドを順に展開して数える ... 配列は展開せず、`[T; N]` は長さを含めた一つの型として比べる". The one argument has the shape of the output:
+// a `Span` for a single value, `[Span[T]; N]` for `[T; N]`, and `<flow>.Out` for a struct, also one with a single field. The flow `chans` has an input `[F32; 2]` and
+// an output with one field `v: [F32; 2]` (the array is one type on both sides, so it has `process_inplace`), and `chans_mix` has `[F32; 2], F32` against `v: [F32; 2], w: F32`.
+// The flows that do not have it are the E0302 of `negative/generated_api_inplace_absent.onsa`. The pairing of the plain scalar structs is also in
+// `flow_semantics/inplace_struct_output.onsa`; here are the names of the generated arguments (`swap(l, r) -> Stereo { l, r }`), the planar shapes, the struct
+// with a single field and with a planar field, an alias of the output, and the argument that is passed on through a function.
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub struct Mono {
+  v: F32,
+}
+
+pub struct Q {
+  v: [F32; 2],
+}
+
+pub struct R {
+  v: [F32; 2],
+  w: F32,
+}
+
+pub struct Named {
+  input: F32,
+  output: F32,
+}
+
+pub type Al = F32
+
+pub type Sa = Stereo
+
+pub flow dbl(x: F32 at sample) -> F32 at sample {
+  x * 2.0
+}
+
+pub flow plus_al(x: F32 at sample) -> Al at sample {
+  x + 1.0
+}
+
+pub flow flip(x: [F32; 2] at sample) -> [F32; 2] at sample {
+  [x[1], x[0]]
+}
+
+pub flow swap(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: r, r: l }
+}
+
+pub flow swap_alias(l: F32 at sample, r: F32 at sample) -> Sa at sample {
+  Stereo { l: r, r: l }
+}
+
+pub flow swap_named(input: F32 at sample, output: F32 at sample) -> Named at sample {
+  Named { input: output, output: input }
+}
+
+pub flow mono(x: F32 at sample) -> Mono at sample {
+  Mono { v: x * 2.0 }
+}
+
+pub flow chans(x: [F32; 2] at sample) -> Q at sample {
+  Q { v: [x[1], x[0]] }
+}
+
+pub flow chans_mix(x: [F32; 2] at sample, w: F32 at sample) -> R at sample {
+  R { v: [x[1], x[0]], w: w + 1.0 }
+}
+
+pub flow tuned(x: F32 at sample, k: F32 at block) -> Mono at sample {
+  Mono { v: x * k }
+}
+
+fn run_swap(inout st: swap.State, inout o: swap.Out) {
+  swap.process_inplace(inout st, inout o)
+}
+
+fn run_mono(inout st: mono.State, inout o: mono.Out) {
+  mono.process_inplace(inout st, inout o)
+}
+
+test "a single value takes one Span" {
+  var buf: [F32; 3] = [1.0, 2.0, 3.0]
+  var st = dbl.init(8.0)
+  dbl.process_inplace(inout st, inout buf)
+  assert buf[0] == 2.0
+  assert buf[1] == 4.0
+  assert buf[2] == 6.0
+  dbl.process_inplace(inout st, inout buf.slice(1, 3))
+  assert buf[0] == 2.0
+  assert buf[1] == 8.0
+  assert buf[2] == 12.0
+}
+
+test "the output through an alias of a scalar is a Span" {
+  var buf: [F32; 2] = [1.0, 2.0]
+  var st = plus_al.init(8.0)
+  plus_al.process_inplace(inout st, inout buf)
+  assert buf[0] == 2.0
+  assert buf[1] == 3.0
+}
+
+test "an array of channels takes an array of Spans" {
+  var a: [F32; 2] = [1.0, 2.0]
+  var b: [F32; 2] = [10.0, 20.0]
+  var st = flip.init(8.0)
+  flip.process_inplace(inout st, inout [a, b])
+  assert a[0] == 10.0
+  assert a[1] == 20.0
+  assert b[0] == 1.0
+  assert b[1] == 2.0
+  var ch: [[F32; 2]; 2] = [[1.0, 2.0], [10.0, 20.0]]
+  flip.process_inplace(inout st, inout ch)
+  assert ch[0][0] == 10.0
+  assert ch[1][1] == 2.0
+}
+
+test "swap with the names of the output fields the names of the inputs" {
+  var a: [F32; 3] = [1.0, 2.0, 3.0]
+  var b: [F32; 3] = [10.0, 20.0, 30.0]
+  var st = swap.init(8.0)
+  swap.process_inplace(inout st, inout swap.Out { l: a, r: b })
+  assert a[0] == 10.0
+  assert a[2] == 30.0
+  assert b[0] == 1.0
+  assert b[2] == 3.0
+}
+
+test "the pairing is by position: the first buffer holds the first input and receives the first field" {
+  var a: [F32; 2] = [1.0, 2.0]
+  var b: [F32; 2] = [10.0, 20.0]
+  var st = swap_named.init(8.0)
+  swap_named.process_inplace(inout st, inout swap_named.Out { input: a, output: b })
+  // `input` is the second input and `output` is the first.
+  assert a[0] == 10.0
+  assert a[1] == 20.0
+  assert b[0] == 1.0
+  assert b[1] == 2.0
+}
+
+test "the output of an alias of a struct is an Out" {
+  var a: [F32; 2] = [1.0, 2.0]
+  var b: [F32; 2] = [10.0, 20.0]
+  var st = swap_alias.init(8.0)
+  swap_alias.process_inplace(inout st, inout swap_alias.Out { l: a, r: b })
+  assert a[0] == 10.0
+  assert b[1] == 2.0
+}
+
+test "a struct with a single field is an Out of one field" {
+  var buf: [F32; 3] = [1.0, 2.0, 3.0]
+  var st = mono.init(8.0)
+  mono.process_inplace(inout st, inout mono.Out { v: buf })
+  assert buf[0] == 2.0
+  assert buf[1] == 4.0
+  assert buf[2] == 6.0
+}
+
+test "an array in a field of a struct with one field is one type with the array input" {
+  var a: [F32; 2] = [1.0, 2.0]
+  var b: [F32; 2] = [10.0, 20.0]
+  var st = chans.init(8.0)
+  chans.process_inplace(inout st, inout chans.Out { v: [a, b] })
+  assert a[0] == 10.0
+  assert a[1] == 20.0
+  assert b[0] == 1.0
+  assert b[1] == 2.0
+  var ch: [[F32; 2]; 2] = [[1.0, 2.0], [10.0, 20.0]]
+  chans.process_inplace(inout st, inout chans.Out { v: ch })
+  assert ch[0][1] == 20.0
+  assert ch[1][0] == 1.0
+}
+
+test "an array and a scalar against a field of an array and a field of a scalar" {
+  var a: [F32; 2] = [1.0, 2.0]
+  var b: [F32; 2] = [10.0, 20.0]
+  var c: [F32; 2] = [100.0, 200.0]
+  var st = chans_mix.init(8.0)
+  chans_mix.process_inplace(inout st, inout chans_mix.Out { v: [a, b], w: c })
+  assert a[0] == 10.0
+  assert a[1] == 20.0
+  assert b[0] == 1.0
+  assert b[1] == 2.0
+  assert c[0] == 101.0
+  assert c[1] == 201.0
+}
+
+test "process_inplace gives what process gives with separate buffers" {
+  let a0: [F32; 2] = [1.0, 2.0]
+  let a1: [F32; 2] = [10.0, 20.0]
+  let w0: [F32; 2] = [100.0, 200.0]
+  var v0: [F32; 2] = [0.0; 2]
+  var v1: [F32; 2] = [0.0; 2]
+  var w1: [F32; 2] = [0.0; 2]
+  var st1 = chans_mix.init(8.0)
+  chans_mix.process(inout st1, chans_mix.In { x: [a0, a1], w: w0 }, inout chans_mix.Out { v: [v0, v1], w: w1 })
+  var a: [F32; 2] = [1.0, 2.0]
+  var b: [F32; 2] = [10.0, 20.0]
+  var c: [F32; 2] = [100.0, 200.0]
+  var st2 = chans_mix.init(8.0)
+  chans_mix.process_inplace(inout st2, inout chans_mix.Out { v: [a, b], w: c })
+  assert a[0] == v0[0]
+  assert a[1] == v0[1]
+  assert b[0] == v1[0]
+  assert b[1] == v1[1]
+  assert c[0] == w1[0]
+  assert c[1] == w1[1]
+}
+
+test "the params come before the one buffer" {
+  var buf: [F32; 2] = [1.0, 2.0]
+  var st = tuned.init(8.0)
+  tuned.process_inplace(inout st, tuned.Params { k: 3.0 }, inout tuned.Out { v: buf })
+  assert buf[0] == 3.0
+  assert buf[1] == 6.0
+}
+
+test "Out is passed as a parameter and made at the call of the function" {
+  var a: [F32; 2] = [1.0, 2.0]
+  var b: [F32; 2] = [10.0, 20.0]
+  var st = swap.init(8.0)
+  run_swap(inout st, inout swap.Out { l: a, r: b })
+  assert a[1] == 20.0
+  assert b[1] == 2.0
+  var buf: [F32; 2] = [1.0, 2.0]
+  var st2 = mono.init(8.0)
+  run_mono(inout st2, inout mono.Out { v: buf })
+  assert buf[1] == 4.0
+}
+
+test "the buffers of a struct output must have equal lengths" {
+  var a: [F32; 3] = [1.0, 2.0, 3.0]
+  var b: [F32; 2] = [10.0, 20.0]
+  var st = swap.init(8.0)
+  swap.process_inplace(inout st, inout swap.Out { l: a, r: b })   //~ PANIC "the buffers of a struct output must have equal lengths"
+  assert a[0] == 10.0
+}

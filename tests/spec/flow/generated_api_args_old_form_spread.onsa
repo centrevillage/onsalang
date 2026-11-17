@@ -1,0 +1,83 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§4.5", "§5.3", "§18.1"]
+
+// W7-12 U3a, S-30, R-15, §11.6: the calls in the form that the old expansion took, one `Span` for each input and each field of the output (`swap.process(inout st, l, r,
+// inout x, inout y)`), are errors of the generated functions of today: the arguments are the state, `input` or `In`, and `output` or `Out` (§11.6, "シグネチャと違う呼び出しは
+// 型の誤りになる"). The number of the arguments is wrong in each of them and so is the type of the argument in the place that the spread begins to be written in, and
+// the call reports the number, E0412 (§4.5, as it does for the call of any function: the reading of W7-12 U1 that the spec does not state, the report of the work). The
+// calls that differ from the signature in one way only are in `generated_api_args_old_form.onsa`. One error in each unit (§18.1).
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub struct Q {
+  v: [F32; 2],
+}
+
+pub flow swap(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: r, r: l }
+}
+
+pub flow split(x: F32 at sample) -> Stereo at sample {
+  Stereo { l: x, r: x }
+}
+
+pub flow up2(x: F32 at sample) -> [F32; 2] at sample {
+  [x, x]
+}
+
+pub flow side(x: [F32; 2] at sample) -> F32 at sample {
+  x[0] - x[1]
+}
+
+pub flow mix(a: [F32; 2] at sample, b: F32 at sample) -> F32 at sample {
+  a[0] + b
+}
+
+pub flow chans(x: [F32; 2] at sample) -> Q at sample {
+  Q { v: [x[1], x[0]] }
+}
+
+pub fn the_inputs_and_the_fields(inout st: swap.State, l: Span[F32], r: Span[F32], inout x: Span[F32], inout y: Span[F32]) {
+  swap.process(inout st, l, r, inout x, inout y)   //~ E0412
+}
+
+pub fn the_fields_with_an_in(inout st: swap.State, i: swap.In, inout x: Span[F32], inout y: Span[F32]) {
+  swap.process(inout st, i, inout x, inout y)   //~ E0412
+}
+
+pub fn the_inputs_with_an_out(inout st: swap.State, l: Span[F32], r: Span[F32], inout o: swap.Out) {
+  swap.process(inout st, l, r, inout o)   //~ E0412
+}
+
+pub fn the_inputs_of_render(l: Span[F32], r: Span[F32]) -> I32 uses {Alloc} {
+  let _ = swap.render(l, r, 8.0)   //~ E0412
+  1
+}
+
+pub fn the_fields_of_one_input(inout st: split.State, xs: Span[F32], inout x: Span[F32], inout y: Span[F32]) {
+  split.process(inout st, xs, inout x, inout y)   //~ E0412
+}
+
+pub fn the_channels_of_the_output(inout st: up2.State, xs: Span[F32], inout a: Span[F32], inout b: Span[F32]) {
+  up2.process(inout st, xs, inout a, inout b)   //~ E0412
+}
+
+pub fn the_channels_of_the_input(inout st: side.State, a: Span[F32], b: Span[F32], inout ys: Span[F32]) {
+  side.process(inout st, a, b, inout ys)   //~ E0412
+}
+
+pub fn the_channels_and_the_scalar_of_the_inputs(inout st: mix.State, a0: Span[F32], a1: Span[F32], b: Span[F32], inout ys: Span[F32]) {
+  mix.process(inout st, a0, a1, b, inout ys)   //~ E0412
+}
+
+pub fn the_fields_in_place(inout st: swap.State, inout x: Span[F32], inout y: Span[F32]) {
+  swap.process_inplace(inout st, inout x, inout y)   //~ E0412
+}
+
+pub fn the_channels_of_a_field_in_place(inout st: chans.State, inout a: Span[F32], inout b: Span[F32]) {
+  chans.process_inplace(inout st, inout a, inout b)   //~ E0412
+}

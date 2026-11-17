@@ -207,6 +207,9 @@ features! {
     /// `{}`: what is exported (a parameter, the result, a signal).
     ExportNonScalar: CBackend, "{} of a non-scalar type in an export", None;
     ProcessParams: CBackend, "this `process` parameter shape", None;
+    /// `{}`: the name. R-15: the names of the C `process` are W10-03's (§14.2).
+    ProcessNames: CBackend, "a signal named `{}`, as another name of the C `process` of its flow",
+        Some("rename the input or the field of the output");
     ExportAggregateReturn: CBackend, "exporting a function that returns an aggregate", None;
     /// `{}`: the parameter's name.
     ExportParam: CBackend, "the parameter `{}` of an exported function (only scalars and spans of scalars)", None;

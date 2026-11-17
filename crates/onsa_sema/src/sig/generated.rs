@@ -76,8 +76,11 @@ impl<'p> Sema<'p> {
     /// `In` of one with two `sample` inputs or more (S-30), by the clocks of
     /// `rates` (of the inputs, `None` of a clock not read); of a clock not
     /// read or a cut heading, all, as what the flow has is not known (§18.1,
-    /// R-471). Whether it has `Out` and `process_inplace` its types decide
-    /// (S-1087: [`Sema::fill_by_output`], [`Sema::trim_members`]).
+    /// R-471), and those the inputs decide (`Config`, `Params`, `In`,
+    /// `init`) are kept as of a cut heading: their uses get no diagnostic
+    /// (`Out` is of the output alone, S-1087). Whether it has `Out` and
+    /// `process_inplace` its types decide (S-1087: [`Sema::fill_by_output`],
+    /// [`Sema::trim_members`]).
     pub(crate) fn generated_defs(&mut self, flow: DefId, rates: &[Option<Rate>]) {
         let d = self.a.def(flow);
         let (module, vis, span, name_span) = (d.module, d.vis, d.span, d.name_span);
@@ -119,7 +122,11 @@ impl<'p> Sema<'p> {
             let def =
                 Def { name: name.to_string(), module, vis, span, name_span, kind, item: None, owner, export: None };
             let m = self.add_def(def);
-            if self.a.heading_failed(flow) {
+            let by_inputs = matches!(
+                g,
+                Generated::Type(FlowTy::Config | FlowTy::Params | FlowTy::In) | Generated::Fn(FlowFn::Init)
+            );
+            if self.a.heading_failed(flow) || !known && by_inputs {
                 self.a.failed.insert(m, onsa_syntax::ast::Failed::Heading);
             }
             members.push((name.to_string(), m));
@@ -503,7 +510,15 @@ impl<'p> Sema<'p> {
             }
         }
         if self.generated(flow, Generated::Type(FlowTy::In)).is_some() {
-            let fs = self.channel_fields(flow, BuiltinTy::Span, &self.sig_inputs(flow));
+            let mut fs = self.channel_fields(flow, BuiltinTy::Span, &self.sig_inputs(flow));
+            // The field of an input that does not cross (its E0810) is not
+            // known: its uses get no diagnostic (§18.1).
+            let error = self.a.types.error();
+            for (f, i) in fs.iter_mut().zip(inputs.iter().filter(|i| i.rate == Rate::Sig)) {
+                if self.boundary_outputs(i.ty).is_err() {
+                    f.ty = error;
+                }
+            }
             self.fill_struct(flow, FlowTy::In, fs);
         }
         let u32 = self.a.types.int(IntKind::U32);
@@ -553,35 +568,39 @@ impl<'p> Sema<'p> {
             named.map(|(ty, name)| sp(self, name, Mode::Borrow, ty))
         };
         let (cfg, params) = (by_input(FlowTy::Config), by_input(FlowTy::Params));
-        // Sig inputs become `name: Span[T]` (or `[Span[T]; N]` for planar channels, §5.3).
+        // The `sample` inputs and the output as §11.6 counts them (S-30): no
+        // input, one `Span`, or the `In` the names stage made of two or more;
+        // the output a `Span`, or the `Out` of a struct.
         let sig_inputs = self.sig_inputs(flow);
-        let views = |s: &mut Self, chans: &[(String, TyId, Option<Len>)], mode: Mode| -> Vec<ParamSig> {
-            chans
-                .iter()
-                .map(|(n, e, l)| (n, s.channels(BuiltinTy::Span, (*e, *l))))
-                .collect::<Vec<_>>()
-                .into_iter()
-                .map(|(n, t)| sp(s, n, mode, t))
-                .collect()
+        let one = |s: &mut Self, chans: &[(String, TyId, Option<Len>)]| {
+            chans.first().map(|&(_, e, l)| s.channels(BuiltinTy::Span, (e, l)))
         };
+        let input = match self.generated_ty(flow, FlowTy::In) {
+            Some(t) => Some(t),
+            None => one(self, &sig_inputs),
+        };
+        let input = input.map(|t| sp(self, "input", Mode::Borrow, t));
+        let output = match self.generated_ty(flow, FlowTy::Out) {
+            Some(t) => t,
+            None => one(self, &outputs).unwrap_or_else(|| self.a.types.error()),
+        };
+        let output = sp(self, "output", Mode::Inout, output);
 
         let ps = cfg.iter().cloned().chain([sp(self, "sample_rate", Mode::Borrow, f32)]).collect();
         self.fill_fn(flow, ps, state_ty, false, false, FlowFn::Init);
         let ps = vec![sp(self, "s", Mode::Inout, state_ty)];
         self.fill_fn(flow, ps, unit, true, false, FlowFn::Reset);
         let head: Vec<ParamSig> = [sp(self, "s", Mode::Inout, state_ty)].into_iter().chain(params.clone()).collect();
-        let ps = [head.clone(), views(self, &sig_inputs, Mode::Borrow), views(self, &outputs, Mode::Inout)].concat();
+        let ps = head.iter().cloned().chain(input.clone()).chain([output.clone()]).collect();
         self.fill_fn(flow, ps, unit, true, false, FlowFn::Process);
         // `process_inplace` only when inputs and outputs pair up by type (§11.6).
         let pairs = sig_inputs.len() == outputs.len()
             && !outputs.is_empty()
             && sig_inputs.iter().zip(&outputs).all(|(i, o)| i.1 == o.1 && i.2 == o.2);
         if pairs {
-            let ps = [head, views(self, &outputs, Mode::Inout)].concat();
-            self.fill_fn(flow, ps, unit, true, false, FlowFn::ProcessInplace);
+            self.fill_fn(flow, [head, vec![output]].concat(), unit, true, false, FlowFn::ProcessInplace);
         }
-        let mut ps: Vec<ParamSig> = cfg.into_iter().chain(params).collect();
-        ps.extend(views(self, &sig_inputs, Mode::Borrow));
+        let mut ps: Vec<ParamSig> = cfg.into_iter().chain(params).chain(input).collect();
         if sig_inputs.is_empty() {
             ps.push(sp(self, "frames", Mode::Borrow, u32));
         }
@@ -593,13 +612,17 @@ impl<'p> Sema<'p> {
     /// The members of `flow`: the items its types give. `process_inplace`,
     /// when its inputs and outputs do not pair up, is not in its namespace,
     /// and a `use` of it fails ([`Sema::fail_ungenerated`]); when that is not
-    /// known, it is kept ([`Self::members_unknown`]).
+    /// known, it is kept ([`Self::members_unknown`]), and it, `process` and
+    /// `render`, whose parameters are not known, get no diagnostic at their
+    /// calls (§18.1, R-471).
     fn trim_members(&mut self, flow: DefId, pairs: bool) {
-        let inplace = Generated::Fn(FlowFn::ProcessInplace);
         if self.members_unknown(flow, true) {
-            return self.unknown_member(flow, inplace);
+            for f in [FlowFn::Process, FlowFn::ProcessInplace, FlowFn::Render] {
+                self.unknown_member(flow, Generated::Fn(f));
+            }
+            return;
         }
-        let inplace = self.generated(flow, inplace);
+        let inplace = self.generated(flow, Generated::Fn(FlowFn::ProcessInplace));
         if let (false, DefKind::Flow(fd)) = (pairs, &mut self.a.defs[flow.0 as usize].kind) {
             fd.members.retain(|&(_, d)| Some(d) != inplace);
         }

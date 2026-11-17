@@ -530,7 +530,7 @@ fn resonator_lowers_to_the_five_functions() {
     );
     assert!(d.contains("rt fn t.resonator.reset(inout s: t.resonator.State) -> () {\n  s.4 = 0.0:F32\n  s.5 = 0.0:F32\n  s.6 = false\n}"), "{d}");
     assert!(d.contains("rt fn t.resonator.process_inplace("), "{d}");
-    assert!(d.contains("t.resonator.process(inout s, params, out, inout out)"), "{d}");
+    assert!(d.contains("t.resonator.process(inout s, params, output, inout output)"), "{d}");
     assert!(d.contains("-> t.resonator.Rendered sret {"), "{d}");
     // Layout (T3-6): 6 × F32 + Bool, padded to the F32 alignment.
     let f = &m.flows[0];
@@ -547,12 +547,12 @@ fn process_reads_all_inputs_then_writes_all_outputs() {
     let d = text(RESONATOR);
     let process = pos(&d, "rt fn t.resonator.process(");
     let p = &d[process..];
-    let len = pos(p, "let len: U32 = len(x");
-    let check = pos(p, "if (len(out) != len) {\n    panic(\"span lengths differ\")");
+    let len = pos(p, "let len: U32 = len(input");
+    let check = pos(p, "if (len(output) != len) {\n    panic(\"span lengths differ\")");
     let ctl = pos(p, "t.resonator.ctl(inout s, params)");
     let read = pos(p, "[i]\n");
     let tick = pos(p, "t.resonator.tick(inout s, x");
-    let write = pos(p, "out[i] = v");
+    let write = pos(p, "output[i] = v");
     assert!(len < check && check < ctl && ctl < read && read < tick && tick < write, "{p}");
 }
 
@@ -689,18 +689,21 @@ fn par_replicates_state_and_loops() {
 fn planar_and_struct_outputs() {
     let src = "pub struct Stereo {\n  l: F32,\n  r: F32,\n}\n\npub flow pan(x: F32 at sample, p: F32 at block) -> Stereo at sample {\n  Stereo { l: x * (1.0 - p), r: x * p }\n}\n\npub flow dup(x: [F32; 2] at sample) -> [F32; 2] at sample {\n  x\n}\n";
     let d = text(src);
-    assert!(d.contains("inout l: Span[F32], inout r: Span[F32]) -> () {"), "{d}");
-    assert!(d.contains("l[i] = v.0\n    r[i] = v.1"), "{d}");
-    assert!(d.contains(": [Span[F32]; 2], inout out: [Span[F32]; 2]) -> () {"), "{d}");
+    assert!(d.contains("inout output: t.pan.Out) -> () {"), "{d}");
+    assert!(d.contains("output.0[i] = v.0\n    output.1[i] = v.1"), "{d}");
+    assert!(d.contains("input: [Span[F32]; 2], inout output: [Span[F32]; 2]) -> () {"), "{d}");
     // R-22: every channel of every span is compared with the first, before `ctl`.
     assert!(
-        d.contains("[1:U32]) != len) {\n    panic(\"span lengths differ\")\n  }\n  if (len(out[0:U32]) != len) {"),
+        d.contains("[1:U32]) != len) {\n    panic(\"span lengths differ\")\n  }\n  if (len(output[0:U32]) != len) {"),
         "{d}"
     );
-    assert!(d.contains("if (len(out[1:U32]) != len) {\n    panic(\"span lengths differ\")\n  }\n  t.dup.ctl("), "{d}");
-    assert!(d.contains("[0:U32][i], x"), "{d}");
+    assert!(
+        d.contains("if (len(output[1:U32]) != len) {\n    panic(\"span lengths differ\")\n  }\n  t.dup.ctl("),
+        "{d}"
+    );
+    assert!(d.contains("[0:U32][i], input"), "{d}");
     assert!(d.contains("[1:U32][i]]\n"), "{d}");
-    assert!(d.contains("out[0:U32][i] = v[0:U32]\n    out[1:U32][i] = v[1:U32]"), "{d}");
+    assert!(d.contains("output[0:U32][i] = v[0:U32]\n    output[1:U32][i] = v[1:U32]"), "{d}");
     assert!(d.contains("t.pan.Rendered { l: l, r: r }"), "{d}");
 }
 

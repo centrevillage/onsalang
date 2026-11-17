@@ -1,0 +1,82 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§15.1", "§5.3"]
+
+// W7-12 U3a, S-30, §11.6, §15.1: the flows are in another module, and the generated types (`In`, `Out`, `State`) and functions (`process`, `process_inplace`) are written through the
+// namespace of the flow (`swap.process`) and through the names taken with `use` (`use dsp.synth.swap.{In, Out, State, process}`). `In` and `Out` are made at the argument with the
+// name that `use` gives, and a function of this module takes them as parameters. A flow of another module has the arguments of its signature, as it has in its own module.
+use dsp.synth.{swap, wide_of, Stereo}
+use dsp.synth.swap.{State, In, Out, init, process}
+
+pub fn run(inout st: State, i: In, inout o: Out) {
+  process(inout st, i, inout o)
+}
+
+pub fn run_wide(inout st: wide_of.State, i: wide_of.In, inout o: wide_of.Out) {
+  wide_of.process(inout st, i, inout o)
+}
+
+test "In and Out taken with use are the types of their flow" {
+  let a: [F32; 2] = [1.0, 2.0]
+  let b: [F32; 2] = [10.0, 20.0]
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var st = init(8.0)
+  run(inout st, In { l: a, r: b }, inout Out { l: x, r: y })
+  assert x[0] == 10.0
+  assert x[1] == 20.0
+  assert y[0] == 1.0
+  assert y[1] == 2.0
+}
+
+test "the namespace and the names of use are the same functions" {
+  let a: [F32; 2] = [1.0, 2.0]
+  let b: [F32; 2] = [10.0, 20.0]
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var st = swap.init(8.0)
+  swap.process(inout st, swap.In { l: a, r: b }, inout swap.Out { l: x, r: y })
+  var x2: [F32; 2] = [0.0; 2]
+  var y2: [F32; 2] = [0.0; 2]
+  var st2 = init(8.0)
+  process(inout st2, In { l: a, r: b }, inout Out { l: x2, r: y2 })
+  assert x2[0] == x[0]
+  assert y2[1] == y[1]
+}
+
+test "process_inplace of a flow of another module takes an Out" {
+  var a: [F32; 2] = [1.0, 2.0]
+  var b: [F32; 2] = [10.0, 20.0]
+  var st = swap.init(8.0)
+  swap.process_inplace(inout st, inout swap.Out { l: a, r: b })
+  assert a[0] == 10.0
+  assert b[1] == 2.0
+}
+
+test "a planar field of In and of Out of a flow of another module" {
+  let a0: [F32; 2] = [1.0, 2.0]
+  let a1: [F32; 2] = [10.0, 20.0]
+  let bb: [F32; 2] = [3.0, 4.0]
+  var x0: [F32; 2] = [0.0; 2]
+  var x1: [F32; 2] = [0.0; 2]
+  var m: [F32; 2] = [0.0; 2]
+  var st = wide_of.init(8.0)
+  run_wide(inout st, wide_of.In { a: [a0, a1], b: bb }, inout wide_of.Out { a: [x0, x1], b: m })
+  assert x0[0] == 10.0
+  assert x1[1] == 2.0
+  assert m[0] == 6.0
+  assert m[1] == 8.0
+  let o = wide_of.render(wide_of.In { a: [a0, a1], b: bb }, 8.0)
+  assert o.a[0][1] == 20.0
+  assert o.b[1] == 8.0
+}
+
+test "the output of render is a Rendered with the fields of the struct" {
+  let a: [F32; 2] = [1.0, 2.0]
+  let b: [F32; 2] = [10.0, 20.0]
+  let o = swap.render(swap.In { l: a, r: b }, 8.0)
+  let s: Stereo = Stereo { l: o.l[0], r: o.r[0] }
+  assert s.l == 10.0
+  assert s.r == 1.0
+}

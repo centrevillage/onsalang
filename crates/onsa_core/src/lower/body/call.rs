@@ -10,15 +10,21 @@ fn lower_args(lw: &mut Lowerer, cx: &mut FnCx, args: &[ast::Arg], params: &[(Mod
     let mut out = Vec::new();
     for (a, (pm, pt)) in args.iter().zip(params) {
         let e = lower_expr(lw, cx, a.expr)?;
-        match (pt, &e.ty) {
-            _ if e.ty == *pt => {}
-            // An `rt fn` value where a `fn` is wanted (§8.1): W8-09 lowers function values.
-            (Ty::FnPtr(_), Ty::FnPtr(_)) => return Err(unsupported(e.span, Feature::FnValues, &[])),
-            _ => return Err(internal(e.span, "an argument of another type than its parameter, with no view recorded")),
-        }
-        out.push(Arg { mode: *pm, expr: e });
+        out.push(Arg { mode: *pm, expr: of_type(e, pt)? });
     }
     Ok(out)
+}
+
+/// `e` where a value of `want` goes and no view is recorded (an argument,
+/// the input of an instance, the output of a flow): of that type, as the
+/// types stage checked it, with no conversion.
+pub(crate) fn of_type(e: Expr, want: &Ty) -> R<Expr> {
+    match (want, &e.ty) {
+        _ if e.ty == *want => Ok(e),
+        // An `rt fn` value where a `fn` is wanted (§8.1): W8-09 lowers function values.
+        (Ty::FnPtr(_), Ty::FnPtr(_)) => Err(unsupported(e.span, Feature::FnValues, &[])),
+        _ => Err(internal(e.span, "a value of another type than where it goes, with no view recorded")),
+    }
 }
 
 /// Whether `t` is a planar array `[Span[T]; N]` (§5.3).
@@ -26,7 +32,7 @@ fn planar(t: &Ty) -> bool {
     matches!(t, Ty::Array(el, _) if matches!(**el, Ty::Span(_)))
 }
 
-pub(crate) fn coerce(lw: &mut Lowerer, cx: &mut FnCx, e: Expr, want: &Ty, mode: Mode) -> R<Expr> {
+pub(super) fn coerce(lw: &mut Lowerer, cx: &mut FnCx, e: Expr, want: &Ty, mode: Mode) -> R<Expr> {
     if e.ty == *want {
         return Ok(e);
     }
@@ -55,8 +61,7 @@ pub(crate) fn coerce(lw: &mut Lowerer, cx: &mut FnCx, e: Expr, want: &Ty, mode: 
             }
             Ok(after(stmts, Expr::new(want.clone(), span, ExprKind::Array(out))))
         }
-        // A view the types stage recorded, or a value at a flow's input or
-        // output (no function value there, §11.2): of these types alone.
+        // A view the types stage recorded: of these types alone.
         _ => Err(internal(
             span,
             format!(
@@ -68,7 +73,7 @@ pub(crate) fn coerce(lw: &mut Lowerer, cx: &mut FnCx, e: Expr, want: &Ty, mode: 
     }
 }
 
-pub(super) fn span_of(cx: &mut FnCx, e: Expr, mode: Mode) -> R<Expr> {
+pub(crate) fn span_of(cx: &mut FnCx, e: Expr, mode: Mode) -> R<Expr> {
     let span = e.span;
     let elem = match &e.ty {
         Ty::Array(t, _) | Ty::Buf(t) => (**t).clone(),

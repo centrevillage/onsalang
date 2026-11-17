@@ -234,7 +234,7 @@ pub(super) fn gen_tick<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Fl
     g.rate_lets(lw, shape, info, FlowRate::Sig, &s)?;
     let output = info.output.ok_or_else(|| internal(shape.span, "flow without an output expression"))?;
     let v = lower_expr(lw, &mut g.cx, output)?;
-    let v = coerce(lw, &mut g.cx, v, &out_ty, Mode::Borrow)?;
+    let v = of_type(v, &out_ty)?;
     // Materialised before the stores so a `prev` inside the output reads first (§11.4).
     let out_local = g.let_("__out", v);
     let nodes = info.nodes.clone();

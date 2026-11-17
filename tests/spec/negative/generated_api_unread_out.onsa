@@ -1,0 +1,214 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§18.1", "§14.2"]
+
+// W7-12 U3a, R-471, S-1110, §11.6, §18.1: "`sample` の入出力の値型は、スカラ、`[スカラ; N]`（N は 1 以上）、または（出力のみ）それらを一つ以上フィールドに持つ struct。入れ子の配列、長さ 0 の配列、
+// フィールドの無い struct は境界に出せない（E0810）". A flow whose output cannot cross the boundary (a nested array, a struct with a field that is a nested array, an enum,
+// a struct with no field) has the E0810 at its heading, and its output is not known: it is not known whether it has an `Out` and `process_inplace`, and what the
+// arguments of its `process` are (§11.6, §18.1: "署名に誤りのある flow で有無が分からないとき（出力の型が境界に出せない E0810 を含む）は、E0302 も出さない"). The calls
+// of the generated functions report nothing, in the shapes of §11.6 (`Span`, an array of `Span`s, `Out`) and in the old forms, and so does the call of a function that takes
+// the `Out` of the flow as a parameter with a `Span` or the literal of `Out`: the only diagnostic of a flow is the E0810 of its heading, with no number of arguments
+// (E0412) and no type (E0401). `nested_two` has two inputs (`In`). One error in each unit (§18.1).
+
+pub struct Grid {
+  l: [[F32; 2]; 2],
+  r: F32,
+}
+
+pub enum Kind {
+  A,
+  B,
+}
+
+pub struct Nothing {}
+
+pub flow nested_out(x: F32 at sample) -> [[F32; 2]; 2] at sample {   //~ E0810
+  [[x, x], [x, x]]
+}
+
+pub flow nested_field_out(x: F32 at sample) -> Grid at sample {   //~ E0810
+  Grid { l: [[x, x], [x, x]], r: x }
+}
+
+pub flow enum_out(x: F32 at sample) -> Kind at sample {   //~ E0810
+  Kind.A
+}
+
+pub flow empty_out(x: F32 at sample) -> Nothing at sample {   //~ E0810
+  Nothing {}
+}
+
+pub flow nested_two(l: F32 at sample, r: F32 at sample) -> [[F32; 2]; 2] at sample {   //~ E0810
+  [[l, r], [r, l]]
+}
+
+// ---------------------------------------------------------------- nested_out
+
+pub fn nested_out_init() -> nested_out.State {
+  nested_out.init(8.0)
+}
+
+pub fn nested_out_process(inout st: nested_out.State, xs: Span[F32], inout zs: Span[F32]) {
+  nested_out.process(inout st, xs, inout zs)
+}
+
+pub fn nested_out_process_out(inout st: nested_out.State, xs: Span[F32], inout a: Span[F32]) {
+  nested_out.process(inout st, xs, inout nested_out.Out { out: a })
+}
+
+pub fn nested_out_process_spread(inout st: nested_out.State, xs: Span[F32], inout a: Span[F32], inout b: Span[F32]) {
+  nested_out.process(inout st, xs, inout a, inout b)
+}
+
+pub fn nested_out_inplace(inout st: nested_out.State, inout zs: Span[F32]) {
+  nested_out.process_inplace(inout st, inout zs)
+}
+
+pub fn nested_out_render(xs: Span[F32]) -> I32 uses {Alloc} {
+  let _ = nested_out.render(xs, 8.0)
+  1
+}
+
+pub fn nested_out_takes(inout o: nested_out.Out) {
+}
+
+pub fn nested_out_takes_a_span(inout a: Span[F32]) {
+  nested_out_takes(inout a)   //~ E0401
+}
+
+pub fn nested_out_takes_the_literal(inout a: Span[F32]) {
+  nested_out_takes(inout nested_out.Out { out: a })
+}
+
+// ---------------------------------------------------------------- nested_field_out
+
+pub fn nested_field_out_init() -> nested_field_out.State {
+  nested_field_out.init(8.0)
+}
+
+pub fn nested_field_out_process(inout st: nested_field_out.State, xs: Span[F32], inout zs: Span[F32]) {
+  nested_field_out.process(inout st, xs, inout zs)
+}
+
+pub fn nested_field_out_process_out(inout st: nested_field_out.State, xs: Span[F32], inout a: Span[F32]) {
+  nested_field_out.process(inout st, xs, inout nested_field_out.Out { l: a })
+}
+
+pub fn nested_field_out_process_spread(inout st: nested_field_out.State, xs: Span[F32], inout a: Span[F32], inout b: Span[F32]) {
+  nested_field_out.process(inout st, xs, inout a, inout b)
+}
+
+pub fn nested_field_out_inplace(inout st: nested_field_out.State, inout zs: Span[F32]) {
+  nested_field_out.process_inplace(inout st, inout zs)
+}
+
+pub fn nested_field_out_render(xs: Span[F32]) -> I32 uses {Alloc} {
+  let _ = nested_field_out.render(xs, 8.0)
+  1
+}
+
+pub fn nested_field_out_takes(inout o: nested_field_out.Out) {
+}
+
+pub fn nested_field_out_takes_a_span(inout a: Span[F32]) {
+  nested_field_out_takes(inout a)   //~ E0401
+}
+
+pub fn nested_field_out_takes_the_literal(inout a: Span[F32]) {
+  nested_field_out_takes(inout nested_field_out.Out { l: a })
+}
+
+// ---------------------------------------------------------------- enum_out
+
+pub fn enum_out_init() -> enum_out.State {
+  enum_out.init(8.0)
+}
+
+pub fn enum_out_process(inout st: enum_out.State, xs: Span[F32], inout zs: Span[F32]) {
+  enum_out.process(inout st, xs, inout zs)
+}
+
+pub fn enum_out_process_out(inout st: enum_out.State, xs: Span[F32], inout a: Span[F32]) {
+  enum_out.process(inout st, xs, inout enum_out.Out { out: a })
+}
+
+pub fn enum_out_process_spread(inout st: enum_out.State, xs: Span[F32], inout a: Span[F32], inout b: Span[F32]) {
+  enum_out.process(inout st, xs, inout a, inout b)
+}
+
+pub fn enum_out_inplace(inout st: enum_out.State, inout zs: Span[F32]) {
+  enum_out.process_inplace(inout st, inout zs)
+}
+
+pub fn enum_out_render(xs: Span[F32]) -> I32 uses {Alloc} {
+  let _ = enum_out.render(xs, 8.0)
+  1
+}
+
+pub fn enum_out_takes(inout o: enum_out.Out) {
+}
+
+pub fn enum_out_takes_a_span(inout a: Span[F32]) {
+  enum_out_takes(inout a)   //~ E0401
+}
+
+pub fn enum_out_takes_the_literal(inout a: Span[F32]) {
+  enum_out_takes(inout enum_out.Out { out: a })
+}
+
+// ---------------------------------------------------------------- empty_out
+
+pub fn empty_out_init() -> empty_out.State {
+  empty_out.init(8.0)
+}
+
+pub fn empty_out_process(inout st: empty_out.State, xs: Span[F32], inout zs: Span[F32]) {
+  empty_out.process(inout st, xs, inout zs)
+}
+
+pub fn empty_out_process_out(inout st: empty_out.State, xs: Span[F32], inout a: Span[F32]) {
+  empty_out.process(inout st, xs, inout empty_out.Out { v: a })
+}
+
+pub fn empty_out_process_spread(inout st: empty_out.State, xs: Span[F32], inout a: Span[F32], inout b: Span[F32]) {
+  empty_out.process(inout st, xs, inout a, inout b)
+}
+
+pub fn empty_out_inplace(inout st: empty_out.State, inout zs: Span[F32]) {
+  empty_out.process_inplace(inout st, inout zs)
+}
+
+pub fn empty_out_render(xs: Span[F32]) -> I32 uses {Alloc} {
+  let _ = empty_out.render(xs, 8.0)
+  1
+}
+
+pub fn empty_out_takes(inout o: empty_out.Out) {
+}
+
+pub fn empty_out_takes_a_span(inout a: Span[F32]) {
+  empty_out_takes(inout a)   //~ E0401
+}
+
+pub fn empty_out_takes_the_literal(inout a: Span[F32]) {
+  empty_out_takes(inout empty_out.Out { v: a })
+}
+
+// ---------------------------------------------------------------- nested_two
+
+pub fn nested_two_init() -> nested_two.State {
+  nested_two.init(8.0)
+}
+
+pub fn nested_two_process_in(inout st: nested_two.State, a: Span[F32], b: Span[F32], inout zs: Span[F32]) {
+  nested_two.process(inout st, nested_two.In { l: a, r: b }, inout zs)
+}
+
+pub fn nested_two_process_spread(inout st: nested_two.State, a: Span[F32], b: Span[F32], inout zs: Span[F32]) {
+  nested_two.process(inout st, a, b, inout zs)
+}
+
+pub fn nested_two_render(a: Span[F32], b: Span[F32]) -> I32 uses {Alloc} {
+  let _ = nested_two.render(nested_two.In { l: a, r: b }, 8.0)
+  1
+}

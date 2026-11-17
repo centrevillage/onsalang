@@ -1,0 +1,67 @@
+// onsa.toml
+// [package]
+// name = "generated_api_zero_frames_planar_field"
+// edition = "2026"
+//
+// [export]
+// prefix = "gazp_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// spec = ["§11.6", "§14.2"]
+//
+// # W7-12 U3a, S-204, §14.2 ("`frames` が 0 の `process`…入出力のポインタ（`In` / `Out` の構造体へのポインタを含む）は読まないので NULL でよく、重なりの検査もしない"),
+// # §11.6 ("長さが 0 の呼び出し（ホストが 0 フレームで呼ぶ場合）も正しい呼び出しで、`block` の段は他の呼び出しと同じく 1 回評価し、`sample` の段は評価しない"):
+// # the generated `process` of a flow whose input `In` has a planar field and a scalar field, and whose output `Out` has a planar field and a scalar field, is called
+// # with 0 frames and NULL for the pointers of all of them. The planar field is an array of channels, and each of its pointers is NULL, so the code that builds `In` and `Out`
+// # in the C that the compiler writes must not read the channels (a planar input read at 0 frames is a read of a NULL pointer). The calls with 0 frames change nothing: the
+// # next call with 2 frames goes on from the state that the call before the 0 frames left (the delay of the scalar field is one sample of the earlier call).
+// [[test.host]]
+// name = "a zero-frame call may pass NULL for the planar fields of In and Out"
+// target = "host"
+// flow = "generated_api_zero_frames_planar_field.bus_of"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 2, input = { a = [[1.0, 2.0], [3.0, 4.0]], b = [5.0, 6.0] }, status = 0, output = { main = [0.0, 5.0], aux = [[3.0, 4.0], [1.0, 2.0]] } },
+//   { call = "process", params = {}, frames = 0, null = ["input", "output"], status = 0 },
+//   { call = "process", params = {}, frames = 0, null = ["input"], status = 0, output = { main = [], aux = [[], []] } },
+//   { call = "process", params = {}, frames = 0, null = ["output"], input = { a = [[], []], b = [] }, status = 0 },
+//   { call = "process", params = {}, frames = 2, input = { a = [[7.0, 8.0], [9.0, 10.0]], b = [11.0, 12.0] }, status = 0, output = { main = [6.0, 11.0], aux = [[9.0, 10.0], [7.0, 8.0]] } },
+// ]
+//
+// # The same shape on a poisoned instance: a call with 0 frames and NULL pointers returns 1 without reading them (§14.2), and the call after `reset` returns 0.
+// [[test.host]]
+// name = "a zero-frame call with NULL planar fields on a poisoned instance returns 1"
+// target = "host"
+// flow = "generated_api_zero_frames_planar_field.guard_bus"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 2, input = { a = [[1.0, 2.0], [3.0, 4.0]], b = [1.0, nan] }, status = 1, output = { main = [0.0, 0.0], aux = [[0.0, 0.0], [0.0, 0.0]] } },
+//   { call = "process", params = {}, frames = 0, null = ["input", "output"], status = 1 },
+//   { call = "reset" },
+//   { call = "process", params = {}, frames = 0, null = ["input", "output"], status = 0 },
+// ]
+
+pub struct Bus {
+  main: F32,
+  aux: [F32; 2],
+}
+
+/// `main` is the scalar input of the call before (one sample late), and `aux` is the planar input with its channels exchanged.
+@export
+pub flow bus_of(a: [F32; 2] at sample, b: F32 at sample) -> Bus at sample {
+  Bus { main: prev~(b), aux: [a[1], a[0]] }
+}
+
+/// Panics for a NaN in `b` (the conversion to I32 of a NaN is a panic).
+@export
+pub flow guard_bus(a: [F32; 2] at sample, b: F32 at sample) -> Bus at sample {
+  let n = I32.trunc_from(b)
+  Bus { main: F32.round_from(n), aux: [a[1], a[0]] }
+}

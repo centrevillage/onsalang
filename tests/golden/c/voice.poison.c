@@ -71,13 +71,13 @@ ONSA_INLINE void voice__voice__ctl(voice__voice__State* s, const voice__voice__P
 ONSA_INLINE float voice__voice__tick(voice__voice__State* s);
 ONSA_INLINE void voice__voice__init(voice__voice__State* out, const voice__voice__Config* cfg, float sample_rate);
 ONSA_INLINE void voice__voice__reset(voice__voice__State* s);
-ONSA_INLINE void voice__voice__process(voice__voice__State* s, const voice__voice__Params* params, onsa_span_f32 out);
+ONSA_INLINE void voice__voice__process(voice__voice__State* s, const voice__voice__Params* params, onsa_span_f32 output);
 ONSA_INLINE void voice__voice__params_default(voice__voice__Params* out);
 ONSA_INLINE void voice__echo__ctl(voice__echo__State* s, const voice__echo__Params* p);
 ONSA_INLINE float voice__echo__tick(voice__echo__State* s, float x);
 ONSA_INLINE void voice__echo__init(voice__echo__State* out, const voice__echo__Config* cfg, float sample_rate);
 ONSA_INLINE void voice__echo__reset(voice__echo__State* s);
-ONSA_INLINE void voice__echo__process(voice__echo__State* s, const voice__echo__Params* params, onsa_span_f32 x, onsa_span_f32 out);
+ONSA_INLINE void voice__echo__process(voice__echo__State* s, const voice__echo__Params* params, onsa_span_f32 input, onsa_span_f32 output);
 ONSA_INLINE void voice__echo__params_default(voice__echo__Params* out);
 
 ONSA_INLINE void voice__resonator__ctl(voice__resonator__State* s, const voice__resonator__Params* p) {
@@ -247,15 +247,15 @@ ONSA_INLINE void voice__voice__reset(voice__voice__State* s) {
   s->poisoned = false;
 }
 
-ONSA_INLINE void voice__voice__process(voice__voice__State* s, const voice__voice__Params* params, onsa_span_f32 out) {
-  uint32_t len = out.len;
+ONSA_INLINE void voice__voice__process(voice__voice__State* s, const voice__voice__Params* params, onsa_span_f32 output) {
+  uint32_t len = output.len;
   voice__voice__ctl(&(*s), &(*params));
   uint32_t onsa_t1 = len;
   for (uint32_t i = UINT32_C(0); i < onsa_t1; i++) {
     float v;
     float onsa_t2 = voice__voice__tick(&(*s));
     v = onsa_t2;
-    out.ptr[onsa_idx(i, out.len, "voice.onsa", 71)] = v;
+    output.ptr[onsa_idx(i, output.len, "voice.onsa", 71)] = v;
   }
 }
 
@@ -322,19 +322,19 @@ ONSA_INLINE void voice__echo__reset(voice__echo__State* s) {
   s->poisoned = false;
 }
 
-ONSA_INLINE void voice__echo__process(voice__echo__State* s, const voice__echo__Params* params, onsa_span_f32 x, onsa_span_f32 out) {
-  uint32_t len = x.len;
-  if (out.len != len) {
+ONSA_INLINE void voice__echo__process(voice__echo__State* s, const voice__echo__Params* params, onsa_span_f32 input, onsa_span_f32 output) {
+  uint32_t len = input.len;
+  if (output.len != len) {
     onsa_panic("span lengths differ", "voice.onsa", 90);
   }
   voice__echo__ctl(&(*s), &(*params));
   uint32_t onsa_t1 = len;
   for (uint32_t i = UINT32_C(0); i < onsa_t1; i++) {
-    float x_11 = x.ptr[onsa_idx(i, x.len, "voice.onsa", 90)];
+    float x = input.ptr[onsa_idx(i, input.len, "voice.onsa", 90)];
     float v;
-    float onsa_t2 = voice__echo__tick(&(*s), x_11);
+    float onsa_t2 = voice__echo__tick(&(*s), x);
     v = onsa_t2;
-    out.ptr[onsa_idx(i, out.len, "voice.onsa", 90)] = v;
+    output.ptr[onsa_idx(i, output.len, "voice.onsa", 90)] = v;
   }
 }
 
@@ -344,9 +344,9 @@ ONSA_INLINE void voice__echo__params_default(voice__echo__Params* out) {
 
 /* ---- called after the setjmp of a wrapper, never inlined there (R-167) ---- */
 static ONSA_NOINLINE ONSA_UNUSED void voice__voice__init__guarded(voice__voice__State* out, const voice__voice__Config* cfg, float sample_rate) { voice__voice__init(out, cfg, sample_rate); }
-static ONSA_NOINLINE ONSA_UNUSED void voice__voice__process__guarded(voice__voice__State* s, const voice__voice__Params* params, onsa_span_f32 out) { voice__voice__process(s, params, out); }
+static ONSA_NOINLINE ONSA_UNUSED void voice__voice__process__guarded(voice__voice__State* s, const voice__voice__Params* params, onsa_span_f32 output) { voice__voice__process(s, params, output); }
 static ONSA_NOINLINE ONSA_UNUSED void voice__echo__init__guarded(voice__echo__State* out, const voice__echo__Config* cfg, float sample_rate) { voice__echo__init(out, cfg, sample_rate); }
-static ONSA_NOINLINE ONSA_UNUSED void voice__echo__process__guarded(voice__echo__State* s, const voice__echo__Params* params, onsa_span_f32 x, onsa_span_f32 out) { voice__echo__process(s, params, x, out); }
+static ONSA_NOINLINE ONSA_UNUSED void voice__echo__process__guarded(voice__echo__State* s, const voice__echo__Params* params, onsa_span_f32 input, onsa_span_f32 output) { voice__echo__process(s, params, input, output); }
 
 /* ---- panic = "poison": the last exported function call panicked (spec §9.2) ---- */
 static ONSA_THREAD_LOCAL int onsa_last_panic = 0;

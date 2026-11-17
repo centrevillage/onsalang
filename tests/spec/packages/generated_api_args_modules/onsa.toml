@@ -1,0 +1,3 @@
+[package]
+name = "generated_api_args_modules"
+edition = "2026"

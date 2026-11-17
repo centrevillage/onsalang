@@ -1,0 +1,130 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§18.1", "§11.3"]
+
+// W7-12 U3a, R-471, §18.1, §11.3: an input with no clock (`c: F32`, no `at`) is the E0810 of the heading, and the flow is a flow whose inputs are not known: the clock of the
+// input is not read, so it may be an input of `sample`, of `block` or of `init`, and the generated functions of the flow take what the read part of the heading gives
+// and no more (§18.1: "読めなかった部分（引数の型 ...）は誤りの型として扱い、それを使う側には診断を出さない"). The calls of `init`, `process`, `process_inplace` and `render`
+// report nothing, in the form of the shapes of §11.6 and in the old forms (one `Span` for each input, `Params` and `Config`), so the only diagnostic of a flow is the E0810
+// of its heading, with no number of arguments (E0412) and no type (E0401). `bare_in` has the input with no clock beside one at `sample`, `bare_one` has one input at
+// `sample` and one with no clock, and `bare_only` has the one with no clock only. One error in each unit (§18.1).
+
+pub flow bare_in(c: F32, y: F32 at sample) -> F32 at sample {   //~ E0810
+  y
+}
+
+pub flow bare_one(x: F32 at sample, c: F32) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow bare_only(c: F32) -> F32 at sample {   //~ E0810
+  1.0
+}
+
+// ---------------------------------------------------------------- bare_in
+
+pub fn bare_in_init() -> bare_in.State {
+  bare_in.init(8.0)
+}
+
+pub fn bare_in_init_config() -> bare_in.State {
+  bare_in.init(bare_in.Config {}, 8.0)
+}
+
+pub fn bare_in_process_spread(inout st: bare_in.State, xs: Span[F32], ys: Span[F32], inout zs: Span[F32]) {
+  bare_in.process(inout st, xs, ys, inout zs)
+}
+
+pub fn bare_in_process_in(inout st: bare_in.State, xs: Span[F32], ys: Span[F32], inout zs: Span[F32]) {
+  bare_in.process(inout st, bare_in.In { c: xs, y: ys }, inout zs)
+}
+
+pub fn bare_in_process_one(inout st: bare_in.State, ys: Span[F32], inout zs: Span[F32]) {
+  bare_in.process(inout st, ys, inout zs)
+}
+
+pub fn bare_in_process_with_params(inout st: bare_in.State, xs: Span[F32], ys: Span[F32], inout zs: Span[F32]) {
+  bare_in.process(inout st, bare_in.Params {}, xs, ys, inout zs)
+}
+
+pub fn bare_in_inplace(inout st: bare_in.State, inout zs: Span[F32]) {
+  bare_in.process_inplace(inout st, inout zs)
+}
+
+pub fn bare_in_render_spread(xs: Span[F32], ys: Span[F32]) -> I32 uses {Alloc} {
+  let _ = bare_in.render(xs, ys, 8.0)
+  1
+}
+
+pub fn bare_in_render_in(xs: Span[F32], ys: Span[F32]) -> I32 uses {Alloc} {
+  let _ = bare_in.render(bare_in.In { c: xs, y: ys }, 8.0)
+  1
+}
+
+// ---------------------------------------------------------------- bare_one
+
+pub fn bare_one_init() -> bare_one.State {
+  bare_one.init(8.0)
+}
+
+pub fn bare_one_init_config() -> bare_one.State {
+  bare_one.init(bare_one.Config {}, 8.0)
+}
+
+pub fn bare_one_process(inout st: bare_one.State, xs: Span[F32], inout zs: Span[F32]) {
+  bare_one.process(inout st, xs, inout zs)
+}
+
+pub fn bare_one_process_with_params(inout st: bare_one.State, xs: Span[F32], inout zs: Span[F32]) {
+  bare_one.process(inout st, bare_one.Params {}, xs, inout zs)
+}
+
+pub fn bare_one_process_in(inout st: bare_one.State, xs: Span[F32], ys: Span[F32], inout zs: Span[F32]) {
+  bare_one.process(inout st, bare_one.In { x: xs, c: ys }, inout zs)
+}
+
+pub fn bare_one_inplace(inout st: bare_one.State, inout zs: Span[F32]) {
+  bare_one.process_inplace(inout st, inout zs)
+}
+
+pub fn bare_one_render(xs: Span[F32]) -> I32 uses {Alloc} {
+  let _ = bare_one.render(xs, 8.0)
+  1
+}
+
+pub fn bare_one_render_with_frames(xs: Span[F32]) -> I32 uses {Alloc} {
+  let _ = bare_one.render(xs, 4, 8.0)
+  1
+}
+
+// ---------------------------------------------------------------- bare_only
+
+pub fn bare_only_init() -> bare_only.State {
+  bare_only.init(8.0)
+}
+
+pub fn bare_only_init_config() -> bare_only.State {
+  bare_only.init(bare_only.Config {}, 8.0)
+}
+
+pub fn bare_only_process(inout st: bare_only.State, inout zs: Span[F32]) {
+  bare_only.process(inout st, inout zs)
+}
+
+pub fn bare_only_process_with_params(inout st: bare_only.State, inout zs: Span[F32]) {
+  bare_only.process(inout st, bare_only.Params {}, inout zs)
+}
+
+pub fn bare_only_inplace(inout st: bare_only.State, inout zs: Span[F32]) {
+  bare_only.process_inplace(inout st, inout zs)
+}
+
+pub fn bare_only_render() -> I32 uses {Alloc} {
+  let _ = bare_only.render(4, 8.0)
+  1
+}
+
+pub fn bare_only_render_one_more(xs: Span[F32]) -> I32 uses {Alloc} {
+  let _ = bare_only.render(xs, 8.0)
+  1
+}

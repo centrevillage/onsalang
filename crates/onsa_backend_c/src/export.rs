@@ -63,7 +63,7 @@ pub(crate) fn header(cx: &mut Cx, e: &Export) -> R<(String, FlowParts)> {
     if fns.params_default.is_some() {
         let _ = writeln!(h, "void {sym}_params_default({sym}_params* p);");
     }
-    let io = process_io(cx, fns.process)?;
+    let io = process_io(cx, fns.process, meta)?;
     let _ = writeln!(
         h,
         "/* 0: ok, 1: poisoned or uninitialized, 2: overlapping buffers that are not an in-place pair (an in-place pair\n * is an input and an output of the same element type at the same pointer). On 1 and 2 all outputs are zero. */"
@@ -132,10 +132,10 @@ fn scalar_c(cx: &mut Cx, ty: &Ty, what: &str) -> R<String> {
     if ty.is_scalar() { Ok(cx.names.name(ty)) } else { Err(unsupported(no_span(), Feature::ExportNonScalar, &[what])) }
 }
 
-/// One `Span` / planar parameter of `process`.
+/// One signal of `process`: a `Span` / planar parameter of the C API.
 struct IoParam {
     name: String,
-    /// The Onsa name (the parameter's local in Core).
+    /// The Onsa name (of the input or the field of the output).
     onsa: String,
     elem: Ty,
     /// `Some(n)`: `[Span[T]; n]` (planar channels)
@@ -143,40 +143,84 @@ struct IoParam {
     output: bool,
 }
 
+/// One parameter of the Core `process` after the state and the
+/// parameters: the signals `signals` of [`ProcessIo::params`], and the
+/// struct of an `In` or `Out` (§11.6) that holds them.
+struct IoGroup {
+    signals: std::ops::Range<usize>,
+    of: Option<onsa_core::TypeId>,
+}
+
 struct ProcessIo {
     decls: String,
     params: Vec<IoParam>,
+    groups: Vec<IoGroup>,
 }
 
-fn process_io(cx: &mut Cx, process: FnId) -> R<ProcessIo> {
+/// The names of the signals of a flow: its `sample` inputs, then its outputs
+/// (the fields of a struct), as the C API names them until W10-03 (§14.2).
+fn signal_names(meta: &onsa_core::FlowMeta) -> Vec<String> {
+    let ins = meta.sig_inputs.iter().map(|(n, _)| n.clone());
+    ins.chain(meta.outputs.iter().map(|(n, _, _)| n.clone())).collect()
+}
+
+/// The names the wrapper of `process` gives its own parameters and locals
+/// besides the signals: the state, the parameters, their clamped copy, the
+/// number of frames (its other locals begin with `onsa_`, as no name of the
+/// program does, [`ident`]).
+const PROCESS_OWN: [&str; 4] = ["s", "p", "q", "frames"];
+
+/// The local of the channels of the planar signal `p` in the wrapper.
+fn spans_local(p: &IoParam) -> String {
+    format!("{}_spans", p.name)
+}
+
+/// The signals of the Core `process` (one per `Span` / planar parameter or
+/// field of an `In` or `Out`), named by `names` in order. A name that is
+/// another of the wrapper's is an E0200 at the flow's name until W10-03
+/// names the C API apart (R-15, §14.2).
+fn process_io(cx: &mut Cx, process: FnId, meta: &onsa_core::FlowMeta) -> R<ProcessIo> {
     let def = cx.m.fn_(process);
-    let mut params = Vec::new();
-    let mut decls = String::new();
+    let names = signal_names(meta);
+    let mut names = names.iter();
+    let (mut params, mut groups, mut decls) = (Vec::new(), Vec::new(), String::new());
     for p in def.params.iter().skip(2) {
-        let onsa = def.locals[p.local.0 as usize].name.clone();
-        let name = ident(&onsa);
         let output = matches!(p.mode, Mode::Inout);
-        let (elem, planar) = match &p.ty {
-            Ty::Span(e) => ((**e).clone(), None),
-            Ty::Array(inner, n) => match &**inner {
-                Ty::Span(e) => ((**e).clone(), Some(*n)),
-                _ => return Err(unsupported(def.span, Feature::ProcessParams, &[])),
-            },
-            _ => return Err(unsupported(def.span, Feature::ProcessParams, &[])),
+        let (of, tys) = match &p.ty {
+            Ty::Struct(id) => (Some(*id), cx.fields(*id).iter().map(|(_, t)| t.clone()).collect()),
+            t => (None, vec![t.clone()]),
         };
-        let et = scalar_c(cx, &elem, &format!("the signal `{name}`"))?;
-        let c = if output { "" } else { "const " };
-        match planar {
-            None => {
-                let _ = write!(decls, "{c}{et}* {name}, ");
-            }
-            Some(_) => {
-                let _ = write!(decls, "{c}{et}* const* {name}, ");
-            }
+        let start = params.len();
+        for ty in tys {
+            let onsa = names.next().ok_or_else(|| crate::emit::internal("more signals than the flow has"))?.clone();
+            let name = ident(&onsa);
+            let (elem, planar) = match &ty {
+                Ty::Span(e) => ((**e).clone(), None),
+                Ty::Array(inner, n) => match &**inner {
+                    Ty::Span(e) => ((**e).clone(), Some(*n)),
+                    _ => return Err(unsupported(def.span, Feature::ProcessParams, &[])),
+                },
+                _ => return Err(unsupported(def.span, Feature::ProcessParams, &[])),
+            };
+            let et = scalar_c(cx, &elem, &format!("the signal `{name}`"))?;
+            let c = if output { "" } else { "const " };
+            let star = if planar.is_some() { "* const*" } else { "*" };
+            let _ = write!(decls, "{c}{et}{star} {name}, ");
+            params.push(IoParam { name, onsa, elem, planar, output });
         }
-        params.push(IoParam { name, onsa, elem, planar, output });
+        groups.push(IoGroup { signals: start..params.len(), of });
     }
-    Ok(ProcessIo { decls, params })
+    if names.next().is_some() {
+        return Err(crate::emit::internal("fewer signals than the flow has"));
+    }
+    let mut seen: std::collections::HashSet<String> = PROCESS_OWN.iter().map(|n| n.to_string()).collect();
+    for p in &params {
+        let spans = p.planar.map(|_| spans_local(p));
+        if let Some(n) = std::iter::once(&p.name).chain(&spans).find(|n| !seen.insert(n.to_string())) {
+            return Err(unsupported(meta.name_span, Feature::ProcessNames, &[n]));
+        }
+    }
+    Ok(ProcessIo { decls, params, groups })
 }
 
 /// One channel of a signal of `process`: one pointer and its range.
@@ -337,7 +381,7 @@ pub(crate) fn wrappers(cx: &mut Cx, e: &Export) -> R<String> {
     }
 
     // process
-    let io = process_io(cx, fns.process)?;
+    let io = process_io(cx, fns.process, &meta)?;
     let _ = writeln!(s, "int {sym}_process({sym}* s, const {sym}_params* p, {}uint32_t frames) {{", io.decls);
     let _ = writeln!(s, "  {params} q;");
     // The order of the entry (spec §14.2, §11.6): a poisoned or uninitialized instance outputs
@@ -401,29 +445,7 @@ pub(crate) fn wrappers(cx: &mut Cx, e: &Export) -> R<String> {
         let _ = writeln!(s, "  }}");
         let _ = writeln!(s, "  onsa_current_jmp = &onsa_jb;");
     }
-    let mut args = vec!["s".to_string(), "&q".to_string()];
-    for p in &io.params {
-        let tag = cx.names.tag(&p.elem);
-        let cast = if p.output { String::new() } else { format!("({}*)", cx.names.name(&p.elem)) };
-        match p.planar {
-            None => args.push(format!("onsa_span_{tag}_of({cast}{}, frames)", p.name)),
-            Some(n) => {
-                let arr = cx.names.name(&Ty::Array(Box::new(Ty::Span(Box::new(p.elem.clone()))), n));
-                let _ = writeln!(s, "  {arr} {}_spans;", p.name);
-                for k in 0..n {
-                    // With 0 frames the array of channel pointers is not read (S-204).
-                    let _ = writeln!(
-                        s,
-                        "  {}_spans.a[{k}] = onsa_span_{tag}_of({cast}(frames != 0 ? {} : NULL), frames);",
-                        p.name,
-                        channel_ptr(p, k)
-                    );
-                }
-                // `[Span[T]; N]` parameters are aggregates: borrowed → `const T*`, `inout` → `T*`.
-                args.push(format!("&{}_spans", p.name));
-            }
-        }
-    }
+    let args = process_args(cx, &io, &mut s);
     // Under poison the call follows the `setjmp`: the guarded twin (R-167).
     let _ = writeln!(s, "  {}({});", cx.after_setjmp(fns.process), args.join(", "));
     if cx.opts.panic == PanicMode::Poison {
@@ -509,6 +531,56 @@ pub(crate) fn wrappers(cx: &mut Cx, e: &Export) -> R<String> {
     }
     let _ = state;
     Ok(s)
+}
+
+/// The arguments of the Core `process` in its wrapper, after the locals
+/// that hold them (written to `s`): the views of the signals, and an `In`
+/// or `Out` made of them.
+fn process_args(cx: &mut Cx, io: &ProcessIo, s: &mut String) -> Vec<String> {
+    let mut views = Vec::new();
+    for p in &io.params {
+        let tag = cx.names.tag(&p.elem);
+        let cast = if p.output { String::new() } else { format!("({}*)", cx.names.name(&p.elem)) };
+        match p.planar {
+            None => views.push(format!("onsa_span_{tag}_of({cast}{}, frames)", p.name)),
+            Some(n) => {
+                let arr = cx.names.name(&Ty::Array(Box::new(Ty::Span(Box::new(p.elem.clone()))), n));
+                let spans = spans_local(p);
+                let _ = writeln!(s, "  {arr} {spans};");
+                for k in 0..n {
+                    // With 0 frames the array of channel pointers is not read (S-204).
+                    let _ = writeln!(
+                        s,
+                        "  {spans}.a[{k}] = onsa_span_{tag}_of({cast}(frames != 0 ? {} : NULL), frames);",
+                        channel_ptr(p, k)
+                    );
+                }
+                views.push(spans);
+            }
+        }
+    }
+    let mut args = vec!["s".to_string(), "&q".to_string()];
+    for (k, g) in io.groups.iter().enumerate() {
+        let Some(id) = g.of else {
+            // `[Span[T]; N]` parameters are aggregates: borrowed → `const T*`, `inout` → `T*`.
+            let one = &io.params[g.signals.start];
+            args.push(if one.planar.is_some() {
+                format!("&{}", views[g.signals.start])
+            } else {
+                views[g.signals.start].clone()
+            });
+            continue;
+        };
+        // An `In` or `Out` (§11.6), passed as a struct is: by its address.
+        let local = format!("onsa_io{k}");
+        let _ = writeln!(s, "  {} {local};", cx.names.name(&Ty::Struct(id)));
+        let fields: Vec<String> = cx.fields(id).iter().map(|(n, _)| ident(n)).collect();
+        for (field, view) in fields.iter().zip(&views[g.signals.clone()]) {
+            let _ = writeln!(s, "  {local}.{field} = {view};");
+        }
+        args.push(format!("&{local}"));
+    }
+    args
 }
 
 /// Header of the exported plain functions (`@export`), and their API

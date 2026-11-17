@@ -29,7 +29,7 @@ ONSA_INLINE void const_call__scaled__ctl(const_call__scaled__State* s, const con
 ONSA_INLINE float const_call__scaled__tick(const_call__scaled__State* s, float x);
 ONSA_INLINE void const_call__scaled__init(const_call__scaled__State* out, const const_call__scaled__Config* cfg, float sample_rate);
 ONSA_INLINE void const_call__scaled__reset(const_call__scaled__State* s);
-ONSA_INLINE void const_call__scaled__process(const_call__scaled__State* s, const const_call__scaled__Params* params, onsa_span_f32 x, onsa_span_f32 out);
+ONSA_INLINE void const_call__scaled__process(const_call__scaled__State* s, const const_call__scaled__Params* params, onsa_span_f32 input, onsa_span_f32 output);
 ONSA_INLINE void const_call__scaled__params_default(const_call__scaled__Params* out);
 
 ONSA_INLINE void const_call__scaled__ctl(const_call__scaled__State* s, const const_call__scaled__Params* p) {
@@ -56,19 +56,19 @@ ONSA_INLINE void const_call__scaled__reset(const_call__scaled__State* s) {
   s->poisoned = false;
 }
 
-ONSA_INLINE void const_call__scaled__process(const_call__scaled__State* s, const const_call__scaled__Params* params, onsa_span_f32 x, onsa_span_f32 out) {
-  uint32_t len = x.len;
-  if (out.len != len) {
+ONSA_INLINE void const_call__scaled__process(const_call__scaled__State* s, const const_call__scaled__Params* params, onsa_span_f32 input, onsa_span_f32 output) {
+  uint32_t len = input.len;
+  if (output.len != len) {
     onsa_panic("span lengths differ", "const_call.onsa", 29);
   }
   const_call__scaled__ctl(&(*s), &(*params));
   uint32_t onsa_t1 = len;
   for (uint32_t i = UINT32_C(0); i < onsa_t1; i++) {
-    float x_7 = x.ptr[onsa_idx(i, x.len, "const_call.onsa", 29)];
+    float x = input.ptr[onsa_idx(i, input.len, "const_call.onsa", 29)];
     float v;
-    float onsa_t2 = const_call__scaled__tick(&(*s), x_7);
+    float onsa_t2 = const_call__scaled__tick(&(*s), x);
     v = onsa_t2;
-    out.ptr[onsa_idx(i, out.len, "const_call.onsa", 29)] = v;
+    output.ptr[onsa_idx(i, output.len, "const_call.onsa", 29)] = v;
   }
 }
 

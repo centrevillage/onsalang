@@ -1,0 +1,207 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§5.3"]
+
+// W7-12 U3a, S-30, §11.6: "入力: `sample` の入力が無ければ引数は無い。1 つなら `input: Span[T]`（値型が `[T; N]` なら `input: [Span[T]; N]`、チャンネルごとの
+// バッファ、§5.3）。2 つ以上なら `input: voice.In`。`In` は `sample` の入力の名前をフィールドに持ち、各フィールドは `Span[T]` か `[Span[T]; N]`", and
+// "`render` の `<入力>` は `process` と同じ形". The shapes of the input, each with `process` and `render`: no input (`render` takes `frames`), one input, one
+// planar input, two or more inputs (`In`) with a scalar field, a planar field, two planar fields, fields of two types, and the inputs of `init` and
+// `block` beside them (the order of the arguments is `cfg`, `params`, the inputs, the sample rate). `In` is made at the argument, and a function takes
+// it as a parameter and passes it on (§11.6, §5.3). The lengths of all the `Span`s of the inputs and the outputs are equal, or `process` panics
+// (§11.6). The names that the arguments have in the old expansion are in `generated_api_args_names.onsa`; the shapes of the output are in
+// `generated_api_args_outputs.onsa`.
+
+// No input at `sample`: the length is the one of the output, and `render` takes the number of frames.
+pub flow src(f: F32 at block) -> F32 at sample {
+  f
+}
+
+pub flow one(x: F32 at sample) -> F32 at sample {
+  x + 1.0
+}
+
+pub flow side(x: [F32; 2] at sample) -> F32 at sample {
+  x[0] - x[1]
+}
+
+pub flow mix(a: [F32; 2] at sample, b: F32 at sample) -> F32 at sample {
+  a[0] + a[1] * 10.0 + b * 100.0
+}
+
+pub flow two_planar(a: [F32; 2] at sample, c: [F32; 2] at sample) -> F32 at sample {
+  a[0] + a[1] * 10.0 + c[0] * 100.0 + c[1] * 1000.0
+}
+
+pub flow typed(x: F32 at sample, n: I32 at sample) -> F32 at sample {
+  x * F32.round_from(n)
+}
+
+pub flow tuned(x: F32 at sample, y: F32 at sample, c: F32 at init, k: F32 at block) -> F32 at sample {
+  (x + y) * k + c
+}
+
+fn run_mix(inout st: mix.State, i: mix.In, inout ys: Span[F32]) {
+  mix.process(inout st, i, inout ys)
+}
+
+test "a flow without a sample input takes the frames in render and no input in process" {
+  let o = src.render(src.Params { f: 2.0 }, 3, 8.0)
+  assert o.out.len() == 3
+  assert o.out[0] == 2.0
+  assert o.out[2] == 2.0
+  var st = src.init(8.0)
+  var ys: [F32; 2] = [0.0; 2]
+  src.process(inout st, src.Params { f: 4.0 }, inout ys)
+  assert ys[0] == 4.0
+  assert ys[1] == 4.0
+}
+
+test "one input is a Span, also a slice and a Buf" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  var ys: [F32; 4] = [0.0; 4]
+  var st = one.init(8.0)
+  one.process(inout st, xs.slice(1, 3), inout ys.slice(0, 2))
+  assert ys[0] == 3.0
+  assert ys[1] == 4.0
+  assert ys[2] == 0.0
+  var bin: Buf[F32] = Buf.zeroed(2)
+  bin[0] = 5.0
+  bin[1] = 6.0
+  var bout: Buf[F32] = Buf.zeroed(2)
+  one.process(inout st, bin, inout bout)
+  assert bout[0] == 6.0
+  assert bout[1] == 7.0
+  let o = one.render(xs, 8.0)
+  assert o.out[3] == 5.0
+}
+
+test "one planar input is an array of Spans, written at the call or a value of arrays" {
+  let a: [F32; 2] = [3.0, 4.0]
+  let b: [F32; 2] = [1.0, 1.0]
+  var ys: [F32; 2] = [0.0; 2]
+  var st = side.init(8.0)
+  side.process(inout st, [a, b], inout ys)
+  assert ys[0] == 2.0
+  assert ys[1] == 3.0
+  let ch: [[F32; 2]; 2] = [[10.0, 20.0], [1.0, 2.0]]
+  side.process(inout st, ch, inout ys)
+  assert ys[0] == 9.0
+  assert ys[1] == 18.0
+  let o = side.render([a, b], 8.0)
+  assert o.out[0] == 2.0
+  assert o.out[1] == 3.0
+  let o2 = side.render(ch, 8.0)
+  assert o2.out[1] == 18.0
+}
+
+test "In with a planar field and a scalar field" {
+  let a0: [F32; 2] = [1.0, 2.0]
+  let a1: [F32; 2] = [1.0, 1.0]
+  let bb: [F32; 2] = [1.0, 2.0]
+  var ys: [F32; 2] = [0.0; 2]
+  var st = mix.init(8.0)
+  mix.process(inout st, mix.In { a: [a0, a1], b: bb }, inout ys)
+  assert ys[0] == 111.0
+  assert ys[1] == 212.0
+  let ch: [[F32; 2]; 2] = [[1.0, 2.0], [1.0, 1.0]]
+  var zs: [F32; 2] = [0.0; 2]
+  mix.process(inout st, mix.In { a: ch, b: bb }, inout zs)
+  assert zs[0] == 111.0
+  assert zs[1] == 212.0
+  let o = mix.render(mix.In { a: [a0, a1], b: bb }, 8.0)
+  assert o.out[0] == 111.0
+  assert o.out[1] == 212.0
+}
+
+test "In with two planar fields" {
+  let a0: [F32; 2] = [1.0, 5.0]
+  let a1: [F32; 2] = [2.0, 6.0]
+  let c0: [F32; 2] = [3.0, 7.0]
+  let c1: [F32; 2] = [4.0, 8.0]
+  var ys: [F32; 2] = [0.0; 2]
+  var st = two_planar.init(8.0)
+  two_planar.process(inout st, two_planar.In { a: [a0, a1], c: [c0, c1] }, inout ys)
+  assert ys[0] == 4321.0
+  assert ys[1] == 8765.0
+  let o = two_planar.render(two_planar.In { c: [c0, c1], a: [a0, a1] }, 8.0)
+  assert o.out[0] == 4321.0
+  assert o.out[1] == 8765.0
+}
+
+test "In with fields of two types" {
+  let xs: [F32; 2] = [1.5, 2.0]
+  let ns: [I32; 2] = [3, 4]
+  var ys: [F32; 2] = [0.0; 2]
+  var st = typed.init(8.0)
+  typed.process(inout st, typed.In { x: xs, n: ns }, inout ys)
+  assert ys[0] == 4.5
+  assert ys[1] == 8.0
+}
+
+test "the inputs of init and block come before the inputs of sample" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let ys: [F32; 2] = [3.0, 4.0]
+  var zs: [F32; 2] = [0.0; 2]
+  var st = tuned.init(tuned.Config { c: 0.5 }, 8.0)
+  tuned.process(inout st, tuned.Params { k: 2.0 }, tuned.In { x: xs, y: ys }, inout zs)
+  assert zs[0] == 8.5
+  assert zs[1] == 12.5
+  let o = tuned.render(tuned.Config { c: 0.5 }, tuned.Params { k: 2.0 }, tuned.In { x: xs, y: ys }, 8.0)
+  assert o.out[0] == 8.5
+  assert o.out[1] == 12.5
+}
+
+test "In is passed as a parameter and made at the call of the function" {
+  let a0: [F32; 2] = [1.0, 2.0]
+  let a1: [F32; 2] = [1.0, 1.0]
+  let bb: [F32; 2] = [1.0, 2.0]
+  var ys: [F32; 2] = [0.0; 2]
+  var st = mix.init(8.0)
+  run_mix(inout st, mix.In { a: [a0, a1], b: bb }, inout ys)
+  assert ys[0] == 111.0
+  assert ys[1] == 212.0
+}
+
+test "a call of length 0 is a call" {
+  let a0: [F32; 2] = [1.0, 2.0]
+  let a1: [F32; 2] = [1.0, 1.0]
+  let bb: [F32; 2] = [1.0, 2.0]
+  var ys: [F32; 2] = [7.0, 7.0]
+  var st = mix.init(8.0)
+  mix.process(inout st, mix.In { a: [a0.slice(0, 0), a1.slice(0, 0)], b: bb.slice(0, 0) }, inout ys.slice(0, 0))
+  assert ys[0] == 7.0
+  assert ys[1] == 7.0
+  mix.process(inout st, mix.In { a: [a0, a1], b: bb }, inout ys)
+  assert ys[1] == 212.0
+}
+
+test "a field of In with another length than the output is a panic" {
+  let a0: [F32; 2] = [1.0, 2.0]
+  let a1: [F32; 2] = [1.0, 1.0]
+  let bb: [F32; 1] = [1.0]
+  var ys: [F32; 2] = [0.0; 2]
+  var st = mix.init(8.0)
+  mix.process(inout st, mix.In { a: [a0, a1], b: bb }, inout ys)   //~ PANIC "a field of In with another length than the output is a panic"
+  assert ys[0] == 0.0
+}
+
+test "a channel of a planar field of In with another length is a panic" {
+  let a0: [F32; 2] = [1.0, 2.0]
+  let a1: [F32; 1] = [1.0]
+  let bb: [F32; 2] = [1.0, 2.0]
+  var ys: [F32; 2] = [0.0; 2]
+  var st = mix.init(8.0)
+  mix.process(inout st, mix.In { a: [a0, a1], b: bb }, inout ys)   //~ PANIC "a channel of a planar field of In with another length is a panic"
+  assert ys[0] == 0.0
+}
+
+test "the output with another length than the inputs is a panic" {
+  let a0: [F32; 2] = [1.0, 2.0]
+  let a1: [F32; 2] = [1.0, 1.0]
+  let bb: [F32; 2] = [1.0, 2.0]
+  var ys: [F32; 3] = [0.0; 3]
+  var st = mix.init(8.0)
+  mix.process(inout st, mix.In { a: [a0, a1], b: bb }, inout ys)   //~ PANIC "the output with another length than the inputs is a panic"
+  assert ys[0] == 0.0
+}

@@ -1,0 +1,131 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§18.1", "§11.3"]
+
+// W7-12 U3a, R-471, §18.1: "読めなかった部分（引数の型 ...）は誤りの型として扱い、それを使う側には診断を出さない" and §11.6 ("署名に誤りのある flow で有無が分からないとき ... は、E0302 も出さない").
+// A flow with an input whose clock is not read (`at foo`: the name of a clock that does not exist, E0302 at the heading) is a flow whose inputs and outputs are not
+// known: it may have a `Config`, `Params` and `In` or not, and its generated functions take what the read part of the heading gives and no more. The calls of
+// `init`, `process`, `process_inplace` and `render` of such a flow report nothing, in the form of the arguments that the shapes of §11.6 would give and in
+// the old forms (one `Span` for each input, `Params` and `Config` that the flow may not have), so that the only diagnostic of a flow is the error of its
+// heading: no number of arguments (E0412), no type (E0401). The flow `foo_in` has an unread input beside one at `sample`, `foo_one` has one input at
+// `sample` and one unread, and `foo_only` has the unread one only. One error in each unit (§18.1).
+
+pub flow foo_in(x: F32 at foo, y: F32 at sample) -> F32 at sample {   //~ E0302
+  y
+}
+
+pub flow foo_one(x: F32 at sample, c: F32 at foo) -> F32 at sample {   //~ E0302
+  x
+}
+
+pub flow foo_only(c: F32 at foo) -> F32 at sample {   //~ E0302
+  1.0
+}
+
+// ---------------------------------------------------------------- foo_in
+
+pub fn foo_in_init() -> foo_in.State {
+  foo_in.init(8.0)
+}
+
+pub fn foo_in_init_config() -> foo_in.State {
+  foo_in.init(foo_in.Config {}, 8.0)
+}
+
+pub fn foo_in_process_spread(inout st: foo_in.State, xs: Span[F32], ys: Span[F32], inout zs: Span[F32]) {
+  foo_in.process(inout st, xs, ys, inout zs)
+}
+
+pub fn foo_in_process_in(inout st: foo_in.State, xs: Span[F32], ys: Span[F32], inout zs: Span[F32]) {
+  foo_in.process(inout st, foo_in.In { x: xs, y: ys }, inout zs)
+}
+
+pub fn foo_in_process_one(inout st: foo_in.State, ys: Span[F32], inout zs: Span[F32]) {
+  foo_in.process(inout st, ys, inout zs)
+}
+
+pub fn foo_in_process_with_params(inout st: foo_in.State, xs: Span[F32], ys: Span[F32], inout zs: Span[F32]) {
+  foo_in.process(inout st, foo_in.Params {}, xs, ys, inout zs)
+}
+
+pub fn foo_in_inplace(inout st: foo_in.State, inout zs: Span[F32]) {
+  foo_in.process_inplace(inout st, inout zs)
+}
+
+pub fn foo_in_render_spread(xs: Span[F32], ys: Span[F32]) -> I32 uses {Alloc} {
+  let _ = foo_in.render(xs, ys, 8.0)
+  1
+}
+
+pub fn foo_in_render_in(xs: Span[F32], ys: Span[F32]) -> I32 uses {Alloc} {
+  let _ = foo_in.render(foo_in.In { x: xs, y: ys }, 8.0)
+  1
+}
+
+// ---------------------------------------------------------------- foo_one
+
+pub fn foo_one_init() -> foo_one.State {
+  foo_one.init(8.0)
+}
+
+pub fn foo_one_init_config() -> foo_one.State {
+  foo_one.init(foo_one.Config {}, 8.0)
+}
+
+pub fn foo_one_process(inout st: foo_one.State, xs: Span[F32], inout zs: Span[F32]) {
+  foo_one.process(inout st, xs, inout zs)
+}
+
+pub fn foo_one_process_with_params(inout st: foo_one.State, xs: Span[F32], inout zs: Span[F32]) {
+  foo_one.process(inout st, foo_one.Params {}, xs, inout zs)
+}
+
+pub fn foo_one_process_in(inout st: foo_one.State, xs: Span[F32], ys: Span[F32], inout zs: Span[F32]) {
+  foo_one.process(inout st, foo_one.In { x: xs, c: ys }, inout zs)
+}
+
+pub fn foo_one_inplace(inout st: foo_one.State, inout zs: Span[F32]) {
+  foo_one.process_inplace(inout st, inout zs)
+}
+
+pub fn foo_one_render(xs: Span[F32]) -> I32 uses {Alloc} {
+  let _ = foo_one.render(xs, 8.0)
+  1
+}
+
+pub fn foo_one_render_with_frames(xs: Span[F32]) -> I32 uses {Alloc} {
+  let _ = foo_one.render(xs, 4, 8.0)
+  1
+}
+
+// ---------------------------------------------------------------- foo_only
+
+pub fn foo_only_init() -> foo_only.State {
+  foo_only.init(8.0)
+}
+
+pub fn foo_only_init_config() -> foo_only.State {
+  foo_only.init(foo_only.Config {}, 8.0)
+}
+
+pub fn foo_only_process(inout st: foo_only.State, inout zs: Span[F32]) {
+  foo_only.process(inout st, inout zs)
+}
+
+pub fn foo_only_process_with_params(inout st: foo_only.State, inout zs: Span[F32]) {
+  foo_only.process(inout st, foo_only.Params {}, inout zs)
+}
+
+pub fn foo_only_inplace(inout st: foo_only.State, inout zs: Span[F32]) {
+  foo_only.process_inplace(inout st, inout zs)
+}
+
+pub fn foo_only_render() -> I32 uses {Alloc} {
+  let _ = foo_only.render(4, 8.0)
+  1
+}
+
+pub fn foo_only_render_one_more(xs: Span[F32]) -> I32 uses {Alloc} {
+  let _ = foo_only.render(xs, 8.0)
+  1
+}

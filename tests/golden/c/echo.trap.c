@@ -27,7 +27,7 @@ ONSA_INLINE void echo__echo__ctl(echo__echo__State* s, const echo__echo__Params*
 ONSA_INLINE float echo__echo__tick(echo__echo__State* s, float x);
 ONSA_INLINE void echo__echo__init(echo__echo__State* out, const echo__echo__Config* cfg, float sample_rate);
 ONSA_INLINE void echo__echo__reset(echo__echo__State* s);
-ONSA_INLINE void echo__echo__process(echo__echo__State* s, const echo__echo__Params* params, onsa_span_f32 x, onsa_span_f32 out);
+ONSA_INLINE void echo__echo__process(echo__echo__State* s, const echo__echo__Params* params, onsa_span_f32 input, onsa_span_f32 output);
 ONSA_INLINE void echo__echo__params_default(echo__echo__Params* out);
 
 ONSA_INLINE void echo__echo__ctl(echo__echo__State* s, const echo__echo__Params* p) {
@@ -89,19 +89,19 @@ ONSA_INLINE void echo__echo__reset(echo__echo__State* s) {
   s->poisoned = false;
 }
 
-ONSA_INLINE void echo__echo__process(echo__echo__State* s, const echo__echo__Params* params, onsa_span_f32 x, onsa_span_f32 out) {
-  uint32_t len = x.len;
-  if (out.len != len) {
+ONSA_INLINE void echo__echo__process(echo__echo__State* s, const echo__echo__Params* params, onsa_span_f32 input, onsa_span_f32 output) {
+  uint32_t len = input.len;
+  if (output.len != len) {
     onsa_panic("span lengths differ", "echo.onsa", 30);
   }
   echo__echo__ctl(&(*s), &(*params));
   uint32_t onsa_t1 = len;
   for (uint32_t i = UINT32_C(0); i < onsa_t1; i++) {
-    float x_11 = x.ptr[onsa_idx(i, x.len, "echo.onsa", 30)];
+    float x = input.ptr[onsa_idx(i, input.len, "echo.onsa", 30)];
     float v;
-    float onsa_t2 = echo__echo__tick(&(*s), x_11);
+    float onsa_t2 = echo__echo__tick(&(*s), x);
     v = onsa_t2;
-    out.ptr[onsa_idx(i, out.len, "echo.onsa", 30)] = v;
+    output.ptr[onsa_idx(i, output.len, "echo.onsa", 30)] = v;
   }
 }
 

@@ -1,0 +1,19 @@
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub struct Wide {
+  a: [F32; 2],
+  b: F32,
+}
+
+// The names of the inputs are the names of the fields of the output.
+pub flow swap(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: r, r: l }
+}
+
+// A planar field in the input and in the output.
+pub flow wide_of(a: [F32; 2] at sample, b: F32 at sample) -> Wide at sample {
+  Wide { a: [a[1], a[0]], b: b * 2.0 }
+}

@@ -1,0 +1,279 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§5.3"]
+
+// W7-12 U3a, S-30, R-15, §11.6: "引数の名前は `s`、`params`、`events`、`input`、`output` に固定する。利用者の名前（`sample` の入力の名前、出力の
+// struct のフィールド名）は `In` / `Out` のフィールドにだけ現れるので、生成 API の引数の名前と衝突しない". A flow whose input is named like an
+// argument of the generated functions (`s`, `params`, `out`, `input`, `output`, `frames`, `events`, `cfg`), and a flow whose output fields have the names
+// of its inputs (`swap(l, r) -> Stereo { l, r }`), give the values that the body says: the old expansion of the names into one `Span` for each name made
+// `swap` write zeros (R-15). The pairing of the fields of `In` and `Out` is by name (the order of the fields in the literal does not matter), and
+// the state is kept between the calls. The shapes of the arguments are in `generated_api_args_inputs.onsa`, `generated_api_args_outputs.onsa` and
+// `generated_api_args_inplace.onsa`; the old forms are the errors of `generated_api_args_old_form.onsa`.
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub struct Named {
+  input: F32,
+  output: F32,
+}
+
+pub struct Fan {
+  s: F32,
+  frames: F32,
+}
+
+// ---------------------------------------------------------------- one input, named like an argument
+
+pub flow in_s(s: F32 at sample) -> F32 at sample {
+  s * 2.0
+}
+
+pub flow in_out(out: F32 at sample) -> F32 at sample {
+  out * 2.0
+}
+
+pub flow in_input(input: F32 at sample) -> F32 at sample {
+  input * 2.0
+}
+
+pub flow in_output(output: F32 at sample) -> F32 at sample {
+  output * 2.0
+}
+
+pub flow in_frames(frames: F32 at sample) -> F32 at sample {
+  frames * 2.0
+}
+
+pub flow in_events(events: F32 at sample) -> F32 at sample {
+  events * 2.0
+}
+
+pub flow in_params(params: F32 at sample, k: F32 at block) -> F32 at sample {
+  params * k
+}
+
+pub flow in_cfg(cfg: F32 at init, x: F32 at sample) -> F32 at sample {
+  x + cfg
+}
+
+// ---------------------------------------------------------------- several inputs and a struct output
+
+pub flow swap(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: r, r: l }
+}
+
+pub flow swap_named(input: F32 at sample, output: F32 at sample) -> Named at sample {
+  Named { input: output, output: input }
+}
+
+pub flow triple(s: F32 at sample, params: F32 at sample, out: F32 at sample) -> F32 at sample {
+  s + params * 10.0 + out * 100.0
+}
+
+pub flow fan(x: F32 at sample) -> Fan at sample {
+  Fan { s: x, frames: x * 2.0 }
+}
+
+// The left channel is the right input of the call before.
+pub flow lag_swap(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: prev~(r), r: l }
+}
+
+test "an input named s" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  var ys: [F32; 2] = [0.0; 2]
+  var st = in_s.init(8.0)
+  in_s.process(inout st, xs, inout ys)
+  assert ys[0] == 2.0
+  assert ys[1] == 4.0
+  let o = in_s.render(xs, 8.0)
+  assert o.out[0] == 2.0
+  assert o.out[1] == 4.0
+}
+
+test "an input named out" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  var ys: [F32; 2] = [0.0; 2]
+  var st = in_out.init(8.0)
+  in_out.process(inout st, xs, inout ys)
+  assert ys[0] == 2.0
+  assert ys[1] == 4.0
+  let o = in_out.render(xs, 8.0)
+  assert o.out[1] == 4.0
+}
+
+test "an input named input" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  var ys: [F32; 2] = [0.0; 2]
+  var st = in_input.init(8.0)
+  in_input.process(inout st, xs, inout ys)
+  assert ys[1] == 4.0
+  let o = in_input.render(xs, 8.0)
+  assert o.out[1] == 4.0
+}
+
+test "an input named output" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  var ys: [F32; 2] = [0.0; 2]
+  var st = in_output.init(8.0)
+  in_output.process(inout st, xs, inout ys)
+  assert ys[1] == 4.0
+  let o = in_output.render(xs, 8.0)
+  assert o.out[1] == 4.0
+}
+
+test "an input named frames" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  var ys: [F32; 2] = [0.0; 2]
+  var st = in_frames.init(8.0)
+  in_frames.process(inout st, xs, inout ys)
+  assert ys[1] == 4.0
+  let o = in_frames.render(xs, 8.0)
+  assert o.out[1] == 4.0
+}
+
+test "an input named events" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  var ys: [F32; 2] = [0.0; 2]
+  var st = in_events.init(8.0)
+  in_events.process(inout st, xs, inout ys)
+  assert ys[1] == 4.0
+  let o = in_events.render(xs, 8.0)
+  assert o.out[1] == 4.0
+}
+
+test "an input named params beside a block input" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  var ys: [F32; 2] = [0.0; 2]
+  var st = in_params.init(8.0)
+  in_params.process(inout st, in_params.Params { k: 3.0 }, xs, inout ys)
+  assert ys[0] == 3.0
+  assert ys[1] == 6.0
+  let o = in_params.render(in_params.Params { k: 3.0 }, xs, 8.0)
+  assert o.out[1] == 6.0
+}
+
+test "an input named cfg" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  var ys: [F32; 2] = [0.0; 2]
+  var st = in_cfg.init(in_cfg.Config { cfg: 0.5 }, 8.0)
+  in_cfg.process(inout st, xs, inout ys)
+  assert ys[0] == 1.5
+  assert ys[1] == 2.5
+  let o = in_cfg.render(in_cfg.Config { cfg: 0.5 }, xs, 8.0)
+  assert o.out[1] == 2.5
+}
+
+test "swap with the names of the output fields the names of the inputs" {
+  let a: [F32; 3] = [1.0, 2.0, 3.0]
+  let b: [F32; 3] = [10.0, 20.0, 30.0]
+  var x: [F32; 3] = [0.0; 3]
+  var y: [F32; 3] = [0.0; 3]
+  var st = swap.init(8.0)
+  swap.process(inout st, swap.In { l: a, r: b }, inout swap.Out { l: x, r: y })
+  // The left output is the right input and the right output is the left input.
+  assert x[0] == 10.0
+  assert x[1] == 20.0
+  assert x[2] == 30.0
+  assert y[0] == 1.0
+  assert y[1] == 2.0
+  assert y[2] == 3.0
+}
+
+test "the fields of In and Out are matched by name, whatever the order they are written in" {
+  let a: [F32; 3] = [1.0, 2.0, 3.0]
+  let b: [F32; 3] = [10.0, 20.0, 30.0]
+  var x: [F32; 3] = [0.0; 3]
+  var y: [F32; 3] = [0.0; 3]
+  var st = swap.init(8.0)
+  // The left input is b and the right input is a; the left output is y and the right output is x.
+  swap.process(inout st, swap.In { r: a, l: b }, inout swap.Out { r: x, l: y })
+  assert y[0] == 1.0
+  assert y[2] == 3.0
+  assert x[0] == 10.0
+  assert x[2] == 30.0
+}
+
+test "render of swap gives the fields by the names of the output" {
+  let a: [F32; 2] = [1.0, 2.0]
+  let b: [F32; 2] = [10.0, 20.0]
+  let o = swap.render(swap.In { l: a, r: b }, 8.0)
+  assert o.l[0] == 10.0
+  assert o.l[1] == 20.0
+  assert o.r[0] == 1.0
+  assert o.r[1] == 2.0
+}
+
+test "inputs and output fields named input and output" {
+  let a: [F32; 2] = [1.0, 2.0]
+  let b: [F32; 2] = [10.0, 20.0]
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  var st = swap_named.init(8.0)
+  swap_named.process(inout st, swap_named.In { input: a, output: b }, inout swap_named.Out { input: x, output: y })
+  assert x[0] == 10.0
+  assert x[1] == 20.0
+  assert y[0] == 1.0
+  assert y[1] == 2.0
+  let o = swap_named.render(swap_named.In { input: a, output: b }, 8.0)
+  assert o.input[1] == 20.0
+  assert o.output[1] == 2.0
+}
+
+test "three inputs named s, params and out" {
+  let a: [F32; 2] = [1.0, 2.0]
+  let b: [F32; 2] = [1.0, 2.0]
+  let c: [F32; 2] = [1.0, 2.0]
+  var ys: [F32; 2] = [0.0; 2]
+  var st = triple.init(8.0)
+  triple.process(inout st, triple.In { s: a, params: b, out: c }, inout ys)
+  assert ys[0] == 111.0
+  assert ys[1] == 222.0
+  let o = triple.render(triple.In { s: a, params: b, out: c }, 8.0)
+  assert o.out[0] == 111.0
+  assert o.out[1] == 222.0
+}
+
+test "output fields named s and frames" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  var p: [F32; 2] = [0.0; 2]
+  var q: [F32; 2] = [0.0; 2]
+  var st = fan.init(8.0)
+  fan.process(inout st, xs, inout fan.Out { s: p, frames: q })
+  assert p[0] == 1.0
+  assert p[1] == 2.0
+  assert q[0] == 2.0
+  assert q[1] == 4.0
+  let o = fan.render(xs, 8.0)
+  assert o.s[1] == 2.0
+  assert o.frames[1] == 4.0
+}
+
+test "the state of a flow with In and Out is kept between two calls" {
+  let a1: [F32; 2] = [1.0, 2.0]
+  let b1: [F32; 2] = [10.0, 20.0]
+  let a2: [F32; 2] = [3.0, 4.0]
+  let b2: [F32; 2] = [30.0, 40.0]
+  var x1: [F32; 2] = [0.0; 2]
+  var y1: [F32; 2] = [0.0; 2]
+  var x2: [F32; 2] = [0.0; 2]
+  var y2: [F32; 2] = [0.0; 2]
+  var st = lag_swap.init(8.0)
+  lag_swap.process(inout st, lag_swap.In { l: a1, r: b1 }, inout lag_swap.Out { l: x1, r: y1 })
+  lag_swap.process(inout st, lag_swap.In { l: a2, r: b2 }, inout lag_swap.Out { l: x2, r: y2 })
+  // The left output is the right input one sample late: 0 10 | 20 30. The right output is the left input.
+  assert x1[0] == 0.0
+  assert x1[1] == 10.0
+  assert x2[0] == 20.0
+  assert x2[1] == 30.0
+  assert y1[1] == 2.0
+  assert y2[0] == 3.0
+  lag_swap.reset(inout st)
+  lag_swap.process(inout st, lag_swap.In { l: a2, r: b2 }, inout lag_swap.Out { l: x1, r: y1 })
+  assert x1[0] == 0.0
+  assert x1[1] == 30.0
+}

@@ -38,12 +38,12 @@ rt fn unison.saw.reset(inout s: unison.saw.State) -> () {
   s.2 = 0.0:F32
   s.3 = false
 }
-rt fn unison.saw.process(inout s: unison.saw.State, params: unison.saw.Params, inout out: Span[F32]) -> () {
-  let len: U32 = len(out)
+rt fn unison.saw.process(inout s: unison.saw.State, params: unison.saw.Params, inout output: Span[F32]) -> () {
+  let len: U32 = len(output)
   unison.saw.ctl(inout s, params)
   for i in 0:U32..len {
     let v: F32 = unison.saw.tick(inout s)
-    out[i] = v
+    output[i] = v
   }
 }
 fn unison.saw.render(cfg: unison.saw.Config, params: unison.saw.Params, frames: U32, sample_rate: F32) -> unison.saw.Rendered sret {
@@ -92,12 +92,12 @@ rt fn unison.unison.reset(inout s: unison.unison.State) -> () {
   }
   s.1 = false
 }
-rt fn unison.unison.process(inout s: unison.unison.State, params: unison.unison.Params, inout out: Span[F32]) -> () {
-  let len: U32 = len(out)
+rt fn unison.unison.process(inout s: unison.unison.State, params: unison.unison.Params, inout output: Span[F32]) -> () {
+  let len: U32 = len(output)
   unison.unison.ctl(inout s, params)
   for i@8 in 0:U32..len {
     let v: F32 = unison.unison.tick(inout s)
-    out[i@8] = v
+    output[i@8] = v
   }
 }
 fn unison.unison.render(cfg: unison.unison.Config, params: unison.unison.Params, frames: U32, sample_rate: F32) -> unison.unison.Rendered sret {

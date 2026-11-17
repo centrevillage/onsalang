@@ -1,0 +1,97 @@
+// onsa.toml
+// [package]
+// name = "generated_api_shapes"
+// edition = "2026"
+//
+// [export]
+// prefix = "gas_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§11.6", "§14.2", "§13.4"]
+// conformance = true
+
+// W7-12 U3a, S-30, S-197, S-220, §11.6, §13.4: the shapes of the input and of the output of the generated `process` (the inputs by the number: two or more are an `In`, a struct output is an
+// `Out`, an array is an array of `Span`s), exported, give the same values in the interpreter and in the C: two inputs and three, a struct output, a planar input and a planar output, a planar field
+// in `In` and in `Out`, a flow that has `process_inplace` (the inputs and the outputs agree in the number and in the types, the struct expanded into its fields: `stereo`, `planar`,
+// `q_inplace`) and one that has not (`bus_mix`, `widen`), and a state and a parameter beside them. The names of the inputs are not the names of the fields of the output (a flow
+// with the same names is the E0200 of `pipeline/generated_api_c_names_clash.onsa`, until W10-03).
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub struct Bus {
+  main: F32,
+  aux: [F32; 2],
+}
+
+pub struct Q {
+  v: [F32; 2],
+}
+
+pub struct Mono {
+  v: F32,
+}
+
+@export
+pub flow two_in(a: F32 at sample, b: F32 at sample) -> F32 at sample {
+  a - b * 0.5
+}
+
+@export
+pub flow three_in(a: F32 at sample, b: F32 at sample, c: F32 at sample) -> F32 at sample {
+  a + b * 2.0 + c * 3.0
+}
+
+@export
+pub flow stereo(a: F32 at sample, b: F32 at sample) -> Stereo at sample {
+  Stereo { l: a + b, r: a - b }
+}
+
+@export
+pub flow mono_out(a: F32 at sample) -> Mono at sample {
+  Mono { v: a * 0.25 }
+}
+
+@export
+pub flow planar(a: [F32; 2] at sample) -> [F32; 2] at sample {
+  [a[1], a[0]]
+}
+
+@export
+pub flow widen(a: F32 at sample) -> [F32; 2] at sample {
+  [a, a * 2.0]
+}
+
+@export
+pub flow fold(a: [F32; 2] at sample) -> F32 at sample {
+  a[0] - a[1]
+}
+
+@export
+pub flow bus_mix(a: [F32; 2] at sample, b: F32 at sample) -> Bus at sample {
+  Bus { main: b, aux: [a[1], a[0]] }
+}
+
+@export
+pub flow q_inplace(a: [F32; 2] at sample) -> Q at sample {
+  Q { v: [a[1] * 0.5, a[0]] }
+}
+
+@export
+pub flow two_planar(a: [F32; 2] at sample, c: [F32; 2] at sample) -> Q at sample {
+  Q { v: [a[0] + c[1], a[1] - c[0]] }
+}
+
+@export
+pub flow stateful(a: F32 at sample, b: F32 at sample, @param(default: 0.5) k: F32 at block) -> Stereo at sample {
+  Stereo { l: prev~(a) * k, r: b }
+}
