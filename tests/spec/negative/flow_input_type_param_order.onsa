@@ -1,0 +1,132 @@
+// onsa.toml
+// [test]
+// spec = ["§11.7", "§11.3", "§18.1"]
+// fixes = 0
+
+// W7-13 U3/t, R-489, S-372 (spec §11.7: "export する flow の `block` の入力には `@param` か `@host` が必須（E0809）", §11.3: the value type of an input is Copy and holds no function type (E0810)): the
+// input whose type is E0810 is read first. The `@param` that an exported flow must have on a `block` input is not asked of it (E0809 would send the writer to add an attribute to an input that
+// cannot stay), and the `@param` that the input has is not read (S-1121, provisional: the attribute of an input that cannot be read is not read; the same as the one of an input with a type that
+// is not a scalar is E0809 in param_attr_value_type_not_copy.onsa). So each flow here is one E0810 at the type of the input, with the attribute or without it. The control is the input
+// that has a type that is right and has no `@param`: E0809 as it was (export_flow_param_required.onsa has the scalars).
+
+pub struct Pt {
+  cb: rt fn(F32) -> F32,
+  k: F32,
+}
+
+pub struct Level {
+  gain: F32,
+}
+
+// ---- no `@param`: the E0810 and not the E0809 of the missing attribute
+
+@export
+pub flow text_without_a_param(p: Str at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+@export
+pub flow function_without_a_param(f: (rt fn(F32) -> F32) at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+@export
+pub flow struct_with_a_function_without_a_param(p: Pt at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+@export
+pub flow heap_array_without_a_param(a: Array[F32] at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+@export
+pub flow option_of_a_function_without_a_param(o: Option[rt fn(F32) -> F32] at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+// Two inputs without a `@param`, the first with a type that is wrong: that one is the error (the second needs its `@param`, and a unit has one error).
+@export
+pub flow text_then_a_scalar_without_a_param(
+  p: Str at block,                                  //~ E0810
+  k: F32 at block,
+  x: F32 at sample,
+) -> F32 at sample {
+  x
+}
+
+// ---- with a `@param`: the E0810, and the attribute is not read
+
+@export
+pub flow text_with_a_param(
+  @param(default: 0.0)
+  p: Str at block,                                  //~ E0810
+  x: F32 at sample,
+) -> F32 at sample {
+  x
+}
+
+@export
+pub flow function_with_a_param(
+  @param(default: 0.0)
+  f: (rt fn(F32) -> F32) at block,                  //~ E0810
+  x: F32 at sample,
+) -> F32 at sample {
+  x
+}
+
+@export
+pub flow struct_with_a_function_with_a_param(
+  @param(default: 0.0)
+  p: Pt at block,                                   //~ E0810
+  x: F32 at sample,
+) -> F32 at sample {
+  x
+}
+
+@export
+pub flow function_with_a_param_of_a_key_not_in_the_list(
+  @param(color: "red")
+  f: (rt fn(F32) -> F32) at block,                  //~ E0810
+  x: F32 at sample,
+) -> F32 at sample {
+  x
+}
+
+@export
+pub flow function_with_a_param_without_a_default(
+  @param(min: 0.0, max: 1.0)
+  f: (rt fn(F32) -> F32) at block,                  //~ E0810
+  x: F32 at sample,
+) -> F32 at sample {
+  x
+}
+
+// The flow is not exported: the `@param` is not required, and an input with a function type is E0810 all the same.
+pub flow function_not_exported_with_a_param(
+  @param(default: 0.0)
+  f: (rt fn(F32) -> F32) at block,                  //~ E0810
+  x: F32 at sample,
+) -> F32 at sample {
+  x
+}
+
+// ---- the controls: a type that is right
+
+// A struct that is Copy and holds no function, with no `@param`, is the E0809 of the missing attribute (the type is right for an input, §11.3).
+@export
+pub flow struct_without_a_param(
+  p: Level at block,                                //~ E0809 @3
+  x: F32 at sample,
+) -> F32 at sample {
+  x
+}
+
+@export
+pub flow scalar_with_a_param(
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  k: F32 at block,
+  x: F32 at sample,
+) -> F32 at sample {
+  x * k
+}

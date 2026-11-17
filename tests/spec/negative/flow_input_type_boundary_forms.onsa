@@ -1,0 +1,83 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§11.3", "§18.1"]
+// fixes = 0
+
+// W7-13 U3/t, R-245, S-372 (spec §11.6: "`sample` の入出力の値型は、スカラ、`[スカラ; N]`（N は 1 以上）、または（出力のみ）それらを一つ以上フィールドに持つ struct", §11.3: a function type is not in a
+// type of an input or an output): the types that cannot cross the boundary at `sample`, in the inputs and in the outputs, are each one E0810 at the type, whatever they are (an `Option`, an enum, a
+// struct with a function in a field, a function type, a nested array, a tuple, a text). The words of the diagnostic are not fixed (§18.1), and what the words say is tested in the
+// CLI tests (flow_input_type_notes); here the code and the place. A function type in an input at `sample` is E0810 by the rule of the function type, which is read before the shape of the
+// boundary (S-372); the place is the same one. The same types as an input of `init` and of `block`, and the types that cross the boundary, are the controls at the end of the file.
+
+pub struct Pt {
+  cb: rt fn(F32) -> F32,
+  k: F32,
+}
+
+pub enum Curve {
+  Tanh,
+  Hard,
+}
+
+pub enum Choice {
+  Plain(F32),
+  Off,
+}
+
+pub flow option_in(x: Option[F32] at sample) -> F32 at sample {   //~ E0810
+  1.0
+}
+
+pub flow option_out(x: F32 at sample) -> Option[F32] at sample {   //~ E0810
+  None
+}
+
+pub flow enum_in(c: Curve at sample) -> F32 at sample {   //~ E0810
+  1.0
+}
+
+pub flow enum_with_a_payload_in(c: Choice at sample) -> F32 at sample {   //~ E0810
+  1.0
+}
+
+pub flow enum_out(x: F32 at sample) -> Curve at sample {   //~ E0810
+  Curve.Tanh
+}
+
+pub flow struct_with_a_function_in(p: Pt at sample) -> F32 at sample {   //~ E0810
+  1.0
+}
+
+pub flow function_in(f: (rt fn(F32) -> F32) at sample, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow nested_array_in(x: [[F32; 2]; 2] at sample) -> F32 at sample {   //~ E0810
+  1.0
+}
+
+pub flow tuple_in(x: (F32, F32) at sample) -> F32 at sample {   //~ E0810
+  1.0
+}
+
+pub flow text_in(x: Str at sample) -> F32 at sample {   //~ E0810
+  1.0
+}
+
+// ---- not errors in the same file: the same types at `init` and at `block`, and the types that cross the boundary
+
+pub flow option_at_block(o: Option[F32] at block, x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow enum_at_init(c: Curve at init, x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow tuple_at_block(t: (F32, F32) at block, x: F32 at sample) -> F32 at sample {
+  x * t.0
+}
+
+pub flow scalar_and_array(x: [F32; 2] at sample, y: F32 at sample) -> [F32; 2] at sample {
+  [x[0] + y, x[1] + y]
+}

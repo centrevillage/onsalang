@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1", "§19.1", "§18.1"]
+// fixes = 0
+
+// W7-13 U3/t, R-41, R-279 (spec §11.6: the type of an input at `sample` is a scalar or an array of scalars, a struct only as an output; §19.1: "struct の入力は今は E0810"): a struct of
+// another module, an alias of it, and the `Params` and the `Config` that a flow of another module generates are structs, and as the type of an input at `sample` each is
+// one E0810 at the type. As an input of `init` and of `block`, and as an output at `sample`, they are as they were: the controls at the end of the file.
+
+use util
+use util.{Pair, Stereo, voice}
+
+pub flow struct_of_the_module(x: Pair at sample) -> F32 at sample {   //~ E0810
+  x.l
+}
+
+pub flow alias_of_the_module(x: Stereo at sample) -> F32 at sample {   //~ E0810
+  x.r
+}
+
+pub flow path_of_the_module(x: util.Pair at sample) -> F32 at sample {   //~ E0810
+  x.l
+}
+
+pub flow params_of_the_module(x: voice.Params at sample) -> F32 at sample {   //~ E0810
+  x.k
+}
+
+pub flow config_of_the_module(x: voice.Config at sample) -> F32 at sample {   //~ E0810
+  1.0
+}
+
+// ---- not errors
+
+pub flow struct_out(x: F32 at sample) -> Pair at sample {
+  Pair { l: x, r: x }
+}
+
+pub flow alias_out(x: F32 at sample) -> Stereo at sample {
+  Pair { l: x, r: x }
+}
+
+pub flow struct_at_init(p: Pair at init, x: F32 at sample) -> F32 at sample {
+  x * p.l
+}
+
+pub flow struct_at_block(p: Stereo at block, x: F32 at sample) -> F32 at sample {
+  x * p.r
+}
+
+pub flow params_at_block(p: voice.Params at block, x: F32 at sample) -> F32 at sample {
+  x * p.k
+}

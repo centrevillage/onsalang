@@ -1,0 +1,110 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.6", "§11.2"]
+
+// W7-13 U3/t, S-372, R-41, R-279 (spec §11.3: the value type of an input is Copy and holds no function type; §11.6: the struct is as an output at `sample` and as an input of `init` and `block`;
+// §11.2: the function that a flow calls is a `rt fn`): the inputs that stay right when the function types and the structs at `sample` are errors, run to the values. A struct that holds only scalars is an
+// input of `init` (the fields of `Config`) and of `block` (the fields of `Params`), an enum is an input of `block` and a `rt fn` that matches it chooses (the way to choose among functions that S-372 gives:
+// "閉じた選択は enum と `match` を持つ `rt fn`"), a table is an input of `init`, and a struct is the output at `sample` with its fields as buffers. The generic struct and the alias are as
+// the struct and the scalar.
+
+pub struct Gains {
+  l: F32,
+  r: F32,
+}
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub struct Box2[T] {
+  a: T,
+  b: T,
+}
+
+pub enum Curve {
+  Linear,
+  Double,
+  Offset(F32),
+}
+
+pub type Scalar = F32
+
+rt fn shape(c: Curve, x: F32) -> F32 {
+  match c {
+    Curve.Linear => x,
+    Curve.Double => x * 2.0,
+    Curve.Offset(d) => x + d,
+  }
+}
+
+pub flow chosen(c: Curve at block, x: F32 at sample) -> F32 at sample {
+  shape(c, x)
+}
+
+pub flow struct_config(g: Gains at init, x: F32 at sample) -> Stereo at sample {
+  Stereo { l: x * g.l, r: x * g.r }
+}
+
+pub flow struct_params(g: Gains at block, x: F32 at sample) -> Stereo at sample {
+  Stereo { l: x * g.l, r: x * g.r }
+}
+
+pub flow generic_params(b: Box2[F32] at block, x: F32 at sample) -> F32 at sample {
+  x * b.a + b.b
+}
+
+pub flow alias_params(k: Scalar at block, x: F32 at sample) -> F32 at sample {
+  x * k
+}
+
+pub flow table_config(t: [F32; 2] at init, x: F32 at sample) -> F32 at sample {
+  x * t[1]
+}
+
+test "an enum at block chooses by a rt fn that matches it" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let a = chosen.render(chosen.Params { c: Curve.Double }, xs, 8.0)
+  assert a.out[0] == 2.0
+  assert a.out[1] == 4.0
+  let b = chosen.render(chosen.Params { c: Curve.Linear }, xs, 8.0)
+  assert b.out[1] == 2.0
+  let c = chosen.render(chosen.Params { c: Curve.Offset(0.5) }, xs, 8.0)
+  assert c.out[0] == 1.5
+  assert c.out[1] == 2.5
+}
+
+test "a struct of scalars at init is the field of Config and gives a struct at sample" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = struct_config.render(struct_config.Config { g: Gains { l: 0.5, r: 3.0 } }, xs, 8.0)
+  assert o.l[0] == 0.5
+  assert o.l[1] == 1.0
+  assert o.r[0] == 3.0
+  assert o.r[1] == 6.0
+}
+
+test "a struct of scalars at block is the field of Params" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = struct_params.render(struct_params.Params { g: Gains { l: 2.0, r: 4.0 } }, xs, 8.0)
+  assert o.l[1] == 4.0
+  assert o.r[0] == 4.0
+  assert o.r[1] == 8.0
+}
+
+test "a generic struct of scalars and an alias of a scalar at block" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let a = generic_params.render(generic_params.Params { b: Box2 { a: 3.0, b: 0.5 } }, xs, 8.0)
+  assert a.out[0] == 3.5
+  assert a.out[1] == 6.5
+  let b = alias_params.render(alias_params.Params { k: 0.25 }, xs, 8.0)
+  assert b.out[1] == 0.5
+}
+
+test "a table at init is an array of scalars made by a function" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = table_config.render(table_config.Config { t: [0.0, 5.0] }, xs, 8.0)
+  assert o.out[0] == 5.0
+  assert o.out[1] == 10.0
+}

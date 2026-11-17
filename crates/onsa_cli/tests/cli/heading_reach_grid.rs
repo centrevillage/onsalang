@@ -113,6 +113,17 @@ impl Ty {
         }
     }
 
+    /// Whether a function type is in the type (S-372: a flow input of it is E0810, so the sweep puts it in
+    /// no flow input).
+    fn holds_fn(&self) -> bool {
+        match self {
+            Ty::Plain(_) => false,
+            Ty::Fn(_) => true,
+            Ty::Option(t) | Ty::Array(t) | Ty::Generic(_, t) | Ty::Alias(_, t) => t.holds_fn(),
+            Ty::Tuple(a, b) => a.holds_fn() || b.holds_fn(),
+        }
+    }
+
     fn depth(&self) -> usize {
         match self {
             Ty::Plain(_) | Ty::Alias(..) => 1,
@@ -158,14 +169,6 @@ fn pool(rng: &mut Rng) -> (Vec<String>, Vec<Ty>) {
     (lines, pool)
 }
 
-/// The text of a type in the place of a flow input, where a function type needs its brackets.
-fn flow_ty(t: &Ty) -> String {
-    match t {
-        Ty::Fn(_) => format!("({})", t.text()),
-        _ => t.text(),
-    }
-}
-
 struct Case {
     line: usize,
     what: String,
@@ -201,15 +204,16 @@ fn generate(seed: u64) -> (Vec<String>, Vec<Case>) {
             5 => ("field", format!("{w}struct D{n} {{ f: {ty} }}"), dv, false),
             6 => ("priv field", format!("{w}struct D{n} {{ priv f: {ty} }}"), Vis::Priv, false),
             7 => ("variant", format!("{w}enum D{n} {{ A({ty}) }}"), dv, false),
+            8 | 9 if t.holds_fn() => continue,
             8 => (
                 "flow block input",
-                format!("{w}flow d{n}(x: F32 at sample, g: {} at block) -> F32 at sample {{ x }}", flow_ty(&t)),
+                format!("{w}flow d{n}(x: F32 at sample, g: {ty} at block) -> F32 at sample {{ x }}"),
                 dv,
                 false,
             ),
             9 => (
                 "flow init input",
-                format!("{w}flow d{n}(x: F32 at sample, g: {} at init) -> F32 at sample {{ x }}", flow_ty(&t)),
+                format!("{w}flow d{n}(x: F32 at sample, g: {ty} at init) -> F32 at sample {{ x }}"),
                 dv,
                 false,
             ),

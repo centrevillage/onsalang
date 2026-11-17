@@ -385,8 +385,22 @@ impl<'p> Sema<'p> {
                     }
                     failed = true;
                 }
-                Ok(r) if r != ty => read.push((id, slot, r)),
-                Ok(_) => {}
+                // An input whose value type is E0810 (§11.3) is not read either,
+                // as one of S-1068: so `Params` and `Config`, which have it as a
+                // field (§11.6), are used with no second diagnostic. Its E0810 is
+                // of the flow stage; a later root is judged still.
+                // SPEC-GAP(S-1123): of an input that is not Copy too (provisional (1)).
+                Ok(r) => {
+                    let input = matches!(slot, Slot::Input(_));
+                    match input.then(|| self.signal_type_error(r, cx.ast.ty(t).span)).flatten() {
+                        Some(d) => {
+                            self.report(id, d);
+                            read.push((id, slot, self.a.types.error()));
+                        }
+                        None if r != ty => read.push((id, slot, r)),
+                        None => {}
+                    }
+                }
             }
         }
         read

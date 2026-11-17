@@ -1,0 +1,116 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.2", "§18.1"]
+// fixes = 0
+
+// W7-13 U3/t, S-372 (spec §11.3: "入出力の値型と、本体の式（部分式を含む）の型は、クロックと `@export` によらず関数型を含まない（E0810）"): the value type of an
+// input or of the output of a flow is not a function type, whatever the clock is (`init`, `block`, `sample`) and whether the flow is exported or not. The forms of the
+// function type are all one: with or without `rt`, with an effect row, with an argument that has a mode, with any number of arguments. The error is at the type of the
+// input (the whole type, §18.1: the place is the one of the signature), has no candidate (`fixes = 0`: what the writer wants instead is an enum and a `match`, a table
+// made by a function, or a flow of its own, and that is not one thing), and is one error in a flow, the first one in the order of the source (§18.1). A function type
+// outside the inputs and the output of a flow is as it was (the functions at the end of the file: the controls). The types that hold a function type are in
+// flow_input_type_fn_nested.onsa.
+
+rt fn dbl(x: F32) -> F32 {
+  x * 2.0
+}
+
+const SHAPE: rt fn(F32) -> F32 = dbl
+
+// ---- the clock does not matter
+
+pub flow function_at_init(f: (rt fn(F32) -> F32) at init, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow function_at_block(f: (rt fn(F32) -> F32) at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow function_at_sample(f: (rt fn(F32) -> F32) at sample, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+// ---- the forms of the function type
+
+pub flow function_without_rt(f: (fn(F32) -> F32) at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow function_with_an_effect_row(f: (fn(F32) -> F32 uses {Alloc}) at init, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+// The type that its `uses` closes needs no parentheses before the clock (S-367).
+pub flow function_closed_by_its_effects(f: fn(F32) -> F32 uses {Alloc} at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow function_with_an_inout_argument(f: (rt fn(inout F32)) at init, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow function_with_a_move_argument(f: (rt fn(move F32) -> F32) at init, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow function_of_two_arguments(f: (rt fn(F32, F32) -> F32) at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow function_of_no_argument(f: (rt fn() -> F32) at init, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow function_returning_a_function(f: (rt fn(F32) -> rt fn(F32) -> F32) at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+// ---- the first input of a flow that has two of them is the one reported
+
+pub flow two_functions(
+  f: (rt fn(F32) -> F32) at init,                   //~ E0810
+  g: (rt fn(F32) -> F32) at block,
+  x: F32 at sample,
+) -> F32 at sample {
+  x
+}
+
+pub flow a_scalar_then_a_function(
+  k: F32 at block,
+  f: (rt fn(F32) -> F32) at block,                  //~ E0810
+  x: F32 at sample,
+) -> F32 at sample {
+  x * k
+}
+
+// ---- the flow is exported: the clock and the export do not matter either
+
+@export
+pub flow exported_function_at_init(f: (rt fn(F32) -> F32) at init, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+// ---- the output
+
+pub flow function_output(x: F32 at sample) -> (rt fn(F32) -> F32) at sample {   //~ E0810
+  SHAPE
+}
+
+// ---- not errors in the same file: a flow without a function in its signature, and the functions that take a function
+
+pub flow no_function(k: F32 at block, n: U32 at init, x: F32 at sample) -> F32 at sample {
+  x * k
+}
+
+rt fn apply(f: rt fn(F32) -> F32, x: F32) -> F32 {
+  f.(x)
+}
+
+pub fn apply_twice(f: fn(F32) -> F32, x: F32) -> F32 {
+  f.(f.(x))
+}
+
+pub rt fn through(x: F32) -> F32 {
+  apply(dbl, x)
+}

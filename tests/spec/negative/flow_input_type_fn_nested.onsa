@@ -1,0 +1,180 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.6", "§18.1"]
+// fixes = 0
+
+// W7-13 U3/t, S-372 (spec §11.3: "含むかは型の構造で決め、配列とタプルの要素、struct のフィールド（`priv` も）、enum の列挙子の要素、型引数、別名の中の関数型も含む"): a type
+// holds a function type when the structure of the type has one: the element of an array and of a tuple, a field of a struct (the field of a struct inside a struct too),
+// the element of a variant of an enum, an argument of a type (`Option`, a struct of its own with a parameter), and what a `type` is an alias of. The array of length 0
+// holds its element type (the type is in the structure, not in the values). The place of the error is the whole type of the input, and a flow has one error (§18.1).
+// The types of other modules, with a `priv` field and through an alias, are in the package packages/flow_input_type_fn_modules. The same types without a function
+// in them are the controls at the end of the file.
+
+pub struct Pt {
+  cb: rt fn(F32) -> F32,
+  k: F32,
+}
+
+pub struct Wrapper {
+  inner: Pt,
+  n: F32,
+}
+
+pub struct Box2[T] {
+  a: T,
+  b: T,
+}
+
+// The parameter is only in an array of length 0: no value of the field exists, the type does.
+pub struct Tag[T] {
+  k: F32,
+  n: [T; 0],
+}
+
+pub enum Choice {
+  Fun(rt fn(F32) -> F32),
+  Lin,
+}
+
+pub enum Deep {
+  Plain(F32),
+  Held(Pt),
+}
+
+pub type Shaper = rt fn(F32) -> F32
+
+pub type Shapers = [Shaper; 2]
+
+pub type Wrapped = Wrapper
+
+// ---- an array and a tuple
+
+pub flow array_at_block(fs: [rt fn(F32) -> F32; 2] at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow array_of_arrays_at_init(fs: [[rt fn(F32) -> F32; 2]; 2] at init, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow tuple_first_at_init(t: (rt fn(F32) -> F32, F32) at init, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow tuple_second_at_block(t: (F32, rt fn(F32) -> F32) at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow array_of_length_zero(fs: [rt fn(F32) -> F32; 0] at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+// ---- a struct
+
+pub flow struct_at_block(p: Pt at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x * p.k
+}
+
+pub flow struct_at_init(p: Pt at init, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x * p.k
+}
+
+pub flow struct_in_a_struct(w: Wrapper at init, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x * w.n
+}
+
+pub flow struct_in_an_array(ps: [Pt; 2] at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+// ---- an enum
+
+pub flow enum_with_a_function(c: Choice at init, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow enum_with_a_struct_with_a_function(c: Deep at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+// ---- an argument of a type
+
+pub flow option_of_a_function(o: Option[rt fn(F32) -> F32] at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow option_of_a_struct(o: Option[Pt] at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow struct_of_its_own_with_a_function(b: Box2[rt fn(F32) -> F32] at init, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow argument_only_in_an_array_of_length_zero(b: Tag[rt fn(F32) -> F32] at init, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x * b.k
+}
+
+// ---- an alias
+
+pub flow alias_of_a_function(f: Shaper at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow alias_of_an_array_of_an_alias(fs: Shapers at init, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow alias_of_a_struct_with_a_function(w: Wrapped at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x * w.n
+}
+
+// ---- not errors in the same file: the same shapes with no function in them
+
+pub struct Level {
+  gain: F32,
+  k: F32,
+}
+
+pub enum Curve {
+  Tanh,
+  Hard(F32),
+}
+
+pub type Scalar = F32
+
+pub flow array_of_scalars(fs: [F32; 2] at block, x: F32 at sample) -> F32 at sample {
+  x * fs[0]
+}
+
+pub flow tuple_of_scalars(t: (F32, F32) at init, x: F32 at sample) -> F32 at sample {
+  x * t.0
+}
+
+pub flow array_of_length_zero_of_scalars(fs: [F32; 0] at block, x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow struct_of_scalars(p: Level at block, x: F32 at sample) -> F32 at sample {
+  x * p.k
+}
+
+pub flow enum_of_scalars(c: Curve at init, x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow option_of_a_scalar(o: Option[F32] at block, x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub flow struct_of_its_own_with_scalars(b: Box2[F32] at init, x: F32 at sample) -> F32 at sample {
+  x * b.a
+}
+
+pub flow tag_of_a_scalar(b: Tag[F32] at init, x: F32 at sample) -> F32 at sample {
+  x * b.k
+}
+
+pub flow alias_of_a_scalar(k: Scalar at block, x: F32 at sample) -> F32 at sample {
+  x * k
+}

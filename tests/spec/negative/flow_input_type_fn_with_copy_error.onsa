@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§18.1"]
+// fixes = 0
+
+// W7-13 U3/t, S-372 (spec §11.3: "flow の入出力と本体の `let` の値型（信号の値型）`T` は Copy でなければならない（E0810）。入出力の値型と、本体の式（部分式を含む）の型は、クロックと
+// `@export` によらず関数型を含まない（E0810）", §18.1: one error in a unit): a type that is not Copy and holds a function type is one E0810 at the type of the input, not two
+// (the rule of Copy and the rule of the function type are the one error of the input). The control is the type that is not Copy and holds no function: it is the E0810
+// of the Copy as it was. The function that holds no non-Copy part is in flow_input_type_fn_nested.onsa.
+
+pub struct WithText {
+  f: rt fn(F32) -> F32,
+  s: Str,
+}
+
+pub struct JustText {
+  s: Str,
+}
+
+pub flow struct_with_a_function_and_a_text(b: WithText at init, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow tuple_with_a_function_and_a_text(t: (rt fn(F32) -> F32, Str) at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow heap_array_of_functions(fs: Array[rt fn(F32) -> F32] at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow option_of_a_text_and_a_function(o: Option[(Str, rt fn(F32) -> F32)] at init, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+// ---- the control: not Copy, and no function in it
+
+pub flow text_alone(b: JustText at init, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow text_in_a_tuple(t: (F32, Str) at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}

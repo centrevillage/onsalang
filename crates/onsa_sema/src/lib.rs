@@ -30,6 +30,7 @@ pub mod flow;
 pub mod flow_names;
 #[cfg(test)]
 mod flow_tests;
+mod holds_fn;
 pub mod infer;
 pub mod kind;
 #[cfg(test)]

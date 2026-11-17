@@ -1,0 +1,58 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§15.1", "§18.1"]
+// fixes = 0
+
+// W7-13 U3/t, S-372 (spec §11.3: the function type in a type is found by the structure of the type, "struct のフィールド（`priv` も）、enum の列挙子の要素、型引数、別名の中の関数型も含む"): the flows
+// of this module have, as the type of an input, a type of util.onsa that holds a function type: through an alias of another module, in a struct whose field is `priv`, as the
+// argument of a struct with a parameter, in a variant of an enum; the names are taken with `use` or written with the path of the module. Each is one E0810 at the type of the input
+// (the name of the module is a part of the type). The controls are the types of util.onsa that hold none: no diagnostic.
+
+use util
+use util.{Shaper, Single, Hidden, Holder, Choice, Plain, Scalar, Curve}
+
+pub flow alias_of_another_module(f: Shaper at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow alias_of_a_function(f: Single at init, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow struct_with_a_priv_field(s: Hidden at init, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x * s.k
+}
+
+pub flow struct_with_a_parameter(h: Holder[rt fn(F32) -> F32] at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow enum_with_a_function(c: Choice at init, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow path_of_the_module(c: util.Choice at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow path_of_an_alias(f: util.Shaper at init, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+// ---- not errors: the types of the module that hold no function
+
+pub flow plain_struct(p: Plain at block, x: F32 at sample) -> F32 at sample {
+  x * p.a
+}
+
+pub flow plain_alias(k: Scalar at block, x: F32 at sample) -> F32 at sample {
+  x * k
+}
+
+pub flow plain_parameter(h: Holder[F32] at init, x: F32 at sample) -> F32 at sample {
+  x * h.v
+}
+
+pub flow plain_enum(c: Curve at block, x: F32 at sample) -> F32 at sample {
+  x
+}

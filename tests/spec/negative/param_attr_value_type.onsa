@@ -5,8 +5,9 @@
 // W7-13 U4a/t, S-87, R-99 (spec §11.7: "`@param` は `block` の入力にだけ付けられ、入力の値型は `F32` `F64` `I8` `I16` `I32`
 // `U8` `U16` `U32` `Bool` に限る（それ以外は E0809）"): the value type of an input that has a `@param` is one of the nine
 // scalars. Any other type is E0809, at the type of the input (the attribute is on a line of its own, so the mark is on the
-// line of the input). The type is read through an alias. A type that is not allowed in an input at all (E0810, not Copy) is
-// param_attr_value_type_not_copy.onsa. The values of the keys are plain numbers of the type that the rule would give them (an
+// line of the input). The type is read through an alias. A type that is not allowed in an input at all (E0810, not Copy, or holding a
+// function type: S-372, W7-13 U3) is param_attr_value_type_not_copy.onsa, and a_function below is E0810 with the attribute on it (R-489: the E0810 of the type
+// is read before the attribute). The values of the keys are plain numbers of the type that the rule would give them (an
 // integer or a float literal), so that the value type is the only thing wrong; the check of the values is in
 // param_attr_ok.onsa and the work after this one (W7-13 U4b). One error in each unit (§18.1).
 
@@ -46,7 +47,7 @@ pub flow an_enum(
 pub flow a_function(
   x: F32 at sample,
   @param(default: 0.0)
-  p: (rt fn(F32) -> F32) at block,                  //~ E0809
+  p: (rt fn(F32) -> F32) at block,                  //~ E0810
 ) -> F32 at sample {
   x
 }

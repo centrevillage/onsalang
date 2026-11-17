@@ -198,7 +198,11 @@ impl Walker<'_> {
                 match mark {
                     // Up to the end of the `.`, which may start the next line (§2.5).
                     Mark::Plain => d.with_fix(Fix::delete("call the item without `.`", Span { start: end, ..dot })),
-                    _ => d,
+                    // A value: no candidate, and why (S-372).
+                    _ => d.with_rule(
+                        "a flow has no function values (§11.3); to choose among functions, take an enum and `match` \
+                         on it",
+                    ),
                 }
             }
             (Mark::Plain, CallKind::Flow) => self.no_flow(e, callee).with_fix(Fix::delete("remove `~`", mark_span)),

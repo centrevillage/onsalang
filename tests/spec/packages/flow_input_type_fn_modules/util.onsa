@@ -1,0 +1,32 @@
+// The types of this module hold a function type (W7-13 U3/t, S-372): an alias that holds it, a struct with a `priv` field of it, a struct with a parameter, an enum with it
+// in a variant. A flow of another module that has one of them as the type of an input is an E0810 in that module (main.onsa): the structure of the type decides, and the
+// privacy of the field and the module of the type do not. The types with no function are the controls.
+
+pub type Shaper = [(rt fn(F32) -> F32, F32); 2]
+
+pub type Single = rt fn(F32) -> F32
+
+pub struct Hidden {
+  priv f: rt fn(F32) -> F32,
+  k: F32,
+}
+
+pub struct Holder[T] {
+  v: T,
+}
+
+pub enum Choice {
+  Fun(rt fn(F32) -> F32),
+  Off,
+}
+
+pub struct Plain {
+  a: F32,
+}
+
+pub type Scalar = F32
+
+pub enum Curve {
+  Tanh,
+  Hard,
+}

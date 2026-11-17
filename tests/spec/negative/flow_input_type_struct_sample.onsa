@@ -1,0 +1,125 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§19.1", "§18.1"]
+// fixes = 0
+
+// W7-13 U3/t, R-41, R-279 (spec §11.6: "`sample` の入出力の値型は、スカラ、`[スカラ; N]`（N は 1 以上）、または（出力のみ）それらを一つ以上フィールドに持つ struct", §19.1: "`sample` の入力に struct を使う
+// こと。struct の入力は今は E0810"): the type of an input at `sample` is a scalar or an array of scalars; a struct is E0810 at the type of the input, whatever the struct has in
+// its fields (scalars, an array, a parameter of a type), however the name is reached (an alias, an alias of an alias, the `Params` and the `Config` that another flow generates, a type
+// of the module), and whether the flow gives a struct as its output too or not. The struct as an output at `sample` is as it was, and the struct in the input of `init` and of `block`
+// (§11.6: the fields of `Config` and `Params`) too: they are the controls at the end of the file. An error is one in the flow, at the first input (§18.1). The modules are in
+// packages/flow_input_type_struct_sample_modules. No candidate (`fixes = 0`): the writer's choice is the scalars one by one, or an array.
+
+pub struct St {
+  a: F32,
+  b: F32,
+}
+
+pub struct WithArray {
+  v: [F32; 2],
+}
+
+pub struct Gen[T] {
+  a: T,
+}
+
+pub struct Single {
+  a: F32,
+}
+
+pub type Alias = St
+
+pub type AliasOfAlias = Alias
+
+pub flow inner(c: U32 at init, k: F32 at block, x: F32 at sample) -> F32 at sample {
+  x * k
+}
+
+pub flow struct_input(x: St at sample) -> F32 at sample {   //~ E0810
+  1.0
+}
+
+pub flow struct_input_that_is_read(x: St at sample) -> F32 at sample {   //~ E0810
+  x.a + x.b
+}
+
+pub flow struct_of_one_field(x: Single at sample) -> F32 at sample {   //~ E0810
+  1.0
+}
+
+pub flow struct_with_an_array_field(x: WithArray at sample) -> F32 at sample {   //~ E0810
+  1.0
+}
+
+pub flow struct_with_a_parameter(x: Gen[F32] at sample) -> F32 at sample {   //~ E0810
+  1.0
+}
+
+pub flow struct_through_an_alias(x: Alias at sample) -> F32 at sample {   //~ E0810
+  1.0
+}
+
+pub flow struct_through_two_aliases(x: AliasOfAlias at sample) -> F32 at sample {   //~ E0810
+  1.0
+}
+
+pub flow generated_params_of_another_flow(x: inner.Params at sample) -> F32 at sample {   //~ E0810
+  1.0
+}
+
+pub flow generated_config_of_another_flow(x: inner.Config at sample) -> F32 at sample {   //~ E0810
+  1.0
+}
+
+pub flow struct_after_a_scalar(a: F32 at sample, x: St at sample) -> F32 at sample {   //~ E0810
+  a
+}
+
+pub flow struct_before_a_scalar(
+  x: St at sample,                                  //~ E0810
+  a: F32 at sample,
+) -> F32 at sample {
+  a
+}
+
+pub flow struct_in_and_out(x: St at sample) -> St at sample {   //~ E0810
+  x
+}
+
+pub flow struct_in_with_blocks_around(k: F32 at block, x: St at sample, n: U32 at init) -> F32 at sample {   //~ E0810
+  k
+}
+
+// ---- not errors in the same file: the struct as an output at `sample`, and as an input of `init` and of `block`
+
+pub flow struct_out(x: F32 at sample) -> St at sample {
+  St { a: x, b: x }
+}
+
+pub flow struct_out_with_an_array(x: F32 at sample) -> WithArray at sample {
+  WithArray { v: [x, x] }
+}
+
+pub flow struct_out_through_an_alias(x: F32 at sample) -> Alias at sample {
+  St { a: x, b: x }
+}
+
+pub flow struct_at_init(s: St at init, x: F32 at sample) -> F32 at sample {
+  x * s.a
+}
+
+pub flow struct_at_block(s: St at block, x: F32 at sample) -> F32 at sample {
+  x * s.b
+}
+
+pub flow generated_params_at_block(p: inner.Params at block, x: F32 at sample) -> F32 at sample {
+  x * p.k
+}
+
+pub flow generated_config_at_init(c: inner.Config at init, x: F32 at sample) -> F32 at sample {
+  x * F32.round_from(c.c)
+}
+
+pub flow array_input(x: [F32; 2] at sample) -> F32 at sample {
+  x[0] + x[1]
+}

@@ -6,8 +6,10 @@ use super::*;
 /// Why the type of a `sample` input or output does not cross the boundary
 /// (§11.6): its E0810.
 enum Unfit {
-    /// A nested array, or a type of none of the forms.
-    Form,
+    /// A type of none of the forms; whether it is or has a nested array.
+    Form(bool),
+    /// A struct as an input (R-41, R-279: an output only).
+    Struct,
     /// No channel (S-1110, S-407): a struct with no field (`None`), or an
     /// array of length 0, with the name of its field in the struct.
     NoChannel(Option<(Option<String>, TyId)>),
@@ -184,11 +186,11 @@ impl<'p> Sema<'p> {
     /// kept, as of a cut heading: its uses get no diagnostic.
     fn members_unknown(&self, flow: DefId, inputs: bool) -> bool {
         let f = self.flow_def(flow);
-        let ins = f.inputs.iter().filter(|_| inputs).map(|i| (i.ty, i.rate == Rate::Sig));
+        let ins = f.inputs.iter().filter(|_| inputs).map(|i| (i.ty, (i.rate == Rate::Sig).then_some(true)));
         let mut seen = HashSet::default();
-        std::iter::once((f.out, true))
-            .chain(ins)
-            .any(|(t, sig)| self.has_error(t, &mut seen) || sig && self.boundary_outputs(t).is_err())
+        std::iter::once((f.out, Some(false))).chain(ins).any(|(t, edge)| {
+            self.has_error(t, &mut seen) || edge.is_some_and(|input| self.boundary_outputs(t, input).is_err())
+        })
     }
 
     /// The item `g` of `flow`, not known ([`Self::members_unknown`]): its
@@ -229,30 +231,62 @@ impl<'p> Sema<'p> {
 
     // ------------------------------------------------------------ generated
 
-    /// §11.3: the value type of a rate must be Copy; §11.6: at the boundary
-    /// (`sample` inputs and the output) only scalars, `[scalar; N]`, and structs
-    /// of those. Whether it reports an E0810.
-    fn check_rate_value_type(&mut self, _cx: &Cx<'p>, id: DefId, ty: TyId, span: Span, boundary: bool) -> bool {
+    /// §11.3: the value type of a signal is Copy and holds no function type
+    /// (S-372), in this order: its E0810 at `span`, of the type as a whole.
+    /// The one judgment of the inputs, read by the well-formedness of the
+    /// types at the turn of the flow (an input with it is the error type to
+    /// its users, S-1123), and of the output ([`Self::check_rate_value_type`]).
+    pub(super) fn signal_type_error(&self, ty: TyId, span: Span) -> Option<Diagnostic> {
+        let shown = |t: TyId| self.a.display_type(t);
         if let Some(k) = crate::kind::facts_of(self.a, ty, &[]).not_copy() {
-            self.report(
-                id,
-                Diagnostic::new(
-                    Stage::Flow,
-                    Code::E0810,
-                    span,
-                    format!("the value type of a signal must be Copy; `{}` is {k} (§11.3)", self.a.display_type(ty)),
-                ),
-            );
+            let msg = format!("the value type of a signal must be Copy; `{}` is {k} (§11.3)", shown(ty));
+            return Some(Diagnostic::new(Stage::Flow, Code::E0810, span, msg));
+        }
+        let held = crate::holds_fn::fn_in(self.a, ty)?;
+        let what = match held.parts.is_empty() {
+            true => "is a function type".to_string(),
+            false => format!("holds the function type `{}`", shown(held.found)),
+        };
+        let msg = format!("the value type of a signal holds no function type; `{}` {what} (§11.3)", shown(ty));
+        let d = Diagnostic::new(Stage::Flow, Code::E0810, span, msg);
+        let d = match held.parts.is_empty() {
+            true => d,
+            false => d.with_rule(format!("`{}` is in {}", shown(held.found), held.path(self.a))),
+        };
+        Some(d.with_rule(
+            "a flow takes, gives and keeps no function value; to choose among functions, take an enum and `match` on it",
+        ))
+    }
+
+    /// The E0810 of the value type `ty` of an input or the output of `id`
+    /// ([`Self::signal_type_error`]), and at the boundary (`sample` inputs,
+    /// `Some(true)`, and the output, `Some(false)`), §11.6: only scalars,
+    /// `[scalar; N]`, and (an output) structs of those. Whether it reports one.
+    fn check_rate_value_type(&mut self, id: DefId, ty: TyId, span: Span, boundary: Option<bool>) -> bool {
+        if let Some(d) = self.signal_type_error(ty, span) {
+            self.report(id, d);
             return true;
         }
-        if !boundary {
-            return false;
-        }
+        let Some(input) = boundary else { return false };
         let shown = |t: TyId| self.a.display_type(t);
-        let msg = match self.boundary_outputs(ty) {
+        let msg = match self.boundary_outputs(ty, input) {
             Ok(_) => return false,
-            Err(Unfit::Form) => "`sample` inputs and outputs are scalars, `[scalar; N]`, or structs of those; nested arrays cannot cross the boundary (§11.6)".to_string(),
-            Err(Unfit::NoChannel(None)) => format!("a `sample` input or output needs at least one channel; the struct `{}` has no field (§11.6)", shown(ty)),
+            // R-245: the type, and the forms that cross.
+            Err(Unfit::Form(nested)) => format!(
+                "`{}` cannot cross the boundary{}: a `sample` input or output is a scalar or `[scalar; N]`, \
+                 and an output may be a struct of those (§11.6)",
+                shown(ty),
+                if nested { ", as nested arrays do not" } else { "" }
+            ),
+            Err(Unfit::Struct) => format!(
+                "`{}` is a struct, which crosses the boundary as an output only: a `sample` input is a scalar or \
+                 `[scalar; N]` (§11.6)",
+                shown(ty)
+            ),
+            Err(Unfit::NoChannel(None)) => format!(
+                "a `sample` input or output needs at least one channel; the struct `{}` has no field (§11.6)",
+                shown(ty)
+            ),
             Err(Unfit::NoChannel(Some((f, t)))) => {
                 let of = f.map_or_else(|| format!("`{}`", shown(t)), |f| format!("the field `{f}`, `{}`,", shown(t)));
                 format!("a `sample` input or output needs at least one channel; {of} is an array of length 0 (§11.6)")
@@ -264,7 +298,9 @@ impl<'p> Sema<'p> {
 
     /// The `process` outputs for an output value type (§11.6): `(name, elem, array len)`.
     /// An element of the error type may be a scalar (§18.1, R-271); the error type, none.
-    fn boundary_outputs(&self, ty: TyId) -> Result<Vec<(String, TyId, Option<Len>)>, Unfit> {
+    /// Of an `input`, a struct is none of the forms (R-41, R-279), known to be
+    /// a struct with the error type in its fields too.
+    fn boundary_outputs(&self, ty: TyId, input: bool) -> Result<Vec<(String, TyId, Option<Len>)>, Unfit> {
         let is_scalar =
             |t: TyId| matches!(self.a.types.get(t), Ty::Int(_) | Ty::Float(_) | Ty::Bool | Ty::Char | Ty::Error);
         let one = |field: Option<&str>, t: TyId| -> Result<(String, TyId, Option<Len>), Unfit> {
@@ -276,10 +312,12 @@ impl<'p> Sema<'p> {
                 }
                 Ty::Array(e, len) if is_scalar(*e) => Ok((name, *e, Some(*len))),
                 _ if is_scalar(t) => Ok((name, t, None)),
-                _ => Err(Unfit::Form),
+                Ty::Array(e, _) => Err(Unfit::Form(matches!(self.a.types.get(*e), Ty::Array(..)))),
+                _ => Err(Unfit::Form(false)),
             }
         };
         match self.a.types.get(ty) {
+            Ty::Named(d, _) if input && matches!(self.a.def(*d).kind, DefKind::Struct(_)) => Err(Unfit::Struct),
             Ty::Named(d, args) if args.is_empty() => match &self.a.defs[d.0 as usize].kind {
                 DefKind::Struct(StructDef { fields: Fields::Named(fs), .. }) if fs.is_empty() => {
                     Err(Unfit::NoChannel(None))
@@ -287,7 +325,7 @@ impl<'p> Sema<'p> {
                 DefKind::Struct(StructDef { fields: Fields::Named(fs), .. }) => {
                     fs.iter().map(|f| one(Some(&f.name), f.ty)).collect()
                 }
-                _ => Err(Unfit::Form),
+                _ => Err(Unfit::Form(false)),
             },
             Ty::Error => Ok(Vec::new()),
             _ => one(None, ty).map(|o| vec![o]),
@@ -320,9 +358,10 @@ impl<'p> Sema<'p> {
             };
             for &(k, at, span) in &h.inputs {
                 let (rate, ty) = (self.flow_def(h.flow).inputs[k].rate, self.flow_def(h.flow).inputs[k].ty);
-                // A type with the error type in it has its diagnostic (§18.1).
-                let unfit =
-                    self.check_rate_value_type(cx, h.flow, ty, span, rate == Rate::Sig) || self.a.types.has_error(ty);
+                // A type with the error type in it has its diagnostic (§18.1):
+                // of an input of the E0810 of [`Self::signal_type_error`] too.
+                let sig = (rate == Rate::Sig).then_some(true);
+                let unfit = self.check_rate_value_type(h.flow, ty, span, sig) || self.a.types.has_error(ty);
                 let attr = Attr::find(&f.params[at].attrs, onsa_syntax::attrs::PARAM);
                 // The `@param` of an input of a type no signal has, or with a
                 // diagnostic, is not read (§6.5: as the arguments of an
@@ -330,7 +369,8 @@ impl<'p> Sema<'p> {
                 // SPEC-GAP(S-1121): its other E0809 are not reported either.
                 let param =
                     attr.filter(|_| !unfit).and_then(|a| self.lower_param_attr(cx, h.flow, a, rate, (ty, span)));
-                if attr.is_none() {
+                // R-489: nor is the `@param` it must have.
+                if attr.is_none() && !unfit {
                     self.check_exported_input(h.flow, k);
                 }
                 if let DefKind::Flow(fd) = &mut self.a.defs[h.flow.0 as usize].kind {
@@ -339,7 +379,7 @@ impl<'p> Sema<'p> {
             }
             if let Some(span) = h.out {
                 let out = self.flow_def(h.flow).out;
-                self.check_rate_value_type(cx, h.flow, out, span, true);
+                self.check_rate_value_type(h.flow, out, span, Some(false));
             }
             self.trim_members(h.flow, pairs);
         }
@@ -458,7 +498,7 @@ impl<'p> Sema<'p> {
             // known: its uses get no diagnostic (§18.1).
             let error = self.a.types.error();
             for (f, i) in fs.iter_mut().zip(inputs.iter().filter(|i| i.rate == Rate::Sig)) {
-                if self.boundary_outputs(i.ty).is_err() {
+                if self.boundary_outputs(i.ty, true).is_err() {
                     f.ty = error;
                 }
             }
@@ -480,7 +520,7 @@ impl<'p> Sema<'p> {
         let out = self.flow_def(flow).out;
         let name_span = self.a.def(flow).name_span;
         // The E0810 of an output that does not cross is of `check_generated`.
-        let outputs = self.boundary_outputs(out).unwrap_or_default();
+        let outputs = self.boundary_outputs(out, false).unwrap_or_default();
         let views = self.channel_fields(flow, BuiltinTy::Span, &outputs);
         self.fill_struct(flow, FlowTy::Out, views);
         let bufs = self.channel_fields(flow, BuiltinTy::Buf, &outputs);

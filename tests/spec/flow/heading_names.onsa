@@ -39,7 +39,7 @@ pub flow open_out(x: F32 at sample) -> Open at sample {
   Open { a: x }
 }
 
-pub flow open_in(o: Open at sample) -> F32 at sample {
+pub flow open_in(o: Open at block) -> F32 at sample {
   o.a
 }
 
@@ -51,7 +51,7 @@ flow package_out(x: F32 at sample) -> Pair at sample {
   Pair { a: x, b: x }
 }
 
-flow package_in(p: Pair at sample, g: Gain at block) -> F32 at sample {
+flow package_in(p: Pair at block, g: Gain at block) -> F32 at sample {
   p.a * g
 }
 
@@ -59,7 +59,7 @@ priv flow module_out(x: F32 at sample) -> Hid at sample {
   Hid { a: x }
 }
 
-priv flow module_in(h: Hid at sample, g: Level at block, k: Gain at init) -> F32 at sample {
+priv flow module_in(h: Hid at block, g: Level at block, k: Gain at init) -> F32 at sample {
   h.a * g * k
 }
 

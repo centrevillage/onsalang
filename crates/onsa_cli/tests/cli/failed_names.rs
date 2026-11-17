@@ -440,7 +440,7 @@ fn a_part_of_the_error_type_is_not_known_and_the_rest_is_checked() {
         ("flow_out", "pub flow u(x: F32 at sample) -> [{X}; 2] at sample {\n  [x, x]\n}\n"),
         (
             "flow_field",
-            "pub struct W {\n  a: {X},\n  b: F32,\n}\n\npub flow u(x: W at sample) -> F32 at sample {\n  1.0\n}\n",
+            "pub struct W {\n  a: {X},\n  b: F32,\n}\n\npub flow u(x: W at block) -> F32 at sample {\n  1.0\n}\n",
         ),
         (
             "flow_delay",

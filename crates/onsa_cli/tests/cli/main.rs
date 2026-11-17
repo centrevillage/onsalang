@@ -34,6 +34,7 @@ mod excluded_readings_notes;
 mod exit_codes;
 mod explain_e0200;
 mod failed_names;
+mod flow_input_type_notes;
 mod flow_syntax;
 mod flow_syntax_decisions;
 mod fmt_comments;

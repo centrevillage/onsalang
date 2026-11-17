@@ -1,0 +1,13 @@
+// The types and the flow of this module (W7-13 U3/t, R-41, R-279): a struct, an alias of it, and a flow whose `Params` and `Config` are structs of another
+// module. The importing module has them as the type of an input at `sample`.
+
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+pub type Stereo = Pair
+
+pub flow voice(c: U32 at init, k: F32 at block, x: F32 at sample) -> F32 at sample {
+  x * k
+}

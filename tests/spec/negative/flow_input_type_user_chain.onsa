@@ -1,0 +1,138 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.6", "§18.1"]
+// fixes = 0
+
+// W7-13 U3/t, S-372, S-1123 (provisional (1)), S-1068 (spec §18.1: "誤りのある宣言も、名前まで読めれば名前解決に見せる。読めなかった部分（引数の型、フィールドなど）は誤りの型として扱い、それを使う側には診断を出さない",
+// "境界の誤り（E0416）で誤りにするのは … flow の入力（flow が生成する型のフィールド、§11.6）の型"): an input whose type is E0810 (it holds a function type, or it is not Copy) is an error type, so that the
+// `Params` and the `Config` the flow generates, which have the input as a field (§11.6), are used with no second diagnostic: as the type of an input of another flow, as the argument of a type that wants
+// Copy (`Buf`), in a literal, in `init`, and as the arguments of an instance in a flow that has an instance of it. The error is the flow's own, at its input. A flow that has an input of such a type itself
+// has the error of its own heading and nothing else (§18.1: a flow has one). The same with the input that is E0416 is in types/bound_error_root_flow_input_users.onsa.
+
+rt fn dbl(x: F32) -> F32 {
+  x * 2.0
+}
+
+// ---- an input that is not Copy
+
+pub flow text_child(s: Str at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow params_as_an_input(p: text_child.Params at block, x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub struct Holder {
+  ps: Buf[text_child.Params],
+}
+
+pub fn make_text_params() -> text_child.Params {
+  text_child.Params { s: "a" }
+}
+
+pub fn make_wrong_text_params() -> text_child.Params {
+  text_child.Params { s: 1.0 }
+}
+
+pub flow text_caller(x: F32 at sample) -> F32 at sample {
+  text_child~("a", x)
+}
+
+pub flow text_caller_with_another_type(x: F32 at sample) -> F32 at sample {
+  text_child~(1.0, x)
+}
+
+// ---- an input that holds a function type, at block
+
+pub flow function_child(f: (rt fn(F32) -> F32) at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow function_params_as_an_input(p: function_child.Params at block, x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub struct FunctionHolder {
+  ps: Buf[function_child.Params],
+}
+
+pub fn make_function_params() -> function_child.Params {
+  function_child.Params { f: dbl }
+}
+
+// ---- an input that holds a function type, at init
+
+pub flow config_child(f: (rt fn(F32) -> F32) at init, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub flow config_as_an_input(c: config_child.Config at init, x: F32 at sample) -> F32 at sample {
+  x
+}
+
+pub fn make_config_state() -> config_child.State {
+  config_child.init(config_child.Config { f: dbl }, 48000.0)
+}
+
+// ---- a struct input that holds a function type
+
+pub struct Pt {
+  cb: rt fn(F32) -> F32,
+  k: F32,
+}
+
+pub flow struct_child(p: Pt at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  x
+}
+
+pub fn make_struct_params() -> struct_child.Params {
+  struct_child.Params { p: Pt { cb: dbl, k: 1.0 } }
+}
+
+// ---- the flow that has the input of the type itself, and calls the one that has it: the error is its heading's
+
+pub flow function_parent(f: (rt fn(F32) -> F32) at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  function_child~(f, x)
+}
+
+pub flow text_parent(s: Str at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  text_child~(s, x)
+}
+
+// ---- the generated struct as a `sample` input: a struct, which is known with the error type in its fields too,
+// is an input of none of the forms (§11.6, R-41, R-279), as the one of a flow whose inputs are right
+
+pub flow text_params_at_sample(p: text_child.Params at sample) -> F32 at sample {   //~ E0810
+  1.0
+}
+
+pub flow function_params_at_sample(p: function_child.Params at sample) -> F32 at sample {   //~ E0810
+  1.0
+}
+
+pub flow right_params_at_sample(p: right_child.Params at sample) -> F32 at sample {   //~ E0810
+  1.0
+}
+
+// ---- not errors: the same uses of a flow whose inputs are right
+
+pub flow right_child(k: F32 at block, x: F32 at sample) -> F32 at sample {
+  x * k
+}
+
+pub flow right_params_as_an_input(p: right_child.Params at block, x: F32 at sample) -> F32 at sample {
+  x * p.k
+}
+
+pub struct RightHolder {
+  ps: Buf[right_child.Params],
+}
+
+pub fn make_right_params() -> right_child.Params {
+  right_child.Params { k: 0.5 }
+}
+
+pub flow right_caller(x: F32 at sample) -> F32 at sample {
+  right_child~(0.5, x)
+}
