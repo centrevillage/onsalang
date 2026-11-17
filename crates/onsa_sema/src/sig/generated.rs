@@ -184,11 +184,12 @@ impl<'p> Sema<'p> {
     /// also as an element, a field or a type argument), or is a `sample`
     /// type that does not cross the boundary (its E0810). Such an item is
     /// kept, as of a cut heading: its uses get no diagnostic.
-    fn members_unknown(&self, flow: DefId, inputs: bool) -> bool {
+    fn members_unknown(&mut self, flow: DefId, inputs: bool) -> bool {
         let f = self.flow_def(flow);
         let ins = f.inputs.iter().filter(|_| inputs).map(|i| (i.ty, (i.rate == Rate::Sig).then_some(true)));
+        let tys: Vec<(TyId, Option<bool>)> = std::iter::once((f.out, Some(false))).chain(ins).collect();
         let mut seen = HashSet::default();
-        std::iter::once((f.out, Some(false))).chain(ins).any(|(t, edge)| {
+        tys.into_iter().any(|(t, edge)| {
             self.has_error(t, &mut seen) || edge.is_some_and(|input| self.boundary_outputs(t, input).is_err())
         })
     }
@@ -268,8 +269,9 @@ impl<'p> Sema<'p> {
             return true;
         }
         let Some(input) = boundary else { return false };
+        let fit = self.boundary_outputs(ty, input);
         let shown = |t: TyId| self.a.display_type(t);
-        let msg = match self.boundary_outputs(ty, input) {
+        let msg = match fit {
             Ok(_) => return false,
             // R-245: the type, and the forms that cross.
             Err(Unfit::Form(nested)) => format!(
@@ -299,8 +301,24 @@ impl<'p> Sema<'p> {
     /// The `process` outputs for an output value type (§11.6): `(name, elem, array len)`.
     /// An element of the error type may be a scalar (§18.1, R-271); the error type, none.
     /// Of an `input`, a struct is none of the forms (R-41, R-279), known to be
-    /// a struct with the error type in its fields too.
-    fn boundary_outputs(&self, ty: TyId, input: bool) -> Result<Vec<(String, TyId, Option<Len>)>, Unfit> {
+    /// a struct with the error type in its fields too. The fields of a struct
+    /// are read with its type arguments applied (R-491).
+    fn boundary_outputs(&mut self, ty: TyId, input: bool) -> Result<Vec<(String, TyId, Option<Len>)>, Unfit> {
+        let fields: Option<Vec<(String, TyId)>> = match self.a.types.get(ty).clone() {
+            Ty::Named(d, _) if input && matches!(self.a.def(d).kind, DefKind::Struct(_)) => return Err(Unfit::Struct),
+            Ty::Named(d, args) => match &self.a.def(d).kind {
+                DefKind::Struct(StructDef { fields: Fields::Named(fs), .. }) if fs.is_empty() => {
+                    return Err(Unfit::NoChannel(None));
+                }
+                DefKind::Struct(StructDef { fields: Fields::Named(fs), .. }) => {
+                    let fs: Vec<(String, TyId)> = fs.iter().map(|f| (f.name.clone(), f.ty)).collect();
+                    Some(fs.into_iter().map(|(name, t)| (name, self.a.types.subst(t, &args))).collect())
+                }
+                _ => return Err(Unfit::Form(false)),
+            },
+            Ty::Error => return Ok(Vec::new()),
+            _ => None,
+        };
         let is_scalar =
             |t: TyId| matches!(self.a.types.get(t), Ty::Int(_) | Ty::Float(_) | Ty::Bool | Ty::Char | Ty::Error);
         let one = |field: Option<&str>, t: TyId| -> Result<(String, TyId, Option<Len>), Unfit> {
@@ -316,19 +334,9 @@ impl<'p> Sema<'p> {
                 _ => Err(Unfit::Form(false)),
             }
         };
-        match self.a.types.get(ty) {
-            Ty::Named(d, _) if input && matches!(self.a.def(*d).kind, DefKind::Struct(_)) => Err(Unfit::Struct),
-            Ty::Named(d, args) if args.is_empty() => match &self.a.defs[d.0 as usize].kind {
-                DefKind::Struct(StructDef { fields: Fields::Named(fs), .. }) if fs.is_empty() => {
-                    Err(Unfit::NoChannel(None))
-                }
-                DefKind::Struct(StructDef { fields: Fields::Named(fs), .. }) => {
-                    fs.iter().map(|f| one(Some(&f.name), f.ty)).collect()
-                }
-                _ => Err(Unfit::Form(false)),
-            },
-            Ty::Error => Ok(Vec::new()),
-            _ => one(None, ty).map(|o| vec![o]),
+        match fields {
+            Some(fs) => fs.iter().map(|(name, t)| one(Some(name), *t)).collect(),
+            None => one(None, ty).map(|o| vec![o]),
         }
     }
 

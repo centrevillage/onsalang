@@ -1,0 +1,342 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§4.5", "§5.3"]
+
+// W7-13 U5, R-491, §11.6: "`sample` の入出力の値型は、スカラ、`[スカラ; N]`（N は 1 以上）、または（出力のみ）それらを一つ以上フィールドに持つ struct", and
+// "struct なら `inout output: voice.Out`。`Out` は出力の struct と同じフィールド名を持ち、各フィールドは `Span[T]` か `[Span[T]; N]`", and
+// "struct 出力はフィールド名（`o.l`、`o.r`。各フィールドは `Buf[T]` か `[Buf[T]; N]`）". A generic struct whose fields are, after its type arguments are applied
+// (§4.5), scalars or arrays of scalars is an output like a struct that is not generic: `Pair[F32, I32]` is an `Out` with a field `a: Span[F32]` and a field
+// `b: Span[I32]`, and the values are the values of the same flow with a struct that is not generic (some generic flows below have a twin with a plain struct).
+// The type arguments are applied through an alias (`type P = Pair[F32, F32]`), through an array (`Pair[[F32; 2], F32]`) and as a const argument (`Quad[F32, 3]`).
+// The shapes that do not cross the boundary after the type arguments are applied are in `negative/generated_out_generic_struct_neg.onsa`, and the C of
+// `host/generated_out_generic_struct.onsa` and `conformance/generated_out_generic_struct.onsa`.
+
+pub struct Pair[A, B] {
+  a: A,
+  b: B,
+}
+
+pub struct PairFI {
+  a: F32,
+  b: I32,
+}
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+pub struct Quad[T, const N: U32] {
+  ch: [T; N],
+  g: F32,
+}
+
+pub struct QuadPlain {
+  ch: [F32; 3],
+  g: F32,
+}
+
+pub type P = Pair[F32, F32]
+
+pub flow gen_fi(x: F32 at sample, n: I32 at sample) -> Pair[F32, I32] at sample {
+  Pair { a: prev~(x) * 2.0, b: n + 1 }
+}
+
+pub flow plain_fi(x: F32 at sample, n: I32 at sample) -> PairFI at sample {
+  PairFI { a: prev~(x) * 2.0, b: n + 1 }
+}
+
+pub flow gen_arr(x: F32 at sample) -> Pair[[F32; 2], F32] at sample {
+  Pair { a: [x, x * 2.0], b: x + 10.0 }
+}
+
+pub flow gen_arr_b(x: F32 at sample) -> Pair[F32, [F32; 2]] at sample {
+  Pair { a: x, b: [x + 1.0, x + 2.0] }
+}
+
+pub flow gen_alias(l: F32 at sample, r: F32 at sample) -> P at sample {
+  Pair { a: r, b: l }
+}
+
+pub flow gen_one(x: F32 at sample) -> Wrap[F32] at sample {
+  Wrap { v: x * 3.0 }
+}
+
+pub flow gen_one_i(x: I32 at sample) -> Wrap[I32] at sample {
+  Wrap { v: x - 1 }
+}
+
+pub flow gen_one_arr(x: F32 at sample) -> Wrap[[F32; 3]] at sample {
+  Wrap { v: [x, x + 1.0, x + 2.0] }
+}
+
+pub flow gen_const(x: F32 at sample) -> Quad[F32, 3] at sample {
+  Quad { ch: [x, x * 2.0, x * 3.0], g: x - 1.0 }
+}
+
+pub flow plain_const(x: F32 at sample) -> QuadPlain at sample {
+  QuadPlain { ch: [x, x * 2.0, x * 3.0], g: x - 1.0 }
+}
+
+pub flow gen_explicit(x: F32 at sample) -> Pair[F32, F32] at sample {
+  Pair::[F32, F32] { a: x, b: x * x }
+}
+
+pub flow swap_pair(l: F32 at sample, r: F32 at sample) -> Pair[F32, F32] at sample {
+  Pair { a: r, b: l }
+}
+
+// The branches of an `if` make the same generic struct.
+pub flow branch(x: F32 at sample) -> Pair[F32, I32] at sample {
+  if x > 1.5 { Pair { a: x, b: 1 } } else { Pair { a: -x, b: 0 } }
+}
+
+// A flow that calls a flow whose output is a generic struct, reads the fields, and gives them as its own output.
+pub flow relay(l: F32 at sample, r: F32 at sample) -> Pair[F32, F32] at sample {
+  let p = swap_pair~(l, r)
+  Pair { a: p.b + 1.0, b: p.a }
+}
+
+pub flow fold_child(x: F32 at sample) -> F32 at sample {
+  let p = swap_pair~(x, x * 2.0)
+  p.a + p.b * 10.0
+}
+
+fn run_gen(inout st: gen_fi.State, x: Span[F32], n: Span[I32], inout o: gen_fi.Out) {
+  gen_fi.process(inout st, gen_fi.In { x: x, n: n }, inout o)
+}
+
+test "a generic struct output is an Out with the fields of the struct after the type arguments" {
+  let x: [F32; 3] = [1.0, 2.0, 3.0]
+  let n: [I32; 3] = [10, 20, 30]
+  var a: [F32; 3] = [0.0; 3]
+  var b: [I32; 3] = [0; 3]
+  var st = gen_fi.init(8.0)
+  gen_fi.process(inout st, gen_fi.In { x: x, n: n }, inout gen_fi.Out { a: a, b: b })
+  // a is the input one sample late, doubled: the delay starts at 0.
+  assert a[0] == 0.0
+  assert a[1] == 2.0
+  assert a[2] == 4.0
+  assert b[0] == 11
+  assert b[1] == 21
+  assert b[2] == 31
+}
+
+test "the generic struct and the struct that is not generic give the same values" {
+  let x: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let n: [I32; 4] = [5, 6, 7, 8]
+  var ga: [F32; 4] = [0.0; 4]
+  var gb: [I32; 4] = [0; 4]
+  var pa: [F32; 4] = [0.0; 4]
+  var pb: [I32; 4] = [0; 4]
+  var gst = gen_fi.init(8.0)
+  var pst = plain_fi.init(8.0)
+  gen_fi.process(inout gst, gen_fi.In { x: x, n: n }, inout gen_fi.Out { a: ga, b: gb })
+  plain_fi.process(inout pst, plain_fi.In { x: x, n: n }, inout plain_fi.Out { a: pa, b: pb })
+  assert ga[0] == pa[0]
+  assert ga[1] == pa[1]
+  assert ga[3] == pa[3]
+  assert gb[0] == pb[0]
+  assert gb[3] == pb[3]
+  assert ga[3] == 6.0
+  assert gb[3] == 9
+}
+
+test "the state of a generic struct output is carried across process calls" {
+  let x: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let n: [I32; 4] = [1, 2, 3, 4]
+  var a: [F32; 4] = [0.0; 4]
+  var b: [I32; 4] = [0; 4]
+  var st = gen_fi.init(8.0)
+  gen_fi.process(inout st, gen_fi.In { x: x.slice(0, 2), n: n.slice(0, 2) }, inout gen_fi.Out { a: a.slice(0, 2), b: b.slice(0, 2) })
+  gen_fi.process(inout st, gen_fi.In { x: x.slice(2, 4), n: n.slice(2, 4) }, inout gen_fi.Out { a: a.slice(2, 4), b: b.slice(2, 4) })
+  assert a[0] == 0.0
+  assert a[1] == 2.0
+  assert a[2] == 4.0
+  assert a[3] == 6.0
+  assert b[0] == 2
+  assert b[3] == 5
+  gen_fi.reset(inout st)
+  var a2: [F32; 1] = [9.0; 1]
+  var b2: [I32; 1] = [9; 1]
+  gen_fi.process(inout st, gen_fi.In { x: x.slice(3, 4), n: n.slice(3, 4) }, inout gen_fi.Out { a: a2, b: b2 })
+  assert a2[0] == 0.0
+  assert b2[0] == 5
+}
+
+test "render of a generic struct output has the fields as Bufs" {
+  let x: [F32; 3] = [1.0, 2.0, 3.0]
+  let n: [I32; 3] = [10, 20, 30]
+  let o = gen_fi.render(gen_fi.In { x: x, n: n }, 8.0)
+  assert o.a[0] == 0.0
+  assert o.a[1] == 2.0
+  assert o.a[2] == 4.0
+  assert o.b[0] == 11
+  assert o.b[1] == 21
+  assert o.b[2] == 31
+  let q = plain_fi.render(plain_fi.In { x: x, n: n }, 8.0)
+  assert q.a[2] == o.a[2]
+  assert q.b[2] == o.b[2]
+}
+
+test "Out of a generic struct is passed as a parameter" {
+  let x: [F32; 2] = [1.0, 2.0]
+  let n: [I32; 2] = [4, 5]
+  var a: [F32; 2] = [0.0; 2]
+  var b: [I32; 2] = [0; 2]
+  var st = gen_fi.init(8.0)
+  run_gen(inout st, x, n, inout gen_fi.Out { a: a, b: b })
+  assert a[1] == 2.0
+  assert b[0] == 5
+  assert b[1] == 6
+}
+
+test "a field of the type argument [F32; 2] is a planar field of Out" {
+  let x: [F32; 2] = [1.0, 2.0]
+  var c0: [F32; 2] = [0.0; 2]
+  var c1: [F32; 2] = [0.0; 2]
+  var b: [F32; 2] = [0.0; 2]
+  var st = gen_arr.init(8.0)
+  gen_arr.process(inout st, x, inout gen_arr.Out { a: [c0, c1], b: b })
+  assert c0[0] == 1.0
+  assert c0[1] == 2.0
+  assert c1[0] == 2.0
+  assert c1[1] == 4.0
+  assert b[0] == 11.0
+  assert b[1] == 12.0
+  let o = gen_arr.render(x, 8.0)
+  assert o.a[0][1] == 2.0
+  assert o.a[1][1] == 4.0
+  assert o.b[1] == 12.0
+}
+
+test "the planar field can be the second type argument" {
+  let x: [F32; 2] = [1.0, 2.0]
+  let o = gen_arr_b.render(x, 8.0)
+  assert o.a[0] == 1.0
+  assert o.a[1] == 2.0
+  assert o.b[0][0] == 2.0
+  assert o.b[0][1] == 3.0
+  assert o.b[1][0] == 3.0
+  assert o.b[1][1] == 4.0
+}
+
+test "a struct that is applied through an alias is an output" {
+  let l: [F32; 2] = [1.0, 2.0]
+  let r: [F32; 2] = [10.0, 20.0]
+  var a: [F32; 2] = [0.0; 2]
+  var b: [F32; 2] = [0.0; 2]
+  var st = gen_alias.init(8.0)
+  gen_alias.process(inout st, gen_alias.In { l: l, r: r }, inout gen_alias.Out { a: a, b: b })
+  assert a[0] == 10.0
+  assert a[1] == 20.0
+  assert b[0] == 1.0
+  assert b[1] == 2.0
+  let o = gen_alias.render(gen_alias.In { l: l, r: r }, 8.0)
+  assert o.a[1] == 20.0
+  assert o.b[1] == 2.0
+}
+
+test "a generic struct of one field is an Out of one field, for each scalar" {
+  let x: [F32; 2] = [1.0, 2.0]
+  var v: [F32; 2] = [0.0; 2]
+  var st = gen_one.init(8.0)
+  gen_one.process(inout st, x, inout gen_one.Out { v: v })
+  assert v[0] == 3.0
+  assert v[1] == 6.0
+  let n: [I32; 2] = [5, 6]
+  let o = gen_one_i.render(n, 8.0)
+  assert o.v[0] == 4
+  assert o.v[1] == 5
+}
+
+test "a generic struct of one field of an array is a planar Out" {
+  let x: [F32; 2] = [1.0, 2.0]
+  let o = gen_one_arr.render(x, 8.0)
+  assert o.v[0][0] == 1.0
+  assert o.v[0][1] == 2.0
+  assert o.v[1][0] == 2.0
+  assert o.v[1][1] == 3.0
+  assert o.v[2][0] == 3.0
+  assert o.v[2][1] == 4.0
+}
+
+test "a const argument gives the length of the planar field, as the struct that is not generic" {
+  let x: [F32; 2] = [1.0, 2.0]
+  let o = gen_const.render(x, 8.0)
+  let q = plain_const.render(x, 8.0)
+  assert o.ch[0][1] == 2.0
+  assert o.ch[1][1] == 4.0
+  assert o.ch[2][0] == 3.0
+  assert o.ch[2][1] == 6.0
+  assert o.g[0] == 0.0
+  assert o.g[1] == 1.0
+  assert q.ch[2][1] == o.ch[2][1]
+  assert q.g[1] == o.g[1]
+}
+
+test "a struct literal with the type arguments written is the same output" {
+  let x: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = gen_explicit.render(x, 8.0)
+  assert o.a[2] == 3.0
+  assert o.b[0] == 1.0
+  assert o.b[2] == 9.0
+}
+
+test "one generic struct output by flows with different type arguments" {
+  let x: [F32; 2] = [1.0, 2.0]
+  let n: [I32; 2] = [7, 8]
+  let f = gen_fi.render(gen_fi.In { x: x, n: n }, 8.0)
+  let g = gen_arr.render(x, 8.0)
+  let s = swap_pair.render(swap_pair.In { l: x, r: x }, 8.0)
+  assert f.b[1] == 9
+  assert g.a[1][1] == 4.0
+  assert s.a[1] == 2.0
+}
+
+test "process_inplace of a generic struct output pairs the inputs with the fields by position" {
+  var l: [F32; 3] = [1.0, 2.0, 3.0]
+  var r: [F32; 3] = [10.0, 20.0, 30.0]
+  var st = swap_pair.init(8.0)
+  swap_pair.process_inplace(inout st, inout swap_pair.Out { a: l, b: r })
+  // field a is input 1 and field b is input 0.
+  assert l[0] == 10.0
+  assert l[2] == 30.0
+  assert r[0] == 1.0
+  assert r[2] == 3.0
+}
+
+test "a field of Out of a generic struct with another length than the input is a panic" {
+  let x: [F32; 3] = [1.0, 2.0, 3.0]
+  let n: [I32; 3] = [1, 2, 3]
+  var a: [F32; 3] = [0.0; 3]
+  var b: [I32; 2] = [0; 2]
+  var st = gen_fi.init(8.0)
+  gen_fi.process(inout st, gen_fi.In { x: x, n: n }, inout gen_fi.Out { a: a, b: b }) //~ PANIC "a field of Out of a generic struct with another length than the input is a panic"
+  assert a[0] == 0.0
+}
+
+test "the branches of an if make the fields of the Out" {
+  let x: [F32; 2] = [1.0, 2.0]
+  let o = branch.render(x, 8.0)
+  assert o.a[0] == -1.0
+  assert o.a[1] == 2.0
+  assert o.b[0] == 0
+  assert o.b[1] == 1
+}
+
+test "a flow calls a flow whose output is a generic struct and reads its fields" {
+  let l: [F32; 2] = [1.0, 2.0]
+  let r: [F32; 2] = [10.0, 20.0]
+  let o = relay.render(relay.In { l: l, r: r }, 8.0)
+  // swap_pair gives a = r and b = l, so the relay has a = l + 1 and b = r.
+  assert o.a[0] == 2.0
+  assert o.a[1] == 3.0
+  assert o.b[0] == 10.0
+  assert o.b[1] == 20.0
+  let x: [F32; 2] = [1.0, 2.0]
+  let f = fold_child.render(x, 8.0)
+  // swap_pair(x, 2x) has a = 2x and b = x, so the sum is 2x + 10x.
+  assert f.out[0] == 12.0
+  assert f.out[1] == 24.0
+}

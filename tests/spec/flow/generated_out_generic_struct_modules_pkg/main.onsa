@@ -1,0 +1,66 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§4.5", "§15.1"]
+
+// W7-13 U5, R-491, §11.6, §15.1: a generic struct that another module declares is the output of a flow, with its type arguments applied, whether the flow is in the module of the struct
+// (`shapes.scaled`, taken by `use shapes.scaled`) or in this module (the struct taken by a `use`, or written with the module: `shapes.Pair[F32, I32]`). The `Out` has the fields of
+// the struct after the type arguments, as for a struct of this module (`flow/generated_out_generic_struct.onsa`). The values are worked out by hand.
+
+use shapes
+use shapes.Pair
+use shapes.scaled
+
+pub flow taken(x: F32 at sample) -> Pair[F32, F32] at sample {
+  Pair { a: x, b: x + 1.0 }
+}
+
+pub flow qualified(x: F32 at sample, n: I32 at sample) -> shapes.Pair[F32, I32] at sample {
+  shapes.Pair { a: x, b: n }
+}
+
+pub flow arr_field(x: F32 at sample) -> Pair[[F32; 2], I32] at sample {
+  Pair { a: [x, -x], b: 3 }
+}
+
+test "the flow of the module of the struct has the Out of the fields" {
+  let x: [F32; 2] = [2.0, 4.0]
+  let n: [I32; 2] = [3, 5]
+  var a: [F32; 2] = [0.0; 2]
+  var b: [I32; 2] = [0; 2]
+  var st = scaled.init(8.0)
+  scaled.process(inout st, scaled.In { x: x, n: n }, inout scaled.Out { a: a, b: b })
+  assert a[0] == 1.0
+  assert a[1] == 2.0
+  assert b[0] == 6
+  assert b[1] == 10
+}
+
+test "a struct taken by a use is an output of a flow of this module" {
+  let x: [F32; 2] = [1.0, 2.0]
+  let o = taken.render(x, 8.0)
+  assert o.a[0] == 1.0
+  assert o.a[1] == 2.0
+  assert o.b[0] == 2.0
+  assert o.b[1] == 3.0
+}
+
+test "a struct written with its module is an output of a flow of this module" {
+  let x: [F32; 2] = [1.5, 2.5]
+  let n: [I32; 2] = [7, 8]
+  let o = qualified.render(qualified.In { x: x, n: n }, 8.0)
+  assert o.a[1] == 2.5
+  assert o.b[0] == 7
+  assert o.b[1] == 8
+}
+
+test "an array type argument of a struct of another module is a planar field" {
+  let x: [F32; 2] = [1.0, 2.0]
+  let o = arr_field.render(x, 8.0)
+  assert o.a[0][0] == 1.0
+  assert o.a[0][1] == 2.0
+  assert o.a[1][0] == -1.0
+  assert o.a[1][1] == -2.0
+  assert o.b[0] == 3
+  assert o.b[1] == 3
+}

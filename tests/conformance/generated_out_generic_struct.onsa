@@ -1,0 +1,78 @@
+// onsa.toml
+// [package]
+// name = "generated_out_generic_struct"
+// edition = "2026"
+//
+// [export]
+// prefix = "gogc_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§11.6", "§4.5", "§13.4"]
+// conformance = true
+
+// W7-13 U5, R-491, §11.6, §13.4: the output of a generic struct with its type arguments applied (`Pair[F32, I32]`, `Pair[[F32; 2], F32]`, `Wrap[F32]`, `Quad[F32, 3]`, an alias) is the same
+// in the interpreter and in the C, as the shapes of the output that are not generic (`generated_api_shapes.onsa`): the fields of the struct after the type arguments are the
+// fields of the `Out`, with the state beside them.
+
+pub struct Pair[A, B] {
+  a: A,
+  b: B,
+}
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+pub struct Quad[T, const N: U32] {
+  ch: [T; N],
+  g: F32,
+}
+
+pub type P = Pair[F32, F32]
+
+@export
+pub flow fi(x: F32 at sample, n: I32 at sample) -> Pair[F32, I32] at sample {
+  Pair { a: prev~(x) * 2.0, b: n + 1 }
+}
+
+@export
+pub flow arr(x: F32 at sample) -> Pair[[F32; 2], F32] at sample {
+  Pair { a: [x, x * 2.0], b: x + 10.0 }
+}
+
+@export
+pub flow arr_b(x: F32 at sample, y: [F32; 2] at sample) -> Pair[F32, [F32; 2]] at sample {
+  Pair { a: x, b: [y[1], y[0] + x] }
+}
+
+@export
+pub flow one(x: F32 at sample) -> Wrap[F32] at sample {
+  Wrap { v: x * 3.0 }
+}
+
+@export
+pub flow one_i(x: I32 at sample) -> Wrap[I32] at sample {
+  Wrap { v: x - 1 }
+}
+
+@export
+pub flow fixed(x: F32 at sample) -> Quad[F32, 3] at sample {
+  Quad { ch: [x, x * 2.0, x * 3.0], g: x - 1.0 }
+}
+
+@export
+pub flow aliased(l: F32 at sample, r: F32 at sample) -> P at sample {
+  Pair { a: r, b: prev~(l) }
+}
+
+@export
+pub flow stateful(x: F32 at sample, @param(default: 0.5) k: F32 at block) -> Pair[F32, F32] at sample {
+  Pair { a: prev~(x) * k, b: x }
+}

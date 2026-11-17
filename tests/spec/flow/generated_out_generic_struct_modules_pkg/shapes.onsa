@@ -1,0 +1,10 @@
+// The module that main.onsa takes its generic struct and its flow from.
+
+pub struct Pair[A, B] {
+  a: A,
+  b: B,
+}
+
+pub flow scaled(x: F32 at sample, n: I32 at sample) -> Pair[F32, I32] at sample {
+  Pair { a: x * 0.5, b: n * 2 }
+}

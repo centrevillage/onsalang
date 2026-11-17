@@ -1,0 +1,3 @@
+[package]
+name = "generated_out_generic_struct_modules_pkg"
+edition = "2026"

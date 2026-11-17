@@ -1,0 +1,128 @@
+// onsa.toml
+// [package]
+// name = "generated_out_generic_struct"
+// edition = "2026"
+//
+// [export]
+// prefix = "gog_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// spec = ["§11.6", "§14.2", "§4.5"]
+//
+// # W7-13 U5, R-491, §11.6 ("`sample` の入出力の値型は…（出力のみ）それらを一つ以上フィールドに持つ struct"), §14.2 ("`In` / `Out` は `<prefix><name>_in` / `<prefix><name>_out`
+// # （各フィールドがポインタの struct）へのポインタになる"): an exported flow whose output is a generic struct with its type arguments applied (`Pair[F32, I32]`) has the `Out` of the
+// # fields of the struct after the type arguments, as the struct that is not generic: the field `a` is a pointer to `float`, the field `b` a pointer to `int32_t`. The state
+// # (`prev~`) is carried across the calls and `reset` returns it.
+// [[test.host]]
+// name = "a generic struct output of two types is an Out with a pointer of each type"
+// target = "host"
+// flow = "generated_out_generic_struct.fi"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = { x = [1.0, 2.0, 3.0], n = [10, 20, 30] }, status = 0, output = { a = [0.0, 2.0, 4.0], b = [11, 21, 31] } },
+//   { call = "process", params = {}, frames = 2, input = { x = [4.0, 5.0], n = [0, -1] }, status = 0, output = { a = [6.0, 8.0], b = [1, 0] } },
+//   { call = "reset" },
+//   { call = "process", params = {}, frames = 1, input = { x = [7.0], n = [1] }, status = 0, output = { a = [0.0], b = [2] } },
+// ]
+//
+// # A type argument that is an array makes a planar field of the `Out`: the pointer of the field `a` is an array of two channels, as the struct that is not generic (`Bus` of the
+// # other cases of the generated API).
+// [[test.host]]
+// name = "a generic struct with an array type argument has a planar field in Out"
+// target = "host"
+// flow = "generated_out_generic_struct.arr"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 2, input = [1.0, 2.0], status = 0, output = { a = [[1.0, 2.0], [2.0, 4.0]], b = [11.0, 12.0] } },
+// ]
+//
+// # The same generic struct with one field, by two flows with different type arguments (`Wrap[F32]`, `Wrap[I32]`): each has the `Out` of its own type.
+// [[test.host]]
+// name = "a generic struct of one field with F32"
+// target = "host"
+// flow = "generated_out_generic_struct.one"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 2, input = [1.0, 2.0], status = 0, output = { v = [3.0, 6.0] } },
+// ]
+//
+// [[test.host]]
+// name = "a generic struct of one field with I32"
+// target = "host"
+// flow = "generated_out_generic_struct.one_i"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [5, 6, -7], status = 0, output = { v = [4, 5, -8] } },
+// ]
+//
+// # A const argument gives the length of the planar field; the alias is applied (`type P = Pair[F32, F32]`).
+// [[test.host]]
+// name = "a generic struct with a const argument and one through an alias"
+// target = "host"
+// flow = "generated_out_generic_struct.fixed"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 2, input = [1.0, 2.0], status = 0, output = { ch = [[1.0, 2.0], [2.0, 4.0], [3.0, 6.0]], g = [0.0, 1.0] } },
+// ]
+//
+// [[test.host]]
+// name = "a generic struct through an alias"
+// target = "host"
+// flow = "generated_out_generic_struct.aliased"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 8.0, status = 0 },
+//   { call = "process", params = {}, frames = 2, input = { l = [1.0, 2.0], r = [10.0, 20.0] }, status = 0, output = { a = [10.0, 20.0], b = [1.0, 2.0] } },
+// ]
+
+pub struct Pair[A, B] {
+  a: A,
+  b: B,
+}
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+pub struct Quad[T, const N: U32] {
+  ch: [T; N],
+  g: F32,
+}
+
+pub type P = Pair[F32, F32]
+
+@export
+pub flow fi(x: F32 at sample, n: I32 at sample) -> Pair[F32, I32] at sample {
+  Pair { a: prev~(x) * 2.0, b: n + 1 }
+}
+
+@export
+pub flow arr(x: F32 at sample) -> Pair[[F32; 2], F32] at sample {
+  Pair { a: [x, x * 2.0], b: x + 10.0 }
+}
+
+@export
+pub flow one(x: F32 at sample) -> Wrap[F32] at sample {
+  Wrap { v: x * 3.0 }
+}
+
+@export
+pub flow one_i(x: I32 at sample) -> Wrap[I32] at sample {
+  Wrap { v: x - 1 }
+}
+
+@export
+pub flow fixed(x: F32 at sample) -> Quad[F32, 3] at sample {
+  Quad { ch: [x, x * 2.0, x * 3.0], g: x - 1.0 }
+}
+
+@export
+pub flow aliased(l: F32 at sample, r: F32 at sample) -> P at sample {
+  Pair { a: r, b: l }
+}

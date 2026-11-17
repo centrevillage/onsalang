@@ -1,0 +1,78 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§4.5"]
+
+// W7-13 U5, R-491, §11.6: "`sample` の入出力の値型は、スカラ、`[スカラ; N]`（N は 1 以上）、または（出力のみ）それらを一つ以上フィールドに持つ struct。入れ子の配列、
+// 長さ 0 の配列、フィールドの無い struct は境界に出せない（E0810）". The fields of a generic struct are read after the type arguments are applied: a field that the
+// type arguments make a nested array, an array of length 0, a struct, an enum or a tuple cannot cross the boundary (E0810), as the same field written
+// in a struct that is not generic (the last flow below), and a generic struct is not an input of `sample` (an input is a scalar or `[scalar; N]`, W7-13 U3).
+// The shapes that cross the boundary are in `flow/generated_out_generic_struct.onsa`.
+
+pub struct Pair[A, B] {
+  a: A,
+  b: B,
+}
+
+pub struct Wrap[T] {
+  v: T,
+}
+
+pub struct Quad[T, const N: U32] {
+  ch: [T; N],
+  g: F32,
+}
+
+pub struct Plain {
+  a: [[F32; 2]; 2],
+  b: F32,
+}
+
+pub type Al = Pair[Option[F32], F32]
+
+pub flow opt_field(x: F32 at sample) -> Pair[Option[F32], F32] at sample { //~ E0810
+  Pair { a: Some(x), b: x }
+}
+
+pub flow opt_second(x: F32 at sample) -> Pair[F32, Option[F32]] at sample { //~ E0810
+  Pair { a: x, b: Some(x) }
+}
+
+pub flow nested_arr(x: F32 at sample) -> Pair[[[F32; 2]; 2], F32] at sample { //~ E0810
+  Pair { a: [[x, x], [x, x]], b: x }
+}
+
+pub flow nested_arr_one(x: F32 at sample) -> Wrap[[[F32; 2]; 2]] at sample { //~ E0810
+  Wrap { v: [[x, x], [x, x]] }
+}
+
+pub flow zero_arr(x: F32 at sample) -> Pair[[F32; 0], F32] at sample { //~ E0810
+  Pair { a: [], b: x }
+}
+
+pub flow const_zero(x: F32 at sample) -> Quad[F32, 0] at sample { //~ E0810
+  Quad { ch: [], g: x }
+}
+
+pub flow nested_struct(x: F32 at sample) -> Pair[Pair[F32, F32], F32] at sample { //~ E0810
+  Pair { a: Pair { a: x, b: x }, b: x }
+}
+
+pub flow tuple_field(x: F32 at sample) -> Pair[(F32, F32), F32] at sample { //~ E0810
+  Pair { a: (x, x), b: x }
+}
+
+pub flow through_alias(x: F32 at sample) -> Al at sample { //~ E0810
+  Pair { a: Some(x), b: x }
+}
+
+pub flow generic_input(p: Pair[F32, F32] at sample) -> F32 at sample { //~ E0810
+  p.a
+}
+
+pub flow generic_input_one(p: Wrap[F32] at sample, x: F32 at sample) -> F32 at sample { //~ E0810
+  p.v + x
+}
+
+pub flow plain_nested(x: F32 at sample) -> Plain at sample { //~ E0810
+  Plain { a: [[x, x], [x, x]], b: x }
+}
