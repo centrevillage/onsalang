@@ -5,12 +5,13 @@
 //! clock of W7-02 changes type: they are met here. A table that is not there (the check
 //! stopped, or a work has not written it yet) is [`Fault::Unavailable`], never a guess.
 
+use onsa_diag::Span;
 use onsa_driver::Analyzed;
-use onsa_sema::def::{FieldDef, Fields, FlowInput, FnDef, StructDef, VariantDef};
+use onsa_sema::def::{FieldDef, Fields, FlowDef, FlowInput, FnDef, StructDef, VariantDef};
 use onsa_sema::ty::Rate;
 use onsa_sema::{Analysis, BodyInfo, ConstValue, DefId, DefKind, LocalId, LocalInfo, LocalKind, Package};
 use onsa_sema::{Target, Ty, TyId};
-use onsa_syntax::ast::{Ast, ExprId, PatId};
+use onsa_syntax::ast::{Ast, ExprId, PatId, PatKind};
 
 use super::scalar::Fault;
 
@@ -42,6 +43,11 @@ impl<'a> View<'a> {
         self.analysis.types.get(id)
     }
 
+    /// Where the name of a declaration is written.
+    pub fn name_span(self, def: DefId) -> Span {
+        self.analysis.def(def).name_span
+    }
+
     /// The body of a declaration, when its tables are whole (`BodyInfo::complete`).
     pub fn body(self, def: DefId) -> Result<Body<'a>, Fault> {
         let d = self.analysis.def(def);
@@ -53,6 +59,14 @@ impl<'a> View<'a> {
             (need(info, "no tables for a body")?, need(self.analysis.ast(self.pkg, d.module), "no tree")?);
         need(info.complete.then_some(()), "a body whose tables are not whole")?;
         Ok(Body { view: self, ast: &module.parsed.ast, info })
+    }
+
+    /// The declaration of a flow: its inputs and its body (`body` has the tables of the body).
+    pub fn flow(self, def: DefId) -> Result<&'a FlowDef, Fault> {
+        match &self.analysis.def(def).kind {
+            DefKind::Flow(f) => Ok(f),
+            _ => need(None, "a name that is not a flow"),
+        }
     }
 
     /// The value the checker worked out for a `const`; none for the ones it does not evaluate (`F32.NAN`).
@@ -103,6 +117,28 @@ impl<'a> Body<'a> {
     /// The local a pattern binds (`PatKind::Bind`).
     pub fn pat_local(&self, p: PatId) -> Result<LocalId, Fault> {
         need(self.info.pat_locals.get(&p).copied(), "a pattern with no local")
+    }
+    /// The locals a pattern binds (each `PatKind::Bind` in it): the one place that says which locals it makes.
+    pub fn pat_locals(&self, p: PatId) -> Result<Vec<LocalId>, Fault> {
+        let mut out = Vec::new();
+        self.collect_locals(p, &mut out)?;
+        Ok(out)
+    }
+    fn collect_locals(&self, p: PatId, out: &mut Vec<LocalId>) -> Result<(), Fault> {
+        match &self.ast.pat(p).kind {
+            PatKind::Bind(_) => out.push(self.pat_local(p)?),
+            PatKind::TupleStruct { elems: ps, .. } | PatKind::Tuple(ps) | PatKind::Or(ps) => {
+                ps.iter().try_for_each(|q| self.collect_locals(*q, out))?
+            }
+            PatKind::Struct { fields, .. } => fields.iter().try_for_each(|(_, q)| self.collect_locals(*q, out))?,
+            PatKind::Wild | PatKind::Lit(_) | PatKind::Neg(_) | PatKind::Path(_) => {}
+        }
+        Ok(())
+    }
+    /// Is the local bound inside the expression `e` (an arm of a `match`)?
+    pub fn bound_within(&self, l: LocalId, e: ExprId) -> bool {
+        let (at, span) = (self.info.locals.get(l.0 as usize).map(|l| l.span), self.ast.expr(e).span);
+        at.is_some_and(|at| span.start <= at.start && at.end <= span.end)
     }
     /// The number of the variant a pattern names.
     pub fn pat_ctor(&self, p: PatId) -> Result<u32, Fault> {
@@ -194,7 +230,16 @@ pub enum Stage {
 
 /// The one place that reads the clock of an input: W7-02 turns its type into `Clock`.
 pub fn input_stage(input: &FlowInput) -> Stage {
-    match input.rate {
+    rate_stage(input.rate)
+}
+
+/// The stage of the clock `name` an `at` writes (§11.3), if it is one of the three.
+pub fn clock_stage(name: &str) -> Option<Stage> {
+    Rate::of_clock(name).map(rate_stage)
+}
+
+fn rate_stage(rate: Rate) -> Stage {
+    match rate {
         Rate::Init => Stage::Init,
         Rate::Ctl => Stage::Block,
         Rate::Sig => Stage::Sample,

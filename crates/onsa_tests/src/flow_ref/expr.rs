@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use onsa_diag::Span;
 use onsa_sema::ty::{FloatKind, Len};
 use onsa_sema::{ConstValue, DefId, LocalId, Target, Ty};
-use onsa_syntax::ast::{BinOp, Block, CallKind, ExprId, ExprKind, Lit, StmtKind, UnOp};
+use onsa_syntax::ast::{BinOp, Block, CallKind, ExprId, ExprKind, Lit, PatId, StmtKind, UnOp};
 use onsa_syntax::{FloatWidth, float_value};
 
 use super::host::FnHost;
@@ -237,10 +237,16 @@ impl<'a> Frame<'a> {
             let StmtKind::Let { pat, init, .. } = &ast.stmt(*s).kind else {
                 return Err(here(Fault::Internal("a statement that is not a `let`")));
             };
-            let v = self.eval(*init)?;
-            self.destructure(*pat, &v, self.body.ty(*init).map_err(here)?)?;
+            self.bind(*pat, *init)?;
         }
         b.tail.map_or(Ok(Value::Unit), |tail| self.eval(tail))
+    }
+
+    /// A `let`: the value of `init`, taken apart by `pat` into its locals (§11.2).
+    pub(super) fn bind(&mut self, pat: PatId, init: ExprId) -> Result<(), Stop> {
+        let v = self.eval(init)?;
+        let ty = self.body.ty(init).map_err(|fault| Stop { fault, at: self.body.ast.expr(init).span })?;
+        self.destructure(pat, &v, ty)
     }
 
     /// A literal of the type of the table (`e` is the literal), negated when the `-` before it is a part of it.

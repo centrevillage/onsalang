@@ -25,11 +25,13 @@
 //! - [`host`]: the door of the functions the evaluator does not evaluate, and the two hosts it has of its own.
 //! - [`pattern`]: `match` and the `let` that takes a value apart, and the patterns they use (a guard is tried for
 //!   each way a `|` lets a pattern match).
+//! - [`flow`]: one instance of a flow: the clock of each `let` and the stages `init` and `process` run them in.
 //! - [`sema_view`]: the tables of the checker the evaluator reads, in one file.
 
 pub mod aggregate;
 pub mod call;
 pub mod expr;
+pub mod flow;
 pub mod host;
 pub mod pattern;
 pub mod scalar;
@@ -42,6 +44,8 @@ mod aggregate_tests;
 mod call_tests;
 #[cfg(test)]
 mod expr_tests;
+#[cfg(test)]
+mod flow_tests;
 #[cfg(test)]
 mod limits_tests;
 #[cfg(test)]
