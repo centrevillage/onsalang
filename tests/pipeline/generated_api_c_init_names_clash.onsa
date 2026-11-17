@@ -1,0 +1,129 @@
+// onsa.toml
+// [package]
+// name = "generated_api_c_init_names_clash"
+// edition = "2026"
+//
+// [export]
+// prefix = "gacin_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = ["Alloc"]
+//
+// [targets.bare]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§11.6", "§14.2", "§18.1"]
+
+// W7-12 U3b, S-30, R-15, §11.6, §14.2, §18.1: the C that the compiler writes for an exported flow (§14.2) has, beside `<p>_process` (`generated_api_c_names_clash.onsa`), the function
+// `<p>_init` (the state `s`, the area `bulk`, the inputs of `init`, the sample rate) and, for a target that provides `Alloc`, `<p>_new` (the inputs of `init` and the sample rate, and the
+// locals of its wrapper). An input of `init` named `s`, `bulk` or `cfg` has the name of an argument or of a local of them, and the C of such a flow does not compile. The names of the C API of such
+// a flow are decided in W10-03 (R-15). Until then the build of the target stops with E0200 at the flow (the heading), one report for each flow, as it does for the names of `process`, and
+// this holds for the target that provides `Alloc` (`host`, which has `_new`) and the one that does not (`bare`). The flows with no such name build (the controls at the end of the file): the
+// names `p`, `q`, `frames` and `x_spans` are names in `<p>_process` and not in `<p>_init`, and an input of `block` is a field of the struct of the parameters and not an argument. The check has
+// nothing to report: the E0200 is of the target. The `sample_rate` is the name of the flow itself (E0304) and `memory.bulk` is no E0200 of this file.
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+@export
+pub flow init_s(s: F32 at init, x: F32 at sample) -> F32 at sample {   //~ E0200 [host, bare]
+  x + s
+}
+
+@export
+pub flow init_bulk(bulk: F32 at init, x: F32 at sample) -> F32 at sample {   //~ E0200 [host, bare]
+  x + bulk
+}
+
+@export
+pub flow init_cfg(cfg: F32 at init, x: F32 at sample) -> F32 at sample {   //~ E0200 [host, bare]
+  x + cfg
+}
+
+// The name is the second of the inputs of `init`.
+@export
+pub flow init_second(a: F32 at init, bulk: F32 at init, x: F32 at sample) -> F32 at sample {   //~ E0200 [host, bare]
+  x * a + bulk
+}
+
+// No input of `sample`: the flow is a source.
+@export
+pub flow source_cfg(cfg: F32 at init) -> F32 at sample {   //~ E0200 [host, bare]
+  cfg
+}
+
+// A parameter of `block` and a struct for the output beside it.
+@export
+pub flow init_s_stereo(s: F32 at init, a: F32 at sample, b: F32 at sample, @param(default: 0.5) k: F32 at block) -> Stereo at sample {   //~ E0200 [host, bare]
+  Stereo { l: a * k + s, r: b }
+}
+
+// A state beside it.
+@export
+pub flow init_cfg_state(cfg: F32 at init, x: F32 at sample) -> F32 at sample {   //~ E0200 [host, bare]
+  prev~(x) * cfg
+}
+
+// Two of the names in one flow, and a name of `init` and a name of `process` in one flow: one report for the flow (the heading).
+@export
+pub flow init_two_names(s: F32 at init, cfg: F32 at init, x: F32 at sample) -> F32 at sample {   //~ E0200 [host, bare]
+  x * s + cfg
+}
+
+@export
+pub flow init_and_process_names(bulk: F32 at init, p: F32 at sample) -> F32 at sample {   //~ E0200 [host, bare]
+  p * bulk
+}
+
+// Controls: the names of `process` are not names in `_init` and in `_new`.
+@export
+pub flow ok_init_p(p: F32 at init, x: F32 at sample) -> F32 at sample {
+  x * p
+}
+
+@export
+pub flow ok_init_q(q: F32 at init, x: F32 at sample) -> F32 at sample {
+  x * q
+}
+
+@export
+pub flow ok_init_frames(frames: F32 at init, x: F32 at sample) -> F32 at sample {
+  x * frames
+}
+
+@export
+pub flow ok_init_x_spans(x_spans: F32 at init, x: F32 at sample) -> F32 at sample {
+  x * x_spans
+}
+
+// The input of `block` is a field of the parameters.
+@export
+pub flow ok_block_p(@param(default: 0.5) p: F32 at block, x: F32 at sample) -> F32 at sample {
+  x * p
+}
+
+@export
+pub flow ok_block_s(@param(default: 0.5) s: F32 at block, x: F32 at sample) -> F32 at sample {
+  x * s
+}
+
+@export
+pub flow ok_init_and_block(p: F32 at init, @param(default: 0.5) s: F32 at block, x: F32 at sample) -> F32 at sample {
+  x * p + s
+}
+
+// A flow that is not exported has no C: its names are free.
+pub flow inner_cfg(cfg: F32 at init, bulk: F32 at init, s: F32 at sample) -> F32 at sample {
+  s * cfg + bulk
+}

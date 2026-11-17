@@ -381,6 +381,10 @@ pub struct FlowDef {
     /// finds them, so that the types stage reports them
     /// ([`crate::Analysis::not_generated`]).
     pub absent: Vec<(String, DefId)>,
+    /// Of a flow with no `process_inplace` (§11.6, R-480): the value types
+    /// of its `sample` inputs and of its outputs (the fields of a struct),
+    /// in order, that did not pair up, for the note of its E0302.
+    pub unpaired: Option<(Vec<TyId>, Vec<TyId>)>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

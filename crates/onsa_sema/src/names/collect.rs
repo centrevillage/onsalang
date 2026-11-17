@@ -223,6 +223,7 @@ impl<'p> Sema<'p> {
                     body: f.body,
                     members: Vec::new(),
                     absent: Vec::new(),
+                    unpaired: None,
                 }),
                 None,
             ),

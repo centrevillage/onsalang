@@ -210,7 +210,11 @@ fn values_are_exact_in_their_type() {
 
 /// The build of the case `hosts` for target `t`, and the plan of its sequences.
 fn plans(hosts: &str) -> (onsa_driver::BuildOutput, Vec<Result<SeqPlan, String>>) {
-    let text = case(hosts);
+    plans_in(case(hosts))
+}
+
+/// The build of the case `text` (of the module `m`) for target `t`, and the plan of its sequences.
+fn plans_in(text: String) -> (onsa_driver::BuildOutput, Vec<Result<SeqPlan, String>>) {
     let frag = fragment::parse(&text).unwrap().unwrap();
     let input = onsa_driver::PackageInput {
         manifest: frag.manifest_source("m.onsa"),
@@ -278,6 +282,15 @@ fn values_are_checked_against_the_build() {
         let e = p[0].as_ref().map(|_| ()).unwrap_err();
         assert!(e.contains(needle) && e.contains("step 2"), "{needle}: {e}");
     }
+    // `inplace` is of a flow that has `process_inplace`, as the compiler decides it (§11.6, S-220): a
+    // flow whose input is no array of the output's length has none.
+    let src =
+        SRC.replace("flow f(\n  x: F32 at sample,", "flow f(\n  x: [F32; 1] at sample,").replace("x * k", "x[0] * k");
+    assert_eq!(src.matches("[F32; 1]").count() + src.matches("x[0]").count(), 2, "{src}");
+    let step = "{ call = \"process\", params = { k = 1.0 }, frames = 1, input = [[1.0]], inplace = true, status = 0, output = [1.0] }";
+    let (_, p) = plans_in(format!("{HEAD}{}{src}", flow_seq(&[INIT, step])));
+    let e = p[0].as_ref().map(|_| ()).unwrap_err();
+    assert!(e.contains("do not pair by position") && e.contains("step 2"), "{e}");
     let fn_errs = [
         ("needs `result`", "{ call = \"fn\", args = { a = 1, b = 2 }, status = 0 }"),
         ("writes no result", "{ call = \"fn\", args = { a = 1, b = 2 }, status = 1, result = 0 }"),

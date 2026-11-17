@@ -547,9 +547,10 @@ impl Analysis {
     /// ([`Self::not_generated`]): of the types stage, which decides it, at a
     /// `use`, a type and a path of a body alike (§11.6, §18.1, S-1087).
     pub(crate) fn not_generated_error(&self, d: DefId, span: Span) -> Option<Diagnostic> {
-        self.not_generated(d)?;
+        let flow = self.not_generated(d)?;
         let msg = format!("cannot find `{}`", self.shown_name(d));
-        Some(Diagnostic::new(onsa_diag::Stage::Types, onsa_diag::Code::E0302, span, msg))
+        let err = Diagnostic::new(onsa_diag::Stage::Types, onsa_diag::Code::E0302, span, msg);
+        Some(self.with_ungenerated_notes(err, flow, &self.def(d).name))
     }
 
     /// The def is an alias of the error type (§18.1, R-271): a struct, a

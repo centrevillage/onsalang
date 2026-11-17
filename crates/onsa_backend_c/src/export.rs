@@ -48,7 +48,7 @@ pub(crate) fn header(cx: &mut Cx, e: &Export) -> R<(String, FlowParts)> {
         params_fields.push(crate::ApiField { name: name.clone(), c_name: ident(name), c_type: tn });
     }
     let _ = writeln!(h, " }} {sym}_params;\n");
-    let cfg = config_args(cx, fns.config)?;
+    let cfg = config_args(cx, e)?;
     let _ = writeln!(
         h,
         "/* Memory is the caller's: `s` has {up}_SIZE bytes aligned to {up}_ALIGN, `bulk` has {up}_BULK_SIZE (NULL when 0). */"
@@ -63,7 +63,7 @@ pub(crate) fn header(cx: &mut Cx, e: &Export) -> R<(String, FlowParts)> {
     if fns.params_default.is_some() {
         let _ = writeln!(h, "void {sym}_params_default({sym}_params* p);");
     }
-    let io = process_io(cx, fns.process, meta)?;
+    let io = process_io(cx, e)?;
     let _ = writeln!(
         h,
         "/* 0: ok, 1: poisoned or uninitialized, 2: overlapping buffers that are not an in-place pair (an in-place pair\n * is an input and an output of the same element type at the same pointer). On 1 and 2 all outputs are zero. */"
@@ -114,8 +114,12 @@ struct ConfigArgs {
     api: Vec<crate::ApiField>,
 }
 
-fn config_args(cx: &mut Cx, config: onsa_core::TypeId) -> R<ConfigArgs> {
-    let fields = cx.fields(config).to_vec();
+/// The arguments of `_init` and `_new` of the flow of `e`: the inputs of
+/// `init`. A C name that is another's there is an E0200 ([`own_names`]).
+fn config_args(cx: &mut Cx, e: &Export) -> R<ConfigArgs> {
+    let meta = &cx.m.flows[e.meta_index];
+    let (fns, at) = (&meta.fns, meta.name_span);
+    let fields = cx.fields(fns.config).to_vec();
     let mut decls = String::new();
     let mut out = Vec::new();
     let mut api = Vec::new();
@@ -125,6 +129,9 @@ fn config_args(cx: &mut Cx, config: onsa_core::TypeId) -> R<ConfigArgs> {
         out.push((ident(name), ident(name)));
         api.push(crate::ApiField { name: name.clone(), c_name: ident(name), c_type: tn });
     }
+    let of: &[&str] = if cx.opts.provides_alloc { &["_init", "_new"] } else { &["_init"] };
+    let user = api.iter().map(|a| (a.c_name.clone(), format!("the `init` input `{}`", a.name))).collect();
+    own_names(e, at, of, cx.bulk.contains_key(&fns.state), user)?;
     Ok(ConfigArgs { decls, fields: out, api })
 }
 
@@ -164,11 +171,41 @@ fn signal_names(meta: &onsa_core::FlowMeta) -> Vec<String> {
     ins.chain(meta.outputs.iter().map(|(n, _, _)| n.clone())).collect()
 }
 
-/// The names the wrapper of `process` gives its own parameters and locals
-/// besides the signals: the state, the parameters, their clamped copy, the
-/// number of frames (its other locals begin with `onsa_`, as no name of the
-/// program does, [`ident`]).
-const PROCESS_OWN: [&str; 4] = ["s", "p", "q", "frames"];
+/// The names the wrappers give their own parameters and locals beside the
+/// signals and the inputs of `init` (their other locals begin with `onsa_`,
+/// as no name of the program does, [`ident`]): (the wrapper, of a flow with
+/// a bulk region alone, the name, what it is). The one list the C names of
+/// the user are checked against ([`own_names`]); the `sample_rate` of
+/// `_init` and `_new` is a name of the flow (E0304).
+const WRAPPER_OWN: &[(&str, bool, &str, &str)] = &[
+    ("_process", false, "s", "the state"),
+    ("_process", false, "p", "the parameters"),
+    ("_process", false, "q", "the clamped parameters"),
+    ("_process", false, "frames", "the number of frames"),
+    ("_init", false, "s", "the state"),
+    ("_init", false, "bulk", "the bulk region"),
+    ("_init", false, "cfg", "the struct of the `init` inputs"),
+    ("_new", false, "s", "the state"),
+    ("_new", true, "b", "the bulk region"),
+];
+
+/// The C names `user` (with what the user wrote they are of) of the flow of
+/// `e` in its wrappers `of`: a name that is another's in one of them is an
+/// E0200 at the flow's name until W10-03 names the C API apart (R-15, §14.2).
+fn own_names(e: &Export, at: onsa_diag::Span, of: &[&str], bulk: bool, user: Vec<(String, String)>) -> R<()> {
+    for &w in of {
+        let own = WRAPPER_OWN.iter().filter(|o| o.0 == w && (bulk || !o.1));
+        let mut seen: std::collections::HashMap<_, _> =
+            own.map(|&(_, _, n, it)| (n.to_string(), format!("{it} `{n}`"))).collect();
+        for (c, what) in &user {
+            if let Some(other) = seen.insert(c.clone(), what.clone()) {
+                let f = format!("{}{w}", e.symbol);
+                return Err(unsupported(at, Feature::ApiNames, &[c, &f, &other, what]));
+            }
+        }
+    }
+    Ok(())
+}
 
 /// The local of the channels of the planar signal `p` in the wrapper.
 fn spans_local(p: &IoParam) -> String {
@@ -179,8 +216,10 @@ fn spans_local(p: &IoParam) -> String {
 /// field of an `In` or `Out`), named by `names` in order. A name that is
 /// another of the wrapper's is an E0200 at the flow's name until W10-03
 /// names the C API apart (R-15, §14.2).
-fn process_io(cx: &mut Cx, process: FnId, meta: &onsa_core::FlowMeta) -> R<ProcessIo> {
-    let def = cx.m.fn_(process);
+fn process_io(cx: &mut Cx, e: &Export) -> R<ProcessIo> {
+    let m = cx.m;
+    let meta = &m.flows[e.meta_index];
+    let def = m.fn_(meta.fns.process);
     let names = signal_names(meta);
     let mut names = names.iter();
     let (mut params, mut groups, mut decls) = (Vec::new(), Vec::new(), String::new());
@@ -213,13 +252,11 @@ fn process_io(cx: &mut Cx, process: FnId, meta: &onsa_core::FlowMeta) -> R<Proce
     if names.next().is_some() {
         return Err(crate::emit::internal("fewer signals than the flow has"));
     }
-    let mut seen: std::collections::HashSet<String> = PROCESS_OWN.iter().map(|n| n.to_string()).collect();
-    for p in &params {
-        let spans = p.planar.map(|_| spans_local(p));
-        if let Some(n) = std::iter::once(&p.name).chain(&spans).find(|n| !seen.insert(n.to_string())) {
-            return Err(unsupported(meta.name_span, Feature::ProcessNames, &[n]));
-        }
-    }
+    let user = params.iter().flat_map(|p| {
+        let spans = p.planar.map(|_| (spans_local(p), format!("the channels of the signal `{}`", p.onsa)));
+        std::iter::once((p.name.clone(), format!("the signal `{}`", p.onsa))).chain(spans)
+    });
+    own_names(e, meta.name_span, &["_process"], false, user.collect())?;
     Ok(ProcessIo { decls, params, groups })
 }
 
@@ -330,7 +367,7 @@ pub(crate) fn wrappers(cx: &mut Cx, e: &Export) -> R<String> {
     let _ = writeln!(s, "/* ---- export: {} ---- */", meta.name);
 
     // init
-    let cfg = config_args(cx, fns.config)?;
+    let cfg = config_args(cx, e)?;
     let _ = writeln!(s, "int {sym}_init({sym}* s, void* bulk, {}float sample_rate) {{", cfg.decls);
     let _ = writeln!(s, "  {config} cfg;");
     let _ = writeln!(s, "  memset(&cfg, 0, sizeof cfg);");
@@ -381,7 +418,7 @@ pub(crate) fn wrappers(cx: &mut Cx, e: &Export) -> R<String> {
     }
 
     // process
-    let io = process_io(cx, fns.process, &meta)?;
+    let io = process_io(cx, e)?;
     let _ = writeln!(s, "int {sym}_process({sym}* s, const {sym}_params* p, {}uint32_t frames) {{", io.decls);
     let _ = writeln!(s, "  {params} q;");
     // The order of the entry (spec §14.2, §11.6): a poisoned or uninitialized instance outputs

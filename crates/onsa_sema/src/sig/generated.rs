@@ -41,12 +41,34 @@ const GENERATED: &[(&str, Generated)] = &[
     ("render", Generated::Fn(FlowFn::Render)),
 ];
 
+impl Generated {
+    /// Of an item the inputs of a flow decide (§11.6), whether the clocks
+    /// `rates` of the inputs give it: `Config` and `Params` of an input of
+    /// their rate (S-112), `In` of two `sample` inputs or more (S-30); `init`
+    /// always, as only its parameter `cfg` (of `Config`) is of the inputs.
+    /// These are the items a flow whose clocks are not read keeps as failed
+    /// (R-471). None of an item the inputs do not decide.
+    fn of_inputs(self, rates: &[Option<Rate>]) -> Option<bool> {
+        match self {
+            Generated::Type(FlowTy::In) => Some(rates.iter().filter(|&&r| r == Some(Rate::Sig)).count() >= 2),
+            Generated::Type(t) => t.input_rate().map(|r| rates.contains(&Some(r))),
+            Generated::Fn(FlowFn::Init) => Some(true),
+            _ => None,
+        }
+    }
+}
+
+/// The name of the item `g` in [`GENERATED`].
+fn name_of(g: Generated) -> &'static str {
+    let named = GENERATED.iter().find(|(_, x)| *x == g);
+    named.map_or_else(|| onsa_diag::internal::bug(None, format!("no name of {g:?}")), |(n, _)| n)
+}
+
 impl FlowTy {
     /// The name of the type (`State`), of [`GENERATED`]: what a later stage
     /// shows, which selects the type by its `FlowTy`, not by this name.
     pub fn name(self) -> &'static str {
-        let named = GENERATED.iter().find(|(_, g)| *g == Generated::Type(self));
-        named.map_or_else(|| onsa_diag::internal::bug(None, format!("no name of {self:?}")), |(n, _)| n)
+        name_of(Generated::Type(self))
     }
 
     /// The parameter of the functions of the flow that takes the type
@@ -64,6 +86,32 @@ impl FlowTy {
 /// whether the flow generates it or not (S-708).
 pub(crate) fn listed_fn(name: &str) -> bool {
     GENERATED.iter().any(|&(n, g)| n == name && matches!(g, Generated::Fn(_)))
+}
+
+impl Analysis {
+    /// The E0302 `d` of the item `name` that `flow` does not generate, with
+    /// the notes of why (§11.6, R-480): of `process_inplace`, the types of
+    /// the `sample` inputs and of the outputs that do not pair up, and the
+    /// rule of `process` with separate buffers. The one place of these notes,
+    /// for every E0302 of the item: a `use`, a path of a body.
+    pub(crate) fn with_ungenerated_notes(&self, d: Diagnostic, flow: DefId, name: &str) -> Diagnostic {
+        let generated = GENERATED.iter().find(|&&(n, _)| n == name).map(|&(_, g)| g);
+        let unpaired = self.def(flow).as_flow().and_then(|f| f.unpaired.as_ref());
+        let (Some(Generated::Fn(FlowFn::ProcessInplace)), Some((ins, outs))) = (generated, unpaired) else { return d };
+        let list = |ts: &[TyId]| match ts {
+            [] => "none".to_string(),
+            ts => ts.iter().map(|&t| format!("`{}`", self.display_type(t))).collect::<Vec<_>>().join(", "),
+        };
+        let (k, process) = (&self.def(flow).name, name_of(Generated::Fn(FlowFn::Process)));
+        d.with_rule(format!(
+            "`{k}.{name}` is generated when the `sample` inputs and the outputs of `{k}` agree in number and in \
+             types, in order (§11.6: a struct output by its fields, an array as one type); the `sample` inputs of \
+             `{k}` are {} and its outputs {}",
+            list(ins),
+            list(outs)
+        ))
+        .with_rule(format!("use `{k}.{process}` with separate buffers"))
+    }
 }
 
 impl<'p> Sema<'p> {
@@ -86,16 +134,11 @@ impl<'p> Sema<'p> {
         let (module, vis, span, name_span) = (d.module, d.vis, d.span, d.name_span);
         let (u32, unit) = (self.a.types.int(IntKind::U32), self.a.types.unit());
         let known = !self.a.heading_failed(flow) && rates.iter().all(Option::is_some);
-        let sig = rates.iter().filter(|&&r| r == Some(Rate::Sig)).count();
-        let has = |t: FlowTy| match t {
-            _ if !known => true,
-            FlowTy::In => sig >= 2,
-            _ => t.input_rate().is_none_or(|r| rates.contains(&Some(r))),
-        };
         let mut members = Vec::new();
         for &(name, g) in GENERATED {
+            let by_inputs = g.of_inputs(rates);
             let kind = match g {
-                Generated::Type(t) if !has(t) => continue,
+                _ if known && by_inputs == Some(false) => continue,
                 Generated::Type(t) => {
                     let fields = if t == FlowTy::State { Fields::Opaque } else { Fields::Named(Vec::new()) };
                     let derives = Some(Vec::new());
@@ -122,11 +165,7 @@ impl<'p> Sema<'p> {
             let def =
                 Def { name: name.to_string(), module, vis, span, name_span, kind, item: None, owner, export: None };
             let m = self.add_def(def);
-            let by_inputs = matches!(
-                g,
-                Generated::Type(FlowTy::Config | FlowTy::Params | FlowTy::In) | Generated::Fn(FlowFn::Init)
-            );
-            if self.a.heading_failed(flow) || !known && by_inputs {
+            if self.a.heading_failed(flow) || !known && by_inputs.is_some() {
                 self.a.failed.insert(m, onsa_syntax::ast::Failed::Heading);
             }
             members.push((name.to_string(), m));
@@ -494,6 +533,11 @@ impl<'p> Sema<'p> {
             .collect()
     }
 
+    /// The value types of `channels` (name, element, length of an array).
+    fn value_tys(&mut self, channels: &[(String, TyId, Option<Len>)]) -> Vec<TyId> {
+        channels.iter().map(|&(_, e, l)| l.map_or(e, |l| self.a.types.intern(Ty::Array(e, l)))).collect()
+    }
+
     /// The items the inputs of `flow` give (§11.6): `State`, `Config`,
     /// `Params`, `In`, `SIZE` and `BULK_SIZE`, the kinds of the defs
     /// [`Sema::generated_defs`] made.
@@ -599,11 +643,15 @@ impl<'p> Sema<'p> {
             && sig_inputs.iter().zip(&outputs).all(|(i, o)| i.1 == o.1 && i.2 == o.2);
         if pairs {
             self.fill_fn(flow, [head, vec![output]].concat(), unit, true, false, FlowFn::ProcessInplace);
+        } else {
+            let unpaired = Some((self.value_tys(&sig_inputs), self.value_tys(&outputs)));
+            if let DefKind::Flow(fd) = &mut self.a.defs[flow.0 as usize].kind {
+                fd.unpaired = unpaired;
+            }
         }
-        let mut ps: Vec<ParamSig> = cfg.into_iter().chain(params).chain(input).collect();
-        if sig_inputs.is_empty() {
-            ps.push(sp(self, "frames", Mode::Borrow, u32));
-        }
+        // `frames` of a flow with no `input` (§11.6).
+        let frames = input.is_none().then(|| sp(self, "frames", Mode::Borrow, u32));
+        let mut ps: Vec<ParamSig> = cfg.into_iter().chain(params).chain(input).chain(frames).collect();
         ps.push(sp(self, "sample_rate", Mode::Borrow, f32));
         self.fill_fn(flow, ps, rendered_ty, false, true, FlowFn::Render);
         pairs

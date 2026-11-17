@@ -52,6 +52,7 @@ mod generated_type_requirement_notes;
 mod generated_view_notes;
 mod heading_names;
 mod heading_reach_grid;
+mod inplace_absent_notes;
 mod instance_limits;
 mod interface_const_floats;
 mod interface_fn_return;

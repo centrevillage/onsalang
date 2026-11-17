@@ -179,13 +179,14 @@ pub(super) fn gen_render<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b 
     let out_ty = Ty::Struct(shape.out_ty);
     let mut g = Gen::new(lw, shape, info, Phase::Tick, out_ty.clone())?;
     let span = g.span;
-    // The third is `input`, or `frames` of a flow with no `sample` input.
+    // The third is `input` (views), or the `U32` `frames` of a flow with no `sample` input, as the
+    // signature the types stage made reads (§11.6).
     let [cfg, params, third, sample_rate] = &g.member_params(lw, shape, "render")?[..] else {
         return Err(internal(span, "`render` with another number of parameters"));
     };
     let init = vec![borrow(cfg.clone()), borrow(sample_rate.clone())];
     let st = g.let_("s", call(fns.init, Ty::Struct(shape.state_ty), span, init));
-    let input = shape.flow.inputs.iter().any(|i| i.rate == Rate::Sig).then_some(third);
+    let input = (third.ty != Ty::u32()).then_some(third);
     let n = match input {
         Some(i) => span_len(signals(lw, i)?.first().ok_or_else(|| internal(span, "an `In` with no field"))?, span)?,
         None => third.clone(),

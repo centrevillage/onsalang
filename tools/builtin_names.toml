@@ -269,6 +269,7 @@
 
 [same_spelling."crates/onsa_backend_c/src/export.rs"]
 "NAN" = { count = 5, note = "C の <math.h> のマクロ名（生成する C の字面）" }
+"cfg" = { count = 1, note = "生成する C の _init の局所変数の名前（W10-03 まで、§14.2。生成される init の引数 cfg と同じ綴り）" }
 "frames" = { count = 1, note = "生成する C の process の引数の名前（W10-03 まで、§14.2。生成される render の引数 frames と同じ綴り）" }
 
 [same_spelling."crates/onsa_backend_c/src/lib.rs"]

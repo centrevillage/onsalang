@@ -1,0 +1,58 @@
+// onsa.toml
+// [package]
+// name = "generated_api_init_names"
+// edition = "2026"
+//
+// [export]
+// prefix = "gain_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§11.6", "§14.2", "§13.4"]
+// conformance = true
+
+// W7-12 U3b, S-30, R-15, §11.6, §14.2, §13.4: the flows that the E0200 of `pipeline/generated_api_c_init_names_clash.onsa` lets through, exported, give the same values in the
+// interpreter and in the C. The names `p`, `q` and `frames` are names in `<p>_process` (two pointers and the number of the frames) and, as the names of inputs of `init`, they are fields of the config
+// of the flow, and the name `s` of an input of `block` is a field of the parameters and not the state `s` of the function. The value of each input of `init` and of `block` is in the output (it is a
+// gain or an offset), so a name taken for another one (the state for `s`, the frames for `frames`) gives other values.
+
+@export
+pub flow init_p(p: F32 at init, x: F32 at sample) -> F32 at sample {
+  x * p
+}
+
+@export
+pub flow init_q(q: F32 at init, x: F32 at sample) -> F32 at sample {
+  x * q + 0.25
+}
+
+@export
+pub flow init_frames(frames: F32 at init, x: F32 at sample) -> F32 at sample {
+  x * frames - 0.5
+}
+
+@export
+pub flow init_x_spans(x_spans: F32 at init, x: F32 at sample) -> F32 at sample {
+  x * x_spans + prev~(x)
+}
+
+@export
+pub flow block_s(@param(default: 0.5) s: F32 at block, x: F32 at sample) -> F32 at sample {
+  x * s
+}
+
+@export
+pub flow init_p_block_s(p: F32 at init, q: F32 at init, @param(default: 0.5) s: F32 at block, frames: F32 at init, x: F32 at sample) -> F32 at sample {
+  (x * p + q) * s - frames
+}
+
+@export
+pub flow block_p_init_q(@param(default: 0.5) p: F32 at block, q: F32 at init, x: F32 at sample) -> F32 at sample {
+  prev~(x * p) + q
+}

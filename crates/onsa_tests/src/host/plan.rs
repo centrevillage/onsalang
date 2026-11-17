@@ -216,6 +216,8 @@ struct FlowTypes {
     outputs: Vec<(String, Scalar, Option<u32>)>,
     /// The output is a struct (spec §11.6: `Out`, written as a table by field).
     out_struct: bool,
+    /// The flow has `process_inplace` (spec §11.6: its inputs and outputs pair up, as the compiler decides).
+    inplace: bool,
 }
 
 fn struct_fields(m: &Module, id: TypeId) -> &[(String, Ty)] {
@@ -255,7 +257,8 @@ fn flow_types(m: &Module, meta: &FlowMeta) -> Result<FlowTypes, String> {
         .map(|(n, t, p)| Ok((n.clone(), scalar_of(m, t, &format!("the output `{n}`"))?, *p)))
         .collect::<Result<_, String>>()?;
     let out_struct = matches!(m.fn_(meta.fns.tick).ret, Ty::Struct(_));
-    Ok(FlowTypes { config, params, inputs, outputs, out_struct })
+    let inplace = meta.fns.process_inplace.is_some();
+    Ok(FlowTypes { config, params, inputs, outputs, out_struct, inplace })
 }
 
 /// Type the sequence `s` against the build `out`.
@@ -378,7 +381,7 @@ fn flow_step(st: &Step, api: &FlowApi, t: &FlowTypes) -> Result<Op, PlanError> {
             let outputs = if st.is_null(NullArg::Output) {
                 None
             } else {
-                let mut outs = outputs(st, api, t, frames, inputs.as_deref())?;
+                let mut outs = outputs(st, api, t, frames)?;
                 for (o, p) in outs.iter_mut().zip(out_place) {
                     o.place = p;
                 }
@@ -418,13 +421,7 @@ fn inputs(st: &Step, api: &FlowApi, t: &FlowTypes, frames: u32) -> Result<Vec<Si
     }
 }
 
-fn outputs(
-    st: &Step,
-    api: &FlowApi,
-    t: &FlowTypes,
-    frames: u32,
-    inputs: Option<&[SigIn]>,
-) -> Result<Vec<SigOut>, PlanError> {
+fn outputs(st: &Step, api: &FlowApi, t: &FlowTypes, frames: u32) -> Result<Vec<SigOut>, PlanError> {
     let per = |v: &toml::Value, what: &str| -> Result<Vec<Vec<Vec<Value>>>, String> {
         if t.out_struct {
             let names: Vec<&str> = t.outputs.iter().map(|(n, _, _)| n.as_str()).collect();
@@ -439,15 +436,10 @@ fn outputs(
     };
     let expected = per(st.output.as_ref().ok_or("no `output`")?, "output")?;
     let inplace = st.inplace == Some(true);
-    if inplace {
-        let ins = inputs.unwrap_or_default();
-        let fits = ins.len() == t.outputs.len()
-            && ins.iter().zip(&t.outputs).all(|(i, (_, s, p))| i.scalar == *s && i.planar == *p);
-        if !fits {
-            return Err("`inplace`: the `sample` inputs and the outputs do not pair by position with the same types \
-                        and channels (spec §11.6 `process_inplace`)"
-                .into());
-        }
+    if inplace && !t.inplace {
+        return Err("`inplace`: the `sample` inputs and the outputs do not pair by position with the same types \
+                    and channels (spec §11.6 `process_inplace`)"
+            .into());
     }
     let fill = match &st.fill {
         Some(v) => Some(per(v, "fill")?),
