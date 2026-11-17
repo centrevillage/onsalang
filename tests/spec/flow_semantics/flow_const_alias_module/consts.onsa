@@ -1,0 +1,6 @@
+// Constants that the flows of other modules take by `use` and by the module path (spec §15.1, §6.6).
+
+pub const K: I32 = 2
+pub const KF: F32 = 0.5
+pub const TBL: [I32; 3] = [10, 20, 30]
+pub const PAIR: (I32, I32) = (3, 4)

@@ -212,7 +212,7 @@ fn constant_lets_are_never_state() {
 fn read_at(f: &FlowInfo, name: &str) -> Option<FlowRate> {
     let ids: Vec<usize> = f.body.locals.iter().enumerate().filter(|(_, l)| l.name == name).map(|(i, _)| i).collect();
     assert_eq!(ids.len(), 1, "locals named {name}");
-    f.read_at.get(&LocalId(ids[0] as u32)).copied()
+    f.read_at.get(&LocalId(ids[0] as u32)).and_then(|rs| rs.last()).copied()
 }
 
 #[test]
@@ -246,6 +246,27 @@ fn read_at_lets() {
     assert_eq!(read_at(f, "s"), Some(FlowRate::Sig));
     // `y` is read only by `^y`, in the first argument of a delay, at `Sig`.
     assert_eq!(read_at(f, "y"), Some(FlowRate::Sig));
+}
+
+#[test]
+fn read_at_constant_lets() {
+    let a = ok(
+        "const K: I32 = 2\npub flow f(x: I32 at sample, p: I32 at block, c: I32 at init) -> I32 at sample {\n  let l0 = K\n  let l1 = l0\n  let b = l1 * l1\n  let u = l0 + 1\n  let t = c * l0\n  let q = p * l0\n  x + b + t + q\n}\n",
+    );
+    let f = flow(&a, "f");
+    let rates = |name: &str| {
+        let id = f.body.locals.iter().position(|l| l.name == name).unwrap();
+        f.read_at.get(&LocalId(id as u32)).map(|rs| rs.iter().copied().collect::<Vec<_>>())
+    };
+    use FlowRate::*;
+    // Every rate, not the fastest alone: `l0` is defined in `init`, `ctl`
+    // and `tick` (R-488, §11.3).
+    assert_eq!(rates("l0"), Some(vec![Const, Init, Ctl, Sig]));
+    // A constant `let` read by a constant `let` at the rates of the reader.
+    assert_eq!(rates("l1"), Some(vec![Sig]));
+    assert_eq!(rates("b"), Some(vec![Sig]));
+    // `u` is read nowhere: its initializer is read at its own rate.
+    assert_eq!(rates("u"), None);
 }
 
 #[test]

@@ -1,0 +1,122 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.4", "§6.6"]
+
+// A `let` of the constant clock built from another `let` of the constant clock (`let l0 = K;
+// let c = l0 + l0`) in the forms that run now: the call of a function on the alias (`twice(l0)`),
+// and a derived `let` that only an `init` stage reads (a `let` of the `init` clock, the init of a
+// delay), which are evaluated at `init`. The forms that a `sample` or `block` stage reads (the tick
+// and the control step of the lowered flow) are in flow_const_alias_derived_kinds.onsa and
+// flow_const_alias_derived_stages.onsa (R-488). The values are the same as there; worked out by hand
+// from §11.3 ("let に分けても分けなくても、評価の段と結果は同じ").
+
+const K: I32 = 2
+const KF: F32 = 0.5
+
+rt fn twice(a: I32) -> I32 {
+  a * 2
+}
+
+fn twice_init(a: I32) -> I32 {
+  a * 2
+}
+
+pub flow init_let(n: I32 at init) -> I32 at sample {
+  let l0 = K
+  let c = l0 + l0
+  let a = n * c
+  a
+}
+
+pub flow init_and_sample(x: I32 at sample, n: I32 at init) -> I32 at sample {
+  let l0 = K
+  let c = l0 + l0
+  let a = n + c
+  x + a
+}
+
+pub flow prev_init(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  let c = l0 + l0
+  prev~(x, c)
+}
+
+pub flow delay_init(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  let c = l0 + l0
+  delay~(x, 2, c)
+}
+
+pub flow vdelay_init(x: F32 at sample) -> F32 at sample {
+  let l0 = KF
+  let c = l0 + l0
+  vdelay~(x, 1.0, 4, c)
+}
+
+pub flow call_rt(p: I32 at block) -> I32 at sample {
+  let l0 = twice(K)
+  let b = twice(l0)
+  p + b
+}
+
+pub flow call_init_fn(p: I32 at block) -> I32 at sample {
+  let l0 = twice_init(K)
+  let b = twice_init(l0)
+  p + b
+}
+
+test "an init-clock let reads the derived alias" {
+  // c = 4; 3 * 4.
+  let o = init_let.render(init_let.Config { n: 3 }, 2, 8.0)
+  assert o.out[0] == 12
+  assert o.out[1] == 12
+}
+
+test "an init input mixed with the derived alias, then a sample input" {
+  // a = 3 + 4 = 7; x + 7.
+  let xs: [I32; 2] = [1, 2]
+  let o = init_and_sample.render(init_and_sample.Config { n: 3 }, xs, 8.0)
+  assert o.out[0] == 8
+  assert o.out[1] == 9
+}
+
+test "the derived alias as the init of prev" {
+  // The first sample is the init 4, then the previous input.
+  let xs: [I32; 3] = [5, 6, 7]
+  let o = prev_init.render(xs, 8.0)
+  assert o.out[0] == 4
+  assert o.out[1] == 5
+  assert o.out[2] == 6
+}
+
+test "the derived alias as the init of delay" {
+  // A delay of 2 samples with every element of the line the init 4.
+  let xs: [I32; 4] = [5, 6, 7, 8]
+  let o = delay_init.render(xs, 8.0)
+  assert o.out[0] == 4
+  assert o.out[1] == 4
+  assert o.out[2] == 5
+  assert o.out[3] == 6
+}
+
+test "the derived alias as the init of vdelay" {
+  // c = 0.5 + 0.5 = 1.0; d = 1.0 reads the sample before: 1.0, then x[n - 1].
+  let xs: [F32; 3] = [2.0, 3.0, 4.0]
+  let o = vdelay_init.render(xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == 3.0
+}
+
+test "a call of an rt fn on a constant alias" {
+  // twice(2) = 4; b = twice(4) = 8; 1 + 8.
+  let o = call_rt.render(call_rt.Params { p: 1 }, 1, 8.0)
+  assert o.out[0] == 9
+}
+
+test "a call of a non-rt fn on a constant alias" {
+  // twice_init(2) = 4; b = 8; 1 + 8.
+  let o = call_init_fn.render(call_init_fn.Params { p: 1 }, 1, 8.0)
+  assert o.out[0] == 9
+}

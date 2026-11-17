@@ -1,0 +1,229 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.6", "§6.6"]
+
+// R-488: a `let` of the constant clock (`let l0 = K`) read by another `let` of the constant clock
+// (`let b = l0 * l0`), which a faster stage or the output then reads (spec §11.3: the constant clock
+// is "コンパイル時"; "同じ式を const に分けても分けなくても、同じビットになる"; "let に分けても
+// 分けなくても、評価の段と結果は同じ"). So `let l0 = K; let b = l0 * l0; p + b` is `p + K * K`.
+// The expected values are worked out by hand.
+//
+// Each flow takes one kind of the constant under `l0`: a scalar `const`, a `const` array and tuple (whole
+// or by index and field), the associated constants (§6.6), a constant expression, a Bool constant, and
+// a literal (a chain of two `let`s of a literal reads the same way as one of a `const`). The same
+// constants read directly by a faster `let` are in flow_const_alias_kinds.onsa, and the call of a
+// function on the alias is in flow_const_alias_derived_init_calls.onsa.
+
+const K: I32 = 2
+const K2: I32 = K * 2
+const FK: F32 = 0.5
+const TBL: [I32; 3] = [10, 20, 30]
+const PAIR: (I32, I32) = (3, 4)
+const ON: Bool = true
+const OFF: Bool = false
+
+// The form of the first report: a block input is read into a `let`, the alias is squared.
+pub flow scalar(p: I32 at block) -> I32 at sample {
+  let l0 = K
+  let a = p
+  let b = l0 * l0
+  a + b
+}
+
+pub flow literal(p: I32 at block) -> I32 at sample {
+  let l0 = 2
+  let b = l0 * l0
+  p + b
+}
+
+pub flow scalar_float(p: F32 at block) -> F32 at sample {
+  let l0 = FK
+  let b = l0 + l0
+  p * b
+}
+
+pub flow array_elem(p: I32 at block) -> I32 at sample {
+  let l0 = TBL[1]
+  let b = l0 + l0
+  p + b
+}
+
+pub flow array_whole(p: I32 at block) -> I32 at sample {
+  let l0 = TBL
+  let b = l0[2] + l0[0]
+  p + b
+}
+
+pub flow tuple_field(p: I32 at block) -> I32 at sample {
+  let l0 = PAIR.1
+  let b = l0 * l0
+  p + b
+}
+
+pub flow tuple_whole(p: I32 at block) -> I32 at sample {
+  let l0 = PAIR
+  let b = l0.0 * l0.1
+  p + b
+}
+
+pub flow assoc_float(p: F32 at block) -> F32 at sample {
+  let l0 = F32.PI
+  let b = l0 * 2.0
+  p * b
+}
+
+pub flow assoc_int(p: I32 at block) -> I32 at sample {
+  let l0 = I32.MAX
+  let b = l0 - 5
+  p + b
+}
+
+pub flow assoc_bits(p: U32 at block) -> U32 at sample {
+  let l0 = I32.BITS
+  let b = l0 * 2
+  p + b
+}
+
+pub flow assoc_one(p: I32 at block) -> I32 at sample {
+  let l0 = I32.ONE
+  let b = l0 + l0
+  p + b
+}
+
+pub flow const_of_const(p: I32 at block) -> I32 at sample {
+  let l0 = K2
+  let b = l0 * l0
+  p + b
+}
+
+pub flow arith(p: I32 at block) -> I32 at sample {
+  let l0 = K * 3 + 1
+  let b = l0 + 1
+  p + b
+}
+
+pub flow negated(p: I32 at block) -> I32 at sample {
+  let l0 = -K
+  let b = l0 - 1
+  p + b
+}
+
+pub flow bool_true(p: I32 at block) -> I32 at sample {
+  let l0 = ON
+  let b = !l0
+  if b { p } else { 0 }
+}
+
+pub flow bool_false(p: I32 at block) -> I32 at sample {
+  let l0 = OFF
+  let b = !l0
+  if b { p } else { 0 }
+}
+
+test "a scalar constant alias read by a constant let (the form of R-488)" {
+  var st = scalar.init(48000.0)
+  var o: [I32; 1] = [0]
+  scalar.process(inout st, scalar.Params { p: 1 }, inout o)
+  assert o[0] == 5
+}
+
+test "a scalar constant alias read by a constant let, by render" {
+  // 1 + 2 * 2 = 5, and for p = 10: 10 + 4 = 14.
+  let a = scalar.render(scalar.Params { p: 1 }, 2, 8.0)
+  assert a.out[0] == 5
+  assert a.out[1] == 5
+  let b = scalar.render(scalar.Params { p: 10 }, 1, 8.0)
+  assert b.out[0] == 14
+}
+
+test "an alias of a literal read by a constant let" {
+  // 1 + 2 * 2.
+  let o = literal.render(literal.Params { p: 1 }, 1, 8.0)
+  assert o.out[0] == 5
+}
+
+test "a floating-point constant alias" {
+  // b = 0.5 + 0.5 = 1.0; 3.0 * 1.0.
+  let o = scalar_float.render(scalar_float.Params { p: 3.0 }, 2, 8.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == 3.0
+}
+
+test "an element of a constant array" {
+  // TBL[1] = 20; b = 40; 1 + 40.
+  let o = array_elem.render(array_elem.Params { p: 1 }, 1, 8.0)
+  assert o.out[0] == 41
+}
+
+test "a whole constant array" {
+  // b = TBL[2] + TBL[0] = 30 + 10 = 40; 2 + 40.
+  let o = array_whole.render(array_whole.Params { p: 2 }, 1, 8.0)
+  assert o.out[0] == 42
+}
+
+test "a field of a constant tuple" {
+  // PAIR.1 = 4; b = 16; 3 + 16.
+  let o = tuple_field.render(tuple_field.Params { p: 3 }, 1, 8.0)
+  assert o.out[0] == 19
+}
+
+test "a whole constant tuple" {
+  // b = 3 * 4 = 12; 1 + 12.
+  let o = tuple_whole.render(tuple_whole.Params { p: 1 }, 1, 8.0)
+  assert o.out[0] == 13
+}
+
+test "the associated constant PI of F32" {
+  // b = PI * 2.0 (an exact scaling by a power of two); 0.5 * b = PI.
+  let o = assoc_float.render(assoc_float.Params { p: 0.5 }, 1, 8.0)
+  assert o.out[0] == F32.PI
+}
+
+test "the associated constant MAX of I32" {
+  // b = 2147483647 - 5 = 2147483642; 3 + b = 2147483645.
+  let o = assoc_int.render(assoc_int.Params { p: 3 }, 1, 8.0)
+  assert o.out[0] == 2147483645
+}
+
+test "the associated constant BITS of I32 is a U32" {
+  // b = 32 * 2 = 64; 1 + 64.
+  let o = assoc_bits.render(assoc_bits.Params { p: 1 }, 1, 8.0)
+  assert o.out[0] == 65
+}
+
+test "the associated constant ONE of I32" {
+  // b = 1 + 1 = 2; 41 + 2.
+  let o = assoc_one.render(assoc_one.Params { p: 41 }, 1, 8.0)
+  assert o.out[0] == 43
+}
+
+test "a constant defined by another constant" {
+  // K2 = 4; b = 16; 1 + 16.
+  let o = const_of_const.render(const_of_const.Params { p: 1 }, 1, 8.0)
+  assert o.out[0] == 17
+}
+
+test "an arithmetic expression of constants" {
+  // 2 * 3 + 1 = 7; b = 8; 1 + 8.
+  let o = arith.render(arith.Params { p: 1 }, 1, 8.0)
+  assert o.out[0] == 9
+}
+
+test "a negated constant" {
+  // l0 = -2; b = -3; 1 + (-3).
+  let o = negated.render(negated.Params { p: 1 }, 1, 8.0)
+  assert o.out[0] == -2
+}
+
+test "a true constant Bool negated by a constant let" {
+  // b = !true = false: the else branch.
+  let o = bool_true.render(bool_true.Params { p: 7 }, 1, 8.0)
+  assert o.out[0] == 0
+}
+
+test "a false constant Bool negated by a constant let" {
+  // b = !false = true: the first branch.
+  let o = bool_false.render(bool_false.Params { p: 7 }, 1, 8.0)
+  assert o.out[0] == 7
+}

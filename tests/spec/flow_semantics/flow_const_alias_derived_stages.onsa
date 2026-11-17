@@ -1,0 +1,269 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.4", "§11.5", "§11.6"]
+
+// R-488: a `let` of the constant clock built from another `let` of the constant clock
+// (`let l0 = K; let c = l0 + l0`, so c = 4) is read by each stage and form that reads the alias
+// directly in flow_const_alias_stages.onsa: a `let` of `block` and of `sample`, the output expression,
+// the condition of an `if`, an argument of an `rt fn`, the body of a delay, an argument of an instance
+// of a flow, a promoted value (`at`), the body of `par~`, an argument of a generic function, an array
+// literal (a `let` of the constant clock too), and an instance of a flow whose own body does the same.
+// (The reads of an `init` stage run now: flow_const_alias_derived_init_calls.onsa.) A `let` of the
+// constant clock "コンパイル時" does not change the stage or the result of what reads it: "let に分けても
+// 分けなくても、評価の段と結果は同じ" (§11.3). The expected values are worked out by hand.
+
+const K: I32 = 2
+const K2: I32 = K * 2
+
+use std.math.sum
+
+rt fn scale(a: I32, b: I32) -> I32 {
+  a * b + 1
+}
+
+rt fn pick[T: PartialOrd](a: T, b: T) -> T {
+  if a > b { a } else { b }
+}
+
+pub flow acc(x: I32 at sample) -> I32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub flow block_let(p: I32 at block) -> I32 at sample {
+  let l0 = K
+  let c = l0 + l0
+  let a = p * c
+  a
+}
+
+pub flow sample_let(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  let c = l0 + l0
+  let a = x * c
+  a
+}
+
+pub flow out_direct(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  let c = l0 + l0
+  x + c
+}
+
+pub flow out_only(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  let c = l0 + l0
+  c
+}
+
+pub flow out_only_no_input() -> I32 at sample {
+  let l0 = K
+  let c = l0 + l0
+  c
+}
+
+pub flow if_cond_sample(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  let c = l0 + l0
+  if x > c { 1 } else { 0 }
+}
+
+pub flow if_cond_const(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  let c = l0 + l0
+  if c > 3 { x + c } else { 0 }
+}
+
+pub flow rt_fn_arg(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  let c = l0 + l0
+  scale(x, c)
+}
+
+pub flow rt_fn_all_const(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  let c = l0 + l0
+  x + scale(c, c)
+}
+
+pub flow prev_body(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  let c = l0 + l0
+  prev~(x + c)
+}
+
+pub flow flow_arg(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  let c = l0 + l0
+  acc~(x * c)
+}
+
+pub flow at_promote(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  let c = l0 + l0
+  let s = c at sample
+  x + s
+}
+
+pub flow par_body(x: F32 at sample) -> F32 at sample {
+  let l0 = K
+  let c = l0 + l0
+  let a = par~ i in 0 ..< 2 { prev~(x * F32.round_from(c) * F32.round_from(i + 1)) }
+  sum(a)
+}
+
+pub flow generic_arg(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  let c = l0 + l0
+  pick(x, c)
+}
+
+pub flow array_literal(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  let arr = [l0, l0 + 1]
+  x + arr[1]
+}
+
+pub flow child(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  let c = l0 + l0
+  x + c
+}
+
+pub flow parent(x: I32 at sample) -> I32 at sample {
+  let m0 = K2
+  let m1 = m0 * 2
+  child~(x) * m1
+}
+
+test "a block let reads the derived alias" {
+  // 3 * 4.
+  let o = block_let.render(block_let.Params { p: 3 }, 2, 8.0)
+  assert o.out[0] == 12
+  assert o.out[1] == 12
+}
+
+test "a sample let reads the derived alias" {
+  let xs: [I32; 3] = [1, 2, 3]
+  let o = sample_let.render(xs, 8.0)
+  assert o.out[0] == 4
+  assert o.out[1] == 8
+  assert o.out[2] == 12
+}
+
+test "the output expression reads the derived alias" {
+  let xs: [I32; 2] = [1, 2]
+  let o = out_direct.render(xs, 8.0)
+  assert o.out[0] == 5
+  assert o.out[1] == 6
+}
+
+test "the output expression is the derived alias alone" {
+  // The sample input is not read: the output is 4 on every frame.
+  let xs: [I32; 3] = [1, 2, 3]
+  let o = out_only.render(xs, 8.0)
+  assert o.out[0] == 4
+  assert o.out[1] == 4
+  assert o.out[2] == 4
+}
+
+test "the output is the derived alias of a flow with no input" {
+  let o = out_only_no_input.render(3, 8.0)
+  assert o.out[0] == 4
+  assert o.out[1] == 4
+  assert o.out[2] == 4
+}
+
+test "the derived alias in the condition of an if with a sample" {
+  // x > 4 ? 1 : 0
+  let xs: [I32; 4] = [3, 4, 5, 9]
+  let o = if_cond_sample.render(xs, 8.0)
+  assert o.out[0] == 0
+  assert o.out[1] == 0
+  assert o.out[2] == 1
+  assert o.out[3] == 1
+}
+
+test "the derived alias in a condition that is all constant" {
+  // 4 > 3: the first branch, x + 4.
+  let xs: [I32; 2] = [1, 5]
+  let o = if_cond_const.render(xs, 8.0)
+  assert o.out[0] == 5
+  assert o.out[1] == 9
+}
+
+test "the derived alias as an argument of an rt fn with a sample" {
+  // 3 * 4 + 1.
+  let xs: [I32; 2] = [3, 0]
+  let o = rt_fn_arg.render(xs, 8.0)
+  assert o.out[0] == 13
+  assert o.out[1] == 1
+}
+
+test "an rt fn on the derived alias alone is of the constant clock" {
+  // scale(4, 4) = 17; x + 17.
+  let xs: [I32; 2] = [1, 2]
+  let o = rt_fn_all_const.render(xs, 8.0)
+  assert o.out[0] == 18
+  assert o.out[1] == 19
+}
+
+test "the derived alias in the body of prev" {
+  // The omitted init is 0; then x[n - 1] + 4.
+  let xs: [I32; 3] = [1, 2, 3]
+  let o = prev_body.render(xs, 8.0)
+  assert o.out[0] == 0
+  assert o.out[1] == 5
+  assert o.out[2] == 6
+}
+
+test "the derived alias as the argument of an instance of a flow" {
+  // A running sum of 4 * 1.
+  let xs: [I32; 3] = [1, 1, 1]
+  let o = flow_arg.render(xs, 8.0)
+  assert o.out[0] == 4
+  assert o.out[1] == 8
+  assert o.out[2] == 12
+}
+
+test "the derived alias promoted by at" {
+  let xs: [I32; 2] = [1, 4]
+  let o = at_promote.render(xs, 8.0)
+  assert o.out[0] == 5
+  assert o.out[1] == 8
+}
+
+test "the derived alias in the body of par" {
+  // The multipliers 4 * 1 and 4 * 2 each with its own delay: 12 * x[n - 1].
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = par_body.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 12.0
+  assert o.out[2] == 24.0
+}
+
+test "the derived alias as an argument of a generic function" {
+  // The larger of x and 4.
+  let xs: [I32; 3] = [1, 9, 4]
+  let o = generic_arg.render(xs, 8.0)
+  assert o.out[0] == 4
+  assert o.out[1] == 9
+  assert o.out[2] == 4
+}
+
+test "an array literal of the alias is a let of the constant clock" {
+  // arr = [2, 3]; x + 3.
+  let xs: [I32; 2] = [1, 2]
+  let o = array_literal.render(xs, 8.0)
+  assert o.out[0] == 4
+  assert o.out[1] == 5
+}
+
+test "a derived alias inside an instance and another in its parent" {
+  // child: x + 4; parent: that times (K2 * 2 = 8).
+  let xs: [I32; 2] = [1, 2]
+  let o = parent.render(xs, 8.0)
+  assert o.out[0] == 40
+  assert o.out[1] == 48
+}

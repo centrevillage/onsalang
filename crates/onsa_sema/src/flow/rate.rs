@@ -111,8 +111,8 @@ pub(super) struct Rater<'a> {
     pub(super) node_of_expr: HashMap<ExprId, usize>,
     pub(super) counters: HashMap<String, u32>,
     pub(super) sample_rate_at: Option<FlowRate>,
-    /// The highest rate each local is read at (the state marking).
-    pub(super) read_at: HashMap<LocalId, FlowRate>,
+    /// The rates each local is read at (the state marking).
+    pub(super) read_at: HashMap<LocalId, BTreeSet<FlowRate>>,
     pub(super) let_names: HashMap<ExprId, String>,
     pub(super) call_of_expr: HashMap<ExprId, usize>,
     /// Nonzero inside a branch, a guard or the right side of `&&` / `||` (K-08).

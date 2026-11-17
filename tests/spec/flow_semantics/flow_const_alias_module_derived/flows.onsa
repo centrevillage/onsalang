@@ -1,0 +1,35 @@
+// R-488: flows that name a constant of another module with a `let`, and build a `let` of the
+// constant clock from it (spec §15.1, §11.3).
+
+use consts
+use consts.{K, TBL}
+
+pub flow by_use(p: I32 at block) -> I32 at sample {
+  let l0 = K
+  let b = l0 * l0
+  p + b
+}
+
+pub flow by_path(p: I32 at block) -> I32 at sample {
+  let l0 = consts.K
+  let b = l0 + consts.K
+  p + b
+}
+
+pub flow by_table(p: I32 at block) -> I32 at sample {
+  let l0 = TBL[2]
+  let b = l0 + 1
+  p + b
+}
+
+pub flow by_pair(x: I32 at sample) -> I32 at sample {
+  let l0 = consts.PAIR
+  let b = l0.0 * l0.1
+  x + b
+}
+
+pub flow by_float(x: F32 at sample) -> F32 at sample {
+  let l0 = consts.KF
+  let b = l0 + l0
+  x * b
+}

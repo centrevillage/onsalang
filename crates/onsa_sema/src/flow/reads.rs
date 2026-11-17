@@ -1,4 +1,4 @@
-//! The state marking (S-05): the highest rate at which each local is read
+//! The state marking (S-05): the rates at which each local is read
 //! (`FlowInfo::read_at`), the `let`s read at a higher rate than their own,
 //! and the rate at which `sample_rate()` is read. The lowering reads these
 //! and does not walk the body again (R-91 (1), D-15).
@@ -8,19 +8,38 @@ use super::*;
 impl<'a> Rater<'a> {
     // ------------------------------------------------------------ state marking
 
-    /// The rate each local is read at, the `let`s read at a higher rate than
+    /// The rates each local is read at, the `let`s read at a higher rate than
     /// their own (S-05), and the rate at which `sample_rate()` is read.
     pub(super) fn mark_all(&mut self) {
         for k in 0..self.lets.len() {
             let (init, rate) = (self.lets[k].init, self.lets[k].rate);
-            self.mark(init, rate);
+            if rate != FlowRate::Const {
+                self.mark(init, rate);
+            }
         }
         if let Some(out) = self.fcx.output {
             self.mark(out, FlowRate::Sig);
         }
+        // A constant `let` is defined in each phase that reads it, and its
+        // initializer read there (§11.3, R-488): from the last, so that one
+        // read by a later constant `let` has the rates of that one.
+        for k in (0..self.lets.len()).rev() {
+            let (init, rate) = (self.lets[k].init, self.lets[k].rate);
+            if rate != FlowRate::Const {
+                continue;
+            }
+            let reads = self.lets[k].locals.iter().filter_map(|id| self.read_at.get(id));
+            let mut rates: BTreeSet<FlowRate> = reads.flatten().copied().collect();
+            if rates.is_empty() {
+                rates.insert(FlowRate::Const);
+            }
+            for r in rates {
+                self.mark(init, r);
+            }
+        }
         for l in &mut self.lets {
-            l.state =
-                l.rate >= FlowRate::Init && l.locals.iter().any(|id| self.read_at.get(id).is_some_and(|&r| r > l.rate));
+            let above = |id: &LocalId| self.read_at.get(id).and_then(|rs| rs.last()).is_some_and(|&r| r > l.rate);
+            l.state = l.rate >= FlowRate::Init && l.locals.iter().any(above);
         }
     }
 
@@ -29,8 +48,7 @@ impl<'a> Rater<'a> {
         match &expr.kind {
             ExprKind::Path(_) | ExprKind::Feedback(_) | ExprKind::Field { .. } => {
                 if let Some(Target::Local(id)) = self.body.targets.get(&e) {
-                    let r = self.read_at.entry(*id).or_insert(ctx);
-                    *r = (*r).max(ctx);
+                    self.read_at.entry(*id).or_default().insert(ctx);
                 }
                 if let ExprKind::Field { base, .. } = &expr.kind
                     && !self.body.targets.contains_key(&e)

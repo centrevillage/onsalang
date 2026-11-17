@@ -1,0 +1,46 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.5"]
+
+// `if~` evaluates every branch and advances the state of every instance in them (spec §11.5). A
+// constant alias (`let l0 = K`) and a `let` of the constant clock built from it (`let c = l0 + l0`)
+// are read in a branch of `if~`; the counter runs on every sample whether the branch is chosen or
+// not. `if~` is not supported yet (E0200), so this case is listed as pending until it is. The
+// expected values are worked out by hand.
+
+const K: I32 = 2
+
+pub flow facc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub flow tilde_direct(x: F32 at sample) -> F32 at sample {
+  let l0 = K
+  if~ x > 2.0 { facc~(F32.round_from(l0)) } else { 0.0 }
+}
+
+pub flow tilde_derived(x: F32 at sample) -> F32 at sample {
+  let l0 = K
+  let c = l0 + l0
+  if~ x > 2.0 { facc~(F32.round_from(c)) } else { 0.0 }
+}
+
+test "the alias in a branch of if~ whose state moves in every branch" {
+  // The counter of 2 runs every sample: 2, 4, 6; chosen when x > 2.
+  let xs: [F32; 3] = [1.0, 3.0, 3.0]
+  let o = tilde_direct.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 4.0
+  assert o.out[2] == 6.0
+}
+
+test "the derived alias in a branch of if~ whose state moves in every branch" {
+  // The counter of 4 runs every sample: 4, 8, 12; chosen when x > 2.
+  let xs: [F32; 3] = [1.0, 3.0, 3.0]
+  let o = tilde_derived.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 8.0
+  assert o.out[2] == 12.0
+}

@@ -1,0 +1,287 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.6"]
+
+// R-488: one constant alias (`let l0 = K`) read directly by two stages of the flow: a `block` let and
+// the output expression of the sample clock (`ctl` and `tick`), an `init` let and a `sample` let, an
+// `init` let and a `block` let, and all three. Each stage reads the alias like any other name
+// (spec §11.3: the constant clock is promoted to every clock; "let に分けても分けなくても、評価の段と
+// 結果は同じ"). The kinds of the constant are a scalar, a tuple taken apart by a pattern, a chain of
+// aliases (`let c = l0 + l0`), an element of an array, and a floating-point constant. The calls of
+// `process` with 0 frames and in several calls are at the end (spec §11.6). The expected values are
+// worked out by hand.
+
+const K: I32 = 2
+const KF: F32 = 0.5
+const TBL: [I32; 3] = [10, 20, 30]
+const PAIR: (I32, I32) = (3, 4)
+
+// `block` and `sample`: a = p * 2 in the control step, x * 2 in the tick.
+pub flow block_sample(p: I32 at block, x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  let a = p * l0
+  let b = x * l0
+  a + b
+}
+
+// `block` and the output expression.
+pub flow block_out(p: I32 at block, x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  let c = p * l0
+  x * l0 + c
+}
+
+// `block` and an output that reads no input.
+pub flow block_out_alone(p: I32 at block) -> I32 at sample {
+  let l0 = K
+  let c = p * l0
+  c + l0
+}
+
+// `init` and `sample`.
+pub flow init_sample(c: I32 at init, x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  let t = c * l0
+  let b = x * l0
+  t + b
+}
+
+// `init` and `block`.
+pub flow init_block(c: I32 at init, p: I32 at block) -> I32 at sample {
+  let l0 = K
+  let t = c * l0
+  let b = p * l0
+  t + b
+}
+
+// `init`, `block` and `sample`.
+pub flow all_three(c: I32 at init, p: I32 at block, x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  let t = c * l0
+  let a = p * l0
+  let b = x * l0
+  t + a + b
+}
+
+// A tuple taken apart: the same element is read by both stages.
+pub flow tuple_same(p: I32 at block, x: I32 at sample) -> I32 at sample {
+  let (u, v) = PAIR
+  let a = p * u
+  let b = x * u
+  a + b + v
+}
+
+// A chain of aliases read by `block` and `sample`.
+pub flow chain_two(p: I32 at block, x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  let c = l0 + l0
+  let a = p * c
+  let b = x * c
+  a + b
+}
+
+// An alias of an alias (the second is read by `init` and `sample`, the first by `block`).
+pub flow chain_three(c: I32 at init, p: I32 at block, x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  let l1 = l0
+  let t = c * l1
+  let a = p * l0
+  let b = x * l1
+  t + a + b
+}
+
+// An element of an array read by `init` and `sample`.
+pub flow array_two(c: I32 at init, x: I32 at sample) -> I32 at sample {
+  let l0 = TBL[1]
+  let t = c + l0
+  let b = x + l0
+  t + b
+}
+
+pub flow float_two(p: F32 at block, x: F32 at sample) -> F32 at sample {
+  let l0 = KF
+  let a = p * l0
+  let b = x * l0
+  a + b
+}
+
+// The alias in the condition of an `if` of the control step and in that of the tick.
+pub flow if_two(p: I32 at block, x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  let a = if p > l0 { 1 } else { 0 }
+  if x > l0 { a } else { 0 }
+}
+
+// A running state with the alias read by `block` and `sample`.
+pub flow run_two(p: I32 at block, x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  let a = p * l0
+  let y = prev~(^y) + x * l0 + a
+  y
+}
+
+// A running state with the alias read by `init`, `block` and `sample`.
+pub flow run_three(c: I32 at init, p: I32 at block, x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  let t = c * l0
+  let a = p * l0
+  let y = prev~(^y) + t + x * l0 + a
+  y
+}
+
+test "a block let and a sample let read the alias" {
+  // a = 3 * 2 = 6; x * 2 + 6.
+  let xs: [I32; 2] = [1, 2]
+  let o = block_sample.render(block_sample.Params { p: 3 }, xs, 8.0)
+  assert o.out[0] == 8
+  assert o.out[1] == 10
+}
+
+test "a block let and the output expression read the alias" {
+  // c = 6; x * 2 + 6.
+  let xs: [I32; 2] = [1, 2]
+  let o = block_out.render(block_out.Params { p: 3 }, xs, 8.0)
+  assert o.out[0] == 8
+  assert o.out[1] == 10
+}
+
+test "a block let and an output with no sample input read the alias" {
+  // c = 6; 6 + 2.
+  let o = block_out_alone.render(block_out_alone.Params { p: 3 }, 2, 8.0)
+  assert o.out[0] == 8
+  assert o.out[1] == 8
+}
+
+test "an init let and a sample let read the alias" {
+  // t = 5 * 2 = 10; x * 2 + 10.
+  let xs: [I32; 2] = [1, 2]
+  let o = init_sample.render(init_sample.Config { c: 5 }, xs, 8.0)
+  assert o.out[0] == 12
+  assert o.out[1] == 14
+}
+
+test "an init let and a block let read the alias" {
+  // t = 5 * 2 = 10; b = 3 * 2 = 6.
+  let o = init_block.render(init_block.Config { c: 5 }, init_block.Params { p: 3 }, 2, 8.0)
+  assert o.out[0] == 16
+  assert o.out[1] == 16
+}
+
+test "an init let, a block let and a sample let read the alias" {
+  // t = 2, a = 4, x * 2: 2 + 4 + 6 = 12 and 2 + 4 + 8 = 14.
+  let xs: [I32; 2] = [3, 4]
+  let o = all_three.render(all_three.Config { c: 1 }, all_three.Params { p: 2 }, xs, 8.0)
+  assert o.out[0] == 12
+  assert o.out[1] == 14
+}
+
+test "one element of a tuple taken apart is read by two stages" {
+  // a = 2 * 3 = 6; b = x * 3; 6 + b + 4.
+  let xs: [I32; 2] = [1, 2]
+  let o = tuple_same.render(tuple_same.Params { p: 2 }, xs, 8.0)
+  assert o.out[0] == 13
+  assert o.out[1] == 16
+}
+
+test "a chain of aliases read by two stages" {
+  // c = 4; a = 1 * 4; x * 4 + 4.
+  let xs: [I32; 2] = [1, 2]
+  let o = chain_two.render(chain_two.Params { p: 1 }, xs, 8.0)
+  assert o.out[0] == 8
+  assert o.out[1] == 12
+}
+
+test "an alias of an alias read by three stages" {
+  // t = 1 * 2 = 2; a = 3 * 2 = 6; x * 2: 2 + 6 + 2 = 10 and 2 + 6 + 4 = 12.
+  let xs: [I32; 2] = [1, 2]
+  let o = chain_three.render(chain_three.Config { c: 1 }, chain_three.Params { p: 3 }, xs, 8.0)
+  assert o.out[0] == 10
+  assert o.out[1] == 12
+}
+
+test "an element of an array read by two stages" {
+  // l0 = TBL[1] = 20: t = 1 + 20 = 21; x + 20 + 21.
+  let xs: [I32; 2] = [1, 2]
+  let o = array_two.render(array_two.Config { c: 1 }, xs, 8.0)
+  assert o.out[0] == 42
+  assert o.out[1] == 43
+}
+
+test "a floating-point alias read by two stages" {
+  // a = 4.0 * 0.5 = 2.0; x * 0.5 + 2.0.
+  let xs: [F32; 2] = [2.0, 4.0]
+  let o = float_two.render(float_two.Params { p: 4.0 }, xs, 8.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == 4.0
+}
+
+test "the alias in the condition of an if in two stages" {
+  // p = 3 > 2: a = 1; x > 2 picks a: x = 1 gives 0, x = 5 gives 1.
+  let xs: [I32; 2] = [1, 5]
+  let o = if_two.render(if_two.Params { p: 3 }, xs, 8.0)
+  assert o.out[0] == 0
+  assert o.out[1] == 1
+  // p = 1 is not above 2: a = 0, so every output is 0.
+  let q = if_two.render(if_two.Params { p: 1 }, xs, 8.0)
+  assert q.out[0] == 0
+  assert q.out[1] == 0
+}
+
+test "process in several calls with 0 frames between them keeps the state" {
+  // l0 = 2. p = 1: a = 2; y0 = 0 + 1 * 2 + 2 = 4, y1 = 4 + 2 + 2 = 8.
+  // p = 10: a = 20; y2 = 8 + 0 + 20 = 28. p = 0: a = 0; 28 + 2 = 30, 32, 34.
+  // A call with 0 frames evaluates the block stage and writes nothing: the output keeps its sentinel.
+  let xs: [I32; 3] = [1, 1, 1]
+  let zs: [I32; 3] = [0, 0, 0]
+  var out: [I32; 3] = [-1, -1, -1]
+  var st = run_two.init(8.0)
+  run_two.process(inout st, run_two.Params { p: 1 }, xs.slice(0, 2), inout out.slice(0, 2))
+  assert out[0] == 4
+  assert out[1] == 8
+  assert out[2] == -1
+  run_two.process(inout st, run_two.Params { p: 99 }, xs.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 4
+  assert out[1] == 8
+  assert out[2] == -1
+  run_two.process(inout st, run_two.Params { p: 10 }, zs.slice(0, 1), inout out.slice(2, 3))
+  assert out[2] == 28
+  run_two.process(inout st, run_two.Params { p: 0 }, xs.slice(0, 0), inout out.slice(0, 0))
+  var more: [I32; 3] = [-1, -1, -1]
+  run_two.process(inout st, run_two.Params { p: 0 }, xs, inout more)
+  assert more[0] == 30
+  assert more[1] == 32
+  assert more[2] == 34
+}
+
+test "process with 0 frames as the first call is a correct call" {
+  let xs: [I32; 3] = [1, 1, 1]
+  var out: [I32; 3] = [-1, -1, -1]
+  var st = run_two.init(8.0)
+  run_two.process(inout st, run_two.Params { p: 1 }, xs.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == -1
+  // The state is still the initial one: the first sample gives 0 + 1 * 2 + 2.
+  run_two.process(inout st, run_two.Params { p: 1 }, xs.slice(0, 1), inout out.slice(0, 1))
+  assert out[0] == 4
+}
+
+test "three stages read the alias in several calls and reset keeps the init value" {
+  // c = 1: t = 2. p = 1: a = 2; each sample adds t + x * 2 + a = 2 + 2 + 2 = 6: 6, 12.
+  // A call with 0 frames changes nothing. p = 0, x = 0: adds t = 2: 14.
+  let xs: [I32; 2] = [1, 1]
+  let zs: [I32; 1] = [0]
+  var out: [I32; 2] = [0, 0]
+  var st = run_three.init(run_three.Config { c: 1 }, 8.0)
+  run_three.process(inout st, run_three.Params { p: 1 }, xs, inout out)
+  assert out[0] == 6
+  assert out[1] == 12
+  run_three.process(inout st, run_three.Params { p: 5 }, xs.slice(0, 0), inout out.slice(0, 0))
+  var z: [I32; 1] = [-1]
+  run_three.process(inout st, run_three.Params { p: 0 }, zs, inout z)
+  assert z[0] == 14
+  // After reset the running value starts again from 0; the init value of t is kept.
+  run_three.reset(inout st)
+  run_three.process(inout st, run_three.Params { p: 1 }, xs, inout out)
+  assert out[0] == 6
+  assert out[1] == 12
+}

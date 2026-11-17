@@ -1,0 +1,36 @@
+// Flows that name a constant of another module with a `let` (spec §15.1: `use` paths from the
+// package root, a module-qualified name `consts.K`; §11.3: the constant clock).
+
+use consts
+use consts.{K, TBL}
+
+/// The alias of a name taken in by `use`.
+pub flow by_use(p: I32 at block) -> I32 at sample {
+  let l0 = K
+  p * l0
+}
+
+/// The alias of a module-qualified name.
+pub flow by_path(p: I32 at block) -> I32 at sample {
+  let l0 = consts.K
+  p + l0
+}
+
+/// The alias of an element of a constant array of another module.
+pub flow by_table(p: I32 at block) -> I32 at sample {
+  let l0 = TBL[2]
+  p + l0
+}
+
+/// The alias of a field of a constant tuple of another module, read by a `let` of the sample clock.
+pub flow by_pair(x: I32 at sample) -> I32 at sample {
+  let l0 = consts.PAIR.0
+  let a = x * l0
+  a
+}
+
+/// A floating-point constant of another module.
+pub flow by_float(x: F32 at sample) -> F32 at sample {
+  let l0 = consts.KF
+  x * l0
+}

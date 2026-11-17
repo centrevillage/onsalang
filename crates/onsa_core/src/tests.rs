@@ -501,6 +501,22 @@ fn a_delay_init_of_a_type_decided_later_is_rounded_once() {
 }
 
 #[test]
+fn a_constant_let_is_defined_in_each_phase_that_reads_it() {
+    // R-488 (§11.3): `l0` is read by `init`, `ctl` and `tick`, and by `l1`,
+    // a constant `let` that `tick` reads; each phase defines what it reads,
+    // before reading it (`core` runs the verifier).
+    let m = core(
+        "const K: I32 = 2\npub flow f(x: I32 at sample, p: I32 at block, c: I32 at init) -> I32 at sample {\n  let l0 = K\n  let l1 = l0\n  let b = l1 * l1\n  let t = c * l0\n  let q = p * l0\n  x + b + t + q\n}\n",
+    );
+    let d = dump(&m);
+    let (init, ctl, tick) = (pos(&d, "fn t.f.init("), pos(&d, "rt fn t.f.ctl("), pos(&d, "rt fn t.f.tick("));
+    let end = |at: usize| at + d[at..].find("\n}\n").unwrap();
+    let defines = |at: usize, name: &str| d[at..end(at)].contains(&format!("let {name}: I32 ="));
+    assert!(defines(init, "l0") && defines(ctl, "l0") && defines(tick, "l0"), "{d}");
+    assert!(defines(tick, "l1") && defines(tick, "b") && !defines(init, "l1") && !defines(ctl, "l1"), "{d}");
+}
+
+#[test]
 fn resonator_lowers_to_the_five_functions() {
     let m = core(RESONATOR);
     let d = dump(&m);

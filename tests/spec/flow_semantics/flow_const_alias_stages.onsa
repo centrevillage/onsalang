@@ -1,0 +1,391 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.4", "§11.5", "§11.6"]
+
+// The stages that read a constant alias (`let l0 = K`) directly (these pass now; the same stages
+// reading a `let` of the constant clock built from the alias are in flow_const_alias_derived_stages.onsa,
+// R-488). The alias is of the constant clock, which "どのクロックにも昇格する" (spec §11.3), so it can be read
+// by a `let` of the `init` clock, of `block`, of `sample`, and by the output expression; it can be
+// the condition of an `if`, an argument of an `rt fn`, the initial value of a delay, the body of a
+// delay, an argument of an instance of a flow, a promoted value (`at`), the body of `par~`, an
+// argument of a generic function, and it is read the same inside a flow that is itself an instance of
+// another flow. `let` does not change "評価の段と結果" (§11.3). The expected values are worked out by
+// hand. `if~` (not supported yet) is in flow_const_alias_if_tilde.onsa.
+
+const K: I32 = 2
+const K2: I32 = K * 2
+const KF: F32 = 0.5
+const PAIR: (I32, I32) = (3, 4)
+
+use std.math.sum
+
+rt fn scale(a: I32, b: I32) -> I32 {
+  a * b + 1
+}
+
+rt fn pick[T: PartialOrd](a: T, b: T) -> T {
+  if a > b { a } else { b }
+}
+
+pub flow acc(x: I32 at sample) -> I32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+pub flow init_let(n: I32 at init) -> I32 at sample {
+  let l0 = K
+  let a = n * l0
+  a
+}
+
+pub flow init_and_sample(x: I32 at sample, n: I32 at init) -> I32 at sample {
+  let l0 = K
+  let a = n + l0
+  x + a
+}
+
+pub flow block_let(p: I32 at block) -> I32 at sample {
+  let l0 = K
+  let a = p * l0
+  a
+}
+
+pub flow sample_let(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  let a = x * l0
+  a
+}
+
+pub flow out_direct(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  x + l0
+}
+
+pub flow two_reads(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  let a = x * l0
+  let b = x + l0
+  a + b
+}
+
+pub flow if_cond_sample(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  if x > l0 { x } else { l0 }
+}
+
+pub flow if_cond_const(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  if l0 > 1 { x + l0 } else { 0 }
+}
+
+pub flow rt_fn_arg(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  scale(x, l0)
+}
+
+pub flow rt_fn_all_const(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  x + scale(l0, l0)
+}
+
+pub flow prev_init(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  prev~(x, l0)
+}
+
+pub flow delay_init(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  delay~(x, 2, l0)
+}
+
+pub flow prev_body(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  prev~(x + l0)
+}
+
+pub flow vdelay_init(x: F32 at sample) -> F32 at sample {
+  let l0 = KF
+  vdelay~(x, 1.0, 4, l0)
+}
+
+pub flow flow_arg(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  acc~(x * l0)
+}
+
+pub flow at_promote(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  let s = l0 at sample
+  x + s
+}
+
+pub flow par_body(x: F32 at sample) -> F32 at sample {
+  let l0 = K
+  let a = par~ i in 0 ..< 3 { prev~(x * F32.round_from(l0) * F32.round_from(i + 1)) }
+  sum(a)
+}
+
+pub flow generic_arg(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  pick(x, l0)
+}
+
+pub flow child(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  x + l0
+}
+
+pub flow parent(x: I32 at sample) -> I32 at sample {
+  let m0 = K2
+  child~(x) * m0
+}
+
+// A running state, a block input and a direct alias: the state keeps between calls of `process`
+// (the counterpart of `run` in flow_const_alias_order.onsa).
+pub flow run_direct(x: I32 at sample, p: I32 at block) -> I32 at sample {
+  let l0 = K
+  let a = p * l0
+  let y = prev~(^y) + x + a
+  y
+}
+
+pub flow interleaved(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  let a = x
+  let l1 = K2
+  let b = l1 * a
+  let c = l0 + b
+  c
+}
+
+// A tuple taken apart by a pattern: the first element is read by `block`, the second by `sample`.
+pub flow tuple_split(p: I32 at block, x: I32 at sample) -> I32 at sample {
+  let (u, v) = PAIR
+  let a = p * u
+  let b = x * v
+  a + b
+}
+
+test "an init-clock let reads the alias" {
+  // 3 * 2.
+  let o = init_let.render(init_let.Config { n: 3 }, 2, 8.0)
+  assert o.out[0] == 6
+  assert o.out[1] == 6
+}
+
+test "an init input mixed with the alias, then a sample input" {
+  // a = 3 + 2 = 5; x + 5.
+  let xs: [I32; 2] = [1, 2]
+  let o = init_and_sample.render(init_and_sample.Config { n: 3 }, xs, 8.0)
+  assert o.out[0] == 6
+  assert o.out[1] == 7
+}
+
+test "a block let reads the alias" {
+  // 3 * 2.
+  let o = block_let.render(block_let.Params { p: 3 }, 2, 8.0)
+  assert o.out[0] == 6
+  assert o.out[1] == 6
+}
+
+test "a sample let reads the alias" {
+  let xs: [I32; 3] = [1, 2, 3]
+  let o = sample_let.render(xs, 8.0)
+  assert o.out[0] == 2
+  assert o.out[1] == 4
+  assert o.out[2] == 6
+}
+
+test "the output expression reads the alias" {
+  let xs: [I32; 2] = [1, 2]
+  let o = out_direct.render(xs, 8.0)
+  assert o.out[0] == 3
+  assert o.out[1] == 4
+}
+
+test "two lets of a sample read the same alias" {
+  // x = 1: 2 + 3; x = 3: 6 + 5.
+  let xs: [I32; 2] = [1, 3]
+  let o = two_reads.render(xs, 8.0)
+  assert o.out[0] == 5
+  assert o.out[1] == 11
+}
+
+test "the alias in the condition of an if with a sample" {
+  // x > 2 ? x : 2
+  let xs: [I32; 4] = [1, 2, 3, 5]
+  let o = if_cond_sample.render(xs, 8.0)
+  assert o.out[0] == 2
+  assert o.out[1] == 2
+  assert o.out[2] == 3
+  assert o.out[3] == 5
+}
+
+test "the alias in a condition that is all constant" {
+  // 2 > 1: the first branch, x + 2.
+  let xs: [I32; 2] = [1, 5]
+  let o = if_cond_const.render(xs, 8.0)
+  assert o.out[0] == 3
+  assert o.out[1] == 7
+}
+
+test "the alias as an argument of an rt fn with a sample" {
+  // 3 * 2 + 1.
+  let xs: [I32; 2] = [3, 0]
+  let o = rt_fn_arg.render(xs, 8.0)
+  assert o.out[0] == 7
+  assert o.out[1] == 1
+}
+
+test "an rt fn on the alias alone is of the constant clock" {
+  // scale(2, 2) = 5; x + 5.
+  let xs: [I32; 2] = [1, 2]
+  let o = rt_fn_all_const.render(xs, 8.0)
+  assert o.out[0] == 6
+  assert o.out[1] == 7
+}
+
+test "the alias as the init of prev" {
+  // The first sample is the init 2, then the previous input.
+  let xs: [I32; 3] = [5, 6, 7]
+  let o = prev_init.render(xs, 8.0)
+  assert o.out[0] == 2
+  assert o.out[1] == 5
+  assert o.out[2] == 6
+}
+
+test "the alias as the init of delay" {
+  // A delay of 2 samples with every element of the line the init 2.
+  let xs: [I32; 4] = [5, 6, 7, 8]
+  let o = delay_init.render(xs, 8.0)
+  assert o.out[0] == 2
+  assert o.out[1] == 2
+  assert o.out[2] == 5
+  assert o.out[3] == 6
+}
+
+test "the alias in the body of prev" {
+  // The omitted init is 0; then x[n - 1] + 2.
+  let xs: [I32; 3] = [1, 2, 3]
+  let o = prev_body.render(xs, 8.0)
+  assert o.out[0] == 0
+  assert o.out[1] == 3
+  assert o.out[2] == 4
+}
+
+test "the alias as the init of vdelay" {
+  // d = 1.0 reads the sample before: 0.5, then x[n - 1].
+  let xs: [F32; 3] = [2.0, 3.0, 4.0]
+  let o = vdelay_init.render(xs, 8.0)
+  assert o.out[0] == 0.5
+  assert o.out[1] == 2.0
+  assert o.out[2] == 3.0
+}
+
+test "the alias as the argument of an instance of a flow" {
+  // A running sum of 2 * 1.
+  let xs: [I32; 3] = [1, 1, 1]
+  let o = flow_arg.render(xs, 8.0)
+  assert o.out[0] == 2
+  assert o.out[1] == 4
+  assert o.out[2] == 6
+}
+
+test "the alias promoted by at" {
+  let xs: [I32; 2] = [1, 4]
+  let o = at_promote.render(xs, 8.0)
+  assert o.out[0] == 3
+  assert o.out[1] == 6
+}
+
+test "the alias in the body of par" {
+  // The multipliers 2, 4, 6 each with its own delay: 12 * x[n - 1].
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = par_body.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 12.0
+  assert o.out[2] == 24.0
+}
+
+test "the alias as an argument of a generic function" {
+  // The larger of x and 2.
+  let xs: [I32; 3] = [1, 3, 2]
+  let o = generic_arg.render(xs, 8.0)
+  assert o.out[0] == 2
+  assert o.out[1] == 3
+  assert o.out[2] == 2
+}
+
+test "an alias inside an instance and another alias in its parent" {
+  // child: x + 2; parent: that times K2 = 4.
+  let xs: [I32; 2] = [1, 2]
+  let o = parent.render(xs, 8.0)
+  assert o.out[0] == 12
+  assert o.out[1] == 16
+}
+
+test "two aliases with a sample let between them" {
+  // b = 4 * x; c = 2 + b.
+  let xs: [I32; 2] = [1, 2]
+  let o = interleaved.render(xs, 8.0)
+  assert o.out[0] == 6
+  assert o.out[1] == 10
+}
+
+test "process in several calls with 0 frames between them keeps the state" {
+  // l0 = 2. p = 1: a = 2; y0 = 0 + 1 + 2 = 3, y1 = 3 + 1 + 2 = 6.
+  // p = 10: a = 20; y2 = 6 + 0 + 20 = 26. p = 0: a = 0; 27, 28, 29.
+  // A call with 0 frames evaluates the block stage and writes nothing: the output keeps its sentinel.
+  let xs: [I32; 3] = [1, 1, 1]
+  let zs: [I32; 3] = [0, 0, 0]
+  var out: [I32; 3] = [-1, -1, -1]
+  var st = run_direct.init(8.0)
+  run_direct.process(inout st, run_direct.Params { p: 1 }, xs.slice(0, 2), inout out.slice(0, 2))
+  assert out[0] == 3
+  assert out[1] == 6
+  assert out[2] == -1
+  run_direct.process(inout st, run_direct.Params { p: 99 }, xs.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 3
+  assert out[1] == 6
+  assert out[2] == -1
+  run_direct.process(inout st, run_direct.Params { p: 10 }, zs.slice(0, 1), inout out.slice(2, 3))
+  assert out[2] == 26
+  run_direct.process(inout st, run_direct.Params { p: 0 }, xs.slice(0, 0), inout out.slice(0, 0))
+  var more: [I32; 3] = [-1, -1, -1]
+  run_direct.process(inout st, run_direct.Params { p: 0 }, xs, inout more)
+  assert more[0] == 27
+  assert more[1] == 28
+  assert more[2] == 29
+}
+
+test "process with 0 frames as the first call is a correct call" {
+  let xs: [I32; 3] = [1, 1, 1]
+  var out: [I32; 3] = [-1, -1, -1]
+  var st = run_direct.init(8.0)
+  run_direct.process(inout st, run_direct.Params { p: 1 }, xs.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == -1
+  // The state is still the initial one: the first sample gives 0 + 1 + 2.
+  run_direct.process(inout st, run_direct.Params { p: 1 }, xs.slice(0, 1), inout out.slice(0, 1))
+  assert out[0] == 3
+}
+
+test "reset returns the state to the first call" {
+  let xs: [I32; 2] = [1, 1]
+  var out: [I32; 2] = [0, 0]
+  var st = run_direct.init(8.0)
+  run_direct.process(inout st, run_direct.Params { p: 1 }, xs, inout out)
+  assert out[1] == 6
+  run_direct.reset(inout st)
+  run_direct.process(inout st, run_direct.Params { p: 1 }, xs, inout out)
+  assert out[0] == 3
+  assert out[1] == 6
+}
+
+test "the elements of a tuple taken apart are read by two stages" {
+  // PAIR = (3, 4): a = 2 * 3 = 6; x * 4 + 6.
+  let xs: [I32; 2] = [1, 2]
+  let o = tuple_split.render(tuple_split.Params { p: 2 }, xs, 8.0)
+  assert o.out[0] == 10
+  assert o.out[1] == 14
+}

@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§11.2", "§11.3", "§3.3"]
+
+// What a constant alias (`let l0 = K`) does not allow (spec §11.2, §11.3, §3.3). The name of a `let` is
+// defined from the top (an unmarked reference before the definition, or inside the definition, is
+// E0801), and an alias has the type of the constant: there is no implicit conversion (§3.3), so an
+// annotation of another type, an operation with a signal of another type, and an init of another type
+// are E0401. A `let` of the constant clock built from the alias is checked in the same way.
+
+const K: I32 = 2
+const KF: F32 = 0.5
+
+// A reference before the definition, in a `let` of the constant clock.
+pub flow forward_in_let(p: I32 at block) -> I32 at sample {
+  let b = l0 + 1 //~ E0801
+  let l0 = K
+  p + b
+}
+
+// A reference before the definition, in a `let` of the sample clock.
+pub flow forward_in_sample(x: I32 at sample) -> I32 at sample {
+  let a = x + l0 //~ E0801
+  let l0 = K
+  a
+}
+
+// A reference before the definition, as the init of a delay.
+pub flow forward_in_init(x: I32 at sample) -> I32 at sample {
+  let d = prev~(x, l0) //~ E0801
+  let l0 = K
+  d
+}
+
+// A reference in the definition itself.
+pub flow itself(p: I32 at block) -> I32 at sample {
+  let l0 = l0 + K //~ E0801
+  p + l0
+}
+
+// An annotation of another type.
+pub flow annotation(p: F32 at block) -> F32 at sample {
+  let l0: F32 = K //~ E0401
+  p * l0
+}
+
+// An alias of an F32 constant under an I32 annotation.
+pub flow annotation_float(p: I32 at block) -> I32 at sample {
+  let l0: I32 = KF //~ E0401
+  p + l0
+}
+
+// An operation with a signal of another type.
+pub flow mixed(x: F32 at sample) -> F32 at sample {
+  let l0 = K
+  x + l0 //~ E0401
+}
+
+// The same through a `let` of the constant clock built from the alias.
+pub flow mixed_derived(x: F32 at sample) -> F32 at sample {
+  let l0 = K
+  let c = l0 + l0
+  x * c //~ E0401
+}
+
+// An init of another type.
+pub flow init_type(x: F32 at sample) -> F32 at sample {
+  let l0 = K
+  prev~(x, l0) //~ E0401
+}

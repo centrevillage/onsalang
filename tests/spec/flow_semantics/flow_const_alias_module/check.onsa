@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.1", "§11.3", "§6.6"]
+
+// The flows of `flows` name a constant of the module `consts` with a `let` and read it by a faster
+// stage (spec §15.1, §11.3). The expected values are worked out by hand.
+
+use flows.{by_use, by_path, by_table, by_pair, by_float}
+
+test "the alias of a name taken in by use" {
+  // 3 * 2.
+  let o = by_use.render(by_use.Params { p: 3 }, 2, 8.0)
+  assert o.out[0] == 6
+  assert o.out[1] == 6
+}
+
+test "the alias of a module-qualified name" {
+  // 1 + 2.
+  let o = by_path.render(by_path.Params { p: 1 }, 1, 8.0)
+  assert o.out[0] == 3
+}
+
+test "the alias of an element of a constant array of another module" {
+  // 1 + 30.
+  let o = by_table.render(by_table.Params { p: 1 }, 1, 8.0)
+  assert o.out[0] == 31
+}
+
+test "the alias of a field of a constant tuple of another module" {
+  // x * 3.
+  let xs: [I32; 2] = [1, 5]
+  let o = by_pair.render(xs, 8.0)
+  assert o.out[0] == 3
+  assert o.out[1] == 15
+}
+
+test "a floating-point constant of another module" {
+  // x * 0.5.
+  let xs: [F32; 2] = [1.0, 3.0]
+  let o = by_float.render(xs, 8.0)
+  assert o.out[0] == 0.5
+  assert o.out[1] == 1.5
+}

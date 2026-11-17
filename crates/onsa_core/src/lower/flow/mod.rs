@@ -324,7 +324,7 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     }
     for (l, input) in info.inputs.iter().zip(&fd.inputs) {
         let own = FlowRate::from_rate(input.rate);
-        if reads.get(l).is_some_and(|&r| r > own) {
+        if reads.get(l).and_then(|rs| rs.last()).is_some_and(|&r| r > own) {
             state_locals.insert(l.0, input.name.clone());
             fields.push((input.name.clone(), lw.core_ty(input.ty, &[], input.span)?));
         }
@@ -334,7 +334,7 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     for (k, l) in info.lets.iter().enumerate() {
         if l.rate == FlowRate::Const {
             let mut phases: Vec<Phase> =
-                l.locals.iter().filter_map(|loc| reads.get(loc)).map(|&r| Phase::of(r)).collect();
+                l.locals.iter().filter_map(|loc| reads.get(loc)).flatten().map(|&r| Phase::of(r)).collect();
             phases.sort_by_key(|p| *p as u8);
             phases.dedup();
             for p in phases {

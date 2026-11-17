@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§15.1", "§11.3", "§6.6"]
+
+// R-488: the flows of `flows` name a constant of the module `consts` with a `let`, build a `let` of the
+// constant clock from it, and read that by a faster stage (spec §15.1, §11.3). The expected values are
+// worked out by hand.
+
+use flows.{by_use, by_path, by_table, by_pair, by_float}
+
+test "the derived alias of a name taken in by use" {
+  // b = 2 * 2; 1 + 4.
+  let o = by_use.render(by_use.Params { p: 1 }, 2, 8.0)
+  assert o.out[0] == 5
+  assert o.out[1] == 5
+}
+
+test "the derived alias of a module-qualified name" {
+  // b = 2 + 2; 1 + 4.
+  let o = by_path.render(by_path.Params { p: 1 }, 1, 8.0)
+  assert o.out[0] == 5
+}
+
+test "the derived alias of an element of a constant array of another module" {
+  // b = 30 + 1; 1 + 31.
+  let o = by_table.render(by_table.Params { p: 1 }, 1, 8.0)
+  assert o.out[0] == 32
+}
+
+test "the derived alias of a constant tuple of another module" {
+  // b = 3 * 4 = 12; x + 12.
+  let xs: [I32; 2] = [1, 5]
+  let o = by_pair.render(xs, 8.0)
+  assert o.out[0] == 13
+  assert o.out[1] == 17
+}
+
+test "a derived floating-point constant of another module" {
+  // b = 0.5 + 0.5 = 1.0; x * 1.0.
+  let xs: [F32; 2] = [1.0, 3.0]
+  let o = by_float.render(xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 3.0
+}

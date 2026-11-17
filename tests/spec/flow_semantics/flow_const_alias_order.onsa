@@ -1,0 +1,211 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.2", "§11.3", "§11.6"]
+
+// R-488: the order of the `let`s that name constants and the chains of them, and the calls of
+// `process` that run such a flow (spec §11.2: "名前は上から順に定義する"; §11.3: "let に分けても分けなくても、
+// 評価の段と結果は同じ"; §11.6: a call with 0 frames is a correct call that evaluates the `block` stage
+// once and the `sample` stage not at all, and the state is kept between calls). The expected values are
+// worked out by hand.
+//
+// The alias of the constant clock is placed after another `let`, between `let`s of a faster clock, and
+// before them; the aliases are chained (`let l1 = l0`), annotated with a type, and several are read by
+// one `let`.
+
+const K: I32 = 2
+const K2: I32 = K * 2
+const PAIR: (I32, I32) = (3, 4)
+
+// The alias comes after a `let` that does not read it.
+pub flow after_other(p: I32 at block) -> I32 at sample {
+  let a = p
+  let l0 = K
+  let c = l0 * l0
+  a + c
+}
+
+// The alias comes after a `let` of the sample clock and is read by a later one.
+pub flow after_sample(x: I32 at sample) -> I32 at sample {
+  let a = x
+  let l0 = K
+  let c = l0 + l0
+  let b = a * c
+  b
+}
+
+// Two aliases of different constants and a `let` of the constant clock that reads both.
+pub flow two_chains(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  let m0 = K2
+  let c = l0 * m0
+  x + c
+}
+
+// A chain of three: l1 is an alias of an alias.
+pub flow chain3(p: I32 at block) -> I32 at sample {
+  let l0 = K
+  let l1 = l0
+  let l2 = l1 * l0
+  p + l2
+}
+
+pub flow chain_alias(p: I32 at block) -> I32 at sample {
+  let l0 = K
+  let l1 = l0
+  p + l1
+}
+
+pub flow annotated(p: I32 at block) -> I32 at sample {
+  let l0: I32 = K
+  let l1: I32 = l0
+  p + l1
+}
+
+// The constants of a tuple taken out by a pattern, then combined.
+pub flow split_tuple(p: I32 at block) -> I32 at sample {
+  let (a, b) = PAIR
+  let c = a * b
+  p + c
+}
+
+// The alias read twice by two derived lets, and the derived lets read by one output.
+pub flow diamond(x: I32 at sample) -> I32 at sample {
+  let l0 = K
+  let u = l0 + 1
+  let v = l0 * 10
+  x + u + v
+}
+
+// A running state, a block input, and a derived alias: the state keeps between calls of `process`.
+pub flow run(x: I32 at sample, p: I32 at block) -> I32 at sample {
+  let l0 = K
+  let c = l0 + l0
+  let a = p * c
+  let y = prev~(^y) + x + a
+  y
+}
+
+test "the alias after a let that does not read it" {
+  // c = 4; 1 + 4.
+  let o = after_other.render(after_other.Params { p: 1 }, 1, 8.0)
+  assert o.out[0] == 5
+}
+
+test "the alias after a let of the sample clock" {
+  // c = 4; x * 4.
+  let xs: [I32; 2] = [1, 2]
+  let o = after_sample.render(xs, 8.0)
+  assert o.out[0] == 4
+  assert o.out[1] == 8
+}
+
+test "two aliases of different constants read by one let" {
+  // 2 * 4 = 8; x + 8.
+  let xs: [I32; 2] = [1, 2]
+  let o = two_chains.render(xs, 8.0)
+  assert o.out[0] == 9
+  assert o.out[1] == 10
+}
+
+test "a chain of three aliases" {
+  // l2 = 2 * 2; 1 + 4.
+  let o = chain3.render(chain3.Params { p: 1 }, 1, 8.0)
+  assert o.out[0] == 5
+}
+
+test "an alias of an alias" {
+  // 1 + 2.
+  let o = chain_alias.render(chain_alias.Params { p: 1 }, 1, 8.0)
+  assert o.out[0] == 3
+}
+
+test "aliases with a type annotation" {
+  // 1 + 2.
+  let o = annotated.render(annotated.Params { p: 1 }, 1, 8.0)
+  assert o.out[0] == 3
+}
+
+test "constants taken out of a tuple by a pattern" {
+  // c = 3 * 4 = 12; 1 + 12.
+  let o = split_tuple.render(split_tuple.Params { p: 1 }, 1, 8.0)
+  assert o.out[0] == 13
+}
+
+test "one alias read by two derived lets" {
+  // u = 3, v = 20; x + 23.
+  let xs: [I32; 2] = [1, 2]
+  let o = diamond.render(xs, 8.0)
+  assert o.out[0] == 24
+  assert o.out[1] == 25
+}
+
+test "process in several calls with 0 frames between them keeps the state" {
+  // c = 4. p = 1: a = 4; y0 = 0 + 1 + 4 = 5, y1 = 5 + 1 + 4 = 10.
+  // p = 10: a = 40; y2 = 10 + 0 + 40 = 50. p = 0: a = 0; 51, 52, 53.
+  // A call with 0 frames evaluates the block stage and writes nothing: the output keeps its sentinel.
+  let xs: [I32; 3] = [1, 1, 1]
+  let zs: [I32; 3] = [0, 0, 0]
+  var out: [I32; 3] = [-1, -1, -1]
+  var st = run.init(8.0)
+  run.process(inout st, run.Params { p: 1 }, xs.slice(0, 2), inout out.slice(0, 2))
+  assert out[0] == 5
+  assert out[1] == 10
+  assert out[2] == -1
+  run.process(inout st, run.Params { p: 99 }, xs.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 5
+  assert out[1] == 10
+  assert out[2] == -1
+  run.process(inout st, run.Params { p: 10 }, zs.slice(0, 1), inout out.slice(2, 3))
+  assert out[2] == 50
+  run.process(inout st, run.Params { p: 0 }, xs.slice(0, 0), inout out.slice(0, 0))
+  var more: [I32; 3] = [-1, -1, -1]
+  run.process(inout st, run.Params { p: 0 }, xs, inout more)
+  assert more[0] == 51
+  assert more[1] == 52
+  assert more[2] == 53
+}
+
+test "process with 0 frames as the first call is a correct call" {
+  let xs: [I32; 3] = [1, 1, 1]
+  var out: [I32; 3] = [-1, -1, -1]
+  var st = run.init(8.0)
+  run.process(inout st, run.Params { p: 1 }, xs.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == -1
+  // The state is still the initial one: the first sample gives 0 + 1 + 4.
+  run.process(inout st, run.Params { p: 1 }, xs.slice(0, 1), inout out.slice(0, 1))
+  assert out[0] == 5
+}
+
+test "reset returns the state to the first call" {
+  // After reset the running value starts again from 0.
+  let xs: [I32; 2] = [1, 1]
+  var out: [I32; 2] = [0, 0]
+  var st = run.init(8.0)
+  run.process(inout st, run.Params { p: 1 }, xs, inout out)
+  assert out[1] == 10
+  run.reset(inout st)
+  run.process(inout st, run.Params { p: 1 }, xs, inout out)
+  assert out[0] == 5
+  assert out[1] == 10
+}
+
+test "one call with the whole run equals the same run in two calls" {
+  let xs: [I32; 4] = [1, 2, 3, 4]
+  var whole: [I32; 4] = [0, 0, 0, 0]
+  var st = run.init(8.0)
+  run.process(inout st, run.Params { p: 3 }, xs, inout whole)
+  var split: [I32; 4] = [0, 0, 0, 0]
+  var st2 = run.init(8.0)
+  run.process(inout st2, run.Params { p: 3 }, xs.slice(0, 1), inout split.slice(0, 1))
+  run.process(inout st2, run.Params { p: 3 }, xs.slice(1, 4), inout split.slice(1, 4))
+  // a = 3 * 4 = 12: 1 + 12 = 13, 13 + 2 + 12 = 27, 27 + 3 + 12 = 42, 42 + 4 + 12 = 58.
+  assert whole[0] == 13
+  assert whole[1] == 27
+  assert whole[2] == 42
+  assert whole[3] == 58
+  assert split[0] == 13
+  assert split[1] == 27
+  assert split[2] == 42
+  assert split[3] == 58
+}

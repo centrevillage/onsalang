@@ -35,13 +35,14 @@
 //! - `sample_rate_at: Option<FlowRate>` — the highest rate at which
 //!   `sample_rate()` is read (`None`: never; `Init`: no state field needed;
 //!   `Ctl` / `Sig`: store it, S-05). `sample_rate_calls` lists the calls.
-//! - `read_at: HashMap<LocalId, FlowRate>` — the highest rate at which each
-//!   local is read (inputs, `let`s, `par` variables, match bindings; S-05):
-//!   instance arguments at the callee input's rate, the first argument of a
-//!   delay (and `d` of `vdelay~`) at `Sig`, an `init` at `Init`. A local
-//!   that is never read has no entry. The lowering stores an input or a
-//!   `let` read above its own rate, and a constant `let` in the phases that
-//!   read it.
+//! - `read_at: HashMap<LocalId, BTreeSet<FlowRate>>` — the rates at which
+//!   each local is read (inputs, `let`s, `par` variables, match bindings;
+//!   S-05): instance arguments at the callee input's rate, the first argument
+//!   of a delay (and `d` of `vdelay~`) at `Sig`, an `init` at `Init`, the
+//!   initializer of a constant `let` at each rate its locals are read at (at
+//!   `Const` when none is read). A local that is never read has no entry.
+//!   The lowering stores an input or a `let` read above its own rate, and
+//!   defines a constant `let` in each phase that reads it (§11.3).
 //! - `output: ExprId` — the output expression (rate ≤ `Sig`, promoted).
 //! - `complete` — `false` when checking stopped at a diagnostic (tables partial).
 //!
@@ -51,6 +52,8 @@
 //! The parts are in a module each: `check` (the flow mode of the checker),
 //! `consts` (the constant expressions), `rate` (the rate pass) and `reads`
 //! (the state marking). The tables are here.
+
+use std::collections::BTreeSet;
 
 use onsa_diag::hash::HashMap;
 use onsa_diag::unsupported::Feature;
@@ -183,7 +186,7 @@ pub struct FlowInfo {
     pub node_of_expr: HashMap<ExprId, usize>,
     pub sample_rate_at: Option<FlowRate>,
     pub sample_rate_calls: Vec<ExprId>,
-    pub read_at: HashMap<LocalId, FlowRate>,
+    pub read_at: HashMap<LocalId, BTreeSet<FlowRate>>,
     pub output: Option<ExprId>,
     pub complete: bool,
 }
