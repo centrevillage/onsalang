@@ -30,18 +30,19 @@ macro_rules! counter {
         }
     };
 }
+pub(super) use counter;
 
 /// `rt fn <name>(x: I32) -> I32`s that have a statement, so that the evaluator hands them to the host.
-fn counted(names: &[&str]) -> String {
+pub(super) fn counted(names: &[&str]) -> String {
     names.iter().map(|n| format!("rt fn {n}(x: I32) -> I32 {{\n  var d = x\n  d = d + 0\n  d\n}}\n")).collect()
 }
 
-fn host(h: &mut TableHost) -> Option<&mut dyn FnHost> {
+pub(super) fn host(h: &mut TableHost) -> Option<&mut dyn FnHost> {
     Some(h)
 }
 
 /// Check `src` and run `go` on the flow `name` (on the thread of a large stack: the check and the evaluation are).
-fn with_flow<T: Send + 'static>(
+pub(super) fn with_flow<T: Send + 'static>(
     src: &str,
     name: &'static str,
     go: impl FnOnce(View, DefId) -> T + Send + 'static,
@@ -380,22 +381,67 @@ fn the_clock_of_two_operands_is_the_faster_of_them() {
     }
 }
 
+/// What `Instance::init` of the flow `name` stops with, as the fault and the text of the source it stops at; none when
+/// it makes the instance. `clean` is as for `with_checked`.
+pub(super) fn init_stop(clean: bool, src: &str, name: &'static str) -> Option<(Fault, String)> {
+    let text = src.to_string();
+    with_checked(src, clean, move |a| {
+        let r = Instance::init(View::new(a), def_named(a, name), 48000.0, &[], None);
+        r.err().map(|s| (s.fault, text[s.at.start as usize..s.at.end as usize].to_string()))
+    })
+}
+
 #[test]
-fn a_flow_with_a_delay_is_unavailable_until_its_unit() {
-    // `prev~` and `^` are the unit after this one's (`vdelay~` and `delay~` the same): a frame that has one stops with
-    // `Unavailable`, whatever the values. Its `init` is made (nothing at `init` reads a delay).
-    let src = "flow d(x: F32 at sample) -> F32 at sample { prev~(x) }
+fn a_form_the_evaluator_has_not_is_unavailable_at_init_and_not_in_a_frame() {
+    // The instance of a flow (`lp~(x)`, also with a delay in front of it and in what a delay stores, U1c), `sample_rate()`
+    // (U1c) and a `par~` (U2) are not evaluated yet: `Instance::init` stops with `Unavailable` at the form, whatever the
+    // values, and so there is no instance for a call of 0 frames (which would have given an empty answer) or for a frame
+    // (which would have stopped late) to be made on. A `par~` whose delay reads its index (`g1`, `g2`: the `init` of a
+    // delay) is `Unavailable` too, and not an internal error of a local that has no value. Nothing in such a form is
+    // looked into: a form in an `if` that is not taken, in the `init` argument of a delay and in a `let` after the delays
+    // is found as well.
+    let src = "flow lp(x: F32 at sample) -> F32 at sample { x }
+flow d(x: F32 at sample) -> F32 at sample { lp~(x) }
 flow g(x: F32 at sample) -> F32 at sample {
-  let y = x + prev~(^y)
+  let y = x + lp~(prev~(^y))
   y
+}
+flow u2(x: F32 at sample) -> F32 at sample { x * sample_rate() }
+flow br(x: F32 at sample) -> F32 at sample { if x > 100.0 { sample_rate() } else { x } }
+flow dl(x: F32 at sample) -> F32 at sample { delay~(x, 2, sample_rate()) }
+flow c6(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { prev~(x) }
+  ys[0] + ys[1]
+}
+flow g1(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { prev~(x, F32.round_from(i)) }
+  ys[0] + ys[1]
+}
+flow g2(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { prev~(x, 1.0 / F32.round_from(i)) }
+  ys[0] + ys[1]
+}
+flow after(x: F32 at sample) -> F32 at sample {
+  let a = prev~(x)
+  let b = delay~(x, 2)
+  a + b + lp~(x)
 }";
-    for name in ["d", "g"] {
-        with_flow(src, name, move |view, def| {
-            let mut me = Instance::init(view, def, 48000.0, &[], None).expect("init");
-            let r = me.process(&[], &[("x", &[Value::F32(1.0)])], 1, None);
-            assert!(matches!(r, Err(Stop { fault: Fault::Unavailable(_), .. })), "{name}: {r:?}");
-        });
+    for (name, at) in [
+        ("d", "lp~(x)"),
+        ("g", "lp~(prev~(^y))"),
+        ("u2", "sample_rate()"),
+        ("br", "sample_rate()"),
+        ("dl", "sample_rate()"),
+        ("c6", "par~ i in 0 ..< 2 { prev~(x) }"),
+        ("g1", "par~ i in 0 ..< 2 { prev~(x, F32.round_from(i)) }"),
+        ("g2", "par~ i in 0 ..< 2 { prev~(x, 1.0 / F32.round_from(i)) }"),
+        ("after", "lp~(x)"),
+    ] {
+        let r = init_stop(true, src, name);
+        assert!(matches!(&r, Some((Fault::Unavailable(_), text)) if text == at), "{name}: {r:?}");
     }
+    // A flow with delays and no such form is made.
+    assert_eq!(init_stop(true, src, "lp"), None);
 }
 
 #[test]

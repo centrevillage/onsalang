@@ -101,6 +101,17 @@ pub enum Shape {
 }
 
 impl Shape {
+    /// The places the default holds, as [`Value::places`] counts them (saturating: 10^12 places are a number).
+    pub fn places(&self) -> usize {
+        let sum = |ps: &mut dyn Iterator<Item = usize>| ps.fold(0usize, usize::saturating_add).max(1);
+        match self {
+            Shape::Scalar(_) => 1,
+            Shape::Tuple(fs) => sum(&mut fs.iter().map(Shape::places)),
+            Shape::Array(e, n) => e.places().saturating_mul(*n).max(1),
+            Shape::Struct(fs) => sum(&mut fs.iter().map(|(d, t)| d.as_ref().map_or_else(|| t.places(), Value::places))),
+        }
+    }
+
     /// The default of the type: elementwise for tuples and arrays, and for a struct
     /// the declared value of a field or else the default of its type. `None` when a
     /// type that is needed has no `Default` (E0816 in a flow).

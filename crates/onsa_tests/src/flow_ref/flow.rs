@@ -3,8 +3,9 @@
 //! once for each `process` call, a call of 0 frames too; of `sample` for each frame. A `let` of a faster clock reads the
 //! latest value of a slower one. The `let`s of a stage run in the order they are written (§11.2), the stages of a frame
 //! in the order of the clocks, and `e at k` has the clock `k` but not another value (§11.3; the name under it is read in
-//! its own stage, and a computed `e` under `at` is E0200 today). The delays, the instances and the state they need,
-//! `reset` and `render` come with the units after this one: they are `Unavailable` here. A panic of a value of the clock
+//! its own stage, and a computed `e` under `at` is E0200 today). The delays (`state.rs`) are in the `sample` stage, and
+//! the second phase of each frame stores what they save, after the stage and before `tick` goes up. The instances of
+//! flows, `reset` and `render` come with the units after this one: they are `Unavailable` here. A panic of a value of the clock
 //! of a constant is E0419 in the spec (compile time, §11.3): the evaluator makes it at `init` and gives the panic of
 //! `init`; the entry of the comparison (W7-19) reads it as an error of the compile time.
 
@@ -19,6 +20,7 @@ use super::expr::{Frame, Stop};
 use super::host::FnHost;
 use super::scalar::Fault;
 use super::sema_view::{Body, Stage, View, clock_stage, input_stage};
+use super::state::{InstState, Run};
 use super::value::Value;
 
 /// When a value is made: once for good (a constant), at `init`, for each `process` call (`block`), for each frame.
@@ -69,7 +71,9 @@ pub struct Ctx {
 /// The clock of `e` (the stage it is made in): the fastest of the names in it. A name has the clock its local has so far
 /// (`known`); one that `known` has not must be bound inside `root`, the expression being clocked (an arm of a `match`),
 /// and has no clock of its own: bound anywhere else is an internal error. A constant has none, a delay or an instance
-/// ticks with the `sample` of the body (§11.4), and `e at k` has the clock `k` (§11.3).
+/// ticks with the `sample` of the body (§11.4: the first argument of a delay is at `sample`, or `^name`, which has no clock of
+/// its own and is read as `sample`, §11.3; a constant or a `block` one is E0813; the other clocks of a delay come with W7-09
+/// and W7-17), and `e at k` has the clock `k` (§11.3).
 pub(super) fn clock_of(body: &Body, known: &HashMap<LocalId, Clock>, root: ExprId, e: ExprId) -> Result<Clock, Fault> {
     match &body.ast.expr(e).kind {
         ExprKind::Call { kind: CallKind::Flow, .. } => Ok(Clock::Sample),
@@ -104,6 +108,8 @@ pub struct Instance<'a> {
     decl: &'a FlowDef,
     steps: Vec<Step>,
     locals: HashMap<LocalId, Value>,
+    /// The state the delays hold between the frames (`reset` is U1c).
+    state: InstState,
     out: Value,
     /// The time the instance runs in (`tick` is read by `sample_tick()`, U1c).
     pub ctx: Ctx,
@@ -194,12 +200,14 @@ impl<'a> Instance<'a> {
             clock_of(&body, &known, tail, tail).map_err(|fault| Stop { fault, at: body.ast.expr(tail).span })?;
         steps.push(Step { pat: None, init: tail, clock });
         let ctx = Ctx { sample_rate, tick: 0 };
-        let mut me = Instance { body, decl, steps, locals: HashMap::new(), out: Value::Unit, ctx };
+        let mut me =
+            Instance { body, decl, steps, locals: HashMap::new(), state: InstState::default(), out: Value::Unit, ctx };
         let mut f = me.frame(host);
         let done = give(&mut f, decl, Stage::Init, &config.iter().map(|(n, v)| (*n, v)).collect::<Vec<_>>())
-            .and_then(|()| stage(&mut f, &me.steps, &mut me.out, Stage::Init));
-        me.locals = f.locals;
-        done.map(|()| me)
+            .and_then(|()| stage(&mut f, &me.steps, &mut me.out, Stage::Init))
+            .and_then(|()| f.make_cells(&me.steps.iter().map(|s| s.init).collect::<Vec<_>>()));
+        let kept = me.keep(f);
+        done.and(kept).map(|()| me)
     }
 
     /// `process` over `frames` frames: the `let`s of `block` once (`params`, by name), a call of 0 frames too, and for
@@ -233,13 +241,14 @@ impl<'a> Instance<'a> {
                     &inputs.iter().map(|(name, col)| (*name, &col[n])).collect::<Vec<_>>(),
                 )?;
                 stage(&mut f, &self.steps, &mut self.out, Stage::Sample)?;
+                f.commit(at)?;
                 outs.push(self.out.clone());
                 self.ctx.tick = self.ctx.tick.wrapping_add(1);
             }
             Ok(())
         })();
-        self.locals = f.locals;
-        done.map(|()| outs)
+        let kept = self.keep(f);
+        done.and(kept).map(|()| outs)
     }
 
     /// The clock of each step: the `let`s in the order they are written, then the output.
@@ -247,7 +256,15 @@ impl<'a> Instance<'a> {
         self.steps.iter().map(|s| s.clock).collect()
     }
 
-    /// The frame of an evaluation: the latest values of the locals are given to it and taken back from it.
+    /// What an evaluation leaves: the latest values of the locals and the state, taken back from its frame.
+    fn keep(&mut self, f: Frame) -> Result<(), Stop> {
+        let at = self.body.ast.expr(self.decl.body).span;
+        self.state = f.run.ok_or(Stop { fault: Fault::Internal("a frame with no state"), at })?.state;
+        self.locals = f.locals;
+        Ok(())
+    }
+
+    /// The frame of an evaluation: the latest values of the locals and the state are given to it (`keep` takes them back).
     fn frame<'b>(&mut self, host: Option<&'b mut dyn FnHost>) -> Frame<'b>
     where
         'a: 'b,
@@ -255,6 +272,7 @@ impl<'a> Instance<'a> {
         let body: Body<'b> = self.body;
         let mut f = Frame::new(body);
         f.locals = std::mem::take(&mut self.locals);
+        f.run = Some(Run::new(std::mem::take(&mut self.state)));
         f.host = host;
         f
     }

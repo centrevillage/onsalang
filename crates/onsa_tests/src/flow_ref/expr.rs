@@ -18,6 +18,7 @@ use onsa_syntax::{FloatWidth, float_value};
 use super::host::FnHost;
 use super::scalar::{Bin, Fault, Un, binary, cast, unary};
 use super::sema_view::{Body, View};
+use super::state::Run;
 use super::value::{Scalar, Value};
 
 /// A fault and where it came from.
@@ -55,6 +56,8 @@ pub struct Frame<'a> {
     pub limits: Limits,
     /// Where the calls the evaluator does not evaluate go; none is [`super::host::NoHost`].
     pub host: Option<&'a mut dyn FnHost>,
+    /// The state of the flow instance this evaluation is a tick of, and what its delays save (none for a function).
+    pub run: Option<Run>,
     chain: u32,
     /// The calls this evaluation is inside of (§12.5): 0 at its entry, and a `const` starts at its own entry.
     depth: u32,
@@ -80,8 +83,9 @@ pub(super) fn evaluates(body: &Body, e: ExprId) -> bool {
         K::If { tilde, .. } | K::Match { tilde, .. } => tilde.is_none(),
         K::Paren(_) | K::At { .. } | K::Binary { .. } | K::Unary { .. } | K::Cast { .. } | K::Index { .. } => true,
         K::TupleIndex { .. } | K::Struct { .. } | K::Tuple(_) | K::Array(_) | K::Repeat { .. } => true,
+        K::Call { kind: CallKind::Flow, .. } | K::Feedback(_) => true,
         K::Call { .. } | K::Hole | K::Error | K::Closure { .. } | K::Handle { .. } | K::Unsafe(_) => false,
-        K::Par { .. } | K::Feedback(_) | K::TypeArgs { .. } | K::Try(_) | K::Move(_) | K::Range(_) => false,
+        K::Par { .. } | K::TypeArgs { .. } | K::Try(_) | K::Move(_) | K::Range(_) => false,
     }
 }
 
@@ -116,14 +120,15 @@ fn bin(op: BinOp) -> Result<Bin, Fault> {
 
 impl<'a> Frame<'a> {
     pub fn new(body: Body<'a>) -> Frame<'a> {
-        Frame { body, locals: HashMap::new(), limits: LIMITS, host: None, chain: 0, depth: 0 }
+        Frame { body, locals: HashMap::new(), limits: LIMITS, host: None, run: None, chain: 0, depth: 0 }
     }
 
     /// `expr` of the body of a function called from this frame, with `locals` its parameters: the same limits and
     /// host (taken for the call and given back), one call deeper.
     pub(super) fn run_callee(&mut self, body: Body<'a>, locals: HashMap<LocalId, Value>, expr: ExprId) -> Eval {
         let host = self.host.take();
-        let mut inner = Frame { body, locals, limits: self.limits, host, chain: self.chain, depth: self.depth + 1 };
+        let mut inner =
+            Frame { body, locals, limits: self.limits, host, run: None, chain: self.chain, depth: self.depth + 1 };
         let value = inner.eval(expr);
         self.host = inner.host.take();
         value
@@ -177,6 +182,7 @@ impl<'a> Frame<'a> {
             ExprKind::Cast { expr: x, .. } => return self.cast(e, *x, at),
             ExprKind::If { cond, then, else_, tilde: None } => return self.branch(*cond, *then, *else_, at),
             ExprKind::Block(b) => return self.block(b, at),
+            ExprKind::Feedback(_) | ExprKind::Call { kind: CallKind::Flow, .. } => return self.stateful(e, at),
             _ => return Err(here(Fault::Internal("a form of the list with no arm"))),
         })
     }

@@ -12,6 +12,7 @@
 //! 0.6 to 2 MB. The chain of constants that read constants, with an initializer 256 levels deep each, is more than the
 //! stack of the thread: [`expr::Limits`] keeps 4 MiB of it back, and an `eval` that finds less left stops with
 //! `Unavailable`, whatever the input (a thread that is not one of `onsa_diag::stack` has no such guard).
+//! A level of a `vdelay~` in the `d` of a `vdelay~` takes 3.7 KB (2026-11-17).
 //!
 //! - [`value`]: the values of the evaluator, their defaults (§6.4) and their
 //!   equality (§13.4).
@@ -26,6 +27,8 @@
 //! - [`pattern`]: `match` and the `let` that takes a value apart, and the patterns they use (a guard is tried for
 //!   each way a `|` lets a pattern match).
 //! - [`flow`]: one instance of a flow: the clock of each `let` and the stages `init` and `process` run them in.
+//! - [`state`]: the state of an instance, a tree of cells made for each place a delay is called, and the delays
+//!   (`prev~`, `delay~`, `vdelay~`) with the two phases of a tick that `^` needs.
 //! - [`sema_view`]: the tables of the checker the evaluator reads, in one file.
 
 pub mod aggregate;
@@ -36,6 +39,7 @@ pub mod host;
 pub mod pattern;
 pub mod scalar;
 pub mod sema_view;
+pub mod state;
 pub mod value;
 
 #[cfg(test)]
@@ -52,5 +56,7 @@ mod limits_tests;
 mod pattern_tests;
 #[cfg(test)]
 mod probe_tests;
+#[cfg(test)]
+mod state_tests;
 #[cfg(test)]
 mod tests;

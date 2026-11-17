@@ -80,21 +80,22 @@ impl<'a> Frame<'a> {
     }
 }
 
-/// Does the evaluator evaluate `e` and what it evaluates in it ([`evaluates`] of each)? A call evaluates its receiver and
-/// arguments and not its callee, a `panic` not even its message, and a name that is a path (`F32.PI`) not its base.
-pub(super) fn evaluated(body: &Body, e: ExprId) -> bool {
+/// What the evaluator evaluates in `e` (not `e` itself): a call evaluates its receiver and arguments and not its callee, a
+/// `panic` not even its message, and a name that is a path (`F32.PI`) not its base.
+pub(super) fn parts(body: &Body, e: ExprId) -> Vec<ExprId> {
     let ast = body.ast;
-    evaluates(body, e)
-        && match (&ast.expr(e).kind, body.target(e)) {
-            (ExprKind::Call { .. }, Ok(Target::Panic)) => vec![],
-            (ExprKind::Call { callee, args, .. }, target) => {
-                let receiver =
-                    onsa_sema::receiver(ast, *callee).filter(|_| matches!(target, Ok(Target::Method { .. })));
-                receiver.into_iter().chain(args.iter().map(|a| a.expr)).collect()
-            }
-            (ExprKind::Field { .. }, _) if body.names(e) => vec![],
-            _ => ast.sub_exprs(e),
+    match (&ast.expr(e).kind, body.target(e)) {
+        (ExprKind::Call { .. }, Ok(Target::Panic)) => vec![],
+        (ExprKind::Call { callee, args, .. }, target) => {
+            let receiver = onsa_sema::receiver(ast, *callee).filter(|_| matches!(target, Ok(Target::Method { .. })));
+            receiver.into_iter().chain(args.iter().map(|a| a.expr)).collect()
         }
-        .into_iter()
-        .all(|x| evaluated(body, x))
+        (ExprKind::Field { .. }, _) if body.names(e) => vec![],
+        _ => ast.sub_exprs(e),
+    }
+}
+
+/// Does the evaluator evaluate `e` and what it evaluates in it ([`evaluates`] of each, [`parts`])?
+pub(super) fn evaluated(body: &Body, e: ExprId) -> bool {
+    evaluates(body, e) && parts(body, e).into_iter().all(|x| evaluated(body, x))
 }
