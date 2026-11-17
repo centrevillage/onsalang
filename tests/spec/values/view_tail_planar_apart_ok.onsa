@@ -1,0 +1,147 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§5.2", "§5.3"]
+
+// W7-12 U2c2b, S-1113 (§5.2, §5.3): the calls whose tail of an `if`, a `match` or a block at a planar argument
+// (`xs: [Span[F32]; 2]`) is a literal of channels (`[x, y]`) or an array of arrays, and are not an overlap, and pass
+// today. A tail that is a literal is the channels of the argument ("ブロックの末尾の式は、そのブロックが置かれた位置を継ぐ", §5.2;
+// "排他性は要素の場所ごとに検査する", §5.3): it overlaps the `inout` of the same call only if a channel is the place of it
+// (negative/overlap_args_tail_planar_literal.onsa, negative/view_tail_planar_overlap.onsa). Other variables, another part of
+// one array, the literal of the `inout`, a read of the same channels in another argument ("読みどうしは重ならない"), an `inout` of a
+// later call, a view of a parameter, a generic callee, a closure and a loop are not. A tail that is an array of arrays or an array of
+// views (`ps`) is one value, the places of its elements are the ones of the variable. The elements of a tail with other kinds and
+// lengths are in values/view_tail_planar_ok.onsa. The change of the lowering that records a conversion for each tail must not
+// make an error of what is here.
+
+pub fn planes(xs: [Span[F32]; 2]) -> F32 {
+  xs[0][0] + xs[1][0]
+}
+
+pub fn planes_inout(xs: [Span[F32]; 2], inout t: Span[F32]) {}
+
+pub fn planes_write(xs: [Span[F32]; 2], inout ys: [Span[F32]; 2]) {}
+
+pub fn planes_both(xs: [Span[F32]; 2], ys: [Span[F32]; 2]) -> F32 {
+  xs[0][0] + ys[1][0]
+}
+
+pub fn gen_planes[T: Copy](xs: [Span[T]; 2], t: Span[T]) {}
+
+pub fn apply(g: fn(U32) -> F32) -> F32 {
+  g.(0)
+}
+
+// ---------------------------------------------------------------------------------------------- the same kind of elements
+
+pub fn tail_arrays(c: Bool, x: [F32; 4], y: [F32; 4]) -> F32 {
+  planes(if c { [x, y] } else { [y, x] })
+}
+
+pub fn direct_arrays(x: [F32; 4], y: [F32; 4]) -> F32 {
+  planes([x, y])
+}
+
+pub fn tail_element_is_an_if(c: Bool, d: Bool, x: [F32; 4], y: [F32; 4]) -> F32 {
+  planes(if c { [if d { x } else { y }, y] } else { [x, match d { true => x, false => y }] })
+}
+
+pub fn tail_arrays_of_arrays_in_both_arms(c: Bool, ps: [[F32; 4]; 2], qs: [[F32; 4]; 2]) -> F32 {
+  planes(if c { ps } else { qs })
+}
+
+pub fn tail_arrays_of_buffers_in_both_arms(c: Bool, ps: [Buf[F32]; 2], qs: [Buf[F32]; 2]) -> F32 {
+  planes(match c { true => ps, false => qs })
+}
+
+pub fn tail_arrays_of_views_in_both_arms(c: Bool, ps: [Span[F32]; 2], qs: [Span[F32]; 2]) -> F32 {
+  planes(if c { ps } else { qs })
+}
+
+// ------------------------------------------------------------------------- not an overlap with the `inout` of the same call
+
+pub fn another_variable(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  var z: [F32; 4] = [0.0; 4]
+  planes_inout(if c { [x, y] } else { [y, x] }, inout z)
+}
+
+pub fn another_variable_in_a_match(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  var z: [F32; 4] = [0.0; 4]
+  planes_inout(match c { true => [x, y], false => [y, y] }, inout z)
+}
+
+pub fn another_variable_in_a_block() {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  var z: [F32; 4] = [0.0; 4]
+  planes_inout({ [x, y] }, inout z)
+}
+
+pub fn another_variable_than_an_array_of_arrays(c: Bool, ps: [[F32; 4]; 2], qs: [[F32; 4]; 2]) {
+  var z: [F32; 4] = [0.0; 4]
+  planes_inout(if c { ps } else { qs }, inout z)
+}
+
+pub fn the_literal_of_the_inout_is_another_variable(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  var z: [F32; 4] = [0.0; 4]
+  var w: [F32; 4] = [0.0; 4]
+  planes_write(if c { [x, y] } else { [y, x] }, inout [z, w])
+}
+
+pub fn an_array_of_arrays_and_the_literal_of_the_inout(c: Bool, ps: [[F32; 4]; 2], qs: [[F32; 4]; 2]) {
+  var z: [F32; 4] = [0.0; 4]
+  var w: [F32; 4] = [0.0; 4]
+  planes_write(if c { ps } else { qs }, inout [z, w])
+}
+
+pub fn two_tail_literals_are_reads(c: Bool, x: [F32; 4], y: [F32; 4]) -> F32 {
+  planes_both(if c { [x, y] } else { [y, x] }, if c { [y, x] } else { [x, y] })
+}
+
+pub fn a_tail_literal_and_a_read_of_the_same_variables(c: Bool, x: [F32; 4], y: [F32; 4]) -> F32 {
+  planes_both(if c { [x, y] } else { [y, x] }, [x, y])
+}
+
+pub fn the_inout_is_in_a_later_call(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  var z: [F32; 4] = [0.0; 4]
+  planes_inout(if c { [x, y] } else { [y, y] }, inout z.slice(0, 2))
+  planes_inout([y, y], inout x)
+  planes_inout([z, x], inout y)
+}
+
+// ---------------------------------------------------------------------------------- a generic function, a closure, a loop
+
+pub fn generic_callee(c: Bool, x: [F32; 4], y: [F32; 4]) {
+  gen_planes(if c { [x, y] } else { [y, x] }, x)
+}
+
+pub fn generic_function_with_a_tail[T: Copy](c: Bool, x: [T; 4], y: [T; 4]) {
+  gen_planes(if c { [x, y] } else { [y, x] }, x)
+}
+
+pub fn in_a_closure(c: Bool) -> F32 {
+  apply(fn(n) {
+    var x: [F32; 4] = [0.0; 4]
+    var y: [F32; 4] = [0.0; 4]
+    var z: [F32; 4] = [0.0; 4]
+    x[0] = F32.round_from(n)
+    planes_inout(if c { [x, y] } else { [y, y] }, inout z)
+    z[0] + planes(if c { [x, z] } else { [y, z] })
+  })
+}
+
+pub fn in_a_loop(c: Bool, n: U32) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  var z: [F32; 4] = [0.0; 4]
+  for _ in 0 ..< n {
+    planes_inout(if c { [x, y] } else { [y, x] }, inout z)
+  }
+}

@@ -1,0 +1,177 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§5.4", "§11.6"]
+
+// W7-12 U2c2b, S-1115 (§5.2, §5.4): the elements of a literal of channels at the tail of an `if`, a `match` or a block at a planar
+// argument, and the fields of the generated `In`, that name what the arm declares and are not an E0716 (negative/view_tail_scope_elements.onsa):
+// "末尾に書いた式が Copy の値なら、値を写して渡すので置ける". The element that is a Copy binding of the arm (`var t: [F32; 4]`, changed there or not,
+// the binding of the pattern of a `match` whose value is a Copy array) is a value that is copied for the call, so the call reads it after
+// the arm, and an element that names a binding of the function (a parameter) is not declared by the arm. An owned binding of the arm that no tail names
+// (`let h = mkb()`, used only for a count) is not a tail. The same forms of a `Span` are the contrast (values/tail_binding_scope_ok.onsa).
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}
+
+pub fn planes(xs: [Span[F32]; 2]) -> F32 {
+  xs[0][0] + xs[1][0]
+}
+
+pub fn take_in(i: pair.In) -> F32 {
+  i.l[0] + i.r[0]
+}
+
+pub fn take(s: Span[F32]) -> F32 {
+  s[0]
+}
+
+pub fn use_len(n: U32) {}
+
+pub fn mkb() -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(4)
+}
+
+pub fn mko(v: F32) -> Option[[F32; 4]] {
+  Some([v; 4])
+}
+
+// ------------------------------------------------------------------------------------------- a Copy binding of the arm
+
+pub fn copy_binding_changed_in_a_literal(c: Bool, v: F32, y: [F32; 4]) -> F32 {
+  planes(if c {
+    var t: [F32; 4] = [v; 4]
+    t[0] = 1.0
+    [t, y]
+  } else { [y, y] })
+}
+
+pub fn copy_binding_unchanged_in_a_literal(c: Bool, v: F32, y: [F32; 4]) -> F32 {
+  planes(if c {
+    let t: [F32; 4] = [v; 4]
+    [y, t]
+  } else { [y, y] })
+}
+
+pub fn copy_binding_in_the_else_arm(c: Bool, v: F32, y: [F32; 4]) -> F32 {
+  planes(if c { [y, y] } else {
+    var t: [F32; 4] = [v; 4]
+    t[1] = 2.0
+    [t, t]
+  })
+}
+
+pub fn copy_binding_in_a_match(k: U32, v: F32, y: [F32; 4]) -> F32 {
+  planes(match k {
+    0 => [y, y],
+    _ => {
+      var t: [F32; 4] = [v; 4]
+      t[2] = 3.0
+      [y, t]
+    },
+  })
+}
+
+pub fn copy_binding_in_a_block(v: F32, y: [F32; 4]) -> F32 {
+  planes({
+    var t: [F32; 4] = [v; 4]
+    t[3] = 4.0
+    [t, y]
+  })
+}
+
+pub fn copy_binding_of_the_pattern_of_an_arm(v: F32, y: [F32; 4]) -> F32 {
+  planes(match mko(v) {
+    Some(b) => [b, y],
+    None => [y, y],
+  })
+}
+
+pub fn copy_binding_in_a_field(c: Bool, v: F32, y: [F32; 4]) -> F32 {
+  take_in(if c {
+    var t: [F32; 4] = [v; 4]
+    t[0] = 2.0
+    pair.In { l: t, r: y }
+  } else { pair.In { l: y, r: y } })
+}
+
+pub fn copy_binding_as_the_tail_of_a_field(c: Bool, v: F32, y: [F32; 4]) -> F32 {
+  take_in(pair.In { l: if c {
+    var t: [F32; 4] = [v; 4]
+    t[0] = 2.0
+    t
+  } else { y }, r: y })
+}
+
+pub fn copy_binding_of_a_span(c: Bool, v: F32, y: [F32; 4]) -> F32 {
+  take(if c {
+    var t: [F32; 4] = [v; 4]
+    t[0] = 2.0
+    t
+  } else { y })
+}
+
+// ------------------------------------------------------------------------------------ an owned binding that no tail names
+
+pub fn owned_binding_that_is_not_a_tail(c: Bool, y: [F32; 4]) -> F32 uses {Alloc} {
+  planes(if c {
+    let h = mkb()
+    use_len(h.len())
+    [y, y]
+  } else { [y, y] })
+}
+
+pub fn owned_binding_used_for_a_value(c: Bool, y: [F32; 4]) -> F32 uses {Alloc} {
+  planes(if c {
+    let h = mkb()
+    let z: [F32; 4] = [h[0]; 4]
+    [z, y]
+  } else { [y, y] })
+}
+
+// --------------------------------------------------------------------------------- a binding of the function, not of the arm
+
+pub fn binding_of_the_function_in_a_literal(c: Bool, v: F32, y: [F32; 4]) -> F32 {
+  var t: [F32; 4] = [v; 4]
+  t[0] = 1.0
+  planes(if c { [t, y] } else { [y, y] })
+}
+
+// ------------------------------------------------------------------------- a binding no E0716 is for, named in a part view
+
+// A borrowed binding of the arm made with a literal that needs no drop (`let t: [F32; 4] = [v; 4]`, the table of §5.4) is not an E0716
+// ("破棄の要らない束縛（§5.4）は…当たらない", §5.2, S-1118 (2)), and a binding declared in the body of an anonymous function, outside the call,
+// is not "その腕・ブロックの中で宣言した束縛". The same forms written at the argument in a block pass too.
+
+pub fn part_of_a_binding_in_the_else_arm(c: Bool, v: F32, y: [F32; 4]) -> F32 {
+  planes(if c { [y, y] } else {
+    let t: [F32; 4] = [v; 4]
+    [y, t.slice(1, 3)]
+  })
+}
+
+pub fn part_of_a_binding_in_a_match(k: U32, v: F32, y: [F32; 4]) -> F32 {
+  planes(match k {
+    0 => [y, y],
+    _ => {
+      let t: [F32; 4] = [v; 4]
+      [t.slice(1, 3), y]
+    },
+  })
+}
+
+pub fn apply(g: fn(U32) -> F32) -> F32 {
+  g.(0)
+}
+
+pub fn part_of_a_binding_in_a_closure(c: Bool, y: [F32; 4]) -> F32 {
+  apply(fn(n) {
+    var t: [F32; 4] = [F32.round_from(n); 4]
+    t[0] = 1.0
+    planes(if c { [t.slice(0, 2), y] } else { [y, y] })
+  })
+}

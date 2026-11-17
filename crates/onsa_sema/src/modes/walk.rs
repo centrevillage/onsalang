@@ -116,8 +116,13 @@ impl<'a> Walker<'a> {
                     }
                 }
             }
-            ExprKind::Tuple(xs) | ExprKind::Array(xs) => self.elements(r, xs.iter().copied(), element),
-            // The fields of a generated `In` or `Out` stand at arguments (§11.6).
+            ExprKind::Tuple(xs) => self.elements(r, xs.iter().copied(), element),
+            // The elements of a planar literal at a tail (S-1113) and the
+            // fields of a generated `In` or `Out` stand at arguments (§11.6).
+            ExprKind::Array(xs) => match planar_parts(self.ast, self.info, e) {
+                Some(parts) => self.elements(r, parts.into_iter(), Pos::Arg(Mode::Borrow)),
+                None => self.elements(r, xs.iter().copied(), element),
+            },
             ExprKind::Struct { fields, .. } => match planar_parts(self.ast, self.info, e) {
                 Some(parts) => self.elements(r, parts.into_iter(), Pos::Arg(Mode::Borrow)),
                 None => self.elements(r, fields.iter().map(|&(_, x)| x), element),

@@ -18,13 +18,15 @@ use crate::body::LocalId;
 use crate::sources::{Cx, Leaf, Open, What, leaves};
 
 /// A place an argument of a call passes (E0702, [`crate::sources::leaves`]):
-/// the argument or the element of a literal opened at it (`arg`), the
-/// argument as written (`outer`) and the elements opened in it (`opened`),
+/// the argument or the element of a literal opened at it (`arg`), the unit
+/// that is opened in (`up`), the argument as written (`outer`) and the
+/// elements opened in it, at every depth (`opened`),
 /// the expression that gives the place (`at`: the argument, an element, a tail),
 /// how it is passed, its place, its root if a binding of the index (S-796),
 /// and why it is read at a `move` parameter or receiver ([`Read`]).
 pub(super) struct Passed {
     arg: ExprId,
+    up: ExprId,
     outer: ExprId,
     opened: Rc<[ExprId]>,
     at: ExprId,
@@ -32,6 +34,13 @@ pub(super) struct Passed {
     place: Place,
     via: Option<LocalId>,
     read: Option<Read>,
+}
+
+impl Passed {
+    /// Whether `b` is in the unit of `self` (the tails of one unit, S-1113).
+    fn unit_of(&self, b: &Passed) -> bool {
+        self.arg == b.arg || self.arg == b.up
+    }
 }
 
 /// Why a value passed to a `move` parameter or receiver is read there, not
@@ -86,7 +95,8 @@ impl Walker<'_> {
             if m == Mode::Borrow {
                 self.ends_inside(&leaves, x, Reader::CALL);
             }
-            let mut opened: Vec<_> = leaves.iter().map(|l| l.arg).filter(|&a| a != x).collect();
+            let mut opened: Vec<_> = leaves.iter().flat_map(|l| [l.up, l.arg]).filter(|&a| a != x).collect();
+            opened.sort_unstable();
             opened.dedup();
             let opened: Rc<[ExprId]> = opened.into();
             for leaf in leaves {
@@ -101,8 +111,8 @@ impl Walker<'_> {
         for (j, b) in passed.iter().enumerate() {
             let excl = |p: &Passed| p.mode != Mode::Borrow && p.read != Some(Read::Unknown);
             let earlier = index.sharing(&self.deps, b.place.root).take_while(|&k| k < j).map(|k| &passed[k]);
-            // The tails of one argument are not passed at once (S-1113).
-            let mut earlier = earlier.filter(|a| a.arg != b.arg && (excl(b) || excl(a)));
+            // The tails of one unit are not passed at once (S-1113).
+            let mut earlier = earlier.filter(|a| !a.unit_of(b) && !b.unit_of(a) && (excl(b) || excl(a)));
             if let Some(a) = earlier.find(|a| self.deps.meets(&a.place, &b.place)) {
                 later.push((self.ast.expr(b.at).span, b.place.root));
                 let d = self.overlapping(a, b);
@@ -143,7 +153,7 @@ impl Walker<'_> {
             _ => {}
         }
         let via = self.deps.indexed(place.root).then_some(place.root);
-        Passed { arg: leaf.arg, outer, opened: opened.clone(), at: leaf.at, mode, place, via, read }
+        Passed { arg: leaf.arg, up: leaf.up, outer, opened: opened.clone(), at: leaf.at, mode, place, via, read }
     }
 
     /// The E0702 of `b`, which overlaps the earlier `a`: "twice" of two of
@@ -212,7 +222,7 @@ impl Walker<'_> {
     /// The E0702 of the changes (§7) made while the arguments of a call were
     /// walked, from `start` on (§3.5, §5.2, S-193, S-799): each that may
     /// overlap a place `passed` in the call, other than the arguments it is
-    /// in (its unit, or its argument out of the elements opened there,
+    /// in (its unit, or a unit around it out of the elements opened there,
     /// R-486), at the later of the two, the first such place (S-796: a
     /// binding of the index stands for its places). The change of a direct argument
     /// (marked with the depth of this call, the one after `calls`) is
@@ -226,10 +236,19 @@ impl Walker<'_> {
     pub(super) fn changed_in_args(&mut self, r: &mut Run, start: usize, (passed, index): (&[Passed], &ByRoot)) {
         let (this, mut copies) = (Some(self.inside.calls + 1), Vec::new());
         let window = self.inside.changes[start..].iter().filter(|c| c.release || (self.reports && c.direct != this));
+        // The elements opened in the call, each argument's once (its places share them).
+        let fresh = |&(i, p): &(usize, &Passed)| i == 0 || !Rc::ptr_eq(&passed[i - 1].opened, &p.opened);
+        let all: Vec<ExprId> =
+            passed.iter().enumerate().filter(fresh).flat_map(|(_, p)| p.opened.iter().copied()).collect();
         for Changed { place: w, at, release, .. } in window {
             let span = |p: &Passed| self.ast.expr(p.at).span;
             let within = |e: ExprId| self.ast.expr(e).span.start <= at.start && at.end <= self.ast.expr(e).span.end;
-            let holds = |p: &Passed| within(p.arg) || (within(p.outer) && !p.opened.iter().any(|&e| within(e)));
+            // In the unit `u` and in none opened in it (of those the change is in, as many as the nesting).
+            let inside: Vec<ExprId> = all.iter().copied().filter(|&e| within(e)).collect();
+            let free = |p: &Passed, u: ExprId| {
+                within(u) && !inside.iter().any(|&e| e != u && p.opened.binary_search(&e).is_ok())
+            };
+            let holds = |p: &Passed| within(p.arg) || free(p, p.up) || free(p, p.outer);
             let mut shared = index.sharing(&self.deps, w.root).map(|k| &passed[k]);
             let Some(q) = shared.find(|q| !holds(q) && self.deps.meets(w, &q.place)) else { continue };
             if *release {

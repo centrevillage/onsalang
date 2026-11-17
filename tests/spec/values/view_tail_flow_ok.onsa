@@ -1,0 +1,21 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3"]
+
+// The tails of an `if` at a view position in the body of a flow (§5.2: each tail takes the position, §5.3):
+// a block in an arm and a constant array pass as views, as in a function. The self-check of the case runner
+// (every tail at a view is converted where the types stage recorded it, S-1113) reads the bodies of flows too.
+
+const K: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+
+const L: [F32; 4] = [4.0, 3.0, 2.0, 1.0]
+
+pub rt fn take(s: Span[F32]) -> F32 {
+  s[0]
+}
+
+pub flow f(x: F32 at sample) -> F32 at sample {
+  {
+    take(if x > 0.0 { { K } } else { L }) + x
+  }
+}

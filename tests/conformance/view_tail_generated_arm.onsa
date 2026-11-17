@@ -1,0 +1,113 @@
+// onsa.toml
+// [package]
+// name = "view_tail_generated_arm"
+// edition = "2026"
+//
+// [export]
+// prefix = "vtga_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§5.2", "§5.3", "§11.6", "§13.4"]
+// conformance = true
+
+// Conformance (W7-12 U2c2b, S-1113, R-481): the literal of the generated `In` (§11.6) that is at the tail of an `if`
+// and names the storage that the arm declares: a Copy binding of the arm, changed there, or an array that a call
+// makes, as a field, or as a channel of the array field `x: [F32; 2] at sample`. The call reads the storage after
+// the arm (§5.2 "位置を継ぐ"), so the storage lives as long as the call. The interpreter and the C program agree on
+// the value (§13.4). The condition is a comparison of an input with zero, so both arms are run; the arrays are 16
+// elements long and read at an index made from an input, so a read of the storage of an arm after the arm is not
+// optimised away: the sanitizer (ASan) finds a read after the end of the scope. They are in a file of their own:
+// the C program of this version reads the storage of an arm after the arm (stack-use-after-scope) until W7-12 U2c2a
+// puts the storage at the height of the function.
+
+const N: U32 = 16
+
+pub enum Side {
+  Left,
+  Right,
+}
+
+pub rt fn side(c: Bool) -> Side {
+  if c { Side.Left } else { Side.Right }
+}
+
+pub rt fn ramp(v: F32, k: F32) -> [F32; N] {
+  var a: [F32; N] = [0.0; N]
+  for j in 0 ..< N {
+    a[j] = v + (k * F32.round_from(j))
+  }
+  a
+}
+
+pub rt fn index(x: F32) -> U32 {
+  U32.trunc_sat_from((x * 8.0) + 8.0) % N
+}
+
+@export
+pub flow pair(l: F32 at sample, r: F32 at sample) -> F32 at sample {
+  l + r
+}
+
+@export
+pub flow spread(x: [F32; 2] at sample, m: F32 at sample) -> F32 at sample {
+  x[0] + x[1] + m
+}
+
+pub rt fn take_in(i: pair.In, k: U32) -> F32 {
+  (i.l[k] * 2.0) + i.r[k]
+}
+
+pub rt fn take_spread(i: spread.In, k: U32) -> F32 {
+  i.m[k] + (i.x[0][k] * 2.0) + (i.x[1][k] * 3.0)
+}
+
+// A field that is a Copy binding of the arm, as the tail itself, changed there (R-486).
+pub rt fn field_arm_binding(c: Bool, x: F32, y: F32) -> F32 {
+  let b = ramp(y, 2.0)
+  take_in(if c {
+    var t = ramp(x, 1.0)
+    t[3] = y
+    pair.In { l: t, r: b }
+  } else { pair.In { l: b, r: b } }, index(x))
+}
+
+// A field that is an array the arm makes (a call result): a temporary of the call.
+pub rt fn field_arm_temporary(c: Bool, x: F32, y: F32) -> F32 {
+  let b = ramp(y, 2.0)
+  take_in(if c { pair.In { l: ramp(x, 1.0), r: b } } else { pair.In { l: b, r: ramp(y, 3.0) } }, index(x))
+}
+
+// A field that is an array of channels (`x: [F32; 2] at sample`, §11.6) written as a literal at the field: the
+// literal of the generated `In` is at the tail of an `if`, and the channel is a Copy binding of the arm or a temporary.
+pub rt fn planar_field_arm_binding(c: Bool, x: F32, y: F32) -> F32 {
+  let b = ramp(y, 2.0)
+  take_spread(if c {
+    var t = ramp(x, 1.0)
+    t[6] = y
+    spread.In { m: t, x: [b, t] }
+  } else {
+    spread.In { m: b, x: [b, b] }
+  }, index(x))
+}
+
+pub rt fn planar_field_arm_temporary(c: Bool, x: F32, y: F32) -> F32 {
+  let b = ramp(y, 2.0)
+  take_spread(if c { spread.In { m: b, x: [ramp(x, 1.0), b] } } else { spread.In { m: b, x: [b, b] } }, index(y))
+}
+
+@export
+pub flow arm_literal_flow(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  field_arm_binding(x > 0.0, x, y) + field_arm_temporary(y > 0.0, x, y)
+}
+
+@export
+pub flow planar_field_arm_flow(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  planar_field_arm_binding(x > 0.0, x, y) + planar_field_arm_temporary(y > 0.0, x, y)
+}

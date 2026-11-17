@@ -1,0 +1,82 @@
+// onsa.toml
+// [package]
+// name = "view_tail_planar_kinds"
+// edition = "2026"
+//
+// [export]
+// prefix = "vtpk_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§5.2", "§5.3", "§13.4"]
+// conformance = true
+
+// Conformance (W7-12 U2c2b, S-1113, §5.3): the channels of a literal at the tail of an `if` are not of one kind or
+// one length: "要素の種類と長さは揃っていなくてよい" (§5.3), as in a literal written at the argument itself
+// (`planes([a, s])`). An array of 16 and an array of 8, a part view and an array, and the temporaries of calls
+// of different lengths. The tail of an arm is each channel turned to a `Span` on its own, so the call reads
+// the channels of the arm that is run. The interpreter and the C program agree on the value (§13.4). They are
+// in a file of their own: this version rejects them with E0401 until W7-12 U2c2b.
+
+const N: U32 = 16
+
+pub enum Side {
+  Left,
+  Right,
+}
+
+pub rt fn side(c: Bool) -> Side {
+  if c { Side.Left } else { Side.Right }
+}
+
+pub rt fn ramp(v: F32, k: F32) -> [F32; N] {
+  var a: [F32; N] = [0.0; N]
+  for j in 0 ..< N {
+    a[j] = v + (k * F32.round_from(j))
+  }
+  a
+}
+
+pub rt fn short_ramp(v: F32) -> [F32; 8] {
+  var a: [F32; 8] = [0.0; 8]
+  for j in 0 ..< 8 {
+    a[j] = v - F32.round_from(j)
+  }
+  a
+}
+
+pub rt fn index(x: F32) -> U32 {
+  U32.trunc_sat_from((x * 8.0) + 8.0) % N
+}
+
+pub rt fn planes(xs: [Span[F32]; 2], i: U32) -> F32 {
+  (xs[0][i] * 2.0) + xs[1][i]
+}
+
+// Channels that are not of one kind or one length (§5.3): an array of 16 and an array of 8, a part, a view.
+pub rt fn literal_lengths(c: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let s = short_ramp(y)
+  planes(if c { [a, s] } else { [s, a] }, index(x) % 8)
+}
+
+pub rt fn literal_parts(c: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let s = short_ramp(y)
+  planes(if c { [a.slice(4, 12), s] } else { [s, a.slice(0, 8)] }, index(y) % 8)
+}
+
+pub rt fn literal_arm_temporaries(c: Bool, x: F32, y: F32) -> F32 {
+  planes(if c { [ramp(x, 1.0), short_ramp(y)] } else { [short_ramp(x), ramp(y, 3.0)] }, index(y) % 8)
+}
+
+@export
+pub flow literal_lengths_flow(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  literal_lengths(x > 0.0, x, y) + literal_parts(y > 0.0, x, y) + literal_arm_temporaries(x > y, x, y)
+}

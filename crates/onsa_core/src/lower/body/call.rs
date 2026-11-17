@@ -4,22 +4,21 @@ use super::*;
 
 // ---------------------------------------------------------------- calls
 
-/// Lower call arguments against parameter types, coercing arrays / `Buf` to
-/// `Span` (§5.3) and planar `[Span[T]; N]` arguments.
+/// Lower call arguments against parameter types: an argument passed as a
+/// view (§5.3) is converted at its tails ([`lower_expr`]).
 fn lower_args(lw: &mut Lowerer, cx: &mut FnCx, args: &[ast::Arg], params: &[(Mode, Ty)]) -> R<Vec<Arg>> {
     let mut out = Vec::new();
     for (a, (pm, pt)) in args.iter().zip(params) {
-        let e = super::expr::lower_value(lw, cx, a.expr, *pm)?;
-        let e = coerce(lw, cx, e, pt, *pm)?;
+        let e = lower_expr(lw, cx, a.expr)?;
+        match (pt, &e.ty) {
+            _ if e.ty == *pt => {}
+            // An `rt fn` value where a `fn` is wanted (§8.1): W8-09 lowers function values.
+            (Ty::FnPtr(_), Ty::FnPtr(_)) => return Err(unsupported(e.span, Feature::FnValues, &[])),
+            _ => return Err(internal(e.span, "an argument of another type than its parameter, with no view recorded")),
+        }
         out.push(Arg { mode: *pm, expr: e });
     }
     Ok(out)
-}
-
-/// Whether a value at `t` is passed as a view (§5.3): a `Span` or a planar
-/// array, what [`coerce`] converts.
-pub(super) fn views(t: &Ty) -> bool {
-    matches!(t, Ty::Span(_)) || planar(t)
 }
 
 /// Whether `t` is a planar array `[Span[T]; N]` (§5.3).
@@ -28,8 +27,7 @@ fn planar(t: &Ty) -> bool {
 }
 
 pub(crate) fn coerce(lw: &mut Lowerer, cx: &mut FnCx, e: Expr, want: &Ty, mode: Mode) -> R<Expr> {
-    // A planar literal has the type of the parameter, its elements their own (S-196): each converted below.
-    if e.ty == *want && !(planar(want) && matches!(e.kind, ExprKind::Array(_))) {
+    if e.ty == *want {
         return Ok(e);
     }
     let span = e.span;
@@ -39,14 +37,7 @@ pub(crate) fn coerce(lw: &mut Lowerer, cx: &mut FnCx, e: Expr, want: &Ty, mode: 
         (Ty::Span(_), Ty::Struct(_)) => crate::lower::fixed_str::view(lw, cx, e),
         (Ty::Array(elem, n), Ty::Array(_, m)) if planar(want) && n == m => {
             let n = *n;
-            // Planar: `[a, b]` written in the argument, or an array of arrays / Bufs.
-            if let ExprKind::Array(items) = e.kind {
-                let mut out = Vec::new();
-                for it in items {
-                    out.push(coerce(lw, cx, it, elem, mode)?);
-                }
-                return Ok(Expr::new(want.clone(), span, ExprKind::Array(out)));
-            }
+            // Planar: an array of arrays / Bufs (a literal is converted by its elements, S-196).
             if e.as_place().is_none() {
                 return Err(unsupported(span, Feature::PlanarTemporary, &[]));
             }
@@ -64,12 +55,12 @@ pub(crate) fn coerce(lw: &mut Lowerer, cx: &mut FnCx, e: Expr, want: &Ty, mode: 
             }
             Ok(after(stmts, Expr::new(want.clone(), span, ExprKind::Array(out))))
         }
-        // An `rt fn` value where a `fn` is wanted (§8.1): W8-09 lowers function values.
-        (Ty::FnPtr(_), Ty::FnPtr(_)) => Err(unsupported(span, Feature::FnValues, &[])),
+        // A view the types stage recorded, or a value at a flow's input or
+        // output (no function value there, §11.2): of these types alone.
         _ => Err(internal(
             span,
             format!(
-                "cannot coerce `{}` to `{}`",
+                "cannot convert `{}` to `{}`",
                 crate::dump::type_name(&lw.m, &e.ty),
                 crate::dump::type_name(&lw.m, want)
             ),
@@ -146,21 +137,13 @@ pub(super) fn lower_call(
             let Some(base) = onsa_sema::receiver(cx.ast, callee) else {
                 return Err(internal(span, "method call shape"));
             };
+            // An array or a `Buf` receiver of a member of `Span[T]` is
+            // converted as the types stage recorded it (§5.3).
             let recv = lower_expr(lw, cx, base)?;
             let self_mode = core_mode(f.self_mode.unwrap_or(ast::Mode::Borrow));
             if f.target {
                 return lower_target_call(lw, cx, e, (def, f), &gargs, Some((recv, self_mode)), args, ty);
             }
-            // An array or a `Buf` receiver of a member of `Span[T]` is a
-            // `Span` of it (§5.3), as `self` is declared.
-            let this = match row_self(lw.a, def) {
-                Some(t) => Some(lw.core_ty(t, &gargs, span)?),
-                None => None,
-            };
-            let recv = match this {
-                Some(this @ Ty::Span(_)) => coerce(lw, cx, recv, &this, self_mode)?,
-                _ => recv,
-            };
             let params = sig_params(lw, f, &gargs, span)?;
             let mut cargs = vec![Arg { mode: self_mode, expr: recv }];
             cargs.extend(lower_args(lw, cx, args, &params)?);
@@ -222,26 +205,19 @@ fn lower_target_call(
     if row == PrimRow::FromFn {
         return lower_from_fn(lw, cx, args, ty, span);
     }
-    let (prim, own) = row_prim(lw, def, row, gargs, span)?;
+    let prim = row_prim(lw, def, row, gargs, span)?;
     let mut cargs = Vec::new();
     if let Some((recv, mode)) = recv {
-        let Some(GenericArg::Ty(this)) = &own else { return Err(internal(span, "a `target` method of no type")) };
-        cargs.push(Arg { mode, expr: coerce(lw, cx, recv, this, mode)? });
+        cargs.push(Arg { mode, expr: recv });
     }
     let params = sig_params(lw, f, gargs, span)?;
     cargs.extend(lower_args(lw, cx, args, &params)?);
     Ok(Expr::new(ty, span, ExprKind::Prim { prim, args: cargs }))
 }
 
-/// The primitive of the row of a `target` declaration at `gargs`, and the
-/// `Self` of a member.
-fn row_prim(
-    lw: &mut Lowerer,
-    def: DefId,
-    row: PrimRow,
-    gargs: &[GenericArg],
-    span: Span,
-) -> R<(Prim, Option<GenericArg>)> {
+/// The primitive of the row of a `target` declaration at `gargs` (and the
+/// `Self` of a member).
+fn row_prim(lw: &mut Lowerer, def: DefId, row: PrimRow, gargs: &[GenericArg], span: Span) -> R<Prim> {
     // The `Self` of a member first (`F32` of `F32.from_bits`), then the type
     // arguments, as sema reads them (`Scalar::of_use`).
     let own = match row_self(lw.a, def) {
@@ -256,7 +232,7 @@ fn row_prim(
     let Some(prim) = row.instantiate(&scalars) else {
         return Err(internal(span, "a `target` declaration without a primitive for its type arguments"));
     };
-    Ok((prim, own))
+    Ok(prim)
 }
 
 /// A type argument of a row as Core has it, read as [`Scalar::of`] reads
@@ -303,7 +279,7 @@ fn lower_from_fn(lw: &mut Lowerer, cx: &mut FnCx, args: &[ast::Arg], ty: Ty, spa
             let args = vec![Arg { mode: Mode::Borrow, expr: local_expr(cx, i, span) }];
             // A `target` declaration has no body to call (`F32.round_from`).
             let kind = match lw.a.prims.get(&def).copied() {
-                Some(row) => ExprKind::Prim { prim: row_prim(lw, def, row, &gargs, span)?.0, args },
+                Some(row) => ExprKind::Prim { prim: row_prim(lw, def, row, &gargs, span)?, args },
                 None => ExprKind::Call { fn_: lw.fn_id(def, gargs, span)?, args },
             };
             Expr::new(elem.clone(), span, kind)

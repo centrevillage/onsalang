@@ -1,0 +1,26 @@
+use util.{planes_inout, planes_write, spread, spread_in}
+
+pub fn a_literal_of_arrays(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 2] = [0.0; 2]
+  planes_inout(if c { [x, y] } else { [y, y] }, inout x) //~ E0702
+}
+
+pub fn a_literal_against_the_literal_of_the_inout(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  var z: [F32; 4] = [0.0; 4]
+  planes_write(match c { true => [y, y], false => [x, y] }, inout [z, x]) //~ E0702
+}
+
+pub fn a_field_of_the_generated_in(c: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  spread_in(if c { spread.In { m: y, x: [y, x] } } else { spread.In { m: y, x: [y, y] } }, inout x) //~ E0702
+}
+
+pub fn parts_of_one_array(c: Bool) {
+  var x: [F32; 8] = [0.0; 8]
+  var y: [F32; 4] = [0.0; 4]
+  planes_inout(if c { [x.slice(0, 4), y] } else { [y, y] }, inout x.slice(4, 8)) //~ E0702
+}

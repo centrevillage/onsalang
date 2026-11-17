@@ -1,0 +1,87 @@
+// onsa.toml
+// [package]
+// name = "view_tail_holes"
+// edition = "2026"
+//
+// [export]
+// prefix = "vth_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§5.2", "§5.3", "§15.2", "§18.1"]
+
+use std.array
+
+// W7-12 U2c2b, S-1113: the build of this version stops with E0200 at a use that the C back end does not lower, one report for each
+// position of a use (§15.2, §18.1: "位置・コード・文面が同じ E0200 は一件"). `array.from_fn` with a function value that is not a literal is one of
+// them. The functions below put it at the position of a view (an argument of a `Span`, the element of a literal of channels written at the
+// argument, the receiver of a method, the tail of an `if` at a `Span` argument) beside a use that is an argument of `[F32; 4]`, which
+// is not a view. The lowering of the view positions changes in this unit (a conversion to the view for each tail), and a use that it cannot
+// lower must still be reported where it is, once, as it is without the conversion: the number of the E0200 of this build is the number of the
+// uses (the one that passes the function value `gen` at the call of each function is a use too).
+
+pub fn take(s: Span[F32]) -> F32 {
+  s[0]
+}
+
+pub fn take4(s: [F32; 4]) -> F32 {
+  s[0]
+}
+
+pub fn planes(xs: [Span[F32]; 2]) -> F32 {
+  xs[0][0]
+}
+
+pub fn gen(i: U32) -> F32 {
+  F32.round_from(i)
+}
+
+fn hole_view_arg_first(k: F32, h: fn(U32) -> F32) -> F32 {
+  let d = take(array.from_fn::[F32, 4](h)) //~ E0200 [host]
+  let b = take4(array.from_fn(h))          //~ E0200 [host]
+  d + b + k
+}
+
+fn hole_planar_elem_first(k: F32, y: [F32; 4], h: fn(U32) -> F32) -> F32 {
+  let d = planes([array.from_fn::[F32, 4](h), y]) //~ E0200 [host]
+  let b = take4(array.from_fn(h))                 //~ E0200 [host]
+  d + b + k
+}
+
+fn hole_receiver_first(k: F32, h: fn(U32) -> F32) -> F32 {
+  let d = array.from_fn::[F32, 4](h).slice(0, 2)[0] //~ E0200 [host]
+  let b = take4(array.from_fn(h))                   //~ E0200 [host]
+  d + b + k
+}
+
+fn hole_at_a_tail(c: Bool, y: [F32; 4], h: fn(U32) -> F32) -> F32 {
+  let d = take(if c { array.from_fn::[F32, 4](h) } else { y }) //~ E0200 [host]
+  let b = take4(array.from_fn(h))                              //~ E0200 [host]
+  d + b
+}
+
+@export
+pub fn entry_view(k: F32) -> F32 {
+  hole_view_arg_first(k, gen) //~ E0200 [host]
+}
+
+@export
+pub fn entry_element(k: F32) -> F32 {
+  hole_planar_elem_first(k, [k; 4], gen) //~ E0200 [host]
+}
+
+@export
+pub fn entry_receiver(k: F32) -> F32 {
+  hole_receiver_first(k, gen) //~ E0200 [host]
+}
+
+@export
+pub fn entry_tail(c: Bool, k: F32) -> F32 {
+  hole_at_a_tail(c, [k; 4], gen) //~ E0200 [host]
+}

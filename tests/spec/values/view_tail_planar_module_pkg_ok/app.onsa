@@ -1,0 +1,16 @@
+use util.{planes, planes_inout}
+
+pub fn lengths(c: Bool, x: [F32; 4], y: [F32; 2]) -> F32 {
+  planes(if c { [x, y] } else { [y, x] })
+}
+
+pub fn views(c: Bool, a: Span[F32], b: Buf[F32]) -> F32 {
+  planes(match c { true => [a, b], false => [b, a.slice(0, 2)] })
+}
+
+pub fn another_variable(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 2] = [0.0; 2]
+  var z: [F32; 4] = [0.0; 4]
+  planes_inout(if c { [x, y] } else { [y, y] }, inout z)
+}

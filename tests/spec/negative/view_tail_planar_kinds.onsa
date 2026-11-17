@@ -1,0 +1,92 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§5.3", "§7"]
+// fixes = 0
+
+// W7-12 U2c2b, S-1113, S-1116 (§4.7, §5.3): the tail of an `if`, a `match` or a block at a planar argument (`xs: [Span[F32]; 2]`)
+// that is a literal of channels is what the literal written at the argument is: an element that is not a channel of the
+// argument, in the type of the element or in the number of the channels, is E0401 at the element, in the tail as
+// in the literal written at the argument itself (the functions `direct_…`). A literal of channels in one arm and an array of arrays in the
+// other (`if c { [x, y] } else { ps }`, `ps: [[F32; 4]; 2]`) is E0401 too: this version sets the type of the arms to
+// the type that the first arm has, as for any other `if` ("`if` の後の枝と `match` の二つ目以降の腕には前の枝の型", §4.7), the
+// literal of channels at the argument is an array of views, and `ps` is not (S-1116, open: the other reading turns each tail to the views on its own and
+// passes it). The array of views in the other arm that is one (`ps: [Span[F32]; 2]`) passes
+// (values/view_tail_planar_ok.onsa). The error is at the element or the arm, no repair candidate (`fixes = 0`). One error per function (P-01).
+
+pub fn planes(xs: [Span[F32]; 2]) -> F32 {
+  xs[0][0] + xs[1][0]
+}
+
+pub fn planes_inout(xs: [Span[F32]; 2], inout t: Span[F32]) {}
+
+// ---------------------------------------------------------------------------------------- the element is not a channel
+
+pub fn tail_an_element_of_another_type(c: Bool, x: [I32; 4], y: [F32; 4]) -> F32 {
+  planes(if c { [x, y] } else { [y, y] }) //~ E0401
+}
+
+pub fn direct_an_element_of_another_type(x: [I32; 4], y: [F32; 4]) -> F32 {
+  planes([x, y]) //~ E0401
+}
+
+pub fn tail_an_element_of_another_type_in_the_other_arm(c: Bool, x: [I32; 4], y: [F32; 4]) -> F32 {
+  planes(if c { [y, y] } else { [y, x] }) //~ E0401
+}
+
+pub fn tail_an_element_that_is_a_scalar(c: Bool, x: [F32; 4]) -> F32 {
+  planes(if c { [x, 1.0] } else { [x, x] }) //~ E0401
+}
+
+pub fn direct_an_element_that_is_a_scalar(x: [F32; 4]) -> F32 {
+  planes([x, 1.0]) //~ E0401
+}
+
+pub fn tail_an_element_that_is_a_buffer_of_another_type(c: Bool, a: Buf[I32], y: [F32; 4]) -> F32 {
+  planes(match c { true => [y, a], false => [y, y] }) //~ E0401
+}
+
+// ---------------------------------------------------------------------------------------- the number of the channels
+
+pub fn tail_three_channels(c: Bool, x: [F32; 4], y: [F32; 4], z: [F32; 4]) -> F32 {
+  planes(if c { [x, y, z] } else { [y, y] }) //~ E0401
+}
+
+pub fn direct_three_channels(x: [F32; 4], y: [F32; 4], z: [F32; 4]) -> F32 {
+  planes([x, y, z]) //~ E0401
+}
+
+pub fn tail_one_channel(c: Bool, x: [F32; 4], y: [F32; 4]) -> F32 {
+  planes(if c { [y, y] } else { [x] }) //~ E0401
+}
+
+pub fn tail_three_channels_with_an_inout(c: Bool, x: [F32; 4], y: [F32; 4]) {
+  var z: [F32; 4] = [0.0; 4]
+  planes_inout(match c { true => [x, y, y], false => [y, y] }, inout z) //~ E0401
+}
+
+// -------------------------------------------------------------- a literal of channels and an array of arrays (S-1116)
+
+pub fn tail_the_other_arm_is_an_array_of_arrays(c: Bool, x: [F32; 4], y: [F32; 4], ps: [[F32; 4]; 2]) -> F32 {
+  planes(if c { [x, y] } else { ps }) //~ E0401
+}
+
+pub fn tail_the_other_arm_is_an_array_of_arrays_in_a_match(c: Bool, x: [F32; 4], y: [F32; 4], ps: [[F32; 4]; 2]) -> F32 {
+  planes(match c { true => [x, y], false => ps }) //~ E0401
+}
+
+pub fn tail_the_other_arm_is_an_array_of_arrays_with_an_inout(c: Bool, x: [F32; 4], y: [F32; 4], ps: [[F32; 4]; 2]) {
+  var z: [F32; 4] = [0.0; 4]
+  planes_inout(if c { [x, y] } else { ps }, inout z) //~ E0401
+}
+
+pub fn tail_the_other_arm_is_an_array_of_buffers(c: Bool, x: [F32; 4], y: [F32; 4], ps: [Buf[F32]; 2]) -> F32 {
+  planes(if c { [x, y] } else { ps }) //~ E0401
+}
+
+// ------------------------------------------------------------------ an element that diverges (§7)
+
+// An element of a literal of channels written at the argument that diverges (an `if` whose two arms `return`) is evaluated before the
+// call ("常に評価される部分式の位置には書けない", §7): E0503 at the call, not an E0401 at the element.
+pub fn direct_an_element_that_diverges(c: Bool, x: [F32; 4]) -> F32 {
+  planes([x, if c { return 1.0 } else { return 2.0 }]) //~ E0503
+}

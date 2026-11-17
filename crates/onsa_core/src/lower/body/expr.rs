@@ -4,29 +4,33 @@ use super::*;
 
 // ---------------------------------------------------------------- expressions
 
+/// `e` lowered, and converted where the types stage recorded a tail at a
+/// view (§5.3, [`onsa_sema::body::View`]): the one place of the conversions.
 pub(crate) fn lower_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
-    lower_value(lw, cx, e, Mode::Borrow)
-}
-
-/// `e` lowered as a value passed by `mode` (an argument's): a literal of a
-/// generated `In` or `Out` passes its fields as views by it (§11.6).
-pub(super) fn lower_value(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, mode: Mode) -> R<Expr> {
     let hole = Hole::Expr(cx.module, e);
-    if lw.holes.contains(&hole) {
+    let x = if lw.holes.contains(&hole) {
         // An expression that uses an unsupported feature (S-67): a fresh
         // local of its type stands for it, so lowering reaches the next one.
         // A type lowering does not support has `()` in its place (its uses
         // are placeholders too). The Core is dropped (`lower_with`).
         let span = cx.expr(e).span;
-        let (ty, stand_in) = placeholder_ty(lw, cx.sema_ty(e)?, &cx.args, span)?;
+        let (ty, stand_in) = placeholder_ty(lw, cx.value_ty(e)?, &cx.args, span)?;
         lw.hole_spans.push(span);
         if stand_in {
             lw.stand_in_spans.push(span);
         }
         let l = cx.temp("__unsupported", ty);
-        return Ok(local_expr(cx, l, span));
+        local_expr(cx, l, span)
+    } else {
+        lower_expr_at(lw, cx, e).map_err(|f| at_hole(f, hole))?
+    };
+    match cx.info.views.get(&e) {
+        Some(v) if v.tail => {
+            let to = lw.core_ty(v.to, &cx.args, x.span)?;
+            super::call::coerce(lw, cx, x, &to, core_mode(v.mode))
+        }
+        _ => Ok(x),
     }
-    lower_expr_at(lw, cx, e, mode).map_err(|f| at_hole(f, hole))
 }
 
 /// The Core type of a placeholder, and whether it stands in for a type
@@ -38,7 +42,7 @@ pub(super) fn placeholder_ty(lw: &mut Lowerer, t: TyId, args: &[GenericArg], spa
     }
 }
 
-fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, mode: Mode) -> R<Expr> {
+fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Expr> {
     let span = cx.expr(e).span;
     // Flow bodies (T3-5): stateful nodes, `sample_rate()` and `par` are
     // lowered by the flow lowering, not by the rules below.
@@ -47,7 +51,7 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, mode: Mode) -> R<Ex
     {
         return Ok(v);
     }
-    let ty = lw.core_ty(cx.sema_ty(e)?, &cx.args, span)?;
+    let ty = lw.core_ty(cx.value_ty(e)?, &cx.args, span)?;
     // Resolved names first (locals, consts, variants, builtin constants).
     if let Some(t) = cx.info.targets.get(&e).cloned()
         && !matches!(cx.expr(e).kind, AK::Call { .. })
@@ -75,8 +79,7 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, mode: Mode) -> R<Ex
         AK::Error => onsa_diag::internal::bug(Some(span), "lowering met a body a syntax error left unread"),
         // The type arguments after a name (`None::[I32]`, `id::[U8]`, §4.5):
         // the types stage decided its type and its target, at the name.
-        AK::Paren(inner) => return lower_value(lw, cx, *inner, mode),
-        AK::Move(inner) | AK::TypeArgs { base: inner, .. } => return lower_expr(lw, cx, *inner),
+        AK::Paren(inner) | AK::Move(inner) | AK::TypeArgs { base: inner, .. } => return lower_expr(lw, cx, *inner),
         AK::Tuple(elems) => {
             if elems.is_empty() {
                 ExprKind::Lit(Lit::Unit)
@@ -105,13 +108,8 @@ fn lower_expr_at(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId, mode: Mode) -> R<Ex
             let id = *id;
             let defs = lw.struct_fields(id);
             let mut out = Vec::new();
-            for (name, fty) in &defs {
+            for (name, _) in &defs {
                 out.push(match fields.iter().find(|(n, _)| n.name == *name) {
-                    // A field of a generated `In` or `Out` is a view of its value (§11.6).
-                    Some((_, v)) if super::call::views(fty) => {
-                        let v = lower_expr(lw, cx, *v)?;
-                        super::call::coerce(lw, cx, v, fty, mode)?
-                    }
                     Some((_, v)) => lower_expr(lw, cx, *v)?,
                     None => crate::lower::derived::filled_field(lw, id, name, span)?,
                 });

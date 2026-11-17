@@ -4,13 +4,14 @@
 
 use onsa_diag::Span;
 use onsa_diag::hash::{HashMap, HashSet};
-use onsa_syntax::ast::{ExprId, Mode, PatId};
+use onsa_syntax::ast::{Ast, ExprId, Mode, PatId};
 use serde::{Deserialize, Serialize};
 
 use crate::DefId;
 use crate::binding::{Bind, Head, HeadRow, LitClass};
 use crate::modes::Proj;
 use crate::names::body::BindingKind;
+use crate::tails::Tail;
 use crate::ty::{Ty, TyId, Types};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -145,6 +146,18 @@ pub struct TryArms {
     pub exit: u32,
 }
 
+/// The conversion of a value to the view `to` passed by `mode` ([`BodyInfo::views`]):
+/// at a tail (`tail`), where it is (an array, a `Buf`, a `FixedStr`, an
+/// array of them, a view); a parenthesis, a block, an `if`, a `match` above
+/// one, and a tail that diverges, have the type `to`. A planar literal at a
+/// tail is in [`BodyInfo::planar`], and its elements are here.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct View {
+    pub to: TyId,
+    pub mode: Mode,
+    pub tail: bool,
+}
+
 /// Typed body of one function, test, or `const` initializer.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct BodyInfo {
@@ -178,6 +191,12 @@ pub struct BodyInfo {
     /// argument of its own. The types stage decides them, the modes stage
     /// reads them (D-15).
     pub planar: HashSet<ExprId>,
+    /// Where a value at a position that passes a view (§5.3: a `Span` or a
+    /// planar parameter, a field of a generated `In` or `Out`, §11.6; a
+    /// receiver as a `Span` of its element) is converted, at each of its
+    /// tails (§5.2 "位置を継ぐ", S-1113). The types stage records them, the
+    /// lowering reads them (D-15).
+    pub views: HashMap<ExprId, View>,
     /// The `?` expressions that passed the check → their constructors: the
     /// lowering reads them (S-71, D-15).
     pub tries: HashMap<ExprId, TryArms>,
@@ -227,6 +246,24 @@ pub struct BodyInfo {
 }
 
 impl BodyInfo {
+    /// The first tail of a value passed as a view (a node of [`Self::views`])
+    /// that is no converted tail there, no planar literal and does not
+    /// diverge ([`crate::tails::tails`]): the self-test of the types
+    /// stage's walk of the tails against that one (S-1113).
+    pub fn unconverted_view_tail(&self, ast: &Ast) -> Option<ExprId> {
+        let mut out = Vec::new();
+        for (&e, _) in self.views.iter().filter(|(_, v)| !v.tail) {
+            crate::tails::tails(ast, e, &self.diverging, &mut out);
+        }
+        let converted = |x| self.views.get(&x).is_some_and(|v| v.tail) || self.planar.contains(&x);
+        let wrong = |t| match t {
+            Tail::Value(x) if converted(x) => None,
+            Tail::Value(x) | Tail::Unit(x) => Some(x),
+            Tail::Exits => None,
+        };
+        out.into_iter().filter_map(wrong).min()
+    }
+
     /// The consumptions that copy the value of the binding `l` (its rows
     /// of [`BodyInfo::copied`]), in the order they are written.
     pub fn copied_of(&self, l: LocalId) -> &[Copied] {

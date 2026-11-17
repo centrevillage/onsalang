@@ -1,0 +1,31 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§11.6", "§12.2", "§15.1"]
+// fixes = 0
+
+// W7-12 U2c2b, S-1115 and S-1113 across modules: the callees, the generated `In` and the functions that make a `Buf` of this module are used from
+// app.onsa. The scope of an element of a literal of channels at the tail of an `if` (E0716) and the `Alloc` that a `Buf` of the arm needs in
+// an `rt` function (E0601) are judged at the call, whatever module declares the callee, the type or the function that makes the value.
+
+pub fn planes(xs: [Span[F32]; 2]) -> F32 {
+  xs[0][0] + xs[1][0]
+}
+
+pub rt fn planes_rt(xs: [Span[F32]; 2]) {}
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}
+
+pub fn take_in(i: pair.In) -> F32 {
+  i.l[0] + i.r[0]
+}
+
+pub fn mkb() -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(4)
+}

@@ -1,0 +1,139 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§5.2", "§5.3"]
+
+// W7-12 U2c2b, S-1113 (§5.3): the tail of an `if`, a `match` or a block at a planar argument (`xs: [Span[F32]; 2]`) that is a
+// literal of channels (`[x, y]`) is the channels of the argument ("ブロックの末尾の式は、そのブロックが置かれた位置を継ぐ", §5.2), so each
+// element of it is what an element of a literal written at the argument itself is: "要素の種類と長さは揃っていなくてよい" (§5.3).
+// The elements are arrays of different lengths, `Span`s, `Buf`s, parts, and several kinds in one literal, whatever the shape of the
+// tail (an `if`, a `match`, a block, a parenthesis, a tail in a tail, an arm that is never run, an arm after a diverging arm).
+// The functions `direct_…` are the literal written at the argument, the contrast that passes. The other arm may be an array of
+// views too (the type of the arms is the type of the argument, §4.7). A tail whose elements are all arrays of one kind
+// and one length, and the calls with an `inout` that they do not overlap, are in values/view_tail_planar_apart_ok.onsa.
+// The kinds that do not fit are in negative/view_tail_planar_kinds.onsa.
+
+pub fn planes(xs: [Span[F32]; 2]) -> F32 {
+  xs[0][0] + xs[1][0]
+}
+
+pub fn planes_inout(xs: [Span[F32]; 2], inout t: Span[F32]) {}
+
+pub fn touch(s: Span[F32]) {}
+
+// ------------------------------------------------------------------- the kinds and the lengths of the elements
+
+pub fn tail_lengths(c: Bool, x: [F32; 4], y: [F32; 2]) -> F32 {
+  planes(if c { [x, y] } else { [y, x] })
+}
+
+pub fn direct_lengths(x: [F32; 4], y: [F32; 2]) -> F32 {
+  planes([x, y])
+}
+
+pub fn tail_spans(c: Bool, a: Span[F32], b: Span[F32]) -> F32 {
+  planes(if c { [a, b] } else { [b, a] })
+}
+
+pub fn direct_spans(a: Span[F32], b: Span[F32]) -> F32 {
+  planes([a, b])
+}
+
+pub fn tail_buffers(c: Bool, a: Buf[F32], b: Buf[F32]) -> F32 {
+  planes(if c { [a, b] } else { [b, a] })
+}
+
+pub fn direct_buffers(a: Buf[F32], b: Buf[F32]) -> F32 {
+  planes([a, b])
+}
+
+pub fn tail_kinds_in_one_literal(c: Bool, x: [F32; 4], a: Span[F32], b: Buf[F32]) -> F32 {
+  planes(if c { [x, a] } else { [b, a.slice(0, 2)] })
+}
+
+pub fn direct_kinds_in_one_literal(x: [F32; 4], a: Span[F32], b: Buf[F32]) -> F32 {
+  planes([x, a]) + planes([b, a.slice(0, 2)])
+}
+
+pub fn tail_parts(c: Bool, x: [F32; 8], y: [F32; 8]) -> F32 {
+  planes(if c { [x.slice(0, 4), y.slice(2, 6)] } else { [y.slice(0, 4), x.slice(4, 8)] })
+}
+
+pub fn direct_parts(x: [F32; 8], y: [F32; 8]) -> F32 {
+  planes([x.slice(0, 4), y.slice(2, 6)])
+}
+
+pub fn tail_a_part_and_an_array(c: Bool, x: [F32; 8], y: [F32; 4]) -> F32 {
+  planes(if c { [x.slice(0, 4), y] } else { [y, x.slice(4, 8)] })
+}
+
+pub fn direct_a_part_and_an_array(x: [F32; 8], y: [F32; 4]) -> F32 {
+  planes([x.slice(0, 4), y])
+}
+
+pub fn tail_views_of_the_parameter(c: Bool, a: Span[F32], inout t: Span[F32]) {
+  planes_inout(if c { [a, a.slice(0, 2)] } else { [a.slice(2, 4), a] }, inout t)
+}
+
+pub fn direct_views_of_the_parameter(a: Span[F32], inout t: Span[F32]) {
+  planes_inout([a, a.slice(0, 2)], inout t)
+}
+
+// -------------------------------------------------------------------------------------------- the shape of the tail
+
+pub fn tail_match(c: Bool, x: [F32; 4], y: [F32; 2]) -> F32 {
+  planes(match c { true => [x, y], false => [y, y] })
+}
+
+pub fn tail_block(x: [F32; 4], y: [F32; 2]) -> F32 {
+  planes({ [x, y] })
+}
+
+pub fn tail_statement_before_the_literal(c: Bool, x: [F32; 4], y: [F32; 2]) -> F32 {
+  planes(if c {
+    touch(y)
+    [x, y]
+  } else { [y, y] })
+}
+
+pub fn tail_parenthesis(c: Bool, x: [F32; 4], y: [F32; 2]) -> F32 {
+  planes(if c { ([x, y]) } else { [y, x] })
+}
+
+pub fn tail_in_a_tail(c: Bool, d: Bool, x: [F32; 4], y: [F32; 2]) -> F32 {
+  planes(if c { if d { [x, y] } else { [y, x] } } else { match d { true => [x, x], false => [y, y] } })
+}
+
+pub fn tail_an_arm_that_is_never_run(x: [F32; 4], y: [F32; 2]) -> F32 {
+  planes(if false { [x, y] } else { [y, y] })
+}
+
+pub fn tail_an_arm_after_a_diverging_arm(c: Bool, x: [F32; 4], y: [F32; 2]) -> F32 {
+  planes(if c { [x, y] } else { panic("unreachable") })
+}
+
+// ------------------------------------------------------- the literal against the array of views of the other arm (S-1116)
+
+pub fn tail_the_other_arm_is_an_array_of_views(c: Bool, x: [F32; 4], y: [F32; 4], ps: [Span[F32]; 2]) -> F32 {
+  planes(if c { [x, y] } else { ps })
+}
+
+pub fn tail_the_other_arm_is_an_array_of_views_in_a_match(c: Bool, x: [F32; 4], y: [F32; 2], ps: [Span[F32]; 2]) -> F32 {
+  planes(match c { true => [x, y], false => ps })
+}
+
+// ---------------------------------------------------------------- a binding of the function, or a borrow of it, as an element
+
+pub fn tail_a_parameter_buffer_and_an_array(c: Bool, a: Buf[F32], y: [F32; 4]) -> F32 {
+  planes(if c { [a, y] } else { [y, y] })
+}
+
+pub fn tail_parts_of_a_parameter(c: Bool, y: [F32; 8]) -> F32 {
+  planes(if c { [y.slice(0, 4), y.slice(4, 8)] } else { [y.slice(2, 6), y.slice(4, 8)] })
+}
+
+pub fn tail_a_borrow_of_the_function_that_the_arm_binds(c: Bool, y: [F32; 8]) -> F32 {
+  planes(if c {
+    let s = y.slice(0, 4)
+    [s, y]
+  } else { [y, y] })
+}

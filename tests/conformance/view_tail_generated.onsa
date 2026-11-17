@@ -1,0 +1,143 @@
+// onsa.toml
+// [package]
+// name = "view_tail_generated"
+// edition = "2026"
+//
+// [export]
+// prefix = "vtg_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§5.2", "§5.3", "§11.6", "§13.4"]
+// conformance = true
+
+// Conformance (W7-12 U2c2b, S-1113, S-196): the generated `In` of a flow (§11.6) at a borrowed argument: the
+// literal `pair.In { … }` is written at the argument, a field of it is an argument of its own, and the tails of an
+// `if`, a `match` or a block at a field, or the literal at the tail of one, are turned to the views on their own.
+// The call reads the fields of the arm that is run, and the interpreter and the C program agree on the value
+// (§13.4). The condition is a comparison of an input with zero, so both arms are run; the arrays are 16 elements long
+// and read at an index made from an input, so a read of the storage of an arm after the arm is not optimised away
+// (the sanitizer finds it).
+
+const N: U32 = 16
+
+pub enum Side {
+  Left,
+  Right,
+}
+
+pub rt fn side(c: Bool) -> Side {
+  if c { Side.Left } else { Side.Right }
+}
+
+pub rt fn ramp(v: F32, k: F32) -> [F32; N] {
+  var a: [F32; N] = [0.0; N]
+  for j in 0 ..< N {
+    a[j] = v + (k * F32.round_from(j))
+  }
+  a
+}
+
+pub rt fn index(x: F32) -> U32 {
+  U32.trunc_sat_from((x * 8.0) + 8.0) % N
+}
+
+@export
+pub flow pair(l: F32 at sample, r: F32 at sample) -> F32 at sample {
+  l + r
+}
+
+pub rt fn take_in(i: pair.In, k: U32) -> F32 {
+  (i.l[k] * 2.0) + i.r[k]
+}
+
+// The tail of an `if`, a `match` and a block is a field of the literal.
+pub rt fn field_if(c: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let b = ramp(y, 2.0)
+  take_in(pair.In { l: if c { a } else { b }, r: b }, index(x))
+}
+
+pub rt fn field_match(c: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let b = ramp(y, 2.0)
+  take_in(pair.In { l: a, r: match side(c) { Side.Left => a, Side.Right => b } }, index(y))
+}
+
+pub rt fn field_block(c: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let b = ramp(y, 2.0)
+  take_in(pair.In { l: if c { { a } } else { { b } }, r: a }, index(x + y))
+}
+
+// The literal is the tail of an `if`, a `match` and a block.
+pub rt fn literal_if(c: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let b = ramp(y, 2.0)
+  take_in(if c { pair.In { l: a, r: b } } else { pair.In { l: b, r: a } }, index(x))
+}
+
+pub rt fn literal_match(c: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let b = ramp(y, 2.0)
+  take_in(match side(c) { Side.Left => pair.In { l: a, r: b }, Side.Right => pair.In { l: b, r: b } }, index(y))
+}
+
+pub rt fn literal_block(c: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let b = ramp(y, 2.0)
+  take_in(if c { { pair.In { l: a, r: b } } } else { { pair.In { l: b, r: a } } }, index(x + y))
+}
+
+pub rt fn field_arm_binding_of_the_field(c: Bool, x: F32, y: F32) -> F32 {
+  let b = ramp(y, 2.0)
+  take_in(pair.In {
+    l: if c {
+      var t = ramp(x, 1.0)
+      t[4] = y
+      t
+    } else { b },
+    r: b,
+  }, index(y))
+}
+
+pub rt fn field_tail_temporary(c: Bool, x: F32, y: F32) -> F32 {
+  let b = ramp(y, 2.0)
+  take_in(pair.In { l: if c { ramp(x, 1.0) } else { b }, r: b }, index(x))
+}
+
+// A statement of the arm changes a variable of the function that a field names (R-486).
+pub rt fn literal_arm_changes_a_variable(c: Bool, x: F32, y: F32) -> F32 {
+  var o = ramp(x, 1.0)
+  let b = ramp(y, 2.0)
+  take_in(if c {
+    o[2] = y
+    pair.In { l: o, r: b }
+  } else { pair.In { l: b, r: b } }, index(x))
+}
+
+@export
+pub flow field_flow(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  field_if(x > 0.0, x, y) + field_match(y > 0.0, x, y) + field_block(x > y, x, y)
+}
+
+@export
+pub flow literal_flow(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  literal_if(x > 0.0, x, y) + literal_match(y > 0.0, x, y) + literal_block(x > y, x, y)
+}
+
+@export
+pub flow arm_binding_flow(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  field_arm_binding_of_the_field(y > 0.0, x, y) + literal_arm_changes_a_variable(x > y, x, y)
+}
+
+@export
+pub flow arm_temporary_flow(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  field_tail_temporary(y > 0.0, x, y)
+}

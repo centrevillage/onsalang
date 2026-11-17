@@ -19,9 +19,27 @@ impl<'a> Checker<'a> {
     /// expected type on (a block to its end, parentheses, a merge) gives
     /// `join` too.
     pub(crate) fn check_expr_as(&mut self, e: ExprId, expected: Option<TyId>, join: Option<Merge>) -> R<TyId> {
-        let outer = std::mem::replace(&mut self.joining, join);
+        self.check_passed(e, expected, join, None)
+    }
+
+    /// `e`, a tail of what is being checked (§5.2: of a block, a branch of
+    /// an `if`, an arm of a `match`, through parentheses), which passes on
+    /// `joining` and the view `viewing`.
+    pub(crate) fn check_tail(&mut self, e: ExprId, expected: Option<TyId>, join: Option<Merge>) -> R<TyId> {
+        self.check_passed(e, expected, join, self.viewing)
+    }
+
+    /// `e` with `joining` and `viewing` set to `join` and `view`, and back.
+    pub(crate) fn check_passed(
+        &mut self,
+        e: ExprId,
+        expected: Option<TyId>,
+        join: Option<Merge>,
+        view: Option<Viewing>,
+    ) -> R<TyId> {
+        let outer = (std::mem::replace(&mut self.joining, join), std::mem::replace(&mut self.viewing, view));
         let t = self.check_expr_fit(e, expected);
-        self.joining = outer;
+        (self.joining, self.viewing) = outer;
         t
     }
 
@@ -30,7 +48,10 @@ impl<'a> Checker<'a> {
         if let Some(part) = self.info.diverging.evaluated_part(self.ast, e) {
             return Err(self.never_carried_out(span, part));
         }
-        let t = self.check_expr_inner(e, expected)?;
+        let t = match self.viewing {
+            Some(v) => self.check_viewed(e, expected, v)?,
+            None => self.check_expr_inner(e, expected)?,
+        };
         let Some(exp) = expected else { return self.record_within(e, t) };
         // A path and an anonymous function in parentheses were fit inside.
         let found = match self.expr(e).kind {
@@ -43,6 +64,31 @@ impl<'a> Checker<'a> {
         // own, and `e` keeps its own (§8.1, §4.7).
         let found = self.record_within(e, t)?;
         Ok(if fns && self.joining.is_none() { exp } else { found })
+    }
+
+    /// `e` at a position that passes the view `v` ([`BodyInfo::views`]),
+    /// each part as `tails::tails` reads it: a node (a parenthesis, a block,
+    /// an `if` with an `else`, a `match`) and what diverges have the view's
+    /// type and pass it on; a tail is converted, a planar literal there
+    /// opened ([`Self::planar_literal`]), and what is in them is checked
+    /// with no view.
+    // SPEC-GAP(S-1116): the branches of a node are of one type first (§4.7),
+    // so a literal of channels and a planar array variable in two arms is E0401.
+    fn check_viewed(&mut self, e: ExprId, expected: Option<TyId>, v: Viewing) -> R<TyId> {
+        let node = matches!(
+            self.expr(e).kind,
+            ExprKind::Paren(_) | ExprKind::Block(_) | ExprKind::If { else_: Some(_), .. } | ExprKind::Match { .. }
+        );
+        let tail = !node && !self.info.diverging.expr(e);
+        self.view_marks.push((e, tail));
+        if !tail {
+            return self.check_expr_inner(e, expected);
+        }
+        self.viewing = None;
+        match (&self.expr(e).kind, v.planar) {
+            (ExprKind::Array(parts), Some(_)) => self.planar_literal(e, parts, v.elem, v.mode),
+            _ => self.check_expr_inner(e, expected),
+        }
     }
 
     /// Whether a merge (`if`, `match`, an array) with the expected type
@@ -151,7 +197,7 @@ impl<'a> Checker<'a> {
                 self.defer(span, t, DeferredKind::Hole { visible });
                 Ok(self.record(e, t))
             }
-            ExprKind::Paren(inner) => self.check_expr_as(*inner, expected, self.joining),
+            ExprKind::Paren(inner) => self.check_tail(*inner, expected, self.joining),
             // `move x` (§5.2, S-21): same type as its operand. Whether it is a
             // place is the modes stage's (R-198: its candidate asks the kinds).
             ExprKind::Move(inner) => self.check_expr_as(*inner, expected, self.joining),
@@ -256,10 +302,9 @@ impl<'a> Checker<'a> {
                 match else_ {
                     Some(el) => {
                         let join = self.joining.or(self.undecided(expected).then_some(Merge::Branches));
-                        let t = self.check_expr_as(*then, expected, join)?;
+                        let t = self.check_tail(*then, expected, join)?;
                         // Merged with the other branch: not the reason of the outer expectation.
-                        let u =
-                            self.without_why(|ck| ck.check_expr_as(*el, Some(t), join.and(Some(Merge::Branches))))?;
+                        let u = self.without_why(|ck| ck.check_tail(*el, Some(t), join.and(Some(Merge::Branches))))?;
                         if join.is_some() { self.join_arms(span, &[t, u]) } else { Ok(t) }
                     }
                     None => {
@@ -533,7 +578,7 @@ impl<'a> Checker<'a> {
                 self.after_stmt()?;
             }
             match b.tail {
-                Some(t) => self.check_expr_as(t, expected, self.joining),
+                Some(t) => self.check_tail(t, expected, self.joining),
                 // A block that ends in a diverging statement takes any type
                 // (§7; a trailing `return e` is allowed, §6.1).
                 None if self.info.diverging.block(self.ast, b) => Ok(expected.unwrap_or_else(|| self.fresh())),
@@ -625,9 +670,9 @@ impl<'a> Checker<'a> {
             let join = if types.is_empty() { m.join } else { m.join.and(Some(Merge::Branches)) };
             let hint = if join.is_some() { self.join_hint(types, expected) } else { expected };
             let t = if hint == expected {
-                self.check_expr_as(arm.body, hint, join)?
+                self.check_tail(arm.body, hint, join)?
             } else {
-                self.without_why(|ck| ck.check_expr_as(arm.body, hint, join))?
+                self.without_why(|ck| ck.check_tail(arm.body, hint, join))?
             };
             types.push(t);
         }

@@ -1,0 +1,12 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§15.1"]
+
+// W7-12 U2c2b, S-1113 across modules: the callees of this module are used from app.onsa, where the tails of an `if` and a `match` at a
+// planar argument are literals of channels of different kinds and lengths (§5.3), and the `inout` of the call is another variable (§5.2).
+
+pub fn planes(xs: [Span[F32]; 2]) -> F32 {
+  xs[0][0] + xs[1][0]
+}
+
+pub fn planes_inout(xs: [Span[F32]; 2], inout t: Span[F32]) {}

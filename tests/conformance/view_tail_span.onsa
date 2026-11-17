@@ -1,0 +1,209 @@
+// onsa.toml
+// [package]
+// name = "view_tail_span"
+// edition = "2026"
+//
+// [export]
+// prefix = "vts_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§5.2", "§5.3", "§13.4"]
+// conformance = true
+
+// Conformance (W7-12 U2c2b, S-1113): the tails of an `if`, a `match` or a block at the position of a `Span`
+// argument (§5.2 "位置を継ぐ", §5.3). Each tail is turned to the view on its own, so the value of the call is what
+// the arm that is run names, and the interpreter and the C program agree on it (§13.4). The condition is a
+// comparison of an input with zero, so both arms are run. The arrays are 16 elements long and are read at an index
+// made from an input, so a read of the storage of an arm after the arm is not optimised away (the sanitizer finds it).
+
+use std.text.FixedStr
+
+const N: U32 = 16
+
+// A `match` that the C program lowers is a plain switch on the variants of one enum.
+pub enum Side {
+  Left,
+  Right,
+}
+
+pub rt fn side(c: Bool) -> Side {
+  if c { Side.Left } else { Side.Right }
+}
+
+pub rt fn ramp(v: F32, k: F32) -> [F32; N] {
+  var a: [F32; N] = [0.0; N]
+  for j in 0 ..< N {
+    a[j] = v + (k * F32.round_from(j))
+  }
+  a
+}
+
+pub rt fn index(x: F32) -> U32 {
+  U32.trunc_sat_from((x * 8.0) + 8.0) % N
+}
+
+pub rt fn pick_at(s: Span[F32], i: U32) -> F32 {
+  s[i]
+}
+
+pub rt fn bytes_sum(s: Span[U8]) -> F32 {
+  var acc: F32 = 0.0
+  for j in 0 ..< s.len() {
+    acc = acc + (s[j] as F32)
+  }
+  acc
+}
+
+// The tails are arrays that the function holds (two arrays of the function, an `if`).
+pub rt fn outer_arrays(c: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let b = ramp(y, 2.0)
+  pick_at(if c { a } else { b }, index(x))
+}
+
+pub rt fn outer_arrays_match(c: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let b = ramp(y, 2.0)
+  pick_at(match side(c) { Side.Left => a, Side.Right => b }, index(y))
+}
+
+pub rt fn outer_arrays_block(c: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let b = ramp(y, 2.0)
+  pick_at(if c { { a } } else { { b } }, index(x + y))
+}
+
+// A Copy binding that the arm declares, as the tail itself: its value is copied for the call.
+pub rt fn arm_binding(c: Bool, x: F32, y: F32) -> F32 {
+  let b = ramp(y, 2.0)
+  pick_at(if c {
+    var t = ramp(x, 1.0)
+    t[3] = y
+    t
+  } else { b }, index(x))
+}
+
+pub rt fn arm_binding_in_the_else_arm(c: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  pick_at(if c { a } else {
+    var t = ramp(y, 3.0)
+    t[5] = x
+    t
+  }, index(y))
+}
+
+pub rt fn arm_binding_in_a_match(c: Bool, x: F32, y: F32) -> F32 {
+  let b = ramp(y, 2.0)
+  pick_at(match side(c) {
+    Side.Left => {
+      var t = ramp(x, 1.5)
+      t[7] = y
+      t
+    },
+    Side.Right => b,
+  }, index(x))
+}
+
+pub rt fn arm_binding_unchanged(c: Bool, x: F32, y: F32) -> F32 {
+  let b = ramp(y, 2.0)
+  pick_at(if c {
+    let t = ramp(x, 1.0)
+    t
+  } else { b }, index(x))
+}
+
+// An array that the arm makes (a call result) is a temporary of the call.
+pub rt fn arm_temporary(c: Bool, x: F32, y: F32) -> F32 {
+  let b = ramp(y, 2.0)
+  pick_at(if c { ramp(x, 1.0) } else { b }, index(x))
+}
+
+pub rt fn arm_temporaries(c: Bool, x: F32, y: F32) -> F32 {
+  pick_at(if c { ramp(x, 1.0) } else { ramp(y, 2.0) }, index(y))
+}
+
+pub rt fn arm_temporary_in_a_tail(c: Bool, d: Bool, x: F32, y: F32) -> F32 {
+  let b = ramp(y, 2.0)
+  pick_at(if c { if d { ramp(x, 1.0) } else { ramp(x, 4.0) } } else { b }, index(x))
+}
+
+// A part view that the tails name (a part of an array of the function).
+pub rt fn part_views(c: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let b = ramp(y, 2.0)
+  pick_at(if c { a.slice(2, 10) } else { b.slice(4, 12) }, index(x) % 8)
+}
+
+pub rt fn whole_and_part(c: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let b = ramp(y, 2.0)
+  pick_at(if c { a.slice(0, 8) } else { b.slice(0, 8) }, index(y) % 8)
+}
+
+// The receiver of a method is an argument too: a part of the value of an `if`, and its length.
+pub rt fn receiver_slice(c: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let b = ramp(y, 2.0)
+  pick_at((if c { a } else { b }).slice(2, 10), index(x) % 8)
+}
+
+pub rt fn receiver_len(c: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let b = ramp(y, 2.0)
+  F32.round_from((if c { a } else { b }).len()) + pick_at(a, index(y))
+}
+
+pub rt fn receiver_slice_len(c: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let b = ramp(y, 2.0)
+  F32.round_from((if c { a } else { b }).slice(3, 9).len()) + pick_at(b, index(x))
+}
+
+// A `FixedStr` at a `Span[U8]`: the arm that is run gives the bytes in use.
+pub rt fn fixed_strings(c: Bool, x: F32) -> F32 {
+  let a: FixedStr[8] = "abc"
+  let b: FixedStr[8] = "xyz12"
+  bytes_sum(if c { a } else { b }) * x
+}
+
+@export
+pub flow outer_arrays_flow(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  outer_arrays(x > 0.0, x, y) + outer_arrays_match(y > 0.0, x, y) + outer_arrays_block(x > y, x, y)
+}
+
+@export
+pub flow arm_binding_flow(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  arm_binding(x > 0.0, x, y) +
+    arm_binding_in_the_else_arm(y > 0.0, x, y) +
+    arm_binding_in_a_match(x > y, x, y) +
+    arm_binding_unchanged(x > 0.25, x, y)
+}
+
+@export
+pub flow arm_temporary_flow(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  arm_temporary(x > 0.0, x, y) +
+    arm_temporaries(y > 0.0, x, y) +
+    arm_temporary_in_a_tail(x > 0.0, y > 0.0, x, y)
+}
+
+@export
+pub flow part_views_flow(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  part_views(x > 0.0, x, y) + whole_and_part(y > 0.0, x, y)
+}
+
+@export
+pub flow receiver_flow(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  receiver_slice(x > 0.0, x, y) + receiver_len(y > 0.0, x, y) + receiver_slice_len(x > y, x, y)
+}
+
+@export
+pub flow fixed_strings_flow(x: F32 at sample) -> F32 at sample {
+  fixed_strings(x > 0.0, x)
+}

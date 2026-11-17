@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§10", "§12.2"]
+// fixes = 0
+
+// W7-12 U2c2b, S-1113 (§12.2, §10): "一時の値（場所でない値。呼び出しの結果、所有の行のリテラルなど）を消費しない位置（借用の引数、受け手…）に置くと、
+// それを使う呼び出しか演算が終わったときに破棄される", and the creation and the drop of a `Buf` need `Alloc` (§12.2), which an `rt` function
+// has not ("`rt` の関数の中の確保", §10): E0601. A `Buf` that the arm makes, as the element of a literal of channels at the tail of an `if`, a
+// `match` or a block, as an element that is an `if` of its own, as a field of the generated `In`, or as the tail of a `Span` argument, is a
+// temporary of the call as the element of the literal written at the argument is (`direct_element`). The error is at the expression that
+// makes the `Buf`, no repair candidate (`fixes = 0`). One error per function (P-01).
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}
+
+pub rt fn planes(xs: [Span[F32]; 2]) {}
+
+pub rt fn take(s: Span[F32]) {}
+
+pub rt fn take_in(i: pair.In) {}
+
+pub fn mkb() -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(4)
+}
+
+pub rt fn tail_element_in_an_if(c: Bool, y: Buf[F32]) {
+  planes(if c { [mkb(), y] } else { [y, y] }) //~ E0601
+}
+
+pub rt fn tail_element_in_the_else_arm(c: Bool, y: Buf[F32]) {
+  planes(if c { [y, y] } else { [y, mkb()] }) //~ E0601
+}
+
+pub rt fn tail_element_in_a_match(c: Bool, y: Buf[F32]) {
+  planes(match c { true => [mkb(), y], false => [y, y] }) //~ E0601
+}
+
+pub rt fn tail_element_in_a_block(y: Buf[F32]) {
+  planes({ [y, mkb()] }) //~ E0601
+}
+
+pub rt fn tail_element_in_a_tail(c: Bool, d: Bool, y: Buf[F32]) {
+  planes(if c { if d { [mkb(), y] } else { [y, y] } } else { [y, y] }) //~ E0601
+}
+
+pub rt fn tail_element_that_is_a_zeroed_buffer(c: Bool, y: Buf[F32]) {
+  planes(if c { [Buf.zeroed(4), y] } else { [y, y] }) //~ E0601
+}
+
+pub rt fn tail_element_is_an_if_that_makes_it(c: Bool, d: Bool, y: Buf[F32]) {
+  planes(if c { [if d { mkb() } else { Buf.zeroed(2) }, y] } else { [y, y] }) //~ E0601
+}
+
+pub rt fn direct_element(y: Buf[F32]) {
+  planes([mkb(), y]) //~ E0601
+}
+
+pub rt fn tail_field_of_the_generated_in(c: Bool, y: [F32; 4]) {
+  take_in(if c { pair.In { l: mkb(), r: y } } else { pair.In { l: y, r: y } }) //~ E0601
+}
+
+pub rt fn tail_of_a_span_argument(c: Bool, y: Buf[F32]) {
+  take(if c { mkb() } else { y }) //~ E0601
+}

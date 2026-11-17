@@ -1,0 +1,91 @@
+// onsa.toml
+// [package]
+// name = "view_tail_generated_planar"
+// edition = "2026"
+//
+// [export]
+// prefix = "vtgp_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§5.2", "§5.3", "§11.6", "§13.4"]
+// conformance = true
+
+// Conformance (W7-12 U2c2b, S-1113, S-196): the field of the generated `In` that is an array of channels (`x: [F32; 2]
+// at sample` is `[Span[F32]; 2]`, §11.6) at a borrowed argument: an `if` at the field whose tails are literals of
+// channels, or an array of arrays (§5.3), and the literal `spread.In { … }` that is itself at the tail of an `if`.
+// The call reads the channels of the arm that is run, and the interpreter and the C program agree on the value
+// (§13.4). The condition is a comparison of an input with zero, so both arms are run; the arrays are 16 elements
+// long and read at an index made from an input, so a read of the storage of an arm after the arm is not optimised
+// away (the sanitizer finds it). They are in a file of their own: the build of this version stops with E0200
+// (planar spans of a temporary) at the tails until W7-12 U2c2b.
+
+const N: U32 = 16
+
+pub enum Side {
+  Left,
+  Right,
+}
+
+pub rt fn side(c: Bool) -> Side {
+  if c { Side.Left } else { Side.Right }
+}
+
+pub rt fn ramp(v: F32, k: F32) -> [F32; N] {
+  var a: [F32; N] = [0.0; N]
+  for j in 0 ..< N {
+    a[j] = v + (k * F32.round_from(j))
+  }
+  a
+}
+
+pub rt fn index(x: F32) -> U32 {
+  U32.trunc_sat_from((x * 8.0) + 8.0) % N
+}
+
+@export
+pub flow spread(x: [F32; 2] at sample, m: F32 at sample) -> F32 at sample {
+  x[0] + x[1] + m
+}
+
+pub rt fn take_spread(i: spread.In, k: U32) -> F32 {
+  i.m[k] + (i.x[0][k] * 2.0) + (i.x[1][k] * 3.0)
+}
+
+// A field that is an array of channels (`x: [F32; 2] at sample` is `[Span[F32]; 2]`, §11.6), the literal of channels at
+// a tail, and an `if` whose tails are literals of channels, written at the field.
+pub rt fn planar_field_literal(c: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let b = ramp(y, 2.0)
+  take_spread(spread.In { m: a, x: if c { [a, b] } else { [b, b] } }, index(x))
+}
+
+pub rt fn planar_field_variable(c: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let ps = [ramp(y, 3.0), a]
+  let qs = [a, ramp(y, 4.0)]
+  take_spread(spread.In { m: a, x: if c { ps } else { qs } }, index(y))
+}
+
+pub rt fn planar_field_in_a_literal_tail(c: Bool, d: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let b = ramp(y, 2.0)
+  take_spread(if c {
+    spread.In { m: a, x: if d { [a, b] } else { [b, a] } }
+  } else {
+    spread.In { m: b, x: [b, b] }
+  }, index(x))
+}
+
+@export
+pub flow planar_field_flow(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  planar_field_literal(x > 0.0, x, y) +
+    planar_field_variable(y > 0.0, x, y) +
+    planar_field_in_a_literal_tail(x > 0.0, y > 0.0, x, y)
+}

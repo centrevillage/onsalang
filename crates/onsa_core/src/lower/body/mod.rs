@@ -94,6 +94,15 @@ impl<'b> FnCx<'b> {
         self.info.expr_types.get(&e).copied().ok_or_else(|| internal(self.expr(e).span, "untyped expression"))
     }
 
+    /// The type of the value of `e`: of a node above the tails at a view,
+    /// the view's (its tails are converted to it, [`onsa_sema::body::View`]).
+    fn value_ty(&self, e: ExprId) -> R<TyId> {
+        match self.info.views.get(&e) {
+            Some(v) if !v.tail => Ok(v.to),
+            _ => self.sema_ty(e),
+        }
+    }
+
     /// Sema local declared with this name span (`var`, closure parameters).
     fn local_by_span(&self, span: Span) -> R<LocalId> {
         self.info
@@ -230,7 +239,7 @@ fn lower_block(lw: &mut Lowerer, cx: &mut FnCx, b: &ast::Block, want: &Ty) -> R<
 
 /// A block expression in value position: its sema type decides whether it has a value.
 pub(super) fn lower_block_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Block> {
-    let ty = lw.core_ty(cx.sema_ty(e)?, &cx.args, cx.expr(e).span)?;
+    let ty = lw.core_ty(cx.value_ty(e)?, &cx.args, cx.expr(e).span)?;
     match &cx.expr(e).kind {
         AK::Block(b) => lower_block(lw, cx, b, &ty),
         _ => {

@@ -1,0 +1,234 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§11.6"]
+
+// W7-12 U2c2b, R-486, S-196, S-1113 (§5.2, §5.3, §11.6): the calls with a change inside the argument whose tail is a literal of channels (`[x, y]` of the
+// planar argument `xs: [Span[F32]; 2]`) or a literal of the generated `In` or `spread.In` that has such a field, and are not an overlap. The
+// elements of a literal at an argument are arguments of their own (§5.3, "排他性は要素の場所ごとに検査する"), and "引数の中のブロックで宣言した変数への代入は、
+// どの引数とも重ならない" (§5.2). A change by a statement of the arm before the literal is a change inside the same argument as the elements, so
+// it overlaps none of them: an outer variable changed there and named in an element, and a Copy variable that the arm declares, changes and gives. A block
+// that is an element declares a variable, changes it and gives it, or changes a variable that no other element and argument names. The forms
+// of the same changes in a literal written at the argument (values/overlap_args_opened_change_planar_ok.onsa, overlap_args_opened_change_gen_ok.onsa)
+// are the contrast; the errors are in negative/view_tail_opened_change.onsa. The tail that is a literal does not make a change of the arm
+// overlap an element (U2c1c), whatever the shape of the tail.
+
+pub struct Wide {
+  a: F32,
+  b: F32,
+}
+
+pub flow spread(x: [F32; 2] at sample, m: F32 at sample) -> Wide at sample {
+  Wide { a: x[0] + m, b: x[1] + m }
+}
+
+pub fn planes(xs: [Span[F32]; 2]) -> F32 {
+  xs[0][0] + xs[1][0]
+}
+
+pub fn planes_inout(xs: [Span[F32]; 2], inout s: Span[F32]) -> F32 {
+  xs[0][0]
+}
+
+pub fn spread_in(i: spread.In) -> F32 {
+  i.m[0]
+}
+
+pub fn spread_in_inout(i: spread.In, inout s: Span[F32]) -> F32 {
+  i.m[0]
+}
+
+// ----------------------------------------------------- a statement of the arm before the literal changes an outer variable
+
+pub fn outer_variable_changed_and_named_in_an_element(c: Bool, y: [F32; 4]) -> F32 {
+  var x: [F32; 4] = [0.0; 4]
+  planes(if c {
+    x[0] = 1.0
+    [x, y]
+  } else { [y, y] })
+}
+
+pub fn outer_variable_changed_and_named_in_both_elements(c: Bool) -> F32 {
+  var x: [F32; 4] = [0.0; 4]
+  planes(if c {
+    x[0] = 1.0
+    [x, x]
+  } else { [x, x] })
+}
+
+pub fn outer_variable_changed_in_a_match(k: U32, y: [F32; 4]) -> F32 {
+  var x: [F32; 4] = [0.0; 4]
+  planes(match k {
+    0 => [y, y],
+    _ => {
+      x[1] = 2.0
+      [y, x]
+    },
+  })
+}
+
+pub fn outer_variable_changed_in_a_block(y: [F32; 4]) -> F32 {
+  var x: [F32; 4] = [0.0; 4]
+  planes({
+    x[2] = 3.0
+    [x, y]
+  })
+}
+
+pub fn outer_variable_changed_in_a_loop_of_the_arm(c: Bool, n: U32, y: [F32; 4]) -> F32 {
+  var x: [F32; 4] = [0.0; 4]
+  planes(if c {
+    for _ in 0 ..< n {
+      x[0] = x[0] + 1.0
+    }
+    [x, y]
+  } else { [y, y] })
+}
+
+pub fn outer_variable_changed_and_an_inout_of_another(c: Bool, y: [F32; 4]) -> F32 {
+  var x: [F32; 4] = [0.0; 4]
+  var z: [F32; 4] = [0.0; 4]
+  planes_inout(if c {
+    x[0] = 1.0
+    [x, y]
+  } else { [y, y] }, inout z)
+}
+
+pub fn outer_variable_changed_for_a_field(c: Bool, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [0.0; 2]
+  spread_in(if c {
+    x[0] = 1.0
+    spread.In { m: x, x: [y, y] }
+  } else { spread.In { m: y, x: [y, y] } })
+}
+
+pub fn outer_variable_changed_for_a_channel_of_a_field(c: Bool, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [0.0; 2]
+  spread_in(if c {
+    x[0] = 1.0
+    spread.In { m: y, x: [x, y] }
+  } else { spread.In { m: y, x: [y, y] } })
+}
+
+pub fn outer_variable_changed_for_a_field_array_in_a_tail(c: Bool, d: Bool, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [0.0; 2]
+  spread_in(if c {
+    x[0] = 1.0
+    spread.In { m: x, x: if d { [x, y] } else { [y, x] } }
+  } else { spread.In { m: y, x: [y, y] } })
+}
+
+// ---------------------------------------------------------- a Copy variable that the arm declares, changes and gives
+
+pub fn arm_variable_changed_and_named_in_both_elements(c: Bool, v: F32, y: [F32; 4]) -> F32 {
+  planes(if c {
+    var t: [F32; 4] = [v; 4]
+    t[0] = 2.0
+    [t, t]
+  } else { [y, y] })
+}
+
+pub fn arm_variable_changed_and_named_in_a_channel_of_a_field(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  spread_in(if c {
+    var t: [F32; 2] = [v; 2]
+    t[0] = 2.0
+    spread.In { m: y, x: [y, t] }
+  } else { spread.In { m: y, x: [y, y] } })
+}
+
+pub fn arm_variable_changed_with_an_inout_of_another(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var z: [F32; 2] = [0.0; 2]
+  spread_in_inout(if c {
+    var t: [F32; 2] = [v; 2]
+    t[0] = 2.0
+    spread.In { m: t, x: [y, t] }
+  } else { spread.In { m: y, x: [y, y] } }, inout z)
+}
+
+// ---------------------------------------------------------------- a block that is an element or a field of its own
+
+pub fn element_block_changes_a_variable_that_it_declares(c: Bool, v: F32, y: [F32; 4]) -> F32 {
+  planes(if c {
+    [{
+      var t: [F32; 4] = [v; 4]
+      t[0] = 2.0
+      t
+    }, y]
+  } else { [y, y] })
+}
+
+pub fn direct_element_block_changes_a_variable_that_it_declares(v: F32, y: [F32; 4]) -> F32 {
+  planes([{
+    var t: [F32; 4] = [v; 4]
+    t[0] = 2.0
+    t
+  }, y])
+}
+
+pub fn element_block_changes_a_variable_that_no_other_names(c: Bool, y: [F32; 4]) -> F32 {
+  var z: [F32; 4] = [0.0; 4]
+  let r = planes(if c {
+    [{
+      z[0] = 2.0
+      y
+    }, y]
+  } else { [y, y] })
+  r + z[0]
+}
+
+pub fn element_blocks_change_two_variables(c: Bool, y: [F32; 4]) -> F32 {
+  var z: [F32; 4] = [0.0; 4]
+  var w: [F32; 4] = [0.0; 4]
+  let r = planes(if c {
+    [{
+      z[0] = 2.0
+      y
+    }, {
+      w[0] = 3.0
+      y
+    }]
+  } else { [y, y] })
+  r + z[0] + w[0]
+}
+
+pub fn field_array_block_declares_and_changes_a_variable(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var z: [F32; 2] = [0.0; 2]
+  spread_in(if c {
+    spread.In {
+      m: z,
+      x: {
+        var t: [F32; 2] = [v; 2]
+        t[0] = 1.0
+        [t, y]
+      },
+    }
+  } else { spread.In { m: y, x: [y, y] } })
+}
+
+pub fn field_array_block_changes_a_variable_that_no_other_field_names(c: Bool, y: [F32; 2]) -> F32 {
+  var z: [F32; 2] = [0.0; 2]
+  var w: [F32; 2] = [0.0; 2]
+  let r = spread_in(if c {
+    spread.In {
+      m: z,
+      x: {
+        w[0] = 1.0
+        [y, y]
+      },
+    }
+  } else { spread.In { m: y, x: [y, y] } })
+  r + w[0]
+}
+
+pub fn field_scalar_block_changes_a_variable_that_no_other_field_names(c: Bool, y: [F32; 2]) -> F32 {
+  var w: [F32; 2] = [0.0; 2]
+  let r = spread_in(if c {
+    spread.In {
+      m: {
+        w[0] = 1.0
+        y
+      },
+      x: [y, y],
+    }
+  } else { spread.In { m: y, x: [y, y] } })
+  r + w[0]
+}

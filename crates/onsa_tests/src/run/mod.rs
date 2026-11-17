@@ -383,6 +383,7 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
             return run;
         }
     };
+    run.problems.extend(unconverted_view(&loaded.sources, &analyzed));
     // The runner's self-tests may change the candidates (`tests::Repo::changing_candidates`).
     #[cfg(test)]
     let analyzed = tests::changed_candidates(root, analyzed);
@@ -400,6 +401,25 @@ pub fn run_case_with(stages: &Stages, root: &Path, case: &Case, opts: RunOptions
     }
     outputs(&cx, &mut run, &markers, &testfails, &panics, test_stage);
     run
+}
+
+/// The first tail of a value at a view that the types stage left
+/// unconverted, in every body, of a function, a test, a `const` and a flow
+/// ([`onsa_sema::BodyInfo::unconverted_view_tail`]): a state the lowering
+/// cannot be in. A body of no module is one too.
+fn unconverted_view(sources: &SourceMap, a: &Analyzed) -> Option<Problem> {
+    let an = &a.analysis;
+    let at = |(&d, info): (_, &onsa_sema::BodyInfo)| match an.ast(&a.pkg, an.def(d).module) {
+        Some(m) => info.unconverted_view_tail(&m.parsed.ast).map(|x| Ok(m.parsed.ast.expr(x).span)),
+        None => Some(Err(an.def(d).span)),
+    };
+    let flows = an.flows.iter().map(|(d, f)| (d, &f.body));
+    let found = an.bodies.iter().chain(flows).filter_map(at).min()?;
+    let (span, message) = match found {
+        Ok(s) => (s, "a tail of a value at a view the types stage did not convert (S-1113)"),
+        Err(s) => (s, "a checked body of no module"),
+    };
+    Some(internal_problem(sources, &InternalError::lowering(span, message.into()), None))
 }
 
 /// The markers of a case's files ([`validate`]).

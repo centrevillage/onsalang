@@ -1,0 +1,206 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§5.2", "§5.3", "§11.6"]
+// fixes = 0
+
+// W7-12 U2c2b, S-1113 (§5.2, §5.3, §11.6): "借用の引数に置いた `if`・`match`・ブロック式は、各末尾の場所をその引数の場所として重なりを見る"
+// and, for a tail that is a literal of channels, "排他性は要素の場所ごとに検査する" (§5.3: the elements of the literal may be of
+// kinds and lengths that differ). The tail names the place of an `inout` of the same call in an element whatever the kind of the
+// element (an array, a `Span`, a `Buf`, a part view), the shape of the tail (a match with many arms, an element that is an `if` or a
+// block, an array of arrays or an array of views in the other arm) and the place of the call (a closure, a generic function, a
+// field of the generated `In` that is an array of channels). Parts of one array overlap whatever the range ("部分ビューも範囲によらず", §5.2).
+// The error is at the later written of the two places, no repair candidate (`fixes = 0`). One error per function (P-01). The forms that
+// were written before are in negative/overlap_args_tail_planar_literal.onsa, the ones that do not overlap in
+// values/view_tail_planar_ok.onsa and values/view_tail_planar_apart_ok.onsa.
+
+pub struct Wide {
+  a: F32,
+  b: F32,
+}
+
+pub flow spread(x: [F32; 2] at sample, m: F32 at sample) -> Wide at sample {
+  Wide { a: x[0] + m, b: x[1] + m }
+}
+
+pub fn two_pl(xs: [Span[F32]; 2], inout t: Span[F32]) {}
+
+pub fn pl_pl(xs: [Span[F32]; 2], inout ys: [Span[F32]; 2]) {}
+
+pub fn gen_pl[T: Copy](xs: [Span[T]; 2], inout t: Span[T]) {}
+
+pub fn spread_in(i: spread.In, inout s: Span[F32]) {}
+
+pub fn touch(s: Span[F32]) {}
+
+pub fn apply(g: fn(U32) -> F32) -> F32 {
+  g.(0)
+}
+
+// ------------------------------------------------------------------------------ the kind of the element that names the place
+
+pub fn element_is_a_span_parameter(c: Bool, inout a: Span[F32], b: Span[F32]) {
+  two_pl(if c { [a, b] } else { [b, b] }, inout a) //~ E0702
+}
+
+pub fn element_is_a_buffer(c: Bool, inout a: Buf[F32], b: Buf[F32]) {
+  two_pl(if c { [a, b] } else { [b, b] }, inout a) //~ E0702
+}
+
+pub fn element_is_an_array_of_another_length(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 2] = [0.0; 2]
+  two_pl(if c { [x, y] } else { [y, y] }, inout y) //~ E0702
+}
+
+pub fn element_is_a_part(c: Bool) {
+  var x: [F32; 8] = [0.0; 8]
+  var y: [F32; 4] = [0.0; 4]
+  two_pl(if c { [x.slice(0, 4), y.slice(0, 2)] } else { [y.slice(2, 4), y.slice(0, 2)] }, inout x.slice(4, 8)) //~ E0702
+}
+
+pub fn direct_parts_of_one_array() {
+  var x: [F32; 8] = [0.0; 8]
+  var y: [F32; 4] = [0.0; 4]
+  two_pl([x.slice(0, 4), y.slice(0, 2)], inout x.slice(4, 8)) //~ E0702
+}
+
+// ------------------------------------------------------------------------------------------------ the shape of the tail
+
+pub fn array_of_arrays_in_the_tail(c: Bool, qs: [[F32; 4]; 2]) {
+  var ps: [[F32; 4]; 2] = [[0.0; 4]; 2]
+  two_pl(if c { ps } else { qs }, inout ps[0]) //~ E0702
+}
+
+pub fn array_of_arrays_in_the_tail_and_the_literal_of_the_inout(c: Bool, qs: [[F32; 4]; 2]) {
+  var ps: [[F32; 4]; 2] = [[0.0; 4]; 2]
+  var z: [F32; 4] = [0.0; 4]
+  pl_pl(if c { qs } else { ps }, inout [z, ps[1]]) //~ E0702
+}
+
+pub fn element_is_the_view_of_the_other_arm_array(c: Bool, ps: [Span[F32]; 2]) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_pl(if c { [x, y] } else { ps }, inout x) //~ E0702
+}
+
+pub fn the_other_arm_is_an_array_of_views_of_the_inout(c: Bool, inout qs: [Span[F32]; 2]) {
+  var y: [F32; 4] = [0.0; 4]
+  two_pl(if c { [y, y] } else { qs }, inout qs[0]) //~ E0702
+}
+
+pub fn match_with_many_arms(k: U32) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  var z: [F32; 4] = [0.0; 4]
+  two_pl(match k { 0 => [y, y], 1 => [z, y], _ => [y, x] }, inout x) //~ E0702
+}
+
+pub fn element_is_an_if(c: Bool, d: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  var z: [F32; 4] = [0.0; 4]
+  two_pl(if c { [if d { x } else { z }, y] } else { [z, z] }, inout x) //~ E0702
+}
+
+pub fn element_is_a_match(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  var z: [F32; 4] = [0.0; 4]
+  two_pl(if c { [y, match c { true => z, false => x }] } else { [z, z] }, inout x) //~ E0702
+}
+
+pub fn element_is_a_block(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_pl(if c {
+    [{
+      touch(y)
+      x
+    }, y]
+  } else { [y, y] }, inout x) //~ E0702
+}
+
+pub fn literal_after_a_statement(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_pl(if c {
+    touch(y)
+    [y, x]
+  } else { [y, y] }, inout x) //~ E0702
+}
+
+pub fn literal_in_the_else_if_chain(c: Bool, d: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_pl(if c { [y, y] } else if d { [y, y] } else { [y, x] }, inout x) //~ E0702
+}
+
+pub fn both_arms_name_the_place(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_pl(if c { [x, y] } else { [y, x] }, inout x) //~ E0702
+}
+
+pub fn field_literal_at_the_tail_of_an_if(c: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  spread_in(if c { spread.In { m: y, x: [x, y] } } else { spread.In { m: y, x: [y, y] } }, inout x) //~ E0702
+}
+
+pub fn field_scalar_names_the_place_under_an_if_of_the_tail(c: Bool, d: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  spread_in(if c { spread.In { m: if d { x } else { y }, x: [y, y] } } else { spread.In { m: y, x: [y, y] } }, inout x) //~ E0702
+}
+
+// ---------------------------------------------------------------------------------------- the place of the call
+
+pub fn in_a_closure(c: Bool) -> F32 {
+  apply(fn(n) {
+    var x: [F32; 4] = [0.0; 4]
+    var y: [F32; 4] = [0.0; 4]
+    x[0] = F32.round_from(n)
+    two_pl(if c { [x, y] } else { [y, y] }, inout x) //~ E0702
+    x[0]
+  })
+}
+
+pub fn in_a_generic_function[T: Copy](c: Bool, inout x: [T; 4], y: [T; 4]) {
+  gen_pl(if c { [x, y] } else { [y, y] }, inout x) //~ E0702
+}
+
+pub fn in_a_loop_over_a_range(c: Bool, n: U32) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  for _ in 0 ..< n {
+    two_pl(match c { true => [x, y], false => [y, y] }, inout x.slice(0, 2)) //~ E0702
+  }
+}
+
+pub fn in_a_branch_of_the_function(c: Bool, d: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  if d {
+    two_pl(if c { [y, x] } else { [y, y] }, inout x) //~ E0702
+  }
+}
+
+// ----------------------------------------------------------------- the field of the generated `In` that is an array of channels
+
+pub fn field_if_with_literals(c: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  spread_in(spread.In { m: y, x: if c { [x, y] } else { [y, y] } }, inout x) //~ E0702
+}
+
+pub fn field_match_with_literals(c: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  spread_in(spread.In { m: y, x: match c { true => [y, y], false => [y, x] } }, inout x) //~ E0702
+}
+
+pub fn field_literal_in_an_if_in_the_tail_of_an_if(c: Bool, d: Bool) {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  spread_in(if c { spread.In { m: y, x: if d { [y, x] } else { [y, y] } } } else { spread.In { m: y, x: [y, y] } }, inout x) //~ E0702
+}

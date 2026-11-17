@@ -1,0 +1,27 @@
+use util.{mkb, pair, planes, planes_rt, take_in}
+
+pub fn buffer_of_the_arm_in_a_literal(c: Bool, y: Buf[F32]) -> F32 uses {Alloc} {
+  planes(if c {
+    let h = mkb()
+    [h, y] //~ E0716
+  } else { [y, y] })
+}
+
+pub fn part_of_a_binding_in_a_literal(c: Bool, v: F32, y: [F32; 4]) -> F32 {
+  planes(if c {
+    var t: [F32; 4] = [v; 4]
+    t[0] = 1.0
+    [t.slice(0, 2), y] //~ E0716
+  } else { [y, y] })
+}
+
+pub fn buffer_of_the_arm_in_a_field(c: Bool, y: [F32; 4]) -> F32 uses {Alloc} {
+  take_in(if c {
+    let h = mkb()
+    pair.In { l: h, r: y } //~ E0716
+  } else { pair.In { l: y, r: y } })
+}
+
+pub rt fn temporary_buffer_in_an_rt_function(c: Bool, y: Buf[F32]) {
+  planes_rt(if c { [mkb(), y] } else { [y, y] }) //~ E0601
+}

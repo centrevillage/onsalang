@@ -69,6 +69,9 @@ pub(crate) struct Leaf {
     /// The unit of exclusivity: the argument as written, or an element of a
     /// literal opened at it (S-196, §11.6), as written.
     pub arg: ExprId,
+    /// The unit `arg` is opened in (the argument, or a field of a generated
+    /// literal whose tail is a planar literal), `arg` itself at the argument.
+    pub up: ExprId,
     /// The tail of `arg`'s own spine (`tails`), or `arg` when it has none:
     /// the value put at the position (a head's `by`).
     pub tail: ExprId,
@@ -96,6 +99,7 @@ impl Leaf {
 #[derive(Clone)]
 struct Cur {
     arg: ExprId,
+    up: ExprId,
     tail: ExprId,
     at: ExprId,
     over: Vec<Proj>,
@@ -105,11 +109,12 @@ struct Cur {
 
 impl Cur {
     fn new(arg: ExprId) -> Self {
-        Cur { arg, tail: arg, at: arg, over: Vec::new(), viewed: false, spine: true }
+        Cur { arg, up: arg, tail: arg, at: arg, over: Vec::new(), viewed: false, spine: true }
     }
 
     fn leaf(self, what: What) -> Leaf {
-        Leaf { arg: self.arg, tail: self.tail, at: self.at, what, over: self.over, viewed: self.viewed }
+        let (arg, up, tail, at) = (self.arg, self.up, self.tail, self.at);
+        Leaf { arg, up, tail, at, what, over: self.over, viewed: self.viewed }
     }
 
     /// One step written over the base: the walk goes on off the spine.
@@ -167,12 +172,12 @@ fn walk(cx: Cx<'_>, e: ExprId, cur: Cur, open: Open, out: &mut Vec<Leaf>) {
         (ExprKind::TupleIndex { base, index, .. }, _) => walk(cx, *base, cur.over(Proj::Elem(*index)), open, out),
         (ExprKind::Index { base, .. }, _) => walk(cx, *base, cur.over(Proj::Index), open, out),
         (_, Some(parts)) => match cur.over.first() {
-            None => parts.into_iter().for_each(|(_, f)| walk(cx, f, Cur::new(f), open, out)),
+            None => parts.into_iter().for_each(|(_, f)| walk(cx, f, Cur { up: cur.arg, ..Cur::new(f) }, open, out)),
             // S-1114: a path over a generated literal is of the field chosen.
             Some(Proj::Field(n)) => match parts.into_iter().find(|(i, _)| *i == Some(n.as_str())) {
                 Some((_, f)) => {
                     let over = cur.over[1..].to_vec();
-                    walk(cx, f, Cur { arg: f, at: f, over, spine: false, ..cur }, open, out)
+                    walk(cx, f, Cur { arg: f, up: cur.arg, at: f, over, spine: false, ..cur }, open, out)
                 }
                 None => out.push(cur.leaf(What::Value(x))),
             },

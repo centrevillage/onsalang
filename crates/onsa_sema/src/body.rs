@@ -69,7 +69,7 @@ pub(crate) use operator_fix::UNSIGNED_NEGATION;
 
 pub use info::{
     BodyInfo, Copied, CopiedWhy, Discard, DropPoint, Dropped, InstId, Instance, LocalId, LocalInfo, LocalKind, RowFrom,
-    Taken, Target, TryArms, Unbound,
+    Taken, Target, TryArms, Unbound, View,
 };
 
 // ---------------------------------------------------------------- checker
@@ -138,6 +138,12 @@ pub(crate) struct Checker<'a> {
     /// earlier part of a merge that joins function types (§4.7, S-1031):
     /// a function found there is joined, not fit ([`Self::check_expr_as`]).
     pub(crate) joining: Option<Merge>,
+    /// The view the expression being checked passes on to its tails, as
+    /// `joining` is ([`Self::check_tail`]); set by `view_arg` (§5.2, §5.3).
+    pub(crate) viewing: Option<Viewing>,
+    /// The expressions met under `viewing`, and whether each is a tail: the
+    /// `view_arg` that set it records its own once the value is a view.
+    pub(crate) view_marks: Vec<(ExprId, bool)>,
     /// A path checked as the base of type arguments written after it, with
     /// the span of both (the text of a wrapping function, S-874).
     pub(crate) written: Option<(ExprId, Span)>,
@@ -154,6 +160,15 @@ pub(crate) struct Checker<'a> {
     /// The names the defs of each module bind, made in the check of the
     /// package where a candidate asks (`removed.rs`).
     bound: &'a mut HashMap<ModId, HashSet<String>>,
+}
+
+/// A view passed at a position (§5.3): of the element `elem`, planar of
+/// the length `planar` or a `Span`, by `mode` ([`BodyInfo::views`]).
+#[derive(Clone, Copy)]
+pub(crate) struct Viewing {
+    pub elem: TyId,
+    pub planar: Option<Len>,
+    pub mode: Mode,
 }
 
 /// The body of the def `id` the types stage checks, with the type `Self`
@@ -236,6 +251,8 @@ fn read_body<'c>(
         arg_closure: None,
         arg_literal: None,
         joining: None,
+        viewing: None,
+        view_marks: Vec::new(),
         written: None,
         flow: None,
         names,

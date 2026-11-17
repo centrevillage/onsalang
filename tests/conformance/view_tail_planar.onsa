@@ -1,0 +1,184 @@
+// onsa.toml
+// [package]
+// name = "view_tail_planar"
+// edition = "2026"
+//
+// [export]
+// prefix = "vtp_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§5.2", "§5.3", "§13.4"]
+// conformance = true
+
+// Conformance (W7-12 U2c2b, S-1113, S-196): the tails of an `if`, a `match` or a block at the position of a planar
+// argument (`[Span[F32]; 2]`, §5.3). A tail that is a literal of channels is the channels one by one, a tail that
+// is an array of arrays or an array of views is one value, and the call reads the channels of the arm that is run. An
+// element of a literal needs not have the kind or the length of the others (§5.3). The interpreter and the C
+// program agree on the value (§13.4). The condition is a comparison of an input with zero, so both arms are run;
+// the arrays are 16 elements long and read at an index made from an input, so a read of the storage of an arm after
+// the arm is not optimised away (the sanitizer finds it).
+
+const N: U32 = 16
+
+pub enum Side {
+  Left,
+  Right,
+}
+
+pub rt fn side(c: Bool) -> Side {
+  if c { Side.Left } else { Side.Right }
+}
+
+pub rt fn ramp(v: F32, k: F32) -> [F32; N] {
+  var a: [F32; N] = [0.0; N]
+  for j in 0 ..< N {
+    a[j] = v + (k * F32.round_from(j))
+  }
+  a
+}
+
+pub rt fn short_ramp(v: F32) -> [F32; 8] {
+  var a: [F32; 8] = [0.0; 8]
+  for j in 0 ..< 8 {
+    a[j] = v - F32.round_from(j)
+  }
+  a
+}
+
+pub rt fn index(x: F32) -> U32 {
+  U32.trunc_sat_from((x * 8.0) + 8.0) % N
+}
+
+pub rt fn planes(xs: [Span[F32]; 2], i: U32) -> F32 {
+  (xs[0][i] * 2.0) + xs[1][i]
+}
+
+// A literal of the channels that the function holds, at the tail of an `if`, a `match` and a block.
+pub rt fn literal_if(c: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let b = ramp(y, 2.0)
+  planes(if c { [a, b] } else { [b, a] }, index(x))
+}
+
+pub rt fn literal_match(c: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let b = ramp(y, 2.0)
+  planes(match side(c) { Side.Left => [a, b], Side.Right => [b, b] }, index(y))
+}
+
+pub rt fn literal_block(c: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let b = ramp(y, 2.0)
+  planes(if c { { [a, b] } } else { { [b, a] } }, index(x + y))
+}
+
+pub rt fn literal_in_a_tail(c: Bool, d: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let b = ramp(y, 2.0)
+  planes(if c { if d { [a, b] } else { [b, a] } } else { [a, a] }, index(x))
+}
+
+// An element that is an `if` of its own at the tail of an `if`.
+pub rt fn literal_element_if(c: Bool, d: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  let b = ramp(y, 2.0)
+  planes(if c { [if d { a } else { b }, b] } else { [a, if d { b } else { a }] }, index(y))
+}
+
+// The tail is an array of arrays, or an array of views, that the function holds (one value).
+pub rt fn planar_variables(c: Bool, x: F32, y: F32) -> F32 {
+  let ps = [ramp(x, 1.0), ramp(y, 2.0)]
+  let qs = [ramp(y, 3.0), ramp(x, 4.0)]
+  planes(if c { ps } else { qs }, index(x))
+}
+
+pub rt fn planar_variables_match(c: Bool, x: F32, y: F32) -> F32 {
+  let ps = [ramp(x, 1.0), ramp(y, 2.0)]
+  let qs = [ramp(y, 3.0), ramp(x, 4.0)]
+  planes(match side(c) { Side.Left => ps, Side.Right => qs }, index(y))
+}
+
+// An element that is a Copy binding of the arm, changed there (R-486): its value is copied for the call.
+pub rt fn literal_arm_binding(c: Bool, x: F32, y: F32) -> F32 {
+  let b = ramp(y, 2.0)
+  planes(if c {
+    var t = ramp(x, 1.0)
+    t[3] = y
+    [t, b]
+  } else { [b, b] }, index(x))
+}
+
+pub rt fn literal_arm_binding_in_the_else_arm(c: Bool, x: F32, y: F32) -> F32 {
+  let a = ramp(x, 1.0)
+  planes(if c { [a, a] } else {
+    var t = ramp(y, 3.0)
+    t[5] = x
+    [a, t]
+  }, index(y))
+}
+
+pub rt fn literal_arm_binding_in_a_match(c: Bool, x: F32, y: F32) -> F32 {
+  let b = ramp(y, 2.0)
+  planes(match side(c) {
+    Side.Left => {
+      var t = ramp(x, 1.5)
+      t[7] = y
+      [b, t]
+    },
+    Side.Right => [b, b],
+  }, index(x))
+}
+
+// An element that is an array that the arm makes (a call result): a temporary of the call.
+pub rt fn literal_arm_temporary(c: Bool, x: F32, y: F32) -> F32 {
+  let b = ramp(y, 2.0)
+  planes(if c { [ramp(x, 1.0), b] } else { [b, ramp(y, 3.0)] }, index(x))
+}
+
+// A statement of the arm changes a variable of the function that an element names (R-486): the element is read after.
+pub rt fn literal_arm_changes_a_variable(c: Bool, x: F32, y: F32) -> F32 {
+  var o = ramp(x, 1.0)
+  let b = ramp(y, 2.0)
+  planes(if c {
+    o[2] = y
+    [o, b]
+  } else { [b, b] }, index(x))
+}
+
+@export
+pub flow literal_flow(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  literal_if(x > 0.0, x, y) +
+    literal_match(y > 0.0, x, y) +
+    literal_block(x > y, x, y) +
+    literal_in_a_tail(x > 0.0, y > 0.0, x, y)
+}
+
+@export
+pub flow literal_kinds_flow(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  literal_element_if(x > 0.0, y > 0.0, x, y)
+}
+
+@export
+pub flow planar_variables_flow(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  planar_variables(x > 0.0, x, y) + planar_variables_match(y > 0.0, x, y)
+}
+
+@export
+pub flow literal_arm_binding_flow(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  literal_arm_binding(x > 0.0, x, y) +
+    literal_arm_binding_in_the_else_arm(y > 0.0, x, y) +
+    literal_arm_binding_in_a_match(x > y, x, y) +
+    literal_arm_changes_a_variable(x > 0.25, x, y)
+}
+
+@export
+pub flow literal_arm_temporary_flow(x: F32 at sample, y: F32 at sample) -> F32 at sample {
+  literal_arm_temporary(x > 0.0, x, y)
+}

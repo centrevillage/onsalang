@@ -1,0 +1,273 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§11.6"]
+// fixes = 0
+
+// W7-12 U2c2b, R-486, S-196, S-1113 (§5.2, §5.3, §11.6): "他の引数の中で `inout` に渡すか `!` を呼ぶと重なる" and "引数に置いたブロック式や腕の中の代入と
+// `move`、入れ子の呼び出しの `move` の引数も同じ変更で、引数の順によらず E0702 である". The elements of a literal of channels at the tail of an `if`, a `match` or a
+// block are arguments of their own (§5.3, "排他性は要素の場所ごとに検査する"), so a change inside the block that is one element overlaps the place that another element
+// names, in either order, and a change by a statement of the arm before the literal overlaps the place that another argument of the call names. The fields of the generated
+// `In` are arguments of their own too (§11.6), and the field that is an array of channels is one argument at the field whatever the literal inside it: the block of
+// that field changes a variable that another field names ("フィールドは一つの引数", S-196, the middle of nested literals is a unit as the field is). The forms that do not
+// overlap are in values/view_tail_opened_change_ok.onsa. The error is at the later written of the change and the other place (S-799), E0702, no repair
+// candidate (`fixes = 0`). One error per function (P-01).
+
+pub struct Wide {
+  a: F32,
+  b: F32,
+}
+
+pub flow spread(x: [F32; 2] at sample, m: F32 at sample) -> Wide at sample {
+  Wide { a: x[0] + m, b: x[1] + m }
+}
+
+pub fn planes(xs: [Span[F32]; 2]) -> F32 {
+  xs[0][0] + xs[1][0]
+}
+
+pub fn planes_with(xs: [Span[F32]; 2], s: Span[F32]) -> F32 {
+  xs[0][0] + s[0]
+}
+
+pub fn with_planes(s: Span[F32], xs: [Span[F32]; 2]) -> F32 {
+  s[0] + xs[0][0]
+}
+
+pub fn spread_in(i: spread.In) -> F32 {
+  i.m[0]
+}
+
+pub fn bump(inout s: Span[F32]) {
+  s[0] = s[0] + 1.0
+}
+
+// ------------------------------------------------------------------------ a change in an element, a place of another element
+
+pub fn element_block_changes_the_variable_of_the_element_before(c: Bool, y: [F32; 4]) -> F32 {
+  var x: [F32; 4] = [0.0; 4]
+  planes(if c {
+    [x, {
+      x[0] = 1.0 //~ E0702
+      y
+    }]
+  } else { [y, y] })
+}
+
+pub fn element_block_changes_the_variable_of_the_element_after(c: Bool, y: [F32; 4]) -> F32 {
+  var x: [F32; 4] = [0.0; 4]
+  planes(if c {
+    [{
+      x[0] = 1.0
+      y
+    }, x] //~ E0702
+  } else { [y, y] })
+}
+
+pub fn element_block_in_the_else_arm(c: Bool, y: [F32; 4]) -> F32 {
+  var x: [F32; 4] = [0.0; 4]
+  planes(if c { [y, y] } else {
+    [x, {
+      x[1] = 2.0 //~ E0702
+      y
+    }]
+  })
+}
+
+pub fn element_block_in_a_match(k: U32, y: [F32; 4]) -> F32 {
+  var x: [F32; 4] = [0.0; 4]
+  planes(match k {
+    0 => [y, y],
+    _ => [{
+      x[2] = 3.0
+      y
+    }, x], //~ E0702
+  })
+}
+
+pub fn element_block_in_a_block(y: [F32; 4]) -> F32 {
+  var x: [F32; 4] = [0.0; 4]
+  planes({
+    [x, {
+      x[3] = 4.0 //~ E0702
+      y
+    }]
+  })
+}
+
+pub fn element_block_changes_by_an_inout_call(c: Bool, y: [F32; 4]) -> F32 {
+  var x: [F32; 4] = [0.0; 4]
+  planes(if c {
+    [x, {
+      bump(inout x) //~ E0702
+      y
+    }]
+  } else { [y, y] })
+}
+
+pub fn element_block_changes_in_a_loop(c: Bool, n: U32, y: [F32; 4]) -> F32 {
+  var x: [F32; 4] = [0.0; 4]
+  planes(if c {
+    [x, {
+      for _ in 0 ..< n {
+        x[0] = 1.0 //~ E0702
+      }
+      y
+    }]
+  } else { [y, y] })
+}
+
+pub fn element_block_changes_a_part_of_the_variable(c: Bool, y: [F32; 4]) -> F32 {
+  var x: [[F32; 4]; 2] = [[0.0; 4]; 2]
+  planes(if c {
+    [x[0], {
+      x[1][0] = 1.0 //~ E0702
+      y
+    }]
+  } else { [y, y] })
+}
+
+pub fn element_block_in_a_nested_tail(c: Bool, d: Bool, y: [F32; 4]) -> F32 {
+  var x: [F32; 4] = [0.0; 4]
+  planes(if c {
+    if d {
+      [x, {
+        x[0] = 1.0 //~ E0702
+        y
+      }]
+    } else { [y, y] }
+  } else { [y, y] })
+}
+
+pub fn element_block_changes_the_variable_of_another_argument(c: Bool, y: [F32; 4]) -> F32 {
+  var x: [F32; 4] = [0.0; 4]
+  planes_with(if c {
+    [{
+      x[0] = 1.0
+      y
+    }, y]
+  } else { [y, y] }, x) //~ E0702
+}
+
+// --------------------------------------------------- a variable of the arm, named in an element and changed in another
+
+pub fn arm_variable_changed_in_the_block_of_another_element(c: Bool, v: F32, y: [F32; 4]) -> F32 {
+  planes(if c {
+    var t: [F32; 4] = [v; 4]
+    [{
+      t[0] = 1.0
+      y
+    }, t] //~ E0702
+  } else { [y, y] })
+}
+
+pub fn arm_variable_changed_in_the_block_of_the_element_before(c: Bool, v: F32, y: [F32; 4]) -> F32 {
+  planes(if c {
+    var t: [F32; 4] = [v; 4]
+    [t, {
+      t[0] = 1.0 //~ E0702
+      y
+    }]
+  } else { [y, y] })
+}
+
+// ----------------------------------------------- a statement of the arm changes the place that another argument names
+
+pub fn arm_statement_changes_the_variable_of_another_argument(c: Bool, y: [F32; 4]) -> F32 {
+  var x: [F32; 4] = [0.0; 4]
+  planes_with(if c {
+    x[0] = 1.0
+    [x, y]
+  } else { [y, y] }, x) //~ E0702
+}
+
+pub fn arm_statement_changes_the_variable_of_an_argument_before(c: Bool, y: [F32; 4]) -> F32 {
+  var x: [F32; 4] = [0.0; 4]
+  with_planes(x, if c {
+    x[0] = 1.0 //~ E0702
+    [y, y]
+  } else { [y, y] })
+}
+
+// ------------------------------------------- the middle of nested literals: a field that is an array of channels is one argument
+
+pub fn field_array_block_changes_the_variable_of_another_field(v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  spread_in(spread.In {
+    m: x,
+    x: {
+      x[0] = 1.0 //~ E0702
+      [y, y]
+    },
+  })
+}
+
+pub fn field_array_block_changes_the_variable_of_the_field_before(v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  spread_in(spread.In {
+    x: {
+      x[0] = 1.0
+      [y, y]
+    },
+    m: x, //~ E0702
+  })
+}
+
+pub fn field_array_if_block_changes_the_variable_of_another_field(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  spread_in(spread.In {
+    m: x,
+    x: if c {
+      x[0] = 1.0 //~ E0702
+      [y, y]
+    } else { [y, y] },
+  })
+}
+
+pub fn field_array_block_in_the_literal_at_a_tail(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  spread_in(if c {
+    spread.In {
+      m: x,
+      x: {
+        x[0] = 1.0 //~ E0702
+        [y, y]
+      },
+    }
+  } else { spread.In { m: y, x: [y, y] } })
+}
+
+pub fn field_scalar_block_changes_the_variable_of_a_channel(v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  spread_in(spread.In {
+    m: {
+      x[0] = 1.0
+      y
+    },
+    x: [x, y], //~ E0702
+  })
+}
+
+pub fn element_block_of_the_field_changes_the_variable_of_another_field(v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  spread_in(spread.In {
+    m: x,
+    x: [{
+      x[0] = 1.0 //~ E0702
+      y
+    }, y],
+  })
+}
+
+pub fn field_array_block_in_a_match_arm_of_the_tail(k: U32, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  spread_in(match k {
+    0 => spread.In { m: y, x: [y, y] },
+    _ => spread.In {
+      m: x,
+      x: {
+        x[0] = 1.0 //~ E0702
+        [y, y]
+      },
+    },
+  })
+}

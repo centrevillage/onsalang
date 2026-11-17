@@ -3,7 +3,7 @@
 use super::conversions::ConversionCall;
 use super::named::Use;
 use super::*;
-use crate::names::body::PathRes;
+use crate::names::body::{PathRes, receiver};
 use crate::sources::{Cx, written};
 
 impl<'a> Checker<'a> {
@@ -257,6 +257,10 @@ impl<'a> Checker<'a> {
                     }
                     let st2 = self.a.types.subst(st, &targs);
                     self.unify_at(name.span, this, st2)?;
+                }
+                // An array or a `Buf` taken as a `Span` (§5.3) is converted whole.
+                if let (true, Some(base), Some(mode)) = (this != recv, receiver(self.ast, callee), f.self_mode) {
+                    self.info.views.insert(base, View { to: this, mode, tail: true });
                 }
                 let (params, ret) = self.member_sig(md, f, &targs, of);
                 if let Some(exp) = expected {
@@ -514,12 +518,12 @@ impl<'a> Checker<'a> {
     /// The value `x` passed as the view `(elem, planar)` of `pt`
     /// ([`Self::view_param`]) by the mode `mode`: an argument, a field of a
     /// literal of a generated `In` or `Out` (§11.6).
+    /// Each of its tails is converted to `pt` ([`BodyInfo::views`]).
     pub(super) fn view_arg(&mut self, x: ExprId, pt: TyId, (elem, planar): (TyId, Option<Len>), mode: Mode) -> R<()> {
-        let aspan = self.expr(x).span;
-        let at = match (planar, &self.expr(self.ast.without_parens(x)).kind) {
-            (Some(_), ExprKind::Array(parts)) => self.planar_literal(x, parts, elem, mode)?,
-            _ => self.check_expr(x, None)?,
-        };
+        let (aspan, mark) = (self.expr(x).span, self.view_marks.len());
+        let at = self.check_passed(x, None, None, Some(Viewing { elem, planar, mode }));
+        let marks = self.view_marks.split_off(mark);
+        let at = at?;
         // A literal variable is passed as no `Span` (S-860).
         let at_s = self.known_shape(at, aspan, "argument")?;
         let ok = match (planar, self.ty(at_s)) {
@@ -534,6 +538,9 @@ impl<'a> Checker<'a> {
         };
         if !ok {
             return Err(self.not_a_view(aspan, pt, at));
+        }
+        for (e, tail) in marks {
+            self.info.views.insert(e, View { to: pt, mode, tail });
         }
         Ok(())
     }
@@ -567,29 +574,17 @@ impl<'a> Checker<'a> {
     }
 
     /// The type of the planar literal `e` (`[a, b]` at `[Span[elem]; N]`,
-    /// S-196, §5.3): each element is passed as a `Span` of its own, of any
-    /// kind and length, so `[Span[elem]; k]` (`k` checked against `N` by the
-    /// caller), recorded through the parentheses, and the literal as one
-    /// ([`crate::body::BodyInfo::planar`]: the one test). The lowering
-    /// converts each element (`coerce`).
-    fn planar_literal(&mut self, e: ExprId, parts: &[ExprId], elem: TyId, mode: Mode) -> R<TyId> {
-        self.info.planar.insert(self.ast.without_parens(e));
+    /// S-196, §5.3), written there or at a tail of it: each element is
+    /// passed as a `Span` of its own, of any kind and length, so
+    /// `[Span[elem]; k]` (`k` checked against `N` by the caller), and the
+    /// literal as one ([`crate::body::BodyInfo::planar`]: the one test).
+    pub(super) fn planar_literal(&mut self, e: ExprId, parts: &[ExprId], elem: TyId, mode: Mode) -> R<TyId> {
+        self.info.planar.insert(e);
         let view = self.a.types.intern(Ty::Builtin(BuiltinTy::Span, vec![elem]));
         for &x in parts {
-            let (t, at) = (self.check_expr(x, None)?, self.expr(x).span);
-            if !self.views(t, elem, at, mode)? {
-                return Err(self.not_a_view(at, view, t));
-            }
+            self.view_arg(x, view, (elem, None), mode)?;
         }
-        let t = self.a.types.intern(Ty::Array(view, Len::Const(parts.len() as u32)));
-        let mut x = e;
-        loop {
-            self.record(x, t);
-            match self.expr(x).kind {
-                ExprKind::Paren(inner) => x = inner,
-                _ => return Ok(t),
-            }
-        }
+        Ok(self.a.types.intern(Ty::Array(view, Len::Const(parts.len() as u32))))
     }
 
     /// E0401: `found` at `at` is passed where `want`, a `Span` or a planar
@@ -616,7 +611,7 @@ impl<'a> Checker<'a> {
     /// The receiver of an `inout self` method, written with `!` or not, is
     /// an `inout` argument (§5.2, S-178).
     fn inout_receiver(&mut self, callee: ExprId) -> R<()> {
-        match crate::names::body::receiver(self.ast, callee) {
+        match receiver(self.ast, callee) {
             Some(base) if !self.inout_place(base) => {
                 Err(self.no_inout_place(base, "the receiver of an `inout self` method", "§5.2"))
             }

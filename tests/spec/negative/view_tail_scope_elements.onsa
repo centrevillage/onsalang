@@ -1,0 +1,158 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§5.4", "§11.6"]
+// fixes = 0
+
+// W7-12 U2c2b, S-1115 (§5.2, §5.4): "消費しない位置（借用の引数…）の末尾に書いた式が Copy でない値で、その場所の根が、その腕・ブロックの中で
+// 宣言した束縛（腕のパターンの束縛を含む）なら、置けない（E0716）". An element of a literal of channels (`[h, y]`) or a field of the
+// generated `In` that the arm builds is an argument of its own (S-196, "排他性は要素の場所ごとに検査する", §5.3), so its tail is a tail
+// of a borrowed argument: an owned binding of the arm (a `Buf` made there, the binding of the pattern of an arm that owns the matched value)
+// and a part view of a binding of the arm (`t.slice(0, 2)`, whose type is a `Span`, not a Copy value) end with the arm and the call reads
+// them after. The error is at the element, no repair candidate (`fixes = 0`). One error per function (P-01). The same elements written
+// at the argument in a block (the functions `direct_…`) are the contrast, and the Copy binding of the arm that is the element itself
+// (`[t, y]`, the type of the element is a Copy array) is a value that is copied for the call and is in values/view_tail_scope_elements_ok.onsa.
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}
+
+pub fn planes(xs: [Span[F32]; 2]) -> F32 {
+  xs[0][0] + xs[1][0]
+}
+
+pub fn take_in(i: pair.In) -> F32 {
+  i.l[0] + i.r[0]
+}
+
+pub fn gen_planes[T: Copy](xs: [Span[T]; 2]) {}
+
+pub fn mkb() -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(4)
+}
+
+pub fn mko(v: F32) -> Option[[F32; 4]] {
+  Some([v; 4])
+}
+
+pub fn mkob() -> Option[Buf[F32]] uses {Alloc} {
+  Some(Buf.zeroed(4))
+}
+
+// ------------------------------------------------------------------------------------- an owned binding of the arm
+
+pub fn buffer_of_the_arm_in_a_literal(c: Bool, y: Buf[F32]) -> F32 uses {Alloc} {
+  planes(if c {
+    let h = mkb()
+    [h, y] //~ E0716
+  } else { [y, y] })
+}
+
+pub fn buffer_of_the_arm_in_the_second_element(c: Bool, y: Buf[F32]) -> F32 uses {Alloc} {
+  planes(if c { [y, y] } else {
+    let h = mkb()
+    [y, h] //~ E0716
+  })
+}
+
+pub fn buffer_of_the_arm_in_a_match(c: Bool, y: Buf[F32]) -> F32 uses {Alloc} {
+  planes(match c {
+    true => {
+      let h = mkb()
+      [h, y] //~ E0716
+    },
+    false => [y, y],
+  })
+}
+
+pub fn buffer_of_the_arm_in_a_block_tail(y: Buf[F32]) -> F32 uses {Alloc} {
+  planes({
+    let h = mkb()
+    [y, h] //~ E0716
+  })
+}
+
+pub fn direct_buffer_of_the_arm_in_a_block(y: Buf[F32]) -> F32 uses {Alloc} {
+  planes([{
+    let h = mkb()
+    h //~ E0716
+  }, y])
+}
+
+pub fn buffer_of_the_arm_in_a_field(c: Bool, y: [F32; 4]) -> F32 uses {Alloc} {
+  take_in(if c {
+    let h = mkb()
+    pair.In { l: h, r: y } //~ E0716
+  } else { pair.In { l: y, r: y } })
+}
+
+pub fn direct_buffer_of_the_arm_in_a_field_block(y: [F32; 4]) -> F32 uses {Alloc} {
+  take_in(pair.In { l: {
+    let h = mkb()
+    h //~ E0716
+  }, r: y })
+}
+
+// -------------------------------------------------------------------------- the binding of the pattern of an arm that owns
+
+pub fn pattern_binding_of_an_owned_option(c: Bool, y: Buf[F32]) -> F32 uses {Alloc} {
+  planes(match mkob() {
+    Some(b) => [b, y], //~ E0716
+    None => [y, y],
+  })
+}
+
+// ------------------------------------------------------------------------------------ a part view of a binding of the arm
+
+pub fn part_of_a_binding_in_a_literal(c: Bool, v: F32, y: [F32; 4]) -> F32 {
+  planes(if c {
+    var t: [F32; 4] = [v; 4]
+    t[0] = 1.0
+    [t.slice(0, 2), y] //~ E0716
+  } else { [y, y] })
+}
+
+pub fn part_of_the_binding_of_a_call_result(c: Bool, v: F32, y: [F32; 4]) -> F32 {
+  planes(match mko(v) {
+    Some(b) => [b.slice(0, 2), y], //~ E0716
+    None => [y, y],
+  })
+}
+
+pub fn part_of_a_binding_in_a_nested_tail(c: Bool, d: Bool, v: F32, y: [F32; 4]) -> F32 {
+  planes(if c {
+    var t: [F32; 4] = [v; 4]
+    t[0] = 1.0
+    if d { [t.slice(0, 2), y] } else { [y, y] } //~ E0716
+  } else { [y, y] })
+}
+
+pub fn direct_part_of_a_binding_in_a_block(v: F32, y: [F32; 4]) -> F32 {
+  planes([{
+    var t: [F32; 4] = [v; 4]
+    t[0] = 1.0
+    t.slice(0, 2) //~ E0716
+  }, y])
+}
+
+pub fn part_of_a_binding_in_a_field(c: Bool, v: F32, y: [F32; 4]) -> F32 {
+  take_in(if c {
+    var t: [F32; 4] = [v; 4]
+    t[0] = 1.0
+    pair.In { l: t.slice(0, 2), r: y } //~ E0716
+  } else { pair.In { l: y, r: y } })
+}
+
+// ------------------------------------------------------------------------------------------ a generic function, a closure
+
+pub fn part_of_a_binding_in_a_generic_function[T: Copy](c: Bool, v: T, y: [T; 4]) {
+  gen_planes(if c {
+    var t: [T; 4] = [v; 4]
+    t[0] = v
+    [t.slice(0, 2), y] //~ E0716
+  } else { [y, y] })
+}
