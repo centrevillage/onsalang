@@ -15,6 +15,7 @@ mod frozen;
 mod marks;
 mod place;
 mod release;
+mod scoped;
 mod second;
 mod state;
 #[cfg(test)]

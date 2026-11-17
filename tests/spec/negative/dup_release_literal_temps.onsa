@@ -1,0 +1,73 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§8.1", "§11.6", "§12.2"]
+
+// R-483 (§12.2: "一時の値（場所でない値。呼び出しの結果、所有の行のリテラル（§5.4）など）を消費しない位置（借用の引数、受け手、演算子の被演算子、条件、添字とフィールドを読む基）に置くと、それを使う呼び出しか演算が
+// 終わったときに破棄される。… その破棄が `Alloc` を要るかは上の表で決まる。`pass(move b).len()` の `Buf[F32]` … の破棄は要り"): the temporary that is an element of the planar array literal at a borrowed argument
+// (`planes([idb(move a), y])`, "別々の変数にあるときは `[a, b]` / `inout [a, b]` と配列リテラルを引数の位置にだけ書け", §5.3) and the temporary that is a field of the literal of a generated type at a borrowed argument
+// (`useit(pair.In { l: idb(move a), r: y })`, §11.6) are temporaries of the call, so they are dropped when the call ends and the drop of a `Buf` needs `Alloc`: an E0601 in a function without `uses {Alloc}` and in an `rt fn`,
+// as the temporary that is written alone is (`take(idb(move a))`, the control). The temporary is the `Buf[F32]` that `idb(move a)` returns, in any element (the first, the others) and any field. The error is at the
+// temporary (the line of the value that is dropped, one-liners, S-783), the candidate that adds `uses {Alloc}` is not counted (the `fixes` of the units that have one are not written). The temporaries that need no drop
+// (an array that is `Copy`), the elements that are places, and the function that has `Alloc` are in negative/dup_release_literal_temps_ok.onsa. The position of the point where the temporary is dropped is not seen at the command line
+// and is a unit test of the implementation. One error per function (P-01).
+
+pub rt fn idb(move b: Buf[F32]) -> Buf[F32] { b }
+
+pub fn take(s: Span[F32]) -> F32 { s[0] }
+
+pub rt fn take_rt(s: Span[F32]) -> F32 { s[0] }
+
+pub fn planes(xs: [Span[F32]; 2]) -> F32 { xs[0][0] }
+
+pub rt fn planes_rt(xs: [Span[F32]; 2]) -> F32 { xs[0][0] }
+
+pub fn planes3(xs: [Span[F32]; 3]) -> F32 { xs[0][0] }
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}
+
+pub fn useit(i: pair.In) {}
+
+pub rt fn useit_rt(i: pair.In) {}
+
+// ---------------------------------------------------------------------------- controls: a temporary alone
+
+pub fn control_direct(move a: Buf[F32]) -> F32 { take(idb(move a)) }   //~ E0601
+
+pub rt fn control_rt_direct(move a: Buf[F32]) -> F32 { take_rt(idb(move a)) }   //~ E0601
+
+// ------------------------------------------------------------------ an element of the planar literal
+
+pub fn planar_first(move a: Buf[F32], y: Buf[F32]) -> F32 { planes([idb(move a), y]) }   //~ E0601
+
+pub fn planar_second(move a: Buf[F32], y: Buf[F32]) -> F32 { planes([y, idb(move a)]) }   //~ E0601
+
+pub fn planar_middle(move a: Buf[F32], y: Buf[F32]) -> F32 { planes3([y, idb(move a), y]) }   //~ E0601
+
+pub fn planar_last(move a: Buf[F32], y: Buf[F32]) -> F32 { planes3([y, y, idb(move a)]) }   //~ E0601
+
+pub fn planar_view_of_the_temporary(move a: Buf[F32], y: Buf[F32]) -> F32 { planes([idb(move a).slice(0, 2), y.slice(0, 2)]) }   //~ E0601
+
+pub rt fn rt_planar_first(move a: Buf[F32], y: Buf[F32]) -> F32 { planes_rt([idb(move a), y]) }   //~ E0601
+
+pub rt fn rt_planar_second(move a: Buf[F32], y: Buf[F32]) -> F32 { planes_rt([y, idb(move a)]) }   //~ E0601
+
+pub rt fn rt_planar_view_of_the_temporary(move a: Buf[F32], y: Buf[F32]) -> F32 { planes_rt([y.slice(0, 2), idb(move a).slice(0, 2)]) }   //~ E0601
+
+// --------------------------------------------------------------- a field of the literal of a generated type
+
+pub fn generated_in_l(move a: Buf[F32], y: Buf[F32]) { useit(pair.In { l: idb(move a), r: y }) }   //~ E0601
+
+pub fn generated_in_r(move a: Buf[F32], y: Buf[F32]) { useit(pair.In { l: y, r: idb(move a) }) }   //~ E0601
+
+pub fn generated_in_view_of_the_temporary(move a: Buf[F32], y: Buf[F32]) { useit(pair.In { l: idb(move a).slice(0, 2), r: y.slice(0, 2) }) }   //~ E0601
+
+pub rt fn rt_generated_in_l(move a: Buf[F32], y: Buf[F32]) { useit_rt(pair.In { l: idb(move a), r: y }) }   //~ E0601
+
+pub rt fn rt_generated_in_r(move a: Buf[F32], y: Buf[F32]) { useit_rt(pair.In { l: y, r: idb(move a) }) }   //~ E0601

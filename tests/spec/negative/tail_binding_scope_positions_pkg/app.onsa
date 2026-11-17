@@ -1,0 +1,100 @@
+use util.{take, first, same, hb, mkb, mkh, ids, Holder}
+
+pub fn a_view_of_a_var_at_an_argument(c: Bool, y: [F32; 4]) -> F32 {
+  take(if c {
+    var t: [F32; 4] = [1.0; 4]
+    t.slice(0, 2) //~ E0716
+  } else {
+    y.slice(0, 2)
+  })
+}
+
+pub fn a_view_at_a_generic_argument(c: Bool, y: [F32; 4]) -> F32 {
+  first(if c {
+    var t: [F32; 4] = [1.0; 4]
+    t.slice(0, 2) //~ E0716
+  } else {
+    y.slice(0, 2)
+  })
+}
+
+pub fn a_view_of_a_copy_arm_binding(o: Option[[F32; 4]], y: [F32; 4]) -> F32 {
+  take(match o { Some(b) => b.slice(0, 2), None => y.slice(0, 2) }) //~ E0716
+}
+
+pub fn a_buffer_of_the_block(c: Bool, y: Buf[F32]) -> U32 uses {Alloc} {
+  hb(if c {
+    let t = mkb(4)
+    t //~ E0716
+  } else {
+    y
+  })
+}
+
+pub fn the_base_that_an_index_reads(c: Bool, y: [F32; 4]) -> F32 {
+  (if c {
+    var t: [F32; 4] = [1.0; 4]
+    t.slice(0, 2) //~ E0716
+  } else {
+    y.slice(0, 2)
+  })[1]
+}
+
+pub fn the_base_that_a_field_reads() -> U32 uses {Alloc} {
+  hb(({
+    let h = mkh(4)
+    h //~ E0716
+  }).buf)
+}
+
+pub fn the_receiver_of_a_method() -> U32 uses {Alloc} {
+  ({
+    let h = mkh(4)
+    h //~ E0716
+  }).count()
+}
+
+pub fn the_receiver_of_a_method_of_an_arm(move o: Option[Holder], g: Holder) -> U32 uses {Alloc} {
+  (match move o { Some(h) => h, None => g }).count() //~ E0716
+}
+
+pub fn an_operand_of_a_comparison(c: Bool, a: Str, s: Str, u: Str) -> Bool uses {Alloc} {
+  (if c {
+    let t = ids(a)
+    t //~ E0716
+  } else {
+    s
+  }) == u
+}
+
+pub fn an_argument_of_a_generic_comparison(c: Bool, a: Str, s: Str, u: Str) -> Bool uses {Alloc} {
+  same(if c {
+    let t = ids(a)
+    t //~ E0716
+  } else {
+    s
+  }, u)
+}
+
+pub fn control_a_copy_field_of_a_binding() -> U32 uses {Alloc} {
+  ({
+    let h = mkh(4)
+    h.n
+  }) + 1
+}
+
+pub fn control_a_binding_derived_from_a_parameter(c: Bool, g: Holder, h: Holder) -> U32 {
+  hb((if c {
+    let t = g
+    t
+  } else {
+    h
+  }).buf)
+}
+
+pub fn control_a_copy_array_of_the_block(y: [F32; 4]) -> F32 {
+  take(({
+    var t: [F32; 4] = [1.0; 4]
+    t
+  }).slice(0, 2))
+}

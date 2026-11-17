@@ -3542,6 +3542,70 @@ pub fn loops(c: Bool, move xs: [Buf[F32]; 2]) uses {Alloc} {
     assert_eq!(at_of("loops"), [(rest(false), "xs"), (rest(true), "break"), (s(), "break"), (s(), "continue")]);
 }
 
+/// S-1115 (§5.2, §5.4): the note of an E0716 at a head says to take the
+/// binding with `move` only where that makes the row owned with no other
+/// error: its other tails are values made (none, a static `Str`), not a
+/// borrowed place (`y`, which the owned row would consume, E0711).
+#[test]
+fn the_note_of_a_binding_at_a_head() {
+    let notes = |body: &str| {
+        let src = format!("{PRELUDE}pub fn mks() -> Str uses {{Alloc}} {{ \"a\" }}\n{body}");
+        let (_, a) = analyzed(&src);
+        let d = a.diagnostics.iter().filter(|d| d.code == Code::E0716).collect::<Vec<_>>();
+        assert_eq!(d.len(), 1, "{body}: {:?}", a.diagnostics);
+        d[0].notes.iter().map(|n| n.message.clone()).collect::<Vec<_>>()
+    };
+    let take = "`t` is declared here; write `move t` at the tail to take its value (§5.4)";
+    let before = "`t` is declared here; declare it before the `for`";
+    let alone = "pub fn f() uses {Alloc} { for v in ({ let t = mk()
+  t }) { tk(1) } }";
+    assert_eq!(notes(alone), [take]);
+    let other_static = "pub fn f(c: Bool) -> U32 uses {Alloc} { match (if c { let t = mks()
+  t } else { \"abc\" }) { s => s.len() } }";
+    assert_eq!(notes(other_static), [take]);
+    let other_borrowed = "pub fn f(c: Bool, y: Buf[F32]) uses {Alloc} { for v in (if c { let t = mk()
+  t } else { y }) { tk(1) } }";
+    assert_eq!(notes(other_borrowed), [before]);
+}
+
+/// R-483 (§12.2, §5.3, §11.6): a value made where a call borrows it waits
+/// for that call, through a partial view and an index (not their own end),
+/// and as an element of a planar literal or a field of a generated literal
+/// opened at it; dropped once, at the end of the call.
+#[test]
+fn the_temps_wait_for_the_call_that_reads_them() {
+    let (src, a, def) = clean(
+        "pub fn idb(move b: Buf[F32]) -> Buf[F32] uses {Alloc} { b }
+pub fn usein(i: pair.In) {}
+pub fn view_of_a_temp(move a: Buf[F32]) -> U32 uses {Alloc} { rd(idb(move a).slice(0, 1)) }
+pub fn view_of_a_view(move a: Buf[F32]) -> U32 uses {Alloc} { rd(idb(move a).slice(0, 2).slice(0, 1)) }
+pub fn index_of_a_temp() -> U32 uses {Alloc} { len_of(make_array()[0]) }
+pub fn holders() -> [Holder; 2] uses {Alloc} { [Holder { buf: mk(), n: 1 }, Holder { buf: mk(), n: 2 }] }
+pub fn index_alone() -> U32 uses {Alloc} { let n = holders()[0].n
+  n }
+pub fn planar_element(move a: Buf[F32], y: Buf[F32]) uses {Alloc} { planes([y, idb(move a)]) }
+pub fn generated_field(move a: Buf[F32], y: Buf[F32]) uses {Alloc} { usein(pair.In { l: idb(move a), r: y }) }
+",
+    );
+    let ast = onsa_syntax::parse(FileId(0), &src).ast;
+    let at_of = |n: &str| {
+        let info = &a.bodies[&def(&a, n)];
+        let text = |s: onsa_diag::Span| &src[s.start as usize..s.end as usize];
+        let what = |d: &crate::body::DropPoint| match d.what {
+            crate::body::Dropped::Temp(e) => text(ast.expr(e).span),
+            _ => panic!("no other point"),
+        };
+        (info.drops.iter()).map(|d| (what(d), text(d.at))).collect::<Vec<_>>()
+    };
+    assert_eq!(at_of("view_of_a_temp"), [("idb(move a)", "rd(idb(move a).slice(0, 1))")]);
+    assert_eq!(at_of("view_of_a_view"), [("idb(move a)", "rd(idb(move a).slice(0, 2).slice(0, 1))")]);
+    assert_eq!(at_of("index_of_a_temp"), [("make_array()", "len_of(make_array()[0])")]);
+    // An index that nothing waits for drops its base at its own end.
+    assert_eq!(at_of("index_alone"), [("holders()", "holders()[0]")]);
+    assert_eq!(at_of("planar_element"), [("idb(move a)", "planes([y, idb(move a)])")]);
+    assert_eq!(at_of("generated_field"), [("idb(move a)", "usein(pair.In { l: idb(move a), r: y })")]);
+}
+
 /// S-85 (§5.2): a field taken out is kept once (a loop's summary walks it
 /// too, and keeps it not), with its root and path, for the stages after.
 #[test]

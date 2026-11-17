@@ -12,6 +12,7 @@ use onsa_syntax::ast::{BinOp, ExprId, ExprKind, Mode, PatId, PatKind, StmtId, St
 use super::check::Walker;
 use super::drops::Leave;
 use super::place::{Borrowed, head_places, place_of};
+use super::scoped::Reader;
 use super::state::{Joins, LoopSum, Paths, Trail};
 use super::walk::Pos;
 use super::write::How;
@@ -151,6 +152,7 @@ impl Walker<'_> {
                 let owned = borrows.is_none();
                 if let Some(sources) = &borrows {
                     self.view_of_inout(sources, arms.iter().map(|a| a.pat));
+                    self.scoped(*scrutinee, Reader::MATCH);
                 }
                 let head = if owned { Pos::Own } else { Pos::Bind };
                 self.head(r, *scrutinee, head, &arms.iter().map(|a| a.pat).collect::<Vec<_>>());
@@ -209,6 +211,9 @@ impl Walker<'_> {
                     _ => None,
                 };
                 let outer = replace(&mut self.inside.owned_by, by);
+                if pos == Pos::Bind {
+                    self.scoped(*init, Reader::LET);
+                }
                 self.head(r, *init, pos, &[*pat]);
                 self.inside.owned_by = outer;
                 // What it binds to no name is dropped at the end of the statement (S-1036).
@@ -252,6 +257,7 @@ impl Walker<'_> {
                     None if owned => self.expr(r, *iter, Pos::Own),
                     None => {
                         self.view_of_inout(borrows.as_deref().unwrap_or_default(), [*pat]);
+                        self.scoped(*iter, Reader::FOR);
                         self.expr(r, *iter, Pos::Arg(Mode::Borrow))
                     }
                 }

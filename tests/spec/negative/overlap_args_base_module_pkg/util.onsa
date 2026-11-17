@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§11.6", "§15.1"]
+// fixes = 0
+
+// S-1114, S-1115 (§5.2) across modules: the callees, the structs, the flow, and the helpers of this module are used from app.onsa. The overlap of the places of the tails at the base of a view, a field or an
+// index with an `inout` of the same call, and the E0716 of a tail that is a view of a binding of its arm or block, are found at the call, where the places are written, whatever module declares the callee,
+// a type or the generated `In`/`Out` (§11.6, §15.1).
+
+pub fn two_s(s: Span[F32], inout t: Span[F32]) {}
+
+pub fn hs(a: Buf[F32], inout b: Buf[F32]) {}
+
+pub fn hb(a: F32, inout t: [F32; 4]) {}
+
+pub fn take(s: Span[F32]) -> F32 {
+  s[0]
+}
+
+pub fn hbuf(b: Buf[F32]) -> U32 {
+  b.len()
+}
+
+pub fn mkb(n: U32) -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(n)
+}
+
+pub struct Holder {
+  buf: Buf[F32],
+  n: U32,
+}
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}

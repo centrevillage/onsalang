@@ -1,0 +1,56 @@
+use util.{two_s, hs, hb, take, hbuf, mkb, Holder, pair}
+
+pub fn a_view_of_the_tails(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_s((if c { x } else { y }).slice(0, 2), inout x) //~ E0702
+}
+
+pub fn a_view_of_a_view_of_the_tails(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  two_s((if c { y } else { x }).slice(0, 2).slice(0, 1), inout x) //~ E0702
+}
+
+pub fn a_field_of_the_tails(c: Bool, inout h: Holder, g: Holder) {
+  hs((if c { h } else { g }).buf, inout h.buf) //~ E0702
+}
+
+pub fn an_element_of_the_tails(c: Bool) {
+  var x: [F32; 4] = [0.0; 4]
+  var y: [F32; 4] = [0.0; 4]
+  hb((if c { x } else { y })[0], inout x) //~ E0702
+}
+
+pub fn a_field_of_a_generated_literal() {
+  var x: [F32; 2] = [0.0; 2]
+  var y: [F32; 2] = [0.0; 2]
+  two_s(pair.In { l: x, r: y }.l, inout x) //~ E0702
+}
+
+pub fn a_field_of_a_generated_out(c: Bool, inout o: pair.Out, p: pair.Out) {
+  two_s((if c { o } else { p }).l, inout o.l) //~ E0702
+}
+
+pub fn a_view_of_a_binding_of_the_arm(c: Bool, y: [F32; 4]) -> F32 {
+  take(if c {
+    var t: [F32; 4] = [1.0; 4]
+    t.slice(0, 2) //~ E0716
+  } else {
+    y.slice(0, 2)
+  })
+}
+
+pub fn a_buffer_of_the_block(move a: Buf[F32]) -> U32 uses {Alloc} {
+  hbuf({
+    let t = move a
+    t //~ E0716
+  })
+}
+
+pub fn a_new_buffer_of_the_block() -> U32 uses {Alloc} {
+  hbuf({
+    var t: Buf[F32] = mkb(4)
+    t //~ E0716
+  })
+}

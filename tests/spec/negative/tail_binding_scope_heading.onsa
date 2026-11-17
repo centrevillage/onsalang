@@ -1,0 +1,247 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§7"]
+// fixes = 0
+
+// S-1115 (§5.2, §5.4): "借用の引数と借用の行の見出し（`for`・`match`、§5.4）の末尾に、その腕・ブロックの中で宣言した束縛 … を根とする部分ビューと、そういう Copy でない束縛の場所は置けない（E0716）".
+// The heading of a `for` and of a `match` over a place or a view is a borrowed row ("`for s in xs`（`xs` は任意の場所 …）"、"`match x` の腕の束縛（`x` は任意の場所 …）"), and the tails of
+// an `if`, a `match` or a block that is the heading are the places it borrows from, read by the body or the arms after the arm or the block of the tail ends. So a tail that is a part
+// view rooted at a variable the arm or the block declares (`t.slice(0, 2)`), or that variable itself when it is not `Copy` (a `Buf`, an `Option` that holds one), or the part view of the
+// binding of an arm that owns its value, is an E0716 at the tail expression (the line of the view or of the binding). No repair candidate (`fixes = 0`: the writer declares the binding
+// before the heading). One error per function (P-01). The part view of the heading itself (`for v in (if c { a } else { b }).slice(0, 2)`) is a heading of the owned row in
+// negative/tail_binding_scope_heading_base.onsa. The tails that stay are in values/tail_binding_scope_ok.onsa. The `let` of a view is initialized by a call (`mk4()`): a `let` of a static value or
+// of a literal that needs no drop (`let t = [1.0; 4]`) needs no drop (S-1118, §5.4) and is in values/tail_binding_scope_nodrop_ok.onsa; a `var` is an owned binding whatever it is initialized with.
+
+pub fn take(s: Span[F32]) -> F32 {
+  s[0]
+}
+
+pub fn mkb(n: U32) -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(n)
+}
+
+pub fn mk4() -> [F32; 4] {
+  [1.0; 4]
+}
+
+pub fn mk(v: F32) -> Option[[F32; 4]] {
+  Some([v; 4])
+}
+
+// ------------------------------------------------------------ `for` over a view of a local binding
+
+pub fn for_if_then_arm(c: Bool, y: [F32; 4]) -> F32 {
+  var s: F32 = 0.0
+  for v in if c {
+    var t: [F32; 4] = [1.0; 4]
+    t[0] = 2.0
+    t.slice(0, 2) //~ E0716
+  } else {
+    y.slice(0, 2)
+  } {
+    s = s + v
+  }
+  s
+}
+
+pub fn for_if_else_arm(c: Bool, y: [F32; 4]) -> F32 {
+  var s: F32 = 0.0
+  for v in if c {
+    y.slice(0, 2)
+  } else {
+    let t: [F32; 4] = mk4()
+    t.slice(0, 2) //~ E0716
+  } {
+    s = s + v
+  }
+  s
+}
+
+pub fn for_a_block_in_a_parenthesis() -> F32 {
+  var s: F32 = 0.0
+  for v in ({
+    var t: [F32; 4] = [1.0; 4]
+    t[0] = 2.0
+    t.slice(0, 2) //~ E0716
+  }) {
+    s = s + v
+  }
+  s
+}
+
+pub fn for_an_if_in_a_parenthesis(c: Bool, y: [F32; 4]) -> F32 {
+  var s: F32 = 0.0
+  for v in (if c {
+    let t: [F32; 4] = mk4()
+    t.slice(1, 3) //~ E0716
+  } else {
+    y.slice(0, 2)
+  }) {
+    s = s + v
+  }
+  s
+}
+
+pub fn for_an_arm_of_a_match(k: U32, y: [F32; 4]) -> F32 {
+  var s: F32 = 0.0
+  for v in match k {
+    0 => {
+      var t: [F32; 4] = [1.0; 4]
+      t.slice(0, 2) //~ E0716
+    },
+    _ => y.slice(0, 2),
+  } {
+    s = s + v
+  }
+  s
+}
+
+pub fn for_a_tail_in_a_tail(c: Bool, d: Bool, y: [F32; 4]) -> F32 {
+  var s: F32 = 0.0
+  for v in if c {
+    if d {
+      let t: [F32; 4] = mk4()
+      t.slice(0, 2) //~ E0716
+    } else {
+      y.slice(0, 2)
+    }
+  } else {
+    y.slice(1, 3)
+  } {
+    s = s + v
+  }
+  s
+}
+
+pub fn for_a_view_of_a_buffer(c: Bool, y: [F32; 4]) -> F32 uses {Alloc} {
+  var s: F32 = 0.0
+  for v in if c {
+    var t: Buf[F32] = mkb(4)
+    t.slice(0, 2) //~ E0716
+  } else {
+    y.slice(0, 2)
+  } {
+    s = s + v
+  }
+  s
+}
+
+pub fn for_a_view_of_a_view(c: Bool, y: [F32; 4]) -> F32 {
+  var s: F32 = 0.0
+  for v in if c {
+    var t: [F32; 4] = [1.0; 4]
+    t.slice(0, 3).slice(0, 2) //~ E0716
+  } else {
+    y.slice(0, 2)
+  } {
+    s = s + v
+  }
+  s
+}
+
+pub fn for_the_binding_of_an_arm_that_owns_its_value(v: F32, y: [F32; 4]) -> F32 {
+  var s: F32 = 0.0
+  for e in (match mk(v) { Some(b) => b.slice(0, 2), None => y.slice(0, 2) }) { //~ E0716
+    s = s + e
+  }
+  s
+}
+
+// ---------------------------------------------------- `for` over a local binding that is not `Copy`
+
+pub fn for_a_buffer(c: Bool, y: Buf[F32]) -> F32 uses {Alloc} {
+  var s: F32 = 0.0
+  for v in if c {
+    var t: Buf[F32] = mkb(4)
+    t[0] = 2.0
+    t //~ E0716
+  } else {
+    y
+  } {
+    s = s + v
+  }
+  s
+}
+
+pub fn for_a_moved_parameter(c: Bool, move a: Buf[F32], y: Buf[F32]) -> F32 uses {Alloc} {
+  var s: F32 = 0.0
+  for v in if c {
+    let t = move a
+    t //~ E0716
+  } else {
+    y
+  } {
+    s = s + v
+  }
+  s
+}
+
+pub fn for_a_buffer_of_a_block() -> F32 uses {Alloc} {
+  var s: F32 = 0.0
+  for v in ({
+    var t: Buf[F32] = mkb(4)
+    t //~ E0716
+  }) {
+    s = s + v
+  }
+  s
+}
+
+// ------------------------------------------------------------------------------------------ `match`
+
+pub fn match_a_view_of_a_local_binding(c: Bool, y: [F32; 4]) -> F32 {
+  match if c {
+    var t: [F32; 4] = [1.0; 4]
+    t.slice(0, 2) //~ E0716
+  } else {
+    y.slice(0, 2)
+  } {
+    s => take(s),
+  }
+}
+
+pub fn match_a_view_of_a_block(y: [F32; 4]) -> F32 {
+  match ({
+    let t: [F32; 4] = mk4()
+    t.slice(0, 2) //~ E0716
+  }) {
+    s => take(s),
+  }
+}
+
+pub fn match_an_option_that_holds_a_buffer(c: Bool, y: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match if c {
+    var t: Option[Buf[F32]] = Some(mkb(4))
+    t = None
+    t //~ E0716
+  } else {
+    y
+  } {
+    Some(b) => b.len(),
+    None => 0,
+  }
+}
+
+pub fn match_a_moved_option(c: Bool, move a: Option[Buf[F32]], y: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  match if c {
+    let t = move a
+    t //~ E0716
+  } else {
+    y
+  } {
+    Some(b) => b.len(),
+    None => 0,
+  }
+}
+
+pub fn match_an_arm_of_a_match(k: U32, y: [F32; 4]) -> F32 {
+  match match k {
+    0 => {
+      var t: [F32; 4] = [1.0; 4]
+      t.slice(0, 2) //~ E0716
+    },
+    _ => y.slice(0, 2),
+  } {
+    s => take(s),
+  }
+}

@@ -10,6 +10,7 @@ use super::calls::Takes;
 use super::check::{Changed, Walker};
 use super::flow::Run;
 use super::place::{ByRoot, Place, place_of};
+use super::scoped::Reader;
 use crate::Kind;
 use crate::body::LocalId;
 use crate::sources::{Cx, Leaf, Open, What, leaves};
@@ -60,7 +61,8 @@ impl Walker<'_> {
     /// Each argument is evaluated before the call, so the order is not what
     /// counts, and a value made of a place (`xs.fill!(xs.len())`) is no
     /// place. A borrow binding that is not Copy stands for the places it
-    /// derives from (S-796). And the places passed, by their roots too
+    /// derives from (S-796). The leaves of a borrowed one are E0716's
+    /// ([`Walker::ends_inside`]). And the places passed, by their roots too
     /// (looked up there: linear in the places of no root in common), for
     /// the changes made in the other arguments ([`Walker::changed_in_args`]).
     pub(super) fn exclusive(
@@ -75,7 +77,11 @@ impl Walker<'_> {
         });
         let mut passed = Vec::new();
         for (x, m) in receiver.into_iter().chain(params) {
-            for leaf in leaves(self.cx(), x, Open::Arg) {
+            let leaves = leaves(self.cx(), x, Open::Arg);
+            if m == Mode::Borrow {
+                self.ends_inside(&leaves, x, Reader::CALL);
+            }
+            for leaf in leaves {
                 let What::Place(b) = leaf.what else { continue };
                 let Some(place) = place_of(self.ast, self.names, b) else {
                     bug(Some(self.ast.expr(b).span), "a place leaf with no place")

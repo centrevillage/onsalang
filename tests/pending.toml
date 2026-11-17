@@ -36,13 +36,6 @@ note = "型の大きさと状態の領域が U32 を超える（ターゲット�
 
 [[pending]]
 kind = "diag-code"
-target = "E0716"
-reasons = ["S-1115"]
-until = "W7-12"
-note = "借用の位置の末尾の、腕・ブロックの中の束縛（W7-12 U2c1 の寿命の述語）"
-
-[[pending]]
-kind = "diag-code"
 target = "E0808"
 reasons = ["S-88", "R-100", "S-151", "S-132"]
 until = "W7-14"

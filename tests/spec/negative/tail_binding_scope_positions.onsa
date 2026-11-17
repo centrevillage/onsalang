@@ -1,0 +1,311 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§12.2"]
+// fixes = 0
+
+// S-1115 (§5.2, the supplement B1): "E0716 の位置は、消費しない位置（借用の引数と受け手、演算子の被演算子（`assert` を含む）、添字とフィールドを読む基、§12.2）と借用の行の見出し … とする", and the judgment
+// "末尾に書いた式が Copy でない値で、その場所の根が、その腕・ブロックの中で宣言した束縛 … なら、置けない（E0716）". The positions that are not a borrowed argument: the base that an index reads
+// (`(if c { … t.slice(0, 2) } else { … })[1]`), the base that a field reads, an operand of an operator and of `assert` (`(if c { let t = ids(a) … t } else { s }) == u`), and the receiver
+// (§5.3: "受け手は `self` の引数"). The storage of the binding ends at the end of the arm or of the block, and the index, the field, the operation or the method reads the value after it (§12.2:
+// "一時の値 … を消費しない位置 … に置くと、それを使う呼び出しか演算が終わったときに破棄される"). The tail is a part view of a binding of its arm or block, or the binding itself that is not `Copy` (a `Buf`, a
+// struct that holds one, an owned `Str` (a `Dup` value that is not `Copy`), a value of a type parameter `T: PartialEq`, the binding of an arm that owns its value). The error is at the tail expression (the line of
+// the view or of the binding; the judgment is on the tail that is written, so the `Copy` field `.n` or the element `[0]` that is read from the base does not make it pass: `h` and `t` are not `Copy`), no repair candidate (`fixes = 0`: the writer declares the binding before the expression). One error per function (P-01). The tails that stay (a `Copy` value, a binding
+// derived from a place outside, a binding that needs no drop) are in values/tail_binding_scope_positions_ok.onsa and values/tail_binding_scope_nodrop_ok.onsa. The same positions across modules are in
+// negative/tail_binding_scope_positions_pkg/.
+
+use std.array
+
+pub struct Holder {
+  buf: Buf[F32],
+  n: U32,
+}
+
+pub fn take(s: Span[F32]) -> F32 {
+  s[0]
+}
+
+pub fn first[T: Copy](s: Span[T]) -> T {
+  s[0]
+}
+
+pub fn hb(b: Buf[F32]) -> U32 {
+  b.len()
+}
+
+pub fn mkb(n: U32) -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(n)
+}
+
+pub fn mkh(n: U32) -> Holder uses {Alloc} {
+  Holder { buf: mkb(n), n: n }
+}
+
+pub fn ids(a: Str) -> Str {
+  a
+}
+
+// ------------------------------------------------------------------------- the base that an index reads
+
+pub fn index_if_view_of_a_var(c: Bool, y: [F32; 4]) -> F32 {
+  (if c {
+    var t: [F32; 4] = [1.0; 4]
+    t[0] = 2.0
+    t.slice(0, 2) //~ E0716
+  } else {
+    y.slice(0, 2)
+  })[1]
+}
+
+pub fn index_if_else_arm(c: Bool, y: [F32; 4]) -> F32 {
+  (if c {
+    y.slice(0, 2)
+  } else {
+    var t: [F32; 4] = [1.0; 4]
+    t.slice(1, 3) //~ E0716
+  })[0]
+}
+
+pub fn index_match_view_of_a_copy_arm_binding(o: Option[[F32; 4]], y: [F32; 4]) -> F32 {
+  (match o { Some(b) => b.slice(0, 2), None => y.slice(0, 2) })[1] //~ E0716
+}
+
+pub fn index_match_view_of_a_moved_option(move o: Option[[F32; 4]], y: [F32; 4]) -> F32 {
+  (match move o { Some(b) => b.slice(0, 2), None => y.slice(0, 2) })[1] //~ E0716
+}
+
+pub fn index_block_view_of_a_var() -> F32 {
+  ({
+    var t: [F32; 4] = [1.0; 4]
+    t.slice(0, 2) //~ E0716
+  })[1]
+}
+
+pub fn index_a_buffer_of_the_block(c: Bool, y: Buf[F32]) -> F32 uses {Alloc} {
+  (if c {
+    let t = mkb(4)
+    t //~ E0716
+  } else {
+    y
+  })[0]
+}
+
+pub fn index_the_view_in_an_expression(c: Bool, y: [F32; 4]) -> F32 {
+  1.0 + (if c {
+    var t: [F32; 4] = [1.0; 4]
+    t.slice(0, 2) //~ E0716
+  } else {
+    y.slice(0, 2)
+  })[1]
+}
+
+// ------------------------------------------------------------------------- the base that a field reads
+
+pub fn field_a_struct_of_the_block() -> U32 uses {Alloc} {
+  hb(({
+    let h = mkh(4)
+    h //~ E0716
+  }).buf)
+}
+
+pub fn field_a_moved_struct_of_the_block(move hh: Holder) -> U32 uses {Alloc} {
+  hb(({
+    let h = move hh
+    h //~ E0716
+  }).buf)
+}
+
+pub fn hn(n: U32) -> U32 {
+  n
+}
+
+pub fn field_a_copy_field_of_the_struct_of_the_block() -> U32 uses {Alloc} {
+  hn(({
+    let h = mkh(4)
+    h //~ E0716
+  }).n)
+}
+
+pub fn field_a_struct_of_an_if(c: Bool, g: Holder) -> U32 uses {Alloc} {
+  hb((if c {
+    var h = mkh(4)
+    h.n = 2
+    h //~ E0716
+  } else {
+    g
+  }).buf)
+}
+
+pub fn field_a_struct_of_a_moved_option(move o: Option[Holder], g: Holder) -> U32 uses {Alloc} {
+  hb((match move o { Some(h) => h, None => g }).buf) //~ E0716
+}
+
+pub fn field_then_a_view(c: Bool, g: Holder) -> F32 uses {Alloc} {
+  take((if c {
+    let h = mkh(4)
+    h //~ E0716
+  } else {
+    g
+  }).buf.slice(0, 2))
+}
+
+// ------------------------------------------------------------------------- an operand of an operator
+
+pub fn operand_left(c: Bool, a: Str, s: Str, u: Str) -> Bool uses {Alloc} {
+  (if c {
+    let t = ids(a)
+    t //~ E0716
+  } else {
+    s
+  }) == u
+}
+
+pub fn operand_right(c: Bool, a: Str, s: Str, u: Str) -> Bool uses {Alloc} {
+  u == (if c {
+    let t = ids(a)
+    t //~ E0716
+  } else {
+    s
+  })
+}
+
+pub fn operand_not_equal(c: Bool, a: Str, s: Str, u: Str) -> Bool uses {Alloc} {
+  (if c {
+    s
+  } else {
+    let t = ids(a)
+    t //~ E0716
+  }) != u
+}
+
+pub fn operand_a_block(a: Str, u: Str) -> Bool uses {Alloc} {
+  ({
+    let t = ids(a)
+    t //~ E0716
+  }) == u
+}
+
+pub fn operand_the_binding_of_an_arm_that_owns_its_value(move o: Option[Str], s: Str, u: Str) -> Bool uses {Alloc} {
+  (match move o { Some(b) => b, None => s }) == u //~ E0716
+}
+
+pub fn operand_of_a_type_parameter[T: PartialEq](c: Bool, move a: T, s: T, u: T) -> Bool uses {Alloc} {
+  (if c {
+    let t = move a
+    t //~ E0716
+  } else {
+    s
+  }) == u
+}
+
+pub fn operand_in_a_condition(c: Bool, a: Str, s: Str, u: Str) -> U32 uses {Alloc} {
+  if ({
+    let t = ids(a)
+    t //~ E0716
+  }) == u {
+    1
+  } else {
+    0
+  }
+}
+
+// ------------------------------------------------------------------------------------ `assert`
+
+pub fn assert_operand(c: Bool, a: Str, s: Str, u: Str) uses {Alloc} {
+  assert (if c {
+    let t = ids(a)
+    t //~ E0716
+  } else {
+    s
+  }) == u
+}
+
+pub fn assert_operand_of_a_type_parameter[T: PartialEq](c: Bool, move a: T, s: T, u: T) uses {Alloc} {
+  assert (if c {
+    s
+  } else {
+    let t = move a
+    t //~ E0716
+  }) == u
+}
+
+// ------------------------------------------------------------------------------- the receiver
+
+pub fn receiver_view_of_a_var(c: Bool, y: [F32; 4]) -> U32 {
+  (if c {
+    var t: [F32; 4] = [1.0; 4]
+    t.slice(0, 2) //~ E0716
+  } else {
+    y.slice(0, 2)
+  }).len()
+}
+
+pub fn receiver_a_buffer_of_the_block() -> U32 uses {Alloc} {
+  ({
+    let t = mkb(4)
+    t //~ E0716
+  }).len()
+}
+
+pub fn receiver_the_buffer_of_an_arm_that_owns_its_value(move o: Option[Buf[F32]], y: Buf[F32]) -> U32 uses {Alloc} {
+  (match move o { Some(b) => b, None => y }).len() //~ E0716
+}
+
+pub fn receiver_view_of_the_arm_binding_of_a_call(c: Bool, y: [F32; 4]) -> U32 {
+  (if c {
+    let t: [F32; 4] = mk4()
+    t.slice(0, 3) //~ E0716
+  } else {
+    y.slice(0, 2)
+  }).len()
+}
+
+pub fn mk4() -> [F32; 4] {
+  [1.0; 4]
+}
+
+pub fn receiver_then_a_method_that_reads(c: Bool, y: [F32; 4]) -> Option[F32] {
+  (if c {
+    var t: [F32; 4] = [1.0; 4]
+    t.slice(0, 3) //~ E0716
+  } else {
+    y.slice(0, 2)
+  }).get(1)
+}
+
+// -------------------------------------------------------------------- a generic callee, a closure
+
+pub fn generic_callee(c: Bool, y: [F32; 4]) -> F32 {
+  first(if c {
+    var t: [F32; 4] = [1.0; 4]
+    t.slice(0, 2) //~ E0716
+  } else {
+    y.slice(0, 2)
+  })
+}
+
+pub fn generic_callee_with_an_explicit_argument(c: Bool, y: [U32; 4]) -> U32 {
+  first::[U32](if c {
+    var t: [U32; 4] = [1; 4]
+    t.slice(0, 2) //~ E0716
+  } else {
+    y.slice(0, 2)
+  })
+}
+
+pub fn in_a_closure() -> [F32; 3] {
+  array.from_fn(fn(i: U32) -> F32 {
+    take({
+      var t: [F32; 4] = [1.0; 4]
+      t.slice(0, 2) //~ E0716
+    })
+  })
+}
+
+pub fn in_a_closure_an_index_base() -> [F32; 3] {
+  array.from_fn(fn(i: U32) -> F32 {
+    ({
+      var t: [F32; 4] = [1.0; 4]
+      t.slice(0, 2) //~ E0716
+    })[1]
+  })
+}

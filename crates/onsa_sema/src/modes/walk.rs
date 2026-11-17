@@ -9,6 +9,7 @@ use super::check::Walker;
 use super::drops::Leave;
 use super::flow::Run;
 use super::place::{Place, Proj, hole_place, pattern_places, place_of};
+use super::scoped::Reader;
 use crate::Kind;
 use crate::body::{Dropped, Taken, Target};
 use crate::sources::planar_parts;
@@ -131,21 +132,31 @@ impl<'a> Walker<'a> {
                 self.expr(r, *len, Pos::Read);
                 self.repeated(r, e, *elem, element);
             }
-            // The base waits for the index (§3.5), then is read.
+            // The base waits for the index (§3.5), then is read; for the
+            // consumer that waits for the element, if any (R-483: `Walker::temps`).
             ExprKind::Index { base, index } => {
                 let values = r.items();
+                self.scoped(*base, Reader::INDEX);
                 self.expr(r, *base, Pos::Arg(Mode::Borrow));
-                self.waits(r, *base, Pos::Arg(Mode::Borrow));
+                if !pos.waits() {
+                    self.waits(r, *base, Pos::Arg(Mode::Borrow));
+                }
                 self.expr(r, *index, Pos::Read);
                 self.ran(r, values, ast.expr(e).span);
             }
             // A path of a value made here (D2): consumed, the rest of it is dropped there; else the whole, after.
             ExprKind::Field { base, .. } | ExprKind::TupleIndex { base, .. } => match pos.consumes() {
                 true => self.take_out(r, e, pos),
-                false => self.expr(r, *base, if pos.waits() { pos } else { Pos::Read }),
+                false => {
+                    self.scoped(*base, Reader::FIELD);
+                    self.expr(r, *base, if pos.waits() { pos } else { Pos::Read })
+                }
             },
+            // An operand is read by the operation (§12.2: E0716).
+            ExprKind::Binary { lhs, rhs, .. } => [*lhs, *rhs].into_iter().for_each(|x| self.operand(r, x)),
+            ExprKind::Unary { expr, .. } => self.operand(r, *expr),
             ExprKind::Call { callee, args, kind } => {
-                self.call(r, e, *callee, args, *kind);
+                self.call(r, e, (*callee, args, *kind), pos);
                 // `panic`, which does not come back (§7).
                 if self.info.diverging.expr(e) {
                     r.cur.stop();
@@ -157,6 +168,12 @@ impl<'a> Walker<'a> {
         if !pos.consumes() && !pos.waits() && pos != Pos::Unknown && self.made(e, false) {
             self.drop_point(r, ast.expr(e).span, Dropped::Temp(e), (true, None));
         }
+    }
+
+    /// The operand `x` of an operator, read.
+    fn operand(&mut self, r: &mut Run, x: ExprId) {
+        self.scoped(x, Reader::OPERATION);
+        self.expr(r, x, Pos::Read);
     }
 
     /// Whether `e` makes a new value that needs a drop where nothing

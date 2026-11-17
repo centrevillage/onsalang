@@ -37,10 +37,12 @@ pub(super) enum Takes {
 type Takings = (Option<Mode>, Vec<Takes>);
 
 impl Walker<'_> {
-    /// The call `e` of `callee` with `args`, of the form `kind`. Of a callee
-    /// the walk does not know (§18.1: a value of the error type), the marks
-    /// and the moves are not checked.
-    pub(super) fn call(&mut self, r: &mut Run, e: ExprId, callee: ExprId, args: &[Arg], kind: CallKind) {
+    /// The call `e` of `callee` with `args`, of the form `kind`, at `pos`. Of
+    /// a callee the walk does not know (§18.1: a value of the error type),
+    /// the marks and the moves are not checked. A partial view where a
+    /// consumer waits (`pos`) leaves the values made in its base to wait for
+    /// that consumer, which reads the view (R-483: `Walker::temps`).
+    pub(super) fn call(&mut self, r: &mut Run, e: ExprId, (callee, args, kind): (ExprId, &[Arg], CallKind), pos: Pos) {
         let Some((recv, takes)) = self.takes(e, callee, args.len()) else {
             self.expr(r, callee, Pos::Read);
             return args.iter().for_each(|a| self.expr(r, a.expr, Pos::Unknown));
@@ -71,7 +73,9 @@ impl Walker<'_> {
             Some((base, Mode::Inout)) => self.write_place(r, base, How::Bang),
             Some((base, m)) => {
                 self.expr(r, base, Pos::Arg(m));
-                self.waits(r, base, Pos::Arg(m));
+                if !(pos.waits() && self.cx().view_base(e).is_some()) {
+                    self.waits(r, base, Pos::Arg(m));
+                }
             }
             None => {}
         }

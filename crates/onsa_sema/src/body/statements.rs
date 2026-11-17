@@ -34,7 +34,7 @@ impl<'a> Checker<'a> {
                 if self.unread_root(*target) {
                     return Err(self.held_stop());
                 }
-                if !self.is_place(*target) {
+                if self.names.place_root(self.ast, *target).is_none() {
                     let span = self.expr(*target).span;
                     let msg = "assignment needs a place: a `var`, or a field / element of one (§5.1)";
                     let mut d = Diagnostic::new(Stage::Types, Code::E0415, span, msg).with_found(self.src(span));
@@ -52,7 +52,8 @@ impl<'a> Checker<'a> {
                             "a tuple is not a place; take the value apart with `let ({names}) = {value}`, then assign each: {each} (§5.1)"
                         );
                         let words = "a tuple is not a place; take the value apart with `let`, then assign each part to its place (§5.1)";
-                        let written = parts.iter().all(|&p| self.is_place(p)) && !rule.contains('\n');
+                        let written =
+                            parts.iter().all(|&p| self.names.place_root(self.ast, p).is_some()) && !rule.contains('\n');
                         d = d.with_rule(if written { rule } else { words.to_string() });
                     }
                     return Err(self.diag(d));
@@ -184,14 +185,6 @@ impl<'a> Checker<'a> {
                 Err(self.err(Code::E0401, span, format!("{shown} cannot be iterated (§7)")))
             }
         }
-    }
-
-    /// A place expression (§5.1): a local, or a field / element / tuple element of a place
-    /// ([`onsa_syntax::ast::Ast::place_root_node`], the one definition of the form),
-    /// whose root the record has as a local (`self` included).
-    pub(super) fn is_place(&self, e: ExprId) -> bool {
-        let root = self.ast.place_root_node(e);
-        root.is_some_and(|r| matches!(self.names.paths.get(&r), Some(PathRes::Local(_))))
     }
 
     /// The place `e` or one it is a part of is an item whose heading a syntax

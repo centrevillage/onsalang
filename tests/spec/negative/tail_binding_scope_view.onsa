@@ -1,0 +1,288 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§5.4"]
+// fixes = 0
+
+// S-1115 (§5.2): "借用の引数と借用の行の見出し（`for`・`match`、§5.4）の末尾に、その腕・ブロックの中で宣言した束縛（腕のパターンの束縛を含む）を根とする部分ビューと、
+// そういう Copy でない束縛の場所は置けない（E0716）。束縛はその腕・ブロックの終わりで破棄され、呼び出しと見出しはその後に読むからである". The tail of an `if`,
+// a `match` or a block at a borrowed argument is read by the call after the arm or the block ends, so a part view that is rooted at a variable the arm or the block
+// declares (`t.slice(0, 2)` of a `var` or a `let`, a field or an element of it, a view of a view) is a view of a storage that is gone, whatever the type of the element
+// is (a `Copy` array is no exception: it is the view that is not copied) and whatever the arm is (the arm that is not run too). The error is at the tail expression (the line of the view, §18.1),
+// no repair candidate (`fixes = 0`: the writer puts the binding before the call). One error per function (P-01). The binding itself of a `Copy` array
+// (copied to the temporary of the call), a binding derived from a place outside and a binding before the call are in values/tail_binding_scope_ok.onsa, the arm bindings in
+// negative/tail_binding_scope_arm.onsa, the non-Copy bindings in negative/tail_binding_scope_affine.onsa, the headings of `for` and `match` in
+// negative/tail_binding_scope_heading.onsa. The `let` of a view is initialized by a call (`mk4()`): a `let` of a static value or of a literal that needs no drop (`let t = [1.0; 4]`) is a binding that needs no drop
+// (S-1118, §5.4), which the view does not point at the storage of, and is in values/tail_binding_scope_nodrop_ok.onsa; a `var` is an owned binding whatever it is initialized with.
+
+pub struct Holder {
+  buf: Buf[F32],
+  n: U32,
+}
+
+pub fn take(s: Span[F32]) -> F32 {
+  s[0]
+}
+
+pub fn take_u(s: Span[U32]) -> U32 {
+  s[0]
+}
+
+pub fn take_t(s: Span[(F32, F32)]) -> F32 {
+  s[0].0
+}
+
+pub fn take_a(s: Span[[F32; 2]]) -> F32 {
+  s[0][0]
+}
+
+pub fn take2(s: Span[F32], t: Span[F32]) -> F32 {
+  s[0] + t[0]
+}
+
+pub fn mkb(n: U32) -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(n)
+}
+
+pub fn mk4() -> [F32; 4] {
+  [1.0; 4]
+}
+
+// ------------------------------------------------------ the binding is declared in an arm of an `if`
+
+pub fn if_then_arm_var(c: Bool, y: [F32; 4]) -> F32 {
+  take(if c {
+    var t: [F32; 4] = [1.0; 4]
+    t[0] = 2.0
+    t.slice(0, 2) //~ E0716
+  } else {
+    y.slice(0, 2)
+  })
+}
+
+pub fn if_then_arm_let(c: Bool, y: [F32; 4]) -> F32 {
+  take(if c {
+    let t: [F32; 4] = mk4()
+    t.slice(0, 2) //~ E0716
+  } else {
+    y.slice(0, 2)
+  })
+}
+
+pub fn if_else_arm(c: Bool, y: [F32; 4]) -> F32 {
+  take(if c {
+    y.slice(0, 2)
+  } else {
+    var t: [F32; 4] = [1.0; 4]
+    t[0] = 2.0
+    t.slice(0, 2) //~ E0716
+  })
+}
+
+pub fn if_one_line_arms_around_a_block(c: Bool, y: [F32; 4]) -> F32 {
+  take(if c { y.slice(0, 2) } else {
+    let t: [F32; 4] = mk4()
+    t.slice(1, 3) //~ E0716
+  })
+}
+
+pub fn if_the_arm_that_is_never_run(y: [F32; 4]) -> F32 {
+  take(if false {
+    var t: [F32; 4] = [1.0; 4]
+    t.slice(0, 2) //~ E0716
+  } else {
+    y.slice(0, 2)
+  })
+}
+
+pub fn if_an_else_if_chain(c: Bool, d: Bool, y: [F32; 4]) -> F32 {
+  take(if c {
+    y.slice(0, 2)
+  } else if d {
+    let t: [F32; 4] = mk4()
+    t.slice(0, 2) //~ E0716
+  } else {
+    y.slice(1, 3)
+  })
+}
+
+pub fn if_the_binding_is_used_before_the_tail(c: Bool, y: [F32; 4]) -> F32 {
+  take(if c {
+    var t: [F32; 4] = [1.0; 4]
+    for i in 0 ..< 4 {
+      t[i] = y[i]
+    }
+    t.slice(0, 2) //~ E0716
+  } else {
+    y.slice(0, 2)
+  })
+}
+
+// ------------------------------------------------------------------ a block and an arm of a `match`
+
+pub fn block_alone() -> F32 {
+  take({
+    var t: [F32; 4] = [1.0; 4]
+    t[0] = 2.0
+    t.slice(0, 2) //~ E0716
+  })
+}
+
+pub fn block_in_a_parenthesis() -> F32 {
+  take(({
+    let t: [F32; 4] = mk4()
+    t.slice(0, 2) //~ E0716
+  }))
+}
+
+pub fn match_arm_block(k: U32, y: [F32; 4]) -> F32 {
+  take(match k {
+    0 => {
+      var t: [F32; 4] = [1.0; 4]
+      t.slice(0, 2) //~ E0716
+    },
+    _ => y.slice(0, 2),
+  })
+}
+
+pub fn match_last_arm_block(k: U32, y: [F32; 4]) -> F32 {
+  take(match k {
+    0 => y.slice(0, 2),
+    _ => {
+      let t: [F32; 4] = mk4()
+      t.slice(1, 3) //~ E0716
+    },
+  })
+}
+
+pub fn a_tail_in_a_tail(c: Bool, d: Bool, y: [F32; 4]) -> F32 {
+  take(if c {
+    if d {
+      var t: [F32; 4] = [1.0; 4]
+      t.slice(0, 2) //~ E0716
+    } else {
+      y.slice(0, 2)
+    }
+  } else {
+    y.slice(1, 3)
+  })
+}
+
+pub fn a_block_in_an_if(c: Bool, y: [F32; 4]) -> F32 {
+  take(if c {
+    {
+      let t: [F32; 4] = mk4()
+      t.slice(0, 2) //~ E0716
+    }
+  } else {
+    y.slice(1, 3)
+  })
+}
+
+// ----------------------------------------------------------------- the type of the element and the root
+
+pub fn elements_of_u32(c: Bool, y: [U32; 4]) -> U32 {
+  take_u(if c {
+    var t: [U32; 4] = [1; 4]
+    t.slice(0, 2) //~ E0716
+  } else {
+    y.slice(0, 2)
+  })
+}
+
+pub fn elements_that_are_tuples(c: Bool, y: [(F32, F32); 4]) -> F32 {
+  take_t(if c {
+    var t: [(F32, F32); 4] = [(1.0, 2.0); 4]
+    t.slice(0, 2) //~ E0716
+  } else {
+    y.slice(0, 2)
+  })
+}
+
+pub fn elements_that_are_arrays(c: Bool, y: [[F32; 2]; 4]) -> F32 {
+  take_a(if c {
+    var t: [[F32; 2]; 4] = [[1.0; 2]; 4]
+    t.slice(0, 2) //~ E0716
+  } else {
+    y.slice(0, 2)
+  })
+}
+
+pub fn a_buffer(c: Bool, y: [F32; 4]) -> F32 uses {Alloc} {
+  take(if c {
+    var t: Buf[F32] = mkb(4)
+    t[0] = 2.0
+    t.slice(0, 2) //~ E0716
+  } else {
+    y.slice(0, 2)
+  })
+}
+
+pub fn the_buffer_field_of_a_struct(c: Bool, y: [F32; 4]) -> F32 uses {Alloc} {
+  take(if c {
+    var h = Holder { buf: mkb(4), n: 4 }
+    h.buf.slice(0, 2) //~ E0716
+  } else {
+    y.slice(0, 2)
+  })
+}
+
+pub fn an_element_of_an_array_of_arrays(c: Bool, y: [F32; 4]) -> F32 {
+  take(if c {
+    var t: [[F32; 4]; 2] = [[1.0; 4]; 2]
+    t[0].slice(0, 2) //~ E0716
+  } else {
+    y.slice(0, 2)
+  })
+}
+
+pub fn a_view_of_a_view(c: Bool, y: [F32; 4]) -> F32 {
+  take(if c {
+    var t: [F32; 4] = [1.0; 4]
+    t.slice(0, 3).slice(0, 2) //~ E0716
+  } else {
+    y.slice(0, 2)
+  })
+}
+
+pub fn a_view_with_bounds_known_at_run_time(c: Bool, i: U32, j: U32, y: [F32; 4]) -> F32 {
+  take(if c {
+    var t: [F32; 4] = [1.0; 4]
+    t.slice(i, j) //~ E0716
+  } else {
+    y.slice(0, 2)
+  })
+}
+
+pub fn the_view_is_the_second_argument(c: Bool, x: [F32; 4], y: [F32; 4]) -> F32 {
+  take2(x.slice(0, 2), if c {
+    var t: [F32; 4] = [1.0; 4]
+    t.slice(0, 2) //~ E0716
+  } else {
+    y.slice(0, 2)
+  })
+}
+
+// ------------------------------------------------------------------------ where the call stands
+
+pub fn in_a_loop(n: U32, y: [F32; 4]) -> F32 {
+  var s: F32 = 0.0
+  for i in 0 ..< n {
+    s = s + take(if i > 1 {
+      var t: [F32; 4] = [1.0; 4]
+      t.slice(0, 2) //~ E0716
+    } else {
+      y.slice(0, 2)
+    })
+  }
+  s
+}
+
+pub fn in_an_arm_of_a_match(o: Option[U32], y: [F32; 4]) -> F32 {
+  match o {
+    Some(_) => take({
+      let t: [F32; 4] = mk4()
+      t.slice(0, 2) //~ E0716
+    }),
+    None => 0.0,
+  }
+}

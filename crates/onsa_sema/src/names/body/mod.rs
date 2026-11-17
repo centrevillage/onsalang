@@ -171,6 +171,19 @@ pub(crate) struct BodyNames {
 }
 
 impl BodyNames {
+    /// The node of the name at the root of the place `e` and its binding: a
+    /// local, and its fields, tuple elements and elements, through
+    /// parentheses (§5.1, [`Ast::place_root_node`]); `None` of any other
+    /// value. The one definition of a place (D-15): of the types stage, the
+    /// binding stage, [`crate::sources`] and the modes.
+    pub(crate) fn place_root(&self, ast: &Ast, e: ExprId) -> Option<(ExprId, BindingId)> {
+        let root = ast.place_root_node(e)?;
+        match self.paths.get(&root) {
+            Some(PathRes::Local(b)) => Some((root, *b)),
+            _ => None,
+        }
+    }
+
     /// The flow the call `e` makes an instance of ([`Self::instances`]).
     pub(crate) fn instance(&self, e: ExprId) -> Option<DefId> {
         self.instance_of.get(&e).map(|&k| self.instances[k].1)

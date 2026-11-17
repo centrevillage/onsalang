@@ -1,0 +1,249 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4", "§12.8"]
+
+// S-1118 (§5.2): "破棄の要らない束縛（§5.4）は、名前がその場にリテラルを書いたのと同じで束縛の記憶域を指さないので当たらない（`take(if c { let t = [1.0, 2.0] … t.slice(0, 1) } else { y })` は通る）".
+// A binding that needs no drop is a borrowed `let` of a static value (`let t = [1.0, 2.0, 3.0, 4.0]`, `let t: [F32; 4] = [1.0; 4]`, `let nm = "gain"`, `let t = ["a", "bc"]`) or of a literal that needs no drop (`let p = ("gain", v)`, `let t = [v, 2.0]`,
+// `v` is `Copy`), and a binding derived from it (`let u = t.slice(0, 2)`, `let q = p`): it is never dropped and "その場にリテラルを書いたのと同じ" (S-613, S-1065), so the tail that is a part view of it or the
+// binding itself (a `Str` too, an immortal static object, §12.8) is not an E0716, where it stands at a borrowed argument, at an operator, an index, a field or a receiver, and at the heading of a `let`, a `for` and a `match`.
+// The form without the `let` (`take(if c { [1.0, 2.0].slice(0, 1) } else { y.slice(0, 1) })`) is the control that is accepted today and is the same program. A `var` or a `let` of a call is not such a binding
+// (negative/tail_binding_scope_view.onsa). The storage of the view is kept by the lowering (R-481, W7-12 U2c2: an E0200 until then, so the cases are checked and not built).
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+pub fn take(s: Span[F32]) -> F32 {
+  s[0]
+}
+
+pub fn hs(a: Str) -> U32 {
+  a.len()
+}
+
+pub fn hp(p: (Str, F32)) -> U32 {
+  0
+}
+
+pub fn hq(xs: [Str; 2]) -> U32 {
+  0
+}
+
+pub fn hparam(p: Param) -> U32 {
+  0
+}
+
+// ------------------------------------------------------------------ a view of a static array, at an argument
+
+pub fn view_of_a_literal_in_an_if(c: Bool, y: [F32; 4]) -> F32 {
+  take(if c {
+    let t = [1.0, 2.0, 3.0, 4.0]
+    t.slice(0, 2)
+  } else {
+    y.slice(0, 2)
+  })
+}
+
+pub fn view_of_a_repeated_literal_in_an_if(c: Bool, y: [F32; 4]) -> F32 {
+  take(if c {
+    let t: [F32; 4] = [1.0; 4]
+    t.slice(0, 2)
+  } else {
+    y.slice(0, 2)
+  })
+}
+
+pub fn view_of_a_literal_in_a_block() -> F32 {
+  take({
+    let t = [1.0, 2.0, 3.0, 4.0]
+    t.slice(1, 3)
+  })
+}
+
+pub fn view_of_a_literal_in_an_arm(k: U32, y: [F32; 4]) -> F32 {
+  take(match k {
+    0 => {
+      let t = [1.0, 2.0, 3.0, 4.0]
+      t.slice(0, 2)
+    },
+    _ => y.slice(0, 2),
+  })
+}
+
+pub fn view_of_a_literal_of_a_copy_value(v: F32, c: Bool, y: [F32; 4]) -> F32 {
+  take(if c {
+    let t = [v, 2.0, 3.0, 4.0]
+    t.slice(0, 2)
+  } else {
+    y.slice(0, 2)
+  })
+}
+
+pub fn view_of_a_view_of_a_literal(c: Bool, y: [F32; 4]) -> F32 {
+  take(if c {
+    let t = [1.0, 2.0, 3.0, 4.0]
+    let u = t.slice(0, 3)
+    u.slice(0, 2)
+  } else {
+    y.slice(0, 2)
+  })
+}
+
+pub fn derived_binding_of_a_literal(c: Bool, y: [F32; 4]) -> F32 {
+  take(if c {
+    let t = [1.0, 2.0, 3.0, 4.0]
+    let u = t.slice(0, 3)
+    u
+  } else {
+    y.slice(0, 2)
+  })
+}
+
+pub fn view_of_a_literal_in_an_arm_of_a_match_on_a_place(o: Option[U32], y: [F32; 4]) -> F32 {
+  take(match o {
+    Some(_) => {
+      let t = [1.0, 2.0]
+      t.slice(0, 1)
+    },
+    None => y.slice(0, 1),
+  })
+}
+
+pub fn control_the_literal_without_the_let(c: Bool, y: [F32; 4]) -> F32 {
+  take(if c { [1.0, 2.0].slice(0, 1) } else { y.slice(0, 1) })
+}
+
+// ------------------------------------------------------------------- a `Str` and a literal, at an argument
+
+pub fn str_of_a_literal_in_an_if(c: Bool, s: Str) -> U32 {
+  hs(if c {
+    let t = "abc"
+    t
+  } else {
+    s
+  })
+}
+
+pub fn str_of_a_block() -> U32 {
+  hs({
+    let nm = "gain"
+    nm
+  })
+}
+
+pub fn tuple_of_a_literal(v: F32) -> U32 {
+  hp({
+    let p = ("gain", v)
+    p
+  })
+}
+
+pub fn array_of_strings(c: Bool, xs: [Str; 2]) -> U32 {
+  hq(if c {
+    let t = ["a", "bc"]
+    t
+  } else {
+    xs
+  })
+}
+
+pub fn struct_of_a_literal(v: F32) -> U32 {
+  hparam({
+    let p = Param { name: "gain", value: v }
+    p
+  })
+}
+
+pub fn derived_binding_of_a_str() -> U32 {
+  hs({
+    let t = "abc"
+    let q = t
+    q
+  })
+}
+
+// ---------------------------------------------------- the positions that do not consume, and the headings
+
+pub fn index_the_view_of_a_literal(c: Bool, y: [F32; 4]) -> F32 {
+  (if c {
+    let t = [1.0, 2.0, 3.0, 4.0]
+    t.slice(0, 2)
+  } else {
+    y.slice(0, 2)
+  })[1]
+}
+
+pub fn receiver_the_view_of_a_literal(c: Bool, y: [F32; 4]) -> U32 {
+  (if c {
+    let t = [1.0, 2.0, 3.0, 4.0]
+    t.slice(0, 2)
+  } else {
+    y.slice(0, 2)
+  }).len()
+}
+
+pub fn field_of_a_literal(v: F32) -> U32 {
+  hs(({
+    let p = Param { name: "gain", value: v }
+    p
+  }).name)
+}
+
+pub fn operand_the_str_of_a_literal(c: Bool, s: Str, u: Str) -> Bool {
+  (if c {
+    let t = "abc"
+    t
+  } else {
+    s
+  }) == u
+}
+
+pub fn assert_the_str_of_a_literal(c: Bool, s: Str, u: Str) {
+  assert (if c {
+    let t = "abc"
+    t
+  } else {
+    s
+  }) == u
+}
+
+pub fn for_the_view_of_a_literal(c: Bool, y: [F32; 4]) -> F32 {
+  var r: F32 = 0.0
+  for v in (if c {
+    let t = [1.0, 2.0, 3.0, 4.0]
+    t.slice(0, 2)
+  } else {
+    y.slice(0, 2)
+  }) {
+    r = r + v
+  }
+  r
+}
+
+pub fn match_the_view_of_a_literal(y: [F32; 4]) -> F32 {
+  match ({
+    let t = [1.0, 2.0, 3.0, 4.0]
+    t.slice(0, 2)
+  }) {
+    s => take(s),
+  }
+}
+
+pub fn let_the_view_of_a_literal(c: Bool, y: [F32; 4]) -> F32 {
+  let s = if c {
+    let t = [1.0, 2.0]
+    t.slice(0, 1)
+  } else {
+    y.slice(0, 1)
+  }
+  take(s)
+}
+
+pub fn let_the_view_of_a_literal_in_a_block() -> F32 {
+  let s = {
+    let t = [1.0, 2.0, 3.0, 4.0]
+    t.slice(0, 2)
+  }
+  take(s)
+}

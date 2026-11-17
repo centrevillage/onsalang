@@ -1,0 +1,144 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§5.4"]
+// fixes = 0
+
+// S-1115 (§5.2, §5.4): "その腕・ブロックの中で宣言した束縛（腕のパターンの束縛を含む）". The binding of the pattern of an arm that owns the matched value (`match move o`, or a
+// `match` on the result of a call, "`match move x` と、場所でも破棄の要らない値でもない対象（`match f(...)`）の腕の束縛: 所有", §5.4) is declared by the arm and ends with it, so
+// the tail of the arm at a borrowed argument that is a part view rooted at it (`b.slice(0, 2)`), or the binding itself when it is not `Copy`, is read by the call after the
+// binding is gone (E0716). A binding of a `match` on a place (`match o { Some(b) => … }`) whose value is not `Copy` is derived from that place ("派生した借用束縛は派生元の場所") and stays
+// (values/tail_binding_scope_ok.onsa); a binding of a `Copy` value is the value taken when it is bound, so its view is an E0716 (negative/tail_binding_scope_reads.onsa). The error is at the tail of the arm, no repair candidate (`fixes = 0`). One error per function (P-01). The functions are one-liners
+// where the call is one line.
+
+pub struct Holder {
+  buf: Buf[F32],
+  n: U32,
+}
+
+pub fn take(s: Span[F32]) -> F32 {
+  s[0]
+}
+
+pub fn take_t(s: Span[(F32, F32)]) -> F32 {
+  s[0].0
+}
+
+pub fn hb(b: Buf[F32]) -> U32 {
+  b.len()
+}
+
+pub fn hh(h: Holder) -> U32 {
+  h.n
+}
+
+pub fn ho(o: Option[Buf[F32]]) -> U32 {
+  0
+}
+
+pub fn mk(v: F32) -> Option[[F32; 4]] {
+  Some([v; 4])
+}
+
+pub fn mk_r(v: F32) -> Result[[F32; 4], U32] {
+  Ok([v; 4])
+}
+
+pub fn mk_t(v: F32) -> ([F32; 4], [F32; 4]) {
+  ([v; 4], [v; 4])
+}
+
+pub fn mk_p(v: F32) -> Option[[(F32, F32); 4]] {
+  Some([(v, v); 4])
+}
+
+pub fn mkob(n: U32) -> Option[Buf[F32]] uses {Alloc} {
+  Some(Buf.zeroed(n))
+}
+
+// -------------------------------------------------------- a view of the binding of a call result
+
+pub fn view_of_the_some_arm(v: F32, y: [F32; 4]) -> F32 {
+  take(match mk(v) { Some(b) => b.slice(0, 2), None => y.slice(0, 2) }) //~ E0716
+}
+
+pub fn view_of_the_some_arm_when_it_is_the_last(v: F32, y: [F32; 4]) -> F32 {
+  take(match mk(v) { None => y.slice(0, 2), Some(b) => b.slice(1, 3) }) //~ E0716
+}
+
+pub fn view_of_the_ok_arm(v: F32, y: [F32; 4]) -> F32 {
+  take(match mk_r(v) { Ok(b) => b.slice(0, 2), Err(_) => y.slice(0, 2) }) //~ E0716
+}
+
+pub fn view_of_a_part_of_the_tuple(v: F32, y: [F32; 4]) -> F32 {
+  take(match mk_t(v) { (a, _) => a.slice(0, 2) }) //~ E0716
+}
+
+pub fn view_of_a_view_of_the_binding(v: F32, y: [F32; 4]) -> F32 {
+  take(match mk(v) { Some(b) => b.slice(0, 3).slice(0, 2), None => y.slice(0, 2) }) //~ E0716
+}
+
+pub fn view_of_the_binding_of_tuples(v: F32, y: [(F32, F32); 4]) -> F32 {
+  take_t(match mk_p(v) { Some(b) => b.slice(0, 2), None => y.slice(0, 2) }) //~ E0716
+}
+
+pub fn view_in_an_arm_that_is_a_nested_if(v: F32, c: Bool, y: [F32; 4]) -> F32 {
+  take(match mk(v) { Some(b) => if c { b.slice(0, 2) } else { y.slice(0, 2) }, None => y.slice(0, 2) }) //~ E0716
+}
+
+pub fn view_in_an_arm_that_is_a_block(v: F32, y: [F32; 4]) -> F32 {
+  take(match mk(v) {
+    Some(b) => {
+      let _ = b[0]
+      b.slice(0, 2) //~ E0716
+    },
+    None => y.slice(0, 2),
+  })
+}
+
+// -------------------------------------------------------------------- a binding of `match move`
+
+pub fn view_of_a_buffer_of_a_moved_option(move o: Option[Buf[F32]], y: Buf[F32]) -> F32 uses {Alloc} {
+  take(match move o { Some(b) => b.slice(0, 1), None => y.slice(0, 1) }) //~ E0716
+}
+
+pub fn view_of_a_buffer_of_a_moved_option_in_the_none_arm(move o: Option[Buf[F32]], y: Buf[F32]) -> F32 uses {Alloc} {
+  take(match move o { None => y.slice(0, 1), Some(b) => b.slice(0, 1) }) //~ E0716
+}
+
+pub fn view_of_a_copy_array_of_a_moved_option(move o: Option[[F32; 4]], y: [F32; 4]) -> F32 {
+  take(match move o { Some(b) => b.slice(0, 2), None => y.slice(0, 2) }) //~ E0716
+}
+
+pub fn view_of_a_buffer_of_a_call_result(n: U32, y: Buf[F32]) -> F32 uses {Alloc} {
+  take(match mkob(n) { Some(b) => b.slice(0, 1), None => y.slice(0, 1) }) //~ E0716
+}
+
+// -------------------------------------------------------------------- the binding itself, not Copy
+
+pub fn the_buffer_of_a_moved_option(move o: Option[Buf[F32]], y: Buf[F32]) -> U32 uses {Alloc} {
+  hb(match move o { Some(b) => b, None => y }) //~ E0716
+}
+
+pub fn the_buffer_of_a_moved_option_in_the_none_arm(move o: Option[Buf[F32]], y: Buf[F32]) -> U32 uses {Alloc} {
+  hb(match move o { None => y, Some(b) => b }) //~ E0716
+}
+
+pub fn the_buffer_of_a_call_result(n: U32, y: Buf[F32]) -> U32 uses {Alloc} {
+  hb(match mkob(n) { Some(b) => b, None => y }) //~ E0716
+}
+
+pub fn the_struct_of_a_moved_option(move o: Option[Holder], y: Holder) -> U32 uses {Alloc} {
+  hh(match move o { Some(b) => b, None => y }) //~ E0716
+}
+
+pub fn the_buffer_field_of_a_moved_struct(move h: Holder, y: Buf[F32]) -> U32 uses {Alloc} {
+  hb(match move h { Holder { buf: b, n: _ } => b }) //~ E0716
+}
+
+pub fn the_option_that_holds_a_buffer(move o: Option[Option[Buf[F32]]], y: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  ho(match move o { Some(b) => b, None => y }) //~ E0716
+}
+
+pub fn the_binding_is_in_a_nested_if(move o: Option[Buf[F32]], c: Bool, y: Buf[F32]) -> U32 uses {Alloc} {
+  hb(match move o { Some(b) => if c { b } else { y }, None => y }) //~ E0716
+}

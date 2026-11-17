@@ -1,0 +1,224 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4"]
+// fixes = 0
+
+// S-1115 (§5.2, §5.4): "借用の引数 … の末尾に、その腕・ブロックの中で宣言した束縛 … を根とする部分ビューと、そういう Copy でない束縛の場所は置けない（E0716）". A binding that is not
+// `Copy` (a `Buf`, a struct or an `Option` that holds one, an array of them) and that the arm or the block declares (`let t = move a`, `var t = mkb(4)`) is dropped at the end
+// of the arm or of the block, so the tail that is the binding itself is read by the call after it is gone (the tail is not a value that is passed on: the argument is borrowed, so
+// no `move` is written, and `move t` at the tail is an error of another kind). The error is at the tail expression (the line of the binding), no repair candidate (`fixes = 0`:
+// the writer declares the binding before the call). One error per function (P-01). The binding that is `Copy` is copied and the binding derived from a place outside the arm is that
+// place (values/tail_binding_scope_ok.onsa), the arm bindings of a `match` in negative/tail_binding_scope_arm.onsa.
+
+pub struct Holder {
+  buf: Buf[F32],
+  n: U32,
+}
+
+pub fn hb(b: Buf[F32]) -> U32 {
+  b.len()
+}
+
+pub fn hb2(a: U32, b: Buf[F32]) -> U32 {
+  a
+}
+
+pub fn hh(h: Holder) -> U32 {
+  h.n
+}
+
+pub fn ho(o: Option[Buf[F32]]) -> U32 {
+  0
+}
+
+pub fn ha(xs: [Buf[F32]; 2]) -> U32 {
+  0
+}
+
+pub fn mkb(n: U32) -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(n)
+}
+
+// ------------------------------------------------------------------------ a binding of the block
+
+pub fn block_a_moved_parameter(move a: Buf[F32]) -> U32 uses {Alloc} {
+  hb({
+    let t = move a
+    t //~ E0716
+  })
+}
+
+pub fn block_a_new_buffer() -> U32 uses {Alloc} {
+  hb({
+    var t: Buf[F32] = mkb(4)
+    t //~ E0716
+  })
+}
+
+pub fn block_a_buffer_that_is_written() -> U32 uses {Alloc} {
+  hb({
+    var t: Buf[F32] = mkb(4)
+    t[0] = 2.0
+    t //~ E0716
+  })
+}
+
+pub fn block_a_buffer_in_a_parenthesis(move a: Buf[F32]) -> U32 uses {Alloc} {
+  hb(({
+    let t = move a
+    t //~ E0716
+  }))
+}
+
+pub fn block_a_buffer_as_the_second_argument(move a: Buf[F32]) -> U32 uses {Alloc} {
+  hb2(1, {
+    let t = move a
+    t //~ E0716
+  })
+}
+
+pub fn block_a_struct_that_holds_a_buffer(move h: Holder) -> U32 uses {Alloc} {
+  hh({
+    let t = move h
+    t //~ E0716
+  })
+}
+
+pub fn block_a_new_struct() -> U32 uses {Alloc} {
+  hh({
+    let t = Holder { buf: mkb(4), n: 4 }
+    t //~ E0716
+  })
+}
+
+pub fn block_an_option_that_holds_a_buffer(move o: Option[Buf[F32]]) -> U32 uses {Alloc} {
+  ho({
+    let t = move o
+    t //~ E0716
+  })
+}
+
+pub fn block_an_option_that_is_assigned() -> U32 uses {Alloc} {
+  ho({
+    var t: Option[Buf[F32]] = Some(mkb(4))
+    t = None
+    t //~ E0716
+  })
+}
+
+pub fn block_an_array_of_buffers() -> U32 uses {Alloc} {
+  ha({
+    var t: [Buf[F32]; 2] = [mkb(1), mkb(2)]
+    t //~ E0716
+  })
+}
+
+// -------------------------------------------------------------------------------- an arm of an `if`
+
+pub fn if_then_arm(c: Bool, move a: Buf[F32], y: Buf[F32]) -> U32 uses {Alloc} {
+  hb(if c {
+    let t = move a
+    t //~ E0716
+  } else {
+    y
+  })
+}
+
+pub fn if_else_arm(c: Bool, move a: Buf[F32], y: Buf[F32]) -> U32 uses {Alloc} {
+  hb(if c {
+    y
+  } else {
+    let t = move a
+    t //~ E0716
+  })
+}
+
+pub fn if_the_arm_that_is_never_run(y: Buf[F32]) -> U32 uses {Alloc} {
+  hb(if false {
+    var t: Buf[F32] = mkb(4)
+    t //~ E0716
+  } else {
+    y
+  })
+}
+
+pub fn if_an_else_if_chain(c: Bool, d: Bool, y: Buf[F32]) -> U32 uses {Alloc} {
+  hb(if c {
+    y
+  } else if d {
+    var t: Buf[F32] = mkb(4)
+    t //~ E0716
+  } else {
+    y
+  })
+}
+
+pub fn if_a_struct(c: Bool, y: Holder) -> U32 uses {Alloc} {
+  hh(if c {
+    let t = Holder { buf: mkb(4), n: 4 }
+    t //~ E0716
+  } else {
+    y
+  })
+}
+
+// -------------------------------------------------------------------- an arm of a `match`, a nested tail
+
+pub fn match_arm_block(k: U32, move a: Buf[F32], y: Buf[F32]) -> U32 uses {Alloc} {
+  hb(match k {
+    0 => {
+      let t = move a
+      t //~ E0716
+    },
+    _ => y,
+  })
+}
+
+pub fn match_last_arm_block(k: U32, y: Buf[F32]) -> U32 uses {Alloc} {
+  hb(match k {
+    0 => y,
+    _ => {
+      var t: Buf[F32] = mkb(4)
+      t //~ E0716
+    },
+  })
+}
+
+pub fn a_tail_in_a_tail(c: Bool, d: Bool, y: Buf[F32]) -> U32 uses {Alloc} {
+  hb(if c {
+    if d {
+      var t: Buf[F32] = mkb(4)
+      t //~ E0716
+    } else {
+      y
+    }
+  } else {
+    y
+  })
+}
+
+pub fn a_block_in_an_if(c: Bool, y: Buf[F32]) -> U32 uses {Alloc} {
+  hb(if c {
+    {
+      var t: Buf[F32] = mkb(4)
+      t //~ E0716
+    }
+  } else {
+    y
+  })
+}
+
+// ------------------------------------------------------------------------ where the call stands
+
+pub fn in_a_loop(n: U32, y: Buf[F32]) -> U32 uses {Alloc} {
+  var s: U32 = 0
+  for i in 0 ..< n {
+    s = s + hb(if i > 1 {
+      var t: Buf[F32] = mkb(4)
+      t //~ E0716
+    } else {
+      y
+    })
+  }
+  s
+}

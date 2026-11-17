@@ -1,0 +1,234 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§5.4"]
+
+// S-1115 (§5.2) and its supplement B2, next to the errors of negative/tail_binding_scope_reads.onsa and negative/tail_binding_scope_let_head.onsa: the readings of the places that the first tests found open,
+// where the tail is a `Copy` value. (1) An element or a field of a `Copy` binding of the block (`t[0]` of an array of arrays, `t.a` of a struct that holds an array) is not a part view and the binding is
+// `Copy`: the value is copied to the temporary of the call ("Copy の値なら、値を写して渡すので置ける"). (2) The binding itself of a `Copy` array at the heading of a `for` and a `match` is a value that is
+// copied (the row is a copy), and so is the binding of an arm of a `match` on a place with a `Copy` payload when the tail is the binding itself and not a view of it. (3) The binding of an arm of a `match` on
+// a place whose value is not `Copy` is derived from that place, and a `let` whose tails are such places or `Copy` values is a binding of the place or a copy (the heading `let`, the supplement G3).
+
+pub struct W {
+  a: [F32; 4],
+}
+
+pub fn take(s: Span[F32]) -> F32 {
+  s[0]
+}
+
+pub fn take_a(s: Span[[F32; 4]]) -> F32 {
+  s[0][0]
+}
+
+// ---------------------------------------------------- (1) an element or a field of a `Copy` binding
+
+pub fn element_in_an_if(c: Bool, y: [F32; 4]) -> F32 {
+  take(if c {
+    var t: [[F32; 4]; 2] = [[1.0; 4]; 2]
+    t[0][1] = 2.0
+    t[0]
+  } else {
+    y
+  })
+}
+
+pub fn element_in_a_block() -> F32 {
+  take({
+    var t: [[F32; 4]; 2] = [[1.0; 4]; 2]
+    t[1]
+  })
+}
+
+pub fn element_in_an_arm_of_a_match(k: U32, y: [F32; 4]) -> F32 {
+  take(match k {
+    0 => {
+      let t: [[F32; 4]; 2] = [[1.0; 4]; 2]
+      t[0]
+    },
+    _ => y,
+  })
+}
+
+pub fn field_in_an_if(c: Bool, y: [F32; 4]) -> F32 {
+  take(if c {
+    var t: W = W { a: [1.0; 4] }
+    t.a[0] = 2.0
+    t.a
+  } else {
+    y
+  })
+}
+
+pub fn field_in_a_block() -> F32 {
+  take({
+    var t: W = W { a: [1.0; 4] }
+    t.a
+  })
+}
+
+pub fn elements_in_the_second_argument(c: Bool, x: [F32; 4], y: [F32; 4]) -> F32 {
+  take2(x, if c {
+    var t: [[F32; 4]; 2] = [[1.0; 4]; 2]
+    t[0]
+  } else {
+    y
+  })
+}
+
+pub fn take2(s: Span[F32], u: Span[F32]) -> F32 {
+  s[0] + u[0]
+}
+
+pub fn array_of_arrays_in_a_block() -> F32 {
+  take_a({
+    var t: [[F32; 4]; 2] = [[1.0; 4]; 2]
+    t
+  })
+}
+
+// ------------------------------------------------------------ (2) the heading of a `for` and a `match`
+
+pub fn for_a_copy_array_of_a_block() -> F32 {
+  var s: F32 = 0.0
+  for v in ({
+    var t: [F32; 4] = [1.0; 4]
+    t[0] = 2.0
+    t
+  }) {
+    s = s + v
+  }
+  s
+}
+
+pub fn for_a_copy_array_of_an_if(c: Bool, y: [F32; 4]) -> F32 {
+  var s: F32 = 0.0
+  for v in if c {
+    var t: [F32; 4] = [1.0; 4]
+    t[0] = 2.0
+    t
+  } else {
+    y
+  } {
+    s = s + v
+  }
+  s
+}
+
+pub fn for_an_element_of_a_copy_binding(c: Bool, y: [F32; 4]) -> F32 {
+  var s: F32 = 0.0
+  for v in (if c {
+    var t: [[F32; 4]; 2] = [[1.0; 4]; 2]
+    t[0]
+  } else {
+    y
+  }) {
+    s = s + v
+  }
+  s
+}
+
+pub fn match_a_copy_tuple_of_a_block() -> F32 {
+  match ({
+    var t: (F32, U32) = (1.0, 2)
+    t
+  }) {
+    (a, _) => a,
+  }
+}
+
+pub fn match_a_copy_array_of_an_if(c: Bool, y: [F32; 4]) -> F32 {
+  match (if c {
+    var t: [F32; 4] = [1.0; 4]
+    t
+  } else {
+    y
+  }) {
+    s => s[0],
+  }
+}
+
+pub fn for_the_copy_binding_of_an_arm(o: Option[[F32; 4]], y: [F32; 4]) -> F32 {
+  var s: F32 = 0.0
+  for v in (match o { Some(b) => b, None => y }) {
+    s = s + v
+  }
+  s
+}
+
+pub fn arm_binding_itself_at_an_argument(o: Option[[F32; 4]], y: [F32; 4]) -> F32 {
+  take(match o { Some(b) => b, None => y })
+}
+
+pub fn arm_binding_of_a_result_itself(o: Result[[F32; 4], U32], y: [F32; 4]) -> F32 {
+  take(match o { Ok(b) => b, Err(_) => y })
+}
+
+pub fn derived_binding_itself_of_a_copy_arm_binding(o: Option[[F32; 4]], y: [F32; 4]) -> F32 {
+  take(match o {
+    Some(b) => {
+      let s = b
+      s
+    },
+    None => y,
+  })
+}
+
+pub fn an_element_of_the_copy_arm_binding(o: Option[[F32; 4]], y: [F32; 4]) -> F32 {
+  take_one(match o { Some(b) => b[0], None => y[0] })
+}
+
+pub fn take_one(x: F32) -> F32 {
+  x
+}
+
+// -------------------------------------------------------- (3) a binding of a place that is not `Copy`
+
+pub fn let_the_view_of_a_borrowed_buffer_arm(o: Option[Buf[F32]], y: Buf[F32]) -> F32 {
+  let s = match o { Some(b) => b.slice(0, 1), None => y.slice(0, 1) }
+  take(s)
+}
+
+pub fn let_the_view_of_a_buffer_arm_in_a_block(o: Option[Buf[F32]], y: Buf[F32]) -> F32 {
+  let s = match o {
+    Some(b) => {
+      let u = b.slice(0, 1)
+      u
+    },
+    None => y.slice(0, 1),
+  }
+  take(s)
+}
+
+pub fn let_the_view_of_a_derived_view_of_a_block(x: [F32; 4]) -> F32 {
+  let s = {
+    let u = x.slice(0, 2)
+    u
+  }
+  take(s)
+}
+
+pub fn let_the_view_of_a_parameter_in_an_if(c: Bool, x: [F32; 4], y: [F32; 4]) -> F32 {
+  let s = if c {
+    let u = x.slice(0, 2)
+    u
+  } else {
+    y.slice(0, 2)
+  }
+  take(s)
+}
+
+pub fn let_the_copy_arm_binding_itself(o: Option[[F32; 4]], y: [F32; 4]) -> F32 {
+  let s = match o { Some(b) => b, None => y }
+  take(s.slice(0, 2))
+}
+
+pub fn let_the_copy_array_of_a_block(c: Bool, y: [F32; 4]) -> F32 {
+  let s = if c {
+    var t: [F32; 4] = [1.0; 4]
+    t[0] = 2.0
+    t
+  } else {
+    y
+  }
+  take(s.slice(0, 2))
+}

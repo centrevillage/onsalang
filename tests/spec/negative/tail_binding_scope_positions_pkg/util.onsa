@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§12.2", "§15.1"]
+// fixes = 0
+
+// S-1115 (§5.2, the supplement B1) across modules: the callees, the struct with its method, the generic function and the helpers of this module are used from app.onsa. The E0716 of a tail that is a view of a
+// binding of its arm or block, or a binding that is not `Copy`, at a borrowed argument, at the base that an index or a field reads, at an operand of `==` and at the receiver, is found at the expression, where
+// the tails are written, whatever module declares the callee, the type, the method or the generic function (§15.1). The tails that stay (a `Copy` value, a binding derived from a parameter) are in the same app.onsa.
+
+pub struct Holder {
+  buf: Buf[F32],
+  n: U32,
+}
+
+impl Holder {
+  pub fn count(self) -> U32 {
+    self.n
+  }
+}
+
+pub fn take(s: Span[F32]) -> F32 {
+  s[0]
+}
+
+pub fn first[T: Copy](s: Span[T]) -> T {
+  s[0]
+}
+
+pub fn same[T: PartialEq](a: T, b: T) -> Bool {
+  a == b
+}
+
+pub fn hb(b: Buf[F32]) -> U32 {
+  b.len()
+}
+
+pub fn mkb(n: U32) -> Buf[F32] uses {Alloc} {
+  Buf.zeroed(n)
+}
+
+pub fn mkh(n: U32) -> Holder uses {Alloc} {
+  Holder { buf: mkb(n), n: n }
+}
+
+pub fn ids(a: Str) -> Str {
+  a
+}

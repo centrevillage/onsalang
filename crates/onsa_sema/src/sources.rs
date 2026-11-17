@@ -2,7 +2,8 @@
 //! S-1114, R-482): the one walk of the tails, the partial views, the paths
 //! over values and the literals opened at an argument. It records nothing:
 //! the binding stage (the heads), the types stage (`inout`) and the modes
-//! (the exclusivity, the writes) read it (D-15). Linear in the expression's
+//! (the exclusivity, the writes, the temporaries that wait, E0716) read it
+//! (D-15). Linear in the expression's
 //! spine and bases: each step goes into a part of the expression, once.
 
 use onsa_syntax::ast::{Ast, ExprId, ExprKind};
@@ -10,7 +11,7 @@ use onsa_syntax::ast::{Ast, ExprId, ExprKind};
 use crate::Analysis;
 use crate::body::{BodyInfo, view_base};
 use crate::modes::Proj;
-use crate::names::body::{BodyNames, PathRes};
+use crate::names::body::BodyNames;
 use crate::tails::{Tail, tails};
 use crate::ty::TyId;
 
@@ -35,14 +36,8 @@ impl<'a> Cx<'a> {
         Cx { ast, names, info, a, ty: &same }
     }
 
-    /// Whether `e` is a place: a local and its fields and elements
-    /// ([`Ast::place_root_node`], the one definition of it).
-    fn is_place(&self, e: ExprId) -> bool {
-        let root = self.ast.place_root_node(e);
-        root.is_some_and(|r| matches!(self.names.paths.get(&r), Some(PathRes::Local(_))))
-    }
-
-    fn view_base(&self, e: ExprId) -> Option<ExprId> {
+    /// The base of `e`, a partial view of it ([`view_base`]).
+    pub(crate) fn view_base(&self, e: ExprId) -> Option<ExprId> {
         view_base((self.ast, self.info, self.a), e, |t| (self.ty)(t))
     }
 }
@@ -66,7 +61,7 @@ pub(crate) enum What {
     Unit(ExprId),
     /// The argument itself (or an element opened) diverges; a tail that
     /// exits gives no leaf.
-    Exits(ExprId),
+    Exits,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -136,7 +131,7 @@ fn walk(cx: Cx<'_>, e: ExprId, cur: Cur, open: Open, out: &mut Vec<Leaf>) {
     let x = cx.ast.without_parens(e);
     // Off the spine, a base that diverges is a value, as the heads read it.
     if cur.spine && cx.info.diverging.expr(e) {
-        return out.push(cur.leaf(What::Exits(x)));
+        return out.push(cur.leaf(What::Exits));
     }
     if let ExprKind::If { .. } | ExprKind::Match { .. } | ExprKind::Block(_) = cx.ast.expr(x).kind {
         let mut ts = Vec::new();
@@ -158,7 +153,7 @@ fn walk(cx: Cx<'_>, e: ExprId, cur: Cur, open: Open, out: &mut Vec<Leaf>) {
     if let Some(base) = cx.view_base(x) {
         return walk(cx, base, Cur { viewed: true, spine: false, ..cur }, open, out);
     }
-    if cx.is_place(x) {
+    if cx.names.place_root(cx.ast, x).is_some() {
         return out.push(cur.leaf(What::Place(x)));
     }
     let opened = if open == Open::Arg { elements(cx.ast, cx.info, x) } else { None };

@@ -15,7 +15,7 @@ use super::walk::Pos;
 use crate::Kind;
 use crate::binding::no_drop;
 use crate::body::{DropPoint, Dropped, LocalId, Unbound};
-use crate::tails::Tail;
+use crate::sources::{Open, What, leaves};
 use crate::ty::{Len, Ty, TyId};
 
 /// What leaves the items of a scope ([`Walker::drops`]): its end (of a
@@ -93,8 +93,9 @@ impl Walker<'_> {
     /// an assignment or an index, whose consumer runs after the operands
     /// after it): its value waits there for them (A-1), until the consumer
     /// runs ([`Walker::ran`]), if it is owned ([`Walker::owned`]) and `pos`
-    /// consumes; a value made in its tails (of the root of a path of one,
-    /// D2) where a call or an index borrows it, too (D3, [`Walker::temps`]).
+    /// consumes; a value made that it stands for (its tails, the bases of
+    /// its paths and partial views, D2) where a call or an index borrows it,
+    /// too (D3, R-483, [`Walker::temps`]).
     /// The one place that decides it.
     pub(super) fn waits(&mut self, r: &mut Run, e: ExprId, pos: Pos) {
         let x = self.value_of(e);
@@ -133,20 +134,18 @@ impl Walker<'_> {
         x
     }
 
-    /// The values made in the tails of `e` where a call or an index borrows
-    /// them (D3): of a path, those in the tails of its root, again (§5.2: a
-    /// block, an `if`, a `match` puts its tails where it is); a place in
-    /// them is borrowed, not dropped. Linear in `e`.
+    /// The values made that `e` stands for where a call or an index borrows
+    /// them (D3, R-483: [`leaves`], its tails, the bases of its paths and
+    /// partial views, the elements of a literal opened, §5.2, §5.3): each
+    /// waits for the one consumer, whose end drops it (a partial view or an
+    /// index that waits makes none wait, `Walker::call`, `Walker::expr`); a
+    /// place is borrowed, not dropped. Linear in `e`.
     fn temps(&mut self, r: &mut Run, e: ExprId) {
-        let mut tails = Vec::new();
-        crate::tails::tails(self.ast, e, &self.info.diverging, &mut tails);
-        for t in tails {
-            let Tail::Value(v) = t else { continue };
-            let root = self.root_of_path(v, None);
-            if self.made(v, false) {
-                r.push(Nameless::Temp(v));
-            } else if root != v {
-                self.temps(r, root);
+        for leaf in leaves(self.cx(), e, Open::Arg) {
+            if let What::Value(x) = leaf.what
+                && self.made(x, false)
+            {
+                r.push(Nameless::Temp(x));
             }
         }
     }

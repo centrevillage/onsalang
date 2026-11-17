@@ -1,0 +1,60 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§8.1", "§11.6", "§12.2"]
+
+// R-483 (§12.2), the contrasts of negative/dup_release_literal_temps.onsa: the planar array literal and the literal of a generated type at a borrowed argument that drop nothing that needs `Alloc`, or in a function that has
+// `Alloc`. The elements and the fields that are places (`planes([a, y])`, `pair.In { l: a, r: y }`) are no temporaries, a temporary that is `Copy` (an array that `mk4()` returns) needs no drop ("Copy 値 … の生成と破棄:
+// 要らない"), and the temporary that needs one is paid for by `uses {Alloc}` (a plain function; an `rt fn` cannot have it). The functions are one-liners (S-783).
+
+pub rt fn idb(move b: Buf[F32]) -> Buf[F32] { b }
+
+pub rt fn mk4() -> [F32; 4] { [1.0; 4] }
+
+pub fn planes(xs: [Span[F32]; 2]) -> F32 { xs[0][0] }
+
+pub rt fn planes_rt(xs: [Span[F32]; 2]) -> F32 { xs[0][0] }
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}
+
+pub fn useit(i: pair.In) {}
+
+pub rt fn useit_rt(i: pair.In) {}
+
+// ------------------------------------------------------------------------------------ no temporary
+
+pub fn places(a: Buf[F32], y: Buf[F32]) -> F32 { planes([a, y]) }
+
+pub rt fn rt_places(a: Buf[F32], y: Buf[F32]) -> F32 { planes_rt([a, y]) }
+
+pub fn views_of_places(a: Buf[F32], y: Buf[F32]) -> F32 { planes([a.slice(0, 2), y.slice(0, 2)]) }
+
+pub fn generated_places(a: Buf[F32], y: Buf[F32]) { useit(pair.In { l: a, r: y }) }
+
+pub rt fn rt_generated_places(a: Buf[F32], y: Buf[F32]) { useit_rt(pair.In { l: a, r: y }) }
+
+// ------------------------------------------------------------------------- a temporary that needs no drop
+
+pub fn copy_temporary(y: [F32; 4]) -> F32 { planes([mk4(), y]) }
+
+pub rt fn rt_copy_temporary(y: [F32; 4]) -> F32 { planes_rt([y, mk4()]) }
+
+pub fn generated_copy_temporary(y: [F32; 4]) { useit(pair.In { l: mk4(), r: y }) }
+
+pub rt fn rt_generated_copy_temporary(y: [F32; 4]) { useit_rt(pair.In { l: y, r: mk4() }) }
+
+// ----------------------------------------------------------------------- a function that has `Alloc`
+
+pub fn alloc_planar_first(move a: Buf[F32], y: Buf[F32]) -> F32 uses {Alloc} { planes([idb(move a), y]) }
+
+pub fn alloc_planar_second(move a: Buf[F32], y: Buf[F32]) -> F32 uses {Alloc} { planes([y, idb(move a)]) }
+
+pub fn alloc_generated_l(move a: Buf[F32], y: Buf[F32]) uses {Alloc} { useit(pair.In { l: idb(move a), r: y }) }
+
+pub fn alloc_generated_r(move a: Buf[F32], y: Buf[F32]) uses {Alloc} { useit(pair.In { l: y, r: idb(move a) }) }

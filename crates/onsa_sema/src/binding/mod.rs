@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 use crate::body::{BodyInfo, LocalId};
 use crate::def::GenericDef;
 use crate::kind::Kind;
-use crate::names::body::{BindingKind, BodyNames, Origin, PathRes};
+use crate::names::body::{BindingKind, BodyNames, Origin};
 use crate::sources::{Cx, Open, What, bare, leaves};
 use crate::tails::Tail;
 use crate::ty::TyId;
@@ -259,7 +259,7 @@ impl<'a> Settle<'a> {
         for leaf in leaves(cx, e, Open::No) {
             let by = Some(self.ast.without_parens(leaf.tail));
             match leaf.what {
-                What::Exits(_) => continue,
+                What::Exits => continue,
                 What::Unit(_) => return HeadRow::Owned { by: None },
                 _ if leaf.through() => {
                     if last == Some(leaf.tail) {
@@ -270,7 +270,7 @@ impl<'a> Settle<'a> {
                         return HeadRow::Owned { by };
                     }
                 }
-                What::Place(b) => match root_local(self.ast, self.names, b) {
+                What::Place(b) => match self.names.place_root(self.ast, b).map(|(_, l)| l.0 as usize) {
                     Some(l) if any_place || matches!(self.info.locals[l].state, Bind::Borrow { .. }) => {
                         no_drops &= nd(b);
                         sources.push(b);
@@ -338,13 +338,6 @@ pub(crate) fn no_drop(ast: &Ast, names: &BodyNames, info: &BodyInfo, e: ExprId) 
 /// (S-613 L4): its fields, elements and tuple elements, through
 /// parentheses. A binding not settled yet is owned.
 pub(crate) fn no_drop_binding(ast: &Ast, names: &BodyNames, info: &BodyInfo, e: ExprId) -> bool {
-    root_local(ast, names, e).is_some_and(|b| info.locals[b].state == Bind::Borrow { no_drop: true })
-}
-
-/// The index of the binding at the root of the place `e`, if a local.
-fn root_local(ast: &Ast, names: &BodyNames, e: ExprId) -> Option<usize> {
-    match names.paths.get(&ast.place_root_node(e)?) {
-        Some(PathRes::Local(b)) => Some(b.0 as usize),
-        _ => None,
-    }
+    let root = names.place_root(ast, e);
+    root.is_some_and(|(_, b)| info.locals[b.0 as usize].state == Bind::Borrow { no_drop: true })
 }

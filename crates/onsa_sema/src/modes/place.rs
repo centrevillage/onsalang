@@ -53,10 +53,9 @@ impl Place {
 /// The place `e` is, through parentheses: a local, and its fields, tuple
 /// elements and elements (§5.2); `None` for any other value (a call, a
 /// literal, a constant, a function item, a block, an `if` or a `match`). The
-/// form is [`Ast::place_root_node`]'s, the one definition of it.
+/// form is [`BodyNames::place_root`]'s, the one definition of it.
 pub(super) fn place_of(ast: &Ast, names: &BodyNames, e: ExprId) -> Option<Place> {
-    let root = ast.place_root_node(e)?;
-    let Some(PathRes::Local(b)) = names.paths.get(&root) else { return None };
+    let (root, b) = names.place_root(ast, e)?;
     let (mut proj, mut x) = (Vec::new(), ast.without_parens(e));
     while x != root {
         let (base, step) = match &ast.expr(x).kind {

@@ -1,0 +1,119 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.4"]
+// fixes = 0
+
+// S-1115 (§5.2, the supplement G3): "借用の行の見出しには `let` も入る（`let s = match o { Some(b) => b.slice(0, 2), None => y.slice(0, 2) }`、`o: Option[[F32; 4]]`、`b` は腕の中の Copy の値で、
+// `s` はそのビューを腕の外で読む）". The initializer of a `let` whose tails are all borrowed rows ("`if`・`match`・ブロック式は、発散しない全ての末尾で決め、全ての末尾が借用の行なら借用", §5.4) is a
+// borrowed row, so the name `s` holds a view that is read after the arm or the block ends. The binding of an arm that is a value taken when it is bound ("Copy の借用束縛は、束縛した時点の値を持つ") is a
+// storage of its arm, so the view of it is an E0716 at the tail that is the view (the line of the view), as it is at a borrowed argument. The initializer that has a part view of a variable of its
+// own arm or block (`var t … t.slice(0, 2)`) is an owned row and stays an E0710 (negative/tail_binding_scope_owned_row.onsa). No repair candidate (`fixes = 0`: the writer declares the binding before the
+// `let`). One error per function (P-01). The `let` whose tails are places outside or values that are copied is in values/tail_binding_scope_reads_ok.onsa.
+
+pub fn take(s: Span[F32]) -> F32 {
+  s[0]
+}
+
+// ----------------------------------------------------------------- a `match` on a place with a `Copy` payload
+
+pub fn match_some_arm(o: Option[[F32; 4]], y: [F32; 4]) -> F32 {
+  let s = match o { Some(b) => b.slice(0, 2), None => y.slice(0, 2) } //~ E0716
+  take(s)
+}
+
+pub fn match_some_arm_when_it_is_the_last(o: Option[[F32; 4]], y: [F32; 4]) -> F32 {
+  let s = match o { None => y.slice(0, 2), Some(b) => b.slice(1, 3) } //~ E0716
+  take(s)
+}
+
+pub fn match_ok_arm(o: Result[[F32; 4], U32], y: [F32; 4]) -> F32 {
+  let s = match o { Ok(b) => b.slice(0, 2), Err(_) => y.slice(0, 2) } //~ E0716
+  take(s)
+}
+
+pub fn match_a_part_of_a_tuple(o: ([F32; 4], U32), y: [F32; 4]) -> F32 {
+  let s = match o { (a, _) => a.slice(0, 2) } //~ E0716
+  take(s)
+}
+
+pub fn match_a_view_of_a_view(o: Option[[F32; 4]], y: [F32; 4]) -> F32 {
+  let s = match o { Some(b) => b.slice(0, 3).slice(0, 2), None => y.slice(0, 2) } //~ E0716
+  take(s)
+}
+
+pub fn match_arms_on_lines(o: Option[[F32; 4]], y: [F32; 4]) -> F32 {
+  let s = match o {
+    Some(b) => b.slice(0, 2), //~ E0716
+    None => y.slice(0, 2),
+  }
+  take(s)
+}
+
+pub fn match_a_block_in_the_arm(o: Option[[F32; 4]], y: [F32; 4]) -> F32 {
+  let s = match o {
+    Some(b) => {
+      let _ = b[0]
+      b.slice(0, 2) //~ E0716
+    },
+    None => y.slice(0, 2),
+  }
+  take(s)
+}
+
+pub fn match_a_nested_if_in_the_arm(o: Option[[F32; 4]], c: Bool, y: [F32; 4]) -> F32 {
+  let s = match o {
+    Some(b) => if c { b.slice(0, 2) } else { y.slice(0, 2) }, //~ E0716
+    None => y.slice(0, 2),
+  }
+  take(s)
+}
+
+// ------------------------------------------------------------------------------ the block form
+
+pub fn block_around_a_match(o: Option[[F32; 4]], y: [F32; 4]) -> F32 {
+  let s = {
+    match o { Some(b) => b.slice(0, 2), None => y.slice(0, 2) } //~ E0716
+  }
+  take(s)
+}
+
+pub fn block_around_an_if_that_has_a_match(o: Option[[F32; 4]], c: Bool, y: [F32; 4]) -> F32 {
+  let s = if c {
+    match o {
+      Some(b) => b.slice(0, 2), //~ E0716
+      None => y.slice(0, 2),
+    }
+  } else {
+    y.slice(1, 3)
+  }
+  take(s)
+}
+
+pub fn the_block_after_a_statement(o: Option[[F32; 4]], y: [F32; 4]) -> F32 {
+  let s = {
+    let _ = y[0]
+    match o { Some(b) => b.slice(0, 2), None => y.slice(0, 2) } //~ E0716
+  }
+  take(s)
+}
+
+// ----------------------------------------------------------------------------------- the position
+
+pub fn in_a_loop(o: Option[[F32; 4]], n: U32, y: [F32; 4]) -> F32 {
+  var r: F32 = 0.0
+  for _ in 0 ..< n {
+    let s = match o { Some(b) => b.slice(0, 2), None => y.slice(0, 2) } //~ E0716
+    r = r + take(s)
+  }
+  r
+}
+
+pub fn in_an_arm(o: Option[[F32; 4]], k: U32, y: [F32; 4]) -> F32 {
+  match k {
+    0 => {
+      let s = match o { Some(b) => b.slice(0, 2), None => y.slice(0, 2) } //~ E0716
+      take(s)
+    },
+    _ => 0.0,
+  }
+}

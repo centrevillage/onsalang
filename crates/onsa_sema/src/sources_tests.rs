@@ -59,7 +59,7 @@ fn leaves_of(body: &str) -> Vec<String> {
                 What::Place(x) => ("place", x),
                 What::Value(x) => ("value", x),
                 What::Unit(x) => ("unit", x),
-                What::Exits(x) => ("exits", x),
+                What::Exits => ("exits", l.at),
             };
             let over: String = l
                 .over
