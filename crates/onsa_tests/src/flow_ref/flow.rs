@@ -13,13 +13,14 @@ use std::collections::HashMap;
 
 use onsa_diag::Span;
 use onsa_sema::def::FlowDef;
+use onsa_sema::flow_names::FlowBuiltin;
 use onsa_sema::{DefId, LocalId, Target};
 use onsa_syntax::ast::{CallKind, ExprId, ExprKind, PatId, StmtKind};
 
 use super::expr::{Frame, Stop};
 use super::host::FnHost;
 use super::scalar::Fault;
-use super::sema_view::{Body, Stage, View, clock_stage, input_stage};
+use super::sema_view::{Body, Called, Stage, View, clock_stage, input_stage, output_stage};
 use super::state::{InstState, Run};
 use super::value::Value;
 
@@ -76,7 +77,13 @@ pub struct Ctx {
 /// and W7-17), and `e at k` has the clock `k` (§11.3).
 pub(super) fn clock_of(body: &Body, known: &HashMap<LocalId, Clock>, root: ExprId, e: ExprId) -> Result<Clock, Fault> {
     match &body.ast.expr(e).kind {
-        ExprKind::Call { kind: CallKind::Flow, .. } => Ok(Clock::Sample),
+        ExprKind::Call { callee, kind, .. } if matches!(kind, CallKind::Flow) || body.time_call(e) => {
+            Ok(match body.called(*callee)? {
+                Called::Builtin(FlowBuiltin::SampleRate) => Clock::Init,
+                Called::Flow(def) => output_stage(body.view.flow(def)?).into(),
+                Called::Builtin(_) => Clock::Sample,
+            })
+        }
         ExprKind::At { expr, clock } => {
             clock_of(body, known, root, *expr)?;
             clock_stage(&clock.name.name).map(Clock::from).ok_or(Fault::Unavailable("a clock the evaluator has not"))
@@ -96,22 +103,30 @@ pub(super) fn clock_of(body: &Body, known: &HashMap<LocalId, Clock>, root: ExprI
 }
 
 /// A `let` of the body, or (no pattern) its last expression, the output; and when its value is made.
+#[derive(Debug)]
 struct Step {
     pat: Option<PatId>,
     init: ExprId,
     clock: Clock,
 }
 
-/// An instance of one flow: the latest value of each of its locals and of its output lives between the calls.
+/// What an instance of a flow keeps between its entries, with no lifetime: one a flow calls is kept whole in the state of
+/// its caller (`InstState::children`), the outermost in an [`Instance`]; the entry `enter` is the same.
+#[derive(Debug)]
+pub struct Inst {
+    pub(super) def: DefId,
+    steps: Vec<Step>,
+    locals: HashMap<LocalId, Value>,
+    pub(super) out: Value,
+    pub(super) state: InstState,
+}
+
+/// One instance of a flow, the outermost: the time it runs in is its own, and the instances it calls read it.
 pub struct Instance<'a> {
     body: Body<'a>,
     decl: &'a FlowDef,
-    steps: Vec<Step>,
-    locals: HashMap<LocalId, Value>,
-    /// The state the delays hold between the frames (`reset` is U1c).
-    state: InstState,
-    out: Value,
-    /// The time the instance runs in (`tick` is read by `sample_tick()`, U1c).
+    me: Inst,
+    /// The time the instance runs in: `sample_tick()` reads it, and `reset` makes it 0.
     pub ctx: Ctx,
 }
 
@@ -160,19 +175,28 @@ fn stage(f: &mut Frame, steps: &[Step], out: &mut Value, at: Stage) -> Result<()
     Ok(())
 }
 
-impl<'a> Instance<'a> {
-    /// The instance of the flow `def` as `init` makes it: `config` has the inputs of `init` (by name), and the `let`s of
-    /// a constant or of that clock are made once. Call it on a thread of a large stack (`mod.rs`).
-    pub fn init<'h>(
-        view: View<'a>,
-        def: DefId,
-        sample_rate: f32,
-        config: &[(&str, Value)],
-        host: Option<&'h mut dyn FnHost>,
-    ) -> Result<Instance<'a>, Stop>
-    where
-        'a: 'h,
-    {
+/// One entry of `inst` in its frame `f` (the time is `f.run.ctx`): the inputs of the stage `at` (`given`, by name), its
+/// `let`s, then what the stage has besides: at `init` the nodes (the delays, the instances it calls), at `block` the
+/// `block` stage of those instances (§11.3, a call of 0 frames too), for a frame the second phase of the delays (§11.4).
+pub(super) fn enter<V: std::borrow::Borrow<Value>>(
+    f: &mut Frame,
+    inst: &mut Inst,
+    decl: &FlowDef,
+    at: Stage,
+    given: &[(&str, V)],
+) -> Result<(), Stop> {
+    give(f, decl, at, given)?;
+    stage(f, &inst.steps, &mut inst.out, at)?;
+    match at {
+        Stage::Init => f.make_cells(&inst.steps.iter().map(|s| s.init).collect::<Vec<_>>()),
+        Stage::Block => f.block_children(),
+        Stage::Sample => f.commit(f.body.ast.expr(decl.body).span),
+    }
+}
+
+impl Inst {
+    /// The plan of the flow `def`: the clock of each `let` and of the output (§11.2), with its body and declaration.
+    pub(super) fn plan<'a>(view: View<'a>, def: DefId) -> Result<(Inst, Body<'a>, &'a FlowDef), Stop> {
         let unavailable = |fault| Stop { fault, at: view.name_span(def) };
         let (body, decl) = (view.body(def).map_err(unavailable)?, view.flow(def).map_err(unavailable)?);
         let wrong = |e, what| Stop { fault: Fault::Internal(what), at: body.ast.expr(e).span };
@@ -199,15 +223,51 @@ impl<'a> Instance<'a> {
         let clock =
             clock_of(&body, &known, tail, tail).map_err(|fault| Stop { fault, at: body.ast.expr(tail).span })?;
         steps.push(Step { pat: None, init: tail, clock });
+        Ok((Inst { def, steps, locals: HashMap::new(), out: Value::Unit, state: InstState::default() }, body, decl))
+    }
+
+    /// The frame of an evaluation, given the locals and the state (`keep` takes them back), the time and the places held.
+    pub(super) fn frame<'b>(
+        &mut self,
+        body: Body<'b>,
+        ctx: Ctx,
+        used: usize,
+        host: Option<&'b mut dyn FnHost>,
+    ) -> Frame<'b> {
+        let mut f = Frame::new(body);
+        f.locals = std::mem::take(&mut self.locals);
+        f.run = Some(Run::new(std::mem::take(&mut self.state), ctx, used));
+        f.host = host;
+        f
+    }
+
+    /// What an evaluation leaves: the latest values of the locals and the state, taken back from its frame.
+    pub(super) fn keep(&mut self, f: Frame, at: Span) -> Result<(), Stop> {
+        self.state = f.run.ok_or(Stop { fault: Fault::Internal("a frame with no state"), at })?.state;
+        self.locals = f.locals;
+        Ok(())
+    }
+}
+
+impl<'a> Instance<'a> {
+    /// The instance of the flow `def` as `init` makes it: `config` has the inputs of `init` (by name), and the `let`s of
+    /// a constant or of that clock are made once, with the instances it calls. Call it on a thread of a large stack.
+    pub fn init<'h>(
+        view: View<'a>,
+        def: DefId,
+        sample_rate: f32,
+        config: &[(&str, Value)],
+        host: Option<&'h mut dyn FnHost>,
+    ) -> Result<Instance<'a>, Stop>
+    where
+        'a: 'h,
+    {
+        let (mut me, body, decl) = Inst::plan(view, def)?;
         let ctx = Ctx { sample_rate, tick: 0 };
-        let mut me =
-            Instance { body, decl, steps, locals: HashMap::new(), state: InstState::default(), out: Value::Unit, ctx };
-        let mut f = me.frame(host);
-        let done = give(&mut f, decl, Stage::Init, &config.iter().map(|(n, v)| (*n, v)).collect::<Vec<_>>())
-            .and_then(|()| stage(&mut f, &me.steps, &mut me.out, Stage::Init))
-            .and_then(|()| f.make_cells(&me.steps.iter().map(|s| s.init).collect::<Vec<_>>()));
-        let kept = me.keep(f);
-        done.and(kept).map(|()| me)
+        let mut f = me.frame(body, ctx, 0, host);
+        let done = enter(&mut f, &mut me, decl, Stage::Init, config);
+        let kept = me.keep(f, body.ast.expr(decl.body).span);
+        done.and(kept).map(|()| Instance { body, decl, me, ctx })
     }
 
     /// `process` over `frames` frames: the `let`s of `block` once (`params`, by name), a call of 0 frames too, and for
@@ -224,56 +284,38 @@ impl<'a> Instance<'a> {
         'a: 'h,
     {
         let (decl, mut outs) = (self.decl, Vec::new());
-        let mut f = self.frame(host);
+        let at = self.body.ast.expr(decl.body).span;
+        let mut f = self.me.frame(self.body, self.ctx, 0, host);
         let done = (|| {
-            let at = f.body.ast.expr(decl.body).span;
             if inputs.iter().any(|(_, column)| column.len() != frames) {
                 return Err(Stop { fault: Fault::Internal("a column that is not of the frames given"), at });
             }
             check(at, decl, Stage::Sample, inputs.iter().map(|(n, _)| *n))?;
-            give(&mut f, decl, Stage::Block, &params.iter().map(|(n, v)| (*n, v)).collect::<Vec<_>>())?;
-            stage(&mut f, &self.steps, &mut self.out, Stage::Block)?;
+            enter(&mut f, &mut self.me, decl, Stage::Block, params)?;
             for n in 0..frames {
-                give(
-                    &mut f,
-                    decl,
-                    Stage::Sample,
-                    &inputs.iter().map(|(name, col)| (*name, &col[n])).collect::<Vec<_>>(),
-                )?;
-                stage(&mut f, &self.steps, &mut self.out, Stage::Sample)?;
-                f.commit(at)?;
-                outs.push(self.out.clone());
+                if let Some(run) = f.run.as_mut() {
+                    run.ctx = self.ctx;
+                }
+                let given: Vec<(&str, &Value)> = inputs.iter().map(|(name, col)| (*name, &col[n])).collect();
+                enter(&mut f, &mut self.me, decl, Stage::Sample, &given)?;
+                outs.push(self.me.out.clone());
                 self.ctx.tick = self.ctx.tick.wrapping_add(1);
             }
             Ok(())
         })();
-        let kept = self.keep(f);
+        let kept = self.me.keep(f, at);
         done.and(kept).map(|()| outs)
+    }
+
+    /// `reset` (§11.6): every delay and every instance it calls is as `init` made it, the time is 0. The `let`s of `init`
+    /// keep their values; those of a faster clock are made again by the next `process` before they are read.
+    pub fn reset(&mut self) {
+        self.me.state.reset();
+        self.ctx.tick = 0;
     }
 
     /// The clock of each step: the `let`s in the order they are written, then the output.
     pub fn clocks(&self) -> Vec<Clock> {
-        self.steps.iter().map(|s| s.clock).collect()
-    }
-
-    /// What an evaluation leaves: the latest values of the locals and the state, taken back from its frame.
-    fn keep(&mut self, f: Frame) -> Result<(), Stop> {
-        let at = self.body.ast.expr(self.decl.body).span;
-        self.state = f.run.ok_or(Stop { fault: Fault::Internal("a frame with no state"), at })?.state;
-        self.locals = f.locals;
-        Ok(())
-    }
-
-    /// The frame of an evaluation: the latest values of the locals and the state are given to it (`keep` takes them back).
-    fn frame<'b>(&mut self, host: Option<&'b mut dyn FnHost>) -> Frame<'b>
-    where
-        'a: 'b,
-    {
-        let body: Body<'b> = self.body;
-        let mut f = Frame::new(body);
-        f.locals = std::mem::take(&mut self.locals);
-        f.run = Some(Run::new(std::mem::take(&mut self.state)));
-        f.host = host;
-        f
+        self.me.steps.iter().map(|s| s.clock).collect()
     }
 }

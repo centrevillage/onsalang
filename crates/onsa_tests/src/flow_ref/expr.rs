@@ -49,6 +49,8 @@ pub struct Limits {
 /// within it. 2^20 places are 40 MB or so.
 pub const LIMITS: Limits = Limits { reserve: 4 << 20, most: 1 << 20 };
 
+pub(super) const LOW_STACK: Fault = Fault::Unavailable("the stack is nearly used up");
+
 /// The evaluation of one body: the values its locals have so far.
 pub struct Frame<'a> {
     pub body: Body<'a>,
@@ -76,10 +78,13 @@ pub(super) fn evaluates(body: &Body, e: ExprId) -> bool {
         K::Lit(l) => !matches!(l, Lit::Str(_)),
         K::Path(_) => value(),
         K::Field { .. } => !body.names(e) || value(),
-        K::Call { kind: CallKind::Plain, .. } => matches!(
-            body.target(e),
-            Ok(Target::Variant { .. } | Target::Fn { .. } | Target::Method { .. } | Target::Panic)
-        ),
+        K::Call { kind: CallKind::Plain, .. } => {
+            let call = matches!(
+                body.target(e),
+                Ok(Target::Variant { .. } | Target::Fn { .. } | Target::Method { .. } | Target::Panic)
+            );
+            call || body.time_call(e)
+        }
         K::If { tilde, .. } | K::Match { tilde, .. } => tilde.is_none(),
         K::Paren(_) | K::At { .. } | K::Binary { .. } | K::Unary { .. } | K::Cast { .. } | K::Index { .. } => true,
         K::TupleIndex { .. } | K::Struct { .. } | K::Tuple(_) | K::Array(_) | K::Repeat { .. } => true,
@@ -139,11 +144,17 @@ impl<'a> Frame<'a> {
         self.depth
     }
 
+    /// Is the stack left under what the limits keep back? (`Unavailable`: [`LOW_STACK`].)
+    #[inline(never)]
+    pub(super) fn low_stack(&self) -> bool {
+        onsa_diag::stack::remaining().is_some_and(|left| left < self.limits.reserve)
+    }
+
     /// The value of `e`, which has the type the table gives it. Call it on a large stack (`mod.rs`): it recurses.
     pub fn eval(&mut self, e: ExprId) -> Eval {
         let at = self.body.ast.expr(e).span;
-        if onsa_diag::stack::remaining().is_some_and(|left| left < self.limits.reserve) {
-            return Err(Stop { fault: Fault::Unavailable("the stack is nearly used up"), at });
+        if self.low_stack() {
+            return Err(Stop { fault: LOW_STACK, at });
         }
         let v = self.form(e, at)?;
         match self.body.ty(e).and_then(|ty| v.agrees(ty, self.body.view)) {

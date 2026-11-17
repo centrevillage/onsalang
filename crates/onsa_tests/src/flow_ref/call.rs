@@ -25,6 +25,9 @@ impl<'a> Frame<'a> {
     #[inline(never)]
     pub(super) fn call(&mut self, e: ExprId, callee: ExprId, args: &[Arg], at: Span) -> Eval {
         let here = |fault| Stop { fault, at };
+        if self.body.time_call(e) {
+            return self.stateful(e, at);
+        }
         match self.body.target(e).map_err(here)? {
             Target::Variant { index, .. } => {
                 let fields = args.iter().map(|a| self.eval(a.expr)).collect::<Result<_, _>>()?;

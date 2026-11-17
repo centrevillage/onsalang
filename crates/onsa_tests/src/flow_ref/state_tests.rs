@@ -18,7 +18,7 @@ use super::value::Value;
 
 use std::sync::atomic::{AtomicU32, Ordering::Relaxed};
 
-fn floats(xs: &[f32]) -> Vec<Value> {
+pub(super) fn floats(xs: &[f32]) -> Vec<Value> {
     xs.iter().map(|x| Value::F32(*x)).collect()
 }
 
@@ -27,7 +27,7 @@ fn floats(xs: &[f32]) -> Vec<Value> {
 /// `clean` is false for a source that has diagnostics of this version's check (E0200 of a form the spec has: a delay in
 /// the first argument of a delay, an omitted `init` of a type that is not a number, a delay length that is a constant
 /// expression and not a literal): the evaluator has the form, and its tables are whole, so it runs.
-fn run_with(
+pub(super) fn run_with(
     clean: bool,
     src: &str,
     name: &'static str,
@@ -49,7 +49,7 @@ fn run_with(
     })
 }
 
-fn run(
+pub(super) fn run(
     src: &str,
     name: &'static str,
     config: Vec<(&'static str, Value)>,
@@ -61,20 +61,20 @@ fn run(
 }
 
 /// A flow with the one input `x` at `sample`, run in one call (`go_open`: of a source with diagnostics, see `run_with`).
-fn go(src: &str, name: &'static str, xs: &[f32]) -> Vec<f32> {
+pub(super) fn go(src: &str, name: &'static str, xs: &[f32]) -> Vec<f32> {
     f32s(&run(src, name, vec![], vec![], vec![("x", floats(xs))], vec![xs.len()]))
 }
 
-fn go_open(src: &str, name: &'static str, xs: &[f32]) -> Vec<f32> {
+pub(super) fn go_open(src: &str, name: &'static str, xs: &[f32]) -> Vec<f32> {
     f32s(&run_with(false, src, name, vec![], vec![], vec![("x", floats(xs))], vec![xs.len()]))
 }
 
-fn f32s(vs: &[Value]) -> Vec<f32> {
+pub(super) fn f32s(vs: &[Value]) -> Vec<f32> {
     vs.iter().map(|v| if let Value::F32(x) = v { *x } else { panic!("not an F32: {v:?}") }).collect()
 }
 
 /// The same bits (a NaN is the same as any NaN), so that `-0.0` and `0.0` differ.
-fn same(got: &[f32], want: &[f32]) {
+pub(super) fn same(got: &[f32], want: &[f32]) {
     let eq = |a: &f32, b: &f32| a.to_bits() == b.to_bits() || (a.is_nan() && b.is_nan());
     assert!(got.len() == want.len() && got.iter().zip(want).all(|(a, b)| eq(a, b)), "got {got:?}, want {want:?}");
 }

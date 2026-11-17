@@ -8,10 +8,13 @@
 use onsa_diag::Span;
 use onsa_driver::Analyzed;
 use onsa_sema::def::{FieldDef, Fields, FlowDef, FlowInput, FnDef, StructDef, VariantDef};
+use onsa_sema::flow_names::FlowBuiltin;
 use onsa_sema::ty::Rate;
-use onsa_sema::{Analysis, BodyInfo, ConstValue, DefId, DefKind, LocalId, LocalInfo, LocalKind, Package};
+use onsa_sema::{
+    Analysis, BodyInfo, ConstValue, DefId, DefKind, Entity, LocalId, LocalInfo, LocalKind, ModId, Package,
+};
 use onsa_sema::{Target, Ty, TyId};
-use onsa_syntax::ast::{Ast, ExprId, PatId, PatKind};
+use onsa_syntax::ast::{Ast, CallKind, ExprId, ExprKind, PatId, PatKind};
 
 use super::scalar::Fault;
 
@@ -32,6 +35,7 @@ pub struct Body<'a> {
     pub view: View<'a>,
     pub ast: &'a Ast,
     pub info: &'a BodyInfo,
+    pub module: ModId,
 }
 
 impl<'a> View<'a> {
@@ -58,7 +62,7 @@ impl<'a> View<'a> {
         let (info, module) =
             (need(info, "no tables for a body")?, need(self.analysis.ast(self.pkg, d.module), "no tree")?);
         need(info.complete.then_some(()), "a body whose tables are not whole")?;
-        Ok(Body { view: self, ast: &module.parsed.ast, info })
+        Ok(Body { view: self, ast: &module.parsed.ast, info, module: d.module })
     }
 
     /// The declaration of a flow: its inputs and its body (`body` has the tables of the body).
@@ -107,7 +111,39 @@ impl<'a> View<'a> {
     }
 }
 
+/// What the callee of a call of a flow is: a builtin (a delay, `sample_rate()`, `sample_tick()`) or a flow of the user.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Called {
+    Builtin(FlowBuiltin),
+    Flow(DefId),
+}
+
 impl<'a> Body<'a> {
+    /// What `callee` names (no binding hides a builtin, E0304); not a path is a qualifier (`.when~`, W7-10).
+    pub fn called(&self, callee: ExprId) -> Result<Called, Fault> {
+        let ExprKind::Path(p) = &self.ast.expr(onsa_sema::named(self.ast, callee)).kind else {
+            return need(None, "a qualifier of an instance");
+        };
+        if let [one] = p.segments.as_slice() {
+            if let Some(b) = FlowBuiltin::named(&one.name) {
+                return Ok(Called::Builtin(b));
+            }
+        }
+        match self.view.analysis.resolve_path(self.module, p) {
+            Ok(Entity::Def(d)) if matches!(self.view.analysis.def(d).kind, DefKind::Flow(_)) => Ok(Called::Flow(d)),
+            _ => Err(Fault::Internal("the callee of a call of a flow is no flow")),
+        }
+    }
+
+    /// Is `e` the call `sample_rate()` or `sample_tick()`? They are written with no `~`, and the table has no target for them.
+    #[inline(never)]
+    pub fn time_call(&self, e: ExprId) -> bool {
+        let ExprKind::Call { callee, kind: CallKind::Plain, .. } = &self.ast.expr(e).kind else { return false };
+        let time =
+            matches!(self.called(*callee), Ok(Called::Builtin(FlowBuiltin::SampleRate | FlowBuiltin::SampleTick)));
+        time && !self.names(e)
+    }
+
     pub fn ty(&self, e: ExprId) -> Result<&'a Ty, Fault> {
         Ok(self.view.ty(*need(self.info.expr_types.get(&e), "an expression with no type")?))
     }
@@ -236,6 +272,11 @@ pub fn input_stage(input: &FlowInput) -> Stage {
 /// The stage of the clock `name` an `at` writes (§11.3), if it is one of the three.
 pub fn clock_stage(name: &str) -> Option<Stage> {
     Rate::of_clock(name).map(rate_stage)
+}
+
+/// The clock of the output of a flow (§11.3): always `sample` today (W7-09 and W7-17 bring the others).
+pub fn output_stage(_: &FlowDef) -> Stage {
+    rate_stage(Rate::Sig)
 }
 
 fn rate_stage(rate: Rate) -> Stage {

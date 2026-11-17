@@ -12,7 +12,8 @@
 //! 0.6 to 2 MB. The chain of constants that read constants, with an initializer 256 levels deep each, is more than the
 //! stack of the thread: [`expr::Limits`] keeps 4 MiB of it back, and an `eval` that finds less left stops with
 //! `Unavailable`, whatever the input (a thread that is not one of `onsa_diag::stack` has no such guard).
-//! A level of a `vdelay~` in the `d` of a `vdelay~` takes 3.7 KB (2026-11-17).
+//! A level of a `vdelay~` in the `d` of a `vdelay~` takes 3.7 KB, one of `id~(id~(..))` 6.0 KB and a flow that calls a flow
+//! 9.4 KB (64 MiB hold some 6400 of them; `Frame::low_stack` stops it, 2026-11-17).
 //!
 //! - [`value`]: the values of the evaluator, their defaults (§6.4) and their
 //!   equality (§13.4).
@@ -26,9 +27,9 @@
 //! - [`host`]: the door of the functions the evaluator does not evaluate, and the two hosts it has of its own.
 //! - [`pattern`]: `match` and the `let` that takes a value apart, and the patterns they use (a guard is tried for
 //!   each way a `|` lets a pattern match).
-//! - [`flow`]: one instance of a flow: the clock of each `let` and the stages `init` and `process` run them in.
-//! - [`state`]: the state of an instance, a tree of cells made for each place a delay is called, and the delays
-//!   (`prev~`, `delay~`, `vdelay~`) with the two phases of a tick that `^` needs.
+//! - [`flow`]: an instance of a flow: the clock of each `let`, the stages `init` and `process` run them in, `reset`.
+//! - [`state`]: the state of an instance, a tree of cells and instances made for each place a delay or a flow is called,
+//!   the delays (`prev~`, `delay~`, `vdelay~`) with the two phases of a tick that `^` needs, the time (`sample_rate()`).
 //! - [`sema_view`]: the tables of the checker the evaluator reads, in one file.
 
 pub mod aggregate;
@@ -50,6 +51,8 @@ mod call_tests;
 mod expr_tests;
 #[cfg(test)]
 mod flow_tests;
+#[cfg(test)]
+mod instance_tests;
 #[cfg(test)]
 mod limits_tests;
 #[cfg(test)]
