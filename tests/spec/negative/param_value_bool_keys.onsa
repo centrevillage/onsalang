@@ -1,0 +1,119 @@
+// onsa.toml
+// [test]
+// spec = ["§11.7", "§14.2", "§18.1"]
+
+// W7-13 U4b/t, S-87 (3), R-99 (spec §11.7: "`Bool` の入力に書けるのは `default`（`true` / `false`）、`unit`、`label`、`id` だけである", the
+// constraints of the values are E0809 and the "型の不一致は E0401"): the keys that a `Bool` input may not have (`min`, `max`, `step`
+// and `scale`) are E0809, at the key (the attribute is on one line, so the line of the mark is the key's); the value of the key is
+// `true` or `false`, a value of the type of the input, so that the key is the only thing wrong in them and the error is not a
+// type's. The value of an allowed key that is not a `Bool` or a text (`default: 1`, `unit: true`) is E0401
+// (tests/spec/negative/param_value_type_mismatch.onsa), and the forms that are right are in param_attr_ok_bool.onsa. The same keys on
+// a float or an integer input are not errors. One error in each unit (§18.1).
+
+pub flow bool_with_min(
+  x: F32 at sample,
+  @param(min: false, default: true)                   //~ E0809
+  on: Bool at block,
+) -> F32 at sample {
+  if on { x } else { 0.0 }
+}
+
+pub flow bool_with_max(
+  x: F32 at sample,
+  @param(default: true, max: true)                    //~ E0809
+  on: Bool at block,
+) -> F32 at sample {
+  if on { x } else { 0.0 }
+}
+
+pub flow bool_with_step(
+  x: F32 at sample,
+  @param(default: false, step: true)                  //~ E0809
+  mute: Bool at block,
+) -> F32 at sample {
+  if mute { 0.0 } else { x }
+}
+
+pub flow bool_with_scale_linear(
+  x: F32 at sample,
+  @param(default: false, scale: "linear")             //~ E0809
+  mute: Bool at block,
+) -> F32 at sample {
+  if mute { 0.0 } else { x }
+}
+
+pub flow bool_with_scale_log(
+  x: F32 at sample,
+  @param(default: true, scale: "log", label: "On")    //~ E0809
+  on: Bool at block,
+) -> F32 at sample {
+  if on { x } else { 0.0 }
+}
+
+pub flow bool_with_a_range(
+  x: F32 at sample,
+  @param(min: false, max: true, default: true)        //~ E0809
+  on: Bool at block,
+) -> F32 at sample {
+  if on { x } else { 0.0 }
+}
+
+pub flow bool_with_every_numeric_key(
+  x: F32 at sample,
+  @param(min: false, max: true, default: true, step: true, scale: "linear") //~ E0809
+  on: Bool at block,
+) -> F32 at sample {
+  if on { x } else { 0.0 }
+}
+
+pub flow bool_with_the_text_keys_and_a_step(
+  x: F32 at sample,
+  @param(default: true, unit: "on/off", label: "Bypass", id: "bypass", step: false) //~ E0809
+  on: Bool at block,
+) -> F32 at sample {
+  if on { x } else { 0.0 }
+}
+
+// The key of the one input does not reach the others, and the same keys are fine on the numbers.
+pub flow keys_on_the_numbers_are_fine(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5, step: 0.25, scale: "linear")
+  p: F32 at block,
+  @param(min: 0, max: 4, default: 1, step: 1)
+  n: I32 at block,
+  @param(min: 1.0, max: 4.0, default: 2.0, scale: "log")
+  q: F64 at block,
+  @param(default: true, unit: "on/off", label: "Bypass", id: "bypass")
+  on: Bool at block,
+) -> F32 at sample {
+  if on { x * p } else { 0.0 }
+}
+
+pub flow the_bool_beside_numbers(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  p: F32 at block,
+  @param(default: true, max: true)                    //~ E0809
+  on: Bool at block,
+) -> F32 at sample {
+  if on { x * p } else { 0.0 }
+}
+
+// An alias of `Bool` is `Bool`.
+type Switch = Bool
+
+pub flow alias_with_min(
+  x: F32 at sample,
+  @param(min: false, default: true)                   //~ E0809
+  on: Switch at block,
+) -> F32 at sample {
+  if on { x } else { 0.0 }
+}
+
+pub flow alias_is_fine(
+  x: F32 at sample,
+  @param(default: true, label: "On")
+  on: Switch at block,
+) -> F32 at sample {
+  if on { x } else { 0.0 }
+}

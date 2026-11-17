@@ -1,0 +1,272 @@
+// onsa.toml
+// [test]
+// spec = ["§11.7", "§6.6", "§2.4", "§18.1"]
+
+// W7-13 U4b/t, S-87 (2), R-291 (spec §11.7 writes the values "`const` の初期化式と同じ規則で書き、コンパイル時に評価する（`const` の名前、関連定数、関数の呼び出し、補間を書ける）",
+// and the evaluation is the work of the constants, W9-03; §18.1: a form that is not done yet is E0200, and not a wrong result): until then a value that is
+// not a literal is E0200 (the feature, "the value of `@param` other than a literal"), at the value. A numeric key takes a literal, parentheses and a
+// prefix `-` and nothing else: the name of a `const` or of an associated constant (`default: K`, `F32.PI`), an operator (`1.0 + 1.0`), a call
+// (`one()`) and the prefix `-` or the parentheses around such a name are E0200, in each key and for each type of the inputs. A text key takes a string literal
+// with no hole: a hole (`"Gain {CH}"`, the name resolved and its type checked first, so a name that is nowhere is E0302 and one with no `Show` E0416,
+// param_value_name_unresolved.onsa) is E0200. The error is of the form of the expression: it does not depend on the order of the
+// declarations or on the value that the name has. A value of the wrong type is E0401 and not E0200 (a type is checked before):
+// `max: U8.MAX` for a `I8` input is E0401. One error in each unit (§18.1). (The name of a `const` of `Str` is not here: the `const` is itself
+// E0200 in this version, §6.6, and what the use of such a name reports is not decided.)
+
+pub const K: F32 = 0.5
+
+pub const BIG: F32 = 100.0
+
+pub const COUNT: U8 = 4
+
+pub const ON: Bool = true
+
+pub const CH: U32 = 2
+
+pub fn one() -> F32 {
+  1.0
+}
+
+pub fn four() -> U8 {
+  4
+}
+
+// ---- the name of a `const`, in each key and for the types of the inputs
+
+pub flow const_default(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: K)               //~ E0200
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow const_max(
+  x: F32 at sample,
+  @param(min: 0.0, max: BIG, default: 0.5)             //~ E0200
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow assoc_one_of_a_double_min(
+  x: F64 at sample,
+  @param(min: F64.ONE, max: 2.0, default: 1.5)          //~ E0200
+  p: F64 at block,
+) -> F64 at sample {
+  x * p
+}
+
+pub flow const_integer(
+  x: F32 at sample,
+  @param(min: 0, max: 10, default: COUNT)              //~ E0200
+  n: U8 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow const_step_of_an_integer(
+  x: F32 at sample,
+  @param(min: 0, max: 100, default: 4, step: COUNT)    //~ E0200
+  n: U8 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow const_bool(
+  x: F32 at sample,
+  @param(default: ON)                                  //~ E0200
+  on: Bool at block,
+) -> F32 at sample {
+  if on { x } else { 0.0 }
+}
+
+// ---- the associated constants
+
+pub flow assoc_pi(
+  x: F32 at sample,
+  @param(min: 0.0, max: F32.PI, default: 1.0)          //~ E0200
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow assoc_integer_max(
+  x: F32 at sample,
+  @param(min: 0, max: U8.MAX, default: 3)              //~ E0200
+  n: U8 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow assoc_epsilon_of_a_double(
+  x: F64 at sample,
+  @param(min: F64.EPSILON, max: 1.0, default: 0.5)     //~ E0200
+  p: F64 at block,
+) -> F64 at sample {
+  x * p
+}
+
+// ---- an operator, a call, and the prefix `-` or parentheses around a name
+
+pub flow sum_of_literals(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0 + 1.0, default: 0.5)       //~ E0200
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow product_of_integers(
+  x: F32 at sample,
+  @param(min: 0, max: 2 * 5, default: 3)               //~ E0200
+  n: I32 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow call_of_a_function(
+  x: F32 at sample,
+  @param(min: 0.0, max: 2.0, default: one())           //~ E0200
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow call_for_an_integer(
+  x: F32 at sample,
+  @param(min: 0, max: 10, default: four())             //~ E0200
+  n: U8 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow negated_const(
+  x: F32 at sample,
+  @param(min: -BIG, max: 1.0, default: 0.5)            //~ E0200
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow parenthesized_const(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: (K))             //~ E0200
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow negated_parenthesized_const(
+  x: F32 at sample,
+  @param(min: -(BIG), max: 1.0, default: 0.5)          //~ E0200
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow if_expression(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: if true { 0.5 } else { 0.25 }) //~ E0200
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow not_of_a_bool(
+  x: F32 at sample,
+  @param(default: !false)                              //~ E0200
+  on: Bool at block,
+) -> F32 at sample {
+  if on { x } else { 0.0 }
+}
+
+// ---- the hole of a string whose name is there
+
+pub flow hole_in_label(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5, label: "Gain {CH}") //~ E0200
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow hole_in_unit(
+  x: F32 at sample,
+  @param(min: 0, max: 10, default: 2, unit: "x{CH}")   //~ E0200
+  n: I32 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow hole_in_id(
+  x: F32 at sample,
+  @param(default: true, id: "bypass_{CH}")             //~ E0200
+  on: Bool at block,
+) -> F32 at sample {
+  if on { x } else { 0.0 }
+}
+
+pub flow hole_of_an_associated_constant(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5, label: "{U8.MAX}") //~ E0200
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+// ---- a value of the wrong type is E0401 whatever its form is: the type is checked before the form
+
+pub flow wrong_type_assoc(
+  x: F32 at sample,
+  @param(min: -10, max: U8.MAX, default: 3)            //~ E0401
+  n: I8 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow wrong_type_const(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: COUNT)           //~ E0401
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow wrong_type_call(
+  x: F32 at sample,
+  @param(min: 0, max: 10, default: one())              //~ E0401
+  n: I32 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow wrong_type_sum(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 1 + 1)           //~ E0401
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow wrong_type_text_const(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5, label: CH)  //~ E0401
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+// ---- controls: the literal forms, in the same file
+
+pub flow literals_are_fine(
+  x: F32 at sample,
+  @param(min: -(60.0), max: (12.0), default: -(-1.0), unit: "dB", label: "Level")
+  level: F32 at block,
+  @param(min: -(100), max: (100), default: 5)
+  n: I32 at block,
+  @param(default: (false))
+  mute: Bool at block,
+) -> F32 at sample {
+  if mute { 0.0 } else { x * level }
+}

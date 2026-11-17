@@ -1,0 +1,282 @@
+// onsa.toml
+// [test]
+// spec = ["§11.7", "§3.3", "§4.7", "§18.1"]
+
+// W7-13 U4b/t, S-87 (2), S-200, R-99 (spec §11.7: the value of a numeric key (`min max default step`) is a value of the value type `T` of
+// the input and the value of a text key (`unit label id`) is a `Str`, "型の合わない値は E0401（暗黙の変換は無い、§3.3）"): a value of
+// another type is E0401. The expected type is the one of the key, so an integer literal is not a `F32` and a float literal is not an
+// integer, whatever the number is; a number is not a text and a text is not a number; the `Bool` input takes `true` and `false` only.
+// A negative integer is not a value of an unsigned type (§4.7: "符号なしの型の `-1` と `-0` は E0401"). Each flow has one error, in the
+// attribute (the line of the mark; the place in it, the key or the value, is not decided here), and one error in each unit (§18.1).
+// The candidates that these have (`0` for `0.0`, `2.0` for `2`) are in tests/spec/fixes/param_value_candidates.onsa and the values with
+// no candidate in param_value_no_candidate.onsa.
+
+// ---- an integer literal for a float, in each of the keys and for both widths
+
+pub flow float_min_integer(
+  x: F32 at sample,
+  @param(min: 0, max: 1.0, default: 0.5)               //~ E0401
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow float_max_integer(
+  x: F32 at sample,
+  @param(min: 0.0, max: 4, default: 0.5)               //~ E0401
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow double_default_integer(
+  x: F64 at sample,
+  @param(min: 0.0, max: 4.0, default: 1)               //~ E0401
+  p: F64 at block,
+) -> F64 at sample {
+  x * p
+}
+
+pub flow double_step_integer(
+  x: F64 at sample,
+  @param(min: 0.0, max: 4.0, default: 1.0, step: 1)    //~ E0401
+  p: F64 at block,
+) -> F64 at sample {
+  x * p
+}
+
+pub flow float_negative_integer(
+  x: F32 at sample,
+  @param(min: -60, max: 12.0, default: 0.0)            //~ E0401
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+// ---- a float literal for an integer, in each of the widths
+
+pub flow i8_float(
+  x: F32 at sample,
+  @param(min: 0, max: 10.0, default: 2)                //~ E0401
+  n: I8 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow i16_float(
+  x: F32 at sample,
+  @param(min: -1.0, max: 10, default: 2)               //~ E0401
+  n: I16 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow i32_float(
+  x: F32 at sample,
+  @param(min: 0, max: 10, default: 2.0)                //~ E0401
+  n: I32 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow u8_float(
+  x: F32 at sample,
+  @param(min: 0, max: 200.0, default: 2)               //~ E0401
+  n: U8 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow u16_float_step(
+  x: F32 at sample,
+  @param(min: 0, max: 1000, default: 2, step: 2.0)     //~ E0401
+  n: U16 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow u32_float(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1000, default: 2)              //~ E0401
+  n: U32 at block,
+) -> F32 at sample {
+  x
+}
+
+// ---- a negative integer for an unsigned type (the prefix `-` is part of the literal, with parentheses or without)
+
+pub flow u32_negative_min(
+  x: F32 at sample,
+  @param(min: -1, max: 10, default: 2)                 //~ E0401
+  n: U32 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow u8_negative_default(
+  x: F32 at sample,
+  @param(min: 0, max: 10, default: -2)                 //~ E0401
+  n: U8 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow u16_negative_paren(
+  x: F32 at sample,
+  @param(min: 0, max: 10, default: -(5))               //~ E0401
+  n: U16 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow u32_negative_zero(
+  x: F32 at sample,
+  @param(min: -0, max: 10, default: 2)                 //~ E0401
+  n: U32 at block,
+) -> F32 at sample {
+  x
+}
+
+// ---- a value that is not a number, for a numeric key
+
+pub flow float_bool(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: true)            //~ E0401
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow double_text(
+  x: F64 at sample,
+  @param(min: "0.0", max: 1.0, default: 0.5)           //~ E0401
+  p: F64 at block,
+) -> F64 at sample {
+  x * p
+}
+
+pub flow integer_text(
+  x: F32 at sample,
+  @param(min: 0, max: 10, default: "2")                //~ E0401
+  n: I32 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow unsigned_bool_step(
+  x: F32 at sample,
+  @param(min: 0, max: 10, default: 2, step: true)      //~ E0401
+  n: U8 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow integer_char(
+  x: F32 at sample,
+  @param(min: 0, max: 10, default: 'a')                //~ E0401
+  n: I8 at block,
+) -> F32 at sample {
+  x
+}
+
+// ---- a value that is not a text, for a text key
+
+pub flow unit_integer(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5, unit: 3)   //~ E0401
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow label_float(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5, label: 1.0) //~ E0401
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow id_bool(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5, id: true)  //~ E0401
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow label_char(
+  x: F32 at sample,
+  @param(min: 0, max: 10, default: 2, label: 'g')     //~ E0401
+  n: I32 at block,
+) -> F32 at sample {
+  x
+}
+
+// ---- the `Bool` input takes `true` and `false` only
+
+pub flow bool_integer_one(
+  x: F32 at sample,
+  @param(default: 1)                                   //~ E0401
+  on: Bool at block,
+) -> F32 at sample {
+  if on { x } else { 0.0 }
+}
+
+pub flow bool_integer_zero(
+  x: F32 at sample,
+  @param(default: 0, label: "Mute")                   //~ E0401
+  mute: Bool at block,
+) -> F32 at sample {
+  if mute { 0.0 } else { x }
+}
+
+pub flow bool_float(
+  x: F32 at sample,
+  @param(default: 1.0)                                 //~ E0401
+  on: Bool at block,
+) -> F32 at sample {
+  if on { x } else { 0.0 }
+}
+
+pub flow bool_text(
+  x: F32 at sample,
+  @param(default: "true", id: "on")                   //~ E0401
+  on: Bool at block,
+) -> F32 at sample {
+  if on { x } else { 0.0 }
+}
+
+pub flow bool_text_key_bool(
+  x: F32 at sample,
+  @param(default: true, unit: false)                  //~ E0401
+  on: Bool at block,
+) -> F32 at sample {
+  if on { x } else { 0.0 }
+}
+
+// ---- controls: the same inputs with values of their types, and the same keys on the other inputs of a flow with a wrong one
+
+pub flow fine_values(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5, step: 0.25, unit: "ratio")
+  p: F32 at block,
+  @param(min: 0, max: 10, default: 2, step: 1)
+  n: U8 at block,
+  @param(default: true, label: "On")
+  on: Bool at block,
+) -> F32 at sample {
+  if on { x * p } else { 0.0 }
+}
+
+pub flow wrong_among_fine(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  p: F32 at block,
+  @param(min: 0, max: 10, default: 2.5)                //~ E0401
+  n: I32 at block,
+  @param(default: true)
+  on: Bool at block,
+) -> F32 at sample {
+  if on { x * p } else { 0.0 }
+}

@@ -3,7 +3,7 @@
 
 use std::fmt::Write as _;
 
-use onsa_core::{FnId, Mode, Ty};
+use onsa_core::{FnId, Mode, ParamKey, ParamKind, ParamNumber, Ty};
 
 use crate::emit::{Cx, Export, R, f32_lit};
 use crate::names::ident;
@@ -16,6 +16,17 @@ pub(crate) struct FlowParts {
     pub init_args: Vec<crate::ApiField>,
     pub params_fields: Vec<crate::ApiField>,
     pub process_args: Vec<crate::IoArg>,
+}
+
+/// A number of `@param` in the `float` of the table (§14.2, until W10-03); a
+/// `Bool` is the E0200 of [`wrappers`].
+fn table_number(n: Option<ParamNumber>) -> R<Option<f64>> {
+    match n {
+        Some(ParamNumber::Float(x)) => Ok(Some(x)),
+        Some(ParamNumber::Int(x)) => Ok(Some(x as f64)),
+        Some(ParamNumber::Bool(_)) => Err(crate::emit::internal("a `Bool` value in the table of the parameters")),
+        None => Ok(None),
+    }
 }
 
 /// The public header `onsa_<flow>.h`, and what it declares of the API.
@@ -441,7 +452,10 @@ pub(crate) fn wrappers(cx: &mut Cx, e: &Export) -> R<String> {
     let _ = writeln!(s, "  q = *p;");
     for (name, ty, pm) in &meta.params {
         let Some(pm) = pm else { continue };
-        let (Some(min), Some(max)) = (pm.min, pm.max) else { continue };
+        let (Some(min), Some(max)) = (table_number(pm.number(ParamKey::Min))?, table_number(pm.number(ParamKey::Max))?)
+        else {
+            continue;
+        };
         match ty {
             Ty::Float(onsa_core::FloatKind::F32) => {
                 let _ = writeln!(
@@ -492,23 +506,28 @@ pub(crate) fn wrappers(cx: &mut Cx, e: &Export) -> R<String> {
     let _ = writeln!(s, "}}\n");
 
     // Parameter metadata table.
+    // §14.2: the table writes no truth value as a number; the field of a `Bool` is W10-03's.
+    if let Some((name, ..)) = meta.params.iter().find(|(.., p)| p.as_ref().is_some_and(|p| p.kind == ParamKind::Bool)) {
+        return Err(unsupported(meta.name_span, Feature::ParamBoolTable, &[name]));
+    }
     if !meta.params.is_empty() {
         let _ = writeln!(s, "const onsa_param_info {sym}_param_info[{}] = {{", meta.params.len());
         for (name, _, pm) in &meta.params {
-            let f = |v: Option<f64>| match v {
-                Some(x) => f32_lit(x as f32),
-                None => "NAN".into(),
+            let f = |k: ParamKey| -> R<String> {
+                Ok(table_number(pm.as_ref().and_then(|p| p.number(k)))?
+                    .map_or_else(|| "NAN".into(), |x| f32_lit(x as f32)))
             };
+            let t = |k: ParamKey| pm.as_ref().and_then(|p| p.text(k)).map(str::to_string);
             let (min, max, def, step, unit, scale, label, id) = match pm {
-                Some(pm) => (
-                    f(pm.min),
-                    f(pm.max),
-                    f(pm.default),
-                    f(pm.step),
-                    pm.unit.clone().unwrap_or_default(),
-                    pm.scale.clone().unwrap_or_else(|| "linear".into()),
-                    pm.label.clone().unwrap_or_default(),
-                    pm.id.clone().unwrap_or_else(|| name.clone()),
+                Some(_) => (
+                    f(ParamKey::Min)?,
+                    f(ParamKey::Max)?,
+                    f(ParamKey::Default)?,
+                    f(ParamKey::Step)?,
+                    t(ParamKey::Unit).unwrap_or_default(),
+                    t(ParamKey::Scale).unwrap_or_else(|| "linear".into()),
+                    t(ParamKey::Label).unwrap_or_default(),
+                    t(ParamKey::Id).unwrap_or_else(|| name.clone()),
                 ),
                 None => (
                     "NAN".into(),

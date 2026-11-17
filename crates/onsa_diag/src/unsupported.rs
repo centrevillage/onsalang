@@ -153,6 +153,9 @@ features! {
     /// S-610, R-85, W4-05 table 5: `{}`: the type of the `const`, holding a Shared
     /// value or a type parameter not `Copy` (placed statically from phase 2).
     SharedConsts: Language, "a `const` of the type `{}`, which holds or may hold a Shared value", None;
+    /// `{}`: the key. S-87 (2), R-291: a value of `@param` (§11.7) other than a
+    /// literal, under parentheses and `-`, or a string with no hole (W9-03).
+    ParamValues: Language, "the value of the `@param` key `{}` other than a literal", Some("write the value as a literal");
     /// R-85 (5), S-80: whether the capture copies or borrows is phase 2's (§5.4).
     CapturedShared: Language, "the capture of a Shared value by an anonymous function (phase 2)", None;
     OrPatternBindings: Language, "or-patterns with bindings", Some("write one arm for each alternative");
@@ -212,6 +215,9 @@ features! {
     ApiNames: CBackend, "the name `{}` twice in the C function `{}` of its flow, for {} and {}",
         Some("rename the input or the field of the output");
     ExportAggregateReturn: CBackend, "exporting a function that returns an aggregate", None;
+    /// `{}`: the input. §14.2: the table writes no truth value as a number
+    /// (W10-03).
+    ParamBoolTable: CBackend, "the `Bool` input `{}` of `@param` in the table of the parameters", None;
     /// `{}`: the parameter's name.
     ExportParam: CBackend, "the parameter `{}` of an exported function (only scalars and spans of scalars)", None;
     /// `{}`, `{}`: the flow's state type and the type that holds it.

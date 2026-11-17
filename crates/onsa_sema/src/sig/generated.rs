@@ -145,7 +145,7 @@ impl<'p> Sema<'p> {
                     DefKind::Struct(StructDef { generics: Vec::new(), fields, derives, flow_ty: Some(t) })
                 }
                 Generated::Size | Generated::BulkSize => {
-                    DefKind::Const(ConstDef { ty: u32, value: None, int_value: None, param: None })
+                    DefKind::Const(ConstDef { ty: u32, value: None, int_value: None, param: None, of_attr: None })
                 }
                 Generated::Fn(which) => DefKind::Fn(FnDef {
                     generics: Vec::new(),
@@ -320,10 +320,13 @@ impl<'p> Sema<'p> {
             };
             for &(k, at, span) in &h.inputs {
                 let (rate, ty) = (self.flow_def(h.flow).inputs[k].rate, self.flow_def(h.flow).inputs[k].ty);
-                let unfit = self.check_rate_value_type(cx, h.flow, ty, span, rate == Rate::Sig);
+                // A type with the error type in it has its diagnostic (§18.1).
+                let unfit =
+                    self.check_rate_value_type(cx, h.flow, ty, span, rate == Rate::Sig) || self.a.types.has_error(ty);
                 let attr = Attr::find(&f.params[at].attrs, onsa_syntax::attrs::PARAM);
-                // The `@param` of an input of a type no signal has is not read
-                // (§6.5: as the arguments of an attribute in excess).
+                // The `@param` of an input of a type no signal has, or with a
+                // diagnostic, is not read (§6.5: as the arguments of an
+                // attribute in excess).
                 // SPEC-GAP(S-1121): its other E0809 are not reported either.
                 let param =
                     attr.filter(|_| !unfit).and_then(|a| self.lower_param_attr(cx, h.flow, a, rate, (ty, span)));
@@ -462,7 +465,7 @@ impl<'p> Sema<'p> {
             self.fill_struct(flow, FlowTy::In, fs);
         }
         let u32 = self.a.types.int(IntKind::U32);
-        let size = ConstDef { ty: u32, value: None, int_value: None, param: None };
+        let size = ConstDef { ty: u32, value: None, int_value: None, param: None, of_attr: None };
         for g in [Generated::Size, Generated::BulkSize] {
             self.fill_generated(flow, g, DefKind::Const(size.clone()));
         }

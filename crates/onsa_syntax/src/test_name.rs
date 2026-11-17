@@ -36,21 +36,9 @@ pub(crate) fn problem(value: &str) -> Option<String> {
 /// The name `value` written as an Onsa string literal, as the full name text
 /// of a test has it (spec §11.8, S-244): in quotes, with `\` as `\\`, `"` as
 /// `\"`, `{` as `{{` and `}` as `}}`, and every other character as it is (a
-/// name holds no control character, so these four decide the text).
+/// name holds no character [`crate::quote_str`] escapes besides these four).
 pub fn quote(value: &str) -> String {
-    let mut out = String::with_capacity(value.len() + 2);
-    out.push('"');
-    for c in value.chars() {
-        match c {
-            '\\' => out.push_str("\\\\"),
-            '"' => out.push_str("\\\""),
-            '{' => out.push_str("{{"),
-            '}' => out.push_str("}}"),
-            c => out.push(c),
-        }
-    }
-    out.push('"');
-    out
+    crate::quote_str(value)
 }
 
 #[cfg(test)]

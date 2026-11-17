@@ -1,0 +1,183 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.7", "§3.3", "§2.4", "§6.6", "§4.7"]
+
+// W7-13 U4b/t, S-87 (2), S-200 (spec §11.7: the value of a numeric key is a value of the value type `T` of the input and the value
+// of a text key is a `Str`, "どちらも `const` の初期化式と同じ規則で書き"): the forms of the values of `@param` that are right.
+// A value is typed like the initializer of a `const` with the type of the input as the expected type, so a literal of the kind of
+// the type (a float literal for `F32` `F64`, an integer literal for the integers, `true` or `false` for `Bool`) is a value, with
+// a prefix `-` and with parentheses (the value `-(60.0)` is the same as `-60.0`, §4.7: the `-` of a literal is part of its value).
+// A text key takes a string literal with no hole, whatever is in it (the escapes, the braces written `{{` and `}}`, a character
+// that is not ASCII). The flows are run with the value that they are given (the keys are metadata, §11.7), so the check here is that
+// each of these checks and runs. The values are in the ranges that the work of the constraints (W9-03) will ask for (finite, `min < max`,
+// a `default` in the range, `step > 0`, `min > 0` for a log scale).
+
+// ---- parentheses and the prefix `-` on a float literal
+
+pub flow negated_paren(
+  x: F32 at sample,
+  @param(min: -(60.0), max: (12.0), default: -(-1.0), unit: "dB")
+  level: F32 at block,
+) -> F32 at sample {
+  x + level
+}
+
+pub flow paren_everywhere(
+  x: F64 at sample,
+  @param(min: (-(4.0)), max: ((4.0)), default: (-(2.0)), step: (0.5))
+  level: F64 at block,
+) -> F64 at sample {
+  x * level
+}
+
+pub flow negative_zero_and_exponents(
+  x: F32 at sample,
+  @param(min: -0.0, max: 48e3, default: 1.5e2, step: 1e-3)
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+// ---- the integers: the prefix `-`, the spellings of the literal, the ends of the range of the type
+
+pub flow signed_integers(
+  x: F32 at sample,
+  @param(min: -(100), max: (100), default: -(-5), step: (5))
+  a: I32 at block,
+  @param(min: -128, max: 127, default: -1)
+  b: I8 at block,
+  @param(min: -32768, max: 32767, default: 0)
+  c: I16 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow unsigned_integers(
+  x: F32 at sample,
+  @param(min: 0, max: 255, default: 0xFF)
+  a: U8 at block,
+  @param(min: 0, max: 65_535, default: 0b1010)
+  b: U16 at block,
+  @param(min: (0), max: 4294967295, default: (480), step: 16)
+  c: U32 at block,
+) -> F32 at sample {
+  x
+}
+
+// ---- the text keys: the escapes, the braces, and a character that is not ASCII are values of a literal with no hole
+
+pub flow text_with_escapes(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5, unit: "a\"b\\c", label: "tab\there\nnext", id: "level_1.a")
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow text_with_braces(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5, unit: "{{dB}}", label: "{{}} and {{x}}")
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+pub flow text_not_ascii(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5, label: "ゲイン \u{3b1}", unit: "")
+  level: F32 at block,
+) -> F32 at sample {
+  x * level
+}
+
+// ---- the `Bool` input: `true`, `false` and the same in parentheses
+
+pub flow bool_with_parentheses(
+  x: F32 at sample,
+  @param(default: (true), label: "On")
+  on: Bool at block,
+  @param(default: ((false)), id: "mute")
+  mute: Bool at block,
+) -> F32 at sample {
+  if on && !mute { x } else { 0.0 }
+}
+
+// ---- in a flow that is called by another, and exported
+
+pub flow inner(
+  x: F32 at sample,
+  @param(min: -(1.0), max: (1.0), default: (0.5))
+  p: F32 at block,
+  @param(default: (true))
+  on: Bool at block,
+) -> F32 at sample {
+  if on { x * p } else { 0.0 }
+}
+
+pub flow outer(
+  x: F32 at sample,
+  @param(min: -(2.0), max: 2.0, default: -(1.0))
+  q: F32 at block,
+) -> F32 at sample {
+  inner~(x, q, true) + inner~(x, 0.25, false)
+}
+
+@export
+pub flow exported(
+  x: F32 at sample,
+  @param(min: -(1.0), max: (1.0), default: -(0.5), unit: "ratio")
+  mix: F32 at block,
+  @param(min: (0), max: 8, default: (2))
+  taps: U8 at block,
+) -> F32 at sample {
+  if taps > 1 { x * mix } else { x }
+}
+
+// ---- the flows are run, and the value is the one that is given
+
+test "a float input whose values have parentheses and a prefix minus runs with the value it is given" {
+  let xs: [F32; 2] = [2.0, 3.0]
+  let a = negated_paren.render(negated_paren.Params { level: 1.0 }, xs, 8.0)
+  assert a.out[0] == 3.0
+  let ys: [F64; 2] = [2.0, 3.0]
+  let b = paren_everywhere.render(paren_everywhere.Params { level: 0.5 }, ys, 8.0)
+  assert b.out[1] == 1.5
+  let c = negative_zero_and_exponents.render(negative_zero_and_exponents.Params { level: 2.0 }, xs, 8.0)
+  assert c.out[0] == 4.0
+}
+
+test "the integer inputs of every width run" {
+  let xs: [F32; 2] = [2.0, 3.0]
+  let a = signed_integers.render(signed_integers.Params { a: -5, b: -1, c: 7 }, xs, 8.0)
+  assert a.out[1] == 3.0
+  let b = unsigned_integers.render(unsigned_integers.Params { a: 255, b: 10, c: 480 }, xs, 8.0)
+  assert b.out[0] == 2.0
+}
+
+test "the text keys with escapes, braces and characters that are not ASCII run" {
+  let xs: [F32; 2] = [2.0, 3.0]
+  let a = text_with_escapes.render(text_with_escapes.Params { level: 0.5 }, xs, 8.0)
+  assert a.out[0] == 1.0
+  let b = text_with_braces.render(text_with_braces.Params { level: 1.0 }, xs, 8.0)
+  assert b.out[1] == 3.0
+  let c = text_not_ascii.render(text_not_ascii.Params { level: 2.0 }, xs, 8.0)
+  assert c.out[0] == 4.0
+}
+
+test "the Bool inputs with a default in parentheses run with the value they are given" {
+  let xs: [F32; 2] = [2.0, 3.0]
+  let a = bool_with_parentheses.render(bool_with_parentheses.Params { on: true, mute: false }, xs, 8.0)
+  assert a.out[0] == 2.0
+  let b = bool_with_parentheses.render(bool_with_parentheses.Params { on: true, mute: true }, xs, 8.0)
+  assert b.out[1] == 0.0
+}
+
+test "a flow with a Bool input called by another, and an exported flow, run" {
+  let xs: [F32; 2] = [2.0, 4.0]
+  let a = outer.render(outer.Params { q: 1.0 }, xs, 8.0)
+  assert a.out[0] == 2.0
+  assert a.out[1] == 4.0
+  let b = exported.render(exported.Params { mix: 0.5, taps: 2 }, xs, 8.0)
+  assert b.out[0] == 1.0
+}

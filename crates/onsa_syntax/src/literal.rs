@@ -884,6 +884,29 @@ pub(crate) fn str_lit(text: &str, span: Span, holes: &[Hole]) -> StrLit {
     StrLit { segments, span, pathless_hole }
 }
 
+/// The string literal whose value is `value`, with no hole (§2.4): in
+/// quotes, with `\`, `"`, `{` and `}` escaped, and the characters written
+/// nowhere (§2.5, [`crate::lexer::unwritable`]) as `\n`, `\t`, `\r` or
+/// `\u{…}`; every other character as it is. [`escape`] reads it back.
+pub fn quote_str(value: &str) -> String {
+    let mut out = String::from('"');
+    for c in value.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '{' => out.push_str("{{"),
+            '}' => out.push_str("}}"),
+            '\n' => out.push_str("\\n"),
+            '\t' => out.push_str("\\t"),
+            '\r' => out.push_str("\\r"),
+            c if crate::lexer::unwritable(c) => out.push_str(&format!("\\u{{{:x}}}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
 /// The escape after a backslash (§2.4, S-19), `after` being the text after
 /// the `\`: its character, or `None` when it is no escape of the closed list
 /// (the lexer's E0001), and how many bytes of `after` it takes. The one

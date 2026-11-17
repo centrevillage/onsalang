@@ -1,0 +1,174 @@
+// onsa.toml
+// [test]
+// spec = ["§11.7", "§2.4", "§6.6", "§18.1"]
+
+// W7-13 U4b/t, S-87 (2), R-291 (spec §11.7: a value is written "`const` の初期化式と同じ規則で", so a name in it is resolved as in the
+// initializer of a `const`, in the scope of the module: the inputs of the flow and the `let`s of its body are not in that scope; §2.4:
+// the name of a hole of a string is resolved as in an expression; §18.1: the stage of the names comes before the one of the types):
+// a name that is nowhere is E0302, in the value of a numeric key and in the hole of the value of a text key; so are the name of
+// an input of the flow (the one of the attribute, or another) and the name of a `let` of the body. A hole
+// is checked for `Show` as in any string (§2.4): the name of a value of a type that has none is E0416. The attribute is on
+// one line, so the line of the mark is the value's. One error in each unit (§18.1). The values that are names of the scope
+// (`default: K`) are E0200 until W9-03, in param_value_not_literal.onsa.
+
+pub struct Pair {
+  a: F32,
+}
+
+pub const C: Pair = Pair { a: 1.0 }
+
+// ---- a name that is nowhere, in each key and for the types of input
+
+pub flow unknown_default(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: nope)           //~ E0302
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow unknown_min_of_an_integer(
+  x: F32 at sample,
+  @param(min: nope, max: 10, default: 2)               //~ E0302
+  n: I32 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow unknown_max_of_a_double(
+  x: F64 at sample,
+  @param(min: 0.0, max: LIMIT, default: 1.0)           //~ E0302
+  p: F64 at block,
+) -> F64 at sample {
+  x * p
+}
+
+pub flow unknown_step(
+  x: F32 at sample,
+  @param(min: 0, max: 10, default: 2, step: STEP)      //~ E0302
+  n: U8 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow unknown_bool_default(
+  x: F32 at sample,
+  @param(default: enabled)                             //~ E0302
+  on: Bool at block,
+) -> F32 at sample {
+  if on { x } else { 0.0 }
+}
+
+// ---- a name of the flow: the inputs and a `let` of the body
+
+pub flow input_of_the_flow(
+  x: F32 at sample,
+  @param(min: 0.0, max: x, default: 0.5)               //~ E0302
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow the_input_itself(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: p)               //~ E0302
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow another_param(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  p: F32 at block,
+  @param(min: 0.0, max: p, default: 0.5)               //~ E0302
+  q: F32 at block,
+) -> F32 at sample {
+  x * p * q
+}
+
+pub flow let_of_the_body(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: tmp)            //~ E0302
+  p: F32 at block,
+) -> F32 at sample {
+  let tmp = 0.5
+  x * p * tmp
+}
+
+// ---- the hole of a string: a name that is nowhere, an input, a `let` of the body
+
+pub flow hole_nowhere_in_label(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5, label: "Gain {nope}") //~ E0302
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow hole_nowhere_in_unit(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5, unit: "{missing}") //~ E0302
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow hole_nowhere_in_id(
+  x: F32 at sample,
+  @param(min: 0, max: 10, default: 2, id: "n{suffix}")  //~ E0302
+  n: I32 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow hole_of_an_input(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5, label: "{x}") //~ E0302
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow hole_of_a_let(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5, label: "{tmp}") //~ E0302
+  p: F32 at block,
+) -> F32 at sample {
+  let tmp = 2.0
+  x * p * tmp
+}
+
+pub flow hole_of_a_path_nowhere(
+  x: F32 at sample,
+  @param(default: true, label: "{Nowhere.K}")          //~ E0302
+  on: Bool at block,
+) -> F32 at sample {
+  if on { x } else { 0.0 }
+}
+
+// ---- a hole of a name that is there, of a value that has no `Show`
+
+pub flow hole_of_a_struct_in_label(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5, label: "a{C}") //~ E0416
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow hole_of_a_struct_in_unit(
+  x: F32 at sample,
+  @param(min: 0, max: 10, default: 2, unit: "{C}")     //~ E0416
+  n: U8 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow hole_of_a_struct_in_id(
+  x: F32 at sample,
+  @param(default: true, id: "on_{C}")                  //~ E0416
+  on: Bool at block,
+) -> F32 at sample {
+  if on { x } else { 0.0 }
+}

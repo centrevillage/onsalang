@@ -20,7 +20,6 @@ use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::timing::{Phase, phase};
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Fix, Span, Stage};
-use onsa_syntax::FloatRange;
 use onsa_syntax::ast::{
     Ast, Attr, AttrArg, Derives, EffectRow, ExprKind, Failed, GenericParam, Ident, ImplDecl, ItemId, ItemKind, Lit,
     Mode, Param, ParamName, Path, TypeId, TypeKind, UnOp, Vis,
@@ -40,7 +39,7 @@ mod generated;
 mod heading;
 mod impl_items;
 mod impls;
-mod param;
+pub(crate) mod param;
 #[cfg(test)]
 mod tests;
 mod types;
@@ -387,7 +386,7 @@ impl<'p> Sema<'p> {
         let ItemKind::FieldDefault { value } = at.kind else {
             onsa_diag::internal::bug(Some(at.span), "a default that is no default item")
         };
-        let kind = DefKind::Const(ConstDef { ty, value: Some(value), int_value: None, param: None });
+        let kind = DefKind::Const(ConstDef { ty, value: Some(value), int_value: None, param: None, of_attr: None });
         let (name, module, owner) = (f.name.name.clone(), cx.m, Some(cx.def));
         let span = at.span;
         self.add_def(Def { name, module, vis, span, name_span: span, kind, item: Some(item), owner, export: None })

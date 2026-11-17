@@ -260,7 +260,12 @@ pub fn lower_with(pkg: &Package, a: &Analysis, opts: &LowerOptions) -> Result<Mo
             }
             DefKind::Test { .. } => lw.lower_item(def.span, |lw| lw.fn_id(id, Vec::new(), def.span).map(drop))?,
             DefKind::Flow(_) => lw.lower_item(def.span, |lw| lw.ensure_flow(id).map(drop))?,
-            DefKind::Const(c) if c.value.is_some() && def.owner.is_none_or(|o| a.def(o).generics().is_empty()) => {
+            // A value of an attribute is read by what it describes (`ParamInfo`).
+            DefKind::Const(c)
+                if c.value.is_some()
+                    && c.of_attr.is_none()
+                    && def.owner.is_none_or(|o| a.def(o).generics().is_empty()) =>
+            {
                 lw.lower_item(def.span, |lw| lw.const_id(id, Vec::new(), def.span).map(drop))?
             }
             _ => {}

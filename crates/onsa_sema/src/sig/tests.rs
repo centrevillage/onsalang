@@ -97,7 +97,12 @@ fn flow_namespace_items() {
     let process = voice.members.iter().find(|(n, _)| n == "process").map(|(_, d)| a.def(*d).as_fn().unwrap()).unwrap();
     assert_eq!(process.params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), vec!["s", "params", "output"]);
     assert!(process.rt);
-    assert_eq!(voice.inputs[0].param.as_ref().unwrap().default, Some(0.5));
+    // The values of `@param`, of the input's type, evaluated (§11.7).
+    let info = a.param_info(&voice.inputs[0]).unwrap();
+    use crate::def::{ParamKey, ParamNumber};
+    assert_eq!(info.number(ParamKey::Default), Some(ParamNumber::Float(0.5)));
+    assert_eq!(info.number(ParamKey::Max), Some(ParamNumber::Float(1.0)));
+    assert_eq!(info.number(ParamKey::Step), None);
 }
 
 #[test]
@@ -325,4 +330,62 @@ fn the_order_of_the_declarations_reports_each_cycle_once() {
     let [d] = &a.diagnostics[..] else { panic!("{:?}", a.diagnostics) };
     let at: Vec<FileId> = d.notes.iter().filter_map(|n| n.span).map(|s| s.file).collect();
     assert_eq!((d.code, at), (Code::E0310, vec![FileId(1), FileId(1)]));
+}
+
+/// The candidate of the E0401 of a value of `@param` (§11.7, S-200) is the
+/// literal with the same value, read exactly from the digits: a whole number
+/// in any spelling, never a fraction a rounding would hide, nothing out of
+/// the type, nothing under parentheses.
+#[test]
+fn param_value_candidates_keep_the_value() {
+    let cases = [
+        ("I32", "1e3", Some("1000")),
+        ("I32", "2.00", Some("2")),
+        ("I32", "100.0e-2", Some("1")),
+        ("I32", "1_0.0", Some("10")),
+        ("I16", "0.0e-999999999", Some("0")),
+        ("I8", "-128.0", Some("128")),
+        ("F32", "0x10", Some("16.0")),
+        ("I32", "2.0000000000000001", None),
+        ("I32", "1e-1", None),
+        ("I32", "1e99999999999999999999", None),
+        ("I8", "128.0", None),
+        ("U8", "-0.0", None),
+        ("U32", "4294967296.0", None),
+        ("I32", "(2.0)", None),
+        ("F32", "-(3)", None),
+        ("F32", "-0", None),
+        ("I8", "-0.0", Some("0")),
+    ];
+    for (ty, value, want) in cases {
+        let src =
+            format!("pub flow f(x: F32 at sample, @param(default: {value}) p: {ty} at block) -> F32 at sample {{ x }}");
+        let a = check(&src);
+        assert_eq!(codes(&a), vec![Code::E0401], "{value}: {:?}", a.diagnostics);
+        let got = a.diagnostics[0].fixes.first().map(|f| f.edits()[0].replace.as_str());
+        assert_eq!(got, want, "{ty} {value}");
+    }
+}
+
+/// A value of `@param` that reads a constant whose check stopped at an error
+/// reports nothing more (§18.1, as a `const` reading it): the one error is the
+/// constant's. One that reads a constant with a value is the E0200 of its
+/// form until W9-03, at the value.
+#[test]
+fn a_param_value_reading_a_failed_constant_is_silent() {
+    let cases = [
+        ("pub const NAME: Str = \"hello\"", "label: NAME", Code::E0200, true),
+        ("pub const K: F32 = missing", "max: K", Code::E0302, true),
+        ("pub const K: F32 = missing", "max: K + 1.0", Code::E0302, true),
+        ("pub const K: F32 = 1.0", "max: K", Code::E0200, false),
+        ("pub const J: F32 = K\npub const K: F32 = 1.0", "max: J", Code::E0200, false),
+    ];
+    for (decl, value, code, in_decl) in cases {
+        let flow = format!(
+            "pub flow f(x: F32 at sample, @param(default: 0.5, {value}) p: F32 at block) -> F32 at sample {{ x }}"
+        );
+        let a = check(&format!("{decl}\n{flow}"));
+        assert_eq!(codes(&a), vec![code], "{decl} / {value}: {:?}", a.diagnostics);
+        assert_eq!(a.diagnostics[0].span.start < decl.len() as u32, in_decl, "{decl} / {value}");
+    }
 }

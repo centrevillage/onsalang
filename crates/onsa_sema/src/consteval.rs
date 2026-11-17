@@ -28,6 +28,16 @@ pub enum ConstValue {
     Struct(Vec<ConstValue>),
 }
 
+/// The body of `ck` reads a constant whose check stopped at an error (§18.1;
+/// one not checked yet is none): it has no value, an evaluation reading it
+/// gives none and reports nothing ([`eval`]), and neither does the unit.
+pub(crate) fn reads_failed(ck: &Checker<'_>) -> bool {
+    ck.info.targets.values().any(|t| match t {
+        Target::Const { def, of: None, .. } => ck.a.bodies.get(def).is_some_and(|b| !b.complete),
+        _ => false,
+    })
+}
+
 pub(crate) fn eval(ck: &mut Checker<'_>, e: ExprId) -> Option<ConstValue> {
     let expr = ck.expr(e);
     match &expr.kind {

@@ -35,7 +35,7 @@
 use std::collections::HashMap;
 use std::fmt::Write as _;
 
-use onsa_sema::def::{DefKind, Fields, FlowTy, GenericKind, ParamMeta};
+use onsa_sema::def::{DefKind, Fields, FlowInput, FlowTy, GenericKind, ParamKey, ParamKind, ParamNumber};
 use onsa_sema::ty::{Env, Rate};
 use onsa_sema::{Analysis, ConstValue, DefId, ModId, Ty, TyId};
 use onsa_syntax::ast::{Mode, Vis};
@@ -181,16 +181,18 @@ pub struct FlowInputIface {
     pub param: Option<ParamIfaceMeta>,
 }
 
+/// The metadata of `@param`, its values evaluated, in the form of the
+/// input's type (S-1120, provisional (2)).
 #[derive(Debug, Clone, Serialize)]
 pub struct ParamIfaceMeta {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub min: Option<f64>,
+    pub min: Option<ParamNumberIface>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub max: Option<f64>,
+    pub max: Option<ParamNumberIface>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub default: Option<f64>,
+    pub default: Option<ParamNumberIface>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub step: Option<f64>,
+    pub step: Option<ParamNumberIface>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub unit: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -199,6 +201,20 @@ pub struct ParamIfaceMeta {
     pub label: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
+    /// The keys written with their values as the text form shows them, in
+    /// the order of the list of §11.7.
+    #[serde(skip)]
+    pub shown: Vec<String>,
+}
+
+/// A number of `@param` in the JSON: a number of the kind of the input's
+/// type, or a boolean.
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(untagged)]
+pub enum ParamNumberIface {
+    Float(f64),
+    Int(i64),
+    Bool(bool),
 }
 
 /// Whether an item or a member of `v` is shown: `pub` and no word, not
@@ -234,22 +250,6 @@ fn mode_prefix(m: Mode) -> &'static str {
         Mode::Borrow => "",
         Mode::Inout => "inout ",
         Mode::Move => "move ",
-    }
-}
-
-/// The metadata of `@param`, its numbers shown in the input's type
-/// ([`onsa_syntax::float_shown`]).
-fn param_meta(p: &ParamMeta) -> ParamIfaceMeta {
-    let shown = |x: Option<f64>| x.map(|x| onsa_syntax::float_shown(x, p.width));
-    ParamIfaceMeta {
-        min: shown(p.min),
-        max: shown(p.max),
-        default: shown(p.default),
-        step: shown(p.step),
-        unit: p.unit.clone(),
-        scale: p.scale.clone(),
-        label: p.label.clone(),
-        id: p.id.clone(),
     }
 }
 
@@ -511,6 +511,40 @@ impl Builder<'_> {
         }
     }
 
+    /// The metadata of the `@param` of `input`: each number in the input's
+    /// type ([`Self::value_text`], [`onsa_syntax::float_shown`]), each text
+    /// as a literal ([`onsa_syntax::quote_str`], R-487).
+    fn param_meta(&self, input: &FlowInput) -> Option<ParamIfaceMeta> {
+        let p = self.a.param_info(input)?;
+        let width = match p.kind {
+            ParamKind::Float(k) => k.width(),
+            ParamKind::Int(_) | ParamKind::Bool => onsa_syntax::FloatWidth::F64,
+        };
+        let number = |k| {
+            p.number(k).map(|n| match n {
+                ParamNumber::Float(x) => ParamNumberIface::Float(onsa_syntax::float_shown(x, width)),
+                ParamNumber::Int(x) => ParamNumberIface::Int(x as i64),
+                ParamNumber::Bool(b) => ParamNumberIface::Bool(b),
+            })
+        };
+        let text = |k| p.text(k).map(str::to_string);
+        let numbers = p.numbers.iter().map(|&(k, n)| (k, self.value_text(&n.into(), Some(input.ty), None)));
+        let mut shown: Vec<(ParamKey, String)> =
+            numbers.chain(p.texts.iter().map(|(k, t)| (*k, onsa_syntax::quote_str(t)))).collect();
+        shown.sort_by_key(|&(k, _)| k as u8);
+        Some(ParamIfaceMeta {
+            min: number(ParamKey::Min),
+            max: number(ParamKey::Max),
+            default: number(ParamKey::Default),
+            step: number(ParamKey::Step),
+            unit: text(ParamKey::Unit),
+            scale: text(ParamKey::Scale),
+            label: text(ParamKey::Label),
+            id: text(ParamKey::Id),
+            shown: shown.into_iter().map(|(k, v)| format!("{}: {v}", k.name())).collect(),
+        })
+    }
+
     fn flow_item(&self, d: DefId) -> Item {
         let def = self.a.def(d);
         let f = def.as_flow().expect("flow def");
@@ -522,7 +556,7 @@ impl Builder<'_> {
                 clock: i.rate.clock().into(),
                 ty: self.ty(i.ty, &[]),
                 parens: self.a.types.parens_before_uses(i.ty, true),
-                param: i.param.as_ref().map(param_meta),
+                param: self.param_meta(i),
             })
             .collect();
         let layout = self.flow_layout(d);
@@ -766,32 +800,7 @@ fn render_item(item: &Item, out: &mut String, indent: &str) {
             let _ = writeln!(out, "{indent}{v}flow {}(", f.name);
             for i in &f.inputs {
                 if let Some(p) = &i.param {
-                    let mut kv = Vec::new();
-                    if let Some(x) = p.min {
-                        kv.push(format!("min: {x:?}"));
-                    }
-                    if let Some(x) = p.max {
-                        kv.push(format!("max: {x:?}"));
-                    }
-                    if let Some(x) = p.default {
-                        kv.push(format!("default: {x:?}"));
-                    }
-                    if let Some(x) = p.step {
-                        kv.push(format!("step: {x:?}"));
-                    }
-                    if let Some(x) = &p.unit {
-                        kv.push(format!("unit: \"{x}\""));
-                    }
-                    if let Some(x) = &p.scale {
-                        kv.push(format!("scale: \"{x}\""));
-                    }
-                    if let Some(x) = &p.label {
-                        kv.push(format!("label: \"{x}\""));
-                    }
-                    if let Some(x) = &p.id {
-                        kv.push(format!("id: \"{x}\""));
-                    }
-                    let _ = writeln!(out, "{indent}  @param({})", kv.join(", "));
+                    let _ = writeln!(out, "{indent}  @param({})", p.shown.join(", "));
                 }
                 let ty = if i.parens { format!("({})", i.ty) } else { i.ty.clone() };
                 let _ = writeln!(out, "{indent}  {}: {ty} at {},", i.name, i.clock);

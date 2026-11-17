@@ -371,13 +371,6 @@ note = "E0813 の候補"
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/fixes/e0401_param_values.onsa"
-reasons = ["S-116"]
-until = "W7-13"
-note = "@param の値の E0401 の候補"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/fixes/e0811_e0812_tilde.onsa"
 reasons = ["S-101", "S-110"]
 until = "W7-06"
@@ -432,7 +425,7 @@ kind = "test-case"
 target = "tests/spec/negative/const_depth_flow.onsa"
 reasons = ["S-102", "S-222"]
 until = "W9-03"
-note = "定数のクロックの式と @param の値が上限 128 を超えたときの E0419。flow の at は W3-10 まで読めない（E0002）"
+note = "定数のクロックの式と @param の値が上限 128 を超えたときの E0419。@param の値の関数の呼び出しは W9-03 まで E0200（W7-13 U4b）、`sample` のクロックの式の関数の呼び出しも E0200"
 
 # --- W2-07/t: 黙って誤る降下を止める（2026-10-08）
 
@@ -740,14 +733,14 @@ kind = "fix-contract"
 target = "tests/spec/fixes/e0320_uses_param_value.onsa:19:7 E0320 fix1"
 reasons = ["S-82", "R-87"]
 until = "W9-03"
-note = "E0320 の候補が宣言だけを改名し、使用箇所に E0302 などが残る（S-82、R-87 (5)。W4-04 U9）"
+note = "E0320 の候補の後に、@param の値の const の名前の E0200（W7-13 U4b、W9-03 まで）が残る（S-82、R-87 (5)。W4-04 U9）"
 
 [[pending]]
 kind = "test-case"
 target = "tests/spec/fixes/e0320_uses_param_value.onsa"
 reasons = ["R-216", "S-632"]
 until = "W9-03"
-note = "@param の値に const の名前を書くと E0809「must be a numeric literal」（R-216）"
+note = "@param の値に const の名前を書くと W9-03 まで E0200「the value of the `@param` key … other than a literal」（W7-13 U4b、R-216）"
 
 [[pending]]
 kind = "test-case"
@@ -814,14 +807,14 @@ kind = "test-case"
 target = "tests/spec/flow_semantics/scalar_assoc_const_param.onsa"
 reasons = ["R-216"]
 until = "W9-03"
-note = "@param の値に書いた関連定数（F32.PI など）が E0809「must be a numeric literal」"
+note = "@param の値に書いた関連定数（F32.PI など）が W9-03 まで E0200「the value of the `@param` key … other than a literal」（W7-13 U4b）"
 
 [[pending]]
 kind = "test-case"
 target = "tests/spec/negative/scalar_assoc_const_param_errors.onsa"
 reasons = ["R-216"]
 until = "W9-03"
-note = "@param の値の関連定数の E0401・E0419 が、全て E0809「must be a numeric literal」になる"
+note = "@param の値の関連定数が W9-03 まで E0200（W7-13 U4b）。型の合わない E0401 の四つは通り、値の制約の E0809 と E0419 が E0200 になる"
 
 [[pending]]
 kind = "test-case"
@@ -1069,10 +1062,3 @@ target = "tests/spec/flow/flow_gen_bind_run_match_arms.onsa"
 reasons = ["R-06", "S-218"]
 until = "W8-06"
 note = "借用の生成型 Out・In を match の腕に束縛して読む形（S-218 (b)）。腕に束縛だけを書く値の match も降下で E0200（W8-06）なので、flow_gen_bind_run.onsa と packages/flow_gen_bind_modules から分けた（W7-12 U2b）。束縛の検査は flow_gen_bind_borrowed_whole.onsa が持つ"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/param_attr_ok_bool.onsa"
-reasons = ["S-87"]
-until = "W7-13"
-note = "U4b: `Bool` の入力の `default: true` / `false` は U4b の値の型付け（`const` の初期化式と同じ道）で通る。それまでは E0809「must be a numeric literal」（五つの flow のどれもその一件だけで落ちることを U4a/i で確かめた）"

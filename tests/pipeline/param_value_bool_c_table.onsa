@@ -1,0 +1,83 @@
+// onsa.toml
+// [package]
+// name = "param_value_bool_c_table"
+// edition = "2026"
+//
+// [export]
+// prefix = "pvb_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = ["Alloc"]
+//
+// [targets.bare]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§11.7", "§14.2", "§18.1"]
+
+// W7-13 U4b/t, S-87 (5), R-99, Q3 of the review of W7-13 U4 (spec §14.2: "`onsa_param_info`（`onsa.h`）の値の欄は、入力の型（§11.7）で形が変わる。真偽を `1.0` / `0.0`
+// のような数で表さない", the table of C is the work of W10-03): the table `<p>_param_info` of an exported flow (`@export`) has a field of its value for each type
+// of the input, and the form of the field of a `Bool` (a union that is one of three, §14.2) is not written in this version. Until W10-03 the build of
+// every C target that has the flow stops with E0200 (the feature, a `Bool` input of `@param` in the table of the metadata) at the flow, one report for
+// each flow; the check and `onsa test` are not stopped, since the `@param` is right (tests/spec/negative/param_attr_ok_bool.onsa, run in `onsa test`). The flows with no `@param`
+// of `Bool` are built in the same package: the numbers (the floats and the integers, with the text keys of the metadata) and a `Bool` that is not an
+// input of `@param` (an input of `init`), and a flow that is not exported (it has no table). The line of the mark is the one with the heading of the flow, in which the attribute
+// and the type of the input are written, so the place of the report in it is not decided here.
+
+@export
+pub flow bool_default_true(x: F32 at sample, @param(default: true) on: Bool at block) -> F32 at sample {   //~ E0200 [host, bare]
+  if on { x } else { 0.0 }
+}
+
+@export
+pub flow bool_default_false(x: F32 at sample, @param(default: false) mute: Bool at block) -> F32 at sample {   //~ E0200 [host, bare]
+  if mute { 0.0 } else { x }
+}
+
+@export
+pub flow bool_with_the_text_keys(x: F32 at sample, @param(default: true, unit: "on/off", label: "Bypass", id: "bypass") on: Bool at block) -> F32 at sample {   //~ E0200 [host, bare]
+  if on { x } else { 0.0 }
+}
+
+// A `Bool` beside the numbers: the numbers are fine and the `Bool` is the report of the flow.
+@export
+pub flow bool_beside_numbers(x: F32 at sample, @param(min: 0.0, max: 1.0, default: 0.5) level: F32 at block, @param(min: 0, max: 4, default: 2) taps: U8 at block, @param(default: true) on: Bool at block) -> F32 at sample {   //~ E0200 [host, bare]
+  if on && taps > 1 { x * level } else { 0.0 }
+}
+
+// ---- controls: these build
+
+// No `Bool`: the floats and the integers, with the text keys.
+@export
+pub flow floats_and_integers(x: F32 at sample, @param(min: -60.0, max: 12.0, default: 0.0, unit: "dB", label: "Gain", id: "gain") level: F32 at block, @param(min: 0, max: 10, default: 2, step: 1) steps: I32 at block) -> F32 at sample {
+  if steps > 1 { x * level } else { x }
+}
+
+@export
+pub flow double_and_unsigned(x: F64 at sample, @param(min: 0.0, max: 4.0, default: 2.0) level: F64 at block, @param(min: 0, max: 200, default: 8) taps: U8 at block) -> F64 at sample {
+  if taps > 1 { x * level } else { x }
+}
+
+// A `Bool` that is an input of `init` is not a parameter.
+@export
+pub flow bool_at_init(x: F32 at sample, mute: Bool at init) -> F32 at sample {
+  if mute { 0.0 } else { x }
+}
+
+// A flow that is not exported has no table: its `Bool` is no report of the build.
+pub flow not_exported(x: F32 at sample, @param(default: true) on: Bool at block) -> F32 at sample {
+  if on { x } else { 0.0 }
+}
+
+@export
+pub flow calls_it(x: F32 at sample, @param(min: 0.0, max: 1.0, default: 0.5) level: F32 at block) -> F32 at sample {
+  not_exported~(x, true) * level
+}

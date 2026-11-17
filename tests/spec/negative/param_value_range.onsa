@@ -1,0 +1,122 @@
+// onsa.toml
+// [test]
+// spec = ["§11.7", "§4.7", "§2.4", "§18.1"]
+
+// W7-13 U4b/t, S-87 (2) (spec §11.7: a value is written "`const` の初期化式と同じ規則で"; §4.7: "型が決まった時点で範囲外のリテラル（`let x: U8 = 300`）は E0408",
+// §2.4: a float literal that rounds to infinity or a non-zero literal that rounds to 0 is E0408): the value of a key that is a literal outside
+// the range of the type of the input is E0408, as the same literal is in a `const` of that type. The values that fit are the
+// controls (the ends of each range: tests/spec/flow_semantics/param_value_typed.onsa). One error in each flow (§18.1).
+
+pub flow i8_above(
+  x: F32 at sample,
+  @param(min: 0, max: 10, default: 300)                //~ E0408
+  n: I8 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow i8_below(
+  x: F32 at sample,
+  @param(min: -129, max: 10, default: 0)               //~ E0408
+  n: I8 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow u8_above(
+  x: F32 at sample,
+  @param(min: 0, max: 256, default: 3)                 //~ E0408
+  n: U8 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow i16_above(
+  x: F32 at sample,
+  @param(min: 0, max: 10, default: 40000)              //~ E0408
+  n: I16 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow u16_above(
+  x: F32 at sample,
+  @param(min: 0, max: 65536, default: 3)               //~ E0408
+  n: U16 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow i32_above(
+  x: F32 at sample,
+  @param(min: 0, max: 10, default: 2147483648)         //~ E0408
+  n: I32 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow i32_below(
+  x: F32 at sample,
+  @param(min: -2147483649, max: 10, default: 0)        //~ E0408
+  n: I32 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow u32_above(
+  x: F32 at sample,
+  @param(min: 0, max: 4294967296, default: 3)          //~ E0408
+  n: U32 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow single_too_large(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0e40, default: 0.5)          //~ E0408
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow single_too_small(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 1.0e-50)         //~ E0408
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow double_too_large(
+  x: F64 at sample,
+  @param(min: 0.0, max: 1.0e400, default: 0.5)         //~ E0408
+  p: F64 at block,
+) -> F64 at sample {
+  x * p
+}
+
+pub flow in_parentheses(
+  x: F32 at sample,
+  @param(min: 0, max: 10, default: (300))              //~ E0408
+  n: I8 at block,
+) -> F32 at sample {
+  x
+}
+
+// ---- controls: the ends of the ranges, and a literal that is a subnormal of F32
+
+pub flow at_the_ends(
+  x: F32 at sample,
+  @param(min: -128, max: 127, default: 0)
+  a: I8 at block,
+  @param(min: 0, max: 255, default: 3)
+  b: U8 at block,
+  @param(min: -2147483648, max: 2147483647, default: 0)
+  c: I32 at block,
+  @param(min: 0, max: 4294967295, default: 3)
+  d: U32 at block,
+  @param(min: 0.0, max: 3.4e38, default: 1.0e-40)
+  e: F32 at block,
+) -> F32 at sample {
+  x
+}

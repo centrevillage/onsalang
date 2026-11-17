@@ -62,7 +62,7 @@ pub use edits::in_literal;
 pub use fmt::format;
 pub use layout::continues;
 pub use lexer::{Lexed, lex};
-pub use literal::{FloatRange, FloatWidth, float_shown, float_value};
+pub use literal::{FloatRange, FloatWidth, float_shown, float_value, quote_str};
 pub use lower::AstMap;
 pub use naming::{PathPart, binds_as_written, is_module_name, module_name_by_rule, path_name_error};
 pub use operands::CandidateReads;

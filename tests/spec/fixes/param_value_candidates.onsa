@@ -1,0 +1,97 @@
+// onsa.toml
+// [test]
+// spec = ["§11.7", "§3.3", "§18.1"]
+// fixes = 1
+
+// W7-13 U4b/t, S-200 (spec §11.7: "型の合わない値は E0401（暗黙の変換は無い、§3.3。`F32` の入力の `min: 0` は修正候補 `0.0`、整数の入力の
+// `min: 2.0` は修正候補 `2` で、`2.5` には候補が無い）"): the candidate of the E0401 of a value of `@param` is the literal of the kind of the type
+// with the same value, when the whole of the value is a number (a literal with a prefix `-` too) of the other kind: an integer literal for a
+// float input (`1` for `1.0`) and a float literal of a whole number for an integer input (`200.0` for `200`). One candidate for each error, and
+// the unit has no error after it. Each flow has one error (§18.1: the candidate has to leave no error in the unit, and a second wrong value is
+// a second error in the unit). The keys and the types are the other ones than tests/spec/fixes/e0401_param_values.onsa has; the value with
+// a fraction (no candidate) and the value of another kind are in tests/spec/negative/param_value_no_candidate.onsa and
+// param_value_type_mismatch.onsa.
+
+pub flow double_default(
+  x: F64 at sample,
+  @param(min: 0.0, max: 4.0, default: 1)               //~ E0401
+  p: F64 at block,
+) -> F64 at sample {
+  x * p
+}
+
+pub flow float_max_negative(
+  x: F32 at sample,
+  @param(min: -60.0, max: -3, default: -10.0)          //~ E0401
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow float_step(
+  x: F32 at sample,
+  @param(min: 0.0, max: 8.0, default: 4.0, step: 1)    //~ E0401
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow float_big(
+  x: F32 at sample,
+  @param(min: 0.0, max: 20000, default: 1000.0)        //~ E0401
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow unsigned_max(
+  x: F32 at sample,
+  @param(min: 0, max: 200.0, default: 8)               //~ E0401
+  n: U8 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow signed_min_negative(
+  x: F32 at sample,
+  @param(min: -5.0, max: 5, default: 0)                //~ E0401
+  n: I16 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow integer_default(
+  x: F32 at sample,
+  @param(min: 0, max: 10, default: 4.0)                //~ E0401
+  n: I32 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow unsigned_step(
+  x: F32 at sample,
+  @param(min: 0, max: 1000, default: 480, step: 16.0)  //~ E0401
+  n: U32 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow signed_byte_zero(
+  x: F32 at sample,
+  @param(min: -8, max: 0.0, default: -1)               //~ E0401
+  n: I8 at block,
+) -> F32 at sample {
+  x
+}
+
+// A text key with a number has no such candidate: it is not in this file (the value is not a number of the other kind but a number
+// for a text, tests/spec/negative/param_value_type_mismatch.onsa). The control: values that are right.
+pub flow fine(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  p: F32 at block,
+  @param(min: 0, max: 10, default: 4)
+  n: U8 at block,
+) -> F32 at sample {
+  x * p
+}

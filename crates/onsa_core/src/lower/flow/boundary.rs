@@ -236,26 +236,22 @@ pub(super) fn gen_render<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b 
     Ok(())
 }
 
-/// `params_default() -> Params` from the `@param` defaults (§11.7).
+/// `params_default() -> Params` from the `@param` defaults (§11.7), of the
+/// type of each `block` input.
 pub(super) fn gen_params_default<'b>(
     lw: &mut Lowerer<'b>,
     shape: &FlowShape,
     info: &'b FlowInfo,
     fns: &FlowFns,
+    defaults: Option<Vec<(Ty, ParamNumber)>>,
 ) -> R<()> {
-    let Some(fid) = fns.params_default else { return Ok(()) };
+    let (Some(fid), Some(defaults)) = (fns.params_default, defaults) else { return Ok(()) };
     let ty = Ty::Struct(shape.params_ty);
     let g = Gen::new(lw, shape, info, Phase::Init, ty.clone())?;
     let span = g.span;
     let mut fields = Vec::new();
-    for i in shape.flow.inputs.iter().filter(|i| i.rate == Rate::Ctl) {
-        let t = lw.core_ty(i.ty, &[], i.span)?;
-        let d = i
-            .param
-            .as_ref()
-            .and_then(|p| p.default)
-            .ok_or_else(|| internal(span, "params_default without a default"))?;
-        fields.push(float_lit(&t, d, i.span)?);
+    for (t, d) in defaults {
+        fields.push(lw.const_value_expr(&d.into(), &t, span)?);
     }
     let v = Expr::new(ty.clone(), span, ExprKind::Struct { ty: shape.params_ty, fields });
     g.finish(lw, fid, ty, false, Some(v));

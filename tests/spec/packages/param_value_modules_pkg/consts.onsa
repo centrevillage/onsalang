@@ -1,0 +1,33 @@
+// The constants of the module main.onsa takes with `use` (`K`, `LIMIT`) and `BIG`, which it does not, and the flows of this module whose
+// `@param` has a name (W7-13 U4b/t, S-87 (2), spec §11.7): the scope of a value is the module of its flow, so in this file `K` and `BIG` are found (E0200,
+// the evaluation is W9-03) and `MAIN_ONLY` of main.onsa, which is not taken here, is E0302.
+
+pub const K: F32 = 0.5
+
+pub const LIMIT: U32 = 4
+
+pub const BIG: F32 = 100.0
+
+pub flow wrong_default(
+  x: F32 at sample,
+  @param(min: 0.0, max: BIG, default: K)               //~ E0200
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow not_in_scope(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: MAIN_ONLY)       //~ E0302
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow right(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5, label: "Gain")
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}

@@ -134,6 +134,10 @@ pub(crate) struct Checker<'a> {
     /// a literal of a generated `In` or `Out` there passes its fields as
     /// views by that mode (§11.6).
     pub(crate) arg_literal: Option<(ExprId, Mode)>,
+    /// The candidate of an E0401 at a value of `@param` (§11.7, S-200),
+    /// with the span of the value: [`Self::mismatch_at`] puts it on the
+    /// E0401 of a literal at that span.
+    pub(crate) literal_fix: Option<(Span, Fix)>,
     /// The expected type of the expression being checked is the type of an
     /// earlier part of a merge that joins function types (§4.7, S-1031):
     /// a function found there is joined, not fit ([`Self::check_expr_as`]).
@@ -250,6 +254,7 @@ fn read_body<'c>(
         why: None,
         arg_closure: None,
         arg_literal: None,
+        literal_fix: None,
         joining: None,
         viewing: None,
         view_marks: Vec::new(),
@@ -579,7 +584,12 @@ impl<'a> Checker<'a> {
             // A literal in a part of the types (`fn({integer})`): neither is one.
             _ => format!("expected `{e}`, found `{a}`"),
         };
-        let d = Diagnostic::new(Stage::Types, Code::E0401, span, text).with_found(self.src(span));
+        let mut d = Diagnostic::new(Stage::Types, Code::E0401, span, text).with_found(self.src(span));
+        if let (Mismatch::Literal, Some((at, fix))) = (&mismatch, &self.literal_fix)
+            && *at == span
+        {
+            d = d.with_fix(fix.clone());
+        }
         if let (Some(fit), Mismatch::Modes(ps)) = (fit, &mismatch)
             && !self.mentions_error(actual)
             && !self.mentions_error(expected)

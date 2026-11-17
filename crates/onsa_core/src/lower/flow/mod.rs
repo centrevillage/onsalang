@@ -58,7 +58,7 @@ use std::collections::{HashMap, HashSet};
 
 use onsa_diag::Span;
 use onsa_sema::DefId;
-use onsa_sema::def::{DefKind, Fields, FlowDef, FlowFn, FlowTy};
+use onsa_sema::def::{DefKind, Fields, FlowDef, FlowFn, FlowTy, ParamInfo, ParamKey, ParamNumber};
 use onsa_sema::flow::{FlowInfo, FlowRate, InitArg, Node};
 use onsa_sema::ty::{BuiltinTy, Len, Rate, Ty as STy};
 use onsa_syntax::ast::ExprId;
@@ -134,7 +134,7 @@ pub struct FlowMeta {
     pub fns: FlowFns,
     pub layout: FlowLayout,
     /// `Ctl` inputs with their `@param` metadata, in input order.
-    pub params: Vec<(String, Ty, Option<onsa_sema::def::ParamMeta>)>,
+    pub params: Vec<(String, Ty, Option<ParamInfo>)>,
     /// `Sig` inputs: name and value type.
     pub sig_inputs: Vec<(String, Ty)>,
     /// Outputs: name, element type, planar channel count (§11.6).
@@ -390,10 +390,20 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     let process = lw.fn_id(need("process")?, Vec::new(), span)?;
     let process_inplace = member(&fd, "process_inplace").map(|d| lw.fn_id(d, Vec::new(), span)).transpose()?;
     let render = lw.fn_id(need("render")?, Vec::new(), span)?;
+    // The values of `@param`, read from the analysis in this one place (§11.7).
+    let (mut params, mut sig_inputs) = (Vec::new(), Vec::new());
+    for i in &fd.inputs {
+        let ty = lw.core_ty(i.ty, &[], i.span)?;
+        match i.rate {
+            Rate::Ctl => params.push((i.name.clone(), ty, a.param_info(i))),
+            Rate::Sig => sig_inputs.push((i.name.clone(), ty)),
+            Rate::Init => {}
+        }
+    }
     // Of the C API alone, when every `block` input has a `default` (§11.7, §14.2, S-625).
-    let mut ctl_inputs = fd.inputs.iter().filter(|i| i.rate == Rate::Ctl);
-    let all_defaults = ctl_inputs.all(|i| i.param.as_ref().is_some_and(|p| p.default.is_some()));
-    let params_default = all_defaults.then(|| push_fn(lw, format!("{base}.params_default"), false, span));
+    let defaults: Option<Vec<(Ty, ParamNumber)>> =
+        params.iter().map(|(_, t, p)| Some((t.clone(), p.as_ref()?.number(ParamKey::Default)?))).collect();
+    let params_default = defaults.is_some().then(|| push_fn(lw, format!("{base}.params_default"), false, span));
     let fns = FlowFns {
         flow,
         state: state_ty,
@@ -417,7 +427,7 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     gen_process(lw, &shape, info, &fns)?;
     gen_process_inplace(lw, &shape, info, &fns)?;
     gen_render(lw, &shape, info, &fns)?;
-    gen_params_default(lw, &shape, info, &fns)?;
+    gen_params_default(lw, &shape, info, &fns, defaults)?;
 
     // Layout and the `SIZE` / `BULK_SIZE` consts (T3-6).
     let layout = flow_layout_for(&lw.m, state_ty, lw.bulk_threshold, lw.ptr_size);
@@ -427,16 +437,6 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
         let cname = lw.qual_name(d);
         lw.m.consts.push(ConstDef { name: cname, ty: Ty::u32(), init: lit(Ty::u32(), span, Lit::Int(value as i128)) });
         lw.const_ids.insert((d, Vec::new()), id);
-    }
-    let mut params = Vec::new();
-    let mut sig_inputs = Vec::new();
-    for i in &fd.inputs {
-        let ty = lw.core_ty(i.ty, &[], i.span)?;
-        match i.rate {
-            Rate::Ctl => params.push((i.name.clone(), ty, i.param.clone())),
-            Rate::Sig => sig_inputs.push((i.name.clone(), ty)),
-            Rate::Init => {}
-        }
     }
     lw.m.flows.push(FlowMeta {
         name: base,

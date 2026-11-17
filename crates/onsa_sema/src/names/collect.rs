@@ -447,7 +447,7 @@ impl Place<'_> {
             ExprKind::Lit(Lit::Int { value, .. }) => Some(*value),
             _ => None,
         });
-        ConstDef { ty: self.error, value, int_value, param: None }
+        ConstDef { ty: self.error, value, int_value, param: None, of_attr: None }
     }
 
     /// A function, with the mode of its `self` (a method, §6.2), known

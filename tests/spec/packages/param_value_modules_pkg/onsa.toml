@@ -1,0 +1,3 @@
+[package]
+name = "param_value_modules_pkg"
+edition = "2026"

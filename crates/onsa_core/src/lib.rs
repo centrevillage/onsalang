@@ -22,5 +22,6 @@ pub use ir::*;
 pub use layout::{FieldLayout, FlowLayout, RecordLayout, flow_layout, flow_layout_for, size_align, size_align_for};
 pub use lower::flow::{FlowFns, FlowMeta};
 pub use lower::{GenericArg, LowerFailure, LowerOptions, lower, lower_with};
+pub use onsa_sema::def::{ParamInfo, ParamKey, ParamKind, ParamNumber};
 pub use reach::{Reach, reach};
 pub use verify::{VerifyError, verify};

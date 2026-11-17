@@ -77,15 +77,15 @@ impl Scalar {
         }
     }
 
-    /// The value of a `block` input: its `@param` default (an integer input
-    /// takes it when it is a whole number in range), else zero.
-    fn param_value(self, default: Option<f64>) -> Value {
+    /// The value of a `block` input: its `@param` default, a value of its
+    /// type (§11.7), else zero.
+    fn param_value(self, default: Option<onsa_core::ParamNumber>) -> Value {
+        use onsa_core::ParamNumber as N;
         match (self, default) {
-            (Scalar::F32, Some(d)) => Value::F32(d as f32),
-            (Scalar::F64, Some(d)) => Value::F64(d),
-            (Scalar::Int(k), Some(d)) if d.fract() == 0.0 && k.range().0 as f64 <= d && d <= k.range().1 as f64 => {
-                int_value(k, d as i128)
-            }
+            (Scalar::F32, Some(N::Float(d))) => Value::F32(d as f32),
+            (Scalar::F64, Some(N::Float(d))) => Value::F64(d),
+            (Scalar::Int(k), Some(N::Int(d))) => int_value(k, d),
+            (Scalar::Bool, Some(N::Bool(b))) => Value::Bool(b),
             (s, _) => s.zero(),
         }
     }
@@ -165,7 +165,7 @@ impl Shape {
             .zip(&meta.params)
             .map(|((n, t), (_, _, pm))| {
                 let s = scalar_of(t, &format!("the `block` input `{n}`"))?;
-                Ok((n.clone(), s, s.param_value(pm.as_ref().and_then(|p| p.default))))
+                Ok((n.clone(), s, s.param_value(pm.as_ref().and_then(|p| p.number(onsa_core::ParamKey::Default)))))
             })
             .collect::<Result<_, String>>()?;
         let inputs =

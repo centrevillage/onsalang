@@ -1,0 +1,200 @@
+// onsa.toml
+// [test]
+// spec = ["§11.7", "§6.5", "§18.1"]
+
+// W7-13 U4b/t, S-87, S-1121 (the reading of the parent, as in W7-13 U4a: what the attribute of an input says is read on an input that can have
+// it, and a key that §11.7 turns away is not read): a value that the attribute does not take is not typed, so the errors of the value
+// (E0302 for a name that is nowhere, E0401 for a value of another type, E0200 for a form that is not done) are not reported beside the
+// E0809 that turns it away. They are the values of a key that is not in the list of eight and of the second `default` (or another key
+// written twice), of a key that a `Bool` input may not have, of a `scale` that is not one of the two texts, and the values of the `@param`
+// of an input whose value type is not one of the nine (E0809) or is not Copy (E0810). One error in each unit (§18.1): the E0809 or
+// the E0810 and nothing else. The value of a right key of the same attribute is read as usual (param_value_name_unresolved.onsa).
+
+pub struct St {
+  a: F32,
+}
+
+// ---- a key that is not in the list: the value is a name that is nowhere, a string with a hole that is nowhere, a form that is not done, a value of another type
+
+pub flow unknown_key_name(
+  x: F32 at sample,
+  @param(default: 0.5, color: nope) p: F32 at block,    //~ E0809
+) -> F32 at sample {
+  x * p
+}
+
+pub flow unknown_key_hole(
+  x: F32 at sample,
+  @param(default: 0.5, color: "red{nope}") p: F32 at block, //~ E0809
+) -> F32 at sample {
+  x * p
+}
+
+pub flow unknown_key_sum(
+  x: F32 at sample,
+  @param(min: 0, max: 10, default: 2, range: 1 + 1) n: I32 at block, //~ E0809
+) -> F32 at sample {
+  x
+}
+
+pub flow unknown_key_before_the_default(
+  x: F32 at sample,
+  @param(range: nope, default: 0.5) p: F32 at block,    //~ E0809
+) -> F32 at sample {
+  x * p
+}
+
+// ---- a key twice: the value of the second is not read
+
+pub flow second_default_name(
+  x: F32 at sample,
+  @param(default: 0.5, default: nope) p: F32 at block,  //~ E0809
+) -> F32 at sample {
+  x * p
+}
+
+pub flow second_min_of_another_type(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5, min: "a") p: F32 at block, //~ E0809
+) -> F32 at sample {
+  x * p
+}
+
+pub flow second_label_hole(
+  x: F32 at sample,
+  @param(default: 0.5, label: "a", label: "{nope}") p: F32 at block, //~ E0809
+) -> F32 at sample {
+  x * p
+}
+
+pub flow second_max_not_done(
+  x: F32 at sample,
+  @param(min: 0, max: 10, default: 2, max: 5 * 2) n: U8 at block, //~ E0809
+) -> F32 at sample {
+  x
+}
+
+// ---- the keys that a `Bool` input may not have
+
+pub flow bool_min_name(
+  x: F32 at sample,
+  @param(min: nope, default: true) on: Bool at block,   //~ E0809
+) -> F32 at sample {
+  if on { x } else { 0.0 }
+}
+
+pub flow bool_max_of_another_type(
+  x: F32 at sample,
+  @param(default: true, max: 1.0) on: Bool at block,    //~ E0809
+) -> F32 at sample {
+  if on { x } else { 0.0 }
+}
+
+pub flow bool_step_not_done(
+  x: F32 at sample,
+  @param(default: false, step: 1 + 1) on: Bool at block, //~ E0809
+) -> F32 at sample {
+  if on { x } else { 0.0 }
+}
+
+// ---- a `scale` that is not one of the two texts
+
+pub flow scale_name(
+  x: F32 at sample,
+  @param(min: 1.0, max: 10.0, default: 2.0, scale: nope) p: F32 at block, //~ E0809
+) -> F32 at sample {
+  x * p
+}
+
+pub flow scale_text_of_another_word(
+  x: F32 at sample,
+  @param(min: 1.0, max: 10.0, default: 2.0, scale: "bogus") p: F32 at block, //~ E0809
+) -> F32 at sample {
+  x * p
+}
+
+// ---- an input whose value type is not one of the nine (E0809 at the type)
+
+pub flow i64_with_a_name(
+  x: F32 at sample,
+  @param(min: nope, max: 10, default: 2)
+  n: I64 at block,                                      //~ E0809
+) -> F32 at sample {
+  x
+}
+
+pub flow u64_with_a_float(
+  x: F32 at sample,
+  @param(min: 0, max: 10, default: 2.5)
+  n: U64 at block,                                      //~ E0809
+) -> F32 at sample {
+  x
+}
+
+pub flow struct_with_a_name(
+  x: F32 at sample,
+  @param(default: nope)
+  p: St at block,                                       //~ E0809
+) -> F32 at sample {
+  x
+}
+
+pub flow char_with_a_hole(
+  x: F32 at sample,
+  @param(default: 'a', label: "{nope}")
+  c: Char at block,                                     //~ E0809
+) -> F32 at sample {
+  x
+}
+
+pub flow array_with_a_sum(
+  x: F32 at sample,
+  @param(default: 1 + 1)
+  p: [F32; 2] at block,                                 //~ E0809
+) -> F32 at sample {
+  x
+}
+
+// ---- an input that is not Copy (E0810 at the type)
+
+pub flow string_with_a_name(
+  x: F32 at sample,
+  @param(default: nope)
+  p: Str at block,                                      //~ E0810
+) -> F32 at sample {
+  x
+}
+
+pub flow heap_array_with_a_sum(
+  x: F32 at sample,
+  @param(default: 1 + 1)
+  p: Array[F32] at block,                               //~ E0810
+) -> F32 at sample {
+  x
+}
+
+pub flow option_of_a_string_with_a_hole(
+  x: F32 at sample,
+  @param(default: 0.0, label: "{nope}")
+  p: Option[Str] at block,                              //~ E0810
+) -> F32 at sample {
+  x
+}
+
+// ---- the control: the keys and the inputs that are right are read, so the value of another type in one of them is E0401
+
+pub flow control_right_keys(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5, unit: "a")
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow control_right_input_wrong_value(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 1)               //~ E0401
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}

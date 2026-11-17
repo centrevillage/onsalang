@@ -306,6 +306,16 @@ pub struct ConstDef {
     /// its name alone, in parentheses too: a constant expression reads the
     /// argument (`R.CAP` of `type R = Rg[F32, 4]`, §4.5, S-304).
     pub param: Option<u32>,
+    /// The value of an attribute key this def is (of the item of the
+    /// attribute's owner): not an item, and of a type no `const` needs to
+    /// have.
+    pub of_attr: Option<AttrValue>,
+}
+
+/// The attribute key whose value a [`ConstDef`] is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AttrValue {
+    Param(ParamKey),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -320,38 +330,89 @@ pub struct ImplDef {
     pub consts: Vec<DefId>,
 }
 
-/// `@param(...)` metadata (§11.7). Numeric values are evaluated from literals,
-/// as values of the input's type (`onsa_syntax::float_value`: an `F32` value
-/// is held exactly in the `f64`).
+/// A key of `@param` (§11.7, a closed list), in the order of the list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ParamKey {
+    Min,
+    Max,
+    Default,
+    Step,
+    Unit,
+    Scale,
+    Label,
+    Id,
+}
+
+impl ParamKey {
+    pub fn name(self) -> &'static str {
+        ["min", "max", "default", "step", "unit", "scale", "label", "id"][self as usize]
+    }
+}
+
+/// The kind of the value type of an input with `@param` (§11.7), which
+/// decides the field of its value in the C table (§14.2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ParamKind {
+    Float(crate::ty::FloatKind),
+    Int(crate::ty::IntKind),
+    Bool,
+}
+
+/// A key of `@param` with its value: a number or a text has a def, a
+/// `const` of the input's type or of `Str` ([`ConstDef::of_attr`]), whose
+/// value the types stage evaluates; `scale` has none.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParamValue {
+    pub key: ParamKey,
+    pub key_span: Span,
+    pub def: Option<DefId>,
+    /// The text of a string literal with no hole, of a text key and `scale`
+    /// (`crate::sig::param::literal`).
+    pub text: Option<String>,
+}
+
+/// `@param(...)` metadata (§11.7): the keys written, in order, each once.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParamMeta {
-    /// The width of the input's type the numbers are values of (`F64` for
-    /// an integer input, whose values every `f64` here holds).
-    pub width: onsa_syntax::FloatWidth,
-    pub min: Option<f64>,
-    pub max: Option<f64>,
-    pub default: Option<f64>,
-    pub step: Option<f64>,
-    pub unit: Option<String>,
-    pub scale: Option<String>,
-    pub label: Option<String>,
-    pub id: Option<String>,
+    pub values: Vec<ParamValue>,
     pub span: Span,
 }
 
-impl ParamMeta {
-    pub fn empty(span: Span, width: onsa_syntax::FloatWidth) -> ParamMeta {
-        ParamMeta {
-            width,
-            min: None,
-            max: None,
-            default: None,
-            step: None,
-            unit: None,
-            scale: None,
-            label: None,
-            id: None,
-            span,
+/// A number of `@param` (§11.7), of one of the three fields of the C table
+/// (§14.2).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ParamNumber {
+    Float(f64),
+    Int(i128),
+    Bool(bool),
+}
+
+/// The values of the `@param` of an input, evaluated, in the order written
+/// ([`crate::Analysis::param_info`]).
+#[derive(Debug, Clone)]
+pub struct ParamInfo {
+    pub kind: ParamKind,
+    pub numbers: Vec<(ParamKey, ParamNumber)>,
+    /// Of the text keys and `scale`.
+    pub texts: Vec<(ParamKey, String)>,
+}
+
+impl ParamInfo {
+    pub fn number(&self, key: ParamKey) -> Option<ParamNumber> {
+        self.numbers.iter().find(|(k, _)| *k == key).map(|(_, n)| *n)
+    }
+
+    pub fn text(&self, key: ParamKey) -> Option<&str> {
+        self.texts.iter().find(|(k, _)| *k == key).map(|(_, t)| t.as_str())
+    }
+}
+
+impl From<ParamNumber> for crate::consteval::ConstValue {
+    fn from(n: ParamNumber) -> Self {
+        match n {
+            ParamNumber::Float(x) => Self::Float(x),
+            ParamNumber::Int(x) => Self::Int(x),
+            ParamNumber::Bool(x) => Self::Bool(x),
         }
     }
 }

@@ -59,10 +59,18 @@ impl<'a> Checker<'a> {
     }
 
     pub(super) fn check_const(&mut self, value: ExprId, ty: TyId) {
+        let of_attr = match &self.a.def(self.def).kind {
+            DefKind::Const(c) => c.of_attr,
+            _ => None,
+        };
         // The declared type first, of itself: its error stops the unit (§6.6, S-755).
-        if let Some(d) = self.const_type(ty) {
+        // A value of an attribute has the type of what it describes (§11.7).
+        if let Some(d) = self.const_type(ty).filter(|_| of_attr.is_none()) {
             self.diag(d);
             return;
+        }
+        if let Some(crate::def::AttrValue::Param(_)) = of_attr {
+            self.literal_fix = crate::sig::param::candidate(self.ast, value, self.a.types.get(ty));
         }
         self.frames.push(Frame { ret: ty, loop_depth: 0 });
         let _ = self.check_expr(value, Some(ty));
@@ -71,6 +79,17 @@ impl<'a> Checker<'a> {
         // below reads the values they denote.
         if !self.failed {
             self.check_deferred_end();
+        }
+        // A value of `@param` other than a literal waits for the evaluation of W9-03; one
+        // that reads a failed constant reports nothing more, as a `const` does (§18.1).
+        if let Some(crate::def::AttrValue::Param(key)) = of_attr
+            && !self.failed
+            && crate::sig::param::literal(self.ast, value).is_none()
+            && !crate::consteval::reads_failed(self)
+        {
+            let span = self.expr(value).span;
+            self.unsupported(span, Feature::ParamValues, &[key.name()]);
+            return;
         }
         // Only the first read has a value: a candidate's form reads no `const_values`.
         if !self.failed
@@ -86,7 +105,11 @@ impl<'a> Checker<'a> {
                 self.err(
                     Code::E0419,
                     span,
-                    format!("the compile-time evaluation of this `const` overflows `{}` (§6.6, §3.4)", k.name()),
+                    format!(
+                        "the compile-time evaluation of this {} overflows `{}` (§6.6, §3.4)",
+                        if of_attr.is_some() { "value of `@param`" } else { "`const`" },
+                        k.name()
+                    ),
                 );
                 return;
             }

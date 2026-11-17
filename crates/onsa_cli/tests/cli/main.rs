@@ -57,6 +57,7 @@ mod instance_limits;
 mod interface_const_floats;
 mod interface_fn_return;
 mod interface_generic_kinds;
+mod interface_param_values;
 mod interface_visibility;
 mod kind_heading_notes;
 mod lexical_syntax;
