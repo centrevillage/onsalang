@@ -1,0 +1,530 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§11.6"]
+
+// R-486, S-196, S-1113 (§5.2, §11.6): the calls with a change inside an argument that is a struct literal of the
+// generated `In` or `Out` (or an `if`, a `match` or a block whose tail is one) and are not an overlap, next to the
+// errors of negative/overlap_args_opened_change_gen.onsa. "引数の中のブロックで宣言した変数への代入は、どの引数とも
+// 重ならない" (§5.2). The fields of a literal at an argument are arguments of their own (the places of the elements,
+// §11.6). A change that is in no field (a statement of an arm before the literal) is a change inside the same
+// argument as the fields, so it overlaps none of them: a Copy variable declared in the arm and changed there, or an
+// outer variable changed there, then named in a field, is not an overlap, as `take(if c { x[0] = 1.0 ⏎ x } else { y })`
+// of a `Span` is not. It overlaps the other arguments of the same call (negative/overlap_args_opened_change_outer.onsa).
+// A change in a block that is a field of its own, to a variable declared in that block, overlaps no argument.
+// The same forms of a `Span` (the last functions) are the contrast.
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}
+
+pub struct Wide {
+  a: F32,
+  b: F32,
+}
+
+pub flow spread(x: [F32; 2] at sample, m: F32 at sample) -> Wide at sample {
+  Wide { a: x[0] + m, b: x[1] + m }
+}
+
+pub fn take_in(i: pair.In) -> F32 {
+  i.l[0]
+}
+
+pub fn take_both(i: pair.In, j: pair.In) -> F32 {
+  i.l[0] + j.r[0]
+}
+
+pub fn put_in(i: pair.In, inout o: pair.Out) {}
+
+pub fn put_out(o: pair.Out, inout s: Span[F32]) {}
+
+pub fn spread_in(i: spread.In, inout s: Span[F32]) {}
+
+pub fn take_sp(s: Span[F32]) -> F32 {
+  s[0]
+}
+
+pub fn take_sp2(s: Span[F32], t: Span[F32]) -> F32 {
+  s[0] + t[0]
+}
+
+// ------------------------------------------ a Copy variable declared in the arm and changed there (R-486)
+
+pub fn arm_local_changed_in_an_if(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  take_in(if c {
+    var t: [F32; 2] = [v; 2]
+    t[0] = 2.0
+    pair.In { l: t, r: y }
+  } else {
+    pair.In { l: y, r: y }
+  })
+}
+
+pub fn arm_local_changed_in_the_else_arm(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  take_in(if c {
+    pair.In { l: y, r: y }
+  } else {
+    var t: [F32; 2] = [v; 2]
+    t[1] = 2.0
+    pair.In { l: y, r: t }
+  })
+}
+
+pub fn arm_local_changed_in_a_match(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  take_in(match c {
+    true => {
+      var t: [F32; 2] = [v; 2]
+      t[0] = 2.0
+      pair.In { l: t, r: y }
+    },
+    false => pair.In { l: y, r: y },
+  })
+}
+
+pub fn arm_local_changed_in_a_block(v: F32, y: [F32; 2]) -> F32 {
+  take_in({
+    var t: [F32; 2] = [v; 2]
+    t[0] = 2.0
+    pair.In { l: t, r: y }
+  })
+}
+
+pub fn arm_local_changed_in_both_fields(c: Bool, v: F32) -> F32 {
+  take_in(if c {
+    var t: [F32; 2] = [v; 2]
+    t[0] = 2.0
+    pair.In { l: t, r: t }
+  } else {
+    var u: [F32; 2] = [v; 2]
+    u[1] = 3.0
+    pair.In { l: u, r: u }
+  })
+}
+
+pub fn arm_local_changed_twice_and_a_second_variable(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  take_in(if c {
+    var t: [F32; 2] = [v; 2]
+    var u: [F32; 2] = [v; 2]
+    t[0] = 2.0
+    u[0] = t[0]
+    t[1] = u[0]
+    pair.In { l: t, r: u }
+  } else {
+    pair.In { l: y, r: y }
+  })
+}
+
+pub fn arm_local_changed_in_a_loop_of_the_arm(c: Bool, n: U32, v: F32, y: [F32; 2]) -> F32 {
+  take_in(if c {
+    var t: [F32; 2] = [v; 2]
+    for _ in 0 ..< n {
+      t[0] = t[0] + 1.0
+    }
+    pair.In { l: t, r: y }
+  } else {
+    pair.In { l: y, r: y }
+  })
+}
+
+pub fn arm_local_changed_in_nested_ifs(c: Bool, d: Bool, v: F32, y: [F32; 2]) -> F32 {
+  take_in(if c {
+    var t: [F32; 2] = [v; 2]
+    t[0] = 2.0
+    if d {
+      pair.In { l: t, r: y }
+    } else {
+      pair.In { l: y, r: t }
+    }
+  } else {
+    pair.In { l: y, r: y }
+  })
+}
+
+pub fn arm_local_changed_for_an_out_literal(c: Bool, v: F32, y: [F32; 2]) {
+  var z: [F32; 2] = [0.0; 2]
+  put_out(if c {
+    var t: [F32; 2] = [v; 2]
+    t[0] = 2.0
+    pair.Out { l: t, r: y }
+  } else {
+    pair.Out { l: y, r: y }
+  }, inout z)
+}
+
+pub fn arm_local_changed_with_an_inout_of_another_variable(c: Bool, v: F32, y: [F32; 2]) {
+  var z: [F32; 2] = [0.0; 2]
+  var w: [F32; 2] = [0.0; 2]
+  put_in(if c {
+    var t: [F32; 2] = [v; 2]
+    t[0] = 2.0
+    pair.In { l: t, r: y }
+  } else {
+    pair.In { l: y, r: y }
+  }, inout pair.Out { l: z, r: w })
+}
+
+pub fn arm_local_changed_in_both_literals_of_a_call(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  take_both(if c {
+    var t: [F32; 2] = [v; 2]
+    t[0] = 2.0
+    pair.In { l: t, r: y }
+  } else {
+    pair.In { l: y, r: y }
+  }, if c {
+    var u: [F32; 2] = [v; 2]
+    u[0] = 3.0
+    pair.In { l: y, r: u }
+  } else {
+    pair.In { l: y, r: y }
+  })
+}
+
+pub fn arm_local_changed_for_a_literal_with_an_array_field(c: Bool, v: F32, y: [F32; 2]) {
+  var w: [F32; 2] = [0.0; 2]
+  spread_in(if c {
+    var t: [F32; 2] = [v; 2]
+    t[0] = 2.0
+    spread.In { m: t, x: [y, y] }
+  } else {
+    spread.In { m: y, x: [y, y] }
+  }, inout w)
+}
+
+pub fn arm_local_changed_for_a_channel_of_the_array_field(c: Bool, v: F32, y: [F32; 2]) {
+  var w: [F32; 2] = [0.0; 2]
+  spread_in(if c {
+    var t: [F32; 2] = [v; 2]
+    t[0] = 2.0
+    spread.In { m: y, x: [t, y] }
+  } else {
+    spread.In { m: y, x: [y, y] }
+  }, inout w)
+}
+
+// ------------------------------------------------------- an outer variable changed in the arm, then a field
+
+pub fn outer_changed_in_the_arm_before_the_literal(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  take_in(if c {
+    x[0] = 1.0
+    pair.In { l: x, r: y }
+  } else {
+    pair.In { l: y, r: y }
+  })
+}
+
+pub fn outer_changed_in_the_arm_of_a_match(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  take_in(match c {
+    true => {
+      x[0] = 1.0
+      pair.In { l: y, r: x }
+    },
+    false => pair.In { l: y, r: y },
+  })
+}
+
+pub fn outer_changed_in_a_block(v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  take_in({
+    x[0] = 1.0
+    pair.In { l: x, r: x }
+  })
+}
+
+pub fn outer_changed_by_an_inout_call_in_the_arm(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  take_in(if c {
+    bump(inout x)
+    pair.In { l: x, r: y }
+  } else {
+    pair.In { l: y, r: y }
+  })
+}
+
+pub fn bump(inout s: Span[F32]) {
+  s[0] = s[0] + 1.0
+}
+
+pub fn outer_changed_for_an_out_literal(c: Bool, v: F32, y: [F32; 2]) {
+  var x: [F32; 2] = [v; 2]
+  var z: [F32; 2] = [0.0; 2]
+  put_out(if c {
+    x[0] = 1.0
+    pair.Out { l: x, r: y }
+  } else {
+    pair.Out { l: y, r: y }
+  }, inout z)
+}
+
+pub fn outer_changed_in_the_arm_and_another_variable_in_the_call(c: Bool, v: F32, y: [F32; 2]) {
+  var x: [F32; 2] = [v; 2]
+  var z: [F32; 2] = [0.0; 2]
+  var w: [F32; 2] = [0.0; 2]
+  put_in(if c {
+    x[0] = 1.0
+    pair.In { l: x, r: y }
+  } else {
+    pair.In { l: y, r: y }
+  }, inout pair.Out { l: z, r: w })
+}
+
+// ------------------------------------------------------ the change is in another arm (a path not taken)
+
+pub fn other_arm_changes_an_outer_variable(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  take_in(if c {
+    pair.In { l: x, r: y }
+  } else {
+    x[0] = 1.0
+    pair.In { l: y, r: y }
+  })
+}
+
+pub fn other_arm_changes_an_outer_variable_in_a_match(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  take_in(match c {
+    true => pair.In { l: x, r: y },
+    false => {
+      x[0] = 1.0
+      pair.In { l: y, r: y }
+    },
+  })
+}
+
+pub fn other_arm_changes_its_own_variable(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  take_in(if c {
+    let t: [F32; 2] = [v; 2]
+    pair.In { l: t, r: y }
+  } else {
+    var t: [F32; 2] = [v; 2]
+    t[0] = 1.0
+    pair.In { l: y, r: t }
+  })
+}
+
+// ------------------------------------------------------------------------------------ no change at all
+
+pub fn arm_local_unchanged(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  take_in(if c {
+    let t: [F32; 2] = [v; 2]
+    pair.In { l: t, r: y }
+  } else {
+    pair.In { l: y, r: y }
+  })
+}
+
+pub fn outer_variables_unchanged(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  take_in(if c { pair.In { l: x, r: y } } else { pair.In { l: y, r: x } })
+}
+
+// ------------------------------------------------------------- a field that is a block of its own
+
+pub fn field_block_declares_and_changes_its_variable(v: F32, y: [F32; 2]) -> F32 {
+  take_in(pair.In {
+    l: {
+      var t: [F32; 2] = [v; 2]
+      t[0] = 2.0
+      t
+    },
+    r: y,
+  })
+}
+
+pub fn field_block_of_an_arm_tail(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  take_in(if c {
+    pair.In {
+      l: y,
+      r: {
+        var t: [F32; 2] = [v; 2]
+        t[0] = 2.0
+        t
+      },
+    }
+  } else {
+    pair.In { l: y, r: y }
+  })
+}
+
+pub fn field_block_beside_a_field_of_another_variable(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  take_in(if c {
+    pair.In {
+      l: x,
+      r: {
+        var t: [F32; 2] = [v; 2]
+        t[0] = 2.0
+        t
+      },
+    }
+  } else {
+    pair.In { l: y, r: y }
+  })
+}
+
+pub fn field_if_declares_and_changes_its_variable_in_an_arm(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  take_in(pair.In {
+    l: if c {
+      var t: [F32; 2] = [v; 2]
+      t[0] = 2.0
+      t
+    } else {
+      y
+    },
+    r: y,
+  })
+}
+
+pub fn field_block_of_a_match_arm_tail(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  take_in(match c {
+    true => pair.In {
+      l: {
+        var t: [F32; 2] = [v; 2]
+        t[0] = 2.0
+        t
+      },
+      r: y,
+    },
+    false => pair.In { l: y, r: y },
+  })
+}
+
+pub fn changed_variable_of_the_field_block_and_a_field_that_reads_another(v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  take_in(pair.In {
+    l: x,
+    r: {
+      var t: [F32; 2] = [v; 2]
+      t[1] = x[0]
+      t
+    },
+  })
+}
+
+pub fn field_block_in_a_call_with_an_inout_of_another_variable(v: F32, y: [F32; 2]) {
+  var z: [F32; 2] = [0.0; 2]
+  var w: [F32; 2] = [0.0; 2]
+  put_in(pair.In {
+    l: {
+      var t: [F32; 2] = [v; 2]
+      t[0] = 2.0
+      t
+    },
+    r: y,
+  }, inout pair.Out { l: z, r: w })
+}
+
+// -------------------------------------------------------------------------------------- combinations
+
+pub fn apply(g: fn(Bool) -> F32) -> F32 {
+  g.(true)
+}
+
+pub fn in_an_anonymous_function(v: F32, y: [F32; 2]) -> F32 {
+  apply(fn(c) {
+    take_in(if c {
+      var t: [F32; 2] = [v; 2]
+      t[0] = 2.0
+      pair.In { l: t, r: y }
+    } else {
+      pair.In { l: y, r: y }
+    })
+  })
+}
+
+pub fn in_a_loop_body(n: U32, c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var acc: F32 = 0.0
+  for _ in 0 ..< n {
+    acc = acc + take_in(if c {
+      var t: [F32; 2] = [v; 2]
+      t[0] = 2.0
+      pair.In { l: t, r: y }
+    } else {
+      pair.In { l: y, r: y }
+    })
+  }
+  acc
+}
+
+pub fn in_a_nested_call(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  take_sp(if c {
+    var t: [F32; 2] = [v; 2]
+    t[0] = take_in(if c {
+      var u: [F32; 2] = [v; 2]
+      u[0] = 2.0
+      pair.In { l: u, r: t }
+    } else {
+      pair.In { l: y, r: y }
+    })
+    t
+  } else {
+    y
+  })
+}
+
+pub fn in_a_generic_function[T](a: T, c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  take_in(if c {
+    var t: [F32; 2] = [v; 2]
+    t[0] = 2.0
+    pair.In { l: t, r: y }
+  } else {
+    pair.In { l: y, r: y }
+  })
+}
+
+// ---------------------------------------------------------- the same forms of a `Span` (the contrast)
+
+pub fn span_arm_local_changed(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  take_sp(if c {
+    var t: [F32; 2] = [v; 2]
+    t[0] = 2.0
+    t
+  } else {
+    y
+  })
+}
+
+pub fn span_outer_changed_in_the_arm(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  take_sp(if c {
+    x[0] = 1.0
+    x
+  } else {
+    y
+  })
+}
+
+pub fn span_other_arm_changed(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  take_sp(if c {
+    x
+  } else {
+    x[0] = 1.0
+    y
+  })
+}
+
+pub fn span_arm_local_changed_in_a_match(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  take_sp(match c {
+    true => {
+      var t: [F32; 2] = [v; 2]
+      t[0] = 2.0
+      t
+    },
+    false => y,
+  })
+}
+
+pub fn span_block_declares_and_changes_its_variable(v: F32, y: [F32; 2]) -> F32 {
+  take_sp2({
+    var t: [F32; 2] = [v; 2]
+    t[0] = 2.0
+    t
+  }, y)
+}

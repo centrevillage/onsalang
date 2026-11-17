@@ -1,0 +1,52 @@
+use util.{pair, take_in, put_in, planes}
+
+pub fn an_arm_variable_changed(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  take_in(if c {
+    var t: [F32; 2] = [v; 2]
+    t[0] = 2.0
+    pair.In { l: t, r: y }
+  } else {
+    pair.In { l: y, r: y }
+  })
+}
+
+pub fn an_outer_variable_changed_in_the_arm(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  take_in(if c {
+    x[0] = 1.0
+    pair.In { l: x, r: y }
+  } else {
+    pair.In { l: y, r: y }
+  })
+}
+
+pub fn an_arm_variable_beside_an_inout_literal(c: Bool, v: F32, y: [F32; 2]) {
+  var z: [F32; 2] = [0.0; 2]
+  var w: [F32; 2] = [0.0; 2]
+  put_in(if c {
+    var t: [F32; 2] = [v; 2]
+    t[0] = 2.0
+    pair.In { l: t, r: y }
+  } else {
+    pair.In { l: y, r: y }
+  }, inout pair.Out { l: z, r: w })
+}
+
+pub fn a_field_block_declares_and_changes(v: F32, y: [F32; 2]) -> F32 {
+  take_in(pair.In {
+    l: {
+      var t: [F32; 2] = [v; 2]
+      t[0] = 2.0
+      t
+    },
+    r: y,
+  })
+}
+
+pub fn a_planar_element_block_declares_and_changes(v: F32, y: [F32; 2]) -> F32 {
+  planes([{
+    var t: [F32; 2] = [v; 2]
+    t[0] = 2.0
+    t
+  }, y])
+}

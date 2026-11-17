@@ -1,0 +1,338 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§11.6"]
+// fixes = 0
+
+// R-486, S-196, S-1113 (§5.2, §11.6): "他の引数の中で `inout` に渡すか `!` を呼ぶと重なる" and "引数に置いたブロック式や
+// 腕の中の代入…も同じ変更で、引数の順によらず E0702 である". The fields of a struct literal of the generated `In` or
+// `Out` at an argument are arguments of their own (§11.6), so a change inside one field overlaps the place that
+// another field names, in either order of the fields, in the literal written at the argument and in the tail of an
+// `if`, a `match` or a block. A variable declared in the arm and named in one field is the place of that field, and a
+// change to it inside the block of another field overlaps it ("引数の中のブロックで宣言した変数" is the one a
+// field's own block declares, not one the arm declares and another field names). The error is at the later written of
+// the change and the other place (S-799), E0702, no repair candidate (`fixes = 0`). One error per function (P-01). The
+// forms that do not overlap are in values/overlap_args_opened_change_gen_ok.onsa, the changes of an arm that overlap
+// another argument of the call in negative/overlap_args_opened_change_outer.onsa.
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}
+
+pub fn take_in(i: pair.In) -> F32 {
+  i.l[0]
+}
+
+pub fn take_both(i: pair.In, j: pair.In) -> F32 {
+  i.l[0] + j.r[0]
+}
+
+pub fn put_out(o: pair.Out, inout s: Span[F32]) {}
+
+pub fn bump(inout s: Span[F32]) {
+  s[0] = s[0] + 1.0
+}
+
+pub fn apply(g: fn(Bool) -> F32) -> F32 {
+  g.(true)
+}
+
+// --------------------------------------------------------- a field that changes what another field names
+
+pub fn field_block_changes_the_variable_of_the_field_before(v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  take_in(pair.In {
+    l: x,
+    r: {
+      x[0] = 1.0 //~ E0702
+      y
+    },
+  })
+}
+
+pub fn field_block_changes_the_variable_of_the_field_after(v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  take_in(pair.In {
+    l: {
+      x[0] = 1.0
+      y
+    },
+    r: x, //~ E0702
+  })
+}
+
+pub fn field_if_changes_the_variable_of_another_field(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  take_in(pair.In {
+    l: x,
+    r: if c {
+      x[0] = 1.0 //~ E0702
+      y
+    } else {
+      y
+    },
+  })
+}
+
+pub fn field_match_changes_the_variable_of_another_field(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  take_in(pair.In {
+    l: x,
+    r: match c {
+      true => y,
+      false => {
+        x[0] = 1.0 //~ E0702
+        y
+      },
+    },
+  })
+}
+
+pub fn field_block_changes_by_an_inout_call(v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  take_in(pair.In {
+    l: x,
+    r: {
+      bump(inout x) //~ E0702
+      y
+    },
+  })
+}
+
+pub fn field_block_changes_in_a_loop(n: U32, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  take_in(pair.In {
+    l: x,
+    r: {
+      for _ in 0 ..< n {
+        x[0] = 1.0 //~ E0702
+      }
+      y
+    },
+  })
+}
+
+pub fn out_field_block_changes_the_variable_of_another_field(v: F32, y: [F32; 2]) {
+  var x: [F32; 2] = [v; 2]
+  var z: [F32; 2] = [0.0; 2]
+  put_out(pair.Out {
+    l: x,
+    r: {
+      x[0] = 1.0 //~ E0702
+      y
+    },
+  }, inout z)
+}
+
+pub fn the_literal_is_a_tail_of_an_if(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  take_in(if c {
+    pair.In {
+      l: x,
+      r: {
+        x[0] = 1.0 //~ E0702
+        y
+      },
+    }
+  } else {
+    pair.In { l: y, r: y }
+  })
+}
+
+pub fn the_literal_is_a_tail_of_a_match(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  take_in(match c {
+    true => pair.In { l: y, r: y },
+    false => pair.In {
+      l: {
+        x[0] = 1.0
+        y
+      },
+      r: x, //~ E0702
+    },
+  })
+}
+
+pub fn the_literal_is_a_tail_of_a_block(v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  take_in({
+    pair.In {
+      l: x,
+      r: {
+        x[0] = 1.0 //~ E0702
+        y
+      },
+    }
+  })
+}
+
+pub fn the_field_is_a_part_of_the_variable(v: F32, y: [F32; 2]) -> F32 {
+  var x: [[F32; 2]; 2] = [[v; 2]; 2]
+  take_in(pair.In {
+    l: x[0],
+    r: {
+      x[1][0] = 1.0 //~ E0702
+      y
+    },
+  })
+}
+
+pub fn two_literals_of_a_call(v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  take_both(pair.In { l: x, r: y }, pair.In {
+    l: y,
+    r: {
+      x[0] = 1.0 //~ E0702
+      y
+    },
+  })
+}
+
+// ------------------------------- a variable the arm declares, named in a field, changed in another field
+
+pub fn arm_variable_changed_in_a_field_block_after(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  take_in(if c {
+    var t: [F32; 2] = [v; 2]
+    pair.In {
+      l: t,
+      r: {
+        t[0] = 2.0 //~ E0702
+        y
+      },
+    }
+  } else {
+    pair.In { l: y, r: y }
+  })
+}
+
+pub fn arm_variable_changed_in_a_field_block_before(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  take_in(if c {
+    var t: [F32; 2] = [v; 2]
+    pair.In {
+      l: {
+        t[0] = 2.0
+        y
+      },
+      r: t, //~ E0702
+    }
+  } else {
+    pair.In { l: y, r: y }
+  })
+}
+
+pub fn arm_variable_changed_in_a_field_block_of_a_match(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  take_in(match c {
+    true => {
+      var t: [F32; 2] = [v; 2]
+      pair.In {
+        l: t,
+        r: {
+          t[0] = 2.0 //~ E0702
+          y
+        },
+      }
+    },
+    false => pair.In { l: y, r: y },
+  })
+}
+
+pub fn block_variable_changed_in_a_field_block(v: F32, y: [F32; 2]) -> F32 {
+  take_in({
+    var t: [F32; 2] = [v; 2]
+    pair.In {
+      l: t,
+      r: {
+        t[0] = 2.0 //~ E0702
+        y
+      },
+    }
+  })
+}
+
+pub fn arm_variable_changed_in_a_field_if(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  take_in(if c {
+    var t: [F32; 2] = [v; 2]
+    pair.In {
+      l: t,
+      r: if c {
+        t[0] = 2.0 //~ E0702
+        y
+      } else {
+        y
+      },
+    }
+  } else {
+    pair.In { l: y, r: y }
+  })
+}
+
+pub fn arm_variable_changed_before_and_in_a_field_block(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  take_in(if c {
+    var t: [F32; 2] = [v; 2]
+    t[1] = 1.0
+    pair.In {
+      l: t,
+      r: {
+        t[0] = 2.0 //~ E0702
+        y
+      },
+    }
+  } else {
+    pair.In { l: y, r: y }
+  })
+}
+
+pub fn arm_variable_changed_in_a_field_block_in_an_anonymous_function(v: F32, y: [F32; 2]) -> F32 {
+  apply(fn(c) {
+    take_in(if c {
+      var t: [F32; 2] = [v; 2]
+      pair.In {
+        l: t,
+        r: {
+          t[0] = 2.0 //~ E0702
+          y
+        },
+      }
+    } else {
+      pair.In { l: y, r: y }
+    })
+  })
+}
+
+pub fn arm_variable_changed_in_a_field_block_of_the_literal_in_a_loop(n: U32, c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var acc: F32 = 0.0
+  for _ in 0 ..< n {
+    acc = acc + take_in(if c {
+      var t: [F32; 2] = [v; 2]
+      pair.In {
+        l: t,
+        r: {
+          t[0] = 2.0 //~ E0702
+          y
+        },
+      }
+    } else {
+      pair.In { l: y, r: y }
+    })
+  }
+  acc
+}
+
+pub fn arm_variable_changed_in_a_field_block_in_a_generic_function[T](a: T, c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  take_in(if c {
+    var t: [F32; 2] = [v; 2]
+    pair.In {
+      l: t,
+      r: {
+        t[0] = 2.0 //~ E0702
+        y
+      },
+    }
+  } else {
+    pair.In { l: y, r: y }
+  })
+}

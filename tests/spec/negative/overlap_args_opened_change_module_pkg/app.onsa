@@ -1,0 +1,45 @@
+use util.{pair, take_in, read_in, planes}
+
+pub fn an_arm_variable_changed_in_another_field(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  take_in(if c {
+    var t: [F32; 2] = [v; 2]
+    pair.In {
+      l: t,
+      r: {
+        t[0] = 2.0 //~ E0702
+        y
+      },
+    }
+  } else {
+    pair.In { l: y, r: y }
+  })
+}
+
+pub fn an_outer_variable_changed_in_another_field(v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  take_in(pair.In {
+    l: x,
+    r: {
+      x[0] = 1.0 //~ E0702
+      y
+    },
+  })
+}
+
+pub fn an_arm_change_and_another_argument(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  read_in(if c {
+    x[0] = 1.0
+    pair.In { l: y, r: y }
+  } else {
+    pair.In { l: y, r: y }
+  }, x) //~ E0702
+}
+
+pub fn a_planar_element_changed_against_another(v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  planes([x, {
+    x[0] = 1.0 //~ E0702
+    y
+  }])
+}

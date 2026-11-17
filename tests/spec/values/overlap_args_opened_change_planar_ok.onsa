@@ -1,0 +1,337 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3"]
+
+// R-486, S-196 (§5.2, §5.3): the calls with a change inside an argument that is a planar array literal (`[x, y]` of
+// `Span`s, an argument of `[Span[F32]; 2]`) and are not an overlap, next to the errors of
+// negative/overlap_args_opened_change_planar.onsa. The elements of a literal at an argument are arguments of their
+// own (§5.3, "排他性は要素ごとに検査する"), and "引数の中のブロックで宣言した変数への代入は、どの引数とも重ならない"
+// (§5.2): a block (or an `if` or a `match`) that is an element declares a variable, changes it and gives it back,
+// whatever the other elements and arguments name; it changes another variable than the ones the other elements and
+// arguments name; or it changes a field or an element that the others do not touch. The literal as an element of a
+// generated literal is the same. The tail of an `if` that is a planar literal is not written here. The same
+// forms of a `Span` are the contrast.
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub struct Wide {
+  a: F32,
+  b: F32,
+}
+
+pub flow spread(x: [F32; 2] at sample, m: F32 at sample) -> Wide at sample {
+  Wide { a: x[0] + m, b: x[1] + m }
+}
+
+pub struct Halves {
+  a: [F32; 2],
+  b: [F32; 2],
+}
+
+pub fn planes(xs: [Span[F32]; 2]) -> F32 {
+  xs[0][0] + xs[1][1]
+}
+
+pub fn planes_with(xs: [Span[F32]; 2], s: Span[F32]) -> F32 {
+  xs[0][0] + s[0]
+}
+
+pub fn planes_inout(xs: [Span[F32]; 2], inout s: Span[F32]) -> F32 {
+  xs[0][0]
+}
+
+pub fn spread_in(i: spread.In, inout s: Span[F32]) {}
+
+pub fn take_sp(s: Span[F32]) -> F32 {
+  s[0]
+}
+
+pub fn take_sp2(s: Span[F32], t: Span[F32]) -> F32 {
+  s[0] + t[0]
+}
+
+pub fn bump(inout s: Span[F32]) {
+  s[0] = s[0] + 1.0
+}
+
+// ----------------------------------------------------------------------------- no change, and a change before
+
+pub fn no_change(v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  planes([x, y])
+}
+
+pub fn the_same_variable_twice(v: F32) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  planes([x, x])
+}
+
+pub fn a_change_before_the_call(v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  x[0] = 1.0
+  planes([x, y])
+}
+
+// ----------------------------------------------------- an element that declares and changes its variable
+
+pub fn first_element_block_declares_and_changes(v: F32, y: [F32; 2]) -> F32 {
+  planes([{
+    var t: [F32; 2] = [v; 2]
+    t[0] = 2.0
+    t
+  }, y])
+}
+
+pub fn second_element_block_declares_and_changes(v: F32, y: [F32; 2]) -> F32 {
+  planes([y, {
+    var t: [F32; 2] = [v; 2]
+    t[0] = 2.0
+    t
+  }])
+}
+
+pub fn both_element_blocks_declare_and_change(v: F32) -> F32 {
+  planes([{
+    var t: [F32; 2] = [v; 2]
+    t[0] = 2.0
+    t
+  }, {
+    var t: [F32; 2] = [v; 2]
+    t[1] = 3.0
+    t
+  }])
+}
+
+pub fn element_if_arm_declares_and_changes(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  planes([if c {
+    var t: [F32; 2] = [v; 2]
+    t[0] = 2.0
+    t
+  } else {
+    y
+  }, y])
+}
+
+pub fn element_match_arm_declares_and_changes(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  planes([y, match c {
+    true => {
+      var t: [F32; 2] = [v; 2]
+      t[0] = 2.0
+      t
+    },
+    false => y,
+  }])
+}
+
+pub fn element_block_with_a_loop_on_its_own_variable(n: U32, v: F32, y: [F32; 2]) -> F32 {
+  planes([{
+    var t: [F32; 2] = [v; 2]
+    for _ in 0 ..< n {
+      t[0] = t[0] + 1.0
+    }
+    t
+  }, y])
+}
+
+pub fn element_block_changes_its_variable_by_an_inout_call(v: F32, y: [F32; 2]) -> F32 {
+  planes([{
+    var t: [F32; 2] = [v; 2]
+    bump(inout t)
+    t
+  }, y])
+}
+
+pub fn element_block_declares_and_changes_beside_the_same_variable_elsewhere(v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  planes_with([x, {
+    var t: [F32; 2] = [v; 2]
+    t[0] = x[0]
+    t
+  }], x)
+}
+
+// ------------------------------------------------------- an element that changes a place the others do not name
+
+pub fn element_changes_another_variable(v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  var z: [F32; 2] = [v; 2]
+  planes([z, {
+    x[0] = 1.0
+    y
+  }]) + x[1]
+}
+
+pub fn element_changes_another_variable_and_the_call_has_a_third(v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  var z: [F32; 2] = [v; 2]
+  var w: [F32; 2] = [v; 2]
+  planes_with([{
+    x[0] = 1.0
+    y
+  }, z], w) + x[1]
+}
+
+pub fn element_changes_another_variable_beside_an_inout_of_a_third(v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  var z: [F32; 2] = [v; 2]
+  var w: [F32; 2] = [v; 2]
+  planes_inout([z, {
+    x[0] = 1.0
+    y
+  }], inout w) + x[1]
+}
+
+pub fn element_changes_another_field(v: F32, y: [F32; 2]) -> F32 {
+  var s: Halves = Halves { a: [v; 2], b: [v; 2] }
+  planes([s.a, {
+    s.b[0] = 1.0
+    y
+  }])
+}
+
+pub fn element_if_changes_another_variable(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  var z: [F32; 2] = [v; 2]
+  planes([z, if c {
+    x[0] = 1.0
+    y
+  } else {
+    y
+  }]) + x[1]
+}
+
+pub fn element_changes_a_variable_that_another_element_does_not_name(v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  planes([{
+    x[0] = 1.0
+    y
+  }, {
+    x[1] = 2.0
+    y
+  }]) + x[1]
+}
+
+// ------------------------------------------------------------------ the literal as an element of an `In` literal
+
+pub fn nested_element_block_declares_and_changes(v: F32, y: [F32; 2]) {
+  var w: [F32; 2] = [0.0; 2]
+  spread_in(spread.In {
+    m: y,
+    x: [{
+      var t: [F32; 2] = [v; 2]
+      t[0] = 2.0
+      t
+    }, y],
+  }, inout w)
+}
+
+pub fn nested_element_changes_another_variable(v: F32, y: [F32; 2]) {
+  var x: [F32; 2] = [v; 2]
+  var w: [F32; 2] = [0.0; 2]
+  spread_in(spread.In {
+    m: y,
+    x: [y, {
+      x[0] = 1.0
+      y
+    }],
+  }, inout w)
+  w[0] = x[1]
+}
+
+// -------------------------------------------------------------------------------------- combinations
+
+pub fn apply(g: fn(Bool) -> F32) -> F32 {
+  g.(true)
+}
+
+pub fn in_an_anonymous_function(v: F32, y: [F32; 2]) -> F32 {
+  apply(fn(c) {
+    planes([{
+      var t: [F32; 2] = [v; 2]
+      t[0] = 2.0
+      t
+    }, y])
+  })
+}
+
+pub fn in_a_loop_body(n: U32, v: F32, y: [F32; 2]) -> F32 {
+  var acc: F32 = 0.0
+  for _ in 0 ..< n {
+    acc = acc + planes([{
+      var t: [F32; 2] = [v; 2]
+      t[0] = 2.0
+      t
+    }, y])
+  }
+  acc
+}
+
+pub fn in_a_branch(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  if c {
+    planes([{
+      var t: [F32; 2] = [v; 2]
+      t[0] = 2.0
+      t
+    }, y])
+  } else {
+    0.0
+  }
+}
+
+pub fn in_a_nested_call(v: F32, y: [F32; 2]) -> F32 {
+  take_sp(if true {
+    var t: [F32; 2] = [v; 2]
+    t[0] = planes([{
+      var u: [F32; 2] = [v; 2]
+      u[0] = 2.0
+      u
+    }, t])
+    t
+  } else {
+    y
+  })
+}
+
+pub fn the_literal_is_an_element_of_a_literal_of_a_value(v: F32, y: [F32; 2]) -> F32 {
+  planes([{
+    var t: [F32; 2] = [v; 2]
+    t[0] = planes([{
+      var u: [F32; 2] = [v; 2]
+      u[0] = 2.0
+      u
+    }, y])
+    t
+  }, y])
+}
+
+// ---------------------------------------------------------- the same forms of a `Span` (the contrast)
+
+pub fn span_block_declares_and_changes(v: F32, y: [F32; 2]) -> F32 {
+  take_sp2({
+    var t: [F32; 2] = [v; 2]
+    t[0] = 2.0
+    t
+  }, y)
+}
+
+pub fn span_block_changes_another_variable(v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  var z: [F32; 2] = [v; 2]
+  take_sp2(z, {
+    x[0] = 1.0
+    y
+  }) + x[1]
+}
+
+pub fn span_if_arm_declares_and_changes(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  take_sp(if c {
+    var t: [F32; 2] = [v; 2]
+    t[0] = 2.0
+    t
+  } else {
+    y
+  })
+}

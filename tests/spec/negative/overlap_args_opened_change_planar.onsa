@@ -1,0 +1,277 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3"]
+// fixes = 0
+
+// R-486, S-196 (§5.2, §5.3): "他の引数の中で `inout` に渡すか `!` を呼ぶと重なる" and "引数に置いたブロック式や腕の中の
+// 代入…も同じ変更で、引数の順によらず E0702 である". The elements of a planar array literal at an argument are
+// arguments of their own (§5.3), so a change inside one element (a block, or an `if` or a `match` arm that is an
+// element) overlaps the place that another element names, in either order of the elements, and the same for the
+// elements of the array field of a generated literal and for a change inside one element against another argument of the
+// same call. A variable that is a part of the place (a field, an index) overlaps by the rule of §5.2: an index of the
+// same array overlaps, another field does not. The error is at the later written of the change and the other place
+// (S-799), E0702, no repair candidate (`fixes = 0`). One error per function (P-01). The forms that do not overlap
+// are in values/overlap_args_opened_change_planar_ok.onsa.
+
+pub struct Wide {
+  a: F32,
+  b: F32,
+}
+
+pub flow spread(x: [F32; 2] at sample, m: F32 at sample) -> Wide at sample {
+  Wide { a: x[0] + m, b: x[1] + m }
+}
+
+pub struct Halves {
+  a: [F32; 2],
+  b: [F32; 2],
+}
+
+pub fn planes(xs: [Span[F32]; 2]) -> F32 {
+  xs[0][0] + xs[1][1]
+}
+
+pub fn planes_with(xs: [Span[F32]; 2], s: Span[F32]) -> F32 {
+  xs[0][0] + s[0]
+}
+
+pub fn planes_with_first(s: Span[F32], xs: [Span[F32]; 2]) -> F32 {
+  xs[0][0] + s[0]
+}
+
+pub fn planes_inout(xs: [Span[F32]; 2], inout s: Span[F32]) -> F32 {
+  xs[0][0]
+}
+
+pub fn spread_in(i: spread.In, inout s: Span[F32]) {}
+
+pub fn bump(inout s: Span[F32]) {
+  s[0] = s[0] + 1.0
+}
+
+pub fn apply(g: fn(Bool) -> F32) -> F32 {
+  g.(true)
+}
+
+// --------------------------------------------------------- an element that changes what another element names
+
+pub fn block_changes_the_variable_of_the_element_before(v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  planes([x, {
+    x[0] = 1.0 //~ E0702
+    y
+  }])
+}
+
+pub fn block_changes_the_variable_of_the_element_after(v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  planes([{
+    x[0] = 1.0
+    y
+  }, x]) //~ E0702
+}
+
+pub fn if_changes_the_variable_of_the_element_before(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  planes([x, if c {
+    x[0] = 1.0 //~ E0702
+    y
+  } else {
+    y
+  }])
+}
+
+pub fn else_arm_changes_the_variable_of_the_element_before(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  planes([x, if c {
+    y
+  } else {
+    x[0] = 1.0 //~ E0702
+    y
+  }])
+}
+
+pub fn match_changes_the_variable_of_the_element_before(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  planes([x, match c {
+    true => y,
+    false => {
+      x[0] = 1.0 //~ E0702
+      y
+    },
+  }])
+}
+
+pub fn if_changes_the_variable_of_the_element_after(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  planes([if c {
+    x[0] = 1.0
+    y
+  } else {
+    y
+  }, x]) //~ E0702
+}
+
+pub fn block_changes_by_an_inout_call(v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  planes([x, {
+    bump(inout x) //~ E0702
+    y
+  }])
+}
+
+pub fn block_changes_in_a_loop(n: U32, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  planes([x, {
+    for _ in 0 ..< n {
+      x[0] = 1.0 //~ E0702
+    }
+    y
+  }])
+}
+
+pub fn element_is_a_field_that_the_block_changes(v: F32, y: [F32; 2]) -> F32 {
+  var s: Halves = Halves { a: [v; 2], b: [v; 2] }
+  planes([s.a, {
+    s.a[0] = 1.0 //~ E0702
+    y
+  }])
+}
+
+pub fn element_is_an_index_that_the_block_changes_another_index_of(v: F32, y: [F32; 2]) -> F32 {
+  var m: [[F32; 2]; 2] = [[v; 2]; 2]
+  planes([m[0], {
+    m[1][0] = 1.0 //~ E0702
+    y
+  }])
+}
+
+// ---------------------------------------------------- an element that changes what another argument names
+
+pub fn element_changes_the_variable_of_a_later_argument(v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  planes_with([y, {
+    x[0] = 1.0
+    y
+  }], x) //~ E0702
+}
+
+pub fn element_changes_the_variable_of_an_earlier_argument(v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  planes_with_first(x, [y, {
+    x[0] = 1.0 //~ E0702
+    y
+  }])
+}
+
+pub fn element_changes_the_variable_of_an_inout_argument(v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  planes_inout([y, {
+    x[0] = 1.0
+    y
+  }], inout x) //~ E0702
+}
+
+pub fn element_if_changes_the_variable_of_a_later_argument(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  planes_with([if c {
+    x[0] = 1.0
+    y
+  } else {
+    y
+  }, y], x) //~ E0702
+}
+
+// ------------------------------------------------------ the literal as an element of a generated literal
+
+pub fn nested_block_changes_the_variable_of_the_field_before(v: F32, y: [F32; 2]) {
+  var x: [F32; 2] = [v; 2]
+  var w: [F32; 2] = [0.0; 2]
+  spread_in(spread.In {
+    m: x,
+    x: [y, {
+      x[0] = 1.0 //~ E0702
+      y
+    }],
+  }, inout w)
+}
+
+pub fn nested_block_changes_the_variable_of_the_element_before(v: F32, y: [F32; 2]) {
+  var x: [F32; 2] = [v; 2]
+  var w: [F32; 2] = [0.0; 2]
+  spread_in(spread.In {
+    m: y,
+    x: [x, {
+      x[0] = 1.0 //~ E0702
+      y
+    }],
+  }, inout w)
+}
+
+pub fn nested_block_changes_the_variable_of_the_field_after(v: F32, y: [F32; 2]) {
+  var x: [F32; 2] = [v; 2]
+  var w: [F32; 2] = [0.0; 2]
+  spread_in(spread.In {
+    x: [y, {
+      x[0] = 1.0
+      y
+    }],
+    m: x, //~ E0702
+  }, inout w)
+}
+
+pub fn nested_arm_variable_changed_in_an_element_block(c: Bool, v: F32, y: [F32; 2]) {
+  var w: [F32; 2] = [0.0; 2]
+  spread_in(if c {
+    var t: [F32; 2] = [v; 2]
+    spread.In {
+      m: t,
+      x: [y, {
+        t[0] = 2.0 //~ E0702
+        y
+      }],
+    }
+  } else {
+    spread.In { m: y, x: [y, y] }
+  }, inout w)
+}
+
+pub fn nested_arm_variable_in_an_element_changed_in_a_block_of_the_field(c: Bool, v: F32, y: [F32; 2]) {
+  var w: [F32; 2] = [0.0; 2]
+  spread_in(if c {
+    var t: [F32; 2] = [v; 2]
+    spread.In {
+      x: [t, y],
+      m: {
+        t[0] = 2.0 //~ E0702
+        y
+      },
+    }
+  } else {
+    spread.In { m: y, x: [y, y] }
+  }, inout w)
+}
+
+// -------------------------------------------------------------------------------------- combinations
+
+pub fn in_an_anonymous_function(v: F32, y: [F32; 2]) -> F32 {
+  apply(fn(c) {
+    var x: [F32; 2] = [v; 2]
+    planes([x, {
+      x[0] = 1.0 //~ E0702
+      y
+    }])
+  })
+}
+
+pub fn in_a_loop_body(n: U32, v: F32, y: [F32; 2]) -> F32 {
+  var acc: F32 = 0.0
+  for _ in 0 ..< n {
+    var x: [F32; 2] = [v; 2]
+    acc = acc + planes([x, {
+      x[0] = 1.0 //~ E0702
+      y
+    }])
+  }
+  acc
+}

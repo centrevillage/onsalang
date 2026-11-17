@@ -2,6 +2,8 @@
 //! its arguments that are places, which overlap one another
 //! or a change made in another argument (E0702).
 
+use std::rc::Rc;
+
 use onsa_diag::internal::bug;
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast::{Arg, ExprId, Mode};
@@ -17,11 +19,14 @@ use crate::sources::{Cx, Leaf, Open, What, leaves};
 
 /// A place an argument of a call passes (E0702, [`crate::sources::leaves`]):
 /// the argument or the element of a literal opened at it (`arg`), the
-/// expression that gives the place (`at`: the argument, an element, a tail),
+/// argument as written (`outer`) and the elements opened in it (`opened`),
+/// the expression that gives the place (`at`: the argument, an element, a tail),
 /// how it is passed, its place, its root if a binding of the index (S-796),
 /// and why it is read at a `move` parameter or receiver ([`Read`]).
 pub(super) struct Passed {
     arg: ExprId,
+    outer: ExprId,
+    opened: Rc<[ExprId]>,
     at: ExprId,
     mode: Mode,
     place: Place,
@@ -81,12 +86,15 @@ impl Walker<'_> {
             if m == Mode::Borrow {
                 self.ends_inside(&leaves, x, Reader::CALL);
             }
+            let mut opened: Vec<_> = leaves.iter().map(|l| l.arg).filter(|&a| a != x).collect();
+            opened.dedup();
+            let opened: Rc<[ExprId]> = opened.into();
             for leaf in leaves {
                 let What::Place(b) = leaf.what else { continue };
                 let Some(place) = place_of(self.ast, self.names, b) else {
                     bug(Some(self.ast.expr(b).span), "a place leaf with no place")
                 };
-                passed.push(self.passed(&leaf, m, place.then(&leaf.over)));
+                passed.push(self.passed(&leaf, (x, &opened), m, place.then(&leaf.over)));
             }
         }
         let (mut later, index) = (Vec::new(), ByRoot::new(&self.deps, passed.iter().map(|q| &q.place)));
@@ -114,7 +122,13 @@ impl Walker<'_> {
     /// S-801: a Dup value at a `move` parameter or receiver is copied, and
     /// counts as a read of its place, as at a borrowed one; a value with no
     /// kind too), of the kind of the argument (or element) as passed.
-    fn passed(&mut self, leaf: &Leaf, mut mode: Mode, mut place: Place) -> Passed {
+    fn passed(
+        &mut self,
+        leaf: &Leaf,
+        (outer, opened): (ExprId, &Rc<[ExprId]>),
+        mut mode: Mode,
+        mut place: Place,
+    ) -> Passed {
         let ty = self.info.expr_types.get(&self.ast.without_parens(leaf.arg)).copied();
         let kind = ty.and_then(|t| self.kind_of(t));
         // A value with no kind (§18.1: an unknown bound, the error type) may move or not: a read too.
@@ -129,7 +143,7 @@ impl Walker<'_> {
             _ => {}
         }
         let via = self.deps.indexed(place.root).then_some(place.root);
-        Passed { arg: leaf.arg, at: leaf.at, mode, place, via, read }
+        Passed { arg: leaf.arg, outer, opened: opened.clone(), at: leaf.at, mode, place, via, read }
     }
 
     /// The E0702 of `b`, which overlaps the earlier `a`: "twice" of two of
@@ -198,8 +212,9 @@ impl Walker<'_> {
     /// The E0702 of the changes (§7) made while the arguments of a call were
     /// walked, from `start` on (§3.5, §5.2, S-193, S-799): each that may
     /// overlap a place `passed` in the call, other than the arguments it is
-    /// in, at the later of the two, the first such place (S-796: a binding
-    /// of the index stands for its places). The change of a direct argument
+    /// in (its unit, or its argument out of the elements opened there,
+    /// R-486), at the later of the two, the first such place (S-796: a
+    /// binding of the index stands for its places). The change of a direct argument
     /// (marked with the depth of this call, the one after `calls`) is
     /// `exclusive`'s, and changes are not compared with one another
     /// (`h(next(inout k), next(inout k))`). A release of a Dup value that
@@ -213,8 +228,8 @@ impl Walker<'_> {
         let window = self.inside.changes[start..].iter().filter(|c| c.release || (self.reports && c.direct != this));
         for Changed { place: w, at, release, .. } in window {
             let span = |p: &Passed| self.ast.expr(p.at).span;
-            let arg = |p: &Passed| self.ast.expr(p.arg).span;
-            let holds = |p: &Passed| arg(p).start <= at.start && at.end <= arg(p).end;
+            let within = |e: ExprId| self.ast.expr(e).span.start <= at.start && at.end <= self.ast.expr(e).span.end;
+            let holds = |p: &Passed| within(p.arg) || (within(p.outer) && !p.opened.iter().any(|&e| within(e)));
             let mut shared = index.sharing(&self.deps, w.root).map(|k| &passed[k]);
             let Some(q) = shared.find(|q| !holds(q) && self.deps.meets(w, &q.place)) else { continue };
             if *release {

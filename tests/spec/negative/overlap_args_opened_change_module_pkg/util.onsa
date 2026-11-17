@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§5.3", "§11.6", "§15.1"]
+// fixes = 0
+
+// R-486, S-196 (§5.2) across modules: the callees and the flow of this module are used from app.onsa. The change inside a
+// field (or a planar element) of a literal at an argument that overlaps the place another field names, and the change of an arm
+// that overlaps another argument of the call, are found at the call, where the places are written, whatever module
+// declares the callee, a type or the generated `In`/`Out` (§11.6, §15.1).
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}
+
+pub fn take_in(i: pair.In) -> F32 {
+  i.l[0]
+}
+
+pub fn read_in(i: pair.In, s: Span[F32]) -> F32 {
+  i.l[0] + s[0]
+}
+
+pub fn planes(xs: [Span[F32]; 2]) -> F32 {
+  xs[0][0] + xs[1][1]
+}

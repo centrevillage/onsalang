@@ -1,0 +1,268 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§11.6"]
+// fixes = 0
+
+// R-486, S-196, S-1113 (§5.2, §11.6): "他の引数の中で `inout` に渡すか `!` を呼ぶと重なる" and "引数に置いたブロック式や
+// 腕の中の代入…も同じ変更で、引数の順によらず E0702 である". A change in a statement of an arm or of a block that is
+// written before the struct literal of the generated `In` or `Out` is not in any field of the literal: it is a change inside the
+// same argument as the fields, which overlaps none of them (values/overlap_args_opened_change_gen_ok.onsa), but
+// it is a change inside an argument, and it overlaps the other arguments of the same call that name the changed
+// place, as the same statement of an arm that gives a `Span` does, in either order of the arguments, and also in
+// an arm that is not taken. The error is at the later written of the change and the other place (S-799), E0702,
+// no repair candidate (`fixes = 0`). One error per function (P-01).
+
+pub struct Stereo {
+  l: F32,
+  r: F32,
+}
+
+pub flow pair(l: F32 at sample, r: F32 at sample) -> Stereo at sample {
+  Stereo { l: l, r: r }
+}
+
+pub fn read_in(i: pair.In, s: Span[F32]) -> F32 {
+  i.l[0] + s[0]
+}
+
+pub fn read_in_first(s: Span[F32], i: pair.In) -> F32 {
+  i.l[0] + s[0]
+}
+
+pub fn in_sp(i: pair.In, inout s: Span[F32]) {}
+
+pub fn in_sp_first(inout s: Span[F32], i: pair.In) {}
+
+pub fn put_in(i: pair.In, inout o: pair.Out) {}
+
+pub fn take_both(i: pair.In, j: pair.In) -> F32 {
+  i.l[0] + j.r[0]
+}
+
+pub fn put_out(o: pair.Out, s: Span[F32]) {}
+
+pub fn take_sp2(s: Span[F32], t: Span[F32]) -> F32 {
+  s[0] + t[0]
+}
+
+pub fn bump(inout s: Span[F32]) {
+  s[0] = s[0] + 1.0
+}
+
+// ------------------------------------------------ the change of an arm against another argument that borrows
+
+pub fn if_arm_change_and_a_later_borrowed_argument(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  read_in(if c {
+    x[0] = 1.0
+    pair.In { l: y, r: y }
+  } else {
+    pair.In { l: y, r: y }
+  }, x) //~ E0702
+}
+
+pub fn if_arm_change_and_an_earlier_borrowed_argument(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  read_in_first(x, if c {
+    x[0] = 1.0 //~ E0702
+    pair.In { l: y, r: y }
+  } else {
+    pair.In { l: y, r: y }
+  })
+}
+
+pub fn match_arm_change_and_a_later_borrowed_argument(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  read_in(match c {
+    true => {
+      x[0] = 1.0
+      pair.In { l: y, r: y }
+    },
+    false => pair.In { l: y, r: y },
+  }, x) //~ E0702
+}
+
+pub fn block_change_and_a_later_borrowed_argument(v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  read_in({
+    x[0] = 1.0
+    pair.In { l: y, r: y }
+  }, x) //~ E0702
+}
+
+pub fn block_change_and_an_earlier_borrowed_argument(v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  read_in_first(x, {
+    x[0] = 1.0 //~ E0702
+    pair.In { l: y, r: y }
+  })
+}
+
+pub fn the_arm_that_is_not_taken(v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  read_in(if false {
+    x[0] = 1.0
+    pair.In { l: y, r: y }
+  } else {
+    pair.In { l: y, r: y }
+  }, x) //~ E0702
+}
+
+pub fn the_other_arm_changes(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  read_in(if c {
+    pair.In { l: y, r: y }
+  } else {
+    x[0] = 1.0
+    pair.In { l: y, r: y }
+  }, x) //~ E0702
+}
+
+pub fn the_change_is_an_inout_call(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  read_in(if c {
+    bump(inout x)
+    pair.In { l: y, r: y }
+  } else {
+    pair.In { l: y, r: y }
+  }, x) //~ E0702
+}
+
+pub fn the_change_and_a_field_of_the_literal_name_the_variable(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  read_in(if c {
+    x[0] = 1.0
+    pair.In { l: x, r: y }
+  } else {
+    pair.In { l: y, r: y }
+  }, x) //~ E0702
+}
+
+// ------------------------------------------- the change of an arm against an `inout` argument or a literal
+
+pub fn if_arm_change_and_a_later_inout_argument(c: Bool, v: F32, y: [F32; 2]) {
+  var x: [F32; 2] = [v; 2]
+  in_sp(if c {
+    x[0] = 1.0
+    pair.In { l: y, r: y }
+  } else {
+    pair.In { l: y, r: y }
+  }, inout x) //~ E0702
+}
+
+pub fn if_arm_change_and_an_earlier_inout_argument(c: Bool, v: F32, y: [F32; 2]) {
+  var x: [F32; 2] = [v; 2]
+  in_sp_first(inout x, if c {
+    x[0] = 1.0 //~ E0702
+    pair.In { l: y, r: y }
+  } else {
+    pair.In { l: y, r: y }
+  })
+}
+
+pub fn if_arm_change_and_a_field_of_an_inout_literal(c: Bool, v: F32, y: [F32; 2]) {
+  var x: [F32; 2] = [v; 2]
+  var z: [F32; 2] = [0.0; 2]
+  put_in(if c {
+    x[0] = 1.0
+    pair.In { l: y, r: y }
+  } else {
+    pair.In { l: y, r: y }
+  }, inout pair.Out { l: z, r: x }) //~ E0702
+}
+
+pub fn arm_change_and_a_field_of_another_literal(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  take_both(if c {
+    x[0] = 1.0
+    pair.In { l: y, r: y }
+  } else {
+    pair.In { l: y, r: y }
+  }, pair.In { l: x, r: y }) //~ E0702
+}
+
+pub fn arm_change_and_a_field_of_a_literal_before(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  take_both(pair.In { l: y, r: x }, if c {
+    x[0] = 1.0 //~ E0702
+    pair.In { l: y, r: y }
+  } else {
+    pair.In { l: y, r: y }
+  })
+}
+
+pub fn out_literal_arm_change_and_a_later_borrowed_argument(c: Bool, v: F32, y: [F32; 2]) {
+  var x: [F32; 2] = [v; 2]
+  put_out(if c {
+    x[0] = 1.0
+    pair.Out { l: y, r: y }
+  } else {
+    pair.Out { l: y, r: y }
+  }, x) //~ E0702
+}
+
+// ------------------------------------------------------------------ the same statements of an arm of a `Span`
+
+pub fn span_arm_change_and_a_later_borrowed_argument(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  take_sp2(if c {
+    x[0] = 1.0
+    y
+  } else {
+    y
+  }, x) //~ E0702
+}
+
+pub fn span_arm_change_and_an_earlier_borrowed_argument(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  take_sp2(x, if c {
+    x[0] = 1.0 //~ E0702
+    y
+  } else {
+    y
+  })
+}
+
+// -------------------------------------------------------------------------------------- combinations
+
+pub fn apply(g: fn(Bool) -> F32) -> F32 {
+  g.(true)
+}
+
+pub fn in_an_anonymous_function(v: F32, y: [F32; 2]) -> F32 {
+  apply(fn(c) {
+    var x: [F32; 2] = [v; 2]
+    read_in(if c {
+      x[0] = 1.0
+      pair.In { l: y, r: y }
+    } else {
+      pair.In { l: y, r: y }
+    }, x) //~ E0702
+  })
+}
+
+pub fn in_a_loop_body(n: U32, c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var acc: F32 = 0.0
+  for _ in 0 ..< n {
+    var x: [F32; 2] = [v; 2]
+    acc = acc + read_in(if c {
+      x[0] = 1.0
+      pair.In { l: y, r: y }
+    } else {
+      pair.In { l: y, r: y }
+    }, x) //~ E0702
+  }
+  acc
+}
+
+pub fn arm_variable_changed_and_the_outer_variable_of_the_same_call(c: Bool, v: F32, y: [F32; 2]) -> F32 {
+  var x: [F32; 2] = [v; 2]
+  read_in(if c {
+    var t: [F32; 2] = [v; 2]
+    t[0] = 2.0
+    x[0] = 1.0
+    pair.In { l: t, r: y }
+  } else {
+    pair.In { l: y, r: y }
+  }, x) //~ E0702
+}
