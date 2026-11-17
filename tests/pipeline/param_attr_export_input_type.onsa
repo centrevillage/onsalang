@@ -1,0 +1,77 @@
+// onsa.toml
+// [package]
+// name = "param_attr_export_input_type"
+// edition = "2026"
+//
+// [export]
+// prefix = "param_attr_export_input_type_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§11.7", "§14.2", "§18.1"]
+
+// W7-13 U4a/t, S-87, R-99 (spec §11.7: a `@param` is on an input whose value type is one of the nine scalars, "それ以外は E0809"; §18.1:
+// the build starts only from a source whose check has no error): an exported flow (`@export`) whose `block` input has a `@param` and a
+// type that is not one of the nine is E0809 at the type, by `onsa check`, and the build of the target has nothing to do. The error is
+// in the source (the mark has no target), and the manifest is right. One error in each unit.
+
+@export
+pub flow with_a_function(
+  @param(default: 0.0)
+  h: (rt fn(F32) -> F32) at block,                  //~ E0809
+  x: F32 at sample,
+) -> F32 at sample {
+  x
+}
+
+pub struct Pair {
+  a: F32,
+  b: F32,
+}
+
+@export
+pub flow with_a_struct(
+  x: F32 at sample,
+  @param(default: 0.0)
+  p: Pair at block,                                 //~ E0809
+) -> F32 at sample {
+  x
+}
+
+@export
+pub flow with_an_i64(
+  x: F32 at sample,
+  @param(min: 0, max: 10, default: 2)
+  n: I64 at block,                                  //~ E0809
+) -> F32 at sample {
+  x
+}
+
+@export
+pub flow with_an_array(
+  x: F32 at sample,
+  @param(default: 0.0)
+  p: [F32; 2] at block,                             //~ E0809
+) -> F32 at sample {
+  x
+}
+
+pub enum Mode {
+  A,
+  B,
+}
+
+@export
+pub flow with_an_enum(
+  x: F32 at sample,
+  @param(default: 0)
+  m: Mode at block,                                 //~ E0809
+) -> F32 at sample {
+  x
+}

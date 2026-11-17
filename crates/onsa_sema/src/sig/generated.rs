@@ -231,8 +231,8 @@ impl<'p> Sema<'p> {
 
     /// §11.3: the value type of a rate must be Copy; §11.6: at the boundary
     /// (`sample` inputs and the output) only scalars, `[scalar; N]`, and structs
-    /// of those.
-    fn check_rate_value_type(&mut self, _cx: &Cx<'p>, id: DefId, ty: TyId, span: Span, boundary: bool) {
+    /// of those. Whether it reports an E0810.
+    fn check_rate_value_type(&mut self, _cx: &Cx<'p>, id: DefId, ty: TyId, span: Span, boundary: bool) -> bool {
         if let Some(k) = crate::kind::facts_of(self.a, ty, &[]).not_copy() {
             self.report(
                 id,
@@ -243,14 +243,14 @@ impl<'p> Sema<'p> {
                     format!("the value type of a signal must be Copy; `{}` is {k} (§11.3)", self.a.display_type(ty)),
                 ),
             );
-            return;
+            return true;
         }
         if !boundary {
-            return;
+            return false;
         }
         let shown = |t: TyId| self.a.display_type(t);
         let msg = match self.boundary_outputs(ty) {
-            Ok(_) => return,
+            Ok(_) => return false,
             Err(Unfit::Form) => "`sample` inputs and outputs are scalars, `[scalar; N]`, or structs of those; nested arrays cannot cross the boundary (§11.6)".to_string(),
             Err(Unfit::NoChannel(None)) => format!("a `sample` input or output needs at least one channel; the struct `{}` has no field (§11.6)", shown(ty)),
             Err(Unfit::NoChannel(Some((f, t)))) => {
@@ -259,6 +259,7 @@ impl<'p> Sema<'p> {
             }
         };
         self.report(id, Diagnostic::new(Stage::Flow, Code::E0810, span, msg));
+        true
     }
 
     /// The `process` outputs for an output value type (§11.6): `(name, elem, array len)`.
@@ -293,115 +294,6 @@ impl<'p> Sema<'p> {
         }
     }
 
-    fn lower_param_attr(&mut self, cx: &Cx<'p>, id: DefId, attr: &Attr, rate: Rate, ty: TyId) -> Option<ParamMeta> {
-        // A number of `@param` is a value of the input's type (§11.7): a float
-        // literal is rounded once to it (§2.4, R-20), and out of its range is
-        // E0408 (R-45).
-        let width = match self.a.types.get(ty) {
-            Ty::Float(k) => k.width(),
-            _ => onsa_syntax::FloatWidth::F64,
-        };
-        let float = |text: &str| onsa_syntax::float_value(text, width);
-        if rate != Rate::Ctl {
-            self.report(
-                id,
-                Diagnostic::new(Stage::Flow, Code::E0809, attr.span, "`@param` goes on `block` inputs only (§11.7)"),
-            );
-            return None;
-        }
-        let mut meta = ParamMeta::empty(attr.span, width);
-        for arg in &attr.args {
-            let AttrArg::Named { key, value } = arg else {
-                self.report(
-                    id,
-                    Diagnostic::new(Stage::Flow, Code::E0809, attr.span, "`@param` takes `key: value` pairs"),
-                );
-                continue;
-            };
-            let num = |e: onsa_syntax::ast::ExprId| -> Option<Result<f64, FloatRange>> {
-                match &cx.ast.expr(e).kind {
-                    ExprKind::Lit(Lit::Float { text }) => Some(float(text)),
-                    ExprKind::Lit(Lit::Int { value, .. }) => Some(Ok(*value as f64)),
-                    ExprKind::Unary { op: UnOp::Neg, expr } => match &cx.ast.expr(*expr).kind {
-                        ExprKind::Lit(Lit::Float { text }) => Some(float(text).map(|v| -v)),
-                        ExprKind::Lit(Lit::Int { value, .. }) => Some(Ok(-(*value as f64))),
-                        _ => None,
-                    },
-                    _ => None,
-                }
-            };
-            let string = |e: onsa_syntax::ast::ExprId| -> Option<String> {
-                match &cx.ast.expr(e).kind {
-                    ExprKind::Lit(Lit::Str(s)) => Some(
-                        s.segments
-                            .iter()
-                            .map(|seg| match seg {
-                                onsa_syntax::ast::StrSeg::Text(t) => t.clone(),
-                                _ => String::new(),
-                            })
-                            .collect(),
-                    ),
-                    _ => None,
-                }
-            };
-            let vspan = cx.ast.expr(*value).span;
-            let bad = |s: &mut Self, what: &str| {
-                s.report(
-                    id,
-                    Diagnostic::new(Stage::Flow, Code::E0809, vspan, format!("`@param` `{}` must be {what}", key.name)),
-                );
-            };
-            match key.name.as_str() {
-                "min" | "max" | "default" | "step" => match num(*value).map(|v| v.map_err(FloatRange::why)) {
-                    Some(Ok(v)) => match key.name.as_str() {
-                        "min" => meta.min = Some(v),
-                        "max" => meta.max = Some(v),
-                        "default" => meta.default = Some(v),
-                        _ => meta.step = Some(v),
-                    },
-                    Some(Err(Some(why))) => {
-                        self.report(
-                            id,
-                            Diagnostic::new(
-                                Stage::Types,
-                                Code::E0408,
-                                vspan,
-                                format!("this literal is out of range for the type of the input: {why} (§2.4, §11.7)"),
-                            )
-                            .with_found(src(cx, vspan)),
-                        );
-                    }
-                    // A text that is no float has the lexer's E0001 (`1.5abc`).
-                    Some(Err(None)) | None => bad(self, "a numeric literal"),
-                },
-                "unit" | "label" | "id" => match string(*value) {
-                    Some(v) => match key.name.as_str() {
-                        "unit" => meta.unit = Some(v),
-                        "label" => meta.label = Some(v),
-                        _ => meta.id = Some(v),
-                    },
-                    None => bad(self, "a string literal"),
-                },
-                "scale" => match string(*value) {
-                    Some(v) if v == "linear" || v == "log" => meta.scale = Some(v),
-                    _ => bad(self, "\"linear\" or \"log\""),
-                },
-                other => {
-                    self.report(
-                        id,
-                        Diagnostic::new(
-                            Stage::Flow, Code::E0809,
-                            key.span,
-                            format!("unknown `@param` key `{other}`; keys are min max default step unit scale label id (§11.7)"),
-                        )
-                        .with_found(other.to_string()),
-                    );
-                }
-            }
-        }
-        Some(meta)
-    }
-
     /// The stage of the items flows generate and of `@param` (§11.6, §11.7),
     /// after every signature (R-273). Each step is done for every flow before
     /// the next, so that what a step reads is made, whatever the order of the
@@ -428,9 +320,13 @@ impl<'p> Sema<'p> {
             };
             for &(k, at, span) in &h.inputs {
                 let (rate, ty) = (self.flow_def(h.flow).inputs[k].rate, self.flow_def(h.flow).inputs[k].ty);
-                self.check_rate_value_type(cx, h.flow, ty, span, rate == Rate::Sig);
+                let unfit = self.check_rate_value_type(cx, h.flow, ty, span, rate == Rate::Sig);
                 let attr = Attr::find(&f.params[at].attrs, onsa_syntax::attrs::PARAM);
-                let param = attr.and_then(|a| self.lower_param_attr(cx, h.flow, a, rate, ty));
+                // The `@param` of an input of a type no signal has is not read
+                // (§6.5: as the arguments of an attribute in excess).
+                // SPEC-GAP(S-1121): its other E0809 are not reported either.
+                let param =
+                    attr.filter(|_| !unfit).and_then(|a| self.lower_param_attr(cx, h.flow, a, rate, (ty, span)));
                 if attr.is_none() {
                     self.check_exported_input(h.flow, k);
                 }

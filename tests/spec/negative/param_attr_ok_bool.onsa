@@ -1,0 +1,65 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.7", "§11.3"]
+
+// W7-13 U4a/t, S-87 (3), R-99 (spec §11.7: the value types of `@param` are the eight numbers and `Bool`, and "`Bool` の入力に書けるのは
+// `default`（`true` / `false`）、`unit`、`label`、`id` だけである"): the `Bool` input, the ninth of the types, with the keys that
+// it may have. It is a case of its own because its `default` is the literal `true` or `false`, which is a value that the work
+// after the one of the types and the keys (W7-13 U4b, the typing of the values of the keys) takes: until then the value of
+// `default` is a number only. The `Bool` with a `min`, a `max`, a `step` or a `scale` is E0809 (U4b).
+
+pub flow switch_on(
+  x: F32 at sample,
+  @param(default: true)
+  on: Bool at block,
+) -> F32 at sample {
+  if on { x } else { 0.0 }
+}
+
+pub flow switch_off(
+  x: F32 at sample,
+  @param(default: false)
+  mute: Bool at block,
+) -> F32 at sample {
+  if mute { 0.0 } else { x }
+}
+
+pub flow all_the_keys_a_bool_may_have(
+  x: F32 at sample,
+  @param(default: true, unit: "on/off", label: "Bypass", id: "bypass")
+  bypass: Bool at block,
+) -> F32 at sample {
+  if bypass { x } else { 0.0 }
+}
+
+pub flow a_bool_among_numbers(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  p: F32 at block,
+  @param(default: true)
+  on: Bool at block,
+) -> F32 at sample {
+  if on { x * p } else { 0.0 }
+}
+
+@export
+pub flow exported_bool(
+  x: F32 at sample,
+  @param(default: false, label: "Mute")
+  mute: Bool at block,
+) -> F32 at sample {
+  if mute { 0.0 } else { x }
+}
+
+test "a Bool input runs with the value it is given" {
+  let xs: [F32; 2] = [2.0, 3.0]
+  let a = switch_on.render(switch_on.Params { on: true }, xs, 8.0)
+  assert a.out[0] == 2.0
+  let b = switch_on.render(switch_on.Params { on: false }, xs, 8.0)
+  assert b.out[1] == 0.0
+  let c = switch_off.render(switch_off.Params { mute: false }, xs, 8.0)
+  assert c.out[1] == 3.0
+  let d = a_bool_among_numbers.render(a_bool_among_numbers.Params { p: 0.5, on: true }, xs, 8.0)
+  assert d.out[0] == 1.0
+}

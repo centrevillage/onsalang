@@ -1,0 +1,44 @@
+// The flows of this module have a `@param` that is wrong in the way of its own (W7-13 U4a/t, S-87, spec §11.7). Each is one E0809 in this
+// file, in the unit of its own flow: a type that is not one of the nine scalars, a key twice, no `default`. The flow that has a
+// `@param` that is right is in the same file, and the module that takes the names in with `use` has no diagnostic for the flows
+// that failed (a name that failed is used without a diagnostic, §18.1).
+
+pub struct Pair {
+  a: F32,
+  b: F32,
+}
+
+pub flow wrong_type(
+  x: F32 at sample,
+  @param(default: 0.0)
+  p: Pair at block,                                 //~ E0809
+) -> F32 at sample {
+  x
+}
+
+pub flow key_twice(
+  x: F32 at sample,
+  @param(
+    default: 0.5,
+    default: 0.25,                                  //~ E0809
+  )
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow no_default(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0)                       //~ E0809
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow right(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}

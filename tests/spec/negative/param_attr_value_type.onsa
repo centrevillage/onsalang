@@ -1,0 +1,166 @@
+// onsa.toml
+// [test]
+// spec = ["§11.7", "§11.3", "§18.1"]
+
+// W7-13 U4a/t, S-87, R-99 (spec §11.7: "`@param` は `block` の入力にだけ付けられ、入力の値型は `F32` `F64` `I8` `I16` `I32`
+// `U8` `U16` `U32` `Bool` に限る（それ以外は E0809）"): the value type of an input that has a `@param` is one of the nine
+// scalars. Any other type is E0809, at the type of the input (the attribute is on a line of its own, so the mark is on the
+// line of the input). The type is read through an alias. A type that is not allowed in an input at all (E0810, not Copy) is
+// param_attr_value_type_not_copy.onsa. The values of the keys are plain numbers of the type that the rule would give them (an
+// integer or a float literal), so that the value type is the only thing wrong; the check of the values is in
+// param_attr_ok.onsa and the work after this one (W7-13 U4b). One error in each unit (§18.1).
+
+pub struct St {
+  a: F32,
+}
+
+pub enum Wave {
+  Sine,
+  Saw,
+}
+
+type AliasOfStruct = St
+
+type AliasOfI64 = I64
+
+type AliasOfF32 = F32
+
+// ---- the types that are not in the list
+
+pub flow a_struct(
+  x: F32 at sample,
+  @param(default: 0.0)
+  p: St at block,                                   //~ E0809
+) -> F32 at sample {
+  x
+}
+
+pub flow an_enum(
+  x: F32 at sample,
+  @param(default: 0)
+  p: Wave at block,                                 //~ E0809
+) -> F32 at sample {
+  x
+}
+
+pub flow a_function(
+  x: F32 at sample,
+  @param(default: 0.0)
+  p: (rt fn(F32) -> F32) at block,                  //~ E0809
+) -> F32 at sample {
+  x
+}
+
+pub flow an_array(
+  x: F32 at sample,
+  @param(default: 0.0)
+  p: [F32; 2] at block,                             //~ E0809
+) -> F32 at sample {
+  x
+}
+
+pub flow a_nested_array(
+  x: F32 at sample,
+  @param(default: 0.0)
+  p: [[F32; 2]; 2] at block,                        //~ E0809
+) -> F32 at sample {
+  x
+}
+
+pub flow a_tuple(
+  x: F32 at sample,
+  @param(default: 0.0)
+  p: (F32, F32) at block,                           //~ E0809
+) -> F32 at sample {
+  x
+}
+
+pub flow an_i64(
+  x: F32 at sample,
+  @param(min: 0, max: 10, default: 3)
+  p: I64 at block,                                  //~ E0809
+) -> F32 at sample {
+  x
+}
+
+pub flow a_u64(
+  x: F32 at sample,
+  @param(min: 0, max: 10, default: 3)
+  p: U64 at block,                                  //~ E0809
+) -> F32 at sample {
+  x
+}
+
+pub flow a_char(
+  x: F32 at sample,
+  @param(default: 0)
+  p: Char at block,                                 //~ E0809
+) -> F32 at sample {
+  x
+}
+
+pub flow a_unit(
+  x: F32 at sample,
+  @param(default: 0.0)
+  p: () at block,                                   //~ E0809
+) -> F32 at sample {
+  x
+}
+
+// ---- through an alias
+
+pub flow alias_of_a_struct(
+  x: F32 at sample,
+  @param(default: 0.0)
+  p: AliasOfStruct at block,                      //~ E0809
+) -> F32 at sample {
+  x
+}
+
+pub flow alias_of_an_i64(
+  x: F32 at sample,
+  @param(default: 3)
+  p: AliasOfI64 at block,                         //~ E0809
+) -> F32 at sample {
+  x
+}
+
+// ---- the same input among right ones: only the one with the type is reported, in its own place
+
+pub flow among_right_inputs(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  gain: F32 at block,
+  @param(default: 1)
+  count: I32 at block,
+  @param(default: 0.0)
+  shape: St at block,                               //~ E0809
+  @param(default: 4)
+  steps: U8 at block,
+) -> F32 at sample {
+  x * gain
+}
+
+// ---- the one that is a failed flow does not give the caller an error, the caller is a unit of its own (§18.1)
+
+pub flow user_of_struct(x: F32 at sample) -> F32 at sample {
+  a_struct~(x, St { a: 1.0 })
+}
+
+pub flow user_of_i64(x: F32 at sample) -> F32 at sample {
+  an_i64~(x, 2)
+}
+
+pub flow user_of_array(x: F32 at sample) -> F32 at sample {
+  an_array~(x, [0.5, 0.25])
+}
+
+// ---- not errors in the same file: an alias of an allowed type, and the nine types in a flow of their own
+
+pub flow alias_of_a_scalar(
+  x: F32 at sample,
+  @param(default: 0.5)
+  p: AliasOfF32 at block,
+) -> F32 at sample {
+  x * p
+}

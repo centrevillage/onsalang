@@ -1069,3 +1069,10 @@ target = "tests/spec/flow/flow_gen_bind_run_match_arms.onsa"
 reasons = ["R-06", "S-218"]
 until = "W8-06"
 note = "借用の生成型 Out・In を match の腕に束縛して読む形（S-218 (b)）。腕に束縛だけを書く値の match も降下で E0200（W8-06）なので、flow_gen_bind_run.onsa と packages/flow_gen_bind_modules から分けた（W7-12 U2b）。束縛の検査は flow_gen_bind_borrowed_whole.onsa が持つ"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/param_attr_ok_bool.onsa"
+reasons = ["S-87"]
+until = "W7-13"
+note = "U4b: `Bool` の入力の `default: true` / `false` は U4b の値の型付け（`const` の初期化式と同じ道）で通る。それまでは E0809「must be a numeric literal」（五つの flow のどれもその一件だけで落ちることを U4a/i で確かめた）"

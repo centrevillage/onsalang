@@ -1,0 +1,107 @@
+// onsa.toml
+// [test]
+// spec = ["§11.7", "§18.1"]
+
+// W7-13 U4a/t, S-87 (spec §11.7: "キーは `min max default step unit scale label id` の閉じた一覧", "`scale` は `"linear"`（既定）か
+// `"log"`"): a key that is not in the list of eight is E0809, whatever its value is (a name that is near one of the list, a name
+// of another case, a name that the other languages give to the same thing, a key of a plugin). `scale` is one of the keys of the
+// list, so `scale: "log"` and `scale: "linear"` are not errors, and a value of `scale` that is neither is E0809. The attribute is
+// on one line with the input, so the place of the error (the key or the attribute) is not decided here: one error in each unit
+// (§18.1). The `default` is written in all of them, so that the missing `default` is not the error.
+
+// ---- a key that is not in the list
+
+pub flow a_new_name(
+  x: F32 at sample,
+  @param(default: 0.5, color: "red") p: F32 at block,           //~ E0809
+) -> F32 at sample {
+  x * p
+}
+
+pub flow a_name_near_one_of_the_list(
+  x: F32 at sample,
+  @param(default: 0.5, maximum: 1.0) p: F32 at block,           //~ E0809
+) -> F32 at sample {
+  x * p
+}
+
+pub flow a_name_of_another_case(
+  x: F32 at sample,
+  @param(Default: 0.5) p: F32 at block,                         //~ E0809
+) -> F32 at sample {
+  x * p
+}
+
+pub flow a_name_from_the_other_languages(
+  x: F32 at sample,
+  @param(default: 0.5, range: 1.0) p: F32 at block,             //~ E0809
+) -> F32 at sample {
+  x * p
+}
+
+pub flow a_key_of_the_host_and_not_of_the_attribute(
+  x: F32 at sample,
+  @param(default: 0.5, automatable: true) p: F32 at block,      //~ E0809
+) -> F32 at sample {
+  x * p
+}
+
+pub flow a_key_that_is_in_the_list_of_another_attribute(
+  x: F32 at sample,
+  @param(default: 0.5, samples: 64) p: F32 at block,            //~ E0809
+) -> F32 at sample {
+  x * p
+}
+
+pub flow an_unknown_key_of_an_integer_input(
+  x: F32 at sample,
+  @param(default: 3, color: "red") n: I32 at block,             //~ E0809
+) -> F32 at sample {
+  x
+}
+
+// ---- a value of `scale` that is not in the list
+
+pub flow scale_exp(
+  x: F32 at sample,
+  @param(min: 1.0, max: 10.0, default: 2.0, scale: "exp") p: F32 at block,   //~ E0809
+) -> F32 at sample {
+  x * p
+}
+
+pub flow scale_of_another_case(
+  x: F32 at sample,
+  @param(min: 1.0, max: 10.0, default: 2.0, scale: "Log") p: F32 at block,   //~ E0809
+) -> F32 at sample {
+  x * p
+}
+
+pub flow scale_empty(
+  x: F32 at sample,
+  @param(default: 0.5, scale: "") p: F32 at block,              //~ E0809
+) -> F32 at sample {
+  x * p
+}
+
+pub flow scale_linear_with_a_space(
+  x: F32 at sample,
+  @param(default: 0.5, scale: "linear ") p: F32 at block,       //~ E0809
+) -> F32 at sample {
+  x * p
+}
+
+// ---- not errors in the same file: `scale` is a key of the list, with its two values
+
+pub flow scale_log(
+  x: F32 at sample,
+  @param(min: 1.0, max: 10.0, default: 2.0, scale: "log") p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow scale_linear(
+  x: F32 at sample,
+  @param(min: 0.0, max: 10.0, default: 2.0, scale: "linear") p: F32 at block,
+) -> F32 at sample {
+  x * p
+}

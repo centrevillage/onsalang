@@ -1,0 +1,73 @@
+// onsa.toml
+// [test]
+// spec = ["§11.7", "§11.3", "§18.1"]
+
+// W7-13 U4a/t, S-87 (spec §11.3: "flow の入出力と本体の `let` の値型（信号の値型）`T` は Copy でなければならない（E0810）",
+// §11.7: a value type that is not one of the nine scalars is E0809, §18.1: a unit has one error). An input that has a `@param`
+// and whose type is not Copy is E0810 at the type, and the E0809 of the type is not reported besides: the type is wrong for the
+// reason of the signature of any flow, which is the first one, and what the attribute says is read on a type that is allowed.
+// The same inputs without a `@param` are E0810 too (the flow of its own at the end of the file is the unit of the control).
+// One error in each unit.
+
+pub struct Named {
+  label: Str,
+}
+
+pub flow a_string(
+  x: F32 at sample,
+  @param(default: 0.0)
+  p: Str at block,                                  //~ E0810
+) -> F32 at sample {
+  x
+}
+
+pub flow a_struct_with_a_string(
+  x: F32 at sample,
+  @param(default: 0.0)
+  p: Named at block,                                //~ E0810
+) -> F32 at sample {
+  x
+}
+
+pub flow a_heap_array(
+  x: F32 at sample,
+  @param(default: 0.0)
+  p: Array[F32] at block,                           //~ E0810
+) -> F32 at sample {
+  x
+}
+
+pub flow an_option_of_a_string(
+  x: F32 at sample,
+  @param(default: 0.0)
+  p: Option[Str] at block,                          //~ E0810
+) -> F32 at sample {
+  x
+}
+
+pub flow a_tuple_with_a_string(
+  x: F32 at sample,
+  @param(default: 0.0)
+  p: (F32, Str) at block,                           //~ E0810
+) -> F32 at sample {
+  x
+}
+
+// Every E0809 of the attribute gives way to the E0810, not only the one of the type: a key that is not in the list and a
+// missing `default` are not reported either (W7-13 U4a/i, the parent's reading: the attribute of an input that cannot be read
+// is not read, as §6.5 says of the arguments of an attribute in excess).
+pub flow a_string_with_a_key_not_in_the_list(
+  x: F32 at sample,
+  @param(color: "red")
+  p: Str at block,                                  //~ E0810
+) -> F32 at sample {
+  x
+}
+
+// The control: the same inputs with no `@param`.
+pub flow a_string_without_a_param(
+  x: F32 at sample,
+  p: Str at block,                                  //~ E0810
+) -> F32 at sample {
+  x
+}

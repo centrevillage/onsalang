@@ -1,0 +1,188 @@
+// onsa.toml
+// [test]
+// spec = ["§11.7", "§14.2", "§18.1"]
+
+// W7-13 U4a/t, S-87 (4), R-99 (spec §11.7: "`default` は必須（E0809）"): a `@param` that has no `default` is E0809, at the
+// attribute (the line of its `@`). It is so for every other key it has, for the empty argument list, and for an integer input; the
+// need is the attribute's, so a flow that is not exported has it too, and an exported flow (`@export`, §14.2) as well. The
+// missing `default` is the last of the checks of an attribute: when the attribute has another E0809 (a key that is not in
+// the list, a key twice, a value of `scale` that is not in the list) the error is that one and not the missing `default`, so
+// the marks of those are on the line of the key. One error in each unit (§18.1).
+
+// ---- no `default`, the keys that the attribute has are right ones
+
+pub flow range_only(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0)                       //~ E0809
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow max_only(
+  x: F32 at sample,
+  @param(max: 1.0)                                 //~ E0809
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow text_keys_only(
+  x: F32 at sample,
+  @param(unit: "dB", label: "Gain", id: "gain")    //~ E0809
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow step_and_scale_only(
+  x: F32 at sample,
+  @param(min: 1.0, max: 10.0, step: 0.5, scale: "log") //~ E0809
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow an_integer_input(
+  x: F32 at sample,
+  @param(min: 0, max: 10)                          //~ E0809
+  n: I32 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow an_unsigned_input(
+  x: F32 at sample,
+  @param(min: 0, max: 255)                         //~ E0809
+  n: U8 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow a_double_input(
+  x: F32 at sample,
+  @param(unit: "Hz")                               //~ E0809
+  f: F64 at block,
+) -> F32 at sample {
+  x
+}
+
+// ---- no key at all
+
+pub flow empty_list(
+  x: F32 at sample,
+  @param()                                         //~ E0809
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+// ---- no argument list at all: the same as the empty one (W7-13 U4a/i, the parent's reading)
+
+pub flow no_argument_list(
+  x: F32 at sample,
+  @param                                           //~ E0809
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+// ---- the attribute in the block form: the error is at the `@`, whatever the keys are
+
+pub flow block_form(
+  x: F32 at sample,
+  @param(                                          //~ E0809
+    min: 0.0,
+    max: 1.0,
+  )
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+// ---- among the inputs of one flow: the one that has none, in its own place
+
+pub flow second_of_three(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  a: F32 at block,
+  @param(min: 0.0, max: 1.0)                       //~ E0809
+  b: F32 at block,
+  @param(min: 0.0, max: 1.0, default: 0.5)
+  c: F32 at block,
+) -> F32 at sample {
+  x * a * b * c
+}
+
+// ---- an exported flow and a flow that is not exported have the same need
+
+@export
+pub flow exported_without_default(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0)                       //~ E0809
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+// ---- the attribute has another E0809: the error is the one of the key, and the missing `default` is not reported
+
+pub flow key_not_in_the_list(
+  x: F32 at sample,
+  @param(
+    min: 0.0,
+    color: "red",                                  //~ E0809
+  )
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow key_twice_and_no_default(
+  x: F32 at sample,
+  @param(
+    min: 0.0,
+    max: 1.0,
+    max: 2.0,                                      //~ E0809
+  )
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow scale_not_in_the_list_and_no_default(
+  x: F32 at sample,
+  @param(
+    min: 1.0,
+    scale: "exp",                                  //~ E0809
+  )
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+// ---- not errors in the same file: the `default` is there, in any place and with no other key
+
+pub flow default_only(
+  x: F32 at sample,
+  @param(default: 0.5)
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow default_last(
+  x: F32 at sample,
+  @param(min: 0.0, max: 1.0, unit: "dB", default: 0.5)
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow default_of_an_integer(
+  x: F32 at sample,
+  @param(default: 2)
+  n: U16 at block,
+) -> F32 at sample {
+  x
+}

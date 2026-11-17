@@ -1,0 +1,190 @@
+// onsa.toml
+// [test]
+// spec = ["§11.7", "§18.1"]
+
+// W7-13 U4a/t, S-87 (spec §11.7: "キーは `min max default step unit scale label id` の閉じた一覧で、同じキーは一度だけ書ける"): the
+// second time a key is written in a `@param` is E0809, at the second key (the attribute is written one key a line, so the mark is
+// on the line of the second key). It does not matter which key it is, whether the value is the same, how far apart the two are,
+// or whether the value would have been right. With three of the same key only the second is reported (a unit stops at its first
+// error, §18.1). The attribute that has no `default` as well as a key twice has the E0809 of the key only: the missing `default`
+// is the last of the checks of an attribute (param_attr_default_required.onsa). One error in each unit.
+
+pub flow default_twice(
+  x: F32 at sample,
+  @param(
+    default: 0.5,
+    default: 0.2,                                   //~ E0809
+  )
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow default_twice_with_the_same_value(
+  x: F32 at sample,
+  @param(
+    default: 0.5,
+    default: 0.5,                                   //~ E0809
+  )
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow min_twice_far_apart(
+  x: F32 at sample,
+  @param(
+    min: 0.0,
+    max: 1.0,
+    default: 0.5,
+    min: 0.1,                                       //~ E0809
+  )
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow max_twice(
+  x: F32 at sample,
+  @param(
+    max: 1.0,
+    default: 0.5,
+    max: 2.0,                                       //~ E0809
+  )
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow step_twice_of_an_integer(
+  x: F32 at sample,
+  @param(
+    min: 0,
+    max: 10,
+    default: 4,
+    step: 1,
+    step: 2,                                        //~ E0809
+  )
+  n: I32 at block,
+) -> F32 at sample {
+  x
+}
+
+pub flow unit_twice(
+  x: F32 at sample,
+  @param(
+    default: 0.5,
+    unit: "dB",
+    unit: "Hz",                                     //~ E0809
+  )
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow label_twice(
+  x: F32 at sample,
+  @param(
+    default: 0.5,
+    label: "Gain",
+    label: "Gain",                                  //~ E0809
+  )
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow id_twice(
+  x: F32 at sample,
+  @param(
+    default: 0.5,
+    id: "gain",
+    id: "level",                                    //~ E0809
+  )
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow scale_twice(
+  x: F32 at sample,
+  @param(
+    min: 1.0,
+    max: 10.0,
+    default: 2.0,
+    scale: "log",
+    scale: "linear",                                //~ E0809
+  )
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow three_times(
+  x: F32 at sample,
+  @param(
+    default: 0.5,
+    default: 0.4,                                   //~ E0809
+    default: 0.3,
+  )
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow two_keys_twice(
+  x: F32 at sample,
+  @param(
+    min: 0.0,
+    default: 0.5,
+    min: 0.1,                                       //~ E0809
+    default: 0.4,
+  )
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow on_one_line(
+  x: F32 at sample,
+  @param(min: 0.0, default: 0.5, min: 0.1)         //~ E0809
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+pub flow no_default_and_a_key_twice(
+  x: F32 at sample,
+  @param(
+    min: 0.0,
+    max: 1.0,
+    min: 0.1,                                       //~ E0809
+  )
+  p: F32 at block,
+) -> F32 at sample {
+  x * p
+}
+
+// ---- the second input has its own attribute: the same key in two attributes is not a key twice
+
+pub flow the_same_key_in_two_inputs(
+  x: F32 at sample,
+  @param(
+    default: 0.5,
+    unit: "dB",
+  )
+  a: F32 at block,
+  @param(
+    default: 0.5,
+    unit: "dB",
+  )
+  b: F32 at block,
+) -> F32 at sample {
+  x * a * b
+}
+
+// ---- a flow that is called with the failed one (the caller is a unit of its own)
+
+pub flow user(x: F32 at sample) -> F32 at sample {
+  default_twice~(x, 0.5)
+}

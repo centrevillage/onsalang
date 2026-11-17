@@ -40,6 +40,7 @@ mod generated;
 mod heading;
 mod impl_items;
 mod impls;
+mod param;
 #[cfg(test)]
 mod tests;
 mod types;

@@ -103,7 +103,7 @@ pub fn take(
 }
 
 // The attribute of an input in a list of one line: the break after the attribute stays.
-pub flow gain(@param(min: 0.0, max: 1.0)
+pub flow gain(@param(min: 0.0, max: 1.0, default: 0.5)
   level: F32 at block) -> F32 at sample {
   level
 }
