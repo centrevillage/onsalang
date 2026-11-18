@@ -1,0 +1,30 @@
+# 165 回目（2026-11-18）、W7-02 U2b-2/t（onsa-test）が見つけた、flow の段の診断が開始の位置の順にならない形。
+# どれも今は後ろの（内側の）診断を出す。§18.1 の位置の順なら前の（外側の）診断。
+=== q1_promotion_encloses_e0813（今 E0813@2:18、位置の順なら E0200 ClockPromotion@2:11）
+pub flow f(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = (prev~(p) + 1.0) at sample
+  x
+}
+=== q6_nonrt_gate_then_e0813（今 E0813@3:25、位置の順なら E0200 NonRtCallAtClock@3:7）
+pub fn design(v: F32) -> F32 { v * 0.5 }
+pub flow f(x: F32 at sample, c: F32 at init, p: F32 at block) -> F32 at sample {
+  x * design(c) + prev~(p)
+}
+=== q8_default_init_encloses_e0815（今 E0815@3:22、位置の順なら E0200 DefaultInit@3:11）
+pub struct St { a: F32 }
+pub flow f(x: F32 at sample) -> F32 at sample {
+  let s = prev~(St { a: x at block })
+  s.a
+}
+=== q17_e0805_then_e0810_in_let_inside（今 E0805@3:12、位置の順なら E0810@3:3）
+pub fn noisy(v: F32) -> F32 uses {Alloc} { v }
+pub flow f(x: F32 at sample) -> F32 at sample {
+  let s = (noisy(x), "a")
+  x
+}
+=== o12_e0401_then_e0810（今 E0810@3:3、位置の順なら E0401@2:11。R-493 で E0416 になる）
+pub flow f(x: I32 at sample) -> I32 at sample {
+  let a = vdelay~(x, 1, 8)
+  let s = "text"
+  a
+}
