@@ -64,6 +64,7 @@
 | `pipeline/` | export とターゲットを持ち、ビルドの全体を通す事例 |
 | `golden/` | 写し（`core`・`interface`・`c`・`graph`）。事例が宣言しない写しは失敗 |
 | `vectors/` | テストベクトルの表（形式は [`vectors/FORMAT.md`](vectors/FORMAT.md)） |
+| `flow_ref/` | 参照評価器が flow の事例の test を評価した結果のデータと、生成した固定の入力 `corpus/`（事例ではない。`crates/onsa_tests/tests/flow_ref.rs` が読み、インタプリタと比べる。形式は [`flow_ref/FORMAT.md`](flow_ref/FORMAT.md)） |
 | `heavy/` | 1 件で約 1 秒を超える事例。既定の走査から外し、gate の項目 `heavy` だけが回す（X-24）。印は `diag-negatives` が走らせずに数える。同じ重さの Rust のテストは、名前を `heavy_` で始めて `#[ignore = "heavy: …"]` を付ける |
 | `fuzz/` | ファズが保存した入力（事例ではない。`tools/fuzz.py` と `fix-loop` が読む） |
 | `review-phase1/` | レビューの再現の入力（事例ではない。[`review-phase1/README.md`](review-phase1/README.md)） |
