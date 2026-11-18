@@ -8,7 +8,7 @@ use super::*;
 /// expression of the flow body is lowered. `None`: not a flow construct.
 pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<Option<Expr>> {
     let span = cx.ast.expr(e).span;
-    let (phase, node, state) = {
+    let (phase, info, id, state) = {
         let f = cx.flow.as_ref().expect("flow context");
         if let Some(v) = f.expr_override.get(&e) {
             return Ok(Some(v.clone()));
@@ -16,20 +16,21 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
         if f.info.sample_rate_calls.contains(&e) {
             return Ok(Some(f.sample_rate.clone()));
         }
-        let Some(node) = f.node_by_expr.get(&e).cloned() else { return Ok(None) };
+        let Some(&id) = f.info.node_of.get(&e) else { return Ok(None) };
         let state = f.scopes.last().ok_or_else(|| internal(span, "node outside a state scope"))?.state.clone();
-        (f.phase, node, state)
+        (f.phase, f.info, id, state)
     };
+    let name = &info.node(id).name;
     let not_here = |what: &str| internal(span, format!("`{what}` evaluated outside `tick`"));
     let mut stmts = Vec::new();
-    let value = match &node {
-        Node::Prev { name, .. } => {
+    let value = match &info.node(id).kind {
+        PlanKind::Prev { .. } => {
             if phase != Phase::Tick {
                 return Err(not_here("prev"));
             }
             sfield(lw, &state, name, span)?
         }
-        Node::Delay { name, .. } => {
+        PlanKind::Delay { .. } => {
             if phase != Phase::Tick {
                 return Err(not_here("delay"));
             }
@@ -37,13 +38,13 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
             let w = sfield(lw, &state, &format!("{name}.w"), span)?;
             index(buf, w)?
         }
-        Node::Vdelay { name, d, max, ty, .. } => {
+        PlanKind::Vdelay { d, max, ty, .. } => {
             if phase != Phase::Tick {
                 return Err(not_here("vdelay"));
             }
             vdelay_read(lw, cx, &mut stmts, &state, name, *d, *max, *ty, span)?
         }
-        Node::Instance { name, callee, args, .. } => {
+        PlanKind::Instance { callee, args, .. } => {
             if phase != Phase::Tick {
                 return Err(not_here("a flow instance"));
             }
@@ -53,13 +54,13 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
             cargs.extend(instance_args(lw, cx, *callee, args, Clock::SAMPLE)?.into_iter().map(borrow));
             call(sub.tick, ret, span, cargs)
         }
-        Node::Par { name, var, from, to, body, nodes, .. } => {
+        PlanKind::Par { var, from, to, body, children, .. } => {
             let ty = lw.core_ty(cx.info.expr_types[&e], &[], span)?;
             let arr = cx.temp(name, ty.clone());
             stmts.push(stmt(span, StmtKind::Let(arr, Expr::new(ty.clone(), span, ExprKind::Zeroed))));
             let arr_e = local_expr(cx, arr, span);
             let idx = replica_index(cx, *var, *from, span);
-            let elem_state = if node_has_state(&node) {
+            let elem_state = if node_has_state(info, id) {
                 index(sfield(lw, &state, name, span)?, idx.clone())?
             } else {
                 state.clone()
@@ -69,7 +70,7 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
             let v = lower_expr(lw, cx, *body)?;
             assign(&mut loop_body, &index(arr_e.clone(), idx)?, v)?;
             if phase == Phase::Tick {
-                store_nodes(lw, cx, &mut loop_body, nodes, &elem_state)?;
+                store_nodes(lw, cx, &mut loop_body, children, &elem_state)?;
             }
             cx.flow.as_mut().unwrap().scopes.pop();
             let b = Block { stmts: loop_body, value: None };
@@ -82,7 +83,7 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
     let result = if matches!(value.kind, ExprKind::Local(_)) {
         value
     } else {
-        let tmp = cx.temp(node.name(), value.ty.clone());
+        let tmp = cx.temp(name, value.ty.clone());
         stmts.push(stmt(span, StmtKind::Let(tmp, value)));
         local_expr(cx, tmp, span)
     };

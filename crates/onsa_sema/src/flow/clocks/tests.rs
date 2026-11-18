@@ -200,7 +200,7 @@ fn the_walk_keeps_the_first_diagnostic_by_position() {
         assert_eq!(reported(&src), vec![(code, at.to_string())], "{body}");
     }
     let f = walk_of(&format!("{head}{}", cases[0].0), "f");
-    assert_eq!(f.walked.info.node_of.len(), 1);
+    assert_eq!(f.walked.node_of.len(), 1);
     assert_eq!((f.local("a"), f.local("b")), (Clock::Block, Clock::Error));
     // `vdelay~` of no float (E0416, §11.4) before a later `let` of no Copy
     // (E0810).

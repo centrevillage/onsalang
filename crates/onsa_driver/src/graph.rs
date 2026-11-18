@@ -13,7 +13,7 @@ use onsa_diag::Span;
 use onsa_sema::body::{LocalId, Target};
 use onsa_sema::clock::Clock;
 use onsa_sema::def::DefKind;
-use onsa_sema::flow::{FlowInfo, InitArg, Node};
+use onsa_sema::flow::{FlowInfo, InitArg, PlanKind, PlanNode};
 use onsa_sema::{Analysis, DefId};
 use onsa_syntax::ast::{Ast, ExprId, ExprKind};
 
@@ -57,20 +57,17 @@ impl Graph<'_> {
 
     /// Reads inside `e` become edges into `target`. A stateful sub-node gets a
     /// node of its own (unless it IS the target's initializer) and its own edges.
-    fn visit(&mut self, e: ExprId, target: &str, dashed: bool, nodes: &[Node]) {
+    fn visit(&mut self, e: ExprId, target: &str, dashed: bool) {
         // The graph is drawn only for a package without diagnostics (S-59).
         if let ExprKind::Error = self.ast.expr(e).kind {
             onsa_diag::internal::bug(Some(self.ast.expr(e).span), "the graph met a body a syntax error left unread")
         }
-        if let Some(&idx) = self.info.node_of_expr.get(&e)
-            && let Some(node) = nodes.get(idx)
-            && node.expr() == e
-        {
-            let name = node.name().to_string();
+        if let Some(&id) = self.info.node_of.get(&e) {
+            let node = self.info.node(id);
             let label = self.node_label(node, e);
-            self.extra.push((name.clone(), label, self.rate_of(e)));
-            self.edge(&name, target, dashed);
-            self.visit_node(node, &name, nodes);
+            self.extra.push((node.name.clone(), label, self.rate_of(e)));
+            self.edge(&node.name, target, dashed);
+            self.visit_node(node, &node.name);
             return;
         }
         if let Some(Target::Local(l)) = self.info.body.targets.get(&e)
@@ -80,51 +77,50 @@ impl Graph<'_> {
             return;
         }
         for child in self.ast.sub_exprs(e) {
-            self.visit(child, target, dashed, nodes);
+            self.visit(child, target, dashed);
         }
     }
 
     /// The arguments of a stateful node: look-backs dashed, the rest solid.
-    fn visit_node(&mut self, node: &Node, name: &str, nodes: &[Node]) {
-        match node {
-            Node::Prev { arg, init, .. } | Node::Delay { arg, init, .. } => {
-                self.visit(*arg, name, true, nodes);
+    fn visit_node(&mut self, node: &PlanNode, name: &str) {
+        match &node.kind {
+            PlanKind::Prev { arg, init, .. } | PlanKind::Delay { arg, init, .. } => {
+                self.visit(*arg, name, true);
                 if let InitArg::Init(i) = init {
-                    self.visit(*i, name, false, nodes);
+                    self.visit(*i, name, false);
                 }
             }
-            Node::Vdelay { arg, d, init, .. } => {
-                self.visit(*arg, name, true, nodes);
-                self.visit(*d, name, false, nodes);
+            PlanKind::Vdelay { arg, d, init, .. } => {
+                self.visit(*arg, name, true);
+                self.visit(*d, name, false);
                 if let InitArg::Init(i) = init {
-                    self.visit(*i, name, false, nodes);
+                    self.visit(*i, name, false);
                 }
             }
-            Node::Instance { args, .. } => {
+            PlanKind::Instance { args, .. } => {
                 for &arg in args {
-                    self.visit(arg, name, false, nodes);
+                    self.visit(arg, name, false);
                 }
             }
-            Node::Par { var, body, nodes: inner, .. } => {
+            PlanKind::Par { var, body, .. } => {
                 self.local_node.insert(*var, name.to_string());
-                let inner_nodes: Vec<Node> = inner.clone();
-                self.visit(*body, name, false, &inner_nodes);
+                self.visit(*body, name, false);
             }
         }
     }
 
-    fn node_label(&self, node: &Node, e: ExprId) -> String {
+    fn node_label(&self, node: &PlanNode, e: ExprId) -> String {
         // `prev_0 = prev~`, `src = saw~` (spec/tools.md §1.1).
-        let what = match (node, node.delay()) {
+        let what = match (&node.kind, node.kind.delay()) {
             (_, Some(d)) => format!("{}~", d.name()),
-            (Node::Instance { callee, .. }, None) => format!("{}~", self.a.def(*callee).name),
-            (Node::Par { from, to, .. }, None) => format!("par~ {from}..<{to}"),
-            // `Node::delay` names every delay.
-            (Node::Prev { .. } | Node::Delay { .. } | Node::Vdelay { .. }, None) => {
+            (PlanKind::Instance { callee, .. }, None) => format!("{}~", self.a.def(*callee).name),
+            (PlanKind::Par { from, to, .. }, None) => format!("par~ {from}..<{to}"),
+            // `PlanKind::delay` names every delay.
+            (PlanKind::Prev { .. } | PlanKind::Delay { .. } | PlanKind::Vdelay { .. }, None) => {
                 onsa_diag::internal::bug(None, "a delay node without its delay")
             }
         };
-        format!("{} = {what}: {}", node.name(), typed(&self.ty_of(e), self.rate_of(e), self.ast.expr(e).span))
+        format!("{} = {what}: {}", node.name, typed(&self.ty_of(e), self.rate_of(e), self.ast.expr(e).span))
     }
 }
 
@@ -253,9 +249,9 @@ fn graph_of(analyzed: &Analyzed, flow: &str, scope: Option<&str>) -> Result<Stri
     }
     for (i, l) in info.lets.iter().enumerate() {
         let name = &let_names[i];
-        let whole = info.node_of_expr.get(&l.init).and_then(|&idx| info.nodes.get(idx)).filter(|n| n.expr() == l.init);
+        let whole = info.node_of.get(&l.init).map(|&id| info.node(id));
         let label = match whole {
-            Some(node) => g.node_label(node, l.init).replacen(&format!("{} =", node.name()), &format!("{name} ="), 1),
+            Some(node) => g.node_label(node, l.init).replacen(&format!("{} =", node.name), &format!("{name} ="), 1),
             None => format!("{name}: {}", typed(&a.display_type(l.ty), l.clock, l.span)),
         };
         let _ = writeln!(
@@ -265,11 +261,8 @@ fn graph_of(analyzed: &Analyzed, flow: &str, scope: Option<&str>) -> Result<Stri
             rate_color(l.clock)
         );
         match whole {
-            Some(node) => {
-                let node = node.clone();
-                g.visit_node(&node, name, &info.nodes);
-            }
-            None => g.visit(l.init, name, false, &info.nodes),
+            Some(node) => g.visit_node(node, name),
+            None => g.visit(l.init, name, false),
         }
     }
     // Output.
@@ -282,7 +275,7 @@ fn graph_of(analyzed: &Analyzed, flow: &str, scope: Option<&str>) -> Result<Stri
             rate_color(rate),
             rate_color(rate)
         );
-        g.visit(o, "out", false, &info.nodes);
+        g.visit(o, "out", false);
     }
     for (name, label, rate) in &g.extra {
         let _ = writeln!(

@@ -1,24 +1,41 @@
-//! The stateful nodes of a flow body (§11.4, §11.5, S-06): their names,
-//! their order and the nesting of `par~`, apart from the clocks. The walk of
-//! the clocks checks a node first and then builds it here.
+//! The record of the stateful nodes of a flow body (§11.4, §11.5, S-06):
+//! their names, their owners and the nesting of `par~`, apart from the
+//! clocks. The walk of the clocks checks a node first and then records it
+//! here; the plan ([`super::plan::build`]) makes the table of the record.
 
+use super::plan::{NodeId, Owner, PlanKind};
 use super::*;
 
-/// The node lists of a flow body while a walk goes through it
-/// ([`FlowInfo::nodes`], [`FlowInfo::node_of_expr`]). It knows no clock.
+/// A node the walk recorded: a [`super::PlanNode`] before its clock, in the
+/// order of its [`NodeId`].
+#[derive(Debug, Clone)]
+pub(super) struct Recorded {
+    pub(super) expr: ExprId,
+    pub(super) span: Span,
+    pub(super) kind: PlanKind,
+    pub(super) owner: Owner,
+    pub(super) name: String,
+}
+
+/// The record of the nodes of a flow body while a walk goes through it. It
+/// knows no clock.
 ///
-/// The walk of the clocks calls it at stage 2 in the order of the source,
-/// at each node after the checks of its clocks:
-/// - [`NodeBuilder::node`] at a delay or an instance call;
-/// - at `par~`, [`NodeBuilder::enter_par`] before the body and
-///   [`NodeBuilder::leave_par`] after it, even when the body stopped, and
-///   then [`NodeBuilder::par`] with the nodes of the body;
-/// - [`NodeBuilder::finish`] at the end, for the tables.
+/// The walk of the clocks calls it at stage 2 in the order of the source:
+/// - [`NodeBuilder::owner`] before each `let` and the output;
+/// - [`NodeBuilder::node`] at a delay or an instance call, after the checks
+///   of its clocks;
+/// - at `par~`, [`NodeBuilder::enter_par`] before the body, which takes the
+///   slot of the `par~` before the nodes of its body, and
+///   [`NodeBuilder::leave_par`] after it, even when the body stopped;
+/// - [`NodeBuilder::finish`] at the end, for the plan.
 ///
-/// The names are numbered per kind in the order of the calls (S-06).
+/// The names are numbered per kind in the order the nodes are finished (a
+/// `par~` after its body, S-06).
 pub(super) struct NodeBuilder {
-    lists: Vec<Vec<Node>>,
-    node_of_expr: HashMap<ExprId, usize>,
+    nodes: Vec<Recorded>,
+    /// The owner of the nodes recorded now: the `let` or the output walked,
+    /// then each `par~` entered.
+    owners: Vec<Owner>,
     counters: HashMap<String, u32>,
     let_names: HashMap<ExprId, String>,
 }
@@ -28,17 +45,17 @@ impl NodeBuilder {
     /// that name (S-06).
     pub(super) fn new(pending: &[PendingLet]) -> NodeBuilder {
         let let_names = pending.iter().filter_map(|p| Some((p.init, p.name.clone()?))).collect();
-        NodeBuilder {
-            lists: vec![Vec::new()],
-            node_of_expr: HashMap::default(),
-            counters: HashMap::default(),
-            let_names,
-        }
+        NodeBuilder { nodes: Vec::new(), owners: Vec::new(), counters: HashMap::default(), let_names }
     }
 
-    /// The nodes of the body and the index of each in its list.
-    pub(super) fn finish(mut self) -> (Vec<Node>, HashMap<ExprId, usize>) {
-        (self.lists.pop().unwrap_or_default(), self.node_of_expr)
+    /// The nodes of the body, in the order of their [`NodeId`]s.
+    pub(super) fn finish(self) -> Vec<Recorded> {
+        self.nodes
+    }
+
+    /// The nodes recorded next are of `owner`, a `let` or the output.
+    pub(super) fn owner(&mut self, owner: Owner) {
+        self.owners = vec![owner];
     }
 
     fn next_name(&mut self, kind: &str) -> String {
@@ -48,11 +65,11 @@ impl NodeBuilder {
         name
     }
 
-    fn push(&mut self, node: Node) {
-        let list = self.lists.last_mut().expect("node list");
-        let idx = list.len();
-        self.node_of_expr.insert(node.expr(), idx);
-        list.push(node);
+    fn push(&mut self, expr: ExprId, span: Span, kind: PlanKind, name: String) -> NodeId {
+        let Some(&owner) = self.owners.last() else { onsa_diag::internal::bug(Some(span), "a node of no owner") };
+        let id = NodeId(self.nodes.len() as u32);
+        self.nodes.push(Recorded { expr, span, kind, owner, name });
+        id
     }
 
     fn node_name(&mut self, e: ExprId, kind: &str) -> String {
@@ -73,10 +90,10 @@ impl NodeBuilder {
         call: &NodeCall,
         span: Span,
     ) -> Result<(), Diagnostic> {
-        let node = match call.kind {
+        let (kind, name) = match call.kind {
             NodeKind::Instance(callee) => {
                 let name = self.node_name(e, &a.def(callee).name);
-                Node::Instance { name, expr: e, callee, args: call.args.clone(), span }
+                (PlanKind::Instance { callee, args: call.args.clone(), span }, name)
             }
             NodeKind::Delay(delay, len) => {
                 let arg = call.args[0];
@@ -88,32 +105,37 @@ impl NodeBuilder {
                     (None, None) => default_init(a, ty, span)?,
                 };
                 let name = self.node_name(e, delay.name());
-                match (delay, d_e) {
-                    (Delay::Prev, _) => Node::Prev { name, expr: e, arg, init, ty },
-                    (Delay::Fixed, _) => Node::Delay { name, expr: e, arg, n: len, init, ty },
-                    (Delay::Variable, Some(d)) => Node::Vdelay { name, expr: e, arg, d, max: len, init, ty },
+                let kind = match (delay, d_e) {
+                    (Delay::Prev, _) => PlanKind::Prev { arg, init, ty },
+                    (Delay::Fixed, _) => PlanKind::Delay { arg, n: len, init, ty },
+                    (Delay::Variable, Some(d)) => PlanKind::Vdelay { arg, d, max: len, init, ty },
                     (Delay::Variable, None) => onsa_diag::internal::bug(Some(span), "a `vdelay~` without its `d`"),
-                }
+                };
+                (kind, name)
             }
         };
-        self.push(node);
+        self.push(e, span, kind, name);
         Ok(())
     }
 
-    /// The nodes of the body of a `par~` go to a list of their own.
-    pub(super) fn enter_par(&mut self) {
-        self.lists.push(Vec::new());
+    /// `par~ var in from..<to { body }` (§11.5) at `e` and `span`: its slot,
+    /// and the nodes recorded next are of its body.
+    pub(super) fn enter_par(&mut self, e: ExprId, span: Span, var: LocalId, from: u32, to: u32, body: ExprId) {
+        let kind = PlanKind::Par { var, from, to, body, children: Vec::new() };
+        let id = self.push(e, span, kind, String::new());
+        self.owners.push(Owner::Par(id));
     }
 
-    /// The nodes of the body of the `par~` entered last.
-    pub(super) fn leave_par(&mut self) -> Vec<Node> {
-        self.lists.pop().unwrap_or_default()
-    }
-
-    /// `par~ var in from..<to { body }` (§11.5) at `e`, holding `nodes`.
-    pub(super) fn par(&mut self, e: ExprId, var: LocalId, from: u32, to: u32, body: ExprId, nodes: Vec<Node>) {
+    /// The end of the body of the `par~` `e` entered last, which takes its
+    /// name.
+    pub(super) fn leave_par(&mut self, e: ExprId, span: Span) {
+        let Some(Owner::Par(id)) =
+            self.owners.pop().filter(|o| matches!(o, Owner::Par(p) if self.nodes[p.0 as usize].expr == e))
+        else {
+            onsa_diag::internal::bug(Some(span), "a `par~` left that was not entered")
+        };
         let name = self.node_name(e, "par");
-        self.push(Node::Par { name, expr: e, var, from, to, body, nodes });
+        self.nodes[id.0 as usize].name = name;
     }
 }
 

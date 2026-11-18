@@ -38,7 +38,7 @@ pub(super) fn gen_init<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Fl
     g.state_overrides(lw, shape, info, &s)?;
     g.const_lets(lw, shape, info)?;
     g.rate_lets(lw, shape, info, ClockStage::Init, &s)?;
-    let nodes = info.nodes.clone();
+    let nodes: Vec<NodeId> = info.top().collect();
     init_nodes(lw, &mut g.cx, &mut g.stmts, &nodes, &s, &sr)?;
     let poisoned = sfield(lw, &s, "poisoned", span)?;
     assign(&mut g.stmts, &poisoned, lit(Ty::Bool, span, Lit::Bool(false)))?;
@@ -49,12 +49,19 @@ pub(super) fn gen_init<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Fl
     Ok(())
 }
 
+/// The plan of the flow `cx` lowers.
+fn plan<'b>(cx: &FnCx<'b>) -> &'b FlowInfo {
+    cx.flow.as_ref().expect("flow context").info
+}
+
 /// Node initialisation (§11.4): stores, buffers, sub `init`s, replicas.
-fn init_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, nodes: &[Node], state: &Expr, sr: &Expr) -> R<()> {
-    for n in nodes {
-        let span = cx.ast.expr(n.expr()).span;
-        match n {
-            Node::Prev { name, init, ty, .. } => {
+fn init_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, ids: &[NodeId], state: &Expr, sr: &Expr) -> R<()> {
+    let info = plan(cx);
+    for &id in ids {
+        let n = info.node(id);
+        let (span, name) = (cx.ast.expr(n.expr).span, &n.name);
+        match &n.kind {
+            PlanKind::Prev { init, ty, .. } => {
                 let t = lw.core_ty(*ty, &[], span)?;
                 let v = init_value(lw, cx, init, &t, span)?;
                 let v = materialize(cx, v, out, &format!("{name}.init"));
@@ -63,9 +70,9 @@ fn init_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, nodes: &[Nod
                 }
                 assign(out, &sfield(lw, state, name, span)?, v)?;
             }
-            Node::Delay { name, n: len, init, ty, .. } | Node::Vdelay { name, max: len, init, ty, .. } => {
+            PlanKind::Delay { n: len, init, ty, .. } | PlanKind::Vdelay { max: len, init, ty, .. } => {
                 let t = lw.core_ty(*ty, &[], span)?;
-                let len = if matches!(n, Node::Vdelay { .. }) { *len + 1 } else { *len };
+                let len = if matches!(n.kind, PlanKind::Vdelay { .. }) { *len + 1 } else { *len };
                 let v = init_value(lw, cx, init, &t, span)?;
                 let v = materialize(cx, v, out, &format!("{name}.init"));
                 if matches!(init, InitArg::Init(_)) {
@@ -76,15 +83,15 @@ fn init_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, nodes: &[Nod
                 assign(out, &buf, fill)?;
                 assign(out, &sfield(lw, state, &format!("{name}.w"), span)?, u32_lit(span, 0))?;
             }
-            Node::Instance { name, callee, args, .. } => {
+            PlanKind::Instance { callee, args, .. } => {
                 let sub = lw.ensure_flow(*callee)?;
                 let fields = instance_args(lw, cx, *callee, args, Clock::Init)?;
                 let cfg = Expr::new(Ty::Struct(sub.config), span, ExprKind::Struct { ty: sub.config, fields });
                 let c = call(sub.init, Ty::Struct(sub.state), span, vec![borrow(cfg), borrow(sr.clone())]);
                 assign(out, &sfield(lw, state, name, span)?, c)?;
             }
-            Node::Par { name, var, from, to, nodes, .. } => {
-                if !node_has_state(n) {
+            PlanKind::Par { var, from, to, children, .. } => {
+                if !node_has_state(info, id) {
                     continue;
                 }
                 let arr = sfield(lw, state, name, span)?;
@@ -92,7 +99,7 @@ fn init_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, nodes: &[Nod
                 let elem = index(arr, idx)?;
                 let mut body = Vec::new();
                 cx.flow.as_mut().unwrap().scopes.push(Scope { state: elem.clone() });
-                init_nodes(lw, cx, &mut body, nodes, &elem, sr)?;
+                init_nodes(lw, cx, &mut body, children, &elem, sr)?;
                 cx.flow.as_mut().unwrap().scopes.pop();
                 let b = Block { stmts: body, value: None };
                 out.push(stmt(span, StmtKind::ForRange(LocalId(var.0), u32_lit(span, *from), u32_lit(span, *to), b)));
@@ -108,7 +115,7 @@ pub(super) fn gen_reset<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b F
     let s = g.param("s", Mode::Inout, Ty::Struct(shape.state_ty));
     let span = g.span;
     g.flow().scopes.push(Scope { state: s.clone() });
-    let nodes = info.nodes.clone();
+    let nodes: Vec<NodeId> = info.top().collect();
     reset_nodes(lw, &mut g.cx, &mut g.stmts, &nodes, &s)?;
     let poisoned = sfield(lw, &s, "poisoned", span)?;
     assign(&mut g.stmts, &poisoned, lit(Ty::Bool, span, Lit::Bool(false)))?;
@@ -116,11 +123,13 @@ pub(super) fn gen_reset<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b F
     Ok(())
 }
 
-fn reset_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, nodes: &[Node], state: &Expr) -> R<()> {
-    for n in nodes {
-        let span = cx.ast.expr(n.expr()).span;
-        match n {
-            Node::Prev { name, init, ty, .. } => {
+fn reset_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, ids: &[NodeId], state: &Expr) -> R<()> {
+    let info = plan(cx);
+    for &id in ids {
+        let n = info.node(id);
+        let (span, name) = (cx.ast.expr(n.expr).span, &n.name);
+        match &n.kind {
+            PlanKind::Prev { init, ty, .. } => {
                 let t = lw.core_ty(*ty, &[], span)?;
                 let v = match init {
                     InitArg::Const(c) => lw.const_value_expr(c, &t, span)?,
@@ -128,9 +137,9 @@ fn reset_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, nodes: &[No
                 };
                 assign(out, &sfield(lw, state, name, span)?, v)?;
             }
-            Node::Delay { name, n: len, init, ty, .. } | Node::Vdelay { name, max: len, init, ty, .. } => {
+            PlanKind::Delay { n: len, init, ty, .. } | PlanKind::Vdelay { max: len, init, ty, .. } => {
                 let t = lw.core_ty(*ty, &[], span)?;
-                let len = if matches!(n, Node::Vdelay { .. }) { *len + 1 } else { *len };
+                let len = if matches!(n.kind, PlanKind::Vdelay { .. }) { *len + 1 } else { *len };
                 let v = match init {
                     InitArg::Const(c) => lw.const_value_expr(c, &t, span)?,
                     InitArg::Init(_) => sfield(lw, state, &format!("{name}.init"), span)?,
@@ -140,19 +149,19 @@ fn reset_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, nodes: &[No
                 assign(out, &buf, fill)?;
                 assign(out, &sfield(lw, state, &format!("{name}.w"), span)?, u32_lit(span, 0))?;
             }
-            Node::Instance { name, callee, .. } => {
+            PlanKind::Instance { callee, .. } => {
                 let sub = lw.ensure_flow(*callee)?;
                 let st = sfield(lw, state, name, span)?;
                 expr_stmt(out, call(sub.reset, Ty::Unit, span, vec![inout(st)]));
             }
-            Node::Par { name, var, from, to, nodes, .. } => {
-                if !node_has_state(n) {
+            PlanKind::Par { var, from, to, children, .. } => {
+                if !node_has_state(info, id) {
                     continue;
                 }
                 let arr = sfield(lw, state, name, span)?;
                 let elem = index(arr, replica_index(cx, *var, *from, span))?;
                 let mut body = Vec::new();
-                reset_nodes(lw, cx, &mut body, nodes, &elem)?;
+                reset_nodes(lw, cx, &mut body, children, &elem)?;
                 let b = Block { stmts: body, value: None };
                 out.push(stmt(span, StmtKind::ForRange(LocalId(var.0), u32_lit(span, *from), u32_lit(span, *to), b)));
             }
@@ -181,38 +190,40 @@ pub(super) fn gen_ctl<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Flo
     g.state_overrides(lw, shape, info, &s)?;
     g.const_lets(lw, shape, info)?;
     g.rate_lets(lw, shape, info, ClockStage::Block, &s)?;
-    let nodes = info.nodes.clone();
+    let nodes: Vec<NodeId> = info.top().collect();
     ctl_nodes(lw, &mut g.cx, &mut g.stmts, &nodes, &s)?;
     g.finish(lw, fns.ctl, Ty::Unit, true, None);
     Ok(())
 }
 
 /// Sub `ctl`s with the sub's `Params` built from the `Ctl`-input arguments.
-fn ctl_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, nodes: &[Node], state: &Expr) -> R<()> {
-    for n in nodes {
-        let span = cx.ast.expr(n.expr()).span;
-        match n {
-            Node::Instance { name, callee, args, .. } => {
+fn ctl_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, ids: &[NodeId], state: &Expr) -> R<()> {
+    let info = plan(cx);
+    for &id in ids {
+        let n = info.node(id);
+        let (span, name) = (cx.ast.expr(n.expr).span, &n.name);
+        match &n.kind {
+            PlanKind::Instance { callee, args, .. } => {
                 let sub = lw.ensure_flow(*callee)?;
                 let fields = instance_args(lw, cx, *callee, args, Clock::Block)?;
                 let params = Expr::new(Ty::Struct(sub.params), span, ExprKind::Struct { ty: sub.params, fields });
                 let st = sfield(lw, state, name, span)?;
                 expr_stmt(out, call(sub.ctl, Ty::Unit, span, vec![inout(st), borrow(params)]));
             }
-            Node::Par { name, var, from, to, nodes, .. } => {
-                if !node_has_state(n) {
+            PlanKind::Par { var, from, to, children, .. } => {
+                if !node_has_state(info, id) {
                     continue;
                 }
                 let arr = sfield(lw, state, name, span)?;
                 let elem = index(arr, replica_index(cx, *var, *from, span))?;
                 let mut body = Vec::new();
                 cx.flow.as_mut().unwrap().scopes.push(Scope { state: elem.clone() });
-                ctl_nodes(lw, cx, &mut body, nodes, &elem)?;
+                ctl_nodes(lw, cx, &mut body, children, &elem)?;
                 cx.flow.as_mut().unwrap().scopes.pop();
                 let b = Block { stmts: body, value: None };
                 out.push(stmt(span, StmtKind::ForRange(LocalId(var.0), u32_lit(span, *from), u32_lit(span, *to), b)));
             }
-            Node::Prev { .. } | Node::Delay { .. } | Node::Vdelay { .. } => {}
+            PlanKind::Prev { .. } | PlanKind::Delay { .. } | PlanKind::Vdelay { .. } => {}
         }
     }
     Ok(())
@@ -237,7 +248,7 @@ pub(super) fn gen_tick<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Fl
     let v = of_type(v, &out_ty)?;
     // Materialised before the stores so a `prev` inside the output reads first (§11.4).
     let out_local = g.let_("__out", v);
-    let nodes = info.nodes.clone();
+    let nodes: Vec<NodeId> = info.top().collect();
     store_nodes(lw, &mut g.cx, &mut g.stmts, &nodes, &s)?;
     g.finish(lw, fns.tick, out_ty, true, Some(out_local));
     Ok(())
@@ -245,16 +256,18 @@ pub(super) fn gen_tick<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Fl
 
 /// End-of-tick stores (§11.4) in node order: `prev` saves its argument,
 /// `delay` / `vdelay` write the argument at `w` and advance.
-pub(super) fn store_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, nodes: &[Node], state: &Expr) -> R<()> {
-    for n in nodes {
-        let span = cx.ast.expr(n.expr()).span;
-        match n {
-            Node::Prev { name, arg, .. } => {
+pub(super) fn store_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, ids: &[NodeId], state: &Expr) -> R<()> {
+    let info = plan(cx);
+    for &id in ids {
+        let n = info.node(id);
+        let (span, name) = (cx.ast.expr(n.expr).span, &n.name);
+        match &n.kind {
+            PlanKind::Prev { arg, .. } => {
                 let v = lower_expr(lw, cx, *arg)?;
                 assign(out, &sfield(lw, state, name, span)?, v)?;
             }
-            Node::Delay { name, arg, n: len, .. } | Node::Vdelay { name, arg, max: len, .. } => {
-                let len = if matches!(n, Node::Vdelay { .. }) { *len + 1 } else { *len };
+            PlanKind::Delay { arg, n: len, .. } | PlanKind::Vdelay { arg, max: len, .. } => {
+                let len = if matches!(n.kind, PlanKind::Vdelay { .. }) { *len + 1 } else { *len };
                 let v = lower_expr(lw, cx, *arg)?;
                 let buf = sfield(lw, state, &format!("{name}.buf"), span)?;
                 let w = sfield(lw, state, &format!("{name}.w"), span)?;
@@ -268,7 +281,7 @@ pub(super) fn store_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, 
             }
             // Instances store inside their own `tick`; `par` replicas store at the
             // end of each iteration of the loop that computes them.
-            Node::Instance { .. } | Node::Par { .. } => {}
+            PlanKind::Instance { .. } | PlanKind::Par { .. } => {}
         }
     }
     Ok(())

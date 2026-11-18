@@ -60,7 +60,7 @@ use onsa_diag::Span;
 use onsa_sema::DefId;
 use onsa_sema::clock::{Clock, ClockStage};
 use onsa_sema::def::{DefKind, Fields, FlowDef, FlowFn, FlowTy, ParamInfo, ParamKey, ParamNumber};
-use onsa_sema::flow::{FlowInfo, InitArg, Node};
+use onsa_sema::flow::{FlowInfo, InitArg, NodeId, Owner, PlanKind};
 use onsa_sema::ty::{BuiltinTy, Len, Ty as STy};
 use onsa_syntax::ast::ExprId;
 
@@ -84,7 +84,7 @@ use boundary::{gen_params_default, gen_process, gen_process_inplace, gen_render}
 use generated::{Gen, init_value, instance_args, replica_index, sfield};
 pub(crate) use nodes::lower_flow_expr;
 use phases::{gen_ctl, gen_init, gen_reset, gen_tick, store_nodes};
-use state::{ast_span, flat_nodes, node_fields, node_has_state, nodes_in};
+use state::{node_fields, node_has_state};
 
 /// The Core items generated for one flow.
 #[derive(Debug, Clone)]
@@ -179,8 +179,6 @@ pub struct FlowLowerCx<'b> {
     pub expr_override: HashMap<ExprId, Expr>,
     info: &'b FlowInfo,
     phase: Phase,
-    /// Every stateful node by its call / `par` expression, at any depth.
-    node_by_expr: HashMap<ExprId, Node>,
     /// `sample_rate()`: the parameter in `init`, the state field elsewhere.
     sample_rate: Expr,
     /// Innermost scope last.
@@ -334,7 +332,7 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
         }
     }
     let mut const_lets: HashMap<Phase, Vec<usize>> = HashMap::new();
-    let mut nodes_done: HashSet<ExprId> = HashSet::new();
+    let mut nodes_done: HashSet<NodeId> = HashSet::new();
     for (k, l) in info.lets.iter().enumerate() {
         if l.clock == Clock::Const {
             let reads = l.locals.iter().filter_map(|loc| reads.get(loc)).flatten();
@@ -354,16 +352,15 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
                 fields.push((name.clone(), ty));
             }
         }
-        let init_span = ast_span(lw, flow, l.init)?;
-        for n in nodes_in(lw, flow, &info.nodes, init_span)? {
-            if nodes_done.insert(n.expr()) {
-                node_fields(lw, flow, &n, &mut fields)?;
+        for &n in info.roots(Owner::Let(k as u32)) {
+            if nodes_done.insert(n) {
+                node_fields(lw, flow, info, n, &mut fields)?;
             }
         }
     }
-    for n in &info.nodes {
-        if nodes_done.insert(n.expr()) {
-            node_fields(lw, flow, n, &mut fields)?;
+    for n in info.top() {
+        if nodes_done.insert(n) {
+            node_fields(lw, flow, info, n, &mut fields)?;
         }
     }
     fields.push(("poisoned".into(), Ty::Bool));

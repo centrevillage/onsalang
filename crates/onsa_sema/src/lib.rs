@@ -111,7 +111,7 @@ pub use body::{BodyInfo, Instance, LocalId, LocalInfo, LocalKind, Target};
 pub use clock::{Clock, ClockName, ClockStage};
 pub use consteval::ConstValue;
 pub use def::{Def, DefId, DefKind, ModId};
-pub use flow::{ClockInfo, FlowInfo, FlowLet, InitArg, Node};
+pub use flow::{ClockInfo, FlowInfo, FlowLet, InitArg, NodeId, Owner, PlanKind, PlanNode};
 pub use kind::Kind;
 pub use layout::Layout;
 pub use names::body::{named, receiver};

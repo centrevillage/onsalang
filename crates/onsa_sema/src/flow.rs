@@ -12,7 +12,7 @@
 //!   bindings `MatchBind`), `targets`, `pat_locals`, `instances` (generic
 //!   instantiations used by the body, for monomorphization). Flow-instance
 //!   calls (`saw~(f0)`), the delays `prev~` / `delay~` / `vdelay~` and
-//!   `sample_rate()` have no `Target`; use `node_of_expr` / `sample_rate_calls`.
+//!   `sample_rate()` have no `Target`; use `node_of` / `sample_rate_calls`.
 //!   A feedback reference `^y` has the `Target::Local` of `y`.
 //! - `clocks: ClockInfo` — `exprs`, the clock of every expression (§11.3),
 //!   and `locals`, the clock of every local (inputs: declared, of
@@ -24,14 +24,18 @@
 //!   `let` read at `Block` / `sample`, a `Block` `let` read at `sample`;
 //!   S-05): those become state fields. `let`s of `Clock::Const` are never
 //!   state (they can be inlined).
-//! - `nodes: Vec<Node>` — the stateful nodes in source order with their S-06
-//!   names: the `let` name when the node is the whole initializer (`let y1 =
-//!   prev~(^y)`, `let src = saw~(f0)`), otherwise `prev_0`, `delay_0`,
-//!   `vdelay_0`, `<callee>_0`, numbered per kind in source order over the
-//!   whole body. Nodes inside a `par` body are nested in `Node::Par.nodes`.
-//! - `node_of_expr` — call expression → index into the node list that
-//!   contains it (`nodes`, or the enclosing `Par.nodes`); a `par` expression
-//!   maps to its `Par` node.
+//! - `nodes: Vec<PlanNode>` — the plan of the stateful nodes (R-91 (1),
+//!   [`plan`]), flat and indexed by [`NodeId`]: the delays, the instance
+//!   calls and the `par~`s, each with its [`Owner`] (a `let`, the output or
+//!   a `par~`, by the tree of the body), its clock, the clocks its arguments
+//!   are read at, and its S-06 name: the `let` name when the node is the
+//!   whole initializer (`let y1 = prev~(^y)`, `let src = saw~(f0)`),
+//!   otherwise `prev_0`, `delay_0`, `vdelay_0`, `<callee>_0`, `par_0`,
+//!   numbered per kind over the whole body in the order the walk finishes
+//!   the nodes (a `par~` after its body). [`FlowInfo::roots`] gives the nodes
+//!   of an owner (of a `par~`, its `children`), [`FlowInfo::top`] those of
+//!   the `let`s and the output. Empty when the flow is not `complete`.
+//! - `node_of` — a call or `par~` expression → its node.
 //! - `sample_rate_at: Option<ClockStage>` — the latest stage at which
 //!   `sample_rate()` is read (`None`: never; `Init`: no state field needed;
 //!   `Block` / `Tick`: store it, S-05). `sample_rate_calls` lists the calls.
@@ -50,8 +54,8 @@
 //! The parts are in a module each: `check` (the flow mode of the checker),
 //! `consts` (the constant expressions), `clocks` (the walk of the clocks and
 //! the checks of the flow rules), `loops` (the loops of the `let`s), `nodes`
-//! (the building of the nodes) and `reads` (the state marking). The tables
-//! are here.
+//! (the record of the nodes), `plan` (the table of the nodes) and `reads`
+//! (the state marking). The tables are here.
 
 use std::collections::BTreeSet;
 
@@ -74,7 +78,10 @@ mod clocks;
 mod consts;
 mod loops;
 mod nodes;
+mod plan;
 mod reads;
+
+pub use plan::{NodeId, Owner, PlanKind, PlanNode};
 
 pub(crate) use clocks::finish_flow;
 
@@ -119,69 +126,20 @@ pub enum InitArg {
     Init(ExprId),
 }
 
-/// A stateful node of a flow body (§11.4, §11.5).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Node {
-    Prev { name: String, expr: ExprId, arg: ExprId, init: InitArg, ty: TyId },
-    Delay { name: String, expr: ExprId, arg: ExprId, n: u32, init: InitArg, ty: TyId },
-    Vdelay { name: String, expr: ExprId, arg: ExprId, d: ExprId, max: u32, init: InitArg, ty: TyId },
-    Instance { name: String, expr: ExprId, callee: DefId, args: Vec<ExprId>, span: Span },
-    Par { name: String, expr: ExprId, var: LocalId, from: u32, to: u32, body: ExprId, nodes: Vec<Node> },
-}
-
-impl Node {
-    pub fn name(&self) -> &str {
-        match self {
-            Node::Prev { name, .. }
-            | Node::Delay { name, .. }
-            | Node::Vdelay { name, .. }
-            | Node::Instance { name, .. }
-            | Node::Par { name, .. } => name,
-        }
-    }
-
-    /// The built-in delay of the node, if it is one.
-    pub fn delay(&self) -> Option<Delay> {
-        match self {
-            Node::Prev { .. } => Some(Delay::Prev),
-            Node::Delay { .. } => Some(Delay::Fixed),
-            Node::Vdelay { .. } => Some(Delay::Variable),
-            Node::Instance { .. } | Node::Par { .. } => None,
-        }
-    }
-
-    pub fn expr(&self) -> ExprId {
-        match self {
-            Node::Prev { expr, .. }
-            | Node::Delay { expr, .. }
-            | Node::Vdelay { expr, .. }
-            | Node::Instance { expr, .. }
-            | Node::Par { expr, .. } => *expr,
-        }
-    }
-}
-
-/// The clocks of the expressions, the locals and the nodes of a flow body
-/// (§11.3).
+/// The clocks of the expressions and the locals of a flow body (§11.3).
+/// The clocks of the nodes are in the plan ([`PlanNode`]).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ClockInfo {
     pub exprs: HashMap<ExprId, Clock>,
     pub locals: HashMap<LocalId, Clock>,
-    /// The delays and the instance calls in the order of the text, flat:
-    /// the nodes of a `par~` body too, and not the `par~` itself.
-    pub nodes: Vec<NodeClock>,
-    /// A delay or an instance call → its index in `nodes` (not the index of
-    /// [`FlowInfo::node_of_expr`], which is in the list that holds the node).
-    pub node_of: HashMap<ExprId, usize>,
 }
 
-/// The clock of a delay or an instance call, and the clocks its arguments
-/// are read at.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NodeClock {
-    pub expr: ExprId,
-    pub clock: Clock,
-    pub args: Vec<ArgRead>,
+/// The clock of a delay or an instance call the walk of the clocks gives,
+/// and the clocks its arguments are read at.
+#[derive(Debug, Clone)]
+pub(super) struct NodeClock {
+    pub(super) clock: Clock,
+    pub(super) args: Vec<ArgRead>,
 }
 
 /// An argument of a node and the clock of the place it is read at (§11.3,
@@ -200,8 +158,9 @@ pub struct FlowInfo {
     pub clocks: ClockInfo,
     pub inputs: Vec<LocalId>,
     pub lets: Vec<FlowLet>,
-    pub nodes: Vec<Node>,
-    pub node_of_expr: HashMap<ExprId, usize>,
+    pub nodes: Vec<PlanNode>,
+    pub node_of: HashMap<ExprId, NodeId>,
+    pub(crate) roots: plan::Roots,
     pub sample_rate_at: Option<ClockStage>,
     pub sample_rate_calls: Vec<ExprId>,
     pub read_at: HashMap<LocalId, BTreeSet<ClockStage>>,

@@ -92,7 +92,6 @@ impl<'b> Gen<'b> {
             expr_override: HashMap::new(),
             info,
             phase,
-            node_by_expr: flat_nodes(&info.nodes),
             sample_rate: lit(Ty::Float(FloatKind::F32), shape.span, Lit::F32(0.0)),
             scopes: Vec::new(),
         });

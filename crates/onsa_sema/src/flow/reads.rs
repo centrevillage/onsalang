@@ -1,7 +1,7 @@
 //! The state marking (S-05): the stages at which each local is read
 //! (`FlowInfo::read_at`), the `let`s read at a later stage than their own,
 //! and the stage at which `sample_rate()` is read, from the clocks of the
-//! walk ([`ClockInfo`], the `let`s). The lowering reads these and does not
+//! walk ([`Walked`], the `let`s). The lowering reads these and does not
 //! walk the body again (R-91 (1), D-15).
 
 use onsa_diag::hash::HashSet;
@@ -23,7 +23,7 @@ struct Marker<'a> {
     ast: &'a Ast,
     text: &'a str,
     body: &'a BodyInfo,
-    clocks: &'a ClockInfo,
+    clocks: &'a Walked,
     /// The walk had a diagnostic: it did not record the nodes it did not
     /// reach (in a branch, in `if~` / `match~`).
     partial: bool,
@@ -59,7 +59,7 @@ pub(super) fn mark_all(
         ast,
         text,
         body,
-        clocks: &walked.info,
+        clocks: walked,
         partial: walked.diag.is_some(),
         non_rt: &walked.non_rt,
         node_calls: cx.calls.iter().map(|c| c.expr).collect(),

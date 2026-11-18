@@ -11,18 +11,21 @@
 //! - Stage 2 (`Check`) walks the `let`s in their order and the output, with
 //!   `^y` the value of stage 1, records every clock, checks the flow rules
 //!   ([`checks`]) all through, keeping the first diagnostic in the order of
-//!   the file (§18.1), and builds the nodes ([`NodeBuilder`]).
+//!   the file (§18.1), and records the nodes and their owners
+//!   ([`NodeBuilder`]).
 //!
 //! Each expression is walked at most three times; the components are linear
 //! in the reads (Tarjan), so the walk is linear in the body, with no bound of
 //! rounds. [`finish_flow`] makes the tables of the flow from the walk and the
-//! state marking (`reads`).
+//! state marking (`reads`), and the plan of the nodes (`plan`) of a walk with
+//! no diagnostic.
 
 use onsa_diag::hash::HashSet;
 use onsa_syntax::ast::{Ast, BinOp, MatchArm};
 
 use super::loops;
-use super::nodes::NodeBuilder;
+use super::nodes::{NodeBuilder, Recorded};
+use super::plan::Owner;
 use super::*;
 use crate::clock::{self, ClockFrame, Ratio, delay_out, loop_clock, rebase};
 use crate::names::body::BodyNames;
@@ -50,7 +53,7 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
     }
     let error = a.types.error();
     let (ast, text) = (&module.parsed.ast, module.text.as_str());
-    let w = walk(a, ast, text, id, &body, &fcx, error);
+    let mut w = walk(a, ast, text, id, &body, &fcx, error);
     if w.diag.is_none() {
         w.post_check(&fcx);
     }
@@ -67,18 +70,21 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
         state: false,
     });
     info.lets = lets.collect();
-    let mut diag = w.diag.clone();
     let m = super::reads::mark_all(ast, text, &body, &fcx, &w, &mut info.lets);
     (info.read_at, info.sample_rate_at) = (m.read_at, m.sample_rate_at);
+    info.complete = w.diag.is_none() && m.diag.is_none() && w.inout_call.is_none();
+    #[cfg(test)]
+    WALKED.with(|x| x.borrow_mut().push((id, w.clone(), info.complete)));
+    if info.complete {
+        let recorded = std::mem::take(&mut w.recorded);
+        super::plan::build(&mut info, recorded, &w);
+    }
+    let mut diag = w.diag;
     if let Some(d) = m.diag {
         keep_first(&mut diag, d);
     }
-    let diag = diag.or(w.inout_call.clone());
-    info.complete = diag.is_none();
-    #[cfg(test)]
-    WALKED.with(|x| x.borrow_mut().push((id, w.clone(), info.complete)));
+    let diag = diag.or(w.inout_call);
     info.clocks = w.info;
-    (info.nodes, info.node_of_expr) = (w.nodes, w.node_of_expr);
     info.body = body;
     if let Some(d) = diag {
         a.diagnostics.push(d);
@@ -97,16 +103,24 @@ enum Mode {
     Check,
 }
 
-/// The clocks of a flow body the walk found, its first diagnostic and its
-/// nodes.
+/// The clocks of a flow body the walk found, its first diagnostic and the
+/// record of its nodes.
 #[derive(Debug, Clone)]
 pub(super) struct Walked {
     /// Stage 1: the clock of each `let`, in the order of the text.
     pub(super) lets: Vec<Clock>,
     /// Stage 2: the clock of each `let`.
     pub(super) checked: Vec<Clock>,
-    /// Stage 2: the clocks of the expressions, the locals and the nodes.
+    /// Stage 2: the clocks of the expressions and the locals.
     pub(super) info: ClockInfo,
+    /// Stage 2: the clocks of the delays and the instance calls in the order
+    /// of the text (each before its arguments'), flat: the nodes of a `par~`
+    /// body too, and not the `par~` itself. Read in the walk and the marking
+    /// only, which run with a diagnostic too; the plan has the clocks of its
+    /// nodes.
+    pub(super) nodes: Vec<NodeClock>,
+    /// A delay or an instance call → its index in `nodes`.
+    pub(super) node_of: HashMap<ExprId, usize>,
     /// Stage 2: the first diagnostic in the order of the file.
     pub(super) diag: Option<Diagnostic>,
     /// Stage 2: the first call of an `inout self` method (E0713, §5.2),
@@ -115,9 +129,8 @@ pub(super) struct Walked {
     /// Stage 2: the calls of a function that is not `rt` with values at
     /// `init` (§11.5), which the marking reads (E0200 at a later stage).
     pub(super) non_rt: HashSet<ExprId>,
-    /// Stage 2: [`FlowInfo::nodes`] and [`FlowInfo::node_of_expr`].
-    pub(super) nodes: Vec<Node>,
-    pub(super) node_of_expr: HashMap<ExprId, usize>,
+    /// Stage 2: the nodes and their owners, for the plan.
+    pub(super) recorded: Vec<Recorded>,
 }
 
 pub(super) struct Walk<'a> {
@@ -146,13 +159,15 @@ pub(super) struct Walk<'a> {
     scoped: HashMap<LocalId, Option<Clock>>,
     checked: Vec<Option<Clock>>,
     out: ClockInfo,
+    node_clocks: Vec<NodeClock>,
+    node_of: HashMap<ExprId, usize>,
     /// Nonzero inside a branch of `if` and `match`, a guard and the right
     /// side of `&&` / `||` (K-08, `StatefulInBranch`).
     branch: u32,
     diag: Option<Diagnostic>,
     inout_call: Option<Diagnostic>,
     non_rt: HashSet<ExprId>,
-    nodes: NodeBuilder,
+    recorder: NodeBuilder,
 }
 
 /// Runs the two stages over the body of the flow `id` of the module of
@@ -193,11 +208,13 @@ pub(super) fn walk(
         scoped: HashMap::default(),
         checked: vec![None; n],
         out: ClockInfo::default(),
+        node_clocks: Vec::new(),
+        node_of: HashMap::default(),
         branch: 0,
         diag: None,
         inout_call: None,
         non_rt: HashSet::default(),
-        nodes: NodeBuilder::new(&cx.pending),
+        recorder: NodeBuilder::new(&cx.pending),
     };
     for (l, input) in cx.inputs.iter().zip(&decl.inputs) {
         w.out.locals.insert(*l, input.api_clock());
@@ -205,7 +222,6 @@ pub(super) fn walk(
     w.solve();
     w.check();
     let solved = |c: Option<Clock>| c.unwrap_or_else(|| onsa_diag::internal::bug(span, "a `let` left unsolved"));
-    let (nodes, node_of_expr) = w.nodes.finish();
     Walked {
         lets: w.lets.into_iter().map(solved).collect(),
         checked: w.checked.into_iter().map(solved).collect(),
@@ -213,8 +229,9 @@ pub(super) fn walk(
         diag: w.diag,
         inout_call: w.inout_call,
         non_rt: w.non_rt,
-        nodes,
-        node_of_expr,
+        nodes: w.node_clocks,
+        node_of: w.node_of,
+        recorded: w.recorder.finish(),
     }
 }
 
@@ -250,6 +267,7 @@ impl Walk<'_> {
         self.mode = Mode::Check;
         let cx = self.cx;
         for (k, p) in cx.pending.iter().enumerate() {
+            self.recorder.owner(Owner::Let(k as u32));
             self.in_loop = self.looped[k];
             let c = self.expr(p.init).unwrap_or(Clock::Const);
             self.checked[k] = Some(c);
@@ -259,6 +277,7 @@ impl Walk<'_> {
             self.check_let(p);
         }
         if let Some(out) = self.cx.output {
+            self.recorder.owner(Owner::Output);
             self.in_loop = false;
             self.expr(out);
         }
@@ -437,14 +456,13 @@ impl Walk<'_> {
             return Some(Clock::Error);
         }
         self.bind_local(var, Some(Clock::Init));
-        let check = self.mode == Mode::Check;
+        let (check, span) = (self.mode == Mode::Check, self.ast.expr(e).span);
         if check {
-            self.nodes.enter_par();
+            self.recorder.enter_par(e, span, var, from, to, body);
         }
         let b = self.expr(body);
         if check {
-            let nodes = self.nodes.leave_par();
-            self.nodes.par(e, var, from, to, body, nodes);
+            self.recorder.leave_par(e, span);
         }
         self.join(e, &[b, Some(Clock::Init)])
     }
@@ -502,9 +520,9 @@ impl Walk<'_> {
             return Some(Clock::Error);
         }
         let slot = (self.mode == Mode::Check).then(|| {
-            self.out.node_of.insert(e, self.out.nodes.len());
-            self.out.nodes.push(NodeClock { expr: e, clock: Clock::Error, args: Vec::new() });
-            self.out.nodes.len() - 1
+            self.node_of.insert(e, self.node_clocks.len());
+            self.node_clocks.push(NodeClock { clock: Clock::Error, args: Vec::new() });
+            self.node_clocks.len() - 1
         });
         let (clock, args) = match call.kind {
             NodeKind::Instance(d) => self.instance(e, d, call),
@@ -512,11 +530,11 @@ impl Walk<'_> {
         };
         if let Some(k) = slot {
             let span = self.ast.expr(e).span;
-            if let Err(d) = self.nodes.node(self.a, self.body, e, call, span) {
+            if let Err(d) = self.recorder.node(self.a, self.body, e, call, span) {
                 let found = self.src(span);
                 self.report(d.with_found(found));
             }
-            self.out.nodes[k] = NodeClock { expr: e, clock: clock.unwrap_or(Clock::Const), args };
+            self.node_clocks[k] = NodeClock { clock: clock.unwrap_or(Clock::Const), args };
         }
         clock
     }
