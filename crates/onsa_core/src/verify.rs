@@ -217,7 +217,7 @@ impl<'a> V<'a> {
                 let bt = self.place(b)?;
                 self.field_ty(&bt, *i)
             }
-            Place::Index(b, i, _) => {
+            Place::Index(b, i, ..) => {
                 let bt = self.place(b)?;
                 let it = self.expr(i)?;
                 self.same(&it, &Ty::u32(), "index")?;
@@ -395,7 +395,7 @@ impl<'a> V<'a> {
                 let ft = self.field_ty(&bt, *index)?;
                 self.same(&ft, &ty, "field")?;
             }
-            ExprKind::Index { base, index } => {
+            ExprKind::Index { base, index, .. } => {
                 let bt = self.expr(base)?;
                 let it = self.expr(index)?;
                 self.same(&it, &Ty::u32(), "index")?;

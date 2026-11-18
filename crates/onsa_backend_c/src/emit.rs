@@ -18,8 +18,8 @@ use std::fmt::Write as _;
 use onsa_core::prim::{MathFn, Prim};
 use onsa_core::walk::{has_return, walk_block};
 use onsa_core::{
-    BinOp, Block, CmpOp, ConstId, Expr, ExprKind, FloatKind, FnDef, FnId, IntKind, Lit, LocalId, LogicOp, Mode, Module,
-    Overflow, Place, Stmt, StmtKind, Ty, TypeDefKind, TypeId, UnOp,
+    BinOp, Block, Bounds, CmpOp, ConstId, Expr, ExprKind, FloatKind, FnDef, FnId, IntKind, Lit, LocalId, LogicOp, Mode,
+    Module, Overflow, Place, Stmt, StmtKind, Ty, TypeDefKind, TypeId, UnOp,
 };
 use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Span, Stage};

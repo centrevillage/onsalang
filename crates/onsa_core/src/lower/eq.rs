@@ -119,9 +119,16 @@ fn eq_body(lw: &mut Lowerer, locals: &mut Vec<Local>, ty: &Ty, a: Expr, b: Expr,
             let i = LocalId(locals.len() as u32);
             locals.push(Local { name: "i".into(), ty: Ty::u32() });
             let li = Expr::new(Ty::u32(), span, ExprKind::Local(i));
-            let ea =
-                Expr::new((**elem).clone(), span, ExprKind::Index { base: Box::new(a), index: Box::new(li.clone()) });
-            let eb = Expr::new((**elem).clone(), span, ExprKind::Index { base: Box::new(b), index: Box::new(li) });
+            let ea = Expr::new(
+                (**elem).clone(),
+                span,
+                ExprKind::Index { base: Box::new(a), index: Box::new(li.clone()), bounds: Bounds::Checked },
+            );
+            let eb = Expr::new(
+                (**elem).clone(),
+                span,
+                ExprKind::Index { base: Box::new(b), index: Box::new(li), bounds: Bounds::Checked },
+            );
             let test = eq_expr(lw, ea, eb, span, span)?;
             let not = Expr::new(Ty::Bool, span, ExprKind::Unary(UnOp::Not, Box::new(test)));
             let ret_false = Block {

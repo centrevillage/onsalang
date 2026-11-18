@@ -46,7 +46,7 @@ pub fn walk_place(p: &Place, f: &mut dyn FnMut(&Expr)) {
     match p {
         Place::Local(_) => {}
         Place::Field(b, _) => walk_place(b, f),
-        Place::Index(b, i, _) => {
+        Place::Index(b, i, ..) => {
             walk_place(b, f);
             walk_expr(i, f);
         }
@@ -80,7 +80,7 @@ pub fn for_each_child<'e>(e: &'e Expr, f: &mut dyn FnMut(Child<'e>)) {
         }
         ExprKind::Call { args, .. } | ExprKind::Prim { args, .. } => exprs(&mut args.iter().map(|a| &a.expr)),
         ExprKind::Field { base, .. } | ExprKind::Payload { base, .. } => f(Child::Expr(base)),
-        ExprKind::Index { base, index } => exprs(&mut [&**base, &**index].into_iter()),
+        ExprKind::Index { base, index, .. } => exprs(&mut [&**base, &**index].into_iter()),
         ExprKind::Struct { fields: xs, .. } | ExprKind::Variant { fields: xs, .. } => exprs(&mut xs.iter()),
         ExprKind::Array(xs) | ExprKind::Tuple(xs) => exprs(&mut xs.iter()),
         ExprKind::Repeat { elem, .. } => f(Child::Expr(elem)),
@@ -118,7 +118,7 @@ pub fn has_return(def: &FnDef) -> bool {
         match p {
             Place::Local(_) => false,
             Place::Field(b, _) => place(b),
-            Place::Index(b, i, _) => place(b) || expr(i),
+            Place::Index(b, i, ..) => place(b) || expr(i),
         }
     }
     fn expr(e: &Expr) -> bool {

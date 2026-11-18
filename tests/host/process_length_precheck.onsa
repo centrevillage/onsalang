@@ -1,0 +1,225 @@
+// onsa.toml
+// [package]
+// name = "process_length_precheck"
+// edition = "2026"
+//
+// [export]
+// prefix = "plp_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// spec = ["§11.6", "§14.2", "§9.2", "§5.3"]
+//
+// # W7-08 U2/t, S-196 (§11.6 "全ての `Span` の長さは等しくなければならず、違えば panic する。長さは呼び出しの最初に、どの状態も進める前に一度だけ比べる。サンプルループの中の入出力の `Span` への添字には検査を置かない
+// # （最初の比較が、それらの添字が範囲内であることを保証する）"): the lengths are compared by the first lines of `process`, because nothing inside the sample loop checks an index of an input or an output.
+// # So a difference between two lengths, in whichever of the `Span`s it is, must still be a panic of the call, never an out-of-range read or write (the sanitizer item of the C checks finds one that is not).
+// # The C API of `process` has one `frames` for all the buffers (§14.2), so a difference can be made only in Onsa code: the exported functions below call `process` of a flow with `Span`s of lengths of their own,
+// # and a panic of `process` is a panic of the function, which the boundary reports by the status 1 (§9.2; the result of a panicked call is not compared). The arrays of the outputs have exactly the lengths of the good calls.
+// #
+// # The other cases of the lengths (planar channels: `tests/spec/flow_semantics/export_planar_lengths_in.onsa` and `export_planar_lengths_out.onsa`) are not repeated. This one has the forms they do not have:
+// # (a) one `Span` in and one `Span` out, (b) the two fields of a struct `In`, (c) the two fields of a struct `Out`.
+//
+// # (a) `lag_in` has the input of the host in a `Span` of its own length and an output of 4 frames: 4 is a good call (the output is the input one frame late, the last frame is the third), 3 and 5 are not.
+// [[test.host]]
+// name = "one Span: an input as long as the output processes"
+// target = "host"
+// fn = "process_length_precheck.lag_in"
+// steps = [
+//   { call = "fn", args = { src = [1.0, 2.0, 3.0, 4.0] }, status = 0, result = 3.0 },
+// ]
+//
+// [[test.host]]
+// name = "one Span: an input shorter than the output panics"
+// target = "host"
+// fn = "process_length_precheck.lag_in"
+// steps = [
+//   { call = "fn", args = { src = [1.0, 2.0, 3.0] }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "one Span: an input longer than the output panics"
+// target = "host"
+// fn = "process_length_precheck.lag_in"
+// steps = [
+//   { call = "fn", args = { src = [1.0, 2.0, 3.0, 4.0, 5.0] }, status = 1 },
+// ]
+//
+// # (a) `lag_out` has the input of 4 frames and an output that is the first `n` frames of an array of 6: `n` of 4 is a good call, 3 and 5 are not.
+// [[test.host]]
+// name = "one Span: an output as long as the input processes"
+// target = "host"
+// fn = "process_length_precheck.lag_out"
+// steps = [
+//   { call = "fn", args = { src = [1.0, 2.0, 3.0, 4.0], n = 4 }, status = 0, result = 3.0 },
+// ]
+//
+// [[test.host]]
+// name = "one Span: an output shorter than the input panics"
+// target = "host"
+// fn = "process_length_precheck.lag_out"
+// steps = [
+//   { call = "fn", args = { src = [1.0, 2.0, 3.0, 4.0], n = 3 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "one Span: an output longer than the input panics"
+// target = "host"
+// fn = "process_length_precheck.lag_out"
+// steps = [
+//   { call = "fn", args = { src = [1.0, 2.0, 3.0, 4.0], n = 5 }, status = 1 },
+// ]
+//
+// # (b) the two fields of `In`: the fields `a` and `b` of 4 frames and an output of 4 frames is a good call (`a + prev~(b)` is 4 + 30 = 34 at the last frame). Each field is the one that is longer or shorter than the other
+// # two, and both fields equal to each other but not to the output (the lengths of the fields are compared with each other, and the output with them).
+// [[test.host]]
+// name = "In: fields and output of one length process"
+// target = "host"
+// fn = "process_length_precheck.mix_at"
+// steps = [
+//   { call = "fn", args = { a = [1.0, 2.0, 3.0, 4.0], b = [10.0, 20.0, 30.0, 40.0] }, status = 0, result = 34.0 },
+// ]
+//
+// [[test.host]]
+// name = "In: a longer second field panics"
+// target = "host"
+// fn = "process_length_precheck.mix_at"
+// steps = [
+//   { call = "fn", args = { a = [1.0, 2.0, 3.0, 4.0], b = [10.0, 20.0, 30.0, 40.0, 50.0] }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "In: a shorter second field panics"
+// target = "host"
+// fn = "process_length_precheck.mix_at"
+// steps = [
+//   { call = "fn", args = { a = [1.0, 2.0, 3.0, 4.0], b = [10.0, 20.0, 30.0] }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "In: a longer first field panics"
+// target = "host"
+// fn = "process_length_precheck.mix_at"
+// steps = [
+//   { call = "fn", args = { a = [1.0, 2.0, 3.0, 4.0, 5.0], b = [10.0, 20.0, 30.0, 40.0] }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "In: a shorter first field panics"
+// target = "host"
+// fn = "process_length_precheck.mix_at"
+// steps = [
+//   { call = "fn", args = { a = [1.0, 2.0, 3.0], b = [10.0, 20.0, 30.0, 40.0] }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "In: fields of one length that differs from the output panic"
+// target = "host"
+// fn = "process_length_precheck.mix_at"
+// steps = [
+//   { call = "fn", args = { a = [1.0, 2.0, 3.0, 4.0, 5.0], b = [10.0, 20.0, 30.0, 40.0, 50.0] }, status = 1 },
+// ]
+//
+// # (c) the two fields of `Out`: the field `l` is 4 frames and the field `r` the first `n` frames of an array of 6, with an input of 4 frames. `l` is the input (4 at the last frame) and `r` the input one frame late (3).
+// [[test.host]]
+// name = "Out: fields and input of one length process"
+// target = "host"
+// fn = "process_length_precheck.split_at"
+// steps = [
+//   { call = "fn", args = { src = [1.0, 2.0, 3.0, 4.0], n = 4 }, status = 0, result = 7.0 },
+// ]
+//
+// [[test.host]]
+// name = "Out: a longer second field panics"
+// target = "host"
+// fn = "process_length_precheck.split_at"
+// steps = [
+//   { call = "fn", args = { src = [1.0, 2.0, 3.0, 4.0], n = 5 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "Out: a shorter second field panics"
+// target = "host"
+// fn = "process_length_precheck.split_at"
+// steps = [
+//   { call = "fn", args = { src = [1.0, 2.0, 3.0, 4.0], n = 3 }, status = 1 },
+// ]
+//
+// # Both fields of `Out` have 4 frames, and the input has another length.
+// [[test.host]]
+// name = "Out: an input longer than the fields panics"
+// target = "host"
+// fn = "process_length_precheck.split_at"
+// steps = [
+//   { call = "fn", args = { src = [1.0, 2.0, 3.0, 4.0, 5.0], n = 4 }, status = 1 },
+// ]
+//
+// [[test.host]]
+// name = "Out: an input shorter than the fields panics"
+// target = "host"
+// fn = "process_length_precheck.split_at"
+// steps = [
+//   { call = "fn", args = { src = [1.0, 2.0, 3.0], n = 4 }, status = 1 },
+// ]
+
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+/// The input one frame late.
+pub flow lag(x: F32 at sample) -> F32 at sample {
+  prev~(x)
+}
+
+/// The first input and the second one frame late.
+pub flow mix(a: F32 at sample, b: F32 at sample) -> F32 at sample {
+  a + prev~(b)
+}
+
+/// The input and the input one frame late, as the two fields of a struct.
+pub flow split(x: F32 at sample) -> Pair at sample {
+  Pair { l: x, r: prev~(x) }
+}
+
+/// Runs `lag` over `src` into an output of 4 frames; the last frame.
+@export
+pub fn lag_in(src: Span[F32]) -> F32 {
+  var st = lag.init(8.0)
+  var out: [F32; 4] = [0.0; 4]
+  lag.process(inout st, src, inout out)
+  out[3]
+}
+
+/// Runs `lag` over `src` into the first `n` frames of an array of 6; the frame 3.
+@export
+pub fn lag_out(src: Span[F32], n: U32) -> F32 {
+  var st = lag.init(8.0)
+  var out: [F32; 6] = [0.0; 6]
+  lag.process(inout st, src, inout out.slice(0, n))
+  out[3]
+}
+
+/// Runs `mix` over the `Span`s `a` and `b` into an output of 4 frames; the last frame.
+@export
+pub fn mix_at(a: Span[F32], b: Span[F32]) -> F32 {
+  var st = mix.init(8.0)
+  var out: [F32; 4] = [0.0; 4]
+  mix.process(inout st, mix.In { a: a, b: b }, inout out)
+  out[3]
+}
+
+/// Runs `split` over `src` into `Out` of the first 4 frames of an array of 6 and the first `n` frames of another; the sum of the frame 3 of both.
+@export
+pub fn split_at(src: Span[F32], n: U32) -> F32 {
+  var st = split.init(8.0)
+  var l: [F32; 6] = [0.0; 6]
+  var r: [F32; 6] = [0.0; 6]
+  split.process(inout st, src, inout split.Out { l: l.slice(0, 4), r: r.slice(0, n) })
+  l[3] + r[3]
+}

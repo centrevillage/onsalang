@@ -91,7 +91,10 @@ pub(super) fn gen_process<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b
         g.stmts.push(stmt(span, StmtKind::If(bad, panic, Block::default())));
     }
     expr_stmt(&mut g.stmts, call(fns.ctl, Ty::Unit, span, vec![inout(s.clone()), borrow(params)]));
-    // Sample loop: read every input, tick, write every output.
+    // Sample loop: read every input, tick, write every output. Its indices
+    // are known in range (S-196): `i` is below the length every channel was
+    // compared to, a channel `c` below the `N` of its type.
+    let at = |base: &Expr, c: u32| index_as(base.clone(), u32_lit(span, c), Bounds::Known);
     let i = g.cx.temp("i", Ty::u32());
     let i_e = local_expr(&g.cx, i, span);
     let mut body = Vec::new();
@@ -101,11 +104,11 @@ pub(super) fn gen_process<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b
             Ty::Array(_, n) => {
                 let mut items = Vec::new();
                 for c in 0..*n {
-                    items.push(index(index(sp.clone(), u32_lit(span, c))?, i_e.clone())?);
+                    items.push(index_as(at(&sp, c)?, i_e.clone(), Bounds::Known)?);
                 }
                 Expr::new(ty.clone(), span, ExprKind::Array(items))
             }
-            _ => index(sp, i_e.clone())?,
+            _ => index_as(sp, i_e.clone(), Bounds::Known)?,
         };
         let l = g.cx.temp(name, ty.clone());
         body.push(stmt(span, StmtKind::Let(l, v)));
@@ -120,11 +123,11 @@ pub(super) fn gen_process<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b
         match planar {
             Some(n) => {
                 for c in 0..*n {
-                    let target = index(index(sp.clone(), u32_lit(span, c))?, i_e.clone())?;
-                    assign(&mut body, &target, index(val.clone(), u32_lit(span, c))?)?;
+                    let target = index_as(at(&sp, c)?, i_e.clone(), Bounds::Known)?;
+                    assign(&mut body, &target, at(&val, c)?)?;
                 }
             }
-            None => assign(&mut body, &index(sp, i_e.clone())?, val)?,
+            None => assign(&mut body, &index_as(sp, i_e.clone(), Bounds::Known)?, val)?,
         }
     }
     g.stmts.push(stmt(span, StmtKind::ForRange(i, u32_lit(span, 0), len, Block { stmts: body, value: None })));

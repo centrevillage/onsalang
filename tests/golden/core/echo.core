@@ -57,9 +57,9 @@ rt fn echo.echo.process(inout s: echo.echo.State, params: echo.echo.Params, inpu
   }
   echo.echo.ctl(inout s, params)
   for i in 0:U32..len {
-    let x@11: F32 = input[i]
+    let x@11: F32 = input[known i]
     let v: F32 = echo.echo.tick(inout s, x@11)
-    output[i] = v
+    output[known i] = v
   }
 }
 rt fn echo.echo.process_inplace(inout s: echo.echo.State, params: echo.echo.Params, inout output: Span[F32]) -> () {

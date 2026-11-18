@@ -52,9 +52,9 @@ rt fn resonator.resonator.process(inout s: resonator.resonator.State, params: re
   }
   resonator.resonator.ctl(inout s, params)
   for i in 0:U32..len {
-    let x@16: F32 = input[i]
+    let x@16: F32 = input[known i]
     let v: F32 = resonator.resonator.tick(inout s, x@16)
-    output[i] = v
+    output[known i] = v
   }
 }
 rt fn resonator.resonator.process_inplace(inout s: resonator.resonator.State, params: resonator.resonator.Params, inout output: Span[F32]) -> () {

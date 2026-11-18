@@ -501,8 +501,12 @@ fn a_hoisted_local_is_declared_at_the_head_and_its_let_assigns_it() {
     let arr = Ty::Array(Box::new(f32t.clone()), 4);
     let st = |kind: StmtKind| Stmt { span: sp(), kind };
     // g(c, y) -> [F32; 4] { let r = [y; 4]; if c { let t = y; r[0] = t }; r }
-    let first =
-        Place::Index(Box::new(Place::Local(LocalId(2))), Box::new(e(Ty::u32(), ExprKind::Lit(Lit::Int(0)))), sp());
+    let first = Place::Index(
+        Box::new(Place::Local(LocalId(2))),
+        Box::new(e(Ty::u32(), ExprKind::Lit(Lit::Int(0)))),
+        sp(),
+        Bounds::Checked,
+    );
     let arm = Block {
         stmts: vec![
             st(StmtKind::Let(LocalId(3), local(1, f32t.clone()))),
@@ -552,6 +556,7 @@ fn a_hoisted_local_is_declared_at_the_head_and_its_let_assigns_it() {
     let index = ExprKind::Index {
         base: Box::new(local(2, arr.clone())),
         index: Box::new(e(Ty::u32(), ExprKind::Lit(Lit::Int(0)))),
+        bounds: Bounds::Checked,
     };
     let mut f = g.clone();
     f.name = "m.f".into();

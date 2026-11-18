@@ -80,9 +80,9 @@ rt fn voice.resonator.process(inout s: voice.resonator.State, params: voice.reso
   }
   voice.resonator.ctl(inout s, params)
   for i in 0:U32..len {
-    let x@16: F32 = input[i]
+    let x@16: F32 = input[known i]
     let v: F32 = voice.resonator.tick(inout s, x@16)
-    output[i] = v
+    output[known i] = v
   }
 }
 rt fn voice.resonator.process_inplace(inout s: voice.resonator.State, params: voice.resonator.Params, inout output: Span[F32]) -> () {
@@ -134,7 +134,7 @@ rt fn voice.saw.process(inout s: voice.saw.State, params: voice.saw.Params, inou
   voice.saw.ctl(inout s, params)
   for i in 0:U32..len {
     let v: F32 = voice.saw.tick(inout s)
-    output[i] = v
+    output[known i] = v
   }
 }
 fn voice.saw.render(cfg: voice.saw.Config, params: voice.saw.Params, frames: U32, sample_rate: F32) -> voice.saw.Rendered sret {
@@ -178,7 +178,7 @@ rt fn voice.smooth.process(inout s: voice.smooth.State, params: voice.smooth.Par
   voice.smooth.ctl(inout s, params)
   for i in 0:U32..len {
     let v: F32 = voice.smooth.tick(inout s)
-    output[i] = v
+    output[known i] = v
   }
 }
 fn voice.smooth.render(cfg: voice.smooth.Config, params: voice.smooth.Params, frames: U32, sample_rate: F32) -> voice.smooth.Rendered sret {
@@ -235,7 +235,7 @@ rt fn voice.voice.process(inout s: voice.voice.State, params: voice.voice.Params
   voice.voice.ctl(inout s, params)
   for i in 0:U32..len {
     let v: F32 = voice.voice.tick(inout s)
-    output[i] = v
+    output[known i] = v
   }
 }
 fn voice.voice.render(cfg: voice.voice.Config, params: voice.voice.Params, frames: U32, sample_rate: F32) -> voice.voice.Rendered sret {
@@ -300,9 +300,9 @@ rt fn voice.echo.process(inout s: voice.echo.State, params: voice.echo.Params, i
   }
   voice.echo.ctl(inout s, params)
   for i in 0:U32..len {
-    let x@11: F32 = input[i]
+    let x@11: F32 = input[known i]
     let v: F32 = voice.echo.tick(inout s, x@11)
-    output[i] = v
+    output[known i] = v
   }
 }
 rt fn voice.echo.process_inplace(inout s: voice.echo.State, params: voice.echo.Params, inout output: Span[F32]) -> () {

@@ -99,8 +99,16 @@ fn a_float_an_element_and_two_bindings_never_fold() {
     assert!(matches!(value(&f).kind, ExprKind::Cmp { .. }), "a NaN changes it: {:?}", value(&f));
     let i32t = Ty::Int(IntKind::I32);
     let arr = Ty::Array(Box::new(i32t.clone()), 3);
-    let elem =
-        || e(i32t.clone(), ExprKind::Index { base: Box::new(local(0, &arr)), index: Box::new(local(1, &Ty::u32())) });
+    let elem = || {
+        e(
+            i32t.clone(),
+            ExprKind::Index {
+                base: Box::new(local(0, &arr)),
+                index: Box::new(local(1, &Ty::u32())),
+                bounds: Bounds::Checked,
+            },
+        )
+    };
     let f = folded(&[arr.clone(), Ty::u32()], Vec::new(), Vec::new(), cmp(CmpOp::Eq, elem(), elem()));
     assert!(matches!(value(&f).kind, ExprKind::Cmp { .. }), "the index is checked: {:?}", value(&f));
     let f =
@@ -231,12 +239,18 @@ fn an_assignment_of_a_binding_to_itself_becomes_a_read() {
     let i32t = Ty::Int(IntKind::I32);
     let arr = Ty::Array(Box::new(i32t.clone()), 2);
     let idx = || local(2, &Ty::u32());
-    let elem = e(i32t.clone(), ExprKind::Index { base: Box::new(local(1, &arr)), index: Box::new(idx()) });
+    let elem = e(
+        i32t.clone(),
+        ExprKind::Index { base: Box::new(local(1, &arr)), index: Box::new(idx()), bounds: Bounds::Checked },
+    );
     let stmts = vec![
         Stmt { span: sp(), kind: StmtKind::Assign(Place::Local(LocalId(0)), local(0, &i32t)) },
         Stmt {
             span: sp(),
-            kind: StmtKind::Assign(Place::Index(Box::new(Place::Local(LocalId(1))), Box::new(idx()), sp()), elem),
+            kind: StmtKind::Assign(
+                Place::Index(Box::new(Place::Local(LocalId(1))), Box::new(idx()), sp(), Bounds::Checked),
+                elem,
+            ),
         },
     ];
     let f = folded(&[i32t.clone(), arr, Ty::u32()], Vec::new(), stmts, int(IntKind::I32, 0));

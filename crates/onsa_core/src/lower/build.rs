@@ -73,13 +73,18 @@ pub(super) fn field_by_name(lw: &Lowerer, base: Expr, name: &str, span: Span) ->
     field(lw, base, idx as u32)
 }
 
+/// `base[idx]`, checked against the length of `base` (§18.1).
 pub(super) fn index(base: Expr, idx: Expr) -> R<Expr> {
+    index_as(base, idx, Bounds::Checked)
+}
+
+pub(super) fn index_as(base: Expr, idx: Expr, bounds: Bounds) -> R<Expr> {
     let ty = match &base.ty {
         Ty::Array(e, _) | Ty::Span(e) | Ty::Buf(e) => (**e).clone(),
         _ => return Err(internal(base.span, "index of a non-sequence")),
     };
     let span = base.span;
-    Ok(Expr::new(ty, span, ExprKind::Index { base: Box::new(base), index: Box::new(idx) }))
+    Ok(Expr::new(ty, span, ExprKind::Index { base: Box::new(base), index: Box::new(idx), bounds }))
 }
 
 /// Statements that evaluate `e` once, for an expression used more than once
@@ -93,13 +98,13 @@ pub(super) fn materialize(cx: &mut FnCx, e: Expr, stmts: &mut Vec<Stmt>, name: &
             ExprKind::Field { base, index } => {
                 ExprKind::Field { base: Box::new(materialize(cx, *base, stmts, name)), index }
             }
-            ExprKind::Index { base, index } => {
+            ExprKind::Index { base, index, bounds } => {
                 let base = Box::new(materialize(cx, *base, stmts, name));
                 let index = match has_effect(&index) {
                     false => index,
                     true => Box::new(materialize(cx, *index, stmts, "__index")),
                 };
-                ExprKind::Index { base, index }
+                ExprKind::Index { base, index, bounds }
             }
             kind => kind,
         };
@@ -125,7 +130,7 @@ fn has_effect(e: &Expr) -> bool {
         ExprKind::Binary { lhs, rhs, .. }
         | ExprKind::Cmp { lhs, rhs, .. }
         | ExprKind::Logic { lhs, rhs, .. }
-        | ExprKind::Index { base: lhs, index: rhs } => has_effect(lhs) || has_effect(rhs),
+        | ExprKind::Index { base: lhs, index: rhs, .. } => has_effect(lhs) || has_effect(rhs),
         ExprKind::Prim { prim, args } => {
             !prim.computes_only() || args.iter().any(|a| a.mode == Mode::Inout || has_effect(&a.expr))
         }

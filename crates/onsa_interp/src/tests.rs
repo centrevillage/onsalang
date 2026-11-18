@@ -367,7 +367,15 @@ fn recursion_under(level: Level, levels: usize) -> Module {
             Level::Add => bin(BinOp::Add, Overflow::Checked, int(IntKind::U32, 0), deep),
             Level::ArrayIndex => {
                 let arr = Expr::new(Ty::Array(Box::new(u32_()), 1), sp(), ExprKind::Array(vec![deep]));
-                Expr::new(u32_(), sp(), ExprKind::Index { base: Box::new(arr), index: Box::new(int(IntKind::U32, 0)) })
+                Expr::new(
+                    u32_(),
+                    sp(),
+                    ExprKind::Index {
+                        base: Box::new(arr),
+                        index: Box::new(int(IntKind::U32, 0)),
+                        bounds: Bounds::Checked,
+                    },
+                )
             }
             Level::TupleField => {
                 let t =
@@ -908,6 +916,7 @@ fn values_of_the_wrong_type_are_internal_errors() {
                             ExprKind::Array(vec![i32_(7)]),
                         )),
                         index: Box::new(i32_(0)),
+                        bounds: Bounds::Checked,
                     },
                 ),
             ),
@@ -971,6 +980,57 @@ fn an_internal_failure_is_not_a_panic() {
         let interp = Interp::new(&m);
         let message = internal_error_of(|| interp.call(FnId(0), Vec::new()));
         assert!(message.contains("before initialization") && !message.starts_with("internal:"), "{message}");
+    })
+}
+
+/// `[7][1]` with `bounds`, of the array literal or of the local `a` it is
+/// bound to first.
+fn index_out_of_range(bounds: Bounds, of_local: bool) -> Module {
+    let i32t = Ty::Int(IntKind::I32);
+    let arr_ty = Ty::Array(Box::new(i32t.clone()), 1);
+    let arr = Expr::new(arr_ty.clone(), sp(), ExprKind::Array(vec![int(IntKind::I32, 7)]));
+    let (stmts, base) = match of_local {
+        false => (Vec::new(), arr),
+        true => {
+            let let_ = Stmt { kind: StmtKind::Let(LocalId(0), arr), span: sp() };
+            (vec![let_], Expr::new(arr_ty.clone(), sp(), ExprKind::Local(LocalId(0))))
+        }
+    };
+    let index = Box::new(int(IntKind::U32, 1));
+    let read = Expr::new(i32t.clone(), sp(), ExprKind::Index { base: Box::new(base), index, bounds });
+    Module {
+        fns: vec![FnDef {
+            name: "f".into(),
+            params: Vec::new(),
+            ret: i32t,
+            sret: false,
+            rt: false,
+            locals: vec![Local { name: "a".into(), ty: arr_ty }],
+            body: Some(Block { stmts, value: Some(Box::new(read)) }),
+            span: sp(),
+            fp_relaxed: false,
+            test: None,
+            decl: None,
+            hoisted: Vec::new(),
+        }],
+        ..Default::default()
+    }
+}
+
+/// S-196: an index out of range is a panic of the program (§18.1), but one
+/// known in range (the sample loop of `process`) is an internal error: the
+/// length check before the loop let it through.
+#[test]
+fn an_index_known_in_range_out_of_range_is_an_internal_error() {
+    on_stack(|| {
+        for of_local in [false, true] {
+            let m = index_out_of_range(Bounds::Checked, of_local);
+            let p = Interp::new(&m).call(FnId(0), Vec::new()).map_err(panic_of).expect_err("a panic");
+            assert!(p.message.contains("index 1 out of range"), "{of_local}: {}", p.message);
+            let m = index_out_of_range(Bounds::Known, of_local);
+            let message = internal_error_of(|| Interp::new(&m).call(FnId(0), Vec::new()));
+            assert!(message.contains("index 1 out of range") && message.contains("known in range"), "{message}");
+        }
     })
 }
 

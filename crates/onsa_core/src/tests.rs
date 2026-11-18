@@ -566,9 +566,9 @@ fn process_reads_all_inputs_then_writes_all_outputs() {
     let len = pos(p, "let len: U32 = len(input");
     let check = pos(p, "if (len(output) != len) {\n    panic(\"span lengths differ\")");
     let ctl = pos(p, "t.resonator.ctl(inout s, params)");
-    let read = pos(p, "[i]\n");
+    let read = pos(p, "[known i]\n");
     let tick = pos(p, "t.resonator.tick(inout s, x");
-    let write = pos(p, "output[i] = v");
+    let write = pos(p, "output[known i] = v");
     assert!(len < check && check < ctl && ctl < read && read < tick && tick < write, "{p}");
 }
 
@@ -716,7 +716,7 @@ fn planar_and_struct_outputs() {
     let src = "pub struct Stereo {\n  l: F32,\n  r: F32,\n}\n\npub flow pan(x: F32 at sample, p: F32 at block) -> Stereo at sample {\n  Stereo { l: x * (1.0 - p), r: x * p }\n}\n\npub flow dup(x: [F32; 2] at sample) -> [F32; 2] at sample {\n  x\n}\n";
     let d = text(src);
     assert!(d.contains("inout output: t.pan.Out) -> () {"), "{d}");
-    assert!(d.contains("output.0[i] = v.0\n    output.1[i] = v.1"), "{d}");
+    assert!(d.contains("output.0[known i] = v.0\n    output.1[known i] = v.1"), "{d}");
     assert!(d.contains("input: [Span[F32]; 2], inout output: [Span[F32]; 2]) -> () {"), "{d}");
     // R-22: every channel of every span is compared with the first, before `ctl`.
     assert!(
@@ -727,9 +727,12 @@ fn planar_and_struct_outputs() {
         d.contains("if (len(output[1:U32]) != len) {\n    panic(\"span lengths differ\")\n  }\n  t.dup.ctl("),
         "{d}"
     );
-    assert!(d.contains("[0:U32][i], input"), "{d}");
-    assert!(d.contains("[1:U32][i]]\n"), "{d}");
-    assert!(d.contains("output[0:U32][i] = v[0:U32]\n    output[1:U32][i] = v[1:U32]"), "{d}");
+    assert!(d.contains("[known 0:U32][known i], input"), "{d}");
+    assert!(d.contains("[known 1:U32][known i]]\n"), "{d}");
+    assert!(
+        d.contains("output[known 0:U32][known i] = v[known 0:U32]\n    output[known 1:U32][known i] = v[known 1:U32]"),
+        "{d}"
+    );
     assert!(d.contains("t.pan.Rendered { l: l, r: r }"), "{d}");
 }
 
@@ -1024,7 +1027,7 @@ fn has_return_walks_a_deep_nesting_once() {
     let ret = || st(StmtKind::Return(Some(zero())));
     let in_index =
         Expr::new(int.clone(), sp, ExprKind::Block(Block { stmts: vec![ret()], value: Some(Box::new(zero())) }));
-    let place = Place::Index(Box::new(Place::Local(LocalId(0))), Box::new(in_index), sp);
+    let place = Place::Index(Box::new(Place::Local(LocalId(0))), Box::new(in_index), sp, Bounds::Checked);
     assert!(!crate::walk::has_return(&nested(st(StmtKind::Expr(zero())))));
     assert!(crate::walk::has_return(&nested(ret())));
     assert!(crate::walk::has_return(&nested(st(StmtKind::Assign(place, zero())))));

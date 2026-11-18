@@ -1,15 +1,15 @@
 //! The walk of the tree: statements and expressions.
 
 use onsa_core::{
-    Arg, BinOp, Block, CmpOp, Expr, ExprKind, FnId, IntKind, Lit, LocalId, LogicOp, Mode, MsgId, Overflow, PanicOrigin,
-    Place, Stmt, StmtKind, Ty, UnOp,
+    Arg, BinOp, Block, Bounds, CmpOp, Expr, ExprKind, FnId, IntKind, Lit, LocalId, LogicOp, Mode, MsgId, Overflow,
+    PanicOrigin, Place, Stmt, StmtKind, Ty, UnOp,
 };
 use onsa_diag::Span;
 
 use crate::numeric::{bool_of, int_kind_of, int_of};
 use crate::place::{ArgVal, Frame, Leaf, Loc};
 use crate::value::{ArrayData, SpanRef, Value, int_value, slot, zero};
-use crate::{Interp, R, Signal, internal, panic, panic_from};
+use crate::{Interp, R, Signal, internal, out_of_range, panic_from};
 
 impl<'m> Interp<'m> {
     // ------------------------------------------------------------ statements
@@ -164,7 +164,7 @@ impl<'m> Interp<'m> {
             ExprKind::Call { fn_, args } => self.eval_call(f, *fn_, args, e),
             ExprKind::Prim { prim, args } => self.prim(f, prim, args, &e.ty, span),
             ExprKind::Field { base, index } => self.eval_field(f, base, *index, e),
-            ExprKind::Index { base, index } => self.eval_index(f, base, index, e),
+            ExprKind::Index { base, index, bounds } => self.eval_index(f, base, index, *bounds, e),
             ExprKind::SpanOf(inner) => self.eval_span_of(f, inner, e),
             ExprKind::Struct { fields, .. } => self.eval_struct(f, fields),
             ExprKind::Variant { tag, fields, .. } => self.eval_variant(f, *tag, fields),
@@ -295,25 +295,25 @@ impl<'m> Interp<'m> {
     }
 
     #[inline(never)]
-    fn eval_index(&self, f: &mut Frame, base: &Expr, index: &Expr, at: &Expr) -> R<Value> {
+    fn eval_index(&self, f: &mut Frame, base: &Expr, index: &Expr, bounds: Bounds, at: &Expr) -> R<Value> {
         let span = at.span;
         if let Some(p) = base.as_place() {
             let i = self.eval_u32(f, index)?;
             let r = self.resolve_place(f, &p, span)?;
-            let r = self.project_index(r, i, span)?;
+            let r = self.project_index(r, i, bounds, span)?;
             return self.read(&r, span);
         }
         let v = self.eval(f, base)?;
         let i = self.eval_u32(f, index)?;
-        self.index_value(v, i, span)
+        self.index_value(v, i, bounds, span)
     }
 
     /// Element `i` of the sequence `v`, off the way down a recursion (R-05).
     #[inline(never)]
-    fn index_value(&self, v: Value, i: u32, span: Span) -> R<Value> {
+    fn index_value(&self, v: Value, i: u32, bounds: Bounds, span: Span) -> R<Value> {
         let s = self.seq_of_value(v, span)?;
         if i >= s.len {
-            return panic(span, format!("index {i} out of range for a sequence of length {}", s.len));
+            return out_of_range(bounds, span, format!("index {i} out of range for a sequence of length {}", s.len));
         }
         self.seq_get(&s, i, span)
     }

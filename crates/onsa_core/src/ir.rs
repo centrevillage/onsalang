@@ -288,14 +288,24 @@ pub enum Place {
     Field(Box<Place>, u32),
     /// `base[index]`, with the position of the whole element (`xs[i]`): where
     /// its index out of range panics (§18.1, R-188).
-    Index(Box<Place>, Box<Expr>, Span),
+    Index(Box<Place>, Box<Expr>, Span, Bounds),
+}
+
+/// Whether an index is checked against the length of its sequence (§18.1),
+/// or known in range: the inputs and outputs of the sample loop of
+/// `process`, whose lengths it compared before the loop (S-196), and the
+/// constant channels of a planar `[Span; N]` there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Bounds {
+    Checked,
+    Known,
 }
 
 impl Place {
     pub fn root(&self) -> LocalId {
         match self {
             Place::Local(l) => *l,
-            Place::Field(p, _) | Place::Index(p, _, _) => p.root(),
+            Place::Field(p, _) | Place::Index(p, ..) => p.root(),
         }
     }
 }
@@ -418,10 +428,11 @@ pub enum ExprKind {
         base: Box<Expr>,
         index: u32,
     },
-    /// Bounds-checked element of an array / `Span` / `Buf`; the index is `U32`.
+    /// Element of an array / `Span` / `Buf`; the index is `U32`.
     Index {
         base: Box<Expr>,
         index: Box<Expr>,
+        bounds: Bounds,
     },
     /// A `Span` over an array or `Buf` place.
     SpanOf(Box<Expr>),
@@ -477,7 +488,9 @@ impl Expr {
         match &self.kind {
             ExprKind::Local(l) => Some(Place::Local(*l)),
             ExprKind::Field { base, index } => Some(Place::Field(Box::new(base.as_place()?), *index)),
-            ExprKind::Index { base, index } => Some(Place::Index(Box::new(base.as_place()?), index.clone(), self.span)),
+            ExprKind::Index { base, index, bounds } => {
+                Some(Place::Index(Box::new(base.as_place()?), index.clone(), self.span, *bounds))
+            }
             _ => None,
         }
     }

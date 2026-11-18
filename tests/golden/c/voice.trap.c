@@ -256,7 +256,7 @@ ONSA_INLINE void voice__voice__process(voice__voice__State* s, const voice__voic
     float v;
     float onsa_t2 = voice__voice__tick(&(*s));
     v = onsa_t2;
-    output.ptr[onsa_idx(i, output.len, "voice.onsa", 71)] = v;
+    output.ptr[i] = v;
   }
 }
 
@@ -331,11 +331,11 @@ ONSA_INLINE void voice__echo__process(voice__echo__State* s, const voice__echo__
   voice__echo__ctl(&(*s), &(*params));
   uint32_t onsa_t1 = len;
   for (uint32_t i = UINT32_C(0); i < onsa_t1; i++) {
-    float x = input.ptr[onsa_idx(i, input.len, "voice.onsa", 90)];
+    float x = input.ptr[i];
     float v;
     float onsa_t2 = voice__echo__tick(&(*s), x);
     v = onsa_t2;
-    output.ptr[onsa_idx(i, output.len, "voice.onsa", 90)] = v;
+    output.ptr[i] = v;
   }
 }
 

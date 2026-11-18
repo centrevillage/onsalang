@@ -97,11 +97,11 @@ ONSA_INLINE void echo__echo__process(echo__echo__State* s, const echo__echo__Par
   echo__echo__ctl(&(*s), &(*params));
   uint32_t onsa_t1 = len;
   for (uint32_t i = UINT32_C(0); i < onsa_t1; i++) {
-    float x = input.ptr[onsa_idx(i, input.len, "echo.onsa", 30)];
+    float x = input.ptr[i];
     float v;
     float onsa_t2 = echo__echo__tick(&(*s), x);
     v = onsa_t2;
-    output.ptr[onsa_idx(i, output.len, "echo.onsa", 30)] = v;
+    output.ptr[i] = v;
   }
 }
 

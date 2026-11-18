@@ -1,12 +1,12 @@
 //! Places: locals, projections, and the sequences a primitive reads or
 //! writes.
 
-use onsa_core::{Arg, LocalId, Mode, Place};
+use onsa_core::{Arg, Bounds, LocalId, Mode, Place};
 use onsa_diag::Span;
 
 use crate::numeric::mismatch;
 use crate::value::{ArrayData, Proj, Slot, SpanRef, Value, slot};
-use crate::{Interp, R, internal, panic};
+use crate::{Interp, R, internal, out_of_range};
 
 /// A resolved memory location: a slot and the projections inside its value.
 #[derive(Debug, Clone)]
@@ -72,10 +72,10 @@ impl<'m> Interp<'m> {
             }
             // Each element has its own position (R-188): an inner `xs[i]` of
             // `xs[i][0]` that is out of range panics at `xs[i]`.
-            Place::Index(b, e, at) => {
+            Place::Index(b, e, at, bounds) => {
                 let i = self.eval_u32(f, e)?;
                 let r = self.resolve_place(f, b, span)?;
-                self.project_index(r, i, *at)
+                self.project_index(r, i, *bounds, *at)
             }
         }
     }
@@ -95,7 +95,7 @@ impl<'m> Interp<'m> {
     }
 
     /// Index into the sequence at `r`, following `Span` / `Buf` indirection.
-    pub(super) fn project_index(&self, r: PlaceRef, i: u32, span: Span) -> R<PlaceRef> {
+    pub(super) fn project_index(&self, r: PlaceRef, i: u32, bounds: Bounds, span: Span) -> R<PlaceRef> {
         enum Kind {
             Array(u32),
             Span(SpanRef),
@@ -111,7 +111,11 @@ impl<'m> Interp<'m> {
         match kind {
             Kind::Array(len) => {
                 if i >= len {
-                    return panic(span, format!("index {i} out of range for a sequence of length {len}"));
+                    return out_of_range(
+                        bounds,
+                        span,
+                        format!("index {i} out of range for a sequence of length {len}"),
+                    );
                 }
                 let mut r = r;
                 r.projs.push(Proj::Index(i));
@@ -119,7 +123,11 @@ impl<'m> Interp<'m> {
             }
             Kind::Span(s) => {
                 if i >= s.len {
-                    return panic(span, format!("index {i} out of range for a span of length {}", s.len));
+                    return out_of_range(
+                        bounds,
+                        span,
+                        format!("index {i} out of range for a span of length {}", s.len),
+                    );
                 }
                 let mut projs = s.projs.clone();
                 projs.push(Proj::Index(s.start + i));
@@ -128,7 +136,7 @@ impl<'m> Interp<'m> {
             Kind::Buf(b) => {
                 let len = buf_len(&b, span);
                 if i >= len {
-                    return panic(span, format!("index {i} out of range for a buffer of length {len}"));
+                    return out_of_range(bounds, span, format!("index {i} out of range for a buffer of length {len}"));
                 }
                 Ok(PlaceRef { root: b, projs: vec![Proj::Index(i)] })
             }

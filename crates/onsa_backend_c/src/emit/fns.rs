@@ -276,7 +276,7 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 let bt = self.place_ty(b)?;
                 field_ty(self.cx, &bt, *i)?
             }
-            Place::Index(b, _, _) => match self.place_ty(b)? {
+            Place::Index(b, ..) => match self.place_ty(b)? {
                 Ty::Array(e, _) | Ty::Span(e) | Ty::Buf(e) => *e,
                 _ => return Err(internal("index of a non-sequence place")),
             },
@@ -309,21 +309,24 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 let bs = self.place(b)?;
                 self.field_access(&bs, &bt, *i)
             }
-            Place::Index(b, i, _) => {
+            Place::Index(b, i, _, bounds) => {
                 let bt = self.place_ty(b)?;
                 let bs = self.place(b)?;
                 let idx = self.expr(i)?;
-                self.index_access(&bs, &bt, &idx, i.span)
+                self.index_access(&bs, &bt, &idx, i.span, *bounds)
             }
         }
     }
 
-    fn index_access(&mut self, base: &str, base_ty: &Ty, idx: &str, span: Span) -> R<String> {
+    /// `base[idx]`; checked by `onsa_idx` unless known in range (S-196).
+    fn index_access(&mut self, base: &str, base_ty: &Ty, idx: &str, span: Span, bounds: Bounds) -> R<String> {
         let loc = self.loc(span);
-        match base_ty {
-            Ty::Array(_, n) => Ok(format!("{base}.a[onsa_idx({idx}, UINT32_C({n}), {loc})]")),
-            Ty::Span(_) => Ok(format!("{base}.ptr[onsa_idx({idx}, {base}.len, {loc})]")),
-            Ty::Buf(_) => Err(unsupported(span, Feature::Buf, &[])),
+        match (base_ty, bounds) {
+            (Ty::Array(..), Bounds::Known) => Ok(format!("{base}.a[{idx}]")),
+            (Ty::Span(_), Bounds::Known) => Ok(format!("{base}.ptr[{idx}]")),
+            (Ty::Array(_, n), Bounds::Checked) => Ok(format!("{base}.a[onsa_idx({idx}, UINT32_C({n}), {loc})]")),
+            (Ty::Span(_), Bounds::Checked) => Ok(format!("{base}.ptr[onsa_idx({idx}, {base}.len, {loc})]")),
+            (Ty::Buf(_), _) => Err(unsupported(span, Feature::Buf, &[])),
             _ => Err(internal("index of a non-sequence")),
         }
     }
@@ -895,11 +898,11 @@ impl<'a, 'm> FnEmitter<'a, 'm> {
                 let bt = base.ty.clone();
                 self.field_access(&bs, &bt, *index)
             }
-            ExprKind::Index { base, index } => {
+            ExprKind::Index { base, index, bounds } => {
                 let bs = self.place_like(base)?;
                 let idx = self.materialize(index)?;
                 let bt = base.ty.clone();
-                self.index_access(&bs, &bt, &idx, e.span)
+                self.index_access(&bs, &bt, &idx, e.span, *bounds)
             }
             ExprKind::SpanOf(x) => {
                 let xs = self.place_like(x)?;

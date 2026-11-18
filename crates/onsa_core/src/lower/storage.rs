@@ -107,7 +107,7 @@ impl<'a> Storage<'a> {
         match p {
             Place::Local(_) => {}
             Place::Field(b, _) => self.place(b),
-            Place::Index(b, i, _) => {
+            Place::Index(b, i, ..) => {
                 self.place(b);
                 self.expr(i);
             }

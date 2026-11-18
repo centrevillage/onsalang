@@ -43,7 +43,7 @@ rt fn unison.saw.process(inout s: unison.saw.State, params: unison.saw.Params, i
   unison.saw.ctl(inout s, params)
   for i in 0:U32..len {
     let v: F32 = unison.saw.tick(inout s)
-    output[i] = v
+    output[known i] = v
   }
 }
 fn unison.saw.render(cfg: unison.saw.Config, params: unison.saw.Params, frames: U32, sample_rate: F32) -> unison.saw.Rendered sret {
@@ -97,7 +97,7 @@ rt fn unison.unison.process(inout s: unison.unison.State, params: unison.unison.
   unison.unison.ctl(inout s, params)
   for i@8 in 0:U32..len {
     let v: F32 = unison.unison.tick(inout s)
-    output[i@8] = v
+    output[known i@8] = v
   }
 }
 fn unison.unison.render(cfg: unison.unison.Config, params: unison.unison.Params, frames: U32, sample_rate: F32) -> unison.unison.Rendered sret {

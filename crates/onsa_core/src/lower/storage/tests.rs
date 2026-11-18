@@ -202,8 +202,12 @@ fn the_forms_of_the_tails_by_hand_hoist_the_binding() {
     let m = module(&[("t", arr()), ("p", planar.clone())], block(vec![use_(tail)], None));
     assert_eq!(hoisted_by_hand(m), ["t"]);
     // let p = [span(y), span(y)]; if c { let t = [1.0; 4]; p[0] = span(t) }
-    let first =
-        Place::Index(Box::new(Place::Local(LocalId(4))), Box::new(x(Ty::u32(), ExprKind::Lit(Lit::Int(0)))), sp());
+    let first = Place::Index(
+        Box::new(Place::Local(LocalId(4))),
+        Box::new(x(Ty::u32(), ExprKind::Lit(Lit::Int(0)))),
+        sp(),
+        Bounds::Checked,
+    );
     let body = block(
         vec![
             use_(x(planar.clone(), ExprKind::Array(vec![span_of(1), span_of(1)]))),

@@ -292,7 +292,10 @@ fn lower_from_fn(lw: &mut Lowerer, cx: &mut FnCx, args: &[ast::Arg], ty: Ty, spa
     };
     body.push(stmt(
         span,
-        StmtKind::Assign(Place::Index(Box::new(Place::Local(arr)), Box::new(local_expr(cx, i, span)), span), value),
+        StmtKind::Assign(
+            Place::Index(Box::new(Place::Local(arr)), Box::new(local_expr(cx, i, span)), span, Bounds::Checked),
+            value,
+        ),
     ));
     let stmts = vec![
         stmt(span, StmtKind::Let(arr, Expr::new(ty.clone(), span, ExprKind::Zeroed))),

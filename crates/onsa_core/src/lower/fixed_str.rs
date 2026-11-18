@@ -67,7 +67,7 @@ pub(super) fn value(lw: &Lowerer, cx: &mut FnCx, text: &StrLit, id: TypeId, span
         let tmp = cx.temp("__fixed_str", bytes.clone());
         let mut stmts = vec![stmt(span, StmtKind::Let(tmp, zeros))];
         for (i, b) in (0..).zip(text.bytes()) {
-            let place = Place::Index(Box::new(Place::Local(tmp)), Box::new(u32_lit(span, i)), span);
+            let place = Place::Index(Box::new(Place::Local(tmp)), Box::new(u32_lit(span, i)), span, Bounds::Checked);
             stmts.push(stmt(span, StmtKind::Assign(place, byte(b))));
         }
         let value = Some(Box::new(local_expr(cx, tmp, span)));

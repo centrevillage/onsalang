@@ -322,6 +322,16 @@ impl<'a> Dumper<'a> {
         }
     }
 
+    /// `[i]`, or `[known i]` for an index known in range (S-196).
+    fn index(&mut self, i: &Expr, bounds: Bounds) {
+        self.out.push_str(match bounds {
+            Bounds::Checked => "[",
+            Bounds::Known => "[known ",
+        });
+        self.expr(i);
+        self.out.push(']');
+    }
+
     fn place(&mut self, p: &Place) {
         match p {
             Place::Local(l) => self.local(*l),
@@ -329,11 +339,9 @@ impl<'a> Dumper<'a> {
                 self.place(b);
                 let _ = write!(self.out, ".{i}");
             }
-            Place::Index(b, i, _) => {
+            Place::Index(b, i, _, bounds) => {
                 self.place(b);
-                self.out.push('[');
-                self.expr(i);
-                self.out.push(']');
+                self.index(i, *bounds);
             }
         }
     }
@@ -478,11 +486,9 @@ impl<'a> Dumper<'a> {
                 self.expr(base);
                 let _ = write!(self.out, ".{index}");
             }
-            ExprKind::Index { base, index } => {
+            ExprKind::Index { base, index, bounds } => {
                 self.expr(base);
-                self.out.push('[');
-                self.expr(index);
-                self.out.push(']');
+                self.index(index, *bounds);
             }
             ExprKind::SpanOf(x) => {
                 self.out.push_str("span(");

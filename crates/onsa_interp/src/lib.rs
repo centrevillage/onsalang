@@ -32,7 +32,7 @@ pub mod value;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use onsa_core::{ConstId, FnId, Module, PanicOrigin, Ty, TypeDefKind};
+use onsa_core::{Bounds, ConstId, FnId, Module, PanicOrigin, Ty, TypeDefKind};
 use onsa_diag::{Diagnostic, Span};
 
 use calls::ConstState;
@@ -129,6 +129,16 @@ type R<T> = Result<T, Signal>;
 
 fn panic<T>(span: Span, msg: impl Into<String>) -> R<T> {
     panic_from(PanicOrigin::Panic, span, msg)
+}
+
+/// An index out of range: a panic of the program (§18.1), or an internal
+/// error at one known in range (S-196: the length check of `process` let it
+/// through).
+fn out_of_range<T>(bounds: Bounds, span: Span, msg: String) -> R<T> {
+    match bounds {
+        Bounds::Checked => panic(span, msg),
+        Bounds::Known => internal(span, format!("{msg}, at an index known in range (S-196)")),
+    }
 }
 
 fn panic_from<T>(origin: PanicOrigin, span: Span, msg: impl Into<String>) -> R<T> {

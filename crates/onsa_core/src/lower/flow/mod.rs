@@ -70,8 +70,8 @@ use onsa_syntax::ast::ExprId;
 
 use super::body::{FnCx, bind_irrefutable, lower_expr, of_type, span_of};
 use super::build::{
-    assign, borrow, call, checked_binary, cmp, expr_stmt, field, float_lit, index, inout, lit, local_expr, materialize,
-    stmt, u32_lit,
+    assign, borrow, call, checked_binary, cmp, expr_stmt, field, float_lit, index, index_as, inout, lit, local_expr,
+    materialize, stmt, u32_lit,
 };
 use super::{Lowerer, R, core_mode, internal, unsupported};
 use crate::ir::*;

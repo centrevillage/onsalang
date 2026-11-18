@@ -111,7 +111,7 @@ impl Folder<'_> {
         match p {
             Place::Local(_) => {}
             Place::Field(b, _) => self.place(b),
-            Place::Index(b, i, _) => {
+            Place::Index(b, i, ..) => {
                 self.place(b);
                 self.expr(i);
             }
@@ -132,7 +132,7 @@ impl Folder<'_> {
                 }
             }
             ExprKind::Field { base, .. } | ExprKind::Payload { base, .. } => self.expr(base),
-            ExprKind::Index { base, index } => {
+            ExprKind::Index { base, index, .. } => {
                 self.expr(base);
                 self.expr(index);
             }

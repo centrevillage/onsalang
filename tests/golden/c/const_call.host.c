@@ -64,11 +64,11 @@ ONSA_INLINE void const_call__scaled__process(const_call__scaled__State* s, const
   const_call__scaled__ctl(&(*s), &(*params));
   uint32_t onsa_t1 = len;
   for (uint32_t i = UINT32_C(0); i < onsa_t1; i++) {
-    float x = input.ptr[onsa_idx(i, input.len, "const_call.onsa", 29)];
+    float x = input.ptr[i];
     float v;
     float onsa_t2 = const_call__scaled__tick(&(*s), x);
     v = onsa_t2;
-    output.ptr[onsa_idx(i, output.len, "const_call.onsa", 29)] = v;
+    output.ptr[i] = v;
   }
 }
 
