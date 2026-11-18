@@ -247,3 +247,76 @@ fn the_clock_of_a_loop() {
     assert_eq!(loop_clock(Some(S)), S);
     assert_eq!(loop_clock(Some(Clock::Error)), Clock::Error);
 }
+
+/// The clocks of the grid (no event, S-1095): the parameter kinds,
+/// `sample_tick()`, a clock in error and the ticks of the ratios −3 to 3.
+fn grid() -> Vec<Clock> {
+    let mut v = vec![Clock::Const, Clock::Init, Clock::Block, Clock::Ambient, Clock::Error];
+    v.extend((-3..=3).map(tick));
+    v
+}
+
+/// Two results of a join that agree: the same clock, or both a clash.
+fn agree(a: Result<Option<Clock>, Clash>, b: Result<Option<Clock>, Clash>) -> bool {
+    match (a, b) {
+        (Err(_), Err(_)) => true,
+        (a, b) => a == b,
+    }
+}
+
+#[test]
+fn a_join_over_the_grid_is_symmetric_and_has_bottom_as_its_unit() {
+    let cs: Vec<Option<Clock>> = std::iter::once(None).chain(grid().into_iter().map(Some)).collect();
+    assert_eq!(join(&[]), Ok(None));
+    for &a in &cs {
+        assert_eq!(join(&[a]), Ok(a), "{a:?}");
+        for &b in &cs {
+            assert!(agree(join(&[a, b]), join(&[b, a])), "{a:?} {b:?}");
+            for &c in &cs {
+                let flat = join(&[a, b, c]);
+                for p in [[a, c, b], [b, a, c], [b, c, a], [c, a, b], [c, b, a]] {
+                    assert!(agree(flat, join(&p)), "{p:?}");
+                }
+                // A clock in error hides the clash of the others (the table):
+                // past it, the join of two and then the third is the same.
+                if [a, b, c].contains(&Some(Clock::Error)) {
+                    continue;
+                }
+                let nested = join(&[a, b]).and_then(|ab| join(&[ab, c]));
+                assert!(agree(flat, nested), "{a:?} {b:?} {c:?}");
+            }
+        }
+    }
+}
+
+/// The comparisons over the grid give a value or an internal error, and no
+/// other panic.
+#[test]
+fn out_of_the_table_is_an_internal_error_and_nothing_else() {
+    fn no_other_panic<T>(f: impl FnOnce() -> T + std::panic::UnwindSafe) {
+        if let Err(p) = std::panic::catch_unwind(f) {
+            assert!(p.downcast_ref::<InternalBug>().is_some(), "a panic that is no internal error");
+        }
+    }
+    for a in grid() {
+        for b in grid() {
+            no_other_panic(|| readable_at(a, b));
+            no_other_panic(|| promote(a, b));
+        }
+        for k in [0, 1, -2] {
+            no_other_panic(|| rebase(a, ClockFrame { ratio: Ratio(k) }));
+        }
+    }
+    assert!(is_internal_error(|| readable_at(Clock::Init, Clock::Ambient)));
+    assert!(is_internal_error(|| promote(Clock::Init, Clock::Const)));
+}
+
+/// A clock in error does not hide an event clock, whose rows are W7-11's.
+#[test]
+fn an_event_clock_with_a_clock_in_error_is_an_internal_error() {
+    let ev = Clock::Event(crate::clock::EventSrc(0));
+    assert!(is_internal_error(move || join(&[Some(ev), Some(Clock::Error)])));
+    assert!(is_internal_error(move || join(&[Some(Clock::Error), Some(ev)])));
+    assert!(is_internal_error(move || readable_at(Clock::Error, ev)));
+    assert!(is_internal_error(move || promote(ev, Clock::Error)));
+}

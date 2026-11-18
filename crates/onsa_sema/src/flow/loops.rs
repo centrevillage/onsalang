@@ -1,9 +1,6 @@
 //! The loops of the `let`s of a flow body (§11.3 "読み方", W7-02 U2a): the
 //! strongly connected components of the graph of their reads, which the walk
-//! of the clocks solves one by one (W7-02 U2b). It knows no clock.
-//!
-//! Nothing calls it until the walk of W7-02 U2b-1, which removes this allow.
-#![allow(dead_code)]
+//! of the clocks solves one by one (`flow::clocks`). It knows no clock.
 
 /// A strongly connected component of the `let`s.
 #[derive(Debug, Clone, PartialEq, Eq)]

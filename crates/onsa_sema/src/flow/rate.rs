@@ -74,6 +74,10 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
     info.sample_rate_at = r.sample_rate_at.map(FlowRate::read_stage);
     let stages = |rs: BTreeSet<FlowRate>| rs.into_iter().map(FlowRate::read_stage).collect();
     info.read_at = r.read_at.into_iter().map(|(l, rs)| (l, stages(rs))).collect();
+    // The walk of the clocks that replaces this pass, against it (W7-02 U2b-1).
+    if cfg!(debug_assertions) {
+        super::clocks::cross_check(a, &module.parsed.ast, id, &body, &fcx, &info);
+    }
     info.body = body;
     if let Some(d) = diag {
         a.diagnostics.push(d);

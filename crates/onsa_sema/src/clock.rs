@@ -10,11 +10,12 @@
 //!
 //! The comparisons of clocks ([`join`], [`readable_at`], [`promote`],
 //! [`holds_state`], [`delay_out`], [`rebase`], [`loop_clock`], W7-02 U2a)
-//! are the one table of the rules (D-15). Nothing calls them yet: the rate
-//! pass keeps its own order (`flow::FlowRate`) until the walk of W7-02 U2b.
-//! Each passes a clock in error with no clash and gives a clock in error.
-//! The rows of an event clock are W7-11's (S-1095, S-1096): an event clock
-//! where its row is not written is an internal error.
+//! are the one table of the rules (D-15). The walk of the clocks
+//! (`flow::clocks`) reads them; the rate pass keeps its own order
+//! (`flow::FlowRate`) until W7-02 U2b-2. Each passes a clock in error with
+//! no clash and gives a clock in error. The rows of an event clock are
+//! W7-11's (S-1095, S-1096): an event clock where its row is not written is
+//! an internal error, with a clock in error too.
 
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast;
@@ -103,6 +104,15 @@ pub enum Clock {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Ratio(pub i32);
 
+impl Ratio {
+    /// Faster than the `sample` of the body: the `sample * N` of the caller
+    /// (§11.9), which a join, `at` and a delay take apart from the other
+    /// ticks. The one test of it (D-15).
+    pub fn faster_than_body(self) -> bool {
+        self.0 > 0
+    }
+}
+
 /// The source of an event clock: a provisional form (W7-11 decides it).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EventSrc(pub u32);
@@ -174,8 +184,10 @@ pub struct ClockFrame {
 }
 
 /// Two operands whose clocks do not meet (E0815; a loop of W7-09 too): each
-/// by its index in the operands of the comparison and its clock, the lower
-/// index first. The caller puts the places (`ExprId`) on them.
+/// by its index in the operands of the comparison and its clock. `first` is
+/// the operand whose clock the scan held when `second` met it (in a [`join`],
+/// the one the result so far came from, not always the lowest index), so
+/// the lower index is first. The caller puts the places (`ExprId`) on them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Clash {
     pub first: (usize, Clock),
@@ -209,11 +221,11 @@ fn param_rank(c: Clock) -> u8 {
 /// indices of `ops`. Linear in the operands.
 pub fn join(ops: &[Option<Clock>]) -> Result<Option<Clock>, Clash> {
     let given = || ops.iter().enumerate().filter_map(|(i, c)| c.map(|c| (i, c)));
-    if given().any(|(_, c)| c == Clock::Error) {
-        return Ok(Some(Clock::Error));
-    }
     if given().any(|(_, c)| matches!(c, Clock::Event(_))) {
         event_bug("a join");
+    }
+    if given().any(|(_, c)| c == Clock::Error) {
+        return Ok(Some(Clock::Error));
     }
     let mut out: Option<(usize, Clock)> = None;
     for (i, c) in given() {
@@ -222,7 +234,7 @@ pub fn join(ops: &[Option<Clock>]) -> Result<Option<Clock>, Clash> {
             continue;
         };
         out = Some(match (acc.1, c) {
-            (Clock::Tick(Ratio(k)), _) | (_, Clock::Tick(Ratio(k))) if k > 0 => return Err(clash(acc, (i, c))),
+            (Clock::Tick(k), _) | (_, Clock::Tick(k)) if k.faster_than_body() => return Err(clash(acc, (i, c))),
             (Clock::Tick(a), Clock::Tick(b)) if a != b => return Err(clash(acc, (i, c))),
             (Clock::Tick(_), _) | (Clock::Ambient, Clock::Ambient) => acc,
             (_, Clock::Tick(_)) | (_, Clock::Ambient) => (i, c),
@@ -240,8 +252,8 @@ pub fn join(ops: &[Option<Clock>]) -> Result<Option<Clock>, Clash> {
 /// a tick place (S-567 K6). The clash is the value (0) and the place (1).
 pub fn readable_at(value: Clock, place: Clock) -> Result<(), Clash> {
     let ok = match (value, place) {
-        (Clock::Error, _) | (_, Clock::Error) => true,
         (Clock::Event(_), _) | (_, Clock::Event(_)) => event_bug("a read"),
+        (Clock::Error, _) | (_, Clock::Error) => true,
         (_, Clock::Ambient) => onsa_diag::internal::bug(None, "a place at the clock of `sample_tick()`"),
         (Clock::Tick(a), Clock::Tick(b)) => a == b,
         (_, Clock::Tick(_)) => true,
@@ -256,10 +268,10 @@ pub fn readable_at(value: Clock, place: Clock) -> Result<(), Clash> {
 /// tick only (S-567 K6). The clash is the value (0) and the clock `k` (1).
 pub fn promote(value: Clock, to: Clock) -> Result<Clock, Clash> {
     let ok = match (value, to) {
-        (Clock::Error, _) | (_, Clock::Error) => return Ok(Clock::Error),
         (Clock::Event(_), _) | (_, Clock::Event(_)) => event_bug("`at`"),
+        (Clock::Error, _) | (_, Clock::Error) => return Ok(Clock::Error),
         (_, Clock::Const | Clock::Ambient) => onsa_diag::internal::bug(None, format!("`at` to {to:?}, no name")),
-        (_, Clock::Tick(Ratio(j))) if j > 0 => false,
+        (_, Clock::Tick(j)) if j.faster_than_body() => false,
         (Clock::Tick(Ratio(k)), Clock::Tick(Ratio(j))) => k <= j,
         (_, Clock::Tick(_)) => true,
         (Clock::Tick(_) | Clock::Ambient, _) => false,
@@ -274,7 +286,7 @@ pub fn promote(value: Clock, to: Clock) -> Result<Clock, Clash> {
 /// the caller. A clock in error holds (no second diagnostic).
 pub fn holds_state(c: Clock) -> bool {
     match c {
-        Clock::Tick(Ratio(k)) => k <= 0,
+        Clock::Tick(k) => !k.faster_than_body(),
         Clock::Ambient | Clock::Error => true,
         Clock::Const | Clock::Init | Clock::Block => false,
         Clock::Event(_) => event_bug("the state"),
