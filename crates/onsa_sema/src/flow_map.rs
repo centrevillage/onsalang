@@ -10,8 +10,9 @@
 //!
 //! What the representation cannot hold is E0200 here, never read in another
 //! meaning (plan §8.2): a computed expression made faster with `at`, `if~` /
-//! `match~`, the omitted `init` of a value type that is no number, a call of
-//! a function that is not `rt` above `init` (R-17); a `^` inside a `par`
+//! `match~`, a call of a function that is not `rt` above `init` (R-17); the
+//! omitted `init` of a value type that is no number is the nodes'
+//! (`flow/nodes.rs`, W7-07), and a `^` inside a `par`
 //! (R-03) is the names stage's (`names/body/flow_order.rs`). So are the
 //! forms that the representation reads wrongly until W7 (K-08): a delay inside the first argument of a delay (R-13, W7-07), a
 //! stateful node in a branch, a guard, the right side of `&&` / `||` or an
@@ -43,11 +44,10 @@ use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Span, Stage};
 use onsa_syntax::ast::{BinOp, ExprId, ExprKind};
 
-use super::{FlowRate, InitArg, Rater};
+use super::{FlowRate, Rater};
 use crate::body::{Checker, LocalId, R, Target};
-use crate::consteval::ConstValue;
 use crate::names::body::PathRes;
-use crate::ty::{Ty, TyId};
+use crate::ty::TyId;
 
 impl Checker<'_> {
     /// `e at k` in a flow body (§11.3): the type of `e`; the clock is the
@@ -131,20 +131,6 @@ impl Rater<'_> {
             x = *i;
         }
         matches!(self.expr(x).kind, ExprKind::Path(_) | ExprKind::Lit(_))
-    }
-
-    /// The omitted `init` of a delay (§11.4, S-29): `T.default()`, which this
-    /// representation holds for a number (`0`, `+0.0`) only (K-02). A value
-    /// of the error type is not known, so no diagnostic (§18.1, R-271).
-    pub(super) fn default_init(&mut self, ty: TyId, span: Span) -> Result<InitArg, super::RStop> {
-        match self.a.types.get(ty) {
-            Ty::Int(_) | Ty::Error => Ok(InitArg::Const(ConstValue::Int(0))),
-            Ty::Float(_) => Ok(InitArg::Const(ConstValue::Float(0.0))),
-            _ => {
-                let shown = self.display(ty);
-                Err(self.unsupported(span, Feature::DefaultInit, &[&shown]))
-            }
-        }
     }
 
     /// `if~` / `match~` (§11.5): E0200 at the `~` (W7-06).

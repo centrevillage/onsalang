@@ -53,8 +53,8 @@
 //! `if~` / `match~`) is read into these tables by [`map`] (W3-10, K-02).
 //!
 //! The parts are in a module each: `check` (the flow mode of the checker),
-//! `consts` (the constant expressions), `rate` (the rate pass) and `reads`
-//! (the state marking). The tables are here.
+//! `consts` (the constant expressions), `nodes` (the building of the nodes),
+//! `rate` (the rate pass) and `reads` (the state marking). The tables are here.
 
 use std::collections::BTreeSet;
 
@@ -76,6 +76,7 @@ pub(crate) mod map;
 use crate::flow_names::{Delay, SAMPLE_RATE};
 mod check;
 mod consts;
+mod nodes;
 mod rate;
 mod reads;
 
@@ -162,7 +163,7 @@ impl<C> FlowLet<C> {
 }
 
 /// The `init` argument of `prev~` / `delay~` / `vdelay~` (§11.4), or the
-/// value of an omitted one (`map`).
+/// value of an omitted one (`nodes::default_init`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum InitArg {
     /// A compile-time constant: no storage needed.
@@ -266,7 +267,7 @@ struct NodeCall {
     kind: NodeKind,
     args: Vec<ExprId>,
     /// The `init` of a delay; `None` with no `init_expr` when it is omitted
-    /// (its value is the rate pass's, `map`).
+    /// (its value is `nodes::default_init`).
     init: Option<InitArg>,
     init_expr: Option<ExprId>,
     ty: TyId,

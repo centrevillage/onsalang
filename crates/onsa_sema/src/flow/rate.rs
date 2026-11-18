@@ -1,6 +1,7 @@
 //! The rate pass (§11.3): after type checking, the rate of every
 //! expression, the flow rules and the stateful nodes.
 
+use super::nodes::NodeBuilder;
 use super::*;
 
 // ---------------------------------------------------------------- rate pass
@@ -33,22 +34,14 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
         lets: Vec::new(),
         diag: None,
         inout_call: None,
-        node_lists: Vec::new(),
-        node_of_expr: HashMap::default(),
-        counters: HashMap::default(),
+        nodes: NodeBuilder::new(&fcx.pending),
         sample_rate_at: None,
         read_at: HashMap::default(),
-        let_names: HashMap::default(),
         call_of_expr: HashMap::default(),
         branch: 0,
     };
     for (i, c) in fcx.calls.iter().enumerate() {
         r.call_of_expr.insert(c.expr, i);
-    }
-    for p in &fcx.pending {
-        if let Some(n) = &p.name {
-            r.let_names.insert(p.init, n.clone());
-        }
     }
     // Fixpoint on the `let` rates: a look-back (`prev~(^y)` before `let y`)
     // reads a rate that is only known after its `let` is rated. Rates only go
@@ -77,8 +70,7 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
     let locals = r.local_rates.into_iter().map(|(l, r)| (l, r.to_clock())).collect();
     info.clocks = ClockInfo { exprs, locals };
     info.lets = r.lets.into_iter().map(|l| l.map_clock(FlowRate::to_clock)).collect();
-    info.nodes = r.node_lists.pop().unwrap_or_default();
-    info.node_of_expr = r.node_of_expr;
+    (info.nodes, info.node_of_expr) = r.nodes.finish();
     info.sample_rate_at = r.sample_rate_at.map(FlowRate::read_stage);
     let stages = |rs: BTreeSet<FlowRate>| rs.into_iter().map(FlowRate::read_stage).collect();
     info.read_at = r.read_at.into_iter().map(|(l, rs)| (l, stages(rs))).collect();
@@ -110,13 +102,10 @@ pub(super) struct Rater<'a> {
     /// when the flow checks find no error: the modes stage, which reads no
     /// flow body, would come after them (§18.1).
     pub(super) inout_call: Option<Diagnostic>,
-    pub(super) node_lists: Vec<Vec<Node>>,
-    pub(super) node_of_expr: HashMap<ExprId, usize>,
-    pub(super) counters: HashMap<String, u32>,
+    pub(super) nodes: NodeBuilder,
     pub(super) sample_rate_at: Option<FlowRate>,
     /// The rates each local is read at (the state marking).
     pub(super) read_at: HashMap<LocalId, BTreeSet<FlowRate>>,
-    pub(super) let_names: HashMap<ExprId, String>,
     pub(super) call_of_expr: HashMap<ExprId, usize>,
     /// Nonzero inside a branch, a guard or the right side of `&&` / `||` (K-08).
     pub(super) branch: u32,
@@ -151,9 +140,7 @@ impl<'a> Rater<'a> {
         self.rates.clear();
         self.local_rates.clear();
         self.lets.clear();
-        self.node_lists = vec![Vec::new()];
-        self.node_of_expr.clear();
-        self.counters.clear();
+        self.nodes.reset();
         self.sample_rate_at = None;
         self.branch = 0;
         for &(l, r) in &self.fcx.inputs {
@@ -409,27 +396,6 @@ impl<'a> Rater<'a> {
         }
     }
 
-    fn next_name(&mut self, kind: &str) -> String {
-        let n = self.counters.entry(kind.to_string()).or_insert(0);
-        let name = format!("{kind}_{n}");
-        *n += 1;
-        name
-    }
-
-    fn push_node(&mut self, node: Node) {
-        let list = self.node_lists.last_mut().expect("node list");
-        let idx = list.len();
-        self.node_of_expr.insert(node.expr(), idx);
-        list.push(node);
-    }
-
-    fn node_name(&mut self, e: ExprId, kind: &str) -> String {
-        match self.let_names.get(&e) {
-            Some(n) => n.clone(),
-            None => self.next_name(kind),
-        }
-    }
-
     /// The delays and instance calls (§11.4, §11.5, S-04, S-06).
     fn rate_node(&mut self, e: ExprId, i: usize) -> RR<FlowRate> {
         let call = self.fcx.calls[i].clone();
@@ -456,13 +422,8 @@ impl<'a> Rater<'a> {
                         ));
                     }
                 }
-                if self.final_pass {
-                    let name = self.node_name(e, &callee_name);
-                    self.push_node(Node::Instance { name, expr: e, callee, args: call.args.clone(), span });
-                }
-                Ok(FlowRate::Sig)
             }
-            NodeKind::Delay(delay, len) => {
+            NodeKind::Delay(delay, _) => {
                 let what = delay.name();
                 let arg = call.args[0];
                 let ra = self.rate(arg)?;
@@ -491,9 +452,8 @@ impl<'a> Rater<'a> {
                     }
                     return Err(self.fail(d));
                 }
-                let d_e = (delay == Delay::Variable).then(|| call.args[1]);
-                if let Some(d) = d_e {
-                    self.rate(d)?;
+                if delay == Delay::Variable {
+                    self.rate(call.args[1])?;
                 }
                 if let Some(init_e) = call.init_expr {
                     let ri = self.rate(init_e)?;
@@ -510,25 +470,16 @@ impl<'a> Rater<'a> {
                         ));
                     }
                 }
-                if self.final_pass {
-                    let ty = self.body.expr_types.get(&e).copied().unwrap_or(call.ty);
-                    let init = match (&call.init, call.init_expr) {
-                        (Some(init), _) => init.clone(),
-                        (None, Some(init_e)) => InitArg::Init(init_e),
-                        (None, None) => self.default_init(ty, span)?,
-                    };
-                    let name = self.node_name(e, what);
-                    let node = match (delay, d_e) {
-                        (Delay::Prev, _) => Node::Prev { name, expr: e, arg, init, ty },
-                        (Delay::Fixed, _) => Node::Delay { name, expr: e, arg, n: len, init, ty },
-                        (Delay::Variable, Some(d)) => Node::Vdelay { name, expr: e, arg, d, max: len, init, ty },
-                        (Delay::Variable, None) => onsa_diag::internal::bug(Some(span), "a `vdelay~` without its `d`"),
-                    };
-                    self.push_node(node);
-                }
-                Ok(FlowRate::Sig)
             }
         }
+        // The node, after the checks of its clocks (`NodeBuilder`).
+        if self.final_pass
+            && let Err(d) = self.nodes.node(self.a, self.body, e, &call, span)
+        {
+            let found = self.src(span);
+            return Err(self.fail(d.with_found(found)));
+        }
+        Ok(FlowRate::Sig)
     }
 
     /// `par~ i in a..<b { e }` (§11.5): nodes of the body are nested in the `Par` node.
@@ -536,13 +487,12 @@ impl<'a> Rater<'a> {
         self.stateful_here(self.expr(e).span)?;
         let (var, from, to) = self.fcx.pars[&e];
         self.local_rates.insert(var, FlowRate::Init);
-        self.node_lists.push(Vec::new());
+        self.nodes.enter_par();
         let r = self.rate(body);
-        let nodes = self.node_lists.pop().unwrap_or_default();
+        let nodes = self.nodes.leave_par();
         let r = r?;
         if self.final_pass {
-            let name = self.node_name(e, "par");
-            self.push_node(Node::Par { name, expr: e, var, from, to, body, nodes });
+            self.nodes.par(e, var, from, to, body, nodes);
         }
         Ok(r.max(FlowRate::Init))
     }
