@@ -46,8 +46,10 @@ subgraph cluster_saws {
   "saws.saw_0" [label="saw_0 = saw~: F32 at sample" style=rounded]
 }
 "f0" -> "saws.saw_0"; "detune" -> "saws.saw_0"; "saws.i" -> "saws.saw_0"
-"saws.saw_0" -> "saws"; "saws" -> "out"
+"saws.saw_0" -> "saws"; "saws" -> "_out"
 ```
+
+出力の頂点の名前は `_out` で、利用者の名前（入力と `let`、`out` を含む）と重ならない（基本仕様 §11.6 の処理系が作る名前の形。ラベルは `out: 型 at クロック`）。
 
 枠にするのは、`par~` が N 個の構造の宣言（基本仕様 §11.5）で、「同じ構造が N 個ある」ことと、添字が各複製の中の値であることを見せるためである。
 
