@@ -172,6 +172,9 @@ features! {
     /// integer literal and a `const` with a literal value (W9-03).
     FlowConstExprs: Language, "computing the value of a constant expression in a flow (a `par~` bound, a delay length, the maximum of a `vdelay~`)",
         Some("write it as an integer literal, or as a `const` whose value is an integer literal");
+    /// R-501, §11.4: the ring of `MAX + 1` elements, until the check of the
+    /// size of a state (E0409, S-88 (3), W9-04).
+    HugeRing: Language, "a state of more elements than `U32` counts (the ring of a `vdelay~` whose `MAX` is the largest `U32`)", None;
     VariantCtorValues: Language, "variant constructors as function values", None;
     CallsThroughFnValues: Language, "calls through function values", None;
     /// S-85, X-8: the drop of the rest where a field is taken out (W8-04).

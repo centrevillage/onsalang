@@ -285,69 +285,73 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
     // error, whatever the order of the items (§18.1, R-499).
     let top_const = |id: DefId| a.def(id).owner.is_none() && matches!(a.def(id).kind, DefKind::Const(_));
     let (consts, rest): (Vec<DefId>, Vec<DefId>) = a.new_defs().partition(|&id| top_const(id));
-    for (k, id) in (0..).zip(consts.iter().chain(&rest).copied()) {
-        if k == consts.len() {
-            a.failures = crate::stages::Failures::of(pkg, a);
-        }
-        let def = a.def(id);
-        if def.item.is_none() {
-            continue;
-        }
-        // A panic names this declaration (S-67).
-        let _scope = onsa_diag::internal::item_scope(def.span);
-        let m = def.module;
-        let Some(module) = a.modules.source(&flat, m) else { continue };
-        let Some((self_ty, body, ret)) = body_of(a, id) else { continue };
-        let generics = generics_of(a, id);
-        // The body of an item whose unit has a syntax error is not checked
-        // (spec §18.1, S-59).
-        if a.failed.contains_key(&id) {
-            continue;
-        }
-        // Nor is a body whose unit failed in the names stage (§18.1, S-78: in
-        // its signature too), or whose names walk stopped at an error it
-        // reported (its record ends there).
-        let mut names = a.names.remove(&id).unwrap_or_default();
-        if names.reported || a.failures.skips(id, Stage::Types) {
-            let body = BodyInfo::default();
-            match a.body_kind(id) {
-                Some(BodyKind::Flow(_)) => {
-                    drop(a.flows.insert(id, crate::flow::FlowInfo { body, ..Default::default() }))
-                }
-                Some(BodyKind::Fn(_) | BodyKind::Test(_) | BodyKind::Initializer(_)) | None => {
-                    drop(a.bodies.insert(id, body))
-                }
+    for id in consts {
+        check_one(a, &flat, &mut bound, id);
+    }
+    a.failures = crate::stages::Failures::of(pkg, a);
+    for id in rest {
+        check_one(a, &flat, &mut bound, id);
+    }
+}
+
+/// Check the body of `id`, if it has one the check reads.
+fn check_one(a: &mut Analysis, flat: &[&Package], bound: &mut HashMap<ModId, HashSet<String>>, id: DefId) {
+    let def = a.def(id);
+    if def.item.is_none() {
+        return;
+    }
+    // A panic names this declaration (S-67).
+    let _scope = onsa_diag::internal::item_scope(def.span);
+    let m = def.module;
+    let Some(module) = a.modules.source(flat, m) else { return };
+    let Some((self_ty, body, ret)) = body_of(a, id) else { return };
+    let generics = generics_of(a, id);
+    // The body of an item whose unit has a syntax error is not checked
+    // (spec §18.1, S-59).
+    if a.failed.contains_key(&id) {
+        return;
+    }
+    // Nor is a body whose unit failed in the names stage (§18.1, S-78: in
+    // its signature too), or whose names walk stopped at an error it
+    // reported (its record ends there).
+    let mut names = a.names.remove(&id).unwrap_or_default();
+    if names.reported || a.failures.skips(id, Stage::Types) {
+        let body = BodyInfo::default();
+        match a.body_kind(id) {
+            Some(BodyKind::Flow(_)) => drop(a.flows.insert(id, crate::flow::FlowInfo { body, ..Default::default() })),
+            Some(BodyKind::Fn(_) | BodyKind::Test(_) | BodyKind::Initializer(_)) | None => {
+                drop(a.bodies.insert(id, body))
             }
-            a.names.insert(id, names);
-            continue;
-        }
-        // What the body reads and the check does not goes to `read_held` as
-        // for a signature (`Analysis::unread_path`, `record_if_held`); it is
-        // moved to the body below.
-        let held = a.read_held.contains(&id);
-        let diverging = std::mem::take(&mut names.diverging);
-        let job = Job { module, m, id, self_ty, body, ret, generics };
-        let mut ck = read_body(a, &mut bound, &job, names, diverging, How::First);
-        ck.names.all_reported(!ck.failed, "the check");
-        let fcx = ck.flow.take();
-        let mut names = std::mem::take(&mut ck.names);
-        let tries = ck.tries.take();
-        let mut info = ck.finish();
-        if (!held && a.read_held.remove(&id)) || names.read_unread {
-            info.read_unread = true;
-        }
-        // The types stage stops where the walk of the names stopped (`Diverging`,
-        // S-692), and a candidate can take that place away: a read of its form
-        // would go on into code with no record, so a partial record has no read.
-        if let Some(tries) = tries.filter(|_| names.complete) {
-            reread::read_again(a, &mut bound, &job, &mut names, &info.diverging, tries);
         }
         a.names.insert(id, names);
-        match fcx {
-            Some(fcx) => crate::flow::finish_flow(a, module, id, info, fcx),
-            None => {
-                a.bodies.insert(id, info);
-            }
+        return;
+    }
+    // What the body reads and the check does not goes to `read_held` as
+    // for a signature (`Analysis::unread_path`, `record_if_held`); it is
+    // moved to the body below.
+    let held = a.read_held.contains(&id);
+    let diverging = std::mem::take(&mut names.diverging);
+    let job = Job { module, m, id, self_ty, body, ret, generics };
+    let mut ck = read_body(a, bound, &job, names, diverging, How::First);
+    ck.names.all_reported(!ck.failed, "the check");
+    let fcx = ck.flow.take();
+    let mut names = std::mem::take(&mut ck.names);
+    let tries = ck.tries.take();
+    let mut info = ck.finish();
+    if (!held && a.read_held.remove(&id)) || names.read_unread {
+        info.read_unread = true;
+    }
+    // The types stage stops where the walk of the names stopped (`Diverging`,
+    // S-692), and a candidate can take that place away: a read of its form
+    // would go on into code with no record, so a partial record has no read.
+    if let Some(tries) = tries.filter(|_| names.complete) {
+        reread::read_again(a, bound, &job, &mut names, &info.diverging, tries);
+    }
+    a.names.insert(id, names);
+    match fcx {
+        Some(fcx) => crate::flow::finish_flow(a, module, id, info, fcx),
+        None => {
+            a.bodies.insert(id, info);
         }
     }
 }
@@ -651,7 +655,7 @@ impl<'a> Checker<'a> {
             if let Some(at) = self.unannotated_let_below(s, span) {
                 d = d.with_note(
                     at,
-                    "a `^` above this `let` reads it before its value: write its type on it (§4.7, §11.2)",
+                    "a `^` reads this `let` before its value gives its type: write its type on it (§4.7, §11.2)",
                 );
             }
             return Err(self.diag(d));

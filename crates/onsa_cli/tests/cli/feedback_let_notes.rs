@@ -1,9 +1,9 @@
-//! W7-14 U3/i, S-395 (a): a `^name` above a `let` with no annotation reads a value whose type is not
-//! known there (§11.2, §4.7), so an operation that needs the head of its type (`^s.l`, `^p.0`) is
-//! E0420, and a note shows the `let` on which the type is written (no candidate: what to write is
-//! the writer's). The runner of the cases does not compare notes, so these tests pin them: the
-//! note is at the line of the `let` the `^` names, and an E0420 that no `^` above a `let` makes has
-//! no such note. The words are not fixed (§18.1): the tests read the position and the code only.
+//! W7-14 U3/i, S-395 (a): a `^name` above a `let` with no annotation, or in its own value (W7-14
+//! U3b), reads a value whose type is not known there (§11.2, §4.7), so an operation that needs the
+//! head of its type (`^s.l`, `^p.0`) is E0420, and a note shows the `let` on which the type is
+//! written (no candidate: what to write is the writer's). The runner of the cases does not compare
+//! notes, so these tests pin them: the note is at the line of the `let` the `^` names, and an E0420
+//! that no `^` makes has no such note. The words are not fixed (§18.1): the tests read the position and the code only.
 //!
 //! The inputs are programs in memory (`check_input_out`, nothing is written, `rules/common.md` 3.7).
 
@@ -59,6 +59,16 @@ fn a_local_of_a_pattern_notes_its_let() {
         "{ST}pub flow f(x: F32 at sample) -> F32 at sample {{\n  let a = prev~(^s.l)\n  let (s, k) = (St {{ l: x + a, r: x }}, 1.0)\n  s.r * k\n}}\n"
     );
     assert_eq!(note_lines(&e0420_at(&src, 3)), vec![4]);
+}
+
+#[test]
+fn a_feedback_in_the_value_of_its_own_let_notes_the_let() {
+    // The `let` the `^` reads is the one around it, not one below: S-395 (a) shows the `let` where
+    // the type is written.
+    let src = format!(
+        "{ST}pub flow f(x: F32 at sample) -> F32 at sample {{\n  let s = St {{ l: x + prev~(^s.l), r: x }}\n  s.r\n}}\n"
+    );
+    assert_eq!(note_lines(&e0420_at(&src, 3)), vec![3]);
 }
 
 #[test]

@@ -60,6 +60,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use onsa_diag::Span;
+use onsa_diag::unsupported::Feature;
 use onsa_sema::DefId;
 use onsa_sema::clock::{Clock, ClockStage};
 use onsa_sema::def::{DefKind, Fields, FlowDef, FlowFn, FlowInput, FlowTy, ParamInfo, ParamKey, ParamNumber};
@@ -72,7 +73,7 @@ use super::build::{
     assign, borrow, call, checked_binary, cmp, expr_stmt, field, float_lit, index, inout, lit, local_expr, materialize,
     stmt, u32_lit,
 };
-use super::{Lowerer, R, core_mode, internal};
+use super::{Lowerer, R, core_mode, internal, unsupported};
 use crate::ir::*;
 use crate::layout::{FlowLayout, flow_layout_for};
 use crate::prim::Prim;

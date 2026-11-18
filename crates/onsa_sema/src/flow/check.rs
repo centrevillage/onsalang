@@ -91,8 +91,9 @@ impl<'a> Checker<'a> {
                         Some(lowered)
                     }
                     // With no annotation the locals stay unknown above the
-                    // `let`, so `^s.l` there is E0420 (§4.7, S-395), whose note
-                    // shows the `let` ([`Self::unannotated_let_below`]).
+                    // `let` and in its value, so `^s.l` there is E0420 (§4.7,
+                    // S-395), whose note shows the `let`
+                    // ([`Self::unannotated_let_below`]).
                     None => None,
                 };
                 let name = match &ast.pat(pat).kind {
@@ -115,11 +116,12 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// The statement of a `let` of the flow body after `at` with no
-    /// annotation whose local is of the type variable `t`: what a `^` at `at`
-    /// reads before the value types it (§4.7, S-395).
+    /// The statement of a `let` of the flow body after `at`, or around it,
+    /// with no annotation whose local is of the type variable `t`: what a `^`
+    /// at `at` reads before the value types it (§4.7, S-395), a `^` above the
+    /// `let` or in its own value.
     pub(crate) fn unannotated_let_below(&self, t: TyId, at: Span) -> Option<Span> {
-        let lets = self.flow.as_ref()?.pending.iter().filter(|p| p.annotation.is_none() && p.span.start > at.start);
+        let lets = self.flow.as_ref()?.pending.iter().filter(|p| p.annotation.is_none() && p.span.end > at.start);
         lets.filter(|p| p.locals.iter().any(|&l| self.shallow(self.local_ty(l)) == t)).map(|p| p.span).next()
     }
 

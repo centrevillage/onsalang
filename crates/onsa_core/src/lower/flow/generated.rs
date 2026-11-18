@@ -66,11 +66,12 @@ pub(super) fn instance_args(
 }
 
 /// The length of the ring of a `delay~` (`N`) or a `vdelay~` (`MAX + 1`,
-/// §11.4): the one place of it. Of another node, an internal error.
+/// §11.4): the one place of it. A length past `U32` (a `MAX` of `U32`'s
+/// largest value) is an E0200 (R-501). Of another node, an internal error.
 pub(super) fn ring_len(kind: &PlanKind, span: Span) -> R<u32> {
     match kind {
         PlanKind::Delay { n, .. } => Ok(*n),
-        PlanKind::Vdelay { max, .. } => Ok(max + 1),
+        PlanKind::Vdelay { max, .. } => max.checked_add(1).ok_or_else(|| unsupported(span, Feature::HugeRing, &[])),
         _ => Err(internal(span, "the ring of no delay")),
     }
 }
