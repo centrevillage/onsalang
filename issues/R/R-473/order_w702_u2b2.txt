@@ -1,6 +1,6 @@
 # 165 回目（2026-11-18）、W7-02 U2b-2/t（onsa-test）が見つけた、flow の段の診断が開始の位置の順にならない形。
 # どれも今は後ろの（内側の）診断を出す。§18.1 の位置の順なら前の（外側の）診断。
-=== q1_promotion_encloses_e0813（今 E0813@2:18、位置の順なら E0200 ClockPromotion@2:11）
+=== q1_promotion_encloses_e0813（今 E0813@2:18。順の問題ではない（親、165 回目）: 外側の `at` の E0200 は誤りの遅延の結果のクロックに依り、§18.1 の「誤りの部分を使う側には診断を出さない」で出ない。E0813 だけが本物）
 pub flow f(x: F32 at sample, p: F32 at block) -> F32 at sample {
   let a = (prev~(p) + 1.0) at sample
   x
