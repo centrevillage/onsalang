@@ -118,3 +118,26 @@ fn a_flow_in_error_has_no_nodes() {
     assert!(f.roots(Owner::Let(0)).is_empty() && f.roots(Owner::Output).is_empty());
     assert_eq!(f.top().count(), 0);
 }
+
+/// The first argument of a delay is read a tick later (`lookback`, §11.4),
+/// its `d` and `init` and the arguments of an instance as the node computes
+/// (RF-8 (C)), each at its clock.
+#[test]
+fn the_first_argument_of_a_delay_is_a_lookback() {
+    let src = "pub flow g(x: F32 at sample, k: F32 at block) -> F32 at sample {
+  x * k
+}
+pub flow f(x: F32 at sample, k: F32 at block, t: F32 at init) -> F32 at sample {
+  vdelay~(x, 2.0, 4, t) + prev~(x) + g~(x, k)
+}
+";
+    let a = check(src);
+    let f = flow(&a, "f");
+    let reads = |k: usize| {
+        let n = f.node(f.roots(Owner::Output)[k]);
+        n.args.iter().map(|r| (r.at, r.lookback)).collect::<Vec<_>>()
+    };
+    assert_eq!(reads(0), vec![(Clock::SAMPLE, true), (Clock::SAMPLE, false), (Clock::Init, false)]);
+    assert_eq!(reads(1), vec![(Clock::SAMPLE, true)]);
+    assert_eq!(reads(2), vec![(Clock::SAMPLE, false), (Clock::Block, false)]);
+}

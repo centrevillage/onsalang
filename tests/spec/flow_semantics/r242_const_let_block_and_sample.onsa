@@ -1,0 +1,23 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.6"]
+
+// R-242 (`issues/R/R-242/c2.onsa`): a constant `let` read by two stages, a `block` let and the
+// output of the sample clock. The constant clock is promoted to every clock (spec §11.3), so each
+// stage reads `c1` (the lowering defines it in `ctl` and in `tick`). The expected values are worked
+// out by hand.
+
+pub flow f(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let c1: F32 = 0.5
+  let a = p * c1
+  x * a * c1
+}
+
+test "a constant let read by the block stage and the sample stage" {
+  // a = 4 * 0.5 = 2; x * 2 * 0.5.
+  let xs: [F32; 2] = [1.0, 3.0]
+  let o = f.render(f.Params { p: 4.0 }, xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 3.0
+}

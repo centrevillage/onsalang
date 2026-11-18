@@ -1,5 +1,5 @@
-//! The state fields of a flow (S-05, S-06): the nodes of a flow and the
-//! fields each one adds to `State`.
+//! The state fields of a flow (S-05, S-06): the Core types of the fields
+//! the plan names and orders.
 
 use super::*;
 
@@ -10,58 +10,56 @@ pub(super) fn ast_span(lw: &Lowerer, flow: DefId, e: ExprId) -> R<Span> {
     Ok(m.parsed.ast.expr(e).span)
 }
 
-/// Whether a node holds any state (a `par` of pure replicas has none).
-pub(super) fn node_has_state(info: &FlowInfo, id: NodeId) -> bool {
-    match &info.node(id).kind {
-        PlanKind::Par { children, .. } => children.iter().any(|&c| node_has_state(info, c)),
-        _ => true,
+/// The Core fields of a struct of the state, the `State` of the flow or the
+/// replica of a `par~`, of the fields the plan names and orders (S-05,
+/// S-06, §12.4; [`FlowInfo::fields_of`]): their Core types.
+pub(super) fn state_fields(
+    lw: &mut Lowerer,
+    flow: DefId,
+    fd: &FlowDef,
+    info: &FlowInfo,
+    fs: &[Field],
+) -> R<Vec<(String, Ty)>> {
+    fs.iter().map(|f| Ok((f.name.clone(), field_ty(lw, flow, fd, info, f.of)?))).collect()
+}
+
+fn field_ty(lw: &mut Lowerer, flow: DefId, fd: &FlowDef, info: &FlowInfo, of: FieldOf) -> R<Ty> {
+    let local = |l: onsa_sema::LocalId| info.body.locals[l.0 as usize].ty;
+    match of {
+        FieldOf::SampleRate => Ok(Ty::Float(FloatKind::F32)),
+        FieldOf::Poisoned | FieldOf::Initialized => Ok(Ty::Bool),
+        FieldOf::Input(l) => {
+            let input = info.inputs.iter().position(|&i| i == l).and_then(|k| fd.inputs.get(k));
+            let input = input.ok_or_else(|| internal(lw.a.def(flow).span, "a stored input the flow has not"))?;
+            lw.core_ty(input.ty, &[], input.span)
+        }
+        FieldOf::Let(l) => {
+            let at = info.lets.iter().find(|x| x.locals.contains(&l));
+            let at = at.ok_or_else(|| internal(lw.a.def(flow).span, "a stored local of no `let`"))?;
+            lw.core_ty(local(l), &[], at.span)
+        }
+        FieldOf::Node(id, part) => node_field_ty(lw, flow, fd, info, id, part),
     }
 }
 
-/// The state fields of one node (S-06).
-pub(super) fn node_fields(
-    lw: &mut Lowerer,
-    flow: DefId,
-    info: &FlowInfo,
-    id: NodeId,
-    fields: &mut Vec<(String, Ty)>,
-) -> R<()> {
+/// The Core type of the field `part` of the node `id` (S-06).
+fn node_field_ty(lw: &mut Lowerer, flow: DefId, fd: &FlowDef, info: &FlowInfo, id: NodeId, part: Part) -> R<Ty> {
     let n = info.node(id);
-    let (span, name) = (ast_span(lw, flow, n.expr)?, &n.name);
-    match &n.kind {
-        PlanKind::Prev { init, ty, .. } => {
-            let t = lw.core_ty(*ty, &[], span)?;
-            fields.push((name.clone(), t.clone()));
-            if matches!(init, InitArg::Init(_)) {
-                fields.push((format!("{name}.init"), t));
-            }
-        }
-        PlanKind::Delay { n: len, init, ty, .. } | PlanKind::Vdelay { max: len, init, ty, .. } => {
-            let t = lw.core_ty(*ty, &[], span)?;
-            let len = if matches!(n.kind, PlanKind::Vdelay { .. }) { *len + 1 } else { *len };
-            fields.push((format!("{name}.buf"), Ty::Array(Box::new(t.clone()), len)));
-            fields.push((format!("{name}.w"), Ty::u32()));
-            if matches!(init, InitArg::Init(_)) {
-                fields.push((format!("{name}.init"), t));
-            }
-        }
-        PlanKind::Instance { callee, .. } => {
-            let sub = lw.ensure_flow(*callee)?;
-            fields.push((name.clone(), Ty::Struct(sub.state)));
-        }
-        PlanKind::Par { from, to, children, .. } => {
-            if !node_has_state(info, id) {
-                return Ok(());
-            }
-            let mut inner = Vec::new();
-            for &sub in children {
-                node_fields(lw, flow, info, sub, &mut inner)?;
-            }
-            let tname = format!("{}.{name}.State", lw.qual_name(flow));
-            let id = TypeId(lw.m.types.len() as u32);
+    let span = ast_span(lw, flow, n.expr)?;
+    match (&n.kind, part) {
+        (PlanKind::Prev { ty, .. }, Part::Own | Part::Init)
+        | (PlanKind::Delay { ty, .. } | PlanKind::Vdelay { ty, .. }, Part::Init) => lw.core_ty(*ty, &[], span),
+        (PlanKind::Delay { n: len, ty, .. }, Part::Buf) => Ok(Ty::Array(Box::new(lw.core_ty(*ty, &[], span)?), *len)),
+        (PlanKind::Vdelay { max, ty, .. }, Part::Buf) => Ok(Ty::Array(Box::new(lw.core_ty(*ty, &[], span)?), max + 1)),
+        (PlanKind::Delay { .. } | PlanKind::Vdelay { .. }, Part::W) => Ok(Ty::u32()),
+        (PlanKind::Instance { callee, .. }, Part::Own) => Ok(Ty::Struct(lw.ensure_flow(*callee)?.state)),
+        (PlanKind::Par { from, to, fields, .. }, Part::Own) => {
+            let inner = state_fields(lw, flow, fd, info, fields)?;
+            let tname = format!("{}.{}.State", lw.qual_name(flow), n.name);
+            let tid = TypeId(lw.m.types.len() as u32);
             lw.m.types.push(TypeDef { name: tname, kind: TypeDefKind::Struct { fields: inner } });
-            fields.push((name.clone(), Ty::Array(Box::new(Ty::Struct(id)), to - from)));
+            Ok(Ty::Array(Box::new(Ty::Struct(tid)), to - from))
         }
+        _ => Err(internal(span, format!("no field {part:?} of the node {}", n.name))),
     }
-    Ok(())
 }

@@ -1,8 +1,8 @@
 //! The state marking (S-05): the stages at which each local is read
-//! (`FlowInfo::read_at`), the `let`s read at a later stage than their own,
-//! and the stage at which `sample_rate()` is read, from the clocks of the
-//! walk ([`Walked`], the `let`s). The lowering reads these and does not
-//! walk the body again (R-91 (1), D-15).
+//! (`FlowInfo::read_at`) and the stage at which `sample_rate()` is read,
+//! from the clocks of the walk ([`Walked`], the `let`s), which tell what
+//! the state keeps ([`FlowInfo::stored`]). The lowering reads these and
+//! does not walk the body again (R-91 (1), D-15).
 
 use onsa_diag::hash::HashSet;
 use onsa_syntax::ast::Ast;
@@ -43,9 +43,8 @@ fn read_stage(c: Clock) -> Option<ClockStage> {
     }
 }
 
-/// The stages each local is read at, the `let`s read at a later stage than
-/// their own (S-05, their `state`), and the stage at which `sample_rate()`
-/// is read, in the module of `ast` and `text`, from the walk `walked`, also
+/// The stages each local is read at and the stage at which `sample_rate()`
+/// is read (S-05), in the module of `ast` and `text`, from the walk `walked`, also
 /// one with a diagnostic. A `let` in error is not marked.
 pub(super) fn mark_all(
     ast: &Ast,
@@ -53,7 +52,7 @@ pub(super) fn mark_all(
     body: &BodyInfo,
     cx: &FlowCx,
     walked: &Walked,
-    lets: &mut [FlowLet],
+    lets: &[FlowLet],
 ) -> Marked {
     let mut m = Marker {
         ast,
@@ -86,11 +85,6 @@ pub(super) fn mark_all(
         for s in stages {
             m.mark(l.init, s);
         }
-    }
-    let read = &m.out.read_at;
-    for l in lets.iter_mut() {
-        let last = |id: &LocalId| read.get(id).and_then(|s| s.last()).copied();
-        l.state = l.clock.stage().is_some_and(|own| l.locals.iter().any(|id| last(id).is_some_and(|s| s > own)));
     }
     m.out
 }

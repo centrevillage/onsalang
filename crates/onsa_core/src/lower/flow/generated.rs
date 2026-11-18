@@ -5,8 +5,11 @@ use super::*;
 
 // ---------------------------------------------------------------- small helpers
 
-/// `state.<name>` (dotted node field names are plain field names).
-pub(super) fn sfield(lw: &Lowerer, state: &Expr, name: &str, span: Span) -> R<Expr> {
+/// `state.<name>` of the field that holds `of`, by the name the plan gives
+/// it (S-06; dotted node field names are plain field names). One the plan
+/// has not is an internal error.
+pub(super) fn sfield(lw: &Lowerer, info: &FlowInfo, state: &Expr, of: FieldOf, span: Span) -> R<Expr> {
+    let name = info.field(of).ok_or_else(|| internal(span, format!("no state field of {of:?}")))?;
     field_by_name(lw, state.clone(), name, span)
 }
 
@@ -142,17 +145,17 @@ impl<'b> Gen<'b> {
         state: &Expr,
     ) -> R<()> {
         let phase = self.flow().phase;
-        for (&l, name) in &shape.state_locals {
+        for (&l, &of) in &shape.state_locals {
             let own = info.clocks.locals.get(&onsa_sema::LocalId(l)).copied().unwrap_or(Clock::SAMPLE);
             let own =
-                own.stage().ok_or_else(|| internal(self.span, format!("the stored local {name} with no stage")))?;
+                own.stage().ok_or_else(|| internal(self.span, format!("the stored local {of:?} with no stage")))?;
             if Phase::of(own, self.span)? != phase {
-                let f = sfield(lw, state, name, self.span)?;
+                let f = sfield(lw, info, state, of, self.span)?;
                 self.flow().local_override.insert(l, f);
             }
         }
         if shape.sample_rate_field && phase != Phase::Init {
-            let f = sfield(lw, state, "sample_rate", self.span)?;
+            let f = sfield(lw, info, state, FieldOf::SampleRate, self.span)?;
             self.flow().sample_rate = f;
         }
         Ok(())
@@ -183,8 +186,8 @@ impl<'b> Gen<'b> {
             let v = lower_expr(lw, &mut self.cx, l.init)?;
             bind_irrefutable(lw, &mut self.cx, l.pat, v, &mut self.stmts)?;
             for loc in &l.locals {
-                if let Some(name) = shape.state_locals.get(&loc.0) {
-                    let f = sfield(lw, state, name, l.span)?;
+                if let Some(&of) = shape.state_locals.get(&loc.0) {
+                    let f = sfield(lw, info, state, of, l.span)?;
                     let v = local_expr(&self.cx, LocalId(loc.0), l.span);
                     assign(&mut self.stmts, &f, v)?;
                 }

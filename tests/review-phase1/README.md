@@ -179,6 +179,7 @@
 | `parent/r129.onsa` | R-129（効果の名前の解決、S-74）。W4-03 U5b で期待値付きのテストへ移して消した: `tests/spec/effects/names_r129.onsa`（72 回目） |
 | `parent/r130/` | R-130（マニフェストの未知のキー。期待値と今の出力は `onsa.toml` の先頭のコメント。S-99） |
 | （R-132） | 専用の入力は無い。レートを型の形で書いたときの診断は `parent/t5.onsa`（S-102） |
+| （R-242） | 再現の入力はこのディレクトリの外の `issues/R/R-242/`（`c2.onsa`・`cc.onsa`）。W7-02 の読まれる段の集合（`mark_all`、R-488）で直っていた。W7-03 U1b で値を `onsa test` で確かめる事例へ移した: `tests/spec/flow_semantics/r242_const_let_block_and_sample.onsa`（`c2`）、`r242_const_let_chain.onsa`（`cc`）、`r242_const_let_three_stages.onsa`（定数の `let` の連鎖を `init`・`block`・`sample` の三つの段が読む形） |
 | `parent/c119.onsa` | 点検 C-119 と C-12（行頭の `- b` で関数が `-b` を返す。期待値と今の出力は先頭のコメント。S-127、S-124、S-123）。W3-06/t1 で期待値付きのテストへ移した: `tests/spec/fixes/e0020_leading_minus.onsa`（`c119`。先頭のコメントの E0418 は候補を当てた後の後の段の診断で、移していない） |
 | `parent/c120.onsa` | 点検 C-120（行末の `return` の次の行が黙って実行されない。S-128）。W5-08 U3/t で期待値付きのテストへ移し、入力は消した: `tests/spec/fixes/e0503_valueless_return_not_joined.onsa`（`an_assignment_after_return`）、`e0401_valueless_return_joined.onsa` |
 | `parent/c121.onsa` | 点検 C-121（flow の使われない `let` と、行頭の `- prev` が黙って出力になる。期待値と今の出力は先頭のコメント。S-129） |

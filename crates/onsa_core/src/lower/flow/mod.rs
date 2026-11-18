@@ -18,8 +18,9 @@
 //!
 //! # State fields (S-05, S-06)
 //!
-//! In order: `sample_rate: F32` (when `sample_rate()` is read at `Ctl` or
-//! `Sig`), inputs read above their own rate (by input name), then for each
+//! The plan names and orders them (`FlowInfo::fields`). In order:
+//! `sample_rate: F32` (when `sample_rate()` is read at `Ctl` or `Sig`),
+//! inputs read above their own rate (by input name), then for each
 //! top-level `let` in source order its own field (when read above its rate)
 //! followed by the stateful nodes inside its initializer in source order,
 //! then the nodes of the output expression, then `poisoned: Bool` and
@@ -54,13 +55,13 @@
 //! stateful nodes inside an expression, [`boundary`] `process` /
 //! `process_inplace` / `render` / `params_default`.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use onsa_diag::Span;
 use onsa_sema::DefId;
 use onsa_sema::clock::{Clock, ClockStage};
 use onsa_sema::def::{DefKind, Fields, FlowDef, FlowFn, FlowTy, ParamInfo, ParamKey, ParamNumber};
-use onsa_sema::flow::{FlowInfo, InitArg, NodeId, Owner, PlanKind};
+use onsa_sema::flow::{Field, FieldOf, FlowInfo, InitArg, NodeId, Part, PlanKind};
 use onsa_sema::ty::{BuiltinTy, Len, Ty as STy};
 use onsa_syntax::ast::ExprId;
 
@@ -84,7 +85,7 @@ use boundary::{gen_params_default, gen_process, gen_process_inplace, gen_render}
 use generated::{Gen, init_value, instance_args, replica_index, sfield};
 pub(crate) use nodes::lower_flow_expr;
 use phases::{gen_ctl, gen_init, gen_reset, gen_tick, store_nodes};
-use state::{node_fields, node_has_state};
+use state::state_fields;
 
 /// The Core items generated for one flow.
 #[derive(Debug, Clone)]
@@ -190,8 +191,8 @@ struct FlowShape {
     def: DefId,
     span: Span,
     flow: FlowDef,
-    /// Sema locals that live in the state (inputs and `let`s), with their field name.
-    state_locals: HashMap<u32, String>,
+    /// Sema locals that live in the state (inputs and `let`s), with their field.
+    state_locals: HashMap<u32, FieldOf>,
     /// `Const`-rate `let`s (indices into `info.lets`) read in each phase.
     const_lets: HashMap<Phase, Vec<usize>>,
     sample_rate_field: bool,
@@ -314,57 +315,25 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     }
     let out_is_struct = matches!(out_val, Ty::Struct(_));
 
-    // The highest rate each local is read at is the checker's (S-05).
-    let reads = &info.read_at;
-
-    // State fields in S-05 order.
-    let mut state_locals: HashMap<u32, String> = HashMap::new();
-    let mut fields: Vec<(String, Ty)> = Vec::new();
-    let sample_rate_field = info.sample_rate_at > Some(ClockStage::Init);
-    if sample_rate_field {
-        fields.push(("sample_rate".into(), Ty::Float(FloatKind::F32)));
-    }
-    for (l, input) in info.inputs.iter().zip(&fd.inputs) {
-        let own = input.clock.stage().ok_or_else(|| internal(input.span, "an input with no stage"))?;
-        if reads.get(l).and_then(|rs| rs.last()).is_some_and(|&r| r > own) {
-            state_locals.insert(l.0, input.name.clone());
-            fields.push((input.name.clone(), lw.core_ty(input.ty, &[], input.span)?));
+    // The fields of the state are the plan's (S-05, S-06, §12.4).
+    let mut state_locals: HashMap<u32, FieldOf> = HashMap::new();
+    for f in &info.fields {
+        if let FieldOf::Input(l) | FieldOf::Let(l) = f.of {
+            state_locals.insert(l.0, f.of);
         }
     }
+    let sample_rate_field = info.field(FieldOf::SampleRate).is_some();
     let mut const_lets: HashMap<Phase, Vec<usize>> = HashMap::new();
-    let mut nodes_done: HashSet<NodeId> = HashSet::new();
-    for (k, l) in info.lets.iter().enumerate() {
-        if l.clock == Clock::Const {
-            let reads = l.locals.iter().filter_map(|loc| reads.get(loc)).flatten();
-            let mut phases = reads.map(|&r| Phase::of(r, l.span)).collect::<R<Vec<Phase>>>()?;
-            phases.sort_by_key(|p| *p as u8);
-            phases.dedup();
-            for p in phases {
-                const_lets.entry(p).or_default().push(k);
-            }
-            continue;
-        }
-        for loc in &l.locals {
-            let name = &info.body.locals[loc.0 as usize].name;
-            if l.state {
-                state_locals.insert(loc.0, name.clone());
-                let ty = lw.core_ty(info.body.locals[loc.0 as usize].ty, &[], l.span)?;
-                fields.push((name.clone(), ty));
-            }
-        }
-        for &n in info.roots(Owner::Let(k as u32)) {
-            if nodes_done.insert(n) {
-                node_fields(lw, flow, info, n, &mut fields)?;
-            }
+    for (k, l) in info.lets.iter().enumerate().filter(|(_, l)| l.clock == Clock::Const) {
+        let reads = l.locals.iter().filter_map(|loc| info.read_at.get(loc)).flatten();
+        let mut phases = reads.map(|&r| Phase::of(r, l.span)).collect::<R<Vec<Phase>>>()?;
+        phases.sort_by_key(|p| *p as u8);
+        phases.dedup();
+        for p in phases {
+            const_lets.entry(p).or_default().push(k);
         }
     }
-    for n in info.top() {
-        if nodes_done.insert(n) {
-            node_fields(lw, flow, info, n, &mut fields)?;
-        }
-    }
-    fields.push(("poisoned".into(), Ty::Bool));
-    fields.push(("initialized".into(), Ty::Bool));
+    let fields = state_fields(lw, flow, &fd, info, &info.fields)?;
     lw.m.types[state_ty.0 as usize].kind = TypeDefKind::Struct { fields };
 
     let shape = FlowShape {

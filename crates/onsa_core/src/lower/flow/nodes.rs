@@ -20,7 +20,7 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
         let state = f.scopes.last().ok_or_else(|| internal(span, "node outside a state scope"))?.state.clone();
         (f.phase, f.info, id, state)
     };
-    let name = &info.node(id).name;
+    let (name, at) = (&info.node(id).name, |p| FieldOf::Node(id, p));
     let not_here = |what: &str| internal(span, format!("`{what}` evaluated outside `tick`"));
     let mut stmts = Vec::new();
     let value = match &info.node(id).kind {
@@ -28,21 +28,21 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
             if phase != Phase::Tick {
                 return Err(not_here("prev"));
             }
-            sfield(lw, &state, name, span)?
+            sfield(lw, info, &state, at(Part::Own), span)?
         }
         PlanKind::Delay { .. } => {
             if phase != Phase::Tick {
                 return Err(not_here("delay"));
             }
-            let buf = sfield(lw, &state, &format!("{name}.buf"), span)?;
-            let w = sfield(lw, &state, &format!("{name}.w"), span)?;
+            let buf = sfield(lw, info, &state, at(Part::Buf), span)?;
+            let w = sfield(lw, info, &state, at(Part::W), span)?;
             index(buf, w)?
         }
         PlanKind::Vdelay { d, max, ty, .. } => {
             if phase != Phase::Tick {
                 return Err(not_here("vdelay"));
             }
-            vdelay_read(lw, cx, &mut stmts, &state, name, *d, *max, *ty, span)?
+            vdelay_read(lw, cx, &mut stmts, &state, id, *d, *max, *ty, span)?
         }
         PlanKind::Instance { callee, args, .. } => {
             if phase != Phase::Tick {
@@ -50,7 +50,7 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
             }
             let sub = lw.ensure_flow(*callee)?;
             let ret = lw.m.fn_(sub.tick).ret.clone();
-            let mut cargs = vec![inout(sfield(lw, &state, name, span)?)];
+            let mut cargs = vec![inout(sfield(lw, info, &state, at(Part::Own), span)?)];
             cargs.extend(instance_args(lw, cx, *callee, args, Clock::SAMPLE)?.into_iter().map(borrow));
             call(sub.tick, ret, span, cargs)
         }
@@ -60,8 +60,8 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
             stmts.push(stmt(span, StmtKind::Let(arr, Expr::new(ty.clone(), span, ExprKind::Zeroed))));
             let arr_e = local_expr(cx, arr, span);
             let idx = replica_index(cx, *var, *from, span);
-            let elem_state = if node_has_state(info, id) {
-                index(sfield(lw, &state, name, span)?, idx.clone())?
+            let elem_state = if info.field(at(Part::Own)).is_some() {
+                index(sfield(lw, info, &state, at(Part::Own), span)?, idx.clone())?
             } else {
                 state.clone()
             };
@@ -99,12 +99,14 @@ fn vdelay_read(
     cx: &mut FnCx,
     stmts: &mut Vec<Stmt>,
     state: &Expr,
-    name: &str,
+    id: NodeId,
     d: ExprId,
     max: u32,
     ty: onsa_sema::ty::TyId,
     span: Span,
 ) -> R<Expr> {
+    let info = cx.flow.as_ref().expect("flow context").info;
+    let name = &info.node(id).name;
     let t = lw.core_ty(ty, &[], span)?;
     let Ty::Float(kind) = t else { return Err(internal(span, "vdelay on a non-float")) };
     let len = max + 1;
@@ -154,8 +156,8 @@ fn vdelay_read(
         ExprKind::Prim { prim: Prim::IntToFloat { from: IntKind::U32, to: kind }, args: vec![borrow(k.clone())] },
     );
     let f = let_(cx, "f", checked_binary(BinOp::Sub, dc, kf));
-    let buf = sfield(lw, state, &format!("{name}.buf"), span)?;
-    let w = sfield(lw, state, &format!("{name}.w"), span)?;
+    let buf = sfield(lw, info, state, FieldOf::Node(id, Part::Buf), span)?;
+    let w = sfield(lw, info, state, FieldOf::Node(id, Part::W), span)?;
     // a = buf[(w + L - k) % L]; b = buf[(w + L - k - 1) % L]
     let wlk = checked_binary(BinOp::Sub, checked_binary(BinOp::Add, w, u32_lit(span, len)), k);
     let wlk = let_(cx, "wlk", wlk);

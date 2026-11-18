@@ -27,9 +27,6 @@
 "process_inplace" = 1
 "render" = 1
 
-[allow."crates/onsa_core/src/lower/flow/generated.rs"]
-"sample_rate" = 1
-
 [allow."crates/onsa_core/src/lower/flow/mod.rs"]
 "BULK_SIZE" = 1
 "SIZE" = 1
@@ -38,7 +35,6 @@
 "process_inplace" = 1
 "render" = 1
 "reset" = 1
-"sample_rate" = 1
 
 [allow."crates/onsa_core/src/lower/flow/nodes.rs"]
 "delay" = 1
@@ -47,7 +43,7 @@
 
 [allow."crates/onsa_core/src/lower/flow/phases.rs"]
 "cfg" = 1
-"sample_rate" = 2
+"sample_rate" = 1
 
 [allow."crates/onsa_core/src/lower/mod.rs"]
 "Bool" = 1

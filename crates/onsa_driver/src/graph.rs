@@ -13,7 +13,7 @@ use onsa_diag::Span;
 use onsa_sema::body::{LocalId, Target};
 use onsa_sema::clock::Clock;
 use onsa_sema::def::DefKind;
-use onsa_sema::flow::{FlowInfo, InitArg, PlanKind, PlanNode};
+use onsa_sema::flow::{FlowInfo, PlanKind, PlanNode};
 use onsa_sema::{Analysis, DefId};
 use onsa_syntax::ast::{Ast, ExprId, ExprKind};
 
@@ -81,31 +81,15 @@ impl Graph<'_> {
         }
     }
 
-    /// The arguments of a stateful node: look-backs dashed, the rest solid.
+    /// The arguments of a stateful node: look-backs dashed, the rest solid
+    /// ([`onsa_sema::flow::ArgRead::lookback`]); the body of a `par~`.
     fn visit_node(&mut self, node: &PlanNode, name: &str) {
-        match &node.kind {
-            PlanKind::Prev { arg, init, .. } | PlanKind::Delay { arg, init, .. } => {
-                self.visit(*arg, name, true);
-                if let InitArg::Init(i) = init {
-                    self.visit(*i, name, false);
-                }
-            }
-            PlanKind::Vdelay { arg, d, init, .. } => {
-                self.visit(*arg, name, true);
-                self.visit(*d, name, false);
-                if let InitArg::Init(i) = init {
-                    self.visit(*i, name, false);
-                }
-            }
-            PlanKind::Instance { args, .. } => {
-                for &arg in args {
-                    self.visit(arg, name, false);
-                }
-            }
-            PlanKind::Par { var, body, .. } => {
-                self.local_node.insert(*var, name.to_string());
-                self.visit(*body, name, false);
-            }
+        for r in &node.args {
+            self.visit(r.expr, name, r.lookback);
+        }
+        if let PlanKind::Par { var, body, .. } = &node.kind {
+            self.local_node.insert(*var, name.to_string());
+            self.visit(*body, name, false);
         }
     }
 

@@ -9,6 +9,10 @@ use super::clocks::Walked;
 use super::nodes::Recorded;
 use super::*;
 
+mod fields;
+
+pub use fields::{Field, FieldOf, Part};
+
 /// The index of a node in [`FlowInfo::nodes`]: the one index of a node
 /// outside the walk of the clocks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -51,13 +55,15 @@ pub enum PlanKind {
         span: Span,
     },
     /// `par~ var in from..<to { body }`; `children` are the nodes its body
-    /// holds, in the order of the table.
+    /// holds, in the order of the table, and `fields` the fields of its
+    /// replica (none: it has no state).
     Par {
         var: LocalId,
         from: u32,
         to: u32,
         body: ExprId,
         children: Vec<NodeId>,
+        fields: Vec<Field>,
     },
 }
 
@@ -90,6 +96,17 @@ pub struct PlanNode {
     /// otherwise `<kind>_<n>`, numbered per kind over the whole body in the
     /// order the walk finishes the nodes.
     pub name: String,
+    /// The place of its first field in the struct that holds it
+    /// ([`FlowInfo::fields_of`]); none of a `par~` with no state.
+    pub field: Option<u32>,
+}
+
+/// A value of the body the state may keep beside its nodes (S-05).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Kept {
+    Local(LocalId),
+    /// The value of `sample_rate()`, of the stage `init`.
+    SampleRate,
 }
 
 /// The nodes each `let` and the output hold, in the order of the table:
@@ -101,6 +118,21 @@ pub(crate) struct Roots {
 }
 
 impl FlowInfo {
+    /// Whether the state keeps `v` (S-05, §11.3): it is read at a stage
+    /// that is not its own (the `let`s of a constant have none and are
+    /// defined in each phase that reads them). The one place of the
+    /// judgement: [`FlowLet::state`] and the fields of the plan read it.
+    pub fn stored(&self, v: Kept) -> bool {
+        match v {
+            Kept::Local(l) => {
+                let own = self.clocks.locals.get(&l).and_then(|c| c.stage());
+                let reads = self.read_at.get(&l).into_iter().flatten();
+                own.is_some_and(|own| reads.into_iter().any(|&s| s != own))
+            }
+            Kept::SampleRate => self.sample_rate_at.is_some_and(|s| s != ClockStage::Init),
+        }
+    }
+
     pub fn node(&self, id: NodeId) -> &PlanNode {
         &self.nodes[id.0 as usize]
     }
@@ -141,20 +173,23 @@ pub(super) fn build(info: &mut FlowInfo, recorded: Vec<Recorded>, w: &Walked) {
         list.push(id);
     }
     let nodes = recorded.into_iter().zip(children).map(|(r, ch)| {
-        let (clock, args) = match (w.node_of.get(&r.expr), w.info.exprs.get(&r.expr)) {
+        let (clock, args) = match (w.node_of.get(&r.expr), info.clocks.exprs.get(&r.expr)) {
             (Some(&k), _) => (w.nodes[k].clock, w.nodes[k].args.clone()),
             (None, Some(&c)) => (c, Vec::new()),
             (None, None) => onsa_diag::internal::bug(Some(r.span), "a node the walk gave no clock"),
         };
         let kind = match r.kind {
-            PlanKind::Par { var, from, to, body, .. } => PlanKind::Par { var, from, to, body, children: ch },
+            PlanKind::Par { var, from, to, body, fields, .. } => {
+                PlanKind::Par { var, from, to, body, children: ch, fields }
+            }
             kind => kind,
         };
-        PlanNode { expr: r.expr, kind, owner: r.owner, clock, args, name: r.name }
+        PlanNode { expr: r.expr, kind, owner: r.owner, clock, args, name: r.name, field: None }
     });
     info.nodes = nodes.collect();
     info.node_of = info.nodes.iter().enumerate().map(|(i, n)| (n.expr, NodeId(i as u32))).collect();
     info.roots = roots;
+    fields::build(info);
 }
 
 #[cfg(test)]

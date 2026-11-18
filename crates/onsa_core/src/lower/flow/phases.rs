@@ -21,7 +21,7 @@ pub(super) fn gen_init<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Fl
     g.flow().sample_rate = sr.clone();
     g.flow().scopes.push(Scope { state: s.clone() });
     if shape.sample_rate_field {
-        let f = sfield(lw, &s, "sample_rate", span)?;
+        let f = sfield(lw, info, &s, FieldOf::SampleRate, span)?;
         assign(&mut g.stmts, &f, sr.clone())?;
     }
     for (l, input) in info.inputs.iter().zip(&shape.flow.inputs) {
@@ -31,7 +31,7 @@ pub(super) fn gen_init<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Fl
         let from_cfg = field_by_name(lw, cfg.clone(), &input.name, input.span)?;
         g.flow().local_override.insert(l.0, from_cfg.clone());
         if shape.state_locals.contains_key(&l.0) {
-            let f = sfield(lw, &s, &input.name, input.span)?;
+            let f = sfield(lw, info, &s, FieldOf::Input(*l), input.span)?;
             assign(&mut g.stmts, &f, from_cfg)?;
         }
     }
@@ -40,10 +40,10 @@ pub(super) fn gen_init<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Fl
     g.rate_lets(lw, shape, info, ClockStage::Init, &s)?;
     let nodes: Vec<NodeId> = info.top().collect();
     init_nodes(lw, &mut g.cx, &mut g.stmts, &nodes, &s, &sr)?;
-    let poisoned = sfield(lw, &s, "poisoned", span)?;
+    let poisoned = sfield(lw, info, &s, FieldOf::Poisoned, span)?;
     assign(&mut g.stmts, &poisoned, lit(Ty::Bool, span, Lit::Bool(false)))?;
     // S-27: the last store of `init`; a panic before it leaves the instance uninitialized.
-    let initialized = sfield(lw, &s, "initialized", span)?;
+    let initialized = sfield(lw, info, &s, FieldOf::Initialized, span)?;
     assign(&mut g.stmts, &initialized, lit(Ty::Bool, span, Lit::Bool(true)))?;
     g.finish(lw, fns.init, state_ty, false, Some(s));
     Ok(())
@@ -59,42 +59,42 @@ fn init_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, ids: &[NodeI
     let info = plan(cx);
     for &id in ids {
         let n = info.node(id);
-        let (span, name) = (cx.ast.expr(n.expr).span, &n.name);
+        let (span, name, at) = (cx.ast.expr(n.expr).span, &n.name, |p| FieldOf::Node(id, p));
         match &n.kind {
             PlanKind::Prev { init, ty, .. } => {
                 let t = lw.core_ty(*ty, &[], span)?;
                 let v = init_value(lw, cx, init, &t, span)?;
                 let v = materialize(cx, v, out, &format!("{name}.init"));
-                if matches!(init, InitArg::Init(_)) {
-                    assign(out, &sfield(lw, state, &format!("{name}.init"), span)?, v.clone())?;
+                if info.field(at(Part::Init)).is_some() {
+                    assign(out, &sfield(lw, info, state, at(Part::Init), span)?, v.clone())?;
                 }
-                assign(out, &sfield(lw, state, name, span)?, v)?;
+                assign(out, &sfield(lw, info, state, at(Part::Own), span)?, v)?;
             }
             PlanKind::Delay { n: len, init, ty, .. } | PlanKind::Vdelay { max: len, init, ty, .. } => {
                 let t = lw.core_ty(*ty, &[], span)?;
                 let len = if matches!(n.kind, PlanKind::Vdelay { .. }) { *len + 1 } else { *len };
                 let v = init_value(lw, cx, init, &t, span)?;
                 let v = materialize(cx, v, out, &format!("{name}.init"));
-                if matches!(init, InitArg::Init(_)) {
-                    assign(out, &sfield(lw, state, &format!("{name}.init"), span)?, v.clone())?;
+                if info.field(at(Part::Init)).is_some() {
+                    assign(out, &sfield(lw, info, state, at(Part::Init), span)?, v.clone())?;
                 }
-                let buf = sfield(lw, state, &format!("{name}.buf"), span)?;
+                let buf = sfield(lw, info, state, at(Part::Buf), span)?;
                 let fill = Expr::new(buf.ty.clone(), span, ExprKind::Repeat { elem: Box::new(v), n: len });
                 assign(out, &buf, fill)?;
-                assign(out, &sfield(lw, state, &format!("{name}.w"), span)?, u32_lit(span, 0))?;
+                assign(out, &sfield(lw, info, state, at(Part::W), span)?, u32_lit(span, 0))?;
             }
             PlanKind::Instance { callee, args, .. } => {
                 let sub = lw.ensure_flow(*callee)?;
                 let fields = instance_args(lw, cx, *callee, args, Clock::Init)?;
                 let cfg = Expr::new(Ty::Struct(sub.config), span, ExprKind::Struct { ty: sub.config, fields });
                 let c = call(sub.init, Ty::Struct(sub.state), span, vec![borrow(cfg), borrow(sr.clone())]);
-                assign(out, &sfield(lw, state, name, span)?, c)?;
+                assign(out, &sfield(lw, info, state, at(Part::Own), span)?, c)?;
             }
             PlanKind::Par { var, from, to, children, .. } => {
-                if !node_has_state(info, id) {
+                if info.field(at(Part::Own)).is_none() {
                     continue;
                 }
-                let arr = sfield(lw, state, name, span)?;
+                let arr = sfield(lw, info, state, at(Part::Own), span)?;
                 let idx = replica_index(cx, *var, *from, span);
                 let elem = index(arr, idx)?;
                 let mut body = Vec::new();
@@ -117,7 +117,7 @@ pub(super) fn gen_reset<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b F
     g.flow().scopes.push(Scope { state: s.clone() });
     let nodes: Vec<NodeId> = info.top().collect();
     reset_nodes(lw, &mut g.cx, &mut g.stmts, &nodes, &s)?;
-    let poisoned = sfield(lw, &s, "poisoned", span)?;
+    let poisoned = sfield(lw, info, &s, FieldOf::Poisoned, span)?;
     assign(&mut g.stmts, &poisoned, lit(Ty::Bool, span, Lit::Bool(false)))?;
     g.finish(lw, fns.reset, Ty::Unit, true, None);
     Ok(())
@@ -127,38 +127,38 @@ fn reset_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, ids: &[Node
     let info = plan(cx);
     for &id in ids {
         let n = info.node(id);
-        let (span, name) = (cx.ast.expr(n.expr).span, &n.name);
+        let (span, at) = (cx.ast.expr(n.expr).span, |p| FieldOf::Node(id, p));
         match &n.kind {
             PlanKind::Prev { init, ty, .. } => {
                 let t = lw.core_ty(*ty, &[], span)?;
                 let v = match init {
                     InitArg::Const(c) => lw.const_value_expr(c, &t, span)?,
-                    InitArg::Init(_) => sfield(lw, state, &format!("{name}.init"), span)?,
+                    InitArg::Init(_) => sfield(lw, info, state, at(Part::Init), span)?,
                 };
-                assign(out, &sfield(lw, state, name, span)?, v)?;
+                assign(out, &sfield(lw, info, state, at(Part::Own), span)?, v)?;
             }
             PlanKind::Delay { n: len, init, ty, .. } | PlanKind::Vdelay { max: len, init, ty, .. } => {
                 let t = lw.core_ty(*ty, &[], span)?;
                 let len = if matches!(n.kind, PlanKind::Vdelay { .. }) { *len + 1 } else { *len };
                 let v = match init {
                     InitArg::Const(c) => lw.const_value_expr(c, &t, span)?,
-                    InitArg::Init(_) => sfield(lw, state, &format!("{name}.init"), span)?,
+                    InitArg::Init(_) => sfield(lw, info, state, at(Part::Init), span)?,
                 };
-                let buf = sfield(lw, state, &format!("{name}.buf"), span)?;
+                let buf = sfield(lw, info, state, at(Part::Buf), span)?;
                 let fill = Expr::new(buf.ty.clone(), span, ExprKind::Repeat { elem: Box::new(v), n: len });
                 assign(out, &buf, fill)?;
-                assign(out, &sfield(lw, state, &format!("{name}.w"), span)?, u32_lit(span, 0))?;
+                assign(out, &sfield(lw, info, state, at(Part::W), span)?, u32_lit(span, 0))?;
             }
             PlanKind::Instance { callee, .. } => {
                 let sub = lw.ensure_flow(*callee)?;
-                let st = sfield(lw, state, name, span)?;
+                let st = sfield(lw, info, state, at(Part::Own), span)?;
                 expr_stmt(out, call(sub.reset, Ty::Unit, span, vec![inout(st)]));
             }
             PlanKind::Par { var, from, to, children, .. } => {
-                if !node_has_state(info, id) {
+                if info.field(at(Part::Own)).is_none() {
                     continue;
                 }
-                let arr = sfield(lw, state, name, span)?;
+                let arr = sfield(lw, info, state, at(Part::Own), span)?;
                 let elem = index(arr, replica_index(cx, *var, *from, span))?;
                 let mut body = Vec::new();
                 reset_nodes(lw, cx, &mut body, children, &elem)?;
@@ -183,7 +183,7 @@ pub(super) fn gen_ctl<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Flo
         let from_p = field_by_name(lw, p.clone(), &input.name, input.span)?;
         g.flow().local_override.insert(l.0, from_p.clone());
         if shape.state_locals.contains_key(&l.0) {
-            let f = sfield(lw, &s, &input.name, input.span)?;
+            let f = sfield(lw, info, &s, FieldOf::Input(*l), input.span)?;
             assign(&mut g.stmts, &f, from_p)?;
         }
     }
@@ -201,20 +201,20 @@ fn ctl_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, ids: &[NodeId
     let info = plan(cx);
     for &id in ids {
         let n = info.node(id);
-        let (span, name) = (cx.ast.expr(n.expr).span, &n.name);
+        let (span, own) = (cx.ast.expr(n.expr).span, FieldOf::Node(id, Part::Own));
         match &n.kind {
             PlanKind::Instance { callee, args, .. } => {
                 let sub = lw.ensure_flow(*callee)?;
                 let fields = instance_args(lw, cx, *callee, args, Clock::Block)?;
                 let params = Expr::new(Ty::Struct(sub.params), span, ExprKind::Struct { ty: sub.params, fields });
-                let st = sfield(lw, state, name, span)?;
+                let st = sfield(lw, info, state, own, span)?;
                 expr_stmt(out, call(sub.ctl, Ty::Unit, span, vec![inout(st), borrow(params)]));
             }
             PlanKind::Par { var, from, to, children, .. } => {
-                if !node_has_state(info, id) {
+                if info.field(own).is_none() {
                     continue;
                 }
-                let arr = sfield(lw, state, name, span)?;
+                let arr = sfield(lw, info, state, own, span)?;
                 let elem = index(arr, replica_index(cx, *var, *from, span))?;
                 let mut body = Vec::new();
                 cx.flow.as_mut().unwrap().scopes.push(Scope { state: elem.clone() });
@@ -260,17 +260,17 @@ pub(super) fn store_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, 
     let info = plan(cx);
     for &id in ids {
         let n = info.node(id);
-        let (span, name) = (cx.ast.expr(n.expr).span, &n.name);
+        let (span, at) = (cx.ast.expr(n.expr).span, |p| FieldOf::Node(id, p));
         match &n.kind {
             PlanKind::Prev { arg, .. } => {
                 let v = lower_expr(lw, cx, *arg)?;
-                assign(out, &sfield(lw, state, name, span)?, v)?;
+                assign(out, &sfield(lw, info, state, at(Part::Own), span)?, v)?;
             }
             PlanKind::Delay { arg, n: len, .. } | PlanKind::Vdelay { arg, max: len, .. } => {
                 let len = if matches!(n.kind, PlanKind::Vdelay { .. }) { *len + 1 } else { *len };
                 let v = lower_expr(lw, cx, *arg)?;
-                let buf = sfield(lw, state, &format!("{name}.buf"), span)?;
-                let w = sfield(lw, state, &format!("{name}.w"), span)?;
+                let buf = sfield(lw, info, state, at(Part::Buf), span)?;
+                let w = sfield(lw, info, state, at(Part::W), span)?;
                 assign(out, &index(buf, w.clone())?, v)?;
                 let next = checked_binary(
                     BinOp::Rem,

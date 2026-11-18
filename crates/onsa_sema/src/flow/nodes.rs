@@ -121,7 +121,7 @@ impl NodeBuilder {
     /// `par~ var in from..<to { body }` (§11.5) at `e` and `span`: its slot,
     /// and the nodes recorded next are of its body.
     pub(super) fn enter_par(&mut self, e: ExprId, span: Span, var: LocalId, from: u32, to: u32, body: ExprId) {
-        let kind = PlanKind::Par { var, from, to, body, children: Vec::new() };
+        let kind = PlanKind::Par { var, from, to, body, children: Vec::new(), fields: Vec::new() };
         let id = self.push(e, span, kind, String::new());
         self.owners.push(Owner::Par(id));
     }

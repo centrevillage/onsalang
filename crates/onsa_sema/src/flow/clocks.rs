@@ -70,11 +70,15 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
         state: false,
     });
     info.lets = lets.collect();
-    let m = super::reads::mark_all(ast, text, &body, &fcx, &w, &mut info.lets);
+    let m = super::reads::mark_all(ast, text, &body, &fcx, &w, &info.lets);
     (info.read_at, info.sample_rate_at) = (m.read_at, m.sample_rate_at);
     info.complete = w.diag.is_none() && m.diag.is_none() && w.inout_call.is_none();
     #[cfg(test)]
     WALKED.with(|x| x.borrow_mut().push((id, w.clone(), info.complete)));
+    info.clocks = std::mem::take(&mut w.info);
+    info.body = body;
+    let state: Vec<bool> = info.lets.iter().map(|l| l.locals.iter().any(|&v| info.stored(Kept::Local(v)))).collect();
+    info.lets.iter_mut().zip(state).for_each(|(l, s)| l.state = s);
     if info.complete {
         let recorded = std::mem::take(&mut w.recorded);
         super::plan::build(&mut info, recorded, &w);
@@ -84,8 +88,6 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
         keep_first(&mut diag, d);
     }
     let diag = diag.or(w.inout_call);
-    info.clocks = w.info;
-    info.body = body;
     if let Some(d) = diag {
         a.diagnostics.push(d);
     }
@@ -552,7 +554,7 @@ impl Walk<'_> {
             let at = rebase(input.api_clock(), frame);
             if let Some(c) = self.cut(x) {
                 self.check_arg(x, c, at, input, g);
-                reads.push(ArgRead { expr: x, at });
+                reads.push(ArgRead { expr: x, at, lookback: false });
             }
         }
         (Some(rebase(f.out_clock, frame)), reads)
@@ -581,8 +583,8 @@ impl Walk<'_> {
         }
         let out = if held { delay_out(c, self.in_loop) } else { Some(Clock::Error) };
         let at = out.unwrap_or(Clock::Const);
-        let reads = [Some(first), d].into_iter().flatten().map(|x| ArgRead { expr: x, at });
-        let init = call.init_expr.map(|i| ArgRead { expr: i, at: Clock::Init });
+        let reads = [Some(first), d].into_iter().flatten().map(|x| ArgRead { expr: x, at, lookback: x == first });
+        let init = call.init_expr.map(|i| ArgRead { expr: i, at: Clock::Init, lookback: false });
         (out, reads.chain(init).collect())
     }
 }

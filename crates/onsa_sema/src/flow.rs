@@ -20,34 +20,43 @@
 //!   variables: `Init`; match bindings: the clock of the scrutinee).
 //! - `inputs: Vec<LocalId>` — locals of the inputs, in signature order.
 //! - `lets: Vec<FlowLet>` — the top-level `let`s in source order. `state`
-//!   is set when the `let` is read at a later stage than its own (an `Init`
-//!   `let` read at `Block` / `sample`, a `Block` `let` read at `sample`;
-//!   S-05): those become state fields. `let`s of `Clock::Const` are never
-//!   state (they can be inlined).
+//!   is set when a local of the `let` is read at a stage that is not its own
+//!   (an `Init` `let` read at `Block` / `sample`, a `Block` `let` read at
+//!   `sample`; S-05, [`FlowInfo::stored`]): those become state fields.
+//!   `let`s of `Clock::Const` are never state (they can be inlined).
 //! - `nodes: Vec<PlanNode>` — the plan of the stateful nodes (R-91 (1),
 //!   [`plan`]), flat and indexed by [`NodeId`]: the delays, the instance
 //!   calls and the `par~`s, each with its [`Owner`] (a `let`, the output or
 //!   a `par~`, by the tree of the body), its clock, the clocks its arguments
-//!   are read at, and its S-06 name: the `let` name when the node is the
-//!   whole initializer (`let y1 = prev~(^y)`, `let src = saw~(f0)`),
-//!   otherwise `prev_0`, `delay_0`, `vdelay_0`, `<callee>_0`, `par_0`,
+//!   are read at ([`ArgRead`], `lookback` of the first argument of a delay),
+//!   the place of its fields, and its S-06 name: the `let` name when the
+//!   node is the whole initializer (`let y1 = prev~(^y)`, `let src =
+//!   saw~(f0)`), otherwise `prev_0`, `delay_0`, `vdelay_0`, `<callee>_0`, `par_0`,
 //!   numbered per kind over the whole body in the order the walk finishes
 //!   the nodes (a `par~` after its body). [`FlowInfo::roots`] gives the nodes
 //!   of an owner (of a `par~`, its `children`), [`FlowInfo::top`] those of
 //!   the `let`s and the output. Empty when the flow is not `complete`.
 //! - `node_of` — a call or `par~` expression → its node.
+//! - `fields: Vec<Field>` — the fields of the `State` in the order of §12.4
+//!   (S-05, S-06, [`plan`]): `sample_rate`, the inputs and the locals of the
+//!   `let`s [`FlowInfo::stored`] keeps, the fields of the nodes of each `let`
+//!   and of the output, `poisoned`, `initialized`; a `par~` with state has
+//!   the fields of its replica. The lowering reads their names by what they
+//!   hold ([`FlowInfo::field`]) and gives them their Core types.
 //! - `sample_rate_at: Option<ClockStage>` — the latest stage at which
 //!   `sample_rate()` is read (`None`: never; `Init`: no state field needed;
 //!   `Block` / `Tick`: store it, S-05). `sample_rate_calls` lists the calls.
 //! - `read_at: HashMap<LocalId, BTreeSet<ClockStage>>` — the stages at which
 //!   each local is read (inputs, `let`s, `par` variables, match bindings;
-//!   S-05): instance arguments at the stage of the callee input's clock, the
-//!   first argument of a delay (and `d` of `vdelay~`) at `sample`, an `init`
-//!   at `Init`, the initializer of a constant `let` at each stage its locals
+//!   S-05): each argument of a node at the stage of its clock
+//!   ([`ArgRead::at`]: of an instance, the callee input's clock; the first
+//!   argument and the `d` of a delay, the clock of the delay; an `init`,
+//!   `Init`), the initializer of a constant `let` at each stage its locals
 //!   are read at (at `Init` when none is read: a constant is read at the
-//!   first stage). A local that is never read has no entry. The lowering stores an input or a
-//!   `let` read at a later stage than its own, and defines a constant `let`
-//!   in each phase that reads it (§11.3).
+//!   first stage). A local that is never read has no entry. The state keeps
+//!   an input or a `let` read at a stage not its own ([`FlowInfo::stored`]);
+//!   the lowering defines a constant `let` in each phase that reads it
+//!   (§11.3).
 //! - `output: ExprId` — the output expression (clock ≤ `sample`, promoted).
 //! - `complete` — `false` when checking stopped at a diagnostic (tables partial).
 //!
@@ -81,7 +90,7 @@ mod nodes;
 mod plan;
 mod reads;
 
-pub use plan::{NodeId, Owner, PlanKind, PlanNode};
+pub use plan::{Field, FieldOf, Kept, NodeId, Owner, Part, PlanKind, PlanNode};
 
 pub(crate) use clocks::finish_flow;
 
@@ -112,7 +121,8 @@ pub struct FlowLet {
     pub clock: Clock,
     pub init: ExprId,
     pub span: Span,
-    /// Read at a later stage than its own: becomes a state field (S-05).
+    /// A local of it is read at a stage that is not its own: its locals
+    /// become state fields ([`FlowInfo::stored`], S-05).
     pub state: bool,
 }
 
@@ -145,11 +155,14 @@ pub(super) struct NodeClock {
 /// An argument of a node and the clock of the place it is read at (§11.3,
 /// §11.4): the first argument and the `d` of a delay at the clock of the
 /// delay, an `init` at `init`, an argument of an instance at the clock of
-/// its input.
+/// its input. `lookback`: the value is read a tick later (the first
+/// argument of a delay, §11.4), not as the node computes. The one place of
+/// what a node reads (RF-8 (C)).
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct ArgRead {
     pub expr: ExprId,
     pub at: Clock,
+    pub lookback: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -161,6 +174,7 @@ pub struct FlowInfo {
     pub nodes: Vec<PlanNode>,
     pub node_of: HashMap<ExprId, NodeId>,
     pub(crate) roots: plan::Roots,
+    pub fields: Vec<Field>,
     pub sample_rate_at: Option<ClockStage>,
     pub sample_rate_calls: Vec<ExprId>,
     pub read_at: HashMap<LocalId, BTreeSet<ClockStage>>,
