@@ -115,18 +115,34 @@ fn named(key: &str, items: &Named<Value>) -> String {
 /// `out[k]=` for a channel of an array, `out.f=` and `out.f[k]=` for a field of a struct output; a call that panicked
 /// gave none.
 fn out_rows(run: &Run) -> String {
-    let Some(outs) = &run.outs else { return String::new() };
-    let mut rows = String::new();
-    for (i, (path, channels)) in run.shape.iter().enumerate() {
+    leaves(run).iter().map(|l| format!("out{}=[{}]\n", l.path, list(l.frames.iter().copied(), true))).collect()
+}
+
+/// A leaf of the outputs of a call: the field of the output it is of (an index of `run.shape`), its channel when that is
+/// an array, its path in the data, and its value for each frame.
+pub struct Leaf<'v> {
+    pub field: usize,
+    pub channel: Option<usize>,
+    pub path: String,
+    pub frames: Vec<&'v Value>,
+}
+
+/// The leaves of what a call gave, in order (none when it panicked).
+pub fn leaves(run: &Run) -> Vec<Leaf<'_>> {
+    let Some(outs) = &run.outs else { return Vec::new() };
+    let mut all = Vec::new();
+    for (field, (path, channels)) in run.shape.iter().enumerate() {
         let column: Vec<&Value> =
-            if path.is_empty() { outs.iter().collect() } else { outs.iter().filter_map(|o| part(o, i)).collect() };
-        let leaves = (0..channels.unwrap_or(1)).map(|k| match channels {
-            Some(_) => (format!("{path}[{k}]"), column.iter().filter_map(|v| part(v, k)).collect::<Vec<_>>()),
-            None => (path.clone(), column.clone()),
-        });
-        leaves.for_each(|(p, vs)| _ = writeln!(rows, "out{p}=[{}]", list(vs, true)));
+            if path.is_empty() { outs.iter().collect() } else { outs.iter().filter_map(|o| part(o, field)).collect() };
+        for k in 0..channels.unwrap_or(1) {
+            let (channel, path, frames) = match channels {
+                Some(_) => (Some(k), format!("{path}[{k}]"), column.iter().filter_map(|v| part(v, k)).collect()),
+                None => (None, path.clone(), column.clone()),
+            };
+            all.push(Leaf { field, channel, path, frames });
+        }
     }
-    rows
+    all
 }
 
 /// The field or the element `i` of a struct or an array.

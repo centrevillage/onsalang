@@ -47,6 +47,8 @@ pub enum Verdict {
 #[derive(Debug)]
 pub struct TestRun {
     pub name: String,
+    /// The path of the file the test is written in (the interpreter's side appends its test there, W7-19 U3).
+    pub file: String,
     pub asserts: usize,
     pub panic: Option<Panic>,
     pub verdict: Verdict,
@@ -61,12 +63,21 @@ pub type Named<T> = Vec<(String, T)>;
 /// (`.l` or empty) and its channels.
 pub type Shape = Vec<(String, Option<usize>)>;
 
+/// The types a call is written with, as source writes them: the `sample` inputs' (a column of no value has none to tell
+/// it by) and the leaves' of the output (one for each of the `Shape`, an array's element).
+#[derive(Clone, Debug, Default)]
+pub struct Types {
+    pub inputs: Vec<String>,
+    pub leaves: Vec<String>,
+}
+
 /// What a call of `process` or `render` was given (`frames` only of a flow with no `sample` input) and gave, a value for
 /// each frame; a call that panicked gave nothing.
 #[derive(Debug)]
 pub struct Run {
     /// The leaves of one output frame: for each field of a struct output (`.l`, else none) its channels, when it is an array.
     pub shape: Shape,
+    pub types: Types,
     pub config: Named<Value>,
     pub params: Named<Value>,
     pub frames: Option<usize>,

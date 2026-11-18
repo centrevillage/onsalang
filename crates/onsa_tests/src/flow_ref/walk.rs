@@ -29,7 +29,7 @@ use crate::{Markers, parse_markers};
 use onsa_sema::prim::PrimRow;
 
 use super::reads::{elem, part};
-pub use super::walk_model::{CaseRun, Event, Named, Panic, Run, Shape, Skip, TestRun, Verdict};
+pub use super::walk_model::{CaseRun, Event, Named, Panic, Run, Shape, Skip, TestRun, Types, Verdict};
 
 /// Run the tests of `input` on the evaluator, its functions through the interpreter host. Call it on a thread of a
 /// large stack. `Err` is a case that is not read (no check or a diagnostic that is not of a feature this version does not
@@ -60,7 +60,8 @@ pub fn run_case(input: PackageInput, wrappers: &Wrappers) -> Result<CaseRun, Str
             generated: 0,
         };
         let r = view.body(def).map_err(Halt::from).and_then(|body| run.steps(body, root));
-        tests.push(run.finish(name.clone(), r, marked(&name)));
+        let file = loaded.sources.file(view.name_span(def).file).name().to_string();
+        tests.push(run.finish((name.clone(), file), r, marked(&name)));
     }
     Ok(CaseRun { tests, lowered: core.is_some(), e0200 })
 }
@@ -119,7 +120,7 @@ pub(super) struct Walk<'h, 'a> {
 }
 
 impl<'a> Walk<'_, 'a> {
-    fn finish(self, name: String, r: Result<(), Halt>, marked: bool) -> TestRun {
+    fn finish(self, (name, file): (String, String), r: Result<(), Halt>, marked: bool) -> TestRun {
         let (asserts, generated, events) = (self.asserts, self.generated, self.events);
         let (panic, verdict) = match r {
             Ok(()) => (None, Verdict::Ok),
@@ -137,7 +138,7 @@ impl<'a> Walk<'_, 'a> {
             Verdict::Ok if generated == 0 => Verdict::Skipped(Skip::NoCall),
             v => v,
         };
-        TestRun { name, asserts, panic, verdict, events }
+        TestRun { name, file, asserts, panic, verdict, events }
     }
 
     /// `e` evaluated in the frame of the test, whose locals are kept between the calls.
@@ -286,7 +287,7 @@ impl<'a> Walk<'_, 'a> {
         let inputs = named_columns(&sampled, &columns);
         let (state, st) = Self::state(&mut self.states, body, args)?;
         let outcome = st.process_outcome(params, &inputs, frames, Some(&mut *self.host))?;
-        let run = run_of((&args.config, &args.params), Some(frames), &inputs, &outcome, shape(body.view, decl.out));
+        let run = run_of((&args.config, &args.params), Some(frames), &inputs, &outcome, io(body.view, decl, &sampled));
         self.events.push(Event::Process { state, run });
         match outcome {
             Outcome::Ok(gave) => {
@@ -369,11 +370,11 @@ fn run_of(
     frames: Option<usize>,
     inputs: &[(&str, &[Value])],
     outcome: &Outcome,
-    shape: Shape,
+    (shape, types): (Shape, Types),
 ) -> Run {
     let outs = if let Outcome::Ok(o) = outcome { Some(o.clone()) } else { None };
     let inputs = inputs.iter().map(|(n, c)| (n.to_string(), c.to_vec())).collect();
-    Run { shape, config: config.clone(), params: params.clone(), frames, inputs, outs }
+    Run { shape, types, config: config.clone(), params: params.clone(), frames, inputs, outs }
 }
 
 /// A call of `render` on the evaluator with its `Config` and `Params` and its rate, frames and input columns: what it gave,
@@ -386,11 +387,12 @@ fn render_run<'a>(
     (sample_rate, frames, columns): (f32, Option<usize>, &[Vec<Value>]),
 ) -> Result<(Outcome, Event), Fault> {
     let decl = view.flow(flow)?;
-    let inputs = named_columns(&inputs_at(decl, Stage::Sample)?, columns);
+    let sampled = inputs_at(decl, Stage::Sample)?;
+    let inputs = named_columns(&sampled, columns);
     let (cfg, prm) = (by_name(config), by_name(params));
     let call = Call { config: &cfg, params: &prm, inputs: &inputs, frames };
     let outcome = Instance::render(view, flow, sample_rate, &call, Some(host)).map_err(|stop| stop.fault)?;
-    let run = run_of((config, params), frames, &inputs, &outcome, shape(view, decl.out));
+    let run = run_of((config, params), frames, &inputs, &outcome, io(view, decl, &sampled));
     Ok((outcome, Event::Render { flow: view.qualified_name(flow), sample_rate, run }))
 }
 
@@ -460,21 +462,29 @@ fn rendered_value(view: View, ret: TyId, outs: &[Value]) -> Result<Value, Fault>
     Ok(Value::Struct((0..view.struct_fields(def)?.len()).map(field).collect::<Result<_, _>>()?))
 }
 
-/// The leaves of the output type `out` of a flow (a struct output is its fields; an array is its channels).
-fn shape(view: View, out: TyId) -> Shape {
+/// The leaves of the output of a flow, and the types of its `sample` inputs and of those leaves (a struct output is its
+/// fields; an array is its channels, and its element is the type).
+fn io(view: View, decl: &FlowDef, sampled: &[&FlowInput]) -> (Shape, Types) {
     let channels = |t| match view.ty(t) {
         Ty::Array(_, Len::Const(n)) => Some(*n as usize),
         _ => None,
     };
-    match view.ty(out) {
+    let element = |t| match view.ty(t) {
+        Ty::Array(e, _) => view.display_type(*e),
+        _ => view.display_type(t),
+    };
+    let leaves: Vec<(String, TyId)> = match view.ty(decl.out) {
         Ty::Named(def, _) => match view.struct_fields(*def) {
-            Ok(fields) if !fields.is_empty() => {
-                fields.iter().map(|f| (format!(".{}", f.name), channels(f.ty))).collect()
-            }
-            _ => vec![(String::new(), None)],
+            Ok(fields) if !fields.is_empty() => fields.iter().map(|f| (format!(".{}", f.name), f.ty)).collect(),
+            _ => vec![(String::new(), decl.out)],
         },
-        _ => vec![(String::new(), channels(out))],
-    }
+        _ => vec![(String::new(), decl.out)],
+    };
+    let types = Types {
+        inputs: sampled.iter().map(|i| view.display_type(i.ty)).collect(),
+        leaves: leaves.iter().map(|(_, t)| element(*t)).collect(),
+    };
+    (leaves.into_iter().map(|(p, t)| (p, channels(t))).collect(), types)
 }
 
 /// The columns of the inputs by the name of the `sample` input each is given to.

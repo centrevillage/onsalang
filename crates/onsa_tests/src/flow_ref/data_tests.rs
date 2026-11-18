@@ -4,7 +4,7 @@
 use super::data::{Counts, case_text, manifest};
 use super::flow::PanicAt;
 use super::value::{IntKind, Value};
-use super::walk::{CaseRun, Event, Panic, Run, Skip, TestRun, Verdict};
+use super::walk::{CaseRun, Event, Panic, Run, Skip, TestRun, Types, Verdict};
 
 fn f(x: f32) -> Value {
     Value::F32(x)
@@ -13,7 +13,15 @@ fn f(x: f32) -> Value {
 /// A run whose output has the leaves `shape` (a path and its channels).
 fn shaped(shape: &[(&str, Option<usize>)], inputs: Vec<(String, Vec<Value>)>, outs: Option<Vec<Value>>) -> Run {
     let shape = shape.iter().map(|(p, c)| (p.to_string(), *c)).collect();
-    Run { shape, config: vec![("k".into(), Value::int(IntKind::I32, -3))], params: vec![], frames: None, inputs, outs }
+    Run {
+        shape,
+        types: Types::default(),
+        config: vec![("k".into(), Value::int(IntKind::I32, -3))],
+        params: vec![],
+        frames: None,
+        inputs,
+        outs,
+    }
 }
 
 fn run(inputs: Vec<(String, Vec<Value>)>, outs: Option<Vec<Value>>) -> Run {
@@ -21,7 +29,7 @@ fn run(inputs: Vec<(String, Vec<Value>)>, outs: Option<Vec<Value>>) -> Run {
 }
 
 fn test(name: &str, verdict: Verdict, panic: Option<Panic>, events: Vec<Event>) -> TestRun {
-    TestRun { name: name.into(), asserts: 0, panic, verdict, events }
+    TestRun { name: name.into(), file: String::new(), asserts: 0, panic, verdict, events }
 }
 
 fn case(tests: Vec<TestRun>) -> CaseRun {

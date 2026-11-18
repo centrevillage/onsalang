@@ -3,7 +3,8 @@
 //! (`onsa_tests::flow_ref::walk`), its asserts and its marks (`TESTFAIL`, `PANIC`) against what the evaluator gives. The
 //! numbers are printed (`--nocapture`); a run that finds nothing, or a case that cannot be lowered and is not in the list
 //! of things pending, fails. The data of `tests/flow_ref/` (U2c) is made from what the evaluator gave and compared with the
-//! files: `UPDATE_GOLDEN=1` rewrites them, but not when the evaluator and an assert of a case disagree.
+//! files: `UPDATE_GOLDEN=1` rewrites them, but not when the evaluator and an assert of a case disagree. Then what the
+//! evaluator gave is printed as tests of Onsa and run through the interpreter (`compare.rs`, `print.rs`, U3).
 
 use std::collections::BTreeMap;
 use std::sync::Mutex;
@@ -17,10 +18,19 @@ use onsa_tests::flow_ref::walk::{Skip, Verdict, run_case};
 use onsa_tests::golden::{self, Update};
 use onsa_tests::pending::{Kind, Pending};
 
+#[path = "flow_ref/compare.rs"]
+mod compare;
+#[path = "flow_ref/compare_tests.rs"]
+mod compare_tests;
+#[path = "flow_ref/print.rs"]
+mod print;
+#[path = "flow_ref/print_tests.rs"]
+mod print_tests;
+
 /// The roots of the cases that are run on the evaluator, from the repository root (one place; a root is added here).
 const ROOTS: &[&str] = &["tests/spec/flow_semantics/"];
 
-/// The directory of the data, and the files of the cases the halves have run (the last half to finish writes or compares
+/// The directory of the data, and the files of the cases the parts have run (the last part to finish writes or compares
 /// the `MANIFEST`, which is of all of them).
 const DATA: &str = "tests/flow_ref";
 static DONE: Mutex<BTreeMap<String, (String, Counts)>> = Mutex::new(BTreeMap::new());
@@ -38,31 +48,40 @@ struct Tally {
     failures: Vec<String>,
     /// The data of each case: its name, its text and counts.
     files: Vec<(String, String, Counts)>,
-    /// How many cases of the roots both halves have.
+    /// How many cases of the roots all the parts have.
     total: usize,
 }
 
 /// The whole run on a thread of a large stack, the wrappers made and kept in it (the interpreter's values are not `Send`).
-fn run(half: usize) -> Tally {
-    onsa_diag::stack::run(move || run_all(half))
+fn run(part: usize) -> Tally {
+    onsa_diag::stack::run(move || run_all(part))
 }
 
-/// The cases of `half` (0 or 1: every other one of the sorted cases, so that one `#[test]` stays under a second).
-fn run_all(half: usize) -> Tally {
-    let root = repo_root();
-    let pending = Pending::load(&root).expect("the list of things pending");
-    let (cases, errors) = case::collect(&root);
+/// How many parts the cases are split in (every `PARTS`-th one of the sorted cases to a part, so that one `#[test]` stays
+/// under a second).
+const PARTS: usize = 4;
+
+/// The cases of the part `part` (below `PARTS`) that are tests (path, name, input), and how many cases of the roots all
+/// the parts have.
+fn cases_of(part: usize) -> (Vec<(String, String, PackageInput)>, usize) {
+    let (cases, errors) = case::collect(&repo_root());
     assert!(errors.is_empty(), "{errors:?}");
-    let wrappers = Wrappers::default();
-    let mut t = Tally::default();
     let mine = cases.iter().filter(|c| ROOTS.iter().any(|r| c.path.starts_with(r)));
     let tests = |c: &&case::Case| c.setup.as_ref().is_ok_and(|s| s.test.mode == Mode::Test);
-    t.total = mine.clone().filter(tests).count();
-    for c in mine.enumerate().filter(|(i, _)| i % 2 == half).map(|(_, c)| c) {
-        let setup = c.setup.as_ref().unwrap_or_else(|e| panic!("{}: {e}", c.path));
-        if setup.test.mode == Mode::Test {
-            tally_case(&mut t, &pending, &wrappers, (&c.path, &c.name), setup.input.clone());
-        }
+    let total = mine.clone().filter(tests).count();
+    let of_part = mine.enumerate().filter(|(i, _)| i % PARTS == part).map(|(_, c)| c);
+    let setup = |c: &case::Case| c.setup.as_ref().unwrap_or_else(|e| panic!("{}: {e}", c.path)).clone();
+    let all = of_part.map(|c| (c, setup(c))).filter(|(_, s)| s.test.mode == Mode::Test);
+    (all.map(|(c, s)| (c.path.clone(), c.name.clone(), s.input)).collect(), total)
+}
+
+fn run_all(part: usize) -> Tally {
+    let pending = Pending::load(&repo_root()).expect("the list of things pending");
+    let wrappers = Wrappers::default();
+    let (cases, total) = cases_of(part);
+    let mut t = Tally { total, ..Tally::default() };
+    for (path, name, input) in cases {
+        tally_case(&mut t, &pending, &wrappers, (&path, &name), input);
     }
     t
 }
@@ -95,16 +114,26 @@ fn tally_case(t: &mut Tally, pending: &Pending, wrappers: &Wrappers, (path, name
 }
 
 #[test]
-fn the_cases_of_the_flow_semantics_run_on_the_evaluator_first_half() {
+fn the_cases_of_the_flow_semantics_run_on_the_evaluator_part_0() {
     report(run(0));
 }
 
 #[test]
-fn the_cases_of_the_flow_semantics_run_on_the_evaluator_second_half() {
+fn the_cases_of_the_flow_semantics_run_on_the_evaluator_part_1() {
     report(run(1));
 }
 
-/// The data of the cases of one half against the files (or into them), and when the last half is done, the `MANIFEST`
+#[test]
+fn the_cases_of_the_flow_semantics_run_on_the_evaluator_part_2() {
+    report(run(2));
+}
+
+#[test]
+fn the_cases_of_the_flow_semantics_run_on_the_evaluator_part_3() {
+    report(run(3));
+}
+
+/// The data of the cases of one part against the files (or into them), and when the last part is done, the `MANIFEST`
 /// and the files no case makes (a case that went away). Nothing is written when a case disagrees with its asserts.
 fn publish(files: Vec<(String, String, Counts)>, total: usize) -> Vec<String> {
     let (root, update) = (repo_root(), Update::from_env());
@@ -159,6 +188,104 @@ fn report(mut t: Tally) {
     t.failures = publish(std::mem::take(&mut t.files), t.total);
     assert!(t.failures.is_empty(), "{}", t.failures.join("\n"));
     assert!(t.cases > 0 && t.tests > 0 && t.evaluated > 0 && t.asserts > 0, "nothing was run");
+}
+
+/// What the interpreter did with the tests the evaluator evaluated, in the cases of one part.
+#[derive(Default)]
+struct Compared {
+    cases: usize,
+    /// The cases that do not lower (the list of things pending), and their tests: not compared.
+    waiting: usize,
+    held: usize,
+    /// The tests of the other cases the evaluator evaluated (only these are compared), and those it did not
+    /// (unavailable or skipped).
+    evaluated: usize,
+    left: usize,
+    ran: usize,
+    asserts: usize,
+    panicked: usize,
+    unprintable: BTreeMap<String, usize>,
+    failures: Vec<String>,
+}
+
+fn compare_one(t: &mut Compared, wrappers: &Wrappers, path: &str, input: PackageInput) {
+    t.cases += 1;
+    let run = match run_case(input.clone(), wrappers) {
+        Ok(run) => run,
+        Err(e) => return t.failures.push(format!("not read: {path}: {e}")),
+    };
+    if run.e0200 || !run.lowered {
+        (t.waiting, t.held) = (t.waiting + 1, t.held + run.tests.len());
+        return;
+    }
+    let evaluated = run.tests.iter().filter(|r| r.verdict == Verdict::Ok).count();
+    (t.evaluated, t.left) = (t.evaluated + evaluated, t.left + run.tests.len() - evaluated);
+    let c = compare::compare_case(path, input, &run);
+    (t.ran, t.asserts) = (t.ran + c.ran, t.asserts + c.asserts);
+    t.panicked += c.panicked;
+    c.unprintable.into_iter().for_each(|(why, n)| *t.unprintable.entry(why).or_default() += n);
+    t.failures.extend(c.failures);
+}
+
+fn compare_part(part: usize) -> Compared {
+    onsa_diag::stack::run(move || {
+        let (mut t, wrappers) = (Compared::default(), Wrappers::default());
+        cases_of(part).0.into_iter().for_each(|(path, _, input)| compare_one(&mut t, &wrappers, &path, input));
+        t
+    })
+}
+
+fn report_compared(t: Compared) {
+    let unprintable: usize = t.unprintable.values().sum();
+    println!(
+        "{} cases ({} waiting with {} tests, not compared): {} tests compared with {} asserts ({} panicked at their last \
+         call), {} not printed, {} not evaluated (unavailable or skipped)",
+        t.cases, t.waiting, t.held, t.ran, t.asserts, t.panicked, unprintable, t.left
+    );
+    t.unprintable.iter().for_each(|(why, n)| println!("  not printed {n}: {why}"));
+    assert!(t.failures.is_empty(), "{}", t.failures.join("\n"));
+    assert_eq!(t.evaluated, t.ran + unprintable, "a test of the evaluator was neither compared nor counted");
+    assert!(t.ran > 0 && t.asserts > 0, "nothing was compared");
+}
+
+#[test]
+#[should_panic(expected = "nothing was compared")]
+fn a_run_that_compared_nothing_fails() {
+    report_compared(Compared::default());
+}
+
+#[test]
+#[should_panic(expected = "neither compared nor counted")]
+fn a_test_of_the_evaluator_that_was_dropped_fails() {
+    // Three tests were evaluated, one was compared and none is counted as not printed.
+    report_compared(Compared { evaluated: 3, ran: 1, ..Compared::default() });
+}
+
+#[test]
+#[should_panic(expected = "a failure of the case")]
+fn a_failure_fails_even_when_everything_is_counted() {
+    let failures = vec!["a failure of the case".to_string()];
+    report_compared(Compared { evaluated: 1, ran: 1, asserts: 1, failures, ..Compared::default() });
+}
+
+#[test]
+fn the_tests_the_evaluator_evaluated_pass_in_the_interpreter_part_0() {
+    report_compared(compare_part(0));
+}
+
+#[test]
+fn the_tests_the_evaluator_evaluated_pass_in_the_interpreter_part_1() {
+    report_compared(compare_part(1));
+}
+
+#[test]
+fn the_tests_the_evaluator_evaluated_pass_in_the_interpreter_part_2() {
+    report_compared(compare_part(2));
+}
+
+#[test]
+fn the_tests_the_evaluator_evaluated_pass_in_the_interpreter_part_3() {
+    report_compared(compare_part(3));
 }
 
 /// A case of the flow `acc` (a running sum) and one test with the one `assert`.
