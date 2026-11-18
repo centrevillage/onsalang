@@ -21,7 +21,8 @@
       "Edit(/CLAUDE.md)"
     ],
     "allow": [
-      "Bash(UPDATE_GOLDEN=1 cargo test -p onsa_tests --test cases)"
+      "Bash(UPDATE_GOLDEN=1 cargo test -p onsa_tests --test cases)",
+      "Bash(UPDATE_GOLDEN=1 cargo test -p onsa_tests --test flow_ref)"
     ],
     "deny": [
       "Read(.env)",
