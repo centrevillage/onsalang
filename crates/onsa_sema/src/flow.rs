@@ -91,24 +91,12 @@ mod loops;
 mod nodes;
 mod plan;
 mod reads;
+#[cfg(test)]
+mod tests;
 
 pub use plan::{Field, FieldOf, Kept, NodeId, Owner, Part, PlanKind, PlanNode};
 
 pub(crate) use clocks::finish_flow;
-
-/// The text at `span` of the module `text`: the `found` of a diagnostic of
-/// the flow checks.
-fn found(text: &str, span: Span) -> String {
-    text[span.start as usize..span.end as usize].to_string()
-}
-
-/// Keeps in `slot` the first of its diagnostic and `d` in the order of the
-/// file (§18.1): a check that walks on past an error reports the first.
-fn keep_first(slot: &mut Option<Diagnostic>, d: Diagnostic) {
-    if slot.as_ref().is_none_or(|old| d.order_in_file() < old.order_in_file()) {
-        *slot = Some(d);
-    }
-}
 
 /// A top-level `let` of a flow body.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -222,13 +210,16 @@ struct NodeCall {
 }
 
 impl NodeCall {
-    /// The `d` of a `vdelay~` (its second argument, §11.4): the one place
-    /// of it.
-    fn d(&self) -> Option<ExprId> {
-        match self.kind {
+    /// The parts of a delay (§11.4) the walk and the plan read: its first
+    /// argument, the `d` of a `vdelay~` (its second) and the written `init`.
+    /// The one place of them.
+    fn delay_parts(&self) -> (ExprId, Option<ExprId>, Option<ExprId>) {
+        let Some(&first) = self.args.first() else { onsa_diag::internal::bug(None, "a delay with no argument") };
+        let d = match self.kind {
             NodeKind::Delay(Delay::Variable, _) => self.args.get(1).copied(),
             NodeKind::Delay(..) | NodeKind::Instance(_) => None,
-        }
+        };
+        (first, d, self.init_expr)
     }
 }
 

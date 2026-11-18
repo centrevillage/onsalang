@@ -418,7 +418,10 @@ impl Walker<'_> {
             false => None,
         };
         match at {
-            Some(Fail::Report(e)) if e.order_in_file() < d.order_in_file() => Ok(()),
+            Some(Fail::Report(e)) => {
+                *e = d.earlier(e.clone());
+                Ok(())
+            }
             Some(why) => {
                 *why = Fail::Report(d);
                 Ok(())

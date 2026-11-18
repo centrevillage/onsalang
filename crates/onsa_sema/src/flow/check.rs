@@ -109,31 +109,19 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// The bindings of the `let` pattern `pat`, not in an `Or` (the `let`'s
+    /// E0502), each with a fresh type.
     fn predeclare_pat(&mut self, pat: PatId, locals: &mut Vec<LocalId>) -> R<()> {
-        let ast = self.ast;
-        match &ast.pat(pat).kind {
-            PatKind::Bind(id) => {
-                let t = self.fresh();
-                let lid = self.local_of_pat(pat)?;
-                self.bind_local(lid, t, id.span)?;
-                self.info.pat_locals.insert(pat, lid);
-                locals.push(lid);
-                Ok(())
-            }
-            PatKind::Tuple(elems) | PatKind::TupleStruct { elems, .. } => {
-                for &e in &elems.clone() {
-                    self.predeclare_pat(e, locals)?;
-                }
-                Ok(())
-            }
-            PatKind::Struct { fields, .. } => {
-                for (_, fp) in &fields.clone() {
-                    self.predeclare_pat(*fp, locals)?;
-                }
-                Ok(())
-            }
-            PatKind::Wild | PatKind::Lit(_) | PatKind::Neg(_) | PatKind::Path(_) | PatKind::Or(_) => Ok(()),
+        let mut binds = Vec::new();
+        crate::pat::each_bind(self.ast, pat, false, &mut |q, name| binds.push((q, name.span)));
+        for (q, span) in binds {
+            let t = self.fresh();
+            let lid = self.local_of_pat(q)?;
+            self.bind_local(lid, t, span)?;
+            self.info.pat_locals.insert(q, lid);
+            locals.push(lid);
         }
+        Ok(())
     }
 
     /// Statements in flow mode (§11.2): the `let`s of the top level; the

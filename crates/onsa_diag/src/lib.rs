@@ -66,6 +66,12 @@ impl Span {
     pub fn contains(self, offset: u32) -> bool {
         self.start <= offset && offset < self.end
     }
+
+    /// The text of the span in `text`, the text of its file: the `found` of
+    /// a diagnostic at it.
+    pub fn text_in(self, text: &str) -> &str {
+        &text[self.start as usize..self.end as usize]
+    }
 }
 
 /// One edit of a fix candidate: the range `span` is replaced by `replace`.
@@ -288,6 +294,28 @@ impl Diagnostic {
     /// that keeps one diagnostic of an item keeps the first in it.
     pub fn unit_order(&self) -> (usize, (u32, u32, &str, &str)) {
         (self.stage.check_rank().unwrap_or(usize::MAX), self.order_in_file())
+    }
+
+    /// The first of `self` and `other` in [`Diagnostic::order_in_file`];
+    /// `self` of two at one place. The one test of the order of two.
+    pub fn earlier(self, other: Diagnostic) -> Diagnostic {
+        if other.order_in_file() < self.order_in_file() { other } else { self }
+    }
+
+    /// Keeps in `slot` the first of its diagnostic and `d` (§18.1), its own
+    /// of two at one place: a check that walks on past an error reports the
+    /// first.
+    pub fn keep_first(slot: &mut Option<Diagnostic>, d: Diagnostic) {
+        *slot = Some(match slot.take() {
+            Some(old) => old.earlier(d),
+            None => d,
+        });
+    }
+
+    /// The first of `ds` in the order of the file (§18.1), the earlier in
+    /// `ds` of two at one place.
+    pub fn first_in_file(ds: impl IntoIterator<Item = Diagnostic>) -> Option<Diagnostic> {
+        ds.into_iter().reduce(Diagnostic::earlier)
     }
 
     pub fn with_found(mut self, found: impl Into<String>) -> Diagnostic {
@@ -740,6 +768,31 @@ mod tests {
         let mut sources = SourceMap::default();
         let f = sources.add("dsp/voice.onsa", "flow v() {\n  let f1 = resonator(src, vowel_f1, 80.0)\n}\n");
         (sources, f)
+    }
+
+    #[test]
+    fn the_first_kept_is_the_first_in_the_file_and_the_one_before_of_two_at_one_place() {
+        let at =
+            |start, code, message: &str| Diagnostic::new(Stage::Flow, code, Span::new(FileId(0), start, 9), message);
+        let shown = |d: &Option<Diagnostic>| d.as_ref().map(|d| (d.span.start, d.message.clone()));
+        let mut slot = None;
+        Diagnostic::keep_first(&mut slot, at(5, Code::E0811, "b"));
+        Diagnostic::keep_first(&mut slot, at(7, Code::E0811, "c"));
+        assert_eq!(shown(&slot), Some((5, "b".into())), "a later one is dropped");
+        Diagnostic::keep_first(&mut slot, at(5, Code::E0811, "a"));
+        assert_eq!(shown(&slot), Some((5, "a".into())), "at one place, the order of the code and the message");
+        let kept = slot.clone().map(|d| d.with_found("kept"));
+        let mut slot = kept;
+        Diagnostic::keep_first(&mut slot, at(5, Code::E0811, "a"));
+        assert_eq!(slot.and_then(|d| d.found), Some("kept".into()), "of two the same, the one kept");
+        let ds = || {
+            [at(3, Code::E0811, "x").with_found("1"), at(2, Code::E0811, "y"), at(2, Code::E0811, "y").with_found("3")]
+        };
+        let first = Diagnostic::first_in_file(ds()).unwrap();
+        assert_eq!((first.span.start, first.found), (2, None), "the earlier in the list of two the same");
+        assert!(Diagnostic::first_in_file([]).is_none());
+        let [x, y, _] = ds();
+        assert_eq!(x.earlier(y).span.start, 2);
     }
 
     #[test]

@@ -103,7 +103,7 @@ pub(crate) fn path(
     path: &Path,
 ) -> Result<(ConstU32, Option<DefId>), ConstErr> {
     let Some(records) = records else { return Err(ConstErr::Unknown) };
-    let shown = at.2[path.span.start as usize..path.span.end as usize].to_string();
+    let shown = path.span.text_in(at.2).to_string();
     let got = settle(chain(a, at, records, path.segments.len(), (&path.segments[0].name, shown, path.span)))?;
     finish(got, path.span)
 }
@@ -172,7 +172,7 @@ fn settle(r: Result<Got, ConstErr>) -> Result<Got, ConstErr> {
 /// (S-989). The grammar is the syntax's ([`Ast::const_form`]).
 fn node(a: &mut Analysis, cx: &ConstCx, e: ExprId) -> Result<Got, ConstErr> {
     let expr = cx.ast.expr(e);
-    let shown = || cx.text[expr.span.start as usize..expr.span.end as usize].to_string();
+    let shown = || expr.span.text_in(cx.text).to_string();
     // A prefix `-` before a numeric literal, whatever its value (S-228).
     if cx.ast.negated_literal(e).is_some() {
         return Err(no_negative(shown(), expr.span).into());
@@ -340,7 +340,7 @@ pub(crate) fn of_entity(
     (head, span): (&str, Span),
 ) -> Result<Option<u32>, ConstErr> {
     let (Entity::Def(d) | Entity::Member(d)) = entity else { return Ok(None) };
-    let found = text[span.start as usize..span.end as usize].to_string();
+    let found = span.text_in(text).to_string();
     let def = a.def(d).clone();
     let DefKind::Const(c) = &def.kind else { return Ok(None) };
     // A constant of a cycle (E0311, §18.1, S-734), and of an `impl` with an

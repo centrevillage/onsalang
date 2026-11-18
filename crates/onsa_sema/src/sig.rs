@@ -555,5 +555,5 @@ fn one_line(s: &str) -> String {
 }
 
 fn src(cx: &Cx<'_>, span: Span) -> String {
-    cx.text[span.start as usize..span.end as usize].to_string()
+    span.text_in(cx.text).to_string()
 }

@@ -701,7 +701,7 @@ impl<'a> Walker<'a> {
     }
 
     fn src(&self, span: onsa_diag::Span) -> String {
-        self.text[span.start as usize..span.end as usize].to_string()
+        span.text_in(self.text).to_string()
     }
 
     /// A body with the parameters of its heading.

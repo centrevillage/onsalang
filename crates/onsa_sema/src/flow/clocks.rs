@@ -85,7 +85,7 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
     }
     let mut diag = w.diag;
     if let Some(d) = m.diag {
-        keep_first(&mut diag, d);
+        Diagnostic::keep_first(&mut diag, d);
     }
     let diag = diag.or(w.inout_call);
     if let Some(d) = diag {
@@ -471,18 +471,11 @@ impl Walk<'_> {
 
     fn bind_pat(&mut self, p: PatId, c: Option<Clock>) {
         let ast = self.ast;
-        match &ast.pat(p).kind {
-            PatKind::Bind(_) => match self.body.pat_locals.get(&p) {
-                Some(&l) => self.bind_local(l, c),
-                None if self.body.pat_consts.contains_key(&p) || self.body.pat_ctors.contains_key(&p) => {}
-                None => onsa_diag::internal::bug(Some(ast.pat(p).span), "a binding with no local"),
-            },
-            PatKind::TupleStruct { elems: ps, .. } | PatKind::Tuple(ps) | PatKind::Or(ps) => {
-                ps.iter().for_each(|&q| self.bind_pat(q, c));
-            }
-            PatKind::Struct { fields, .. } => fields.iter().for_each(|&(_, q)| self.bind_pat(q, c)),
-            PatKind::Wild | PatKind::Lit(_) | PatKind::Neg(_) | PatKind::Path(_) => {}
-        }
+        crate::pat::each_bind(ast, p, true, &mut |q, _| match self.body.pat_locals.get(&q) {
+            Some(&l) => self.bind_local(l, c),
+            None if self.body.pat_consts.contains_key(&q) || self.body.pat_ctors.contains_key(&q) => {}
+            None => onsa_diag::internal::bug(Some(ast.pat(q).span), "a binding with no local"),
+        });
     }
 
     /// A call (§11.3, §11.4, §11.5).
@@ -565,19 +558,16 @@ impl Walk<'_> {
     /// `init`, not its length, and the element type of `vdelay~`. With the
     /// E0813 of its first argument, it is in error (§18.1).
     fn delay(&mut self, e: ExprId, delay: Delay, call: &NodeCall) -> (Option<Clock>, Vec<ArgRead>) {
-        let Some(&first) = call.args.first() else {
-            onsa_diag::internal::bug(self.span(e), "a delay with no argument")
-        };
+        let (first, d, init) = call.delay_parts();
         let c = self.expr(first);
         let held = c.filter(|_| self.checking()).is_none_or(|c| self.check_first(delay, first, c));
         if delay == Delay::Variable && self.checking() {
             self.check_float(e);
         }
-        let d = call.d();
         if let Some(d) = d {
             self.cut(d);
         }
-        if let Some(i) = call.init_expr
+        if let Some(i) = init
             && let Some(c) = self.cut(i)
         {
             self.check_init(delay, i, c);
@@ -585,7 +575,7 @@ impl Walk<'_> {
         let out = if held { delay_out(c, self.in_loop) } else { Some(Clock::Error) };
         let at = out.unwrap_or(Clock::Const);
         let reads = [Some(first), d].into_iter().flatten().map(|x| ArgRead { expr: x, at, lookback: x == first });
-        let init = call.init_expr.map(|i| ArgRead { expr: i, at: Clock::Init, lookback: false });
+        let init = init.map(|i| ArgRead { expr: i, at: Clock::Init, lookback: false });
         (out, reads.chain(init).collect())
     }
 }

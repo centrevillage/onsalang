@@ -154,7 +154,9 @@ impl Marker<'_> {
             ClockStage::SAMPLE => ClockName::Sample.name(),
             s => onsa_diag::internal::bug(Some(span), format!("a read at the stage {s:?}, which W7-09 makes")),
         };
-        let d = Feature::NonRtCallAtClock.diagnostic(Stage::Flow, span, &[stage]).with_found(found(self.text, span));
-        keep_first(&mut self.out.diag, d);
+        let d = Feature::NonRtCallAtClock
+            .diagnostic(Stage::Flow, span, &[stage])
+            .with_found(span.text_in(self.text).to_string());
+        Diagnostic::keep_first(&mut self.out.diag, d);
     }
 }

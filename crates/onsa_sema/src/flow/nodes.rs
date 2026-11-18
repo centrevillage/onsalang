@@ -89,10 +89,9 @@ impl NodeBuilder {
         let kind = match call.kind {
             NodeKind::Instance(callee) => PlanKind::Instance { callee, args: call.args.clone(), span },
             NodeKind::Delay(delay, len) => {
-                let arg = call.args[0];
-                let d_e = call.d();
+                let (arg, d_e, init_e) = call.delay_parts();
                 let ty = body.expr_types.get(&e).copied().unwrap_or(call.ty);
-                let init = match (&call.init, call.init_expr) {
+                let init = match (&call.init, init_e) {
                     (Some(init), _) => init.clone(),
                     (None, Some(init_e)) => InitArg::Init(init_e),
                     (None, None) => default_init(a, ty, span)?,

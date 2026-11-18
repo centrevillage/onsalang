@@ -72,7 +72,7 @@ pub(crate) fn outside_flow(form: Outside, span: Span, text: &str) -> Diagnostic 
         Outside::Branches => ("`if~` / `match~`", "outside a flow body, a branch is written with `if` / `match`"),
         Outside::Clock(_) => ("a clock", "a function, a test and a constant have no clocks (§11.3)"),
     };
-    let found = &text[span.start as usize..span.end as usize];
+    let found = span.text_in(text);
     let msg = format!("{what} is written in a flow body only (§11.1)");
     let d = Diagnostic::new(Stage::Names, Code::E0821, span, msg).with_found(found).with_rule(note);
     match form {

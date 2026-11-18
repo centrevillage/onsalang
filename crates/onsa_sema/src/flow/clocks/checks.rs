@@ -32,12 +32,12 @@ impl Walk<'_> {
     }
 
     pub(super) fn src(&self, span: Span) -> String {
-        found(self.text, span)
+        span.text_in(self.text).to_string()
     }
 
     /// A diagnostic of the walk, kept if it is the first (§18.1).
     pub(super) fn report(&mut self, d: Diagnostic) {
-        keep_first(&mut self.diag, d);
+        Diagnostic::keep_first(&mut self.diag, d);
     }
 
     fn err(&mut self, code: Code, span: Span, msg: String) {
@@ -135,7 +135,7 @@ impl Walk<'_> {
         if f.takes_inout_self() {
             let msg = format!("`{name}` takes `inout self`, and a flow body cannot call it (§5.2, §11.2)");
             let d = Diagnostic::new(Stage::Flow, Code::E0713, span, msg).with_found(self.src(span));
-            keep_first(&mut self.inout_call, d);
+            Diagnostic::keep_first(&mut self.inout_call, d);
         }
         if !f.effects.effects().is_empty() {
             let msg = format!("`{name}` has effects; a flow calls effect-free functions only (§11.5)");

@@ -7,7 +7,7 @@ use std::mem::replace;
 
 use onsa_diag::internal::bug;
 use onsa_diag::{Code, Diagnostic, Span, Stage};
-use onsa_syntax::ast::{BinOp, ExprId, ExprKind, Mode, PatId, PatKind, StmtId, StmtKind};
+use onsa_syntax::ast::{BinOp, ExprId, ExprKind, Mode, PatId, StmtId, StmtKind};
 
 use super::check::Walker;
 use super::drops::Leave;
@@ -414,19 +414,10 @@ impl Walker<'_> {
     /// Each local the pattern `p` binds.
     pub(super) fn each_local(&self, p: PatId, f: &mut dyn FnMut(LocalId)) {
         let ast = self.ast;
-        match &ast.pat(p).kind {
-            PatKind::Bind(_) => {
-                let Some(&l) = self.info.pat_locals.get(&p) else {
-                    bug(Some(ast.pat(p).span), "a binding with no local")
-                };
-                f(l);
-            }
-            PatKind::TupleStruct { elems: ps, .. } | PatKind::Tuple(ps) | PatKind::Or(ps) => {
-                ps.iter().for_each(|&q| self.each_local(q, f))
-            }
-            PatKind::Struct { fields, .. } => fields.iter().for_each(|&(_, q)| self.each_local(q, f)),
-            PatKind::Wild | PatKind::Lit(_) | PatKind::Neg(_) | PatKind::Path(_) => {}
-        }
+        crate::pat::each_bind(ast, p, true, &mut |q, _| match self.info.pat_locals.get(&q) {
+            Some(&l) => f(l),
+            None => bug(Some(ast.pat(q).span), "a binding with no local"),
+        });
     }
 }
 

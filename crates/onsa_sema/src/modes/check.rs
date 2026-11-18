@@ -51,7 +51,7 @@ pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
         let mut run = w.start(w.params(), None, n);
         w.expr(&mut run, root, Pos::Return);
         w.body_end(&run, root);
-        found.extend(w.m.found.into_iter().min_by(|x, y| x.order_in_file().cmp(&y.order_in_file())));
+        found.extend(Diagnostic::first_in_file(w.m.found));
         if drops_made {
             let ast = w.ast;
             let mut copied: Vec<Copied> =

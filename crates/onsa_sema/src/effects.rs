@@ -60,7 +60,7 @@ fn first_use(
 ) -> Option<Diagnostic> {
     let (ast, text) = (&module.parsed.ast, &module.text);
     let def = a.def(r.id);
-    let src = |span: Span| text[span.start as usize..span.end as usize].to_string();
+    let src = |span: Span| span.text_in(text).to_string();
     let name = &a.def(effect).name;
     let of = scope.closure.map_or_else(|| format!("`{}`", def.name), |_| "the anonymous function".into());
     let message = format!(

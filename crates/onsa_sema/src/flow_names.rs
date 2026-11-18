@@ -82,7 +82,7 @@ impl FlowBuiltin {
         let name = names.next().expect("the builtin name");
         let end = names.next().unwrap_or(name);
         let span = Span::new(name.file, name.start, end.end);
-        let found = &text[span.start as usize..span.end as usize];
+        let found = span.text_in(text);
         let call = match self {
             FlowBuiltin::Delay(d) => format!("{}~(…)", d.name()),
             _ => format!("{}()", self.name()),

@@ -126,7 +126,7 @@ fn way_back(edges: &[Vec<usize>], comp: &[usize], caller: usize, callee: usize) 
 }
 
 fn src_of(pkg: &Package, a: &Analysis, def: DefId, span: Span) -> String {
-    module_of_def(pkg, a, def).map(|m| m.text[span.start as usize..span.end as usize].to_string()).unwrap_or_default()
+    module_of_def(pkg, a, def).map(|m| span.text_in(&m.text).to_string()).unwrap_or_default()
 }
 
 impl Analysis {
@@ -149,7 +149,7 @@ impl Analysis {
 fn first_calls(pkg: &Package, a: &Analysis, r: &Record) -> Vec<Diagnostic> {
     let Some(module) = module_of_def(pkg, a, r.id) else { return Vec::new() };
     let (ast, text) = (&module.parsed.ast, &module.text);
-    let src = |span: Span| text[span.start as usize..span.end as usize].to_string();
+    let src = |span: Span| span.text_in(text).to_string();
     let mut seen = HashSet::default();
     let firsts = r.uses.iter().filter(|u| u.rt == Some(false) && r.scopes[u.scope as usize].rt);
     let firsts = firsts.filter(|u| seen.insert(u.scope));

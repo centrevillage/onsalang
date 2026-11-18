@@ -398,7 +398,7 @@ impl<'a> Checker<'a> {
     // ------------------------------------------------------------ helpers
 
     pub(crate) fn src(&self, span: Span) -> String {
-        self.text[span.start as usize..span.end as usize].to_string()
+        span.text_in(self.text).to_string()
     }
 
     /// A diagnostic of the typing pass (stage `Types`).
