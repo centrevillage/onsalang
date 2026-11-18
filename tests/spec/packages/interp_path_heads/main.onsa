@@ -87,7 +87,9 @@ pub fn in_a_closure() -> Str uses {Alloc} {
   f.(1)
 }
 
-pub flow in_a_flow_body(x: F32 at sample) -> F32 at sample {
+// The holes of a flow body are E0805 (§11.5, S-1043: a string with an interpolation makes a `Str`), so the function below has the shape of the flow
+// body that was here.
+pub fn in_a_function_with_the_holes_of_a_flow_body(x: F32) -> F32 uses {Alloc} {
   let s = len_of("{inner.K}/{N}/{Q.LIMIT}/{deep.leaf.D}")
   x + s
 }

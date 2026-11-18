@@ -1,0 +1,182 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5", "§12.2", "§12.3", "§2.4", "§18.1"]
+// fixes = 0
+
+// W7-14 U4/t, S-1043 (b), R-457: a flow body uses no effect, and the implicit `Alloc` (§12.2) is one: a string with an interpolation makes a new `Str`,
+// so it is E0805 in a flow body, as the call of a function with effects is (§11.5), whatever the clock of the string is (the hole of a `sample` input, a
+// `block` or an `init` input, a constant), and wherever it stands: a `let`, the output, the receiver of a method, the guard of a `match`, the right
+// side of `&&`, the argument of an instance, the value and the `init` argument of a delay, an `init` computation (a call of a function that is not `rt`
+// at the clock `init`), the body of a `par~`, a branch and an arm of a `match`. The error is at the string (S-1043 C1), and it has no candidate
+// (`fixes = 0`). One error per flow (§18.1), so each form is a flow of its own. The names of the holes are read by the names stage first (§2.4), so
+// a hole that names an input, a `let`, a loop index, a constant or the built-in constant `F32.PI` is not E0302: the unit reaches the flow check
+// and the error is E0805. A string without a hole is a static value and is no error (the end of the file), as the hole written `{{x}}` is only text.
+// R-457 is here: a string with a hole of a `sample` input is E0805 also as the argument of a function that is not `rt` (`a_call_that_is_not_rt_of_a_sample_hole`,
+// which was no error): the call is not read for the clock of its argument, as an outer check does not read the clock of a part that is in error (the same as
+// `flow_clock/order_outer_before_inner.onsa`). The call of a function that is not `rt` with a `sample` value is E0815 as before (`a_call_that_is_not_rt_of_a_sample_value`).
+
+pub rt fn len_of(s: Str) -> F32 {
+  1.0
+}
+
+pub fn len_nr(s: Str) -> F32 {
+  1.0
+}
+
+pub fn lf(v: F32) -> F32 {
+  v
+}
+
+pub flow pass(y: F32 at sample) -> F32 at sample {
+  y
+}
+
+const N: U32 = 3
+
+// ---------------------------------------------------------------- the places of the string
+
+pub flow in_a_let(x: F32 at sample) -> F32 at sample {
+  let n = len_of("a{x}")                                        //~ E0805 @18
+  x * n
+}
+
+pub flow in_the_output(x: F32 at sample) -> F32 at sample {
+  x * len_of("{x}")                                             //~ E0805 @14
+}
+
+pub flow a_method_receiver(x: F32 at sample) -> F32 at sample {
+  x * F32.round_from("a{x}".len())                              //~ E0805 @22
+}
+
+pub flow a_call_that_is_not_rt_of_a_sample_hole(x: F32 at sample) -> F32 at sample {
+  let n = len_nr("{x}")                                         //~ E0805 @18
+  x + n
+}
+
+pub flow two_holes(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  x * len_of("{x}/{p}")                                         //~ E0805 @14
+}
+
+pub flow in_a_guard(x: F32 at sample) -> F32 at sample {
+  match x {
+    v if len_of("{v}") > 1.0 => v,                              //~ E0805 @17
+    _ => 0.0,
+  }
+}
+
+pub flow on_the_right_of_and(x: F32 at sample) -> F32 at sample {
+  let c = x > 0.0 && len_of("{x}") > 1.0                        //~ E0805 @29
+  if c { x } else { 0.0 }
+}
+
+pub flow in_an_instance_argument(x: F32 at sample) -> F32 at sample {
+  pass~(len_of("{x}"))                                          //~ E0805 @16
+}
+
+pub flow in_a_delay_value(x: F32 at sample) -> F32 at sample {
+  prev~(x * len_of("{x}"))                                      //~ E0805 @20
+}
+
+pub flow in_a_delay_init(x: F32 at sample, k: F32 at init) -> F32 at sample {
+  prev~(x, len_nr("{k}"))                                       //~ E0805 @19
+}
+
+pub flow in_an_if_condition(x: F32 at sample) -> F32 at sample {
+  if len_of("{x}") > 1.0 { x } else { 0.0 }                     //~ E0805 @13
+}
+
+pub flow in_an_if_branch(x: F32 at sample) -> F32 at sample {
+  if x > 0.0 { len_of("{x}") } else { 0.0 }                     //~ E0805 @23
+}
+
+pub flow in_a_match_arm(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  match k {
+    0 => len_of("{x}"),                                         //~ E0805 @17
+    _ => 0.0,
+  }
+}
+
+pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 {
+    len_of("{i}/{x}")                                           //~ E0805 @12
+  }
+  ys[0] + x
+}
+
+pub flow in_a_nested_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 {
+    par~ j in 0 ..< 2 {
+      x * len_of("{i}{j}")                                      //~ E0805 @18
+    }
+  }
+  ys[0][0]
+}
+
+// ---------------------------------------------------------------- the clock of the string does not matter
+
+pub flow a_hole_of_a_block_value(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let n = len_of("{p}")                                         //~ E0805 @18
+  x * n
+}
+
+pub flow a_hole_of_an_init_value(x: F32 at sample, k: F32 at init) -> F32 at sample {
+  let n = len_of("{k}")                                         //~ E0805 @18
+  x * n
+}
+
+pub flow an_init_computation(x: F32 at sample, k: F32 at init) -> F32 at sample {
+  let n = len_nr("{k}")                                         //~ E0805 @18
+  x * n
+}
+
+pub flow a_hole_of_a_constant(x: F32 at sample) -> F32 at sample {
+  let n = len_of("{N}")                                         //~ E0805 @18
+  x * n
+}
+
+pub flow a_constant_computation(x: F32 at sample) -> F32 at sample {
+  let n = len_nr("{N}")                                         //~ E0805 @18
+  x * n
+}
+
+pub flow a_hole_of_a_built_in_constant(x: F32 at sample) -> F32 at sample {
+  let n = len_of("{F32.PI}")                                    //~ E0805 @18
+  x * n
+}
+
+// ---------------------------------------------------------------- the names of the holes are read first (they are no E0302)
+
+pub flow a_hole_sees_an_earlier_let(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0
+  let n = len_of("{a}/{x}")                                     //~ E0805 @18
+  a + n
+}
+
+pub flow a_hole_sees_the_index_of_a_par(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 {
+    x * len_of("{i}")                                           //~ E0805 @16
+  }
+  ys[0]
+}
+
+// ---------------------------------------------------------------- the flow that calls it has no error of its own
+
+pub flow caller(x: F32 at sample) -> F32 at sample {
+  in_a_let~(x) + pass~(x)
+}
+
+// ---------------------------------------------------------------- not E0805: the call of a function that is not `rt` at the clock `sample` is E0815 (§11.5)
+
+pub flow a_call_that_is_not_rt_of_a_sample_value(x: F32 at sample) -> F32 at sample {
+  x + lf(x)                                                     //~ E0815
+}
+
+// ---------------------------------------------------------------- not errors: no string is made
+
+pub flow not_errors(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = len_of("abc")
+  let b = F32.round_from("abc".len())
+  let c = len_of("{{x}}")
+  let d = len_nr("{{N}}")
+  a + b + c + d + x * p
+}

@@ -178,6 +178,9 @@ pub(super) struct Walk<'a> {
     inout_call: Option<Diagnostic>,
     non_rt: HashSet<ExprId>,
     recorder: NodeBuilder,
+    /// A type → whether it is Dup and whether its drop needs `Alloc`
+    /// ([`Walk::check_made`]).
+    dup_drops: HashMap<TyId, (bool, bool)>,
 }
 
 /// Runs the two stages over the body of the flow `id` of the module of
@@ -225,6 +228,7 @@ pub(super) fn walk(
         inout_call: None,
         non_rt: HashSet::default(),
         recorder: NodeBuilder::new(&cx.pending, ast, body),
+        dup_drops: HashMap::default(),
     };
     for (l, input) in cx.inputs.iter().zip(&decl.inputs) {
         w.out.locals.insert(*l, input.api_clock());
@@ -297,9 +301,11 @@ impl Walk<'_> {
         Some(self.ast.expr(e).span)
     }
 
-    /// The clock of `e` (⊥ is `None`), recorded at `Check`.
+    /// The clock of `e` (⊥ is `None`), recorded at `Check`: in error if it
+    /// makes a value dropped with `Alloc` (E0805, [`Walk::check_made`]).
     fn expr(&mut self, e: ExprId) -> Option<Clock> {
         let c = self.rule(e);
+        let c = if self.check_made(e) { Some(Clock::Error) } else { c };
         if self.mode != Mode::Check {
             return c;
         }

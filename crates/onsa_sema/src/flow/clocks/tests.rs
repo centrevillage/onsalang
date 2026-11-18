@@ -247,3 +247,31 @@ fn a_part_in_error_gives_no_diagnostic_to_its_users() {
     let f = walk_of(&format!("{head}{}", cases[0].0), "f");
     assert_eq!((f.expr("prev~(p)"), f.expr("(prev~(p) + 1.0) at sample"), f.local("a")), (Clock::Error, S, S));
 }
+
+/// S-1043 C2 (§11.5): an interpolated string, the result of a call of a
+/// function and a literal whose own type is not Dup make a value dropped
+/// with `Alloc`: E0805 at it, and in error in both stages, so that no outer
+/// check reads its clock (the first argument of a delay, a function that is
+/// not `rt`, `at`). A literal that is Dup is not one (the call in it is), nor
+/// a static value, nor a call whose result is Copy (§5.4, S-1076).
+#[test]
+fn a_value_made_with_alloc_to_drop_is_in_error() {
+    let head = "pub fn slow(s: Str) -> F32 { 1.0 }\npub rt fn mk(n: U32) -> Str { \"x\" }\npub rt fn pick(o: Option[Str]) -> F32 { 1.0 }\npub rt fn has(o: Option[Buf[F32]]) -> F32 { 1.0 }\npub rt fn pair(v: F32) -> (F32, F32) { (v, v) }\npub flow f(x: F32 at sample, c: Bool at sample) -> F32 at sample {\n";
+    let cases = [
+        ("  let a = prev~(slow(\"{x}\"))\n  x\n}\n", "\"{x}\"", Clock::Error),
+        // `e at k` is at `k` (§11.3).
+        ("  let a = F32.round_from(mk(1).len()) at block\n  x\n}\n", "mk(1)", Clock::Block),
+        ("  let a = pick(Some(mk(1)))\n  x\n}\n", "mk(1)", Clock::Error),
+        ("  let a = has(None)\n  x\n}\n", "None", Clock::Error),
+    ];
+    for (body, at, a) in cases {
+        let src = format!("{head}{body}");
+        assert_eq!(reported(&src), vec![(onsa_diag::Code::E0805, at.to_string())], "{body}");
+        let f = walk_of(&src, "f");
+        assert_eq!((f.expr(at), f.let_("a")), (Clock::Error, a), "{body}");
+    }
+    let body = "  let a = pick(Some(if c { \"a\" } else { \"b\" })) + pick(None) + pair(x).0\n  a\n}\n";
+    let f = walk_of(&format!("{head}{body}"), "f");
+    assert!(f.complete && f.code().is_none());
+    assert_eq!((f.expr("pick(None)"), f.expr("pair(x)")), (Clock::Init, S));
+}

@@ -30,6 +30,7 @@ use crate::ty::TyId;
 use crate::{Analysis, DefId, Package, module_of_def};
 
 mod literal;
+pub(crate) use literal::{aggregate, unit_variant};
 #[cfg(test)]
 mod tests;
 

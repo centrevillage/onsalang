@@ -27,6 +27,7 @@
 use onsa_syntax::ast::{Ast, ExprId, ExprKind, Lit, Mode};
 
 use super::{LitClass, Settle, no_drop};
+use crate::Analysis;
 use crate::body::{BodyInfo, Target};
 use crate::kind::{Kind, kind_in_body};
 use crate::ty::Ty;
@@ -62,18 +63,14 @@ impl Settle<'_> {
         match &self.ast.expr(e).kind {
             ExprKind::Lit(Lit::Str(s)) => s.value().is_some(),
             ExprKind::Lit(Lit::Int { .. } | Lit::Float { .. } | Lit::Bool(_) | Lit::Char(_)) => true,
-            ExprKind::Path(_) | ExprKind::Field { .. } => match self.info.targets.get(&e) {
-                Some(Target::Const { .. } | Target::ConstParam(_)) => true,
-                // A variant with a payload named as a value is a function.
-                t if variant(t) => {
-                    let ty = self.info.expr_types.get(&e).map(|&t| self.a.types.get(t));
-                    ty.is_some_and(|t| !matches!(t, Ty::Fn(_)))
-                }
-                _ => false,
-            },
+            ExprKind::Path(_) | ExprKind::Field { .. }
+                if matches!(self.info.targets.get(&e), Some(Target::Const { .. } | Target::ConstParam(_))) =>
+            {
+                true
+            }
             // As the name before them (`None::[Str]`, §4.5).
             ExprKind::TypeArgs { base, .. } => self.leaf(*base),
-            _ => false,
+            _ => unit_variant(self.a, self.ast, self.info, e),
         }
     }
 
@@ -93,6 +90,19 @@ impl Settle<'_> {
         self.kinds.insert(t, k);
         k
     }
+}
+
+/// Whether `e` is an aggregate literal ([`parts`]).
+pub(crate) fn aggregate(ast: &Ast, info: &BodyInfo, e: ExprId) -> bool {
+    parts(ast, info, e).is_some()
+}
+
+/// Whether `e` names a unit variant (`E.A`, `None`; the `None` of
+/// `None::[Str]`): a variant with a payload named as a value is a function.
+pub(crate) fn unit_variant(a: &Analysis, ast: &Ast, info: &BodyInfo, e: ExprId) -> bool {
+    matches!(ast.expr(e).kind, ExprKind::Path(_) | ExprKind::Field { .. })
+        && variant(info.targets.get(&e))
+        && info.expr_types.get(&e).is_some_and(|&t| !matches!(a.types.get(t), Ty::Fn(_)))
 }
 
 /// The elements of `e` when it is an aggregate literal (S-610), each with

@@ -110,6 +110,11 @@ pub flow method_of_a_function_value_as_the_output(x: F32 at sample) -> F32 at sa
 // ---- Not errors ----
 
 pub flow fine(x: F32 at sample) -> F32 at sample {
-  let n = len_of("{x}")
+  let n = len_of("x")
   g(x) + id::[F32](x) + n
+}
+
+// A hole of an ordinary name is no error (a function: a flow body has no string with a hole, E0805, §11.5).
+pub fn a_hole_of_an_ordinary_name(x: F32) -> F32 uses {Alloc} {
+  len_of("{x}") + g(x)
 }

@@ -399,7 +399,7 @@ codes! {
     E0801 = 801, Flow, [Names], Optional, Optional,
         "name used before its definition in a flow (a later `let` is read as `^name` in the first argument of a delay)";
     E0805 = 805, Flow, [Flow], Optional, Optional,
-        "a function with effects cannot be called from a flow";
+        "a function with effects cannot be called from a flow, nor a value made whose drop needs `Alloc` (an implicit `Alloc`)";
     E0806 = 806, Flow, [Names], Optional, Optional,
         "this form is not allowed in a flow body";
     E0807 = 807, Flow, [Flow], Optional, Optional,

@@ -1,0 +1,260 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5", "§12.2", "§5.4", "§18.1"]
+// fixes = 0
+
+// W7-14 U4/t, S-1043 (b) C2 and C3, R-453: a flow body makes no value whose drop needs `Alloc` (§12.2, §11.5), and the expressions that make one are three: the
+// result of a call (the type is the one after the instantiation, so `id("abc")` of the generic `id[T]` is a `Str`), an interpolated string (in
+// negative/flow_alloc_interpolation.onsa), and a literal of an owned row that has no type that is Dup (`None` as an `Option[Buf[F32]]`, a unit variant of
+// an enum that has a variant with a `Buf`, a struct that holds one: §5.4). Each is E0805 at the expression, whatever the call is (a function, a method, a
+// generic function, a function of another module in packages/flow_alloc_modules), whatever the result is used for (a method receiver, a field,
+// the argument of a function that borrows it, the argument that is moved to the callee, the element of a literal) and wherever it stands. A literal whose own
+// type is Dup is not the error itself, the expression that makes a value in it is (`pick(Some(mk(1)))` is at `mk(1)`, not at `Some(..)`). The callee of these
+// functions is `rt` and has an empty effect row: the value its `Str` result holds is static, and no heap is touched in the callee. In the flow it is the
+// temporary that is dropped, which needs `Alloc`. A call of a function that returns a value that is Copy (a number, a tuple of numbers) is no error, nor is a value
+// whose drop needs nothing (§5.4: static values and the literals of them). The error has no candidate (`fixes = 0`). One error per flow (§18.1), so each form
+// is a flow of its own.
+
+pub rt fn mk(n: U32) -> Str {
+  "x"
+}
+
+pub rt fn same(move s: Str) -> Str {
+  s
+}
+
+pub rt fn wrap(s: Str) -> Option[Str] {
+  Some(s)
+}
+
+pub rt fn pick(o: Option[Str]) -> F32 {
+  1.0
+}
+
+pub rt fn id[T](v: T) -> T {
+  v
+}
+
+pub rt fn tagged(v: F32) -> (Str, F32) {
+  ("t", v)
+}
+
+pub rt fn has(o: Option[Buf[F32]]) -> F32 {
+  1.0
+}
+
+pub enum E {
+  A,
+  B(Buf[F32]),
+}
+
+pub rt fn kind(e: E) -> F32 {
+  1.0
+}
+
+pub struct Wrap {
+  b: Option[Buf[F32]],
+}
+
+pub rt fn wrapped(w: Wrap) -> F32 {
+  1.0
+}
+
+pub struct Pt {
+  n: U32,
+}
+
+impl Pt {
+  pub rt fn name(self) -> Str {
+    "p"
+  }
+}
+
+pub fn size_nr(s: Str) -> F32 {
+  1.0
+}
+
+pub rt fn twice(v: F32) -> F32 {
+  v * 2.0
+}
+
+pub rt fn pair(v: F32) -> (F32, F32) {
+  (v, v)
+}
+
+pub rt fn sq_len(p: (Str, F32)) -> F32 {
+  p.1
+}
+
+pub struct Param {
+  name: Str,
+  value: F32,
+}
+
+pub rt fn param_value(p: Param) -> F32 {
+  p.value
+}
+
+pub flow pass(y: F32 at sample) -> F32 at sample {
+  y
+}
+
+// ---------------------------------------------------------------- the result of a call
+
+pub flow a_call_in_a_let(x: F32 at sample) -> F32 at sample {
+  let n = F32.round_from(mk(1).len())                           //~ E0805 @26
+  x * n
+}
+
+pub flow a_call_in_the_output(x: F32 at sample) -> F32 at sample {
+  x * F32.round_from(mk(1).len())                               //~ E0805 @22
+}
+
+pub flow the_result_is_borrowed_by_a_call(x: F32 at sample) -> F32 at sample {
+  x * pick(wrap("a"))                                           //~ E0805 @12
+}
+
+pub flow a_generic_call_of_a_string(x: F32 at sample) -> F32 at sample {
+  x * F32.round_from(id("abc").len())                           //~ E0805 @22
+}
+
+pub flow a_generic_call_of_an_option(x: F32 at sample) -> F32 at sample {
+  x * pick(id(Some("a")))                                       //~ E0805 @12
+}
+
+pub flow a_tuple_result_and_its_field(x: F32 at sample) -> F32 at sample {
+  tagged(x).1 * x                                               //~ E0805 @3
+}
+
+pub flow a_method_result(x: F32 at sample) -> F32 at sample {
+  let p = Pt { n: 1 }
+  x * F32.round_from(p.name().len())                            //~ E0805
+}
+
+pub flow a_result_moved_to_a_callee(x: F32 at sample) -> F32 at sample {
+  x * F32.round_from(same(mk(1)).len())                         //~ E0805
+}
+
+pub flow a_result_of_a_result(x: F32 at sample) -> F32 at sample {
+  x * pick(wrap(mk(1)))                                         //~ E0805
+}
+
+// ---------------------------------------------------------------- the value of a literal whose own type is Dup is made by an expression in it
+
+pub flow in_a_literal_of_a_dup_type(x: F32 at sample) -> F32 at sample {
+  x * pick(Some(mk(1)))                                         //~ E0805 @17
+}
+
+pub flow in_a_branch_of_a_literal(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  x * pick(Some(if c { mk(1) } else { "b" }))                   //~ E0805 @24
+}
+
+pub flow in_the_second_element_of_a_literal(x: F32 at sample) -> F32 at sample {
+  x * sq_len((mk(1), x))                                        //~ E0805
+}
+
+pub flow in_a_field_of_a_literal(x: F32 at sample) -> F32 at sample {
+  x * param_value(Param { name: mk(1), value: x })              //~ E0805
+}
+
+// ---------------------------------------------------------------- a literal whose own type is not Dup is the error itself
+
+pub flow none_of_a_buf(x: F32 at sample) -> F32 at sample {
+  x * has(None)                                                 //~ E0805 @11
+}
+
+pub flow a_unit_variant_of_an_enum_with_a_buf(x: F32 at sample) -> F32 at sample {
+  x * kind(E.A)                                                 //~ E0805 @12
+}
+
+pub flow a_struct_that_holds_a_buf(x: F32 at sample) -> F32 at sample {
+  x * wrapped(Wrap { b: None })                                 //~ E0805
+}
+
+// ---------------------------------------------------------------- the places of the value
+
+pub flow in_a_branch(x: F32 at sample) -> F32 at sample {
+  if x > 0.0 { x * F32.round_from(mk(1).len()) } else { 0.0 }   //~ E0805 @35
+}
+
+pub flow in_a_condition(x: F32 at sample) -> F32 at sample {
+  if mk(1).len() > 0 { x } else { 0.0 }                         //~ E0805
+}
+
+pub flow in_a_match_arm(x: F32 at sample, k: U32 at sample) -> F32 at sample {
+  match k {
+    0 => pick(wrap("a")),                                       //~ E0805 @15
+    _ => x,
+  }
+}
+
+pub flow in_a_guard(x: F32 at sample) -> F32 at sample {
+  match x {
+    v if mk(1).len() > 0 => v,                                  //~ E0805 @10
+    _ => 0.0,
+  }
+}
+
+pub flow on_the_right_of_and(x: F32 at sample) -> F32 at sample {
+  let c = x > 0.0 && mk(1).len() > 0                            //~ E0805 @22
+  if c { x } else { 0.0 }
+}
+
+pub flow in_an_instance_argument(x: F32 at sample) -> F32 at sample {
+  pass~(F32.round_from(mk(1).len()))                            //~ E0805 @24
+}
+
+pub flow in_a_delay_value(x: F32 at sample) -> F32 at sample {
+  prev~(x * F32.round_from(mk(1).len()))                        //~ E0805 @28
+}
+
+pub flow in_a_delay_init(x: F32 at sample, k: U32 at init) -> F32 at sample {
+  prev~(x, size_nr(mk(k)))                                      //~ E0805 @20
+}
+
+pub flow in_an_init_computation(x: F32 at sample, k: U32 at init) -> F32 at sample {
+  let n = F32.round_from(mk(k).len())                           //~ E0805 @26
+  x * n
+}
+
+pub flow in_an_init_call_of_a_function_that_is_not_rt(x: F32 at sample, k: U32 at init) -> F32 at sample {
+  let n = size_nr(mk(k))                                        //~ E0805 @19
+  x * n
+}
+
+pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 {
+    x * F32.round_from(mk(i).len())                             //~ E0805 @24
+  }
+  ys[0]
+}
+
+pub flow in_a_nested_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 {
+    par~ j in 0 ..< 2 {
+      x * pick(wrap("a"))                                       //~ E0805 @16
+    }
+  }
+  ys[1][1]
+}
+
+pub flow a_call_of_a_flow_that_has_the_error(x: F32 at sample) -> F32 at sample {
+  a_call_in_a_let~(x) + pass~(x)
+}
+
+// ---------------------------------------------------------------- not errors: nothing that is dropped with `Alloc`
+
+pub flow not_errors(x: F32 at sample, c: Bool at sample, k: U32 at sample) -> F32 at sample {
+  let a = F32.round_from("abc".len())
+  let b = pick(Some("a"))
+  let d = pick(Some(if c { "a" } else { "b" }))
+  let e = pick(Some({ "a" }))
+  let f = pick(Some(match k { 0 => "a", _ => "b" }))
+  let g = pick(None)
+  let h = F32.round_from(["a", "bc"][k].len())
+  let i = param_value(Param { name: "gain", value: twice(x) })
+  let j = sq_len(("gain", x))
+  let l = id(1.0) + id::[F32](x)
+  let m = pair(x).0
+  a + b + d + e + f + g + h + i + j + l + m
+}

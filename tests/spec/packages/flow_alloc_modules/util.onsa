@@ -1,0 +1,47 @@
+// The module of flow_alloc_modules (W7-14 U4/t, S-1043): the functions whose results the flows of main.onsa drop, and two flows that have the error
+// in their own module (an interpolated string with a hole that names a constant of the module, and the result of a call). The functions are `rt` with an
+// empty effect row. See main.onsa.
+
+pub const K: U32 = 3
+
+pub rt fn len_of(s: Str) -> F32 {
+  1.0
+}
+
+pub rt fn mk(n: U32) -> Str {
+  "x"
+}
+
+pub rt fn id[T](v: T) -> T {
+  v
+}
+
+pub rt fn pick(o: Option[Str]) -> F32 {
+  1.0
+}
+
+pub struct Pt {
+  n: U32,
+}
+
+pub rt fn pt(n: U32) -> Pt {
+  Pt { n: n }
+}
+
+impl Pt {
+  pub rt fn name(self) -> Str {
+    "p"
+  }
+}
+
+pub flow clean(x: F32 at sample) -> F32 at sample {
+  x * 0.5
+}
+
+pub flow noisy_string(x: F32 at sample) -> F32 at sample {
+  x * len_of("{x}/{K}")                                         //~ E0805 @14
+}
+
+pub flow noisy_call(x: F32 at sample) -> F32 at sample {
+  x * F32.round_from(mk(1).len())                               //~ E0805 @22
+}

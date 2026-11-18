@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5", "§12.2", "§15.1", "§18.1"]
+// fixes = 0
+
+// W7-14 U4/t, S-1043 (b): the implicit `Alloc` of a flow body (E0805, §11.5, §12.2) does not depend on where the callee or the constant is. A call of a function of
+// another module whose result is dropped with `Alloc` is the same error through the qualified name (`util.mk(1)`) and through a name taken in by `use`
+// (`mk(1)`), for a generic function (`util.id("abc")` has a `Str` result), and for a method of a type of another module; a string with a hole whose head is a
+// constant of another module (`{util.K}`) or one that a `use` took (`{K}`) is E0805 as any string with a hole, and its hole is read by the names stage first (it is
+// no E0302). The flows of util.onsa that have the error in their own module are in util.onsa. A flow that calls them (`util.noisy_string~(x)`) has no error of
+// its own: the unit that has the error is the flow of the other module (§18.1). One error per flow, so each form is a flow of its own.
+
+use util
+use util.{mk, K}
+
+pub flow a_qualified_call(x: F32 at sample) -> F32 at sample {
+  x * F32.round_from(util.mk(1).len())                          //~ E0805 @22
+}
+
+pub flow a_taken_call(x: F32 at sample) -> F32 at sample {
+  x * F32.round_from(mk(1).len())                               //~ E0805 @22
+}
+
+pub flow a_generic_function_of_a_module(x: F32 at sample) -> F32 at sample {
+  x * F32.round_from(util.id("abc").len())                      //~ E0805 @22
+}
+
+pub flow a_method_of_a_type_of_a_module(x: F32 at sample) -> F32 at sample {
+  x * F32.round_from(util.pt(1).name().len())                   //~ E0805
+}
+
+pub flow a_hole_of_a_constant_of_a_module(x: F32 at sample) -> F32 at sample {
+  x * util.len_of("{util.K}")                                   //~ E0805 @19
+}
+
+pub flow a_hole_of_a_constant_that_is_taken(x: F32 at sample) -> F32 at sample {
+  x * util.len_of("{K}")                                        //~ E0805 @19
+}
+
+pub flow a_value_in_a_literal_of_a_dup_type(x: F32 at sample) -> F32 at sample {
+  x * util.pick(Some(util.mk(1)))                               //~ E0805 @22
+}
+
+pub flow calls_the_flows_that_have_the_error(x: F32 at sample) -> F32 at sample {
+  util.noisy_string~(x) + util.noisy_call~(x) + util.clean~(x)
+}
+
+// ---------------------------------------------------------------- not errors
+
+pub flow not_errors(x: F32 at sample) -> F32 at sample {
+  let a = util.len_of("abc")
+  let b = util.pick(Some("a"))
+  let c = util.id(1.0)
+  a + b + c + util.clean~(x)
+}

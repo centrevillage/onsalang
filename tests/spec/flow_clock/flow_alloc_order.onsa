@@ -1,0 +1,174 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5", "§12.2", "§18.1"]
+//
+// [[test.fix]]
+// at = "45:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["46:18 E0805"]
+//
+// [[test.fix]]
+// at = "57:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["58:26 E0805"]
+//
+// [[test.fix]]
+// at = "87:11"
+// code = "E0807"
+// candidate = 1
+// leaves = ["88:18 E0805"]
+
+// W7-14 U4/t, S-1043 (b): where the E0805 of an implicit `Alloc` (a string with an interpolation, a call whose result is dropped with `Alloc`) comes in the order of
+// the diagnostics of a flow (§18.1). The checks of a unit come in the order syntax, names, types, the flow check, the modes and moves, `rt` and effects, and a
+// unit with an error in a stage does not get the later ones; the E0805 of these forms is of the flow check (S-1043 C5: the walk of the flow stage), so
+// - an error of the names stage (E0302, E0806) or of the type stage (E0401) is reported whatever the positions are,
+// - an error of the flow check (the clock rules E0813 and E0815, the length of a delay E0807, the type of a `let` E0810) is reported if it is the first by
+//   position (the start position, then the end position, §18.1). The E0810 of a `let` of a value that is not Copy starts at the statement, before the string
+//   or the call it holds, so it is the one reported.
+// One error per flow, so each form is a flow of its own; the marker is on the first.
+// The clock of the string is not read by an outer check (the expression is E0805 whatever its clock is, and the clock of a part in error is not read, §18.1), so no
+// form here has an outer check over the string or the call.
+
+pub rt fn len_of(s: Str) -> F32 {
+  1.0
+}
+
+pub rt fn mk(n: U32) -> Str {
+  "x"
+}
+
+// ---------------------------------------------------------------- the flow check, by position
+
+pub flow clock_error_then_a_string(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let b = prev~(p)                                              //~ E0813
+  let n = len_of("{x}")
+  x
+}
+
+pub flow a_string_then_a_clock_error(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let n = len_of("{x}")                                         //~ E0805 @18
+  let b = prev~(p)
+  x
+}
+
+pub flow clock_error_then_a_call(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let b = prev~(p)                                              //~ E0813
+  let n = F32.round_from(mk(1).len())
+  x
+}
+
+pub flow a_call_then_a_clock_error(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let n = F32.round_from(mk(1).len())                           //~ E0805 @26
+  let b = prev~(p)
+  x
+}
+
+pub flow a_string_then_a_slower_clock_error(x: F32 at sample) -> F32 at sample {
+  let n = len_of("{x}")                                         //~ E0805 @18
+  let b = x at block
+  x
+}
+
+pub flow a_slower_clock_error_then_a_string(x: F32 at sample) -> F32 at sample {
+  let b = x at block                                            //~ E0815
+  let n = len_of("{x}")
+  x
+}
+
+pub flow a_string_then_a_delay_of_one(x: F32 at sample) -> F32 at sample {
+  let n = len_of("{x}")                                         //~ E0805 @18
+  let a = delay~(x, 1)
+  x
+}
+
+pub flow a_delay_of_one_then_a_string(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, 1)                                          //~ E0807
+  let n = len_of("{x}")
+  x
+}
+
+pub flow a_let_of_a_string_over_the_string(x: F32 at sample) -> F32 at sample {
+  let s = "a{x}"                                                //~ E0810
+  x
+}
+
+pub flow a_let_of_a_call_over_the_call(x: F32 at sample) -> F32 at sample {
+  let s = mk(1)                                                 //~ E0810
+  x
+}
+
+pub flow a_call_then_a_let_of_a_text(x: F32 at sample) -> F32 at sample {
+  let n = F32.round_from(mk(1).len())                           //~ E0805 @26
+  let s = "text"
+  x
+}
+
+// ---------------------------------------------------------------- the earlier stages
+
+pub flow a_string_then_a_type_error(x: F32 at sample) -> F32 at sample {
+  let n = len_of("{x}")
+  let t: Bool = 1.0                                             //~ E0401
+  x
+}
+
+pub flow a_type_error_then_a_string(x: F32 at sample) -> F32 at sample {
+  let t: Bool = 1.0                                             //~ E0401
+  let n = len_of("{x}")
+  x
+}
+
+pub flow a_call_then_a_type_error(x: F32 at sample) -> F32 at sample {
+  let n = F32.round_from(mk(1).len())
+  let t: Bool = 1.0                                             //~ E0401
+  x
+}
+
+pub flow a_clock_error_a_string_then_a_type_error(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let b = prev~(p)
+  let n = len_of("{x}")
+  let t: Bool = 1.0                                             //~ E0401
+  x
+}
+
+pub flow a_string_then_a_name_error(x: F32 at sample) -> F32 at sample {
+  let n = len_of("{x}")
+  let z = nope                                                  //~ E0302
+  x + z
+}
+
+pub flow a_call_then_a_name_error(x: F32 at sample) -> F32 at sample {
+  let n = F32.round_from(mk(1).len())
+  let z = nope                                                  //~ E0302
+  x + z
+}
+
+pub flow a_string_then_a_loop(x: F32 at sample) -> F32 at sample {
+  let n = len_of("{x}")
+  for i in 0 ..< 4 { }                                          //~ E0806
+  x
+}
+
+pub flow a_call_then_a_loop(x: F32 at sample) -> F32 at sample {
+  let n = F32.round_from(mk(1).len())
+  for i in 0 ..< 4 { }                                          //~ E0806
+  x
+}
+
+// ---------------------------------------------------------------- the flow that is next to it is checked on its own
+
+pub flow a_string_alone(x: F32 at sample) -> F32 at sample {
+  let n = len_of("{x}")                                         //~ E0805 @18
+  x * n
+}
+
+pub flow a_clock_error_alone(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let b = prev~(p)                                              //~ E0813
+  x * b
+}
+
+pub flow a_call_alone(x: F32 at sample) -> F32 at sample {
+  let n = F32.round_from(mk(1).len())                           //~ E0805 @26
+  x * n
+}
