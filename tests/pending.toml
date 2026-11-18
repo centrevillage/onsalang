@@ -1034,3 +1034,10 @@ target = "tests/spec/negative/flow_const_neg_until_w9_03.onsa"
 reasons = ["S-228", "S-132", "R-195"]
 until = "W9-03"
 note = "flow の定数式の評価: ONE - 2 は E0419、ONE - 1 は E0808、計算した長さは W9-03 まで E0200（FlowConstExprs）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_clock/feedback_to_a_let_in_error_until_w7_09.onsa"
+reasons = ["S-1133", "R-496"]
+until = "W7-09"
+note = "^名前 の先が誤りの let のとき、^ で読む側に診断を出さない（今は段 1 のクロックで読む）"
