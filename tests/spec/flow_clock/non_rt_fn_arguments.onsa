@@ -1,0 +1,132 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5", "§18.1"]
+
+// A function with an empty effect row that is not `rt` takes arguments at the clock `init` or
+// constants only; an argument (or a receiver) at a faster clock is E0815 (§11.5, S-147), at the
+// call. It is not E0805, which is for a function with effects (the last flows). One error per flow
+// (§18.1), so each form is a flow of its own. The arguments at `init` and constants are the cases of
+// non_rt_calls_accepted.onsa; the calls below keep the result at `init` too, so the only diagnostic is
+// that of the faster argument.
+
+pub fn slow(v: F32) -> F32 { v }
+pub fn slow2(a: F32, b: F32) -> F32 { a + b }
+pub fn ident[T](v: T) -> T { v }
+pub rt fn half(v: F32) -> F32 { v * 0.5 }
+pub fn noisy(v: F32) -> F32 uses {Alloc} { v }
+
+pub struct Gain { g: F32 }
+
+impl Gain {
+  pub fn scaled(self, v: F32) -> F32 { self.g * v }
+}
+
+pub flow output_at_sample(x: F32 at sample) -> F32 at sample {
+  slow(x)                                                       //~ E0815
+}
+
+pub flow let_at_sample(x: F32 at sample) -> F32 at sample {
+  let a = slow(x)                                               //~ E0815
+  x * a
+}
+
+pub flow argument_at_block(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = slow(p)                                               //~ E0815
+  x * a
+}
+
+pub flow second_argument_at_sample(x: F32 at sample, c: F32 at init) -> F32 at sample {
+  let a = slow2(c, x)                                           //~ E0815
+  x * a
+}
+
+pub flow first_argument_at_block(c: F32 at init, p: F32 at block) -> F32 at sample {
+  let a = slow2(p, c)                                           //~ E0815
+  a
+}
+
+pub flow argument_computed_at_sample(x: F32 at sample, c: F32 at init) -> F32 at sample {
+  let a = slow(c * x)                                           //~ E0815
+  a
+}
+
+pub flow argument_through_a_let(x: F32 at sample) -> F32 at sample {
+  let y = x * 2.0
+  let a = slow(y)                                               //~ E0815
+  a
+}
+
+pub flow argument_is_a_delay(x: F32 at sample) -> F32 at sample {
+  let a = slow(prev~(x))                                        //~ E0815
+  a
+}
+
+pub flow argument_promoted_by_at(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = slow(p at sample)                                     //~ E0815
+  x * a
+}
+
+pub flow generic_function(x: F32 at sample) -> F32 at sample {
+  let a = ident(x)                                              //~ E0815
+  a
+}
+
+pub flow receiver_at_sample(x: F32 at sample, c: F32 at init) -> F32 at sample {
+  let g = Gain { g: x }
+  let a = g.scaled(c)                                           //~ E0815
+  a
+}
+
+pub flow receiver_at_block(g: Gain at block, c: F32 at init) -> F32 at sample {
+  let a = g.scaled(c)                                           //~ E0815
+  a
+}
+
+pub flow argument_at_sample_of_a_method(g: Gain at init, x: F32 at sample) -> F32 at sample {
+  let a = g.scaled(x)                                           //~ E0815
+  a
+}
+
+pub flow in_a_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  if c { slow(x) } else { 0.0 }                                 //~ E0815
+}
+
+pub flow in_a_par_body(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 { slow(x) }                                 //~ E0815
+}
+
+pub flow in_a_delay_init(x: F32 at sample) -> F32 at sample {
+  prev~(x, slow(x))                                             //~ E0815
+}
+
+pub flow in_an_instance_argument(x: F32 at sample) -> F32 at sample {
+  let a = prev~(slow(x))                                        //~ E0815
+  a
+}
+
+// A function with effects is E0805 whatever the clock of its arguments (§11.5). The call at `init`
+// or with a constant is as much an error as the call at `sample`.
+pub flow effects_with_sample_argument(x: F32 at sample) -> F32 at sample {
+  let a = noisy(x)                                              //~ E0805
+  a
+}
+
+pub flow effects_with_init_argument(c: F32 at init) -> F32 at sample {
+  let a = noisy(c)                                              //~ E0805
+  a
+}
+
+pub flow effects_with_constant_argument(x: F32 at sample) -> F32 at sample {
+  let a = noisy(1.0)                                            //~ E0805
+  x * a
+}
+
+// An `rt` function is applied point by point at the clock of its arguments, and the arguments of a
+// function that is not `rt` at `init` or constants are accepted (§11.5).
+pub flow rt_function_at_every_clock(x: F32 at sample, p: F32 at block, c: F32 at init) -> F32 at sample {
+  let a = half(p)
+  let b = half(c)
+  let k = slow(c)
+  let m = slow2(c, 2.0)
+  half(x) * a * b * k * m
+}

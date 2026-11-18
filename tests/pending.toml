@@ -36,13 +36,6 @@ note = "型の大きさと状態の領域が U32 を超える（ターゲット�
 
 [[pending]]
 kind = "diag-code"
-target = "E0808"
-reasons = ["S-88", "R-100", "S-151", "S-132"]
-until = "W7-14"
-note = "遅延の長さの範囲、vdelay の MAX、空の par の範囲"
-
-[[pending]]
-kind = "diag-code"
 target = "E0816"
 reasons = ["S-29", "S-110"]
 until = "W7-07"
@@ -166,13 +159,6 @@ until = "PH2"
 note = "核から extern への到達。§20 は第 1 期を核（§13.2）に限り、extern（§14.1）は第 1 期では E0200 で止めるので、このコードは第 1 期に出る場面が無い"
 
 # --- テストの事例（仕様のコードの期待値に直した否定例。W1-02 で tests/spec/negative/flow.onsa から分けた）
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/flow_fn_clock.onsa"
-reasons = ["S-147"]
-until = "W7-02"
-note = "非 rt の fn に sample の値を渡すのは E0815（§11.5）。元の期待値は E0805 で、今の実装も E0805 を出す"
 
 # --- W1-10 の否定例のうち、まだ通らないもの（2026-10-07）
 
@@ -357,13 +343,6 @@ note = "range_header_one_sided.onsa の正しい形（W3-21 で移した）。fo
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/fixes/e0813_promote.onsa"
-reasons = ["S-102"]
-until = "W7-02"
-note = "E0813 の候補"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/fixes/e0811_e0812_tilde.onsa"
 reasons = ["S-101", "S-110"]
 until = "W7-06"
@@ -523,13 +502,6 @@ note = "定数式の溢れとゼロ除算は E0419（0 - 1、4 / 0、65536 * 655
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/negative/flow_const_neg.onsa"
-reasons = ["S-228", "S-132"]
-until = "W7-02"
-note = "遅延線の長さと par の端の前置の - は E0401、0 - 1 は E0419、E0808 は値の範囲（N = 0、空の範囲）だけ。at の構文はW3-09 で読めるが、検査は W3-09 の関門の E0200 で止まる（写しは W3-10）、コードは W7-02"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/negative/const_neg_min.onsa"
 reasons = ["S-227", "R-155"]
 until = "W9-03"
@@ -583,13 +555,6 @@ note = "整数のリテラルの腕が 300 個の match の実行。リテラル
 # --- W2-09/i: 新しい種（tests/spec/c_runtime/ の W2-09/t の事例）で変異が変わり、ファズが見つけた修正候補の型（2026-10-08。親が R を登録して付け替える）
 
 # --- W2-13/t: テストが届く範囲の E0200（S-242）
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/test/reach_flow.onsa"
-reasons = ["S-242", "S-102"]
-until = "W7-02"
-note = "インスタンスを作る flow を経由して届く使用。最終の構文（at）はW3-09 で読めるが、検査は W3-09 の関門の E0200 で止まる（写しは W3-10）、block のクロックから非 rt の関数を呼ぶ形は W7-02 まで E0805"
 
 [[pending]]
 kind = "test-case"
@@ -1062,3 +1027,10 @@ target = "tests/spec/flow_semantics/flow_const_alias_if_tilde.onsa"
 reasons = ["S-110", "R-14"]
 until = "W7-06"
 note = "if~ の枝で定数のクロックの let の別名と派生の別名を読む。if~ は W7-06 まで E0200（branches_tilde.onsa と同じ）。R-488 は W7-18 で直した"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/negative/flow_const_neg_until_w9_03.onsa"
+reasons = ["S-228", "S-132", "R-195"]
+until = "W9-03"
+note = "flow の定数式の評価: ONE - 2 は E0419、ONE - 1 は E0808、計算した長さは W9-03 まで E0200（FlowConstExprs）"

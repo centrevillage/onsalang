@@ -19,13 +19,14 @@
 use std.test.gen
 use std.dsp.test.impulse
 
-// Called from the body of `tone`, at the clock `block`.
+// Called from the body of `tone`, with a value at the clock `init` (a function that is not `rt` takes
+// arguments at `init` or constants only, §11.5).
 fn scale(g: F32) -> F32 {
   let _ = gen.f32(0.0, 1.0)   //~ E0200
   g
 }
 
-pub flow tone(x: F32 at sample, g: F32 at block) -> F32 at sample {
+pub flow tone(x: F32 at sample, g: F32 at init) -> F32 at sample {
   let k = scale(g)
   x * k
 }
@@ -36,7 +37,7 @@ fn via_instance(g: F32) -> F32 {
   g
 }
 
-pub flow inner(x: F32 at sample, g: F32 at block) -> F32 at sample {
+pub flow inner(x: F32 at sample, g: F32 at init) -> F32 at sample {
   let k = via_instance(g)
   x * k
 }
@@ -53,7 +54,7 @@ fn lonely_scale(g: F32) -> F32 {
   g
 }
 
-pub flow lonely(x: F32 at sample, g: F32 at block) -> F32 at sample {
+pub flow lonely(x: F32 at sample, g: F32 at init) -> F32 at sample {
   let k = lonely_scale(g)
   x * k
 }
@@ -64,7 +65,7 @@ pub flow lonely_outer(x: F32 at sample) -> F32 at sample {
 }
 
 test "a flow rendered by a test" {
-  let o = tone.render(tone.Params { g: 2.0 }, impulse(4), 48000.0)
+  let o = tone.render(tone.Config { g: 2.0 }, impulse(4), 48000.0)
   let first: U32 = 0
   assert o.out[first] == 2.0
   assert false

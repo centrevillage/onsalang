@@ -1,0 +1,151 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§18.1"]
+//
+// [[test.fix]]
+// at = "72:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["72:11 E0815"]
+//
+// [[test.fix]]
+// at = "77:18"
+// code = "E0813"
+// candidate = 1
+// leaves = ["77:11 E0815"]
+//
+// [[test.fix]]
+// at = "100:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["101:11 E0815"]
+//
+// [[test.fix]]
+// at = "106:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["107:12 E0815"]
+//
+// [[test.fix]]
+// at = "111:18"
+// code = "E0813"
+// candidate = 1
+// leaves = ["111:12 E0815"]
+//
+// [[test.fix]]
+// at = "138:9"
+// code = "E0813"
+// candidate = 1
+// leaves = ["138:30 E0813"]
+//
+// [[test.fix]]
+// at = "142:9"
+// code = "E0813"
+// candidate = 1
+// leaves = ["142:30 E0813"]
+//
+// [[test.fix]]
+// at = "150:9"
+// code = "E0813"
+// candidate = 1
+// leaves = ["150:24 E0805"]
+
+// A part that could not be read is an error and the part that uses it gets no diagnostic of its own
+// (§18.1): the result of a delay whose first argument is not at a clock of ticks (E0813), of an
+// `if~` or `match~` and of a stateful part in a branch (E0200) has the clock of an error. The check
+// that would read that clock (an `at` that makes it slower, a delay that needs its first argument at
+// `sample`, an input of an instance that is at `block`) does not report even where it starts before
+// the error; only the error is reported, though by its position the outer one is first. The other
+// order of the flow check is the order of the position, left to right. One error per flow.
+
+pub flow gate(x: F32 at sample, k: F32 at block) -> F32 at sample { x * k }
+pub fn noisy(v: F32) -> F32 uses {Alloc} { v }
+
+// ---------------------------------------------------------------- the result of a delay in error
+
+pub flow at_promotion_of_the_result(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = (prev~(p) + 1.0) at sample                             //~ E0813
+  x
+}
+
+pub flow at_slower_of_the_result(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = prev~(p) at block                                      //~ E0813 @17
+  x
+}
+
+pub flow at_slower_of_the_result_in_a_sum(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = (prev~(p) + x) at block                                //~ E0813 @18
+  x
+}
+
+pub flow delay_of_the_result(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = prev~(p)                                               //~ E0813
+  let b = prev~(a)
+  x
+}
+
+pub flow delay_n_of_the_result(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = prev~(p)                                               //~ E0813
+  let b = delay~(a, 2)
+  x
+}
+
+pub flow vdelay_of_the_result(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = prev~(p)                                               //~ E0813
+  let b = vdelay~(a, x, 8)
+  x
+}
+
+pub flow let_of_the_result_at_slower(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = prev~(p)                                               //~ E0813
+  let b = a at block
+  x
+}
+
+pub flow let_of_the_result_to_a_block_input(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = prev~(p)                                               //~ E0813
+  gate~(x, a)
+}
+
+pub flow result_as_a_block_argument(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  gate~(x, prev~(p))                                             //~ E0813 @18
+}
+
+// ---------------------------------------------------------------- the result of `if~`, `match~`, a stateful branch
+
+pub flow at_slower_of_if_tilde(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = (if~ c { x } else { 0.0 }) at block                    //~ E0200 @14
+  x
+}
+
+pub flow at_slower_of_match_tilde(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = (match~ c { true => x, false => 0.0 }) at block        //~ E0200 @17
+  x
+}
+
+pub flow at_slower_of_a_stateful_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = (if c { prev~(x) } else { 0.0 }) at block              //~ E0200 @19
+  x
+}
+
+pub flow block_argument_of_if_tilde(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  gate~(x, if~ c { x } else { 0.0 })                             //~ E0200 @14
+}
+
+// ---------------------------------------------------------------- left to right
+
+pub flow two_delays_in_error(x: F32 at sample, p: F32 at block, q: F32 at block) -> F32 at sample {
+  prev~(p) + prev~(q)                                            //~ E0813 @9
+}
+
+pub flow two_delays_in_error_swapped(x: F32 at sample, p: F32 at block, q: F32 at block) -> F32 at sample {
+  prev~(q) + prev~(p)                                            //~ E0813 @9
+}
+
+pub flow effect_then_delay_in_error(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  noisy(x) + prev~(p)                                            //~ E0805 @3
+}
+
+pub flow delay_in_error_then_effect(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  prev~(p) + noisy(x)                                            //~ E0813 @9
+}

@@ -93,7 +93,7 @@ fn a_feedback_to_a_later_let_with_no_loop_reads_its_clock() {
     assert!(f.complete);
     assert_eq!((f.let_("a"), f.let_("b"), f.let_("c")), (S, S, Clock::Block));
     // A `block` read by `^` (E0813): the delay goes on at `sample` in stage
-    // 1; stage 2 stops at the E0813, and `b` after it is in error.
+    // 1; in stage 2 it is in error (§18.1), and `b` after it is walked.
     let f = walk_of(
         "pub flow f(g: F32 at block) -> F32 at sample {\n  let a = prev~(^b)\n  let b = g * 2.0\n  a\n}\n",
         "f",
@@ -101,7 +101,7 @@ fn a_feedback_to_a_later_let_with_no_loop_reads_its_clock() {
     assert!(!f.complete);
     assert_eq!(f.code(), Some(onsa_diag::Code::E0813));
     assert_eq!((f.walked.lets[0], f.walked.lets[1]), (S, Clock::Block));
-    assert_eq!((f.local("a"), f.local("b"), f.expr("^b")), (S, Clock::Error, Clock::Block));
+    assert_eq!((f.local("a"), f.local("b"), f.expr("^b")), (Clock::Error, Clock::Block, Clock::Block));
 }
 
 #[test]
@@ -174,25 +174,76 @@ fn a_call_of_a_flow_whose_output_clock_is_in_error_is_in_error_and_quiet() {
     }
 }
 
-/// Stage 2 keeps the first diagnostic and checks no more: of two errors,
-/// the one before.
+/// The codes of the diagnostics of `src` and the text each is at.
+fn reported(src: &str) -> Vec<(onsa_diag::Code, String)> {
+    let a = check(src);
+    let at = |d: &onsa_diag::Diagnostic| src[d.span.start as usize..d.span.end as usize].to_string();
+    a.diagnostics.iter().map(|d| (d.code, at(d))).collect()
+}
+
+/// Stage 2 walks on past an error and keeps the first diagnostic in the
+/// order of the file (§18.1), of two errors in either order, an outer one
+/// before an inner one; and the walk records the clocks and the nodes after
+/// an error.
 #[test]
-fn the_walk_stops_at_the_first_diagnostic() {
-    let f = walk_of(
-        "pub flow f(x: F32 at sample, g: F32 at block) -> F32 at sample {\n  let a = x at block\n  let b = prev~(g)\n  a + b\n}\n",
-        "f",
-    );
-    assert!(!f.complete);
-    let d = f.walked.diag.as_ref().expect("a diagnostic");
-    assert_eq!((d.code, d.found.as_deref()), (onsa_diag::Code::E0815, Some("x at block")));
-    // A later `let` is not walked: its delay has no record, and it is in error.
-    assert!(f.walked.info.node_of.is_empty());
-    assert_eq!(f.local("b"), Clock::Error);
-    // An E0713 held is behind an error of the flow checks (§18.1).
-    let f = walk_of(
-        "pub struct Pt { x: F32 }\nimpl Pt {\n  pub rt fn grow(inout self) -> F32 { self.x }\n}\npub flow f(x: F32 at sample, c: F32 at block) -> F32 at sample {\n  let p = Pt { x: 1.0 }\n  let k = p.grow()\n  let a = prev~(c)\n  x + k\n}\n",
-        "f",
-    );
+fn the_walk_keeps_the_first_diagnostic_by_position() {
+    let head = "pub fn noisy(v: F32) -> F32 uses {Alloc} { v }\npub flow f(x: F32 at sample, g: F32 at block) -> F32 at sample {\n";
+    let cases = [
+        ("  let a = x at block\n  let b = prev~(g)\n  x\n}\n", onsa_diag::Code::E0815, "x at block"),
+        ("  let b = prev~(g)\n  let a = x at block\n  x\n}\n", onsa_diag::Code::E0813, "g"),
+        ("  let s = (noisy(x), \"a\")\n  x\n}\n", onsa_diag::Code::E0810, "let s = (noisy(x), \"a\")"),
+        // E0805 reads no clock: the outer call is reported.
+        ("  let a = noisy(noisy(x))\n  x\n}\n", onsa_diag::Code::E0805, "noisy(noisy(x))"),
+    ];
+    for (body, code, at) in cases {
+        let src = format!("{head}{body}");
+        assert_eq!(reported(&src), vec![(code, at.to_string())], "{body}");
+    }
+    let f = walk_of(&format!("{head}{}", cases[0].0), "f");
+    assert_eq!(f.walked.info.node_of.len(), 1);
+    assert_eq!((f.local("a"), f.local("b")), (Clock::Block, Clock::Error));
+    // `vdelay~` of no float (E0416, §11.4) before a later `let` of no Copy
+    // (E0810).
+    let src =
+        "pub flow f(x: I32 at sample) -> I32 at sample {\n  let a = vdelay~(x, 1, 8)\n  let s = \"text\"\n  a\n}\n";
+    assert_eq!(reported(src), vec![(onsa_diag::Code::E0416, "vdelay~(x, 1, 8)".to_string())]);
+    // An E0713 held is the first by position too, and behind an error of the
+    // flow checks (§18.1).
+    let inout = "pub struct Pt { x: F32 }\nimpl Pt {\n  pub rt fn bump(inout self, v: F32) -> F32 { v }\n}\npub flow f(x: F32 at sample, c: F32 at block) -> F32 at sample {\n  let p = Pt { x: 1.0 }\n";
+    let src = format!("{inout}  let k = p.bump(p.bump(x))\n  x + k\n}}\n");
+    assert_eq!(reported(&src), vec![(onsa_diag::Code::E0713, "p.bump(p.bump(x))".to_string())]);
+    let f = walk_of(&format!("{inout}  let k = p.bump(x)\n  let a = prev~(c)\n  x + k\n}}\n"), "f");
     assert_eq!(f.code(), Some(onsa_diag::Code::E0813));
     assert!(f.walked.inout_call.is_some());
+}
+
+/// §18.1: an expression whose rule of the clock rests on a check that fails
+/// is in error (the E0813 of a delay, the E0805 and the E0815 of a call of a
+/// function), and the places that read it have no diagnostic; an error that
+/// leaves the clock known (the E0815 of `at`) does not quiet them.
+#[test]
+fn a_part_in_error_gives_no_diagnostic_to_its_users() {
+    let head = "pub fn slow(v: F32) -> F32 { v }\npub fn noisy(v: F32) -> F32 uses {Alloc} { v }\npub flow f(x: F32 at sample, c: F32 at init, p: F32 at block) -> F32 at sample {\n";
+    let cases = [
+        // The `at` of a computed expression (E0200) and a function that is
+        // not `rt` (E0815) read a delay in error.
+        ("  let a = (prev~(p) + 1.0) at sample\n  x\n}\n", onsa_diag::Code::E0813, "p"),
+        ("  let a = slow(prev~(p))\n  x\n}\n", onsa_diag::Code::E0813, "p"),
+        // The E0200 of the marking at a call of `slow` at `init` read at
+        // `sample` is before the E0813 after it.
+        ("  x * slow(c) + prev~(p)\n}\n", onsa_diag::Code::E0200, "slow(c)"),
+        // The calls with E0805 and E0815 are in error.
+        ("  let a = slow(slow(x) + c)\n  x\n}\n", onsa_diag::Code::E0815, "slow(x)"),
+        ("  let a = slow(noisy(x))\n  x\n}\n", onsa_diag::Code::E0805, "noisy(x)"),
+        ("  let a = (noisy(x)) at block\n  x\n}\n", onsa_diag::Code::E0805, "noisy(x)"),
+        // `e at k` is at `k` with its E0815: the E0813 of the delay over it
+        // is at the same place, and first by its code (§18.1).
+        ("  let a = prev~(x at block)\n  x\n}\n", onsa_diag::Code::E0813, "x at block"),
+    ];
+    for (body, code, at) in cases {
+        let src = format!("{head}{body}");
+        assert_eq!(reported(&src), vec![(code, at.to_string())], "{body}");
+    }
+    let f = walk_of(&format!("{head}{}", cases[0].0), "f");
+    assert_eq!((f.expr("prev~(p)"), f.expr("(prev~(p) + 1.0) at sample"), f.local("a")), (Clock::Error, S, S));
 }

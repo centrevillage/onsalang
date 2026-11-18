@@ -1,0 +1,19 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "18:11"
+// code = "E0813"
+// candidate = 1
+// clean = true
+
+// The candidate of E0813 promotes the first argument and leaves the other arguments (§11.4, S-102):
+// `vdelay~(p, x, 8, 0.5)` becomes `vdelay~(p at sample, x, 8, 0.5)`: the delay time and the maximum stay (a call without them would be an error, which `clean` rules out).
+// The unit is the only one of the file, so the file as a whole is without an error after the
+// candidate (`clean`).
+
+pub flow f(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  vdelay~(p at sample, x, 8, 0.5) + x                                       //~ E0813
+}

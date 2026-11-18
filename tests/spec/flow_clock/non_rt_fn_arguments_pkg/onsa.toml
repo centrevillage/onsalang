@@ -1,0 +1,3 @@
+[package]
+name = "non_rt_fn_arguments_pkg"
+edition = "2026"

@@ -1,0 +1,42 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§11.5", "§4.5", "§3.4"]
+
+// E0419 / E0808: the length of a delay line and the ends of a `par` range are constant expressions
+// of type `U32` (§11.4, §11.5, §4.5), evaluated at compile time (§11.3, §6.6): `ONE - 2` is an
+// evaluation that overflows (E0419), and `ONE - 1` is the value 0 out of range (E0808, S-132). One
+// error per flow (P-01). This version does not compute the value of a constant expression of a
+// flow (E0200, `FlowConstExprs`), which W9-03 gives (R-195); the forms of a prefix `-` (E0401, S-228)
+// and of a literal out of range are flow_const_neg.onsa, which this version gives.
+
+const ONE: U32 = 1
+const TWO: U32 = 2
+
+// ---------------------------------------------------------------- E0419: an evaluation that overflows
+
+pub flow delay_subtraction(x: F32 at sample) -> F32 at sample {
+  delay~(x, ONE - 2)            //~ E0419
+}
+
+pub flow par_subtraction(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0..<ONE - 2 {   //~ E0419
+    x * F32.round_from(i)
+  }
+  ys[0]
+}
+
+// ---------------------------------------------------------------- E0808: the value out of range
+
+pub flow delay_zero_by_subtraction(x: F32 at sample) -> F32 at sample {
+  delay~(x, ONE - 1)            //~ E0808
+}
+
+// ---------------------------------------------------------------- fine
+
+pub flow computed_lengths(x: F32 at sample) -> F32 at sample {
+  let b = delay~(x, TWO + 1, 0.5)
+  let ys = par~ i in 0..<TWO + 1 {
+    x * F32.round_from(i)
+  }
+  b + ys[0] + ys[2]
+}

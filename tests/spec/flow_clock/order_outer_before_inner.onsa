@@ -1,0 +1,140 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§11.5", "§18.1"]
+//
+// [[test.fix]]
+// at = "91:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["92:23 E0416"]
+
+// The diagnostics of the flow check that one unit has are not found in the order of the walk: the one
+// reported is the first by the order of the diagnostics (start position, end position, code, text,
+// §18.1). So the diagnostic of an outer construct, which starts before the inner one, is the one
+// reported: the type of a `let` (E0810, at the statement), the element type of a `vdelay~` (E0416, at
+// the call) against a later `let`, an outer `at` (E0815) over an inner error that leaves the clock of
+// its operand, and the gates this version has. An outer check that reads the clock of a part in error
+// is not made (§18.1): a call of a function with effects has no clock (§11.5), so the inner E0805 is
+// the one there. The inner error of a part is reported only when the outer one has no error of its own. The cases are
+// one error of the outer kind and one of the inner kind in a flow, the marker on the first.
+// The gates are the E0200 of a feature this version does not take (§18.1): a call of a function that
+// is not `rt` read at the clock `sample` (W7-05), the omitted `init` of a delay of a value that is not
+// a number (W7-07), and `at` that makes a computed expression faster (W7-05).
+
+pub fn noisy(v: F32) -> F32 uses {Alloc} { v }
+pub fn design(v: F32) -> F32 { v * 0.5 }
+pub struct St { a: F32 }
+pub flow lp(y: F32 at sample) -> F32 at sample { y }
+pub flow slow_in(y: F32 at block) -> F32 at sample { y }
+
+// ---------------------------------------------------------------- the type of a `let`
+
+pub flow let_type_over_effect_in_value(x: F32 at sample) -> F32 at sample {
+  let s = (noisy(x), "a")                                        //~ E0810 @3
+  x
+}
+
+pub flow let_type_over_effect_in_second_element(x: F32 at sample) -> F32 at sample {
+  let s = ("a", noisy(x))                                        //~ E0810 @3
+  x
+}
+
+pub flow let_type_over_effect_in_a_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let s = if c { ("a", noisy(x)) } else { ("b", x) }             //~ E0810 @3
+  x
+}
+
+// ---------------------------------------------------------------- the element type of `vdelay~`
+
+pub flow vdelay_i32_then_let_type(x: I32 at sample) -> I32 at sample {
+  let a = vdelay~(x, 1, 8)                                       //~ E0416
+  let s = "text"
+  a
+}
+
+pub flow vdelay_u32_then_let_type(x: U32 at sample) -> U32 at sample {
+  let a = vdelay~(x, 1, 8)                                       //~ E0416
+  let s = "text"
+  a
+}
+
+pub flow vdelay_bool_then_let_type(x: Bool at sample) -> Bool at sample {
+  let a = vdelay~(x, true, 8, false)                             //~ E0416
+  let s = "text"
+  a
+}
+
+pub flow vdelay_i32_then_delay_clock(x: I32 at sample, p: F32 at block) -> I32 at sample {
+  let a = vdelay~(x, 1, 8)                                       //~ E0416
+  let b = prev~(p)
+  a
+}
+
+pub flow vdelay_i32_then_effect(x: I32 at sample) -> I32 at sample {
+  let a = vdelay~(x, 1, 8)                                       //~ E0416
+  let b = noisy(1.0)
+  a
+}
+
+pub flow vdelay_i32_then_at_slower(x: I32 at sample) -> I32 at sample {
+  let a = vdelay~(x, 1, 8)                                       //~ E0416
+  let b = x at block
+  a
+}
+
+pub flow vdelay_i32_in_the_output(x: I32 at sample) -> I32 at sample {
+  let b = x
+  vdelay~(b, 1, 8)                                               //~ E0416
+}
+
+pub flow delay_clock_then_vdelay_i32_in_a_par_body(x: I32 at sample, p: F32 at block) -> [I32; 2] at sample {
+  let b = prev~(p)                                               //~ E0813
+  par~ i in 0 ..< 2 { vdelay~(x, 1, 8) }
+}
+
+// ---------------------------------------------------------------- an outer `at`
+
+pub flow at_slower_over_at_inside(x: F32 at sample) -> F32 at sample {
+  let a = (lp~(x at block)) at block                             //~ E0815 @11
+  x
+}
+
+pub flow at_slower_over_instance_argument(x: F32 at sample) -> F32 at sample {
+  let a = (slow_in~(x)) at block                                 //~ E0815 @11
+  x
+}
+
+pub flow effect_inside_at_slower(x: F32 at sample) -> F32 at sample {
+  let a = (noisy(x)) at block                                    //~ E0805 @12
+  x
+}
+
+pub flow effect_deep_inside_at_slower(x: F32 at sample) -> F32 at sample {
+  let a = (2.0 * noisy(x)) at block                              //~ E0805 @18
+  x
+}
+
+pub flow effect_inside_at_promotion(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = (noisy(p) + 1.0) at sample                             //~ E0805 @12
+  x
+}
+
+// ---------------------------------------------------------------- the gates
+
+pub flow gate_non_rt_call_over_later_delay(x: F32 at sample, c: F32 at init, p: F32 at block) -> F32 at sample {
+  x * design(c) + prev~(p)                                       //~ E0200 @7
+}
+
+pub flow gate_non_rt_call_over_later_effect(x: F32 at sample, c: F32 at init) -> F32 at sample {
+  x * design(c) + noisy(x)                                       //~ E0200 @7
+}
+
+pub flow gate_default_init_over_argument_at(x: F32 at sample) -> F32 at sample {
+  let s = prev~(St { a: x at block })                            //~ E0200 @11
+  s.a
+}
+
+pub flow gate_default_init_over_argument_effect(x: F32 at sample) -> F32 at sample {
+  let s = prev~(St { a: noisy(x) })                              //~ E0200 @11
+  s.a
+}

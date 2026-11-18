@@ -120,7 +120,7 @@ features! {
     /// K-08, R-13: the store of the inner delay comes first (W7-07).
     NestedDelays: Language, "a delay inside the first argument of a delay",
         Some("bind the inner delay with a `let`, and delay that name");
-    /// K-02: `e at k` evaluates `e` at its own clock (W7-02).
+    /// K-02: `e at k` evaluates `e` at its own clock (W7-05).
     ClockPromotion: Language, "`at` that makes a computed expression faster than its operands",
         Some("bind the expression with a `let`, and write `at` on its name");
     /// `{}`: the value type. K-02, S-29: `T.default()` (W7-07).
@@ -168,10 +168,10 @@ features! {
     /// type's maximum (W8-03); never lowered as `..<` (R-81).
     InclusiveRangeFor: Language, "a range with its end (`a..=b`) in a `for` head",
         Some("write `a..<b + 1` when `b + 1` fits in the type");
-    /// S-224, S-257: the `b - a + 1` instances of `par~ i in a..=b` (W7-04).
+    /// S-224, S-257: the `b - a + 1` instances of `par~ i in a..=b` (W7-14).
     InclusiveRangePar: Language, "a range with its end (`a..=b`) in a `par~` head", None;
     /// R-195: the values of the constant expressions of §4.5 other than an
-    /// integer literal and a `const` with a literal value (W7-02).
+    /// integer literal and a `const` with a literal value (W9-03).
     FlowConstExprs: Language, "computing the value of a constant expression in a flow (a `par~` bound, a delay length, the maximum of a `vdelay~`)",
         Some("write it as an integer literal, or as a `const` whose value is an integer literal");
     VariantCtorValues: Language, "variant constructors as function values", None;

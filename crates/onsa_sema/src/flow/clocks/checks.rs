@@ -1,15 +1,21 @@
 //! The checks of the flow rules at stage 2 of the walk (§11.3–§11.5): each
-//! at its place in the walk, the first diagnostic kept, where the walk
-//! stops. A clock in error is no error of a check (§18.1): the comparisons
-//! of [`crate::clock`] pass it.
+//! at its place in the walk, which goes on past an error and keeps the first
+//! diagnostic in the order of the file (§18.1). A clock in error is no error
+//! of a check (§18.1): the comparisons of [`crate::clock`] pass it. The
+//! checks on which the rule of the clock of their expression rests give it
+//! in error when they fail: the E0813 of a delay, the E0805 and the E0815 of
+//! a call of a function (§11.5), `if~` / `match~`, a node in a branch; the
+//! others leave it as the rules give it (the `k` of `e at k`, the output of
+//! an instance, the clock of a delay by its first argument).
 
 use super::*;
 use crate::clock::{holds_state, promote, readable_at};
+use crate::requirement::{Required, unmet_error, unmet_rules};
 
 /// Whether `e` is written as a name or a literal, past parentheses and type
 /// arguments (not `^name`): the operand `at` makes faster as written (the
 /// E0200 of a computed one, W7-05) and the first argument of a delay the
-/// note of E0813 writes again.
+/// candidate of E0813 makes faster.
 pub(crate) fn name_or_literal(ast: &Ast, mut e: ExprId) -> bool {
     loop {
         match &ast.expr(e).kind {
@@ -20,29 +26,28 @@ pub(crate) fn name_or_literal(ast: &Ast, mut e: ExprId) -> bool {
 }
 
 impl Walk<'_> {
-    /// Whether the checks run: at `Check`, before the first diagnostic.
-    fn checking(&self) -> bool {
-        self.mode == Mode::Check && self.diag.is_none()
+    /// Whether the checks run: at `Check`.
+    pub(super) fn checking(&self) -> bool {
+        self.mode == Mode::Check
     }
 
     pub(super) fn src(&self, span: Span) -> String {
-        self.text[span.start as usize..span.end as usize].to_string()
+        found(self.text, span)
     }
 
-    /// The first diagnostic: the walk stops.
-    pub(super) fn fail(&mut self, d: Diagnostic) -> Option<Clock> {
-        self.diag = Some(d);
-        Some(Clock::Error)
+    /// A diagnostic of the walk, kept if it is the first (§18.1).
+    pub(super) fn report(&mut self, d: Diagnostic) {
+        keep_first(&mut self.diag, d);
     }
 
-    fn err(&mut self, code: Code, span: Span, msg: String) -> Option<Clock> {
+    fn err(&mut self, code: Code, span: Span, msg: String) {
         let found = self.src(span);
-        self.fail(Diagnostic::new(Stage::Flow, code, span, msg).with_found(found))
+        self.report(Diagnostic::new(Stage::Flow, code, span, msg).with_found(found));
     }
 
-    fn gate(&mut self, feature: Feature, span: Span, details: &[&str]) -> Option<Clock> {
+    fn gate(&mut self, feature: Feature, span: Span, details: &[&str]) {
         let found = self.src(span);
-        self.fail(feature.diagnostic(Stage::Flow, span, details).with_found(found))
+        self.report(feature.diagnostic(Stage::Flow, span, details).with_found(found));
     }
 
     fn ty_of(&self, e: ExprId) -> TyId {
@@ -55,21 +60,24 @@ impl Walk<'_> {
             && let Some(d) = crate::sig::not_copy_signal(self.a, self.ty_of(p.init), p.span)
         {
             let found = self.src(p.span);
-            self.fail(d.with_found(found));
+            self.report(d.with_found(found));
         }
     }
 
-    /// §11.4: `vdelay~` interpolates a float (E0401), after the `let`s.
-    pub(super) fn check_floats(&mut self) {
-        for &(span, e) in &self.cx.float_checks {
-            if !self.checking() {
-                return;
-            }
-            if !matches!(self.a.types.get(self.ty_of(e)), Ty::Float(_) | Ty::Error) {
-                let msg = "`vdelay~` interpolates and needs a float signal (`F32` / `F64`, §11.4)";
-                self.err(Code::E0401, span, msg.into());
-            }
+    /// §11.4: the element type `T` of `vdelay~` at `e` meets `T: Float`
+    /// (E0416, R-493).
+    pub(super) fn check_float(&mut self, e: ExprId) {
+        let ty = self.ty_of(e);
+        if matches!(self.a.types.get(ty), Ty::Float(_) | Ty::Error) {
+            return;
         }
+        let span = self.ast.expr(e).span;
+        let (shown, bound) = (self.a.display_type(ty), crate::def::Bound::Float);
+        let what = Required::Param { param: "T".into(), owner: format!("`{}~`", Delay::Variable.name()), std: true };
+        let mut d = unmet_error(span, &what, &shown, bound, &mut |t| self.a.display_type(t));
+        d.stage = Stage::Flow;
+        let d = unmet_rules(self.a, ty, &shown, bound).fold(d, Diagnostic::with_rule);
+        self.report(d.with_found(self.src(span)));
     }
 
     /// `inner at k` at `e` (§11.3), `c` the clock of `inner`: no slower
@@ -88,10 +96,10 @@ impl Walk<'_> {
         }
     }
 
-    /// `if~` / `match~` (`form`) at its `~`: W7-06.
+    /// `if~` / `match~` (`form`) at its `~`: W7-06, in error.
     pub(super) fn tilde(&mut self, tilde: Span, form: &str) -> Option<Clock> {
         if self.checking() {
-            return self.gate(Feature::TildeBranches, tilde, &[form]);
+            self.gate(Feature::TildeBranches, tilde, &[form]);
         }
         Some(Clock::Error)
     }
@@ -106,27 +114,52 @@ impl Walk<'_> {
         true
     }
 
-    /// A call at `e` of the function `def`, `r` the join of its receiver and
-    /// arguments (§11.5): the first `inout self` call held (E0713, §5.2), no
-    /// effects (E0805), and a function that is not `rt` takes values at
-    /// `init` or constants only (E0805).
-    pub(super) fn check_fn_call(&mut self, e: ExprId, def: DefId, r: Option<Clock>) {
-        let Some(f) = self.a.def(def).as_fn().filter(|_| self.checking()) else { return };
+    /// Whether a call at `e` of the function `def`, `ops` the clocks of its
+    /// receiver (`receiver`) and arguments and `r` their join, has a clock
+    /// (§11.5): the first `inout self` call held (E0713, §5.2), no effects
+    /// (E0805), and a function that is not `rt` takes values at `init` or
+    /// constants only (E0815, S-147); one that does is recorded for the
+    /// marking. With E0805 or that E0815 the rule of its clock fails, and the
+    /// call is in error (§18.1).
+    pub(super) fn check_fn_call(
+        &mut self,
+        e: ExprId,
+        def: DefId,
+        receiver: bool,
+        ops: &[Option<Clock>],
+        r: Option<Clock>,
+    ) -> bool {
+        let Some(f) = self.a.def(def).as_fn().filter(|_| self.checking()) else { return true };
         let span = self.ast.expr(e).span;
         let name = &self.a.def(def).name;
-        if f.takes_inout_self() && self.inout_call.is_none() {
+        if f.takes_inout_self() {
             let msg = format!("`{name}` takes `inout self`, and a flow body cannot call it (§5.2, §11.2)");
-            self.inout_call = Some(Diagnostic::new(Stage::Flow, Code::E0713, span, msg).with_found(self.src(span)));
+            let d = Diagnostic::new(Stage::Flow, Code::E0713, span, msg).with_found(self.src(span));
+            keep_first(&mut self.inout_call, d);
         }
         if !f.effects.effects().is_empty() {
             let msg = format!("`{name}` has effects; a flow calls effect-free functions only (§11.5)");
             self.err(Code::E0805, span, msg);
-        } else if !f.rt && readable_at(r.unwrap_or(Clock::Const), Clock::Init).is_err() {
-            let msg = format!(
-                "`{name}` is not `rt` and takes arguments at the clock `init` or constants only; mark it `rt` or pass values at `init` (§11.5)"
-            );
-            self.err(Code::E0805, span, msg);
+            return false;
         }
+        if f.rt || r == Some(Clock::Error) {
+            return true;
+        }
+        let fast = |c: &Option<Clock>| readable_at(c.unwrap_or(Clock::Const), Clock::Init).is_err();
+        let Some(k) = ops.iter().position(fast) else {
+            self.non_rt.insert(e);
+            return true;
+        };
+        let place = match k.checked_sub(usize::from(receiver)) {
+            None => "its receiver".to_string(),
+            Some(k) => format!("its argument {}", k + 1),
+        };
+        let shown = ops[k].unwrap_or(Clock::Const).shown(span);
+        let msg = format!(
+            "`{name}` is not `rt` and takes values at the clock `init` or constants only, but {place} is at `{shown}`; mark it `rt` or pass values at `init` (§11.5)"
+        );
+        self.err(Code::E0815, span, msg);
+        false
     }
 
     /// The argument `x` at the clock `c` of an instance of `g`, read at
@@ -144,12 +177,13 @@ impl Walk<'_> {
         self.err(Code::E0815, span, msg);
     }
 
-    /// The first argument `first` of a delay, at the clock `c`, holds its
-    /// state (§11.4, E0813); a name or a literal at `block` has the note of
-    /// the form at `sample`.
-    pub(super) fn check_first(&mut self, delay: Delay, first: ExprId, c: Clock) {
-        if !self.checking() || holds_state(c) {
-            return;
+    /// Whether the first argument `first` of a delay, at the clock `c`,
+    /// holds its state (§11.4, E0813); a name or a literal of a parameter
+    /// kind has the candidate `first at sample` (S-102; a computed one
+    /// waits for W7-05).
+    pub(super) fn check_first(&mut self, delay: Delay, first: ExprId, c: Clock) -> bool {
+        if holds_state(c) {
+            return true;
         }
         let span = self.ast.expr(first).span;
         let d = delay.name();
@@ -164,10 +198,17 @@ impl Walk<'_> {
         };
         let src = self.src(span);
         let mut diag = Diagnostic::new(Stage::Flow, Code::E0813, span, msg).with_found(src.clone());
-        if c == Clock::Block && name_or_literal(self.ast, first) {
-            diag = diag.with_note(span, format!("write `{d}~({src} at sample)` to delay it per sample"));
+        if matches!(c, Clock::Const | Clock::Init | Clock::Block) && name_or_literal(self.ast, first) {
+            let fix = Fix::insert(
+                format!("write `{src} at sample` to delay it per sample"),
+                span.file,
+                span.end,
+                " at sample",
+            );
+            diag = diag.with_fix(fix);
         }
-        self.fail(diag);
+        self.report(diag);
+        false
     }
 
     /// The `init` `i` of a delay, at the clock `c`, is at `init` or a

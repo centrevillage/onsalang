@@ -196,7 +196,7 @@ fn non_rt_function_only_at_init() {
     assert_eq!(let_rate(f, "b"), (Clock::Init, true));
     assert_eq!(
         codes("pub fn make(n: F32) -> F32 { n * 2.0 }\npub flow f(c: F32 at block) -> F32 at sample {\n  make(c)\n}\n"),
-        vec![Code::E0805]
+        vec![Code::E0815]
     );
 }
 
@@ -401,7 +401,7 @@ fn par_ranges() {
     // `par` head, unlike a `for` head (R-194).
     assert_eq!(par("[F32; 2]", "0..<n.min(2)"), vec![Code::E0417]);
     // The forms of §4.5 that this version does not compute: E0200 until
-    // W7-02 (R-195); a prefix `-` on a `U32` is E0401 (S-228).
+    // W9-03 (R-195); a prefix `-` on a `U32` is E0401 (S-228).
     assert_eq!(par("[F32; 4]", "0..<3 + 1"), vec![Code::E0200]);
     assert_eq!(par("[F32; 4]", "0..<(2 * 2)"), vec![Code::E0200]);
     assert_eq!(par("[F32; 4]", "(0)..<(4)"), vec![]);
@@ -459,9 +459,10 @@ fn e0811_e0812_marks() {
 
 #[test]
 fn e0813_e0815_delay_argument_rates() {
-    let a = check("pub flow f(p: F32 at block) -> F32 at sample {\n  prev~(p)\n}\n");
+    let src = "pub flow f(p: F32 at block) -> F32 at sample {\n  prev~(p)\n}\n";
+    let a = check(src);
     assert_eq!(a.diagnostics[0].code, Code::E0813);
-    assert!(a.diagnostics[0].notes.iter().any(|n| n.message.contains("prev~(p at sample)")));
+    assert_eq!(crate::fixed_region(src, &a.diagnostics[0], 0), "p at sample");
     // The `init` of a delay is faster than `init`: E0815 (S-147; E0814 is retired).
     assert_eq!(
         codes("pub flow f(x: F32 at sample, p: F32 at block) -> F32 at sample {\n  prev~(x, p)\n}\n"),

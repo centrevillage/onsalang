@@ -1,6 +1,18 @@
 // onsa.toml
 // [test]
 // spec = ["§5.2", "§11.2", "§11.3", "§11.4", "§11.5", "§18.1"]
+//
+// [[test.fix]]
+// at = "51:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["50:11 E0713"]
+//
+// [[test.fix]]
+// at = "63:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["65:11 E0713"]
 
 // A call of an `inout self` method in a flow body without `!` is E0713 (§11.2, §5.2). It is a
 // check of the argument modes, which a unit does not get when the flow check has an error

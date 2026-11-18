@@ -10,8 +10,8 @@
 //!   the [`loop_clock`] of the join of its `let`s (§11.3, S-567 P3).
 //! - Stage 2 (`Check`) walks the `let`s in their order and the output, with
 //!   `^y` the value of stage 1, records every clock, checks the flow rules
-//!   ([`checks`]) up to the first diagnostic, where it stops, and builds the
-//!   nodes ([`NodeBuilder`]).
+//!   ([`checks`]) all through, keeping the first diagnostic in the order of
+//!   the file (§18.1), and builds the nodes ([`NodeBuilder`]).
 //!
 //! Each expression is walked at most three times; the components are linear
 //! in the reads (Tarjan), so the walk is linear in the body, with no bound of
@@ -30,9 +30,10 @@ use crate::names::body::BodyNames;
 mod checks;
 
 /// After type checking: the walk of the clocks, the state marking and the
-/// tables of the flow `id` (§11.2–§11.5). The diagnostic is the first of the
-/// walk, else of the marking, else a call of an `inout self` method (the
-/// modes stage comes after the flow checks, §18.1).
+/// tables of the flow `id` (§11.2–§11.5). The diagnostic is the first in
+/// the order of the file of the walk and of the marking, else a call of an
+/// `inout self` method (the modes stage comes after the flow checks, §18.1);
+/// with one, the tables are partial.
 pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: BodyInfo, fcx: FlowCx) {
     let _flow = onsa_diag::timing::phase(onsa_diag::timing::Phase::Flow);
     let mut info = FlowInfo {
@@ -67,9 +68,10 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
     });
     info.lets = lets.collect();
     let mut diag = w.diag.clone();
-    if diag.is_none() {
-        let m = super::reads::mark_all(a, ast, text, &body, &fcx, &w.info, &mut info.lets);
-        (info.read_at, info.sample_rate_at, diag) = (m.read_at, m.sample_rate_at, m.diag);
+    let m = super::reads::mark_all(ast, text, &body, &fcx, &w, &mut info.lets);
+    (info.read_at, info.sample_rate_at) = (m.read_at, m.sample_rate_at);
+    if let Some(d) = m.diag {
+        keep_first(&mut diag, d);
     }
     let diag = diag.or(w.inout_call.clone());
     info.complete = diag.is_none();
@@ -105,11 +107,14 @@ pub(super) struct Walked {
     pub(super) checked: Vec<Clock>,
     /// Stage 2: the clocks of the expressions, the locals and the nodes.
     pub(super) info: ClockInfo,
-    /// Stage 2: the first diagnostic, where the walk stopped.
+    /// Stage 2: the first diagnostic in the order of the file.
     pub(super) diag: Option<Diagnostic>,
     /// Stage 2: the first call of an `inout self` method (E0713, §5.2),
     /// reported when the flow checks find no error.
     pub(super) inout_call: Option<Diagnostic>,
+    /// Stage 2: the calls of a function that is not `rt` with values at
+    /// `init` (§11.5), which the marking reads (E0200 at a later stage).
+    pub(super) non_rt: HashSet<ExprId>,
     /// Stage 2: [`FlowInfo::nodes`] and [`FlowInfo::node_of_expr`].
     pub(super) nodes: Vec<Node>,
     pub(super) node_of_expr: HashMap<ExprId, usize>,
@@ -146,6 +151,7 @@ pub(super) struct Walk<'a> {
     branch: u32,
     diag: Option<Diagnostic>,
     inout_call: Option<Diagnostic>,
+    non_rt: HashSet<ExprId>,
     nodes: NodeBuilder,
 }
 
@@ -190,6 +196,7 @@ pub(super) fn walk(
         branch: 0,
         diag: None,
         inout_call: None,
+        non_rt: HashSet::default(),
         nodes: NodeBuilder::new(&cx.pending),
     };
     for (l, input) in cx.inputs.iter().zip(&decl.inputs) {
@@ -205,6 +212,7 @@ pub(super) fn walk(
         info: w.out,
         diag: w.diag,
         inout_call: w.inout_call,
+        non_rt: w.non_rt,
         nodes,
         node_of_expr,
     }
@@ -237,7 +245,7 @@ impl Walk<'_> {
     }
 
     /// Stage 2: the `let`s in their order, each checked after its
-    /// initializer, the floats of `vdelay~`, then the output.
+    /// initializer, then the output.
     fn check(&mut self) {
         self.mode = Mode::Check;
         let cx = self.cx;
@@ -250,7 +258,6 @@ impl Walk<'_> {
             }
             self.check_let(p);
         }
-        self.check_floats();
         if let Some(out) = self.cx.output {
             self.in_loop = false;
             self.expr(out);
@@ -261,12 +268,8 @@ impl Walk<'_> {
         Some(self.ast.expr(e).span)
     }
 
-    /// The clock of `e` (⊥ is `None`), recorded at `Check`. Past the first
-    /// diagnostic, `Check` walks no more and gives a clock in error.
+    /// The clock of `e` (⊥ is `None`), recorded at `Check`.
     fn expr(&mut self, e: ExprId) -> Option<Clock> {
-        if self.mode == Mode::Check && self.diag.is_some() {
-            return Some(Clock::Error);
-        }
         let c = self.rule(e);
         if self.mode != Mode::Check {
             return c;
@@ -441,9 +444,7 @@ impl Walk<'_> {
         let b = self.expr(body);
         if check {
             let nodes = self.nodes.leave_par();
-            if self.diag.is_none() {
-                self.nodes.par(e, var, from, to, body, nodes);
-            }
+            self.nodes.par(e, var, from, to, body, nodes);
         }
         self.join(e, &[b, Some(Clock::Init)])
     }
@@ -479,8 +480,10 @@ impl Walk<'_> {
         let ops: Vec<Option<Clock>> =
             receiver.into_iter().chain(args.iter().map(|x| x.expr)).map(|x| self.expr(x)).collect();
         let r = self.join(e, &ops);
-        if let Some(Target::Fn { def, .. } | Target::Method { def, .. }) = target {
-            self.check_fn_call(e, *def, r);
+        if let Some(Target::Fn { def, .. } | Target::Method { def, .. }) = target
+            && !self.check_fn_call(e, *def, receiver.is_some(), &ops, r)
+        {
+            return Some(Clock::Error);
         }
         match target {
             Some(Target::Variant { .. } | Target::Panic) => r,
@@ -507,11 +510,11 @@ impl Walk<'_> {
             NodeKind::Instance(d) => self.instance(e, d, call),
             NodeKind::Delay(delay, _) => self.delay(e, delay, call),
         };
-        if let Some(k) = slot.filter(|_| self.diag.is_none()) {
+        if let Some(k) = slot {
             let span = self.ast.expr(e).span;
             if let Err(d) = self.nodes.node(self.a, self.body, e, call, span) {
                 let found = self.src(span);
-                return self.fail(d.with_found(found));
+                self.report(d.with_found(found));
             }
             self.out.nodes[k] = NodeClock { expr: e, clock: clock.unwrap_or(Clock::Const), args };
         }
@@ -538,14 +541,16 @@ impl Walk<'_> {
     }
 
     /// A delay (§11.4): its first argument, the `d` of `vdelay~` and its
-    /// `init`, not its length.
+    /// `init`, not its length, and the element type of `vdelay~`. With the
+    /// E0813 of its first argument, it is in error (§18.1).
     fn delay(&mut self, e: ExprId, delay: Delay, call: &NodeCall) -> (Option<Clock>, Vec<ArgRead>) {
         let Some(&first) = call.args.first() else {
             onsa_diag::internal::bug(self.span(e), "a delay with no argument")
         };
         let c = self.expr(first);
-        if let Some(c) = c.filter(|_| self.mode == Mode::Check) {
-            self.check_first(delay, first, c);
+        let held = c.filter(|_| self.checking()).is_none_or(|c| self.check_first(delay, first, c));
+        if delay == Delay::Variable && self.checking() {
+            self.check_float(e);
         }
         let d = call.d();
         if let Some(d) = d {
@@ -556,7 +561,7 @@ impl Walk<'_> {
         {
             self.check_init(delay, i, c);
         }
-        let out = delay_out(c, self.in_loop);
+        let out = if held { delay_out(c, self.in_loop) } else { Some(Clock::Error) };
         let at = out.unwrap_or(Clock::Const);
         let reads = [Some(first), d].into_iter().flatten().map(|x| ArgRead { expr: x, at });
         let init = call.init_expr.map(|i| ArgRead { expr: i, at: Clock::Init });

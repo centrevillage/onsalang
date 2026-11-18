@@ -1,0 +1,91 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§18.1"]
+// fixes = 1
+
+// E0813 has a candidate when the first argument of a delay is a name or a literal (parentheses
+// stripped) of the clock `block`, of the clock `init` or of a constant: the candidate promotes it with
+// ` at sample` after the argument (`prev~(p)` is `prev~(p at sample)`, §11.4, S-102), and the other
+// arguments stay as they are. Applied alone, it leaves the unit without an error, which the runner
+// checks for each candidate (§18.1, W3-17), so the form that the candidate makes is a form that is
+// accepted. One error per flow (§18.1). The first arguments that are no name or literal have no
+// candidate: e0813_no_candidate_until_w7_05.onsa.
+
+const K: F32 = 1.0
+
+pub flow block_input(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  prev~(p) + x                                                  //~ E0813
+}
+
+pub flow init_input(x: F32 at sample, c: F32 at init) -> F32 at sample {
+  prev~(c) + x                                                  //~ E0813
+}
+
+pub flow block_through_a_let(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let q = p * 2.0
+  prev~(q) + x                                                  //~ E0813
+}
+
+pub flow init_through_a_let(x: F32 at sample, c: F32 at init) -> F32 at sample {
+  let q = c * 2.0
+  prev~(q) + x                                                  //~ E0813
+}
+
+pub flow float_literal(x: F32 at sample) -> F32 at sample {
+  prev~(1.0) + x                                                //~ E0813
+}
+
+pub flow integer_literal(x: I32 at sample) -> I32 at sample {
+  prev~(3) + x                                                  //~ E0813
+}
+
+pub flow named_constant(x: F32 at sample) -> F32 at sample {
+  prev~(K) + x                                                  //~ E0813
+}
+
+pub flow constant_through_a_let(x: F32 at sample) -> F32 at sample {
+  let k = 3.0
+  prev~(k) + x                                                  //~ E0813
+}
+
+pub flow in_parentheses(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  prev~((p)) + x                                                //~ E0813
+}
+
+pub flow delay_with_a_length(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  delay~(p, 4) + x                                              //~ E0813
+}
+
+pub flow delay_with_a_length_and_an_init(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  delay~(p, 4, 0.5) + x                                         //~ E0813
+}
+
+pub flow prev_with_an_init(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  prev~(p, 0.5) + x                                             //~ E0813
+}
+
+pub flow vdelay_with_the_length_and_the_maximum(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  vdelay~(p, x, 8) + x                                          //~ E0813
+}
+
+pub flow vdelay_with_an_init(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  vdelay~(p, x, 8, 0.5) + x                                     //~ E0813
+}
+
+pub flow in_a_let(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = prev~(p)                                              //~ E0813
+  a + x
+}
+
+pub flow in_a_par_body(x: F32 at sample, p: F32 at block) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 { prev~(p) + x }                            //~ E0813
+}
+
+pub flow in_an_if_condition(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  if prev~(p) > 0.5 { x } else { 0.0 }                          //~ E0813
+}
+
+// The form that the candidate makes is accepted as written.
+pub flow promoted(x: F32 at sample, p: F32 at block, c: F32 at init) -> F32 at sample {
+  prev~(p at sample) + delay~(c at sample, 4, 0.5) + prev~(1.0 at sample) + prev~(K at sample) + x
+}

@@ -282,8 +282,8 @@ impl<'a> Checker<'a> {
             ExprKind::Block(b) => self.check_block(e, self.block_of(e, b), expected),
             // What only a flow body holds is the names stage's E0821 outside
             // one (§11.1). In a flow body, `if~` and `match~` are typed as
-            // `if` and `match`, and the flow checks read the `~`
-            // (`crate::flow::map`); `at`, `^` and `par` are theirs.
+            // `if` and `match`, and the walk of the clocks reads the `~`
+            // (`flow/clocks.rs`, W7-06); `at`, `^` and `par` are theirs.
             ExprKind::If { tilde: Some(_), .. } | ExprKind::Match { tilde: Some(_), .. } if self.flow.is_none() => {
                 Err(self.flow_syntax(span))
             }

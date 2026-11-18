@@ -1,11 +1,15 @@
 //! The flow mode of the checker (T3-1; §11.2–§11.5): the inputs and the
-//! `let`s of a flow body, its statements and expressions, `par`, and the
-//! calls of instances, delays and `sample_rate()`.
+//! `let`s of a flow body, its statements and expressions, `par`, `at`,
+//! `^name`, and the calls of instances, delays and `sample_rate()`. The
+//! clocks are the walk's (`flow/clocks.rs`), which reads the clock of `at`
+//! the names stage recorded; the forms the representation cannot hold yet
+//! are its E0200 (`onsa_diag/src/unsupported.rs`, the works named on each).
 
 use super::*;
 use crate::flow_names::FlowBuiltin;
 use crate::names::body::{NoFlowForm, Origin, PathRes, no_flow_form};
 use crate::resolve::{Callee, NameKind};
+use crate::ty::TyId;
 
 impl<'a> Checker<'a> {
     pub(super) fn fcx(&mut self) -> &mut FlowCx {
@@ -447,7 +451,6 @@ impl<'a> Checker<'a> {
                         "`vdelay~` needs a maximum of at least 1 (§11.4)",
                     ));
                 }
-                self.fcx().float_checks.push((span, e));
                 max
             }
         };
@@ -470,5 +473,40 @@ impl<'a> Checker<'a> {
         let arg_exprs: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
         self.fcx().calls.push(NodeCall { expr: e, kind, args: arg_exprs, init, init_expr, ty: t });
         Ok(t)
+    }
+
+    /// `e at k` in a flow body (§11.3): the type of `e`; the clock is the
+    /// names stage's record ([`crate::names::body::BodyNames::clocks`]), which
+    /// the walk of the clocks reads.
+    fn check_at(&mut self, e: ExprId, inner: ExprId, expected: Option<TyId>) -> R<TyId> {
+        let t = self.check_expr_as(inner, expected, self.joining)?;
+        self.names_record(e, self.names.clocks.get(&e).copied())?;
+        Ok(t)
+    }
+
+    /// `^name` in a flow body (§11.2): a later `let` of the body, read in the
+    /// first argument of a delay, as the names stage recorded it (its E0801,
+    /// E0020 and the E0200 in a `par`, `names/body/flow_order.rs`).
+    fn check_feedback(&mut self, e: ExprId) -> R<TyId> {
+        let record = match self.names.paths.get(&e) {
+            Some(&PathRes::Local(b)) => Some(LocalId(b.0)),
+            _ => None,
+        };
+        let id = self.names_record(e, record)?;
+        self.info.targets.insert(e, Target::Local(id));
+        Ok(self.local_ty(id))
+    }
+
+    /// The record `r` of the names stage at the node `e` of a flow body: none
+    /// where it stopped before it with no diagnostic (§18.1, S-692).
+    fn names_record<T>(&mut self, e: ExprId, r: Option<T>) -> R<T> {
+        match r {
+            Some(r) => Ok(r),
+            None if !self.names.complete => Err(self.held_stop()),
+            None => onsa_diag::internal::bug(
+                Some(self.expr(e).span),
+                "a node of a flow body the names stage did not record",
+            ),
+        }
     }
 }

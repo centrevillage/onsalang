@@ -1,6 +1,36 @@
 // onsa.toml
 // [test]
 // spec = ["§11.3", "§11.4", "§11.5", "§18.1"]
+//
+// [[test.fix]]
+// at = "49:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["50:3 E0810"]
+//
+// [[test.fix]]
+// at = "61:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["62:11 E0805"]
+//
+// [[test.fix]]
+// at = "73:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["74:11 E0815"]
+//
+// [[test.fix]]
+// at = "121:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["122:11 E0200"]
+//
+// [[test.fix]]
+// at = "133:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["134:13 E0200"]
 
 // A flow is one unit of the flow check: the first error by position is the one reported (§18.1,
 // "the first by the order of the diagnostics: start position, ..."). Each flow below has two errors

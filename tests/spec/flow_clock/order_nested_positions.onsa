@@ -1,6 +1,30 @@
 // onsa.toml
 // [test]
 // spec = ["§11.3", "§11.4", "§11.5", "§18.1"]
+//
+// [[test.fix]]
+// at = "69:9"
+// code = "E0813"
+// candidate = 1
+// leaves = ["69:28 E0200"]
+//
+// [[test.fix]]
+// at = "77:9"
+// code = "E0813"
+// candidate = 1
+// leaves = ["77:30 E0815"]
+//
+// [[test.fix]]
+// at = "81:9"
+// code = "E0813"
+// candidate = 1
+// leaves = ["81:22 E0815"]
+//
+// [[test.fix]]
+// at = "85:15"
+// code = "E0813"
+// candidate = 1
+// leaves = ["85:9 E0815"]
 
 // Two errors inside one `let` or one expression: the first by position is the one reported
 // (§18.1: one error per flow, the first of the order start position, end position, code). The

@@ -47,9 +47,6 @@
 //! - `output: ExprId` — the output expression (clock ≤ `sample`, promoted).
 //! - `complete` — `false` when checking stopped at a diagnostic (tables partial).
 //!
-//! The flow syntax of 0.3 (`at`, `^name`, `prev~`, the omitted `init`,
-//! `if~` / `match~`) is read into these tables by [`map`] (W3-10, K-02).
-//!
 //! The parts are in a module each: `check` (the flow mode of the checker),
 //! `consts` (the constant expressions), `clocks` (the walk of the clocks and
 //! the checks of the flow rules), `loops` (the loops of the `let`s), `nodes`
@@ -71,8 +68,6 @@ use crate::def::FlowInput;
 use crate::ty::{FloatKind, Len, Ty, TyId};
 use crate::{Analysis, DefId, Module};
 
-#[path = "flow_map.rs"]
-pub(crate) mod map;
 use crate::flow_names::{Delay, SAMPLE_RATE};
 mod check;
 mod clocks;
@@ -82,6 +77,20 @@ mod nodes;
 mod reads;
 
 pub(crate) use clocks::finish_flow;
+
+/// The text at `span` of the module `text`: the `found` of a diagnostic of
+/// the flow checks.
+fn found(text: &str, span: Span) -> String {
+    text[span.start as usize..span.end as usize].to_string()
+}
+
+/// Keeps in `slot` the first of its diagnostic and `d` in the order of the
+/// file (§18.1): a check that walks on past an error reports the first.
+fn keep_first(slot: &mut Option<Diagnostic>, d: Diagnostic) {
+    if slot.as_ref().is_none_or(|old| d.order_in_file() < old.order_in_file()) {
+        *slot = Some(d);
+    }
+}
 
 /// A top-level `let` of a flow body.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -263,7 +272,5 @@ pub(crate) struct FlowCx {
     /// `par` expression → (variable, from, to).
     pars: HashMap<ExprId, (LocalId, u32, u32)>,
     sample_rate_calls: Vec<ExprId>,
-    /// `vdelay` calls: the element type must be a float (checked once resolved).
-    float_checks: Vec<(Span, ExprId)>,
     output: Option<ExprId>,
 }

@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5", "§15.1", "§18.1"]
+
+// The rule of a function that is not `rt` (an argument faster than `init` is E0815 at the call,
+// §11.5, S-147) holds for a function of another module, through the qualified name and through a
+// name taken in by `use` alike. The arguments at `init` are accepted.
+
+use util
+use util.{slow}
+
+pub flow qualified_at_sample(x: F32 at sample) -> F32 at sample {
+  let a = util.slow(x)                                          //~ E0815
+  a
+}
+
+pub flow imported_at_sample(x: F32 at sample) -> F32 at sample {
+  let a = slow(x)                                               //~ E0815
+  a
+}
+
+pub flow qualified_at_block(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = util.mixed(p, 1.0)                                    //~ E0815
+  x * a
+}
+
+pub flow qualified_second_argument(c: F32 at init, x: F32 at sample) -> F32 at sample {
+  let a = util.mixed(c, x)                                      //~ E0815
+  a
+}
+
+pub flow arguments_at_init_are_accepted(x: F32 at sample, c: F32 at init) -> F32 at sample {
+  let a = util.slow(c)
+  let b = slow(2.0)
+  let d = util.mixed(c, 1.0)
+  x * a * b * d
+}

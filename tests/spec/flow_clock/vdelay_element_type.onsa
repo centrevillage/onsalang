@@ -1,0 +1,52 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§4.5", "§18.1"]
+
+// `vdelay~` interpolates, so its element type is a float: `T: Float`, and any other element type is
+// E0416 (§11.4, §4.5), at the call. The delay time `d` has the type of the first argument, so the
+// type of both is the one that is wrong. One error per flow (§18.1), so each form is a flow of its
+// own. `F32` and `F64` are accepted, with the init written or omitted.
+
+pub flow i32_element(x: I32 at sample) -> I32 at sample {
+  vdelay~(x, 1, 8)                                              //~ E0416
+}
+
+pub flow u32_element(x: U32 at sample) -> U32 at sample {
+  vdelay~(x, 1, 8)                                              //~ E0416
+}
+
+pub flow i64_element(x: I64 at sample) -> I64 at sample {
+  vdelay~(x, 1, 8)                                              //~ E0416
+}
+
+pub flow bool_element(x: Bool at sample) -> Bool at sample {
+  vdelay~(x, true, 8, false)                                    //~ E0416
+}
+
+pub flow i32_element_in_a_let(x: I32 at sample) -> I32 at sample {
+  let a = vdelay~(x, 1, 8)                                      //~ E0416
+  a
+}
+
+pub flow i32_element_with_an_init(x: I32 at sample) -> I32 at sample {
+  let a = vdelay~(x, 1, 8, 0)                                   //~ E0416
+  a
+}
+
+pub flow i32_element_in_an_operand(x: I32 at sample) -> I32 at sample {
+  x + vdelay~(x, 1, 8)                                          //~ E0416
+}
+
+pub flow i32_element_in_a_par_body(x: I32 at sample) -> [I32; 2] at sample {
+  par~ i in 0 ..< 2 { vdelay~(x, 1, 8) }                        //~ E0416
+}
+
+pub flow i32_element_of_a_block_input(x: I32 at sample, d: I32 at block) -> I32 at sample {
+  vdelay~(x, d, 8)                                              //~ E0416
+}
+
+pub flow float_elements(x: F32 at sample, y: F64 at sample, d: F32 at sample, e: F64 at sample) -> F32 at sample {
+  let a = vdelay~(x, d, 8)
+  let b = vdelay~(y, e, 8, 0.0)
+  a + F32.round_from(b)
+}

@@ -1,5 +1,5 @@
 //! The constant expressions of a flow (§4.5, §11.4): the lengths and
-//! bounds that fix the state size (R-195, W7-02), read by the one reader of
+//! bounds that fix the state size (R-195, W9-03), read by the one reader of
 //! the constant expressions (`crate::constarg`) from the records of the
 //! names of the body.
 
@@ -10,7 +10,7 @@ impl<'a> Checker<'a> {
     /// A compile-time `U32` (§11.4, §4.5): the value of a constant
     /// expression. This version computes an integer literal and a `const`
     /// with a literal value (in parentheses too); the other constant
-    /// expressions are E0200 until W7-02 (R-195).
+    /// expressions are E0200 until W9-03 (R-195).
     pub(super) fn flow_const_u32(&mut self, e: ExprId) -> R<u32> {
         match self.const_expr(e) {
             Ok((ConstU32::Value(v), constant)) => {

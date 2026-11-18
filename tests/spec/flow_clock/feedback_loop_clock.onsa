@@ -45,8 +45,10 @@ pub flow sample_enters_read_at_block(x: F32 at sample, c: Bool at sample) -> F32
   b
 }
 
+// The `at` is E0815 and the first argument it gives is at `block` (E0813), over the same span: the
+// order of the codes puts E0813 first (§18.1).
 pub flow at_inside_the_loop(p: F32 at block) -> F32 at sample {
-  let a = prev~(^b at block)                                   //~ E0815
+  let a = prev~(^b at block)                                   //~ E0813
   let b = a
   b
 }

@@ -1,0 +1,5 @@
+// A function of another module with an empty effect row that is not `rt` (§11.5).
+
+pub fn slow(v: F32) -> F32 { v }
+
+pub fn mixed(a: F32, b: F32) -> F32 { a + b }

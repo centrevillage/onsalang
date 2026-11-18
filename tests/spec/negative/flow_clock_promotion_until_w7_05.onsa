@@ -8,7 +8,7 @@
 // computed `e` at `k`; it says E0200 for it, and promotes a name, a literal and a constant only (a
 // constant goes to every clock, §11.3). One error per flow (P-01).
 //
-// W7-02 removes this file: after it these programs check (the clock analysis).
+// W7-05 removes this file: after it these programs check (the promotion of a computed expression, X-26).
 
 pub rt fn twice(x: F32) -> F32 {
   x * 2.0

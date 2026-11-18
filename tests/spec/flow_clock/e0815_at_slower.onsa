@@ -52,8 +52,10 @@ pub flow in_an_instance_argument(x: F32 at sample) -> F32 at sample {
   g~(x at block)                                              //~ E0815
 }
 
+// The `at` is E0815 and the first argument it gives is at `block` (E0813), over the same span: the
+// order of the codes puts E0813 first (§18.1).
 pub flow in_a_delay_argument(x: F32 at sample) -> F32 at sample {
-  prev~(x at block)                                           //~ E0815
+  prev~(x at block)                                           //~ E0813
 }
 
 pub flow in_a_par_body(x: F32 at sample) -> [F32; 2] at sample {

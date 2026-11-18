@@ -1,0 +1,58 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§18.1"]
+// fixes = 0
+
+// The first argument of a delay that is none of a name or a literal has no candidate in this
+// version: the candidate would have to promote a computed expression, which this version does not
+// do (E0200, `at` that makes a computed expression faster). W7-05 gives that, and these then
+// get the candidate too (this file goes then). `^name` is no name of a value that is read here, and
+// a call or a field is a computed expression. One error per flow (§18.1).
+
+pub rt fn half(v: F32) -> F32 { v * 0.5 }
+
+pub flow block_computed(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  prev~(p * 2.0) + x                                            //~ E0813
+}
+
+pub flow block_negated(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  prev~(-p) + x                                                 //~ E0813
+}
+
+pub flow init_computed(x: F32 at sample, c: F32 at init) -> F32 at sample {
+  prev~(c + 1.0) + x                                            //~ E0813
+}
+
+pub flow constant_computed(x: F32 at sample) -> F32 at sample {
+  prev~(1.0 + 2.0) + x                                          //~ E0813
+}
+
+pub flow call_of_a_constant(x: F32 at sample) -> F32 at sample {
+  prev~(half(1.0)) + x                                          //~ E0813
+}
+
+pub flow call_of_a_block_value(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  prev~(half(p)) + x                                            //~ E0813
+}
+
+pub flow sample_rate_computed(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  prev~(sample_rate() * p) + x                                  //~ E0813
+}
+
+pub flow delay_computed(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  delay~(p + 1.0, 4) + x                                        //~ E0813
+}
+
+pub flow vdelay_computed(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  vdelay~(p * 2.0, x, 8) + x                                    //~ E0813
+}
+
+pub flow in_parentheses_computed(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  prev~((p * 2.0)) + x                                          //~ E0813
+}
+
+pub flow caret_name(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = prev~(^b)                                             //~ E0813
+  let b = p
+  a + x
+}

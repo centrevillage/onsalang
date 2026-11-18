@@ -2,7 +2,7 @@
 //! ([`crate::names::body::BodyNames`]): the values they name, the type of a
 //! field, and the types written in the body. The types stage reads the
 //! record and resolves no name of its own (D-15), except the errors the
-//! flow stage reports after `^` (W7-04: `flow_map.rs`).
+//! flow stage reports after `^` (W7-04: `flow/check.rs`).
 
 use super::*;
 use crate::deferred::DeferredKind;

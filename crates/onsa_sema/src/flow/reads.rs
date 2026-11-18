@@ -7,23 +7,27 @@
 use onsa_diag::hash::HashSet;
 use onsa_syntax::ast::Ast;
 
+use super::clocks::Walked;
 use super::*;
 
 /// What the marking gives.
 pub(super) struct Marked {
     pub(super) read_at: HashMap<LocalId, BTreeSet<ClockStage>>,
     pub(super) sample_rate_at: Option<ClockStage>,
-    /// The first call of a function that is not `rt` read at a stage after
-    /// `init` (E0200, R-17, W7-05).
+    /// The first call (in the order of the file) of a function that is not
+    /// `rt` read at a stage after `init` (E0200, R-17, W7-05).
     pub(super) diag: Option<Diagnostic>,
 }
 
 struct Marker<'a> {
-    a: &'a Analysis,
     ast: &'a Ast,
     text: &'a str,
     body: &'a BodyInfo,
     clocks: &'a ClockInfo,
+    /// The walk had a diagnostic: it did not record the nodes it did not
+    /// reach (in a branch, in `if~` / `match~`).
+    partial: bool,
+    non_rt: &'a HashSet<ExprId>,
     node_calls: HashSet<ExprId>,
     sample_rate: HashSet<ExprId>,
     out: Marked,
@@ -41,22 +45,23 @@ fn read_stage(c: Clock) -> Option<ClockStage> {
 
 /// The stages each local is read at, the `let`s read at a later stage than
 /// their own (S-05, their `state`), and the stage at which `sample_rate()`
-/// is read, in the module of `ast` and `text`.
+/// is read, in the module of `ast` and `text`, from the walk `walked`, also
+/// one with a diagnostic. A `let` in error is not marked.
 pub(super) fn mark_all(
-    a: &Analysis,
     ast: &Ast,
     text: &str,
     body: &BodyInfo,
     cx: &FlowCx,
-    clocks: &ClockInfo,
+    walked: &Walked,
     lets: &mut [FlowLet],
 ) -> Marked {
     let mut m = Marker {
-        a,
         ast,
         text,
         body,
-        clocks,
+        clocks: &walked.info,
+        partial: walked.diag.is_some(),
+        non_rt: &walked.non_rt,
         node_calls: cx.calls.iter().map(|c| c.expr).collect(),
         sample_rate: cx.sample_rate_calls.iter().copied().collect(),
         out: Marked { read_at: HashMap::default(), sample_rate_at: None, diag: None },
@@ -109,6 +114,9 @@ impl Marker<'_> {
                 if self.node_calls.contains(&e) {
                     let clocks = self.clocks;
                     let Some(&k) = clocks.node_of.get(&e) else {
+                        if self.partial {
+                            return;
+                        }
                         onsa_diag::internal::bug(Some(expr.span), "a node the walk of the clocks did not reach")
                     };
                     for r in &clocks.nodes[k].args {
@@ -139,15 +147,11 @@ impl Marker<'_> {
         }
     }
 
-    /// A call at `e` of a function that is not `rt`, read at a stage after
-    /// `init`: E0200 until hoisting computes it at `init` (R-17, W7-05). The
-    /// first one.
+    /// A call at `e` of a function that is not `rt`, with values at `init`
+    /// ([`Walked::non_rt`]), read at a stage after `init`: E0200 until
+    /// hoisting computes it at `init` (R-17, W7-05).
     fn non_rt_here(&mut self, e: ExprId, at: ClockStage) {
-        if self.out.diag.is_some() || at <= ClockStage::Init {
-            return;
-        }
-        let Some(Target::Fn { def, .. } | Target::Method { def, .. }) = self.body.targets.get(&e) else { return };
-        if self.a.def(*def).as_fn().is_none_or(|f| f.rt) {
+        if at <= ClockStage::Init || !self.non_rt.contains(&e) {
             return;
         }
         let span = self.ast.expr(e).span;
@@ -156,8 +160,7 @@ impl Marker<'_> {
             ClockStage::SAMPLE => ClockName::Sample.name(),
             s => onsa_diag::internal::bug(Some(span), format!("a read at the stage {s:?}, which W7-09 makes")),
         };
-        let found = self.text[span.start as usize..span.end as usize].to_string();
-        let d = Feature::NonRtCallAtClock.diagnostic(Stage::Flow, span, &[stage]).with_found(found);
-        self.out.diag = Some(d);
+        let d = Feature::NonRtCallAtClock.diagnostic(Stage::Flow, span, &[stage]).with_found(found(self.text, span));
+        keep_first(&mut self.out.diag, d);
     }
 }
