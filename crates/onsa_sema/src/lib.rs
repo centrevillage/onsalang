@@ -332,6 +332,18 @@ impl Analysis {
         self.names.get(&body)?.instance(call)
     }
 
+    /// The builtin of a flow (a delay, `sample_rate`, `sample_tick`; §2.2,
+    /// §11.4) that the name `name` of a callee in the flow body of `body`
+    /// is ([`named`] of the callee), as the names stage found it: a name an
+    /// item or a `use` of the module takes is no builtin (E0304, S-675;
+    /// `names/body/paths.rs`, D-15). `None` of any other name.
+    pub fn flow_builtin(&self, body: DefId, name: onsa_syntax::ast::ExprId) -> Option<flow_names::FlowBuiltin> {
+        match self.names.get(&body)?.paths.get(&name)? {
+            names::body::PathRes::FlowBuiltin(b) => Some(*b),
+            _ => None,
+        }
+    }
+
     /// The effect `Alloc` of `std.core`, a lang item (D-08, [`lang::LangItems`]).
     pub fn alloc(&self) -> Option<DefId> {
         self.modules.lang.alloc()

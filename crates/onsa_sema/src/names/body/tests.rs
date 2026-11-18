@@ -645,6 +645,25 @@ fn the_instance_of_a_call_is_read_from_the_names_stage() {
     assert_eq!(a.instance_of(u, node(&m, "util.lp~(x)")), util_lp);
     assert_eq!(a.instance_of(u, node(&m, "lp~(x)")), main_lp);
     assert_eq!(a.instance_of(u, node(&m, "prev~(x, 0.0)")), None);
+    // The builtin of a callee is the names stage's too: `prev` here, no
+    // flow of the user (W7-18 U2).
+    use crate::flow_names::{Delay, FlowBuiltin};
+    assert_eq!(a.flow_builtin(u, node(&m, "prev")), Some(FlowBuiltin::Delay(Delay::Prev)));
+    assert_eq!(a.flow_builtin(u, node(&m, "lp")), None);
+}
+
+/// A name an item of the module takes is no builtin of a flow (E0304,
+/// S-675): [`Analysis::flow_builtin`] reads the names stage.
+#[test]
+fn a_builtin_of_a_flow_is_read_from_the_names_stage() {
+    let src = "pub flow u(x: F32 at sample) -> F32 at sample {\n  let r = sample_rate()\n  delay~(x, 4, 0.0) * r\n}\n";
+    let (a, m) = analysis(src);
+    assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
+    use crate::flow_names::{Delay, FlowBuiltin};
+    let u = def(&a, "u");
+    assert_eq!(a.flow_builtin(u, node(&m, "sample_rate")), Some(FlowBuiltin::SampleRate));
+    assert_eq!(a.flow_builtin(u, node(&m, "delay")), Some(FlowBuiltin::Delay(Delay::Fixed)));
+    assert_eq!(a.flow_builtin(u, node(&m, "x")), None);
 }
 
 /// Outside a flow body, `f~(…)` is the walk's E0821 before the names of
