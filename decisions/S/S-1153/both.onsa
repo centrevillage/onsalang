@@ -1,0 +1,20 @@
+pub rt fn dbl(x: F32) -> F32 {
+  x * 2.0
+}
+
+pub struct Named {
+  name: Str,
+  cb: rt fn(F32) -> F32,
+}
+
+pub rt fn mk() -> Named {
+  Named { name: "a", cb: dbl }
+}
+
+pub rt fn use_it(n: Named, x: F32) -> F32 {
+  x
+}
+
+pub flow both(x: F32 at sample) -> F32 at sample {
+  use_it(mk(), x)
+}
