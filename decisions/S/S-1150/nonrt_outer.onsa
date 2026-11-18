@@ -1,0 +1,27 @@
+pub rt fn mk(n: U32) -> Str { "x" }
+pub rt fn pick(o: Option[Str]) -> F32 { 1.0 }
+pub rt fn has(o: Option[Buf[F32]]) -> F32 { 1.0 }
+pub rt fn id[T](v: T) -> T { v }
+pub rt fn tup(t: (Option[Buf[F32]], F32)) -> F32 { 1.0 }
+pub rt fn arr(t: [Option[Buf[F32]]; 2]) -> F32 { 1.0 }
+pub rt fn thru(move b: Buf[F32]) -> Buf[F32] { b }
+pub rt fn bl(b: Buf[F32]) -> F32 { 1.0 }
+pub type S = Str
+pub rt fn mka(n: U32) -> S { "x" }
+pub struct Wr { b: Option[Buf[F32]], }
+pub rt fn wr(w: Wr) -> F32 { 1.0 }
+pub rt fn pair(v: F32) -> (F32, F32) { (v, v) }
+pub enum E { A, B(Buf[F32]), }
+pub rt fn kind(e: E) -> F32 { 1.0 }
+pub rt fn mkarr(v: F32) -> [F32; 3] { [v, v, v] }
+pub rt fn mkdef() -> Option[F32] { None }
+pub rt fn sq(s: Str) -> F32 { 1.0 }
+pub fn slow2(a: F32, n: U32) -> F32 { a }
+pub rt fn eff(n: U32) -> F32 uses {Alloc} { 1.0 }
+pub fn slow3(n: U32, m: F32) -> F32 { m }
+pub flow g(y: F32 at sample) -> F32 at sample { y }
+pub flow gb(y: F32 at block) -> F32 at sample { y }
+
+pub flow f(x: F32 at sample, p: F32 at block, c: Bool at sample, k: U32 at init) -> F32 at sample {
+  slow2(x, mk(1).len())
+}
