@@ -118,7 +118,7 @@ flow cfg(x: F32 at sample, s: F32 at init) -> F32 at sample { delay~(x, 2, s) }"
 }
 
 #[test]
-#[ignore = "W7-02: the check gives E0200 to the length of a delay that is a constant expression and not a literal"]
+#[ignore = "W9-03: the check gives E0200 to the length of a delay that is a constant expression and not a literal"]
 fn the_length_of_a_delay_is_a_constant_expression() {
     // §11.4: `N` and `MAX` are constant expressions (§4.5): `K = 1 + 2` is 3, so out[n] = x[n-3] and the first 3 are init.
     let src = "const K: U32 = 1 + 2

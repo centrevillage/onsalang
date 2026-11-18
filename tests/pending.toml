@@ -167,7 +167,7 @@ kind = "test-case"
 target = "tests/spec/negative/flow_delay_one.onsa"
 reasons = ["R-195", "S-110"]
 until = "W7-06"
-note = "E0807 の否定例 7 件。W3-10 の後、TWO - 1 の長さが定数式の値の E0200（R-195、W7-02）、if~ の中の E0807 の候補を当てた後に if~ の E0200（K-02、W7-06）が残る"
+note = "E0807 の否定例 7 件。W3-10 の後、TWO - 1 の長さが定数式の値の E0200（R-195、W9-03）、if~ の中の E0807 の候補を当てた後に if~ の E0200（K-02、W7-06）が残る"
 
 # --- W1-04（2026-10-07）
 
