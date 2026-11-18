@@ -29,18 +29,20 @@
 //!   calls and the `par~`s, each with its [`Owner`] (a `let`, the output or
 //!   a `par~`, by the tree of the body), its clock, the clocks its arguments
 //!   are read at ([`ArgRead`], `lookback` of the first argument of a delay),
-//!   the place of its fields, and its S-06 name: the `let` name when the
-//!   node is the whole initializer (`let y1 = prev~(^y)`, `let src =
-//!   saw~(f0)`), otherwise `prev_0`, `delay_0`, `vdelay_0`, `<callee>_0`, `par_0`,
-//!   numbered per kind over the whole body in the order the walk finishes
-//!   the nodes (a `par~` after its body). [`FlowInfo::roots`] gives the nodes
+//!   the place of its fields, and its §11.6 names ([`plan`]'s `names`): the
+//!   `let` name when the node is the whole initializer of a `let` of one
+//!   name (`let y1 = prev~(^y)`, `let src = saw~(f0)`), otherwise
+//!   `prev_0`, `delay_0`, `vdelay_0`, `<callee>_0`, `par_0`, numbered per
+//!   kind in the `let`, the output or the `par~` that holds it in the order
+//!   of the text (the outer call first), and its path after the scope of
+//!   that part (`a.prev_0`, `_out.lp_0`, `m.par_0.lp_0`). [`FlowInfo::roots`] gives the nodes
 //!   of an owner (of a `par~`, its `children`), [`FlowInfo::top`] those of
 //!   the `let`s and the output. Empty when the flow is not `complete`.
 //! - `node_of` — a call or `par~` expression → its node.
 //! - `fields: Vec<Field>` — the fields of the `State` in the order of §12.4
-//!   (S-05, S-06, [`plan`]): `sample_rate`, the inputs and the locals of the
+//!   (S-05, S-06, [`plan`]): `_sample_rate`, the inputs and the locals of the
 //!   `let`s [`FlowInfo::stored`] keeps, the fields of the nodes of each `let`
-//!   and of the output, `poisoned`, `initialized`; a `par~` with state has
+//!   and of the output, `_poisoned`, `_initialized`; a `par~` with state has
 //!   the fields of its replica. The lowering reads their names by what they
 //!   hold ([`FlowInfo::field`]) and gives them their Core types.
 //! - `sample_rate_at: Option<ClockStage>` — the latest stage at which

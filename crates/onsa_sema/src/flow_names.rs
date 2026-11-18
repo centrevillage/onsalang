@@ -16,6 +16,37 @@ pub(crate) const SAMPLE_RATE: &str = "sample_rate";
 /// the others (§11.4).
 const SAMPLE_TICK: &str = "sample_tick";
 
+/// The names the processor gives the state of a flow (§11.6, S-1138), all
+/// of a form no user writes (`_` first or a `.` in it, §2.3): the scope of
+/// the nodes of the output, the kinds of a `par~` and of a hoisted field
+/// (W7-05), and the fixed fields. The one table of them: the names of the
+/// plan (`flow::plan`) and the lowering and the C backend that look a
+/// fixed field up read them from here.
+pub const OUTPUT_SCOPE: &str = "_out";
+pub(crate) const PAR: &str = "par";
+pub const HOIST: &str = "_hoist";
+
+/// A fixed field of the state of a flow (§11.6, §12.4, S-1138).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FixedField {
+    SampleRate,
+    Poisoned,
+    Initialized,
+    /// The pointer to the bulk region (§12.4).
+    Bulk,
+}
+
+impl FixedField {
+    pub fn name(self) -> &'static str {
+        match self {
+            FixedField::SampleRate => "_sample_rate",
+            FixedField::Poisoned => "_poisoned",
+            FixedField::Initialized => "_initialized",
+            FixedField::Bulk => "_bulk",
+        }
+    }
+}
+
 /// A builtin name of a flow (§2.2, §11.4), as the names stage records a
 /// flow body naming one (`prev~(x)`, `sample_rate()`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

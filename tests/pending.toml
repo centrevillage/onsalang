@@ -171,13 +171,6 @@ note = "E0807 の否定例 7 件。W3-10 の後、TWO - 1 の長さが定数式�
 
 # --- W1-04（2026-10-07）
 
-[[pending]]
-kind = "test-case"
-target = "tests/spec/negative/names_reserved_inputs.onsa"
-reasons = ["R-77", "S-67"]
-until = "W7-03"
-note = "入力名の予約名（sample_rate、poisoned、initialized、bulk）の E0304。今は at を読めず E0002（W3-10）、読めても E0304 を出さない（W7-03）"
-
 # --- W1-08 の意味のテスト（fn の世界）のうち、まだ通らないもの（2026-10-07）
 
 # --- W1-08 の意味のテストのうち、まだ通らないもの

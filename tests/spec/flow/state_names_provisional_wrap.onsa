@@ -1,0 +1,37 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6"]
+// golden = ["interface"]
+
+// W7-03 U1c/t, S-1143 (OPEN, the provisional reading of the work ticket): is a value that is wrapped in parentheses or in `at` "the call itself" of
+// §11.6 ("パターンが名前一つだけの `let` の値がインスタンス・遅延・`par~` の呼び出しそのものなら…")? The spec does not say. The provisional reading, which
+// this file keeps and which changes only the names of this file when S-1143 is decided otherwise: parentheses are transparent (the value `(prev~(x))`
+// is the call, so the node is `a`), `at` is not (the value `prev~(x) at sample` is an expression that holds the call, so the node is `b.prev_0`).
+// The fields, in the order of the text:
+//
+//   wrapped_in_parentheses:  a
+//   wrapped_twice:           c (two pairs of parentheses)
+//   wrapped_in_at:           b.prev_0
+//   not_wrapped:             d (the same call without the wrapper, for the comparison)
+//
+// Spec gap NEW/S-1143: no test of another reading is written (the unit of the decision would change this file and its golden file only).
+
+pub flow wrapped_in_parentheses(x: F32 at sample) -> F32 at sample {
+  let a = (prev~(x))
+  a
+}
+
+pub flow wrapped_twice(x: F32 at sample) -> F32 at sample {
+  let c = ((prev~(x)))
+  c
+}
+
+pub flow wrapped_in_at(x: F32 at sample) -> F32 at sample {
+  let b = prev~(x) at sample
+  b
+}
+
+pub flow not_wrapped(x: F32 at sample) -> F32 at sample {
+  let d = prev~(x)
+  d
+}

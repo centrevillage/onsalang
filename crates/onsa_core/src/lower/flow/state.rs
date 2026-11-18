@@ -55,11 +55,11 @@ fn node_field_ty(lw: &mut Lowerer, flow: DefId, fd: &FlowDef, info: &FlowInfo, i
         (PlanKind::Instance { callee, .. }, Part::Own) => Ok(Ty::Struct(lw.ensure_flow(*callee)?.state)),
         (PlanKind::Par { from, to, fields, .. }, Part::Own) => {
             let inner = state_fields(lw, flow, fd, info, fields)?;
-            let tname = format!("{}.{}.State", lw.qual_name(flow), n.name);
+            let tname = format!("{}.{}.State", lw.qual_name(flow), n.path);
             let tid = TypeId(lw.m.types.len() as u32);
             lw.m.types.push(TypeDef { name: tname, kind: TypeDefKind::Struct { fields: inner } });
             Ok(Ty::Array(Box::new(Ty::Struct(tid)), to - from))
         }
-        _ => Err(internal(span, format!("no field {part:?} of the node {}", n.name))),
+        _ => Err(internal(span, format!("no field {part:?} of the node {}", n.path))),
     }
 }

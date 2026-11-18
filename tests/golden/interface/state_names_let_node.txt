@@ -1,0 +1,92 @@
+package state_names_let_node
+
+module state_names_let_node
+
+pub flow lp(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct lp.State  // Affine; size 8, bulk 0, align 4
+    y.prev_0: 4 bytes, align 4, fast  // offset 0
+    _poisoned: 1 bytes, align 1, fast  // offset 4
+    _initialized: 1 bytes, align 1, fast  // offset 5
+  pub struct lp.Rendered  // Affine
+    out: Buf[F32]
+  pub const lp.SIZE: U32 = 8
+  pub const lp.BULK_SIZE: U32 = 0
+  pub fn lp.init(sample_rate: F32) -> lp.State
+  pub rt fn lp.reset(inout s: lp.State)
+  pub rt fn lp.process(inout s: lp.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn lp.process_inplace(inout s: lp.State, inout output: Span[F32])
+  pub fn lp.render(input: Span[F32], sample_rate: F32) -> lp.Rendered uses {Alloc}
+
+pub flow node_is_the_let(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct node_is_the_let.State  // Affine; size 20, bulk 0, align 4
+    b: 4 bytes, align 4, fast  // offset 0
+    c: 4 bytes, align 4, fast  // offset 4
+    src: 8 bytes, align 4, fast  // offset 8
+    _poisoned: 1 bytes, align 1, fast  // offset 16
+    _initialized: 1 bytes, align 1, fast  // offset 17
+  pub struct node_is_the_let.Rendered  // Affine
+    out: Buf[F32]
+  pub const node_is_the_let.SIZE: U32 = 20
+  pub const node_is_the_let.BULK_SIZE: U32 = 0
+  pub fn node_is_the_let.init(sample_rate: F32) -> node_is_the_let.State
+  pub rt fn node_is_the_let.reset(inout s: node_is_the_let.State)
+  pub rt fn node_is_the_let.process(inout s: node_is_the_let.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn node_is_the_let.process_inplace(inout s: node_is_the_let.State, inout output: Span[F32])
+  pub fn node_is_the_let.render(input: Span[F32], sample_rate: F32) -> node_is_the_let.Rendered uses {Alloc}
+
+pub flow node_and_inner(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct node_and_inner.State  // Affine; size 16, bulk 0, align 4
+    a: 4 bytes, align 4, fast  // offset 0
+    a.lp_0: 8 bytes, align 4, fast  // offset 4
+    _poisoned: 1 bytes, align 1, fast  // offset 12
+    _initialized: 1 bytes, align 1, fast  // offset 13
+  pub struct node_and_inner.Rendered  // Affine
+    out: Buf[F32]
+  pub const node_and_inner.SIZE: U32 = 16
+  pub const node_and_inner.BULK_SIZE: U32 = 0
+  pub fn node_and_inner.init(sample_rate: F32) -> node_and_inner.State
+  pub rt fn node_and_inner.reset(inout s: node_and_inner.State)
+  pub rt fn node_and_inner.process(inout s: node_and_inner.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn node_and_inner.process_inplace(inout s: node_and_inner.State, inout output: Span[F32])
+  pub fn node_and_inner.render(input: Span[F32], sample_rate: F32) -> node_and_inner.Rendered uses {Alloc}
+
+pub flow value_not_call(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct value_not_call.State  // Affine; size 16, bulk 0, align 4
+    d.prev_0: 4 bytes, align 4, fast  // offset 0
+    e.lp_0: 8 bytes, align 4, fast  // offset 4
+    _poisoned: 1 bytes, align 1, fast  // offset 12
+    _initialized: 1 bytes, align 1, fast  // offset 13
+  pub struct value_not_call.Rendered  // Affine
+    out: Buf[F32]
+  pub const value_not_call.SIZE: U32 = 16
+  pub const value_not_call.BULK_SIZE: U32 = 0
+  pub fn value_not_call.init(sample_rate: F32) -> value_not_call.State
+  pub rt fn value_not_call.reset(inout s: value_not_call.State)
+  pub rt fn value_not_call.process(inout s: value_not_call.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn value_not_call.process_inplace(inout s: value_not_call.State, inout output: Span[F32])
+  pub fn value_not_call.render(input: Span[F32], sample_rate: F32) -> value_not_call.Rendered uses {Alloc}
+
+pub flow typed_let(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct typed_let.State  // Affine; size 8, bulk 0, align 4
+    t: 4 bytes, align 4, fast  // offset 0
+    _poisoned: 1 bytes, align 1, fast  // offset 4
+    _initialized: 1 bytes, align 1, fast  // offset 5
+  pub struct typed_let.Rendered  // Affine
+    out: Buf[F32]
+  pub const typed_let.SIZE: U32 = 8
+  pub const typed_let.BULK_SIZE: U32 = 0
+  pub fn typed_let.init(sample_rate: F32) -> typed_let.State
+  pub rt fn typed_let.reset(inout s: typed_let.State)
+  pub rt fn typed_let.process(inout s: typed_let.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn typed_let.process_inplace(inout s: typed_let.State, inout output: Span[F32])
+  pub fn typed_let.render(input: Span[F32], sample_rate: F32) -> typed_let.Rendered uses {Alloc}

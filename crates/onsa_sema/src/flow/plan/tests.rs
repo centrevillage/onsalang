@@ -25,14 +25,14 @@ fn flow<'a>(a: &'a Analysis, name: &str) -> &'a FlowInfo {
     &a.flows[&id]
 }
 
-/// The names of the nodes of `ids`.
+/// The paths of the nodes of `ids`.
 fn names<'a>(f: &'a FlowInfo, ids: &[NodeId]) -> Vec<&'a str> {
-    ids.iter().map(|&id| f.node(id).name.as_str()).collect()
+    ids.iter().map(|&id| f.node(id).path.as_str()).collect()
 }
 
-/// The node named `name`.
+/// The node of the path `name`.
 fn named(f: &FlowInfo, name: &str) -> NodeId {
-    let k = f.nodes.iter().position(|n| n.name == name).unwrap_or_else(|| panic!("no node {name}"));
+    let k = f.nodes.iter().position(|n| n.path == name).unwrap_or_else(|| panic!("no node {name}"));
     NodeId(k as u32)
 }
 
@@ -43,12 +43,12 @@ fn the_owner_is_the_let_or_the_output() {
     assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
     let f = flow(&a, "f");
     assert_eq!(f.node(named(f, "a")).owner, Owner::Let(0));
-    assert_eq!(f.node(named(f, "g_0")).owner, Owner::Let(1));
-    assert_eq!(f.node(named(f, "delay_0")).owner, Owner::Let(1));
-    assert_eq!(f.node(named(f, "par_1")).owner, Owner::Let(2));
-    assert_eq!(f.node(named(f, "prev_1")).owner, Owner::Output);
+    assert_eq!(f.node(named(f, "b.g_0")).owner, Owner::Let(1));
+    assert_eq!(f.node(named(f, "b.delay_0")).owner, Owner::Let(1));
+    assert_eq!(f.node(named(f, "s.par_0")).owner, Owner::Let(2));
+    assert_eq!(f.node(named(f, "_out.prev_0")).owner, Owner::Output);
     // The clock of a delay and the clock its argument is read at (§11.4).
-    let prev = f.node(named(f, "prev_1"));
+    let prev = f.node(named(f, "_out.prev_0"));
     assert_eq!(prev.clock, Clock::SAMPLE);
     assert_eq!(prev.args.iter().map(|r| r.at).collect::<Vec<_>>(), vec![Clock::SAMPLE]);
 }
@@ -59,10 +59,10 @@ fn the_owner_is_the_let_or_the_output() {
 fn a_par_holds_the_nodes_of_its_body() {
     let a = check(SRC);
     let f = flow(&a, "f");
-    let (outer, inner) = (named(f, "par_1"), named(f, "par_0"));
+    let (outer, inner) = (named(f, "s.par_0"), named(f, "s.par_0.par_0"));
     assert!(outer.0 < inner.0);
-    assert_eq!(names(f, f.roots(Owner::Par(outer))), vec!["prev_0", "par_0"]);
-    assert_eq!(names(f, f.roots(Owner::Par(inner))), vec!["delay_1"]);
+    assert_eq!(names(f, f.roots(Owner::Par(outer))), vec!["s.par_0.prev_0", "s.par_0.par_0"]);
+    assert_eq!(names(f, f.roots(Owner::Par(inner))), vec!["s.par_0.par_0.delay_0"]);
     for (p, kids) in [(outer, f.roots(Owner::Par(outer))), (inner, f.roots(Owner::Par(inner)))] {
         let PlanKind::Par { children, .. } = &f.node(p).kind else { panic!("not a par~") };
         assert_eq!(children.as_slice(), kids);
@@ -91,13 +91,13 @@ fn roots_are_in_the_order_of_the_table() {
     let a = check(SRC);
     let f = flow(&a, "f");
     assert_eq!(names(f, f.roots(Owner::Let(0))), vec!["a"]);
-    assert_eq!(names(f, f.roots(Owner::Let(1))), vec!["g_0", "delay_0"]);
-    assert_eq!(names(f, f.roots(Owner::Let(2))), vec!["par_1"]);
-    assert_eq!(names(f, f.roots(Owner::Output)), vec!["prev_1"]);
+    assert_eq!(names(f, f.roots(Owner::Let(1))), vec!["b.g_0", "b.delay_0"]);
+    assert_eq!(names(f, f.roots(Owner::Let(2))), vec!["s.par_0"]);
+    assert_eq!(names(f, f.roots(Owner::Output)), vec!["_out.prev_0"]);
     assert!(f.roots(Owner::Let(3)).is_empty());
     let top: Vec<NodeId> = f.top().collect();
-    assert_eq!(names(f, &top), vec!["a", "g_0", "delay_0", "par_1", "prev_1"]);
-    for owner in [Owner::Let(1), Owner::Par(named(f, "par_1"))] {
+    assert_eq!(names(f, &top), vec!["a", "b.g_0", "b.delay_0", "s.par_0", "_out.prev_0"]);
+    for owner in [Owner::Let(1), Owner::Par(named(f, "s.par_0"))] {
         assert!(f.roots(owner).windows(2).all(|w| w[0].0 < w[1].0));
     }
 }

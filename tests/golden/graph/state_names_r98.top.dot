@@ -1,0 +1,39 @@
+digraph "top" {
+  rankdir=LR
+  node [shape=box fontname="monospace"]
+  "x" [label="x: F32 at sample" shape=ellipse color="black" fontcolor="black"]
+  "a" [label="a: F32 at sample" color="black" fontcolor="black"]
+  "b" [label="b = lp~: F32 at sample" color="black" fontcolor="black"]
+  "c" [label="c = prev~: F32 at sample" color="black" fontcolor="black"]
+  "vs" [label="vs = par~ 0..<2: [F32; 2] at sample" color="black" fontcolor="black"]
+  "_out" [label="out: F32 at sample" shape=doubleoctagon color="black" fontcolor="black"]
+  "a.prev_0" [label="prev_0 = prev~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  "a.lp_0" [label="lp_0 = lp~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  "a.prev_1" [label="prev_1 = prev~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  "b.prev_0" [label="prev_0 = prev~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  "c.lp_0" [label="lp_0 = lp~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  "vs.lp_0" [label="lp_0 = lp~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  "vs.prev_0" [label="prev_0 = prev~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  "vs.lp_1" [label="lp_1 = lp~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  "_out.lp_0" [label="lp_0 = lp~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  "_out.lp_1" [label="lp_1 = lp~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  "a.prev_0" -> "a"
+  "a.lp_0" -> "a.prev_0" [style=dashed]
+  "x" -> "a.lp_0"
+  "a.prev_1" -> "a"
+  "x" -> "a.prev_1" [style=dashed]
+  "b.prev_0" -> "b"
+  "a" -> "b.prev_0" [style=dashed]
+  "c.lp_0" -> "c" [style=dashed]
+  "b" -> "c.lp_0"
+  "vs.lp_0" -> "vs"
+  "vs.prev_0" -> "vs.lp_0"
+  "x" -> "vs.prev_0" [style=dashed]
+  "vs.lp_1" -> "vs"
+  "x" -> "vs.lp_1"
+  "_out.lp_0" -> "_out"
+  "_out.lp_1" -> "_out.lp_0"
+  "x" -> "_out.lp_1"
+  "c" -> "_out"
+  "vs" -> "_out"
+}

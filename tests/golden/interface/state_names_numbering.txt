@@ -1,0 +1,101 @@
+package state_names_numbering
+
+module state_names_numbering
+
+pub flow lp(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct lp.State  // Affine; size 8, bulk 0, align 4
+    y.prev_0: 4 bytes, align 4, fast  // offset 0
+    _poisoned: 1 bytes, align 1, fast  // offset 4
+    _initialized: 1 bytes, align 1, fast  // offset 5
+  pub struct lp.Rendered  // Affine
+    out: Buf[F32]
+  pub const lp.SIZE: U32 = 8
+  pub const lp.BULK_SIZE: U32 = 0
+  pub fn lp.init(sample_rate: F32) -> lp.State
+  pub rt fn lp.reset(inout s: lp.State)
+  pub rt fn lp.process(inout s: lp.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn lp.process_inplace(inout s: lp.State, inout output: Span[F32])
+  pub fn lp.render(input: Span[F32], sample_rate: F32) -> lp.Rendered uses {Alloc}
+
+pub flow spec_example(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct spec_example.State  // Affine; size 20, bulk 0, align 4
+    a.prev_0: 4 bytes, align 4, fast  // offset 0
+    a.lp_0: 8 bytes, align 4, fast  // offset 4
+    a.prev_1: 4 bytes, align 4, fast  // offset 12
+    _poisoned: 1 bytes, align 1, fast  // offset 16
+    _initialized: 1 bytes, align 1, fast  // offset 17
+  pub struct spec_example.Rendered  // Affine
+    out: Buf[F32]
+  pub const spec_example.SIZE: U32 = 20
+  pub const spec_example.BULK_SIZE: U32 = 0
+  pub fn spec_example.init(sample_rate: F32) -> spec_example.State
+  pub rt fn spec_example.reset(inout s: spec_example.State)
+  pub rt fn spec_example.process(inout s: spec_example.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn spec_example.process_inplace(inout s: spec_example.State, inout output: Span[F32])
+  pub fn spec_example.render(input: Span[F32], sample_rate: F32) -> spec_example.Rendered uses {Alloc}
+
+pub flow per_let(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct per_let.State  // Affine; size 36, bulk 0, align 4
+    a.prev_0: 4 bytes, align 4, fast  // offset 0
+    a.prev_1: 4 bytes, align 4, fast  // offset 4
+    b.prev_0: 4 bytes, align 4, fast  // offset 8
+    b.lp_0: 8 bytes, align 4, fast  // offset 12
+    b.prev_1: 4 bytes, align 4, fast  // offset 20
+    c.lp_0: 8 bytes, align 4, fast  // offset 24
+    _poisoned: 1 bytes, align 1, fast  // offset 32
+    _initialized: 1 bytes, align 1, fast  // offset 33
+  pub struct per_let.Rendered  // Affine
+    out: Buf[F32]
+  pub const per_let.SIZE: U32 = 36
+  pub const per_let.BULK_SIZE: U32 = 0
+  pub fn per_let.init(sample_rate: F32) -> per_let.State
+  pub rt fn per_let.reset(inout s: per_let.State)
+  pub rt fn per_let.process(inout s: per_let.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn per_let.process_inplace(inout s: per_let.State, inout output: Span[F32])
+  pub fn per_let.render(input: Span[F32], sample_rate: F32) -> per_let.Rendered uses {Alloc}
+
+pub flow outer_first(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct outer_first.State  // Affine; size 20, bulk 0, align 4
+    n.lp_0: 8 bytes, align 4, fast  // offset 0
+    n.lp_1: 8 bytes, align 4, fast  // offset 8
+    _poisoned: 1 bytes, align 1, fast  // offset 16
+    _initialized: 1 bytes, align 1, fast  // offset 17
+  pub struct outer_first.Rendered  // Affine
+    out: Buf[F32]
+  pub const outer_first.SIZE: U32 = 20
+  pub const outer_first.BULK_SIZE: U32 = 0
+  pub fn outer_first.init(sample_rate: F32) -> outer_first.State
+  pub rt fn outer_first.reset(inout s: outer_first.State)
+  pub rt fn outer_first.process(inout s: outer_first.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn outer_first.process_inplace(inout s: outer_first.State, inout output: Span[F32])
+  pub fn outer_first.render(input: Span[F32], sample_rate: F32) -> outer_first.Rendered uses {Alloc}
+
+pub flow kinds_apart(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct kinds_apart.State  // Affine; size 40, bulk 0, align 4
+    k.delay_0.buf: 8 bytes, align 4, fast  // offset 0
+    k.delay_0.w: 4 bytes, align 4, fast  // offset 8
+    k.prev_0: 4 bytes, align 4, fast  // offset 12
+    k.delay_1.buf: 12 bytes, align 4, fast  // offset 16
+    k.delay_1.w: 4 bytes, align 4, fast  // offset 28
+    k.prev_1: 4 bytes, align 4, fast  // offset 32
+    _poisoned: 1 bytes, align 1, fast  // offset 36
+    _initialized: 1 bytes, align 1, fast  // offset 37
+  pub struct kinds_apart.Rendered  // Affine
+    out: Buf[F32]
+  pub const kinds_apart.SIZE: U32 = 40
+  pub const kinds_apart.BULK_SIZE: U32 = 0
+  pub fn kinds_apart.init(sample_rate: F32) -> kinds_apart.State
+  pub rt fn kinds_apart.reset(inout s: kinds_apart.State)
+  pub rt fn kinds_apart.process(inout s: kinds_apart.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn kinds_apart.process_inplace(inout s: kinds_apart.State, inout output: Span[F32])
+  pub fn kinds_apart.render(input: Span[F32], sample_rate: F32) -> kinds_apart.Rendered uses {Alloc}

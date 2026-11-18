@@ -5,6 +5,7 @@
 //! ([`FlowInfo::field`]); it does not name, order or choose them.
 
 use super::*;
+use crate::flow_names::FixedField;
 
 /// A field of a node (S-06).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -66,11 +67,12 @@ impl FlowInfo {
     }
 }
 
-/// The fields of the state of `info` (S-05, §12.4): `sample_rate` when it
+/// The fields of the state of `info` (S-05, §12.4): `_sample_rate` when it
 /// is kept, the kept inputs in their order, then for each `let` in its
 /// order its kept locals and the fields of its nodes, the fields of the
-/// nodes of the output, `poisoned` and `initialized`; and the fields of
-/// the replica of each `par~`, of its `children`.
+/// nodes of the output, `_poisoned` and `_initialized`; and the fields of
+/// the replica of each `par~`, of its `children`. The names are of
+/// [`names`] and [`FixedField`].
 pub(super) fn build(info: &mut FlowInfo) {
     let n = info.nodes.len();
     let mut s = Structs { info, at: vec![None; n], pars: vec![Vec::new(); n] };
@@ -79,7 +81,7 @@ pub(super) fn build(info: &mut FlowInfo) {
     let field = |of: FieldOf, name: &str| Field { name: name.to_string(), of };
     let local = |of: fn(LocalId) -> FieldOf, v: LocalId| field(of(v), &p.body.locals[v.0 as usize].name);
     if p.stored(Kept::SampleRate) {
-        top.push(field(FieldOf::SampleRate, SAMPLE_RATE));
+        top.push(field(FieldOf::SampleRate, FixedField::SampleRate.name()));
     }
     top.extend(p.inputs.iter().filter(|&&v| p.stored(Kept::Local(v))).map(|&v| local(FieldOf::Input, v)));
     for (k, l) in p.lets.iter().enumerate() {
@@ -93,9 +95,12 @@ pub(super) fn build(info: &mut FlowInfo) {
     for &id in p.roots(Owner::Output) {
         s.node(id, &mut top);
     }
-    top.push(field(FieldOf::Poisoned, "poisoned"));
-    top.push(field(FieldOf::Initialized, "initialized"));
+    top.push(field(FieldOf::Poisoned, FixedField::Poisoned.name()));
+    top.push(field(FieldOf::Initialized, FixedField::Initialized.name()));
     let (at, pars) = (s.at, s.pars);
+    for fs in pars.iter().chain([&top]) {
+        unique(info, fs);
+    }
     for (node, (at, fs)) in info.nodes.iter_mut().zip(at.into_iter().zip(pars)) {
         node.field = at;
         if let PlanKind::Par { fields, .. } = &mut node.kind {
@@ -103,6 +108,24 @@ pub(super) fn build(info: &mut FlowInfo) {
         }
     }
     info.fields = top;
+}
+
+/// Two fields of one struct of the state never have one name: the names
+/// the processor makes are of a form no user writes, and the user's names
+/// are apart (§11.6, S-1138). An internal error at the later of the two.
+fn unique(info: &FlowInfo, fields: &[Field]) {
+    let span = |of: FieldOf| match of {
+        FieldOf::Node(id, _) => Some(info.node(id).span),
+        FieldOf::Input(l) | FieldOf::Let(l) => Some(info.body.locals[l.0 as usize].span),
+        FieldOf::SampleRate | FieldOf::Poisoned | FieldOf::Initialized => None,
+    };
+    let mut seen: HashMap<&str, FieldOf> = HashMap::default();
+    for f in fields {
+        if let Some(first) = seen.insert(&f.name, f.of) {
+            let at = span(f.of).or_else(|| span(first));
+            onsa_diag::internal::bug(at, format!("two fields `{}` in a struct of the state of a flow", f.name));
+        }
+    }
 }
 
 /// The structs of the state while they are made: the place of the first
@@ -123,19 +146,20 @@ impl Structs<'_> {
         let info = self.info;
         let n = info.node(id);
         let start = out.len() as u32;
-        let mut push = |part: Part, name: String| out.push(Field { name, of: FieldOf::Node(id, part) });
+        let own = names::field(n);
+        let mut push = |part: Part| out.push(Field { name: names::part(own, part), of: FieldOf::Node(id, part) });
         let init = match &n.kind {
             PlanKind::Prev { init, .. } => {
-                push(Part::Own, n.name.clone());
+                push(Part::Own);
                 Some(init)
             }
             PlanKind::Delay { init, .. } | PlanKind::Vdelay { init, .. } => {
-                push(Part::Buf, format!("{}.buf", n.name));
-                push(Part::W, format!("{}.w", n.name));
+                push(Part::Buf);
+                push(Part::W);
                 Some(init)
             }
             PlanKind::Instance { .. } => {
-                push(Part::Own, n.name.clone());
+                push(Part::Own);
                 None
             }
             PlanKind::Par { children, .. } => {
@@ -147,12 +171,12 @@ impl Structs<'_> {
                     return;
                 }
                 self.pars[id.0 as usize] = inner;
-                push(Part::Own, n.name.clone());
+                push(Part::Own);
                 None
             }
         };
         if let Some(InitArg::Init(_)) = init {
-            push(Part::Init, format!("{}.init", n.name));
+            push(Part::Init);
         }
         self.at[id.0 as usize] = Some(start);
     }

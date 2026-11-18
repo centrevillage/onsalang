@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§18.2"]
+// golden_graph = ["let_out", "input_out", "let_out_node"]
+
+// W7-03 U1c/t, R-497 (spec/tools.md §1.1, §1.2): the vertex of the output has a name that no name of the user and no generated name of a node can be, so a `let`
+// named `out` and an input named `out` are not the same vertex as the output. Before, the DOT names were all `"out"`, the vertices merged into one, and the
+// edge from the `let` to the output became an edge from the vertex to itself (a cycle of solid edges, which §1.2 forbids: "実線の辺だけでは閉路を作らない").
+// Required of the graph of each flow (the golden file keeps the name that the vertex of the output has, which the spec does not fix):
+//   let_out:      three vertices, the input `x`, the `let` named `out`, and the output vertex; the solid edges are x -> out and out -> the output vertex
+//   input_out:    three vertices, the input named `out`, the node `_out.prev_0` (of `prev~(out)` in the output) and the output vertex; the solid edge from `out` to the
+//                 output vertex and from `_out.prev_0` to it, the dashed edge from `out` to `_out.prev_0` (the look-back of the delay), no edge from a vertex to itself
+//   let_out_node: the `let out` that is a node (`prev~(x)`, called `out`) and the output vertex apart; the dashed edge x -> out and the solid edge out -> the output vertex
+
+pub flow let_out(x: F32 at sample) -> F32 at sample {
+  let out = x * 2.0
+  out + 1.0
+}
+
+pub flow input_out(out: F32 at sample) -> F32 at sample {
+  prev~(out) + out
+}
+
+pub flow let_out_node(x: F32 at sample) -> F32 at sample {
+  let out = prev~(x)
+  out * 0.5
+}

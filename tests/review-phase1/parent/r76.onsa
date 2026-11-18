@@ -10,6 +10,7 @@
 //   今: "m" -> "acc_0" -> "par_0" -> "m" の実線の閉路と、"par_0" -> "acc_0"。
 //   期待: 枠 cluster_m の中に "m.i" と、入れ子の枠 cluster_m.par_0（"m.par_0.j" と "m.par_0.acc_0"。名前は R-98、S-86）。
 //         辺は "x" / "m.i" / "m.par_0.j" -> "m.par_0.acc_0"、"m.par_0.acc_0" -> "m.par_0"、"m.par_0" -> "m"、"m" -> "out"。実線の閉路は無い。
+// （出力の頂点の名前 "out" は、W7-03 U1c の R-497 で、利用者の名前と重ならない名前に改める。事例 `tests/spec/flow/state_names_graph_out.onsa`。）
 
 use std.math.{sum}
 use std.math.{floor}

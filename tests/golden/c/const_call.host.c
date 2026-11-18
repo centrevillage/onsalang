@@ -9,7 +9,7 @@
 #include "const_call_scaled.h"
 
 /* ---- types ---- */
-struct const_call_scaled { bool poisoned; bool initialized; };
+struct const_call_scaled { bool onsa_poisoned; bool onsa_initialized; };
 typedef struct const_call_scaled const_call__scaled__State;
 typedef const_call_scaled_params const_call__scaled__Params;
 struct const_call__scaled__Config { uint8_t onsa_empty; };
@@ -18,8 +18,8 @@ ONSA_DEFINE_SPAN(f32, float)
 ONSA_DEFINE_SPAN_ADD_F32(f32)
 ONSA_STATIC_ASSERT(sizeof(const_call__scaled__State) == CONST_CALL_SCALED_SIZE, "CONST_CALL_SCALED fast region size (spec §12.4)");
 ONSA_STATIC_ASSERT(ONSA_ALIGNOF(const_call__scaled__State) == CONST_CALL_SCALED_ALIGN, "CONST_CALL_SCALED alignment (spec §12.4)");
-ONSA_STATIC_ASSERT(offsetof(const_call__scaled__State, poisoned) == 0, "CONST_CALL_SCALED layout prefix (spec §12.4)");
-ONSA_STATIC_ASSERT(offsetof(const_call__scaled__State, initialized) == 1, "CONST_CALL_SCALED layout prefix (spec §12.4)");
+ONSA_STATIC_ASSERT(offsetof(const_call__scaled__State, onsa_poisoned) == 0, "CONST_CALL_SCALED layout prefix (spec §12.4)");
+ONSA_STATIC_ASSERT(offsetof(const_call__scaled__State, onsa_initialized) == 1, "CONST_CALL_SCALED layout prefix (spec §12.4)");
 
 /* ---- constants ---- */
 static const float const_call__HALF = 0.5f;
@@ -47,13 +47,13 @@ ONSA_INLINE void const_call__scaled__init(const_call__scaled__State* out, const 
   (void)cfg;
   (void)sample_rate;
   memset(&(*out), 0, sizeof (*out));
-  out->poisoned = false;
-  out->initialized = true;
+  out->onsa_poisoned = false;
+  out->onsa_initialized = true;
 }
 
 ONSA_INLINE void const_call__scaled__reset(const_call__scaled__State* s) {
   (void)s;
-  s->poisoned = false;
+  s->onsa_poisoned = false;
 }
 
 ONSA_INLINE void const_call__scaled__process(const_call__scaled__State* s, const const_call__scaled__Params* params, onsa_span_f32 input, onsa_span_f32 output) {
@@ -85,13 +85,13 @@ int const_call_scaled_init(const_call_scaled* s, void* bulk, float sample_rate) 
   return 0;
 }
 
-void const_call_scaled_reset(const_call_scaled* s) { if (!s->initialized) return; const_call__scaled__reset(s); }
+void const_call_scaled_reset(const_call_scaled* s) { if (!s->onsa_initialized) return; const_call__scaled__reset(s); }
 
 void const_call_scaled_params_default(const_call_scaled_params* p) { const_call__scaled__params_default(p); }
 
 int const_call_scaled_process(const_call_scaled* s, const const_call_scaled_params* p, const float* x, float* out, uint32_t frames) {
   const_call__scaled__Params q;
-  if (!s->initialized || s->poisoned) {
+  if (!s->onsa_initialized || s->onsa_poisoned) {
     if (frames != 0) {
       memset(out, 0, (size_t)frames * sizeof(float));
     }

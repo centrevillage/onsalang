@@ -3,8 +3,8 @@
 //!
 //! | function | contents |
 //! |---|---|
-//! | `init(cfg, sample_rate) -> State` | `Init`-rate `let`s in order (state ones stored), node initialisation, sub `init`s, `poisoned = false`, `initialized = true` last |
-//! | `reset(inout s)` | `prev` / `delay` / `vdelay` back to their `init` values, `w = 0`, sub `reset`s, `poisoned = false` |
+//! | `init(cfg, sample_rate) -> State` | `Init`-rate `let`s in order (state ones stored), node initialisation, sub `init`s, `_poisoned = false`, `_initialized = true` last |
+//! | `reset(inout s)` | `prev` / `delay` / `vdelay` back to their `init` values, `w = 0`, sub `reset`s, `_poisoned = false` |
 //! | `ctl(inout s, p: Params)` | `Ctl`-rate `let`s in order (those read at `Sig` stored), sub `ctl`s with the sub's `Params` |
 //! | `tick(inout s, <Sig inputs>) -> out` | `Sig`-rate `let`s in order, the output, then the stores of §11.4 in node order |
 //! | `process(inout s, p, [input], inout output)` | `input` and `output` one `Span` (planar `[Span; N]`) or the `In` and `Out` of more (§11.6); length check, `ctl` once, per sample: read all inputs, `tick`, write all outputs |
@@ -19,17 +19,19 @@
 //! # State fields (S-05, S-06)
 //!
 //! The plan names and orders them (`FlowInfo::fields`). In order:
-//! `sample_rate: F32` (when `sample_rate()` is read at `Ctl` or `Sig`),
+//! `_sample_rate: F32` (when `sample_rate()` is read at `Ctl` or `Sig`),
 //! inputs read above their own rate (by input name), then for each
 //! top-level `let` in source order its own field (when read above its rate)
 //! followed by the stateful nodes inside its initializer in source order,
-//! then the nodes of the output expression, then `poisoned: Bool` and
-//! `initialized: Bool` (both export-boundary marks, spec §14.2 / S-27). A node
-//! named `n` contributes `n: T` (`prev`), `n.buf: [T; N]` + `n.w: U32`
-//! (`delay`; `[T; MAX + 1]` for `vdelay`), plus `n.init: T` when its `init`
-//! argument is an `Init`-rate expression; an instance contributes
-//! `n: Callee.State`; a `par` with stateful nodes contributes
-//! `n: [Flow.n.State; N]`. The bulk pointer of §12.4 is not a Core field: the
+//! then the nodes of the output expression, then `_poisoned: Bool` and
+//! `_initialized: Bool` (both export-boundary marks, spec §14.2 / S-27). A
+//! node of the path `p` (§11.6: `a.prev_0`, `_out.lp_0`, or the name of the
+//! `let` whose whole value it is) contributes `p: T` (`prev`), `p.buf: [T;
+//! N]` + `p.w: U32` (`delay`; `[T; MAX + 1]` for `vdelay`), plus `p.init: T`
+//! when its `init` argument is an `Init`-rate expression; an instance
+//! contributes `p: Callee.State`; a `par` with stateful nodes contributes
+//! `p: [Flow.p.State; N]`, whose replica names its nodes without the scope
+//! (`saw_0`). The bulk pointer of §12.4 is not a Core field: the
 //! Core `State` is the whole value, and [`crate::layout::flow_layout`]
 //! describes the fast / bulk split (the C backend materialises the pointer
 //! and the `jmp_buf`).

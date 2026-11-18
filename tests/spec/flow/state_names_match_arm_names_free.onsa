@@ -1,0 +1,75 @@
+// onsa.toml
+// [test]
+// spec = ["§2.2", "§5.1", "§11.4"]
+// fixes = 0
+
+// W7-03 U1c/t, S-542 (§2.2, §5.1, §11.4): the counterpart of negative/flow_match_arm_builtin_names.onsa. The built-in names (`prev`, `delay`, `vdelay`,
+// `sample_rate`, `sample_tick`) are names of the body of a flow, so the patterns of the arms of a `match` in a `fn` (where the names are not built-in) bind them
+// freely, and in a flow a pattern may bind a name that only starts like one (`previous`, `delay_time`, `prev_0`, `lp_0`, `poisoned`) and sibling arms may
+// bind the same name (§5.1: "二つの `match` の腕の `Some(x)`").
+
+pub rt fn fn_arm_prev(o: Option[F32]) -> F32 {
+  match o {
+    Some(prev) => prev,
+    None => 0.0,
+  }
+}
+
+pub rt fn fn_arm_names(t: (F32, F32), u: Option[F32]) -> F32 {
+  let a = match t {
+    (delay, vdelay) => delay + vdelay,
+  }
+  let b = match u {
+    Some(sample_rate) => sample_rate,
+    None => 0.0,
+  }
+  let c = match u {
+    Some(sample_tick) => sample_tick,
+    None => 1.0,
+  }
+  a + b + c
+}
+
+pub flow arm_similar_names(x: F32 at sample) -> F32 at sample {
+  let o = Some(x)
+  match o {
+    Some(previous) => previous,
+    None => 0.0,
+  }
+}
+
+pub flow arm_generated_like_names(x: F32 at sample) -> F32 at sample {
+  let o = Some(x)
+  let q = Some(x * 2.0)
+  let a = match o {
+    Some(prev_0) => prev_0,
+    None => 0.0,
+  }
+  let b = match q {
+    Some(delay_time) => delay_time,
+    None => 0.0,
+  }
+  a + b
+}
+
+pub flow arm_fixed_like_names(x: F32 at sample) -> F32 at sample {
+  let o = Some(x)
+  match o {
+    Some(poisoned) => poisoned,
+    None => 0.0,
+  }
+}
+
+pub flow arm_sibling_arms(x: F32 at sample) -> F32 at sample {
+  let o = Some(x)
+  let p = Some(x * 2.0)
+  let a = match o {
+    Some(v) => v,
+    None => 0.0,
+  }
+  let b = match p {
+    Some(v) => v,
+    None => 0.0,
+  }
+  a + b
+}

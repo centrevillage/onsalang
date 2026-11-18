@@ -1,0 +1,42 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§12.4"]
+// golden = ["interface"]
+// golden_graph = ["outer_first"]
+
+// W7-03 U1c/t, S-86, R-98 (§11.6): the number of a node that has no name. The kinds are the name of the built-in delay, the name of the flow without its path
+// (`lp`), and `par`. The number counts each kind alone inside each `let`, from 0, in the order in which the names of the calls come in the text. A `let` does
+// not change the numbers of another (`let a` with one more `prev~` does not move the `prev_k` of `b`), and a call that is the outer one of a nested pair
+// comes first (`lp~(lp~(x))`: the outer one is `lp_0`; a delay inside the first argument of a delay is E0200 in this version, so the pair is of a flow). The state of each flow (the internal `.buf` and `.w` of a `delay~` follow the node):
+//
+//   spec_example: a.prev_0 (prev[F32]), a.lp_0, a.prev_1 (§11.6: `let a = prev~(lp~(x)) + prev~(x, 1.0)`)
+//   per_let:      a.prev_0, a.prev_1, b.prev_0, b.lp_0, b.prev_1, c.lp_0
+//   outer_first:  n.lp_0, n.lp_1 (the outer call is `n.lp_0`: the graph of `outer_first` has the edges x -> n.lp_1 -> n.lp_0)
+//   kinds_apart:  k.delay_0 = delay[F32, 2], k.prev_0, k.delay_1 = delay[F32, 3], k.prev_1
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  let y = 0.5 * x + 0.5 * prev~(^y)
+  y
+}
+
+pub flow spec_example(x: F32 at sample) -> F32 at sample {
+  let a = prev~(lp~(x)) + prev~(x, 1.0)
+  a
+}
+
+pub flow per_let(x: F32 at sample) -> F32 at sample {
+  let a = prev~(x) + prev~(x * 2.0)
+  let b = prev~(x) + lp~(x) + prev~(x * 3.0)
+  let c = 1.0 + lp~(x)
+  a + b + c
+}
+
+pub flow outer_first(x: F32 at sample) -> F32 at sample {
+  let n = 1.0 * lp~(lp~(x))
+  n
+}
+
+pub flow kinds_apart(x: F32 at sample) -> F32 at sample {
+  let k = delay~(x, 2) + prev~(x) + delay~(x, 3) + prev~(x * 2.0)
+  k
+}

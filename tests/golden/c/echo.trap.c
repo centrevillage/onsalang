@@ -10,7 +10,7 @@
 
 /* ---- types ---- */
 typedef struct onsa_arr_f32_96001 { float a[96001]; } onsa_arr_f32_96001;
-struct echo_echo { float sample_rate; float feedback; float d; onsa_arr_f32_96001 vdelay_0_buf; uint32_t vdelay_0_w; bool poisoned; bool initialized; };
+struct echo_echo { float onsa_sample_rate; float feedback; float d; onsa_arr_f32_96001 y__vdelay_0__buf; uint32_t y__vdelay_0__w; bool onsa_poisoned; bool onsa_initialized; };
 typedef struct echo_echo echo__echo__State;
 typedef echo_echo_params echo__echo__Params;
 struct echo__echo__Config { uint8_t onsa_empty; };
@@ -19,8 +19,8 @@ ONSA_DEFINE_SPAN(f32, float)
 ONSA_DEFINE_SPAN_ADD_F32(f32)
 ONSA_STATIC_ASSERT(sizeof(echo__echo__State) == ECHO_ECHO_SIZE, "ECHO_ECHO fast region size (spec §12.4)");
 ONSA_STATIC_ASSERT(ONSA_ALIGNOF(echo__echo__State) == ECHO_ECHO_ALIGN, "ECHO_ECHO alignment (spec §12.4)");
-ONSA_STATIC_ASSERT(offsetof(echo__echo__State, poisoned) == 384020, "ECHO_ECHO layout prefix (spec §12.4)");
-ONSA_STATIC_ASSERT(offsetof(echo__echo__State, initialized) == 384021, "ECHO_ECHO layout prefix (spec §12.4)");
+ONSA_STATIC_ASSERT(offsetof(echo__echo__State, onsa_poisoned) == 384020, "ECHO_ECHO layout prefix (spec §12.4)");
+ONSA_STATIC_ASSERT(offsetof(echo__echo__State, onsa_initialized) == 384021, "ECHO_ECHO layout prefix (spec §12.4)");
 
 /* ---- functions ---- */
 ONSA_INLINE void echo__echo__ctl(echo__echo__State* s, const echo__echo__Params* p);
@@ -32,61 +32,61 @@ ONSA_INLINE void echo__echo__params_default(echo__echo__Params* out);
 
 ONSA_INLINE void echo__echo__ctl(echo__echo__State* s, const echo__echo__Params* p) {
   s->feedback = p->feedback;
-  float d = (float)(p->time * s->sample_rate);
+  float d = (float)(p->time * s->onsa_sample_rate);
   s->d = d;
 }
 
 ONSA_INLINE float echo__echo__tick(echo__echo__State* s, float x) {
   float onsa_t4 = x;
   float onsa_t3 = s->feedback;
-  float vdelay_0_d = s->d;
-  float vdelay_0_dc;
-  if (vdelay_0_d >= 1.0f) {
-    if (vdelay_0_d <= 96000.0f) {
-      vdelay_0_dc = vdelay_0_d;
+  float y__vdelay_0__d = s->d;
+  float y__vdelay_0__dc;
+  if (y__vdelay_0__d >= 1.0f) {
+    if (y__vdelay_0__d <= 96000.0f) {
+      y__vdelay_0__dc = y__vdelay_0__d;
     } else {
-      vdelay_0_dc = 96000.0f;
+      y__vdelay_0__dc = 96000.0f;
     }
   } else {
-    vdelay_0_dc = 1.0f;
+    y__vdelay_0__dc = 1.0f;
   }
-  uint32_t vdelay_0_k = onsa_trunc_u32_f32(vdelay_0_dc, "echo.onsa", 39);
-  float vdelay_0_f = (float)(vdelay_0_dc - ((float)vdelay_0_k));
-  uint32_t vdelay_0_wlk = onsa_sub_u32(onsa_add_u32(s->vdelay_0_w, UINT32_C(96001), "echo.onsa", 30), vdelay_0_k, "echo.onsa", 30);
-  uint32_t onsa_t1 = onsa_rem_u32(vdelay_0_wlk, UINT32_C(96001), "echo.onsa", 39);
-  float vdelay_0_a = s->vdelay_0_buf.a[onsa_idx(onsa_t1, UINT32_C(96001), "echo.onsa", 30)];
-  uint32_t onsa_t2 = onsa_rem_u32(onsa_sub_u32(vdelay_0_wlk, UINT32_C(1), "echo.onsa", 39), UINT32_C(96001), "echo.onsa", 39);
-  float vdelay_0_b = s->vdelay_0_buf.a[onsa_idx(onsa_t2, UINT32_C(96001), "echo.onsa", 30)];
-  float vdelay_0 = (float)((float)((float)(1.0f - vdelay_0_f) * vdelay_0_a) + (float)(vdelay_0_f * vdelay_0_b));
-  float y = (float)(onsa_t4 + (float)(onsa_t3 * vdelay_0));
+  uint32_t y__vdelay_0__k = onsa_trunc_u32_f32(y__vdelay_0__dc, "echo.onsa", 39);
+  float y__vdelay_0__f = (float)(y__vdelay_0__dc - ((float)y__vdelay_0__k));
+  uint32_t y__vdelay_0__wlk = onsa_sub_u32(onsa_add_u32(s->y__vdelay_0__w, UINT32_C(96001), "echo.onsa", 30), y__vdelay_0__k, "echo.onsa", 30);
+  uint32_t onsa_t1 = onsa_rem_u32(y__vdelay_0__wlk, UINT32_C(96001), "echo.onsa", 39);
+  float y__vdelay_0__a = s->y__vdelay_0__buf.a[onsa_idx(onsa_t1, UINT32_C(96001), "echo.onsa", 30)];
+  uint32_t onsa_t2 = onsa_rem_u32(onsa_sub_u32(y__vdelay_0__wlk, UINT32_C(1), "echo.onsa", 39), UINT32_C(96001), "echo.onsa", 39);
+  float y__vdelay_0__b = s->y__vdelay_0__buf.a[onsa_idx(onsa_t2, UINT32_C(96001), "echo.onsa", 30)];
+  float y__vdelay_0 = (float)((float)((float)(1.0f - y__vdelay_0__f) * y__vdelay_0__a) + (float)(y__vdelay_0__f * y__vdelay_0__b));
+  float y = (float)(onsa_t4 + (float)(onsa_t3 * y__vdelay_0));
   float onsa__out = y;
-  s->vdelay_0_buf.a[onsa_idx(s->vdelay_0_w, UINT32_C(96001), "echo.onsa", 30)] = y;
-  s->vdelay_0_w = onsa_rem_u32(onsa_add_u32(s->vdelay_0_w, UINT32_C(1), "echo.onsa", 30), UINT32_C(96001), "echo.onsa", 30);
+  s->y__vdelay_0__buf.a[onsa_idx(s->y__vdelay_0__w, UINT32_C(96001), "echo.onsa", 30)] = y;
+  s->y__vdelay_0__w = onsa_rem_u32(onsa_add_u32(s->y__vdelay_0__w, UINT32_C(1), "echo.onsa", 30), UINT32_C(96001), "echo.onsa", 30);
   return onsa__out;
 }
 
 ONSA_INLINE void echo__echo__init(echo__echo__State* out, const echo__echo__Config* cfg, float sample_rate) {
   (void)cfg;
   memset(&(*out), 0, sizeof (*out));
-  out->sample_rate = sample_rate;
-  float vdelay_0_init = 0.0f;
+  out->onsa_sample_rate = sample_rate;
+  float y__vdelay_0__init = 0.0f;
   {
     uint32_t onsa_i;
-    for (onsa_i = 0; onsa_i < 96001; onsa_i++) out->vdelay_0_buf.a[onsa_i] = vdelay_0_init;
+    for (onsa_i = 0; onsa_i < 96001; onsa_i++) out->y__vdelay_0__buf.a[onsa_i] = y__vdelay_0__init;
   }
-  out->vdelay_0_w = UINT32_C(0);
-  out->poisoned = false;
-  out->initialized = true;
+  out->y__vdelay_0__w = UINT32_C(0);
+  out->onsa_poisoned = false;
+  out->onsa_initialized = true;
 }
 
 ONSA_INLINE void echo__echo__reset(echo__echo__State* s) {
   (void)s;
   {
     uint32_t onsa_i;
-    for (onsa_i = 0; onsa_i < 96001; onsa_i++) s->vdelay_0_buf.a[onsa_i] = 0.0f;
+    for (onsa_i = 0; onsa_i < 96001; onsa_i++) s->y__vdelay_0__buf.a[onsa_i] = 0.0f;
   }
-  s->vdelay_0_w = UINT32_C(0);
-  s->poisoned = false;
+  s->y__vdelay_0__w = UINT32_C(0);
+  s->onsa_poisoned = false;
 }
 
 ONSA_INLINE void echo__echo__process(echo__echo__State* s, const echo__echo__Params* params, onsa_span_f32 input, onsa_span_f32 output) {
@@ -118,13 +118,13 @@ int echo_echo_init(echo_echo* s, void* bulk, float sample_rate) {
   return 0;
 }
 
-void echo_echo_reset(echo_echo* s) { if (!s->initialized) return; echo__echo__reset(s); }
+void echo_echo_reset(echo_echo* s) { if (!s->onsa_initialized) return; echo__echo__reset(s); }
 
 void echo_echo_params_default(echo_echo_params* p) { echo__echo__params_default(p); }
 
 int echo_echo_process(echo_echo* s, const echo_echo_params* p, const float* x, float* out, uint32_t frames) {
   echo__echo__Params q;
-  if (!s->initialized || s->poisoned) {
+  if (!s->onsa_initialized || s->onsa_poisoned) {
     if (frames != 0) {
       memset(out, 0, (size_t)frames * sizeof(float));
     }

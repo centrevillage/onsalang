@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§12.4"]
+// golden = ["interface"]
+
+// W7-03 U1c/t, S-1138, S-67, S-149 (§11.6, §12.4): the fixed fields of a state have names that a user cannot write (they start with `_`, §2.3), so no name
+// is reserved for the state. The fixed fields are `_sample_rate`, `_poisoned` and `_initialized` (and `_bulk`, which is there when the bulk area is
+// not empty: `memory.bulk = true` is E0200 in this version, §15.3, so no case here has it), in the order of §12.4: `_sample_rate` first, then the inputs that
+// a faster clock reads, then the fields of the `let`s, `_poisoned` and `_initialized` last. A `let` of the clock `block` that `sample` reads and an input of
+// `block` that `sample` reads keep their own names as fields (§12.4: "入力の写しと `let` のフィールドは利用者の名前のまま"). The hidden fields of the hoisted
+// values (`a._hoist_0`) are made by a later work, so no case here has them. The fields of each flow:
+//
+//   phase_step:  _sample_rate, f0 (the input of `block` that `sample` reads), phase.prev_0, _poisoned, _initialized
+//   block_let:   g, _poisoned, _initialized (the `let g` of the clock `block`, read at `sample`; `k` is read at its own clock only, so it has no copy)
+//   input_copy:  k, _poisoned, _initialized
+//   no_fixed_extra: _poisoned, _initialized only (no `_sample_rate`: nothing reads the rate)
+//
+// Inputs and `let`s that are named like the fixed fields (`poisoned`, `initialized`, `bulk`) are in state_names_free_run.onsa.
+
+pub flow phase_step(f0: F32 at block) -> F32 at sample {
+  let phase = prev~(^phase) + (f0 / sample_rate())
+  phase - 1.0
+}
+
+pub flow block_let(x: F32 at sample, k: F32 at block) -> F32 at sample {
+  let g = k * 2.0
+  x * g
+}
+
+pub flow input_copy(x: F32 at sample, k: F32 at block) -> F32 at sample {
+  x * k
+}
+
+pub flow no_fixed_extra(x: F32 at sample) -> F32 at sample {
+  x * 2.0
+}

@@ -1,0 +1,19 @@
+digraph "lp_after_par" {
+  rankdir=LR
+  node [shape=box fontname="monospace"]
+  "x" [label="x: F32 at sample" shape=ellipse color="black" fontcolor="black"]
+  "b" [label="b: F32 at sample" color="black" fontcolor="black"]
+  "_out" [label="out: F32 at sample" shape=doubleoctagon color="black" fontcolor="black"]
+  "b.prev_0" [label="prev_0 = prev~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  "b.par_0" [label="par_0 = par~ 0..<2: [F32; 2] at sample" style=rounded color="black" fontcolor="black"]
+  "b.par_0.lp_0" [label="lp_0 = lp~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  "b.lp_0" [label="lp_0 = lp~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  "b.prev_0" -> "b"
+  "x" -> "b.prev_0" [style=dashed]
+  "b.par_0" -> "b"
+  "b.par_0.lp_0" -> "b.par_0"
+  "x" -> "b.par_0.lp_0"
+  "b.lp_0" -> "b"
+  "x" -> "b.lp_0"
+  "b" -> "_out"
+}

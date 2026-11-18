@@ -69,7 +69,14 @@ fn names_are_mangled() {
     assert_eq!(qualified("dsp.voice.State"), "dsp__voice__State");
     assert_eq!(qualified("clamp__F32"), "clamp__F32");
     assert_eq!(qualified("__eq.Option__U8"), "onsa__eq__Option__U8");
-    assert_eq!(ident("vdelay_0.buf"), "vdelay_0_buf");
+    assert_eq!(ident("vdelay_0.buf"), "vdelay_0__buf");
+    // §11.6: the `.` of the names of the state is `__`, so the paths of
+    // the processor and the names of a user stay apart.
+    assert_eq!(ident("a.prev_0"), "a__prev_0");
+    assert_eq!(ident("a_prev_0"), "a_prev_0");
+    assert_eq!(ident("_out.lp_0"), "onsa_out__lp_0");
+    assert_eq!(ident("onsa_x"), "onsa_x_");
+    assert_eq!(ident("_poisoned"), "onsa_poisoned");
     assert_eq!(ident("y1@7"), "y1_7");
     assert_eq!(ident("float"), "float_");
     assert_eq!(ident("_x"), "onsa_x");

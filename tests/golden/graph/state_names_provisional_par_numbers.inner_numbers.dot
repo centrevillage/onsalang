@@ -1,0 +1,19 @@
+digraph "inner_numbers" {
+  rankdir=LR
+  node [shape=box fontname="monospace"]
+  "x" [label="x: F32 at sample" shape=ellipse color="black" fontcolor="black"]
+  "a" [label="a: F32 at sample" color="black" fontcolor="black"]
+  "_out" [label="out: F32 at sample" shape=doubleoctagon color="black" fontcolor="black"]
+  "a.prev_0" [label="prev_0 = prev~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  "a.par_0" [label="par_0 = par~ 0..<2: [F32; 2] at sample" style=rounded color="black" fontcolor="black"]
+  "a.par_0.prev_0" [label="prev_0 = prev~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  "a.prev_1" [label="prev_1 = prev~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  "a.prev_0" -> "a"
+  "x" -> "a.prev_0" [style=dashed]
+  "a.par_0" -> "a"
+  "a.par_0.prev_0" -> "a.par_0"
+  "x" -> "a.par_0.prev_0" [style=dashed]
+  "a.prev_1" -> "a"
+  "x" -> "a.prev_1" [style=dashed]
+  "a" -> "_out"
+}

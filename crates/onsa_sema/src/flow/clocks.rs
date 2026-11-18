@@ -216,7 +216,7 @@ pub(super) fn walk(
         diag: None,
         inout_call: None,
         non_rt: HashSet::default(),
-        recorder: NodeBuilder::new(&cx.pending),
+        recorder: NodeBuilder::new(&cx.pending, ast, body),
     };
     for (l, input) in cx.inputs.iter().zip(&decl.inputs) {
         w.out.locals.insert(*l, input.api_clock());
@@ -516,23 +516,24 @@ impl Walk<'_> {
 
     /// A delay or an instance call `call` at `e` (§11.4, §11.5): its clock,
     /// its checks, and at `Check` its node and the clocks its arguments are
-    /// read at, in the order of the text (its slot before its arguments').
+    /// read at, in the order of the text (its slot and its node before its
+    /// arguments', §11.6; the error of its node after theirs, §18.1).
     fn node(&mut self, e: ExprId, call: &NodeCall) -> Option<Clock> {
         if !self.stateful_here(e) {
             return Some(Clock::Error);
         }
+        let span = self.ast.expr(e).span;
         let slot = (self.mode == Mode::Check).then(|| {
             self.node_of.insert(e, self.node_clocks.len());
             self.node_clocks.push(NodeClock { clock: Clock::Error, args: Vec::new() });
-            self.node_clocks.len() - 1
+            (self.node_clocks.len() - 1, self.recorder.node(self.a, self.body, e, call, span))
         });
         let (clock, args) = match call.kind {
             NodeKind::Instance(d) => self.instance(e, d, call),
             NodeKind::Delay(delay, _) => self.delay(e, delay, call),
         };
-        if let Some(k) = slot {
-            let span = self.ast.expr(e).span;
-            if let Err(d) = self.recorder.node(self.a, self.body, e, call, span) {
+        if let Some((k, recorded)) = slot {
+            if let Err(d) = recorded {
                 let found = self.src(span);
                 self.report(d.with_found(found));
             }

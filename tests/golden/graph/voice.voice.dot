@@ -8,15 +8,15 @@ digraph "voice" {
   "src" [label="src = saw~: F32 at sample" color="black" fontcolor="black"]
   "f1" [label="f1 = resonator~: F32 at sample" color="black" fontcolor="black"]
   "f2" [label="f2 = resonator~: F32 at sample" color="black" fontcolor="black"]
-  "out" [label="out: F32 at sample" shape=doubleoctagon color="black" fontcolor="black"]
-  "smooth_0" [label="smooth_0 = smooth~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  "_out" [label="out: F32 at sample" shape=doubleoctagon color="black" fontcolor="black"]
+  "_out.smooth_0" [label="smooth_0 = smooth~: F32 at sample" style=rounded color="black" fontcolor="black"]
   "f0" -> "src"
   "src" -> "f1"
   "vowel_f1" -> "f1"
   "src" -> "f2"
   "vowel_f2" -> "f2"
-  "f1" -> "out"
-  "f2" -> "out"
-  "smooth_0" -> "out"
-  "gain" -> "smooth_0"
+  "f1" -> "_out"
+  "f2" -> "_out"
+  "_out.smooth_0" -> "_out"
+  "gain" -> "_out.smooth_0"
 }

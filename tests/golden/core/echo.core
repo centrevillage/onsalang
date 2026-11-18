@@ -1,4 +1,4 @@
-type echo.echo.State = struct { sample_rate: F32, feedback: F32, d: F32, vdelay_0.buf: [F32; 96001], vdelay_0.w: U32, poisoned: Bool, initialized: Bool }
+type echo.echo.State = struct { _sample_rate: F32, feedback: F32, d: F32, y.vdelay_0.buf: [F32; 96001], y.vdelay_0.w: U32, _poisoned: Bool, _initialized: Bool }
 type echo.echo.Config = struct {}
 type echo.echo.Params = struct { time: F32, feedback: F32 }
 type echo.echo.Rendered = struct { out: Buf[F32] }
@@ -12,23 +12,23 @@ rt fn echo.echo.ctl(inout s: echo.echo.State, p: echo.echo.Params) -> () {
 }
 rt fn echo.echo.tick(inout s: echo.echo.State, x: F32) -> F32 {
   let y: F32 = (x + (s.1 * {
-    let vdelay_0.d: F32 = s.2
-    let vdelay_0.dc: F32 = if (vdelay_0.d >= 1.0:F32) {
-      if (vdelay_0.d <= 96000.0:F32) {
-        vdelay_0.d
+    let y.vdelay_0.d: F32 = s.2
+    let y.vdelay_0.dc: F32 = if (y.vdelay_0.d >= 1.0:F32) {
+      if (y.vdelay_0.d <= 96000.0:F32) {
+        y.vdelay_0.d
       } else {
         96000.0:F32
       }
     } else {
       1.0:F32
     }
-    let vdelay_0.k: U32 = trunc.F32.U32(vdelay_0.dc)
-    let vdelay_0.f: F32 = (vdelay_0.dc - round.U32.F32(vdelay_0.k))
-    let vdelay_0.wlk: U32 = ((s.4 + 96001:U32) - vdelay_0.k)
-    let vdelay_0.a: F32 = s.3[(vdelay_0.wlk % 96001:U32)]
-    let vdelay_0.b: F32 = s.3[((vdelay_0.wlk - 1:U32) % 96001:U32)]
-    let vdelay_0: F32 = (((1.0:F32 - vdelay_0.f) * vdelay_0.a) + (vdelay_0.f * vdelay_0.b))
-    vdelay_0
+    let y.vdelay_0.k: U32 = trunc.F32.U32(y.vdelay_0.dc)
+    let y.vdelay_0.f: F32 = (y.vdelay_0.dc - round.U32.F32(y.vdelay_0.k))
+    let y.vdelay_0.wlk: U32 = ((s.4 + 96001:U32) - y.vdelay_0.k)
+    let y.vdelay_0.a: F32 = s.3[(y.vdelay_0.wlk % 96001:U32)]
+    let y.vdelay_0.b: F32 = s.3[((y.vdelay_0.wlk - 1:U32) % 96001:U32)]
+    let y.vdelay_0: F32 = (((1.0:F32 - y.vdelay_0.f) * y.vdelay_0.a) + (y.vdelay_0.f * y.vdelay_0.b))
+    y.vdelay_0
   }))
   let __out: F32 = y
   s.3[s.4] = y
@@ -38,8 +38,8 @@ rt fn echo.echo.tick(inout s: echo.echo.State, x: F32) -> F32 {
 fn echo.echo.init(cfg: echo.echo.Config, sample_rate: F32) -> echo.echo.State sret {
   let s: echo.echo.State = zeroed:echo.echo.State
   s.0 = sample_rate
-  let vdelay_0.init: F32 = 0.0:F32
-  s.3 = [vdelay_0.init; 96001]
+  let y.vdelay_0.init: F32 = 0.0:F32
+  s.3 = [y.vdelay_0.init; 96001]
   s.4 = 0:U32
   s.5 = false
   s.6 = true

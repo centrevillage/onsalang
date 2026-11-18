@@ -247,12 +247,14 @@ pub(crate) fn emit_unit(m: &Module, opts: &EmitOptions) -> Result<CUnit, Vec<Dia
             "ONSA_STATIC_ASSERT(ONSA_ALIGNOF({state}) == {}_ALIGN, \"{} alignment (spec §12.4)\");",
             e.upper, e.upper
         );
-        for mark in ["poisoned", "initialized"] {
+        for mark in [onsa_core::FixedField::Poisoned, onsa_core::FixedField::Initialized].map(|f| f.name()) {
             if let Some(p) = e.layout.fast_fields.iter().find(|f| f.name == mark) {
                 let _ = writeln!(
                     out,
-                    "ONSA_STATIC_ASSERT(offsetof({state}, {mark}) == {}, \"{} layout prefix (spec §12.4)\");",
-                    p.offset, e.upper
+                    "ONSA_STATIC_ASSERT(offsetof({state}, {}) == {}, \"{} layout prefix (spec §12.4)\");",
+                    ident(mark),
+                    p.offset,
+                    e.upper
                 );
             }
         }

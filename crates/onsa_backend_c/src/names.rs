@@ -11,10 +11,18 @@ const C_KEYWORDS: &[&str] = &[
     "main", "NULL", "NAN", "INFINITY",
 ];
 
-/// A C identifier from an Onsa name: `.` and `@` become `_`, C keywords and
+/// A C identifier from an Onsa name: `.` becomes `__` as in [`qualified`]
+/// (`a.prev_0` is `a__prev_0`, §11.6), `@` becomes `_`, C keywords and
 /// reserved spellings get a suffix, leading underscores get a prefix.
 pub fn ident(name: &str) -> String {
-    let mut s: String = name.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '_' }).collect();
+    let mut s = String::with_capacity(name.len());
+    for c in name.chars() {
+        match c {
+            '.' => s.push_str("__"),
+            c if c.is_ascii_alphanumeric() => s.push(c),
+            _ => s.push('_'),
+        }
+    }
     if s.starts_with('_') {
         s = format!("onsa{s}");
     }

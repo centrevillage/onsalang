@@ -1,13 +1,14 @@
 // R-77: 同じ診断の繰り返し、降下の内部の失敗の E0200、入力名の予約名（S-67）。
 // 期待値と今の出力は各項目の上のコメントに書いた。`onsa check` と `onsa test` で確かめる。
 
-// 期待: `onsa check` で E0304（`sample_rate` は flow の中の予約名。入力名にも使えない）。
+// 期待: `onsa check` で E0304（`sample_rate` は flow の組込みの名前、§2.2。入力名にも使えない）。`tests/spec/negative/names_reserved_inputs.onsa` で確かめる。
 // 今: `check` が E0304（`sample_rate` は flow の組込みの名前）。
 pub flow f3(sample_rate: Sig[F32]) -> Sig[F32] {
   sample_rate
 }
 
-// 期待: `onsa check` で E0304（`poisoned` は状態の固定のフィールド名）。今は通る。
+// 期待（S-1138 で改めた）: 診断は無い。状態の固定の欄は `_poisoned` で利用者の書けない名前なので、入力 `poisoned` は通り、値は `tests/spec/flow/state_names_free_run.onsa` で確かめる。
+// （改める前の期待は、`poisoned` を状態の固定の欄の名前として予約して E0304 にするものだった。）
 pub flow f4(x: Sig[F32], poisoned: Ctl[F32]) -> Sig[F32] {
   x * poisoned
 }

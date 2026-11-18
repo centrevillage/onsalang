@@ -87,7 +87,7 @@ impl Walker<'_> {
         let visible = local.or_else(|| self.generics.iter().find(|g| g.name == name.name).map(|g| g.span));
         let flow = match kind {
             BindingKind::FlowInput | BindingKind::FlowLet => true,
-            BindingKind::ParVar => self.flow,
+            BindingKind::ParVar | BindingKind::MatchBind => self.flow,
             _ => false,
         };
         hides(self.a, self.m, name, visible, flow)

@@ -1,0 +1,165 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§12.4", "§11.4"]
+// golden = ["interface"]
+
+// W7-03 U1c/t, S-1138, S-1081, S-149 (§11.6): no name is reserved for the state, because every name that the processor makes in a state is one that a user cannot
+// write (it has a `.` or starts with `_`). So an input and a `let` of a body may be named `prev_0`, `lp_0`, `par_0`, `hoist_0`, `poisoned`, `initialized` or
+// `bulk`, and a flow may be named `hoist`, and the state is then right: the node `prev_0` of a `let` and the node `_out.prev_0` of the output are two fields,
+// not one (before the call of the output moved the node of the `let`, so the values were wrong without a diagnostic, or the lowering stopped inside).
+// The values are of the interpreter (`onsa test`). The names `sample_rate`, `prev`, `delay`, `vdelay` and `sample_tick` are the built-in names (§2.2) and stay
+// E0304 (negative/names_reserved_inputs.onsa).
+//
+// The fields of each flow (the interface golden keeps them; the user's name and the generated one are two fields, the generated one has a `.` or starts
+// with `_`): prev_named: prev_0, _out.prev_0 | lp_named: lp_0, _out.lp_0 | par_named: par_0, _out.par_0 | fixed_input_names: poisoned, initialized, bulk
+// (the copies of the inputs of `block` that `sample` reads, in the order of the declaration) | fixed_let_names: k | fixed_stored_let: poisoned, bulk (the
+// `let`s of the clock `block` that `sample` reads) | hoist_0_let: k, _out.prev_0 | calls_hoist: _out.hoist_0 (the kind is the name of the flow) |
+// initialized_node: initialized, poisoned (the nodes of two `let`s). Every flow has `_poisoned` and `_initialized` last.
+//
+// The inputs below are `[1, 2, 3]` unless a test says otherwise; `prev~` starts from 0.
+
+pub flow prev_named(x: F32 at sample) -> F32 at sample {
+  let prev_0 = prev~(x)
+  prev_0 + prev~(x * 2.0)
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  let y = 0.5 * x + 0.5 * prev~(^y)
+  y
+}
+
+pub flow lp_named(x: F32 at sample) -> F32 at sample {
+  let lp_0 = lp~(x)
+  lp_0 + lp~(x)
+}
+
+pub rt fn pair_sum(xs: [F32; 2]) -> F32 {
+  xs[0] + xs[1]
+}
+
+pub flow par_named(x: F32 at sample) -> F32 at sample {
+  let par_0 = par~ i in 0 ..< 2 { prev~(x) * F32.round_from(i + 1) }
+  pair_sum(par~ i in 0 ..< 2 { par_0[i] + prev~(x * 10.0) })
+}
+
+pub flow fixed_input_names(x: F32 at sample, poisoned: F32 at block, initialized: F32 at block, bulk: F32 at block) -> F32 at sample {
+  x * poisoned + initialized - bulk
+}
+
+pub flow fixed_let_names(x: F32 at sample, k: F32 at block) -> F32 at sample {
+  let poisoned = x + 1.0
+  let initialized = poisoned * 2.0
+  let bulk = initialized + k
+  bulk
+}
+
+pub flow fixed_stored_let(x: F32 at sample, k: F32 at block) -> F32 at sample {
+  let poisoned = k * 2.0
+  let bulk = k + 1.0
+  x * poisoned + bulk
+}
+
+pub flow hoist_0_let(x: F32 at sample, k: F32 at block) -> F32 at sample {
+  let hoist_0 = x * 0.5 + k
+  hoist_0 + prev~(hoist_0)
+}
+
+pub flow hoist(x: F32 at sample) -> F32 at sample {
+  prev~(x) + 1.0
+}
+
+pub flow calls_hoist(x: F32 at sample) -> F32 at sample {
+  hoist~(x) * 2.0
+}
+
+pub flow initialized_node(x: F32 at sample) -> F32 at sample {
+  let initialized = prev~(x)
+  let poisoned = prev~(initialized)
+  poisoned
+}
+
+test "a let named prev_0 and the prev of the output are two nodes" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = prev_named.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 3.0
+  assert o.out[2] == 6.0
+}
+
+test "a let named lp_0 and the lp of the output are two nodes" {
+  let xs: [F32; 3] = [1.0, 0.0, 0.0]
+  let o = lp_named.render(xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 0.5
+  assert o.out[2] == 0.25
+}
+
+test "a let named par_0 and the par of the output are two nodes" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = par_named.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 23.0
+  assert o.out[2] == 46.0
+}
+
+test "inputs named poisoned, initialized and bulk are read at sample" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let p = fixed_input_names.Params { poisoned: 2.0, initialized: 3.0, bulk: 1.0 }
+  let o = fixed_input_names.render(p, xs, 8.0)
+  assert o.out[0] == 4.0
+  assert o.out[1] == 6.0
+}
+
+test "lets named poisoned, initialized and bulk" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = fixed_let_names.render(fixed_let_names.Params { k: 0.5 }, xs, 8.0)
+  assert o.out[0] == 4.5
+  assert o.out[1] == 6.5
+}
+
+test "lets of the clock block named poisoned and bulk are read at sample" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = fixed_stored_let.render(fixed_stored_let.Params { k: 3.0 }, xs, 8.0)
+  assert o.out[0] == 10.0
+  assert o.out[1] == 16.0
+}
+
+test "a let named hoist_0" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = hoist_0_let.render(hoist_0_let.Params { k: 0.5 }, xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 2.5
+  assert o.out[2] == 3.5
+}
+
+test "a flow named hoist is defined and called" {
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = calls_hoist.render(xs, 8.0)
+  assert o.out[0] == 2.0
+  assert o.out[1] == 4.0
+  assert o.out[2] == 6.0
+}
+
+test "lets named initialized and poisoned that are nodes" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let o = initialized_node.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 1.0
+  assert o.out[3] == 2.0
+}
+
+test "the state is kept between two calls when the let and the output have the same kind" {
+  var st = prev_named.init(8.0)
+  let first: [F32; 2] = [1.0, 2.0]
+  let second: [F32; 2] = [4.0, 8.0]
+  var a: [F32; 2] = [0.0; 2]
+  var b: [F32; 2] = [0.0; 2]
+  prev_named.process(inout st, first, inout a)
+  prev_named.process(inout st, second, inout b)
+  assert a[0] == 0.0
+  assert a[1] == 3.0
+  assert b[0] == 6.0
+  assert b[1] == 12.0
+}

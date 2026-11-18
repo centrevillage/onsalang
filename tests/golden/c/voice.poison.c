@@ -10,25 +10,25 @@
 #include "voice_echo.h"
 
 /* ---- types ---- */
-struct voice__resonator__State { float sample_rate; float r; float b1; float b2; float y1; float y2; bool poisoned; bool initialized; };
+struct voice__resonator__State { float onsa_sample_rate; float r; float b1; float b2; float y1; float y2; bool onsa_poisoned; bool onsa_initialized; };
 typedef struct voice__resonator__State voice__resonator__State;
 struct voice__resonator__Params { float fc; float bw; };
 typedef struct voice__resonator__Params voice__resonator__Params;
 struct voice__resonator__Config { uint8_t onsa_empty; };
 typedef struct voice__resonator__Config voice__resonator__Config;
-struct voice__saw__State { float sample_rate; float f0; float prev_0; bool poisoned; bool initialized; };
+struct voice__saw__State { float onsa_sample_rate; float f0; float phase__prev_0; bool onsa_poisoned; bool onsa_initialized; };
 typedef struct voice__saw__State voice__saw__State;
 struct voice__saw__Params { float f0; };
 typedef struct voice__saw__Params voice__saw__Params;
 struct voice__saw__Config { uint8_t onsa_empty; };
 typedef struct voice__saw__Config voice__saw__Config;
-struct voice__smooth__State { float x; float a; float prev_0; bool poisoned; bool initialized; };
+struct voice__smooth__State { float x; float a; float y__prev_0; bool onsa_poisoned; bool onsa_initialized; };
 typedef struct voice__smooth__State voice__smooth__State;
 struct voice__smooth__Params { float x; };
 typedef struct voice__smooth__Params voice__smooth__Params;
 struct voice__smooth__Config { float time; };
 typedef struct voice__smooth__Config voice__smooth__Config;
-struct voice_voice { voice__saw__State src; voice__resonator__State f1; voice__resonator__State f2; voice__smooth__State smooth_0; bool poisoned; bool initialized; };
+struct voice_voice { voice__saw__State src; voice__resonator__State f1; voice__resonator__State f2; voice__smooth__State onsa_out__smooth_0; bool onsa_poisoned; bool onsa_initialized; };
 typedef struct voice_voice voice__voice__State;
 typedef voice_voice_params voice__voice__Params;
 struct voice__voice__Config { uint8_t onsa_empty; };
@@ -36,19 +36,19 @@ typedef struct voice__voice__Config voice__voice__Config;
 ONSA_DEFINE_SPAN(f32, float)
 ONSA_DEFINE_SPAN_ADD_F32(f32)
 typedef struct onsa_arr_f32_96001 { float a[96001]; } onsa_arr_f32_96001;
-struct voice_echo { float sample_rate; float feedback; float d; onsa_arr_f32_96001 vdelay_0_buf; uint32_t vdelay_0_w; bool poisoned; bool initialized; };
+struct voice_echo { float onsa_sample_rate; float feedback; float d; onsa_arr_f32_96001 y__vdelay_0__buf; uint32_t y__vdelay_0__w; bool onsa_poisoned; bool onsa_initialized; };
 typedef struct voice_echo voice__echo__State;
 typedef voice_echo_params voice__echo__Params;
 struct voice__echo__Config { uint8_t onsa_empty; };
 typedef struct voice__echo__Config voice__echo__Config;
 ONSA_STATIC_ASSERT(sizeof(voice__voice__State) == VOICE_VOICE_SIZE, "VOICE_VOICE fast region size (spec §12.4)");
 ONSA_STATIC_ASSERT(ONSA_ALIGNOF(voice__voice__State) == VOICE_VOICE_ALIGN, "VOICE_VOICE alignment (spec §12.4)");
-ONSA_STATIC_ASSERT(offsetof(voice__voice__State, poisoned) == 88, "VOICE_VOICE layout prefix (spec §12.4)");
-ONSA_STATIC_ASSERT(offsetof(voice__voice__State, initialized) == 89, "VOICE_VOICE layout prefix (spec §12.4)");
+ONSA_STATIC_ASSERT(offsetof(voice__voice__State, onsa_poisoned) == 88, "VOICE_VOICE layout prefix (spec §12.4)");
+ONSA_STATIC_ASSERT(offsetof(voice__voice__State, onsa_initialized) == 89, "VOICE_VOICE layout prefix (spec §12.4)");
 ONSA_STATIC_ASSERT(sizeof(voice__echo__State) == VOICE_ECHO_SIZE, "VOICE_ECHO fast region size (spec §12.4)");
 ONSA_STATIC_ASSERT(ONSA_ALIGNOF(voice__echo__State) == VOICE_ECHO_ALIGN, "VOICE_ECHO alignment (spec §12.4)");
-ONSA_STATIC_ASSERT(offsetof(voice__echo__State, poisoned) == 384020, "VOICE_ECHO layout prefix (spec §12.4)");
-ONSA_STATIC_ASSERT(offsetof(voice__echo__State, initialized) == 384021, "VOICE_ECHO layout prefix (spec §12.4)");
+ONSA_STATIC_ASSERT(offsetof(voice__echo__State, onsa_poisoned) == 384020, "VOICE_ECHO layout prefix (spec §12.4)");
+ONSA_STATIC_ASSERT(offsetof(voice__echo__State, onsa_initialized) == 384021, "VOICE_ECHO layout prefix (spec §12.4)");
 
 /* ---- constants ---- */
 static const float std__core__num__F32__PI = 3.1415927f;
@@ -81,9 +81,9 @@ ONSA_INLINE void voice__echo__process(voice__echo__State* s, const voice__echo__
 ONSA_INLINE void voice__echo__params_default(voice__echo__Params* out);
 
 ONSA_INLINE void voice__resonator__ctl(voice__resonator__State* s, const voice__resonator__Params* p) {
-  float r = expf((float)((float)(-(float)(std__core__num__F32__PI * p->bw)) / s->sample_rate));
+  float r = expf((float)((float)(-(float)(std__core__num__F32__PI * p->bw)) / s->onsa_sample_rate));
   s->r = r;
-  float w = (float)((float)((float)(2.0f * std__core__num__F32__PI) * p->fc) / s->sample_rate);
+  float w = (float)((float)((float)(2.0f * std__core__num__F32__PI) * p->fc) / s->onsa_sample_rate);
   float b1 = (float)((float)(2.0f * r) * cosf(w));
   s->b1 = b1;
   float b2 = (float)(r * r);
@@ -107,20 +107,20 @@ ONSA_INLINE float voice__resonator__tick(voice__resonator__State* s, float x) {
 ONSA_INLINE void voice__resonator__init(voice__resonator__State* out, const voice__resonator__Config* cfg, float sample_rate) {
   (void)cfg;
   memset(&(*out), 0, sizeof (*out));
-  out->sample_rate = sample_rate;
-  float y1_init = 0.0f;
-  out->y1 = y1_init;
-  float y2_init = 0.0f;
-  out->y2 = y2_init;
-  out->poisoned = false;
-  out->initialized = true;
+  out->onsa_sample_rate = sample_rate;
+  float y1__init = 0.0f;
+  out->y1 = y1__init;
+  float y2__init = 0.0f;
+  out->y2 = y2__init;
+  out->onsa_poisoned = false;
+  out->onsa_initialized = true;
 }
 
 ONSA_INLINE void voice__resonator__reset(voice__resonator__State* s) {
   (void)s;
   s->y1 = 0.0f;
   s->y2 = 0.0f;
-  s->poisoned = false;
+  s->onsa_poisoned = false;
 }
 
 ONSA_INLINE void voice__saw__ctl(voice__saw__State* s, const voice__saw__Params* p) {
@@ -130,28 +130,28 @@ ONSA_INLINE void voice__saw__ctl(voice__saw__State* s, const voice__saw__Params*
 
 ONSA_INLINE float voice__saw__tick(voice__saw__State* s) {
   float phase;
-  float prev_0 = s->prev_0;
-  float onsa_t1 = voice__wrap01((float)(prev_0 + (float)(s->f0 / s->sample_rate)));
+  float phase__prev_0 = s->phase__prev_0;
+  float onsa_t1 = voice__wrap01((float)(phase__prev_0 + (float)(s->f0 / s->onsa_sample_rate)));
   phase = onsa_t1;
   float onsa__out = (float)((float)(2.0f * phase) - 1.0f);
-  s->prev_0 = phase;
+  s->phase__prev_0 = phase;
   return onsa__out;
 }
 
 ONSA_INLINE void voice__saw__init(voice__saw__State* out, const voice__saw__Config* cfg, float sample_rate) {
   (void)cfg;
   memset(&(*out), 0, sizeof (*out));
-  out->sample_rate = sample_rate;
-  float prev_0_init = 0.0f;
-  out->prev_0 = prev_0_init;
-  out->poisoned = false;
-  out->initialized = true;
+  out->onsa_sample_rate = sample_rate;
+  float phase__prev_0__init = 0.0f;
+  out->phase__prev_0 = phase__prev_0__init;
+  out->onsa_poisoned = false;
+  out->onsa_initialized = true;
 }
 
 ONSA_INLINE void voice__saw__reset(voice__saw__State* s) {
   (void)s;
-  s->prev_0 = 0.0f;
-  s->poisoned = false;
+  s->phase__prev_0 = 0.0f;
+  s->onsa_poisoned = false;
 }
 
 ONSA_INLINE float voice__wrap01(float x) {
@@ -166,10 +166,10 @@ ONSA_INLINE void voice__smooth__ctl(voice__smooth__State* s, const voice__smooth
 ONSA_INLINE float voice__smooth__tick(voice__smooth__State* s) {
   float onsa_t2 = s->x;
   float onsa_t1 = s->a;
-  float prev_0 = s->prev_0;
-  float y = (float)(onsa_t2 + (float)(onsa_t1 * (float)(prev_0 - s->x)));
+  float y__prev_0 = s->y__prev_0;
+  float y = (float)(onsa_t2 + (float)(onsa_t1 * (float)(y__prev_0 - s->x)));
   float onsa__out = y;
-  s->prev_0 = y;
+  s->y__prev_0 = y;
   return onsa__out;
 }
 
@@ -177,16 +177,16 @@ ONSA_INLINE void voice__smooth__init(voice__smooth__State* out, const voice__smo
   memset(&(*out), 0, sizeof (*out));
   float a = expf((float)(-1.0f / (float)(cfg->time * sample_rate)));
   out->a = a;
-  float prev_0_init = 0.0f;
-  out->prev_0 = prev_0_init;
-  out->poisoned = false;
-  out->initialized = true;
+  float y__prev_0__init = 0.0f;
+  out->y__prev_0 = y__prev_0__init;
+  out->onsa_poisoned = false;
+  out->onsa_initialized = true;
 }
 
 ONSA_INLINE void voice__smooth__reset(voice__smooth__State* s) {
   (void)s;
-  s->prev_0 = 0.0f;
-  s->poisoned = false;
+  s->y__prev_0 = 0.0f;
+  s->onsa_poisoned = false;
 }
 
 ONSA_INLINE void voice__voice__ctl(voice__voice__State* s, const voice__voice__Params* p) {
@@ -197,7 +197,7 @@ ONSA_INLINE void voice__voice__ctl(voice__voice__State* s, const voice__voice__P
   voice__resonator__Params onsa_t3 = ((voice__resonator__Params){ .fc = p->vowel_f2, .bw = 120.0f });
   voice__resonator__ctl(&s->f2, &onsa_t3);
   voice__smooth__Params onsa_t4 = ((voice__smooth__Params){ .x = p->gain });
-  voice__smooth__ctl(&s->smooth_0, &onsa_t4);
+  voice__smooth__ctl(&s->onsa_out__smooth_0, &onsa_t4);
 }
 
 ONSA_INLINE float voice__voice__tick(voice__voice__State* s) {
@@ -217,10 +217,10 @@ ONSA_INLINE float voice__voice__tick(voice__voice__State* s) {
   f2_10 = onsa_t3;
   f2 = f2_10;
   float onsa_t5 = (float)(f1 + f2);
-  float smooth_0;
-  float onsa_t4 = voice__smooth__tick(&s->smooth_0);
-  smooth_0 = onsa_t4;
-  float onsa__out = (float)(onsa_t5 * smooth_0);
+  float onsa_out__smooth_0;
+  float onsa_t4 = voice__smooth__tick(&s->onsa_out__smooth_0);
+  onsa_out__smooth_0 = onsa_t4;
+  float onsa__out = (float)(onsa_t5 * onsa_out__smooth_0);
   return onsa__out;
 }
 
@@ -234,17 +234,17 @@ ONSA_INLINE void voice__voice__init(voice__voice__State* out, const voice__voice
   voice__resonator__Config onsa_t3 = ((voice__resonator__Config){ .onsa_empty = 0 });
   voice__resonator__init(&out->f2, &onsa_t3, sample_rate);
   voice__smooth__Config onsa_t4 = ((voice__smooth__Config){ .time = 0.01f });
-  voice__smooth__init(&out->smooth_0, &onsa_t4, sample_rate);
-  out->poisoned = false;
-  out->initialized = true;
+  voice__smooth__init(&out->onsa_out__smooth_0, &onsa_t4, sample_rate);
+  out->onsa_poisoned = false;
+  out->onsa_initialized = true;
 }
 
 ONSA_INLINE void voice__voice__reset(voice__voice__State* s) {
   voice__saw__reset(&s->src);
   voice__resonator__reset(&s->f1);
   voice__resonator__reset(&s->f2);
-  voice__smooth__reset(&s->smooth_0);
-  s->poisoned = false;
+  voice__smooth__reset(&s->onsa_out__smooth_0);
+  s->onsa_poisoned = false;
 }
 
 ONSA_INLINE void voice__voice__process(voice__voice__State* s, const voice__voice__Params* params, onsa_span_f32 output) {
@@ -265,61 +265,61 @@ ONSA_INLINE void voice__voice__params_default(voice__voice__Params* out) {
 
 ONSA_INLINE void voice__echo__ctl(voice__echo__State* s, const voice__echo__Params* p) {
   s->feedback = p->feedback;
-  float d = (float)(p->time * s->sample_rate);
+  float d = (float)(p->time * s->onsa_sample_rate);
   s->d = d;
 }
 
 ONSA_INLINE float voice__echo__tick(voice__echo__State* s, float x) {
   float onsa_t4 = x;
   float onsa_t3 = s->feedback;
-  float vdelay_0_d = s->d;
-  float vdelay_0_dc;
-  if (vdelay_0_d >= 1.0f) {
-    if (vdelay_0_d <= 96000.0f) {
-      vdelay_0_dc = vdelay_0_d;
+  float y__vdelay_0__d = s->d;
+  float y__vdelay_0__dc;
+  if (y__vdelay_0__d >= 1.0f) {
+    if (y__vdelay_0__d <= 96000.0f) {
+      y__vdelay_0__dc = y__vdelay_0__d;
     } else {
-      vdelay_0_dc = 96000.0f;
+      y__vdelay_0__dc = 96000.0f;
     }
   } else {
-    vdelay_0_dc = 1.0f;
+    y__vdelay_0__dc = 1.0f;
   }
-  uint32_t vdelay_0_k = onsa_trunc_u32_f32(vdelay_0_dc, "voice.onsa", 99);
-  float vdelay_0_f = (float)(vdelay_0_dc - ((float)vdelay_0_k));
-  uint32_t vdelay_0_wlk = onsa_sub_u32(onsa_add_u32(s->vdelay_0_w, UINT32_C(96001), "voice.onsa", 90), vdelay_0_k, "voice.onsa", 90);
-  uint32_t onsa_t1 = onsa_rem_u32(vdelay_0_wlk, UINT32_C(96001), "voice.onsa", 99);
-  float vdelay_0_a = s->vdelay_0_buf.a[onsa_idx(onsa_t1, UINT32_C(96001), "voice.onsa", 90)];
-  uint32_t onsa_t2 = onsa_rem_u32(onsa_sub_u32(vdelay_0_wlk, UINT32_C(1), "voice.onsa", 99), UINT32_C(96001), "voice.onsa", 99);
-  float vdelay_0_b = s->vdelay_0_buf.a[onsa_idx(onsa_t2, UINT32_C(96001), "voice.onsa", 90)];
-  float vdelay_0 = (float)((float)((float)(1.0f - vdelay_0_f) * vdelay_0_a) + (float)(vdelay_0_f * vdelay_0_b));
-  float y = (float)(onsa_t4 + (float)(onsa_t3 * vdelay_0));
+  uint32_t y__vdelay_0__k = onsa_trunc_u32_f32(y__vdelay_0__dc, "voice.onsa", 99);
+  float y__vdelay_0__f = (float)(y__vdelay_0__dc - ((float)y__vdelay_0__k));
+  uint32_t y__vdelay_0__wlk = onsa_sub_u32(onsa_add_u32(s->y__vdelay_0__w, UINT32_C(96001), "voice.onsa", 90), y__vdelay_0__k, "voice.onsa", 90);
+  uint32_t onsa_t1 = onsa_rem_u32(y__vdelay_0__wlk, UINT32_C(96001), "voice.onsa", 99);
+  float y__vdelay_0__a = s->y__vdelay_0__buf.a[onsa_idx(onsa_t1, UINT32_C(96001), "voice.onsa", 90)];
+  uint32_t onsa_t2 = onsa_rem_u32(onsa_sub_u32(y__vdelay_0__wlk, UINT32_C(1), "voice.onsa", 99), UINT32_C(96001), "voice.onsa", 99);
+  float y__vdelay_0__b = s->y__vdelay_0__buf.a[onsa_idx(onsa_t2, UINT32_C(96001), "voice.onsa", 90)];
+  float y__vdelay_0 = (float)((float)((float)(1.0f - y__vdelay_0__f) * y__vdelay_0__a) + (float)(y__vdelay_0__f * y__vdelay_0__b));
+  float y = (float)(onsa_t4 + (float)(onsa_t3 * y__vdelay_0));
   float onsa__out = y;
-  s->vdelay_0_buf.a[onsa_idx(s->vdelay_0_w, UINT32_C(96001), "voice.onsa", 90)] = y;
-  s->vdelay_0_w = onsa_rem_u32(onsa_add_u32(s->vdelay_0_w, UINT32_C(1), "voice.onsa", 90), UINT32_C(96001), "voice.onsa", 90);
+  s->y__vdelay_0__buf.a[onsa_idx(s->y__vdelay_0__w, UINT32_C(96001), "voice.onsa", 90)] = y;
+  s->y__vdelay_0__w = onsa_rem_u32(onsa_add_u32(s->y__vdelay_0__w, UINT32_C(1), "voice.onsa", 90), UINT32_C(96001), "voice.onsa", 90);
   return onsa__out;
 }
 
 ONSA_INLINE void voice__echo__init(voice__echo__State* out, const voice__echo__Config* cfg, float sample_rate) {
   (void)cfg;
   memset(&(*out), 0, sizeof (*out));
-  out->sample_rate = sample_rate;
-  float vdelay_0_init = 0.0f;
+  out->onsa_sample_rate = sample_rate;
+  float y__vdelay_0__init = 0.0f;
   {
     uint32_t onsa_i;
-    for (onsa_i = 0; onsa_i < 96001; onsa_i++) out->vdelay_0_buf.a[onsa_i] = vdelay_0_init;
+    for (onsa_i = 0; onsa_i < 96001; onsa_i++) out->y__vdelay_0__buf.a[onsa_i] = y__vdelay_0__init;
   }
-  out->vdelay_0_w = UINT32_C(0);
-  out->poisoned = false;
-  out->initialized = true;
+  out->y__vdelay_0__w = UINT32_C(0);
+  out->onsa_poisoned = false;
+  out->onsa_initialized = true;
 }
 
 ONSA_INLINE void voice__echo__reset(voice__echo__State* s) {
   (void)s;
   {
     uint32_t onsa_i;
-    for (onsa_i = 0; onsa_i < 96001; onsa_i++) s->vdelay_0_buf.a[onsa_i] = 0.0f;
+    for (onsa_i = 0; onsa_i < 96001; onsa_i++) s->y__vdelay_0__buf.a[onsa_i] = 0.0f;
   }
-  s->vdelay_0_w = UINT32_C(0);
-  s->poisoned = false;
+  s->y__vdelay_0__w = UINT32_C(0);
+  s->onsa_poisoned = false;
 }
 
 ONSA_INLINE void voice__echo__process(voice__echo__State* s, const voice__echo__Params* params, onsa_span_f32 input, onsa_span_f32 output) {
@@ -370,13 +370,13 @@ int voice_voice_init(voice_voice* s, void* bulk, float sample_rate) {
   return 0;
 }
 
-void voice_voice_reset(voice_voice* s) { if (!s->initialized) return; voice__voice__reset(s); }
+void voice_voice_reset(voice_voice* s) { if (!s->onsa_initialized) return; voice__voice__reset(s); }
 
 void voice_voice_params_default(voice_voice_params* p) { voice__voice__params_default(p); }
 
 int voice_voice_process(voice_voice* s, const voice_voice_params* p, float* out, uint32_t frames) {
   voice__voice__Params q;
-  if (!s->initialized || s->poisoned) {
+  if (!s->onsa_initialized || s->onsa_poisoned) {
     if (frames != 0) {
       memset(out, 0, (size_t)frames * sizeof(float));
     }
@@ -394,7 +394,7 @@ int voice_voice_process(voice_voice* s, const voice_voice_params* p, float* out,
     if (frames != 0) {
       memset(out, 0, (size_t)frames * sizeof(float));
     }
-    s->poisoned = true;
+    s->onsa_poisoned = true;
     return 1;
   }
   onsa_current_jmp = &onsa_jb;
@@ -428,13 +428,13 @@ int voice_echo_init(voice_echo* s, void* bulk, float sample_rate) {
   return 0;
 }
 
-void voice_echo_reset(voice_echo* s) { if (!s->initialized) return; voice__echo__reset(s); }
+void voice_echo_reset(voice_echo* s) { if (!s->onsa_initialized) return; voice__echo__reset(s); }
 
 void voice_echo_params_default(voice_echo_params* p) { voice__echo__params_default(p); }
 
 int voice_echo_process(voice_echo* s, const voice_echo_params* p, const float* x, float* out, uint32_t frames) {
   voice__echo__Params q;
-  if (!s->initialized || s->poisoned) {
+  if (!s->onsa_initialized || s->onsa_poisoned) {
     if (frames != 0) {
       memset(out, 0, (size_t)frames * sizeof(float));
     }
@@ -456,7 +456,7 @@ int voice_echo_process(voice_echo* s, const voice_echo_params* p, const float* x
     if (frames != 0) {
       memset(out, 0, (size_t)frames * sizeof(float));
     }
-    s->poisoned = true;
+    s->onsa_poisoned = true;
     return 1;
   }
   onsa_current_jmp = &onsa_jb;

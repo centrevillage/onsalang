@@ -249,7 +249,7 @@ fn flow_members_are_lowered_when_referenced() {
     let d = text(
         "pub flow one(x: F32 at sample) -> F32 at sample {\n  x\n}\n\npub fn mk(sr: F32) -> one.State {\n  one.init(sr)\n}\n",
     );
-    assert!(d.contains("type t.one.State = struct { poisoned: Bool, initialized: Bool }"), "{d}");
+    assert!(d.contains("type t.one.State = struct { _poisoned: Bool, _initialized: Bool }"), "{d}");
     assert!(d.contains("fn t.one.init(cfg: t.one.Config, sample_rate: F32) -> t.one.State sret {"), "{d}");
     assert!(d.contains("rt fn t.one.tick(inout s: t.one.State, x: F32) -> F32 {"), "{d}");
 }
@@ -520,9 +520,9 @@ fn a_constant_let_is_defined_in_each_phase_that_reads_it() {
 fn resonator_lowers_to_the_five_functions() {
     let m = core(RESONATOR);
     let d = dump(&m);
-    // State fields (S-05): sample_rate, the Ctl lets read at Sig, the prev nodes, poisoned.
+    // State fields (S-05): _sample_rate, the Ctl lets read at Sig, the prev nodes, _poisoned.
     assert!(
-        d.contains("type t.resonator.State = struct { sample_rate: F32, r: F32, b1: F32, b2: F32, y1: F32, y2: F32, poisoned: Bool, initialized: Bool }"),
+        d.contains("type t.resonator.State = struct { _sample_rate: F32, r: F32, b1: F32, b2: F32, y1: F32, y2: F32, _poisoned: Bool, _initialized: Bool }"),
         "{d}"
     );
     // ctl: Ctl lets in order, state ones stored; `w` is a plain local.
@@ -553,7 +553,7 @@ fn resonator_lowers_to_the_five_functions() {
     assert_eq!((f.layout.size, f.layout.bulk_size, f.layout.align), (28, 0, 4));
     assert_eq!(
         f.layout.fast_fields.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(),
-        ["sample_rate", "r", "b1", "b2", "y1", "y2", "poisoned", "initialized"]
+        ["_sample_rate", "r", "b1", "b2", "y1", "y2", "_poisoned", "_initialized"]
     );
     assert!(d.contains("const t.resonator.SIZE: U32 = 28:U32"), "{d}");
 }
@@ -583,7 +583,7 @@ fn delay_ring_buffer_order() {
 fn delay_ring_buffer_order_of(call: &str) {
     let d = text(&format!("pub flow dl(x: F32 at sample) -> F32 at sample {{\n  let y = {call}\n  y\n}}\n"));
     assert!(
-        d.contains("type t.dl.State = struct { y.buf: [F32; 4], y.w: U32, poisoned: Bool, initialized: Bool }"),
+        d.contains("type t.dl.State = struct { y.buf: [F32; 4], y.w: U32, _poisoned: Bool, _initialized: Bool }"),
         "{d}"
     );
     // init: buffer filled with init, w = 0.
@@ -600,23 +600,31 @@ fn vdelay_formula_order() {
     let d = text(
         "pub flow ec(x: F32 at sample, fb: F32 at block, t: F32 at block) -> F32 at sample {\n  let d = t * 100.0\n  let y = x + (fb * vdelay~(^y, d, 8))\n  y\n}\n",
     );
-    assert!(d.contains("vdelay_0.buf: [F32; 9], vdelay_0.w: U32"), "{d}");
+    assert!(d.contains("y.vdelay_0.buf: [F32; 9], y.vdelay_0.w: U32"), "{d}");
     let tick = pos(&d, "rt fn t.ec.tick(");
     let t = &d[tick..];
     let mut last = 0;
-    for name in ["vdelay_0.d", "vdelay_0.dc", "vdelay_0.k", "vdelay_0.f", "vdelay_0.wlk", "vdelay_0.a", "vdelay_0.b"] {
+    for name in [
+        "y.vdelay_0.d",
+        "y.vdelay_0.dc",
+        "y.vdelay_0.k",
+        "y.vdelay_0.f",
+        "y.vdelay_0.wlk",
+        "y.vdelay_0.a",
+        "y.vdelay_0.b",
+    ] {
         let p = pos(t, &format!("let {name}: "));
         assert!(p > last, "{name} out of order in:\n{t}");
         last = p;
     }
     // dc clamps to [1, MAX] with NaN -> 1.0; k = trunc; f = dc - k; a and b read the ring.
-    assert!(t.contains("if (vdelay_0.d >= 1.0:F32) {"), "{t}");
-    assert!(t.contains("if (vdelay_0.d <= 8.0:F32) {"), "{t}");
-    assert!(t.contains("trunc.F32.U32(vdelay_0.dc)"), "{t}");
-    assert!(t.contains("(vdelay_0.dc - round.U32.F32(vdelay_0.k))"), "{t}");
-    assert!(t.contains("(vdelay_0.wlk % 9:U32)"), "{t}");
-    assert!(t.contains("((vdelay_0.wlk - 1:U32) % 9:U32)"), "{t}");
-    assert!(t.contains("(((1.0:F32 - vdelay_0.f) * vdelay_0.a) + (vdelay_0.f * vdelay_0.b))"), "{t}");
+    assert!(t.contains("if (y.vdelay_0.d >= 1.0:F32) {"), "{t}");
+    assert!(t.contains("if (y.vdelay_0.d <= 8.0:F32) {"), "{t}");
+    assert!(t.contains("trunc.F32.U32(y.vdelay_0.dc)"), "{t}");
+    assert!(t.contains("(y.vdelay_0.dc - round.U32.F32(y.vdelay_0.k))"), "{t}");
+    assert!(t.contains("(y.vdelay_0.wlk % 9:U32)"), "{t}");
+    assert!(t.contains("((y.vdelay_0.wlk - 1:U32) % 9:U32)"), "{t}");
+    assert!(t.contains("(((1.0:F32 - y.vdelay_0.f) * y.vdelay_0.a) + (y.vdelay_0.f * y.vdelay_0.b))"), "{t}");
     // The store and advance come after the output is materialised.
     let out = pos(t, "let __out");
     let store = pos(t, "] = y\n");
@@ -630,17 +638,17 @@ fn echo_bulk_layout() {
     let m = core_with(src, Some(4096));
     let f = &m.flows[0];
     assert_eq!(f.layout.bulk_size, 384004);
-    assert_eq!(f.layout.bulk_fields.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), ["vdelay_0.buf"]);
+    assert_eq!(f.layout.bulk_fields.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(), ["y.vdelay_0.buf"]);
     assert_eq!(
         f.layout.fast_fields.iter().map(|x| (x.name.as_str(), x.offset)).collect::<Vec<_>>(),
         [
-            ("bulk", 0),
-            ("sample_rate", 8),
+            ("_bulk", 0),
+            ("_sample_rate", 8),
             ("feedback", 12),
             ("d", 16),
-            ("vdelay_0.w", 20),
-            ("poisoned", 24),
-            ("initialized", 25)
+            ("y.vdelay_0.w", 20),
+            ("_poisoned", 24),
+            ("_initialized", 25)
         ]
     );
     assert_eq!((f.layout.size, f.layout.align), (32, 8));
@@ -655,7 +663,7 @@ fn sub_instances_are_wired_per_phase() {
     let src = "pub flow saw(f0: F32 at block) -> F32 at sample {\n  let phase = prev~(^phase) + (f0 / sample_rate())\n  phase\n}\n\npub flow smooth(x: F32 at block, time: F32 at init) -> F32 at sample {\n  let a = 1.0 / (time * sample_rate())\n  let y = x + (a * (prev~(^y) - x))\n  y\n}\n\npub flow voice(f0: F32 at block, gain: F32 at block) -> F32 at sample {\n  let src = saw~(f0)\n  src * smooth~(gain, 0.01)\n}\n";
     let d = text(src);
     assert!(
-        d.contains("type t.voice.State = struct { src: t.saw.State, smooth_0: t.smooth.State, poisoned: Bool, initialized: Bool }"),
+        d.contains("type t.voice.State = struct { src: t.saw.State, _out.smooth_0: t.smooth.State, _poisoned: Bool, _initialized: Bool }"),
         "{d}"
     );
     // init: sub inits with Config from the Init args; ctl: sub ctls with Params from the Ctl args; tick: sub ticks.
@@ -669,12 +677,14 @@ fn sub_instances_are_wired_per_phase() {
     // The sub states store the inputs they read at Sig and the Init let.
     assert!(
         d.contains(
-            "type t.saw.State = struct { sample_rate: F32, f0: F32, prev_0: F32, poisoned: Bool, initialized: Bool }"
+            "type t.saw.State = struct { _sample_rate: F32, f0: F32, phase.prev_0: F32, _poisoned: Bool, _initialized: Bool }"
         ),
         "{d}"
     );
     assert!(
-        d.contains("type t.smooth.State = struct { x: F32, a: F32, prev_0: F32, poisoned: Bool, initialized: Bool }"),
+        d.contains(
+            "type t.smooth.State = struct { x: F32, a: F32, y.prev_0: F32, _poisoned: Bool, _initialized: Bool }"
+        ),
         "{d}"
     );
     // No Sig inputs: `process_inplace` is not generated, `render` takes `frames`.
@@ -687,7 +697,7 @@ fn par_replicates_state_and_loops() {
     let src = "use std.math.{sum}\n\nconst N: U32 = 4\n\npub flow saw(f0: F32 at block) -> F32 at sample {\n  let phase = prev~(^phase) + (f0 / sample_rate())\n  phase\n}\n\npub flow uni(f0: F32 at block) -> F32 at sample {\n  let saws = par~ i in 0..<N {\n    saw~(f0 * (1.0 + (F32.round_from(i) * 0.01)))\n  }\n  sum(saws)\n}\n";
     let d = text(src);
     assert!(
-        d.contains("type t.uni.State = struct { saws: [t.uni.saws.State; 4], poisoned: Bool, initialized: Bool }"),
+        d.contains("type t.uni.State = struct { saws: [t.uni.saws.State; 4], _poisoned: Bool, _initialized: Bool }"),
         "{d}"
     );
     assert!(d.contains("type t.uni.saws.State = struct { saw_0: t.saw.State }"), "{d}");

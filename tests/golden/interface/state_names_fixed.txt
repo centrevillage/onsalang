@@ -1,0 +1,79 @@
+package state_names_fixed
+
+module state_names_fixed
+
+pub flow phase_step(
+  f0: F32 at block,
+) -> F32 at sample
+  pub struct phase_step.State  // Affine; size 16, bulk 0, align 4
+    _sample_rate: 4 bytes, align 4, fast  // offset 0
+    f0: 4 bytes, align 4, fast  // offset 4
+    phase.prev_0: 4 bytes, align 4, fast  // offset 8
+    _poisoned: 1 bytes, align 1, fast  // offset 12
+    _initialized: 1 bytes, align 1, fast  // offset 13
+  pub struct phase_step.Params  // Copy; size 4, align 4
+    f0: F32  // offset 0
+  pub struct phase_step.Rendered  // Affine
+    out: Buf[F32]
+  pub const phase_step.SIZE: U32 = 16
+  pub const phase_step.BULK_SIZE: U32 = 0
+  pub fn phase_step.init(sample_rate: F32) -> phase_step.State
+  pub rt fn phase_step.reset(inout s: phase_step.State)
+  pub rt fn phase_step.process(inout s: phase_step.State, params: phase_step.Params, inout output: Span[F32])
+  pub fn phase_step.render(params: phase_step.Params, frames: U32, sample_rate: F32) -> phase_step.Rendered uses {Alloc}
+
+pub flow block_let(
+  x: F32 at sample,
+  k: F32 at block,
+) -> F32 at sample
+  pub struct block_let.State  // Affine; size 8, bulk 0, align 4
+    g: 4 bytes, align 4, fast  // offset 0
+    _poisoned: 1 bytes, align 1, fast  // offset 4
+    _initialized: 1 bytes, align 1, fast  // offset 5
+  pub struct block_let.Params  // Copy; size 4, align 4
+    k: F32  // offset 0
+  pub struct block_let.Rendered  // Affine
+    out: Buf[F32]
+  pub const block_let.SIZE: U32 = 8
+  pub const block_let.BULK_SIZE: U32 = 0
+  pub fn block_let.init(sample_rate: F32) -> block_let.State
+  pub rt fn block_let.reset(inout s: block_let.State)
+  pub rt fn block_let.process(inout s: block_let.State, params: block_let.Params, input: Span[F32], inout output: Span[F32])
+  pub rt fn block_let.process_inplace(inout s: block_let.State, params: block_let.Params, inout output: Span[F32])
+  pub fn block_let.render(params: block_let.Params, input: Span[F32], sample_rate: F32) -> block_let.Rendered uses {Alloc}
+
+pub flow input_copy(
+  x: F32 at sample,
+  k: F32 at block,
+) -> F32 at sample
+  pub struct input_copy.State  // Affine; size 8, bulk 0, align 4
+    k: 4 bytes, align 4, fast  // offset 0
+    _poisoned: 1 bytes, align 1, fast  // offset 4
+    _initialized: 1 bytes, align 1, fast  // offset 5
+  pub struct input_copy.Params  // Copy; size 4, align 4
+    k: F32  // offset 0
+  pub struct input_copy.Rendered  // Affine
+    out: Buf[F32]
+  pub const input_copy.SIZE: U32 = 8
+  pub const input_copy.BULK_SIZE: U32 = 0
+  pub fn input_copy.init(sample_rate: F32) -> input_copy.State
+  pub rt fn input_copy.reset(inout s: input_copy.State)
+  pub rt fn input_copy.process(inout s: input_copy.State, params: input_copy.Params, input: Span[F32], inout output: Span[F32])
+  pub rt fn input_copy.process_inplace(inout s: input_copy.State, params: input_copy.Params, inout output: Span[F32])
+  pub fn input_copy.render(params: input_copy.Params, input: Span[F32], sample_rate: F32) -> input_copy.Rendered uses {Alloc}
+
+pub flow no_fixed_extra(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct no_fixed_extra.State  // Affine; size 2, bulk 0, align 1
+    _poisoned: 1 bytes, align 1, fast  // offset 0
+    _initialized: 1 bytes, align 1, fast  // offset 1
+  pub struct no_fixed_extra.Rendered  // Affine
+    out: Buf[F32]
+  pub const no_fixed_extra.SIZE: U32 = 2
+  pub const no_fixed_extra.BULK_SIZE: U32 = 0
+  pub fn no_fixed_extra.init(sample_rate: F32) -> no_fixed_extra.State
+  pub rt fn no_fixed_extra.reset(inout s: no_fixed_extra.State)
+  pub rt fn no_fixed_extra.process(inout s: no_fixed_extra.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn no_fixed_extra.process_inplace(inout s: no_fixed_extra.State, inout output: Span[F32])
+  pub fn no_fixed_extra.render(input: Span[F32], sample_rate: F32) -> no_fixed_extra.Rendered uses {Alloc}

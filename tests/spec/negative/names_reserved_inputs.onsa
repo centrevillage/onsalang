@@ -2,23 +2,36 @@
 // [test]
 // spec = ["§11.6", "§2.2"]
 
-// E0304: the fixed field names of a flow state (`sample_rate`, `poisoned`,
-// `initialized`, `bulk`) are reserved, and a flow input may not use them
-// either (§11.6; `sample_rate` is also a builtin name inside a flow, §2.2).
-// One flow per name (each flow is its own unit, §18.1). From the review
-// R-77 (S-67): today `check` passes them, and lowering `f3` fails inside.
+// §11.6, §2.2, S-1138, S-67, S-1081: among the names of the fixed fields of a flow state, only `sample_rate` is a name that a flow input may not have: it is a
+// builtin name of a flow (§2.2, §5.1), so an input with it is E0304. `poisoned`, `initialized` and `bulk` are not reserved: the fields of the
+// state that the processor makes have names that a user cannot write (`_sample_rate`, `_poisoned`, `_initialized`, `_bulk`, §11.6), so a flow input (and a
+// `let`) may have these names, and the flows below with them have no diagnostic (their values are in flow/state_names_free_run.onsa). One flow per
+// name (each flow is its own unit, §18.1). From the review R-77 (S-67): `check` passed the four names, and lowering `f3` failed inside; S-1138 later
+// dropped the reservation of the three names that are not builtin.
 pub flow f3(sample_rate: F32 at sample) -> F32 at sample { //~ E0304
   sample_rate
 }
 
-pub flow f4(x: F32 at sample, poisoned: F32 at block) -> F32 at sample { //~ E0304
+pub flow f3_block(x: F32 at sample, sample_rate: F32 at block) -> F32 at sample { //~ E0304
+  x * sample_rate
+}
+
+pub flow f3_init(x: F32 at sample, sample_rate: F32 at init) -> F32 at sample { //~ E0304
+  x * sample_rate
+}
+
+pub flow f3_first(sample_rate: F32 at block, x: F32 at sample) -> F32 at sample { //~ E0304
+  x * sample_rate
+}
+
+pub flow f4(x: F32 at sample, poisoned: F32 at block) -> F32 at sample {
   x * poisoned
 }
 
-pub flow f5(initialized: F32 at sample) -> F32 at sample { //~ E0304
+pub flow f5(initialized: F32 at sample) -> F32 at sample {
   initialized
 }
 
-pub flow f6(x: F32 at sample, bulk: F32 at block) -> F32 at sample { //~ E0304
+pub flow f6(x: F32 at sample, bulk: F32 at block) -> F32 at sample {
   x * bulk
 }

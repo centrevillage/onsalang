@@ -26,9 +26,9 @@ fn flow<'a>(a: &'a Analysis, name: &str) -> &'a FlowInfo {
     f
 }
 
-/// The names of the nodes no `par~` holds, in their order.
+/// The paths of the nodes no `par~` holds, in their order (§11.6).
 fn top_names(f: &FlowInfo) -> Vec<&str> {
-    f.top().map(|id| f.node(id).name.as_str()).collect()
+    f.top().map(|id| f.node(id).path.as_str()).collect()
 }
 
 /// The `i`-th node no `par~` holds.
@@ -130,21 +130,21 @@ pub flow smooth(x: F32 at block, time: F32 at init) -> F32 at sample {
     assert_eq!(let_rate(f, "a"), (Clock::Init, true));
     assert_eq!(let_rate(f, "y"), (Clock::SAMPLE, false));
     assert_eq!(f.sample_rate_at, Some(ClockStage::Init));
-    assert_eq!(top_names(f), vec!["prev_0"]);
+    assert_eq!(top_names(f), vec!["y.prev_0"]);
 }
 
 #[test]
 fn voice_instances_are_named() {
     let a = ok(&spec("examples/voice.onsa"));
     let f = flow(&a, "voice");
-    assert_eq!(top_names(f), vec!["src", "f1", "f2", "smooth_0"]);
+    assert_eq!(top_names(f), vec!["src", "f1", "f2", "_out.smooth_0"]);
     assert!(
         matches!(top_kind(f, 1), PlanKind::Instance { callee, args, .. } if a.def(*callee).name == "resonator" && args.len() == 3)
     );
     assert_eq!(f.node_of.len(), 4);
-    // `saw`: the `prev` inside `wrap01(...)` is unnamed.
+    // `saw`: the `prev` inside `wrap01(...)` is qualified by its `let`.
     let saw = flow(&a, "saw");
-    assert_eq!(top_names(saw), vec!["prev_0"]);
+    assert_eq!(top_names(saw), vec!["phase.prev_0"]);
     assert_eq!(saw.sample_rate_at, Some(ClockStage::Tick(Ratio(0))));
 }
 
@@ -153,7 +153,7 @@ fn echo_vdelay_from_const() {
     let a = ok(&spec("examples/voice.onsa"));
     let f = flow(&a, "echo");
     assert_eq!(let_rate(f, "d"), (Clock::Block, true));
-    assert_eq!(top_names(f)[0], "vdelay_0");
+    assert_eq!(top_names(f)[0], "y.vdelay_0");
     assert!(matches!(top_kind(f, 0), PlanKind::Vdelay { max: 96000, init: InitArg::Const(_), .. }));
 }
 
@@ -165,8 +165,9 @@ fn unison_par_nests_instances() {
     let par = f.top().next().expect("a node");
     let PlanKind::Par { from, to, var, .. } = &f.node(par).kind else { panic!("expected par: {:?}", f.nodes) };
     assert_eq!((f.node(par).name.as_str(), *from, *to), ("saws", 0, 4));
-    let inner: Vec<&str> = f.roots(Owner::Par(par)).iter().map(|&id| f.node(id).name.as_str()).collect();
-    assert_eq!(inner, vec!["saw_0"]);
+    let inner: Vec<(&str, &str)> =
+        f.roots(Owner::Par(par)).iter().map(|&id| (f.node(id).name.as_str(), f.node(id).path.as_str())).collect();
+    assert_eq!(inner, vec![("saw_0", "saws.saw_0")]);
     assert_eq!(f.clocks.locals[var], Clock::Init);
 }
 

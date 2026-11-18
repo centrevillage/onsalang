@@ -1,0 +1,11 @@
+digraph "out_nested" {
+  rankdir=LR
+  node [shape=box fontname="monospace"]
+  "x" [label="x: F32 at sample" shape=ellipse color="black" fontcolor="black"]
+  "_out" [label="out: F32 at sample" shape=doubleoctagon color="black" fontcolor="black"]
+  "_out.lp_0" [label="lp_0 = lp~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  "_out.lp_1" [label="lp_1 = lp~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  "_out.lp_0" -> "_out"
+  "_out.lp_1" -> "_out.lp_0"
+  "x" -> "_out.lp_1"
+}

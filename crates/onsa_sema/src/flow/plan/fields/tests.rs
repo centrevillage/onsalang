@@ -79,7 +79,7 @@ fn the_state_keeps_what_a_later_stage_reads() {
 
 /// The fields of `State` in the order of §12.4: the sample rate, the kept
 /// inputs, each `let`'s own field and its nodes, the nodes of the output,
-/// `poisoned` and `initialized`.
+/// `_poisoned` and `_initialized`.
 #[test]
 fn the_fields_of_the_state_are_in_the_order_of_12_4() {
     let a = check(ORDER);
@@ -99,20 +99,20 @@ fn the_fields_of_the_state_are_in_the_order_of_12_4() {
     ];
     assert_eq!(whats(f, Owner::Output), want);
     assert_eq!(whats(f, Owner::Let(0)), want);
-    // The names are those of S-06 the lowering reads (U1c changes them).
+    // The names of §11.6 the lowering reads (S-1138).
     let names: Vec<&str> = f.fields.iter().map(|x| x.name.as_str()).collect();
     let want = [
-        "sample_rate",
+        "_sample_rate",
         "k",
         "w",
         "a",
         "a.init",
-        "g_0",
-        "delay_0.buf",
-        "delay_0.w",
-        "prev_0",
-        "poisoned",
-        "initialized",
+        "b.g_0",
+        "b.delay_0.buf",
+        "b.delay_0.w",
+        "_out.prev_0",
+        "_poisoned",
+        "_initialized",
     ];
     assert_eq!(names, want);
     for x in &f.fields {
@@ -179,5 +179,22 @@ fn a_par_has_the_fields_of_its_body_and_none_with_no_state() {
     assert_eq!(f.field(FieldOf::Node(delay, Part::W)), Some("delay_0.w"));
     assert_eq!(f.node(delay).field, Some(0));
     assert_eq!(f.field(FieldOf::Node(delay, Part::Own)), None);
-    assert_eq!(f.field(FieldOf::Node(outer, Part::Own)), Some(f.node(outer).name.as_str()));
+    assert_eq!(f.field(FieldOf::Node(outer, Part::Own)), Some("s.par_0"));
+    assert_eq!(f.node(delay).path, "s.par_0.par_0.delay_0");
+}
+
+/// Two fields of one name in a struct of the state are an internal error
+/// at the later one (§11.6, S-1138: no name of the processor is a user's).
+#[test]
+fn two_fields_of_one_name_are_an_internal_error() {
+    let a = check(ORDER);
+    let f = flow(&a, "f");
+    super::unique(f, &f.fields);
+    let mut fields = f.fields.clone();
+    let k = fields.iter().position(|x| matches!(x.of, FieldOf::Node(..))).expect("a field of a node");
+    fields[k].name = "w".into();
+    let payload = std::panic::catch_unwind(|| super::unique(f, &fields)).expect_err("two fields `w`");
+    let bug = payload.downcast_ref::<onsa_diag::internal::InternalBug>().expect("an internal error");
+    let FieldOf::Node(id, _) = fields[k].of else { unreachable!() };
+    assert_eq!(bug.span, Some(f.node(id).span), "{bug:?}");
 }

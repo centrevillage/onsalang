@@ -1,6 +1,6 @@
 //! `onsa graph` (T3-12; spec §18.2): the signal graph of a flow as DOT.
 //! Nodes are the inputs, the top-level `let`s, the stateful nodes that are not
-//! a `let` of their own (named per S-06) and the output; edges follow the
+//! a `let` of their own (by their §11.6 paths) and the output; edges follow the
 //! reads of each initializer. The look-back edges of `prev~` / `delay~` /
 //! `vdelay~` are dashed. A label is `name: type at clock` (no clock for a
 //! constant), and clocks colour the nodes (`init` and constants gray,
@@ -14,6 +14,7 @@ use onsa_sema::body::{LocalId, Target};
 use onsa_sema::clock::Clock;
 use onsa_sema::def::DefKind;
 use onsa_sema::flow::{FlowInfo, PlanKind, PlanNode};
+use onsa_sema::flow_names::OUTPUT_SCOPE;
 use onsa_sema::{Analysis, DefId};
 use onsa_syntax::ast::{Ast, ExprId, ExprKind};
 
@@ -65,9 +66,9 @@ impl Graph<'_> {
         if let Some(&id) = self.info.node_of.get(&e) {
             let node = self.info.node(id);
             let label = self.node_label(node, e);
-            self.extra.push((node.name.clone(), label, self.rate_of(e)));
-            self.edge(&node.name, target, dashed);
-            self.visit_node(node, &node.name);
+            self.extra.push((node.path.clone(), label, self.rate_of(e)));
+            self.edge(&node.path, target, dashed);
+            self.visit_node(node, &node.path);
             return;
         }
         if let Some(Target::Local(l)) = self.info.body.targets.get(&e)
@@ -94,7 +95,8 @@ impl Graph<'_> {
     }
 
     fn node_label(&self, node: &PlanNode, e: ExprId) -> String {
-        // `prev_0 = prev~`, `src = saw~` (spec/tools.md §1.1).
+        // `prev_0 = prev~`, `src = saw~`: the name without its scope
+        // (spec/tools.md §1.1).
         let what = match (&node.kind, node.kind.delay()) {
             (_, Some(d)) => format!("{}~", d.name()),
             (PlanKind::Instance { callee, .. }, None) => format!("{}~", self.a.def(*callee).name),
@@ -233,9 +235,10 @@ fn graph_of(analyzed: &Analyzed, flow: &str, scope: Option<&str>) -> Result<Stri
     }
     for (i, l) in info.lets.iter().enumerate() {
         let name = &let_names[i];
-        let whole = info.node_of.get(&l.init).map(|&id| info.node(id));
+        let whole = info.whole(i as u32).map(|id| info.node(id));
         let label = match whole {
-            Some(node) => g.node_label(node, l.init).replacen(&format!("{} =", node.name), &format!("{name} ="), 1),
+            // Its node has its name (S-148).
+            Some(node) => g.node_label(node, l.init),
             None => format!("{name}: {}", typed(&a.display_type(l.ty), l.clock, l.span)),
         };
         let _ = writeln!(
@@ -249,17 +252,17 @@ fn graph_of(analyzed: &Analyzed, flow: &str, scope: Option<&str>) -> Result<Stri
             None => g.visit(l.init, name, false),
         }
     }
-    // Output.
+    // Output: the vertex of a name no input, `let` or node has (R-497).
     if let Some(o) = info.output {
         let rate = g.rate_of(o);
         let _ = writeln!(
             out,
-            "  \"out\" [label=\"out: {}\" shape=doubleoctagon color=\"{}\" fontcolor=\"{}\"]",
+            "  \"{OUTPUT_SCOPE}\" [label=\"out: {}\" shape=doubleoctagon color=\"{}\" fontcolor=\"{}\"]",
             typed(&g.ty_of(o), rate, ast.expr(o).span),
             rate_color(rate),
             rate_color(rate)
         );
-        g.visit(o, "out", false);
+        g.visit(o, OUTPUT_SCOPE, false);
     }
     for (name, label, rate) in &g.extra {
         let _ = writeln!(
@@ -348,7 +351,8 @@ pub flow resonator(x: F32 at sample, fc: F32 at block, bw: F32 at block) -> F32 
         assert!(dot.contains("\"r\" [label=\"r: F32 at block\" color=\"blue\""), "{dot}");
         assert!(dot.contains("\"y1\" [label=\"y1 = prev~: F32 at sample\""), "{dot}");
         assert!(dot.contains("  \"x\" -> \"y\"\n"), "{dot}");
-        assert!(dot.contains("  \"y\" -> \"out\"\n"), "{dot}");
+        // The output is a vertex of its own (R-497).
+        assert!(dot.contains("  \"y\" -> \"_out\"\n"), "{dot}");
     }
 
     /// The node of a `par~` names the replication with its `~` and its range,
@@ -359,6 +363,20 @@ pub flow resonator(x: F32 at sample, fc: F32 at block, bw: F32 at block) -> F32 
         let analyzed = analyzed(PackageInput::single_file("p.onsa", src));
         let dot = super::graph(&analyzed, "f", None).unwrap();
         assert!(dot.contains("[label=\"xs = par~ 0..<2: [F32; 2] at sample\""), "{dot}");
+    }
+
+    /// Only a `let` of a single name is its node (S-148, through
+    /// parentheses); the node of any other `let` is a vertex of its §11.6
+    /// name (spec/tools.md §1.1), as the plan decides ([`FlowInfo::whole`]).
+    #[test]
+    fn the_node_of_a_let_that_is_not_one_name_is_a_vertex_of_its_own() {
+        let src = "pub flow f(x: F32 at sample) -> F32 at sample {\n  let a = (prev~(x))\n  let _ = prev~(x)\n  a\n}\n";
+        let analyzed = analyzed(PackageInput::single_file("p.onsa", src));
+        let dot = super::graph(&analyzed, "f", None).unwrap();
+        assert!(dot.contains("\"a\" [label=\"a = prev~: F32 at sample\""), "{dot}");
+        assert!(dot.contains("\"let_1\" [label=\"let_1: F32 at sample\""), "{dot}");
+        assert!(dot.contains("\"_0.prev_0\" [label=\"prev_0 = prev~: F32 at sample\" style=rounded"), "{dot}");
+        assert!(dot.contains("  \"_0.prev_0\" -> \"let_1\"\n"), "{dot}");
     }
 
     /// §18.2 (S-323): a name is the one flow of that name in the scope (the

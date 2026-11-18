@@ -1,0 +1,70 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§12.4"]
+// golden = ["interface"]
+
+// W7-03 U1c/t, S-1136, S-148 (§11.6): a `let` that takes its value apart, and a `let` that binds no name. Only a `let` whose pattern is one name calls the node
+// that is its whole value by the name of the `let`. A `let` of a tuple, a struct or `_` does not: it qualifies the nodes by the first name that the pattern
+// binds (`let (p, q) = g~(x)` is `p.g_0`, also when the value is the node itself) and, when it binds no name (`let _ = f~(x)`, `let (_, _) = g~(x)`), by
+// `_<number>`, where the number counts the `let`s that bind no name, from 0, in the order of the text. The state of each flow
+// (the spec writes `let (p, q) = g~(x)`, but the output of a flow is a scalar, an array or a struct, never a tuple (E0810), so the value that is a
+// node itself is taken apart with a struct pattern here; the tuple pattern has the value that is no call, `tuple_literal`):
+//
+//   struct_pattern:  p.h_0 (the node of `h~(x)`; the first name that the pattern binds is `p`)
+//   second_name:     q.h_0 (`p` is `_`: the first name that the pattern binds is `q`)
+//   with_inner:      p.h_0, p.prev_0 (the order of the text: `h~` then `prev~`; the kinds count apart)
+//   tuple_literal:   p.prev_0 (the value is no call of an instance, so the node is inside it)
+//   no_names:        _0.f_0, _1.f_0, _2.h_0 (the numbers go over the `let`s that bind no name, in the order of the text; `let Pair { l: _, r: _ }` too)
+//   tuple_no_names:  _0.prev_0 (the numbers of `_<number>` count in each flow from 0: this `_0` is not the `_0` of `no_names`)
+//   named_after:     _0.f_0, n (the `let n` keeps its own node `n`, and it does not use up a number of `_<number>`)
+
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+pub flow f(x: F32 at sample) -> F32 at sample {
+  prev~(x)
+}
+
+pub flow h(x: F32 at sample) -> Pair at sample {
+  Pair { l: prev~(x), r: x }
+}
+
+pub flow struct_pattern(x: F32 at sample) -> F32 at sample {
+  let Pair { l: p, r: q } = h~(x)
+  p + q
+}
+
+pub flow second_name(x: F32 at sample) -> F32 at sample {
+  let Pair { l: _, r: q } = h~(x)
+  q
+}
+
+pub flow with_inner(x: F32 at sample) -> F32 at sample {
+  let Pair { l: p, r: q } = h~(prev~(x))
+  p + q
+}
+
+pub flow tuple_literal(x: F32 at sample) -> F32 at sample {
+  let (p, q) = (prev~(x), x)
+  p + q
+}
+
+pub flow no_names(x: F32 at sample) -> F32 at sample {
+  let _ = f~(x)
+  let _ = f~(x * 2.0)
+  let Pair { l: _, r: _ } = h~(x)
+  x
+}
+
+pub flow tuple_no_names(x: F32 at sample) -> F32 at sample {
+  let (_, _) = (prev~(x), x)
+  x
+}
+
+pub flow named_after(x: F32 at sample) -> F32 at sample {
+  let _ = f~(x)
+  let n = f~(x * 2.0)
+  n
+}

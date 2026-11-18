@@ -20,7 +20,7 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
         let state = f.scopes.last().ok_or_else(|| internal(span, "node outside a state scope"))?.state.clone();
         (f.phase, f.info, id, state)
     };
-    let (name, at) = (&info.node(id).name, |p| FieldOf::Node(id, p));
+    let (name, at) = (&info.node(id).path, |p| FieldOf::Node(id, p));
     let not_here = |what: &str| internal(span, format!("`{what}` evaluated outside `tick`"));
     let mut stmts = Vec::new();
     let value = match &info.node(id).kind {
@@ -106,7 +106,7 @@ fn vdelay_read(
     span: Span,
 ) -> R<Expr> {
     let info = cx.flow.as_ref().expect("flow context").info;
-    let name = &info.node(id).name;
+    let name = &info.node(id).path;
     let t = lw.core_ty(ty, &[], span)?;
     let Ty::Float(kind) = t else { return Err(internal(span, "vdelay on a non-float")) };
     let len = max + 1;

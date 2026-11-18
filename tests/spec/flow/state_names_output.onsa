@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§12.4"]
+// golden = ["interface"]
+// golden_graph = ["out_nested"]
+
+// W7-03 U1c/t, S-86, S-1138 (§11.6): a node in the expression of the output has no `let` to belong to, so it is called by `_out`, then `.`, its kind and its number
+// (`_out.lp_0`), also when the whole output is the call. The numbers of the output count by themselves (the `let`s do not change them) and the outer call of
+// a nested pair comes first. The fields of the output follow the fields of the `let`s (§12.4). The state of each flow:
+//
+//   out_whole:   _out.lp_0
+//   out_nested:  _out.lp_0 (the outer one), _out.lp_1 (the graph of `out_nested` has the edges x -> _out.lp_1 -> _out.lp_0)
+//   out_mixed:   a, _out.prev_0, _out.lp_0
+//   out_lets:    a.prev_0, a.prev_1, _out.prev_0
+//   out_only_lets_nodes: b.prev_0 (the output has no call, so no `_out` field)
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  let y = 0.5 * x + 0.5 * prev~(^y)
+  y
+}
+
+pub flow out_whole(x: F32 at sample) -> F32 at sample {
+  lp~(x)
+}
+
+pub flow out_nested(x: F32 at sample) -> F32 at sample {
+  lp~(lp~(x))
+}
+
+pub flow out_mixed(x: F32 at sample) -> F32 at sample {
+  let a = prev~(x)
+  a + prev~(x) + lp~(x)
+}
+
+pub flow out_lets(x: F32 at sample) -> F32 at sample {
+  let a = prev~(x) + prev~(x * 2.0)
+  a + prev~(a)
+}
+
+pub flow out_only_lets_nodes(x: F32 at sample) -> F32 at sample {
+  let b = prev~(x) + 1.0
+  b * 2.0
+}

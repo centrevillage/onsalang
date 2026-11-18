@@ -1,0 +1,12 @@
+digraph "whole_value" {
+  rankdir=LR
+  node [shape=box fontname="monospace"]
+  "x" [label="x: F32 at sample" shape=ellipse color="black" fontcolor="black"]
+  "saws" [label="saws = par~ 0..<2: [F32; 2] at sample" color="black" fontcolor="black"]
+  "_out" [label="out: F32 at sample" shape=doubleoctagon color="black" fontcolor="black"]
+  "saws.lp_0" [label="lp_0 = lp~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  "saws.lp_0" -> "saws"
+  "x" -> "saws.lp_0"
+  "saws" -> "saws.lp_0"
+  "saws" -> "_out"
+}

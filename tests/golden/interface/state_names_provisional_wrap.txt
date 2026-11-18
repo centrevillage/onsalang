@@ -1,0 +1,71 @@
+package state_names_provisional_wrap
+
+module state_names_provisional_wrap
+
+pub flow wrapped_in_parentheses(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct wrapped_in_parentheses.State  // Affine; size 8, bulk 0, align 4
+    a: 4 bytes, align 4, fast  // offset 0
+    _poisoned: 1 bytes, align 1, fast  // offset 4
+    _initialized: 1 bytes, align 1, fast  // offset 5
+  pub struct wrapped_in_parentheses.Rendered  // Affine
+    out: Buf[F32]
+  pub const wrapped_in_parentheses.SIZE: U32 = 8
+  pub const wrapped_in_parentheses.BULK_SIZE: U32 = 0
+  pub fn wrapped_in_parentheses.init(sample_rate: F32) -> wrapped_in_parentheses.State
+  pub rt fn wrapped_in_parentheses.reset(inout s: wrapped_in_parentheses.State)
+  pub rt fn wrapped_in_parentheses.process(inout s: wrapped_in_parentheses.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn wrapped_in_parentheses.process_inplace(inout s: wrapped_in_parentheses.State, inout output: Span[F32])
+  pub fn wrapped_in_parentheses.render(input: Span[F32], sample_rate: F32) -> wrapped_in_parentheses.Rendered uses {Alloc}
+
+pub flow wrapped_twice(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct wrapped_twice.State  // Affine; size 8, bulk 0, align 4
+    c: 4 bytes, align 4, fast  // offset 0
+    _poisoned: 1 bytes, align 1, fast  // offset 4
+    _initialized: 1 bytes, align 1, fast  // offset 5
+  pub struct wrapped_twice.Rendered  // Affine
+    out: Buf[F32]
+  pub const wrapped_twice.SIZE: U32 = 8
+  pub const wrapped_twice.BULK_SIZE: U32 = 0
+  pub fn wrapped_twice.init(sample_rate: F32) -> wrapped_twice.State
+  pub rt fn wrapped_twice.reset(inout s: wrapped_twice.State)
+  pub rt fn wrapped_twice.process(inout s: wrapped_twice.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn wrapped_twice.process_inplace(inout s: wrapped_twice.State, inout output: Span[F32])
+  pub fn wrapped_twice.render(input: Span[F32], sample_rate: F32) -> wrapped_twice.Rendered uses {Alloc}
+
+pub flow wrapped_in_at(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct wrapped_in_at.State  // Affine; size 8, bulk 0, align 4
+    b.prev_0: 4 bytes, align 4, fast  // offset 0
+    _poisoned: 1 bytes, align 1, fast  // offset 4
+    _initialized: 1 bytes, align 1, fast  // offset 5
+  pub struct wrapped_in_at.Rendered  // Affine
+    out: Buf[F32]
+  pub const wrapped_in_at.SIZE: U32 = 8
+  pub const wrapped_in_at.BULK_SIZE: U32 = 0
+  pub fn wrapped_in_at.init(sample_rate: F32) -> wrapped_in_at.State
+  pub rt fn wrapped_in_at.reset(inout s: wrapped_in_at.State)
+  pub rt fn wrapped_in_at.process(inout s: wrapped_in_at.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn wrapped_in_at.process_inplace(inout s: wrapped_in_at.State, inout output: Span[F32])
+  pub fn wrapped_in_at.render(input: Span[F32], sample_rate: F32) -> wrapped_in_at.Rendered uses {Alloc}
+
+pub flow not_wrapped(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct not_wrapped.State  // Affine; size 8, bulk 0, align 4
+    d: 4 bytes, align 4, fast  // offset 0
+    _poisoned: 1 bytes, align 1, fast  // offset 4
+    _initialized: 1 bytes, align 1, fast  // offset 5
+  pub struct not_wrapped.Rendered  // Affine
+    out: Buf[F32]
+  pub const not_wrapped.SIZE: U32 = 8
+  pub const not_wrapped.BULK_SIZE: U32 = 0
+  pub fn not_wrapped.init(sample_rate: F32) -> not_wrapped.State
+  pub rt fn not_wrapped.reset(inout s: not_wrapped.State)
+  pub rt fn not_wrapped.process(inout s: not_wrapped.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn not_wrapped.process_inplace(inout s: not_wrapped.State, inout output: Span[F32])
+  pub fn not_wrapped.render(input: Span[F32], sample_rate: F32) -> not_wrapped.Rendered uses {Alloc}

@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§11.5"]
+// golden = ["interface"]
+// golden_graph = ["second_par_is_counted"]
+
+// W7-03 U1c/t, S-1142 (OPEN, the provisional reading of the work ticket): a `par~` whose body has no state makes no field, but does it count in the number of
+// the kind `par`? §11.6 says the kinds are counted "呼び出しの名前が字面に現れる順" and does not say whether a `par~` that makes no field is a call of the kind. The
+// provisional reading, which this file keeps (the names of this file change when S-1142 is decided otherwise): every `par~` counts, a stateless one too, so the
+// second `par~` below is `a.par_1` (the other reading: `a.par_0`). The stateless one has no field. The fields of the flows:
+//   second_par_is_counted:  a.par_1 (the graph has a.par_1.prev_0)
+//   stateless_alone:        none of `par` (a `par~` with no state makes no field)
+// Spec gap S-1142: the name of the second `par~` is not in the spec text.
+
+pub rt fn pair_pick(xs: [F32; 2]) -> F32 {
+  xs[0]
+}
+
+pub flow second_par_is_counted(x: F32 at sample) -> F32 at sample {
+  let a = pair_pick(par~ i in 0 ..< 2 { x * 2.0 }) + pair_pick(par~ j in 0 ..< 2 { prev~(x) })
+  a
+}
+
+pub flow stateless_alone(x: F32 at sample) -> F32 at sample {
+  pair_pick(par~ i in 0 ..< 2 { x * 2.0 })
+}

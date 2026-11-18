@@ -1,0 +1,48 @@
+package state_names_r98
+
+module state_names_r98
+
+pub flow lp(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct lp.State  // Affine; size 8, bulk 0, align 4
+    y.prev_0: 4 bytes, align 4, fast  // offset 0
+    _poisoned: 1 bytes, align 1, fast  // offset 4
+    _initialized: 1 bytes, align 1, fast  // offset 5
+  pub struct lp.Rendered  // Affine
+    out: Buf[F32]
+  pub const lp.SIZE: U32 = 8
+  pub const lp.BULK_SIZE: U32 = 0
+  pub fn lp.init(sample_rate: F32) -> lp.State
+  pub rt fn lp.reset(inout s: lp.State)
+  pub rt fn lp.process(inout s: lp.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn lp.process_inplace(inout s: lp.State, inout output: Span[F32])
+  pub fn lp.render(input: Span[F32], sample_rate: F32) -> lp.Rendered uses {Alloc}
+
+pub rt fn pair_pick(xs: [F32; 2]) -> F32
+
+pub flow top(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct top.State  // Affine; size 100, bulk 0, align 4
+    a.prev_0: 4 bytes, align 4, fast  // offset 0
+    a.lp_0: 8 bytes, align 4, fast  // offset 4
+    a.prev_1: 4 bytes, align 4, fast  // offset 12
+    b: 8 bytes, align 4, fast  // offset 16
+    b.prev_0: 4 bytes, align 4, fast  // offset 24
+    c: 4 bytes, align 4, fast  // offset 28
+    c.lp_0: 8 bytes, align 4, fast  // offset 32
+    vs: 40 bytes, align 4, fast  // offset 40
+    _out.lp_0: 8 bytes, align 4, fast  // offset 80
+    _out.lp_1: 8 bytes, align 4, fast  // offset 88
+    _poisoned: 1 bytes, align 1, fast  // offset 96
+    _initialized: 1 bytes, align 1, fast  // offset 97
+  pub struct top.Rendered  // Affine
+    out: Buf[F32]
+  pub const top.SIZE: U32 = 100
+  pub const top.BULK_SIZE: U32 = 0
+  pub fn top.init(sample_rate: F32) -> top.State
+  pub rt fn top.reset(inout s: top.State)
+  pub rt fn top.process(inout s: top.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn top.process_inplace(inout s: top.State, inout output: Span[F32])
+  pub fn top.render(input: Span[F32], sample_rate: F32) -> top.Rendered uses {Alloc}

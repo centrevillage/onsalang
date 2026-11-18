@@ -3,7 +3,7 @@
 
 use std::fmt::Write as _;
 
-use onsa_core::{FnId, Mode, ParamKey, ParamKind, ParamNumber, Ty};
+use onsa_core::{FixedField, FnId, Mode, ParamKey, ParamKind, ParamNumber, Ty};
 
 use crate::emit::{Cx, Export, R, f32_lit};
 use crate::names::ident;
@@ -70,7 +70,7 @@ pub(crate) fn header(cx: &mut Cx, e: &Export) -> R<(String, FlowParts)> {
     );
     let _ = writeln!(h, "int  {sym}_init({sym}* s, void* bulk, {}float sample_rate);", cfg.decls);
     let _ =
-        writeln!(h, "void {sym}_reset({sym}* s);   /* clears `poisoned`; no effect on an uninitialized instance */");
+        writeln!(h, "void {sym}_reset({sym}* s);   /* clears `_poisoned`; no effect on an uninitialized instance */");
     if fns.params_default.is_some() {
         let _ = writeln!(h, "void {sym}_params_default({sym}_params* p);");
     }
@@ -365,15 +365,15 @@ pub(crate) fn wrappers(cx: &mut Cx, e: &Export) -> R<String> {
     let poisoned = cx
         .fields(fns.state)
         .iter()
-        .find(|(n, _)| n == "poisoned")
+        .find(|(n, _)| n == FixedField::Poisoned.name())
         .map(|(n, _)| ident(n))
-        .ok_or_else(|| crate::emit::internal("flow state without `poisoned`"))?;
+        .ok_or_else(|| crate::emit::internal("flow state without its poisoned field"))?;
     let initialized = cx
         .fields(fns.state)
         .iter()
-        .find(|(n, _)| n == "initialized")
+        .find(|(n, _)| n == FixedField::Initialized.name())
         .map(|(n, _)| ident(n))
-        .ok_or_else(|| crate::emit::internal("flow state without `initialized`"))?;
+        .ok_or_else(|| crate::emit::internal("flow state without its initialized field"))?;
     let mut s = String::new();
     let _ = writeln!(s, "/* ---- export: {} ---- */", meta.name);
 
@@ -397,7 +397,7 @@ pub(crate) fn wrappers(cx: &mut Cx, e: &Export) -> R<String> {
         let _ = writeln!(s, "  jmp_buf onsa_jb;");
         let _ = writeln!(s, "  jmp_buf* volatile onsa_prev = onsa_current_jmp;");
         // S-27: a panic inside `init` leaves the instance uninitialized: the whole
-        // state (and the bulk region) is zeroed, `initialized` stays false, 1 is returned.
+        // state (and the bulk region) is zeroed, `_initialized` stays false, 1 is returned.
         let _ = writeln!(s, "  if (setjmp(onsa_jb)) {{");
         let _ = writeln!(s, "    onsa_current_jmp = onsa_prev;");
         if has_bulk {

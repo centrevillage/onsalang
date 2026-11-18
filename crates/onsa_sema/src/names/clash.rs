@@ -52,8 +52,9 @@ pub(crate) fn unbindable(name: &str) -> Option<Unbindable> {
 /// declaration, of what it would hide: the binding visible where it is
 /// declared (`visible`, its name: a local, or a binding of the heading),
 /// a name of the body of the module (an item, a `use`, the prelude and the
-/// builtin types; S-79, R-103), and, for an input, a `let` or the index
-/// of a `par` of a flow (`flow`), a builtin name of a flow (S-542). The order decides the
+/// builtin types; S-79, R-103), and, for an input, a `let`, the index
+/// of a `par` or a binding of a `match` arm of a flow (`flow`), a builtin
+/// name of a flow (S-542). The order decides the
 /// wording alone: a program with no error sees no name twice.
 pub(crate) fn hides(a: &Analysis, m: ModId, name: &Ident, visible: Option<Span>, flow: bool) -> Option<Diagnostic> {
     let n = &name.name;

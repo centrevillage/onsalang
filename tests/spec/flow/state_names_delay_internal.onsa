@@ -1,0 +1,42 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§12.4"]
+// golden = ["interface"]
+
+// W7-03 U1c/t, S-148 (§11.6, §12.4): the internal fields of a node. `delay~` and `vdelay~` keep their line and their write position in
+// `<name>.buf` and `<name>.w`, and an `init` argument that is not a constant (an input of `init`) is kept in `<name>.init`; `<name>` is the name of the node
+// (the name of the `let`, or `a.delay_0` for a node inside a value, or `_out.delay_0` in the output). `onsa interface` shows them as the parts of the
+// field of the node (§11.6; how the node itself is shown with its parts is a display detail that the golden file keeps). The names
+// that the state of each flow has:
+//
+//   whole:         d (the input of `block` that `sample` reads, §12.4), line.buf, line.w, v.buf, v.w
+//   inside:        d, a.delay_0.buf, a.delay_0.w, a.vdelay_0.buf, a.vdelay_0.w
+//   init_field:    p, p.init, q.buf, q.w, q.init (the input `i0` is not constant, so each node that has it as `init` keeps it in `<name>.init`)
+//   constant_init: r (the constant `0.5` is in the node itself: no `r.init`)
+//   output:        _out.delay_0.buf, _out.delay_0.w
+
+pub flow whole(x: F32 at sample, d: F32 at block) -> F32 at sample {
+  let line = delay~(x, 4)
+  let v = vdelay~(x, d, 8)
+  line + v
+}
+
+pub flow inside(x: F32 at sample, d: F32 at block) -> F32 at sample {
+  let a = delay~(x, 2) + vdelay~(x, d, 6)
+  a
+}
+
+pub flow init_field(x: F32 at sample, i0: F32 at init) -> F32 at sample {
+  let p = prev~(x, i0)
+  let q = delay~(x, 3, i0)
+  p + q
+}
+
+pub flow constant_init(x: F32 at sample) -> F32 at sample {
+  let r = prev~(x, 0.5)
+  r
+}
+
+pub flow output(x: F32 at sample) -> F32 at sample {
+  delay~(x, 5)
+}

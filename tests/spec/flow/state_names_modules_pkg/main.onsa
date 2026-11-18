@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§15.1"]
+// golden = ["interface"]
+
+// W7-03 U1c/t, S-148 (§11.6): the kind of a node that is an instance of a flow is the name of the flow without its qualification: the node of `util.lp~(x)` is
+// `a.lp_0` (not `a.util.lp_0`), and the node of `lp~(x)` that `use util.lp` took in is the same kind `lp`, so the two calls in one `let`
+// are `a.lp_0` and `a.lp_1`. The fields of each flow:
+//
+//   qualified_call:  a.lp_0
+//   imported_call:   a.lp_0
+//   both_calls:      a.lp_0, a.lp_1 (the order of the text: the qualified call first)
+//   whole_value:     c (the call that is the whole value takes the name of the `let`)
+
+use util
+use util.lp
+
+pub flow qualified_call(x: F32 at sample) -> F32 at sample {
+  let a = 1.0 + util.lp~(x)
+  a
+}
+
+pub flow imported_call(x: F32 at sample) -> F32 at sample {
+  let a = 1.0 + lp~(x)
+  a
+}
+
+pub flow both_calls(x: F32 at sample) -> F32 at sample {
+  let a = util.lp~(x) + lp~(x * 2.0)
+  a
+}
+
+pub flow whole_value(x: F32 at sample) -> F32 at sample {
+  let c = util.lp~(x)
+  c
+}

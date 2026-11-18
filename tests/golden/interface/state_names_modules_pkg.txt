@@ -1,0 +1,91 @@
+package state_names_modules_pkg
+
+module main
+
+pub flow qualified_call(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct qualified_call.State  // Affine; size 12, bulk 0, align 4
+    a.lp_0: 8 bytes, align 4, fast  // offset 0
+    _poisoned: 1 bytes, align 1, fast  // offset 8
+    _initialized: 1 bytes, align 1, fast  // offset 9
+  pub struct qualified_call.Rendered  // Affine
+    out: Buf[F32]
+  pub const qualified_call.SIZE: U32 = 12
+  pub const qualified_call.BULK_SIZE: U32 = 0
+  pub fn qualified_call.init(sample_rate: F32) -> qualified_call.State
+  pub rt fn qualified_call.reset(inout s: qualified_call.State)
+  pub rt fn qualified_call.process(inout s: qualified_call.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn qualified_call.process_inplace(inout s: qualified_call.State, inout output: Span[F32])
+  pub fn qualified_call.render(input: Span[F32], sample_rate: F32) -> qualified_call.Rendered uses {Alloc}
+
+pub flow imported_call(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct imported_call.State  // Affine; size 12, bulk 0, align 4
+    a.lp_0: 8 bytes, align 4, fast  // offset 0
+    _poisoned: 1 bytes, align 1, fast  // offset 8
+    _initialized: 1 bytes, align 1, fast  // offset 9
+  pub struct imported_call.Rendered  // Affine
+    out: Buf[F32]
+  pub const imported_call.SIZE: U32 = 12
+  pub const imported_call.BULK_SIZE: U32 = 0
+  pub fn imported_call.init(sample_rate: F32) -> imported_call.State
+  pub rt fn imported_call.reset(inout s: imported_call.State)
+  pub rt fn imported_call.process(inout s: imported_call.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn imported_call.process_inplace(inout s: imported_call.State, inout output: Span[F32])
+  pub fn imported_call.render(input: Span[F32], sample_rate: F32) -> imported_call.Rendered uses {Alloc}
+
+pub flow both_calls(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct both_calls.State  // Affine; size 20, bulk 0, align 4
+    a.lp_0: 8 bytes, align 4, fast  // offset 0
+    a.lp_1: 8 bytes, align 4, fast  // offset 8
+    _poisoned: 1 bytes, align 1, fast  // offset 16
+    _initialized: 1 bytes, align 1, fast  // offset 17
+  pub struct both_calls.Rendered  // Affine
+    out: Buf[F32]
+  pub const both_calls.SIZE: U32 = 20
+  pub const both_calls.BULK_SIZE: U32 = 0
+  pub fn both_calls.init(sample_rate: F32) -> both_calls.State
+  pub rt fn both_calls.reset(inout s: both_calls.State)
+  pub rt fn both_calls.process(inout s: both_calls.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn both_calls.process_inplace(inout s: both_calls.State, inout output: Span[F32])
+  pub fn both_calls.render(input: Span[F32], sample_rate: F32) -> both_calls.Rendered uses {Alloc}
+
+pub flow whole_value(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct whole_value.State  // Affine; size 12, bulk 0, align 4
+    c: 8 bytes, align 4, fast  // offset 0
+    _poisoned: 1 bytes, align 1, fast  // offset 8
+    _initialized: 1 bytes, align 1, fast  // offset 9
+  pub struct whole_value.Rendered  // Affine
+    out: Buf[F32]
+  pub const whole_value.SIZE: U32 = 12
+  pub const whole_value.BULK_SIZE: U32 = 0
+  pub fn whole_value.init(sample_rate: F32) -> whole_value.State
+  pub rt fn whole_value.reset(inout s: whole_value.State)
+  pub rt fn whole_value.process(inout s: whole_value.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn whole_value.process_inplace(inout s: whole_value.State, inout output: Span[F32])
+  pub fn whole_value.render(input: Span[F32], sample_rate: F32) -> whole_value.Rendered uses {Alloc}
+
+module util
+
+pub flow lp(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct lp.State  // Affine; size 8, bulk 0, align 4
+    y.prev_0: 4 bytes, align 4, fast  // offset 0
+    _poisoned: 1 bytes, align 1, fast  // offset 4
+    _initialized: 1 bytes, align 1, fast  // offset 5
+  pub struct lp.Rendered  // Affine
+    out: Buf[F32]
+  pub const lp.SIZE: U32 = 8
+  pub const lp.BULK_SIZE: U32 = 0
+  pub fn lp.init(sample_rate: F32) -> lp.State
+  pub rt fn lp.reset(inout s: lp.State)
+  pub rt fn lp.process(inout s: lp.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn lp.process_inplace(inout s: lp.State, inout output: Span[F32])
+  pub fn lp.render(input: Span[F32], sample_rate: F32) -> lp.Rendered uses {Alloc}

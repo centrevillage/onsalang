@@ -19,7 +19,7 @@ typedef struct echo_echo_params { float time; float feedback; } echo_echo_params
 /* 0: ok, 1: `init` panicked (panic = "poison" only): the state is left uninitialized — `process` returns 1
  * and `reset` does nothing until `init` succeeds (spec §14.2, S-27). */
 int  echo_echo_init(echo_echo* s, void* bulk, float sample_rate);
-void echo_echo_reset(echo_echo* s);   /* clears `poisoned`; no effect on an uninitialized instance */
+void echo_echo_reset(echo_echo* s);   /* clears `_poisoned`; no effect on an uninitialized instance */
 void echo_echo_params_default(echo_echo_params* p);
 /* 0: ok, 1: poisoned or uninitialized, 2: overlapping buffers that are not an in-place pair (an in-place pair
  * is an input and an output of the same element type at the same pointer). On 1 and 2 all outputs are zero. */

@@ -59,7 +59,7 @@ fn init_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, ids: &[NodeI
     let info = plan(cx);
     for &id in ids {
         let n = info.node(id);
-        let (span, name, at) = (cx.ast.expr(n.expr).span, &n.name, |p| FieldOf::Node(id, p));
+        let (span, name, at) = (cx.ast.expr(n.expr).span, &n.path, |p| FieldOf::Node(id, p));
         match &n.kind {
             PlanKind::Prev { init, ty, .. } => {
                 let t = lw.core_ty(*ty, &[], span)?;

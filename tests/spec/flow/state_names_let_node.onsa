@@ -1,0 +1,47 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§12.4"]
+// golden = ["interface"]
+
+// W7-03 U1c/t, S-148, S-86, R-98 (§11.6): the name of a node of a state. When the pattern of a `let` is one name and the value is the call of an
+// instance, of a built-in delay or of a `par~` itself, the node is called by the name of the `let` (`let c = prev~(b)` is the node `c`).
+// A node that has no name of its own (a call inside a larger value) is called by the name of the `let` that holds it, then `.`, then its kind and number
+// (`d.prev_0`). The state of each flow, in the order of §12.4 (for each `let` its own node, then the nodes inside its value in the order of the text;
+// the fixed fields `_poisoned` and `_initialized` last), is:
+//
+//   lp:              y.prev_0
+//   node_is_the_let: b, c, src (type lp.State)
+//   node_and_inner:  a, a.lp_0
+//   value_not_call:  d.prev_0, e.lp_0
+//   typed_let:       t
+//
+// Each flow has these fields and `_poisoned` and `_initialized` and no other. The names are for the display (`onsa interface`, the generated code,
+// the graph), not the key of the hot reload (§18.3). What the names of the parenthesis and of `at` are is S-1143 (state_names_provisional_wrap.onsa).
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  let y = 0.5 * x + 0.5 * prev~(^y)
+  y
+}
+
+pub flow node_is_the_let(x: F32 at sample) -> F32 at sample {
+  let b = prev~(x)
+  let c = prev~(b)
+  let src = lp~(c)
+  src
+}
+
+pub flow node_and_inner(x: F32 at sample) -> F32 at sample {
+  let a = prev~(lp~(x))
+  a
+}
+
+pub flow value_not_call(x: F32 at sample) -> F32 at sample {
+  let d = prev~(x) + 1.0
+  let e = 2.0 * lp~(x)
+  d + e
+}
+
+pub flow typed_let(x: F32 at sample) -> F32 at sample {
+  let t: F32 = prev~(x)
+  t
+}

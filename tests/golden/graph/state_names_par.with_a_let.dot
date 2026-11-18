@@ -1,0 +1,17 @@
+digraph "with_a_let" {
+  rankdir=LR
+  node [shape=box fontname="monospace"]
+  "x" [label="x: F32 at sample" shape=ellipse color="black" fontcolor="black"]
+  "ps" [label="ps = par~ 0..<2: [F32; 2] at sample" color="black" fontcolor="black"]
+  "q" [label="q: F32 at sample" color="black" fontcolor="black"]
+  "_out" [label="out: F32 at sample" shape=doubleoctagon color="black" fontcolor="black"]
+  "ps.prev_0" [label="prev_0 = prev~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  "q.prev_0" [label="prev_0 = prev~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  "ps.prev_0" -> "ps"
+  "x" -> "ps.prev_0" [style=dashed]
+  "ps" -> "ps.prev_0" [style=dashed]
+  "q.prev_0" -> "q"
+  "x" -> "q.prev_0" [style=dashed]
+  "ps" -> "_out"
+  "q" -> "_out"
+}

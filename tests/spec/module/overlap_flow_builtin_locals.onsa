@@ -7,8 +7,8 @@
 // names of a flow, and they are visible in the whole body of a flow, so the input of a flow, a `let`
 // of the body and the index of a `par` cannot have one of them as its name: E0304, with no candidate. Each flow is a unit with
 // one error (§18.1) and is otherwise correct. A name of a built-in flow that is a field or a method
-// (`prev` as a method) is free; the generated names (`prev_0`) and the patterns of the body are W7-03.
-// The E0304 is in W4-04 U7a (tests/pending.toml).
+// (`prev` as a method) is free. The names that the processor makes for a state (`prev_0`) are not reserved
+// (§11.6, S-1138: flow/state_names_free_run.onsa), and the patterns of a `match` in the body (`Some(prev)`) are E0304 too (negative/flow_match_arm_builtin_names.onsa, S-542).
 
 pub flow input_prev(prev: F32 at sample) -> F32 at sample {           //~ E0304
   prev

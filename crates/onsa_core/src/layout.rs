@@ -161,7 +161,7 @@ pub fn flow_layout_for(m: &Module, state: TypeId, bulk_threshold: Option<u32>, p
     let mut fast: Vec<(String, Ty)> = Vec::new();
     if !bulk.is_empty() {
         // The bulk pointer: modelled as a pointer-sized, pointer-aligned slot.
-        fast.push(("bulk".into(), Ty::Buf(Box::new(Ty::Int(IntKind::U8)))));
+        fast.push((onsa_sema::flow_names::FixedField::Bulk.name().into(), Ty::Buf(Box::new(Ty::Int(IntKind::U8)))));
     }
     fast.extend(fields.iter().filter(|(_, t)| !is_bulk(t)).cloned());
     let f = record_for(m, &fast, ptr);

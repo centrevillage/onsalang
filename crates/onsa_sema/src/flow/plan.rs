@@ -10,6 +10,7 @@ use super::nodes::Recorded;
 use super::*;
 
 mod fields;
+pub(super) mod names;
 
 pub use fields::{Field, FieldOf, Part};
 
@@ -92,10 +93,18 @@ pub struct PlanNode {
     pub clock: Clock,
     /// The arguments and the clocks they are read at (none of a `par~`).
     pub args: Vec<ArgRead>,
-    /// The S-06 name: the `let` name when the node is the whole initializer,
-    /// otherwise `<kind>_<n>`, numbered per kind over the whole body in the
-    /// order the walk finishes the nodes.
+    /// The name in the part of the body that holds it (§11.6): the name of
+    /// the `let` of a single name whose whole value it is, else `<kind>_<n>`
+    /// (`prev_0`), numbered per kind in that part in the order of the text.
     pub name: String,
+    /// The name shown (§11.6, spec/tools.md §1.1): the name after the
+    /// scope of that part (`a.prev_0`, `_out.lp_0`, `m.par_0.lp_0`), or the
+    /// name of the `let` whose whole value it is.
+    pub path: String,
+    /// It is the whole value of the `let` that holds it and has its name
+    /// ([`FlowInfo::whole`]).
+    pub whole: bool,
+    pub span: Span,
     /// The place of its first field in the struct that holds it
     /// ([`FlowInfo::fields_of`]); none of a `par~` with no state.
     pub field: Option<u32>,
@@ -150,6 +159,12 @@ impl FlowInfo {
         }
     }
 
+    /// The node that is the whole value of the `let` k and has its name
+    /// (S-148, §11.6): of a `let` of a single name, through parentheses.
+    pub fn whole(&self, k: u32) -> Option<NodeId> {
+        self.roots(Owner::Let(k)).iter().copied().find(|&id| self.node(id).whole)
+    }
+
     /// The nodes no `par~` holds: of each `let` in their order, then of the
     /// output.
     pub fn top(&self) -> impl Iterator<Item = NodeId> + '_ {
@@ -184,7 +199,18 @@ pub(super) fn build(info: &mut FlowInfo, recorded: Vec<Recorded>, w: &Walked) {
             }
             kind => kind,
         };
-        PlanNode { expr: r.expr, kind, owner: r.owner, clock, args, name: r.name, field: None }
+        PlanNode {
+            expr: r.expr,
+            kind,
+            owner: r.owner,
+            clock,
+            args,
+            name: r.name,
+            path: r.path,
+            whole: r.whole,
+            span: r.span,
+            field: None,
+        }
     });
     info.nodes = nodes.collect();
     info.node_of = info.nodes.iter().enumerate().map(|(i, n)| (n.expr, NodeId(i as u32))).collect();

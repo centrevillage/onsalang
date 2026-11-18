@@ -1,0 +1,38 @@
+package state_names_provisional_stateless_par
+
+module state_names_provisional_stateless_par
+
+pub rt fn pair_pick(xs: [F32; 2]) -> F32
+
+pub flow second_par_is_counted(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct second_par_is_counted.State  // Affine; size 12, bulk 0, align 4
+    a.par_1: 8 bytes, align 4, fast  // offset 0
+    _poisoned: 1 bytes, align 1, fast  // offset 8
+    _initialized: 1 bytes, align 1, fast  // offset 9
+  pub struct second_par_is_counted.Rendered  // Affine
+    out: Buf[F32]
+  pub const second_par_is_counted.SIZE: U32 = 12
+  pub const second_par_is_counted.BULK_SIZE: U32 = 0
+  pub fn second_par_is_counted.init(sample_rate: F32) -> second_par_is_counted.State
+  pub rt fn second_par_is_counted.reset(inout s: second_par_is_counted.State)
+  pub rt fn second_par_is_counted.process(inout s: second_par_is_counted.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn second_par_is_counted.process_inplace(inout s: second_par_is_counted.State, inout output: Span[F32])
+  pub fn second_par_is_counted.render(input: Span[F32], sample_rate: F32) -> second_par_is_counted.Rendered uses {Alloc}
+
+pub flow stateless_alone(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct stateless_alone.State  // Affine; size 2, bulk 0, align 1
+    _poisoned: 1 bytes, align 1, fast  // offset 0
+    _initialized: 1 bytes, align 1, fast  // offset 1
+  pub struct stateless_alone.Rendered  // Affine
+    out: Buf[F32]
+  pub const stateless_alone.SIZE: U32 = 2
+  pub const stateless_alone.BULK_SIZE: U32 = 0
+  pub fn stateless_alone.init(sample_rate: F32) -> stateless_alone.State
+  pub rt fn stateless_alone.reset(inout s: stateless_alone.State)
+  pub rt fn stateless_alone.process(inout s: stateless_alone.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn stateless_alone.process_inplace(inout s: stateless_alone.State, inout output: Span[F32])
+  pub fn stateless_alone.render(input: Span[F32], sample_rate: F32) -> stateless_alone.Rendered uses {Alloc}

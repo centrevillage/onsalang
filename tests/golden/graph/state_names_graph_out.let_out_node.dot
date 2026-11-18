@@ -1,0 +1,9 @@
+digraph "let_out_node" {
+  rankdir=LR
+  node [shape=box fontname="monospace"]
+  "x" [label="x: F32 at sample" shape=ellipse color="black" fontcolor="black"]
+  "out" [label="out = prev~: F32 at sample" color="black" fontcolor="black"]
+  "_out" [label="out: F32 at sample" shape=doubleoctagon color="black" fontcolor="black"]
+  "x" -> "out" [style=dashed]
+  "out" -> "_out"
+}

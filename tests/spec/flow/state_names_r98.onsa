@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6", "§12.4", "§18.3"]
+// golden = ["interface"]
+// golden_graph = ["top"]
+
+// W7-03 U1c/t, R-98, S-86 (§11.6): the names and the order of the fields of one flow that has the forms together. It is the form of tests/review-phase1/parent/r98.onsa
+// in the syntax of the spec (that file is kept as the record of the review). The names are for the display; the hot reload and the probes are matched by the
+// structure of the plan, not by these names (§18.3), so a `prev~` added to `let a` must not change the name of a node of a later `let` of another kind
+// (in the old rule all the numbers went by the flow, in the order of the post-order, so `let a` with one more `prev~` moved every later number).
+//
+// Expected, by the rules of §11.6 (a `let` with one name takes the call that is its whole value as its node; the other nodes are qualified by the `let`; the
+// output by `_out`; the body of a `par~` by its name; the numbers count by kind inside each `let`, in the order of the text; the fields in the order of §12.4:
+// the node of each `let` and then the nodes inside its value):
+//   top.State:  a.prev_0, a.lp_0, a.prev_1, b, b.prev_0, c, c.lp_0, vs, _out.lp_0, _out.lp_1, _poisoned, _initialized
+//     (`a.prev_0` is `prev~(lp~(x), 0.0)`, `a.lp_0` the `lp~(x)` inside it, `a.prev_1` the `prev~(x, 1.0)`; `b` is the `lp~` that is the whole value;
+//      `c` is the `prev~` that is the whole value, `c.lp_0` the `lp~` inside it (a delay inside the first argument of a delay is E0200 in this version);
+//      `_out.lp_0` is the outer `lp~` of the output, `_out.lp_1` the inner one)
+//   the graph of `top` has the nodes: a.prev_0, a.lp_0, a.prev_1, b.prev_0, c.lp_0, vs.lp_0, vs.prev_0, vs.lp_1, _out.lp_0, _out.lp_1 (and the
+//   vertices of the `let`s `b`, `c`, `vs`; the label of a node without a name is the name without the qualification: `prev_0 = prev~: …`)
+//   lp.State:   y.prev_0
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  let y = 0.5 * x + 0.5 * prev~(^y)
+  y
+}
+
+pub rt fn pair_pick(xs: [F32; 2]) -> F32 {
+  xs[0]
+}
+
+pub flow top(x: F32 at sample) -> F32 at sample {
+  let a = prev~(lp~(x), 0.0) + prev~(x, 1.0)
+  let b = lp~(prev~(a, 0.0))
+  let c = prev~(lp~(b), 0.0)
+  let vs = par~ i in 0 ..< 2 {
+    lp~(prev~(x, 0.0)) + lp~(x)
+  }
+  (lp~(lp~(x)) * c) + pair_pick(vs)
+}

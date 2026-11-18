@@ -23,5 +23,6 @@ pub use layout::{FieldLayout, FlowLayout, RecordLayout, flow_layout, flow_layout
 pub use lower::flow::{FlowFns, FlowMeta};
 pub use lower::{GenericArg, LowerFailure, LowerOptions, lower, lower_with};
 pub use onsa_sema::def::{ParamInfo, ParamKey, ParamKind, ParamNumber};
+pub use onsa_sema::flow_names::FixedField;
 pub use reach::{Reach, reach};
 pub use verify::{VerifyError, verify};

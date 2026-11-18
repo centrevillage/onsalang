@@ -1,0 +1,34 @@
+// onsa.toml
+// [test]
+// spec = ["§11.6"]
+// golden = ["interface"]
+// golden_graph = ["inner_numbers", "lp_after_par"]
+
+// W7-03 U1c/t, S-1141 (OPEN, the provisional reading of the work ticket): does the number of a node inside the body of a `par~` count again from 0 for each
+// `par~` or does it go on from the count of the `let` that holds the `par~`? §11.6 says "番号は `let` ごと・種類ごとに" and "`par~` の本体は、その `par~` の名前で修飾する"
+// and does not say which. The provisional reading, which this file keeps (the names of this file change when S-1141 is decided otherwise):
+// the body of each `par~` has its own numbers from 0 (the qualification by the name of the `par~` makes the names apart).
+//   inner_numbers:           a.prev_0, a.par_0 (the `par~`), a.par_0.prev_0 (the node of its body), a.prev_1
+//                            (the other reading: a.par_0.prev_1 and a.prev_2)
+//   lp_after_par: b.prev_0, b.par_0, b.par_0.lp_0 (the body of the `par~`), b.lp_0 (the `lp~` after the `par~` in the text; the count of the kind
+//                            `lp` of the `let` does not go through the body)
+// The order of the fields is the order of the text (§12.4).
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  let y = 0.5 * x + 0.5 * prev~(^y)
+  y
+}
+
+pub rt fn pair_pick(xs: [F32; 2]) -> F32 {
+  xs[0]
+}
+
+pub flow inner_numbers(x: F32 at sample) -> F32 at sample {
+  let a = prev~(x) + pair_pick(par~ k in 0 ..< 2 { prev~(x) }) + prev~(x)
+  a
+}
+
+pub flow lp_after_par(x: F32 at sample) -> F32 at sample {
+  let b = prev~(x) + pair_pick(par~ k in 0 ..< 2 { lp~(x) }) + lp~(x)
+  b
+}

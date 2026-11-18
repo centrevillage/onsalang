@@ -1,0 +1,167 @@
+package state_names_destructure
+
+module state_names_destructure
+
+pub struct Pair  // Copy; size 8, align 4
+  l: F32  // offset 0
+  r: F32  // offset 4
+
+pub flow f(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct f.State  // Affine; size 8, bulk 0, align 4
+    _out.prev_0: 4 bytes, align 4, fast  // offset 0
+    _poisoned: 1 bytes, align 1, fast  // offset 4
+    _initialized: 1 bytes, align 1, fast  // offset 5
+  pub struct f.Rendered  // Affine
+    out: Buf[F32]
+  pub const f.SIZE: U32 = 8
+  pub const f.BULK_SIZE: U32 = 0
+  pub fn f.init(sample_rate: F32) -> f.State
+  pub rt fn f.reset(inout s: f.State)
+  pub rt fn f.process(inout s: f.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn f.process_inplace(inout s: f.State, inout output: Span[F32])
+  pub fn f.render(input: Span[F32], sample_rate: F32) -> f.Rendered uses {Alloc}
+
+pub flow h(
+  x: F32 at sample,
+) -> Pair at sample
+  pub struct h.State  // Affine; size 8, bulk 0, align 4
+    _out.prev_0: 4 bytes, align 4, fast  // offset 0
+    _poisoned: 1 bytes, align 1, fast  // offset 4
+    _initialized: 1 bytes, align 1, fast  // offset 5
+  pub struct h.Out
+    l: Span[F32]
+    r: Span[F32]
+  pub struct h.Rendered  // Affine
+    l: Buf[F32]
+    r: Buf[F32]
+  pub const h.SIZE: U32 = 8
+  pub const h.BULK_SIZE: U32 = 0
+  pub fn h.init(sample_rate: F32) -> h.State
+  pub rt fn h.reset(inout s: h.State)
+  pub rt fn h.process(inout s: h.State, input: Span[F32], inout output: h.Out)
+  pub fn h.render(input: Span[F32], sample_rate: F32) -> h.Rendered uses {Alloc}
+
+pub flow struct_pattern(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct struct_pattern.State  // Affine; size 12, bulk 0, align 4
+    p.h_0: 8 bytes, align 4, fast  // offset 0
+    _poisoned: 1 bytes, align 1, fast  // offset 8
+    _initialized: 1 bytes, align 1, fast  // offset 9
+  pub struct struct_pattern.Rendered  // Affine
+    out: Buf[F32]
+  pub const struct_pattern.SIZE: U32 = 12
+  pub const struct_pattern.BULK_SIZE: U32 = 0
+  pub fn struct_pattern.init(sample_rate: F32) -> struct_pattern.State
+  pub rt fn struct_pattern.reset(inout s: struct_pattern.State)
+  pub rt fn struct_pattern.process(inout s: struct_pattern.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn struct_pattern.process_inplace(inout s: struct_pattern.State, inout output: Span[F32])
+  pub fn struct_pattern.render(input: Span[F32], sample_rate: F32) -> struct_pattern.Rendered uses {Alloc}
+
+pub flow second_name(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct second_name.State  // Affine; size 12, bulk 0, align 4
+    q.h_0: 8 bytes, align 4, fast  // offset 0
+    _poisoned: 1 bytes, align 1, fast  // offset 8
+    _initialized: 1 bytes, align 1, fast  // offset 9
+  pub struct second_name.Rendered  // Affine
+    out: Buf[F32]
+  pub const second_name.SIZE: U32 = 12
+  pub const second_name.BULK_SIZE: U32 = 0
+  pub fn second_name.init(sample_rate: F32) -> second_name.State
+  pub rt fn second_name.reset(inout s: second_name.State)
+  pub rt fn second_name.process(inout s: second_name.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn second_name.process_inplace(inout s: second_name.State, inout output: Span[F32])
+  pub fn second_name.render(input: Span[F32], sample_rate: F32) -> second_name.Rendered uses {Alloc}
+
+pub flow with_inner(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct with_inner.State  // Affine; size 16, bulk 0, align 4
+    p.h_0: 8 bytes, align 4, fast  // offset 0
+    p.prev_0: 4 bytes, align 4, fast  // offset 8
+    _poisoned: 1 bytes, align 1, fast  // offset 12
+    _initialized: 1 bytes, align 1, fast  // offset 13
+  pub struct with_inner.Rendered  // Affine
+    out: Buf[F32]
+  pub const with_inner.SIZE: U32 = 16
+  pub const with_inner.BULK_SIZE: U32 = 0
+  pub fn with_inner.init(sample_rate: F32) -> with_inner.State
+  pub rt fn with_inner.reset(inout s: with_inner.State)
+  pub rt fn with_inner.process(inout s: with_inner.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn with_inner.process_inplace(inout s: with_inner.State, inout output: Span[F32])
+  pub fn with_inner.render(input: Span[F32], sample_rate: F32) -> with_inner.Rendered uses {Alloc}
+
+pub flow tuple_literal(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct tuple_literal.State  // Affine; size 8, bulk 0, align 4
+    p.prev_0: 4 bytes, align 4, fast  // offset 0
+    _poisoned: 1 bytes, align 1, fast  // offset 4
+    _initialized: 1 bytes, align 1, fast  // offset 5
+  pub struct tuple_literal.Rendered  // Affine
+    out: Buf[F32]
+  pub const tuple_literal.SIZE: U32 = 8
+  pub const tuple_literal.BULK_SIZE: U32 = 0
+  pub fn tuple_literal.init(sample_rate: F32) -> tuple_literal.State
+  pub rt fn tuple_literal.reset(inout s: tuple_literal.State)
+  pub rt fn tuple_literal.process(inout s: tuple_literal.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn tuple_literal.process_inplace(inout s: tuple_literal.State, inout output: Span[F32])
+  pub fn tuple_literal.render(input: Span[F32], sample_rate: F32) -> tuple_literal.Rendered uses {Alloc}
+
+pub flow no_names(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct no_names.State  // Affine; size 28, bulk 0, align 4
+    _0.f_0: 8 bytes, align 4, fast  // offset 0
+    _1.f_0: 8 bytes, align 4, fast  // offset 8
+    _2.h_0: 8 bytes, align 4, fast  // offset 16
+    _poisoned: 1 bytes, align 1, fast  // offset 24
+    _initialized: 1 bytes, align 1, fast  // offset 25
+  pub struct no_names.Rendered  // Affine
+    out: Buf[F32]
+  pub const no_names.SIZE: U32 = 28
+  pub const no_names.BULK_SIZE: U32 = 0
+  pub fn no_names.init(sample_rate: F32) -> no_names.State
+  pub rt fn no_names.reset(inout s: no_names.State)
+  pub rt fn no_names.process(inout s: no_names.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn no_names.process_inplace(inout s: no_names.State, inout output: Span[F32])
+  pub fn no_names.render(input: Span[F32], sample_rate: F32) -> no_names.Rendered uses {Alloc}
+
+pub flow tuple_no_names(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct tuple_no_names.State  // Affine; size 8, bulk 0, align 4
+    _0.prev_0: 4 bytes, align 4, fast  // offset 0
+    _poisoned: 1 bytes, align 1, fast  // offset 4
+    _initialized: 1 bytes, align 1, fast  // offset 5
+  pub struct tuple_no_names.Rendered  // Affine
+    out: Buf[F32]
+  pub const tuple_no_names.SIZE: U32 = 8
+  pub const tuple_no_names.BULK_SIZE: U32 = 0
+  pub fn tuple_no_names.init(sample_rate: F32) -> tuple_no_names.State
+  pub rt fn tuple_no_names.reset(inout s: tuple_no_names.State)
+  pub rt fn tuple_no_names.process(inout s: tuple_no_names.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn tuple_no_names.process_inplace(inout s: tuple_no_names.State, inout output: Span[F32])
+  pub fn tuple_no_names.render(input: Span[F32], sample_rate: F32) -> tuple_no_names.Rendered uses {Alloc}
+
+pub flow named_after(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct named_after.State  // Affine; size 20, bulk 0, align 4
+    _0.f_0: 8 bytes, align 4, fast  // offset 0
+    n: 8 bytes, align 4, fast  // offset 8
+    _poisoned: 1 bytes, align 1, fast  // offset 16
+    _initialized: 1 bytes, align 1, fast  // offset 17
+  pub struct named_after.Rendered  // Affine
+    out: Buf[F32]
+  pub const named_after.SIZE: U32 = 20
+  pub const named_after.BULK_SIZE: U32 = 0
+  pub fn named_after.init(sample_rate: F32) -> named_after.State
+  pub rt fn named_after.reset(inout s: named_after.State)
+  pub rt fn named_after.process(inout s: named_after.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn named_after.process_inplace(inout s: named_after.State, inout output: Span[F32])
+  pub fn named_after.render(input: Span[F32], sample_rate: F32) -> named_after.Rendered uses {Alloc}
