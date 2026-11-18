@@ -1,0 +1,36 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§11.5", "§18.1"]
+//
+// [[test.fix]]
+// at = "21:11"
+// code = "E0807"
+// candidate = 1
+// leaves = ["22:17 E0813"]
+
+// The checks of the flow stage that one flow body has are found in the order of the diagnostics, the
+// first by position (§18.1). When the error of the length of a delay (E0807 for 1, E0808 for 0) or of
+// the bounds of a `par~` (E0808) is written before an error of the clock rules (E0813, E0815), it is
+// the one reported, and the clock error is not (the candidate of E0807 leaves the clock error). One
+// error per flow, so each form is a flow of its own: the first line has the error that is reported.
+// The other order is in `flow_stage_order_clock_before_flow_check.onsa`.
+
+pub flow pass(c: F32 at block) -> F32 at sample { c }
+
+pub flow delay_one_then_block(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = delay~(x, 1)                                      //~ E0807
+  let b = prev~(p)
+  x
+}
+
+pub flow delay_zero_then_pass(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = delay~(x, 0)                                      //~ E0808
+  let b = pass~(x)
+  x
+}
+
+pub flow par_empty_then_at(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = par~ i in 2 ..< 2 { x }                           //~ E0808
+  let b = x at block
+  x
+}

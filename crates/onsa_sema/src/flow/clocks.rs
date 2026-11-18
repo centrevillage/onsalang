@@ -28,15 +28,20 @@ use super::nodes::{NodeBuilder, Recorded};
 use super::plan::Owner;
 use super::*;
 use crate::clock::{self, ClockFrame, Ratio, delay_out, loop_clock, rebase};
-use crate::names::body::BodyNames;
+use crate::flow_names::FlowBuiltin;
+use crate::names::body::{BodyNames, PathRes, named};
 
 mod checks;
 
 /// After type checking: the walk of the clocks, the state marking and the
 /// tables of the flow `id` (§11.2–§11.5). The diagnostic is the first in
-/// the order of the file of the walk and of the marking, else a call of an
-/// `inout self` method (the modes stage comes after the flow checks, §18.1);
-/// with one, the tables are partial.
+/// the order of the file of the walk, of the marking and of the error the
+/// check of the types held ([`FlowCx::held`]), else a call of an `inout
+/// self` method (the modes stage comes after the flow checks, §18.1); with
+/// one, the tables are partial. A body the check of the types did not end
+/// has the held error only when that check reported none (a type error
+/// comes first, §18.1; it stopped with no diagnostic at a name held as an
+/// error).
 pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: BodyInfo, fcx: FlowCx) {
     let _flow = onsa_diag::timing::phase(onsa_diag::timing::Phase::Flow);
     let mut info = FlowInfo {
@@ -47,6 +52,11 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
         ..Default::default()
     };
     if !body.complete {
+        if a.diagnostics.len() == fcx.diags_before
+            && let Some(d) = fcx.held
+        {
+            a.diagnostics.push(d);
+        }
         info.body = body;
         a.flows.insert(id, info);
         return;
@@ -72,7 +82,7 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
     info.lets = lets.collect();
     let m = super::reads::mark_all(ast, text, &body, &fcx, &w, &info.lets);
     (info.read_at, info.sample_rate_at) = (m.read_at, m.sample_rate_at);
-    info.complete = w.diag.is_none() && m.diag.is_none() && w.inout_call.is_none();
+    info.complete = w.diag.is_none() && m.diag.is_none() && w.inout_call.is_none() && fcx.held.is_none();
     #[cfg(test)]
     WALKED.with(|x| x.borrow_mut().push((id, w.clone(), info.complete)));
     info.clocks = std::mem::take(&mut w.info);
@@ -83,10 +93,7 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
         let recorded = std::mem::take(&mut w.recorded);
         super::plan::build(&mut info, recorded, &w);
     }
-    let mut diag = w.diag;
-    if let Some(d) = m.diag {
-        Diagnostic::keep_first(&mut diag, d);
-    }
+    let diag = Diagnostic::first_in_file([w.diag, m.diag, fcx.held].into_iter().flatten());
     let diag = diag.or(w.inout_call);
     if let Some(d) = diag {
         a.diagnostics.push(d);
@@ -487,6 +494,12 @@ impl Walk<'_> {
         if self.sample_rate.contains(&e) {
             return Some(Clock::Init);
         }
+        // The check of the types held the E0200 of `sample_tick()` (W7-09):
+        // in error, so that no later check reads a clock it has not.
+        if let Some(PathRes::FlowBuiltin(FlowBuiltin::SampleTick)) = self.names.paths.get(&named(self.ast, callee)) {
+            self.join_of(e, args.iter().map(|x| x.expr));
+            return Some(Clock::Error);
+        }
         let target = self.body.targets.get(&e);
         let receiver = crate::names::body::receiver(self.ast, callee)
             .filter(|b| self.body.expr_types.contains_key(b) && !matches!(target, Some(Target::Fn { .. })));
@@ -523,7 +536,7 @@ impl Walk<'_> {
         });
         let (clock, args) = match call.kind {
             NodeKind::Instance(d) => self.instance(e, d, call),
-            NodeKind::Delay(delay, _) => self.delay(e, delay, call),
+            NodeKind::Delay(delay, _) => self.delay(delay, call),
         };
         if let Some((k, recorded)) = slot {
             if let Err(d) = recorded {
@@ -555,15 +568,12 @@ impl Walk<'_> {
     }
 
     /// A delay (§11.4): its first argument, the `d` of `vdelay~` and its
-    /// `init`, not its length, and the element type of `vdelay~`. With the
-    /// E0813 of its first argument, it is in error (§18.1).
-    fn delay(&mut self, e: ExprId, delay: Delay, call: &NodeCall) -> (Option<Clock>, Vec<ArgRead>) {
+    /// `init`, not its length. With the E0813 of its first argument, it is in
+    /// error (§18.1).
+    fn delay(&mut self, delay: Delay, call: &NodeCall) -> (Option<Clock>, Vec<ArgRead>) {
         let (first, d, init) = call.delay_parts();
         let c = self.expr(first);
         let held = c.filter(|_| self.checking()).is_none_or(|c| self.check_first(delay, first, c));
-        if delay == Delay::Variable && self.checking() {
-            self.check_float(e);
-        }
         if let Some(d) = d {
             self.cut(d);
         }

@@ -1,0 +1,256 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§11.5", "§18.1"]
+//
+// [[test.fix]]
+// at = "106:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["107:11 E0807"]
+//
+// [[test.fix]]
+// at = "112:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["113:21 E0808"]
+//
+// [[test.fix]]
+// at = "118:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["119:25 E0808"]
+//
+// [[test.fix]]
+// at = "124:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["125:11 E0808"]
+//
+// [[test.fix]]
+// at = "130:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["131:11 E0807"]
+//
+// [[test.fix]]
+// at = "136:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["137:21 E0808"]
+//
+// [[test.fix]]
+// at = "142:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["143:25 E0808"]
+//
+// [[test.fix]]
+// at = "148:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["149:11 E0808"]
+//
+// [[test.fix]]
+// at = "226:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["227:3 E0807"]
+//
+// [[test.fix]]
+// at = "231:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["232:31 E0807"]
+//
+// [[test.fix]]
+// at = "237:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["238:61 E0808"]
+//
+// [[test.fix]]
+// at = "243:37"
+// code = "E0813"
+// candidate = 1
+// leaves = ["244:11 E0807"]
+//
+// [[test.fix]]
+// at = "255:9"
+// code = "E0813"
+// candidate = 1
+// leaves = ["255:24 E0807"]
+
+// The checks of the flow stage that one flow body has are found in the order of the diagnostics, the
+// first by position (§18.1: "the first by the order of the diagnostics: start position, ..."), so
+// an error of the clock rules (E0813 on the first argument of a delay, E0815 on a value that is too
+// fast) is reported when it is written before an error of the other flow checks: the length of a
+// delay (E0807 for 1, E0808 for 0 and for the `MAX` of `vdelay~`), the bounds of a `par~` (E0808),
+// and the two features this version does not take (E0200 for a delay inside the first argument of a
+// delay, W7-07, and for `sample_tick()`, W7-09). They are all of the flow stage, and none of them
+// hides another by the way the compiler walks the body. One error per flow, so each form is a flow
+// of its own: the first line has the error that is reported, the second the one that is not.
+//
+// The first group has the two errors on two lines of a `let`, the second the later error in other
+// places (the output expression, a `par~` body, a nested `par~`), and the last one the two on one
+// line (the clock error starts first). The forms with the error of the length first are in
+// `flow_stage_order_flow_check_first.onsa`. The candidate of E0813 leaves the later error.
+// Since W7-14 (R-495) the walk of the types holds the errors of the lengths and goes on, so they do
+// not win. The E0200 of a delay inside a delay and of `sample_tick()` go when W7-07 and W7-09
+// take the features; the error that is reported (the first one) does not change, and they are only
+// after E0815, which has no candidate (the candidate of E0813 would leave an E0200 that goes).
+
+const K: F32 = 1.0
+pub flow pass(c: F32 at block) -> F32 at sample { c }
+
+pub flow block_then_delay_one(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = prev~(p)                                          //~ E0813
+  let b = delay~(x, 1)
+  x
+}
+
+pub flow block_then_delay_zero(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = prev~(p)                                          //~ E0813
+  let b = delay~(x, 0)
+  x
+}
+
+pub flow block_then_vdelay_zero(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = prev~(p)                                          //~ E0813
+  let b = vdelay~(x, d, 0)
+  x
+}
+
+pub flow block_then_par_empty(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = prev~(p)                                          //~ E0813
+  let b = par~ i in 2 ..< 2 { x }
+  x
+}
+
+pub flow const_then_delay_one(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = prev~(K)                                          //~ E0813
+  let b = delay~(x, 1)
+  x
+}
+
+pub flow const_then_delay_zero(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = prev~(K)                                          //~ E0813
+  let b = delay~(x, 0)
+  x
+}
+
+pub flow const_then_vdelay_zero(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = prev~(K)                                          //~ E0813
+  let b = vdelay~(x, d, 0)
+  x
+}
+
+pub flow const_then_par_empty(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = prev~(K)                                          //~ E0813
+  let b = par~ i in 2 ..< 2 { x }
+  x
+}
+
+pub flow pass_then_delay_one(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = pass~(x)                                          //~ E0815
+  let b = delay~(x, 1)
+  x
+}
+
+pub flow pass_then_delay_zero(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = pass~(x)                                          //~ E0815
+  let b = delay~(x, 0)
+  x
+}
+
+pub flow pass_then_vdelay_zero(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = pass~(x)                                          //~ E0815
+  let b = vdelay~(x, d, 0)
+  x
+}
+
+pub flow pass_then_par_empty(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = pass~(x)                                          //~ E0815
+  let b = par~ i in 2 ..< 2 { x }
+  x
+}
+
+pub flow pass_then_nested_delay(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = pass~(x)                                          //~ E0815
+  let b = prev~(prev~(x))
+  x
+}
+
+pub flow pass_then_sample_tick(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = pass~(x)                                          //~ E0815
+  let t = sample_tick()
+  x
+}
+
+pub flow at_then_delay_one(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = x at block                                        //~ E0815
+  let b = delay~(x, 1)
+  x
+}
+
+pub flow at_then_delay_zero(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = x at block                                        //~ E0815
+  let b = delay~(x, 0)
+  x
+}
+
+pub flow at_then_vdelay_zero(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = x at block                                        //~ E0815
+  let b = vdelay~(x, d, 0)
+  x
+}
+
+pub flow at_then_par_empty(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = x at block                                        //~ E0815
+  let b = par~ i in 2 ..< 2 { x }
+  x
+}
+
+pub flow at_then_nested_delay(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = x at block                                        //~ E0815
+  let b = prev~(prev~(x))
+  x
+}
+
+pub flow at_then_sample_tick(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = x at block                                        //~ E0815
+  let t = sample_tick()
+  x
+}
+
+pub flow block_then_delay_one_in_the_output(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = prev~(p)                                          //~ E0813
+  delay~(x, 1) + a
+}
+
+pub flow block_then_delay_one_in_a_par_body(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = prev~(p)                                          //~ E0813
+  let b = par~ i in 0 ..< 2 { delay~(x, 1) }
+  x
+}
+
+pub flow block_then_delay_zero_in_a_nested_par_body(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = prev~(p)                                          //~ E0813
+  let b = par~ i in 0 ..< 2 { par~ j in 0 ..< 2 { delay~(x, 0) } }
+  x
+}
+
+pub flow block_in_a_par_body_then_delay_one(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = par~ i in 0 ..< 2 { prev~(p) }                    //~ E0813
+  let b = delay~(x, 1)
+  x
+}
+
+pub flow pass_in_a_par_body_then_sample_tick(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = par~ i in 0 ..< 2 { pass~(x) }                    //~ E0815
+  let t = sample_tick()
+  x
+}
+
+pub flow block_then_delay_one_in_one_line(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  prev~(p) + delay~(x, 1)                                   //~ E0813
+}

@@ -1,0 +1,138 @@
+// onsa.toml
+// [test]
+// spec = ["§4.7", "§7", "§11.4", "§11.5", "§18.1"]
+
+// The checks of a unit come in the order syntax, names, types, the flow check, the modes and moves,
+// then `rt` and effects, and a unit with an error in a stage does not get the later ones; between the
+// stages that depend on each other the error of the earlier stage is reported, whatever the positions
+// (§18.1). The length of a delay (E0807 for 1, E0808 for 0 and for the `MAX` of `vdelay~`) and the
+// bounds of a `par~` (E0808, empty or reversed) are checks of the flow stage (§11.4, §11.5), so a
+// type error that is written after them, in the same flow, is the error reported: the flow check is
+// made on a body that has its types (§4.7). The type errors are the mismatch of a type (E0401), the
+// number of the arguments of a call and of an instance (E0412), a `let` pattern of a wrong shape
+// (E0401, E0502).
+//
+// One error per flow, so each form is a flow of its own: the first line has the error of the flow
+// stage, which is not reported, the second the type error, which is. Since W7-14 (R-329)
+// the walk of the types holds the error of the length and goes on to the type error.
+// The flow stage errors alone are in `tests/spec/negative/flow_delay_one.onsa`,
+// `tests/spec/negative/flow_const_neg.onsa` and `tests/spec/flow_semantics/rules_negative.onsa`; the
+// other order (the type error first) and the type errors after the other flow checks are in
+// `flow_stage_order_type_first.onsa` and `flow_stage_order_type_shape_errors.onsa`.
+
+pub fn id1(a: F32) -> F32 { a }
+pub flow lp(y: F32 at sample) -> F32 at sample { y }
+
+
+pub flow delay_one_then_type_error(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, 1)
+  let b: Bool = 1.0                                              //~ E0401
+  x
+}
+
+pub flow delay_one_with_init_then_type_error(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, 1, 0.5)
+  let b: Bool = 1.0                                              //~ E0401
+  x
+}
+
+pub flow delay_zero_then_type_error(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, 0)
+  let b: Bool = 1.0                                              //~ E0401
+  x
+}
+
+pub flow vdelay_zero_then_type_error(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  let a = vdelay~(x, d, 0)
+  let b: Bool = 1.0                                              //~ E0401
+  x
+}
+
+pub flow par_empty_then_type_error(x: F32 at sample) -> F32 at sample {
+  let a = par~ i in 2 ..< 2 { x }
+  let b: Bool = 1.0                                              //~ E0401
+  x
+}
+
+pub flow par_reversed_then_type_error(x: F32 at sample) -> F32 at sample {
+  let a = par~ i in 3 ..< 1 { x }
+  let b: Bool = 1.0                                              //~ E0401
+  x
+}
+
+pub flow delay_one_then_type_error_in_the_output(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, 1)
+  x + true                                                       //~ E0401
+}
+
+pub flow delay_one_then_wrong_argument_of_a_call(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, 1)
+  let b = id1(true)                                              //~ E0401
+  x
+}
+
+pub flow delay_one_then_wrong_argument_of_an_instance(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, 1)
+  let b = lp~(true)                                              //~ E0401
+  x
+}
+
+pub flow delay_one_then_argument_count(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, 1)
+  let b = id1(1.0, 2.0)                                          //~ E0412
+  x
+}
+
+pub flow delay_zero_then_instance_argument_count(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, 0)
+  let b = lp~(x, x)                                              //~ E0412
+  x
+}
+
+pub flow par_empty_in_a_nested_par_then_type_error(x: F32 at sample) -> F32 at sample {
+  let a = par~ i in 0 ..< 2 { par~ j in 1 ..< 1 { x } }
+  let b: Bool = 1.0                                              //~ E0401
+  x
+}
+
+pub flow delay_one_in_a_par_body_then_type_error(x: F32 at sample) -> F32 at sample {
+  let a = par~ i in 0 ..< 2 { delay~(x, 1) }
+  let b: Bool = 1.0                                              //~ E0401
+  x
+}
+
+pub flow delay_zero_in_a_par_body_then_type_error(x: F32 at sample) -> F32 at sample {
+  let a = par~ i in 0 ..< 2 { delay~(x, 0) }
+  let b: Bool = 1.0                                              //~ E0401
+  x
+}
+
+pub flow vdelay_zero_in_a_nested_par_body_then_type_error(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  let a = par~ i in 0 ..< 2 { par~ j in 0 ..< 2 { vdelay~(x, d, 0) } }
+  let b: Bool = 1.0                                              //~ E0401
+  x
+}
+
+pub flow delay_one_then_tuple_of_a_scalar(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, 1)
+  let (u, v) = x                                                 //~ E0401
+  x
+}
+
+pub flow delay_zero_then_refutable_let(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, 0)
+  let Some(v) = Some(x)                                          //~ E0502
+  x
+}
+
+pub flow delay_one_then_delay_with_four_arguments(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, 1)
+  let b = delay~(x, 4, 0.0, 1.0)                                 //~ E0412
+  x
+}
+
+pub flow par_empty_then_sample_rate_with_an_argument(x: F32 at sample) -> F32 at sample {
+  let a = par~ i in 2 ..< 2 { x }
+  let r = sample_rate(1.0)                                       //~ E0412
+  x
+}

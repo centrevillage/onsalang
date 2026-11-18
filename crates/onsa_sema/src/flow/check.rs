@@ -6,8 +6,11 @@
 //! are its E0200 (`onsa_diag/src/unsupported.rs`, the works named on each).
 
 use super::*;
+use crate::def::Bound;
+use crate::deferred::DeferredKind;
 use crate::flow_names::FlowBuiltin;
 use crate::names::body::{NoFlowForm, Origin, PathRes, no_flow_form};
+use crate::requirement::Required;
 use crate::resolve::{Callee, NameKind};
 use crate::ty::TyId;
 
@@ -16,9 +19,28 @@ impl<'a> Checker<'a> {
         self.flow.as_mut().expect("flow mode")
     }
 
+    /// An error of the flow stage found while the types are checked: held,
+    /// the first in the order of the file, and the check goes on
+    /// ([`FlowCx::held`]).
+    fn flow_hold(&mut self, d: Diagnostic) {
+        Diagnostic::keep_first(&mut self.fcx().held, d);
+    }
+
+    /// [`Self::flow_hold`] of the diagnostic of `code` at `span`.
+    fn flow_hold_at(&mut self, code: Code, span: Span, msg: impl Into<String>) {
+        let d = Diagnostic::new(Stage::Flow, code, span, msg).with_found(self.src(span));
+        self.flow_hold(d);
+    }
+
+    /// [`Self::flow_hold`] of the E0200 of `feature` at `span` (S-224).
+    pub(super) fn flow_hold_gate(&mut self, feature: Feature, span: Span) {
+        let d = feature.diagnostic(Stage::Flow, span, &[]).with_found(self.src(span));
+        self.flow_hold(d);
+    }
+
     /// Entry point: declare the inputs, pre-declare the `let`s, check the body.
     pub(crate) fn check_flow_body(&mut self, body: ExprId, out: TyId) {
-        self.flow = Some(FlowCx::default());
+        self.flow = Some(FlowCx { diags_before: self.a.diagnostics.len(), ..FlowCx::default() });
         self.frames.push(Frame { ret: out, loop_depth: 0 });
         let r = (|| -> R<()> {
             self.declare_flow_inputs()?;
@@ -148,6 +170,8 @@ impl<'a> Checker<'a> {
     }
 
     /// Unify a `let` pattern with the pre-declared locals (irrefutable patterns only).
+    /// Its errors (E0401, E0410, E0502) are of the types stage, as in a
+    /// function (§18.1, the stages of the table of the codes).
     fn flow_unify_pat(&mut self, pat: PatId, ty: TyId) -> R<()> {
         let ast = self.ast;
         let p = ast.pat(pat);
@@ -161,7 +185,7 @@ impl<'a> Checker<'a> {
             }
             PatKind::Tuple(elems) => {
                 let elems = elems.clone();
-                let Some(ts) = self.tuple_pattern(Stage::Flow, ty, span, elems.len())? else {
+                let Some(ts) = self.tuple_pattern(ty, span, elems.len())? else {
                     // The error type: its elements are errors too (§18.1).
                     let s = self.shallow(ty);
                     for &el in &elems {
@@ -177,7 +201,6 @@ impl<'a> Checker<'a> {
             PatKind::Struct { path, fields, rest } => {
                 let (path, fields, rest) = (path.clone(), fields.clone(), *rest);
                 self.struct_pattern(
-                    Stage::Flow,
                     span,
                     ty,
                     crate::structpat::Written { pat, path: &path, fields: &fields, rest },
@@ -186,7 +209,7 @@ impl<'a> Checker<'a> {
                 Ok(())
             }
             PatKind::Lit(_) | PatKind::Neg(_) | PatKind::Path(_) | PatKind::TupleStruct { .. } | PatKind::Or(_) => {
-                Err(self.flow_err(
+                Err(self.err(
                     Code::E0502,
                     span,
                     "this pattern can fail to match; `let` takes only tuple and struct patterns (§7)",
@@ -235,19 +258,21 @@ impl<'a> Checker<'a> {
         let lo = self.flow_const_u32(range.lo)?;
         let hi = self.flow_const_u32(range.hi)?;
         let end = range.end;
-        let (empty, count) = match end {
-            RangeEnd::Excluded => (hi <= lo, "`b - a`"),
-            RangeEnd::Included => (hi < lo, "`b - a + 1`"),
-        };
-        if empty {
-            let sym = end.symbol();
-            return Err(self.flow_err(
-                Code::E0808,
-                span,
-                format!("`par~` replicates {count} instances; the bounds `{lo}{sym}{hi}` give none (§11.5)"),
-            ));
-        }
-        if end == RangeEnd::Included {
+        // With an end in error (held), the body is checked and the `par~` is
+        // of the error type, so that no later use of it is an error (§18.1).
+        let ends = lo.zip(hi).filter(|&(lo, hi)| {
+            let (empty, count) = match end {
+                RangeEnd::Excluded => (hi <= lo, "`b - a`"),
+                RangeEnd::Included => (hi < lo, "`b - a + 1`"),
+            };
+            if empty {
+                let sym = end.symbol();
+                let msg = format!("`par~` replicates {count} instances; the bounds `{lo}{sym}{hi}` give none (§11.5)");
+                self.flow_hold_at(Code::E0808, span, msg);
+            }
+            !empty
+        });
+        if ends.is_some() && end == RangeEnd::Included {
             return Err(self.closed_range_unsupported(range, Stage::Flow, Feature::InclusiveRangePar));
         }
         let exp_elem = expected.and_then(|t| match self.ty(self.shallow(t)) {
@@ -258,11 +283,16 @@ impl<'a> Checker<'a> {
             let u32 = self.u32();
             let lid = self.local_of(Origin::Par(e))?;
             self.bind_local(lid, u32, var.span)?;
+            // The plan reads the ends, and a flow with an error has none.
+            let (lo, hi) = ends.unwrap_or_default();
             self.fcx().pars.insert(e, (lid, lo, hi));
             self.check_expr(body, exp_elem)
         })();
         let t = r?;
-        Ok(self.a.types.intern(Ty::Array(t, Len::Const(hi - lo))))
+        Ok(match ends {
+            Some((lo, hi)) => self.a.types.intern(Ty::Array(t, Len::Const(hi - lo))),
+            None => self.a.types.error(),
+        })
     }
 
     /// Calls in flow mode (§11.5): flow instances `f~(...)`, the delays
@@ -292,8 +322,11 @@ impl<'a> Checker<'a> {
         match (builtin, kind) {
             (Some(FlowBuiltin::Delay(d)), CallKind::Flow) => self.check_delay(e, d, args, expected).map(Some),
             (Some(FlowBuiltin::SampleRate), CallKind::Plain) => self.check_sample_rate(e, args).map(Some),
+            // Held: the call is of the error type, and its clock is in error
+            // in the walk (`clocks.rs`).
             (Some(FlowBuiltin::SampleTick), CallKind::Plain) => {
-                Err(self.unsupported_in(Stage::Flow, span, Feature::SampleTick, &[]))
+                self.flow_hold_gate(Feature::SampleTick, span);
+                self.args_of_unknown_callee(args).map(Some)
             }
             // The names stage stopped in the callee of an instance with no
             // diagnostic (a name held as an error, §18.1, S-675), where the
@@ -332,7 +365,7 @@ impl<'a> Checker<'a> {
         let f = self.a.def(d).as_flow().unwrap().clone();
         let name = self.a.def(d).name.clone();
         if args.len() != f.inputs.len() {
-            return Err(self.flow_err(
+            return Err(self.err(
                 Code::E0412,
                 span,
                 format!("flow `{name}` takes {} input(s) but {} were given", f.inputs.len(), args.len()),
@@ -361,7 +394,7 @@ impl<'a> Checker<'a> {
     fn check_sample_rate(&mut self, e: ExprId, args: &[Arg]) -> R<TyId> {
         if !args.is_empty() {
             let span = self.expr(e).span;
-            return Err(self.flow_err(
+            return Err(self.err(
                 Code::E0412,
                 span,
                 format!("`{SAMPLE_RATE}` takes 0 argument(s) but {} were given", args.len()),
@@ -373,13 +406,16 @@ impl<'a> Checker<'a> {
     }
 
     /// `prev~(e)`, `delay~(e, N)`, `vdelay~(e, d, MAX)`, each with an
-    /// optional last `init` (§11.4).
+    /// optional last `init` (§11.4). The number of the arguments is of the
+    /// types stage, the length of the flow stage (held, [`Self::flow_hold`]).
     fn check_delay(&mut self, e: ExprId, d: Delay, args: &[Arg], expected: Option<TyId>) -> R<TyId> {
         let span = self.expr(e).span;
         let name = d.name();
         let most = d.init_index() + 1;
         if args.len() != most && args.len() != most - 1 {
-            return Err(self.flow_err(
+            // The number of the arguments is of the types stage, as of an
+            // instance and `sample_rate()` (§18.1, the table of the codes).
+            return Err(self.err(
                 Code::E0412,
                 span,
                 format!(
@@ -396,11 +432,11 @@ impl<'a> Checker<'a> {
         let init_expr = args.get(d.init_index()).map(|a| a.expr);
         let constant = d.const_index().map(|k| args[k].expr);
         let len = match d {
-            Delay::Prev => 0,
+            Delay::Prev => Some(0),
             Delay::Fixed => {
                 let n_expr = constant.expect("the length of `delay~`");
                 let n = self.flow_const_u32(n_expr)?;
-                if n == 1 {
+                if n == Some(1) {
                     // The name and the length change, the rest of the call stays (S-251):
                     // the length goes with the `,` before it.
                     let name = Span::new(span.file, span.start, span.start + Delay::Fixed.name().len() as u32);
@@ -413,36 +449,33 @@ impl<'a> Checker<'a> {
                         shown.extend(init_expr.map(|i| self.src(self.expr(i).span)));
                         vec![Edit::replace(span, format!("{}~({})", Delay::Prev.name(), shown.join(", ")))]
                     };
-                    return Err(self.diag(
+                    self.flow_hold(
                         Diagnostic::new(Stage::Flow, Code::E0807, span, "a 1-sample delay is written `prev~` (§11.4)")
                             .with_found(self.src(span))
                             .with_fix(Fix::new("write `prev~`", edits)),
-                    ));
-                }
-                if n < 2 {
-                    return Err(self.flow_err(
-                        Code::E0808,
-                        self.expr(n_expr).span,
-                        "`delay~` needs a length of at least 2 (§11.4)",
-                    ));
+                    );
+                } else if n == Some(0) {
+                    let at = self.expr(n_expr).span;
+                    self.flow_hold_at(Code::E0808, at, "`delay~` needs a length of at least 2 (§11.4)");
                 }
                 n
             }
             Delay::Variable => {
+                // §11.4: `T: Float`, a requirement of the types stage (§4.5, S-1135).
+                let what = Required::Param { param: "T".into(), owner: format!("`{name}~`"), std: true };
+                self.defer(span, t, DeferredKind::Require { bound: Bound::Float, what });
                 self.check_expr(args[1].expr, Some(t))?;
                 let max_expr = constant.expect("the maximum of `vdelay~`");
                 let max = self.flow_const_u32(max_expr)?;
-                if max < 1 {
-                    return Err(self.flow_err(
-                        Code::E0808,
-                        self.expr(max_expr).span,
-                        "`vdelay~` needs a maximum of at least 1 (§11.4)",
-                    ));
+                if max == Some(0) {
+                    let at = self.expr(max_expr).span;
+                    self.flow_hold_at(Code::E0808, at, "`vdelay~` needs a maximum of at least 1 (§11.4)");
                 }
                 max
             }
         };
-        let kind = NodeKind::Delay(d, len);
+        // A length the check does not compute (held) is read by no plan.
+        let kind = NodeKind::Delay(d, len.unwrap_or_default());
         let init = match init_expr {
             Some(i) => {
                 self.check_expr(i, Some(t))?;
@@ -456,7 +489,7 @@ impl<'a> Checker<'a> {
         // K-08, R-13: the store of a delay inside the first argument of a
         // delay comes before the outer one reads it (W7-07).
         if self.fcx().delay_arg > 0 {
-            return Err(self.unsupported_in(Stage::Flow, span, Feature::NestedDelays, &[]));
+            self.flow_hold_gate(Feature::NestedDelays, span);
         }
         let arg_exprs: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
         self.fcx().calls.push(NodeCall { expr: e, kind, args: arg_exprs, init, init_expr, ty: t });

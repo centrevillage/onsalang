@@ -485,11 +485,6 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// A diagnostic of the flow checks (`flow.rs`, stage `Flow`).
-    pub(crate) fn flow_err(&mut self, code: Code, span: Span, msg: impl Into<String>) -> Stop {
-        self.diag(Diagnostic::new(Stage::Flow, code, span, msg).with_found(self.src(span)))
-    }
-
     pub(crate) fn diag(&mut self, d: Diagnostic) -> Stop {
         if !self.failed {
             self.failed = true;

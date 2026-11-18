@@ -1,19 +1,15 @@
 // onsa.toml
 // [test]
 // spec = ["§11.3", "§11.4", "§11.5", "§18.1"]
-//
-// [[test.fix]]
-// at = "91:17"
-// code = "E0813"
-// candidate = 1
-// leaves = ["92:23 E0416"]
 
 // The diagnostics of the flow check that one unit has are not found in the order of the walk: the one
 // reported is the first by the order of the diagnostics (start position, end position, code, text,
 // §18.1). So the diagnostic of an outer construct, which starts before the inner one, is the one
-// reported: the type of a `let` (E0810, at the statement), the element type of a `vdelay~` (E0416, at
-// the call) against a later `let`, an outer `at` (E0815) over an inner error that leaves the clock of
-// its operand, and the gates this version has. An outer check that reads the clock of a part in error
+// reported: the type of a `let` (E0810, at the statement), an outer `at` (E0815) over an inner error
+// that leaves the clock of its operand, and the gates this version has. The element type of a `vdelay~`
+// (E0416, at the call) is of the type stage (§11.4, §4.5), so it is the one reported over any error of
+// the flow check, written before or after it (`flow_stage_order_vdelay_element_type*.onsa`); the forms
+// of it below have the `vdelay~` first. An outer check that reads the clock of a part in error
 // is not made (§18.1): a call of a function with effects has no clock (§11.5), so the inner E0805 is
 // the one there. The inner error of a part is reported only when the outer one has no error of its own. The cases are
 // one error of the outer kind and one of the inner kind in a flow, the marker on the first.
@@ -85,11 +81,6 @@ pub flow vdelay_i32_then_at_slower(x: I32 at sample) -> I32 at sample {
 pub flow vdelay_i32_in_the_output(x: I32 at sample) -> I32 at sample {
   let b = x
   vdelay~(b, 1, 8)                                               //~ E0416
-}
-
-pub flow delay_clock_then_vdelay_i32_in_a_par_body(x: I32 at sample, p: F32 at block) -> [I32; 2] at sample {
-  let b = prev~(p)                                               //~ E0813
-  par~ i in 0 ..< 2 { vdelay~(x, 1, 8) }
 }
 
 // ---------------------------------------------------------------- an outer `at`

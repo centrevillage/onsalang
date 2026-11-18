@@ -17,7 +17,7 @@ use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 use onsa_syntax::ast::{Ident, PatId, Path, RestMark, StructRest};
 use onsa_syntax::foreign::{self, RowId};
 
-use crate::body::{Checker, R, Stop, Unbound};
+use crate::body::{Checker, R, Unbound};
 use crate::def::{DefId, DefKind, FieldDef, Fields};
 use crate::resolve::{Entity, Owner};
 use crate::ty::{Ty, TyId};
@@ -50,12 +50,11 @@ impl<'a> Checker<'a> {
     /// The struct pattern `written` of type `ty` at `span`:
     /// the struct is resolved and unified with `ty`, each written field is
     /// checked and given to `sub`, in the order written, and the number of
-    /// the declared fields is returned. The diagnostics are of `stage`.
+    /// the declared fields is returned.
     /// An alias of the error type is no struct here: its path has no record
     /// (S-728, `names/body/paths.rs`).
     pub(crate) fn struct_pattern(
         &mut self,
-        stage: Stage,
         span: Span,
         ty: TyId,
         written: Written<'_>,
@@ -65,14 +64,14 @@ impl<'a> Checker<'a> {
         let (entity, owner) = self.ctor_of(pat)?;
         let d = match entity {
             Entity::Def(d) | Entity::Member(d) if matches!(self.a.def(d).kind, DefKind::Struct(_)) => d,
-            _ => return Err(self.pattern_err(stage, Code::E0401, path.span, "a struct pattern needs a struct")),
+            _ => return Err(self.err(Code::E0401, path.span, "a struct pattern needs a struct")),
         };
         self.generated_at(d, path.span)?;
         let Some(sd) = self.a.def(d).as_struct() else {
-            return Err(self.pattern_err(stage, Code::E0401, path.span, "a struct pattern needs a struct"));
+            return Err(self.err(Code::E0401, path.span, "a struct pattern needs a struct"));
         };
         let Fields::Named(defs) = sd.fields.clone() else {
-            return Err(self.pattern_err(stage, Code::E0410, path.span, "this struct has no named fields"));
+            return Err(self.err(Code::E0410, path.span, "this struct has no named fields"));
         };
         let name = self.a.shown_name(d);
         let args = self.fresh_args(d);
@@ -95,11 +94,11 @@ impl<'a> Checker<'a> {
                     continue;
                 }
                 let msg = format!("`{name}` has no field `{}`", field.name);
-                return Err(self.pattern_err(stage, Code::E0410, field.span, msg));
+                return Err(self.err(Code::E0410, field.span, msg));
             };
             if seen.contains(&field.name.as_str()) {
                 let msg = format!("field `{}` is given twice", field.name);
-                return Err(self.pattern_err(stage, Code::E0410, field.span, msg));
+                return Err(self.err(Code::E0410, field.span, msg));
             }
             seen.push(&field.name);
             self.a.note_use(defs[i].span, field.span);
@@ -119,7 +118,7 @@ impl<'a> Checker<'a> {
             }
             Some(rest @ StructRest { mark: RestMark::Underscore, .. }) => {
                 let msg = format!("every field of `{name}` is written: the `_` ignores nothing");
-                let diag = Diagnostic::new(stage, Code::E0410, rest.span, msg)
+                let diag = Diagnostic::new(Stage::Types, Code::E0410, rest.span, msg)
                     .with_found(self.src(rest.span))
                     .with_fix(rest_removal(rest));
                 Err(self.diag(diag))
@@ -138,7 +137,7 @@ impl<'a> Checker<'a> {
                     Fix::new("write the remaining fields with `_`", vec![Edit::replace(rest.span, list)])
                 };
                 let mut d = foreign::report(RowId::StructPatternRest, self.text, rest.span, vec![fix]);
-                d.stage = stage;
+                d.stage = Stage::Types;
                 Err(self.diag(d))
             }
             // The fields left are visible here: a field not visible that the
@@ -146,7 +145,7 @@ impl<'a> Checker<'a> {
             None if !missing.is_empty() => {
                 let names = missing.iter().map(|f| format!("`{}`", f.name)).collect::<Vec<_>>().join(", ");
                 let msg = format!("struct patterns name every field; missing {names} (use `_`, §7)");
-                Err(self.diag(Diagnostic::new(stage, Code::E0410, span, msg).with_found(self.src(span))))
+                Err(self.err(Code::E0410, span, msg))
             }
             None => Ok(defs.len()),
         }
@@ -270,10 +269,6 @@ impl<'a> Checker<'a> {
             }
         }
         Ok(())
-    }
-
-    fn pattern_err(&mut self, stage: Stage, code: Code, span: Span, msg: impl Into<String>) -> Stop {
-        self.diag(Diagnostic::new(stage, code, span, msg).with_found(self.src(span)))
     }
 }
 

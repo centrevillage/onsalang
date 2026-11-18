@@ -85,15 +85,16 @@ fn probe(case: &str) -> Vec<Row> {
     })
 }
 
-const COMPLETE_ONLY_AFTER_THE_BODY: [&str; 3] = ["prev_default_types.onsa", "par_branch.onsa", "branches_tilde.onsa"];
+const COMPLETE_ONLY_AFTER_THE_BODY: [&str; 4] =
+    ["prev_default_types.onsa", "par_branch.onsa", "branches_tilde.onsa", "lookback_nesting.onsa"];
 
 /// (case, the number of its flows, the number of the incomplete ones): the check
-/// of the body stops at the E0200 of `lookback_nesting`, `par_lookback` and
-/// `par_tilde_closed_range` (their incomplete flows are the flows the check
-/// stops at); the E0200 of the other three comes from the stage of the flow,
-/// after the body, so every body is complete.
-const BODY_STOPS: [(&str, usize, usize); 3] =
-    [("lookback_nesting.onsa", 11, 11), ("par_lookback.onsa", 2, 2), ("par_tilde_closed_range.onsa", 6, 5)];
+/// of the body stops at the E0200 of `par_lookback` and `par_tilde_closed_range`
+/// (their incomplete flows are the flows the check stops at); the E0200 of the
+/// other four comes from the stage of the flow (a delay inside a delay is held
+/// by the check of the types and reported after the body, R-329), so every body
+/// is complete.
+const BODY_STOPS: [(&str, usize, usize); 2] = [("par_lookback.onsa", 2, 2), ("par_tilde_closed_range.onsa", 6, 5)];
 
 #[test]
 fn the_cases_the_check_stops_at_in_the_body_have_incomplete_tables() {
@@ -114,6 +115,6 @@ fn the_complete_flows_have_a_type_for_every_value() {
             assert!(r.holes.is_empty(), "{case}: {r:?}");
         }
     }
-    // `par_tilde_closed_range` has one complete flow; the three others have 4, 2 and 11.
-    assert_eq!(complete_flows, 1 + 4 + 2 + 11);
+    // `par_tilde_closed_range` has one complete flow; the four others have 4, 2, 11 and 11.
+    assert_eq!(complete_flows, 1 + 4 + 2 + 11 + 11);
 }

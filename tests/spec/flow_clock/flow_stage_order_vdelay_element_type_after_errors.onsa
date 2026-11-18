@@ -1,0 +1,168 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§11.3", "§11.4", "§11.5", "§18.1"]
+
+// The element type of `vdelay~` is `T: Float`, and any other type is E0416 at the call (§11.4).
+// It is the E0416 of a type parameter's bound that a call makes (§4.5), so it is an error of the
+// type stage (§18.1): in a flow with another error of the flow stage (E0810 on the type of a `let`,
+// E0813, E0815, E0805, E0807, E0808), the E0416 is the one reported, wherever the other one is
+// written, and the flow stage is not made. Two errors of the type stage go by position (the
+// element type, then a type error written after it).
+//
+// One error per flow, so each form is a flow of its own: the first line has the error of the flow
+// stage and the second the `vdelay~` of an element type that is not a float (or the `vdelay~` is
+// first, and the later error is of the flow stage or of the type stage). Since W7-14 (S-1135)
+// the element type is checked in the type stage, as a bound of a generic function is.
+// The element type alone is in `vdelay_element_type.onsa`, the forms that pass today (the `vdelay~`
+// before a clock error, the type error first) are in `flow_stage_order_vdelay_element_type.onsa`.
+
+const K: F32 = 1.0
+pub fn noisy(v: F32) -> F32 uses {Alloc} { v }
+pub flow pass(c: F32 at block) -> F32 at sample { c }
+
+pub flow let_type_then_vdelay_i32(x: F32 at sample, i: I32 at sample) -> I32 at sample {
+  let s = "text"
+  vdelay~(i, 1, 8)                                               //~ E0416
+}
+
+pub flow clock_then_vdelay_i32(x: F32 at sample, p: F32 at block, i: I32 at sample) -> I32 at sample {
+  let a = prev~(p)
+  let b = vdelay~(i, 1, 8)                                       //~ E0416
+  b
+}
+
+pub flow clock_then_vdelay_u32(x: F32 at sample, p: F32 at block, i: U32 at sample) -> U32 at sample {
+  let a = prev~(p)
+  let b = vdelay~(i, 1, 8)                                       //~ E0416
+  b
+}
+
+pub flow clock_then_vdelay_i64(x: F32 at sample, p: F32 at block, i: I64 at sample) -> I64 at sample {
+  let a = prev~(p)
+  let b = vdelay~(i, 1, 8)                                       //~ E0416
+  b
+}
+
+pub flow clock_then_vdelay_bool(x: F32 at sample, p: F32 at block, i: Bool at sample) -> Bool at sample {
+  let a = prev~(p)
+  let b = vdelay~(i, true, 8, false)                             //~ E0416
+  b
+}
+
+pub flow clock_then_vdelay_i32_with_an_init(x: F32 at sample, p: F32 at block, i: I32 at sample) -> I32 at sample {
+  let a = prev~(p)
+  let b = vdelay~(i, 1, 8, 0)                                    //~ E0416
+  b
+}
+
+pub flow clock_then_vdelay_i32_in_the_output(x: F32 at sample, p: F32 at block, i: I32 at sample) -> I32 at sample {
+  let a = prev~(p)
+  vdelay~(i, 1, 8)                                               //~ E0416
+}
+
+pub flow clock_then_vdelay_i32_in_an_operand(x: F32 at sample, p: F32 at block, i: I32 at sample) -> I32 at sample {
+  let a = prev~(p)
+  i + vdelay~(i, 1, 8)                                           //~ E0416
+}
+
+pub flow const_clock_then_vdelay_i32(x: F32 at sample, i: I32 at sample) -> I32 at sample {
+  let a = prev~(K)
+  let b = vdelay~(i, 1, 8)                                       //~ E0416
+  b
+}
+
+pub flow at_slower_then_vdelay_i32(x: F32 at sample, i: I32 at sample) -> I32 at sample {
+  let a = x at block
+  let b = vdelay~(i, 1, 8)                                       //~ E0416
+  b
+}
+
+pub flow instance_argument_then_vdelay_i32(x: F32 at sample, i: I32 at sample) -> I32 at sample {
+  let a = pass~(x)
+  let b = vdelay~(i, 1, 8)                                       //~ E0416
+  b
+}
+
+pub flow effect_then_vdelay_i32(x: F32 at sample, i: I32 at sample) -> I32 at sample {
+  let a = noisy(x)
+  let b = vdelay~(i, 1, 8)                                       //~ E0416
+  b
+}
+
+pub flow delay_one_then_vdelay_i32(x: F32 at sample, i: I32 at sample) -> I32 at sample {
+  let a = delay~(x, 1)
+  let b = vdelay~(i, 1, 8)                                       //~ E0416
+  b
+}
+
+pub flow delay_zero_then_vdelay_i32(x: F32 at sample, i: I32 at sample) -> I32 at sample {
+  let a = delay~(x, 0)
+  let b = vdelay~(i, 1, 8)                                       //~ E0416
+  b
+}
+
+pub flow par_empty_then_vdelay_i32(x: F32 at sample, i: I32 at sample) -> I32 at sample {
+  let a = par~ k in 2 ..< 2 { x }
+  let b = vdelay~(i, 1, 8)                                       //~ E0416
+  b
+}
+
+pub flow vdelay_max_zero_then_vdelay_i32(x: F32 at sample, d: F32 at sample, i: I32 at sample) -> I32 at sample {
+  let a = vdelay~(x, d, 0)
+  let b = vdelay~(i, 1, 8)                                       //~ E0416
+  b
+}
+
+pub flow delay_clock_then_vdelay_i32_in_a_par_body(x: I32 at sample, p: F32 at block) -> [I32; 2] at sample {
+  let b = prev~(p)
+  par~ i in 0 ..< 2 { vdelay~(x, 1, 8) }                         //~ E0416
+}
+
+pub flow clock_then_vdelay_i32_in_a_par_body(x: I32 at sample, p: F32 at block) -> I32 at sample {
+  let a = prev~(p)
+  let ys = par~ i in 0 ..< 2 { vdelay~(x, 1, 8) }                //~ E0416
+  ys[0]
+}
+
+pub flow clock_then_vdelay_i32_in_a_nested_par_body(x: I32 at sample, p: F32 at block) -> I32 at sample {
+  let a = prev~(p)
+  let ys = par~ i in 0 ..< 2 { par~ j in 0 ..< 2 { vdelay~(x, 1, 8) } }   //~ E0416
+  ys[0][0]
+}
+
+pub flow let_type_then_vdelay_i32_in_a_par_body(x: I32 at sample) -> I32 at sample {
+  let s = "text"
+  let ys = par~ i in 0 ..< 2 { vdelay~(x, 1, 8) }                //~ E0416
+  ys[0]
+}
+
+pub flow slower_in_a_par_body_then_vdelay_i32(x: I32 at sample) -> I32 at sample {
+  let ys = par~ i in 0 ..< 2 { x at block }
+  let b = vdelay~(x, 1, 8)                                       //~ E0416
+  b
+}
+
+pub flow vdelay_i32_then_delay_one(x: F32 at sample, i: I32 at sample) -> I32 at sample {
+  let a = vdelay~(i, 1, 8)                                       //~ E0416
+  let b = delay~(x, 1)
+  a
+}
+
+pub flow vdelay_i32_then_par_empty(x: F32 at sample, i: I32 at sample) -> I32 at sample {
+  let a = vdelay~(i, 1, 8)                                       //~ E0416
+  let b = par~ k in 2 ..< 2 { x }
+  a
+}
+
+pub flow vdelay_i32_then_type_error(x: F32 at sample, i: I32 at sample) -> I32 at sample {
+  let a = vdelay~(i, 1, 8)                                       //~ E0416
+  let b: Bool = 1.0
+  a
+}
+
+pub flow clock_then_vdelay_i32_then_type_error(x: F32 at sample, p: F32 at block, i: I32 at sample) -> I32 at sample {
+  let c = prev~(p)
+  let a = vdelay~(i, 1, 8)                                       //~ E0416
+  let b: Bool = 1.0
+  a
+}

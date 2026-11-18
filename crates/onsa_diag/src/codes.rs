@@ -304,7 +304,7 @@ codes! {
         "the alternatives of an or-pattern bind different names";
     E0320 = 320, Names, [Names], Optional, Optional,
         "name does not follow the naming rule for its kind";
-    E0401 = 401, Types, [Types, Flow], Optional, Optional,
+    E0401 = 401, Types, [Types], Optional, Optional,
         "type mismatch";
     E0405 = 405, Types, [Types], Optional, Optional,
         "the type of this literal cannot be determined";
@@ -316,11 +316,11 @@ codes! {
         "literal is out of range for its type";
     E0409 = 409, Types, [Build], Optional, Optional,
         "the size of a type or of a flow's state does not fit in `U32`";
-    E0410 = 410, Types, [Types, Flow], Optional, Optional,
+    E0410 = 410, Types, [Types], Optional, Optional,
         "struct literal field error (missing, unknown, or duplicate field)";
     E0411 = 411, Types, [Types], Optional, Optional,
         "`as` only writes a lossless conversion between number types";
-    E0412 = 412, Types, [Types, Flow], Optional, Optional,
+    E0412 = 412, Types, [Types], Optional, Optional,
         "wrong number of arguments";
     E0413 = 413, Types, [Types], Optional, Optional,
         "no such field, method or conversion function";
@@ -328,7 +328,7 @@ codes! {
         "`?` needs a matching Option/Result return type";
     E0415 = 415, Types, [Types], Optional, Optional,
         "assignment target, `inout` argument or `inout self` receiver is not a place";
-    E0416 = 416, Types, [Types, Flow], Optional, Optional,
+    E0416 = 416, Types, [Types], Optional, Optional,
         "type does not satisfy the bound";
     E0417 = 417, Types, [Types], Optional, Optional,
         "not a constant expression where one is required";
@@ -346,7 +346,7 @@ codes! {
         "too many instantiations of generic items";
     E0501 = 501, Exhaustiveness, [Types], Optional, Optional,
         "`match` is not exhaustive";
-    E0502 = 502, Exhaustiveness, [Types, Flow], Optional, Optional,
+    E0502 = 502, Exhaustiveness, [Types], Optional, Optional,
         "refutable pattern in `let`";
     E0503 = 503, Exhaustiveness, [Types], Optional, Optional,
         "unreachable statement after a diverging one, or `match` arm the arms before it cover";

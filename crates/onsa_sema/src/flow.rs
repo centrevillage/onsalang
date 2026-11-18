@@ -239,4 +239,12 @@ pub(crate) struct FlowCx {
     pars: HashMap<ExprId, (LocalId, u32, u32)>,
     sample_rate_calls: Vec<ExprId>,
     output: Option<ExprId>,
+    /// The first error of the flow stage the check of the types found
+    /// (§18.1): held, not reported, while the types are checked on, since a
+    /// type error anywhere in the body comes first (R-329). The walk of the
+    /// clocks compares it with its own by position (R-495).
+    held: Option<Diagnostic>,
+    /// The number of the diagnostics before the body was checked: more after
+    /// it, and the check of the types reported an error of the body.
+    diags_before: usize,
 }

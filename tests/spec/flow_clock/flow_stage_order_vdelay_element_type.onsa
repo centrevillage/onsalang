@@ -1,0 +1,28 @@
+// onsa.toml
+// [test]
+// spec = ["§4.5", "§11.3", "§11.4", "§18.1"]
+
+// The element type of `vdelay~` is `T: Float`, and any other type is E0416 at the call (§11.4, §4.5).
+// When the `vdelay~` is written first, its E0416 is the one reported over a later error of the clock
+// rules; of two errors of the type stage the first by position is reported (§18.1). One error per
+// flow, so each form is a flow of its own. The forms with another error of the flow stage first are
+// in `flow_stage_order_vdelay_element_type_after_errors.onsa` (S-1135).
+
+pub flow vdelay_i32_then_clock(x: F32 at sample, p: F32 at block, i: I32 at sample) -> I32 at sample {
+  let a = vdelay~(i, 1, 8)                                       //~ E0416
+  let b = prev~(p)
+  a
+}
+
+pub flow type_error_then_vdelay_i32(x: F32 at sample, i: I32 at sample) -> I32 at sample {
+  let b: Bool = 1.0                                              //~ E0401
+  let a = vdelay~(i, 1, 8)
+  a
+}
+
+pub flow clock_then_type_error_then_vdelay_i32(x: F32 at sample, p: F32 at block, i: I32 at sample) -> I32 at sample {
+  let c = prev~(p)
+  let b: Bool = 1.0                                              //~ E0401
+  let a = vdelay~(i, 1, 8)
+  a
+}

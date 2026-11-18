@@ -10,7 +10,6 @@
 
 use super::*;
 use crate::clock::{holds_state, promote, readable_at};
-use crate::requirement::{Required, unmet_error, unmet_rules};
 
 /// Whether `e` is written as a name or a literal, past parentheses and type
 /// arguments (not `^name`): the operand `at` makes faster as written (the
@@ -62,22 +61,6 @@ impl Walk<'_> {
             let found = self.src(p.span);
             self.report(d.with_found(found));
         }
-    }
-
-    /// §11.4: the element type `T` of `vdelay~` at `e` meets `T: Float`
-    /// (E0416, R-493).
-    pub(super) fn check_float(&mut self, e: ExprId) {
-        let ty = self.ty_of(e);
-        if matches!(self.a.types.get(ty), Ty::Float(_) | Ty::Error) {
-            return;
-        }
-        let span = self.ast.expr(e).span;
-        let (shown, bound) = (self.a.display_type(ty), crate::def::Bound::Float);
-        let what = Required::Param { param: "T".into(), owner: format!("`{}~`", Delay::Variable.name()), std: true };
-        let mut d = unmet_error(span, &what, &shown, bound, &mut |t| self.a.display_type(t));
-        d.stage = Stage::Flow;
-        let d = unmet_rules(self.a, ty, &shown, bound).fold(d, Diagnostic::with_rule);
-        self.report(d.with_found(self.src(span)));
     }
 
     /// `inner at k` at `e` (§11.3), `c` the clock of `inner`: no slower

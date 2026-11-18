@@ -10,8 +10,9 @@ impl<'a> Checker<'a> {
     /// A compile-time `U32` (§11.4, §4.5): the value of a constant
     /// expression. This version computes an integer literal and a `const`
     /// with a literal value (in parentheses too); the other constant
-    /// expressions are E0200 until W9-03 (R-195).
-    pub(super) fn flow_const_u32(&mut self, e: ExprId) -> R<u32> {
+    /// expressions are E0200 until W9-03 (R-195), an error of the flow stage
+    /// that is held ([`Checker::flow_hold`]): `None`, a value not computed.
+    pub(super) fn flow_const_u32(&mut self, e: ExprId) -> R<Option<u32>> {
         match self.const_expr(e) {
             Ok((ConstU32::Value(v), constant)) => {
                 let u32 = self.u32();
@@ -24,11 +25,12 @@ impl<'a> Checker<'a> {
                 if let Some(def) = constant {
                     self.info.targets.insert(cur, Target::Const { def, of: None, inst: None });
                 }
-                Ok(v)
+                Ok(Some(v))
             }
             // A flow has no const parameters.
             Ok((ConstU32::Param(_), _)) | Err(Unheld::Uncomputed(_)) => {
-                Err(self.unsupported_in(Stage::Flow, self.expr(e).span, Feature::FlowConstExprs, &[]))
+                self.flow_hold_gate(Feature::FlowConstExprs, self.expr(e).span);
+                Ok(None)
             }
             Err(Unheld::Report(d)) => Err(self.diag(d)),
             // A name held as an error, a constant whose unit failed (§18.1).
