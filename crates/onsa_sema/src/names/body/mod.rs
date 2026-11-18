@@ -34,6 +34,7 @@ pub(crate) use flow::clock_after;
 pub(crate) use flow_forms::{NoFlowForm, no_flow_form};
 pub(crate) use kinds::METHOD_IS_CALLED;
 pub(crate) use paths::{is_value, not_a_struct};
+pub(crate) use scope::unused;
 pub(crate) use type_args::{Form, names_only, own_count_error, own_kinds, own_params};
 mod scope;
 #[cfg(test)]
@@ -513,9 +514,10 @@ pub(crate) fn walk_bodies(pkg: &Package, a: &mut Analysis) {
             Some(Fail::Held | Fail::Later) => out.complete = false,
             None => {}
         }
-        // The unused bindings of a flow body are the flow stage's (W7-04).
+        // The unused bindings of a flow body are the flow stage's, which
+        // knows what is reached (`flow::reads`, S-726).
         if out.complete && !flow {
-            a.diagnostics.extend(scope::unused(&out, ast));
+            a.diagnostics.extend(scope::unused(&out, ast, &|_| None));
         }
         names.insert(id, out);
     }

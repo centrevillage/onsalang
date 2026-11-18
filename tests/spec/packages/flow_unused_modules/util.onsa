@@ -1,0 +1,20 @@
+pub flow scale(x: F32 at sample) -> F32 at sample {
+  let factor: F32 = 2.0 //~ E0309 @7
+  x
+}
+
+pub flow tapped(x: F32 at sample) -> F32 at sample {
+  prev~(x)
+}
+
+pub flow fine(x: F32 at sample) -> F32 at sample {
+  let factor = 2.0
+  x * factor
+}
+
+pub flow match_unused(x: F32 at sample, n: I32 at sample) -> F32 at sample {
+  match n {
+    0 => x,
+    m => 0.0, //~ E0309 @5
+  }
+}

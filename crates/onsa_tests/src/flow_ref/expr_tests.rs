@@ -336,7 +336,7 @@ fn a_value_that_is_not_of_the_type_of_the_table_is_an_internal_error() {
     let r = flow(src, "f", vec![]);
     assert!(matches!(r, Err(Stop { fault: Fault::Internal(_), .. })), "{r:?}");
     // Not even for a type with one value: an unbound input of type `()` is not `()` (it is the `Unit` that agrees).
-    let unit = "flow f(u: () at init) -> I32 at sample {\n  let v = u\n  1\n}";
+    let unit = "flow f(u: () at init) -> I32 at sample {\n  let _ = u\n  1\n}";
     let r = flow(unit, "f", vec![]);
     assert!(matches!(r, Err(Stop { fault: Fault::Internal(_), .. })), "{r:?}");
     assert!(is(&flow(unit, "f", vec![("u", Value::Unit)]), &i32v(1)));
@@ -374,7 +374,7 @@ fn a_body_the_check_rules_out_is_not_evaluated() {
 #[test]
 fn an_if_without_else_is_the_unit_when_it_is_not_taken() {
     // §7: an `if` without `else` has the type `()`, and its value is `()` when the condition is false.
-    let src = "flow f(c: Bool at sample, x: F32 at sample) -> F32 at sample {\n  let u = if c { () }\n  x\n}";
+    let src = "flow f(c: Bool at sample, x: F32 at sample) -> F32 at sample {\n  let _ = if c { () }\n  x\n}";
     let r = flow(src, "f", vec![("c", Value::Bool(false)), ("x", Value::F32(2.5))]);
     assert!(is(&r, &Value::F32(2.5)), "{r:?}");
     // Taken, its value is the `()` of the branch, and the flow goes on.

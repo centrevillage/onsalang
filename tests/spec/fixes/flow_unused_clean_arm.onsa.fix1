@@ -1,0 +1,20 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§11.2", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "18:5"
+// code = "E0309"
+// candidate = 1
+// clean = true
+
+// The candidate of the E0309 of the name of a `match` arm in a flow body (spec 5.1; S-1146): the name
+// becomes `_`, the arm stays, and the file has no diagnostic after it (`clean`).
+
+pub flow one_unused_arm_binding(x: F32 at sample, n: I32 at sample) -> F32 at sample {
+  match n {
+    0 => x,
+    _ => 0.0, //~ E0309 @5
+  }
+}

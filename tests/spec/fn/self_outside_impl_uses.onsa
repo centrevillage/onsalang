@@ -54,7 +54,7 @@ test "a call in a test" {
 }
 
 pub flow in_a_flow(x: F32 at sample) -> F32 at sample {
-  let y = f(1)
+  let _ = f(1)
   x
 }
 

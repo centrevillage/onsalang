@@ -81,7 +81,10 @@ pub(in crate::flow) struct Namer {
 impl Namer {
     pub(in crate::flow) fn new(pending: &[PendingLet], ast: &Ast, body: &BodyInfo) -> Namer {
         let whole = pending.iter().filter_map(|p| Some((ast.without_parens(p.init), p.name.clone()?))).collect();
-        let first = pending.iter().map(|p| p.locals.first().map(|l| body.locals[l.0 as usize].name.as_str()));
+        let first = pending.iter().map(|p| match crate::flow::binds_none(&p.locals) {
+            true => None,
+            false => Some(body.locals[p.locals[0].0 as usize].name.as_str()),
+        });
         Namer { numbers: HashMap::default(), scopes: let_scopes(first), whole }
     }
 

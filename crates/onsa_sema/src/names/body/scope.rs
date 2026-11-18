@@ -3,7 +3,7 @@
 //! functions (§5.1, §5.3).
 
 use onsa_diag::hash::{HashMap, HashSet};
-use onsa_diag::{Code, Diagnostic, Edit, Fix, Stage};
+use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 use onsa_syntax::ast::{Ast, ExprId, Ident, PatId, PatKind};
 
 use super::{Binding, BindingId, BindingKind, BodyNames, Fail, Origin, ScopeId, ScopeInfo, Stop, W, Walker};
@@ -170,27 +170,77 @@ impl Walker<'_> {
     }
 }
 
-/// The E0309 of every binding of the complete record `out` of a body of the
-/// fn world that is never read (§5.1, S-129): a `let`, a `var`, a `for` and
-/// a pattern of an arm, no parameter. It is of the last stage (§18.1,
-/// S-726): the unit reports the first, and none when it has another error.
-/// At the name where it is first bound; the candidate renames every site
-/// to `_` (each branch of a choice), and a `var` has none (`var _` is no
-/// form, S-714).
-pub(super) fn unused<'a>(out: &'a BodyNames, ast: &'a Ast) -> impl Iterator<Item = Diagnostic> + 'a {
-    let counted = |k: BindingKind| {
-        matches!(k, BindingKind::Let | BindingKind::Var | BindingKind::For { .. } | BindingKind::MatchBind)
-    };
-    out.bindings.iter().filter(move |b| b.reads == 0 && counted(b.kind)).map(move |b| {
-        let message = format!("`{}` is bound and never read; a value that is not used is bound to `_` (§5.1)", b.name);
-        let d = Diagnostic::new(Stage::Unused, Code::E0309, b.span, message).with_found(b.name.clone());
-        if b.kind == BindingKind::Var {
-            return d.with_rule("a `var` cannot be named `_`: write `let _ = e` for a value that is not used");
-        }
-        let names = b.sites.iter().filter_map(|&p| match &ast.pat(p).kind {
-            PatKind::Bind(name) => Some(Edit::replace(name.span, "_")),
-            _ => None,
-        });
-        d.with_fix(Fix::new("rename to `_`", names.collect()))
+/// How E0309 counts a binding of a kind (§5.1): by its reads, by whether
+/// it is reached (a `let` of a flow body, also read where nothing reached
+/// reads it), or not at all (a parameter, an input, the index of a `par~`).
+enum Counted {
+    Reads,
+    Reached,
+    No,
+}
+
+fn counted(k: BindingKind) -> Counted {
+    match k {
+        BindingKind::Let | BindingKind::Var | BindingKind::For { .. } | BindingKind::MatchBind => Counted::Reads,
+        BindingKind::FlowLet => Counted::Reached,
+        BindingKind::Param(_)
+        | BindingKind::SelfParam(_)
+        | BindingKind::ClosureParam(_)
+        | BindingKind::FlowInput
+        | BindingKind::ParVar => Counted::No,
+    }
+}
+
+/// The E0309 of every binding of the complete record `out` of a body that
+/// is not used (§5.1, S-129): never read, or, of a `let` of a flow body, not
+/// reached (`unreached` gives the `let`s that read it then, `None` when it is
+/// reached). It is of the last stage (§18.1, S-726): the unit reports the
+/// first, and none when it has another error. At the name where it is first
+/// bound; the candidate renames every site to `_` (each branch of a choice),
+/// and a `var` has none (`var _` is no form, S-714).
+pub(crate) fn unused<'a>(
+    out: &'a BodyNames,
+    ast: &'a Ast,
+    unreached: &'a dyn Fn(&Binding) -> Option<Vec<Span>>,
+) -> impl Iterator<Item = Diagnostic> + 'a {
+    out.bindings.iter().filter_map(move |b| {
+        let readers = match counted(b.kind) {
+            Counted::Reads if b.reads == 0 => Vec::new(),
+            Counted::Reached => unreached(b)?,
+            Counted::Reads | Counted::No => return None,
+        };
+        Some(unused_binding(b, ast, readers))
     })
+}
+
+fn unused_binding(b: &Binding, ast: &Ast, readers: Vec<Span>) -> Diagnostic {
+    let message = match b.reads {
+        0 => format!("`{}` is bound and never read; a value that is not used is bound to `_` (§5.1)", b.name),
+        _ => format!(
+            "`{}` is read only where the output and no `let _` reach; a value that is not used is bound to `_` (§5.1)",
+            b.name
+        ),
+    };
+    let d = Diagnostic::new(Stage::Unused, Code::E0309, b.span, message).with_found(b.name.clone());
+    if b.kind == BindingKind::Var {
+        return d.with_rule("a `var` cannot be named `_`: write `let _ = e` for a value that is not used");
+    }
+    // SPEC-GAP(S-1145): a binding that is read (by a `let` nothing reached
+    // reads) has no candidate, which would leave the reads of the name with
+    // no binding (E0302); a note shows the first `let` that reads it, and
+    // the number of the others (one note, however many read it).
+    if b.reads > 0 {
+        let Some(&first) = readers.first() else { return d };
+        let more = match readers.len() - 1 {
+            0 => String::new(),
+            n => format!(" (and {n} more)"),
+        };
+        let note = format!("`{}` is read by this `let`{more}, which the output and no `let _` reach", b.name);
+        return d.with_note(first, note);
+    }
+    let names = b.sites.iter().filter_map(|&p| match &ast.pat(p).kind {
+        PatKind::Bind(name) => Some(Edit::replace(name.span, "_")),
+        _ => None,
+    });
+    d.with_fix(Fix::new("rename to `_`", names.collect()))
 }

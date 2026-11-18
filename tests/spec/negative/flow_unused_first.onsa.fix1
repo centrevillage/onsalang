@@ -1,0 +1,147 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§11.2", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "78:7"
+// code = "E0309"
+// candidate = 1
+// leaves = ["79:7 E0309"]
+// [[test.fix]]
+// at = "84:7"
+// code = "E0309"
+// candidate = 1
+// leaves = ["85:7 E0309"]
+// [[test.fix]]
+// at = "91:7"
+// code = "E0309"
+// candidate = 1
+// leaves = ["92:7 E0309"]
+// [[test.fix]]
+// at = "97:8"
+// code = "E0309"
+// candidate = 1
+// leaves = ["97:11 E0309"]
+// [[test.fix]]
+// at = "102:17"
+// code = "E0309"
+// candidate = 1
+// leaves = ["102:23 E0309"]
+// [[test.fix]]
+// at = "107:8"
+// code = "E0309"
+// candidate = 1
+// leaves = ["107:11 E0309"]
+// [[test.fix]]
+// at = "112:7"
+// code = "E0309"
+// candidate = 1
+// leaves = ["115:5 E0309"]
+// [[test.fix]]
+// at = "123:5"
+// code = "E0309"
+// candidate = 1
+// leaves = ["125:7 E0309"]
+// [[test.fix]]
+// at = "130:7"
+// code = "E0309"
+// candidate = 1
+// leaves = ["132:5 E0309"]
+// [[test.fix]]
+// at = "139:7"
+// code = "E0309"
+// candidate = 1
+// leaves = ["140:7 E0309"]
+
+// A unit reports one E0309 (spec 18.1, 5.1; S-129, S-726): when a flow body has several unused bindings,
+// the first in the order of the diagnostics is reported, that is the one that starts first in the file
+// (the name of the binding, so `let (l, r) = ...` gives `l`), as in a `fn` (negative/unused_binding_first).
+// The others are not reported and come out one by one in the repair loop: the candidate of the first
+// renames it to `_`, which makes a `let` of it that names nothing (or a name of an arm that is not
+// read any more), and the next check reports the next one, so each candidate leaves the next E0309 of
+// its flow (`leaves`, the place after the edit, the same as before since `_` is as wide as the one
+// letter names here). The order is by place, not by name (`the_name_that_comes_first_wins`). The
+// E0309 of another flow is not affected: the flows are units of their own (P1), and so are the `fn`
+// of the same file.
+
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+pub fn the_fn_beside_the_flows(a: I32) -> I32 {
+  let _ = a * 2 //~ E0309 @7
+  a
+}
+
+pub flow two_lets(x: F32 at sample) -> F32 at sample {
+  let _ = x * 2.0 //~ E0309 @7
+  let b = x * 3.0
+  x
+}
+
+pub flow three_lets(x: F32 at sample) -> F32 at sample {
+  let _ = x * 2.0 //~ E0309 @7
+  let b = x * 3.0
+  let c = x * 4.0
+  x
+}
+
+pub flow the_name_that_comes_first_wins(x: F32 at sample) -> F32 at sample {
+  let _ = x * 2.0 //~ E0309 @7
+  let a = x * 3.0
+  x
+}
+
+pub flow destructuring_of_a_tuple(x: F32 at sample) -> F32 at sample {
+  let (_, r) = (x, x * 0.5) //~ E0309 @8
+  x
+}
+
+pub flow destructuring_of_a_struct(x: F32 at sample) -> F32 at sample {
+  let Pair { l: _, r: q } = Pair { l: x, r: x * 0.5 } //~ E0309 @17
+  x
+}
+
+pub flow three_names_of_one_pattern(x: F32 at sample) -> F32 at sample {
+  let (_, b, c) = (x, x, x) //~ E0309 @8
+  x
+}
+
+pub flow a_let_then_an_arm(x: F32 at sample, n: I32 at sample) -> F32 at sample {
+  let _ = x * 2.0 //~ E0309 @7
+  let k = match n {
+    0 => 1.0,
+    m => 2.0,
+  }
+  x + k
+}
+
+pub flow an_arm_then_a_let(x: F32 at sample, n: I32 at sample) -> F32 at sample {
+  let k = match n {
+    0 => 1.0,
+    _ => 2.0, //~ E0309 @5
+  }
+  let late = x * 2.0
+  x + k
+}
+
+pub flow an_outer_let_starts_before_the_arm_in_it(x: F32 at sample, n: I32 at sample) -> F32 at sample {
+  let _: F32 = match n { //~ E0309 @7
+    0 => 1.0,
+    m => 2.0,
+  }
+  x
+}
+
+pub flow two_lets_beside_a_reached_one(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0
+  let _ = x * 3.0 //~ E0309 @7
+  let c = a * 2.0
+  a
+}
+
+pub flow the_flow_with_the_one_error(x: F32 at sample) -> F32 at sample {
+  let _ = x * 2.0 //~ E0309 @7
+  x
+}

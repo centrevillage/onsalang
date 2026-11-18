@@ -732,14 +732,14 @@ const FLOWS: &[(&str, &str)] = &[
     ("out_plain", "x: F32 at sample) -> {X} at sample {\n  STMTSx\n}"),
     ("out_array", "x: F32 at sample) -> [{X}; 2] at sample {\n  STMTS[x, x]\n}"),
     ("io_same", "x: {X} at sample) -> {X} at sample {\n  STMTSx\n}"),
-    ("prev_init_omitted", "x: {X} at sample) -> F32 at sample {\n  let z = prev~(x)\n  STMTS1.0\n}"),
+    ("prev_init_omitted", "x: {X} at sample) -> F32 at sample {\n  let _ = prev~(x)\n  STMTS1.0\n}"),
     ("prev_out", "x: {X} at sample) -> {X} at sample {\n  let z = prev~(x)\n  STMTSz\n}"),
-    ("delay_init_omitted", "x: {X} at sample) -> F32 at sample {\n  let z = delay~(x, 8)\n  STMTS1.0\n}"),
+    ("delay_init_omitted", "x: {X} at sample) -> F32 at sample {\n  let _ = delay~(x, 8)\n  STMTS1.0\n}"),
     ("delay_out", "x: {X} at sample) -> {X} at sample {\n  STMTSdelay~(x, 8)\n}"),
     // The `init` is written: the omitted one of an array is an E0200 of this version whatever its elements are.
-    ("prev_array", "x: [{X}; 2] at sample) -> F32 at sample {\n  let z = prev~(x, [0.0, 0.0])\n  STMTS1.0\n}"),
-    ("prev_local", "x: F32 at sample) -> F32 at sample {\n  let y: {X} = x\n  let z = prev~(y)\n  STMTS1.0\n}"),
-    ("prev_init_given", "x: {X} at sample, n: {X} at init) -> F32 at sample {\n  let z = prev~(x, n)\n  STMTS1.0\n}"),
+    ("prev_array", "x: [{X}; 2] at sample) -> F32 at sample {\n  let _ = prev~(x, [0.0, 0.0])\n  STMTS1.0\n}"),
+    ("prev_local", "x: F32 at sample) -> F32 at sample {\n  let y: {X} = x\n  let _ = prev~(y)\n  STMTS1.0\n}"),
+    ("prev_init_given", "x: {X} at sample, n: {X} at init) -> F32 at sample {\n  let _ = prev~(x, n)\n  STMTS1.0\n}"),
 ];
 
 #[test]

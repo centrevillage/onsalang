@@ -1,0 +1,55 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§5.1", "§18.1"]
+// fixes = 1
+// [[test.fix]]
+// at = "52:7"
+// code = "E0309"
+// candidate = 1
+// leaves = ["53:7 E0309"]
+
+// The second round of the repair loop of an unused binding of a flow body whose name starts with `_`
+// (spec 2.3, 5.1, 18.1; S-716, S-726). negative/flow_unused_leading_underscore reports the E0320 of `_x`
+// (candidate `x`); this file holds the same flows with the names after that candidate. The binding is
+// still not read, so now it is the E0309, and its candidate renames it to `_`; the contract of the
+// candidates checks that nothing is left in the flow after it, so the loop stops after two rounds
+// (`_x` to `x` to `_`). In `first_is_plain` the plain `a` comes first, so it is the E0309 and the `x`
+// that the first round made is left for the next one (`leaves`).
+
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+pub flow let_binding(s: F32 at sample) -> F32 at sample {
+  let _ = s * 2.0 //~ E0309 @7
+  s
+}
+
+pub flow typed_binding(s: F32 at sample) -> F32 at sample {
+  let _: F32 = s * 2.0 //~ E0309 @7
+  s
+}
+
+pub flow destructuring(s: F32 at sample) -> F32 at sample {
+  let (_, b) = (s, s * 0.5) //~ E0309 @8
+  b
+}
+
+pub flow destructuring_of_a_struct(s: F32 at sample) -> F32 at sample {
+  let Pair { l: _, r: q } = Pair { l: s, r: s * 0.5 } //~ E0309 @17
+  q
+}
+
+pub flow arm_binding(s: F32 at sample, n: I32 at sample) -> F32 at sample {
+  match n {
+    0 => s,
+    _ => 0.0, //~ E0309 @5
+  }
+}
+
+pub flow first_is_plain(s: F32 at sample) -> F32 at sample {
+  let _ = s * 2.0 //~ E0309 @7
+  let x = s * 3.0
+  s
+}

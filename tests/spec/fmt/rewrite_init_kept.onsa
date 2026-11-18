@@ -57,6 +57,6 @@ pub flow use_lag(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow zero(x: F32 at sample, n: I32 at sample) -> F32 at sample {
-  let m = delay~(n, 4, 0)
+  let _ = delay~(n, 4, 0)
   prev~(x, 0.0)
 }

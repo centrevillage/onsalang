@@ -42,6 +42,6 @@ rt fn nodrop(c: Bool, y: [F32; 16]) -> F32 {
 
 @export
 pub flow arm_storage_for_head_nodrop(x: F32 at sample) -> F32 at sample {
-  let k = U32.trunc_sat_from((x * x) * 1000.0)
+  let _ = U32.trunc_sat_from((x * x) * 1000.0)
   nodrop(x > 0.0, ramp(x, 0.5))
 }

@@ -132,7 +132,7 @@ pub flow a_line_starts_with_caret_in_a_flow(a: U32 at sample, b: U32 at sample) 
 
 pub flow fine(x: F32 at sample, c: I32 at sample, u: U32 at sample, v: U32 at sample) -> F32 at sample {
   let a = lp~(x) + prev~(^a)
-  let b = -c
-  let d = !(u ^ v)
+  let _ = -c
+  let _ = !(u ^ v)
   a
 }

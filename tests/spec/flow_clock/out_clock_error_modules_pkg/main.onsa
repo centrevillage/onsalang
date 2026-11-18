@@ -15,42 +15,42 @@ pub fn half(v: F32) -> F32 { v * 0.5 }
 pub flow slow_in(c: F32 at block) -> F32 at sample { c }
 
 pub flow at_slower_qualified(x: F32 at sample) -> F32 at sample {
-  let a = util.unknown_clock~(x) at block
+  let _ = util.unknown_clock~(x) at block
   x
 }
 
 pub flow at_slower_imported(x: F32 at sample) -> F32 at sample {
-  let a = unknown_clock~(x) at block
+  let _ = unknown_clock~(x) at block
   x
 }
 
 pub flow block_output_at_slower(x: F32 at sample) -> F32 at sample {
-  let a = util.block_output~(x) at block
+  let _ = util.block_output~(x) at block
   x
 }
 
 pub flow no_clock_output_at_slower(x: F32 at sample) -> F32 at sample {
-  let a = util.no_clock_output~(x) at block
+  let _ = util.no_clock_output~(x) at block
   x
 }
 
 pub flow non_rt_call(x: F32 at sample) -> F32 at sample {
-  let b = half(util.unknown_clock~(x))
+  let _ = half(util.unknown_clock~(x))
   x
 }
 
 pub flow into_block_input(x: F32 at sample) -> F32 at sample {
-  let c = slow_in~(util.block_output~(x))
+  let _ = slow_in~(util.block_output~(x))
   x
 }
 
 pub flow into_delay_init(x: F32 at sample) -> F32 at sample {
-  let d = prev~(x, util.no_clock_output~(x))
+  let _ = prev~(x, util.no_clock_output~(x))
   x
 }
 
 pub flow into_delay_value(x: F32 at sample) -> F32 at sample {
-  let e = prev~(util.unknown_clock~(x))
+  let _ = prev~(util.unknown_clock~(x))
   x
 }
 

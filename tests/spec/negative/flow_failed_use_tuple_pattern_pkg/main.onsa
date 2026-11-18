@@ -3,7 +3,8 @@
 // A tuple pattern or the unit pattern `()` (§7, S-516) of a `let` in a flow body against a value of that
 // type is such a use: its elements are of the error type too, and the check of the flow goes on after
 // it. So the flows below report nothing of the pattern, and the last one reports the E0401 of the
-// `let` after the pattern. The same forms in a fn body are silent too. One error per unit.
+// `let` after the pattern. The same forms in a fn body are silent too. One error per unit. The names the
+// patterns bind are read by a `let _`, so that no E0309 is due (§5.1).
 
 use util.{Gone} //~ E0302
 
@@ -14,11 +15,14 @@ pub flow unit_pattern(x: Gone at sample, y: F32 at sample) -> F32 at sample {
 
 pub flow pair_pattern(x: Gone at sample, y: F32 at sample) -> F32 at sample {
   let (p, q) = x
+  let _ = p
+  let _ = q
   y
 }
 
 pub flow nested_pattern(x: Gone at sample, y: F32 at sample) -> F32 at sample {
   let ((), (r, _)) = x
+  let _ = r
   y
 }
 

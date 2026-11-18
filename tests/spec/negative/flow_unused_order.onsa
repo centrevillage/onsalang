@@ -1,0 +1,253 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§11.2", "§18.1"]
+
+// The place of E0309 in the order of the stages for the body of a flow (spec 18.1, 5.1; S-726): the E0309
+// of an unused binding is the last stage and is reported only for a unit with no other error, since an
+// unused binding may be the symptom of the other error (a `let` is not read because the name meant was
+// written otherwise). A flow is one unit, so in a flow with an unused `let` and an error of the syntax,
+// the names, the types, the flow check (the errors of the lengths and bounds that the walk of the types
+// holds and goes on from, R-329, R-495, and the errors of the clocks) or of the effects, only that error
+// is reported, whichever is written first, and no E0309. A body that was not walked to its end (the use
+// of a name that failed, 18.1) is not reported either, and the units are independent (P1): the flow
+// with the unused `let` and nothing else, in the last part, reports its E0309 beside the errors of the
+// others. Each flow below has an unused `let` (`u`, or the `let`s that the error is on); the mark is
+// the one error of its flow.
+
+pub fn noisy(v: F32) -> F32 uses {Alloc} { v }
+
+pub flow tap(x: F32 at sample) -> F32 at sample {
+  prev~(x)
+}
+
+pub struct Dd {
+  a: F32,
+}
+
+pub struct Dd { //~ E0304
+  a: F32,
+}
+
+// ---------------------------------------------------------------- the flow check
+
+pub flow clock_error_after(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let u = x * 2.0
+  let a = prev~(p) //~ E0813
+  x
+}
+
+pub flow clock_error_before(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = prev~(p) //~ E0813
+  let u = x * 2.0
+  x
+}
+
+pub flow at_slower_error_after(x: F32 at sample) -> F32 at sample {
+  let u = x * 2.0
+  let a = x at block //~ E0815
+  x
+}
+
+pub flow delay_of_one_after(x: F32 at sample) -> F32 at sample {
+  let u = x * 2.0
+  let d = delay~(x, 1) //~ E0807
+  x
+}
+
+pub flow delay_of_one_before(x: F32 at sample) -> F32 at sample {
+  let d = delay~(x, 1) //~ E0807
+  let u = x * 2.0
+  x
+}
+
+pub flow delay_of_zero_after(x: F32 at sample) -> F32 at sample {
+  let u = x * 2.0
+  let d = delay~(x, 0) //~ E0808
+  x
+}
+
+pub flow vdelay_of_no_room_after(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  let u = x * 2.0
+  let v = vdelay~(x, d, 0) //~ E0808
+  x
+}
+
+pub flow empty_replicas_after(x: F32 at sample) -> F32 at sample {
+  let u = x * 2.0
+  let ys = par~ i in 2 ..< 2 { x } //~ E0808
+  x
+}
+
+pub flow empty_replicas_before(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 2 ..< 2 { x } //~ E0808
+  let u = x * 2.0
+  x
+}
+
+pub flow str_value_after(x: F32 at sample) -> F32 at sample {
+  let u = x * 2.0
+  let s = "text" //~ E0810
+  x
+}
+
+pub flow let_in_a_replica_body_after(x: F32 at sample) -> F32 at sample {
+  let u = x * 2.0
+  let ys = par~ i in 0 ..< 2 {
+    let t = x //~ E0806
+    t
+  }
+  x
+}
+
+pub flow let_in_a_branch_after(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let u = x * 2.0
+  if c {
+    let t = x //~ E0806
+    t
+  } else {
+    x
+  }
+}
+
+// The all `_` destructuring is a root, and it still checks the shape of the value (S-727): the tuple
+// pattern against a scalar is E0401, as for a `let` that names things, and `let _ = x` is fine.
+pub flow all_underscore_tuple_of_a_scalar(x: F32 at sample) -> F32 at sample {
+  let (_, _) = x //~ E0401
+  x
+}
+
+// ---------------------------------------------------------------- the effects
+
+pub flow alloc_call_after(x: F32 at sample) -> F32 at sample {
+  let u = x * 2.0
+  let a = noisy(1.0) //~ E0805
+  x
+}
+
+pub flow alloc_call_before(x: F32 at sample) -> F32 at sample {
+  let a = noisy(1.0) //~ E0805
+  let u = x * 2.0
+  x
+}
+
+// ---------------------------------------------------------------- the types
+
+pub flow type_error_after(x: F32 at sample) -> F32 at sample {
+  let u = x * 2.0
+  let t: Bool = 1.0 //~ E0401
+  x
+}
+
+pub flow type_error_before(x: F32 at sample) -> F32 at sample {
+  let t: Bool = 1.0 //~ E0401
+  let u = x * 2.0
+  x
+}
+
+pub flow arguments_of_an_instance_after(x: F32 at sample) -> F32 at sample {
+  let u = x * 2.0
+  let y = tap~(x, x) //~ E0412
+  x
+}
+
+pub flow tuple_pattern_of_a_scalar_after(x: F32 at sample) -> F32 at sample {
+  let u = x * 2.0
+  let (a, b) = x //~ E0401
+  x
+}
+
+// A held error of the walk of the types (R-329, R-495): the length of a delay or the clock of a first
+// argument is the first by position and is held, and the type error written after it is the one
+// reported. The unit has an error, so there is no E0309.
+pub flow held_delay_of_one_then_a_type_error(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, 1)
+  let t: Bool = 1.0 //~ E0401
+  x
+}
+
+pub flow held_clock_error_then_a_type_error(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = prev~(p)
+  let t: Bool = 1.0 //~ E0401
+  x
+}
+
+pub flow held_empty_replicas_then_a_type_error(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 2 ..< 2 { x }
+  let t: Bool = 1.0 //~ E0401
+  x
+}
+
+pub flow type_error_then_a_held_delay(x: F32 at sample) -> F32 at sample {
+  let t: Bool = 1.0 //~ E0401
+  let a = delay~(x, 1)
+  x
+}
+
+// ---------------------------------------------------------------- the names and the syntax
+
+pub flow name_not_found_after(x: F32 at sample) -> F32 at sample {
+  let u = x * 2.0
+  let b = nope //~ E0302
+  x
+}
+
+pub flow name_not_found_before(x: F32 at sample) -> F32 at sample {
+  let b = nope //~ E0302
+  let u = x * 2.0
+  x
+}
+
+pub flow forward_read_after(x: F32 at sample) -> F32 at sample {
+  let a = b + 1.0 //~ E0801
+  let b = x * 2.0
+  x
+}
+
+pub flow clock_on_the_binding_after(x: F32 at sample) -> F32 at sample {
+  let u = x * 2.0
+  let a at sample = x //~ E0020
+  x
+}
+
+// ---------------------------------------------------------------- the body was not walked to its end
+
+// A name that failed (the second `Dd` is E0304, so `Dd` is no name in a value position) stops the checks
+// that depend on it for the rest of the unit (18.1), so nothing is reported in these flows, before the
+// use or after it, and the same goes for the `fn` that has the same body.
+pub flow failed_name_in_a_literal(x: F32 at sample) -> F32 at sample {
+  let u = x * 2.0
+  let d = Dd { a: x }
+  let w = x * 3.0
+  x
+}
+
+pub flow failed_name_in_a_pattern(x: F32 at sample) -> F32 at sample {
+  let u = x * 2.0
+  let Dd { a: q } = x
+  x
+}
+
+pub fn failed_name_in_a_fn(x: F32) -> F32 {
+  let u = x * 2.0
+  let d = Dd { a: x }
+  x
+}
+
+// ---------------------------------------------------------------- the other units are independent
+
+pub flow only_an_unused_let(x: F32 at sample) -> F32 at sample {
+  let u = x * 2.0 //~ E0309 @7
+  x
+}
+
+pub flow only_an_unused_arm_binding(x: F32 at sample, n: I32 at sample) -> F32 at sample {
+  match n {
+    0 => x,
+    m => 0.0, //~ E0309 @5
+  }
+}
+
+pub fn only_an_unused_let_in_a_fn(a: I32) -> I32 {
+  let u = a * 2 //~ E0309 @7
+  a
+}

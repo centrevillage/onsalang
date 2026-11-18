@@ -58,7 +58,7 @@ pub flow f2(n: I32 at init, p: I32 at block, x: I32 at sample) -> I32 at sample 
   let c0 = PAIR.1
   let c1 = c0
   let c2 = c0 - c0
-  let (c3, c3b) = (c2, c0 + 1)
+  let (_, c3b) = (c2, c0 + 1)
   let (c4, c4b) = PAIR
   let v3 = par~ i in 0 ..< 2 { prev~(((x % 9) * (p + c1)), c0) }
   let v4 = par~ i in 0 ..< 2 { prev~(((x % 9) * (p + c4)), c4b) }
@@ -74,7 +74,7 @@ pub flow g2(n: I32 at init, p: I32 at block, x: I32 at sample) -> I32 at sample 
 pub flow f3(p: I32 at block, x: I32 at sample) -> I32 at sample {
   let c0 = twice(K)
   let c1 = c0
-  let c2 = c1 * c0
+  let _ = c1 * c0
   let (c3, c3b) = PAIR
   (((prev~((x % 100), c3)) + ((prev~(((x % 9) + c3b), c3b) + delay~((x % 7), 2, c0))) + (delay~(((x % 100) + c3), 3, c0)) + (c3b)) % 100000)
 }
@@ -164,7 +164,7 @@ pub flow f10(p: I32 at block, x: I32 at sample) -> I32 at sample {
   let c2 = c1 - c0
   let c3 = 3
   let c4 = c0 * c3
-  let c5 = c4 * c4
+  let _ = c4 * c4
   let v2 = (x % 10) + c4
   let v3 = (v2 * c2) % 100
   (((kid2~(c0, c4)) + (v3) + (delay~(((x % 100) + c4), 3, c4)) + (kid~(c2, c0, x))) % 100000)
@@ -204,10 +204,10 @@ pub flow g12(x: I32 at sample) -> I32 at sample {
 }
 pub flow f13(n: I32 at init, p: I32 at block, x: I32 at sample) -> I32 at sample {
   let c0 = TBL[1]
-  let c1 = c0
-  let (c2, c2b) = (c0, c0 + 1)
-  let (c3, c3b) = PAIR
-  let (c4, c4b) = PAIR
+  let _ = c0
+  let (c2, _) = (c0, c0 + 1)
+  let (c3, _) = PAIR
+  let (c4, _) = PAIR
   ((((if x > c4 { (x % 50) } else { c3 })) + ((prev~(((x % 9) + c2), c2) + delay~((x % 7), 2, c0)))) % 100000)
 }
 pub flow g13(n: I32 at init, p: I32 at block, x: I32 at sample) -> I32 at sample {
@@ -236,8 +236,8 @@ pub flow f15(n: I32 at init, x: I32 at sample) -> I32 at sample {
   let c1 = c0 - c0
   let c2 = K
   let c3 = K
-  let c4 = c3 * c0
-  let c5 = TBL[1]
+  let _ = c3 * c0
+  let _ = TBL[1]
   let v2 = par~ i in 0 ..< 3 { prev~((x % 50), c2) + delay~((x % 9), 2, c1) }
   (((kid3~(c1)) + (v2[0] + v2[1] + v2[2])) % 100000)
 }
@@ -275,8 +275,8 @@ pub flow f18(p: I32 at block) -> I32 at sample {
   let c0 = K
   let c1 = K
   let c2 = scale(K, 2)
-  let (c3, c3b) = (c2, c0 + 1)
-  let c4 = c3 + c2
+  let (c3, _) = (c2, c0 + 1)
+  let _ = c3 + c2
   (((c1) + (c0)) % 100000)
 }
 pub flow g18(p: I32 at block) -> I32 at sample {
@@ -292,9 +292,9 @@ pub flow g19(p: I32 at block, x: I32 at sample) -> I32 at sample {
 }
 pub flow f20(n: I32 at init, p: I32 at block) -> I32 at sample {
   let c0 = twice(K)
-  let (c1, c1b) = PAIR
-  let c2 = c1
-  let (c3, c3b) = PAIR
+  let (c1, _) = PAIR
+  let _ = c1
+  let (c3, _) = PAIR
   ((((n + c3)) + (c1) + (c3 + c0)) % 100000)
 }
 pub flow g20(n: I32 at init, p: I32 at block) -> I32 at sample {
@@ -303,7 +303,7 @@ pub flow g20(n: I32 at init, p: I32 at block) -> I32 at sample {
 pub flow f21(n: I32 at init, x: I32 at sample) -> I32 at sample {
   let c0 = PAIR.1
   let c1 = pick(c0, 3)
-  let (c2, c2b) = (c0, c0 + 1)
+  let (c2, _) = (c0, c0 + 1)
   let v3 = [c1, c2, 1]
   ((((prev~(((x % 9) + c2), c2) + delay~((x % 7), 2, c1))) + (kid2~(c1, c2)) + (v3[1])) % 100000)
 }
@@ -327,7 +327,7 @@ pub flow g22(p: I32 at block, x: I32 at sample) -> I32 at sample {
 }
 pub flow f23(x: I32 at sample) -> I32 at sample {
   let c0 = (TBL[2] % 7)
-  let (c1, c1b) = PAIR
+  let (c1, _) = PAIR
   let c2 = c0 + c0
   ((((if c2 > c1 { c2 } else { c1 + 1 }))) % 100000)
 }
@@ -348,8 +348,8 @@ pub flow f25(n: I32 at init, p: I32 at block, x: I32 at sample) -> I32 at sample
   let c0 = 1
   let c1 = c0 + c0
   let c2 = c0
-  let c3 = c0 * c1
-  let c4 = c2
+  let _ = c0 * c1
+  let _ = c2
   let c5 = PAIR.1
   let v3 = par~ i in 0 ..< 3 { prev~(((x % 50) * c1) + 1) }
   let v4 = (x % 10) + c0
@@ -431,7 +431,7 @@ pub flow g31(n: I32 at init, p: I32 at block, x: I32 at sample) -> I32 at sample
 }
 pub flow f32(x: I32 at sample) -> I32 at sample {
   let c0 = scale(K, 2)
-  let c1 = K
+  let _ = K
   let c2 = scale(c0, c0)
   let v3 = par~ i in 0 ..< 2 { kid2~(c2, c2) }
   (((c2 + c2) + (c0) + (v3[0] + v3[1]) + (delay~((x % 100), 2, c2))) % 100000)
@@ -444,9 +444,9 @@ pub flow f33(n: I32 at init, p: I32 at block) -> I32 at sample {
   let c0 = K2
   let c1 = c0
   let (c2, c2b) = (c1, c1 + 1)
-  let c3 = c2
-  let c4 = TBL[1]
-  let (c5, c5b) = PAIR
+  let _ = c2
+  let _ = TBL[1]
+  let (_, _) = PAIR
   let v1 = p + c2b
   let v2 = (v1 * c2) % 1000
   (((v2)) % 100000)
@@ -469,11 +469,11 @@ pub flow g34(n: I32 at init, p: I32 at block, x: I32 at sample) -> I32 at sample
 }
 pub flow f35(p: I32 at block, x: I32 at sample) -> I32 at sample {
   let c0 = twice(K)
-  let c1 = (TBL[2] % 7)
+  let _ = (TBL[2] % 7)
   let c2 = c0
   let c3 = c2
-  let (c4, c4b) = (c2, c0 + 1)
-  let c5 = (TBL[2] % 7)
+  let (_, _) = (c2, c0 + 1)
+  let _ = (TBL[2] % 7)
   (((c3)) % 100000)
 }
 pub flow g35(p: I32 at block, x: I32 at sample) -> I32 at sample {
@@ -518,9 +518,9 @@ pub flow g38(n: I32 at init, p: I32 at block, x: I32 at sample) -> I32 at sample
 }
 pub flow f39(n: I32 at init, p: I32 at block, x: I32 at sample) -> I32 at sample {
   let c0 = 1
-  let c1 = scale(K, 2)
+  let _ = scale(K, 2)
   let (c2, c2b) = PAIR
-  let (c3, c3b) = (c2, c0 + 1)
+  let (_, c3b) = (c2, c0 + 1)
   let c4 = c2b
   let v1 = n + c3b
   let v2 = (v1 * c2b) % 1000
@@ -534,10 +534,10 @@ pub flow g39(n: I32 at init, p: I32 at block, x: I32 at sample) -> I32 at sample
 pub flow f40(n: I32 at init, p: I32 at block, x: I32 at sample) -> I32 at sample {
   let c0 = K2
   let c1 = c0
-  let c2 = c0
+  let _ = c0
   let c3 = c0 - c1
-  let c4 = 1
-  let c5 = pick(c3, 3)
+  let _ = 1
+  let _ = pick(c3, 3)
   let v1 = n + c1
   (((v1) + (((x % 5) * (p + n + c1))) + (((x % 5) * (p + n + c0)))) % 100000)
 }
@@ -550,7 +550,7 @@ pub flow f41(n: I32 at init, p: I32 at block, x: I32 at sample) -> I32 at sample
   let c1 = twice(K)
   let c2 = c1 - c0
   let c3 = c2 - c2
-  let c4 = TBL[1]
+  let _ = TBL[1]
   let v3 = par~ i in 0 ..< 3 { prev~(((x % 50) * c0) + 1) }
   let v4 = [c1, c1, 1]
   (((c1 + c3) + (pick(c1, c2)) + (v3[0] + v3[2]) + (v4[1])) % 100000)
@@ -562,9 +562,9 @@ pub flow g41(n: I32 at init, p: I32 at block, x: I32 at sample) -> I32 at sample
 }
 pub flow f42(n: I32 at init, p: I32 at block, x: I32 at sample) -> I32 at sample {
   let c0 = K
-  let (c1, c1b) = PAIR
+  let (c1, _) = PAIR
   let c2 = twice(K)
-  let (c3, c3b) = (c2, c1 + 1)
+  let (_, c3b) = (c2, c1 + 1)
   (((delay~(((x % 100) + c0), 3, c3b))) % 100000)
 }
 pub flow g42(n: I32 at init, p: I32 at block, x: I32 at sample) -> I32 at sample {
@@ -572,7 +572,7 @@ pub flow g42(n: I32 at init, p: I32 at block, x: I32 at sample) -> I32 at sample
 }
 pub flow f43(p: I32 at block, x: I32 at sample) -> I32 at sample {
   let c0 = TBL[1]
-  let (c1, c1b) = (c0, c0 + 1)
+  let (_, c1b) = (c0, c0 + 1)
   let c2 = c0 + c1b
   let v1 = (x * c1b) % 100
   let v2 = p + c2
@@ -588,8 +588,8 @@ pub flow g43(p: I32 at block, x: I32 at sample) -> I32 at sample {
 pub flow f44(p: I32 at block, x: I32 at sample) -> I32 at sample {
   let c0 = K
   let c1 = c0
-  let (c2, c2b) = (c1, c1 + 1)
-  let (c3, c3b) = PAIR
+  let (_, _) = (c1, c1 + 1)
+  let (_, c3b) = PAIR
   (((prev~((x % 100), c1)) + ((prev~(((x % 9) + c3b), c3b) + delay~((x % 7), 2, c3b)))) % 100000)
 }
 pub flow g44(p: I32 at block, x: I32 at sample) -> I32 at sample {
@@ -598,9 +598,9 @@ pub flow g44(p: I32 at block, x: I32 at sample) -> I32 at sample {
 pub flow f45(n: I32 at init, x: I32 at sample) -> I32 at sample {
   let c0 = 3
   let c1 = c0 * c0
-  let c2 = 3
+  let _ = 3
   let c3 = c1
-  let c4 = c3
+  let _ = c3
   (((((x % 7) + (n * c1)))) % 100000)
 }
 pub flow g45(n: I32 at init, x: I32 at sample) -> I32 at sample {
@@ -608,9 +608,9 @@ pub flow g45(n: I32 at init, x: I32 at sample) -> I32 at sample {
 }
 pub flow f46(n: I32 at init, p: I32 at block, x: I32 at sample) -> I32 at sample {
   let c0 = 1
-  let c1 = c0 + c0
+  let _ = c0 + c0
   let c2 = 1
-  let c3 = c2
+  let _ = c2
   let v1 = (p * c0) % 100
   (((v1) + (((x % 5) * (p + n + c2))) + (kc~(c0, c0, x)) + (delay~((x % 100), 2, c2)) + (prev~((x % 100), c2))) % 100000)
 }
@@ -622,9 +622,9 @@ pub flow f47(n: I32 at init, p: I32 at block) -> I32 at sample {
   let c0 = (TBL[2] % 7)
   let c1 = (c0, 5).0
   let c2 = c1 + c1
-  let c3 = (c1, 5).0
-  let c4 = twice(K)
-  let c5 = twice(c2)
+  let _ = (c1, 5).0
+  let _ = twice(K)
+  let _ = twice(c2)
   (((kid3~(c2))) % 100000)
 }
 pub flow g47(n: I32 at init, p: I32 at block) -> I32 at sample {
@@ -634,8 +634,8 @@ pub flow f48(n: I32 at init, p: I32 at block, x: I32 at sample) -> I32 at sample
   let c0 = scale(K, 2)
   let c1 = [c0, 1, 2][1]
   let (c2, c2b) = (c1, c0 + 1)
-  let (c3, c3b) = (c2b, c1 + 1)
-  let (c4, c4b) = PAIR
+  let (_, c3b) = (c2b, c1 + 1)
+  let (_, c4b) = PAIR
   let v1 = (x % 10) + c4b
   let v2 = (v1 * c0) % 100
   (((v2) + ((if c3b > c2 { c3b } else { c2 + 1 }))) % 100000)
@@ -648,8 +648,8 @@ pub flow g48(n: I32 at init, p: I32 at block, x: I32 at sample) -> I32 at sample
 pub flow f49(x: I32 at sample) -> I32 at sample {
   let c0 = 1
   let c1 = c0
-  let c2 = 1
-  let c3 = (c0, 5).0
+  let _ = 1
+  let _ = (c0, 5).0
   (((prev~((x % 100), c1))) % 100000)
 }
 pub flow g49(x: I32 at sample) -> I32 at sample {

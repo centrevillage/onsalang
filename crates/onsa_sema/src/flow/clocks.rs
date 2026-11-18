@@ -93,6 +93,8 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
     if info.complete {
         let recorded = std::mem::take(&mut w.recorded);
         super::plan::build(&mut info, recorded, &w);
+        let unused = super::reads::unused(a, id, ast, &info, &m.deps, &fcx);
+        a.diagnostics.extend(unused);
     }
     let diag = Diagnostic::first_in_file([w.diag, m.diag, fcx.held].into_iter().flatten());
     let diag = diag.or(w.inout_call);

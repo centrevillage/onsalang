@@ -9,6 +9,10 @@ use onsa_syntax::ast::Ast;
 
 use super::clocks::Walked;
 use super::*;
+use crate::names::body::Binding;
+
+#[cfg(test)]
+mod tests;
 
 /// What the marking gives.
 pub(super) struct Marked {
@@ -17,6 +21,10 @@ pub(super) struct Marked {
     /// The first call (in the order of the file) of a function that is not
     /// `rt` read at a stage after `init` (E0200, R-17, W7-05).
     pub(super) diag: Option<Diagnostic>,
+    /// The locals of the `let`s the initializer of each `let` reads (by its
+    /// index; the last, the output), `^y` too: the reads what is reached
+    /// goes by ([`reached`]). W7-15 makes them from the edges of the plan.
+    pub(super) deps: Vec<HashSet<LocalId>>,
 }
 
 struct Marker<'a> {
@@ -30,6 +38,9 @@ struct Marker<'a> {
     non_rt: &'a HashSet<ExprId>,
     node_calls: HashSet<ExprId>,
     sample_rate: HashSet<ExprId>,
+    let_of_local: &'a HashMap<LocalId, usize>,
+    /// The `let` whose initializer is marked now (its index), or the output.
+    consumer: usize,
     out: Marked,
 }
 
@@ -63,20 +74,30 @@ pub(super) fn mark_all(
         non_rt: &walked.non_rt,
         node_calls: cx.calls.iter().map(|c| c.expr).collect(),
         sample_rate: cx.sample_rate_calls.iter().copied().collect(),
-        out: Marked { read_at: HashMap::default(), sample_rate_at: None, diag: None },
+        let_of_local: &cx.let_of_local,
+        consumer: lets.len(),
+        out: Marked {
+            read_at: HashMap::default(),
+            sample_rate_at: None,
+            diag: None,
+            deps: vec![HashSet::default(); lets.len() + 1],
+        },
     };
-    for l in lets.iter().filter(|l| l.clock != Clock::Const) {
+    for (k, l) in lets.iter().enumerate().filter(|(_, l)| l.clock != Clock::Const) {
         if let Some(s) = read_stage(l.clock) {
+            m.consumer = k;
             m.mark(l.init, s);
         }
     }
     if let Some(out) = cx.output {
+        m.consumer = lets.len();
         m.mark(out, ClockStage::SAMPLE);
     }
     // A constant `let` is defined in each phase that reads it, and its
     // initializer read there (§11.3, R-488): from the last, so that one
     // read by a later constant `let` has the stages of that one.
-    for l in lets.iter().rev().filter(|l| l.clock == Clock::Const) {
+    for (k, l) in lets.iter().enumerate().rev().filter(|(_, l)| l.clock == Clock::Const) {
+        m.consumer = k;
         let reads = l.locals.iter().filter_map(|id| m.out.read_at.get(id));
         let mut stages: BTreeSet<ClockStage> = reads.flatten().copied().collect();
         if stages.is_empty() {
@@ -89,6 +110,59 @@ pub(super) fn mark_all(
     m.out
 }
 
+/// The locals of the `let`s reached from the output and from the `let`s
+/// that bind no name (§5.1, S-727), through the reads `deps` of
+/// [`Marked`]: each `let` is visited once, so the walk is linear in the
+/// `let`s and their reads, and ends.
+pub(super) fn reached(
+    lets: &[FlowLet],
+    deps: &[HashSet<LocalId>],
+    let_of_local: &HashMap<LocalId, usize>,
+) -> HashSet<LocalId> {
+    let roots = lets.iter().enumerate().filter(|(_, l)| l.binds_none()).map(|(k, _)| k);
+    let mut todo: Vec<usize> = roots.chain([lets.len()]).collect();
+    let mut seen = vec![false; deps.len()];
+    todo.iter().for_each(|&k| seen[k] = true);
+    let mut out = HashSet::default();
+    while let Some(k) = todo.pop() {
+        for &id in &deps[k] {
+            out.insert(id);
+            let j = let_of_local[&id];
+            if !std::mem::replace(&mut seen[j], true) {
+                todo.push(j);
+            }
+        }
+    }
+    out
+}
+
+/// The E0309 of the bindings of the complete flow `id` that are not used
+/// (§5.1, S-129, S-1146), of the names stage's record: a `let` not
+/// [`reached`], whose notes show the `let`s that read it, and a binding of
+/// an arm by its reads. Reported of the last stage (S-726).
+pub(super) fn unused(
+    a: &Analysis,
+    id: DefId,
+    ast: &Ast,
+    info: &FlowInfo,
+    deps: &[HashSet<LocalId>],
+    cx: &FlowCx,
+) -> Vec<Diagnostic> {
+    let Some(names) = a.names.get(&id).filter(|n| n.complete) else { return Vec::new() };
+    let reached = reached(&info.lets, deps, &cx.let_of_local);
+    let mut readers: HashMap<LocalId, Vec<Span>> = HashMap::default();
+    for (l, d) in info.lets.iter().zip(deps) {
+        d.iter().for_each(|&v| readers.entry(v).or_default().push(ast.pat(l.pat).span));
+    }
+    let unreached = |b: &Binding| {
+        let Some(&v) = b.sites.first().and_then(|p| info.body.pat_locals.get(p)) else {
+            onsa_diag::internal::bug(Some(b.span), "a `let` of a flow with no local")
+        };
+        (!reached.contains(&v)).then(|| readers.get(&v).cloned().unwrap_or_default())
+    };
+    crate::names::body::unused(names, ast, &unreached).collect()
+}
+
 impl Marker<'_> {
     fn mark(&mut self, e: ExprId, at: ClockStage) {
         let ast = self.ast;
@@ -97,6 +171,9 @@ impl Marker<'_> {
             ExprKind::Path(_) | ExprKind::Feedback(_) | ExprKind::Field { .. } => {
                 if let Some(Target::Local(id)) = self.body.targets.get(&e) {
                     self.out.read_at.entry(*id).or_default().insert(at);
+                    if self.let_of_local.contains_key(id) {
+                        self.out.deps[self.consumer].insert(*id);
+                    }
                 }
                 if let ExprKind::Field { base, .. } = &expr.kind
                     && !self.body.targets.contains_key(&e)

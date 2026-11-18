@@ -62,7 +62,7 @@ fn a_chain_of_constants_is_stopped_by_the_stack_it_uses_and_not_by_its_length_al
 const MOST: fn() -> Limits = || Limits { reserve: 0, most: 100 };
 
 fn array(n: &str) -> String {
-    format!("struct P {{ x: I32, y: I32 }}\nflow f(a: I32 at sample) -> I32 at sample {{ let xs = {n}\n 7 }}")
+    format!("struct P {{ x: I32, y: I32 }}\nflow f(a: I32 at sample) -> I32 at sample {{ let _ = {n}\n 7 }}")
 }
 
 #[test]
@@ -106,7 +106,7 @@ const EMPTY: [[U8; 0]; 101] = [[1; 0]; 101]
         ("over", "OVER[0][0]"),
         ("tup", "TUP.0[0]"),
         ("lit", "LIT[0][0]"),
-        ("empty", "let e = EMPTY\n 1"),
+        ("empty", "let _ = EMPTY\n 1"),
     ];
     let src = flows.iter().fold(defs.to_string(), |s, (n, e)| s + &body(n, e));
     let run = |name: &'static str| flow_with(&src, name, vec![("a", i32v(0))], MOST);

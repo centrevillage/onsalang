@@ -1,0 +1,148 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§11.2", "§18.1"]
+// fixes = 0
+
+// E0309 of a `let` of a flow body that is read, but cannot be reached from the output or from a
+// `let _` (spec 5.1: "参照されていても出力と `let _` から辿れない `let` が使われない束縛である", also
+// for the lets that read each other through `^`, 11.2; S-129, S-1146). The `let`s that are read only by
+// such `let`s are not reached either, so a chain `a` -> `b` -> nobody is two unused bindings, and the
+// one that is reported is the first by position (one error per unit, 18.1): the head of the chain
+// (a binding is defined above the lets that read it, so the head is always first), and the head of a
+// `^` ring. What is reached is found by the initializers of the lets that are read, from the output
+// and from the `let _` (also through `^y`, and the initializer of a `let` that names nothing).
+//
+// Provisional (S-1145, OPEN): the head of a chain is read by a `let` (by itself, in a ring), so it has
+// no candidate: renaming it to `_` would make the `let` that reads it name a missing `a` (E0302 of the
+// names stage), against the promise of the candidates (18.1). Only a binding that nothing reads, in
+// the names stage, gets the candidate `_` (negative/flow_unused_forms); the note of the diagnostic
+// shows the `let` that reads it (the text is not a promise). `fixes = 0` is all this file says of the
+// candidates: when S-1145 is decided, the cases of this file are the ones to revisit.
+
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+pub flow tap(x: F32 at sample) -> F32 at sample {
+  prev~(x)
+}
+
+// ---------------------------------------------------------------- chains
+
+pub flow chain_of_two(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0 //~ E0309 @7
+  let b = a + 1.0
+  x
+}
+
+pub flow chain_of_three(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0 //~ E0309 @7
+  let b = a + 1.0
+  let c = b * 3.0
+  x
+}
+
+pub flow diamond_nobody_reads(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0 //~ E0309 @7
+  let b = a + 1.0
+  let c = a - 1.0
+  let d = b * c
+  x
+}
+
+pub flow chain_with_a_later_unread_let(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0 //~ E0309 @7
+  let b = a + 1.0
+  let z = x * 3.0
+  x
+}
+
+pub flow chain_through_a_delay(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0 //~ E0309 @7
+  let d = prev~(a)
+  x
+}
+
+pub flow chain_through_an_instance_argument(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0 //~ E0309 @7
+  let y = tap~(a)
+  x
+}
+
+pub flow chain_through_a_replica(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0 //~ E0309 @7
+  let ys = par~ i in 0 ..< 2 {
+    a
+  }
+  x
+}
+
+pub flow chain_through_a_field(x: F32 at sample) -> F32 at sample {
+  let s = Pair { l: x, r: x * 0.5 } //~ E0309 @7
+  let t = s.l
+  x
+}
+
+pub flow chain_through_a_destructuring(x: F32 at sample) -> F32 at sample {
+  let (a, b) = (x, x * 2.0) //~ E0309 @8
+  let c = a + b
+  x
+}
+
+pub flow chain_through_an_arm(x: F32 at sample, n: I32 at sample) -> F32 at sample {
+  let a = x * 2.0 //~ E0309 @7
+  let k = match n {
+    0 => a,
+    m => F32.round_from(m),
+  }
+  x
+}
+
+pub flow a_second_chain_beside_a_reached_one(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0
+  let b = a + 1.0
+  let c = x + 3.0 //~ E0309 @7
+  let d = c * 2.0
+  b
+}
+
+// ---------------------------------------------------------------- `^`
+
+pub flow a_let_that_reads_itself_through_a_caret(x: F32 at sample) -> F32 at sample {
+  let y = prev~(^y) * 0.5 + x //~ E0309 @7
+  x
+}
+
+pub flow a_ring_of_two_lets(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^b) //~ E0309 @7
+  let b = a * 0.5 + x
+  x
+}
+
+pub flow a_ring_of_three_lets(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^c) //~ E0309 @7
+  let b = a * 0.5 + x
+  let c = b + 1.0
+  x
+}
+
+pub flow a_ring_read_by_a_let_that_nobody_reads(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^b) //~ E0309 @7
+  let b = a * 0.5 + x
+  let c = b * 2.0
+  x
+}
+
+pub flow a_ring_that_reads_a_chain(x: F32 at sample) -> F32 at sample {
+  let g = x * 2.0 //~ E0309 @7
+  let a = prev~(^b) + g
+  let b = a * 0.5 + x
+  x
+}
+
+pub flow a_ring_with_an_instance(x: F32 at sample) -> F32 at sample {
+  let a = tap~(prev~(^b)) //~ E0309 @7
+  let b = a + x
+  x
+}

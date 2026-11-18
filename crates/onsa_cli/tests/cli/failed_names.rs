@@ -444,7 +444,7 @@ fn a_part_of_the_error_type_is_not_known_and_the_rest_is_checked() {
         ),
         (
             "flow_delay",
-            "pub flow u(x: {X} at sample) -> F32 at sample {\n  let p = prev~(x)\n  let q = delay~(x, 8)\n  1.0\n}\n",
+            "pub flow u(x: {X} at sample) -> F32 at sample {\n  let _ = prev~(x)\n  let _ = delay~(x, 8)\n  1.0\n}\n",
         ),
         ("flow_nested", "pub flow u(x: [[{X}; 2]; 2] at sample) -> F32 at sample { @@E0810\n  1.0\n}\n"),
         ("flow_tuple", "pub flow u(x: F32 at sample) -> (F32, {X}) at sample { @@E0810\n  (x, x)\n}\n"),

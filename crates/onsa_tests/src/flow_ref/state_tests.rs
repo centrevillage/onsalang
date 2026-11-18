@@ -245,17 +245,19 @@ fn a_delay_ticks_with_the_clock_of_its_first_argument_which_is_sample_here() {
     // §11.3, §11.4: the result of a delay has the clock of its first argument, and a first argument that is of `block`
     // is `p at sample` (a name that decides nothing is read as `sample`: `^c`, a constant). So each of these `let`s is of
     // `sample` and ticks for each frame, not for each call: `ps = p at sample`, `a = prev~(ps)`, `b = prev~(p at sample)`,
-    // `c = prev~(^c, 1.0)`, and the output `a + b` too.
+    // `c = prev~(^c, 1.0)`, the `let _ = c` that reads it (a `let` read by its `^c` only is an E0309, §5.1), and the
+    // output `a + b` too.
     let src = "flow f(p: F32 at block) -> F32 at sample {
   let ps = p at sample
   let a = prev~(ps)
   let b = prev~(p at sample, 9.0)
   let c: F32 = prev~(^c, 1.0)
+  let _ = c
   a + b
 }";
     with_flow(src, "f", |view, def| {
         let mut me = Instance::init(view, def, 48000.0, &[], None).expect("init");
-        assert_eq!(me.clocks(), [Clock::Sample; 5]);
+        assert_eq!(me.clocks(), [Clock::Sample; 6]);
         // Call 1: p = 1, 2 frames: a = 0, 1; b = 9, 1. Call 2: p = 2, 2 frames: a = 1, 2; b = 1, 2.
         // Call 3, 0 frames, p = 5: nothing. Call 4: p = 3, 1 frame: a = 2, b = 2.
         let mut outs = Vec::new();

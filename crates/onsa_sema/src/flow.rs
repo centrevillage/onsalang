@@ -121,6 +121,20 @@ pub struct FlowLet {
     pub state: bool,
 }
 
+impl FlowLet {
+    /// The `let` binds no name (`let _ = e`, `let Pair { l: _, r: _ } = e`):
+    /// a root of what is reached (§5.1, S-727), and the scope `_<m>` of its
+    /// nodes (§11.6). The one test of it ([`binds_none`]).
+    pub fn binds_none(&self) -> bool {
+        binds_none(&self.locals)
+    }
+}
+
+/// A `let` of the locals `locals` binds no name ([`FlowLet::binds_none`]).
+fn binds_none(locals: &[LocalId]) -> bool {
+    locals.is_empty()
+}
+
 /// The `init` argument of `prev~` / `delay~` / `vdelay~` (§11.4), or the
 /// value of an omitted one (`nodes::default_init`).
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -1,0 +1,32 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§11.5", "§18.1"]
+
+// The index of a `par~` is no binding of E0309 (spec 5.1; S-393 (a)): a `par~` that does not read its
+// index puts the same replica side by side on purpose (spec/flow/flow_unused_reached has them, no
+// diagnostic). The index is not left out with `_` either: `par~ _ in 0 ..< 4` stays the E0002 of the
+// syntax stage (a replication index is a name), whatever the range is, also in a replica that sits in
+// another one.
+
+pub flow underscore_index(x: F32 at sample) -> F32 at sample {
+  let ys = par~ _ in 0 ..< 4 { x } //~ E0002 @17
+  ys[0]
+}
+
+pub flow underscore_index_of_an_inclusive_range(x: F32 at sample) -> F32 at sample {
+  let ys = par~ _ in 0 ..= 3 { x } //~ E0002 @17
+  ys[0]
+}
+
+pub flow underscore_index_of_the_inner_replica(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 {
+    par~ _ in 0 ..< 2 { x } //~ E0002 @10
+  }
+  ys[0][0]
+}
+
+pub flow underscore_index_with_an_unused_let_before(x: F32 at sample) -> F32 at sample {
+  let u = x * 2.0
+  let ys = par~ _ in 0 ..< 4 { x } //~ E0002 @17
+  ys[0]
+}

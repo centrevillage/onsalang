@@ -639,7 +639,7 @@ fn a_body_of_every_form_of_the_list_has_its_value_from_the_arm_of_the_form() {
     // function `ident` it is asked for, whose type argument is written in the body of `k_typeargs`); x when x >= 0.
     let calls = "k_paren(a), k_cast(a), k_tuple(a), k_array(a), k_repeat(a), k_struct(a), k_unary(a), k_match(a), k_if(a), \
                  k_let(a), k_call(a), k_method(a), k_assoc(a), k_const(a), k_named(a), k_variant(a), k_typeargs(a), k_panic(a)";
-    let src = format!("{KINDS}\nflow f(a: I32 at init) -> I32 at sample {{ let r_ = ({calls})\n 0 }}\n");
+    let src = format!("{KINDS}\nflow f(a: I32 at init) -> I32 at sample {{ let _ = ({calls})\n 0 }}\n");
     let (value, asked) = with_checked(&src, true, |a| {
         let mut names = Names::default();
         let (view, def) = (View::new(a), def_named(a, "f"));

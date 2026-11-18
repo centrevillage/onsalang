@@ -39,6 +39,6 @@ pub flow integer_element(x: F32 at sample) -> F32 at sample {
 }
 
 pub flow fine_the_calls_without_effects(x: F32 at sample) -> F32 at sample {
-  let n = count()
+  let _ = count()
   level(x)
 }

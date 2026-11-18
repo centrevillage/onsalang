@@ -243,7 +243,7 @@ fn read_at_inputs() {
 #[test]
 fn read_at_lets() {
     let a = ok(
-        "pub flow g(k: F32 at block) -> F32 at sample { k }\npub flow f(x: F32 at sample, c: F32 at block) -> F32 at sample {\n  let a = c * 2.0\n  let b = a + 1.0\n  let s = g~(b)\n  let y = x + prev~(^y)\n  let e = a + x\n  let d = a * c\n  e + d + s\n}\n",
+        "pub flow g(k: F32 at block) -> F32 at sample { k }\npub flow f(x: F32 at sample, c: F32 at block) -> F32 at sample {\n  let a = c * 2.0\n  let b = a + 1.0\n  let s = g~(b)\n  let y = x + prev~(^y)\n  let _ = y\n  let e = a + x\n  let d = a * c\n  e + d + s\n}\n",
     );
     let f = flow(&a, "f");
     // Read at `Ctl` in `b`, at `Sig` in `e` and at `Ctl` again in `d` after
@@ -254,14 +254,15 @@ fn read_at_lets() {
     assert_eq!(read_at(f, "b"), Some(ClockStage::Block));
     assert_eq!(let_rate(f, "b"), (Clock::Block, false));
     assert_eq!(read_at(f, "s"), Some(ClockStage::Tick(Ratio(0))));
-    // `y` is read only by `^y`, in the first argument of a delay, at `Sig`.
+    // `y` is read by `^y`, in the first argument of a delay, at `Sig`, and by
+    // a `let _` of its clock (a `let` read only by `^y` is unused, §5.1).
     assert_eq!(read_at(f, "y"), Some(ClockStage::Tick(Ratio(0))));
 }
 
 #[test]
 fn read_at_constant_lets() {
     let a = ok(
-        "const K: I32 = 2\npub flow f(x: I32 at sample, p: I32 at block, c: I32 at init) -> I32 at sample {\n  let l0 = K\n  let l1 = l0\n  let b = l1 * l1\n  let u = l0 + 1\n  let t = c * l0\n  let q = p * l0\n  x + b + t + q\n}\n",
+        "const K: I32 = 2\npub flow f(x: I32 at sample, p: I32 at block, c: I32 at init) -> I32 at sample {\n  let l0 = K\n  let l1 = l0\n  let b = l1 * l1\n  let _ = l0 + 1\n  let t = c * l0\n  let q = p * l0\n  x + b + t + q\n}\n",
     );
     let f = flow(&a, "f");
     let rates = |name: &str| {
@@ -270,14 +271,12 @@ fn read_at_constant_lets() {
     };
     use ClockStage::*;
     // Every stage, not the latest alone: `l0` is defined in `init`, `ctl`
-    // and `tick` (R-488, §11.3). The read of the constant `u` that no one
-    // reads is at `init`, the stage of a constant read (`flow/reads.rs`).
+    // and `tick` (R-488, §11.3). The read of the constant `let _` is at
+    // `init`, the stage of a constant read (`flow/reads.rs`).
     assert_eq!(rates("l0"), Some(vec![Init, Block, Tick(Ratio(0))]));
     // A constant `let` read by a constant `let` at the stages of the reader.
     assert_eq!(rates("l1"), Some(vec![Tick(Ratio(0))]));
     assert_eq!(rates("b"), Some(vec![Tick(Ratio(0))]));
-    // `u` is read nowhere: its initializer is read at its own rate.
-    assert_eq!(rates("u"), None);
 }
 
 #[test]

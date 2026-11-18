@@ -477,13 +477,14 @@ fn the_inputs_given_are_the_inputs_of_the_flow_by_clock() {
 }
 
 #[test]
-fn a_let_of_a_stage_is_made_whether_or_not_it_is_read() {
+fn a_let_of_no_name_of_a_stage_is_made() {
     // SPEC-GAP(S-1093): the reading the evaluator has for now (1): the value of a `let` is made at its stage, read or not.
-    // `k = 100 / n` (block) is read by nothing, and n = 0 panics: at `process`, a call of 0 frames too. With n = 5 it
-    // is 20, and nothing else changes. At `init` the same of an `init` input: a = 0 panics in `init`.
+    // A `let` that is not read is a `let _` (a named one is an E0309, §5.1). `let _ = 100 / n` (block) is read by
+    // nothing, and n = 0 panics: at `process`, a call of 0 frames too. With n = 5 it is 20, and nothing else changes.
+    // At `init` the same of an `init` input: a = 0 panics in `init`.
     let src = "flow f(a: I32 at init, n: I32 at block) -> I32 at sample {
-  let j = 100 / a
-  let k = 100 / n
+  let _ = 100 / a
+  let _ = 100 / n
   7
 }";
     with_flow(src, "f", move |view, def| {

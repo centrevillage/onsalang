@@ -1,0 +1,248 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§11.2", "§18.1"]
+// fixes = 1
+
+// E0309 in the body of a flow (spec 5.1; S-129, S-726, S-1146, S-393). A `let` of a flow body, a name
+// of its destructuring and a name of a `match` arm that nothing reads is E0309, as in a `fn`; the
+// position is the name, and the candidate renames it to `_`. One error per unit (18.1), so each flow
+// below has one unused binding. The inputs of a flow and the index of a `par~` are no binding of
+// E0309 (spec/flow/flow_unused_reached). The `let`s that are read but cannot be reached from the
+// output are in flow_unused_chains, the order against the other errors of a unit in flow_unused_order,
+// and a unit with more than one unused binding in flow_unused_first.
+
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+pub enum Mode {
+  A(F32),
+  B(F32),
+}
+
+pub flow split(x: F32 at sample) -> Pair at sample {
+  Pair { l: x, r: x * 0.5 }
+}
+
+pub flow tap(x: F32 at sample) -> F32 at sample {
+  prev~(x)
+}
+
+// ---------------------------------------------------------------- a `let` that nothing reads
+
+pub flow unused_let(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0 //~ E0309 @7
+  x
+}
+
+pub flow unused_typed_let(x: F32 at sample) -> F32 at sample {
+  let a: F32 = x * 2.0 //~ E0309 @7
+  x
+}
+
+pub flow unused_let_after_a_used_one(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0
+  let b = a + 1.0 //~ E0309 @7
+  a
+}
+
+pub flow unused_instance(x: F32 at sample) -> F32 at sample {
+  let y = tap~(x) //~ E0309 @7
+  x
+}
+
+pub flow unused_prev(x: F32 at sample) -> F32 at sample {
+  let d = prev~(x) //~ E0309 @7
+  x
+}
+
+pub flow unused_delay(x: F32 at sample) -> F32 at sample {
+  let d = delay~(x, 4) //~ E0309 @7
+  x
+}
+
+pub flow unused_vdelay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  let v = vdelay~(x, d, 8) //~ E0309 @7
+  x
+}
+
+pub flow unused_replicas(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 4 { //~ E0309 @7
+    tap~(x)
+  }
+  x
+}
+
+pub flow unused_replicas_without_state(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 4 { //~ E0309 @7
+    x
+  }
+  x
+}
+
+pub flow unused_struct_literal(x: F32 at sample) -> F32 at sample {
+  let s = Pair { l: x, r: x } //~ E0309 @7
+  x
+}
+
+pub flow unused_array_literal(x: F32 at sample) -> F32 at sample {
+  let xs = [x, x] //~ E0309 @7
+  x
+}
+
+pub flow unused_with_a_clock(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let q = p at sample //~ E0309 @7
+  x
+}
+
+pub flow unused_of_the_init_clock(x: F32 at sample, level: F32 at init) -> F32 at sample {
+  let g = level * 2.0 //~ E0309 @7
+  x
+}
+
+pub flow unused_of_the_block_clock(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let t = p * 2.0 //~ E0309 @7
+  x
+}
+
+pub flow unused_constant(x: F32 at sample) -> F32 at sample {
+  let c: F32 = 1.0 + 2.0 //~ E0309 @7
+  x
+}
+
+// The form of the review item C-121: the `let` is followed by a line that starts with `-prev~(x)`, which
+// is not a continuation (a `-` that starts a line starts a new statement, 2.5), so it is the output and
+// `y` is never read.
+pub flow the_minus_line_after_a_let_is_the_output(x: F32 at sample) -> F32 at sample {
+  let y = x //~ E0309 @7
+  -prev~(x)
+}
+
+// ---------------------------------------------------------------- a name of a destructuring
+
+pub flow unused_second_of_a_tuple(x: F32 at sample) -> F32 at sample {
+  let (a, b) = (x, x * 0.5) //~ E0309 @11
+  a
+}
+
+pub flow unused_first_of_a_tuple(x: F32 at sample) -> F32 at sample {
+  let (a, b) = (x, x * 0.5) //~ E0309 @8
+  b
+}
+
+pub flow unused_field_of_an_instance_result(x: F32 at sample) -> F32 at sample {
+  let Pair { l: p, r: q } = split~(x) //~ E0309 @23
+  p
+}
+
+pub flow unused_first_field_of_an_instance_result(x: F32 at sample) -> F32 at sample {
+  let Pair { l: p, r: q } = split~(x) //~ E0309 @17
+  q
+}
+
+pub flow unused_field_of_a_literal(x: F32 at sample) -> F32 at sample {
+  let Pair { l: p, r: q } = Pair { l: x, r: x * 0.5 } //~ E0309 @23
+  p
+}
+
+pub flow unused_name_of_a_nested_tuple(x: F32 at sample) -> F32 at sample {
+  let ((a, b), c) = ((x, x * 0.5), x * 2.0) //~ E0309 @12
+  a + c
+}
+
+// ---------------------------------------------------------------- a name of a `match` arm
+
+pub flow unused_arm_binding(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 0.0 { Some(x) } else { None }
+  let k = match o {
+    Some(v) => 1.0, //~ E0309 @10
+    None => 0.0,
+  }
+  x + k
+}
+
+pub flow unused_arm_binding_of_the_output(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 0.0 { Some(x) } else { None }
+  match o {
+    Some(v) => x, //~ E0309 @10
+    None => 0.0,
+  }
+}
+
+pub flow unused_arm_binding_of_a_number(x: F32 at sample, k: I32 at sample) -> F32 at sample {
+  match k {
+    0 => x,
+    n => 0.0, //~ E0309 @5
+  }
+}
+
+pub flow unused_name_of_a_nested_arm_pattern(x: F32 at sample) -> F32 at sample {
+  let o: Option[(F32, F32)] = if x > 0.0 { Some((x, x)) } else { None }
+  match o {
+    Some((a, b)) => a, //~ E0309 @14
+    None => 0.0,
+  }
+}
+
+pub flow unused_arm_binding_in_a_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 0.0 { Some(x) } else { None }
+  if c {
+    match o {
+      Some(v) => x, //~ E0309 @12
+      None => 0.0,
+    }
+  } else {
+    x
+  }
+}
+
+pub flow unused_arm_binding_in_the_else_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 0.0 { Some(x) } else { None }
+  if c {
+    x
+  } else {
+    match o {
+      Some(v) => x, //~ E0309 @12
+      None => 0.0,
+    }
+  }
+}
+
+pub flow unused_arm_binding_in_a_replica(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 0.0 { Some(x) } else { None }
+  let ys = par~ i in 0 ..< 2 {
+    match o {
+      Some(v) => x, //~ E0309 @12
+      None => 0.0,
+    }
+  }
+  ys[0] + ys[1]
+}
+
+pub flow unused_arm_binding_in_an_argument(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 0.0 { Some(x) } else { None }
+  tap~(match o {
+    Some(v) => x, //~ E0309 @10
+    None => 0.0,
+  })
+}
+
+// A choice pattern binds the same name in every alternative: the position is the first one, and the
+// candidate is one edit that renames the name in each alternative.
+pub flow unused_name_of_a_choice_pattern(x: F32 at sample) -> F32 at sample {
+  let m: Mode = if x > 0.0 { Mode.A(x) } else { Mode.B(x) }
+  match m {
+    Mode.A(v) | Mode.B(v) => x, //~ E0309 @12
+  }
+}
+
+// The `let` that is not reached is the unused binding, not the name of the arm that its initializer
+// reads: the arm binding `m` is read.
+pub flow unused_let_whose_arm_binding_is_read(x: F32 at sample, n: I32 at sample) -> F32 at sample {
+  let k = match n { //~ E0309 @7
+    0 => 1.0,
+    m => F32.round_from(m),
+  }
+  x
+}

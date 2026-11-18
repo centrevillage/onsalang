@@ -13,27 +13,27 @@ pub flow slow_in(c: F32 at block) -> F32 at sample { c }
 pub flow bad(x: F32 at sample) -> F32 at nope { x }          //~ E0302
 
 pub flow at_slower(x: F32 at sample) -> F32 at sample {
-  let a = bad~(x) at block
+  let _ = bad~(x) at block
   x
 }
 
 pub flow non_rt_call(x: F32 at sample) -> F32 at sample {
-  let b = half(bad~(x))
+  let _ = half(bad~(x))
   x
 }
 
 pub flow into_block_input(x: F32 at sample) -> F32 at sample {
-  let c = slow_in~(bad~(x))
+  let _ = slow_in~(bad~(x))
   x
 }
 
 pub flow into_delay_init(x: F32 at sample) -> F32 at sample {
-  let d = prev~(x, bad~(x))
+  let _ = prev~(x, bad~(x))
   x
 }
 
 pub flow into_delay_value(x: F32 at sample) -> F32 at sample {
-  let e = prev~(bad~(x))
+  let _ = prev~(bad~(x))
   x
 }
 

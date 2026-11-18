@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§2.3", "§5.1", "§18.1"]
+
+// An unused binding of a flow body whose name starts with `_` (spec 2.3, 5.1, 18.1; S-716, S-726): the
+// name breaks 2.3 (`let _x = 1` is a binding and the candidate is `x`), and E0309 is reported only for a
+// unit with no other error, so the first check reports the E0320 and no E0309, in a flow as in a `fn`
+// (negative/unused_binding_leading_underscore). After the candidate is applied the name is `x`, which is
+// not read, and the second check reports the E0309 (candidate `_`), so the repair loop stops after two
+// rounds: `_x` -> `x` -> `_`. The second round is fixes/flow_unused_after_e0320, which holds the same
+// flows with the names after the first round. A `_` that starts a name is not "no use": only a lone `_`
+// says the value is not used. Each flow here has one unused binding; in a flow with another unused
+// binding that is written first, the E0320 is still the only error (`first_is_plain`).
+
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+pub flow let_binding(s: F32 at sample) -> F32 at sample {
+  let _x = s * 2.0 //~ E0320 @7
+  s
+}
+
+pub flow typed_binding(s: F32 at sample) -> F32 at sample {
+  let _x: F32 = s * 2.0 //~ E0320 @7
+  s
+}
+
+pub flow destructuring(s: F32 at sample) -> F32 at sample {
+  let (_a, b) = (s, s * 0.5) //~ E0320 @8
+  b
+}
+
+pub flow destructuring_of_a_struct(s: F32 at sample) -> F32 at sample {
+  let Pair { l: _p, r: q } = Pair { l: s, r: s * 0.5 } //~ E0320 @17
+  q
+}
+
+pub flow arm_binding(s: F32 at sample, n: I32 at sample) -> F32 at sample {
+  match n {
+    0 => s,
+    _k => 0.0, //~ E0320 @5
+  }
+}
+
+pub flow first_is_plain(s: F32 at sample) -> F32 at sample {
+  let a = s * 2.0
+  let _x = s * 3.0 //~ E0320 @7
+  s
+}
+
+pub flow read_but_not_reached(s: F32 at sample) -> F32 at sample {
+  let _x = s * 2.0 //~ E0320 @7
+  let b = _x + 1.0
+  s
+}
+
+pub flow name_read_by_the_output_is_still_e0320(s: F32 at sample) -> F32 at sample {
+  let _x = s * 2.0 //~ E0320 @7
+  _x
+}

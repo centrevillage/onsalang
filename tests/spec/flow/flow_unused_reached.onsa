@@ -1,0 +1,228 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§11.2", "§18.1"]
+
+// No E0309 in a flow body (spec 5.1; S-129, S-727, S-393, S-1146). In a flow body a `let` counts as
+// used only when the output or a `let _` reaches it, going through the initializers of the `let`s that
+// are read, also through `^y`, so everything here is reached and the file has no diagnostic. The
+// negatives are in negative/flow_unused_*. The inputs of a flow are not binding forms of E0309, and
+// neither is the index of a `par~` (S-393 (a)).
+
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+pub flow split(x: F32 at sample) -> Pair at sample {
+  Pair { l: x, r: x * 0.5 }
+}
+
+pub flow tap(x: F32 at sample) -> F32 at sample {
+  prev~(x)
+}
+
+pub rt fn clip(v: F32, hi: F32) -> F32 {
+  if v > hi { hi } else { v }
+}
+
+pub flow chain_from_the_output(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0
+  let b = a + 1.0
+  let c = b * a
+  c
+}
+
+pub flow chain_from_a_let_underscore(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0
+  let b = a + 1.0
+  let _ = b * 3.0
+  x
+}
+
+pub flow instance_from_a_let_underscore(x: F32 at sample) -> F32 at sample {
+  let _ = tap~(x)
+  x
+}
+
+pub flow delay_from_a_let_underscore(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0
+  let _ = prev~(a)
+  x
+}
+
+pub flow all_underscore_destructuring_is_a_root(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0
+  let Pair { l: _, r: _ } = split~(a)
+  x
+}
+
+pub flow all_underscore_with_a_chain_behind(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0
+  let b = a + 1.0
+  let Pair { l: _, r: _ } = split~(b)
+  x
+}
+
+pub flow destructuring_with_one_name_read(x: F32 at sample) -> F32 at sample {
+  let Pair { l: p, r: _ } = split~(x)
+  p
+}
+
+pub flow destructuring_with_both_names_read(x: F32 at sample) -> F32 at sample {
+  let Pair { l: p, r: q } = split~(x)
+  p + q
+}
+
+pub flow tuple_destructuring_read_in_two_places(x: F32 at sample) -> F32 at sample {
+  let (a, b) = (x, x * 0.5)
+  let c = b + 1.0
+  a + c
+}
+
+pub flow feedback_read_by_the_output(x: F32 at sample) -> F32 at sample {
+  let y = prev~(^y) * 0.5 + x
+  y
+}
+
+pub flow feedback_pair_reached_from_the_output(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^b)
+  let b = a * 0.5 + x
+  b
+}
+
+pub flow feedback_pair_reached_from_a_let_underscore(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^b)
+  let b = a * 0.5 + x
+  let _ = b
+  x
+}
+
+pub flow delayed_read_of_a_let(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0
+  prev~(a)
+}
+
+pub flow init_read_by_a_delay(x: F32 at sample, level: F32 at init) -> F32 at sample {
+  let start = level * 2.0
+  prev~(x, start)
+}
+
+pub flow constant_clock_let_read(x: F32 at sample) -> F32 at sample {
+  let g = 1.0 + 2.0
+  x * g
+}
+
+pub flow block_let_read_by_a_delay_length(x: F32 at sample, d: F32 at block) -> F32 at sample {
+  let t = d + 1.0
+  vdelay~(x, t, 16)
+}
+
+pub flow let_read_in_a_branch(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = x * 2.0
+  if c { a } else { x }
+}
+
+pub flow let_read_as_a_condition(x: F32 at sample) -> F32 at sample {
+  let big = x > 0.5
+  if big { x } else { 0.0 }
+}
+
+pub flow let_read_by_an_argument_of_an_instance(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0
+  tap~(a)
+}
+
+pub flow let_read_by_a_call(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0
+  clip(a, 1.0)
+}
+
+pub flow let_read_by_a_replica_body(x: F32 at sample) -> F32 at sample {
+  let a = x * 2.0
+  let ys = par~ i in 0 ..< 2 {
+    a * F32.round_from(i)
+  }
+  ys[1]
+}
+
+pub flow let_read_by_a_field_and_an_index(x: F32 at sample) -> F32 at sample {
+  let s = Pair { l: x, r: x * 0.5 }
+  let xs = [x, x * 2.0]
+  s.l + xs[1]
+}
+
+pub flow let_read_by_a_cast_and_a_clock(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let q = p at sample
+  let n = 3
+  x * q * F32.round_from(n)
+}
+
+pub flow arm_binding_read(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 0.0 { Some(x) } else { None }
+  let k = match o {
+    Some(v) => v + 1.0,
+    None => 0.0,
+  }
+  x + k
+}
+
+pub flow arm_binding_read_in_a_guard(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 0.0 { Some(x) } else { None }
+  match o {
+    Some(v) if v > 0.5 => x,
+    Some(_) => 0.0,
+    None => 1.0,
+  }
+}
+
+pub flow arm_binding_underscore(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 0.0 { Some(x) } else { None }
+  match o {
+    Some(_) => x,
+    None => 0.0,
+  }
+}
+
+pub flow arm_binding_read_in_a_replica(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 0.0 { Some(x) } else { None }
+  let ys = par~ i in 0 ..< 2 {
+    match o {
+      Some(v) => v,
+      None => x,
+    }
+  }
+  ys[0] + ys[1]
+}
+
+pub flow unused_input_is_not_reported(x: F32 at sample, spare: F32 at block, unused: F32 at init) -> F32 at sample {
+  x
+}
+
+pub flow unused_replica_index_is_not_reported(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 4 {
+    tap~(x)
+  }
+  ys[0] + ys[3]
+}
+
+pub flow replica_index_read(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 4 {
+    x * F32.round_from(i)
+  }
+  ys[1]
+}
+
+pub flow replica_inclusive_unused_index(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 1 ..= 3 {
+    x
+  }
+  ys[0]
+}
+
+pub flow replica_result_read_by_a_let_underscore(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 {
+    tap~(x)
+  }
+  let _ = ys
+  x
+}

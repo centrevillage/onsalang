@@ -1,0 +1,24 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§11.2", "§18.1"]
+// fixes = 1
+//
+// [[test.fix]]
+// at = "22:23"
+// code = "E0309"
+// candidate = 1
+// clean = true
+
+// The candidate of the E0309 of the one name of a destructuring of a flow body that is not read (spec
+// 5.1; S-129, S-727): only `q` is reported, `p` is read by the output, and the candidate renames `q`
+// to `_` (`Pair { l: p, r: _ }`), after which the file has no diagnostic (`clean`).
+
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+pub flow one_unused_name_of_a_destructuring(x: F32 at sample) -> F32 at sample {
+  let Pair { l: p, r: _ } = Pair { l: x, r: x * 0.5 } //~ E0309 @23
+  p
+}

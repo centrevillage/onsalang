@@ -1,0 +1,40 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§11.2", "§15.1", "§18.1"]
+
+// E0309 of the body of a flow in a package of two modules (spec 5.1, 11.2, 15.1, 18.1; S-129, S-726). The
+// unit of a diagnostic is a declaration and the units are independent (P1), also across files: `util.scale`
+// has an unused `let` (the E0309 is in util.onsa) and is still a flow that `main.run` calls, `main.run`
+// reads what it makes and has no error, `main.broken` has a type error and an unused `let` (only the
+// E0401), `main.lazy` has an unused `let` (the E0309), and `main.reads_a_flow_of_util` has only an
+// instance of a flow of the other module that nothing reads (the E0309: what the instance makes is the
+// unit's own binding). The names that `util` makes by `use` are read by the module that uses them.
+use util.{scale, tapped}
+
+pub flow run(x: F32 at sample) -> F32 at sample {
+  let a = scale~(x)
+  let b = tapped~(a)
+  b
+}
+
+pub flow broken(x: F32 at sample) -> F32 at sample {
+  let b: Bool = 1.0 //~ E0401
+  let unused = x
+  x
+}
+
+pub flow lazy(x: F32 at sample) -> F32 at sample {
+  let unused = x * 2.0 //~ E0309 @7
+  x
+}
+
+pub flow reads_a_flow_of_util(x: F32 at sample) -> F32 at sample {
+  let y = tapped~(x) //~ E0309 @7
+  x
+}
+
+pub flow the_chain_of_a_flow_of_util(x: F32 at sample) -> F32 at sample {
+  let a = scale~(x) //~ E0309 @7
+  let b = tapped~(a)
+  x
+}
