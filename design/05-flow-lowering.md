@@ -13,31 +13,31 @@ D-03 の 5 関数。§17.3 の `resonator` なら次の形になる（擬似 Ons
 
 ```
 struct resonator.State {
-  sample_rate: F32   // block の値の計算に使う（§12.4）
+  _sample_rate: F32  // block の値の計算に使う（§12.4）
   b1: F32            // sample から読まれる block の let。r と w は block の中でしか使わないので置かない
   b2: F32
-  y.hoist_0: F32     // 巻き上げた部分式 1.0 - r（S-33。sample の式の中の block の部分式）
+  y._hoist_0: F32    // 巻き上げた部分式 1.0 - r（S-33。sample の式の中の block の部分式）
   y1: prev[F32]      // prev~(^y) の保存値
   y2: prev[F32]      // prev~(y1) の保存値
-  poisoned: Bool
-  initialized: Bool  // export の境界（S-27）
+  _poisoned: Bool
+  _initialized: Bool // export の境界（S-27）
 }
 fn resonator.init(cfg: resonator.Config, sr: F32) -> State {
-  // b1、b2、y.hoist_0 は ctl が読む前に必ず書くので設定しない（R-92）
-  State { sample_rate: sr, y1: 0.0, y2: 0.0, poisoned: false, initialized: true }
+  // b1、b2、y._hoist_0 は ctl が読む前に必ず書くので設定しない（R-92）
+  State { _sample_rate: sr, y1: 0.0, y2: 0.0, _poisoned: false, _initialized: true }
 }
-rt fn resonator.reset(inout s) { s.y1 = 0.0; s.y2 = 0.0; s.poisoned = false }
+rt fn resonator.reset(inout s) { s.y1 = 0.0; s.y2 = 0.0; s._poisoned = false }
 rt fn resonator.ctl(inout s, params: Params) {
-  let r = exp(-(F32.PI * params.bw) / s.sample_rate)   // 状態に置かないローカル
-  let w = (2.0 * F32.PI * params.fc) / s.sample_rate
+  let r = exp(-(F32.PI * params.bw) / s._sample_rate)   // 状態に置かないローカル
+  let w = (2.0 * F32.PI * params.fc) / s._sample_rate
   s.b1 = 2.0 * r * cos(w)
   s.b2 = r * r
-  s.y.hoist_0 = 1.0 - r
+  s.y._hoist_0 = 1.0 - r
 }
 rt fn resonator.tick(inout s, x: F32) -> F32 {
   let y1 = s.y1                       // 遅延の出力（保存値）を先に読む
   let y2 = s.y2
-  let y = s.y.hoist_0 * x + s.b1 * y1 - s.b2 * y2
+  let y = s.y._hoist_0 * x + s.b1 * y1 - s.b2 * y2
   s.y1 = y                            // 保存はまとめて最後に（R-13）。prev~(^y): y を保存
   s.y2 = y1                           // prev~(y1): y1 を保存
   y

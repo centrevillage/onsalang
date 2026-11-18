@@ -85,7 +85,7 @@ test "resonator decays" {
 - 順序: `prev~(^y)` だけが前方の `y` を参照し、`^` の印で帰還と分かる。遅延を通るので合法（§11.2）。`prev~(y1)` は上で定義済みの `y1` の遅延なので、印は無い。
 - レート: `r w b1 b2` は `block` のクロックなので、ブロックごとに 1 回だけ計算される。
 - 演算子: 積和は括弧なしで書く（乗法は加法より強い、§3.1）。`-(F32.PI * bw)` は前置の `-` の被演算子なので括弧が要る。
-- 状態: 遅延の状態は `y1` と `y2` の 2 つの F32。状態の全体は、他に `sample_rate`、`sample` から読まれる `block` の値（`b1`、`b2`）、巻き上げた部分式（`y.hoist_0` の `1.0 - r`）、`poisoned`、`initialized` を持つ（§12.4）。大きさはコンパイル時に決まり、`onsa interface` に出る（export すればヘッダの `<PREFIX>RESONATOR_SIZE` にも出る）。
+- 状態: 遅延の状態は `y1` と `y2` の 2 つの F32。状態の全体は、他に `_sample_rate`、`sample` から読まれる `block` の値（`b1`、`b2`）、巻き上げた部分式（`y._hoist_0` の `1.0 - r`）、`_poisoned`、`_initialized` を持つ（§12.4）。大きさはコンパイル時に決まり、`onsa interface` に出る（export すればヘッダの `<PREFIX>RESONATOR_SIZE` にも出る）。
 
 ### 17.4 声の flow
 
