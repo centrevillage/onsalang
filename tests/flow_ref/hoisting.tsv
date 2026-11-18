@@ -1,0 +1,13 @@
+# flow_ref 1 source=tests/spec/flow_semantics/hoisting.onsa tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
+@ a block expression that can panic is not hoisted out of an untaken branch
+render hoisting.slow_in_branch sr=0x41000000 params p=0 in x=[0xbf800000 0x00000000 0xc0000000]
+out=[0x00000000 0x00000000 0x00000000]
+@ the same block expression is evaluated when the branch is taken
+render hoisting.slow_in_branch sr=0x41000000 params p=4 in x=[0xbf800000 0x40000000 0x40400000]
+out=[0x00000000 0x42480000 0x42960000]
+@ a division by zero in a taken branch panics
+render hoisting.slow_in_branch sr=0x41000000 params p=0 in x=[0xbf800000 0x40000000]
+panic sample 1
+@ a block expression that can panic is not hoisted out of the right side of &&
+render hoisting.slow_in_and sr=0x41000000 params p=0 in x=[0xbf800000 0x00000000 0xc0000000]
+out=[0x00000000 0x00000000 0x00000000]

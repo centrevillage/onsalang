@@ -1,0 +1,20 @@
+# flow_ref 1 source=tests/spec/flow_semantics/poison_boundary.onsa tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
+@ boom adds a counter to the truncated input
+render poison_boundary.boom sr=0x41000000 in x=[0x3fc00000 0x40200000 0x40600000]
+out=[0x40000000 0x40800000 0x40c00000]
+@ a NaN input panics in process and fails the test
+render poison_boundary.boom sr=0x41000000 in x=[0x3f800000 0x7fc00000 0x40400000]
+panic sample 1
+@ an input outside I32 panics in process and fails the test
+render poison_boundary.boom sr=0x41000000 in x=[0x3f800000 0x4f32d05e]
+panic sample 1
+@ init_boom adds 100 / n to the input
+render poison_boundary.init_boom sr=0x41000000 cfg n=4 in x=[0x3f800000 0x40000000 0x40400000]
+out=[0x41d00000 0x41d80000 0x41e00000]
+@ a panic in init fails the test
+init 0 poison_boundary.init_boom sr=0x41000000 cfg n=0
+panic init
+@ a panic in process through an explicit state fails the test
+init 0 poison_boundary.boom sr=0x41000000
+process 0 frames=3 in x=[0x3f800000 0x7fc00000 0x40400000]
+panic sample 1

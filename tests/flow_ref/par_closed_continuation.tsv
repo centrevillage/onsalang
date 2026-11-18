@@ -1,0 +1,11 @@
+# flow_ref 1 source=tests/spec/flow_semantics/par_closed_continuation.onsa tests=2 evaluated=2 unavailable=0 skipped=0 waiting=0
+@ a head that goes on over a line break
+render par_closed_continuation.par_head sr=0x41000000 in x=[0x3f800000 0x40000000]
+out[0]=[0x00000000 0x00000000]
+out[1]=[0x3f800000 0x40000000]
+out[2]=[0x40000000 0x40800000]
+out[3]=[0x40400000 0x40c00000]
+@ a head that goes on over a comment
+render par_closed_continuation.par_head_with_a_comment sr=0x41000000 in x=[0x3f800000 0x40000000]
+out[0]=[0x40400000 0x40800000]
+out[1]=[0x40800000 0x40a00000]

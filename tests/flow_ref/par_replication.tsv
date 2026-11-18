@@ -1,0 +1,21 @@
+# flow_ref 1 source=tests/spec/flow_semantics/par_replication.onsa tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
+@ each replica has its own instance
+render par_replication.two_accs sr=0x41000000 in x=[0x3f800000 0x3f800000 0x3f800000]
+out[0]=[0x3f800000 0x40000000 0x40400000]
+out[1]=[0x40000000 0x40800000 0x40c00000]
+@ the index of a par starts at its lower bound
+render par_replication.scaled_by_index sr=0x41000000 in x=[0x3f800000 0x40000000]
+out[0]=[0x40000000 0x40800000]
+out[1]=[0x40400000 0x40c00000]
+out[2]=[0x40800000 0x41000000]
+@ a par of one replica has one element
+render par_replication.one_replica sr=0x41000000 in x=[0x3f800000 0x40000000 0x40400000]
+out[0]=[0x40a00000 0x40c00000 0x40e00000]
+@ a delay length computed from the index
+render par_replication.own_delay_each sr=0x41000000 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000 0x40e00000 0x41000000]
+out[0]=[0x00000000 0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000]
+out[1]=[0x00000000 0x00000000 0x00000000 0x00000000 0x3f800000 0x40000000 0x40400000 0x40800000]
+@ a detuned pair keeps a separate phase in each replica
+render par_replication.detuned_pair sr=0x41000000 params f0=0x40800000 detune=0x3f800000 frames=5
+out[0]=[0xbf000000 0x00000000 0x3f000000 0xbf800000 0xbf000000]
+out[1]=[0x3f000000 0x00000000 0xbf000000 0xbf800000 0x3f000000]

@@ -5,7 +5,7 @@
 //! in the order of the clocks, and `e at k` has the clock `k` but not another value (§11.3; the name under it is read in
 //! its own stage, and a computed `e` under `at` is E0200 today). The delays (`state.rs`) are in the `sample` stage, and
 //! the second phase of each frame stores what they save, after the stage and before `tick` goes up. The instances of
-//! flows, `reset` and `render` come with the units after this one: they are `Unavailable` here. A panic of a value of the clock
+//! flows (`Inst`), `reset` (`Instance::reset`) and `render` are here too. A panic of a value of the clock
 //! of a constant is E0419 in the spec (compile time, §11.3): the evaluator makes it at `init` and gives the panic of
 //! `init`; the entry of the comparison (W7-19) reads it as an error of the compile time.
 
@@ -156,6 +156,16 @@ impl Outcome {
             Err((_, stop)) => Err(stop),
         }
     }
+}
+
+/// What a call of `render` is given (§11.6): the inputs of `init` and of `block` by name, the columns of the `sample`
+/// inputs, and the frames of a flow that has none of them.
+#[derive(Clone, Copy, Default)]
+pub struct Call<'c> {
+    pub config: &'c [(&'c str, Value)],
+    pub params: &'c [(&'c str, Value)],
+    pub inputs: &'c [(&'c str, &'c [Value])],
+    pub frames: Option<usize>,
 }
 
 /// One instance of a flow, the outermost: the time it runs in is its own, and the instances it calls read it.
@@ -410,21 +420,18 @@ impl<'a> Instance<'a> {
     /// `render` (§11.6): `init` and one `process` of all the frames, the call a test makes. A flow with `sample` inputs
     /// has the length of their columns (`frames` is `None`); one with none has `frames`. A panic of `init` or of
     /// `process` is the outcome, at its stage.
-    #[allow(clippy::too_many_arguments)]
     pub fn render<'h>(
         view: View<'a>,
         def: DefId,
         sample_rate: f32,
-        config: &[(&str, Value)],
-        params: &[(&str, Value)],
-        inputs: &[(&str, &[Value])],
-        frames: Option<usize>,
+        call: &Call,
         mut host: Option<&'h mut dyn FnHost>,
     ) -> Result<Outcome, Stop>
     where
         'a: 'h,
     {
         let here = |fault| Stop { fault, at: view.name_span(def) };
+        let Call { config, params, inputs, frames } = *call;
         let sampled = !inputs_at(view.flow(def).map_err(here)?, Stage::Sample).map_err(here)?.is_empty();
         let n = match (sampled, frames, inputs.first()) {
             (true, None, Some((_, column))) => column.len(),

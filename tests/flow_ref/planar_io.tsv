@@ -1,0 +1,9 @@
+# flow_ref 1 source=tests/spec/flow_semantics/planar_io.onsa tests=5 evaluated=1 unavailable=0 skipped=4 waiting=0
+- a planar input and output with one delayed channel	skipped layout
+- process writes planar output buffers	skipped layout
+- two channels in, one out	skipped layout
+@ one channel in, two out
+render planar_io.widen sr=0x41000000 in x=[0x3f800000 0x40000000 0x40400000]
+out[0]=[0x3f800000 0x40000000 0x40400000]
+out[1]=[0x00000000 0x3f800000 0x40000000]
+- process_inplace reads the old input of a delayed flow	skipped layout

@@ -27,6 +27,9 @@ pub enum PanicKind {
     Explicit,
     /// A column of a `sample` input is not as long as the call (§11.6).
     Length,
+    /// A function the interpreter ran for the host of the evaluator panicked: its kind and its message are the
+    /// interpreter's, and only that it panicked is compared (W7-19).
+    Host,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

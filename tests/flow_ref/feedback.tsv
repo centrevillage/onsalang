@@ -1,0 +1,7 @@
+# flow_ref 1 source=tests/spec/flow_semantics/feedback.onsa tests=2 evaluated=2 unavailable=0 skipped=0 waiting=0
+@ two delays read each other's old values
+render feedback.swap_pair sr=0x41000000 frames=5
+out=[0x41400000 0x41a80000 0x41400000 0x41a80000 0x41400000]
+@ feedback through a flow instance with a prev~ outside it
+render feedback.loop_through_instance sr=0x41000000 in x=[0x3f800000 0x00000000 0x00000000 0x00000000 0x00000000]
+out=[0x3f800000 0x3e800000 0x3e400000 0x3e100000 0x3dd80000]

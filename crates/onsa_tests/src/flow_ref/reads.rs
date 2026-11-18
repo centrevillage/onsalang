@@ -1,0 +1,109 @@
+//! What an assert reads of the outputs a `render` gave (`o.out[2]`, `o.l[c][k]`, `is_nan(o.out[0])`, `o.out.len()`, W7-19 U2a):
+//! the path into the outputs read from the syntax tree and the tables, each component taken from the values the call gave.
+
+use onsa_sema::prim::PrimRow;
+use onsa_syntax::ast::{BinOp, ExprId, ExprKind};
+
+use super::scalar::{Bin, Fault, PanicKind, binary};
+use super::sema_view::Body;
+use super::value::{IntKind, Value};
+use super::walk::{Halt, Walk};
+
+impl Walk<'_, '_> {
+    /// The value of `e` when it reads what a render gave (`o.out[2]`, `is_nan(o.out[0])`, `o.out.len()`), else evaluated.
+    pub(super) fn value(&mut self, body: Body, e: ExprId) -> Result<Value, Halt> {
+        if !self.reads(body, e) {
+            return self.eval(body, e);
+        }
+        let ExprKind::Binary { op, lhs, rhs, .. } = &body.ast.expr(e).kind else { return self.shape(body, e) };
+        let bin = match op {
+            BinOp::Eq => Bin::Eq,
+            BinOp::Ne => Bin::Ne,
+            _ => return Err(Fault::Unavailable("an operator on what `render` gave").into()),
+        };
+        let (a, b) = (self.value(body, *lhs)?, self.value(body, *rhs)?);
+        Ok(binary(bin, &a, &b)?)
+    }
+
+    fn reads(&self, body: Body, e: ExprId) -> bool {
+        let local = matches!(body.target(e), Ok(onsa_sema::Target::Local(l)) if self.rendered.contains_key(l));
+        local || body.ast.sub_exprs(e).into_iter().any(|x| self.reads(body, x))
+    }
+
+    /// A path into the outputs (`.out` or a field, then the channel and the frame), or a primitive on one.
+    fn shape(&mut self, body: Body, e: ExprId) -> Result<Value, Halt> {
+        match self.node(body, e)? {
+            Node::One(v) => Ok(v),
+            Node::Frames(_) => Err(Fault::Internal("a column read as a value").into()),
+        }
+    }
+
+    fn node(&mut self, body: Body, e: ExprId) -> Result<Node, Halt> {
+        let unavailable = || Halt::Fault(Fault::Unavailable("a form of an assert on what `render` gave"));
+        match &body.ast.expr(e).kind {
+            ExprKind::Paren(x) => self.node(body, *x),
+            ExprKind::Field { base, name } => {
+                let Ok(onsa_sema::Target::Local(l)) = body.target(*base) else { return Err(unavailable()) };
+                let r = self.rendered.get(l).ok_or_else(unavailable)?;
+                let at = r.fields.iter().position(|f| *f == name.name).ok_or_else(unavailable)?;
+                Ok(Node::Frames(r.outs.iter().map(|v| part(v, at)).collect()))
+            }
+            ExprKind::Index { base, index } => {
+                let (Node::Frames(c), Value::Int(_, k, _)) = (self.node(body, *base)?, self.value(body, *index)?)
+                else {
+                    return Err(unavailable());
+                };
+                let at = usize::try_from(k).map_err(|_| Fault::Panic(PanicKind::Bounds))?;
+                match c.first() {
+                    Some(Value::Array(_)) => Ok(Node::Frames(c.iter().map(|v| elem(v, at)).collect::<Result<_, _>>()?)),
+                    _ => Ok(Node::One(c.get(at).cloned().ok_or(Fault::Panic(PanicKind::Bounds))?)),
+                }
+            }
+            ExprKind::Call { args, .. } => {
+                let callee = body.callee(e)?;
+                let receiver = onsa_sema::receiver(
+                    body.ast,
+                    match &body.ast.expr(e).kind {
+                        ExprKind::Call { callee, .. } => *callee,
+                        _ => e,
+                    },
+                );
+                let arg = receiver.or(args.first().map(|a| a.expr)).ok_or_else(unavailable)?;
+                match (body.view.prim(callee.def), self.node(body, arg)?) {
+                    (Some(PrimRow::Len), Node::Frames(c)) => {
+                        let n = if let Some(Value::Array(a)) = c.first() { a.len() } else { c.len() };
+                        Ok(Node::One(Value::int(IntKind::U32, n as i128)))
+                    }
+                    (Some(PrimRow::IsNan), Node::One(Value::F32(x))) => Ok(Node::One(Value::Bool(x.is_nan()))),
+                    (Some(PrimRow::IsNan), Node::One(Value::F64(x))) => Ok(Node::One(Value::Bool(x.is_nan()))),
+                    (Some(PrimRow::ToBits(_)), Node::One(Value::F32(x))) => {
+                        Ok(Node::One(Value::int(IntKind::U32, x.to_bits().into())))
+                    }
+                    (Some(PrimRow::ToBits(_)), Node::One(Value::F64(x))) => {
+                        Ok(Node::One(Value::int(IntKind::U64, x.to_bits().into())))
+                    }
+                    _ => Err(unavailable()),
+                }
+            }
+            _ => Err(unavailable()),
+        }
+    }
+}
+
+/// The field `at` of a struct output, or the output itself (it is no struct).
+pub(super) fn part(v: &Value, at: usize) -> Value {
+    if let Value::Struct(fs) = v { fs[at].clone() } else { v.clone() }
+}
+
+/// What a path into the outputs is so far: the values of one component in each frame, or one value.
+enum Node {
+    Frames(Vec<Value>),
+    One(Value),
+}
+
+pub(super) fn elem(v: &Value, at: usize) -> Result<Value, Fault> {
+    match v {
+        Value::Array(a) => a.get(at).cloned().ok_or(Fault::Panic(PanicKind::Bounds)),
+        _ => Err(Fault::Internal("a channel of a value that is not an array")),
+    }
+}

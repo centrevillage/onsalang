@@ -1,0 +1,29 @@
+# flow_ref 1 source=tests/spec/flow_semantics/par_closed_edges.onsa tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
+@ the largest end of U32 gives two replicas
+render par_closed_edges.top_pair sr=0x41000000 in x=[0x3f800000 0x40000000]
+out[0]=[0x3f800000 0x40000000]
+out[1]=[0x40000000 0x40400000]
+@ a ..= a at the largest U32 is one replica
+render par_closed_edges.top_one sr=0x41000000 in x=[0x3f800000 0x40000000]
+out[0]=[0x40000000 0x40400000]
+@ each replica at the largest ends has its own instance
+render par_closed_edges.top_pair_states sr=0x41000000 in x=[0x3f800000 0x3f800000 0x3f800000]
+out[0]=[0x3f800000 0x40000000 0x40400000]
+out[1]=[0x40000000 0x40800000 0x40c00000]
+@ 0 ..= 0 is one replica with the index 0
+render par_closed_edges.zero_only sr=0x41000000 in x=[0x3f800000 0x40000000]
+out[0]=[0x40800000 0x40a00000]
+@ the ends are constants of the package
+render par_closed_edges.named_ends sr=0x41000000 in x=[0x3f800000 0x40000000]
+out[0]=[0x40000000 0x40800000]
+out[1]=[0x40400000 0x40c00000]
+out[2]=[0x40800000 0x41000000]
+@ 0 ..= LAST and 0 ..< COUNT are the same replication
+render par_closed_edges.closed_to_last sr=0x41000000 in x=[0x3f800000 0x40000000]
+out[0]=[0x00000000 0x00000000]
+out[1]=[0x3f800000 0x40000000]
+out[2]=[0x40000000 0x40800000]
+render par_closed_edges.half_open_to_count sr=0x41000000 in x=[0x3f800000 0x40000000]
+out[0]=[0x00000000 0x00000000]
+out[1]=[0x3f800000 0x40000000]
+out[2]=[0x40000000 0x40800000]

@@ -1,0 +1,17 @@
+# flow_ref 1 source=tests/spec/flow_semantics/par_closed_forms.onsa tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
+@ the index picks a branch inside the body
+render par_closed_forms.only_the_middle sr=0x41000000 in x=[0x3f800000 0x40000000]
+out[0]=[0x00000000 0x00000000]
+out[1]=[0x3f800000 0x40000000]
+out[2]=[0x00000000 0x00000000]
+@ the index goes through a generic function
+render par_closed_forms.doubled sr=0x41000000 in x=[0x3f800000 0x40000000]
+out[0]=[0x40000000 0x40800000]
+out[1]=[0x40800000 0x41000000]
+@ each replica has its own delay line
+render par_closed_forms.own_delays sr=0x41000000 in x=[0x3f800000 0x40000000 0x40400000 0x40800000]
+out[0]=[0x00000000 0x3f800000 0x40000000 0x40400000]
+out[1]=[0x00000000 0x00000000 0x3f800000 0x40000000]
+@ the replication is the argument of a call
+render par_closed_forms.total sr=0x41000000 in x=[0x3f800000 0x40000000]
+out=[0x41200000 0x41a00000]

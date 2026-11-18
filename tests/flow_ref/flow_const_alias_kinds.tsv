@@ -1,0 +1,55 @@
+# flow_ref 1 source=tests/spec/flow_semantics/flow_const_alias_kinds.onsa tests=18 evaluated=18 unavailable=0 skipped=0 waiting=0
+@ an alias of a literal read by a block let
+render flow_const_alias_kinds.literal_alias sr=0x41000000 params p=5 frames=2
+out=[10 10]
+@ a floating-point constant alias
+render flow_const_alias_kinds.scalar_float sr=0x41000000 params p=0x40400000 frames=2
+out=[0x3fc00000 0x3fc00000]
+@ an element of a constant array
+render flow_const_alias_kinds.array_elem sr=0x41000000 params p=1 frames=1
+out=[21]
+@ a whole constant array
+render flow_const_alias_kinds.array_whole sr=0x41000000 params p=1 frames=1
+out=[31]
+@ a field of a constant tuple
+render flow_const_alias_kinds.tuple_field sr=0x41000000 params p=3 frames=1
+out=[12]
+@ a whole constant tuple
+render flow_const_alias_kinds.tuple_whole sr=0x41000000 params p=1 frames=1
+out=[8]
+@ the associated constant PI of F32
+render flow_const_alias_kinds.assoc_float sr=0x41000000 params p=0x40000000 frames=1
+out=[0x40c90fdb]
+@ the associated constant MAX of I32
+render flow_const_alias_kinds.assoc_int sr=0x41000000 params p=5 frames=1
+out=[2147483642]
+@ the associated constant BITS of I32 is a U32
+render flow_const_alias_kinds.assoc_bits sr=0x41000000 params p=1 frames=1
+out=[33]
+@ the associated constant ONE of I32
+render flow_const_alias_kinds.assoc_one sr=0x41000000 params p=41 frames=1
+out=[42]
+@ a constant defined by another constant
+render flow_const_alias_kinds.const_of_const sr=0x41000000 params p=1 frames=1
+out=[5]
+@ an arithmetic expression of constants
+render flow_const_alias_kinds.arith sr=0x41000000 params p=1 frames=1
+out=[8]
+@ a negated constant
+render flow_const_alias_kinds.negated sr=0x41000000 params p=1 frames=1
+out=[-1]
+@ a call of an rt fn on a constant
+render flow_const_alias_kinds.call_rt sr=0x41000000 params p=1 frames=1
+out=[5]
+@ a call of a non-rt fn on a constant
+render flow_const_alias_kinds.call_init_fn sr=0x41000000 params p=1 frames=1
+out=[5]
+@ a true constant Bool picks the first branch
+render flow_const_alias_kinds.bool_true sr=0x41000000 params p=7 frames=1
+out=[7]
+@ a false constant Bool picks the second branch
+render flow_const_alias_kinds.bool_false sr=0x41000000 params p=7 frames=1
+out=[0]
+@ the alias and the name of the constant have the same value
+render flow_const_alias_kinds.alias_and_name sr=0x41000000 params p=3 frames=1
+out=[8]

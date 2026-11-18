@@ -1,0 +1,19 @@
+# flow_ref 1 source=tests/spec/flow_semantics/scalar_assoc_const_flows.onsa tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
+@ a flow body multiplies by an associated constant
+render scalar_assoc_const_flows.times_pi sr=0x41000000 in x=[0x3f800000 0x40000000 0x00000000]
+out=[0x40490fdb 0x40c90fdb 0x00000000]
+@ a flow reads a const that reads an associated constant
+render scalar_assoc_const_flows.by_const sr=0x41000000 in x=[0x40000000 0x40800000]
+out=[0x3fc90fdb 0x40490fdb]
+@ a flow adds the largest finite value twice and overflows to infinity
+render scalar_assoc_const_flows.overflow sr=0x41000000 in x=[0x00000000 0x3f800000]
+out=[0x7f800000 0x7f800000]
+@ a flow adds EPSILON to a zero it makes
+render scalar_assoc_const_flows.floor_at_epsilon sr=0x41000000 in x=[0x40a00000 0xc0600000]
+out=[0x34000000 0x34000000]
+@ a flow of F64 adds the EPSILON of F64
+render scalar_assoc_const_flows.wide sr=0x41000000 in x=[0x3ff0000000000000 0x0000000000000000]
+out=[0x3ff0000000000001 0x3cb0000000000000]
+@ a delayed sample plus the negative largest value
+render scalar_assoc_const_flows.lowest_input sr=0x41000000 in x=[0x3f800000 0x40000000 0x40400000]
+out=[0xff7fffff 0xff7fffff 0xff7fffff]

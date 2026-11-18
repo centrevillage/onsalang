@@ -775,9 +775,9 @@ fn the_arguments_are_bound_by_position_and_a_number_that_differs_is_an_internal_
         // Three arguments for a function of one parameter: the evaluator does not drop two of them.
         let mut frame = Frame::new(body);
         let callee = body.callee(call).expect("the callee");
-        let r = frame.invoke(&callee, vec![i32v(1), i32v(2), i32v(3)], body.ast.expr(call).span);
+        let r = frame.invoke(&callee, vec![i32v(1), i32v(2), i32v(3)], call, body.ast.expr(call).span);
         assert!(matches!(r, Err(Stop { fault: Fault::Internal(_), .. })), "{r:?}");
-        let r = frame.invoke(&callee, vec![], body.ast.expr(call).span);
+        let r = frame.invoke(&callee, vec![], call, body.ast.expr(call).span);
         assert!(matches!(r, Err(Stop { fault: Fault::Internal(_), .. })), "{r:?}");
     });
 }

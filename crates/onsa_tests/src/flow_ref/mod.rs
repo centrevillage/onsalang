@@ -26,6 +26,7 @@
 //! - [`call`]: the calls of functions and methods, the ones with a body of expressions only evaluated here, the others
 //!   handed to the [`host`] (§6.1, §11.5), and the limit of 128 nested calls (§12.5).
 //! - [`host`]: the door of the functions the evaluator does not evaluate, and the two hosts it has of its own.
+//! - [`interp_host`]: the host that runs the functions of the user's package in the interpreter (W7-19).
 //! - [`pattern`]: `match` and the `let` that takes a value apart, and the patterns they use (a guard is tried for
 //!   each way a `|` lets a pattern match).
 //! - [`flow`]: an instance of a flow: the clock of each `let`, the stages `init` and `process` run them in, `reset`,
@@ -35,21 +36,28 @@
 //! - [`boundary`]: an exported flow as the C API has it (§9.2, §14.2): `init`, `process` and `reset` with the status, a panic that
 //!   zeroes the outputs of a call and poisons the instance, and one that leaves it uninitialized.
 //! - [`state`]: the state of an instance, a tree of cells and instances made for each place a delay or a flow is called,
-//!   the delays (`prev~`, `delay~`, `vdelay~`) with the two phases of a tick that `^` needs, the time (`sample_rate()`).
+//!   the delays (`prev~`, `delay~`, `vdelay~`) with the two phases of a tick that `^` needs, the time (`sample_rate()`, `sample_tick()`).
+//! - [`walk`]: the `test` blocks of a case taken apart and run on the evaluator: the calls of `render` and the asserts (W7-19).
+//! - [`walk_model`], `reads`: the data a walk gives (the verdicts, the events), and what an assert reads of the outputs.
 //! - [`sema_view`]: the tables of the checker the evaluator reads, in one file.
 
 pub mod aggregate;
 pub mod boundary;
 pub mod branch;
 pub mod call;
+pub mod data;
 pub mod expr;
 pub mod flow;
 pub mod host;
+pub mod interp_host;
 pub mod pattern;
+mod reads;
 pub mod scalar;
 pub mod sema_view;
 pub mod state;
 pub mod value;
+pub mod walk;
+pub mod walk_model;
 
 #[cfg(test)]
 mod aggregate_tests;
@@ -59,6 +67,8 @@ mod boundary_tests;
 mod branch_tests;
 #[cfg(test)]
 mod call_tests;
+#[cfg(test)]
+mod data_tests;
 #[cfg(test)]
 mod expr_tests;
 #[cfg(test)]
@@ -74,6 +84,10 @@ mod probe_tests;
 #[cfg(test)]
 mod render_tests;
 #[cfg(test)]
+mod sequence_tests;
+#[cfg(test)]
 mod state_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod walk_tests;

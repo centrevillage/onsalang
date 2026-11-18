@@ -1,0 +1,8 @@
+# flow_ref 1 source=tests/spec/flow_semantics/planar_length_bufs.onsa tests=7 evaluated=0 unavailable=0 skipped=7 waiting=0
+- equal lengths of Bufs process	skipped layout
+- a shorter channel 1 of the input panics	skipped layout
+- a shorter channel 1 of the output panics	skipped layout
+- a longer channel 0 of the input panics	skipped layout
+- inputs and outputs that are each equal but differ from each other panic	skipped layout
+- a mismatch in the middle of three channels of the output panics	skipped layout
+- process_inplace with equal channels runs	skipped layout

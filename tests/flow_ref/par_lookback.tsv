@@ -1,0 +1,3 @@
+# flow_ref 1 source=tests/spec/flow_semantics/par_lookback.onsa tests=2 evaluated=0 unavailable=2 skipped=0 waiting=1
+? a feedback reference inside a replica reads the later let	unavailable a body whose tables are not whole
+? feedback through the replicas	unavailable a body whose tables are not whole

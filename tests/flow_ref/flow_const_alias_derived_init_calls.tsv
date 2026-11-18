@@ -1,0 +1,22 @@
+# flow_ref 1 source=tests/spec/flow_semantics/flow_const_alias_derived_init_calls.onsa tests=7 evaluated=7 unavailable=0 skipped=0 waiting=0
+@ an init-clock let reads the derived alias
+render flow_const_alias_derived_init_calls.init_let sr=0x41000000 cfg n=3 frames=2
+out=[12 12]
+@ an init input mixed with the derived alias, then a sample input
+render flow_const_alias_derived_init_calls.init_and_sample sr=0x41000000 cfg n=3 in x=[1 2]
+out=[8 9]
+@ the derived alias as the init of prev
+render flow_const_alias_derived_init_calls.prev_init sr=0x41000000 in x=[5 6 7]
+out=[4 5 6]
+@ the derived alias as the init of delay
+render flow_const_alias_derived_init_calls.delay_init sr=0x41000000 in x=[5 6 7 8]
+out=[4 4 5 6]
+@ the derived alias as the init of vdelay
+render flow_const_alias_derived_init_calls.vdelay_init sr=0x41000000 in x=[0x40000000 0x40400000 0x40800000]
+out=[0x3f800000 0x40000000 0x40400000]
+@ a call of an rt fn on a constant alias
+render flow_const_alias_derived_init_calls.call_rt sr=0x41000000 params p=1 frames=1
+out=[9]
+@ a call of a non-rt fn on a constant alias
+render flow_const_alias_derived_init_calls.call_init_fn sr=0x41000000 params p=1 frames=1
+out=[9]

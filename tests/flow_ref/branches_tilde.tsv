@@ -1,0 +1,34 @@
+# flow_ref 1 source=tests/spec/flow_semantics/branches_tilde.onsa tests=11 evaluated=11 unavailable=0 skipped=0 waiting=1
+@ if~ advances the counter on the samples it is not chosen
+render branches_tilde.count_if_big sr=0x41000000 in x=[0x3f800000 0x40400000 0x3f800000 0x40400000 0x40400000]
+out=[0x00000000 0x40000000 0x00000000 0x40800000 0x40a00000]
+@ if~ with an instance in each branch runs both
+render branches_tilde.two_counters sr=0x41000000 in x=[0x3f800000 0x40400000 0x3f800000 0x40400000 0x40400000]
+out=[0x41200000 0x40000000 0x41f00000 0x40800000 0x40a00000]
+@ the tilde of an else-if chain covers every branch
+render branches_tilde.chain_of_three sr=0x41000000 in x=[0x3f800000 0x40000000 0x40400000 0x40000000]
+out=[0x447a0000 0x43480000 0x40400000 0x43c80000]
+@ a delay inside an untaken if~ branch still moves
+render branches_tilde.select_delayed sr=0x41000000 in x=[0x3f800000 0x40000000 0x40400000 0x40800000]
+out=[0x3f800000 0x40000000 0x40000000 0x40400000]
+@ if~ inside if~ runs all three counters
+render branches_tilde.nested_if_tilde sr=0x41000000 in x=[0 1 2 3]
+out=[0x42c80000 0x43480000 0x41f00000 0x40800000]
+@ match~ runs every arm
+render branches_tilde.pick_counter sr=0x41000000 in k=[0 1 2 1 0]
+out=[0x3f800000 0x41a00000 0x43960000 0x42200000 0x40a00000]
+@ match~ chooses by pattern and guard
+render branches_tilde.pick_with_guard sr=0x41000000 in k=[0 1 2 3 1]
+out=[0x41200000 0x43480000 0x40400000 0x40800000 0x43fa0000]
+@ an unmatched match~ arm binds the default value
+render branches_tilde.some_or_none sr=0x41000000 in x=[0x3f800000 0xbf800000 0x40000000 0xbf800000 0x40800000]
+out=[0x40000000 0x00000000 0x40c00000 0x00000000 0x41400000]
+@ if~ evaluates the stateless part of the branch it does not take
+render branches_tilde.untaken_divides sr=0x41000000 in d=[5 20 -4]
+out=[0x41a00000 0x40a00000 0x40400000]
+@ a division by zero in an untaken if~ branch panics
+render branches_tilde.untaken_divides sr=0x41000000 in d=[5 0]
+panic sample 1
+@ a plain if inside an if~ branch keeps the division from running
+render branches_tilde.guarded_divides sr=0x41000000 in d=[0 5 0 20]
+out=[0x00000000 0x40000000 0x00000000 0x40800000]

@@ -1,0 +1,16 @@
+# flow_ref 1 source=tests/spec/flow_semantics/branches_plain.onsa tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
+@ a plain if evaluates only the branch it takes
+render branches_plain.plain_if sr=0x41000000 in d=[0 5 0 20]
+out=[0x00000000 0x41a00000 0x00000000 0x40a00000]
+@ the right side of && is evaluated only when needed
+render branches_plain.and_guard sr=0x41000000 in d=[0 10 50]
+out=[0x00000000 0x3f800000 0x00000000]
+@ the right side of || is evaluated only when needed
+render branches_plain.or_guard sr=0x41000000 in d=[0 10 50]
+out=[0x3f800000 0x3f800000 0x00000000]
+@ the left side of && may hold state
+render branches_plain.left_with_state sr=0x41000000 in x=[0x3f800000 0x3f800000 0x3f800000 0xbf800000 0x3f800000]
+out=[0x00000000 0x00000000 0x3f800000 0x00000000 0x3f800000]
+@ the condition of an if may hold state
+render branches_plain.condition_with_state sr=0x41000000 frames=5
+out=[0x00000000 0x00000000 0x3f800000 0x3f800000 0x3f800000]

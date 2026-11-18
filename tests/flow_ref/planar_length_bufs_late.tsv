@@ -1,0 +1,7 @@
+# flow_ref 1 source=tests/spec/flow_semantics/planar_length_bufs_late.onsa tests=6 evaluated=0 unavailable=0 skipped=6 waiting=0
+- a longer channel 1 of the input panics	skipped layout
+- a longer channel 1 of the output panics	skipped layout
+- a mismatch in the last of three channels of the input panics	skipped layout
+- a mismatch in the last of three channels of the output panics	skipped layout
+- a mismatch in the planar input of a mono-output flow panics	skipped layout
+- process_inplace with channels of different lengths panics	skipped layout

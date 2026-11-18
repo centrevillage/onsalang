@@ -1,0 +1,13 @@
+# flow_ref 1 source=tests/spec/flow_semantics/pkg_modules tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
+@ a flow from another module with instances from a third
+render dsp.synth.smoothed_sum sr=0x41000000 in x=[0x3f800000 0x3f800000 0x3f800000 0x3f800000]
+out=[0x3f000000 0x3fc00000 0x40200000 0x40600000]
+@ a generic function at F32 in a flow, with a block input
+render dsp.synth.limited sr=0x41000000 params hi=0x40400000 in x=[0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x3f800000]
+out=[0x3f800000 0x40000000 0x40400000 0x40400000 0x40400000 0x40400000]
+@ the same generic function at I32
+render dsp.synth.quantized sr=0x41000000 in x=[5 -7 1 2]
+out=[0 2 -2 1]
+@ two instances of one imported flow have separate states
+render dsp.synth.doubled sr=0x41000000 in x=[0x41000000 0x00000000 0x00000000 0x00000000]
+out=[0x41000000 0x41000000 0x00000000 0x00000000]

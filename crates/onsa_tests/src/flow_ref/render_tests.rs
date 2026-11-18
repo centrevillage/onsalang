@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicU32, Ordering::Relaxed};
 
 use super::expr::Stop;
 use super::expr_tests::i32v;
-use super::flow::{Instance, Outcome, PanicAt};
+use super::flow::{Call, Instance, Outcome, PanicAt};
 use super::flow_tests::{counted, counter, host, with_flow};
 use super::host::TableHost;
 use super::scalar::{Fault, PanicKind};
@@ -48,8 +48,13 @@ fn ints(xs: &[i128]) -> Vec<Value> {
 fn render_ints(src: &str, name: &'static str, (a, p): (i128, i128), xs: &[i128]) -> Seen {
     let (text, xs) = (src.to_string(), ints(xs));
     with_flow(src, name, move |view, def| {
-        let r =
-            Instance::render(view, def, 48000.0, &[("a", i32v(a))], &[("p", i32v(p))], &[("x", &xs[..])], None, None);
+        let r = Instance::render(
+            view,
+            def,
+            48000.0,
+            &Call { config: &[("a", i32v(a))], params: &[("p", i32v(p))], inputs: &[("x", &xs[..])], frames: None },
+            None,
+        );
         seen(&text, r)
     })
 }
@@ -126,7 +131,7 @@ fn a_fault_that_is_no_panic_is_an_error_and_not_an_outcome() {
     let text = src.to_string();
     let got = with_flow(src, "p", move |view, def| {
         let xs = floats(&[1.0]);
-        seen(&text, Instance::render(view, def, 48000.0, &[], &[], &[("x", &xs[..])], None, None))
+        seen(&text, Instance::render(view, def, 48000.0, &Call { inputs: &[("x", &xs[..])], ..Call::default() }, None))
     });
     assert!(matches!(got, Seen::Error(Fault::Unavailable(_))), "{got:?}");
 }
@@ -190,7 +195,13 @@ fn render_is_init_and_one_process_and_the_init_input_reaches_the_output() {
     let text = src.to_string();
     let got = with_flow(src, "ramp", move |view, def| {
         let render = |start, step, n| {
-            let r = Instance::render(view, def, 48000.0, &[("start", start)], &[("step", step)], &[], Some(n), None);
+            let r = Instance::render(
+                view,
+                def,
+                48000.0,
+                &Call { config: &[("start", start)], params: &[("step", step)], frames: Some(n), ..Call::default() },
+                None,
+            );
             seen(&text, r)
         };
         let by_hand = {
@@ -228,16 +239,9 @@ fn render_makes_the_init_once_the_block_stage_once_and_the_frames_it_is_given() 
     let got = with_flow(&src, "cnt", move |view, def| {
         let mut t = TableHost::default().with("t.ci", row_i).with("t.cb", row_b).with("t.cs", row_s);
         let mut at = |n| {
-            let r = Instance::render(
-                view,
-                def,
-                48000.0,
-                &[("a", i32v(1000))],
-                &[("p", i32v(100))],
-                &[],
-                Some(n),
-                host(&mut t),
-            );
+            let call =
+                Call { config: &[("a", i32v(1000))], params: &[("p", i32v(100))], frames: Some(n), ..Call::default() };
+            let r = Instance::render(view, def, 48000.0, &call, host(&mut t));
             (seen(&text, r), counts())
         };
         (at(3), at(0))
@@ -260,7 +264,16 @@ flow none(g: F32 at block) -> F32 at sample { g }";
             let g = [("g", Value::F32(3.0))];
             let col = floats(&[1.0, 2.0, 3.0, 4.0, 5.0]);
             let render = |col: &[Value], frames| {
-                seen(&text, Instance::render(view, def, 48000.0, &[], &g, &[("x", col)], frames, None))
+                seen(
+                    &text,
+                    Instance::render(
+                        view,
+                        def,
+                        48000.0,
+                        &Call { params: &g, inputs: &[("x", col)], frames, ..Call::default() },
+                        None,
+                    ),
+                )
             };
             (render(&col, None), render(&[], None), render(&col, Some(5)))
         }
@@ -270,7 +283,9 @@ flow none(g: F32 at block) -> F32 at sample { g }";
     assert!(matches!(got.2, Seen::Error(Fault::Internal(_))), "{:?}", got.2);
     let got = with_flow(src, "none", move |view, def| {
         let g = [("g", Value::F32(3.0))];
-        let r = |frames| seen(&text, Instance::render(view, def, 48000.0, &[], &g, &[], frames, None));
+        let r = |frames| {
+            seen(&text, Instance::render(view, def, 48000.0, &Call { params: &g, frames, ..Call::default() }, None))
+        };
         (r(Some(2)), r(None))
     });
     assert_eq!(got.0, Seen::Floats(vec![3.0, 3.0]));

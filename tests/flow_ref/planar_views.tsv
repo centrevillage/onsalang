@@ -1,0 +1,4 @@
+# flow_ref 1 source=tests/spec/flow_semantics/planar_views.onsa tests=3 evaluated=0 unavailable=0 skipped=3 waiting=0
+- channels given as separate buffers	skipped layout
+- process_inplace reads all the inputs of a sample before writing any output	skipped layout
+- process_inplace carries the state across calls	skipped layout

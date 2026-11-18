@@ -1,0 +1,9 @@
+# flow_ref 1 source=tests/spec/flow_semantics/inplace_struct_output.onsa tests=8 evaluated=0 unavailable=0 skipped=8 waiting=0
+- the channels are exchanged in place, each sample reading both inputs first	skipped layout
+- process_inplace gives what process gives with separate buffers	skipped layout
+- input 0 is paired with the first field and input 1 with the second, whatever the names	skipped layout
+- the state of a struct-output flow is carried across process_inplace calls	skipped layout
+- reset returns the delayed channel to its initial value	skipped layout
+- a struct with one field is paired with the one input	skipped layout
+- a block input does not take part in the pairing	skipped layout
+- the in-place buffers of a struct output must have equal lengths	skipped layout

@@ -1,0 +1,7 @@
+# flow_ref 1 source=tests/spec/flow_semantics/struct_pattern_rest_let.onsa tests=2 evaluated=2 unavailable=0 skipped=0 waiting=0
+@ a destructuring let with a last _ in a flow
+render struct_pattern_rest_let.left_of_the_last sr=0x41000000 in x=[0x3f800000 0x40000000 0x40400000]
+out=[0x3f800000 0x40000000 0x40400000]
+@ the fields of a struct made in the body, in another order
+render struct_pattern_rest_let.two_fields sr=0x41000000 in x=[0x3f800000 0x40000000]
+out=[0x40400000 0x40c00000]

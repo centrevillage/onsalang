@@ -8,8 +8,9 @@
 use onsa_diag::Span;
 use onsa_driver::Analyzed;
 use onsa_sema::clock::{Clock, ClockName};
-use onsa_sema::def::{FieldDef, Fields, FlowDef, FlowInput, FnDef, StructDef, VariantDef};
+use onsa_sema::def::{FieldDef, Fields, FlowDef, FlowFn, FlowInput, FlowTy, FnDef, StructDef, VariantDef};
 use onsa_sema::flow_names::FlowBuiltin;
+use onsa_sema::prim::PrimRow;
 use onsa_sema::{Analysis, BodyInfo, ConstValue, DefId, DefKind, LocalId, LocalInfo, LocalKind, ModId, Package};
 use onsa_sema::{Target, Ty, TyId};
 use onsa_syntax::ast::{Ast, CallKind, ExprId, ExprKind, PatId, PatKind};
@@ -94,6 +95,60 @@ impl<'a> View<'a> {
         [module.clone(), a.shown_name(def)].into_iter().filter(|s| !s.is_empty()).collect::<Vec<_>>().join(".")
     }
 
+    /// Is the declaration in the std (its module is of the package of that role)?
+    pub fn in_std(self, def: DefId) -> bool {
+        self.analysis.modules.is_std(self.analysis.def(def).module)
+    }
+
+    /// The function a generated one is (`render`) and the flow it belongs to (§11.6).
+    pub fn flow_fn(self, def: DefId) -> Option<(FlowFn, DefId)> {
+        let d = self.analysis.def(def);
+        Some((d.as_fn()?.flow_fn?, d.owner?))
+    }
+
+    /// The row of the table of primitives a function is (`len`, `is_nan`, `to_bits`: not told by their names).
+    pub fn prim(self, def: DefId) -> Option<&'a PrimRow> {
+        self.analysis.prims.get(&def)
+    }
+
+    /// The struct a type is and what it is of a flow, when a flow generated it (`Config`, `Params`, `In`, `Rendered`).
+    pub fn flow_ty(self, ty: TyId) -> Option<(DefId, FlowTy)> {
+        match self.ty(ty) {
+            Ty::Named(d, _) => match &self.analysis.def(*d).kind {
+                DefKind::Struct(s) => s.flow_ty.map(|f| (*d, f)),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// The `test` blocks of the package, in the order they are declared.
+    pub fn tests(self) -> Vec<(DefId, String, ExprId)> {
+        let a = self.analysis;
+        let mods = self.pkg.modules.iter().filter_map(|m| a.module_of_file(m.file));
+        let defs = mods.flat_map(|m| a.defs_of_module(m));
+        let test = |(id, d): (DefId, &'a onsa_sema::def::Def)| match &d.kind {
+            DefKind::Test { name, body } => Some((id, name.clone(), *body)),
+            _ => None,
+        };
+        defs.filter_map(test).collect()
+    }
+
+    /// The path of the module of a declaration (`math`, `core.num`; empty for a package root).
+    pub fn module_path(self, def: DefId) -> &'a str {
+        &self.analysis.modules.get(self.analysis.def(def).module).path
+    }
+
+    /// The name a module writes for a declaration, with its type when it is a member (`F32.round_from`).
+    pub fn shown_name(self, def: DefId) -> String {
+        self.analysis.shown_name(def)
+    }
+
+    /// A type as source writes it (user types by their short names).
+    pub fn display_type(self, ty: TyId) -> String {
+        self.analysis.display_type(ty)
+    }
+
     /// The fields of a struct in the order of the declaration, with the declared default of each.
     pub fn struct_fields(self, def: DefId) -> Result<&'a [FieldDef], Fault> {
         match &self.analysis.def(def).kind {
@@ -145,8 +200,11 @@ impl<'a> Body<'a> {
         time && matches!(self.ast.expr(e).kind, ExprKind::Call { kind: CallKind::Plain, .. }) && !self.names(e)
     }
 
+    pub fn ty_id(&self, e: ExprId) -> Result<TyId, Fault> {
+        need(self.info.expr_types.get(&e).copied(), "an expression with no type")
+    }
     pub fn ty(&self, e: ExprId) -> Result<&'a Ty, Fault> {
-        Ok(self.view.ty(*need(self.info.expr_types.get(&e), "an expression with no type")?))
+        Ok(self.view.ty(self.ty_id(e)?))
     }
     pub fn target(&self, e: ExprId) -> Result<&'a Target, Fault> {
         need(self.info.targets.get(&e), "a name with no target")
@@ -243,6 +301,12 @@ impl<'a> Body<'a> {
     pub fn par_var(&self, at: Span) -> Result<LocalId, Fault> {
         let found = self.info.locals.iter().position(|l| l.span == at && matches!(l.kind, LocalKind::Let));
         need(found.map(|n| LocalId(n as u32)), "a `par~` variable with no local")
+    }
+
+    /// The local of the `var` written at `at` (the span of its name).
+    pub fn var_local(&self, at: Span) -> Result<LocalId, Fault> {
+        let found = self.info.locals.iter().position(|l| l.span == at);
+        need(found.map(|n| LocalId(n as u32)), "a `var` with no local")
     }
 
     /// The type of a local.

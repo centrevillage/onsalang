@@ -1,0 +1,10 @@
+# flow_ref 1 source=tests/spec/flow_semantics/infer_generic.onsa tests=3 evaluated=3 unavailable=0 skipped=0 waiting=0
+@ a literal takes the type of the sample that decides T
+render infer_generic.shifted sr=0x41000000 in x=[0x3f800000 0x40000000]
+out=[0x3fc00000 0x40200000]
+@ the same inside par
+render infer_generic.replicated sr=0x41000000 in x=[0x3f800000 0x40000000]
+out=[0x40200000 0x40900000]
+@ a parameter decided by a later statement
+render infer_generic.chained sr=0x41000000 in x=[0x3f800000 0x40000000]
+out=[0x3fc00000 0x40200000]

@@ -1,0 +1,10 @@
+# flow_ref 1 source=tests/spec/flow_semantics/feedback_annotated.onsa tests=1 evaluated=1 unavailable=0 skipped=0 waiting=0
+@ an annotated later let types the feedback reference
+render feedback_annotated.field sr=0x41000000 in x=[0x3f800000 0x40000000 0x40400000]
+out=[0x40000000 0x40a00000 0x41100000]
+render feedback_annotated.method sr=0x41000000 in x=[0x3f800000 0x40000000 0x40400000]
+out=[0x00000000 0x3f800000 0x40400000]
+render feedback_annotated.index sr=0x41000000 in x=[0x3f800000 0x40000000 0x40400000]
+out=[0x40000000 0x40a00000 0x41000000]
+render feedback_annotated.tuple sr=0x41000000 in x=[0x3f800000 0x40000000 0x40400000]
+out=[0x40000000 0x40a00000 0x41000000]

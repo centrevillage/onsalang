@@ -7,7 +7,9 @@
 //! The aggregates are in [`super::aggregate`], the patterns in [`super::pattern`], the calls in [`super::call`]. The
 //! other forms (the forms of a flow) are [`Fault::Unavailable`] until the units that have them.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use onsa_diag::Span;
 use onsa_sema::ty::{FloatKind, Len};
@@ -65,6 +67,9 @@ pub struct Frame<'a> {
     /// The state of the flow instance this evaluation is a tick of, and what its delays save (none for a function).
     pub run: Option<Run>,
     chain: u32,
+    /// Which of the functions called from here the evaluator evaluates itself (`call::plain`), kept by declaration: a
+    /// recursive function is not walked at each call. A frame of a call or a constant shares it with the one that made it.
+    pub(super) plain: Rc<RefCell<HashMap<DefId, bool>>>,
     /// The calls this evaluation is inside of (§12.5): 0 at its entry, and a `const` starts at its own entry.
     depth: u32,
 }
@@ -130,15 +135,33 @@ fn bin(op: BinOp) -> Result<Bin, Fault> {
 
 impl<'a> Frame<'a> {
     pub fn new(body: Body<'a>) -> Frame<'a> {
-        Frame { body, locals: HashMap::new(), limits: LIMITS, host: None, run: None, chain: 0, depth: 0 }
+        Frame {
+            body,
+            locals: HashMap::new(),
+            limits: LIMITS,
+            host: None,
+            run: None,
+            chain: 0,
+            plain: Rc::default(),
+            depth: 0,
+        }
     }
 
     /// `expr` of the body of a function called from this frame, with `locals` its parameters: the same limits and
     /// host (taken for the call and given back), one call deeper.
     pub(super) fn run_callee(&mut self, body: Body<'a>, locals: HashMap<LocalId, Value>, expr: ExprId) -> Eval {
         let host = self.host.take();
-        let mut inner =
-            Frame { body, locals, limits: self.limits, host, run: None, chain: self.chain, depth: self.depth + 1 };
+        let plain = self.plain.clone();
+        let mut inner = Frame {
+            body,
+            locals,
+            limits: self.limits,
+            host,
+            run: None,
+            chain: self.chain,
+            plain,
+            depth: self.depth + 1,
+        };
         let value = inner.eval(expr);
         self.host = inner.host.take();
         value
@@ -323,7 +346,8 @@ impl<'a> Frame<'a> {
         }
         let (body, init) = self.body.view.const_init(def).map_err(here)?;
         let host = self.host.take();
-        let mut inner = Frame { chain: self.chain + 1, limits: self.limits, host, ..Frame::new(body) };
+        let mut inner =
+            Frame { chain: self.chain + 1, limits: self.limits, host, plain: self.plain.clone(), ..Frame::new(body) };
         let value = inner.eval(init);
         self.host = inner.host.take();
         value

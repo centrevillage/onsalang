@@ -1,0 +1,58 @@
+# flow_ref 1 source=tests/spec/flow_semantics/reset_replay.onsa tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
+@ render gives the first-run values
+render reset_replay.rs sr=0x41000000 cfg start=0x40400000 params g=0x40000000 in x=[0x3f800000 0x40000000 0x40400000 0x40800000]
+out=[0x41900000 0x41a00000 0x41d80000 0x41f00000]
+@ process on a fresh state equals render
+init 0 reset_replay.rs sr=0x41000000 cfg start=0x40400000
+process 0 params g=0x40000000 frames=4 in x=[0x3f800000 0x40000000 0x40400000 0x40800000]
+out=[0x41900000 0x41a00000 0x41d80000 0x41f00000]
+@ reset replays the first run exactly
+init 0 reset_replay.rs sr=0x41000000 cfg start=0x40400000
+process 0 params g=0x40000000 frames=4 in x=[0x3f800000 0x40000000 0x40400000 0x40800000]
+out=[0x41900000 0x41a00000 0x41d80000 0x41f00000]
+reset 0
+process 0 params g=0x40000000 frames=4 in x=[0x3f800000 0x40000000 0x40400000 0x40800000]
+out=[0x41900000 0x41a00000 0x41d80000 0x41f00000]
+@ reset after a run that stopped in the middle
+init 0 reset_replay.rs sr=0x41000000 cfg start=0x40400000
+process 0 params g=0x40000000 frames=2 in x=[0x42c80000 0x43480000]
+out=[0x43580000 0x44324000]
+reset 0
+process 0 params g=0x40000000 frames=4 in x=[0x3f800000 0x40000000 0x40400000 0x40800000]
+out=[0x41900000 0x41a00000 0x41d80000 0x41f00000]
+@ reset on a fresh state changes nothing
+init 0 reset_replay.rs sr=0x41000000 cfg start=0x40400000
+reset 0
+process 0 params g=0x40000000 frames=4 in x=[0x3f800000 0x40000000 0x40400000 0x40800000]
+out=[0x41900000 0x41a00000 0x41d80000 0x41f00000]
+@ reset twice is the same as once
+init 0 reset_replay.rs sr=0x41000000 cfg start=0x40400000
+process 0 params g=0x40000000 frames=3 in x=[0x41100000 0x41100000 0x41100000]
+out=[0x42080000 0x42680000 0x42980000]
+reset 0
+reset 0
+process 0 params g=0x40000000 frames=4 in x=[0x3f800000 0x40000000 0x40400000 0x40800000]
+out=[0x41900000 0x41a00000 0x41d80000 0x41f00000]
+@ reset uses the init values, not the defaults
+init 0 reset_replay.rs sr=0x41000000 cfg start=0x40400000
+process 0 params g=0x40000000 frames=4 in x=[0x3f800000 0x40000000 0x40400000 0x40800000]
+out=[0x41900000 0x41a00000 0x41d80000 0x41f00000]
+reset 0
+process 0 params g=0x00000000 frames=4 in x=[0x3f800000 0x40000000 0x40400000 0x40800000]
+out=[0x41800000 0x41600000 0x41700000 0x41200000]
+@ the vdelay, par and instance state also come back after reset
+init 0 reset_replay.rs2 sr=0x41000000
+process 0 frames=4 in x=[0x3f800000 0x40000000 0x40400000 0x40800000]
+out=[0x41000000 0x41100000 0x41580000 0x41ac0000]
+process 0 frames=3 in x=[0x41000000 0x41000000 0x41000000]
+out=[0x42060000 0x42600000 0x42840000]
+reset 0
+process 0 frames=4 in x=[0x3f800000 0x40000000 0x40400000 0x40800000]
+out=[0x41000000 0x41100000 0x41580000 0x41ac0000]
+@ two states of the same flow are independent
+init 0 reset_replay.acc sr=0x41000000
+init 1 reset_replay.acc sr=0x41000000
+process 0 frames=4 in x=[0x3f800000 0x40000000 0x40400000 0x40800000]
+out=[0x3f800000 0x40400000 0x40c00000 0x41200000]
+process 1 frames=4 in x=[0x41200000 0x41a00000 0x41f00000 0x42200000]
+out=[0x41200000 0x41f00000 0x42700000 0x42c80000]

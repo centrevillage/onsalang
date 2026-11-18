@@ -1,0 +1,4 @@
+# flow_ref 1 source=tests/spec/flow_semantics/branches_plain_match.onsa tests=1 evaluated=1 unavailable=0 skipped=0 waiting=1
+@ the scrutinee of a match may hold state
+render branches_plain_match.scrutinee_with_state sr=0x41000000 in k=[0 1 0 0]
+out=[0x41200000 0x41200000 0x41a00000 0x41200000]

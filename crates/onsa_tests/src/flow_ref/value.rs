@@ -7,7 +7,7 @@
 //! are not specified, §3.4). The comparison of the language (`==`, IEEE) is
 //! [`super::scalar::binary`].
 
-use onsa_sema::ty::{FloatKind, Len};
+use onsa_sema::ty::{BuiltinTy, FloatKind, Len};
 use onsa_sema::{Ty, TyId};
 
 use super::scalar::Fault;
@@ -209,6 +209,8 @@ impl Value {
                 }
                 all(vs, &vec![*t; vs.len()], view, env)
             }
+            // The frames a `render` gave are the `Buf` of a field of its `Rendered` (§11.6).
+            (Value::Array(vs), Ty::Builtin(BuiltinTy::Buf, a)) => all(vs, &vec![a[0]; vs.len()], view, env),
             (Value::Struct(vs), Ty::Named(def, args)) => {
                 let fs = view.struct_fields(*def)?;
                 all(vs, &fs.iter().map(|f| f.ty).collect::<Vec<_>>(), view, Some(&Env { args, outer: env }))

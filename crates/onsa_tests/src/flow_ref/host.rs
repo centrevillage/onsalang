@@ -7,16 +7,23 @@ use std::collections::HashMap;
 use super::scalar::Fault;
 use super::sema_view::{Callee, View};
 use super::value::Value;
+use onsa_sema::TyId;
 
 /// One call: the function (with its type arguments and the signature the checker holds), the table it was named in
 /// (a host tells functions apart by `callee.def`, one for each; `View::qualified_name` is the name of a table of
-/// rows) and the arguments, which are values: the host gets no place to write to.
+/// rows) and the arguments, which are values: the host gets no place to write to. `types` are the types of the
+/// arguments' expressions (the receiver first) and `ret` that of the call, as the checker holds them: what a host that
+/// writes the call in source needs.
 pub struct HostCall<'a> {
     pub view: View<'a>,
     pub callee: &'a Callee<'a>,
     pub args: Vec<Value>,
+    pub types: Vec<TyId>,
+    pub ret: TyId,
 }
 
+/// A host that runs a function (`InterpHost`) counts the calls inside the function from 0, whatever the depth of the call
+/// that handed it over: §12.5's 128 of calls are not shared between the two, as a host has no door to take the depth in.
 pub trait FnHost {
     fn call(&mut self, call: HostCall) -> Result<Value, Fault>;
 }

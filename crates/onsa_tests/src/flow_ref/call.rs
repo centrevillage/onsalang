@@ -46,18 +46,20 @@ impl<'a> Frame<'a> {
         for a in args {
             vals.push(self.eval(a.expr)?);
         }
-        self.invoke(&func, vals, at)
+        self.invoke(&func, vals, e, at)
     }
 
     /// The value of `func` on `args`: the body evaluated here when it is plain, else what the host gives.
     #[inline(never)]
-    pub(super) fn invoke(&mut self, func: &Callee<'a>, args: Vec<Value>, at: Span) -> Eval {
+    pub(super) fn invoke(&mut self, func: &Callee<'a>, args: Vec<Value>, call: ExprId, at: Span) -> Eval {
         let here = |fault| Stop { fault, at };
         if self.depth() >= DEPTH && !func.primitive() {
             return Err(here(Fault::Panic(PanicKind::Depth)));
         }
         let Some((body, expr)) = self.plain(func).map_err(here)? else {
-            let call = HostCall { view: self.body.view, callee: func, args };
+            let types = parts(&self.body, call).into_iter().map(|x| self.body.ty_id(x)).collect::<Result<_, _>>();
+            let (types, ret) = (types.map_err(here)?, self.body.ty_id(call).map_err(here)?);
+            let call = HostCall { view: self.body.view, callee: func, args, types, ret };
             return match self.host.as_deref_mut() {
                 Some(host) => host.call(call),
                 None => NoHost.call(call),
@@ -75,11 +77,18 @@ impl<'a> Frame<'a> {
     /// The body of `func` and its value expression when the evaluator evaluates it itself.
     fn plain(&self, func: &Callee<'a>) -> Result<Option<(Body<'a>, ExprId)>, Fault> {
         let f = func.func;
-        let mine = !func.primitive() && f.generics.is_empty();
+        // A std function is the host's whole (its body calls `target` functions that are private to its module).
+        let mine = !func.primitive() && f.generics.is_empty() && !self.body.view.in_std(func.def);
         let by_value = f.self_mode.is_none_or(|m| m == Mode::Borrow) && f.params.iter().all(|p| p.mode == Mode::Borrow);
         let Some(expr) = f.body.filter(|_| mine && by_value) else { return Ok(None) };
         let body = self.body.view.body(func.def)?;
-        Ok(evaluated(&body, expr).then_some((body, expr)))
+        let known = self.plain.borrow().get(&func.def).copied();
+        let ok = known.unwrap_or_else(|| {
+            let ok = evaluated(&body, expr);
+            self.plain.borrow_mut().insert(func.def, ok);
+            ok
+        });
+        Ok(ok.then_some((body, expr)))
     }
 }
 

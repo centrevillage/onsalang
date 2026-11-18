@@ -1,0 +1,30 @@
+# flow_ref 1 source=tests/spec/flow_semantics/param_value_typed.onsa tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
+@ a float input whose values have parentheses and a prefix minus runs with the value it is given
+render param_value_typed.negated_paren sr=0x41000000 params level=0x3f800000 in x=[0x40000000 0x40400000]
+out=[0x40400000 0x40800000]
+render param_value_typed.paren_everywhere sr=0x41000000 params level=0x3fe0000000000000 in x=[0x4000000000000000 0x4008000000000000]
+out=[0x3ff0000000000000 0x3ff8000000000000]
+render param_value_typed.negative_zero_and_exponents sr=0x41000000 params level=0x40000000 in x=[0x40000000 0x40400000]
+out=[0x40800000 0x40c00000]
+@ the integer inputs of every width run
+render param_value_typed.signed_integers sr=0x41000000 params a=-5 b=-1 c=7 in x=[0x40000000 0x40400000]
+out=[0x40000000 0x40400000]
+render param_value_typed.unsigned_integers sr=0x41000000 params a=255 b=10 c=480 in x=[0x40000000 0x40400000]
+out=[0x40000000 0x40400000]
+@ the text keys with escapes, braces and characters that are not ASCII run
+render param_value_typed.text_with_escapes sr=0x41000000 params level=0x3f000000 in x=[0x40000000 0x40400000]
+out=[0x3f800000 0x3fc00000]
+render param_value_typed.text_with_braces sr=0x41000000 params level=0x3f800000 in x=[0x40000000 0x40400000]
+out=[0x40000000 0x40400000]
+render param_value_typed.text_not_ascii sr=0x41000000 params level=0x40000000 in x=[0x40000000 0x40400000]
+out=[0x40800000 0x40c00000]
+@ the Bool inputs with a default in parentheses run with the value they are given
+render param_value_typed.bool_with_parentheses sr=0x41000000 params on=true mute=false in x=[0x40000000 0x40400000]
+out=[0x40000000 0x40400000]
+render param_value_typed.bool_with_parentheses sr=0x41000000 params on=true mute=true in x=[0x40000000 0x40400000]
+out=[0x00000000 0x00000000]
+@ a flow with a Bool input called by another, and an exported flow, run
+render param_value_typed.outer sr=0x41000000 params q=0x3f800000 in x=[0x40000000 0x40800000]
+out=[0x40000000 0x40800000]
+render param_value_typed.exported sr=0x41000000 params mix=0x3f000000 taps=2 in x=[0x40000000 0x40800000]
+out=[0x3f800000 0x40000000]
