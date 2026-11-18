@@ -36,7 +36,7 @@ use std::collections::HashMap;
 use std::fmt::Write as _;
 
 use onsa_sema::def::{DefKind, Fields, FlowInput, FlowTy, GenericKind, ParamKey, ParamKind, ParamNumber};
-use onsa_sema::ty::{Env, Rate};
+use onsa_sema::ty::Env;
 use onsa_sema::{Analysis, ConstValue, DefId, ModId, Ty, TyId};
 use onsa_syntax::ast::{Mode, Vis};
 use serde::Serialize;
@@ -164,6 +164,9 @@ pub struct FlowIface {
     pub vis: String,
     pub inputs: Vec<FlowInputIface>,
     pub out: String,
+    /// The clock of the output (`sample`, §11.6), in the text form only.
+    #[serde(skip)]
+    pub out_clock: String,
     pub members: Vec<Item>,
 }
 
@@ -553,7 +556,7 @@ impl Builder<'_> {
             .iter()
             .map(|i| FlowInputIface {
                 name: i.name.clone(),
-                clock: i.rate.clock().into(),
+                clock: i.clock.shown(i.span),
                 ty: self.ty(i.ty, &[]),
                 parens: self.a.types.parens_before_uses(i.ty, true),
                 param: self.param_meta(i),
@@ -611,6 +614,7 @@ impl Builder<'_> {
             vis: vis_str(def.vis).into(),
             inputs,
             out: self.ty(f.out, &[]),
+            out_clock: f.out_clock.shown(def.name_span),
             members,
         })
     }
@@ -805,8 +809,7 @@ fn render_item(item: &Item, out: &mut String, indent: &str) {
                 let ty = if i.parens { format!("({})", i.ty) } else { i.ty.clone() };
                 let _ = writeln!(out, "{indent}  {}: {ty} at {},", i.name, i.clock);
             }
-            // The output is at the clock `sample` (§11.6).
-            let _ = writeln!(out, "{indent}) -> {} at {}", f.out, Rate::Sig.clock());
+            let _ = writeln!(out, "{indent}) -> {} at {}", f.out, f.out_clock);
             for m in &f.members {
                 render_item(m, out, &format!("{indent}  "));
             }

@@ -9,9 +9,11 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 
+use onsa_diag::Span;
 use onsa_sema::body::{LocalId, Target};
+use onsa_sema::clock::Clock;
 use onsa_sema::def::DefKind;
-use onsa_sema::flow::{FlowInfo, FlowRate, InitArg, Node};
+use onsa_sema::flow::{FlowInfo, InitArg, Node};
 use onsa_sema::{Analysis, DefId};
 use onsa_syntax::ast::{Ast, ExprId, ExprKind};
 
@@ -30,7 +32,7 @@ struct Graph<'a> {
     /// Local → node name (inputs, `let`s, `par` variables).
     local_node: HashMap<LocalId, String>,
     /// Extra nodes (stateful nodes that are not a `let`): name, label, rate.
-    extra: Vec<(String, String, FlowRate)>,
+    extra: Vec<(String, String, Clock)>,
     edges: Vec<Edge>,
     seen: HashSet<(String, String, bool)>,
 }
@@ -45,8 +47,8 @@ impl Graph<'_> {
         }
     }
 
-    fn rate_of(&self, e: ExprId) -> FlowRate {
-        self.info.expr_rates.get(&e).copied().unwrap_or(FlowRate::Sig)
+    fn rate_of(&self, e: ExprId) -> Clock {
+        self.info.clocks.exprs.get(&e).copied().unwrap_or(Clock::SAMPLE)
     }
 
     fn ty_of(&self, e: ExprId) -> String {
@@ -122,23 +124,26 @@ impl Graph<'_> {
                 onsa_diag::internal::bug(None, "a delay node without its delay")
             }
         };
-        format!("{} = {what}: {}", node.name(), typed(&self.ty_of(e), self.rate_of(e)))
+        format!("{} = {what}: {}", node.name(), typed(&self.ty_of(e), self.rate_of(e), self.ast.expr(e).span))
     }
 }
 
-/// `type at clock`, or the type alone for a constant (§11.3).
-fn typed(ty: &str, r: FlowRate) -> String {
+/// `type at clock`, or the type alone for a constant (§11.3); a clock with
+/// no text is an internal error at `at`.
+fn typed(ty: &str, r: Clock, at: Span) -> String {
     match r {
-        FlowRate::Const => ty.to_string(),
-        r => format!("{ty} at {}", r.name()),
+        Clock::Const => ty.to_string(),
+        r => format!("{ty} at {}", r.shown(at)),
     }
 }
 
-fn rate_color(r: FlowRate) -> &'static str {
+/// The color of a clock (W7-15 redraws them): the stages before `block`
+/// gray, `block` blue, the others black.
+fn rate_color(r: Clock) -> &'static str {
     match r {
-        FlowRate::Const | FlowRate::Init => "gray40",
-        FlowRate::Ctl => "blue",
-        FlowRate::Sig => "black",
+        Clock::Const | Clock::Init => "gray40",
+        Clock::Block => "blue",
+        _ => "black",
     }
 }
 
@@ -228,11 +233,11 @@ fn graph_of(analyzed: &Analyzed, flow: &str, scope: Option<&str>) -> Result<Stri
         let name = info.body.locals[l.0 as usize].name.clone();
         g.local_node.insert(l, name.clone());
         let input = &flow_def.inputs[i];
-        let rate = FlowRate::from_rate(input.rate);
+        let rate = input.clock;
         let _ = writeln!(
             out,
             "  \"{name}\" [label=\"{name}: {}\" shape=ellipse color=\"{}\" fontcolor=\"{}\"]",
-            typed(&a.display_type(input.ty), rate),
+            typed(&a.display_type(input.ty), rate, input.span),
             rate_color(rate),
             rate_color(rate)
         );
@@ -251,13 +256,13 @@ fn graph_of(analyzed: &Analyzed, flow: &str, scope: Option<&str>) -> Result<Stri
         let whole = info.node_of_expr.get(&l.init).and_then(|&idx| info.nodes.get(idx)).filter(|n| n.expr() == l.init);
         let label = match whole {
             Some(node) => g.node_label(node, l.init).replacen(&format!("{} =", node.name()), &format!("{name} ="), 1),
-            None => format!("{name}: {}", typed(&a.display_type(l.ty), l.rate)),
+            None => format!("{name}: {}", typed(&a.display_type(l.ty), l.clock, l.span)),
         };
         let _ = writeln!(
             out,
             "  \"{name}\" [label=\"{label}\" color=\"{}\" fontcolor=\"{}\"]",
-            rate_color(l.rate),
-            rate_color(l.rate)
+            rate_color(l.clock),
+            rate_color(l.clock)
         );
         match whole {
             Some(node) => {
@@ -273,7 +278,7 @@ fn graph_of(analyzed: &Analyzed, flow: &str, scope: Option<&str>) -> Result<Stri
         let _ = writeln!(
             out,
             "  \"out\" [label=\"out: {}\" shape=doubleoctagon color=\"{}\" fontcolor=\"{}\"]",
-            typed(&g.ty_of(o), rate),
+            typed(&g.ty_of(o), rate, ast.expr(o).span),
             rate_color(rate),
             rate_color(rate)
         );

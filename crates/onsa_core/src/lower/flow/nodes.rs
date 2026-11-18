@@ -50,7 +50,7 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
             let sub = lw.ensure_flow(*callee)?;
             let ret = lw.m.fn_(sub.tick).ret.clone();
             let mut cargs = vec![inout(sfield(lw, &state, name, span)?)];
-            cargs.extend(instance_args(lw, cx, *callee, args, Rate::Sig)?.into_iter().map(borrow));
+            cargs.extend(instance_args(lw, cx, *callee, args, Clock::SAMPLE)?.into_iter().map(borrow));
             call(sub.tick, ret, span, cargs)
         }
         Node::Par { name, var, from, to, body, nodes, .. } => {

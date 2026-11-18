@@ -90,15 +90,17 @@ fn a_measure_follows_the_bound_variables() {
     assert!(inf.measure(t, with_err, &mut walk()).error);
 }
 
-/// `Rate::of_type_name` pairs `Rate::ALL` with `RATE_TYPES` by position
-/// (S-120): the two lists have one length and one order.
+/// `ClockName::of_type_name` pairs `ClockName::ALL` with `RATE_TYPES` by
+/// position (S-120): the two lists have one length, and each rate type names
+/// the clock of its place (`Init` `init`, `Ctl` `block`, `Sig` `sample`).
 #[test]
-fn the_rate_types_are_the_rates_in_their_order() {
-    use crate::ty::Rate;
+fn the_rate_types_are_the_clocks_in_their_order() {
+    use crate::clock::ClockName;
     use onsa_syntax::foreign::RATE_TYPES;
-    assert_eq!(Rate::ALL.len(), RATE_TYPES.len());
-    for (rate, name) in Rate::ALL.into_iter().zip(RATE_TYPES) {
-        assert_eq!(format!("{rate:?}"), name);
-        assert_eq!(Rate::of_type_name(name), Some(rate));
+    assert_eq!(ClockName::ALL.len(), RATE_TYPES.len());
+    let pairs = [("Init", "init"), ("Ctl", "block"), ("Sig", "sample")];
+    for ((clock, name), (ty, written)) in ClockName::ALL.into_iter().zip(RATE_TYPES).zip(pairs) {
+        assert_eq!((name, clock.name()), (ty, written));
+        assert_eq!(ClockName::of_type_name(name), Some(clock));
     }
 }

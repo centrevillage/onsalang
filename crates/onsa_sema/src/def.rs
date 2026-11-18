@@ -5,7 +5,8 @@ use onsa_diag::Span;
 use onsa_syntax::ast::{ExprId, ItemId, Mode, Vis};
 use serde::{Deserialize, Serialize};
 
-use crate::ty::{EffectSet, Rate, TyId};
+use crate::clock::{Clock, ClockName};
+use crate::ty::{EffectSet, TyId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct DefId(pub u32);
@@ -268,11 +269,11 @@ impl FlowTy {
         matches!(self, FlowTy::In | FlowTy::Out)
     }
 
-    /// The rate of the inputs whose fields it holds (§11.6).
-    pub fn input_rate(self) -> Option<Rate> {
+    /// The clock of the inputs whose fields it holds (§11.6).
+    pub fn input_clock(self) -> Option<ClockName> {
         match self {
-            FlowTy::Config => Some(Rate::Init),
-            FlowTy::Params => Some(Rate::Ctl),
+            FlowTy::Config => Some(ClockName::Init),
+            FlowTy::Params => Some(ClockName::Block),
             FlowTy::State | FlowTy::In | FlowTy::Out | FlowTy::Rendered => None,
         }
     }
@@ -420,8 +421,10 @@ impl From<ParamNumber> for crate::consteval::ConstValue {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FlowInput {
     pub name: String,
-    pub rate: Rate,
-    /// Value type (without the rate).
+    /// The clock written after the type (§11.3); `Clock::Error` when it has
+    /// a diagnostic.
+    pub clock: Clock,
+    /// Value type (without the clock).
     pub ty: TyId,
     pub param: Option<ParamMeta>,
     pub span: Span,
@@ -429,11 +432,26 @@ pub struct FlowInput {
     pub name_span: Span,
 }
 
+impl FlowInput {
+    /// The clock the generated API and the rate pass read: an input whose
+    /// clock is in error is a `sample` input there, so that its uses report
+    /// as of one (R-471: no cascade of other text). The one place of that rule.
+    pub fn api_clock(&self) -> Clock {
+        match self.clock {
+            Clock::Error => Clock::SAMPLE,
+            c => c,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FlowDef {
     pub inputs: Vec<FlowInput>,
-    /// Output value type (rate is always `Sig`, §11.6).
+    /// Output value type (its clock is `out_clock`, §11.6).
     pub out: TyId,
+    /// The clock of the output: `Clock::SAMPLE` (§11.6: its one clock in this
+    /// version), or `Clock::Error` when the clock written has a diagnostic.
+    pub out_clock: Clock,
     pub body: ExprId,
     /// Generated namespace items (§11.6): `State`, `Config`, ..., `process`, ...
     pub members: Vec<(String, DefId)>,

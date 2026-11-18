@@ -450,12 +450,12 @@ impl<'p> Sema<'p> {
                 walk(g, (true, gs, this), &mut heading.map(|i| i.self_ty).into_iter().chain(consts));
             }
             (DefKind::Struct(sd), None) => {
-                let (Some(rate), Some(flow)) = (sd.flow_ty.and_then(FlowTy::input_rate), def.owner) else { return };
+                let (Some(clock), Some(flow)) = (sd.flow_ty.and_then(FlowTy::input_clock), def.owner) else { return };
                 let Some(ItemKind::Flow(f)) = self.a.def(flow).item.map(|i| item_kind(&ast.item(i).kind)) else {
                     return;
                 };
                 let rated =
-                    |p: &&Param| p.clock.as_ref().and_then(|c| crate::flow_names::clock_rate(c).ok()) == Some(rate);
+                    |p: &&Param| p.clock.as_ref().and_then(|c| crate::clock::resolve_name(c).ok()) == Some(clock);
                 walk(g, (false, &[], None), &mut f.params.iter().filter(rated).filter_map(|p| p.ty));
             }
             (DefKind::Alias(_) | DefKind::Const(_), _) => _ = g.point((d, true)),

@@ -146,7 +146,7 @@ pub(crate) struct BodyNames {
     pub instance_of: HashMap<ExprId, usize>,
     /// The clock of each `e at k` of a flow body, its name looked up (§11.3,
     /// R-472): the one lookup that the types stage and the clocks read.
-    pub clocks: HashMap<ExprId, crate::ty::Rate>,
+    pub clocks: HashMap<ExprId, crate::clock::ClockName>,
     /// What diverges (§7), which [`crate::body::BodyInfo::diverging`] takes.
     pub diverging: crate::tails::Diverging,
     /// `false` when the walk stopped before the end of the body: at an error

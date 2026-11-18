@@ -15,6 +15,9 @@ mod body_tests;
 mod bounds;
 mod builtin;
 pub(crate) mod cast;
+pub mod clock;
+#[cfg(test)]
+mod clock_tests;
 mod constarg;
 pub mod consteval;
 pub mod def;
@@ -105,9 +108,10 @@ use serde::{Deserialize, Serialize};
 
 pub use base::{Base, BaseError, analyze_on, fresh_std, read_std, std_bytes, std_files};
 pub use body::{BodyInfo, Instance, LocalId, LocalInfo, LocalKind, Target};
+pub use clock::{Clock, ClockName, ClockStage};
 pub use consteval::ConstValue;
 pub use def::{Def, DefId, DefKind, ModId};
-pub use flow::{FlowInfo, FlowLet, FlowRate, InitArg, Node};
+pub use flow::{ClockInfo, FlowInfo, FlowLet, InitArg, Node};
 pub use kind::Kind;
 pub use layout::Layout;
 pub use names::body::{named, receiver};

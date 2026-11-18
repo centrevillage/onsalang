@@ -273,7 +273,7 @@ impl<'p> Sema<'p> {
         let te = cx.ast.ty(t);
         let TypeKind::Path { path, args } = &te.kind else { return None };
         let ([seg], [arg]) = (path.segments.as_slice(), args.as_slice()) else { return None };
-        let rate = Rate::of_type_name(&seg.name)?;
+        let rate = ClockName::of_type_name(&seg.name)?;
         if !matches!(err, ResolveError::NotFound { name, .. } if *name == seg.name) {
             return None;
         }
@@ -287,12 +287,12 @@ impl<'p> Sema<'p> {
             kind = Some(inner);
         }
         let clock = match kind {
-            Some(ItemKind::Flow(f)) if f.ret == t && f.ret_clock.is_none() => Some(Rate::Sig),
+            Some(ItemKind::Flow(f)) if f.ret == t && f.ret_clock.is_none() => Some(ClockName::Sample),
             Some(ItemKind::Flow(f)) if f.params.iter().any(|p| p.ty == Some(t) && p.clock.is_none()) => Some(rate),
             _ => None,
         };
         let (clock, title) = match clock {
-            Some(r) => (format!(" at {}", r.clock()), format!("write the rate as the clock `at {}`", r.clock())),
+            Some(r) => (format!(" at {}", r.name()), format!("write the rate as the clock `at {}`", r.name())),
             None => (String::new(), format!("write `{}` with no rate", src(cx, arg))),
         };
         let edits = vec![

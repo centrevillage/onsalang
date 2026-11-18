@@ -50,10 +50,10 @@ impl Generated {
     /// always, as only its parameter `cfg` (of `Config`) is of the inputs.
     /// These are the items a flow whose clocks are not read keeps as failed
     /// (R-471). None of an item the inputs do not decide.
-    fn of_inputs(self, rates: &[Option<Rate>]) -> Option<bool> {
+    fn of_inputs(self, rates: &[Option<ClockName>]) -> Option<bool> {
         match self {
-            Generated::Type(FlowTy::In) => Some(rates.iter().filter(|&&r| r == Some(Rate::Sig)).count() >= 2),
-            Generated::Type(t) => t.input_rate().map(|r| rates.contains(&Some(r))),
+            Generated::Type(FlowTy::In) => Some(rates.iter().filter(|&&r| r == Some(ClockName::Sample)).count() >= 2),
+            Generated::Type(t) => t.input_clock().map(|r| rates.contains(&Some(r))),
             Generated::Fn(FlowFn::Init) => Some(true),
             _ => None,
         }
@@ -131,7 +131,7 @@ impl<'p> Sema<'p> {
     /// (`Out` is of the output alone, S-1087). Whether it has `Out` and
     /// `process_inplace` its types decide (S-1087: [`Sema::fill_by_output`],
     /// [`Sema::trim_members`]).
-    pub(crate) fn generated_defs(&mut self, flow: DefId, rates: &[Option<Rate>]) {
+    pub(crate) fn generated_defs(&mut self, flow: DefId, rates: &[Option<ClockName>]) {
         let d = self.a.def(flow);
         let (module, vis, span, name_span) = (d.module, d.vis, d.span, d.name_span);
         let (u32, unit) = (self.a.types.int(IntKind::U32), self.a.types.unit());
@@ -186,7 +186,7 @@ impl<'p> Sema<'p> {
     /// kept, as of a cut heading: its uses get no diagnostic.
     fn members_unknown(&mut self, flow: DefId, inputs: bool) -> bool {
         let f = self.flow_def(flow);
-        let ins = f.inputs.iter().filter(|_| inputs).map(|i| (i.ty, (i.rate == Rate::Sig).then_some(true)));
+        let ins = f.inputs.iter().filter(|_| inputs).map(|i| (i.ty, (i.api_clock() == Clock::SAMPLE).then_some(true)));
         let tys: Vec<(TyId, Option<bool>)> = std::iter::once((f.out, Some(false))).chain(ins).collect();
         let mut seen = HashSet::default();
         tys.into_iter().any(|(t, edge)| {
@@ -365,10 +365,11 @@ impl<'p> Sema<'p> {
                 onsa_diag::internal::bug(Some(self.a.def(h.flow).name_span), "a flow lowered with no declaration")
             };
             for &(k, at, span) in &h.inputs {
-                let (rate, ty) = (self.flow_def(h.flow).inputs[k].rate, self.flow_def(h.flow).inputs[k].ty);
+                let input = &self.flow_def(h.flow).inputs[k];
+                let (clock, api, ty) = (input.clock, input.api_clock(), input.ty);
                 // A type with the error type in it has its diagnostic (§18.1):
                 // of an input of the E0810 of [`Self::signal_type_error`] too.
-                let sig = (rate == Rate::Sig).then_some(true);
+                let sig = (api == Clock::SAMPLE).then_some(true);
                 let unfit = self.check_rate_value_type(h.flow, ty, span, sig) || self.a.types.has_error(ty);
                 let attr = Attr::find(&f.params[at].attrs, onsa_syntax::attrs::PARAM);
                 // The `@param` of an input of a type no signal has, or with a
@@ -376,7 +377,7 @@ impl<'p> Sema<'p> {
                 // attribute in excess).
                 // SPEC-GAP(S-1121): its other E0809 are not reported either.
                 let param =
-                    attr.filter(|_| !unfit).and_then(|a| self.lower_param_attr(cx, h.flow, a, rate, (ty, span)));
+                    attr.filter(|_| !unfit).and_then(|a| self.lower_param_attr(cx, h.flow, a, clock, (ty, span)));
                 // R-489: nor is the `@param` it must have.
                 if attr.is_none() && !unfit {
                     self.check_exported_input(h.flow, k);
@@ -398,7 +399,7 @@ impl<'p> Sema<'p> {
     /// the writer's). `@host` is not in the table of the attributes yet (§6.5).
     fn check_exported_input(&mut self, flow: DefId, k: usize) {
         let input = &self.flow_def(flow).inputs[k];
-        if self.a.def(flow).export.is_none() || input.rate != Rate::Ctl {
+        if self.a.def(flow).export.is_none() || input.clock != Clock::Block {
             return;
         }
         let name = &self.a.def(flow).name;
@@ -471,7 +472,7 @@ impl<'p> Sema<'p> {
 
     /// The `sample` inputs of `flow`: name, element and length of an array.
     fn sig_inputs(&self, flow: DefId) -> Vec<(String, TyId, Option<Len>)> {
-        let inputs = self.flow_def(flow).inputs.iter().filter(|i| i.rate == Rate::Sig);
+        let inputs = self.flow_def(flow).inputs.iter().filter(|i| i.api_clock() == Clock::SAMPLE);
         inputs
             .map(|i| match self.a.types.get(i.ty) {
                 Ty::Array(e, l) => (i.name.clone(), *e, Some(*l)),
@@ -490,13 +491,14 @@ impl<'p> Sema<'p> {
     /// [`Sema::generated_defs`] made.
     fn fill_by_inputs(&mut self, flow: DefId) {
         let inputs = self.flow_def(flow).inputs.clone();
-        let fields = |s: &Self, rate: Rate| -> Vec<FieldDef> {
-            inputs.iter().filter(|i| i.rate == rate).map(|i| s.generated_field(flow, &i.name, i.ty)).collect()
+        let fields = |s: &Self, clock: ClockName| -> Vec<FieldDef> {
+            let of = |i: &&FlowInput| i.api_clock() == clock.clock();
+            inputs.iter().filter(of).map(|i| s.generated_field(flow, &i.name, i.ty)).collect()
         };
         self.fill_struct(flow, FlowTy::State, Vec::new());
         for t in [FlowTy::Config, FlowTy::Params] {
             if self.generated(flow, Generated::Type(t)).is_some() {
-                let fs = t.input_rate().map(|r| fields(self, r)).unwrap_or_default();
+                let fs = t.input_clock().map(|r| fields(self, r)).unwrap_or_default();
                 self.fill_struct(flow, t, fs);
             }
         }
@@ -505,7 +507,7 @@ impl<'p> Sema<'p> {
             // The field of an input that does not cross (its E0810) is not
             // known: its uses get no diagnostic (§18.1).
             let error = self.a.types.error();
-            for (f, i) in fs.iter_mut().zip(inputs.iter().filter(|i| i.rate == Rate::Sig)) {
+            for (f, i) in fs.iter_mut().zip(inputs.iter().filter(|i| i.api_clock() == Clock::SAMPLE)) {
                 if self.boundary_outputs(i.ty, true).is_err() {
                     f.ty = error;
                 }

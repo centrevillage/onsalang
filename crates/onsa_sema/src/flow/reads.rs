@@ -12,7 +12,7 @@ impl<'a> Rater<'a> {
     /// their own (S-05), and the rate at which `sample_rate()` is read.
     pub(super) fn mark_all(&mut self) {
         for k in 0..self.lets.len() {
-            let (init, rate) = (self.lets[k].init, self.lets[k].rate);
+            let (init, rate) = (self.lets[k].init, self.lets[k].clock);
             if rate != FlowRate::Const {
                 self.mark(init, rate);
             }
@@ -24,7 +24,7 @@ impl<'a> Rater<'a> {
         // initializer read there (§11.3, R-488): from the last, so that one
         // read by a later constant `let` has the rates of that one.
         for k in (0..self.lets.len()).rev() {
-            let (init, rate) = (self.lets[k].init, self.lets[k].rate);
+            let (init, rate) = (self.lets[k].init, self.lets[k].clock);
             if rate != FlowRate::Const {
                 continue;
             }
@@ -38,8 +38,8 @@ impl<'a> Rater<'a> {
             }
         }
         for l in &mut self.lets {
-            let above = |id: &LocalId| self.read_at.get(id).and_then(|rs| rs.last()).is_some_and(|&r| r > l.rate);
-            l.state = l.rate >= FlowRate::Init && l.locals.iter().any(above);
+            let above = |id: &LocalId| self.read_at.get(id).and_then(|rs| rs.last()).is_some_and(|&r| r > l.clock);
+            l.state = l.clock >= FlowRate::Init && l.locals.iter().any(above);
         }
     }
 
@@ -63,7 +63,7 @@ impl<'a> Rater<'a> {
                         NodeKind::Instance(callee_def) => {
                             let inputs = self.a.def(callee_def).as_flow().map(|f| f.inputs.clone()).unwrap_or_default();
                             for (arg, input) in call.args.iter().zip(&inputs) {
-                                self.mark(*arg, FlowRate::from_rate(input.rate));
+                                self.mark(*arg, FlowRate::of_clock(input.api_clock(), input.span));
                             }
                         }
                         NodeKind::Delay(delay, _) => {

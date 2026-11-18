@@ -1,32 +1,12 @@
-//! The names of the flow language that every stage reads: the clock after
-//! `at` (§11.3, S-359; the names are [`Rate::clock`]) and the built-in delays
-//! `prev~` / `delay~` / `vdelay~` and the other builtin names of a flow
-//! (§11.4, §2.2). The one table of each (plan
-//! D-15): the names stage, the flow checks, `onsa graph` and `onsa interface`
-//! read them from here.
+//! The builtin names of the flow language that every stage reads: the
+//! built-in delays `prev~` / `delay~` / `vdelay~` and the other builtin names
+//! of a flow (§11.4, §2.2). The one table of them (plan D-15): the names
+//! stage, the flow checks, `onsa graph` and `onsa interface` read them from
+//! here. The names of the clocks after `at` (§11.3, S-359) are
+//! [`crate::clock::ClockName`]'s.
 
 use onsa_diag::{Code, Diagnostic, Span, Stage};
-use onsa_syntax::ast::Clock;
 use serde::{Deserialize, Serialize};
-
-use crate::ty::Rate;
-
-/// The clock after `at` (§11.3, S-359): a name of the clock namespace, or
-/// E0302 at the name, whatever value or type has that name.
-pub(crate) fn clock_rate(c: &Clock) -> Result<Rate, Diagnostic> {
-    if let Some(r) = Rate::of_clock(&c.name.name) {
-        return Ok(r);
-    }
-    let names = Rate::ALL.iter().map(|r| format!("`{}`", r.clock())).collect::<Vec<_>>().join(", ");
-    Err(Diagnostic::new(
-        Stage::Names,
-        Code::E0302,
-        c.name.span,
-        format!("cannot find the clock `{}`; a clock after `at` is a name of the clocks (§11.3)", c.name.name),
-    )
-    .with_found(c.name.name.clone())
-    .with_rule(format!("the clocks of this version are {names}")))
-}
 
 /// The builtin of a flow that is no delay and is checked (§11.4).
 pub(crate) const SAMPLE_RATE: &str = "sample_rate";

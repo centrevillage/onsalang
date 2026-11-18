@@ -57,8 +57,8 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
         r.pass();
         let mut changed = false;
         for (i, l) in r.lets.iter().enumerate() {
-            changed |= r.let_rates[i] != l.rate;
-            r.let_rates[i] = l.rate;
+            changed |= r.let_rates[i] != l.clock;
+            r.let_rates[i] = l.clock;
         }
         if !changed {
             break;
@@ -72,13 +72,16 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
     // The stage of the modes comes after the flow checks (§18.1).
     let diag = r.diag.take().or(r.inout_call.take());
     info.complete = diag.is_none();
-    info.expr_rates = r.rates;
-    info.local_rates = r.local_rates;
-    info.lets = r.lets;
+    // The rates of the pass, as the clocks and the stages of the tables.
+    let exprs = r.rates.into_iter().map(|(e, r)| (e, r.to_clock())).collect();
+    let locals = r.local_rates.into_iter().map(|(l, r)| (l, r.to_clock())).collect();
+    info.clocks = ClockInfo { exprs, locals };
+    info.lets = r.lets.into_iter().map(|l| l.map_clock(FlowRate::to_clock)).collect();
     info.nodes = r.node_lists.pop().unwrap_or_default();
     info.node_of_expr = r.node_of_expr;
-    info.sample_rate_at = r.sample_rate_at;
-    info.read_at = r.read_at;
+    info.sample_rate_at = r.sample_rate_at.map(FlowRate::read_stage);
+    let stages = |rs: BTreeSet<FlowRate>| rs.into_iter().map(FlowRate::read_stage).collect();
+    info.read_at = r.read_at.into_iter().map(|(l, rs)| (l, stages(rs))).collect();
     info.body = body;
     if let Some(d) = diag {
         a.diagnostics.push(d);
@@ -101,7 +104,7 @@ pub(super) struct Rater<'a> {
     pub(super) local_rates: HashMap<LocalId, FlowRate>,
     /// Rates of the `let`s from the previous pass (read by look-backs).
     pub(super) let_rates: Vec<FlowRate>,
-    pub(super) lets: Vec<FlowLet>,
+    pub(super) lets: Vec<FlowLet<FlowRate>>,
     pub(super) diag: Option<Diagnostic>,
     /// The first call of an `inout self` method (E0713, §5.2), reported
     /// when the flow checks find no error: the modes stage, which reads no
@@ -183,7 +186,7 @@ impl<'a> Rater<'a> {
                 locals: p.locals.clone(),
                 name: p.name.clone(),
                 ty,
-                rate,
+                clock: rate,
                 init: p.init,
                 span: p.span,
                 state: false,
@@ -438,7 +441,7 @@ impl<'a> Rater<'a> {
                 let callee_name = self.a.def(callee).name.clone();
                 for (arg, input) in call.args.iter().zip(&inputs) {
                     let ra = self.rate(*arg)?;
-                    let ri = FlowRate::from_rate(input.rate);
+                    let ri = FlowRate::of_clock(input.api_clock(), input.span);
                     if self.final_pass && ra > ri {
                         let aspan = self.expr(*arg).span;
                         return Err(self.err(

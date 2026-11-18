@@ -58,9 +58,10 @@ use std::collections::{HashMap, HashSet};
 
 use onsa_diag::Span;
 use onsa_sema::DefId;
+use onsa_sema::clock::{Clock, ClockStage};
 use onsa_sema::def::{DefKind, Fields, FlowDef, FlowFn, FlowTy, ParamInfo, ParamKey, ParamNumber};
-use onsa_sema::flow::{FlowInfo, FlowRate, InitArg, Node};
-use onsa_sema::ty::{BuiltinTy, Len, Rate, Ty as STy};
+use onsa_sema::flow::{FlowInfo, InitArg, Node};
+use onsa_sema::ty::{BuiltinTy, Len, Ty as STy};
 use onsa_syntax::ast::ExprId;
 
 use super::body::{FnCx, bind_irrefutable, lower_expr, of_type, span_of};
@@ -151,11 +152,14 @@ enum Phase {
 }
 
 impl Phase {
-    fn of(rate: FlowRate) -> Phase {
-        match rate {
-            FlowRate::Const | FlowRate::Init => Phase::Init,
-            FlowRate::Ctl => Phase::Ctl,
-            FlowRate::Sig => Phase::Tick,
+    /// The phase of the stage `s` of the analysis; another tick than the
+    /// `sample` of the body is an internal error at `span`.
+    fn of(s: ClockStage, span: Span) -> R<Phase> {
+        match s {
+            ClockStage::Init => Ok(Phase::Init),
+            ClockStage::Block => Ok(Phase::Ctl),
+            ClockStage::SAMPLE => Ok(Phase::Tick),
+            s => Err(internal(span, format!("no phase of the stage {s:?}"))),
         }
     }
 }
@@ -244,7 +248,7 @@ impl Lowerer<'_> {
         if let Some(d) = generated_type(self.a, fd, t) {
             return self.type_id(d, Vec::new(), span);
         }
-        if t.input_rate().is_none() {
+        if t.input_clock().is_none() {
             return Err(internal(span, format!("flow without `{}`", t.name())));
         }
         if let Some(&id) = self.implicit_tys.get(&(flow, t)) {
@@ -318,12 +322,12 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     // State fields in S-05 order.
     let mut state_locals: HashMap<u32, String> = HashMap::new();
     let mut fields: Vec<(String, Ty)> = Vec::new();
-    let sample_rate_field = info.sample_rate_at.is_some_and(|r| r >= FlowRate::Ctl);
+    let sample_rate_field = info.sample_rate_at > Some(ClockStage::Init);
     if sample_rate_field {
         fields.push(("sample_rate".into(), Ty::Float(FloatKind::F32)));
     }
     for (l, input) in info.inputs.iter().zip(&fd.inputs) {
-        let own = FlowRate::from_rate(input.rate);
+        let own = input.clock.stage().ok_or_else(|| internal(input.span, "an input with no stage"))?;
         if reads.get(l).and_then(|rs| rs.last()).is_some_and(|&r| r > own) {
             state_locals.insert(l.0, input.name.clone());
             fields.push((input.name.clone(), lw.core_ty(input.ty, &[], input.span)?));
@@ -332,9 +336,9 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     let mut const_lets: HashMap<Phase, Vec<usize>> = HashMap::new();
     let mut nodes_done: HashSet<ExprId> = HashSet::new();
     for (k, l) in info.lets.iter().enumerate() {
-        if l.rate == FlowRate::Const {
-            let mut phases: Vec<Phase> =
-                l.locals.iter().filter_map(|loc| reads.get(loc)).flatten().map(|&r| Phase::of(r)).collect();
+        if l.clock == Clock::Const {
+            let reads = l.locals.iter().filter_map(|loc| reads.get(loc)).flatten();
+            let mut phases = reads.map(|&r| Phase::of(r, l.span)).collect::<R<Vec<Phase>>>()?;
             phases.sort_by_key(|p| *p as u8);
             phases.dedup();
             for p in phases {
@@ -394,10 +398,11 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     let (mut params, mut sig_inputs) = (Vec::new(), Vec::new());
     for i in &fd.inputs {
         let ty = lw.core_ty(i.ty, &[], i.span)?;
-        match i.rate {
-            Rate::Ctl => params.push((i.name.clone(), ty, a.param_info(i))),
-            Rate::Sig => sig_inputs.push((i.name.clone(), ty)),
-            Rate::Init => {}
+        match i.clock {
+            Clock::Block => params.push((i.name.clone(), ty, a.param_info(i))),
+            Clock::SAMPLE => sig_inputs.push((i.name.clone(), ty)),
+            Clock::Init => {}
+            c => return Err(internal(i.span, format!("an input of the clock {c:?}"))),
         }
     }
     // Of the C API alone, when every `block` input has a `default` (§11.7, §14.2, S-625).

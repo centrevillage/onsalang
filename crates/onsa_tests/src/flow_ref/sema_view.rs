@@ -7,9 +7,9 @@
 
 use onsa_diag::Span;
 use onsa_driver::Analyzed;
+use onsa_sema::clock::{Clock, ClockName};
 use onsa_sema::def::{FieldDef, Fields, FlowDef, FlowInput, FnDef, StructDef, VariantDef};
 use onsa_sema::flow_names::FlowBuiltin;
-use onsa_sema::ty::Rate;
 use onsa_sema::{
     Analysis, BodyInfo, ConstValue, DefId, DefKind, Entity, LocalId, LocalInfo, LocalKind, ModId, Package,
 };
@@ -264,25 +264,31 @@ pub enum Stage {
     Sample,
 }
 
-/// The one place that reads the clock of an input: W7-02 turns its type into `Clock`.
+/// The one place that reads the clock of an input, its `Clock` as the generated API reads it
+/// (`FlowInput::api_clock`). The clocks no declaration makes today (W7-09, W7-11, W7-17) stop here.
 pub fn input_stage(input: &FlowInput) -> Stage {
-    rate_stage(input.rate)
+    match input.api_clock() {
+        Clock::Init => Stage::Init,
+        Clock::Block => Stage::Block,
+        Clock::SAMPLE => Stage::Sample,
+        c => panic!("the evaluator has no stage of the input clock {c:?}"),
+    }
 }
 
 /// The stage of the clock `name` an `at` writes (§11.3), if it is one of the three.
 pub fn clock_stage(name: &str) -> Option<Stage> {
-    Rate::of_clock(name).map(rate_stage)
+    ClockName::of_name(name).map(name_stage)
 }
 
 /// The clock of the output of a flow (§11.3): always `sample` today (W7-09 and W7-17 bring the others).
 pub fn output_stage(_: &FlowDef) -> Stage {
-    rate_stage(Rate::Sig)
+    name_stage(ClockName::Sample)
 }
 
-fn rate_stage(rate: Rate) -> Stage {
-    match rate {
-        Rate::Init => Stage::Init,
-        Rate::Ctl => Stage::Block,
-        Rate::Sig => Stage::Sample,
+fn name_stage(name: ClockName) -> Stage {
+    match name {
+        ClockName::Init => Stage::Init,
+        ClockName::Block => Stage::Block,
+        ClockName::Sample => Stage::Sample,
     }
 }

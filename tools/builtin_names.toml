@@ -74,6 +74,11 @@
 [allow."crates/onsa_sema/src/builtin.rs"]
 "len" = 1
 
+[allow."crates/onsa_sema/src/clock.rs"]
+"block" = 1
+"init" = 1
+"sample" = 1
+
 [allow."crates/onsa_sema/src/def.rs"]
 "Add" = 1
 "AnyNum" = 1
@@ -223,9 +228,6 @@
 "U32" = 2
 "U64" = 2
 "U8" = 2
-"block" = 1
-"init" = 1
-"sample" = 1
 
 [allow."crates/onsa_syntax/src/attrs.rs"]
 "export" = 1

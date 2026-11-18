@@ -143,7 +143,7 @@ fn e0809(span: Span, msg: String) -> Diagnostic {
 
 impl<'p> Sema<'p> {
     /// The metadata of the `@param` `attr` of an input of the flow `id`, of
-    /// the clock `rate` and of the value type `ty` written at `ty_span`
+    /// the clock `clock` and of the value type `ty` written at `ty_span`
     /// (§11.7), and its E0809s. An attribute with an E0809 is not read
     /// further and gives no metadata (§6.5): its values are no defs, so that
     /// no later stage reports them first. The missing `default` is the last
@@ -155,10 +155,10 @@ impl<'p> Sema<'p> {
         cx: &Cx<'p>,
         id: DefId,
         attr: &Attr,
-        rate: Rate,
+        clock: Clock,
         (ty, ty_span): (TyId, Span),
     ) -> Option<ParamMeta> {
-        if rate != Rate::Ctl {
+        if clock != Clock::Block {
             self.report(id, e0809(attr.span, "`@param` goes on `block` inputs only (§11.7)".into()));
             return None;
         }

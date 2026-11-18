@@ -25,7 +25,7 @@ pub(super) fn gen_init<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Fl
         assign(&mut g.stmts, &f, sr.clone())?;
     }
     for (l, input) in info.inputs.iter().zip(&shape.flow.inputs) {
-        if input.rate != Rate::Init {
+        if input.clock != Clock::Init {
             continue;
         }
         let from_cfg = field_by_name(lw, cfg.clone(), &input.name, input.span)?;
@@ -37,7 +37,7 @@ pub(super) fn gen_init<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Fl
     }
     g.state_overrides(lw, shape, info, &s)?;
     g.const_lets(lw, shape, info)?;
-    g.rate_lets(lw, shape, info, FlowRate::Init, &s)?;
+    g.rate_lets(lw, shape, info, ClockStage::Init, &s)?;
     let nodes = info.nodes.clone();
     init_nodes(lw, &mut g.cx, &mut g.stmts, &nodes, &s, &sr)?;
     let poisoned = sfield(lw, &s, "poisoned", span)?;
@@ -78,7 +78,7 @@ fn init_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, nodes: &[Nod
             }
             Node::Instance { name, callee, args, .. } => {
                 let sub = lw.ensure_flow(*callee)?;
-                let fields = instance_args(lw, cx, *callee, args, Rate::Init)?;
+                let fields = instance_args(lw, cx, *callee, args, Clock::Init)?;
                 let cfg = Expr::new(Ty::Struct(sub.config), span, ExprKind::Struct { ty: sub.config, fields });
                 let c = call(sub.init, Ty::Struct(sub.state), span, vec![borrow(cfg), borrow(sr.clone())]);
                 assign(out, &sfield(lw, state, name, span)?, c)?;
@@ -168,7 +168,7 @@ pub(super) fn gen_ctl<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Flo
     let p = g.param("p", Mode::Borrow, Ty::Struct(shape.params_ty));
     g.flow().scopes.push(Scope { state: s.clone() });
     for (l, input) in info.inputs.iter().zip(&shape.flow.inputs) {
-        if input.rate != Rate::Ctl {
+        if input.clock != Clock::Block {
             continue;
         }
         let from_p = field_by_name(lw, p.clone(), &input.name, input.span)?;
@@ -180,7 +180,7 @@ pub(super) fn gen_ctl<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Flo
     }
     g.state_overrides(lw, shape, info, &s)?;
     g.const_lets(lw, shape, info)?;
-    g.rate_lets(lw, shape, info, FlowRate::Ctl, &s)?;
+    g.rate_lets(lw, shape, info, ClockStage::Block, &s)?;
     let nodes = info.nodes.clone();
     ctl_nodes(lw, &mut g.cx, &mut g.stmts, &nodes, &s)?;
     g.finish(lw, fns.ctl, Ty::Unit, true, None);
@@ -194,7 +194,7 @@ fn ctl_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, nodes: &[Node
         match n {
             Node::Instance { name, callee, args, .. } => {
                 let sub = lw.ensure_flow(*callee)?;
-                let fields = instance_args(lw, cx, *callee, args, Rate::Ctl)?;
+                let fields = instance_args(lw, cx, *callee, args, Clock::Block)?;
                 let params = Expr::new(Ty::Struct(sub.params), span, ExprKind::Struct { ty: sub.params, fields });
                 let st = sfield(lw, state, name, span)?;
                 expr_stmt(out, call(sub.ctl, Ty::Unit, span, vec![inout(st), borrow(params)]));
@@ -224,14 +224,14 @@ pub(super) fn gen_tick<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Fl
     let mut g = Gen::new(lw, shape, info, Phase::Tick, out_ty.clone())?;
     let s = g.param("s", Mode::Inout, Ty::Struct(shape.state_ty));
     for (l, input) in info.inputs.iter().zip(&shape.flow.inputs) {
-        if input.rate == Rate::Sig {
+        if input.clock == Clock::SAMPLE {
             g.param_local(LocalId(l.0), Mode::Borrow);
         }
     }
     g.flow().scopes.push(Scope { state: s.clone() });
     g.state_overrides(lw, shape, info, &s)?;
     g.const_lets(lw, shape, info)?;
-    g.rate_lets(lw, shape, info, FlowRate::Sig, &s)?;
+    g.rate_lets(lw, shape, info, ClockStage::SAMPLE, &s)?;
     let output = info.output.ok_or_else(|| internal(shape.span, "flow without an output expression"))?;
     let v = lower_expr(lw, &mut g.cx, output)?;
     let v = of_type(v, &out_ty)?;

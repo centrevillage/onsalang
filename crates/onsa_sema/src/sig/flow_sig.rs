@@ -60,10 +60,10 @@ impl<'p> Sema<'p> {
             let Some(t) = p.ty else { continue };
             let lowered = self.lower_type(&cx, t);
             let tspan = cx.ast.ty(t).span;
-            // The clock after the type (§11.3): the rate of the input (W3-10).
-            let rate = match &p.clock {
-                Some(c) => match crate::flow_names::clock_rate(c) {
-                    Ok(r) => Some(r),
+            // The clock after the type (§11.3).
+            let clock = match &p.clock {
+                Some(c) => match crate::clock::resolve_name(c) {
+                    Ok(n) => Some(n.clock()),
                     Err(d) => {
                         self.report(id, d);
                         None
@@ -86,24 +86,24 @@ impl<'p> Sema<'p> {
             // An input whose type or clock is in error stays, as the error
             // type, so that the body sees its name (no cascade in the unit, R-71).
             // An input of the error type keeps its clock (§18.1, S-692).
-            let Some(rate) = rate else {
+            let Some(clock) = clock else {
                 let error = self.a.types.error();
-                inputs.push(FlowInput { name, rate: Rate::Sig, ty: error, param: None, span: p.span, name_span });
+                inputs.push(FlowInput { name, clock: Clock::Error, ty: error, param: None, span: p.span, name_span });
                 continue;
             };
             if matches!(self.a.types.get(lowered), Ty::Error) {
-                inputs.push(FlowInput { name, rate, ty: lowered, param: None, span: p.span, name_span });
+                inputs.push(FlowInput { name, clock, ty: lowered, param: None, span: p.span, name_span });
                 continue;
             }
             heading.inputs.push((inputs.len(), k, tspan));
-            inputs.push(FlowInput { name, rate, ty: lowered, param: None, span: p.span, name_span });
+            inputs.push(FlowInput { name, clock, ty: lowered, param: None, span: p.span, name_span });
         }
         let out_lowered = self.lower_type(&cx, f.ret);
         let rspan = cx.ast.ty(f.ret).span;
         // The output's clock is `sample` in this version (§11.3, §11.6, §19.1).
         let out_clock = match &f.ret_clock {
-            Some(c) => match crate::flow_names::clock_rate(c) {
-                Ok(Rate::Sig) => None,
+            Some(c) => match crate::clock::resolve_name(c) {
+                Ok(ClockName::Sample) => None,
                 Ok(_) => Some(
                     Diagnostic::new(
                         Stage::Names,
@@ -125,6 +125,7 @@ impl<'p> Sema<'p> {
                 .with_found(src(&cx, rspan)),
             ),
         };
+        let clock = if out_clock.is_none() { Clock::SAMPLE } else { Clock::Error };
         let out = match (out_clock, self.a.types.get(out_lowered)) {
             (_, Ty::Error) => out_lowered,
             (None, _) => {
@@ -139,6 +140,7 @@ impl<'p> Sema<'p> {
         if let DefKind::Flow(fd) = &mut self.a.defs[id.0 as usize].kind {
             fd.inputs = inputs;
             fd.out = out;
+            fd.out_clock = clock;
         }
         Some(heading)
     }

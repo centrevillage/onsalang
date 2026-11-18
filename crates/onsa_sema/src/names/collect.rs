@@ -220,6 +220,7 @@ impl<'p> Sema<'p> {
                 DefKind::Flow(FlowDef {
                     inputs: Vec::new(),
                     out: at.error,
+                    out_clock: crate::clock::Clock::Error,
                     body: f.body,
                     members: Vec::new(),
                     absent: Vec::new(),
@@ -257,8 +258,8 @@ impl<'p> Sema<'p> {
         };
         let d = self.add_def(at.def(name.name.clone(), name.span, kind));
         if let Some(f) = flow {
-            let rates = f.params.iter().map(|p| p.clock.as_ref().and_then(|c| crate::flow_names::clock_rate(c).ok()));
-            self.generated_defs(d, &rates.collect::<Vec<_>>());
+            let clocks = f.params.iter().map(|p| p.clock.as_ref().and_then(|c| crate::clock::resolve_name(c).ok()));
+            self.generated_defs(d, &clocks.collect::<Vec<_>>());
         }
         if let Some(list) = list {
             self.derived_defs(d, list);

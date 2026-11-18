@@ -39,7 +39,7 @@ fn sub_inputs(lw: &Lowerer, callee: DefId) -> Vec<onsa_sema::def::FlowInput> {
     lw.a.def(callee).as_flow().map(|f| f.inputs.clone()).unwrap_or_default()
 }
 
-/// Arguments of an instance call for the callee inputs of `rate`, lowered
+/// Arguments of an instance call for the callee inputs of `clock`, lowered
 /// in the current function: of the input value types, which are no views
 /// (§11.3), so with no conversion.
 pub(super) fn instance_args(
@@ -47,12 +47,12 @@ pub(super) fn instance_args(
     cx: &mut FnCx,
     callee: DefId,
     args: &[ExprId],
-    rate: Rate,
+    clock: Clock,
 ) -> R<Vec<Expr>> {
     let inputs = sub_inputs(lw, callee);
     let mut out = Vec::new();
     for (arg, input) in args.iter().zip(&inputs) {
-        if input.rate != rate {
+        if input.clock != clock {
             continue;
         }
         let want = lw.core_ty(input.ty, &[], input.span)?;
@@ -144,8 +144,10 @@ impl<'b> Gen<'b> {
     ) -> R<()> {
         let phase = self.flow().phase;
         for (&l, name) in &shape.state_locals {
-            let own = info.local_rates.get(&onsa_sema::LocalId(l)).copied().unwrap_or(FlowRate::Sig);
-            if Phase::of(own) != phase {
+            let own = info.clocks.locals.get(&onsa_sema::LocalId(l)).copied().unwrap_or(Clock::SAMPLE);
+            let own =
+                own.stage().ok_or_else(|| internal(self.span, format!("the stored local {name} with no stage")))?;
+            if Phase::of(own, self.span)? != phase {
                 let f = sfield(lw, state, name, self.span)?;
                 self.flow().local_override.insert(l, f);
             }
@@ -169,16 +171,16 @@ impl<'b> Gen<'b> {
         Ok(())
     }
 
-    /// The `let`s of `rate` in order; state ones are also stored.
+    /// The `let`s of the stage `stage` in order; state ones are also stored.
     pub(super) fn rate_lets(
         &mut self,
         lw: &mut Lowerer,
         shape: &FlowShape,
         info: &FlowInfo,
-        rate: FlowRate,
+        stage: ClockStage,
         state: &Expr,
     ) -> R<()> {
-        for l in info.lets.iter().filter(|l| l.rate == rate) {
+        for l in info.lets.iter().filter(|l| l.clock.stage() == Some(stage)) {
             let v = lower_expr(lw, &mut self.cx, l.init)?;
             bind_irrefutable(lw, &mut self.cx, l.pat, v, &mut self.stmts)?;
             for loc in &l.locals {

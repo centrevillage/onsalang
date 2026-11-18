@@ -5,7 +5,8 @@ use std::path::Path;
 use onsa_diag::Code;
 
 use crate::body::LocalId;
-use crate::flow::{FlowInfo, FlowRate, InitArg, Node};
+use crate::clock::{Clock, ClockStage, Ratio};
+use crate::flow::{FlowInfo, InitArg, Node};
 use crate::tests::{check, codes_of as codes};
 use crate::{Analysis, DefId};
 
@@ -25,9 +26,9 @@ fn flow<'a>(a: &'a Analysis, name: &str) -> &'a FlowInfo {
     f
 }
 
-fn let_rate(f: &FlowInfo, name: &str) -> (FlowRate, bool) {
+fn let_rate(f: &FlowInfo, name: &str) -> (Clock, bool) {
     let l = f.lets.iter().find(|l| l.name.as_deref() == Some(name)).unwrap_or_else(|| panic!("no let {name}"));
-    (l.rate, l.state)
+    (l.clock, l.state)
 }
 
 fn spec(path: &str) -> String {
@@ -85,24 +86,24 @@ fn the_generated_types_are_named_by_their_role() {
 fn resonator_rates_and_state() {
     let a = ok(RESONATOR);
     let f = flow(&a, "resonator");
-    assert_eq!(let_rate(f, "r"), (FlowRate::Ctl, true));
-    assert_eq!(let_rate(f, "w"), (FlowRate::Ctl, false));
-    assert_eq!(let_rate(f, "b1"), (FlowRate::Ctl, true));
-    assert_eq!(let_rate(f, "b2"), (FlowRate::Ctl, true));
-    assert_eq!(let_rate(f, "y1"), (FlowRate::Sig, false));
-    assert_eq!(let_rate(f, "y2"), (FlowRate::Sig, false));
-    assert_eq!(let_rate(f, "y"), (FlowRate::Sig, false));
+    assert_eq!(let_rate(f, "r"), (Clock::Block, true));
+    assert_eq!(let_rate(f, "w"), (Clock::Block, false));
+    assert_eq!(let_rate(f, "b1"), (Clock::Block, true));
+    assert_eq!(let_rate(f, "b2"), (Clock::Block, true));
+    assert_eq!(let_rate(f, "y1"), (Clock::SAMPLE, false));
+    assert_eq!(let_rate(f, "y2"), (Clock::SAMPLE, false));
+    assert_eq!(let_rate(f, "y"), (Clock::SAMPLE, false));
     // Two `prev` nodes named by their `let`s, constant inits.
     let names: Vec<&str> = f.nodes.iter().map(|n| n.name()).collect();
     assert_eq!(names, vec!["y1", "y2"]);
     assert!(matches!(&f.nodes[0], Node::Prev { init: InitArg::Const(_), .. }));
     // `sample_rate()` is read at Ctl rate: stored in the state (S-05).
-    assert_eq!(f.sample_rate_at, Some(FlowRate::Ctl));
+    assert_eq!(f.sample_rate_at, Some(ClockStage::Block));
     assert_eq!(f.sample_rate_calls.len(), 2);
     assert_eq!(f.inputs.len(), 3);
-    assert_eq!(f.local_rates[&f.inputs[0]], FlowRate::Sig);
-    assert_eq!(f.local_rates[&f.inputs[1]], FlowRate::Ctl);
-    assert_eq!(f.expr_rates[&f.output.unwrap()], FlowRate::Sig);
+    assert_eq!(f.clocks.locals[&f.inputs[0]], Clock::SAMPLE);
+    assert_eq!(f.clocks.locals[&f.inputs[1]], Clock::Block);
+    assert_eq!(f.clocks.exprs[&f.output.unwrap()], Clock::SAMPLE);
 }
 
 #[test]
@@ -117,9 +118,9 @@ pub flow smooth(x: F32 at block, time: F32 at init) -> F32 at sample {
 }
 "#);
     let f = flow(&a, "smooth");
-    assert_eq!(let_rate(f, "a"), (FlowRate::Init, true));
-    assert_eq!(let_rate(f, "y"), (FlowRate::Sig, false));
-    assert_eq!(f.sample_rate_at, Some(FlowRate::Init));
+    assert_eq!(let_rate(f, "a"), (Clock::Init, true));
+    assert_eq!(let_rate(f, "y"), (Clock::SAMPLE, false));
+    assert_eq!(f.sample_rate_at, Some(ClockStage::Init));
     assert_eq!(f.nodes.iter().map(|n| n.name()).collect::<Vec<_>>(), vec!["prev_0"]);
 }
 
@@ -136,14 +137,14 @@ fn voice_instances_are_named() {
     // `saw`: the `prev` inside `wrap01(...)` is unnamed.
     let saw = flow(&a, "saw");
     assert_eq!(saw.nodes.iter().map(|n| n.name()).collect::<Vec<_>>(), vec!["prev_0"]);
-    assert_eq!(saw.sample_rate_at, Some(FlowRate::Sig));
+    assert_eq!(saw.sample_rate_at, Some(ClockStage::Tick(Ratio(0))));
 }
 
 #[test]
 fn echo_vdelay_from_const() {
     let a = ok(&spec("examples/voice.onsa"));
     let f = flow(&a, "echo");
-    assert_eq!(let_rate(f, "d"), (FlowRate::Ctl, true));
+    assert_eq!(let_rate(f, "d"), (Clock::Block, true));
     assert!(
         matches!(&f.nodes[0], Node::Vdelay { name, max: 96000, init: InitArg::Const(_), .. } if name == "vdelay_0")
     );
@@ -153,12 +154,12 @@ fn echo_vdelay_from_const() {
 fn unison_par_nests_instances() {
     let a = ok(&spec("flow/unison.onsa"));
     let f = flow(&a, "unison");
-    assert_eq!(let_rate(f, "saws"), (FlowRate::Sig, false));
+    assert_eq!(let_rate(f, "saws"), (Clock::SAMPLE, false));
     let Node::Par { name, from, to, nodes, .. } = &f.nodes[0] else { panic!("expected par: {:?}", f.nodes) };
     assert_eq!((name.as_str(), *from, *to), ("saws", 0, 4));
     assert_eq!(nodes.iter().map(|n| n.name()).collect::<Vec<_>>(), vec!["saw_0"]);
     let Node::Par { var, .. } = &f.nodes[0] else { unreachable!() };
-    assert_eq!(f.local_rates[var], FlowRate::Init);
+    assert_eq!(f.clocks.locals[var], Clock::Init);
 }
 
 // ---------------------------------------------------------------- rates
@@ -167,7 +168,7 @@ fn unison_par_nests_instances() {
 fn at_promotes_and_cannot_lower() {
     let a = ok("pub flow f(p: F32 at block) -> F32 at sample {\n  let ps = p at sample\n  prev~(ps)\n}\n");
     let f = flow(&a, "f");
-    assert_eq!(let_rate(f, "ps"), (FlowRate::Sig, false));
+    assert_eq!(let_rate(f, "ps"), (Clock::SAMPLE, false));
     // `at` does not make a value slower: E0815 (§11.3; the annotation of the
     // draft was E0810).
     assert_eq!(
@@ -182,8 +183,8 @@ fn match_and_if_are_pointwise() {
         "pub flow f(x: F32 at sample, g: Bool at block) -> F32 at sample {\n  let y = if g { x } else { 0.0 }\n  let o = match Some(y) {\n    Some(v) => v,\n    None => 1.0,\n  }\n  o\n}\n",
     );
     let f = flow(&a, "f");
-    assert_eq!(let_rate(f, "y"), (FlowRate::Sig, false));
-    assert_eq!(let_rate(f, "o"), (FlowRate::Sig, false));
+    assert_eq!(let_rate(f, "y"), (Clock::SAMPLE, false));
+    assert_eq!(let_rate(f, "o"), (Clock::SAMPLE, false));
 }
 
 #[test]
@@ -191,8 +192,8 @@ fn non_rt_function_only_at_init() {
     let src = "pub fn make(n: F32) -> F32 { n * 2.0 }\npub flow f(t: F32 at init, c: F32 at block) -> F32 at sample {\n  let a = make(t)\n  let b = make(2.0)\n  a + b + c\n}\n";
     let a = ok(src);
     let f = flow(&a, "f");
-    assert_eq!(let_rate(f, "a"), (FlowRate::Init, true));
-    assert_eq!(let_rate(f, "b"), (FlowRate::Init, true));
+    assert_eq!(let_rate(f, "a"), (Clock::Init, true));
+    assert_eq!(let_rate(f, "b"), (Clock::Init, true));
     assert_eq!(
         codes("pub fn make(n: F32) -> F32 { n * 2.0 }\npub flow f(c: F32 at block) -> F32 at sample {\n  make(c)\n}\n"),
         vec![Code::E0805]
@@ -202,14 +203,14 @@ fn non_rt_function_only_at_init() {
 #[test]
 fn constant_lets_are_never_state() {
     let a = ok("pub flow f(x: F32 at sample) -> F32 at sample {\n  let two = 2.0\n  x * two\n}\n");
-    assert_eq!(let_rate(flow(&a, "f"), "two"), (FlowRate::Const, false));
+    assert_eq!(let_rate(flow(&a, "f"), "two"), (Clock::Const, false));
 }
 
 // ---------------------------------------------------------------- reads
 
 /// The highest rate at which the one local named `name` is read
 /// (`FlowInfo::read_at`; `None`: never read).
-fn read_at(f: &FlowInfo, name: &str) -> Option<FlowRate> {
+fn read_at(f: &FlowInfo, name: &str) -> Option<ClockStage> {
     let ids: Vec<usize> = f.body.locals.iter().enumerate().filter(|(_, l)| l.name == name).map(|(i, _)| i).collect();
     assert_eq!(ids.len(), 1, "locals named {name}");
     f.read_at.get(&LocalId(ids[0] as u32)).and_then(|rs| rs.last()).copied()
@@ -222,11 +223,11 @@ fn read_at_inputs() {
     );
     let f = flow(&a, "f");
     // The first argument of a delay at `Sig`, its `init` at `Init`.
-    assert_eq!(read_at(f, "x"), Some(FlowRate::Sig));
-    assert_eq!(read_at(f, "t"), Some(FlowRate::Init));
+    assert_eq!(read_at(f, "x"), Some(ClockStage::Tick(Ratio(0))));
+    assert_eq!(read_at(f, "t"), Some(ClockStage::Init));
     // `c` is read at `Ctl` in `a` and at `Sig` in the output: the faster.
-    assert_eq!(read_at(f, "c"), Some(FlowRate::Sig));
-    assert_eq!(read_at(f, "k"), Some(FlowRate::Ctl));
+    assert_eq!(read_at(f, "c"), Some(ClockStage::Tick(Ratio(0))));
+    assert_eq!(read_at(f, "k"), Some(ClockStage::Block));
     assert_eq!(read_at(f, "u"), None);
 }
 
@@ -238,14 +239,14 @@ fn read_at_lets() {
     let f = flow(&a, "f");
     // Read at `Ctl` in `b`, at `Sig` in `e` and at `Ctl` again in `d` after
     // it: the fastest read, not the last, and so state (S-05).
-    assert_eq!(read_at(f, "a"), Some(FlowRate::Sig));
-    assert_eq!(let_rate(f, "a"), (FlowRate::Ctl, true));
+    assert_eq!(read_at(f, "a"), Some(ClockStage::Tick(Ratio(0))));
+    assert_eq!(let_rate(f, "a"), (Clock::Block, true));
     // An instance argument is read at the rate of the callee's input.
-    assert_eq!(read_at(f, "b"), Some(FlowRate::Ctl));
-    assert_eq!(let_rate(f, "b"), (FlowRate::Ctl, false));
-    assert_eq!(read_at(f, "s"), Some(FlowRate::Sig));
+    assert_eq!(read_at(f, "b"), Some(ClockStage::Block));
+    assert_eq!(let_rate(f, "b"), (Clock::Block, false));
+    assert_eq!(read_at(f, "s"), Some(ClockStage::Tick(Ratio(0))));
     // `y` is read only by `^y`, in the first argument of a delay, at `Sig`.
-    assert_eq!(read_at(f, "y"), Some(FlowRate::Sig));
+    assert_eq!(read_at(f, "y"), Some(ClockStage::Tick(Ratio(0))));
 }
 
 #[test]
@@ -258,13 +259,14 @@ fn read_at_constant_lets() {
         let id = f.body.locals.iter().position(|l| l.name == name).unwrap();
         f.read_at.get(&LocalId(id as u32)).map(|rs| rs.iter().copied().collect::<Vec<_>>())
     };
-    use FlowRate::*;
-    // Every rate, not the fastest alone: `l0` is defined in `init`, `ctl`
-    // and `tick` (R-488, §11.3).
-    assert_eq!(rates("l0"), Some(vec![Const, Init, Ctl, Sig]));
-    // A constant `let` read by a constant `let` at the rates of the reader.
-    assert_eq!(rates("l1"), Some(vec![Sig]));
-    assert_eq!(rates("b"), Some(vec![Sig]));
+    use ClockStage::*;
+    // Every stage, not the latest alone: `l0` is defined in `init`, `ctl`
+    // and `tick` (R-488, §11.3). The read of the constant `u` that no one
+    // reads is at `init`, the stage of a constant read (`FlowRate::read_stage`).
+    assert_eq!(rates("l0"), Some(vec![Init, Block, Tick(Ratio(0))]));
+    // A constant `let` read by a constant `let` at the stages of the reader.
+    assert_eq!(rates("l1"), Some(vec![Tick(Ratio(0))]));
+    assert_eq!(rates("b"), Some(vec![Tick(Ratio(0))]));
     // `u` is read nowhere: its initializer is read at its own rate.
     assert_eq!(rates("u"), None);
 }
@@ -276,8 +278,8 @@ fn read_at_par_variables() {
     );
     let f = flow(&a, "f");
     // `i` in an argument of an instance whose input is at `block`.
-    assert_eq!(read_at(f, "i"), Some(FlowRate::Ctl));
-    assert_eq!(read_at(f, "j"), Some(FlowRate::Sig));
+    assert_eq!(read_at(f, "i"), Some(ClockStage::Block));
+    assert_eq!(read_at(f, "j"), Some(ClockStage::Tick(Ratio(0))));
 }
 
 #[test]
@@ -286,10 +288,10 @@ fn read_at_match_bindings() {
         "pub flow f(x: F32 at sample, c: F32 at block) -> F32 at sample {\n  let m = match Some(c) {\n    Some(v) => v,\n    None => 0.0,\n  }\n  let n = match Some(x) {\n    Some(w) => w * m,\n    None => 0.0,\n  }\n  n\n}\n",
     );
     let f = flow(&a, "f");
-    assert_eq!(read_at(f, "v"), Some(FlowRate::Ctl));
-    assert_eq!(read_at(f, "w"), Some(FlowRate::Sig));
-    assert_eq!(read_at(f, "m"), Some(FlowRate::Sig));
-    assert_eq!(let_rate(f, "m"), (FlowRate::Ctl, true));
+    assert_eq!(read_at(f, "v"), Some(ClockStage::Block));
+    assert_eq!(read_at(f, "w"), Some(ClockStage::Tick(Ratio(0))));
+    assert_eq!(read_at(f, "m"), Some(ClockStage::Tick(Ratio(0))));
+    assert_eq!(let_rate(f, "m"), (Clock::Block, true));
 }
 
 /// The kinds of the locals of a flow body, as the table of `flow.rs` gives
@@ -515,7 +517,7 @@ fn let_patterns_destructure() {
     let f = flow(&a, "f");
     assert_eq!(f.lets.len(), 2);
     assert_eq!(f.lets[0].locals.len(), 2);
-    assert_eq!(f.lets[0].rate, FlowRate::Sig);
+    assert_eq!(f.lets[0].clock, Clock::SAMPLE);
     assert!(f.lets[0].name.is_none());
 }
 

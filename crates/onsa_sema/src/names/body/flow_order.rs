@@ -257,8 +257,8 @@ impl Walker<'_> {
     /// namespace of the clocks (E0302 at it), recorded for the types stage
     /// and the analysis of the clocks.
     pub(super) fn clock(&mut self, e: ExprId, clock: &Clock) -> W {
-        match crate::flow_names::clock_rate(clock) {
-            Ok(rate) => Ok(_ = self.out.clocks.insert(e, rate)),
+        match crate::clock::resolve_name(clock) {
+            Ok(name) => Ok(_ = self.out.clocks.insert(e, name)),
             Err(d) => Err(self.fail(Fail::Report(d))),
         }
     }

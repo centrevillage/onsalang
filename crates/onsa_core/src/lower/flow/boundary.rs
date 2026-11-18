@@ -58,7 +58,7 @@ pub(super) fn gen_process<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b
         .flow
         .inputs
         .iter()
-        .filter(|i| i.rate == Rate::Sig)
+        .filter(|i| i.clock == Clock::SAMPLE)
         .map(|i| Ok((i.name.clone(), lw.core_ty(i.ty, &[], i.span)?)))
         .collect::<R<_>>()?;
     let ins = input.as_ref().map(|i| signals(lw, i)).transpose()?.unwrap_or_default();

@@ -2,11 +2,11 @@
 //! flow checks (W3-10, K-02 (a)): the clocks `at` (S-102, S-359), the
 //! feedback references `^name` and the built-in delays `prev~` / `delay~` /
 //! `vdelay~` with their optional `init` (S-44, S-29), and `if~` / `match~`
-//! (S-110). The checks keep their representation (`Rate`, [`FlowRate`], the
+//! (S-110). The checks keep their representation ([`FlowRate`], the
 //! nodes of [`super::Node`] and [`InitArg`]); this module holds the reading
 //! of the new forms into it, and W7-02 removes it with the clock analysis
 //! and the flow plan. The names of the clocks and of the delays stay
-//! (`crate::flow_names`, [`crate::ty::Rate::clock`]).
+//! (`crate::flow_names`, [`crate::clock::ClockName::name`]).
 //!
 //! What the representation cannot hold is E0200 here, never read in another
 //! meaning (plan §8.2): a computed expression made faster with `at`, `if~` /
@@ -55,8 +55,9 @@ impl Checker<'_> {
     /// the rate pass reads ([`Rater::rate_at`]).
     pub(super) fn check_at(&mut self, e: ExprId, inner: ExprId, expected: Option<TyId>) -> R<TyId> {
         let t = self.check_expr_as(inner, expected, self.joining)?;
-        let rate = self.names_record(e, self.names.clocks.get(&e).copied())?;
-        self.fcx().ats.insert(e, FlowRate::from_rate(rate));
+        let name = self.names_record(e, self.names.clocks.get(&e).copied())?;
+        let span = self.ast.expr(e).span;
+        self.fcx().ats.insert(e, FlowRate::of_clock(name.clock(), span));
         Ok(t)
     }
 

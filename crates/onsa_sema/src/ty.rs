@@ -161,41 +161,6 @@ pub enum Len {
     Var(u32),
 }
 
-/// Rates of flow signals (§11.3), the clocks `init`, `block`, `sample` of
-/// the inputs and the output of a flow.
-/// Constants have no rate (`None` elsewhere).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-pub enum Rate {
-    Init,
-    Ctl,
-    Sig,
-}
-
-impl Rate {
-    /// Every clock, slowest first.
-    pub const ALL: [Rate; 3] = [Rate::Init, Rate::Ctl, Rate::Sig];
-
-    /// The name of the clock (§11.3): the one table of the clock names.
-    pub fn clock(self) -> &'static str {
-        match self {
-            Rate::Init => "init",
-            Rate::Ctl => "block",
-            Rate::Sig => "sample",
-        }
-    }
-
-    /// The clock of the name `name`, if it is one.
-    pub fn of_clock(name: &str) -> Option<Rate> {
-        Rate::ALL.into_iter().find(|r| r.clock() == name)
-    }
-
-    /// The rate the name `name` of a rate written as a type names (`Sig`,
-    /// [`onsa_syntax::foreign::RATE_TYPES`], S-120), if it is one.
-    pub fn of_type_name(name: &str) -> Option<Rate> {
-        Rate::ALL.into_iter().zip(onsa_syntax::foreign::RATE_TYPES).find(|&(_, n)| n == name).map(|(r, _)| r)
-    }
-}
-
 /// Function type (§4.1). Captures are not part of the type.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct FnTy {
