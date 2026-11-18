@@ -27,6 +27,11 @@ impl FlowInfo {
         }
     }
 
+    /// Every stage some local is read at ([`FlowInfo::read_at`]), once or more.
+    pub fn read_stages(&self) -> impl Iterator<Item = ClockStage> + '_ {
+        self.read_at.values().flatten().copied()
+    }
+
     /// The `let`s of the stage `stage`, in their order (§11.4).
     pub fn lets_at(&self, stage: ClockStage) -> impl Iterator<Item = &FlowLet> {
         self.lets.iter().filter(move |l| l.clock.stage() == Some(stage))

@@ -1,0 +1,18 @@
+# flow_ref 1 source=tests/spec/flow_semantics/process_field_lengths.onsa tests=11 evaluated=2 unavailable=0 skipped=9 waiting=0
+@ a call of length 0 runs no sample
+init 0 process_field_lengths.lag sr=0x41000000
+process 0 frames=0 in x=[]
+out=[]
+@ an input of length 3 and an output of length 0 panic
+init 0 process_field_lengths.lag sr=0x41000000
+process 0 frames=0 in x=[0x3f800000 0x3f800000 0x3f800000]
+panic start
+- the fields of an Out of one length are written	skipped layout
+- a field of an Out shorter than the input panics	skipped layout
+- a field of an Out longer than the other panics	skipped layout
+- the fields of an In of one length are read	skipped layout
+- an In of one length and a longer output panic	skipped layout
+- a planar field and a Span field of one length run	skipped layout
+- a channel of a planar field of an In of another length panics	skipped layout
+- a channel of a planar field of an Out of another length panics	skipped layout
+- a Span field of an Out of another length than the planar one panics	skipped layout

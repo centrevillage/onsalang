@@ -46,6 +46,7 @@ file precedence_flow.tsv rows=26 tests=7 evaluated=7 unavailable=0 skipped=0 wai
 file prev_default_types.tsv rows=13 tests=4 evaluated=4 unavailable=0 skipped=0 waiting=1
 file prev_delay.tsv rows=31 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
 file process_blocks.tsv rows=7 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=0
+file process_field_lengths.tsv rows=18 tests=11 evaluated=2 unavailable=0 skipped=9 waiting=0
 file r242_const_let_block_and_sample.tsv rows=4 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=0
 file r242_const_let_chain.tsv rows=4 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=0
 file r242_const_let_three_stages.tsv rows=4 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=0
@@ -58,4 +59,4 @@ file struct_pattern_rest_let.tsv rows=7 tests=2 evaluated=2 unavailable=0 skippe
 file struct_pattern_rest_match.tsv rows=4 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=1
 file vdelay_edges.tsv rows=64 tests=15 evaluated=14 unavailable=0 skipped=1 waiting=0
 file vdelay_varying_d.tsv rows=2 tests=1 evaluated=0 unavailable=0 skipped=1 waiting=0
-total files=59 rows=1172 tests=334 evaluated=290 unavailable=2 skipped=42 waiting=11
+total files=60 rows=1190 tests=345 evaluated=292 unavailable=2 skipped=51 waiting=11

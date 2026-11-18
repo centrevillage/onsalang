@@ -105,7 +105,10 @@ pub(super) fn build(info: &mut FlowInfo) {
     for fs in pars.iter().chain([&top]) {
         unique(info, fs);
         // What a field holds is one in all the structs: a node's fields are its.
-        places.extend(fs.iter().enumerate().map(|(k, f)| (f.of, k as u32)));
+        for (k, f) in fs.iter().enumerate() {
+            let before = places.insert(f.of, k as u32);
+            debug_assert!(before.is_none(), "two fields hold {:?}", f.of);
+        }
     }
     info.places = places;
     for (node, (at, fs)) in info.nodes.iter_mut().zip(at.into_iter().zip(pars)) {

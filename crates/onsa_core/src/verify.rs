@@ -22,11 +22,27 @@ impl std::error::Error for VerifyError {}
 
 pub fn verify(m: &Module) -> Result<(), VerifyError> {
     for c in &m.consts {
-        let mut v = V { m, f: None, defined: Vec::new(), lets: Vec::new(), loops: 0, name: c.name.clone() };
+        let mut v = V {
+            m,
+            f: None,
+            defined: Vec::new(),
+            lets: Vec::new(),
+            loops: 0,
+            process: false,
+            known: false,
+            name: c.name.clone(),
+        };
         let t = v.expr(&c.init)?;
         v.same(&t, &c.ty, "const initializer")?;
     }
-    for f in &m.fns {
+    // The generated `process` of each flow, marked once (V-19).
+    let mut process = vec![false; m.fns.len()];
+    for fl in &m.flows {
+        if let Some(p) = process.get_mut(fl.fns.process.0 as usize) {
+            *p = true;
+        }
+    }
+    for (f, &process) in m.fns.iter().zip(&process) {
         let Some(body) = &f.body else { continue };
         let mut v = V {
             m,
@@ -34,6 +50,8 @@ pub fn verify(m: &Module) -> Result<(), VerifyError> {
             defined: vec![false; f.locals.len()],
             lets: vec![false; f.locals.len()],
             loops: 0,
+            process,
+            known: false,
             name: f.name.clone(),
         };
         for p in &f.params {
@@ -75,6 +93,10 @@ struct V<'a> {
     /// The locals a `let` defines.
     lets: Vec<bool>,
     loops: u32,
+    /// The function is the `process` generated for a flow (`FlowFns::process`).
+    process: bool,
+    /// V-19 (S-196): an index `Bounds::Known` may be here, in the sample loop of a `process`.
+    known: bool,
     name: String,
 }
 
@@ -182,7 +204,10 @@ impl<'a> V<'a> {
                 self.same(&lt, &vt, "for variable")?;
                 self.define(*l)?;
                 self.loops += 1;
+                let here = self.known || self.process;
+                let outer = std::mem::replace(&mut self.known, here);
                 let r = self.block(b);
+                self.known = outer;
                 self.loops -= 1;
                 r.map(|_| ())
             }
@@ -217,7 +242,8 @@ impl<'a> V<'a> {
                 let bt = self.place(b)?;
                 self.field_ty(&bt, *i)
             }
-            Place::Index(b, i, ..) => {
+            Place::Index(b, i, _, bounds) => {
+                self.bounds(*bounds)?;
                 let bt = self.place(b)?;
                 let it = self.expr(i)?;
                 self.same(&it, &Ty::u32(), "index")?;
@@ -238,6 +264,14 @@ impl<'a> V<'a> {
             Ty::Tuple(ts) => ts.get(i as usize).cloned().ok_or_else(|| self.err("tuple index out of range")),
             _ => Err(self.err(format!("field access on `{}`", crate::dump::type_name(self.m, base)))),
         }
+    }
+
+    /// V-19 (S-196): an index known in range is in the sample loop of a `process` only.
+    fn bounds(&self, b: Bounds) -> R<()> {
+        if b == Bounds::Known && !self.known {
+            return Err(self.err("an index known in range outside the sample loop of `process`"));
+        }
+        Ok(())
     }
 
     fn elem_ty(&self, base: &Ty) -> R<Ty> {
@@ -395,7 +429,8 @@ impl<'a> V<'a> {
                 let ft = self.field_ty(&bt, *index)?;
                 self.same(&ft, &ty, "field")?;
             }
-            ExprKind::Index { base, index, .. } => {
+            ExprKind::Index { base, index, bounds } => {
+                self.bounds(*bounds)?;
                 let bt = self.expr(base)?;
                 let it = self.expr(index)?;
                 self.same(&it, &Ty::u32(), "index")?;

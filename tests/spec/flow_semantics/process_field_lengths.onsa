@@ -1,0 +1,161 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.6", "§9.2"]
+
+// The lengths of the fields of an `In` and an `Out` (spec §11.6): every `Span` of the `sample` inputs
+// and outputs of a `process` call, the fields of its `In` and its `Out` and the channels of a planar
+// field, must have one length, compared once at the start of the call; otherwise `process` panics (in a
+// `test` the panic fails the test, §9.2). With one length the sample loop runs. A call of length 0 is
+// a call (§11.6).
+
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+pub struct Quad {
+  m: F32,
+  p: [F32; 2],
+}
+
+pub flow lag(x: F32 at sample) -> F32 at sample {
+  prev~(x)
+}
+
+pub flow split(x: F32 at sample) -> Pair at sample {
+  Pair { l: x, r: prev~(x) }
+}
+
+pub flow src2(a: F32 at sample, b: F32 at sample) -> F32 at sample {
+  a + prev~(b)
+}
+
+pub flow mixed(a: F32 at sample, b: [F32; 2] at sample) -> Quad at sample {
+  Quad { m: a + prev~(b[0]), p: [b[1], a] }
+}
+
+test "a call of length 0 runs no sample" {
+  var z: [F32; 8] = [1.0; 8]
+  var w: [F32; 8] = [5.0; 8]
+  var st = lag.init(8.0)
+  lag.process(inout st, z.slice(0, 0), inout w.slice(0, 0))
+  assert w[0] == 5.0
+}
+
+test "an input of length 3 and an output of length 0 panic" {
+  var z: [F32; 8] = [1.0; 8]
+  var w: [F32; 8] = [0.0; 8]
+  var st = lag.init(8.0)
+  lag.process(inout st, z.slice(0, 3), inout w.slice(0, 0)) //~ PANIC "an input of length 3 and an output of length 0 panic"
+  assert w[0] == 0.0
+}
+
+test "the fields of an Out of one length are written" {
+  // l = x = 1 2 3.  r = prev~(x) = 0 1 2.
+  let x: [F32; 3] = [1.0, 2.0, 3.0]
+  var l: [F32; 3] = [9.0; 3]
+  var r: [F32; 3] = [9.0; 3]
+  var st = split.init(8.0)
+  split.process(inout st, x, inout split.Out { l: l, r: r })
+  assert l[0] == 1.0
+  assert l[1] == 2.0
+  assert l[2] == 3.0
+  assert r[0] == 0.0
+  assert r[1] == 1.0
+  assert r[2] == 2.0
+}
+
+test "a field of an Out shorter than the input panics" {
+  var z: [F32; 8] = [1.0; 8]
+  var w: [F32; 8] = [0.0; 8]
+  var u: [F32; 8] = [0.0; 8]
+  var st = split.init(8.0)
+  split.process(inout st, z.slice(0, 3), inout split.Out { l: w.slice(0, 3), r: u.slice(0, 2) }) //~ PANIC "a field of an Out shorter than the input panics"
+  assert w[0] == 0.0
+}
+
+test "a field of an Out longer than the other panics" {
+  var z: [F32; 8] = [1.0; 8]
+  var w: [F32; 8] = [0.0; 8]
+  var u: [F32; 8] = [0.0; 8]
+  var st = split.init(8.0)
+  split.process(inout st, z.slice(0, 3), inout split.Out { l: w.slice(0, 4), r: u.slice(0, 3) }) //~ PANIC "a field of an Out longer than the other panics"
+  assert w[0] == 0.0
+}
+
+test "the fields of an In of one length are read" {
+  // a + prev~(b) = 1 + 0, 2 + 10, 3 + 20.
+  let a: [F32; 3] = [1.0, 2.0, 3.0]
+  let b: [F32; 3] = [10.0, 20.0, 30.0]
+  var y: [F32; 3] = [0.0; 3]
+  var st = src2.init(8.0)
+  src2.process(inout st, src2.In { a: a, b: b }, inout y)
+  assert y[0] == 1.0
+  assert y[1] == 12.0
+  assert y[2] == 23.0
+}
+
+test "an In of one length and a longer output panic" {
+  var z: [F32; 8] = [1.0; 8]
+  var v: [F32; 8] = [1.0; 8]
+  var w: [F32; 8] = [0.0; 8]
+  var st = src2.init(8.0)
+  src2.process(inout st, src2.In { a: z.slice(0, 3), b: v.slice(0, 3) }, inout w.slice(0, 4)) //~ PANIC "an In of one length and a longer output panic"
+  assert w[0] == 0.0
+}
+
+test "a planar field and a Span field of one length run" {
+  // m = a + prev~(b[0]) = 1, 12, 23, 34.  p = [b[1], a].
+  let a: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let b0: [F32; 4] = [10.0, 20.0, 30.0, 40.0]
+  let b1: [F32; 4] = [100.0, 200.0, 300.0, 400.0]
+  var m: [F32; 4] = [0.0; 4]
+  var p0: [F32; 4] = [0.0; 4]
+  var p1: [F32; 4] = [0.0; 4]
+  var st = mixed.init(8.0)
+  mixed.process(inout st, mixed.In { a: a, b: [b0, b1] }, inout mixed.Out { m: m, p: [p0, p1] })
+  assert m[0] == 1.0
+  assert m[1] == 12.0
+  assert m[3] == 34.0
+  assert p0[0] == 100.0
+  assert p0[3] == 400.0
+  assert p1[0] == 1.0
+  assert p1[3] == 4.0
+}
+
+test "a channel of a planar field of an In of another length panics" {
+  var z: [F32; 8] = [1.0; 8]
+  var v: [F32; 8] = [1.0; 8]
+  var u: [F32; 8] = [1.0; 8]
+  var w: [F32; 8] = [0.0; 8]
+  var t: [F32; 8] = [0.0; 8]
+  var q: [F32; 8] = [0.0; 8]
+  var st = mixed.init(8.0)
+  mixed.process(inout st, mixed.In { a: z.slice(0, 4), b: [v.slice(0, 4), u.slice(0, 3)] }, inout mixed.Out { m: w.slice(0, 4), p: [t.slice(0, 4), q.slice(0, 4)] }) //~ PANIC "a channel of a planar field of an In of another length panics"
+  assert w[0] == 0.0
+}
+
+test "a channel of a planar field of an Out of another length panics" {
+  var z: [F32; 8] = [1.0; 8]
+  var v: [F32; 8] = [1.0; 8]
+  var u: [F32; 8] = [1.0; 8]
+  var w: [F32; 8] = [0.0; 8]
+  var t: [F32; 8] = [0.0; 8]
+  var q: [F32; 8] = [0.0; 8]
+  var st = mixed.init(8.0)
+  mixed.process(inout st, mixed.In { a: z.slice(0, 4), b: [v.slice(0, 4), u.slice(0, 4)] }, inout mixed.Out { m: w.slice(0, 4), p: [t.slice(0, 5), q.slice(0, 4)] }) //~ PANIC "a channel of a planar field of an Out of another length panics"
+  assert w[0] == 0.0
+}
+
+test "a Span field of an Out of another length than the planar one panics" {
+  var z: [F32; 8] = [1.0; 8]
+  var v: [F32; 8] = [1.0; 8]
+  var u: [F32; 8] = [1.0; 8]
+  var w: [F32; 8] = [0.0; 8]
+  var t: [F32; 8] = [0.0; 8]
+  var q: [F32; 8] = [0.0; 8]
+  var st = mixed.init(8.0)
+  mixed.process(inout st, mixed.In { a: z.slice(0, 4), b: [v.slice(0, 4), u.slice(0, 4)] }, inout mixed.Out { m: w.slice(0, 5), p: [t.slice(0, 4), q.slice(0, 4)] }) //~ PANIC "a Span field of an Out of another length than the planar one panics"
+  assert w[0] == 0.0
+}

@@ -220,7 +220,7 @@ fn check_stages(info: &FlowInfo, span: Span) -> R<()> {
         FieldOf::Input(l) | FieldOf::Let(l) => Some(info.own_stage(l)),
         _ => None,
     });
-    let stages: BTreeSet<Option<ClockStage>> = kept.chain(info.read_at.values().flatten().map(|&s| Some(s))).collect();
+    let stages: BTreeSet<Option<ClockStage>> = kept.chain(info.read_stages().map(Some)).collect();
     for s in stages {
         let s = s.ok_or_else(|| internal(span, "a stored local with no stage"))?;
         Phase::at(s, span)?;

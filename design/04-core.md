@@ -52,6 +52,7 @@ pub enum Place { Local(LocalId), Field(Box<Place>, u32), Index(Box<Place>, Expr,
 | V-16 | ターゲットの pass の後: flow のメタデータ（入力、出力、パラメータ）が、`State` / `Params` の型と生成した関数のシグネチャと一致する | R-82 |
 | V-17 | flow の `init` は、状態の全てのフィールドを設定する。設定しないのは、flow の計画（§3.5）が「段の順で読む前に必ず書かれる」と記録したフィールドだけ | R-92 |
 | V-18 | `hoisted` の局所変数は、本体のどこかの `Let` で定義し、本体の一番上の `Let` では定義しない（引数と `ForRange` の変数は `Let` を持たず、NRVO の局所変数は一番上の `Let`） | R-481 |
+| V-19 | 範囲の内と決まった添字（`Bounds::Known`）は、flow に生成した `process`（`FlowFns::process`、名前で比べない）のサンプルループ（`ForRange`）の中にだけある | S-196 |
 
 正規形の R3（評価順に並べる）と R4（条件の内側に出す）は、Core から元の順序が分からないので検証器では確かめない。評価順の再現の期待値付きテストと、インタプリタと C の差分テストで押さえる（R-81）。
 - テキスト形式 `onsa dump --core`（隠しコマンド）を持ち、golden テストにも使う。

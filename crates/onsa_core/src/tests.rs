@@ -453,6 +453,50 @@ fn verifier_rejects_bad_modules() {
     assert!(err.message.contains("mismatch"), "{err}");
 }
 
+/// V-19 (S-196): an index known in range is in the sample loop of a generated `process` only. The same
+/// index outside it, before the loop of `process` or in the loop of another function, fails the verifier.
+#[test]
+fn the_verifier_rejects_an_index_known_in_range_outside_the_sample_loop() {
+    let mut m = core("pub flow f(x: F32 at sample) -> F32 at sample {\n  x\n}\n");
+    let span = onsa_diag::Span::new(FileId(0), 0, 0);
+    let index = |bounds: Bounds| {
+        let zero = Expr::new(Ty::u32(), span, ExprKind::Lit(Lit::Int(0)));
+        let base = Expr::new(Ty::Array(Box::new(Ty::u32()), 1), span, ExprKind::Array(vec![zero.clone()]));
+        let e = Expr::new(Ty::u32(), span, ExprKind::Index { base: Box::new(base), index: Box::new(zero), bounds });
+        Stmt { span, kind: StmtKind::Expr(e) }
+    };
+    let process = m.flows[0].fns.process.0 as usize;
+    fn body(m: &mut Module, f: usize) -> &mut Vec<Stmt> {
+        &mut m.fns[f].body.as_mut().expect("a body").stmts
+    }
+    body(&mut m, process).insert(0, index(Bounds::Checked));
+    verify(&m).unwrap_or_else(|e| panic!("{e}"));
+    body(&mut m, process)[0] = index(Bounds::Known);
+    let err = verify(&m).unwrap_err();
+    assert!(err.message.contains("outside the sample loop") && err.fn_name.ends_with(".process"), "{err}");
+    body(&mut m, process).remove(0);
+    verify(&m).unwrap_or_else(|e| panic!("{e}"));
+    let i = LocalId(0);
+    let lit0 = Expr::new(Ty::u32(), span, ExprKind::Lit(Lit::Int(0)));
+    let looped = StmtKind::ForRange(i, lit0.clone(), lit0, Block { stmts: vec![index(Bounds::Known)], value: None });
+    m.fns.push(FnDef {
+        name: "other".into(),
+        params: Vec::new(),
+        ret: Ty::Unit,
+        sret: false,
+        rt: true,
+        locals: vec![Local { name: "i".into(), ty: Ty::u32() }],
+        body: Some(Block { stmts: vec![Stmt { span, kind: looped }], value: None }),
+        span,
+        fp_relaxed: false,
+        test: None,
+        decl: None,
+        hoisted: Vec::new(),
+    });
+    let err = verify(&m).unwrap_err();
+    assert!(err.message.contains("outside the sample loop") && err.fn_name == "other", "{err}");
+}
+
 // ---------------------------------------------------------------- flows (T3-5, T3-6)
 
 fn core_with(src: &str, bulk_threshold: Option<u32>) -> Module {
