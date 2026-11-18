@@ -447,7 +447,7 @@ fn a_body_the_check_rules_out_is_not_made_an_instance_of() {
 #[test]
 fn the_inputs_given_are_the_inputs_of_the_flow_by_clock() {
     // The number and the names of the inputs of each clock come from the types of §11.6: one left out, one added, one of
-    // another clock and a column of another length are internal errors, not a value.
+    // another clock are internal errors, not a value; a column of another length is the panic of the start of the call (§11.6).
     let src = "flow f(a: I32 at init, p: I32 at block, x: I32 at sample) -> I32 at sample { a + p + x }";
     with_flow(src, "f", |view, def| {
         let internal = |r: Result<Instance<'_>, Stop>| matches!(r.err(), Some(Stop { fault: Fault::Internal(_), .. }));
@@ -459,7 +459,8 @@ fn the_inputs_given_are_the_inputs_of_the_flow_by_clock() {
         let xs = [i32v(1), i32v(2)];
         assert!(bad(me.process(&[], &[("x", &xs[..])], 2, None)), "p left out");
         assert!(bad(me.process(&[("p", i32v(1))], &[], 2, None)), "x left out");
-        assert!(bad(me.process(&[("p", i32v(1))], &[("x", &xs[..])], 3, None)), "a column of 2 for 3 frames");
+        let long = me.process(&[("p", i32v(1))], &[("x", &xs[..])], 3, None);
+        assert!(matches!(long, Err(Stop { fault: Fault::Panic(PanicKind::Length), .. })), "a column of 2 for 3 frames");
         assert!(
             bad(me.process(&[("a", i32v(1))], &[("x", &xs[..])], 2, None)),
             "an input of `init` given at `process`"

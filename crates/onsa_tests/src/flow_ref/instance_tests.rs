@@ -19,7 +19,7 @@ use super::host::TableHost;
 use super::scalar::{Fault, PanicKind};
 use super::sema_view::{Called, Stage, View, inputs_at, output_stage, stage_of};
 use super::state_tests::{f32s, floats, go, run, same};
-use super::value::Value;
+use super::value::{IntKind, Value};
 
 /// `acc~(x)` is the sum of the inputs so far: `s[n] = x[n] + s[n - 1]` (§11.4: `prev~` is the value of the last tick).
 const ACC: &str = "flow acc(x: F32 at sample) -> F32 at sample {
@@ -580,6 +580,40 @@ flow two(x: F32 at sample) -> F32 at sample { child~(x) + child~(x * 2.0) }";
         let mut me = Instance::init(view, def, 48000.0, &[], None).expect("init");
         me.process(&[], &[("x", &floats(&[1.0])[..])], 1, None).map(|outs| f32s(&outs))
     });
+    assert!(matches!(r, Err(Stop { fault: Fault::Unavailable(_), .. })), "{r:?}");
+}
+
+#[test]
+fn the_places_the_tree_holds_are_counted_across_the_calls_of_init_and_process_and_not_from_0_in_each() {
+    // §11.4, §12.3: the evaluator holds `Limits::most` (2^20 = 1 048 576) places for the whole tree, whatever the clock of the
+    // place. `delay~(x, N)` is a line of N places made at `init`, and `big = [x; M]` a `let` of `sample` that keeps M places (M - 1
+    // beyond the one of its step) when its frame runs: N = M = 600 000 are 1 199 999 together, over the limit, so the first frame
+    // is `Unavailable` (a count that starts from 0 in each call sees 600 000 and 599 999 apart and lets it through). N = M =
+    // 400 000 are 799 999, under it: x = 1, 2 give `big[3] + delay~(x, N)` = 1 + 0, 2 + 0 = 1, 2 (the line is 400 000 long: it still gives its default), in the three calls (1, 1 and 1
+    // frame) of one instance, the `let` handing its places back when it is made again (the count does not grow).
+    let src = |n: u32| {
+        format!(
+            "flow f(x: I64 at sample) -> I64 at sample {{
+  let big = [x; {n}]
+  big[3] + delay~(x, {n})
+}}"
+        )
+    };
+    let run = |n: u32, calls: &'static [&'static [i64]]| {
+        with_flow(&src(n), "f", move |view, def| {
+            let mut me = Instance::init(view, def, 48000.0, &[], None)?;
+            let mut all = Vec::new();
+            for xs in calls {
+                let col: Vec<Value> = xs.iter().map(|x| Value::int(IntKind::I64, i128::from(*x))).collect();
+                all.extend(me.process(&[], &[("x", &col[..])], xs.len(), None)?);
+            }
+            Ok::<_, Stop>(
+                all.iter().map(|v| if let Value::Int(_, n, _) = v { *n } else { panic!("{v:?}") }).collect::<Vec<_>>(),
+            )
+        })
+    };
+    assert_eq!(run(400_000, &[&[1], &[2], &[]]), Ok(vec![1, 2]));
+    let r = run(600_000, &[&[1], &[2]]);
     assert!(matches!(r, Err(Stop { fault: Fault::Unavailable(_), .. })), "{r:?}");
 }
 

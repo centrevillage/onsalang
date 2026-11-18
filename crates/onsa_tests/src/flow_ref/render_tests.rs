@@ -121,22 +121,60 @@ fn the_frame_of_a_panic_is_counted_in_its_call_and_not_from_init() {
 
 #[test]
 fn a_fault_that_is_no_panic_is_an_error_and_not_an_outcome() {
-    // An unavailable form (a string literal) and a call that is not the flow's (a column of another length than the
-    // frames, which the boundary panics on in the spec and the evaluator does not take, §11.6) are `Err`, whatever the stage.
-    let src = "flow p(x: F32 at sample) -> F32 at sample { x + F32.round_from(\"ab\".len()) }
-flow q(x: I32 at sample) -> I32 at sample { x }";
+    // An unavailable form (a string literal) is `Err`, whatever the stage: it is not the program's.
+    let src = "flow p(x: F32 at sample) -> F32 at sample { x + F32.round_from(\"ab\".len()) }";
     let text = src.to_string();
     let got = with_flow(src, "p", move |view, def| {
         let xs = floats(&[1.0]);
         seen(&text, Instance::render(view, def, 48000.0, &[], &[], &[("x", &xs[..])], None, None))
     });
     assert!(matches!(got, Seen::Error(Fault::Unavailable(_))), "{got:?}");
-    let text = src.to_string();
-    let got = with_flow(src, "q", move |view, def| {
+}
+
+#[test]
+fn a_column_of_another_length_than_the_frames_is_a_panic_of_the_start_of_the_call_and_moves_no_state() {
+    // §11.6: the lengths of the `sample` spans must be equal, and "differ is a panic; the lengths are compared at the start of
+    // the call, once, before any state is moved". `sum` is `s = x + prev~(^s)` with `b = cb(p)` of `block` and the output `s`:
+    // a call of x = 1, 2 is 1, 3 (`Ok`); one of the columns x = 1, 2, 3 with `frames` 2 (and one of x = 1, 2 with `frames` 3)
+    // is the panic `Length` at `PanicAt::Start`, whichever is longer; it did not move the state: the `block` stage has not run
+    // (`cb` was called once, by the first call), the time is still 2, and the next call of x = 4 gives 3 + 4 = 7.
+    // `Fault::Panic(Length)` is also what `process` (no outcome) returns.
+    counter!(row_b, N_B);
+    let src = format!(
+        "{}flow sum(p: I32 at block, x: I32 at sample) -> I32 at sample {{
+  let b = cb(p)
+  let s = x + prev~(^s) + 0 * b
+  s
+}}",
+        counted(&["cb"])
+    );
+    let got = with_flow(&src, "sum", move |view, def| {
+        let mut t = TableHost::default().with("t.cb", row_b);
         let mut me = Instance::init(view, def, 48000.0, &[], None).expect("init");
-        seen(&text, me.process_outcome(&[], &[("x", &ints(&[1, 2])[..])], 3, None))
+        let p = [("p", i32v(1))];
+        let mut call = |me: &mut Instance, xs: &[i128], frames| {
+            let col = ints(xs);
+            me.process_outcome(&p, &[("x", &col[..])], frames, host(&mut t))
+        };
+        let first = call(&mut me, &[1, 2], 2);
+        let (longer, shorter) = (call(&mut me, &[1, 2, 3], 2), call(&mut me, &[1, 2], 3));
+        let state = (N_B.load(Relaxed), me.ctx.tick);
+        let next = call(&mut me, &[4], 1);
+        let as_error = me.process(&p, &[("x", &ints(&[1])[..])], 2, host(&mut t)).map(|_| ());
+        (first, longer, shorter, state, next, as_error)
     });
-    assert!(matches!(got, Seen::Error(Fault::Internal(_))), "{got:?}");
+    assert!(
+        matches!(&got.0, Ok(Outcome::Ok(o)) if matches!(o[..], [Value::Int(_, 1, _), Value::Int(_, 3, _)])),
+        "{:?}",
+        got.0
+    );
+    for r in [&got.1, &got.2] {
+        let Ok(Outcome::Panic { at, stop }) = r else { panic!("not a panic outcome: {r:?}") };
+        assert_eq!((*at, stop.fault), (PanicAt::Start, Fault::Panic(PanicKind::Length)));
+    }
+    assert_eq!(got.3, (1, 2));
+    assert!(matches!(&got.4, Ok(Outcome::Ok(o)) if matches!(o[..], [Value::Int(_, 7, _)])), "{:?}", got.4);
+    assert_eq!(got.5.map_err(|s| s.fault), Err(Fault::Panic(PanicKind::Length)));
 }
 
 #[test]

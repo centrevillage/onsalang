@@ -25,6 +25,8 @@ pub enum PanicKind {
     Depth,
     /// `panic(msg)` (§9.2).
     Explicit,
+    /// A column of a `sample` input is not as long as the call (§11.6).
+    Length,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

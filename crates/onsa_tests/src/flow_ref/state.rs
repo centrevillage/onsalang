@@ -77,7 +77,7 @@ pub struct Run {
     pub state: InstState,
     saves: Vec<Save>,
     pub ctx: Ctx,
-    used: usize,
+    pub(super) used: usize,
     plans: Plans,
     /// The replica of each `par~` the evaluation is inside of, and the bindings of those (`i`, an arm of a `match~`).
     pub(super) replicas: Vec<u32>,
@@ -145,6 +145,29 @@ impl<'a> Frame<'a> {
         NodeKey { call, replicas: self.run.as_ref().map(|r| r.replicas.clone()).unwrap_or_default() }
     }
 
+    /// `go` inside the replicas `replicas` of the `par~`s (after the ones it is already in) with the bindings `binds` (the index
+    /// of a `par~`, the locals of an arm of a `match~`) made and kept in the run, so that a delay called in it saves them with
+    /// what it stores and the second phase reads that under them (§11.4); they are taken off the run after, the one door of both.
+    pub(super) fn with_bindings<R>(
+        &mut self,
+        replicas: &[u32],
+        binds: Vec<(LocalId, Value)>,
+        go: impl FnOnce(&mut Self) -> Result<R, Stop>,
+    ) -> Result<R, Stop> {
+        let kept = self.run.as_ref().map(|r| (r.replicas.len(), r.scope.len()));
+        self.locals.extend(binds.iter().cloned());
+        if let Some(run) = self.run.as_mut() {
+            run.replicas.extend_from_slice(replicas);
+            run.scope.extend(binds);
+        }
+        let result = go(self);
+        if let (Some(run), Some((r, s))) = (self.run.as_mut(), kept) {
+            run.replicas.truncate(r);
+            run.scope.truncate(s);
+        }
+        result
+    }
+
     /// The time this evaluation is at (§11.4: `sample_rate()`, `sample_tick()`); there is none outside an instance.
     fn time(&self, at: Span) -> Result<Ctx, Stop> {
         let run = self.run.as_ref();
@@ -177,13 +200,11 @@ impl<'a> Frame<'a> {
         let mut stores = Vec::new();
         while let Some(save) = self.run.as_ref().ok_or(here(Internal("no run")))?.saves.get(stores.len()) {
             let (key, expr, scope) = (save.key.clone(), save.expr, save.scope.clone());
-            self.locals.extend(scope);
-            self.run.as_mut().ok_or(here(Internal("no run")))?.replicas.clone_from(&key.replicas);
-            stores.push((key, self.eval(expr)?));
+            let value = self.with_bindings(&key.replicas, scope, |f| f.eval(expr))?;
+            stores.push((key, value));
         }
         let run = self.run.as_mut().ok_or(here(Internal("no run")))?;
         run.saves.clear();
-        run.replicas.clear();
         for (key, v) in stores {
             match run.state.cells.get_mut(&key).map(|c| &mut c.current) {
                 Some(Store::Last(last)) => *last = v,
@@ -241,7 +262,7 @@ impl<'a> Frame<'a> {
             match site {
                 Site::Node(e, Node::Delay(d), args) => self.make_cell(*e, *d, args)?,
                 Site::Node(e, Node::Instance(def), _) => self.make_child(*e, *def)?,
-                Site::Par(e, inner) => drop(self.replicate(*e, |f| f.build(inner))?),
+                Site::Par(e, inner) => drop(self.replicate(*e, |_| 0, |f| f.build(inner))?),
             }
         }
         Ok(())
@@ -250,9 +271,18 @@ impl<'a> Frame<'a> {
     /// A `let` keeps the value `v` (its previous one is given back): the places it holds beyond the one of its step count in the tree.
     pub(super) fn keep_places(&mut self, init: ExprId, v: &Value) -> Result<(), Stop> {
         let Some(run) = self.run.as_mut() else { return Ok(()) };
-        let more = v.places() - 1;
-        run.used = run.used.saturating_sub(run.state.held.insert(init, more).unwrap_or(0));
-        self.hold(Some(more), self.body.ast.expr(init).span)
+        let (more, old) = (v.places() - 1, run.state.held.get(&init).copied().unwrap_or(0));
+        run.used = run.used.saturating_sub(old);
+        let held = self.hold(Some(more), self.body.ast.expr(init).span);
+        // The record of the `let` changes only when its new value is held: else the old value stays, and so does its
+        // count (a call stopped at the limit leaves `held` and `used` as one).
+        if let Some(run) = self.run.as_mut() {
+            match held {
+                Ok(()) => drop(run.state.held.insert(init, more)),
+                Err(_) => run.used += old,
+            }
+        }
+        held
     }
 
     /// Adds `places` (none: more than a count holds) to those of the whole tree, which `Limits::most` holds.
@@ -268,6 +298,9 @@ impl<'a> Frame<'a> {
     fn make_cell(&mut self, e: ExprId, d: Delay, args: &[Arg]) -> Result<(), Stop> {
         let at = self.body.ast.expr(e).span;
         let here = |fault| Stop { fault, at };
+        if let Some(a) = args.get(d.init_index()) {
+            self.no_arm_binding(a.expr, Stage::Init)?;
+        }
         let given = args.get(d.init_index()).map(|a| self.eval(a.expr)).transpose()?;
         let shape = match given {
             Some(_) => None,
@@ -310,6 +343,22 @@ impl<'a> Frame<'a> {
         self.in_child(&key, |f, inst, decl| enter(f, inst, decl, Stage::Init, &config))
     }
 
+    /// An argument of the clock `init` or `block` is not evaluated if it reads a binding of an arm of a `match~` (`n` of
+    /// `match~ k { n => lp~(x, (n as F64)) }`): the arm is evaluated in the `sample` stage, and the spec does not say which
+    /// stage makes the value of the binding that a faster-stage reader is given.
+    // SPEC-GAP(S-1131): the stage of the value of the binding of an arm that an argument of the clock `init` or `block` reads,
+    // and the clock of the binding (the readings: the stage of the argument chooses the arm, the argument is evaluated in the
+    // arm, or it is an error): it is not evaluated here (`Unavailable`).
+    pub(super) fn no_arm_binding(&self, arg: ExprId, stage: Stage) -> Result<(), Stop> {
+        match stage != Stage::Sample && self.body.reads_arm_binding(arg, arg) {
+            true => Err(Stop {
+                fault: Fault::Unavailable("a `match~` arm binding read by an argument of `init` or `block` (S-1131)"),
+                at: self.body.ast.expr(arg).span,
+            }),
+            false => Ok(()),
+        }
+    }
+
     /// The arguments of the call `call` that are inputs of `decl` at `stage`, by input name, evaluated here from the left.
     fn inputs_of(&mut self, call: ExprId, decl: &'a FlowDef, stage: Stage) -> Result<Vec<(&'a str, Value)>, Stop> {
         let (ast, at) = (self.body.ast, self.body.ast.expr(call).span);
@@ -319,6 +368,7 @@ impl<'a> Frame<'a> {
         let mut mine = Vec::new();
         for (i, a) in decl.inputs.iter().zip(args) {
             if input_stage(i).map_err(|fault| Stop { fault, at })? == stage {
+                self.no_arm_binding(a.expr, stage)?;
                 mine.push((i.name.as_str(), self.eval(a.expr)?));
             }
         }
@@ -373,11 +423,12 @@ impl<'a> Frame<'a> {
         let run = self.run.as_ref().ok_or(Stop { fault: Internal("a block stage with no run"), at: whole })?;
         let calls: Vec<_> = run.state.children.iter().map(|(k, c)| (k.clone(), c.def, c.scope.clone())).collect();
         for (key, def, scope) in calls {
-            self.locals.extend(scope);
             let at = self.body.ast.expr(key.call).span;
             let decl = self.body.view.flow(def).map_err(|fault| Stop { fault, at })?;
-            let params = self.inputs_of(key.call, decl, Stage::Block)?;
-            self.in_child(&key, |f, inst, decl| enter(f, inst, decl, Stage::Block, &params))?;
+            self.with_bindings(&key.replicas, scope, |f| {
+                let params = f.inputs_of(key.call, decl, Stage::Block)?;
+                f.in_child(&key, |f, inst, decl| enter(f, inst, decl, Stage::Block, &params))
+            })?;
         }
         Ok(())
     }

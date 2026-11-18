@@ -32,11 +32,14 @@
 //!   and `render` and `Outcome` (a panic with the stage it is at: `init`, `block`, the frame `n`).
 //! - [`branch`]: `par~` (a replica of its body for each value of its index, a state for each) and `if~` and `match~`
 //!   (every branch is evaluated, one is taken, an arm not taken has the default of its bindings).
+//! - [`boundary`]: an exported flow as the C API has it (§9.2, §14.2): `init`, `process` and `reset` with the status, a panic that
+//!   zeroes the outputs of a call and poisons the instance, and one that leaves it uninitialized.
 //! - [`state`]: the state of an instance, a tree of cells and instances made for each place a delay or a flow is called,
 //!   the delays (`prev~`, `delay~`, `vdelay~`) with the two phases of a tick that `^` needs, the time (`sample_rate()`).
 //! - [`sema_view`]: the tables of the checker the evaluator reads, in one file.
 
 pub mod aggregate;
+pub mod boundary;
 pub mod branch;
 pub mod call;
 pub mod expr;
@@ -50,6 +53,8 @@ pub mod value;
 
 #[cfg(test)]
 mod aggregate_tests;
+#[cfg(test)]
+mod boundary_tests;
 #[cfg(test)]
 mod branch_tests;
 #[cfg(test)]

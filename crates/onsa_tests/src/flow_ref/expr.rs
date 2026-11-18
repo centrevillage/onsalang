@@ -46,9 +46,11 @@ pub struct Limits {
 }
 
 /// 4 MiB of the 64 MiB of a command thread stay: the frames between two `eval`s (a pattern 256 levels deep) are well
-/// within it. 2^20 places are 40 MB in a value, and 110 to 150 B a place (2026-11-18, up to some 150 MB) in a tree of
-/// instances: a place is a value, a cell of a delay line, a value a `let` keeps, and in an instance 8 and one for each
-/// step of its body.
+/// within it. 2^20 places are 40 MB in a value. In a tree they are a value, a cell of a delay line, a value a `let` keeps,
+/// and in an instance 8 and one for each step of its body, and they cost (2026-11-18, `guard.py` on `par~ i in 0 ..< 1000000 {
+/// prev~(x) }` and on 60 000 instances of a flow, less the 70 MB of the test binary): some 700 B for the node of a delay in
+/// a `par~` (its key, its two stores, its entry in a map), some 3.7 KB for an instance, so that a tree at the limit is some
+/// 700 MB of nodes, or 130 000 instances (some 500 MB), and not the 150 MB a place of a value would make it.
 pub const LIMITS: Limits = Limits { reserve: 4 << 20, most: 1 << 20 };
 
 pub(super) const LOW_STACK: Fault = Fault::Unavailable("the stack is nearly used up");

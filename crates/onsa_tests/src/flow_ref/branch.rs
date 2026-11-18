@@ -17,6 +17,7 @@ impl<'a> Frame<'a> {
     pub(super) fn replicate<R>(
         &mut self,
         par: ExprId,
+        places: impl Fn(&R) -> usize,
         mut go: impl FnMut(&mut Self) -> Result<R, Stop>,
     ) -> Result<Vec<R>, Stop> {
         let (ast, at) = (self.body.ast, self.body.ast.expr(par).span);
@@ -33,19 +34,17 @@ impl<'a> Frame<'a> {
         if n > self.limits.most {
             return Err(here(Unavailable("a `par~` of more replicas than the evaluator holds")));
         }
-        let mut out = Vec::with_capacity(n);
+        self.run.as_ref().ok_or(here(Unavailable("a `par~` outside an instance of a flow")))?;
+        let mut out = Vec::with_capacity(n.min(1024));
         for k in 0..n {
             let i = Value::int(IntKind::U32, lo + k as i128);
-            self.locals.insert(var, i.clone());
-            let run = self.run.as_mut().ok_or(here(Unavailable("a `par~` outside an instance of a flow")))?;
-            run.replicas.push(k as u32);
-            run.scope.push((var, i));
-            let value = go(self);
-            if let Some(run) = self.run.as_mut() {
-                run.replicas.pop();
-                run.scope.pop();
+            let value = self.with_bindings(&[k as u32], vec![(var, i)], |f| go(f))?;
+            // The values of all the replicas are as many places as the first has, n times (as `[e; N]` is held, `aggregate.rs`):
+            // the nest of `par~`s is stopped at its first row, before the product is made.
+            if k == 0 && n.saturating_mul(places(&value)) > self.limits.most {
+                return Err(here(Unavailable("the values of a `par~` are more places than the evaluator holds")));
             }
-            out.push(value?);
+            out.push(value);
         }
         Ok(out)
     }
@@ -56,7 +55,7 @@ impl<'a> Frame<'a> {
         let ExprKind::Par { body, .. } = &self.body.ast.expr(e).kind else {
             return Err(Stop { fault: Internal("not a `par~`"), at: self.body.ast.expr(e).span });
         };
-        Ok(Value::Array(self.replicate(e, |f| f.eval(*body))?))
+        Ok(Value::Array(self.replicate(e, Value::places, |f| f.eval(*body))?))
     }
 
     /// `if~` (§11.5): each condition and each branch is evaluated, in the order written (the nested `if`s of an `else if`
@@ -100,22 +99,16 @@ impl<'a> Frame<'a> {
         }
         let mut value = None;
         for (n, arm) in arms.iter().enumerate() {
-            let locals = self.body.pat_locals(arm.pat).map_err(here)?;
-            for l in locals.iter().filter(|_| Some(n) != taken) {
-                let ty = self.body.local_ty(*l).map_err(here)?;
-                let default = self.shape(ty, at)?.default_value();
-                self.locals.insert(*l, default.ok_or(here(Unavailable("a binding of a type with no default")))?);
+            let mut bound = Vec::new();
+            for l in self.body.pat_locals(arm.pat).map_err(here)? {
+                if Some(n) == taken {
+                    bound.extend(self.locals.get(&l).map(|v| (l, v.clone())));
+                    continue;
+                }
+                let default = self.shape(self.body.local_ty(l).map_err(here)?, at)?.default_value();
+                bound.push((l, default.ok_or(here(Unavailable("a binding of a type with no default")))?));
             }
-            let bound: Vec<_> = locals.iter().filter_map(|l| Some((*l, self.locals.get(l)?.clone()))).collect();
-            let kept = self.run.as_ref().map_or(0, |r| r.scope.len());
-            if let Some(run) = self.run.as_mut() {
-                run.scope.extend(bound);
-            }
-            let result = self.eval(arm.body);
-            if let Some(run) = self.run.as_mut() {
-                run.scope.truncate(kept);
-            }
-            let result = result?;
+            let result = self.with_bindings(&[], bound, |f| f.eval(arm.body))?;
             if Some(n) == taken {
                 value = Some(result);
             }

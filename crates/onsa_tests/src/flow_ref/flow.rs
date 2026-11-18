@@ -21,7 +21,7 @@ use onsa_syntax::ast::{CallKind, ExprId, ExprKind, PatId, StmtKind};
 
 use super::expr::{Frame, Stop};
 use super::host::FnHost;
-use super::scalar::Fault;
+use super::scalar::{Fault, PanicKind};
 use super::sema_view::{Body, Called, Stage, View, clock_stage, input_stage, inputs_at, output_stage};
 use super::state::{InstState, Run};
 use super::value::Value;
@@ -128,11 +128,13 @@ pub struct Inst {
     pub(super) scope: Vec<(LocalId, Value)>,
 }
 
-/// The stage of a call a panic came from (§9.2, §11.6): its `init`, the `block` stage of a `process` (whatever its
-/// frames), or the frame `n` of it, counted from 0 in that `process`.
+/// The stage of a call a panic came from (§9.2, §11.6): its `init`, the start of a `process` (the lengths of the columns are
+/// compared there, before any state moves), the `block` stage of a `process` (whatever its frames), or the frame `n` of
+/// it, counted from 0 in that `process`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PanicAt {
     Init,
+    Start,
     Block,
     Sample(usize),
 }
@@ -164,6 +166,8 @@ pub struct Instance<'a> {
     plans: Plans,
     /// The time the instance runs in: `sample_tick()` reads it, and `reset` makes it 0.
     pub ctx: Ctx,
+    /// The places of the tree held so far (`Run::used`), which a call goes on from: the limit is the tree's, not a call's.
+    used: usize,
 }
 
 /// The inputs of `decl` at `stage` and the `names` given: an input left out, one added and one of another clock are
@@ -330,8 +334,9 @@ impl<'a> Instance<'a> {
         let ctx = Ctx { sample_rate, tick: 0 };
         let mut f = me.frame(body, ctx, 0, plans.clone(), host);
         let done = enter(&mut f, &mut me, decl, Stage::Init, config);
+        let used = f.run.as_ref().map_or(0, |r| r.used);
         let kept = me.keep(f, body.ast.expr(decl.body).span);
-        done.and(kept).map(|()| Instance { body, decl, me, plans, ctx })
+        done.and(kept).map(|()| Instance { body, decl, me, plans, ctx, used })
     }
 
     /// `process` over `frames` frames: the `let`s of `block` once (`params`, by name), a call of 0 frames too, and for
@@ -375,14 +380,16 @@ impl<'a> Instance<'a> {
     where
         'a: 'h,
     {
-        let (decl, mut outs, mut stage) = (self.decl, Vec::new(), PanicAt::Block);
+        let (decl, mut outs, mut stage) = (self.decl, Vec::new(), PanicAt::Start);
         let at = self.body.ast.expr(decl.body).span;
-        let mut f = self.me.frame(self.body, self.ctx, 0, self.plans.clone(), host);
+        let mut f = self.me.frame(self.body, self.ctx, self.used, self.plans.clone(), host);
         let done = (|| {
-            if inputs.iter().any(|(_, column)| column.len() != frames) {
-                return Err(Stop { fault: Fault::Internal("a column that is not of the frames given"), at });
-            }
             check(at, decl, Stage::Sample, inputs.iter().map(|(n, _)| *n))?;
+            stage = PanicAt::Start;
+            if inputs.iter().any(|(_, column)| column.len() != frames) {
+                return Err(Stop { fault: Fault::Panic(PanicKind::Length), at });
+            }
+            stage = PanicAt::Block;
             enter(&mut f, &mut self.me, decl, Stage::Block, params)?;
             for n in 0..frames {
                 stage = PanicAt::Sample(n);
@@ -395,6 +402,7 @@ impl<'a> Instance<'a> {
             }
             Ok(())
         })();
+        self.used = f.run.as_ref().map_or(self.used, |r| r.used);
         let kept = self.me.keep(f, at);
         done.and(kept).map(|()| outs).map_err(|stop| (stage, stop))
     }

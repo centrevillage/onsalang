@@ -321,3 +321,82 @@ flow g(k: U32 at sample) -> [F64; 2] at sample {
     assert_eq!(rows("f"), [vec![0.0, 0.0], vec![3.0, 4.0]]);
     assert_eq!(rows("g"), [vec![0.0, 0.0], vec![3.0, 5.0]]);
 }
+
+/// `init` of the flow `name` with `config`, then one `process` of the frames `xs` (a source that has the E0200 of `match~`
+/// runs: the evaluator has the form and its tables are whole).
+fn open_run(
+    src: &str,
+    name: &'static str,
+    config: Vec<(&'static str, Value)>,
+    params: Vec<(&'static str, Value)>,
+    xs: &[f64],
+) -> Result<Vec<f64>, Stop> {
+    let xs = doubles(xs);
+    with_checked(src, false, move |a| {
+        let (view, def) = (super::sema_view::View::new(a), super::expr_tests::def_named(a, name));
+        let mut me = Instance::init(view, def, 48000.0, &config, None)?;
+        me.process(&params, &[("x", &xs[..])], xs.len(), None).map(|outs| f64s(&outs))
+    })
+}
+
+#[test]
+fn the_results_of_nested_pars_are_held_to_the_limit_before_they_are_all_made() {
+    // §11.5: the evaluator holds `Limits::most` (2^20 = 1 048 576) places in a value (the spec has no limit, so a value over
+    // it is `Unavailable` and not a wrong value), as `[e; N]` does for `N` times the places of `e`; a `par~` of n replicas that
+    // have p places each is n p. `cube` is 128 * 128 * 128 = 2 097 152 values: over, and `Unavailable` once the first of its 128
+    // rows (16 384 values) shows it (a count of one `par~` at a time sees 128, 128 and 128 and builds 2 million values).
+    // `wide` is 2000 rows of `[x; 1000]`, 2 000 000: over too. `small` is 32 * 32 * 32 = 32 768, under: its last value
+    // is x + 31 = 36 for x = 5.
+    let src = "flow cube(x: I64 at sample) -> I64 at sample {
+  (par~ i in 0 ..< 128 { par~ j in 0 ..< 128 { par~ k in 0 ..< 128 { x + ((k) as I64) } } })[0][0][0]
+}
+flow wide(x: I64 at sample) -> I64 at sample { (par~ i in 0 ..< 2000 { [x; 1000] })[0][0] }
+flow small(x: I64 at sample) -> I64 at sample {
+  (par~ i in 0 ..< 32 { par~ j in 0 ..< 32 { par~ k in 0 ..< 32 { x + ((k) as I64) } } })[31][31][31]
+}";
+    let run = |name: &'static str| {
+        with_flow(src, name, |view, def| {
+            let mut me = Instance::init(view, def, 48000.0, &[], None).expect("init");
+            let x = [Value::int(IntKind::I64, 5)];
+            me.process(&[], &[("x", &x[..])], 1, None)
+        })
+    };
+    for name in ["cube", "wide"] {
+        let r = run(name);
+        assert!(matches!(r, Err(Stop { fault: Fault::Unavailable(_), .. })), "{name}: {r:?}");
+    }
+    assert!(matches!(&run("small"), Ok(o) if o[0].same(&Value::int(IntKind::I64, 36))), "{:?}", run("small"));
+}
+
+#[test]
+fn a_match_arm_binding_read_by_a_block_or_init_argument_is_unavailable_and_not_an_internal_error() {
+    // S-1131 (provisional reading (1) of the evaluator: it does not evaluate it): a `match~` arm is evaluated in the `sample` stage,
+    // so a binding of it (`n`) has no value in the `block` stage of an instance in the arm, which reads the argument of its
+    // `block` input, or at `init`, which reads those of the `init` inputs of an instance or a delay. The spec does not say
+    // at which stage the binding's value is made: that is not an internal error of the evaluator but a form it has not. No
+    // value is written (the spec has none).
+    // The same forms that do not read the binding of an arm do run: `k` itself (the `block` argument `lp~(x, k)` is 3.0,
+    // x * g = 2.0 * 3.0 = 6.0), a `match` inside the argument that binds its own `m`, the binding read in a `sample` input (`mul~`
+    // multiplies x = 2.0 by n = 3.0: 6.0), and the `init` of a delay that reads `k` (`prev~(x, 3.0)` starts from 3.0).
+    let src = "flow lp(x: F64 at sample, g: F64 at block) -> F64 at sample { x * g }
+flow mul(x: F64 at sample, y: F64 at sample) -> F64 at sample { x * y }
+flow st(a: F64 at init, x: F64 at sample) -> F64 at sample { x + a }
+flow blk(x: F64 at sample, k: U32 at block) -> F64 at sample { match~ k { n => lp~(x, (n as F64)), } }
+flow blk_k(x: F64 at sample, k: U32 at block) -> F64 at sample { match~ k { n => lp~(x, (k as F64)), } }
+flow blk_own(x: F64 at sample, k: U32 at block) -> F64 at sample { lp~(x, match k { m => (m as F64), }) }
+flow blk_sample(x: F64 at sample, k: U32 at block) -> F64 at sample { match~ k { n => mul~(x, (n as F64)), } }
+flow ini_delay(k: U32 at init, x: F64 at sample) -> F64 at sample { match~ k { n => prev~(x, (n as F64)), } }
+flow ini_inst(k: U32 at init, x: F64 at sample) -> F64 at sample { match~ k { n => st~((n as F64), x), } }
+flow ini_k(k: U32 at init, x: F64 at sample) -> F64 at sample { match~ k { n => prev~(x, (k as F64)), } }";
+    let k = |name| (name, Value::int(IntKind::U32, 3));
+    let unavailable = |r: Result<Vec<f64>, Stop>| matches!(r, Err(Stop { fault: Fault::Unavailable(_), .. }));
+    let by_block = |name: &'static str| open_run(src, name, vec![], vec![k("k")], &[2.0]);
+    let by_init = |name: &'static str| open_run(src, name, vec![k("k")], vec![], &[2.0]);
+    assert!(unavailable(by_block("blk")), "{:?}", by_block("blk"));
+    assert!(unavailable(by_init("ini_delay")), "{:?}", by_init("ini_delay"));
+    assert!(unavailable(by_init("ini_inst")), "{:?}", by_init("ini_inst"));
+    same64(&by_block("blk_k").expect("a block argument that reads k"), &[6.0]);
+    same64(&by_block("blk_own").expect("a match of the argument that binds its own"), &[6.0]);
+    same64(&by_block("blk_sample").expect("a sample argument that reads the arm binding"), &[6.0]);
+    same64(&by_init("ini_k").expect("an init argument that reads k"), &[3.0]);
+}

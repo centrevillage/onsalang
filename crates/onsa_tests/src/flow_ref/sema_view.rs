@@ -177,6 +177,17 @@ impl<'a> Body<'a> {
         let (at, span) = (self.info.locals.get(l.0 as usize).map(|l| l.span), self.ast.expr(e).span);
         at.is_some_and(|at| span.start <= at.start && at.end <= span.end)
     }
+    /// Does `e` read a local that a `match` arm binds outside `root` (the `n` of `match~ k { n => lp~(x, n) }` in the argument of
+    /// `lp~`: the argument is `root`)? One bound within `root` is made by it.
+    pub fn reads_arm_binding(&self, e: ExprId, root: ExprId) -> bool {
+        let arm = |l: &LocalId| {
+            let kind = self.info.locals.get(l.0 as usize).map(|i| &i.kind);
+            matches!(kind, Some(LocalKind::MatchBind)) && !self.bound_within(*l, root)
+        };
+        let names = matches!(self.ast.expr(e).kind, ExprKind::Path(_))
+            && matches!(self.info.targets.get(&e), Some(Target::Local(l)) if arm(l));
+        names || self.ast.sub_exprs(e).into_iter().any(|x| self.reads_arm_binding(x, root))
+    }
     /// The number of the variant a pattern names.
     pub fn pat_ctor(&self, p: PatId) -> Result<u32, Fault> {
         need(self.info.pat_ctors.get(&p).copied(), "a pattern with no variant")
