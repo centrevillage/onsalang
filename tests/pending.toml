@@ -43,13 +43,6 @@ note = "遅延の長さの範囲、vdelay の MAX、空の par の範囲"
 
 [[pending]]
 kind = "diag-code"
-target = "E0813"
-reasons = ["S-102", "R-132"]
-until = "W7-02"
-note = "prev 系の第 1 引数のクロック（クロックの解析）"
-
-[[pending]]
-kind = "diag-code"
 target = "E0816"
 reasons = ["S-29", "S-110"]
 until = "W7-07"

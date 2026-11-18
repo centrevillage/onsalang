@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§5.2", "§11.2", "§11.3", "§11.4", "§11.5", "§18.1"]
+
+// A call of an `inout self` method in a flow body without `!` is E0713 (§11.2, §5.2). It is a
+// check of the argument modes, which a unit does not get when the flow check has an error
+// (§18.1: the checks come in the order syntax, names, types, the flow check, the modes and moves,
+// then `rt` and effects). So E0713 is reported when it is the only error of the flow, and a later
+// error of the flow check wins over an earlier E0713. A `!` call is E0806 of the names stage, which
+// wins over the flow check. One error per flow (§18.1), so each form is a flow of its own.
+
+pub struct Pt { x: F32 }
+
+impl Pt {
+  pub rt fn grow(inout self) -> F32 { self.x }
+}
+
+pub flow alone(x: F32 at sample) -> F32 at sample {
+  let p = Pt { x: 1.0 }
+  let k = p.grow()                                             //~ E0713
+  x + k
+}
+
+pub flow in_the_output_expression(x: F32 at sample) -> F32 at sample {
+  let p = Pt { x: 1.0 }
+  x + p.grow()                                                 //~ E0713
+}
+
+pub flow then_e0815(x: F32 at sample) -> F32 at sample {
+  let p = Pt { x: 1.0 }
+  let k = p.grow()
+  let a = x at block                                           //~ E0815
+  x + k
+}
+
+pub flow then_e0813(x: F32 at sample, c: F32 at block) -> F32 at sample {
+  let p = Pt { x: 1.0 }
+  let k = p.grow()
+  let a = prev~(c)                                             //~ E0813
+  x + k
+}
+
+pub flow then_e0810(x: F32 at sample) -> F32 at sample {
+  let p = Pt { x: 1.0 }
+  let k = p.grow()
+  let s = "text"                                               //~ E0810
+  x + k
+}
+
+pub flow after_e0813(x: F32 at sample, c: F32 at block) -> F32 at sample {
+  let a = prev~(c)                                             //~ E0813
+  let p = Pt { x: 1.0 }
+  let k = p.grow()
+  x + k
+}
+
+pub flow bang_call_then_e0815(x: F32 at sample) -> F32 at sample {
+  let p = Pt { x: 1.0 }
+  let k = p.grow!()                                            //~ E0806
+  let a = x at block
+  x + k
+}

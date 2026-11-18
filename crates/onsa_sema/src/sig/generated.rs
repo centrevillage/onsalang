@@ -60,6 +60,15 @@ impl Generated {
     }
 }
 
+/// §11.3: the E0810 at `span` of the value type `ty` of a signal that is not
+/// Copy, the one judgment of the inputs and the output
+/// ([`Sema::signal_type_error`]) and of the `let`s of a flow body.
+pub(crate) fn not_copy_signal(a: &Analysis, ty: TyId, span: Span) -> Option<Diagnostic> {
+    let k = crate::kind::facts_of(a, ty, &[]).not_copy()?;
+    let msg = format!("the value type of a signal must be Copy; `{}` is {k} (§11.3)", a.display_type(ty));
+    Some(Diagnostic::new(Stage::Flow, Code::E0810, span, msg))
+}
+
 /// The name of the item `g` in [`GENERATED`].
 fn name_of(g: Generated) -> &'static str {
     let named = GENERATED.iter().find(|(_, x)| *x == g);
@@ -239,9 +248,8 @@ impl<'p> Sema<'p> {
     /// its users, S-1123), and of the output ([`Self::check_rate_value_type`]).
     pub(super) fn signal_type_error(&self, ty: TyId, span: Span) -> Option<Diagnostic> {
         let shown = |t: TyId| self.a.display_type(t);
-        if let Some(k) = crate::kind::facts_of(self.a, ty, &[]).not_copy() {
-            let msg = format!("the value type of a signal must be Copy; `{}` is {k} (§11.3)", shown(ty));
-            return Some(Diagnostic::new(Stage::Flow, Code::E0810, span, msg));
+        if let Some(d) = not_copy_signal(self.a, ty, span) {
+            return Some(d);
         }
         let held = crate::holds_fn::fn_in(self.a, ty)?;
         let what = match held.parts.is_empty() {

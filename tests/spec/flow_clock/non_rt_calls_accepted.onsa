@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5"]
+
+// A function with an empty effect row that is not `rt` can be called in a flow body when its
+// arguments are at `init` or constants (§11.5): an expression of a constant clock is evaluated at
+// compile time, one at `init` once at `init` (§11.3). The call goes in a `let` of its own (the
+// result is at the clock of its arguments), the `init` of a delay, or an argument of another such
+// call. An `rt` fn takes a constant like any value, and a constant is at no clock, so it is also a
+// delay's `init` and a `par~` body. (A call at the clock `sample`, and the call with an argument at
+// `block`, are the diagnostics of the other cases.)
+
+pub fn design(v: F32) -> F32 { v * 0.5 }
+pub rt fn half(v: F32) -> F32 { v * 0.5 }
+
+pub flow constant_argument(x: F32 at sample) -> F32 at sample {
+  let k = design(2.0)
+  x * k
+}
+
+pub flow init_argument(x: F32 at sample, c: F32 at init) -> F32 at sample {
+  let k = design(c)
+  x * k
+}
+
+pub flow nested_calls(x: F32 at sample, c: F32 at init) -> F32 at sample {
+  let k = design(design(c))
+  x * k
+}
+
+pub flow delay_init_of_a_call(x: F32 at sample, c: F32 at init) -> F32 at sample {
+  prev~(x, design(2.0)) + prev~(x, design(c))
+}
+
+pub flow rt_call_of_constants(x: F32 at sample) -> F32 at sample {
+  let k = half(2.0)
+  x * k + prev~(x, half(1.0))
+}
+
+pub flow constant_in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let k = par~ i in 0 ..< 2 { 1.0 }
+  x * k[0]
+}
+
+pub flow constant_chain(x: F32 at sample) -> F32 at sample {
+  let a = 2.0
+  let b = a
+  x * b
+}
+
+pub flow constants_at_every_clock(x: F32 at sample) -> F32 at sample {
+  let k = half(2.0) + 1.0
+  let a = k at init
+  let b = k at block
+  let c = k at sample
+  x * (a + b + c)
+}
+
+pub flow sample_rate_at_block(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let k = sample_rate() * p
+  x * k
+}

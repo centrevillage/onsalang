@@ -1,0 +1,93 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4"]
+
+// The first argument of a delay is at a clock of ticks (the body's `sample`; §11.4): a value of the
+// parameter kinds (a constant, `init`, `block`) is E0813 at the argument, a constant included
+// (`prev~(1.0)`, S-396: it has no clock of ticks to count). A value promoted with `at` is at the
+// clock of its tick. One error per flow (§18.1), so each form is a flow of its own.
+
+const K: F32 = 1.0
+
+pub struct Knobs { a: F32 }
+
+pub flow literal(x: F32 at sample) -> F32 at sample {
+  prev~(1.0) + x                                              //~ E0813
+}
+
+pub flow integer_literal(x: I32 at sample) -> I32 at sample {
+  prev~(3) + x                                                //~ E0813
+}
+
+pub flow named_const(x: F32 at sample) -> F32 at sample {
+  prev~(K) + x                                                //~ E0813
+}
+
+pub flow computed_const(x: F32 at sample) -> F32 at sample {
+  prev~(1.0 + 2.0) + x                                        //~ E0813
+}
+
+pub flow const_through_let(x: F32 at sample) -> F32 at sample {
+  let k = 3.0
+  prev~(k) + x                                                //~ E0813
+}
+
+pub rt fn half(v: F32) -> F32 { v * 0.5 }
+
+// A call whose arguments are all constants is a constant too (§11.3): the same E0813.
+pub flow rt_call_of_constants(x: F32 at sample) -> F32 at sample {
+  prev~(half(1.0)) + x                                        //~ E0813
+}
+
+pub flow delay_of_a_const(x: F32 at sample) -> F32 at sample {
+  delay~(1.0, 2) + x                                          //~ E0813
+}
+
+pub flow block_name(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  prev~(p) + x                                                //~ E0813
+}
+
+pub flow block_computed(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  prev~(p * 2.0) + x                                          //~ E0813
+}
+
+pub flow block_through_let(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let q = p * 2.0
+  prev~(q) + x                                                //~ E0813
+}
+
+pub flow block_field(x: F32 at sample, p: Knobs at block) -> F32 at sample {
+  prev~(p.a) + x                                              //~ E0813
+}
+
+pub flow block_with_sample_rate(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  prev~(sample_rate() * p) + x                                //~ E0813
+}
+
+pub flow init_name(x: F32 at sample, c: F32 at init) -> F32 at sample {
+  prev~(c) + x                                                //~ E0813
+}
+
+pub flow init_through_let(x: F32 at sample, c: F32 at init) -> F32 at sample {
+  let q = c * 2.0
+  prev~(q) + x                                                //~ E0813
+}
+
+pub flow vdelay_value_computed(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  vdelay~(p * 2.0, x, 4) + x                                  //~ E0813
+}
+
+pub flow delay_block(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  delay~(p, 2) + x                                            //~ E0813
+}
+
+pub flow in_a_par_body(x: F32 at sample, p: F32 at block) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 { prev~(p) + x }                          //~ E0813
+}
+
+// A value promoted with `at sample` (the candidate of E0813, §11.4), or an input at `sample`, is
+// accepted; so is a `block` value in `d` of `vdelay~` (§11.4: `d` is read at the clock of the value).
+pub flow promoted(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let q = p at sample
+  prev~(q) + prev~(p at sample) + vdelay~(x, p, 4)
+}

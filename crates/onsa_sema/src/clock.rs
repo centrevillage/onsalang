@@ -11,8 +11,7 @@
 //! The comparisons of clocks ([`join`], [`readable_at`], [`promote`],
 //! [`holds_state`], [`delay_out`], [`rebase`], [`loop_clock`], W7-02 U2a)
 //! are the one table of the rules (D-15). The walk of the clocks
-//! (`flow::clocks`) reads them; the rate pass keeps its own order
-//! (`flow::FlowRate`) until W7-02 U2b-2. Each passes a clock in error with
+//! (`flow::clocks`) and its checks read them. Each passes a clock in error with
 //! no clash and gives a clock in error. The rows of an event clock are
 //! W7-11's (S-1095, S-1096): an event clock where its row is not written is
 //! an internal error, with a clock in error too.

@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5"]
+
+// A flow body calls effect-free functions only (§11.5): a call of a function with an effect row
+// that is not empty (`Alloc` included) is E0805, at the call, wherever the call is (an input of the
+// flow's own clock, a `block` value, the argument of a delay or an instance, a branch, a `par~`
+// body, the loop of a `^` reference, a method). One error per flow (§18.1), so each form is a flow
+// of its own.
+
+pub fn noisy(v: F32) -> F32 uses {Alloc} { v }
+pub flow pass(y: F32 at sample) -> F32 at sample { y }
+
+pub struct Pt { x: F32 }
+
+impl Pt {
+  pub fn noisy(self) -> F32 uses {Alloc} { self.x }
+}
+
+pub flow in_a_let(x: F32 at sample) -> F32 at sample {
+  let a = noisy(1.0)                                           //~ E0805
+  x
+}
+
+pub flow on_a_block_value(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = noisy(p)                                             //~ E0805
+  x
+}
+
+pub flow in_the_output(x: F32 at sample) -> F32 at sample {
+  x * noisy(x)                                                 //~ E0805
+}
+
+pub flow in_a_delay_value(x: F32 at sample) -> F32 at sample {
+  prev~(noisy(x))                                              //~ E0805
+}
+
+pub flow in_a_delay_init(x: F32 at sample) -> F32 at sample {
+  prev~(x, noisy(1.0))                                         //~ E0805
+}
+
+pub flow in_an_instance_argument(x: F32 at sample) -> F32 at sample {
+  pass~(noisy(x))                                              //~ E0805
+}
+
+pub flow in_an_if_branch(x: F32 at sample) -> F32 at sample {
+  if x > 0.0 { noisy(x) } else { 0.0 }                         //~ E0805
+}
+
+pub flow in_a_par_body(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 { noisy(x) }                               //~ E0805
+}
+
+pub flow in_a_loop(x: F32 at sample) -> F32 at sample {
+  let a = prev~(noisy(^a) + x)                                 //~ E0805
+  a
+}
+
+pub flow a_method(x: F32 at sample) -> F32 at sample {
+  let p = Pt { x: 1.0 }
+  p.noisy()                                                    //~ E0805
+}

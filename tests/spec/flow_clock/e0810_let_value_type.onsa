@@ -1,0 +1,67 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3"]
+
+// The value type of a `let` in a flow body (a signal) must be Copy (§11.3): E0810, at the whole `let`
+// statement. A value of a type that is not Copy (`Str`, a struct that holds one, an array or an
+// option of them) is the same error, whatever the clock of the value is and wherever the value is
+// built. One error per flow (§18.1), so each form is a flow of its own.
+
+pub struct Named { s: Str }
+
+pub flow text(x: F32 at sample) -> F32 at sample {
+  let s = "text"                                               //~ E0810
+  x
+}
+
+pub flow text_annotated(x: F32 at sample) -> F32 at sample {
+  let s: Str = "text"                                          //~ E0810
+  x
+}
+
+pub flow struct_with_text(x: F32 at sample) -> F32 at sample {
+  let w = Named { s: "a" }                                     //~ E0810
+  x
+}
+
+pub flow array_of_text(x: F32 at sample) -> F32 at sample {
+  let a = ["a", "b"]                                           //~ E0810
+  x
+}
+
+pub flow option_of_text(x: F32 at sample) -> F32 at sample {
+  let a = Some("a")                                            //~ E0810
+  x
+}
+
+pub flow text_in_a_branch(x: F32 at sample) -> F32 at sample {
+  let c = if x > 0.0 { "a" } else { "b" }                      //~ E0810
+  x
+}
+
+pub flow text_in_a_par(x: F32 at sample) -> F32 at sample {
+  let a = par~ i in 0 ..< 2 { "a" }                            //~ E0810
+  x
+}
+
+pub flow after_copy_lets(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = x * 2.0
+  let b = p * 2.0
+  let s = "text"                                               //~ E0810
+  a + b
+}
+
+pub flow at_block(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let s = "text" at block                                      //~ E0810
+  x
+}
+
+// Copy values are signals: numbers, `Bool`, tuples, arrays and structs of them.
+pub struct Pair { a: F32, b: F32 }
+
+pub flow copy_values(x: F32 at sample) -> F32 at sample {
+  let p = Pair { a: x, b: 1.0 }
+  let t = (x, true)
+  let a = [x, 1.0]
+  p.a + t.0 + a[1]
+}

@@ -1,0 +1,10 @@
+// The flows of util: each has an output clock that is an error, in a module other than the one that
+// calls it. The error is reported here, once, at the output of each (§11.3, §11.6).
+
+pub flow unknown_clock(x: F32 at sample) -> F32 at nope { x }   //~ E0302
+
+pub flow block_output(x: F32 at sample) -> F32 at block { x }   //~ E0810
+
+pub flow no_clock_output(x: F32 at sample) -> F32 { x }         //~ E0810
+
+pub flow fine(x: F32 at sample) -> F32 at sample { x }

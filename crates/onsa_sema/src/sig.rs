@@ -37,6 +37,7 @@ mod decls;
 mod derives;
 mod flow_sig;
 mod generated;
+pub(crate) use generated::not_copy_signal;
 mod heading;
 mod impl_items;
 mod impls;

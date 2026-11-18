@@ -1,0 +1,80 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§11.11"]
+
+// The `let`s that depend on each other through `^` (a feedback loop, §11.3) have one clock. It comes
+// from the operands that enter from outside, by the rules of an expression without feedback; when
+// no clock of ticks enters, or only `init` and `block` values do, it is the `sample` of the body
+// (`let c = prev~(^c) + 1` ticks at `sample`). The result of a delay is at the clock of its first
+// argument (§11.4), so a loop through a delay is read at `sample`, and `at block` on it is E0815.
+// The operands that do not carry their clock to the result (the `init` of a delay, the operand of
+// `at`) do not count as entering. One error per flow (§18.1), so each form is a flow of its own.
+
+pub flow lp(x: F32 at sample) -> F32 at sample { x }
+
+pub flow block_only_one_let(p: F32 at block) -> F32 at sample {
+  let c = prev~(^c + p)
+  let q = c at block                                           //~ E0815
+  c
+}
+
+pub flow block_only_two_lets_read_b(p: F32 at block) -> F32 at sample {
+  let a = prev~(^b)
+  let b = a + p
+  let q = b at block                                           //~ E0815
+  b
+}
+
+pub flow block_only_two_lets_read_a(p: F32 at block) -> F32 at sample {
+  let a = prev~(^b)
+  let b = a + p
+  let q = a at block                                           //~ E0815
+  b
+}
+
+pub flow init_only_read_at_init(k: F32 at init) -> F32 at sample {
+  let c = prev~(^c + k)
+  let q = c at init                                            //~ E0815
+  c
+}
+
+pub flow sample_enters_read_at_block(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = if c { 1.0 } else { 0.0 }
+  let b = prev~(^b + a)
+  let q = b at block                                           //~ E0815
+  b
+}
+
+pub flow at_inside_the_loop(p: F32 at block) -> F32 at sample {
+  let a = prev~(^b at block)                                   //~ E0815
+  let b = a
+  b
+}
+
+pub flow init_argument_of_the_loop_is_sample(x: F32 at sample) -> F32 at sample {
+  let a = prev~(^b)
+  let b = prev~(x, a)                                          //~ E0815
+  b
+}
+
+pub flow init_argument_of_the_loop_is_block(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = prev~(^b, p)                                         //~ E0815
+  let b = prev~(a)
+  b
+}
+
+// A loop that is accepted: a loop with a delay whose argument is a `block` value, the operand of
+// `at` (does not enter the loop), a loop through an instance, a destructuring loop, a loop with an
+// `init` value, and the `init` argument of a delay at `init`.
+pub flow accepted_forms(x: F32 at sample, p: F32 at block, k: F32 at init) -> F32 at sample {
+  let a = prev~(^b)
+  let b = prev~(a + p)
+  let c = prev~(^c + (p at sample)) + x
+  let fb = prev~(^s)
+  let mix = x + fb
+  let s = lp~(mix)
+  let (d, e) = (prev~(^d) + p, prev~(^e) + x)
+  let g = prev~(^g + k)
+  let h = prev~(^h + x, k)
+  b + c + mix + d + e + g + h
+}

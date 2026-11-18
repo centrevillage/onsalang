@@ -1,10 +1,8 @@
 //! Flow body checking (T3-1; spec §11.2–§11.5, §4.7 last bullet). A flow body
 //! is checked with the function-body inference of `body.rs` in "flow mode",
-//! then a rate pass assigns every expression a clock, checks the flow rules,
-//! and collects the state nodes for lowering (T3-5). The tables hold the
-//! clocks of [`crate::clock`]; the rate pass keeps its own order of rates
-//! ([`FlowRate`], `Const < Init < Ctl < Sig`) and maps its results to them
-//! at its end (W7-02 U1).
+//! then the walk of the clocks ([`clocks`]) gives every expression a clock
+//! of [`crate::clock`], checks the flow rules, and collects the state nodes
+//! for lowering (T3-5).
 //!
 //! # Output tables (`Analysis.flows[flow] = FlowInfo`)
 //!
@@ -42,8 +40,8 @@
 //!   S-05): instance arguments at the stage of the callee input's clock, the
 //!   first argument of a delay (and `d` of `vdelay~`) at `sample`, an `init`
 //!   at `Init`, the initializer of a constant `let` at each stage its locals
-//!   are read at (at `Init` when none is read, [`FlowRate::read_stage`]). A
-//!   local that is never read has no entry. The lowering stores an input or a
+//!   are read at (at `Init` when none is read: a constant is read at the
+//!   first stage). A local that is never read has no entry. The lowering stores an input or a
 //!   `let` read at a later stage than its own, and defines a constant `let`
 //!   in each phase that reads it (§11.3).
 //! - `output: ExprId` — the output expression (clock ≤ `sample`, promoted).
@@ -53,8 +51,10 @@
 //! `if~` / `match~`) is read into these tables by [`map`] (W3-10, K-02).
 //!
 //! The parts are in a module each: `check` (the flow mode of the checker),
-//! `consts` (the constant expressions), `nodes` (the building of the nodes),
-//! `rate` (the rate pass) and `reads` (the state marking). The tables are here.
+//! `consts` (the constant expressions), `clocks` (the walk of the clocks and
+//! the checks of the flow rules), `loops` (the loops of the `let`s), `nodes`
+//! (the building of the nodes) and `reads` (the state marking). The tables
+//! are here.
 
 use std::collections::BTreeSet;
 
@@ -79,69 +79,13 @@ mod clocks;
 mod consts;
 mod loops;
 mod nodes;
-mod rate;
 mod reads;
 
-pub(crate) use rate::finish_flow;
-use rate::{RStop, Rater};
+pub(crate) use clocks::finish_flow;
 
-/// The order of the rate pass, with constants as the bottom (§11.3:
-/// `定数 < Init < Ctl < Sig`). Its results go to the tables as [`Clock`]s
-/// (W7-02 U2b replaces the pass and this order).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-pub(crate) enum FlowRate {
-    Const,
-    Init,
-    Ctl,
-    Sig,
-}
-
-impl FlowRate {
-    pub fn name(self) -> &'static str {
-        match self {
-            FlowRate::Const => "constant",
-            FlowRate::Init => ClockName::Init.name(),
-            FlowRate::Ctl => ClockName::Block.name(),
-            FlowRate::Sig => ClockName::Sample.name(),
-        }
-    }
-
-    /// The rate of the clock of an input ([`FlowInput::api_clock`]) or of an
-    /// `at`: `init`, `block` or `sample`; another is an internal error at `at`.
-    pub(crate) fn of_clock(clock: Clock, at: Span) -> FlowRate {
-        match clock {
-            Clock::Init => FlowRate::Init,
-            Clock::Block => FlowRate::Ctl,
-            Clock::SAMPLE => FlowRate::Sig,
-            c => onsa_diag::internal::bug(Some(at), format!("the rate pass has no rate of the clock {c:?}")),
-        }
-    }
-
-    /// The clock of the tables the rate stands for.
-    pub(crate) fn to_clock(self) -> Clock {
-        match self {
-            FlowRate::Const => Clock::Const,
-            FlowRate::Init => Clock::Init,
-            FlowRate::Ctl => Clock::Block,
-            FlowRate::Sig => Clock::SAMPLE,
-        }
-    }
-
-    /// The stage a read at the rate is at: a constant is read at `Init`, the
-    /// first stage (as a constant `let` no one reads, defined there).
-    pub(crate) fn read_stage(self) -> ClockStage {
-        match self {
-            FlowRate::Const | FlowRate::Init => ClockStage::Init,
-            FlowRate::Ctl => ClockStage::Block,
-            FlowRate::Sig => ClockStage::SAMPLE,
-        }
-    }
-}
-
-/// A top-level `let` of a flow body, of the clocks `C` (the rate pass holds
-/// its own rates, [`FlowRate`]).
+/// A top-level `let` of a flow body.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FlowLet<C = Clock> {
+pub struct FlowLet {
     pub pat: PatId,
     /// Locals bound by the pattern (one for `let y = ...`).
     pub locals: Vec<LocalId>,
@@ -149,19 +93,11 @@ pub struct FlowLet<C = Clock> {
     pub name: Option<String>,
     /// Type of the initializer (resolved).
     pub ty: TyId,
-    pub clock: C,
+    pub clock: Clock,
     pub init: ExprId,
     pub span: Span,
     /// Read at a later stage than its own: becomes a state field (S-05).
     pub state: bool,
-}
-
-impl<C> FlowLet<C> {
-    /// The `let` with its clock mapped by `f`.
-    pub(crate) fn map_clock<D>(self, f: impl FnOnce(C) -> D) -> FlowLet<D> {
-        let FlowLet { pat, locals, name, ty, clock, init, span, state } = self;
-        FlowLet { pat, locals, name, ty, clock: f(clock), init, span, state }
-    }
 }
 
 /// The `init` argument of `prev~` / `delay~` / `vdelay~` (§11.4), or the
@@ -216,11 +152,37 @@ impl Node {
     }
 }
 
-/// The clocks of the expressions and the locals of a flow body (§11.3).
+/// The clocks of the expressions, the locals and the nodes of a flow body
+/// (§11.3).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ClockInfo {
     pub exprs: HashMap<ExprId, Clock>,
     pub locals: HashMap<LocalId, Clock>,
+    /// The delays and the instance calls in the order of the text, flat:
+    /// the nodes of a `par~` body too, and not the `par~` itself.
+    pub nodes: Vec<NodeClock>,
+    /// A delay or an instance call → its index in `nodes` (not the index of
+    /// [`FlowInfo::node_of_expr`], which is in the list that holds the node).
+    pub node_of: HashMap<ExprId, usize>,
+}
+
+/// The clock of a delay or an instance call, and the clocks its arguments
+/// are read at.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NodeClock {
+    pub expr: ExprId,
+    pub clock: Clock,
+    pub args: Vec<ArgRead>,
+}
+
+/// An argument of a node and the clock of the place it is read at (§11.3,
+/// §11.4): the first argument and the `d` of a delay at the clock of the
+/// delay, an `init` at `init`, an argument of an instance at the clock of
+/// its input.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct ArgRead {
+    pub expr: ExprId,
+    pub at: Clock,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -275,19 +237,28 @@ struct NodeCall {
     ty: TyId,
 }
 
+impl NodeCall {
+    /// The `d` of a `vdelay~` (its second argument, §11.4): the one place
+    /// of it.
+    fn d(&self) -> Option<ExprId> {
+        match self.kind {
+            NodeKind::Delay(Delay::Variable, _) => self.args.get(1).copied(),
+            NodeKind::Delay(..) | NodeKind::Instance(_) => None,
+        }
+    }
+}
+
 /// Flow-mode state of the [`Checker`].
 #[derive(Debug, Default)]
 pub(crate) struct FlowCx {
     /// Block nesting: `let` is allowed at depth 1 only.
     pub(crate) depth: u32,
-    inputs: Vec<(LocalId, FlowRate)>,
+    inputs: Vec<LocalId>,
     pending: Vec<PendingLet>,
     let_of_local: HashMap<LocalId, usize>,
     /// Nonzero while checking the first argument of a delay, instances included
     /// (a delay there is E0200, K-08).
     delay_arg: u32,
-    /// The clock of each `e at k` (§11.3), for the rate pass.
-    ats: HashMap<ExprId, FlowRate>,
     calls: Vec<NodeCall>,
     /// `par` expression → (variable, from, to).
     pars: HashMap<ExprId, (LocalId, u32, u32)>,

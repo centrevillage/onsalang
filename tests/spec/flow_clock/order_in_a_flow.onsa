@@ -1,0 +1,111 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§11.5", "§18.1"]
+
+// A flow is one unit of the flow check: the first error by position is the one reported (§18.1,
+// "the first by the order of the diagnostics: start position, ..."). Each flow below has two errors
+// of the clock rules and the other checks of the flow body, in the two orders; the marker is on the
+// line of the first. E0200 is a feature this version does not take (§18.1) and goes by its position.
+
+pub fn noisy(v: F32) -> F32 uses {Alloc} { v }
+
+pub flow e0810_then_e0813(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let s = "text"                                               //~ E0810
+  let b = prev~(p)
+  x
+}
+
+pub flow e0813_then_e0810(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let b = prev~(p)                                             //~ E0813
+  let s = "text"
+  x
+}
+
+pub flow e0805_then_e0813(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = noisy(1.0)                                           //~ E0805
+  let b = prev~(p)
+  x
+}
+
+pub flow e0813_then_e0805(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let b = prev~(p)                                             //~ E0813
+  let a = noisy(1.0)
+  x
+}
+
+pub flow e0815_then_e0813(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = x at block                                           //~ E0815
+  let b = prev~(p)
+  x
+}
+
+pub flow e0813_then_e0815(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let b = prev~(p)                                             //~ E0813
+  let a = x at block
+  x
+}
+
+pub flow e0805_then_e0815(x: F32 at sample) -> F32 at sample {
+  let a = noisy(1.0)                                           //~ E0805
+  let b = x at block
+  x
+}
+
+pub flow e0815_then_e0805(x: F32 at sample) -> F32 at sample {
+  let b = x at block                                           //~ E0815
+  let a = noisy(1.0)
+  x
+}
+
+pub flow e0815_then_e0810(x: F32 at sample) -> F32 at sample {
+  let a = x at block                                           //~ E0815
+  let s = "text"
+  x
+}
+
+pub flow e0810_then_e0815(x: F32 at sample) -> F32 at sample {
+  let s = "text"                                               //~ E0810
+  let a = x at block
+  x
+}
+
+pub flow e0200_promotion_then_e0815(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = (p + 1.0) at sample                                  //~ E0200
+  let b = x at block
+  x
+}
+
+pub flow e0815_then_e0200_promotion(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let b = x at block                                           //~ E0815
+  let a = (p + 1.0) at sample
+  x
+}
+
+pub flow e0200_promotion_then_e0813(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = (p + 1.0) at sample                                  //~ E0200
+  let b = prev~(p)
+  x
+}
+
+pub flow e0813_then_e0200_promotion(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let b = prev~(p)                                             //~ E0813
+  let a = (p + 1.0) at sample
+  x
+}
+
+pub flow e0200_if_tilde_then_e0813(x: F32 at sample, p: F32 at block, c: Bool at block) -> F32 at sample {
+  let a = if~ c { x } else { 0.0 }                             //~ E0200
+  let b = prev~(p)
+  a
+}
+
+pub flow e0813_then_e0200_if_tilde(x: F32 at sample, p: F32 at block, c: Bool at block) -> F32 at sample {
+  let b = prev~(p)                                             //~ E0813
+  let a = if~ c { x } else { 0.0 }
+  a
+}
+
+pub flow output_expression_after_a_let(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = x * 2.0
+  prev~(p) + a                                                 //~ E0813
+}

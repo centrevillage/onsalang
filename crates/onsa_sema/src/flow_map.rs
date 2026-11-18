@@ -2,35 +2,34 @@
 //! flow checks (W3-10, K-02 (a)): the clocks `at` (S-102, S-359), the
 //! feedback references `^name` and the built-in delays `prev~` / `delay~` /
 //! `vdelay~` with their optional `init` (S-44, S-29), and `if~` / `match~`
-//! (S-110). The checks keep their representation ([`FlowRate`], the
-//! nodes of [`super::Node`] and [`InitArg`]); this module holds the reading
-//! of the new forms into it, and W7-02 removes it with the clock analysis
-//! and the flow plan. The names of the clocks and of the delays stay
-//! (`crate::flow_names`, [`crate::clock::ClockName::name`]).
+//! (S-110). The checks keep their representation (the nodes of
+//! [`super::Node`] and [`super::InitArg`]); this module holds the typing of
+//! `at` and `^name`, which W7-02 U3 moves to `flow/check.rs`. The names of
+//! the clocks and of the delays stay (`crate::flow_names`,
+//! [`crate::clock::ClockName::name`]).
 //!
-//! What the representation cannot hold is E0200 here, never read in another
-//! meaning (plan §8.2): a computed expression made faster with `at`, `if~` /
-//! `match~`, a call of a function that is not `rt` above `init` (R-17); the
-//! omitted `init` of a value type that is no number is the nodes'
-//! (`flow/nodes.rs`, W7-07), and a `^` inside a `par`
-//! (R-03) is the names stage's (`names/body/flow_order.rs`). So are the
-//! forms that the representation reads wrongly until W7 (K-08): a delay inside the first argument of a delay (R-13, W7-07), a
-//! stateful node in a branch, a guard, the right side of `&&` / `||` or an
-//! argument a builtin evaluates on some paths only (S-110, W7-06).
+//! What the representation cannot hold is E0200, never read in another
+//! meaning (plan §8.2), in the walk of the clocks (`flow/clocks.rs`): a
+//! computed expression made faster with `at` (W7-05), `if~` / `match~`
+//! (W7-06); a call of a function that is not `rt` above `init` (R-17) is the
+//! state marking's (`flow/reads.rs`, W7-05); the omitted `init` of a value
+//! type that is no number is the nodes' (`flow/nodes.rs`, W7-07), and a `^`
+//! inside a `par` (R-03) is the names stage's (`names/body/flow_order.rs`).
+//! So are the forms that the representation reads wrongly until W7 (K-08):
+//! a delay inside the first argument of a delay (R-13, W7-07), a stateful
+//! node in a branch, a guard, the right side of `&&` / `||` or an argument a
+//! builtin evaluates on some paths only (S-110, W7-06).
 //!
-//! W7-02 also removes or rewrites, outside this file, what serves it:
-//! - `flow.rs`: the fields `delay_arg` and `ats` of `FlowCx`.
-//!   `flow/check.rs`: their counting (`check_delay`), the arms of `At`
-//!   and `Feedback` in `check_flow_expr`. `flow/rate.rs`: those arms in
-//!   `rate`, the field `branch` of the rate pass and its counting in `rate`
-//!   (`If`, `Match`, `Binary`) and `rate_call`. `flow/reads.rs`: the arm
-//!   of `Feedback` in `mark`.
-//! - `sig/flow_sig.rs`: the rates of the inputs and the output from their
-//!   clocks (`lower_flow`); `Ty::Rate` is gone already.
+//! What serves them outside this file, and goes with their works:
+//! - `flow.rs`: the field `delay_arg` of `FlowCx`, and its counting in
+//!   `flow/check.rs` (`check_delay`), with the arms of `At` and `Feedback`
+//!   in `check_flow_expr`. `flow/clocks.rs`: the depth of the branches of
+//!   the walk (`If`, `Match`, `Binary`). `flow/reads.rs`: the arm of
+//!   `Feedback` in `mark`.
 //! - `body.rs`: the arms of `tilde` of `If` / `Match` (typed as plain in a
 //!   flow, E0200 outside).
-//! - `onsa_diag/src/unsupported.rs`: the features of the E0200 here and of
-//!   `NestedDelays` (the works named on each).
+//! - `onsa_diag/src/unsupported.rs`: the features of the E0200 of the flow
+//!   checks and of `NestedDelays` (the works named on each).
 //! - `onsa_core` (`lower/body/expr.rs` `At`): the arms of `At` / `Feedback`.
 //!   The modes stage (`modes/walk.rs`), `mark` and `onsa_driver/graph.rs` have
 //!   no arm of `At`: they reach its operand through `onsa_syntax`'s `Ast::sub_exprs`, the one
@@ -40,11 +39,8 @@
 //! The optional `init` of a delay (`NodeCall.init_expr`) stays: W7-07 gives
 //! the omitted one its value `T.default()`.
 
-use onsa_diag::unsupported::Feature;
-use onsa_diag::{Code, Span, Stage};
-use onsa_syntax::ast::{BinOp, ExprId, ExprKind};
+use onsa_syntax::ast::ExprId;
 
-use super::{FlowRate, Rater};
 use crate::body::{Checker, LocalId, R, Target};
 use crate::names::body::PathRes;
 use crate::ty::TyId;
@@ -52,12 +48,10 @@ use crate::ty::TyId;
 impl Checker<'_> {
     /// `e at k` in a flow body (§11.3): the type of `e`; the clock is the
     /// names stage's record ([`crate::names::body::BodyNames::clocks`]), which
-    /// the rate pass reads ([`Rater::rate_at`]).
+    /// the walk of the clocks reads.
     pub(super) fn check_at(&mut self, e: ExprId, inner: ExprId, expected: Option<TyId>) -> R<TyId> {
         let t = self.check_expr_as(inner, expected, self.joining)?;
-        let name = self.names_record(e, self.names.clocks.get(&e).copied())?;
-        let span = self.ast.expr(e).span;
-        self.fcx().ats.insert(e, FlowRate::of_clock(name.clock(), span));
+        self.names_record(e, self.names.clocks.get(&e).copied())?;
         Ok(t)
     }
 
@@ -85,93 +79,5 @@ impl Checker<'_> {
                 "a node of a flow body the names stage did not record",
             ),
         }
-    }
-}
-
-impl Rater<'_> {
-    /// The rate of `e at k` (§11.3): `k`. A slower `k` than the rate of the
-    /// expression is E0815; a faster one is a promotion, which this
-    /// representation holds for a name or a literal only (the `let` of a
-    /// computed one would be evaluated at `k`, not at its own clock, K-02).
-    pub(super) fn rate_at(&mut self, e: ExprId, inner: ExprId) -> Result<FlowRate, super::RStop> {
-        let r = self.rate(inner)?;
-        let Some(&k) = self.fcx.ats.get(&e) else {
-            let span = self.expr(e).span;
-            onsa_diag::internal::bug(Some(span), "the rate pass met an `at` the checker did not read")
-        };
-        if self.final_pass && r > k {
-            let span = self.expr(e).span;
-            return Err(self.err(
-                Code::E0815,
-                span,
-                format!(
-                    "this expression is at the clock `{}`, faster than `{}`; `at` cannot make a value slower (§11.3)",
-                    r.name(),
-                    k.name()
-                ),
-            ));
-        }
-        // A constant goes to every clock (§11.3).
-        let held = r == FlowRate::Const || self.promotes_as_written(inner);
-        if self.final_pass && r < k && !held {
-            let span = self.expr(e).span;
-            return Err(self.unsupported(span, Feature::ClockPromotion, &[]));
-        }
-        Ok(k)
-    }
-
-    /// Whether `e at k` with a faster `k` is held by this representation
-    /// whatever the clock of `e`: a name or a literal, in parentheses or not,
-    /// has its place (with type arguments after it too, `None::[F32]`), and
-    /// nothing is computed at `k` (K-02). The E0813 note suggests
-    /// `prev~(e at sample)` on the same ground.
-    pub(super) fn promotes_as_written(&self, e: ExprId) -> bool {
-        let mut x = e;
-        while let ExprKind::Paren(i) | ExprKind::TypeArgs { base: i, .. } = &self.expr(x).kind {
-            x = *i;
-        }
-        matches!(self.expr(x).kind, ExprKind::Path(_) | ExprKind::Lit(_))
-    }
-
-    /// `if~` / `match~` (§11.5): E0200 at the `~` (W7-06).
-    pub(super) fn tilde_branches(&mut self, tilde: Span, form: &str) -> super::RStop {
-        self.unsupported(tilde, Feature::TildeBranches, &[form])
-    }
-
-    /// A stateful node at `span` (an instance, a delay, a `par`): E0200 in a
-    /// branch, a guard or the right side of `&&` / `||` (K-08, W7-06).
-    pub(super) fn stateful_here(&mut self, span: Span) -> Result<(), super::RStop> {
-        if self.final_pass && self.branch > 0 {
-            return Err(self.unsupported(span, Feature::StatefulInBranch, &[]));
-        }
-        Ok(())
-    }
-
-    /// Whether the right side of `op` is evaluated only for some values of
-    /// the left (`&&`, `||`).
-    pub(super) fn short_circuits(op: BinOp) -> bool {
-        matches!(op, BinOp::And | BinOp::Or)
-    }
-
-    /// A call of a function that is not `rt`, read at `ctx` (the walk of
-    /// S-05): the lowering evaluates the expression that holds it at `ctx`,
-    /// in `process`. Hoisting computes the call at `init` (R-17, S-33,
-    /// W7-05); until then it is E0200 above `init`.
-    pub(super) fn non_rt_here(&mut self, e: ExprId, ctx: FlowRate) {
-        if ctx <= FlowRate::Init {
-            return;
-        }
-        let (Some(Target::Fn { def, .. }) | Some(Target::Method { def, .. })) = self.body.targets.get(&e) else {
-            return;
-        };
-        if self.a.def(*def).as_fn().is_some_and(|f| !f.rt) {
-            let span = self.expr(e).span;
-            let _ = self.unsupported(span, Feature::NonRtCallAtClock, &[ctx.name()]);
-        }
-    }
-
-    fn unsupported(&mut self, span: Span, feature: Feature, details: &[&str]) -> super::RStop {
-        let found = self.src(span);
-        self.fail(feature.diagnostic(Stage::Flow, span, details).with_found(found))
     }
 }

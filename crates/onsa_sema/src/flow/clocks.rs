@@ -9,21 +9,80 @@
 //!   walks each component once, a loop with its own `let`s as ⊥, which gets
 //!   the [`loop_clock`] of the join of its `let`s (§11.3, S-567 P3).
 //! - Stage 2 (`Check`) walks the `let`s in their order and the output, with
-//!   `^y` the value of stage 1, and records every clock. The checks of the
-//!   flow rules go at its places in W7-02 U2b-2.
+//!   `^y` the value of stage 1, records every clock, checks the flow rules
+//!   ([`checks`]) up to the first diagnostic, where it stops, and builds the
+//!   nodes ([`NodeBuilder`]).
 //!
 //! Each expression is walked at most three times; the components are linear
 //! in the reads (Tarjan), so the walk is linear in the body, with no bound of
-//! rounds. Until U2b-2 the rate pass makes the tables, and a debug build
-//! compares the walk with it ([`cross_check`]).
+//! rounds. [`finish_flow`] makes the tables of the flow from the walk and the
+//! state marking (`reads`).
 
 use onsa_diag::hash::HashSet;
-use onsa_syntax::ast::{Ast, MatchArm};
+use onsa_syntax::ast::{Ast, BinOp, MatchArm};
 
 use super::loops;
+use super::nodes::NodeBuilder;
 use super::*;
 use crate::clock::{self, ClockFrame, Ratio, delay_out, loop_clock, rebase};
 use crate::names::body::BodyNames;
+
+mod checks;
+
+/// After type checking: the walk of the clocks, the state marking and the
+/// tables of the flow `id` (§11.2–§11.5). The diagnostic is the first of the
+/// walk, else of the marking, else a call of an `inout self` method (the
+/// modes stage comes after the flow checks, §18.1).
+pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: BodyInfo, fcx: FlowCx) {
+    let _flow = onsa_diag::timing::phase(onsa_diag::timing::Phase::Flow);
+    let mut info = FlowInfo {
+        inputs: fcx.inputs.clone(),
+        sample_rate_calls: fcx.sample_rate_calls.clone(),
+        output: fcx.output,
+        complete: false,
+        ..Default::default()
+    };
+    if !body.complete {
+        info.body = body;
+        a.flows.insert(id, info);
+        return;
+    }
+    let error = a.types.error();
+    let (ast, text) = (&module.parsed.ast, module.text.as_str());
+    let w = walk(a, ast, text, id, &body, &fcx, error);
+    if w.diag.is_none() {
+        w.post_check(&fcx);
+    }
+    let ty = |p: &PendingLet| body.expr_types.get(&p.init).copied().unwrap_or(error);
+    let lets = fcx.pending.iter().zip(&w.checked);
+    let lets = lets.map(|(p, &clock)| FlowLet {
+        pat: p.pat,
+        locals: p.locals.clone(),
+        name: p.name.clone(),
+        ty: ty(p),
+        clock,
+        init: p.init,
+        span: p.span,
+        state: false,
+    });
+    info.lets = lets.collect();
+    let mut diag = w.diag.clone();
+    if diag.is_none() {
+        let m = super::reads::mark_all(a, ast, text, &body, &fcx, &w.info, &mut info.lets);
+        (info.read_at, info.sample_rate_at, diag) = (m.read_at, m.sample_rate_at, m.diag);
+    }
+    let diag = diag.or(w.inout_call.clone());
+    info.complete = diag.is_none();
+    #[cfg(test)]
+    WALKED.with(|x| x.borrow_mut().push((id, w.clone(), info.complete)));
+    info.clocks = w.info;
+    (info.nodes, info.node_of_expr) = (w.nodes, w.node_of_expr);
+    info.body = body;
+    if let Some(d) = diag {
+        a.diagnostics.push(d);
+    }
+    a.flows.insert(id, info);
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Mode {
@@ -36,20 +95,33 @@ enum Mode {
     Check,
 }
 
-/// The clocks of a flow body the walk found.
+/// The clocks of a flow body the walk found, its first diagnostic and its
+/// nodes.
 #[derive(Debug, Clone)]
 pub(super) struct Walked {
     /// Stage 1: the clock of each `let`, in the order of the text.
     pub(super) lets: Vec<Clock>,
     /// Stage 2: the clock of each `let`.
     pub(super) checked: Vec<Clock>,
-    /// Stage 2: the clocks of the expressions and the locals.
+    /// Stage 2: the clocks of the expressions, the locals and the nodes.
     pub(super) info: ClockInfo,
+    /// Stage 2: the first diagnostic, where the walk stopped.
+    pub(super) diag: Option<Diagnostic>,
+    /// Stage 2: the first call of an `inout self` method (E0713, §5.2),
+    /// reported when the flow checks find no error.
+    pub(super) inout_call: Option<Diagnostic>,
+    /// Stage 2: [`FlowInfo::nodes`] and [`FlowInfo::node_of_expr`].
+    pub(super) nodes: Vec<Node>,
+    pub(super) node_of_expr: HashMap<ExprId, usize>,
 }
 
 pub(super) struct Walk<'a> {
     a: &'a Analysis,
     ast: &'a Ast,
+    /// The text of the module, for the `found` of a diagnostic.
+    text: &'a str,
+    /// The error type, of an expression with no type.
+    error: TyId,
     body: &'a BodyInfo,
     cx: &'a FlowCx,
     names: &'a BodyNames,
@@ -69,10 +141,25 @@ pub(super) struct Walk<'a> {
     scoped: HashMap<LocalId, Option<Clock>>,
     checked: Vec<Option<Clock>>,
     out: ClockInfo,
+    /// Nonzero inside a branch of `if` and `match`, a guard and the right
+    /// side of `&&` / `||` (K-08, `StatefulInBranch`).
+    branch: u32,
+    diag: Option<Diagnostic>,
+    inout_call: Option<Diagnostic>,
+    nodes: NodeBuilder,
 }
 
-/// Runs the two stages over the body of the flow `id`.
-pub(super) fn walk(a: &Analysis, ast: &Ast, id: DefId, body: &BodyInfo, cx: &FlowCx) -> Walked {
+/// Runs the two stages over the body of the flow `id` of the module of
+/// `ast` and `text`; `error` is the error type.
+pub(super) fn walk(
+    a: &Analysis,
+    ast: &Ast,
+    text: &str,
+    id: DefId,
+    body: &BodyInfo,
+    cx: &FlowCx,
+    error: TyId,
+) -> Walked {
     let span = a.def(id).as_flow().map(|f| ast.expr(f.body).span);
     let (Some(names), Some(decl)) = (a.names.get(&id), a.def(id).as_flow()) else {
         onsa_diag::internal::bug(span, "the walk of the clocks of a flow with no record of its names")
@@ -84,6 +171,8 @@ pub(super) fn walk(a: &Analysis, ast: &Ast, id: DefId, body: &BodyInfo, cx: &Flo
     let mut w = Walk {
         a,
         ast,
+        text,
+        error,
         body,
         cx,
         names,
@@ -98,17 +187,26 @@ pub(super) fn walk(a: &Analysis, ast: &Ast, id: DefId, body: &BodyInfo, cx: &Flo
         scoped: HashMap::default(),
         checked: vec![None; n],
         out: ClockInfo::default(),
+        branch: 0,
+        diag: None,
+        inout_call: None,
+        nodes: NodeBuilder::new(&cx.pending),
     };
-    for ((l, _), input) in cx.inputs.iter().zip(&decl.inputs) {
+    for (l, input) in cx.inputs.iter().zip(&decl.inputs) {
         w.out.locals.insert(*l, input.api_clock());
     }
     w.solve();
     w.check();
     let solved = |c: Option<Clock>| c.unwrap_or_else(|| onsa_diag::internal::bug(span, "a `let` left unsolved"));
+    let (nodes, node_of_expr) = w.nodes.finish();
     Walked {
         lets: w.lets.into_iter().map(solved).collect(),
         checked: w.checked.into_iter().map(solved).collect(),
         info: w.out,
+        diag: w.diag,
+        inout_call: w.inout_call,
+        nodes,
+        node_of_expr,
     }
 }
 
@@ -138,17 +236,21 @@ impl Walk<'_> {
         }
     }
 
-    /// Stage 2: the `let`s in their order, then the output.
+    /// Stage 2: the `let`s in their order, each checked after its
+    /// initializer, the floats of `vdelay~`, then the output.
     fn check(&mut self) {
         self.mode = Mode::Check;
-        for (k, p) in self.cx.pending.iter().enumerate() {
+        let cx = self.cx;
+        for (k, p) in cx.pending.iter().enumerate() {
             self.in_loop = self.looped[k];
             let c = self.expr(p.init).unwrap_or(Clock::Const);
             self.checked[k] = Some(c);
             for &l in &p.locals {
                 self.out.locals.insert(l, c);
             }
+            self.check_let(p);
         }
+        self.check_floats();
         if let Some(out) = self.cx.output {
             self.in_loop = false;
             self.expr(out);
@@ -159,8 +261,12 @@ impl Walk<'_> {
         Some(self.ast.expr(e).span)
     }
 
-    /// The clock of `e` (⊥ is `None`), recorded at `Check`.
+    /// The clock of `e` (⊥ is `None`), recorded at `Check`. Past the first
+    /// diagnostic, `Check` walks no more and gives a clock in error.
     fn expr(&mut self, e: ExprId) -> Option<Clock> {
+        if self.mode == Mode::Check && self.diag.is_some() {
+            return Some(Clock::Error);
+        }
         let c = self.rule(e);
         if self.mode != Mode::Check {
             return c;
@@ -170,11 +276,18 @@ impl Walk<'_> {
         Some(c)
     }
 
-    /// A place whose clock is not its operand's: walked at `Check` only.
-    fn cut(&mut self, e: ExprId) {
-        if self.mode == Mode::Check {
-            self.expr(e);
-        }
+    /// A place whose clock is not its operand's: walked at `Check` only,
+    /// which gives its clock to check.
+    fn cut(&mut self, e: ExprId) -> Option<Clock> {
+        if self.mode == Mode::Check { self.expr(e) } else { None }
+    }
+
+    /// `f` walking a branch (K-08).
+    fn in_branch<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
+        self.branch += 1;
+        let r = f(self);
+        self.branch -= 1;
+        r
     }
 
     /// The join of the clocks of operands of `e` (a constant of none). A
@@ -218,10 +331,11 @@ impl Walk<'_> {
             | ExprKind::TypeArgs { base: x, .. }
             | ExprKind::Repeat { elem: x, .. } => self.expr(*x),
             ExprKind::At { expr, .. } => {
-                self.cut(*expr);
+                let c = self.cut(*expr);
                 let Some(k) = self.names.clocks.get(&e) else {
                     onsa_diag::internal::bug(self.span(e), "an `at` whose clock the names stage did not record")
                 };
+                self.check_at(e, *expr, c, k.clock());
                 Some(k.clock())
             }
             ExprKind::Tuple(es) | ExprKind::Array(es) => self.join_of(e, es.iter().copied()),
@@ -230,21 +344,25 @@ impl Walk<'_> {
                 Some(t) => self.expr(t),
                 None => Some(Clock::Const),
             },
-            // E0200 of W7-06 in the rate pass: the walk stops at them.
-            ExprKind::If { tilde: Some(_), .. } | ExprKind::Match { tilde: Some(_), .. } => Some(Clock::Error),
-            ExprKind::If { cond, then, else_, .. } => self.join_of(e, [*cond, *then].into_iter().chain(*else_)),
+            // E0200 of W7-06: the walk stops at them.
+            ExprKind::If { tilde: Some(t), .. } => self.tilde(*t, "if~"),
+            ExprKind::Match { tilde: Some(t), .. } => self.tilde(*t, "match~"),
+            ExprKind::If { cond, then, else_, .. } => {
+                let mut ops = vec![self.expr(*cond)];
+                self.in_branch(|w| ops.extend([Some(*then), *else_].into_iter().flatten().map(|x| w.expr(x))));
+                self.join(e, &ops)
+            }
             ExprKind::Match { scrutinee, arms, .. } => self.match_arms(e, *scrutinee, arms),
-            ExprKind::Binary { lhs: x, rhs: y, .. } | ExprKind::Index { base: x, index: y } => {
-                self.join_of(e, [*x, *y])
-            }
-            ExprKind::Par { body, .. } => {
-                let Some(&(var, ..)) = self.cx.pars.get(&e) else {
-                    onsa_diag::internal::bug(self.span(e), "a `par~` the check did not record")
+            ExprKind::Binary { op, lhs, rhs, .. } => {
+                let l = self.expr(*lhs);
+                let r = match op {
+                    BinOp::And | BinOp::Or => self.in_branch(|w| w.expr(*rhs)),
+                    _ => self.expr(*rhs),
                 };
-                self.bind_local(var, Some(Clock::Init));
-                let b = self.expr(*body);
-                self.join(e, &[b, Some(Clock::Init)])
+                self.join(e, &[l, r])
             }
+            ExprKind::Index { base, index } => self.join_of(e, [*base, *index]),
+            ExprKind::Par { body, .. } => self.par(e, *body),
             ExprKind::Call { callee, args, .. } => self.call(e, *callee, args),
         }
     }
@@ -291,17 +409,43 @@ impl Walk<'_> {
         }
     }
 
-    /// `match` (§11.3): the scrutinee, the guards and the bodies; the
-    /// bindings of a pattern have the clock of the scrutinee.
+    /// `match` (§11.3): the scrutinee, the guards and the bodies, these two
+    /// in a branch; the bindings of a pattern have the clock of the
+    /// scrutinee.
     fn match_arms(&mut self, e: ExprId, scrutinee: ExprId, arms: &[MatchArm]) -> Option<Clock> {
         let s = self.expr(scrutinee);
         let mut ops = vec![s];
         for arm in arms {
             self.bind_pat(arm.pat, s);
-            ops.extend(arm.guard.map(|g| self.expr(g)));
-            ops.push(self.expr(arm.body));
+            self.in_branch(|w| {
+                ops.extend(arm.guard.map(|g| w.expr(g)));
+                ops.push(w.expr(arm.body));
+            });
         }
         self.join(e, &ops)
+    }
+
+    /// `par~` (§11.5): its index at `init`, its body, and its node.
+    fn par(&mut self, e: ExprId, body: ExprId) -> Option<Clock> {
+        let Some(&(var, from, to)) = self.cx.pars.get(&e) else {
+            onsa_diag::internal::bug(self.span(e), "a `par~` the check did not record")
+        };
+        if !self.stateful_here(e) {
+            return Some(Clock::Error);
+        }
+        self.bind_local(var, Some(Clock::Init));
+        let check = self.mode == Mode::Check;
+        if check {
+            self.nodes.enter_par();
+        }
+        let b = self.expr(body);
+        if check {
+            let nodes = self.nodes.leave_par();
+            if self.diag.is_none() {
+                self.nodes.par(e, var, from, to, body, nodes);
+            }
+        }
+        self.join(e, &[b, Some(Clock::Init)])
     }
 
     fn bind_pat(&mut self, p: PatId, c: Option<Clock>) {
@@ -323,24 +467,8 @@ impl Walk<'_> {
     /// A call (§11.3, §11.4, §11.5).
     fn call(&mut self, e: ExprId, callee: ExprId, args: &[Arg]) -> Option<Clock> {
         if let Some(&i) = self.calls.get(&e) {
-            let call = &self.cx.calls[i];
-            return match call.kind {
-                NodeKind::Instance(d) => {
-                    args.iter().for_each(|x| self.cut(x.expr));
-                    let Some(f) = self.a.def(d).as_flow() else {
-                        onsa_diag::internal::bug(self.span(e), "an instance of no flow")
-                    };
-                    Some(rebase(f.out_clock, ClockFrame { ratio: Ratio(0) }))
-                }
-                NodeKind::Delay(..) => {
-                    let Some(&first) = call.args.first() else {
-                        onsa_diag::internal::bug(self.span(e), "a delay with no argument")
-                    };
-                    let c = self.expr(first);
-                    args.iter().filter(|x| x.expr != first).for_each(|x| self.cut(x.expr));
-                    delay_out(c, self.in_loop)
-                }
-            };
+            let cx = self.cx;
+            return self.node(e, &cx.calls[i]);
         }
         if self.sample_rate.contains(&e) {
             return Some(Clock::Init);
@@ -351,6 +479,9 @@ impl Walk<'_> {
         let ops: Vec<Option<Clock>> =
             receiver.into_iter().chain(args.iter().map(|x| x.expr)).map(|x| self.expr(x)).collect();
         let r = self.join(e, &ops);
+        if let Some(Target::Fn { def, .. } | Target::Method { def, .. }) = target {
+            self.check_fn_call(e, *def, r);
+        }
         match target {
             Some(Target::Variant { .. } | Target::Panic) => r,
             Some(Target::Value) => onsa_diag::internal::bug(self.span(e), "a call of a function value in a flow body"),
@@ -358,6 +489,78 @@ impl Walk<'_> {
             // call of constants alone is at `init` until they are evaluated.
             _ => self.join(e, &[r, Some(Clock::Init)]),
         }
+    }
+
+    /// A delay or an instance call `call` at `e` (§11.4, §11.5): its clock,
+    /// its checks, and at `Check` its node and the clocks its arguments are
+    /// read at, in the order of the text (its slot before its arguments').
+    fn node(&mut self, e: ExprId, call: &NodeCall) -> Option<Clock> {
+        if !self.stateful_here(e) {
+            return Some(Clock::Error);
+        }
+        let slot = (self.mode == Mode::Check).then(|| {
+            self.out.node_of.insert(e, self.out.nodes.len());
+            self.out.nodes.push(NodeClock { expr: e, clock: Clock::Error, args: Vec::new() });
+            self.out.nodes.len() - 1
+        });
+        let (clock, args) = match call.kind {
+            NodeKind::Instance(d) => self.instance(e, d, call),
+            NodeKind::Delay(delay, _) => self.delay(e, delay, call),
+        };
+        if let Some(k) = slot.filter(|_| self.diag.is_none()) {
+            let span = self.ast.expr(e).span;
+            if let Err(d) = self.nodes.node(self.a, self.body, e, call, span) {
+                let found = self.src(span);
+                return self.fail(d.with_found(found));
+            }
+            self.out.nodes[k] = NodeClock { expr: e, clock: clock.unwrap_or(Clock::Const), args };
+        }
+        clock
+    }
+
+    /// `g~(args)` (§11.5): each argument read at the clock of its input in
+    /// the frame of the call, and the output of `g` in it.
+    fn instance(&mut self, e: ExprId, g: DefId, call: &NodeCall) -> (Option<Clock>, Vec<ArgRead>) {
+        let Some(f) = self.a.def(g).as_flow() else { onsa_diag::internal::bug(self.span(e), "an instance of no flow") };
+        if f.inputs.len() != call.args.len() {
+            onsa_diag::internal::bug(self.span(e), "an instance with other arguments than its inputs");
+        }
+        let frame = ClockFrame { ratio: Ratio(0) };
+        let mut reads = Vec::new();
+        for (&x, input) in call.args.iter().zip(&f.inputs) {
+            let at = rebase(input.api_clock(), frame);
+            if let Some(c) = self.cut(x) {
+                self.check_arg(x, c, at, input, g);
+                reads.push(ArgRead { expr: x, at });
+            }
+        }
+        (Some(rebase(f.out_clock, frame)), reads)
+    }
+
+    /// A delay (§11.4): its first argument, the `d` of `vdelay~` and its
+    /// `init`, not its length.
+    fn delay(&mut self, e: ExprId, delay: Delay, call: &NodeCall) -> (Option<Clock>, Vec<ArgRead>) {
+        let Some(&first) = call.args.first() else {
+            onsa_diag::internal::bug(self.span(e), "a delay with no argument")
+        };
+        let c = self.expr(first);
+        if let Some(c) = c.filter(|_| self.mode == Mode::Check) {
+            self.check_first(delay, first, c);
+        }
+        let d = call.d();
+        if let Some(d) = d {
+            self.cut(d);
+        }
+        if let Some(i) = call.init_expr
+            && let Some(c) = self.cut(i)
+        {
+            self.check_init(delay, i, c);
+        }
+        let out = delay_out(c, self.in_loop);
+        let at = out.unwrap_or(Clock::Const);
+        let reads = [Some(first), d].into_iter().flatten().map(|x| ArgRead { expr: x, at });
+        let init = call.init_expr.map(|i| ArgRead { expr: i, at: Clock::Init });
+        (out, reads.chain(init).collect())
     }
 }
 
@@ -376,67 +579,9 @@ impl Walked {
 
 #[cfg(test)]
 thread_local! {
-    /// The walks of the flows a test checked, and whether each was compared.
+    /// The walks of the flows a test checked, and whether each flow had no
+    /// diagnostic.
     pub(crate) static WALKED: std::cell::RefCell<Vec<(DefId, Walked, bool)>> = const { std::cell::RefCell::new(Vec::new()) };
-}
-
-/// A debug build: the walk against the tables of the rate pass (W7-02
-/// U2b-1), when the rate pass gave no diagnostic and no input is in error.
-/// The clocks the walk has in error are not compared (a call of a flow whose
-/// output is in error). A difference is an internal error at its place.
-pub(super) fn cross_check(a: &Analysis, ast: &Ast, id: DefId, body: &BodyInfo, cx: &FlowCx, info: &FlowInfo) {
-    let walked = walk(a, ast, id, body, cx);
-    let inputs_ok = a.def(id).as_flow().is_some_and(|f| f.inputs.iter().all(|i| i.clock != Clock::Error));
-    let compared = info.complete && inputs_ok;
-    if compared {
-        walked.post_check(cx);
-        compare(ast, body, info, &walked);
-    }
-    #[cfg(test)]
-    WALKED.with(|w| w.borrow_mut().push((id, walked, compared)));
-}
-
-fn compare(ast: &Ast, body: &BodyInfo, info: &FlowInfo, walked: &Walked) {
-    let new = &walked.info;
-    let mut exprs: Vec<_> = info.clocks.exprs.iter().collect();
-    exprs.sort_by_key(|(e, _)| e.0);
-    for (&e, &old) in exprs {
-        let x = ast.expr(e);
-        let kind = format!("{:?}", x.kind);
-        let kind = kind.split(|c: char| !c.is_alphanumeric()).next().unwrap_or("");
-        match new.exprs.get(&e) {
-            None => onsa_diag::internal::bug(
-                Some(x.span),
-                format!("the walk of the clocks has no clock of the {kind} expression, {old:?} in the rate pass"),
-            ),
-            Some(&c) if c != old && c != Clock::Error => onsa_diag::internal::bug(
-                Some(x.span),
-                format!("the {kind} expression is {old:?} in the rate pass and {c:?} in the walk of the clocks"),
-            ),
-            Some(_) => {}
-        }
-    }
-    let mut locals: Vec<_> = info.clocks.locals.iter().collect();
-    locals.sort_by_key(|(l, _)| l.0);
-    for (&l, &old) in locals {
-        let span = body.locals.get(l.0 as usize).map(|x| x.span);
-        match new.locals.get(&l) {
-            Some(&c) if c == old || c == Clock::Error => {}
-            c => onsa_diag::internal::bug(
-                span,
-                format!("the local {l:?} is {old:?} in the rate pass and {c:?} in the walk of the clocks"),
-            ),
-        }
-    }
-    if info.lets.len() != walked.lets.len() {
-        onsa_diag::internal::bug(None, "the rate pass and the walk of the clocks have other `let`s");
-    }
-    for (old, &c) in info.lets.iter().zip(&walked.lets) {
-        if c != old.clock && c != Clock::Error {
-            let msg = format!("the `let` is {:?} in the rate pass and {c:?} in the walk of the clocks", old.clock);
-            onsa_diag::internal::bug(Some(old.span), msg);
-        }
-    }
 }
 
 #[cfg(test)]

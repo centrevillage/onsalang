@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5"]
+
+// The clock of an argument of a flow call is at most the clock of the declared input (§11.5): a
+// `sample` value into a `block` input, or a `block` value into an `init` input, is E0815, and there
+// is no promotion the other way. A constant goes to any input. The error is at the argument. One
+// error per flow (§18.1), so each form is a flow of its own.
+
+pub flow to_block(c: F32 at block) -> F32 at sample { c }
+pub flow to_init(c: F32 at init) -> F32 at sample { c }
+pub flow to_all(a: F32 at init, b: F32 at block, c: F32 at sample) -> F32 at sample { a + b + c }
+pub flow two_blocks(a: F32 at block, b: F32 at block) -> F32 at sample { a + b }
+pub flow to_sample(c: F32 at sample) -> F32 at sample { c }
+
+pub flow sample_to_block(x: F32 at sample) -> F32 at sample {
+  to_block~(x)                                                //~ E0815
+}
+
+pub flow sample_to_init(x: F32 at sample) -> F32 at sample {
+  to_init~(x)                                                 //~ E0815
+}
+
+pub flow block_to_init(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  to_init~(p)                                                 //~ E0815
+}
+
+pub flow the_second_argument(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  two_blocks~(p, x)                                           //~ E0815
+}
+
+pub flow a_computed_argument(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  to_block~(p + x)                                            //~ E0815
+}
+
+pub flow a_nested_call(x: F32 at sample) -> F32 at sample {
+  to_all~(1.0, 2.0, to_block~(x))                             //~ E0815
+}
+
+pub flow in_a_par_body(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 { to_block~(x) }                          //~ E0815
+}
+
+// A slower value, a constant, and a promotion written with `at` are not errors.
+pub flow not_errors(x: F32 at sample, k: F32 at init, p: F32 at block) -> F32 at sample {
+  let q = p at sample
+  let a = to_block~(k) + to_all~(k, p, x)
+  let b = to_all~(k, k, p) + to_all~(1.0, k, k) + to_all~(1.0, 2.0, 3.0)
+  a + b + to_sample~(q)
+}

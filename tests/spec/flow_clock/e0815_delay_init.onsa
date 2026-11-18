@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4"]
+
+// The `init` argument of a delay is at the clock `init` or a constant (§11.4: it is stored and used
+// by `reset`); a faster value is E0815 at the argument. `prev~`, `delay~` and `vdelay~` take the
+// same rule. One error per flow (§18.1), so each form is a flow of its own.
+
+pub flow prev_block(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  prev~(x, p)                                                 //~ E0815
+}
+
+pub flow prev_sample(x: F32 at sample) -> F32 at sample {
+  prev~(x, x)                                                 //~ E0815
+}
+
+pub flow delay_block(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  delay~(x, 3, p)                                             //~ E0815
+}
+
+pub flow delay_sample(x: F32 at sample) -> F32 at sample {
+  delay~(x, 3, x)                                             //~ E0815
+}
+
+pub flow vdelay_block(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  vdelay~(x, 1.5, 4, p)                                       //~ E0815
+}
+
+pub flow computed_init(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  prev~(x, p * 2.0)                                           //~ E0815
+}
+
+pub flow in_a_par_body(x: F32 at sample, p: F32 at block) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 { prev~(x, p) }                           //~ E0815
+}
+
+pub flow in_an_instance_argument(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = lp~(prev~(x, p))                                    //~ E0815
+  a
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample { x }
+
+// A constant, an `init` value and a value computed from them are allowed, and `d` of `vdelay~` may be
+// at `block` (it reads at the clock of the first argument, §11.4).
+pub flow not_errors(x: F32 at sample, k: F32 at init, p: F32 at block) -> F32 at sample {
+  let a = prev~(x, k) + delay~(x, 3, k) + vdelay~(x, 1.5, 4, k)
+  let b = prev~(x, 1.0) + delay~(x, 2, 0.5) + vdelay~(x, 1.5, 4, 0.0)
+  let c = prev~(x, k * 2.0) + vdelay~(x, p, 4)
+  a + b + c
+}

@@ -433,7 +433,7 @@ pub struct FlowInput {
 }
 
 impl FlowInput {
-    /// The clock the generated API and the rate pass read: an input whose
+    /// The clock the generated API and the flow checks read: an input whose
     /// clock is in error is a `sample` input there, so that its uses report
     /// as of one (R-471: no cascade of other text). The one place of that rule.
     pub fn api_clock(&self) -> Clock {

@@ -31,8 +31,7 @@ impl<'a> Checker<'a> {
         for (k, input) in (0..).zip(inputs) {
             let id = self.local_of(Origin::FlowInput(k))?;
             self.bind_local(id, input.ty, input.span)?;
-            let rate = FlowRate::of_clock(input.api_clock(), input.span);
-            self.fcx().inputs.push((id, rate));
+            self.fcx().inputs.push(id);
         }
         Ok(())
     }

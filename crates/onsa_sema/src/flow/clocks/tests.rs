@@ -13,24 +13,24 @@ use crate::{Analysis, DefId};
 const S: Clock = Clock::SAMPLE;
 
 /// The walk of the flow `flow` of `src`, with the tree to find its
-/// expressions by their text.
+/// expressions by their text, and whether the flow had no diagnostic.
 struct Found {
     src: String,
     ast: Ast,
     a: Analysis,
     flow: DefId,
     walked: Walked,
-    compared: bool,
+    complete: bool,
 }
 
 fn walk_of(src: &str, flow: &str) -> Found {
     WALKED.with(|w| w.borrow_mut().clear());
     let a = check(src);
     let id = DefId(a.defs.iter().position(|d| d.name == flow).expect("the flow") as u32);
-    let (_, walked, compared) =
+    let (_, walked, complete) =
         WALKED.with(|w| w.borrow_mut().drain(..).find(|(d, ..)| *d == id)).expect("the walk of the flow");
     let ast = onsa_syntax::parse(FileId(0), src).ast;
-    Found { src: src.into(), ast, a, flow: id, walked, compared }
+    Found { src: src.into(), ast, a, flow: id, walked, complete }
 }
 
 impl Found {
@@ -49,6 +49,11 @@ impl Found {
         self.walked.lets[k]
     }
 
+    /// The code of the first diagnostic of the walk.
+    fn code(&self) -> Option<onsa_diag::Code> {
+        self.walked.diag.as_ref().map(|d| d.code)
+    }
+
     fn local(&self, name: &str) -> Clock {
         let locals = &self.a.flows[&self.flow].body.locals;
         let l = locals.iter().position(|l| l.name == name).unwrap_or_else(|| panic!("no local {name}"));
@@ -62,7 +67,7 @@ fn a_loop_with_no_tick_from_outside_is_the_sample_of_the_body() {
         "pub flow f(x: F32 at sample, p: F32 at block) -> F32 at sample {\n  let c = prev~(^c) + 1.0\n  let d = prev~(^d) + p\n  c + d + x\n}\n",
         "f",
     );
-    assert!(f.compared);
+    assert!(f.complete);
     assert_eq!((f.let_("c"), f.let_("d")), (S, S));
     assert_eq!((f.expr("^c"), f.expr("prev~(^c)"), f.expr("1.0")), (S, S, Clock::Const));
     assert_eq!((f.expr("p"), f.expr("prev~(^d) + p")), (Clock::Block, S));
@@ -74,7 +79,7 @@ fn two_lets_that_read_each_other_have_one_clock() {
         "pub flow f(g: F32 at block) -> F32 at sample {\n  let a = prev~(^b) * g\n  let b = a + g\n  b\n}\n",
         "f",
     );
-    assert!(f.compared);
+    assert!(f.complete);
     assert_eq!((f.let_("a"), f.let_("b")), (S, S));
     assert_eq!((f.expr("^b"), f.expr("a + g")), (S, S));
 }
@@ -85,15 +90,18 @@ fn a_feedback_to_a_later_let_with_no_loop_reads_its_clock() {
         "pub flow f(x: F32 at sample, g: F32 at block) -> F32 at sample {\n  let a = prev~(^b)\n  let b = x * 2.0\n  let c = g * 2.0\n  a + b + c\n}\n",
         "f",
     );
-    assert!(f.compared);
+    assert!(f.complete);
     assert_eq!((f.let_("a"), f.let_("b"), f.let_("c")), (S, S, Clock::Block));
-    // A `block` read by `^` (E0813): the delay goes on at `sample`.
+    // A `block` read by `^` (E0813): the delay goes on at `sample` in stage
+    // 1; stage 2 stops at the E0813, and `b` after it is in error.
     let f = walk_of(
         "pub flow f(g: F32 at block) -> F32 at sample {\n  let a = prev~(^b)\n  let b = g * 2.0\n  a\n}\n",
         "f",
     );
-    assert!(!f.compared);
-    assert_eq!((f.local("a"), f.local("b"), f.expr("^b")), (S, Clock::Block, Clock::Block));
+    assert!(!f.complete);
+    assert_eq!(f.code(), Some(onsa_diag::Code::E0813));
+    assert_eq!((f.walked.lets[0], f.walked.lets[1]), (S, Clock::Block));
+    assert_eq!((f.local("a"), f.local("b"), f.expr("^b")), (S, Clock::Error, Clock::Block));
 }
 
 #[test]
@@ -102,14 +110,15 @@ fn the_operand_of_at_is_no_read_of_its_let() {
         "pub flow f(g: F32 at block) -> F32 at sample {\n  let bs = g at sample\n  let a = prev~(bs)\n  a\n}\n",
         "f",
     );
-    assert!(f.compared);
+    assert!(f.complete);
     assert_eq!((f.let_("bs"), f.let_("a"), f.expr("g")), (S, S, Clock::Block));
     // §11.3: `a` is `sample` whatever the clock of `b` (E0200 of W7-05 here).
     let f = walk_of(
         "pub flow f(g: F32 at block) -> F32 at sample {\n  let a = prev~(^b at sample)\n  let b = g\n  a + b\n}\n",
         "f",
     );
-    assert_eq!((f.local("a"), f.local("b")), (S, Clock::Block));
+    assert_eq!(f.code(), Some(onsa_diag::Code::E0200));
+    assert_eq!((f.walked.lets[0], f.walked.lets[1]), (S, Clock::Block));
     assert_eq!((f.expr("^b"), f.expr("^b at sample")), (Clock::Block, S));
 }
 
@@ -119,7 +128,7 @@ fn the_init_of_a_delay_has_its_own_clock() {
         "pub flow f(x: F32 at sample, k: F32 at init) -> F32 at sample {\n  let k2 = k * 2.0\n  let c = prev~(x, k2)\n  c\n}\n",
         "f",
     );
-    assert!(f.compared);
+    assert!(f.complete);
     assert_eq!((f.let_("k2"), f.let_("c")), (Clock::Init, S));
     assert_eq!((f.expr("k2"), f.expr("prev~(x, k2)")), (Clock::Init, S));
 }
@@ -130,7 +139,7 @@ fn a_call_of_a_flow_has_the_clock_of_its_output_not_of_its_arguments() {
         "pub flow g(y: F32 at block) -> F32 at sample { y * 2.0 }\npub flow f(c: F32 at block) -> F32 at sample {\n  let a = g~(c)\n  a\n}\n",
         "f",
     );
-    assert!(f.compared);
+    assert!(f.complete);
     assert_eq!((f.let_("a"), f.expr("c"), f.expr("g~(c)")), (S, Clock::Block, S));
 }
 
@@ -140,8 +149,50 @@ fn the_bindings_of_a_match_and_the_index_of_a_par() {
         "pub flow f(x: F32 at sample, c: F32 at block) -> F32 at sample {\n  let p = par~ i in 0..<2 { x }\n  let m = match Some(c) {\n    Some(v) => v,\n    None => 0.0,\n  }\n  p[0] + m\n}\n",
         "f",
     );
-    assert!(f.compared);
+    assert!(f.complete);
     assert_eq!((f.local("x"), f.local("c")), (S, Clock::Block));
     assert_eq!((f.local("p"), f.local("i")), (S, Clock::Init));
     assert_eq!((f.local("m"), f.local("v")), (Clock::Block, Clock::Block));
+}
+
+/// §18.1 (M-5): the output of the callee has its clock in error, so the call
+/// is in error, and no place of the caller that reads it has a diagnostic.
+#[test]
+fn a_call_of_a_flow_whose_output_clock_is_in_error_is_in_error_and_quiet() {
+    let callee = "pub flow g(y: F32 at sample) -> F32 at nope { y }\n";
+    let callers = [
+        "pub flow f(x: F32 at sample) -> F32 at sample {\n  let a = g~(x) at block\n  x\n}\n",
+        "fn half(v: F32) -> F32 { v * 0.5 }\npub flow f(x: F32 at sample) -> F32 at sample {\n  let a = half(g~(x))\n  x\n}\n",
+        "pub flow h(c: F32 at block) -> F32 at sample { c }\npub flow f(x: F32 at sample) -> F32 at sample {\n  let a = h~(g~(x))\n  x + a\n}\n",
+        "pub flow f(x: F32 at sample) -> F32 at sample {\n  let a = prev~(x, g~(x))\n  a\n}\n",
+    ];
+    for caller in callers {
+        let f = walk_of(&format!("{callee}{caller}"), "f");
+        assert!(f.complete, "{caller}");
+        assert_eq!(f.expr("g~(x)"), Clock::Error, "{caller}");
+        assert_eq!(f.walked.diag, None, "{caller}");
+    }
+}
+
+/// Stage 2 keeps the first diagnostic and checks no more: of two errors,
+/// the one before.
+#[test]
+fn the_walk_stops_at_the_first_diagnostic() {
+    let f = walk_of(
+        "pub flow f(x: F32 at sample, g: F32 at block) -> F32 at sample {\n  let a = x at block\n  let b = prev~(g)\n  a + b\n}\n",
+        "f",
+    );
+    assert!(!f.complete);
+    let d = f.walked.diag.as_ref().expect("a diagnostic");
+    assert_eq!((d.code, d.found.as_deref()), (onsa_diag::Code::E0815, Some("x at block")));
+    // A later `let` is not walked: its delay has no record, and it is in error.
+    assert!(f.walked.info.node_of.is_empty());
+    assert_eq!(f.local("b"), Clock::Error);
+    // An E0713 held is behind an error of the flow checks (§18.1).
+    let f = walk_of(
+        "pub struct Pt { x: F32 }\nimpl Pt {\n  pub rt fn grow(inout self) -> F32 { self.x }\n}\npub flow f(x: F32 at sample, c: F32 at block) -> F32 at sample {\n  let p = Pt { x: 1.0 }\n  let k = p.grow()\n  let a = prev~(c)\n  x + k\n}\n",
+        "f",
+    );
+    assert_eq!(f.code(), Some(onsa_diag::Code::E0813));
+    assert!(f.walked.inout_call.is_some());
 }

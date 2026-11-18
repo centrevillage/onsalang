@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.6", "§18.1"]
+
+// A flow whose output clock is an error (the name `nope` is no clock, E0302, §11.3) is an error of
+// its own declaration, reported once there (S-119). The caller reads the output as a value of an
+// error clock: it gets no second error that a clock would have made (§18.1, a part that could not
+// be read is an error and its users get no diagnostics; S-1077). One error per flow, so each form
+// of the caller is a flow of its own.
+
+pub fn half(v: F32) -> F32 { v * 0.5 }
+pub flow slow_in(c: F32 at block) -> F32 at sample { c }
+pub flow bad(x: F32 at sample) -> F32 at nope { x }          //~ E0302
+
+pub flow at_slower(x: F32 at sample) -> F32 at sample {
+  let a = bad~(x) at block
+  x
+}
+
+pub flow non_rt_call(x: F32 at sample) -> F32 at sample {
+  let b = half(bad~(x))
+  x
+}
+
+pub flow into_block_input(x: F32 at sample) -> F32 at sample {
+  let c = slow_in~(bad~(x))
+  x
+}
+
+pub flow into_delay_init(x: F32 at sample) -> F32 at sample {
+  let d = prev~(x, bad~(x))
+  x
+}
+
+pub flow into_delay_value(x: F32 at sample) -> F32 at sample {
+  let e = prev~(bad~(x))
+  x
+}
+
+pub flow summed(x: F32 at sample) -> F32 at sample {
+  let u = bad~(x) + x
+  u
+}

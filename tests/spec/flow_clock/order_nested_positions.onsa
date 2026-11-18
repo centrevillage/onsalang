@@ -1,0 +1,62 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§11.5", "§18.1"]
+
+// Two errors inside one `let` or one expression: the first by position is the one reported
+// (§18.1: one error per flow, the first of the order start position, end position, code). The
+// expression holds the other as a part (an argument, a condition, a branch) or follows it. E0200 is
+// a feature this version does not take: `if~` and `match~` (the `~`), and a delay, an instance or
+// `par~` in a branch, a guard or the right of `&&` / `||`, are found where they are written, and
+// come first when they start first. One error per flow, so each form is a flow of its own.
+
+pub fn design(v: F32) -> F32 { v * 0.5 }
+pub flow pass(c: F32 at block) -> F32 at sample { c }
+
+pub flow if_tilde_holds_e0813(x: F32 at sample, p: F32 at block, c: Bool at block) -> F32 at sample {
+  let a = if~ c { prev~(p) } else { x }                        //~ E0200
+  a
+}
+
+pub flow if_tilde_holds_e0813_in_the_condition(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = if~ prev~(p) > 0.0 { x } else { 0.0 }                //~ E0200
+  a
+}
+
+pub flow match_tilde_holds_a_delay(x: F32 at sample, k: U32 at block) -> F32 at sample {
+  match~ k { 0 => prev~(x), _ => x }                           //~ E0200
+}
+
+pub flow state_in_a_branch_then_e0815(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = if c { prev~(x) } else { x at block }                //~ E0200
+  a
+}
+
+pub flow e0815_in_a_branch_then_state(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = if c { x at block } else { prev~(x) }                //~ E0815
+  a
+}
+
+pub flow e0815_in_the_condition_then_state(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let a = if (x at block) > 0.0 { prev~(x) } else { x }        //~ E0815
+  a
+}
+
+pub flow e0813_then_a_non_rt_call_at_sample(x: F32 at sample, c: F32 at init, p: F32 at block) -> F32 at sample {
+  prev~(p) + x * design(c)                                     //~ E0813
+}
+
+pub flow instance_argument_then_e0813(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  pass~(x) + prev~(p)                                          //~ E0815
+}
+
+pub flow e0813_then_instance_argument(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  prev~(p) + pass~(x)                                          //~ E0813
+}
+
+pub flow e0813_before_the_init_of_the_same_delay(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  prev~(p, x)                                                  //~ E0813
+}
+
+pub flow e0813_in_an_instance_argument(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  pass~(prev~(p))                                              //~ E0813
+}

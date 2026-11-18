@@ -1,0 +1,41 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5", "§18.1"]
+
+// The contrast of out_clock_error_*.onsa: an input whose clock is an error (E0302) does not make the
+// output of the flow an error. The caller reads the output at the clock the flow declares (§11.3: the
+// clock of a call is the declared output clock, not the clocks of the arguments), so `at block` on
+// the call is still E0815 (a value is never made slower), as it is for any flow. An argument given to
+// the input of an error clock is no error of the caller (§18.1: the users of what could not be read
+// get no diagnostics), whatever its clock is.
+
+pub flow pick(x: F32 at nope, y: F32 at sample) -> F32 at sample { y }   //~ E0302
+pub flow slow_in(c: F32 at block, y: F32 at sample) -> F32 at sample { y * c }
+
+pub flow call_slower(p: F32 at block, y: F32 at sample) -> F32 at sample {
+  let a = pick~(p, y) at block                                          //~ E0815
+  y
+}
+
+pub flow call_plain(p: F32 at block, y: F32 at sample) -> F32 at sample {
+  pick~(p, y)
+}
+
+pub flow error_argument_to_block_input(x: F32 at nope, y: F32 at sample) -> F32 at sample {   //~ E0302
+  slow_in~(x, y)
+}
+
+pub flow error_argument_at_block(x: F32 at nope, y: F32 at sample) -> F32 at sample {   //~ E0302
+  let a = x at block
+  y
+}
+
+// An input with no clock (E0810 at the input) is read the same way: no second error in the body.
+pub flow no_clock_input_at_block(x: F32, p: F32 at block) -> F32 at sample {   //~ E0810
+  let a = x at block
+  p
+}
+
+pub flow no_clock_input_to_block_input(x: F32, y: F32 at sample) -> F32 at sample {   //~ E0810
+  slow_in~(x, y)
+}

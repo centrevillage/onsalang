@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.4", "§11.6"]
+
+// The clock of a feedback loop (§11.3): when no clock of ticks enters from outside, the loop is the
+// `sample` of the body (`let c = prev~(^c) + 1` ticks at `sample`); when only a `block` value
+// enters it is the same. So the loop below advances once per sample, and the `block` value is read
+// at every sample (a value read at a faster clock stays the same until it changes, §11.3).
+
+pub flow counter() -> F32 at sample {
+  let c = prev~(^c) + 1.0
+  c
+}
+
+pub flow block_step(p: F32 at block) -> F32 at sample {
+  let c = prev~(^c + p)
+  c
+}
+
+pub flow two_lets(p: F32 at block) -> F32 at sample {
+  let a = prev~(^b)
+  let b = a + p
+  b
+}
+
+test "a loop with no clock entering ticks at sample" {
+  let o = counter.render(4, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == 3.0
+  assert o.out[3] == 4.0
+}
+
+test "a loop with only a block value entering ticks at sample" {
+  // c[n] = c[n - 1] + p, from 0.
+  let o = block_step.render(block_step.Params { p: 0.5 }, 4, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.5
+  assert o.out[2] == 1.0
+  assert o.out[3] == 1.5
+}
+
+test "two lets that read each other with a block value entering tick at sample" {
+  // a[n] = b[n - 1], b[n] = a[n] + p, from 0: b = p, 2p, 3p, 4p.
+  let o = two_lets.render(two_lets.Params { p: 2.0 }, 4, 8.0)
+  assert o.out[0] == 2.0
+  assert o.out[1] == 4.0
+  assert o.out[2] == 6.0
+  assert o.out[3] == 8.0
+}

@@ -262,7 +262,7 @@ fn read_at_constant_lets() {
     use ClockStage::*;
     // Every stage, not the latest alone: `l0` is defined in `init`, `ctl`
     // and `tick` (R-488, §11.3). The read of the constant `u` that no one
-    // reads is at `init`, the stage of a constant read (`FlowRate::read_stage`).
+    // reads is at `init`, the stage of a constant read (`flow/reads.rs`).
     assert_eq!(rates("l0"), Some(vec![Init, Block, Tick(Ratio(0))]));
     // A constant `let` read by a constant `let` at the stages of the reader.
     assert_eq!(rates("l1"), Some(vec![Tick(Ratio(0))]));

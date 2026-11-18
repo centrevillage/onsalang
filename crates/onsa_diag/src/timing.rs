@@ -41,7 +41,7 @@ phases! {
     Signatures "signatures",
     /// The types of the bodies (and of a flow body's walk).
     Types "types",
-    /// The flow checks after a flow body is typed (the rate pass, §11.3).
+    /// The flow checks after a flow body is typed (the walk of the clocks, §11.3).
     Flow "flow",
     /// The states of the bindings.
     Bindings "bindings",

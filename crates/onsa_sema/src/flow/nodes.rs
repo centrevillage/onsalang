@@ -7,17 +7,15 @@ use super::*;
 /// The node lists of a flow body while a walk goes through it
 /// ([`FlowInfo::nodes`], [`FlowInfo::node_of_expr`]). It knows no clock.
 ///
-/// A walk calls it in the order of the source, at each node after the
-/// checks of its clocks:
-/// - [`NodeBuilder::reset`] before each walk over the body;
+/// The walk of the clocks calls it at stage 2 in the order of the source,
+/// at each node after the checks of its clocks:
 /// - [`NodeBuilder::node`] at a delay or an instance call;
 /// - at `par~`, [`NodeBuilder::enter_par`] before the body and
 ///   [`NodeBuilder::leave_par`] after it, even when the body stopped, and
 ///   then [`NodeBuilder::par`] with the nodes of the body;
 /// - [`NodeBuilder::finish`] at the end, for the tables.
 ///
-/// The names are numbered per kind in the order of the calls since the
-/// last `reset` (S-06), so a walk builds only in its final pass.
+/// The names are numbered per kind in the order of the calls (S-06).
 pub(super) struct NodeBuilder {
     lists: Vec<Vec<Node>>,
     node_of_expr: HashMap<ExprId, usize>,
@@ -36,12 +34,6 @@ impl NodeBuilder {
             counters: HashMap::default(),
             let_names,
         }
-    }
-
-    pub(super) fn reset(&mut self) {
-        self.lists = vec![Vec::new()];
-        self.node_of_expr.clear();
-        self.counters.clear();
     }
 
     /// The nodes of the body and the index of each in its list.
@@ -88,7 +80,7 @@ impl NodeBuilder {
             }
             NodeKind::Delay(delay, len) => {
                 let arg = call.args[0];
-                let d_e = (delay == Delay::Variable).then(|| call.args[1]);
+                let d_e = call.d();
                 let ty = body.expr_types.get(&e).copied().unwrap_or(call.ty);
                 let init = match (&call.init, call.init_expr) {
                     (Some(init), _) => init.clone(),
