@@ -1,8 +1,8 @@
 //! The fields of the state of a flow (S-05, S-06, §12.4): of its `State`
 //! ([`FlowInfo::fields`]) and of the replica of each `par~` with state
 //! ([`PlanKind::Par`]), in their order and with their names. The lowering
-//! gives them their Core types and reads their names by what they hold
-//! ([`FlowInfo::field`]); it does not name, order or choose them.
+//! gives them their Core types and reads their places by what they hold
+//! ([`FlowInfo::field_at`]); it does not name, order or choose them.
 
 use super::*;
 use crate::flow_names::FixedField;
@@ -52,18 +52,21 @@ impl FlowInfo {
         }
     }
 
+    /// The place of the field that holds `of` in the struct that holds it
+    /// (that of its node, or the `State`); `None` when the state does not
+    /// keep it. Of the table the fields are made with: no search (R-498).
+    pub fn field_at(&self, of: FieldOf) -> Option<u32> {
+        self.places.get(&of).copied()
+    }
+
     /// The name of the field that holds `of`, in the struct that holds it;
     /// `None` when the state does not keep it.
     pub fn field(&self, of: FieldOf) -> Option<&str> {
-        let found = match of {
-            FieldOf::Node(id, _) => {
-                let n = self.node(id);
-                let own = self.fields_of(n.owner).get(n.field? as usize..)?;
-                own.iter().take_while(|f| matches!(f.of, FieldOf::Node(m, _) if m == id)).find(|f| f.of == of)
-            }
-            _ => self.fields.iter().find(|f| f.of == of),
+        let fields = match of {
+            FieldOf::Node(id, _) => self.fields_of(self.node(id).owner),
+            _ => &self.fields,
         };
-        found.map(|f| f.name.as_str())
+        Some(fields.get(self.field_at(of)? as usize)?.name.as_str())
     }
 }
 
@@ -98,9 +101,13 @@ pub(super) fn build(info: &mut FlowInfo) {
     top.push(field(FieldOf::Poisoned, FixedField::Poisoned.name()));
     top.push(field(FieldOf::Initialized, FixedField::Initialized.name()));
     let (at, pars) = (s.at, s.pars);
+    let mut places = HashMap::default();
     for fs in pars.iter().chain([&top]) {
         unique(info, fs);
+        // What a field holds is one in all the structs: a node's fields are its.
+        places.extend(fs.iter().enumerate().map(|(k, f)| (f.of, k as u32)));
     }
+    info.places = places;
     for (node, (at, fs)) in info.nodes.iter_mut().zip(at.into_iter().zip(pars)) {
         node.field = at;
         if let PlanKind::Par { fields, .. } = &mut node.kind {

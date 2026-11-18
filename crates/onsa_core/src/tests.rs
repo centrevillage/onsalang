@@ -6,7 +6,7 @@ use onsa_sema::{Module as SModule, Package};
 use crate::ir::*;
 use crate::{dump, lower, verify};
 
-fn package(src: &str) -> (SourceMap, Package) {
+pub(crate) fn package(src: &str) -> (SourceMap, Package) {
     let mut sources = SourceMap::default();
     let std_mods: Vec<SModule> = onsa_sema::std_modules()
         .iter()

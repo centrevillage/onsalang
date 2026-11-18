@@ -46,9 +46,18 @@ pub(super) fn payload(lw: &Lowerer, base: Expr, tag: u32, index: u32) -> R<Expr>
     Ok(Expr::new(ty, span, ExprKind::Payload { base: Box::new(base), tag, index }))
 }
 
+/// The fields of the Core struct `id`, borrowed: a field is reached with no
+/// copy of the others (R-498).
+fn fields_of<'l>(lw: &'l Lowerer, id: TypeId) -> &'l [(String, Ty)] {
+    match &lw.m.ty(id).kind {
+        TypeDefKind::Struct { fields } => fields,
+        _ => &[],
+    }
+}
+
 pub(super) fn field(lw: &Lowerer, base: Expr, index: u32) -> R<Expr> {
     let ty = match &base.ty {
-        Ty::Struct(id) => lw.struct_fields(*id).get(index as usize).map(|(_, t)| t.clone()),
+        Ty::Struct(id) => fields_of(lw, *id).get(index as usize).map(|(_, t)| t.clone()),
         Ty::Tuple(ts) => ts.get(index as usize).cloned(),
         _ => None,
     };
@@ -59,7 +68,7 @@ pub(super) fn field(lw: &Lowerer, base: Expr, index: u32) -> R<Expr> {
 
 pub(super) fn field_by_name(lw: &Lowerer, base: Expr, name: &str, span: Span) -> R<Expr> {
     let Ty::Struct(id) = &base.ty else { return Err(internal(span, format!("field `{name}` of a non-struct"))) };
-    let idx = lw.struct_fields(*id).iter().position(|(n, _)| n == name);
+    let idx = fields_of(lw, *id).iter().position(|(n, _)| n == name);
     let Some(idx) = idx else { return Err(internal(span, format!("no field `{name}`"))) };
     field(lw, base, idx as u32)
 }

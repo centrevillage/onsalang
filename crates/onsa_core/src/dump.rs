@@ -1,12 +1,13 @@
 //! Deterministic text form of a Core module (`onsa dump --core`), for golden
 //! tests and for reading what the backends get.
 
+use std::collections::HashSet;
 use std::fmt::Write;
 
 use crate::ir::*;
 
 pub fn dump(m: &Module) -> String {
-    let mut d = Dumper { m, out: String::new(), indent: 0, locals: &[] };
+    let mut d = Dumper { m, out: String::new(), indent: 0, locals: &[], dups: HashSet::new() };
     for t in &m.types {
         d.type_def(t);
     }
@@ -22,7 +23,7 @@ pub fn dump(m: &Module) -> String {
 /// The `const`s and functions named `name`, as in the dump (the part of a
 /// module a verifier error names, R-82).
 pub fn dump_item(m: &Module, name: &str) -> String {
-    let mut d = Dumper { m, out: String::new(), indent: 0, locals: &[] };
+    let mut d = Dumper { m, out: String::new(), indent: 0, locals: &[], dups: HashSet::new() };
     for c in m.consts.iter().filter(|c| c.name == name) {
         d.const_def(c);
     }
@@ -34,7 +35,7 @@ pub fn dump_item(m: &Module, name: &str) -> String {
 
 /// One type, as in the dump.
 pub fn type_name(m: &Module, ty: &Ty) -> String {
-    let mut d = Dumper { m, out: String::new(), indent: 0, locals: &[] };
+    let mut d = Dumper { m, out: String::new(), indent: 0, locals: &[], dups: HashSet::new() };
     d.ty(ty);
     d.out
 }
@@ -44,6 +45,8 @@ struct Dumper<'a> {
     out: String,
     indent: usize,
     locals: &'a [Local],
+    /// The names of more than one of `locals`, made once for the function (R-498).
+    dups: HashSet<&'a str>,
 }
 
 impl<'a> Dumper<'a> {
@@ -178,8 +181,7 @@ impl<'a> Dumper<'a> {
             return;
         };
         let name = &local.name;
-        let dup = self.locals.iter().filter(|x| x.name == *name).count() > 1;
-        if dup || name.is_empty() {
+        if self.dups.contains(name.as_str()) || name.is_empty() {
             let _ = write!(self.out, "{name}@{}", l.0);
         } else {
             self.out.push_str(name);
@@ -198,6 +200,8 @@ impl<'a> Dumper<'a> {
 
     fn fn_def(&mut self, f: &'a FnDef) {
         self.locals = &f.locals;
+        let mut seen = HashSet::new();
+        self.dups = f.locals.iter().map(|l| l.name.as_str()).filter(|n| !seen.insert(*n)).collect();
         self.out.push_str(if f.rt { "rt fn " } else { "fn " });
         self.out.push_str(&f.name);
         self.out.push('(');

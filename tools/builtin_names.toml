@@ -23,27 +23,15 @@
 
 [allow."crates/onsa_core/src/lower/flow/boundary.rs"]
 "len" = 1
-"process" = 1
-"process_inplace" = 1
-"render" = 1
 
 [allow."crates/onsa_core/src/lower/flow/mod.rs"]
 "BULK_SIZE" = 1
 "SIZE" = 1
-"init" = 1
-"process" = 1
-"process_inplace" = 1
-"render" = 1
-"reset" = 1
 
 [allow."crates/onsa_core/src/lower/flow/nodes.rs"]
 "delay" = 1
 "prev" = 1
 "vdelay" = 1
-
-[allow."crates/onsa_core/src/lower/flow/phases.rs"]
-"cfg" = 1
-"sample_rate" = 1
 
 [allow."crates/onsa_core/src/lower/mod.rs"]
 "Bool" = 1

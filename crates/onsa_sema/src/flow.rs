@@ -43,8 +43,8 @@
 //!   (S-05, S-06, [`plan`]): `_sample_rate`, the inputs and the locals of the
 //!   `let`s [`FlowInfo::stored`] keeps, the fields of the nodes of each `let`
 //!   and of the output, `_poisoned`, `_initialized`; a `par~` with state has
-//!   the fields of its replica. The lowering reads their names by what they
-//!   hold ([`FlowInfo::field`]) and gives them their Core types.
+//!   the fields of its replica. The lowering reads their places by what they
+//!   hold ([`FlowInfo::field_at`]) and gives them their Core types.
 //! - `sample_rate_at: Option<ClockStage>` — the latest stage at which
 //!   `sample_rate()` is read (`None`: never; `Init`: no state field needed;
 //!   `Block` / `Tick`: store it, S-05). `sample_rate_calls` lists the calls.
@@ -57,8 +57,13 @@
 //!   are read at (at `Init` when none is read: a constant is read at the
 //!   first stage). A local that is never read has no entry. The state keeps
 //!   an input or a `let` read at a stage not its own ([`FlowInfo::stored`]);
-//!   the lowering defines a constant `let` in each phase that reads it
-//!   (§11.3).
+//!   the function of each stage defines the constant `let`s it reads
+//!   ([`FlowInfo::consts_at`], §11.3).
+//!
+//! The lowering asks the plan what the function of each stage reads
+//! ([`plan`]'s `stage`): its `let`s ([`FlowInfo::lets_at`]), its constants
+//! and what it reads from the state ([`FlowInfo::from_state`]), and finds
+//! a field at its place ([`FlowInfo::field_at`]).
 //! - `output: ExprId` — the output expression (clock ≤ `sample`, promoted).
 //! - `complete` — `false` when checking stopped at a diagnostic (tables partial).
 //!
@@ -165,6 +170,9 @@ pub struct FlowInfo {
     pub node_of: HashMap<ExprId, NodeId>,
     pub(crate) roots: plan::Roots,
     pub fields: Vec<Field>,
+    /// The place of each field in the struct that holds it, made once with
+    /// the fields ([`FlowInfo::field_at`]).
+    pub(crate) places: HashMap<FieldOf, u32>,
     pub sample_rate_at: Option<ClockStage>,
     pub sample_rate_calls: Vec<ExprId>,
     pub read_at: HashMap<LocalId, BTreeSet<ClockStage>>,

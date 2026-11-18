@@ -57,20 +57,20 @@
 //! stateful nodes inside an expression, [`boundary`] `process` /
 //! `process_inplace` / `render` / `params_default`.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use onsa_diag::Span;
 use onsa_sema::DefId;
 use onsa_sema::clock::{Clock, ClockStage};
-use onsa_sema::def::{DefKind, Fields, FlowDef, FlowFn, FlowTy, ParamInfo, ParamKey, ParamNumber};
-use onsa_sema::flow::{Field, FieldOf, FlowInfo, InitArg, NodeId, Part, PlanKind};
+use onsa_sema::def::{DefKind, Fields, FlowDef, FlowFn, FlowInput, FlowTy, ParamInfo, ParamKey, ParamNumber};
+use onsa_sema::flow::{Field, FieldOf, FlowInfo, InitArg, Kept, NodeId, Part, PlanKind};
 use onsa_sema::ty::{BuiltinTy, Len, Ty as STy};
 use onsa_syntax::ast::ExprId;
 
 use super::body::{FnCx, bind_irrefutable, lower_expr, of_type, span_of};
 use super::build::{
-    assign, borrow, call, checked_binary, cmp, expr_stmt, field, field_by_name, float_lit, index, inout, lit,
-    local_expr, materialize, stmt, u32_lit,
+    assign, borrow, call, checked_binary, cmp, expr_stmt, field, float_lit, index, inout, lit, local_expr, materialize,
+    stmt, u32_lit,
 };
 use super::{Lowerer, R, core_mode, internal};
 use crate::ir::*;
@@ -82,9 +82,11 @@ mod generated;
 mod nodes;
 mod phases;
 mod state;
+#[cfg(test)]
+mod tests;
 
 use boundary::{gen_params_default, gen_process, gen_process_inplace, gen_render};
-use generated::{Gen, init_value, instance_args, replica_index, sfield};
+use generated::{Gen, init_value, instance_args, replicas, ring_len, sfield};
 pub(crate) use nodes::lower_flow_expr;
 use phases::{gen_ctl, gen_init, gen_reset, gen_tick, store_nodes};
 use state::state_fields;
@@ -155,16 +157,74 @@ enum Phase {
 }
 
 impl Phase {
-    /// The phase of the stage `s` of the analysis; another tick than the
-    /// `sample` of the body is an internal error at `span`.
-    fn of(s: ClockStage, span: Span) -> R<Phase> {
-        match s {
-            ClockStage::Init => Ok(Phase::Init),
-            ClockStage::Block => Ok(Phase::Ctl),
-            ClockStage::SAMPLE => Ok(Phase::Tick),
-            s => Err(internal(span, format!("no phase of the stage {s:?}"))),
+    /// The stage of the analysis whose values the function of the phase
+    /// makes: the one place of the correspondence (D-03).
+    fn stage(self) -> ClockStage {
+        match self {
+            Phase::Init => ClockStage::Init,
+            Phase::Ctl => ClockStage::Block,
+            Phase::Tick => ClockStage::SAMPLE,
         }
     }
+
+    /// The phase of the stage `s`; none of another tick than the `sample`
+    /// of the body.
+    fn of(s: ClockStage) -> Option<Phase> {
+        [Phase::Init, Phase::Ctl, Phase::Tick].into_iter().find(|p| p.stage() == s)
+    }
+
+    /// [`Phase::of`], where a stage of no phase is an internal error at `span`.
+    fn at(s: ClockStage, span: Span) -> R<Phase> {
+        Phase::of(s).ok_or_else(|| internal(span, format!("no phase of the stage {s:?}")))
+    }
+}
+
+/// An input of the flow as its functions read it (§11.2, §11.6): its local,
+/// its declaration, the phase of its stage in the plan (of
+/// `FlowInput::api_clock`) and its place among the inputs of that stage
+/// (its field of `Config` or `Params`).
+#[derive(Debug, Clone)]
+struct Input {
+    local: onsa_sema::LocalId,
+    decl: FlowInput,
+    phase: Phase,
+    at: u32,
+}
+
+/// The inputs of the flow `fd` of the plan `info`: the one place the
+/// lowering reads their stages and their places. One in error or of
+/// another stage than those of the phases is an internal error.
+fn inputs(info: &FlowInfo, fd: &FlowDef, span: Span) -> R<Vec<Input>> {
+    if info.inputs.len() != fd.inputs.len() {
+        return Err(internal(span, "a plan of another number of inputs than its flow"));
+    }
+    let mut count = [0u32; 3];
+    let one = |(&local, decl): (&onsa_sema::LocalId, &FlowInput)| {
+        let stage = info.own_stage(local).filter(|_| decl.clock != Clock::Error);
+        let Some(phase) = stage.and_then(Phase::of) else {
+            return Err(internal(decl.span, format!("an input of the clock {:?}", decl.clock)));
+        };
+        let at = count[phase as usize];
+        count[phase as usize] += 1;
+        Ok(Input { local, decl: decl.clone(), phase, at })
+    };
+    info.inputs.iter().zip(&fd.inputs).map(one).collect()
+}
+
+/// Every stage of the plan is of a phase: those its locals are read at
+/// and those of what the state keeps (the functions of the phases ask the
+/// plan of no other). Another is an internal error.
+fn check_stages(info: &FlowInfo, span: Span) -> R<()> {
+    let kept = info.fields.iter().filter_map(|f| match f.of {
+        FieldOf::Input(l) | FieldOf::Let(l) => Some(info.own_stage(l)),
+        _ => None,
+    });
+    let stages: BTreeSet<Option<ClockStage>> = kept.chain(info.read_at.values().flatten().map(|&s| Some(s))).collect();
+    for s in stages {
+        let s = s.ok_or_else(|| internal(span, "a stored local with no stage"))?;
+        Phase::at(s, span)?;
+    }
+    Ok(())
 }
 
 /// A replica scope: the state place the nodes of this scope live in.
@@ -184,6 +244,8 @@ pub struct FlowLowerCx<'b> {
     phase: Phase,
     /// `sample_rate()`: the parameter in `init`, the state field elsewhere.
     sample_rate: Expr,
+    /// The calls of `sample_rate()` (`FlowInfo::sample_rate_calls`), each found at once (R-498).
+    sample_rate_calls: HashSet<ExprId>,
     /// Innermost scope last.
     scopes: Vec<Scope>,
 }
@@ -193,13 +255,8 @@ struct FlowShape {
     def: DefId,
     span: Span,
     flow: FlowDef,
-    /// Sema locals that live in the state (inputs and `let`s), with their field.
-    state_locals: HashMap<u32, FieldOf>,
-    /// `Const`-rate `let`s (indices into `info.lets`) read in each phase.
-    const_lets: HashMap<Phase, Vec<usize>>,
-    sample_rate_field: bool,
+    inputs: Vec<Input>,
     state_ty: TypeId,
-    config_ty: TypeId,
     params_ty: TypeId,
     out_ty: TypeId,
     /// Core type of the flow's output value.
@@ -232,6 +289,12 @@ impl<'a> Lowerer<'a> {
 
 fn member(fd: &FlowDef, name: &str) -> Option<DefId> {
     fd.members.iter().find(|(n, _)| n == name).map(|(_, d)| *d)
+}
+
+/// The function `f` among the members of `fd`, by its role (§11.6), not its name.
+fn generated_fn(a: &onsa_sema::Analysis, fd: &FlowDef, f: FlowFn) -> Option<DefId> {
+    let mut ds = fd.members.iter().map(|&(_, d)| d);
+    ds.find(|&d| matches!(&a.def(d).kind, DefKind::Fn(x) if x.flow_fn == Some(f)))
 }
 
 /// The type `t` among the members of `fd`, by its role (§11.6), not its name.
@@ -290,7 +353,7 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     if !info.complete {
         return Err(internal(span, "flow body has errors"));
     }
-    let need = |name: &str| member(&fd, name).ok_or_else(|| internal(span, format!("flow without `{name}`")));
+    let need = |f: FlowFn| generated_fn(a, &fd, f).ok_or_else(|| internal(span, format!("flow without {f:?}")));
     let state_ty = lw.flow_ty(flow, FlowTy::State, span)?;
     let config_ty = lw.flow_ty(flow, FlowTy::Config, span)?;
     let params_ty = lw.flow_ty(flow, FlowTy::Params, span)?;
@@ -317,36 +380,18 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     }
     let out_is_struct = matches!(out_val, Ty::Struct(_));
 
+    check_stages(info, span)?;
+    let inputs = inputs(info, &fd, span)?;
     // The fields of the state are the plan's (S-05, S-06, §12.4).
-    let mut state_locals: HashMap<u32, FieldOf> = HashMap::new();
-    for f in &info.fields {
-        if let FieldOf::Input(l) | FieldOf::Let(l) = f.of {
-            state_locals.insert(l.0, f.of);
-        }
-    }
-    let sample_rate_field = info.field(FieldOf::SampleRate).is_some();
-    let mut const_lets: HashMap<Phase, Vec<usize>> = HashMap::new();
-    for (k, l) in info.lets.iter().enumerate().filter(|(_, l)| l.clock == Clock::Const) {
-        let reads = l.locals.iter().filter_map(|loc| info.read_at.get(loc)).flatten();
-        let mut phases = reads.map(|&r| Phase::of(r, l.span)).collect::<R<Vec<Phase>>>()?;
-        phases.sort_by_key(|p| *p as u8);
-        phases.dedup();
-        for p in phases {
-            const_lets.entry(p).or_default().push(k);
-        }
-    }
-    let fields = state_fields(lw, flow, &fd, info, &info.fields)?;
+    let fields = state_fields(lw, flow, &state::decls(info, &inputs), info, &info.fields)?;
     lw.m.types[state_ty.0 as usize].kind = TypeDefKind::Struct { fields };
 
     let shape = FlowShape {
         def: flow,
         span,
         flow: fd.clone(),
-        state_locals,
-        const_lets,
-        sample_rate_field,
+        inputs,
         state_ty,
-        config_ty,
         params_ty,
         out_ty,
         out_val,
@@ -357,20 +402,20 @@ fn lower_flow<'b>(lw: &mut Lowerer<'b>, flow: DefId, fd: FlowDef, span: Span) ->
     let base = lw.qual_name(flow);
     let ctl = push_fn(lw, format!("{base}.ctl"), true, span);
     let tick = push_fn(lw, format!("{base}.tick"), true, span);
-    let init = lw.fn_id(need("init")?, Vec::new(), span)?;
-    let reset = lw.fn_id(need("reset")?, Vec::new(), span)?;
-    let process = lw.fn_id(need("process")?, Vec::new(), span)?;
-    let process_inplace = member(&fd, "process_inplace").map(|d| lw.fn_id(d, Vec::new(), span)).transpose()?;
-    let render = lw.fn_id(need("render")?, Vec::new(), span)?;
+    let init = lw.fn_id(need(FlowFn::Init)?, Vec::new(), span)?;
+    let reset = lw.fn_id(need(FlowFn::Reset)?, Vec::new(), span)?;
+    let process = lw.fn_id(need(FlowFn::Process)?, Vec::new(), span)?;
+    let inplace = generated_fn(a, &fd, FlowFn::ProcessInplace);
+    let process_inplace = inplace.map(|d| lw.fn_id(d, Vec::new(), span)).transpose()?;
+    let render = lw.fn_id(need(FlowFn::Render)?, Vec::new(), span)?;
     // The values of `@param`, read from the analysis in this one place (§11.7).
     let (mut params, mut sig_inputs) = (Vec::new(), Vec::new());
-    for i in &fd.inputs {
+    for Input { decl: i, phase, .. } in &shape.inputs {
         let ty = lw.core_ty(i.ty, &[], i.span)?;
-        match i.clock {
-            Clock::Block => params.push((i.name.clone(), ty, a.param_info(i))),
-            Clock::SAMPLE => sig_inputs.push((i.name.clone(), ty)),
-            Clock::Init => {}
-            c => return Err(internal(i.span, format!("an input of the clock {c:?}"))),
+        match phase {
+            Phase::Ctl => params.push((i.name.clone(), ty, a.param_info(i))),
+            Phase::Tick => sig_inputs.push((i.name.clone(), ty)),
+            Phase::Init => {}
         }
     }
     // Of the C API alone, when every `block` input has a `default` (§11.7, §14.2, S-625).

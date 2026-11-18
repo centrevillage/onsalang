@@ -49,17 +49,13 @@ fn process_types(lw: &Lowerer, fns: &FlowFns) -> Vec<Ty> {
 pub(super) fn gen_process<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b FlowInfo, fns: &FlowFns) -> R<()> {
     let mut g = Gen::new(lw, shape, info, Phase::Tick, Ty::Unit)?;
     let span = g.span;
-    let (s, params, input, output) = match g.member_params(lw, shape, "process")?.as_slice() {
+    let (s, params, input, output) = match g.member_params(lw, shape, FlowFn::Process)?.as_slice() {
         [s, p, o] => (s.clone(), p.clone(), None, o.clone()),
         [s, p, i, o] => (s.clone(), p.clone(), Some(i.clone()), o.clone()),
         _ => return Err(internal(span, "`process` with another number of parameters")),
     };
-    let sig_inputs: Vec<(String, Ty)> = shape
-        .flow
-        .inputs
-        .iter()
-        .filter(|i| i.clock == Clock::SAMPLE)
-        .map(|i| Ok((i.name.clone(), lw.core_ty(i.ty, &[], i.span)?)))
+    let sig_inputs: Vec<(String, Ty)> = (shape.inputs.iter().filter(|i| i.phase == Phase::Tick))
+        .map(|Input { decl: i, .. }| Ok((i.name.clone(), lw.core_ty(i.ty, &[], i.span)?)))
         .collect::<R<_>>()?;
     let ins = input.as_ref().map(|i| signals(lw, i)).transpose()?.unwrap_or_default();
     let outs = signals(lw, &output)?;
@@ -148,7 +144,7 @@ pub(super) fn gen_process_inplace<'b>(
     let Some(fid) = fns.process_inplace else { return Ok(()) };
     let mut g = Gen::new(lw, shape, info, Phase::Tick, Ty::Unit)?;
     let span = g.span;
-    let [s, params, output] = &g.member_params(lw, shape, "process_inplace")?[..] else {
+    let [s, params, output] = &g.member_params(lw, shape, FlowFn::ProcessInplace)?[..] else {
         return Err(internal(span, "`process_inplace` with another number of parameters"));
     };
     let outs = signals(lw, output)?;
@@ -181,7 +177,7 @@ pub(super) fn gen_render<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b 
     let span = g.span;
     // The third is `input` (views), or the `U32` `frames` of a flow with no `sample` input, as the
     // signature the types stage made reads (§11.6).
-    let [cfg, params, third, sample_rate] = &g.member_params(lw, shape, "render")?[..] else {
+    let [cfg, params, third, sample_rate] = &g.member_params(lw, shape, FlowFn::Render)?[..] else {
         return Err(internal(span, "`render` with another number of parameters"));
     };
     let init = vec![borrow(cfg.clone()), borrow(sample_rate.clone())];

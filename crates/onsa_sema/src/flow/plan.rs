@@ -11,6 +11,7 @@ use super::*;
 
 mod fields;
 pub(super) mod names;
+mod stage;
 
 pub use fields::{Field, FieldOf, Part};
 

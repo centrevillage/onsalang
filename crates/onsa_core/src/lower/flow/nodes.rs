@@ -13,7 +13,7 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
         if let Some(v) = f.expr_override.get(&e) {
             return Ok(Some(v.clone()));
         }
-        if f.info.sample_rate_calls.contains(&e) {
+        if f.sample_rate_calls.contains(&e) {
             return Ok(Some(f.sample_rate.clone()));
         }
         let Some(&id) = f.info.node_of.get(&e) else { return Ok(None) };
@@ -51,15 +51,16 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
             let sub = lw.ensure_flow(*callee)?;
             let ret = lw.m.fn_(sub.tick).ret.clone();
             let mut cargs = vec![inout(sfield(lw, info, &state, at(Part::Own), span)?)];
-            cargs.extend(instance_args(lw, cx, *callee, args, Clock::SAMPLE)?.into_iter().map(borrow));
+            cargs.extend(instance_args(lw, cx, *callee, args, Phase::Tick, span)?.into_iter().map(borrow));
             call(sub.tick, ret, span, cargs)
         }
-        PlanKind::Par { var, from, to, body, children, .. } => {
+        PlanKind::Par { body, children, .. } => {
+            let r = replicas(&info.node(id).kind, span)?;
             let ty = lw.core_ty(cx.info.expr_types[&e], &[], span)?;
             let arr = cx.temp(name, ty.clone());
             stmts.push(stmt(span, StmtKind::Let(arr, Expr::new(ty.clone(), span, ExprKind::Zeroed))));
             let arr_e = local_expr(cx, arr, span);
-            let idx = replica_index(cx, *var, *from, span);
+            let idx = r.index(cx, span);
             let elem_state = if info.field(at(Part::Own)).is_some() {
                 index(sfield(lw, info, &state, at(Part::Own), span)?, idx.clone())?
             } else {
@@ -73,8 +74,7 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
                 store_nodes(lw, cx, &mut loop_body, children, &elem_state)?;
             }
             cx.flow.as_mut().unwrap().scopes.pop();
-            let b = Block { stmts: loop_body, value: None };
-            stmts.push(stmt(span, StmtKind::ForRange(LocalId(var.0), u32_lit(span, *from), u32_lit(span, *to), b)));
+            stmts.push(r.each(span, loop_body));
             arr_e
         }
     };
@@ -109,7 +109,7 @@ fn vdelay_read(
     let name = &info.node(id).path;
     let t = lw.core_ty(ty, &[], span)?;
     let Ty::Float(kind) = t else { return Err(internal(span, "vdelay on a non-float")) };
-    let len = max + 1;
+    let len = ring_len(&info.node(id).kind, span)?;
     let mut let_ = |cx: &mut FnCx, n: &str, v: Expr| -> Expr {
         let l = cx.temp(&format!("{name}.{n}"), v.ty.clone());
         stmts.push(stmt(span, StmtKind::Let(l, v)));

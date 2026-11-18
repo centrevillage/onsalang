@@ -183,6 +183,32 @@ fn a_par_has_the_fields_of_its_body_and_none_with_no_state() {
     assert_eq!(f.node(delay).path, "s.par_0.par_0.delay_0");
 }
 
+/// The place of a field (`FlowInfo::field_at`, R-498) is its index in the
+/// struct that holds it, the `State` or a replica of a `par~`; none of what
+/// the state does not keep.
+#[test]
+fn the_place_of_a_field_is_its_index_in_its_struct() {
+    let src = "pub flow f(x: F32 at sample, k: F32 at block) -> F32 at sample {
+  let s = (par~ i in 0..<2 { prev~(x) + (par~ j in 0..<2 { delay~(x, 2) })[0] })[1]
+  s + k + prev~(x)
+}
+";
+    let a = check(src);
+    let f = flow(&a, "f");
+    let outer = f.roots(Owner::Let(0))[0];
+    let inner = f.roots(Owner::Par(outer))[1];
+    let mut seen = 0;
+    for owner in [Owner::Output, Owner::Par(outer), Owner::Par(inner)] {
+        for (k, x) in f.fields_of(owner).iter().enumerate() {
+            assert_eq!(f.field_at(x.of), Some(k as u32), "{}", x.name);
+            seen += 1;
+        }
+    }
+    assert_eq!(seen, 5 + 2 + 2);
+    assert_eq!(f.field_at(FieldOf::Input(local(f, "x"))), None);
+    assert_eq!(f.field_at(FieldOf::Node(inner, Part::Init)), None);
+}
+
 /// Two fields of one name in a struct of the state are an internal error
 /// at the later one (§11.6, S-1138: no name of the processor is a user's).
 #[test]
