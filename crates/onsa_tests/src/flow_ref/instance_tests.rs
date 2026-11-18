@@ -5,6 +5,9 @@
 
 use std::sync::atomic::{AtomicU32, Ordering::Relaxed};
 
+use onsa_driver::{Analyzed, Loaded, ManifestForm, ManifestSource, PackageInput, SourceFile, analyze_loaded};
+use onsa_sema::DefId;
+
 use super::expr::Stop;
 use super::expr_tests::{def_named, i32v, is, panic_at, with_checked};
 use super::flow::{Clock, Instance};
@@ -419,4 +422,126 @@ fn the_instances_are_counted_in_the_limit_and_a_chain_too_deep_stops_and_does_no
     }
     let r = init_stop(true, &src, "d9000");
     assert!(matches!(&r, Some((Fault::Unavailable(_), _))), "{r:?}");
+}
+
+/// Check the package of `files` (path, text), as the modules `main` and the others, on a thread of a large stack and run
+/// `go` on the result (the names stage decides each call; the source has no diagnostic).
+fn with_package<T: Send + 'static>(files: &[(&str, &str)], go: impl FnOnce(&Analyzed) -> T + Send + 'static) -> T {
+    let files: Vec<SourceFile> =
+        files.iter().map(|(p, t)| SourceFile { path: p.to_string(), text: t.to_string() }).collect();
+    let text = "[package]\nname = \"t\"\nedition = \"2026\"\n".to_string();
+    let manifest = Some(ManifestSource { path: "onsa.toml".into(), text, form: ManifestForm::File });
+    onsa_diag::stack::run(move || {
+        let input = PackageInput { manifest, files, ..PackageInput::default() };
+        let mut loaded = Loaded::from_input(input).expect("the input loads");
+        let analyzed = analyze_loaded(&mut loaded).unwrap_or_else(|e| panic!("{}", e.render(&loaded.sources)));
+        let text = onsa_diag::to_text(&loaded.sources, &analyzed.diagnostics);
+        assert!(analyzed.diagnostics.is_empty(), "the source has diagnostics:\n{text}");
+        go(&analyzed)
+    })
+}
+
+/// The declaration `name` of the module of the file number `file` of the package (the order of the files given).
+fn def_in(a: &Analyzed, file: usize, name: &str) -> DefId {
+    let module = a.analysis.module_of_file(a.pkg.modules[file].file).expect("the module of the file");
+    a.analysis.defs_of_module(module).find(|(_, d)| d.name == name).map(|(id, _)| id).expect("a declaration")
+}
+
+/// The outputs of the flow `name` of the first file of `files` for the frames `xs` of its input `x`.
+fn in_package(files: &[(&str, &str)], name: &'static str, xs: &'static [f32]) -> Vec<f32> {
+    with_package(files, move |a| {
+        let mut me = Instance::init(View::new(a), def_in(a, 0, name), 48000.0, &[], None).expect("init");
+        f32s(&me.process(&[], &[("x", &floats(xs)[..])], xs.len(), None).expect("process"))
+    })
+}
+
+const MAIN: &str = "use util
+pub flow lp(x: F32 at sample) -> F32 at sample { x * 2.0 }
+pub flow both(x: F32 at sample) -> F32 at sample { util.lp~(x) + lp~(x) }
+pub flow via(x: F32 at sample) -> F32 at sample { util.bank~(x) }
+pub flow twice(x: F32 at sample) -> F32 at sample { util.lp~(x) + util.lp~(x * 2.0) }
+";
+const UTIL: &str = "pub flow lp(x: F32 at sample) -> F32 at sample { x * 10.0 + prev~(x) }
+pub flow bank(x: F32 at sample) -> F32 at sample { lp~(x) + 1.0 }
+";
+
+#[test]
+fn a_flow_of_another_module_called_by_its_qualified_name_is_an_instance_of_that_flow() {
+    // §11.5, §15.1: `util.lp~(x)` is the flow `lp` of the module `util`, not the `lp` of the module that writes the call,
+    // and `lp~(x)` in `util` is the `lp` of `util` (the same name is in both modules). `util.lp` is y[n] = 10 x[n] + x[n - 1]
+    // (`prev~` starts at 0): for x = 1, 2, 3 it is 10, 21, 32. `main.lp` is 2 x: 2, 4, 6.
+    //   both  = util.lp + main.lp: 12, 25, 38 (one `lp` taken for the other would give 20, 42, 64 or 4, 8, 12)
+    //   via   = `util.bank`, which is `util.lp + 1.0` and not `main.lp + 1.0`: 11, 22, 33 (that would be 3, 5, 7)
+    //   twice = `util.lp` on x and `util.lp` on 2 x, two instances with a state each: the second on 2, 4, 6 is 20, 42, 64
+    //   (20 + 0, 40 + 2, 60 + 4), so 30, 63, 96 (one state shared would give 30, 62, 94).
+    let files = [("main.onsa", MAIN), ("util.onsa", UTIL)];
+    same(&in_package(&files, "both", &[1.0, 2.0, 3.0]), &[12.0, 25.0, 38.0]);
+    same(&in_package(&files, "via", &[1.0, 2.0, 3.0]), &[11.0, 22.0, 33.0]);
+    same(&in_package(&files, "twice", &[1.0, 2.0, 3.0]), &[30.0, 63.0, 96.0]);
+}
+
+#[test]
+fn a_qualified_call_in_a_flow_that_a_flow_of_another_module_calls_is_an_instance_at_each_depth() {
+    // §11.5, §15.1: instances at two depths and in two modules. `main.top` calls `util.wrap` and `main.lp`; `util.wrap` calls
+    // `util.lp` twice (by the name it writes, `lp~`, and as `util` is `util`'s own module there is no qualified name there).
+    // `util.lp` is y[n] = 10 x[n] + x[n - 1]. For x = 1, 2: `lp~(x)` is 10, 21; `lp~(x * 0.5)` has the inputs 0.5, 1.0 and is
+    // 5, 10 + 0.5 = 10.5; so `wrap` is 15, 31.5, `main.lp` is 2, 4 and `top` is 17, 35.5. After `reset` the same again.
+    let util = "pub flow lp(x: F32 at sample) -> F32 at sample { x * 10.0 + prev~(x) }
+pub flow wrap(x: F32 at sample) -> F32 at sample { lp~(x) + lp~(x * 0.5) }
+";
+    let main = "use util
+pub flow lp(x: F32 at sample) -> F32 at sample { x * 2.0 }
+pub flow top(x: F32 at sample) -> F32 at sample { util.wrap~(x) + lp~(x) }
+";
+    let got = with_package(&[("main.onsa", main), ("util.onsa", util)], |a| {
+        let mut me = Instance::init(View::new(a), def_in(a, 0, "top"), 48000.0, &[], None).expect("init");
+        let xs = floats(&[1.0, 2.0]);
+        let call = |me: &mut Instance| f32s(&me.process(&[], &[("x", &xs[..])], 2, None).expect("process"));
+        let first = call(&mut me);
+        me.reset();
+        (first, call(&mut me))
+    });
+    same(&got.0, &[17.0, 35.5]);
+    same(&got.1, &[17.0, 35.5]);
+}
+
+/// The source of `depth + 1` flows `g0` to `g{depth}` of `lets` `let`s each, every `g{k}` calling `g{k - 1}` twice: the tree of
+/// a call of `g{depth}` has 2^(depth + 1) - 2 instances under it, each with a body of `lets + 1` steps, and the value is
+/// 2^depth * x (the `let`s are of `sample` and read only through `* 0.0`, which is 0 for a finite x).
+fn wide(depth: usize, lets: usize) -> String {
+    let body = |k: usize, out: &str| {
+        let mut s = format!("flow g{k}(x: F32 at sample) -> F32 at sample {{\n  let l0 = x\n");
+        for i in 1..lets {
+            s += &format!("  let l{i} = l{}\n", i - 1);
+        }
+        s + &format!("  {out} + l{} * 0.0\n}}\n", lets - 1)
+    };
+    let mut src = body(0, "x");
+    for k in 1..=depth {
+        src += &body(k, &format!("g{}~(x) + g{}~(x)", k - 1, k - 1));
+    }
+    src
+}
+
+#[test]
+fn the_places_of_the_tree_count_the_body_of_each_instance_and_not_only_the_instance() {
+    // The evaluator holds `Limits::most` (2^20) places for the tree: an instance takes 8 and one more for each step of its
+    // body (the `let`s and the output: its locals and its plan), as a delay line takes its length, so that 2^20 places stay
+    // some tens of MB whatever the bodies. Here every body has 300 `let`s (301 steps), an instance is 309 places, and the
+    // 2^(d + 1) - 2 instances under a call of `g{d}` are 1022 for d = 9 (315 798 places, under 1 048 576) and 4094 for d = 11
+    // (1 265 046, over). Counting the 8 only, the tree of d = 11 is 32 752 places and is made, whatever the bodies.
+    let src = wide(11, 300);
+    for (name, made) in [("g9", true), ("g11", false)] {
+        let r = init_stop(true, &src, name);
+        match (made, &r) {
+            (true, None) | (false, Some((Fault::Unavailable(_), _))) => {}
+            _ => panic!("{name}: {r:?}"),
+        }
+    }
+    // A tree under the limit runs: d = 7 has 254 instances, with the 300 locals of each made by a frame.
+    let got = with_flow(&src, "g7", |view, def| {
+        let mut me = Instance::init(view, def, 48000.0, &[], None).expect("init");
+        f32s(&me.process(&[], &[("x", &floats(&[1.0, 0.5])[..])], 2, None).expect("process"))
+    });
+    same(&got, &[128.0, 64.0]);
 }

@@ -16,7 +16,7 @@ use onsa_syntax::ast::{Arg, CallKind, ExprId, ExprKind};
 
 use super::call::parts;
 use super::expr::{Eval, Frame, LOW_STACK, Stop, evaluates};
-use super::flow::{Ctx, Inst, enter};
+use super::flow::{Ctx, Inst, Plans, enter};
 use super::scalar::{Fault, Fault::Internal};
 use super::sema_view::{Called, Stage, input_stage};
 use super::value::{IntKind, Scalar, Shape, Value};
@@ -67,17 +67,19 @@ struct Save {
 }
 
 /// What an evaluation of a flow body holds besides its locals: the state, what the delays save this tick, the time it is
-/// at (an instance reads its caller's; W7-09 gives `.down~` and `.up~` another) and the places of the tree made so far.
+/// at (an instance reads its caller's; W7-09 gives `.down~` and `.up~` another), the places of the tree made so far and
+/// the plans of its flows.
 pub struct Run {
     pub state: InstState,
     saves: Vec<Save>,
     pub ctx: Ctx,
     used: usize,
+    plans: Plans,
 }
 
 impl Run {
-    pub fn new(state: InstState, ctx: Ctx, used: usize) -> Run {
-        Run { state, saves: Vec::new(), ctx, used }
+    pub(super) fn new(state: InstState, ctx: Ctx, used: usize, plans: Plans) -> Run {
+        Run { state, saves: Vec::new(), ctx, used, plans }
     }
 }
 
@@ -113,7 +115,7 @@ impl<'a> Frame<'a> {
         let here = |fault| Stop { fault, at };
         match &self.body.ast.expr(e).kind {
             ExprKind::Feedback(_) => self.name(e, at),
-            ExprKind::Call { callee, args, .. } => match self.body.called(*callee).map_err(here)? {
+            ExprKind::Call { args, .. } => match self.body.called(e).map_err(here)? {
                 Called::Builtin(FlowBuiltin::Delay(d)) => self.delay(e, d, args, at),
                 Called::Builtin(FlowBuiltin::SampleRate) => Ok(Value::F32(self.time(at)?.sample_rate)),
                 // SPEC-GAP(S-1127): the first frame after `init` or `reset` reads 0 (the time since then, §11.4); the other
@@ -183,7 +185,7 @@ impl<'a> Frame<'a> {
             return Err(here(Fault::Unavailable("a form of a later unit")));
         }
         let node = match &ast.expr(e).kind {
-            ExprKind::Call { callee, args, kind: CallKind::Flow } => match self.body.called(*callee).map_err(here)? {
+            ExprKind::Call { args, kind: CallKind::Flow, .. } => match self.body.called(e).map_err(here)? {
                 Called::Builtin(FlowBuiltin::Delay(d)) => Some((e, Node::Delay(d), args.as_slice())),
                 Called::Builtin(_) => None,
                 Called::Flow(def) => Some((e, Node::Instance(def), args.as_slice())),
@@ -241,11 +243,19 @@ impl<'a> Frame<'a> {
         Ok(())
     }
 
+    /// A new instance of the flow `def` for a call at `at`: its places (8 and one for each step of its body) are held first.
+    #[inline(never)]
+    fn new_child(&mut self, def: DefId, at: Span) -> Result<(Inst, &'a FlowDef), Stop> {
+        let plans = self.run.as_ref().map(|r| r.plans.clone()).ok_or(Stop { fault: Internal("no run"), at })?;
+        let (inst, _, decl) = Inst::plan(self.body.view, def, &plans)?;
+        self.hold(Some(INSTANCE + inst.steps.len()), at)?;
+        Ok((inst, decl))
+    }
+
     /// The instance of the flow `def` that the call `e` makes: kept in the state, then its `init` (the arguments of that clock).
     fn make_child(&mut self, e: ExprId, def: DefId) -> Result<(), Stop> {
         let at = self.body.ast.expr(e).span;
-        self.hold(Some(INSTANCE), at)?;
-        let (inst, _, decl) = Inst::plan(self.body.view, def)?;
+        let (inst, decl) = self.new_child(def, at)?;
         let config = self.inputs_of(e, decl, Stage::Init)?;
         let key = NodeKey { call: e, replicas: Vec::new() };
         let run = self.run.as_mut().ok_or(Stop { fault: Internal("no run"), at })?;
@@ -276,11 +286,11 @@ impl<'a> Frame<'a> {
         }
         let view = self.body.view;
         let run = self.run.as_mut().ok_or(here(Fault::Unavailable("an instance outside an instance of a flow")))?;
-        let (ctx, used) = (run.ctx, run.used);
+        let (ctx, used, plans) = (run.ctx, run.used, run.plans.clone());
         let def = run.state.children.get(key).map(|c| c.def).ok_or(here(Internal("an instance with no state")))?;
         let (body, decl) = (view.body(def).map_err(here)?, view.flow(def).map_err(here)?);
         let mut inst = run.state.children.remove(key).ok_or(here(Internal("an instance with no state")))?;
-        let mut f = inst.frame(body, ctx, used, self.host.take());
+        let mut f = inst.frame(body, ctx, used, plans, self.host.take());
         f.limits = self.limits;
         let done = go(&mut f, &mut inst, decl);
         self.host = f.host.take();
@@ -307,9 +317,9 @@ impl<'a> Frame<'a> {
     /// The `block` stage of the instances this one calls (§11.3, a call of 0 frames too), on the `block` arguments.
     // SPEC-GAP(S-1128): the `block` stages of the instances a flow calls run after its own `block` `let`s, in the order of
     // their places; the spec does not say the order, which only the place of a panic shows.
-    pub(super) fn block_children(&mut self) -> Result<(), Stop> {
-        let children = self.run.iter().flat_map(|r| &r.state.children);
-        let calls: Vec<(NodeKey, DefId)> = children.map(|(k, c)| (k.clone(), c.def)).collect();
+    pub(super) fn block_children(&mut self, whole: Span) -> Result<(), Stop> {
+        let run = self.run.as_ref().ok_or(Stop { fault: Internal("a block stage with no run"), at: whole })?;
+        let calls: Vec<(NodeKey, DefId)> = run.state.children.iter().map(|(k, c)| (k.clone(), c.def)).collect();
         for (key, def) in calls {
             let at = self.body.ast.expr(key.call).span;
             let decl = self.body.view.flow(def).map_err(|fault| Stop { fault, at })?;

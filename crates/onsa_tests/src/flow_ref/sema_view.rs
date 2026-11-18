@@ -10,9 +10,7 @@ use onsa_driver::Analyzed;
 use onsa_sema::clock::{Clock, ClockName};
 use onsa_sema::def::{FieldDef, Fields, FlowDef, FlowInput, FnDef, StructDef, VariantDef};
 use onsa_sema::flow_names::FlowBuiltin;
-use onsa_sema::{
-    Analysis, BodyInfo, ConstValue, DefId, DefKind, Entity, LocalId, LocalInfo, LocalKind, ModId, Package,
-};
+use onsa_sema::{Analysis, BodyInfo, ConstValue, DefId, DefKind, LocalId, LocalInfo, LocalKind, ModId, Package};
 use onsa_sema::{Target, Ty, TyId};
 use onsa_syntax::ast::{Ast, CallKind, ExprId, ExprKind, PatId, PatKind};
 
@@ -36,6 +34,8 @@ pub struct Body<'a> {
     pub ast: &'a Ast,
     pub info: &'a BodyInfo,
     pub module: ModId,
+    /// The declaration whose body it is: the names stage records the calls of a flow by it.
+    pub def: DefId,
 }
 
 impl<'a> View<'a> {
@@ -62,7 +62,7 @@ impl<'a> View<'a> {
         let (info, module) =
             (need(info, "no tables for a body")?, need(self.analysis.ast(self.pkg, d.module), "no tree")?);
         need(info.complete.then_some(()), "a body whose tables are not whole")?;
-        Ok(Body { view: self, ast: &module.parsed.ast, info, module: d.module })
+        Ok(Body { view: self, ast: &module.parsed.ast, info, module: d.module, def })
     }
 
     /// The declaration of a flow: its inputs and its body (`body` has the tables of the body).
@@ -119,29 +119,33 @@ pub enum Called {
 }
 
 impl<'a> Body<'a> {
-    /// What `callee` names (no binding hides a builtin, E0304); not a path is a qualifier (`.when~`, W7-10).
-    pub fn called(&self, callee: ExprId) -> Result<Called, Fault> {
-        let ExprKind::Path(p) = &self.ast.expr(onsa_sema::named(self.ast, callee)).kind else {
-            return need(None, "a qualifier of an instance");
-        };
-        if let [one] = p.segments.as_slice() {
-            if let Some(b) = FlowBuiltin::named(&one.name) {
-                return Ok(Called::Builtin(b));
-            }
+    /// The builtin the call `call` names, by the name its callee is written with (no binding hides one, E0304).
+    fn builtin(&self, call: ExprId) -> Option<FlowBuiltin> {
+        let ExprKind::Call { callee, .. } = &self.ast.expr(call).kind else { return None };
+        let ExprKind::Path(p) = &self.ast.expr(onsa_sema::named(self.ast, *callee)).kind else { return None };
+        match p.segments.as_slice() {
+            [one] => FlowBuiltin::named(&one.name),
+            _ => None,
         }
-        match self.view.analysis.resolve_path(self.module, p) {
-            Ok(Entity::Def(d)) if matches!(self.view.analysis.def(d).kind, DefKind::Flow(_)) => Ok(Called::Flow(d)),
-            _ => Err(Fault::Internal("the callee of a call of a flow is no flow")),
+    }
+
+    /// What the call `call` of a flow makes an instance of: a builtin, or the flow the names stage recorded for it
+    /// (`util.lp~(x)` too, D-15). A call the stage has no flow for is a qualifier (`.when~`, W7-10) and not evaluated.
+    pub fn called(&self, call: ExprId) -> Result<Called, Fault> {
+        if let Some(b) = self.builtin(call) {
+            return Ok(Called::Builtin(b));
+        }
+        match self.view.analysis.instance_of(self.def, call) {
+            Some(def) => Ok(Called::Flow(def)),
+            None => need(None, "a call that is no instance of a flow (a qualifier)"),
         }
     }
 
     /// Is `e` the call `sample_rate()` or `sample_tick()`? They are written with no `~`, and the table has no target for them.
     #[inline(never)]
     pub fn time_call(&self, e: ExprId) -> bool {
-        let ExprKind::Call { callee, kind: CallKind::Plain, .. } = &self.ast.expr(e).kind else { return false };
-        let time =
-            matches!(self.called(*callee), Ok(Called::Builtin(FlowBuiltin::SampleRate | FlowBuiltin::SampleTick)));
-        time && !self.names(e)
+        let time = matches!(self.builtin(e), Some(FlowBuiltin::SampleRate | FlowBuiltin::SampleTick));
+        time && matches!(self.ast.expr(e).kind, ExprKind::Call { kind: CallKind::Plain, .. }) && !self.names(e)
     }
 
     pub fn ty(&self, e: ExprId) -> Result<&'a Ty, Fault> {

@@ -13,7 +13,8 @@
 //! stack of the thread: [`expr::Limits`] keeps 4 MiB of it back, and an `eval` that finds less left stops with
 //! `Unavailable`, whatever the input (a thread that is not one of `onsa_diag::stack` has no such guard).
 //! A level of a `vdelay~` in the `d` of a `vdelay~` takes 3.7 KB, one of `id~(id~(..))` 6.0 KB and a flow that calls a flow
-//! 9.4 KB (64 MiB hold some 6400 of them; `Frame::low_stack` stops it, 2026-11-17).
+//! 8.9 KB in a frame and 7.4 KB at `init` (64 MiB hold some 7000 and 8400 of them; `Frame::low_stack` stops it,
+//! 2026-11-18).
 //!
 //! - [`value`]: the values of the evaluator, their defaults (§6.4) and their
 //!   equality (§13.4).
@@ -27,7 +28,8 @@
 //! - [`host`]: the door of the functions the evaluator does not evaluate, and the two hosts it has of its own.
 //! - [`pattern`]: `match` and the `let` that takes a value apart, and the patterns they use (a guard is tried for
 //!   each way a `|` lets a pattern match).
-//! - [`flow`]: an instance of a flow: the clock of each `let`, the stages `init` and `process` run them in, `reset`.
+//! - [`flow`]: an instance of a flow: the clock of each `let`, the stages `init` and `process` run them in, `reset`,
+//!   and `render` and `Outcome` (a panic with the stage it is at: `init`, `block`, the frame `n`).
 //! - [`state`]: the state of an instance, a tree of cells and instances made for each place a delay or a flow is called,
 //!   the delays (`prev~`, `delay~`, `vdelay~`) with the two phases of a tick that `^` needs, the time (`sample_rate()`).
 //! - [`sema_view`]: the tables of the checker the evaluator reads, in one file.
@@ -59,6 +61,8 @@ mod limits_tests;
 mod pattern_tests;
 #[cfg(test)]
 mod probe_tests;
+#[cfg(test)]
+mod render_tests;
 #[cfg(test)]
 mod state_tests;
 #[cfg(test)]

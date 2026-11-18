@@ -9,7 +9,9 @@
 //! of a constant is E0419 in the spec (compile time, §11.3): the evaluator makes it at `init` and gives the panic of
 //! `init`; the entry of the comparison (W7-19) reads it as an error of the compile time.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use onsa_diag::Span;
 use onsa_sema::def::FlowDef;
@@ -77,8 +79,8 @@ pub struct Ctx {
 /// and W7-17), and `e at k` has the clock `k` (§11.3).
 pub(super) fn clock_of(body: &Body, known: &HashMap<LocalId, Clock>, root: ExprId, e: ExprId) -> Result<Clock, Fault> {
     match &body.ast.expr(e).kind {
-        ExprKind::Call { callee, kind, .. } if matches!(kind, CallKind::Flow) || body.time_call(e) => {
-            Ok(match body.called(*callee)? {
+        ExprKind::Call { kind, .. } if matches!(kind, CallKind::Flow) || body.time_call(e) => {
+            Ok(match body.called(e)? {
                 Called::Builtin(FlowBuiltin::SampleRate) => Clock::Init,
                 Called::Flow(def) => output_stage(body.view.flow(def)?).into(),
                 Called::Builtin(_) => Clock::Sample,
@@ -104,21 +106,52 @@ pub(super) fn clock_of(body: &Body, known: &HashMap<LocalId, Clock>, root: ExprI
 
 /// A `let` of the body, or (no pattern) its last expression, the output; and when its value is made.
 #[derive(Debug)]
-struct Step {
+pub(super) struct Step {
     pat: Option<PatId>,
     init: ExprId,
     clock: Clock,
 }
+
+/// The plans made so far for a tree of instances, one for each flow: the clocks of a body are the same at each call.
+pub(super) type Plans = Rc<RefCell<HashMap<DefId, Rc<[Step]>>>>;
 
 /// What an instance of a flow keeps between its entries, with no lifetime: one a flow calls is kept whole in the state of
 /// its caller (`InstState::children`), the outermost in an [`Instance`]; the entry `enter` is the same.
 #[derive(Debug)]
 pub struct Inst {
     pub(super) def: DefId,
-    steps: Vec<Step>,
+    pub(super) steps: Rc<[Step]>,
     locals: HashMap<LocalId, Value>,
     pub(super) out: Value,
     pub(super) state: InstState,
+}
+
+/// The stage of a call a panic came from (§9.2, §11.6): its `init`, the `block` stage of a `process` (whatever its
+/// frames), or the frame `n` of it, counted from 0 in that `process`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PanicAt {
+    Init,
+    Block,
+    Sample(usize),
+}
+
+/// What a call of the entries gives (§11.6, the memo's `Outcome`): the outputs, or the panic with the stage and the
+/// expression it is at. An unavailable form and an internal error are not an outcome of the program: they stay `Stop`s.
+#[derive(Debug)]
+pub enum Outcome {
+    Ok(Vec<Value>),
+    Panic { at: PanicAt, stop: Stop },
+}
+
+impl Outcome {
+    /// The outcome of a call that gave `r`: a panic at its stage is an outcome, any other fault is the error it is.
+    fn of(r: Result<Vec<Value>, (PanicAt, Stop)>) -> Result<Outcome, Stop> {
+        match r {
+            Ok(outs) => Ok(Outcome::Ok(outs)),
+            Err((at, stop)) if matches!(stop.fault, Fault::Panic(_)) => Ok(Outcome::Panic { at, stop }),
+            Err((_, stop)) => Err(stop),
+        }
+    }
 }
 
 /// One instance of a flow, the outermost: the time it runs in is its own, and the instances it calls read it.
@@ -126,6 +159,7 @@ pub struct Instance<'a> {
     body: Body<'a>,
     decl: &'a FlowDef,
     me: Inst,
+    plans: Plans,
     /// The time the instance runs in: `sample_tick()` reads it, and `reset` makes it 0.
     pub ctx: Ctx,
 }
@@ -189,16 +223,31 @@ pub(super) fn enter<V: std::borrow::Borrow<Value>>(
     stage(f, &inst.steps, &mut inst.out, at)?;
     match at {
         Stage::Init => f.make_cells(&inst.steps.iter().map(|s| s.init).collect::<Vec<_>>()),
-        Stage::Block => f.block_children(),
+        Stage::Block => f.block_children(f.body.ast.expr(decl.body).span),
         Stage::Sample => f.commit(f.body.ast.expr(decl.body).span),
     }
 }
 
 impl Inst {
-    /// The plan of the flow `def`: the clock of each `let` and of the output (§11.2), with its body and declaration.
-    pub(super) fn plan<'a>(view: View<'a>, def: DefId) -> Result<(Inst, Body<'a>, &'a FlowDef), Stop> {
+    /// The instance of the flow `def` with its body and declaration, and the plan of the flow (one for each flow in
+    /// `plans`, made at the first instance).
+    pub(super) fn plan<'a>(view: View<'a>, def: DefId, plans: &Plans) -> Result<(Inst, Body<'a>, &'a FlowDef), Stop> {
         let unavailable = |fault| Stop { fault, at: view.name_span(def) };
         let (body, decl) = (view.body(def).map_err(unavailable)?, view.flow(def).map_err(unavailable)?);
+        let known = plans.borrow().get(&def).cloned();
+        let steps = match known {
+            Some(steps) => steps,
+            None => {
+                let steps = Inst::steps(&body, decl)?;
+                plans.borrow_mut().insert(def, steps.clone());
+                steps
+            }
+        };
+        Ok((Inst { def, steps, locals: HashMap::new(), out: Value::Unit, state: InstState::default() }, body, decl))
+    }
+
+    /// The clock of each `let` and of the output (§11.2).
+    fn steps(body: &Body, decl: &FlowDef) -> Result<Rc<[Step]>, Stop> {
         let wrong = |e, what| Stop { fault: Fault::Internal(what), at: body.ast.expr(e).span };
         let ExprKind::Block(b) = &body.ast.expr(decl.body).kind else { return Err(wrong(decl.body, "a body")) };
         let tail = b.tail.ok_or(wrong(decl.body, "a flow with no output expression"))?;
@@ -212,7 +261,7 @@ impl Inst {
                 return Err(wrong(decl.body, "a statement"));
             };
             let at = |fault| Stop { fault, at: body.ast.expr(*init).span };
-            let clock = clock_of(&body, &known, *init, *init).map_err(at)?;
+            let clock = clock_of(body, &known, *init, *init).map_err(at)?;
             // SPEC-GAP(S-1119): the locals the pattern binds (a `let` taken apart) have the clock of the whole right
             // side, as the interpreter has it; the other reading gives each the clock of its own element.
             for l in body.pat_locals(*pat).map_err(at)? {
@@ -220,10 +269,9 @@ impl Inst {
             }
             steps.push(Step { pat: Some(*pat), init: *init, clock });
         }
-        let clock =
-            clock_of(&body, &known, tail, tail).map_err(|fault| Stop { fault, at: body.ast.expr(tail).span })?;
+        let clock = clock_of(body, &known, tail, tail).map_err(|fault| Stop { fault, at: body.ast.expr(tail).span })?;
         steps.push(Step { pat: None, init: tail, clock });
-        Ok((Inst { def, steps, locals: HashMap::new(), out: Value::Unit, state: InstState::default() }, body, decl))
+        Ok(steps.into())
     }
 
     /// The frame of an evaluation, given the locals and the state (`keep` takes them back), the time and the places held.
@@ -232,11 +280,12 @@ impl Inst {
         body: Body<'b>,
         ctx: Ctx,
         used: usize,
+        plans: Plans,
         host: Option<&'b mut dyn FnHost>,
     ) -> Frame<'b> {
         let mut f = Frame::new(body);
         f.locals = std::mem::take(&mut self.locals);
-        f.run = Some(Run::new(std::mem::take(&mut self.state), ctx, used));
+        f.run = Some(Run::new(std::mem::take(&mut self.state), ctx, used, plans));
         f.host = host;
         f
     }
@@ -262,12 +311,13 @@ impl<'a> Instance<'a> {
     where
         'a: 'h,
     {
-        let (mut me, body, decl) = Inst::plan(view, def)?;
+        let plans = Plans::default();
+        let (mut me, body, decl) = Inst::plan(view, def, &plans)?;
         let ctx = Ctx { sample_rate, tick: 0 };
-        let mut f = me.frame(body, ctx, 0, host);
+        let mut f = me.frame(body, ctx, 0, plans.clone(), host);
         let done = enter(&mut f, &mut me, decl, Stage::Init, config);
         let kept = me.keep(f, body.ast.expr(decl.body).span);
-        done.and(kept).map(|()| Instance { body, decl, me, ctx })
+        done.and(kept).map(|()| Instance { body, decl, me, plans, ctx })
     }
 
     /// `process` over `frames` frames: the `let`s of `block` once (`params`, by name), a call of 0 frames too, and for
@@ -283,9 +333,37 @@ impl<'a> Instance<'a> {
     where
         'a: 'h,
     {
-        let (decl, mut outs) = (self.decl, Vec::new());
+        self.stages(params, inputs, frames, host).map_err(|(_, stop)| stop)
+    }
+
+    /// [`Self::process`] with a panic as a result (§9.2, §11.6): the stage it was at and the expression.
+    pub fn process_outcome<'h>(
+        &mut self,
+        params: &[(&str, Value)],
+        inputs: &[(&str, &[Value])],
+        frames: usize,
+        host: Option<&'h mut dyn FnHost>,
+    ) -> Result<Outcome, Stop>
+    where
+        'a: 'h,
+    {
+        Outcome::of(self.stages(params, inputs, frames, host))
+    }
+
+    /// The one `process`, with the stage a stop is at (`block`, then each frame).
+    fn stages<'h>(
+        &mut self,
+        params: &[(&str, Value)],
+        inputs: &[(&str, &[Value])],
+        frames: usize,
+        host: Option<&'h mut dyn FnHost>,
+    ) -> Result<Vec<Value>, (PanicAt, Stop)>
+    where
+        'a: 'h,
+    {
+        let (decl, mut outs, mut stage) = (self.decl, Vec::new(), PanicAt::Block);
         let at = self.body.ast.expr(decl.body).span;
-        let mut f = self.me.frame(self.body, self.ctx, 0, host);
+        let mut f = self.me.frame(self.body, self.ctx, 0, self.plans.clone(), host);
         let done = (|| {
             if inputs.iter().any(|(_, column)| column.len() != frames) {
                 return Err(Stop { fault: Fault::Internal("a column that is not of the frames given"), at });
@@ -293,6 +371,7 @@ impl<'a> Instance<'a> {
             check(at, decl, Stage::Sample, inputs.iter().map(|(n, _)| *n))?;
             enter(&mut f, &mut self.me, decl, Stage::Block, params)?;
             for n in 0..frames {
+                stage = PanicAt::Sample(n);
                 if let Some(run) = f.run.as_mut() {
                     run.ctx = self.ctx;
                 }
@@ -304,7 +383,42 @@ impl<'a> Instance<'a> {
             Ok(())
         })();
         let kept = self.me.keep(f, at);
-        done.and(kept).map(|()| outs)
+        done.and(kept).map(|()| outs).map_err(|stop| (stage, stop))
+    }
+
+    /// `render` (§11.6): `init` and one `process` of all the frames, the call a test makes. A flow with `sample` inputs
+    /// has the length of their columns (`frames` is `None`); one with none has `frames`. A panic of `init` or of
+    /// `process` is the outcome, at its stage.
+    #[allow(clippy::too_many_arguments)]
+    pub fn render<'h>(
+        view: View<'a>,
+        def: DefId,
+        sample_rate: f32,
+        config: &[(&str, Value)],
+        params: &[(&str, Value)],
+        inputs: &[(&str, &[Value])],
+        frames: Option<usize>,
+        mut host: Option<&'h mut dyn FnHost>,
+    ) -> Result<Outcome, Stop>
+    where
+        'a: 'h,
+    {
+        let here = |fault| Stop { fault, at: view.name_span(def) };
+        let sampled = view.flow(def).map_err(here)?.inputs.iter().any(|i| input_stage(i) == Stage::Sample);
+        let n = match (sampled, frames, inputs.first()) {
+            (true, None, Some((_, column))) => column.len(),
+            (false, Some(n), _) => n,
+            _ => {
+                return Err(here(Fault::Internal(
+                    "`frames` is for a flow with no `sample` input, the columns for one",
+                )));
+            }
+        };
+        let first = host.as_mut().map(|h| &mut **h as &mut dyn FnHost);
+        match Instance::init(view, def, sample_rate, config, first) {
+            Ok(mut me) => me.process_outcome(params, inputs, n, host),
+            Err(stop) => Outcome::of(Err((PanicAt::Init, stop))),
+        }
     }
 
     /// `reset` (§11.6): every delay and every instance it calls is as `init` made it, the time is 0. The `let`s of `init`

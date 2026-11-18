@@ -46,7 +46,8 @@ pub struct Limits {
 }
 
 /// 4 MiB of the 64 MiB of a command thread stay: the frames between two `eval`s (a pattern 256 levels deep) are well
-/// within it. 2^20 places are 40 MB or so.
+/// within it. 2^20 places are 40 MB or so: a place is a value, a cell of a delay line, and in an instance 8 and
+/// one for each step of its body.
 pub const LIMITS: Limits = Limits { reserve: 4 << 20, most: 1 << 20 };
 
 pub(super) const LOW_STACK: Fault = Fault::Unavailable("the stack is nearly used up");
