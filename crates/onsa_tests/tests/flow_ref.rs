@@ -13,8 +13,9 @@ use onsa_driver::PackageInput;
 use onsa_tests::Mode;
 use onsa_tests::case::{self, repo_root};
 use onsa_tests::flow_ref::data::{self, Counts};
+use onsa_tests::flow_ref::flow::PanicAt;
 use onsa_tests::flow_ref::interp_host::Wrappers;
-use onsa_tests::flow_ref::walk::{Skip, Verdict, run_case};
+use onsa_tests::flow_ref::walk::{Panic, Skip, Verdict, run_case};
 use onsa_tests::golden::{self, Update};
 use onsa_tests::pending::{Kind, Pending};
 
@@ -46,6 +47,8 @@ struct Tally {
     unavailable: BTreeMap<&'static str, usize>,
     skipped: BTreeMap<Skip, usize>,
     failures: Vec<String>,
+    /// The tests that panic in the `init` stage (`path: "name"`).
+    at_init: Vec<String>,
     /// The data of each case: its name, its text and counts.
     files: Vec<(String, String, Counts)>,
     /// How many cases of the roots all the parts have.
@@ -104,6 +107,9 @@ fn tally_case(t: &mut Tally, pending: &Pending, wrappers: &Wrappers, (path, name
     for r in run.tests {
         t.tests += 1;
         t.asserts += r.asserts;
+        if r.panic == Some(Panic::Call(PanicAt::Init)) {
+            t.at_init.push(format!("{path}: \"{}\"", r.name));
+        }
         match r.verdict {
             Verdict::Ok => t.evaluated += 1,
             Verdict::Unavailable(why) => *t.unavailable.entry(why).or_default() += 1,
@@ -311,4 +317,80 @@ fn a_case_that_is_not_read_fails_the_run() {
     assert_eq!((bad.cases, bad.evaluated, bad.files.len()), (1, 0, 0));
     let failed = failures(&bad);
     assert!(failed.len() == 1 && failed[0].starts_with("not read: zz_case.onsa: E0"), "{failed:?}");
+}
+
+/// The fixed inputs of the generated flows (W7-19 U4, `tests/flow_ref/corpus/`, not cases: [`case::EXCLUDED`]): each file
+/// with its tests and how many of them the evaluator evaluates (the rest is counted, never dropped). A file that is added
+/// or made again is a new line here.
+const CORPUS: &str = "tests/flow_ref/corpus";
+const CORPUS_COUNTS: &[(&str, usize, usize)] =
+    &[("clock_twins.onsa", 50, 50), ("expr_a.onsa", 154, 154), ("expr_b.onsa", 141, 141)];
+
+fn corpus() -> Vec<(String, PackageInput)> {
+    let root = repo_root();
+    let files = case::onsa_files(&root, CORPUS).unwrap_or_else(|e| panic!("{e}"));
+    let read = |p: &std::path::Path| std::fs::read_to_string(p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
+    let path = |p: &std::path::Path| case::rel_path(&root, p);
+    files.iter().map(|p| (path(p), PackageInput::single_file(path(p), read(p)))).collect()
+}
+
+/// What the files of the corpus come to on the evaluator, against `CORPUS_COUNTS`.
+fn corpus_failures(files: &[(String, Tally)], expected: &[(&str, usize, usize)]) -> Vec<String> {
+    let mut out: Vec<String> =
+        files.iter().flat_map(|(p, t)| failures(t).into_iter().map(move |m| format!("{p}: {m}"))).collect();
+    // The flows have no `init` input: a panic in `init` is of a constant-clock expression, E0419 at compile time (§11.3), and
+    // no test; the interpreter does not give it (a `let` nothing reads is not run).
+    out.extend(
+        files.iter().flat_map(|(_, t)| t.at_init.iter().map(|m| format!("{m}: it panics in init (E0419, §11.3)"))),
+    );
+    out.extend(files.iter().filter(|(_, t)| t.waiting > 0).map(|(p, _)| format!("{p}: it does not lower")));
+    let got: Vec<(String, usize, usize)> = files.iter().map(|(p, t)| (p.clone(), t.tests, t.evaluated)).collect();
+    let want: Vec<(String, usize, usize)> =
+        expected.iter().map(|(n, t, e)| (format!("{CORPUS}/{n}"), *t, *e)).collect();
+    if got != want {
+        out.push(format!("the files, their tests and the tests evaluated are {got:?}, not {want:?}"));
+    }
+    out
+}
+
+fn corpus_on_the_evaluator() -> Vec<(String, Tally)> {
+    onsa_diag::stack::run(|| {
+        let (pending, wrappers) =
+            (Pending::load(&repo_root()).expect("the list of things pending"), Wrappers::default());
+        let one = |(path, input): (String, PackageInput)| {
+            let mut t = Tally::default();
+            tally_case(&mut t, &pending, &wrappers, (&path, &path), input);
+            (path, t)
+        };
+        corpus().into_iter().map(one).collect()
+    })
+}
+
+#[test]
+fn the_corpus_of_generated_flows_runs_on_the_evaluator() {
+    let files = corpus_on_the_evaluator();
+    for (p, t) in &files {
+        let (un, sk) = (t.unavailable.values().sum::<usize>(), t.skipped.values().sum::<usize>());
+        println!(
+            "{p}: {} tests, {} evaluated, {un} unavailable, {sk} skipped, {} asserts",
+            t.tests, t.evaluated, t.asserts
+        );
+        t.unavailable.iter().for_each(|(why, n)| println!("  unavailable {n}: {why}"));
+        t.skipped.iter().for_each(|(why, n)| println!("  skipped {n}: {why:?}"));
+    }
+    let problems = corpus_failures(&files, CORPUS_COUNTS);
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
+    assert!(!files.is_empty(), "no file of the corpus");
+}
+
+#[test]
+fn the_corpus_of_generated_flows_passes_in_the_interpreter() {
+    let t = onsa_diag::stack::run(|| {
+        let (mut t, wrappers) = (Compared::default(), Wrappers::default());
+        corpus().into_iter().for_each(|(path, input)| compare_one(&mut t, &wrappers, &path, input));
+        t
+    });
+    let evaluated: usize = CORPUS_COUNTS.iter().map(|(_, _, e)| e).sum();
+    assert_eq!(t.evaluated, evaluated, "the tests of the corpus that were evaluated and compared");
+    report_compared(t);
 }

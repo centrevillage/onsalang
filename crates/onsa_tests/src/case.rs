@@ -28,6 +28,12 @@ pub const EXCLUDED: &[(&str, &str)] = &[
          loop (the gate item `fix-loop`, `onsa_tests::fix_loop`; [`onsa_files`]), not cases",
     ),
     (
+        "tests/flow_ref/corpus",
+        "fixed inputs of the comparison of the reference evaluator with the interpreter (W7-19 U4): flows a script \
+         generated, with `test`s that call them and have no assert (the evaluator and the interpreter give the \
+         values), read by `crates/onsa_tests/tests/flow_ref.rs`, not cases",
+    ),
+    (
         HEAVY,
         "cases too slow for every run (X-24): each reader of the cases would pay for them, so the ignored test \
          `heavy_cases` of `tests/cases.rs` runs them, for the gate item `heavy`",

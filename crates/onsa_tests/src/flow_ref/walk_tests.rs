@@ -227,3 +227,73 @@ fn a_render_has_the_leaves_of_its_output_type_even_with_no_frames() {
     assert_eq!(leaves("chans", 2, "o.out[0][0] == 1.0").0, vec![(String::new(), Some(2))]);
     assert_eq!(leaves("dbl", 2, "o.out[1] == 2.0").0, vec![(String::new(), None)]);
 }
+
+#[test]
+fn the_length_of_an_array_output_is_its_channels_whatever_the_frames() {
+    // §11.6: `o.out` of `[T; N]` is `[Buf[T]; N]`, so `o.out.len()` is N (2 for `chans`) and `o.out[k].len()` is the frames,
+    // for 0 frames as for 3. A scalar output is a `Buf`, whose length is the frames.
+    let held = |frames: usize, flow: &str, reads: &str| {
+        let xs = vec!["1.0"; frames].join(", ");
+        let r = one(&format!(
+            "test \"len\" {{\n  let xs: [F32; {frames}] = [{xs}]\n  let o = {flow}.render(xs, 8.0)\n{reads}\n}}"
+        ));
+        (r.verdict, r.asserts)
+    };
+    let (chans, scalar) = ("  assert o.out.len() == 2\n  assert o.out[1].len() == ", "  assert o.out.len() == ");
+    for frames in [3, 1, 0] {
+        assert_eq!(held(frames, "chans", &format!("{chans}{frames}")), (Verdict::Ok, 2), "chans {frames}");
+        assert_eq!(held(frames, "dbl", &format!("{scalar}{frames}")), (Verdict::Ok, 1), "dbl {frames}");
+    }
+    // A wrong count does not hold: 3 channels of a 2-channel output, at 0 frames too.
+    let (verdict, _) = held(0, "chans", "  assert o.out.len() == 3");
+    assert!(matches!(&verdict, Verdict::Failed(m) if m.contains("assert 1")), "{verdict:?}");
+}
+
+#[test]
+fn a_channel_past_the_last_is_a_panic_of_the_test() {
+    // `chans` has 2 channels (§11.6): `o.out[1]` is the last, and `o.out[2]` is past the array, a panic (§9.2) of an
+    // expression of the test (not of a call), which fits its mark; with no mark the test fails.
+    let at = |index: usize, mark: &str| {
+        one(&format!(
+            "test \"past\" {{\n  let xs: [F32; 2] = [1.0, 2.0]\n  let o = chans.render(xs, 8.0)\n  assert o.out[{index}][0] == 2.0{mark}\n}}"
+        ))
+    };
+    let r = at(1, "");
+    assert_eq!((&r.verdict, r.asserts, r.panic), (&Verdict::Ok, 1, None));
+    let r = at(2, "   //~ PANIC \"past\"");
+    assert_eq!((&r.verdict, r.panic), (&Verdict::Ok, Some(Panic::Eval)), "{r:?}");
+    let r = at(2, "");
+    assert!(matches!(&r.verdict, Verdict::Failed(m) if m.contains("panic")), "{r:?}");
+}
+
+#[test]
+fn the_len_of_an_array_is_one_function_of_std_and_the_len_of_a_span_is_the_primitive() {
+    // §5.3: std's `impl [T; N]` has `len` as a plain function (no row of the primitives) and `Span[T]`'s is the row `Len`:
+    // `array_len` is the first, whichever the case is (std is in every package), and none of the rows.
+    let (found, row) = onsa_diag::stack::run(|| {
+        let mut loaded = onsa_driver::Loaded::from_input(PackageInput::single_file("t.onsa", FLOWS)).expect("loads");
+        let analyzed = onsa_driver::analyze_loaded(&mut loaded).expect("analyzes");
+        let view = super::sema_view::View::new(&analyzed);
+        let def = view.array_len();
+        (def.is_some(), def.and_then(|d| view.prim(d)).is_some())
+    });
+    assert_eq!((found, row), (true, false));
+}
+
+#[test]
+fn a_call_bound_to_no_name_is_run_and_kept_like_one_bound_to_a_name() {
+    // `let _ = dbl.render(..)` makes the call (its event is in the data) and drops what it gave; a panic in it is the
+    // test's. `inv` is 10 / x, and 0 panics at the frame 1 of 5 0.
+    let r = one("test \"dropped\" {\n  let xs: [F32; 2] = [1.0, 2.0]\n  let _ = dbl.render(xs, 8.0)\n}");
+    assert_eq!((&r.verdict, r.asserts, r.panic, r.events.len()), (&Verdict::Ok, 0, None, 1), "{r:?}");
+    let r = one(
+        "test \"dropped boom\" {\n  let xs: [I32; 2] = [5, 0]\n  let _ = inv.render(xs, 8.0)   //~ PANIC \"dropped boom\"\n}",
+    );
+    assert_eq!(
+        (&r.verdict, r.panic, r.events.len()),
+        (&Verdict::Ok, Some(Panic::Call(PanicAt::Sample(1))), 1),
+        "{r:?}"
+    );
+    let r = one("test \"unmarked\" {\n  let xs: [I32; 2] = [5, 0]\n  let _ = inv.render(xs, 8.0)\n}");
+    assert!(matches!(&r.verdict, Verdict::Failed(m) if m.contains("panic")), "{r:?}");
+}

@@ -16,7 +16,7 @@ use onsa_driver::{Loaded, PackageInput, analyze_loaded, lower_core};
 use onsa_sema::def::{FlowDef, FlowFn, FlowInput, FlowTy};
 use onsa_sema::ty::Len;
 use onsa_sema::{DefId, LocalId, Target, Ty, TyId};
-use onsa_syntax::ast::{Arg, ExprId, ExprKind, Mode, StmtKind};
+use onsa_syntax::ast::{Arg, ExprId, ExprKind, Mode, PatKind, StmtKind};
 
 use super::expr::{Frame, Stop};
 use super::flow::{Call, Instance, Outcome, PanicAt};
@@ -24,7 +24,7 @@ use super::host::{FnHost, HostCall};
 use super::interp_host::{GENERATED, InterpHost, Wrappers};
 use super::scalar::{Fault, PanicKind};
 use super::sema_view::{Body, Callee, Stage, View, inputs_at};
-use super::value::Value;
+use super::value::{Scalar, Value};
 use crate::{Markers, parse_markers};
 use onsa_sema::prim::PrimRow;
 
@@ -90,6 +90,8 @@ impl From<Stop> for Halt {
 pub(super) struct Rendered {
     pub(super) outs: Vec<Value>,
     pub(super) fields: Vec<String>,
+    /// The channels of each field, from the type (so that `o.out.len()` is not the frames when there are none).
+    pub(super) channels: Vec<Option<usize>>,
 }
 
 /// What a call of a generated function gave: the outputs of a `render`, or the state of an `init`.
@@ -166,6 +168,9 @@ impl<'a> Walk<'_, 'a> {
         };
         for s in &block.stmts {
             match &body.ast.stmt(*s).kind {
+                StmtKind::Let { pat, init, .. } if matches!(body.ast.pat(*pat).kind, PatKind::Wild) => {
+                    self.discard(body, *init)?
+                }
                 StmtKind::Let { pat, init, .. } => self.bind(body, *init, body.pat_local(*pat).map_err(Halt::from))?,
                 StmtKind::Var { name, init, .. } => {
                     self.bind(body, *init, body.var_local(name.span).map_err(Halt::from))?
@@ -192,6 +197,15 @@ impl<'a> Walk<'_, 'a> {
             self.call(body, e).map(drop)
         } else {
             Err(Halt::Skip(if views(body, e) { Skip::Layout } else { Skip::Statement }))
+        }
+    }
+
+    /// `let _ = e`: a call of a generated function is run (its event is kept) and any other value evaluated, then dropped.
+    fn discard(&mut self, body: Body<'a>, e: ExprId) -> Result<(), Halt> {
+        if self.generated_call(body, e).is_some() {
+            self.call(body, e).map(drop)
+        } else {
+            self.value(body, e).map(drop)
         }
     }
 
@@ -233,7 +247,8 @@ impl<'a> Walk<'_, 'a> {
             FlowFn::Init => {
                 let (sample_rate, _) = self.rate(body, &args.rest)?;
                 let (state, config_of) = (self.states.len(), args.config.clone());
-                let at = Event::Init { state, flow: view.qualified_name(flow), sample_rate, config: config_of };
+                let (name, written) = (view.qualified_name(flow), written_flow(body, e));
+                let at = Event::Init { state, flow: name, written, sample_rate, config: config_of };
                 self.events.push(at);
                 let made = Instance::init(view, flow, sample_rate, &config, Some(&mut *self.host));
                 Ok(Some(Gave::State(Box::new(made.map_err(|stop| stopped(stop, PanicAt::Init))?))))
@@ -263,12 +278,18 @@ impl<'a> Walk<'_, 'a> {
         };
         let columns = rest.iter().map(|a| self.column(body, a.expr)).collect::<Result<Vec<_>, _>>()?;
         let call = (&args.config, &args.params);
-        let (outcome, event) = render_run(&mut *self.host, view, flow, call, (sample_rate, frames, &columns))?;
+        let (outcome, mut event) = render_run(&mut *self.host, view, flow, call, (sample_rate, frames, &columns))?;
+        if let Event::Render { written, .. } = &mut event {
+            *written = written_flow(body, e);
+        }
         let (rendered, _) = view.flow_ty(body.ty_id(e)?).ok_or(Fault::Internal("a `Rendered`"))?;
         let fields: Vec<String> = view.struct_fields(rendered)?.iter().map(|f| f.name.clone()).collect();
         self.events.push(event);
         match outcome {
-            Outcome::Ok(outs) => Ok(Rendered { outs, fields }),
+            Outcome::Ok(outs) => {
+                let channels = io(view, decl, &sampled).0.into_iter().map(|(_, n)| n).collect();
+                Ok(Rendered { outs, fields, channels })
+            }
             Outcome::Panic { at, .. } => Err(Halt::Panic(Panic::Call(at))),
         }
     }
@@ -393,7 +414,7 @@ fn render_run<'a>(
     let call = Call { config: &cfg, params: &prm, inputs: &inputs, frames };
     let outcome = Instance::render(view, flow, sample_rate, &call, Some(host)).map_err(|stop| stop.fault)?;
     let run = run_of((config, params), frames, &inputs, &outcome, io(view, decl, &sampled));
-    Ok((outcome, Event::Render { flow: view.qualified_name(flow), sample_rate, run }))
+    Ok((outcome, Event::Render { flow: view.qualified_name(flow), written: None, sample_rate, run }))
 }
 
 /// The fields of the struct `v` of the struct `def` by name.
@@ -462,6 +483,23 @@ fn rendered_value(view: View, ret: TyId, outs: &[Value]) -> Result<Value, Fault>
     Ok(Value::Struct((0..view.struct_fields(def)?.len()).map(field).collect::<Result<_, _>>()?))
 }
 
+/// The path of the flow of the call `e` of a generated function as the test writes it (`b.dup` of `b.dup.render(..)`).
+fn written_flow(body: Body, e: ExprId) -> Option<String> {
+    fn dotted(body: Body, e: ExprId) -> Option<String> {
+        match &body.ast.expr(e).kind {
+            ExprKind::Path(p) => Some(p.dotted()),
+            ExprKind::Field { base, name } => Some(format!("{}.{}", dotted(body, *base)?, name.name)),
+            _ => None,
+        }
+    }
+    let ExprKind::Call { callee, .. } = &body.ast.expr(e).kind else { return None };
+    match &body.ast.expr(*callee).kind {
+        ExprKind::Field { base, .. } => dotted(body, *base),
+        ExprKind::Path(p) => Some(p.dotted().rsplit_once('.')?.0.to_string()),
+        _ => None,
+    }
+}
+
 /// The leaves of the output of a flow, and the types of its `sample` inputs and of those leaves (a struct output is its
 /// fields; an array is its channels, and its element is the type).
 fn io(view: View, decl: &FlowDef, sampled: &[&FlowInput]) -> (Shape, Types) {
@@ -470,8 +508,8 @@ fn io(view: View, decl: &FlowDef, sampled: &[&FlowInput]) -> (Shape, Types) {
         _ => None,
     };
     let element = |t| match view.ty(t) {
-        Ty::Array(e, _) => view.display_type(*e),
-        _ => view.display_type(t),
+        Ty::Array(e, _) => *e,
+        _ => t,
     };
     let leaves: Vec<(String, TyId)> = match view.ty(decl.out) {
         Ty::Named(def, _) => match view.struct_fields(*def) {
@@ -482,7 +520,8 @@ fn io(view: View, decl: &FlowDef, sampled: &[&FlowInput]) -> (Shape, Types) {
     };
     let types = Types {
         inputs: sampled.iter().map(|i| view.display_type(i.ty)).collect(),
-        leaves: leaves.iter().map(|(_, t)| element(*t)).collect(),
+        leaves: leaves.iter().map(|(_, t)| view.display_type(element(*t))).collect(),
+        zeros: leaves.iter().map(|(_, t)| Scalar::of(view.ty(element(*t))).and_then(Scalar::default_value)).collect(),
     };
     (leaves.into_iter().map(|(p, t)| (p, channels(t))).collect(), types)
 }

@@ -34,7 +34,7 @@ impl Walk<'_, '_> {
     fn shape(&mut self, body: Body, e: ExprId) -> Result<Value, Halt> {
         match self.node(body, e)? {
             Node::One(v) => Ok(v),
-            Node::Frames(_) => Err(Fault::Internal("a column read as a value").into()),
+            Node::Frames(..) => Err(Fault::Internal("a column read as a value").into()),
         }
     }
 
@@ -46,17 +46,21 @@ impl Walk<'_, '_> {
                 let Ok(onsa_sema::Target::Local(l)) = body.target(*base) else { return Err(unavailable()) };
                 let r = self.rendered.get(l).ok_or_else(unavailable)?;
                 let at = r.fields.iter().position(|f| *f == name.name).ok_or_else(unavailable)?;
-                Ok(Node::Frames(r.outs.iter().map(|v| part(v, at)).collect()))
+                Ok(Node::Frames(r.outs.iter().map(|v| part(v, at)).collect(), r.channels[at]))
             }
             ExprKind::Index { base, index } => {
-                let (Node::Frames(c), Value::Int(_, k, _)) = (self.node(body, *base)?, self.value(body, *index)?)
+                let (Node::Frames(c, channels), Value::Int(_, k, _)) =
+                    (self.node(body, *base)?, self.value(body, *index)?)
                 else {
                     return Err(unavailable());
                 };
                 let at = usize::try_from(k).map_err(|_| Fault::Panic(PanicKind::Bounds))?;
-                match c.first() {
-                    Some(Value::Array(_)) => Ok(Node::Frames(c.iter().map(|v| elem(v, at)).collect::<Result<_, _>>()?)),
-                    _ => Ok(Node::One(c.get(at).cloned().ok_or(Fault::Panic(PanicKind::Bounds))?)),
+                match channels {
+                    Some(n) if at < n => {
+                        Ok(Node::Frames(c.iter().map(|v| elem(v, at)).collect::<Result<_, _>>()?, None))
+                    }
+                    Some(_) => Err(Fault::Panic(PanicKind::Bounds).into()),
+                    None => Ok(Node::One(c.get(at).cloned().ok_or(Fault::Panic(PanicKind::Bounds))?)),
                 }
             }
             ExprKind::Call { args, .. } => {
@@ -70,8 +74,11 @@ impl Walk<'_, '_> {
                 );
                 let arg = receiver.or(args.first().map(|a| a.expr)).ok_or_else(unavailable)?;
                 match (body.view.prim(callee.def), self.node(body, arg)?) {
-                    (Some(PrimRow::Len), Node::Frames(c)) => {
-                        let n = if let Some(Value::Array(a)) = c.first() { a.len() } else { c.len() };
+                    (Some(PrimRow::Len), Node::Frames(c, None)) => {
+                        Ok(Node::One(Value::int(IntKind::U32, c.len() as i128)))
+                    }
+                    // `len` of the array of the channels (`[Buf[T]; N]`, std's `impl [T; N]`, no primitive): N.
+                    (None, Node::Frames(_, Some(n))) if body.view.array_len() == Some(callee.def) => {
                         Ok(Node::One(Value::int(IntKind::U32, n as i128)))
                     }
                     (Some(PrimRow::IsNan), Node::One(Value::F32(x))) => Ok(Node::One(Value::Bool(x.is_nan()))),
@@ -95,9 +102,10 @@ pub(super) fn part(v: &Value, at: usize) -> Value {
     if let Value::Struct(fs) = v { fs[at].clone() } else { v.clone() }
 }
 
-/// What a path into the outputs is so far: the values of one component in each frame, or one value.
+/// What a path into the outputs is so far: the values of one component in each frame (and its channels, when it is an
+/// array of them: its length, though there are no frames), or one value.
 enum Node {
-    Frames(Vec<Value>),
+    Frames(Vec<Value>, Option<usize>),
     One(Value),
 }
 

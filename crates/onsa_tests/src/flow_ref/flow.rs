@@ -139,6 +139,37 @@ pub enum PanicAt {
     Sample(usize),
 }
 
+impl PanicAt {
+    /// The stage of the flow it is (`None` is the start of a `process`, before any stage of a flow runs), whichever frame.
+    pub fn stage(self) -> Option<Stage> {
+        match self {
+            PanicAt::Init => Some(Stage::Init),
+            PanicAt::Start => None,
+            PanicAt::Block => Some(Stage::Block),
+            PanicAt::Sample(_) => Some(Stage::Sample),
+        }
+    }
+}
+
+/// The stage of the code written at `at` (§11.3): that of the clock of the `let` (or the output) of a flow it is within, a
+/// constant's as `init`'s. `None` where no flow has it (the call a test makes, whose panic is the start of a `process`).
+pub fn stage_at(view: View, at: Span) -> Option<Stage> {
+    let plans = Plans::default();
+    view.flows().into_iter().find_map(|def| {
+        let (me, body, _) = Inst::plan(view, def, &plans).ok()?;
+        let within = |e: ExprId| {
+            let s = body.ast.expr(e).span;
+            s.file == at.file && s.start <= at.start && at.end <= s.end
+        };
+        let step = me.steps.iter().find(|s| within(s.init))?;
+        Some(match step.clock {
+            Clock::Const | Clock::Init => Stage::Init,
+            Clock::Block => Stage::Block,
+            Clock::Sample => Stage::Sample,
+        })
+    })
+}
+
 /// What a call of the entries gives (§11.6, the memo's `Outcome`): the outputs, or the panic with the stage and the
 /// expression it is at. An unavailable form and an internal error are not an outcome of the program: they stay `Stop`s.
 #[derive(Debug)]

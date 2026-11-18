@@ -1,0 +1,796 @@
+// A fixed input (W7-19 U4), drawn with seed 20261102, 131 flows of 260 drawn, typed expressions of W7-01 U3. It is not made again: no script of it is kept.
+// The inputs are fixed; the tests have no assert (the evaluator and the interpreter are compared by
+// crates/onsa_tests/tests/flow_ref.rs). A case that panics in the interpreter is its own marked test.
+// Left out: the flows `onsa check` refuses, and these, whose constant-clock expression panics (E0419, §11.3):
+// f26,f32,f53,f67,f68,f71,f79,f96,f106,f158,f170,f184,f204,f214,f220,f222,f230,f235,f247,f259
+
+flow f4(a: U8 at sample) -> U32 at sample {
+  let w2: U32 = a as U32
+  !(w2 +% 0) | ((w2 +% 0) ^ w2 ^ w2)
+}
+flow f6(a: F32 at sample) -> Bool at sample {
+  let v3: U8 = (1 *% 1 * ({ 0 })) / ((!0) ^ !10)
+  ((v3 as U8) | 2) < ({ v3 })
+}
+flow f7(a: Bool at sample) -> U32 at sample { !(!((!(if true { 2 } else { 4294967295 })) + !(!10)) % (((if a && a { if true { 2 } else if a { 0 } else { 10 } } else { { 7 } }) +% (1 >> 31) +| !1) ^ (10 * 2147483647 * 7 +| ({ 0 -% 0 })))) }
+flow f8(a: U8 at sample) -> I32 at sample {
+  let w1: I32 = a as I32
+  let v1: I8 = -10 +| (if (7 << 4294967295) < a -| 127 { { -128 >> 9 } } else { { 100 } })
+  ((({ 7 }) % (100 / w1)) -| (if !false { w1 - 1 } else { !w1 })) -| !w1 * w1 -| (v1 as I32)
+}
+flow f9(a: I16 at sample) -> F32 at sample {
+  let v1: I8 = -(-((((if false { 7 } else { -128 }) -| 100 +% 0) ^ ((127 +% 63) >> 0)) + ((100 % 7) ^ (if true { 10 } else { 127 })) - ((if true { 63 } else { 127 }) & 7)))
+  (if (v1 as F64) > 1.0 % (({ -2.5 }) / (-1e-3 + 4.9e-324)) { { -1.0 / 100.0 + 0.30000001192092896 / 0.30000001192092896 + ((3.4028235e38 / 0.1) - -100.0) } } else if v1 > (((v1 + v1 *| v1) as I8) +| 10) { (if ({ a }) != (a >> 10) { if true == true { 16777217.0 % 16777216.0 } else { if false { 1.00000017881393432617187499999 } else { 100.0 } } } else { a as F32 }) % ((a +% (a | ({ a }))) as F32) } else { 3.14159 }) / -(((a +% !a) as F32) / ((a as F32) % 1e-3)) * ((a as F32) + ({ 0.7 }))
+}
+flow f10(a: U8 at sample) -> I16 at sample {
+  let v1: F64 = 1e300
+  (({ 7 - 2 }) *% (if v1 <= v1 { a as I16 } else { { 2 } }) -| 2) ^ (0 & (if true && false { 10 / 0 } else if true { 1 % 16383 } else { 0 >> 17 }) & ({ 32767 >> 16 }))
+}
+flow f12(a: U8 at sample) -> U32 at sample { ({ 100 -% !(!(10 *% 7)) }) +| ((4294967295 *| 1 * (2147483647 *| 100) / (a as U32) *% (((a +% (1 & 100)) as U32) -| ({ 4294967295 }) +% 100)) >> 12) }
+flow f13(a: I64 at sample) -> U32 at sample { 0 }
+flow f14(a: I64 at sample) -> Bool at sample { (false || (a == 1)) == (-100 != -(-32768)) }
+flow f16(a: Bool at sample) -> F32 at sample {
+  let v1: U8 = (((if 127 >= 2 { 1 ^ 255 } else { 7 / 0 }) << 8) % 1) << (({ !(1 -| 10) }) >> (if (if a { 2 } else { 2 }) > 32767 - 0 { { !4294967295 } } else { (if a { 4294967295 } else { 7 }) +| !0 }))
+  ((if if if a { a } else { a } { a || a } else { { a } } { (16777216.0 * 1.0) / (v1 as F32) } else { -(-1.00000017881393432617187499999) }) / ((-100.0 - (if a { 0.30000001192092896 } else { -100.0 })) % (-16777216.0 - -1e-3 * 100.0))) + ((v1 - v1) as F32)
+}
+flow f17(a: U32 at sample) -> I64 at sample {
+  let w3: I64 = a as I64
+  (9223372036854775807 & -(a as I64)) / ((w3 + 100 +% (100 + 100)) << 64)
+}
+flow f18(a: I16 at sample) -> U8 at sample { 100 ^ (if (-2) != 2 { !(0 << 0) } else { { 100 } }) }
+flow f21(a: F64 at sample) -> F64 at sample { ({ (if true { a } else { a }) / (-4.9e-324 + 0.30000000000000004) }) + a }
+flow f24(a: U64 at sample) -> U16 at sample { 0 }
+flow f25(a: U64 at sample) -> I8 at sample { (({ 127 }) >> 1) >> 0 }
+flow f27(a: F64 at sample) -> U8 at sample { !0 }
+flow f29(a: I16 at sample) -> I32 at sample { (if !true { a as I32 } else { ((a - (-(!a))) as I32) - -(2 % 10) +| ((7 +| 7) >> 1) }) +| ((a as I32) ^ ((-(if if true { true } else { false } { 10 ^ 1073741823 } else if 100 <= 1 { 1073741823 << 0 } else { { 0 } })) * (((100 >> 2147483647) >> !10) << ((10 >> 5) & !100)))) }
+flow f34(a: I8 at sample) -> U32 at sample { ((7 +| 7) % (if true { 2 } else { 0 })) *% ((4294967295 + 0) +% (!4294967295)) }
+flow f36(a: Bool at sample) -> U8 at sample {
+  let v1: U8 = (!(if a { 100 } else { 2 }) -% ((127 -| 100) >> (7 *| 1))) << 8
+  (if false { (1 >> 2) * (v1 as U8) } else { (v1 as U8) +% !v1 }) << (((1 >> 10) - (2 ^ 4294967295)) >> ((2147483647 & 2) / 2147483647))
+}
+flow f37(a: I64 at sample) -> U32 at sample { 1 }
+flow f39(a: Bool at sample) -> I16 at sample { { -({ if a { (100 +% -32768) << 17 } else { { 2 } } }) } }
+flow f40(a: I32 at sample) -> Bool at sample { true == ((-(-128) & (7 << 2)) > -128 / 1 * -0) }
+flow f43(a: I32 at sample) -> U32 at sample { ({ ({ if true { 10 } else { 2 } }) + 1 - 1 -| (if true { 4294967295 } else { 10 }) }) | (!(2147483647 & ({ 0 })) +% 100) }
+flow f45(a: Bool at sample) -> I16 at sample { { if a { ({ (if a { 2 } else { -32768 }) + (0 | 10) }) << 17 } else { -(((0 & 100) - (if a { 32767 } else { -32768 })) * (1 + ((-32768) % 10))) } } }
+flow f46(a: Bool at sample) -> U8 at sample { if true { !({ 127 + 255 +% 255 +% 255 }) } else { (!(7 +| 0) ^ 0) +% (if !false || (!a) { !(if true { 100 } else { 7 }) } else { (if a { 7 } else { 10 }) +| 127 *| 0 }) } }
+flow f47(a: U32 at sample) -> U32 at sample { if (({ (100 +% 10) <= -1 }) || true || true || (false && false)) && ((a as F64) * 2.5 / 3.141592653589793 - 9007199254740993.0 < -(a as F64)) { a } else { !(a % ((a as U32) % ({ 4294967295 }))) >> 0 } }
+flow f49(a: U64 at sample) -> F32 at sample { 1.0 }
+flow f50(a: U64 at sample) -> Bool at sample {
+  let v1 = true == false
+  ((a as U64) | ({ if false { a } else if v1 { a } else { 10 } })) > ((a * (a *% !7)) as U64)
+}
+flow f51(a: I32 at sample) -> U8 at sample { if 100 <= 32767 { !((255 | 1) << (1 *% 1)) *% (if true && (7 < 65535) { ({ 255 }) *% 255 } else { (10 -| 2) & (if false { 0 } else { 1 }) }) } else { ((if false || false { 1 } else { if true { 255 } else if true { 255 } else { 0 } }) << ((100 - 4294967295) >> (4294967295 *% 2))) | (((1 * 7) << 8) -% (!0 % (if false { 2 } else { 1 }))) } }
+flow f57(a: U8 at sample) -> U64 at sample { { (10 | ((10 ^ 0) >> 65)) -| (!(a as U64)) } }
+flow f58(a: I8 at sample) -> U16 at sample { { 7 } }
+flow f59(a: I64 at sample) -> I64 at sample { a }
+flow f61(a: I8 at sample) -> I64 at sample { { if ({ a as I16 }) == (if (a as I64) <= (100 << 63) { a as I16 } else if 7 *% 1 > (if true { 0 } else { 127 }) { ({ 1 }) - 32767 } else { 0 }) { -({ 2 }) } else { (a * (a as I8)) as I64 } } }
+flow f65(a: U32 at sample) -> F32 at sample { if (65535 ^ 2) -% 65535 != (if true { 0 } else { 2 }) - (!32767) { (if false && true { { 3.4028235e38 } } else { { 0.5 } }) * -16777216.0 } else { 3.14159 } }
+flow f66(a: I8 at sample) -> I32 at sample {
+  let w2: F32 = a as F32
+  let v1 = ({ 0.0 }) < (((a as F64) / (-2.5 / (0.30000000000000004 % 1e-3))) % (if false == ({ true }) { 4.9e-324 } else { 9007199254740993.0 })) / ((w2 as F64) + (({ 0.30000000000000004 }) / (w2 as F64) * -9007199254740993.0))
+  ({ { (10 / 0 * 0 * (-2147483648)) * (if v1 { 10 } else { -2147483648 }) *% 1073741823 } }) >> 33
+}
+flow f72(a: I64 at sample) -> U16 at sample { 7 -| (65535 -| 65535) / (if false { 100 } else { 2 }) *% ({ 0 << 0 }) }
+flow f76(a: U64 at sample) -> I8 at sample { 127 }
+flow f81(a: Bool at sample) -> Bool at sample {
+  let v3: I16 = { if a { (({ 16383 }) | (if a { 32767 } else { 1 })) *| (-32768 << 15) } else { 100 +| (16383 -% 16383) -| (if !a { 1 + 10 } else { 16383 >> 2147483647 }) } }
+  ((true && (true || v3 >= v3)) || ((7 << 6) & (if a { 255 } else { 0 })) < 1) && !((2147483647 >> 0) & ({ 7 })) > ((if a { 100 } else { 2147483647 }) * (2147483647 + 10)) * (!100 | (if a { 1 } else { 7 }))
+}
+flow f82(a: I16 at sample) -> F64 at sample { { a as F64 } }
+flow f83(a: U8 at sample) -> F32 at sample {
+  let w1: I16 = a as I16
+  w1 as F32
+}
+flow f84(a: I32 at sample) -> F64 at sample { { -((4.9e-324 * 3.141592653589793) * (1e300 - 9007199254740993.0)) } }
+flow f86(a: Bool at sample) -> U16 at sample { !(!(32767 ^ (100 -| !(10 -| 32767)))) }
+flow f87(a: Bool at sample) -> I64 at sample { (-(4611686018427387903 *% 0 / 100 * (100 -% 100)) +| ((if (a && a) && a { (9223372036854775807 -| 10) / ({ 1 }) } else { (2 / 100) ^ (7 & 10) }) << ((if 1 != 7 { 100 & 10 } else { 10 / 1 }) -% ({ 1 + 4294967295 })))) >> 62 }
+flow f89(a: I32 at sample) -> I16 at sample { 1 }
+flow f90(a: F64 at sample) -> U8 at sample { 100 }
+flow f98(a: U64 at sample) -> I32 at sample { 0 }
+flow f99(a: F32 at sample) -> Bool at sample { (a - a - (if true { a } else { a })) > ((if false { 16777217.0 } else { a }) * -2.5) }
+flow f100(a: U64 at sample) -> F64 at sample { -(if a > 1 && (if false { true } else { false }) { if false { if true { 9007199254740993.0 } else { 1e300 } } else { 0.30000000000000004 / 1.0 } } else { (0.0 + 1e300) / (0.30000000000000004 - 0.30000000000000004) }) }
+flow f104(a: I64 at sample) -> F32 at sample {
+  let v1: I16 = !((if 7 *| 0 < (if true { 1 } else { 7 }) { (if false { 16383 } else { -32768 }) *| -2 } else { (-32768 * 32767) ^ (-32768 +| 0) }) << 12)
+  ((((if true { 0.7 } else { 3.14159 }) + -1e-3 - 0.1) % ((v1 as F32) * (2.5 - 16777216.0))) - 2.5 / (0.1 - 0.30000001192092896 + (v1 as F32))) % ((if if true { true } else { false } { 3.14159 } else { 1.0 }) * ((-1e-3) % 16777216.0) * (0.7 * 0.30000001192092896)) % (-(if -32768 == v1 { 123456789.0 - 16777217.0 } else { 1e-3 / 1e-3 }))
+}
+flow f109(a: U8 at sample) -> F32 at sample { -1e-45 }
+flow f112(a: I64 at sample) -> F64 at sample {
+  let v2: U32 = !(({ 1 }) -% (if (false == false) && false == true { 10 } else { (2147483647 << 10) +| (2147483647 << 22) }))
+  -(v2 as F64)
+}
+flow f113(a: U64 at sample) -> I32 at sample { ((({ 1 }) * 100) ^ ((if false { 100 } else if false { 2147483647 } else { 2 }) % (2 +| 2147483647))) >> (({ 0 +| 7 }) % 4294967295) }
+flow f114(a: I8 at sample) -> I64 at sample { (if (16383 >> 15) <= 7 * 10 { (-9223372036854775808 *| 4611686018427387903) % 4611686018427387903 } else { a as I64 }) % (if !(7 >= 2) { { 1 +| 2 } } else { { 2 } }) }
+flow f115(a: F32 at sample) -> U32 at sample { (!2 & (if false { 0 } else { 0 })) % !(2 + 1) }
+flow f116(a: I32 at sample) -> I8 at sample { 7 }
+flow f118(a: U64 at sample) -> U32 at sample { (if 63 >= 0 { if true { 1 } else { 2147483647 } } else if 7 > 0 { 1 +% 100 } else { 0 * 2 }) / ({ 1 << 0 }) }
+flow f123(a: U8 at sample) -> I16 at sample {
+  let w2: I16 = a as I16
+  (((-(-(a as I16))) -% ({ a as I16 })) *| ((((w2 +% w2) >> (0 +% 4294967295)) - ({ w2 })) % ({ -w2 }))) | (if ({ ({ 100 }) << (7 +| 4294967295) }) > !2 / (127 ^ 1) -| 0 { -w2 } else { (a * (a as U8)) as I16 })
+}
+flow f126(a: U64 at sample) -> F32 at sample { if !false { if true == true { 16777216.0 } else { 2.5 - -16777217.0 } } else { if a != a { 0.5 } else { 3.4028235e38 % 0.7 } } }
+flow f128(a: Bool at sample) -> U32 at sample { if -128 *| 10 >= (2 | -128) { if 1 != 100 { { 4294967295 } } else { 7 } } else { 10 } }
+flow f130(a: I8 at sample) -> I16 at sample { (32767 *| (-32768 >> 13)) + (2 +% 16383) -| (2 - 7) }
+flow f131(a: I8 at sample) -> I16 at sample { { if true { 100 -% 7 } else if false { if true { -32768 } else { 0 } } else { 100 >> 0 } } }
+flow f135(a: U8 at sample) -> I64 at sample {
+  let w2: I16 = a as I16
+  w2 as I64
+}
+flow f136(a: U64 at sample) -> Bool at sample { !({ 9223372036854775807 }) < a }
+flow f138(a: I32 at sample) -> U16 at sample { !(if if if true { false } else if false { true } else { false } { 1 < 7 } else { true || true } { 7 } else { (if false { 0 } else { 100 }) ^ !32767 }) }
+flow f140(a: U16 at sample) -> U16 at sample { !65535 }
+flow f141(a: I8 at sample) -> Bool at sample { { { true } } }
+flow f142(a: F32 at sample) -> F64 at sample { ({ a as F64 }) - (a as F64) }
+flow f144(a: I32 at sample) -> I64 at sample { ((if true { 100 } else if false { 2 } else { 7 }) % (100 *% 9223372036854775807)) & 7 }
+flow f146(a: U64 at sample) -> U16 at sample {
+  let v3: U16 = { { { if false { 2 } else { 32767 } } } }
+  (v3 - ((v3 as U16) | (v3 & v3))) * ({ (v3 +| v3) * (0 % v3) })
+}
+flow f147(a: Bool at sample) -> Bool at sample { a }
+flow f148(a: I32 at sample) -> F64 at sample { -(-(if false { 3.141592653589793 } else if true { 1e-3 } else { 9007199254740993.0 })) }
+flow f149(a: U16 at sample) -> Bool at sample { false != (((100 ^ ({ a as I64 })) < ({ 10 })) || 0 < (!(127 * -128) << 1)) }
+flow f150(a: U16 at sample) -> F64 at sample {
+  let w2: F64 = a as F64
+  if (if false { true } else { true }) && ({ false }) { -1e-3 / w2 * w2 / w2 } else { -w2 }
+}
+flow f152(a: U8 at sample) -> F32 at sample {
+  let w1: I16 = a as I16
+  let v1 = 1 + (if true { (if w1 > w1 { if false { 0 } else { 2 } } else { a as U16 }) *% ({ 1 }) } else { !(!7 >> (if false { 0 } else { 1 })) })
+  (v1 as F32) / (1.0 * 16777216.0 * (-0.30000001192092896 - 2.5) - (-100.0 % (3.14159 * 0.30000001192092896)) + -16777216.0)
+}
+flow f154(a: U8 at sample) -> I8 at sample { 127 }
+flow f155(a: F32 at sample) -> U32 at sample { 7 }
+flow f160(a: U32 at sample) -> F32 at sample { (-0.0 * 0.0 + -(-1.00000017881393432617187499999)) % (1.0 * 1e-3 / (16777217.0 + 1e-45)) }
+flow f161(a: F32 at sample) -> U32 at sample { ((!1) | !0) - !(0 +| 4294967295) }
+flow f162(a: F64 at sample) -> Bool at sample { { false } }
+flow f163(a: I64 at sample) -> I64 at sample { ((!({ if false { a } else if false { 0 } else { a } })) -| 1) % ((a + (if a - a < (if true { a } else { a }) { a } else { if 255 > 7 { a } else if if false { false } else { true } { -a } else { a } })) as I64) }
+flow f164(a: U32 at sample) -> U32 at sample { ({ ((!a) + (2147483647 / a)) - (if false { 10 } else { 0 }) +| ({ 10 }) }) >> 33 }
+flow f165(a: U8 at sample) -> I64 at sample { { a as I64 } }
+flow f168(a: F64 at sample) -> U32 at sample { 7 }
+flow f169(a: U8 at sample) -> U16 at sample {
+  let w1: U32 = a as U32
+  let v1: U16 = if !(if true || true { w1 == 2147483647 } else { if false { true } else { true } }) { { (32767 +| 10) * (0 ^ 1) } } else { 0 }
+  !((({ 2 }) | (1 % v1)) *% ((v1 as U16) >> 8))
+}
+flow f172(a: U64 at sample) -> U8 at sample { (!0 -% !127) % (1 -% 127 +| ({ 10 })) }
+flow f173(a: U8 at sample) -> I16 at sample { ((a as I16) -| ({ (if !true { 7 +| 0 } else { 10 }) ^ (1 +| 10 -% (1 ^ 100)) })) -% ((({ 1 }) << 16) +| 1 +% (({ 7 }) >> 4) *| -(1 - 7)) *| ({ a as I16 }) }
+flow f176(a: U8 at sample) -> U8 at sample { 0 }
+flow f177(a: U8 at sample) -> F32 at sample {
+  let w2: I16 = a as I16
+  (w2 * ((({ w2 ^ 100 }) | ((100 - 32767) ^ (if true { w2 } else { w2 }))) << 2)) as F32
+}
+flow f180(a: F64 at sample) -> Bool at sample {
+  let v1: I8 = { { (if false { 0 +| 0 } else { -128 / 2 }) | ((100 ^ -128) << (2 >> 2)) } }
+  false || ((2 & (v1 as I32)) == 100)
+}
+flow f182(a: I16 at sample) -> I8 at sample { 7 }
+flow f183(a: U32 at sample) -> F32 at sample { { (if false { 0.7 } else { 0.1 }) + (if true { 0.30000001192092896 } else if false { 3.4028235e38 } else { 123456789.0 }) } }
+flow f185(a: Bool at sample) -> I64 at sample { ((2 >> 49) >> 14) *| (({ 10 }) +| (if true { 10 } else { -9223372036854775808 })) }
+flow f186(a: I16 at sample) -> U64 at sample { 100 }
+flow f187(a: F64 at sample) -> I16 at sample {
+  let v1: I16 = !(((if !100 < (100 *| 7) { (100 + 7) * (if false { 10 } else { 100 }) } else { ({ 10 }) << 11 }) -% 1) & !({ (if true { 1 } else { 7 }) -% 1 - 10 }))
+  v1 as I16
+}
+flow f188(a: F32 at sample) -> I16 at sample { (1 ^ 0) & ((if false { 16383 } else { 7 }) +% (0 & 16383)) }
+flow f190(a: U8 at sample) -> U16 at sample {
+  let w1: U16 = a as U16
+  (if (false && false) || !true { if false { w1 - 65535 } else { w1 << 15 } } else { ({ 7 }) +| 32767 + 65535 }) | (((if true { w1 } else { 32767 }) >> 17) ^ ((w1 * 0) -| (w1 & w1)))
+}
+flow f191(a: F64 at sample) -> I8 at sample { 100 }
+flow f192(a: Bool at sample) -> I8 at sample { -(-({ if 2 < 2 *% 1 { { if a { 100 } else { 63 } } } else { if -32768 == 2 { if false { 7 } else { -128 } } else { 63 } } })) }
+flow f193(a: Bool at sample) -> F64 at sample { { if if a { true } else { true } { 2.5 - ((if a { 0.0 } else { -1e300 }) % (1.0 % 0.30000000000000004)) } else { -(if a { 1.0 } else { 0.1 }) * (if a || true { 0.30000000000000004 * 2.5 } else if if a { false } else if false { a } else { a } { -(-1e300) } else { if false { -1e300 } else { 1.0 } }) } } }
+flow f197(a: U32 at sample) -> Bool at sample { false }
+flow f198(a: U32 at sample) -> I16 at sample {
+  let v1: U8 = if ({ 7 << a }) < -2 % (1073741823 >> 15) { if (true && false) == (a != 2147483647) { if 1 <= 2147483647 { 127 } else { !127 } } else { 1 | (if false { 1 } else { 10 }) } } else { 7 }
+  v1 as I16
+}
+flow f201(a: Bool at sample) -> I8 at sample { -(({ 2 }) << 1) }
+flow f202(a: I32 at sample) -> I8 at sample { if 2 / a + ({ a }) == a { if true { if 32767 <= 2 { -0 } else { 63 / 2 } } else if (false || false) && (if false { false } else { false }) { 63 - 63 - (if false { 63 } else { 10 }) } else { (100 % 63) & !2 } } else { -128 & ({ -128 % 2 }) } }
+flow f203(a: F32 at sample) -> I8 at sample { 7 }
+flow f208(a: U16 at sample) -> F32 at sample {
+  let w2: F32 = a as F32
+  w2 / ((a - (a >> 10)) as F32)
+}
+flow f209(a: U8 at sample) -> I64 at sample { 100 }
+flow f210(a: I32 at sample) -> I16 at sample { -((7 >> 15) * (if (!true) || ({ if true { true } else { false } }) { -(100 % !16383) } else { 10 })) }
+flow f211(a: I32 at sample) -> U64 at sample { if 2147483647 > (if false { a - a } else { a }) + !(-a) { 100 } else { (((2 -| 100) >> 64) << 65) & ((if !false { 9223372036854775807 } else { if true { 0 } else { 0 } }) % ({ 10 >> 64 })) } }
+flow f213(a: F32 at sample) -> F32 at sample {
+  let v2: F32 = ((if true { a } else { -0.30000001192092896 }) + (a / a) + (if false && true { a } else { if true { 0.5 } else { a } })) * (a / -(-0.30000001192092896) - (-a % 0.5 % -16777216.0))
+  v2
+}
+flow f216(a: I32 at sample) -> F64 at sample { { (1e-3 * 2.5) % (-3.141592653589793 + 0.1) % ((a as F64) + ({ -1.0 })) } }
+flow f218(a: I64 at sample) -> U16 at sample { 7 >> 0 }
+flow f219(a: F32 at sample) -> F32 at sample { ((if true { 123456789.0 } else { 1e-3 }) % (a - 123456789.0)) - (if false || false { a / 1e-3 } else { { a } }) + ((if false { a } else { a }) + a - a) + ({ -a }) }
+flow f223(a: U8 at sample) -> I8 at sample { (((2 *% 7) << (2 *| 1)) + (1 *| 10) *| !2) *% (if if !true { true } else { 7 >= 0 } { (2 +| 100) | (7 ^ 127) } else { { 127 << 0 } }) }
+flow f225(a: U16 at sample) -> F64 at sample {
+  let w2: F32 = a as F32
+  (w2 as F64) / (a as F64) - (if ({ false }) && ({ false }) { -({ 0.30000000000000004 }) } else { -(if !(true || false) { 0.1 / 1e300 - -2.5 } else if (true && false) != (false == true) { -9007199254740993.0 * 0.1 * (1.0 - 4.9e-324) } else { (if true { 0.1 } else { 0.0 }) - 4.9e-324 / -0.30000000000000004 }) })
+}
+flow f226(a: I16 at sample) -> F32 at sample {
+  let w2: F32 = a as F32
+  w2
+}
+flow f227(a: I16 at sample) -> F64 at sample { { 9007199254740993.0 } }
+flow f229(a: U8 at sample) -> U16 at sample { !(65535 ^ ((2 + 1 -| 32767) | (100 & ({ 32767 })))) }
+flow f231(a: U64 at sample) -> Bool at sample { (0 < 1 || (10 < 1)) && true }
+flow f232(a: F64 at sample) -> I8 at sample { { !(if 10 / 7 == !2 { 0 } else { 1 }) } }
+flow f234(a: I16 at sample) -> F32 at sample { ({ (a as F32) - (1e-3 - 16777216.0) }) / ((3.4028235e38 * 1.0 / (3.4028235e38 + 1e-45)) % ({ 100.0 % 3.4028235e38 })) }
+flow f236(a: I16 at sample) -> I16 at sample { 0 -| ((a - a - 2 + (a << 0)) as I16) }
+flow f237(a: Bool at sample) -> U16 at sample { !((2 -% 0) / (65535 & 65535) / (if a || a { 32767 / 100 } else { 0 * 7 })) | ((100 % (1 | (2 + 2))) *% 100) }
+flow f238(a: F32 at sample) -> U8 at sample { 7 }
+flow f239(a: U32 at sample) -> U32 at sample { ((a + a -% (4294967295 -| 7)) as U32) + 7 +% !a +% (7 ^ 2147483647) }
+flow f241(a: U8 at sample) -> U8 at sample { !(({ a << 7 }) -| (a ^ (0 -% a))) }
+flow f244(a: I8 at sample) -> F32 at sample { { if true == true { 1e-3 } else { -2.5 } } }
+flow f246(a: F32 at sample) -> F64 at sample { 0.30000000000000004 % ((-(0.30000000000000004 % 4.9e-324)) + -({ 4.9e-324 })) }
+flow f248(a: I64 at sample) -> U8 at sample { 127 }
+flow f252(a: I8 at sample) -> I32 at sample {
+  let w1: I32 = a as I32
+  (w1 *% 1 *| (w1 -% w1)) - -(w1 *% -2147483648)
+}
+flow f253(a: U32 at sample) -> I32 at sample { (if true || false { 2 & -2147483648 } else { { -2147483648 } }) / (if 0 > 7 { 2 / 7 } else { -2147483648 +| 1073741823 }) }
+flow f257(a: U32 at sample) -> U8 at sample { !(0 +| 0) *| (0 & 0 & (0 / 2)) }
+
+test "f4" {
+  let x0: [U8; 6] = [100, 0, 255, 100, 1, 0]
+  let _ = f4.render(x0, 8.0)
+}
+test "f6" {
+  let x0: [F32; 6] = [F32.from_bits(1078530011), F32.from_bits(759926910), F32.from_bits(2147483648), F32.from_bits(1), F32.from_bits(1266679809), F32.from_bits(0)]
+  let _ = f6.render(x0, 8.0)
+}
+test "f7 panics" {
+  let x0: [Bool; 1] = [false]
+  let _ = f7.render(x0, 8.0) //~ PANIC "f7 panics"
+}
+test "f8 panics" {
+  let x0: [U8; 1] = [254]
+  let _ = f8.render(x0, 8.0) //~ PANIC "f8 panics"
+}
+test "f9" {
+  let x0: [I16; 6] = [100, 32766, -32767, -32767, 100, -32768]
+  let _ = f9.render(x0, 8.0)
+}
+test "f10 panics" {
+  let x0: [U8; 1] = [254]
+  let _ = f10.render(x0, 8.0) //~ PANIC "f10 panics"
+}
+test "f12 panics" {
+  let x0: [U8; 1] = [0]
+  let _ = f12.render(x0, 8.0) //~ PANIC "f12 panics"
+}
+test "f13" {
+  let x0: [I64; 6] = [1, -9223372036854775807, 9223372036854775807, -9223372036854775807, -9223372036854775807, 7]
+  let _ = f13.render(x0, 8.0)
+}
+test "f14" {
+  let x0: [I64; 6] = [9223372036854775806, 0, 0, -1, -9223372036854775807, -9223372036854775808]
+  let _ = f14.render(x0, 8.0)
+}
+test "f16 panics" {
+  let x0: [Bool; 1] = [false]
+  let _ = f16.render(x0, 8.0) //~ PANIC "f16 panics"
+}
+test "f17 panics" {
+  let x0: [U32; 1] = [0]
+  let _ = f17.render(x0, 8.0) //~ PANIC "f17 panics"
+}
+test "f18" {
+  let x0: [I16; 6] = [32766, -32767, 7, 32767, 32767, 7]
+  let _ = f18.render(x0, 8.0)
+}
+test "f21" {
+  let x0: [F64; 6] = [F64.from_bits(4845873199050653696), F64.from_bits(4599676419421066581), F64.from_bits(4599676419421066581), F64.from_bits(9552619280166880916), F64.from_bits(9221120237041090560), F64.from_bits(4845873199050653696)]
+  let _ = f21.render(x0, 8.0)
+}
+test "f24" {
+  let x0: [U64; 6] = [0, 2, 18446744073709551615, 1, 18446744073709551614, 1]
+  let _ = f24.render(x0, 8.0)
+}
+test "f25" {
+  let x0: [U64; 6] = [18100302458875252968, 1, 1, 0, 0, 8194748598604047745]
+  let _ = f25.render(x0, 8.0)
+}
+test "f27" {
+  let x0: [F64; 6] = [F64.from_bits(4609434218613702656), F64.from_bits(4599676419421066581), F64.from_bits(9223372036854775808), F64.from_bits(9223372036854775808), F64.from_bits(4599676419421066581), F64.from_bits(9218868437227405312)]
+  let _ = f27.render(x0, 8.0)
+}
+test "f29 panics" {
+  let x0: [I16; 1] = [7]
+  let _ = f29.render(x0, 8.0) //~ PANIC "f29 panics"
+}
+test "f34" {
+  let x0: [I8; 6] = [-128, -1, 0, 7, 40, 120]
+  let _ = f34.render(x0, 8.0)
+}
+test "f36 panics" {
+  let x0: [Bool; 1] = [true]
+  let _ = f36.render(x0, 8.0) //~ PANIC "f36 panics"
+}
+test "f37" {
+  let x0: [I64; 6] = [1, 6571013483323223764, 1, 100, -1, 0]
+  let _ = f37.render(x0, 8.0)
+}
+test "f39" {
+  let x0: [Bool; 2] = [false, false]
+  let _ = f39.render(x0, 8.0)
+}
+test "f39 panics" {
+  let x0: [Bool; 1] = [true]
+  let _ = f39.render(x0, 8.0) //~ PANIC "f39 panics"
+}
+test "f40" {
+  let x0: [I32; 6] = [-1, -2147483648, 1, -2147483647, -2147483647, 7]
+  let _ = f40.render(x0, 8.0)
+}
+test "f43" {
+  let x0: [I32; 6] = [100, 2147483646, 7, 636386643, 1494631513, 2147483646]
+  let _ = f43.render(x0, 8.0)
+}
+test "f45 panics" {
+  let x0: [Bool; 1] = [true]
+  let _ = f45.render(x0, 8.0) //~ PANIC "f45 panics"
+}
+test "f46 panics" {
+  let x0: [Bool; 1] = [true]
+  let _ = f46.render(x0, 8.0) //~ PANIC "f46 panics"
+}
+test "f47" {
+  let x0: [U32; 6] = [0, 4294967295, 0, 4294967294, 0, 1302601824]
+  let _ = f47.render(x0, 8.0)
+}
+test "f49" {
+  let x0: [U64; 6] = [100, 18446744073709551615, 11679782359129097334, 0, 0, 18446744073709551614]
+  let _ = f49.render(x0, 8.0)
+}
+test "f50" {
+  let x0: [U64; 6] = [1, 0, 0, 1, 1, 1]
+  let _ = f50.render(x0, 8.0)
+}
+test "f51" {
+  let x0: [I32; 6] = [100, -2147483648, 0, 100, 100, 7]
+  let _ = f51.render(x0, 8.0)
+}
+test "f57 panics" {
+  let x0: [U8; 1] = [2]
+  let _ = f57.render(x0, 8.0) //~ PANIC "f57 panics"
+}
+test "f58" {
+  let x0: [I8; 6] = [126, 100, 127, 126, 127, 126]
+  let _ = f58.render(x0, 8.0)
+}
+test "f59" {
+  let x0: [I64; 6] = [9223372036854775807, 100, 9223372036854775807, 100, -1, -9223372036854775807]
+  let _ = f59.render(x0, 8.0)
+}
+test "f61" {
+  let x0: [I8; 4] = [7, 7, -1, -128]
+  let _ = f61.render(x0, 8.0)
+}
+test "f61 panics" {
+  let x0: [I8; 1] = [100]
+  let _ = f61.render(x0, 8.0) //~ PANIC "f61 panics"
+}
+test "f65" {
+  let x0: [U32; 6] = [7, 4294967295, 7, 1, 2, 1]
+  let _ = f65.render(x0, 8.0)
+}
+test "f66 panics" {
+  let x0: [I8; 1] = [-127]
+  let _ = f66.render(x0, 8.0) //~ PANIC "f66 panics"
+}
+test "f72" {
+  let x0: [I64; 6] = [-9223372036854775807, 9223372036854775806, 7574666257817087855, -9223372036854775807, -9223372036854775808, -9223372036854775808]
+  let _ = f72.render(x0, 8.0)
+}
+test "f76" {
+  let x0: [U64; 6] = [0, 0, 7033490849661419500, 2, 18446744073709551615, 0]
+  let _ = f76.render(x0, 8.0)
+}
+test "f81 panics" {
+  let x0: [Bool; 1] = [false]
+  let _ = f81.render(x0, 8.0) //~ PANIC "f81 panics"
+}
+test "f82" {
+  let x0: [I16; 6] = [-1, -1, -2935, -1, 6252, -1]
+  let _ = f82.render(x0, 8.0)
+}
+test "f83" {
+  let x0: [U8; 6] = [172, 0, 254, 2, 7, 0]
+  let _ = f83.render(x0, 8.0)
+}
+test "f84" {
+  let x0: [I32; 6] = [-2147483647, 0, -2147483648, -2147483647, 7, -2147483647]
+  let _ = f84.render(x0, 8.0)
+}
+test "f86" {
+  let x0: [Bool; 6] = [true, false, false, true, true, true]
+  let _ = f86.render(x0, 8.0)
+}
+test "f87 panics" {
+  let x0: [Bool; 1] = [true]
+  let _ = f87.render(x0, 8.0) //~ PANIC "f87 panics"
+}
+test "f89" {
+  let x0: [I32; 6] = [100, -1, 2147483646, 2147483646, 0, 0]
+  let _ = f89.render(x0, 8.0)
+}
+test "f90" {
+  let x0: [F64; 6] = [F64.from_bits(9218868437227405311), F64.from_bits(0), F64.from_bits(9218868437227405312), F64.from_bits(4607182418800017408), F64.from_bits(9218868437227405312), F64.from_bits(4607182418800017408)]
+  let _ = f90.render(x0, 8.0)
+}
+test "f98" {
+  let x0: [U64; 6] = [18446744073709551615, 7, 0, 100, 1, 0]
+  let _ = f98.render(x0, 8.0)
+}
+test "f99" {
+  let x0: [F32; 6] = [F32.from_bits(1266679809), F32.from_bits(1266679809), F32.from_bits(1266679808), F32.from_bits(1065353216), F32.from_bits(3212836864), F32.from_bits(1078530011)]
+  let _ = f99.render(x0, 8.0)
+}
+test "f100" {
+  let x0: [U64; 6] = [1, 18446744073709551615, 0, 1, 2, 18446744073709551614]
+  let _ = f100.render(x0, 8.0)
+}
+test "f104" {
+  let x0: [I64; 6] = [100, 9223372036854775806, -1, -9223372036854775807, 9223372036854775806, 1]
+  let _ = f104.render(x0, 8.0)
+}
+test "f109" {
+  let x0: [U8; 6] = [255, 149, 2, 100, 2, 0]
+  let _ = f109.render(x0, 8.0)
+}
+test "f112" {
+  let x0: [I64; 6] = [-1, 7, -9223372036854775808, 9223372036854775806, -1, 100]
+  let _ = f112.render(x0, 8.0)
+}
+test "f113" {
+  let x0: [U64; 6] = [7, 0, 7, 0, 2, 8774738518241971835]
+  let _ = f113.render(x0, 8.0)
+}
+test "f114" {
+  let x0: [I8; 6] = [-127, -127, -127, -127, 7, 1]
+  let _ = f114.render(x0, 8.0)
+}
+test "f115" {
+  let x0: [F32; 6] = [F32.from_bits(4286578688), F32.from_bits(0), F32.from_bits(1078530011), F32.from_bits(1266679808), F32.from_bits(1078530011), F32.from_bits(0)]
+  let _ = f115.render(x0, 8.0)
+}
+test "f116" {
+  let x0: [I32; 6] = [-2147483647, 2147483647, 1, -2147483648, -2147483647, 1]
+  let _ = f116.render(x0, 8.0)
+}
+test "f118" {
+  let x0: [U64; 6] = [18446744073709551615, 1, 2, 16583082000770647858, 1, 1]
+  let _ = f118.render(x0, 8.0)
+}
+test "f123 panics" {
+  let x0: [U8; 1] = [0]
+  let _ = f123.render(x0, 8.0) //~ PANIC "f123 panics"
+}
+test "f126" {
+  let x0: [U64; 6] = [0, 0, 1, 0, 18446744073709551614, 7]
+  let _ = f126.render(x0, 8.0)
+}
+test "f128" {
+  let x0: [Bool; 6] = [false, false, true, true, false, false]
+  let _ = f128.render(x0, 8.0)
+}
+test "f130" {
+  let x0: [I8; 6] = [1, 127, -127, 127, 1, -127]
+  let _ = f130.render(x0, 8.0)
+}
+test "f131" {
+  let x0: [I8; 6] = [1, 100, -128, 0, -1, -117]
+  let _ = f131.render(x0, 8.0)
+}
+test "f135" {
+  let x0: [U8; 6] = [7, 100, 50, 1, 0, 100]
+  let _ = f135.render(x0, 8.0)
+}
+test "f136" {
+  let x0: [U64; 6] = [1, 7, 1, 1, 8377809260758425699, 18446744073709551614]
+  let _ = f136.render(x0, 8.0)
+}
+test "f138" {
+  let x0: [I32; 6] = [100, 1, 2147483646, 7, 0, 7]
+  let _ = f138.render(x0, 8.0)
+}
+test "f140" {
+  let x0: [U16; 6] = [0, 7, 0, 1, 100, 1]
+  let _ = f140.render(x0, 8.0)
+}
+test "f141" {
+  let x0: [I8; 6] = [127, -5, -127, 1, 127, 106]
+  let _ = f141.render(x0, 8.0)
+}
+test "f142" {
+  let x0: [F32; 6] = [F32.from_bits(2892213663), F32.from_bits(1056964608), F32.from_bits(1069547520), F32.from_bits(0), F32.from_bits(2147483648), F32.from_bits(1)]
+  let _ = f142.render(x0, 8.0)
+}
+test "f144" {
+  let x0: [I32; 6] = [2147483646, -2147483648, 2147483647, 7, -2147483648, 100]
+  let _ = f144.render(x0, 8.0)
+}
+test "f146" {
+  let x0: [U64; 6] = [0, 18446744073709551615, 7, 100, 7, 0]
+  let _ = f146.render(x0, 8.0)
+}
+test "f147" {
+  let x0: [Bool; 6] = [false, true, true, false, false, false]
+  let _ = f147.render(x0, 8.0)
+}
+test "f148" {
+  let x0: [I32; 6] = [1, 100, -985180421, 2147483646, 1, 7]
+  let _ = f148.render(x0, 8.0)
+}
+test "f149" {
+  let x0: [U16; 6] = [2, 1, 0, 0, 0, 1]
+  let _ = f149.render(x0, 8.0)
+}
+test "f150" {
+  let x0: [U16; 6] = [65535, 65535, 7, 0, 2, 0]
+  let _ = f150.render(x0, 8.0)
+}
+test "f152" {
+  let x0: [U8; 6] = [1, 0, 7, 7, 2, 7]
+  let _ = f152.render(x0, 8.0)
+}
+test "f154" {
+  let x0: [U8; 6] = [0, 254, 7, 0, 254, 1]
+  let _ = f154.render(x0, 8.0)
+}
+test "f155" {
+  let x0: [F32; 6] = [F32.from_bits(1065353216), F32.from_bits(2143289344), F32.from_bits(2139095040), F32.from_bits(1), F32.from_bits(1266679809), F32.from_bits(1056964608)]
+  let _ = f155.render(x0, 8.0)
+}
+test "f160" {
+  let x0: [U32; 6] = [100, 0, 7, 0, 100, 2]
+  let _ = f160.render(x0, 8.0)
+}
+test "f161" {
+  let x0: [F32; 6] = [F32.from_bits(3212836864), F32.from_bits(1042199461), F32.from_bits(1078530011), F32.from_bits(1), F32.from_bits(3190685976), F32.from_bits(438885526)]
+  let _ = f161.render(x0, 8.0)
+}
+test "f162" {
+  let x0: [F64; 6] = [F64.from_bits(4607182418800017408), F64.from_bits(9453280239173405487), F64.from_bits(13830554455654793216), F64.from_bits(4609434218613702656), F64.from_bits(4599676419421066581), F64.from_bits(17733752503840980506)]
+  let _ = f162.render(x0, 8.0)
+}
+test "f163" {
+  let x0: [I64; 2] = [1, 1]
+  let _ = f163.render(x0, 8.0)
+}
+test "f163 panics" {
+  let x0: [I64; 1] = [0]
+  let _ = f163.render(x0, 8.0) //~ PANIC "f163 panics"
+}
+test "f164 panics" {
+  let x0: [U32; 1] = [0]
+  let _ = f164.render(x0, 8.0) //~ PANIC "f164 panics"
+}
+test "f165" {
+  let x0: [U8; 6] = [2, 255, 0, 0, 0, 1]
+  let _ = f165.render(x0, 8.0)
+}
+test "f168" {
+  let x0: [F64; 6] = [F64.from_bits(6998845001820329846), F64.from_bits(9221120237041090560), F64.from_bits(1), F64.from_bits(9223372036854775808), F64.from_bits(5443619762675164612), F64.from_bits(4845873199050653696)]
+  let _ = f168.render(x0, 8.0)
+}
+test "f169" {
+  let x0: [U8; 6] = [1, 255, 0, 255, 0, 0]
+  let _ = f169.render(x0, 8.0)
+}
+test "f172" {
+  let x0: [U64; 6] = [1, 1, 18446744073709551614, 0, 2, 13764344634086113151]
+  let _ = f172.render(x0, 8.0)
+}
+test "f173 panics" {
+  let x0: [U8; 1] = [254]
+  let _ = f173.render(x0, 8.0) //~ PANIC "f173 panics"
+}
+test "f176" {
+  let x0: [U8; 6] = [100, 100, 0, 7, 7, 2]
+  let _ = f176.render(x0, 8.0)
+}
+test "f177" {
+  let x0: [U8; 3] = [2, 1, 40]
+  let _ = f177.render(x0, 8.0)
+}
+test "f177 panics" {
+  let x0: [U8; 1] = [254]
+  let _ = f177.render(x0, 8.0) //~ PANIC "f177 panics"
+}
+test "f180" {
+  let x0: [F64; 6] = [F64.from_bits(9223372036854775808), F64.from_bits(9221120237041090560), F64.from_bits(9218868437227405311), F64.from_bits(9218868437227405312), F64.from_bits(13830554455654793216), F64.from_bits(9223372036854775808)]
+  let _ = f180.render(x0, 8.0)
+}
+test "f182" {
+  let x0: [I16; 6] = [7, 1, -1, -1, -32767, 32767]
+  let _ = f182.render(x0, 8.0)
+}
+test "f183" {
+  let x0: [U32; 6] = [7, 2, 2, 4294967295, 0, 7]
+  let _ = f183.render(x0, 8.0)
+}
+test "f185" {
+  let x0: [Bool; 6] = [false, false, false, true, true, false]
+  let _ = f185.render(x0, 8.0)
+}
+test "f186" {
+  let x0: [I16; 6] = [32767, -1, 1, 32766, 0, 29264]
+  let _ = f186.render(x0, 8.0)
+}
+test "f187" {
+  let x0: [F64; 6] = [F64.from_bits(4845873199050653696), F64.from_bits(15615814352918239419), F64.from_bits(10833018974223382983), F64.from_bits(4609434218613702656), F64.from_bits(12338182593537351953), F64.from_bits(18442240474082181120)]
+  let _ = f187.render(x0, 8.0)
+}
+test "f188" {
+  let x0: [F32; 6] = [F32.from_bits(34897367), F32.from_bits(1056964608), F32.from_bits(2139095039), F32.from_bits(4286578688), F32.from_bits(1095456358), F32.from_bits(3212836864)]
+  let _ = f188.render(x0, 8.0)
+}
+test "f190 panics" {
+  let x0: [U8; 1] = [1]
+  let _ = f190.render(x0, 8.0) //~ PANIC "f190 panics"
+}
+test "f191" {
+  let x0: [F64; 6] = [F64.from_bits(18442240474082181120), F64.from_bits(0), F64.from_bits(9218868437227405311), F64.from_bits(9218868437227405312), F64.from_bits(9223372036854775808), F64.from_bits(12859176178183918420)]
+  let _ = f191.render(x0, 8.0)
+}
+test "f192" {
+  let x0: [Bool; 6] = [true, true, true, false, false, true]
+  let _ = f192.render(x0, 8.0)
+}
+test "f193" {
+  let x0: [Bool; 6] = [false, false, false, true, true, false]
+  let _ = f193.render(x0, 8.0)
+}
+test "f197" {
+  let x0: [U32; 6] = [4294967294, 7, 4294967294, 1518271505, 2, 4294967294]
+  let _ = f197.render(x0, 8.0)
+}
+test "f198" {
+  let x0: [U32; 4] = [7, 1, 0, 0]
+  let _ = f198.render(x0, 8.0)
+}
+test "f198 panics" {
+  let x0: [U32; 1] = [100]
+  let _ = f198.render(x0, 8.0) //~ PANIC "f198 panics"
+}
+test "f201" {
+  let x0: [Bool; 6] = [false, false, true, true, true, false]
+  let _ = f201.render(x0, 8.0)
+}
+test "f202" {
+  let x0: [I32; 6] = [-2147483647, 1, 100, 2147483646, -1, 1]
+  let _ = f202.render(x0, 8.0)
+}
+test "f203" {
+  let x0: [F32; 6] = [F32.from_bits(115919271), F32.from_bits(1266679808), F32.from_bits(2139095039), F32.from_bits(1266679808), F32.from_bits(1056964608), F32.from_bits(3205452882)]
+  let _ = f203.render(x0, 8.0)
+}
+test "f208" {
+  let x0: [U16; 6] = [0, 100, 65535, 7, 0, 7]
+  let _ = f208.render(x0, 8.0)
+}
+test "f209" {
+  let x0: [U8; 6] = [129, 254, 7, 110, 0, 56]
+  let _ = f209.render(x0, 8.0)
+}
+test "f210" {
+  let x0: [I32; 6] = [100, 100, -2147483648, 7, -1, 100]
+  let _ = f210.render(x0, 8.0)
+}
+test "f211" {
+  let x0: [I32; 3] = [100, 0, 0]
+  let _ = f211.render(x0, 8.0)
+}
+test "f211 panics" {
+  let x0: [I32; 1] = [2147483646]
+  let _ = f211.render(x0, 8.0) //~ PANIC "f211 panics"
+}
+test "f213" {
+  let x0: [F32; 6] = [F32.from_bits(1065353216), F32.from_bits(2139095040), F32.from_bits(2772952263), F32.from_bits(1078530011), F32.from_bits(4286578688), F32.from_bits(2147483648)]
+  let _ = f213.render(x0, 8.0)
+}
+test "f216" {
+  let x0: [I32; 6] = [7, 100, -1, 1, -1, 0]
+  let _ = f216.render(x0, 8.0)
+}
+test "f218" {
+  let x0: [I64; 6] = [-9223372036854775808, 9223372036854775807, 1, 9223372036854775807, -1, 9223372036854775807]
+  let _ = f218.render(x0, 8.0)
+}
+test "f219" {
+  let x0: [F32; 6] = [F32.from_bits(1266679809), F32.from_bits(0), F32.from_bits(1065353216), F32.from_bits(1056964608), F32.from_bits(1065353216), F32.from_bits(1078530011)]
+  let _ = f219.render(x0, 8.0)
+}
+test "f223" {
+  let x0: [U8; 6] = [32, 1, 100, 254, 254, 100]
+  let _ = f223.render(x0, 8.0)
+}
+test "f225" {
+  let x0: [U16; 6] = [1, 65534, 7, 0, 2, 1]
+  let _ = f225.render(x0, 8.0)
+}
+test "f226" {
+  let x0: [I16; 6] = [0, 0, -32768, -32768, 32766, 32766]
+  let _ = f226.render(x0, 8.0)
+}
+test "f227" {
+  let x0: [I16; 6] = [-1, 1, 1, -32767, 7291, -32767]
+  let _ = f227.render(x0, 8.0)
+}
+test "f229" {
+  let x0: [U8; 6] = [254, 255, 100, 7, 7, 100]
+  let _ = f229.render(x0, 8.0)
+}
+test "f231" {
+  let x0: [U64; 6] = [18446744073709551615, 18446744073709551614, 1, 2, 100, 7]
+  let _ = f231.render(x0, 8.0)
+}
+test "f232" {
+  let x0: [F64; 6] = [F64.from_bits(18194085837564545199), F64.from_bits(2605955732063117823), F64.from_bits(4609434218613702656), F64.from_bits(9218868437227405312), F64.from_bits(4607182418800017408), F64.from_bits(10428319077839289473)]
+  let _ = f232.render(x0, 8.0)
+}
+test "f234" {
+  let x0: [I16; 6] = [32767, 32766, -32768, 7, -1, -32768]
+  let _ = f234.render(x0, 8.0)
+}
+test "f236" {
+  let x0: [I16; 5] = [-27808, 20788, 100, 100, 0]
+  let _ = f236.render(x0, 8.0)
+}
+test "f236 panics" {
+  let x0: [I16; 1] = [-32768]
+  let _ = f236.render(x0, 8.0) //~ PANIC "f236 panics"
+}
+test "f237" {
+  let x0: [Bool; 2] = [true, true]
+  let _ = f237.render(x0, 8.0)
+}
+test "f237 panics" {
+  let x0: [Bool; 1] = [false]
+  let _ = f237.render(x0, 8.0) //~ PANIC "f237 panics"
+}
+test "f238" {
+  let x0: [F32; 6] = [F32.from_bits(1065353216), F32.from_bits(1266679809), F32.from_bits(1724060535), F32.from_bits(4286578688), F32.from_bits(1069547520), F32.from_bits(1056964608)]
+  let _ = f238.render(x0, 8.0)
+}
+test "f239" {
+  let x0: [U32; 3] = [100, 1, 1821971614]
+  let _ = f239.render(x0, 8.0)
+}
+test "f239 panics" {
+  let x0: [U32; 1] = [4294967294]
+  let _ = f239.render(x0, 8.0) //~ PANIC "f239 panics"
+}
+test "f241" {
+  let x0: [U8; 6] = [255, 255, 2, 254, 7, 255]
+  let _ = f241.render(x0, 8.0)
+}
+test "f244" {
+  let x0: [I8; 6] = [127, 100, 1, -38, -1, 25]
+  let _ = f244.render(x0, 8.0)
+}
+test "f246" {
+  let x0: [F32; 6] = [F32.from_bits(3212836864), F32.from_bits(2139095039), F32.from_bits(1078530011), F32.from_bits(2143289344), F32.from_bits(2139095039), F32.from_bits(1078530011)]
+  let _ = f246.render(x0, 8.0)
+}
+test "f248" {
+  let x0: [I64; 6] = [9223372036854775806, 0, -3190739235308205836, 0, 0, 1]
+  let _ = f248.render(x0, 8.0)
+}
+test "f252" {
+  let x0: [I8; 3] = [126, 0, 126]
+  let _ = f252.render(x0, 8.0)
+}
+test "f252 panics" {
+  let x0: [I8; 1] = [1]
+  let _ = f252.render(x0, 8.0) //~ PANIC "f252 panics"
+}
+test "f253" {
+  let x0: [U32; 6] = [341903464, 1, 2, 4294967294, 0, 0]
+  let _ = f253.render(x0, 8.0)
+}
+test "f257" {
+  let x0: [U32; 6] = [4294967294, 2, 2, 4294967294, 100, 1]
+  let _ = f257.render(x0, 8.0)
+}

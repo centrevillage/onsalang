@@ -37,7 +37,7 @@ fn case(tests: Vec<TestRun>) -> CaseRun {
 }
 
 fn render(run: Run) -> Event {
-    Event::Render { flow: "m.f".into(), sample_rate: 8.0, run }
+    Event::Render { flow: "m.f".into(), written: None, sample_rate: 8.0, run }
 }
 
 #[test]

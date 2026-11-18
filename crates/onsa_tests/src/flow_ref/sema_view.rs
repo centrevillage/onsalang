@@ -111,6 +111,30 @@ impl<'a> View<'a> {
         self.analysis.prims.get(&def)
     }
 
+    /// The flows of the package.
+    pub fn flows(self) -> Vec<DefId> {
+        let a = self.analysis;
+        let mods = self.pkg.modules.iter().filter_map(|m| a.module_of_file(m.file));
+        let defs = mods.flat_map(|m| a.defs_of_module(m));
+        defs.filter(|(_, d)| matches!(d.kind, DefKind::Flow(_))).map(|(id, _)| id).collect()
+    }
+
+    /// The `len` of an array (std's `impl [T; N]`, a plain function: a `Span`'s is the primitive `Len`): the function of the
+    /// name of that primitive, in its module, with no row of its own and an array for its `impl`. The one place that says
+    /// which callee it is.
+    pub fn array_len(self) -> Option<DefId> {
+        let a = self.analysis;
+        let (span_len, _) = a.prims.iter().find(|(_, row)| matches!(row, PrimRow::Len))?;
+        let named = a.def(*span_len);
+        let of_array = |d: &onsa_sema::def::Def| {
+            let owner = d.owner.and_then(|o| a.def(o).as_impl());
+            owner.is_some_and(|i| matches!(self.ty(i.self_ty), Ty::Array(..)))
+        };
+        let mut same =
+            a.defs_of_module(named.module).filter(|(id, d)| d.name == named.name && !a.prims.contains_key(id));
+        same.find(|(_, d)| of_array(d)).map(|(id, _)| id)
+    }
+
     /// The struct a type is and what it is of a flow, when a flow generated it (`Config`, `Params`, `In`, `Rendered`).
     pub fn flow_ty(self, ty: TyId) -> Option<(DefId, FlowTy)> {
         match self.ty(ty) {

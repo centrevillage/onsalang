@@ -69,6 +69,8 @@ pub type Shape = Vec<(String, Option<usize>)>;
 pub struct Types {
     pub inputs: Vec<String>,
     pub leaves: Vec<String>,
+    /// The zero of each leaf (`Scalar::default_value`: a buffer of an output starts with it); `None` for a type with none.
+    pub zeros: Vec<Option<Value>>,
 }
 
 /// What a call of `process` or `render` was given (`frames` only of a flow with no `sample` input) and gave, a value for
@@ -87,10 +89,13 @@ pub struct Run {
 
 /// A call of a generated function; a state is named by its place in the order the test made them.
 #[derive(Debug)]
+///
+/// `written` is the path of the flow as the test writes it (`dup` after a `use`, `b.dup`: the printed test of the interpreter
+/// writes the same, in the same file); `None` where the call is not at hand (a `render` that a helper makes).
 pub enum Event {
-    Init { state: usize, flow: String, sample_rate: f32, config: Named<Value> },
+    Init { state: usize, flow: String, written: Option<String>, sample_rate: f32, config: Named<Value> },
     Process { state: usize, run: Run },
-    Render { flow: String, sample_rate: f32, run: Run },
+    Render { flow: String, written: Option<String>, sample_rate: f32, run: Run },
     Reset { state: usize },
 }
 

@@ -5,9 +5,11 @@
 use std::collections::{BTreeMap, HashMap};
 
 use onsa_driver::{Loaded, PackageInput, TestOptions, TestRun as Ran, analyze_loaded, lower_core, run_tests};
+use onsa_tests::flow_ref::flow::stage_at;
+use onsa_tests::flow_ref::sema_view::View;
 use onsa_tests::flow_ref::walk::{CaseRun, Verdict};
 
-use super::print::{PREFIX, Printed, print_test};
+use super::print::{LOCAL, PREFIX, Printed, print_test};
 
 /// What the printed tests of a case came to.
 #[derive(Debug, Default)]
@@ -35,12 +37,18 @@ struct Placed {
 pub fn compare_case(path: &str, mut input: PackageInput, run: &CaseRun) -> Compared {
     let mut out = Compared::default();
     let mut placed: HashMap<String, Placed> = HashMap::new();
+    let clash = input.files.iter().any(|f| f.text.contains(LOCAL));
     for (index, t) in run.tests.iter().enumerate().filter(|(_, t)| t.verdict == Verdict::Ok) {
         let Some(file) = input.files.iter_mut().find(|f| f.path == t.file) else {
             out.failures.push(format!("{path}: \"{}\": its file {} is not a file of the case", t.name, t.file));
             continue;
         };
-        match print_test(index, t) {
+        let printed = if clash {
+            Err(format!("a case that writes a name that starts with `{LOCAL}`"))
+        } else {
+            print_test(index, t)
+        };
+        match printed {
             Ok(printed) => {
                 if !file.text.ends_with('\n') {
                     file.text.push('\n');
@@ -86,6 +94,7 @@ fn judge(path: &str, input: PackageInput, placed: &HashMap<String, Placed>, out:
         }
         Err(e) => return out.failures.push(format!("{path}: {}", e.render(&loaded.sources))),
     };
+    let view = View::new(&analyzed);
     for t in &report.tests {
         let Some(p) = placed.get(&t.name) else {
             out.failures.push(format!("{path}: the interpreter ran a test that was not printed: {}", t.name));
@@ -105,8 +114,19 @@ fn judge(path: &str, input: PackageInput, placed: &HashMap<String, Placed>, out:
             (Some(call), Some((f, _, o)))
                 if f.origin == onsa_core::PanicOrigin::Panic && o.assert.is_none() && o.call == *call =>
             {
-                out.panicked += 1;
-                None
+                // The stage is that of the first place of the failure (the panic, then the calls outwards) that a flow has;
+                // none is the start of a `process`. Which frame, and the kind of the panic, the record does not tell.
+                let places = std::iter::once(f.span).chain(f.calls.iter().copied());
+                let stage = places.into_iter().find_map(|s| stage_at(view, s));
+                match p.printed.panic_at.map(|at| at.stage()) {
+                    Some(want) if want != stage => {
+                        Some(format!("it panicked at {stage:?}, the evaluator at {want:?}, at {call}"))
+                    }
+                    _ => {
+                        out.panicked += 1;
+                        None
+                    }
+                }
             }
             (_, Some((f, line, o))) => Some(format!(
                 "{}{} (line {line}): {}",

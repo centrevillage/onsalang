@@ -87,12 +87,12 @@ fn test_text(t: &TestRun) -> String {
 fn event_text(e: &Event) -> String {
     let rate = |sr: &f32| val(&Value::F32(*sr), false);
     match e {
-        Event::Init { state, flow, sample_rate, config } => {
+        Event::Init { state, flow, sample_rate, config, .. } => {
             format!("init {state} {flow} sr={}{}\n", rate(sample_rate), named(" cfg", config))
         }
         Event::Reset { state } => format!("reset {state}\n"),
         Event::Process { state, run } => format!("process {state}{}\n{}", run_text(run), out_rows(run)),
-        Event::Render { flow, sample_rate, run } => {
+        Event::Render { flow, sample_rate, run, .. } => {
             format!("render {flow} sr={}{}\n{}", rate(sample_rate), run_text(run), out_rows(run))
         }
     }
