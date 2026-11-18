@@ -319,6 +319,15 @@ impl Analysis {
         self.effect_decls.get(name).map_or(&[], Vec::as_slice)
     }
 
+    /// The flow the call `call` in the flow body of `body` makes an instance
+    /// of (`f~(x)`, `util.lp~(x)`, §11.5), as the names stage decided it
+    /// (`names/body/flow.rs`, D-15); `None` of any other call (a delay,
+    /// `sample_rate()`). The one place a reader outside the checker (the
+    /// reference evaluator) takes it from.
+    pub fn instance_of(&self, body: DefId, call: onsa_syntax::ast::ExprId) -> Option<DefId> {
+        self.names.get(&body)?.instance(call)
+    }
+
     /// The effect `Alloc` of `std.core`, a lang item (D-08, [`lang::LangItems`]).
     pub fn alloc(&self) -> Option<DefId> {
         self.modules.lang.alloc()

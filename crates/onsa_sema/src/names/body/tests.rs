@@ -621,6 +621,32 @@ fn the_marks_of_the_calls_of_a_flow_body_are_one_table() {
     assert_eq!(n.instance(n.instances[0].0), Some(def(&a, "lp")));
 }
 
+/// [`Analysis::instance_of`] reads the record of the names stage: the call
+/// of a flow of another module (`util.lp~(x)`) and of the module itself are
+/// instances, a delay is none (W7-18 U1d, the reference evaluator).
+#[test]
+fn the_instance_of_a_call_is_read_from_the_names_stage() {
+    let main = "use util\npub flow lp(x: F32 at sample) -> F32 at sample {\n  x\n}\n\
+                pub flow u(x: F32 at sample) -> F32 at sample {\n  util.lp~(x) + lp~(x) + prev~(x, 0.0)\n}\n";
+    let util = "pub flow lp(x: F32 at sample) -> F32 at sample {\n  x\n}\n";
+    let module = |segs: &[&str], file: u32, src: &str| {
+        let segs = segs.iter().map(|s| s.to_string()).collect();
+        Module::new(segs, FileId(file), src.into(), onsa_syntax::parse(FileId(file), src))
+    };
+    let m = module(&["main"], 0, main);
+    let a = analyze(&Package::new("t", vec![module(&["main"], 0, main), module(&["util"], 1, util)], vec![]));
+    assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
+    let lp_of = |file| {
+        let m = a.module_of_file(FileId(file)).unwrap();
+        a.defs_of_module(m).find(|(_, d)| d.name == "lp").map(|(id, _)| id)
+    };
+    let (u, main_lp, util_lp) = (def(&a, "u"), lp_of(0), lp_of(1));
+    assert!(main_lp.is_some() && util_lp.is_some() && main_lp != util_lp);
+    assert_eq!(a.instance_of(u, node(&m, "util.lp~(x)")), util_lp);
+    assert_eq!(a.instance_of(u, node(&m, "lp~(x)")), main_lp);
+    assert_eq!(a.instance_of(u, node(&m, "prev~(x, 0.0)")), None);
+}
+
 /// Outside a flow body, `f~(…)` is the walk's E0821 before the names of
 /// its callee (S-815): a name not found there is no E0302, and the callee has
 /// no record. A flow called as `f(x)` is the E0821 after them (R-269).
