@@ -1,0 +1,56 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§15.1", "§18.1"]
+// fixes = 0
+
+// W7-14 U6/t, S-372 (spec §11.3: the type of an expression of a flow body holds no function type, E0810, "入力でない道の `const` の関数値、関数型を含む型を返す `rt fn` の呼び出し"): the value of a `const`
+// of another module (`dsp.F`, or `F` after a `use`) and the call of an `rt fn` of another module that returns a function (`dsp.pick(c)`, `pick(c)`) or a type with one in it (`dsp.mk().cb`)
+// are the same error as in the module of the flow; the module of the declaration does not matter. A name that is called is not one (`dsp.through(x)`, `dsp.apply(…)` as the callee), and the
+// call of an `rt fn` of another module that uses a function inside its own body is fine. The same forms in the module of the declaration are in dsp.onsa. One error per flow (§18.1).
+
+use dsp
+use dsp.{F, pick, mk, apply}
+
+pub flow constant_of_a_module(x: F32 at sample) -> F32 at sample {
+  dsp.apply(dsp.F, x)                               //~ E0810 @13
+}
+
+pub flow constant_taken_by_a_use(x: F32 at sample) -> F32 at sample {
+  apply(F, x)                                       //~ E0810 @9
+}
+
+pub flow call_of_a_module_that_returns_a_function(x: F32 at sample, c: Bool at init) -> F32 at sample {
+  dsp.apply(dsp.pick(c), x)                         //~ E0810 @13
+}
+
+pub flow call_taken_by_a_use(x: F32 at sample, c: Bool at init) -> F32 at sample {
+  apply(pick(c), x)                                 //~ E0810 @9
+}
+
+pub flow field_of_a_call_of_a_module(x: F32 at sample) -> F32 at sample {
+  dsp.apply(dsp.mk().cb, x)                         //~ E0810 @13
+}
+
+pub flow field_of_a_call_taken_by_a_use(x: F32 at sample) -> F32 at sample {
+  let y = apply(mk().cb, x)                         //~ E0810 @17
+  y
+}
+
+pub flow field_of_a_call_with_a_private_function(x: F32 at sample) -> F32 at sample {
+  dsp.sealed().k * x                                //~ E0810 @3
+}
+
+pub flow in_a_par_body_of_a_module(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 {
+    dsp.apply(dsp.F, x) * F32.round_from(i)         //~ E0810 @15
+  }
+  ys[0] + ys[1]
+}
+
+pub flow call_of_a_module_that_is_fine(x: F32 at sample) -> F32 at sample {
+  dsp.through(x) + dsp.dbl(x)
+}
+
+pub flow flow_of_a_module_that_is_fine(x: F32 at sample) -> F32 at sample {
+  dsp.in_the_module_a_call_that_is_fine~(x)
+}

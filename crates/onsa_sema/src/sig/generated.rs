@@ -15,6 +15,15 @@ enum Unfit {
     NoChannel(Option<(Option<String>, TyId)>),
 }
 
+/// Where the value type of an input or the output of a flow is, of the
+/// boundary (§11.6): a `sample` input, the output, or neither.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Boundary {
+    Input,
+    Output,
+    Inside,
+}
+
 /// An item a flow generates (§11.6).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Generated {
@@ -247,36 +256,25 @@ impl<'p> Sema<'p> {
     /// types at the turn of the flow (an input with it is the error type to
     /// its users, S-1123), and of the output ([`Self::check_rate_value_type`]).
     pub(super) fn signal_type_error(&self, ty: TyId, span: Span) -> Option<Diagnostic> {
-        let shown = |t: TyId| self.a.display_type(t);
-        if let Some(d) = not_copy_signal(self.a, ty, span) {
-            return Some(d);
-        }
-        let held = crate::holds_fn::fn_in(self.a, ty)?;
-        let what = match held.parts.is_empty() {
-            true => "is a function type".to_string(),
-            false => format!("holds the function type `{}`", shown(held.found)),
-        };
-        let msg = format!("the value type of a signal holds no function type; `{}` {what} (§11.3)", shown(ty));
-        let d = Diagnostic::new(Stage::Flow, Code::E0810, span, msg);
-        let d = match held.parts.is_empty() {
-            true => d,
-            false => d.with_rule(format!("`{}` is in {}", shown(held.found), held.path(self.a))),
-        };
-        Some(d.with_rule(
-            "a flow takes, gives and keeps no function value; to choose among functions, take an enum and `match` on it",
-        ))
+        let what = "the value type of a signal";
+        not_copy_signal(self.a, ty, span).or_else(|| {
+            crate::holds_fn::holds_fn(self.a, ty).then(|| crate::holds_fn::fn_type_error(self.a, ty, span, what))
+        })
     }
 
     /// The E0810 of the value type `ty` of an input or the output of `id`
-    /// ([`Self::signal_type_error`]), and at the boundary (`sample` inputs,
-    /// `Some(true)`, and the output, `Some(false)`), §11.6: only scalars,
-    /// `[scalar; N]`, and (an output) structs of those. Whether it reports one.
-    fn check_rate_value_type(&mut self, id: DefId, ty: TyId, span: Span, boundary: Option<bool>) -> bool {
+    /// ([`Self::signal_type_error`]), and at the boundary, §11.6: only
+    /// scalars, `[scalar; N]`, and (an output) structs of those. Whether it
+    /// reports one.
+    fn check_rate_value_type(&mut self, id: DefId, ty: TyId, span: Span, boundary: Boundary) -> bool {
         if let Some(d) = self.signal_type_error(ty, span) {
             self.report(id, d);
             return true;
         }
-        let Some(input) = boundary else { return false };
+        let input = match boundary {
+            Boundary::Inside => return false,
+            b => b == Boundary::Input,
+        };
         let fit = self.boundary_outputs(ty, input);
         let shown = |t: TyId| self.a.display_type(t);
         let msg = match fit {
@@ -377,8 +375,8 @@ impl<'p> Sema<'p> {
                 let (clock, api, ty) = (input.clock, input.api_clock(), input.ty);
                 // A type with the error type in it has its diagnostic (§18.1):
                 // of an input of the E0810 of [`Self::signal_type_error`] too.
-                let sig = (api == Clock::SAMPLE).then_some(true);
-                let unfit = self.check_rate_value_type(h.flow, ty, span, sig) || self.a.types.has_error(ty);
+                let place = if api == Clock::SAMPLE { Boundary::Input } else { Boundary::Inside };
+                let unfit = self.check_rate_value_type(h.flow, ty, span, place) || self.a.types.has_error(ty);
                 let attr = Attr::find(&f.params[at].attrs, onsa_syntax::attrs::PARAM);
                 // The `@param` of an input of a type no signal has, or with a
                 // diagnostic, is not read (§6.5: as the arguments of an
@@ -396,7 +394,7 @@ impl<'p> Sema<'p> {
             }
             if let Some(span) = h.out {
                 let out = self.flow_def(h.flow).out;
-                self.check_rate_value_type(h.flow, out, span, Some(false));
+                self.check_rate_value_type(h.flow, out, span, Boundary::Output);
             }
             self.trim_members(h.flow, pairs);
         }

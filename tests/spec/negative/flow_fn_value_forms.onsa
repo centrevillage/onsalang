@@ -1,0 +1,283 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5", "§11.2", "§18.1"]
+// fixes = 0
+
+// W7-14 U6/t, S-372 (spec §11.3: "入出力の値型と、本体の式（部分式を含む）の型は、クロックと `@export` によらず関数型を含まない（E0810）。含むかは型の構造で決め、配列とタプルの
+// 要素、struct のフィールド（`priv` も）、enum の列挙子の要素、型引数、別名の中の関数型も含む"): an expression of a flow body (a part of an expression too) has a type that holds no
+// function type, whatever its clock is. The forms that hold one are the value of a `const` (`F`, an element of an array of functions), the call of an `rt fn` that returns a type with a
+// function type in it (and the field of that result), the value that a delay or a `let` holds, and the tuple and struct literals that have a function in them. The error is E0810 of the flow
+// check, has no candidate (`fixes = 0`: what the writer wants instead is an enum and a `match`, or a table made by a function, and that is not one thing), and is the first one in the order of
+// the source (§18.1: one error in a flow), so each form is a flow of its own and the marker is on its line. The place of an error in a nest of expressions is in flow_fn_value_nesting.onsa and its
+// order against the other errors of a flow is in flow_clock/flow_fn_value_order.onsa.
+// What is not an error is in the flows at the end of the file (the controls): the name that is called (`f(x)` of `f`), the instance that is called, the constructor of an enum
+// (`Some`, `Choice.Gain`), and every value whose type holds no function type (a call of an `rt fn` that takes a function inside its own body, a struct of scalars).
+
+pub rt fn dbl(x: F32) -> F32 {
+  x * 2.0
+}
+
+pub rt fn half(x: F32) -> F32 {
+  x * 0.5
+}
+
+const F: rt fn(F32) -> F32 = dbl
+
+const FS: [rt fn(F32) -> F32; 2] = [dbl, half]
+
+pub struct Pt {
+  cb: rt fn(F32) -> F32,
+  k: F32,
+}
+
+pub struct Level {
+  k: F32,
+}
+
+pub enum Choice {
+  Off,
+  Gain(F32),
+}
+
+pub rt fn pick(c: Bool) -> rt fn(F32) -> F32 {
+  dbl
+}
+
+pub rt fn mk() -> Pt {
+  Pt { cb: dbl, k: 1.0 }
+}
+
+pub rt fn apply(f: rt fn(F32) -> F32, x: F32) -> F32 {
+  f.(x)
+}
+
+pub rt fn first(p: (F32, rt fn(F32) -> F32)) -> F32 {
+  p.0
+}
+
+pub rt fn through(x: F32) -> F32 {
+  apply(dbl, x)
+}
+
+pub rt fn level_of(k: F32) -> Level {
+  Level { k: k }
+}
+
+pub flow gain(k: F32 at block, x: F32 at sample) -> F32 at sample {
+  x * k
+}
+
+// ---------------------------------------------------------------- the value of a constant
+
+pub flow const_as_an_argument(x: F32 at sample) -> F32 at sample {
+  apply(F, x)                                       //~ E0810
+}
+
+pub flow const_in_a_let(x: F32 at sample) -> F32 at sample {
+  let y = apply(F, x)                               //~ E0810
+  y
+}
+
+pub flow element_of_a_constant_array(x: F32 at sample) -> F32 at sample {
+  apply(FS[1], x)                                   //~ E0810
+}
+
+// ---------------------------------------------------------------- the call of an `rt fn` that returns a function, or a type with a function in it
+
+pub flow call_returns_a_function(x: F32 at sample, c: Bool at init) -> F32 at sample {
+  apply(pick(c), x)                                 //~ E0810
+}
+
+pub flow call_returns_a_function_in_a_let(x: F32 at sample, c: Bool at init) -> F32 at sample {
+  let h = pick(c)                                   //~ E0810
+  x
+}
+
+pub flow let_with_the_type_written(x: F32 at sample, c: Bool at init) -> F32 at sample {
+  let h: rt fn(F32) -> F32 = pick(c)                //~ E0810
+  x
+}
+
+pub flow field_of_a_call(x: F32 at sample) -> F32 at sample {
+  apply(mk().cb, x)                                 //~ E0810
+}
+
+pub flow call_of_a_slower_clock(x: F32 at sample, c: Bool at block) -> F32 at sample {
+  x * apply(pick(c), 1.0)                           //~ E0810
+}
+
+// ---------------------------------------------------------------- the literals that hold a function
+
+pub flow tuple_literal(x: F32 at sample) -> F32 at sample {
+  x * first((1.0, F))                               //~ E0810
+}
+
+pub flow struct_literal(x: F32 at sample) -> F32 at sample {
+  let p = Pt { cb: F, k: x }                        //~ E0810
+  x
+}
+
+pub flow some_of_a_function(x: F32 at sample, c: Bool at init) -> F32 at sample {
+  let o = Some(pick(c))                             //~ E0810
+  x
+}
+
+// ---------------------------------------------------------------- the values that a delay holds, and its `init`
+
+pub flow delay_of_a_function(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let d = delay~(pick(c), 4, pick(true))            //~ E0810
+  x
+}
+
+pub flow prev_of_a_function(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  let d = prev~(pick(c), pick(true))                //~ E0810
+  x
+}
+
+pub flow delay_init_with_a_function(x: F32 at sample) -> F32 at sample {
+  prev~(x, apply(F, 0.5))                           //~ E0810
+}
+
+// ---------------------------------------------------------------- the places of a body
+
+pub flow in_an_instance_argument(x: F32 at sample) -> F32 at sample {
+  gain~(apply(F, 0.5), x)                           //~ E0810
+}
+
+pub flow in_an_instance_argument_in_a_let(x: F32 at sample) -> F32 at sample {
+  let y = gain~(apply(F, 0.5), x)                   //~ E0810
+  y
+}
+
+pub flow in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 {
+    apply(F, x) * F32.round_from(i)                 //~ E0810
+  }
+  ys[0] + ys[1]
+}
+
+pub flow in_the_arm_of_an_if(x: F32 at sample) -> F32 at sample {
+  if x > 0.0 {
+    apply(F, x)                                     //~ E0810
+  } else {
+    0.0
+  }
+}
+
+pub flow in_the_arm_of_a_match(x: F32 at sample) -> F32 at sample {
+  match x > 0.0 {
+    true => apply(F, x),                            //~ E0810
+    false => 0.0,
+  }
+}
+
+pub flow in_the_guard_of_an_arm(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  match c {
+    true if apply(F, x) > 0.0 => 1.0,               //~ E0810
+    _ => 0.0,
+  }
+}
+
+pub flow in_an_operand_of_a_comparison(x: F32 at sample) -> F32 at sample {
+  if x > apply(F, 0.5) {                            //~ E0810
+    1.0
+  } else {
+    0.0
+  }
+}
+
+// ---------------------------------------------------------------- the function type is found by the structure of the type
+
+pub type Shaper = rt fn(F32) -> F32
+
+const G: Shaper = dbl
+
+const NONE: [rt fn(F32) -> F32; 0] = []
+
+pub struct Pair[T] {
+  a: T,
+  b: T,
+}
+
+pub flow alias_of_a_function(x: F32 at sample) -> F32 at sample {
+  apply(G, x)                                       //~ E0810
+}
+
+pub flow struct_with_a_function_as_its_type_argument(x: F32 at sample, c: Bool at init) -> F32 at sample {
+  let p = Pair { a: pick(c), b: pick(c) }           //~ E0810
+  x
+}
+
+pub flow array_of_length_zero_of_functions(x: F32 at sample) -> F32 at sample {
+  let n = NONE.len()                                //~ E0810
+  x
+}
+
+// ---------------------------------------------------------------- the reading of the type: a value whose type holds a function type is an error whatever the part of it that is read
+
+// §11.3: "本体の式（部分式を含む）の型は…関数型を含まない": the type of `P` is `Pt`, which has a function in it, so the field `k` that is read is of the expression `P`
+// whose type is `Pt` (and the same for the result of a call and for a value of an enum with a function in one of its variants).
+
+const P: Pt = Pt { cb: dbl, k: 2.0 }
+
+pub enum Hook {
+  Off,
+  On(rt fn(F32) -> F32),
+}
+
+pub flow field_of_a_constant_that_is_not_a_function(x: F32 at sample) -> F32 at sample {
+  P.k * x                                           //~ E0810
+}
+
+pub flow field_of_a_call_that_is_not_a_function(x: F32 at sample) -> F32 at sample {
+  mk().k * x                                        //~ E0810
+}
+
+pub flow unit_variant_of_an_enum_with_a_function(x: F32 at sample) -> F32 at sample {
+  let h = Hook.Off                                  //~ E0810
+  x
+}
+
+// ---------------------------------------------------------------- not errors: the controls
+
+pub flow call_of_an_rt_fn_that_uses_a_function_inside(x: F32 at sample) -> F32 at sample {
+  through(x)
+}
+
+pub flow name_that_is_called(x: F32 at sample) -> F32 at sample {
+  dbl(x) + half(x)
+}
+
+pub flow instance_that_is_called(x: F32 at sample) -> F32 at sample {
+  gain~(0.5, x)
+}
+
+pub flow constructor_of_an_enum(x: F32 at sample) -> F32 at sample {
+  let c = if x > 0.0 { Choice.Gain(x) } else { Choice.Off }
+  let o = Some(x)
+  let k = match c {
+    Choice.Gain(g) => g,
+    Choice.Off => 0.0,
+  }
+  match o {
+    Some(v) => v + k,
+    None => k,
+  }
+}
+
+pub flow struct_without_a_function(x: F32 at sample) -> F32 at sample {
+  let l = level_of(x)
+  let m = Level { k: x }
+  l.k + m.k
+}
+
+pub flow delay_of_a_number(x: F32 at sample) -> F32 at sample {
+  delay~(x, 4, 0.5) + prev~(x)
+}
+
+pub flow par_of_numbers(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 {
+    dbl(x) * F32.round_from(i)
+  }
+  ys[0] + ys[1]
+}

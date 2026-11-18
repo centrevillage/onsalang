@@ -1,6 +1,6 @@
 // onsa.toml
 // [test]
-// spec = ["§2.6", "§11.1", "§15.1", "§18.1"]
+// spec = ["§2.6", "§11.1", "§11.3", "§15.1", "§18.1"]
 // fixes = 0
 
 // `~` on a field of a function type (§2.6, S-811): a field is a value, so `s.f~(x)` is the E0812 of a `~`
@@ -54,7 +54,14 @@ pub flow in_an_operand(x: F32 at sample) -> F32 at sample {
   x - KS.curve~(x)                                  //~ E0812
 }
 
+// The constant `KS` has a function in its type, so every expression `KS` of a flow body is the E0810 of §11.3 (S-372, W7-14 U6), the read of the
+// field `gain` that is a number as well.
+pub flow a_number_field_of_a_constant_with_a_function(x: F32 at sample) -> F32 at sample {
+  let y = x * KS.gain                               //~ E0810
+  y
+}
+
 pub flow fine(x: F32 at sample) -> F32 at sample {
-  let y = x * KS.gain
+  let y = x * 2.0
   y
 }

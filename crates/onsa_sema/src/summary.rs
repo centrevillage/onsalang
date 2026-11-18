@@ -29,6 +29,9 @@ pub(crate) struct Summaries {
     pub(crate) decls: HashMap<DefId, Option<Facts>>,
     closed: HashMap<TyId, Facts>,
     cycle: Option<Cycle>,
+    /// Whether each type asked holds a function type ([`crate::holds_fn::holds_fn`]),
+    /// all of which [`Self::forget_new`] forgets.
+    pub(crate) fns: HashMap<TyId, bool>,
 }
 
 /// The declarations of a cycle, and what is kept that holds them: read with
@@ -51,6 +54,7 @@ impl Summaries {
         self.decls.clear();
         self.closed.clear();
         self.cycle = None;
+        self.fns.clear();
     }
 
     /// What is kept from here that holds the declarations `cycle` is what
@@ -60,6 +64,7 @@ impl Summaries {
     }
 
     pub(crate) fn forget_new(&mut self) {
+        self.fns.clear();
         let Some(Cycle { holds: (decls, types), .. }) = &mut self.cycle else { return };
         decls.drain().for_each(|d| _ = self.decls.remove(&d));
         types.drain().for_each(|t| _ = self.closed.remove(&t));

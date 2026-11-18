@@ -179,7 +179,7 @@ pub(super) struct Walk<'a> {
     non_rt: HashSet<ExprId>,
     recorder: NodeBuilder,
     /// A type → whether it is Dup and whether its drop needs `Alloc`
-    /// ([`Walk::check_made`]).
+    /// ([`Walk::fault`]).
     dup_drops: HashMap<TyId, (bool, bool)>,
 }
 
@@ -301,11 +301,19 @@ impl Walk<'_> {
         Some(self.ast.expr(e).span)
     }
 
-    /// The clock of `e` (⊥ is `None`), recorded at `Check`: in error if it
-    /// makes a value dropped with `Alloc` (E0805, [`Walk::check_made`]).
+    /// The clock of `e` (⊥ is `None`), recorded at `Check`: in error with a
+    /// fault of its value (E0805, E0810, [`Walk::fault`]).
     fn expr(&mut self, e: ExprId) -> Option<Clock> {
         let c = self.rule(e);
-        let c = if self.check_made(e) { Some(Clock::Error) } else { c };
+        let c = match self.fault(e) {
+            Some(f) => {
+                if self.checking() {
+                    self.report_fault(e, f);
+                }
+                Some(Clock::Error)
+            }
+            None => c,
+        };
         if self.mode != Mode::Check {
             return c;
         }

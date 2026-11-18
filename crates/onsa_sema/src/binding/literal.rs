@@ -76,7 +76,7 @@ impl Settle<'_> {
 
     /// Whether the value of `e` is Dup (S-780).
     fn dup(&mut self, e: ExprId) -> bool {
-        matches!(self.kind(e), Some(Kind::Copy | Kind::Shared))
+        crate::kind::dup(self.kind(e))
     }
 
     /// The kind of the value of `e` (§4.6, R-30), asked once for each type

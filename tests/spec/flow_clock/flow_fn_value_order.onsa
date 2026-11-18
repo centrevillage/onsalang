@@ -1,0 +1,192 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§18.1"]
+//
+// [[test.fix]]
+// at = "57:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["58:17 E0810"]
+//
+// [[test.fix]]
+// at = "69:11"
+// code = "E0807"
+// candidate = 1
+// leaves = ["70:17 E0810"]
+//
+// [[test.fix]]
+// at = "181:18"
+// code = "E0813"
+// candidate = 1
+// leaves = ["182:17 E0810"]
+//
+// [[test.fix]]
+// at = "117:9"
+// code = "E0813"
+// candidate = 1
+// leaves = ["117:30 E0810"]
+
+// W7-14 U6/t, S-372 (spec §11.3: a type of an expression of a flow body that holds a function type is E0810 of the flow check; §18.1: the order of the stages
+// names → types → flow check → modes and moves → rt and effects → unused bindings, and in a stage the first by position, the start and then the end): where the E0810 of a function
+// value comes in the order of the diagnostics of a flow. A unit has the errors of the first stage that has one, and of those the first by position, so
+// - an error of the names stage (E0302, E0806: the item written as a value, `F.(x)`) or of the type stage (E0401) is reported whatever the positions are, before or after the function
+//   value,
+// - an error of the flow check (the clock rules E0813 and E0815, the length of a delay E0807, an E0805 of an implicit `Alloc`, the E0810 of the type of a `let`) is reported if it is the
+//   first by position, and the E0810 of the function value is reported if that one is first,
+// - an input whose type is a function (E0810 at the signature, S-372, W7-13 U3) is at the heading of the flow, which is before the body, so the body has no second error.
+// The candidates of E0813 and E0807 stay (§11.4): the candidate is applied and what is left in the unit is the E0810 below it (`leaves`). One error per flow, so each form is a
+// flow of its own and the marker is on the line of the first.
+
+pub rt fn dbl(x: F32) -> F32 {
+  x * 2.0
+}
+
+const F: rt fn(F32) -> F32 = dbl
+
+pub rt fn apply(f: rt fn(F32) -> F32, x: F32) -> F32 {
+  f.(x)
+}
+
+pub rt fn len_of(s: Str) -> F32 {
+  1.0
+}
+
+// ---------------------------------------------------------------- the flow check, by position
+
+pub flow clock_error_then_a_function_value(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let b = prev~(p)                                              //~ E0813
+  let y = apply(F, x)
+  y
+}
+
+pub flow function_value_then_a_clock_error(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let y = apply(F, x)                                           //~ E0810
+  let b = prev~(p)
+  y
+}
+
+pub flow delay_of_one_then_a_function_value(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, 1)                                          //~ E0807
+  let y = apply(F, a)
+  y
+}
+
+pub flow function_value_then_a_delay_of_one(x: F32 at sample) -> F32 at sample {
+  let y = apply(F, x)                                           //~ E0810
+  let a = delay~(y, 1)
+  a
+}
+
+pub flow slower_clock_error_then_a_function_value(x: F32 at sample) -> F32 at sample {
+  let b = x at block                                            //~ E0815
+  let y = apply(F, x)
+  y
+}
+
+pub flow function_value_then_a_slower_clock_error(x: F32 at sample) -> F32 at sample {
+  let y = apply(F, x)                                           //~ E0810
+  let b = x at block
+  y
+}
+
+pub flow string_then_a_function_value(x: F32 at sample) -> F32 at sample {
+  let n = len_of("{x}")                                         //~ E0805 @18
+  let y = apply(F, x)
+  y
+}
+
+pub flow function_value_then_a_string(x: F32 at sample) -> F32 at sample {
+  let y = apply(F, x)                                           //~ E0810
+  let n = len_of("{x}")
+  y
+}
+
+pub flow text_let_then_a_function_value(x: F32 at sample) -> F32 at sample {
+  let s = "text"                                                //~ E0810
+  let y = apply(F, x)
+  y
+}
+
+pub flow function_value_then_a_text_let(x: F32 at sample) -> F32 at sample {
+  let y = apply(F, x)                                           //~ E0810
+  let s = "text"
+  y
+}
+
+pub flow clock_error_in_the_same_line_before(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  prev~(p) + apply(F, x)                                        //~ E0813
+}
+
+pub flow clock_error_in_the_same_line_after(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  apply(F, x) + prev~(p)                                        //~ E0810 @9
+}
+
+// ---------------------------------------------------------------- the stages before the flow check
+
+pub flow function_value_then_a_type_error(x: F32 at sample) -> F32 at sample {
+  let y = apply(F, x)
+  let t: Bool = 1.0                                             //~ E0401
+  y
+}
+
+pub flow type_error_then_a_function_value(x: F32 at sample) -> F32 at sample {
+  let t: Bool = 1.0                                             //~ E0401
+  let y = apply(F, x)
+  y
+}
+
+pub flow function_value_then_an_item_as_a_value(x: F32 at sample) -> F32 at sample {
+  let y = apply(F, x)
+  let z = apply(dbl, y)                                         //~ E0806
+  z
+}
+
+pub flow item_as_a_value_then_a_function_value(x: F32 at sample) -> F32 at sample {
+  let z = apply(dbl, x)                                         //~ E0806
+  let y = apply(F, z)
+  y
+}
+
+pub flow function_value_then_a_dot_call(x: F32 at sample) -> F32 at sample {
+  let y = apply(F, x)
+  let z = F.(y)                                                 //~ E0806
+  z
+}
+
+pub flow function_value_then_an_unknown_name(x: F32 at sample) -> F32 at sample {
+  let y = apply(F, x)
+  let z = y + nope                                              //~ E0302
+  z
+}
+
+pub flow unknown_name_then_a_function_value(x: F32 at sample) -> F32 at sample {
+  let z = x + nope                                              //~ E0302
+  let y = apply(F, z)
+  y
+}
+
+// ---------------------------------------------------------------- the heading of the flow
+
+pub flow function_input_and_a_function_value(f: (rt fn(F32) -> F32) at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  apply(F, x)
+}
+
+pub flow text_input_and_a_function_value(s: Str at block, x: F32 at sample) -> F32 at sample {   //~ E0810
+  apply(F, x)
+}
+
+// ---------------------------------------------------------------- the candidate of E0813 on the first argument of a delay
+
+pub flow delay_clock_error_then_a_function_value(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let d = delay~(p, 4, 0.5)                                     //~ E0813
+  let y = apply(F, d)
+  y
+}
+
+// ---------------------------------------------------------------- the control: a flow with none of these is right
+
+pub flow fine(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = prev~(x)
+  let b = delay~(a, 2)
+  b * p
+}

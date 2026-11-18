@@ -1,0 +1,159 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5", "§18.1"]
+// fixes = 0
+
+// W7-14 U6/t, S-372 (spec §11.3: "本体の式（部分式を含む）の型は…関数型を含まない（E0810）"; §18.1: of the errors left in a unit the first one by the order of `diagnostics`, the start
+// position and then the end position, is the one reported): every expression of the body whose type holds a function type is an error, and a flow reports the first one, so
+// - an expression that starts before another is reported before it, so the outer one over the inner one that starts where it starts or later (`first((1.0, F))` is the tuple
+//   `(1.0, F)`, not `F`),
+// - of two expressions that start at the same place the shorter one is reported (`apply(mk().cb, x)` is `mk()`, not `mk().cb`; `FS[0]` is `FS`),
+// - an expression that has no function type in it and holds one that has (`apply(F, x)` as a whole, `x * apply(pick(c), 1.0)`) is not the error, the part is,
+// - of two forms in one flow the first by the source is reported, in whatever order the clocks and the statements make them (a `let` below the other statement is the later).
+// The place is the marker's column (`@N`), the start of the expression (§3.5).
+
+pub rt fn dbl(x: F32) -> F32 {
+  x * 2.0
+}
+
+const F: rt fn(F32) -> F32 = dbl
+
+const FS: [rt fn(F32) -> F32; 2] = [dbl, dbl]
+
+pub struct Pt {
+  cb: rt fn(F32) -> F32,
+  k: F32,
+}
+
+pub struct Wrap {
+  inner: Pt,
+}
+
+pub rt fn pick(c: Bool) -> rt fn(F32) -> F32 {
+  dbl
+}
+
+pub rt fn mk() -> Pt {
+  Pt { cb: dbl, k: 1.0 }
+}
+
+pub rt fn wrap() -> Wrap {
+  Wrap { inner: Pt { cb: dbl, k: 1.0 } }
+}
+
+pub rt fn same[T](x: T) -> T {
+  x
+}
+
+pub rt fn apply(f: rt fn(F32) -> F32, x: F32) -> F32 {
+  f.(x)
+}
+
+pub rt fn first(p: (F32, rt fn(F32) -> F32)) -> F32 {
+  p.0
+}
+
+pub rt fn second(p: (F32, (F32, rt fn(F32) -> F32))) -> F32 {
+  p.0
+}
+
+// ---------------------------------------------------------------- the outer expression starts first
+
+pub flow tuple_over_its_element(x: F32 at sample) -> F32 at sample {
+  x * first((1.0, F))                               //~ E0810 @13
+}
+
+pub flow tuple_over_a_call_in_it(x: F32 at sample) -> F32 at sample {
+  x * first((1.0, mk().cb))                         //~ E0810 @13
+}
+
+pub flow tuple_in_a_tuple(x: F32 at sample) -> F32 at sample {
+  x * second((1.0, (2.0, F)))                       //~ E0810 @14
+}
+
+pub flow struct_literal_over_its_field(x: F32 at sample) -> F32 at sample {
+  apply(Wrap { inner: Pt { cb: F, k: x } }.inner.cb, x)   //~ E0810 @9
+}
+
+// ---------------------------------------------------------------- the same start: the shorter one
+
+pub flow call_over_its_field(x: F32 at sample) -> F32 at sample {
+  apply(mk().cb, x)                                 //~ E0810 @9
+}
+
+pub flow call_over_two_fields(x: F32 at sample) -> F32 at sample {
+  apply(wrap().inner.cb, x)                         //~ E0810 @9
+}
+
+pub flow element_over_its_array(x: F32 at sample) -> F32 at sample {
+  apply(FS[0], x)                                   //~ E0810 @9
+}
+
+pub flow call_with_a_slower_clock(x: F32 at sample, c: Bool at init) -> F32 at sample {
+  apply(pick(c), x)                                 //~ E0810 @9
+}
+
+pub flow generic_call_over_its_argument(x: F32 at sample, c: Bool at init) -> F32 at sample {
+  apply(same(pick(c)), x)                           //~ E0810 @9
+}
+
+// ---------------------------------------------------------------- the part, when the whole holds no function type
+
+pub flow part_of_an_argument_list(x: F32 at sample) -> F32 at sample {
+  apply(F, apply(F, x))                             //~ E0810 @9
+}
+
+pub flow part_of_a_sum(x: F32 at sample, c: Bool at init) -> F32 at sample {
+  x + apply(pick(c), 1.0) * 2.0                     //~ E0810 @13
+}
+
+pub flow part_of_a_delay(x: F32 at sample) -> F32 at sample {
+  prev~(apply(F, x))                                //~ E0810 @15
+}
+
+// ---------------------------------------------------------------- the delay that holds a function starts before its argument
+
+pub flow delay_over_its_argument(x: F32 at sample, c: Bool at sample) -> F32 at sample {
+  apply(delay~(pick(c), 4, pick(true)), x)          //~ E0810 @9
+}
+
+// ---------------------------------------------------------------- two forms in one flow: the first by the source
+
+pub flow two_lets_the_first_is_reported(x: F32 at sample, c: Bool at init) -> F32 at sample {
+  let a = apply(F, x)                               //~ E0810 @17
+  let b = apply(pick(c), a)
+  b
+}
+
+pub flow two_lets_the_first_is_a_call(x: F32 at sample, c: Bool at init) -> F32 at sample {
+  let a = apply(pick(c), x)                         //~ E0810 @17
+  let b = apply(F, a)
+  b
+}
+
+pub flow two_forms_in_one_expression(x: F32 at sample, c: Bool at init) -> F32 at sample {
+  apply(pick(c), x) + apply(F, x)                   //~ E0810 @9
+}
+
+pub flow two_forms_in_one_expression_reversed(x: F32 at sample, c: Bool at init) -> F32 at sample {
+  apply(F, x) + apply(pick(c), x)                   //~ E0810 @9
+}
+
+pub flow the_second_in_the_branch_that_is_not_taken(x: F32 at sample, c: Bool at init) -> F32 at sample {
+  if x > 0.0 {
+    apply(pick(c), x)                               //~ E0810 @11
+  } else {
+    apply(F, x)
+  }
+}
+
+// ---------------------------------------------------------------- not errors: the part of a nest that holds no function type
+
+pub flow field_that_is_a_number_of_a_value_without_a_function(x: F32 at sample) -> F32 at sample {
+  let p = (x, 1.0)
+  first_of(p)
+}
+
+pub rt fn first_of(p: (F32, F32)) -> F32 {
+  p.0
+}

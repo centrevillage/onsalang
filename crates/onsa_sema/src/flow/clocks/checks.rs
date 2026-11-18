@@ -7,14 +7,15 @@
 //! a call of a function (§11.5), `if~` / `match~`, a node in a branch; the
 //! others leave it as the rules give it (the `k` of `e at k`, the output of
 //! an instance, the clock of a delay by its first argument). So does a value
-//! made with `Alloc` to drop (E0805, [`Walk::check_made`]).
+//! made with `Alloc` to drop (E0805) and one whose type holds a function
+//! type (E0810, [`Walk::fault`]).
 
 use onsa_syntax::ast::Lit;
 
 use super::*;
 use crate::binding::{aggregate, unit_variant};
 use crate::clock::{holds_state, promote, readable_at};
-use crate::kind::{Kind, kind_in_body};
+use crate::kind::kind_in_body;
 
 /// Whether `e` is written as a name or a literal, past parentheses and type
 /// arguments (not `^name`): the operand `at` makes faster as written (the
@@ -27,6 +28,16 @@ pub(crate) fn name_or_literal(ast: &Ast, mut e: ExprId) -> bool {
             k => return matches!(k, ExprKind::Path(_) | ExprKind::Lit(_)),
         }
     }
+}
+
+/// What the rules of a flow body find wrong with the value of an
+/// expression, by its type ([`Walk::fault`]).
+#[derive(Debug, Clone, Copy)]
+pub(super) enum Fault {
+    /// A value made whose drop needs `Alloc` (E0805), and what makes it.
+    Alloc(&'static str),
+    /// A type that holds a function type (E0810).
+    Fn,
 }
 
 impl Walk<'_> {
@@ -68,14 +79,27 @@ impl Walk<'_> {
         }
     }
 
-    /// Whether `e` makes a value whose drop needs `Alloc` (§11.5, §12.2,
-    /// S-1043 C2): a string with an interpolation, the result of a call of
-    /// a function, or a literal whose own type is not Dup (an aggregate, a
-    /// unit variant; a value in a literal that is Dup is made by an
-    /// expression in it). The same in every mode, E0805 at `Check`, and in
-    /// error then (§18.1): no outer check reads its clock. A value that
-    /// needs no drop (§5.4, S-1076) is none of these.
-    pub(super) fn check_made(&mut self, e: ExprId) -> bool {
+    /// What the rules of a flow body on the type of the value of `e` find
+    /// wrong with it, in this order: the same in every mode, reported at
+    /// `Check` ([`Self::report_fault`]), and in error then (§18.1): no outer
+    /// check reads its clock.
+    // SPEC-GAP(S-1152): every visited expression whose type holds a function
+    // is an E0810 and the first by place is the one reported (provisional).
+    pub(super) fn fault(&mut self, e: ExprId) -> Option<Fault> {
+        let ty = self.ty_of(e);
+        if let Some(what) = self.made(e, ty) {
+            return Some(Fault::Alloc(what));
+        }
+        crate::holds_fn::holds_fn(self.a, ty).then_some(Fault::Fn)
+    }
+
+    /// What `e` is if it makes a value whose drop needs `Alloc` (§11.5,
+    /// §12.2, S-1043 C2): a string with an interpolation, the result of a
+    /// call of a function, or a literal whose own type is not Dup (an
+    /// aggregate, a unit variant; a value in a literal that is Dup is made by
+    /// an expression in it). A value that needs no drop (§5.4, S-1076) is
+    /// none of these.
+    fn made(&mut self, e: ExprId, ty: TyId) -> Option<&'static str> {
         let (ast, body) = (self.ast, self.body);
         // `literal`: a literal, whose own type is to be Dup.
         let (what, literal) = match &ast.expr(e).kind {
@@ -86,26 +110,37 @@ impl Walk<'_> {
                 ("this call", false)
             }
             _ if aggregate(ast, body, e) || unit_variant(self.a, ast, body, e) => ("this literal", true),
-            _ => return false,
+            _ => return None,
         };
-        let (a, ty) = (self.a, self.ty_of(e));
+        let a = self.a;
         let (dup, drops) = *self.dup_drops.entry(ty).or_insert_with(|| {
-            let dup = matches!(kind_in_body(a, ty, &[]), Some(Kind::Copy | Kind::Shared));
-            (dup, crate::drop_alloc::Frame::body(a, vec![]).drops(ty))
+            (crate::kind::dup(kind_in_body(a, ty, &[])), crate::drop_alloc::Frame::body(a, vec![]).drops(ty))
         });
-        if !drops || (dup && literal) {
-            return false;
-        }
-        if self.checking() {
-            let span = ast.expr(e).span;
-            let msg =
-                format!("{what} makes a value whose drop needs `Alloc`, which a flow body cannot use (§11.5, §12.2)");
-            let d = Diagnostic::new(Stage::Flow, Code::E0805, span, msg).with_found(self.src(span));
-            self.report(
-                d.with_rule("a flow uses no heap: make the value in an `rt fn` that returns a value that is Copy"),
-            );
-        }
-        true
+        (drops && !(dup && literal)).then_some(what)
+    }
+
+    /// The diagnostic of the fault `f` of `e`: E0805 of a value made with
+    /// `Alloc` to drop, E0810 of a type that holds a function type (§11.3,
+    /// S-372: part of it read too, S-1151).
+    pub(super) fn report_fault(&mut self, e: ExprId, f: Fault) {
+        let span = self.ast.expr(e).span;
+        let d = match f {
+            Fault::Alloc(what) => {
+                let msg = format!(
+                    "{what} makes a value whose drop needs `Alloc`, which a flow body cannot use (§11.5, §12.2)"
+                );
+                Diagnostic::new(Stage::Flow, Code::E0805, span, msg)
+                    .with_rule("a flow uses no heap: make the value in an `rt fn` that returns a value that is Copy")
+            }
+            Fault::Fn => {
+                let what = "the type of an expression of a flow body";
+                crate::holds_fn::fn_type_error(self.a, self.ty_of(e), span, what).with_rule(
+                    "move this expression into an `rt fn` or a `const` that gives the flow what it reads (`const GAIN: F32 = P.gain`)",
+                )
+            }
+        };
+        let found = self.src(span);
+        self.report(d.with_found(found));
     }
 
     /// `inner at k` at `e` (§11.3), `c` the clock of `inner`: no slower

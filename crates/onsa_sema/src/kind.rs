@@ -29,6 +29,12 @@ impl Kind {
     }
 }
 
+/// Whether a value of the kind `k` is Dup (§4.6, S-780): Copy or Shared;
+/// of no kind (a second-class type, a walk that keeps quiet, §18.1), not.
+pub(crate) fn dup(k: Option<Kind>) -> bool {
+    matches!(k, Some(Kind::Copy | Kind::Shared))
+}
+
 /// Kind of a type; `None` when it depends on a generic parameter, or for
 /// second-class types (`Span`), and for a type that holds itself ([`Facts`]).
 pub fn kind_of(a: &Analysis, ty: TyId) -> Option<Kind> {
