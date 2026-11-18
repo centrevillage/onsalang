@@ -242,7 +242,7 @@ fn the_clock_of_an_input_is_read_in_one_place() {
     let stages = with_checked(src, true, |a| {
         let def = def_named(a, "f");
         let DefKind::Flow(decl) = &a.analysis.def(def).kind else { panic!("a flow") };
-        decl.inputs.iter().map(input_stage).collect::<Vec<_>>()
+        decl.inputs.iter().map(|i| input_stage(i).expect("a clock of a stage")).collect::<Vec<_>>()
     });
     assert_eq!(stages, [Stage::Init, Stage::Block, Stage::Sample]);
 }

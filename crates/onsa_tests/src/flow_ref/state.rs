@@ -11,7 +11,7 @@ use onsa_diag::Span;
 use onsa_sema::def::FlowDef;
 use onsa_sema::flow_names::{Delay, FlowBuiltin};
 use onsa_sema::ty::{FloatKind, Len};
-use onsa_sema::{DefId, Ty};
+use onsa_sema::{DefId, LocalId, Ty};
 use onsa_syntax::ast::{Arg, CallKind, ExprId, ExprKind};
 
 use super::call::parts;
@@ -50,6 +50,8 @@ pub struct Cell {
 pub struct InstState {
     pub cells: BTreeMap<NodeKey, Cell>,
     pub children: BTreeMap<NodeKey, Inst>,
+    /// What each `let` (by its initializer) holds beyond the one place of its step: part of the tree's places.
+    held: BTreeMap<ExprId, usize>,
 }
 
 impl InstState {
@@ -60,10 +62,12 @@ impl InstState {
     }
 }
 
-/// What a delay saves this tick: where, and the expression whose value it is.
+/// What a delay saves this tick: where, the expression whose value it is, and the bindings it is read under (the index
+/// of each `par~` it is in and the locals an arm of a `match~` binds: they are not what they were when it is stored).
 struct Save {
     key: NodeKey,
     expr: ExprId,
+    scope: Vec<(LocalId, Value)>,
 }
 
 /// What an evaluation of a flow body holds besides its locals: the state, what the delays save this tick, the time it is
@@ -75,17 +79,26 @@ pub struct Run {
     pub ctx: Ctx,
     used: usize,
     plans: Plans,
+    /// The replica of each `par~` the evaluation is inside of, and the bindings of those (`i`, an arm of a `match~`).
+    pub(super) replicas: Vec<u32>,
+    pub(super) scope: Vec<(LocalId, Value)>,
 }
 
 impl Run {
     pub(super) fn new(state: InstState, ctx: Ctx, used: usize, plans: Plans) -> Run {
-        Run { state, saves: Vec::new(), ctx, used, plans }
+        Run { state, saves: Vec::new(), ctx, used, plans, replicas: Vec::new(), scope: Vec::new() }
     }
 }
 
 enum Node {
     Delay(Delay),
     Instance(DefId),
+}
+
+/// What an expression makes at `init`: the node of a call, or the nodes of the body of a `par~`, each made for every replica.
+enum Site<'a> {
+    Node(ExprId, Node, &'a [Arg]),
+    Par(ExprId, Vec<Site<'a>>),
 }
 
 /// §11.4 `vdelay` as the spec writes it, on the ring `buf` (of `MAX + 1`) whose next place is `w`. A float of 32 bits is
@@ -127,6 +140,11 @@ impl<'a> Frame<'a> {
         }
     }
 
+    /// The node of the call `call` here: in the replica of each `par~` around it (U2).
+    pub(super) fn key(&self, call: ExprId) -> NodeKey {
+        NodeKey { call, replicas: self.run.as_ref().map(|r| r.replicas.clone()).unwrap_or_default() }
+    }
+
     /// The time this evaluation is at (§11.4: `sample_rate()`, `sample_tick()`); there is none outside an instance.
     fn time(&self, at: Span) -> Result<Ctx, Stop> {
         let run = self.run.as_ref();
@@ -139,7 +157,7 @@ impl<'a> Frame<'a> {
         let here = |fault| Stop { fault, at };
         let arg = |i: usize| args.get(i).map(|a| a.expr).ok_or(here(Internal("a delay with too few arguments")));
         let dc = if d == Delay::Variable { Some(self.eval(arg(1)?)?) } else { None };
-        let key = NodeKey { call: e, replicas: Vec::new() };
+        let key = self.key(e);
         let run = self.run.as_mut().ok_or(here(Fault::Unavailable("a delay outside an instance of a flow")))?;
         let cell = run.state.cells.get(&key).ok_or(here(Internal("a delay with no state")))?;
         let out = match (&cell.current, &dc) {
@@ -147,7 +165,7 @@ impl<'a> Frame<'a> {
             (Store::Ring { buf, w }, None) => buf[*w].clone(),
             (Store::Ring { buf, w }, Some(dc)) => interpolate(buf, *w, dc).map_err(here)?,
         };
-        run.saves.push(Save { key, expr: arg(0)? });
+        run.saves.push(Save { key, expr: arg(0)?, scope: run.scope.clone() });
         Ok(out)
     }
 
@@ -158,11 +176,14 @@ impl<'a> Frame<'a> {
         let here = |fault| Stop { fault, at };
         let mut stores = Vec::new();
         while let Some(save) = self.run.as_ref().ok_or(here(Internal("no run")))?.saves.get(stores.len()) {
-            let (key, expr) = (save.key.clone(), save.expr);
+            let (key, expr, scope) = (save.key.clone(), save.expr, save.scope.clone());
+            self.locals.extend(scope);
+            self.run.as_mut().ok_or(here(Internal("no run")))?.replicas.clone_from(&key.replicas);
             stores.push((key, self.eval(expr)?));
         }
         let run = self.run.as_mut().ok_or(here(Internal("no run")))?;
         run.saves.clear();
+        run.replicas.clear();
         for (key, v) in stores {
             match run.state.cells.get_mut(&key).map(|c| &mut c.current) {
                 Some(Store::Last(last)) => *last = v,
@@ -176,19 +197,27 @@ impl<'a> Frame<'a> {
         Ok(())
     }
 
-    /// The delays and instances in `e` as `(call, which, arguments)`, the inside first. A form the evaluator does not
-    /// evaluate (`par~`, U2) is `Unavailable` here, at `init`, not looked into.
-    fn nodes(&self, e: ExprId, out: &mut Vec<(ExprId, Node, &'a [Arg])>) -> Result<(), Stop> {
+    /// The delays and instances in `e`, the inside first, and the body of a `par~` as a site of its own. A form the
+    /// evaluator does not evaluate is `Unavailable` here, at `init`, not looked into.
+    fn nodes(&self, e: ExprId, out: &mut Vec<Site<'a>>) -> Result<(), Stop> {
         let (ast, at) = (self.body.ast, self.body.ast.expr(e).span);
         let here = |fault| Stop { fault, at };
         if !evaluates(&self.body, e) {
             return Err(here(Fault::Unavailable("a form of a later unit")));
         }
         let node = match &ast.expr(e).kind {
+            ExprKind::Par { body, .. } => {
+                let mut inner = Vec::new();
+                self.nodes(*body, &mut inner)?;
+                if !inner.is_empty() {
+                    out.push(Site::Par(e, inner));
+                }
+                return Ok(());
+            }
             ExprKind::Call { args, kind: CallKind::Flow, .. } => match self.body.called(e).map_err(here)? {
-                Called::Builtin(FlowBuiltin::Delay(d)) => Some((e, Node::Delay(d), args.as_slice())),
+                Called::Builtin(FlowBuiltin::Delay(d)) => Some(Site::Node(e, Node::Delay(d), args.as_slice())),
                 Called::Builtin(_) => None,
-                Called::Flow(def) => Some((e, Node::Instance(def), args.as_slice())),
+                Called::Flow(def) => Some(Site::Node(e, Node::Instance(def), args.as_slice())),
             },
             _ => None,
         };
@@ -203,10 +232,27 @@ impl<'a> Frame<'a> {
     pub(super) fn make_cells(&mut self, roots: &[ExprId]) -> Result<(), Stop> {
         let mut found = Vec::new();
         roots.iter().try_for_each(|e| self.nodes(*e, &mut found))?;
-        found.into_iter().try_for_each(|(e, node, args)| match node {
-            Node::Delay(d) => self.make_cell(e, d, args),
-            Node::Instance(def) => self.make_child(e, def),
-        })
+        self.build(&found)
+    }
+
+    /// The nodes of `sites`: those of a `par~` once for each replica, with its index bound.
+    fn build(&mut self, sites: &[Site<'a>]) -> Result<(), Stop> {
+        for site in sites {
+            match site {
+                Site::Node(e, Node::Delay(d), args) => self.make_cell(*e, *d, args)?,
+                Site::Node(e, Node::Instance(def), _) => self.make_child(*e, *def)?,
+                Site::Par(e, inner) => drop(self.replicate(*e, |f| f.build(inner))?),
+            }
+        }
+        Ok(())
+    }
+
+    /// A `let` keeps the value `v` (its previous one is given back): the places it holds beyond the one of its step count in the tree.
+    pub(super) fn keep_places(&mut self, init: ExprId, v: &Value) -> Result<(), Stop> {
+        let Some(run) = self.run.as_mut() else { return Ok(()) };
+        let more = v.places() - 1;
+        run.used = run.used.saturating_sub(run.state.held.insert(init, more).unwrap_or(0));
+        self.hold(Some(more), self.body.ast.expr(init).span)
     }
 
     /// Adds `places` (none: more than a count holds) to those of the whole tree, which `Limits::most` holds.
@@ -237,7 +283,7 @@ impl<'a> Frame<'a> {
         let init = init.ok_or(here(Internal("a delay of a type with no default")))?;
         let n = len.ok_or(here(Internal("a length that holds")))?;
         let store = if d == Delay::Prev { Store::Last(init) } else { Store::Ring { buf: vec![init; n], w: 0 } };
-        let key = NodeKey { call: e, replicas: Vec::new() };
+        let key = self.key(e);
         let run = self.run.as_mut().ok_or(here(Fault::Unavailable("a delay outside an instance of a flow")))?;
         run.state.cells.insert(key, Cell { initial: store.clone(), current: store });
         Ok(())
@@ -255,9 +301,10 @@ impl<'a> Frame<'a> {
     /// The instance of the flow `def` that the call `e` makes: kept in the state, then its `init` (the arguments of that clock).
     fn make_child(&mut self, e: ExprId, def: DefId) -> Result<(), Stop> {
         let at = self.body.ast.expr(e).span;
-        let (inst, decl) = self.new_child(def, at)?;
+        let (mut inst, decl) = self.new_child(def, at)?;
         let config = self.inputs_of(e, decl, Stage::Init)?;
-        let key = NodeKey { call: e, replicas: Vec::new() };
+        let key = self.key(e);
+        inst.scope = self.run.as_ref().map(|r| r.scope.clone()).unwrap_or_default();
         let run = self.run.as_mut().ok_or(Stop { fault: Internal("no run"), at })?;
         run.state.children.insert(key.clone(), inst);
         self.in_child(&key, |f, inst, decl| enter(f, inst, decl, Stage::Init, &config))
@@ -269,8 +316,13 @@ impl<'a> Frame<'a> {
         let ExprKind::Call { args, .. } = &ast.expr(call).kind else {
             return Err(Stop { fault: Internal("an instance that is not a call"), at });
         };
-        let mine = decl.inputs.iter().zip(args).filter(|(i, _)| input_stage(i) == stage);
-        mine.map(|(i, a)| Ok((i.name.as_str(), self.eval(a.expr)?))).collect()
+        let mut mine = Vec::new();
+        for (i, a) in decl.inputs.iter().zip(args) {
+            if input_stage(i).map_err(|fault| Stop { fault, at })? == stage {
+                mine.push((i.name.as_str(), self.eval(a.expr)?));
+            }
+        }
+        Ok(mine)
     }
 
     /// `go` on the instance at `key` in a frame of its own (the host, limits, time and places of this one); kept again whatever.
@@ -308,7 +360,7 @@ impl<'a> Frame<'a> {
         let decl = self.body.view.flow(def).map_err(|fault| Stop { fault, at })?;
         let given = self.inputs_of(e, decl, Stage::Sample)?;
         let given: Vec<(&str, &Value)> = given.iter().map(|(n, v)| (*n, v)).collect();
-        self.in_child(&NodeKey { call: e, replicas: Vec::new() }, |f, inst, decl| {
+        self.in_child(&self.key(e), |f, inst, decl| {
             enter(f, inst, decl, Stage::Sample, &given)?;
             Ok(inst.out.clone())
         })
@@ -319,8 +371,9 @@ impl<'a> Frame<'a> {
     // their places; the spec does not say the order, which only the place of a panic shows.
     pub(super) fn block_children(&mut self, whole: Span) -> Result<(), Stop> {
         let run = self.run.as_ref().ok_or(Stop { fault: Internal("a block stage with no run"), at: whole })?;
-        let calls: Vec<(NodeKey, DefId)> = run.state.children.iter().map(|(k, c)| (k.clone(), c.def)).collect();
-        for (key, def) in calls {
+        let calls: Vec<_> = run.state.children.iter().map(|(k, c)| (k.clone(), c.def, c.scope.clone())).collect();
+        for (key, def, scope) in calls {
+            self.locals.extend(scope);
             let at = self.body.ast.expr(key.call).span;
             let decl = self.body.view.flow(def).map_err(|fault| Stop { fault, at })?;
             let params = self.inputs_of(key.call, decl, Stage::Block)?;
@@ -330,7 +383,7 @@ impl<'a> Frame<'a> {
     }
 
     /// The type as far as its default needs it (§6.4); a field a struct declares a value for has it.
-    fn shape(&mut self, ty: &Ty, at: Span) -> Result<Shape, Stop> {
+    pub(super) fn shape(&mut self, ty: &Ty, at: Span) -> Result<Shape, Stop> {
         let here = |fault| Stop { fault, at };
         let view = self.body.view;
         Ok(match ty {

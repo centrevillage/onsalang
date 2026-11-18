@@ -22,7 +22,7 @@ use onsa_syntax::ast::{CallKind, ExprId, ExprKind, PatId, StmtKind};
 use super::expr::{Frame, Stop};
 use super::host::FnHost;
 use super::scalar::Fault;
-use super::sema_view::{Body, Called, Stage, View, clock_stage, input_stage, output_stage};
+use super::sema_view::{Body, Called, Stage, View, clock_stage, input_stage, inputs_at, output_stage};
 use super::state::{InstState, Run};
 use super::value::Value;
 
@@ -82,7 +82,7 @@ pub(super) fn clock_of(body: &Body, known: &HashMap<LocalId, Clock>, root: ExprI
         ExprKind::Call { kind, .. } if matches!(kind, CallKind::Flow) || body.time_call(e) => {
             Ok(match body.called(e)? {
                 Called::Builtin(FlowBuiltin::SampleRate) => Clock::Init,
-                Called::Flow(def) => output_stage(body.view.flow(def)?).into(),
+                Called::Flow(def) => output_stage(body.view.flow(def)?)?.into(),
                 Called::Builtin(_) => Clock::Sample,
             })
         }
@@ -124,6 +124,8 @@ pub struct Inst {
     locals: HashMap<LocalId, Value>,
     pub(super) out: Value,
     pub(super) state: InstState,
+    /// The index of each `par~` around the call that made it, which the arguments of its `block` stage may read.
+    pub(super) scope: Vec<(LocalId, Value)>,
 }
 
 /// The stage of a call a panic came from (§9.2, §11.6): its `init`, the `block` stage of a `process` (whatever its
@@ -168,11 +170,11 @@ pub struct Instance<'a> {
 /// internal errors (§11.6 decides the number), a call of 0 frames too.
 fn check<'n>(at: Span, decl: &FlowDef, stage: Stage, names: impl Iterator<Item = &'n str> + Clone) -> Result<(), Stop> {
     let wrong = |what| Stop { fault: Fault::Internal(what), at };
-    let mine = decl.inputs.iter().filter(|i| input_stage(i) == stage);
-    if names.clone().count() != mine.clone().count() {
+    let mine = inputs_at(decl, stage).map_err(|fault| Stop { fault, at })?;
+    if names.clone().count() != mine.len() {
         return Err(wrong("the inputs given are not the inputs of the clock"));
     }
-    match mine.clone().all(|i| names.clone().any(|n| n == i.name)) {
+    match mine.iter().all(|i| names.clone().any(|n| n == i.name)) {
         true => Ok(()),
         false => Err(wrong("an input that was not given")),
     }
@@ -188,7 +190,7 @@ fn give<V: std::borrow::Borrow<Value>>(
     let at = f.body.ast.expr(decl.body).span;
     check(at, decl, stage, given.iter().map(|(n, _)| *n))?;
     let wrong = |what| Stop { fault: Fault::Internal(what), at };
-    for i in decl.inputs.iter().filter(|i| input_stage(i) == stage) {
+    for i in inputs_at(decl, stage).map_err(|fault| Stop { fault, at })? {
         let (_, v) = given.iter().find(|(n, _)| *n == i.name).ok_or(wrong("an input that was not given"))?;
         f.locals.insert(f.body.input(&i.name).ok_or(wrong("an input with no local"))?, v.borrow().clone());
     }
@@ -243,7 +245,18 @@ impl Inst {
                 steps
             }
         };
-        Ok((Inst { def, steps, locals: HashMap::new(), out: Value::Unit, state: InstState::default() }, body, decl))
+        Ok((
+            Inst {
+                def,
+                steps,
+                locals: HashMap::new(),
+                out: Value::Unit,
+                state: InstState::default(),
+                scope: Vec::new(),
+            },
+            body,
+            decl,
+        ))
     }
 
     /// The clock of each `let` and of the output (§11.2).
@@ -253,7 +266,8 @@ impl Inst {
         let tail = b.tail.ok_or(wrong(decl.body, "a flow with no output expression"))?;
         let mut known = HashMap::new();
         for i in &decl.inputs {
-            known.insert(body.input(&i.name).ok_or(wrong(decl.body, "an input with no local"))?, input_stage(i).into());
+            let stage = input_stage(i).map_err(|fault| Stop { fault, at: body.ast.expr(decl.body).span })?;
+            known.insert(body.input(&i.name).ok_or(wrong(decl.body, "an input with no local"))?, stage.into());
         }
         let mut steps = Vec::new();
         for s in &b.stmts {
@@ -372,9 +386,8 @@ impl<'a> Instance<'a> {
             enter(&mut f, &mut self.me, decl, Stage::Block, params)?;
             for n in 0..frames {
                 stage = PanicAt::Sample(n);
-                if let Some(run) = f.run.as_mut() {
-                    run.ctx = self.ctx;
-                }
+                let run = f.run.as_mut().ok_or(Stop { fault: Fault::Internal("a frame with no run"), at })?;
+                run.ctx = self.ctx;
                 let given: Vec<(&str, &Value)> = inputs.iter().map(|(name, col)| (*name, &col[n])).collect();
                 enter(&mut f, &mut self.me, decl, Stage::Sample, &given)?;
                 outs.push(self.me.out.clone());
@@ -404,7 +417,7 @@ impl<'a> Instance<'a> {
         'a: 'h,
     {
         let here = |fault| Stop { fault, at: view.name_span(def) };
-        let sampled = view.flow(def).map_err(here)?.inputs.iter().any(|i| input_stage(i) == Stage::Sample);
+        let sampled = !inputs_at(view.flow(def).map_err(here)?, Stage::Sample).map_err(here)?.is_empty();
         let n = match (sampled, frames, inputs.first()) {
             (true, None, Some((_, column))) => column.len(),
             (false, Some(n), _) => n,

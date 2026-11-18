@@ -121,12 +121,9 @@ fn the_frame_of_a_panic_is_counted_in_its_call_and_not_from_init() {
 
 #[test]
 fn a_fault_that_is_no_panic_is_an_error_and_not_an_outcome() {
-    // An unavailable form (the `par~` of U2) and a call that is not the flow's (a column of another length than the
+    // An unavailable form (a string literal) and a call that is not the flow's (a column of another length than the
     // frames, which the boundary panics on in the spec and the evaluator does not take, §11.6) are `Err`, whatever the stage.
-    let src = "flow p(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { x }
-  ys[0]
-}
+    let src = "flow p(x: F32 at sample) -> F32 at sample { x + F32.round_from(\"ab\".len()) }
 flow q(x: I32 at sample) -> I32 at sample { x }";
     let text = src.to_string();
     let got = with_flow(src, "p", move |view, def| {

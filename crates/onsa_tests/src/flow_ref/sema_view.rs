@@ -119,14 +119,11 @@ pub enum Called {
 }
 
 impl<'a> Body<'a> {
-    /// The builtin the call `call` names, by the name its callee is written with (no binding hides one, E0304).
+    /// The builtin the call `call` names, as the names stage found it (an item or a `use` that takes the name first is
+    /// not one, E0304): the evaluator does not tell them by the spelling (D-15).
     fn builtin(&self, call: ExprId) -> Option<FlowBuiltin> {
         let ExprKind::Call { callee, .. } = &self.ast.expr(call).kind else { return None };
-        let ExprKind::Path(p) = &self.ast.expr(onsa_sema::named(self.ast, *callee)).kind else { return None };
-        match p.segments.as_slice() {
-            [one] => FlowBuiltin::named(&one.name),
-            _ => None,
-        }
+        self.view.analysis.flow_builtin(self.def, onsa_sema::named(self.ast, *callee))
     }
 
     /// What the call `call` of a flow makes an instance of: a builtin, or the flow the names stage recorded for it
@@ -231,6 +228,17 @@ impl<'a> Body<'a> {
         need(locals.peek().is_none().then_some(out), "a local of a parameter that the signature has not")
     }
 
+    /// The local of the variable of a `par~`, by where it is written: the `i` of `par~ i in 0 ..< 4`.
+    pub fn par_var(&self, at: Span) -> Result<LocalId, Fault> {
+        let found = self.info.locals.iter().position(|l| l.span == at && matches!(l.kind, LocalKind::Let));
+        need(found.map(|n| LocalId(n as u32)), "a `par~` variable with no local")
+    }
+
+    /// The type of a local.
+    pub fn local_ty(&self, l: LocalId) -> Result<&'a Ty, Fault> {
+        Ok(self.view.ty(need(self.info.locals.get(l.0 as usize), "a local not in the table")?.ty))
+    }
+
     /// The local of an input of a flow or of a parameter of a function (`self` included), by its name.
     pub fn input(&self, name: &str) -> Option<LocalId> {
         let at = self
@@ -268,15 +276,30 @@ pub enum Stage {
     Sample,
 }
 
-/// The one place that reads the clock of an input, its `Clock` as the generated API reads it
-/// (`FlowInput::api_clock`). The clocks no declaration makes today (W7-09, W7-11, W7-17) stop here.
-pub fn input_stage(input: &FlowInput) -> Stage {
-    match input.api_clock() {
-        Clock::Init => Stage::Init,
-        Clock::Block => Stage::Block,
-        Clock::SAMPLE => Stage::Sample,
-        c => panic!("the evaluator has no stage of the input clock {c:?}"),
+/// The stage a clock is made in; the clocks no declaration makes today (W7-09, W7-11, W7-17) are `Unavailable`.
+pub(super) fn stage_of(clock: Clock) -> Result<Stage, Fault> {
+    match clock {
+        Clock::Init => Ok(Stage::Init),
+        Clock::Block => Ok(Stage::Block),
+        Clock::SAMPLE => Ok(Stage::Sample),
+        _ => Err(Fault::Unavailable("a clock of no stage the evaluator has")),
     }
+}
+
+/// The stage of an input: its `Clock` as the generated API reads it (`FlowInput::api_clock`).
+pub fn input_stage(input: &FlowInput) -> Result<Stage, Fault> {
+    stage_of(input.api_clock())
+}
+
+/// The inputs of `decl` that are at `stage`, in the order of the heading.
+pub fn inputs_at(decl: &FlowDef, stage: Stage) -> Result<Vec<&FlowInput>, Fault> {
+    let mut mine = Vec::new();
+    for i in &decl.inputs {
+        if input_stage(i)? == stage {
+            mine.push(i);
+        }
+    }
+    Ok(mine)
 }
 
 /// The stage of the clock `name` an `at` writes (§11.3), if it is one of the three.
@@ -284,9 +307,9 @@ pub fn clock_stage(name: &str) -> Option<Stage> {
     ClockName::of_name(name).map(name_stage)
 }
 
-/// The clock of the output of a flow (§11.3): always `sample` today (W7-09 and W7-17 bring the others).
-pub fn output_stage(_: &FlowDef) -> Stage {
-    name_stage(ClockName::Sample)
+/// The clock of the output of a flow (§11.3), as its declaration made it.
+pub fn output_stage(decl: &FlowDef) -> Result<Stage, Fault> {
+    stage_of(decl.out_clock)
 }
 
 fn name_stage(name: ClockName) -> Stage {

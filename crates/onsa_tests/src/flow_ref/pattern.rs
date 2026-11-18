@@ -91,7 +91,14 @@ impl<'a> Frame<'a> {
 
     /// Does `v` match `pat` in a way `guard` accepts? The ways come in Rust's order, and the bindings of each are put
     /// to the locals before the guard reads them (the ones of a way the guard refuses are written over by the next).
-    fn arm(&mut self, pat: PatId, v: &Value, ty: &'a Ty, guard: Option<ExprId>, at: Span) -> Result<bool, Stop> {
+    pub(super) fn arm(
+        &mut self,
+        pat: PatId,
+        v: &Value,
+        ty: &'a Ty,
+        guard: Option<ExprId>,
+        at: Span,
+    ) -> Result<bool, Stop> {
         let mut way = Way::default();
         loop {
             if self.matches(pat, v, ty, None, &mut way)? {

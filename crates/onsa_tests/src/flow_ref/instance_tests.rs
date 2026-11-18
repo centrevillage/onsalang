@@ -7,6 +7,9 @@ use std::sync::atomic::{AtomicU32, Ordering::Relaxed};
 
 use onsa_driver::{Analyzed, Loaded, ManifestForm, ManifestSource, PackageInput, SourceFile, analyze_loaded};
 use onsa_sema::DefId;
+use onsa_sema::clock::Clock as SemaClock;
+use onsa_sema::flow_names::FlowBuiltin;
+use onsa_syntax::ast::{ExprId, ExprKind};
 
 use super::expr::Stop;
 use super::expr_tests::{def_named, i32v, is, panic_at, with_checked};
@@ -14,7 +17,7 @@ use super::flow::{Clock, Instance};
 use super::flow_tests::{counted, counter, host, init_stop, with_flow};
 use super::host::TableHost;
 use super::scalar::{Fault, PanicKind};
-use super::sema_view::View;
+use super::sema_view::{Called, Stage, View, inputs_at, output_stage, stage_of};
 use super::state_tests::{f32s, floats, go, run, same};
 use super::value::Value;
 
@@ -377,18 +380,15 @@ flow top3(a: I32 at init, x: I32 at sample) -> I32 at sample { idiv~(a, x) }";
 }
 
 #[test]
-fn a_par_in_a_child_is_unavailable_at_the_init_of_the_parent() {
-    // U2 has `par~`: the instance of a flow that has one cannot be made, and the parent's `init` says so (`Unavailable`),
-    // not a frame later; the flow that has none is made.
-    let src = "flow p(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { x }
-  ys[0]
-}
+fn a_form_the_evaluator_has_not_in_a_child_is_unavailable_at_the_init_of_the_parent() {
+    // The instance of a flow that has a string literal (§11.5) cannot be made, and the parent's `init` says so
+    // (`Unavailable`), not a frame later; the flow that has none is made.
+    let src = "flow p(x: F32 at sample) -> F32 at sample { x + F32.round_from(\"ab\".len()) }
 flow q(x: F32 at sample) -> F32 at sample { p~(x) }
 flow r(x: F32 at sample) -> F32 at sample { x }
 flow s(x: F32 at sample) -> F32 at sample { r~(x) }";
     let r = init_stop(true, src, "q");
-    assert!(matches!(&r, Some((Fault::Unavailable(_), at)) if at == "par~ i in 0 ..< 2 { x }"), "{r:?}");
+    assert!(matches!(&r, Some((Fault::Unavailable(_), at)) if at == "\"ab\""), "{r:?}");
     assert_eq!(init_stop(true, src, "s"), None);
 }
 
@@ -544,4 +544,87 @@ fn the_places_of_the_tree_count_the_body_of_each_instance_and_not_only_the_insta
         f32s(&me.process(&[], &[("x", &floats(&[1.0, 0.5])[..])], 2, None).expect("process"))
     });
     same(&got, &[128.0, 64.0]);
+}
+
+#[test]
+fn the_values_the_lets_of_the_instances_keep_are_counted_in_the_places_of_the_tree() {
+    // §11.5, §12.3: the evaluator holds `Limits::most` (2^20) places for the tree, and a `let` that keeps an array keeps
+    // its places. `child` has `[x; 600000]` in a `let` (600 000 places: 599 999 beyond the one of its step): one call of it
+    // is under the limit and runs (the value is x + 1), two calls are 1 199 998 and over: `Unavailable` in the first frame,
+    // when the second makes its value. Instances that are counted at their making only (8 and the steps) both run.
+    let src = "flow child(x: F32 at sample) -> F32 at sample {
+  let big = [x; 600000]
+  big[0] + 1.0
+}
+flow one(x: F32 at sample) -> F32 at sample { child~(x) }
+flow two(x: F32 at sample) -> F32 at sample { child~(x) + child~(x * 2.0) }";
+    let r = |name: &'static str| {
+        with_flow(src, name, |view, def| {
+            let mut me = Instance::init(view, def, 48000.0, &[], None).expect("init");
+            me.process(&[], &[("x", &floats(&[1.0])[..])], 1, None).map(|outs| f32s(&outs))
+        })
+    };
+    same(&r("one").expect("one call"), &[2.0]);
+    assert!(matches!(r("two"), Err(Stop { fault: Fault::Unavailable(_), .. })), "{:?}", r("two"));
+    // A tree of 6 levels (126 instances, two calls in each), each with `[x; 100000]`: 12.6 million places, which stops
+    // after some ten of them (the limit is 1 048 576), where counting nothing of the values keeps some 400 MB.
+    let mut src = String::from("flow g0(x: F32 at sample) -> F32 at sample {\n  let big = [x; 100000]\n  big[0]\n}\n");
+    for k in 1..=5 {
+        src += &format!(
+            "flow g{k}(x: F32 at sample) -> F32 at sample {{\n  let big = [x; 100000]\n  big[0] + g{}~(x) + g{}~(x)\n}}\n",
+            k - 1,
+            k - 1
+        );
+    }
+    let r = with_flow(&src, "g5", |view, def| {
+        let mut me = Instance::init(view, def, 48000.0, &[], None).expect("init");
+        me.process(&[], &[("x", &floats(&[1.0])[..])], 1, None).map(|outs| f32s(&outs))
+    });
+    assert!(matches!(r, Err(Stop { fault: Fault::Unavailable(_), .. })), "{r:?}");
+}
+
+#[test]
+fn a_call_is_a_builtin_as_the_names_stage_found_it_and_not_as_it_is_spelled() {
+    // §11.4, §2.2: `prev~(x)` and `sample_rate()` are builtins, `lp~(x)` is the flow `lp`, and an item that is spelled as a
+    // builtin (`flow prev`, E0304) is not run as the delay or as the item: its body has no tables, so `Unavailable`.
+    let src = "flow lp(x: F32 at sample) -> F32 at sample { x }
+flow top(x: F32 at sample) -> F32 at sample { lp~(x) + prev~(x) + sample_rate() }";
+    let got = with_checked(src, true, |a| {
+        let (view, lp) = (View::new(a), def_named(a, "lp"));
+        let body = view.body(def_named(a, "top")).expect("a body");
+        let calls: Vec<_> = (0..body.ast.exprs.len() as u32)
+            .map(ExprId)
+            .filter(|e| matches!(body.ast.expr(*e).kind, ExprKind::Call { .. }))
+            .collect();
+        let flows = calls.iter().filter(|e| matches!(body.called(**e), Ok(Called::Flow(d)) if d == lp)).count();
+        let delays =
+            calls.iter().filter(|e| matches!(body.called(**e), Ok(Called::Builtin(FlowBuiltin::Delay(_))))).count();
+        (calls.len(), flows, delays, calls.iter().filter(|e| body.time_call(**e)).count())
+    });
+    // Three calls in `top`: the flow `lp`, the delay `prev~`, and the one time call `sample_rate()`.
+    assert_eq!(got, (3, 1, 1, 1));
+    let src = "flow prev(x: F32 at sample) -> F32 at sample { x + 100.0 }
+flow top(x: F32 at sample) -> F32 at sample { prev~(x) }";
+    let r = init_stop(false, src, "top");
+    assert!(matches!(r, Some((Fault::Unavailable(_), _))), "{r:?}");
+}
+
+#[test]
+fn the_stage_of_a_clock_is_init_block_or_sample_and_no_other_clock_is_one() {
+    // §11.3: the inputs and the output of a declaration are at `init`, `block` or `sample`; a clock that no declaration of
+    // this version makes (a constant, the ambient one, an error) has no stage the evaluator runs: `Unavailable`, not a
+    // panic of the evaluator. The output of a flow is read from its `out_clock` (always `sample` in W7-02).
+    assert_eq!(stage_of(SemaClock::Init), Ok(Stage::Init));
+    assert_eq!(stage_of(SemaClock::Block), Ok(Stage::Block));
+    assert_eq!(stage_of(SemaClock::SAMPLE), Ok(Stage::Sample));
+    for c in [SemaClock::Const, SemaClock::Ambient, SemaClock::Error] {
+        assert!(matches!(stage_of(c), Err(Fault::Unavailable(_))), "{c:?}");
+    }
+    let src = "flow f(a: I32 at init, p: I32 at block, x: I32 at sample) -> I32 at sample { a + p + x }";
+    with_checked(src, true, |a| {
+        let decl = View::new(a).flow(def_named(a, "f")).expect("a flow");
+        assert_eq!(output_stage(decl), Ok(Stage::Sample));
+        let at_block = inputs_at(decl, Stage::Block).expect("inputs");
+        assert_eq!(at_block.iter().map(|i| i.name.as_str()).collect::<Vec<_>>(), ["p"]);
+    });
 }

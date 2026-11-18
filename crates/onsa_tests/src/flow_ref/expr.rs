@@ -46,8 +46,9 @@ pub struct Limits {
 }
 
 /// 4 MiB of the 64 MiB of a command thread stay: the frames between two `eval`s (a pattern 256 levels deep) are well
-/// within it. 2^20 places are 40 MB or so: a place is a value, a cell of a delay line, and in an instance 8 and
-/// one for each step of its body.
+/// within it. 2^20 places are 40 MB in a value, and 110 to 150 B a place (2026-11-18, up to some 150 MB) in a tree of
+/// instances: a place is a value, a cell of a delay line, a value a `let` keeps, and in an instance 8 and one for each
+/// step of its body.
 pub const LIMITS: Limits = Limits { reserve: 4 << 20, most: 1 << 20 };
 
 pub(super) const LOW_STACK: Fault = Fault::Unavailable("the stack is nearly used up");
@@ -86,12 +87,13 @@ pub(super) fn evaluates(body: &Body, e: ExprId) -> bool {
             );
             call || body.time_call(e)
         }
-        K::If { tilde, .. } | K::Match { tilde, .. } => tilde.is_none(),
+        K::Par { tilde, .. } => tilde.is_some(),
+        K::If { .. } | K::Match { .. } => true,
         K::Paren(_) | K::At { .. } | K::Binary { .. } | K::Unary { .. } | K::Cast { .. } | K::Index { .. } => true,
         K::TupleIndex { .. } | K::Struct { .. } | K::Tuple(_) | K::Array(_) | K::Repeat { .. } => true,
         K::Call { kind: CallKind::Flow, .. } | K::Feedback(_) => true,
         K::Call { .. } | K::Hole | K::Error | K::Closure { .. } | K::Handle { .. } | K::Unsafe(_) => false,
-        K::Par { .. } | K::TypeArgs { .. } | K::Try(_) | K::Move(_) | K::Range(_) => false,
+        K::TypeArgs { .. } | K::Try(_) | K::Move(_) | K::Range(_) => false,
     }
 }
 
@@ -183,6 +185,8 @@ impl<'a> Frame<'a> {
             | ExprKind::Struct { .. } => return self.aggregate(e, at),
             ExprKind::Call { callee, args, kind: CallKind::Plain } => return self.call(e, *callee, args, at),
             ExprKind::Match { tilde: None, .. } => return self.select(e, at),
+            ExprKind::Match { .. } => return self.select_all(e, at),
+            ExprKind::Par { .. } => return self.par(e),
             ExprKind::Unary { op: UnOp::Neg, .. } if self.body.ast.negated_literal(e).is_some() => {
                 return self.negated(e, at);
             }
@@ -193,6 +197,7 @@ impl<'a> Frame<'a> {
             ExprKind::Binary { op, lhs, rhs, .. } => return self.binary(*op, *lhs, *rhs, at),
             ExprKind::Cast { expr: x, .. } => return self.cast(e, *x, at),
             ExprKind::If { cond, then, else_, tilde: None } => return self.branch(*cond, *then, *else_, at),
+            ExprKind::If { .. } => return self.all_branches(e, at),
             ExprKind::Block(b) => return self.block(b, at),
             ExprKind::Feedback(_) | ExprKind::Call { kind: CallKind::Flow, .. } => return self.stateful(e, at),
             _ => return Err(here(Fault::Internal("a form of the list with no arm"))),
@@ -263,6 +268,7 @@ impl<'a> Frame<'a> {
     /// A `let`: the value of `init`, taken apart by `pat` into its locals (§11.2).
     pub(super) fn bind(&mut self, pat: PatId, init: ExprId) -> Result<(), Stop> {
         let v = self.eval(init)?;
+        self.keep_places(init, &v)?;
         let ty = self.body.ty(init).map_err(|fault| Stop { fault, at: self.body.ast.expr(init).span })?;
         self.destructure(pat, &v, ty)
     }

@@ -13,8 +13,8 @@
 //! stack of the thread: [`expr::Limits`] keeps 4 MiB of it back, and an `eval` that finds less left stops with
 //! `Unavailable`, whatever the input (a thread that is not one of `onsa_diag::stack` has no such guard).
 //! A level of a `vdelay~` in the `d` of a `vdelay~` takes 3.7 KB, one of `id~(id~(..))` 6.0 KB and a flow that calls a flow
-//! 8.9 KB in a frame and 7.4 KB at `init` (64 MiB hold some 7000 and 8400 of them; `Frame::low_stack` stops it,
-//! 2026-11-18).
+//! 9.4 KB in a frame and 8.4 KB at `init` (64 MiB hold some 6700 and 7450 of them; `Frame::low_stack` stops it,
+//! 2026-11-18; the `Frame::form` frame is 816 B, `in_child` 4.5 KB).
 //!
 //! - [`value`]: the values of the evaluator, their defaults (§6.4) and their
 //!   equality (§13.4).
@@ -30,11 +30,14 @@
 //!   each way a `|` lets a pattern match).
 //! - [`flow`]: an instance of a flow: the clock of each `let`, the stages `init` and `process` run them in, `reset`,
 //!   and `render` and `Outcome` (a panic with the stage it is at: `init`, `block`, the frame `n`).
+//! - [`branch`]: `par~` (a replica of its body for each value of its index, a state for each) and `if~` and `match~`
+//!   (every branch is evaluated, one is taken, an arm not taken has the default of its bindings).
 //! - [`state`]: the state of an instance, a tree of cells and instances made for each place a delay or a flow is called,
 //!   the delays (`prev~`, `delay~`, `vdelay~`) with the two phases of a tick that `^` needs, the time (`sample_rate()`).
 //! - [`sema_view`]: the tables of the checker the evaluator reads, in one file.
 
 pub mod aggregate;
+pub mod branch;
 pub mod call;
 pub mod expr;
 pub mod flow;
@@ -47,6 +50,8 @@ pub mod value;
 
 #[cfg(test)]
 mod aggregate_tests;
+#[cfg(test)]
+mod branch_tests;
 #[cfg(test)]
 mod call_tests;
 #[cfg(test)]

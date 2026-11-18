@@ -393,40 +393,27 @@ pub(super) fn init_stop(clean: bool, src: &str, name: &'static str) -> Option<(F
 
 #[test]
 fn a_form_the_evaluator_has_not_is_unavailable_at_init_and_not_in_a_frame() {
-    // A `par~` (U2) is not evaluated yet: `Instance::init` stops with `Unavailable` at the form, whatever the values, and
-    // so there is no instance for a call of 0 frames (which would have given an empty answer) or for a frame (which would
-    // have stopped late) to be made on. A `par~` whose delay reads its index (`g1`, `g2`: the `init` of a delay) is
-    // `Unavailable` too, and not an internal error of a local that has no value; one in a flow that another calls (`up`,
-    // `deep`) is found at the `init` of the instance that is made for it. Nothing in such a form is looked into: a form
-    // in the `init` argument of a delay and in a `let` after the delays is found as well.
+    // A string literal (`"abc".len()`, §11.5) is a form the evaluator has not: `Instance::init` stops with `Unavailable` at
+    // the form, whatever the values, and so there is no instance for a call of 0 frames (which would have given an empty
+    // answer) or for a frame (which would have stopped late) to be made on. One in the `init` argument of a delay (`g1`) is
+    // found as well, and in a `let` after the delays (`after`), and in a flow that another calls (`up`, `deep`), at the
+    // `init` of the instance that is made for it. Nothing in such a form is looked into.
     let src = "flow c6(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { prev~(x) }
-  ys[0] + ys[1]
+  let n = \"abc\".len()
+  prev~(x) + F32.round_from(n)
 }
-flow g1(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { prev~(x, F32.round_from(i)) }
-  ys[0] + ys[1]
-}
-flow g2(x: F32 at sample) -> F32 at sample {
-  let ys = par~ i in 0 ..< 2 { prev~(x, 1.0 / F32.round_from(i)) }
-  ys[0] + ys[1]
-}
+flow g1(x: F32 at sample) -> F32 at sample { prev~(x, F32.round_from(\"ab\".len())) }
 flow after(x: F32 at sample) -> F32 at sample {
   let a = prev~(x)
   let b = delay~(x, 2)
-  let ys = par~ i in 0 ..< 2 { x }
-  a + b + ys[0]
+  let n = \"abcd\".len()
+  a + b + F32.round_from(n)
 }
 flow up(x: F32 at sample) -> F32 at sample { c6~(x) }
 flow deep(x: F32 at sample) -> F32 at sample { prev~(up~(x)) }";
-    for (name, at) in [
-        ("c6", "par~ i in 0 ..< 2 { prev~(x) }"),
-        ("g1", "par~ i in 0 ..< 2 { prev~(x, F32.round_from(i)) }"),
-        ("g2", "par~ i in 0 ..< 2 { prev~(x, 1.0 / F32.round_from(i)) }"),
-        ("after", "par~ i in 0 ..< 2 { x }"),
-        ("up", "par~ i in 0 ..< 2 { prev~(x) }"),
-        ("deep", "par~ i in 0 ..< 2 { prev~(x) }"),
-    ] {
+    for (name, at) in
+        [("c6", "\"abc\""), ("g1", "\"ab\""), ("after", "\"abcd\""), ("up", "\"abc\""), ("deep", "\"abc\"")]
+    {
         let r = init_stop(true, src, name);
         assert!(matches!(&r, Some((Fault::Unavailable(_), text)) if text == at), "{name}: {r:?}");
     }
