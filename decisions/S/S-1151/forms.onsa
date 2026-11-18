@@ -1,0 +1,20 @@
+pub rt fn soft(x: F32) -> F32 { x }
+pub struct Shaper { gain: F32, curve: rt fn(F32) -> F32 }
+pub const KS: Shaper = Shaper { gain: 2.0, curve: soft }
+pub rt fn mk() -> Shaper { Shaper { gain: 3.0, curve: soft } }
+pub enum Hook { Off, On(rt fn(F32) -> F32) }
+pub rt fn hooked(h: Hook, x: F32) -> F32 { match h { Hook.Off => x, Hook.On(f) => f.(x) } }
+
+pub flow a_number_field_of_a_const(x: F32 at sample) -> F32 at sample {
+  x * KS.gain
+}
+pub flow a_number_field_of_a_call(x: F32 at sample) -> F32 at sample {
+  x * mk().gain
+}
+pub flow a_let_of_the_const_then_its_field(x: F32 at sample) -> F32 at sample {
+  let k = KS
+  x * k.gain
+}
+pub flow a_unit_variant(x: F32 at sample) -> F32 at sample {
+  hooked(Hook.Off, x)
+}
