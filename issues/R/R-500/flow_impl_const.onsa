@@ -1,0 +1,8 @@
+pub struct S { a: F32 }
+impl S {
+  const BAD: U32 = true
+}
+pub flow f(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, S.BAD)
+  x
+}

@@ -1,0 +1,4 @@
+pub fn g(a: [F32; BAD]) -> F32 { 1.0 }
+pub fn h() -> F32 { let z: [F32; BAD] = [1.0; BAD]; 1.0 }
+const BAD: U32 = true
+pub fn g2(a: [F32; BAD]) -> F32 { 1.0 }
