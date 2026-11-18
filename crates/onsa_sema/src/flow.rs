@@ -76,6 +76,7 @@ pub(crate) mod map;
 use crate::flow_names::{Delay, SAMPLE_RATE};
 mod check;
 mod consts;
+mod loops;
 mod nodes;
 mod rate;
 mod reads;

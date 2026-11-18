@@ -8,8 +8,13 @@
 //!   ([`crate::flow::FlowInfo::clocks`], [`crate::def::FlowInput::clock`]).
 //!   Its stage of evaluation is a [`ClockStage`] ([`Clock::stage`]).
 //!
-//! The comparisons of clocks are not here yet (W7-02 U2a): the rate pass
-//! keeps its own order (`flow::FlowRate`) and maps its results here.
+//! The comparisons of clocks ([`join`], [`readable_at`], [`promote`],
+//! [`holds_state`], [`delay_out`], [`rebase`], [`loop_clock`], W7-02 U2a)
+//! are the one table of the rules (D-15). Nothing calls them yet: the rate
+//! pass keeps its own order (`flow::FlowRate`) until the walk of W7-02 U2b.
+//! Each passes a clock in error with no clash and gives a clock in error.
+//! The rows of an event clock are W7-11's (S-1095, S-1096): an event clock
+//! where its row is not written is an internal error.
 
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 use onsa_syntax::ast;
@@ -130,7 +135,7 @@ impl Clock {
             Clock::Block => Some(ClockStage::Block),
             Clock::Tick(k) => Some(ClockStage::Tick(k)),
             Clock::Const | Clock::Ambient | Clock::Error => None,
-            Clock::Event(_) => onsa_diag::internal::bug(None, "the stage of an event clock, which W7-11 makes"),
+            Clock::Event(_) => event_bug("the stage"),
         }
     }
 
@@ -157,5 +162,159 @@ impl Clock {
             1.. => format!("{sample} * {n}"),
             _ => format!("{sample} / {n}"),
         }
+    }
+}
+
+/// The frame a declared clock of a callee is read in ([`rebase`]): the ratio
+/// of the place of the call over the `sample` of the body (§11.9). Always
+/// `Ratio(0)` in W7-02; W7-10 marks the things that make time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClockFrame {
+    pub ratio: Ratio,
+}
+
+/// Two operands whose clocks do not meet (E0815; a loop of W7-09 too): each
+/// by its index in the operands of the comparison and its clock, the lower
+/// index first. The caller puts the places (`ExprId`) on them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Clash {
+    pub first: (usize, Clock),
+    pub second: (usize, Clock),
+}
+
+fn clash(first: (usize, Clock), second: (usize, Clock)) -> Clash {
+    Clash { first, second }
+}
+
+fn event_bug(what: &str) -> ! {
+    onsa_diag::internal::bug(None, format!("{what} of an event clock, which W7-11 makes"))
+}
+
+/// The order of the parameter kinds (constant < `init` < `block`, §11.3).
+fn param_rank(c: Clock) -> u8 {
+    match c {
+        Clock::Const => 0,
+        Clock::Init => 1,
+        Clock::Block => 2,
+        _ => onsa_diag::internal::bug(None, format!("the clock {c:?} is not a parameter kind")),
+    }
+}
+
+/// The clock of the operands of an expression (§11.3 "式のクロックは三つで
+/// 決まる"): the largest parameter kind; tick clocks of one ratio, which is the
+/// result (two ratios clash, E0815); `sample_tick()` follows a tick and is
+/// itself with parameter kinds alone (S-567 K6); `sample * N` with another
+/// operand clashes for now (§11.9). `None` (⊥, a `^name` in the loop being
+/// solved) is the unit, and the result of no other operand. The clash holds
+/// indices of `ops`. Linear in the operands.
+pub fn join(ops: &[Option<Clock>]) -> Result<Option<Clock>, Clash> {
+    let given = || ops.iter().enumerate().filter_map(|(i, c)| c.map(|c| (i, c)));
+    if given().any(|(_, c)| c == Clock::Error) {
+        return Ok(Some(Clock::Error));
+    }
+    if given().any(|(_, c)| matches!(c, Clock::Event(_))) {
+        event_bug("a join");
+    }
+    let mut out: Option<(usize, Clock)> = None;
+    for (i, c) in given() {
+        let Some(acc) = out else {
+            out = Some((i, c));
+            continue;
+        };
+        out = Some(match (acc.1, c) {
+            (Clock::Tick(Ratio(k)), _) | (_, Clock::Tick(Ratio(k))) if k > 0 => return Err(clash(acc, (i, c))),
+            (Clock::Tick(a), Clock::Tick(b)) if a != b => return Err(clash(acc, (i, c))),
+            (Clock::Tick(_), _) | (Clock::Ambient, Clock::Ambient) => acc,
+            (_, Clock::Tick(_)) | (_, Clock::Ambient) => (i, c),
+            (Clock::Ambient, _) => acc,
+            (a, b) if param_rank(b) > param_rank(a) => (i, c),
+            _ => acc,
+        });
+    }
+    Ok(out.map(|(_, c)| c))
+}
+
+/// Whether a value of the clock `value` is read at a place of the clock
+/// `place` (§11.3 "読み方"): a parameter kind at a place of its kind or larger
+/// and at every tick place; a tick at the same tick only; `sample_tick()` at
+/// a tick place (S-567 K6). The clash is the value (0) and the place (1).
+pub fn readable_at(value: Clock, place: Clock) -> Result<(), Clash> {
+    let ok = match (value, place) {
+        (Clock::Error, _) | (_, Clock::Error) => true,
+        (Clock::Event(_), _) | (_, Clock::Event(_)) => event_bug("a read"),
+        (_, Clock::Ambient) => onsa_diag::internal::bug(None, "a place at the clock of `sample_tick()`"),
+        (Clock::Tick(a), Clock::Tick(b)) => a == b,
+        (_, Clock::Tick(_)) => true,
+        (Clock::Tick(_) | Clock::Ambient, _) => false,
+        (v, p) => param_rank(v) <= param_rank(p),
+    };
+    if ok { Ok(()) } else { Err(clash((0, value), (1, place))) }
+}
+
+/// The clock of `e at k` (§11.3): `k`, when `e` is as slow as `k` or slower
+/// and `k` is the `sample` of the body or slower; `sample_tick()` goes to a
+/// tick only (S-567 K6). The clash is the value (0) and the clock `k` (1).
+pub fn promote(value: Clock, to: Clock) -> Result<Clock, Clash> {
+    let ok = match (value, to) {
+        (Clock::Error, _) | (_, Clock::Error) => return Ok(Clock::Error),
+        (Clock::Event(_), _) | (_, Clock::Event(_)) => event_bug("`at`"),
+        (_, Clock::Const | Clock::Ambient) => onsa_diag::internal::bug(None, format!("`at` to {to:?}, no name")),
+        (_, Clock::Tick(Ratio(j))) if j > 0 => false,
+        (Clock::Tick(Ratio(k)), Clock::Tick(Ratio(j))) => k <= j,
+        (_, Clock::Tick(_)) => true,
+        (Clock::Tick(_) | Clock::Ambient, _) => false,
+        (v, t) => param_rank(v) <= param_rank(t),
+    };
+    if ok { Ok(to) } else { Err(clash((0, value), (1, to))) }
+}
+
+/// Whether a delay keeps its state at the clock of its first argument
+/// (§11.4, E0813): a tick of the body (`sample`, `sample / N`) and
+/// `sample_tick()` (S-567 K6), not a parameter kind nor the `sample * N` of
+/// the caller. A clock in error holds (no second diagnostic).
+pub fn holds_state(c: Clock) -> bool {
+    match c {
+        Clock::Tick(Ratio(k)) => k <= 0,
+        Clock::Ambient | Clock::Error => true,
+        Clock::Const | Clock::Init | Clock::Block => false,
+        Clock::Event(_) => event_bug("the state"),
+    }
+}
+
+/// The clock of a delay by the clock of its first argument (§11.3, §11.4):
+/// a tick or an event itself, `sample_tick()` the `sample` of the body
+/// (S-567 K6). A parameter kind, which E0813 rejects at the check, is ⊥ in
+/// a loop being solved (`looped`) and else the `sample` of the body to go on
+/// with. ⊥ gives ⊥.
+pub fn delay_out(first: Option<Clock>, looped: bool) -> Option<Clock> {
+    match first? {
+        c @ (Clock::Tick(_) | Clock::Event(_) | Clock::Error) => Some(c),
+        Clock::Ambient => Some(Clock::SAMPLE),
+        Clock::Const | Clock::Init | Clock::Block => (!looped).then_some(Clock::SAMPLE),
+    }
+}
+
+/// A declared clock of a callee read in the frame of its call (§11.3, §11.9):
+/// a tick moved by the ratio of the frame (S-1077), `init`, `block` and a
+/// clock in error as they are. A ratio past `i32` is an internal error (M1).
+pub fn rebase(decl: Clock, frame: ClockFrame) -> Clock {
+    match decl {
+        Clock::Init | Clock::Block | Clock::Error => decl,
+        Clock::Tick(Ratio(k)) => match k.checked_add(frame.ratio.0) {
+            Some(k) => Clock::Tick(Ratio(k)),
+            None => onsa_diag::internal::bug(None, format!("the ratio of {decl:?} in the frame {frame:?}")),
+        },
+        Clock::Event(_) => event_bug("the frame"),
+        Clock::Const | Clock::Ambient => onsa_diag::internal::bug(None, format!("{decl:?} is no declared clock")),
+    }
+}
+
+/// The clock of every `let` of a loop by the join `t` of its operands (§11.3
+/// "読み方", S-567 P3): a tick, an event or a clock in error itself, else (a
+/// parameter kind, `sample_tick()`, ⊥) the `sample` of the body.
+pub fn loop_clock(t: Option<Clock>) -> Clock {
+    match t {
+        Some(c @ (Clock::Tick(_) | Clock::Event(_) | Clock::Error)) => c,
+        Some(Clock::Const | Clock::Init | Clock::Block | Clock::Ambient) | None => Clock::SAMPLE,
     }
 }

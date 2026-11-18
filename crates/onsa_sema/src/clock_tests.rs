@@ -1,9 +1,13 @@
-//! The names, the stages and the text of the clocks (`clock.rs`, W7-02 U1).
+//! The names, the stages and the text of the clocks (`clock.rs`, W7-02 U1)
+//! and their comparisons (W7-02 U2a).
 
 use onsa_diag::internal::InternalBug;
 use onsa_diag::{FileId, Span};
 
-use crate::clock::{Clock, ClockName, ClockStage, Ratio};
+use crate::clock::{
+    Clash, Clock, ClockFrame, ClockName, ClockStage, Ratio, delay_out, holds_state, join, loop_clock, promote,
+    readable_at, rebase,
+};
 
 #[test]
 fn a_name_and_its_clock_go_both_ways() {
@@ -49,4 +53,197 @@ fn a_clock_with_no_text_is_an_internal_error_at_its_place() {
         let bug = payload.downcast_ref::<InternalBug>().expect("an internal error");
         assert_eq!(bug.span, Some(at), "{c:?}");
     }
+}
+
+// The comparisons (W7-02 U2a). The expectations follow the table of the
+// design (§11.3, §11.4, §11.9, S-567 P3 and K6); no row of an event clock
+// (S-1095, S-1096).
+
+const S: Clock = Clock::SAMPLE;
+
+fn tick(k: i32) -> Clock {
+    Clock::Tick(Ratio(k))
+}
+
+fn joined(ops: &[Clock]) -> Result<Option<Clock>, Clash> {
+    join(&ops.iter().copied().map(Some).collect::<Vec<_>>())
+}
+
+fn clash_of(i: usize, a: Clock, j: usize, b: Clock) -> Clash {
+    Clash { first: (i, a), second: (j, b) }
+}
+
+fn is_internal_error<T>(f: impl FnOnce() -> T + std::panic::UnwindSafe) -> bool {
+    std::panic::catch_unwind(f).err().is_some_and(|p| p.downcast_ref::<InternalBug>().is_some())
+}
+
+#[test]
+fn a_join_of_parameter_kinds_is_the_largest() {
+    assert_eq!(joined(&[Clock::Const]), Ok(Some(Clock::Const)));
+    assert_eq!(joined(&[Clock::Const, Clock::Init]), Ok(Some(Clock::Init)));
+    assert_eq!(joined(&[Clock::Block, Clock::Const, Clock::Init]), Ok(Some(Clock::Block)));
+    assert_eq!(joined(&[Clock::Init, Clock::Init]), Ok(Some(Clock::Init)));
+}
+
+#[test]
+fn a_join_of_ticks_needs_one_ratio() {
+    assert_eq!(joined(&[S, Clock::Init, S]), Ok(Some(S)));
+    assert_eq!(joined(&[tick(-2), Clock::Block]), Ok(Some(tick(-2))));
+    assert_eq!(joined(&[Clock::Const, tick(-1), tick(-1)]), Ok(Some(tick(-1))));
+    assert_eq!(joined(&[S, tick(-1)]), Err(clash_of(0, S, 1, tick(-1))));
+    assert_eq!(joined(&[Clock::Init, tick(-1), Clock::Const, S]), Err(clash_of(1, tick(-1), 3, S)));
+}
+
+#[test]
+fn bottom_is_the_unit_of_a_join() {
+    assert_eq!(join(&[]), Ok(None));
+    assert_eq!(join(&[None, None]), Ok(None));
+    assert_eq!(join(&[None, Some(Clock::Init)]), Ok(Some(Clock::Init)));
+    assert_eq!(join(&[Some(tick(1)), None]), Ok(Some(tick(1))));
+    // The indices are of the operands given, ⊥ counted.
+    assert_eq!(join(&[Some(S), None, Some(tick(-1))]), Err(clash_of(0, S, 2, tick(-1))));
+}
+
+#[test]
+fn a_clock_in_error_passes_a_join_with_no_clash() {
+    assert_eq!(joined(&[Clock::Init, Clock::Error]), Ok(Some(Clock::Error)));
+    assert_eq!(joined(&[Clock::Error, tick(-1), S]), Ok(Some(Clock::Error)));
+    assert_eq!(joined(&[tick(1), Clock::Const, Clock::Error]), Ok(Some(Clock::Error)));
+    assert_eq!(join(&[None, Some(Clock::Error)]), Ok(Some(Clock::Error)));
+}
+
+#[test]
+fn sample_tick_follows_a_tick_in_a_join() {
+    assert_eq!(joined(&[Clock::Ambient]), Ok(Some(Clock::Ambient)));
+    assert_eq!(joined(&[Clock::Ambient, Clock::Init]), Ok(Some(Clock::Ambient)));
+    assert_eq!(joined(&[Clock::Block, Clock::Ambient, Clock::Const]), Ok(Some(Clock::Ambient)));
+    assert_eq!(joined(&[Clock::Ambient, Clock::Ambient]), Ok(Some(Clock::Ambient)));
+    assert_eq!(joined(&[Clock::Ambient, S]), Ok(Some(S)));
+    assert_eq!(joined(&[Clock::Init, Clock::Ambient, tick(-1)]), Ok(Some(tick(-1))));
+}
+
+#[test]
+fn sample_times_n_with_another_operand_clashes() {
+    assert_eq!(joined(&[tick(1)]), Ok(Some(tick(1))));
+    assert_eq!(joined(&[tick(1), Clock::Const]), Err(clash_of(0, tick(1), 1, Clock::Const)));
+    assert_eq!(joined(&[Clock::Init, tick(2)]), Err(clash_of(0, Clock::Init, 1, tick(2))));
+    assert_eq!(joined(&[tick(1), tick(1)]), Err(clash_of(0, tick(1), 1, tick(1))));
+    assert_eq!(joined(&[S, tick(1)]), Err(clash_of(0, S, 1, tick(1))));
+}
+
+#[test]
+fn a_parameter_kind_is_read_at_its_kind_or_larger_and_at_a_tick() {
+    for (v, p) in [(Clock::Const, Clock::Const), (Clock::Const, Clock::Init), (Clock::Init, Clock::Init)] {
+        assert_eq!(readable_at(v, p), Ok(()), "{v:?} at {p:?}");
+    }
+    for v in [Clock::Const, Clock::Init, Clock::Block] {
+        assert_eq!(readable_at(v, S), Ok(()), "{v:?}");
+        assert_eq!(readable_at(v, tick(-3)), Ok(()), "{v:?}");
+    }
+    assert_eq!(readable_at(Clock::Block, Clock::Init), Err(clash_of(0, Clock::Block, 1, Clock::Init)));
+    assert_eq!(readable_at(Clock::Init, Clock::Const), Err(clash_of(0, Clock::Init, 1, Clock::Const)));
+}
+
+#[test]
+fn a_tick_is_read_at_the_same_tick_only() {
+    assert_eq!(readable_at(S, S), Ok(()));
+    assert_eq!(readable_at(tick(1), tick(1)), Ok(()));
+    assert_eq!(readable_at(tick(-1), S), Err(clash_of(0, tick(-1), 1, S)));
+    assert_eq!(readable_at(S, tick(-1)), Err(clash_of(0, S, 1, tick(-1))));
+    assert_eq!(readable_at(S, Clock::Block), Err(clash_of(0, S, 1, Clock::Block)));
+}
+
+#[test]
+fn sample_tick_and_a_clock_in_error_where_they_are_read() {
+    assert_eq!(readable_at(Clock::Ambient, S), Ok(()));
+    assert_eq!(readable_at(Clock::Ambient, tick(-2)), Ok(()));
+    assert_eq!(readable_at(Clock::Ambient, Clock::Block), Err(clash_of(0, Clock::Ambient, 1, Clock::Block)));
+    assert_eq!(readable_at(Clock::Ambient, Clock::Init), Err(clash_of(0, Clock::Ambient, 1, Clock::Init)));
+    assert_eq!(readable_at(Clock::Error, Clock::Init), Ok(()));
+    assert_eq!(readable_at(S, Clock::Error), Ok(()));
+    assert!(is_internal_error(|| readable_at(Clock::Init, Clock::Ambient)));
+}
+
+#[test]
+fn at_goes_from_slow_to_fast_up_to_the_sample_of_the_body() {
+    for (v, to) in [
+        (Clock::Const, Clock::Init),
+        (Clock::Init, Clock::Init),
+        (Clock::Init, Clock::Block),
+        (Clock::Block, S),
+        (Clock::Const, tick(-1)),
+        (tick(-2), S),
+        (tick(-2), tick(-1)),
+        (S, S),
+    ] {
+        assert_eq!(promote(v, to), Ok(to), "{v:?} at {to:?}");
+    }
+    for (v, to) in [(Clock::Block, Clock::Init), (S, tick(-1)), (S, Clock::Block), (Clock::Init, tick(1)), (tick(1), S)]
+    {
+        assert_eq!(promote(v, to), Err(clash_of(0, v, 1, to)), "{v:?} at {to:?}");
+    }
+}
+
+#[test]
+fn sample_tick_goes_to_a_tick_and_at_passes_a_clock_in_error() {
+    assert_eq!(promote(Clock::Ambient, S), Ok(S));
+    assert_eq!(promote(Clock::Ambient, tick(-3)), Ok(tick(-3)));
+    assert_eq!(promote(Clock::Ambient, Clock::Block), Err(clash_of(0, Clock::Ambient, 1, Clock::Block)));
+    assert_eq!(promote(Clock::Ambient, tick(1)), Err(clash_of(0, Clock::Ambient, 1, tick(1))));
+    assert_eq!(promote(Clock::Error, Clock::Block), Ok(Clock::Error));
+    assert_eq!(promote(S, Clock::Error), Ok(Clock::Error));
+    assert_eq!(promote(Clock::Block, Clock::Error), Ok(Clock::Error));
+    assert!(is_internal_error(|| promote(Clock::Init, Clock::Const)));
+}
+
+#[test]
+fn a_delay_holds_its_state_at_a_tick_of_the_body() {
+    for c in [S, tick(-4), Clock::Ambient, Clock::Error] {
+        assert!(holds_state(c), "{c:?}");
+    }
+    for c in [Clock::Const, Clock::Init, Clock::Block, tick(1)] {
+        assert!(!holds_state(c), "{c:?}");
+    }
+}
+
+#[test]
+fn the_clock_of_a_delay_by_its_first_argument() {
+    for looped in [false, true] {
+        // A tick and a clock in error are themselves.
+        assert_eq!(delay_out(Some(tick(-1)), looped), Some(tick(-1)));
+        assert_eq!(delay_out(Some(S), looped), Some(S));
+        assert_eq!(delay_out(Some(Clock::Error), looped), Some(Clock::Error));
+        // ⊥ gives ⊥; `prev~(sample_tick())` is the `sample` of the body.
+        assert_eq!(delay_out(None, looped), None);
+        assert_eq!(delay_out(Some(Clock::Ambient), looped), Some(S));
+    }
+    // A parameter kind (E0813 at the check): ⊥ in a loop, else `sample`.
+    for c in [Clock::Const, Clock::Init, Clock::Block] {
+        assert_eq!(delay_out(Some(c), true), None, "{c:?}");
+        assert_eq!(delay_out(Some(c), false), Some(S), "{c:?}");
+    }
+}
+
+#[test]
+fn a_declared_clock_in_the_frame_of_its_call() {
+    let body = ClockFrame { ratio: Ratio(0) };
+    let slow = ClockFrame { ratio: Ratio(-2) };
+    for c in [Clock::Init, Clock::Block, Clock::Error] {
+        assert_eq!(rebase(c, slow), c);
+    }
+    assert_eq!(rebase(tick(-1), body), tick(-1));
+    assert_eq!(rebase(S, slow), tick(-2));
+    assert_eq!(rebase(tick(1), slow), tick(-1));
+    assert!(is_internal_error(|| rebase(tick(i32::MAX), ClockFrame { ratio: Ratio(1) })));
+    assert!(is_internal_error(|| rebase(Clock::Ambient, body)));
+}
+
+#[test]
+fn the_clock_of_a_loop() {
+    for t in [None, Some(Clock::Const), Some(Clock::Init), Some(Clock::Block), Some(Clock::Ambient)] {
+        assert_eq!(loop_clock(t), S, "{t:?}");
+    }
+    assert_eq!(loop_clock(Some(tick(-2))), tick(-2));
+    assert_eq!(loop_clock(Some(S)), S);
+    assert_eq!(loop_clock(Some(Clock::Error)), Clock::Error);
 }
