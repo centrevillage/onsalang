@@ -42,7 +42,7 @@ mod checks;
 /// has the held error only when that check reported none (a type error
 /// comes first, §18.1; it stopped with no diagnostic at a name held as an
 /// error).
-pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: BodyInfo, fcx: FlowCx) {
+pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: BodyInfo, mut fcx: FlowCx) {
     let _flow = onsa_diag::timing::phase(onsa_diag::timing::Phase::Flow);
     let mut info = FlowInfo {
         inputs: fcx.inputs.clone(),
@@ -63,6 +63,7 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
     }
     let error = a.types.error();
     let (ast, text) = (&module.parsed.ast, module.text.as_str());
+    super::check::hold_f32_max(a, ast, text, &body, &mut fcx);
     let mut w = walk(a, ast, text, id, &body, &fcx, error);
     if w.diag.is_none() {
         w.post_check(&fcx);
@@ -82,7 +83,7 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
     info.lets = lets.collect();
     let m = super::reads::mark_all(ast, text, &body, &fcx, &w, &info.lets);
     (info.read_at, info.sample_rate_at) = (m.read_at, m.sample_rate_at);
-    info.complete = w.diag.is_none() && m.diag.is_none() && w.inout_call.is_none() && fcx.held.is_none();
+    info.complete = w.diag.is_none() && m.diag.is_none() && w.inout_call.is_none() && fcx.held.is_none() && !fcx.unread;
     #[cfg(test)]
     WALKED.with(|x| x.borrow_mut().push((id, w.clone(), info.complete)));
     info.clocks = std::mem::take(&mut w.info);
@@ -458,7 +459,7 @@ impl Walk<'_> {
 
     /// `par~` (§11.5): its index at `init`, its body, and its node.
     fn par(&mut self, e: ExprId, body: ExprId) -> Option<Clock> {
-        let Some(&(var, from, to)) = self.cx.pars.get(&e) else {
+        let Some(&(var, from, count)) = self.cx.pars.get(&e) else {
             onsa_diag::internal::bug(self.span(e), "a `par~` the check did not record")
         };
         if !self.stateful_here(e) {
@@ -467,7 +468,7 @@ impl Walk<'_> {
         self.bind_local(var, Some(Clock::Init));
         let (check, span) = (self.mode == Mode::Check, self.ast.expr(e).span);
         if check {
-            self.recorder.enter_par(e, span, var, from, to, body);
+            self.recorder.enter_par(e, span, var, from, count, body);
         }
         let b = self.expr(body);
         if check {
@@ -507,7 +508,7 @@ impl Walk<'_> {
             receiver.into_iter().chain(args.iter().map(|x| x.expr)).map(|x| self.expr(x)).collect();
         let r = self.join(e, &ops);
         if let Some(Target::Fn { def, .. } | Target::Method { def, .. }) = target
-            && !self.check_fn_call(e, *def, receiver.is_some(), &ops, r)
+            && (self.signature_failed(*def) || !self.check_fn_call(e, *def, receiver.is_some(), &ops, r))
         {
             return Some(Clock::Error);
         }

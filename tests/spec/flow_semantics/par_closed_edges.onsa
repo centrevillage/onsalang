@@ -1,0 +1,126 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.5", "§4.2"]
+
+// W7-14 U3/t, S-257: the closed range of the replication, `par~ i in a ..= b { e }`, at the ends of
+// `U32` and with named ends (§11.5: "`par~ i in a ..= b { e }` は `N = b - a + 1` 個並べる", and the
+// index `i` goes from `a` to `b`, the last value of the index being `b` itself). When the upper end is
+// the largest `U32`, `4294967295`, the count `N` is still small (2 or 1), so the replication is
+// accepted: an exclusive end `b + 1`, which would overflow, is not made. The ends are integer literals
+// or `const` names whose value is a literal (a computed end is E0200 in this version). The
+// values are worked out by hand. The cases of the general replication are in
+// par_tilde_closed_range.onsa, and the count that does not fit in `U32` in par_closed_count_overflow.onsa.
+
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+const LOW: U32 = 2
+const HIGH: U32 = 4
+const LAST: U32 = 2
+const COUNT: U32 = 3
+
+// N = 2: the index is 4294967294 and 4294967295, so `i - 4294967294` is 0 and 1.
+pub flow top_pair(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 4294967294 ..= 4294967295 { x + F32.round_from(i - 4294967294) }
+}
+
+// N = 1 at the largest `U32`: `i - 4294967294` is 1.
+pub flow top_one(x: F32 at sample) -> [F32; 1] at sample {
+  par~ i in 4294967295 ..= 4294967295 { x + F32.round_from(i - 4294967294) }
+}
+
+// N = 2 with a state in each replica: the running sums of x + 0 and x + 1.
+pub flow top_pair_states(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 4294967294 ..= 4294967295 { acc~(x + F32.round_from(i - 4294967294)) }
+}
+
+// N = 1 at 0: the index is 0.
+pub flow zero_only(x: F32 at sample) -> [F32; 1] at sample {
+  par~ i in 0 ..= 0 { x + 3.0 + F32.round_from(i) }
+}
+
+// Named ends: N = 3, the index is 2, 3, 4.
+pub flow named_ends(x: F32 at sample) -> [F32; 3] at sample {
+  par~ i in LOW ..= HIGH { x * F32.round_from(i) }
+}
+
+// `0 ..= LAST` (LAST = 2) and `0 ..< COUNT` (COUNT = 3) are the same replication: N = 3, the index 0, 1, 2.
+pub flow closed_to_last(x: F32 at sample) -> [F32; 3] at sample {
+  par~ i in 0 ..= LAST { x * F32.round_from(i) }
+}
+
+pub flow half_open_to_count(x: F32 at sample) -> [F32; 3] at sample {
+  par~ i in 0 ..< COUNT { x * F32.round_from(i) }
+}
+
+test "the largest end of U32 gives two replicas" {
+  // x + 0 and x + 1 with x = 1.0, 2.0.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = top_pair.render(xs, 8.0)
+  assert o.out[0][0] == 1.0
+  assert o.out[0][1] == 2.0
+  assert o.out[1][0] == 2.0
+  assert o.out[1][1] == 3.0
+}
+
+test "a ..= a at the largest U32 is one replica" {
+  // x + 1 with x = 1.0, 2.0.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = top_one.render(xs, 8.0)
+  assert o.out[0][0] == 2.0
+  assert o.out[0][1] == 3.0
+}
+
+test "each replica at the largest ends has its own instance" {
+  // x = 1.0 each sample. Replica 0: the running sum of 1: 1 2 3. Replica 1: the running sum of 2: 2 4 6.
+  let xs: [F32; 3] = [1.0, 1.0, 1.0]
+  let o = top_pair_states.render(xs, 8.0)
+  assert o.out[0][0] == 1.0
+  assert o.out[0][1] == 2.0
+  assert o.out[0][2] == 3.0
+  assert o.out[1][0] == 2.0
+  assert o.out[1][1] == 4.0
+  assert o.out[1][2] == 6.0
+}
+
+test "0 ..= 0 is one replica with the index 0" {
+  // x + 3 + 0 with x = 1.0, 2.0.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = zero_only.render(xs, 8.0)
+  assert o.out[0][0] == 4.0
+  assert o.out[0][1] == 5.0
+}
+
+test "the ends are constants of the package" {
+  // x * 2, x * 3, x * 4 with x = 1.0, 2.0.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = named_ends.render(xs, 8.0)
+  assert o.out[0][0] == 2.0
+  assert o.out[0][1] == 4.0
+  assert o.out[1][0] == 3.0
+  assert o.out[1][1] == 6.0
+  assert o.out[2][0] == 4.0
+  assert o.out[2][1] == 8.0
+}
+
+test "0 ..= LAST and 0 ..< COUNT are the same replication" {
+  // x * 0, x * 1, x * 2 with x = 1.0, 2.0, in both.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let c = closed_to_last.render(xs, 8.0)
+  assert c.out[0][0] == 0.0
+  assert c.out[0][1] == 0.0
+  assert c.out[1][0] == 1.0
+  assert c.out[1][1] == 2.0
+  assert c.out[2][0] == 2.0
+  assert c.out[2][1] == 4.0
+  let h = half_open_to_count.render(xs, 8.0)
+  assert h.out[0][0] == 0.0
+  assert h.out[0][1] == 0.0
+  assert h.out[1][0] == 1.0
+  assert h.out[1][1] == 2.0
+  assert h.out[2][0] == 2.0
+  assert h.out[2][1] == 4.0
+}

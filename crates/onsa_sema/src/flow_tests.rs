@@ -163,8 +163,8 @@ fn unison_par_nests_instances() {
     let f = flow(&a, "unison");
     assert_eq!(let_rate(f, "saws"), (Clock::SAMPLE, false));
     let par = f.top().next().expect("a node");
-    let PlanKind::Par { from, to, var, .. } = &f.node(par).kind else { panic!("expected par: {:?}", f.nodes) };
-    assert_eq!((f.node(par).name.as_str(), *from, *to), ("saws", 0, 4));
+    let PlanKind::Par { from, count, var, .. } = &f.node(par).kind else { panic!("expected par: {:?}", f.nodes) };
+    assert_eq!((f.node(par).name.as_str(), *from, *count), ("saws", 0, 4));
     let inner: Vec<(&str, &str)> =
         f.roots(Owner::Par(par)).iter().map(|&id| (f.node(id).name.as_str(), f.node(id).path.as_str())).collect();
     assert_eq!(inner, vec![("saw_0", "saws.saw_0")]);
@@ -403,9 +403,11 @@ fn par_ranges() {
     assert_eq!(par("[F32; 2]", "0..<n"), vec![Code::E0417]);
     // The `[F32; 0]` output is its own E0810 at the heading (S-1110, S-407).
     assert_eq!(par("[F32; 0]", "3..=2"), vec![Code::E0808, Code::E0810]);
-    // `..=` is E0200 until W7-04 (S-224), also for one instance (`2..=2`).
-    assert_eq!(par("[F32; 1]", "2..=2"), vec![Code::E0200]);
-    assert_eq!(par("[F32; 3]", "0..=2"), vec![Code::E0200]);
+    // `..=` gives `b - a + 1` instances (S-257), one for `2..=2`; a count past
+    // `U32` is E0808 for now (S-1147).
+    assert_eq!(par("[F32; 1]", "2..=2"), vec![]);
+    assert_eq!(par("[F32; 3]", "0..=2"), vec![]);
+    assert_eq!(par("[F32; 2]", "0..=4294967295"), vec![Code::E0808]);
     // Not read by the modes (a local is no constant): no move happens in a
     // `par` head, unlike a `for` head (R-194).
     assert_eq!(par("[F32; 2]", "0..<n.min(2)"), vec![Code::E0417]);

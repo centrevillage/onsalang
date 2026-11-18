@@ -168,8 +168,6 @@ features! {
     /// type's maximum (W8-03); never lowered as `..<` (R-81).
     InclusiveRangeFor: Language, "a range with its end (`a..=b`) in a `for` head",
         Some("write `a..<b + 1` when `b + 1` fits in the type");
-    /// S-224, S-257: the `b - a + 1` instances of `par~ i in a..=b` (W7-14).
-    InclusiveRangePar: Language, "a range with its end (`a..=b`) in a `par~` head", None;
     /// R-195: the values of the constant expressions of §4.5 other than an
     /// integer literal and a `const` with a literal value (W9-03).
     FlowConstExprs: Language, "computing the value of a constant expression in a flow (a `par~` bound, a delay length, the maximum of a `vdelay~`)",

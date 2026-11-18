@@ -1,0 +1,43 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.5", "§15.1"]
+
+// The ends of a closed `par~` range are constants of another module (spec §11.5, §15.1), taken in by
+// `use` and by the module path. The expected values are worked out by hand.
+
+use flows.{by_use, by_path, at_the_top}
+
+test "the ends taken in by use" {
+  // x * 3, x * 4, x * 5 with x = 1.0, 2.0.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = by_use.render(xs, 8.0)
+  assert o.out[0][0] == 3.0
+  assert o.out[0][1] == 6.0
+  assert o.out[1][0] == 4.0
+  assert o.out[1][1] == 8.0
+  assert o.out[2][0] == 5.0
+  assert o.out[2][1] == 10.0
+}
+
+test "the ends as module-qualified names" {
+  // x + 3, x + 4, x + 5 with x = 1.0, 2.0.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = by_path.render(xs, 8.0)
+  assert o.out[0][0] == 4.0
+  assert o.out[0][1] == 5.0
+  assert o.out[1][0] == 5.0
+  assert o.out[1][1] == 6.0
+  assert o.out[2][0] == 6.0
+  assert o.out[2][1] == 7.0
+}
+
+test "the largest U32 as the upper end from another module" {
+  // x * 1 and x * 2 with x = 1.0, 2.0.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = at_the_top.render(xs, 8.0)
+  assert o.out[0][0] == 1.0
+  assert o.out[0][1] == 2.0
+  assert o.out[1][0] == 2.0
+  assert o.out[1][1] == 4.0
+}

@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§2.5", "§7", "§11.5"]
+
+// W7-14 U3/t, S-257, S-335: the closed range `..=` at the end of a line goes on, as `..<` does (§2.5, §7),
+// in the head of a `par~`, and the replication is made: N = b - a + 1. It was the `par_head` of
+// negative/range_continuation_closed_e0200.onsa, which was E0200 until the closed range of `par~` was
+// made (W7-14); the `for` head stays there. The same heads with `..<` are in lex/continuation_range.onsa.
+// The values are worked out by hand.
+
+pub flow par_head(x: F32 at sample) -> [F32; 4] at sample {
+  par~ i in 0 ..=
+    3 {
+    x * F32.round_from(i)
+  }
+}
+
+pub flow par_head_with_a_comment(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 2 ..=
+    // the last value of the index
+    3 {
+    x + F32.round_from(i)
+  }
+}
+
+test "a head that goes on over a line break" {
+  // N = 4, the index 0, 1, 2, 3: x * i with x = 1.0, 2.0.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = par_head.render(xs, 8.0)
+  assert o.out[0][0] == 0.0
+  assert o.out[0][1] == 0.0
+  assert o.out[1][0] == 1.0
+  assert o.out[1][1] == 2.0
+  assert o.out[2][0] == 2.0
+  assert o.out[2][1] == 4.0
+  assert o.out[3][0] == 3.0
+  assert o.out[3][1] == 6.0
+}
+
+test "a head that goes on over a comment" {
+  // N = 2, the index 2, 3: x + i with x = 1.0, 2.0.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = par_head_with_a_comment.render(xs, 8.0)
+  assert o.out[0][0] == 3.0
+  assert o.out[0][1] == 4.0
+  assert o.out[1][0] == 4.0
+  assert o.out[1][1] == 5.0
+}

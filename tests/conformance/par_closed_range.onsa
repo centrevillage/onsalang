@@ -1,0 +1,54 @@
+// onsa.toml
+// [package]
+// name = "par_closed_range"
+// edition = "2026"
+//
+// [export]
+// prefix = "par_closed_range_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§11.5", "§13.4"]
+// conformance = true
+
+// Conformance (W7-14 U3/t, S-257): the closed range of `par~` (spec §11.5, `par~ i in a ..= b { e }` is
+// `N = b - a + 1` replicas, the index goes from `a` to `b`) gives the same values in the interpreter and in C
+// (§13.4): the stateless replication, a state in each replica, the index as a delay time, and the largest
+// ends of `U32` where an exclusive end `b + 1` would overflow.
+
+@export
+pub flow stateless(x: F32 at sample) -> [F32; 3] at sample {
+  par~ i in 1 ..= 3 { x * F32.round_from(i) }
+}
+
+@export
+pub flow with_state(x: F32 at sample) -> [F32; 3] at sample {
+  par~ i in 0 ..= 2 { acc~(x + F32.round_from(i)) }
+}
+
+@export
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(^y)
+  y
+}
+
+@export
+pub flow delay_by_the_index(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 1 ..= 2 { vdelay~(x, F32.round_from(i), 4) }
+}
+
+@export
+pub flow at_the_top(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 4294967294 ..= 4294967295 { x + F32.round_from(i - 4294967294) }
+}
+
+@export
+pub flow one_at_the_top(x: F32 at sample) -> [F32; 1] at sample {
+  par~ i in 4294967295 ..= 4294967295 { x * 2.0 + F32.round_from(i - 4294967294) }
+}

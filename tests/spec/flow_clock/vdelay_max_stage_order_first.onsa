@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§11.3", "§4.7", "§18.1"]
+
+// W7-14 U3/t, S-88, R-100: the maximum of a `vdelay~` of `F32` over 2^24 (E0808, §11.4) written before a clock
+// error (E0813, E0815) is the one reported, and the clock error is not (the first by position, in one stage,
+// §18.1), as the error of the length of a delay is in flow_stage_order_flow_check_first.onsa. One error per
+// flow, so each form is a flow of its own: the first line has the error that is reported. The other orders
+// are in vdelay_max_stage_order.onsa and vdelay_max_stage_order_clock_first.onsa.
+
+pub flow pass(c: F32 at block) -> F32 at sample { c }
+
+pub flow vdelay_over_then_block(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = vdelay~(x, d, 16777217)                           //~ E0808
+  let b = prev~(p)
+  x
+}
+
+pub flow vdelay_over_then_pass(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = vdelay~(x, d, 16777217)                           //~ E0808
+  let b = pass~(x)
+  x
+}
+
+pub flow vdelay_over_then_at(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = vdelay~(x, d, 16777217)                           //~ E0808
+  let b = x at block
+  x
+}

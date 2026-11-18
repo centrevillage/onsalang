@@ -1,0 +1,60 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5", "§18.1"]
+
+// W7-14 U3/t, S-257: an empty closed range in the header of `par~` is E0808 (§11.5: "範囲は空であっては
+// ならない（`a ..< b` は `a < b`、`a ..= b` は `a <= b` を要し、空の範囲は E0808）"). `a ..= b` is empty
+// when `a > b`, and `a ..= a` is not (one replica, tests/spec/flow_semantics/par_closed_edges.onsa). The
+// count `b - a + 1` is not computed in `U32`: `1 ..= 0` and `4294967295 ..= 0` are empty, not an overflow of
+// `b - a`. One error per flow, each form a flow of its own, and the bounds are integer literals or
+// constants. The same error of the half-open range, `a ..< b` with `a >= b`, is in negative/flow_const_neg.onsa
+// (`par_empty`, `par_reversed`).
+
+use std.math.sum
+
+const FROM: U32 = 4
+const TO: U32 = 3
+
+pub flow reversed_by_one(x: F32 at sample) -> F32 at sample {
+  let _ = par~ i in 3 ..= 2 { x }                                  //~ E0808
+  x
+}
+
+pub flow reversed_from_one_to_zero(x: F32 at sample) -> F32 at sample {
+  let _ = par~ i in 1 ..= 0 { x }                                  //~ E0808
+  x
+}
+
+pub flow reversed_by_three(x: F32 at sample) -> F32 at sample {
+  let _ = par~ i in 5 ..= 2 { x }                                  //~ E0808
+  x
+}
+
+pub flow reversed_from_the_largest(x: F32 at sample) -> F32 at sample {
+  let _ = par~ i in 4294967295 ..= 0 { x }                         //~ E0808
+  x
+}
+
+pub flow reversed_from_the_largest_by_one(x: F32 at sample) -> F32 at sample {
+  let _ = par~ i in 4294967295 ..= 4294967294 { x }                //~ E0808
+  x
+}
+
+pub flow reversed_named_ends(x: F32 at sample) -> F32 at sample {
+  let _ = par~ i in FROM ..= TO { x }                              //~ E0808
+  x
+}
+
+pub flow reversed_in_a_call(x: F32 at sample) -> F32 at sample {
+  sum(par~ i in 3 ..= 2 { x * F32.round_from(i) })                 //~ E0808
+}
+
+pub flow reversed_in_a_par_body(x: F32 at sample) -> F32 at sample {
+  let _ = par~ i in 0 ..< 2 { par~ j in 3 ..= 2 { x } }            //~ E0808
+  x
+}
+
+pub flow reversed_with_no_space(x: F32 at sample) -> F32 at sample {
+  let _ = par~ i in 3..=2 { x }                                    //~ E0808
+  x
+}

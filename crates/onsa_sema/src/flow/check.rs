@@ -90,9 +90,9 @@ impl<'a> Checker<'a> {
                         }
                         Some(lowered)
                     }
-                    // SPEC-GAP(S-395): with no annotation the locals stay unknown
-                    // above the `let`, so `^s.l` there is E0420 (§4.7); the type is
-                    // not taken from the value of the later `let`.
+                    // With no annotation the locals stay unknown above the
+                    // `let`, so `^s.l` there is E0420 (§4.7, S-395), whose note
+                    // shows the `let` ([`Self::unannotated_let_below`]).
                     None => None,
                 };
                 let name = match &ast.pat(pat).kind {
@@ -113,6 +113,14 @@ impl<'a> Checker<'a> {
             }
             None => Err(self.flow_syntax(span)),
         }
+    }
+
+    /// The statement of a `let` of the flow body after `at` with no
+    /// annotation whose local is of the type variable `t`: what a `^` at `at`
+    /// reads before the value types it (§4.7, S-395).
+    pub(crate) fn unannotated_let_below(&self, t: TyId, at: Span) -> Option<Span> {
+        let lets = self.flow.as_ref()?.pending.iter().filter(|p| p.annotation.is_none() && p.span.start > at.start);
+        lets.filter(|p| p.locals.iter().any(|&l| self.shallow(self.local_ty(l)) == t)).map(|p| p.span).next()
     }
 
     /// Whether every constructor the pattern `pat` names has its record.
@@ -243,8 +251,9 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// `par~ i in a..<b { e }` (§11.5): `i` is an `Init`-rate `U32`, the result is `[T; b - a]`.
-    /// `par~ i in a..=b` (`b - a + 1` instances) is E0200 until W7-04 (S-224).
+    /// `par~ i in a..<b { e }` and `par~ i in a..=b { e }` (§11.5): `i` is
+    /// an `Init`-rate `U32`, the result is `[T; N]` of the `N` instances
+    /// (`b - a`, `b - a + 1`), counted without an end past `b` (S-257).
     fn check_par(
         &mut self,
         e: ExprId,
@@ -257,24 +266,13 @@ impl<'a> Checker<'a> {
         // The ends are constant expressions (§4.5, S-966), read by their form there.
         let lo = self.flow_const_u32(range.lo)?;
         let hi = self.flow_const_u32(range.hi)?;
-        let end = range.end;
-        // With an end in error (held), the body is checked and the `par~` is
-        // of the error type, so that no later use of it is an error (§18.1).
-        let ends = lo.zip(hi).filter(|&(lo, hi)| {
-            let (empty, count) = match end {
-                RangeEnd::Excluded => (hi <= lo, "`b - a`"),
-                RangeEnd::Included => (hi < lo, "`b - a + 1`"),
-            };
-            if empty {
-                let sym = end.symbol();
-                let msg = format!("`par~` replicates {count} instances; the bounds `{lo}{sym}{hi}` give none (§11.5)");
-                self.flow_hold_at(Code::E0808, span, msg);
-            }
-            !empty
-        });
-        if ends.is_some() && end == RangeEnd::Included {
-            return Err(self.closed_range_unsupported(range, Stage::Flow, Feature::InclusiveRangePar));
-        }
+        // With an end in error, or no instances or more than a `U32` counts
+        // (held), the body is checked and the `par~` is of the error type, so
+        // that no later use of it is an error (§18.1).
+        let count = match (lo, hi) {
+            (Some(lo), Some(hi)) => self.par_count(span, range.end, lo, hi),
+            _ => None,
+        };
         let exp_elem = expected.and_then(|t| match self.ty(self.shallow(t)) {
             Ty::Array(el, _) => Some(el),
             _ => None,
@@ -283,16 +281,38 @@ impl<'a> Checker<'a> {
             let u32 = self.u32();
             let lid = self.local_of(Origin::Par(e))?;
             self.bind_local(lid, u32, var.span)?;
-            // The plan reads the ends, and a flow with an error has none.
-            let (lo, hi) = ends.unwrap_or_default();
-            self.fcx().pars.insert(e, (lid, lo, hi));
+            // The plan reads the first and the count, and a flow with an error has none.
+            let (from, n) = lo.zip(count).unwrap_or_default();
+            self.fcx().pars.insert(e, (lid, from, n));
             self.check_expr(body, exp_elem)
         })();
         let t = r?;
-        Ok(match ends {
-            Some((lo, hi)) => self.a.types.intern(Ty::Array(t, Len::Const(hi - lo))),
+        Ok(match count {
+            Some(n) => self.a.types.intern(Ty::Array(t, Len::Const(n))),
             None => self.a.types.error(),
         })
+    }
+
+    /// The number of the instances of `par~` over `lo` and `hi` with `end`
+    /// (§11.5), in a width with no overflow; none (an E0808, held) when the
+    /// range is empty or the number does not fit in `U32`.
+    fn par_count(&mut self, span: Span, end: RangeEnd, lo: u32, hi: u32) -> Option<u32> {
+        let (n, count) = match end {
+            RangeEnd::Excluded => (i64::from(hi) - i64::from(lo), "`b - a`"),
+            RangeEnd::Included => (i64::from(hi) - i64::from(lo) + 1, "`b - a + 1`"),
+        };
+        let gives = if n <= 0 {
+            "none".to_string()
+        } else if let Ok(n) = u32::try_from(n) {
+            return Some(n);
+        } else {
+            // SPEC-GAP(S-1147): the code of a count past `U32` (E0808 or E0409); E0808 for now.
+            format!("{n}, more than the size `N` of `[T; N]`, a `U32`, holds")
+        };
+        let msg =
+            format!("`par~` replicates {count} instances; the bounds `{lo}{}{hi}` give {gives} (§11.5)", end.symbol());
+        self.flow_hold_at(Code::E0808, span, msg);
+        None
     }
 
     /// Calls in flow mode (§11.5): flow instances `f~(...)`, the delays
@@ -529,5 +549,26 @@ impl<'a> Checker<'a> {
                 "a node of a flow body the names stage did not record",
             ),
         }
+    }
+}
+
+/// The maximum of a `vdelay~` whose `d` is an `F32` (the type of its first
+/// argument, through aliases and the variables of the inference: of the
+/// typed body) is at most 2^24 (§11.4, S-88, R-100): an E0808 at it, held
+/// ([`FlowCx::held`]). `F64` has no such limit.
+pub(super) fn hold_f32_max(a: &Analysis, ast: &onsa_syntax::ast::Ast, text: &str, body: &BodyInfo, fcx: &mut FlowCx) {
+    const MOST: u32 = 1 << 24;
+    for call in &fcx.calls {
+        let NodeKind::Delay(d @ Delay::Variable, max) = call.kind else { continue };
+        let f32 = body.expr_types.get(&call.expr).is_some_and(|&t| *a.types.get(t) == Ty::Float(FloatKind::F32));
+        let Some(&max_expr) = d.const_index().and_then(|k| call.args.get(k)).filter(|_| f32 && max > MOST) else {
+            continue;
+        };
+        let span = ast.expr(max_expr).span;
+        let msg = format!(
+            "the maximum of a `vdelay~` whose `d` is an `F32` is at most 2^24 ({MOST}), the integers an `F32` holds (§11.4)"
+        );
+        let d = Diagnostic::new(Stage::Flow, Code::E0808, span, msg).with_found(span.text_in(text));
+        Diagnostic::keep_first(&mut fcx.held, d);
     }
 }

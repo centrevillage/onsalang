@@ -97,6 +97,16 @@ impl Walk<'_> {
         true
     }
 
+    /// The signature of the function `def` has an error type: a call of it
+    /// is in error, with no diagnostic (§18.1, R-499), in every stage.
+    pub(super) fn signature_failed(&self, def: DefId) -> bool {
+        let types = &self.a.types;
+        self.a
+            .def(def)
+            .as_fn()
+            .is_some_and(|f| types.has_error(f.ret) || f.params.iter().any(|p| types.has_error(p.ty)))
+    }
+
     /// Whether a call at `e` of the function `def`, `ops` the clocks of its
     /// receiver (`receiver`) and arguments and `r` their join, has a clock
     /// (§11.5): the first `inout self` call held (E0713, §5.2), no effects

@@ -86,7 +86,7 @@ mod state;
 mod tests;
 
 use boundary::{gen_params_default, gen_process, gen_process_inplace, gen_render};
-use generated::{Gen, init_value, instance_args, replicas, ring_len, sfield};
+use generated::{Gen, init_value, instance_args, replica_loop, ring_len, sfield};
 pub(crate) use nodes::lower_flow_expr;
 use phases::{gen_ctl, gen_init, gen_reset, gen_tick, store_nodes};
 use state::state_fields;

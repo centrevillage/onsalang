@@ -5,6 +5,8 @@
 
 use super::*;
 use crate::constarg::{ConstU32, Unheld};
+use crate::names::body::PathRes;
+use crate::resolve::Entity;
 
 impl<'a> Checker<'a> {
     /// A compile-time `U32` (§11.4, §4.5): the value of a constant
@@ -27,6 +29,12 @@ impl<'a> Checker<'a> {
                 }
                 Ok(Some(v))
             }
+            // A constant whose unit failed has no value, with no diagnostic
+            // (§18.1, R-499), and the flow no plan.
+            Ok((ConstU32::Param(_), _)) | Err(Unheld::Uncomputed(_)) if self.names_failed_const(e) => {
+                self.fcx().unread = true;
+                Ok(None)
+            }
             // A flow has no const parameters.
             Ok((ConstU32::Param(_), _)) | Err(Unheld::Uncomputed(_)) => {
                 self.flow_hold_gate(Feature::FlowConstExprs, self.expr(e).span);
@@ -39,5 +47,12 @@ impl<'a> Checker<'a> {
                 Err(crate::body::Stop)
             }
         }
+    }
+
+    /// `e` names a constant (in parentheses too) whose unit failed (§18.1).
+    fn names_failed_const(&self, e: ExprId) -> bool {
+        let named = crate::names::body::named(self.ast, self.ast.without_parens(e));
+        matches!(self.names.paths.get(&named), Some(&PathRes::Item { entity: Entity::Def(d) | Entity::Member(d), .. })
+            if self.a.failures.failed(d))
     }
 }

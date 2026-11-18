@@ -56,13 +56,15 @@ pub enum PlanKind {
         args: Vec<ExprId>,
         span: Span,
     },
-    /// `par~ var in from..<to { body }`; `children` are the nodes its body
-    /// holds, in the order of the table, and `fields` the fields of its
-    /// replica (none: it has no state).
+    /// `par~ var in a..<b { body }` or `a..=b`: `count` replicas whose `var`
+    /// is `from` (`a`) and up, with no end past the last (S-257, a last of
+    /// `U32`'s maximum); `children` are the nodes its body holds, in the
+    /// order of the table, and `fields` the fields of its replica (none: it
+    /// has no state).
     Par {
         var: LocalId,
         from: u32,
-        to: u32,
+        count: u32,
         body: ExprId,
         children: Vec<NodeId>,
         fields: Vec<Field>,
@@ -195,8 +197,8 @@ pub(super) fn build(info: &mut FlowInfo, recorded: Vec<Recorded>, w: &Walked) {
             (None, None) => onsa_diag::internal::bug(Some(r.span), "a node the walk gave no clock"),
         };
         let kind = match r.kind {
-            PlanKind::Par { var, from, to, body, fields, .. } => {
-                PlanKind::Par { var, from, to, body, children: ch, fields }
+            PlanKind::Par { var, from, count, body, fields, .. } => {
+                PlanKind::Par { var, from, count, body, children: ch, fields }
             }
             kind => kind,
         };

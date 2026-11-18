@@ -88,13 +88,17 @@ fn probe(case: &str) -> Vec<Row> {
 const COMPLETE_ONLY_AFTER_THE_BODY: [&str; 4] =
     ["prev_default_types.onsa", "par_branch.onsa", "branches_tilde.onsa", "lookback_nesting.onsa"];
 
+/// The cases with no E0200 left in their flows: `par_tilde_closed_range`
+/// stopped at the E0200 of `par~ ..=` until W7-14 U3.
+const COMPLETE: [&str; 1] = ["par_tilde_closed_range.onsa"];
+
 /// (case, the number of its flows, the number of the incomplete ones): the check
-/// of the body stops at the E0200 of `par_lookback` and `par_tilde_closed_range`
-/// (their incomplete flows are the flows the check stops at); the E0200 of the
-/// other four comes from the stage of the flow (a delay inside a delay is held
-/// by the check of the types and reported after the body, R-329), so every body
-/// is complete.
-const BODY_STOPS: [(&str, usize, usize); 2] = [("par_lookback.onsa", 2, 2), ("par_tilde_closed_range.onsa", 6, 5)];
+/// of the body stops at the E0200 of `par_lookback` (its incomplete flows are
+/// the flows the check stops at); the E0200 of the four of
+/// [`COMPLETE_ONLY_AFTER_THE_BODY`] comes from the stage of the flow (a delay
+/// inside a delay is held by the check of the types and reported after the
+/// body, R-329), so every body is complete.
+const BODY_STOPS: [(&str, usize, usize); 1] = [("par_lookback.onsa", 2, 2)];
 
 #[test]
 fn the_cases_the_check_stops_at_in_the_body_have_incomplete_tables() {
@@ -108,13 +112,13 @@ fn the_cases_the_check_stops_at_in_the_body_have_incomplete_tables() {
 #[test]
 fn the_complete_flows_have_a_type_for_every_value() {
     let mut complete_flows = 0;
-    for case in BODY_STOPS.iter().map(|c| c.0).chain(COMPLETE_ONLY_AFTER_THE_BODY) {
+    for case in BODY_STOPS.iter().map(|c| c.0).chain(COMPLETE).chain(COMPLETE_ONLY_AFTER_THE_BODY) {
         for r in probe(case).iter().filter(|r| r.complete) {
             complete_flows += 1;
             assert_eq!(r.unresolved, 0, "{case}: {r:?}");
             assert!(r.holes.is_empty(), "{case}: {r:?}");
         }
     }
-    // `par_tilde_closed_range` has one complete flow; the four others have 4, 2, 11 and 11.
-    assert_eq!(complete_flows, 1 + 4 + 2 + 11 + 11);
+    // `par_lookback` has none, `par_tilde_closed_range` six; the four others have 4, 2, 11 and 11.
+    assert_eq!(complete_flows, 6 + 4 + 2 + 11 + 11);
 }

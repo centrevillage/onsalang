@@ -1,0 +1,82 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.4", "§11.5"]
+
+// W7-14 U3/t, S-257, S-151: the closed range of `par~` in the places a body and a call are written (§11.5:
+// `par~ i in a ..= b { e }` is `N = b - a + 1` replicas, the index goes from `a` to `b`, "the body that
+// has no stateful part makes no state field and is not an error"). The index picks a branch of a plain
+// `if` in the body (a branch without a stateful part), goes through a generic `rt fn`, gives a delay
+// length to a `vdelay~` of each replica (the index is a value of the `init` clock, so it is the delay
+// time `d`, not the maximum), and the replication is the argument of a call. The bodies of the first
+// three have no state, and the replication is accepted all the same. The values are worked out by hand.
+
+use std.math.sum
+
+pub rt fn twice[T: Num](a: T) -> T {
+  a + a
+}
+
+// Three replicas, the index 0, 1, 2: x only where the index is 1.
+pub flow only_the_middle(x: F32 at sample) -> [F32; 3] at sample {
+  par~ i in 0 ..= 2 { if i == 1 { x } else { 0.0 } }
+}
+
+// Two replicas, the index 1, 2: twice (x * i).
+pub flow doubled(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 1 ..= 2 { twice(x * F32.round_from(i)) }
+}
+
+// Two replicas, each with its own delay line of the length i (the maximum is 4).
+pub flow own_delays(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 1 ..= 2 { vdelay~(x, F32.round_from(i), 4) }
+}
+
+// Four replicas, the index 1, 2, 3, 4, summed: x * 10.
+pub flow total(x: F32 at sample) -> F32 at sample {
+  sum(par~ i in 1 ..= 4 { x * F32.round_from(i) })
+}
+
+test "the index picks a branch inside the body" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = only_the_middle.render(xs, 8.0)
+  assert o.out[0][0] == 0.0
+  assert o.out[0][1] == 0.0
+  assert o.out[1][0] == 1.0
+  assert o.out[1][1] == 2.0
+  assert o.out[2][0] == 0.0
+  assert o.out[2][1] == 0.0
+}
+
+test "the index goes through a generic function" {
+  // 2 * (x * 1) and 2 * (x * 2) with x = 1.0, 2.0.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = doubled.render(xs, 8.0)
+  assert o.out[0][0] == 2.0
+  assert o.out[0][1] == 4.0
+  assert o.out[1][0] == 4.0
+  assert o.out[1][1] == 8.0
+}
+
+test "each replica has its own delay line" {
+  // x = 1 2 3 4, the first output is `init` (0.0), then the input `d` samples before, as `d` is an integer:
+  // d = 1 gives 0 1 2 3 and d = 2 gives 0 0 1 2.
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let o = own_delays.render(xs, 8.0)
+  assert o.out[0][0] == 0.0
+  assert o.out[0][1] == 1.0
+  assert o.out[0][2] == 2.0
+  assert o.out[0][3] == 3.0
+  assert o.out[1][0] == 0.0
+  assert o.out[1][1] == 0.0
+  assert o.out[1][2] == 1.0
+  assert o.out[1][3] == 2.0
+}
+
+test "the replication is the argument of a call" {
+  // x * (1 + 2 + 3 + 4) with x = 1.0, 2.0.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = total.render(xs, 8.0)
+  assert o.out[0] == 10.0
+  assert o.out[1] == 20.0
+}

@@ -100,7 +100,10 @@ impl Graph<'_> {
         let what = match (&node.kind, node.kind.delay()) {
             (_, Some(d)) => format!("{}~", d.name()),
             (PlanKind::Instance { callee, .. }, None) => format!("{}~", self.a.def(*callee).name),
-            (PlanKind::Par { from, to, .. }, None) => format!("par~ {from}..<{to}"),
+            // The end past the last, in a width with no overflow (W7-15 draws the form written).
+            (PlanKind::Par { from, count, .. }, None) => {
+                format!("par~ {from}..<{}", u64::from(*from) + u64::from(*count))
+            }
             // `PlanKind::delay` names every delay.
             (PlanKind::Prev { .. } | PlanKind::Delay { .. } | PlanKind::Vdelay { .. }, None) => {
                 onsa_diag::internal::bug(None, "a delay node without its delay")

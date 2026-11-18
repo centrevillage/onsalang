@@ -1,0 +1,124 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5", "§11.3", "§4.7", "§18.1"]
+//
+// [[test.fix]]
+// at = "46:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["47:11 E0808"]
+//
+// [[test.fix]]
+// at = "52:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["53:11 E0808"]
+//
+// [[test.fix]]
+// at = "70:37"
+// code = "E0813"
+// candidate = 1
+// leaves = ["71:11 E0808"]
+//
+// [[test.fix]]
+// at = "76:9"
+// code = "E0813"
+// candidate = 1
+// leaves = ["76:28 E0808"]
+
+// W7-14 U3/t, S-257, R-329, R-495: the empty closed range of `par~` (`par~ i in 2 ..= 1`, E0808, §11.5) is an
+// error of the flow stage, like the bounds `a ..< b` and the length of a delay (§18.1, the order of the
+// stages). So the error that is reported is, in one flow: the clock error (E0813, E0815) that is written
+// before it (the first by position, one stage), and not the clock error that is written after it; and a type
+// error (E0401, E0412) wherever it is written, because the flow check is made on a body that has its types
+// (§4.7). One error per flow, so each form is a flow of its own: the first line has the error that is
+// reported. The candidate of E0813 leaves the empty range. The same orders for the bounds `a ..< b` and the
+// length of a delay are in flow_stage_order_clock_before_flow_check.onsa, flow_stage_order_flow_check_first.onsa
+// and flow_stage_order_type_before_flow_check.onsa.
+
+use std.math.sum
+
+const K: F32 = 1.0
+pub fn id1(a: F32) -> F32 { a }
+pub flow pass(c: F32 at block) -> F32 at sample { c }
+
+pub flow block_then_closed_empty(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = prev~(p)                                          //~ E0813
+  let b = par~ i in 2 ..= 1 { x }
+  x
+}
+
+pub flow const_then_closed_empty(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = prev~(K)                                          //~ E0813
+  let b = par~ i in 2 ..= 1 { x }
+  x
+}
+
+pub flow pass_then_closed_empty(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = pass~(x)                                          //~ E0815
+  let b = par~ i in 2 ..= 1 { x }
+  x
+}
+
+pub flow at_then_closed_empty(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = x at block                                        //~ E0815
+  let b = par~ i in 2 ..= 1 { x }
+  x
+}
+
+pub flow block_in_a_par_body_then_closed_empty(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = par~ i in 0 ..< 2 { prev~(p) }                    //~ E0813
+  let b = par~ j in 2 ..= 1 { x }
+  x
+}
+
+pub flow block_then_closed_empty_in_one_line(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  prev~(p) + sum(par~ j in 2 ..= 1 { x })                   //~ E0813
+}
+
+pub flow closed_empty_then_block(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = par~ i in 2 ..= 1 { x }                           //~ E0808
+  let b = prev~(p)
+  x
+}
+
+pub flow closed_empty_then_pass(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = par~ i in 2 ..= 1 { x }                           //~ E0808
+  let b = pass~(x)
+  x
+}
+
+pub flow closed_empty_then_at(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = par~ i in 2 ..= 1 { x }                           //~ E0808
+  let b = x at block
+  x
+}
+
+pub flow closed_empty_then_type_error(x: F32 at sample) -> F32 at sample {
+  let a = par~ i in 2 ..= 1 { x }
+  let b: Bool = 1.0                                         //~ E0401
+  x
+}
+
+pub flow closed_empty_then_type_error_in_the_output(x: F32 at sample) -> F32 at sample {
+  let a = par~ i in 2 ..= 1 { x }
+  x + true                                                  //~ E0401
+}
+
+pub flow closed_empty_then_argument_count(x: F32 at sample) -> F32 at sample {
+  let a = par~ i in 2 ..= 1 { x }
+  let b = id1(1.0, 2.0)                                     //~ E0412
+  x
+}
+
+pub flow closed_empty_in_a_par_body_then_type_error(x: F32 at sample) -> F32 at sample {
+  let a = par~ i in 0 ..< 2 { par~ j in 2 ..= 1 { x } }
+  let b: Bool = 1.0                                         //~ E0401
+  x
+}
+
+pub flow type_error_then_closed_empty(x: F32 at sample) -> F32 at sample {
+  let a: Bool = 1.0                                         //~ E0401
+  let b = par~ i in 2 ..= 1 { x }
+  x
+}

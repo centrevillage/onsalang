@@ -86,7 +86,7 @@ fn init_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, ids: &[NodeI
                 if info.field(at(Part::Own)).is_none() {
                     continue;
                 }
-                let r = replicas(&n.kind, span)?;
+                let r = replica_loop(cx, &n.kind, span)?;
                 let elem = index(sfield(lw, info, state, at(Part::Own), span)?, r.index(cx, span))?;
                 let mut body = Vec::new();
                 cx.flow.as_mut().unwrap().scopes.push(Scope { state: elem.clone() });
@@ -151,7 +151,7 @@ fn reset_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, ids: &[Node
                 if info.field(at(Part::Own)).is_none() {
                     continue;
                 }
-                let r = replicas(&n.kind, span)?;
+                let r = replica_loop(cx, &n.kind, span)?;
                 let elem = index(sfield(lw, info, state, at(Part::Own), span)?, r.index(cx, span))?;
                 let mut body = Vec::new();
                 reset_nodes(lw, cx, &mut body, children, &elem)?;
@@ -196,7 +196,7 @@ fn ctl_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, ids: &[NodeId
                 if info.field(own).is_none() {
                     continue;
                 }
-                let r = replicas(&n.kind, span)?;
+                let r = replica_loop(cx, &n.kind, span)?;
                 let elem = index(sfield(lw, info, state, own, span)?, r.index(cx, span))?;
                 let mut body = Vec::new();
                 cx.flow.as_mut().unwrap().scopes.push(Scope { state: elem.clone() });

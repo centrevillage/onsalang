@@ -1,0 +1,71 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§11.3", "§4.7", "§18.1"]
+//
+// [[test.fix]]
+// at = "46:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["47:25 E0808"]
+//
+// [[test.fix]]
+// at = "52:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["53:25 E0808"]
+//
+// [[test.fix]]
+// at = "58:17"
+// code = "E0813"
+// candidate = 1
+// leaves = ["59:45 E0808"]
+//
+// [[test.fix]]
+// at = "64:37"
+// code = "E0813"
+// candidate = 1
+// leaves = ["65:25 E0808"]
+//
+// [[test.fix]]
+// at = "70:9"
+// code = "E0813"
+// candidate = 1
+// leaves = ["70:38 E0808"]
+
+// W7-14 U3/t, S-88, R-100, R-495: the clock error (E0813) on the first argument of a delay, written before
+// the maximum of a `vdelay~` of `F32` over 2^24 (E0808, §11.4), is the one reported (the first by position, in
+// one stage, §18.1), and its candidate (`p at sample`, `K at sample`) leaves the error of the maximum, as it
+// leaves the error of the length of a delay (flow_stage_order_clock_before_flow_check.onsa). One error per
+// flow, so each form is a flow of its own. The error of the maximum is reported by the check only after
+// W7-14 U3, so the `leaves` of each candidate fail before it. The forms with the other errors are in
+// vdelay_max_stage_order.onsa and vdelay_max_stage_order_first.onsa.
+
+const K: F32 = 1.0
+
+pub flow block_then_vdelay_over(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = prev~(p)                                          //~ E0813
+  let b = vdelay~(x, d, 16777217)
+  x
+}
+
+pub flow const_then_vdelay_over(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = prev~(K)                                          //~ E0813
+  let b = vdelay~(x, d, 16777217)
+  x
+}
+
+pub flow block_then_vdelay_over_in_a_par_body(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = prev~(p)                                          //~ E0813
+  let b = par~ i in 0 ..< 2 { vdelay~(x, d, 16777217) }
+  x
+}
+
+pub flow block_in_a_par_body_then_vdelay_over(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  let a = par~ i in 0 ..< 2 { prev~(p) }                    //~ E0813
+  let b = vdelay~(x, d, 16777217)
+  x
+}
+
+pub flow block_then_vdelay_over_in_one_line(x: F32 at sample, p: F32 at block, d: F32 at sample) -> F32 at sample {
+  prev~(p) + vdelay~(x, d, 16777217)                        //~ E0813
+}

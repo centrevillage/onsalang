@@ -1,0 +1,27 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§4.2", "§18.1"]
+
+// W7-14 U3/t, R-100, S-88: the reproduction of R-100 in the syntax of today (it was
+// tests/review-phase1/parent/r100/delay.onsa, in the draft of 0.3). The delay time is a huge literal that
+// saturates to `MAX`, and `MAX` is above 2^24, so `F32` converts it to a value that is rounded up (16777219 to
+// 16777220) and a `k` above `MAX` would overflow the index computation at run time. It is E0808 at the
+// check (§11.4: "`d` の型 `T` が `F32` なら `MAX <= 2^24`"), so no flow of a `render` that panics is made. The
+// accepted forms (2^24 itself, and an `F64` element with the same `MAX`) are in
+// vdelay_max_f32_limit_ok.onsa. One error per flow.
+
+pub flow f32_over(x: F32 at sample) -> F32 at sample {
+  vdelay~(x, 1000000000.0, 16777219, 0.0)                           //~ E0808
+}
+
+pub flow f32_over_a_tie(x: F32 at sample) -> F32 at sample {
+  vdelay~(x, 1000000000.0, 16777217, 0.0)                           //~ E0808
+}
+
+pub flow f32_over_without_init(x: F32 at sample) -> F32 at sample {
+  vdelay~(x, 1000000000.0, 16777219)                                //~ E0808
+}
+
+pub flow f32_over_with_a_signal_delay(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, 16777219, 0.0)                                      //~ E0808
+}

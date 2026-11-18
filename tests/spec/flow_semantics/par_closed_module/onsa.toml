@@ -1,0 +1,3 @@
+[package]
+name = "par_closed_module"
+edition = "2026"

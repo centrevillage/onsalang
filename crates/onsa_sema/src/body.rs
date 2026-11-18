@@ -280,7 +280,15 @@ fn read_body<'c>(
 pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
     let flat = flatten(pkg);
     let mut bound = HashMap::default();
-    for id in a.new_defs() {
+    // The values of the constants of the modules first, then the record of
+    // the failures again: a flow reads a constant whose unit failed as an
+    // error, whatever the order of the items (§18.1, R-499).
+    let top_const = |id: DefId| a.def(id).owner.is_none() && matches!(a.def(id).kind, DefKind::Const(_));
+    let (consts, rest): (Vec<DefId>, Vec<DefId>) = a.new_defs().partition(|&id| top_const(id));
+    for (k, id) in (0..).zip(consts.iter().chain(&rest).copied()) {
+        if k == consts.len() {
+            a.failures = crate::stages::Failures::of(pkg, a);
+        }
         let def = a.def(id);
         if def.item.is_none() {
             continue;
@@ -449,11 +457,11 @@ impl<'a> Checker<'a> {
     }
 
     /// E0200 for a range with its end (`a..=b`, S-224) in the head of a
-    /// `for` (W8-03, the types stage) or a `par` (W7-04, the flow stage),
-    /// once its ends are checked; it is never read as `a..<b` (R-81).
-    pub(crate) fn closed_range_unsupported(&mut self, r: &RangeHead, stage: Stage, feature: Feature) -> Stop {
+    /// `for` (W8-03, the types stage), once its ends are checked; it is
+    /// never read as `a..<b` (R-81).
+    pub(crate) fn closed_range_unsupported(&mut self, r: &RangeHead) -> Stop {
         let (lo, hi) = (self.expr(r.lo).span, self.expr(r.hi).span);
-        self.unsupported_in(stage, Span::new(lo.file, lo.start, hi.end), feature, &[])
+        self.unsupported_in(Stage::Types, Span::new(lo.file, lo.start, hi.end), Feature::InclusiveRangeFor, &[])
     }
 
     /// E0401 for an end of a range whose form is no integer, whatever its
@@ -638,15 +646,15 @@ impl<'a> Checker<'a> {
     pub(crate) fn known(&mut self, t: TyId, span: Span, what: &str) -> R<TyId> {
         let s = self.shallow(t);
         if matches!(self.ty(s), Ty::Var(_)) {
-            return Err(self.diag(
-                Diagnostic::new(
-                    Stage::Types,
-                    Code::E0420,
-                    span,
-                    format!("the type of this {what} must be known here; add an annotation (§4.7)"),
-                )
-                .with_found(self.src(span)),
-            ));
+            let msg = format!("the type of this {what} must be known here; add an annotation (§4.7)");
+            let mut d = Diagnostic::new(Stage::Types, Code::E0420, span, msg).with_found(self.src(span));
+            if let Some(at) = self.unannotated_let_below(s, span) {
+                d = d.with_note(
+                    at,
+                    "a `^` above this `let` reads it before its value: write its type on it (§4.7, §11.2)",
+                );
+            }
+            return Err(self.diag(d));
         }
         Ok(s)
     }

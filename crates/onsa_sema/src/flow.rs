@@ -243,7 +243,8 @@ pub(crate) struct FlowCx {
     /// (a delay there is E0200, K-08).
     delay_arg: u32,
     calls: Vec<NodeCall>,
-    /// `par` expression → (variable, from, to).
+    /// `par` expression → (variable, its first value, the number of the
+    /// instances), §11.5.
     pars: HashMap<ExprId, (LocalId, u32, u32)>,
     sample_rate_calls: Vec<ExprId>,
     output: Option<ExprId>,
@@ -255,4 +256,7 @@ pub(crate) struct FlowCx {
     /// The number of the diagnostics before the body was checked: more after
     /// it, and the check of the types reported an error of the body.
     diags_before: usize,
+    /// A constant expression read a constant whose unit failed (§18.1,
+    /// R-499): no plan is made, with no diagnostic.
+    unread: bool,
 }

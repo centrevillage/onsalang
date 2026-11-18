@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5", "§11.4", "§18.1"]
+
+// W7-14 U3, S-257, R-329, R-495: a `par~` over a closed range (`0 ..= 2`, three instances, §11.5) is
+// read like any other expression of the body: it holds no error of its own, so the errors of the flow
+// stage are chosen by their position, and a type error anywhere in the body comes first (§18.1, the order
+// of the stages). Before U3 the `..=` of a `par~` was an E0200 that stopped the check at its place, and
+// won over the E0807 and the E0813 before it and the E0401 after it (the break side of U1 and U2,
+// `r2.onsa`).
+
+pub flow delay_one_before(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, 1)                                       //~ E0807
+  let b = (par~ k in 0 ..= 2 { x })[0]
+  x
+}
+
+pub flow block_before(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = prev~(p)                                           //~ E0813
+  let b = (par~ k in 0 ..= 2 { x })[0]
+  x
+}
+
+pub flow delay_one_before_then_a_type_error(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, 1)
+  let b = (par~ k in 0 ..= 2 { x })[0]
+  let c: Bool = 1.0                                          //~ E0401
+  x
+}

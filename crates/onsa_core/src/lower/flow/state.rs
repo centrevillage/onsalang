@@ -64,12 +64,13 @@ fn node_field_ty(lw: &mut Lowerer, flow: DefId, decls: &Decls, info: &FlowInfo, 
         }
         (PlanKind::Delay { .. } | PlanKind::Vdelay { .. }, Part::W) => Ok(Ty::u32()),
         (PlanKind::Instance { callee, .. }, Part::Own) => Ok(Ty::Struct(lw.ensure_flow(*callee)?.state)),
-        (PlanKind::Par { fields, .. }, Part::Own) => {
+        (PlanKind::Par { fields, count, .. }, Part::Own) => {
             let inner = state_fields(lw, flow, decls, info, fields)?;
             let tname = format!("{}.{}.State", lw.qual_name(flow), n.path);
             let tid = TypeId(lw.m.types.len() as u32);
             lw.m.types.push(TypeDef { name: tname, kind: TypeDefKind::Struct { fields: inner } });
-            Ok(Ty::Array(Box::new(Ty::Struct(tid)), replicas(&n.kind, span)?.count()))
+            // The array of the states of the replicas (§11.5).
+            Ok(Ty::Array(Box::new(Ty::Struct(tid)), *count))
         }
         _ => Err(internal(span, format!("no field {part:?} of the node {}", n.path))),
     }

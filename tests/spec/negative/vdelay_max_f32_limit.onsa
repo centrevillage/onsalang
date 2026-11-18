@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§4.2", "§18.1"]
+
+// W7-14 U3/t, S-88, R-100: the maximum `MAX` of a `vdelay~` whose element type is `F32` is at most 2^24 =
+// 16777216 (§11.4: "`d` の型 `T` が `F32` なら `MAX <= 2^24`", E0808), because `F32` does not hold the
+// consecutive integers above it. 2^24 itself is accepted, and an `F64` element has no such bound
+// (vdelay_max_f32_limit_ok.onsa). One error per flow, each form a flow of its own. The `MAX` is the third
+// argument, an integer literal or a `const` name whose value is a literal (a computed constant is E0200
+// in this version). The element type is `F32` also through a type alias (§4.1: an alias is the same type, and
+// the way to switch the precision of a flow, which has no type parameter).
+
+type Sample = F32
+type Chained = Sample
+
+const OVER: U32 = 16777217
+const WAY_OVER: U32 = 4294967295
+
+pub flow one_over(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, 16777217)                                           //~ E0808
+}
+
+pub flow two_over(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, 16777218)                                           //~ E0808
+}
+
+pub flow the_largest_u32(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, 4294967295)                                         //~ E0808
+}
+
+pub flow with_an_init(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, 16777217, 0.5)                                      //~ E0808
+}
+
+pub flow named_over(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, OVER)                                               //~ E0808
+}
+
+pub flow named_the_largest_u32(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, WAY_OVER)                                           //~ E0808
+}
+
+pub flow block_delay_time(x: F32 at sample, d: F32 at block) -> F32 at sample {
+  vdelay~(x, d, 16777217)                                           //~ E0808
+}
+
+pub flow in_a_let(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  let a = vdelay~(x, d, 16777217)                                   //~ E0808
+  a
+}
+
+pub flow in_an_operand(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  x + vdelay~(x, d, 16777217)                                       //~ E0808
+}
+
+pub flow in_a_par_body(x: F32 at sample, d: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 { vdelay~(x, d, 16777217) }                     //~ E0808
+}
+
+pub flow in_a_nested_par_body(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  let a = par~ i in 0 ..< 2 { par~ j in 0 ..< 2 { vdelay~(x, d, 16777217) } }   //~ E0808
+  x
+}
+
+pub flow on_a_feedback(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  let y = x + vdelay~(^y, d, 16777217)                              //~ E0808
+  y
+}
+
+pub flow alias_of_f32(x: Sample at sample, d: Sample at sample) -> Sample at sample {
+  vdelay~(x, d, 16777217)                                           //~ E0808
+}
+
+pub flow alias_of_an_alias_of_f32(x: Chained at sample, d: Chained at sample) -> Chained at sample {
+  vdelay~(x, d, 16777217)                                           //~ E0808
+}

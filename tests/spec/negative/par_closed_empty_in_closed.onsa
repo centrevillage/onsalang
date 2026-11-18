@@ -1,0 +1,30 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5", "§18.1"]
+
+// W7-14 U3/t, S-257: an empty closed range (E0808, §11.5) in the body of a `par~` whose own range is a
+// closed one that is not empty. The outer range is accepted since W7-14 (it is E0200 before), so the error of
+// the inner one is the only error of the flow. The empty ranges alone are in negative/par_closed_empty.onsa
+// (the check reports them before W7-14 as well, as it reports the empty `a ..< b`). One error per flow, each
+// form a flow of its own.
+
+use std.math.sum
+
+pub flow inner_empty(x: F32 at sample) -> F32 at sample {
+  let _ = par~ i in 0 ..= 1 { par~ j in 3 ..= 2 { x } }            //~ E0808
+  x
+}
+
+pub flow inner_empty_at_the_largest_ends(x: F32 at sample) -> F32 at sample {
+  let _ = par~ i in 4294967294 ..= 4294967295 { par~ j in 1 ..= 0 { x } }   //~ E0808
+  x
+}
+
+pub flow inner_empty_in_a_call(x: F32 at sample) -> F32 at sample {
+  sum(par~ i in 0 ..= 2 { sum(par~ j in 2 ..= 1 { x }) })           //~ E0808
+}
+
+pub flow inner_empty_half_open(x: F32 at sample) -> F32 at sample {
+  let _ = par~ i in 0 ..= 1 { par~ j in 2 ..< 2 { x } }            //~ E0808
+  x
+}

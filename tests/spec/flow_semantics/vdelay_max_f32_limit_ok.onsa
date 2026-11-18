@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§4.2"]
+
+// W7-14 U3/t, R-100, S-88: what the limit of the maximum of a `vdelay~` accepts (§11.4: "`d` の型 `T` が
+// `F32` なら `MAX <= 2^24`", and "`F64` の `d` は `U32` の `MAX` を全て正確に表すので、この上限は無い"):
+// 2^24 = 16777216 itself for an `F32` element, and any `MAX` of this size for an `F64` element, with the
+// delay time a literal, a signal and a block value, and with the init written or omitted. The file is only
+// checked (the state of a delay line of this length is large). The accepted forms of the R-100
+// reproduction (negative/vdelay_max_f32_rounds_up.onsa) and the errors (negative/vdelay_max_f32_limit.onsa). The element
+// type can be a type alias (§4.1): `F32` at the limit and `F64` above it.
+
+type Sample = F32
+type Wide = F64
+
+const LIMIT: U32 = 16777216
+const ABOVE: U32 = 16777217
+
+pub flow f32_at_the_limit(x: F32 at sample) -> F32 at sample {
+  vdelay~(x, 1000000000.0, 16777216, 0.0)
+}
+
+pub flow f32_at_the_limit_with_a_signal(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, 16777216)
+}
+
+pub flow f32_at_the_limit_named(x: F32 at sample, d: F32 at block) -> F32 at sample {
+  vdelay~(x, d, LIMIT, 0.25)
+}
+
+pub flow f32_below_the_limit(x: F32 at sample, d: F32 at sample) -> F32 at sample {
+  vdelay~(x, d, 16777215)
+}
+
+pub flow f64_one_above(x: F64 at sample) -> F64 at sample {
+  vdelay~(x, 1000000000.0, 16777217, 0.0)
+}
+
+pub flow f64_three_above(x: F64 at sample) -> F64 at sample {
+  vdelay~(x, 1000000000.0, 16777219, 0.0)
+}
+
+pub flow f64_named_above(x: F64 at sample, d: F64 at sample) -> F64 at sample {
+  vdelay~(x, d, ABOVE)
+}
+
+pub flow alias_of_f32_at_the_limit(x: Sample at sample, d: Sample at sample) -> Sample at sample {
+  vdelay~(x, d, 16777216)
+}
+
+pub flow alias_of_f64_above_the_limit(x: Wide at sample, d: Wide at sample) -> Wide at sample {
+  vdelay~(x, d, 16777217)
+}

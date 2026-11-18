@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5", "§4.5", "§18.1"]
+
+// E0200: an end of the closed range `a ..= b` in the header of a `par~` that is a computed constant
+// expression (a sum, a difference, a product of constants). The closed range is made (W7-14, S-257), and
+// the ends are as in `a ..< b`: an integer literal or a `const` name whose value is an integer literal, and
+// a computed value of a constant expression in a flow is not made in this version, so it is reported where it
+// is. This file was range_inclusive_par_e0200.onsa, the closed range itself being E0200 until W7-14 (the
+// accepted closed ranges are in flow_semantics/par_closed_edges.onsa and par_closed_forms.onsa). One error
+// per flow.
+
+const N: U32 = 3
+
+pub flow sums_in_both_ends(x: F32 at sample) -> [F32; 4] at sample {
+  par~ i in N - 2 ..= N + 1 {                          //~ E0200
+    x * F32.round_from(i)
+  }
+}
+
+pub flow computed_upper_end(x: F32 at sample) -> [F32; 4] at sample {
+  par~ i in 0 ..= N + 1 {                              //~ E0200
+    x * F32.round_from(i)
+  }
+}
+
+pub flow computed_lower_end(x: F32 at sample) -> [F32; 3] at sample {
+  par~ i in N - 1 ..= 4 {                              //~ E0200
+    x * F32.round_from(i)
+  }
+}
+
+pub flow computed_end_bound_by_let(x: F32 at sample) -> [F32; 2] at sample {
+  let rows = par~ i in 2 ..= N * 1 {                   //~ E0200
+    x + F32.round_from(i)
+  }
+  rows
+}

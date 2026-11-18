@@ -55,7 +55,7 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
             call(sub.tick, ret, span, cargs)
         }
         PlanKind::Par { body, children, .. } => {
-            let r = replicas(&info.node(id).kind, span)?;
+            let r = replica_loop(cx, &info.node(id).kind, span)?;
             let ty = lw.core_ty(cx.info.expr_types[&e], &[], span)?;
             let arr = cx.temp(name, ty.clone());
             stmts.push(stmt(span, StmtKind::Let(arr, Expr::new(ty.clone(), span, ExprKind::Zeroed))));

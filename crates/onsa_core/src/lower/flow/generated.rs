@@ -75,38 +75,52 @@ pub(super) fn ring_len(kind: &PlanKind, span: Span) -> R<u32> {
     }
 }
 
-/// The replicas of a `par~` (§11.5): its variable and its range as the
-/// plan gives them, read in this one place.
+/// The replicas of a `par~` (§11.5): its variable, its first value and
+/// their number as the plan gives them, read in this one place. The loop
+/// over them is of the variable, `from..<from + count`, when that end fits
+/// in `U32`; past it (a last of `U32`'s maximum, S-257) it counts them with
+/// a local `k` of its own from 0 and binds the variable to `from + k`, and
+/// no end past the last is made.
 pub(super) struct Replicas {
     var: onsa_sema::LocalId,
     from: u32,
-    to: u32,
+    count: u32,
+    /// The counter of the loop when `from + count` is past `U32`.
+    k: Option<LocalId>,
 }
 
-/// The replicas of the `par~` of `kind`; of another node, an internal error.
-pub(super) fn replicas(kind: &PlanKind, span: Span) -> R<Replicas> {
-    match kind {
-        &PlanKind::Par { var, from, to, .. } => Ok(Replicas { var, from, to }),
-        _ => Err(internal(span, "the replicas of no `par~`")),
-    }
+/// The replicas of the `par~` of `kind`, with the locals of a loop over
+/// them in `cx`; of another node, an internal error.
+pub(super) fn replica_loop(cx: &mut FnCx, kind: &PlanKind, span: Span) -> R<Replicas> {
+    let &PlanKind::Par { var, from, count, .. } = kind else {
+        return Err(internal(span, "the replicas of no `par~`"));
+    };
+    let k = from.checked_add(count).is_none().then(|| cx.temp("k", Ty::u32()));
+    Ok(Replicas { var, from, count, k })
 }
 
 impl Replicas {
-    /// Their number: the length of the array of their states.
-    pub(super) fn count(&self) -> u32 {
-        self.to - self.from
-    }
-
-    /// The index of the replica of the iteration (`var - from`).
+    /// The index of the replica of the iteration (`var - from`, or `k`).
     pub(super) fn index(&self, cx: &FnCx, span: Span) -> Expr {
+        if let Some(k) = self.k {
+            return local_expr(cx, k, span);
+        }
         let v = local_expr(cx, LocalId(self.var.0), span);
         if self.from == 0 { v } else { checked_binary(BinOp::Sub, v, u32_lit(span, self.from)) }
     }
 
     /// The loop over them, of the variable of the `par~`, with the body `stmts`.
-    pub(super) fn each(&self, span: Span, stmts: Vec<Stmt>) -> Stmt {
-        let (from, to) = (u32_lit(span, self.from), u32_lit(span, self.to));
-        stmt(span, StmtKind::ForRange(LocalId(self.var.0), from, to, Block { stmts, value: None }))
+    pub(super) fn each(&self, span: Span, mut stmts: Vec<Stmt>) -> Stmt {
+        let var = LocalId(self.var.0);
+        // With no `k`, `from + count` fits in `U32` ([`replica_loop`], the one maker).
+        let Some(k) = self.k else {
+            let (from, to) = (u32_lit(span, self.from), u32_lit(span, self.from + self.count));
+            return stmt(span, StmtKind::ForRange(var, from, to, Block { stmts, value: None }));
+        };
+        let at = checked_binary(BinOp::Add, u32_lit(span, self.from), Expr::new(Ty::u32(), span, ExprKind::Local(k)));
+        stmts.insert(0, stmt(span, StmtKind::Let(var, at)));
+        let (zero, count) = (u32_lit(span, 0), u32_lit(span, self.count));
+        stmt(span, StmtKind::ForRange(k, zero, count, Block { stmts, value: None }))
     }
 }
 

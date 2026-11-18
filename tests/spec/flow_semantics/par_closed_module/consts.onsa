@@ -1,0 +1,6 @@
+// Constants that the flows of another module use as the ends of a closed `par~` range (spec §11.5, §15.1).
+
+pub const FIRST: U32 = 3
+pub const LAST: U32 = 5
+pub const TOP_LOW: U32 = 4294967294
+pub const TOP: U32 = 4294967295

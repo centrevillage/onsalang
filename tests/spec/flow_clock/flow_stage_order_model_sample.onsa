@@ -1,0 +1,299 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§11.5", "§18.1"]
+//
+// [[test.fix]]
+// at = "127:12"
+// code = "E0807"
+// candidate = 1
+// leaves = ["128:3 E0200"]
+
+// Sample of the model of the order of the stages in a flow body (names, types, flow check; the first by position in a stage). One error is reported per flow; the line of it is marked.
+
+pub fn noisy(v: F32) -> F32 uses {Alloc} { v }
+pub fn slow(v: F32) -> F32 { v }
+pub fn id1(a: F32) -> F32 { a }
+pub struct P { a: F32, b: F32 }
+pub flow lp(y: F32 at sample) -> F32 at sample { y }
+
+pub flow m0(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let 1 = x  //~ E0502
+  let v1 = vdelay~(slow(x), x, 8)
+  let (q000, r001) = x
+  x
+
+}
+
+pub flow m1(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let v0 = vdelay~(k, 1, 5000000000)  //~ E0408
+  let v1 = (par~ i000 in 3 ..< 3 { slow(x) })[0]
+  x
+
+}
+
+pub flow m2(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let v0 = vdelay~(x, x, 0)
+  let v1 = prev~((undef_name + x))  //~ E0302
+  x
+
+}
+
+pub flow m3(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let v0 = delay~(vdelay~(k, 1, 5000000000), 0)  //~ E0408
+  let v1 = delay~(x, n)
+  x
+
+}
+
+pub flow m4(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let v0 = (par~ i000 in 0 ..< 2 { (noisy(x) + lp~(x, x)) })[0]  //~ E0412
+  prev~((vdelay~(x, x, 0) + lp~(x, x)))
+
+}
+
+pub flow m5(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let v0 = (par~ i000 in 3 ..< 3 { delay~((undef_name + x), 1) })[0]  //~ E0302
+  let 1 = x
+  let v2 = id1(x, x)
+  x
+
+}
+
+pub flow m6(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let v0 = delay~(x, n)  //~ E0417
+  let v1 = delay~(delay~(x, 1), 4)
+  x
+
+}
+
+pub flow m7(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let v0 = prev~(prev~(x))
+  let v1 = vdelay~(x, x, 0)
+  (id1(x, x) + x)  //~ E0412
+
+}
+
+pub flow m8(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let v0 = id1(x, x)  //~ E0412
+  delay~(x, 1 + 1)
+
+}
+
+pub flow m9(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let s000 = "text"
+  let v1 = sample_tick()
+  let v2 = delay~(lp~((x + true)), 4)  //~ E0401
+  x
+
+}
+
+pub flow m10(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let v0 = vdelay~(k, 1, 8)  //~ E0416
+  let v1 = prev~(delay~(x, 1 + 1))
+  x
+
+}
+
+pub flow m11(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let v0 = (par~ i000 in 3 ..< 3 { (par~ w001 in 0 ..< n { x })[0] })[0]  //~ E0417
+  let v1 = (par~ w002 in 0 ..< 5000000000 { x })[0]
+  let v2 = delay~(sample_tick(), 0)
+  x
+
+}
+
+pub flow m12(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let v0 = vdelay~((par~ i000 in 0 ..< 2 { delay~(slow(x), 4) })[0], x, 8)  //~ E0200
+  let v1 = prev~(delay~(x, 1))
+  delay~((delay~((if c { lp~(x) } else { x }), 0) + x), 1)
+
+}
+
+pub flow m13(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let v0 = (par~ i000 in 0 ..< 2 { ((par~ i001 in 0 ..< 2 { noisy(x) })[0] + x) })[0]  //~ E0805
+  let v1 = prev~(p)
+  vdelay~(prev~((prev~(prev~(x)) + delay~(x, 1 + 1))), x, 8)
+
+}
+
+pub flow m14(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let s000 = "text"
+  let v1 = ((undef_name + x) + (undef_name + x))  //~ E0302
+  x
+
+}
+
+pub flow m15(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let v0 = delay~(x, 1)  //~ E0807
+  sample_tick()
+
+}
+
+pub flow m16(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let v0 = (delay~(x, n) + x)  //~ E0417
+  let v1 = ((prev~((delay~(x, 5000000000) + (if c { prev~(x) } else { x }))) + x) + x)
+  let v2 = (par~ i000 in 0 ..< 2 { delay~(x, 1) })[0]
+  x
+
+}
+
+pub flow m17(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let (q000, r001) = x  //~ E0401
+  let v1 = lp~(prev~(delay~(sample_tick(), 1)))
+  let v2 = delay~(prev~(vdelay~(delay~(x, 1), x, 8)), 1)
+  x
+
+}
+
+pub flow m18(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let v0 = ((par~ j000 in 2 ..< 2 { x })[0] + x)  //~ E0808
+  (par~ i001 in 3 ..< 3 { (par~ i002 in 0 ..< 2 { (par~ i003 in 3 ..< 3 { delay~(x, 1 + 1) })[0] })[0] })[0]
+
+}
+
+pub flow m19(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let (q000, r001) = x  //~ E0401
+  delay~(prev~(((par~ w002 in 0 ..< 5000000000 { x })[0] + id1(x, x))), 0)
+
+}
+
+pub flow m20(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let v0 = slow(x)
+  (x + true)  //~ E0401
+
+}
+
+pub flow m21(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let (q000, r001) = x  //~ E0401
+  let v1 = ((par~ w002 in 0 ..< 5000000000 { x })[0] + delay~(x, 1))
+  x
+
+}
+
+pub flow m22(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let v0 = (prev~(p) + delay~(x, 5000000000))  //~ E0408
+  lp~(((x at block) + (if c { lp~(x) } else { x })))
+
+}
+
+pub flow m23(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let P { a: q000, zz: r001 } = P { a: x, b: x }
+  let v1 = lp~(x, x)
+  ((undef_name + x) + delay~(x, 5000000000))  //~ E0302
+
+}
+
+pub flow m24(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let P { a: q000, zz: r001 } = P { a: x, b: x }
+  let v1 = prev~((par~ i002 in 0 ..< 2 { lp~((sample_tick() + (if c { prev~(x) } else { x }))) })[0])
+  let v2 = (undef_name + x)  //~ E0302
+  x
+
+}
+
+pub flow m25(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let 1 = x  //~ E0502
+  let v1 = (par~ i000 in 3 ..< 3 { delay~(x, 1 + 1) })[0]
+  let v2 = delay~(x, 0)
+  x
+
+}
+
+pub flow m26(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let v0 = (par~ i000 in 0 ..< 2 { (if c { prev~(x) } else { x }) })[0]
+  let 1 = x  //~ E0502
+  x
+
+}
+
+pub flow m27(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let v0 = ((x at block) + noisy(x))
+  let v1 = prev~(delay~(vdelay~(x, x, 0), 4))
+  (par~ i000 in 0 ..< 2 { id1(x, x) })[0]  //~ E0412
+
+}
+
+pub flow m28(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let v0 = (par~ i000 in 0 ..< 2 { ((par~ i001 in 0 ..< 2 { (undef_name + x) })[0] + x) })[0]  //~ E0302
+  ((if c { lp~(x) } else { x }) + x)
+
+}
+
+pub flow m29(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let v0 = lp~(prev~(id1(x, x)))  //~ E0412
+  vdelay~((par~ w000 in 0 ..< 5000000000 { x })[0], x, 8)
+
+}
+
+pub flow m30(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let s000 = "text"
+  let v1 = (par~ i001 in 3 ..< 3 { lp~((par~ i002 in 0 ..< 2 { (slow(x) + lp~(x, x)) })[0]) })[0]  //~ E0412
+  delay~(x, 1)
+
+}
+
+pub flow m31(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let v0 = (delay~(x, n) + lp~(x, x))  //~ E0417
+  (par~ i000 in 0 ..< 2 { (((if c { prev~(x) } else { x }) + (par~ j001 in 2 ..< 2 { x })[0]) + x) })[0]
+
+}
+
+pub flow m32(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let v0 = (delay~(x, 1 + 1) + (x at block))
+  let v1 = (delay~(x, n) + delay~(x, 0))  //~ E0417
+  x
+
+}
+
+pub flow m33(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let v0 = (par~ i000 in 3 ..< 3 { (if c { lp~(x) } else { x }) })[0]  //~ E0808
+  let v1 = (par~ i001 in 0 ..< 2 { delay~((if c { lp~(x) } else { x }), 1) })[0]
+  x
+
+}
+
+pub flow m34(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let v0 = vdelay~(k, 1, 5000000000)  //~ E0408
+  let v1 = lp~(x, x)
+  let v2 = prev~(prev~(x))
+  x
+
+}
+
+pub flow m35(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let 1 = x  //~ E0502
+  let v1 = delay~(noisy(x), 0)
+  let v2 = delay~(delay~(x, 0), 4)
+  x
+
+}
+
+pub flow m36(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let v0 = lp~(delay~(x, 0))  //~ E0808
+  let v1 = delay~(x, 1)
+  let v2 = delay~((prev~(p) + (if c { lp~(x) } else { x })), 4)
+  x
+
+}
+
+pub flow m37(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let s000 = "text"
+  let v1 = delay~(x, 5000000000)  //~ E0408
+  x
+
+}
+
+pub flow m38(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let v0 = vdelay~(k, 1, 8)  //~ E0416
+  let v1 = delay~(vdelay~(x, x, 0), 4)
+  let v2 = delay~(x, 0)
+  x
+
+}
+
+pub flow m39(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
+  let v0 = slow(x)  //~ E0815
+  let v1 = prev~(prev~(p))
+  x
+
+}

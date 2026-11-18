@@ -1,0 +1,74 @@
+// onsa.toml
+// [test]
+// spec = ["§18.1", "§11.4", "§11.5"]
+
+// W7-14 U3, R-499: a flow body that reads a unit that failed gets no diagnostic for that read (§18.1:
+// "読めなかった部分は誤りの型として扱い、それを使う側には診断を出さない"). The constant `BAD` has a type
+// error in its own unit (E0401), so its value is not known: as the length of a delay or an end of a
+// `par~` it is an error with no diagnostic (no E0200 of a constant expression, no E0808), and the `par~`
+// is of the error type. The signature of `id2` has a name that is not found (E0302), so a call of it is
+// an error value whatever its clocks are (no E0815, as the call of a function whose heading was not read,
+// §18.1). The other errors of the same flow are reported as before (E0807, E0813, E0401), each flow
+// being its own unit.
+
+pub fn id2(a: Missing) -> F32 { 1.0 }                        //~ E0302
+const BAD: U32 = true                                        //~ E0401
+const BAD_LAST: U32 = 1.0                                    //~ E0401
+const FLAG: Bool = 1.0                                       //~ E0401
+
+pub flow length_of_a_delay(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, BAD)
+  x + a
+}
+
+pub flow maximum_of_a_vdelay(x: F32 at sample) -> F32 at sample {
+  vdelay~(x, 2.0, (BAD))
+}
+
+pub flow ends_of_a_par(x: F32 at sample) -> F32 at sample {
+  let a = par~ i in 0 ..= BAD_LAST { x }
+  let b = par~ i in BAD ..< 4 { x }
+  a[0] + b[1]
+}
+
+pub flow length_then_delay_one(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, BAD)
+  let b = delay~(x, 1)                                       //~ E0807
+  x
+}
+
+pub flow call_then_delay_one(x: F32 at sample) -> F32 at sample {
+  let b = id2(x)
+  let a = delay~(x, 1)                                       //~ E0807
+  x
+}
+
+pub flow delay_one_then_call(x: F32 at sample) -> F32 at sample {
+  let a = delay~(x, 1)                                       //~ E0807
+  let b = id2(x)
+  x
+}
+
+pub flow failed_const_then_delay_one(x: F32 at sample) -> F32 at sample {
+  let b = FLAG
+  let a = delay~(x, 1)                                       //~ E0807
+  x
+}
+
+pub flow call_then_block(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let b = id2(x)
+  let a = prev~(p)                                           //~ E0813
+  x
+}
+
+pub flow call_read_on(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let b = id2(p)
+  let c = prev~(b + x)
+  c + b
+}
+
+pub flow call_then_type_error(x: F32 at sample) -> F32 at sample {
+  let b = id2(x)
+  let c: Bool = 1.0                                          //~ E0401
+  x
+}

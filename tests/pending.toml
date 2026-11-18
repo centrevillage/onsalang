@@ -296,13 +296,6 @@ note = "par の中の if~。W3-10 の写しでは E0200（K-08）"
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/flow_semantics/rules_negative.onsa"
-reasons = ["S-110", "S-101", "S-116", "S-29", "S-44"]
-until = "W7-06"
-note = "状態を持つものの置き場所（E0811 / E0812 / E0806）、Default の無い遅延の値型（E0816）、^ の位置（E0801 / E0020）、遅延と par の範囲（E0808 / E0417 / E0416 / E0813）、自分自身のインスタンス（E0817）。最後に仕上がるのは E0816（W7-07）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/flow_semantics/enum_construct_match.onsa"
 reasons = ["S-102", "R-06"]
 until = "W8-06"
@@ -710,13 +703,6 @@ note = "取り出し（S-85）の降下（取り出さなかった残りの破�
 
 # --- W4-20: `par~`（S-745）の事例のうち、後の作業を待つもの
 [[pending]]
-kind = "test-case"
-target = "tests/spec/flow_semantics/par_tilde_closed_range.onsa"
-reasons = ["S-745", "S-257"]
-until = "W7-14"
-note = "par~ の見出しの ..= は今 E0200（Feature::InclusiveRangePar、W7-04）"
-
-[[pending]]
 kind = "fix-contract"
 target = "tests/spec/fixes/e0811_par_in_a_plain_branch_leaves.onsa:39:5 E0811 fix1"
 reasons = ["S-745", "S-110"]
@@ -1027,3 +1013,10 @@ target = "tests/spec/flow_clock/feedback_to_a_let_in_error_until_w7_09.onsa"
 reasons = ["S-1133", "R-496"]
 until = "W7-09"
 note = "^名前 の先が誤りの let のとき、^ で読む側に診断を出さない（今は段 1 のクロックで読む）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_semantics/rules_negative.onsa"
+reasons = ["S-110", "S-101", "S-116", "S-29", "S-44", "S-88"]
+until = "W7-06"
+note = "状態を持つものの置き場所（E0811 / E0812 / E0806）、Default の無い遅延の値型（E0816）、^ の位置（E0801 / E0020）、遅延と par の範囲（E0808 / E0417 / E0416 / E0813）、自分自身のインスタンス（E0817）。最後に仕上がるのは E0816（W7-07）"

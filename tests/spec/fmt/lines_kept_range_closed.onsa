@@ -7,8 +7,9 @@
 // (spec/tools.md §3.2, S-335, S-498): `onsa fmt` keeps the line break, the next line is one level
 // deeper than the line the `for` or `par` starts on, and the `{` of the head stays on the last line of the
 // head. The body is on the level of the continued line, and the content of an enclosure on the continued
-// line is one level under it. This version does not lower a range with its end in a head (E0200 of
-// `onsa check`), so the file is read by the syntax stage only (`mode = "parse"`). The cases of `..<` are
+// line is one level under it. This version does not lower a range with its end in the head of a `for`
+// (E0200 of `onsa check`; a `par~` takes it), so the file is read by the syntax stage only
+// (`mode = "parse"`). The cases of `..<` are
 // in lines_kept_continuation.onsa and indent_enclosures.onsa. The file is canonical, so `onsa fmt`
 // leaves it unchanged.
 
