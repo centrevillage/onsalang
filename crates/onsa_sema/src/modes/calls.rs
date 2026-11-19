@@ -15,7 +15,6 @@ use super::flow::Run;
 use super::place::place_of;
 use super::walk::Pos;
 use super::write::How;
-use crate::Kind;
 use crate::body::{BANG_ON_NO_INOUT_SELF, Target};
 use crate::def::{DefKind, FnDef};
 use crate::sources::planar_parts;
@@ -229,7 +228,7 @@ impl Walker<'_> {
         let x = self.ast.without_parens(a.expr);
         let ty = self.info.expr_types.get(&x).copied();
         let dup = (place_of(self.ast, self.names, x).is_none()
-            || ty.is_some_and(|t| matches!(self.kind_of(t), Some(Kind::Copy | Kind::Shared))))
+            || ty.is_some_and(|t| crate::kind::dup(self.kind_of(t))))
             && self.tail_class(x).is_none();
         let message = match t {
             Takes::Element => "a constructor takes its elements by value, not `inout` (§5.2)",

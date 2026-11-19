@@ -1020,3 +1020,10 @@ target = "tests/spec/flow_semantics/rules_negative.onsa"
 reasons = ["S-110", "S-101", "S-116", "S-29", "S-44", "S-88"]
 until = "W7-06"
 note = "状態を持つものの置き場所（E0811 / E0812 / E0806）、Default の無い遅延の値型（E0816）、^ の位置（E0801 / E0020）、遅延と par の範囲（E0808 / E0417 / E0416 / E0813）、自分自身のインスタンス（E0817）。最後に仕上がるのは E0816（W7-07）"
+
+[[pending]]
+kind = "test-case"
+target = "tests/spec/flow_clock/flow_fn_value_clock_model_until_w7_05.onsa"
+reasons = ["S-1133"]
+until = "W7-05"
+note = "定数だけの呼び出しの applyf(FF, 1.0) はこの版で init（W9-03 まで）で、計算した式を速くする at は W7-05 の E0200 なので、E0810 より先に E0200 が出る（W7-14 U6b の model の f10_atb）"

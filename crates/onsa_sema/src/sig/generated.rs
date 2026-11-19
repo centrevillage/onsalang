@@ -69,15 +69,6 @@ impl Generated {
     }
 }
 
-/// §11.3: the E0810 at `span` of the value type `ty` of a signal that is not
-/// Copy, the one judgment of the inputs and the output
-/// ([`Sema::signal_type_error`]) and of the `let`s of a flow body.
-pub(crate) fn not_copy_signal(a: &Analysis, ty: TyId, span: Span) -> Option<Diagnostic> {
-    let k = crate::kind::facts_of(a, ty, &[]).not_copy()?;
-    let msg = format!("the value type of a signal must be Copy; `{}` is {k} (§11.3)", a.display_type(ty));
-    Some(Diagnostic::new(Stage::Flow, Code::E0810, span, msg))
-}
-
 /// The name of the item `g` in [`GENERATED`].
 fn name_of(g: Generated) -> &'static str {
     let named = GENERATED.iter().find(|(_, x)| *x == g);
@@ -256,10 +247,7 @@ impl<'p> Sema<'p> {
     /// types at the turn of the flow (an input with it is the error type to
     /// its users, S-1123), and of the output ([`Self::check_rate_value_type`]).
     pub(super) fn signal_type_error(&self, ty: TyId, span: Span) -> Option<Diagnostic> {
-        let what = "the value type of a signal";
-        not_copy_signal(self.a, ty, span).or_else(|| {
-            crate::holds_fn::holds_fn(self.a, ty).then(|| crate::holds_fn::fn_type_error(self.a, ty, span, what))
-        })
+        crate::signal::signal_type_error(self.a, ty, span)
     }
 
     /// The E0810 of the value type `ty` of an input or the output of `id`

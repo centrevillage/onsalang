@@ -139,7 +139,8 @@ pub(super) fn reached(
 /// The E0309 of the bindings of the complete flow `id` that are not used
 /// (§5.1, S-129, S-1146), of the names stage's record: a `let` not
 /// [`reached`], whose notes show the `let`s that read it, and a binding of
-/// an arm by its reads. Reported of the last stage (S-726).
+/// an arm by its reads; the first, which the unit reports. Reported of the
+/// last stage (S-726).
 pub(super) fn unused(
     a: &Analysis,
     id: DefId,
@@ -147,8 +148,8 @@ pub(super) fn unused(
     info: &FlowInfo,
     deps: &[HashSet<LocalId>],
     cx: &FlowCx,
-) -> Vec<Diagnostic> {
-    let Some(names) = a.names.get(&id).filter(|n| n.complete) else { return Vec::new() };
+) -> Option<Diagnostic> {
+    let names = a.names.get(&id).filter(|n| n.complete)?;
     let reached = reached(&info.lets, deps, &cx.let_of_local);
     let mut readers: HashMap<LocalId, Vec<Span>> = HashMap::default();
     for (l, d) in info.lets.iter().zip(deps) {
@@ -160,7 +161,18 @@ pub(super) fn unused(
         };
         (!reached.contains(&v)).then(|| readers.get(&v).cloned().unwrap_or_default())
     };
-    crate::names::body::unused(names, ast, &unreached).collect()
+    use crate::names::body::{unused, unused_binding};
+    #[cfg(test)]
+    UNUSED.with(|u| u.borrow_mut().extend(unused(names, &unreached).map(|(b, r)| unused_binding(b, ast, r))));
+    let first = unused(names, &unreached).min_by_key(|(b, _)| (b.span.start, b.span.end));
+    first.map(|(b, readers)| unused_binding(b, ast, readers))
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Every E0309 of the flows a test checked, of which [`unused`] makes
+    /// the first.
+    static UNUSED: std::cell::RefCell<Vec<Diagnostic>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
 impl Marker<'_> {

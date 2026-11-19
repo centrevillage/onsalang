@@ -6,9 +6,9 @@
 //! in error when they fail: the E0813 of a delay, the E0805 and the E0815 of
 //! a call of a function (§11.5), `if~` / `match~`, a node in a branch; the
 //! others leave it as the rules give it (the `k` of `e at k`, the output of
-//! an instance, the clock of a delay by its first argument). So does a value
-//! made with `Alloc` to drop (E0805) and one whose type holds a function
-//! type (E0810, [`Walk::fault`]).
+//! an instance, the clock of a delay by its first argument, a value whose
+//! type holds a function type, E0810). A value made with `Alloc` to drop
+//! (E0805) is in error too ([`Walk::fault`]).
 
 use onsa_syntax::ast::Lit;
 
@@ -72,25 +72,40 @@ impl Walk<'_> {
     /// §11.3: the value type of a `let` of the body is Copy (E0810).
     pub(super) fn check_let(&mut self, p: &PendingLet) {
         if self.checking()
-            && let Some(d) = crate::sig::not_copy_signal(self.a, self.ty_of(p.init), p.span)
+            && let Some(d) = crate::signal::not_copy_signal(self.a, self.ty_of(p.init), p.span)
         {
             let found = self.src(p.span);
             self.report(d.with_found(found));
         }
     }
 
+    /// §11.3, S-1047 (d): the element of the result of the `par~` at `e` is
+    /// the value of a signal, Copy (E0810 at the `par~`, as of a `let`).
+    pub(super) fn check_par(&mut self, e: ExprId) {
+        let span = self.ast.expr(e).span;
+        if let Ty::Array(elem, _) = self.a.types.get(self.ty_of(e))
+            && let Some(d) = crate::signal::not_copy_signal(self.a, *elem, span)
+        {
+            self.report(d.with_found(self.src(span)));
+        }
+    }
+
     /// What the rules of a flow body on the type of the value of `e` find
     /// wrong with it, in this order: the same in every mode, reported at
-    /// `Check` ([`Self::report_fault`]), and in error then (§18.1): no outer
-    /// check reads its clock.
+    /// `Check` ([`Self::report_fault`]). A value made with `Alloc` to drop is
+    /// in error then (§11.5 gives no rule of its clock): no outer check reads
+    /// its clock; one whose type holds a function type keeps the clock its
+    /// rule gives, which rests on no type (S-1133).
     // SPEC-GAP(S-1152): every visited expression whose type holds a function
     // is an E0810 and the first by place is the one reported (provisional).
     pub(super) fn fault(&mut self, e: ExprId) -> Option<Fault> {
         let ty = self.ty_of(e);
+        // SPEC-GAP(S-1153): of one expression that is both, E0805 is the one
+        // (provisional).
         if let Some(what) = self.made(e, ty) {
             return Some(Fault::Alloc(what));
         }
-        crate::holds_fn::holds_fn(self.a, ty).then_some(Fault::Fn)
+        crate::signal::holds_fn(self.a, ty).then_some(Fault::Fn)
     }
 
     /// What `e` is if it makes a value whose drop needs `Alloc` (§11.5,
@@ -122,8 +137,13 @@ impl Walk<'_> {
     /// The diagnostic of the fault `f` of `e`: E0805 of a value made with
     /// `Alloc` to drop, E0810 of a type that holds a function type (§11.3,
     /// S-372: part of it read too, S-1151).
+    /// None when the diagnostic kept starts before it, which [`Self::report`]
+    /// would keep: the note of the path of an E0810 walks the type.
     pub(super) fn report_fault(&mut self, e: ExprId, f: Fault) {
         let span = self.ast.expr(e).span;
+        if self.diag.as_ref().is_some_and(|d| (d.span.start, d.span.end) < (span.start, span.end)) {
+            return;
+        }
         let d = match f {
             Fault::Alloc(what) => {
                 let msg = format!(
@@ -134,7 +154,7 @@ impl Walk<'_> {
             }
             Fault::Fn => {
                 let what = "the type of an expression of a flow body";
-                crate::holds_fn::fn_type_error(self.a, self.ty_of(e), span, what).with_rule(
+                crate::signal::fn_type_error(self.a, self.ty_of(e), span, what).with_rule(
                     "move this expression into an `rt fn` or a `const` that gives the flow what it reads (`const GAIN: F32 = P.gain`)",
                 )
             }

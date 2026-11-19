@@ -1,0 +1,675 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§11.5", "§18.1"]
+
+// W7-14 U6b/t, S-372, S-1133 (spec §11.3: the type of an expression of a flow body holds no function type, E0810; §11.3, §11.4, §11.5: the clock rules; §18.1: of the errors left in a unit the
+// first by position, the start and then the end; "読めなかった部分は誤りの型として扱い、それを使う側には診断を出さない"). A grid of the expressions that hold a function value (the atoms) in the
+// forms that read the clock of what they hold (the wraps), made from the spec by a model of the order of the diagnostics of the flow check (the atom alone, each in each wrap; the model is
+// not in the repository, the grid is). The E0810 of a function value does not fail a clock rule, so the atom has the clock its rule gives and the check of the wrap is made; the first error by
+// position is the one reported, one for each flow, and the marker is on its line. Where the E0810 starts first (it starts where the wrap's error starts and ends before it, or the wrap's
+// error is on the argument and the argument is longer), the E0810 is the error. Where an expression of the error clock is in the atom (a delay of a slower value, a call that is not `rt` with a
+// faster argument), the wrap that reads its clock says nothing.
+//
+// Atoms (clock): f1 `applyf(FF, x)` (sample), f2 `KS.gain` (constant), f3 `mks(x).gain` (sample), f4 `applyf(FF, prev~(p))` (error: E0813 of the delay in it), f5 `applyf(FF, slow(x))` (error:
+// E0815 of the call that is not `rt`), f6 `prev~(KS.gain)` (error: E0813), f7 `first((x, FF))` (sample), f8 `Sh { gain: x, cb: FF }.gain` (sample), f9 `applyf(FF, p)` (block),
+// f10 `applyf(FF, 1.0)` (constant). Wraps: id; lp `lp~(A)`; par `(par~ i in 0 ..< 2 { A })[0]`; add `(A + x)`; atb `(A) at block`; nrt `slow(A)` (not `rt`, E0815 for an argument at
+// `block` or `sample`); tob `to_block~(A)` (an input at `block`); prev `prev~(A)`, del `delay~(A, 4)`, vdel `vdelay~(A, x, 8)` (the first argument at `sample`, E0813; a delay in it is E0200);
+// pinit `prev~(x, A)` (`init` at `init` or a constant); par0 `(par~ i in 3 ..< 3 { A })[0]` (E0808 at the `par~`); del0 `delay~(A, 0)` (E0808 at the `0`).
+// The row f10_atb is in `flow_fn_value_clock_model_until_w7_05.onsa`: in this version a call of constants only is at `init` (until W9-03), and an `at`
+// that makes a computed expression faster is an E0200 (until W7-05), so that row reports the E0200 first.
+
+pub rt fn dbl(v: F32) -> F32 { v }
+const FF: rt fn(F32) -> F32 = dbl
+pub rt fn applyf(g: rt fn(F32) -> F32, v: F32) -> F32 { g.(v) }
+pub rt fn first(p: (F32, rt fn(F32) -> F32)) -> F32 { p.0 }
+pub fn slow(v: F32) -> F32 { v }
+pub flow lp(y: F32 at sample) -> F32 at sample { y }
+pub flow to_block(c: F32 at block) -> F32 at sample { c }
+pub struct Sh { gain: F32, cb: rt fn(F32) -> F32 }
+const KS: Sh = Sh { gain: 1.0, cb: dbl }
+pub rt fn mks(g: F32) -> Sh { Sh { gain: g, cb: dbl } }
+
+pub flow f1_id(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = applyf(FF, x)  //~ E0810
+  x
+}
+
+pub flow f1_lp(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = lp~(applyf(FF, x))  //~ E0810
+  x
+}
+
+pub flow f1_par(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (par~ i in 0 ..< 2 { applyf(FF, x) })[0]  //~ E0810
+  x
+}
+
+pub flow f1_add(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (applyf(FF, x) + x)  //~ E0810
+  x
+}
+
+pub flow f1_atb(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (applyf(FF, x)) at block  //~ E0815
+  x
+}
+
+pub flow f1_nrt(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = slow(applyf(FF, x))  //~ E0815
+  x
+}
+
+pub flow f1_tob(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = to_block~(applyf(FF, x))  //~ E0815
+  x
+}
+
+pub flow f1_prev(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = prev~(applyf(FF, x))  //~ E0810
+  x
+}
+
+pub flow f1_del(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = delay~(applyf(FF, x), 4)  //~ E0810
+  x
+}
+
+pub flow f1_vdel(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = vdelay~(applyf(FF, x), x, 8)  //~ E0810
+  x
+}
+
+pub flow f1_pinit(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = prev~(x, applyf(FF, x))  //~ E0815
+  x
+}
+
+pub flow f1_par0(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (par~ i in 3 ..< 3 { applyf(FF, x) })[0]  //~ E0808
+  x
+}
+
+pub flow f1_del0(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = delay~(applyf(FF, x), 0)  //~ E0810
+  x
+}
+
+pub flow f2_id(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = KS.gain  //~ E0810
+  x
+}
+
+pub flow f2_lp(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = lp~(KS.gain)  //~ E0810
+  x
+}
+
+pub flow f2_par(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (par~ i in 0 ..< 2 { KS.gain })[0]  //~ E0810
+  x
+}
+
+pub flow f2_add(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (KS.gain + x)  //~ E0810
+  x
+}
+
+pub flow f2_atb(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (KS.gain) at block  //~ E0810
+  x
+}
+
+pub flow f2_nrt(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = slow(KS.gain)  //~ E0810
+  x
+}
+
+pub flow f2_tob(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = to_block~(KS.gain)  //~ E0810
+  x
+}
+
+pub flow f2_prev(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = prev~(KS.gain)  //~ E0810
+  x
+}
+
+pub flow f2_del(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = delay~(KS.gain, 4)  //~ E0810
+  x
+}
+
+pub flow f2_vdel(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = vdelay~(KS.gain, x, 8)  //~ E0810
+  x
+}
+
+pub flow f2_pinit(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = prev~(x, KS.gain)  //~ E0810
+  x
+}
+
+pub flow f2_par0(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (par~ i in 3 ..< 3 { KS.gain })[0]  //~ E0808
+  x
+}
+
+pub flow f2_del0(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = delay~(KS.gain, 0)  //~ E0810
+  x
+}
+
+pub flow f3_id(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = mks(x).gain  //~ E0810
+  x
+}
+
+pub flow f3_lp(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = lp~(mks(x).gain)  //~ E0810
+  x
+}
+
+pub flow f3_par(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (par~ i in 0 ..< 2 { mks(x).gain })[0]  //~ E0810
+  x
+}
+
+pub flow f3_add(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (mks(x).gain + x)  //~ E0810
+  x
+}
+
+pub flow f3_atb(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (mks(x).gain) at block  //~ E0815
+  x
+}
+
+pub flow f3_nrt(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = slow(mks(x).gain)  //~ E0815
+  x
+}
+
+pub flow f3_tob(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = to_block~(mks(x).gain)  //~ E0810
+  x
+}
+
+pub flow f3_prev(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = prev~(mks(x).gain)  //~ E0810
+  x
+}
+
+pub flow f3_del(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = delay~(mks(x).gain, 4)  //~ E0810
+  x
+}
+
+pub flow f3_vdel(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = vdelay~(mks(x).gain, x, 8)  //~ E0810
+  x
+}
+
+pub flow f3_pinit(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = prev~(x, mks(x).gain)  //~ E0810
+  x
+}
+
+pub flow f3_par0(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (par~ i in 3 ..< 3 { mks(x).gain })[0]  //~ E0808
+  x
+}
+
+pub flow f3_del0(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = delay~(mks(x).gain, 0)  //~ E0810
+  x
+}
+
+pub flow f4_id(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = applyf(FF, prev~(p))  //~ E0810
+  x
+}
+
+pub flow f4_lp(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = lp~(applyf(FF, prev~(p)))  //~ E0810
+  x
+}
+
+pub flow f4_par(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (par~ i in 0 ..< 2 { applyf(FF, prev~(p)) })[0]  //~ E0810
+  x
+}
+
+pub flow f4_add(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (applyf(FF, prev~(p)) + x)  //~ E0810
+  x
+}
+
+pub flow f4_atb(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (applyf(FF, prev~(p))) at block  //~ E0810
+  x
+}
+
+pub flow f4_nrt(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = slow(applyf(FF, prev~(p)))  //~ E0810
+  x
+}
+
+pub flow f4_tob(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = to_block~(applyf(FF, prev~(p)))  //~ E0810
+  x
+}
+
+pub flow f4_prev(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = prev~(applyf(FF, prev~(p)))  //~ E0810
+  x
+}
+
+pub flow f4_del(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = delay~(applyf(FF, prev~(p)), 4)  //~ E0810
+  x
+}
+
+pub flow f4_vdel(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = vdelay~(applyf(FF, prev~(p)), x, 8)  //~ E0810
+  x
+}
+
+pub flow f4_pinit(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = prev~(x, applyf(FF, prev~(p)))  //~ E0810
+  x
+}
+
+pub flow f4_par0(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (par~ i in 3 ..< 3 { applyf(FF, prev~(p)) })[0]  //~ E0808
+  x
+}
+
+pub flow f4_del0(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = delay~(applyf(FF, prev~(p)), 0)  //~ E0810
+  x
+}
+
+pub flow f5_id(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = applyf(FF, slow(x))  //~ E0810
+  x
+}
+
+pub flow f5_lp(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = lp~(applyf(FF, slow(x)))  //~ E0810
+  x
+}
+
+pub flow f5_par(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (par~ i in 0 ..< 2 { applyf(FF, slow(x)) })[0]  //~ E0810
+  x
+}
+
+pub flow f5_add(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (applyf(FF, slow(x)) + x)  //~ E0810
+  x
+}
+
+pub flow f5_atb(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (applyf(FF, slow(x))) at block  //~ E0810
+  x
+}
+
+pub flow f5_nrt(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = slow(applyf(FF, slow(x)))  //~ E0810
+  x
+}
+
+pub flow f5_tob(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = to_block~(applyf(FF, slow(x)))  //~ E0810
+  x
+}
+
+pub flow f5_prev(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = prev~(applyf(FF, slow(x)))  //~ E0810
+  x
+}
+
+pub flow f5_del(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = delay~(applyf(FF, slow(x)), 4)  //~ E0810
+  x
+}
+
+pub flow f5_vdel(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = vdelay~(applyf(FF, slow(x)), x, 8)  //~ E0810
+  x
+}
+
+pub flow f5_pinit(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = prev~(x, applyf(FF, slow(x)))  //~ E0810
+  x
+}
+
+pub flow f5_par0(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (par~ i in 3 ..< 3 { applyf(FF, slow(x)) })[0]  //~ E0808
+  x
+}
+
+pub flow f5_del0(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = delay~(applyf(FF, slow(x)), 0)  //~ E0810
+  x
+}
+
+pub flow f6_id(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = prev~(KS.gain)  //~ E0810
+  x
+}
+
+pub flow f6_lp(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = lp~(prev~(KS.gain))  //~ E0810
+  x
+}
+
+pub flow f6_par(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (par~ i in 0 ..< 2 { prev~(KS.gain) })[0]  //~ E0810
+  x
+}
+
+pub flow f6_add(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (prev~(KS.gain) + x)  //~ E0810
+  x
+}
+
+pub flow f6_atb(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (prev~(KS.gain)) at block  //~ E0810
+  x
+}
+
+pub flow f6_nrt(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = slow(prev~(KS.gain))  //~ E0810
+  x
+}
+
+pub flow f6_tob(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = to_block~(prev~(KS.gain))  //~ E0810
+  x
+}
+
+pub flow f6_prev(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = prev~(prev~(KS.gain))  //~ E0200
+  x
+}
+
+pub flow f6_del(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = delay~(prev~(KS.gain), 4)  //~ E0200
+  x
+}
+
+pub flow f6_vdel(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = vdelay~(prev~(KS.gain), x, 8)  //~ E0200
+  x
+}
+
+pub flow f6_pinit(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = prev~(x, prev~(KS.gain))  //~ E0810
+  x
+}
+
+pub flow f6_par0(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (par~ i in 3 ..< 3 { prev~(KS.gain) })[0]  //~ E0808
+  x
+}
+
+pub flow f6_del0(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = delay~(prev~(KS.gain), 0)  //~ E0200
+  x
+}
+
+pub flow f7_id(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = first((x, FF))  //~ E0810
+  x
+}
+
+pub flow f7_lp(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = lp~(first((x, FF)))  //~ E0810
+  x
+}
+
+pub flow f7_par(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (par~ i in 0 ..< 2 { first((x, FF)) })[0]  //~ E0810
+  x
+}
+
+pub flow f7_add(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (first((x, FF)) + x)  //~ E0810
+  x
+}
+
+pub flow f7_atb(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (first((x, FF))) at block  //~ E0815
+  x
+}
+
+pub flow f7_nrt(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = slow(first((x, FF)))  //~ E0815
+  x
+}
+
+pub flow f7_tob(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = to_block~(first((x, FF)))  //~ E0815
+  x
+}
+
+pub flow f7_prev(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = prev~(first((x, FF)))  //~ E0810
+  x
+}
+
+pub flow f7_del(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = delay~(first((x, FF)), 4)  //~ E0810
+  x
+}
+
+pub flow f7_vdel(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = vdelay~(first((x, FF)), x, 8)  //~ E0810
+  x
+}
+
+pub flow f7_pinit(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = prev~(x, first((x, FF)))  //~ E0815
+  x
+}
+
+pub flow f7_par0(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (par~ i in 3 ..< 3 { first((x, FF)) })[0]  //~ E0808
+  x
+}
+
+pub flow f7_del0(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = delay~(first((x, FF)), 0)  //~ E0810
+  x
+}
+
+pub flow f8_id(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = Sh { gain: x, cb: FF }.gain  //~ E0810
+  x
+}
+
+pub flow f8_lp(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = lp~(Sh { gain: x, cb: FF }.gain)  //~ E0810
+  x
+}
+
+pub flow f8_par(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (par~ i in 0 ..< 2 { Sh { gain: x, cb: FF }.gain })[0]  //~ E0810
+  x
+}
+
+pub flow f8_add(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (Sh { gain: x, cb: FF }.gain + x)  //~ E0810
+  x
+}
+
+pub flow f8_atb(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (Sh { gain: x, cb: FF }.gain) at block  //~ E0815
+  x
+}
+
+pub flow f8_nrt(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = slow(Sh { gain: x, cb: FF }.gain)  //~ E0815
+  x
+}
+
+pub flow f8_tob(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = to_block~(Sh { gain: x, cb: FF }.gain)  //~ E0810
+  x
+}
+
+pub flow f8_prev(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = prev~(Sh { gain: x, cb: FF }.gain)  //~ E0810
+  x
+}
+
+pub flow f8_del(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = delay~(Sh { gain: x, cb: FF }.gain, 4)  //~ E0810
+  x
+}
+
+pub flow f8_vdel(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = vdelay~(Sh { gain: x, cb: FF }.gain, x, 8)  //~ E0810
+  x
+}
+
+pub flow f8_pinit(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = prev~(x, Sh { gain: x, cb: FF }.gain)  //~ E0810
+  x
+}
+
+pub flow f8_par0(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (par~ i in 3 ..< 3 { Sh { gain: x, cb: FF }.gain })[0]  //~ E0808
+  x
+}
+
+pub flow f8_del0(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = delay~(Sh { gain: x, cb: FF }.gain, 0)  //~ E0810
+  x
+}
+
+pub flow f9_id(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = applyf(FF, p)  //~ E0810
+  x
+}
+
+pub flow f9_lp(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = lp~(applyf(FF, p))  //~ E0810
+  x
+}
+
+pub flow f9_par(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (par~ i in 0 ..< 2 { applyf(FF, p) })[0]  //~ E0810
+  x
+}
+
+pub flow f9_add(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (applyf(FF, p) + x)  //~ E0810
+  x
+}
+
+pub flow f9_atb(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (applyf(FF, p)) at block  //~ E0810
+  x
+}
+
+pub flow f9_nrt(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = slow(applyf(FF, p))  //~ E0815
+  x
+}
+
+pub flow f9_tob(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = to_block~(applyf(FF, p))  //~ E0810
+  x
+}
+
+pub flow f9_prev(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = prev~(applyf(FF, p))  //~ E0813
+  x
+}
+
+pub flow f9_del(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = delay~(applyf(FF, p), 4)  //~ E0813
+  x
+}
+
+pub flow f9_vdel(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = vdelay~(applyf(FF, p), x, 8)  //~ E0813
+  x
+}
+
+pub flow f9_pinit(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = prev~(x, applyf(FF, p))  //~ E0815
+  x
+}
+
+pub flow f9_par0(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (par~ i in 3 ..< 3 { applyf(FF, p) })[0]  //~ E0808
+  x
+}
+
+pub flow f9_del0(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = delay~(applyf(FF, p), 0)  //~ E0813
+  x
+}
+
+pub flow f10_id(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = applyf(FF, 1.0)  //~ E0810
+  x
+}
+
+pub flow f10_lp(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = lp~(applyf(FF, 1.0))  //~ E0810
+  x
+}
+
+pub flow f10_par(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (par~ i in 0 ..< 2 { applyf(FF, 1.0) })[0]  //~ E0810
+  x
+}
+
+pub flow f10_add(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (applyf(FF, 1.0) + x)  //~ E0810
+  x
+}
+
+pub flow f10_nrt(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = slow(applyf(FF, 1.0))  //~ E0810
+  x
+}
+
+pub flow f10_tob(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = to_block~(applyf(FF, 1.0))  //~ E0810
+  x
+}
+
+pub flow f10_prev(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = prev~(applyf(FF, 1.0))  //~ E0813
+  x
+}
+
+pub flow f10_del(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = delay~(applyf(FF, 1.0), 4)  //~ E0813
+  x
+}
+
+pub flow f10_vdel(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = vdelay~(applyf(FF, 1.0), x, 8)  //~ E0813
+  x
+}
+
+pub flow f10_pinit(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = prev~(x, applyf(FF, 1.0))  //~ E0810
+  x
+}
+
+pub flow f10_par0(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (par~ i in 3 ..< 3 { applyf(FF, 1.0) })[0]  //~ E0808
+  x
+}
+
+pub flow f10_del0(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = delay~(applyf(FF, 1.0), 0)  //~ E0813
+  x
+}

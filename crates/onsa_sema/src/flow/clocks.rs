@@ -304,7 +304,8 @@ impl Walk<'_> {
     }
 
     /// The clock of `e` (⊥ is `None`), recorded at `Check`: in error with a
-    /// fault of its value (E0805, E0810, [`Walk::fault`]).
+    /// fault of its value that the rule of its clock rests on (E0805, not
+    /// E0810: S-1133, [`Walk::fault`]).
     fn expr(&mut self, e: ExprId) -> Option<Clock> {
         let c = self.rule(e);
         let c = match self.fault(e) {
@@ -312,7 +313,7 @@ impl Walk<'_> {
                 if self.checking() {
                     self.report_fault(e, f);
                 }
-                Some(Clock::Error)
+                if matches!(f, checks::Fault::Alloc(_)) { Some(Clock::Error) } else { c }
             }
             None => c,
         };
@@ -489,6 +490,7 @@ impl Walk<'_> {
         let b = self.expr(body);
         if check {
             self.recorder.leave_par(e, span);
+            self.check_par(e);
         }
         self.join(e, &[b, Some(Clock::Init)])
     }

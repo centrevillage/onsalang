@@ -191,7 +191,8 @@ fn counted(k: BindingKind) -> Counted {
     }
 }
 
-/// The E0309 of every binding of the complete record `out` of a body that
+/// Each binding, with the `let`s that read it, for its E0309
+/// ([`unused_binding`]), of the complete record `out` of a body that
 /// is not used (§5.1, S-129): never read, or, of a `let` of a flow body, not
 /// reached (`unreached` gives the `let`s that read it then, `None` when it is
 /// reached). It is of the last stage (§18.1, S-726): the unit reports the
@@ -200,20 +201,19 @@ fn counted(k: BindingKind) -> Counted {
 /// and a `var` has none (`var _` is no form, S-714).
 pub(crate) fn unused<'a>(
     out: &'a BodyNames,
-    ast: &'a Ast,
     unreached: &'a dyn Fn(&Binding) -> Option<Vec<Span>>,
-) -> impl Iterator<Item = Diagnostic> + 'a {
+) -> impl Iterator<Item = (&'a Binding, Vec<Span>)> + 'a {
     out.bindings.iter().filter_map(move |b| {
         let readers = match counted(b.kind) {
             Counted::Reads if b.reads == 0 => Vec::new(),
             Counted::Reached => unreached(b)?,
             Counted::Reads | Counted::No => return None,
         };
-        Some(unused_binding(b, ast, readers))
+        Some((b, readers))
     })
 }
 
-fn unused_binding(b: &Binding, ast: &Ast, readers: Vec<Span>) -> Diagnostic {
+pub(crate) fn unused_binding(b: &Binding, ast: &Ast, readers: Vec<Span>) -> Diagnostic {
     let message = match b.reads {
         0 => format!("`{}` is bound and never read; a value that is not used is bound to `_` (§5.1)", b.name),
         _ => format!(

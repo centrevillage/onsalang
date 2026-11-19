@@ -1,0 +1,143 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§11.5", "§18.1"]
+
+// W7-14 U6b/t, S-372, S-1133 (spec §11.3: "本体の式（部分式を含む）の型は…関数型を含まない（E0810）"; §11.3, §11.5: the clock of an expression is given by its rule, the fastest of the
+// arguments of a call, the join of the operands, the declared clock of a name; §18.1: of the errors left in a unit the first by position, and "読めなかった部分は誤りの型として扱い、それを使う側には
+// 診断を出さない"): the E0810 of a function value is not a failed clock rule. The clock of an expression that holds a function type is the clock its rule gives (`apply(F, x)` is at `sample` because
+// `x` is, `apply(F, p)` at `block`, `apply(F, 1.0)` a constant), so the checks outside it that read the clock are made, and the first error by position is reported: an outer error starts at or before
+// the expression it holds, so it is the one reported over the E0810 of the function value inside it (`x * (apply(F, x) at block)` is the E0815 of the `at`, not the E0810 of `F`). The outer errors
+// here are the ones that read a clock: `at` that makes a value slower (E0815), the first argument of a delay (E0813) and its `init` (E0815), the argument of a call of a function that is not `rt`
+// (E0815) and of an input of a flow that is slower (E0815). One error per flow (§18.1), so each form is a flow of its own. The same expression at the clock where the outer check passes is the E0810
+// (flow_fn_value_clock_order.onsa, and flow_fn_value_forms.onsa for the forms alone). The E0810 over an outer error that starts at the same place is in flow_clock/flow_fn_value_clock_order.onsa too.
+
+pub rt fn dbl(x: F32) -> F32 {
+  x * 2.0
+}
+
+const F: rt fn(F32) -> F32 = dbl
+
+const FS: [rt fn(F32) -> F32; 2] = [dbl, dbl]
+
+pub struct Pt {
+  cb: rt fn(F32) -> F32,
+  k: F32,
+}
+
+const KS: Pt = Pt { cb: dbl, k: 1.0 }
+
+pub rt fn mk(g: F32) -> Pt {
+  Pt { cb: dbl, k: g }
+}
+
+pub rt fn pick(c: Bool) -> rt fn(F32) -> F32 {
+  dbl
+}
+
+pub rt fn apply(f: rt fn(F32) -> F32, x: F32) -> F32 {
+  f.(x)
+}
+
+pub rt fn first(p: (F32, rt fn(F32) -> F32)) -> F32 {
+  p.0
+}
+
+pub fn slow(v: F32) -> F32 {
+  v * 0.5
+}
+
+pub flow to_block(c: F32 at block) -> F32 at sample {
+  c
+}
+
+pub flow to_init(c: F32 at init) -> F32 at sample {
+  c
+}
+
+// ---------------------------------------------------------------- `at` that makes a value slower
+
+pub flow at_slower_over_a_call(x: F32 at sample) -> F32 at sample {
+  x * (apply(F, x) at block)                        //~ E0815
+}
+
+pub flow at_slower_over_a_sum(x: F32 at sample) -> F32 at sample {
+  (apply(F, x) + x) at block                        //~ E0815
+}
+
+pub flow at_slower_over_a_constant_with_a_function(x: F32 at sample) -> F32 at sample {
+  (KS.k * x) at block                               //~ E0815
+}
+
+pub flow at_slower_over_the_field_of_a_call(x: F32 at sample) -> F32 at sample {
+  (mk(x).k) at block                                //~ E0815
+}
+
+pub flow at_slower_over_an_element_of_a_constant(x: F32 at sample) -> F32 at sample {
+  (apply(FS[0], x)) at block                        //~ E0815
+}
+
+pub flow at_slower_in_an_arm(x: F32 at sample) -> F32 at sample {
+  if x > 0.0 {
+    x * (apply(F, x) at block)                      //~ E0815
+  } else {
+    0.0
+  }
+}
+
+// ---------------------------------------------------------------- the first argument of a delay, and its `init`
+
+pub flow delay_argument_of_a_block_value(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  prev~(apply(F, p))                                //~ E0813
+}
+
+pub flow delay_argument_of_a_constant(x: F32 at sample) -> F32 at sample {
+  prev~(apply(F, 1.0))                              //~ E0813
+}
+
+pub flow delay_argument_with_a_length(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  delay~(apply(pick(true), p), 4)                   //~ E0813
+}
+
+pub flow delay_argument_that_is_a_tuple_with_a_function(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  prev~(first((p, F)))                              //~ E0813
+}
+
+pub flow delay_argument_in_a_par_body(x: F32 at sample, p: F32 at block) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 { prev~(apply(F, p)) }          //~ E0813
+}
+
+pub flow delay_init_that_is_faster(x: F32 at sample) -> F32 at sample {
+  prev~(x, apply(F, x))                             //~ E0815
+}
+
+pub flow delay_init_that_is_a_block_value(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  delay~(x, 4, apply(F, p))                         //~ E0815
+}
+
+// ---------------------------------------------------------------- the argument of a call
+
+pub flow call_of_a_function_that_is_not_rt(x: F32 at sample) -> F32 at sample {
+  slow(apply(F, x))                                 //~ E0815
+}
+
+pub flow call_of_a_function_that_is_not_rt_with_a_block_value(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  slow(apply(F, p))                                 //~ E0815
+}
+
+pub flow input_of_a_flow_that_is_slower(x: F32 at sample) -> F32 at sample {
+  to_block~(apply(F, x))                            //~ E0815
+}
+
+pub flow input_of_a_flow_at_init(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  to_init~(apply(F, p))                             //~ E0815
+}
+
+// ---------------------------------------------------------------- the clock read through a name
+
+// `^q` reads the let `q` below it, and the first argument of the delay is at the clock of `q`. The let `q` holds a function value, but its clock is the clock of the value
+// (`block`), so the delay on the line above it is the first error, E0813; the E0810 is on the line below.
+pub flow delay_reads_a_let_below_it(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = prev~(^q)                                 //~ E0813
+  let q = apply(F, p)
+  a
+}

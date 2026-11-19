@@ -280,6 +280,18 @@ fn read_at_constant_lets() {
 }
 
 #[test]
+fn read_at_a_constant_let_read_only_by_an_underscore_is_init() {
+    // `l` is read by nothing but a `let _` of a constant, which no stage reads (a `let` that is read by nothing is an E0309, §5.1), so the
+    // stages that read `l` are the constant read's alone: `Init` (`flow/reads.rs`), not a stage of the flow's output.
+    let a =
+        ok("const K: I32 = 2\npub flow f(x: I32 at sample) -> I32 at sample {\n  let l = K\n  let _ = l + 1\n  x\n}\n");
+    let f = flow(&a, "f");
+    let id = f.body.locals.iter().position(|l| l.name == "l").unwrap();
+    let rates = f.read_at.get(&LocalId(id as u32)).map(|rs| rs.iter().copied().collect::<Vec<_>>());
+    assert_eq!(rates, Some(vec![ClockStage::Init]));
+}
+
+#[test]
 fn read_at_par_variables() {
     let a = ok(
         "use std.math.{sum}\npub flow g(k: F32 at block) -> F32 at sample { k }\npub flow f(x: F32 at sample, c: F32 at block) -> F32 at sample {\n  let p = par~ i in 0..<2 { g~(c + F32.round_from(i)) }\n  let q = par~ j in 0..<2 { x * F32.round_from(j) }\n  sum(p) + sum(q)\n}\n",

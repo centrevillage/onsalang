@@ -29,7 +29,7 @@ pub(crate) struct Summaries {
     pub(crate) decls: HashMap<DefId, Option<Facts>>,
     closed: HashMap<TyId, Facts>,
     cycle: Option<Cycle>,
-    /// Whether each type asked holds a function type ([`crate::holds_fn::holds_fn`]),
+    /// Whether each type asked holds a function type ([`crate::signal::holds_fn`]),
     /// all of which [`Self::forget_new`] forgets.
     pub(crate) fns: HashMap<TyId, bool>,
 }

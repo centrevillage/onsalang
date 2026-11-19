@@ -1,4 +1,4 @@
-//! Unit tests of whether a type holds a function type (`holds_fn.rs`, §11.3,
+//! Unit tests of whether a type holds a function type (`signal.rs`, §11.3,
 //! S-372): by its structure, the same answer as the note's walk, kept for
 //! the package through a type that holds itself, and a note of a few steps.
 
@@ -68,6 +68,26 @@ fn a_cycle_is_answered_whichever_is_asked_first() {
         let kept = a.known.summaries.borrow().fns.clone();
         assert_eq!((kept.get(&z), kept.get(&x)), (Some(&false), Some(&true)), "{first} first");
     }
+}
+
+/// Of a question that finds a function type, a type found to hold none is
+/// kept when it rests on no declaration being entered (`C2`, `Level`), and
+/// not when it does: `Z` reaches `X` again only through `Y`, left with a "no"
+/// while `X` was being entered. Asked after, each is answered as first.
+#[test]
+fn a_question_that_finds_one_keeps_the_sure_noes() {
+    let src = "pub struct C0 { k: F32 }\npub struct C1 { c: C0 }\npub struct C2 { c: C1 }\n\
+        pub struct Level { k: F32 }\n\
+        pub struct S { c: C2, l: Level, f: fn(F32) -> F32 }\n\
+        pub struct X { a: Y, b: Z, f: fn(F32) -> F32 }\npub struct Y { x: Array[X] }\npub struct Z { y: Y }\n";
+    let mut a = check(src);
+    assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
+    let ty = |a: &mut Analysis, n: &str| a.types.intern(Ty::Named(def(a, n), vec![]));
+    let [s, c2, level, x, y, z] = ["S", "C2", "Level", "X", "Y", "Z"].map(|n| ty(&mut a, n));
+    assert!(holds_fn(&a, s) && holds_fn(&a, x));
+    let kept = a.known.summaries.borrow().fns.clone();
+    assert_eq!([c2, level, y, z].map(|t| kept.get(&t).copied()), [Some(false), Some(false), None, None]);
+    assert!(holds_fn(&a, z) && holds_fn(&a, y) && !holds_fn(&a, c2));
 }
 
 /// The note shows the first steps of a long chain and how many more.

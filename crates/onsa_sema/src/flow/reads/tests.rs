@@ -1,15 +1,20 @@
 use onsa_diag::Code;
 
-/// The E0309 of the flow `f` with the body `body` (its input `x`), in order:
-/// the name, whether it has the candidate `_`, and its notes.
+/// Every E0309 of the flow `f` with the body `body` (its input `x`), in
+/// order: the name, whether it has the candidate `_`, and its notes. The
+/// flow makes the first only, which the unit reports (§18.1).
 fn unused(body: &str) -> Vec<(String, bool, usize)> {
     let src = format!("pub flow f(x: F32 at sample) -> F32 at sample {{\n{body}\n}}\n");
+    super::UNUSED.with(|u| u.borrow_mut().clear());
     let a = crate::tests::check(&src);
+    let all = super::UNUSED.with(|u| u.take());
+    let first = all.iter().min_by_key(|d| d.order_in_file());
+    assert_eq!(a.diagnostics.iter().collect::<Vec<_>>(), first.into_iter().collect::<Vec<_>>());
     let one = |d: &onsa_diag::Diagnostic| {
         assert_eq!(d.code, Code::E0309, "{d:?}");
         (d.found.clone().unwrap_or_default(), !d.fixes.is_empty(), d.notes.len())
     };
-    a.diagnostics.iter().map(one).collect()
+    all.iter().map(one).collect()
 }
 
 fn names(body: &str) -> Vec<String> {
