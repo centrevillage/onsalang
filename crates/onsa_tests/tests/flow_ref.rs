@@ -324,7 +324,7 @@ fn a_case_that_is_not_read_fails_the_run() {
 /// or made again is a new line here.
 const CORPUS: &str = "tests/flow_ref/corpus";
 const CORPUS_COUNTS: &[(&str, usize, usize)] =
-    &[("clock_twins.onsa", 50, 50), ("expr_a.onsa", 154, 154), ("expr_b.onsa", 141, 141)];
+    &[("clock_twins.onsa", 50, 50), ("expr_a.onsa", 154, 154), ("expr_b.onsa", 141, 141), ("guards.onsa", 40, 40)];
 
 fn corpus() -> Vec<(String, PackageInput)> {
     let root = repo_root();

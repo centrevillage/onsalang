@@ -43,7 +43,13 @@
 //!   evaluated at the stage of their clock into hidden fields (§11.3,
 //!   [`hoist`]): chosen by the marking, which reads their parts at their
 //!   stage, so `read_at` comes of the choice. [`FlowInfo::hoist_of`] gives
-//!   the one of an expression.
+//!   the one of an expression. One in a conditional position whose
+//!   conditions are decided at `init` or `block` is `guarded` (S-1157):
+//!   the conditions on its path are read at its stage too.
+//! - `checks`, `const_conds` — the computed constant expressions in a
+//!   conditional position: those its conditions' stage evaluates for their
+//!   panic ([`FlowInfo::check_of`], S-888 (c′)), and the conditions of each
+//!   (W9-03).
 //! - `fields: Vec<Field>` — the fields of the `State` in the order of §12.4
 //!   (S-05, S-06, [`plan`]): `_sample_rate`, the inputs and the locals of the
 //!   `let`s [`FlowInfo::stored`] keeps, the fields of the nodes of each `let`
@@ -105,7 +111,7 @@ mod reads;
 #[cfg(test)]
 mod tests;
 
-pub use hoist::{Hoist, HoistId};
+pub use hoist::{Cond, Hoist, HoistId, strip};
 pub use plan::{Field, FieldOf, Kept, NodeId, Owner, Part, PlanKind, PlanNode};
 
 pub(crate) use clocks::finish_flow;
@@ -199,6 +205,15 @@ pub struct FlowInfo {
     /// expression.
     pub hoists: Vec<Hoist>,
     pub(crate) hoisted: HashMap<ExprId, HoistId>,
+    /// The computed constant expressions in a conditional position that
+    /// the stage of their conditions evaluates for their panic (S-888
+    /// (c′), [`FlowInfo::check_of`]).
+    pub(crate) checks: HashMap<ExprId, ClockStage>,
+    /// The largest computed constant expressions in a conditional position
+    /// (of a Copy type), each with the conditions on its path: W9-03
+    /// evaluates at compile time those under `Const` and evaluates no
+    /// branch that is not taken (S-888 (c′)).
+    pub const_conds: HashMap<ExprId, Cond>,
     pub fields: Vec<Field>,
     /// The place of each field in the struct that holds it, made once with
     /// the fields ([`FlowInfo::field_at`]).

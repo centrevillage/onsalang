@@ -230,9 +230,10 @@ fn a_part_in_error_gives_no_diagnostic_to_its_users() {
         // not `rt` (E0815) read a delay in error.
         ("  let a = (prev~(p) + 1.0) at sample\n  x\n}\n", onsa_diag::Code::E0813, "p"),
         ("  let a = slow(prev~(p))\n  x\n}\n", onsa_diag::Code::E0813, "p"),
-        // The E0200 of the marking at a call of `slow` at `init` read at
-        // `sample` in a branch (W7-05 U2) is before the E0813 after it.
-        ("  (if x > 0.0 { slow(c) } else { 0.0 }) + prev~(p)\n}\n", onsa_diag::Code::E0200, "slow(c)"),
+        // The E0815 of the marking at a call of `slow` at `init` in a
+        // branch a condition at `sample` selects (§11.5) is before the
+        // E0813 after it.
+        ("  (if x > 0.0 { slow(c) } else { 0.0 }) + prev~(p)\n}\n", onsa_diag::Code::E0815, "slow(c)"),
         // The calls with E0805 and E0815 are in error.
         ("  let a = slow(slow(x) + c)\n  x\n}\n", onsa_diag::Code::E0815, "slow(x)"),
         ("  let a = slow(noisy(x))\n  x\n}\n", onsa_diag::Code::E0805, "noisy(x)"),

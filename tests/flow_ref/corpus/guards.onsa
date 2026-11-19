@@ -1,0 +1,261 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.6"]
+
+// W7-05 U2/t, S-1157 (D'): the fixed input of the guarded parts of `init` and `block` in a position of a condition (hoist_cond_values.onsa has the same forms by hand, with their values worked out). Made by a script
+// of the test (no seed): eight flows (the `if`, `else if`, `&&`, `||`, the arm of a `match` that binds, nested conditions of `block`, two `let`s that are guarded, a condition of `sample` outside a condition of
+// `block`) over a grid of `block` values that holds the guard and does not hold it, with three frames each; the tests have no assert (the value of the evaluator is the one the interpreter has to give,
+// `tests/flow_ref/FORMAT.md`), and the calls whose guard holds and whose division is by zero are the tests marked PANIC. The calls of 0 frames are the ones the list `UNTIL_W7_05_U2` of the entry sets aside
+// when the guard holds and divides by zero (the interpreter does not make a guarded part at `block` yet). The flows have no input of `init` (a panic of `init` is a constant-clock panic here, E0419).
+
+
+pub flow g1(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  if d != 0 { x * F32.round_from(100 / d) } else { x }
+}
+
+pub flow g2(x: F32 at sample, d: I32 at block, e: I32 at block) -> F32 at sample {
+  if d == 0 { x } else if e != 0 { x * F32.round_from(100 / e) } else { x + 1.0 }
+}
+
+pub flow g3(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  if d != 0 && F32.round_from(100 / d) > x { 1.0 } else { 0.0 }
+}
+
+pub flow g4(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  if d == 0 || F32.round_from(100 / d) > x { 1.0 } else { 0.0 }
+}
+
+pub flow g5(x: F32 at sample, o: Option[I32] at block) -> F32 at sample {
+  match o { Some(v) => x * F32.round_from(100 / v), None => x }
+}
+
+pub flow g6(x: F32 at sample, d: I32 at block, e: I32 at block) -> F32 at sample {
+  if d != 0 { if F32.round_from(100 / d) > F32.round_from(e) { x * F32.round_from(100 / e) } else { x } } else { x }
+}
+
+pub flow g7(x: F32 at sample, d: I32 at block, e: I32 at block) -> F32 at sample {
+  let u = if d != 0 { x * F32.round_from(100 / d) } else { x }
+  let v = if e != 0 { u * F32.round_from(100 / e) } else { u }
+  v
+}
+
+pub flow g8(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  if x > 0.0 { if d != 0 { x * F32.round_from(100 / d) } else { x } } else { 0.0 }
+}
+
+test "g1 d=0" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g1.render(g1.Params { d: 0 }, xs, 8.0)
+}
+
+test "g1 d=1" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g1.render(g1.Params { d: 1 }, xs, 8.0)
+}
+
+test "g1 d=4" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g1.render(g1.Params { d: 4 }, xs, 8.0)
+}
+
+test "g1 d=-3" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g1.render(g1.Params { d: -3 }, xs, 8.0)
+}
+
+test "g2 d=0, e=0" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g2.render(g2.Params { d: 0, e: 0 }, xs, 8.0)
+}
+
+test "g2 d=0, e=5" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g2.render(g2.Params { d: 0, e: 5 }, xs, 8.0)
+}
+
+test "g2 d=2, e=0" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g2.render(g2.Params { d: 2, e: 0 }, xs, 8.0)
+}
+
+test "g2 d=2, e=5" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g2.render(g2.Params { d: 2, e: 5 }, xs, 8.0)
+}
+
+test "g3 d=0" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g3.render(g3.Params { d: 0 }, xs, 8.0)
+}
+
+test "g3 d=1" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g3.render(g3.Params { d: 1 }, xs, 8.0)
+}
+
+test "g3 d=4" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g3.render(g3.Params { d: 4 }, xs, 8.0)
+}
+
+test "g3 d=-3" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g3.render(g3.Params { d: -3 }, xs, 8.0)
+}
+
+test "g4 d=0" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g4.render(g4.Params { d: 0 }, xs, 8.0)
+}
+
+test "g4 d=1" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g4.render(g4.Params { d: 1 }, xs, 8.0)
+}
+
+test "g4 d=4" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g4.render(g4.Params { d: 4 }, xs, 8.0)
+}
+
+test "g4 d=-3" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g4.render(g4.Params { d: -3 }, xs, 8.0)
+}
+
+test "g5 o=None" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g5.render(g5.Params { o: None }, xs, 8.0)
+}
+
+test "g5 o=Some(4)" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g5.render(g5.Params { o: Some(4) }, xs, 8.0)
+}
+
+test "g5 o=Some(-5)" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g5.render(g5.Params { o: Some(-5) }, xs, 8.0)
+}
+
+test "g6 d=0, e=3" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g6.render(g6.Params { d: 0, e: 3 }, xs, 8.0)
+}
+
+test "g6 d=0, e=50" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g6.render(g6.Params { d: 0, e: 50 }, xs, 8.0)
+}
+
+test "g6 d=5, e=3" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g6.render(g6.Params { d: 5, e: 3 }, xs, 8.0)
+}
+
+test "g6 d=5, e=50" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g6.render(g6.Params { d: 5, e: 50 }, xs, 8.0)
+}
+
+test "g7 d=0, e=0" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g7.render(g7.Params { d: 0, e: 0 }, xs, 8.0)
+}
+
+test "g7 d=0, e=5" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g7.render(g7.Params { d: 0, e: 5 }, xs, 8.0)
+}
+
+test "g7 d=4, e=0" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g7.render(g7.Params { d: 4, e: 0 }, xs, 8.0)
+}
+
+test "g7 d=4, e=5" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g7.render(g7.Params { d: 4, e: 5 }, xs, 8.0)
+}
+
+test "g8 d=0" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g8.render(g8.Params { d: 0 }, xs, 8.0)
+}
+
+test "g8 d=2" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g8.render(g8.Params { d: 2 }, xs, 8.0)
+}
+
+test "g8 d=-7" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g8.render(g8.Params { d: -7 }, xs, 8.0)
+}
+
+test "g5 panic o=Some(0)" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g5.render(g5.Params { o: Some(0) }, xs, 8.0) //~ PANIC "g5 panic o=Some(0)"
+}
+
+test "g6 panic d=5, e=0" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  let _ = g6.render(g6.Params { d: 5, e: 0 }, xs, 8.0) //~ PANIC "g6 panic d=5, e=0"
+}
+
+test "g1 0 frames d=0" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  var out: [F32; 3] = [7.0; 3]
+  var st = g1.init(8.0)
+  g1.process(inout st, g1.Params { d: 0 }, xs.slice(0, 0), inout out.slice(0, 0))
+}
+
+test "g1 0 frames d=4" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  var out: [F32; 3] = [7.0; 3]
+  var st = g1.init(8.0)
+  g1.process(inout st, g1.Params { d: 4 }, xs.slice(0, 0), inout out.slice(0, 0))
+}
+
+test "g5 0 frames o=None" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  var out: [F32; 3] = [7.0; 3]
+  var st = g5.init(8.0)
+  g5.process(inout st, g5.Params { o: None }, xs.slice(0, 0), inout out.slice(0, 0))
+}
+
+test "g5 0 frames o=Some(0)" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  var out: [F32; 3] = [7.0; 3]
+  var st = g5.init(8.0)
+  g5.process(inout st, g5.Params { o: Some(0) }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "g5 0 frames o=Some(0)"
+}
+
+test "g6 0 frames d=5, e=0" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  var out: [F32; 3] = [7.0; 3]
+  var st = g6.init(8.0)
+  g6.process(inout st, g6.Params { d: 5, e: 0 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "g6 0 frames d=5, e=0"
+}
+
+test "g2 0 frames d=2, e=1" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  var out: [F32; 3] = [7.0; 3]
+  var st = g2.init(8.0)
+  g2.process(inout st, g2.Params { d: 2, e: 1 }, xs.slice(0, 0), inout out.slice(0, 0))
+}
+
+test "g3 0 frames d=0" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  var out: [F32; 3] = [7.0; 3]
+  var st = g3.init(8.0)
+  g3.process(inout st, g3.Params { d: 0 }, xs.slice(0, 0), inout out.slice(0, 0))
+}
+
+test "g4 0 frames d=2" {
+  let xs: [F32; 3] = [2.0, -1.0, 0.5]
+  var out: [F32; 3] = [7.0; 3]
+  var st = g4.init(8.0)
+  g4.process(inout st, g4.Params { d: 2 }, xs.slice(0, 0), inout out.slice(0, 0))
+}

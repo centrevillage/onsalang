@@ -9,7 +9,7 @@
 //! plan; the lowering writes and reads them by [`FlowInfo::hoist_of`].
 
 use onsa_diag::hash::HashSet;
-use onsa_syntax::ast::Ast;
+use onsa_syntax::ast::{Ast, Block};
 
 use super::plan::names;
 use super::*;
@@ -19,16 +19,47 @@ use crate::flow_names::{HOIST, OUTPUT_SCOPE};
 mod tests;
 
 /// The conditions on the path from a root (a `let`, the output, an
-/// argument of a node) to an expression (§11.3): of the condition decided
-/// last. `None`: no condition. `Late`: one decided per sample, or one this
-/// version takes as such: the inside of a branch of `if` / `match`, of a
-/// guard and of the right of `&&` / `||` (W7-05 U2 adds the conditions
-/// decided at `init` and `block`), and the body of a `par~` (W7-05 U3).
-/// What is under `Late` is evaluated where it is reached.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(super) enum Cond {
+/// argument of a node) to an expression (§11.3, S-1157): the stage at which
+/// the one decided last is decided, joined. `None`: no condition. `Const`:
+/// constants only (W9-03 decides them at compile time). `Init`, `Block`:
+/// decided at that stage, where what they guard is written under them.
+/// `Late`: one decided per sample, or by a value that is not Copy at a
+/// sample, or the body of a `par~` (W7-05 U3): what is under it is
+/// evaluated where it is reached.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum Cond {
     None,
+    Const,
+    Init,
+    Block,
     Late,
+}
+
+impl Cond {
+    fn of(s: ClockStage) -> Cond {
+        match s {
+            ClockStage::Init => Cond::Init,
+            ClockStage::Block => Cond::Block,
+            ClockStage::Tick(_) => Cond::Late,
+        }
+    }
+
+    fn stage(self) -> Option<ClockStage> {
+        match self {
+            Cond::Init => Some(ClockStage::Init),
+            Cond::Block => Some(ClockStage::Block),
+            _ => None,
+        }
+    }
+}
+
+/// `e` past its parentheses and `at`, which change neither its value nor
+/// its stage (§11.3): what a condition is decided by.
+pub fn strip(ast: &Ast, mut e: ExprId) -> ExprId {
+    while let ExprKind::Paren(x) | ExprKind::At { expr: x, .. } = &ast.expr(e).kind {
+        e = *x;
+    }
+    e
 }
 
 /// The index of a hoisted subexpression in [`FlowInfo::hoists`].
@@ -42,8 +73,8 @@ pub struct Hoist {
     /// The stage it is evaluated at, `init` or `block`: before every stage
     /// that reads it.
     pub stage: ClockStage,
-    /// Written only when the conditions on its path hold (S-1157); none is
-    /// yet (W7-05 U2). W8-07 makes of it what `init` sets (V-17).
+    /// Written only when the conditions on its path hold (S-1157): under
+    /// a conditional position. W8-07 makes of it what `init` sets (V-17).
     pub guarded: bool,
     pub owner: Owner,
     /// `_hoist_<n>`, numbered in its owner from 0 in the order of the
@@ -60,6 +91,14 @@ pub struct Hoist {
 pub(super) enum Place {
     /// In a field written at this stage.
     Hoist(ClockStage),
+    /// A computed constant expression in a conditional position whose
+    /// conditions are decided at this stage, before the stage that reads
+    /// it: evaluated there too when they hold, for its panic (S-888 (c′)),
+    /// with no field.
+    Check(ClockStage),
+    /// A computed constant expression in a conditional position, evaluated
+    /// where it is read (W9-03 at compile time when its conditions are).
+    Const,
     /// Where it is read.
     Here,
 }
@@ -77,22 +116,44 @@ pub(super) struct Choose<'a> {
 
 impl Choose<'_> {
     /// Where `e`, read at the stage `at` under the conditions `g`, is
-    /// evaluated (§11.3): in a field of the stage of its clock when that is
-    /// `init` or `block` and before `at`, no condition is on its path and
-    /// it may have one ([`Choose::hoistable`]); else where it is read. The
-    /// marking reads the parts of a hoisted one at its stage, so the first
-    /// met from the root is the largest, and a slower part in it is hoisted
-    /// again (`make(a)` in `level * make(a)`).
+    /// evaluated (§11.3, S-1157): at the stage of its clock and of `g`,
+    /// the later, in a field when that is `init` or `block` and before
+    /// `at`, `g` is not `Late` and it may have one ([`Choose::hoistable`]);
+    /// else where it is read. The marking reads the parts of a hoisted one
+    /// at its stage, so the first met from the root is the largest, and a
+    /// slower part in it is hoisted again (`make(a)` in `level * make(a)`).
     pub(super) fn place(&self, e: ExprId, at: ClockStage, g: Cond) -> Place {
-        let s = match self.clocks.exprs.get(&e) {
+        let d = match self.clocks.exprs.get(&e) {
             Some(Clock::Init) => ClockStage::Init,
             Some(Clock::Block) => ClockStage::Block,
+            Some(Clock::Const) if g != Cond::None && self.computed(e) => {
+                return g.stage().filter(|&s| s < at).map_or(Place::Const, Place::Check);
+            }
             _ => return Place::Here,
         };
-        if g != Cond::None || s >= at || !self.hoistable(e) {
+        let s = match g {
+            Cond::Late => return Place::Here,
+            g => g.stage().map_or(d, |c| c.max(d)),
+        };
+        if s >= at || !self.hoistable(e) {
             return Place::Here;
         }
         Place::Hoist(s)
+    }
+
+    /// The stage at which the condition `c` (an `if`, the left of `&&` /
+    /// `||`, a guard, the scrutinee of a `match`), read at `at`, is decided
+    /// (§11.3): of its clock past parentheses and `at`; of a value that is
+    /// not Copy, which is not hoisted (S-1046 (a)), `at`.
+    pub(super) fn cond_stage(&self, c: ExprId, at: ClockStage) -> Cond {
+        if !self.copy(c) {
+            return Cond::of(at);
+        }
+        match self.clocks.exprs.get(&strip(self.ast, c)) {
+            Some(Clock::Const) => Cond::Const,
+            Some(k) => k.stage().map_or(Cond::Late, Cond::of),
+            None => Cond::Late,
+        }
     }
 
     /// Whether `e` may have a field: its type is Copy (S-1046 (a)), and it
@@ -100,7 +161,6 @@ impl Choose<'_> {
     /// binding of an arm, `^y`), `sample_rate()` and a node (§11.3), nor
     /// parentheses or `at`, whose operand is the same value at the same
     /// stage (§11.3: `at` changes neither): the operand is chosen instead.
-    /// A constant has no stage, and is not met here.
     fn hoistable(&self, e: ExprId) -> bool {
         let kind = &self.ast.expr(e).kind;
         let name = matches!(self.body.targets.get(&e), Some(Target::Local(_)));
@@ -111,12 +171,33 @@ impl Choose<'_> {
         {
             return false;
         }
-        self.body.expr_types.get(&e).is_some_and(|&ty| crate::kind::facts_of(self.a, ty, &[]).not_copy().is_none())
+        self.copy(e)
+    }
+
+    /// A constant expression that is computed: one [`Choose::hoistable`]
+    /// would take, not a literal or the name of a constant, nor a field of
+    /// one, past parentheses and a block of a value only (`{ (PAIR.1) }`,
+    /// `{ None }`): what may panic (S-888 (c′)).
+    fn computed(&self, e: ExprId) -> bool {
+        let mut x = e;
+        loop {
+            match &self.ast.expr(x).kind {
+                ExprKind::Paren(y) | ExprKind::Field { base: y, .. } | ExprKind::TupleIndex { base: y, .. } => x = *y,
+                ExprKind::Block(Block { stmts, tail: Some(y) }) if stmts.is_empty() => x = *y,
+                ExprKind::Lit(_) | ExprKind::Path(_) => return false,
+                _ => return self.hoistable(e),
+            }
+        }
+    }
+
+    fn copy(&self, e: ExprId) -> bool {
+        self.body.expr_types.get(&e).is_some_and(|&ty| crate::signal::not_copy(self.a, ty).is_none())
     }
 }
 
 /// The table of the hoisted subexpressions of `info` the marking chose
-/// (`marked`: each with its stage and its owner), made with the plan:
+/// (`marked`: each with its stage, its owner and whether it is guarded),
+/// made with the plan:
 /// numbered per owner from 0 in the order of the starts of the
 /// subexpressions, named `_hoist_<n>` after the scope of the owner (§11.6),
 /// in the order of their fields (§12.4: the `let`s in their order, then the
@@ -124,22 +205,24 @@ impl Choose<'_> {
 // SPEC-GAP(S-1164): two hoisted subexpressions of one owner that start at one
 // place (`make(a) * level`, `level` at `block`, and its `make(a)` at
 // `init`) are numbered the outer first, in the order of the walk.
-pub(super) fn table(info: &mut FlowInfo, ast: &Ast, marked: Vec<(ExprId, ClockStage, Owner)>) {
+pub(super) fn table(info: &mut FlowInfo, ast: &Ast, marked: Vec<(ExprId, ClockStage, Owner, bool)>) {
     let scopes = names::scopes(info.lets.iter().map(|l| l.locals.as_slice()), &info.body);
     let rank = |o: Owner| match o {
         Owner::Let(k) => k as usize,
         Owner::Output => scopes.len(),
         Owner::Par(_) => onsa_diag::internal::bug(None, "a field hoisted in the body of a `par~` (W7-05 U3)"),
     };
-    let mut marked: Vec<_> = marked.into_iter().map(|(e, s, o)| (rank(o), ast.expr(e).span, e, s, o)).collect();
+    let mut marked: Vec<_> = marked.into_iter().map(|(e, s, o, g)| (rank(o), ast.expr(e).span, e, s, o, g)).collect();
     marked.sort_by_key(|&(r, span, ..)| (r, span.start));
     let mut hoists: Vec<Hoist> = Vec::with_capacity(marked.len());
-    for (r, span, expr, stage, owner) in marked {
-        let n = hoists.iter().rev().take_while(|h| h.owner == owner).count();
-        let name = names::local(HOIST, n as u32);
+    let mut n = 0;
+    for (r, span, expr, stage, owner, guarded) in marked {
+        // Sorted by owner: the count goes on until the owner changes.
+        n = if hoists.last().is_some_and(|h: &Hoist| h.owner == owner) { n + 1 } else { 0 };
+        let name = names::local(HOIST, n);
         let scope = scopes.get(r).map_or(OUTPUT_SCOPE, String::as_str);
         let path = names::qualify(scope, &name);
-        hoists.push(Hoist { expr, stage, guarded: false, owner, name, path, span });
+        hoists.push(Hoist { expr, stage, guarded, owner, name, path, span });
     }
     info.hoisted = hoists.iter().enumerate().map(|(i, h)| (h.expr, HoistId(i as u32))).collect();
     info.hoists = hoists;
@@ -153,5 +236,12 @@ impl FlowInfo {
 
     pub fn hoist(&self, h: HoistId) -> &Hoist {
         &self.hoists[h.0 as usize]
+    }
+
+    /// The stage at which the computed constant expression `e` in a
+    /// conditional position is evaluated for its panic, if it is one
+    /// ([`Place::Check`]).
+    pub fn check_of(&self, e: ExprId) -> Option<ClockStage> {
+        self.checks.get(&e).copied()
     }
 }

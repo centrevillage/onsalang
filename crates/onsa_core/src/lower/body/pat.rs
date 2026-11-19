@@ -249,12 +249,27 @@ pub(super) fn lower_match(
     arms: &[ast::MatchArm],
     ty: Ty,
 ) -> R<Expr> {
-    let span = cx.expr(e).span;
     let scrut_ast = match &cx.expr(scrutinee).kind {
         AK::Move(inner) => *inner,
         _ => scrutinee,
     };
     let s = lower_expr(lw, cx, scrut_ast)?;
+    lower_match_with(lw, cx, e, s, arms, ty, &mut |lw, cx, i| lower_block_expr(lw, cx, arms[i].body))
+}
+
+/// The `match` `e` of the lowered scrutinee `s`, whose arm `i` has the body
+/// `body(i)`, lowered after the bindings of its pattern: of the flow body
+/// too, whose hoisted fields its arms write (§11.3).
+pub(crate) fn lower_match_with(
+    lw: &mut Lowerer,
+    cx: &mut FnCx,
+    e: ExprId,
+    s: Expr,
+    arms: &[ast::MatchArm],
+    ty: Ty,
+    body: &mut dyn FnMut(&mut Lowerer, &mut FnCx, usize) -> R<Block>,
+) -> R<Expr> {
+    let span = cx.expr(e).span;
     let mut stmts = Vec::new();
     let place = materialize(cx, s, &mut stmts, "__match");
     let want = ty != Ty::Unit;
@@ -271,19 +286,19 @@ pub(super) fn lower_match(
     if simple {
         let mut sw_arms = Vec::new();
         let mut default = None;
-        for arm in arms {
+        for (i, arm) in arms.iter().enumerate() {
             let mut b = Vec::new();
             match &cx.ast.pat(arm.pat).kind {
                 PatKind::Wild | PatKind::Bind(_) => {
                     pat_bind(lw, cx, arm.pat, &place, &mut b)?;
-                    let body = lower_block_expr(lw, cx, arm.body)?;
+                    let body = body(lw, cx, i)?;
                     b.extend(body.stmts);
                     default = Some(Block { stmts: b, value: if want { body.value } else { None } });
                 }
                 _ => {
                     let (tag, _) = ctor_of(lw, cx, arm.pat, &place.ty)?;
                     pat_bind(lw, cx, arm.pat, &place, &mut b)?;
-                    let body = lower_block_expr(lw, cx, arm.body)?;
+                    let body = body(lw, cx, i)?;
                     b.extend(body.stmts);
                     let blk = Block { stmts: b, value: if want { body.value } else { None } };
                     if sw_arms.iter().any(|(t, _)| *t == tag) {
@@ -309,7 +324,7 @@ pub(super) fn lower_match(
     let done = cx.temp("__done", Ty::Bool);
     stmts.push(stmt(span, StmtKind::Let(done, bool_lit(span, false))));
     let result = if want { Some(cx.temp("__result", ty.clone())) } else { None };
-    for arm in arms {
+    for (i, arm) in arms.iter().enumerate() {
         let not_done = Expr::new(Ty::Bool, span, ExprKind::Unary(UnOp::Not, Box::new(local_expr(cx, done, span))));
         // A pattern that uses an unsupported feature (S-67): the arm never
         // matches and binds nothing, so lowering reaches its guard and body.
@@ -338,7 +353,7 @@ pub(super) fn lower_match(
             pat_bind(lw, cx, arm.pat, &place, &mut inner)?;
         }
         let mut body_stmts = vec![stmt(span, StmtKind::Assign(Place::Local(done), bool_lit(span, true)))];
-        let body = lower_block_expr(lw, cx, arm.body)?;
+        let body = body(lw, cx, i)?;
         let diverges = body.diverges();
         body_stmts.extend(body.stmts);
         match (result, body.value) {

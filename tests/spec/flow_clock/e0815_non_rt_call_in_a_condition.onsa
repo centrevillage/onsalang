@@ -1,0 +1,162 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5", "§18.1"]
+// fixes = 0
+
+// W7-05 U2/t, R-17, S-1157 (D'), S-1162 (spec §11.5, §11.3): a call of a function that is not `rt` with an argument that is not a constant is evaluated at `init` ("定数でない引数を持つ呼び出しは、
+// その位置を選ぶ条件のどれかが `init` より速い段で決まる条件の位置には書けない（E0815。前の `let` に出す）"), so it cannot be in a position of a condition (the branch of an `if`, an arm or a guard of a `match`,
+// the right side of `&&` / `||`) when one of the conditions that choose that position is decided at `block` or `sample`: the call would be made at `init`, before the condition is known. The error is E0815 at the
+// call, with no candidate (`fixes = 0`; S-1162 (1), provisional: a `let` before it would evaluate the call where the branch is not taken, which changes whether it panics). When all the conditions are decided at `init`
+// (or are constants) the call is made at `init` where they hold, and there is no error (the forms at the end, the ones without a marker). The call in the condition itself, in the left side of `&&` / `||`, in the object of
+// a `match` and outside every condition is not in a position of a condition. One error per flow (§18.1): the first by position. `x` is the `sample` input, `n` of `block`, `a` of `init`. `make` is not `rt`.
+// The calls whose arguments are all constants stay E0200 in this version (negative/hoist_cond_unsupported_until_w9_03.onsa).
+
+pub fn make(a: F32) -> F32 {
+  a * 0.5
+}
+
+pub rt fn keep(v: F32) -> F32 {
+  v
+}
+
+// ---------------------------------------------------------------- a condition of block or sample on the way
+
+pub flow block_condition(x: F32 at sample, n: I32 at block, a: F32 at init) -> F32 at sample {
+  if n != 0 { x * make(a) } else { x }                              //~ E0815
+}
+
+pub flow sample_condition(x: F32 at sample, a: F32 at init) -> F32 at sample {
+  if x > 0.0 { x * make(a) } else { x }                             //~ E0815
+}
+
+pub flow else_of_a_block_condition(x: F32 at sample, n: I32 at block, a: F32 at init) -> F32 at sample {
+  if n == 0 { x } else { x * make(a) }                              //~ E0815
+}
+
+pub flow else_if_with_a_block_condition(x: F32 at sample, n: I32 at block, a: F32 at init) -> F32 at sample {
+  if a > 1.0 { x } else if n != 0 { x * make(a) } else { x + 1.0 }  //~ E0815
+}
+
+pub flow right_of_and_with_a_block_left(x: F32 at sample, n: I32 at block, a: F32 at init) -> F32 at sample {
+  if n != 0 && make(a) > x { 1.0 } else { 0.0 }                     //~ E0815
+}
+
+pub flow right_of_or_with_a_sample_left(x: F32 at sample, a: F32 at init) -> F32 at sample {
+  if x > 0.0 || make(a) > x { 1.0 } else { 0.0 }                    //~ E0815
+}
+
+pub flow arm_of_a_block_object(x: F32 at sample, o: Option[F32] at block, a: F32 at init) -> F32 at sample {
+  match o {
+    Some(v) => x * make(a) + v,                                     //~ E0815
+    None => x,
+  }
+}
+
+pub flow init_outside_block_inside(x: F32 at sample, n: I32 at block, a: F32 at init) -> F32 at sample {
+  if a != 0.0 {
+    if n != 0 { x * make(a) } else { x }                            //~ E0815
+  } else {
+    x
+  }
+}
+
+pub flow block_outside_init_inside(x: F32 at sample, n: I32 at block, a: F32 at init) -> F32 at sample {
+  if n != 0 {
+    if a != 0.0 { x * make(a) } else { x }                          //~ E0815
+  } else {
+    x
+  }
+}
+
+pub flow in_a_let(x: F32 at sample, n: I32 at block, a: F32 at init) -> F32 at sample {
+  let y = if n != 0 { make(a) } else { 1.0 }                        //~ E0815
+  x * y
+}
+
+// ---------------------------------------------------------------- the first by position
+
+pub flow two_calls_the_first_is_the_error(x: F32 at sample, n: I32 at block, a: F32 at init) -> F32 at sample {
+  let y = if n != 0 { make(a) } else { 1.0 }                        //~ E0815
+  let z = if x > 0.0 { make(a) } else { 1.0 }
+  x * y * z
+}
+
+pub flow e0815_of_the_condition_then_at(x: F32 at sample, n: I32 at block, a: F32 at init) -> F32 at sample {
+  let y = if n != 0 { make(a) } else { 1.0 }                        //~ E0815
+  let b = x at block
+  x * y
+}
+
+pub flow at_then_e0815_of_the_condition(x: F32 at sample, n: I32 at block, a: F32 at init) -> F32 at sample {
+  let b = x at block                                                //~ E0815
+  let y = if n != 0 { make(a) } else { 1.0 }
+  x * y
+}
+
+// ---------------------------------------------------------------- accepted: every condition is decided at init
+
+pub flow init_condition(x: F32 at sample, a: F32 at init) -> F32 at sample {
+  if a != 0.0 { x * make(a) } else { x }
+}
+
+pub flow init_else(x: F32 at sample, a: F32 at init) -> F32 at sample {
+  if a == 0.0 { x } else { x * make(a) }
+}
+
+pub flow init_else_if(x: F32 at sample, a: F32 at init, b: F32 at init) -> F32 at sample {
+  if a > 1.0 { x } else if b != 0.0 { x * make(b) } else { x + 1.0 }
+}
+
+pub flow init_nested(x: F32 at sample, a: F32 at init, b: F32 at init) -> F32 at sample {
+  if a != 0.0 { if b != 0.0 { x * make(a + b) } else { x } } else { x }
+}
+
+pub flow init_right_of_and(x: F32 at sample, a: F32 at init) -> F32 at sample {
+  if a != 0.0 && make(a) > 1.0 { x } else { 0.0 }
+}
+
+pub flow init_right_of_or(x: F32 at sample, a: F32 at init) -> F32 at sample {
+  if a == 0.0 || make(a) > 1.0 { x } else { 0.0 }
+}
+
+pub flow init_arm(x: F32 at sample, o: Option[F32] at init) -> F32 at sample {
+  match o {
+    Some(v) => x * make(v),
+    None => x,
+  }
+}
+
+pub flow init_in_a_let(x: F32 at sample, a: F32 at init) -> F32 at sample {
+  let y = if a != 0.0 { make(a) } else { 1.0 }
+  x * y
+}
+
+// ---------------------------------------------------------------- accepted: not in a position of a condition
+
+pub flow in_the_condition(x: F32 at sample, a: F32 at init) -> F32 at sample {
+  if make(a) > x { 1.0 } else { 0.0 }
+}
+
+pub flow left_of_and(x: F32 at sample, n: I32 at block, a: F32 at init) -> F32 at sample {
+  if make(a) > x && n != 0 { 1.0 } else { 0.0 }
+}
+
+pub flow object_of_a_match(x: F32 at sample, n: I32 at block, a: F32 at init) -> F32 at sample {
+  match make(a) > 1.0 {
+    true => x,
+    false => x * F32.round_from(n),
+  }
+}
+
+pub flow outside_every_condition(x: F32 at sample, n: I32 at block, a: F32 at init) -> F32 at sample {
+  (if n != 0 { x } else { 0.0 }) * make(a)
+}
+
+pub flow in_the_argument_of_a_call(x: F32 at sample, n: I32 at block, a: F32 at init) -> F32 at sample {
+  keep((if n != 0 { x } else { 0.0 }) * make(a))
+}
+
+pub flow in_a_let_of_its_own(x: F32 at sample, n: I32 at block, a: F32 at init) -> F32 at sample {
+  let k = make(a)
+  if n != 0 { x * k } else { x }
+}

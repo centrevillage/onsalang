@@ -196,6 +196,10 @@ impl<'a> Frame<'a> {
         let v = self.form(e, at)?;
         match self.body.ty(e).and_then(|ty| v.agrees(ty, self.body.view)) {
             Ok(true) => Ok(v),
+            // A type the checker did not make (`Ty::Error`: an E0200 form, as `sample_tick()` of a flow is, W7-09) is a body with tables that are not whole.
+            Ok(false) if matches!(self.body.ty(e), Ok(Ty::Error)) => {
+                Err(Stop { fault: Fault::Unavailable("a body whose tables are not whole"), at })
+            }
             Ok(false) => Err(Stop { fault: Fault::Internal("the value is not of the type of the table"), at }),
             Err(fault) => Err(Stop { fault, at }),
         }

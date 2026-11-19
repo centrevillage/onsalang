@@ -1,0 +1,321 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.5", "§11.6"]
+
+// W7-05 U2/t, S-1157 (D'), S-1080, S-1046, R-17 (spec §11.3): the values of an expression in a position of a condition (the branch of an `if`, an arm and a guard of a `match`, the right
+// side of `&&` / `||`) whose slower parts are guarded: "条件の位置の中の `init`・`block` の式は、その位置を選ぶ条件が全て `init`・`block` の段で決まるなら、式のクロックと条件の段のうち最も
+// 速い段で、条件が成り立つときだけ評価する". The value does not change ("値は `let` に分けても分けなくても同じである"), and a part that the condition does not take is not evaluated, so a
+// division by zero of it does not happen ("`if d != 0 { x * F32.round_from(100 / d) } else { x }` の守りは fn と同じに効く"). Every value is worked out by hand; `x` is the `sample` input, `d`
+// and `e` of `block`, `a` of `init`. The guards and the arms with a literal or a struct pattern, which this version cannot lower (E0200 until W8-06), are in hoist_cond_match_forms.onsa. What this version does at the `block` stage for a guard that holds (a panic in a call of 0 frames) is in hoist_cond_panic_block.onsa and
+// hoist_cond_panic_init.onsa; where the guard is of `sample`, in hoist_cond_reached.onsa. The tests here pass before and after the guarded fields: the guard that does not hold is
+// not a difference.
+
+pub struct Wrap {
+  a: I32,
+}
+
+pub rt fn pick2(o: Option[Wrap], x: F32) -> F32 {
+  match o {
+    Some(w) => x * F32.round_from(w.a),
+    None => x,
+  }
+}
+
+const ON: I32 = 1
+const OFF: I32 = 0
+
+pub flow guard_block(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  if d != 0 { x * F32.round_from(100 / d) } else { x }
+}
+
+pub flow else_branch(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  if d == 0 { x } else { x * F32.round_from(100 / d) }
+}
+
+pub flow else_if(x: F32 at sample, d: I32 at block, e: I32 at block) -> F32 at sample {
+  if d == 0 { x } else if e != 0 { x * F32.round_from(100 / e) } else { x + 1.0 }
+}
+
+pub flow and_right(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  if d != 0 && F32.round_from(100 / d) > x { 1.0 } else { 0.0 }
+}
+
+pub flow or_right(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  if d == 0 || F32.round_from(100 / d) > x { 1.0 } else { 0.0 }
+}
+
+pub flow init_guards_a_block_part(x: F32 at sample, a: I32 at init, d: I32 at block) -> F32 at sample {
+  if a != 0 { x * F32.round_from(100 / d) } else { x }
+}
+
+pub flow block_guards_an_init_part(x: F32 at sample, a: I32 at init, d: I32 at block) -> F32 at sample {
+  if d != 0 { x * F32.round_from(100 / a) } else { x }
+}
+
+pub flow init_guards_an_init_part(x: F32 at sample, a: I32 at init) -> F32 at sample {
+  if a != 0 { x * F32.round_from(100 / a) } else { x }
+}
+
+// The condition `100 / a > d` of the inner `if` is a part of `block` in the branch of the outer one, guarded by `a != 0` of `init`.
+pub flow nested_slow(x: F32 at sample, a: I32 at init, d: I32 at block) -> F32 at sample {
+  if a != 0 {
+    if F32.round_from(100 / a) > F32.round_from(d) { x * F32.round_from(100 / d) } else { x }
+  } else {
+    x
+  }
+}
+
+pub flow match_binding(x: F32 at sample, o: Option[F32] at block, k: F32 at block) -> F32 at sample {
+  match o {
+    Some(v) => v * k + x,
+    None => x,
+  }
+}
+
+pub flow match_division(x: F32 at sample, o: Option[I32] at block) -> F32 at sample {
+  match o {
+    Some(v) => x * F32.round_from(100 / v),
+    None => x,
+  }
+}
+
+// `at` does not change the stage the condition is evaluated at: `n != 0` is evaluated at `block` ("`at` は段を変えない").
+pub flow at_in_the_condition(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  if (d != 0) at sample { x * F32.round_from(100 / d) } else { x }
+}
+
+pub flow constant_condition_on(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  if ON != 0 { x * F32.round_from(100 / d) } else { x }
+}
+
+pub flow constant_condition_off(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  if OFF != 0 { x * F32.round_from(100 / d) } else { x }
+}
+
+// An `Option` of a struct of Copy elements is Copy (§4.6: the kind is decided by the structure), so the `if` is a part of `block` as a whole: it is made at `block` with its condition, and `100 / d` is made only where `d > 3` holds.
+pub flow copy_struct_if(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  pick2(if d > 3 { Some(Wrap { a: 100 / d }) } else { None }, x)
+}
+
+pub flow two_guarded_lets(x: F32 at sample, d: I32 at block, e: I32 at block) -> F32 at sample {
+  let u = if d != 0 { x * F32.round_from(100 / d) } else { x }
+  let v = if e != 0 { u * F32.round_from(100 / e) } else { u }
+  v
+}
+
+test "a guard of block that does not hold keeps the division away: d = 0" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = guard_block.render(guard_block.Params { d: 0 }, xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 2.0
+}
+
+test "a guard of block that does not hold in a call of 0 frames writes nothing" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  var out: [F32; 2] = [7.0; 2]
+  var st = guard_block.init(8.0)
+  guard_block.process(inout st, guard_block.Params { d: 0 }, xs.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 7.0
+}
+
+test "the branch of a guard that holds gives the value: d = 4 is 100 / 4 = 25" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = guard_block.render(guard_block.Params { d: 4 }, xs, 8.0)
+  assert o.out[0] == 25.0
+  assert o.out[1] == 50.0
+}
+
+test "the guard is decided again by each call, and a value of a call before is not read" {
+  // x = 3: d = 4 gives 3 * 25 = 75; d = 0 gives x = 3 (not 75); d = 5 gives 3 * 20 = 60; d = 0 again gives 3.
+  let xs: [F32; 1] = [3.0]
+  var out: [F32; 1] = [0.0]
+  var st = guard_block.init(8.0)
+  guard_block.process(inout st, guard_block.Params { d: 4 }, xs, inout out)
+  assert out[0] == 75.0
+  guard_block.process(inout st, guard_block.Params { d: 0 }, xs, inout out)
+  assert out[0] == 3.0
+  guard_block.process(inout st, guard_block.Params { d: 5 }, xs, inout out)
+  assert out[0] == 60.0
+  guard_block.process(inout st, guard_block.Params { d: 0 }, xs, inout out)
+  assert out[0] == 3.0
+}
+
+test "after reset a guard that does not hold is decided by the call after it: d = 2, then reset, then d = 0" {
+  // d = 2 gives 3 * 50 = 150; after reset d = 0 gives x = 3, and d = 4 gives 75.
+  let xs: [F32; 1] = [3.0]
+  var out: [F32; 1] = [0.0]
+  var st = guard_block.init(8.0)
+  guard_block.process(inout st, guard_block.Params { d: 2 }, xs, inout out)
+  assert out[0] == 150.0
+  guard_block.reset(inout st)
+  guard_block.process(inout st, guard_block.Params { d: 0 }, xs, inout out)
+  assert out[0] == 3.0
+  guard_block.process(inout st, guard_block.Params { d: 4 }, xs, inout out)
+  assert out[0] == 75.0
+}
+
+test "the else branch of a guard of block" {
+  // d = 0 takes `x`; d = 5 gives x * 20.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let zero = else_branch.render(else_branch.Params { d: 0 }, xs, 8.0)
+  assert zero.out[0] == 1.0
+  assert zero.out[1] == 2.0
+  let five = else_branch.render(else_branch.Params { d: 5 }, xs, 8.0)
+  assert five.out[0] == 20.0
+  assert five.out[1] == 40.0
+}
+
+test "else if: each branch is taken by its conditions, and the division is only where it is taken" {
+  // (d, e) = (0, 0): x; (0, 4): x (the first branch); (2, 0): x + 1; (2, 4): x * 25. x = 2.
+  let xs: [F32; 1] = [2.0]
+  let r0 = else_if.render(else_if.Params { d: 0, e: 0 }, xs, 8.0)
+  assert r0.out[0] == 2.0
+  let r1 = else_if.render(else_if.Params { d: 0, e: 4 }, xs, 8.0)
+  assert r1.out[0] == 2.0
+  let r2 = else_if.render(else_if.Params { d: 2, e: 0 }, xs, 8.0)
+  assert r2.out[0] == 3.0
+  let r3 = else_if.render(else_if.Params { d: 2, e: 4 }, xs, 8.0)
+  assert r3.out[0] == 50.0
+}
+
+test "the right side of && is only where the left side holds" {
+  // d = 0: the left side is false, 0.0 with no division. d = 4: 25 > x gives 1.0 for x = 10 and 0.0 for x = 30.
+  let xs: [F32; 2] = [10.0, 30.0]
+  let zero = and_right.render(and_right.Params { d: 0 }, xs, 8.0)
+  assert zero.out[0] == 0.0
+  assert zero.out[1] == 0.0
+  let four = and_right.render(and_right.Params { d: 4 }, xs, 8.0)
+  assert four.out[0] == 1.0
+  assert four.out[1] == 0.0
+}
+
+test "the right side of || is only where the left side does not hold" {
+  // d = 0: the left side is true, 1.0 with no division. d = 4: 25 > x gives 1.0 for x = 10 and 0.0 for x = 30.
+  let xs: [F32; 2] = [10.0, 30.0]
+  let zero = or_right.render(or_right.Params { d: 0 }, xs, 8.0)
+  assert zero.out[0] == 1.0
+  assert zero.out[1] == 1.0
+  let four = or_right.render(or_right.Params { d: 4 }, xs, 8.0)
+  assert four.out[0] == 1.0
+  assert four.out[1] == 0.0
+}
+
+test "a condition of init guards a part of block" {
+  // a = 0: x whatever d is (d = 0 does not divide). a = 1, d = 4: x * 25. a = 1, d = 5: x * 20.
+  let xs: [F32; 1] = [2.0]
+  let off = init_guards_a_block_part.render(init_guards_a_block_part.Config { a: 0 }, init_guards_a_block_part.Params { d: 0 }, xs, 8.0)
+  assert off.out[0] == 2.0
+  let on4 = init_guards_a_block_part.render(init_guards_a_block_part.Config { a: 1 }, init_guards_a_block_part.Params { d: 4 }, xs, 8.0)
+  assert on4.out[0] == 50.0
+  let on5 = init_guards_a_block_part.render(init_guards_a_block_part.Config { a: 1 }, init_guards_a_block_part.Params { d: 5 }, xs, 8.0)
+  assert on5.out[0] == 40.0
+}
+
+test "a condition of block guards a part of init" {
+  // a = 4 (100 / a = 25): d = 0 gives x, d = 1 gives x * 25. x = 2.
+  let xs: [F32; 1] = [2.0]
+  let off = block_guards_an_init_part.render(block_guards_an_init_part.Config { a: 4 }, block_guards_an_init_part.Params { d: 0 }, xs, 8.0)
+  assert off.out[0] == 2.0
+  let on = block_guards_an_init_part.render(block_guards_an_init_part.Config { a: 4 }, block_guards_an_init_part.Params { d: 1 }, xs, 8.0)
+  assert on.out[0] == 50.0
+}
+
+test "a condition of block guards a part of init: a = 0 and d = 0 divide nowhere" {
+  let xs: [F32; 1] = [2.0]
+  let o = block_guards_an_init_part.render(block_guards_an_init_part.Config { a: 0 }, block_guards_an_init_part.Params { d: 0 }, xs, 8.0)
+  assert o.out[0] == 2.0
+}
+
+test "a condition of init guards a part of init: a = 0 does not divide, a = 5 gives 20" {
+  let xs: [F32; 1] = [2.0]
+  let off = init_guards_an_init_part.render(init_guards_an_init_part.Config { a: 0 }, xs, 8.0)
+  assert off.out[0] == 2.0
+  let on = init_guards_an_init_part.render(init_guards_an_init_part.Config { a: 5 }, xs, 8.0)
+  assert on.out[0] == 40.0
+}
+
+test "the value of an init guarded part is kept by reset" {
+  // a = 5 gives x * 20 = 40 (x = 2) before and after reset: the `init` values are kept.
+  let xs: [F32; 1] = [2.0]
+  var out: [F32; 1] = [0.0]
+  var st = init_guards_an_init_part.init(init_guards_an_init_part.Config { a: 5 }, 8.0)
+  init_guards_an_init_part.process(inout st, xs, inout out)
+  assert out[0] == 40.0
+  init_guards_an_init_part.reset(inout st)
+  init_guards_an_init_part.process(inout st, xs, inout out)
+  assert out[0] == 40.0
+}
+
+test "a slow condition in a slow branch: the fields depend on each other" {
+  // a = 0: x. a = 5: 100 / 5 = 20, so d = 4 (20 > 4) gives x * 25 and d = 30 (20 > 30 is false) gives x. x = 2.
+  let xs: [F32; 1] = [2.0]
+  let off = nested_slow.render(nested_slow.Config { a: 0 }, nested_slow.Params { d: 0 }, xs, 8.0)
+  assert off.out[0] == 2.0
+  let four = nested_slow.render(nested_slow.Config { a: 5 }, nested_slow.Params { d: 4 }, xs, 8.0)
+  assert four.out[0] == 50.0
+  let thirty = nested_slow.render(nested_slow.Config { a: 5 }, nested_slow.Params { d: 30 }, xs, 8.0)
+  assert thirty.out[0] == 2.0
+}
+
+test "an arm reads what its pattern binds: Some(3.0) with k = 2.0 and x = 1.0 gives 7.0" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let some = match_binding.render(match_binding.Params { o: Some(3.0), k: 2.0 }, xs, 8.0)
+  assert some.out[0] == 7.0
+  assert some.out[1] == 8.0
+  let none = match_binding.render(match_binding.Params { o: None, k: 2.0 }, xs, 8.0)
+  assert none.out[0] == 1.0
+  assert none.out[1] == 2.0
+}
+
+test "an arm divides by what its pattern binds only when it is taken" {
+  // Some(4) gives x * 25; None gives x with no division.
+  let xs: [F32; 1] = [2.0]
+  let r0 = match_division.render(match_division.Params { o: Some(4) }, xs, 8.0)
+  assert r0.out[0] == 50.0
+  let r1 = match_division.render(match_division.Params { o: None }, xs, 8.0)
+  assert r1.out[0] == 2.0
+}
+
+test "a condition with at is counted at the stage of its expression: d = 0 does not divide, d = 4 gives x * 25" {
+  let xs: [F32; 1] = [2.0]
+  let r0 = at_in_the_condition.render(at_in_the_condition.Params { d: 0 }, xs, 8.0)
+  assert r0.out[0] == 2.0
+  let r1 = at_in_the_condition.render(at_in_the_condition.Params { d: 4 }, xs, 8.0)
+  assert r1.out[0] == 50.0
+}
+
+test "a constant condition: the branch of a true one gives its value, the branch of a false one is never taken" {
+  // ON: d = 4 gives x * 25. OFF: x whatever d is (d = 0 does not divide).
+  let xs: [F32; 1] = [2.0]
+  let r0 = constant_condition_on.render(constant_condition_on.Params { d: 4 }, xs, 8.0)
+  assert r0.out[0] == 50.0
+  let r1 = constant_condition_off.render(constant_condition_off.Params { d: 4 }, xs, 8.0)
+  assert r1.out[0] == 2.0
+  let r2 = constant_condition_off.render(constant_condition_off.Params { d: 0 }, xs, 8.0)
+  assert r2.out[0] == 2.0
+}
+
+test "an Option of a Copy struct in a branch: the part is made only where the condition holds" {
+  // d = 0 and d = 3: None, so x. d = 4: Some(Wrap { a: 25 }) so x * 25. x = 2.
+  let xs: [F32; 1] = [2.0]
+  let r0 = copy_struct_if.render(copy_struct_if.Params { d: 0 }, xs, 8.0)
+  assert r0.out[0] == 2.0
+  let r1 = copy_struct_if.render(copy_struct_if.Params { d: 3 }, xs, 8.0)
+  assert r1.out[0] == 2.0
+  let r2 = copy_struct_if.render(copy_struct_if.Params { d: 4 }, xs, 8.0)
+  assert r2.out[0] == 50.0
+}
+
+test "two lets with a guard each: the guards are independent" {
+  // x = 2: (d, e) = (4, 5): 2 * 25 * 20 = 1000; (0, 5): 2 * 20 = 40; (4, 0): 50; (0, 0): 2.
+  let xs: [F32; 1] = [2.0]
+  let r0 = two_guarded_lets.render(two_guarded_lets.Params { d: 4, e: 5 }, xs, 8.0)
+  assert r0.out[0] == 1000.0
+  let r1 = two_guarded_lets.render(two_guarded_lets.Params { d: 0, e: 5 }, xs, 8.0)
+  assert r1.out[0] == 40.0
+  let r2 = two_guarded_lets.render(two_guarded_lets.Params { d: 4, e: 0 }, xs, 8.0)
+  assert r2.out[0] == 50.0
+  let r3 = two_guarded_lets.render(two_guarded_lets.Params { d: 0, e: 0 }, xs, 8.0)
+  assert r3.out[0] == 2.0
+}

@@ -40,7 +40,7 @@ impl<'a> Checker<'a> {
             if let Some(PathRes::Item { entity, owner }) = record {
                 let name = self.last_name(named);
                 return match entity {
-                    Entity::Builtin(Builtin::Panic) => self.check_panic(e, &name, args, expected),
+                    Entity::Builtin(Builtin::Panic) => self.check_panic(e, args, expected),
                     _ => self.check_fn_call(e, callee, (entity, owner), &name, args, expected, kind),
                 };
             }
@@ -81,12 +81,7 @@ impl<'a> Checker<'a> {
 
     /// The call `panic(msg)` `e` (§9.2): it takes the type of its place (§7).
     /// A `!` on it is the modes stage's E0714, as on a constructor.
-    fn check_panic(&mut self, e: ExprId, name: &Ident, args: &[Arg], expected: Option<TyId>) -> R<TyId> {
-        // SPEC-GAP(S-888): in a flow body, a `panic` may be a constant
-        // expression of the clocks (E0419, §11.3) or take the clock around it.
-        if self.flow.is_some() {
-            return Err(self.unsupported(name.span, Feature::PanicInFlow, &[]));
-        }
+    fn check_panic(&mut self, e: ExprId, args: &[Arg], expected: Option<TyId>) -> R<TyId> {
         let [arg] = args else {
             let message = format!("this call takes 1 argument(s) but {} were given", args.len());
             return Err(self.err(Code::E0412, self.expr(e).span, message));

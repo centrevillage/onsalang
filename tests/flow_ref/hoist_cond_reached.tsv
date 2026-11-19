@@ -1,0 +1,95 @@
+# flow_ref 1 source=tests/spec/flow_semantics/hoist_cond_reached.onsa tests=15 evaluated=15 unavailable=0 skipped=0 waiting=0
+@ a part of block in a branch of sample: a call of 0 frames and frames that do not take the branch do not panic
+init 0 hoist_cond_reached.sample_outside_block_inside sr=0x41000000
+process 0 params d=1 frames=0 in x=[]
+out=[]
+render hoist_cond_reached.sample_outside_block_inside sr=0x41000000 params d=1 in x=[0xbf800000 0x00000000]
+out=[0x00000000 0x00000000]
+render hoist_cond_reached.sample_outside_block_inside sr=0x41000000 params d=3 in x=[0x40000000]
+out=[0x42c80000]
+@ a part of block in a branch of sample panics in the frame that takes the branch
+render hoist_cond_reached.sample_outside_block_inside sr=0x41000000 params d=1 in x=[0xbf800000 0x40000000]
+panic sample 1
+@ a condition of sample inside a condition of block: the part is evaluated when the frame reaches it
+init 0 hoist_cond_reached.block_outside_sample_inside sr=0x41000000
+process 0 params d=1 frames=0 in x=[]
+out=[]
+render hoist_cond_reached.block_outside_sample_inside sr=0x41000000 params d=1 in x=[0xbf800000]
+out=[0xbf800000]
+render hoist_cond_reached.block_outside_sample_inside sr=0x41000000 params d=0 in x=[0xbf800000]
+out=[0x00000000]
+@ a condition of sample inside a condition of block panics in the frame that takes it
+render hoist_cond_reached.block_outside_sample_inside sr=0x41000000 params d=1 in x=[0xbf800000 0x40000000]
+panic sample 1
+@ the else branch of a condition of sample is evaluated by the frame that takes it, not in a call of 0 frames
+init 0 hoist_cond_reached.sample_else_branch sr=0x41000000
+process 0 params d=1 frames=0 in x=[]
+out=[]
+render hoist_cond_reached.sample_else_branch sr=0x41000000 params d=1 in x=[0x3f800000]
+out=[0x3f800000]
+@ the else branch of a condition of sample panics in the frame that takes it
+render hoist_cond_reached.sample_else_branch sr=0x41000000 params d=1 in x=[0xbf800000]
+panic sample 0
+@ the right side of && with a left side of sample is evaluated by the frame whose left side holds
+init 0 hoist_cond_reached.sample_and_right sr=0x41000000
+process 0 params d=1 frames=0 in x=[]
+out=[]
+render hoist_cond_reached.sample_and_right sr=0x41000000 params d=1 in x=[0xbf800000]
+out=[0x00000000]
+render hoist_cond_reached.sample_and_right sr=0x41000000 params d=1 in x=[0x3f800000]
+panic sample 0
+@ the right side of || with a left side of sample is evaluated by the frame whose left side does not hold
+init 0 hoist_cond_reached.sample_or_right sr=0x41000000
+process 0 params d=1 frames=0 in x=[]
+out=[]
+render hoist_cond_reached.sample_or_right sr=0x41000000 params d=1 in x=[0xbf800000]
+out=[0x3f800000]
+render hoist_cond_reached.sample_or_right sr=0x41000000 params d=1 in x=[0x3f800000]
+panic sample 0
+@ a chain with a term of sample before the guard: the part is evaluated by the frame that reaches it
+init 0 hoist_cond_reached.sample_in_the_left_chain sr=0x41000000
+process 0 params d=1 frames=0 in x=[]
+out=[]
+render hoist_cond_reached.sample_in_the_left_chain sr=0x41000000 params d=1 in x=[0xbf800000]
+out=[0x00000000]
+render hoist_cond_reached.sample_in_the_left_chain sr=0x41000000 params d=0 in x=[0x3f800000]
+out=[0x00000000]
+render hoist_cond_reached.sample_in_the_left_chain sr=0x41000000 params d=1 in x=[0x3f800000]
+panic sample 0
+@ a guard on the right side of a term of sample is evaluated by the frame that reaches it
+init 0 hoist_cond_reached.sample_before_the_guard sr=0x41000000
+process 0 params d=1 frames=0 in x=[]
+out=[]
+render hoist_cond_reached.sample_before_the_guard sr=0x41000000 params d=1 in x=[0xbf800000]
+out=[0x00000000]
+render hoist_cond_reached.sample_before_the_guard sr=0x41000000 params d=1 in x=[0x3f800000]
+panic sample 0
+@ a let of sample with a branch of sample: the part is evaluated by the frame that takes the branch
+init 0 hoist_cond_reached.sample_in_a_let sr=0x41000000
+process 0 params d=1 frames=0 in x=[]
+out=[]
+render hoist_cond_reached.sample_in_a_let sr=0x41000000 params d=1 in x=[0xbf800000]
+out=[0x00000000]
+render hoist_cond_reached.sample_in_a_let sr=0x41000000 params d=1 in x=[0x3f800000]
+panic sample 0
+@ the part moved out of a condition of sample is unconditional: it panics in a call of 0 frames
+init 0 hoist_cond_reached.moved_out_of_a_sample_condition sr=0x41000000
+process 0 params d=1 frames=0 in x=[]
+panic block
+@ the part moved out of a condition of sample gives its value with d = 3: 100 / 2 = 50
+render hoist_cond_reached.moved_out_of_a_sample_condition sr=0x41000000 params d=3 in x=[0x3f800000 0xbf800000]
+out=[0x42480000 0x00000000]
+@ a chain whose last term is of sample: the first terms are a part of block that is evaluated at block
+init 0 hoist_cond_reached.guard_first_sample_last sr=0x41000000
+process 0 params d=0 frames=0 in x=[]
+out=[]
+process 0 params d=1 frames=0 in x=[]
+panic block
+@ an Option of a Copy struct in a branch is a part of block, made where the condition holds
+init 0 hoist_cond_reached.copy_struct_if sr=0x41000000
+process 0 params d=2 frames=0 in x=[]
+out=[]
+process 0 params d=4 frames=0 in x=[]
+out=[]
+process 0 params d=5 frames=0 in x=[]
+panic block

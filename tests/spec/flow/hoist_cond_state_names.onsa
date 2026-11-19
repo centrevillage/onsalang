@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.6", "§12.4"]
+// golden = ["interface"]
+
+// W7-05 U2/t, S-1157 (D'), S-1138 (§11.3, §11.6, §12.4): the hidden fields of the guarded parts. A part of `init` or `block` in a position of a condition whose conditions are all decided at `init` or `block` is a hoisted
+// part like the one that is not in a condition: its value is kept in a field `<修飾>._hoist_N`, numbered for each `let` (the output expression is `_out`) in the order in which the parts start in the text ("巻き上げの番号は `let` ごとに、
+// 部分式の始まりの字面の順に振る"), and so is the condition that is decided at `block` and read by `sample` (it is a part of `block` in a position that is not a condition: the condition of an `if`, the left side of `&&`). "条件が成り立たない段では
+// フィールドを書かず、そのフィールドは読まれない": the field of the guarded part is there all the same, in the state. A part in a position that a condition of `sample` chooses is not hoisted: it is evaluated where it is reached, so it has no
+// field (and the input of `block` that it reads is copied into the state, "自分のクロックより速いクロックから読まれる入力"). The hoisted fields of each flow (the golden keeps them with their sizes and offsets, which the implementation makes):
+//
+//   guard_block:         _out._hoist_0 (`n != 0`, Bool), _out._hoist_1 (`F32.round_from(100 / n)`, F32)
+//   init_guards_block:   _out._hoist_0 (`a != 0`, Bool, of init), _out._hoist_1 (`F32.round_from(100 / d)`, F32, of block)
+//   block_guards_init:   _out._hoist_0 (`d != 0`, Bool), _out._hoist_1 (`F32.round_from(100 / a)`, F32, of init)
+//   sample_condition:    none (the copy of `d` is the only field of the body)
+//   and_right:           _out._hoist_0 (`n != 0`, Bool: the left side), _out._hoist_1 (`F32.round_from(100 / n)`, F32: the right side, guarded by the left side)
+//   else_if:             _out._hoist_0 (`d == 0`), _out._hoist_1 (`e != 0`, guarded by the first condition), _out._hoist_2 (`F32.round_from(100 / e)`)
+//   in_a_let:            y._hoist_0 (`n != 0`), y._hoist_1 (`F32.round_from(100 / n)`)
+//
+// The order of the fields is the one of §12.4: the fields of the `let`s (own field, then the nodes in it), the nodes of the output expression, then the hoisted values, `_poisoned` and `_initialized` last.
+
+pub flow guard_block(x: F32 at sample, n: I32 at block) -> F32 at sample {
+  if n != 0 { x * F32.round_from(100 / n) } else { x }
+}
+
+pub flow init_guards_block(x: F32 at sample, a: I32 at init, d: I32 at block) -> F32 at sample {
+  if a != 0 { x * F32.round_from(100 / d) } else { x }
+}
+
+pub flow block_guards_init(x: F32 at sample, a: I32 at init, d: I32 at block) -> F32 at sample {
+  if d != 0 { x * F32.round_from(100 / a) } else { x }
+}
+
+pub flow sample_condition(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  if x > 0.0 { x * F32.round_from(100 / d) } else { x }
+}
+
+pub flow and_right(x: F32 at sample, n: I32 at block) -> F32 at sample {
+  if n != 0 && F32.round_from(100 / n) > x { 1.0 } else { 0.0 }
+}
+
+pub flow else_if(x: F32 at sample, d: I32 at block, e: I32 at block) -> F32 at sample {
+  if d == 0 { x } else if e != 0 { x * F32.round_from(100 / e) } else { x + 1.0 }
+}
+
+pub flow in_a_let(x: F32 at sample, n: I32 at block) -> F32 at sample {
+  let y = if n != 0 { x * F32.round_from(100 / n) } else { x }
+  y
+}

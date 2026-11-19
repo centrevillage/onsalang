@@ -93,6 +93,7 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
     if info.complete {
         let recorded = std::mem::take(&mut w.recorded);
         super::plan::build(&mut info, recorded, &w, ast, std::mem::take(&mut m.hoisted));
+        (info.checks, info.const_conds) = (std::mem::take(&mut m.checks), std::mem::take(&mut m.const_conds));
         let unused = super::reads::unused(a, id, ast, &info, &m.deps, &fcx);
         a.diagnostics.extend(unused);
     }
@@ -139,8 +140,9 @@ pub(super) struct Walked {
     /// reported when the flow checks find no error.
     pub(super) inout_call: Option<Diagnostic>,
     /// Stage 2: the calls of a function that is not `rt` with values at
-    /// `init` (§11.5), which the marking reads (E0200 at a later stage).
-    pub(super) non_rt: HashSet<ExprId>,
+    /// `init` (§11.5), each with whether a value is not a constant, which
+    /// the marking reads (E0815 or E0200 at a later stage).
+    pub(super) non_rt: HashMap<ExprId, bool>,
     /// Stage 2: the nodes and their owners, for the plan.
     pub(super) recorded: Vec<Recorded>,
 }
@@ -178,7 +180,7 @@ pub(super) struct Walk<'a> {
     branch: u32,
     diag: Option<Diagnostic>,
     inout_call: Option<Diagnostic>,
-    non_rt: HashSet<ExprId>,
+    non_rt: HashMap<ExprId, bool>,
     recorder: NodeBuilder,
     /// A type → whether it is Dup and whether its drop needs `Alloc`
     /// ([`Walk::fault`]).
@@ -228,7 +230,7 @@ pub(super) fn walk(
         branch: 0,
         diag: None,
         inout_call: None,
-        non_rt: HashSet::default(),
+        non_rt: HashMap::default(),
         recorder: NodeBuilder::new(&cx.pending, ast, body),
         dup_drops: HashMap::default(),
     };

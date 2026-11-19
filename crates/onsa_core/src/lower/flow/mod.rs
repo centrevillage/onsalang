@@ -48,8 +48,9 @@
 //! (`FlowInfo::hoist_of`, §11.3) is written to its field by the phase of
 //! its stage ([`hoist::writes`]: at the place of the faster `let` that holds
 //! it, those of the output last; S-1159), and read from the field by the
-//! later phases ([`lower_flow_expr`]); W7-05 U2 writes those under a
-//! condition decided at `init` or `block`. A stateful node is lowered on demand when the
+//! later phases ([`lower_flow_expr`]); one under a condition decided at
+//! `init` or `block` is written under it (S-1157; in the body of a `par~`:
+//! W7-05 U3). A stateful node is lowered on demand when the
 //! expression containing it is lowered ([`lower_flow_expr`]), into a
 //! temporary that is memoised in `expr_override` so the end-of-tick stores
 //! see the same value. `prev` reads its stored value where it appears and

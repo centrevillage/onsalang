@@ -1,0 +1,234 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.6", "§9.2"]
+
+// W7-05 U2/t, S-1157 (D'), S-1046, S-1080 (spec §11.3): where a condition on the way to a part is decided by `sample`, the part is not hoisted and is evaluated when the evaluation reaches
+// it ("条件のどれかがサンプルごとに決まるなら巻き上げず、評価が届いたときに評価する"; "サンプルごとに決まる条件の枝の中の式は、取られたときだけ panic する"). So a call of 0 frames and a frame that
+// does not take the branch do not panic, and a frame that takes it does (at the frame, not at `block`). The same holds with a condition of `block` outside a condition of `sample`,
+// and with one inside it: the way to the part has a condition of `sample` on it. The forms at the end are the ones that are a part of `block` all the same, because the way to the part holds no
+// condition of `sample` (a condition of `sample` that is moved out; the left sides of a chain of `&&`; an `Option` of a Copy struct, which is Copy as a whole, §4.6): they panic at `block` before and after
+// the guarded fields. `x` is the `sample` input, `d` of `block`; `d - 1` is 0 for d = 1, so d = 1 is the panic of each flow. These tests pass before and after the guarded fields.
+
+pub struct Wrap {
+  a: I32,
+}
+
+pub rt fn pick2(o: Option[Wrap], x: F32) -> F32 {
+  match o {
+    Some(w) => x * F32.round_from(w.a),
+    None => x,
+  }
+}
+
+pub flow sample_outside_block_inside(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  if x > 0.0 { if d != 0 { x * F32.round_from(100 / (d - 1)) } else { x } } else { 0.0 }
+}
+
+pub flow block_outside_sample_inside(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  if d != 0 { if x > 0.0 { x * F32.round_from(100 / (d - 1)) } else { x } } else { 0.0 }
+}
+
+pub flow sample_else_branch(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  if x > 0.0 { x } else { x * F32.round_from(100 / (d - 1)) }
+}
+
+pub flow sample_and_right(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  if x > 0.0 && F32.round_from(100 / (d - 1)) > x { 1.0 } else { 0.0 }
+}
+
+pub flow sample_or_right(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  if x < 0.0 || F32.round_from(100 / (d - 1)) > x { 1.0 } else { 0.0 }
+}
+
+// `(x > 0.0 && d != 0) && ...`: the left side of the last `&&` has a term of `sample`, so the right side is reached by the frame.
+pub flow sample_in_the_left_chain(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  if x > 0.0 && d != 0 && F32.round_from(100 / (d - 1)) > x { 1.0 } else { 0.0 }
+}
+
+// The `block` condition `d != 0` is itself on the right side of `x > 0.0 &&`: not hoisted, evaluated by the frame that reaches it.
+pub flow sample_before_the_guard(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  if x > 0.0 && (d != 0 && F32.round_from(100 / (d - 1)) > 1.0) { 1.0 } else { 0.0 }
+}
+
+pub flow sample_in_a_let(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  let y = if x > 0.0 { x * F32.round_from(100 / (d - 1)) } else { x }
+  y + 1.0
+}
+
+// What is a part of `block` all the same:
+pub flow moved_out_of_a_sample_condition(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  (if x > 0.0 { x } else { 0.0 }) * F32.round_from(100 / (d - 1))
+}
+
+pub flow guard_first_sample_last(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  if d != 0 && F32.round_from(100 / (d - 1)) > 1.0 && x > 0.0 { 1.0 } else { 0.0 }
+}
+
+pub flow copy_struct_if(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  pick2(if d > 3 { Some(Wrap { a: 100 / (d - 5) }) } else { None }, x)
+}
+
+test "a part of block in a branch of sample: a call of 0 frames and frames that do not take the branch do not panic" {
+  // d = 1: x = -1 and x = 0 give 0.0, with nothing evaluated. d = 3: 100 / 2 = 50, so x = 2 gives 100.
+  let xs: [F32; 2] = [-1.0, 0.0]
+  var out: [F32; 2] = [7.0; 2]
+  var st = sample_outside_block_inside.init(8.0)
+  sample_outside_block_inside.process(inout st, sample_outside_block_inside.Params { d: 1 }, xs.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 7.0
+  let o = sample_outside_block_inside.render(sample_outside_block_inside.Params { d: 1 }, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  let two: [F32; 1] = [2.0]
+  let r0 = sample_outside_block_inside.render(sample_outside_block_inside.Params { d: 3 }, two, 8.0)
+  assert r0.out[0] == 100.0
+}
+
+test "a part of block in a branch of sample panics in the frame that takes the branch" {
+  let xs: [F32; 2] = [-1.0, 2.0]
+  let o = sample_outside_block_inside.render(sample_outside_block_inside.Params { d: 1 }, xs, 8.0) //~ PANIC "a part of block in a branch of sample panics in the frame that takes the branch"
+  assert o.out[0] == 0.0
+}
+
+test "a condition of sample inside a condition of block: the part is evaluated when the frame reaches it" {
+  // d = 1: a call of 0 frames and x = -1 (the inner condition is false) do not panic, and give -1. d = 0: 0.0.
+  let neg: [F32; 1] = [-1.0]
+  var out: [F32; 1] = [7.0]
+  var st = block_outside_sample_inside.init(8.0)
+  block_outside_sample_inside.process(inout st, block_outside_sample_inside.Params { d: 1 }, neg.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 7.0
+  let r0 = block_outside_sample_inside.render(block_outside_sample_inside.Params { d: 1 }, neg, 8.0)
+  assert r0.out[0] == -1.0
+  let r1 = block_outside_sample_inside.render(block_outside_sample_inside.Params { d: 0 }, neg, 8.0)
+  assert r1.out[0] == 0.0
+}
+
+test "a condition of sample inside a condition of block panics in the frame that takes it" {
+  let xs: [F32; 2] = [-1.0, 2.0]
+  let o = block_outside_sample_inside.render(block_outside_sample_inside.Params { d: 1 }, xs, 8.0) //~ PANIC "a condition of sample inside a condition of block panics in the frame that takes it"
+  assert o.out[0] == -1.0
+}
+
+test "the else branch of a condition of sample is evaluated by the frame that takes it, not in a call of 0 frames" {
+  // d = 1: x = 1 takes the first branch (1.0). Nothing is evaluated in a call of 0 frames.
+  let one: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var st = sample_else_branch.init(8.0)
+  sample_else_branch.process(inout st, sample_else_branch.Params { d: 1 }, one.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 7.0
+  let r0 = sample_else_branch.render(sample_else_branch.Params { d: 1 }, one, 8.0)
+  assert r0.out[0] == 1.0
+}
+
+test "the else branch of a condition of sample panics in the frame that takes it" {
+  let neg: [F32; 1] = [-1.0]
+  let o = sample_else_branch.render(sample_else_branch.Params { d: 1 }, neg, 8.0) //~ PANIC "the else branch of a condition of sample panics in the frame that takes it"
+  assert o.out[0] == 0.0
+}
+
+test "the right side of && with a left side of sample is evaluated by the frame whose left side holds" {
+  // d = 1: x = -1 does not take it (0.0). In a call of 0 frames nothing is evaluated.
+  let neg: [F32; 1] = [-1.0]
+  var out: [F32; 1] = [7.0]
+  var st = sample_and_right.init(8.0)
+  sample_and_right.process(inout st, sample_and_right.Params { d: 1 }, neg.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 7.0
+  let r0 = sample_and_right.render(sample_and_right.Params { d: 1 }, neg, 8.0)
+  assert r0.out[0] == 0.0
+  let pos: [F32; 1] = [1.0]
+  let o = sample_and_right.render(sample_and_right.Params { d: 1 }, pos, 8.0) //~ PANIC "the right side of && with a left side of sample is evaluated by the frame whose left side holds"
+  assert o.out[0] == 0.0
+}
+
+test "the right side of || with a left side of sample is evaluated by the frame whose left side does not hold" {
+  // d = 1: x = -1 makes the left side true (1.0, nothing evaluated). A call of 0 frames evaluates nothing.
+  let neg: [F32; 1] = [-1.0]
+  var out: [F32; 1] = [7.0]
+  var st = sample_or_right.init(8.0)
+  sample_or_right.process(inout st, sample_or_right.Params { d: 1 }, neg.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 7.0
+  let r0 = sample_or_right.render(sample_or_right.Params { d: 1 }, neg, 8.0)
+  assert r0.out[0] == 1.0
+  let pos: [F32; 1] = [1.0]
+  let o = sample_or_right.render(sample_or_right.Params { d: 1 }, pos, 8.0) //~ PANIC "the right side of || with a left side of sample is evaluated by the frame whose left side does not hold"
+  assert o.out[0] == 0.0
+}
+
+test "a chain with a term of sample before the guard: the part is evaluated by the frame that reaches it" {
+  // d = 1: x = -1 stops at `x > 0.0` (0.0); a call of 0 frames evaluates nothing; d = 0 stops at `d != 0` for x = 1.
+  let neg: [F32; 1] = [-1.0]
+  var out: [F32; 1] = [7.0]
+  var st = sample_in_the_left_chain.init(8.0)
+  sample_in_the_left_chain.process(inout st, sample_in_the_left_chain.Params { d: 1 }, neg.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 7.0
+  let r0 = sample_in_the_left_chain.render(sample_in_the_left_chain.Params { d: 1 }, neg, 8.0)
+  assert r0.out[0] == 0.0
+  let pos: [F32; 1] = [1.0]
+  let r1 = sample_in_the_left_chain.render(sample_in_the_left_chain.Params { d: 0 }, pos, 8.0)
+  assert r1.out[0] == 0.0
+  let o = sample_in_the_left_chain.render(sample_in_the_left_chain.Params { d: 1 }, pos, 8.0) //~ PANIC "a chain with a term of sample before the guard: the part is evaluated by the frame that reaches it"
+  assert o.out[0] == 0.0
+}
+
+test "a guard on the right side of a term of sample is evaluated by the frame that reaches it" {
+  let neg: [F32; 1] = [-1.0]
+  var out: [F32; 1] = [7.0]
+  var st = sample_before_the_guard.init(8.0)
+  sample_before_the_guard.process(inout st, sample_before_the_guard.Params { d: 1 }, neg.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 7.0
+  let r0 = sample_before_the_guard.render(sample_before_the_guard.Params { d: 1 }, neg, 8.0)
+  assert r0.out[0] == 0.0
+  let pos: [F32; 1] = [1.0]
+  let o = sample_before_the_guard.render(sample_before_the_guard.Params { d: 1 }, pos, 8.0) //~ PANIC "a guard on the right side of a term of sample is evaluated by the frame that reaches it"
+  assert o.out[0] == 0.0
+}
+
+test "a let of sample with a branch of sample: the part is evaluated by the frame that takes the branch" {
+  // d = 1: x = -1 gives -1 + 1 = 0.0. A call of 0 frames evaluates nothing.
+  let neg: [F32; 1] = [-1.0]
+  var out: [F32; 1] = [7.0]
+  var st = sample_in_a_let.init(8.0)
+  sample_in_a_let.process(inout st, sample_in_a_let.Params { d: 1 }, neg.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 7.0
+  let r0 = sample_in_a_let.render(sample_in_a_let.Params { d: 1 }, neg, 8.0)
+  assert r0.out[0] == 0.0
+  let pos: [F32; 1] = [1.0]
+  let o = sample_in_a_let.render(sample_in_a_let.Params { d: 1 }, pos, 8.0) //~ PANIC "a let of sample with a branch of sample: the part is evaluated by the frame that takes the branch"
+  assert o.out[0] == 0.0
+}
+
+test "the part moved out of a condition of sample is unconditional: it panics in a call of 0 frames" {
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var st = moved_out_of_a_sample_condition.init(8.0)
+  moved_out_of_a_sample_condition.process(inout st, moved_out_of_a_sample_condition.Params { d: 1 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "the part moved out of a condition of sample is unconditional: it panics in a call of 0 frames"
+  assert out[0] == 7.0
+}
+
+test "the part moved out of a condition of sample gives its value with d = 3: 100 / 2 = 50" {
+  let xs: [F32; 2] = [1.0, -1.0]
+  let o = moved_out_of_a_sample_condition.render(moved_out_of_a_sample_condition.Params { d: 3 }, xs, 8.0)
+  assert o.out[0] == 50.0
+  assert o.out[1] == 0.0
+}
+
+test "a chain whose last term is of sample: the first terms are a part of block that is evaluated at block" {
+  // d = 0 does not evaluate the division. d = 1 evaluates it, a call of 0 frames too.
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var st = guard_first_sample_last.init(8.0)
+  guard_first_sample_last.process(inout st, guard_first_sample_last.Params { d: 0 }, xs.slice(0, 0), inout out.slice(0, 0))
+  guard_first_sample_last.process(inout st, guard_first_sample_last.Params { d: 1 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "a chain whose last term is of sample: the first terms are a part of block that is evaluated at block"
+  assert out[0] == 7.0
+}
+
+test "an Option of a Copy struct in a branch is a part of block, made where the condition holds" {
+  // d = 2: None. d = 4: 100 / (4 - 5) = -100 (no panic). d = 5: the condition holds and 100 / 0 is evaluated at block.
+  let xs: [F32; 1] = [2.0]
+  var out: [F32; 1] = [7.0]
+  var st = copy_struct_if.init(8.0)
+  copy_struct_if.process(inout st, copy_struct_if.Params { d: 2 }, xs.slice(0, 0), inout out.slice(0, 0))
+  copy_struct_if.process(inout st, copy_struct_if.Params { d: 4 }, xs.slice(0, 0), inout out.slice(0, 0))
+  copy_struct_if.process(inout st, copy_struct_if.Params { d: 5 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "an Option of a Copy struct in a branch is a part of block, made where the condition holds"
+  assert out[0] == 7.0
+}

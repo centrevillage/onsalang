@@ -1,0 +1,152 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§9.2", "§6.6"]
+
+// W7-05 U2/t, S-888 (c'), S-1157 (spec §11.3): "`panic("…")` を含む定数の式は、その位置を選ぶ条件が決まる段で評価する": "条件の位置の中の定数のクロックの式は、その位置を選ぶ条件が決まる段で、条件が成り立つときだけ
+// 評価する。... 条件が実行時の段で決まるなら、その段で条件が成り立つときに評価し、同じ panic が実行時に起きる。`panic(msg)` もこの規則に従い、起こらないはずの枝に書ける". A flow body may hold `panic("…")`
+// (it was E0200). Under a condition of `block` it is evaluated at `block` where the condition holds, a call of 0 frames too; under a condition of `init`, at `init`; under a condition of `sample`, in the frame that
+// takes the branch. Where the condition does not hold nothing panics. `x` is the `sample` input, `n` of `block`, `a` of `init`. The conditions that are all constants (the compile time, E0419) are in
+// hoist_cond_panic_const_until_w9_03.onsa.
+
+pub flow block_condition(x: F32 at sample, n: I32 at block) -> F32 at sample {
+  if n == 0 { panic("bad n") } else { x }
+}
+
+pub flow init_condition(x: F32 at sample, a: I32 at init) -> F32 at sample {
+  if a == 0 { panic("bad a") } else { x }
+}
+
+pub flow sample_condition(x: F32 at sample) -> F32 at sample {
+  if x < 0.0 { panic("negative") } else { x }
+}
+
+pub flow block_outside_sample_inside(x: F32 at sample, n: I32 at block) -> F32 at sample {
+  if n != 0 { if x < 0.0 { panic("negative") } else { x } } else { 0.0 }
+}
+
+pub flow else_branch(x: F32 at sample, n: I32 at block) -> F32 at sample {
+  if n != 0 { x } else { panic("zero") }
+}
+
+pub flow in_a_let(x: F32 at sample, n: I32 at block) -> F32 at sample {
+  let y = if n == 0 { panic("bad n") } else { x }
+  y + 1.0
+}
+
+pub flow match_arm(x: F32 at sample, o: Option[F32] at block) -> F32 at sample {
+  match o {
+    Some(v) => x * v,
+    None => panic("none"),
+  }
+}
+
+pub flow init_then_block(x: F32 at sample, a: I32 at init, n: I32 at block) -> F32 at sample {
+  if a == 0 { panic("a") } else if n == 0 { panic("n") } else { x }
+}
+
+test "a panic under a condition of block that holds is a panic of the block stage, a call of 0 frames too" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  var out: [F32; 2] = [7.0; 2]
+  var st = block_condition.init(8.0)
+  block_condition.process(inout st, block_condition.Params { n: 0 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "a panic under a condition of block that holds is a panic of the block stage, a call of 0 frames too"
+  assert out[0] == 7.0
+}
+
+test "the same flow does not panic where the condition does not hold" {
+  // n = 3: x, whatever the frames are.
+  let xs: [F32; 2] = [1.0, 2.0]
+  var out: [F32; 2] = [7.0; 2]
+  var st = block_condition.init(8.0)
+  block_condition.process(inout st, block_condition.Params { n: 3 }, xs.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 7.0
+  let o = block_condition.render(block_condition.Params { n: 3 }, xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 2.0
+}
+
+test "a panic under a condition of init that holds is a panic of init" {
+  let _ = init_condition.init(init_condition.Config { a: 1 }, 8.0)
+  let _ = init_condition.init(init_condition.Config { a: 0 }, 8.0) //~ PANIC "a panic under a condition of init that holds is a panic of init"
+}
+
+test "the same flow with a = 2 gives x" {
+  let xs: [F32; 1] = [3.0]
+  let r0 = init_condition.render(init_condition.Config { a: 2 }, xs, 8.0)
+  assert r0.out[0] == 3.0
+}
+
+test "a panic under a condition of sample is a panic of the frame that takes the branch" {
+  // A call of 0 frames and positive frames do not panic; the frame of x = -1 does.
+  let xs: [F32; 2] = [1.0, 2.0]
+  var out: [F32; 2] = [7.0; 2]
+  var st = sample_condition.init(8.0)
+  sample_condition.process(inout st, xs.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 7.0
+  let r0 = sample_condition.render(xs, 8.0)
+  assert r0.out[1] == 2.0
+  let neg: [F32; 2] = [1.0, -1.0]
+  let o = sample_condition.render(neg, 8.0) //~ PANIC "a panic under a condition of sample is a panic of the frame that takes the branch"
+  assert o.out[0] == 1.0
+}
+
+test "a panic under a condition of sample under a condition of block that holds is evaluated by the frame" {
+  // n = 1: a call of 0 frames and x = 2 do not panic; x = -1 does. n = 0: 0.0, whatever x is.
+  let neg: [F32; 1] = [-1.0]
+  var out: [F32; 1] = [7.0]
+  var st = block_outside_sample_inside.init(8.0)
+  block_outside_sample_inside.process(inout st, block_outside_sample_inside.Params { n: 1 }, neg.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 7.0
+  let r0 = block_outside_sample_inside.render(block_outside_sample_inside.Params { n: 0 }, neg, 8.0)
+  assert r0.out[0] == 0.0
+  let o = block_outside_sample_inside.render(block_outside_sample_inside.Params { n: 1 }, neg, 8.0) //~ PANIC "a panic under a condition of sample under a condition of block that holds is evaluated by the frame"
+  assert o.out[0] == 0.0
+}
+
+test "the else branch with a panic is taken by the block stage where the condition does not hold" {
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var st = else_branch.init(8.0)
+  else_branch.process(inout st, else_branch.Params { n: 2 }, xs.slice(0, 0), inout out.slice(0, 0))
+  else_branch.process(inout st, else_branch.Params { n: 0 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "the else branch with a panic is taken by the block stage where the condition does not hold"
+  assert out[0] == 7.0
+}
+
+test "a panic in a let under a condition of block that holds is a panic of the block stage" {
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var st = in_a_let.init(8.0)
+  in_a_let.process(inout st, in_a_let.Params { n: 1 }, xs.slice(0, 0), inout out.slice(0, 0))
+  let r0 = in_a_let.render(in_a_let.Params { n: 1 }, xs, 8.0)
+  assert r0.out[0] == 2.0
+  in_a_let.process(inout st, in_a_let.Params { n: 0 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "a panic in a let under a condition of block that holds is a panic of the block stage"
+  assert out[0] == 7.0
+}
+
+test "a panic in an arm is a panic of the block stage where the pattern matches" {
+  // Some(2.0) gives x * 2.0; None panics in a call of 0 frames.
+  let xs: [F32; 1] = [3.0]
+  var out: [F32; 1] = [7.0]
+  var st = match_arm.init(8.0)
+  let r0 = match_arm.render(match_arm.Params { o: Some(2.0) }, xs, 8.0)
+  assert r0.out[0] == 6.0
+  match_arm.process(inout st, match_arm.Params { o: Some(2.0) }, xs.slice(0, 0), inout out.slice(0, 0))
+  match_arm.process(inout st, match_arm.Params { o: None }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "a panic in an arm is a panic of the block stage where the pattern matches"
+  assert out[0] == 7.0
+}
+
+test "a condition of init and a condition of block: the first panic is the init's, the second the block's" {
+  // a = 0 panics at init, and a = 1 passes init. Then n = 0 panics at block in a call of 0 frames, and n = 1 gives x.
+  let xs: [F32; 1] = [3.0]
+  var out: [F32; 1] = [7.0]
+  var st = init_then_block.init(init_then_block.Config { a: 1 }, 8.0)
+  init_then_block.process(inout st, init_then_block.Params { n: 1 }, xs.slice(0, 0), inout out.slice(0, 0))
+  let r0 = init_then_block.render(init_then_block.Config { a: 1 }, init_then_block.Params { n: 1 }, xs, 8.0)
+  assert r0.out[0] == 3.0
+  init_then_block.process(inout st, init_then_block.Params { n: 0 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "a condition of init and a condition of block: the first panic is the init's, the second the block's"
+  assert out[0] == 7.0
+}
+
+test "a condition of init and a condition of block: a = 0 panics at init" {
+  let _ = init_then_block.init(init_then_block.Config { a: 0 }, 8.0) //~ PANIC "a condition of init and a condition of block: a = 0 panics at init"
+}

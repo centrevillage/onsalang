@@ -1,0 +1,159 @@
+package hoist_cond_state_names
+
+module hoist_cond_state_names
+
+pub flow guard_block(
+  x: F32 at sample,
+  n: I32 at block,
+) -> F32 at sample
+  pub struct guard_block.State  // Affine; size 12, bulk 0, align 4
+    _out._hoist_0: 1 bytes, align 1, fast  // offset 0
+    _out._hoist_1: 4 bytes, align 4, fast  // offset 4
+    _poisoned: 1 bytes, align 1, fast  // offset 8
+    _initialized: 1 bytes, align 1, fast  // offset 9
+  pub struct guard_block.Params  // Copy; size 4, align 4
+    n: I32  // offset 0
+  pub struct guard_block.Rendered  // Affine
+    out: Buf[F32]
+  pub const guard_block.SIZE: U32 = 12
+  pub const guard_block.BULK_SIZE: U32 = 0
+  pub fn guard_block.init(sample_rate: F32) -> guard_block.State
+  pub rt fn guard_block.reset(inout s: guard_block.State)
+  pub rt fn guard_block.process(inout s: guard_block.State, params: guard_block.Params, input: Span[F32], inout output: Span[F32])
+  pub rt fn guard_block.process_inplace(inout s: guard_block.State, params: guard_block.Params, inout output: Span[F32])
+  pub fn guard_block.render(params: guard_block.Params, input: Span[F32], sample_rate: F32) -> guard_block.Rendered uses {Alloc}
+
+pub flow init_guards_block(
+  x: F32 at sample,
+  a: I32 at init,
+  d: I32 at block,
+) -> F32 at sample
+  pub struct init_guards_block.State  // Affine; size 12, bulk 0, align 4
+    _out._hoist_0: 1 bytes, align 1, fast  // offset 0
+    _out._hoist_1: 4 bytes, align 4, fast  // offset 4
+    _poisoned: 1 bytes, align 1, fast  // offset 8
+    _initialized: 1 bytes, align 1, fast  // offset 9
+  pub struct init_guards_block.Config  // Copy; size 4, align 4
+    a: I32  // offset 0
+  pub struct init_guards_block.Params  // Copy; size 4, align 4
+    d: I32  // offset 0
+  pub struct init_guards_block.Rendered  // Affine
+    out: Buf[F32]
+  pub const init_guards_block.SIZE: U32 = 12
+  pub const init_guards_block.BULK_SIZE: U32 = 0
+  pub fn init_guards_block.init(cfg: init_guards_block.Config, sample_rate: F32) -> init_guards_block.State
+  pub rt fn init_guards_block.reset(inout s: init_guards_block.State)
+  pub rt fn init_guards_block.process(inout s: init_guards_block.State, params: init_guards_block.Params, input: Span[F32], inout output: Span[F32])
+  pub rt fn init_guards_block.process_inplace(inout s: init_guards_block.State, params: init_guards_block.Params, inout output: Span[F32])
+  pub fn init_guards_block.render(cfg: init_guards_block.Config, params: init_guards_block.Params, input: Span[F32], sample_rate: F32) -> init_guards_block.Rendered uses {Alloc}
+
+pub flow block_guards_init(
+  x: F32 at sample,
+  a: I32 at init,
+  d: I32 at block,
+) -> F32 at sample
+  pub struct block_guards_init.State  // Affine; size 16, bulk 0, align 4
+    a: 4 bytes, align 4, fast  // offset 0
+    _out._hoist_0: 1 bytes, align 1, fast  // offset 4
+    _out._hoist_1: 4 bytes, align 4, fast  // offset 8
+    _poisoned: 1 bytes, align 1, fast  // offset 12
+    _initialized: 1 bytes, align 1, fast  // offset 13
+  pub struct block_guards_init.Config  // Copy; size 4, align 4
+    a: I32  // offset 0
+  pub struct block_guards_init.Params  // Copy; size 4, align 4
+    d: I32  // offset 0
+  pub struct block_guards_init.Rendered  // Affine
+    out: Buf[F32]
+  pub const block_guards_init.SIZE: U32 = 16
+  pub const block_guards_init.BULK_SIZE: U32 = 0
+  pub fn block_guards_init.init(cfg: block_guards_init.Config, sample_rate: F32) -> block_guards_init.State
+  pub rt fn block_guards_init.reset(inout s: block_guards_init.State)
+  pub rt fn block_guards_init.process(inout s: block_guards_init.State, params: block_guards_init.Params, input: Span[F32], inout output: Span[F32])
+  pub rt fn block_guards_init.process_inplace(inout s: block_guards_init.State, params: block_guards_init.Params, inout output: Span[F32])
+  pub fn block_guards_init.render(cfg: block_guards_init.Config, params: block_guards_init.Params, input: Span[F32], sample_rate: F32) -> block_guards_init.Rendered uses {Alloc}
+
+pub flow sample_condition(
+  x: F32 at sample,
+  d: I32 at block,
+) -> F32 at sample
+  pub struct sample_condition.State  // Affine; size 8, bulk 0, align 4
+    d: 4 bytes, align 4, fast  // offset 0
+    _poisoned: 1 bytes, align 1, fast  // offset 4
+    _initialized: 1 bytes, align 1, fast  // offset 5
+  pub struct sample_condition.Params  // Copy; size 4, align 4
+    d: I32  // offset 0
+  pub struct sample_condition.Rendered  // Affine
+    out: Buf[F32]
+  pub const sample_condition.SIZE: U32 = 8
+  pub const sample_condition.BULK_SIZE: U32 = 0
+  pub fn sample_condition.init(sample_rate: F32) -> sample_condition.State
+  pub rt fn sample_condition.reset(inout s: sample_condition.State)
+  pub rt fn sample_condition.process(inout s: sample_condition.State, params: sample_condition.Params, input: Span[F32], inout output: Span[F32])
+  pub rt fn sample_condition.process_inplace(inout s: sample_condition.State, params: sample_condition.Params, inout output: Span[F32])
+  pub fn sample_condition.render(params: sample_condition.Params, input: Span[F32], sample_rate: F32) -> sample_condition.Rendered uses {Alloc}
+
+pub flow and_right(
+  x: F32 at sample,
+  n: I32 at block,
+) -> F32 at sample
+  pub struct and_right.State  // Affine; size 12, bulk 0, align 4
+    _out._hoist_0: 1 bytes, align 1, fast  // offset 0
+    _out._hoist_1: 4 bytes, align 4, fast  // offset 4
+    _poisoned: 1 bytes, align 1, fast  // offset 8
+    _initialized: 1 bytes, align 1, fast  // offset 9
+  pub struct and_right.Params  // Copy; size 4, align 4
+    n: I32  // offset 0
+  pub struct and_right.Rendered  // Affine
+    out: Buf[F32]
+  pub const and_right.SIZE: U32 = 12
+  pub const and_right.BULK_SIZE: U32 = 0
+  pub fn and_right.init(sample_rate: F32) -> and_right.State
+  pub rt fn and_right.reset(inout s: and_right.State)
+  pub rt fn and_right.process(inout s: and_right.State, params: and_right.Params, input: Span[F32], inout output: Span[F32])
+  pub rt fn and_right.process_inplace(inout s: and_right.State, params: and_right.Params, inout output: Span[F32])
+  pub fn and_right.render(params: and_right.Params, input: Span[F32], sample_rate: F32) -> and_right.Rendered uses {Alloc}
+
+pub flow else_if(
+  x: F32 at sample,
+  d: I32 at block,
+  e: I32 at block,
+) -> F32 at sample
+  pub struct else_if.State  // Affine; size 12, bulk 0, align 4
+    _out._hoist_0: 1 bytes, align 1, fast  // offset 0
+    _out._hoist_1: 1 bytes, align 1, fast  // offset 1
+    _out._hoist_2: 4 bytes, align 4, fast  // offset 4
+    _poisoned: 1 bytes, align 1, fast  // offset 8
+    _initialized: 1 bytes, align 1, fast  // offset 9
+  pub struct else_if.Params  // Copy; size 8, align 4
+    d: I32  // offset 0
+    e: I32  // offset 4
+  pub struct else_if.Rendered  // Affine
+    out: Buf[F32]
+  pub const else_if.SIZE: U32 = 12
+  pub const else_if.BULK_SIZE: U32 = 0
+  pub fn else_if.init(sample_rate: F32) -> else_if.State
+  pub rt fn else_if.reset(inout s: else_if.State)
+  pub rt fn else_if.process(inout s: else_if.State, params: else_if.Params, input: Span[F32], inout output: Span[F32])
+  pub rt fn else_if.process_inplace(inout s: else_if.State, params: else_if.Params, inout output: Span[F32])
+  pub fn else_if.render(params: else_if.Params, input: Span[F32], sample_rate: F32) -> else_if.Rendered uses {Alloc}
+
+pub flow in_a_let(
+  x: F32 at sample,
+  n: I32 at block,
+) -> F32 at sample
+  pub struct in_a_let.State  // Affine; size 12, bulk 0, align 4
+    y._hoist_0: 1 bytes, align 1, fast  // offset 0
+    y._hoist_1: 4 bytes, align 4, fast  // offset 4
+    _poisoned: 1 bytes, align 1, fast  // offset 8
+    _initialized: 1 bytes, align 1, fast  // offset 9
+  pub struct in_a_let.Params  // Copy; size 4, align 4
+    n: I32  // offset 0
+  pub struct in_a_let.Rendered  // Affine
+    out: Buf[F32]
+  pub const in_a_let.SIZE: U32 = 12
+  pub const in_a_let.BULK_SIZE: U32 = 0
+  pub fn in_a_let.init(sample_rate: F32) -> in_a_let.State
+  pub rt fn in_a_let.reset(inout s: in_a_let.State)
+  pub rt fn in_a_let.process(inout s: in_a_let.State, params: in_a_let.Params, input: Span[F32], inout output: Span[F32])
+  pub rt fn in_a_let.process_inplace(inout s: in_a_let.State, params: in_a_let.Params, inout output: Span[F32])
+  pub fn in_a_let.render(params: in_a_let.Params, input: Span[F32], sample_rate: F32) -> in_a_let.Rendered uses {Alloc}

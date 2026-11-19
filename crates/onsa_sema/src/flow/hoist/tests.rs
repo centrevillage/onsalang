@@ -1,8 +1,9 @@
-//! The choice of the hoisted subexpressions (§11.3, W7-05 U1): the largest
-//! slow Copy one, no name, `sample_rate()` or constant, the Copy parts of
-//! one that is not Copy, none in a conditional position or the body of a
-//! `par~` in this unit, the stages its parts are read at, and the numbers
-//! and the order of the fields (§11.6, §12.4).
+//! The choice of the hoisted subexpressions (§11.3, W7-05 U1, U2): the
+//! largest slow Copy one, no name, `sample_rate()` or constant, the Copy
+//! parts of one that is not Copy, guarded under conditions decided at `init`
+//! or `block` (S-1157), none in the body of a `par~` in this unit, the
+//! stages its parts are read at, the checked constants (S-888 (c′)), and
+//! the numbers and the order of the fields (§11.6, §12.4).
 
 use crate::Analysis;
 use crate::clock::ClockStage;
@@ -92,16 +93,115 @@ fn a_call_that_is_not_rt_is_hoisted_to_init_with_what_holds_it_at_block() {
     );
 }
 
+/// Each hoisted field: its path, its stage, whether it is guarded and the
+/// text of its subexpression.
+fn guarded(src: &str) -> Vec<(String, ClockStage, bool, String)> {
+    let (a, text) = flow(src);
+    let f = info(&a);
+    f.hoists.iter().map(|h| (h.path.clone(), h.stage, h.guarded, h.span.text_in(&text).to_string())).collect()
+}
+
+fn g(path: &str, stage: ClockStage, guarded: bool, text: &str) -> (String, ClockStage, bool, String) {
+    (path.to_string(), stage, guarded, text.to_string())
+}
+
+/// S-1157 (D′): under conditions decided at `init` or `block` (an `if`, the
+/// left of `&&`, the scrutinee of a `match`), a slow part has a guarded
+/// field at the later of its stage and theirs; the conditions are hoisted
+/// unguarded. Not in the body of a `par~` (W7-05 U3).
 #[test]
-fn a_conditional_position_and_the_body_of_a_par_have_no_field_in_this_unit() {
-    let src = "pub flow f(x: F32 at sample, level: F32 at block, n: I32 at block) -> F32 at sample {
-  let a = if level > 0.5 { x * (level * 2.0) } else { x }
-  let b = level > 0.5 && x > level * 2.0
-  let c = match n { 0 => x * (level * 3.0), _ => x }
-  let d = par~ i in 0 ..< 2 { x * (level * 4.0) }
-  if b { a + c + d[0] } else { x }
+fn conditions_decided_at_init_or_block_guard_the_fields_under_them() {
+    let src = "pub flow f(x: F32 at sample, a: F32 at init, level: F32 at block, n: I32 at block) -> F32 at sample {
+  let p = if level > 0.5 { x * (level * 2.0) } else { x }
+  let q = level > 0.5 && x > level * 2.0
+  let r = match n { 0 => x * (level * 3.0), _ => x }
+  let s = if a > 0.0 { x * (level + a) + x * (a * 2.0) } else { x }
+  let t = if level > 0.5 { x * (a * 3.0) } else { x }
+  let u = par~ i in 0 ..< 2 { x * (level * 4.0) }
+  if q { p + r + s + t + u[0] } else { x }
 }";
-    assert_eq!(hoists(src), [one("a._hoist_0", B, "level > 0.5"), one("b._hoist_0", B, "level > 0.5")]);
+    assert_eq!(
+        guarded(src),
+        [
+            g("p._hoist_0", B, false, "level > 0.5"),
+            g("p._hoist_1", B, true, "level * 2.0"),
+            g("q._hoist_0", B, false, "level > 0.5"),
+            g("q._hoist_1", B, true, "level * 2.0"),
+            g("r._hoist_0", B, true, "level * 3.0"),
+            g("s._hoist_0", I, false, "a > 0.0"),
+            g("s._hoist_1", B, true, "level + a"),
+            g("s._hoist_2", I, true, "a * 2.0"),
+            g("t._hoist_0", B, false, "level > 0.5"),
+            g("t._hoist_1", B, true, "a * 3.0"),
+        ]
+    );
+}
+
+/// A condition decided per sample (§11.3), or by a value that is not Copy
+/// read at `sample` (S-1046 (a)), leaves what is under it where it is
+/// reached; one in `at` is decided at the stage of its operand.
+#[test]
+fn a_condition_decided_per_sample_leaves_its_branches_where_they_are_reached() {
+    let src = "pub flow f(x: F32 at sample, a: I32 at init, level: F32 at block) -> F32 at sample {
+  let c = level > 0.5
+  let p = if x > 0.0 { if level > 0.5 { x * (level * 2.0) } else { x } } else { x }
+  let q = match (if a > 0 { Some(\"on\") } else { None }) { Some(_) => x * (level * 3.0), None => x }
+  let r = if (c at sample) { x * (level * 4.0) } else { x }
+  p + q + r
+}";
+    let hoisted: Vec<String> = guarded(src).into_iter().map(|h| h.3).collect();
+    assert_eq!(hoisted, ["a > 0", "level * 4.0"]);
+}
+
+/// The binding of an arm read in a guarded field is read at its stage, where
+/// the arm binds it again; a condition that is a name is read there too.
+#[test]
+fn a_guarded_field_reads_its_conditions_and_the_bindings_of_its_arm_at_its_stage() {
+    let src =
+        "pub flow f(x: F32 at sample, o: Option[F32] at block, k: F32 at block, on: Bool at init) -> F32 at sample {
+  let r = match o { Some(v) => v * k + x, None => x }
+  r + (if on { x * (k * 2.0) } else { x })
+}";
+    assert_eq!(guarded(src), [g("r._hoist_0", B, true, "v * k"), g("_out._hoist_0", B, true, "k * 2.0")]);
+    let (a, _) = flow(src);
+    let f = info(&a);
+    let on = f.inputs[3];
+    assert!(f.read_at[&on].contains(&B), "`on` is read at `block` too");
+    assert!(f.stored(Kept::Local(on)), "an input at `init` read at `block`");
+    let v = f.read_at.iter().filter(|(l, _)| !f.inputs.contains(l) && f.clocks.locals[l] == crate::clock::Clock::Block);
+    assert!(v.into_iter().any(|(_, s)| s.contains(&B)), "`v` is read at `block`");
+}
+
+/// S-888 (c′): a computed constant expression under conditions decided at
+/// `init` or `block` is checked at their stage; under constants or a
+/// condition per sample it is evaluated where it is reached. Each is
+/// recorded with its conditions for W9-03.
+#[test]
+fn a_constant_expression_in_a_branch_is_checked_at_the_stage_of_its_conditions() {
+    use crate::flow::Cond;
+    let src = "const K: I32 = 2
+const PAIR: (F32, F32) = (1.0, 2.0)
+pub flow f(x: F32 at sample, n: I32 at block) -> F32 at sample {
+  let p = if n == 0 { panic(\"bad n\") } else { x }
+  let q = if K > 0 { x * (1.0 / 3.0) } else { x }
+  let r = if x > 0.0 { x * (2.0 / 3.0) } else if n == 1 { 1.0 } else { (PAIR.1) }
+  p + q + r
+}";
+    let (a, text) = flow(src);
+    let f = info(&a);
+    let ast = onsa_syntax::parse(onsa_diag::FileId(0), &text).ast;
+    let mut found: Vec<(String, Option<ClockStage>, Cond)> =
+        f.const_conds.iter().map(|(&e, &c)| (ast.expr(e).span.text_in(&text).to_string(), f.check_of(e), c)).collect();
+    found.sort();
+    // A branch `{ e }` of a constant is the largest constant expression;
+    // one of a literal, a name or a field of one (`{ 1.0 }`, `{ (PAIR.1) }`)
+    // is not computed.
+    let want = [
+        ("1.0 / 3.0".to_string(), None, Cond::Const),
+        ("2.0 / 3.0".to_string(), None, Cond::Late),
+        ("{ panic(\"bad n\") }".to_string(), Some(B), Cond::Block),
+    ];
+    assert_eq!(found, want);
 }
 
 #[test]

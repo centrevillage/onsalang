@@ -81,7 +81,7 @@ pub flow slower_at_then_a_par(x: F32 at sample) -> F32 at sample {
 // ---------------------------------------------------------------- the `par~` is no failed clock rule
 
 // The clock of the `par~` is the clock of its body (a constant here, the text is one), so the delay of it is E0813 and the `par~`, which starts later, is not the error. The first argument is
-// a call, which has no candidate.
+// a call that holds the E0810 of the element in its first argument, so it has no candidate (a candidate of a computed first argument is for one that has no error of its own, W7-05 U2/t).
 pub flow delay_of_a_par(x: F32 at sample) -> F32 at sample {
   prev~(F32.round_from((par~ i in 0 ..< 2 { "a" })[0].len())) + x   //~ E0813
 }

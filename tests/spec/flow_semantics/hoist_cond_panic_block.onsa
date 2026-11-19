@@ -1,0 +1,212 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.6", "§9.2"]
+
+// W7-05 U2/t, S-1157 (D'), S-1080 (spec §11.3, §11.6): a part of `block` or of `init` in a position of a condition whose conditions are all decided at `init` or `block` is
+// evaluated by the stage of the fastest of its clock and its conditions, when the conditions hold ("式のクロックと条件の段のうち最も速い段で、条件が成り立つときだけ評価する")
+// and its panic is that of the stage: "成り立てば、0 フレームの呼び出しと止まっている部品でも panic しうる". So where the guard holds, the division by zero is a panic of the `block` stage
+// of a call of 0 frames (the output is not written), and where the guard does not hold nothing is evaluated (hoist_cond_values.onsa). `x` is the `sample` input, `d` and `e`
+// of `block`, `a` of `init`. The guard that is decided by `sample` evaluates where it is reached (hoist_cond_reached.onsa). The divisor `d - 1` is 0 for d = 1, so d = 1 is
+// the panic of each flow, and the other values do not panic.
+
+pub flow guard_true(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  if d != 0 { x * F32.round_from(100 / (d - 1)) } else { x }
+}
+
+pub flow else_branch(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  if d == 0 { x } else { x * F32.round_from(100 / (d - 1)) }
+}
+
+pub flow else_if(x: F32 at sample, d: I32 at block, e: I32 at block) -> F32 at sample {
+  if d == 0 { x } else if e != 0 { x * F32.round_from(100 / (e - 1)) } else { x + 1.0 }
+}
+
+pub flow and_right(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  if d != 0 && F32.round_from(100 / (d - 1)) > x { 1.0 } else { 0.0 }
+}
+
+pub flow or_right(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  if d == 0 || F32.round_from(100 / (d - 1)) > x { 1.0 } else { 0.0 }
+}
+
+pub flow init_guards_a_block_part(x: F32 at sample, a: I32 at init, d: I32 at block) -> F32 at sample {
+  if a != 0 { x * F32.round_from(100 / (d - 1)) } else { x }
+}
+
+// The `init` part is in a position that the condition of `block` decides: it is evaluated at `block` where `d != 0` holds, so `init` does not panic with a = 1.
+pub flow block_guards_an_init_part(x: F32 at sample, a: I32 at init, d: I32 at block) -> F32 at sample {
+  if d != 0 { x * F32.round_from(100 / (a - 1)) } else { x }
+}
+
+pub flow nested_slow(x: F32 at sample, a: I32 at init, d: I32 at block) -> F32 at sample {
+  if a != 0 {
+    if F32.round_from(100 / a) > F32.round_from(d) { x * F32.round_from(100 / (d - 1)) } else { x }
+  } else {
+    x
+  }
+}
+
+pub flow match_division(x: F32 at sample, o: Option[I32] at block) -> F32 at sample {
+  match o {
+    Some(v) => x * F32.round_from(100 / v),
+    None => x,
+  }
+}
+
+pub flow at_in_the_condition(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  if (d != 0) at sample { x * F32.round_from(100 / (d - 1)) } else { x }
+}
+
+pub flow two_guarded_lets(x: F32 at sample, d: I32 at block, e: I32 at block) -> F32 at sample {
+  let u = if d != 0 { x * F32.round_from(100 / (d - 1)) } else { x }
+  let v = if e != 0 { u * F32.round_from(100 / (e - 1)) } else { u }
+  v
+}
+
+pub flow child(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  if d != 0 { x * F32.round_from(100 / (d - 1)) } else { x }
+}
+
+// The `block` stage of the instance is evaluated with the one of the flow that makes it (§11.3: "`block` の式は `process` の呼び出しごとに 1 回").
+pub flow parent(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  child~(x, d) + 1.0
+}
+
+test "a guard that holds and divides by zero panics in a call of 0 frames" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  var out: [F32; 2] = [7.0; 2]
+  var st = guard_true.init(8.0)
+  guard_true.process(inout st, guard_true.Params { d: 1 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "a guard that holds and divides by zero panics in a call of 0 frames"
+  assert out[0] == 7.0
+}
+
+test "the call after calls that did not panic is the one that panics: d = 2, d = 0, then d = 1 in a call of 0 frames" {
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var st = guard_true.init(8.0)
+  guard_true.process(inout st, guard_true.Params { d: 2 }, xs, inout out)
+  assert out[0] == 100.0
+  guard_true.process(inout st, guard_true.Params { d: 0 }, xs, inout out)
+  assert out[0] == 1.0
+  guard_true.process(inout st, guard_true.Params { d: 1 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "the call after calls that did not panic is the one that panics: d = 2, d = 0, then d = 1 in a call of 0 frames"
+  assert out[0] == 1.0
+}
+
+test "after reset the guard that holds panics in a call of 0 frames again" {
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var st = guard_true.init(8.0)
+  guard_true.process(inout st, guard_true.Params { d: 0 }, xs, inout out)
+  guard_true.reset(inout st)
+  guard_true.process(inout st, guard_true.Params { d: 1 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "after reset the guard that holds panics in a call of 0 frames again"
+  assert out[0] == 1.0
+}
+
+test "the else branch that is taken panics in a call of 0 frames" {
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var st = else_branch.init(8.0)
+  else_branch.process(inout st, else_branch.Params { d: 0 }, xs.slice(0, 0), inout out.slice(0, 0))
+  else_branch.process(inout st, else_branch.Params { d: 1 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "the else branch that is taken panics in a call of 0 frames"
+  assert out[0] == 7.0
+}
+
+test "else if: the branch that is taken panics in a call of 0 frames, and the other ones do not" {
+  // (d, e) = (0, 1): the first branch is taken; (2, 0): the last; (2, 1): the middle one, which divides by e - 1 = 0.
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var st = else_if.init(8.0)
+  else_if.process(inout st, else_if.Params { d: 0, e: 1 }, xs.slice(0, 0), inout out.slice(0, 0))
+  else_if.process(inout st, else_if.Params { d: 2, e: 0 }, xs.slice(0, 0), inout out.slice(0, 0))
+  else_if.process(inout st, else_if.Params { d: 2, e: 1 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "else if: the branch that is taken panics in a call of 0 frames, and the other ones do not"
+  assert out[0] == 7.0
+}
+
+test "the right side of && panics in a call of 0 frames where the left side holds" {
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var st = and_right.init(8.0)
+  and_right.process(inout st, and_right.Params { d: 0 }, xs.slice(0, 0), inout out.slice(0, 0))
+  and_right.process(inout st, and_right.Params { d: 1 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "the right side of && panics in a call of 0 frames where the left side holds"
+  assert out[0] == 7.0
+}
+
+test "the right side of || panics in a call of 0 frames where the left side does not hold" {
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var st = or_right.init(8.0)
+  or_right.process(inout st, or_right.Params { d: 0 }, xs.slice(0, 0), inout out.slice(0, 0))
+  or_right.process(inout st, or_right.Params { d: 1 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "the right side of || panics in a call of 0 frames where the left side does not hold"
+  assert out[0] == 7.0
+}
+
+test "a condition of init guards a part of block: the panic is the block stage's, init does not panic" {
+  // a = 1 and d = 1: `init` is made (no panic there), the call of 0 frames panics. a = 0: nothing is evaluated.
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var off = init_guards_a_block_part.init(init_guards_a_block_part.Config { a: 0 }, 8.0)
+  init_guards_a_block_part.process(inout off, init_guards_a_block_part.Params { d: 1 }, xs.slice(0, 0), inout out.slice(0, 0))
+  var on = init_guards_a_block_part.init(init_guards_a_block_part.Config { a: 1 }, 8.0)
+  init_guards_a_block_part.process(inout on, init_guards_a_block_part.Params { d: 1 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "a condition of init guards a part of block: the panic is the block stage's, init does not panic"
+  assert out[0] == 7.0
+}
+
+test "a condition of block guards a part of init: init does not panic, block does where the guard holds" {
+  // a = 1 divides `100 / (a - 1)` by zero where it is evaluated: at block, when d != 0. `init` (a = 1) is made with no panic.
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var st = block_guards_an_init_part.init(block_guards_an_init_part.Config { a: 1 }, 8.0)
+  block_guards_an_init_part.process(inout st, block_guards_an_init_part.Params { d: 0 }, xs.slice(0, 0), inout out.slice(0, 0))
+  block_guards_an_init_part.process(inout st, block_guards_an_init_part.Params { d: 1 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "a condition of block guards a part of init: init does not panic, block does where the guard holds"
+  assert out[0] == 7.0
+}
+
+test "a slow condition in a slow branch: the innermost part is evaluated at block when both conditions hold" {
+  // a = 5 (100 / a = 20), d = 1: 20 > 1 holds, so `100 / (d - 1)` is evaluated at block and divides by zero. d = 30: 20 > 30 does not hold. a = 0: nothing.
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var off = nested_slow.init(nested_slow.Config { a: 0 }, 8.0)
+  nested_slow.process(inout off, nested_slow.Params { d: 1 }, xs.slice(0, 0), inout out.slice(0, 0))
+  var st = nested_slow.init(nested_slow.Config { a: 5 }, 8.0)
+  nested_slow.process(inout st, nested_slow.Params { d: 30 }, xs.slice(0, 0), inout out.slice(0, 0))
+  nested_slow.process(inout st, nested_slow.Params { d: 1 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "a slow condition in a slow branch: the innermost part is evaluated at block when both conditions hold"
+  assert out[0] == 7.0
+}
+
+test "an arm reads what its pattern binds: Some(0) divides by zero in a call of 0 frames, None does not" {
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var st = match_division.init(8.0)
+  match_division.process(inout st, match_division.Params { o: None }, xs.slice(0, 0), inout out.slice(0, 0))
+  match_division.process(inout st, match_division.Params { o: Some(4) }, xs.slice(0, 0), inout out.slice(0, 0))
+  match_division.process(inout st, match_division.Params { o: Some(0) }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "an arm reads what its pattern binds: Some(0) divides by zero in a call of 0 frames, None does not"
+  assert out[0] == 7.0
+}
+
+test "a condition with at is counted at the stage of its expression: the guard holds at block" {
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var st = at_in_the_condition.init(8.0)
+  at_in_the_condition.process(inout st, at_in_the_condition.Params { d: 0 }, xs.slice(0, 0), inout out.slice(0, 0))
+  at_in_the_condition.process(inout st, at_in_the_condition.Params { d: 1 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "a condition with at is counted at the stage of its expression: the guard holds at block"
+  assert out[0] == 7.0
+}
+
+test "the second let that is guarded panics when its guard holds, the first one with its guard not holding" {
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var st = two_guarded_lets.init(8.0)
+  two_guarded_lets.process(inout st, two_guarded_lets.Params { d: 0, e: 2 }, xs.slice(0, 0), inout out.slice(0, 0))
+  two_guarded_lets.process(inout st, two_guarded_lets.Params { d: 0, e: 1 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "the second let that is guarded panics when its guard holds, the first one with its guard not holding"
+  assert out[0] == 7.0
+}
+
+test "the guarded part of an instance is evaluated at the block stage of the call that makes it" {
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var st = parent.init(8.0)
+  parent.process(inout st, parent.Params { d: 0 }, xs.slice(0, 0), inout out.slice(0, 0))
+  parent.process(inout st, parent.Params { d: 1 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "the guarded part of an instance is evaluated at the block stage of the call that makes it"
+  assert out[0] == 7.0
+}

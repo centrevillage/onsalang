@@ -1,0 +1,10 @@
+# flow_ref 1 source=tests/spec/flow_semantics/hoist_cond_panic_const_until_w9_03.onsa tests=3 evaluated=3 unavailable=0 skipped=0 waiting=0
+@ a panic with no condition is a panic at run time in this version
+render hoist_cond_panic_const_until_w9_03.always sr=0x41000000 in x=[0x3f800000]
+panic init
+@ a panic under a constant condition that holds is a panic at run time in this version
+render hoist_cond_panic_const_until_w9_03.constant_on sr=0x41000000 in x=[0x3f800000]
+panic sample 0
+@ a panic under a constant condition that does not hold is not evaluated
+render hoist_cond_panic_const_until_w9_03.constant_off sr=0x41000000 in x=[0x3f800000 0x40000000]
+out=[0x3f800000 0x40000000]

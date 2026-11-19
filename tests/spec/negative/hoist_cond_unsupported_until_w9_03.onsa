@@ -1,0 +1,51 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5"]
+
+// W7-05 U2/t, R-17, S-1160, S-1157 (spec §11.5, §11.3): THE FORMS THAT STAY E0200 IN THIS VERSION. (1) A call of a function that is not `rt` whose arguments are all constants, in a position of a condition that a condition
+// of `block` or `sample` chooses: such a call is a constant expression, which W9-03 evaluates at compile time (§11.3), and until then it is E0200 (not the E0815 of a call with an argument that is not a constant,
+// e0815_non_rt_call_in_a_condition.onsa). (2) A call of a function that is not `rt` whose result is not Copy, read by a faster stage (S-1160: provisional, this version is E0200; the spec has two sentences that disagree about it,
+// §11.5 "引数が全て定数ならコンパイル時、そうでなければ `init` の段で評価される" and §11.3 "型が Copy でない部分式 … は巻き上げず、読む側の段で評価し", and the decision is W7-05's detail S-1160). When W9-03 (the constants) and
+// S-1160 are decided, the forms here go with them. `x` is the `sample` input, `n` of `block`, `a` of `init`.
+
+pub fn half(v: F32) -> F32 {
+  v * 0.5
+}
+
+pub fn name_of(n: I32) -> Option[Str] {
+  if n > 0 { Some("on") } else { None }
+}
+
+pub rt fn pick(o: Option[Str], x: F32) -> F32 {
+  match o {
+    Some(_) => x,
+    None => 0.0,
+  }
+}
+
+pub flow constant_call_under_a_block_condition(x: F32 at sample, n: I32 at block) -> F32 at sample {
+  if n != 0 { x * half(2.0) } else { x }                            //~ E0200
+}
+
+pub flow constant_call_under_a_sample_condition(x: F32 at sample) -> F32 at sample {
+  if x > 0.0 { x * half(2.0) } else { x }                           //~ E0200
+}
+
+pub flow constant_call_in_an_arm_of_a_block_object(x: F32 at sample, o: Option[F32] at block) -> F32 at sample {
+  match o {
+    Some(v) => x * half(2.0) + v,                                   //~ E0200
+    None => x,
+  }
+}
+
+pub flow constant_call_right_of_and(x: F32 at sample, n: I32 at block) -> F32 at sample {
+  if n != 0 && half(2.0) > x { 1.0 } else { 0.0 }                   //~ E0200
+}
+
+pub flow constant_call_else_branch(x: F32 at sample, n: I32 at block) -> F32 at sample {
+  if n == 0 { x } else { x * half(4.0) }                            //~ E0200
+}
+
+pub flow not_copy_result_read_by_sample(x: F32 at sample, a: I32 at init) -> F32 at sample {
+  pick(name_of(a), x)                                               //~ E0200
+}

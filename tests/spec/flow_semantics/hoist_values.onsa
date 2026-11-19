@@ -15,7 +15,7 @@ pub rt fn half(l: F32) -> F32 {
   l * 0.5
 }
 
-// A struct with no derive list is Affine: it is not Copy (§5.2), so the parts that are made of it are not hoisted.
+// A struct of Copy elements is Copy (§4.6: the kind is decided by the structure; a derive list is not needed), so a `Wrap` in a sample expression is a part that is hoisted whole when it is of a slower clock, and the Copy parts of it are made with it.
 pub struct Wrap {
   a: I32,
   b: I32,
@@ -51,8 +51,8 @@ pub flow in_node_argument(x: F32 at sample, g: F32 at block) -> F32 at sample {
   prev~(x * (g * 0.5))
 }
 
-// The part that is not Copy (a `Wrap`) is not hoisted; the part of it that is Copy, is (S-1046 (a)).
-pub flow not_copy(x: F32 at sample, d: I32 at block) -> F32 at sample {
+// The `Wrap` is Copy (§4.6), so `Wrap { a: 100 / d, b: 1 }` is hoisted whole (the part of `block`): the panic of `100 / d` is a panic of the `block` stage. A part that is not Copy (an `Option[Str]`) cannot be written in this version (E0200 or E0805); the sema unit tests have it (S-1046 (a)).
+pub flow copy_struct(x: F32 at sample, d: I32 at block) -> F32 at sample {
   pick(Wrap { a: 100 / d, b: 1 }, x)
 }
 
@@ -114,10 +114,10 @@ test "in the argument of a node" {
   assert o.out[2] == 4.0
 }
 
-test "a part that is not Copy holds a part that is" {
+test "a struct of Copy elements is a part that is hoisted whole" {
   // d = 4: 100 / 4 + 1 = 26, so x * 26.0.
   let xs: [F32; 2] = [1.0, 2.0]
-  let o = not_copy.render(not_copy.Params { d: 4 }, xs, 8.0)
+  let o = copy_struct.render(copy_struct.Params { d: 4 }, xs, 8.0)
   assert o.out[0] == 26.0
   assert o.out[1] == 52.0
 }

@@ -1,0 +1,98 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§18.1"]
+// fixes = 1
+
+// W7-05 U1/t and U2/t, S-152 (§11.3, §11.4, §18.1; the list of the candidates of W7-02 U3 that this version could not make): E0813 has a candidate when the first
+// argument of a delay is of the clock `block`, of the clock `init` or of a constant, whatever the expression is: the candidate promotes it with ` at sample`
+// ("候補は `prev~(p at sample)`"; "サンプル単位の遅延が要るなら `prev~(p at sample)` と書いて昇格する（E0813 の修正候補）"). It is a candidate for the name, the literal
+// (e0813_candidate_forms.onsa) and also for the expression that is computed, now that `at` may make a computed expression faster (§11.3, hoist_at_computed.onsa). The `^name` form
+// (`let a = prev~(^b)`) has no candidate in this version (S-1165, provisional): e0813_no_candidate_caret_s1165.onsa. The text of the candidate puts `at sample`
+// after the argument, and the argument is put
+// in parentheses when `at` could not follow it as it is: the operand of `at` that needs parentheses is an expression of a binary operator, a range, `as` or an
+// expression that looks like a block (§3.1, §11.3: "`at` の被演算子に置くのに括弧の要る式"), so
+//
+//   prev~(p * 2.0)           is  prev~((p * 2.0) at sample)        (a binary expression: parentheses)
+//   prev~(-p)                is  prev~(-p at sample)               (a prefix operator binds tighter than `at`: none)
+//   prev~(half(p))           is  prev~(half(p) at sample)          (a call: none)
+//   prev~(s[0])              is  prev~(s[0] at sample)             (an index: none)
+//   prev~((p * 2.0))         is  prev~((p * 2.0) at sample)        (the parentheses of the argument stay, as `prev~((p))` is `prev~((p) at sample)`)
+//   delay~(p + 1.0, 4)       is  delay~((p + 1.0) at sample, 4)    (the other arguments stay)
+//
+// `p * 2.0 at sample` would read `p * (2.0 at sample)`, an expression that is evaluated at `sample`, which is not what `at` says for the argument. Applied alone, the
+// candidate leaves the unit without an error (the runner checks it for each candidate, W3-17). One error per flow (§18.1), each form is a flow of its own. The
+// `.fix1` of this file is made by the implementation (`UPDATE_GOLDEN=1`) and is read against the list above. The first arguments that hold an error of their own
+// have no candidate, since applying it would leave that error: e0813_no_candidate_with_an_error_inside.onsa.
+
+const KK: F32 = 2.0
+
+pub rt fn half(v: F32) -> F32 { v * 0.5 }
+
+pub flow block_computed(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  prev~((p * 2.0) at sample) + x                                            //~ E0813
+}
+
+pub flow block_negated(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  prev~(-p at sample) + x                                                 //~ E0813
+}
+
+pub flow init_computed(x: F32 at sample, c: F32 at init) -> F32 at sample {
+  prev~((c + 1.0) at sample) + x                                            //~ E0813
+}
+
+pub flow constant_computed(x: F32 at sample) -> F32 at sample {
+  prev~((1.0 + 2.0) at sample) + x                                          //~ E0813
+}
+
+pub flow call_of_a_constant(x: F32 at sample) -> F32 at sample {
+  prev~(half(1.0) at sample) + x                                          //~ E0813
+}
+
+pub flow call_of_a_block_value(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  prev~(half(p) at sample) + x                                            //~ E0813
+}
+
+pub flow sample_rate_computed(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  prev~((sample_rate() * p) at sample) + x                                  //~ E0813
+}
+
+pub flow delay_computed(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  delay~((p + 1.0) at sample, 4) + x                                        //~ E0813
+}
+
+pub flow vdelay_computed(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  vdelay~((p * 2.0) at sample, x, 8) + x                                    //~ E0813
+}
+
+pub flow in_parentheses_computed(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  prev~((p * 2.0) at sample) + x                                          //~ E0813
+}
+
+pub flow index_computed(x: F32 at sample, s: [F32; 2] at block) -> F32 at sample {
+  prev~(s[0] at sample) + x                                               //~ E0813
+}
+
+// The forms of a constant (W7-02 U3): a negative literal, a negated constant and an expression of a constant.
+pub flow negative_literal(x: F32 at sample) -> F32 at sample {
+  prev~(-1.0 at sample) + x                                               //~ E0813
+}
+
+pub flow negated_constant(x: F32 at sample) -> F32 at sample {
+  prev~(-KK at sample) + x                                                //~ E0813
+}
+
+pub flow constant_product(x: F32 at sample) -> F32 at sample {
+  prev~((KK * 2.0) at sample) + x                                           //~ E0813
+}
+
+// The forms that the candidates make are accepted as written.
+pub flow promoted(x: F32 at sample, p: F32 at block, c: F32 at init, s: [F32; 2] at block) -> F32 at sample {
+  prev~((p * 2.0) at sample) + prev~(-p at sample) + prev~(half(p) at sample) + prev~(s[0] at sample) + delay~((c + 1.0) at sample, 4) +
+    prev~(-1.0 at sample) + prev~(-KK at sample) + prev~((KK * 2.0) at sample) + x
+}
+
+pub flow promoted_caret_name(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = prev~(^b at sample)
+  let b = p
+  a + x
+}

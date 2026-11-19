@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§18.1"]
+// fixes = 0
+
+// W7-05 U2/t, S-152 (spec §11.4, §18.1): E0813 has a candidate that promotes the first argument of a delay with ` at sample`, for the name, the literal and the computed expression
+// (e0813_candidate_computed.onsa). When the first argument holds an error of its own, one that the flow reports after the E0813 (one error per flow, the first by position) but that stays when
+// the candidate is applied, the candidate would leave the unit with that error, which is what the promise of a candidate does not allow ("候補を当てると、その単位の診断が消える": the runner checks
+// it for each candidate, W3-17). So there is no candidate for such a first argument (`fixes = 0`): the error inside has to be mended first. The forms here are the delay whose first argument holds, after its start, a value that `at` makes slower
+// (`x at block`, E0815, hidden by the E0813 that starts first). The function values (E0810) are in negative/flow_fn_value_clock_forms.onsa and the `par~` with an element that is not Copy
+// in flow_clock/flow_par_result_order.onsa. (An inner error of a call that is found while the argument is read, an effect (E0805) or a call of a function that is not `rt` with an argument of `sample`
+// (E0815), is the error reported, and the delay has no E0813 to hang a candidate on.)
+
+pub flow slower_at_inside(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  prev~(p + (x at block)) + x                                   //~ E0813
+}
+
+pub flow slower_at_inside_to_init(x: F32 at sample, c: F32 at init) -> F32 at sample {
+  prev~(c + (x at init)) + x                                    //~ E0813
+}
+
+pub flow slower_at_inside_a_delay_with_a_length(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  delay~(p * 2.0 + (x at block), 4) + x                         //~ E0813
+}
+
+pub flow slower_at_inside_a_vdelay(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  vdelay~((p + (x at block)) * 2.0, x, 8) + x                   //~ E0813
+}
+
+pub flow slower_at_inside_in_a_let(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = prev~(-p + (x at block))                              //~ E0813
+  a + x
+}

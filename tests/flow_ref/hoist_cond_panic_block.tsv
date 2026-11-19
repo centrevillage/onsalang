@@ -1,0 +1,94 @@
+# flow_ref 1 source=tests/spec/flow_semantics/hoist_cond_panic_block.onsa tests=14 evaluated=14 unavailable=0 skipped=0 waiting=0
+@ a guard that holds and divides by zero panics in a call of 0 frames
+init 0 hoist_cond_panic_block.guard_true sr=0x41000000
+process 0 params d=1 frames=0 in x=[]
+panic block
+@ the call after calls that did not panic is the one that panics: d = 2, d = 0, then d = 1 in a call of 0 frames
+init 0 hoist_cond_panic_block.guard_true sr=0x41000000
+process 0 params d=2 frames=1 in x=[0x3f800000]
+out=[0x42c80000]
+process 0 params d=0 frames=1 in x=[0x3f800000]
+out=[0x3f800000]
+process 0 params d=1 frames=0 in x=[]
+panic block
+@ after reset the guard that holds panics in a call of 0 frames again
+init 0 hoist_cond_panic_block.guard_true sr=0x41000000
+process 0 params d=0 frames=1 in x=[0x3f800000]
+out=[0x3f800000]
+reset 0
+process 0 params d=1 frames=0 in x=[]
+panic block
+@ the else branch that is taken panics in a call of 0 frames
+init 0 hoist_cond_panic_block.else_branch sr=0x41000000
+process 0 params d=0 frames=0 in x=[]
+out=[]
+process 0 params d=1 frames=0 in x=[]
+panic block
+@ else if: the branch that is taken panics in a call of 0 frames, and the other ones do not
+init 0 hoist_cond_panic_block.else_if sr=0x41000000
+process 0 params d=0 e=1 frames=0 in x=[]
+out=[]
+process 0 params d=2 e=0 frames=0 in x=[]
+out=[]
+process 0 params d=2 e=1 frames=0 in x=[]
+panic block
+@ the right side of && panics in a call of 0 frames where the left side holds
+init 0 hoist_cond_panic_block.and_right sr=0x41000000
+process 0 params d=0 frames=0 in x=[]
+out=[]
+process 0 params d=1 frames=0 in x=[]
+panic block
+@ the right side of || panics in a call of 0 frames where the left side does not hold
+init 0 hoist_cond_panic_block.or_right sr=0x41000000
+process 0 params d=0 frames=0 in x=[]
+out=[]
+process 0 params d=1 frames=0 in x=[]
+panic block
+@ a condition of init guards a part of block: the panic is the block stage's, init does not panic
+init 0 hoist_cond_panic_block.init_guards_a_block_part sr=0x41000000 cfg a=0
+process 0 params d=1 frames=0 in x=[]
+out=[]
+init 1 hoist_cond_panic_block.init_guards_a_block_part sr=0x41000000 cfg a=1
+process 1 params d=1 frames=0 in x=[]
+panic block
+@ a condition of block guards a part of init: init does not panic, block does where the guard holds
+init 0 hoist_cond_panic_block.block_guards_an_init_part sr=0x41000000 cfg a=1
+process 0 params d=0 frames=0 in x=[]
+out=[]
+process 0 params d=1 frames=0 in x=[]
+panic block
+@ a slow condition in a slow branch: the innermost part is evaluated at block when both conditions hold
+init 0 hoist_cond_panic_block.nested_slow sr=0x41000000 cfg a=0
+process 0 params d=1 frames=0 in x=[]
+out=[]
+init 1 hoist_cond_panic_block.nested_slow sr=0x41000000 cfg a=5
+process 1 params d=30 frames=0 in x=[]
+out=[]
+process 1 params d=1 frames=0 in x=[]
+panic block
+@ an arm reads what its pattern binds: Some(0) divides by zero in a call of 0 frames, None does not
+init 0 hoist_cond_panic_block.match_division sr=0x41000000
+process 0 params o=#0() frames=0 in x=[]
+out=[]
+process 0 params o=#1(4) frames=0 in x=[]
+out=[]
+process 0 params o=#1(0) frames=0 in x=[]
+panic block
+@ a condition with at is counted at the stage of its expression: the guard holds at block
+init 0 hoist_cond_panic_block.at_in_the_condition sr=0x41000000
+process 0 params d=0 frames=0 in x=[]
+out=[]
+process 0 params d=1 frames=0 in x=[]
+panic block
+@ the second let that is guarded panics when its guard holds, the first one with its guard not holding
+init 0 hoist_cond_panic_block.two_guarded_lets sr=0x41000000
+process 0 params d=0 e=2 frames=0 in x=[]
+out=[]
+process 0 params d=0 e=1 frames=0 in x=[]
+panic block
+@ the guarded part of an instance is evaluated at the block stage of the call that makes it
+init 0 hoist_cond_panic_block.parent sr=0x41000000
+process 0 params d=0 frames=0 in x=[]
+out=[]
+process 0 params d=1 frames=0 in x=[]
+panic block

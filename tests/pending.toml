@@ -981,7 +981,7 @@ note = "状態を持つものの置き場所（E0811 / E0812 / E0806）、Defaul
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/flow_clock/e0813_candidate_computed.onsa"
-reasons = ["S-152"]
-until = "W7-05"
-note = "E0813 の候補を計算した式（括弧の要る形を含む）へ広げる分は W7-05 U2（U1 では候補は名前とリテラルのまま。広げた版で候補の約束を破る形は U2 の設計で決める）"
+target = "tests/spec/flow_semantics/hoist_cond_match_forms.onsa"
+reasons = ["R-06", "S-1157"]
+until = "W8-06"
+note = "守り付きの欄の match の形（ガード、リテラルの腕、struct パターン）。値の match の一般の道の降下が E0200（W8-06）なので、W7-05 U2 の段の期待を確かめられない"

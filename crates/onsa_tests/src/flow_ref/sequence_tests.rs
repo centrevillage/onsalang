@@ -8,7 +8,7 @@ use super::walk::{Panic, Skip, TestRun, Verdict, run_case};
 use onsa_driver::PackageInput;
 
 // `acc` is a running sum: 1 2 3 4 gives 1 3 6 10. `gain` multiplies by a `block` value, `off` adds an `init` one, `inv` is
-// 10 / x (it panics for 0), `ib` is x + 100 / n (it panics in `init` for n = 0), `closed` is E0200 today (`panic` in a flow body), `chans` has two
+// 10 / x (it panics for 0), `ib` is x + 100 / n (it panics in `init` for n = 0), `closed` is E0200 today (`sample_tick()`, W7-09), `chans` has two
 // channels (an output of views).
 const FLOWS: &str = "
 flow acc(x: F32 at sample) -> F32 at sample {
@@ -22,7 +22,7 @@ flow ib(n: I32 at init, x: F32 at sample) -> F32 at sample {
   let k = 100 / n
   x + F32.round_from(k)
 }
-flow closed(x: F32 at sample) -> [F32; 1] at sample { [if x > 9.0 { panic(\"closed\") } else { x }] }
+flow closed(x: F32 at sample) -> [F32; 1] at sample { [x + F32.round_from(sample_tick())] }
 flow chans(x: F32 at sample) -> [F32; 2] at sample { [x, x + 1.0] }
 fn ramp() -> [F32; 3] { [1.0, 2.0, 3.0] }
 ";
@@ -124,8 +124,10 @@ fn a_panic_ends_the_test_at_its_call_with_the_stage_and_nothing_runs_after_it() 
 
 #[test]
 fn an_unavailable_call_stops_the_test_and_a_wrong_assert_after_a_run_fails_it() {
-    // `closed` is E0200 today, so its `init` is the evaluator's `Unavailable` and `assert false` after it is not reached.
-    let r = one("test \"wait\" {\n  var st = closed.init(8.0)\n  closed.reset(inout st)\n  assert false\n}");
+    // `closed` is E0200 today (`sample_tick()` of a flow, W7-09), so the body of the frame is the evaluator's `Unavailable` (`init` and `reset` go on, the frame does not) and `assert false` after it is not reached.
+    let r = one(
+        "test \"wait\" {\n  let xs: [F32; 1] = [1.0]\n  let o = closed.render(xs, 8.0)\n  assert o.out[0][0] == 1.0\n  assert false\n}",
+    );
     assert_eq!((r.asserts, matches!(r.verdict, Verdict::Unavailable(_))), (0, true), "{r:?}");
     let r = one("test \"wrong\" {
   let xs: [F32; 2] = [1.0, 2.0]

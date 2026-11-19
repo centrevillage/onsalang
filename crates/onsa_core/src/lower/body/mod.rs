@@ -32,8 +32,8 @@ use call::lower_call;
 pub(super) use call::{of_type, span_of};
 pub(super) use expr::lower_expr;
 use expr::placeholder_ty;
-pub(super) use pat::bind_irrefutable;
 use pat::lower_match;
+pub(super) use pat::{bind_irrefutable, lower_match_with};
 
 pub(crate) struct FnCx<'b> {
     pub args: Vec<GenericArg>,

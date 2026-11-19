@@ -158,3 +158,182 @@ flow f(x: I32 at sample) -> I32 at sample { x + 10 / Z }";
         assert_eq!(panics(r), Some((PanicAt::Sample(0), PanicKind::DivZero)));
     });
 }
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// W7-05 U2/t, S-1157 (D'): the guarded parts. A part in a position of a condition is made by the fastest of its clock and the stages of
+// the conditions on the way, when they hold; a condition of a later stage (`sample`, or one the reader evaluates) leaves the part where
+// it is reached. `d - 1` is 0 for d = 1, so d = 1 is the panic of each flow below.
+
+type Inputs = &'static [(&'static str, i32)];
+
+/// The stage and the kind of the panic of one call of 0 frames (`init` with `init`, then `block` is made, no frame) with the inputs given.
+fn zero_frames(src: &'static str, name: &'static str, init: Inputs, block: Inputs) -> Option<(PanicAt, PanicKind)> {
+    with_flow(src, name, move |view, def| {
+        let cfg: Vec<(&str, Value)> = init.iter().map(|(n, v)| (*n, i32v(i128::from(*v)))).collect();
+        match Instance::init(view, def, 8.0, &cfg, None) {
+            Err(Stop { fault: Fault::Panic(k), .. }) => Some((PanicAt::Init, k)),
+            Err(e) => panic!("init: {e:?}"),
+            Ok(mut me) => {
+                let params: Vec<(&str, Value)> = block.iter().map(|(n, v)| (*n, i32v(i128::from(*v)))).collect();
+                panics(me.process_outcome(&params, &[("x", &[])], 0, None))
+            }
+        }
+    })
+}
+
+#[test]
+fn a_part_of_block_under_a_condition_of_block_is_made_at_block_where_it_holds() {
+    // `d != 0` holds for d = 1 and `100 / (d - 1)` is made at `block`: a call of 0 frames panics there. d = 0: nothing is made. d = 2: 100.
+    let src =
+        "flow f(x: I32 at sample, d: I32 at block) -> I32 at sample { if d != 0 { x * (100 / (d - 1)) } else { x } }";
+    assert_eq!(zero_frames(src, "f", &[], &[("d", 1)]), Some((PanicAt::Block, PanicKind::DivZero)));
+    assert_eq!(zero_frames(src, "f", &[], &[("d", 0)]), None);
+    assert_eq!(zero_frames(src, "f", &[], &[("d", 2)]), None);
+    with_flow(src, "f", |view, def| {
+        let mut me = Instance::init(view, def, 8.0, &[], None).expect("init");
+        let outs = me.process(&[("d", i32v(2))], &[("x", &[i32v(3)])], 1, None).expect("process");
+        assert!(is(&Ok(outs[0].clone()), &i32v(300)), "{outs:?}");
+        // The next call does not read the part of the call before: d = 0 gives x.
+        let outs = me.process(&[("d", i32v(0))], &[("x", &[i32v(3)])], 1, None).expect("process");
+        assert!(is(&Ok(outs[0].clone()), &i32v(3)), "{outs:?}");
+    });
+}
+
+#[test]
+fn the_else_branch_and_the_right_side_of_and_or_are_guarded_by_what_takes_them() {
+    let else_ =
+        "flow f(x: I32 at sample, d: I32 at block) -> I32 at sample { if d == 0 { x } else { x * (100 / (d - 1)) } }";
+    assert_eq!(zero_frames(else_, "f", &[], &[("d", 1)]), Some((PanicAt::Block, PanicKind::DivZero)));
+    assert_eq!(zero_frames(else_, "f", &[], &[("d", 0)]), None);
+    let and = "flow f(x: I32 at sample, d: I32 at block) -> Bool at sample { d != 0 && 100 / (d - 1) > x }";
+    assert_eq!(zero_frames(and, "f", &[], &[("d", 1)]), Some((PanicAt::Block, PanicKind::DivZero)));
+    assert_eq!(zero_frames(and, "f", &[], &[("d", 0)]), None);
+    let or = "flow f(x: I32 at sample, d: I32 at block) -> Bool at sample { d == 0 || 100 / (d - 1) > x }";
+    assert_eq!(zero_frames(or, "f", &[], &[("d", 1)]), Some((PanicAt::Block, PanicKind::DivZero)));
+    assert_eq!(zero_frames(or, "f", &[], &[("d", 0)]), None);
+}
+
+#[test]
+fn the_stage_of_a_guarded_part_is_the_fastest_of_its_clock_and_its_conditions() {
+    // An `init` part under a condition of `block` is made at `block` (init does not panic with a = 1); a `block` part under a condition of
+    // `init` is made at `block`; an `init` part under a condition of `init` is made at `init`.
+    let init_in_block = "flow f(x: I32 at sample, a: I32 at init, d: I32 at block) -> I32 at sample { if d != 0 { x * (100 / (a - 1)) } else { x } }";
+    assert_eq!(zero_frames(init_in_block, "f", &[("a", 1)], &[("d", 0)]), None);
+    assert_eq!(zero_frames(init_in_block, "f", &[("a", 1)], &[("d", 1)]), Some((PanicAt::Block, PanicKind::DivZero)));
+    let block_in_init = "flow f(x: I32 at sample, a: I32 at init, d: I32 at block) -> I32 at sample { if a != 0 { x * (100 / (d - 1)) } else { x } }";
+    assert_eq!(zero_frames(block_in_init, "f", &[("a", 0)], &[("d", 1)]), None);
+    assert_eq!(zero_frames(block_in_init, "f", &[("a", 1)], &[("d", 1)]), Some((PanicAt::Block, PanicKind::DivZero)));
+    let init_in_init =
+        "flow f(x: I32 at sample, a: I32 at init) -> I32 at sample { if a != 0 { x * (100 / (a - 1)) } else { x } }";
+    assert_eq!(zero_frames(init_in_init, "f", &[("a", 1)], &[]), Some((PanicAt::Init, PanicKind::DivZero)));
+    assert_eq!(zero_frames(init_in_init, "f", &[("a", 0)], &[]), None);
+}
+
+#[test]
+fn a_condition_of_sample_leaves_the_part_where_it_is_reached() {
+    // A call of 0 frames does not panic; the frame whose condition holds does, at `sample`; the `block` condition inside it changes nothing.
+    let src = "flow f(x: I32 at sample, d: I32 at block) -> I32 at sample { if x > 0 { if d != 0 { x * (100 / (d - 1)) } else { x } } else { 0 } }";
+    assert_eq!(zero_frames(src, "f", &[], &[("d", 1)]), None);
+    with_flow(src, "f", |view, def| {
+        let mut me = Instance::init(view, def, 8.0, &[], None).expect("init");
+        let r = me.process_outcome(&[("d", i32v(1))], &[("x", &[i32v(-1)])], 1, None);
+        assert_eq!(panics(r), None);
+        let r = me.process_outcome(&[("d", i32v(1))], &[("x", &[i32v(-1), i32v(2)])], 2, None);
+        assert_eq!(panics(r), Some((PanicAt::Sample(1), PanicKind::DivZero)));
+    });
+}
+
+#[test]
+fn the_arm_of_a_match_is_guarded_by_the_object_and_the_patterns_up_to_it() {
+    let src =
+        "flow f(x: I32 at sample, d: I32 at block) -> I32 at sample { match d { 0 => x, _ => x * (100 / (d - 1)) } }";
+    assert_eq!(zero_frames(src, "f", &[], &[("d", 1)]), Some((PanicAt::Block, PanicKind::DivZero)));
+    assert_eq!(zero_frames(src, "f", &[], &[("d", 0)]), None);
+    // The guard of an arm is under the object and the pattern: a guard of `block` that is reached is made at `block`, a guard of `sample`
+    // stops the arms after it.
+    let guard = "flow f(x: I32 at sample, d: I32 at block) -> I32 at sample { match d { n if 100 / (n - 1) > 5 => x, _ => 0 } }";
+    assert_eq!(zero_frames(guard, "f", &[], &[("d", 1)]), Some((PanicAt::Block, PanicKind::DivZero)));
+    let late = "flow f(x: I32 at sample, d: I32 at block) -> I32 at sample { match d { n if x > n => 1, _ => 100 / (d - 1) } }";
+    assert_eq!(zero_frames(late, "f", &[], &[("d", 1)]), None);
+}
+
+#[test]
+fn a_panic_under_a_condition_is_a_panic_of_the_stage_that_decides_it() {
+    let block =
+        "flow f(x: I32 at sample, d: I32 at block) -> I32 at sample { if d == 0 { panic(\"bad d\") } else { x } }";
+    assert_eq!(zero_frames(block, "f", &[], &[("d", 0)]), Some((PanicAt::Block, PanicKind::Explicit)));
+    assert_eq!(zero_frames(block, "f", &[], &[("d", 3)]), None);
+    let init =
+        "flow f(x: I32 at sample, a: I32 at init) -> I32 at sample { if a == 0 { panic(\"bad a\") } else { x } }";
+    assert_eq!(zero_frames(init, "f", &[("a", 0)], &[]), Some((PanicAt::Init, PanicKind::Explicit)));
+    let sample = "flow f(x: I32 at sample) -> I32 at sample { if x < 0 { panic(\"negative\") } else { x } }";
+    assert_eq!(zero_frames(sample, "f", &[], &[]), None);
+    with_flow(sample, "f", |view, def| {
+        let mut me = Instance::init(view, def, 8.0, &[], None).expect("init");
+        let r = me.process_outcome(&[], &[("x", &[i32v(1), i32v(-1)])], 2, None);
+        assert_eq!(panics(r), Some((PanicAt::Sample(1), PanicKind::Explicit)));
+    });
+}
+
+#[test]
+fn a_constant_condition_is_decided_and_the_part_of_block_it_takes_is_made_at_block() {
+    // S-1157 with S-888 (c'): a constant condition is decided before `init` (W9-03 takes its branch at compile time, as if `constexpr`), so
+    // the part of `block` under `Z != 0` is made at `block` when `Z != 0` holds: a call of 0 frames panics, and under `Z == 0` it does not.
+    let on = "const Z: I32 = 1\nflow f(x: I32 at sample, d: I32 at block) -> I32 at sample { if Z != 0 { x * (100 / (d - 1)) } else { x } }";
+    assert_eq!(zero_frames(on, "f", &[], &[("d", 1)]), Some((PanicAt::Block, PanicKind::DivZero)));
+    assert_eq!(zero_frames(on, "f", &[], &[("d", 2)]), None);
+    let off = "const Z: I32 = 0\nflow f(x: I32 at sample, d: I32 at block) -> I32 at sample { if Z != 0 { x * (100 / (d - 1)) } else { x } }";
+    assert_eq!(zero_frames(off, "f", &[], &[("d", 1)]), None);
+}
+
+#[test]
+fn a_constant_condition_that_panics_is_decided_where_a_part_under_it_is_made_else_where_it_is_read() {
+    // `2 % 0` panics (DivZero) and is a constant condition, which is an input of E0419 under W9-03 (it is taken at compile time); the stage
+    // that decides it until then is the one of the Core: a stage decides it when a part that the stage makes is in a branch, arm or right
+    // side under it (in any one, whichever it takes), else the reader evaluates it where it is reached.
+    // Nothing of `init` or `block` is under it in `if (2 % 0) != 0 { x } else { x }`, so `init` and a call of 0 frames do not panic, and a
+    // frame does at `sample` (x = 1: frame 0). The same for the right side of `&&` and the arms of a `match`.
+    let none = "flow f(x: I32 at sample, d: I32 at block) -> I32 at sample { if (2 % 0) != 0 { x } else { x } }";
+    let and = "flow f(x: I32 at sample) -> Bool at sample { (2 % 0) != 0 && x > 0 }";
+    let arms = "const Z: I32 = 2\nflow f(x: I32 at sample) -> I32 at sample { match Z % 0 { 0 => x, _ => x + 1 } }";
+    for (src, has_d) in [(none, true), (and, false), (arms, false)] {
+        let block: Inputs = if has_d { &[("d", 1)] } else { &[] };
+        assert_eq!(zero_frames(src, "f", &[], block), None, "{src}");
+        with_flow(src, "f", move |view, def| {
+            let mut me = Instance::init(view, def, 8.0, &[], None).expect("init");
+            let params: Vec<(&str, Value)> = block.iter().map(|(n, v)| (*n, i32v(i128::from(*v)))).collect();
+            let r = me.process_outcome(&params, &[("x", &[i32v(1)])], 1, None);
+            assert_eq!(panics(r), Some((PanicAt::Sample(0), PanicKind::DivZero)), "{src}");
+        });
+    }
+    // A part of `block` under it (`100 / d`, d = 1 does not panic by itself) makes the stage `block` decide it: the panic is the one of the
+    // condition, at `block`, in a call of 0 frames, and in the branch it does not take as well (the condition is decided, not the part).
+    let under =
+        "flow f(x: I32 at sample, d: I32 at block) -> I32 at sample { if (2 % 0) != 0 { x * (100 / d) } else { x } }";
+    assert_eq!(zero_frames(under, "f", &[], &[("d", 1)]), Some((PanicAt::Block, PanicKind::DivZero)));
+    let else_ =
+        "flow f(x: I32 at sample, d: I32 at block) -> I32 at sample { if (2 % 0) != 0 { x } else { x * (100 / d) } }";
+    assert_eq!(zero_frames(else_, "f", &[], &[("d", 1)]), Some((PanicAt::Block, PanicKind::DivZero)));
+    let right = "flow f(x: I32 at sample, d: I32 at block) -> Bool at sample { (2 % 0) != 0 && 100 / d > x }";
+    assert_eq!(zero_frames(right, "f", &[], &[("d", 1)]), Some((PanicAt::Block, PanicKind::DivZero)));
+    // A part of `init` under it is made at `init` (the stage the condition is decided at is the same as the part's).
+    let init =
+        "flow f(x: I32 at sample, a: I32 at init) -> I32 at sample { if (2 % 0) != 0 { x * (100 / a) } else { x } }";
+    assert_eq!(zero_frames(init, "f", &[("a", 1)], &[]), Some((PanicAt::Init, PanicKind::DivZero)));
+}
+
+#[test]
+fn a_block_expression_is_walked() {
+    // `({ x * (100 / (d - 1)) })`: the part of `block` in the block expression is made at `block` (§11.3, the carry-over of U1). A nested block
+    // holds one expression (E0806, §11.2), so it binds no name that a part could read.
+    let plain = "flow f(x: I32 at sample, d: I32 at block) -> I32 at sample { x * ({ x * (100 / (d - 1)) }) }";
+    assert_eq!(zero_frames(plain, "f", &[], &[("d", 1)]), Some((PanicAt::Block, PanicKind::DivZero)));
+    assert_eq!(zero_frames(plain, "f", &[], &[("d", 2)]), None);
+}
+
+#[test]
+fn a_struct_of_copy_elements_is_copy_and_a_part_of_its_own() {
+    // §4.6: `Wrap` has no derive list and is Copy by its structure. `Wrap { a: 100 / d }` is made at `block` as a whole: d = 0 panics in a call of 0 frames.
+    let src = "struct Wrap { a: I32 }\nrt fn pick(w: Wrap, x: I32) -> I32 { x * w.a }\nflow f(x: I32 at sample, d: I32 at block) -> I32 at sample { pick(Wrap { a: 100 / d }, x) }";
+    assert_eq!(zero_frames(src, "f", &[], &[("d", 0)]), Some((PanicAt::Block, PanicKind::DivZero)));
+}

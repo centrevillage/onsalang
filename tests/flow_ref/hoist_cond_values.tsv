@@ -1,0 +1,126 @@
+# flow_ref 1 source=tests/spec/flow_semantics/hoist_cond_values.onsa tests=21 evaluated=21 unavailable=0 skipped=0 waiting=0
+@ a guard of block that does not hold keeps the division away: d = 0
+render hoist_cond_values.guard_block sr=0x41000000 params d=0 in x=[0x3f800000 0x40000000]
+out=[0x3f800000 0x40000000]
+@ a guard of block that does not hold in a call of 0 frames writes nothing
+init 0 hoist_cond_values.guard_block sr=0x41000000
+process 0 params d=0 frames=0 in x=[]
+out=[]
+@ the branch of a guard that holds gives the value: d = 4 is 100 / 4 = 25
+render hoist_cond_values.guard_block sr=0x41000000 params d=4 in x=[0x3f800000 0x40000000]
+out=[0x41c80000 0x42480000]
+@ the guard is decided again by each call, and a value of a call before is not read
+init 0 hoist_cond_values.guard_block sr=0x41000000
+process 0 params d=4 frames=1 in x=[0x40400000]
+out=[0x42960000]
+process 0 params d=0 frames=1 in x=[0x40400000]
+out=[0x40400000]
+process 0 params d=5 frames=1 in x=[0x40400000]
+out=[0x42700000]
+process 0 params d=0 frames=1 in x=[0x40400000]
+out=[0x40400000]
+@ after reset a guard that does not hold is decided by the call after it: d = 2, then reset, then d = 0
+init 0 hoist_cond_values.guard_block sr=0x41000000
+process 0 params d=2 frames=1 in x=[0x40400000]
+out=[0x43160000]
+reset 0
+process 0 params d=0 frames=1 in x=[0x40400000]
+out=[0x40400000]
+process 0 params d=4 frames=1 in x=[0x40400000]
+out=[0x42960000]
+@ the else branch of a guard of block
+render hoist_cond_values.else_branch sr=0x41000000 params d=0 in x=[0x3f800000 0x40000000]
+out=[0x3f800000 0x40000000]
+render hoist_cond_values.else_branch sr=0x41000000 params d=5 in x=[0x3f800000 0x40000000]
+out=[0x41a00000 0x42200000]
+@ else if: each branch is taken by its conditions, and the division is only where it is taken
+render hoist_cond_values.else_if sr=0x41000000 params d=0 e=0 in x=[0x40000000]
+out=[0x40000000]
+render hoist_cond_values.else_if sr=0x41000000 params d=0 e=4 in x=[0x40000000]
+out=[0x40000000]
+render hoist_cond_values.else_if sr=0x41000000 params d=2 e=0 in x=[0x40000000]
+out=[0x40400000]
+render hoist_cond_values.else_if sr=0x41000000 params d=2 e=4 in x=[0x40000000]
+out=[0x42480000]
+@ the right side of && is only where the left side holds
+render hoist_cond_values.and_right sr=0x41000000 params d=0 in x=[0x41200000 0x41f00000]
+out=[0x00000000 0x00000000]
+render hoist_cond_values.and_right sr=0x41000000 params d=4 in x=[0x41200000 0x41f00000]
+out=[0x3f800000 0x00000000]
+@ the right side of || is only where the left side does not hold
+render hoist_cond_values.or_right sr=0x41000000 params d=0 in x=[0x41200000 0x41f00000]
+out=[0x3f800000 0x3f800000]
+render hoist_cond_values.or_right sr=0x41000000 params d=4 in x=[0x41200000 0x41f00000]
+out=[0x3f800000 0x00000000]
+@ a condition of init guards a part of block
+render hoist_cond_values.init_guards_a_block_part sr=0x41000000 cfg a=0 params d=0 in x=[0x40000000]
+out=[0x40000000]
+render hoist_cond_values.init_guards_a_block_part sr=0x41000000 cfg a=1 params d=4 in x=[0x40000000]
+out=[0x42480000]
+render hoist_cond_values.init_guards_a_block_part sr=0x41000000 cfg a=1 params d=5 in x=[0x40000000]
+out=[0x42200000]
+@ a condition of block guards a part of init
+render hoist_cond_values.block_guards_an_init_part sr=0x41000000 cfg a=4 params d=0 in x=[0x40000000]
+out=[0x40000000]
+render hoist_cond_values.block_guards_an_init_part sr=0x41000000 cfg a=4 params d=1 in x=[0x40000000]
+out=[0x42480000]
+@ a condition of block guards a part of init: a = 0 and d = 0 divide nowhere
+render hoist_cond_values.block_guards_an_init_part sr=0x41000000 cfg a=0 params d=0 in x=[0x40000000]
+out=[0x40000000]
+@ a condition of init guards a part of init: a = 0 does not divide, a = 5 gives 20
+render hoist_cond_values.init_guards_an_init_part sr=0x41000000 cfg a=0 in x=[0x40000000]
+out=[0x40000000]
+render hoist_cond_values.init_guards_an_init_part sr=0x41000000 cfg a=5 in x=[0x40000000]
+out=[0x42200000]
+@ the value of an init guarded part is kept by reset
+init 0 hoist_cond_values.init_guards_an_init_part sr=0x41000000 cfg a=5
+process 0 frames=1 in x=[0x40000000]
+out=[0x42200000]
+reset 0
+process 0 frames=1 in x=[0x40000000]
+out=[0x42200000]
+@ a slow condition in a slow branch: the fields depend on each other
+render hoist_cond_values.nested_slow sr=0x41000000 cfg a=0 params d=0 in x=[0x40000000]
+out=[0x40000000]
+render hoist_cond_values.nested_slow sr=0x41000000 cfg a=5 params d=4 in x=[0x40000000]
+out=[0x42480000]
+render hoist_cond_values.nested_slow sr=0x41000000 cfg a=5 params d=30 in x=[0x40000000]
+out=[0x40000000]
+@ an arm reads what its pattern binds: Some(3.0) with k = 2.0 and x = 1.0 gives 7.0
+render hoist_cond_values.match_binding sr=0x41000000 params o=#1(0x40400000) k=0x40000000 in x=[0x3f800000 0x40000000]
+out=[0x40e00000 0x41000000]
+render hoist_cond_values.match_binding sr=0x41000000 params o=#0() k=0x40000000 in x=[0x3f800000 0x40000000]
+out=[0x3f800000 0x40000000]
+@ an arm divides by what its pattern binds only when it is taken
+render hoist_cond_values.match_division sr=0x41000000 params o=#1(4) in x=[0x40000000]
+out=[0x42480000]
+render hoist_cond_values.match_division sr=0x41000000 params o=#0() in x=[0x40000000]
+out=[0x40000000]
+@ a condition with at is counted at the stage of its expression: d = 0 does not divide, d = 4 gives x * 25
+render hoist_cond_values.at_in_the_condition sr=0x41000000 params d=0 in x=[0x40000000]
+out=[0x40000000]
+render hoist_cond_values.at_in_the_condition sr=0x41000000 params d=4 in x=[0x40000000]
+out=[0x42480000]
+@ a constant condition: the branch of a true one gives its value, the branch of a false one is never taken
+render hoist_cond_values.constant_condition_on sr=0x41000000 params d=4 in x=[0x40000000]
+out=[0x42480000]
+render hoist_cond_values.constant_condition_off sr=0x41000000 params d=4 in x=[0x40000000]
+out=[0x40000000]
+render hoist_cond_values.constant_condition_off sr=0x41000000 params d=0 in x=[0x40000000]
+out=[0x40000000]
+@ an Option of a Copy struct in a branch: the part is made only where the condition holds
+render hoist_cond_values.copy_struct_if sr=0x41000000 params d=0 in x=[0x40000000]
+out=[0x40000000]
+render hoist_cond_values.copy_struct_if sr=0x41000000 params d=3 in x=[0x40000000]
+out=[0x40000000]
+render hoist_cond_values.copy_struct_if sr=0x41000000 params d=4 in x=[0x40000000]
+out=[0x42480000]
+@ two lets with a guard each: the guards are independent
+render hoist_cond_values.two_guarded_lets sr=0x41000000 params d=4 e=5 in x=[0x40000000]
+out=[0x447a0000]
+render hoist_cond_values.two_guarded_lets sr=0x41000000 params d=0 e=5 in x=[0x40000000]
+out=[0x42200000]
+render hoist_cond_values.two_guarded_lets sr=0x41000000 params d=4 e=0 in x=[0x40000000]
+out=[0x42480000]
+render hoist_cond_values.two_guarded_lets sr=0x41000000 params d=0 e=0 in x=[0x40000000]
+out=[0x40000000]

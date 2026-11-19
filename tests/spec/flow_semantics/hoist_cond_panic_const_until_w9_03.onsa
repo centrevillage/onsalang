@@ -1,0 +1,45 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§9.2", "§6.6"]
+
+// W7-05 U2/t, S-888 (c') (spec §11.3): THE FORM UNTIL W9-03. The spec says that a constant-clock expression that panics is evaluated at compile time and its panic is E0419
+// ("定数のクロックの式は、`const` の初期化式と同じ評価器でコンパイル時に評価する。評価が panic すると E0419 である"), and that "条件が全て定数ならコンパイル時で（取られない枝は評価しない）、panic は E0419 である". This
+// version does not evaluate a constant expression of a flow at compile time (W9-03 does, and gives the E0419): a `panic("…")` that is on a way with no condition, or with conditions that are all constants, is a
+// panic at run time, as `x + 10 / Z` of a `const` `Z` of 0 is today (hoist_values.onsa), and a constant condition that does not hold takes the branch that is not the panic. What is
+// written here is the run time form only: where the panic is and that it is one (the render panics), not at which stage (the stage of a constant expression is W9-03's). When W9-03 lands, `always` and `constant_on` are
+// E0419 (a diagnostic of the build, not a test that panics) and this file goes into the negative cases, and `constant_off` stays as it is. `x` is the `sample` input.
+
+const ON: I32 = 1
+const OFF: I32 = 0
+
+pub flow always(x: F32 at sample) -> F32 at sample {
+  panic("always")
+}
+
+pub flow constant_on(x: F32 at sample) -> F32 at sample {
+  if ON != 0 { panic("on") } else { x }
+}
+
+pub flow constant_off(x: F32 at sample) -> F32 at sample {
+  if OFF != 0 { panic("off") } else { x }
+}
+
+test "a panic with no condition is a panic at run time in this version" {
+  let xs: [F32; 1] = [1.0]
+  let o = always.render(xs, 8.0) //~ PANIC "a panic with no condition is a panic at run time in this version"
+  assert o.out[0] == 1.0
+}
+
+test "a panic under a constant condition that holds is a panic at run time in this version" {
+  let xs: [F32; 1] = [1.0]
+  let o = constant_on.render(xs, 8.0) //~ PANIC "a panic under a constant condition that holds is a panic at run time in this version"
+  assert o.out[0] == 1.0
+}
+
+test "a panic under a constant condition that does not hold is not evaluated" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = constant_off.render(xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 2.0
+}

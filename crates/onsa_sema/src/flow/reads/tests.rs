@@ -72,3 +72,30 @@ fn a_read_in_the_body_of_a_par_is_a_read_of_its_let() {
     assert_eq!(names(&format!("{par}  ys[0]")), Vec::<String>::new());
     assert_eq!(names(&format!("{par}  x")), ["a", "ys"]);
 }
+
+/// R-17, §11.5, S-1157: a call of a function that is not `rt` evaluated
+/// after `init` is E0815 when a value is not a constant and a condition
+/// decided after `init` selects its place (one at `init` hoists it there);
+/// E0200 of constants only (W9-03), of a result that is not Copy (S-1160)
+/// and in the body of a `par~` (W7-05 U3).
+#[test]
+fn a_call_that_is_not_rt_after_init_is_e0815_in_a_late_branch_and_e0200_else() {
+    let head = "pub fn make(v: F32) -> F32 { v * 2.0 }
+pub fn name_of(n: I32) -> Option[Str] { if n > 0 { Some(\"on\") } else { None } }
+pub rt fn pick(o: Option[Str], x: F32) -> F32 { match o { Some(_) => x, None => 0.0 } }
+pub flow f(x: F32 at sample, a: F32 at init, b: F32 at init, n: I32 at block, i: I32 at init) -> F32 at sample {\n";
+    let cases = [
+        ("if n != 0 { x * make(a) } else { x }", Some(Code::E0815)),
+        ("if x > 0.0 { x * make(a) } else { x }", Some(Code::E0815)),
+        ("if n != 0 && make(a) > 1.0 { x } else { 0.0 }", Some(Code::E0815)),
+        ("if b > 0.0 { x * make(a) } else { x }", None),
+        ("if n != 0 { x * make(2.0) } else { x }", Some(Code::E0200)),
+        ("pick(name_of(i), x)", Some(Code::E0200)),
+        ("(par~ k in 0 ..< 2 { x * make(a) })[0]", Some(Code::E0200)),
+    ];
+    for (body, code) in cases {
+        let a = crate::tests::check(&format!("{head}  {body}\n}}\n"));
+        let got: Vec<Code> = a.diagnostics.iter().map(|d| d.code).collect();
+        assert_eq!(got, code.into_iter().collect::<Vec<_>>(), "{body}: {:?}", a.diagnostics);
+    }
+}

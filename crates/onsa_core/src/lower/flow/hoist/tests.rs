@@ -60,3 +60,34 @@ pub flow f(x: F32 at sample, level: F32 at block) -> F32 at sample {
     assert!(tick.contains("s.0 = s.2\n"), "{tick}");
     assert!(!tick.contains("2.0:F32"), "{tick}");
 }
+
+/// S-1157: `ctl` writes a guarded field under its condition read at `block`
+/// (its field, written first): an `if`, the left of `&&` and of `||` (its
+/// negation), and the arm of a `match` that binds what it reads; a checked
+/// constant (S-888 (c′)) is evaluated there for its panic. `tick` reads.
+#[test]
+fn a_guarded_field_is_written_under_its_condition() {
+    let src =
+        "pub flow f(x: F32 at sample, n: I32 at block, o: Option[F32] at block, k: F32 at block) -> F32 at sample {
+  let p = if n != 0 { x * F32.round_from(100 / n) } else { x }
+  let q = n > 2 && x > F32.round_from(10 / n)
+  let r = n < 2 || x > F32.round_from(20 / n)
+  let m = match o { Some(v) => v * k + x, None => x }
+  let t = if n == 0 { panic(\"bad n\") } else { x }
+  p + m + t + (if q || r { 1.0 } else { 0.0 })
+}";
+    let ctl = phase(src, "ctl");
+    let want = [
+        "  s.1 = (p@11.0 != 0:I32)\n  if s.1 {\n    s.2 = round.I32.F32((100:I32 / p@11.0))\n  }\n",
+        "  s.3 = (p@11.0 > 2:I32)\n  if s.3 {\n    s.4 = round.I32.F32((10:I32 / p@11.0))\n  }\n",
+        "  s.5 = (p@11.0 < 2:I32)\n  if (!s.5) {\n    s.6 = round.I32.F32((20:I32 / p@11.0))\n  }\n",
+        "  switch p@11.1 {\n    Some => {\n      let v: F32 = payload(p@11.1, Some, 0)\n      s.7 = (v * p@11.2)\n    }\n",
+        "  s.8 = (p@11.0 == 0:I32)\n  if s.8 {\n    panic(\"bad n\")\n  }\n",
+    ];
+    for w in want {
+        assert!(ctl.contains(w), "{w}\nin\n{ctl}");
+    }
+    let tick = phase(src, "tick");
+    assert!(tick.contains("(x * s.2)") && tick.contains("(s.7 + x)"), "{tick}");
+    assert!(!tick.contains("100:I32"), "{tick}");
+}

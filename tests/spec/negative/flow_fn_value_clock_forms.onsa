@@ -1,6 +1,7 @@
 // onsa.toml
 // [test]
 // spec = ["§11.3", "§11.4", "§11.5", "§18.1"]
+// fixes = 0
 
 // W7-14 U6b/t, S-372, S-1133 (spec §11.3: "本体の式（部分式を含む）の型は…関数型を含まない（E0810）"; §11.3, §11.5: the clock of an expression is given by its rule, the fastest of the
 // arguments of a call, the join of the operands, the declared clock of a name; §18.1: of the errors left in a unit the first by position, and "読めなかった部分は誤りの型として扱い、それを使う側には
@@ -8,7 +9,9 @@
 // `x` is, `apply(F, p)` at `block`, `apply(F, 1.0)` a constant), so the checks outside it that read the clock are made, and the first error by position is reported: an outer error starts at or before
 // the expression it holds, so it is the one reported over the E0810 of the function value inside it (`x * (apply(F, x) at block)` is the E0815 of the `at`, not the E0810 of `F`). The outer errors
 // here are the ones that read a clock: `at` that makes a value slower (E0815), the first argument of a delay (E0813) and its `init` (E0815), the argument of a call of a function that is not `rt`
-// (E0815) and of an input of a flow that is slower (E0815). One error per flow (§18.1), so each form is a flow of its own. The same expression at the clock where the outer check passes is the E0810
+// (E0815) and of an input of a flow that is slower (E0815). One error per flow (§18.1), so each form is a flow of its own. W7-05 U2/t (`fixes = 0`, S-152): the E0813 of the delay with an
+// E0810 inside its first argument (`prev~(apply(F, p))`) or in the `let` that its caret name reads (`prev~(^q)`) has no candidate, although the first argument of a delay has one now whatever the expression is
+// (flow_clock/e0813_candidate_computed.onsa): applying it would leave the E0810 and the candidate would break its promise (§18.1). The same expression at the clock where the outer check passes is the E0810
 // (flow_fn_value_clock_order.onsa, and flow_fn_value_forms.onsa for the forms alone). The E0810 over an outer error that starts at the same place is in flow_clock/flow_fn_value_clock_order.onsa too.
 
 pub rt fn dbl(x: F32) -> F32 {

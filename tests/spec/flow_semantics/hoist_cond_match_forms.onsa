@@ -1,0 +1,89 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.6", "§9.2"]
+
+// W7-05 U2/t, S-1157 (D'), S-1046 (spec §11.3): the forms of `match` that this version cannot lower (the value of a `match` with a guard, a literal pattern or a struct pattern is E0200 until W8-06, R-06),
+// so this case is waiting for W8-06 and, for the stages, for W7-05 U2. The rules are the ones of hoist_cond_values.onsa and hoist_cond_panic_block.onsa. A guard is a position of a condition
+// whose way holds the object and the patterns of the arms up to its own, and the guards before it ("match の対象とその腕までのパターンとガード"): a guard of `block` that is reached
+// is evaluated at `block`, once the pattern holds. The arm of the pattern of a literal is chosen by the object of `block`. The object of the struct pattern is a `Wrap` of Copy elements, so it is Copy (§4.6: the kind
+// is decided by the structure) and a part of `block` of its own: the arm is evaluated at `block` with the pattern that holds. (An object that is not Copy, read where it is written by `sample`, cannot be written in this version:
+// its type is an `Option[Str]` and the like, E0200 or E0805; the sema unit tests have it.) `x` is the `sample` input, `d` and `m` of `block`; `d - 1` is 0 for d = 1.
+
+pub struct Wrap {
+  a: I32,
+}
+
+pub flow guard(x: F32 at sample, o: Option[I32] at block, d: I32 at block) -> F32 at sample {
+  match o {
+    Some(v) if F32.round_from(100 / d) > F32.round_from(v) => x * 2.0,
+    Some(_) => x,
+    None => 0.0,
+  }
+}
+
+pub flow literal(x: F32 at sample, m: I32 at block) -> F32 at sample {
+  match m {
+    0 => x,
+    _ => x * F32.round_from(100 / (m - 1)),
+  }
+}
+
+pub flow copy_struct_object(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  match (Wrap { a: d }) {
+    Wrap { a: k } => x * F32.round_from(100 / (k - 1)),
+  }
+}
+
+test "the guard of an arm is only where its pattern holds: None does not divide by d = 0" {
+  // d = 0, None: 0.0 (the guard is not looked at). d = 4 (100 / 4 = 25): Some(10) gives x * 2 (25 > 10), Some(30) gives x. x = 3.
+  let xs: [F32; 1] = [3.0]
+  let r0 = guard.render(guard.Params { o: None, d: 0 }, xs, 8.0)
+  assert r0.out[0] == 0.0
+  let r1 = guard.render(guard.Params { o: Some(10), d: 4 }, xs, 8.0)
+  assert r1.out[0] == 6.0
+  let r2 = guard.render(guard.Params { o: Some(30), d: 4 }, xs, 8.0)
+  assert r2.out[0] == 3.0
+}
+
+test "the guard of an arm with a pattern that holds is evaluated at block: d = 0 panics in a call of 0 frames" {
+  let xs: [F32; 1] = [3.0]
+  var out: [F32; 1] = [7.0]
+  var st = guard.init(8.0)
+  guard.process(inout st, guard.Params { o: None, d: 0 }, xs.slice(0, 0), inout out.slice(0, 0))
+  guard.process(inout st, guard.Params { o: Some(3), d: 0 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "the guard of an arm with a pattern that holds is evaluated at block: d = 0 panics in a call of 0 frames"
+  assert out[0] == 7.0
+}
+
+test "an arm of a literal pattern: m = 0 does not divide, m = 3 gives x * 50" {
+  // 100 / (3 - 1) = 50.
+  let xs: [F32; 1] = [2.0]
+  let r0 = literal.render(literal.Params { m: 0 }, xs, 8.0)
+  assert r0.out[0] == 2.0
+  let r1 = literal.render(literal.Params { m: 3 }, xs, 8.0)
+  assert r1.out[0] == 100.0
+}
+
+test "the arm after a literal pattern that does not hold is evaluated at block: m = 1 panics in a call of 0 frames" {
+  let xs: [F32; 1] = [2.0]
+  var out: [F32; 1] = [7.0]
+  var st = literal.init(8.0)
+  literal.process(inout st, literal.Params { m: 0 }, xs.slice(0, 0), inout out.slice(0, 0))
+  literal.process(inout st, literal.Params { m: 1 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "the arm after a literal pattern that does not hold is evaluated at block: m = 1 panics in a call of 0 frames"
+  assert out[0] == 7.0
+}
+
+test "an object that is a struct of Copy elements: the arm gives its value, d = 3 gives x * 50" {
+  let xs: [F32; 1] = [2.0]
+  let r0 = copy_struct_object.render(copy_struct_object.Params { d: 3 }, xs, 8.0)
+  assert r0.out[0] == 100.0
+}
+
+test "an object that is a struct of Copy elements: the arm is evaluated at block, so a call of 0 frames panics" {
+  let xs: [F32; 1] = [2.0]
+  var out: [F32; 1] = [7.0]
+  var st = copy_struct_object.init(8.0)
+  copy_struct_object.process(inout st, copy_struct_object.Params { d: 3 }, xs.slice(0, 0), inout out.slice(0, 0))
+  copy_struct_object.process(inout st, copy_struct_object.Params { d: 1 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "an object that is a struct of Copy elements: the arm is evaluated at block, so a call of 0 frames panics"
+  assert out[0] == 7.0
+}

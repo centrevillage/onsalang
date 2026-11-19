@@ -22,17 +22,22 @@ pub(super) struct Marked {
     pub(super) read_at: HashMap<LocalId, BTreeSet<ClockStage>>,
     pub(super) sample_rate_at: Option<ClockStage>,
     /// The first call (in the order of the file) of a function that is not
-    /// `rt` evaluated at a stage after `init` (E0200, R-17): in a branch, a
-    /// guard, the right of `&&` / `||` or the body of a `par~` (W7-05 U2
-    /// and U3), or of a type that is not Copy (S-1160).
+    /// `rt` evaluated at a stage after `init` (R-17): E0815 in a
+    /// conditional position a condition decided after `init` selects
+    /// (§11.5); else E0200, in the body of a `par~` (W7-05 U3), of a type
+    /// that is not Copy (S-1160) or of constants only (W9-03).
     pub(super) diag: Option<Diagnostic>,
     /// The locals of the `let`s the initializer of each `let` reads (by its
     /// index; the last, the output), `^y` too: the reads what is reached
     /// goes by ([`reached`]). W7-15 makes them from the edges of the plan.
     pub(super) deps: Vec<HashSet<LocalId>>,
     /// The hoisted subexpressions in the order of the walk, with their
-    /// stages and owners, of which the plan makes its table.
-    pub(super) hoisted: Vec<(ExprId, ClockStage, Owner)>,
+    /// stages, owners and whether they are guarded, of which the plan makes
+    /// its table.
+    pub(super) hoisted: Vec<(ExprId, ClockStage, Owner, bool)>,
+    /// `FlowInfo::checks` and `FlowInfo::const_conds`.
+    pub(super) checks: HashMap<ExprId, ClockStage>,
+    pub(super) const_conds: HashMap<ExprId, Cond>,
 }
 
 struct Marker<'a> {
@@ -44,10 +49,22 @@ struct Marker<'a> {
     /// The walk had a diagnostic: it did not record the nodes it did not
     /// reach (in a branch, in `if~` / `match~`).
     partial: bool,
-    non_rt: &'a HashSet<ExprId>,
+    non_rt: &'a HashMap<ExprId, bool>,
     let_of_local: &'a HashMap<LocalId, usize>,
     /// The `let` whose initializer is marked now (its index), or the output.
     consumer: usize,
+    /// The conditions on the path to the expression marked now, each with
+    /// the conditions on its own path (§11.3: of an `if`, the left of `&&` /
+    /// `||`, the scrutinee and the guards before of a `match`).
+    conds: Vec<(ExprId, Cond)>,
+    /// The conditions read at a stage, for a guarded part there.
+    cond_read: HashSet<(ExprId, ClockStage)>,
+    /// The hoisted subexpressions.
+    seen: HashSet<ExprId>,
+    /// The parts of a constant expression are marked (their reads only).
+    konst: bool,
+    /// In the body of a `par~` (W7-05 U3).
+    par: u32,
     out: Marked,
 }
 
@@ -86,12 +103,19 @@ pub(super) fn mark_all(
         non_rt: &walked.non_rt,
         let_of_local: &cx.let_of_local,
         consumer: lets.len(),
+        conds: Vec::new(),
+        cond_read: HashSet::default(),
+        seen: HashSet::default(),
+        konst: false,
+        par: 0,
         out: Marked {
             read_at: HashMap::default(),
             sample_rate_at: None,
             diag: None,
             deps: vec![HashSet::default(); lets.len() + 1],
             hoisted: Vec::new(),
+            checks: HashMap::default(),
+            const_conds: HashMap::default(),
         },
     };
     // The `let`s and the output are evaluated at their stages whether and
@@ -185,16 +209,37 @@ pub(super) fn unused(
 impl Marker<'_> {
     /// Marks `e`, read at the stage `at` under the conditions `g` on its
     /// path: hoisted ([`Choose::place`]), it is evaluated, and its parts
-    /// read, at its own stage.
+    /// read, at its own stage; guarded, the conditions on its path are read
+    /// there too. A computed constant in a conditional position is
+    /// recorded, and its parts read where it is evaluated.
     fn mark(&mut self, e: ExprId, at: ClockStage, g: Cond) {
-        let at = match self.choose.place(e, at, g) {
+        let place = if self.konst { Place::Here } else { self.choose.place(e, at, g) };
+        let at = match place {
             Place::Hoist(s) => {
+                // A part of a condition read again (`read_conds`) is in the
+                // table once.
+                if !self.seen.insert(e) {
+                    return;
+                }
                 let owner = match self.consumer {
                     k if k < self.out.deps.len() - 1 => Owner::Let(k as u32),
                     _ => Owner::Output,
                 };
-                self.out.hoisted.push((e, s, owner));
+                self.out.hoisted.push((e, s, owner, g != Cond::None));
+                if g != Cond::None {
+                    self.read_conds(s);
+                }
                 s
+            }
+            Place::Check(_) | Place::Const => {
+                self.out.const_conds.insert(e, g);
+                if let Place::Check(s) = place {
+                    self.out.checks.insert(e, s);
+                    self.read_conds(s);
+                    self.konst_parts(e, s, g);
+                }
+                // W9-03 evaluates it once; until then, also where it is read.
+                return self.konst_parts(e, at, g);
             }
             Place::Here => at,
         };
@@ -233,7 +278,7 @@ impl Marker<'_> {
                 } else if self.choose.sample_rate.contains(&e) {
                     self.out.sample_rate_at = Some(self.out.sample_rate_at.map_or(at, |s| s.max(at)));
                 } else {
-                    self.non_rt_here(e, at);
+                    self.non_rt_here(e, *callee, at, g);
                     if let Some(base) = crate::names::body::receiver(ast, *callee)
                         && self.body.expr_types.contains_key(&base)
                     {
@@ -245,28 +290,38 @@ impl Marker<'_> {
                 }
             }
             // The body of a `par~` (W7-05 U3, S-1140).
-            ExprKind::Par { body, .. } => self.mark(*body, at, Cond::Late),
-            // The conditional positions (§11.3), not those of `if~` / `match~`
-            // (W7-06): W7-05 U2 counts the stages of their conditions.
-            ExprKind::If { cond, then, else_, tilde } => {
-                let inner = if tilde.is_some() { g } else { Cond::Late };
+            ExprKind::Par { body, .. } => {
+                self.par += 1;
+                self.mark(*body, at, Cond::Late);
+                self.par -= 1;
+            }
+            // The conditional positions (§11.3) under the conditions that
+            // select them, not the arms of `if~` / `match~` (W7-06).
+            ExprKind::If { cond, then, else_, tilde: None } => {
                 self.mark(*cond, at, g);
+                let inner = self.enter(*cond, at, g);
                 for x in [Some(*then), *else_].into_iter().flatten() {
                     self.mark(x, at, inner);
                 }
+                self.conds.pop();
             }
-            ExprKind::Match { scrutinee, arms, tilde } => {
-                let inner = if tilde.is_some() { g } else { Cond::Late };
+            ExprKind::Match { scrutinee, arms, tilde: None } => {
                 self.mark(*scrutinee, at, g);
+                let (depth, mut inner) = (self.conds.len(), self.enter(*scrutinee, at, g));
                 for arm in arms {
-                    for x in arm.guard.iter().chain([&arm.body]) {
-                        self.mark(*x, at, inner);
+                    if let Some(x) = arm.guard {
+                        self.mark(x, at, inner);
+                        inner = self.enter(x, at, inner);
                     }
+                    self.mark(arm.body, at, inner);
                 }
+                self.conds.truncate(depth);
             }
             ExprKind::Binary { op: BinOp::And | BinOp::Or, lhs, rhs, .. } => {
                 self.mark(*lhs, at, g);
-                self.mark(*rhs, at, Cond::Late);
+                let inner = self.enter(*lhs, at, g);
+                self.mark(*rhs, at, inner);
+                self.conds.pop();
             }
             _ => {
                 for child in ast.sub_exprs(e) {
@@ -276,24 +331,60 @@ impl Marker<'_> {
         }
     }
 
-    /// A call at `e` of a function that is not `rt`, with values at `init`
-    /// ([`Walked::non_rt`]), evaluated at a stage after `init`: one not
-    /// hoisted to `init` (R-17), in a conditional position or the body of a
-    /// `par~` (W7-05 U2, U3) or of a type that is not Copy (S-1160), is
-    /// E0200.
-    fn non_rt_here(&mut self, e: ExprId, at: ClockStage) {
-        if at <= ClockStage::Init || !self.non_rt.contains(&e) {
-            return;
+    /// The condition `c` read at `at` under `g`, entered: the conditions
+    /// under it, of the stage it is decided at ([`Choose::cond_stage`]).
+    fn enter(&mut self, c: ExprId, at: ClockStage, g: Cond) -> Cond {
+        self.conds.push((c, g));
+        g.max(self.choose.cond_stage(c, at))
+    }
+
+    /// The conditions on the path, read at `s` (once each) by the guards of
+    /// a guarded part there: each under the conditions before it.
+    fn read_conds(&mut self, s: ClockStage) {
+        for k in 0..self.conds.len() {
+            let (c, g) = self.conds[k];
+            if self.cond_read.insert((c, s)) {
+                let rest = self.conds.split_off(k);
+                self.mark(c, s, g);
+                self.conds.extend(rest);
+            }
         }
+    }
+
+    /// The reads of the parts of the constant expression `e` at `s`.
+    fn konst_parts(&mut self, e: ExprId, s: ClockStage, g: Cond) {
+        let k = std::mem::replace(&mut self.konst, true);
+        self.mark(e, s, g);
+        self.konst = k;
+    }
+
+    /// A call at `e` of the function `callee` that is not `rt`, with values
+    /// at `init` ([`Walked::non_rt`]), evaluated at a stage after `init`,
+    /// under the conditions `g`: one not hoisted to `init` (R-17). With a
+    /// value that is not a constant, a condition decided after `init`
+    /// selects its place: E0815 (§11.5, S-1157). Else E0200: in the body of
+    /// a `par~` (W7-05 U3), of a type that is not Copy (S-1160) or of
+    /// constants only (W9-03).
+    fn non_rt_here(&mut self, e: ExprId, callee: ExprId, at: ClockStage, g: Cond) {
+        let Some(&varies) = self.non_rt.get(&e).filter(|_| at > ClockStage::Init) else { return };
         let span = self.ast.expr(e).span;
-        let stage = match at {
-            ClockStage::Block => ClockName::Block.name(),
-            ClockStage::SAMPLE => ClockName::Sample.name(),
-            s => onsa_diag::internal::bug(Some(span), format!("a read at the stage {s:?}, which W7-09 makes")),
+        let found = span.text_in(self.text).to_string();
+        let d = if varies && g > Cond::Init && self.par == 0 {
+            let name = self.ast.expr(callee).span.text_in(self.text);
+            let msg = format!(
+                "`{name}` is not `rt`, and a condition decided after `init` selects this place, so it cannot be computed at `init`; bind it with a `let` before the condition (§11.3, §11.5)"
+            );
+            Diagnostic::new(Stage::Flow, Code::E0815, span, msg)
+        } else {
+            let stage = match at {
+                ClockStage::Block => ClockName::Block.name(),
+                ClockStage::SAMPLE => ClockName::Sample.name(),
+                s => onsa_diag::internal::bug(Some(span), format!("a read at the stage {s:?}, which W7-09 makes")),
+            };
+            // SPEC-GAP(S-1160): one whose result is not Copy is not hoisted,
+            // and is E0200 (§11.3, §11.5).
+            Feature::NonRtCallAtClock.diagnostic(Stage::Flow, span, &[stage])
         };
-        let d = Feature::NonRtCallAtClock
-            .diagnostic(Stage::Flow, span, &[stage])
-            .with_found(span.text_in(self.text).to_string());
-        Diagnostic::keep_first(&mut self.out.diag, d);
+        Diagnostic::keep_first(&mut self.out.diag, d.with_found(found));
     }
 }

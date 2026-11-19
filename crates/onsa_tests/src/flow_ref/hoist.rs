@@ -2,47 +2,35 @@
 //! of a stage are made in `flow::stage`; this is the other half: the parts of a `let` (or of the output) that are of a slower clock than the
 //! `let` itself, which a stage before the one of the `let` evaluates, once, whether the value is read or not. The part is the largest one of
 //! the stage that is Copy (S-1046 (a): a part that is not Copy is read where it is written, and the Copy parts in it are hoisted by
-//! the same rule), and it is not a name, a literal, `sample_rate()` or `sample_tick()` (they have a place already, or none, §11.3). The
-//! value is kept, so the `let` reads it where it is written and does not make it again (`Frame::hoisted`; the field of the state of §11.6).
+//! the same rule; Copy is the checker's judgement of §4.6), and it is not a name, a literal, `sample_rate()` or `sample_tick()` (they have a
+//! place already, or none, §11.3). The value is kept, so the `let` reads it where it is written and does not make it again (`Frame::hoisted`;
+//! the field of the state of §11.6).
 //!
-//! This is the walk of the positions that are not conditions: it goes into the operands, the arguments, the elements and the fields, the
-//! condition of an `if`, the object of a `match` and the left side of `&&` and `||`, and not into a branch, an arm, a guard or the right
-//! side of `&&` / `||` (S-1157, the guarded parts: W7-05 U2), a block expression, or a `par~` (U3). A part that reads a `^name` is left where it
-//! is (a feedback has the clock of the reader, §11.3). The constant clock is not hoisted (W9-03 makes it at compile time, E0419).
-//! The order inside a stage is the order the parts are written (S-1159, provisional): `flow::stage` walks the `let`s in order and each
-//! `let` from the left.
+//! The walk goes down with a *guard*: the fastest of the clocks of the conditions on the way (S-1157 (D'): the condition of an `if`, the object
+//! of a `match` and the patterns and guards of the arms up to the one, the left side of `&&` / `||`). The stage that makes a part is the
+//! fastest of its clock and its guard, and a constant-clock part (a `panic("…")`) is made by the stage of its guard when it has one, else it
+//! stays where it is written (W9-03 makes it at compile time, E0419). A condition that a stage decides (its stage is not after it) is
+//! evaluated here, and only the branch, the arm (its bindings made) or the right side that it takes is walked, so a part that the condition
+//! does not take is not made (a constant condition is decided at a stage only when a part that the stage makes is under it, as the Core
+//! does; else it is evaluated where it is reached); a condition of a later stage (`sample`, or a value that is not Copy, which the reader evaluates) stops the walk:
+//! what is under it is evaluated where it is reached. An arm binding has the clock of the object of its `match`. The walk goes into the
+//! operands, the arguments, the elements and the fields, the branches and the block expressions (a part that reads a name the block binds
+//! is left where it is), and not into a `par~` (U3). A part that reads a `^name` is left where it is (a feedback has the clock of the reader,
+//! §11.3). The order inside a stage is the order the parts are written (S-1159, provisional): `flow::stage` walks the `let`s in order and
+//! each `let` from the left.
 
 use std::collections::HashMap;
 
 use onsa_diag::Span;
-use onsa_sema::{LocalId, Ty};
-use onsa_syntax::ast::{BinOp, ExprId, ExprKind};
+use onsa_sema::{LocalId, Target};
+use onsa_syntax::ast::{BinOp, ExprId, ExprKind, StmtKind};
 
 use super::expr::{Frame, LOW_STACK, Stop};
 use super::flow::{Clock, clock_of};
 use super::scalar::Fault;
-use super::sema_view::{Body, Stage, View};
+use super::sema_view::{Body, Stage};
 
-/// Is a value of the clock `c` made in the stage `at`? The constant clock is not (W9-03 evaluates a constant expression at compile time, and
-/// until then it stays where it is written, as the interpreter has it: a panic of it is not hoisted to `init`).
-fn mine(c: Clock, at: Stage) -> bool {
-    match at {
-        Stage::Init => c == Clock::Init,
-        Stage::Block => c == Clock::Block,
-        Stage::Sample => false,
-    }
-}
-
-/// Is the type Copy? A struct or an enum is taken as not Copy: its parts that are Copy are hoisted all the same, and that is all
-/// that a stage of a panic can tell.
-fn copy_ty(view: View, t: &Ty) -> bool {
-    match t {
-        Ty::Int(_) | Ty::Float(_) | Ty::Bool | Ty::Char | Ty::Unit => true,
-        Ty::Array(el, _) => copy_ty(view, view.ty(*el)),
-        Ty::Tuple(ts) => ts.iter().all(|t| copy_ty(view, view.ty(*t))),
-        _ => false,
-    }
-}
+type Known = HashMap<LocalId, Clock>;
 
 /// What has a place of its own or none, so it is not hoisted: a literal, a name, `sample_rate()` and `sample_tick()`, and a parenthesis
 /// or an `at` over one.
@@ -63,7 +51,96 @@ fn feedback(body: &Body, e: ExprId) -> bool {
         || body.ast.sub_exprs(e).into_iter().any(|x| feedback(body, x))
 }
 
-/// The operands that are in a position that is not a condition (see the top): the parts `pre` goes on into.
+/// `panic("…")`: its value is of any type, so it is kept whatever the table says of it.
+fn is_panic(body: &Body, e: ExprId) -> bool {
+    matches!(body.ast.expr(e).kind, ExprKind::Call { .. }) && matches!(body.target(e), Ok(Target::Panic))
+}
+
+/// Does `x` (in the part `part`) read a local that has no clock in `known` and that `part` does not bind (a name of a block expression
+/// that the walk has not made)? Such a part cannot be made before its own stage.
+fn reads_unknown(body: &Body, known: &Known, part: ExprId, x: ExprId) -> bool {
+    match &body.ast.expr(x).kind {
+        ExprKind::Path(_) | ExprKind::Field { .. } if body.names(x) => {
+            matches!(body.target(x), Ok(Target::Local(l)) if !known.contains_key(l) && !body.bound_within(*l, part))
+        }
+        _ => body.ast.sub_exprs(x).into_iter().any(|y| reads_unknown(body, known, part, y)),
+    }
+}
+
+/// A parenthesis or an `at` takes nothing from the stage of the expression it holds (§11.3: "`at` は段を変えない").
+fn strip(body: &Body, mut e: ExprId) -> ExprId {
+    while let ExprKind::Paren(x) | ExprKind::At { expr: x, .. } = &body.ast.expr(e).kind {
+        e = *x;
+    }
+    e
+}
+
+/// The stage of a condition `c`, as a clock: that of the expression it is (`at` and parentheses off), and the stage of the reader (`sample`) for
+/// a value that is not Copy, which is not hoisted (S-1046 (a)).
+fn cond_clock(body: &Body, known: &Known, root: ExprId, c: ExprId) -> Result<Clock, Fault> {
+    let inner = strip(body, c);
+    if !body.view.is_copy(body.ty_id(inner)?) {
+        return Ok(Clock::Sample);
+    }
+    clock_of(body, known, root, inner)
+}
+
+/// The guard under a condition of the clock `cc`: the slower of the two. A constant condition is decided before `init` (S-888 (c'): W9-03
+/// evaluates it at compile time and takes its branch as if `constexpr`, whose `block` part is then made at `block`), so it adds nothing.
+fn after(guard: Clock, cc: Clock) -> Clock {
+    guard.max(cc)
+}
+
+/// Does this stage decide the condition of `e` (an `if`, `&&` / `||` or `match`; the clock `cc`, the guard `g` counted in)? One that is not
+/// after the stage is decided here. A constant condition is decided before `init` (S-888 (c')), but this evaluator reads its value where a
+/// stage needs it: when a part that this stage makes is under it, in any branch, arm or right side (as the `has_writes` of the Core, which
+/// does not look at which one is taken), and else it is evaluated where it is reached. Until W9-03 takes it at compile time (E0419 when it
+/// panics), so a constant condition that panics does so at the stage where such a part is made, else where it is read.
+fn decides(
+    body: &Body,
+    known: &Known,
+    root: ExprId,
+    e: ExprId,
+    (cc, g): (Clock, Clock),
+    here: Clock,
+) -> Result<bool, Fault> {
+    if g > here {
+        return Ok(false);
+    }
+    if cc != Clock::Const {
+        return Ok(true);
+    }
+    for (x, k, kg) in kids(body, known, root, e, g)?.into_iter().skip(1) {
+        if makes(body, &k, root, x, here, kg)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// Does the stage `here` make a part of `e` (or of the parts in it)? The walk of [`walk`] without the values and the conditions' truth.
+fn makes(body: &Body, known: &Known, root: ExprId, e: ExprId, here: Clock, guard: Clock) -> Result<bool, Fault> {
+    let clock = clock_of(body, known, root, e)?;
+    if clock == Clock::Const && guard == Clock::Const {
+        return Ok(false);
+    }
+    let made = clock.max(guard);
+    if made < here {
+        return Ok(false);
+    }
+    if made == here && kept(body, known, e)? {
+        return Ok(true);
+    }
+    for (x, k, g) in kids(body, known, root, e, guard)? {
+        if makes(body, &k, root, x, here, g)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// The operands that are in a position that is not a condition: the parts `walk` goes on into (the conditional forms and the block
+/// expression are walked by themselves; `if~` and `match~` give their condition and object only).
 fn operands(body: &Body, e: ExprId) -> Vec<ExprId> {
     use ExprKind as K;
     let ast = body.ast;
@@ -94,72 +171,201 @@ fn operands(body: &Body, e: ExprId) -> Vec<ExprId> {
     }
 }
 
-/// Whether a part of the clock of a stage is kept (see the top): Copy, and none of an atom and a feedback.
-fn kept(body: &Body, e: ExprId) -> Result<bool, Fault> {
-    Ok(body.ty(e).map(|t| copy_ty(body.view, t))? && !atom(body, e) && !feedback(body, e))
+/// Whether a part that a stage makes is kept: Copy (or a `panic`), and none of an atom, a feedback and a part that reads what is not made.
+fn kept(body: &Body, known: &Known, e: ExprId) -> Result<bool, Fault> {
+    let copy = body.view.is_copy(body.ty_id(e)?) || is_panic(body, e);
+    Ok(copy && !atom(body, e) && !feedback(body, e) && !reads_unknown(body, known, e, e))
+}
+
+/// A child of an expression with the clocks of the names in scope there and the guard on the way to it.
+type Kid = (ExprId, Known, Clock);
+
+/// The children of `e` with the guard on the way to each and the clocks of the names that are in scope there (an arm binding has the
+/// clock of the object): the operands, and for a conditional form its branches, arms and right side under the conditions up to them.
+/// This is the walk of [`walk`] without the values, for the stage a place is in.
+fn kids(body: &Body, known: &Known, root: ExprId, e: ExprId, guard: Clock) -> Result<Vec<Kid>, Fault> {
+    use ExprKind as K;
+    let own = |xs: Vec<ExprId>| xs.into_iter().map(|x| (x, known.clone(), guard)).collect::<Vec<_>>();
+    Ok(match &body.ast.expr(e).kind {
+        K::If { cond, then, else_, tilde: None } => {
+            let g = after(guard, cond_clock(body, known, root, *cond)?);
+            let mut out = own(vec![*cond]);
+            out.extend([*then].into_iter().chain(*else_).map(|x| (x, known.clone(), g)));
+            out
+        }
+        K::Binary { op: BinOp::And | BinOp::Or, lhs, rhs, .. } => {
+            let g = after(guard, cond_clock(body, known, root, *lhs)?);
+            vec![(*lhs, known.clone(), guard), (*rhs, known.clone(), g)]
+        }
+        K::Match { scrutinee, arms, tilde: None } => {
+            let sc = clock_of(body, known, root, *scrutinee)?;
+            let mut acc = after(guard, cond_clock(body, known, root, *scrutinee)?);
+            let mut out = own(vec![*scrutinee]);
+            for arm in arms {
+                let mut inner = known.clone();
+                for l in body.pat_locals(arm.pat)? {
+                    inner.insert(l, sc);
+                }
+                let mut at_body = acc;
+                if let Some(g) = arm.guard {
+                    out.push((g, inner.clone(), acc));
+                    at_body = after(acc, cond_clock(body, &inner, root, g)?);
+                }
+                out.push((arm.body, inner, at_body));
+                acc = at_body;
+            }
+            out
+        }
+        K::Block(b) => {
+            let inits = b.stmts.iter().filter_map(|s| match &body.ast.stmt(*s).kind {
+                StmtKind::Let { init, .. } => Some(*init),
+                _ => None,
+            });
+            own(inits.chain(b.tail).collect())
+        }
+        _ => own(operands(body, e)),
+    })
 }
 
 /// The clock of the part of `root` (a `let` of the body; `known` as in [`pre`]) that holds `at` and that the stage of its clock
-/// makes, as [`pre`] chooses it: the innermost, as a part of `init` in a part of `block` is made at `init`. `None` when no part
-/// of `init` or `block` holds `at` (it is made with its `let`).
-pub(super) fn part_clock(
-    body: &Body,
-    known: &HashMap<LocalId, Clock>,
-    root: ExprId,
-    at: Span,
-) -> Result<Option<Clock>, Fault> {
+/// makes, as [`pre`] chooses it: the innermost, as a part of `init` in a part of `block` is made at `init`, and a part under a condition of
+/// `block` is made at `block` whatever its own clock is. `None` when no part of `init` or `block` holds `at` (it is made with its `let`).
+pub(super) fn part_clock(body: &Body, known: &Known, root: ExprId, at: Span) -> Result<Option<Clock>, Fault> {
     let holds = |x: ExprId| {
         let s = body.ast.expr(x).span;
         s.file == at.file && s.start <= at.start && at.end <= s.end
     };
-    let (mut e, mut found) = (root, None);
+    let (mut e, mut known, mut guard, mut found) = (root, known.clone(), Clock::Const, None);
     loop {
-        let clock = clock_of(body, known, root, e)?;
-        if clock == Clock::Const {
+        let clock = clock_of(body, &known, root, e)?;
+        if clock == Clock::Const && guard == Clock::Const {
             return Ok(found);
         }
-        if matches!(clock, Clock::Init | Clock::Block) && kept(body, e)? {
-            found = Some(clock);
+        let made = clock.max(guard);
+        if matches!(made, Clock::Init | Clock::Block) && kept(body, &known, e)? {
+            found = Some(made);
         }
-        match operands(body, e).into_iter().find(|&x| holds(x)) {
-            Some(x) => e = x,
-            None => return Ok(found),
+        match kids(body, &known, root, e, guard)?.into_iter().find(|(x, ..)| holds(*x)) {
+            Some((x, k, g)) if g < Clock::Sample => (e, known, guard) = (x, k, g),
+            _ => return Ok(found),
         }
     }
 }
 
 /// The parts of `e` (a `let` of the body, `root` its value; `known` the clocks of the locals before it) that the stage `at` makes, in the
 /// order they are written: each is evaluated and kept in `f.hoisted`, and a panic of one is the panic of the stage.
-pub(super) fn pre(
-    f: &mut Frame,
-    known: &HashMap<LocalId, Clock>,
-    root: ExprId,
-    e: ExprId,
-    at: Stage,
-) -> Result<(), Stop> {
+pub(super) fn pre(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, at: Stage) -> Result<(), Stop> {
+    walk(f, known, root, e, Clock::from(at), Clock::Const)
+}
+
+fn walk(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, guard: Clock) -> Result<(), Stop> {
     let body = f.body;
-    let here = |fault| Stop { fault, at: body.ast.expr(e).span };
+    let span = body.ast.expr(e).span;
+    let stop = |fault| Stop { fault, at: span };
     if f.low_stack() {
-        return Err(here(LOW_STACK));
+        return Err(stop(LOW_STACK));
     }
-    let clock = clock_of(&body, known, root, e).map_err(here)?;
-    if mine(clock, at) {
-        if kept(&body, e).map_err(here)? {
-            // The value of the call before is stale: made again by this stage (the parts it holds that a slower stage kept stay).
-            f.hoisted.remove(&e);
-            let v = f.eval(e)?;
-            f.hoisted.insert(e, v);
-            return Ok(());
-        }
-    } else if clock < Clock::Block && at == Stage::Block && clock != Clock::Const {
-        // Made at `init`: not again.
-        return Ok(());
-    } else if clock == Clock::Const {
+    let clock = clock_of(&body, known, root, e).map_err(stop)?;
+    if clock == Clock::Const && guard == Clock::Const {
         // A constant: where it is written (W9-03), and no part of it is of another stage.
         return Ok(());
     }
-    for x in operands(&body, e) {
-        pre(f, known, root, x, at)?;
+    let made = clock.max(guard);
+    if made < here {
+        // Made by a stage before: not again.
+        return Ok(());
     }
-    Ok(())
+    if made == here && kept(&body, known, e).map_err(stop)? {
+        // The value of the call before is stale: made again by this stage (the parts it holds that a slower stage kept stay).
+        f.hoisted.remove(&e);
+        let v = f.eval(e)?;
+        f.hoisted.insert(e, v);
+        return Ok(());
+    }
+    descend(f, known, root, e, here, guard)
+}
+
+/// The parts inside `e`, which is not made by this stage as a whole: the conditions this stage decides are evaluated and the branch, arm or
+/// right side they take is walked under them.
+fn descend(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, guard: Clock) -> Result<(), Stop> {
+    use ExprKind as K;
+    let body = f.body;
+    let span = body.ast.expr(e).span;
+    let stop = |fault| Stop { fault, at: span };
+    match &body.ast.expr(e).kind {
+        K::If { cond, then, else_, tilde: None } => {
+            walk(f, known, root, *cond, here, guard)?;
+            let cc = cond_clock(&body, known, root, *cond).map_err(stop)?;
+            let g = guard.max(cc);
+            if decides(&body, known, root, e, (cc, g), here).map_err(stop)? {
+                let taken = if f.truth(*cond, span)? { Some(*then) } else { *else_ };
+                if let Some(b) = taken {
+                    walk(f, known, root, b, here, g)?;
+                }
+            }
+            Ok(())
+        }
+        K::Binary { op: op @ (BinOp::And | BinOp::Or), lhs, rhs, .. } => {
+            walk(f, known, root, *lhs, here, guard)?;
+            let cc = cond_clock(&body, known, root, *lhs).map_err(stop)?;
+            let g = guard.max(cc);
+            if decides(&body, known, root, e, (cc, g), here).map_err(stop)?
+                && f.truth(*lhs, span)? == (*op == BinOp::And)
+            {
+                walk(f, known, root, *rhs, here, g)?;
+            }
+            Ok(())
+        }
+        K::Match { scrutinee, arms, tilde: None } => {
+            walk(f, known, root, *scrutinee, here, guard)?;
+            let sc = clock_of(&body, known, root, *scrutinee).map_err(stop)?;
+            let cc = cond_clock(&body, known, root, *scrutinee).map_err(stop)?;
+            let mut acc = guard.max(cc);
+            if !decides(&body, known, root, e, (cc, acc), here).map_err(stop)? {
+                return Ok(());
+            }
+            let v = f.eval(*scrutinee)?;
+            let ty = body.ty(*scrutinee).map_err(stop)?;
+            for arm in arms {
+                let mut inner = known.clone();
+                for l in body.pat_locals(arm.pat).map_err(stop)? {
+                    inner.insert(l, sc);
+                }
+                if !f.arm(arm.pat, &v, ty, None, span)? {
+                    continue;
+                }
+                let mut at_body = acc;
+                if let Some(g) = arm.guard {
+                    walk(f, &inner, root, g, here, acc)?;
+                    at_body = acc.max(cond_clock(&body, &inner, root, g).map_err(stop)?);
+                    if at_body > here {
+                        return Ok(());
+                    }
+                    if !f.truth(g, span)? {
+                        acc = at_body;
+                        continue;
+                    }
+                }
+                return walk(f, &inner, root, arm.body, here, at_body);
+            }
+            Ok(())
+        }
+        K::Block(b) => {
+            for s in &b.stmts {
+                if let StmtKind::Let { init, .. } = &body.ast.stmt(*s).kind {
+                    walk(f, known, root, *init, here, guard)?;
+                }
+            }
+            match b.tail {
+                Some(t) => walk(f, known, root, t, here, guard),
+                None => Ok(()),
+            }
+        }
+        _ => {
+            for x in operands(&body, e) {
+                walk(f, known, root, x, here, guard)?;
+            }
+            Ok(())
+        }
+    }
 }

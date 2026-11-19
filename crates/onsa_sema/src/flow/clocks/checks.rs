@@ -10,23 +10,20 @@
 //! type holds a function type, E0810). A value made with `Alloc` to drop
 //! (E0805) is in error too ([`Walk::fault`]).
 
-use onsa_syntax::ast::Lit;
+use onsa_syntax::ast::{Lit, OperandPlace};
 
 use super::*;
 use crate::binding::{aggregate, unit_variant};
 use crate::clock::{holds_state, promote, readable_at};
 use crate::kind::kind_in_body;
+use crate::slot::{Form, Slot};
 
-/// Whether `e` is written as a name or a literal, past parentheses and type
-/// arguments (not `^name`): the first argument of a delay the candidate of
-/// E0813 makes faster (W7-05 U2 gives it to a computed one too).
-pub(crate) fn name_or_literal(ast: &Ast, mut e: ExprId) -> bool {
-    loop {
-        match &ast.expr(e).kind {
-            ExprKind::Paren(x) | ExprKind::TypeArgs { base: x, .. } => e = *x,
-            k => return matches!(k, ExprKind::Path(_) | ExprKind::Lit(_)),
-        }
-    }
+/// Whether `at` makes a value at the clock `c` one at the clock `k`: it is
+/// not slower (§11.3). The one predicate of `e at k` ([`Walk::check_at`])
+/// and of the candidate of E0813 that writes `first at sample`
+/// ([`Walk::check_first`]), which so passes the check of its `at`.
+fn promotable(c: Clock, k: Clock) -> bool {
+    promote(c, k).is_ok()
 }
 
 /// What the rules of a flow body find wrong with the value of an
@@ -177,7 +174,7 @@ impl Walk<'_> {
     pub(super) fn check_at(&mut self, e: ExprId, c: Option<Clock>, k: Clock) {
         let Some(c) = c.filter(|_| self.checking()) else { return };
         let span = self.ast.expr(e).span;
-        if promote(c, k).is_err() {
+        if !promotable(c, k) {
             let (shown, to) = (c.shown(span), k.shown(span));
             let msg = format!(
                 "this expression is at the clock `{shown}`, faster than `{to}`; `at` cannot make a value slower (§11.3)"
@@ -247,7 +244,7 @@ impl Walk<'_> {
         }
         let fast = |c: &Option<Clock>| readable_at(c.unwrap_or(Clock::Const), Clock::Init).is_err();
         let Some(k) = ops.iter().position(fast) else {
-            self.non_rt.insert(e);
+            self.non_rt.insert(e, ops.iter().any(|c| c.is_some_and(|c| c != Clock::Const)));
             return true;
         };
         let place = match k.checked_sub(usize::from(receiver)) {
@@ -278,9 +275,11 @@ impl Walk<'_> {
     }
 
     /// Whether the first argument `first` of a delay, at the clock `c`,
-    /// holds its state (§11.4, E0813); a name or a literal of a parameter
-    /// kind has the candidate `first at sample` (S-102; a computed one
-    /// waits for W7-05 U2).
+    /// holds its state (§11.4, E0813); one `at` makes `sample`
+    /// ([`promotable`]) has the candidate `first at sample` (S-102, S-152),
+    /// in parentheses where `at` takes them (§3.1: `(p * 2.0) at sample`),
+    /// unless the walk found an error in it, which the candidate would
+    /// leave (§18.1), or it is a `^name`.
     pub(super) fn check_first(&mut self, delay: Delay, first: ExprId, c: Clock) -> bool {
         if holds_state(c) {
             return true;
@@ -298,14 +297,19 @@ impl Walk<'_> {
         };
         let src = self.src(span);
         let mut diag = Diagnostic::new(Stage::Flow, Code::E0813, span, msg).with_found(src.clone());
-        if matches!(c, Clock::Const | Clock::Init | Clock::Block) && name_or_literal(self.ast, first) {
-            let fix = Fix::insert(
-                format!("write `{src} at sample` to delay it per sample"),
-                span.file,
-                span.end,
-                " at sample",
-            );
-            diag = diag.with_fix(fix);
+        let inside = self.diag.as_ref().is_some_and(|d| span.start <= d.span.start && d.span.end <= span.end);
+        // SPEC-GAP(S-1165): `^b` (past parentheses and `at`) has no candidate:
+        // the error it would leave may be in the `let` of `b`, walked later.
+        let feedback = matches!(self.ast.expr(crate::flow::strip(self.ast, first)).kind, ExprKind::Feedback(_));
+        if promotable(c, Clock::SAMPLE) && !inside && !feedback {
+            let wrap = Slot::Operand(OperandPlace::AsAtLeft).wraps(Form::of(self.ast, first));
+            let (open, close) = if wrap { ("(", ")") } else { ("", "") };
+            let title = format!("write `{open}{src}{close} at sample` to delay it per sample");
+            let mut edits = vec![Edit::insert(span.file, span.end, format!("{close} at sample"))];
+            if wrap {
+                edits.insert(0, Edit::insert(span.file, span.start, open));
+            }
+            diag = diag.with_fix(Fix::new(title, edits));
         }
         self.report(diag);
         false

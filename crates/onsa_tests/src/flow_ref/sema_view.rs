@@ -48,6 +48,12 @@ impl<'a> View<'a> {
         self.analysis.types.get(id)
     }
 
+    /// Is the type Copy (§4.6: the kind is decided by the structure, an array, a tuple, a struct and an enum of Copy
+    /// elements are Copy)? The one place of the judgement is the checker's (D-15); an unjudged type is not Copy.
+    pub fn is_copy(self, id: TyId) -> bool {
+        self.analysis.kind_of(id) == Some(onsa_sema::Kind::Copy)
+    }
+
     /// Where the name of a declaration is written.
     pub fn name_span(self, def: DefId) -> Span {
         self.analysis.def(def).name_span

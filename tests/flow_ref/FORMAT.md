@@ -73,11 +73,12 @@ panic した呼び出しの行は残り、`out` の行は無い。panic の後�
 `corpus/*.onsa` は、台本が生成した flow と、それを呼ぶ `test`（assert の無いもの、または flow とその双子の出力が等しいことを assert するもの）の固定の入力である。
 事例ではなく（`onsa_tests::case::EXCLUDED`）、`.tsv` と `MANIFEST` には載せない（手書きの期待が無く、値の源は評価器とインタプリタの二つで、一致を毎回照らす）。
 入口（`crates/onsa_tests/tests/flow_ref.rs`）が、評価器で走らせた test の数と評価した数を `CORPUS_COUNTS` と照らし、評価して合った test を W1-09 の事例と同じ道（上の「インタプリタとの比べ」）でインタプリタと比べる。
-生成した flow は `init`・`block` の入力を持たない（`at sample` の入力が一つ）ので、`init` の段の panic は定数のクロックの式の panic（E0419、§11.3）で、入口が失敗にする。
+生成した flow（`guards.onsa` を除く）は `init`・`block` の入力を持たない（`at sample` の入力が一つ）ので、`init` の段の panic は定数のクロックの式の panic（E0419、§11.3）で、入口が失敗にする。
 
 | ファイル | 中身 |
 |---|---|
 | `expr_a.onsa`、`expr_b.onsa` | 型の付いた式の flow（W7-01 U3 の壊す側の式の生成。種と落とした flow は先頭のコメント）。入力のフレームのうち panic しない分を一つの `render`、最初の panic する一つを `//~ PANIC` の印の test に |
+| `guards.onsa` | `init`・`block` の部分式が条件の位置（`if` の枝、`match` の腕、`&&` / `||` の右辺）で守り付きの欄になる形（W7-05 U2。S-1157 (D′)）。`block` の値の格子と 3 フレームの `render`、守りが成り立つ 0 フレームの `process`。台本は木に置かず、手で決めた形（先頭のコメント）。0 フレームの panic は入口の `UNTIL_W7_05_U2` が比べから外す（インタプリタが守り付きの欄を `block` で作るまで） |
 | `clock_twins.onsa` | 定数のクロックの `let` を持つ flow と、`let` をその場に書いた双子（R-488 の双子。種は先頭のコメント）。`process`・`reset` の列で、出力が等しいことを assert する |
 
 corpus は固定の入力で、作り直しは約束しない（生成の台本は木に置かない。種と落とした flow はファイルの先頭のコメントにある）。ファイルを足すときは、入口の `CORPUS_COUNTS` に test の数と評価した数の行を足す。
