@@ -5,7 +5,7 @@
 //!   one table of the names (D-15); [`resolve_name`] looks one up (E0302).
 //! - [`Clock`]: the layer of the values, the clock of an expression, a local,
 //!   an input or the output, which the tables of a flow hold
-//!   ([`crate::flow::FlowInfo::clocks`], [`crate::def::FlowInput::clock`]).
+//!   ([`crate::flow::FlowInfo::clocks`], [`crate::def::FlowInput::api_clock`]).
 //!   Its stage of evaluation is a [`ClockStage`] ([`Clock::stage`]).
 //!
 //! The comparisons of clocks ([`join`], [`readable_at`], [`promote`],

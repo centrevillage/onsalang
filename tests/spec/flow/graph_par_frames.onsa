@@ -3,8 +3,8 @@
 // spec = ["§11.5", "§11.6", "§18.2"]
 // golden_graph = ["unison", "nest"]
 
-// W7-15 U3/t, R-76, S-66 (spec/tools.md §1.2, §1.3; §11.5, §11.6): the graph of a `par~`. The two flows of R-76 (`tests/review-phase1/parent/r76.onsa`, in the syntax of
-// the spec). The spec fixes (the golden files keep the rest of the text, which the spec does not fix):
+// W7-15 U3/t, R-76, S-66 (spec/tools.md §1.2, §1.3; §11.5, §11.6): the graph of a `par~`. The two flows of R-76 (from `tests/review-phase1/parent/r76.onsa`, which this case
+// replaces; in the syntax of the spec). The spec fixes (the golden files keep the rest of the text, which the spec does not fix):
 //   unison: one frame (a Graphviz cluster `cluster_saws`) with the heading `par~ i in 0..<4（×4）`; in the frame, the vertex of the index `saws.i` (label
 //           `i: U32 at init`, an ellipse, gray) and the vertex of the node of the body `saws.saw_0` (label `saw_0 = saw~: F32 at sample`, rounded). The solid edges
 //           f0 -> saws.saw_0, detune -> saws.saw_0, saws.i -> saws.saw_0, saws.saw_0 -> saws, saws -> _out. No edge from `saws` to its body: the body does not read the
