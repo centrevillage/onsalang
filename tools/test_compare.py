@@ -336,6 +336,44 @@ class Compare(unittest.TestCase):
         self.assertEqual(quiet_out(compare.main, ["core", before, after, "--root", str(self.root / "empty")]), (1, [
             f"core: no case in tests (but tests/review-phase1) and examples of {self.root / 'empty'}"]))
 
+    def test_graph(self):
+        # W7-15 U1: `graph <flow> <file>` of each flow declared at the head of a line of each file of the inputs of
+        # `core` (a package's files each; tests/review-phase1 and tests/fuzz are not taken), each name once.
+        self.assertEqual(compare.FLOW_DECL.findall("pub flow a(x: F32)\nflow b\npriv flow c\npub(crate) flow d<T>\n"
+                                                   "  flow e\npub\nflow f\npub fn flow g\n// flow h\nflows i\n"),
+                         ["a", "b", "c", "d", "f"])  # fmt: skip
+        for rel, text in (("tests/a.onsa", "pub flow one(x: F32) {}\npriv flow two\npub(crate) flow three\npub flow one\n"),
+                          ("tests/p/x.onsa", "flow px\n"), ("tests/p/sub/y.onsa", "pub(super) flow py\n"),
+                          ("tests/fuzz/z.onsa", "flow z\n"), ("tests/review-phase1/r.onsa", "flow r\n"),
+                          ("examples/e.onsa", "flow e\n")):  # fmt: skip
+            (self.root / rel).parent.mkdir(parents=True, exist_ok=True)
+            (self.root / rel).write_text(text)
+        want = ["tests/a.onsa::one", "tests/a.onsa::two", "tests/a.onsa::three", "tests/p/sub/y.onsa::py",
+                "tests/p/x.onsa::px", "examples/e.onsa::e"]  # fmt: skip
+        self.assertEqual(list(map(str, compare.graph_units(self.root))), want)
+        out = {"*": [0, "digraph {\na\n}\n"]}
+        before, after = self.fakes({"before": out, "after": {**out, "graph two tests/a.onsa": [0, "digraph {\nb\n}\n"],
+                                                             "graph py tests/p/sub/y.onsa": ["kill", ""]}},
+                                   "before", "after")  # fmt: skip
+        run = lambda b, a: quiet_out(compare.main, ["graph", b, a, "--root", str(self.root), "--jobs", "2"])  # noqa: E731
+        self.assertEqual(run(before, before), (0, ["6 cases, 0 differ, 0 fell in one binary only, 0 fell in both"]))
+        calls = (self.bin / "calls").read_text().splitlines()
+        self.assertEqual(sorted(x.split(" ", 1)[1] for x in calls),  # the binary given twice: each flow twice
+                         sorted([f"graph {u.name} {u.file}" for u in compare.graph_units(self.root)] * 2))
+        self.assertEqual(run(before, after), (1, [
+            "tests/a.onsa::two", "  before: exit 0, 4 lines", "  after:  exit 0, 4 lines", "  line 2: 'a' -> 'b'",
+            "tests/p/sub/y.onsa::py", "  before: exit 0", "  after:  signal 9",
+            "6 cases, 2 differ, 1 fell in one binary only, 0 fell in both"]))  # fmt: skip
+        # The same output, but no flow reached exit 0: no graph was compared, which is no pass.
+        before, after = self.fakes({"before": {"*": [1, "error"]}, "after": {"*": [1, "error"]}}, "before", "after")
+        self.assertEqual(run(before, after), (1, ["6 cases, 0 differ, 0 fell in one binary only, 0 fell in both",
+                                                  "graph: no case ran to exit 0 in both binaries"]))
+        # No flow at all names where the flows come from.
+        for rel in ("tests/a.onsa", "tests/p/x.onsa", "tests/p/sub/y.onsa", "examples/e.onsa"):
+            (self.root / rel).write_text("pub fn f() {}\n")
+        self.assertEqual(run(before, after), (1, [
+            f"graph: no case in the flows of tests (but tests/review-phase1) and examples of {self.root}"]))
+
     def test_cst(self):
         # W5-13 U9b: `dump --cst --tree` of each seed file, tests/review-phase1 too (the syntax only); the exit code and
         # the output tell, and no file to exit 0 in both is no pass.
@@ -546,7 +584,7 @@ class Compare(unittest.TestCase):
                 want = [n for n, c in compare.COMMANDS.items() if role in c.roles]
                 self.assertEqual((code, [x.split()[0] for x in lines if not x.startswith(" ")]), (0, want or ["（役割"]))
         names = list(compare.COMMANDS)
-        self.assertEqual(names, ["diags", "fmt", "cst", "core", "c", "fixes", "loops", "speed", "probe"])
+        self.assertEqual(names, ["diags", "fmt", "cst", "core", "graph", "c", "fixes", "loops", "speed", "probe"])
         self.assertEqual([x.split()[0] for x in quiet_out(compare.main, ["help"])[1][: len(names)]], names)
         for argv, code in (([], 2), (["--help"], 0)):  # no command is a usage error; `--help` lists the commands
             buf = io.StringIO()

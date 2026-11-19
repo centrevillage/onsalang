@@ -2,8 +2,8 @@
 """Before and after: the diagnostics, the formatting, the Core and the time of `onsa` binaries (rules/refactoring.md 8;
 X-9 X9-18, X9-19; X-6 B1).
 
-Its commands are `diags`, `fmt`, `cst`, `core`, `c`, `fixes`, `loops`, `speed` and `probe` (COMMANDS, rules/tools.md 9.1);
-`compare.py help` shows them.
+Its commands are `diags`, `fmt`, `cst`, `core`, `graph`, `c`, `fixes`, `loops`, `speed` and `probe` (COMMANDS,
+rules/tools.md 9.1); `compare.py help` shows them.
 `diags` runs `check --json` of both binaries on every case of tests/: the seed files of the gate's fuzz
 (`fuzz.seeds`), a file in a package (a directory below tests/ with an `onsa.toml`, the outermost, as the case
 harness `onsa_tests::case::collect`) giving way to its directory. It lists the cases whose diagnostics differ in
@@ -16,12 +16,14 @@ case gave JSON on both sides.
 temporary directory of its own, and lists the files whose exit code, written text, stdout or the names of the files
 left in the directory differ. `cst` runs `dump --cst --tree` of both on the fuzz's seed files, a file at a time (the
 syntax only: tests/review-phase1 too), and lists those whose exit code or output differ. `core` runs `dump --core` of both on the cases of tests/ and examples (`core_cases`) and
-lists those whose exit code or output differ. `c` builds every target (`build --target … --out`) of the inputs of `core`
-as they are in the HEAD of `--root` (a copy of its tests/ but REVIEW and the fuzz's inputs, and examples, `c_builds`),
+lists those whose exit code or output differ. `graph` runs `graph <flow> <file>` of both on each flow declared at
+the head of a line (FLOW_DECL) of each `.onsa` of those inputs, a package's files each (W7-15 U1, X-6 step 8), and
+lists the `<file>::<flow>` whose exit code or output differ. `c` builds every target (`build --target … --out`) of
+the inputs of `core` as they are in the HEAD of `--root` (a copy of its tests/ but REVIEW and the fuzz's inputs, and examples, `c_builds`),
 a file with a manifest in its `// onsa.toml` fragment as a package of its own whose onsa.toml is the fragment without
 its `[test]` table (the `manifest` of the list of `onsa_cases`: every file it builds is a case), and lists the builds whose exit code, output (the diagnostics) or files written (the C, the
 headers, `onsa_build.json`; of an object or an archive, the name) differ, the out directory named `<out>` and the
-package `<pkg>`. All four list the falls and exit 1 as `diags` does, and when no case ran to exit 0 in both binaries.
+package `<pkg>`. All five list the falls and exit 1 as `diags` does, and when no case ran to exit 0 in both binaries.
 `fixes` runs `--fix-contract` of two `onsa_cases` on each input given, a process an input (W6-04 U17: the
 inputs of a unit that changes the candidates), and sorts the inputs by the candidates before and after and by
 whether each kept the contract of §18.1; it lists those broken after, those with fewer candidates after whose
@@ -74,6 +76,10 @@ CASES = repo.CASES_CMD  # the list of the cases of `c` (the self-test gives its 
 FIX_COUNTS = re.compile(r"fix-contract: \d+ file\(s\), (\d+) candidate\(s\), \d+ problem\(s\)")  # its last line
 PICKS = ("first", "last")  # the `--pick` of `loops`
 GOOD = {"clean", "no-candidate"}  # the stops of `--fix-loop` that `loops` takes as ending well
+# A flow `graph` compares: declared at the head of a line. One missed (an attribute before it on its line, indented)
+# is not compared; one taken by mistake (`flow` at the head of a line in a string) is the same usage error (exit 2)
+# in both binaries.
+FLOW_DECL = re.compile(r"^(?:pub(?:\(\w+\))? |priv )?flow (\w+)", re.M)
 
 
 def packaged(root, rels) -> list:
@@ -266,6 +272,31 @@ def core(args) -> int:
     units = core_cases(args.root)
     run = lambda b, c: outcome([b, "dump", "--core", c], args.root)  # noqa: E731
     return compared(args, units, run, texts, ok, f"tests (but {REVIEW}) and examples")
+
+
+class Flow(NamedTuple):
+    file: str  # an `.onsa` of the inputs of `core`, from --root
+    name: str
+
+    def __str__(self):
+        return f"{self.file}::{self.name}"
+
+
+def graph_units(root) -> list:
+    """[Flow] of `graph`: each `.onsa` of `core_cases` (a package's files each, as `graph` takes a file and looks the
+    name up in its module, spec §18.2), each flow its FLOW_DECL names once."""
+    out = []
+    for case in core_cases(root):
+        p = Path(root) / case
+        for f in sorted(p.rglob("*.onsa")) if p.is_dir() else [p]:
+            names = FLOW_DECL.findall(f.read_bytes().decode("utf-8", "replace"))
+            out += [Flow(f.relative_to(root).as_posix(), n) for n in dict.fromkeys(names)]
+    return out
+
+
+def graph(args) -> int:
+    run = lambda b, u: outcome([b, "graph", u.name, u.file], args.root)  # noqa: E731
+    return compared(args, graph_units(args.root), run, texts, ok, f"the flows of tests (but {REVIEW}) and examples")
 
 
 class Build(NamedTuple):
@@ -730,6 +761,11 @@ COMMANDS = {
               "降下に進む命令に一括でかけないので除く。rules/common.md 3.2）と examples（パッケージはディレクトリで）に回し、終了コードか出力が違う入力と落ちた入力を並べる。両方で終了コード 0 の入力が無ければ失敗",
               "意味解析・降下のリファクタリングの前後で、Core IR が変わっていないかを見るとき（check を回す diags では降下を確かめられない）。前のバイナリは diags と同じ",
               "compare.py core <主のツリー>/target/base/<基>/onsa target/debug/onsa"),
+    "graph": C(diags_args, graph, ("parent", "i", "b"),
+               "二つのバイナリの graph <flow> <ファイル> を、core の入力の各 .onsa（パッケージは中のファイルごと）の行頭で宣言した flow ごとに回し、"
+               "終了コードか出力（DOT）が違う <ファイル>::<flow> と落ちたものを並べる。行頭でない宣言（同じ行の前に属性がある、字下げした）は比べない。両方で終了コード 0 の flow が無ければ失敗",
+               "graph の作り（計画の辺・描き方）を変える単位の前後で、出力が変わっていないか（変わった所が意図どおりか）を見るとき。前のバイナリは diags と同じ",
+               "compare.py graph <主のツリー>/target/base/<基>/onsa target/debug/onsa"),
     "c": C(diags_args, c, ("parent", "i", "b"),
            "二つのバイナリの build を、HEAD の tests/（tests/review-phase1 と fuzz の入力を除く）と examples の写しで、core と同じ入力の全てのターゲットに回し"
            "（マニフェストを断片に持つファイルは、断片から [test] を除いた onsa.toml の一つのパッケージにして）、終了コード・出力（診断）・書いたファイル"
