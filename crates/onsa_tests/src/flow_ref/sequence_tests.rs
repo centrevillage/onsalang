@@ -8,7 +8,7 @@ use super::walk::{Panic, Skip, TestRun, Verdict, run_case};
 use onsa_driver::PackageInput;
 
 // `acc` is a running sum: 1 2 3 4 gives 1 3 6 10. `gain` multiplies by a `block` value, `off` adds an `init` one, `inv` is
-// 10 / x (it panics for 0), `ib` is x + 100 / n (it panics in `init` for n = 0), `closed` is E0200 today (`^` inside a `par~`), `chans` has two
+// 10 / x (it panics for 0), `ib` is x + 100 / n (it panics in `init` for n = 0), `closed` is E0200 today (`panic` in a flow body), `chans` has two
 // channels (an output of views).
 const FLOWS: &str = "
 flow acc(x: F32 at sample) -> F32 at sample {
@@ -22,11 +22,7 @@ flow ib(n: I32 at init, x: F32 at sample) -> F32 at sample {
   let k = 100 / n
   x + F32.round_from(k)
 }
-flow closed(x: F32 at sample) -> [F32; 1] at sample {
-  let a = par~ i in 0 ..< 1 { prev~(^y) }
-  let y = x
-  a
-}
+flow closed(x: F32 at sample) -> [F32; 1] at sample { [if x > 9.0 { panic(\"closed\") } else { x }] }
 flow chans(x: F32 at sample) -> [F32; 2] at sample { [x, x + 1.0] }
 fn ramp() -> [F32; 3] { [1.0, 2.0, 3.0] }
 ";

@@ -1,0 +1,13 @@
+# flow_ref 1 source=tests/spec/flow_semantics/lookback_panic.onsa tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
+@ the values stored by nested delays are evaluated at every sample
+render lookback_panic.inner_store sr=0x41000000 in n=[1 2 5 10 2]
+out=[1 2 15 15 4]
+@ the value an inner delay stores panics at the sample that stores it
+render lookback_panic.inner_store sr=0x41000000 in n=[1 0 3]
+panic sample 1
+@ the value of a delay whose output is multiplied away panics too
+render lookback_panic.unread_store sr=0x41000000 in n=[4 0]
+panic sample 1
+@ nested stores with no zero do not panic
+render lookback_panic.unread_store sr=0x41000000 in n=[4 2]
+out=[4 2]

@@ -2,11 +2,11 @@
 // [test]
 // spec = ["§11.2", "§11.5", "§18.1"]
 
-// W7-04 U2/t, S-116, S-267, R-286: E0200 for a `^name` inside the body of a `par~` (§11.2 lets a delay read the later `let` through the replicas, `prev~(^y)` in a replica reads the
-// later `y`; this version does not support it, and W7-07 removes the gate: after it the file flow_semantics/par_lookback.onsa checks these programs). The gate is a check of the names stage
-// of the unit, where the `^name` is read (§18.1: "flow の本体の名前の順（E0801 …）" is the names stage), so of the diagnostics of the names stage the first by position is reported: the E0200 before the
-// errors that come after it (E0302, E0304, E0801, E0806, E0811, E0812), and the other error when it comes first. An error of a later stage (E0401 type, E0805 effect, E0815 clock) is not
-// reported with it, whatever the position is. One error per unit. W7-07 changes the E0200 of these forms: the unit has no error of the gate, and the units with another error report it.
+// W7-04 U2/t, S-116, S-267, R-286, W7-07 U1/t: a `^name` inside the body of a `par~` is no error (§11.2 lets a delay read the later `let` through the replicas, `prev~(^y)` in a replica
+// reads the later `y`; the file flow_semantics/par_lookback.onsa checks the values). So the `^y` in these units hides nothing and is not reported: the unit has its other error, one per
+// unit, and the first by position of the diagnostics of the stages is reported (§18.1): of the names stage the first by position (E0302, E0304, E0801, E0806, E0811, E0812), and an error of a later
+// stage (E0401 type, E0805 effect, E0815 clock) is reported when the unit has no error of an earlier stage. The `^y` is written before the error in the first group, after it in the second
+// group, and the third group has an error of a later stage on each side of it. One error per unit.
 
 pub fn with_alloc(x: F32) -> F32 uses {Alloc} {
   x
@@ -20,66 +20,66 @@ pub flow lp(x: F32 at sample) -> F32 at sample {
   x
 }
 
-// ---- The E0200, then an error of the names stage
+// ---- The `^y` in a `par~`, then an error of the names stage
 
 pub flow caret_in_a_par_then_name_not_found(x: F32 at sample) -> F32 at sample {
-  let a = par~ i in 0 ..< 2 { prev~(^y) }           //~ E0200
+  let a = par~ i in 0 ..< 2 { prev~(^y) }
   let y = x
-  let z = nope
+  let z = nope                                      //~ E0302
   a[0] + z
 }
 
 pub flow caret_in_a_par_then_duplicate(x: F32 at sample) -> F32 at sample {
-  let a = par~ i in 0 ..< 2 { prev~(^y) }           //~ E0200
+  let a = par~ i in 0 ..< 2 { prev~(^y) }
   let y = x
   let c = x
-  let c = x
+  let c = x                                         //~ E0304
   a[0] + c
 }
 
 pub flow caret_in_a_par_then_forward(x: F32 at sample) -> F32 at sample {
-  let a = par~ i in 0 ..< 2 { prev~(^y) }           //~ E0200
-  let b = w
+  let a = par~ i in 0 ..< 2 { prev~(^y) }
+  let b = w                                         //~ E0801
   let w = x
   let y = x
   a[0] + b
 }
 
 pub flow caret_in_a_par_then_var(x: F32 at sample) -> F32 at sample {
-  let a = par~ i in 0 ..< 2 { prev~(^y) }           //~ E0200
+  let a = par~ i in 0 ..< 2 { prev~(^y) }
   let y = x
-  var c = x
+  var c = x                                         //~ E0806
   a[0]
 }
 
 pub flow caret_in_a_par_then_closure(x: F32 at sample) -> F32 at sample {
-  let a = par~ i in 0 ..< 2 { prev~(^y) }           //~ E0200
+  let a = par~ i in 0 ..< 2 { prev~(^y) }
   let y = x
-  let k = fn(v: F32) -> F32 { v }
+  let k = fn(v: F32) -> F32 { v }                   //~ E0806
   a[0]
 }
 
 pub flow caret_in_a_par_then_call_without_tilde(x: F32 at sample) -> F32 at sample {
-  let a = par~ i in 0 ..< 2 { prev~(^y) }           //~ E0200
+  let a = par~ i in 0 ..< 2 { prev~(^y) }
   let y = x
-  let z = lp(x)
+  let z = lp(x)                                     //~ E0811
   a[0] + z
 }
 
 pub flow caret_in_a_par_then_tilde_on_a_function(x: F32 at sample) -> F32 at sample {
-  let a = par~ i in 0 ..< 2 { prev~(^y) }           //~ E0200
+  let a = par~ i in 0 ..< 2 { prev~(^y) }
   let y = x
-  let z = g~(x)
+  let z = g~(x)                                     //~ E0812
   a[0] + z
 }
 
 pub flow caret_in_a_par_before_a_name_error_in_the_same_let(x: F32 at sample) -> F32 at sample {
-  let a = par~ i in 0 ..< 2 { prev~(^y) + nope }    //~ E0200
+  let a = par~ i in 0 ..< 2 { prev~(^y) + nope }    //~ E0302
   let y = x
   a[0]
 }
 
-// ---- An error of the names stage, then the E0200
+// ---- An error of the names stage, then the `^y` in a `par~`
 
 pub flow name_not_found_then_caret_in_a_par(x: F32 at sample) -> F32 at sample {
   let z = nope                                      //~ E0302
@@ -117,39 +117,39 @@ pub flow name_not_found_in_a_par_body_then_caret(x: F32 at sample) -> F32 at sam
   a[0]
 }
 
-// ---- An error of a later stage, before and after the E0200
+// ---- An error of a later stage, before and after the `^y` in a `par~`
 
 pub flow caret_in_a_par_then_type_error(x: F32 at sample) -> F32 at sample {
-  let a = par~ i in 0 ..< 2 { prev~(^y) }           //~ E0200
+  let a = par~ i in 0 ..< 2 { prev~(^y) }
   let y = x
-  let t: Bool = x
+  let t: Bool = x                                   //~ E0401
   a[0]
 }
 
 pub flow type_error_then_caret_in_a_par(x: F32 at sample) -> F32 at sample {
-  let t: Bool = x
-  let a = par~ i in 0 ..< 2 { prev~(^y) }           //~ E0200
+  let t: Bool = x                                   //~ E0401
+  let a = par~ i in 0 ..< 2 { prev~(^y) }
   let y = x
   a[0]
 }
 
 pub flow caret_in_a_par_then_effect(x: F32 at sample) -> F32 at sample {
-  let a = par~ i in 0 ..< 2 { prev~(^y) }           //~ E0200
+  let a = par~ i in 0 ..< 2 { prev~(^y) }
   let y = x
-  let e = with_alloc(x)
+  let e = with_alloc(x)                             //~ E0805
   a[0] + e
 }
 
 pub flow effect_then_caret_in_a_par(x: F32 at sample) -> F32 at sample {
-  let e = with_alloc(x)
-  let a = par~ i in 0 ..< 2 { prev~(^y) }           //~ E0200
+  let e = with_alloc(x)                             //~ E0805
+  let a = par~ i in 0 ..< 2 { prev~(^y) }
   let y = x
   a[0] + e
 }
 
 pub flow slow_clock_then_caret_in_a_par(x: F32 at sample) -> F32 at sample {
-  let c = x at block
-  let a = par~ i in 0 ..< 2 { prev~(^y) }           //~ E0200
+  let c = x at block                                //~ E0815
+  let a = par~ i in 0 ..< 2 { prev~(^y) }
   let y = x
   a[0] + c
 }
@@ -157,16 +157,16 @@ pub flow slow_clock_then_caret_in_a_par(x: F32 at sample) -> F32 at sample {
 // ---- Places: a branch in the body, a nested `par~`
 
 pub flow caret_in_a_branch_of_a_par_body_then_name_not_found(x: F32 at sample, c: Bool at sample) -> F32 at sample {
-  let a = par~ i in 0 ..< 2 { prev~(if c { ^y } else { 0.0 }) }   //~ E0200
+  let a = par~ i in 0 ..< 2 { prev~(if c { ^y } else { 0.0 }) }
   let y = x
-  let z = nope
+  let z = nope                                      //~ E0302
   a[0] + z
 }
 
 pub flow caret_in_a_nested_par_then_name_not_found(x: F32 at sample) -> F32 at sample {
-  let a = par~ i in 0 ..< 2 { par~ j in 0 ..< 2 { prev~(^y) } }   //~ E0200
+  let a = par~ i in 0 ..< 2 { par~ j in 0 ..< 2 { prev~(^y) } }
   let y = x
-  let z = nope
+  let z = nope                                      //~ E0302
   a[0][0] + z
 }
 

@@ -253,9 +253,6 @@ pub(crate) struct FlowCx {
     inputs: Vec<LocalId>,
     pending: Vec<PendingLet>,
     let_of_local: HashMap<LocalId, usize>,
-    /// Nonzero while checking the first argument of a delay, instances included
-    /// (a delay there is E0200, K-08).
-    delay_arg: u32,
     calls: Vec<NodeCall>,
     /// `par` expression → (variable, its first value, the number of the
     /// instances), §11.5.

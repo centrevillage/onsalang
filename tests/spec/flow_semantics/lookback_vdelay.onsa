@@ -1,0 +1,121 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.4"]
+
+// `vdelay~` and `delay~` around each other (spec §11.4, S-44, R-13, S-194). A `vdelay~` outputs
+// e[n - d] for an integer `d` and the interpolation of two stored values otherwise; what it
+// outputs is read before its store, like every delay. So the outer delay of a `vdelay~` sees the
+// `vdelay~` output of the same sample, and a `vdelay~` of a delay sees that delay's output.
+// The value before the first sample is 0. The plain forms are in lookback_nesting_forms.onsa
+// (`in_a_variable_delay`) and vdelay_edges.onsa.
+//
+// Every expected sequence is worked out by hand from §11.4: with k = trunc(d), f = d - k,
+// out = (1 - f) * e[n-k] + f * e[n-k-1].
+
+// d = 2 is x[n-2], and the delay after it makes x[n-3].
+pub flow prev_of_vdelay(x: F32 at sample) -> F32 at sample {
+  prev~(vdelay~(x, 2.0, 4))
+}
+
+// A `vdelay~` of a `vdelay~`: x[n-2] delayed by 3 more is x[n-5].
+pub flow vdelay_of_vdelay(x: F32 at sample) -> F32 at sample {
+  vdelay~(vdelay~(x, 2.0, 4), 3.0, 4)
+}
+
+// d = 1.5 on e[n] = x[n-1]: out[n] = 0.5 * e[n-1] + 0.5 * e[n-2] = 0.5 * (x[n-2] + x[n-3]).
+pub flow fractional_of_prev(x: F32 at sample) -> F32 at sample {
+  vdelay~(prev~(x), 1.5, 4)
+}
+
+// A delay line after a fractional delay: v[n] = 0.5 * (x[n-1] + x[n-2]), out[n] = v[n-2].
+pub flow delay_of_fractional(x: F32 at sample) -> F32 at sample {
+  delay~(vdelay~(x, 1.5, 4), 2)
+}
+
+// A loop through a `vdelay~` of a delay: e[n] = y[n-1], out = e[n-2] = y[n-3],
+// y[n] = x[n] + 0.5 * y[n-3].
+pub flow vdelay_in_a_loop(x: F32 at sample) -> F32 at sample {
+  let y = x + 0.5 * vdelay~(prev~(^y), 2.0, 4)
+  y
+}
+
+// Both inits: the inner delay starts at 1, the `vdelay~` at 9.
+pub flow vdelay_with_inits(x: F32 at sample) -> F32 at sample {
+  vdelay~(prev~(x, 1.0), 2.0, 4, 9.0)
+}
+
+test "a delay of a vdelay" {
+  let xs: [F32; 6] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+  let o = prev_of_vdelay.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 1.0
+  assert o.out[4] == 2.0
+  assert o.out[5] == 3.0
+}
+
+test "a vdelay of a vdelay" {
+  let xs: [F32; 8] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
+  let o = vdelay_of_vdelay.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 0.0
+  assert o.out[4] == 0.0
+  assert o.out[5] == 1.0
+  assert o.out[6] == 2.0
+  assert o.out[7] == 3.0
+}
+
+test "a fractional vdelay of a delay" {
+  // 0.5 * (x[n-2] + x[n-3]): n0 0, n1 0, n2 0.5 * (1 + 0), n3 0.5 * (2 + 1), n4 0.5 * (3 + 2),
+  // n5 0.5 * (4 + 3).
+  let xs: [F32; 6] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+  let o = fractional_of_prev.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 0.5
+  assert o.out[3] == 1.5
+  assert o.out[4] == 2.5
+  assert o.out[5] == 3.5
+}
+
+test "a delay line of a fractional vdelay" {
+  // v = 0 0.5 1.5 2.5 3.5 4.5 (v[n] = 0.5 * (x[n-1] + x[n-2])).  out[n] = v[n-2] = 0 0 0 0.5 1.5 2.5.
+  let xs: [F32; 6] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+  let o = delay_of_fractional.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 0.5
+  assert o.out[4] == 1.5
+  assert o.out[5] == 2.5
+}
+
+test "a loop through a vdelay of a delay" {
+  // x = 8 0 0 0 0 0 0: y = 8 0 0 4 0 0 2.
+  let xs: [F32; 7] = [8.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  let o = vdelay_in_a_loop.render(xs, 8.0)
+  assert o.out[0] == 8.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 4.0
+  assert o.out[4] == 0.0
+  assert o.out[5] == 0.0
+  assert o.out[6] == 2.0
+}
+
+test "the inits of a vdelay of a delay" {
+  // x = 5 6 7 8 9 10.  e = 1 5 6 7 8 9 (1 is the inner init).  out[n] = e[n-2], 9 before e[0]:
+  // 9 9 1 5 6 7.
+  let xs: [F32; 6] = [5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
+  let o = vdelay_with_inits.render(xs, 8.0)
+  assert o.out[0] == 9.0
+  assert o.out[1] == 9.0
+  assert o.out[2] == 1.0
+  assert o.out[3] == 5.0
+  assert o.out[4] == 6.0
+  assert o.out[5] == 7.0
+}

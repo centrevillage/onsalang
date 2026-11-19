@@ -1,0 +1,36 @@
+# flow_ref 1 source=tests/spec/flow_semantics/par_lookback_forms.onsa tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
+@ the index in the stored expression
+render par_lookback_forms.index_in_the_store sr=0x41000000 in x=[0x3f800000 0x3f800000 0x3f800000 0x3f800000]
+out=[0x00000000 0x3f400000 0x3fa80000 0x3fde0000]
+@ each replica has its own feedback
+render par_lookback_forms.own_feedback_each sr=0x41000000 in x=[0x3f800000 0x3f800000 0x3f800000 0x3f800000]
+out[0]=[0x3f800000 0x40000000 0x40400000 0x40800000]
+out[1]=[0x40000000 0x40800000 0x40c00000 0x41000000]
+@ replicas that read each other
+render par_lookback_forms.cross_feedback sr=0x41000000 in x=[0x3f800000 0x3f800000 0x3f800000 0x3f800000]
+out[0]=[0x3f800000 0x40400000 0x40800000 0x40c00000]
+out[1]=[0x40000000 0x40400000 0x40a00000 0x40c00000]
+@ a par in a par with a feedback reference
+render par_lookback_forms.nested_par sr=0x41000000 in x=[0x3f800000 0x3f800000 0x3f800000 0x3f800000]
+out=[0x00000000 0x3fa00000 0x3ff00000 0x400c0000]
+@ a par of delays inside a delay
+render par_lookback_forms.par_in_a_delay sr=0x41000000 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000]
+out=[0x00000000 0x00000000 0x40000000 0x40800000 0x40c00000 0x41000000]
+@ a par of feedback references inside a delay
+render par_lookback_forms.par_in_a_delay_loop sr=0x41000000 in x=[0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x3f800000 0x3f800000]
+out=[0x3f800000 0x3f800000 0x40400000 0x40400000 0x40e00000 0x40e00000]
+@ an array of delayed values as the first argument of a delay
+render par_lookback_forms.par_array_in_a_delay sr=0x41000000 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000]
+out[0]=[0x3f000000 0x00000000 0x3f800000 0x40000000 0x40400000]
+out[1]=[0x3f000000 0x00000000 0x40000000 0x40800000 0x40c00000]
+@ an instance in each replica with a feedback reference in its argument
+render par_lookback_forms.instances_with_feedback sr=0x41000000 in x=[0x3f800000 0x00000000 0x00000000 0x00000000]
+out=[0x3fc00000 0x40400000 0x40c00000 0x41400000]
+@ an inclusive range with nested delays
+render par_lookback_forms.inclusive_range sr=0x41000000 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000 0x40c00000]
+out[0]=[0x00000000 0x00000000 0x00000000 0x3f800000 0x40000000 0x40400000]
+out[1]=[0x00000000 0x00000000 0x00000000 0x40000000 0x40800000 0x40c00000]
+out[2]=[0x00000000 0x00000000 0x00000000 0x40400000 0x40c00000 0x41100000]
+@ an inclusive range with a feedback reference
+render par_lookback_forms.inclusive_feedback sr=0x41000000 in x=[0x3f800000 0x40000000 0x40400000]
+out=[0x40400000 0x40a00000 0x40e00000]

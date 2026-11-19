@@ -24,9 +24,9 @@ pub(super) fn floats(xs: &[f32]) -> Vec<Value> {
 
 /// The outputs of the flow `name` for the columns `cols` (by name), the inputs of `init` and the `block` ones given, in
 /// calls of `calls` frames each (a call takes the next frames of every column; the sum of `calls` is their length).
-/// `clean` is false for a source that has diagnostics of this version's check (E0200 of a form the spec has: a delay in
-/// the first argument of a delay, an omitted `init` of a type that is not a number, a delay length that is a constant
-/// expression and not a literal): the evaluator has the form, and its tables are whole, so it runs.
+/// `clean` is false for a source that has diagnostics of this version's check (E0200 of a form the spec has: an omitted
+/// `init` of a type that is not a number, a delay length that is a constant expression and not a literal): the
+/// evaluator has the form, and its tables are whole, so it runs.
 pub(super) fn run_with(
     clean: bool,
     src: &str,
@@ -158,7 +158,6 @@ flow two(x: F32 at sample) -> F32 at sample { prev~(x, 1.0) + prev~(x, 2.0) }";
 }
 
 #[test]
-#[ignore = "W7-07: the check gives E0200 to a delay inside the first argument of a delay and leaves the tables of the body whole not"]
 fn a_delay_written_inside_the_first_argument_of_a_delay_is_the_same_as_one_bound_by_a_let() {
     // §11.4: `prev~(prev~(x))` is `x[n-2]`, the same as `let p = prev~(x)` and `prev~(p)` (the test before). The inner
     // delay is evaluated in the second phase, where what the outer one stores is, so the second phase evaluates what
@@ -170,10 +169,10 @@ fn a_delay_written_inside_the_first_argument_of_a_delay_is_the_same_as_one_bound
 flow pi(x: F32 at sample) -> F32 at sample { prev~(prev~(x, 7.0), 9.0) }
 flow dp(x: F32 at sample) -> F32 at sample { delay~(prev~(x), 2) }
 flow m(x: F32 at sample) -> F32 at sample { prev~(x) + prev~(prev~(x) + 1.0) }";
-    same(&go_open(src, "pp", &[1.0, 2.0, 3.0, 4.0]), &[0.0, 0.0, 1.0, 2.0]);
-    same(&go_open(src, "pi", &[1.0, 2.0, 3.0, 4.0]), &[9.0, 7.0, 1.0, 2.0]);
-    same(&go_open(src, "dp", &[1.0, 2.0, 3.0, 4.0, 5.0]), &[0.0, 0.0, 0.0, 1.0, 2.0]);
-    same(&go_open(src, "m", &[1.0, 2.0, 3.0]), &[0.0, 2.0, 4.0]);
+    same(&go(src, "pp", &[1.0, 2.0, 3.0, 4.0]), &[0.0, 0.0, 1.0, 2.0]);
+    same(&go(src, "pi", &[1.0, 2.0, 3.0, 4.0]), &[9.0, 7.0, 1.0, 2.0]);
+    same(&go(src, "dp", &[1.0, 2.0, 3.0, 4.0, 5.0]), &[0.0, 0.0, 0.0, 1.0, 2.0]);
+    same(&go(src, "m", &[1.0, 2.0, 3.0]), &[0.0, 2.0, 4.0]);
 }
 
 #[test]

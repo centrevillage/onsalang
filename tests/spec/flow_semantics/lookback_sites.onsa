@@ -1,0 +1,176 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.4", "§11.2"]
+
+// One rule at every place a delay can stand (spec §11.4, S-44, R-13). Each sample, every delay
+// outputs its stored value first, then every value to store is evaluated, then all of them are
+// stored together. A delay inside the value another delay stores therefore reads its output from
+// *before* the store, wherever it stands in that value: in a `let`, in the output, in an argument
+// of a call, in an index, in the condition of an `if`, in the `d` of a `vdelay~`, in a tuple.
+// The same holds for a delay that is read twice (two reads of one name see one value).
+//
+// Every expected sequence is worked out by hand from the rule. The value before the first sample
+// is 0 for every delay here (no `init` is written).
+
+pub rt fn mix(a: F32, b: F32) -> F32 {
+  a * 2.0 + b
+}
+
+// A `let` initializer: out[n] = x[n-2] + 1.
+pub flow in_a_let(x: F32 at sample) -> F32 at sample {
+  let a = prev~(prev~(x)) + 1.0
+  a
+}
+
+// The output expression, two separate delays: out[n] = x[n-1] + x[n-2].
+pub flow in_an_output(x: F32 at sample) -> F32 at sample {
+  prev~(x) + prev~(prev~(x))
+}
+
+// The arguments of a call: out[n] = 2 * x[n-1] + x[n-2].
+pub flow in_call_args(x: F32 at sample) -> F32 at sample {
+  mix(prev~(x), prev~(prev~(x)))
+}
+
+// An index: the table is read at i[n-2], and at 0 before the first samples.
+pub flow in_an_index(i: U32 at sample) -> F32 at sample {
+  [10.0, 20.0, 30.0][prev~(prev~(i))]
+}
+
+// The condition of an `if` inside the value that is stored: c[n] = (x[n-1] > 2) (false at n = 0),
+// e[n] = if c[n] { x[n] } else { 0 }, out[n] = e[n-1].
+pub flow in_an_if_condition(x: F32 at sample) -> F32 at sample {
+  prev~(if prev~(x > 2.0, false) { x } else { 0.0 })
+}
+
+// A tuple that a `let` takes apart: out[n] = 10 * x[n-2] + x[n-1].
+pub flow in_a_tuple(x: F32 at sample) -> F32 at sample {
+  let (a, b) = (prev~(prev~(x)), prev~(x))
+  a * 10.0 + b
+}
+
+// One name read twice inside the stored value: p[n] = x[n-1], e[n] = p[n] + p[n-1],
+// out[n] = e[n-1] = x[n-2] + x[n-3].
+pub flow read_in_the_store(x: F32 at sample) -> F32 at sample {
+  let p = prev~(x)
+  prev~(p + prev~(p))
+}
+
+// A delay in the `d` of a `vdelay~`: d[n] = dd[n-2], clamped to [1, 4].
+pub flow in_a_vdelay_d(x: F32 at sample, dd: F32 at sample) -> F32 at sample {
+  vdelay~(x, prev~(prev~(dd)), 4)
+}
+
+// A delay in the first argument and one in `d`: e[n] = x[n-1], d[n] = dd[n-1] (1 at n = 0),
+// out[n] = e[n - d[n]].
+pub flow in_a_vdelay_both(x: F32 at sample, dd: F32 at sample) -> F32 at sample {
+  vdelay~(prev~(x), prev~(dd), 4)
+}
+
+test "a delay in a let reads before the store" {
+  let xs: [F32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0]
+  let o = in_a_let.render(xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 1.0
+  assert o.out[2] == 2.0
+  assert o.out[3] == 3.0
+  assert o.out[4] == 4.0
+}
+
+test "two delays in the output" {
+  // n0: 0 + 0.  n1: x0 + 0 = 1.  n2: x1 + x0 = 3.  n3: x2 + x1 = 5.  n4: x3 + x2 = 7.
+  let xs: [F32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0]
+  let o = in_an_output.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 1.0
+  assert o.out[2] == 3.0
+  assert o.out[3] == 5.0
+  assert o.out[4] == 7.0
+}
+
+test "delays in the arguments of a call" {
+  // n0: 0.  n1: 2 * 1 + 0 = 2.  n2: 2 * 2 + 1 = 5.  n3: 2 * 3 + 2 = 8.  n4: 2 * 4 + 3 = 11.
+  let xs: [F32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0]
+  let o = in_call_args.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == 5.0
+  assert o.out[3] == 8.0
+  assert o.out[4] == 11.0
+}
+
+test "a delayed delay as an index" {
+  // i = 2 1 0 2 1: the index is 0 0 2 1 0, so the table gives 10 10 30 20 10.
+  let is: [U32; 5] = [2, 1, 0, 2, 1]
+  let o = in_an_index.render(is, 8.0)
+  assert o.out[0] == 10.0
+  assert o.out[1] == 10.0
+  assert o.out[2] == 30.0
+  assert o.out[3] == 20.0
+  assert o.out[4] == 10.0
+}
+
+test "a delay in the condition of an if inside a stored value" {
+  // x = 1 3 1 3 3 1.  c = (x[n-1] > 2) = F F T F T T.  e = if c { x } else { 0 } = 0 0 1 0 3 1.
+  // out[n] = e[n-1] = 0 0 0 1 0 3.
+  let xs: [F32; 6] = [1.0, 3.0, 1.0, 3.0, 3.0, 1.0]
+  let o = in_an_if_condition.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 1.0
+  assert o.out[4] == 0.0
+  assert o.out[5] == 3.0
+}
+
+test "delays in the elements of a tuple" {
+  // n0: 0.  n1: 10 * 0 + 1 = 1.  n2: 10 * 1 + 2 = 12.  n3: 10 * 2 + 3 = 23.  n4: 10 * 3 + 4 = 34.
+  let xs: [F32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0]
+  let o = in_a_tuple.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 1.0
+  assert o.out[2] == 12.0
+  assert o.out[3] == 23.0
+  assert o.out[4] == 34.0
+}
+
+test "a name read twice inside a stored value" {
+  // out[n] = x[n-2] + x[n-3] = 0 0 1 3 5 7.
+  let xs: [F32; 6] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+  let o = read_in_the_store.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 1.0
+  assert o.out[3] == 3.0
+  assert o.out[4] == 5.0
+  assert o.out[5] == 7.0
+}
+
+test "a delayed delay in the d of a vdelay" {
+  // dd = 2 for all samples: d[n] = dd[n-2] = 0 0 2 2 2 2, clamped to 1 1 2 2 2 2.
+  // out[n] = x[n - d] = x[-1] x[0] x[0] x[1] x[2] x[3] = 0 1 1 2 3 4.
+  let xs: [F32; 6] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+  let ds: [F32; 6] = [2.0, 2.0, 2.0, 2.0, 2.0, 2.0]
+  let o = in_a_vdelay_d.render(in_a_vdelay_d.In { x: xs, dd: ds }, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 1.0
+  assert o.out[2] == 1.0
+  assert o.out[3] == 2.0
+  assert o.out[4] == 3.0
+  assert o.out[5] == 4.0
+}
+
+test "a delay in the first argument and one in d of a vdelay" {
+  // e = x[n-1] = 0 1 2 3 4 5.  dd = 1 1 1 2 2 2, so d[n] = dd[n-1] = 0 1 1 1 2 2, clamped 1 1 1 1 2 2.
+  // out[n] = e[n - d]: e[-1] e[0] e[1] e[2] e[2] e[3] = 0 0 1 2 2 3.
+  let xs: [F32; 6] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+  let ds: [F32; 6] = [1.0, 1.0, 1.0, 2.0, 2.0, 2.0]
+  let o = in_a_vdelay_both.render(in_a_vdelay_both.In { x: xs, dd: ds }, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 1.0
+  assert o.out[3] == 2.0
+  assert o.out[4] == 2.0
+  assert o.out[5] == 3.0
+}

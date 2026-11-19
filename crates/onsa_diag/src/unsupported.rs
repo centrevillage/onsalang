@@ -117,9 +117,6 @@ features! {
     StatefulInBranch: Language,
         "a flow instance, a delay or a `par~` where it is evaluated on some samples only (a branch of `if` or `match`, a guard, the right of `&&` / `||`)",
         Some("bind it with a `let` before the expression that holds it");
-    /// K-08, R-13: the store of the inner delay comes first (W7-07).
-    NestedDelays: Language, "a delay inside the first argument of a delay",
-        Some("bind the inner delay with a `let`, and delay that name");
     /// K-02: `e at k` evaluates `e` at its own clock (W7-05).
     ClockPromotion: Language, "`at` that makes a computed expression faster than its operands",
         Some("bind the expression with a `let`, and write `at` on its name");
@@ -129,8 +126,6 @@ features! {
     /// `{}`: the clock. R-17, S-33: hoisting computes it at `init` (W7-05).
     NonRtCallAtClock: Language, "a call of a function that is not `rt` in an expression at the clock `{}`",
         Some("bind the call with a `let` of its own, which is computed at `init`");
-    /// R-03: the look-back of a replica, of the names stage (W7-07).
-    FeedbackInPar: Language, "a feedback reference `^name` inside a `par~`", None;
     /// §11.4, S-565: the time since `reset` in ticks (W7-09, R-288).
     SampleTick: Language, "the builtin `sample_tick()` of a flow", None;
     Iteration: Language, "iteration over types other than arrays, `Span`, `Buf` and `Array`", None;

@@ -1,0 +1,11 @@
+# flow_ref 1 source=tests/spec/flow_semantics/lookback_plain.onsa tests=3 evaluated=3 unavailable=0 skipped=0 waiting=0
+@ a delayed name read in the output and in a stored value
+render lookback_plain.read_twice sr=0x41000000 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000]
+out=[0x00000000 0x41200000 0x41a80000 0x42000000 0x422c0000]
+@ the values the replicas store are read one sample later
+render lookback_plain.replica_store sr=0x41000000 in n=[3 4 5]
+out[0]=[0 3 2]
+out[1]=[0 5 3]
+@ the value a replica stores panics at the sample that stores it
+render lookback_plain.replica_store sr=0x41000000 in n=[3 1 2]
+panic sample 1

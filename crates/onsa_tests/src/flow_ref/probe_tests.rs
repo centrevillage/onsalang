@@ -85,40 +85,27 @@ fn probe(case: &str) -> Vec<Row> {
     })
 }
 
-const COMPLETE_ONLY_AFTER_THE_BODY: [&str; 4] =
-    ["prev_default_types.onsa", "par_branch.onsa", "branches_tilde.onsa", "lookback_nesting.onsa"];
+/// The cases whose E0200 comes from the stage of the flow, after the body
+/// (R-329), so every body is complete.
+const COMPLETE_ONLY_AFTER_THE_BODY: [&str; 3] = ["prev_default_types.onsa", "par_branch.onsa", "branches_tilde.onsa"];
 
 /// The cases with no E0200 left in their flows: `par_tilde_closed_range`
-/// stopped at the E0200 of `par~ ..=` until W7-14 U3.
-const COMPLETE: [&str; 1] = ["par_tilde_closed_range.onsa"];
-
-/// (case, the number of its flows, the number of the incomplete ones): the check
-/// of the body stops at the E0200 of `par_lookback` (its incomplete flows are
-/// the flows the check stops at); the E0200 of the four of
-/// [`COMPLETE_ONLY_AFTER_THE_BODY`] comes from the stage of the flow (a delay
-/// inside a delay is held by the check of the types and reported after the
-/// body, R-329), so every body is complete.
-const BODY_STOPS: [(&str, usize, usize); 1] = [("par_lookback.onsa", 2, 2)];
-
-#[test]
-fn the_cases_the_check_stops_at_in_the_body_have_incomplete_tables() {
-    for (case, flows, incomplete) in BODY_STOPS {
-        let rows = probe(case);
-        assert_eq!(rows.len(), flows, "{case}: {rows:#?}");
-        assert_eq!(rows.iter().filter(|r| !r.complete).count(), incomplete, "{case}: {rows:#?}");
-    }
-}
+/// stopped at the E0200 of `par~ ..=` until W7-14 U3, `par_lookback` (where
+/// the check of the body stopped) and `lookback_nesting` at the E0200 of
+/// `^` in a `par~` and of a delay inside a delay until W7-07 U1. No case of
+/// these has a body the check stops at now.
+const COMPLETE: [&str; 3] = ["par_tilde_closed_range.onsa", "par_lookback.onsa", "lookback_nesting.onsa"];
 
 #[test]
 fn the_complete_flows_have_a_type_for_every_value() {
     let mut complete_flows = 0;
-    for case in BODY_STOPS.iter().map(|c| c.0).chain(COMPLETE).chain(COMPLETE_ONLY_AFTER_THE_BODY) {
+    for case in COMPLETE.into_iter().chain(COMPLETE_ONLY_AFTER_THE_BODY) {
         for r in probe(case).iter().filter(|r| r.complete) {
             complete_flows += 1;
             assert_eq!(r.unresolved, 0, "{case}: {r:?}");
             assert!(r.holes.is_empty(), "{case}: {r:?}");
         }
     }
-    // `par_lookback` has none, `par_tilde_closed_range` six; the four others have 4, 2, 11 and 11.
-    assert_eq!(complete_flows, 6 + 4 + 2 + 11 + 11);
+    // Six, two and eleven of the complete cases; 4, 2 and 11 of the others.
+    assert_eq!(complete_flows, 6 + 2 + 11 + 4 + 2 + 11);
 }

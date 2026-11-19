@@ -112,9 +112,7 @@ impl Walker<'_> {
                 self.const_expr(range.hi)?;
                 self.open_scope();
                 declare(self)?;
-                self.order.par += 1;
                 self.expr(*body)?;
-                self.order.par -= 1;
                 self.close_scope();
                 Ok(())
             }

@@ -103,7 +103,7 @@ pub flow m11(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at samp
 }
 
 pub flow m12(x: F32 at sample, p: F32 at block, k: I32 at sample, n: U32 at sample, c: Bool at sample) -> F32 at sample {
-  let v0 = vdelay~((par~ i000 in 0 ..< 2 { delay~(slow(x), 4) })[0], x, 8)  //~ E0200
+  let v0 = vdelay~((par~ i000 in 0 ..< 2 { delay~(slow(x), 4) })[0], x, 8)  //~ E0815
   let v1 = prev~(delay~(x, 1))
   delay~((delay~((if c { lp~(x) } else { x }), 0) + x), 1)
 

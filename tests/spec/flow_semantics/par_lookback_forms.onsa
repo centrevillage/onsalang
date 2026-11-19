@@ -1,0 +1,223 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.5", "§11.2", "§11.4"]
+
+// `^name` and nested delays inside `par~` (spec §11.5, §11.2, §11.4, R-03, R-13). A replica is a
+// copy of the structure: every delay in the body is a separate delay in each replica, each replica
+// stores its own value, and a `^y` in the body is the later `let y` of the same sample, delayed by
+// the surrounding delay. The values the replicas store are stored with every other delay, after
+// every delay has output (the same rule as outside a `par~`, §11.4). The body is one expression
+// (a `let` in it is E0806), so a replica reads its index `i` in the stored expression itself.
+// The plain forms are in par_lookback.onsa.
+//
+// Every expected sequence is worked out by hand. The value before the first sample is 0.
+
+use std.math.sum
+
+// The index in the stored expression: replica i stores i * x + y and outputs it one sample later,
+// r_i[n] = i * x[n-1] + y[n-1]. y = 0.25 * (0 + 1 + 2) * x[n-1] + 0.75 * y[n-1].
+pub flow index_in_the_store(x: F32 at sample) -> F32 at sample {
+  let a = par~ i in 0 ..< 3 { prev~(x * F32.round_from(i) + ^y) }
+  let y = sum(a) * 0.25
+  y
+}
+
+// A different element of the later `let` in each replica: `^ys[i]` is replica i's own value of the
+// last sample, so replica k runs its own accumulator, ys[k][n] = (k + 1) * x[n] + ys[k][n-1].
+pub flow own_feedback_each(x: F32 at sample) -> [F32; 2] at sample {
+  let ys: [F32; 2] = par~ i in 0 ..< 2 { x * F32.round_from(i + 1) + prev~(^ys[i]) }
+  ys
+}
+
+// The replicas read each other's value: ys[0][n] = x[n] + ys[1][n-1], ys[1][n] = 2 * x[n] + ys[0][n-1].
+pub flow cross_feedback(x: F32 at sample) -> [F32; 2] at sample {
+  let ys: [F32; 2] = par~ i in 0 ..< 2 { x * F32.round_from(i + 1) + prev~(^ys[1 - i]) }
+  ys
+}
+
+// A `par~` in a `par~`: the four replicas have weights 1 2 3 4 (i * 2 + j + 1), each stores
+// w * x + y. The total is 10 * x[n-1] + 4 * y[n-1], and y is an eighth of it.
+pub flow nested_par(x: F32 at sample) -> F32 at sample {
+  let a = par~ i in 0 ..< 2 {
+    sum(par~ j in 0 ..< 2 { prev~(x * F32.round_from(i * 2 + j + 1) + ^y) })
+  }
+  let y = sum(a) * 0.125
+  y
+}
+
+// A `par~` as the first argument of a delay, with a delay in each replica: each replica is
+// x[n-1], the sum is 2 * x[n-1], and the outer delay makes it 2 * x[n-2].
+pub flow par_in_a_delay(x: F32 at sample) -> F32 at sample {
+  prev~(sum(par~ i in 0 ..< 2 { prev~(x) }))
+}
+
+// The same with a feedback reference inside the replicas: y[n] = x[n] + 2 * y[n-2].
+pub flow par_in_a_delay_loop(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(sum(par~ i in 0 ..< 2 { prev~(^y) }))
+  y
+}
+
+// An array of values as the stored value, each replica holding a delay: r_k[n] = (k + 1) * x[n-1],
+// out[n] = r[n-1], and [0.5, 0.5] before the first sample.
+pub flow par_array_in_a_delay(x: F32 at sample) -> [F32; 2] at sample {
+  prev~(par~ i in 0 ..< 2 { prev~(x) * F32.round_from(i + 1) }, [0.5, 0.5])
+}
+
+// An instance in each replica, with a feedback reference in its argument: s_k[n] = s_k[n-1] +
+// (k + 1) * x[n] + y[n-1], and y = 0.5 * (s_0 + s_1).
+pub flow acc(x: F32 at sample) -> F32 at sample {
+  let s = x + prev~(^s)
+  s
+}
+
+pub flow instances_with_feedback(x: F32 at sample) -> F32 at sample {
+  let a = par~ i in 0 ..< 2 { acc~(x * F32.round_from(i + 1) + prev~(^y)) }
+  let y = sum(a) * 0.5
+  y
+}
+
+// An inclusive range: replicas 1 2 3, each x[n-3] times its index.
+pub flow inclusive_range(x: F32 at sample) -> [F32; 3] at sample {
+  par~ i in 1 ..= 3 { delay~(prev~(x), 2) * F32.round_from(i) }
+}
+
+// An inclusive range with a feedback reference: replica i is y[n-1] + i for i = 1 2.
+pub flow inclusive_feedback(x: F32 at sample) -> F32 at sample {
+  let a = par~ i in 1 ..= 2 { prev~(^y) + F32.round_from(i) }
+  let y = x
+  sum(a)
+}
+
+test "the index in the stored expression" {
+  // x = 1: y0 = 0.  y1 = 0.25 * (0 + 1 + 2) * 1 + 0.75 * 0 = 0.75.  y2 = 0.75 + 0.75 * 0.75 = 1.3125.
+  // y3 = 0.75 + 0.75 * 1.3125 = 1.734375.
+  let xs: [F32; 4] = [1.0, 1.0, 1.0, 1.0]
+  let o = index_in_the_store.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.75
+  assert o.out[2] == 1.3125
+  assert o.out[3] == 1.734375
+}
+
+test "each replica has its own feedback" {
+  // x = 1: replica 0 counts 1 2 3 4, replica 1 counts 2 4 6 8.
+  let xs: [F32; 4] = [1.0, 1.0, 1.0, 1.0]
+  let o = own_feedback_each.render(xs, 8.0)
+  assert o.out[0][0] == 1.0
+  assert o.out[0][1] == 2.0
+  assert o.out[0][2] == 3.0
+  assert o.out[0][3] == 4.0
+  assert o.out[1][0] == 2.0
+  assert o.out[1][1] == 4.0
+  assert o.out[1][2] == 6.0
+  assert o.out[1][3] == 8.0
+}
+
+test "replicas that read each other" {
+  // x = 1.  n0: 1, 2.  n1: 1 + 2 = 3, 2 + 1 = 3.  n2: 1 + 3 = 4, 2 + 3 = 5.  n3: 1 + 5 = 6, 2 + 4 = 6.
+  let xs: [F32; 4] = [1.0, 1.0, 1.0, 1.0]
+  let o = cross_feedback.render(xs, 8.0)
+  assert o.out[0][0] == 1.0
+  assert o.out[0][1] == 3.0
+  assert o.out[0][2] == 4.0
+  assert o.out[0][3] == 6.0
+  assert o.out[1][0] == 2.0
+  assert o.out[1][1] == 3.0
+  assert o.out[1][2] == 5.0
+  assert o.out[1][3] == 6.0
+}
+
+test "a par in a par with a feedback reference" {
+  // x = 1: y0 = 0.  y1 = 0.125 * (10 + 0) = 1.25.  y2 = 0.125 * (10 + 4 * 1.25) = 1.875.
+  // y3 = 0.125 * (10 + 4 * 1.875) = 2.1875.
+  let xs: [F32; 4] = [1.0, 1.0, 1.0, 1.0]
+  let o = nested_par.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 1.25
+  assert o.out[2] == 1.875
+  assert o.out[3] == 2.1875
+}
+
+test "a par of delays inside a delay" {
+  // out[n] = 2 * x[n-2]: 0 0 2 4 6 8 for x = 1 2 3 4 5 6.
+  let xs: [F32; 6] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+  let o = par_in_a_delay.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 2.0
+  assert o.out[3] == 4.0
+  assert o.out[4] == 6.0
+  assert o.out[5] == 8.0
+}
+
+test "a par of feedback references inside a delay" {
+  // x = 1: y = 1 1 3 3 7 7 (y[n] = 1 + 2 * y[n-2]).
+  let xs: [F32; 6] = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+  let o = par_in_a_delay_loop.render(xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 1.0
+  assert o.out[2] == 3.0
+  assert o.out[3] == 3.0
+  assert o.out[4] == 7.0
+  assert o.out[5] == 7.0
+}
+
+test "an array of delayed values as the first argument of a delay" {
+  // x = 1 2 3 4 5.  r = [0 0] [1 2] [2 4] [3 6] ...  out[0] = [0.5 0.5], out[n] = r[n-1]:
+  // [0.5 0.5] [0 0] [1 2] [2 4] [3 6].
+  let xs: [F32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0]
+  let o = par_array_in_a_delay.render(xs, 8.0)
+  assert o.out[0][0] == 0.5
+  assert o.out[0][1] == 0.0
+  assert o.out[0][2] == 1.0
+  assert o.out[0][3] == 2.0
+  assert o.out[0][4] == 3.0
+  assert o.out[1][0] == 0.5
+  assert o.out[1][1] == 0.0
+  assert o.out[1][2] == 2.0
+  assert o.out[1][3] == 4.0
+  assert o.out[1][4] == 6.0
+}
+
+test "an instance in each replica with a feedback reference in its argument" {
+  // x = 1 0 0 0, weights 1 2.  n0: s0 = 1, s1 = 2, y = 1.5.  n1: s0 = 1 + 0 + 1.5 = 2.5, s1 = 3.5, y = 3.
+  // n2: s0 = 2.5 + 3 = 5.5, s1 = 6.5, y = 6.  n3: s0 = 11.5, s1 = 12.5, y = 12.
+  let xs: [F32; 4] = [1.0, 0.0, 0.0, 0.0]
+  let o = instances_with_feedback.render(xs, 8.0)
+  assert o.out[0] == 1.5
+  assert o.out[1] == 3.0
+  assert o.out[2] == 6.0
+  assert o.out[3] == 12.0
+}
+
+test "an inclusive range with nested delays" {
+  // x = 1 .. 6: x[n-3] = 0 0 0 1 2 3, times 1 2 3.
+  let xs: [F32; 6] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+  let o = inclusive_range.render(xs, 8.0)
+  assert o.out[0][0] == 0.0
+  assert o.out[0][1] == 0.0
+  assert o.out[0][2] == 0.0
+  assert o.out[0][3] == 1.0
+  assert o.out[0][4] == 2.0
+  assert o.out[0][5] == 3.0
+  assert o.out[1][0] == 0.0
+  assert o.out[1][2] == 0.0
+  assert o.out[1][3] == 2.0
+  assert o.out[1][4] == 4.0
+  assert o.out[1][5] == 6.0
+  assert o.out[2][0] == 0.0
+  assert o.out[2][2] == 0.0
+  assert o.out[2][3] == 3.0
+  assert o.out[2][4] == 6.0
+  assert o.out[2][5] == 9.0
+}
+
+test "an inclusive range with a feedback reference" {
+  // y = x = 1 2 3.  out[n] = (y[n-1] + 1) + (y[n-1] + 2) = 2 * x[n-1] + 3 = 3 5 7.
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = inclusive_feedback.render(xs, 8.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == 5.0
+  assert o.out[2] == 7.0
+}

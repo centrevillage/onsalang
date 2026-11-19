@@ -45,10 +45,10 @@
 | `body/d1_while_true.onsa` | R-52。W5-08 U1/t で期待値付きのテストへ移し、入力は消した: `tests/spec/semantics/while_true.onsa`、`while_true_forms.onsa`、`panic_positions.onsa` |
 | `body/pm1_partial.onsa` | R-74、R-95。R-74 の形（modes の誤りの単位で効果の検査を行わない）は W4-06 で期待値付きのテストへ移した: `tests/spec/negative/unit_stage_modes_stops_rt.onsa`。R-95 の形（`take_field` と分解 `via_let`）は W4-09 U2/t で期待値付きのテストへ移し、入力は消した: `tests/spec/values/take_out_consumes_root.onsa`・`take_out_rest_copy.onsa`（取り出して残りの Copy だけを破棄する形。分解は `unit_stage_modes_stops_rt.onsa` の `via_let`）。S-85 の後は取り出しが modes の誤りでなくなるので、`unit_stage_modes_stops_rt.onsa` と `_alloc.onsa` の modes の誤りは配列の要素の取り出しの E0711 に替えた |
 | `body/b2_builtin_methods.onsa` | R-96 |
-| `flow/e1/` | R-13 |
+| `flow/e1/` | R-13。W7-07 U1 で期待値付きのテストへ移し、入力は消した: `tests/spec/flow_semantics/lookback_feedback.onsa` の `inner_and_self`（`prev~(prev~(^y) + ^y * 0.5)`、`np` の形）、`lookback_nesting.onsa` の `two`・`prev_of_delay`（`nd` の `prev~(delay~(x, 2))` は x[n-3]）。`actual.onsa` の `sel`（枝の中のインスタンス）は R-14 の形で、S-110 の後は E0811（`tests/spec/flow_semantics/rules_negative.onsa` の 37・41 行、W7-06 まで実装待ち） |
 | `flow/e2/`、`flow/e17/` | R-14（`e2` は R-06 の `match` も）。S-110 で規則を改めたので、期待は各ファイルの先頭のコメント |
 | `flow/e4/` | R-17 |
-| `flow/e5/` | R-03（`par` の中の look-back） |
+| `flow/e5/` | R-03（`par` の中の look-back）。W7-07 U1 で期待値付きのテストへ移し、入力は消した: `tests/spec/flow_semantics/par_lookback.onsa` の `lookback_in_par`（`par~ … { prev~(^y) … }`）、`par_lookback_forms.onsa`（複製ごとの帰還、複製の間の帰還、入れ子の `par~`） |
 | `flow/e8/`、`flow/e9/`、`flow/e18/` | R-15 |
 | `flow/e10/` | R-03（自分をインスタンスにする flow）。W4-05 U5 で期待値付きのテストへ移した: `tests/spec/flow_semantics/instance_cycle_groups.onsa`・`instance_cycle_forms.onsa`（E0817）。今: `check` は `rec` と、`a`・`b` の集まりの `a` に E0817（`b` は古い構文 `Sig[F32]` の E0020）で、降下に進む命令も E0817 で止まる（降下の E0200「a flow that instantiates itself」は内部エラーの守りになった） |
 | `flow/e11/` | R-22。W2-08 で期待値付きのテストへ移した: `tests/spec/flow_semantics/export_planar_lengths_in.onsa`、`planar_length_bufs.onsa`・`planar_length_bufs_late.onsa`（全てのチャンネルの長さの比較） |
@@ -123,7 +123,7 @@
 | `parent/r4.onsa` | R-72。W3-07 で直した（候補の順は S-60）。名指すテストは無いが、同じ形が `crates/onsa_syntax/src/groups.rs` の `chains_the_strengths_allow` と `tests/spec/negative/operator_groups.onsa` にある。今: `r4.onsa` は通る。`groups.onsa` は 14 行の E0010（候補二つ）と、1・9 行の E0304（入力の引数名） |
 | `parent/t1.onsa` | R-30。W4-05 U1 と W4-16 U3 で直した（今の `onsa check` は 7 行の E0704）。期待値付きのテストは `tests/spec/types/affine_generic_holder_used_after.onsa` |
 | `parent/p2/` | R-09 |
-| `parent/r13*.onsa` | R-13（`prev(prev(x))` を含む） |
+| `parent/r13*.onsa` | R-13（`prev(prev(x))` を含む）。W7-07 U1 で期待値付きのテストへ移し、入力は消した: `tests/spec/flow_semantics/lookback_nesting.onsa` の `two`（`prev~(prev~(x))` は x[n-2]、`two_inline`）・`prev_of_delay`（`nd`）、`lookback_feedback.onsa` の `inner_and_self`（`np`、`r13t.onsa` も同じ形）、`lookback_instance_args.onsa` の `prev~(lp~(x))`（`inst_in_prev` のインスタンスを遅延する形）。`two_lets` は今も通る形で、`tests/spec/flow_semantics/lookback_nesting.onsa` の `named_chain` |
 | `parent/r15*.onsa` | R-15 |
 | `parent/r17.onsa` | R-17 |
 | `parent/r18.onsa` | R-18。名指すテストは無い。A-02 で不採用にした `unwrap_or` は W5-03 の U2 で E0413 になった（R-96。期待値付きのテストは `tests/spec/negative/option_methods_e0413.onsa`）。下の「今」は U2 の前の記録である。今: `check` は 19 行の E0309（`_` に直すと通る）、直すと `test` の 1 つ目は ok、2 つ目は 20 行の assert で失敗。W5-03 の後に期待値付きのテスト（E0413）へ移して消す |

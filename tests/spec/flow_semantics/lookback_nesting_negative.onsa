@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§11.2", "§11.5"]
+
+// A delay inside the first argument of a delay is no mistake of its own (spec §11.4: a delay in the
+// value `e` of a delay reads its output from before the store), so every other rule of the outer
+// delay still applies and is reported at the place it is broken: a length of 0 or 1 (E0808, E0807)
+// and an `init` at a faster clock than `init` (E0815). The forms without the inner delay are in
+// rules_negative.onsa and e0815_delay_init.onsa; the forms with a delay output in a place that needs
+// a constant, and the E0801 forms with a delay inside, are in lookback_negative.onsa (they are
+// reported today as they will be). One error per flow (§18.1), so each form is a flow of its own.
+
+pub flow one_sample_line_of_prev(x: F32 at sample) -> F32 at sample {
+  delay~(prev~(x), 1)                                         //~ E0807
+}
+
+pub flow one_sample_line_of_delay(x: F32 at sample) -> F32 at sample {
+  delay~(delay~(x, 2), 1)                                     //~ E0807
+}
+
+pub flow one_sample_line_nested(x: F32 at sample) -> F32 at sample {
+  prev~(delay~(prev~(x), 1))                                  //~ E0807
+}
+
+pub flow one_sample_line_nested_twice(x: F32 at sample) -> F32 at sample {
+  delay~(prev~(prev~(x)), 1)                                  //~ E0807
+}
+
+pub flow zero_line_of_prev(x: F32 at sample) -> F32 at sample {
+  delay~(prev~(x), 0)                                         //~ E0808
+}
+
+pub flow zero_max_of_prev(x: F32 at sample) -> F32 at sample {
+  vdelay~(prev~(x), 1.0, 0)                                   //~ E0808
+}
+
+pub flow zero_max_nested(x: F32 at sample) -> F32 at sample {
+  prev~(vdelay~(prev~(x), 1.0, 0))                            //~ E0808
+}
+
+pub flow init_of_nested_prev(x: F32 at sample, p: F32 at sample) -> F32 at sample {
+  prev~(prev~(x), p)                                          //~ E0815
+}
+
+pub flow init_of_nested_sample(x: F32 at sample) -> F32 at sample {
+  prev~(prev~(x), x)                                          //~ E0815
+}
+
+pub flow init_of_nested_line(x: F32 at sample) -> F32 at sample {
+  delay~(prev~(x), 3, x)                                      //~ E0815
+}
+
+pub flow init_of_nested_vdelay(x: F32 at sample) -> F32 at sample {
+  vdelay~(prev~(x), 1.5, 4, x)                                //~ E0815
+}
+
+pub flow init_of_nested_in_par(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 { prev~(prev~(x), x) }                    //~ E0815
+}

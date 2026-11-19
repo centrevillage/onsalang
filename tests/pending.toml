@@ -261,13 +261,6 @@ note = "数でない値型（Bool、配列、タプル、struct）の init の�
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/flow_semantics/lookback_nesting.onsa"
-reasons = ["R-13", "S-44"]
-until = "W7-07"
-note = "遅延の入れ子（prev~(prev~(x)) は x[n-2]）。保存の二相化は W7-07、それまで W3-10 で E0200（K-08）。今の実装は x[n-1] を返す（R-13）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/flow_semantics/branches_plain_match.onsa"
 reasons = ["R-06"]
 until = "W8-06"
@@ -279,13 +272,6 @@ target = "tests/spec/flow_semantics/branches_tilde.onsa"
 reasons = ["S-110", "R-14"]
 until = "W7-06"
 note = "if~ / match~ は全ての枝を評価して状態を進める。取られない枝の panic、match~ の取られない腕の束縛は T.default()。W3-10 の写しでは E0200（K-08）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/flow_semantics/par_lookback.onsa"
-reasons = ["R-03"]
-until = "W7-07"
-note = "par の中の ^y（look-back）。今の実装は local y read before definition の内部エラー（R-03）"
 
 [[pending]]
 kind = "test-case"
@@ -588,13 +574,6 @@ target = "tests/spec/negative/flow_state_branches.onsa"
 reasons = ["S-110", "R-14"]
 until = "W7-06"
 note = "普通の if / match の枝とガードの状態の E0811、&& / || の右辺の状態の E0806。W3-10 の写しでは E0200（K-08）"
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/flow_semantics/lookback_nesting_forms.onsa"
-reasons = ["R-13", "S-44"]
-until = "W7-07"
-note = "遅延の第 1 引数の中の遅延（関数の呼び出し・添字・vdelay~・delay~ の中）。保存の二相化は W7-07、それまで W3-10 で E0200（K-08）"
 
 # --- W3-06/t2: 空白、改行の後の記号、並びの中の `,` の抜け（W3-06 の単位 1a・1b で外す）
 

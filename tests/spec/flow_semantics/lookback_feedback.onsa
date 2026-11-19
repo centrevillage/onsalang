@@ -1,0 +1,153 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.2", "§11.4"]
+
+// `^name` together with delays inside delays (spec §11.2, §11.4, R-13). `^y` is the value of the
+// later `let y` of the same sample, and a delay that stores it outputs it one sample later; a delay
+// inside the stored value reads its output from before the store. So `prev~(prev~(^y))` is y[n-2],
+// and a loop around it has the period of the delays it goes through. The plain nestings are in
+// lookback_nesting.onsa (`feedback_two`, `sum_lookback`).
+//
+// Every expected sequence is worked out by hand. The value before the first sample is 0 unless an
+// `init` is written.
+
+pub rt fn same(v: F32) -> F32 {
+  v
+}
+
+// Three samples around the loop: y[n] = x[n] + y[n-3].
+pub flow three_loop(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(prev~(prev~(^y)))
+  y
+}
+
+// The same loop through a delay line: delay~(^y, 2) is y[n-2], and prev~ makes it y[n-3].
+pub flow delay_line_loop(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(delay~(^y, 2))
+  y
+}
+
+// The nested delays on a name of their own: a[n] = y[n-2], y[n] = x[n] + a[n].
+pub flow named_then_nested(x: F32 at sample) -> F32 at sample {
+  let a = prev~(prev~(^y))
+  let y = x + a
+  y
+}
+
+// The inner delay and the feedback reference side by side: e[n] = y[n-1] + 0.5 * y[n],
+// y[n] = x[n] + e[n-1].
+pub flow inner_and_self(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(prev~(^y) + ^y * 0.5)
+  y
+}
+
+// Both delays have an init: the inner one starts at 1, the outer one at 10. i[n] = y[n-1] (i[0] = 1),
+// out[n] = i[n-1] (out[0] = 10).
+pub flow loop_with_inits(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(prev~(^y, 1.0), 10.0)
+  y
+}
+
+// A call between the delays and the reference: y[n] = x[n] + y[n-2].
+pub flow through_a_call(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(prev~(same(^y)))
+  y
+}
+
+// Two names: a[n] = x[n] + b[n-2] and b = 0.5 * a, out = a + b = 1.5 * a.
+pub flow two_names(x: F32 at sample) -> F32 at sample {
+  let a = x + prev~(prev~(^b))
+  let b = a * 0.5
+  a + b
+}
+
+test "a three-sample loop" {
+  // x = 1: y = 1 1 1 2 2 2 3.
+  let xs: [F32; 7] = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+  let o = three_loop.render(xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 1.0
+  assert o.out[2] == 1.0
+  assert o.out[3] == 2.0
+  assert o.out[4] == 2.0
+  assert o.out[5] == 2.0
+  assert o.out[6] == 3.0
+}
+
+test "a loop through a delay line and a prev" {
+  let xs: [F32; 7] = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+  let o = delay_line_loop.render(xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 1.0
+  assert o.out[2] == 1.0
+  assert o.out[3] == 2.0
+  assert o.out[4] == 2.0
+  assert o.out[5] == 2.0
+  assert o.out[6] == 3.0
+}
+
+test "nested delays on a name of their own" {
+  // x = 1 2 3 4 5 6.  y0 = 1.  y1 = 2.  y2 = 3 + y0 = 4.  y3 = 4 + y1 = 6.  y4 = 5 + y2 = 9.
+  // y5 = 6 + y3 = 12.
+  let xs: [F32; 6] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+  let o = named_then_nested.render(xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == 4.0
+  assert o.out[3] == 6.0
+  assert o.out[4] == 9.0
+  assert o.out[5] == 12.0
+}
+
+test "an inner delay beside a feedback reference reads before the store" {
+  // x = 1 0 0 0 0 0.  y0 = 1, e0 = 0 + 0.5 * 1 = 0.5.  y1 = e0 = 0.5, e1 = y0 + 0.5 * y1 = 1.25.
+  // y2 = e1 = 1.25, e2 = y1 + 0.5 * y2 = 1.125.  y3 = e2 = 1.125, e3 = y2 + 0.5 * y3 = 1.8125.
+  // y4 = e3 = 1.8125, e4 = y3 + 0.5 * y4 = 2.03125.  y5 = e4 = 2.03125.
+  let xs: [F32; 6] = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  let o = inner_and_self.render(xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 0.5
+  assert o.out[2] == 1.25
+  assert o.out[3] == 1.125
+  assert o.out[4] == 1.8125
+  assert o.out[5] == 2.03125
+}
+
+test "the inits of nested delays on a loop" {
+  // x = 1.  out[0] = 10, out[1] = i[0] = 1, out[n] = y[n-2] after that.
+  // y0 = 11.  y1 = 2.  y2 = 1 + y0 = 12.  y3 = 1 + y1 = 3.  y4 = 1 + y2 = 13.  y5 = 1 + y3 = 4.
+  let xs: [F32; 6] = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+  let o = loop_with_inits.render(xs, 8.0)
+  assert o.out[0] == 11.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == 12.0
+  assert o.out[3] == 3.0
+  assert o.out[4] == 13.0
+  assert o.out[5] == 4.0
+}
+
+test "a call between the delays and the reference" {
+  // x = 1: y = 1 1 2 2 3 3.
+  let xs: [F32; 6] = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+  let o = through_a_call.render(xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 1.0
+  assert o.out[2] == 2.0
+  assert o.out[3] == 2.0
+  assert o.out[4] == 3.0
+  assert o.out[5] == 3.0
+}
+
+test "two names with a two-sample loop" {
+  // x = 8 4 0 0 0 0.  a0 = 8.  a1 = 4.  a2 = 0 + 0.5 * a0 = 4.  a3 = 0.5 * a1 = 2.  a4 = 0.5 * a2 = 2.
+  // a5 = 0.5 * a3 = 1.  out = 1.5 * a = 12 6 6 3 3 1.5.
+  let xs: [F32; 6] = [8.0, 4.0, 0.0, 0.0, 0.0, 0.0]
+  let o = two_names.render(xs, 8.0)
+  assert o.out[0] == 12.0
+  assert o.out[1] == 6.0
+  assert o.out[2] == 6.0
+  assert o.out[3] == 3.0
+  assert o.out[4] == 3.0
+  assert o.out[5] == 1.5
+}

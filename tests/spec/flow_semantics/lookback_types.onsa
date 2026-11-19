@@ -1,0 +1,182 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.4", "§6.4"]
+
+// The two-phase store for every kind of value type (spec §11.4, S-44, R-13): a delay inside the
+// first argument of a delay reads its output from before the store, whatever the value type is.
+// Each flow nests two delays of one value type and writes both `init` values (an omitted `init`
+// is in prev_default_types.onsa). The output of a nested pair is the input of two samples ago,
+// except that the first two outputs come from the inits: the outer one first, then the inner one.
+//
+// Every expected sequence is worked out by hand.
+
+pub struct Pair {
+  a: F32,
+  b: I32,
+}
+
+// I32: inner i[n] = n[n-1] (i[0] = 5), outer o[n] = i[n-1] (o[0] = 7).
+pub flow nested_i32(n: I32 at sample) -> I32 at sample {
+  prev~(prev~(n, 5), 7)
+}
+
+// U32 in a delay line: inner i[n] = n[n-1] (i[0] = 4), outer o[n] = i[n-2] (o[0] = o[1] = 9).
+pub flow nested_u32(n: U32 at sample) -> U32 at sample {
+  delay~(prev~(n, 4), 2, 9)
+}
+
+// F64.
+pub flow nested_f64(x: F64 at sample) -> F64 at sample {
+  prev~(prev~(x, 0.5), 0.25)
+}
+
+// F64 in a `vdelay~` with d = 2: e[n] = x[n-1], out[n] = e[n-2] = x[n-3].
+pub flow nested_vdelay_f64(x: F64 at sample) -> F64 at sample {
+  vdelay~(prev~(x, 1.0), 2.0, 4, 9.0)
+}
+
+// Bool: big[n] = (x[n] > 2), inner i[n] = big[n-1] (i[0] = true), outer o[n] = i[n-1] (o[0] = false).
+// The outer delay is the condition of an `if`.
+pub flow nested_bool(x: F32 at sample) -> F32 at sample {
+  let big = x > 2.0
+  if prev~(prev~(big, true), false) { 1.0 } else { 0.0 }
+}
+
+// An array.
+pub flow nested_array(x: F32 at sample) -> [F32; 2] at sample {
+  prev~(prev~([x, x + 1.0], [10.0, 20.0]), [0.5, 0.25])
+}
+
+// An array in a delay line.
+pub flow nested_array_line(x: F32 at sample) -> [F32; 2] at sample {
+  delay~(prev~([x, x * 2.0], [1.0, 1.0]), 2, [2.0, 2.0])
+}
+
+// A tuple, taken apart by a `let`.
+pub flow nested_tuple(x: F32 at sample) -> F32 at sample {
+  let (a, b) = prev~(prev~((x, x * 2.0), (1.0, 2.0)), (3.0, 4.0))
+  a * 10.0 + b
+}
+
+// A struct.
+pub flow nested_struct(x: F32 at sample) -> F32 at sample {
+  let q = prev~(prev~(Pair { a: x, b: 2 }, Pair { a: 1.0, b: 1 }), Pair { a: 3.0, b: 3 })
+  q.a * 10.0 + F32.round_from(q.b)
+}
+
+test "nested delays of I32" {
+  // n = 10 20 30 40 50: out = 7 (outer init), 5 (inner init), n[0], n[1], n[2].
+  let ns: [I32; 5] = [10, 20, 30, 40, 50]
+  let o = nested_i32.render(ns, 8.0)
+  assert o.out[0] == 7
+  assert o.out[1] == 5
+  assert o.out[2] == 10
+  assert o.out[3] == 20
+  assert o.out[4] == 30
+}
+
+test "a delay line of a delay of U32" {
+  // i = 4 10 20 30 40.  o[n] = i[n-2]: 9 9 4 10 20.
+  let ns: [U32; 5] = [10, 20, 30, 40, 50]
+  let o = nested_u32.render(ns, 8.0)
+  assert o.out[0] == 9
+  assert o.out[1] == 9
+  assert o.out[2] == 4
+  assert o.out[3] == 10
+  assert o.out[4] == 20
+}
+
+test "nested delays of F64" {
+  // inner i = 0.5 1.5 2.5 3.5 (0.5 is its init).  out[n] = i[n-1], out[0] = 0.25: 0.25 0.5 1.5 2.5.
+  let xs: [F64; 4] = [1.5, 2.5, 3.5, 4.5]
+  let o = nested_f64.render(xs, 8.0)
+  assert o.out[0] == 0.25
+  assert o.out[1] == 0.5
+  assert o.out[2] == 1.5
+  assert o.out[3] == 2.5
+}
+
+test "a vdelay of a delay of F64" {
+  // e = 1.0 5 6 7 8 9 (x = 5 6 7 8 9 10, init 1.0).  The vdelay starts at 9.0 and d = 2 gives e[n-2]:
+  // 9 9 1 5 6 7.
+  let xs: [F64; 6] = [5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
+  let o = nested_vdelay_f64.render(xs, 8.0)
+  assert o.out[0] == 9.0
+  assert o.out[1] == 9.0
+  assert o.out[2] == 1.0
+  assert o.out[3] == 5.0
+  assert o.out[4] == 6.0
+  assert o.out[5] == 7.0
+}
+
+test "nested delays of Bool" {
+  // x = 1 3 1 3 3 1.  big = F T F T T F.  i = T F T F T T.  o = F T F T F T.  out = 0 1 0 1 0 1.
+  let xs: [F32; 6] = [1.0, 3.0, 1.0, 3.0, 3.0, 1.0]
+  let o = nested_bool.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 1.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 1.0
+  assert o.out[4] == 0.0
+  assert o.out[5] == 1.0
+}
+
+test "nested delays of an array" {
+  // x = 1 2 3 4 5.  inner i = [10 20] (its init), [1 2], [2 3], [3 4], [4 5].  out[n] = i[n-1] and
+  // out[0] = [0.5 0.25] (the outer init), so out = [0.5 0.25] [10 20] [1 2] [2 3] [3 4].
+  // The array is the output, so o.out[k][n] is element k at sample n.
+  let xs: [F32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0]
+  let o = nested_array.render(xs, 8.0)
+  assert o.out[0][0] == 0.5
+  assert o.out[1][0] == 0.25
+  assert o.out[0][1] == 10.0
+  assert o.out[1][1] == 20.0
+  assert o.out[0][2] == 1.0
+  assert o.out[1][2] == 2.0
+  assert o.out[0][3] == 2.0
+  assert o.out[1][3] == 3.0
+  assert o.out[0][4] == 3.0
+  assert o.out[1][4] == 4.0
+}
+
+test "a delay line of a delay of an array" {
+  // i = [1 1], [1 2], [2 4], [3 6], [4 8].  The delay line starts at [2 2] for two samples.
+  // out = [2 2] [2 2] [1 1] [1 2] [2 4].
+  let xs: [F32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0]
+  let o = nested_array_line.render(xs, 8.0)
+  assert o.out[0][0] == 2.0
+  assert o.out[1][0] == 2.0
+  assert o.out[0][1] == 2.0
+  assert o.out[1][1] == 2.0
+  assert o.out[0][2] == 1.0
+  assert o.out[1][2] == 1.0
+  assert o.out[0][3] == 1.0
+  assert o.out[1][3] == 2.0
+  assert o.out[0][4] == 2.0
+  assert o.out[1][4] == 4.0
+}
+
+test "nested delays of a tuple" {
+  // x = 5 6 7 8 9.  a * 10 + b: out[0] = (3, 4) = 34, out[1] = (1, 2) = 12, out[2] = (5, 10) = 60,
+  // out[3] = (6, 12) = 72, out[4] = (7, 14) = 84.
+  let xs: [F32; 5] = [5.0, 6.0, 7.0, 8.0, 9.0]
+  let o = nested_tuple.render(xs, 8.0)
+  assert o.out[0] == 34.0
+  assert o.out[1] == 12.0
+  assert o.out[2] == 60.0
+  assert o.out[3] == 72.0
+  assert o.out[4] == 84.0
+}
+
+test "nested delays of a struct" {
+  // x = 5 6 7 8 9.  out = a * 10 + b: out[0] = (3, 3) = 33, out[1] = (1, 1) = 11, out[2] = (5, 2) = 52,
+  // out[3] = (6, 2) = 62, out[4] = (7, 2) = 72.
+  let xs: [F32; 5] = [5.0, 6.0, 7.0, 8.0, 9.0]
+  let o = nested_struct.render(xs, 8.0)
+  assert o.out[0] == 33.0
+  assert o.out[1] == 11.0
+  assert o.out[2] == 52.0
+  assert o.out[3] == 62.0
+  assert o.out[4] == 72.0
+}

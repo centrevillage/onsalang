@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.4", "§11.5", "§9.2"]
+
+// Forms next to the nested delays that hold no delay inside the first argument of another delay
+// (spec §11.4, §11.5), kept in a case of their own because they hold today and must keep holding
+// when the nesting is added (the nested forms are in lookback_sites.onsa, lookback_panic.onsa and
+// par_lookback_forms.onsa).
+//
+// One name read in the output and in the value another delay stores sees one value: every delay
+// outputs its stored value first, so `p` is read before anything is stored. A value that a
+// replica of a `par~` stores is evaluated at every sample, whether or not it is read yet, so a
+// panic in it is at the sample that stores it.
+//
+// Every expected sequence is worked out by hand.
+
+// p[n] = x[n-1], q[n] = p[n-1], out[n] = 10 * p[n] + q[n].
+pub flow read_twice(x: F32 at sample) -> F32 at sample {
+  let p = prev~(x)
+  let q = prev~(p)
+  p * 10.0 + q
+}
+
+// Replica i stores 10 / (n - i) and outputs it one sample later.
+pub flow replica_store(n: U32 at sample) -> [U32; 2] at sample {
+  par~ i in 0 ..< 2 { prev~(10 / (n - i)) }
+}
+
+test "a delayed name read in the output and in a stored value" {
+  // p = 0 1 2 3 4.  q = p[n-1] = 0 0 1 2 3.  out = 10 p + q = 0 10 21 32 43.
+  let xs: [F32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0]
+  let o = read_twice.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 10.0
+  assert o.out[2] == 21.0
+  assert o.out[3] == 32.0
+  assert o.out[4] == 43.0
+}
+
+test "the values the replicas store are read one sample later" {
+  // n = 3 4 5: replica 0 stores 3 2 2, replica 1 stores 5 3 2 (integer division).
+  // out[n] = what was stored at n-1: replica 0 gives 0 3 2, replica 1 gives 0 5 3.
+  let ns: [U32; 3] = [3, 4, 5]
+  let o = replica_store.render(ns, 8.0)
+  assert o.out[0][0] == 0
+  assert o.out[0][1] == 3
+  assert o.out[0][2] == 2
+  assert o.out[1][0] == 0
+  assert o.out[1][1] == 5
+  assert o.out[1][2] == 3
+}
+
+test "the value a replica stores panics at the sample that stores it" {
+  // n = 3 1 2: replica 1 stores 10 / (n - 1), which is 10 / 0 at the second sample.
+  let ns: [U32; 3] = [3, 1, 2]
+  let o = replica_store.render(ns, 8.0) //~ PANIC "the value a replica stores panics at the sample that stores it"
+  assert o.out[0][0] == 0
+}

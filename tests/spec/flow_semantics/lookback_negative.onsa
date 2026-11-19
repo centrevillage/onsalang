@@ -1,0 +1,63 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§4.5", "§11.2", "§11.5"]
+
+// What a delay output may not be given to (spec §11.4, §4.5, §11.2, §11.5). The output of a delay
+// is a `sample` value that changes every sample:
+//   - the `init` of a delay is at the clock `init` or a constant, so a delay output there is E0815;
+//   - the length `N` of `delay~`, the `MAX` of `vdelay~` and the bounds of a `par~` are constant
+//     expressions, so a delay output there is E0417 (a call is not a constant).
+// A name used before its `let`, or a `^name` handed to a flow, is E0801 with a delay inside the first
+// argument too. One error per flow (§18.1), so each form is a flow of its own. The forms with a
+// delay inside the first argument of the delay that breaks the rule (the lengths 0 and 1, the init of
+// the outer delay) are in lookback_nesting_negative.onsa.
+
+pub flow init_of_prev(x: F32 at sample) -> F32 at sample {
+  prev~(x, prev~(x))                                          //~ E0815
+}
+
+pub flow init_of_delay_line(x: F32 at sample) -> F32 at sample {
+  delay~(x, 3, prev~(x))                                      //~ E0815
+}
+
+pub flow init_of_vdelay(x: F32 at sample) -> F32 at sample {
+  vdelay~(x, 1.5, 4, prev~(x))                                //~ E0815
+}
+
+pub flow init_of_nested(x: F32 at sample) -> F32 at sample {
+  prev~(x, prev~(prev~(x)))                                   //~ E0815
+}
+
+pub flow length_of_delay_line(x: F32 at sample, n: U32 at sample) -> F32 at sample {
+  delay~(x, prev~(n))                                         //~ E0417
+}
+
+pub flow max_of_vdelay(x: F32 at sample, n: U32 at sample) -> F32 at sample {
+  vdelay~(x, 1.5, prev~(n))                                   //~ E0417
+}
+
+pub flow bound_of_par(x: F32 at sample, n: U32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< prev~(n) { prev~(prev~(x)) }                //~ E0417
+}
+
+pub flow forward_name_nested(x: F32 at sample) -> F32 at sample {
+  let a = prev~(prev~(b))                                     //~ E0801
+  let b = x
+  a
+}
+
+pub flow forward_name_nested_in_a_line(x: F32 at sample) -> F32 at sample {
+  let a = prev~(delay~(b, 2))                                 //~ E0801
+  let b = x
+  a
+}
+
+pub flow feedback_into_a_flow_nested(x: F32 at sample) -> F32 at sample {
+  let y = x + prev~(prev~(lp~(^y)))                           //~ E0801
+  y
+}
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  let y = 0.5 * x + 0.5 * prev~(^y)
+  y
+}

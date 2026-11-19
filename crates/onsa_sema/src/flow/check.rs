@@ -447,10 +447,7 @@ impl<'a> Checker<'a> {
                 ),
             ));
         }
-        self.fcx().delay_arg += 1;
-        let r = self.check_expr(args[0].expr, expected);
-        self.fcx().delay_arg -= 1;
-        let t = r?;
+        let t = self.check_expr(args[0].expr, expected)?;
         let init_expr = args.get(d.init_index()).map(|a| a.expr);
         let constant = d.const_index().map(|k| args[k].expr);
         let len = match d {
@@ -508,11 +505,6 @@ impl<'a> Checker<'a> {
             }
             None => None,
         };
-        // K-08, R-13: the store of a delay inside the first argument of a
-        // delay comes before the outer one reads it (W7-07).
-        if self.fcx().delay_arg > 0 {
-            self.flow_hold_gate(Feature::NestedDelays, span);
-        }
         let arg_exprs: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
         self.fcx().calls.push(NodeCall { expr: e, kind, args: arg_exprs, init, init_expr, ty: t });
         Ok(t)

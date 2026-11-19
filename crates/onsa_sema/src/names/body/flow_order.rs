@@ -7,7 +7,6 @@
 //! clock of `e at k` is looked up here too (§11.3, R-472).
 
 use onsa_diag::hash::HashMap;
-use onsa_diag::unsupported::Feature;
 use onsa_diag::{Code, Diagnostic, Edit, Fix, Span, Stage};
 use onsa_syntax::ast::{Clock, ExprId, Ident, StmtId};
 use onsa_syntax::foreign::{self, RowId};
@@ -35,8 +34,6 @@ pub(super) struct Order {
     /// The end of the bindings of each `let`.
     ends: HashMap<StmtId, u32>,
     pub(super) reach: Reach,
-    /// The `par~` the walk is in (a `^` there waits for W7-07, R-03).
-    pub(super) par: u32,
     /// The bindings that hide a name (E0304, §5.1), which is read above
     /// them, to the local they hide (none: a name of the module).
     pub(super) clashes: HashMap<BindingId, Option<BindingId>>,
@@ -84,15 +81,15 @@ impl Walker<'_> {
     }
 
     /// The reach where a candidate of the order may write `^` or `prev~(…)`
-    /// at a name of the chain `nodes` (none: a hole of a string): none in a
-    /// `par~` (W7-07) and at a callee, where it would leave the error of the
-    /// call (S-1108). The one place of that judgment.
+    /// at a name of the chain `nodes` (none: a hole of a string): none at a
+    /// callee, where it would leave the error of the call (S-1108). The one
+    /// place of that judgment.
     fn candidate_reach(&self, nodes: &[ExprId]) -> Option<Reach> {
         let callee = self
             .order
             .callee
             .is_some_and(|(c, marked)| nodes.first() == Some(&c) || (marked && nodes.last() == Some(&c)));
-        (!nodes.is_empty() && !callee && self.order.par == 0).then_some(self.order.reach)
+        (!nodes.is_empty() && !callee).then_some(self.order.reach)
     }
 
     /// The note of a `^name` (`found`) read in an argument of the flow
@@ -170,34 +167,29 @@ impl Walker<'_> {
     }
 
     /// `^name` of the later `let` `b` at `e`: the value of the step before in
-    /// the first argument of a delay (out of a `par~`, until W7-07), else
-    /// E0801 (§11.2): out of a delay with the candidate `prev~(^name)`
+    /// the first argument of a delay, in a `par~` too, else E0801 (§11.2):
+    /// out of a delay with the candidate `prev~(^name)`
     /// ([`Self::candidate_reach`]), in an argument of a flow with a note.
     fn past(&mut self, e: ExprId, name: &Ident, b: BindingId) -> W {
         let span = self.ast.expr(e).span;
         let found = self.src(span);
-        let d = match self.order.reach {
-            Reach::Delay if self.order.par > 0 => Feature::FeedbackInPar.diagnostic(Stage::Names, span, &[]),
-            Reach::Delay => {
-                self.out.paths.insert(e, PathRes::Local(b));
-                return Ok(());
-            }
-            reach => {
-                let msg = format!(
-                    "`^{0}` reads the later `{0}`, which only the first argument of `prev~` / `delay~` / `vdelay~` may do (§11.2)",
-                    name.name
-                );
-                let d = Diagnostic::new(Stage::Names, Code::E0801, span, msg).with_note(self.let_of(b), "defined here");
-                let not_a_delay = "`^` is not a delay: it reads a later `let` in the first argument of a delay";
-                match (reach, self.candidate_reach(&[e])) {
-                    (Reach::FlowArg(callee), _) => d.with_rule(self.flow_arg_rule(callee, &found)),
-                    (_, None) => d.with_rule(not_a_delay),
-                    _ => d.with_rule(not_a_delay).with_fix(Fix::new(
-                        "read the past value with `prev~`",
-                        vec![Edit::insert(span.file, span.start, "prev~("), Edit::insert(span.file, span.end, ")")],
-                    )),
-                }
-            }
+        if self.order.reach == Reach::Delay {
+            self.out.paths.insert(e, PathRes::Local(b));
+            return Ok(());
+        }
+        let msg = format!(
+            "`^{0}` reads the later `{0}`, which only the first argument of `prev~` / `delay~` / `vdelay~` may do (§11.2)",
+            name.name
+        );
+        let d = Diagnostic::new(Stage::Names, Code::E0801, span, msg).with_note(self.let_of(b), "defined here");
+        let not_a_delay = "`^` is not a delay: it reads a later `let` in the first argument of a delay";
+        let d = match (self.order.reach, self.candidate_reach(&[e])) {
+            (Reach::FlowArg(callee), _) => d.with_rule(self.flow_arg_rule(callee, &found)),
+            (_, None) => d.with_rule(not_a_delay),
+            _ => d.with_rule(not_a_delay).with_fix(Fix::new(
+                "read the past value with `prev~`",
+                vec![Edit::insert(span.file, span.start, "prev~("), Edit::insert(span.file, span.end, ")")],
+            )),
         };
         Err(self.fail(Fail::Report(d.with_found(found))))
     }
@@ -206,8 +198,7 @@ impl Walker<'_> {
     /// the candidate takes the `^` off in the first argument of a delay, and
     /// out of it both `name` and `prev~(name)`, the intent not being one.
     // SPEC-GAP(S-1107): `^` on what is no value (a function `^g`) is this
-    // E0020 with no candidate, and in a `par~` it comes before the E0200 of
-    // a `^` there.
+    // E0020 with no candidate.
     fn caret_visible(&mut self, span: Span, name: &Ident, value: bool) -> Stop {
         let caret = Span { end: name.span.start, ..span };
         let fixes = match (value, self.order.reach) {
@@ -241,7 +232,7 @@ impl Walker<'_> {
     /// stopped or not.
     pub(super) fn walks_clean_as_let(&mut self, name: &Ident, s: StmtId, value: ExprId) -> bool {
         let (bindings, scopes) = (self.out.bindings.len(), self.out.scopes.len());
-        let (par, callee, clocks) = (self.order.par, self.order.callee, self.out.clocks.clone());
+        let (callee, clocks) = (self.order.callee, self.out.clocks.clone());
         self.open_scope();
         let clean = self.declare(name, BindingKind::FlowLet, Origin::Let(s), None).is_ok() && self.walks_clean(value);
         self.close_scope();
@@ -249,7 +240,7 @@ impl Walker<'_> {
         self.out.scopes.truncate(scopes);
         self.out.paths.retain(|_, r| !matches!(r, PathRes::Local(b) if b.0 as usize >= bindings));
         self.order.clashes.retain(|b, _| (b.0 as usize) < bindings);
-        (self.order.par, self.order.callee, self.out.clocks) = (par, callee, clocks);
+        (self.order.callee, self.out.clocks) = (callee, clocks);
         clean
     }
 

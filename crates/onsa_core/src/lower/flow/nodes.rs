@@ -54,7 +54,7 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
             cargs.extend(instance_args(lw, cx, *callee, args, Phase::Tick, span)?.into_iter().map(borrow));
             call(sub.tick, ret, span, cargs)
         }
-        PlanKind::Par { body, children, .. } => {
+        PlanKind::Par { body, .. } => {
             let r = replica_loop(cx, &info.node(id).kind, span)?;
             let ty = lw.core_ty(cx.info.expr_types[&e], &[], span)?;
             let arr = cx.temp(name, ty.clone());
@@ -70,9 +70,6 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
             let mut loop_body = Vec::new();
             let v = lower_expr(lw, cx, *body)?;
             assign(&mut loop_body, &index(arr_e.clone(), idx)?, v)?;
-            if phase == Phase::Tick {
-                store_nodes(lw, cx, &mut loop_body, children, &elem_state)?;
-            }
             cx.flow.as_mut().unwrap().scopes.pop();
             stmts.push(r.each(span, loop_body));
             arr_e

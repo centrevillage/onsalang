@@ -234,8 +234,20 @@ pub(super) fn gen_tick<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Fl
 }
 
 /// End-of-tick stores (§11.4) in node order: `prev` saves its argument,
-/// `delay` / `vdelay` write the argument at `w` and advance.
-pub(super) fn store_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, ids: &[NodeId], state: &Expr) -> R<()> {
+/// `delay` / `vdelay` write the argument at `w` and advance, a `par~` with
+/// state stores its replicas in a loop of its own at its place in the order.
+///
+/// They are the second phase of §11.4 (read all, then store all) with no
+/// temporaries of their own: each node is read once where it is lowered
+/// (memoised), a node of the body before all the stores, and a node first
+/// lowered here (in the first argument of a delay) in the store of the
+/// nearest delay around it, which the order (preorder, the outer first)
+/// puts before the node's own store. So no read sees a store of this tick.
+/// A change of the order of the stores (W7-06, W7-09) keeps that: the read
+/// of a node first lowered here comes before its store.
+// SPEC-GAP(S-1154): the stores (and their panics) are in the preorder of
+// the table; S-1126 (1): after every `let` and the output of the body.
+fn store_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, ids: &[NodeId], state: &Expr) -> R<()> {
     let info = plan(cx);
     for &id in ids {
         let n = info.node(id);
@@ -258,10 +270,31 @@ pub(super) fn store_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, 
                 );
                 assign(out, &w, next)?;
             }
-            // Instances store inside their own `tick`; `par` replicas store at the
-            // end of each iteration of the loop that computes them.
-            PlanKind::Instance { .. } | PlanKind::Par { .. } => {}
+            // An instance stores inside its own `tick`.
+            PlanKind::Instance { .. } => {}
+            PlanKind::Par { children, .. } => {
+                if !stores(info, children) {
+                    continue;
+                }
+                let r = replica_loop(cx, &n.kind, span)?;
+                let elem = index(sfield(lw, info, state, at(Part::Own), span)?, r.index(cx, span))?;
+                let mut body = Vec::new();
+                cx.flow.as_mut().unwrap().scopes.push(Scope { state: elem.clone() });
+                store_nodes(lw, cx, &mut body, children, &elem)?;
+                cx.flow.as_mut().unwrap().scopes.pop();
+                out.push(r.each(span, body));
+            }
         }
     }
     Ok(())
+}
+
+/// Whether the nodes `ids` store in `tick` ([`store_nodes`]): a delay, or a
+/// `par~` of one; an instance stores in its own `tick`.
+fn stores(info: &FlowInfo, ids: &[NodeId]) -> bool {
+    ids.iter().any(|&id| match &info.node(id).kind {
+        PlanKind::Prev { .. } | PlanKind::Delay { .. } | PlanKind::Vdelay { .. } => true,
+        PlanKind::Par { children, .. } => stores(info, children),
+        PlanKind::Instance { .. } => false,
+    })
 }

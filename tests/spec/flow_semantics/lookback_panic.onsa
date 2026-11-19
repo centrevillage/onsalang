@@ -1,0 +1,61 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.4", "§9.2"]
+
+// A value that a delay stores is evaluated every sample, whether or not anything reads it yet
+// (spec §11.4: "保存する値 e を全て評価してから、まとめて保存する"), so a panic in it happens at
+// the sample that stores it, not when the output first shows it. The cases are about *that* a
+// panic happens (a division by zero in the value an inner delay stores, and in a value whose
+// delay output is multiplied away). Which of two panics of one sample comes first is S-1126 (the
+// order of the panics of a store and of the body) and is not asserted here: a case sees only the
+// call of `render` that panicked.
+//
+// Every expected sequence is worked out by hand.
+
+// q[n] = 10 / n[n], a = q delayed twice, out[n] = n[n] + a[n]: the inner delay stores 10 / n[n].
+pub flow inner_store(n: I32 at sample) -> I32 at sample {
+  let a = prev~(prev~(10 / n))
+  n + a
+}
+
+// The inner delay stores 100 / n, the outer one stores that output plus 1, and the output of the
+// outer one is multiplied by 0: out[n] = n[n].
+pub flow unread_store(n: I32 at sample) -> I32 at sample {
+  let a = prev~(prev~(100 / n) + 1)
+  a * 0 + n
+}
+
+test "the values stored by nested delays are evaluated at every sample" {
+  // n = 1 2 5 10 2: q = 10 5 2 1 5.  a = q[n-2] = 0 0 10 5 2.  out = 1 2 15 15 4.
+  let ns: [I32; 5] = [1, 2, 5, 10, 2]
+  let o = inner_store.render(ns, 8.0)
+  assert o.out[0] == 1
+  assert o.out[1] == 2
+  assert o.out[2] == 15
+  assert o.out[3] == 15
+  assert o.out[4] == 4
+}
+
+test "the value an inner delay stores panics at the sample that stores it" {
+  // n = 1 0 3: the second sample divides by zero, two samples before its value would be read.
+  let ns: [I32; 3] = [1, 0, 3]
+  let o = inner_store.render(ns, 8.0) //~ PANIC "the value an inner delay stores panics at the sample that stores it"
+  assert o.out[0] == 1
+}
+
+test "the value of a delay whose output is multiplied away panics too" {
+  // `a * 0` does not remove the division: n = 4 0.
+  let ns: [I32; 2] = [4, 0]
+  let o = unread_store.render(ns, 8.0) //~ PANIC "the value of a delay whose output is multiplied away panics too"
+  assert o.out[0] == 4
+}
+
+test "nested stores with no zero do not panic" {
+  // 100 / n = 25 50: a = (prev~(100 / n) + 1) delayed once.  The inner delay outputs 0 25, so
+  // e = 1 26 and a = 0 1, out = a * 0 + n = 4 2.
+  let ns: [I32; 2] = [4, 2]
+  let o = unread_store.render(ns, 8.0)
+  assert o.out[0] == 4
+  assert o.out[1] == 2
+}

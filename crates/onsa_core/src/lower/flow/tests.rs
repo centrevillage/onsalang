@@ -1,6 +1,58 @@
-//! The time of the lowering of a flow grows with its state linearly (R-498).
+//! The order of the stores of `tick` (§11.4, W7-07) and the time of the
+//! lowering of a flow, which grows with its state linearly (R-498).
 
 use std::time::{Duration, Instant};
+
+/// The `tick` of the flow `name` of `src`, as in the dump of the Core.
+fn tick(src: &str, name: &str) -> String {
+    crate::dump::dump_item(&crate::tests::core(src), &format!("t.{name}.tick"))
+}
+
+/// The place of `what` in `text`, which holds it once.
+fn at(text: &str, what: &str) -> usize {
+    assert_eq!(text.matches(what).count(), 1, "`{what}` once in:\n{text}");
+    text.find(what).unwrap_or_default()
+}
+
+/// §11.4: the inner delay of `prev~(prev~(x))` is read in the store of the
+/// outer one, before its own store, so the outer one keeps the inner one's
+/// output of this tick (x[n-2]), not what the inner one stores now.
+#[test]
+fn a_delay_inside_a_delay_is_read_in_the_outer_store_before_its_own_store() {
+    let t = tick("pub flow f(x: F32 at sample) -> F32 at sample { prev~(prev~(x)) }", "f");
+    let (out, outer, inner_read, inner) = (at(&t, "let __out"), at(&t, "s.0 = "), at(&t, "= s.1\n"), at(&t, "s.1 = x"));
+    assert!(out < outer && outer < inner_read && inner_read < inner, "{t}");
+}
+
+/// R-03: a replica of a `par~` stores in a loop of its own after the output,
+/// so the `^y` its stored value reads is the `y` of this tick; the loop that
+/// computes the replicas stores nothing.
+#[test]
+fn the_replicas_of_a_par_store_in_a_loop_after_the_output() {
+    let src = "pub flow f(x: F32 at sample) -> F32 at sample {
+  let a = par~ i in 0 ..< 2 { prev~(x * F32.round_from(i) + ^y) }
+  let y = a[0] + x
+  y
+}";
+    let t = tick(src, "f");
+    let (out, store) = (at(&t, "let __out"), at(&t, "s.0[i].0 = "));
+    assert!(out < store && t[out..store].contains("for i in"), "{t}");
+    assert_eq!(t.matches("for i in").count(), 2, "{t}");
+}
+
+/// A `par~` whose replicas are instances alone stores nothing in `tick` (an
+/// instance stores in its own), so no loop is made for it.
+#[test]
+fn a_par_of_instances_alone_has_no_loop_of_stores() {
+    let src = "pub flow lp(x: F32 at sample) -> F32 at sample { x + prev~(x) }
+pub flow f(x: F32 at sample) -> F32 at sample {
+  let a = par~ i in 0 ..< 2 { lp~(x) }
+  a[0] + a[1]
+}";
+    let t = tick(src, "f");
+    assert_eq!(t.matches("for i in").count(), 1, "{t}");
+    assert!(at(&t, "lp.tick") < at(&t, "let __out"), "{t}");
+}
 
 /// A flow of `n` pairs of `let`s, each pair a `let` the state keeps and a
 /// `let` with a `prev~` and a `delay~` (the form of R-498): about 4 `n`

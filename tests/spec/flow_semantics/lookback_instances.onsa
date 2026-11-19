@@ -1,0 +1,142 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.4", "§11.5", "§11.2"]
+
+// Instances and delays inside each other (spec §11.4, §11.5, R-13). An instance has its own state,
+// and the state of the delays inside it is stored in the same tick as every other delay: the
+// output of an instance is read before its delays store, so `prev~(lp~(x))` is the output of
+// `lp~(x)` one sample later, and a flow that holds `prev~(prev~(x))` makes x[n-2] wherever it is
+// called from. The value before the first sample is 0. The forms with no delay inside a delay
+// (an instance as the first argument of a delay, a delay in the argument of an instance) are in
+// lookback_instance_args.onsa.
+//
+// Every expected sequence is worked out by hand.
+
+// A one-pole low-pass: y[n] = 0.5 * x[n] + 0.5 * y[n-1]. With x = 8 0 0 0 0 the output is
+// 4 2 1 0.5 0.25.
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  let y = 0.5 * x + 0.5 * prev~(^y)
+  y
+}
+
+// A flow that holds nested delays itself: out[n] = x[n-2].
+pub flow back2(x: F32 at sample) -> F32 at sample {
+  prev~(prev~(x))
+}
+
+// A delay of a delay of an instance: out[n] = lp(x)[n-2].
+pub flow twice_delayed_instance(x: F32 at sample) -> F32 at sample {
+  prev~(prev~(lp~(x)))
+}
+
+// The instance's output read in two delays, one of them nested: out[n] = l[n-1] + l[n-2].
+pub flow instance_read_twice(x: F32 at sample) -> F32 at sample {
+  let l = lp~(x)
+  prev~(l) + prev~(prev~(l))
+}
+
+// An instance that takes a nested delay as its argument: lp of x[n-2].
+pub flow nested_in_the_argument(x: F32 at sample) -> F32 at sample {
+  lp~(prev~(prev~(x)))
+}
+
+// A delay of a flow that holds nested delays: x[n-3].
+pub flow delay_of_nested_instance(x: F32 at sample) -> F32 at sample {
+  prev~(back2~(x))
+}
+
+// A flow that holds nested delays, given a delay: x[n-3].
+pub flow nested_instance_of_delay(x: F32 at sample) -> F32 at sample {
+  back2~(prev~(x))
+}
+
+// Two of them in a row: x[n-4].
+pub flow nested_instance_twice(x: F32 at sample) -> F32 at sample {
+  back2~(back2~(x))
+}
+
+// A loop through an instance that holds nested delays: y[n] = x[n] + y[n-3] (one sample from
+// `prev~(^y)` and two from `back2`).
+pub flow loop_through_nested_instance(x: F32 at sample) -> F32 at sample {
+  let y = x + back2~(prev~(^y))
+  y
+}
+
+test "a delay of a delay of an instance" {
+  let xs: [F32; 5] = [8.0, 0.0, 0.0, 0.0, 0.0]
+  let o = twice_delayed_instance.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 4.0
+  assert o.out[3] == 2.0
+  assert o.out[4] == 1.0
+}
+
+test "an instance's output read in two delays" {
+  // l = 4 2 1 0.5 0.25.  out[n] = l[n-1] + l[n-2] = 0, 4, 2 + 4, 1 + 2, 0.5 + 1.
+  let xs: [F32; 5] = [8.0, 0.0, 0.0, 0.0, 0.0]
+  let o = instance_read_twice.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 4.0
+  assert o.out[2] == 6.0
+  assert o.out[3] == 3.0
+  assert o.out[4] == 1.5
+}
+
+test "an instance of a two-sample delay" {
+  // The input of lp is x[n-2] = 0 0 8 0 0, so lp gives 0 0 4 2 1.
+  let xs: [F32; 5] = [8.0, 0.0, 0.0, 0.0, 0.0]
+  let o = nested_in_the_argument.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 4.0
+  assert o.out[3] == 2.0
+  assert o.out[4] == 1.0
+}
+
+test "a delay of an instance that holds nested delays is x[n-3]" {
+  let xs: [F32; 6] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+  let o = delay_of_nested_instance.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 1.0
+  assert o.out[4] == 2.0
+  assert o.out[5] == 3.0
+}
+
+test "an instance that holds nested delays, given a delay, is x[n-3]" {
+  let xs: [F32; 6] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+  let o = nested_instance_of_delay.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 1.0
+  assert o.out[4] == 2.0
+  assert o.out[5] == 3.0
+}
+
+test "two instances that hold nested delays are x[n-4]" {
+  let xs: [F32; 6] = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+  let o = nested_instance_twice.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 0.0
+  assert o.out[4] == 1.0
+  assert o.out[5] == 2.0
+}
+
+test "a loop through an instance that holds nested delays" {
+  // x = 1: y = 1 1 1 2 2 2 3.
+  let xs: [F32; 7] = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+  let o = loop_through_nested_instance.render(xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 1.0
+  assert o.out[2] == 1.0
+  assert o.out[3] == 2.0
+  assert o.out[4] == 2.0
+  assert o.out[5] == 2.0
+  assert o.out[6] == 3.0
+}

@@ -1,4 +1,4 @@
-# flow_ref 1 source=tests/spec/flow_semantics/lookback_nesting.onsa tests=11 evaluated=11 unavailable=0 skipped=0 waiting=1
+# flow_ref 1 source=tests/spec/flow_semantics/lookback_nesting.onsa tests=11 evaluated=11 unavailable=0 skipped=0 waiting=0
 @ prev~(prev~(x)) is a two-sample delay
 render lookback_nesting.two sr=0x41000000 in x=[0x3f800000 0x40000000 0x40400000 0x40800000 0x40a00000]
 out=[0x00000000 0x00000000 0x3f800000 0x40000000 0x40400000]
