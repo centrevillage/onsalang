@@ -11,7 +11,7 @@
 - `[test]` のキー（閉じた表）:
   - `mode`: `"none"`（収録だけ）/ `"parse"`（構文解析だけ）/ `"check"`（check の診断を印と比べる。既定）/ `"test"`（check の後、`test` ブロックをインタプリタで走らせる）。
   - `spec`: 事例が確かめる仕様の節（`"§11.4"`）。
-  - `golden`: 比べる写しの種類（`"core"` / `"interface"` / `"c"`）。写しは `golden/core/<事例>.core`、`golden/interface/<事例>.txt`、`golden/c/<事例>.<ターゲット>.c` と `.h`。`golden_graph`: `onsa graph` を比べる flow の名前で、写しは `golden/graph/<事例>.<flow>.dot`。
+  - `golden`: 比べる写しの種類（`"core"` / `"interface"` / `"c"`）。写しは `golden/core/<事例>.core`、`golden/interface/<事例>.txt`、`golden/c/<事例>.<ターゲット>.c` と `.h`。`golden_graph`: `onsa graph` を比べる flow の名前で、写しは `golden/graph/<事例>.<flow>.dot`。器は `golden_graph` によらず、診断の無い全ての事例の、利用者のパッケージの全ての flow の graph に、実線の辺だけでは閉路が無いこと（`spec/tools.md` §1.2）を当てる（`onsa_driver::graph::check_graphs`）。
   - `conformance`: 全ての `pub flow` に `@export` を付け、インタプリタと C を比べる（§13.4）。
   - `fixes`: 一つの診断が持つ修正候補の数の最大（診断の数ではない）。`.fixK`（`.fix1`〜`.fix<N>`）は、k 番目の候補を持つ全ての診断にその候補を一度に当てた後の全文で、ファイルの隣に置く。書いた `fixes = 0` は、候補を持つ診断が無いことを確かめる（書かなければ数えない）。
   - `canonical = false`: `mode` が `"none"` でなければ、印の無いファイルは `onsa fmt` の正規形でなければならない（`fmt` が変えず、冪等）。`fmt` が書き換える正例はこのキーを書く（正規の形と比べず、書き換えた結果が読めて冪等なことを確かめる）。
