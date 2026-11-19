@@ -60,14 +60,14 @@ pub rt fn pair_sum(xs: [F32; 2]) -> F32
 pub flow par_named(
   x: F32 at sample,
 ) -> F32 at sample
-  pub struct par_named.State  // Affine; size 20, bulk 0, align 4
-    par_0: 8 bytes, align 4, fast  // offset 0
-    _out.par_0: 8 bytes, align 4, fast  // offset 8
-    _poisoned: 1 bytes, align 1, fast  // offset 16
-    _initialized: 1 bytes, align 1, fast  // offset 17
+  pub struct par_named.State  // Affine; size 28, bulk 0, align 4
+    par_0: 16 bytes, align 4, fast  // offset 0
+    _out.par_0: 8 bytes, align 4, fast  // offset 16
+    _poisoned: 1 bytes, align 1, fast  // offset 24
+    _initialized: 1 bytes, align 1, fast  // offset 25
   pub struct par_named.Rendered  // Affine
     out: Buf[F32]
-  pub const par_named.SIZE: U32 = 20
+  pub const par_named.SIZE: U32 = 28
   pub const par_named.BULK_SIZE: U32 = 0
   pub fn par_named.init(sample_rate: F32) -> par_named.State
   pub rt fn par_named.reset(inout s: par_named.State)

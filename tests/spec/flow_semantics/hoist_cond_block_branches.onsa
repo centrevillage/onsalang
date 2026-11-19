@@ -1,0 +1,102 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.5"]
+
+// W7-05 U2/b (the parent wrote it from the break), S-1157 (spec §11.3): a branch or an arm written as a block `{ … }` whose value is
+// slower than its place is the same value as the expression in it ("値は `let` に分けても分けなくても同じである"), whether its part
+// is guarded under a condition of `init` or `block` or the whole `if` is a part of `block`. These forms checked and ran before W7-05
+// U2 and fell with an internal error after it (the field of the block was written and not read). Every value is worked out by hand.
+
+pub enum Sh {
+  Circle(I32),
+  Dot,
+}
+
+pub rt fn half(l: F32) -> F32 {
+  l * 0.5
+}
+
+// The `else` block is all `block` under a condition of `init`.
+pub flow else_block(x: F32 at sample, b2: F32 at block, c: I32 at init) -> F32 at sample {
+  if c == 0 { x } else { b2 * 2.0 }
+}
+
+// The `then` block is all `block` under a condition of `block`.
+pub flow then_block(x: F32 at sample, b2: F32 at block, n: I32 at block) -> F32 at sample {
+  if n != 0 { b2 * 2.0 } else { x }
+}
+
+// The same `if` bound by a `let`.
+pub flow in_a_let(x: F32 at sample, b2: F32 at block, c: I32 at init) -> F32 at sample {
+  let y = if c == 0 { x } else { b2 * 2.0 }
+  y
+}
+
+// A call of an `rt fn` in the block.
+pub flow a_call(x: F32 at sample, b2: F32 at block, c: I32 at init) -> F32 at sample {
+  if c == 0 { x } else { half(b2) }
+}
+
+// The whole `if` is of `block`, and a branch is a name of `init` or an expression of `init`.
+pub flow whole_if_name(x: F32 at sample, n: F32 at block, c: F32 at init) -> F32 at sample {
+  x + (if c <= 1.0 { n } else { c })
+}
+
+pub flow whole_if_expr(x: F32 at sample, n: F32 at block, c: F32 at init) -> F32 at sample {
+  x + (if c <= 1.0 { n } else { c + 1.0 })
+}
+
+// An arm of a `match` written as a block.
+pub flow arm_block(x: F32 at sample, s: Sh at block, b2: F32 at block) -> F32 at sample {
+  match s {
+    Sh.Circle(r) => x * F32.round_from(r),
+    Sh.Dot => { b2 * 2.0 },
+  }
+}
+
+test "a block branch under a condition of init: b2 * 2.0 when c != 0, x when c == 0" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let on = else_block.render(else_block.Config { c: 1 }, else_block.Params { b2: 3.0 }, xs, 8.0)
+  assert on.out[0] == 6.0
+  assert on.out[1] == 6.0
+  let off = else_block.render(else_block.Config { c: 0 }, else_block.Params { b2: 3.0 }, xs, 8.0)
+  assert off.out[0] == 1.0
+  assert off.out[1] == 2.0
+  let l = in_a_let.render(in_a_let.Config { c: 1 }, in_a_let.Params { b2: 3.0 }, xs, 8.0)
+  assert l.out[1] == 6.0
+  let h = a_call.render(a_call.Config { c: 1 }, a_call.Params { b2: 3.0 }, xs, 8.0)
+  assert h.out[0] == 1.5
+}
+
+test "a block branch under a condition of block: b2 * 2.0 when n != 0, x when n == 0" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let on = then_block.render(then_block.Params { b2: 3.0, n: 1 }, xs, 8.0)
+  assert on.out[0] == 6.0
+  assert on.out[1] == 6.0
+  let off = then_block.render(then_block.Params { b2: 3.0, n: 0 }, xs, 8.0)
+  assert off.out[0] == 1.0
+  assert off.out[1] == 2.0
+}
+
+test "a whole if of block with a branch of init: x + n when c <= 1, x + c (or c + 1) when c > 1" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let a = whole_if_name.render(whole_if_name.Config { c: 0.5 }, whole_if_name.Params { n: 4.0 }, xs, 8.0)
+  assert a.out[0] == 5.0
+  assert a.out[1] == 6.0
+  let b = whole_if_name.render(whole_if_name.Config { c: 2.0 }, whole_if_name.Params { n: 4.0 }, xs, 8.0)
+  assert b.out[0] == 3.0
+  let e = whole_if_expr.render(whole_if_expr.Config { c: 2.0 }, whole_if_expr.Params { n: 4.0 }, xs, 8.0)
+  assert e.out[0] == 4.0
+  assert e.out[1] == 5.0
+}
+
+test "an arm written as a block: b2 * 2.0 for Dot, x * r for Circle(r)" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let d = arm_block.render(arm_block.Params { s: Sh.Dot, b2: 3.0 }, xs, 8.0)
+  assert d.out[0] == 6.0
+  assert d.out[1] == 6.0
+  let c = arm_block.render(arm_block.Params { s: Sh.Circle(2), b2: 3.0 }, xs, 8.0)
+  assert c.out[0] == 2.0
+  assert c.out[1] == 4.0
+}

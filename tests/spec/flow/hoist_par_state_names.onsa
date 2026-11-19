@@ -1,0 +1,92 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.6", "§12.4"]
+// golden = ["interface"]
+
+// W7-05 U3/t, S-1138, S-1157, S-1140 (§11.3, §11.6, §12.4): the hidden fields of the parts that are hoisted in the body of a `par~`. The body is qualified by the name of the `par~` ("`par~` の本体は、その `par~` の名前で修飾する",
+// `saws.saw_0`; "巻き上げた部分式の値を置く隠れたフィールドも同じ規則で、種類を `_hoist` として"), so a part of the body is `saws._hoist_0`. S-1140 is open and the provisional reading is the one this file keeps (the names change
+// when it is decided otherwise): the field is of each replica (the body is one structure with N replicas, and the part reads the index `i` and has a value of its own in each), numbered by the text of the body of
+// each `par~` (not by the `let`), in the order in which the parts start in the text; the path is `<the path of the par~>._hoist_<n>`, and the fields of a replica are its nodes, then its hoisted values (§12.4: "各 `let` の位置に ... その
+// `let` 自身のフィールドがあればそれを、続けてその式の中の名前の無いノード ... 次に巻き上げた部分式の値"). A part of `block` that holds a part of `init` has both (the largest part of each stage, §11.3): the part `f0 * ratio(i)`
+// of `block` is the field 0 of the replica and `ratio(i)` of `init` is the field 1 (it starts after the part that holds it). `onsa interface` shows the `par~` as one field with the size of its replicas (the golden
+// keeps it with the sizes and the offsets, which the implementation makes); the fields of the replicas are the ones listed here for each flow (the names of the graph are `onsa graph`'s, not this file's):
+//
+//   named:        saws (the `par~`); in each replica saws.saw_0 (the instance), saws._hoist_0 (`f0 * ratio(i)`, F32, of block), saws._hoist_1 (`ratio(i)`, F32, of init)
+//   in_a_value:   a.par_0 (a `par~` inside the value of the `let` `a`), a.par_0.saw_0, a.par_0._hoist_0 (`f0 * ratio(i)`), a.par_0._hoist_1 (`ratio(i)`)
+//   in_the_output: _out.par_0, _out.par_0.saw_0, _out.par_0._hoist_0 (`f0 * ratio(i)`), _out.par_0._hoist_1 (`ratio(i)`)
+//   nested:       m (the outer `par~`), m.par_0 (the inner `par~` in each replica of `m`), m.par_0.saw_0, m.par_0._hoist_0 (`f0 * ratio(i + j)`), m.par_0._hoist_1 (`ratio(i + j)`)
+//   without_the_index: saws (the `par~`), saws.saw_0, saws._hoist_0 (`f0 * 2.0`: a field in each replica, the same value in each)
+//   two_parts:    saws (the `par~`), saws.saw_0, saws._hoist_0 (`f0 * ratio(i)`), saws._hoist_1 (`ratio(i)`), saws._hoist_2 (`g * 2.0`): the numbers go by the start of the part in the text
+//   own_and_par:  s.par_0 (the `par~` in the value of the `let` `s`), s.par_0.saw_0, s.par_0._hoist_0 (`f0 * ratio(i)`), s.par_0._hoist_1 (`ratio(i)`), then s._hoist_0 (`g * 3.0`, outside the `par~`): the
+//                 node comes before the hoisted values of the `let` (§12.4), and the numbers inside the body of the `par~` count again from 0 (the body of each `par~` has its own numbers)
+//   no_node:      ys (the `par~`), ys._hoist_0 (`f0 * ratio(i)`), ys._hoist_1 (`ratio(i)`): a body with no node has the fields of its parts all the same (a field of the replica for each, so the `par~` is a
+//                 structure of replicas that hold them)
+//   init_only:    saws (the `par~`), saws.saw_0, saws._hoist_0 (`k * ratio(i)`, of init; it holds `ratio(i)`, of init as well, the same stage: one field, the largest)
+//
+// A body with no part of `init` or `block` that is hoisted has no `_hoist` field: stateless_plain below (it reads the `sample` input only).
+// `saw` takes `f` at `sample`, so the argument of `saw~(…)` is read at `sample` and its slower parts are hoisted; an argument read at
+// `block` would be evaluated at `block` itself, with no field (§11.3: a field holds a slower value read at a faster stage).
+
+pub rt fn ratio(i: U32) -> F32 {
+  F32.round_from(i) + 1.0
+}
+
+pub rt fn pair_sum(xs: [F32; 2]) -> F32 {
+  xs[0] + xs[1]
+}
+
+pub flow saw(f: F32 at sample) -> F32 at sample {
+  let p = prev~(^p) + f
+  p
+}
+
+pub flow named(x: F32 at sample, f0: F32 at block) -> F32 at sample {
+  let saws = par~ i in 0 ..< 3 { saw~(f0 * ratio(i)) }
+  saws[0] + saws[1] + saws[2] + x
+}
+
+pub flow in_a_value(x: F32 at sample, f0: F32 at block) -> F32 at sample {
+  let a = 0.5 * pair_sum(par~ i in 0 ..< 2 { saw~(f0 * ratio(i)) })
+  a + x
+}
+
+pub flow in_the_output(x: F32 at sample, f0: F32 at block) -> F32 at sample {
+  pair_sum(par~ i in 0 ..< 2 { saw~(f0 * ratio(i)) }) + x
+}
+
+pub flow nested(x: F32 at sample, f0: F32 at block) -> F32 at sample {
+  let m = par~ i in 0 ..< 2 {
+    pair_sum(par~ j in 0 ..< 2 { saw~(f0 * ratio(i + j)) })
+  }
+  m[0] + m[1] + x
+}
+
+pub flow without_the_index(x: F32 at sample, f0: F32 at block) -> F32 at sample {
+  let saws = par~ i in 0 ..< 3 { saw~(f0 * 2.0) }
+  saws[0] + saws[1] + saws[2] + x
+}
+
+pub flow two_parts(x: F32 at sample, f0: F32 at block, g: F32 at block) -> F32 at sample {
+  let saws = par~ i in 0 ..< 2 { saw~(f0 * ratio(i)) * (g * 2.0) }
+  saws[0] + saws[1] + x
+}
+
+pub flow own_and_par(x: F32 at sample, f0: F32 at block, g: F32 at block) -> F32 at sample {
+  let s = x * (g * 3.0) + pair_sum(par~ i in 0 ..< 2 { saw~(f0 * ratio(i)) })
+  s
+}
+
+pub flow no_node(x: F32 at sample, f0: F32 at block) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { x * (f0 * ratio(i)) }
+  ys[0] + ys[1]
+}
+
+pub flow init_only(x: F32 at sample, k: F32 at init) -> F32 at sample {
+  let saws = par~ i in 0 ..< 2 { saw~(k * ratio(i)) }
+  saws[0] + saws[1] + x
+}
+
+pub flow stateless_plain(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { x * 2.0 }
+  ys[0] + ys[1]
+}

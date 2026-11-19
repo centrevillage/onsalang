@@ -1,0 +1,147 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.5", "§11.6", "§9.2"]
+
+// W7-05 U3/t, S-1157 (D'), S-1080, S-1140 (spec §11.3, §11.6): a part of `block` or of `init` in the body of a `par~` is made by the stage of its clock, so its panic is a panic of that stage:
+// "`init` の式は `init` で 1 回、`block` の式は `process` の呼び出しごとに 1 回（0 フレームの呼び出しでも、§11.6）" and "`init` の段の式の panic は `init` で起きる". A part of `block` of a body panics
+// in a call of 0 frames (the output is not written), a part of `init` at `init`. It is made for each replica, so the panic is of the replica whose value divides by zero: `100 / (d - i)` is made
+// for i = 0, 1 and divides by zero for d = 1 at i = 1. The index `i` is a value of `init` (§11.5), `x` the `sample` input, `d` and `n` of `block`, `k` and `a` of `init`; the values are `U32` (the
+// division by zero and the subtraction `d - i` that goes below 0 are the panics; d = 1 and k = 1 divide by zero for i = 1, d = 2 and k = 2 do not). Where a condition of `sample` chooses the part it is made
+// where it is reached, so the panic is not of a stage before the frames (hoist_par_panic_reached.onsa, the companion that passes now). The values where nothing panics are worked out by hand: with d = 3, `100 / 3` is 33 (the quotient
+// of integers), 100 / 2 is 50, 100 / 1 is 100.
+
+pub rt fn pair_sum(xs: [F32; 2]) -> F32 {
+  xs[0] + xs[1]
+}
+
+pub flow block_reads_i(x: F32 at sample, d: U32 at block) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { x * F32.round_from(100 / (d - i)) }
+  ys[0] + ys[1]
+}
+
+pub flow block_ignores_i(x: F32 at sample, d: U32 at block) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { x * F32.round_from(100 / d) + F32.round_from(i) }
+  ys[0] + ys[1]
+}
+
+pub flow in_output(x: F32 at sample, d: U32 at block) -> F32 at sample {
+  pair_sum(par~ i in 0 ..< 2 { x * F32.round_from(100 / (d - i)) })
+}
+
+pub flow init_part(x: F32 at sample, k: U32 at init) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { x * F32.round_from(100 / (k - i)) }
+  ys[0] + ys[1]
+}
+
+pub flow init_in_block_part(x: F32 at sample, k: U32 at init, d: U32 at block) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { x * F32.round_from((100 / (k - i)) + d) }
+  ys[0] + ys[1]
+}
+
+pub flow nested(x: F32 at sample, d: U32 at block) -> F32 at sample {
+  let m = par~ i in 0 ..< 2 {
+    pair_sum(par~ j in 0 ..< 2 { x * F32.round_from(100 / (d - (i + j))) })
+  }
+  m[0] + m[1]
+}
+
+pub flow block_guard(x: F32 at sample, n: U32 at block) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { if n != 0 { x * F32.round_from(100 / (n - i)) } else { x } }
+  ys[0] + ys[1]
+}
+
+pub flow init_guard(x: F32 at sample, a: U32 at init, d: U32 at block) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { if a != 0 { x * F32.round_from(100 / (d - i)) } else { x } }
+  ys[0] + ys[1]
+}
+
+test "a part of block that reads the index panics in a call of 0 frames, in the replica that divides by zero" {
+  // d = 3 and d = 2 do not panic (the call of 0 frames writes nothing); d = 1 divides by zero for i = 1.
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var st = block_reads_i.init(8.0)
+  block_reads_i.process(inout st, block_reads_i.Params { d: 3 }, xs.slice(0, 0), inout out.slice(0, 0))
+  block_reads_i.process(inout st, block_reads_i.Params { d: 2 }, xs.slice(0, 0), inout out.slice(0, 0))
+  block_reads_i.process(inout st, block_reads_i.Params { d: 1 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "a part of block that reads the index panics in a call of 0 frames, in the replica that divides by zero"
+  assert out[0] == 7.0
+}
+
+test "a part of block that does not read the index panics in a call of 0 frames" {
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var st = block_ignores_i.init(8.0)
+  block_ignores_i.process(inout st, block_ignores_i.Params { d: 5 }, xs.slice(0, 0), inout out.slice(0, 0))
+  block_ignores_i.process(inout st, block_ignores_i.Params { d: 0 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "a part of block that does not read the index panics in a call of 0 frames"
+  assert out[0] == 7.0
+}
+
+test "a part of block in the output expression panics in a call of 0 frames" {
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var st = in_output.init(8.0)
+  in_output.process(inout st, in_output.Params { d: 2 }, xs.slice(0, 0), inout out.slice(0, 0))
+  in_output.process(inout st, in_output.Params { d: 1 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "a part of block in the output expression panics in a call of 0 frames"
+  assert out[0] == 7.0
+}
+
+test "a part of init that reads the index panics at init" {
+  // k = 2: 50 + 100 = 150 * x. k = 1 divides by zero for i = 1, when the state is made.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = init_part.render(init_part.Config { k: 2 }, xs, 8.0)
+  assert o.out[0] == 150.0
+  assert o.out[1] == 300.0
+  let _ = init_part.init(init_part.Config { k: 1 }, 8.0) //~ PANIC "a part of init that reads the index panics at init"
+}
+
+test "a part of block that holds a part of init: init panics, not block" {
+  // k = 1 panics at init, whatever d is. With k = 2 and d = 0: (50 + 0) + (100 + 0) = 150 in the output and no panic in a call of 0 frames.
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var st = init_in_block_part.init(init_in_block_part.Config { k: 2 }, 8.0)
+  init_in_block_part.process(inout st, init_in_block_part.Params { d: 0 }, xs.slice(0, 0), inout out.slice(0, 0))
+  let _ = init_in_block_part.init(init_in_block_part.Config { k: 1 }, 8.0) //~ PANIC "a part of block that holds a part of init: init panics, not block"
+}
+
+test "a par~ in a par~: the part is made for each pair, and the pair (1, 1) divides by zero for d = 2" {
+  // d = 3: (0, 0) 33, (0, 1) 50, (1, 0) 50, (1, 1) 100: 233 * x. d = 2: (0, 0) 50, (0, 1) 100, (1, 0) 100, (1, 1) divides by zero.
+  let xs: [F32; 1] = [1.0]
+  let o = nested.render(nested.Params { d: 3 }, xs, 8.0)
+  assert o.out[0] == 233.0
+  var out: [F32; 1] = [7.0]
+  var st = nested.init(8.0)
+  nested.process(inout st, nested.Params { d: 4 }, xs.slice(0, 0), inout out.slice(0, 0))
+  nested.process(inout st, nested.Params { d: 2 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "a par~ in a par~: the part is made for each pair, and the pair (1, 1) divides by zero for d = 2"
+  assert out[0] == 7.0
+}
+
+test "a condition of block that holds guards the part of the replicas: n = 1 divides by zero for i = 1 in a call of 0 frames" {
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var st = block_guard.init(8.0)
+  block_guard.process(inout st, block_guard.Params { n: 0 }, xs.slice(0, 0), inout out.slice(0, 0))
+  block_guard.process(inout st, block_guard.Params { n: 2 }, xs.slice(0, 0), inout out.slice(0, 0))
+  block_guard.process(inout st, block_guard.Params { n: 1 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "a condition of block that holds guards the part of the replicas: n = 1 divides by zero for i = 1 in a call of 0 frames"
+  assert out[0] == 7.0
+}
+
+test "a condition of init that holds guards a part of block: init does not panic, block does" {
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var off = init_guard.init(init_guard.Config { a: 0 }, 8.0)
+  init_guard.process(inout off, init_guard.Params { d: 1 }, xs.slice(0, 0), inout out.slice(0, 0))
+  var on = init_guard.init(init_guard.Config { a: 1 }, 8.0)
+  init_guard.process(inout on, init_guard.Params { d: 1 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "a condition of init that holds guards a part of block: init does not panic, block does"
+  assert out[0] == 7.0
+}
+
+test "after reset the part of block is made again and panics in a call of 0 frames" {
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var st = block_reads_i.init(8.0)
+  block_reads_i.process(inout st, block_reads_i.Params { d: 3 }, xs, inout out)
+  assert out[0] == 83.0
+  block_reads_i.reset(inout st)
+  block_reads_i.process(inout st, block_reads_i.Params { d: 1 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "after reset the part of block is made again and panics in a call of 0 frames"
+  assert out[0] == 83.0
+}

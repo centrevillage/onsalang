@@ -1,0 +1,151 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.5", "§9.2"]
+
+// W7-05 U3/t, R-17, S-1157, S-1140 (spec §11.5, §11.3): a call of a function that is not `rt` takes arguments of the clock `init` (or constants) and is computed at `init`, "引数が全て定数ならコンパイル時、そうでなければ `init` の段で
+// 評価される" (the argument is not a constant here: it reads the index `i`, a value of `init`, §11.5, or an input of `init`). In the body of a `par~` it is an `init` part of each replica, written outside a condition, or inside
+// one that `init` decides ("その位置を選ぶ条件のどれかが `init` より速い段で決まる条件の位置には書けない", E0815: flow_clock/hoist_par_e0815_non_rt_call.onsa). The body of a `par~` was the place that stayed E0200 (a gate of
+// the check, "in the body of a `par~`") when the other places were hoisted; the call is accepted now, and its panic is a panic of `init`. Every number is worked out by hand. `design(f)` is f / 2, `inv(a)` is 100 / a (`U32`),
+// both not `rt`. `x` is the `sample` input, `g` of `block`, `f`, `a` and `k` of `init`.
+
+pub fn design(f: F32) -> F32 {
+  f * 0.5
+}
+
+pub fn inv(a: U32) -> U32 {
+  100 / a
+}
+
+pub rt fn pair_sum(xs: [F32; 2]) -> F32 {
+  xs[0] + xs[1]
+}
+
+pub flow gain(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  x * g
+}
+
+// The argument reads the index only: design(2.0) + design(3.0) = 1.0 + 1.5.
+pub flow index_argument(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { x * design(F32.round_from(i) + 2.0) }
+  ys[0] + ys[1]
+}
+
+// The argument reads an input of `init` and the index: design(f * 1) + design(f * 2).
+pub flow input_argument(x: F32 at sample, f: F32 at init) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { x * design(f * F32.round_from(i + 1)) }
+  ys[0] + ys[1]
+}
+
+// The call is a part of `init` in a part of `block`: g * design(f + i).
+pub flow in_a_block_part(x: F32 at sample, g: F32 at block, f: F32 at init) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { x * (g * design(f + F32.round_from(i))) }
+  ys[0] + ys[1]
+}
+
+// A condition of `init` decides the place of the call: made where it holds, in each replica.
+pub flow init_condition(x: F32 at sample, a: F32 at init) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { if a > 0.0 { x * design(F32.round_from(i) + a) } else { x } }
+  ys[0] + ys[1]
+}
+
+// A `par~` in a `par~`: design(i + j) for the pairs.
+pub flow nested(x: F32 at sample) -> F32 at sample {
+  let m = par~ i in 0 ..< 2 {
+    pair_sum(par~ j in 0 ..< 2 { x * design(F32.round_from(i + j)) })
+  }
+  m[0] + m[1]
+}
+
+// The call is the argument of an instance (an input of `block` of the child, the argument is of `init`).
+pub flow instance_argument(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { gain~(x, design(F32.round_from(i) + 2.0)) }
+  ys[0] + ys[1]
+}
+
+// The call that panics: inv(k - i) divides by zero for k = 1 at i = 1, at `init`.
+pub flow panics_at_init(x: F32 at sample, k: U32 at init) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { x * F32.round_from(inv(k - i)) }
+  ys[0] + ys[1]
+}
+
+// The same call under a condition of `init`: not made where the condition does not hold.
+pub flow guarded_panic(x: F32 at sample, a: U32 at init, k: U32 at init) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { if a != 0 { x * F32.round_from(inv(k - i)) } else { x } }
+  ys[0] + ys[1]
+}
+
+test "the call with the index as its argument is a part of init of each replica" {
+  // (1.0 + 1.5) * x.
+  let xs: [F32; 2] = [2.0, 4.0]
+  let o = index_argument.render(xs, 8.0)
+  assert o.out[0] == 5.0
+  assert o.out[1] == 10.0
+}
+
+test "the call with an input of init and the index" {
+  // f = 4: design(4) = 2, design(8) = 4: 6 * x.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = input_argument.render(input_argument.Config { f: 4.0 }, xs, 8.0)
+  assert o.out[0] == 6.0
+  assert o.out[1] == 12.0
+}
+
+test "the call in a part of block is made once at init: the block changes between calls" {
+  // f = 2: design(2) = 1.0, design(3) = 1.5: 2.5 * g * x. g = 0.5, x = 4: 5.0. g = 2.0: 20.0.
+  let xs: [F32; 1] = [4.0]
+  var out: [F32; 1] = [0.0]
+  var st = in_a_block_part.init(in_a_block_part.Config { f: 2.0 }, 8.0)
+  in_a_block_part.process(inout st, in_a_block_part.Params { g: 0.5 }, xs, inout out)
+  assert out[0] == 5.0
+  in_a_block_part.process(inout st, in_a_block_part.Params { g: 2.0 }, xs, inout out)
+  assert out[0] == 20.0
+}
+
+test "the call under a condition of init that holds is made in each replica" {
+  // a = 2: design(0 + 2) = 1.0, design(1 + 2) = 1.5: 2.5 * x.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = init_condition.render(init_condition.Config { a: 2.0 }, xs, 8.0)
+  assert o.out[0] == 2.5
+  assert o.out[1] == 5.0
+}
+
+test "the call under a condition of init that does not hold is not made: x in each replica" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = init_condition.render(init_condition.Config { a: 0.0 }, xs, 8.0)
+  assert o.out[0] == 2.0
+  assert o.out[1] == 4.0
+}
+
+test "a par~ in a par~: design(0), design(1), design(1), design(2) is 0, 0.5, 0.5, 1.0: 2 * x" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = nested.render(xs, 8.0)
+  assert o.out[0] == 2.0
+  assert o.out[1] == 4.0
+}
+
+test "the call as the argument of an instance: 2.5 * x" {
+  let xs: [F32; 2] = [2.0, 4.0]
+  let o = instance_argument.render(xs, 8.0)
+  assert o.out[0] == 5.0
+  assert o.out[1] == 10.0
+}
+
+test "the call that gives its value: k = 2 gives 100 / 2 + 100 / 1" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = panics_at_init.render(panics_at_init.Config { k: 2 }, xs, 8.0)
+  assert o.out[0] == 150.0
+  assert o.out[1] == 300.0
+}
+
+test "the call that panics is made at init: k = 1 divides by zero for i = 1" {
+  let _ = panics_at_init.init(panics_at_init.Config { k: 1 }, 8.0) //~ PANIC "the call that panics is made at init: k = 1 divides by zero for i = 1"
+}
+
+test "the call under a condition of init that does not hold does not panic, one that holds does" {
+  // a = 0, k = 1: x in each replica, and no call. a = 1, k = 1: the call is made and divides by zero at init.
+  let xs: [F32; 1] = [3.0]
+  let off = guarded_panic.render(guarded_panic.Config { a: 0, k: 1 }, xs, 8.0)
+  assert off.out[0] == 6.0
+  let _ = guarded_panic.init(guarded_panic.Config { a: 1, k: 1 }, 8.0) //~ PANIC "the call under a condition of init that does not hold does not panic, one that holds does"
+}

@@ -65,6 +65,7 @@ impl FlowInfo {
     pub fn field(&self, of: FieldOf) -> Option<&str> {
         let fields = match of {
             FieldOf::Node(id, _) => self.fields_of(self.node(id).owner),
+            FieldOf::Hoist(h) => self.fields_of(self.hoist(h).owner),
             _ => &self.fields,
         };
         Some(fields.get(self.field_at(of)? as usize)?.name.as_str())
@@ -74,10 +75,10 @@ impl FlowInfo {
 /// The fields of the state of `info` (S-05, §12.4): `_sample_rate` when it
 /// is kept, the kept inputs in their order, then for each `let` in its
 /// order its kept locals and the fields of its nodes, the fields of the
-/// nodes of the output, the hoisted fields in their order, `_poisoned` and
-/// `_initialized`; and the fields of
-/// the replica of each `par~`, of its `children`. The names are of
-/// [`names`] and [`FixedField`].
+/// nodes of the output, the hoisted fields of the `let`s and the output in
+/// their order, `_poisoned` and `_initialized`; and the fields of the
+/// replica of each `par~`: of its `children`, then those hoisted in its
+/// body (S-1140). The names are of [`names`] and [`FixedField`].
 pub(super) fn build(info: &mut FlowInfo) {
     let n = info.nodes.len();
     let mut s = Structs { info, at: vec![None; n], pars: vec![Vec::new(); n] };
@@ -100,7 +101,7 @@ pub(super) fn build(info: &mut FlowInfo) {
     for &id in p.roots(Owner::Output) {
         s.node(id, &mut top);
     }
-    let hoists = p.hoists.iter().enumerate();
+    let hoists = p.hoists.iter().enumerate().filter(|(_, x)| !matches!(x.owner, Owner::Par(_)));
     top.extend(hoists.map(|(h, x)| field(FieldOf::Hoist(HoistId(h as u32)), &x.path)));
     top.push(field(FieldOf::Poisoned, FixedField::Poisoned.name()));
     top.push(field(FieldOf::Initialized, FixedField::Initialized.name()));
@@ -155,8 +156,9 @@ impl Structs<'_> {
     /// The fields of the node `id` (S-06) after `out`, of the struct that
     /// holds it: `n` of `prev~` and of an instance, `n.buf` and `n.w` of
     /// `delay~` / `vdelay~`, then `n.init` of a delay whose `init` is an
-    /// `Init`-rate expression; `n` of a `par~` whose replicas have fields,
-    /// and none of one with no state.
+    /// `Init`-rate expression; `n` of a `par~` whose replicas have fields
+    /// (of its nodes, then its hoisted ones by their names), and none of
+    /// one with no state.
     fn node(&mut self, id: NodeId, out: &mut Vec<Field>) {
         let info = self.info;
         let n = info.node(id);
@@ -182,6 +184,10 @@ impl Structs<'_> {
                 for &c in children {
                     self.node(c, &mut inner);
                 }
+                let hoists = info.hoists.iter().enumerate().filter(|(_, x)| x.owner == Owner::Par(id));
+                let hoist =
+                    |(h, x): (usize, &Hoist)| Field { name: x.name.clone(), of: FieldOf::Hoist(HoistId(h as u32)) };
+                inner.extend(hoists.map(hoist));
                 if inner.is_empty() {
                     return;
                 }

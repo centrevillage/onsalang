@@ -76,8 +76,9 @@ fn a_read_in_the_body_of_a_par_is_a_read_of_its_let() {
 /// R-17, §11.5, S-1157: a call of a function that is not `rt` evaluated
 /// after `init` is E0815 when a value is not a constant and a condition
 /// decided after `init` selects its place (one at `init` hoists it there);
-/// E0200 of constants only (W9-03), of a result that is not Copy (S-1160)
-/// and in the body of a `par~` (W7-05 U3).
+/// E0200 of constants only (W9-03) and of a result that is not Copy
+/// (S-1160). The body of a `par~` is as the rest (S-1140): one at `init`
+/// hoists it there in each replica, one in a late branch is E0815.
 #[test]
 fn a_call_that_is_not_rt_after_init_is_e0815_in_a_late_branch_and_e0200_else() {
     let head = "pub fn make(v: F32) -> F32 { v * 2.0 }
@@ -91,7 +92,10 @@ pub flow f(x: F32 at sample, a: F32 at init, b: F32 at init, n: I32 at block, i:
         ("if b > 0.0 { x * make(a) } else { x }", None),
         ("if n != 0 { x * make(2.0) } else { x }", Some(Code::E0200)),
         ("pick(name_of(i), x)", Some(Code::E0200)),
-        ("(par~ k in 0 ..< 2 { x * make(a) })[0]", Some(Code::E0200)),
+        ("(par~ k in 0 ..< 2 { x * make(a) })[0]", None),
+        ("(par~ k in 0 ..< 2 { x * make(F32.round_from(k)) })[0]", None),
+        ("(par~ k in 0 ..< 2 { if n != 0 { x * make(a) } else { x } })[0]", Some(Code::E0815)),
+        ("(par~ k in 0 ..< 2 { if b > 0.0 { x * make(F32.round_from(k)) } else { x } })[0]", None),
     ];
     for (body, code) in cases {
         let a = crate::tests::check(&format!("{head}  {body}\n}}\n"));

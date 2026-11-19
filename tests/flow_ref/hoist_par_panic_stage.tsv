@@ -1,0 +1,62 @@
+# flow_ref 1 source=tests/spec/flow_semantics/hoist_par_panic_stage.onsa tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
+@ a part of block that reads the index panics in a call of 0 frames, in the replica that divides by zero
+init 0 hoist_par_panic_stage.block_reads_i sr=0x41000000
+process 0 params d=3 frames=0 in x=[]
+out=[]
+process 0 params d=2 frames=0 in x=[]
+out=[]
+process 0 params d=1 frames=0 in x=[]
+panic block
+@ a part of block that does not read the index panics in a call of 0 frames
+init 0 hoist_par_panic_stage.block_ignores_i sr=0x41000000
+process 0 params d=5 frames=0 in x=[]
+out=[]
+process 0 params d=0 frames=0 in x=[]
+panic block
+@ a part of block in the output expression panics in a call of 0 frames
+init 0 hoist_par_panic_stage.in_output sr=0x41000000
+process 0 params d=2 frames=0 in x=[]
+out=[]
+process 0 params d=1 frames=0 in x=[]
+panic block
+@ a part of init that reads the index panics at init
+render hoist_par_panic_stage.init_part sr=0x41000000 cfg k=2 in x=[0x3f800000 0x40000000]
+out=[0x43160000 0x43960000]
+init 0 hoist_par_panic_stage.init_part sr=0x41000000 cfg k=1
+panic init
+@ a part of block that holds a part of init: init panics, not block
+init 0 hoist_par_panic_stage.init_in_block_part sr=0x41000000 cfg k=2
+process 0 params d=0 frames=0 in x=[]
+out=[]
+init 1 hoist_par_panic_stage.init_in_block_part sr=0x41000000 cfg k=1
+panic init
+@ a par~ in a par~: the part is made for each pair, and the pair (1, 1) divides by zero for d = 2
+render hoist_par_panic_stage.nested sr=0x41000000 params d=3 in x=[0x3f800000]
+out=[0x43690000]
+init 0 hoist_par_panic_stage.nested sr=0x41000000
+process 0 params d=4 frames=0 in x=[]
+out=[]
+process 0 params d=2 frames=0 in x=[]
+panic block
+@ a condition of block that holds guards the part of the replicas: n = 1 divides by zero for i = 1 in a call of 0 frames
+init 0 hoist_par_panic_stage.block_guard sr=0x41000000
+process 0 params n=0 frames=0 in x=[]
+out=[]
+process 0 params n=2 frames=0 in x=[]
+out=[]
+process 0 params n=1 frames=0 in x=[]
+panic block
+@ a condition of init that holds guards a part of block: init does not panic, block does
+init 0 hoist_par_panic_stage.init_guard sr=0x41000000 cfg a=0
+process 0 params d=1 frames=0 in x=[]
+out=[]
+init 1 hoist_par_panic_stage.init_guard sr=0x41000000 cfg a=1
+process 1 params d=1 frames=0 in x=[]
+panic block
+@ after reset the part of block is made again and panics in a call of 0 frames
+init 0 hoist_par_panic_stage.block_reads_i sr=0x41000000
+process 0 params d=3 frames=1 in x=[0x3f800000]
+out=[0x42a60000]
+reset 0
+process 0 params d=1 frames=0 in x=[]
+panic block

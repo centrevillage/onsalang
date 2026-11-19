@@ -23,6 +23,7 @@ file flow_const_alias_stages.tsv rows=89 tests=24 evaluated=24 unavailable=0 ski
 file flow_const_alias_two_stages.tsv rows=68 tests=15 evaluated=15 unavailable=0 skipped=0 waiting=0
 file hoist_at_computed.tsv rows=23 tests=7 evaluated=7 unavailable=0 skipped=0 waiting=0
 file hoist_at_larger_expr_s1161.tsv rows=11 tests=3 evaluated=3 unavailable=0 skipped=0 waiting=0
+file hoist_cond_block_branches.tsv rows=27 tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
 file hoist_cond_match_forms.tsv rows=34 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=1
 file hoist_cond_panic_block.tsv rows=94 tests=14 evaluated=14 unavailable=0 skipped=0 waiting=0
 file hoist_cond_panic_const_until_w9_03.tsv rows=10 tests=3 evaluated=3 unavailable=0 skipped=0 waiting=0
@@ -34,6 +35,10 @@ file hoist_non_rt_calls.tsv rows=33 tests=9 evaluated=9 unavailable=0 skipped=0 
 file hoist_panic_frames.tsv rows=15 tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
 file hoist_panic_init.tsv rows=19 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
 file hoist_panic_zero_frames.tsv rows=39 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
+file hoist_par_non_rt_calls.tsv rows=36 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
+file hoist_par_panic_reached.tsv rows=37 tests=7 evaluated=7 unavailable=0 skipped=0 waiting=0
+file hoist_par_panic_stage.tsv rows=62 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
+file hoist_par_values.tsv rows=82 tests=20 evaluated=20 unavailable=0 skipped=0 waiting=0
 file hoist_values.tsv rows=28 tests=8 evaluated=8 unavailable=0 skipped=0 waiting=0
 file hoisting.tsv rows=13 tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
 file in_out_field_receiver.tsv rows=7 tests=6 evaluated=0 unavailable=0 skipped=6 waiting=0
@@ -88,4 +93,4 @@ file struct_pattern_rest_let.tsv rows=7 tests=2 evaluated=2 unavailable=0 skippe
 file struct_pattern_rest_match.tsv rows=4 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=1
 file vdelay_edges.tsv rows=64 tests=15 evaluated=14 unavailable=0 skipped=1 waiting=0
 file vdelay_varying_d.tsv rows=2 tests=1 evaluated=0 unavailable=0 skipped=1 waiting=0
-total files=89 rows=2161 tests=569 evaluated=509 unavailable=6 skipped=54 waiting=8
+total files=94 rows=2405 tests=619 evaluated=559 unavailable=6 skipped=54 waiting=8

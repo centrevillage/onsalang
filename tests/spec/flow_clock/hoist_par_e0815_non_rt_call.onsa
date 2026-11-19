@@ -1,0 +1,118 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5", "§18.1"]
+
+// W7-05 U3/t, R-17, S-1157, S-1140, S-1162 (spec §11.5, §11.3): a call of a function that is not `rt` with an argument that is not a constant is evaluated at `init`, so in the body of a `par~` it cannot be in a position of a
+// condition (the branch of an `if`, an arm of a `match`, the right side of `&&` / `||`) when one of the conditions that choose that position is decided at `block` or `sample` ("定数でない引数を持つ呼び出しは、
+// その位置を選ぶ条件のどれかが `init` より速い段で決まる条件の位置には書けない（E0815）"): the same rule as outside a `par~` (e0815_non_rt_call_in_a_condition.onsa), and the body of a `par~` is no exception. The argument here
+// reads the index `i`, a value of `init` (§11.5), so it is not a constant. A condition of `init` (an input of `init`, the index) decides the place at `init`: there is no error (the flows at the end). The conditions that choose the
+// place include the ones outside the `par~` body (an `if` around the `par~` is not allowed to hold a `par~`, so the conditions here are inside the body) and the ones of an inner `par~`. One error per flow (§18.1), at the call.
+// `x` is the `sample` input, `n` and `o` of `block`, `a` of `init`. `design` is not `rt`; `keep` is.
+
+pub fn design(f: F32) -> F32 {
+  f * 0.5
+}
+
+pub rt fn keep(v: F32) -> F32 {
+  v
+}
+
+pub rt fn pair_sum(xs: [F32; 2]) -> F32 {
+  xs[0] + xs[1]
+}
+
+// ---------------------------------------------------------------- a condition of block or sample on the way
+
+pub flow sample_condition(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { if x > 0.0 { x * design(F32.round_from(i)) } else { x } }  //~ E0815
+  ys[0] + ys[1]
+}
+
+pub flow block_condition(x: F32 at sample, n: I32 at block) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { if n != 0 { x * design(F32.round_from(i)) } else { x } }  //~ E0815
+  ys[0] + ys[1]
+}
+
+pub flow else_of_a_block_condition(x: F32 at sample, n: I32 at block) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { if n == 0 { x } else { x * design(F32.round_from(i)) } }  //~ E0815
+  ys[0] + ys[1]
+}
+
+pub flow else_if_with_a_sample_condition(x: F32 at sample, a: F32 at init) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { if a > 1.0 { x } else if x > 0.0 { x * design(F32.round_from(i)) } else { x + 1.0 } }  //~ E0815
+  ys[0] + ys[1]
+}
+
+pub flow right_of_and_with_a_sample_left(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { if x > 0.0 && design(F32.round_from(i)) > x { 1.0 } else { 0.0 } }  //~ E0815
+  ys[0] + ys[1]
+}
+
+pub flow right_of_or_with_a_block_left(x: F32 at sample, n: I32 at block) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { if n != 0 || design(F32.round_from(i)) > x { 1.0 } else { 0.0 } }  //~ E0815
+  ys[0] + ys[1]
+}
+
+pub flow arm_of_a_block_object(x: F32 at sample, o: Option[F32] at block) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 {
+    match o {
+      Some(v) => x * design(F32.round_from(i)) + v,  //~ E0815
+      None => x,
+    }
+  }
+  ys[0] + ys[1]
+}
+
+pub flow in_the_inner_par(x: F32 at sample, n: I32 at block) -> F32 at sample {
+  let m = par~ i in 0 ..< 2 {
+    pair_sum(par~ j in 0 ..< 2 { if n != 0 { x * design(F32.round_from(i + j)) } else { x } })  //~ E0815
+  }
+  m[0] + m[1]
+}
+
+pub flow init_outside_sample_inside(x: F32 at sample, a: F32 at init) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 {
+    if a > 0.0 {
+      if x > 0.0 { x * design(F32.round_from(i)) } else { x }  //~ E0815
+    } else {
+      x
+    }
+  }
+  ys[0] + ys[1]
+}
+
+pub flow in_the_output(x: F32 at sample, n: I32 at block) -> F32 at sample {
+  pair_sum(par~ i in 0 ..< 2 { if n != 0 { x * design(F32.round_from(i)) } else { x } })  //~ E0815
+}
+
+// ---------------------------------------------------------------- no error: init decides the place, or the call is not in a condition, or it is rt
+
+pub flow condition_of_init(x: F32 at sample, a: F32 at init) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { if a > 0.0 { x * design(F32.round_from(i)) } else { x } }
+  ys[0] + ys[1]
+}
+
+pub flow condition_of_the_index(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { if i == 0 { x * design(F32.round_from(i) + 1.0) } else { x } }
+  ys[0] + ys[1]
+}
+
+pub flow no_condition(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { x * design(F32.round_from(i)) }
+  ys[0] + ys[1]
+}
+
+pub flow in_the_condition_itself(x: F32 at sample, a: F32 at init) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { if design(a + F32.round_from(i)) > 1.0 { x } else { 0.0 } }
+  ys[0] + ys[1]
+}
+
+pub flow left_of_and(x: F32 at sample, a: F32 at init) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { if design(a + F32.round_from(i)) > 1.0 && x > 0.0 { 1.0 } else { 0.0 } }
+  ys[0] + ys[1]
+}
+
+pub flow rt_call_under_a_sample_condition(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { if x > 0.0 { x * keep(F32.round_from(i)) } else { x } }
+  ys[0] + ys[1]
+}

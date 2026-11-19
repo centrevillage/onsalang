@@ -17,11 +17,11 @@ pub(crate) fn lower_flow_expr(lw: &mut Lowerer, cx: &mut FnCx, e: ExprId) -> R<O
             return Ok(Some(f.sample_rate.clone()));
         }
         // A hoisted subexpression of an earlier stage: its field (§11.3), of
-        // the `State` (a `let` or the output holds it; W7-05 U3 those of the
-        // body of a `par~`).
+        // the scope it is lowered in: the `State` (a `let` or the output
+        // holds it), or the replica of the `par~` whose body does (S-1140).
         if let Some(h) = f.info.hoist_of(e).filter(|&h| f.info.hoist(h).stage < f.phase.stage()) {
-            let top = f.scopes.first().ok_or_else(|| internal(span, "a hoisted field outside the state"))?;
-            return sfield(lw, f.info, &top.state, FieldOf::Hoist(h), span).map(Some);
+            let scope = f.scopes.last().ok_or_else(|| internal(span, "a hoisted field outside the state"))?;
+            return sfield(lw, f.info, &scope.state, FieldOf::Hoist(h), span).map(Some);
         }
         let Some(&id) = f.info.node_of.get(&e) else { return Ok(None) };
         let state = f.scopes.last().ok_or_else(|| internal(span, "node outside a state scope"))?.state.clone();

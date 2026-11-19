@@ -24,13 +24,13 @@ pub rt fn pair_sum(xs: [F32; 2]) -> F32
 pub flow whole_value(
   x: F32 at sample,
 ) -> F32 at sample
-  pub struct whole_value.State  // Affine; size 20, bulk 0, align 4
-    saws: 16 bytes, align 4, fast  // offset 0
-    _poisoned: 1 bytes, align 1, fast  // offset 16
-    _initialized: 1 bytes, align 1, fast  // offset 17
+  pub struct whole_value.State  // Affine; size 28, bulk 0, align 4
+    saws: 24 bytes, align 4, fast  // offset 0
+    _poisoned: 1 bytes, align 1, fast  // offset 24
+    _initialized: 1 bytes, align 1, fast  // offset 25
   pub struct whole_value.Rendered  // Affine
     out: Buf[F32]
-  pub const whole_value.SIZE: U32 = 20
+  pub const whole_value.SIZE: U32 = 28
   pub const whole_value.BULK_SIZE: U32 = 0
   pub fn whole_value.init(sample_rate: F32) -> whole_value.State
   pub rt fn whole_value.reset(inout s: whole_value.State)
@@ -41,13 +41,13 @@ pub flow whole_value(
 pub flow inside_value(
   x: F32 at sample,
 ) -> F32 at sample
-  pub struct inside_value.State  // Affine; size 20, bulk 0, align 4
-    a.par_0: 16 bytes, align 4, fast  // offset 0
-    _poisoned: 1 bytes, align 1, fast  // offset 16
-    _initialized: 1 bytes, align 1, fast  // offset 17
+  pub struct inside_value.State  // Affine; size 28, bulk 0, align 4
+    a.par_0: 24 bytes, align 4, fast  // offset 0
+    _poisoned: 1 bytes, align 1, fast  // offset 24
+    _initialized: 1 bytes, align 1, fast  // offset 25
   pub struct inside_value.Rendered  // Affine
     out: Buf[F32]
-  pub const inside_value.SIZE: U32 = 20
+  pub const inside_value.SIZE: U32 = 28
   pub const inside_value.BULK_SIZE: U32 = 0
   pub fn inside_value.init(sample_rate: F32) -> inside_value.State
   pub rt fn inside_value.reset(inout s: inside_value.State)
@@ -58,13 +58,13 @@ pub flow inside_value(
 pub flow two_kinds(
   x: F32 at sample,
 ) -> F32 at sample
-  pub struct two_kinds.State  // Affine; size 44, bulk 0, align 4
-    vs: 40 bytes, align 4, fast  // offset 0
-    _poisoned: 1 bytes, align 1, fast  // offset 40
-    _initialized: 1 bytes, align 1, fast  // offset 41
+  pub struct two_kinds.State  // Affine; size 52, bulk 0, align 4
+    vs: 48 bytes, align 4, fast  // offset 0
+    _poisoned: 1 bytes, align 1, fast  // offset 48
+    _initialized: 1 bytes, align 1, fast  // offset 49
   pub struct two_kinds.Rendered  // Affine
     out: Buf[F32]
-  pub const two_kinds.SIZE: U32 = 44
+  pub const two_kinds.SIZE: U32 = 52
   pub const two_kinds.BULK_SIZE: U32 = 0
   pub fn two_kinds.init(sample_rate: F32) -> two_kinds.State
   pub rt fn two_kinds.reset(inout s: two_kinds.State)
@@ -75,13 +75,13 @@ pub flow two_kinds(
 pub flow nested(
   x: F32 at sample,
 ) -> F32 at sample
-  pub struct nested.State  // Affine; size 36, bulk 0, align 4
-    m: 32 bytes, align 4, fast  // offset 0
-    _poisoned: 1 bytes, align 1, fast  // offset 32
-    _initialized: 1 bytes, align 1, fast  // offset 33
+  pub struct nested.State  // Affine; size 52, bulk 0, align 4
+    m: 48 bytes, align 4, fast  // offset 0
+    _poisoned: 1 bytes, align 1, fast  // offset 48
+    _initialized: 1 bytes, align 1, fast  // offset 49
   pub struct nested.Rendered  // Affine
     out: Buf[F32]
-  pub const nested.SIZE: U32 = 36
+  pub const nested.SIZE: U32 = 52
   pub const nested.BULK_SIZE: U32 = 0
   pub fn nested.init(sample_rate: F32) -> nested.State
   pub rt fn nested.reset(inout s: nested.State)
@@ -92,13 +92,13 @@ pub flow nested(
 pub flow in_output(
   x: F32 at sample,
 ) -> F32 at sample
-  pub struct in_output.State  // Affine; size 20, bulk 0, align 4
-    _out.par_0: 16 bytes, align 4, fast  // offset 0
-    _poisoned: 1 bytes, align 1, fast  // offset 16
-    _initialized: 1 bytes, align 1, fast  // offset 17
+  pub struct in_output.State  // Affine; size 28, bulk 0, align 4
+    _out.par_0: 24 bytes, align 4, fast  // offset 0
+    _poisoned: 1 bytes, align 1, fast  // offset 24
+    _initialized: 1 bytes, align 1, fast  // offset 25
   pub struct in_output.Rendered  // Affine
     out: Buf[F32]
-  pub const in_output.SIZE: U32 = 20
+  pub const in_output.SIZE: U32 = 28
   pub const in_output.BULK_SIZE: U32 = 0
   pub fn in_output.init(sample_rate: F32) -> in_output.State
   pub rt fn in_output.reset(inout s: in_output.State)
@@ -109,14 +109,14 @@ pub flow in_output(
 pub flow with_a_let(
   x: F32 at sample,
 ) -> F32 at sample
-  pub struct with_a_let.State  // Affine; size 16, bulk 0, align 4
-    ps: 8 bytes, align 4, fast  // offset 0
-    q.prev_0: 4 bytes, align 4, fast  // offset 8
-    _poisoned: 1 bytes, align 1, fast  // offset 12
-    _initialized: 1 bytes, align 1, fast  // offset 13
+  pub struct with_a_let.State  // Affine; size 24, bulk 0, align 4
+    ps: 16 bytes, align 4, fast  // offset 0
+    q.prev_0: 4 bytes, align 4, fast  // offset 16
+    _poisoned: 1 bytes, align 1, fast  // offset 20
+    _initialized: 1 bytes, align 1, fast  // offset 21
   pub struct with_a_let.Rendered  // Affine
     out: Buf[F32]
-  pub const with_a_let.SIZE: U32 = 16
+  pub const with_a_let.SIZE: U32 = 24
   pub const with_a_let.BULK_SIZE: U32 = 0
   pub fn with_a_let.init(sample_rate: F32) -> with_a_let.State
   pub rt fn with_a_let.reset(inout s: with_a_let.State)

@@ -306,11 +306,12 @@ fn read_at_a_constant_let_read_only_by_an_underscore_is_init() {
 #[test]
 fn read_at_par_variables() {
     let a = ok(
-        "use std.math.{sum}\npub flow g(k: F32 at block) -> F32 at sample { k }\npub flow f(x: F32 at sample, c: F32 at block) -> F32 at sample {\n  let p = par~ i in 0..<2 { g~(c + F32.round_from(i)) }\n  let q = par~ j in 0..<2 { x * F32.round_from(j) }\n  sum(p) + sum(q)\n}\n",
+        "use std.math.{sum}\npub flow g(k: F32 at block) -> F32 at sample { k }\npub flow f(x: F32 at sample, c: F32 at block) -> F32 at sample {\n  let p = par~ i in 0..<2 { g~(c + F32.round_from(i)) }\n  let q = par~ j in 0..<2 { x * F32.round_from(if x > 0.0 { j } else { 0 }) }\n  sum(p) + sum(q)\n}\n",
     );
     let f = flow(&a, "f");
-    // `i` in an argument of an instance whose input is at `block`.
-    assert_eq!(read_at(f, "i"), Some(ClockStage::Block));
+    // `i` in an argument of an instance whose input is at `block`, in the
+    // part `F32.round_from(i)` hoisted to `init` in each replica (S-1140).
+    assert_eq!(read_at(f, "i"), Some(ClockStage::Init));
     assert_eq!(read_at(f, "j"), Some(ClockStage::Tick(Ratio(0))));
 }
 

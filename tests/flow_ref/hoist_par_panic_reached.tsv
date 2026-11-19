@@ -1,0 +1,37 @@
+# flow_ref 1 source=tests/spec/flow_semantics/hoist_par_panic_reached.onsa tests=7 evaluated=7 unavailable=0 skipped=0 waiting=0
+@ the same part with d = 3: 33 + 50, and with d = 2: 50 + 100
+render hoist_par_panic_reached.block_reads_i sr=0x41000000 params d=3 in x=[0x3f800000 0x40000000]
+out=[0x42a60000 0x43260000]
+render hoist_par_panic_reached.block_reads_i sr=0x41000000 params d=2 in x=[0x3f800000 0x40000000]
+out=[0x43160000 0x43960000]
+@ a call of 1 frame panics at the block stage as well
+init 0 hoist_par_panic_reached.block_reads_i sr=0x41000000
+process 0 params d=1 frames=1 in x=[0x3f800000]
+panic block
+@ the argument of an instance in the body panics at the block stage, in a call of 0 frames
+init 0 hoist_par_panic_reached.instance_argument sr=0x41000000
+process 0 params d=3 frames=0 in x=[]
+out=[]
+process 0 params d=1 frames=0 in x=[]
+panic block
+@ a condition of block that does not hold makes nothing in any replica
+render hoist_par_panic_reached.block_guard sr=0x41000000 params n=0 in x=[0x3f800000 0x40000000]
+out=[0x40000000 0x40800000]
+@ a condition of sample: a call of 0 frames and a frame that does not take the branch do not panic
+init 0 hoist_par_panic_reached.sample_guard sr=0x41000000
+process 0 params d=1 frames=0 in x=[]
+out=[]
+process 0 params d=1 frames=1 in x=[0xbf800000]
+out=[0xc0000000]
+@ a condition of sample: the frame that takes the branch panics, at that frame
+init 0 hoist_par_panic_reached.sample_guard sr=0x41000000
+process 0 params d=1 frames=1 in x=[0x3f800000]
+panic sample 0
+@ the whole par~ is a part of block: it panics in a call of 0 frames in the replica that divides by zero
+init 0 hoist_par_panic_reached.whole_par_of_block sr=0x41000000
+process 0 params d=2 frames=0 in x=[]
+out=[]
+process 0 params d=2 frames=1 in x=[0x40000000]
+out=[0x43960000]
+process 0 params d=1 frames=0 in x=[]
+panic block

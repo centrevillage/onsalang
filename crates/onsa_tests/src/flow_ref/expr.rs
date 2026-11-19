@@ -55,6 +55,9 @@ pub struct Limits {
 /// 700 MB of nodes, or 130 000 instances (some 500 MB), and not the 150 MB a place of a value would make it.
 pub const LIMITS: Limits = Limits { reserve: 4 << 20, most: 1 << 20 };
 
+/// The parts a stage made: by expression, then by the replicas it is in (empty outside a `par~`).
+pub(super) type Hoisted = HashMap<ExprId, HashMap<Vec<u32>, Value>>;
+
 pub(super) const LOW_STACK: Fault = Fault::Unavailable("the stack is nearly used up");
 
 /// The evaluation of one body: the values its locals have so far.
@@ -67,9 +70,10 @@ pub struct Frame<'a> {
     /// The state of the flow instance this evaluation is a tick of, and what its delays save (none for a function).
     pub run: Option<Run>,
     /// The values of the parts of the body that a stage before the one of their `let` has made (`flow::pre`, §11.3), by
-    /// expression: `eval` of such a part gives the value that was kept, as the field of the state does, and does not make
-    /// it again (the panic of it was the one of the stage that made it). Empty for a function.
-    pub(super) hoisted: HashMap<ExprId, Value>,
+    /// expression and by the replica of each `par~` around it (a part of the body of a `par~` has a value for each replica, as
+    /// its field does, S-1140): `eval` of such a part gives the value that was kept, and does not make it again (the panic of it
+    /// was the one of the stage that made it). Empty for a function.
+    pub(super) hoisted: Hoisted,
     chain: u32,
     /// Which of the functions called from here the evaluator evaluates itself (`call::plain`), kept by declaration: a
     /// recursive function is not walked at each call. A frame of a call or a constant shares it with the one that made it.
@@ -186,8 +190,11 @@ impl<'a> Frame<'a> {
 
     /// The value of `e`, which has the type the table gives it. Call it on a large stack (`mod.rs`): it recurses.
     pub fn eval(&mut self, e: ExprId) -> Eval {
-        if let Some(v) = self.hoisted.get(&e) {
-            return Ok(v.clone());
+        if let Some(kept) = self.hoisted.get(&e) {
+            let replicas = self.run.as_ref().map_or(&[][..], |r| &r.replicas[..]);
+            if let Some(v) = kept.get(replicas) {
+                return Ok(v.clone());
+            }
         }
         let at = self.body.ast.expr(e).span;
         if self.low_stack() {

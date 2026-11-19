@@ -25,16 +25,18 @@
 //! followed by the stateful nodes inside its initializer in source order,
 //! then the nodes of the output expression, then the hoisted fields
 //! (`a._hoist_0: T`, §11.3, §12.4; of the `let`s in order, then of the
-//! output; W7-05 U3 those of the body of a `par~`), then `_poisoned: Bool` and
-//! `_initialized: Bool` (both export-boundary marks, spec §14.2 / S-27). A
+//! output; those of the body of a `par~` are in its replica), then
+//! `_poisoned: Bool` and `_initialized: Bool` (both export-boundary marks,
+//! spec §14.2 / S-27). A
 //! node of the path `p` (§11.6: `a.prev_0`, `_out.lp_0`, or the name of the
 //! `let` whose whole value it is) contributes `p: T` (`prev`), `p.buf: [T;
 //! N]` + `p.w: U32` (`delay`; `[T; MAX + 1]` for `vdelay`), plus `p.init: T`
 //! when its `init` argument is an `Init`-rate expression; an instance
-//! contributes `p: Callee.State`; a `par` with stateful nodes contributes
-//! `p: [Flow.p.State; N]`, whose replica names its nodes without the scope
-//! (`saw_0`). The bulk pointer of §12.4 is not a Core field: the
-//! Core `State` is the whole value, and [`crate::layout::flow_layout`]
+//! contributes `p: Callee.State`; a `par` with stateful nodes or hoisted
+//! fields contributes `p: [Flow.p.State; N]`, whose replica names its nodes
+//! and fields without the scope (`saw_0`, `_hoist_0`). The bulk pointer of
+//! §12.4 is not a Core field: the Core `State` is the whole value, and
+//! [`crate::layout::flow_layout`]
 //! describes the fast / bulk split (the C backend materialises the pointer
 //! and the `jmp_buf`).
 //!
@@ -49,9 +51,9 @@
 //! its stage ([`hoist::writes`]: at the place of the faster `let` that holds
 //! it, those of the output last; S-1159), and read from the field by the
 //! later phases ([`lower_flow_expr`]); one under a condition decided at
-//! `init` or `block` is written under it (S-1157; in the body of a `par~`:
-//! W7-05 U3). A stateful node is lowered on demand when the
-//! expression containing it is lowered ([`lower_flow_expr`]), into a
+//! `init` or `block` is written under it (S-1157); one in the body of a
+//! `par~` in each replica (S-1140). A stateful node is lowered on demand
+//! when the expression containing it is lowered ([`lower_flow_expr`]), into a
 //! temporary that is memoised in `expr_override` so the end-of-tick stores
 //! see the same value. `prev` reads its stored value where it appears and
 //! stores its argument at the end of `tick` (§11.4); `delay` / `vdelay`

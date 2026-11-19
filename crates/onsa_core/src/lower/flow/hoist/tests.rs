@@ -91,3 +91,35 @@ fn a_guarded_field_is_written_under_its_condition() {
     assert!(tick.contains("(x * s.2)") && tick.contains("(s.7 + x)"), "{tick}");
     assert!(!tick.contains("100:I32"), "{tick}");
 }
+
+/// S-1140: a field of the body of a `par~` is of each replica: the stage
+/// writes it in a loop over the replicas, of the nested one too, one at
+/// `block` reading one at `init` of its replica, and `tick` reads it of the
+/// replica it lowers. A replica with hoisted fields only gets no loop to
+/// set, reset or run its nodes.
+#[test]
+fn the_fields_of_the_body_of_a_par_are_written_and_read_in_each_replica() {
+    let src = "pub fn make(v: F32) -> F32 { v * 2.0 }
+pub rt fn pair(xs: [F32; 2]) -> F32 { xs[0] + xs[1] }
+pub flow f(x: F32 at sample, level: F32 at block) -> F32 at sample {
+  let a = par~ i in 0 ..< 2 { pair(par~ j in 0 ..< 2 { x * make(F32.round_from(i + j)) }) }
+  let b = par~ i in 0 ..< 2 { x * (level * F32.round_from(i)) }
+  a[0] + b[1]
+}";
+    let d = crate::dump::dump(&crate::tests::core(src));
+    assert!(d.contains("type t.f.a.par_0.State = struct { _hoist_0: F32 }"), "{d}");
+    assert!(d.contains("type t.f.a.State = struct { par_0: [t.f.a.par_0.State; 2] }"), "{d}");
+    assert!(d.contains("type t.f.b.State = struct { _hoist_0: F32, _hoist_1: F32 }"), "{d}");
+    let init = phase(src, "init");
+    let nested = "for i@4 in 0:U32..2:U32 {\n    for j in 0:U32..2:U32 {\n      s.0[i@4].0[j].0 = t.make(round.U32.F32((i@4 + j)))\n";
+    assert!(init.contains(nested), "{init}");
+    assert!(init.contains("for i@6 in 0:U32..2:U32 {\n    s.1[i@6].1 = round.U32.F32(i@6)\n"), "{init}");
+    assert_eq!(init.matches("for ").count(), 3, "{init}");
+    let ctl = phase(src, "ctl");
+    assert!(ctl.contains("for i@6 in 0:U32..2:U32 {\n    s.1[i@6].0 = (p.0 * s.1[i@6].1)\n"), "{ctl}");
+    assert_eq!(ctl.matches("for ").count(), 1, "{ctl}");
+    let tick = phase(src, "tick");
+    assert!(tick.contains("(x * s.0[i@4].0[j].0)") && tick.contains("(x * s.1[i@6].0)"), "{tick}");
+    assert!(!tick.contains("make") && !tick.contains("round"), "{tick}");
+    assert!(!phase(src, "reset").contains("for "), "the replicas have no node");
+}

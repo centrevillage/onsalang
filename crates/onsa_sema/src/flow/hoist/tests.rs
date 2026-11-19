@@ -1,9 +1,9 @@
 //! The choice of the hoisted subexpressions (§11.3, W7-05 U1, U2): the
 //! largest slow Copy one, no name, `sample_rate()` or constant, the Copy
 //! parts of one that is not Copy, guarded under conditions decided at `init`
-//! or `block` (S-1157), none in the body of a `par~` in this unit, the
-//! stages its parts are read at, the checked constants (S-888 (c′)), and
-//! the numbers and the order of the fields (§11.6, §12.4).
+//! or `block` (S-1157), of each replica in the body of a `par~` (S-1140),
+//! the stages its parts are read at, the checked constants (S-888 (c′)),
+//! and the numbers and the order of the fields (§11.6, §12.4).
 
 use crate::Analysis;
 use crate::clock::ClockStage;
@@ -108,7 +108,7 @@ fn g(path: &str, stage: ClockStage, guarded: bool, text: &str) -> (String, Clock
 /// S-1157 (D′): under conditions decided at `init` or `block` (an `if`, the
 /// left of `&&`, the scrutinee of a `match`), a slow part has a guarded
 /// field at the later of its stage and theirs; the conditions are hoisted
-/// unguarded. Not in the body of a `par~` (W7-05 U3).
+/// unguarded. The body of a `par~` is no conditional position (S-1140).
 #[test]
 fn conditions_decided_at_init_or_block_guard_the_fields_under_them() {
     let src = "pub flow f(x: F32 at sample, a: F32 at init, level: F32 at block, n: I32 at block) -> F32 at sample {
@@ -133,6 +133,7 @@ fn conditions_decided_at_init_or_block_guard_the_fields_under_them() {
             g("s._hoist_2", I, true, "a * 2.0"),
             g("t._hoist_0", B, false, "level > 0.5"),
             g("t._hoist_1", B, true, "a * 3.0"),
+            g("u._hoist_0", B, false, "level * 4.0"),
         ]
     );
 }
@@ -199,7 +200,8 @@ pub flow f(x: F32 at sample, n: I32 at block) -> F32 at sample {
     let want = [
         ("1.0 / 3.0".to_string(), None, Cond::Const),
         ("2.0 / 3.0".to_string(), None, Cond::Late),
-        ("{ panic(\"bad n\") }".to_string(), Some(B), Cond::Block),
+        // The tail of the block of a value only (its body).
+        ("panic(\"bad n\")".to_string(), Some(B), Cond::Block),
     ];
     assert_eq!(found, want);
 }
@@ -233,4 +235,72 @@ fn the_fields_are_numbered_per_let_and_follow_the_nodes() {
     );
     assert!(f.fields.iter().all(|x| !matches!(x.of, FieldOf::Hoist(h) if f.hoist(h).guarded)));
     assert_eq!(f.hoist(f.hoist_of(f.hoists[3].expr).expect("its field")).owner, Owner::Output);
+}
+
+/// S-1140 (its provisional form): a field of the body of a `par~` is of
+/// each replica: numbered in that body by itself in the order of the
+/// starts, after the scope of the `par~` (of a nested one too, and of one
+/// in the output), in an argument of a node of the body (read at `block`
+/// by `lp~`, its part at `init`), guarded under the conditions in that
+/// body; the replica
+/// holds it after its nodes, also a replica with no node, and the `State`
+/// does not.
+#[test]
+fn the_fields_of_the_body_of_a_par_are_of_each_replica() {
+    let src = "pub flow lp(x: F32 at sample, g: F32 at block) -> F32 at sample { x * g }
+pub rt fn pair(xs: [F32; 2]) -> F32 { xs[0] + xs[1] }
+pub flow f(x: F32 at sample, a: F32 at init, level: F32 at block, n: I32 at block) -> F32 at sample {
+  let saws = par~ i in 0 ..< 2 { lp~(x, level * make(F32.round_from(i))) + x * (a * 2.0) }
+  let m = x * (level + 1.0)
+  let w = par~ i in 0 ..< 2 { pair(par~ j in 0 ..< 2 { x * make(F32.round_from(i + j)) }) }
+  let c = par~ i in 0 ..< 2 { if n != 0 { x * F32.round_from(100 / n) } else { x } }
+  saws[0] + m + w[1] + c[0] + pair(par~ k in 0 ..< 2 { x * (level * 3.0) })
+}";
+    assert_eq!(
+        guarded(src),
+        [
+            g("m._hoist_0", B, false, "level + 1.0"),
+            g("saws._hoist_0", I, false, "make(F32.round_from(i))"),
+            g("saws._hoist_1", I, false, "a * 2.0"),
+            g("w.par_0._hoist_0", I, false, "make(F32.round_from(i + j))"),
+            g("c._hoist_0", B, false, "n != 0"),
+            g("c._hoist_1", B, true, "F32.round_from(100 / n)"),
+            g("_out.par_0._hoist_0", B, false, "level * 3.0"),
+        ]
+    );
+    let (a, _) = flow(src);
+    let f = info(&a);
+    let names: Vec<&str> = f.fields.iter().map(|x| x.name.as_str()).collect();
+    assert_eq!(names, ["saws", "w", "c", "_out.par_0", "m._hoist_0", "_poisoned", "_initialized"]);
+    let replica = |path: &str| {
+        let p = f.nodes.iter().find(|n| n.path == path).expect("the `par~`");
+        let owner = Owner::Par(f.node_of[&p.expr]);
+        let fields = f.fields_of(owner).iter().map(|x| x.name.as_str()).collect::<Vec<_>>();
+        let owned = f.hoists.iter().filter(|h| h.owner == owner).count();
+        (fields, owned)
+    };
+    assert_eq!(replica("saws"), (vec!["lp_0", "_hoist_0", "_hoist_1"], 2));
+    assert_eq!(replica("w"), (vec!["par_0"], 0));
+    assert_eq!(replica("w.par_0"), (vec!["_hoist_0"], 1));
+    assert_eq!(replica("_out.par_0"), (vec!["_hoist_0"], 1));
+    let h = f.hoist_of(f.hoists[1].expr).expect("its field");
+    assert_eq!((f.field(FieldOf::Hoist(h)), f.field_at(FieldOf::Hoist(h))), (Some("_hoist_0"), Some(1)));
+}
+
+/// A block of a value only (`{ b2 * 2.0 }`, the body of a branch or an arm)
+/// is made of its tail in place, as parentheses: its tail is chosen.
+#[test]
+fn a_block_of_a_value_only_has_its_tail_hoisted() {
+    let src = "pub flow f(x: F32 at sample, b2: F32 at block, c: I32 at init) -> F32 at sample {
+  let a = if c == 0 { x } else { b2 * 2.0 }
+  a + x * ({ b2 + 1.0 })
+}";
+    assert_eq!(
+        guarded(src),
+        [
+            g("a._hoist_0", I, false, "c == 0"),
+            g("a._hoist_1", B, true, "b2 * 2.0"),
+            g("_out._hoist_0", B, false, "b2 + 1.0")
+        ]
+    );
 }

@@ -20,9 +20,9 @@ mod tests;
 /// the parts of `e`, the guarded ones (S-1157) under the conditions on
 /// their paths: an `if` or `Switch` of the condition read at `s`, holding
 /// the bindings of an arm (§11.3). The constant expressions checked at `s`
-/// are evaluated there for their panic (S-888 (c′)). None is in the body of
-/// a `par~`, whose parts are not walked: W7-05 U3 writes those of each
-/// replica.
+/// are evaluated there for their panic (S-888 (c′)). Those of the body of
+/// a `par~` are of each replica (S-1140): written in a loop over them, in
+/// the struct of the replica.
 pub(super) fn writes(
     lw: &mut Lowerer,
     cx: &mut FnCx,
@@ -94,6 +94,17 @@ pub(super) fn writes(
             push_expr_stmt(m, out);
         }
         AK::If { cond: x, .. } | AK::Match { scrutinee: x, .. } => writes(lw, cx, info, *x, s, state, out)?,
+        AK::Par { body, .. } if has_writes(info, ast, *body, s) => {
+            let Some(&id) = info.node_of.get(&e) else { return Err(internal(span, "a `par~` of no node")) };
+            let r = replica_loop(cx, &info.node(id).kind, span)?;
+            let elem = index(sfield(lw, info, state, FieldOf::Node(id, Part::Own), span)?, r.index(cx, span))?;
+            cx.flow.as_mut().unwrap().scopes.push(Scope { state: elem.clone() });
+            let mut b = Vec::new();
+            let done = writes(lw, cx, info, *body, s, &elem, &mut b);
+            cx.flow.as_mut().unwrap().scopes.pop();
+            done?;
+            out.push(r.each(span, b));
+        }
         AK::Par { .. } => {}
         _ => {
             for x in ast.sub_exprs(e) {

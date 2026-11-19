@@ -1,0 +1,289 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.5", "§11.6"]
+
+// W7-05 U3/t, S-1157 (D'), S-1140 (spec §11.3, §11.5): the part of `init` or `block` in the body of a `par~` is hoisted by the same rule as any other ("コンパイラは各式を、部分式も含めて、その値と
+// 評価されるかどうかが決まる最も遅い段で評価する"): the index `i` is a value of `init` ("`i` は ... `init` のクロックの **値**", §11.5), so `f0 * ratio(i)` of a body is a part of `block`, of each replica,
+// and `k * F32.round_from(i)` of `init`. The value does not change by hoisting ("巻き上げても値は変わらない"), so this file is about the values: the stage a part is made at is the one of
+// hoist_par_panic_stage.onsa, the fields are the ones of flow/hoist_par_state_names.onsa. Every number is worked out by hand. `ratio(i)` is i + 1 (1, 2, 3 for i = 0, 1, 2).
+// The parts that call a function that is not `rt` are in hoist_par_non_rt_calls.onsa. `x` is the `sample` input, `f0`, `g`, `n` and `d` of `block`, `k` and `a` of `init`.
+
+use std.math.sum
+
+pub rt fn ratio(i: U32) -> F32 {
+  F32.round_from(i) + 1.0
+}
+
+pub rt fn pair_sum(xs: [F32; 2]) -> F32 {
+  xs[0] + xs[1]
+}
+
+pub flow gain(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  x * g
+}
+
+// A part of `block` that reads the index: one value for each replica, so 1 + 2 + 3 = 6 times f0 * x.
+pub flow block_reads_i(x: F32 at sample, f0: F32 at block) -> F32 at sample {
+  let ys = par~ i in 0 ..< 3 { x * (f0 * ratio(i)) }
+  ys[0] + ys[1] + ys[2]
+}
+
+// A part of `block` that does not read the index: the same value in each replica (3 replicas, 2 * f0 * x each), and the index added by the replica: 0 + 1 + 2 = 3.
+pub flow block_ignores_i(x: F32 at sample, f0: F32 at block) -> F32 at sample {
+  let ys = par~ i in 0 ..< 3 { x * (f0 * 2.0) + F32.round_from(i) }
+  ys[0] + ys[1] + ys[2]
+}
+
+// A part of `init` that reads the index: k * (0 + 1 + 2) * x.
+pub flow init_reads_i(x: F32 at sample, k: F32 at init) -> F32 at sample {
+  let ys = par~ i in 0 ..< 3 { x * (k * F32.round_from(i)) }
+  ys[0] + ys[1] + ys[2]
+}
+
+// A part of `block` that holds a part of `init`: g * (k * (i + 1)), 1 + 2 + 3 = 6 times g * k * x.
+pub flow init_in_block(x: F32 at sample, g: F32 at block, k: F32 at init) -> F32 at sample {
+  let ys = par~ i in 0 ..< 3 { x * (g * (k * F32.round_from(i + 1))) }
+  ys[0] + ys[1] + ys[2]
+}
+
+// A part of `block` that reads a `let` of `block` outside the `par~`: g = 2 * f0, so g * (1 + 2) = 6 * f0.
+pub flow reads_a_let_of_block(x: F32 at sample, f0: F32 at block) -> F32 at sample {
+  let g = f0 * 2.0
+  let ys = par~ i in 0 ..< 2 { x * (g * ratio(i)) }
+  ys[0] + ys[1]
+}
+
+// The argument of an instance in the body, an input of `block` of the child: gain~(x, f0 * ratio(i)), 6 * f0 * x.
+pub flow instance_argument(x: F32 at sample, f0: F32 at block) -> F32 at sample {
+  let ys = par~ i in 0 ..< 3 { gain~(x, f0 * ratio(i)) }
+  ys[0] + ys[1] + ys[2]
+}
+
+// A node in the body with a part of `block` in its argument: the delay holds the product of the frame before.
+pub flow with_a_delay(x: F32 at sample, f0: F32 at block) -> F32 at sample {
+  let ys = par~ i in 0 ..< 3 { prev~(x * (f0 * ratio(i))) }
+  ys[0] + ys[1] + ys[2]
+}
+
+// A `par~` in a `par~`: the part of the inner body is of each pair (i, j): f0 * (i + j + 1) is 1, 2, 2, 3 for (0, 0), (0, 1), (1, 0), (1, 1): 8 * f0 * x.
+pub flow nested(x: F32 at sample, f0: F32 at block) -> F32 at sample {
+  let m = par~ i in 0 ..< 2 {
+    pair_sum(par~ j in 0 ..< 2 { x * (f0 * F32.round_from(i + j + 1)) })
+  }
+  m[0] + m[1]
+}
+
+// The range of `..=`: i is 2, 3, 4, 9 * f0 * x.
+pub flow closed_range(x: F32 at sample, f0: F32 at block) -> F32 at sample {
+  let ys = par~ i in 2 ..= 4 { x * (f0 * F32.round_from(i)) }
+  ys[0] + ys[1] + ys[2]
+}
+
+// A condition of `block` in the body, with the part of `block` that it guards: n != 0 gives (100 / n + i) * x, n = 0 gives x in each replica.
+pub flow block_guard(x: F32 at sample, n: I32 at block) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { if n != 0 { x * (F32.round_from(100 / n) + F32.round_from(i)) } else { x } }
+  ys[0] + ys[1]
+}
+
+// A condition of `init` guarding a part of `block` in the body.
+pub flow init_guard(x: F32 at sample, a: I32 at init, d: I32 at block) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { if a != 0 { x * (F32.round_from(100 / d) + F32.round_from(i)) } else { x } }
+  ys[0] + ys[1]
+}
+
+// A condition of `sample` in the body: it is decided by the frame, and the part under it is made where it is reached.
+pub flow sample_guard(x: F32 at sample, n: I32 at block) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { if x > 0.0 { x * (F32.round_from(100 / n) + F32.round_from(i)) } else { x } }
+  ys[0] + ys[1]
+}
+
+// The whole `par~` is a part of `block` (it reads `f0` and the index only): one value in the expression, 3 * f0 * x.
+pub flow whole_par_of_block(x: F32 at sample, f0: F32 at block) -> F32 at sample {
+  x * pair_sum(par~ i in 0 ..< 2 { f0 * ratio(i) })
+}
+
+// The whole `par~` is a part of `init` (it reads no input of `sample` or `block`): one value in the `let` and one in the expression.
+pub flow slow_only(x: F32 at sample) -> F32 at sample {
+  let total = sum(par~ i in 0 ..< 5 { F32.round_from(i * i) })
+  x * sum(par~ i in 0 ..< 5 { F32.round_from(i * i) }) + total
+}
+
+test "a part of block that reads the index is one value for each replica: 6 * f0 * x" {
+  // f0 = 0.5: 3 * x.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = block_reads_i.render(block_reads_i.Params { f0: 0.5 }, xs, 8.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == 6.0
+}
+
+test "process again with another f0: the part is made again by each block" {
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [0.0]
+  var st = block_reads_i.init(8.0)
+  block_reads_i.process(inout st, block_reads_i.Params { f0: 0.5 }, xs, inout out)
+  assert out[0] == 3.0
+  block_reads_i.process(inout st, block_reads_i.Params { f0: 2.0 }, xs, inout out)
+  assert out[0] == 12.0
+  block_reads_i.process(inout st, block_reads_i.Params { f0: 0.0 }, xs, inout out)
+  assert out[0] == 0.0
+}
+
+test "a part of block that does not read the index: 3 * x + 3 with f0 = 0.5" {
+  // each replica: x * 1.0 + i: x + 0, x + 1, x + 2.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = block_ignores_i.render(block_ignores_i.Params { f0: 0.5 }, xs, 8.0)
+  assert o.out[0] == 6.0
+  assert o.out[1] == 9.0
+}
+
+test "a part of init that reads the index: 3 * k * x" {
+  // k = 2: 6 * x.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = init_reads_i.render(init_reads_i.Config { k: 2.0 }, xs, 8.0)
+  assert o.out[0] == 6.0
+  assert o.out[1] == 12.0
+}
+
+test "a part of init is kept by reset and a part of block is made again" {
+  // k = 2, g = 0.5: 6 * g * k * x = 6 * x; after reset with g = 1.0: 12 * x.
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [0.0]
+  var st = init_in_block.init(init_in_block.Config { k: 2.0 }, 8.0)
+  init_in_block.process(inout st, init_in_block.Params { g: 0.5 }, xs, inout out)
+  assert out[0] == 6.0
+  init_in_block.reset(inout st)
+  init_in_block.process(inout st, init_in_block.Params { g: 1.0 }, xs, inout out)
+  assert out[0] == 12.0
+}
+
+test "a part of block that holds a part of init: 6 * g * k * x" {
+  let xs: [F32; 2] = [1.0, 3.0]
+  let o = init_in_block.render(init_in_block.Config { k: 4.0 }, init_in_block.Params { g: 0.25 }, xs, 8.0)
+  assert o.out[0] == 6.0
+  assert o.out[1] == 18.0
+}
+
+test "a part that reads a let of block outside the par~: g = 2 * f0" {
+  // f0 = 0.5: g = 1.0, (1 + 2) * x.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = reads_a_let_of_block.render(reads_a_let_of_block.Params { f0: 0.5 }, xs, 8.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == 6.0
+}
+
+test "the argument of an instance in the body is a part of block of each replica" {
+  // f0 = 0.5: gain~(x, 0.5), gain~(x, 1.0), gain~(x, 1.5): 3 * x.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = instance_argument.render(instance_argument.Params { f0: 0.5 }, xs, 8.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == 6.0
+}
+
+test "the argument of an instance in the body, with the block changing between calls" {
+  let xs: [F32; 1] = [2.0]
+  var out: [F32; 1] = [0.0]
+  var st = instance_argument.init(8.0)
+  instance_argument.process(inout st, instance_argument.Params { f0: 1.0 }, xs, inout out)
+  assert out[0] == 12.0
+  instance_argument.process(inout st, instance_argument.Params { f0: 0.25 }, xs, inout out)
+  assert out[0] == 3.0
+}
+
+test "a delay in the body holds the product of the frame before, in each replica" {
+  // x = 1, 2, 4 and f0 = 0.5: the delays hold 0.5, 1.0, 1.5 (frame 0), then 1.0, 2.0, 3.0 (frame 1): out 0, 3, 6.
+  let xs: [F32; 3] = [1.0, 2.0, 4.0]
+  let o = with_a_delay.render(with_a_delay.Params { f0: 0.5 }, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 3.0
+  assert o.out[2] == 6.0
+}
+
+test "reset sets the delays back and the part of block is made again by the next block" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  var out: [F32; 2] = [0.0, 0.0]
+  var st = with_a_delay.init(8.0)
+  with_a_delay.process(inout st, with_a_delay.Params { f0: 0.5 }, xs, inout out)
+  assert out[0] == 0.0
+  assert out[1] == 3.0
+  with_a_delay.reset(inout st)
+  with_a_delay.process(inout st, with_a_delay.Params { f0: 1.0 }, xs, inout out)
+  assert out[0] == 0.0
+  assert out[1] == 6.0
+}
+
+test "a par~ in a par~: the part of the inner body is made for each pair, 8 * f0 * x" {
+  // f0 = 0.25: 2 * x.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = nested.render(nested.Params { f0: 0.25 }, xs, 8.0)
+  assert o.out[0] == 2.0
+  assert o.out[1] == 4.0
+}
+
+test "the range of ..= : 9 * f0 * x" {
+  // f0 = 0.5: 4.5 * x.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = closed_range.render(closed_range.Params { f0: 0.5 }, xs, 8.0)
+  assert o.out[0] == 4.5
+  assert o.out[1] == 9.0
+}
+
+test "a condition of block that holds guards the part of block of each replica" {
+  // n = 4: 100 / 4 = 25: (25 + 0) * x + (25 + 1) * x = 51 * x.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = block_guard.render(block_guard.Params { n: 4 }, xs, 8.0)
+  assert o.out[0] == 51.0
+  assert o.out[1] == 102.0
+}
+
+test "a condition of block that does not hold takes the else branch in each replica and makes nothing" {
+  // n = 0: x + x. `100 / n` is not evaluated.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = block_guard.render(block_guard.Params { n: 0 }, xs, 8.0)
+  assert o.out[0] == 2.0
+  assert o.out[1] == 4.0
+}
+
+test "a condition of init and a part of block under it" {
+  // a = 1, d = 5: 100 / 5 = 20: (20 + 0 + 20 + 1) * x = 41 * x. a = 0: 2 * x, whatever d is (d = 0 does not panic).
+  let xs: [F32; 1] = [1.0]
+  let on = init_guard.render(init_guard.Config { a: 1 }, init_guard.Params { d: 5 }, xs, 8.0)
+  assert on.out[0] == 41.0
+  let off = init_guard.render(init_guard.Config { a: 0 }, init_guard.Params { d: 0 }, xs, 8.0)
+  assert off.out[0] == 2.0
+}
+
+test "a condition of sample in the body is decided by the frame" {
+  // n = 4: 25. x = 1: (25 + 0 + 25 + 1) * 1 = 51; x = -1: the else branch, -1 in each replica: -2.
+  let xs: [F32; 2] = [1.0, -1.0]
+  let o = sample_guard.render(sample_guard.Params { n: 4 }, xs, 8.0)
+  assert o.out[0] == 51.0
+  assert o.out[1] == -2.0
+}
+
+test "the frame that does not take the branch does not make the part (n = 0)" {
+  // n = 0: `100 / n` is evaluated only for x > 0: x = -1 and 0 give x in each replica.
+  let xs: [F32; 2] = [-1.0, 0.0]
+  let o = sample_guard.render(sample_guard.Params { n: 0 }, xs, 8.0)
+  assert o.out[0] == -2.0
+  assert o.out[1] == 0.0
+}
+
+test "a par~ that has parts of init only: 0 + 1 + 4 + 9 + 16 = 30" {
+  // x * 30 + 30.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = slow_only.render(xs, 8.0)
+  assert o.out[0] == 60.0
+  assert o.out[1] == 90.0
+}
+
+test "the whole par~ is a part of block: 3 * f0 * x, made again by each block" {
+  // f0 = 0.5: 1.5 * x. f0 = 2.0: 6 * x.
+  let xs: [F32; 1] = [2.0]
+  var out: [F32; 1] = [0.0]
+  var st = whole_par_of_block.init(8.0)
+  whole_par_of_block.process(inout st, whole_par_of_block.Params { f0: 0.5 }, xs, inout out)
+  assert out[0] == 3.0
+  whole_par_of_block.process(inout st, whole_par_of_block.Params { f0: 2.0 }, xs, inout out)
+  assert out[0] == 12.0
+}

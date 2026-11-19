@@ -24,8 +24,8 @@ pub(super) struct Marked {
     /// The first call (in the order of the file) of a function that is not
     /// `rt` evaluated at a stage after `init` (R-17): E0815 in a
     /// conditional position a condition decided after `init` selects
-    /// (§11.5); else E0200, in the body of a `par~` (W7-05 U3), of a type
-    /// that is not Copy (S-1160) or of constants only (W9-03).
+    /// (§11.5); else E0200, of a type that is not Copy (S-1160) or of
+    /// constants only (W9-03).
     pub(super) diag: Option<Diagnostic>,
     /// The locals of the `let`s the initializer of each `let` reads (by its
     /// index; the last, the output), `^y` too: the reads what is reached
@@ -63,8 +63,10 @@ struct Marker<'a> {
     seen: HashSet<ExprId>,
     /// The parts of a constant expression are marked (their reads only).
     konst: bool,
-    /// In the body of a `par~` (W7-05 U3).
-    par: u32,
+    /// The `par~`s of the walk by their expressions, and those whose bodies
+    /// hold the expression marked now, the innermost last: its owner.
+    par_of: HashMap<ExprId, NodeId>,
+    pars: Vec<NodeId>,
     out: Marked,
 }
 
@@ -93,6 +95,9 @@ pub(super) fn mark_all(
     let nodes: HashSet<ExprId> = cx.calls.iter().map(|c| c.expr).collect();
     let sample_rate: HashSet<ExprId> = cx.sample_rate_calls.iter().copied().collect();
     let choose = Choose { a, ast, body, clocks: &walked.info, nodes: &nodes, sample_rate: &sample_rate };
+    let recorded = walked.recorded.iter().enumerate();
+    let par_of = recorded.filter(|(_, r)| matches!(r.kind, PlanKind::Par { .. }));
+    let par_of = par_of.map(|(i, r)| (r.expr, NodeId(i as u32))).collect();
     let mut m = Marker {
         ast,
         text,
@@ -107,7 +112,8 @@ pub(super) fn mark_all(
         cond_read: HashSet::default(),
         seen: HashSet::default(),
         konst: false,
-        par: 0,
+        par_of,
+        pars: Vec::new(),
         out: Marked {
             read_at: HashMap::default(),
             sample_rate_at: None,
@@ -221,9 +227,10 @@ impl Marker<'_> {
                 if !self.seen.insert(e) {
                     return;
                 }
-                let owner = match self.consumer {
-                    k if k < self.out.deps.len() - 1 => Owner::Let(k as u32),
-                    _ => Owner::Output,
+                let owner = match (self.pars.last(), self.consumer) {
+                    (Some(&p), _) => Owner::Par(p),
+                    (None, k) if k < self.out.deps.len() - 1 => Owner::Let(k as u32),
+                    (None, _) => Owner::Output,
                 };
                 self.out.hoisted.push((e, s, owner, g != Cond::None));
                 if g != Cond::None {
@@ -289,12 +296,19 @@ impl Marker<'_> {
                     }
                 }
             }
-            // The body of a `par~` (W7-05 U3, S-1140).
-            ExprKind::Par { body, .. } => {
-                self.par += 1;
-                self.mark(*body, at, Cond::Late);
-                self.par -= 1;
-            }
+            // The body of a `par~`, whose fields are of each replica
+            // (S-1140). One a walk with a diagnostic did not reach has no
+            // node, and a flow in error no table: its body is marked for
+            // the reads and the diagnostics only.
+            ExprKind::Par { body, .. } => match self.par_of.get(&e) {
+                Some(&p) => {
+                    self.pars.push(p);
+                    self.mark(*body, at, g);
+                    self.pars.pop();
+                }
+                None if self.partial => self.mark(*body, at, g),
+                None => onsa_diag::internal::bug(Some(expr.span), "a `par~` the walk of the clocks did not reach"),
+            },
             // The conditional positions (§11.3) under the conditions that
             // select them, not the arms of `if~` / `match~` (W7-06).
             ExprKind::If { cond, then, else_, tilde: None } => {
@@ -362,14 +376,13 @@ impl Marker<'_> {
     /// at `init` ([`Walked::non_rt`]), evaluated at a stage after `init`,
     /// under the conditions `g`: one not hoisted to `init` (R-17). With a
     /// value that is not a constant, a condition decided after `init`
-    /// selects its place: E0815 (§11.5, S-1157). Else E0200: in the body of
-    /// a `par~` (W7-05 U3), of a type that is not Copy (S-1160) or of
-    /// constants only (W9-03).
+    /// selects its place: E0815 (§11.5, S-1157). Else E0200: of a type that
+    /// is not Copy (S-1160) or of constants only (W9-03).
     fn non_rt_here(&mut self, e: ExprId, callee: ExprId, at: ClockStage, g: Cond) {
         let Some(&varies) = self.non_rt.get(&e).filter(|_| at > ClockStage::Init) else { return };
         let span = self.ast.expr(e).span;
         let found = span.text_in(self.text).to_string();
-        let d = if varies && g > Cond::Init && self.par == 0 {
+        let d = if varies && g > Cond::Init {
             let name = self.ast.expr(callee).span.text_in(self.text);
             let msg = format!(
                 "`{name}` is not `rt`, and a condition decided after `init` selects this place, so it cannot be computed at `init`; bind it with a `let` before the condition (§11.3, §11.5)"

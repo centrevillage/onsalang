@@ -21,7 +21,7 @@ use onsa_sema::flow_names::FlowBuiltin;
 use onsa_sema::{DefId, LocalId, Target};
 use onsa_syntax::ast::{CallKind, ExprId, ExprKind, PatId, StmtKind};
 
-use super::expr::{Frame, Stop};
+use super::expr::{Frame, Hoisted, Stop};
 use super::hoist::pre;
 use super::host::FnHost;
 use super::scalar::{Fault, PanicKind};
@@ -89,6 +89,12 @@ pub(super) fn clock_of(body: &Body, known: &HashMap<LocalId, Clock>, root: ExprI
                 Called::Builtin(_) => Clock::Sample,
             })
         }
+        // The index of a `par~` is a value of `init` (§11.5), not a constant: the body is clocked with it.
+        ExprKind::Par { var, body: inner, .. } => {
+            let mut inside = known.clone();
+            inside.insert(body.par_var(var.span)?, Clock::Init);
+            clock_of(body, &inside, root, *inner)
+        }
         ExprKind::At { expr, clock } => {
             clock_of(body, known, root, *expr)?;
             clock_stage(&clock.name.name).map(Clock::from).ok_or(Fault::Unavailable("a clock the evaluator has not"))
@@ -128,7 +134,7 @@ pub struct Inst {
     pub(super) steps: Rc<[Step]>,
     locals: HashMap<LocalId, Value>,
     /// The parts of the body that a slower stage made (`Frame::hoisted`).
-    hoisted: HashMap<ExprId, Value>,
+    hoisted: Hoisted,
     pub(super) out: Value,
     pub(super) state: InstState,
     /// The index of each `par~` around the call that made it, which the arguments of its `block` stage may read.

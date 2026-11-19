@@ -1,0 +1,36 @@
+# flow_ref 1 source=tests/spec/flow_semantics/hoist_par_non_rt_calls.onsa tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
+@ the call with the index as its argument is a part of init of each replica
+render hoist_par_non_rt_calls.index_argument sr=0x41000000 in x=[0x40000000 0x40800000]
+out=[0x40a00000 0x41200000]
+@ the call with an input of init and the index
+render hoist_par_non_rt_calls.input_argument sr=0x41000000 cfg f=0x40800000 in x=[0x3f800000 0x40000000]
+out=[0x40c00000 0x41400000]
+@ the call in a part of block is made once at init: the block changes between calls
+init 0 hoist_par_non_rt_calls.in_a_block_part sr=0x41000000 cfg f=0x40000000
+process 0 params g=0x3f000000 frames=1 in x=[0x40800000]
+out=[0x40a00000]
+process 0 params g=0x40000000 frames=1 in x=[0x40800000]
+out=[0x41a00000]
+@ the call under a condition of init that holds is made in each replica
+render hoist_par_non_rt_calls.init_condition sr=0x41000000 cfg a=0x40000000 in x=[0x3f800000 0x40000000]
+out=[0x40200000 0x40a00000]
+@ the call under a condition of init that does not hold is not made: x in each replica
+render hoist_par_non_rt_calls.init_condition sr=0x41000000 cfg a=0x00000000 in x=[0x3f800000 0x40000000]
+out=[0x40000000 0x40800000]
+@ a par~ in a par~: design(0), design(1), design(1), design(2) is 0, 0.5, 0.5, 1.0: 2 * x
+render hoist_par_non_rt_calls.nested sr=0x41000000 in x=[0x3f800000 0x40000000]
+out=[0x40000000 0x40800000]
+@ the call as the argument of an instance: 2.5 * x
+render hoist_par_non_rt_calls.instance_argument sr=0x41000000 in x=[0x40000000 0x40800000]
+out=[0x40a00000 0x41200000]
+@ the call that gives its value: k = 2 gives 100 / 2 + 100 / 1
+render hoist_par_non_rt_calls.panics_at_init sr=0x41000000 cfg k=2 in x=[0x3f800000 0x40000000]
+out=[0x43160000 0x43960000]
+@ the call that panics is made at init: k = 1 divides by zero for i = 1
+init 0 hoist_par_non_rt_calls.panics_at_init sr=0x41000000 cfg k=1
+panic init
+@ the call under a condition of init that does not hold does not panic, one that holds does
+render hoist_par_non_rt_calls.guarded_panic sr=0x41000000 cfg a=0 k=1 in x=[0x40400000]
+out=[0x40c00000]
+init 0 hoist_par_non_rt_calls.guarded_panic sr=0x41000000 cfg a=1 k=1
+panic init

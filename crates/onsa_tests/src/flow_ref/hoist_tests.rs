@@ -337,3 +337,161 @@ fn a_struct_of_copy_elements_is_copy_and_a_part_of_its_own() {
     let src = "struct Wrap { a: I32 }\nrt fn pick(w: Wrap, x: I32) -> I32 { x * w.a }\nflow f(x: I32 at sample, d: I32 at block) -> I32 at sample { pick(Wrap { a: 100 / d }, x) }";
     assert_eq!(zero_frames(src, "f", &[], &[("d", 0)]), Some((PanicAt::Block, PanicKind::DivZero)));
 }
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// W7-05 U3/t, S-1157, S-1140 (§11.3, §11.5): the body of a `par~`. The index `i` is a value of `init`, so a part of the body that reads it
+// and a part of `block` are parts of each replica, made by their stage, once for each replica (S-1140, provisional: the field of the part is
+// one for each replica). `100 / (d - i)` is made for i = 0, 1 and is a division by zero for d = 1 at i = 1; `d - i` is a `U32`.
+
+use super::value::IntKind;
+
+fn u32v(v: u32) -> Value {
+    Value::int(IntKind::U32, i128::from(v))
+}
+
+type U32Inputs = &'static [(&'static str, u32)];
+
+/// The panic of a call of 0 frames of the flow `f` of `src` (one `sample` input `x`), with the inputs of `init` and of `block` given.
+fn zero_frames_u32(src: &'static str, init: U32Inputs, block: U32Inputs) -> Option<(PanicAt, PanicKind)> {
+    with_flow(src, "f", move |view, def| {
+        let cfg: Vec<(&str, Value)> = init.iter().map(|(n, v)| (*n, u32v(*v))).collect();
+        match Instance::init(view, def, 8.0, &cfg, None) {
+            Err(Stop { fault: Fault::Panic(k), .. }) => Some((PanicAt::Init, k)),
+            Err(e) => panic!("init: {e:?}"),
+            Ok(mut me) => {
+                let params: Vec<(&str, Value)> = block.iter().map(|(n, v)| (*n, u32v(*v))).collect();
+                panics(me.process_outcome(&params, &[("x", &[])], 0, None))
+            }
+        }
+    })
+}
+
+const PAR_BLOCK: &str = "flow f(x: U32 at sample, d: U32 at block) -> U32 at sample {
+  let ys = par~ i in 0 ..< 2 { x * (100 / (d - i)) }
+  ys[0] + ys[1]
+}";
+
+#[test]
+fn a_part_of_block_of_a_par_body_is_made_at_block_for_each_replica() {
+    // d = 1 divides by zero for i = 1: a call of 0 frames panics at the `block` stage; d = 2 and d = 3 do not. d = 3, x = 1 gives 33 + 50 = 83
+    // and d = 2 gives 50 + 100 = 150, the next call making its parts again (d = 4: 25 + 33 = 58).
+    assert_eq!(zero_frames_u32(PAR_BLOCK, &[], &[("d", 1)]), Some((PanicAt::Block, PanicKind::DivZero)));
+    assert_eq!(zero_frames_u32(PAR_BLOCK, &[], &[("d", 2)]), None);
+    assert_eq!(zero_frames_u32(PAR_BLOCK, &[], &[("d", 3)]), None);
+    with_flow(PAR_BLOCK, "f", |view, def| {
+        let mut me = Instance::init(view, def, 8.0, &[], None).expect("init");
+        for (d, want) in [(3, 83), (2, 150), (4, 25 + 33)] {
+            let outs = me.process(&[("d", u32v(d))], &[("x", &[u32v(1)])], 1, None).expect("process");
+            assert!(is(&Ok(outs[0].clone()), &u32v(want)), "d = {d}: {outs:?}");
+        }
+    });
+}
+
+#[test]
+fn a_part_of_init_of_a_par_body_is_made_at_init_for_each_replica() {
+    // `100 / (k - i)`: k = 1 divides by zero for i = 1 at `init`, before any call; k = 2 gives 50 and 100, 150 * x (x = 2: 300), kept by the next call.
+    let src = "flow f(x: U32 at sample, k: U32 at init) -> U32 at sample {
+  let ys = par~ i in 0 ..< 2 { x * (100 / (k - i)) }
+  ys[0] + ys[1]
+}";
+    assert_eq!(zero_frames_u32(src, &[("k", 1)], &[]), Some((PanicAt::Init, PanicKind::DivZero)));
+    with_flow(src, "f", |view, def| {
+        let mut me = Instance::init(view, def, 8.0, &[("k", u32v(2))], None).expect("init");
+        for _ in 0..2 {
+            let outs = me.process(&[], &[("x", &[u32v(2)])], 1, None).expect("process");
+            assert!(is(&Ok(outs[0].clone()), &u32v(300)), "{outs:?}");
+        }
+    });
+}
+
+#[test]
+fn a_part_of_block_that_does_not_read_the_index_and_the_output_of_block_are_made_at_block() {
+    // `100 / d` in the body is the same in each replica and panics at `block` with d = 0; the same for the `par~` of the output expression.
+    let in_a_let = "flow f(x: U32 at sample, d: U32 at block) -> U32 at sample {
+  let ys = par~ i in 0 ..< 2 { x * (100 / d) + i }
+  ys[0] + ys[1]
+}";
+    let in_the_output = "flow f(x: U32 at sample, d: U32 at block) -> U32 at sample {
+  sum2(par~ i in 0 ..< 2 { x * (100 / (d - i)) })
+}
+rt fn sum2(xs: [U32; 2]) -> U32 { xs[0] + xs[1] }";
+    assert_eq!(zero_frames_u32(in_a_let, &[], &[("d", 0)]), Some((PanicAt::Block, PanicKind::DivZero)));
+    assert_eq!(zero_frames_u32(in_a_let, &[], &[("d", 4)]), None);
+    assert_eq!(zero_frames_u32(in_the_output, &[], &[("d", 1)]), Some((PanicAt::Block, PanicKind::DivZero)));
+    assert_eq!(zero_frames_u32(in_the_output, &[], &[("d", 2)]), None);
+}
+
+#[test]
+fn a_par_in_a_par_has_a_part_for_each_pair() {
+    // `100 / (d - (i + j))`: the pair (1, 1) divides by zero for d = 2; d = 3 gives 33 + 50 + 50 + 100 = 233 (x = 1).
+    let src = "flow f(x: U32 at sample, d: U32 at block) -> U32 at sample {
+  let m = par~ i in 0 ..< 2 { sum2(par~ j in 0 ..< 2 { x * (100 / (d - (i + j))) }) }
+  m[0] + m[1]
+}
+rt fn sum2(xs: [U32; 2]) -> U32 { xs[0] + xs[1] }";
+    assert_eq!(zero_frames_u32(src, &[], &[("d", 2)]), Some((PanicAt::Block, PanicKind::DivZero)));
+    assert_eq!(zero_frames_u32(src, &[], &[("d", 3)]), None);
+    with_flow(src, "f", |view, def| {
+        let mut me = Instance::init(view, def, 8.0, &[], None).expect("init");
+        let outs = me.process(&[("d", u32v(3))], &[("x", &[u32v(1)])], 1, None).expect("process");
+        assert!(is(&Ok(outs[0].clone()), &u32v(233)), "{outs:?}");
+    });
+}
+
+#[test]
+fn a_condition_in_a_par_body_guards_the_part_of_each_replica() {
+    // A condition of `block` that holds: `100 / (n - i)` for i = 0, 1 is made at `block` (n = 1 panics in a call of 0 frames); one that does not hold
+    // makes nothing (n = 0 does not panic, though `n - i` would be below 0). A condition of `sample` leaves the part where it is reached: a call of
+    // 0 frames does not panic, a frame that does not take the branch does not (x = 0), the one that takes it does (x = 1, n = 1, the frame 0).
+    let block = "flow f(x: U32 at sample, n: U32 at block) -> U32 at sample {
+  let ys = par~ i in 0 ..< 2 { if n != 0 { x * (100 / (n - i)) } else { x } }
+  ys[0] + ys[1]
+}";
+    assert_eq!(zero_frames_u32(block, &[], &[("n", 1)]), Some((PanicAt::Block, PanicKind::DivZero)));
+    assert_eq!(zero_frames_u32(block, &[], &[("n", 2)]), None);
+    assert_eq!(zero_frames_u32(block, &[], &[("n", 0)]), None);
+    let sample = "flow f(x: U32 at sample, n: U32 at block) -> U32 at sample {
+  let ys = par~ i in 0 ..< 2 { if x > 0 { x * (100 / (n - i)) } else { x } }
+  ys[0] + ys[1]
+}";
+    assert_eq!(zero_frames_u32(sample, &[], &[("n", 1)]), None);
+    with_flow(sample, "f", |view, def| {
+        let mut me = Instance::init(view, def, 8.0, &[], None).expect("init");
+        let r = me.process_outcome(&[("n", u32v(1))], &[("x", &[u32v(0)])], 1, None);
+        assert_eq!(panics(r), None);
+        let r = me.process_outcome(&[("n", u32v(1))], &[("x", &[u32v(1)])], 1, None);
+        assert_eq!(panics(r), Some((PanicAt::Sample(0), PanicKind::DivZero)));
+    });
+}
+
+#[test]
+fn the_index_of_a_par_is_of_init_not_a_constant() {
+    // The `par~` of `c` reads the index only: its clock is `init` (§11.5: a value of `init`, not a compile-time constant).
+    let src = "flow f(x: U32 at sample) -> U32 at sample {
+  let c = par~ i in 0 ..< 2 { i * 2 }
+  x + c[0] + c[1]
+}";
+    with_flow(src, "f", |view, def| {
+        let me = Instance::init(view, def, 8.0, &[], None).expect("init");
+        assert_eq!(me.clocks(), [super::flow::Clock::Init, super::flow::Clock::Sample]);
+    });
+}
+
+#[test]
+fn a_whole_par_of_init_is_one_part_made_at_init_and_kept_by_reset() {
+    // `x * sum3(par~ i in 0 ..< 3 { 100 / (k - i) })` is of `init` as a whole: k = 2 divides by zero for i = 2 at `init`; k = 4 gives
+    // 25 + 33 + 50 = 108 (x = 1; x = 2 after `reset`: 216), the value kept.
+    let src = "flow f(x: U32 at sample, k: U32 at init) -> U32 at sample {
+  x * sum3(par~ i in 0 ..< 3 { 100 / (k - i) })
+}
+rt fn sum3(xs: [U32; 3]) -> U32 { xs[0] + xs[1] + xs[2] }";
+    assert_eq!(zero_frames_u32(src, &[("k", 2)], &[]), Some((PanicAt::Init, PanicKind::DivZero)));
+    with_flow(src, "f", |view, def| {
+        let mut me = Instance::init(view, def, 8.0, &[("k", u32v(4))], None).expect("init");
+        let outs = me.process(&[], &[("x", &[u32v(1)])], 1, None).expect("process");
+        assert!(is(&Ok(outs[0].clone()), &u32v(25 + 33 + 50)), "{outs:?}");
+        me.reset();
+        let outs = me.process(&[], &[("x", &[u32v(2)])], 1, None).expect("process");
+        assert!(is(&Ok(outs[0].clone()), &u32v(2 * (25 + 33 + 50))), "{outs:?}");
+    });
+}

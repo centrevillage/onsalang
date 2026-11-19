@@ -24,8 +24,8 @@ mod tests;
 /// constants only (W9-03 decides them at compile time). `Init`, `Block`:
 /// decided at that stage, where what they guard is written under them.
 /// `Late`: one decided per sample, or by a value that is not Copy at a
-/// sample, or the body of a `par~` (W7-05 U3): what is under it is
-/// evaluated where it is reached.
+/// sample: what is under it is evaluated where it is reached. The body of
+/// a `par~` is no conditional position.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Cond {
     None,
@@ -81,7 +81,8 @@ pub struct Hoist {
     /// starts of the subexpressions (§11.6).
     pub name: String,
     /// The name after the scope of its owner (`a._hoist_0`,
-    /// `_out._hoist_0`): its field.
+    /// `_out._hoist_0`, `saws._hoist_0` of the body of the `par~` `saws`):
+    /// its field in the `State`; in the replica of a `par~`, its `name`.
     pub path: String,
     pub span: Span,
 }
@@ -160,12 +161,15 @@ impl Choose<'_> {
     /// is none of a name (an input, a `let`, the index of a `par~`, a
     /// binding of an arm, `^y`), `sample_rate()` and a node (§11.3), nor
     /// parentheses or `at`, whose operand is the same value at the same
-    /// stage (§11.3: `at` changes neither): the operand is chosen instead.
+    /// stage (§11.3: `at` changes neither), nor a block of a value only,
+    /// whose value the lowering makes of its tail in place: the operand or
+    /// the tail is chosen instead.
     fn hoistable(&self, e: ExprId) -> bool {
         let kind = &self.ast.expr(e).kind;
         let name = matches!(self.body.targets.get(&e), Some(Target::Local(_)));
         if name
-            || matches!(kind, ExprKind::Paren(_) | ExprKind::At { .. } | ExprKind::Par { .. })
+            || matches!(kind, ExprKind::At { .. } | ExprKind::Par { .. })
+            || value_of(kind).is_some()
             || self.nodes.contains(&e)
             || self.sample_rate.contains(&e)
         {
@@ -182,10 +186,12 @@ impl Choose<'_> {
         let mut x = e;
         loop {
             match &self.ast.expr(x).kind {
-                ExprKind::Paren(y) | ExprKind::Field { base: y, .. } | ExprKind::TupleIndex { base: y, .. } => x = *y,
-                ExprKind::Block(Block { stmts, tail: Some(y) }) if stmts.is_empty() => x = *y,
+                ExprKind::Field { base: y, .. } | ExprKind::TupleIndex { base: y, .. } => x = *y,
                 ExprKind::Lit(_) | ExprKind::Path(_) => return false,
-                _ => return self.hoistable(e),
+                k => match value_of(k) {
+                    Some(y) => x = y,
+                    None => return self.hoistable(e),
+                },
             }
         }
     }
@@ -195,22 +201,35 @@ impl Choose<'_> {
     }
 }
 
+/// What parentheses or a block of a value only (`{ b * 2.0 }`) hold: the
+/// same value, made in place.
+fn value_of(kind: &ExprKind) -> Option<ExprId> {
+    match kind {
+        ExprKind::Paren(y) => Some(*y),
+        ExprKind::Block(Block { stmts, tail: Some(y) }) if stmts.is_empty() => Some(*y),
+        _ => None,
+    }
+}
+
 /// The table of the hoisted subexpressions of `info` the marking chose
 /// (`marked`: each with its stage, its owner and whether it is guarded),
 /// made with the plan:
 /// numbered per owner from 0 in the order of the starts of the
 /// subexpressions, named `_hoist_<n>` after the scope of the owner (§11.6),
 /// in the order of their fields (§12.4: the `let`s in their order, then the
-/// output).
+/// output, then the body of each `par~`, whose replica holds them).
 // SPEC-GAP(S-1164): two hoisted subexpressions of one owner that start at one
 // place (`make(a) * level`, `level` at `block`, and its `make(a)` at
 // `init`) are numbered the outer first, in the order of the walk.
+// SPEC-GAP(S-1140): those of the body of a `par~` are of each replica,
+// numbered in that body by themselves, after the scope of the `par~`
+// (`saws._hoist_0`).
 pub(super) fn table(info: &mut FlowInfo, ast: &Ast, marked: Vec<(ExprId, ClockStage, Owner, bool)>) {
     let scopes = names::scopes(info.lets.iter().map(|l| l.locals.as_slice()), &info.body);
     let rank = |o: Owner| match o {
         Owner::Let(k) => k as usize,
         Owner::Output => scopes.len(),
-        Owner::Par(_) => onsa_diag::internal::bug(None, "a field hoisted in the body of a `par~` (W7-05 U3)"),
+        Owner::Par(p) => scopes.len() + 1 + p.0 as usize,
     };
     let mut marked: Vec<_> = marked.into_iter().map(|(e, s, o, g)| (rank(o), ast.expr(e).span, e, s, o, g)).collect();
     marked.sort_by_key(|&(r, span, ..)| (r, span.start));
@@ -220,7 +239,10 @@ pub(super) fn table(info: &mut FlowInfo, ast: &Ast, marked: Vec<(ExprId, ClockSt
         // Sorted by owner: the count goes on until the owner changes.
         n = if hoists.last().is_some_and(|h: &Hoist| h.owner == owner) { n + 1 } else { 0 };
         let name = names::local(HOIST, n);
-        let scope = scopes.get(r).map_or(OUTPUT_SCOPE, String::as_str);
+        let scope = match owner {
+            Owner::Par(p) => info.node(p).path.as_str(),
+            _ => scopes.get(r).map_or(OUTPUT_SCOPE, String::as_str),
+        };
         let path = names::qualify(scope, &name);
         hoists.push(Hoist { expr, stage, guarded, owner, name, path, span });
     }

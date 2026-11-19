@@ -15,8 +15,11 @@
 //! does; else it is evaluated where it is reached); a condition of a later stage (`sample`, or a value that is not Copy, which the reader evaluates) stops the walk:
 //! what is under it is evaluated where it is reached. An arm binding has the clock of the object of its `match`. The walk goes into the
 //! operands, the arguments, the elements and the fields, the branches and the block expressions (a part that reads a name the block binds
-//! is left where it is), and not into a `par~` (U3). A part that reads a `^name` is left where it is (a feedback has the clock of the reader,
-//! §11.3). The order inside a stage is the order the parts are written (S-1159, provisional): `flow::stage` walks the `let`s in order and
+//! is left where it is), and into the body of a `par~` once for each replica, with its index bound and clocked `init` (§11.5: the index is a
+//! value of `init`; S-1140, provisional: each replica has a value of its own for each part of the body, kept by the replicas it is in).
+//! The body is walked as the rest is, by the same guard and stages, and only when it has a part for the stage (a `par~` of a million replicas
+//! that reads `x` only is not walked at `init`); a `par~` that is a part of the stage as a whole is made as a whole and not walked. A part that
+//! reads a `^name` is left where it is (a feedback has the clock of the reader, §11.3). The order inside a stage is the order the parts are written (S-1159, provisional): `flow::stage` walks the `let`s in order and
 //! each `let` from the left.
 
 use std::collections::HashMap;
@@ -177,6 +180,13 @@ fn kept(body: &Body, known: &Known, e: ExprId) -> Result<bool, Fault> {
     Ok(copy && !atom(body, e) && !feedback(body, e) && !reads_unknown(body, known, e, e))
 }
 
+/// The clocks of the names in scope in the body of a `par~` whose variable is written at `at`: the index is of `init` (§11.5).
+fn with_index(body: &Body, known: &Known, at: Span) -> Result<Known, Fault> {
+    let mut inside = known.clone();
+    inside.insert(body.par_var(at)?, Clock::Init);
+    Ok(inside)
+}
+
 /// A child of an expression with the clocks of the names in scope there and the guard on the way to it.
 type Kid = (ExprId, Known, Clock);
 
@@ -223,6 +233,7 @@ fn kids(body: &Body, known: &Known, root: ExprId, e: ExprId, guard: Clock) -> Re
             });
             own(inits.chain(b.tail).collect())
         }
+        K::Par { var, body: inner, tilde: Some(_), .. } => vec![(*inner, with_index(body, known, var.span)?, guard)],
         _ => own(operands(body, e)),
     })
 }
@@ -277,9 +288,10 @@ fn walk(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, guar
     }
     if made == here && kept(&body, known, e).map_err(stop)? {
         // The value of the call before is stale: made again by this stage (the parts it holds that a slower stage kept stay).
-        f.hoisted.remove(&e);
+        let replicas = f.run.as_ref().map(|r| r.replicas.clone()).unwrap_or_default();
+        f.hoisted.entry(e).or_default().remove(&replicas);
         let v = f.eval(e)?;
-        f.hoisted.insert(e, v);
+        f.hoisted.entry(e).or_default().insert(replicas, v);
         return Ok(());
     }
     descend(f, known, root, e, here, guard)
@@ -347,6 +359,15 @@ fn descend(f: &mut Frame, known: &Known, root: ExprId, e: ExprId, here: Clock, g
                     }
                 }
                 return walk(f, &inner, root, arm.body, here, at_body);
+            }
+            Ok(())
+        }
+        K::Par { var, body: inner, tilde: Some(_), .. } => {
+            // The replicas in the order of the index, each with its index bound (as the evaluation of the `par~` does).
+            // A body that has no part for this stage is not walked (a `par~` of a million replicas that only reads `x`).
+            let inside = with_index(&body, known, var.span).map_err(stop)?;
+            if makes(&body, &inside, root, *inner, here, guard).map_err(stop)? {
+                f.replicate(e, |_: &()| 0, |f| walk(f, &inside, root, *inner, here, guard))?;
             }
             Ok(())
         }
