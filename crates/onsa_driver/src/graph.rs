@@ -1,8 +1,8 @@
 //! `onsa graph` (T3-12; spec §18.2): the signal graph of a flow as DOT.
 //! Nodes are the inputs, the top-level `let`s, the stateful nodes that are not
-//! a `let` of their own (by their §11.6 paths) and the output; edges follow the
-//! reads of each initializer. The look-back edges of `prev~` / `delay~` /
-//! `vdelay~` are dashed. A label is `name: type at clock` (no clock for a
+//! a `let` of their own (by their §11.6 paths) and the output; edges are the
+//! edges of the plan ([`FlowInfo::edges`]). The look-back edges of `prev~` /
+//! `delay~` / `vdelay~` are dashed. A label is `name: type at clock` (no clock for a
 //! constant), and clocks colour the nodes (`init` and constants gray,
 //! `block` blue, `sample` black; `spec/tools.md` §1.1).
 
@@ -10,13 +10,13 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 
 use onsa_diag::Span;
-use onsa_sema::body::{LocalId, Target};
+use onsa_sema::body::LocalId;
 use onsa_sema::clock::Clock;
 use onsa_sema::def::DefKind;
-use onsa_sema::flow::{FlowInfo, PlanKind, PlanNode};
+use onsa_sema::flow::{FlowInfo, PlanKind, PlanNode, Vertex};
 use onsa_sema::flow_names::OUTPUT_SCOPE;
 use onsa_sema::{Analysis, DefId};
-use onsa_syntax::ast::{Ast, ExprId, ExprKind};
+use onsa_syntax::ast::{Ast, ExprId};
 
 use crate::Analyzed;
 
@@ -30,10 +30,11 @@ struct Graph<'a> {
     a: &'a Analysis,
     ast: &'a Ast,
     info: &'a FlowInfo,
-    /// Local → node name (inputs, `let`s, `par` variables).
+    /// Local → vertex (inputs, `let`s, the index of a `par~` as its node);
+    /// a binding of an arm has none.
     local_node: HashMap<LocalId, String>,
-    /// Extra nodes (stateful nodes that are not a `let`): name, label, rate.
-    extra: Vec<(String, String, Clock)>,
+    /// The vertex of each `let`.
+    let_names: Vec<String>,
     edges: Vec<Edge>,
     seen: HashSet<(String, String, bool)>,
 }
@@ -56,41 +57,27 @@ impl Graph<'_> {
         self.info.body.expr_types.get(&e).map(|&t| self.a.display_type(t)).unwrap_or_else(|| "?".into())
     }
 
-    /// Reads inside `e` become edges into `target`. A stateful sub-node gets a
-    /// node of its own (unless it IS the target's initializer) and its own edges.
-    fn visit(&mut self, e: ExprId, target: &str, dashed: bool) {
-        // The graph is drawn only for a package without diagnostics (S-59).
-        if let ExprKind::Error = self.ast.expr(e).kind {
-            onsa_diag::internal::bug(Some(self.ast.expr(e).span), "the graph met a body a syntax error left unread")
-        }
-        if let Some(&id) = self.info.node_of.get(&e) {
-            let node = self.info.node(id);
-            let label = self.node_label(node, e);
-            self.extra.push((node.path.clone(), label, self.rate_of(e)));
-            self.edge(&node.path, target, dashed);
-            self.visit_node(node, &node.path);
-            return;
-        }
-        if let Some(Target::Local(l)) = self.info.body.targets.get(&e)
-            && let Some(from) = self.local_node.get(l).cloned()
-        {
-            self.edge(&from, target, dashed);
-            return;
-        }
-        for child in self.ast.sub_exprs(e) {
-            self.visit(child, target, dashed);
+    /// The vertex `v` is drawn as: a node of the whole value of a `let` is
+    /// the `let`'s (they have one name); none of a binding of an arm.
+    fn vertex(&self, v: Vertex) -> Option<String> {
+        match v {
+            Vertex::Local(l) => self.local_node.get(&l).cloned(),
+            Vertex::Node(id) => Some(self.info.node(id).path.clone()),
+            Vertex::Let(k) => match self.let_names.get(k as usize) {
+                Some(name) => Some(name.clone()),
+                None => onsa_diag::internal::bug(None, "an edge of a `let` the flow has not"),
+            },
+            Vertex::Output => Some(OUTPUT_SCOPE.to_string()),
         }
     }
 
-    /// The arguments of a stateful node: look-backs dashed, the rest solid
-    /// ([`onsa_sema::flow::ArgRead::lookback`]); the body of a `par~`.
-    fn visit_node(&mut self, node: &PlanNode, name: &str) {
-        for r in &node.args {
-            self.visit(r.expr, name, r.lookback);
-        }
-        if let PlanKind::Par { var, body, .. } = &node.kind {
-            self.local_node.insert(*var, name.to_string());
-            self.visit(*body, name, false);
+    /// The edges of the plan as edges of the graph, in their order.
+    fn copy_edges(&mut self) {
+        for e in &self.info.edges {
+            // A binding of an arm has no vertex (none in spec/tools.md §1.1).
+            let Some(from) = self.vertex(e.from) else { continue };
+            let Some(to) = self.vertex(e.to) else { onsa_diag::internal::bug(None, "an edge read by a local") };
+            self.edge(&from, &to, e.lookback);
         }
     }
 
@@ -205,8 +192,8 @@ fn graph_of(analyzed: &Analyzed, flow: &str, scope: Option<&str>) -> Result<Stri
     };
     let ast = &module.parsed.ast;
     let flow_def = def.as_flow().expect("flow");
-    let mut g =
-        Graph { a, ast, info, local_node: HashMap::new(), extra: Vec::new(), edges: Vec::new(), seen: HashSet::new() };
+    let (local_node, let_names, edges, seen) = (HashMap::new(), Vec::new(), Vec::new(), HashSet::new());
+    let mut g = Graph { a, ast, info, local_node, let_names, edges, seen };
 
     let mut out = String::new();
     let _ = writeln!(out, "digraph \"{}\" {{", def.name);
@@ -218,7 +205,9 @@ fn graph_of(analyzed: &Analyzed, flow: &str, scope: Option<&str>) -> Result<Stri
         let name = info.body.locals[l.0 as usize].name.clone();
         g.local_node.insert(l, name.clone());
         let input = &flow_def.inputs[i];
-        let rate = input.clock;
+        let Some(&rate) = info.clocks.locals.get(&l) else {
+            onsa_diag::internal::bug(Some(input.span), "an input with no clock in the plan")
+        };
         let _ = writeln!(
             out,
             "  \"{name}\" [label=\"{name}: {}\" shape=ellipse color=\"{}\" fontcolor=\"{}\"]",
@@ -228,16 +217,20 @@ fn graph_of(analyzed: &Analyzed, flow: &str, scope: Option<&str>) -> Result<Stri
         );
     }
     // `let` nodes.
-    let mut let_names: Vec<String> = Vec::new();
     for (i, l) in info.lets.iter().enumerate() {
         let name = l.name.clone().unwrap_or_else(|| format!("let_{i}"));
         for &loc in &l.locals {
             g.local_node.insert(loc, name.clone());
         }
-        let_names.push(name);
+        g.let_names.push(name);
+    }
+    for node in &info.nodes {
+        if let PlanKind::Par { var, .. } = node.kind {
+            g.local_node.insert(var, node.path.clone());
+        }
     }
     for (i, l) in info.lets.iter().enumerate() {
-        let name = &let_names[i];
+        let name = &g.let_names[i];
         let whole = info.whole(i as u32).map(|id| info.node(id));
         let label = match whole {
             // Its node has its name (S-148).
@@ -250,10 +243,6 @@ fn graph_of(analyzed: &Analyzed, flow: &str, scope: Option<&str>) -> Result<Stri
             rate_color(l.clock),
             rate_color(l.clock)
         );
-        match whole {
-            Some(node) => g.visit_node(node, name),
-            None => g.visit(l.init, name, false),
-        }
     }
     // Output: the vertex of a name no input, `let` or node has (R-497).
     if let Some(o) = info.output {
@@ -265,16 +254,19 @@ fn graph_of(analyzed: &Analyzed, flow: &str, scope: Option<&str>) -> Result<Stri
             rate_color(rate),
             rate_color(rate)
         );
-        g.visit(o, OUTPUT_SCOPE, false);
     }
-    for (name, label, rate) in &g.extra {
+    // The nodes not the whole value of a `let`, in the order of the table.
+    for node in info.nodes.iter().filter(|n| !n.whole) {
+        let (label, rate) = (g.node_label(node, node.expr), g.rate_of(node.expr));
         let _ = writeln!(
             out,
-            "  \"{name}\" [label=\"{label}\" style=rounded color=\"{}\" fontcolor=\"{}\"]",
-            rate_color(*rate),
-            rate_color(*rate)
+            "  \"{}\" [label=\"{label}\" style=rounded color=\"{}\" fontcolor=\"{}\"]",
+            node.path,
+            rate_color(rate),
+            rate_color(rate)
         );
     }
+    g.copy_edges();
     for e in &g.edges {
         if e.dashed {
             let _ = writeln!(out, "  \"{}\" -> \"{}\" [style=dashed]", e.from, e.to);

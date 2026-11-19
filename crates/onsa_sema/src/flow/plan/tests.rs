@@ -3,7 +3,8 @@
 //! [`NodeId`], the order of [`FlowInfo::roots`] and the empty table of a
 //! flow in error.
 
-use super::{NodeId, Owner, PlanKind};
+use super::Vertex::{Let, Local, Node, Output};
+use super::{Edge, NodeId, Owner, PlanKind};
 use crate::clock::Clock;
 use crate::flow::FlowInfo;
 use crate::tests::check;
@@ -119,9 +120,9 @@ fn a_flow_in_error_has_no_nodes() {
     assert_eq!(f.top().count(), 0);
 }
 
-/// The first argument of a delay is read a tick later (`lookback`, §11.4),
-/// its `d` and `init` and the arguments of an instance as the node computes
-/// (RF-8 (C)), each at its clock.
+/// The first argument of a delay is read a tick later (`lookback` of its
+/// edges, §11.4), its `d` and `init` and the arguments of an instance as the
+/// node computes (RF-8 (C)), each at its clock.
 #[test]
 fn the_first_argument_of_a_delay_is_a_lookback() {
     let src = "pub flow g(x: F32 at sample, k: F32 at block) -> F32 at sample {
@@ -133,11 +134,44 @@ pub flow f(x: F32 at sample, k: F32 at block, t: F32 at init) -> F32 at sample {
 ";
     let a = check(src);
     let f = flow(&a, "f");
-    let reads = |k: usize| {
-        let n = f.node(f.roots(Owner::Output)[k]);
-        n.args.iter().map(|r| (r.at, r.lookback)).collect::<Vec<_>>()
-    };
-    assert_eq!(reads(0), vec![(Clock::SAMPLE, true), (Clock::SAMPLE, false), (Clock::Init, false)]);
-    assert_eq!(reads(1), vec![(Clock::SAMPLE, true)]);
-    assert_eq!(reads(2), vec![(Clock::SAMPLE, false), (Clock::Block, false)]);
+    let node = |k: usize| f.roots(Owner::Output)[k];
+    let at = |k: usize| f.node(node(k)).args.iter().map(|r| r.at).collect::<Vec<_>>();
+    assert_eq!(at(0), vec![Clock::SAMPLE, Clock::SAMPLE, Clock::Init]);
+    assert_eq!(at(1), vec![Clock::SAMPLE]);
+    assert_eq!(at(2), vec![Clock::SAMPLE, Clock::Block]);
+    let [x, k, t] = [0, 1, 2].map(|i| Local(f.inputs[i]));
+    let [d0, d1, d2] = [0, 1, 2].map(|k| Node(node(k)));
+    let edges = [(d0, Output, false), (x, d0, true), (t, d0, false), (d1, Output, false), (x, d1, true)];
+    let edges = edges.into_iter().chain([(d2, Output, false), (x, d2, false), (k, d2, false)]);
+    assert_eq!(f.edges, edges.map(|(from, to, lookback)| Edge { from, to, lookback }).collect::<Vec<_>>());
+}
+
+/// The edges of the plan: each read by the innermost node, `let` or output
+/// around it, once, in the order of the text; a node read by the one around
+/// its call, not the whole value of a `let`, which is its vertex; a node in
+/// the first argument of a delay and what is in it, a tick later; the index
+/// of a `par~` read in its body.
+#[test]
+fn the_edges_are_the_reads_in_the_order_of_the_text() {
+    let src = "pub flow h(x: F32 at sample) -> F32 at sample {
+  x
+}
+pub flow f(x: F32 at sample) -> F32 at sample {
+  let a = x * x
+  let y = prev~(h~(a) + ^y)
+  let s = par~ i in 0..<2 { h~(x * F32.round_from(i)) }
+  a + y + s[0]
+}
+";
+    let a = check(src);
+    assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
+    let f = flow(&a, "f");
+    let local = |k: usize| Local(f.lets[k].locals[0]);
+    let (x, la, ly, ls) = (Local(f.inputs[0]), local(0), local(1), local(2));
+    let [y, h, s, sh] = ["y", "y.h_0", "s", "s.h_0"].map(|p| Node(named(f, p)));
+    let PlanKind::Par { var, .. } = f.node(named(f, "s")).kind else { panic!("not a par~") };
+    let edges = [(x, Let(0), false), (h, y, true), (la, h, false), (ly, y, true)];
+    let edges = edges.into_iter().chain([(sh, s, false), (x, sh, false), (Local(var), sh, false)]);
+    let edges = edges.chain([(la, Output, false), (ly, Output, false), (ls, Output, false)]);
+    assert_eq!(f.edges, edges.map(|(from, to, lookback)| Edge { from, to, lookback }).collect::<Vec<_>>());
 }

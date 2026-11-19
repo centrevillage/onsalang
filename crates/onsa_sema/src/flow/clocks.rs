@@ -25,7 +25,7 @@ use onsa_syntax::ast::{Ast, BinOp, MatchArm};
 
 use super::loops;
 use super::nodes::{NodeBuilder, Recorded};
-use super::plan::Owner;
+use super::plan::{Edge, Owner};
 use super::*;
 use crate::clock::{self, ClockFrame, Ratio, delay_out, loop_clock, rebase};
 use crate::flow_names::FlowBuiltin;
@@ -92,9 +92,10 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
     info.lets.iter_mut().zip(state).for_each(|(l, s)| l.state = s);
     if info.complete {
         let recorded = std::mem::take(&mut w.recorded);
+        info.edges = std::mem::take(&mut w.edges);
         super::plan::build(&mut info, recorded, &w, ast, std::mem::take(&mut m.hoisted));
         (info.checks, info.const_conds) = (std::mem::take(&mut m.checks), std::mem::take(&mut m.const_conds));
-        let unused = super::reads::unused(a, id, ast, &info, &m.deps, &fcx);
+        let unused = super::reads::unused(a, id, ast, &info, &fcx);
         a.diagnostics.extend(unused);
     }
     let diag = Diagnostic::first_in_file([w.diag, m.diag, fcx.held].into_iter().flatten());
@@ -108,6 +109,8 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Mode {
     /// Stage 1: the `let`s an expression reads, not through a cut place.
+    /// Not the edges of the plan (all the reads, of stage 2): the relation
+    /// of the clocks, needed before they are known.
     Deps,
     /// Stage 1: the clock, a `let` of the loop being solved read as ⊥.
     Solve,
@@ -145,6 +148,8 @@ pub(super) struct Walked {
     pub(super) non_rt: HashMap<ExprId, bool>,
     /// Stage 2: the nodes and their owners, for the plan.
     pub(super) recorded: Vec<Recorded>,
+    /// Stage 2: the edges of the plan ([`FlowInfo::edges`]).
+    pub(super) edges: Vec<Edge>,
 }
 
 pub(super) struct Walk<'a> {
@@ -240,6 +245,7 @@ pub(super) fn walk(
     w.solve();
     w.check();
     let solved = |c: Option<Clock>| c.unwrap_or_else(|| onsa_diag::internal::bug(span, "a `let` left unsolved"));
+    let (recorded, edges) = w.recorder.finish();
     Walked {
         lets: w.lets.into_iter().map(solved).collect(),
         checked: w.checked.into_iter().map(solved).collect(),
@@ -249,7 +255,8 @@ pub(super) fn walk(
         non_rt: w.non_rt,
         nodes: w.node_clocks,
         node_of: w.node_of,
-        recorded: w.recorder.finish(),
+        recorded,
+        edges,
     }
 }
 
@@ -432,6 +439,9 @@ impl Walk<'_> {
     }
 
     fn local(&mut self, e: ExprId, id: LocalId) -> Option<Clock> {
+        if self.mode == Mode::Check {
+            self.recorder.read(id, self.ast.expr(e).span);
+        }
         if let Some(&k) = self.cx.let_of_local.get(&id) {
             let feedback = matches!(self.ast.expr(e).kind, ExprKind::Feedback(_));
             return match self.mode {
@@ -560,6 +570,9 @@ impl Walk<'_> {
             NodeKind::Delay(delay, _) => self.delay(delay, call),
         };
         if let Some((k, recorded)) = slot {
+            if recorded.is_ok() {
+                self.recorder.leave_node();
+            }
             // SPEC-GAP(S-1155): of a value type neither Copy nor `Default`,
             // the E0810 is the one (provisional): not the E0816 of an omitted `init`.
             let not_copy = matches!(call.kind, NodeKind::Delay(..)) && self.check_delay_value(e);
@@ -587,7 +600,7 @@ impl Walk<'_> {
             let at = rebase(input.api_clock(), frame);
             if let Some(c) = self.cut(x) {
                 self.check_arg(x, c, at, input, g);
-                reads.push(ArgRead { expr: x, at, lookback: false });
+                reads.push(ArgRead { expr: x, at });
             }
         }
         (Some(rebase(f.out_clock, frame)), reads)
@@ -598,7 +611,11 @@ impl Walk<'_> {
     /// error (§18.1).
     fn delay(&mut self, delay: Delay, call: &NodeCall) -> (Option<Clock>, Vec<ArgRead>) {
         let (first, d, init) = call.delay_parts();
+        let check = self.mode == Mode::Check;
+        // Read a tick later (§11.4): the one place of the judgement (RF-8 (C)).
+        self.recorder.lookback(check);
         let c = self.expr(first);
+        self.recorder.lookback(false);
         let held = c.filter(|_| self.checking()).is_none_or(|c| self.check_first(delay, first, c));
         if let Some(d) = d {
             self.cut(d);
@@ -610,8 +627,8 @@ impl Walk<'_> {
         }
         let out = if held { delay_out(c, self.in_loop) } else { Some(Clock::Error) };
         let at = out.unwrap_or(Clock::Const);
-        let reads = [Some(first), d].into_iter().flatten().map(|x| ArgRead { expr: x, at, lookback: x == first });
-        let init = init.map(|i| ArgRead { expr: i, at: Clock::Init, lookback: false });
+        let reads = [Some(first), d].into_iter().flatten().map(|x| ArgRead { expr: x, at });
+        let init = init.map(|i| ArgRead { expr: i, at: Clock::Init });
         (out, reads.chain(init).collect())
     }
 }

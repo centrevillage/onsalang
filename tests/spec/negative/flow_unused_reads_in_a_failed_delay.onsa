@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§5.1", "§18.1", "§11.4"]
+
+// R-506 (W7-15 U2): a `let` read inside a delay whose argument also reads a unit that failed is read, and the
+// output reaches it (§5.1), so it has no E0309. The signature of `id2` has a name that is not found (E0302), so a call
+// of it is an error value whose clock is the error clock (§18.1). Before W7-15 U2 the reads of a delay of that clock
+// were left out of what the output reaches, and `b` had an E0309 "read only where the output and no `let _` reach"
+// in each of the three flows; the reads are now the edges of the plan, which hold every read.
+
+pub fn id2(a: Missing) -> F32 { 1.0 }                        //~ E0302
+
+pub flow read_beside_a_failed_call_in_a_delay(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let b = x * 2.0
+  let c = prev~(id2(p) + b)
+  c
+}
+
+pub flow delay_after_a_failed_call(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let b = x * 2.0
+  let c = id2(p) + prev~(b)
+  c
+}
+
+pub flow delay_before_a_failed_call(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let b = x * 2.0
+  let c = prev~(b) + id2(p)
+  c
+}

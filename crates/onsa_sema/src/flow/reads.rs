@@ -27,10 +27,6 @@ pub(super) struct Marked {
     /// (§11.5); else E0200, of a type that is not Copy (S-1160) or of
     /// constants only (W9-03).
     pub(super) diag: Option<Diagnostic>,
-    /// The locals of the `let`s the initializer of each `let` reads (by its
-    /// index; the last, the output), `^y` too: the reads what is reached
-    /// goes by ([`reached`]). W7-15 makes them from the edges of the plan.
-    pub(super) deps: Vec<HashSet<LocalId>>,
     /// The hoisted subexpressions in the order of the walk, with their
     /// stages, owners and whether they are guarded, of which the plan makes
     /// its table.
@@ -50,7 +46,8 @@ struct Marker<'a> {
     /// reach (in a branch, in `if~` / `match~`).
     partial: bool,
     non_rt: &'a HashMap<ExprId, bool>,
-    let_of_local: &'a HashMap<LocalId, usize>,
+    /// The number of the `let`s, the `consumer` of the output.
+    lets: usize,
     /// The `let` whose initializer is marked now (its index), or the output.
     consumer: usize,
     /// The conditions on the path to the expression marked now, each with
@@ -106,7 +103,7 @@ pub(super) fn mark_all(
         choose,
         partial: walked.diag.is_some(),
         non_rt: &walked.non_rt,
-        let_of_local: &cx.let_of_local,
+        lets: lets.len(),
         consumer: lets.len(),
         conds: Vec::new(),
         cond_read: HashSet::default(),
@@ -118,7 +115,6 @@ pub(super) fn mark_all(
             read_at: HashMap::default(),
             sample_rate_at: None,
             diag: None,
-            deps: vec![HashSet::default(); lets.len() + 1],
             hoisted: Vec::new(),
             checks: HashMap::default(),
             const_conds: HashMap::default(),
@@ -153,10 +149,47 @@ pub(super) fn mark_all(
     m.out
 }
 
+/// The locals of the `let`s the initializer of each `let` reads (by its
+/// index; the last, the output), `^y` too, of the edges of the plan
+/// ([`FlowInfo::edges`]): a read by a node is of the outermost `let` or the
+/// output that holds it. One pass of the nodes (a `par~` comes before the
+/// nodes of its body) and one of the edges.
+pub(super) fn deps(info: &FlowInfo, let_of_local: &HashMap<LocalId, usize>) -> Vec<HashSet<LocalId>> {
+    let out = info.lets.len();
+    let mut outer: Vec<usize> = Vec::with_capacity(info.nodes.len());
+    for n in &info.nodes {
+        let k = match n.owner {
+            Owner::Let(k) => k as usize,
+            Owner::Output => out,
+            Owner::Par(p) => outer.get(p.0 as usize).copied().unwrap_or(usize::MAX),
+        };
+        if k > out {
+            onsa_diag::internal::bug(Some(n.span), "a node of no `let` and not of the output");
+        }
+        outer.push(k);
+    }
+    let mut deps = vec![HashSet::default(); out + 1];
+    for e in &info.edges {
+        let Vertex::Local(v) = e.from else { continue };
+        let k = match e.to {
+            _ if !let_of_local.contains_key(&v) => continue,
+            Vertex::Let(k) => k as usize,
+            Vertex::Output => out,
+            Vertex::Node(id) => outer.get(id.0 as usize).copied().unwrap_or(usize::MAX),
+            Vertex::Local(_) => usize::MAX,
+        };
+        let Some(d) = deps.get_mut(k) else {
+            onsa_diag::internal::bug(None, format!("an edge read by no `let` and not by the output: {e:?}"))
+        };
+        d.insert(v);
+    }
+    deps
+}
+
 /// The locals of the `let`s reached from the output and from the `let`s
-/// that bind no name (§5.1, S-727), through the reads `deps` of
-/// [`Marked`]: each `let` is visited once, so the walk is linear in the
-/// `let`s and their reads, and ends.
+/// that bind no name (§5.1, S-727), through the reads `deps` ([`deps`]):
+/// each `let` is visited once, so the walk is linear in the `let`s and their
+/// reads, and ends.
 pub(super) fn reached(
     lets: &[FlowLet],
     deps: &[HashSet<LocalId>],
@@ -184,15 +217,9 @@ pub(super) fn reached(
 /// [`reached`], whose notes show the `let`s that read it, and a binding of
 /// an arm by its reads; the first, which the unit reports. Reported of the
 /// last stage (S-726).
-pub(super) fn unused(
-    a: &Analysis,
-    id: DefId,
-    ast: &Ast,
-    info: &FlowInfo,
-    deps: &[HashSet<LocalId>],
-    cx: &FlowCx,
-) -> Option<Diagnostic> {
+pub(super) fn unused(a: &Analysis, id: DefId, ast: &Ast, info: &FlowInfo, cx: &FlowCx) -> Option<Diagnostic> {
     let names = a.names.get(&id).filter(|n| n.complete)?;
+    let deps = &deps(info, &cx.let_of_local);
     let reached = reached(&info.lets, deps, &cx.let_of_local);
     let mut readers: HashMap<LocalId, Vec<Span>> = HashMap::default();
     for (l, d) in info.lets.iter().zip(deps) {
@@ -229,7 +256,7 @@ impl Marker<'_> {
                 }
                 let owner = match (self.pars.last(), self.consumer) {
                     (Some(&p), _) => Owner::Par(p),
-                    (None, k) if k < self.out.deps.len() - 1 => Owner::Let(k as u32),
+                    (None, k) if k < self.lets => Owner::Let(k as u32),
                     (None, _) => Owner::Output,
                 };
                 self.out.hoisted.push((e, s, owner, g != Cond::None));
@@ -256,9 +283,6 @@ impl Marker<'_> {
             ExprKind::Path(_) | ExprKind::Feedback(_) | ExprKind::Field { .. } => {
                 if let Some(Target::Local(id)) = self.body.targets.get(&e) {
                     self.out.read_at.entry(*id).or_default().insert(at);
-                    if self.let_of_local.contains_key(id) {
-                        self.out.deps[self.consumer].insert(*id);
-                    }
                 }
                 if let ExprKind::Field { base, .. } = &expr.kind
                     && !self.body.targets.contains_key(&e)

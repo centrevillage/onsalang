@@ -30,6 +30,27 @@ pub enum Owner {
     Par(NodeId),
 }
 
+/// A vertex of the edges of the plan ([`FlowInfo::edges`]): a local read (an
+/// input, a local of a `let`, the index of a `par~`, a binding of an arm), a
+/// node, the initializer of the `let` k of [`FlowInfo::lets`], or the output.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Vertex {
+    Local(LocalId),
+    Node(NodeId),
+    Let(u32),
+    Output,
+}
+
+/// An edge of the plan: `from` is read by `to`, the innermost node, `let`
+/// or output that reads it (a node by the one that holds its call).
+/// `lookback`: read a tick later, in the first argument of a delay (§11.4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Edge {
+    pub from: Vertex,
+    pub to: Vertex,
+    pub lookback: bool,
+}
+
 /// What a stateful node is (§11.4, §11.5).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PlanKind {

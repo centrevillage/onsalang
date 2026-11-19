@@ -1,12 +1,13 @@
 //! The record of the stateful nodes of a flow body (§11.4, §11.5, S-06):
 //! their names, their owners and the nesting of `par~`, apart from the
-//! clocks. The walk of the clocks records a node where it meets its call,
-//! before its arguments; the plan ([`super::plan::build`]) makes the table
-//! of the record.
+//! clocks, and who reads what (the edges of the plan). The walk of the
+//! clocks records a node where it meets its call, before its arguments; the
+//! plan ([`super::plan::build`]) makes the table of the record.
 
+use onsa_diag::hash::HashSet;
 use onsa_syntax::ast::Ast;
 
-use super::plan::{NodeId, Owner, PlanKind, names};
+use super::plan::{Edge, NodeId, Owner, PlanKind, Vertex, names};
 use super::*;
 use crate::flow_names::PAR;
 
@@ -29,34 +30,90 @@ pub(super) struct Recorded {
 /// The walk of the clocks calls it at stage 2 in the order of the source:
 /// - [`NodeBuilder::owner`] before each `let` and the output;
 /// - [`NodeBuilder::node`] at a delay or an instance call, before the walk
-///   of its arguments;
+///   of its arguments, and [`NodeBuilder::leave_node`] after it;
 /// - at `par~`, [`NodeBuilder::enter_par`] before the body and
 ///   [`NodeBuilder::leave_par`] after it, even when the body stopped;
+/// - [`NodeBuilder::read`] at each read of a local, and
+///   [`NodeBuilder::lookback`] around the first argument of a delay;
 /// - [`NodeBuilder::finish`] at the end, for the plan.
 ///
 /// So the nodes come in the order the names of their calls come in the
-/// text (the outer call first), which numbers them (§11.6, [`names`]).
+/// text (the outer call first), which numbers them (§11.6, [`names`]), and
+/// the edges in the order of the reads, a node's before its arguments'.
 pub(super) struct NodeBuilder {
     nodes: Vec<Recorded>,
     /// The owner of the nodes recorded now: the `let` or the output walked,
     /// then each `par~` entered.
     owners: Vec<Owner>,
     namer: names::Namer,
+    /// The vertices around the place walked now, the innermost last, each
+    /// with whether what it reads is read a tick later.
+    readers: Vec<(Vertex, bool)>,
+    edges: Vec<Edge>,
+    seen: HashSet<Edge>,
 }
 
 impl NodeBuilder {
     pub(super) fn new(pending: &[PendingLet], ast: &Ast, body: &BodyInfo) -> NodeBuilder {
-        NodeBuilder { nodes: Vec::new(), owners: Vec::new(), namer: names::Namer::new(pending, ast, body) }
+        let namer = names::Namer::new(pending, ast, body);
+        let (readers, edges, seen) = (Vec::new(), Vec::new(), HashSet::default());
+        NodeBuilder { nodes: Vec::new(), owners: Vec::new(), namer, readers, edges, seen }
     }
 
-    /// The nodes of the body, in the order of their [`NodeId`]s.
-    pub(super) fn finish(self) -> Vec<Recorded> {
-        self.nodes
+    /// The nodes of the body, in the order of their [`NodeId`]s, and the
+    /// edges in the order of the text.
+    pub(super) fn finish(self) -> (Vec<Recorded>, Vec<Edge>) {
+        (self.nodes, self.edges)
     }
 
-    /// The nodes recorded next are of `owner`, a `let` or the output.
+    /// The nodes recorded next are of `owner`, a `let` or the output, which
+    /// reads what is walked next.
     pub(super) fn owner(&mut self, owner: Owner) {
+        let reader = match owner {
+            Owner::Let(k) => Vertex::Let(k),
+            Owner::Output => Vertex::Output,
+            Owner::Par(_) => onsa_diag::internal::bug(None, "a `par~` as the owner of a `let`"),
+        };
         self.owners = vec![owner];
+        self.readers = vec![(reader, false)];
+    }
+
+    /// `from` is read by the innermost reader around, once.
+    fn edge(&mut self, from: Vertex, span: Option<Span>) {
+        let Some(&(to, lookback)) = self.readers.last() else {
+            onsa_diag::internal::bug(span, "a read outside a `let` and the output")
+        };
+        let edge = Edge { from, to, lookback };
+        if self.seen.insert(edge) {
+            self.edges.push(edge);
+        }
+    }
+
+    /// The local `l` read at `span`.
+    pub(super) fn read(&mut self, l: LocalId, span: Span) {
+        self.edge(Vertex::Local(l), Some(span));
+    }
+
+    /// What is read next is read a tick later (`on`), in the first argument
+    /// of a delay (§11.4), or no longer.
+    pub(super) fn lookback(&mut self, on: bool) {
+        if let Some(r) = self.readers.last_mut() {
+            r.1 = on;
+        }
+    }
+
+    /// The node `id` reads what is walked next; a node not the whole value
+    /// of its `let` is read by the reader around it.
+    fn enter(&mut self, id: NodeId, whole: bool, span: Span) {
+        if !whole {
+            self.edge(Vertex::Node(id), Some(span));
+        }
+        self.readers.push((Vertex::Node(id), false));
+    }
+
+    /// The end of the arguments of the node recorded last that is not left.
+    pub(super) fn leave_node(&mut self) {
+        self.readers.pop();
     }
 
     /// The node `e` of `kind` at `span`, its name and its path (§11.6).
@@ -72,6 +129,7 @@ impl NodeBuilder {
         let id = NodeId(self.nodes.len() as u32);
         let whole = self.namer.whole(e);
         self.nodes.push(Recorded { expr: e, span, kind, owner, name, path, whole });
+        self.enter(id, whole, span);
         id
     }
 
@@ -124,6 +182,7 @@ impl NodeBuilder {
         if !self.owners.pop().is_some_and(|o| matches!(o, Owner::Par(p) if self.nodes[p.0 as usize].expr == e)) {
             onsa_diag::internal::bug(Some(span), "a `par~` left that was not entered")
         }
+        self.leave_node();
     }
 }
 

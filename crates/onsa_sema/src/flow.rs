@@ -28,8 +28,7 @@
 //!   [`plan`]), flat and indexed by [`NodeId`]: the delays, the instance
 //!   calls and the `par~`s, each with its [`Owner`] (a `let`, the output or
 //!   a `par~`, by the tree of the body), its clock, the clocks its arguments
-//!   are read at ([`ArgRead`], `lookback` of the first argument of a delay),
-//!   the place of its fields, and its §11.6 names ([`plan`]'s `names`): the
+//!   are read at ([`ArgRead`]), the place of its fields, and its §11.6 names ([`plan`]'s `names`): the
 //!   `let` name when the node is the whole initializer of a `let` of one
 //!   name (`let y1 = prev~(^y)`, `let src = saw~(f0)`), otherwise
 //!   `prev_0`, `delay_0`, `vdelay_0`, `<callee>_0`, `par_0`, numbered per
@@ -39,6 +38,9 @@
 //!   of an owner (of a `par~`, its `children`), [`FlowInfo::top`] those of
 //!   the `let`s and the output. Empty when the flow is not `complete`.
 //! - `node_of` — a call or `par~` expression → its node.
+//! - `edges: Vec<Edge>` — who reads what, recorded with the nodes: a local
+//!   or a node ([`Vertex`]) read by the innermost node, `let` or output
+//!   around the read, `lookback` in the first argument of a delay (§11.4).
 //! - `hoists: Vec<Hoist>` — the slow subexpressions read at a faster stage,
 //!   evaluated at the stage of their clock into hidden fields (§11.3,
 //!   [`hoist`]): chosen by the marking, which reads their parts at their
@@ -112,7 +114,7 @@ mod reads;
 mod tests;
 
 pub use hoist::{Cond, Hoist, HoistId, strip};
-pub use plan::{Field, FieldOf, Kept, NodeId, Owner, Part, PlanKind, PlanNode};
+pub use plan::{Edge, Field, FieldOf, Kept, NodeId, Owner, Part, PlanKind, PlanNode, Vertex};
 
 pub(crate) use clocks::finish_flow;
 
@@ -181,14 +183,12 @@ pub(super) struct NodeClock {
 /// An argument of a node and the clock of the place it is read at (§11.3,
 /// §11.4): the first argument and the `d` of a delay at the clock of the
 /// delay, an `init` at `init`, an argument of an instance at the clock of
-/// its input. `lookback`: the value is read a tick later (the first
-/// argument of a delay, §11.4), not as the node computes. The one place of
-/// what a node reads (RF-8 (C)).
+/// its input. Which reads are a tick later is of [`FlowInfo::edges`]
+/// (RF-8 (C)).
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct ArgRead {
     pub expr: ExprId,
     pub at: Clock,
-    pub lookback: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -199,6 +199,11 @@ pub struct FlowInfo {
     pub lets: Vec<FlowLet>,
     pub nodes: Vec<PlanNode>,
     pub node_of: HashMap<ExprId, NodeId>,
+    /// Who reads what (R-91 (1), RF-8 (C)): the edges of the reads of the
+    /// body, each once, in the order of the text (a node before its
+    /// arguments'); empty when the flow is not `complete`. `onsa graph` and
+    /// the E0309 of a `let` not reached read them.
+    pub edges: Vec<Edge>,
     pub(crate) roots: plan::Roots,
     /// The hoisted subexpressions (§11.3), in the order of their fields
     /// ([`hoist`]'s `table`); [`FlowInfo::hoist_of`] finds the one of an
