@@ -80,6 +80,11 @@ pub fn run_all_with(root: &Path, update: Update) -> Report {
                 .into(),
         );
     }
+    if report.cases.iter().all(|c| c.run.graph_flows == 0) {
+        report
+            .failures
+            .push("no graph of a flow was checked for a cycle of solid edges (`onsa graph`, spec/tools.md)".into());
+    }
     if report.cases.iter().all(|c| c.run.fix_copies == 0 && c.run.copies_rewritten.is_empty()) {
         report.failures.push("no copy of the text after the candidates (.fixK) was compared".into());
     }

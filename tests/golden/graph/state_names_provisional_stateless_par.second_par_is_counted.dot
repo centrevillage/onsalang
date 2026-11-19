@@ -5,8 +5,16 @@ digraph "second_par_is_counted" {
   "a" [label="a: F32 at sample" color="black" fontcolor="black"]
   "_out" [label="out: F32 at sample" shape=doubleoctagon color="black" fontcolor="black"]
   "a.par_0" [label="par_0 = par~ 0..<2: [F32; 2] at sample" style=rounded color="black" fontcolor="black"]
+  subgraph "cluster_a.par_0" {
+    label="par~ i in 0..<2（×2）"
+    "a.par_0.i" [label="i: U32 at init" shape=ellipse color="gray40" fontcolor="gray40"]
+  }
   "a.par_1" [label="par_1 = par~ 0..<2: [F32; 2] at sample" style=rounded color="black" fontcolor="black"]
-  "a.par_1.prev_0" [label="prev_0 = prev~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  subgraph "cluster_a.par_1" {
+    label="par~ j in 0..<2（×2）"
+    "a.par_1.j" [label="j: U32 at init" shape=ellipse color="gray40" fontcolor="gray40"]
+    "a.par_1.prev_0" [label="prev_0 = prev~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  }
   "a.par_0" -> "a"
   "x" -> "a.par_0"
   "a.par_1" -> "a"

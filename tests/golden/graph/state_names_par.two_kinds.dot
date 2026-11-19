@@ -4,14 +4,18 @@ digraph "two_kinds" {
   "x" [label="x: F32 at sample" shape=ellipse color="black" fontcolor="black"]
   "vs" [label="vs = par~ 0..<2: [F32; 2] at sample" color="black" fontcolor="black"]
   "_out" [label="out: F32 at sample" shape=doubleoctagon color="black" fontcolor="black"]
-  "vs.lp_0" [label="lp_0 = lp~: F32 at sample" style=rounded color="black" fontcolor="black"]
-  "vs.prev_0" [label="prev_0 = prev~: F32 at sample" style=rounded color="black" fontcolor="black"]
-  "vs.lp_1" [label="lp_1 = lp~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  subgraph "cluster_vs" {
+    label="par~ i in 0..<2（×2）"
+    "vs.i" [label="i: U32 at init" shape=ellipse color="gray40" fontcolor="gray40"]
+    "vs.lp_0" [label="lp_0 = lp~: F32 at sample" style=rounded color="black" fontcolor="black"]
+    "vs.prev_0" [label="prev_0 = prev~: F32 at sample" style=rounded color="black" fontcolor="black"]
+    "vs.lp_1" [label="lp_1 = lp~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  }
   "vs.lp_0" -> "vs"
   "vs.prev_0" -> "vs.lp_0"
   "x" -> "vs.prev_0" [style=dashed]
   "vs.lp_1" -> "vs"
   "x" -> "vs.lp_1"
-  "vs" -> "vs.lp_1"
+  "vs.i" -> "vs.lp_1"
   "vs" -> "_out"
 }

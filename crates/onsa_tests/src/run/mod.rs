@@ -215,6 +215,9 @@ pub struct CaseRun {
     pub copies_forced: Vec<String>,
     /// The candidates K whose copies went through the guard.
     pub copies_guarded: usize,
+    /// The flows whose graphs were checked for a cycle of solid edges
+    /// (`spec/tools.md` §1.2, [`onsa_driver::graph::check_graphs`]).
+    pub graph_flows: usize,
 }
 
 /// A target of a case that built: its C, for the C checks ([`crate::ccheck`]).
@@ -725,6 +728,14 @@ fn outputs(
             }
             Err(e) => run.problems.push(stage_problem(&loaded.sources, StageFailure::Lower(&e))),
         }
+    }
+    // No graph has a cycle of solid edges (spec/tools.md §1.2), of every flow.
+    match onsa_driver::graph::check_graphs(analyzed) {
+        Ok(check) => {
+            run.graph_flows = check.flows;
+            run.problems.extend(check.problems.into_iter().map(|p| Problem::Failed(format!("graph: {p}"))));
+        }
+        Err(e) => run.problems.push(internal_problem(&loaded.sources, &e, None)),
     }
     for flow in &t.golden_graph {
         match onsa_driver::graph(analyzed, flow, None) {

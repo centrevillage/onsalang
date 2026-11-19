@@ -142,7 +142,7 @@
 | `parent/r73.onsa` | R-73、R-124（数値リテラル。期待値は各関数の上のコメント。S-62、S-63）。W3-05 で直し、期待値付きのテストへ移した: `tests/spec/fixes/e0020_numeric_*.onsa`（`suffixes`、`float_forms`、`leading_zero`、`callee_overlap`、`exponent_clean_*`）、`tests/spec/lex/numeric_spellings*.onsa`、`tests/spec/negative/lex_numeric_e0001.onsa`、`literal_int_beyond_u64.onsa`、`numeric_literals_pkg/`。今: 全ての関数が「期待」の行のとおり |
 | `parent/r74.onsa` | R-74（modes の失敗の後の rt と効果。期待値は各関数の上のコメント。S-64）。W4-06 で期待値付きのテストへ移した: `tests/spec/negative/unit_stage_modes_stops_rt.onsa`・`unit_stage_modes_stops_rt_alloc.onsa`（今の `onsa check` は通り、`onsa test` は 11・14 行の E0200。S-85 の後、取り出しは modes の誤りでない） |
 | `parent/r75/` | R-75（`onsa interface` の大きさと状態のフィールド。仕様の構文で書いたパッケージで、期待値は `dsp.onsa` の先頭のコメント。S-65） |
-| `parent/r76.onsa` | R-76（`onsa graph` の `par` の添字の閉路。期待値は先頭のコメント。S-66） |
+| `parent/r76.onsa` | R-76（`onsa graph` の `par` の添字の閉路。S-66）。W7-15 U3 で期待値付きの事例へ移した: `tests/spec/flow/graph_par_frames.onsa`（`unison`・`nest`、`golden_graph`）と `crates/onsa_cli/tests/cli/graph_par_frames.rs`（枠・添字の頂点・辺・実線の閉路の無いこと・ラベル）。テストが使う他の flow は `tests/spec/flow/graph_labels.onsa` |
 | `parent/r77.onsa` | R-77（降下の診断の繰り返し、内部エラー、入力名の予約名。期待値は各項目の上のコメント。S-67）。W1-04 で期待値付きの事例へ移した: `tests/spec/negative/lower_unsupported.onsa`、`names_reserved_inputs.onsa`（W7-03 の実装待ち） |
 | `parent/r78.onsa` | R-78（意味を変えない余分な情報。fmt が取り除くのが期待値で、各関数の上のコメントに書いた。S-68）。W3-12 で期待値付きのテストへ移した: `crates/onsa_cli/tests/cli/fmt_rewrites.rs` の `r78_the_extra_information_of_r78_onsa_is_taken_off_as_its_comments_say`（九つの関数の入力と期待する全文。`pick` の腕は `{ v }`・`{ 0 }` で、ブロックの波括弧は残る。`-> ()` と `uses {}` の除去が第 2 期へ回ったので、今は ignore）。書き換えごとの形は同じファイルの他のテストと `tests/spec/fmt/rewrite_*.onsa` |
 | `parent/r79/` | R-79（std の `target` 宣言を変換先が与えないとき。期待値は `m.onsa` の各項目の上のコメント。S-69） |

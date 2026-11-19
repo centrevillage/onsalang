@@ -1,0 +1,76 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5", "§11.6", "§18.2"]
+
+// W7-15 U3/t (spec/tools.md §1.1, §1.2, §1.3; §11.5, §11.6): the flows that the tests of `crates/onsa_cli/tests/cli/graph_par_frames.rs` give to `onsa graph`
+// (this file is checked as a program, so the sources of those tests are programs; no golden file of the graphs is kept for them). Each flow is for one test:
+//   labels:        the labels of the vertices (§1.1): inputs of the three clocks, the constant `let`, the `let` of a delay and of a `prev~`, the output
+//   lp:            the feedback `^y` and the edges of the look-back (§1.2: dashed)
+//   two_frames:    two `par~` with the same index name, and a `par~` inside the output expression (§1.3: the names of the index vertices do not collide)
+//   nested_delay:  a delay in a nested `par~`
+//   shadow:        a `par~` whose index has the name of a node of its body (S-1168)
+//   inclusive:     `a ..= b` (S-1171)
+//   destructure:   a `let` of more than one name, and `let _` (S-1169)
+//   stateless:     a `par~` with no state, the value of a `let` (S-1175)
+
+pub flow lp(x: F32 at sample) -> F32 at sample {
+  let y = (0.5 * x) + (0.5 * prev~(^y))
+  y
+}
+
+pub flow labels(x: F32 at sample, g: F32 at block, k: F32 at init) -> F32 at sample {
+  let two = 2.0
+  let scaled = (x * g) * two
+  let d = delay~(scaled, 4)
+  let p = prev~(d * k)
+  p + lp~(scaled)
+}
+
+pub rt fn pair_sum(xs: [F32; 2]) -> F32 {
+  xs[0] + xs[1]
+}
+
+pub flow two_frames(x: F32 at sample) -> F32 at sample {
+  let a = par~ i in 0 ..< 2 { lp~(x * F32.round_from(i)) }
+  let b = par~ i in 0 ..< 3 { lp~(x * F32.round_from(i)) }
+  pair_sum(par~ k in 0 ..< 2 { lp~(x * F32.round_from(k)) }) + a[0] + b[2]
+}
+
+pub flow nested_delay(x: F32 at sample) -> F32 at sample {
+  let m = par~ i in 0 ..< 2 { par~ j in 0 ..< 2 { delay~(x * F32.round_from(i + j), 4) } }
+  m[0][0] + m[0][1] + m[1][0] + m[1][1]
+}
+
+pub flow shadow(x: F32 at sample) -> F32 at sample {
+  let lps = par~ lp_0 in 0 ..< 2 { lp~(x * F32.round_from(lp_0)) }
+  lps[0] + lps[1]
+}
+
+pub flow inclusive(x: F32 at sample) -> F32 at sample {
+  let a = par~ i in 1 ..= 3 { lp~(x * F32.round_from(i)) }
+  let b = par~ k in 4294967294 ..= 4294967295 { lp~(x * F32.round_from(k - 4294967294)) }
+  a[0] + a[2] + b[1]
+}
+
+pub struct Pair {
+  l: F32,
+  r: F32,
+}
+
+pub flow split(x: F32 at sample) -> Pair at sample {
+  let a = lp~(x)
+  Pair { l: a, r: x - a }
+}
+
+pub flow destructure(x: F32 at sample) -> F32 at sample {
+  let Pair { l: p, r: q } = split~(x)
+  let (a, b) = (p * 2.0, q * 3.0)
+  let _ = lp~(x)
+  let _ = lp~(p)
+  a + b
+}
+
+pub flow stateless(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 2 { x * F32.round_from(i) }
+  ys[0] + ys[1]
+}

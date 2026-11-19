@@ -1,0 +1,18 @@
+digraph "unison" {
+  rankdir=LR
+  node [shape=box fontname="monospace"]
+  "f0" [label="f0: F32 at block" shape=ellipse color="blue" fontcolor="blue"]
+  "detune" [label="detune: F32 at block" shape=ellipse color="blue" fontcolor="blue"]
+  "saws" [label="saws = par~ 0..<4: [F32; 4] at sample" color="black" fontcolor="black"]
+  "_out" [label="out: F32 at sample" shape=doubleoctagon color="black" fontcolor="black"]
+  subgraph "cluster_saws" {
+    label="par~ i in 0..<4（×4）"
+    "saws.i" [label="i: U32 at init" shape=ellipse color="gray40" fontcolor="gray40"]
+    "saws.saw_0" [label="saw_0 = saw~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  }
+  "saws.saw_0" -> "saws"
+  "f0" -> "saws.saw_0"
+  "detune" -> "saws.saw_0"
+  "saws.i" -> "saws.saw_0"
+  "saws" -> "_out"
+}

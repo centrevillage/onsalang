@@ -1,0 +1,23 @@
+digraph "nest" {
+  rankdir=LR
+  node [shape=box fontname="monospace"]
+  "x" [label="x: F32 at sample" shape=ellipse color="black" fontcolor="black"]
+  "m" [label="m = par~ 1..<3: [[F32; 2]; 2] at sample" color="black" fontcolor="black"]
+  "_out" [label="out: F32 at sample" shape=doubleoctagon color="black" fontcolor="black"]
+  subgraph "cluster_m" {
+    label="par~ i in 1..<3（×2）"
+    "m.i" [label="i: U32 at init" shape=ellipse color="gray40" fontcolor="gray40"]
+    "m.par_0" [label="par_0 = par~ 0..<2: [F32; 2] at sample" style=rounded color="black" fontcolor="black"]
+    subgraph "cluster_m.par_0" {
+      label="par~ j in 0..<2（×2）"
+      "m.par_0.j" [label="j: U32 at init" shape=ellipse color="gray40" fontcolor="gray40"]
+      "m.par_0.acc_0" [label="acc_0 = acc~: F32 at sample" style=rounded color="black" fontcolor="black"]
+    }
+  }
+  "m.par_0" -> "m"
+  "m.par_0.acc_0" -> "m.par_0"
+  "x" -> "m.par_0.acc_0"
+  "m.i" -> "m.par_0.acc_0"
+  "m.par_0.j" -> "m.par_0.acc_0"
+  "m" -> "_out"
+}

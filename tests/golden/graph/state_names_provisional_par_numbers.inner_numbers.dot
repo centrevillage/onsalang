@@ -6,7 +6,11 @@ digraph "inner_numbers" {
   "_out" [label="out: F32 at sample" shape=doubleoctagon color="black" fontcolor="black"]
   "a.prev_0" [label="prev_0 = prev~: F32 at sample" style=rounded color="black" fontcolor="black"]
   "a.par_0" [label="par_0 = par~ 0..<2: [F32; 2] at sample" style=rounded color="black" fontcolor="black"]
-  "a.par_0.prev_0" [label="prev_0 = prev~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  subgraph "cluster_a.par_0" {
+    label="par~ k in 0..<2（×2）"
+    "a.par_0.k" [label="k: U32 at init" shape=ellipse color="gray40" fontcolor="gray40"]
+    "a.par_0.prev_0" [label="prev_0 = prev~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  }
   "a.prev_1" [label="prev_1 = prev~: F32 at sample" style=rounded color="black" fontcolor="black"]
   "a.prev_0" -> "a"
   "x" -> "a.prev_0" [style=dashed]

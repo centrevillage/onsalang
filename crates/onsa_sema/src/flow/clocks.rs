@@ -488,7 +488,7 @@ impl Walk<'_> {
 
     /// `par~` (§11.5): its index at `init`, its body, and its node.
     fn par(&mut self, e: ExprId, body: ExprId) -> Option<Clock> {
-        let Some(&(var, from, count)) = self.cx.pars.get(&e) else {
+        let Some(&(var, from, count, end)) = self.cx.pars.get(&e) else {
             onsa_diag::internal::bug(self.span(e), "a `par~` the check did not record")
         };
         if !self.stateful_here(e) {
@@ -497,7 +497,7 @@ impl Walk<'_> {
         self.bind_local(var, Some(Clock::Init));
         let (check, span) = (self.mode == Mode::Check, self.ast.expr(e).span);
         if check {
-            self.recorder.enter_par(e, span, var, from, count, body);
+            self.recorder.enter_par(e, span, var, (from, count, end), body);
         }
         let b = self.expr(body);
         if check {
@@ -565,9 +565,11 @@ impl Walk<'_> {
             self.node_clocks.push(NodeClock { clock: Clock::Error, args: Vec::new() });
             (self.node_clocks.len() - 1, self.recorder.node(self.a, self.body, e, call, span))
         });
+        // Its node is the innermost reader of its arguments (none of an E0816).
+        let own = slot.as_ref().is_some_and(|(_, recorded)| recorded.is_ok());
         let (clock, args) = match call.kind {
             NodeKind::Instance(d) => self.instance(e, d, call),
-            NodeKind::Delay(delay, _) => self.delay(delay, call),
+            NodeKind::Delay(delay, _) => self.delay(delay, call, own),
         };
         if let Some((k, recorded)) = slot {
             if recorded.is_ok() {
@@ -608,14 +610,18 @@ impl Walk<'_> {
 
     /// A delay (§11.4): its first argument, the `d` of `vdelay~` and its
     /// `init`, not its length. With the E0813 of its first argument, it is in
-    /// error (§18.1).
-    fn delay(&mut self, delay: Delay, call: &NodeCall) -> (Option<Clock>, Vec<ArgRead>) {
+    /// error (§18.1). `own`: its node was recorded, and reads its arguments.
+    fn delay(&mut self, delay: Delay, call: &NodeCall, own: bool) -> (Option<Clock>, Vec<ArgRead>) {
         let (first, d, init) = call.delay_parts();
-        let check = self.mode == Mode::Check;
-        // Read a tick later (§11.4): the one place of the judgement (RF-8 (C)).
-        self.recorder.lookback(check);
+        // Read a tick later (§11.4): the one place of the judgement (RF-8
+        // (C)), marked on its own node only, not on a reader around it.
+        if own {
+            self.recorder.lookback(true);
+        }
         let c = self.expr(first);
-        self.recorder.lookback(false);
+        if own {
+            self.recorder.lookback(false);
+        }
         let held = c.filter(|_| self.checking()).is_none_or(|c| self.check_first(delay, first, c));
         if let Some(d) = d {
             self.cut(d);

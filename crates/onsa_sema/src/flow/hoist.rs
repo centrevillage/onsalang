@@ -225,7 +225,7 @@ fn value_of(kind: &ExprKind) -> Option<ExprId> {
 // numbered in that body by themselves, after the scope of the `par~`
 // (`saws._hoist_0`).
 pub(super) fn table(info: &mut FlowInfo, ast: &Ast, marked: Vec<(ExprId, ClockStage, Owner, bool)>) {
-    let scopes = names::scopes(info.lets.iter().map(|l| l.locals.as_slice()), &info.body);
+    let scopes = info.let_scopes();
     let rank = |o: Owner| match o {
         Owner::Let(k) => k as usize,
         Owner::Output => scopes.len(),

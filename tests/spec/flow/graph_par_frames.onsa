@@ -1,0 +1,50 @@
+// onsa.toml
+// [test]
+// spec = ["§11.5", "§11.6", "§18.2"]
+// golden_graph = ["unison", "nest"]
+
+// W7-15 U3/t, R-76, S-66 (spec/tools.md §1.2, §1.3; §11.5, §11.6): the graph of a `par~`. The two flows of R-76 (`tests/review-phase1/parent/r76.onsa`, in the syntax of
+// the spec). The spec fixes (the golden files keep the rest of the text, which the spec does not fix):
+//   unison: one frame (a Graphviz cluster `cluster_saws`) with the heading `par~ i in 0..<4（×4）`; in the frame, the vertex of the index `saws.i` (label
+//           `i: U32 at init`, an ellipse, gray) and the vertex of the node of the body `saws.saw_0` (label `saw_0 = saw~: F32 at sample`, rounded). The solid edges
+//           f0 -> saws.saw_0, detune -> saws.saw_0, saws.i -> saws.saw_0, saws.saw_0 -> saws, saws -> _out. No edge from `saws` to its body: the body does not read the
+//           result of the `par~`, so the solid edges have no cycle (R-76 was `saws` -> `saws.saw_0` -> `saws`).
+//   nest:   two frames, the inner inside the outer: `par~ i in 1..<3（×2）` with the vertex `m.i`, and `par~ j in 0..<2（×2）` with the vertex `m.par_0.j` (the inner
+//           `par~` is the node `m.par_0`, so its index is qualified by that name, "入れ子でも重ならない") and the node `m.par_0.acc_0`. The solid edges x -> m.par_0.acc_0,
+//           m.i -> m.par_0.acc_0, m.par_0.j -> m.par_0.acc_0 (the init input `k` reads both indices), m.par_0.acc_0 -> m.par_0, m.par_0 -> m, m -> _out. No solid cycle.
+// The same two flows are read by the tests of `crates/onsa_cli/tests/cli/graph_par_frames.rs` (the frames, the vertices, the edges, the cycles).
+
+use std.math.sum
+use std.math.floor
+
+const UNISON: U32 = 4
+
+pub flow unison(f0: F32 at block, detune: F32 at block) -> F32 at sample {
+  let saws = par~ i in 0 ..< UNISON {
+    saw~(f0 * (1.0 + (detune * spread(i, UNISON))))
+  }
+  sum(saws) * 0.25
+}
+
+pub rt fn spread(i: U32, n: U32) -> F32 {
+  (F32.round_from(i) / F32.round_from(n - 1)) - 0.5
+}
+
+pub flow saw(f0: F32 at block) -> F32 at sample {
+  let phase = wrap01(prev~(^phase) + (f0 / sample_rate()))
+  (2.0 * phase) - 1.0
+}
+
+pub rt fn wrap01(x: F32) -> F32 {
+  x - floor(x)
+}
+
+pub flow acc(x: F32 at sample, k: F32 at init) -> F32 at sample {
+  let y = prev~(^y) + (x * k)
+  y
+}
+
+pub flow nest(x: F32 at sample) -> F32 at sample {
+  let m = par~ i in 1 ..< 3 { par~ j in 0 ..< 2 { acc~(x, F32.round_from((i * 10) + j)) } }
+  m[0][0] + m[0][1] + m[1][0] + m[1][1]
+}

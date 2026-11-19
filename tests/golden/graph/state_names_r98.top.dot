@@ -12,9 +12,13 @@ digraph "top" {
   "a.prev_1" [label="prev_1 = prev~: F32 at sample" style=rounded color="black" fontcolor="black"]
   "b.prev_0" [label="prev_0 = prev~: F32 at sample" style=rounded color="black" fontcolor="black"]
   "c.lp_0" [label="lp_0 = lp~: F32 at sample" style=rounded color="black" fontcolor="black"]
-  "vs.lp_0" [label="lp_0 = lp~: F32 at sample" style=rounded color="black" fontcolor="black"]
-  "vs.prev_0" [label="prev_0 = prev~: F32 at sample" style=rounded color="black" fontcolor="black"]
-  "vs.lp_1" [label="lp_1 = lp~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  subgraph "cluster_vs" {
+    label="par~ i in 0..<2（×2）"
+    "vs.i" [label="i: U32 at init" shape=ellipse color="gray40" fontcolor="gray40"]
+    "vs.lp_0" [label="lp_0 = lp~: F32 at sample" style=rounded color="black" fontcolor="black"]
+    "vs.prev_0" [label="prev_0 = prev~: F32 at sample" style=rounded color="black" fontcolor="black"]
+    "vs.lp_1" [label="lp_1 = lp~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  }
   "_out.lp_0" [label="lp_0 = lp~: F32 at sample" style=rounded color="black" fontcolor="black"]
   "_out.lp_1" [label="lp_1 = lp~: F32 at sample" style=rounded color="black" fontcolor="black"]
   "a.prev_0" -> "a"

@@ -4,9 +4,13 @@ digraph "whole_value" {
   "x" [label="x: F32 at sample" shape=ellipse color="black" fontcolor="black"]
   "saws" [label="saws = par~ 0..<2: [F32; 2] at sample" color="black" fontcolor="black"]
   "_out" [label="out: F32 at sample" shape=doubleoctagon color="black" fontcolor="black"]
-  "saws.lp_0" [label="lp_0 = lp~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  subgraph "cluster_saws" {
+    label="par~ i in 0..<2（×2）"
+    "saws.i" [label="i: U32 at init" shape=ellipse color="gray40" fontcolor="gray40"]
+    "saws.lp_0" [label="lp_0 = lp~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  }
   "saws.lp_0" -> "saws"
   "x" -> "saws.lp_0"
-  "saws" -> "saws.lp_0"
+  "saws.i" -> "saws.lp_0"
   "saws" -> "_out"
 }

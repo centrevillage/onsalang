@@ -77,15 +77,16 @@ pub enum PlanKind {
         args: Vec<ExprId>,
         span: Span,
     },
-    /// `par~ var in a..<b { body }` or `a..=b`: `count` replicas whose `var`
-    /// is `from` (`a`) and up, with no end past the last (S-257, a last of
-    /// `U32`'s maximum); `children` are the nodes its body holds, in the
-    /// order of the table, and `fields` the fields of its replica (none: it
-    /// has no state).
+    /// `par~ var in a..<b { body }` or `a..=b` (`end`, as written):
+    /// `count` (one or more) replicas whose `var` is `from` (`a`) and up,
+    /// with no end past the last (S-257, a last of `U32`'s maximum);
+    /// `children` are the nodes its body holds, in the order of the table,
+    /// and `fields` the fields of its replica (none: it has no state).
     Par {
         var: LocalId,
         from: u32,
         count: u32,
+        end: RangeEnd,
         body: ExprId,
         children: Vec<NodeId>,
         fields: Vec<Field>,
@@ -189,6 +190,13 @@ impl FlowInfo {
         self.roots(Owner::Let(k)).iter().copied().find(|&id| self.node(id).whole)
     }
 
+    /// The scope of each `let` (§11.6, S-1136): its first name, or `_<m>`
+    /// when it binds none. Of its nodes and its hoisted fields, and its
+    /// vertex in `onsa graph` (S-1169).
+    pub fn let_scopes(&self) -> Vec<String> {
+        names::scopes(self.lets.iter().map(|l| l.locals.as_slice()), &self.body)
+    }
+
     /// The nodes no `par~` holds: of each `let` in their order, then of the
     /// output.
     pub fn top(&self) -> impl Iterator<Item = NodeId> + '_ {
@@ -226,8 +234,8 @@ pub(super) fn build(
             (None, None) => onsa_diag::internal::bug(Some(r.span), "a node the walk gave no clock"),
         };
         let kind = match r.kind {
-            PlanKind::Par { var, from, count, body, fields, .. } => {
-                PlanKind::Par { var, from, count, body, children: ch, fields }
+            PlanKind::Par { var, from, count, end, body, fields, .. } => {
+                PlanKind::Par { var, from, count, end, body, children: ch, fields }
             }
             kind => kind,
         };

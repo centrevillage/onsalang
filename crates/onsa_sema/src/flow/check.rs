@@ -285,7 +285,7 @@ impl<'a> Checker<'a> {
             self.bind_local(lid, u32, var.span)?;
             // The plan reads the first and the count, and a flow with an error has none.
             let (from, n) = lo.zip(count).unwrap_or_default();
-            self.fcx().pars.insert(e, (lid, from, n));
+            self.fcx().pars.insert(e, (lid, from, n, range.end));
             self.check_expr(body, exp_elem)
         })();
         let t = r?;

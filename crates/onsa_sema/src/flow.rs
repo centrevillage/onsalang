@@ -291,8 +291,8 @@ pub(crate) struct FlowCx {
     let_of_local: HashMap<LocalId, usize>,
     calls: Vec<NodeCall>,
     /// `par` expression → (variable, its first value, the number of the
-    /// instances), §11.5.
-    pars: HashMap<ExprId, (LocalId, u32, u32)>,
+    /// instances, the end of its range), §11.5.
+    pars: HashMap<ExprId, (LocalId, u32, u32, RangeEnd)>,
     sample_rate_calls: Vec<ExprId>,
     output: Option<ExprId>,
     /// The first error of the flow stage the check of the types found

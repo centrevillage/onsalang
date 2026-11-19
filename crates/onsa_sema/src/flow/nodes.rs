@@ -169,10 +169,18 @@ impl NodeBuilder {
         Ok(())
     }
 
-    /// The `par~` of `count` replicas of `var` from `from` (§11.5) at `e` and
-    /// `span`: its node, and the nodes recorded next are of its body.
-    pub(super) fn enter_par(&mut self, e: ExprId, span: Span, var: LocalId, from: u32, count: u32, body: ExprId) {
-        let kind = PlanKind::Par { var, from, count, body, children: Vec::new(), fields: Vec::new() };
+    /// The `par~` of `count` replicas of `var` from `from`, of a range with
+    /// `end` (§11.5), at `e` and `span`: its node, and the nodes recorded
+    /// next are of its body.
+    pub(super) fn enter_par(
+        &mut self,
+        e: ExprId,
+        span: Span,
+        var: LocalId,
+        (from, count, end): (u32, u32, RangeEnd),
+        body: ExprId,
+    ) {
+        let kind = PlanKind::Par { var, from, count, end, body, children: Vec::new(), fields: Vec::new() };
         let id = self.push(e, span, kind, PAR);
         self.owners.push(Owner::Par(id));
     }

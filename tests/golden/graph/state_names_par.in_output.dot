@@ -4,9 +4,13 @@ digraph "in_output" {
   "x" [label="x: F32 at sample" shape=ellipse color="black" fontcolor="black"]
   "_out" [label="out: F32 at sample" shape=doubleoctagon color="black" fontcolor="black"]
   "_out.par_0" [label="par_0 = par~ 0..<2: [F32; 2] at sample" style=rounded color="black" fontcolor="black"]
-  "_out.par_0.lp_0" [label="lp_0 = lp~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  subgraph "cluster__out.par_0" {
+    label="par~ i in 0..<2（×2）"
+    "_out.par_0.i" [label="i: U32 at init" shape=ellipse color="gray40" fontcolor="gray40"]
+    "_out.par_0.lp_0" [label="lp_0 = lp~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  }
   "_out.par_0" -> "_out"
   "_out.par_0.lp_0" -> "_out.par_0"
   "x" -> "_out.par_0.lp_0"
-  "_out.par_0" -> "_out.par_0.lp_0"
+  "_out.par_0.i" -> "_out.par_0.lp_0"
 }

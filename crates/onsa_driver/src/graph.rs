@@ -1,22 +1,32 @@
-//! `onsa graph` (T3-12; spec §18.2): the signal graph of a flow as DOT.
-//! Nodes are the inputs, the top-level `let`s, the stateful nodes that are not
-//! a `let` of their own (by their §11.6 paths) and the output; edges are the
-//! edges of the plan ([`FlowInfo::edges`]). The look-back edges of `prev~` /
-//! `delay~` / `vdelay~` are dashed. A label is `name: type at clock` (no clock for a
-//! constant), and clocks colour the nodes (`init` and constants gray,
-//! `block` blue, `sample` black; `spec/tools.md` §1.1).
+//! `onsa graph` (T3-12; spec §18.2, `spec/tools.md` §1): the signal graph of
+//! a flow as DOT, in two steps: the drawing ([`Drawing`]: the vertices, the
+//! frames of the `par~`s and the edges), made of the plan of the flow, then
+//! its text ([`Drawing::dot`]).
+//! - Vertices: the inputs, the top-level `let`s (by their scopes, §11.6),
+//!   the output, the stateful nodes that are not the whole value of a `let`
+//!   (by their §11.6 paths), and the index of each `par~` (§1.3).
+//! - Frames: one of each `par~`, holding its index and the nodes of its body
+//!   (with the frames of the `par~`s in it).
+//! - Edges: the edges of the plan ([`FlowInfo::edges`]), the look-back ones
+//!   (`prev~` / `delay~` / `vdelay~`, `^y`) dashed.
+//!
+//! A label is `name: type at clock` (no clock for a constant), and clocks
+//! colour the vertices (§1.1). No cycle of solid edges (§1.2):
+//! [`Drawing::solid_cycle`] finds one, and the cases check it of every flow
+//! ([`check_graphs`]).
 
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 
 use onsa_diag::Span;
+use onsa_diag::internal::bug;
 use onsa_sema::body::LocalId;
 use onsa_sema::clock::Clock;
-use onsa_sema::def::DefKind;
-use onsa_sema::flow::{FlowInfo, PlanKind, PlanNode, Vertex};
+use onsa_sema::def::{DefKind, FlowDef};
+use onsa_sema::flow::{FlowInfo, NodeId, Owner, PlanKind, PlanNode, Vertex};
 use onsa_sema::flow_names::OUTPUT_SCOPE;
 use onsa_sema::{Analysis, DefId};
-use onsa_syntax::ast::{Ast, ExprId};
+use onsa_syntax::ast::{Ast, ExprId, RangeEnd};
 
 use crate::Analyzed;
 
@@ -26,26 +36,24 @@ struct Edge {
     dashed: bool,
 }
 
+/// The drawing of a flow while it is made, of its plan.
 struct Graph<'a> {
     a: &'a Analysis,
     ast: &'a Ast,
     info: &'a FlowInfo,
-    /// Local → vertex (inputs, `let`s, the index of a `par~` as its node);
+    /// Local → vertex (an input, a local of a `let`, the index of a `par~`);
     /// a binding of an arm has none.
     local_node: HashMap<LocalId, String>,
     /// The vertex of each `let`.
     let_names: Vec<String>,
-    edges: Vec<Edge>,
+    d: Drawing,
     seen: HashSet<(String, String, bool)>,
 }
 
 impl Graph<'_> {
     fn edge(&mut self, from: &str, to: &str, dashed: bool) {
-        if from == to && !dashed {
-            return;
-        }
         if self.seen.insert((from.into(), to.into(), dashed)) {
-            self.edges.push(Edge { from: from.into(), to: to.into(), dashed });
+            self.d.edges.push(Edge { from: from.into(), to: to.into(), dashed });
         }
     }
 
@@ -81,16 +89,110 @@ impl Graph<'_> {
         }
     }
 
+    /// The clock of the local `l` in the plan, at `span`.
+    fn clock_of(&self, l: LocalId, span: Span) -> Clock {
+        match self.info.clocks.locals.get(&l) {
+            Some(&c) => c,
+            None => bug(Some(span), "a local with no clock in the plan"),
+        }
+    }
+
+    fn push(&mut self, name: String, label: String, shape: &'static str, (clock, at): (Clock, Span)) -> Item {
+        self.d.vertices.push(Vert { name, label, shape, color: rate_color(clock, at) });
+        Item::Vertex(self.d.vertices.len() - 1)
+    }
+
+    fn inputs(&mut self, flow: &FlowDef) -> Vec<Item> {
+        let info = self.info;
+        let mut items = Vec::new();
+        for (&l, input) in info.inputs.iter().zip(&flow.inputs) {
+            let name = info.body.locals[l.0 as usize].name.clone();
+            self.local_node.insert(l, name.clone());
+            let rate = self.clock_of(l, input.span);
+            let label = format!("{name}: {}", typed(&self.a.display_type(input.ty), rate, input.span));
+            items.push(self.push(name, label, "shape=ellipse ", (rate, input.span)));
+        }
+        items
+    }
+
+    /// The `let`s, each a vertex of its scope (§11.6): its name.
+    // SPEC-GAP(S-1169): a `let` of a pattern is the vertex of its first
+    // name, and one that binds none `_<m>`, as its nodes are qualified.
+    fn lets(&mut self) -> Vec<Item> {
+        let info = self.info;
+        self.let_names = info.let_scopes();
+        let mut items = Vec::new();
+        for (i, l) in info.lets.iter().enumerate() {
+            let name = self.let_names[i].clone();
+            for &loc in &l.locals {
+                self.local_node.insert(loc, name.clone());
+            }
+            let label = match info.whole(i as u32).map(|id| info.node(id)) {
+                // Its node has its name (S-148).
+                Some(node) => self.node_label(node, l.init),
+                None => format!("{name}: {}", typed(&self.a.display_type(l.ty), l.clock, l.span)),
+            };
+            items.push(self.push(name, label, "", (l.clock, l.span)));
+        }
+        items
+    }
+
+    /// The output: the vertex of a name no input, `let` or node has (R-497).
+    fn output(&mut self) -> Option<Item> {
+        let o = self.info.output?;
+        let (rate, at) = (self.rate_of(o), self.ast.expr(o).span);
+        let label = format!("out: {}", typed(&self.ty_of(o), rate, at));
+        Some(self.push(OUTPUT_SCOPE.to_string(), label, "shape=doubleoctagon ", (rate, at)))
+    }
+
+    /// The vertex of the node `id`, but of the whole value of a `let` (it
+    /// is the `let`'s), and the frame of a `par~`.
+    fn node(&mut self, id: NodeId) -> Vec<Item> {
+        let node = self.info.node(id);
+        let mut items = Vec::new();
+        if !node.whole {
+            let (label, at) = (self.node_label(node, node.expr), (self.rate_of(node.expr), node.span));
+            items.push(self.push(node.path.clone(), label, "style=rounded ", at));
+        }
+        if let PlanKind::Par { .. } = node.kind {
+            items.push(self.frame(id));
+        }
+        items
+    }
+
+    /// The frame of the `par~` `id` (§1.3): the heading of its range, its
+    /// index as an input of its clock (`init`), and the nodes of its body.
+    // SPEC-GAP(S-1176): the vertex of a `par~` in the body is in the frame,
+    // beside its own frame; that of a `par~` in no body is in none.
+    fn frame(&mut self, id: NodeId) -> Item {
+        let info = self.info;
+        let node = info.node(id);
+        let PlanKind::Par { var, count, children, .. } = &node.kind else {
+            bug(Some(node.span), "a frame of no `par~`")
+        };
+        let local = &info.body.locals[var.0 as usize];
+        let name = index_name(info, id, &local.name);
+        self.local_node.insert(*var, name.clone());
+        let clock = self.clock_of(*var, local.span);
+        let label = format!("{}: {}", local.name, typed(&self.a.display_type(local.ty), clock, local.span));
+        let heading = format!("par~ {} in {}（×{count}）", local.name, range(node));
+        let mut items = vec![self.push(name, label, "shape=ellipse ", (clock, local.span))];
+        for &child in children {
+            items.extend(self.node(child));
+        }
+        self.d.frames.push(Frame { path: node.path.clone(), heading, items });
+        Item::Frame(self.d.frames.len() - 1)
+    }
+
     fn node_label(&self, node: &PlanNode, e: ExprId) -> String {
         // `prev_0 = prev~`, `src = saw~`: the name without its scope
         // (spec/tools.md §1.1).
         let what = match (&node.kind, node.kind.delay()) {
+            // SPEC-GAP(S-397): a delay is its kind, with no length.
             (_, Some(d)) => format!("{}~", d.name()),
             (PlanKind::Instance { callee, .. }, None) => format!("{}~", self.a.def(*callee).name),
-            // The end past the last, in a width with no overflow (W7-15 draws the form written).
-            (PlanKind::Par { from, count, .. }, None) => {
-                format!("par~ {from}..<{}", u64::from(*from) + u64::from(*count))
-            }
+            // SPEC-GAP(S-1170): with its range, the one of the heading of its frame.
+            (PlanKind::Par { .. }, None) => format!("par~ {}", range(node)),
             // `PlanKind::delay` names every delay.
             (PlanKind::Prev { .. } | PlanKind::Delay { .. } | PlanKind::Vdelay { .. }, None) => {
                 onsa_diag::internal::bug(None, "a delay node without its delay")
@@ -100,8 +202,37 @@ impl Graph<'_> {
     }
 }
 
+/// The vertex of the index `var` of the `par~` `id` (§1.3): `<path>.<var>`
+/// (`saws.i`), unless a node of its body has that name.
+// SPEC-GAP(S-1168): then `<path>._<var>`, of the form no user writes (`_`
+// first, §2.3, §11.6), which no node of the body has (`<kind>_<n>`).
+fn index_name(info: &FlowInfo, id: NodeId, var: &str) -> String {
+    let node = info.node(id);
+    let name = format!("{}.{var}", node.path);
+    let children = info.roots(Owner::Par(id));
+    match children.iter().any(|&c| info.node(c).path == name) {
+        true => format!("{}._{var}", node.path),
+        false => name,
+    }
+}
+
+/// The range of the `par~` `node` as written (§11.5): `0..<4`, `1..=3`.
+// SPEC-GAP(S-1171): `a..=b` as written, not as `a..<b + 1` (no `U32` holds
+// the end past `U32`'s maximum).
+fn range(node: &PlanNode) -> String {
+    let PlanKind::Par { from, count, end, .. } = node.kind else { bug(Some(node.span), "a range of no `par~`") };
+    // One replica or more (§11.5), and the end written is a `U32`.
+    let to = match end {
+        RangeEnd::Excluded => from.checked_add(count),
+        RangeEnd::Included => count.checked_sub(1).and_then(|n| from.checked_add(n)),
+    };
+    let Some(to) = to else { bug(Some(node.span), "a `par~` whose end is out of `U32`") };
+    format!("{from}{}{to}", end.symbol())
+}
+
 /// `type at clock`, or the type alone for a constant (§11.3); a clock with
 /// no text is an internal error at `at`.
+// SPEC-GAP(S-397): a constant `let` has no clock in its label.
 fn typed(ty: &str, r: Clock, at: Span) -> String {
     match r {
         Clock::Const => ty.to_string(),
@@ -109,14 +240,24 @@ fn typed(ty: &str, r: Clock, at: Span) -> String {
     }
 }
 
-/// The color of a clock (W7-15 redraws them): the stages before `block`
-/// gray, `block` blue, the others black.
-fn rate_color(r: Clock) -> &'static str {
+/// The colour of a clock at `at` (§1.1): the stages before `block` gray,
+/// `block` blue, `sample` black.
+// SPEC-GAP(S-1084): the other ticks, an event and the ambient clock are
+// black too (none but the ticks is made in this version).
+fn rate_color(r: Clock, at: Span) -> &'static str {
     match r {
         Clock::Const | Clock::Init => "gray40",
         Clock::Block => "blue",
-        _ => "black",
+        Clock::Tick(_) | Clock::Event(_) | Clock::Ambient => "black",
+        Clock::Error => bug(Some(at), "a vertex of a clock in error"),
     }
+}
+
+/// The flows of the user's package, in their order. The package by its
+/// place, not its name: a dependency may have the same name (R-88).
+fn own_flows(a: &Analysis) -> impl Iterator<Item = DefId> + '_ {
+    let own = |d: &onsa_sema::def::Def| matches!(d.kind, DefKind::Flow(_)) && a.modules.is_own(d.module);
+    a.defs.iter().enumerate().filter(move |(_, d)| own(d)).map(|(i, _)| DefId(i as u32))
 }
 
 /// The flow `name` names in `scope` (§18.2): the module of the file passed,
@@ -129,14 +270,8 @@ fn rate_color(r: Clock) -> &'static str {
 // scope lists no candidates, even when other modules have a flow of that name.
 fn find_flow(analyzed: &Analyzed, name: &str, scope: Option<&str>) -> Result<DefId, String> {
     let a = &analyzed.analysis;
-    // The user's package by its place, not its name: a dependency may have the same name (R-88).
     let module_of = |id: DefId| a.modules.get(a.def(id).module).path.as_str();
-    let mut flows = a
-        .defs
-        .iter()
-        .enumerate()
-        .filter(|(_, d)| matches!(d.kind, DefKind::Flow(_)) && a.modules.is_own(d.module))
-        .map(|(i, _)| DefId(i as u32));
+    let mut flows = own_flows(a);
     let place = match scope {
         Some(m) => format!("module `{m}`, the module of the file passed"),
         None => format!("package `{}`", analyzed.pkg.name),
@@ -178,10 +313,14 @@ pub fn graph(analyzed: &Analyzed, flow: &str, scope: Option<&str>) -> Result<Str
 }
 
 fn graph_of(analyzed: &Analyzed, flow: &str, scope: Option<&str>) -> Result<String, String> {
+    Ok(draw(analyzed, find_flow(analyzed, flow, scope)?)?.dot())
+}
+
+/// The drawing of the flow `id`, which checks.
+fn draw(analyzed: &Analyzed, id: DefId) -> Result<Drawing, String> {
     let a = &analyzed.analysis;
-    let def_id = find_flow(analyzed, flow, scope)?;
-    let def = a.def(def_id);
-    let Some(info) = a.flows.get(&def_id) else {
+    let def = a.def(id);
+    let Some(info) = a.flows.get(&id) else {
         return Err(format!("flow `{}` was not checked (it has diagnostics)", def.name));
     };
     if !info.complete {
@@ -190,92 +329,180 @@ fn graph_of(analyzed: &Analyzed, flow: &str, scope: Option<&str>) -> Result<Stri
     let Some(module) = a.ast(&analyzed.pkg, def.module) else {
         return Err("flow is not in a source module".into());
     };
-    let ast = &module.parsed.ast;
-    let flow_def = def.as_flow().expect("flow");
-    let (local_node, let_names, edges, seen) = (HashMap::new(), Vec::new(), Vec::new(), HashSet::new());
-    let mut g = Graph { a, ast, info, local_node, let_names, edges, seen };
-
-    let mut out = String::new();
-    let _ = writeln!(out, "digraph \"{}\" {{", def.name);
-    let _ = writeln!(out, "  rankdir=LR");
-    let _ = writeln!(out, "  node [shape=box fontname=\"monospace\"]");
-
-    // Inputs.
-    for (i, &l) in info.inputs.iter().enumerate() {
-        let name = info.body.locals[l.0 as usize].name.clone();
-        g.local_node.insert(l, name.clone());
-        let input = &flow_def.inputs[i];
-        let Some(&rate) = info.clocks.locals.get(&l) else {
-            onsa_diag::internal::bug(Some(input.span), "an input with no clock in the plan")
-        };
-        let _ = writeln!(
-            out,
-            "  \"{name}\" [label=\"{name}: {}\" shape=ellipse color=\"{}\" fontcolor=\"{}\"]",
-            typed(&a.display_type(input.ty), rate, input.span),
-            rate_color(rate),
-            rate_color(rate)
-        );
-    }
-    // `let` nodes.
-    for (i, l) in info.lets.iter().enumerate() {
-        let name = l.name.clone().unwrap_or_else(|| format!("let_{i}"));
-        for &loc in &l.locals {
-            g.local_node.insert(loc, name.clone());
+    let Some(flow) = def.as_flow() else { bug(Some(def.span), "a flow with no flow definition") };
+    let (vertices, frames, top, edges) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    let d = Drawing { title: def.name.clone(), vertices, frames, top, edges };
+    let (local_node, let_names, seen) = (HashMap::new(), Vec::new(), HashSet::new());
+    let mut g = Graph { a, ast: &module.parsed.ast, info, local_node, let_names, d, seen };
+    let mut top = g.inputs(flow);
+    top.extend(g.lets());
+    top.extend(g.output());
+    // The nodes in no `par~`, in the order of the table, with their frames.
+    for (i, node) in info.nodes.iter().enumerate() {
+        if !matches!(node.owner, Owner::Par(_)) {
+            top.extend(g.node(NodeId(i as u32)));
         }
-        g.let_names.push(name);
-    }
-    for node in &info.nodes {
-        if let PlanKind::Par { var, .. } = node.kind {
-            g.local_node.insert(var, node.path.clone());
-        }
-    }
-    for (i, l) in info.lets.iter().enumerate() {
-        let name = &g.let_names[i];
-        let whole = info.whole(i as u32).map(|id| info.node(id));
-        let label = match whole {
-            // Its node has its name (S-148).
-            Some(node) => g.node_label(node, l.init),
-            None => format!("{name}: {}", typed(&a.display_type(l.ty), l.clock, l.span)),
-        };
-        let _ = writeln!(
-            out,
-            "  \"{name}\" [label=\"{label}\" color=\"{}\" fontcolor=\"{}\"]",
-            rate_color(l.clock),
-            rate_color(l.clock)
-        );
-    }
-    // Output: the vertex of a name no input, `let` or node has (R-497).
-    if let Some(o) = info.output {
-        let rate = g.rate_of(o);
-        let _ = writeln!(
-            out,
-            "  \"{OUTPUT_SCOPE}\" [label=\"out: {}\" shape=doubleoctagon color=\"{}\" fontcolor=\"{}\"]",
-            typed(&g.ty_of(o), rate, ast.expr(o).span),
-            rate_color(rate),
-            rate_color(rate)
-        );
-    }
-    // The nodes not the whole value of a `let`, in the order of the table.
-    for node in info.nodes.iter().filter(|n| !n.whole) {
-        let (label, rate) = (g.node_label(node, node.expr), g.rate_of(node.expr));
-        let _ = writeln!(
-            out,
-            "  \"{}\" [label=\"{label}\" style=rounded color=\"{}\" fontcolor=\"{}\"]",
-            node.path,
-            rate_color(rate),
-            rate_color(rate)
-        );
     }
     g.copy_edges();
-    for e in &g.edges {
-        if e.dashed {
-            let _ = writeln!(out, "  \"{}\" -> \"{}\" [style=dashed]", e.from, e.to);
-        } else {
-            let _ = writeln!(out, "  \"{}\" -> \"{}\"", e.from, e.to);
+    g.d.top = top;
+    Ok(g.d)
+}
+
+/// A vertex drawn: its name, its label, its shape (`shape=… ` or
+/// `style=… `, empty for a box) and the colour of its clock.
+struct Vert {
+    name: String,
+    label: String,
+    shape: &'static str,
+    color: &'static str,
+}
+
+/// A vertex or a frame, in the order drawn.
+#[derive(Clone, Copy)]
+enum Item {
+    Vertex(usize),
+    Frame(usize),
+}
+
+/// The frame of a `par~` (a Graphviz cluster, §1.3).
+struct Frame {
+    /// The path of the `par~` (`saws`, `m.par_0`).
+    path: String,
+    heading: String,
+    items: Vec<Item>,
+}
+
+/// The graph of a flow before its text.
+pub struct Drawing {
+    title: String,
+    vertices: Vec<Vert>,
+    frames: Vec<Frame>,
+    /// The items in no frame, in their order.
+    top: Vec<Item>,
+    edges: Vec<Edge>,
+}
+
+impl Drawing {
+    /// The DOT text: the vertices and the frames in their order, then the
+    /// edges in theirs.
+    pub fn dot(&self) -> String {
+        let mut out = String::new();
+        let _ = writeln!(out, "digraph \"{}\" {{", self.title);
+        let _ = writeln!(out, "  rankdir=LR");
+        let _ = writeln!(out, "  node [shape=box fontname=\"monospace\"]");
+        self.items(&mut out, &self.top, 1);
+        for e in &self.edges {
+            let style = if e.dashed { " [style=dashed]" } else { "" };
+            let _ = writeln!(out, "  \"{}\" -> \"{}\"{style}", e.from, e.to);
+        }
+        out.push_str("}\n");
+        out
+    }
+
+    fn items(&self, out: &mut String, items: &[Item], depth: usize) {
+        let pad = "  ".repeat(depth);
+        for &item in items {
+            match item {
+                Item::Vertex(k) => {
+                    let Vert { name, label, shape, color } = &self.vertices[k];
+                    let _ = writeln!(
+                        out,
+                        "{pad}\"{name}\" [label=\"{label}\" {shape}color=\"{color}\" fontcolor=\"{color}\"]"
+                    );
+                }
+                Item::Frame(k) => {
+                    let Frame { path, heading, items } = &self.frames[k];
+                    let _ = writeln!(out, "{pad}subgraph \"cluster_{path}\" {{");
+                    let _ = writeln!(out, "{pad}  label=\"{heading}\"");
+                    self.items(out, items, depth + 1);
+                    let _ = writeln!(out, "{pad}}}");
+                }
+            }
         }
     }
-    out.push_str("}\n");
-    Ok(out)
+
+    /// A cycle of the solid edges, by the names of its vertices from one back
+    /// to it, or none (§1.2: a flow has none, §11.2). An iterative
+    /// depth-first search that closes each vertex once: O(V + E).
+    pub fn solid_cycle(&self) -> Option<Vec<String>> {
+        let mut index: HashMap<&str, usize> = HashMap::new();
+        let mut next: Vec<Vec<usize>> = Vec::new();
+        for e in self.edges.iter().filter(|e| !e.dashed) {
+            let [from, to] = [&e.from, &e.to].map(|n| {
+                let k = index.len();
+                *index.entry(n.as_str()).or_insert(k)
+            });
+            next.resize(index.len(), Vec::new());
+            next[from].push(to);
+        }
+        let mut names = vec![""; index.len()];
+        for (n, k) in index {
+            names[k] = n;
+        }
+        // 0: not met, 1: on the path, 2: closed.
+        let mut state = vec![0u8; names.len()];
+        for start in 0..names.len() {
+            if state[start] != 0 {
+                continue;
+            }
+            state[start] = 1;
+            let mut path = vec![(start, 0usize)];
+            while let Some(top) = path.last_mut() {
+                let (v, k) = *top;
+                let Some(&w) = next[v].get(k) else {
+                    state[v] = 2;
+                    path.pop();
+                    continue;
+                };
+                top.1 += 1;
+                match state[w] {
+                    0 => {
+                        state[w] = 1;
+                        path.push((w, 0));
+                    }
+                    1 => {
+                        let from = path.iter().position(|&(u, _)| u == w).unwrap_or(0);
+                        let cycle = path[from..].iter().map(|&(u, _)| u).chain([w]);
+                        return Some(cycle.map(|u| names[u].to_string()).collect());
+                    }
+                    _ => {}
+                }
+            }
+        }
+        None
+    }
+}
+
+/// What [`check_graphs`] found.
+#[derive(Debug, Clone, Default)]
+pub struct GraphCheck {
+    /// The flows drawn.
+    pub flows: usize,
+    /// Each flow not drawn, or whose solid edges make a cycle.
+    pub problems: Vec<String>,
+}
+
+/// Every flow of the user's package whose plan is complete, drawn, and the
+/// cycles of its solid edges (§1.2: none): the property the cases check of
+/// every flow.
+pub fn check_graphs(analyzed: &Analyzed) -> Result<GraphCheck, crate::InternalError> {
+    crate::guard(|| {
+        let a = &analyzed.analysis;
+        let mut check = GraphCheck::default();
+        for id in own_flows(a).filter(|id| a.flows.get(id).is_some_and(|f| f.complete)) {
+            match draw(analyzed, id).map(|d| d.solid_cycle()) {
+                Ok(cycle) => {
+                    check.flows += 1;
+                    if let Some(c) = cycle {
+                        let (name, c) = (a.qualified_name(id), c.join(" -> "));
+                        check.problems.push(format!("flow `{name}`: a cycle of solid edges {c}"));
+                    }
+                }
+                Err(e) => check.problems.push(format!("flow `{}`: {e}", a.qualified_name(id))),
+            }
+        }
+        check
+    })
 }
 
 /// Render DOT to SVG with the `dot` command, if installed.
@@ -298,100 +525,4 @@ pub fn to_svg(dot: &str) -> Result<String, String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use crate::{Analyzed, Loaded, ManifestForm, ManifestSource, PackageInput, SourceFile};
-
-    const RESONATOR: &str = "use std.math.{exp, cos}\n\
-pub flow resonator(x: F32 at sample, fc: F32 at block, bw: F32 at block) -> F32 at sample {\n\
-  let r  = exp(-(F32.PI * bw) / sample_rate())\n\
-  let w  = (2.0 * F32.PI * fc) / sample_rate()\n\
-  let b1 = 2.0 * r * cos(w)\n\
-  let b2 = r * r\n\
-  let y1 = prev~(^y)\n\
-  let y2 = prev~(y1)\n\
-  let y  = ((1.0 - r) * x) + (b1 * y1) - (b2 * y2)\n\
-  y\n\
-}\n";
-
-    /// The analysis of `input`, which checks.
-    fn analyzed(input: PackageInput) -> Analyzed {
-        let mut loaded = Loaded::from_input(input).expect("the input loads");
-        let analyzed = crate::analyze_loaded(&mut loaded).expect("no internal error");
-        assert!(analyzed.diagnostics.is_empty(), "{}", onsa_diag::to_text(&loaded.sources, &analyzed.diagnostics));
-        analyzed
-    }
-
-    /// A package `name` of the files `files` (path, text).
-    fn package(name: &str, files: &[(&str, &str)]) -> PackageInput {
-        let text = format!("[package]\nname = \"{name}\"\nedition = \"2026\"\n");
-        PackageInput {
-            manifest: Some(ManifestSource { path: "onsa.toml".into(), text, form: ManifestForm::File }),
-            files: files
-                .iter()
-                .map(|(path, text)| SourceFile { path: path.to_string(), text: text.to_string() })
-                .collect(),
-            ..PackageInput::default()
-        }
-    }
-
-    #[test]
-    fn resonator_graph() {
-        let analyzed = analyzed(PackageInput::single_file("res.onsa", RESONATOR));
-        let dot = super::graph(&analyzed, "resonator", None).unwrap();
-        let node_lines = dot.lines().filter(|l| l.contains("[label=")).count();
-        // 3 inputs + 7 lets + out
-        assert_eq!(node_lines, 11, "{dot}");
-        let dashed: Vec<&str> = dot.lines().filter(|l| l.contains("style=dashed")).collect();
-        assert_eq!(dashed, vec!["  \"y\" -> \"y1\" [style=dashed]", "  \"y1\" -> \"y2\" [style=dashed]"], "{dot}");
-        assert!(dot.contains("\"r\" [label=\"r: F32 at block\" color=\"blue\""), "{dot}");
-        assert!(dot.contains("\"y1\" [label=\"y1 = prev~: F32 at sample\""), "{dot}");
-        assert!(dot.contains("  \"x\" -> \"y\"\n"), "{dot}");
-        // The output is a vertex of its own (R-497).
-        assert!(dot.contains("  \"y\" -> \"_out\"\n"), "{dot}");
-    }
-
-    /// The node of a `par~` names the replication with its `~` and its range,
-    /// as an instance names its flow (`saw~`, spec/tools.md §1.1, S-745). One
-    /// whose body holds no node is named as one with no name (S-1175).
-    #[test]
-    fn a_par_node_is_labelled_with_its_tilde() {
-        let src = "pub flow f(x: F32 at sample) -> [F32; 2] at sample {\n  let xs = par~ i in 0 ..< 2 { x }\n  xs\n}\n";
-        let analyzed = analyzed(PackageInput::single_file("p.onsa", src));
-        let dot = super::graph(&analyzed, "f", None).unwrap();
-        assert!(dot.contains("\"xs.par_0\" [label=\"par_0 = par~ 0..<2: [F32; 2] at sample\""), "{dot}");
-    }
-
-    /// Only a `let` of a single name is its node (S-148, through
-    /// parentheses); the node of any other `let` is a vertex of its §11.6
-    /// name (spec/tools.md §1.1), as the plan decides ([`FlowInfo::whole`]).
-    #[test]
-    fn the_node_of_a_let_that_is_not_one_name_is_a_vertex_of_its_own() {
-        let src = "pub flow f(x: F32 at sample) -> F32 at sample {\n  let a = (prev~(x))\n  let _ = prev~(x)\n  a\n}\n";
-        let analyzed = analyzed(PackageInput::single_file("p.onsa", src));
-        let dot = super::graph(&analyzed, "f", None).unwrap();
-        assert!(dot.contains("\"a\" [label=\"a = prev~: F32 at sample\""), "{dot}");
-        assert!(dot.contains("\"let_1\" [label=\"let_1: F32 at sample\""), "{dot}");
-        assert!(dot.contains("\"_0.prev_0\" [label=\"prev_0 = prev~: F32 at sample\" style=rounded"), "{dot}");
-        assert!(dot.contains("  \"_0.prev_0\" -> \"let_1\"\n"), "{dot}");
-    }
-
-    /// §18.2 (S-323): a name is the one flow of that name in the scope (the
-    /// module of the file passed, or the package), else the candidates are
-    /// listed; a module-qualified name must be in the scope.
-    #[test]
-    fn the_flow_is_named_in_its_scope() {
-        let analyzed = analyzed(package("p", &[("a.onsa", RESONATOR), ("b.onsa", RESONATOR)]));
-        let usage = |flow: &str, scope: Option<&str>| match super::graph(&analyzed, flow, scope) {
-            Err(super::GraphError::Usage(e)) => e,
-            other => panic!("{flow} in {scope:?}: {other:?}"),
-        };
-        let many = usage("resonator", None);
-        assert!(many.contains("a.resonator, b.resonator"), "{many}");
-        for (flow, scope) in [("resonator", Some("a")), ("a.resonator", None), ("a.resonator", Some("a"))] {
-            assert!(super::graph(&analyzed, flow, scope).is_ok(), "{flow} in {scope:?}");
-        }
-        assert!(usage("b.resonator", Some("a")).contains("not in module `a`"));
-        assert!(usage("lowpass", Some("a")).contains("no flow named `lowpass` in module `a`"));
-        assert!(usage("c.resonator", None).contains("no flow named `c.resonator`"));
-    }
-}
+mod tests;

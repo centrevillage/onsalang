@@ -6,7 +6,11 @@ digraph "lp_after_par" {
   "_out" [label="out: F32 at sample" shape=doubleoctagon color="black" fontcolor="black"]
   "b.prev_0" [label="prev_0 = prev~: F32 at sample" style=rounded color="black" fontcolor="black"]
   "b.par_0" [label="par_0 = par~ 0..<2: [F32; 2] at sample" style=rounded color="black" fontcolor="black"]
-  "b.par_0.lp_0" [label="lp_0 = lp~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  subgraph "cluster_b.par_0" {
+    label="par~ k in 0..<2（×2）"
+    "b.par_0.k" [label="k: U32 at init" shape=ellipse color="gray40" fontcolor="gray40"]
+    "b.par_0.lp_0" [label="lp_0 = lp~: F32 at sample" style=rounded color="black" fontcolor="black"]
+  }
   "b.lp_0" [label="lp_0 = lp~: F32 at sample" style=rounded color="black" fontcolor="black"]
   "b.prev_0" -> "b"
   "x" -> "b.prev_0" [style=dashed]
