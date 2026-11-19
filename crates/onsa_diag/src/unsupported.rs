@@ -120,9 +120,6 @@ features! {
     /// K-02: `e at k` evaluates `e` at its own clock (W7-05).
     ClockPromotion: Language, "`at` that makes a computed expression faster than its operands",
         Some("bind the expression with a `let`, and write `at` on its name");
-    /// `{}`: the value type. K-02, S-29: `T.default()` (W7-07).
-    DefaultInit: Language, "the omitted `init` of a delay whose value type `{}` is not a number",
-        Some("write the `init`");
     /// `{}`: the clock. R-17, S-33: hoisting computes it at `init` (W7-05).
     NonRtCallAtClock: Language, "a call of a function that is not `rt` in an expression at the clock `{}`",
         Some("bind the call with a `let` of its own, which is computed at `init`");

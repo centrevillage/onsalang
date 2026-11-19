@@ -1,0 +1,39 @@
+// The types of the case in check.onsa (W7-07, §6.4: "`priv` のフィールドがあっても、他のモジュールから
+// `P.default()` を呼べる"): a struct with private fields and a derived `Default`, and a struct with a
+// hand-written `Default` in this module.
+
+pub struct Meter: Default {
+  priv level: F32 = 0.5,
+  priv peak: F32,
+  tag: U8,
+}
+
+pub rt fn make(x: F32) -> Meter {
+  Meter { level: x, peak: x * 2.0, tag: 7 }
+}
+
+pub rt fn level(m: Meter) -> F32 {
+  m.level
+}
+
+pub rt fn peak(m: Meter) -> F32 {
+  m.peak
+}
+
+pub struct Hidden {
+  priv gain: F32,
+}
+
+impl Default for Hidden {
+  rt fn default() -> Hidden {
+    Hidden { gain: 8.0 }
+  }
+}
+
+pub rt fn hide(x: F32) -> Hidden {
+  Hidden { gain: x }
+}
+
+pub rt fn gain(h: Hidden) -> F32 {
+  h.gain
+}

@@ -1,0 +1,38 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.5", "§18.1"]
+
+// E0810 of the value type of an unnamed delay, where the value of the delay is made by a call (R-458
+// form `prev_owned` of issues/R/R-458/prev_value_type.onsa) or holds a `Buf`. Such a value is also an
+// owned value whose drop needs `Alloc` that a flow body cannot make, E0805 at the call or the literal
+// (§11.5, S-1043). The two errors are of the flow check of one unit, so the one reported is the first
+// by the order of the diagnostics (§18.1: start position first), and the delay (the outer expression,
+// §11.3: "位置はその式で、入れ子なら外の式") starts before the call in its argument: E0810. The forms with
+// static literals only, where there is no E0805, are in flow_delay_value_copy_e0810.onsa. The columns
+// are the delay call (§11.3).
+
+pub rt fn mk(x: F32) -> Str { "x" }
+pub rt fn str_len(s: Str) -> F32 { F32.round_from(s.len()) }
+
+pub struct Holder {
+  b: Option[Buf[F32]],
+}
+
+pub rt fn pick_buf(x: F32) -> Option[Buf[F32]] { None }
+pub rt fn held(h: Holder) -> F32 { 1.0 }
+
+pub flow prev_owned_call_in_the_output(x: F32 at sample) -> F32 at sample {
+  x * F32.round_from(prev~(mk(x), "z").len())                    //~ E0810 @22
+}
+
+pub flow prev_owned_call_in_a_call_argument(x: F32 at sample) -> F32 at sample {
+  x * str_len(prev~(mk(x), "z"))                                 //~ E0810 @15
+}
+
+pub flow prev_owned_call_omitted_init(x: F32 at sample) -> F32 at sample {
+  x * str_len(prev~(mk(x)))                                      //~ E0810 @15
+}
+
+pub flow prev_struct_with_a_buf(x: F32 at sample) -> F32 at sample {
+  x * held(prev~(Holder { b: pick_buf(x) }, Holder { b: None }))   //~ E0810 @12
+}

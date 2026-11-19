@@ -1,0 +1,361 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.4", "§6.3", "§6.4", "§4.4"]
+
+// The value of the omitted `init` of a delay whose value type is no number (W7-07, S-29, S-1104).
+// §11.4: "`init` は省略できる。省略すると値型の既定値 `T.default()` で始まる（数値は 0、浮動小数は
+// `+0.0`、`Bool` は `false`、配列とタプルは要素ごと、struct は宣言に `Default` を並べたもの。§6.4）".
+// §6.4: "struct の `Default` は、各フィールドの既定値を並べたものである（宣言に既定値を書いたフィールド
+// はその値で、型の `Default` を要らない。他のフィールドは型の `default()`）"; §6.3: "enum には `Default`
+// を並べられない。… `impl Default for Mode { rt fn default() -> Mode { Mode.Off } }` と手で書く".
+//
+// Every flow here starts from a default that is not what the first sample of the input would give,
+// so a start from the first value, or from a zero of the wrong shape, shows. The numbers are worked
+// out by hand in each test. `prev_default_types.onsa` has the Bool, the array, the tuple and the
+// struct with `prev~`; this file has the other delays, the nested shapes, the field defaults, the
+// hand-written `Default`, the alias and the generic struct. The numbers alone (which check today) are
+// in default_init_numbers.onsa.
+
+// ---- Bool, with a length
+
+pub flow delay_bool(x: F32 at sample) -> F32 at sample {
+  let b = delay~(x > 2.0, 2)
+  if b { 1.0 } else { 0.0 }
+}
+
+// The types of the boundary: a Bool and a channel array are signals of the delay as any other.
+pub flow bool_input(c: Bool at sample) -> Bool at sample {
+  prev~(c)
+}
+
+pub flow array_input(x: [F32; 2] at sample) -> [F32; 2] at sample {
+  delay~(x, 3)
+}
+
+// ---- arrays and tuples, element by element
+
+pub flow array_i32(k: I32 at sample) -> I32 at sample {
+  let p = prev~([k, k + 1])
+  p[0] * 10 + p[1]
+}
+
+// `+0.0` in each element: 1 / +0.0 is +inf, 1 / -0.0 would be -inf.
+pub flow array_f32_sign(x: F32 at sample) -> F32 at sample {
+  1.0 / prev~([x, x])[0]
+}
+
+pub flow array_f32_delay(x: F32 at sample) -> F32 at sample {
+  let d = delay~([x, -x], 3)
+  d[0] - d[1]
+}
+
+pub flow tuple_mixed(x: F32 at sample) -> F32 at sample {
+  let (a, flag, b) = prev~((x, x > 1.5, x * 2.0))
+  if flag { 10.0 + a + b } else { a - b }
+}
+
+pub flow array_of_arrays(x: F32 at sample) -> F32 at sample {
+  let m = prev~([[x, 1.0], [2.0, x]])
+  m[0][0] + m[0][1] + m[1][0] + m[1][1]
+}
+
+pub flow tuple_with_array(x: F32 at sample) -> F32 at sample {
+  let (a, v) = prev~((x, [x, x + 1.0]))
+  a * 100.0 + v[0] * 10.0 + v[1]
+}
+
+// An array of no element has the default of a type that has one (S-1104: the element type decides).
+pub flow empty_array(x: F32 at sample) -> F32 at sample {
+  let e = prev~([x; 0])
+  x + F32.round_from(e.len())
+}
+
+// ---- struct: the defaults of the fields and of the types
+
+pub struct Voice: Default {
+  gain: F32 = 0.5,
+  level: F32,
+  on: Bool = true,
+  steps: U32,
+}
+
+pub flow struct_field_defaults(x: F32 at sample) -> F32 at sample {
+  let v = prev~(Voice { gain: x, level: x * 2.0, on: x > 2.0, steps: 3 })
+  let gate = if v.on { 1000.0 } else { 0.0 }
+  v.gain * 100.0 + v.level + gate + F32.round_from(v.steps)
+}
+
+pub struct Inner: Default {
+  v: F32,
+  n: I32,
+}
+
+pub struct Outer: Default {
+  a: Inner,
+  t: [F32; 2],
+  k: F32 = 4.0,
+}
+
+pub flow struct_nested(x: F32 at sample) -> F32 at sample {
+  let o = prev~(Outer { a: Inner { v: x, n: 1 }, t: [x, x], k: x })
+  o.a.v + F32.round_from(o.a.n) + o.t[0] + o.k
+}
+
+// A field of a type with no `Default` takes the default of its declaration.
+pub struct Tagged: Default {
+  c: Char = 'k',
+  v: F32,
+}
+
+pub flow struct_char_field_with_default(x: F32 at sample) -> F32 at sample {
+  let t = prev~(Tagged { c: if x > 1.0 { 'q' } else { 'k' }, v: x })
+  if t.c == 'k' { t.v + 1.0 } else { t.v }
+}
+
+// A generic struct has the default of its field when the argument has one.
+pub struct Gen[T]: Default {
+  v: T,
+  k: F32 = 2.0,
+}
+
+pub flow generic_struct(x: F32 at sample) -> F32 at sample {
+  let g = prev~(Gen { v: x, k: 1.0 })
+  g.v + g.k * 10.0
+}
+
+// ---- the default is written by hand
+
+pub struct Pt {
+  x: F32,
+  y: F32,
+}
+
+impl Default for Pt {
+  rt fn default() -> Pt {
+    Pt { x: 1.0, y: -1.0 }
+  }
+}
+
+pub flow hand_struct_prev(x: F32 at sample) -> F32 at sample {
+  let p = prev~(Pt { x: x, y: x })
+  p.x * 10.0 + p.y
+}
+
+pub flow hand_struct_delay(x: F32 at sample) -> F32 at sample {
+  let p = delay~(Pt { x: x, y: x }, 2)
+  p.x * 10.0 + p.y
+}
+
+pub enum Mode {
+  Off,
+  On,
+}
+
+// The default of the enum is its second variant, so a start from the first one shows.
+impl Default for Mode {
+  rt fn default() -> Mode {
+    Mode.On
+  }
+}
+
+pub flow hand_enum(x: F32 at sample) -> F32 at sample {
+  let m = prev~(if x > 1.5 { Mode.On } else { Mode.Off })
+  match m {
+    Mode.On => 1.0,
+    Mode.Off => 0.0,
+  }
+}
+
+// ---- an alias is the type it names
+
+type Frame = [F32; 2]
+type Spot = Pt
+
+pub flow alias_array(x: F32 at sample) -> F32 at sample {
+  let f: Frame = [x, x + 1.0]
+  let p = prev~(f)
+  p[0] * 10.0 + p[1]
+}
+
+pub flow alias_hand_struct(x: F32 at sample) -> F32 at sample {
+  let s: Spot = Pt { x: x, y: x }
+  let q = prev~(s)
+  q.x * 10.0 + q.y
+}
+
+// ---- the tests
+
+test "delay~ of a Bool starts from false for N samples" {
+  // b[n] = (x[n - 2] > 2), false before: false, false, true, true, true.
+  let xs: [F32; 5] = [3.0, 3.0, 3.0, 1.0, 3.0]
+  let o = delay_bool.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 1.0
+  assert o.out[3] == 1.0
+  assert o.out[4] == 1.0
+}
+
+test "an array of I32 starts from zeros" {
+  // n0: [0, 0] -> 0.  n1: [1, 2] -> 12.  n2: [2, 3] -> 23.
+  let ks: [I32; 3] = [1, 2, 3]
+  let o = array_i32.render(ks, 8.0)
+  assert o.out[0] == 0
+  assert o.out[1] == 12
+  assert o.out[2] == 23
+}
+
+test "the elements of a float array start from +0.0" {
+  // n0: 1 / +0.0 = +inf.  n1: 1 / x[0] = 1 / 2.
+  let xs: [F32; 2] = [2.0, 4.0]
+  let o = array_f32_sign.render(xs, 8.0)
+  assert o.out[0] == F32.INFINITY
+  assert o.out[1] == 0.5
+}
+
+test "delay~ of an array holds N defaults" {
+  // d[n] = [x[n - 3], -x[n - 3]], so d[0] - d[1] = 2 x[n - 3]: 0, 0, 0, 2, 4.
+  let xs: [F32; 5] = [1.0, 2.0, 3.0, 4.0, 5.0]
+  let o = array_f32_delay.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 0.0
+  assert o.out[3] == 2.0
+  assert o.out[4] == 4.0
+}
+
+test "a tuple of a float, a Bool and a float starts from (0, false, 0)" {
+  // The default flag is false, so n0 is a - b = 0 (a true flag would give 10).
+  // n1 from x = 1: (1, false, 2) -> 1 - 2 = -1.  n2 from x = 2: (2, true, 4) -> 10 + 2 + 4 = 16.
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = tuple_mixed.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == -1.0
+  assert o.out[2] == 16.0
+}
+
+test "an array of arrays starts from zeros" {
+  // n0: 0.  n1 from x = 3: 3 + 1 + 2 + 3 = 9.
+  let xs: [F32; 2] = [3.0, 5.0]
+  let o = array_of_arrays.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 9.0
+}
+
+test "a tuple that holds an array starts from zeros" {
+  // n0: 0.  n1 from x = 1: 1 * 100 + 1 * 10 + 2 = 112.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = tuple_with_array.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 112.0
+}
+
+test "an array of no float is accepted and has length 0" {
+  let xs: [F32; 2] = [3.0, 4.0]
+  let o = empty_array.render(xs, 8.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == 4.0
+}
+
+test "a struct starts from the defaults of its fields" {
+  // Default: gain 0.5, level 0, on true, steps 0 -> 50 + 0 + 1000 + 0 = 1050.
+  // n1 from x = 1: gain 1, level 2, on false, steps 3 -> 100 + 2 + 0 + 3 = 105.
+  // n2 from x = 3: gain 3, level 6, on true, steps 3 -> 300 + 6 + 1000 + 3 = 1309.
+  let xs: [F32; 3] = [1.0, 3.0, 0.0]
+  let o = struct_field_defaults.render(xs, 8.0)
+  assert o.out[0] == 1050.0
+  assert o.out[1] == 105.0
+  assert o.out[2] == 1309.0
+}
+
+test "a struct of structs and arrays starts from the defaults of its parts" {
+  // Default: a { 0, 0 }, t [0, 0], k 4 -> 0 + 0 + 0 + 4 = 4.
+  // n1 from x = 2: 2 + 1 + 2 + 2 = 7.
+  let xs: [F32; 2] = [2.0, 0.0]
+  let o = struct_nested.render(xs, 8.0)
+  assert o.out[0] == 4.0
+  assert o.out[1] == 7.0
+}
+
+test "a field with a declared default needs no Default of its type" {
+  // Default: c 'k', v 0 -> 0 + 1 = 1.
+  // n1 from x = 3: c 'q', v 3 -> 3.  n2 from x = 1: c 'k', v 1 -> 2.
+  let xs: [F32; 3] = [3.0, 1.0, 1.0]
+  let o = struct_char_field_with_default.render(xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 3.0
+  assert o.out[2] == 2.0
+}
+
+test "a generic struct starts from the default of its argument and its field" {
+  // Default: v 0, k 2 -> 0 + 20 = 20.  n1 from x = 1, k 1: 1 + 10 = 11.
+  let xs: [F32; 2] = [1.0, 5.0]
+  let o = generic_struct.render(xs, 8.0)
+  assert o.out[0] == 20.0
+  assert o.out[1] == 11.0
+}
+
+test "a hand-written Default of a struct is the start of prev~" {
+  // Default: x 1, y -1 -> 10 - 1 = 9.  n1 from x = 2: 20 + 2 = 22.
+  let xs: [F32; 2] = [2.0, 3.0]
+  let o = hand_struct_prev.render(xs, 8.0)
+  assert o.out[0] == 9.0
+  assert o.out[1] == 22.0
+}
+
+test "a hand-written Default of a struct is the start of delay~ for N samples" {
+  // 9, 9, then x[0] = 2: 20 + 2 = 22, then x[1] = 3: 33.
+  let xs: [F32; 4] = [2.0, 3.0, 4.0, 5.0]
+  let o = hand_struct_delay.render(xs, 8.0)
+  assert o.out[0] == 9.0
+  assert o.out[1] == 9.0
+  assert o.out[2] == 22.0
+  assert o.out[3] == 33.0
+}
+
+test "a hand-written Default of an enum is its start" {
+  // Default: On -> 1.  n1 from x = 1 -> Off -> 0.  n2 from x = 2 -> On -> 1.
+  let xs: [F32; 3] = [1.0, 2.0, 0.0]
+  let o = hand_enum.render(xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 0.0
+  assert o.out[2] == 1.0
+}
+
+test "an alias of an array starts from the zeros of the array" {
+  // n0: 0.  n1 from x = 1: [1, 2] -> 12.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = alias_array.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 12.0
+}
+
+test "an alias of a struct starts from the Default of the struct" {
+  // n0: 10 - 1 = 9.  n1 from x = 2: 22.
+  let xs: [F32; 2] = [2.0, 3.0]
+  let o = alias_hand_struct.render(xs, 8.0)
+  assert o.out[0] == 9.0
+  assert o.out[1] == 22.0
+}
+
+test "a Bool input is delayed from false" {
+  let cs: [Bool; 3] = [true, false, true]
+  let o = bool_input.render(cs, 8.0)
+  assert o.out[0] == false
+  assert o.out[1] == true
+  assert o.out[2] == false
+}
+
+test "a channel array is delayed from zeros in each channel" {
+  // out[c][n] = in[c][n - 3], 0.0 before.
+  let ins: [[F32; 5]; 2] = [[1.0, 2.0, 3.0, 4.0, 5.0], [10.0, 20.0, 30.0, 40.0, 50.0]]
+  let o = array_input.render(ins, 8.0)
+  assert o.out[0][0] == 0.0
+  assert o.out[0][2] == 0.0
+  assert o.out[0][3] == 1.0
+  assert o.out[0][4] == 2.0
+  assert o.out[1][1] == 0.0
+  assert o.out[1][3] == 10.0
+  assert o.out[1][4] == 20.0
+}

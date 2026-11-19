@@ -14,12 +14,12 @@
 // the one there. The inner error of a part is reported only when the outer one has no error of its own. The cases are
 // one error of the outer kind and one of the inner kind in a flow, the marker on the first.
 // The gates are the E0200 of a feature this version does not take (§18.1): a call of a function that
-// is not `rt` read at the clock `sample` (W7-05), the omitted `init` of a delay of a value that is not
-// a number (W7-07), and `at` that makes a computed expression faster (W7-05).
+// is not `rt` read at the clock `sample` (W7-05) and `at` that makes a computed expression faster
+// (W7-05). The omitted `init` of a delay with no `Default` is E0816 (W7-07, §11.4); its order against
+// the errors of the parts is in order_outer_before_inner_default_init.onsa.
 
 pub fn noisy(v: F32) -> F32 uses {Alloc} { v }
 pub fn design(v: F32) -> F32 { v * 0.5 }
-pub struct St { a: F32 }
 pub flow lp(y: F32 at sample) -> F32 at sample { y }
 pub flow slow_in(y: F32 at block) -> F32 at sample { y }
 
@@ -118,14 +118,4 @@ pub flow gate_non_rt_call_over_later_delay(x: F32 at sample, c: F32 at init, p: 
 
 pub flow gate_non_rt_call_over_later_effect(x: F32 at sample, c: F32 at init) -> F32 at sample {
   x * design(c) + noisy(x)                                       //~ E0200 @7
-}
-
-pub flow gate_default_init_over_argument_at(x: F32 at sample) -> F32 at sample {
-  let s = prev~(St { a: x at block })                            //~ E0200 @11
-  s.a
-}
-
-pub flow gate_default_init_over_argument_effect(x: F32 at sample) -> F32 at sample {
-  let s = prev~(St { a: noisy(x) })                              //~ E0200 @11
-  s.a
 }

@@ -26,10 +26,11 @@ pub(super) fn structural_default(lw: &mut Lowerer, ty: &Ty, span: Span) -> Optio
     Some(kind.map(|kind| Expr::new(ty.clone(), span, kind)))
 }
 
-/// The default value of `ty` (§6.3): the one path of a field and of an
-/// element. It recurs on the structure of the type, and a struct is a call:
-/// its fields are lowered once, for its function.
-fn default_value(lw: &mut Lowerer, ty: &Ty, span: Span) -> R<Expr> {
+/// The default value of `ty` (§6.3): the one path of a field, of an
+/// element and of the omitted `init` of a delay (§11.4). It recurs on the
+/// structure of the type, and a struct is a call: its fields are lowered
+/// once, for its function.
+pub(super) fn default_value(lw: &mut Lowerer, ty: &Ty, span: Span) -> R<Expr> {
     if let Some(value) = structural_default(lw, ty, span) {
         return value;
     }

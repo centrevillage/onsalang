@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§11.3", "§18.1"]
+
+// The order of the E0816 of a delay (the omitted `init` of a value type with no `Default`, §11.4) against
+// the other errors of the flow check of one unit (§18.1: one unit reports the first by the order of the
+// diagnostics, start position first; an outer check that reads the clock of a part in error is not made,
+// and the inner error is reported only when the outer one has no error of its own). E0816 reads the
+// type of the first argument and not its clock, so it is made over an error of a part of that argument
+// (the first two forms were the gate E0200 of the omitted `init` in order_outer_before_inner.onsa, which
+// W7-07 takes off), and it is found by position against the clock error of a delay written after it
+// (E0813). The forms where the other error is first, and the type stage, which pass today and stay,
+// are in order_default_init_among_errors.onsa. The columns of the E0816 are not asserted (the spec does
+// not say which part the report points at); every marker is on the line of the delay.
+
+pub fn noisy(v: F32) -> F32 uses {Alloc} { v }
+pub struct St { a: F32 }
+
+pub flow default_init_over_argument_at(x: F32 at sample) -> F32 at sample {
+  let s = prev~(St { a: x at block })                            //~ E0816
+  s.a
+}
+
+pub flow default_init_over_argument_effect(x: F32 at sample) -> F32 at sample {
+  let s = prev~(St { a: noisy(x) })                              //~ E0816
+  s.a
+}
+
+pub flow default_init_then_later_clock(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = prev~(St { a: x })                                     //~ E0816
+  let b = prev~(p)
+  b + a.a
+}

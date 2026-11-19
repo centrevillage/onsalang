@@ -5,7 +5,8 @@
 the type), so the omitted form of the documents rests on the writer: this
 check fails when a delay call (`prev~`, `delay~`, `vdelay~`) in them has an
 `init` that is a literal of the default value (0 in any spelling of §2.4, the
-integer `-0`, `+0.0`, `false`, also in parentheses; not `-0.0`).
+integer `-0`, `+0.0`, `false`, an array, a repeat or a tuple of them, S-550,
+also in parentheses; not `-0.0`, nor the empty `[]`).
 
 The documents are the ```onsa blocks of the spec and of `spec/tools.md`,
 and the `.onsa` files of `examples/` and `std/`. The text of the documents

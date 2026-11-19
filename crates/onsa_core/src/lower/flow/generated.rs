@@ -29,12 +29,21 @@ pub(super) fn member_params(lw: &mut Lowerer, fd: &FlowDef, f: FlowFn, span: Spa
     Ok(out)
 }
 
-/// A node's `init` value: a constant literal, or the `Init`-rate expression
-/// (lowered in `init`; `reset` reads the stored copy).
-pub(super) fn init_value(lw: &mut Lowerer, cx: &mut FnCx, init: &InitArg, ty: &Ty, span: Span) -> R<Expr> {
+/// A node's `init` value: a constant literal, the default of its type
+/// (§11.4, made again at `reset`: it has no effect), or what `of` gives of
+/// the `Init`-rate expression (lowered in `init`; `reset` reads the stored
+/// copy).
+pub(super) fn init_value(
+    lw: &mut Lowerer,
+    init: &InitArg,
+    ty: &Ty,
+    span: Span,
+    of: impl FnOnce(&mut Lowerer, ExprId) -> R<Expr>,
+) -> R<Expr> {
     match init {
         InitArg::Const(v) => lw.const_value_expr(v, ty, span),
-        InitArg::Init(e) => lower_expr(lw, cx, *e),
+        InitArg::Default => crate::lower::derived::default_value(lw, ty, span),
+        InitArg::Init(e) => of(lw, *e),
     }
 }
 

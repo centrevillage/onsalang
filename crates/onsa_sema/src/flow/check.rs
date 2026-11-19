@@ -485,28 +485,23 @@ impl<'a> Checker<'a> {
                 self.defer(span, t, DeferredKind::Require { bound: Bound::Float, what });
                 self.check_expr(args[1].expr, Some(t))?;
                 let max_expr = constant.expect("the maximum of `vdelay~`");
-                let max = self.flow_const_u32(max_expr)?;
-                if max == Some(0) {
-                    let at = self.expr(max_expr).span;
-                    self.flow_hold_at(Code::E0808, at, "`vdelay~` needs a maximum of at least 1 (§11.4)");
-                }
-                max
+                // Its range is of the flow stage, after the types ([`hold_vdelay_max`]).
+                self.flow_const_u32(max_expr)?
             }
         };
-        // A length the check does not compute (held) is read by no plan.
-        let kind = NodeKind::Delay(d, len.unwrap_or_default());
-        let init = match init_expr {
-            Some(i) => {
-                self.check_expr(i, Some(t))?;
-                Some(match consteval::eval(self, i) {
-                    Some(v) => InitArg::Const(v),
-                    None => InitArg::Init(i),
-                })
-            }
-            None => None,
-        };
-        let arg_exprs: Vec<ExprId> = args.iter().map(|a| a.expr).collect();
-        self.fcx().calls.push(NodeCall { expr: e, kind, args: arg_exprs, init, init_expr, ty: t });
+        // The call is recorded before its `init` is checked: the range of the
+        // maximum of a `vdelay~` is judged past an error there.
+        let args = args.iter().map(|a| a.expr).collect();
+        let at = self.fcx().calls.len();
+        self.fcx().calls.push(NodeCall { expr: e, kind: NodeKind::Delay(d, len), args, init: None, init_expr, ty: t });
+        if let Some(i) = init_expr {
+            self.check_expr(i, Some(t))?;
+            let init = match consteval::eval(self, i) {
+                Some(v) => InitArg::Const(v),
+                None => InitArg::Init(i),
+            };
+            self.fcx().calls[at].init = Some(init);
+        }
         Ok(t)
     }
 
@@ -546,23 +541,28 @@ impl<'a> Checker<'a> {
     }
 }
 
-/// The maximum of a `vdelay~` whose `d` is an `F32` (the type of its first
-/// argument, through aliases and the variables of the inference: of the
-/// typed body) is at most 2^24 (§11.4, S-88, R-100): an E0808 at it, held
-/// ([`FlowCx::held`]). `F64` has no such limit.
-pub(super) fn hold_f32_max(a: &Analysis, ast: &onsa_syntax::ast::Ast, text: &str, body: &BodyInfo, fcx: &mut FlowCx) {
+/// The range of the maximum of a `vdelay~` (§11.4), the one judgment of it:
+/// at least 1, and at most 2^24 when its `d` is an `F32` (the type of its
+/// first argument, through aliases and the variables of the inference: of
+/// the typed body; S-88, R-100), which is judged of a body the check ended
+/// only. An E0808 at it, held ([`FlowCx::held`]). `F64` has no such limit.
+pub(super) fn hold_vdelay_max(a: &Analysis, module: &Module, body: &BodyInfo, fcx: &mut FlowCx) {
     const MOST: u32 = 1 << 24;
     for call in &fcx.calls {
-        let NodeKind::Delay(d @ Delay::Variable, max) = call.kind else { continue };
-        let f32 = body.expr_types.get(&call.expr).is_some_and(|&t| *a.types.get(t) == Ty::Float(FloatKind::F32));
-        let Some(&max_expr) = d.const_index().and_then(|k| call.args.get(k)).filter(|_| f32 && max > MOST) else {
+        let NodeKind::Delay(d @ Delay::Variable, Some(max)) = call.kind else { continue };
+        let f32 = || body.expr_types.get(&call.expr).is_some_and(|&t| *a.types.get(t) == Ty::Float(FloatKind::F32));
+        let msg = if max == 0 {
+            "`vdelay~` needs a maximum of at least 1 (§11.4)".to_string()
+        } else if max > MOST && body.complete && f32() {
+            format!(
+                "the maximum of a `vdelay~` whose `d` is an `F32` is at most 2^24 ({MOST}), the integers an `F32` holds (§11.4)"
+            )
+        } else {
             continue;
         };
-        let span = ast.expr(max_expr).span;
-        let msg = format!(
-            "the maximum of a `vdelay~` whose `d` is an `F32` is at most 2^24 ({MOST}), the integers an `F32` holds (§11.4)"
-        );
-        let d = Diagnostic::new(Stage::Flow, Code::E0808, span, msg).with_found(span.text_in(text));
-        Diagnostic::keep_first(&mut fcx.held, d);
+        let Some(&max_expr) = d.const_index().and_then(|k| call.args.get(k)) else { continue };
+        let span = module.parsed.ast.expr(max_expr).span;
+        let diag = Diagnostic::new(Stage::Flow, Code::E0808, span, msg).with_found(span.text_in(&module.text));
+        Diagnostic::keep_first(&mut fcx.held, diag);
     }
 }

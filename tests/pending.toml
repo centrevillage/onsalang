@@ -36,13 +36,6 @@ note = "型の大きさと状態の領域が U32 を超える（ターゲット�
 
 [[pending]]
 kind = "diag-code"
-target = "E0816"
-reasons = ["S-29", "S-110"]
-until = "W7-07"
-note = "init の省略（W7-07）と match~ の取られない腕（W7-06）で T: Default でない"
-
-[[pending]]
-kind = "diag-code"
 target = "E0818"
 reasons = ["S-43", "S-31"]
 until = "W9-06"
@@ -251,13 +244,6 @@ note = "xs[i][j] の添字を内側から評価する（§3.5）"
 # 各ファイルは、待つ作業が一つになるように分けてある。until は「そのファイルが通る最後の作業」。
 # W3-10 のファイルは、実装が flow の新しい構文を今の sema へ写した時点（K-02）で通る見込み
 # （struct の `: Default` は W3-08、`at` と `prev~` の構文は W3-09。演算子の群 S-45 は W3-07 で入った）。
-
-[[pending]]
-kind = "test-case"
-target = "tests/spec/flow_semantics/prev_default_types.onsa"
-reasons = ["S-29", "S-34"]
-until = "W7-07"
-note = "数でない値型（Bool、配列、タプル、struct）の init の省略は T.default()。W3-10 の写しでは E0200（K-02）。struct の : Default の構文は W3-08"
 
 [[pending]]
 kind = "test-case"
@@ -998,7 +984,7 @@ kind = "test-case"
 target = "tests/spec/flow_semantics/rules_negative.onsa"
 reasons = ["S-110", "S-101", "S-116", "S-29", "S-44", "S-88"]
 until = "W7-06"
-note = "状態を持つものの置き場所（E0811 / E0812 / E0806）、Default の無い遅延の値型（E0816）、^ の位置（E0801 / E0020）、遅延と par の範囲（E0808 / E0417 / E0416 / E0813）、自分自身のインスタンス（E0817）。最後に仕上がるのは E0816（W7-07）"
+note = "状態を持つものの置き場所（E0811 / E0812 / E0806）、Default の無い遅延の値型（E0816）、^ の位置（E0801 / E0020）、遅延と par の範囲（E0808 / E0417 / E0416 / E0813）、自分自身のインスタンス（E0817）。遅延の省いた `init` の E0816 は W7-07 で済み、最後に仕上がるのは `match~` の取られない腕の E0816（W7-06）"
 
 [[pending]]
 kind = "test-case"

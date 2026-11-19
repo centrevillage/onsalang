@@ -1,0 +1,59 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§12.4"]
+
+// E0810: the value type of a delay is a signal value type and must be Copy, also where the delay is
+// not bound to a name (R-458, S-1047 (d); §11.3: "状態を持つもの（インスタンス、組込みの遅延、`par~`）が
+// 作る値（インスタンスの出力、遅延の値、`par~` の結果の要素）の型も信号の値型で、名前を付けない位置でも
+// Copy でなければならない（E0810。位置はその式で、入れ子なら外の式）"; §12.4: "値型は Copy、ヒープを
+// 使わない"). The delays below are in the output, in the argument of a call, in a condition and in a
+// `par~` body; the value types are `Str` (Shared), `Option[Str]` and a tuple with a `Str`, made of
+// static literals only (§5.4) so that no other rule of a flow body (E0805 for an owned value made by a
+// call, §11.5) is at the same place; the forms with a call are in flow_delay_value_copy_order_e0810.onsa.
+// The omitted `init` of a `Str` is E0810 too (`Str` has a `Default`, so there is no E0816).
+// `vdelay~` takes only a float (`T: Float`, E0416 otherwise), so its value type is always Copy.
+// One error per flow. The columns of the first two are the delay call (§11.3: the position is that
+// expression). The named forms (`let s = prev~(…)`) are in flow_delay_value_copy_let_e0810.onsa, which
+// passes today.
+
+pub rt fn str_len(s: Str) -> F32 { F32.round_from(s.len()) }
+pub rt fn opt_len(o: Option[Str]) -> F32 { 1.0 }
+pub rt fn pair_len(t: (F32, Str)) -> F32 { 1.0 }
+
+// ---- the forms of R-458 (issues/R/R-458/prev_value_type.onsa)
+
+pub flow prev_str_in_the_output(x: F32 at sample) -> F32 at sample {
+  x * F32.round_from(prev~(if x > 0.0 { "a" } else { "bb" }, "z").len())   //~ E0810 @22
+}
+
+pub flow delay_option_str_in_a_call_argument(x: F32 at sample) -> F32 at sample {
+  x * opt_len(delay~(if x > 0.0 { Some("a") } else { None }, 4, None))   //~ E0810 @15
+}
+
+// ---- other places and other value types
+
+pub flow prev_str_in_a_call_argument(x: F32 at sample) -> F32 at sample {
+  x * str_len(prev~(if x > 0.0 { "a" } else { "bb" }, "z"))      //~ E0810
+}
+
+pub flow prev_tuple_with_a_str(x: F32 at sample) -> F32 at sample {
+  x * pair_len(prev~((x, "a"), (0.0, "z")))                      //~ E0810
+}
+
+pub flow prev_str_in_a_condition(x: F32 at sample) -> F32 at sample {
+  if str_len(prev~(if x > 0.0 { "a" } else { "bb" }, "z")) > 1.0 { x } else { 0.0 }   //~ E0810
+}
+
+pub flow delay_str_in_a_par_body(x: F32 at sample) -> [F32; 2] at sample {
+  par~ i in 0 ..< 2 { str_len(delay~(if x > 0.0 { "a" } else { "bb" }, 2, "z")) * F32.round_from(i) }   //~ E0810
+}
+
+// ---- the omitted `init` of a Str (it has a Default, so the Copy is what fails)
+
+pub flow prev_str_omitted_init(x: F32 at sample) -> F32 at sample {
+  x * str_len(prev~(if x > 0.0 { "a" } else { "bb" }))           //~ E0810
+}
+
+pub flow delay_str_omitted_init(x: F32 at sample) -> F32 at sample {
+  x * str_len(delay~(if x > 0.0 { "a" } else { "bb" }, 3))       //~ E0810
+}

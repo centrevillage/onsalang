@@ -173,6 +173,11 @@ impl<'a> View<'a> {
         self.analysis.display_type(ty)
     }
 
+    /// Whether the type `def` has a hand-written `impl Default` (§6.4), whose `default()` is its default.
+    pub fn default_by_hand(self, def: DefId) -> bool {
+        self.analysis.modules.trait_impls.contains_key(&(onsa_sema::def::Bound::Default, def))
+    }
+
     /// The fields of a struct in the order of the declaration, with the declared default of each.
     pub fn struct_fields(self, def: DefId) -> Result<&'a [FieldDef], Fault> {
         match &self.analysis.def(def).kind {

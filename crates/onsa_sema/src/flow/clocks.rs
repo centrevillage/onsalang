@@ -51,6 +51,7 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
         complete: false,
         ..Default::default()
     };
+    super::check::hold_vdelay_max(a, module, &body, &mut fcx);
     if !body.complete {
         if a.diagnostics.len() == fcx.diags_before
             && let Some(d) = fcx.held
@@ -63,7 +64,6 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
     }
     let error = a.types.error();
     let (ast, text) = (&module.parsed.ast, module.text.as_str());
-    super::check::hold_f32_max(a, ast, text, &body, &mut fcx);
     let mut w = walk(a, ast, text, id, &body, &fcx, error);
     if w.diag.is_none() {
         w.post_check(&fcx);
@@ -558,7 +558,12 @@ impl Walk<'_> {
             NodeKind::Delay(delay, _) => self.delay(delay, call),
         };
         if let Some((k, recorded)) = slot {
-            if let Err(d) = recorded {
+            // SPEC-GAP(S-1155): of a value type neither Copy nor `Default`,
+            // the E0810 is the one (provisional): not the E0816 of an omitted `init`.
+            let not_copy = matches!(call.kind, NodeKind::Delay(..)) && self.check_delay_value(e);
+            if let Err(d) = recorded
+                && !not_copy
+            {
                 let found = self.src(span);
                 self.report(d.with_found(found));
             }

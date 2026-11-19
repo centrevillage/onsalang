@@ -6,7 +6,7 @@ use crate::ty::TyId;
 
 fn call(delay: Delay, args: &[u32], init: Option<u32>) -> NodeCall {
     let args = args.iter().map(|&i| ExprId(i)).collect();
-    let kind = NodeKind::Delay(delay, 4);
+    let kind = NodeKind::Delay(delay, Some(4));
     NodeCall { expr: ExprId(0), kind, args, init: None, init_expr: init.map(ExprId), ty: TyId(0) }
 }
 

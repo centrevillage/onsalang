@@ -1,0 +1,25 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§11.3", "§18.1"]
+
+// The omitted `init` of a delay with no `Default` (E0816, §11.4) among other errors of one unit, in the
+// forms where it is NOT the one reported: the error of the length of a delay written before it is first
+// by position (E0808, §18.1; E0808 has no fix candidate, so the case needs no `leaves`), and the element
+// type of a `vdelay~` (E0416, §11.4) is of the type stage, which comes before the flow check (§18.1: the
+// stages are in order), so it is reported over an E0816 written before it. These pass today (the omitted
+// `init` is the gate E0200, later in the flow check, or not reached) and they stay after W7-07; the forms
+// where E0816 is the one reported are in order_outer_before_inner_default_init.onsa.
+
+pub struct St { a: F32 }
+
+pub flow length_then_later_default_init(x: F32 at sample) -> F32 at sample {
+  let b = delay~(x, 0)                                           //~ E0808
+  let a = prev~(St { a: x })
+  b + a.a
+}
+
+pub flow default_init_then_later_element_type(x: F32 at sample, k: I32 at sample) -> F32 at sample {
+  let a = prev~(St { a: x })
+  let b = vdelay~(k, 1, 8)                                       //~ E0416
+  a.a + F32.round_from(b)
+}

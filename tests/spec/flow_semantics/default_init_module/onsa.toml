@@ -1,0 +1,3 @@
+[package]
+name = "default_init_module"
+edition = "2026"

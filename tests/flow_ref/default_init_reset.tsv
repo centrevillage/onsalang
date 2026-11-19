@@ -1,0 +1,30 @@
+# flow_ref 1 source=tests/spec/flow_semantics/default_init_reset.onsa tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
+@ the first run starts from the defaults
+render default_init_reset.rs_default sr=0x41000000 in x=[0x3f800000 0x40000000 0x40400000 0x40800000]
+out=[0x42c90000 0x40400000 0x448a6000 0x448ac000]
+@ reset puts the defaults back after a run
+init 0 default_init_reset.rs_default sr=0x41000000
+process 0 frames=2 in x=[0x41100000 0x41100000]
+out=[0x42c90000 0x448ae000]
+reset 0
+process 0 frames=4 in x=[0x3f800000 0x40000000 0x40400000 0x40800000]
+out=[0x42c90000 0x40400000 0x448a6000 0x448ac000]
+@ a run split into two process calls equals one call, and reset replays it
+init 0 default_init_reset.rs_default sr=0x41000000
+process 0 frames=1 in x=[0x3f800000]
+out=[0x42c90000]
+process 0 frames=3 in x=[0x40000000 0x40400000 0x40800000]
+out=[0x40400000 0x448a6000 0x448ac000]
+reset 0
+process 0 frames=4 in x=[0x3f800000 0x40000000 0x40400000 0x40800000]
+out=[0x42c90000 0x40400000 0x448a6000 0x448ac000]
+@ each replica of a par~ starts from its own default
+render default_init_reset.par_default sr=0x41000000 in x=[0x3f800000 0x40000000 0x40800000]
+out=[0x40b00000 0x41a80000 0x42280000]
+@ reset puts the replicas of a par~ back to their defaults
+init 0 default_init_reset.par_default sr=0x41000000
+process 0 frames=3 in x=[0x3f800000 0x40000000 0x40800000]
+out=[0x40b00000 0x41a80000 0x42280000]
+reset 0
+process 0 frames=3 in x=[0x3f800000 0x40000000 0x40800000]
+out=[0x40b00000 0x41a80000 0x42280000]

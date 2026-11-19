@@ -1,0 +1,236 @@
+// onsa.toml
+// [package]
+// name = "default_init_values"
+// edition = "2026"
+//
+// [export]
+// prefix = "cf_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§11.4", "§13.4"]
+// conformance = true
+// canonical = false
+
+// The value of the omitted `init` of a delay whose value type is no number (W7-07, S-29, S-1104).
+// §11.4: "`init` は省略できる。省略すると値型の既定値 `T.default()` で始まる（数値は 0、浮動小数は
+// `+0.0`、`Bool` は `false`、配列とタプルは要素ごと、struct は宣言に `Default` を並べたもの。§6.4）".
+// §6.4: "struct の `Default` は、各フィールドの既定値を並べたものである（宣言に既定値を書いたフィールド
+// はその値で、型の `Default` を要らない。他のフィールドは型の `default()`）"; §6.3: "enum には `Default`
+// を並べられない。… `impl Default for Mode { rt fn default() -> Mode { Mode.Off } }` と手で書く".
+//
+// Every flow here starts from a default that is not what the first sample of the input would give,
+// so a start from the first value, or from a zero of the wrong shape, shows. The numbers are worked
+// out by hand in each test. `prev_default_types.onsa` has the Bool, the array, the tuple and the
+// struct with `prev~`; this file has the other delays, the nested shapes, the field defaults, the
+// hand-written `Default`, the alias and the generic struct. The numbers alone (which check today) are
+// in default_init_numbers.onsa.
+
+// ---- Bool, with a length
+
+@export
+pub flow delay_bool(x: F32 at sample) -> F32 at sample {
+  let b = delay~(x > 2.0, 2)
+  if b { 1.0 } else { 0.0 }
+}
+
+// The types of the boundary: a Bool and a channel array are signals of the delay as any other.
+@export
+pub flow bool_input(c: Bool at sample) -> Bool at sample {
+  prev~(c)
+}
+
+@export
+pub flow array_input(x: [F32; 2] at sample) -> [F32; 2] at sample {
+  delay~(x, 3)
+}
+
+// ---- arrays and tuples, element by element
+
+@export
+pub flow array_i32(k: I32 at sample) -> I32 at sample {
+  let p = prev~([k, k + 1])
+  p[0] * 10 + p[1]
+}
+
+// `+0.0` in each element: 1 / +0.0 is +inf, 1 / -0.0 would be -inf.
+@export
+pub flow array_f32_sign(x: F32 at sample) -> F32 at sample {
+  1.0 / prev~([x, x])[0]
+}
+
+@export
+pub flow array_f32_delay(x: F32 at sample) -> F32 at sample {
+  let d = delay~([x, -x], 3)
+  d[0] - d[1]
+}
+
+@export
+pub flow tuple_mixed(x: F32 at sample) -> F32 at sample {
+  let (a, flag, b) = prev~((x, x > 1.5, x * 2.0))
+  if flag { 10.0 + a + b } else { a - b }
+}
+
+@export
+pub flow array_of_arrays(x: F32 at sample) -> F32 at sample {
+  let m = prev~([[x, 1.0], [2.0, x]])
+  m[0][0] + m[0][1] + m[1][0] + m[1][1]
+}
+
+@export
+pub flow tuple_with_array(x: F32 at sample) -> F32 at sample {
+  let (a, v) = prev~((x, [x, x + 1.0]))
+  a * 100.0 + v[0] * 10.0 + v[1]
+}
+
+// An array of no element (S-1104) is left to `default_init_values.onsa` of `tests/spec/flow_semantics`: the C state
+// of a delay of `[F32; 0]` breaks its layout asserts (R-504).
+
+// ---- struct: the defaults of the fields and of the types
+
+pub struct Voice: Default {
+  gain: F32 = 0.5,
+  level: F32,
+  on: Bool = true,
+  steps: U32,
+}
+
+@export
+pub flow struct_field_defaults(x: F32 at sample) -> F32 at sample {
+  let v = prev~(Voice { gain: x, level: x * 2.0, on: x > 2.0, steps: 3 })
+  let gate = if v.on { 1000.0 } else { 0.0 }
+  v.gain * 100.0 + v.level + gate + F32.round_from(v.steps)
+}
+
+pub struct Inner: Default {
+  v: F32,
+  n: I32,
+}
+
+pub struct Outer: Default {
+  a: Inner,
+  t: [F32; 2],
+  k: F32 = 4.0,
+}
+
+@export
+pub flow struct_nested(x: F32 at sample) -> F32 at sample {
+  let o = prev~(Outer { a: Inner { v: x, n: 1 }, t: [x, x], k: x })
+  o.a.v + F32.round_from(o.a.n) + o.t[0] + o.k
+}
+
+// A field of a type with no `Default` takes the default of its declaration.
+pub struct Tagged: Default {
+  c: Char = 'k',
+  v: F32,
+}
+
+@export
+pub flow struct_char_field_with_default(x: F32 at sample) -> F32 at sample {
+  let t = prev~(Tagged { c: if x > 1.0 { 'q' } else { 'k' }, v: x })
+  if t.c == 'k' { t.v + 1.0 } else { t.v }
+}
+
+// A generic struct has the default of its field when the argument has one.
+pub struct Gen[T]: Default {
+  v: T,
+  k: F32 = 2.0,
+}
+
+@export
+pub flow generic_struct(x: F32 at sample) -> F32 at sample {
+  let g = prev~(Gen { v: x, k: 1.0 })
+  g.v + g.k * 10.0
+}
+
+// ---- the default is written by hand
+
+pub struct Pt {
+  x: F32,
+  y: F32,
+}
+
+impl Default for Pt {
+  rt fn default() -> Pt {
+    Pt { x: 1.0, y: -1.0 }
+  }
+}
+
+@export
+pub flow hand_struct_prev(x: F32 at sample) -> F32 at sample {
+  let p = prev~(Pt { x: x, y: x })
+  p.x * 10.0 + p.y
+}
+
+@export
+pub flow hand_struct_delay(x: F32 at sample) -> F32 at sample {
+  let p = delay~(Pt { x: x, y: x }, 2)
+  p.x * 10.0 + p.y
+}
+
+pub enum Mode {
+  Off,
+  On,
+}
+
+// The default of the enum is its second variant, so a start from the first one shows.
+impl Default for Mode {
+  rt fn default() -> Mode {
+    Mode.On
+  }
+}
+
+@export
+pub flow hand_enum(x: F32 at sample) -> F32 at sample {
+  let m = prev~(if x > 1.5 { Mode.On } else { Mode.Off })
+  match m {
+    Mode.On => 1.0,
+    Mode.Off => 0.0,
+  }
+}
+
+// ---- an alias is the type it names
+
+type Frame = [F32; 2]
+type Spot = Pt
+
+@export
+pub flow alias_array(x: F32 at sample) -> F32 at sample {
+  let f: Frame = [x, x + 1.0]
+  let p = prev~(f)
+  p[0] * 10.0 + p[1]
+}
+
+@export
+pub flow alias_hand_struct(x: F32 at sample) -> F32 at sample {
+  let s: Spot = Pt { x: x, y: x }
+  let q = prev~(s)
+  q.x * 10.0 + q.y
+}
+
+// ---- the tests
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

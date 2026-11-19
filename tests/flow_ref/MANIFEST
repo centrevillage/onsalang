@@ -2,6 +2,11 @@
 file branches_plain.tsv rows=16 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
 file branches_plain_match.tsv rows=4 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=1
 file branches_tilde.tsv rows=34 tests=11 evaluated=11 unavailable=0 skipped=0 waiting=1
+file default_init_explicit.tsv rows=16 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
+file default_init_module.tsv rows=5 tests=2 evaluated=1 unavailable=1 skipped=0 waiting=0
+file default_init_numbers.tsv rows=19 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
+file default_init_reset.tsv rows=30 tests=5 evaluated=5 unavailable=0 skipped=0 waiting=0
+file default_init_values.tsv rows=46 tests=19 evaluated=13 unavailable=5 skipped=1 waiting=0
 file enum_construct.tsv rows=21 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
 file enum_construct_match.tsv rows=9 tests=2 evaluated=2 unavailable=0 skipped=0 waiting=1
 file feedback.tsv rows=7 tests=2 evaluated=2 unavailable=0 skipped=0 waiting=0
@@ -53,7 +58,7 @@ file planar_structs.tsv rows=4 tests=3 evaluated=0 unavailable=0 skipped=3 waiti
 file planar_views.tsv rows=4 tests=3 evaluated=0 unavailable=0 skipped=3 waiting=0
 file poison_boundary.tsv rows=20 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
 file precedence_flow.tsv rows=26 tests=7 evaluated=7 unavailable=0 skipped=0 waiting=0
-file prev_default_types.tsv rows=13 tests=4 evaluated=4 unavailable=0 skipped=0 waiting=1
+file prev_default_types.tsv rows=13 tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
 file prev_delay.tsv rows=31 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
 file process_blocks.tsv rows=7 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=0
 file process_field_lengths.tsv rows=18 tests=11 evaluated=2 unavailable=0 skipped=9 waiting=0
@@ -69,4 +74,4 @@ file struct_pattern_rest_let.tsv rows=7 tests=2 evaluated=2 unavailable=0 skippe
 file struct_pattern_rest_match.tsv rows=4 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=1
 file vdelay_edges.tsv rows=64 tests=15 evaluated=14 unavailable=0 skipped=1 waiting=0
 file vdelay_varying_d.tsv rows=2 tests=1 evaluated=0 unavailable=0 skipped=1 waiting=0
-total files=70 rows=1424 tests=409 evaluated=356 unavailable=0 skipped=53 waiting=8
+total files=75 rows=1540 tests=446 evaluated=386 unavailable=6 skipped=54 waiting=7

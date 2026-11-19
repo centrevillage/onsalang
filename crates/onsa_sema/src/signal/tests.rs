@@ -2,7 +2,7 @@
 //! S-372): by its structure, the same answer as the note's walk, kept for
 //! the package through a type that holds itself, and a note of a few steps.
 
-use super::{fn_in, holds_fn};
+use super::{fn_in, holds_fn, no_default_signal};
 use crate::Analysis;
 use crate::def::DefKind;
 use crate::tests::{check, def};
@@ -109,4 +109,33 @@ fn the_path_of_a_note_has_a_limit() {
     let c3 = a.types.intern(Ty::Named(def(&a, "C3"), vec![]));
     let path = fn_in(&a, c3).expect("a function type in C3").path(&a);
     assert!(path.ends_with("the field `c` of `C1`, then the field `f` of `C0`"), "{path}");
+}
+
+/// The E0816 of a value type that is not written (§11.4): the predicate of
+/// the bound `Default` (§6.3), of the types of the elements whatever the
+/// length (S-1104), quiet of the error type (§18.1); at `span`, of the flow
+/// stage, with what is not written in the message.
+#[test]
+fn no_default_is_the_bound_of_the_types_of_the_elements() {
+    let decls = "pub struct D: Default { k: F32 = 1.0 }\npub struct N { k: F32 }\npub struct G[T]: Default { t: T }\n";
+    let table = [
+        (true, "Char | [Char; 0] | [Char; 2] | (F32, Char) | Option[F32] | N | G[Char] | [(F32, Char); 2]"),
+        (false, "F32 | Bool | () | [F32; 0] | (F32, Bool) | [[I32; 2]; 3] | D | G[F32] | Str"),
+    ];
+    let table: Vec<(&str, bool)> =
+        table.iter().flat_map(|&(none, ts)| ts.split('|').map(move |t| (t.trim(), none))).collect();
+    let src: String = table.iter().enumerate().map(|(i, (t, _))| format!("type K{i} = {t}\n")).collect();
+    let mut a = check(&format!("{decls}{src}"));
+    assert!(a.diagnostics.is_empty(), "{:?}", a.diagnostics);
+    let error = a.types.error();
+    let span = onsa_diag::Span::new(onsa_diag::FileId(0), 3, 5);
+    for (i, (t, none)) in table.iter().enumerate() {
+        let d = no_default_signal(&a, alias(&a, &format!("K{i}")), span, "the omitted `init` of `prev~`");
+        assert_eq!(d.is_some(), *none, "{t}");
+        if let Some(d) = d {
+            assert_eq!((d.code, d.stage, d.span), (onsa_diag::Code::E0816, onsa_diag::Stage::Flow, span), "{t}");
+            assert!(d.message.starts_with("the omitted `init` of `prev~`"), "{t}: {}", d.message);
+        }
+    }
+    assert!(no_default_signal(&a, error, span, "it").is_none());
 }

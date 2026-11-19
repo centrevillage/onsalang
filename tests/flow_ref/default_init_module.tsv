@@ -1,0 +1,5 @@
+# flow_ref 1 source=tests/spec/flow_semantics/default_init_module tests=2 evaluated=1 unavailable=1 skipped=0 waiting=0
+@ a derived Default with private fields starts a delay of another module
+render check.derived_other_module sr=0x41000000 in x=[0x40400000 0x40800000]
+out=[0x40a00000 0x42100000]
+? a hand-written Default of another module starts a delay for N samples	unavailable a hand-written Default

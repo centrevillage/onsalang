@@ -143,6 +143,10 @@ pub enum InitArg {
     Const(ConstValue),
     /// An `Init`-rate expression: stored in the state as `<name>.init` (S-06).
     Init(ExprId),
+    /// The omitted `init` of a value type other than a number that satisfies
+    /// `Default`: `T.default()` (§11.4, S-29), a constant made at `init` and
+    /// at `reset` with no storage.
+    Default,
 }
 
 /// The clocks of the expressions and the locals of a flow body (§11.3).
@@ -214,8 +218,8 @@ struct PendingLet {
 #[derive(Debug, Clone)]
 enum NodeKind {
     /// A built-in delay and its length (`N` of `delay~`, `MAX` of `vdelay~`,
-    /// 0 for `prev~`).
-    Delay(Delay, u32),
+    /// 0 for `prev~`), `None` when the check does not compute it (held).
+    Delay(Delay, Option<u32>),
     Instance(DefId),
 }
 

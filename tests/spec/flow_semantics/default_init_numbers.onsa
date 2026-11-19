@@ -1,0 +1,89 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.4", "§6.3"]
+
+// The omitted `init` of a delay of a number (§11.4: "数値は 0、浮動小数は `+0.0`"). These pass today:
+// the numbers are the omitted `init` the compiler takes. They are kept apart from
+// default_init_values.onsa, which needs W7-07, so that a failure here is not hidden by the list of
+// what waits for that work. `vdelay~` takes only a float (`T: Float`), so it has no other default.
+
+// `+0.0`: 1 / +0.0 is +inf, 1 / -0.0 would be -inf.
+pub flow f32_sign(x: F32 at sample) -> F32 at sample {
+  1.0 / prev~(x)
+}
+
+pub flow u32_delay(k: U32 at sample) -> U32 at sample {
+  delay~(k, 2)
+}
+
+pub flow i32_prev(k: I32 at sample) -> I32 at sample {
+  let p = prev~(k)
+  p - 1
+}
+
+// d = 1.5: k = 1, f = 0.5, y = 0.5 * e[n - 1] + 0.5 * e[n - 2].
+pub flow f32_vdelay(x: F32 at sample) -> F32 at sample {
+  vdelay~(x, 1.5, 4)
+}
+
+// d = 1: k = 1, f = 0, y = (1 - 0) * e[n - 1] + 0 * e[n - 2] = e[n - 1] (+0.0 before).
+pub flow f32_vdelay_sign(x: F32 at sample) -> F32 at sample {
+  1.0 / vdelay~(x, 1.0, 2)
+}
+
+pub flow f64_vdelay(x: F64 at sample) -> F64 at sample {
+  vdelay~(x, 1.0, 2)
+}
+
+test "an F32 starts from +0.0" {
+  // n0: 1 / +0.0 = +inf.  n1: 1 / x[0] = 1 / 4.
+  let xs: [F32; 2] = [4.0, 8.0]
+  let o = f32_sign.render(xs, 8.0)
+  assert o.out[0] == F32.INFINITY
+  assert o.out[1] == 0.25
+}
+
+test "delay~ of a U32 starts from 0 for N samples" {
+  let ks: [U32; 4] = [5, 6, 7, 8]
+  let o = u32_delay.render(ks, 8.0)
+  assert o.out[0] == 0
+  assert o.out[1] == 0
+  assert o.out[2] == 5
+  assert o.out[3] == 6
+}
+
+test "an I32 starts from 0" {
+  // p = 0, 3, 4 -> -1, 2, 3.
+  let ks: [I32; 3] = [3, 4, 5]
+  let o = i32_prev.render(ks, 8.0)
+  assert o.out[0] == -1
+  assert o.out[1] == 2
+  assert o.out[2] == 3
+}
+
+test "vdelay~ of an F32 starts from zeros" {
+  // x = 4 8 12 16: n0: 0.  n1: 0.5 * 4 + 0.5 * 0 = 2.  n2: 0.5 * 8 + 0.5 * 4 = 6.  n3: 0.5 * 12 + 0.5 * 8 = 10.
+  let xs: [F32; 4] = [4.0, 8.0, 12.0, 16.0]
+  let o = f32_vdelay.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == 6.0
+  assert o.out[3] == 10.0
+}
+
+test "vdelay~ starts from +0.0" {
+  // n0: 1 / (1 * 0.0 + 0 * 0.0) = +inf.  n1: 1 / x[0] = 1 / 4.
+  let xs: [F32; 2] = [4.0, 8.0]
+  let o = f32_vdelay_sign.render(xs, 8.0)
+  assert o.out[0] == F32.INFINITY
+  assert o.out[1] == 0.25
+}
+
+test "vdelay~ of an F64 starts from zeros" {
+  let xs: [F64; 3] = [2.0, 4.0, 6.0]
+  let o = f64_vdelay.render(xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == 4.0
+}

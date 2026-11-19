@@ -442,6 +442,10 @@ impl<'a> Frame<'a> {
             Ty::Array(t, Len::Const(n)) if *n as usize <= self.limits.most => {
                 Shape::Array(Box::new(self.shape(view.ty(*t), at)?), *n as usize)
             }
+            // The evaluator does not call a function of the program for a default.
+            Ty::Named(def, _) if view.default_by_hand(*def) => {
+                return Err(here(Fault::Unavailable("a hand-written Default")));
+            }
             Ty::Named(def, _) => {
                 let mut fields = Vec::new();
                 for f in view.struct_fields(*def).map_err(here)? {

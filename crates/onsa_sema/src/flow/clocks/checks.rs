@@ -90,6 +90,16 @@ impl Walk<'_> {
         }
     }
 
+    /// §11.3, S-1047 (d), R-458: the value of the delay at `e` is the value
+    /// of a signal, Copy in any place (E0810 at the delay, as of a `let`);
+    /// whether it is reported.
+    pub(super) fn check_delay_value(&mut self, e: ExprId) -> bool {
+        let span = self.ast.expr(e).span;
+        let Some(d) = crate::signal::not_copy_signal(self.a, self.ty_of(e), span) else { return false };
+        self.report(d.with_found(self.src(span)));
+        true
+    }
+
     /// What the rules of a flow body on the type of the value of `e` find
     /// wrong with it, in this order: the same in every mode, reported at
     /// `Check` ([`Self::report_fault`]). A value made with `Alloc` to drop is

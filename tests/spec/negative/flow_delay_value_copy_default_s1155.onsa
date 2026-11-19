@@ -1,0 +1,26 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§18.1"]
+
+// S-1155 (OPEN, a detail), the PROVISIONAL treatment: a delay whose value type is neither Copy nor
+// `Default` and whose `init` is omitted. §11.3 says the value type of a delay must be Copy (E0810, R-458)
+// and §11.4 says an omitted `init` of a type with no `Default` is E0816; §18.1 does not say which of the
+// two is reported when both apply at the same place. The provisional treatment is E0810. If S-1155 is
+// decided as E0816 or as both, this file changes with it; nothing else depends on it. The forms are the
+// unnamed delays of `Option[Str]` and `Result[Str, F32]` (no `Default`, Shared), made of static literals
+// only (§5.4) so that no E0805 of an owned value made by a call (§11.5) is at the same place.
+
+pub rt fn opt_len(o: Option[Str]) -> F32 { 1.0 }
+pub rt fn res_len(r: Result[Str, F32]) -> F32 { 1.0 }
+
+pub flow prev_option_str(x: F32 at sample) -> F32 at sample {
+  x * opt_len(prev~(if x > 0.0 { Some("a") } else { None }))     //~ E0810
+}
+
+pub flow delay_option_str(x: F32 at sample) -> F32 at sample {
+  x * opt_len(delay~(if x > 0.0 { Some("a") } else { None }, 3))   //~ E0810
+}
+
+pub flow prev_result_str(x: F32 at sample) -> F32 at sample {
+  x * res_len(prev~(if x > 0.0 { Ok("a") } else { Err(x) }))     //~ E0810
+}

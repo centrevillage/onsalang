@@ -1,0 +1,114 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.4", "§11.6", "§11.5", "§6.4"]
+
+// `reset` puts a delay back to its `init` value (§11.6), and for an omitted `init` that value is the
+// default of the type (§11.4: "省略すると値型の既定値 `T.default()` で始まる"), also in the replicas of
+// a `par~` (§11.5: a delay in the body is a separate instance in each replica) and across the calls
+// of `process` (the state is kept between the calls, §11.6). Each flow has a default that differs
+// from the value of the first sample and from a zero (a declared default, a true flag), so a
+// `reset` that restores the first value or a zero shows.
+
+pub struct Gate: Default {
+  open: Bool = true,
+  level: F32 = 0.5,
+  n: U32,
+}
+
+pub flow rs_default(x: F32 at sample) -> F32 at sample {
+  let g = prev~(Gate { open: x > 1.0, level: x, n: 2 })
+  let a = delay~([x, x + 1.0], 2)
+  let b = prev~(x > 1.0)
+  let top = if g.open { 100.0 } else { 0.0 }
+  let flag = if b { 1000.0 } else { 0.0 }
+  top + g.level + F32.round_from(g.n) + a[0] + a[1] + flag
+}
+
+// Expected for rs_default with x = 1 2 3 4 (g from x[n - 1], a from x[n - 2], b from x[n - 1]):
+//   n0: g = default { open, 0.5, 0 }: 100 + 0.5 + 0 ; a = [0, 0] ; b = false         = 100.5
+//   n1: g from x = 1: { false, 1, 2 }: 0 + 1 + 2 ; a = default 0 ; b = (1 > 1) false  = 3
+//   n2: g from x = 2: { true, 2, 2 }: 100 + 2 + 2 ; a = [1, 2] = 3 ; b = (2 > 1) true = 1107
+//   n3: g from x = 3: { true, 3, 2 }: 100 + 3 + 2 ; a = [2, 3] = 5 ; b = (3 > 1) true = 1110
+
+pub struct Lvl: Default {
+  level: F32 = 0.5,
+  other: F32,
+}
+
+// Replica 0 holds x, replica 1 holds 2 x, each from its own default level 0.5.
+pub flow par_default(x: F32 at sample) -> F32 at sample {
+  let q = par~ i in 0 ..< 2 { prev~(Lvl { level: x * F32.round_from(i + 1), other: x }) }
+  q[0].level + q[1].level * 10.0
+}
+
+// Expected for par_default with x = 1 2 4:
+//   n0: 0.5 + 0.5 * 10   = 5.5
+//   n1: 1 + 2 * 10       = 21        (from x = 1: level 1 and 2)
+//   n2: 2 + 4 * 10       = 42        (from x = 2: level 2 and 4)
+
+test "the first run starts from the defaults" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let o = rs_default.render(xs, 8.0)
+  assert o.out[0] == 100.5
+  assert o.out[1] == 3.0
+  assert o.out[2] == 1107.0
+  assert o.out[3] == 1110.0
+}
+
+test "reset puts the defaults back after a run" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let junk: [F32; 2] = [9.0, 9.0]
+  var out: [F32; 4] = [0.0; 4]
+  var scratch: [F32; 2] = [0.0; 2]
+  var st = rs_default.init(8.0)
+  rs_default.process(inout st, junk, inout scratch)
+  rs_default.reset(inout st)
+  rs_default.process(inout st, xs, inout out)
+  assert out[0] == 100.5
+  assert out[1] == 3.0
+  assert out[2] == 1107.0
+  assert out[3] == 1110.0
+}
+
+test "a run split into two process calls equals one call, and reset replays it" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  var out: [F32; 4] = [0.0; 4]
+  var again: [F32; 4] = [0.0; 4]
+  var st = rs_default.init(8.0)
+  rs_default.process(inout st, xs.slice(0, 1), inout out.slice(0, 1))
+  rs_default.process(inout st, xs.slice(1, 4), inout out.slice(1, 4))
+  assert out[0] == 100.5
+  assert out[1] == 3.0
+  assert out[2] == 1107.0
+  assert out[3] == 1110.0
+  rs_default.reset(inout st)
+  rs_default.process(inout st, xs, inout again)
+  assert again[0] == 100.5
+  assert again[1] == 3.0
+  assert again[2] == 1107.0
+  assert again[3] == 1110.0
+}
+
+test "each replica of a par~ starts from its own default" {
+  let xs: [F32; 3] = [1.0, 2.0, 4.0]
+  let o = par_default.render(xs, 8.0)
+  assert o.out[0] == 5.5
+  assert o.out[1] == 21.0
+  assert o.out[2] == 42.0
+}
+
+test "reset puts the replicas of a par~ back to their defaults" {
+  let xs: [F32; 3] = [1.0, 2.0, 4.0]
+  var first: [F32; 3] = [0.0; 3]
+  var again: [F32; 3] = [0.0; 3]
+  var st = par_default.init(8.0)
+  par_default.process(inout st, xs, inout first)
+  par_default.reset(inout st)
+  par_default.process(inout st, xs, inout again)
+  assert first[0] == 5.5
+  assert first[2] == 42.0
+  assert again[0] == 5.5
+  assert again[1] == 21.0
+  assert again[2] == 42.0
+}

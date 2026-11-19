@@ -1,0 +1,128 @@
+// onsa.toml
+// [test]
+// spec = ["§11.4", "§6.3", "§6.4", "§4.4"]
+
+// E0816: the omitted `init` of `prev~` / `delay~` when the value type does not satisfy `Default`
+// (§11.4: "省略すると値型の既定値 `T.default()` で始まる。… `T` が `Default` を満たさなければ E0816").
+// Which types satisfy `Default` is §6.3's table and §6.4's derive: `Char`, `Option[T]`, `Result[T, E]`
+// and a struct or an enum that does not list or write it do not; a tuple or an array does when its
+// elements do, whatever its length (S-1104: `[Char; 0]` does not); a generic struct does when its
+// arguments do. A written `init` has no E0816 (flow_semantics/default_init_explicit.onsa). `vdelay~`
+// takes only a float (`T: Float`, E0416 otherwise, §11.4), so its value type always has a `Default`.
+// The spec has no fix candidate for E0816 (the value of the `init` is the writer's), so the file does
+// not state `fixes`. One error per flow, the marker on the line of the delay (its column is not
+// asserted).
+
+pub struct Mixed {
+  a: F32,
+  c: Char,
+}
+
+pub enum Gear {
+  Low,
+  High,
+}
+
+pub struct Gen[T]: Default {
+  v: T,
+  k: F32 = 2.0,
+}
+
+type Letters = [Char; 2]
+
+pub rt fn pick(c: Char) -> F32 {
+  if c == 'a' { 1.0 } else { 0.0 }
+}
+
+// ---- types that have no Default
+
+pub flow char_prev(x: F32 at sample) -> F32 at sample {
+  let c: Char = if x > 0.0 { 'a' } else { 'b' }
+  let p = prev~(c)                                               //~ E0816
+  pick(p)
+}
+
+pub flow char_delay(x: F32 at sample) -> F32 at sample {
+  let c: Char = if x > 0.0 { 'a' } else { 'b' }
+  let p = delay~(c, 3)                                           //~ E0816
+  pick(p)
+}
+
+pub flow struct_without_default(x: F32 at sample) -> F32 at sample {
+  let c: Char = if x > 0.0 { 'a' } else { 'b' }
+  let m = prev~(Mixed { a: x, c: c })                            //~ E0816
+  m.a + pick(m.c)
+}
+
+pub flow enum_without_default(x: F32 at sample) -> F32 at sample {
+  let g = prev~(if x > 1.0 { Gear.High } else { Gear.Low })      //~ E0816
+  match g {
+    Gear.High => 1.0,
+    Gear.Low => 0.0,
+  }
+}
+
+pub flow option_delay(x: F32 at sample) -> F32 at sample {
+  let o: Option[F32] = if x > 1.0 { Some(x) } else { None }
+  let p = delay~(o, 2)                                           //~ E0816
+  match p {
+    Some(v) => v,
+    None => 0.0,
+  }
+}
+
+// ---- arrays and tuples: the elements decide, not the length
+
+pub flow empty_char_array(x: F32 at sample) -> F32 at sample {
+  let c: Char = if x > 0.0 { 'a' } else { 'b' }
+  let e = prev~([c; 0])                                          //~ E0816
+  x + F32.round_from(e.len())
+}
+
+pub flow char_array_of_two(x: F32 at sample) -> F32 at sample {
+  let c: Char = if x > 0.0 { 'a' } else { 'b' }
+  let e = prev~([c, c])                                          //~ E0816
+  pick(e[0]) + pick(e[1])
+}
+
+pub flow tuple_with_a_char(x: F32 at sample) -> F32 at sample {
+  let c: Char = if x > 0.0 { 'a' } else { 'b' }
+  let (a, ch) = prev~((x, c))                                    //~ E0816
+  a + pick(ch)
+}
+
+pub flow array_of_tuples_with_a_char(x: F32 at sample) -> F32 at sample {
+  let c: Char = if x > 0.0 { 'a' } else { 'b' }
+  let q = delay~([(x, c); 2], 2)                                 //~ E0816
+  q[0].0 + pick(q[1].1)
+}
+
+pub flow alias_of_a_char_array(x: F32 at sample) -> F32 at sample {
+  let c: Char = if x > 0.0 { 'a' } else { 'b' }
+  let l: Letters = [c, c]
+  let p = prev~(l)                                               //~ E0816
+  pick(p[0])
+}
+
+pub flow generic_struct_of_a_char(x: F32 at sample) -> F32 at sample {
+  let c: Char = if x > 0.0 { 'a' } else { 'b' }
+  let g = prev~(Gen { v: c, k: 1.0 })                            //~ E0816
+  pick(g.v) + g.k
+}
+
+// ---- where the delay is written
+
+pub flow in_the_output(x: F32 at sample) -> F32 at sample {
+  let c: Char = if x > 0.0 { 'a' } else { 'b' }
+  if prev~(c) == 'a' { 1.0 } else { 0.0 }                        //~ E0816
+}
+
+pub flow in_a_call_argument(x: F32 at sample) -> F32 at sample {
+  let c: Char = if x > 0.0 { 'a' } else { 'b' }
+  pick(prev~(c)) * x                                             //~ E0816
+}
+
+pub flow in_a_par_body(x: F32 at sample) -> [F32; 2] at sample {
+  let c: Char = if x > 0.0 { 'a' } else { 'b' }
+  par~ i in 0 ..< 2 { pick(prev~(c)) + x * F32.round_from(i) }   //~ E0816
+}

@@ -14,7 +14,7 @@
 // the node of each `let` and then the nodes inside its value):
 //   top.State:  a.prev_0, a.lp_0, a.prev_1, b, b.prev_0, c, c.lp_0, vs, _out.lp_0, _out.lp_1, _poisoned, _initialized
 //     (`a.prev_0` is `prev~(lp~(x), 0.0)`, `a.lp_0` the `lp~(x)` inside it, `a.prev_1` the `prev~(x, 1.0)`; `b` is the `lp~` that is the whole value;
-//      `c` is the `prev~` that is the whole value, `c.lp_0` the `lp~` inside it (a delay inside the first argument of a delay is E0200 in this version);
+//      `c` is the `prev~` that is the whole value, `c.lp_0` the `lp~` inside it;
 //      `_out.lp_0` is the outer `lp~` of the output, `_out.lp_1` the inner one)
 //   the graph of `top` has the nodes: a.prev_0, a.lp_0, a.prev_1, b.prev_0, c.lp_0, vs.lp_0, vs.prev_0, vs.lp_1, _out.lp_0, _out.lp_1 (and the
 //   vertices of the `let`s `b`, `c`, `vs`; the label of a node without a name is the name without the qualification: `prev_0 = prev~: …`)

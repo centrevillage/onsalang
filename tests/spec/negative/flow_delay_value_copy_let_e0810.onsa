@@ -1,0 +1,29 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§12.4"]
+
+// E0810 of the value type of a delay bound to a `let` (§11.3: "flow の入出力と本体の `let` の値型（信号の
+// 値型）`T` は Copy でなければならない（E0810）"). This is the form that is an error today; the same
+// delays not bound to a name (R-458, W7-07) are in flow_delay_value_copy_e0810.onsa. Kept apart so that
+// the forms that pass today are not silenced by the list of what waits for W7-07. One error per flow,
+// the marker on the `let`.
+
+pub rt fn mk(x: F32) -> Str { "x" }
+pub rt fn str_len(s: Str) -> F32 { F32.round_from(s.len()) }
+pub rt fn pick_opt(x: F32) -> Option[Str] { Some("x") }
+pub rt fn opt_len(o: Option[Str]) -> F32 { 1.0 }
+
+pub flow prev_str_branch(x: F32 at sample) -> F32 at sample {
+  let s = prev~(if x > 0.0 { "a" } else { "bb" }, "z")           //~ E0810
+  x * str_len(s)
+}
+
+pub flow prev_str_call(x: F32 at sample) -> F32 at sample {
+  let s = prev~(mk(x), "z")                                      //~ E0810
+  x * str_len(s)
+}
+
+pub flow delay_option_str(x: F32 at sample) -> F32 at sample {
+  let o = delay~(pick_opt(x), 4, None)                           //~ E0810
+  x * opt_len(o)
+}

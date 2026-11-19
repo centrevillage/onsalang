@@ -7,7 +7,7 @@
 // W7-03 U1c/t, S-86, R-98 (§11.6): the number of a node that has no name. The kinds are the name of the built-in delay, the name of the flow without its path
 // (`lp`), and `par`. The number counts each kind alone inside each `let`, from 0, in the order in which the names of the calls come in the text. A `let` does
 // not change the numbers of another (`let a` with one more `prev~` does not move the `prev_k` of `b`), and a call that is the outer one of a nested pair
-// comes first (`lp~(lp~(x))`: the outer one is `lp_0`; a delay inside the first argument of a delay is E0200 in this version, so the pair is of a flow). The state of each flow (the internal `.buf` and `.w` of a `delay~` follow the node):
+// comes first (`lp~(lp~(x))`: the outer one is `lp_0`; the pairs here are of a flow). The state of each flow (the internal `.buf` and `.w` of a `delay~` follow the node):
 //
 //   spec_example: a.prev_0 (prev[F32]), a.lp_0, a.prev_1 (§11.6: `let a = prev~(lp~(x)) + prev~(x, 1.0)`)
 //   per_let:      a.prev_0, a.prev_1, b.prev_0, b.lp_0, b.prev_1, c.lp_0

@@ -1,0 +1,78 @@
+// onsa.toml
+// [package]
+// name = "c_lookback_host"
+// edition = "2026"
+//
+// [export]
+// prefix = "ns_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "poison"
+// provides = []
+//
+// [test]
+// mode = "test"
+// spec = ["§11.4"]
+//
+// [[test.host]]
+// name = "c_lookback_host"
+// target = "host"
+// flow = "c_lookback_host.nest"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 48000.0, status = 0 },
+//   { call = "process", params = {}, frames = 4, input = [1.0, 2.0, 3.0, 4.0], status = 0, output = [50.0, 50.0, 50.0, 12.0] },
+//   { call = "reset" },
+//   { call = "process", params = {}, frames = 2, input = [1.0, 2.0], status = 0, output = [50.0, 50.0] },
+//   { call = "process", params = {}, frames = 2, input = [3.0, 4.0], status = 0, output = [50.0, 12.0] },
+// ]
+//
+// [[test.host]]
+// name = "fb"
+// target = "host"
+// flow = "c_lookback_host.fb"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 48000.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [1.0, 2.0, 3.0], status = 0, output = [6.0, 8.0, 11.0] },
+//   { call = "reset" },
+//   { call = "process", params = {}, frames = 3, input = [1.0, 2.0, 3.0], status = 0, output = [6.0, 8.0, 11.0] },
+// ]
+//
+// [[test.host]]
+// name = "parnest"
+// target = "host"
+// flow = "c_lookback_host.parnest"
+// steps = [
+//   { call = "init", config = {}, sample_rate = 48000.0, status = 0 },
+//   { call = "process", params = {}, frames = 3, input = [1.0, 2.0, 3.0], status = 0, output = [110.0, 110.0, 110.0] },
+//   { call = "reset" },
+//   { call = "process", params = {}, frames = 3, input = [1.0, 2.0, 3.0], status = 0, output = [110.0, 110.0, 110.0] },
+// ]
+
+pub struct P: Default { a: F32 = 5.0, b: F32 }
+
+@export
+pub flow nest(x: F32 at sample) -> F32 at sample {
+  let q = delay~(prev~(P { a: x, b: x * 2.0 }), 2)
+  q.a * 10.0 + q.b
+}
+
+@export
+pub flow fb(x: F32 at sample) -> F32 at sample {
+  let y: P = P { a: x + prev~(^y).a, b: 0.0 }
+  y.a
+}
+
+@export
+pub flow parnest(x: F32 at sample) -> F32 at sample {
+  let r = par~ i in 0 ..< 2 { delay~(prev~(P { a: x, b: F32.round_from(i) }), 2) }
+  r[0].a * 10.0 + r[1].a * 10.0 - r[0].b - r[1].b - 10.0 + 10.0 + 10.0
+}
+
+test "t" {
+  let xs: [F32; 4] = [1.0, 2.0, 3.0, 4.0]
+  let o = nest.render(xs, 8.0)
+  assert o.out[3] == 12.0
+}

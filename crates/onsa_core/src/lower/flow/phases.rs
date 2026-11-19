@@ -55,7 +55,7 @@ fn init_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, ids: &[NodeI
         match &n.kind {
             PlanKind::Prev { init, ty, .. } => {
                 let t = lw.core_ty(*ty, &[], span)?;
-                let v = init_value(lw, cx, init, &t, span)?;
+                let v = init_value(lw, init, &t, span, |lw, e| lower_expr(lw, cx, e))?;
                 let v = materialize(cx, v, out, &format!("{name}.init"));
                 if info.field(at(Part::Init)).is_some() {
                     assign(out, &sfield(lw, info, state, at(Part::Init), span)?, v.clone())?;
@@ -65,7 +65,7 @@ fn init_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, ids: &[NodeI
             PlanKind::Delay { init, ty, .. } | PlanKind::Vdelay { init, ty, .. } => {
                 let t = lw.core_ty(*ty, &[], span)?;
                 let len = ring_len(&n.kind, span)?;
-                let v = init_value(lw, cx, init, &t, span)?;
+                let v = init_value(lw, init, &t, span, |lw, e| lower_expr(lw, cx, e))?;
                 let v = materialize(cx, v, out, &format!("{name}.init"));
                 if info.field(at(Part::Init)).is_some() {
                     assign(out, &sfield(lw, info, state, at(Part::Init), span)?, v.clone())?;
@@ -124,19 +124,13 @@ fn reset_nodes(lw: &mut Lowerer, cx: &mut FnCx, out: &mut Vec<Stmt>, ids: &[Node
         match &n.kind {
             PlanKind::Prev { init, ty, .. } => {
                 let t = lw.core_ty(*ty, &[], span)?;
-                let v = match init {
-                    InitArg::Const(c) => lw.const_value_expr(c, &t, span)?,
-                    InitArg::Init(_) => sfield(lw, info, state, at(Part::Init), span)?,
-                };
+                let v = init_value(lw, init, &t, span, |lw, _| sfield(lw, info, state, at(Part::Init), span))?;
                 assign(out, &sfield(lw, info, state, at(Part::Own), span)?, v)?;
             }
             PlanKind::Delay { init, ty, .. } | PlanKind::Vdelay { init, ty, .. } => {
                 let t = lw.core_ty(*ty, &[], span)?;
                 let len = ring_len(&n.kind, span)?;
-                let v = match init {
-                    InitArg::Const(c) => lw.const_value_expr(c, &t, span)?,
-                    InitArg::Init(_) => sfield(lw, info, state, at(Part::Init), span)?,
-                };
+                let v = init_value(lw, init, &t, span, |lw, _| sfield(lw, info, state, at(Part::Init), span))?;
                 let buf = sfield(lw, info, state, at(Part::Buf), span)?;
                 let fill = Expr::new(buf.ty.clone(), span, ExprKind::Repeat { elem: Box::new(v), n: len });
                 assign(out, &buf, fill)?;

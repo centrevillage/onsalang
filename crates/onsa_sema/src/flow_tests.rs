@@ -497,6 +497,30 @@ fn e0813_e0815_delay_argument_rates() {
     assert!(matches!(top_kind(flow(&a, "f"), 0), PlanKind::Prev { init: InitArg::Init(_), .. }));
 }
 
+/// The omitted `init` (§11.4, S-29): a literal of a number, `Default` of
+/// another type that satisfies the bound, E0816 of one that does not; of a
+/// value type that is not Copy, E0810 alone (S-1155, provisional).
+#[test]
+fn the_omitted_init_is_the_default_of_the_value_type() {
+    let flow_of = |t: &str, e: &str| {
+        format!(
+            "pub rt fn k(v: {t}) -> F32 {{ 1.0 }}\npub flow f(x: F32 at sample) -> F32 at sample {{\n  x * k(prev~({e}))\n}}\n"
+        )
+    };
+    let a = ok(&flow_of("F32", "x"));
+    assert!(matches!(top_kind(flow(&a, "f"), 0), PlanKind::Prev { init: InitArg::Const(_), .. }));
+    let char = "if x > 0.0 { 'a' } else { 'b' }";
+    for (t, e) in [("Bool", "x > 0.0"), ("[F32; 2]", "[x, x]"), ("(F32, Bool)", "(x, x > 0.0)"), ("[F32; 0]", "[x; 0]")]
+    {
+        let a = ok(&flow_of(t, e));
+        assert!(matches!(top_kind(flow(&a, "f"), 0), PlanKind::Prev { init: InitArg::Default, .. }), "{t}");
+    }
+    assert_eq!(codes(&flow_of("Char", char)), vec![Code::E0816]);
+    assert_eq!(codes(&flow_of("[Char; 0]", &format!("[{char}; 0]"))), vec![Code::E0816]);
+    let some = "if x > 0.0 { Some(\"a\") } else { None }";
+    assert_eq!(codes(&flow_of("Option[Str]", some)), vec![Code::E0810]);
+}
+
 #[test]
 fn e0815_argument_rate_too_high() {
     assert_eq!(

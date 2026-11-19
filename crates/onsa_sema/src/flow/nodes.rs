@@ -77,7 +77,7 @@ impl NodeBuilder {
 
     /// The node of the delay or the instance call `e` at `span`. The `init`
     /// of a delay is the written one, else the [`default_init`] of its type,
-    /// whose E0200 is the error.
+    /// whose E0816 is the error.
     pub(super) fn node(
         &mut self,
         a: &Analysis,
@@ -94,8 +94,10 @@ impl NodeBuilder {
                 let init = match (&call.init, init_e) {
                     (Some(init), _) => init.clone(),
                     (None, Some(init_e)) => InitArg::Init(init_e),
-                    (None, None) => default_init(a, ty, span)?,
+                    (None, None) => default_init(a, ty, span, delay)?,
                 };
+                // A length the check does not compute (held) is read by no plan.
+                let len = len.unwrap_or_default();
                 match (delay, d_e) {
                     (Delay::Prev, _) => PlanKind::Prev { arg, init, ty },
                     (Delay::Fixed, _) => PlanKind::Delay { arg, n: len, init, ty },
@@ -125,16 +127,18 @@ impl NodeBuilder {
     }
 }
 
-/// The omitted `init` of a delay (§11.4, S-29): `T.default()`, which this
-/// representation holds for a number (`0`, `+0.0`) only (K-02, W7-07). A
-/// value of the error type is not known, so no diagnostic (§18.1, R-271).
-pub(super) fn default_init(a: &Analysis, ty: TyId, span: Span) -> Result<InitArg, Diagnostic> {
+/// The omitted `init` of the delay `of` (§11.4, S-29): `T.default()`, a
+/// literal for a number (`0`, `+0.0`), else made of the type in Core, and
+/// the E0816 of a type that does not satisfy `Default`
+/// ([`crate::signal::no_default_signal`]). A value of the error type is not
+/// known, so no diagnostic (§18.1, R-271).
+pub(super) fn default_init(a: &Analysis, ty: TyId, span: Span, of: Delay) -> Result<InitArg, Diagnostic> {
     match a.types.get(ty) {
         Ty::Int(_) | Ty::Error => Ok(InitArg::Const(ConstValue::Int(0))),
         Ty::Float(_) => Ok(InitArg::Const(ConstValue::Float(0.0))),
-        _ => {
-            let shown = a.display_type(ty);
-            Err(Feature::DefaultInit.diagnostic(Stage::Flow, span, &[&shown]))
-        }
+        _ => match crate::signal::no_default_signal(a, ty, span, &format!("the omitted `init` of `{}~`", of.name())) {
+            Some(d) => Err(d),
+            None => Ok(InitArg::Default),
+        },
     }
 }

@@ -24,9 +24,9 @@ pub(super) fn floats(xs: &[f32]) -> Vec<Value> {
 
 /// The outputs of the flow `name` for the columns `cols` (by name), the inputs of `init` and the `block` ones given, in
 /// calls of `calls` frames each (a call takes the next frames of every column; the sum of `calls` is their length).
-/// `clean` is false for a source that has diagnostics of this version's check (E0200 of a form the spec has: an omitted
-/// `init` of a type that is not a number, a delay length that is a constant expression and not a literal): the
-/// evaluator has the form, and its tables are whole, so it runs.
+/// `clean` is false for a source that has diagnostics of this version's check (E0200 of a form the spec has: a delay
+/// length that is a constant expression and not a literal): the evaluator has the form, and its tables are whole, so it
+/// runs.
 pub(super) fn run_with(
     clean: bool,
     src: &str,
@@ -580,8 +580,8 @@ flow under(x: F32 at sample) -> F32 at sample {{ prev~(x) + delay~(x, 1000) + de
 fn the_default_of_a_type_over_the_limit_is_unavailable_and_not_made() {
     // §6.4 gives the default of an array of arrays element by element: `[[F32; 1024]; 1025]` is 1 049 600 places, over
     // the 2^20 of `Limits::most` though each level is under it, and a tuple of two arrays of 600 000 is 1 200 000. They
-    // stop at `init` with `Unavailable`, before the array is made. The check gives E0200 to the omitted `init` of a type
-    // that is not a number, so the source is not clean (the evaluator has the form, `go_open`).
+    // stop at `init` with `Unavailable`, before the array is made. The source is clean (the omitted `init` of an array
+    // is its default since W7-07 U2).
     let src = "flow big(x: F32 at sample) -> F32 at sample {
   let a = prev~([[x; 1024]; 1025])
   a[0][0]
@@ -595,7 +595,7 @@ flow small(x: F32 at sample) -> F32 at sample {
   a[0][0]
 }";
     for (name, ok) in [("big", false), ("two", false), ("small", true)] {
-        let r = init_stop(false, src, name);
+        let r = init_stop(true, src, name);
         match (ok, &r) {
             (true, None) | (false, Some((Fault::Unavailable(_), _))) => {}
             _ => panic!("{name}: {r:?}"),

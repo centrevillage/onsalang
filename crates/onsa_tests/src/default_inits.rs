@@ -94,8 +94,10 @@ fn lexed_calls(text: &str, tokens: &[Token]) -> usize {
 }
 
 /// Whether `e` is a literal whose value is the default of its type (§11.4:
-/// 0, `+0.0`, `false`), through parentheses. A negative literal (`-0`) is
-/// its value: the integer 0, but the float `-0.0`, which is not the default.
+/// 0, `+0.0`, `false`, and an array, a repeat or a tuple of them, S-550),
+/// through parentheses. A negative literal (`-0`) is its value: the integer
+/// 0, but the float `-0.0`, which is not the default. The empty `[]` is not
+/// one: it is the `init` of an array whose element has no default (S-1104).
 fn equals_default(ast: &Ast, e: ExprId) -> bool {
     let e = ast.without_parens(e);
     if let Some(lit) = ast.negated_literal(e) {
@@ -107,6 +109,9 @@ fn equals_default(ast: &Ast, e: ExprId) -> bool {
             onsa_syntax::float_value(text, FloatWidth::F64).is_ok_and(|v| v == 0.0 && v.is_sign_positive())
         }
         ExprKind::Lit(Lit::Bool(b)) => !b,
+        ExprKind::Array(es) => !es.is_empty() && es.iter().all(|&x| equals_default(ast, x)),
+        ExprKind::Tuple(es) => es.iter().all(|&x| equals_default(ast, x)),
+        ExprKind::Repeat { elem, .. } => equals_default(ast, *elem),
         _ => false,
     }
 }
@@ -134,6 +139,20 @@ mod tests {
             assert_eq!(inits(&format!("  prev~(x, {init})")), [init], "{init}");
         }
         assert_eq!(inits("  delay~(x, 4, 0.0) + vdelay~(x, x, 8, 0.0)"), ["0.0", "0.0"]);
+        // S-550: an array, a repeat and a tuple of them, nested and in parentheses; `()` is a tuple of none
+        for init in [
+            "[0.0, 0.0]",
+            "[0.0; 4]",
+            "[(0); N]",
+            "(0.0, false)",
+            "([0, -0], (0.0))",
+            "[[0.0; 2]; 3]",
+            "(([false]))",
+            "[(0.0, [0; 2])]",
+            "()",
+        ] {
+            assert_eq!(inits(&format!("  prev~(x, {init})")), [init], "{init}");
+        }
         // a spelling of §2.4 that is E0020 has no value (`00`, `0_0`, `017`), and is not one
         for init in ["00", "0_0", "0o0"] {
             assert!(inits(&format!("  prev~(x, {init})")).is_empty(), "{init}");
@@ -147,6 +166,13 @@ mod tests {
     fn other_inits_and_the_omitted_form_are_not() {
         for init in
             ["-0.0", "-(0.0)", "-0e3", "1", "1.0", "0.5", "1e-50", "0x1", "true", "s", "-s", "0 + 0", "!true", "x"]
+        {
+            assert!(inits(&format!("  prev~(x, {init})")).is_empty(), "{init}");
+        }
+        // S-550: the empty `[]` (the `init` of an array whose element has no default, S-1104), an element that is
+        // not the default, a named constant, a struct literal
+        for init in
+            ["[]", "[0.0, 1.0]", "[-0.0; 4]", "(0.0, true)", "[[]]", "([], 0)", "[ZERO; 2]", "(0.0, s)", "P { x: 0.0 }"]
         {
             assert!(inits(&format!("  prev~(x, {init})")).is_empty(), "{init}");
         }
