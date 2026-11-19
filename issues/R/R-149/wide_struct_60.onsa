@@ -1,0 +1,65 @@
+pub struct S0: Default { v: F32 }
+pub struct S1: Default { a: S0, b: S0 }
+pub struct S2: Default { a: S1, b: S1 }
+pub struct S3: Default { a: S2, b: S2 }
+pub struct S4: Default { a: S3, b: S3 }
+pub struct S5: Default { a: S4, b: S4 }
+pub struct S6: Default { a: S5, b: S5 }
+pub struct S7: Default { a: S6, b: S6 }
+pub struct S8: Default { a: S7, b: S7 }
+pub struct S9: Default { a: S8, b: S8 }
+pub struct S10: Default { a: S9, b: S9 }
+pub struct S11: Default { a: S10, b: S10 }
+pub struct S12: Default { a: S11, b: S11 }
+pub struct S13: Default { a: S12, b: S12 }
+pub struct S14: Default { a: S13, b: S13 }
+pub struct S15: Default { a: S14, b: S14 }
+pub struct S16: Default { a: S15, b: S15 }
+pub struct S17: Default { a: S16, b: S16 }
+pub struct S18: Default { a: S17, b: S17 }
+pub struct S19: Default { a: S18, b: S18 }
+pub struct S20: Default { a: S19, b: S19 }
+pub struct S21: Default { a: S20, b: S20 }
+pub struct S22: Default { a: S21, b: S21 }
+pub struct S23: Default { a: S22, b: S22 }
+pub struct S24: Default { a: S23, b: S23 }
+pub struct S25: Default { a: S24, b: S24 }
+pub struct S26: Default { a: S25, b: S25 }
+pub struct S27: Default { a: S26, b: S26 }
+pub struct S28: Default { a: S27, b: S27 }
+pub struct S29: Default { a: S28, b: S28 }
+pub struct S30: Default { a: S29, b: S29 }
+pub struct S31: Default { a: S30, b: S30 }
+pub struct S32: Default { a: S31, b: S31 }
+pub struct S33: Default { a: S32, b: S32 }
+pub struct S34: Default { a: S33, b: S33 }
+pub struct S35: Default { a: S34, b: S34 }
+pub struct S36: Default { a: S35, b: S35 }
+pub struct S37: Default { a: S36, b: S36 }
+pub struct S38: Default { a: S37, b: S37 }
+pub struct S39: Default { a: S38, b: S38 }
+pub struct S40: Default { a: S39, b: S39 }
+pub struct S41: Default { a: S40, b: S40 }
+pub struct S42: Default { a: S41, b: S41 }
+pub struct S43: Default { a: S42, b: S42 }
+pub struct S44: Default { a: S43, b: S43 }
+pub struct S45: Default { a: S44, b: S44 }
+pub struct S46: Default { a: S45, b: S45 }
+pub struct S47: Default { a: S46, b: S46 }
+pub struct S48: Default { a: S47, b: S47 }
+pub struct S49: Default { a: S48, b: S48 }
+pub struct S50: Default { a: S49, b: S49 }
+pub struct S51: Default { a: S50, b: S50 }
+pub struct S52: Default { a: S51, b: S51 }
+pub struct S53: Default { a: S52, b: S52 }
+pub struct S54: Default { a: S53, b: S53 }
+pub struct S55: Default { a: S54, b: S54 }
+pub struct S56: Default { a: S55, b: S55 }
+pub struct S57: Default { a: S56, b: S56 }
+pub struct S58: Default { a: S57, b: S57 }
+pub struct S59: Default { a: S58, b: S58 }
+pub rt fn leaf(x: F32) -> S59 { S59.default() }
+pub flow f(x: F32 at sample) -> F32 at sample {
+  let p = prev~(leaf(x))
+  p.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.v
+}

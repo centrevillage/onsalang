@@ -1,0 +1,6 @@
+@export
+pub flow empty_array(x: F32 at sample) -> F32 at sample {
+  let z: [F32; 0] = ([] at sample)
+  let p = prev~(z, [])
+  x + F32.round_from(p.len())
+}
