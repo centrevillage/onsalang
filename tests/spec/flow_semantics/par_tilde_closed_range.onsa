@@ -7,8 +7,8 @@
 // a ..= b { e }` は `N = b - a + 1` 個並べる"). The index goes from `a` to `b` itself, `a ..= a` is one
 // replica (the range is empty only when `a > b`, E0808), `0 ..= N - 1` and `0 ..< N` give the same
 // replication, every replica has its own instance, and the `~` is written as for the half-open range.
-// Not made until W7-14 (the closed range in the header of a `par` is E0200 before it), so this file is
-// on the list of what is waited for (until W7-14); the half-open range is in par_tilde_forms.onsa. The ends
+// Made by W7-14 U3 (the closed range in the header of a `par` was E0200 before it); the half-open range
+// is in par_tilde_forms.onsa. The ends
 // of `U32`, the named ends, the empty range (E0808) and the count that does not fit are in
 // par_closed_edges.onsa, par_closed_forms.onsa, negative/par_closed_empty.onsa and
 // negative/par_closed_count_overflow.onsa.

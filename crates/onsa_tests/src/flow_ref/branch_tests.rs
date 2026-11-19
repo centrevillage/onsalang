@@ -177,7 +177,6 @@ flow wide(x: F64 at sample) -> F64 at sample {
 }
 
 #[test]
-#[ignore = "W7-14: the check gives the head `a ..= b` of a `par~` E0200 and the tables of the body are not whole"]
 fn a_closed_range_has_one_replica_more_and_ends_at_b() {
     // §11.5: `par~ i in a ..= b { e }` is `b - a + 1` replicas, the last with i = b: `0 ..= 2` is [0, 1, 2] and `5 ..= 5` one.
     let src = "flow closed(x: F64 at sample) -> [F64; 3] at sample { par~ i in 0 ..= 2 { ((i) as F64) + x } }
