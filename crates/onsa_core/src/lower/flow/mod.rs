@@ -205,17 +205,17 @@ struct Input {
 }
 
 /// The inputs of the flow `fd` of the plan `info`: the one place the
-/// lowering reads their stages and their places. One in error or of
-/// another stage than those of the phases is an internal error.
+/// lowering reads their stages and their places. One of no stage of the
+/// phases is an internal error (of a package with no diagnostic, none).
 fn inputs(info: &FlowInfo, fd: &FlowDef, span: Span) -> R<Vec<Input>> {
     if info.inputs.len() != fd.inputs.len() {
         return Err(internal(span, "a plan of another number of inputs than its flow"));
     }
     let mut count = [0u32; 3];
     let one = |(&local, decl): (&onsa_sema::LocalId, &FlowInput)| {
-        let stage = info.own_stage(local).filter(|_| decl.clock != Clock::Error);
+        let stage = info.own_stage(local);
         let Some(phase) = stage.and_then(Phase::of) else {
-            return Err(internal(decl.span, format!("an input of the clock {:?}", decl.clock)));
+            return Err(internal(decl.span, format!("an input of the stage {stage:?}")));
         };
         let at = count[phase as usize];
         count[phase as usize] += 1;

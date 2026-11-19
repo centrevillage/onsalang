@@ -11,8 +11,6 @@ pub flow wrapped_in_parentheses(
     _initialized: 1 bytes, align 1, fast  // offset 5
   pub struct wrapped_in_parentheses.Rendered  // Affine
     out: Buf[F32]
-  pub const wrapped_in_parentheses.SIZE: U32 = 8
-  pub const wrapped_in_parentheses.BULK_SIZE: U32 = 0
   pub fn wrapped_in_parentheses.init(sample_rate: F32) -> wrapped_in_parentheses.State
   pub rt fn wrapped_in_parentheses.reset(inout s: wrapped_in_parentheses.State)
   pub rt fn wrapped_in_parentheses.process(inout s: wrapped_in_parentheses.State, input: Span[F32], inout output: Span[F32])
@@ -28,8 +26,6 @@ pub flow wrapped_twice(
     _initialized: 1 bytes, align 1, fast  // offset 5
   pub struct wrapped_twice.Rendered  // Affine
     out: Buf[F32]
-  pub const wrapped_twice.SIZE: U32 = 8
-  pub const wrapped_twice.BULK_SIZE: U32 = 0
   pub fn wrapped_twice.init(sample_rate: F32) -> wrapped_twice.State
   pub rt fn wrapped_twice.reset(inout s: wrapped_twice.State)
   pub rt fn wrapped_twice.process(inout s: wrapped_twice.State, input: Span[F32], inout output: Span[F32])
@@ -45,8 +41,6 @@ pub flow wrapped_in_at(
     _initialized: 1 bytes, align 1, fast  // offset 5
   pub struct wrapped_in_at.Rendered  // Affine
     out: Buf[F32]
-  pub const wrapped_in_at.SIZE: U32 = 8
-  pub const wrapped_in_at.BULK_SIZE: U32 = 0
   pub fn wrapped_in_at.init(sample_rate: F32) -> wrapped_in_at.State
   pub rt fn wrapped_in_at.reset(inout s: wrapped_in_at.State)
   pub rt fn wrapped_in_at.process(inout s: wrapped_in_at.State, input: Span[F32], inout output: Span[F32])
@@ -62,8 +56,6 @@ pub flow not_wrapped(
     _initialized: 1 bytes, align 1, fast  // offset 5
   pub struct not_wrapped.Rendered  // Affine
     out: Buf[F32]
-  pub const not_wrapped.SIZE: U32 = 8
-  pub const not_wrapped.BULK_SIZE: U32 = 0
   pub fn not_wrapped.init(sample_rate: F32) -> not_wrapped.State
   pub rt fn not_wrapped.reset(inout s: not_wrapped.State)
   pub rt fn not_wrapped.process(inout s: not_wrapped.State, input: Span[F32], inout output: Span[F32])

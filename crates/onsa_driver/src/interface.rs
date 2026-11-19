@@ -25,7 +25,7 @@
 //!     { "kind": "flow", "name": "voice", "vis": "pub",
 //!       "inputs": [ { "name": "f0", "clock": "block", "ty": "F32",
 //!                     "param": { "min": 20.0, "max": 2000.0, "default": 110.0, "unit": "Hz", "scale": "log" } } ],
-//!       "out": "F32", "members": [ ...struct / const / fn items named `voice.State` etc... ] }
+//!       "out": "F32", "members": [ ...struct / fn items named `voice.State` etc... ] }
 //!   ] } ] }
 //! ```
 //!
@@ -35,7 +35,7 @@
 use std::collections::HashMap;
 use std::fmt::Write as _;
 
-use onsa_sema::def::{DefKind, Fields, FlowInput, FlowTy, GenericKind, ParamKey, ParamKind, ParamNumber};
+use onsa_sema::def::{DefKind, Fields, FlowDef, FlowInput, FlowTy, GenericKind, ParamKey, ParamKind, ParamNumber};
 use onsa_sema::ty::Env;
 use onsa_sema::{Analysis, ConstValue, DefId, ModId, Ty, TyId};
 use onsa_syntax::ast::{Mode, Vis};
@@ -556,7 +556,7 @@ impl Builder<'_> {
             .iter()
             .map(|i| FlowInputIface {
                 name: i.name.clone(),
-                clock: i.clock.shown(i.span),
+                clock: i.api_clock().shown(i.span),
                 ty: self.ty(i.ty, &[]),
                 parens: self.a.types.parens_before_uses(i.ty, true),
                 param: self.param_meta(i),
@@ -565,6 +565,9 @@ impl Builder<'_> {
         let layout = self.flow_layout(d);
         let mut members = Vec::new();
         for (name, m) in &f.members {
+            if !FlowDef::in_namespace(self.a.def(*m)) {
+                continue;
+            }
             let display = format!("{}.{}", def.name, name);
             let item = match &self.a.def(*m).kind {
                 DefKind::Struct(_) | DefKind::Enum(_) => {
@@ -589,18 +592,6 @@ impl Builder<'_> {
                                 default: None,
                             })
                             .collect();
-                    }
-                    item
-                }
-                DefKind::Const(_) => {
-                    let mut item = self.const_item(*m, &display);
-                    if let (Item::Const { value, .. }, Some(l)) = (&mut item, layout) {
-                        match name.as_str() {
-                            "SIZE" => *value = Some(l.size.to_string()),
-                            "BULK_SIZE" => *value = Some(l.bulk_size.to_string()),
-                            "ALIGN" => *value = Some(l.align.to_string()),
-                            _ => {}
-                        }
                     }
                     item
                 }
@@ -830,3 +821,6 @@ pub fn render_text(iface: &Interface) -> String {
     }
     out
 }
+
+#[cfg(test)]
+mod tests;

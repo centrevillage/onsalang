@@ -422,8 +422,8 @@ impl From<ParamNumber> for crate::consteval::ConstValue {
 pub struct FlowInput {
     pub name: String,
     /// The clock written after the type (§11.3); `Clock::Error` when it has
-    /// a diagnostic.
-    pub clock: Clock,
+    /// a diagnostic. Read through [`FlowInput::api_clock`] outside the checks.
+    pub(crate) clock: Clock,
     /// Value type (without the clock).
     pub ty: TyId,
     pub param: Option<ParamMeta>,
@@ -464,6 +464,17 @@ pub struct FlowDef {
     /// of its `sample` inputs and of its outputs (the fields of a struct),
     /// in order, that did not pair up, for the note of its E0302.
     pub unpaired: Option<(Vec<TyId>, Vec<TyId>)>,
+}
+
+impl FlowDef {
+    /// Whether the generated item `item` of a flow (of its `members` or
+    /// `absent`) is in the namespace of the flow (§11.6): the sizes of the
+    /// state (`SIZE`, `BULK_SIZE`, the consts of the list) are not, the C
+    /// header gives them (S-32, R-490). The one place of that rule, for the
+    /// names stage and `onsa interface`.
+    pub fn in_namespace(item: &Def) -> bool {
+        !matches!(item.kind, DefKind::Const(_))
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

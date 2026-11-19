@@ -11,8 +11,6 @@ pub flow qualified_call(
     _initialized: 1 bytes, align 1, fast  // offset 9
   pub struct qualified_call.Rendered  // Affine
     out: Buf[F32]
-  pub const qualified_call.SIZE: U32 = 12
-  pub const qualified_call.BULK_SIZE: U32 = 0
   pub fn qualified_call.init(sample_rate: F32) -> qualified_call.State
   pub rt fn qualified_call.reset(inout s: qualified_call.State)
   pub rt fn qualified_call.process(inout s: qualified_call.State, input: Span[F32], inout output: Span[F32])
@@ -28,8 +26,6 @@ pub flow imported_call(
     _initialized: 1 bytes, align 1, fast  // offset 9
   pub struct imported_call.Rendered  // Affine
     out: Buf[F32]
-  pub const imported_call.SIZE: U32 = 12
-  pub const imported_call.BULK_SIZE: U32 = 0
   pub fn imported_call.init(sample_rate: F32) -> imported_call.State
   pub rt fn imported_call.reset(inout s: imported_call.State)
   pub rt fn imported_call.process(inout s: imported_call.State, input: Span[F32], inout output: Span[F32])
@@ -46,8 +42,6 @@ pub flow both_calls(
     _initialized: 1 bytes, align 1, fast  // offset 17
   pub struct both_calls.Rendered  // Affine
     out: Buf[F32]
-  pub const both_calls.SIZE: U32 = 20
-  pub const both_calls.BULK_SIZE: U32 = 0
   pub fn both_calls.init(sample_rate: F32) -> both_calls.State
   pub rt fn both_calls.reset(inout s: both_calls.State)
   pub rt fn both_calls.process(inout s: both_calls.State, input: Span[F32], inout output: Span[F32])
@@ -63,8 +57,6 @@ pub flow whole_value(
     _initialized: 1 bytes, align 1, fast  // offset 9
   pub struct whole_value.Rendered  // Affine
     out: Buf[F32]
-  pub const whole_value.SIZE: U32 = 12
-  pub const whole_value.BULK_SIZE: U32 = 0
   pub fn whole_value.init(sample_rate: F32) -> whole_value.State
   pub rt fn whole_value.reset(inout s: whole_value.State)
   pub rt fn whole_value.process(inout s: whole_value.State, input: Span[F32], inout output: Span[F32])
@@ -82,8 +74,6 @@ pub flow lp(
     _initialized: 1 bytes, align 1, fast  // offset 5
   pub struct lp.Rendered  // Affine
     out: Buf[F32]
-  pub const lp.SIZE: U32 = 8
-  pub const lp.BULK_SIZE: U32 = 0
   pub fn lp.init(sample_rate: F32) -> lp.State
   pub rt fn lp.reset(inout s: lp.State)
   pub rt fn lp.process(inout s: lp.State, input: Span[F32], inout output: Span[F32])

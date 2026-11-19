@@ -11,8 +11,6 @@ pub flow lp(
     _initialized: 1 bytes, align 1, fast  // offset 5
   pub struct lp.Rendered  // Affine
     out: Buf[F32]
-  pub const lp.SIZE: U32 = 8
-  pub const lp.BULK_SIZE: U32 = 0
   pub fn lp.init(sample_rate: F32) -> lp.State
   pub rt fn lp.reset(inout s: lp.State)
   pub rt fn lp.process(inout s: lp.State, input: Span[F32], inout output: Span[F32])
@@ -30,8 +28,6 @@ pub flow whole_value(
     _initialized: 1 bytes, align 1, fast  // offset 25
   pub struct whole_value.Rendered  // Affine
     out: Buf[F32]
-  pub const whole_value.SIZE: U32 = 28
-  pub const whole_value.BULK_SIZE: U32 = 0
   pub fn whole_value.init(sample_rate: F32) -> whole_value.State
   pub rt fn whole_value.reset(inout s: whole_value.State)
   pub rt fn whole_value.process(inout s: whole_value.State, input: Span[F32], inout output: Span[F32])
@@ -47,8 +43,6 @@ pub flow inside_value(
     _initialized: 1 bytes, align 1, fast  // offset 25
   pub struct inside_value.Rendered  // Affine
     out: Buf[F32]
-  pub const inside_value.SIZE: U32 = 28
-  pub const inside_value.BULK_SIZE: U32 = 0
   pub fn inside_value.init(sample_rate: F32) -> inside_value.State
   pub rt fn inside_value.reset(inout s: inside_value.State)
   pub rt fn inside_value.process(inout s: inside_value.State, input: Span[F32], inout output: Span[F32])
@@ -64,8 +58,6 @@ pub flow two_kinds(
     _initialized: 1 bytes, align 1, fast  // offset 49
   pub struct two_kinds.Rendered  // Affine
     out: Buf[F32]
-  pub const two_kinds.SIZE: U32 = 52
-  pub const two_kinds.BULK_SIZE: U32 = 0
   pub fn two_kinds.init(sample_rate: F32) -> two_kinds.State
   pub rt fn two_kinds.reset(inout s: two_kinds.State)
   pub rt fn two_kinds.process(inout s: two_kinds.State, input: Span[F32], inout output: Span[F32])
@@ -81,8 +73,6 @@ pub flow nested(
     _initialized: 1 bytes, align 1, fast  // offset 49
   pub struct nested.Rendered  // Affine
     out: Buf[F32]
-  pub const nested.SIZE: U32 = 52
-  pub const nested.BULK_SIZE: U32 = 0
   pub fn nested.init(sample_rate: F32) -> nested.State
   pub rt fn nested.reset(inout s: nested.State)
   pub rt fn nested.process(inout s: nested.State, input: Span[F32], inout output: Span[F32])
@@ -98,8 +88,6 @@ pub flow in_output(
     _initialized: 1 bytes, align 1, fast  // offset 25
   pub struct in_output.Rendered  // Affine
     out: Buf[F32]
-  pub const in_output.SIZE: U32 = 28
-  pub const in_output.BULK_SIZE: U32 = 0
   pub fn in_output.init(sample_rate: F32) -> in_output.State
   pub rt fn in_output.reset(inout s: in_output.State)
   pub rt fn in_output.process(inout s: in_output.State, input: Span[F32], inout output: Span[F32])
@@ -116,8 +104,6 @@ pub flow with_a_let(
     _initialized: 1 bytes, align 1, fast  // offset 21
   pub struct with_a_let.Rendered  // Affine
     out: Buf[F32]
-  pub const with_a_let.SIZE: U32 = 24
-  pub const with_a_let.BULK_SIZE: U32 = 0
   pub fn with_a_let.init(sample_rate: F32) -> with_a_let.State
   pub rt fn with_a_let.reset(inout s: with_a_let.State)
   pub rt fn with_a_let.process(inout s: with_a_let.State, input: Span[F32], inout output: Span[F32])

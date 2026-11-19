@@ -11,8 +11,6 @@ pub flow lp(
     _initialized: 1 bytes, align 1, fast  // offset 5
   pub struct lp.Rendered  // Affine
     out: Buf[F32]
-  pub const lp.SIZE: U32 = 8
-  pub const lp.BULK_SIZE: U32 = 0
   pub fn lp.init(sample_rate: F32) -> lp.State
   pub rt fn lp.reset(inout s: lp.State)
   pub rt fn lp.process(inout s: lp.State, input: Span[F32], inout output: Span[F32])
@@ -39,8 +37,6 @@ pub flow top(
     _initialized: 1 bytes, align 1, fast  // offset 97
   pub struct top.Rendered  // Affine
     out: Buf[F32]
-  pub const top.SIZE: U32 = 100
-  pub const top.BULK_SIZE: U32 = 0
   pub fn top.init(sample_rate: F32) -> top.State
   pub rt fn top.reset(inout s: top.State)
   pub rt fn top.process(inout s: top.State, input: Span[F32], inout output: Span[F32])

@@ -13,8 +13,6 @@ pub flow second_par_is_counted(
     _initialized: 1 bytes, align 1, fast  // offset 9
   pub struct second_par_is_counted.Rendered  // Affine
     out: Buf[F32]
-  pub const second_par_is_counted.SIZE: U32 = 12
-  pub const second_par_is_counted.BULK_SIZE: U32 = 0
   pub fn second_par_is_counted.init(sample_rate: F32) -> second_par_is_counted.State
   pub rt fn second_par_is_counted.reset(inout s: second_par_is_counted.State)
   pub rt fn second_par_is_counted.process(inout s: second_par_is_counted.State, input: Span[F32], inout output: Span[F32])
@@ -29,8 +27,6 @@ pub flow stateless_alone(
     _initialized: 1 bytes, align 1, fast  // offset 1
   pub struct stateless_alone.Rendered  // Affine
     out: Buf[F32]
-  pub const stateless_alone.SIZE: U32 = 2
-  pub const stateless_alone.BULK_SIZE: U32 = 0
   pub fn stateless_alone.init(sample_rate: F32) -> stateless_alone.State
   pub rt fn stateless_alone.reset(inout s: stateless_alone.State)
   pub rt fn stateless_alone.process(inout s: stateless_alone.State, input: Span[F32], inout output: Span[F32])

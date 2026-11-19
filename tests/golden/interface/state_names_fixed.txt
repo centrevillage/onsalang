@@ -15,8 +15,6 @@ pub flow phase_step(
     f0: F32  // offset 0
   pub struct phase_step.Rendered  // Affine
     out: Buf[F32]
-  pub const phase_step.SIZE: U32 = 16
-  pub const phase_step.BULK_SIZE: U32 = 0
   pub fn phase_step.init(sample_rate: F32) -> phase_step.State
   pub rt fn phase_step.reset(inout s: phase_step.State)
   pub rt fn phase_step.process(inout s: phase_step.State, params: phase_step.Params, inout output: Span[F32])
@@ -34,8 +32,6 @@ pub flow block_let(
     k: F32  // offset 0
   pub struct block_let.Rendered  // Affine
     out: Buf[F32]
-  pub const block_let.SIZE: U32 = 8
-  pub const block_let.BULK_SIZE: U32 = 0
   pub fn block_let.init(sample_rate: F32) -> block_let.State
   pub rt fn block_let.reset(inout s: block_let.State)
   pub rt fn block_let.process(inout s: block_let.State, params: block_let.Params, input: Span[F32], inout output: Span[F32])
@@ -54,8 +50,6 @@ pub flow input_copy(
     k: F32  // offset 0
   pub struct input_copy.Rendered  // Affine
     out: Buf[F32]
-  pub const input_copy.SIZE: U32 = 8
-  pub const input_copy.BULK_SIZE: U32 = 0
   pub fn input_copy.init(sample_rate: F32) -> input_copy.State
   pub rt fn input_copy.reset(inout s: input_copy.State)
   pub rt fn input_copy.process(inout s: input_copy.State, params: input_copy.Params, input: Span[F32], inout output: Span[F32])
@@ -70,8 +64,6 @@ pub flow no_fixed_extra(
     _initialized: 1 bytes, align 1, fast  // offset 1
   pub struct no_fixed_extra.Rendered  // Affine
     out: Buf[F32]
-  pub const no_fixed_extra.SIZE: U32 = 2
-  pub const no_fixed_extra.BULK_SIZE: U32 = 0
   pub fn no_fixed_extra.init(sample_rate: F32) -> no_fixed_extra.State
   pub rt fn no_fixed_extra.reset(inout s: no_fixed_extra.State)
   pub rt fn no_fixed_extra.process(inout s: no_fixed_extra.State, input: Span[F32], inout output: Span[F32])

@@ -21,8 +21,6 @@ pub flow resonator(
     bw: F32  // offset 4
   pub struct resonator.Rendered  // Affine
     out: Buf[F32]
-  pub const resonator.SIZE: U32 = 28
-  pub const resonator.BULK_SIZE: U32 = 0
   pub fn resonator.init(sample_rate: F32) -> resonator.State
   pub rt fn resonator.reset(inout s: resonator.State)
   pub rt fn resonator.process(inout s: resonator.State, params: resonator.Params, input: Span[F32], inout output: Span[F32])
@@ -42,8 +40,6 @@ pub flow saw(
     f0: F32  // offset 0
   pub struct saw.Rendered  // Affine
     out: Buf[F32]
-  pub const saw.SIZE: U32 = 16
-  pub const saw.BULK_SIZE: U32 = 0
   pub fn saw.init(sample_rate: F32) -> saw.State
   pub rt fn saw.reset(inout s: saw.State)
   pub rt fn saw.process(inout s: saw.State, params: saw.Params, inout output: Span[F32])
@@ -67,8 +63,6 @@ pub flow smooth(
     x: F32  // offset 0
   pub struct smooth.Rendered  // Affine
     out: Buf[F32]
-  pub const smooth.SIZE: U32 = 16
-  pub const smooth.BULK_SIZE: U32 = 0
   pub fn smooth.init(cfg: smooth.Config, sample_rate: F32) -> smooth.State
   pub rt fn smooth.reset(inout s: smooth.State)
   pub rt fn smooth.process(inout s: smooth.State, params: smooth.Params, inout output: Span[F32])
@@ -98,8 +92,6 @@ pub flow voice(
     gain: F32  // offset 12
   pub struct voice.Rendered  // Affine
     out: Buf[F32]
-  pub const voice.SIZE: U32 = 92
-  pub const voice.BULK_SIZE: U32 = 0
   pub fn voice.init(sample_rate: F32) -> voice.State
   pub rt fn voice.reset(inout s: voice.State)
   pub rt fn voice.process(inout s: voice.State, params: voice.Params, inout output: Span[F32])
@@ -127,8 +119,6 @@ pub flow echo(
     feedback: F32  // offset 4
   pub struct echo.Rendered  // Affine
     out: Buf[F32]
-  pub const echo.SIZE: U32 = 384024
-  pub const echo.BULK_SIZE: U32 = 0
   pub fn echo.init(sample_rate: F32) -> echo.State
   pub rt fn echo.reset(inout s: echo.State)
   pub rt fn echo.process(inout s: echo.State, params: echo.Params, input: Span[F32], inout output: Span[F32])

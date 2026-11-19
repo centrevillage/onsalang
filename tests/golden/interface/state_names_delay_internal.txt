@@ -18,8 +18,6 @@ pub flow whole(
     d: F32  // offset 0
   pub struct whole.Rendered  // Affine
     out: Buf[F32]
-  pub const whole.SIZE: U32 = 68
-  pub const whole.BULK_SIZE: U32 = 0
   pub fn whole.init(sample_rate: F32) -> whole.State
   pub rt fn whole.reset(inout s: whole.State)
   pub rt fn whole.process(inout s: whole.State, params: whole.Params, input: Span[F32], inout output: Span[F32])
@@ -42,8 +40,6 @@ pub flow inside(
     d: F32  // offset 0
   pub struct inside.Rendered  // Affine
     out: Buf[F32]
-  pub const inside.SIZE: U32 = 52
-  pub const inside.BULK_SIZE: U32 = 0
   pub fn inside.init(sample_rate: F32) -> inside.State
   pub rt fn inside.reset(inout s: inside.State)
   pub rt fn inside.process(inout s: inside.State, params: inside.Params, input: Span[F32], inout output: Span[F32])
@@ -66,8 +62,6 @@ pub flow init_field(
     i0: F32  // offset 0
   pub struct init_field.Rendered  // Affine
     out: Buf[F32]
-  pub const init_field.SIZE: U32 = 32
-  pub const init_field.BULK_SIZE: U32 = 0
   pub fn init_field.init(cfg: init_field.Config, sample_rate: F32) -> init_field.State
   pub rt fn init_field.reset(inout s: init_field.State)
   pub rt fn init_field.process(inout s: init_field.State, input: Span[F32], inout output: Span[F32])
@@ -83,8 +77,6 @@ pub flow constant_init(
     _initialized: 1 bytes, align 1, fast  // offset 5
   pub struct constant_init.Rendered  // Affine
     out: Buf[F32]
-  pub const constant_init.SIZE: U32 = 8
-  pub const constant_init.BULK_SIZE: U32 = 0
   pub fn constant_init.init(sample_rate: F32) -> constant_init.State
   pub rt fn constant_init.reset(inout s: constant_init.State)
   pub rt fn constant_init.process(inout s: constant_init.State, input: Span[F32], inout output: Span[F32])
@@ -101,8 +93,6 @@ pub flow output(
     _initialized: 1 bytes, align 1, fast  // offset 25
   pub struct output.Rendered  // Affine
     out: Buf[F32]
-  pub const output.SIZE: U32 = 28
-  pub const output.BULK_SIZE: U32 = 0
   pub fn output.init(sample_rate: F32) -> output.State
   pub rt fn output.reset(inout s: output.State)
   pub rt fn output.process(inout s: output.State, input: Span[F32], inout output: Span[F32])

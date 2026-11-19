@@ -140,7 +140,6 @@ fn const_names(doc: &Value) -> BTreeSet<String> {
 /// §11.6, §12.4: the text has no `const` of a flow for the size of its state or its alignment, for each of the flows (a
 /// `block` input, a delay, a nested instance, two `sample` inputs, a `prev~`; `pub` and with no word).
 #[test]
-#[ignore = "W7-15 U4: R-490"]
 fn the_text_has_no_item_of_the_size_of_a_state_in_the_namespace_of_a_flow() {
     let d = source_dir("text_size");
     let text = interface_text(&d, &["m.onsa"]);
@@ -155,7 +154,6 @@ fn the_text_has_no_item_of_the_size_of_a_state_in_the_namespace_of_a_flow() {
 /// §11.6: the flow of the spec's own example (a `block` input and a `sample` input, `x * k`) alone in a file: no size in the
 /// namespace of `g`.
 #[test]
-#[ignore = "W7-15 U4: R-490"]
 fn a_flow_with_a_block_input_has_no_size_item_alone_in_its_file() {
     let d = Dir::pkg("text_size_g");
     d.write("g.onsa", "pub flow g(k: F32 at block, x: F32 at sample) -> F32 at sample {\n  x * k\n}\n");
@@ -171,7 +169,6 @@ fn a_flow_with_a_block_input_has_no_size_item_alone_in_its_file() {
 /// §11.6, §18.2: no item of the namespace is a constant: the constants of the text are the module's own, with the word they
 /// have in the source (the names of the namespace are fixed to the list of §11.6, which has no constant).
 #[test]
-#[ignore = "W7-15 U4: R-490"]
 fn the_constants_of_the_text_are_the_constants_of_the_module_only() {
     let d = source_dir("text_consts");
     let text = interface_text(&d, &["m.onsa"]);
@@ -223,7 +220,6 @@ fn a_priv_flow_is_not_listed_with_anything() {
 /// §15.1, §11.6: the package form (no file named) lists the flows of every module the same way: no size in the namespace of any,
 /// and the items of the list are still there.
 #[test]
-#[ignore = "W7-15 U4: R-490"]
 fn the_package_form_has_no_size_item_for_the_flows_of_any_module() {
     let d = Dir::pkg("package");
     d.write(
@@ -251,7 +247,6 @@ fn the_package_form_has_no_size_item_for_the_flows_of_any_module() {
 /// §11.6, §12.4: the items of `--json` have no object named for the size of a state or the alignment in the namespace of a
 /// flow, and no constant of a flow at all.
 #[test]
-#[ignore = "W7-15 U4: R-490"]
 fn the_json_has_no_item_of_the_size_of_a_state_in_the_namespace_of_a_flow() {
     let d = source_dir("json_size");
     let doc = interface_json(&d, &["m.onsa"]);

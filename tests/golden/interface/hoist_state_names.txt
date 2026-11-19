@@ -14,8 +14,6 @@ pub flow out_only(
     g: F32  // offset 0
   pub struct out_only.Rendered  // Affine
     out: Buf[F32]
-  pub const out_only.SIZE: U32 = 8
-  pub const out_only.BULK_SIZE: U32 = 0
   pub fn out_only.init(sample_rate: F32) -> out_only.State
   pub rt fn out_only.reset(inout s: out_only.State)
   pub rt fn out_only.process(inout s: out_only.State, params: out_only.Params, input: Span[F32], inout output: Span[F32])
@@ -34,8 +32,6 @@ pub flow init_only(
     k: F32  // offset 0
   pub struct init_only.Rendered  // Affine
     out: Buf[F32]
-  pub const init_only.SIZE: U32 = 8
-  pub const init_only.BULK_SIZE: U32 = 0
   pub fn init_only.init(cfg: init_only.Config, sample_rate: F32) -> init_only.State
   pub rt fn init_only.reset(inout s: init_only.State)
   pub rt fn init_only.process(inout s: init_only.State, input: Span[F32], inout output: Span[F32])
@@ -60,8 +56,6 @@ pub flow in_lets(
     g: F32  // offset 0
   pub struct in_lets.Rendered  // Affine
     out: Buf[F32]
-  pub const in_lets.SIZE: U32 = 20
-  pub const in_lets.BULK_SIZE: U32 = 0
   pub fn in_lets.init(cfg: in_lets.Config, sample_rate: F32) -> in_lets.State
   pub rt fn in_lets.reset(inout s: in_lets.State)
   pub rt fn in_lets.process(inout s: in_lets.State, params: in_lets.Params, input: Span[F32], inout output: Span[F32])
@@ -81,8 +75,6 @@ pub flow with_node(
     g: F32  // offset 0
   pub struct with_node.Rendered  // Affine
     out: Buf[F32]
-  pub const with_node.SIZE: U32 = 12
-  pub const with_node.BULK_SIZE: U32 = 0
   pub fn with_node.init(sample_rate: F32) -> with_node.State
   pub rt fn with_node.reset(inout s: with_node.State)
   pub rt fn with_node.process(inout s: with_node.State, params: with_node.Params, input: Span[F32], inout output: Span[F32])
@@ -101,8 +93,6 @@ pub flow outer_part(
     g: F32  // offset 0
   pub struct outer_part.Rendered  // Affine
     out: Buf[F32]
-  pub const outer_part.SIZE: U32 = 8
-  pub const outer_part.BULK_SIZE: U32 = 0
   pub fn outer_part.init(sample_rate: F32) -> outer_part.State
   pub rt fn outer_part.reset(inout s: outer_part.State)
   pub rt fn outer_part.process(inout s: outer_part.State, params: outer_part.Params, input: Span[F32], inout output: Span[F32])
@@ -121,8 +111,6 @@ pub flow a_let_of_its_own(
     g: F32  // offset 0
   pub struct a_let_of_its_own.Rendered  // Affine
     out: Buf[F32]
-  pub const a_let_of_its_own.SIZE: U32 = 8
-  pub const a_let_of_its_own.BULK_SIZE: U32 = 0
   pub fn a_let_of_its_own.init(sample_rate: F32) -> a_let_of_its_own.State
   pub rt fn a_let_of_its_own.reset(inout s: a_let_of_its_own.State)
   pub rt fn a_let_of_its_own.process(inout s: a_let_of_its_own.State, params: a_let_of_its_own.Params, input: Span[F32], inout output: Span[F32])
@@ -142,8 +130,6 @@ pub flow a_let_read_by_sample(
     g: F32  // offset 0
   pub struct a_let_read_by_sample.Rendered  // Affine
     out: Buf[F32]
-  pub const a_let_read_by_sample.SIZE: U32 = 12
-  pub const a_let_read_by_sample.BULK_SIZE: U32 = 0
   pub fn a_let_read_by_sample.init(sample_rate: F32) -> a_let_read_by_sample.State
   pub rt fn a_let_read_by_sample.reset(inout s: a_let_read_by_sample.State)
   pub rt fn a_let_read_by_sample.process(inout s: a_let_read_by_sample.State, params: a_let_read_by_sample.Params, input: Span[F32], inout output: Span[F32])

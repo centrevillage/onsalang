@@ -7,7 +7,7 @@ use onsa_diag::hash::HashMap;
 use onsa_diag::{Edit, Fix, Span};
 use onsa_syntax::ast::{Ident, Path, Vis};
 
-use crate::def::{Declared, Def, DefKind, ModId};
+use crate::def::{Declared, Def, DefKind, FlowDef, ModId};
 use crate::resolve::{Builtin, DepTarget, Entity, Modules, NameKind, Owner, ResolveError, UseAt, UseBinding};
 
 /// The tables a path outside a `use` reads after its head.
@@ -384,11 +384,8 @@ impl Modules {
                 let assoc = self.assoc_member(self.assoc.get(&d), &name.name)?;
                 match &def.kind {
                     DefKind::Flow(f) => {
-                        // The sizes of the state (`SIZE`, `BULK_SIZE`, the
-                        // consts of a flow) are not in its namespace: the C
-                        // header and `onsa interface` read them (§11.6, S-32).
                         let named = |(n, m): &&(String, crate::DefId)| {
-                            n == &name.name && !matches!(defs[m.0 as usize].kind, DefKind::Const(_))
+                            n == &name.name && FlowDef::in_namespace(&defs[m.0 as usize])
                         };
                         if let Some((_, m)) = f.members.iter().chain(&f.absent).find(named) {
                             return Ok(Entity::Member(*m));

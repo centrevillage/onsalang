@@ -15,8 +15,6 @@ pub flow guard_block(
     n: I32  // offset 0
   pub struct guard_block.Rendered  // Affine
     out: Buf[F32]
-  pub const guard_block.SIZE: U32 = 12
-  pub const guard_block.BULK_SIZE: U32 = 0
   pub fn guard_block.init(sample_rate: F32) -> guard_block.State
   pub rt fn guard_block.reset(inout s: guard_block.State)
   pub rt fn guard_block.process(inout s: guard_block.State, params: guard_block.Params, input: Span[F32], inout output: Span[F32])
@@ -39,8 +37,6 @@ pub flow init_guards_block(
     d: I32  // offset 0
   pub struct init_guards_block.Rendered  // Affine
     out: Buf[F32]
-  pub const init_guards_block.SIZE: U32 = 12
-  pub const init_guards_block.BULK_SIZE: U32 = 0
   pub fn init_guards_block.init(cfg: init_guards_block.Config, sample_rate: F32) -> init_guards_block.State
   pub rt fn init_guards_block.reset(inout s: init_guards_block.State)
   pub rt fn init_guards_block.process(inout s: init_guards_block.State, params: init_guards_block.Params, input: Span[F32], inout output: Span[F32])
@@ -64,8 +60,6 @@ pub flow block_guards_init(
     d: I32  // offset 0
   pub struct block_guards_init.Rendered  // Affine
     out: Buf[F32]
-  pub const block_guards_init.SIZE: U32 = 16
-  pub const block_guards_init.BULK_SIZE: U32 = 0
   pub fn block_guards_init.init(cfg: block_guards_init.Config, sample_rate: F32) -> block_guards_init.State
   pub rt fn block_guards_init.reset(inout s: block_guards_init.State)
   pub rt fn block_guards_init.process(inout s: block_guards_init.State, params: block_guards_init.Params, input: Span[F32], inout output: Span[F32])
@@ -84,8 +78,6 @@ pub flow sample_condition(
     d: I32  // offset 0
   pub struct sample_condition.Rendered  // Affine
     out: Buf[F32]
-  pub const sample_condition.SIZE: U32 = 8
-  pub const sample_condition.BULK_SIZE: U32 = 0
   pub fn sample_condition.init(sample_rate: F32) -> sample_condition.State
   pub rt fn sample_condition.reset(inout s: sample_condition.State)
   pub rt fn sample_condition.process(inout s: sample_condition.State, params: sample_condition.Params, input: Span[F32], inout output: Span[F32])
@@ -105,8 +97,6 @@ pub flow and_right(
     n: I32  // offset 0
   pub struct and_right.Rendered  // Affine
     out: Buf[F32]
-  pub const and_right.SIZE: U32 = 12
-  pub const and_right.BULK_SIZE: U32 = 0
   pub fn and_right.init(sample_rate: F32) -> and_right.State
   pub rt fn and_right.reset(inout s: and_right.State)
   pub rt fn and_right.process(inout s: and_right.State, params: and_right.Params, input: Span[F32], inout output: Span[F32])
@@ -129,8 +119,6 @@ pub flow else_if(
     e: I32  // offset 4
   pub struct else_if.Rendered  // Affine
     out: Buf[F32]
-  pub const else_if.SIZE: U32 = 12
-  pub const else_if.BULK_SIZE: U32 = 0
   pub fn else_if.init(sample_rate: F32) -> else_if.State
   pub rt fn else_if.reset(inout s: else_if.State)
   pub rt fn else_if.process(inout s: else_if.State, params: else_if.Params, input: Span[F32], inout output: Span[F32])
@@ -150,8 +138,6 @@ pub flow in_a_let(
     n: I32  // offset 0
   pub struct in_a_let.Rendered  // Affine
     out: Buf[F32]
-  pub const in_a_let.SIZE: U32 = 12
-  pub const in_a_let.BULK_SIZE: U32 = 0
   pub fn in_a_let.init(sample_rate: F32) -> in_a_let.State
   pub rt fn in_a_let.reset(inout s: in_a_let.State)
   pub rt fn in_a_let.process(inout s: in_a_let.State, params: in_a_let.Params, input: Span[F32], inout output: Span[F32])

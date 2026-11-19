@@ -12,8 +12,6 @@ pub flow prev_named(
     _initialized: 1 bytes, align 1, fast  // offset 9
   pub struct prev_named.Rendered  // Affine
     out: Buf[F32]
-  pub const prev_named.SIZE: U32 = 12
-  pub const prev_named.BULK_SIZE: U32 = 0
   pub fn prev_named.init(sample_rate: F32) -> prev_named.State
   pub rt fn prev_named.reset(inout s: prev_named.State)
   pub rt fn prev_named.process(inout s: prev_named.State, input: Span[F32], inout output: Span[F32])
@@ -29,8 +27,6 @@ pub flow lp(
     _initialized: 1 bytes, align 1, fast  // offset 5
   pub struct lp.Rendered  // Affine
     out: Buf[F32]
-  pub const lp.SIZE: U32 = 8
-  pub const lp.BULK_SIZE: U32 = 0
   pub fn lp.init(sample_rate: F32) -> lp.State
   pub rt fn lp.reset(inout s: lp.State)
   pub rt fn lp.process(inout s: lp.State, input: Span[F32], inout output: Span[F32])
@@ -47,8 +43,6 @@ pub flow lp_named(
     _initialized: 1 bytes, align 1, fast  // offset 17
   pub struct lp_named.Rendered  // Affine
     out: Buf[F32]
-  pub const lp_named.SIZE: U32 = 20
-  pub const lp_named.BULK_SIZE: U32 = 0
   pub fn lp_named.init(sample_rate: F32) -> lp_named.State
   pub rt fn lp_named.reset(inout s: lp_named.State)
   pub rt fn lp_named.process(inout s: lp_named.State, input: Span[F32], inout output: Span[F32])
@@ -67,8 +61,6 @@ pub flow par_named(
     _initialized: 1 bytes, align 1, fast  // offset 25
   pub struct par_named.Rendered  // Affine
     out: Buf[F32]
-  pub const par_named.SIZE: U32 = 28
-  pub const par_named.BULK_SIZE: U32 = 0
   pub fn par_named.init(sample_rate: F32) -> par_named.State
   pub rt fn par_named.reset(inout s: par_named.State)
   pub rt fn par_named.process(inout s: par_named.State, input: Span[F32], inout output: Span[F32])
@@ -93,8 +85,6 @@ pub flow fixed_input_names(
     bulk: F32  // offset 8
   pub struct fixed_input_names.Rendered  // Affine
     out: Buf[F32]
-  pub const fixed_input_names.SIZE: U32 = 16
-  pub const fixed_input_names.BULK_SIZE: U32 = 0
   pub fn fixed_input_names.init(sample_rate: F32) -> fixed_input_names.State
   pub rt fn fixed_input_names.reset(inout s: fixed_input_names.State)
   pub rt fn fixed_input_names.process(inout s: fixed_input_names.State, params: fixed_input_names.Params, input: Span[F32], inout output: Span[F32])
@@ -113,8 +103,6 @@ pub flow fixed_let_names(
     k: F32  // offset 0
   pub struct fixed_let_names.Rendered  // Affine
     out: Buf[F32]
-  pub const fixed_let_names.SIZE: U32 = 8
-  pub const fixed_let_names.BULK_SIZE: U32 = 0
   pub fn fixed_let_names.init(sample_rate: F32) -> fixed_let_names.State
   pub rt fn fixed_let_names.reset(inout s: fixed_let_names.State)
   pub rt fn fixed_let_names.process(inout s: fixed_let_names.State, params: fixed_let_names.Params, input: Span[F32], inout output: Span[F32])
@@ -134,8 +122,6 @@ pub flow fixed_stored_let(
     k: F32  // offset 0
   pub struct fixed_stored_let.Rendered  // Affine
     out: Buf[F32]
-  pub const fixed_stored_let.SIZE: U32 = 12
-  pub const fixed_stored_let.BULK_SIZE: U32 = 0
   pub fn fixed_stored_let.init(sample_rate: F32) -> fixed_stored_let.State
   pub rt fn fixed_stored_let.reset(inout s: fixed_stored_let.State)
   pub rt fn fixed_stored_let.process(inout s: fixed_stored_let.State, params: fixed_stored_let.Params, input: Span[F32], inout output: Span[F32])
@@ -155,8 +141,6 @@ pub flow hoist_0_let(
     k: F32  // offset 0
   pub struct hoist_0_let.Rendered  // Affine
     out: Buf[F32]
-  pub const hoist_0_let.SIZE: U32 = 12
-  pub const hoist_0_let.BULK_SIZE: U32 = 0
   pub fn hoist_0_let.init(sample_rate: F32) -> hoist_0_let.State
   pub rt fn hoist_0_let.reset(inout s: hoist_0_let.State)
   pub rt fn hoist_0_let.process(inout s: hoist_0_let.State, params: hoist_0_let.Params, input: Span[F32], inout output: Span[F32])
@@ -172,8 +156,6 @@ pub flow hoist(
     _initialized: 1 bytes, align 1, fast  // offset 5
   pub struct hoist.Rendered  // Affine
     out: Buf[F32]
-  pub const hoist.SIZE: U32 = 8
-  pub const hoist.BULK_SIZE: U32 = 0
   pub fn hoist.init(sample_rate: F32) -> hoist.State
   pub rt fn hoist.reset(inout s: hoist.State)
   pub rt fn hoist.process(inout s: hoist.State, input: Span[F32], inout output: Span[F32])
@@ -189,8 +171,6 @@ pub flow calls_hoist(
     _initialized: 1 bytes, align 1, fast  // offset 9
   pub struct calls_hoist.Rendered  // Affine
     out: Buf[F32]
-  pub const calls_hoist.SIZE: U32 = 12
-  pub const calls_hoist.BULK_SIZE: U32 = 0
   pub fn calls_hoist.init(sample_rate: F32) -> calls_hoist.State
   pub rt fn calls_hoist.reset(inout s: calls_hoist.State)
   pub rt fn calls_hoist.process(inout s: calls_hoist.State, input: Span[F32], inout output: Span[F32])
@@ -207,8 +187,6 @@ pub flow initialized_node(
     _initialized: 1 bytes, align 1, fast  // offset 9
   pub struct initialized_node.Rendered  // Affine
     out: Buf[F32]
-  pub const initialized_node.SIZE: U32 = 12
-  pub const initialized_node.BULK_SIZE: U32 = 0
   pub fn initialized_node.init(sample_rate: F32) -> initialized_node.State
   pub rt fn initialized_node.reset(inout s: initialized_node.State)
   pub rt fn initialized_node.process(inout s: initialized_node.State, input: Span[F32], inout output: Span[F32])

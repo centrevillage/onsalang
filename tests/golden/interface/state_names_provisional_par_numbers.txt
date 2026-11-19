@@ -11,8 +11,6 @@ pub flow lp(
     _initialized: 1 bytes, align 1, fast  // offset 5
   pub struct lp.Rendered  // Affine
     out: Buf[F32]
-  pub const lp.SIZE: U32 = 8
-  pub const lp.BULK_SIZE: U32 = 0
   pub fn lp.init(sample_rate: F32) -> lp.State
   pub rt fn lp.reset(inout s: lp.State)
   pub rt fn lp.process(inout s: lp.State, input: Span[F32], inout output: Span[F32])
@@ -32,8 +30,6 @@ pub flow inner_numbers(
     _initialized: 1 bytes, align 1, fast  // offset 17
   pub struct inner_numbers.Rendered  // Affine
     out: Buf[F32]
-  pub const inner_numbers.SIZE: U32 = 20
-  pub const inner_numbers.BULK_SIZE: U32 = 0
   pub fn inner_numbers.init(sample_rate: F32) -> inner_numbers.State
   pub rt fn inner_numbers.reset(inout s: inner_numbers.State)
   pub rt fn inner_numbers.process(inout s: inner_numbers.State, input: Span[F32], inout output: Span[F32])
@@ -51,8 +47,6 @@ pub flow lp_after_par(
     _initialized: 1 bytes, align 1, fast  // offset 29
   pub struct lp_after_par.Rendered  // Affine
     out: Buf[F32]
-  pub const lp_after_par.SIZE: U32 = 32
-  pub const lp_after_par.BULK_SIZE: U32 = 0
   pub fn lp_after_par.init(sample_rate: F32) -> lp_after_par.State
   pub rt fn lp_after_par.reset(inout s: lp_after_par.State)
   pub rt fn lp_after_par.process(inout s: lp_after_par.State, input: Span[F32], inout output: Span[F32])

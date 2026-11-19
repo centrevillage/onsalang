@@ -15,8 +15,6 @@ pub flow f(
     _initialized: 1 bytes, align 1, fast  // offset 5
   pub struct f.Rendered  // Affine
     out: Buf[F32]
-  pub const f.SIZE: U32 = 8
-  pub const f.BULK_SIZE: U32 = 0
   pub fn f.init(sample_rate: F32) -> f.State
   pub rt fn f.reset(inout s: f.State)
   pub rt fn f.process(inout s: f.State, input: Span[F32], inout output: Span[F32])
@@ -36,8 +34,6 @@ pub flow h(
   pub struct h.Rendered  // Affine
     l: Buf[F32]
     r: Buf[F32]
-  pub const h.SIZE: U32 = 8
-  pub const h.BULK_SIZE: U32 = 0
   pub fn h.init(sample_rate: F32) -> h.State
   pub rt fn h.reset(inout s: h.State)
   pub rt fn h.process(inout s: h.State, input: Span[F32], inout output: h.Out)
@@ -52,8 +48,6 @@ pub flow struct_pattern(
     _initialized: 1 bytes, align 1, fast  // offset 9
   pub struct struct_pattern.Rendered  // Affine
     out: Buf[F32]
-  pub const struct_pattern.SIZE: U32 = 12
-  pub const struct_pattern.BULK_SIZE: U32 = 0
   pub fn struct_pattern.init(sample_rate: F32) -> struct_pattern.State
   pub rt fn struct_pattern.reset(inout s: struct_pattern.State)
   pub rt fn struct_pattern.process(inout s: struct_pattern.State, input: Span[F32], inout output: Span[F32])
@@ -69,8 +63,6 @@ pub flow second_name(
     _initialized: 1 bytes, align 1, fast  // offset 9
   pub struct second_name.Rendered  // Affine
     out: Buf[F32]
-  pub const second_name.SIZE: U32 = 12
-  pub const second_name.BULK_SIZE: U32 = 0
   pub fn second_name.init(sample_rate: F32) -> second_name.State
   pub rt fn second_name.reset(inout s: second_name.State)
   pub rt fn second_name.process(inout s: second_name.State, input: Span[F32], inout output: Span[F32])
@@ -87,8 +79,6 @@ pub flow with_inner(
     _initialized: 1 bytes, align 1, fast  // offset 13
   pub struct with_inner.Rendered  // Affine
     out: Buf[F32]
-  pub const with_inner.SIZE: U32 = 16
-  pub const with_inner.BULK_SIZE: U32 = 0
   pub fn with_inner.init(sample_rate: F32) -> with_inner.State
   pub rt fn with_inner.reset(inout s: with_inner.State)
   pub rt fn with_inner.process(inout s: with_inner.State, input: Span[F32], inout output: Span[F32])
@@ -104,8 +94,6 @@ pub flow tuple_literal(
     _initialized: 1 bytes, align 1, fast  // offset 5
   pub struct tuple_literal.Rendered  // Affine
     out: Buf[F32]
-  pub const tuple_literal.SIZE: U32 = 8
-  pub const tuple_literal.BULK_SIZE: U32 = 0
   pub fn tuple_literal.init(sample_rate: F32) -> tuple_literal.State
   pub rt fn tuple_literal.reset(inout s: tuple_literal.State)
   pub rt fn tuple_literal.process(inout s: tuple_literal.State, input: Span[F32], inout output: Span[F32])
@@ -123,8 +111,6 @@ pub flow no_names(
     _initialized: 1 bytes, align 1, fast  // offset 25
   pub struct no_names.Rendered  // Affine
     out: Buf[F32]
-  pub const no_names.SIZE: U32 = 28
-  pub const no_names.BULK_SIZE: U32 = 0
   pub fn no_names.init(sample_rate: F32) -> no_names.State
   pub rt fn no_names.reset(inout s: no_names.State)
   pub rt fn no_names.process(inout s: no_names.State, input: Span[F32], inout output: Span[F32])
@@ -140,8 +126,6 @@ pub flow tuple_no_names(
     _initialized: 1 bytes, align 1, fast  // offset 5
   pub struct tuple_no_names.Rendered  // Affine
     out: Buf[F32]
-  pub const tuple_no_names.SIZE: U32 = 8
-  pub const tuple_no_names.BULK_SIZE: U32 = 0
   pub fn tuple_no_names.init(sample_rate: F32) -> tuple_no_names.State
   pub rt fn tuple_no_names.reset(inout s: tuple_no_names.State)
   pub rt fn tuple_no_names.process(inout s: tuple_no_names.State, input: Span[F32], inout output: Span[F32])
@@ -158,8 +142,6 @@ pub flow named_after(
     _initialized: 1 bytes, align 1, fast  // offset 17
   pub struct named_after.Rendered  // Affine
     out: Buf[F32]
-  pub const named_after.SIZE: U32 = 20
-  pub const named_after.BULK_SIZE: U32 = 0
   pub fn named_after.init(sample_rate: F32) -> named_after.State
   pub rt fn named_after.reset(inout s: named_after.State)
   pub rt fn named_after.process(inout s: named_after.State, input: Span[F32], inout output: Span[F32])

@@ -11,8 +11,6 @@ pub flow lp(
     _initialized: 1 bytes, align 1, fast  // offset 5
   pub struct lp.Rendered  // Affine
     out: Buf[F32]
-  pub const lp.SIZE: U32 = 8
-  pub const lp.BULK_SIZE: U32 = 0
   pub fn lp.init(sample_rate: F32) -> lp.State
   pub rt fn lp.reset(inout s: lp.State)
   pub rt fn lp.process(inout s: lp.State, input: Span[F32], inout output: Span[F32])
@@ -28,8 +26,6 @@ pub flow out_whole(
     _initialized: 1 bytes, align 1, fast  // offset 9
   pub struct out_whole.Rendered  // Affine
     out: Buf[F32]
-  pub const out_whole.SIZE: U32 = 12
-  pub const out_whole.BULK_SIZE: U32 = 0
   pub fn out_whole.init(sample_rate: F32) -> out_whole.State
   pub rt fn out_whole.reset(inout s: out_whole.State)
   pub rt fn out_whole.process(inout s: out_whole.State, input: Span[F32], inout output: Span[F32])
@@ -46,8 +42,6 @@ pub flow out_nested(
     _initialized: 1 bytes, align 1, fast  // offset 17
   pub struct out_nested.Rendered  // Affine
     out: Buf[F32]
-  pub const out_nested.SIZE: U32 = 20
-  pub const out_nested.BULK_SIZE: U32 = 0
   pub fn out_nested.init(sample_rate: F32) -> out_nested.State
   pub rt fn out_nested.reset(inout s: out_nested.State)
   pub rt fn out_nested.process(inout s: out_nested.State, input: Span[F32], inout output: Span[F32])
@@ -65,8 +59,6 @@ pub flow out_mixed(
     _initialized: 1 bytes, align 1, fast  // offset 17
   pub struct out_mixed.Rendered  // Affine
     out: Buf[F32]
-  pub const out_mixed.SIZE: U32 = 20
-  pub const out_mixed.BULK_SIZE: U32 = 0
   pub fn out_mixed.init(sample_rate: F32) -> out_mixed.State
   pub rt fn out_mixed.reset(inout s: out_mixed.State)
   pub rt fn out_mixed.process(inout s: out_mixed.State, input: Span[F32], inout output: Span[F32])
@@ -84,8 +76,6 @@ pub flow out_lets(
     _initialized: 1 bytes, align 1, fast  // offset 13
   pub struct out_lets.Rendered  // Affine
     out: Buf[F32]
-  pub const out_lets.SIZE: U32 = 16
-  pub const out_lets.BULK_SIZE: U32 = 0
   pub fn out_lets.init(sample_rate: F32) -> out_lets.State
   pub rt fn out_lets.reset(inout s: out_lets.State)
   pub rt fn out_lets.process(inout s: out_lets.State, input: Span[F32], inout output: Span[F32])
@@ -101,8 +91,6 @@ pub flow out_only_lets_nodes(
     _initialized: 1 bytes, align 1, fast  // offset 5
   pub struct out_only_lets_nodes.Rendered  // Affine
     out: Buf[F32]
-  pub const out_only_lets_nodes.SIZE: U32 = 8
-  pub const out_only_lets_nodes.BULK_SIZE: U32 = 0
   pub fn out_only_lets_nodes.init(sample_rate: F32) -> out_only_lets_nodes.State
   pub rt fn out_only_lets_nodes.reset(inout s: out_only_lets_nodes.State)
   pub rt fn out_only_lets_nodes.process(inout s: out_only_lets_nodes.State, input: Span[F32], inout output: Span[F32])
