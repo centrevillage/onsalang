@@ -1,0 +1,8 @@
+# flow_ref 1 source=tests/spec/flow_semantics/hoist_par_let_read_in_a_branch.onsa tests=1 evaluated=1 unavailable=0 skipped=0 waiting=0
+@ a par~ of block read in a branch decided per sample: v0[1] when x <= 0.5
+render hoist_par_let_read_in_a_branch.in_a_branch sr=0x41000000 params p=0x40400000 in x=[0x3f800000 0x3e800000]
+out=[0x40000000 0x40500000]
+render hoist_par_let_read_in_a_branch.in_two_branches sr=0x41000000 params p=0x40400000 in x=[0x3f800000 0x3e800000]
+out=[0x40e00000 0x40500000]
+render hoist_par_let_read_in_a_branch.in_a_delay sr=0x41000000 params p=0x40400000 in x=[0x3f800000 0x3e800000]
+out=[0x3f800000 0x40c80000]

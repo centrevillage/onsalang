@@ -35,6 +35,7 @@ file hoist_non_rt_calls.tsv rows=33 tests=9 evaluated=9 unavailable=0 skipped=0 
 file hoist_panic_frames.tsv rows=15 tests=4 evaluated=4 unavailable=0 skipped=0 waiting=0
 file hoist_panic_init.tsv rows=19 tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
 file hoist_panic_zero_frames.tsv rows=39 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
+file hoist_par_let_read_in_a_branch.tsv rows=8 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=0
 file hoist_par_non_rt_calls.tsv rows=36 tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
 file hoist_par_panic_reached.tsv rows=37 tests=7 evaluated=7 unavailable=0 skipped=0 waiting=0
 file hoist_par_panic_stage.tsv rows=62 tests=9 evaluated=9 unavailable=0 skipped=0 waiting=0
@@ -93,4 +94,4 @@ file struct_pattern_rest_let.tsv rows=7 tests=2 evaluated=2 unavailable=0 skippe
 file struct_pattern_rest_match.tsv rows=4 tests=1 evaluated=1 unavailable=0 skipped=0 waiting=1
 file vdelay_edges.tsv rows=64 tests=15 evaluated=14 unavailable=0 skipped=1 waiting=0
 file vdelay_varying_d.tsv rows=2 tests=1 evaluated=0 unavailable=0 skipped=1 waiting=0
-total files=94 rows=2405 tests=619 evaluated=559 unavailable=6 skipped=54 waiting=8
+total files=95 rows=2413 tests=620 evaluated=560 unavailable=6 skipped=54 waiting=8

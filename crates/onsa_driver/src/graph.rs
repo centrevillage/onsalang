@@ -351,13 +351,14 @@ pub flow resonator(x: F32 at sample, fc: F32 at block, bw: F32 at block) -> F32 
     }
 
     /// The node of a `par~` names the replication with its `~` and its range,
-    /// as an instance names its flow (`saw~`, spec/tools.md §1.1, S-745).
+    /// as an instance names its flow (`saw~`, spec/tools.md §1.1, S-745). One
+    /// whose body holds no node is named as one with no name (S-1175).
     #[test]
     fn a_par_node_is_labelled_with_its_tilde() {
         let src = "pub flow f(x: F32 at sample) -> [F32; 2] at sample {\n  let xs = par~ i in 0 ..< 2 { x }\n  xs\n}\n";
         let analyzed = analyzed(PackageInput::single_file("p.onsa", src));
         let dot = super::graph(&analyzed, "f", None).unwrap();
-        assert!(dot.contains("[label=\"xs = par~ 0..<2: [F32; 2] at sample\""), "{dot}");
+        assert!(dot.contains("\"xs.par_0\" [label=\"par_0 = par~ 0..<2: [F32; 2] at sample\""), "{dot}");
     }
 
     /// Only a `let` of a single name is its node (S-148, through

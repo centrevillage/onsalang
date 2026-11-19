@@ -107,9 +107,10 @@ pub flow f(x: F32 at sample, level: F32 at block) -> F32 at sample {
   a[0] + b[1]
 }";
     let d = crate::dump::dump(&crate::tests::core(src));
-    assert!(d.contains("type t.f.a.par_0.State = struct { _hoist_0: F32 }"), "{d}");
-    assert!(d.contains("type t.f.a.State = struct { par_0: [t.f.a.par_0.State; 2] }"), "{d}");
-    assert!(d.contains("type t.f.b.State = struct { _hoist_0: F32, _hoist_1: F32 }"), "{d}");
+    // S-1175: a `par~` whose body holds no node is named as one with no name.
+    assert!(d.contains("type t.f.a.par_0.par_0.State = struct { _hoist_0: F32 }"), "{d}");
+    assert!(d.contains("type t.f.a.par_0.State = struct { par_0: [t.f.a.par_0.par_0.State; 2] }"), "{d}");
+    assert!(d.contains("type t.f.b.par_0.State = struct { _hoist_0: F32, _hoist_1: F32 }"), "{d}");
     let init = phase(src, "init");
     let nested = "for i@4 in 0:U32..2:U32 {\n    for j in 0:U32..2:U32 {\n      s.0[i@4].0[j].0 = t.make(round.U32.F32((i@4 + j)))\n";
     assert!(init.contains(nested), "{init}");

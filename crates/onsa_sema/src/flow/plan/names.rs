@@ -6,7 +6,7 @@
 //! user writes (`_` first or a `.` in it, §2.3), so none is reserved.
 
 use onsa_diag::hash::HashMap;
-use onsa_syntax::ast::{Ast, ExprId};
+use onsa_syntax::ast::{Ast, CallKind, ExprId, ExprKind};
 
 use super::super::PendingLet;
 use super::{Owner, Part, PlanKind, PlanNode};
@@ -82,16 +82,22 @@ pub(in crate::flow) struct Namer {
     /// The scope of the nodes of each `let`.
     scopes: Vec<String>,
     /// The initializer of each `let` of a single name, through its
-    /// parentheses, and that name (S-148).
+    /// parentheses, and that name (S-148), but a `par~` whose body holds no
+    /// node ([`holds_node`]).
     // SPEC-GAP(S-1143): a value in parentheses is the call itself (`let a =
     // (prev~(x))` is `a`); one under `at` is not (`let b = prev~(x) at
     // sample` is `b.prev_0`).
+    // SPEC-GAP(S-1175): a `par~` whose body holds no node is named as one
+    // with no name (`v0.par_0`), the whole value of its `let` or not: the
+    // `let` may have a field of its value beside the replicas (R-507).
     whole: HashMap<ExprId, String>,
 }
 
 impl Namer {
     pub(in crate::flow) fn new(pending: &[PendingLet], ast: &Ast, body: &BodyInfo) -> Namer {
-        let whole = pending.iter().filter_map(|p| Some((ast.without_parens(p.init), p.name.clone()?))).collect();
+        let named = |e: ExprId| !matches!(ast.expr(e).kind, ExprKind::Par { body, .. } if !holds_node(ast, body));
+        let lets = pending.iter().map(|p| (ast.without_parens(p.init), p.name.clone()));
+        let whole = lets.filter_map(|(e, n)| Some((e, n?))).filter(|&(e, _)| named(e)).collect();
         let scopes = scopes(pending.iter().map(|p| p.locals.as_slice()), body);
         Namer { numbers: HashMap::default(), scopes, whole }
     }
@@ -126,6 +132,19 @@ impl Namer {
         let path = qualify(scope, &name);
         Some((name, path))
     }
+}
+
+/// Whether `e` holds a node in its text (§11.5): a call with `~`, an
+/// instance or a built-in delay, in a `par~` in it too.
+fn holds_node(ast: &Ast, e: ExprId) -> bool {
+    let mut todo = vec![e];
+    while let Some(x) = todo.pop() {
+        if let ExprKind::Call { kind: CallKind::Flow, .. } = ast.expr(x).kind {
+            return true;
+        }
+        todo.extend(ast.sub_exprs(x));
+    }
+    false
 }
 
 /// The kind of a node of a delay or an instance (§11.6): the name of the

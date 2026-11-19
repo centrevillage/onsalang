@@ -1,0 +1,44 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.5", "§11.6"]
+
+// R-507 (W7-15 U2/b found it, the parent wrote it): a `let` whose value is a `par~` with no state, whose body has a slower
+// part made of the index (a field of each replica, W7-05 U3, S-1140 provisional), read in a branch whose condition is
+// decided per sample, is the same value as anywhere else ("値は `let` に分けても分けなくても同じである", §11.3). After
+// W7-05 U3 these forms fell with the internal error "two fields `v0` in a struct of the state of a flow" (the value of
+// the `let` read at `sample` and the replicas of the `par~` were both named `v0`). Every value is worked out by hand:
+// `v0` is [0 * p, 1 * p, 2 * p]; the delay starts at the default [0.0, 0.0, 0.0].
+
+pub flow in_a_branch(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v0: [F32; 3] = par~ i in 0 ..< 3 { p * F32.round_from(i) }
+  let a = if x > 0.5 { x } else { v0[1] }
+  x + a
+}
+
+pub flow in_two_branches(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v0: [F32; 3] = par~ i in 0 ..< 3 { p * F32.round_from(i) }
+  let a = if x > 0.5 { x } else { v0[1] }
+  let b = if x > 0.25 { v0[2] } else { x }
+  a + b
+}
+
+// The same value read at `sample` outside a branch, in the first argument of a delay (a name is not hoisted, §11.3).
+pub flow in_a_delay(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v0: [F32; 3] = par~ i in 0 ..< 3 { p * F32.round_from(i) }
+  let y = prev~(v0 at sample)
+  x + y[2]
+}
+
+test "a par~ of block read in a branch decided per sample: v0[1] when x <= 0.5" {
+  let xs: [F32; 2] = [1.0, 0.25]
+  let one = in_a_branch.render(in_a_branch.Params { p: 3.0 }, xs, 8.0)
+  assert one.out[0] == 2.0
+  assert one.out[1] == 3.25
+  let two = in_two_branches.render(in_two_branches.Params { p: 3.0 }, xs, 8.0)
+  assert two.out[0] == 7.0
+  assert two.out[1] == 3.25
+  let d = in_a_delay.render(in_a_delay.Params { p: 3.0 }, xs, 8.0)
+  assert d.out[0] == 1.0
+  assert d.out[1] == 6.25
+}

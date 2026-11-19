@@ -157,7 +157,7 @@ pub flow no_node(
   f0: F32 at block,
 ) -> F32 at sample
   pub struct no_node.State  // Affine; size 20, bulk 0, align 4
-    ys: 16 bytes, align 4, fast  // offset 0
+    ys.par_0: 16 bytes, align 4, fast  // offset 0
     _poisoned: 1 bytes, align 1, fast  // offset 16
     _initialized: 1 bytes, align 1, fast  // offset 17
   pub struct no_node.Params  // Copy; size 4, align 4

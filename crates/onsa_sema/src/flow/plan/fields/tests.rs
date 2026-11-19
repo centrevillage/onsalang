@@ -225,3 +225,24 @@ fn two_fields_of_one_name_are_an_internal_error() {
     let FieldOf::Node(id, _) = fields[k].of else { unreachable!() };
     assert_eq!(bug.span, Some(f.node(id).span), "{bug:?}");
 }
+
+/// R-507, S-1175: the `let` of a `par~` whose body holds no node, kept for a
+/// faster stage, has the field of its value beside the replicas, which are
+/// named as a `par~` with no name; one whose body holds a node in a nested
+/// `par~` keeps the name of the `let`.
+#[test]
+fn the_value_of_a_let_of_a_par_with_no_node_is_apart_from_its_replicas() {
+    let src = "pub rt fn pick(xs: [F32; 2]) -> F32 { xs[0] }
+pub flow f(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v0: [F32; 3] = par~ i in 0 ..< 3 { p * F32.round_from(i) }
+  let m = par~ i in 0 ..< 2 { pick(par~ j in 0 ..< 2 { prev~(x) }) }
+  let a = if x > 0.5 { x } else { v0[1] }
+  a + m[0]
+}
+";
+    let a = check(src);
+    let f = flow(&a, "f");
+    let names: Vec<&str> = f.fields.iter().map(|x| x.name.as_str()).collect();
+    assert_eq!(names, ["v0", "v0.par_0", "m", "_poisoned", "_initialized"]);
+    assert_eq!(whats(f, Owner::Output), ["let v0", "par", "par", "poisoned", "initialized"]);
+}

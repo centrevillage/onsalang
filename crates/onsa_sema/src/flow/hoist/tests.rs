@@ -133,7 +133,7 @@ fn conditions_decided_at_init_or_block_guard_the_fields_under_them() {
             g("s._hoist_2", I, true, "a * 2.0"),
             g("t._hoist_0", B, false, "level > 0.5"),
             g("t._hoist_1", B, true, "a * 3.0"),
-            g("u._hoist_0", B, false, "level * 4.0"),
+            g("u.par_0._hoist_0", B, false, "level * 4.0"),
         ]
     );
 }
@@ -244,7 +244,8 @@ fn the_fields_are_numbered_per_let_and_follow_the_nodes() {
 /// by `lp~`, its part at `init`), guarded under the conditions in that
 /// body; the replica
 /// holds it after its nodes, also a replica with no node, and the `State`
-/// does not.
+/// does not. A `par~` whose body holds no node is named as one with no name,
+/// the whole value of its `let` too (S-1175): `w.par_0`, `c.par_0`.
 #[test]
 fn the_fields_of_the_body_of_a_par_are_of_each_replica() {
     let src = "pub flow lp(x: F32 at sample, g: F32 at block) -> F32 at sample { x * g }
@@ -262,16 +263,16 @@ pub flow f(x: F32 at sample, a: F32 at init, level: F32 at block, n: I32 at bloc
             g("m._hoist_0", B, false, "level + 1.0"),
             g("saws._hoist_0", I, false, "make(F32.round_from(i))"),
             g("saws._hoist_1", I, false, "a * 2.0"),
-            g("w.par_0._hoist_0", I, false, "make(F32.round_from(i + j))"),
-            g("c._hoist_0", B, false, "n != 0"),
-            g("c._hoist_1", B, true, "F32.round_from(100 / n)"),
+            g("w.par_0.par_0._hoist_0", I, false, "make(F32.round_from(i + j))"),
+            g("c.par_0._hoist_0", B, false, "n != 0"),
+            g("c.par_0._hoist_1", B, true, "F32.round_from(100 / n)"),
             g("_out.par_0._hoist_0", B, false, "level * 3.0"),
         ]
     );
     let (a, _) = flow(src);
     let f = info(&a);
     let names: Vec<&str> = f.fields.iter().map(|x| x.name.as_str()).collect();
-    assert_eq!(names, ["saws", "w", "c", "_out.par_0", "m._hoist_0", "_poisoned", "_initialized"]);
+    assert_eq!(names, ["saws", "w.par_0", "c.par_0", "_out.par_0", "m._hoist_0", "_poisoned", "_initialized"]);
     let replica = |path: &str| {
         let p = f.nodes.iter().find(|n| n.path == path).expect("the `par~`");
         let owner = Owner::Par(f.node_of[&p.expr]);
@@ -280,8 +281,8 @@ pub flow f(x: F32 at sample, a: F32 at init, level: F32 at block, n: I32 at bloc
         (fields, owned)
     };
     assert_eq!(replica("saws"), (vec!["lp_0", "_hoist_0", "_hoist_1"], 2));
-    assert_eq!(replica("w"), (vec!["par_0"], 0));
-    assert_eq!(replica("w.par_0"), (vec!["_hoist_0"], 1));
+    assert_eq!(replica("w.par_0"), (vec!["par_0"], 0));
+    assert_eq!(replica("w.par_0.par_0"), (vec!["_hoist_0"], 1));
     assert_eq!(replica("_out.par_0"), (vec!["_hoist_0"], 1));
     let h = f.hoist_of(f.hoists[1].expr).expect("its field");
     assert_eq!((f.field(FieldOf::Hoist(h)), f.field_at(FieldOf::Hoist(h))), (Some("_hoist_0"), Some(1)));
