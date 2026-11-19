@@ -47,6 +47,11 @@ fn record(w: &Walk, names: impl Iterator<Item = String>, tys: &[TyId], at: At) -
     Some(Layout { size: round_up(size, align), align, fields })
 }
 
+/// A tuple or struct of no fields holds one byte.
+fn nonempty(l: Option<Layout>) -> Option<Layout> {
+    l.map(|l| Layout { size: l.size.max(1), ..l })
+}
+
 fn enum_layout(w: &Walk, variants: &[&[TyId]], at: At) -> Option<Layout> {
     let tag = match variants.len() {
         0..=256 => 1,
@@ -86,15 +91,17 @@ fn walk(w: &Walk, ty: TyId, (env, depth): At) -> Option<Layout> {
         Ty::Float(FloatKind::F64) => Some(Layout::scalar(8)),
         Ty::Bool => Some(Layout::scalar(1)),
         Ty::Char => Some(Layout::scalar(4)),
-        Ty::Unit => Some(Layout { size: 0, align: 1, fields: Vec::new() }),
+        // No value is of no bytes, as in C (R-504, `onsa_core::layout`): `()`, a
+        // tuple or struct of no fields hold one byte, an array of none one element.
+        Ty::Unit => Some(Layout::scalar(1)),
         Ty::Array(t, len) => match w.a.types.len_in(*len, env) {
             Len::Const(n) => {
                 let l = walk(w, *t, at)?;
-                Some(Layout { size: l.size.checked_mul(n)?, align: l.align, fields: Vec::new() })
+                Some(Layout { size: l.size.checked_mul(n.max(1))?, align: l.align, fields: Vec::new() })
             }
             Len::Param(_) | Len::Var(_) => None,
         },
-        Ty::Tuple(ts) => record(w, (0..).map(|i| i.to_string()), ts, at),
+        Ty::Tuple(ts) => nonempty(record(w, (0..).map(|i| i.to_string()), ts, at)),
         Ty::Builtin(BuiltinTy::Ptr, _) => Some(Layout::scalar(PTR_SIZE)),
         Ty::Builtin(..) => None,
         Ty::Fn(_) => Some(Layout::scalar(PTR_SIZE)),
@@ -115,7 +122,7 @@ fn named(w: &Walk, d: DefId, args: &[TyId], (env, depth): At) -> Option<Layout> 
         match holds {
             Holds::Fields(fs, _) => {
                 let tys: Vec<TyId> = fs.iter().map(|f| f.ty).collect();
-                record(w, fs.iter().map(|f| f.name.clone()), &tys, at)
+                nonempty(record(w, fs.iter().map(|f| f.name.clone()), &tys, at))
             }
             Holds::Variants(vs) => enum_layout(w, &vs.iter().map(|v| &v.fields[..]).collect::<Vec<_>>(), at),
             Holds::Alias(t) => walk(w, t, at),

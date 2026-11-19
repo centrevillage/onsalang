@@ -37,19 +37,23 @@ pub fn size_align_for(m: &Module, ty: &Ty, ptr: u32) -> (u32, u32) {
         Ty::Float(FloatKind::F64) => (8, 8),
         Ty::Bool => (1, 1),
         Ty::Char => (4, 4),
-        Ty::Unit => (0, 1),
+        // No value is of no bytes, as in C (R-504): `()`, a tuple or struct of
+        // no fields hold one byte, an array of none one element.
+        // SPEC-GAP(S-1156): §12.4 does not give the size of a value of no
+        // elements or no fields; the bytes its C takes for now.
+        Ty::Unit => (1, 1),
         Ty::Array(e, n) => {
             let (s, a) = size_align_for(m, e, ptr);
-            (s.saturating_mul(*n), a)
+            (s.saturating_mul((*n).max(1)), a)
         }
         Ty::Tuple(ts) => {
             let r = record_for(m, ts.iter().map(|t| ("".to_string(), t.clone())).collect::<Vec<_>>().as_slice(), ptr);
-            (r.size, r.align)
+            (r.size.max(1), r.align)
         }
         Ty::Struct(id) => match &m.ty(*id).kind {
             TypeDefKind::Struct { fields } => {
                 let r = record_for(m, fields, ptr);
-                (r.size, r.align)
+                (r.size.max(1), r.align)
             }
             _ => (0, 1),
         },
@@ -174,3 +178,6 @@ pub fn flow_layout_for(m: &Module, state: TypeId, bulk_threshold: Option<u32>, p
         align: f.align.max(if bulk.is_empty() { 1 } else { b.align }),
     }
 }
+
+#[cfg(test)]
+mod tests;

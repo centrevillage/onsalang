@@ -1,0 +1,89 @@
+// onsa.toml
+// [package]
+// name = "state_no_bytes"
+// edition = "2026"
+//
+// [export]
+// prefix = "state_no_bytes_"
+//
+// [targets.host]
+// kind = "source"
+// lang = "c"
+// platform = "host"
+// panic = "trap"
+// provides = []
+//
+// [test]
+// spec = ["§12.4", "§14.2", "§13.4"]
+// conformance = true
+
+// Conformance (W7-07 U2b, R-504): a flow state that holds a value of no elements or no fields (an array of
+// length 0, `()`, a struct of no fields, inside a delay, a struct, a tuple, an `Option`, an instance and the
+// replicas of a `par~`) is laid out as C holds it, so its C compiles under the static checks of `SIZE`, `ALIGN`
+// and the offsets of the marks (§12.4, §14.2) and gives the same values as the interpreter (§13.4).
+use std.math.sum
+
+pub struct Fields {
+  none: [F32; 0],
+  v: F32,
+}
+
+pub struct Nothing {}
+
+pub struct Units {
+  u: (),
+  e: [U8; 0],
+  n: Nothing,
+  v: F32,
+}
+
+flow inner(x: F32 at sample) -> F32 at sample {
+  let z: [F32; 0] = ([] at sample)
+  let p = prev~(z, [])
+  prev~(x) + F32.round_from(p.len())
+}
+
+@export
+pub flow array_none(x: F32 at sample) -> F32 at sample {
+  let z: [F32; 0] = ([] at sample)
+  let p = prev~(z, [])
+  x + prev~(x, 1.0) + F32.round_from(p.len())
+}
+
+@export
+pub flow array_nested(x: F32 at sample) -> F32 at sample {
+  let z: [[F32; 0]; 4] = ([[], [], [], []] at sample)
+  let p = delay~(z, 3, [[], [], [], []])
+  delay~(x, 2) + F32.round_from(p.len() + p[3].len())
+}
+
+@export
+pub flow records(x: F32 at sample) -> F32 at sample {
+  let s = prev~(Fields { none: [], v: x }, Fields { none: [], v: 2.0 })
+  let t: ([F32; 0], F32) = ([], x * 3.0)
+  let q = prev~(t, ([], 0.5))
+  s.v + q.1
+}
+
+@export
+pub flow units(x: F32 at sample) -> F32 at sample {
+  let u = (() at sample)
+  let _ = prev~(u, ())
+  let n = (Nothing {} at sample)
+  let _ = prev~(n, Nothing {})
+  let w = prev~(Units { u: (), e: [], n: Nothing {}, v: x }, Units { u: (), e: [], n: Nothing {}, v: -1.0 })
+  w.v + x
+}
+
+@export
+pub flow option_none(x: F32 at sample) -> F32 at sample {
+  let o: Option[[F32; 0]] = (Some([]) at sample)
+  let _ = prev~(o, None)
+  prev~(x) * 2.0
+}
+
+@export
+pub flow nested(x: F32 at sample) -> F32 at sample {
+  let ys = par~ i in 0 ..< 3 { inner~(x * F32.round_from(i + 1)) }
+  inner~(x) + sum(ys)
+}

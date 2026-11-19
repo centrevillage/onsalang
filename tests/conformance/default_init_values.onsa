@@ -89,8 +89,12 @@ pub flow tuple_with_array(x: F32 at sample) -> F32 at sample {
   a * 100.0 + v[0] * 10.0 + v[1]
 }
 
-// An array of no element (S-1104) is left to `default_init_values.onsa` of `tests/spec/flow_semantics`: the C state
-// of a delay of `[F32; 0]` breaks its layout asserts (R-504).
+// An array of no element has the default of a type that has one (S-1104: the element type decides).
+@export
+pub flow empty_array(x: F32 at sample) -> F32 at sample {
+  let e = prev~([x; 0])
+  x + F32.round_from(e.len())
+}
 
 // ---- struct: the defaults of the fields and of the types
 

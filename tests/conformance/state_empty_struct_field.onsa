@@ -1,6 +1,6 @@
 // onsa.toml
 // [package]
-// name = "e"
+// name = "state_empty_struct_field"
 // edition = "2026"
 //
 // [export]
