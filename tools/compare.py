@@ -65,6 +65,7 @@ import repo  # noqa: E402
 ROOT = repo.ROOT
 TIMEOUT = 30  # seconds per run of `diags`, `fmt` and `core`
 REVIEW = "tests/review-phase1"  # left by `core`: unknown inputs, not lowered all at once (rules/common.md 3.2)
+FLOW_REF_CORPUS = "tests/flow_ref/corpus"  # left by `c`: inputs of the reference evaluator, not cases
 PARTS = ((2, "message"), (3, "fix titles"), (4, "fix edits"), (5, "notes"))  # the parts of `diagnostic` a pair names
 CASE_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")  # a case of `probe`: a directory below --out
 DIAG_LINE = re.compile(r"^(.+?):(\d+):(\d+): \w+\[(\w+)\]", re.M)  # the text form: `file:line:col: error[E…]`
@@ -281,7 +282,8 @@ def c_builds(root, tmp) -> list:
     a file is the `manifest` of the list of `onsa_cases` (CASES) of the copy. Raises OSError for a file it does not
     list."""
     tree, packages = Path(tmp) / "head", Path(tmp) / "packages"
-    paths = ["tests", f":!{REVIEW}", f":!{repo.HEAVY}", f":!{fuzz.FUZZ_DIR}", "examples"]
+    # The corpus of the reference evaluator is no case: its files have no manifest to build with.
+    paths = ["tests", f":!{REVIEW}", f":!{repo.HEAVY}", f":!{fuzz.FUZZ_DIR}", f":!{FLOW_REF_CORPUS}", "examples"]
     git = subprocess.run(["git", "-C", str(root), "archive", "HEAD", "--", *paths], capture_output=True)
     if git.returncode:
         raise OSError(f"git archive HEAD in {root}: {git.stderr.decode('utf-8', 'replace').strip()}")
