@@ -1,0 +1,2 @@
+pub const B: I32 = -A
+pub const A: I32 = I32.MIN
