@@ -90,6 +90,15 @@ const MADE: &[Made] = &[
         true,
     ),
     (
+        "a constant that names std's associated one",
+        &[(
+            "m.onsa",
+            "pub const MIN32: I32 = I32.MIN\n\npub const EDGES: (I16, U8) = (I16.MIN, U8.MAX)\n\npub fn f() -> I32 {\n  MIN32\n}\n",
+        )],
+        true,
+    ),
+    ("E0419 of a constant that negates std's", &[("m.onsa", "pub const NEG: I32 = -I32.MIN\n")], true),
+    (
         "std's functions in a body",
         &[(
             "m.onsa",

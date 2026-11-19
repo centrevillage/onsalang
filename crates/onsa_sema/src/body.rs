@@ -280,17 +280,28 @@ fn read_body<'c>(
 pub(crate) fn check_all(pkg: &Package, a: &mut Analysis) {
     let flat = flatten(pkg);
     let mut bound = HashMap::default();
-    // The values of the constants of the modules first, then the record of
-    // the failures again: a flow reads a constant whose unit failed as an
-    // error, whatever the order of the items (§18.1, R-499).
+    // A package after those it depends on (the order of `flatten`), each
+    // whole, as when it continues their base: a constant evaluates one of
+    // theirs, an associated one too (R-502). In a package, the values of the
+    // constants of the modules first, then the record of the failures again:
+    // a flow reads a constant whose unit failed as an error, whatever the
+    // order of the items (§18.1, R-499).
+    let pkg_of = |id: DefId| a.modules.get(a.def(id).module).pkg;
     let top_const = |id: DefId| a.def(id).owner.is_none() && matches!(a.def(id).kind, DefKind::Const(_));
-    let (consts, rest): (Vec<DefId>, Vec<DefId>) = a.new_defs().partition(|&id| top_const(id));
-    for id in consts {
-        check_one(a, &flat, &mut bound, id);
-    }
-    a.failures = crate::stages::Failures::of(pkg, a);
-    for id in rest {
-        check_one(a, &flat, &mut bound, id);
+    let mut defs: Vec<DefId> = a.new_defs().collect();
+    defs.sort_by_key(|&id| (pkg_of(id), !top_const(id)));
+    let packages: Vec<(Vec<DefId>, usize)> = defs
+        .chunk_by(|&x, &y| pkg_of(x) == pkg_of(y))
+        .map(|p| (p.to_vec(), p.iter().take_while(|&&id| top_const(id)).count()))
+        .collect();
+    for (defs, consts) in packages {
+        for &id in &defs[..consts] {
+            check_one(a, &flat, &mut bound, id);
+        }
+        a.failures = crate::stages::Failures::of(pkg, a);
+        for &id in &defs[consts..] {
+            check_one(a, &flat, &mut bound, id);
+        }
     }
 }
 
