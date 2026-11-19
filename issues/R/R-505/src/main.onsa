@@ -1,0 +1,4 @@
+@export
+pub flow f(x: F32 at sample, @param(default: 1) n: I32 at block) -> F32 at sample {
+  x * (-(-3.0)) + F32.round_from(-(-n)) + F32.round_from(-(-4)) + (-(-x))
+}
