@@ -1,0 +1,64 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§18.1"]
+
+// W7-14 U6c, S-372 (spec §11.3: "本体の式（部分式を含む）の型は…関数型を含まない（E0810）", by the structure of the type; §18.1: one error per flow): whether a type holds a function type is
+// its structure, whichever flow asks first. `(Ph[X1], F32)` holds the function type of `Y1.cb` through `Ph[X1]`, `X1.b: Ph[Y1]` and `Y1`, though `Ph` itself holds none (a type argument is a part of
+// the type). `Y1` reaches that tuple again as its field `u` while it is being entered from `X1`. Each family is asked in both orders: the flow of the struct first (`fy1`, then `fu1`) and the flow of
+// the tuple first (`fu2`, then `fy2`); each flow is the E0810 of the value it keeps, not the E0309 of its unread `let`. Two families of their own types, so the answers of one do not answer the other.
+
+pub rt fn dbl(x: F32) -> F32 {
+  x * 2.0
+}
+
+pub struct Ph[T] {
+  n: F32,
+}
+
+pub struct X1 {
+  a: Ph[X1],
+  b: Ph[Y1],
+}
+
+pub struct Y1 {
+  x: X1,
+  u: (Ph[X1], F32),
+  cb: rt fn(F32) -> F32,
+}
+
+const CY1: Y1 = Y1 { x: X1 { a: Ph::[X1] { n: 0.0 }, b: Ph::[Y1] { n: 0.0 } }, u: (Ph::[X1] { n: 0.0 }, 0.0), cb: dbl }
+const CU1: (Ph[X1], F32) = (Ph::[X1] { n: 0.0 }, 0.0)
+
+pub flow fy1(x: F32 at sample) -> F32 at sample {
+  let a = CY1  //~ E0810
+  x
+}
+
+pub flow fu1(x: F32 at sample) -> F32 at sample {
+  let a = CU1  //~ E0810
+  x
+}
+
+pub struct X2 {
+  a: Ph[X2],
+  b: Ph[Y2],
+}
+
+pub struct Y2 {
+  x: X2,
+  u: (Ph[X2], F32),
+  cb: rt fn(F32) -> F32,
+}
+
+const CY2: Y2 = Y2 { x: X2 { a: Ph::[X2] { n: 0.0 }, b: Ph::[Y2] { n: 0.0 } }, u: (Ph::[X2] { n: 0.0 }, 0.0), cb: dbl }
+const CU2: (Ph[X2], F32) = (Ph::[X2] { n: 0.0 }, 0.0)
+
+pub flow fu2(x: F32 at sample) -> F32 at sample {
+  let a = CU2  //~ E0810
+  x
+}
+
+pub flow fy2(x: F32 at sample) -> F32 at sample {
+  let a = CY2  //~ E0810
+  x
+}

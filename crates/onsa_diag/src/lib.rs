@@ -284,7 +284,20 @@ impl Diagnostic {
     /// (`onsa_driver::reduce`), also when one failure of the parser is read as
     /// more than one form.
     pub fn order_in_file(&self) -> (u32, u32, &str, &str) {
-        (self.span.start, self.span.end, self.code.as_str(), self.message.as_str())
+        let (start, end) = Self::place(self.span);
+        (start, end, self.code.as_str(), self.message.as_str())
+    }
+
+    /// The part of [`Diagnostic::order_in_file`] a place decides.
+    fn place(span: Span) -> (u32, u32) {
+        (span.start, span.end)
+    }
+
+    /// Whether every diagnostic at `a` comes before every one at `b` in
+    /// [`Diagnostic::order_in_file`], whatever their codes and messages: a
+    /// check that keeps the first need not make one at `b`.
+    pub fn place_before(a: Span, b: Span) -> bool {
+        Self::place(a) < Self::place(b)
     }
 
     /// The order of the diagnostics of one unit (§18.1, S-214): the earliest

@@ -141,7 +141,7 @@ impl Walk<'_> {
     /// would keep: the note of the path of an E0810 walks the type.
     pub(super) fn report_fault(&mut self, e: ExprId, f: Fault) {
         let span = self.ast.expr(e).span;
-        if self.diag.as_ref().is_some_and(|d| (d.span.start, d.span.end) < (span.start, span.end)) {
+        if self.diag.as_ref().is_some_and(|d| Diagnostic::place_before(d.span, span)) {
             return;
         }
         let d = match f {

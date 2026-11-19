@@ -70,12 +70,12 @@ fn a_cycle_is_answered_whichever_is_asked_first() {
     }
 }
 
-/// Of a question that finds a function type, a type found to hold none is
-/// kept when it rests on no declaration being entered (`C2`, `Level`), and
-/// not when it does: `Z` reaches `X` again only through `Y`, left with a "no"
-/// while `X` was being entered. Asked after, each is answered as first.
+/// Of a question that finds a function type, only the types found to hold
+/// one are kept (`S`, `X`): `Z` reaches `X` again only through `Y`, found to
+/// hold none while `X` was being entered, and `C2` and `Level` are not told
+/// apart from them. Asked after, each is answered as first.
 #[test]
-fn a_question_that_finds_one_keeps_the_sure_noes() {
+fn a_question_that_finds_one_keeps_only_what_holds_one() {
     let src = "pub struct C0 { k: F32 }\npub struct C1 { c: C0 }\npub struct C2 { c: C1 }\n\
         pub struct Level { k: F32 }\n\
         pub struct S { c: C2, l: Level, f: fn(F32) -> F32 }\n\
@@ -86,7 +86,10 @@ fn a_question_that_finds_one_keeps_the_sure_noes() {
     let [s, c2, level, x, y, z] = ["S", "C2", "Level", "X", "Y", "Z"].map(|n| ty(&mut a, n));
     assert!(holds_fn(&a, s) && holds_fn(&a, x));
     let kept = a.known.summaries.borrow().fns.clone();
-    assert_eq!([c2, level, y, z].map(|t| kept.get(&t).copied()), [Some(false), Some(false), None, None]);
+    assert_eq!(
+        [s, x, c2, level, y, z].map(|t| kept.get(&t).copied()),
+        [Some(true), Some(true), None, None, None, None]
+    );
     assert!(holds_fn(&a, z) && holds_fn(&a, y) && !holds_fn(&a, c2));
 }
 

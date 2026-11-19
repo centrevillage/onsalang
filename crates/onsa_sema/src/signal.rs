@@ -3,7 +3,7 @@
 //! inputs and the output of a flow and of the types of the expressions of
 //! its body.
 
-use onsa_diag::hash::HashMap;
+use onsa_diag::hash::{HashMap, HashSet};
 use onsa_diag::{Code, Diagnostic, Span, Stage};
 
 use crate::ty::{Ty, TyId};
@@ -59,18 +59,18 @@ const SHOWN: usize = 8;
 /// the package from when the declarations are lowered ([`Summaries::fns`]):
 /// each type of the body of a flow is a question, answered once.
 ///
-/// A question walks the parts as [`fn_in`] does ([`Search`]). Of the types
-/// reached in one, those found to hold one are kept, and those found to
-/// hold none that rest on no declaration being entered ([`SURE`]): one that
-/// does may hold one through it. Of a question that finds none, all are.
+/// A question walks the parts as [`fn_in`] does ([`Search`]). Of a
+/// question that finds none, the types reached are kept, all holding none:
+/// what they reach the question reaches. Of one that finds one, only those
+/// found to hold one are: a type found to hold none may hold one through a
+/// declaration the question was entering, which it did not enter again.
 ///
 /// [`Summaries::fns`]: crate::summary::Summaries::fns
 pub(crate) fn holds_fn(a: &Analysis, ty: TyId) -> bool {
     let mut ask = Search::new(a, None);
-    let (k, _) = ask.of(ty, 0);
+    let k = ask.of(ty, 0);
     if a.known.ready {
-        let sure = ask.found.into_iter().filter(|&(_, (f, on))| f || on == SURE || !k);
-        a.known.summaries.borrow_mut().fns.extend(sure.map(|(t, (f, _))| (t, f)));
+        a.known.summaries.borrow_mut().fns.extend(ask.found.into_iter().filter(|&(_, f)| f || !k));
     }
     k
 }
@@ -105,7 +105,7 @@ pub(crate) fn fn_type_error(a: &Analysis, ty: TyId, span: Span, what: &str) -> D
 /// type [`holds_fn`] finds one in.
 pub(crate) fn fn_in(a: &Analysis, ty: TyId) -> Option<FnIn> {
     let mut find = Search::new(a, Some(Vec::new()));
-    find.of(ty, 0).0.then_some(())?;
+    find.of(ty, 0).then_some(())?;
     let mut parts = find.path?;
     parts.reverse();
     Some(FnIn { parts, found: find.found_fn? })
@@ -166,23 +166,15 @@ fn held(w: &Walk, d: DefId, depth: u32) -> (Parts, u32) {
     (parts, depth)
 }
 
-/// An answer that rests on no declaration being entered.
-const SURE: usize = usize::MAX;
-
 /// The walk of [`holds_fn`] and of [`fn_in`] (with `path`): whether a type
-/// holds a function type, and of a "no", the first declaration on the way
-/// (its place, from 0) it rests on: one being entered, which may hold
-/// one through the type reached ([`SURE`] when none). A declaration left
-/// with a "no" holds none past what it rests on: a "yes" ends the question.
+/// holds a function type. A "yes" ends the question, so a function type
+/// reached by any step is told to the type asked.
 struct Search<'a> {
     w: Walk<'a>,
-    /// The declarations being entered, at their places on the way.
-    open: usize,
-    /// The declarations entered: the place of one being entered, what the
-    /// answer of one left rests on.
-    entered: HashMap<DefId, usize>,
-    /// The answer of each type reached, and what it rests on.
-    found: HashMap<TyId, (bool, usize)>,
+    /// The declarations entered, once a question.
+    seen: HashSet<DefId>,
+    /// The answer of each type reached in the question (not of a note's).
+    found: HashMap<TyId, bool>,
     /// Of [`fn_in`]: the steps from the function type out, and it.
     path: Option<Vec<Part>>,
     found_fn: Option<TyId>,
@@ -190,70 +182,52 @@ struct Search<'a> {
 
 impl<'a> Search<'a> {
     fn new(a: &'a Analysis, path: Option<Vec<Part>>) -> Self {
-        let (entered, found) = (HashMap::default(), HashMap::default());
-        Search { w: Walk::new(a), open: 0, entered, found, path, found_fn: None }
+        let (seen, found) = (HashSet::default(), HashMap::default());
+        Search { w: Walk::new(a), seen, found, path, found_fn: None }
     }
 
-    /// What `on` rests on now: none of a declaration left (with a "no").
-    fn now(&self, on: usize) -> usize {
-        if on >= self.open { SURE } else { on }
-    }
-
-    fn of(&mut self, ty: TyId, depth: u32) -> (bool, usize) {
+    fn of(&mut self, ty: TyId, depth: u32) -> bool {
         let known = &self.w.a.known;
-        let kept = known.ready.then(|| known.summaries.borrow().fns.get(&ty).map(|&k| (k, SURE))).flatten();
-        let known = kept.or_else(|| self.found.get(&ty).map(|&(k, on)| (k, self.now(on))));
+        let kept = known.ready.then(|| known.summaries.borrow().fns.get(&ty).copied()).flatten();
         // The steps of a "yes" are walked.
-        if let Some(r) = known.filter(|&(k, _)| !k || self.path.is_none()) {
-            return r;
+        if let Some(k) = kept.or_else(|| self.found.get(&ty).copied()).filter(|&k| !k || self.path.is_none()) {
+            return k;
         }
-        let r = match parts(self.w.a, ty) {
+        let k = match parts(self.w.a, ty) {
             None => {
                 self.found_fn = Some(ty);
-                (true, SURE)
+                true
             }
-            Some((parts, decl)) => match (self.any(parts, depth), decl) {
-                ((false, on), Some(d)) => {
-                    let (k, of_d) = self.decl(d, depth);
-                    (k, on.min(of_d))
-                }
-                (r, _) => r,
-            },
+            Some((parts, decl)) => self.any(parts, depth) || decl.is_some_and(|d| self.decl(d, depth)),
         };
-        self.found.insert(ty, r);
-        r
+        // A note's walk keeps none: made once, of a type found to hold one,
+        // it ends at the first function type.
+        if self.path.is_none() {
+            self.found.insert(ty, k);
+        }
+        k
     }
 
-    fn any(&mut self, parts: Parts, depth: u32) -> (bool, usize) {
-        let mut on = SURE;
+    fn any(&mut self, parts: Parts, depth: u32) -> bool {
         for (part, t) in parts {
-            match self.of(t, depth) {
-                (true, _) => {
-                    if let Some(p) = &mut self.path {
-                        p.push(part);
-                    }
-                    return (true, SURE);
+            if self.of(t, depth) {
+                if let Some(p) = &mut self.path {
+                    p.push(part);
                 }
-                (false, o) => on = on.min(o),
+                return true;
             }
         }
-        (false, on)
+        false
     }
 
     /// `d`, entered once a question (its fields hold no parameter of a
     /// function type: its arguments are read where it is used).
-    fn decl(&mut self, d: DefId, depth: u32) -> (bool, usize) {
-        if let Some(&on) = self.entered.get(&d) {
-            return (false, self.now(on));
+    fn decl(&mut self, d: DefId, depth: u32) -> bool {
+        if !self.seen.insert(d) {
+            return false;
         }
         let (parts, depth) = held(&self.w, d, depth);
-        self.entered.insert(d, self.open);
-        self.open += 1;
-        let (k, on) = self.any(parts, depth);
-        self.open -= 1;
-        let on = self.now(on);
-        self.entered.insert(d, on);
-        (k, on)
+        self.any(parts, depth)
     }
 }
 

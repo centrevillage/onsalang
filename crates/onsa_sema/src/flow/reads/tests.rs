@@ -1,13 +1,28 @@
-use onsa_diag::Code;
+use onsa_diag::{Code, Diagnostic, Span};
+
+use crate::names::body::{Binding, BodyNames, unused_binding};
+use onsa_syntax::ast::Ast;
+
+thread_local! {
+    /// Every E0309 of the flows a test checked, of which [`super::unused`]
+    /// makes the first.
+    static UNUSED: std::cell::RefCell<Vec<Diagnostic>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Keeps every E0309 of the flow [`super::unused`] reads, for [`unused`].
+pub(super) fn record(names: &BodyNames, unreached: &dyn Fn(&Binding) -> Option<Vec<Span>>, ast: &Ast) {
+    let all = crate::names::body::unused(names, unreached).map(|(b, r)| unused_binding(b, ast, r));
+    UNUSED.with(|u| u.borrow_mut().extend(all));
+}
 
 /// Every E0309 of the flow `f` with the body `body` (its input `x`), in
 /// order: the name, whether it has the candidate `_`, and its notes. The
 /// flow makes the first only, which the unit reports (§18.1).
 fn unused(body: &str) -> Vec<(String, bool, usize)> {
     let src = format!("pub flow f(x: F32 at sample) -> F32 at sample {{\n{body}\n}}\n");
-    super::UNUSED.with(|u| u.borrow_mut().clear());
+    UNUSED.with(|u| u.borrow_mut().clear());
     let a = crate::tests::check(&src);
-    let all = super::UNUSED.with(|u| u.take());
+    let all = UNUSED.with(|u| u.take());
     let first = all.iter().min_by_key(|d| d.order_in_file());
     assert_eq!(a.diagnostics.iter().collect::<Vec<_>>(), first.into_iter().collect::<Vec<_>>());
     let one = |d: &onsa_diag::Diagnostic| {

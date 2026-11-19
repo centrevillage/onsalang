@@ -163,16 +163,10 @@ pub(super) fn unused(
     };
     use crate::names::body::{unused, unused_binding};
     #[cfg(test)]
-    UNUSED.with(|u| u.borrow_mut().extend(unused(names, &unreached).map(|(b, r)| unused_binding(b, ast, r))));
-    let first = unused(names, &unreached).min_by_key(|(b, _)| (b.span.start, b.span.end));
+    tests::record(names, &unreached, ast);
+    let first =
+        unused(names, &unreached).reduce(|x, y| if Diagnostic::place_before(y.0.span, x.0.span) { y } else { x });
     first.map(|(b, readers)| unused_binding(b, ast, readers))
-}
-
-#[cfg(test)]
-thread_local! {
-    /// Every E0309 of the flows a test checked, of which [`unused`] makes
-    /// the first.
-    static UNUSED: std::cell::RefCell<Vec<Diagnostic>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
 impl Marker<'_> {
