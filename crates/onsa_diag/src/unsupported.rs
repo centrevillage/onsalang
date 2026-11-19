@@ -116,9 +116,8 @@ features! {
         "a flow instance, a delay or a `par~` where it is evaluated on some samples only (a branch of `if` or `match`, a guard, the right of `&&` / `||`)",
         Some("bind it with a `let` before the expression that holds it");
     /// `{}`: the clock. R-17, S-33: hoisting computes it at `init`, but not
-    /// with constant arguments only (W9-03), in the body of a `par~` (W7-05
-    /// U3) or of a type that is not Copy (S-1160); under a condition decided
-    /// after `init` it is E0815.
+    /// with constant arguments only (W9-03) or of a type that is not Copy
+    /// (S-1160); under a condition decided after `init` it is E0815.
     NonRtCallAtClock: Language, "a call of a function that is not `rt` in an expression at the clock `{}`",
         Some("bind the call with a `let` of its own, which is computed at `init`");
     /// §11.4, S-565: the time since `reset` in ticks (W7-09, R-288).

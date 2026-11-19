@@ -6,8 +6,8 @@
 // W7-05 U2/t, S-1157 (D'): the fixed input of the guarded parts of `init` and `block` in a position of a condition (hoist_cond_values.onsa has the same forms by hand, with their values worked out). Made by a script
 // of the test (no seed): eight flows (the `if`, `else if`, `&&`, `||`, the arm of a `match` that binds, nested conditions of `block`, two `let`s that are guarded, a condition of `sample` outside a condition of
 // `block`) over a grid of `block` values that holds the guard and does not hold it, with three frames each; the tests have no assert (the value of the evaluator is the one the interpreter has to give,
-// `tests/flow_ref/FORMAT.md`), and the calls whose guard holds and whose division is by zero are the tests marked PANIC. The calls of 0 frames are the ones the list `UNTIL_W7_05_U2` of the entry sets aside
-// when the guard holds and divides by zero (the interpreter does not make a guarded part at `block` yet). The flows have no input of `init` (a panic of `init` is a constant-clock panic here, E0419).
+// `tests/flow_ref/FORMAT.md`), and the calls whose guard holds and whose division is by zero are the tests marked PANIC. The calls of 0 frames panic at `block` when the guard holds and divides by
+// zero (the guarded part is made at `block`, W7-05 U2). The flows have no input of `init` (a panic of `init` is a constant-clock panic here, E0419).
 
 
 pub flow g1(x: F32 at sample, d: I32 at block) -> F32 at sample {

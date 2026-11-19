@@ -184,7 +184,7 @@ fn a_let_of_constants_is_made_once_at_init() {
 #[test]
 fn at_gives_the_clock_k_and_changes_neither_the_value_nor_the_stage_of_what_it_reads() {
     // §11.3: `e at k` has the clock `k`; the value does not change (5) and the name under it is read in its own stage:
-    // `a` is `bq(p)`, of `block` (made once for each call; a computed `e` under `at` is E0200 in this version). `q = a at
+    // `a` is `bq(p)`, of `block` (made once for each call; a computed `e` under `at` is hoisted, W7-05 U1). `q = a at
     // sample` is of `sample`, it is made for each frame and only reads `a`, so `bq` is called once for each call, not
     // for each frame. `r` and the output read `q`: `sample`.
     counter!(row_q, N_Q);

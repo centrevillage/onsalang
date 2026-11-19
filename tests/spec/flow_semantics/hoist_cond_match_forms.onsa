@@ -4,7 +4,7 @@
 // spec = ["§11.3", "§11.6", "§9.2"]
 
 // W7-05 U2/t, S-1157 (D'), S-1046 (spec §11.3): the forms of `match` that this version cannot lower (the value of a `match` with a guard, a literal pattern or a struct pattern is E0200 until W8-06, R-06),
-// so this case is waiting for W8-06 and, for the stages, for W7-05 U2. The rules are the ones of hoist_cond_values.onsa and hoist_cond_panic_block.onsa. A guard is a position of a condition
+// so this case is waiting for W8-06. The rules are the ones of hoist_cond_values.onsa and hoist_cond_panic_block.onsa. A guard is a position of a condition
 // whose way holds the object and the patterns of the arms up to its own, and the guards before it ("match の対象とその腕までのパターンとガード"): a guard of `block` that is reached
 // is evaluated at `block`, once the pattern holds. The arm of the pattern of a literal is chosen by the object of `block`. The object of the struct pattern is a `Wrap` of Copy elements, so it is Copy (§4.6: the kind
 // is decided by the structure) and a part of `block` of its own: the arm is evaluated at `block` with the pattern that holds. (An object that is not Copy, read where it is written by `sample`, cannot be written in this version:

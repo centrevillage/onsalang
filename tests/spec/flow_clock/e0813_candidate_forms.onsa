@@ -8,8 +8,8 @@
 // ` at sample` after the argument (`prev~(p)` is `prev~(p at sample)`, §11.4, S-102), and the other
 // arguments stay as they are. Applied alone, it leaves the unit without an error, which the runner
 // checks for each candidate (§18.1, W3-17), so the form that the candidate makes is a form that is
-// accepted. One error per flow (§18.1). The first arguments that are no name or literal have no
-// candidate: e0813_no_candidate_until_w7_05.onsa.
+// accepted. One error per flow (§18.1). The first arguments that are no name or literal have a
+// candidate too: e0813_candidate_computed.onsa.
 
 const K: F32 = 1.0
 
