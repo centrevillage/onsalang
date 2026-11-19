@@ -151,12 +151,12 @@ impl Describe for Point {
 | `Str` | `PartialEq` `Eq` `PartialOrd` `Ord`（バイト列の辞書順、§4.2） `Hash` `Show` `Default`（空） | なし |
 | `Bytes` | `PartialEq` `Eq` `PartialOrd` `Ord`（辞書順） `Hash` `Default`（空） | なし |
 | `()` | `PartialEq` `Eq` `Default` | なし |
-| タプル、`[T; N]` | 要素が全て実装するとき `PartialEq` `Eq` `PartialOrd` `Ord`（先頭から辞書式） `Hash` `Show` `Default` | なし |
+| タプル、`[T; N]` | 要素の型が全て実装するとき `PartialEq` `Eq` `PartialOrd` `Ord`（先頭から辞書式） `Hash` `Show` `Default` | なし |
 | `Option[T]`、`Result[T, E]` | 中身が全て実装するとき `PartialEq` `Eq` `Hash` `Show`（§4.1 の宣言の derive による） | なし |
 | `Array[T]` | 要素が実装するとき `PartialEq` `Eq` | なし |
 | `Map`、`Set`、`Buf`、`Span`、関数値 | なし | なし |
 
-- タプルと `[T; N]` の実装は、処理系が構造から与える（derive と同じ扱いで、std に要素の数ごとの `impl` は書かない）。
+- タプルと `[T; N]` の実装は、処理系が構造から与える（derive と同じ扱いで、std に要素の数ごとの `impl` は書かない）。満たすかは要素の型で決まり、長さによらない（`[Char; 0]` は `Default` を満たさない。種も同じで、`[Str; 0]` は Shared である、§4.6）。
 - タプルと `[T; N]` の比較: `==` は全ての要素が等しいとき真。大小は、先頭から見て最初の等しくない要素の組で決める（辞書式）。その組が比べられない（浮動小数の NaN）なら、`<` `<=` `>` `>=` は全て偽で、スカラの IEEE の比較と同じである（`[1.0, NaN] < [2.0, 0.0]` は先頭で決まるので真、`[NaN, 0.0] < [1.0, 0.0]` は偽）。
 - `Show` の文字列: 整数は 10 進、`Bool` は `true` / `false`、`Char` はその文字、`Str` はそのまま。浮動小数は、その型（`F32` / `F64`）の値に読み戻せる最短の 10 進表記で、Onsa の浮動小数のリテラルとして読める形にする（小数点を必ず含む: `1.0`、`0.1`、`-0.0`）。
   絶対値が `1.0e21` 以上か `1.0e-7` 未満なら指数で書く（`1.0e21`、`1.5e-8`）。`NaN` は `NaN`、無限大は `inf` / `-inf`。全ての変換先で同じ文字列になる（§13.4）。
