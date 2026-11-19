@@ -3,28 +3,22 @@
 // spec = ["§11.3", "§11.4", "§11.5", "§18.1"]
 //
 // [[test.fix]]
-// at = "69:9"
+// at = "67:9"
 // code = "E0813"
 // candidate = 1
-// leaves = ["69:28 E0200"]
+// leaves = ["67:30 E0815"]
 //
 // [[test.fix]]
-// at = "77:9"
+// at = "71:9"
 // code = "E0813"
 // candidate = 1
-// leaves = ["77:30 E0815"]
+// leaves = ["71:22 E0815"]
 //
 // [[test.fix]]
-// at = "81:9"
+// at = "75:15"
 // code = "E0813"
 // candidate = 1
-// leaves = ["81:22 E0815"]
-//
-// [[test.fix]]
-// at = "85:15"
-// code = "E0813"
-// candidate = 1
-// leaves = ["85:9 E0815"]
+// leaves = ["75:9 E0815"]
 
 // Two errors inside one `let` or one expression: the first by position is the one reported
 // (§18.1: one error per flow, the first of the order start position, end position, code). The
@@ -63,10 +57,6 @@ pub flow e0815_in_a_branch_then_state(x: F32 at sample, c: Bool at sample) -> F3
 pub flow e0815_in_the_condition_then_state(x: F32 at sample, c: Bool at sample) -> F32 at sample {
   let a = if (x at block) > 0.0 { prev~(x) } else { x }        //~ E0815
   a
-}
-
-pub flow e0813_then_a_non_rt_call_at_sample(x: F32 at sample, c: F32 at init, p: F32 at block) -> F32 at sample {
-  prev~(p) + x * design(c)                                     //~ E0813
 }
 
 pub flow instance_argument_then_e0813(x: F32 at sample, p: F32 at block) -> F32 at sample {

@@ -1,0 +1,35 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.6"]
+
+// W7-05 U1/t, S-1161 (provisional, the decision is OPEN): the stage of a larger expression that holds an `at`,
+// `(n at sample) / m` with `n` and `m` of `block`. The reading taken here is S-1161 (1): the parent of an `at` expression is
+// evaluated at the clock of the `at` expression (`sample`), so the division is a `sample` expression and the call of 0
+// frames does not panic, the call of one frame does. The other reading (2) evaluates the division at `block` and panics in
+// a call of 0 frames too. Only this file reads (1): if S-1161 is decided as (2), only this file changes.
+
+pub flow at_in_a_division(x: I32 at sample, n: I32 at block, m: I32 at block) -> I32 at sample {
+  x + (n at sample) / m
+}
+
+test "S-1161 (1): the division of an at expression with m = 0 does not panic in a call of 0 frames" {
+  let xs: [I32; 1] = [1]
+  var out: [I32; 1] = [7]
+  var st = at_in_a_division.init(8.0)
+  at_in_a_division.process(inout st, at_in_a_division.Params { n: 6, m: 0 }, xs.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 7
+}
+
+test "S-1161 (1): the division panics in a call of one frame" {
+  let xs: [I32; 1] = [1]
+  let o = at_in_a_division.render(at_in_a_division.Params { n: 6, m: 0 }, xs, 8.0) //~ PANIC "S-1161 (1): the division panics in a call of one frame"
+  assert o.out[0] == 0
+}
+
+test "the value of the division: 6 / 3 = 2" {
+  let xs: [I32; 2] = [1, 10]
+  let o = at_in_a_division.render(at_in_a_division.Params { n: 6, m: 3 }, xs, 8.0)
+  assert o.out[0] == 3
+  assert o.out[1] == 12
+}

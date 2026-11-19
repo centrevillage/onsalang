@@ -81,7 +81,7 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
         state: false,
     });
     info.lets = lets.collect();
-    let m = super::reads::mark_all(ast, text, &body, &fcx, &w, &info.lets);
+    let mut m = super::reads::mark_all(a, ast, text, &body, &fcx, &w, &info.lets);
     (info.read_at, info.sample_rate_at) = (m.read_at, m.sample_rate_at);
     info.complete = w.diag.is_none() && m.diag.is_none() && w.inout_call.is_none() && fcx.held.is_none() && !fcx.unread;
     #[cfg(test)]
@@ -92,7 +92,7 @@ pub(crate) fn finish_flow(a: &mut Analysis, module: &Module, id: DefId, body: Bo
     info.lets.iter_mut().zip(state).for_each(|(l, s)| l.state = s);
     if info.complete {
         let recorded = std::mem::take(&mut w.recorded);
-        super::plan::build(&mut info, recorded, &w);
+        super::plan::build(&mut info, recorded, &w, ast, std::mem::take(&mut m.hoisted));
         let unused = super::reads::unused(a, id, ast, &info, &m.deps, &fcx);
         a.diagnostics.extend(unused);
     }
@@ -384,7 +384,7 @@ impl Walk<'_> {
                 let Some(k) = self.names.clocks.get(&e) else {
                     onsa_diag::internal::bug(self.span(e), "an `at` whose clock the names stage did not record")
                 };
-                self.check_at(e, *expr, c, k.clock());
+                self.check_at(e, c, k.clock());
                 Some(k.clock())
             }
             ExprKind::Tuple(es) | ExprKind::Array(es) => self.join_of(e, es.iter().copied()),

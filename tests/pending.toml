@@ -324,13 +324,6 @@ note = "`.(` の呼び出しが未実装（E0002）。関数値を通る再帰�
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/semantics/recursion_flow_const.onsa"
-reasons = ["R-17", "S-33"]
-until = "W7-05"
-note = "at は W3-10 で通るが、出力の式の中の rt でない関数の呼び出し is_even(20) が W3-10 の E0200（巻き上げは W7-05）"
-
-[[pending]]
-kind = "test-case"
 target = "tests/spec/negative/const_recursion_panic.onsa"
 reasons = ["S-131", "S-146", "S-222"]
 until = "W9-03"
@@ -355,7 +348,7 @@ kind = "test-case"
 target = "tests/spec/negative/const_depth_flow.onsa"
 reasons = ["S-102", "S-222"]
 until = "W9-03"
-note = "定数のクロックの式と @param の値が上限 128 を超えたときの E0419。@param の値の関数の呼び出しは W9-03 まで E0200（W7-13 U4b）、`sample` のクロックの式の関数の呼び出しも E0200"
+note = "定数のクロックの式と @param の値が上限 128 を超えたときの E0419。@param の値の関数の呼び出しは W9-03 まで E0200（W7-13 U4b）。定数だけを引数にする関数の呼び出しは W9-03 まで init の欄に巻き上げて init で評価する（W7-05 U1）ので、上限を超えても診断が無い"
 
 # --- W2-07/t: 黙って誤る降下を止める（2026-10-08）
 
@@ -988,7 +981,7 @@ note = "状態を持つものの置き場所（E0811 / E0812 / E0806）、Defaul
 
 [[pending]]
 kind = "test-case"
-target = "tests/spec/flow_clock/flow_fn_value_clock_model_until_w7_05.onsa"
-reasons = ["S-1133"]
+target = "tests/spec/flow_clock/e0813_candidate_computed.onsa"
+reasons = ["S-152"]
 until = "W7-05"
-note = "定数だけの呼び出しの applyf(FF, 1.0) はこの版で init（W9-03 まで）で、計算した式を速くする at は W7-05 の E0200 なので、E0810 より先に E0200 が出る（W7-14 U6b の model の f10_atb）"
+note = "E0813 の候補を計算した式（括弧の要る形を含む）へ広げる分は W7-05 U2（U1 では候補は名前とリテラルのまま。広げた版で候補の約束を破る形は U2 の設計で決める）"

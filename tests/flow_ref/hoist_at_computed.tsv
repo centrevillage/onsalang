@@ -1,0 +1,23 @@
+# flow_ref 1 source=tests/spec/flow_semantics/hoist_at_computed.onsa tests=7 evaluated=7 unavailable=0 skipped=0 waiting=0
+@ a computed block expression made sample with at
+render hoist_at_computed.sum_at_sample sr=0x41000000 params g=0x40000000 in x=[0x3f800000 0x40000000]
+out=[0x40400000 0x40c00000]
+@ a call of an init value made block with at
+render hoist_at_computed.call_at_block sr=0x41000000 cfg t=0x3fc00000 in x=[0x3f800000 0x40000000]
+out=[0x40400000 0x40c00000]
+@ a negated block value made sample with at
+render hoist_at_computed.negated_at_sample sr=0x41000000 params g=0x40000000 in x=[0x3f800000 0x40000000]
+out=[0xc0000000 0xc0800000]
+@ an element of a block array made sample with at
+render hoist_at_computed.index_at_sample sr=0x41000000 params s=[0x40a00000 0x41100000] in x=[0x3f800000 0x40000000]
+out=[0x40a00000 0x41200000]
+@ the delay of a computed block value made sample
+render hoist_at_computed.delay_of_a_computed_value sr=0x41000000 params g=0x40000000 in x=[0x3f800000 0x40000000 0x40800000]
+out=[0x3f800000 0x40a00000 0x40e00000]
+@ at does not change the stage: the division is of block and panics in a call of 0 frames
+init 0 hoist_at_computed.division_at_sample sr=0x41000000
+process 0 params d=0 frames=0 in x=[]
+panic block
+@ the division made sample gives its value
+render hoist_at_computed.division_at_sample sr=0x41000000 params d=5 in x=[0x3f800000 0x40000000]
+out=[0x41a00000 0x42200000]

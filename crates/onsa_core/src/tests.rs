@@ -564,31 +564,37 @@ fn a_constant_let_is_defined_in_each_phase_that_reads_it() {
 fn resonator_lowers_to_the_five_functions() {
     let m = core(RESONATOR);
     let d = dump(&m);
-    // State fields (S-05): _sample_rate, the Ctl lets read at Sig, the prev nodes, _poisoned.
+    // State fields (S-05): _sample_rate, the Ctl lets read at Sig, the prev
+    // nodes, the hoisted `1.0 - r` of `y` (§11.3, §12.4: `r` is read at Ctl
+    // only), _poisoned.
     assert!(
-        d.contains("type t.resonator.State = struct { _sample_rate: F32, r: F32, b1: F32, b2: F32, y1: F32, y2: F32, _poisoned: Bool, _initialized: Bool }"),
+        d.contains("type t.resonator.State = struct { _sample_rate: F32, b1: F32, b2: F32, y1: F32, y2: F32, y._hoist_0: F32, _poisoned: Bool, _initialized: Bool }"),
         "{d}"
     );
-    // ctl: Ctl lets in order, state ones stored; `w` is a plain local.
+    // ctl: Ctl lets in order, state ones stored; `r` and `w` are plain
+    // locals; the hoisted field last (S-1159).
     let ctl = pos(&d, "rt fn t.resonator.ctl(");
     let tick = pos(&d, "rt fn t.resonator.tick(inout s: t.resonator.State, x: F32) -> F32 {");
     assert!(ctl < tick);
-    assert!(d[ctl..tick].contains("s.1 = r\n"), "{d}");
+    assert!(d[ctl..tick].contains("s.1 = b1\n"), "{d}");
     assert!(d[ctl..tick].contains("let w: F32 ="), "{d}");
-    assert!(!d[ctl..tick].contains("= w\n"), "{d}");
+    assert!(!d[ctl..tick].contains("= w\n") && !d[ctl..tick].contains("= r\n"), "{d}");
+    assert!(d[ctl..tick].contains("s.5 = (1.0:F32 - r)\n}"), "{d}");
+    // tick reads the field.
+    assert!(d[tick..].contains("let y: F32 = (((s.5 * x) + "), "{d}");
     // tick: prev reads first, the output is materialised, then the stores in node order.
-    let read_y1 = pos(&d, "= s.4\n");
-    let read_y2 = pos(&d, "= s.5\n");
+    let read_y1 = pos(&d, "= s.3\n");
+    let read_y2 = pos(&d, "= s.4\n");
     let out = pos(&d, "let __out: F32 = y\n");
-    let store_y1 = pos(&d, "  s.4 = y\n");
-    let store_y2 = pos(&d, "  s.5 = y1");
+    let store_y1 = pos(&d, "  s.3 = y\n");
+    let store_y2 = pos(&d, "  s.4 = y1");
     assert!(read_y1 < read_y2 && read_y2 < out && out < store_y1 && store_y1 < store_y2, "{d}");
     // init / reset / process / process_inplace / render exist with the §11.6 shapes.
     assert!(
         d.contains("fn t.resonator.init(cfg: t.resonator.Config, sample_rate: F32) -> t.resonator.State sret {"),
         "{d}"
     );
-    assert!(d.contains("rt fn t.resonator.reset(inout s: t.resonator.State) -> () {\n  s.4 = 0.0:F32\n  s.5 = 0.0:F32\n  s.6 = false\n}"), "{d}");
+    assert!(d.contains("rt fn t.resonator.reset(inout s: t.resonator.State) -> () {\n  s.3 = 0.0:F32\n  s.4 = 0.0:F32\n  s.6 = false\n}"), "{d}");
     assert!(d.contains("rt fn t.resonator.process_inplace("), "{d}");
     assert!(d.contains("t.resonator.process(inout s, params, output, inout output)"), "{d}");
     assert!(d.contains("-> t.resonator.Rendered sret {"), "{d}");
@@ -597,7 +603,7 @@ fn resonator_lowers_to_the_five_functions() {
     assert_eq!((f.layout.size, f.layout.bulk_size, f.layout.align), (28, 0, 4));
     assert_eq!(
         f.layout.fast_fields.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(),
-        ["_sample_rate", "r", "b1", "b2", "y1", "y2", "_poisoned", "_initialized"]
+        ["_sample_rate", "b1", "b2", "y1", "y2", "y._hoist_0", "_poisoned", "_initialized"]
     );
     assert!(d.contains("const t.resonator.SIZE: U32 = 28:U32"), "{d}");
 }
@@ -718,10 +724,11 @@ fn sub_instances_are_wired_per_phase() {
     assert!(d.contains("= t.saw.tick(inout s.0)"), "{d}");
     assert!(d.contains("= t.smooth.tick(inout s.1)"), "{d}");
     assert!(d.contains("t.saw.reset(inout s.0)\n  t.smooth.reset(inout s.1)"), "{d}");
-    // The sub states store the inputs they read at Sig and the Init let.
+    // The sub states store the inputs they read at Sig, the Init let and
+    // the hoisted `f0 / sample_rate()` (§11.3: `f0` is read at Ctl only).
     assert!(
         d.contains(
-            "type t.saw.State = struct { _sample_rate: F32, f0: F32, phase.prev_0: F32, _poisoned: Bool, _initialized: Bool }"
+            "type t.saw.State = struct { _sample_rate: F32, phase.prev_0: F32, phase._hoist_0: F32, _poisoned: Bool, _initialized: Bool }"
         ),
         "{d}"
     );

@@ -10,13 +10,13 @@
 #include "voice_echo.h"
 
 /* ---- types ---- */
-struct voice__resonator__State { float onsa_sample_rate; float r; float b1; float b2; float y1; float y2; bool onsa_poisoned; bool onsa_initialized; };
+struct voice__resonator__State { float onsa_sample_rate; float b1; float b2; float y1; float y2; float y___hoist_0; bool onsa_poisoned; bool onsa_initialized; };
 typedef struct voice__resonator__State voice__resonator__State;
 struct voice__resonator__Params { float fc; float bw; };
 typedef struct voice__resonator__Params voice__resonator__Params;
 struct voice__resonator__Config { uint8_t onsa_empty; };
 typedef struct voice__resonator__Config voice__resonator__Config;
-struct voice__saw__State { float onsa_sample_rate; float f0; float phase__prev_0; bool onsa_poisoned; bool onsa_initialized; };
+struct voice__saw__State { float onsa_sample_rate; float phase__prev_0; float phase___hoist_0; bool onsa_poisoned; bool onsa_initialized; };
 typedef struct voice__saw__State voice__saw__State;
 struct voice__saw__Params { float f0; };
 typedef struct voice__saw__Params voice__saw__Params;
@@ -82,12 +82,12 @@ ONSA_INLINE void voice__echo__params_default(voice__echo__Params* out);
 
 ONSA_INLINE void voice__resonator__ctl(voice__resonator__State* s, const voice__resonator__Params* p) {
   float r = expf((float)((float)(-(float)(std__core__num__F32__PI * p->bw)) / s->onsa_sample_rate));
-  s->r = r;
   float w = (float)((float)((float)(2.0f * std__core__num__F32__PI) * p->fc) / s->onsa_sample_rate);
   float b1 = (float)((float)(2.0f * r) * cosf(w));
   s->b1 = b1;
   float b2 = (float)(r * r);
   s->b2 = b2;
+  s->y___hoist_0 = (float)(1.0f - r);
 }
 
 ONSA_INLINE float voice__resonator__tick(voice__resonator__State* s, float x) {
@@ -97,7 +97,7 @@ ONSA_INLINE float voice__resonator__tick(voice__resonator__State* s, float x) {
   float y2;
   float y2_12 = s->y2;
   y2 = y2_12;
-  float y = (float)((float)((float)((float)(1.0f - s->r) * x) + (float)(s->b1 * y1)) - (float)(s->b2 * y2));
+  float y = (float)((float)((float)(s->y___hoist_0 * x) + (float)(s->b1 * y1)) - (float)(s->b2 * y2));
   float onsa__out = y;
   s->y1 = y;
   s->y2 = y1;
@@ -124,14 +124,13 @@ ONSA_INLINE void voice__resonator__reset(voice__resonator__State* s) {
 }
 
 ONSA_INLINE void voice__saw__ctl(voice__saw__State* s, const voice__saw__Params* p) {
-  (void)s;
-  s->f0 = p->f0;
+  s->phase___hoist_0 = (float)(p->f0 / s->onsa_sample_rate);
 }
 
 ONSA_INLINE float voice__saw__tick(voice__saw__State* s) {
   float phase;
   float phase__prev_0 = s->phase__prev_0;
-  float onsa_t1 = voice__wrap01((float)(phase__prev_0 + (float)(s->f0 / s->onsa_sample_rate)));
+  float onsa_t1 = voice__wrap01((float)(phase__prev_0 + s->phase___hoist_0));
   phase = onsa_t1;
   float onsa__out = (float)((float)(2.0f * phase) - 1.0f);
   s->phase__prev_0 = phase;

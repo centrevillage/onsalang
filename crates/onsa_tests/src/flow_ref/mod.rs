@@ -48,6 +48,7 @@ pub mod call;
 pub mod data;
 pub mod expr;
 pub mod flow;
+mod hoist;
 pub mod host;
 pub mod interp_host;
 pub mod pattern;
@@ -73,6 +74,8 @@ mod data_tests;
 mod expr_tests;
 #[cfg(test)]
 mod flow_tests;
+#[cfg(test)]
+mod hoist_tests;
 #[cfg(test)]
 mod instance_tests;
 #[cfg(test)]

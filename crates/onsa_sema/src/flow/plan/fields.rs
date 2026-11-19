@@ -29,6 +29,7 @@ pub enum FieldOf {
     Input(LocalId),
     Let(LocalId),
     Node(NodeId, Part),
+    Hoist(HoistId),
     Poisoned,
     Initialized,
 }
@@ -73,7 +74,8 @@ impl FlowInfo {
 /// The fields of the state of `info` (S-05, §12.4): `_sample_rate` when it
 /// is kept, the kept inputs in their order, then for each `let` in its
 /// order its kept locals and the fields of its nodes, the fields of the
-/// nodes of the output, `_poisoned` and `_initialized`; and the fields of
+/// nodes of the output, the hoisted fields in their order, `_poisoned` and
+/// `_initialized`; and the fields of
 /// the replica of each `par~`, of its `children`. The names are of
 /// [`names`] and [`FixedField`].
 pub(super) fn build(info: &mut FlowInfo) {
@@ -98,6 +100,8 @@ pub(super) fn build(info: &mut FlowInfo) {
     for &id in p.roots(Owner::Output) {
         s.node(id, &mut top);
     }
+    let hoists = p.hoists.iter().enumerate();
+    top.extend(hoists.map(|(h, x)| field(FieldOf::Hoist(HoistId(h as u32)), &x.path)));
     top.push(field(FieldOf::Poisoned, FixedField::Poisoned.name()));
     top.push(field(FieldOf::Initialized, FixedField::Initialized.name()));
     let (at, pars) = (s.at, s.pars);
@@ -127,6 +131,7 @@ fn unique(info: &FlowInfo, fields: &[Field]) {
     let span = |of: FieldOf| match of {
         FieldOf::Node(id, _) => Some(info.node(id).span),
         FieldOf::Input(l) | FieldOf::Let(l) => Some(info.body.locals[l.0 as usize].span),
+        FieldOf::Hoist(h) => Some(info.hoist(h).span),
         FieldOf::SampleRate | FieldOf::Poisoned | FieldOf::Initialized => None,
     };
     let mut seen: HashMap<&str, FieldOf> = HashMap::default();

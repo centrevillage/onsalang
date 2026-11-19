@@ -15,8 +15,8 @@
 // f10 `applyf(FF, 1.0)` (constant). Wraps: id; lp `lp~(A)`; par `(par~ i in 0 ..< 2 { A })[0]`; add `(A + x)`; atb `(A) at block`; nrt `slow(A)` (not `rt`, E0815 for an argument at
 // `block` or `sample`); tob `to_block~(A)` (an input at `block`); prev `prev~(A)`, del `delay~(A, 4)`, vdel `vdelay~(A, x, 8)` (the first argument at `sample`, E0813; a delay in it is read at its own clock, and an atom that is a delay (f6) is the E0810 of the function value in it);
 // pinit `prev~(x, A)` (`init` at `init` or a constant); par0 `(par~ i in 3 ..< 3 { A })[0]` (E0808 at the `par~`); del0 `delay~(A, 0)` (E0808 at the `0`).
-// The row f10_atb is in `flow_fn_value_clock_model_until_w7_05.onsa`: in this version a call of constants only is at `init` (until W9-03), and an `at`
-// that makes a computed expression faster is an E0200 (until W7-05), so that row reports the E0200 first.
+// The row f10_atb is in `flow_fn_value_clock_model_atb_constant.onsa` (it was in this file's list of the rows that this version could not report: an `at` that makes a
+// computed expression faster was an E0200 until W7-05).
 
 pub rt fn dbl(v: F32) -> F32 { v }
 const FF: rt fn(F32) -> F32 = dbl

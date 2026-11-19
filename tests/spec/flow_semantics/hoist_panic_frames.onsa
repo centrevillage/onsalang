@@ -1,0 +1,52 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.6", "§9.2"]
+
+// W7-05 U1/t, S-1093, S-1157 (spec §11.3, §11.6): the panics of a `block` part and of a `block` `let` that are the same
+// before and after hoisting: a call of one frame or more panics when the `block` part divides by zero (the `block` stage
+// is first, so no output is written), and a `let` of `block` is evaluated at its stage, whether it is read or not, a call
+// of 0 frames too (S-1093 (1): "`let` の値と出力の式は、読まれるか、どこで読まれるかによらず、その段で無条件に評価する"). The panic of a `block` part
+// in a call of 0 frames, which this version does not make, is in hoist_panic_zero_frames.onsa.
+
+// The `let` of `block` is read by nothing.
+pub flow unread_let(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  let _ = 100 / d
+  x
+}
+
+// The `let` of `block` is read only in a branch that is not taken: it is evaluated (not guarded, it is not in the
+// branch).
+pub flow let_for_a_branch(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  let k = F32.round_from(100 / d)
+  if x > 100.0 { k } else { x }
+}
+
+test "a let of block that nothing reads panics in a call of 0 frames" {
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var st = unread_let.init(8.0)
+  unread_let.process(inout st, unread_let.Params { d: 0 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "a let of block that nothing reads panics in a call of 0 frames"
+  assert out[0] == 7.0
+}
+
+test "a let of block that nothing reads does not panic with d = 4" {
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [7.0]
+  var st = unread_let.init(8.0)
+  unread_let.process(inout st, unread_let.Params { d: 4 }, xs.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 7.0
+}
+
+test "a let of block that only a branch not taken reads panics all the same" {
+  let xs: [F32; 1] = [1.0]
+  let o = let_for_a_branch.render(let_for_a_branch.Params { d: 0 }, xs, 8.0) //~ PANIC "a let of block that only a branch not taken reads panics all the same"
+  assert o.out[0] == 0.0
+}
+
+test "the branch that is not taken with d = 4 gives x" {
+  let xs: [F32; 2] = [1.0, 200.0]
+  let o = let_for_a_branch.render(let_for_a_branch.Params { d: 4 }, xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 25.0
+}

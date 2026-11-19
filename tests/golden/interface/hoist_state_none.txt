@@ -1,0 +1,80 @@
+package hoist_state_none
+
+module hoist_state_none
+
+pub flow names_and_rate(
+  x: F32 at sample,
+  g: F32 at block,
+) -> F32 at sample
+  pub struct names_and_rate.State  // Affine; size 12, bulk 0, align 4
+    _sample_rate: 4 bytes, align 4, fast  // offset 0
+    g: 4 bytes, align 4, fast  // offset 4
+    _poisoned: 1 bytes, align 1, fast  // offset 8
+    _initialized: 1 bytes, align 1, fast  // offset 9
+  pub struct names_and_rate.Params  // Copy; size 4, align 4
+    g: F32  // offset 0
+  pub struct names_and_rate.Rendered  // Affine
+    out: Buf[F32]
+  pub const names_and_rate.SIZE: U32 = 12
+  pub const names_and_rate.BULK_SIZE: U32 = 0
+  pub fn names_and_rate.init(sample_rate: F32) -> names_and_rate.State
+  pub rt fn names_and_rate.reset(inout s: names_and_rate.State)
+  pub rt fn names_and_rate.process(inout s: names_and_rate.State, params: names_and_rate.Params, input: Span[F32], inout output: Span[F32])
+  pub rt fn names_and_rate.process_inplace(inout s: names_and_rate.State, params: names_and_rate.Params, inout output: Span[F32])
+  pub fn names_and_rate.render(params: names_and_rate.Params, input: Span[F32], sample_rate: F32) -> names_and_rate.Rendered uses {Alloc}
+
+pub flow a_constant(
+  x: F32 at sample,
+  g: F32 at block,
+) -> F32 at sample
+  pub struct a_constant.State  // Affine; size 8, bulk 0, align 4
+    g: 4 bytes, align 4, fast  // offset 0
+    _poisoned: 1 bytes, align 1, fast  // offset 4
+    _initialized: 1 bytes, align 1, fast  // offset 5
+  pub struct a_constant.Params  // Copy; size 4, align 4
+    g: F32  // offset 0
+  pub struct a_constant.Rendered  // Affine
+    out: Buf[F32]
+  pub const a_constant.SIZE: U32 = 8
+  pub const a_constant.BULK_SIZE: U32 = 0
+  pub fn a_constant.init(sample_rate: F32) -> a_constant.State
+  pub rt fn a_constant.reset(inout s: a_constant.State)
+  pub rt fn a_constant.process(inout s: a_constant.State, params: a_constant.Params, input: Span[F32], inout output: Span[F32])
+  pub rt fn a_constant.process_inplace(inout s: a_constant.State, params: a_constant.Params, inout output: Span[F32])
+  pub fn a_constant.render(params: a_constant.Params, input: Span[F32], sample_rate: F32) -> a_constant.Rendered uses {Alloc}
+
+pub flow a_let_by_name(
+  x: F32 at sample,
+  g: F32 at block,
+) -> F32 at sample
+  pub struct a_let_by_name.State  // Affine; size 8, bulk 0, align 4
+    c: 4 bytes, align 4, fast  // offset 0
+    _poisoned: 1 bytes, align 1, fast  // offset 4
+    _initialized: 1 bytes, align 1, fast  // offset 5
+  pub struct a_let_by_name.Params  // Copy; size 4, align 4
+    g: F32  // offset 0
+  pub struct a_let_by_name.Rendered  // Affine
+    out: Buf[F32]
+  pub const a_let_by_name.SIZE: U32 = 8
+  pub const a_let_by_name.BULK_SIZE: U32 = 0
+  pub fn a_let_by_name.init(sample_rate: F32) -> a_let_by_name.State
+  pub rt fn a_let_by_name.reset(inout s: a_let_by_name.State)
+  pub rt fn a_let_by_name.process(inout s: a_let_by_name.State, params: a_let_by_name.Params, input: Span[F32], inout output: Span[F32])
+  pub rt fn a_let_by_name.process_inplace(inout s: a_let_by_name.State, params: a_let_by_name.Params, inout output: Span[F32])
+  pub fn a_let_by_name.render(params: a_let_by_name.Params, input: Span[F32], sample_rate: F32) -> a_let_by_name.Rendered uses {Alloc}
+
+pub flow all_sample(
+  x: F32 at sample,
+) -> F32 at sample
+  pub struct all_sample.State  // Affine; size 2, bulk 0, align 1
+    _poisoned: 1 bytes, align 1, fast  // offset 0
+    _initialized: 1 bytes, align 1, fast  // offset 1
+  pub struct all_sample.Rendered  // Affine
+    out: Buf[F32]
+  pub const all_sample.SIZE: U32 = 2
+  pub const all_sample.BULK_SIZE: U32 = 0
+  pub fn all_sample.init(sample_rate: F32) -> all_sample.State
+  pub rt fn all_sample.reset(inout s: all_sample.State)
+  pub rt fn all_sample.process(inout s: all_sample.State, input: Span[F32], inout output: Span[F32])
+  pub rt fn all_sample.process_inplace(inout s: all_sample.State, inout output: Span[F32])
+  pub fn all_sample.render(input: Span[F32], sample_rate: F32) -> all_sample.Rendered uses {Alloc}

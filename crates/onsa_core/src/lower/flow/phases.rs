@@ -29,7 +29,7 @@ pub(super) fn gen_init<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Fl
     g.inputs_from(lw, shape, info, &cfg, &s)?;
     g.state_overrides(lw, info, &s)?;
     g.const_lets(lw, info)?;
-    g.rate_lets(lw, info, &s)?;
+    g.stage_lets(lw, info, &s)?;
     let nodes: Vec<NodeId> = info.top().collect();
     init_nodes(lw, &mut g.cx, &mut g.stmts, &nodes, &s, &sr)?;
     let poisoned = sfield(lw, info, &s, FieldOf::Poisoned, span)?;
@@ -165,7 +165,7 @@ pub(super) fn gen_ctl<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Flo
     g.inputs_from(lw, shape, info, &p, &s)?;
     g.state_overrides(lw, info, &s)?;
     g.const_lets(lw, info)?;
-    g.rate_lets(lw, info, &s)?;
+    g.stage_lets(lw, info, &s)?;
     let nodes: Vec<NodeId> = info.top().collect();
     ctl_nodes(lw, &mut g.cx, &mut g.stmts, &nodes, &s)?;
     g.finish(lw, fns.ctl, Ty::Unit, true, None);
@@ -215,7 +215,7 @@ pub(super) fn gen_tick<'b>(lw: &mut Lowerer<'b>, shape: &FlowShape, info: &'b Fl
     g.flow().scopes.push(Scope { state: s.clone() });
     g.state_overrides(lw, info, &s)?;
     g.const_lets(lw, info)?;
-    g.rate_lets(lw, info, &s)?;
+    g.stage_lets(lw, info, &s)?;
     let output = info.output.ok_or_else(|| internal(shape.span, "flow without an output expression"))?;
     let v = lower_expr(lw, &mut g.cx, output)?;
     let v = of_type(v, &out_ty)?;

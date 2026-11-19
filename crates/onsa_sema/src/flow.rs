@@ -39,11 +39,16 @@
 //!   of an owner (of a `par~`, its `children`), [`FlowInfo::top`] those of
 //!   the `let`s and the output. Empty when the flow is not `complete`.
 //! - `node_of` — a call or `par~` expression → its node.
+//! - `hoists: Vec<Hoist>` — the slow subexpressions read at a faster stage,
+//!   evaluated at the stage of their clock into hidden fields (§11.3,
+//!   [`hoist`]): chosen by the marking, which reads their parts at their
+//!   stage, so `read_at` comes of the choice. [`FlowInfo::hoist_of`] gives
+//!   the one of an expression.
 //! - `fields: Vec<Field>` — the fields of the `State` in the order of §12.4
 //!   (S-05, S-06, [`plan`]): `_sample_rate`, the inputs and the locals of the
 //!   `let`s [`FlowInfo::stored`] keeps, the fields of the nodes of each `let`
-//!   and of the output, `_poisoned`, `_initialized`; a `par~` with state has
-//!   the fields of its replica. The lowering reads their places by what they
+//!   and of the output, the hoisted fields, `_poisoned`, `_initialized`; a
+//!   `par~` with state has the fields of its replica. The lowering reads their places by what they
 //!   hold ([`FlowInfo::field_at`]) and gives them their Core types.
 //! - `sample_rate_at: Option<ClockStage>` — the latest stage at which
 //!   `sample_rate()` is read (`None`: never; `Init`: no state field needed;
@@ -53,9 +58,9 @@
 //!   S-05): each argument of a node at the stage of its clock
 //!   ([`ArgRead::at`]: of an instance, the callee input's clock; the first
 //!   argument and the `d` of a delay, the clock of the delay; an `init`,
-//!   `Init`), the initializer of a constant `let` at each stage its locals
-//!   are read at (at `Init` when none is read: a constant is read at the
-//!   first stage). A local that is never read has no entry. The state keeps
+//!   `Init`), the parts of a hoisted subexpression at its stage, the
+//!   initializer of a constant `let` at each stage its locals are read at
+//!   (at `Init` when none is read: a constant is read at the first stage). A local that is never read has no entry. The state keeps
 //!   an input or a `let` read at a stage not its own ([`FlowInfo::stored`]);
 //!   the function of each stage defines the constant `let`s it reads
 //!   ([`FlowInfo::consts_at`], §11.3).
@@ -69,9 +74,9 @@
 //!
 //! The parts are in a module each: `check` (the flow mode of the checker),
 //! `consts` (the constant expressions), `clocks` (the walk of the clocks and
-//! the checks of the flow rules), `loops` (the loops of the `let`s), `nodes`
-//! (the record of the nodes), `plan` (the table of the nodes) and `reads`
-//! (the state marking). The tables are here.
+//! the checks of the flow rules), `hoist` (hoisting), `loops` (the loops of
+//! the `let`s), `nodes` (the record of the nodes), `plan` (the table of the
+//! nodes) and `reads` (the state marking). The tables are here.
 
 use std::collections::BTreeSet;
 
@@ -92,6 +97,7 @@ use crate::flow_names::{Delay, SAMPLE_RATE};
 mod check;
 mod clocks;
 mod consts;
+mod hoist;
 mod loops;
 mod nodes;
 mod plan;
@@ -99,6 +105,7 @@ mod reads;
 #[cfg(test)]
 mod tests;
 
+pub use hoist::{Hoist, HoistId};
 pub use plan::{Field, FieldOf, Kept, NodeId, Owner, Part, PlanKind, PlanNode};
 
 pub(crate) use clocks::finish_flow;
@@ -187,6 +194,11 @@ pub struct FlowInfo {
     pub nodes: Vec<PlanNode>,
     pub node_of: HashMap<ExprId, NodeId>,
     pub(crate) roots: plan::Roots,
+    /// The hoisted subexpressions (§11.3), in the order of their fields
+    /// ([`hoist`]'s `table`); [`FlowInfo::hoist_of`] finds the one of an
+    /// expression.
+    pub hoists: Vec<Hoist>,
+    pub(crate) hoisted: HashMap<ExprId, HoistId>,
     pub fields: Vec<Field>,
     /// The place of each field in the struct that holds it, made once with
     /// the fields ([`FlowInfo::field_at`]).

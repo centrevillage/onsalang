@@ -1,0 +1,33 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.6", "§12.4"]
+// golden = ["interface"]
+
+// W7-05 U1/t, S-1157 (§11.3, §12.4): what is not hoisted has no hidden field of the kind `_hoist`: a name (an input, a `let`), `sample_rate()` and
+// a constant ("名前、`sample_rate()`、`sample_tick()`、定数のクロックの式は巻き上げない（既に置き場所があるか、状態に置かないため）"), and
+// an expression that is of the clock `sample`. The state is what it is without hoisting (the same before and after W7-05): the input of `block` that
+// `sample` reads is copied ("自分のクロックより速いクロックから読まれる入力"), a `let` of `block` that `sample` reads has its field, and `_sample_rate`
+// is first. The fields of each flow:
+//
+//   names_and_rate: _sample_rate, g (`x * g * 3.0 + sample_rate()`; `g` is read as a name by `sample`)
+//   a_constant:     g (`2.0 * 3.0` is a constant)
+//   a_let_by_name:  c (the `let` of `block` is read by `sample` as a name)
+//   all_sample:     no field of the body (the parts are of `sample`)
+
+pub flow names_and_rate(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  x * g * 3.0 + sample_rate()
+}
+
+pub flow a_constant(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  x * (2.0 * 3.0) + g
+}
+
+pub flow a_let_by_name(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let c = g * 2.0
+  x * c
+}
+
+pub flow all_sample(x: F32 at sample) -> F32 at sample {
+  let y = x * 2.0
+  y + 1.0
+}

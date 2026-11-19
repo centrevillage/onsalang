@@ -96,7 +96,8 @@ fn the_generated_types_are_named_by_their_role() {
 fn resonator_rates_and_state() {
     let a = ok(RESONATOR);
     let f = flow(&a, "resonator");
-    assert_eq!(let_rate(f, "r"), (Clock::Block, true));
+    // `r` is read at `sample` only in `1.0 - r`, hoisted to `block` (§11.3).
+    assert_eq!(let_rate(f, "r"), (Clock::Block, false));
     assert_eq!(let_rate(f, "w"), (Clock::Block, false));
     assert_eq!(let_rate(f, "b1"), (Clock::Block, true));
     assert_eq!(let_rate(f, "b2"), (Clock::Block, true));
@@ -109,6 +110,10 @@ fn resonator_rates_and_state() {
     // `sample_rate()` is read at Ctl rate: stored in the state (S-05).
     assert_eq!(f.sample_rate_at, Some(ClockStage::Block));
     assert_eq!(f.sample_rate_calls.len(), 2);
+    assert_eq!(
+        f.hoists.iter().map(|h| (h.path.as_str(), h.stage)).collect::<Vec<_>>(),
+        [("y._hoist_0", ClockStage::Block)]
+    );
     assert_eq!(f.inputs.len(), 3);
     assert_eq!(f.clocks.locals[&f.inputs[0]], Clock::SAMPLE);
     assert_eq!(f.clocks.locals[&f.inputs[1]], Clock::Block);
@@ -142,10 +147,11 @@ fn voice_instances_are_named() {
         matches!(top_kind(f, 1), PlanKind::Instance { callee, args, .. } if a.def(*callee).name == "resonator" && args.len() == 3)
     );
     assert_eq!(f.node_of.len(), 4);
-    // `saw`: the `prev` inside `wrap01(...)` is qualified by its `let`.
+    // `saw`: the `prev` inside `wrap01(...)` is qualified by its `let`;
+    // `f0 / sample_rate()` is hoisted to `block` (§11.3).
     let saw = flow(&a, "saw");
     assert_eq!(top_names(saw), vec!["phase.prev_0"]);
-    assert_eq!(saw.sample_rate_at, Some(ClockStage::Tick(Ratio(0))));
+    assert_eq!(saw.sample_rate_at, Some(ClockStage::Block));
 }
 
 #[test]
@@ -201,8 +207,14 @@ fn non_rt_function_only_at_init() {
     let src = "pub fn make(n: F32) -> F32 { n * 2.0 }\npub flow f(t: F32 at init, c: F32 at block) -> F32 at sample {\n  let a = make(t)\n  let b = make(2.0)\n  a + b + c\n}\n";
     let a = ok(src);
     let f = flow(&a, "f");
-    assert_eq!(let_rate(f, "a"), (Clock::Init, true));
-    assert_eq!(let_rate(f, "b"), (Clock::Init, true));
+    // Read only in `a + b`, hoisted to `init` in `a + b + c`, hoisted to
+    // `block` (§11.3).
+    assert_eq!(let_rate(f, "a"), (Clock::Init, false));
+    assert_eq!(let_rate(f, "b"), (Clock::Init, false));
+    assert_eq!(
+        f.hoists.iter().map(|h| (h.path.as_str(), h.stage)).collect::<Vec<_>>(),
+        [("_out._hoist_0", ClockStage::Block), ("_out._hoist_1", ClockStage::Init)]
+    );
     assert_eq!(
         codes("pub fn make(n: F32) -> F32 { n * 2.0 }\npub flow f(c: F32 at block) -> F32 at sample {\n  make(c)\n}\n"),
         vec![Code::E0815]

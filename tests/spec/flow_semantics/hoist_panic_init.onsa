@@ -1,0 +1,61 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.5", "§11.6", "§9.2"]
+
+// W7-05 U1/t, S-1093, S-1157, R-17, S-33 (spec §11.3, §11.5): an `init` expression is evaluated once, at `init`, and its
+// panic is a panic of `init` ("`init` の式は `init` で 1 回"; "`init` の段の式の panic は `init` で起きる"). So a division by zero in an
+// `init` part of a `sample` expression panics at `init`, before any call of `process`; it did not when this part was
+// evaluated where it is written, in the frame. A call of a function that is not `rt` of an `init` input is an `init` part
+// too, and panics at `init` the same way: that is in hoist_panic_init_non_rt.onsa, which this version does not check (E0200).
+// `n` is the `init` input and `x` the `sample` input.
+
+pub flow in_sample_expr(x: F32 at sample, n: I32 at init) -> F32 at sample {
+  x * F32.round_from(100 / n)
+}
+
+pub flow in_a_let(x: F32 at sample, n: I32 at init) -> F32 at sample {
+  let y = x + F32.round_from(100 / n)
+  y
+}
+
+// The output expression is of `init` itself.
+pub flow output_of_init(x: F32 at sample, n: I32 at init) -> I32 at sample {
+  100 / n
+}
+
+// The `init` part that is inside a `block` part: `n + e` is of `block`, and `100 / n` of `init` panics at `init`.
+pub flow init_in_block(x: F32 at sample, n: I32 at init, e: I32 at block) -> F32 at sample {
+  x * F32.round_from(e + 100 / n)
+}
+
+test "an init part of a sample expression panics at init" {
+  let _ = in_sample_expr.init(in_sample_expr.Config { n: 0 }, 8.0) //~ PANIC "an init part of a sample expression panics at init"
+}
+
+test "the same init part with n = 5 gives 20" {
+  // 100 / 5 = 20.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = in_sample_expr.render(in_sample_expr.Config { n: 5 }, xs, 8.0)
+  assert o.out[0] == 20.0
+  assert o.out[1] == 40.0
+}
+
+test "an init part in a let of sample panics at init" {
+  let _ = in_a_let.init(in_a_let.Config { n: 0 }, 8.0) //~ PANIC "an init part in a let of sample panics at init"
+}
+
+test "an output expression of init panics at init" {
+  let _ = output_of_init.init(output_of_init.Config { n: 0 }, 8.0) //~ PANIC "an output expression of init panics at init"
+}
+
+test "an init part inside a block part panics at init" {
+  let _ = init_in_block.init(init_in_block.Config { n: 0 }, 8.0) //~ PANIC "an init part inside a block part panics at init"
+}
+
+test "an init part inside a block part gives its value" {
+  // n = 5, e = 3: 3 + 20 = 23.
+  let xs: [F32; 1] = [2.0]
+  let o = init_in_block.render(init_in_block.Config { n: 5 }, init_in_block.Params { e: 3 }, xs, 8.0)
+  assert o.out[0] == 46.0
+}

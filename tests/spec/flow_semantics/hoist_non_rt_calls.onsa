@@ -1,0 +1,133 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.5"]
+
+// W7-05 U1/t, R-17, S-33, S-1157 (spec §11.5, §11.3): a call of a function that is not `rt` takes arguments of the clock
+// `init` or constants, and is computed at `init` (constants only: at compile time) wherever it is written outside a branch,
+// "引数が全て定数ならコンパイル時、そうでなければ `init` の段で評価される" ("rt でない関数の呼び出しは、条件の位置の外ではそのクロックの段で評価する").
+// In a `sample` or a `block` expression the call is an `init` part, so it is evaluated once, at `init` (its panic is a panic
+// of `init`). This is what the file `flow_map_unsupported_w7_05.onsa` of the negative cases said an E0200: it is accepted
+// now (hoisting, R-17). Every value is worked out by hand.
+
+pub fn design(f: F32) -> F32 {
+  f * 0.5
+}
+
+pub fn make(a: F32) -> F32 {
+  a + 1.0
+}
+
+pub fn inv(a: I32) -> I32 {
+  100 / a
+}
+
+// The call is an `init` part of a `sample` expression.
+pub flow at_sample(x: F32 at sample, f: F32 at init) -> F32 at sample {
+  x * design(f)
+}
+
+// The call of constants only is a constant, in a `block` expression.
+pub flow at_block(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let c = g + design(2.0)
+  x * c
+}
+
+// The call in a `let` of its own: the clock of the `let` is `init`.
+pub flow in_a_let(x: F32 at sample, f: F32 at init) -> F32 at sample {
+  let c = design(f)
+  x * c
+}
+
+// A call of `init` inside a part of `block`: `n * make(a)` is of `block`, `make(a)` of `init`.
+pub flow nested(x: F32 at sample, n: F32 at block, a: F32 at init) -> F32 at sample {
+  x * (n * make(a))
+}
+
+// The call that panics is an `init` part: it panics at `init`.
+pub flow panics_at_init(x: F32 at sample, n: I32 at init) -> F32 at sample {
+  x * F32.round_from(inv(n))
+}
+
+pub flow panics_inside_a_block_part(x: F32 at sample, a: I32 at init, e: I32 at block) -> F32 at sample {
+  x * F32.round_from(e + inv(a))
+}
+
+test "a call of a function that is not rt of an init input in a sample expression" {
+  // design(4.0) = 2.0.
+  let xs: [F32; 2] = [1.0, 3.0]
+  let o = at_sample.render(at_sample.Config { f: 4.0 }, xs, 8.0)
+  assert o.out[0] == 2.0
+  assert o.out[1] == 6.0
+}
+
+test "a call of constants only in a block expression" {
+  // design(2.0) = 1.0; g = 3.0: c = 4.0.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = at_block.render(at_block.Params { g: 3.0 }, xs, 8.0)
+  assert o.out[0] == 4.0
+  assert o.out[1] == 8.0
+}
+
+test "the call in a let of its own" {
+  // design(6.0) = 3.0.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = in_a_let.render(in_a_let.Config { f: 6.0 }, xs, 8.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == 6.0
+}
+
+test "a call of init inside a part of block" {
+  // a = 3.0: make(a) = 4.0; n = 2.0: 8.0. x = 1.0, 2.0.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = nested.render(nested.Config { a: 3.0 }, nested.Params { n: 2.0 }, xs, 8.0)
+  assert o.out[0] == 8.0
+  assert o.out[1] == 16.0
+}
+
+test "the call is made once at init: process again with another n reads the same make(a)" {
+  // make(3.0) = 4.0 in both calls; n = 2.0 then 0.5.
+  let xs: [F32; 1] = [1.0]
+  var out: [F32; 1] = [0.0]
+  var st = nested.init(nested.Config { a: 3.0 }, 8.0)
+  nested.process(inout st, nested.Params { n: 2.0 }, xs, inout out)
+  assert out[0] == 8.0
+  nested.process(inout st, nested.Params { n: 0.5 }, xs, inout out)
+  assert out[0] == 2.0
+}
+
+test "a call that panics is an init part: it panics at init" {
+  let _ = panics_at_init.init(panics_at_init.Config { n: 0 }, 8.0) //~ PANIC "a call that panics is an init part: it panics at init"
+}
+
+test "the call that gives its value: inv(4) = 25" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = panics_at_init.render(panics_at_init.Config { n: 4 }, xs, 8.0)
+  assert o.out[0] == 25.0
+  assert o.out[1] == 50.0
+}
+
+test "a call of init inside a part of block panics at init" {
+  let _ = panics_inside_a_block_part.init(panics_inside_a_block_part.Config { a: 0 }, 8.0) //~ PANIC "a call of init inside a part of block panics at init"
+}
+
+// The argument is `sample_rate()`, a value of `init` (§11.3): the call is an `init` part, in a `let` of its own and
+// in a `sample` expression (the input `flow/e4/nonrt.onsa` of R-17 in `tests/review-phase1/`).
+pub flow of_the_rate_in_a_let(x: F32 at sample) -> F32 at sample {
+  let k = design(sample_rate())
+  x * k
+}
+
+pub flow of_the_rate(x: F32 at sample) -> F32 at sample {
+  x * design(sample_rate())
+}
+
+test "a call of sample_rate() is an init part: design(4.0) = 2.0" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = of_the_rate_in_a_let.render(xs, 4.0)
+  assert o.out[0] == 2.0
+  assert o.out[1] == 4.0
+  let p = of_the_rate.render(xs, 4.0)
+  assert p.out[0] == 2.0
+  assert p.out[1] == 4.0
+}

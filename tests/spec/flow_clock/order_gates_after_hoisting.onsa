@@ -1,0 +1,49 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§11.5", "§18.1"]
+
+// W7-05 U1/t, R-17, S-33, S-152 (§11.3, §11.5, §18.1): the forms of order_outer_before_inner.onsa and order_in_a_flow.onsa that had the E0200 of a gate first, a call of a
+// function that is not `rt` read at the clock `sample` and an `at` that makes a computed expression faster. These are accepted now (hoisting, §11.3), so
+// each flow has the one error of its other part: the E0813 of the delay and the E0805 of the call with an effect are the first and only ones, and a
+// valid call or `at` before or after them changes nothing (the one error of a flow, §18.1). The marker is on the line of the error.
+
+pub fn noisy(v: F32) -> F32 uses {Alloc} { v }
+pub fn design(v: F32) -> F32 { v * 0.5 }
+
+pub flow non_rt_call_then_delay(x: F32 at sample, c: F32 at init, p: F32 at block) -> F32 at sample {
+  x * design(c) + prev~(p)                                       //~ E0813
+}
+
+pub flow non_rt_call_then_effect(x: F32 at sample, c: F32 at init) -> F32 at sample {
+  x * design(c) + noisy(x)                                       //~ E0805
+}
+
+// The E0813 of the delay comes first by position; the call of a function that is not `rt` after it is no error now (before it was an E0200 that the
+// candidate of the E0813 left, `order_nested_positions.onsa`), so the candidate leaves the unit without an error.
+pub flow e0813_then_a_non_rt_call_at_sample(x: F32 at sample, c: F32 at init, p: F32 at block) -> F32 at sample {
+  prev~(p) + x * design(c)                                     //~ E0813
+}
+
+pub flow promotion_then_e0815(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = (p + 1.0) at sample
+  let b = x at block                                             //~ E0815
+  x
+}
+
+pub flow e0815_then_promotion(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let b = x at block                                             //~ E0815
+  let a = (p + 1.0) at sample
+  x
+}
+
+pub flow promotion_then_e0813(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let a = (p + 1.0) at sample
+  let b = prev~(p)                                               //~ E0813
+  x
+}
+
+pub flow e0813_then_promotion(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let b = prev~(p)                                               //~ E0813
+  let a = (p + 1.0) at sample
+  x
+}

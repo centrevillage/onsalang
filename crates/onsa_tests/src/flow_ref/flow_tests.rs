@@ -478,7 +478,7 @@ fn the_inputs_given_are_the_inputs_of_the_flow_by_clock() {
 
 #[test]
 fn a_let_of_no_name_of_a_stage_is_made() {
-    // SPEC-GAP(S-1093): the reading the evaluator has for now (1): the value of a `let` is made at its stage, read or not.
+    // S-1093 (1), decided: the value of a `let` is made at its stage, read or not.
     // A `let` that is not read is a `let _` (a named one is an E0309, §5.1). `let _ = 100 / n` (block) is read by
     // nothing, and n = 0 panics: at `process`, a call of 0 frames too. With n = 5 it is 20, and nothing else changes.
     // At `init` the same of an `init` input: a = 0 panics in `init`.
@@ -500,7 +500,7 @@ fn a_let_of_no_name_of_a_stage_is_made() {
 
 #[test]
 fn the_output_of_a_stage_is_made_whether_or_not_it_is_read() {
-    // SPEC-GAP(S-1093): the same reading (1) for the output expression, the last of the body, as for a `let` (§11.3: a
+    // S-1093 (1), decided: the same for the output expression, the last of the body, as for a `let` (§11.3: a
     // `let` or not, the stage and the result are the same). `100 / n` of `block` panics at `process` with n = 0, a call
     // of 0 frames too; with n = 5 a call of 0 frames makes none, and 2 frames give 20, 20. `100 / a` of `init` panics at
     // `init`.

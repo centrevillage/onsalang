@@ -1,0 +1,128 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.6", "§9.2"]
+
+// W7-05 U1/t, S-1093, S-1157, S-1046 (spec §11.3, §11.6): a `block` expression is evaluated once for each call of `process`,
+// a call of 0 frames too, wherever it is written outside a branch ("コンパイラは各式を、部分式も含めて、その値と評価されるかどうかが
+// 決まる最も遅い段で評価する"; "0 フレームの呼び出しでも"). So a division by zero in a `block` part of a `sample` expression
+// panics in a call of 0 frames; it did not when this part was evaluated where it is written, in the frame. The parts that
+// are of `block` are the ones that read the `block` input `d`; `x` is the `sample` input. For the `init` ones (`init` is
+// where they panic) see hoist_panic_init.onsa.
+//
+// The call of 0 frames of a `block` part that does not panic does nothing visible: the output is not written.
+// The panics of a `let` of `block`, which this version makes at the `block` stage already, are in hoist_panic_frames.onsa.
+
+pub rt fn inv_i(d: I32) -> I32 {
+  100 / d
+}
+
+pub flow in_sample_expr(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  x * F32.round_from(100 / d)
+}
+
+pub flow in_a_let(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  let y = x + F32.round_from(100 / d)
+  y
+}
+
+// The output expression is of `block` itself: it is evaluated at its stage (S-1093), not for each frame.
+pub flow output_of_block(x: F32 at sample, d: I32 at block) -> I32 at sample {
+  100 / d
+}
+
+// Inside the argument of a call that makes a node (a delay), whose value is of `sample`.
+pub flow in_a_node_argument(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  prev~(x * F32.round_from(100 / d))
+}
+
+// A call of an `rt fn` of a `block` argument is of `block`.
+pub flow rt_call(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  x * F32.round_from(inv_i(d))
+}
+
+// Two `block` parts: the second panics (the first is 100 / 4).
+pub flow second_part(x: F32 at sample, d: I32 at block, e: I32 at block) -> F32 at sample {
+  x * F32.round_from(100 / d) + F32.round_from(100 / e)
+}
+
+test "a block part of a sample expression panics in a call of 0 frames" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  var out: [F32; 2] = [7.0; 2]
+  var st = in_sample_expr.init(8.0)
+  in_sample_expr.process(inout st, in_sample_expr.Params { d: 0 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "a block part of a sample expression panics in a call of 0 frames"
+  assert out[0] == 7.0
+}
+
+test "a block part of a sample expression panics in a call of 1 frame, at the block stage" {
+  // The panic is the same one as in a call of 0 frames (the `block` stage is first, so no output is written); the stage of it is `block`, not the first frame.
+  let xs: [F32; 1] = [1.0]
+  let o = in_sample_expr.render(in_sample_expr.Params { d: 0 }, xs, 8.0) //~ PANIC "a block part of a sample expression panics in a call of 1 frame, at the block stage"
+  assert o.out[0] == 0.0
+}
+
+test "a block part of a sample expression with d = 4 gives 25 in each frame" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = in_sample_expr.render(in_sample_expr.Params { d: 4 }, xs, 8.0)
+  assert o.out[0] == 25.0
+  assert o.out[1] == 50.0
+}
+
+test "the same call of 0 frames with d = 4 does not panic and writes nothing" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  var out: [F32; 2] = [7.0; 2]
+  var st = in_sample_expr.init(8.0)
+  in_sample_expr.process(inout st, in_sample_expr.Params { d: 4 }, xs.slice(0, 0), inout out.slice(0, 0))
+  assert out[0] == 7.0
+  assert out[1] == 7.0
+}
+
+test "a block part in a let of sample panics in a call of 0 frames" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  var out: [F32; 2] = [7.0; 2]
+  var st = in_a_let.init(8.0)
+  in_a_let.process(inout st, in_a_let.Params { d: 0 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "a block part in a let of sample panics in a call of 0 frames"
+  assert out[0] == 7.0
+}
+
+test "an output expression of block panics in a call of 0 frames" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  var out: [I32; 2] = [7; 2]
+  var st = output_of_block.init(8.0)
+  output_of_block.process(inout st, output_of_block.Params { d: 0 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "an output expression of block panics in a call of 0 frames"
+  assert out[0] == 7
+}
+
+test "an output expression of block with d = 5 gives 20 in each frame" {
+  // 100 / 5 = 20, in each of the two frames.
+  let xs: [F32; 2] = [1.0, 2.0]
+  var out: [I32; 2] = [7; 2]
+  var st = output_of_block.init(8.0)
+  output_of_block.process(inout st, output_of_block.Params { d: 5 }, xs, inout out)
+  assert out[0] == 20
+  assert out[1] == 20
+}
+
+test "a block part in the argument of a delay panics in a call of 0 frames" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  var out: [F32; 2] = [7.0; 2]
+  var st = in_a_node_argument.init(8.0)
+  in_a_node_argument.process(inout st, in_a_node_argument.Params { d: 0 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "a block part in the argument of a delay panics in a call of 0 frames"
+  assert out[0] == 7.0
+}
+
+test "a call of an rt fn of a block argument panics in a call of 0 frames" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  var out: [F32; 2] = [7.0; 2]
+  var st = rt_call.init(8.0)
+  rt_call.process(inout st, rt_call.Params { d: 0 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "a call of an rt fn of a block argument panics in a call of 0 frames"
+  assert out[0] == 7.0
+}
+
+test "the second of two block parts panics in a call of 0 frames" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  var out: [F32; 2] = [7.0; 2]
+  var st = second_part.init(8.0)
+  second_part.process(inout st, second_part.Params { d: 4, e: 0 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "the second of two block parts panics in a call of 0 frames"
+  assert out[0] == 7.0
+}

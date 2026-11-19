@@ -1,0 +1,131 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.5", "§11.6", "§9.2"]
+
+// W7-05 U1/t, S-33, S-110, S-1046, S-1093 (spec §11.3): a part of an expression that is of a slower clock is evaluated
+// at the stage of that clock, and the value is the same as when it is evaluated where it is written ("値は `let` に分けても
+// 分けなくても同じである"; "flow の式には効果が無いので、巻き上げても値は変わらない"). The forms that the check accepts in this
+// version, so these tests pass before and after hoisting: they are the check that the values do not change. The stage in
+// which a part panics (what does change) is in hoist_panic_zero_frames.onsa and hoist_panic_init.onsa, and a call of a
+// function that is not `rt` and an `at` of a computed expression are in hoist_values_non_rt.onsa and
+// hoist_values_at.onsa. Every value is worked out by hand.
+
+pub rt fn half(l: F32) -> F32 {
+  l * 0.5
+}
+
+// A struct with no derive list is Affine: it is not Copy (§5.2), so the parts that are made of it are not hoisted.
+pub struct Wrap {
+  a: I32,
+  b: I32,
+}
+
+pub rt fn pick(w: Wrap, x: F32) -> F32 {
+  x * F32.round_from(w.a + w.b)
+}
+
+// A call of an `rt fn` of a `block` input in a `sample` expression.
+pub flow in_sample_expr(x: F32 at sample, level: F32 at block) -> F32 at sample {
+  x * half(level)
+}
+
+// A part of `init`.
+pub flow in_init_part(x: F32 at sample, k: F32 at init) -> F32 at sample {
+  x * (k * 2.0)
+}
+
+// A part of `init` inside a part of `block`: the whole of `n + (k * 2.0)` is of `block`.
+pub flow nested_slow(x: F32 at sample, n: F32 at block, k: F32 at init) -> F32 at sample {
+  x * (n + (k * 2.0))
+}
+
+// In a `let` of `sample` and in the output expression.
+pub flow in_let_and_output(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let a = x + (g + 1.0)
+  a * (g - 1.0)
+}
+
+// In the argument of a node: the delay stores `x` times the `block` part.
+pub flow in_node_argument(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  prev~(x * (g * 0.5))
+}
+
+// The part that is not Copy (a `Wrap`) is not hoisted; the part of it that is Copy, is (S-1046 (a)).
+pub flow not_copy(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  pick(Wrap { a: 100 / d, b: 1 }, x)
+}
+
+// Neither a name, nor `sample_rate()`, nor a constant is hoisted: the values are what they are.
+pub flow not_hoisted(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  x * g * 3.0 + sample_rate()
+}
+
+test "a call of an rt fn of a block input in a sample expression" {
+  // half(4.0) = 2.0.
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = in_sample_expr.render(in_sample_expr.Params { level: 4.0 }, xs, 8.0)
+  assert o.out[0] == 2.0
+  assert o.out[1] == 4.0
+  assert o.out[2] == 6.0
+}
+
+test "the part of init" {
+  // 3.0 * 2.0 = 6.0.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = in_init_part.render(in_init_part.Config { k: 3.0 }, xs, 8.0)
+  assert o.out[0] == 6.0
+  assert o.out[1] == 12.0
+}
+
+test "a part of init inside a part of block" {
+  // n = 1.0, k = 2.0: 1.0 + 4.0 = 5.0.
+  let xs: [F32; 2] = [1.0, 3.0]
+  let o = nested_slow.render(nested_slow.Config { k: 2.0 }, nested_slow.Params { n: 1.0 }, xs, 8.0)
+  assert o.out[0] == 5.0
+  assert o.out[1] == 15.0
+}
+
+test "the block part is read again in the next call of process" {
+  // The second call has n = 3.0: 3.0 + 4.0 = 7.0, and the init part is still 4.0.
+  let xs: [F32; 1] = [2.0]
+  var out: [F32; 1] = [0.0]
+  var st = nested_slow.init(nested_slow.Config { k: 2.0 }, 8.0)
+  nested_slow.process(inout st, nested_slow.Params { n: 1.0 }, xs, inout out)
+  assert out[0] == 10.0
+  nested_slow.process(inout st, nested_slow.Params { n: 3.0 }, xs, inout out)
+  assert out[0] == 14.0
+}
+
+test "in a let of sample and in the output expression" {
+  // g = 3.0: a = x + 4.0, the output is a * 2.0. x = 1.0, 2.0: a = 5.0, 6.0; 10.0, 12.0.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = in_let_and_output.render(in_let_and_output.Params { g: 3.0 }, xs, 8.0)
+  assert o.out[0] == 10.0
+  assert o.out[1] == 12.0
+}
+
+test "in the argument of a node" {
+  // g = 4.0: the delay stores x * 2.0 = 2.0, 4.0, 6.0 and gives them one frame later, the first is 0.0.
+  let xs: [F32; 3] = [1.0, 2.0, 3.0]
+  let o = in_node_argument.render(in_node_argument.Params { g: 4.0 }, xs, 8.0)
+  assert o.out[0] == 0.0
+  assert o.out[1] == 2.0
+  assert o.out[2] == 4.0
+}
+
+test "a part that is not Copy holds a part that is" {
+  // d = 4: 100 / 4 + 1 = 26, so x * 26.0.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = not_copy.render(not_copy.Params { d: 4 }, xs, 8.0)
+  assert o.out[0] == 26.0
+  assert o.out[1] == 52.0
+}
+
+test "a name, sample_rate() and a constant are read as they are" {
+  // x * g * 3.0 + 8.0 with g = 2.0: 1.0 * 2.0 * 3.0 + 8.0 = 14.0, 2.0 * 6.0 + 8.0 = 20.0.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = not_hoisted.render(not_hoisted.Params { g: 2.0 }, xs, 8.0)
+  assert o.out[0] == 14.0
+  assert o.out[1] == 20.0
+}

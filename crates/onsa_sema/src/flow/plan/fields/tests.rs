@@ -40,6 +40,7 @@ fn what(f: &FlowInfo, of: FieldOf) -> String {
             };
             if part == Part::Own { kind.into() } else { format!("{kind}.{part:?}") }
         }
+        FieldOf::Hoist(h) => format!("hoist {}", f.hoist(h).path),
         FieldOf::Poisoned => "poisoned".into(),
         FieldOf::Initialized => "initialized".into(),
     }

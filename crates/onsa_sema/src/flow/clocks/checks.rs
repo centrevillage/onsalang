@@ -18,9 +18,8 @@ use crate::clock::{holds_state, promote, readable_at};
 use crate::kind::kind_in_body;
 
 /// Whether `e` is written as a name or a literal, past parentheses and type
-/// arguments (not `^name`): the operand `at` makes faster as written (the
-/// E0200 of a computed one, W7-05) and the first argument of a delay the
-/// candidate of E0813 makes faster.
+/// arguments (not `^name`): the first argument of a delay the candidate of
+/// E0813 makes faster (W7-05 U2 gives it to a computed one too).
 pub(crate) fn name_or_literal(ast: &Ast, mut e: ExprId) -> bool {
     loop {
         match &ast.expr(e).kind {
@@ -174,8 +173,8 @@ impl Walk<'_> {
     }
 
     /// `inner at k` at `e` (§11.3), `c` the clock of `inner`: no slower
-    /// (E0815), and faster only as a name, a literal or a constant (W7-05).
-    pub(super) fn check_at(&mut self, e: ExprId, inner: ExprId, c: Option<Clock>, k: Clock) {
+    /// (E0815). A computed `inner` made faster is hoisted (S-152).
+    pub(super) fn check_at(&mut self, e: ExprId, c: Option<Clock>, k: Clock) {
         let Some(c) = c.filter(|_| self.checking()) else { return };
         let span = self.ast.expr(e).span;
         if promote(c, k).is_err() {
@@ -184,8 +183,6 @@ impl Walk<'_> {
                 "this expression is at the clock `{shown}`, faster than `{to}`; `at` cannot make a value slower (§11.3)"
             );
             self.err(Code::E0815, span, msg);
-        } else if c != k && !matches!(c, Clock::Const | Clock::Error) && !name_or_literal(self.ast, inner) {
-            self.gate(Feature::ClockPromotion, span, &[]);
         }
     }
 
@@ -283,7 +280,7 @@ impl Walk<'_> {
     /// Whether the first argument `first` of a delay, at the clock `c`,
     /// holds its state (§11.4, E0813); a name or a literal of a parameter
     /// kind has the candidate `first at sample` (S-102; a computed one
-    /// waits for W7-05).
+    /// waits for W7-05 U2).
     pub(super) fn check_first(&mut self, delay: Delay, first: ExprId, c: Clock) -> bool {
         if holds_state(c) {
             return true;

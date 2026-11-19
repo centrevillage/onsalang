@@ -2,8 +2,10 @@
 //! The clock of a `let` says when its value is made again: a `let` of a constant or of `init` once, at `init`; of `block`
 //! once for each `process` call, a call of 0 frames too; of `sample` for each frame. A `let` of a faster clock reads the
 //! latest value of a slower one. The `let`s of a stage run in the order they are written (§11.2), the stages of a frame
-//! in the order of the clocks, and `e at k` has the clock `k` but not another value (§11.3; the name under it is read in
-//! its own stage, and a computed `e` under `at` is E0200 today). The delays (`state.rs`) are in the `sample` stage, and
+//! in the order of the clocks, and `e at k` has the clock `k` but not another value (§11.3; it changes no stage: the
+//! expression under it is made in its own). The parts of a `let` that are of a slower clock than the `let` are made by the
+//! slower stage (`hoist.rs`, §11.3: "各式を、部分式も含めて、その値と評価されるかどうかが決まる最も遅い段で評価する"), whether the value is
+//! read or not, so a panic of a `block` part is a panic of the `block` stage of a call of 0 frames too. The delays (`state.rs`) are in the `sample` stage, and
 //! the second phase of each frame stores what they save, after the stage and before `tick` goes up. The instances of
 //! flows (`Inst`), `reset` (`Instance::reset`) and `render` are here too. A panic of a value of the clock
 //! of a constant is E0419 in the spec (compile time, §11.3): the evaluator makes it at `init` and gives the panic of
@@ -20,6 +22,7 @@ use onsa_sema::{DefId, LocalId, Target};
 use onsa_syntax::ast::{CallKind, ExprId, ExprKind, PatId, StmtKind};
 
 use super::expr::{Frame, Stop};
+use super::hoist::pre;
 use super::host::FnHost;
 use super::scalar::{Fault, PanicKind};
 use super::sema_view::{Body, Called, Stage, View, clock_stage, input_stage, inputs_at, output_stage};
@@ -110,6 +113,8 @@ pub(super) struct Step {
     pat: Option<PatId>,
     init: ExprId,
     clock: Clock,
+    /// The clocks of the locals before this step (`hoist::pre` reads the clocks of the parts of `init` by them).
+    known: Rc<HashMap<LocalId, Clock>>,
 }
 
 /// The plans made so far for a tree of instances, one for each flow: the clocks of a body are the same at each call.
@@ -122,6 +127,8 @@ pub struct Inst {
     pub(super) def: DefId,
     pub(super) steps: Rc<[Step]>,
     locals: HashMap<LocalId, Value>,
+    /// The parts of the body that a slower stage made (`Frame::hoisted`).
+    hoisted: HashMap<ExprId, Value>,
     pub(super) out: Value,
     pub(super) state: InstState,
     /// The index of each `par~` around the call that made it, which the arguments of its `block` stage may read.
@@ -151,8 +158,9 @@ impl PanicAt {
     }
 }
 
-/// The stage of the code written at `at` (§11.3): that of the clock of the `let` (or the output) of a flow it is within, a
-/// constant's as `init`'s. `None` where no flow has it (the call a test makes, whose panic is the start of a `process`).
+/// The stage of the code written at `at` (§11.3): that of the clock of the part of a `let` (or the output) of a flow it is
+/// within that a slower stage makes (`hoist::part_clock`), else of the `let`, a constant's as `init`'s. `None` where no flow
+/// has it (the call a test makes, whose panic is the start of a `process`).
 pub fn stage_at(view: View, at: Span) -> Option<Stage> {
     let plans = Plans::default();
     view.flows().into_iter().find_map(|def| {
@@ -162,7 +170,8 @@ pub fn stage_at(view: View, at: Span) -> Option<Stage> {
             s.file == at.file && s.start <= at.start && at.end <= s.end
         };
         let step = me.steps.iter().find(|s| within(s.init))?;
-        Some(match step.clock {
+        let clock = super::hoist::part_clock(&body, &step.known, step.init, at).ok()?.unwrap_or(step.clock);
+        Some(match clock {
             Clock::Const | Clock::Init => Stage::Init,
             Clock::Block => Stage::Block,
             Clock::Sample => Stage::Sample,
@@ -242,15 +251,20 @@ fn give<V: std::borrow::Borrow<Value>>(
     Ok(())
 }
 
-/// The steps the clocks of `at` run, in the order they are written (the output is a step too, the last).
-// SPEC-GAP(S-1093): a `let` and the output expression of a stage are evaluated whether or not a value is read from
-// them (so one that panics does, in a branch not taken too, and the output of `block` or `init` in a call of 0 frames
-// too); the other reading evaluates them where they are used.
+/// The steps the clocks of `at` run, in the order they are written (the output is a step too, the last). A step of a faster clock
+/// is not run, but the parts of it that this stage makes are (`hoist::pre`, in the order of the steps: a `let` of `block` that the
+/// part reads is made before it).
+// S-1093 (1): a `let` and the output expression of a stage are evaluated whether or not a value is read from them (so one that
+// panics does, in a branch not taken too, and the output of `block` or `init` in a call of 0 frames too).
 fn stage(f: &mut Frame, steps: &[Step], out: &mut Value, at: Stage) -> Result<(), Stop> {
-    for s in steps.iter().filter(|s| s.clock.runs_at(at)) {
-        match s.pat {
-            Some(pat) => f.bind(pat, s.init)?,
-            None => *out = f.eval(s.init)?,
+    for s in steps {
+        if s.clock.runs_at(at) {
+            match s.pat {
+                Some(pat) => f.bind(pat, s.init)?,
+                None => *out = f.eval(s.init)?,
+            }
+        } else if s.clock > Clock::from(at) {
+            pre(f, &s.known, s.init, s.init, at)?;
         }
     }
     Ok(())
@@ -295,6 +309,7 @@ impl Inst {
                 def,
                 steps,
                 locals: HashMap::new(),
+                hoisted: HashMap::new(),
                 out: Value::Unit,
                 state: InstState::default(),
                 scope: Vec::new(),
@@ -321,15 +336,16 @@ impl Inst {
             };
             let at = |fault| Stop { fault, at: body.ast.expr(*init).span };
             let clock = clock_of(body, &known, *init, *init).map_err(at)?;
+            let before = Rc::new(known.clone());
             // SPEC-GAP(S-1119): the locals the pattern binds (a `let` taken apart) have the clock of the whole right
             // side, as the interpreter has it; the other reading gives each the clock of its own element.
             for l in body.pat_locals(*pat).map_err(at)? {
                 known.insert(l, clock);
             }
-            steps.push(Step { pat: Some(*pat), init: *init, clock });
+            steps.push(Step { pat: Some(*pat), init: *init, clock, known: before });
         }
         let clock = clock_of(body, &known, tail, tail).map_err(|fault| Stop { fault, at: body.ast.expr(tail).span })?;
-        steps.push(Step { pat: None, init: tail, clock });
+        steps.push(Step { pat: None, init: tail, clock, known: Rc::new(known) });
         Ok(steps.into())
     }
 
@@ -344,6 +360,7 @@ impl Inst {
     ) -> Frame<'b> {
         let mut f = Frame::new(body);
         f.locals = std::mem::take(&mut self.locals);
+        f.hoisted = std::mem::take(&mut self.hoisted);
         f.run = Some(Run::new(std::mem::take(&mut self.state), ctx, used, plans));
         f.host = host;
         f
@@ -353,6 +370,7 @@ impl Inst {
     pub(super) fn keep(&mut self, f: Frame, at: Span) -> Result<(), Stop> {
         self.state = f.run.ok_or(Stop { fault: Fault::Internal("a frame with no state"), at })?.state;
         self.locals = f.locals;
+        self.hoisted = f.hoisted;
         Ok(())
     }
 }

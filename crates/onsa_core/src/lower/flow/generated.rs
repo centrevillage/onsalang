@@ -251,11 +251,23 @@ impl<'b> Gen<'b> {
         Ok(())
     }
 
-    /// The `let`s of the stage of this phase in order; those the state keeps
-    /// are also stored.
-    pub(super) fn rate_lets(&mut self, lw: &mut Lowerer, info: &FlowInfo, state: &Expr) -> R<()> {
+    /// The `let`s of the stage of this phase in order, those the state
+    /// keeps also stored, and the fields of this stage hoisted in the
+    /// faster `let`s at their places and in the output last (§11.3, §12.4;
+    /// [`super::hoist::writes`]).
+    // SPEC-GAP(S-1159): in the order of the text, a field at the place of
+    // the `let` that holds it.
+    pub(super) fn stage_lets(&mut self, lw: &mut Lowerer, info: &FlowInfo, state: &Expr) -> R<()> {
         let stage = self.flow().phase.stage();
-        for l in info.lets_at(stage) {
+        for l in &info.lets {
+            match l.clock.stage() {
+                Some(s) if s == stage => {}
+                Some(s) if s > stage => {
+                    super::hoist::writes(lw, &mut self.cx, info, l.init, stage, state, &mut self.stmts)?;
+                    continue;
+                }
+                _ => continue,
+            }
             let v = lower_expr(lw, &mut self.cx, l.init)?;
             bind_irrefutable(lw, &mut self.cx, l.pat, v, &mut self.stmts)?;
             for &loc in &l.locals {
@@ -265,6 +277,9 @@ impl<'b> Gen<'b> {
                     assign(&mut self.stmts, &f, v)?;
                 }
             }
+        }
+        if let Some(out) = info.output {
+            super::hoist::writes(lw, &mut self.cx, info, out, stage, state, &mut self.stmts)?;
         }
         Ok(())
     }

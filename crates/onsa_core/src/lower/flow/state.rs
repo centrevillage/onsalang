@@ -49,6 +49,11 @@ fn field_ty(lw: &mut Lowerer, flow: DefId, decls: &Decls, info: &FlowInfo, of: F
             lw.core_ty(decl.0, &[], decl.1)
         }
         FieldOf::Node(id, part) => node_field_ty(lw, flow, decls, info, id, part),
+        FieldOf::Hoist(h) => {
+            let x = info.hoist(h);
+            let ty = info.body.expr_types.get(&x.expr).ok_or_else(|| internal(x.span, "a hoisted field of no type"))?;
+            lw.core_ty(*ty, &[], x.span)
+        }
     }
 }
 

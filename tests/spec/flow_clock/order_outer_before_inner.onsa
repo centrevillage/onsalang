@@ -6,16 +6,15 @@
 // reported is the first by the order of the diagnostics (start position, end position, code, text,
 // §18.1). So the diagnostic of an outer construct, which starts before the inner one, is the one
 // reported: the type of a `let` (E0810, at the statement), an outer `at` (E0815) over an inner error
-// that leaves the clock of its operand, and the gates this version has. The element type of a `vdelay~`
+// that leaves the clock of its operand, and nothing of the gates that this version had for a call of a function that is not `rt` and an `at` that makes a computed expression faster (W7-05
+// took them away: order_gates_after_hoisting.onsa). The element type of a `vdelay~`
 // (E0416, at the call) is of the type stage (§11.4, §4.5), so it is the one reported over any error of
 // the flow check, written before or after it (`flow_stage_order_vdelay_element_type*.onsa`); the forms
 // of it below have the `vdelay~` first. An outer check that reads the clock of a part in error
 // is not made (§18.1): a call of a function with effects has no clock (§11.5), so the inner E0805 is
 // the one there. The inner error of a part is reported only when the outer one has no error of its own. The cases are
 // one error of the outer kind and one of the inner kind in a flow, the marker on the first.
-// The gates are the E0200 of a feature this version does not take (§18.1): a call of a function that
-// is not `rt` read at the clock `sample` (W7-05) and `at` that makes a computed expression faster
-// (W7-05). The omitted `init` of a delay with no `Default` is E0816 (W7-07, §11.4); its order against
+// The omitted `init` of a delay with no `Default` is E0816 (W7-07, §11.4); its order against
 // the errors of the parts is in order_outer_before_inner_default_init.onsa.
 
 pub fn noisy(v: F32) -> F32 uses {Alloc} { v }
@@ -108,14 +107,4 @@ pub flow effect_deep_inside_at_slower(x: F32 at sample) -> F32 at sample {
 pub flow effect_inside_at_promotion(x: F32 at sample, p: F32 at block) -> F32 at sample {
   let a = (noisy(p) + 1.0) at sample                             //~ E0805 @12
   x
-}
-
-// ---------------------------------------------------------------- the gates
-
-pub flow gate_non_rt_call_over_later_delay(x: F32 at sample, c: F32 at init, p: F32 at block) -> F32 at sample {
-  x * design(c) + prev~(p)                                       //~ E0200 @7
-}
-
-pub flow gate_non_rt_call_over_later_effect(x: F32 at sample, c: F32 at init) -> F32 at sample {
-  x * design(c) + noisy(x)                                       //~ E0200 @7
 }

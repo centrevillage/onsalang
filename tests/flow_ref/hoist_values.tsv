@@ -1,0 +1,28 @@
+# flow_ref 1 source=tests/spec/flow_semantics/hoist_values.onsa tests=8 evaluated=8 unavailable=0 skipped=0 waiting=0
+@ a call of an rt fn of a block input in a sample expression
+render hoist_values.in_sample_expr sr=0x41000000 params level=0x40800000 in x=[0x3f800000 0x40000000 0x40400000]
+out=[0x40000000 0x40800000 0x40c00000]
+@ the part of init
+render hoist_values.in_init_part sr=0x41000000 cfg k=0x40400000 in x=[0x3f800000 0x40000000]
+out=[0x40c00000 0x41400000]
+@ a part of init inside a part of block
+render hoist_values.nested_slow sr=0x41000000 cfg k=0x40000000 params n=0x3f800000 in x=[0x3f800000 0x40400000]
+out=[0x40a00000 0x41700000]
+@ the block part is read again in the next call of process
+init 0 hoist_values.nested_slow sr=0x41000000 cfg k=0x40000000
+process 0 params n=0x3f800000 frames=1 in x=[0x40000000]
+out=[0x41200000]
+process 0 params n=0x40400000 frames=1 in x=[0x40000000]
+out=[0x41600000]
+@ in a let of sample and in the output expression
+render hoist_values.in_let_and_output sr=0x41000000 params g=0x40400000 in x=[0x3f800000 0x40000000]
+out=[0x41200000 0x41400000]
+@ in the argument of a node
+render hoist_values.in_node_argument sr=0x41000000 params g=0x40800000 in x=[0x3f800000 0x40000000 0x40400000]
+out=[0x00000000 0x40000000 0x40800000]
+@ a part that is not Copy holds a part that is
+render hoist_values.not_copy sr=0x41000000 params d=4 in x=[0x3f800000 0x40000000]
+out=[0x41d00000 0x42500000]
+@ a name, sample_rate() and a constant are read as they are
+render hoist_values.not_hoisted sr=0x41000000 params g=0x40000000 in x=[0x3f800000 0x40000000]
+out=[0x41600000 0x41a00000]

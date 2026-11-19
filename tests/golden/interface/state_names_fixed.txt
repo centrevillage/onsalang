@@ -7,8 +7,8 @@ pub flow phase_step(
 ) -> F32 at sample
   pub struct phase_step.State  // Affine; size 16, bulk 0, align 4
     _sample_rate: 4 bytes, align 4, fast  // offset 0
-    f0: 4 bytes, align 4, fast  // offset 4
-    phase.prev_0: 4 bytes, align 4, fast  // offset 8
+    phase.prev_0: 4 bytes, align 4, fast  // offset 4
+    phase._hoist_0: 4 bytes, align 4, fast  // offset 8
     _poisoned: 1 bytes, align 1, fast  // offset 12
     _initialized: 1 bytes, align 1, fast  // offset 13
   pub struct phase_step.Params  // Copy; size 4, align 4

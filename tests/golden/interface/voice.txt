@@ -9,11 +9,11 @@ pub flow resonator(
 ) -> F32 at sample
   pub struct resonator.State  // Affine; size 28, bulk 0, align 4
     _sample_rate: 4 bytes, align 4, fast  // offset 0
-    r: 4 bytes, align 4, fast  // offset 4
-    b1: 4 bytes, align 4, fast  // offset 8
-    b2: 4 bytes, align 4, fast  // offset 12
-    y1: 4 bytes, align 4, fast  // offset 16
-    y2: 4 bytes, align 4, fast  // offset 20
+    b1: 4 bytes, align 4, fast  // offset 4
+    b2: 4 bytes, align 4, fast  // offset 8
+    y1: 4 bytes, align 4, fast  // offset 12
+    y2: 4 bytes, align 4, fast  // offset 16
+    y._hoist_0: 4 bytes, align 4, fast  // offset 20
     _poisoned: 1 bytes, align 1, fast  // offset 24
     _initialized: 1 bytes, align 1, fast  // offset 25
   pub struct resonator.Params  // Copy; size 8, align 4
@@ -34,8 +34,8 @@ pub flow saw(
 ) -> F32 at sample
   pub struct saw.State  // Affine; size 16, bulk 0, align 4
     _sample_rate: 4 bytes, align 4, fast  // offset 0
-    f0: 4 bytes, align 4, fast  // offset 4
-    phase.prev_0: 4 bytes, align 4, fast  // offset 8
+    phase.prev_0: 4 bytes, align 4, fast  // offset 4
+    phase._hoist_0: 4 bytes, align 4, fast  // offset 8
     _poisoned: 1 bytes, align 1, fast  // offset 12
     _initialized: 1 bytes, align 1, fast  // offset 13
   pub struct saw.Params  // Copy; size 4, align 4

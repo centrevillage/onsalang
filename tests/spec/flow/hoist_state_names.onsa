@@ -1,0 +1,53 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.6", "§12.4"]
+// golden = ["interface"]
+
+// W7-05 U1/t, S-1138, S-1157, S-1093 (§11.6, §12.4, §11.3): the hidden field of a part that is hoisted is of the kind `_hoist`: `a._hoist_0` for the
+// `let` `a` and `_out._hoist_0` for the output expression, numbered for each `let` in the order in which the parts start in the text. The fields come in the
+// order of §12.4: the fields of the `let`s (own field, then the nodes in it), the nodes in the output expression, then the hoisted values ("`let` の順、
+// その中は番号順で、出力の式の巻き上げは最後"), `_poisoned` and `_initialized` last. A part that is hoisted is read at the stage of its clock, so the input of
+// `block` or `init` that it reads is not copied into the state ("自分のクロックより速いクロックから読まれる入力"): the `sample` stage reads the hoisted field.
+// The fields of each flow (the golden keeps them with the sizes):
+//
+//   out_only:  _out._hoist_0 (`g * 2.0`)                                    no copy of `g`
+//   init_only: _out._hoist_0 (`k * 2.0`)                                    no copy of `k`
+//   in_lets:   a._hoist_0 (`g + 1.0`), b._hoist_0 (`k * 2.0`), b._hoist_1 (`g * 3.0`), _out._hoist_0 (`g - 1.0`)
+//   with_node: _out.prev_0 (the node of the output expression), _out._hoist_0 (`g * 0.5`)
+//   outer_part: _out._hoist_0 (the whole `(g + 1.0) * 2.0`, the largest part of its stage; not two fields)
+//   a_let_of_its_own: only _out._hoist_0 (`c + 1.0`); the `let` `c` of `block` is read by the hoisted part only, at `block`, so it has no field
+//   a_let_read_by_sample: c (read as a name by `sample`) and _out._hoist_0 (`g * 3.0`), in this order
+//
+// What is hoisted is the parts of a stage that is slower than the one that uses them (a name, `sample_rate()` and a constant are not: hoist_state_none.onsa).
+
+pub flow out_only(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  x * (g * 2.0)
+}
+
+pub flow init_only(x: F32 at sample, k: F32 at init) -> F32 at sample {
+  x * (k * 2.0)
+}
+
+pub flow in_lets(x: F32 at sample, g: F32 at block, k: F32 at init) -> F32 at sample {
+  let a = x * (g + 1.0)
+  let b = a * (k * 2.0) + (g * 3.0)
+  b * (g - 1.0)
+}
+
+pub flow with_node(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  prev~(x * (g * 0.5))
+}
+
+pub flow outer_part(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  x * ((g + 1.0) * 2.0)
+}
+
+pub flow a_let_of_its_own(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let c = g * 2.0
+  x * (c + 1.0)
+}
+
+pub flow a_let_read_by_sample(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let c = g * 2.0
+  x * c + (g * 3.0)
+}

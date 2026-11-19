@@ -3,9 +3,9 @@
 //!
 //! | function | contents |
 //! |---|---|
-//! | `init(cfg, sample_rate) -> State` | `Init`-rate `let`s in order (state ones stored), node initialisation, sub `init`s, `_poisoned = false`, `_initialized = true` last |
+//! | `init(cfg, sample_rate) -> State` | `Init`-rate `let`s in order (state ones stored) and the `Init` hoisted fields (below), node initialisation, sub `init`s, `_poisoned = false`, `_initialized = true` last |
 //! | `reset(inout s)` | `prev` / `delay` / `vdelay` back to their `init` values, `w = 0`, sub `reset`s, `_poisoned = false` |
-//! | `ctl(inout s, p: Params)` | `Ctl`-rate `let`s in order (those read at `Sig` stored), sub `ctl`s with the sub's `Params` |
+//! | `ctl(inout s, p: Params)` | `Ctl`-rate `let`s in order (those read at `Sig` stored) and the `Ctl` hoisted fields, sub `ctl`s with the sub's `Params` |
 //! | `tick(inout s, <Sig inputs>) -> out` | `Sig`-rate `let`s in order, the output, then the stores of §11.4 in node order |
 //! | `process(inout s, p, [input], inout output)` | `input` and `output` one `Span` (planar `[Span; N]`) or the `In` and `Out` of more (§11.6); length check, `ctl` once, per sample: read all inputs, `tick`, write all outputs |
 //! | `process_inplace(inout s, p, inout output)` | `process` with the input made of the signals of `output` (they pair up) |
@@ -23,7 +23,9 @@
 //! inputs read above their own rate (by input name), then for each
 //! top-level `let` in source order its own field (when read above its rate)
 //! followed by the stateful nodes inside its initializer in source order,
-//! then the nodes of the output expression, then `_poisoned: Bool` and
+//! then the nodes of the output expression, then the hoisted fields
+//! (`a._hoist_0: T`, §11.3, §12.4; of the `let`s in order, then of the
+//! output; W7-05 U3 those of the body of a `par~`), then `_poisoned: Bool` and
 //! `_initialized: Bool` (both export-boundary marks, spec §14.2 / S-27). A
 //! node of the path `p` (§11.6: `a.prev_0`, `_out.lp_0`, or the name of the
 //! `let` whose whole value it is) contributes `p: T` (`prev`), `p.buf: [T;
@@ -42,7 +44,12 @@
 //! (input or `let`) read in a later phase than its own is a state field there
 //! (`local_override`); `Ctl` inputs are read from `p` in `ctl`, `Init`
 //! inputs from `cfg` in `init`. `Const`-rate `let`s are recomputed in every
-//! phase that reads them. A stateful node is lowered on demand when the
+//! phase that reads them. A subexpression the plan hoisted
+//! (`FlowInfo::hoist_of`, §11.3) is written to its field by the phase of
+//! its stage ([`hoist::writes`]: at the place of the faster `let` that holds
+//! it, those of the output last; S-1159), and read from the field by the
+//! later phases ([`lower_flow_expr`]); W7-05 U2 writes those under a
+//! condition decided at `init` or `block`. A stateful node is lowered on demand when the
 //! expression containing it is lowered ([`lower_flow_expr`]), into a
 //! temporary that is memoised in `expr_override` so the end-of-tick stores
 //! see the same value. `prev` reads its stored value where it appears and
@@ -54,7 +61,8 @@
 //! This module holds the shared types and [`lower_flow`]; [`state`] the
 //! nodes and their state fields, [`generated`] the builder of a generated
 //! function, [`phases`] `init` / `reset` / `ctl` / `tick`, [`nodes`] the
-//! stateful nodes inside an expression, [`boundary`] `process` /
+//! stateful nodes inside an expression, [`hoist`] the stores of the hoisted
+//! fields, [`boundary`] `process` /
 //! `process_inplace` / `render` / `params_default`.
 
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -80,6 +88,7 @@ use crate::prim::Prim;
 
 mod boundary;
 mod generated;
+mod hoist;
 mod nodes;
 mod phases;
 mod state;
@@ -213,14 +222,16 @@ fn inputs(info: &FlowInfo, fd: &FlowDef, span: Span) -> R<Vec<Input>> {
 }
 
 /// Every stage of the plan is of a phase: those its locals are read at
-/// and those of what the state keeps (the functions of the phases ask the
-/// plan of no other). Another is an internal error.
+/// and those of what the state keeps and of the hoisted fields (the
+/// functions of the phases ask the plan of no other). Another is an
+/// internal error.
 fn check_stages(info: &FlowInfo, span: Span) -> R<()> {
     let kept = info.fields.iter().filter_map(|f| match f.of {
         FieldOf::Input(l) | FieldOf::Let(l) => Some(info.own_stage(l)),
         _ => None,
     });
-    let stages: BTreeSet<Option<ClockStage>> = kept.chain(info.read_stages().map(Some)).collect();
+    let hoisted = info.hoists.iter().map(|h| Some(h.stage));
+    let stages: BTreeSet<Option<ClockStage>> = kept.chain(hoisted).chain(info.read_stages().map(Some)).collect();
     for s in stages {
         let s = s.ok_or_else(|| internal(span, "a stored local with no stage"))?;
         Phase::at(s, span)?;

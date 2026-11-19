@@ -112,12 +112,13 @@ fn the_operand_of_at_is_no_read_of_its_let() {
     );
     assert!(f.complete);
     assert_eq!((f.let_("bs"), f.let_("a"), f.expr("g")), (S, S, Clock::Block));
-    // §11.3: `a` is `sample` whatever the clock of `b` (E0200 of W7-05 here).
+    // §11.3: `a` is `sample` whatever the clock of `b`.
     let f = walk_of(
         "pub flow f(g: F32 at block) -> F32 at sample {\n  let a = prev~(^b at sample)\n  let b = g\n  a + b\n}\n",
         "f",
     );
-    assert_eq!(f.code(), Some(onsa_diag::Code::E0200));
+    assert!(f.complete);
+    assert_eq!(f.code(), None);
     assert_eq!((f.walked.lets[0], f.walked.lets[1]), (S, Clock::Block));
     assert_eq!((f.expr("^b"), f.expr("^b at sample")), (Clock::Block, S));
 }
@@ -230,8 +231,8 @@ fn a_part_in_error_gives_no_diagnostic_to_its_users() {
         ("  let a = (prev~(p) + 1.0) at sample\n  x\n}\n", onsa_diag::Code::E0813, "p"),
         ("  let a = slow(prev~(p))\n  x\n}\n", onsa_diag::Code::E0813, "p"),
         // The E0200 of the marking at a call of `slow` at `init` read at
-        // `sample` is before the E0813 after it.
-        ("  x * slow(c) + prev~(p)\n}\n", onsa_diag::Code::E0200, "slow(c)"),
+        // `sample` in a branch (W7-05 U2) is before the E0813 after it.
+        ("  (if x > 0.0 { slow(c) } else { 0.0 }) + prev~(p)\n}\n", onsa_diag::Code::E0200, "slow(c)"),
         // The calls with E0805 and E0815 are in error.
         ("  let a = slow(slow(x) + c)\n  x\n}\n", onsa_diag::Code::E0815, "slow(x)"),
         ("  let a = slow(noisy(x))\n  x\n}\n", onsa_diag::Code::E0805, "noisy(x)"),

@@ -338,7 +338,7 @@ fn a_chain_of_flows_that_call_the_next_has_the_instance_of_each() {
 fn a_panic_of_a_child_is_a_panic_of_the_call_at_the_place_in_the_child() {
     // §9.2, §11.5: the panic of a flow called is the panic of its caller, at the expression of the child that panics: `x / d`
     // with d = 0 in a frame (the `block` input of the call is what the parent gives), and the `let` of `block` of a child
-    // (`100 / d`), made in a call of 0 frames as well (S-1093: a `let of a stage is made whether or not it is read).
+    // (`100 / d`), made in a call of 0 frames as well (S-1093: a `let` of a stage is made whether or not it is read).
     // The panic of the `init` of a child (`10 / a`) is the panic of `init` of the parent.
     let src = "flow div(x: I32 at sample, d: I32 at block) -> I32 at sample { x / d }
 flow top(x: I32 at sample, d: I32 at block) -> I32 at sample { div~(x, d) }

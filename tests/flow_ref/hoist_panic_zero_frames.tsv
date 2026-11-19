@@ -1,0 +1,39 @@
+# flow_ref 1 source=tests/spec/flow_semantics/hoist_panic_zero_frames.onsa tests=10 evaluated=10 unavailable=0 skipped=0 waiting=0
+@ a block part of a sample expression panics in a call of 0 frames
+init 0 hoist_panic_zero_frames.in_sample_expr sr=0x41000000
+process 0 params d=0 frames=0 in x=[]
+panic block
+@ a block part of a sample expression panics in a call of 1 frame, at the block stage
+render hoist_panic_zero_frames.in_sample_expr sr=0x41000000 params d=0 in x=[0x3f800000]
+panic block
+@ a block part of a sample expression with d = 4 gives 25 in each frame
+render hoist_panic_zero_frames.in_sample_expr sr=0x41000000 params d=4 in x=[0x3f800000 0x40000000]
+out=[0x41c80000 0x42480000]
+@ the same call of 0 frames with d = 4 does not panic and writes nothing
+init 0 hoist_panic_zero_frames.in_sample_expr sr=0x41000000
+process 0 params d=4 frames=0 in x=[]
+out=[]
+@ a block part in a let of sample panics in a call of 0 frames
+init 0 hoist_panic_zero_frames.in_a_let sr=0x41000000
+process 0 params d=0 frames=0 in x=[]
+panic block
+@ an output expression of block panics in a call of 0 frames
+init 0 hoist_panic_zero_frames.output_of_block sr=0x41000000
+process 0 params d=0 frames=0 in x=[]
+panic block
+@ an output expression of block with d = 5 gives 20 in each frame
+init 0 hoist_panic_zero_frames.output_of_block sr=0x41000000
+process 0 params d=5 frames=2 in x=[0x3f800000 0x40000000]
+out=[20 20]
+@ a block part in the argument of a delay panics in a call of 0 frames
+init 0 hoist_panic_zero_frames.in_a_node_argument sr=0x41000000
+process 0 params d=0 frames=0 in x=[]
+panic block
+@ a call of an rt fn of a block argument panics in a call of 0 frames
+init 0 hoist_panic_zero_frames.rt_call sr=0x41000000
+process 0 params d=0 frames=0 in x=[]
+panic block
+@ the second of two block parts panics in a call of 0 frames
+init 0 hoist_panic_zero_frames.second_part sr=0x41000000
+process 0 params d=4 e=0 frames=0 in x=[]
+panic block

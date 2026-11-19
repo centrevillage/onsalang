@@ -176,8 +176,16 @@ impl FlowInfo {
 }
 
 /// The table of the nodes of `info` from the nodes the walk `w` recorded,
-/// in the order of their [`NodeId`]s, with the clocks the walk gave them.
-pub(super) fn build(info: &mut FlowInfo, recorded: Vec<Recorded>, w: &Walked) {
+/// in the order of their [`NodeId`]s, with the clocks the walk gave them;
+/// the table of the subexpressions the marking hoisted (`hoisted`, of the
+/// module of `ast`); and the fields of the state.
+pub(super) fn build(
+    info: &mut FlowInfo,
+    recorded: Vec<Recorded>,
+    w: &Walked,
+    ast: &onsa_syntax::ast::Ast,
+    hoisted: Vec<(ExprId, ClockStage, Owner)>,
+) {
     let mut roots = Roots { lets: vec![Vec::new(); info.lets.len()], output: Vec::new() };
     let mut children = vec![Vec::new(); recorded.len()];
     for (i, r) in recorded.iter().enumerate() {
@@ -218,6 +226,7 @@ pub(super) fn build(info: &mut FlowInfo, recorded: Vec<Recorded>, w: &Walked) {
     info.nodes = nodes.collect();
     info.node_of = info.nodes.iter().enumerate().map(|(i, n)| (n.expr, NodeId(i as u32))).collect();
     info.roots = roots;
+    super::hoist::table(info, ast, hoisted);
     fields::build(info);
 }
 

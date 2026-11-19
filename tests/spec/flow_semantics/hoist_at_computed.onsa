@@ -1,0 +1,100 @@
+// onsa.toml
+// [test]
+// mode = "test"
+// spec = ["§11.3", "§11.4", "§11.6"]
+
+// W7-05 U1/t, S-152, S-1157 (spec §11.3): `e at k` with `k` faster than the clock of `e` evaluates `e` at its own
+// clock and reads the value at `k` ("`at` は値も評価の段も変えず、状態も作らない"; "`e` はその推論したクロックの段で評価し、値の置き場所は一つである"). A computed
+// `e` is accepted now: the file `flow_clock_promotion_until_w7_05.onsa` of the negative cases said an E0200 for these forms.
+// So `(100 / d) at sample` with `d` of `block` is evaluated once for each call, a call of 0 frames too, and the value of the
+// `at` is the value `e` has. Every value is worked out by hand.
+
+pub rt fn twice(x: F32) -> F32 {
+  x * 2.0
+}
+
+pub flow sum_at_sample(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  x * ((g + 1.0) at sample)
+}
+
+pub flow call_at_block(x: F32 at sample, t: F32 at init) -> F32 at sample {
+  let c = twice(t) at block
+  x * c
+}
+
+pub flow negated_at_sample(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  let c = -g at sample
+  x * c
+}
+
+pub flow index_at_sample(x: F32 at sample, s: [F32; 2] at block) -> F32 at sample {
+  let c = s[0] at sample
+  x * c
+}
+
+// The delay takes its first argument at `sample`: a computed value of `block` made `sample` with `at` (the form that
+// the candidate of E0813 makes, §11.4).
+pub flow delay_of_a_computed_value(x: F32 at sample, g: F32 at block) -> F32 at sample {
+  prev~((g + 1.0) at sample) + x
+}
+
+pub flow division_at_sample(x: F32 at sample, d: I32 at block) -> F32 at sample {
+  x * F32.round_from((100 / d) at sample)
+}
+
+test "a computed block expression made sample with at" {
+  // g = 2.0: g + 1.0 = 3.0.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = sum_at_sample.render(sum_at_sample.Params { g: 2.0 }, xs, 8.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == 6.0
+}
+
+test "a call of an init value made block with at" {
+  // twice(1.5) = 3.0.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = call_at_block.render(call_at_block.Config { t: 1.5 }, xs, 8.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == 6.0
+}
+
+test "a negated block value made sample with at" {
+  // g = 2.0: -2.0.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = negated_at_sample.render(negated_at_sample.Params { g: 2.0 }, xs, 8.0)
+  assert o.out[0] == -2.0
+  assert o.out[1] == -4.0
+}
+
+test "an element of a block array made sample with at" {
+  // s[0] = 5.0.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = index_at_sample.render(index_at_sample.Params { s: [5.0, 9.0] }, xs, 8.0)
+  assert o.out[0] == 5.0
+  assert o.out[1] == 10.0
+}
+
+test "the delay of a computed block value made sample" {
+  // g = 2.0: the delay stores 3.0 each frame and gives 0.0 first: 0.0 + 1.0, 3.0 + 2.0, 3.0 + 4.0.
+  let xs: [F32; 3] = [1.0, 2.0, 4.0]
+  let o = delay_of_a_computed_value.render(delay_of_a_computed_value.Params { g: 2.0 }, xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == 5.0
+  assert o.out[2] == 7.0
+}
+
+test "at does not change the stage: the division is of block and panics in a call of 0 frames" {
+  let xs: [F32; 2] = [1.0, 2.0]
+  var out: [F32; 2] = [7.0; 2]
+  var st = division_at_sample.init(8.0)
+  division_at_sample.process(inout st, division_at_sample.Params { d: 0 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "at does not change the stage: the division is of block and panics in a call of 0 frames"
+  assert out[0] == 7.0
+}
+
+test "the division made sample gives its value" {
+  // 100 / 5 = 20.
+  let xs: [F32; 2] = [1.0, 2.0]
+  let o = division_at_sample.render(division_at_sample.Params { d: 5 }, xs, 8.0)
+  assert o.out[0] == 20.0
+  assert o.out[1] == 40.0
+}

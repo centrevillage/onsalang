@@ -66,6 +66,10 @@ pub struct Frame<'a> {
     pub host: Option<&'a mut dyn FnHost>,
     /// The state of the flow instance this evaluation is a tick of, and what its delays save (none for a function).
     pub run: Option<Run>,
+    /// The values of the parts of the body that a stage before the one of their `let` has made (`flow::pre`, §11.3), by
+    /// expression: `eval` of such a part gives the value that was kept, as the field of the state does, and does not make
+    /// it again (the panic of it was the one of the stage that made it). Empty for a function.
+    pub(super) hoisted: HashMap<ExprId, Value>,
     chain: u32,
     /// Which of the functions called from here the evaluator evaluates itself (`call::plain`), kept by declaration: a
     /// recursive function is not walked at each call. A frame of a call or a constant shares it with the one that made it.
@@ -141,6 +145,7 @@ impl<'a> Frame<'a> {
             limits: LIMITS,
             host: None,
             run: None,
+            hoisted: HashMap::new(),
             chain: 0,
             plain: Rc::default(),
             depth: 0,
@@ -158,6 +163,7 @@ impl<'a> Frame<'a> {
             limits: self.limits,
             host,
             run: None,
+            hoisted: HashMap::new(),
             chain: self.chain,
             plain,
             depth: self.depth + 1,
@@ -180,6 +186,9 @@ impl<'a> Frame<'a> {
 
     /// The value of `e`, which has the type the table gives it. Call it on a large stack (`mod.rs`): it recurses.
     pub fn eval(&mut self, e: ExprId) -> Eval {
+        if let Some(v) = self.hoisted.get(&e) {
+            return Ok(v.clone());
+        }
         let at = self.body.ast.expr(e).span;
         if self.low_stack() {
             return Err(Stop { fault: LOW_STACK, at });

@@ -19,7 +19,7 @@ const SAMPLE_TICK: &str = "sample_tick";
 /// The names the processor gives the state of a flow (§11.6, S-1138), all
 /// of a form no user writes (`_` first or a `.` in it, §2.3): the scope of
 /// the nodes of the output, the kinds of a `par~` and of a hoisted field
-/// (W7-05), and the fixed fields. The one table of them: the names of the
+/// (§11.3), and the fixed fields. The one table of them: the names of the
 /// plan (`flow::plan`) and the lowering and the C backend that look a
 /// fixed field up read them from here.
 pub const OUTPUT_SCOPE: &str = "_out";

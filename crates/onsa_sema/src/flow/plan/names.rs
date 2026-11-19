@@ -10,11 +10,12 @@ use onsa_syntax::ast::{Ast, ExprId};
 
 use super::super::PendingLet;
 use super::{Owner, Part, PlanKind, PlanNode};
-use crate::body::BodyInfo;
+use crate::body::{BodyInfo, LocalId};
 use crate::flow_names::{OUTPUT_SCOPE, PAR};
 
 /// `<kind>_<n>`: the name of the node `n` of a kind in a scope (`prev_0`,
-/// `lp_1`, `par_0`; W7-05 makes `_hoist_0` of [`crate::flow_names::HOIST`]).
+/// `lp_1`, `par_0`), and of the hoisted field `n` (`_hoist_0` of
+/// [`crate::flow_names::HOIST`]).
 pub(in crate::flow) fn local(kind: &str, n: u32) -> String {
     format!("{kind}_{n}")
 }
@@ -59,6 +60,16 @@ fn let_scopes<'a>(first: impl Iterator<Item = Option<&'a str>>) -> Vec<String> {
     first.map(&mut scope).collect()
 }
 
+/// The scopes of the `let`s whose locals are `locals`, in their order
+/// ([`let_scopes`]): of the nodes and of the hoisted fields.
+pub(in crate::flow) fn scopes<'a>(locals: impl Iterator<Item = &'a [LocalId]>, body: &BodyInfo) -> Vec<String> {
+    let first = locals.map(|l| match crate::flow::binds_none(l) {
+        true => None,
+        false => Some(body.locals[l[0].0 as usize].name.as_str()),
+    });
+    let_scopes(first)
+}
+
 /// The names of the nodes of a flow body while the walk records them, in
 /// the order the names of their calls come in the text (the outer call
 /// first): numbered by part of the body and kind (§11.6).
@@ -81,11 +92,8 @@ pub(in crate::flow) struct Namer {
 impl Namer {
     pub(in crate::flow) fn new(pending: &[PendingLet], ast: &Ast, body: &BodyInfo) -> Namer {
         let whole = pending.iter().filter_map(|p| Some((ast.without_parens(p.init), p.name.clone()?))).collect();
-        let first = pending.iter().map(|p| match crate::flow::binds_none(&p.locals) {
-            true => None,
-            false => Some(body.locals[p.locals[0].0 as usize].name.as_str()),
-        });
-        Namer { numbers: HashMap::default(), scopes: let_scopes(first), whole }
+        let scopes = scopes(pending.iter().map(|p| p.locals.as_slice()), body);
+        Namer { numbers: HashMap::default(), scopes, whole }
     }
 
     /// Whether the node `e` is the whole value of a `let` of a single name

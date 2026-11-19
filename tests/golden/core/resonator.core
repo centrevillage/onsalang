@@ -1,4 +1,4 @@
-type resonator.resonator.State = struct { _sample_rate: F32, r: F32, b1: F32, b2: F32, y1: F32, y2: F32, _poisoned: Bool, _initialized: Bool }
+type resonator.resonator.State = struct { _sample_rate: F32, b1: F32, b2: F32, y1: F32, y2: F32, y._hoist_0: F32, _poisoned: Bool, _initialized: Bool }
 type resonator.resonator.Config = struct {}
 type resonator.resonator.Params = struct { fc: F32, bw: F32 }
 type resonator.resonator.Rendered = struct { out: Buf[F32] }
@@ -7,42 +7,42 @@ const resonator.resonator.SIZE: U32 = 28:U32
 const resonator.resonator.BULK_SIZE: U32 = 0:U32
 rt fn resonator.resonator.ctl(inout s: resonator.resonator.State, p: resonator.resonator.Params) -> () {
   let r: F32 = math.exp.F32(((-(const std.core.num.F32.PI * p.1)) / s.0))
-  s.1 = r
   let w: F32 = (((2.0:F32 * const std.core.num.F32.PI) * p.0) / s.0)
   let b1: F32 = ((2.0:F32 * r) * math.cos.F32(w))
-  s.2 = b1
+  s.1 = b1
   let b2: F32 = (r * r)
-  s.3 = b2
+  s.2 = b2
+  s.5 = (1.0:F32 - r)
 }
 rt fn resonator.resonator.tick(inout s: resonator.resonator.State, x: F32) -> F32 {
   let y1@7: F32 = {
-    let y1@11: F32 = s.4
+    let y1@11: F32 = s.3
     y1@11
   }
   let y2@8: F32 = {
-    let y2@12: F32 = s.5
+    let y2@12: F32 = s.4
     y2@12
   }
-  let y: F32 = ((((1.0:F32 - s.1) * x) + (s.2 * y1@7)) - (s.3 * y2@8))
+  let y: F32 = (((s.5 * x) + (s.1 * y1@7)) - (s.2 * y2@8))
   let __out: F32 = y
-  s.4 = y
-  s.5 = y1@7
+  s.3 = y
+  s.4 = y1@7
   __out
 }
 fn resonator.resonator.init(cfg: resonator.resonator.Config, sample_rate: F32) -> resonator.resonator.State sret {
   let s: resonator.resonator.State = zeroed:resonator.resonator.State
   s.0 = sample_rate
   let y1.init: F32 = 0.0:F32
-  s.4 = y1.init
+  s.3 = y1.init
   let y2.init: F32 = 0.0:F32
-  s.5 = y2.init
+  s.4 = y2.init
   s.6 = false
   s.7 = true
   s
 }
 rt fn resonator.resonator.reset(inout s: resonator.resonator.State) -> () {
+  s.3 = 0.0:F32
   s.4 = 0.0:F32
-  s.5 = 0.0:F32
   s.6 = false
 }
 rt fn resonator.resonator.process(inout s: resonator.resonator.State, params: resonator.resonator.Params, input: Span[F32], inout output: Span[F32]) -> () {

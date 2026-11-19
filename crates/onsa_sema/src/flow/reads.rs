@@ -1,13 +1,16 @@
 //! The state marking (S-05): the stages at which each local is read
 //! (`FlowInfo::read_at`) and the stage at which `sample_rate()` is read,
 //! from the clocks of the walk ([`Walked`], the `let`s), which tell what
-//! the state keeps ([`FlowInfo::stored`]). The lowering reads these and
-//! does not walk the body again (R-91 (1), D-15).
+//! the state keeps ([`FlowInfo::stored`]); and, in the same walk, the
+//! subexpressions hoisted to a slower stage, whose parts are read there
+//! ([`super::hoist`], §11.3). The lowering reads these and does not walk
+//! the body again (R-91 (1), D-15).
 
 use onsa_diag::hash::HashSet;
-use onsa_syntax::ast::Ast;
+use onsa_syntax::ast::{Ast, BinOp};
 
 use super::clocks::Walked;
+use super::hoist::{Choose, Cond, Place};
 use super::*;
 use crate::names::body::Binding;
 
@@ -19,12 +22,17 @@ pub(super) struct Marked {
     pub(super) read_at: HashMap<LocalId, BTreeSet<ClockStage>>,
     pub(super) sample_rate_at: Option<ClockStage>,
     /// The first call (in the order of the file) of a function that is not
-    /// `rt` read at a stage after `init` (E0200, R-17, W7-05).
+    /// `rt` evaluated at a stage after `init` (E0200, R-17): in a branch, a
+    /// guard, the right of `&&` / `||` or the body of a `par~` (W7-05 U2
+    /// and U3), or of a type that is not Copy (S-1160).
     pub(super) diag: Option<Diagnostic>,
     /// The locals of the `let`s the initializer of each `let` reads (by its
     /// index; the last, the output), `^y` too: the reads what is reached
     /// goes by ([`reached`]). W7-15 makes them from the edges of the plan.
     pub(super) deps: Vec<HashSet<LocalId>>,
+    /// The hoisted subexpressions in the order of the walk, with their
+    /// stages and owners, of which the plan makes its table.
+    pub(super) hoisted: Vec<(ExprId, ClockStage, Owner)>,
 }
 
 struct Marker<'a> {
@@ -32,12 +40,11 @@ struct Marker<'a> {
     text: &'a str,
     body: &'a BodyInfo,
     clocks: &'a Walked,
+    choose: Choose<'a>,
     /// The walk had a diagnostic: it did not record the nodes it did not
     /// reach (in a branch, in `if~` / `match~`).
     partial: bool,
     non_rt: &'a HashSet<ExprId>,
-    node_calls: HashSet<ExprId>,
-    sample_rate: HashSet<ExprId>,
     let_of_local: &'a HashMap<LocalId, usize>,
     /// The `let` whose initializer is marked now (its index), or the output.
     consumer: usize,
@@ -58,6 +65,7 @@ fn read_stage(c: Clock) -> Option<ClockStage> {
 /// is read (S-05), in the module of `ast` and `text`, from the walk `walked`, also
 /// one with a diagnostic. A `let` in error is not marked.
 pub(super) fn mark_all(
+    a: &Analysis,
     ast: &Ast,
     text: &str,
     body: &BodyInfo,
@@ -65,15 +73,17 @@ pub(super) fn mark_all(
     walked: &Walked,
     lets: &[FlowLet],
 ) -> Marked {
+    let nodes: HashSet<ExprId> = cx.calls.iter().map(|c| c.expr).collect();
+    let sample_rate: HashSet<ExprId> = cx.sample_rate_calls.iter().copied().collect();
+    let choose = Choose { a, ast, body, clocks: &walked.info, nodes: &nodes, sample_rate: &sample_rate };
     let mut m = Marker {
         ast,
         text,
         body,
         clocks: walked,
+        choose,
         partial: walked.diag.is_some(),
         non_rt: &walked.non_rt,
-        node_calls: cx.calls.iter().map(|c| c.expr).collect(),
-        sample_rate: cx.sample_rate_calls.iter().copied().collect(),
         let_of_local: &cx.let_of_local,
         consumer: lets.len(),
         out: Marked {
@@ -81,17 +91,20 @@ pub(super) fn mark_all(
             sample_rate_at: None,
             diag: None,
             deps: vec![HashSet::default(); lets.len() + 1],
+            hoisted: Vec::new(),
         },
     };
+    // The `let`s and the output are evaluated at their stages whether and
+    // where they are read (§11.3, S-1093): roots under no condition.
     for (k, l) in lets.iter().enumerate().filter(|(_, l)| l.clock != Clock::Const) {
         if let Some(s) = read_stage(l.clock) {
             m.consumer = k;
-            m.mark(l.init, s);
+            m.mark(l.init, s, Cond::None);
         }
     }
     if let Some(out) = cx.output {
         m.consumer = lets.len();
-        m.mark(out, ClockStage::SAMPLE);
+        m.mark(out, ClockStage::SAMPLE, Cond::None);
     }
     // A constant `let` is defined in each phase that reads it, and its
     // initializer read there (§11.3, R-488): from the last, so that one
@@ -104,7 +117,7 @@ pub(super) fn mark_all(
             stages.insert(ClockStage::Init);
         }
         for s in stages {
-            m.mark(l.init, s);
+            m.mark(l.init, s, Cond::None);
         }
     }
     m.out
@@ -170,7 +183,21 @@ pub(super) fn unused(
 }
 
 impl Marker<'_> {
-    fn mark(&mut self, e: ExprId, at: ClockStage) {
+    /// Marks `e`, read at the stage `at` under the conditions `g` on its
+    /// path: hoisted ([`Choose::place`]), it is evaluated, and its parts
+    /// read, at its own stage.
+    fn mark(&mut self, e: ExprId, at: ClockStage, g: Cond) {
+        let at = match self.choose.place(e, at, g) {
+            Place::Hoist(s) => {
+                let owner = match self.consumer {
+                    k if k < self.out.deps.len() - 1 => Owner::Let(k as u32),
+                    _ => Owner::Output,
+                };
+                self.out.hoisted.push((e, s, owner));
+                s
+            }
+            Place::Here => at,
+        };
         let ast = self.ast;
         let expr = ast.expr(e);
         match &expr.kind {
@@ -184,11 +211,11 @@ impl Marker<'_> {
                 if let ExprKind::Field { base, .. } = &expr.kind
                     && !self.body.targets.contains_key(&e)
                 {
-                    self.mark(*base, at);
+                    self.mark(*base, at, g);
                 }
             }
             ExprKind::Call { callee, args, .. } => {
-                if self.node_calls.contains(&e) {
+                if self.choose.nodes.contains(&e) {
                     let clocks = self.clocks;
                     let Some(&k) = clocks.node_of.get(&e) else {
                         if self.partial {
@@ -196,37 +223,64 @@ impl Marker<'_> {
                         }
                         onsa_diag::internal::bug(Some(expr.span), "a node the walk of the clocks did not reach")
                     };
+                    // A node is in no branch (K-08): its arguments are roots
+                    // of their own, under the body of a `par~` around it.
                     for r in &clocks.nodes[k].args {
                         if let Some(s) = read_stage(r.at) {
-                            self.mark(r.expr, s);
+                            self.mark(r.expr, s, g);
                         }
                     }
-                } else if self.sample_rate.contains(&e) {
+                } else if self.choose.sample_rate.contains(&e) {
                     self.out.sample_rate_at = Some(self.out.sample_rate_at.map_or(at, |s| s.max(at)));
                 } else {
                     self.non_rt_here(e, at);
                     if let Some(base) = crate::names::body::receiver(ast, *callee)
                         && self.body.expr_types.contains_key(&base)
                     {
-                        self.mark(base, at);
+                        self.mark(base, at, g);
                     }
                     for x in args {
-                        self.mark(x.expr, at);
+                        self.mark(x.expr, at, g);
                     }
                 }
             }
-            ExprKind::Par { body, .. } => self.mark(*body, at),
+            // The body of a `par~` (W7-05 U3, S-1140).
+            ExprKind::Par { body, .. } => self.mark(*body, at, Cond::Late),
+            // The conditional positions (§11.3), not those of `if~` / `match~`
+            // (W7-06): W7-05 U2 counts the stages of their conditions.
+            ExprKind::If { cond, then, else_, tilde } => {
+                let inner = if tilde.is_some() { g } else { Cond::Late };
+                self.mark(*cond, at, g);
+                for x in [Some(*then), *else_].into_iter().flatten() {
+                    self.mark(x, at, inner);
+                }
+            }
+            ExprKind::Match { scrutinee, arms, tilde } => {
+                let inner = if tilde.is_some() { g } else { Cond::Late };
+                self.mark(*scrutinee, at, g);
+                for arm in arms {
+                    for x in arm.guard.iter().chain([&arm.body]) {
+                        self.mark(*x, at, inner);
+                    }
+                }
+            }
+            ExprKind::Binary { op: BinOp::And | BinOp::Or, lhs, rhs, .. } => {
+                self.mark(*lhs, at, g);
+                self.mark(*rhs, at, Cond::Late);
+            }
             _ => {
                 for child in ast.sub_exprs(e) {
-                    self.mark(child, at);
+                    self.mark(child, at, g);
                 }
             }
         }
     }
 
     /// A call at `e` of a function that is not `rt`, with values at `init`
-    /// ([`Walked::non_rt`]), read at a stage after `init`: E0200 until
-    /// hoisting computes it at `init` (R-17, W7-05).
+    /// ([`Walked::non_rt`]), evaluated at a stage after `init`: one not
+    /// hoisted to `init` (R-17), in a conditional position or the body of a
+    /// `par~` (W7-05 U2, U3) or of a type that is not Copy (S-1160), is
+    /// E0200.
     fn non_rt_here(&mut self, e: ExprId, at: ClockStage) {
         if at <= ClockStage::Init || !self.non_rt.contains(&e) {
             return;

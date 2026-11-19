@@ -1,0 +1,18 @@
+// onsa.toml
+// [test]
+// spec = ["§11.3", "§11.4", "§18.1"]
+
+// W7-14 U6b/t, S-372, S-1133: the row f10_atb of `flow_fn_value_clock_model.onsa`. The atom `applyf(FF, 1.0)` is of the clock of its constant
+// arguments, so `(A) at block` reads a constant at `block` and the only error is the E0810 of the atom (§11.3). This row was in
+// `flow_fn_value_clock_model_until_w7_05.onsa` while an `at` that makes a computed expression faster than its operands was an E0200 (which came first);
+// W7-05 accepts that `at` (S-152), so the row reports the E0810 only, and the file is named for what it holds. In this version a call of constants only is
+// at `init` (until W9-03), which changes nothing here.
+
+pub rt fn dbl(v: F32) -> F32 { v }
+const FF: rt fn(F32) -> F32 = dbl
+pub rt fn applyf(g: rt fn(F32) -> F32, v: F32) -> F32 { g.(v) }
+
+pub flow f10_atb(x: F32 at sample, p: F32 at block) -> F32 at sample {
+  let v = (applyf(FF, 1.0)) at block  //~ E0810
+  x
+}

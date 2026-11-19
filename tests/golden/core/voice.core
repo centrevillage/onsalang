@@ -1,8 +1,8 @@
-type voice.resonator.State = struct { _sample_rate: F32, r: F32, b1: F32, b2: F32, y1: F32, y2: F32, _poisoned: Bool, _initialized: Bool }
+type voice.resonator.State = struct { _sample_rate: F32, b1: F32, b2: F32, y1: F32, y2: F32, y._hoist_0: F32, _poisoned: Bool, _initialized: Bool }
 type voice.resonator.Config = struct {}
 type voice.resonator.Params = struct { fc: F32, bw: F32 }
 type voice.resonator.Rendered = struct { out: Buf[F32] }
-type voice.saw.State = struct { _sample_rate: F32, f0: F32, phase.prev_0: F32, _poisoned: Bool, _initialized: Bool }
+type voice.saw.State = struct { _sample_rate: F32, phase.prev_0: F32, phase._hoist_0: F32, _poisoned: Bool, _initialized: Bool }
 type voice.saw.Config = struct {}
 type voice.saw.Params = struct { f0: F32 }
 type voice.saw.Rendered = struct { out: Buf[F32] }
@@ -35,42 +35,42 @@ const voice.echo.BULK_SIZE: U32 = 0:U32
 const voice.MAX_VOICES: U32 = 8:U32
 rt fn voice.resonator.ctl(inout s: voice.resonator.State, p: voice.resonator.Params) -> () {
   let r: F32 = math.exp.F32(((-(const std.core.num.F32.PI * p.1)) / s.0))
-  s.1 = r
   let w: F32 = (((2.0:F32 * const std.core.num.F32.PI) * p.0) / s.0)
   let b1: F32 = ((2.0:F32 * r) * math.cos.F32(w))
-  s.2 = b1
+  s.1 = b1
   let b2: F32 = (r * r)
-  s.3 = b2
+  s.2 = b2
+  s.5 = (1.0:F32 - r)
 }
 rt fn voice.resonator.tick(inout s: voice.resonator.State, x: F32) -> F32 {
   let y1@7: F32 = {
-    let y1@11: F32 = s.4
+    let y1@11: F32 = s.3
     y1@11
   }
   let y2@8: F32 = {
-    let y2@12: F32 = s.5
+    let y2@12: F32 = s.4
     y2@12
   }
-  let y: F32 = ((((1.0:F32 - s.1) * x) + (s.2 * y1@7)) - (s.3 * y2@8))
+  let y: F32 = (((s.5 * x) + (s.1 * y1@7)) - (s.2 * y2@8))
   let __out: F32 = y
-  s.4 = y
-  s.5 = y1@7
+  s.3 = y
+  s.4 = y1@7
   __out
 }
 fn voice.resonator.init(cfg: voice.resonator.Config, sample_rate: F32) -> voice.resonator.State sret {
   let s: voice.resonator.State = zeroed:voice.resonator.State
   s.0 = sample_rate
   let y1.init: F32 = 0.0:F32
-  s.4 = y1.init
+  s.3 = y1.init
   let y2.init: F32 = 0.0:F32
-  s.5 = y2.init
+  s.4 = y2.init
   s.6 = false
   s.7 = true
   s
 }
 rt fn voice.resonator.reset(inout s: voice.resonator.State) -> () {
+  s.3 = 0.0:F32
   s.4 = 0.0:F32
-  s.5 = 0.0:F32
   s.6 = false
 }
 rt fn voice.resonator.process(inout s: voice.resonator.State, params: voice.resonator.Params, input: Span[F32], inout output: Span[F32]) -> () {
@@ -105,28 +105,28 @@ fn test voice "resonator decays"() -> () {
   }
 }
 rt fn voice.saw.ctl(inout s: voice.saw.State, p: voice.saw.Params) -> () {
-  s.1 = p.0
+  s.2 = (p.0 / s.0)
 }
 rt fn voice.saw.tick(inout s: voice.saw.State) -> F32 {
   let phase: F32 = voice.wrap01(({
-    let phase.prev_0: F32 = s.2
+    let phase.prev_0: F32 = s.1
     phase.prev_0
-  } + (s.1 / s.0)))
+  } + s.2))
   let __out: F32 = ((2.0:F32 * phase) - 1.0:F32)
-  s.2 = phase
+  s.1 = phase
   __out
 }
 fn voice.saw.init(cfg: voice.saw.Config, sample_rate: F32) -> voice.saw.State sret {
   let s: voice.saw.State = zeroed:voice.saw.State
   s.0 = sample_rate
   let phase.prev_0.init: F32 = 0.0:F32
-  s.2 = phase.prev_0.init
+  s.1 = phase.prev_0.init
   s.3 = false
   s.4 = true
   s
 }
 rt fn voice.saw.reset(inout s: voice.saw.State) -> () {
-  s.2 = 0.0:F32
+  s.1 = 0.0:F32
   s.3 = false
 }
 rt fn voice.saw.process(inout s: voice.saw.State, params: voice.saw.Params, inout output: Span[F32]) -> () {

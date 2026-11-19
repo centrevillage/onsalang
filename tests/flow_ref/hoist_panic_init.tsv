@@ -1,0 +1,19 @@
+# flow_ref 1 source=tests/spec/flow_semantics/hoist_panic_init.onsa tests=6 evaluated=6 unavailable=0 skipped=0 waiting=0
+@ an init part of a sample expression panics at init
+init 0 hoist_panic_init.in_sample_expr sr=0x41000000 cfg n=0
+panic init
+@ the same init part with n = 5 gives 20
+render hoist_panic_init.in_sample_expr sr=0x41000000 cfg n=5 in x=[0x3f800000 0x40000000]
+out=[0x41a00000 0x42200000]
+@ an init part in a let of sample panics at init
+init 0 hoist_panic_init.in_a_let sr=0x41000000 cfg n=0
+panic init
+@ an output expression of init panics at init
+init 0 hoist_panic_init.output_of_init sr=0x41000000 cfg n=0
+panic init
+@ an init part inside a block part panics at init
+init 0 hoist_panic_init.init_in_block sr=0x41000000 cfg n=0
+panic init
+@ an init part inside a block part gives its value
+render hoist_panic_init.init_in_block sr=0x41000000 cfg n=5 params e=3 in x=[0x40000000]
+out=[0x42380000]
