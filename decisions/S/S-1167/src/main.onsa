@@ -1,0 +1,10 @@
+pub rt fn ratio(i: U32) -> F32 {
+  F32.round_from(i) + 1.0
+}
+pub rt fn sumn(xs: [F32; 2]) -> F32 {
+  xs[0] + xs[1]
+}
+@export
+pub flow f(x: F32 at sample, @param(default: 1.0) f0: F32 at block) -> F32 at sample {
+  (par~ i0 in 0 ..< 2 { (par~ i1 in 0 ..< 2 { (par~ i2 in 0 ..< 2 { (par~ i3 in 0 ..< 2 { (par~ i4 in 0 ..< 2 { (par~ i5 in 0 ..< 2 { (par~ i6 in 0 ..< 2 { (par~ i7 in 0 ..< 2 { (par~ i8 in 0 ..< 2 { (par~ i9 in 0 ..< 2 { (par~ i10 in 0 ..< 2 { (par~ i11 in 0 ..< 2 { (par~ i12 in 0 ..< 2 { (par~ i13 in 0 ..< 2 { (par~ i14 in 0 ..< 2 { (par~ i15 in 0 ..< 2 { (par~ i16 in 0 ..< 2 { (par~ i17 in 0 ..< 2 { (par~ i18 in 0 ..< 2 { (par~ i19 in 0 ..< 2 { (par~ i20 in 0 ..< 2 { (par~ i21 in 0 ..< 2 { (par~ i22 in 0 ..< 2 { (par~ i23 in 0 ..< 2 { (par~ i24 in 0 ..< 2 { (par~ i25 in 0 ..< 2 { (par~ i26 in 0 ..< 2 { (par~ i27 in 0 ..< 2 { (par~ i28 in 0 ..< 2 { (par~ i29 in 0 ..< 2 { (par~ i30 in 0 ..< 2 { x * (f0 * ratio(i0 + i1 + i2 + i3 + i4 + i5 + i6 + i7 + i8 + i9 + i10 + i11 + i12 + i13 + i14 + i15 + i16 + i17 + i18 + i19 + i20 + i21 + i22 + i23 + i24 + i25 + i26 + i27 + i28 + i29 + i30)) })[1] })[1] })[1] })[1] })[1] })[1] })[1] })[1] })[1] })[1] })[1] })[1] })[1] })[1] })[1] })[1] })[1] })[1] })[1] })[1] })[1] })[1] })[1] })[1] })[1] })[1] })[1] })[1] })[1] })[1] })[1]
+}
