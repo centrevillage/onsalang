@@ -45,34 +45,51 @@ pub(crate) fn move_up(
     if crate::lex(file, moved).literals.unclosed_in(0, moved.len() as u32) {
         return None;
     }
-    Some(lifted(file, all, title, (end, format!("{sep}{moved}")), (at, at + code_len, code_end)))
+    let own = (sep.len() as u32, (sep.len() + moved.len()) as u32);
+    Some(lifted(file, all, title, (end, format!("{sep}{moved}"), Some(own)), (at, at + code_len, code_end)))
 }
 
 /// The candidate that moves the token `all[at]` at the head of its line up
 /// to `end`, written there as `written` (a symbol, which holds no literal:
 /// ` +` after a blank for a binary operator, ` ..<` for `..`, S-124, S-335),
-/// as [`move_up`] moves code: what follows it on its line stays there.
-pub(crate) fn move_token_up(file: FileId, all: &[Token], title: &str, end: u32, at: usize, written: &str) -> Fix {
+/// as [`move_up`] moves code: what follows it on its line stays there. The
+/// symbol written as it is in `text` (blanks before it aside) is the writer's
+/// text moved (S-1187); one written as another (` ..<` for `..`) is not.
+pub(crate) fn move_token_up(
+    file: FileId,
+    text: &str,
+    all: &[Token],
+    title: &str,
+    end: u32,
+    at: usize,
+    written: &str,
+) -> Fix {
     let stop = at + 1 + usize::from(all.get(at + 1).is_some_and(|t| t.kind == TokenKind::Whitespace));
-    lifted(file, all, title, (end, written.to_string()), (at, stop, all[at].span.end))
+    let symbol = written.trim_start();
+    let own = (text.get(all[at].span.start as usize..all[at].span.end as usize) == Some(symbol))
+        .then(|| ((written.len() - symbol.len()) as u32, written.len() as u32));
+    lifted(file, all, title, (end, written.to_string(), own), (at, stop, all[at].span.end))
 }
 
 /// The candidate that writes `written` at `end` and takes out the code
 /// `all[at..stop]` (to `code_end`, the blanks after it to `stop`) from the
 /// head of its line: the line, its indentation and its newline when nothing
 /// else is on it, else the code and the blanks (a comment or code after it
-/// stays, after the indentation). The one removal of [`move_up`] and
+/// stays, after the indentation). The part `own` of `written` is that code,
+/// the writer's text ([`Edit::writers`]): the candidate moves it
+/// (`Fix::moves`, S-475). The one removal of [`move_up`] and
 /// [`move_token_up`].
 fn lifted(
     file: FileId,
     all: &[Token],
     title: &str,
-    (end, written): (u32, String),
+    (end, written, own): (u32, String, Option<(u32, u32)>),
     (at, stop, code_end): (usize, usize, u32),
 ) -> Fix {
     let removed = whole_line(file, all, (at, stop, code_end))
         .unwrap_or_else(|| Span::new(file, all[at].span.start, all.get(stop).map_or(code_end, |t| t.span.start)));
-    Fix::new(title, vec![Edit::insert(file, end, written), Edit::delete(removed)])
+    let put = Edit::insert(file, end, written).with_writers(own.as_slice());
+    Fix::new(title, vec![put, Edit::delete(removed)])
 }
 
 /// The line of the code `all[at..stop]` at the head of its line (to

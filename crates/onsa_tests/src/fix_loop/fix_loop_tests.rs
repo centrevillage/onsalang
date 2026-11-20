@@ -391,6 +391,35 @@ fn the_manifest_of_a_fragment_is_walked_first() {
     assert_eq!((r.walks[0].stop, codes), (Stop::Clean, vec!["E0020"]), "{r:?}");
 }
 
+/// S-1187: `par` and the `~` on the next line in parentheses (§2.6). The E0020 candidate moves the
+/// `~` up to the keyword, the writer's text (`Edit::writers`); the E0812 of the `par~` without state
+/// (§11.5) then takes it out: no undo, the walk ends clean. The `~` written back at its place is one.
+#[test]
+fn a_symbol_the_compiler_moves_up_and_a_later_candidate_takes_out_undoes_no_step() {
+    let head = "pub rt fn two(a: [F32; 2], b: F32) -> F32 {\n  a[0] + a[1] + b\n}\n\n";
+    let src = format!(
+        "{head}pub flow f(x: F32 at sample) -> F32 at sample {{\n  two(par\n    ~ i in 0 ..< 2 {{ x }}, 1.0)\n}}\n"
+    );
+    let r = walk("m.onsa", &src, &branches(), &check);
+    let codes: Vec<&str> = r.walks[0].steps.iter().map(|s| s.code.as_str()).collect();
+    assert_eq!((r.walks.len(), r.walks[0].stop, codes), (1, Stop::Clean, vec!["E0020", "E0812"]), "{r:?}");
+    // After the move (`par~`, `i` left on its line), a candidate that writes `~ ` back where it was.
+    let moved = src.replace("par\n    ~ i", "par~\n    i");
+    let at = moved.find("par~\n").unwrap() as u32 + 9;
+    let back = |t: &str| {
+        if t != moved {
+            return check(t);
+        }
+        let mut sources = SourceMap::default();
+        let file = sources.add("m.onsa", t);
+        let mut d = Diagnostic::new(Stage::Syntax, Code::E0002, Span::new(file, at, at), "here");
+        d.fixes = vec![Fix::insert("back", file, at, "~ ")];
+        Ok(Checked { sources, diagnostics: vec![d] })
+    };
+    let r = walk("m.onsa", &src, &Options::default(), &back);
+    assert_eq!((r.walks[0].how, r.walks[0].back_to), (Some(How::Undo), Some(1)), "{r:?}");
+}
+
 /// A made-up repository root under the temporary directory.
 struct Root(std::path::PathBuf);
 

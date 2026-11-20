@@ -28,7 +28,7 @@ pub(super) fn move_token_up(c: &Cursor, title: &str, i: usize) -> Option<Fix> {
 /// ([`crate::edits::move_token_up`]).
 pub(super) fn move_token_up_as(c: &Cursor, title: &str, i: usize, symbol: &str) -> Option<Fix> {
     let prev = c.sig_before(i)?;
-    Some(crate::edits::move_token_up(c.file, c.all, title, c.span(prev).end, c.full[i] as usize, symbol))
+    Some(crate::edits::move_token_up(c.file, c.text, c.all, title, c.span(prev).end, c.full[i] as usize, symbol))
 }
 
 /// The candidate that moves the symbol `i` at the end of its line (a member
