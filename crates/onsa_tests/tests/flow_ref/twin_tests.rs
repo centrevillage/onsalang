@@ -129,21 +129,22 @@ fn heavy_match_twins() {
 
 /// The seeds of the gate for the panics: chosen again when a change of the generator moves what they make and `PAN_COVER` or
 /// `PAN_TWICE` break.
-const PAN_GATE: [u64; 10] = [180, 271, 554, 559, 680, 903, 1000, 1080, 1117, 1168];
+const PAN_GATE: [u64; 12] = [151, 209, 472, 486, 575, 626, 1229, 1255, 1328, 1350, 1397, 1429];
 /// The forms the seeds hold: chains and `match~`es, nested, on each kind of scrutinee; the divisions (by an input of each clock
 /// and by a binding), in a body, in an argument of `block`, in a condition after the first and in a guard after another (a guard
 /// of `sample` before it too), a guarded chain, a short circuit (`&&`, `||`) whose right side divides, by the clock of its left
 /// side (`x`) or by another, a plain `if` that guards its division and one that does not, a division of an outer binding in a
-/// guard, and an argument of `block` that divides by a binding in a `match~` whose scrutinee is a binding.
+/// guard, an argument of `block` that divides by a binding in a `match~` whose scrutinee is a binding, and one that divides by a binding
+/// of an outer arm where a scrutinee or a guard of `sample` is before it.
 const PAN_COVER: &str = "if match nested_if nested_match scr_k scr_n scr_ku scr_b body_div state_div block_div d_k d_n d_b c_x c_eq0 \
     c_lt2 c_ne c_div c_gdiv c_and_x c_or_x c_and_clk c_or_clk plain_guarded plain_bad late_cond_div late_guard_div sample_then_div \
-    guard_chain outer_guard if_cond_b block_arg_b";
+    guard_chain outer_guard if_cond_b block_arg_b block_arg_late";
 /// The forms that the mutants need, which two seeds of the gate hold at least: a division in a body (also of a state, and of an
 /// argument of `block`) that is evaluated whether its arm is taken or not, in a condition after the first and in a guard after
 /// another (one of `sample` before it too), a plain `if` that does not guard its division, a division of an outer binding, a
 /// scrutinee that is one, the nest of the arms chosen from the outside in, each short circuit.
 const PAN_TWICE: &str = "late_cond_div late_guard_div sample_then_div plain_bad outer_guard body_div state_div block_div scr_b \
-    block_arg_b c_and_x c_or_x c_and_clk c_or_clk";
+    block_arg_b block_arg_late c_and_x c_or_x c_and_clk c_or_clk";
 
 /// The programs run: no failure, and what was counted is not nothing (scenes that panic and scenes that do not, a panic at each
 /// stage, and scenes where a division that is surely evaluated divides by zero, which have to panic), all compared.

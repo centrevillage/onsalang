@@ -288,7 +288,7 @@ impl Node {
     }
 
     /// The forms the plan holds (the gate asserts its seeds hold the forms of `COVER`).
-    fn tags(&self, scope: usize, depth: usize, t: &mut BTreeSet<&'static str>) {
+    fn tags(&self, scope: usize, depth: usize, late: bool, t: &mut BTreeSet<&'static str>) {
         let cond = |c: &Cond, t: &mut BTreeSet<&'static str>| {
             t.insert(c.tag());
             t.extend(c.div().map(|(d, _)| dtag(d)));
@@ -297,7 +297,11 @@ impl Node {
             Node::Leaf(l) => match *l {
                 Leaf::Div(d) => t.extend(["body_div", dtag(d)]),
                 Leaf::StateDiv(d) => t.extend(["state_div", dtag(d)]),
-                Leaf::Block(d) => t.extend(["block_div", dtag(d)]),
+                Leaf::Block(d) => {
+                    t.extend(["block_div", dtag(d)]);
+                    // An outer binding read by an argument of `block` under a scrutinee or a guard of `sample` of an arm around it.
+                    t.extend((late && matches!(d, D::B(_))).then_some("block_arg_late"));
+                }
                 Leaf::If(c, d) => {
                     cond(&c, t);
                     t.insert(if c == Cond::Ne(d) { "plain_guarded" } else { "plain_bad" });
@@ -318,7 +322,7 @@ impl Node {
                         && matches!(conds[1], Cond::Div(_)))
                     .then_some("guard_chain"),
                 );
-                arms.iter().for_each(|a| a.tags(scope, depth + 1, t));
+                arms.iter().for_each(|a| a.tags(scope, depth + 1, late, t));
             }
             Node::Match(scr, arms) => {
                 t.insert(["match", "nested_match"][depth.min(1)]);
@@ -331,16 +335,17 @@ impl Node {
                 // The arms are chosen from the outside in: a scrutinee that is a binding of the outside, read by a division
                 // in an argument of `block`, is what an order that is not that is seen by.
                 t.extend((matches!(scr, Scr::B(_)) && arms.iter().any(|a| a.body.block_b())).then_some("block_arg_b"));
-                let mut sample_before = false;
+                let (mut sample_before, mut late) = (false, late || *scr == Scr::Ku);
                 for (i, a) in arms.iter().enumerate() {
                     if let Some(g) = &a.guard {
+                        late |= g.sample(0);
                         cond(g, t);
                         t.extend((g.div().is_some() && i > 0).then_some("late_guard_div"));
                         t.extend((g.div().is_some() && sample_before).then_some("sample_then_div"));
                         t.extend(matches!(g.d(), Some(D::B(b)) if b < scope).then_some("outer_guard"));
                         sample_before |= matches!(g, Cond::X(_));
                     }
-                    a.body.tags(scope + usize::from(a.pat == Pat::Bind), depth + 1, t);
+                    a.body.tags(scope + usize::from(a.pat == Pat::Bind), depth + 1, late, t);
                 }
             }
         }
@@ -431,20 +436,17 @@ fn gen_cond(rng: &mut Rng, scope: usize) -> Cond {
     }
 }
 
-/// A leaf, where `slow` has a bit for each binding that is of the clock `sample` (`block` takes no such division), and `late` tells
-/// that a scrutinee or a guard of `sample` is before it in a `match~` (the evaluator has no value then for a binding of an arm outside that
-/// is read in an argument of `block`: `Internal("a local with no value")`, which the interpreter does not have; the form is
-/// not made until the evaluator takes it).
-fn gen_leaf(rng: &mut Rng, scope: usize, slow: u32, late: bool, need: bool) -> Leaf {
+/// A leaf, where `slow` has a bit for each binding that is of the clock `sample` (`block` takes no such division).
+fn gen_leaf(rng: &mut Rng, scope: usize, slow: u32, need: bool) -> Leaf {
     let d = gen_d(rng, scope);
-    let fast = if matches!(d, D::B(i) if slow >> i & 1 == 1 || late) { D::Ki } else { d };
+    let fast = if matches!(d, D::B(i) if slow >> i & 1 == 1) { D::Ki } else { d };
     match rng.below(9) {
         _ if need => [Leaf::State, Leaf::StateDiv(d)][rng.below(2)],
         0 => Leaf::State,
         1 => Leaf::X,
         2 | 3 => Leaf::Div(d),
         4 => Leaf::If(Cond::Ne(d), d),
-        5 | 6 if scope > 0 && !late && slow >> (scope - 1) & 1 == 0 && rng.chance(80) => Leaf::Block(D::B(scope - 1)),
+        5 | 6 if scope > 0 && slow >> (scope - 1) & 1 == 0 && rng.chance(80) => Leaf::Block(D::B(scope - 1)),
         5 | 6 => Leaf::Block(fast),
         _ => Leaf::If(gen_cond(rng, scope), d),
     }
@@ -453,9 +455,26 @@ fn gen_leaf(rng: &mut Rng, scope: usize, slow: u32, late: bool, need: bool) -> L
 /// A node at `depth` (the root is a chain or a `match~`, and nothing is nested below depth 1) with `scope` bindings around it
 /// (the bits of `slow` are those of the clock `sample`: a binding has the clock of its scrutinee and of the guards up to its arm,
 /// S-1131), and with a state when `need`: a chain and a `match~` have one in an arm of their own, for they are E0812 else.
-fn gen_node(rng: &mut Rng, depth: usize, scope: usize, (slow, late): (u32, bool), need: bool) -> Node {
+fn gen_node(rng: &mut Rng, depth: usize, scope: usize, slow: u32, need: bool) -> Node {
     if depth > 0 && (depth > 1 || rng.chance(55)) {
-        return Node::Leaf(gen_leaf(rng, scope, slow, late, need));
+        return Node::Leaf(gen_leaf(rng, scope, slow, need));
+    }
+    if depth == 0 && rng.chance(6) {
+        // An outer binding read by an argument of `block` where a guard or the scrutinee of `sample` of the inner `match~` is before it
+        // (the stage `block` gives the binding of the arm around, and does not decide the inner arm).
+        let arm = |pat, guard, leaf| Arm { pat, guard, body: Node::Leaf(leaf) };
+        let (scr, guard) = rng.pick(&[(Scr::K, Some(Cond::X("0.0"))), (Scr::Ku, None)]);
+        let (state, read) = (Leaf::State, Leaf::Block(D::B(0)));
+        let (first, second) = if rng.chance(50) { (state, read) } else { (read, state) };
+        let inner = Node::Match(
+            scr,
+            vec![
+                arm(if guard.is_some() { Pat::Wild } else { Pat::Lit(0) }, guard, first),
+                arm(Pat::Wild, None, second),
+            ],
+        );
+        let outer = Arm { pat: Pat::Bind, guard: None, body: inner };
+        return Node::Match(rng.pick(&[Scr::N, Scr::K]), vec![outer]);
     }
     if depth == 0 && rng.chance(10) {
         // The nest that the order of choosing the arms is seen by: the arm of `b0` takes `k`, the arm of `b1` in it takes `b0` and
@@ -480,10 +499,7 @@ fn gen_node(rng: &mut Rng, depth: usize, scope: usize, (slow, late): (u32, bool)
             conds = vec![Cond::Eq0(d), Cond::Div(d)];
         }
         let with_state = rng.below(n);
-        return Node::If(
-            conds,
-            (0..n).map(|i| gen_node(rng, depth + 1, scope, (slow, late), i == with_state)).collect(),
-        );
+        return Node::If(conds, (0..n).map(|i| gen_node(rng, depth + 1, scope, slow, i == with_state)).collect());
     }
     let scr = if scope > 0 && rng.chance(60) {
         Scr::B(rng.below(scope))
@@ -491,7 +507,6 @@ fn gen_node(rng: &mut Rng, depth: usize, scope: usize, (slow, late): (u32, bool)
         rng.pick(&[Scr::K, Scr::K, Scr::N, Scr::Ku])
     };
     if let Scr::B(j) = scr
-        && !late
         && slow >> j & 1 == 0
         && rng.chance(50)
     {
@@ -519,11 +534,7 @@ fn gen_node(rng: &mut Rng, depth: usize, scope: usize, (slow, late): (u32, bool)
         let own = slow | u32::from(scr_slow) << scope;
         guards_slow |= guard.is_some_and(|g| g.sample(own));
         let body_slow = slow | u32::from(scr_slow || guards_slow) << scope;
-        arms.push(Arm {
-            pat,
-            guard,
-            body: gen_node(rng, depth + 1, scope + bind, (body_slow, late || scr_slow || guards_slow), i == with_state),
-        });
+        arms.push(Arm { pat, guard, body: gen_node(rng, depth + 1, scope + bind, body_slow, i == with_state) });
     }
     Node::Match(scr, arms)
 }
@@ -531,10 +542,10 @@ fn gen_node(rng: &mut Rng, depth: usize, scope: usize, (slow, late): (u32, bool)
 /// The program of a seed and the forms it holds.
 pub fn make(seed: u64) -> (Prog, BTreeSet<&'static str>) {
     let mut rng = Rng::new(seed ^ 0x9A71C);
-    let plan = gen_node(&mut rng, 0, 0, (0, false), true);
+    let plan = gen_node(&mut rng, 0, 0, 0, true);
     let xs = rng.pick(&["[1.0, -1.0]", "[-1.0, 1.0]", "[0.5, 0.25]", "[-0.5, -1.0]"]);
     let mut tags = BTreeSet::new();
-    plan.tags(0, 0, &mut tags);
+    plan.tags(0, 0, false, &mut tags);
     (Prog { plan, xs, scenes: scenes(&[0, 2]), hand: None }, tags)
 }
 

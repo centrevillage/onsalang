@@ -1,4 +1,4 @@
-# flow_ref 1 source=tests/spec/flow_semantics/match_tilde_binding_stage.onsa tests=13 evaluated=13 unavailable=0 skipped=0 waiting=0
+# flow_ref 1 source=tests/spec/flow_semantics/match_tilde_binding_stage.onsa tests=19 evaluated=19 unavailable=0 skipped=0 waiting=0
 @ a binding read by a block input is the part of the target
 render match_tilde_binding_stage.a_binding_in_a_block_input sr=0x41000000 params k=3 in x=[0x40000000 0x40a00000]
 out=[0x40c00000 0x41700000]
@@ -64,3 +64,23 @@ out=[0x40400000]
 init 0 match_tilde_binding_stage.the_guard_after_a_guard_that_fails_at_block sr=0x41000000
 process 0 params k=0 frames=0 in x=[]
 panic block
+@ an outer binding is read at block under a guard of sample
+render match_tilde_binding_stage.outer_binding_under_a_sample_guard sr=0x41000000 cfg n=4 params k=1 in x=[0x3f800000 0xc0000000 0x40400000 0xc0800000]
+out=[0x3f800000 0xc2480000 0x40000000 0xc2c80000]
+render match_tilde_binding_stage.outer_binding_under_a_sample_guard sr=0x41000000 cfg n=5 params k=0 in x=[0xbf800000 0xc0000000]
+out=[0xc1a00000 0xc2200000]
+@ an outer binding is read at block under a target of sample
+render match_tilde_binding_stage.outer_binding_under_a_sample_target sr=0x41000000 cfg n=4 in x=[0x3f800000 0xc0000000 0x40400000 0xc0800000]
+out=[0x3f800000 0xc2480000 0x40000000 0xc2c80000]
+@ an outer binding is read at block in the arm that a guard of sample takes
+render match_tilde_binding_stage.outer_binding_in_a_guarded_arm sr=0x41000000 cfg n=4 params k=7 in x=[0x3f800000 0xc0000000 0x40400000 0xc0800000]
+out=[0x41c80000 0xbf800000 0x42960000 0xc0000000]
+@ an outer binding is read at block beside a binding of sample
+render match_tilde_binding_stage.outer_binding_beside_a_sample_binding sr=0x41000000 cfg n=4 params k=3 in x=[0x3f800000 0xc0000000]
+out=[0x40400000 0xc2480000]
+@ an outer binding is read at block in a branch of an if~ under a condition of sample
+render match_tilde_binding_stage.outer_binding_under_an_if_tilde sr=0x41000000 cfg n=4 in x=[0x3f800000 0xc0000000 0x40400000 0xc0800000]
+out=[0x3f800000 0xc2480000 0x40000000 0xc2c80000]
+@ the outer binding is 0 at init and the division by it panics there, under a guard of sample too
+init 0 match_tilde_binding_stage.outer_binding_under_a_sample_guard sr=0x41000000 cfg n=0
+panic init

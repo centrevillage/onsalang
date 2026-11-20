@@ -12,6 +12,8 @@
 // in an arm that is not taken is fed the default (a counter `gsum~(x, g)` that adds `x * g` shows the `g` that it got: 0.0, and not the value of the last call);
 // the second the stage of a panic: a division by the binding that is evaluated although the arm is not taken (at `init`, and at `block` even for a call of
 // 0 frames), and the guards of the later arms, which are condition positions guarded by the arms before them. Every value is worked out by hand.
+// The third group (W7-20 U3b/t): a binding of an outer arm that a `block` input reads, inside an inner `match~` whose object or guard is of `sample`: the stage `block` gives
+// the binding of the arm that holds it and does not decide the inner arm, whose guard it cannot evaluate (S-1131: a binding is read at its stage).
 
 pub flow acc(x: F32 at sample) -> F32 at sample {
   let y = x + prev~(^y)
@@ -118,6 +120,56 @@ pub flow the_guard_after_a_guard_that_fails_at_block(x: F32 at sample, k: I32 at
     n if n < 0 => acc~(x),
     m if 100 / m > 5 => 2.0,
     _ => 3.0,
+  }
+}
+
+// ---- a binding of an outer arm that a `block` input reads, under an inner `match~` that `sample` decides (W7-20 U3b/t)
+
+// The binding `b0` has the clock `init` (its object `n` and no guard), and the `block` input `g` of `scale~` reads it: it is `n` where the arm is taken,
+// in every arm that the inner `match~` takes at any frame. The guard `x > 0.0` of the inner arm before it is of `sample` and is not read by `g`.
+pub flow outer_binding_under_a_sample_guard(x: F32 at sample, k: U32 at block, n: U32 at init) -> F32 at sample {
+  match~ n {
+    b0 => match~ k {
+      _ if x > 0.0 => acc~(x),
+      _ => scale~(x, F32.round_from(100 / b0)),
+    },
+  }
+}
+
+// The same where the object of the inner `match~` is of `sample`.
+pub flow outer_binding_under_a_sample_target(x: F32 at sample, n: U32 at init) -> F32 at sample {
+  match~ n {
+    b0 => match~ x > 0.0 {
+      true => acc~(x),
+      false => scale~(x, F32.round_from(100 / b0)),
+    },
+  }
+}
+
+// The same where the instance that reads the binding is in the arm that the guard of `sample` is for.
+pub flow outer_binding_in_a_guarded_arm(x: F32 at sample, k: U32 at block, n: U32 at init) -> F32 at sample {
+  match~ n {
+    b0 => match~ k {
+      _ if x > 0.0 => scale~(x, F32.round_from(100 / b0)),
+      _ => acc~(x),
+    },
+  }
+}
+
+// The inner arm binds `m`, whose clock is `sample` (its guard is), and `g` reads the binding of the outer arm only.
+pub flow outer_binding_beside_a_sample_binding(x: F32 at sample, k: U32 at block, n: U32 at init) -> F32 at sample {
+  match~ n {
+    b0 => match~ k {
+      m if x > 0.0 => acc~(x * F32.round_from(m)),
+      _ => scale~(x, F32.round_from(100 / b0)),
+    },
+  }
+}
+
+// The branch of an `if~` is no arm, and the condition is of `sample`.
+pub flow outer_binding_under_an_if_tilde(x: F32 at sample, n: U32 at init) -> F32 at sample {
+  match~ n {
+    b0 => if~ x > 0.0 { acc~(x) } else { scale~(x, F32.round_from(100 / b0)) },
   }
 }
 
@@ -255,4 +307,62 @@ test "the guard after a guard that fails is evaluated at block, in a call of 0 f
   var st = the_guard_after_a_guard_that_fails_at_block.init(8.0)
   the_guard_after_a_guard_that_fails_at_block.process(inout st, the_guard_after_a_guard_that_fails_at_block.Params { k: 0 }, xs.slice(0, 0), inout out.slice(0, 0)) //~ PANIC "the guard after a guard that fails is evaluated at block, in a call of 0 frames too"
   assert out[0] == 7.0
+}
+
+test "an outer binding is read at block under a guard of sample" {
+  // n = 4: g = 100 / 4 = 25.  x = 1 -2 3 -4: acc (y = x + the last y) is 1, -1, 2, -2; the guard `x > 0.0` takes acc for 1 and 3, and scale (x * 25) for -2 and -4:
+  // 1, -50, 2, -100.  n = 5: g = 20, x = -1 -2: -20, -40.
+  let xs: [F32; 4] = [1.0, -2.0, 3.0, -4.0]
+  let neg: [F32; 2] = [-1.0, -2.0]
+  let o = outer_binding_under_a_sample_guard.render(outer_binding_under_a_sample_guard.Config { n: 4 }, outer_binding_under_a_sample_guard.Params { k: 1 }, xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == -50.0
+  assert o.out[2] == 2.0
+  assert o.out[3] == -100.0
+  let p = outer_binding_under_a_sample_guard.render(outer_binding_under_a_sample_guard.Config { n: 5 }, outer_binding_under_a_sample_guard.Params { k: 0 }, neg, 8.0)
+  assert p.out[0] == -20.0
+  assert p.out[1] == -40.0
+}
+
+test "an outer binding is read at block under a target of sample" {
+  // As above: true takes acc, false takes scale (x * 25): 1, -50, 2, -100.
+  let xs: [F32; 4] = [1.0, -2.0, 3.0, -4.0]
+  let o = outer_binding_under_a_sample_target.render(outer_binding_under_a_sample_target.Config { n: 4 }, xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == -50.0
+  assert o.out[2] == 2.0
+  assert o.out[3] == -100.0
+}
+
+test "an outer binding is read at block in the arm that a guard of sample takes" {
+  // n = 4: g = 25.  x = 1 -2 3 -4: acc is 1, -1, 2, -2; the guard takes scale (x * 25) for 1 and 3 and acc for -2 and -4: 25, -1, 75, -2.
+  let xs: [F32; 4] = [1.0, -2.0, 3.0, -4.0]
+  let o = outer_binding_in_a_guarded_arm.render(outer_binding_in_a_guarded_arm.Config { n: 4 }, outer_binding_in_a_guarded_arm.Params { k: 7 }, xs, 8.0)
+  assert o.out[0] == 25.0
+  assert o.out[1] == -1.0
+  assert o.out[2] == 75.0
+  assert o.out[3] == -2.0
+}
+
+test "an outer binding is read at block beside a binding of sample" {
+  // n = 4: g = 25; k = 3: `m` is 3 where the guard takes the arm and 0 where it does not.  x = 1 -2: frame 0 takes the arm, acc adds 1 * 3: y = 3, the value 3;
+  // frame 1 does not (m = 0): acc adds -2 * 0, y stays 3 and is not read; the value is scale: -2 * 25 = -50.
+  let xs: [F32; 2] = [1.0, -2.0]
+  let o = outer_binding_beside_a_sample_binding.render(outer_binding_beside_a_sample_binding.Config { n: 4 }, outer_binding_beside_a_sample_binding.Params { k: 3 }, xs, 8.0)
+  assert o.out[0] == 3.0
+  assert o.out[1] == -50.0
+}
+
+test "an outer binding is read at block in a branch of an if~ under a condition of sample" {
+  // The same values as the first: 1, -50, 2, -100.
+  let xs: [F32; 4] = [1.0, -2.0, 3.0, -4.0]
+  let o = outer_binding_under_an_if_tilde.render(outer_binding_under_an_if_tilde.Config { n: 4 }, xs, 8.0)
+  assert o.out[0] == 1.0
+  assert o.out[1] == -50.0
+  assert o.out[2] == 2.0
+  assert o.out[3] == -100.0
+}
+
+test "the outer binding is 0 at init and the division by it panics there, under a guard of sample too" {
+  let _ = outer_binding_under_a_sample_guard.init(outer_binding_under_a_sample_guard.Config { n: 0 }, 8.0) //~ PANIC "the outer binding is 0 at init and the division by it panics there, under a guard of sample too"
 }

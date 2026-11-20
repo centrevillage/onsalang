@@ -5,7 +5,7 @@
 //! so that what a delay saves in it (read in the second phase of the tick, after it) is read under them.
 
 use onsa_diag::Span;
-use onsa_sema::LocalId;
+use onsa_sema::{LocalId, Target};
 use onsa_syntax::ast::{ExprId, ExprKind, PatId, RangeEnd};
 
 use super::expr::{Eval, Frame, Stop};
@@ -189,8 +189,24 @@ impl<'a> Frame<'a> {
         }
         let at = self.body.ast.expr(call).span;
         let arms = arms_of(&self.body, call).map_err(|fault| Stop { fault, at })?;
-        self.with_arms(&arms, |f| f.eval(arg))
+        // Only the arms whose bindings `arg` reads give them here: an arm that binds a name it does not read (or none) may have a guard or an
+        // object of `sample`, which this stage cannot evaluate (a binding of that clock is not read at this stage, S-1131).
+        let mut read = Vec::new();
+        for (m, n) in arms {
+            let ExprKind::Match { arms: all, .. } = &self.body.ast.expr(m).kind else { continue };
+            let locals = self.body.pat_locals(all[n].pat).map_err(|fault| Stop { fault, at })?;
+            if locals.iter().any(|l| reads_local(&self.body, arg, *l)) {
+                read.push((m, n));
+            }
+        }
+        self.with_arms(&read, |f| f.eval(arg))
     }
+}
+
+/// Does `e` read the local `l`?
+fn reads_local(body: &Body, e: ExprId, l: LocalId) -> bool {
+    matches!(body.target(e), Ok(Target::Local(x)) if *x == l)
+        || body.ast.sub_exprs(e).into_iter().any(|x| reads_local(body, x, l))
 }
 
 /// The arms of the `match~`s that hold `call`, outermost first, with the number of each arm: the bindings its arguments may read.
